@@ -1,0 +1,70 @@
+name: Setup Labels and Milestones
+
+on:
+  push:
+    branches: ["claude/create-github-issues-bc5UL"]
+
+jobs:
+  setup:
+    runs-on: ubuntu-latest
+    permissions:
+      issues: write
+    steps:
+      - name: Update label colors
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          gh label edit "phase-1"   --repo ${{ github.repository }} --color "0075ca" --description "Phase 1 — Personal Use"
+          gh label edit "phase-2"   --repo ${{ github.repository }} --color "8250df" --description "Phase 2 — Friends & Family"
+          gh label edit "infra"     --repo ${{ github.repository }} --color "e4e669" --description "Infrastructure & providers"
+          gh label edit "database"  --repo ${{ github.repository }} --color "f9d0c4" --description "Database & migrations"
+          gh label edit "ai"        --repo ${{ github.repository }} --color "d93f0b" --description "AI / LLM"
+          gh label edit "ui"        --repo ${{ github.repository }} --color "0e8a16" --description "Frontend / UI"
+          gh label edit "ops"       --repo ${{ github.repository }} --color "5319e7" --description "Operations & automation"
+          gh label edit "discovery" --repo ${{ github.repository }} --color "c5def5" --description "Research & design"
+
+      - name: Create milestones
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          MS1=$(gh api repos/${{ github.repository }}/milestones \
+            --method POST \
+            --field title="Phase 1 — Personal Use" \
+            --field due_on="2026-08-03T23:59:59Z" \
+            --field description="MVP para uso pessoal" \
+            --jq '.number' 2>/dev/null || \
+            gh api repos/${{ github.repository }}/milestones --jq '.[] | select(.title=="Phase 1 — Personal Use") | .number')
+
+          MS2=$(gh api repos/${{ github.repository }}/milestones \
+            --method POST \
+            --field title="Phase 2 — Friends & Family" \
+            --field due_on="2026-09-07T23:59:59Z" \
+            --field description="Multi-user com whitelist" \
+            --jq '.number' 2>/dev/null || \
+            gh api repos/${{ github.repository }}/milestones --jq '.[] | select(.title=="Phase 2 — Friends & Family") | .number')
+
+          echo "Phase 1 milestone: $MS1"
+          echo "Phase 2 milestone: $MS2"
+
+          # Assign Phase 1 issues
+          for issue in 2 3 4 5 6 7 8 9 10 11; do
+            gh issue edit $issue --repo ${{ github.repository }} --milestone "Phase 1 — Personal Use"
+          done
+
+          # Assign Phase 2 issues
+          for issue in 12 13; do
+            gh issue edit $issue --repo ${{ github.repository }} --milestone "Phase 2 — Friends & Family"
+          done
+
+      - name: Print summary
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          echo "=== Labels ==="
+          gh label list --repo ${{ github.repository }} --json name,color,description \
+            --jq '.[] | "\(.name) #\(.color) — \(.description)"' | sort
+
+          echo ""
+          echo "=== Milestones ==="
+          gh api repos/${{ github.repository }}/milestones \
+            --jq '.[] | "\(.number) \(.title) (due: \(.due_on // "none"))"'
