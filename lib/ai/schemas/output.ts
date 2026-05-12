@@ -2,6 +2,12 @@ import { z } from "zod";
 
 const RecommendationSchema = z.enum(["over", "under", "pass"]);
 
+// Convenção sobre `confidence_pct`:
+// - Para `recommendation` ∈ {"over","under"}: probabilidade estimada (0-100) do
+//   LADO RECOMENDADO.
+// - Para `recommendation = "pass"`: probabilidade estimada do modelo para
+//   "over" (NÃO é "confiança no pass"). Mantém a semântica comparável com
+//   `implied.over_pct` em análises retrospectivas.
 export const OverUnderOutputSchema = z
   .object({
     recommendation: RecommendationSchema,

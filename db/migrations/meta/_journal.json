@@ -8,6 +8,13 @@
       "when": 1778542375829,
       "tag": "0000_same_molten_man",
       "breakpoints": true
+    },
+    {
+      "idx": 1,
+      "version": "7",
+      "when": 1778620901486,
+      "tag": "0001_mighty_ozymandias",
+      "breakpoints": true
     }
   ]
 }
