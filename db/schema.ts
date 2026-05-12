@@ -42,6 +42,15 @@ export const outcomeResultEnum = pgEnum("outcome_result", [
 
 export const aiProviderEnum = pgEnum("ai_provider", ["anthropic"]);
 
+export const aiCallStatusEnum = pgEnum("ai_call_status", [
+  "ok",
+  "invalid_output",
+  "provider_error",
+  "timeout",
+  "tool_missing",
+  "rate_limited",
+]);
+
 export const users = pgTable("users", {
   id: uuid().primaryKey().defaultRandom(),
   email: text().notNull().unique(),
@@ -105,6 +114,8 @@ export const aiCalls = pgTable(
     outputTokens: integer().notNull(),
     latencyMs: integer().notNull(),
     costUsd: numeric({ precision: 10, scale: 6 }).notNull(),
+    status: aiCallStatusEnum().notNull().default("ok"),
+    errorMessage: text(),
     createdAt: timestamp({ withTimezone: true }).notNull().defaultNow(),
   },
   (t) => [

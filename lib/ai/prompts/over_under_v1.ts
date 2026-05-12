@@ -11,28 +11,72 @@ Sua única tarefa é decidir, para o jogo descrito pelo usuário, entre três op
 
 Regras invioláveis:
 1. Recomende "over" ou "under" SOMENTE se sua probabilidade estimada (confidence_pct) supera a probabilidade implícita normalizada do lado correspondente em pelo menos 5 pontos percentuais (edge >= 5%). Caso contrário, retorne "pass".
-2. "pass" é a opção segura por padrão. Em caso de dúvida, passe.
+2. "pass" é a opção segura por padrão e um resultado válido e esperado. Em caso de dúvida, passe a vez. Não force uma recomendação.
 3. confidence_pct é sua probabilidade estimada para o LADO RECOMENDADO. Quando "pass", reporte sua melhor estimativa para "over".
-4. minimum_odd: odd decimal mínima na qual o palpite ainda mantém edge >= 5%. Obrigatório quando recommendation in {"over","under"}; OMITIR quando "pass".
-5. Use apenas os dados fornecidos pelo usuário. Não invente jogadores, lesões, escalações ou estatísticas.
-6. Raciocine quantitativamente quando possível (médias de gols marcados/sofridos, ritmo recente, impacto de ausências em finalização/defesa).
-7. Retorne JSON estrito conforme o schema. Sem texto fora do JSON.
+4. minimum_odd: odd decimal mínima na qual o palpite ainda mantém edge >= 5%. Obrigatório quando recommendation ∈ {"over","under"}; OMITIR quando "pass".
+5. Use APENAS os dados fornecidos pelo usuário. Não invente jogadores, lesões, escalações, estatísticas ou tendências.
+6. Raciocine quantitativamente quando possível: médias de gols marcados/sofridos, ritmo recente, impacto de ausências em finalização/defesa, padrão de H2H, contexto da competição.
+7. Considere a confiabilidade dos dados: poucos jogos de forma recente, ausência de escalação publicada, ou H2H muito antigo são motivos pra reduzir confiança (e provavelmente "pass").
+8. Responda EXCLUSIVAMENTE chamando a ferramenta \`submit_prediction\` com os campos definidos no schema dela. Não produza texto livre fora da chamada da ferramenta.`;
 
-Schema de resposta (obrigatório):
-{
-  "recommendation": "over" | "under" | "pass",
-  "confidence_pct": number 0-100,
-  "rationale": string (português, até 600 caracteres),
-  "key_factors": string[] (2 a 5 itens, até 160 caracteres cada),
-  "minimum_odd": number > 0 (apenas se recommendation != "pass")
-}`;
+export const SUBMIT_PREDICTION_TOOL = {
+  name: "submit_prediction",
+  description:
+    "Envia a recomendação final para o mercado over/under 2.5 gols. Chame esta ferramenta EXATAMENTE UMA VEZ.",
+  input_schema: {
+    type: "object",
+    properties: {
+      recommendation: {
+        type: "string",
+        enum: ["over", "under", "pass"],
+        description: "Lado recomendado, ou 'pass' se não houver edge >= 5%.",
+      },
+      confidence_pct: {
+        type: "number",
+        minimum: 0,
+        maximum: 100,
+        description:
+          "Probabilidade estimada (0-100) do lado recomendado; quando 'pass', estimativa para 'over'.",
+      },
+      rationale: {
+        type: "string",
+        minLength: 1,
+        maxLength: 600,
+        description:
+          "Racional em português, até 600 chars, explicando os fatores quantitativos decisivos.",
+      },
+      key_factors: {
+        type: "array",
+        items: { type: "string", minLength: 1, maxLength: 160 },
+        minItems: 2,
+        maxItems: 5,
+        description: "2 a 5 fatores curtos (até 160 chars cada).",
+      },
+      minimum_odd: {
+        type: "number",
+        exclusiveMinimum: 0,
+        description:
+          "Odd decimal mínima que mantém edge >= 5%. Obrigatório se recommendation != 'pass'; OMITIR se 'pass'.",
+      },
+    },
+    required: ["recommendation", "confidence_pct", "rationale", "key_factors"],
+    additionalProperties: false,
+  },
+} as const;
 
 const fmtNum = (n: number, digits = 2): string =>
   Number.isFinite(n) ? n.toFixed(digits) : "n/a";
 
 const fmtDate = (iso: string): string => iso.slice(0, 10);
 
-export function buildUserMessage(input: OverUnderInput): string {
+export type UserMessageContext = {
+  daysToKickoff: number;
+};
+
+export function buildUserMessage(
+  input: OverUnderInput,
+  context: UserMessageContext,
+): string {
   const lines: string[] = [];
 
   lines.push("# Jogo");
@@ -132,9 +176,15 @@ export function buildUserMessage(input: OverUnderInput): string {
   );
 
   lines.push("");
+  lines.push("# Contexto temporal");
+  lines.push(
+    `- Dias até o jogo: ${context.daysToKickoff} (≤1 = dados mais confiáveis; ≥5 = lineup ainda indefinido, lesões podem mudar)`,
+  );
+
+  lines.push("");
   lines.push("# Sua tarefa");
   lines.push(
-    'Decida: "over", "under" ou "pass". Aplique a regra de edge >= 5%. Retorne APENAS o JSON do schema definido no system prompt.',
+    'Decida: "over", "under" ou "pass". Aplique a regra de edge >= 5%. Chame a ferramenta submit_prediction com os campos do schema.',
   );
 
   return lines.join("\n");
