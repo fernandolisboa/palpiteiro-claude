@@ -10,11 +10,12 @@ import {
   type OddsApiEventOdds,
   type OddsApiSport,
 } from "@/lib/providers/odds-api-schemas";
-
-const DEFAULT_TIMEOUT_MS = 10_000;
-const MAX_ATTEMPTS = 3;
-const BASE_BACKOFF_MS = 500;
-const JITTER_RATIO = 0.2;
+import {
+  createProviderClient,
+  HttpClientError,
+  HttpClientTimeoutError,
+  RetryableHttpError,
+} from "@/lib/providers/http/client";
 
 const ONE_MINUTE = 60_000;
 const FIVE_MINUTES = 5 * ONE_MINUTE;
@@ -25,8 +26,21 @@ const ONE_DAY = 24 * ONE_HOUR;
 const DEFAULT_REGIONS = ["eu"] as const;
 const DEFAULT_MARKETS = ["totals"] as const;
 
-const QUOTA_WARN_THRESHOLD = 50;
-const QUOTA_CRITICAL_THRESHOLD = 10;
+// The Odds API documents a monthly quota (500/month free) but no strict
+// per-minute limit. We still cap concurrency at 2 (avoid pathological bursts)
+// and throttle at 15/min — comfortably higher than api-football to prioritize
+// burning through legitimate demand without artificial waits, but low enough
+// that runaway loops stay bounded.
+const oddsApiClient = createProviderClient({
+  name: "odds-api",
+  concurrency: 2,
+  throttle: { maxRequests: 15, windowMs: ONE_MINUTE },
+  quotaHeaders: {
+    monthly: "x-requests-remaining",
+    monthlyUsed: "x-requests-used",
+    monthlyLimit: 500,
+  },
+});
 
 // ─── Errors ──────────────────────────────────────────────────────────────────
 
@@ -83,72 +97,9 @@ export class OddsApiTimeoutError extends OddsApiError {
   }
 }
 
-// ─── Logging ─────────────────────────────────────────────────────────────────
+// ─── Helpers ─────────────────────────────────────────────────────────────────
 
 type Params = Record<string, string | number | undefined>;
-
-type Quota = {
-  used: number | null;
-  remaining: number | null;
-  last: number | null;
-};
-
-type LogFields = {
-  endpoint: string;
-  params: Record<string, string | number>;
-  cache_hit: boolean;
-  latency_ms: number;
-  status_code: number | null;
-  attempt: number;
-  quota_used?: number | null;
-  quota_remaining?: number | null;
-  quota_last?: number | null;
-  error?: string;
-};
-
-function logCall(fields: LogFields): void {
-  console.log(JSON.stringify({ provider: "odds-api", ...fields }));
-}
-
-function warnOnLowQuota(remaining: number | null, endpoint: string): void {
-  if (remaining === null) return;
-  if (remaining < QUOTA_CRITICAL_THRESHOLD) {
-    console.error(
-      JSON.stringify({
-        provider: "odds-api",
-        level: "error",
-        reason: "quota_critical",
-        quota_remaining: remaining,
-        endpoint,
-      }),
-    );
-  } else if (remaining < QUOTA_WARN_THRESHOLD) {
-    console.warn(
-      JSON.stringify({
-        provider: "odds-api",
-        level: "warn",
-        reason: "quota_low",
-        quota_remaining: remaining,
-        endpoint,
-      }),
-    );
-  }
-}
-
-function parseQuotaHeaders(headers: Headers): Quota {
-  const toInt = (raw: string | null): number | null => {
-    if (raw === null || raw === "") return null;
-    const n = Number(raw);
-    return Number.isFinite(n) ? n : null;
-  };
-  return {
-    used: toInt(headers.get("x-requests-used")),
-    remaining: toInt(headers.get("x-requests-remaining")),
-    last: toInt(headers.get("x-requests-last")),
-  };
-}
-
-// ─── Helpers ─────────────────────────────────────────────────────────────────
 
 function stripUndefined(params: Params): Record<string, string | number> {
   const out: Record<string, string | number> = {};
@@ -184,19 +135,6 @@ function buildUrl(
   return url.toString();
 }
 
-function backoffDelayMs(attempt: number, retryAfterSeconds?: number): number {
-  if (retryAfterSeconds && Number.isFinite(retryAfterSeconds)) {
-    return Math.max(0, retryAfterSeconds * 1000);
-  }
-  const base = BASE_BACKOFF_MS * 2 ** (attempt - 1);
-  const jitter = base * JITTER_RATIO * (Math.random() * 2 - 1);
-  return Math.max(0, Math.floor(base + jitter));
-}
-
-function sleep(ms: number): Promise<void> {
-  return new Promise((resolve) => setTimeout(resolve, ms));
-}
-
 function requireApiKey(): string {
   const key = process.env.ODDS_API_KEY;
   if (!key) {
@@ -228,249 +166,86 @@ async function request<S extends z.ZodTypeAny>(
   const cacheStart = Date.now();
   const cached = await cache.get<z.infer<S>>(cacheKey);
   if (cached !== undefined) {
-    logCall({
-      endpoint: opts.endpoint,
-      params,
-      cache_hit: true,
-      latency_ms: Date.now() - cacheStart,
-      status_code: null,
-      attempt: 0,
-    });
+    oddsApiClient.logCacheHit(opts.endpoint, Date.now() - cacheStart);
     return cached;
   }
 
   const key = requireApiKey();
   const url = buildUrl(opts.endpoint, params, key);
 
-  let lastError: unknown;
-  for (let attempt = 1; attempt <= MAX_ATTEMPTS; attempt++) {
-    const controller = new AbortController();
-    const timeout = setTimeout(() => controller.abort(), DEFAULT_TIMEOUT_MS);
-    const start = Date.now();
-    let statusCode: number | null = null;
-    let quota: Quota = { used: null, remaining: null, last: null };
-
-    try {
-      const response = await fetch(url, {
+  let text: string;
+  let response: Response;
+  try {
+    const r = await oddsApiClient.send({
+      endpoint: opts.endpoint,
+      url,
+      init: {
         method: "GET",
         headers: { Accept: "application/json" },
-        signal: controller.signal,
-      });
-      statusCode = response.status;
-      quota = parseQuotaHeaders(response.headers);
-      const text = await response.text();
-
-      if (response.status === 429 || response.status >= 500) {
-        const retryAfter = Number(response.headers.get("retry-after"));
-        const transientError = new OddsApiHttpError(
-          `Transient HTTP ${response.status} on ${opts.endpoint}`,
-          opts.endpoint,
-          params,
-          response.status,
-          text.slice(0, 2048),
-        );
-        if (attempt >= MAX_ATTEMPTS) {
-          logCall({
-            endpoint: opts.endpoint,
-            params,
-            cache_hit: false,
-            latency_ms: Date.now() - start,
-            status_code: statusCode,
-            attempt,
-            quota_used: quota.used,
-            quota_remaining: quota.remaining,
-            quota_last: quota.last,
-            error: transientError.message,
-          });
-          warnOnLowQuota(quota.remaining, opts.endpoint);
-          throw transientError;
-        }
-        logCall({
-          endpoint: opts.endpoint,
-          params,
-          cache_hit: false,
-          latency_ms: Date.now() - start,
-          status_code: statusCode,
-          attempt,
-          quota_used: quota.used,
-          quota_remaining: quota.remaining,
-          quota_last: quota.last,
-          error: `retrying after ${response.status}`,
-        });
-        warnOnLowQuota(quota.remaining, opts.endpoint);
-        await sleep(backoffDelayMs(attempt, retryAfter));
-        lastError = transientError;
-        continue;
-      }
-
-      if (!response.ok) {
-        const httpError = new OddsApiHttpError(
-          `HTTP ${response.status} on ${opts.endpoint}`,
-          opts.endpoint,
-          params,
-          response.status,
-          text.slice(0, 2048),
-        );
-        logCall({
-          endpoint: opts.endpoint,
-          params,
-          cache_hit: false,
-          latency_ms: Date.now() - start,
-          status_code: statusCode,
-          attempt,
-          quota_used: quota.used,
-          quota_remaining: quota.remaining,
-          quota_last: quota.last,
-          error: httpError.message,
-        });
-        warnOnLowQuota(quota.remaining, opts.endpoint);
-        throw httpError;
-      }
-
-      let json: unknown;
-      try {
-        json = JSON.parse(text);
-      } catch {
-        throw new OddsApiHttpError(
-          `Invalid JSON from ${opts.endpoint}`,
-          opts.endpoint,
-          params,
-          response.status,
-          text.slice(0, 2048),
-        );
-      }
-
-      const parsed = opts.schema.safeParse(json);
-      if (!parsed.success) {
-        console.error(
-          JSON.stringify({
-            provider: "odds-api",
-            endpoint: opts.endpoint,
-            params,
-            error: "schema_validation_failed",
-            payload_preview: text.slice(0, 2048),
-            zod_issues: parsed.error.issues.slice(0, 10),
-          }),
-        );
-        throw new OddsApiSchemaError(
-          `Schema validation failed for ${opts.endpoint}`,
-          opts.endpoint,
-          params,
-          parsed.error,
-        );
-      }
-
-      await cache.set(cacheKey, parsed.data, opts.ttlMs);
-
-      logCall({
-        endpoint: opts.endpoint,
+      },
+    });
+    response = r.response;
+    text = r.text;
+  } catch (err) {
+    if (err instanceof RetryableHttpError) {
+      throw new OddsApiHttpError(
+        `Transient HTTP ${err.statusCode} on ${opts.endpoint}`,
+        opts.endpoint,
         params,
-        cache_hit: false,
-        latency_ms: Date.now() - start,
-        status_code: statusCode,
-        attempt,
-        quota_used: quota.used,
-        quota_remaining: quota.remaining,
-        quota_last: quota.last,
-      });
-      warnOnLowQuota(quota.remaining, opts.endpoint);
-
-      return parsed.data;
-    } catch (err) {
-      const isAbort =
-        err instanceof Error &&
-        (err.name === "AbortError" ||
-          (err as { name?: string }).name === "TimeoutError");
-      if (isAbort) {
-        if (attempt >= MAX_ATTEMPTS) {
-          const timeoutError = new OddsApiTimeoutError(opts.endpoint, params);
-          logCall({
-            endpoint: opts.endpoint,
-            params,
-            cache_hit: false,
-            latency_ms: Date.now() - start,
-            status_code: statusCode,
-            attempt,
-            quota_used: quota.used,
-            quota_remaining: quota.remaining,
-            quota_last: quota.last,
-            error: timeoutError.message,
-          });
-          throw timeoutError;
-        }
-        logCall({
-          endpoint: opts.endpoint,
-          params,
-          cache_hit: false,
-          latency_ms: Date.now() - start,
-          status_code: statusCode,
-          attempt,
-          quota_used: quota.used,
-          quota_remaining: quota.remaining,
-          quota_last: quota.last,
-          error: "timeout — retrying",
-        });
-        await sleep(backoffDelayMs(attempt));
-        lastError = err;
-        continue;
-      }
-
-      if (
-        err instanceof OddsApiHttpError &&
-        (err.status === 429 || err.status >= 500)
-      ) {
-        throw err;
-      }
-
-      if (err instanceof OddsApiHttpError || err instanceof OddsApiSchemaError) {
-        throw err;
-      }
-
-      // Network-level errors (DNS, ECONNRESET, etc.) — retry.
-      if (attempt < MAX_ATTEMPTS) {
-        logCall({
-          endpoint: opts.endpoint,
-          params,
-          cache_hit: false,
-          latency_ms: Date.now() - start,
-          status_code: statusCode,
-          attempt,
-          quota_used: quota.used,
-          quota_remaining: quota.remaining,
-          quota_last: quota.last,
-          error: err instanceof Error ? `network: ${err.message}` : "network error",
-        });
-        await sleep(backoffDelayMs(attempt));
-        lastError = err;
-        continue;
-      }
-
-      logCall({
-        endpoint: opts.endpoint,
-        params,
-        cache_hit: false,
-        latency_ms: Date.now() - start,
-        status_code: statusCode,
-        attempt,
-        quota_used: quota.used,
-        quota_remaining: quota.remaining,
-        quota_last: quota.last,
-        error: err instanceof Error ? err.message : "unknown error",
-      });
-      throw err;
-    } finally {
-      clearTimeout(timeout);
+        err.statusCode,
+        err.body,
+      );
     }
+    if (err instanceof HttpClientError) {
+      throw new OddsApiHttpError(
+        `HTTP ${err.statusCode} on ${opts.endpoint}`,
+        opts.endpoint,
+        params,
+        err.statusCode,
+        err.body,
+      );
+    }
+    if (err instanceof HttpClientTimeoutError) {
+      throw new OddsApiTimeoutError(opts.endpoint, params);
+    }
+    throw err;
   }
 
-  // Defensive — the loop above always returns or throws.
-  throw lastError instanceof Error
-    ? lastError
-    : new OddsApiError(
-        `Request to ${opts.endpoint} exhausted retries`,
-        opts.endpoint,
-        stripUndefined(opts.params),
-      );
+  let json: unknown;
+  try {
+    json = JSON.parse(text);
+  } catch {
+    throw new OddsApiHttpError(
+      `Invalid JSON from ${opts.endpoint}`,
+      opts.endpoint,
+      params,
+      response.status,
+      text.slice(0, 2048),
+    );
+  }
+
+  const parsed = opts.schema.safeParse(json);
+  if (!parsed.success) {
+    console.error(
+      JSON.stringify({
+        provider: "odds-api",
+        endpoint: opts.endpoint,
+        params,
+        error: "schema_validation_failed",
+        payload_preview: text.slice(0, 2048),
+        zod_issues: parsed.error.issues.slice(0, 10),
+      }),
+    );
+    throw new OddsApiSchemaError(
+      `Schema validation failed for ${opts.endpoint}`,
+      opts.endpoint,
+      params,
+      parsed.error,
+    );
+  }
+
+  await cache.set(cacheKey, parsed.data, opts.ttlMs);
+  return parsed.data;
 }
 
 // ─── TTL helpers ─────────────────────────────────────────────────────────────
