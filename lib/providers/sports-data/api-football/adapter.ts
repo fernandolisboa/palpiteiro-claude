@@ -82,16 +82,7 @@ const apiFootballClient = createProviderClient({
   },
 });
 
-// Error classes live in ./errors. Re-exported here for backward compatibility
-// with callers that imported them from the old `lib/providers/api-football`
-// path (step 13 of issue #24 removes these once everyone consumes the class).
-export {
-  ApiFootballError,
-  ApiFootballApiError,
-  ApiFootballHttpError,
-  ApiFootballSchemaError,
-  ApiFootballTimeoutError,
-} from "@/lib/providers/sports-data/api-football/errors";
+// Error classes live in ./errors — import them from there directly.
 
 type Params = Record<string, string | number | undefined>;
 
