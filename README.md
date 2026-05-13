@@ -107,3 +107,41 @@ O deploy é feito via integração nativa **Vercel + GitHub** — sem `vercel.js
 - **Vercel** (hosting, cron jobs, KV)
 
 Documentação detalhada: [`docs/`](./docs/)
+
+## Rate limiting
+
+Os clientes HTTP de providers externos compartilham um conjunto de primitives
+em [`lib/providers/http/`](./lib/providers/http/) que evitam burst e logam
+consumo de quota. Cada provider (`api-football`, `odds-api`) instancia um
+`createProviderClient` no topo do módulo.
+
+**Estratégia em camadas** (de fora pra dentro):
+
+1. **Concurrency limiter** (`concurrency.ts`) — semáforo FIFO, no máximo N
+   requests em voo simultâneas por provider.
+2. **Throttle sliding window** (`throttle.ts`) — no máximo M requests por
+   janela de W ms; excedentes esperam até a janela liberar.
+3. **Retry com backoff exponencial + jitter** (`retry.ts`) — 1s → 2s → 4s
+   (±20%), até 3 tentativas, retry só em 429/5xx/erros de rede; respeita
+   `Retry-After`.
+4. **Quota logger** (`quota-logger.ts`) — extrai headers de quota,
+   loga JSON estruturado por chamada e dispara `WARN` quando remaining < 20%
+   do limite e `ERROR` quando < 5%. Cache hits **não** logam quota.
+
+**Configs ativas:**
+
+| Provider     | Concurrency | Throttle      | Justificativa |
+|--------------|-------------|---------------|---------------|
+| api-football | 2           | 8 req / 60s   | Free tier = 10 req/min + 100 req/dia. 20% abaixo do per-minute evita burst-detection (responsável pela suspensão da issue #23). |
+| odds-api     | 2           | 15 req / 60s  | Free tier = 500 req/mês, sem per-minute strict. Throttle mais relaxado prioriza burning legítimo de quota mensal sem esperas artificiais. |
+
+**Como ajustar:** editar o `createProviderClient({...})` no topo de
+`lib/providers/api-football.ts` ou `lib/providers/odds-api.ts`. Os primitives
+são puros e cobertos por testes unitários em
+`lib/providers/http/__tests__/`.
+
+**Validação manual:** `pnpm tsx scripts/test-rate-limit.ts` dispara 10
+chamadas reais ao endpoint `/status` da API-Football (não consome quota
+diária) e confirma que o throttle espaça as últimas duas em ~60s. Duração
+esperada: ~62-75s. Se a conta estiver suspensa, o script aborta logo na
+primeira chamada e os testes unitários permanecem cobrindo o comportamento.
