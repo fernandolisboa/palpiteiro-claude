@@ -43,15 +43,3 @@ export function mapApiFootballStatus(short: string): MatchStatus {
 export function isFinishedStatus(short: string): boolean {
   return FINISHED_CODES.has(short) || CANCELLED_CODES.has(short);
 }
-
-/**
- * Returns the API-Football season label for a league at a given instant.
- * - Brasileirão (71): calendar-year season (Apr–Dec) → label = current year.
- * - European competitions (UCL etc.): Aug–May → label = year of season start.
- */
-export function currentSeason(leagueId: number, now: Date = new Date()): number {
-  const year = now.getUTCFullYear();
-  const month = now.getUTCMonth() + 1;
-  if (leagueId === LEAGUE_IDS.BRASILEIRAO_A) return year;
-  return month >= 7 ? year : year - 1;
-}
