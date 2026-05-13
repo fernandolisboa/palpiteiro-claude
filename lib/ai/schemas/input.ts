@@ -66,6 +66,13 @@ const LineupSchema = z.object({
 const TeamDataSchema = z.object({
   form: TeamFormSchema,
   standing: StandingSchema,
+  // Per-side: true when the provider returned an injuries response (even if
+  // empty list), false when the active provider does not support injury data
+  // for this fixture/team. The prompt rewires accordingly so the AI knows
+  // an empty `absences` array under absences_available=false means "no data"
+  // (do NOT assume zero), while absences=[] under absences_available=true
+  // means "no injuries reported".
+  absences_available: z.boolean(),
   absences: z.array(PlayerAbsenceSchema),
   lineup: LineupSchema.optional(),
 });

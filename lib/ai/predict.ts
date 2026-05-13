@@ -4,24 +4,16 @@ import { eq } from "drizzle-orm";
 import { aiCalls, matches, predictions } from "@/db/schema";
 import { db } from "@/lib/db";
 import { computeImpliedProbabilities } from "@/lib/odds/implied-probability";
-import {
-  getFixtureById,
-  getH2H,
-  getInjuries,
-  getLineups,
-  getStandings,
-  getTeamForm,
-} from "@/lib/providers/sports-data/api-football/adapter";
-import {
-  LEAGUE_IDS,
-  currentSeason,
-} from "@/lib/providers/sports-data/api-football/constants";
-import type {
-  ApiFootballInjury,
-} from "@/lib/providers/sports-data/api-football/schemas";
 import { getOddsForSport } from "@/lib/providers/odds-api";
 import { SPORT_KEYS } from "@/lib/providers/odds-api-constants";
 import type { OddsApiEventOdds } from "@/lib/providers/odds-api-schemas";
+import { getSportsDataProvider } from "@/lib/providers/sports-data";
+import { normalizeTeamName } from "@/lib/providers/sports-data/team-names";
+import {
+  SportsDataUnsupportedError,
+  type FixtureRef,
+  type NormalizedInjury,
+} from "@/lib/providers/sports-data/types";
 
 import { ANTHROPIC_MODEL, getAnthropicClient } from "./anthropic";
 import { BuildInputError, buildPredictionInput } from "./build-input";
@@ -63,40 +55,16 @@ export class PredictError extends Error {
 // ─── Constants ───────────────────────────────────────────────────────────────
 
 const FORM_LAST = 5;
+const H2H_LAST = 5;
 const MAX_TOKENS = 2048;
 const TEMPERATURE = 0.3;
 const ODDS_WINDOW_MS = 6 * 60 * 60 * 1000;
 const ERROR_MESSAGE_MAX = 2000;
 
-// Normalização básica pra matchear nomes de times entre API-Football e The Odds
-// API: lowercase, remove acentos (NFD + strip combining marks) e descarta tokens
-// comuns. Não é robusto pra todos os casos — grafias muito divergentes podem
-// falhar (ver "Risco conhecido" no PR body).
-const TEAM_NAME_STOPWORDS = new Set([
-  "fc",
-  "cf",
-  "ac",
-  "sc",
-  "afc",
-  "cfc",
-  "ec",
-  "se",
-  "rb",
-  "club",
-  "clube",
-]);
-
-export function normalizeTeamName(name: string): string {
-  const folded = name
-    .normalize("NFD")
-    .replace(/[̀-ͯ]/g, "")
-    .toLowerCase();
-  const tokens = folded
-    .replace(/[^a-z0-9\s]/g, " ")
-    .split(/\s+/)
-    .filter((t) => t.length > 0 && !TEAM_NAME_STOPWORDS.has(t));
-  return tokens.join(" ");
-}
+// Re-export normalizeTeamName for back-compat with any caller still importing
+// it from this module (e.g. tests). Canonical location is now
+// lib/providers/sports-data/team-names.ts.
+export { normalizeTeamName };
 
 function teamNamesMatch(a: string, b: string): boolean {
   const na = normalizeTeamName(a);
@@ -179,28 +147,6 @@ function leagueToSportKey(
   return league === "brasileirao_a"
     ? SPORT_KEYS.BRASILEIRAO_A
     : SPORT_KEYS.CHAMPIONS_LEAGUE;
-}
-
-function leagueToApiFootballId(
-  league: "brasileirao_a" | "champions_league",
-): number {
-  return league === "brasileirao_a"
-    ? LEAGUE_IDS.BRASILEIRAO_A
-    : LEAGUE_IDS.CHAMPIONS_LEAGUE;
-}
-
-function partitionInjuries(
-  injuries: ApiFootballInjury[],
-  homeTeamId: number,
-  awayTeamId: number,
-): { home: ApiFootballInjury[]; away: ApiFootballInjury[] } {
-  const home: ApiFootballInjury[] = [];
-  const away: ApiFootballInjury[] = [];
-  for (const inj of injuries) {
-    if (inj.team.id === homeTeamId) home.push(inj);
-    else if (inj.team.id === awayTeamId) away.push(inj);
-  }
-  return { home, away };
 }
 
 function truncate(text: string, limit: number): string {
@@ -305,45 +251,59 @@ export async function predict({
     });
   }
 
-  // 2. Parse externalId → API-Football fixture id
-  const fixtureId = Number(match.externalId);
-  if (!Number.isFinite(fixtureId) || fixtureId <= 0) {
-    throw new PredictError("match.externalId is not a valid API-Football id", {
-      matchId,
-      externalId: match.externalId,
-    });
-  }
+  const provider = getSportsDataProvider();
+  const ref: FixtureRef = {
+    league: match.league,
+    kickoffAt: match.kickoffAt.toISOString(),
+    homeTeam: match.homeTeam,
+    awayTeam: match.awayTeam,
+  };
 
-  // 3. Fetch fixture details (necessário pra team IDs e venue)
-  const fixture = await getFixtureById(fixtureId);
+  // 2. Fetch normalized fixture (composite-keyed). Used to populate venue
+  //    and serve as the reference for downstream lookups (lineups, injuries).
+  const fixture = await provider.getFixtureByMatch(ref);
   if (!fixture) {
-    throw new PredictError("API-Football fixture not found", {
-      fixtureId,
+    throw new PredictError("fixture not found in provider", {
       matchId,
+      ref,
+      providerName: provider.capabilities.name,
     });
   }
-  const homeTeamId = fixture.teams.home.id;
-  const awayTeamId = fixture.teams.away.id;
-  const leagueId = leagueToApiFootballId(match.league);
-  const season = currentSeason(leagueId, match.kickoffAt);
 
-  // 4. Fetch demais dados "em paralelo" — na prática o client da API-Football
-  // (lib/providers/http/client.ts) tem concurrency=2 e throttle=8/min, então
-  // essas 6 chamadas são serializadas em pares pelo limiter. O Promise.all
-  // aqui expressa que não há dependência lógica entre elas; o rate limit é
-  // imposto na camada de transporte, não aqui.
-  const [homeForm, awayForm, h2h, standings, allInjuries, lineups] =
+  // 3. Parallel fetch of supporting data. The provider's adapters serialize
+  //    HTTP calls through their concurrency + throttle limiters
+  //    (lib/providers/http/), so the Promise.all here expresses logical
+  //    independence; the transport layer enforces rate limits.
+  //
+  //    Injuries are wrapped in catch() to map SportsDataUnsupportedError
+  //    (e.g. football-data.org has no injury endpoint) to the absences-
+  //    unavailable signal for the AI input. Any other error bubbles up.
+  const [homeForm, awayForm, h2h, standings, injuries, lineups] =
     await Promise.all([
-      getTeamForm(homeTeamId, FORM_LAST),
-      getTeamForm(awayTeamId, FORM_LAST),
-      getH2H(homeTeamId, awayTeamId),
-      getStandings(leagueId, season),
-      getInjuries({ fixtureId }),
-      getLineups(fixtureId),
+      provider.getTeamForm(match.homeTeam, match.league, FORM_LAST),
+      provider.getTeamForm(match.awayTeam, match.league, FORM_LAST),
+      provider.getH2H(match.homeTeam, match.awayTeam, match.league, H2H_LAST),
+      provider.getStandings(match.league),
+      provider
+        .getInjuriesByFixture(ref)
+        .then((data) => ({ data, unavailable: false }))
+        .catch((err: unknown) => {
+          if (err instanceof SportsDataUnsupportedError) {
+            return {
+              data: {
+                home: [] as NormalizedInjury[],
+                away: [] as NormalizedInjury[],
+              },
+              unavailable: true,
+            };
+          }
+          throw err;
+        }),
+      provider.getLineups(ref),
     ]);
-  const injuries = partitionInjuries(allInjuries, homeTeamId, awayTeamId);
+  const absencesAvailable = !injuries.unavailable;
 
-  // 5. Fetch odds e seleção de bookmaker
+  // 4. Fetch odds e seleção de bookmaker
   const sportKey = leagueToSportKey(match.league);
   const kickoffMs = match.kickoffAt.getTime();
   const commenceTimeFrom = new Date(kickoffMs - ODDS_WINDOW_MS).toISOString();
@@ -356,14 +316,14 @@ export async function predict({
   });
   const event = findMatchingEvent(
     events,
-    fixture.teams.home.name,
-    fixture.teams.away.name,
+    fixture.homeTeam,
+    fixture.awayTeam,
     match.kickoffAt,
   );
   if (!event) {
     throw new PredictError("no matching odds event found", {
-      home: fixture.teams.home.name,
-      away: fixture.teams.away.name,
+      home: fixture.homeTeam,
+      away: fixture.awayTeam,
       kickoff: match.kickoffAt.toISOString(),
       candidates: events.length,
     });
@@ -376,7 +336,7 @@ export async function predict({
     });
   }
 
-  // 6. Implied probabilities normalizadas
+  // 5. Implied probabilities normalizadas
   const implied = computeImpliedProbabilities(
     oddsBundle.overOdd,
     oddsBundle.underOdd,
@@ -384,21 +344,29 @@ export async function predict({
   const overPct = implied.overProb * 100;
   const underPct = implied.underProb * 100;
 
-  // 7. Monta OverUnderInput
+  // 6. Monta OverUnderInput
   let input: ReturnType<typeof buildPredictionInput>;
   try {
     input = buildPredictionInput({
       match: {
         externalId: match.externalId,
         league: match.league,
-        homeTeam: { id: homeTeamId, name: fixture.teams.home.name },
-        awayTeam: { id: awayTeamId, name: fixture.teams.away.name },
+        homeTeam: match.homeTeam,
+        awayTeam: match.awayTeam,
         kickoffAt: match.kickoffAt,
-        venue: fixture.fixture.venue?.name ?? undefined,
+        venue: fixture.venue,
       },
       standings,
-      home: { form: homeForm, injuries: injuries.home },
-      away: { form: awayForm, injuries: injuries.away },
+      home: {
+        form: homeForm,
+        injuries: injuries.data.home,
+        absencesAvailable,
+      },
+      away: {
+        form: awayForm,
+        injuries: injuries.data.away,
+        absencesAvailable,
+      },
       lineups,
       h2h,
       odds: {
@@ -418,7 +386,7 @@ export async function predict({
     throw err;
   }
 
-  // 8. Monta payload do Claude
+  // 7. Monta payload do Claude
   const daysToKickoff = Math.max(
     0,
     Math.ceil((kickoffMs - Date.now()) / 86_400_000),
@@ -434,7 +402,7 @@ export async function predict({
     temperature: TEMPERATURE,
   };
 
-  // 9. Chamada do Claude (com cronômetro)
+  // 8. Chamada do Claude (com cronômetro)
   const client = getAnthropicClient();
   const start = performance.now();
   let response: Anthropic.Message;
@@ -471,7 +439,7 @@ export async function predict({
   const outputTokens = response.usage.output_tokens;
   const outputPayload = response as unknown as Record<string, unknown>;
 
-  // 10. Extração do tool_use block
+  // 9. Extração do tool_use block
   const toolUse = response.content.find(
     (block): block is Anthropic.ToolUseBlock =>
       block.type === "tool_use" && block.name === SUBMIT_PREDICTION_TOOL.name,
@@ -494,7 +462,7 @@ export async function predict({
     });
   }
 
-  // 11. Validação Zod do output
+  // 10. Validação Zod do output
   const parsed = OverUnderOutputSchema.safeParse(toolUse.input);
   if (!parsed.success) {
     await persistAiCallError({
@@ -514,9 +482,7 @@ export async function predict({
   }
   const output = parsed.data;
 
-  // 12. Persistência (sequencial — neon-http não suporta transações reais).
-  // Em caso raro de falha na insert de predictions após ai_calls.ok já gravado,
-  // o ai_call ficará órfão (auditável via LEFT JOIN). Tolerável no MVP.
+  // 11. Persistência (sequencial — neon-http não suporta transações reais).
   const cost = calculateCost({
     model: ANTHROPIC_MODEL,
     inputTokens,
