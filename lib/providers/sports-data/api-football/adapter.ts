@@ -10,9 +10,16 @@ import {
 } from "@/lib/providers/http/client";
 import {
   API_FOOTBALL_BASE_URL,
-  isFinishedStatus,
   mapApiFootballStatus,
 } from "@/lib/providers/sports-data/api-football/constants";
+import {
+  FIFTEEN_MINUTES,
+  FIVE_MINUTES,
+  ONE_DAY,
+  ONE_HOUR,
+  ONE_MINUTE,
+  pickTtlForFixtureCollection,
+} from "@/lib/providers/sports-data/cache-ttl";
 import {
   ApiFootballApiError,
   ApiFootballError,
@@ -60,12 +67,6 @@ import {
   SportsDataNotFoundError,
   SportsDataTransientError,
 } from "@/lib/providers/sports-data/types";
-
-const ONE_MINUTE = 60_000;
-const FIVE_MINUTES = 5 * ONE_MINUTE;
-const FIFTEEN_MINUTES = 15 * ONE_MINUTE;
-const ONE_HOUR = 60 * ONE_MINUTE;
-const ONE_DAY = 24 * ONE_HOUR;
 
 // API-Football free tier is 10 req/min and 100 req/day. We throttle at 8/min
 // (20% under the per-minute cap) to avoid the burst-detection auto-ban that
@@ -270,34 +271,6 @@ function seasonForApiFootballLeagueId(
   return currentSeasonByLeague(league, now);
 }
 
-// ─── TTL helpers ─────────────────────────────────────────────────────────────
-
-function pickTtlForFixture(
-  kickoffAtMs: number,
-  statusShort: string,
-  now: number = Date.now(),
-): number {
-  if (isFinishedStatus(statusShort)) return ONE_DAY;
-  const delta = kickoffAtMs - now;
-  if (delta < 2 * ONE_HOUR) return FIVE_MINUTES;
-  if (delta > ONE_DAY) return ONE_HOUR;
-  return FIFTEEN_MINUTES;
-}
-
-function pickTtlForFixtureCollection(
-  fixtures: ApiFootballFixture[],
-  now: number = Date.now(),
-): number {
-  if (fixtures.length === 0) return FIVE_MINUTES;
-  let minTtl = ONE_DAY;
-  for (const f of fixtures) {
-    const kickoffMs = f.fixture.timestamp * 1000;
-    const ttl = pickTtlForFixture(kickoffMs, f.fixture.status.short, now);
-    if (ttl < minTtl) minTtl = ttl;
-  }
-  return minTtl;
-}
-
 // ─── Public typed API ────────────────────────────────────────────────────────
 
 export async function getFixturesByDate(
@@ -322,12 +295,18 @@ export async function getFixturesByDate(
     ttlMs: ONE_HOUR,
     cacheKeyOverride: cacheKey,
   });
-  // Re-tighten TTL once we know what's in the payload.
-  const tighterTtl = pickTtlForFixtureCollection(envelope.response);
-  if (tighterTtl < ONE_HOUR) {
-    await inMemoryCache.set(cacheKey, envelope, tighterTtl);
-  }
   return envelope.response;
+}
+
+// Builds the same /fixtures cache key that getFixturesByDate uses, so the
+// adapter class method can tighten the TTL on the cached envelope after
+// normalization.
+function fixturesByDateCacheKey(
+  date: string,
+  leagueId: number,
+  season: number,
+): string {
+  return buildCacheKey("/fixtures", { date, league: leagueId, season });
 }
 
 export async function getFixturesByLeague(
@@ -346,23 +325,13 @@ export async function getFixturesByLeague(
 export async function getFixtureById(
   id: number,
 ): Promise<ApiFootballFixture | undefined> {
-  const cacheKey = buildCacheKey("/fixtures", { id });
   const envelope = await request({
     endpoint: "/fixtures",
     params: { id },
     schema: FixtureEnvelopeSchema,
     ttlMs: FIFTEEN_MINUTES,
-    cacheKeyOverride: cacheKey,
   });
-  const fixture = envelope.response[0];
-  if (fixture) {
-    const ttl = pickTtlForFixture(
-      fixture.fixture.timestamp * 1000,
-      fixture.fixture.status.short,
-    );
-    await inMemoryCache.set(cacheKey, envelope, ttl);
-  }
-  return fixture;
+  return envelope.response[0];
 }
 
 export async function getH2H(
@@ -718,7 +687,19 @@ export class ApiFootballAdapter implements SportsDataProvider {
       const leagueId = API_FOOTBALL_LEAGUE_IDS[league];
       const season = currentSeasonByLeague(league);
       const fixtures = await getFixturesByDate(date, leagueId, season);
-      return fixtures.map((f) => toNormalizedFixture(f, league));
+      const normalized = fixtures.map((f) => toNormalizedFixture(f, league));
+      // Tighten cache TTL after normalization, mirroring the football-data-org
+      // adapter: TTL heuristics operate on NormalizedFixture so both providers
+      // share the same imminent/live/finished rules from cache-ttl.ts.
+      const tighterTtl = pickTtlForFixtureCollection(normalized);
+      if (tighterTtl < ONE_HOUR) {
+        const cacheKey = fixturesByDateCacheKey(date, leagueId, season);
+        const cached = await inMemoryCache.get(cacheKey);
+        if (cached !== undefined) {
+          await inMemoryCache.set(cacheKey, cached, tighterTtl);
+        }
+      }
+      return normalized;
     } catch (err) {
       wrapApiFootballError(err, "getFixturesByDate", { date, league });
     }
