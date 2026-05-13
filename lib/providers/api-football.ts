@@ -20,17 +20,32 @@ import {
   type ApiFootballStandings,
   type ApiFootballStatus,
 } from "@/lib/providers/api-football-schemas";
-
-const DEFAULT_TIMEOUT_MS = 10_000;
-const MAX_ATTEMPTS = 3;
-const BASE_BACKOFF_MS = 500;
-const JITTER_RATIO = 0.2;
+import {
+  createProviderClient,
+  HttpClientError,
+  HttpClientTimeoutError,
+  RetryableHttpError,
+} from "@/lib/providers/http/client";
 
 const ONE_MINUTE = 60_000;
 const FIVE_MINUTES = 5 * ONE_MINUTE;
 const FIFTEEN_MINUTES = 15 * ONE_MINUTE;
 const ONE_HOUR = 60 * ONE_MINUTE;
 const ONE_DAY = 24 * ONE_HOUR;
+
+// API-Football free tier is 10 req/min and 100 req/day. We throttle at 8/min
+// (20% under the per-minute cap) to avoid the burst-detection auto-ban that
+// suspended the account during issue #7 testing.
+const apiFootballClient = createProviderClient({
+  name: "api-football",
+  concurrency: 2,
+  throttle: { maxRequests: 8, windowMs: ONE_MINUTE },
+  quotaHeaders: {
+    daily: "x-ratelimit-requests-remaining",
+    dailyLimit: "x-ratelimit-requests-limit",
+    perMinute: "X-RateLimit-Remaining",
+  },
+});
 
 export class ApiFootballError extends Error {
   readonly endpoint: string;
@@ -101,20 +116,6 @@ export class ApiFootballTimeoutError extends ApiFootballError {
 
 type Params = Record<string, string | number | undefined>;
 
-type LogFields = {
-  endpoint: string;
-  params: Record<string, string | number>;
-  cache_hit: boolean;
-  latency_ms: number;
-  status_code: number | null;
-  attempt: number;
-  error?: string;
-};
-
-function logCall(fields: LogFields): void {
-  console.log(JSON.stringify({ provider: "api-football", ...fields }));
-}
-
 function stripUndefined(params: Params): Record<string, string | number> {
   const out: Record<string, string | number> = {};
   for (const [k, v] of Object.entries(params)) {
@@ -145,19 +146,6 @@ function buildUrl(
     url.searchParams.set(k, String(v));
   }
   return url.toString();
-}
-
-function backoffDelayMs(attempt: number, retryAfterSeconds?: number): number {
-  if (retryAfterSeconds && Number.isFinite(retryAfterSeconds)) {
-    return Math.max(0, retryAfterSeconds * 1000);
-  }
-  const base = BASE_BACKOFF_MS * 2 ** (attempt - 1);
-  const jitter = base * JITTER_RATIO * (Math.random() * 2 - 1);
-  return Math.max(0, Math.floor(base + jitter));
-}
-
-function sleep(ms: number): Promise<void> {
-  return new Promise((resolve) => setTimeout(resolve, ms));
 }
 
 function requireApiKey(): string {
@@ -191,246 +179,99 @@ async function request<S extends z.ZodTypeAny>(
   const cacheStart = Date.now();
   const cached = await cache.get<z.infer<S>>(cacheKey);
   if (cached !== undefined) {
-    logCall({
-      endpoint: opts.endpoint,
-      params,
-      cache_hit: true,
-      latency_ms: Date.now() - cacheStart,
-      status_code: null,
-      attempt: 0,
-    });
+    apiFootballClient.logCacheHit(opts.endpoint, Date.now() - cacheStart);
     return cached;
   }
 
   const key = requireApiKey();
   const url = buildUrl(opts.endpoint, params);
 
-  let lastError: unknown;
-  for (let attempt = 1; attempt <= MAX_ATTEMPTS; attempt++) {
-    const controller = new AbortController();
-    const timeout = setTimeout(() => controller.abort(), DEFAULT_TIMEOUT_MS);
-    const start = Date.now();
-    let statusCode: number | null = null;
-
-    try {
-      const response = await fetch(url, {
+  let result: { response: Response; text: string };
+  try {
+    const r = await apiFootballClient.send({
+      endpoint: opts.endpoint,
+      url,
+      init: {
         method: "GET",
         headers: { "x-apisports-key": key, Accept: "application/json" },
-        signal: controller.signal,
-      });
-      statusCode = response.status;
-      const text = await response.text();
-
-      if (response.status === 429 || response.status >= 500) {
-        const retryAfter = Number(response.headers.get("retry-after"));
-        const transientError = new ApiFootballHttpError(
-          `Transient HTTP ${response.status} on ${opts.endpoint}`,
-          opts.endpoint,
-          params,
-          response.status,
-          text.slice(0, 2048),
-        );
-        if (attempt >= MAX_ATTEMPTS) {
-          logCall({
-            endpoint: opts.endpoint,
-            params,
-            cache_hit: false,
-            latency_ms: Date.now() - start,
-            status_code: statusCode,
-            attempt,
-            error: transientError.message,
-          });
-          throw transientError;
-        }
-        logCall({
-          endpoint: opts.endpoint,
-          params,
-          cache_hit: false,
-          latency_ms: Date.now() - start,
-          status_code: statusCode,
-          attempt,
-          error: `retrying after ${response.status}`,
-        });
-        await sleep(backoffDelayMs(attempt, retryAfter));
-        lastError = transientError;
-        continue;
-      }
-
-      if (!response.ok) {
-        const httpError = new ApiFootballHttpError(
-          `HTTP ${response.status} on ${opts.endpoint}`,
-          opts.endpoint,
-          params,
-          response.status,
-          text.slice(0, 2048),
-        );
-        logCall({
-          endpoint: opts.endpoint,
-          params,
-          cache_hit: false,
-          latency_ms: Date.now() - start,
-          status_code: statusCode,
-          attempt,
-          error: httpError.message,
-        });
-        throw httpError;
-      }
-
-      let json: unknown;
-      try {
-        json = JSON.parse(text);
-      } catch {
-        throw new ApiFootballHttpError(
-          `Invalid JSON from ${opts.endpoint}`,
-          opts.endpoint,
-          params,
-          response.status,
-          text.slice(0, 2048),
-        );
-      }
-
-      const envelopeErrors = (json as { errors?: unknown }).errors;
-      if (envelopeErrors !== undefined) {
-        const errs = envelopeErrors as string[] | Record<string, string>;
-        if (!envelopeErrorsAreEmpty(errs)) {
-          const apiError = new ApiFootballApiError(
-            `API-Football returned errors for ${opts.endpoint}`,
-            opts.endpoint,
-            params,
-            errs,
-          );
-          logCall({
-            endpoint: opts.endpoint,
-            params,
-            cache_hit: false,
-            latency_ms: Date.now() - start,
-            status_code: statusCode,
-            attempt,
-            error: JSON.stringify(errs),
-          });
-          throw apiError;
-        }
-      }
-
-      const parsed = opts.schema.safeParse(json);
-      if (!parsed.success) {
-        console.error(
-          JSON.stringify({
-            provider: "api-football",
-            endpoint: opts.endpoint,
-            params,
-            error: "schema_validation_failed",
-            payload_preview: text.slice(0, 2048),
-            zod_issues: parsed.error.issues.slice(0, 10),
-          }),
-        );
-        throw new ApiFootballSchemaError(
-          `Schema validation failed for ${opts.endpoint}`,
-          opts.endpoint,
-          params,
-          parsed.error,
-        );
-      }
-
-      await cache.set(cacheKey, parsed.data, opts.ttlMs);
-
-      logCall({
-        endpoint: opts.endpoint,
+      },
+    });
+    result = { response: r.response, text: r.text };
+  } catch (err) {
+    if (err instanceof RetryableHttpError) {
+      throw new ApiFootballHttpError(
+        `Transient HTTP ${err.statusCode} on ${opts.endpoint}`,
+        opts.endpoint,
         params,
-        cache_hit: false,
-        latency_ms: Date.now() - start,
-        status_code: statusCode,
-        attempt,
-      });
-
-      return parsed.data;
-    } catch (err) {
-      const isAbort =
-        err instanceof Error &&
-        (err.name === "AbortError" || (err as { name?: string }).name === "TimeoutError");
-      if (isAbort) {
-        if (attempt >= MAX_ATTEMPTS) {
-          const timeoutError = new ApiFootballTimeoutError(opts.endpoint, params);
-          logCall({
-            endpoint: opts.endpoint,
-            params,
-            cache_hit: false,
-            latency_ms: Date.now() - start,
-            status_code: statusCode,
-            attempt,
-            error: timeoutError.message,
-          });
-          throw timeoutError;
-        }
-        logCall({
-          endpoint: opts.endpoint,
-          params,
-          cache_hit: false,
-          latency_ms: Date.now() - start,
-          status_code: statusCode,
-          attempt,
-          error: "timeout — retrying",
-        });
-        await sleep(backoffDelayMs(attempt));
-        lastError = err;
-        continue;
-      }
-
-      if (
-        err instanceof ApiFootballHttpError &&
-        (err.status === 429 || err.status >= 500)
-      ) {
-        // Already handled in the retry path above; rethrow.
-        throw err;
-      }
-
-      if (
-        err instanceof ApiFootballHttpError ||
-        err instanceof ApiFootballApiError ||
-        err instanceof ApiFootballSchemaError
-      ) {
-        throw err;
-      }
-
-      // Network-level errors (DNS, ECONNRESET, etc.) — retry.
-      if (attempt < MAX_ATTEMPTS) {
-        logCall({
-          endpoint: opts.endpoint,
-          params,
-          cache_hit: false,
-          latency_ms: Date.now() - start,
-          status_code: statusCode,
-          attempt,
-          error: err instanceof Error ? `network: ${err.message}` : "network error",
-        });
-        await sleep(backoffDelayMs(attempt));
-        lastError = err;
-        continue;
-      }
-
-      logCall({
-        endpoint: opts.endpoint,
+        err.statusCode,
+        err.body,
+      );
+    }
+    if (err instanceof HttpClientError) {
+      throw new ApiFootballHttpError(
+        `HTTP ${err.statusCode} on ${opts.endpoint}`,
+        opts.endpoint,
         params,
-        cache_hit: false,
-        latency_ms: Date.now() - start,
-        status_code: statusCode,
-        attempt,
-        error: err instanceof Error ? err.message : "unknown error",
-      });
-      throw err;
-    } finally {
-      clearTimeout(timeout);
+        err.statusCode,
+        err.body,
+      );
+    }
+    if (err instanceof HttpClientTimeoutError) {
+      throw new ApiFootballTimeoutError(opts.endpoint, params);
+    }
+    throw err;
+  }
+
+  const { response, text } = result;
+
+  let json: unknown;
+  try {
+    json = JSON.parse(text);
+  } catch {
+    throw new ApiFootballHttpError(
+      `Invalid JSON from ${opts.endpoint}`,
+      opts.endpoint,
+      params,
+      response.status,
+      text.slice(0, 2048),
+    );
+  }
+
+  const envelopeErrors = (json as { errors?: unknown }).errors;
+  if (envelopeErrors !== undefined) {
+    const errs = envelopeErrors as string[] | Record<string, string>;
+    if (!envelopeErrorsAreEmpty(errs)) {
+      throw new ApiFootballApiError(
+        `API-Football returned errors for ${opts.endpoint}`,
+        opts.endpoint,
+        params,
+        errs,
+      );
     }
   }
 
-  // Defensive — the loop above always returns or throws.
-  throw lastError instanceof Error
-    ? lastError
-    : new ApiFootballError(
-        `Request to ${opts.endpoint} exhausted retries`,
-        opts.endpoint,
-        stripUndefined(opts.params),
-      );
+  const parsed = opts.schema.safeParse(json);
+  if (!parsed.success) {
+    console.error(
+      JSON.stringify({
+        provider: "api-football",
+        endpoint: opts.endpoint,
+        params,
+        error: "schema_validation_failed",
+        payload_preview: text.slice(0, 2048),
+        zod_issues: parsed.error.issues.slice(0, 10),
+      }),
+    );
+    throw new ApiFootballSchemaError(
+      `Schema validation failed for ${opts.endpoint}`,
+      opts.endpoint,
+      params,
+      parsed.error,
+    );
+  }
+
+  await cache.set(cacheKey, parsed.data, opts.ttlMs);
+  return parsed.data;
 }
 
 // ─── TTL helpers ─────────────────────────────────────────────────────────────
