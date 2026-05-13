@@ -7,8 +7,8 @@ import {
   getH2H,
   getLineups,
   getStandings,
-} from "@/lib/providers/api-football";
-import { LEAGUE_IDS } from "@/lib/providers/api-football-constants";
+} from "@/lib/providers/sports-data/api-football/adapter";
+import { LEAGUE_IDS } from "@/lib/providers/sports-data/api-football/constants";
 
 // Free plan has dual limits: only ±1 day of today's date AND seasons 2022–2024
 // for season-scoped queries. Day-of fixture queries (no league filter) work in

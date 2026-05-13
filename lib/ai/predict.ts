@@ -11,14 +11,14 @@ import {
   getLineups,
   getStandings,
   getTeamForm,
-} from "@/lib/providers/api-football";
+} from "@/lib/providers/sports-data/api-football/adapter";
 import {
   LEAGUE_IDS,
   currentSeason,
-} from "@/lib/providers/api-football-constants";
+} from "@/lib/providers/sports-data/api-football/constants";
 import type {
   ApiFootballInjury,
-} from "@/lib/providers/api-football-schemas";
+} from "@/lib/providers/sports-data/api-football/schemas";
 import { getOddsForSport } from "@/lib/providers/odds-api";
 import { SPORT_KEYS } from "@/lib/providers/odds-api-constants";
 import type { OddsApiEventOdds } from "@/lib/providers/odds-api-schemas";

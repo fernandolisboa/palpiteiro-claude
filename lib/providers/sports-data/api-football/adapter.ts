@@ -3,10 +3,22 @@ import type { z } from "zod";
 import { inMemoryCache } from "@/lib/cache/in-memory";
 import type { CacheStore } from "@/lib/cache/types";
 import {
+  createProviderClient,
+  HttpClientError,
+  HttpClientTimeoutError,
+  RetryableHttpError,
+} from "@/lib/providers/http/client";
+import {
   API_FOOTBALL_BASE_URL,
   currentSeason,
   isFinishedStatus,
-} from "@/lib/providers/api-football-constants";
+} from "@/lib/providers/sports-data/api-football/constants";
+import {
+  ApiFootballApiError,
+  ApiFootballHttpError,
+  ApiFootballSchemaError,
+  ApiFootballTimeoutError,
+} from "@/lib/providers/sports-data/api-football/errors";
 import {
   envelopeErrorsAreEmpty,
   FixtureEnvelopeSchema,
@@ -19,13 +31,7 @@ import {
   type ApiFootballLineup,
   type ApiFootballStandings,
   type ApiFootballStatus,
-} from "@/lib/providers/api-football-schemas";
-import {
-  createProviderClient,
-  HttpClientError,
-  HttpClientTimeoutError,
-  RetryableHttpError,
-} from "@/lib/providers/http/client";
+} from "@/lib/providers/sports-data/api-football/schemas";
 
 const ONE_MINUTE = 60_000;
 const FIVE_MINUTES = 5 * ONE_MINUTE;
@@ -47,72 +53,16 @@ const apiFootballClient = createProviderClient({
   },
 });
 
-export class ApiFootballError extends Error {
-  readonly endpoint: string;
-  readonly params: Record<string, string | number>;
-  constructor(
-    message: string,
-    endpoint: string,
-    params: Record<string, string | number>,
-  ) {
-    super(message);
-    this.name = "ApiFootballError";
-    this.endpoint = endpoint;
-    this.params = params;
-  }
-}
-
-export class ApiFootballHttpError extends ApiFootballError {
-  readonly status: number;
-  readonly body: string;
-  constructor(
-    message: string,
-    endpoint: string,
-    params: Record<string, string | number>,
-    status: number,
-    body: string,
-  ) {
-    super(message, endpoint, params);
-    this.name = "ApiFootballHttpError";
-    this.status = status;
-    this.body = body;
-  }
-}
-
-export class ApiFootballApiError extends ApiFootballError {
-  readonly errors: string[] | Record<string, string>;
-  constructor(
-    message: string,
-    endpoint: string,
-    params: Record<string, string | number>,
-    errors: string[] | Record<string, string>,
-  ) {
-    super(message, endpoint, params);
-    this.name = "ApiFootballApiError";
-    this.errors = errors;
-  }
-}
-
-export class ApiFootballSchemaError extends ApiFootballError {
-  readonly zodError: z.ZodError;
-  constructor(
-    message: string,
-    endpoint: string,
-    params: Record<string, string | number>,
-    zodError: z.ZodError,
-  ) {
-    super(message, endpoint, params);
-    this.name = "ApiFootballSchemaError";
-    this.zodError = zodError;
-  }
-}
-
-export class ApiFootballTimeoutError extends ApiFootballError {
-  constructor(endpoint: string, params: Record<string, string | number>) {
-    super(`API-Football request timed out for ${endpoint}`, endpoint, params);
-    this.name = "ApiFootballTimeoutError";
-  }
-}
+// Error classes live in ./errors. Re-exported here for backward compatibility
+// with callers that imported them from the old `lib/providers/api-football`
+// path (step 13 of issue #24 removes these once everyone consumes the class).
+export {
+  ApiFootballError,
+  ApiFootballApiError,
+  ApiFootballHttpError,
+  ApiFootballSchemaError,
+  ApiFootballTimeoutError,
+} from "@/lib/providers/sports-data/api-football/errors";
 
 type Params = Record<string, string | number | undefined>;
 
