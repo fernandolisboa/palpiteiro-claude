@@ -327,7 +327,11 @@ export async function predict({
   const leagueId = leagueToApiFootballId(match.league);
   const season = currentSeason(leagueId, match.kickoffAt);
 
-  // 4. Fetch demais dados em paralelo
+  // 4. Fetch demais dados "em paralelo" — na prática o client da API-Football
+  // (lib/providers/http/client.ts) tem concurrency=2 e throttle=8/min, então
+  // essas 6 chamadas são serializadas em pares pelo limiter. O Promise.all
+  // aqui expressa que não há dependência lógica entre elas; o rate limit é
+  // imposto na camada de transporte, não aqui.
   const [homeForm, awayForm, h2h, standings, allInjuries, lineups] =
     await Promise.all([
       getTeamForm(homeTeamId, FORM_LAST),
