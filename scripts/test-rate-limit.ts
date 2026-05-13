@@ -23,10 +23,8 @@
 import { config } from "dotenv";
 config({ path: ".env.local" });
 
-import {
-  ApiFootballHttpError,
-  getApiStatus,
-} from "@/lib/providers/sports-data/api-football/adapter";
+import { getApiStatus } from "@/lib/providers/sports-data/api-football/adapter";
+import { ApiFootballHttpError } from "@/lib/providers/sports-data/api-football/errors";
 
 const TOTAL_CALLS = 10;
 
