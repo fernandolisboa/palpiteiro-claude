@@ -3,111 +3,98 @@ import {
   type OverUnderInput,
 } from "@/lib/ai/schemas/input";
 import type {
-  ApiFootballFixture,
-  ApiFootballInjury,
-  ApiFootballLineup,
-  ApiFootballStandings,
-} from "@/lib/providers/sports-data/api-football/schemas";
+  NormalizedFixture,
+  NormalizedH2H,
+  NormalizedInjury,
+  NormalizedLineup,
+  NormalizedStanding,
+  NormalizedTeamLineup,
+} from "@/lib/providers/sports-data/types";
 
 type PlayerRole = "GK" | "DEF" | "MID" | "FWD";
 type AbsenceStatus = "injured" | "suspended" | "doubtful";
 type SideOrientation = "home" | "away";
 
-// API-Football devolve "Missing Fixture" / "Questionable" como `player.type`.
-// O motivo (reason) é texto livre; usamos heurística simples para detectar
-// suspensões por cartão. Pra outros casos, default seguro = "injured".
-function mapAbsenceStatus(injury: ApiFootballInjury): AbsenceStatus {
-  const type = (injury.player.type ?? "").toLowerCase();
-  const reason = (injury.player.reason ?? "").toLowerCase();
-  if (type.includes("questionable") || reason.includes("doubt")) return "doubtful";
-  if (reason.includes("card") || reason.includes("suspension")) return "suspended";
-  return "injured";
+// NormalizedInjury.type collapses to "injury" or "suspension"; NormalizedInjury.status
+// preserves the full three-state enum. Pass through directly.
+function mapAbsenceStatus(injury: NormalizedInjury): AbsenceStatus {
+  return injury.status;
 }
 
-// API-Football lineup position char: "G" | "D" | "M" | "F".
+// Normalized lineup players carry an optional position label already collapsed
+// to GK/DEF/MID/FWD by the adapter. Default to MID when the provider omits it
+// (mirrors the pre-issue-24 fallback in build-input.ts).
 function mapLineupRole(pos: string | null | undefined): PlayerRole {
-  switch (pos) {
-    case "G":
-      return "GK";
-    case "D":
-      return "DEF";
-    case "M":
-      return "MID";
-    case "F":
-      return "FWD";
-    default:
-      return "MID";
-  }
+  if (pos === "GK" || pos === "DEF" || pos === "MID" || pos === "FWD") return pos;
+  return "MID";
 }
 
-function toIsoZ(input: string | number): string {
-  const date = typeof input === "number" ? new Date(input * 1000) : new Date(input);
-  return date.toISOString();
-}
-
-function findStandingRow(
-  standings: ApiFootballStandings | undefined,
-  teamId: number,
+function findStandingTeamByName(
+  standings: NormalizedStanding | undefined,
+  teamName: string,
 ) {
   if (!standings) return undefined;
-  for (const group of standings.league.standings) {
-    for (const row of group) {
-      if (row.team.id === teamId) return row;
-    }
+  for (const table of standings.tables) {
+    const row = table.teams.find((t) => t.team === teamName);
+    if (row) return row;
   }
   return undefined;
 }
 
 function buildStanding(
-  row: NonNullable<ReturnType<typeof findStandingRow>>,
+  row: NonNullable<ReturnType<typeof findStandingTeamByName>>,
 ): OverUnderInput["home"]["standing"] {
   return {
-    position: row.rank,
-    played: row.all.played,
+    position: row.position,
+    played: row.played,
     points: row.points,
-    goals_for: row.all.goals.for,
-    goals_against: row.all.goals.against,
-    home_split: {
-      played: row.home.played,
-      wins: row.home.win,
-      draws: row.home.draw,
-      losses: row.home.lose,
-      goals_for: row.home.goals.for,
-      goals_against: row.home.goals.against,
-    },
-    away_split: {
-      played: row.away.played,
-      wins: row.away.win,
-      draws: row.away.draw,
-      losses: row.away.lose,
-      goals_for: row.away.goals.for,
-      goals_against: row.away.goals.against,
-    },
+    goals_for: row.goalsFor,
+    goals_against: row.goalsAgainst,
+    home_split: row.homeSplit
+      ? {
+          played: row.homeSplit.played,
+          wins: row.homeSplit.wins,
+          draws: row.homeSplit.draws,
+          losses: row.homeSplit.losses,
+          goals_for: row.homeSplit.goalsFor,
+          goals_against: row.homeSplit.goalsAgainst,
+        }
+      : undefined,
+    away_split: row.awaySplit
+      ? {
+          played: row.awaySplit.played,
+          wins: row.awaySplit.wins,
+          draws: row.awaySplit.draws,
+          losses: row.awaySplit.losses,
+          goals_for: row.awaySplit.goalsFor,
+          goals_against: row.awaySplit.goalsAgainst,
+        }
+      : undefined,
   };
 }
 
 function buildFormMatches(
-  fixtures: ApiFootballFixture[],
-  teamId: number,
+  fixtures: NormalizedFixture[],
+  teamName: string,
   limit: number,
 ): OverUnderInput["home"]["form"]["matches"] {
   const matches: OverUnderInput["home"]["form"]["matches"] = [];
-  // Sort by kickoff descending (mais recente primeiro).
+  // Already cronological-desc from the adapters; defensively sort again.
   const sorted = [...fixtures].sort(
-    (a, b) => b.fixture.timestamp - a.fixture.timestamp,
+    (a, b) => b.kickoffTimestampMs - a.kickoffTimestampMs,
   );
   for (const f of sorted) {
-    if (f.goals.home === null || f.goals.away === null) continue;
-    const isHome = f.teams.home.id === teamId;
-    const isAway = f.teams.away.id === teamId;
+    if (f.score.home === null || f.score.away === null) continue;
+    const isHome = f.homeTeam === teamName;
+    const isAway = f.awayTeam === teamName;
     if (!isHome && !isAway) continue;
-    const goalsFor = isHome ? f.goals.home : f.goals.away;
-    const goalsAgainst = isHome ? f.goals.away : f.goals.home;
-    const opponent = isHome ? f.teams.away.name : f.teams.home.name;
+    const goalsFor = isHome ? f.score.home : f.score.away;
+    const goalsAgainst = isHome ? f.score.away : f.score.home;
+    const opponent = isHome ? f.awayTeam : f.homeTeam;
     const result: "W" | "D" | "L" =
       goalsFor > goalsAgainst ? "W" : goalsFor === goalsAgainst ? "D" : "L";
     matches.push({
-      date: toIsoZ(f.fixture.date),
+      date: f.kickoffAt,
       opponent,
       home_or_away: isHome ? "home" : "away",
       goals_for: goalsFor,
@@ -120,47 +107,49 @@ function buildFormMatches(
 }
 
 function buildAbsences(
-  injuries: ApiFootballInjury[],
+  injuries: NormalizedInjury[],
 ): OverUnderInput["home"]["absences"] {
   return injuries.map((inj) => ({
     player: inj.player.name,
+    // NormalizedInjury doesn't carry position (not reliably available from
+    // the /injuries endpoints); default to MID. The prompt rule about
+    // absences_available makes this less critical — the AI knows when data
+    // is partial.
     role: "MID" as const,
     status: mapAbsenceStatus(inj),
   }));
 }
 
-function buildLineup(
-  lineups: ApiFootballLineup[],
-  teamId: number,
+function buildLineupForSide(
+  lineup: NormalizedTeamLineup | undefined,
 ): OverUnderInput["home"]["lineup"] | undefined {
-  const lineup = lineups.find((l) => l.team.id === teamId);
   if (!lineup) return undefined;
-  if (lineup.startXI.length !== 11) return undefined;
+  if (lineup.starters.length !== 11) return undefined;
   return {
     formation: lineup.formation ?? undefined,
-    starters: lineup.startXI.map((entry) => ({
-      player: entry.player.name,
-      role: mapLineupRole(entry.player.pos),
+    starters: lineup.starters.map((p) => ({
+      player: p.name,
+      role: mapLineupRole(p.position),
     })),
   };
 }
 
 function buildH2H(
-  fixtures: ApiFootballFixture[],
+  fixtures: NormalizedH2H[],
   limit: number,
 ): OverUnderInput["h2h"] {
   const matches: OverUnderInput["h2h"] = [];
   const sorted = [...fixtures].sort(
-    (a, b) => b.fixture.timestamp - a.fixture.timestamp,
+    (a, b) => b.kickoffTimestampMs - a.kickoffTimestampMs,
   );
   for (const f of sorted) {
-    if (f.goals.home === null || f.goals.away === null) continue;
+    if (f.score.home === null || f.score.away === null) continue;
     matches.push({
-      date: toIsoZ(f.fixture.date),
-      home_team: f.teams.home.name,
-      away_team: f.teams.away.name,
-      score_home: f.goals.home,
-      score_away: f.goals.away,
+      date: f.kickoffAt,
+      home_team: f.homeTeam,
+      away_team: f.awayTeam,
+      score_home: f.score.home,
+      score_away: f.score.away,
     });
     if (matches.length >= limit) break;
   }
@@ -171,22 +160,24 @@ export type BuildPredictionInputArgs = {
   match: {
     externalId: string;
     league: string;
-    homeTeam: { id: number; name: string };
-    awayTeam: { id: number; name: string };
+    homeTeam: string;
+    awayTeam: string;
     kickoffAt: Date;
     venue?: string;
   };
-  standings: ApiFootballStandings | undefined;
+  standings: NormalizedStanding | undefined;
   home: {
-    form: ApiFootballFixture[];
-    injuries: ApiFootballInjury[];
+    form: NormalizedFixture[];
+    injuries: NormalizedInjury[];
+    absencesAvailable: boolean;
   };
   away: {
-    form: ApiFootballFixture[];
-    injuries: ApiFootballInjury[];
+    form: NormalizedFixture[];
+    injuries: NormalizedInjury[];
+    absencesAvailable: boolean;
   };
-  lineups: ApiFootballLineup[];
-  h2h: ApiFootballFixture[];
+  lineups: NormalizedLineup | undefined;
+  h2h: NormalizedH2H[];
   odds: {
     bookmaker: string;
     over_2_5_decimal: number;
@@ -211,27 +202,30 @@ const H2H_LIMIT = 5;
 export function buildPredictionInput(
   args: BuildPredictionInputArgs,
 ): OverUnderInput {
-  const homeRow = findStandingRow(args.standings, args.match.homeTeam.id);
-  const awayRow = findStandingRow(args.standings, args.match.awayTeam.id);
+  const homeRow = findStandingTeamByName(args.standings, args.match.homeTeam);
+  const awayRow = findStandingTeamByName(args.standings, args.match.awayTeam);
   if (!homeRow || !awayRow) {
     throw new BuildInputError("standings row missing for one or both teams", {
       homeFound: Boolean(homeRow),
       awayFound: Boolean(awayRow),
-      homeTeamId: args.match.homeTeam.id,
-      awayTeamId: args.match.awayTeam.id,
+      homeTeam: args.match.homeTeam,
+      awayTeam: args.match.awayTeam,
     });
   }
 
+  // The composite fixture key has the same shape as a team identifier per side.
+  // The output schema wants `id` as a string and `name` as the display name —
+  // we use canonical name as both since IDs are no longer provider-bound.
   const draft: OverUnderInput = {
     match: {
       id: args.match.externalId,
       home_team: {
-        id: String(args.match.homeTeam.id),
-        name: args.match.homeTeam.name,
+        id: args.match.homeTeam,
+        name: args.match.homeTeam,
       },
       away_team: {
-        id: String(args.match.awayTeam.id),
-        name: args.match.awayTeam.name,
+        id: args.match.awayTeam,
+        name: args.match.awayTeam,
       },
       league: args.match.league,
       kickoff_at: args.match.kickoffAt.toISOString(),
@@ -241,25 +235,39 @@ export function buildPredictionInput(
       form: {
         matches: buildFormMatches(
           args.home.form,
-          args.match.homeTeam.id,
+          args.match.homeTeam,
           FORM_LIMIT,
         ),
       },
       standing: buildStanding(homeRow),
+      absences_available: args.home.absencesAvailable,
       absences: buildAbsences(args.home.injuries),
-      lineup: buildLineup(args.lineups, args.match.homeTeam.id),
+      lineup: buildLineupForSide(
+        args.lineups?.home.team === args.match.homeTeam
+          ? args.lineups.home
+          : args.lineups?.away.team === args.match.homeTeam
+            ? args.lineups.away
+            : undefined,
+      ),
     },
     away: {
       form: {
         matches: buildFormMatches(
           args.away.form,
-          args.match.awayTeam.id,
+          args.match.awayTeam,
           FORM_LIMIT,
         ),
       },
       standing: buildStanding(awayRow),
+      absences_available: args.away.absencesAvailable,
       absences: buildAbsences(args.away.injuries),
-      lineup: buildLineup(args.lineups, args.match.awayTeam.id),
+      lineup: buildLineupForSide(
+        args.lineups?.away.team === args.match.awayTeam
+          ? args.lineups.away
+          : args.lineups?.home.team === args.match.awayTeam
+            ? args.lineups.home
+            : undefined,
+      ),
     },
     h2h: buildH2H(args.h2h, H2H_LIMIT),
     odds: args.odds,

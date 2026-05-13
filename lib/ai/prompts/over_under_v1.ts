@@ -1,6 +1,6 @@
 import type { OverUnderInput } from "../schemas/input";
 
-export const PROMPT_VERSION = "over_under_v1.0" as const;
+export const PROMPT_VERSION = "over_under_v1.1" as const;
 
 export const SYSTEM_PROMPT = `Você é um analista quantitativo de apostas esportivas focado exclusivamente no mercado over/under 2.5 gols.
 
@@ -17,7 +17,8 @@ Regras invioláveis:
 5. Use APENAS os dados fornecidos pelo usuário. Não invente jogadores, lesões, escalações, estatísticas ou tendências.
 6. Raciocine quantitativamente quando possível: médias de gols marcados/sofridos, ritmo recente, impacto de ausências em finalização/defesa, padrão de H2H, contexto da competição.
 7. Considere a confiabilidade dos dados: poucos jogos de forma recente, ausência de escalação publicada, ou H2H muito antigo são motivos pra reduzir confiança (e provavelmente "pass").
-8. Responda EXCLUSIVAMENTE chamando a ferramenta \`submit_prediction\` com os campos definidos no schema dela. Não produza texto livre fora da chamada da ferramenta.`;
+8. Quando a seção "Lesões / Suspensões" indicar "dados indisponíveis nesta análise" para um time, NÃO assuma que não há lesões — trate como dado faltante e reduza a confiança da análise.
+9. Responda EXCLUSIVAMENTE chamando a ferramenta \`submit_prediction\` com os campos definidos no schema dela. Não produza texto livre fora da chamada da ferramenta.`;
 
 export const SUBMIT_PREDICTION_TOOL = {
   name: "submit_prediction",
@@ -131,7 +132,9 @@ export function buildUserMessage(
     }
 
     lines.push("## Lesões / Suspensões");
-    if (team.absences.length === 0) {
+    if (!team.absences_available) {
+      lines.push("- Lesões: dados indisponíveis nesta análise");
+    } else if (team.absences.length === 0) {
       lines.push("- (nenhuma reportada)");
     } else {
       for (const a of team.absences) {
