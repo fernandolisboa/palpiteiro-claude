@@ -7,7 +7,7 @@ import type {
   ApiFootballInjury,
   ApiFootballLineup,
   ApiFootballStandings,
-} from "@/lib/providers/api-football-schemas";
+} from "@/lib/providers/sports-data/api-football/schemas";
 
 type PlayerRole = "GK" | "DEF" | "MID" | "FWD";
 type AbsenceStatus = "injured" | "suspended" | "doubtful";
