@@ -25,6 +25,7 @@ const {
   toNormalizedTeamLineup,
   mapStatusToNormalized,
   resolveApiFootballTeamId,
+  seasonForApiFootballLeagueId,
   wrapApiFootballError,
 } = __testing;
 
@@ -329,6 +330,62 @@ describe("wrapApiFootballError", () => {
     expect(() => wrapApiFootballError(original, "getH2H", ctx)).toThrow(
       TypeError,
     );
+  });
+});
+
+// ─── Season helper ──────────────────────────────────────────────────────────
+// The adapter's free `getFixturesByDate` falls back to the per-league season
+// logic in leagues.ts (Brasileirão calendar-year, Champions cross-year) via
+// `seasonForApiFootballLeagueId`. These tests pin the boundary months that
+// the previous local `currentSeason(leagueId)` in constants.ts got wrong
+// (Jan–Mar for Brasileirão returning current year instead of previous, and
+// July for Champions returning current year instead of previous).
+
+describe("seasonForApiFootballLeagueId — Brasileirão (id 71)", () => {
+  it("January → previous year (off-season)", () => {
+    expect(
+      seasonForApiFootballLeagueId(71, new Date("2026-01-15T12:00:00Z")),
+    ).toBe(2025);
+  });
+
+  it("March → previous year (final off-season month)", () => {
+    expect(
+      seasonForApiFootballLeagueId(71, new Date("2026-03-31T23:59:59Z")),
+    ).toBe(2025);
+  });
+
+  it("April → current year (season kicks off)", () => {
+    expect(
+      seasonForApiFootballLeagueId(71, new Date("2026-04-15T12:00:00Z")),
+    ).toBe(2026);
+  });
+});
+
+describe("seasonForApiFootballLeagueId — Champions League (id 2)", () => {
+  it("July → previous year (final off-season month)", () => {
+    expect(
+      seasonForApiFootballLeagueId(2, new Date("2026-07-15T12:00:00Z")),
+    ).toBe(2025);
+  });
+
+  it("August → current year (new season starts)", () => {
+    expect(
+      seasonForApiFootballLeagueId(2, new Date("2026-08-15T12:00:00Z")),
+    ).toBe(2026);
+  });
+
+  it("January → previous year (season started prior August)", () => {
+    expect(
+      seasonForApiFootballLeagueId(2, new Date("2026-01-15T12:00:00Z")),
+    ).toBe(2025);
+  });
+});
+
+describe("seasonForApiFootballLeagueId — unmapped id", () => {
+  it("throws so callers can't silently use a wrong season", () => {
+    expect(() =>
+      seasonForApiFootballLeagueId(39, new Date("2026-05-15T12:00:00Z")),
+    ).toThrow(/No SupportedLeague mapped/);
   });
 });
 

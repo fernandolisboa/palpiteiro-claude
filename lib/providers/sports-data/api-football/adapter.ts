@@ -10,7 +10,6 @@ import {
 } from "@/lib/providers/http/client";
 import {
   API_FOOTBALL_BASE_URL,
-  currentSeason,
   isFinishedStatus,
   mapApiFootballStatus,
 } from "@/lib/providers/sports-data/api-football/constants";
@@ -244,6 +243,33 @@ async function request<S extends z.ZodTypeAny>(
   return parsed.data;
 }
 
+// ─── Season helper ───────────────────────────────────────────────────────────
+
+// Reverse of API_FOOTBALL_LEAGUE_IDS. Used by the free getFixturesByDate when
+// a caller passes leagueId but no explicit seasonOverride — we resolve the
+// SupportedLeague so currentSeasonByLeague (the single source of truth for
+// season label logic in leagues.ts) can be applied.
+const SUPPORTED_LEAGUE_BY_API_FOOTBALL_ID: Record<number, SupportedLeague> =
+  Object.fromEntries(
+    Object.entries(API_FOOTBALL_LEAGUE_IDS).map(
+      ([league, id]) => [id, league as SupportedLeague] as const,
+    ),
+  );
+
+function seasonForApiFootballLeagueId(
+  leagueId: number,
+  now: Date = new Date(),
+): number {
+  const league = SUPPORTED_LEAGUE_BY_API_FOOTBALL_ID[leagueId];
+  if (!league) {
+    throw new Error(
+      `No SupportedLeague mapped for API-Football league id ${leagueId}. ` +
+        `Pass seasonOverride explicitly or extend API_FOOTBALL_LEAGUE_IDS.`,
+    );
+  }
+  return currentSeasonByLeague(league, now);
+}
+
 // ─── TTL helpers ─────────────────────────────────────────────────────────────
 
 function pickTtlForFixture(
@@ -282,7 +308,7 @@ export async function getFixturesByDate(
   // API-Football requires `season` whenever `league` is supplied on /fixtures.
   const season =
     leagueId !== undefined
-      ? (seasonOverride ?? currentSeason(leagueId))
+      ? (seasonOverride ?? seasonForApiFootballLeagueId(leagueId))
       : seasonOverride;
   const params = { date, league: leagueId, season, timezone: "UTC" };
   const cacheKey = buildCacheKey(
@@ -886,6 +912,7 @@ export const __testing = {
   toNormalizedTeamLineup,
   mapStatusToNormalized,
   resolveApiFootballTeamId,
+  seasonForApiFootballLeagueId,
   wrapApiFootballError,
 };
 export { canonicalizeTeamName };
