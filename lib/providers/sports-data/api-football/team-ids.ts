@@ -11,10 +11,13 @@ import type { SupportedLeague } from "@/lib/providers/sports-data/leagues";
  * any mismatches surface as console warnings and need manual aliasing here.
  *
  * Until populated, the ApiFootballAdapter's name-based methods (getH2H,
- * getTeamForm, getInjuriesByTeam) throw SportsDataNotFoundError. The
- * FallbackProvider treats that as non-transient (does NOT cascade), matching
- * the behavior contract: an unmapped team is an input error, not a provider
- * outage.
+ * getTeamForm, getInjuriesByTeam) throw SportsDataTransientError when an
+ * unknown canonical name is requested. The FallbackProvider treats Transient
+ * as a cascade signal, so the call is retried against the next adapter (e.g.
+ * football-data-org). This is the deliberate ADR-0005 contract (see lines
+ * 102–109): from the caller's perspective an unmapped name is functionally
+ * equivalent to a provider outage, so cascading keeps the system operational
+ * while this map is being populated.
  */
 export const API_FOOTBALL_TEAM_IDS: Record<
   SupportedLeague,
