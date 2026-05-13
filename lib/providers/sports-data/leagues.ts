@@ -1,0 +1,41 @@
+import { z } from "zod";
+
+export const SUPPORTED_LEAGUES = ["brasileirao_a", "champions_league"] as const;
+export type SupportedLeague = (typeof SUPPORTED_LEAGUES)[number];
+export const SupportedLeagueSchema = z.enum(SUPPORTED_LEAGUES);
+
+// Provider-specific league identifiers. Confirmed via each provider's docs:
+//   API-Football v3: league IDs 71 (BSA) and 2 (UCL).
+//   football-data.org v4: codes BSA / CL (numeric IDs 2013 / 2001 also accepted).
+export const API_FOOTBALL_LEAGUE_IDS: Record<SupportedLeague, number> = {
+  brasileirao_a: 71,
+  champions_league: 2,
+};
+
+export const FOOTBALL_DATA_ORG_LEAGUE_CODES: Record<SupportedLeague, string> = {
+  brasileirao_a: "BSA",
+  champions_league: "CL",
+};
+
+/**
+ * Returns the season label for a league at a given instant. The label matches
+ * what each provider expects on its `season` query param.
+ *
+ * - Brasileirão Série A (calendar-year): April–December. January–March uses the
+ *   prior year's label (last season is the most recently completed one — the
+ *   current season hasn't kicked off yet).
+ * - Champions League (cross-year): August–May. The label is the year the
+ *   season starts. January–July uses the prior year's label.
+ */
+export function currentSeason(
+  league: SupportedLeague,
+  now: Date = new Date(),
+): number {
+  const year = now.getUTCFullYear();
+  const month = now.getUTCMonth() + 1; // 1-12
+  if (league === "brasileirao_a") {
+    return month >= 4 ? year : year - 1;
+  }
+  // champions_league (and future cross-year European competitions)
+  return month >= 8 ? year : year - 1;
+}
