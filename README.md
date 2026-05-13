@@ -136,12 +136,88 @@ consumo de quota. Cada provider (`api-football`, `odds-api`) instancia um
 | odds-api     | 2           | 15 req / 60s  | Free tier = 500 req/mês, sem per-minute strict. Throttle mais relaxado prioriza burning legítimo de quota mensal sem esperas artificiais. |
 
 **Como ajustar:** editar o `createProviderClient({...})` no topo de
-`lib/providers/api-football.ts` ou `lib/providers/odds-api.ts`. Os primitives
-são puros e cobertos por testes unitários em
-`lib/providers/http/__tests__/`.
+`lib/providers/sports-data/api-football/adapter.ts`,
+`lib/providers/sports-data/football-data-org/adapter.ts` ou
+`lib/providers/odds-api.ts`. Os primitives são puros e cobertos por testes
+unitários em `lib/providers/http/__tests__/`.
 
 **Validação manual:** `pnpm tsx scripts/test-rate-limit.ts` dispara 10
 chamadas reais ao endpoint `/status` da API-Football (não consome quota
 diária) e confirma que o throttle espaça as últimas duas em ~60s. Duração
 esperada: ~62-75s. Se a conta estiver suspensa, o script aborta logo na
 primeira chamada e os testes unitários permanecem cobrindo o comportamento.
+
+## Sports Data Providers
+
+Dados de jogos, classificação, escalações, lesões e H2H são acessados via uma
+camada de abstração em [`lib/providers/sports-data/`](./lib/providers/sports-data/)
+que expõe a interface `SportsDataProvider` agnóstica de fonte. Refs e times
+são identificados por **nome canônico + liga** (não por IDs nativos de provider),
+e fixtures por composite key `${league}:${kickoffAt}:${home}:${away}`.
+
+### Adapters e capabilities
+
+| Provider | supportsInjuries | supportsLineups | Ligas |
+|---|---|---|---|
+| `api-football` | ✓ | ✓ | Brasileirão A, Champions League |
+| `football-data-org` | ✗ (free tier não expõe) | ✓ (em `/v4/matches/{id}`) | Brasileirão A, Champions League |
+
+Cada adapter mantém um mapa estático `canonical-name → provider-native team-id`
+em `lib/providers/sports-data/<adapter>/team-ids.ts`. O script
+`scripts/generate-team-ids.ts --provider=<name>` gera/atualiza esses mapas
+chamando `/v4/competitions/{code}/teams` (football-data-org) ou
+`/teams?league=X&season=Y` (api-football). Custo: 2 chamadas reais por provider.
+Lista canônica de times em `lib/providers/sports-data/canonical-teams.ts` — gerada
+do primeiro provider executado (idempotente: re-runs verificam coverage sem
+sobrescrever).
+
+### Composição primary + fallback
+
+Configurado via env (default: api-football primary, football-data-org fallback):
+
+```
+SPORTS_DATA_PRIMARY=api-football
+SPORTS_DATA_FALLBACK=football-data-org
+```
+
+`getSportsDataProvider()` em [`lib/providers/sports-data/index.ts`](./lib/providers/sports-data/index.ts)
+retorna um `FallbackProvider` que envolve os dois adapters. Cascade automático
+quando o primário lança `SportsDataTransientError` (5xx pós-retry, 429 pós-retry,
+timeout, network failure, schema drift, ou erro de envelope tipo "account
+suspended"). Erros 4xx ≠ 429 (`SportsDataNotFoundError`) NÃO ativam fallback —
+são erros de input. Quando ambos adapters lançam transient, o último erro
+é propagado.
+
+Quando primary === fallback, retorna o adapter desembrulhado (sem overhead do
+FallbackProvider).
+
+Logging de cascade: `console.warn` com JSON estruturado:
+
+```json
+{"event":"fallback_activated","method":"getStandings","primary":"api-football",
+ "fallback":"football-data-org","cause":"SportsDataTransientError: 503...",
+ "timestamp":"..."}
+```
+
+### Passo manual (pós-merge da issue #24)
+
+1. Criar conta em https://www.football-data.org/client/register e obter token.
+2. Adicionar em `.env.local`:
+   ```
+   FOOTBALL_DATA_ORG_API_KEY=<token>
+   ```
+3. Adicionar nas env vars do Vercel (**Production** e **Preview**).
+4. Quando a conta da API-Football voltar:
+   ```
+   pnpm tsx scripts/generate-team-ids.ts --provider=api-football
+   ```
+   pra preencher `lib/providers/sports-data/api-football/team-ids.ts`
+   (vazio neste PR por causa da suspensão). Verificar que
+   `canonical-teams.test.ts` "API_FOOTBALL_TEAM_IDS coverage" passa após
+   atualizar pra exigir 100% de cobertura (hoje só checa que tá vazio).
+
+### Validação manual
+
+`pnpm tsx scripts/test-providers.ts` exercita os 3 cenários (primary OK,
+fallback ativado via mock, capabilities reportadas corretas). Máximo de 2
+chamadas reais — abort em 429 ou quota.
