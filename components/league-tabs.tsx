@@ -1,7 +1,7 @@
 import Link from "next/link";
 
 import { cn } from "@/lib/utils";
-import type { LeagueFilter } from "@/lib/fixtures";
+import type { LeagueFilter } from "@/lib/view/types";
 
 type Item = { value: LeagueFilter; label: string };
 
@@ -11,29 +11,25 @@ const ITEMS: Item[] = [
   { value: "ucl", label: "Champions" },
 ];
 
-function buildHref(league: LeagueFilter, preserveState: string | null): string {
+function buildHref(league: LeagueFilter): string {
+  if (league === "all") return "/";
   const params = new URLSearchParams();
-  if (league !== "all") params.set("league", league);
-  if (preserveState) params.set("state", preserveState);
-  const qs = params.toString();
-  return qs ? `/?${qs}` : "/";
+  params.set("league", league);
+  return `/?${params.toString()}`;
 }
 
 type Props = {
   value: LeagueFilter;
-  /** When set, links preserve `?state=...` so the user can swap leagues inside a preview state. */
-  preserveState?: string | null;
   className?: string;
 };
 
-export function LeagueTabs({ value, preserveState = null, className }: Props) {
+export function LeagueTabs({ value, className }: Props) {
   return (
-    <div
+    <nav
       className={cn(
         "inline-flex h-9 items-center rounded-md border border-border bg-surface-2 p-1",
         className,
       )}
-      role="tablist"
       aria-label="Filtro de liga"
     >
       {ITEMS.map((item) => {
@@ -41,9 +37,8 @@ export function LeagueTabs({ value, preserveState = null, className }: Props) {
         return (
           <Link
             key={item.value}
-            role="tab"
-            aria-selected={active}
-            href={buildHref(item.value, preserveState)}
+            href={buildHref(item.value)}
+            aria-current={active ? "page" : undefined}
             className={cn(
               "h-7 rounded-[5px] px-3 text-[12px] font-medium leading-7 transition-colors",
               active
@@ -55,6 +50,6 @@ export function LeagueTabs({ value, preserveState = null, className }: Props) {
           </Link>
         );
       })}
-    </div>
+    </nav>
   );
 }
