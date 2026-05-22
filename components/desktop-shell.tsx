@@ -9,10 +9,7 @@ export function DesktopShell({ children }: { children: ReactNode }) {
     <div className="flex min-h-screen w-full flex-col bg-background text-foreground">
       <header className="flex h-14 items-center justify-between border-b border-border-subtle px-8">
         <div className="flex items-baseline gap-3">
-          <span
-            className="font-semibold tracking-tight"
-            style={{ fontSize: 17, letterSpacing: "-0.04em" }}
-          >
+          <span className="text-[17px] font-semibold tracking-[-0.04em]">
             palpiteiro
           </span>
           <span className="font-mono text-[10px] uppercase tracking-[0.18em] text-muted-fg-2">

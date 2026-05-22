@@ -48,6 +48,8 @@ type AnalysisState =
   | "error"
   | "no-odds";
 
+const REC_LABEL = { over: "OVER", under: "UNDER", pass: "PASS" } as const;
+
 function parseState(input: string | null): AnalysisState | null {
   switch (input) {
     case "idle":
@@ -219,7 +221,7 @@ function DesktopMatch({ fixture, state, onAnalyze }: ScreenProps) {
         {showResult && (
           <div className="pb-6">
             <AnalysisResult
-              kind={state === "again" ? "OVER" : (state.toUpperCase() as "OVER" | "UNDER" | "PASS")}
+              kind={state === "again" ? "OVER" : REC_LABEL[state]}
               again={state === "again"}
             />
           </div>
@@ -309,7 +311,7 @@ function ResultRegion({
     );
   }
   if (state === "over" || state === "under" || state === "pass" || state === "again") {
-    const kind = state === "again" ? "OVER" : (state.toUpperCase() as "OVER" | "UNDER" | "PASS");
+    const kind = state === "again" ? "OVER" : REC_LABEL[state];
     return (
       <>
         <AnalysisResult kind={kind} again={state === "again"} />

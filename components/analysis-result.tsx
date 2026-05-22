@@ -19,10 +19,7 @@ export function AnalysisResult({ kind, again = false }: Props) {
 
   if (kind === "PASS") {
     return (
-      <div
-        className="flex flex-col rounded-[10px] bg-card"
-        style={{ border: "1px dashed var(--border-strong)" }}
-      >
+      <div className="flex flex-col rounded-[10px] border border-dashed border-border-strong bg-card">
         <div className="flex items-center justify-between px-4 pt-3 pb-2">
           <span className="font-mono text-[10.5px] uppercase tracking-[0.16em] text-muted-foreground">
             sem edge claro
