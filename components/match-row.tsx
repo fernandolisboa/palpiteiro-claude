@@ -5,10 +5,11 @@ import { Badge } from "@/components/ui/badge";
 import { Skeleton } from "@/components/ui/skeleton";
 import { TeamAvatar } from "@/components/team-avatar";
 import { cn } from "@/lib/utils";
-import { LEAGUE_LABEL, type Fixture } from "@/lib/fixtures";
+import { LEAGUE_LABEL } from "@/lib/format";
+import type { MatchRowView } from "@/lib/view/types";
 
 type Props = {
-  m: Fixture;
+  m: MatchRowView;
   last?: boolean;
 };
 
@@ -58,14 +59,20 @@ export function MatchRow({ m, last }: Props) {
         </div>
 
         <div className="flex shrink-0 items-center gap-2">
-          <div className="flex flex-col items-end gap-1 font-mono text-[12.5px] tabular-nums">
-            <span>
-              <span className="text-muted-foreground">O</span> {m.odds.over}
+          {m.odds ? (
+            <div className="flex flex-col items-end gap-1 font-mono text-[12.5px] tabular-nums">
+              <span>
+                <span className="text-muted-foreground">O</span> {m.odds.over}
+              </span>
+              <span>
+                <span className="text-muted-foreground">U</span> {m.odds.under}
+              </span>
+            </div>
+          ) : (
+            <span className="font-mono text-[10.5px] text-muted-fg-2">
+              sem odd
             </span>
-            <span>
-              <span className="text-muted-foreground">U</span> {m.odds.under}
-            </span>
-          </div>
+          )}
           <span className="ml-1 text-muted-fg-2">
             <ChevronRight className="size-3.5" />
           </span>

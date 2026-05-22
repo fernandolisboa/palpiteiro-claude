@@ -1,5 +1,3 @@
-"use client";
-
 import { Loader2, Sparkles } from "lucide-react";
 
 import { Button } from "@/components/ui/button";
@@ -8,8 +6,7 @@ import { Separator } from "@/components/ui/separator";
 import { cn } from "@/lib/utils";
 
 type Props = {
-  state?: "idle" | "loading";
-  onClick?: () => void;
+  pending: boolean;
 };
 
 const STEPS = [
@@ -19,8 +16,8 @@ const STEPS = [
   { label: "validando schema + persistindo", status: "pending" as const },
 ];
 
-export function AnalyzeCTA({ state = "idle", onClick }: Props) {
-  if (state === "loading") {
+export function AnalyzeCTA({ pending }: Props) {
+  if (pending) {
     return (
       <Card className="gap-0 p-0">
         <div className="flex items-center gap-3 px-4 py-4">
@@ -66,7 +63,7 @@ export function AnalyzeCTA({ state = "idle", onClick }: Props) {
   }
 
   return (
-    <Button size="lg" className="h-12 w-full text-[14px]" onClick={onClick}>
+    <Button type="submit" size="lg" className="h-12 w-full text-[14px]">
       <Sparkles className="size-4" /> Analisar com IA
     </Button>
   );

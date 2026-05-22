@@ -1,28 +1,16 @@
 import { Badge } from "@/components/ui/badge";
 import { TeamAvatar } from "@/components/team-avatar";
-import { LEAGUE_LABEL, type LeagueKey, type Team } from "@/lib/fixtures";
+import { LEAGUE_LABEL } from "@/lib/format";
+import type { MatchHeroView } from "@/lib/view/types";
 
 type Props = {
-  home: Team;
-  away: Team;
-  league: LeagueKey;
-  when: string;
+  view: MatchHeroView;
   status?: "scheduled" | "live" | "finished";
-  countdown?: string;
-  venue?: string;
   score?: { home: number; away: number };
 };
 
-export function MatchHero({
-  home,
-  away,
-  league,
-  when,
-  status = "scheduled",
-  countdown,
-  venue,
-  score,
-}: Props) {
+export function MatchHero({ view, status = "scheduled", score }: Props) {
+  const { home, away, league, when, countdown, venue } = view;
   return (
     <div className="px-5 pt-5 pb-5">
       <div className="flex items-center justify-between pb-4">
