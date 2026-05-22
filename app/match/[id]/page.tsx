@@ -1,25 +1,30 @@
-/**
- * PREVIEW-ONLY (issue #9): toda a página é client component pra simular o state
- * machine idle → loading → OVER/UNDER/PASS via ?state=… e clique no CTA.
- *
- * Na issue #9 isso vira:
- *   - server component que faz fetch do match + última predição via Drizzle;
- *   - client islands isolados: <AnalyzeCTA> com useFormStatus pro botão, server
- *     action que persiste em ai_calls + predictions, error.tsx boundary pra
- *     falha de validação Zod, loading.tsx pro Suspense.
- *   - getFixtureById sai; entra getMatchById(id) tipado.
- *
- * Não construir lógica nova assumindo client-side rendering — qualquer regra
- * que tem que sobreviver à issue #9 mora em lib/, não aqui.
- *
- * Também: o id do match aqui é slug (pal-fla), na issue #9 vira UUID.
- * Não fazer split/regex sobre o id; tratar como string opaca em qualquer lugar.
- */
-
+import Link from "next/link";
 import { notFound } from "next/navigation";
+import { Suspense } from "react";
+import { ChevronLeft } from "lucide-react";
 
-import { getFixtureById } from "@/lib/fixtures";
-import { MatchScreen } from "./match-screen";
+import { AnalysisPanel } from "@/components/analysis-panel";
+import { DesktopShell } from "@/components/desktop-shell";
+import { MatchAuxiliarySections } from "@/components/match-sections-auxiliary";
+import { MatchHero } from "@/components/match-hero";
+import { MatchSections } from "@/components/match-sections";
+import { OddsCard } from "@/components/odds-card";
+import { TeamAvatar } from "@/components/team-avatar";
+import { ThemeToggle } from "@/components/theme-toggle";
+import {
+  MatchAuxiliarySkeleton,
+  MatchSectionsSkeleton,
+} from "@/components/skeletons/match-sections-skeleton";
+import { DEV_USER_ID } from "@/lib/auth/dev-user";
+import { LEAGUE_LABEL, leagueToKey } from "@/lib/format";
+import { getMatchById } from "@/lib/db/queries/matches";
+import { getLatestPredictionForMatch } from "@/lib/db/queries/predictions";
+import { ensureOddsSnapshotsFresh } from "@/lib/odds/fetch-and-snapshot";
+import type { FixtureRef } from "@/lib/providers/sports-data/types";
+import { toAnalysisView } from "@/lib/view/analysis";
+import { toMatchRowView } from "@/lib/view/match";
+import { toOddsView } from "@/lib/view/odds";
+import type { OddsView } from "@/lib/view/types";
 
 type PageProps = {
   params: Promise<{ id: string }>;
@@ -27,7 +32,252 @@ type PageProps = {
 
 export default async function MatchPage({ params }: PageProps) {
   const { id } = await params;
-  const fixture = getFixtureById(id);
-  if (!fixture) notFound();
-  return <MatchScreen fixture={fixture} />;
+  const match = await getMatchById(id);
+  if (!match) notFound();
+
+  // Odds e predição existente em paralelo. Ambas são pré-requisito pro
+  // render síncrono do hero + odds + panel (não vão pra Suspense).
+  const [snapshot, latestPred] = await Promise.all([
+    ensureOddsSnapshotsFresh(match),
+    getLatestPredictionForMatch(match.id, DEV_USER_ID),
+  ]);
+
+  const heroView = toMatchRowView({
+    match: {
+      id: match.id,
+      league: match.league,
+      homeTeam: match.homeTeam,
+      awayTeam: match.awayTeam,
+      kickoffAt: match.kickoffAt,
+    },
+    odds: snapshot
+      ? {
+          bookmaker: snapshot.bookmaker,
+          overOdd: snapshot.overOdd,
+          underOdd: snapshot.underOdd,
+          capturedAt: snapshot.capturedAt,
+        }
+      : null,
+    hasPrediction: latestPred !== null,
+  });
+
+  const oddsView: OddsView | null = snapshot
+    ? toOddsView({
+        bookmaker: snapshot.bookmaker,
+        overOdd: snapshot.overOdd,
+        underOdd: snapshot.underOdd,
+        capturedAt: snapshot.capturedAt,
+      })
+    : null;
+
+  const existingAnalysis = latestPred
+    ? toAnalysisView(
+        {
+          recommendation: latestPred.prediction.recommendation,
+          confidencePct: latestPred.prediction.confidencePct,
+          rationale: latestPred.prediction.rationale,
+          keyFactors: latestPred.prediction.keyFactors,
+          minimumOdd: latestPred.prediction.minimumOdd,
+          edgePct: latestPred.prediction.edgePct,
+          modelVersion: latestPred.prediction.modelVersion,
+          promptVersion: latestPred.prediction.promptVersion,
+          createdAt: latestPred.prediction.createdAt,
+        },
+        latestPred.aiCall ? { costUsd: latestPred.aiCall.costUsd } : null,
+      )
+    : null;
+
+  const fixtureRef: FixtureRef = {
+    league: match.league,
+    kickoffAt: match.kickoffAt.toISOString(),
+    homeTeam: match.homeTeam,
+    awayTeam: match.awayTeam,
+  };
+  const leagueKey = leagueToKey(match.league);
+  const oddsAvailable = oddsView !== null;
+
+  return (
+    <>
+      <div className="lg:hidden">
+        <MobileMatch
+          heroView={heroView}
+          oddsView={oddsView}
+          analysisExisting={existingAnalysis}
+          matchId={match.id}
+          fixtureRef={fixtureRef}
+          leagueKey={leagueKey}
+          oddsAvailable={oddsAvailable}
+        />
+      </div>
+      <div className="hidden lg:block">
+        <DesktopMatch
+          heroView={heroView}
+          oddsView={oddsView}
+          analysisExisting={existingAnalysis}
+          matchId={match.id}
+          fixtureRef={fixtureRef}
+          leagueKey={leagueKey}
+          oddsAvailable={oddsAvailable}
+        />
+      </div>
+    </>
+  );
+}
+
+type Common = {
+  heroView: ReturnType<typeof toMatchRowView>;
+  oddsView: OddsView | null;
+  analysisExisting: ReturnType<typeof toAnalysisView> | null;
+  matchId: string;
+  fixtureRef: FixtureRef;
+  leagueKey: ReturnType<typeof leagueToKey>;
+  oddsAvailable: boolean;
+};
+
+function MobileMatch({
+  heroView,
+  oddsView,
+  analysisExisting,
+  matchId,
+  fixtureRef,
+  leagueKey,
+  oddsAvailable,
+}: Common) {
+  return (
+    <div className="min-h-screen bg-background text-foreground">
+      <header className="flex items-center justify-between px-5 pt-5 pb-2">
+        <Link
+          href="/"
+          className="flex items-center gap-2 text-muted-foreground hover:text-foreground"
+        >
+          <ChevronLeft className="size-3.5" />
+          <span className="text-[12.5px] tracking-tight">jogos</span>
+        </Link>
+        <div className="flex items-center gap-2">
+          <span className="font-mono text-[10px] uppercase tracking-[0.16em] text-muted-fg-2">
+            match · {matchId.slice(0, 8)}
+          </span>
+          <ThemeToggle />
+        </div>
+      </header>
+
+      <MatchHero view={heroView} />
+
+      <div className="flex flex-col gap-3 px-5 pb-6">
+        <OddsCard view={oddsView} />
+        <AnalysisPanel
+          matchId={matchId}
+          existing={analysisExisting}
+          oddsAvailable={oddsAvailable}
+        />
+        <Suspense fallback={<MatchSectionsSkeleton />}>
+          <MatchSections fixtureRef={fixtureRef} leagueKey={leagueKey} />
+        </Suspense>
+        <Suspense fallback={<MatchAuxiliarySkeleton />}>
+          <MatchAuxiliarySections fixtureRef={fixtureRef} />
+        </Suspense>
+      </div>
+    </div>
+  );
+}
+
+function DesktopMatch({
+  heroView,
+  oddsView,
+  analysisExisting,
+  matchId,
+  fixtureRef,
+  leagueKey,
+  oddsAvailable,
+}: Common) {
+  return (
+    <DesktopShell>
+      <div className="mx-auto w-full max-w-[1100px] px-8 pt-8 pb-16">
+        <Link
+          href="/"
+          className="inline-flex items-center gap-2 pb-6 text-muted-foreground hover:text-foreground"
+        >
+          <ChevronLeft className="size-3.5" />
+          <span className="text-[12.5px] tracking-tight">jogos</span>
+        </Link>
+
+        <div className="grid grid-cols-[1fr_320px] gap-8 pb-8">
+          <div>
+            <div className="flex items-center gap-3 pb-5">
+              <span className="inline-flex h-5 items-center rounded-full border border-border bg-transparent px-2 text-[10px] uppercase tracking-[0.12em] text-muted-foreground">
+                {LEAGUE_LABEL[heroView.league]}
+              </span>
+              <span className="font-mono text-[11px] tabular-nums text-muted-foreground">
+                {heroView.when}
+              </span>
+              {heroView.countdown && (
+                <span className="font-mono text-[11px] tabular-nums text-accent-fg">
+                  {heroView.countdown}
+                </span>
+              )}
+            </div>
+            <div className="flex items-center gap-8">
+              <div className="flex items-center gap-3">
+                <TeamAvatar
+                  initials={heroView.home.short.slice(0, 2)}
+                  hue={heroView.home.hue}
+                  size={56}
+                />
+                <div className="flex flex-col">
+                  <span className="text-[22px] font-medium tracking-[-0.02em]">
+                    {heroView.home.name}
+                  </span>
+                  <span className="font-mono text-[10.5px] uppercase tracking-[0.14em] text-muted-foreground">
+                    casa
+                  </span>
+                </div>
+              </div>
+              <span className="text-[22px] font-medium text-muted-foreground tracking-tight">
+                vs
+              </span>
+              <div className="flex items-center gap-3">
+                <TeamAvatar
+                  initials={heroView.away.short.slice(0, 2)}
+                  hue={heroView.away.hue}
+                  size={56}
+                />
+                <div className="flex flex-col">
+                  <span className="text-[22px] font-medium tracking-[-0.02em]">
+                    {heroView.away.name}
+                  </span>
+                  <span className="font-mono text-[10.5px] uppercase tracking-[0.14em] text-muted-foreground">
+                    visitante
+                  </span>
+                </div>
+              </div>
+            </div>
+            {heroView.venue && (
+              <div className="flex items-center gap-4 pt-5 font-mono text-[10.5px] uppercase tracking-[0.14em] text-muted-fg-2">
+                <span>{heroView.venue}</span>
+              </div>
+            )}
+          </div>
+
+          <div className="flex flex-col gap-3">
+            <OddsCard view={oddsView} />
+          </div>
+        </div>
+
+        <div className="pb-6">
+          <AnalysisPanel
+            matchId={matchId}
+            existing={analysisExisting}
+            oddsAvailable={oddsAvailable}
+          />
+        </div>
+
+        <Suspense fallback={<MatchSectionsSkeleton />}>
+          <MatchSections fixtureRef={fixtureRef} leagueKey={leagueKey} />
+        </Suspense>
+        <Suspense fallback={<MatchAuxiliarySkeleton />}>
+          <MatchAuxiliarySections fixtureRef={fixtureRef} />
+        </Suspense>
+      </div>
+    </DesktopShell>
+  );
 }
