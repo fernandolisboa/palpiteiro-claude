@@ -4,6 +4,7 @@ config({ path: ".env.local" });
 import { neon } from "@neondatabase/serverless";
 import { drizzle } from "drizzle-orm/neon-http";
 
+import { DEV_USER_ID } from "@/lib/auth/dev-user";
 import { matches, users } from "./schema";
 
 if (!process.env.DATABASE_URL) {
@@ -19,6 +20,7 @@ async function main() {
   const [admin] = await db
     .insert(users)
     .values({
+      id: DEV_USER_ID,
       email: "admin@palpiteiro.local",
       name: "Admin",
       role: "admin",
