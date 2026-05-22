@@ -1,33 +1,35 @@
 import { FormDot } from "@/components/form-dot";
-
-type Result = "W" | "D" | "L";
-type Row = { name: string; results: Result[] };
+import type { FormView } from "@/lib/view/types";
 
 type Props = {
-  home: string;
-  away: string;
-  rows?: Row[];
+  view: FormView;
 };
 
-const DEFAULT_ROWS: Row[] = [
-  { name: "home", results: ["W", "W", "D", "L", "W"] },
-  { name: "away", results: ["L", "W", "W", "W", "D"] },
-];
-
-export function FormSection({ home, away, rows }: Props) {
-  const resolved = rows ?? [
-    { name: home, results: DEFAULT_ROWS[0].results },
-    { name: away, results: DEFAULT_ROWS[1].results },
-  ];
+export function FormSection({ view }: Props) {
+  const hasData =
+    view.home.results.length > 0 || view.away.results.length > 0;
+  if (!hasData) {
+    return (
+      <div className="text-[12px] text-muted-foreground tracking-tight">
+        Sem jogos recentes disponíveis.
+      </div>
+    );
+  }
   return (
     <div className="flex flex-col gap-3.5">
-      {resolved.map((r) => (
+      {[view.home, view.away].map((r) => (
         <div key={r.name} className="flex items-center justify-between">
-          <span className="text-[12.5px] text-foreground tracking-tight">{r.name}</span>
+          <span className="text-[12.5px] text-foreground tracking-tight">
+            {r.name}
+          </span>
           <div className="flex items-center gap-1.5">
-            {r.results.map((res, i) => (
-              <FormDot key={i} r={res} />
-            ))}
+            {r.results.length === 0 ? (
+              <span className="font-mono text-[10.5px] text-muted-fg-2">
+                sem histórico
+              </span>
+            ) : (
+              r.results.map((res, i) => <FormDot key={i} r={res} />)
+            )}
           </div>
         </div>
       ))}

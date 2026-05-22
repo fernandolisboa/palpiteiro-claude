@@ -1,19 +1,23 @@
 import Link from "next/link";
 
 import { Badge } from "@/components/ui/badge";
-import { LEAGUE_LABEL, type RecentPrediction } from "@/lib/fixtures";
+import { LEAGUE_LABEL } from "@/lib/format";
+import type {
+  RecentPredictionView,
+  Recommendation,
+} from "@/lib/view/types";
 
-const REC_ICON: Record<RecentPrediction["rec"], string> = {
+const REC_ICON: Record<Recommendation, string> = {
   OVER: "↑",
   UNDER: "↓",
   PASS: "—",
 };
 
-export function RecentPredCard({ p }: { p: RecentPrediction }) {
+export function RecentPredCard({ p }: { p: RecentPredictionView }) {
   const isPass = p.rec === "PASS";
   return (
     <Link
-      href={`/match/${p.id}`}
+      href={`/match/${p.matchId}`}
       className="flex min-w-[180px] shrink-0 flex-col gap-2 rounded-[10px] border border-border bg-card px-3 py-3 transition-colors hover:bg-surface-2"
     >
       <div className="flex items-center justify-between">

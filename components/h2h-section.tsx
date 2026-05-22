@@ -1,31 +1,27 @@
 import { Badge } from "@/components/ui/badge";
 import { cn } from "@/lib/utils";
+import type { H2HView } from "@/lib/view/types";
 
-type Row = {
-  date: string;
-  h: string;
-  a: string;
-  s: string;
-  tag: "over" | "under";
+type Props = {
+  view: H2HView;
 };
 
-const ROWS: Row[] = [
-  { date: "15 fev 25", h: "Palmeiras", a: "Flamengo", s: "2 – 2", tag: "over" },
-  { date: "04 out 24", h: "Flamengo", a: "Palmeiras", s: "1 – 3", tag: "over" },
-  { date: "18 jul 24", h: "Palmeiras", a: "Flamengo", s: "0 – 1", tag: "under" },
-  { date: "21 abr 24", h: "Flamengo", a: "Palmeiras", s: "2 – 1", tag: "over" },
-  { date: "12 nov 23", h: "Palmeiras", a: "Flamengo", s: "1 – 0", tag: "under" },
-];
-
-export function H2HSection() {
+export function H2HSection({ view }: Props) {
+  if (view.rows.length === 0) {
+    return (
+      <div className="text-[12px] text-muted-foreground tracking-tight">
+        Sem confrontos diretos recentes disponíveis.
+      </div>
+    );
+  }
   return (
     <div className="flex flex-col">
-      {ROWS.map((r, i) => (
+      {view.rows.map((r, i) => (
         <div
           key={i}
           className={cn(
             "flex items-center justify-between py-2",
-            i !== ROWS.length - 1 && "border-b border-border-subtle",
+            i !== view.rows.length - 1 && "border-b border-border-subtle",
           )}
         >
           <span className="font-mono text-[10.5px] tabular-nums text-muted-foreground">
@@ -49,8 +45,8 @@ export function H2HSection() {
         </div>
       ))}
       <div className="flex items-center justify-between pt-3 font-mono text-[10.5px] text-muted-foreground">
-        <span>últimos 5 confrontos</span>
-        <span className="tabular-nums">over 60% · média 2.4 gols</span>
+        <span>últimos {view.rows.length} confrontos</span>
+        <span className="tabular-nums">{view.summary}</span>
       </div>
     </div>
   );
