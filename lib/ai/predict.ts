@@ -159,21 +159,36 @@ async function persistAiCallError(args: {
     inputTokens: args.inputTokens,
     outputTokens: args.outputTokens,
   });
-  await db.insert(aiCalls).values({
-    userId: args.userId,
-    matchId: args.matchId,
-    provider: "anthropic",
-    model: ANTHROPIC_MODEL,
-    promptVersion: PROMPT_VERSION,
-    inputPayload: args.inputPayload,
-    outputPayload: args.outputPayload,
-    inputTokens: args.inputTokens,
-    outputTokens: args.outputTokens,
-    latencyMs: args.latencyMs,
-    costUsd: cost.toFixed(6),
-    status: args.status,
-    errorMessage: truncate(args.errorMessage, ERROR_MESSAGE_MAX),
-  });
+  // This logs an error that ALREADY happened, so its own failure must not mask
+  // the primary error by throwing a raw "Failed query: insert into ai_calls".
+  // Swallow + log so the original PredictError surfaces to the caller.
+  try {
+    await db.insert(aiCalls).values({
+      userId: args.userId,
+      matchId: args.matchId,
+      provider: "anthropic",
+      model: ANTHROPIC_MODEL,
+      promptVersion: PROMPT_VERSION,
+      inputPayload: args.inputPayload,
+      outputPayload: args.outputPayload,
+      inputTokens: args.inputTokens,
+      outputTokens: args.outputTokens,
+      latencyMs: args.latencyMs,
+      costUsd: cost.toFixed(6),
+      status: args.status,
+      errorMessage: truncate(args.errorMessage, ERROR_MESSAGE_MAX),
+    });
+  } catch (err) {
+    console.error(
+      JSON.stringify({
+        scope: "persistAiCallError",
+        matchId: args.matchId,
+        error: "ai_call_audit_insert_failed",
+        originalStatus: args.status,
+        message: err instanceof Error ? err.message : String(err),
+      }),
+    );
+  }
 }
 
 // ─── Public API ──────────────────────────────────────────────────────────────
