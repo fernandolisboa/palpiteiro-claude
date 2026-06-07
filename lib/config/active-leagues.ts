@@ -20,7 +20,13 @@ export const LIST_WINDOW_HOURS = 120; // 5 dias
 export const ACTIVE_LEAGUE_KEYS = ACTIVE_LEAGUES.map(leagueToKey);
 
 // Filtro default da home quando não há ?league= (primeira liga ativa).
-export const DEFAULT_LEAGUE_FILTER: LeagueFilter = ACTIVE_LEAGUE_KEYS[0];
+// Guard de runtime: config vazia falha alto em vez de virar undefined silencioso
+// (que causaria loop de redirect a cada request).
+const firstActiveKey = ACTIVE_LEAGUE_KEYS[0];
+if (!firstActiveKey) {
+  throw new Error("ACTIVE_LEAGUES must contain at least one league");
+}
+export const DEFAULT_LEAGUE_FILTER: LeagueFilter = firstActiveKey;
 
 // +1 day-bucket: o sync busca por dia-calendário (getFixturesByDate) e uma janela
 // rolante de LIST_WINDOW_HOURS cruza ceil(h/24)+1 dias-calendário.

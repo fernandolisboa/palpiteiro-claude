@@ -12,4 +12,9 @@ describe("visibleLeagueTabs", () => {
     const tabs = visibleLeagueTabs(["wc"]);
     expect(tabs.some((t) => t.value === "all")).toBe(false);
   });
+
+  it("inclui a aba 'Todos' quando há mais de uma liga ativa", () => {
+    const tabs = visibleLeagueTabs(["wc", "bsa"]);
+    expect(tabs.some((t) => t.value === "all")).toBe(true);
+  });
 });

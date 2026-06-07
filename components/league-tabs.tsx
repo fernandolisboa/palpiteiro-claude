@@ -1,6 +1,6 @@
 import Link from "next/link";
 
-import { ACTIVE_LEAGUE_KEYS, ACTIVE_LEAGUES } from "@/lib/config/active-leagues";
+import { ACTIVE_LEAGUE_KEYS } from "@/lib/config/active-leagues";
 import { cn } from "@/lib/utils";
 import type { LeagueFilter } from "@/lib/view/types";
 
@@ -21,7 +21,7 @@ export function visibleLeagueTabs(
   activeKeys: readonly LeagueFilter[] = ACTIVE_LEAGUE_KEYS,
 ): Item[] {
   return ITEMS.filter((item) => {
-    if (item.value === "all") return ACTIVE_LEAGUES.length > 1;
+    if (item.value === "all") return activeKeys.length > 1;
     return activeKeys.includes(item.value);
   });
 }
