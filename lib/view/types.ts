@@ -1,4 +1,4 @@
-export type LeagueKey = "bsa" | "ucl";
+export type LeagueKey = "bsa" | "ucl" | "wc";
 export type LeagueFilter = LeagueKey | "all";
 export type Recommendation = "OVER" | "UNDER" | "PASS";
 
@@ -116,6 +116,6 @@ export type LineupView = {
 };
 
 export function parseLeagueFilter(input: string | undefined | null): LeagueFilter {
-  if (input === "bsa" || input === "ucl") return input;
+  if (input === "bsa" || input === "ucl" || input === "wc") return input;
   return "all";
 }

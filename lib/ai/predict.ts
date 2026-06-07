@@ -6,7 +6,7 @@ import { db } from "@/lib/db";
 import { computeImpliedProbabilities } from "@/lib/odds/implied-probability";
 import { pickBestTotalsBookmaker } from "@/lib/odds/select-bookmaker";
 import { getOddsForSport } from "@/lib/providers/odds-api";
-import { SPORT_KEYS } from "@/lib/providers/odds-api-constants";
+import { leagueToSportKey } from "@/lib/providers/odds-api-constants";
 import type { OddsApiEventOdds } from "@/lib/providers/odds-api-schemas";
 import { getSportsDataProvider } from "@/lib/providers/sports-data";
 import { normalizeTeamName } from "@/lib/providers/sports-data/team-names";
@@ -96,14 +96,6 @@ function findMatchingEvent(
 }
 
 // ─── Helpers ─────────────────────────────────────────────────────────────────
-
-function leagueToSportKey(
-  league: "brasileirao_a" | "champions_league",
-): (typeof SPORT_KEYS)[keyof typeof SPORT_KEYS] {
-  return league === "brasileirao_a"
-    ? SPORT_KEYS.BRASILEIRAO_A
-    : SPORT_KEYS.CHAMPIONS_LEAGUE;
-}
 
 function truncate(text: string, limit: number): string {
   return text.length > limit ? `${text.slice(0, limit)}…` : text;

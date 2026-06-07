@@ -1,14 +1,21 @@
+import type { SupportedLeague } from "@/lib/providers/sports-data/leagues";
 import type { LeagueKey } from "@/lib/view/types";
 
 export const LEAGUE_LABEL: Record<LeagueKey, string> = {
   bsa: "Brasileirão",
   ucl: "Champions",
+  wc: "Copa do Mundo",
 };
 
-export function leagueToKey(
-  league: "brasileirao_a" | "champions_league",
-): LeagueKey {
-  return league === "brasileirao_a" ? "bsa" : "ucl";
+// Exhaustive map (compile error if a SupportedLeague is left unmapped).
+const LEAGUE_KEY_BY_LEAGUE: Record<SupportedLeague, LeagueKey> = {
+  brasileirao_a: "bsa",
+  champions_league: "ucl",
+  world_cup: "wc",
+};
+
+export function leagueToKey(league: SupportedLeague): LeagueKey {
+  return LEAGUE_KEY_BY_LEAGUE[league];
 }
 
 const MONTH_ABBR_PT = [

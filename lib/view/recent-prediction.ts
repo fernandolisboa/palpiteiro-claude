@@ -1,4 +1,5 @@
 import { formatEdge, leagueToKey } from "@/lib/format";
+import type { SupportedLeague } from "@/lib/providers/sports-data/leagues";
 import { teamToTeam } from "@/lib/view/team";
 import type {
   Recommendation,
@@ -18,7 +19,7 @@ function formatRecentWhen(date: Date): string {
 type RecentInput = {
   predictionId: string;
   matchId: string;
-  league: "brasileirao_a" | "champions_league";
+  league: SupportedLeague;
   homeTeam: string;
   awayTeam: string;
   recommendation: "over" | "under" | "pass";
