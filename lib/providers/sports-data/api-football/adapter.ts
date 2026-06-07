@@ -696,7 +696,7 @@ function resolveApiFootballTeamId(
 // (the fallback) has no injuries either. So injuries are genuinely unavailable
 // for the World Cup — surface that as Unsupported so predict.ts sets
 // absences_available=false ("dados indisponíveis") instead of the empty-list
-// path that reads as "squad fully fit". See ADR-0005 reavaliação note.
+// path that reads as "squad fully fit". See ADR-0006.
 const WORLD_CUP_NO_INJURIES =
   "API-Football has no injury coverage for the World Cup competition";
 

@@ -11,8 +11,9 @@
  * - Writes `<provider>/team-ids.ts` as a CANONICAL-name -> provider-team-id
  *   map. Provider-native names are reconciled to canonical names via
  *   `canonicalizeTeamName` (exact + fuzzy) plus the explicit TEAM_NAME_ALIASES
- *   below for spellings that don't fuzzy-match (national teams drift between
- *   providers, e.g. "Czechia" vs "Czech Republic"). Provider teams that still
+ *   in `lib/providers/sports-data/team-names.ts` for spellings that don't
+ *   fuzzy-match (national teams drift between providers, e.g. "Czechia" vs
+ *   "Czech Republic"). Provider teams that still
  *   don't resolve, and canonical teams left without an id, are reported as
  *   warnings for manual aliasing.
  * - Seeds `canonical-teams.ts` for any league whose canonical list is still
