@@ -17,6 +17,10 @@ describe("CANONICAL_TEAMS", () => {
     expect(CANONICAL_TEAMS.champions_league.length).toBeGreaterThanOrEqual(32);
   });
 
+  it("has 48 World Cup national teams (2026 format)", () => {
+    expect(CANONICAL_TEAMS.world_cup.length).toBe(48);
+  });
+
   it("names are non-empty and unique within each league", () => {
     for (const league of SUPPORTED_LEAGUES) {
       const names = CANONICAL_TEAMS[league];
@@ -58,14 +62,23 @@ describe("FOOTBALL_DATA_ORG_TEAM_IDS coverage", () => {
   });
 });
 
-describe("API_FOOTBALL_TEAM_IDS coverage (account suspended)", () => {
-  // The api-football map is intentionally empty until the account is
-  // reactivated. Once `pnpm tsx scripts/generate-team-ids.ts
-  // --provider=api-football` is run, flip these expectations to enforce
-  // full coverage (mirror the football-data-org tests above).
-  it("is currently empty per intentional stub", () => {
+describe("API_FOOTBALL_TEAM_IDS coverage", () => {
+  // The account is reactivated (issue #29), so the api-football map must cover
+  // every canonical team in every league — same contract as football-data-org.
+  it("covers every canonical team in every league", () => {
     for (const league of SUPPORTED_LEAGUES) {
-      expect(Object.keys(API_FOOTBALL_TEAM_IDS[league]).length).toBe(0);
+      const map = API_FOOTBALL_TEAM_IDS[league];
+      const missing = CANONICAL_TEAMS[league].filter((name) => !(name in map));
+      expect(missing, `api-football missing teams in ${league}`).toEqual([]);
+    }
+  });
+
+  it("all IDs are positive integers", () => {
+    for (const league of SUPPORTED_LEAGUES) {
+      for (const [name, id] of Object.entries(API_FOOTBALL_TEAM_IDS[league])) {
+        expect(Number.isInteger(id), `${league} ${name}`).toBe(true);
+        expect(id).toBeGreaterThan(0);
+      }
     }
   });
 });

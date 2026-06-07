@@ -9,8 +9,12 @@ import {
 } from "@/lib/providers/sports-data/leagues";
 
 describe("SUPPORTED_LEAGUES", () => {
-  it("includes brasileirao_a and champions_league", () => {
-    expect(SUPPORTED_LEAGUES).toEqual(["brasileirao_a", "champions_league"]);
+  it("includes brasileirao_a, champions_league and world_cup", () => {
+    expect(SUPPORTED_LEAGUES).toEqual([
+      "brasileirao_a",
+      "champions_league",
+      "world_cup",
+    ]);
   });
 });
 
@@ -31,11 +35,13 @@ describe("provider league maps", () => {
   it("expected API-Football IDs", () => {
     expect(API_FOOTBALL_LEAGUE_IDS.brasileirao_a).toBe(71);
     expect(API_FOOTBALL_LEAGUE_IDS.champions_league).toBe(2);
+    expect(API_FOOTBALL_LEAGUE_IDS.world_cup).toBe(1);
   });
 
   it("expected football-data.org codes", () => {
     expect(FOOTBALL_DATA_ORG_LEAGUE_CODES.brasileirao_a).toBe("BSA");
     expect(FOOTBALL_DATA_ORG_LEAGUE_CODES.champions_league).toBe("CL");
+    expect(FOOTBALL_DATA_ORG_LEAGUE_CODES.world_cup).toBe("WC");
   });
 });
 
@@ -93,6 +99,25 @@ describe("currentSeason — Champions League (cross-year)", () => {
     expect(
       currentSeason("champions_league", new Date("2026-12-01T12:00:00Z")),
     ).toBe(2026);
+  });
+});
+
+describe("currentSeason — World Cup (single edition)", () => {
+  // The 2026 tournament is keyed on season 2026 by both providers, regardless
+  // of the instant queried.
+  it("returns 2026 in June (tournament month)", () => {
+    expect(currentSeason("world_cup", new Date("2026-06-11T12:00:00Z"))).toBe(
+      2026,
+    );
+  });
+
+  it("returns 2026 regardless of the date", () => {
+    expect(currentSeason("world_cup", new Date("2026-01-01T00:00:00Z"))).toBe(
+      2026,
+    );
+    expect(currentSeason("world_cup", new Date("2026-12-31T23:59:59Z"))).toBe(
+      2026,
+    );
   });
 });
 

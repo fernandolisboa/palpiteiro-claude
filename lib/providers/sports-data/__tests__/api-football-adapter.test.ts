@@ -1,4 +1,4 @@
-import { afterEach, describe, expect, it, vi } from "vitest";
+import { describe, expect, it, vi } from "vitest";
 
 import { ApiFootballAdapter, __testing } from "@/lib/providers/sports-data/api-football/adapter";
 import {
@@ -12,10 +12,13 @@ import type {
   ApiFootballLineup,
   ApiFootballStandings,
 } from "@/lib/providers/sports-data/api-football/schemas";
+import { StandingsItemSchema } from "@/lib/providers/sports-data/api-football/schemas";
 import { API_FOOTBALL_TEAM_IDS } from "@/lib/providers/sports-data/api-football/team-ids";
 import {
   SportsDataNotFoundError,
   SportsDataTransientError,
+  SportsDataUnsupportedError,
+  type FixtureRef,
 } from "@/lib/providers/sports-data/types";
 
 const {
@@ -175,6 +178,121 @@ describe("toNormalizedStanding", () => {
       goalsFor: 15,
       goalsAgainst: 5,
     });
+  });
+});
+
+// ─── Standings normalization — World Cup groups ─────────────────────────────
+
+function makeWorldCupStandings(): ApiFootballStandings {
+  type Row = ApiFootballStandings["league"]["standings"][number][number];
+  const row = (rank: number, name: string, group: string): Row => ({
+    rank,
+    team: { id: rank, name },
+    points: 0,
+    goalsDiff: 0,
+    group,
+    form: null,
+    status: "same",
+    description: null,
+    all: { played: 0, win: 0, draw: 0, lose: 0, goals: { for: 0, against: 0 } },
+    // Real WC payload: neutral-venue / pre-tournament → null home/away splits.
+    home: {
+      played: null,
+      win: null,
+      draw: null,
+      lose: null,
+      goals: { for: null, against: null },
+    },
+    away: {
+      played: null,
+      win: null,
+      draw: null,
+      lose: null,
+      goals: { for: null, against: null },
+    },
+    update: "2026-06-11T00:00:00+00:00",
+  });
+  return {
+    league: {
+      id: 1,
+      name: "World Cup",
+      country: "World",
+      season: 2026,
+      standings: [
+        [row(1, "Mexico", "Group A"), row(2, "South Africa", "Group A")],
+        [row(1, "Brazil", "Group B"), row(2, "Morocco", "Group B")],
+        // 2026 format: a 13th table ranking the third-placed teams.
+        [row(3, "Mexico", "Ranking of third-placed teams")],
+      ],
+    },
+  };
+}
+
+describe("toNormalizedStanding — World Cup groups", () => {
+  it("maps each group (incl. the third-placed ranking) to its own table", () => {
+    const s = toNormalizedStanding(makeWorldCupStandings(), "world_cup");
+    expect(s.league).toBe("world_cup");
+    expect(s.tables).toHaveLength(3);
+    expect(s.tables.map((t) => t.group)).toEqual([
+      "Group A",
+      "Group B",
+      "Ranking of third-placed teams",
+    ]);
+    expect(s.tables[0]?.teams.map((t) => t.team)).toEqual([
+      "Mexico",
+      "South Africa",
+    ]);
+    // Null home/away splits are omitted (both optional), not emitted as nulls.
+    expect(s.tables[0]?.teams[0]?.homeSplit).toBeUndefined();
+    expect(s.tables[0]?.teams[0]?.awaySplit).toBeUndefined();
+  });
+
+  it("schema accepts null home/away splits (WC neutral-venue payload)", () => {
+    const raw = {
+      league: {
+        id: 1,
+        name: "World Cup",
+        country: "World",
+        season: 2026,
+        standings: [
+          [
+            {
+              rank: 1,
+              team: { id: 16, name: "Mexico" },
+              points: 0,
+              goalsDiff: 0,
+              group: "Group A",
+              form: null,
+              status: "same",
+              description: "Playoffs",
+              all: {
+                played: 0,
+                win: 0,
+                draw: 0,
+                lose: 0,
+                goals: { for: 0, against: 0 },
+              },
+              home: {
+                played: null,
+                win: null,
+                draw: null,
+                lose: null,
+                goals: { for: null, against: null },
+              },
+              away: {
+                played: null,
+                win: null,
+                draw: null,
+                lose: null,
+                goals: { for: null, against: null },
+              },
+              update: "2026-05-26T00:00:00+00:00",
+            },
+          ],
+        ],
+      },
+    };
+    expect(() => StandingsItemSchema.parse(raw)).not.toThrow();
   });
 });
 
@@ -392,26 +510,16 @@ describe("seasonForApiFootballLeagueId — unmapped id", () => {
 // ─── Team-ID resolution ──────────────────────────────────────────────────────
 
 describe("resolveApiFootballTeamId", () => {
-  afterEach(() => {
-    // Reset map after each test (mutation pattern below).
-    for (const k of Object.keys(API_FOOTBALL_TEAM_IDS.brasileirao_a)) {
-      delete (API_FOOTBALL_TEAM_IDS.brasileirao_a as Record<string, number>)[k];
-    }
-  });
-
-  it("throws SportsDataTransientError when map is empty", () => {
+  it("throws SportsDataTransientError for an unmapped name (cascade signal)", () => {
     expect(() =>
-      resolveApiFootballTeamId("CR Flamengo", "brasileirao_a", "getH2H"),
+      resolveApiFootballTeamId("Unmapped Test FC", "brasileirao_a", "getH2H"),
     ).toThrow(SportsDataTransientError);
   });
 
-  it("returns the mapped id once the map is populated", () => {
-    (API_FOOTBALL_TEAM_IDS.brasileirao_a as Record<string, number>)[
-      "CR Flamengo"
-    ] = 127;
+  it("returns the mapped id for a canonical team", () => {
     expect(
       resolveApiFootballTeamId("CR Flamengo", "brasileirao_a", "getH2H"),
-    ).toBe(127);
+    ).toBe(API_FOOTBALL_TEAM_IDS.brasileirao_a["CR Flamengo"]);
   });
 
   it("throws when the canonical name isn't in the populated map", () => {
@@ -427,13 +535,14 @@ describe("resolveApiFootballTeamId", () => {
 // ─── ApiFootballAdapter class — capabilities ────────────────────────────────
 
 describe("ApiFootballAdapter capabilities", () => {
-  it("name = api-football; injuries + lineups true; both leagues supported", () => {
+  it("name = api-football; injuries + lineups true; all leagues supported", () => {
     const a = new ApiFootballAdapter();
     expect(a.capabilities.name).toBe("api-football");
     expect(a.capabilities.supportsInjuries).toBe(true);
     expect(a.capabilities.supportsLineups).toBe(true);
     expect(a.capabilities.supportedLeagues.has("brasileirao_a")).toBe(true);
     expect(a.capabilities.supportedLeagues.has("champions_league")).toBe(true);
+    expect(a.capabilities.supportedLeagues.has("world_cup")).toBe(true);
   });
 });
 
@@ -448,9 +557,9 @@ vi.mock("@/lib/providers/sports-data/api-football/adapter", async (importOrigina
 describe("ApiFootballAdapter.getH2H throws when team isn't mapped", () => {
   it("transient error (so FallbackProvider cascades)", async () => {
     const a = new ApiFootballAdapter();
-    // API_FOOTBALL_TEAM_IDS is empty in the test stub, so resolveTeamId throws.
+    // Unknown canonical name → resolveTeamId throws Transient (cascade signal).
     await expect(
-      a.getH2H("CR Flamengo", "Fluminense FC", "brasileirao_a", 5),
+      a.getH2H("Unmapped Test FC", "Fluminense FC", "brasileirao_a", 5),
     ).rejects.toThrow(SportsDataTransientError);
   });
 });
@@ -459,7 +568,7 @@ describe("ApiFootballAdapter.getTeamForm throws when team isn't mapped", () => {
   it("transient error", async () => {
     const a = new ApiFootballAdapter();
     await expect(
-      a.getTeamForm("CR Flamengo", "brasileirao_a", 5),
+      a.getTeamForm("Unmapped Test FC", "brasileirao_a", 5),
     ).rejects.toThrow(SportsDataTransientError);
   });
 });
@@ -468,7 +577,32 @@ describe("ApiFootballAdapter.getInjuriesByTeam throws when team isn't mapped", (
   it("transient error", async () => {
     const a = new ApiFootballAdapter();
     await expect(
-      a.getInjuriesByTeam("CR Flamengo", "brasileirao_a"),
+      a.getInjuriesByTeam("Unmapped Test FC", "brasileirao_a"),
     ).rejects.toThrow(SportsDataTransientError);
+  });
+});
+
+describe("ApiFootballAdapter — World Cup injuries are Unsupported", () => {
+  // API-Football has no injury coverage for any WC edition; surfaced as
+  // Unsupported so predict.ts records absences_available=false instead of the
+  // empty-list "squad fully fit" path. The guard fires even for mapped teams.
+  const a = new ApiFootballAdapter();
+  const ref: FixtureRef = {
+    league: "world_cup",
+    kickoffAt: "2026-06-11T19:00:00.000Z",
+    homeTeam: "Mexico",
+    awayTeam: "South Africa",
+  };
+
+  it("getInjuriesByFixture throws SportsDataUnsupportedError", async () => {
+    await expect(a.getInjuriesByFixture(ref)).rejects.toThrow(
+      SportsDataUnsupportedError,
+    );
+  });
+
+  it("getInjuriesByTeam throws SportsDataUnsupportedError", async () => {
+    await expect(a.getInjuriesByTeam("Brazil", "world_cup")).rejects.toThrow(
+      SportsDataUnsupportedError,
+    );
   });
 });
