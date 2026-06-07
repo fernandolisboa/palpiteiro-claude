@@ -1,12 +1,14 @@
 import { inMemoryCache } from "@/lib/cache/in-memory";
+import {
+  ACTIVE_LEAGUES,
+  SYNC_HORIZON_DAYS,
+} from "@/lib/config/active-leagues";
 import { upsertMatchesFromProvider } from "@/lib/db/queries/matches";
-import { SUPPORTED_LEAGUES } from "@/lib/providers/sports-data/leagues";
 import { getSportsDataProvider } from "@/lib/providers/sports-data";
 import type { NormalizedFixture } from "@/lib/providers/sports-data/types";
 
 const SYNC_LOCK_TTL_MS = 60 * 60 * 1000; // 1h
 const SYNC_LOCK_KEY = "sync:upcoming-fixtures:lock";
-const SYNC_HORIZON_DAYS = 3;
 
 function pad2(n: number): string {
   return n.toString().padStart(2, "0");
@@ -19,7 +21,8 @@ function isoDateForDay(now: Date, dayOffset: number): string {
 }
 
 /**
- * Sync sob demanda das fixtures das próximas 72h × ligas suportadas. Idempotente
+ * Sync sob demanda das fixtures das ligas ativas (ACTIVE_LEAGUES) dentro do
+ * horizonte SYNC_HORIZON_DAYS (derivado de LIST_WINDOW_HOURS). Idempotente
  * (upsert por composite key). Lock processo-local de 1h em inMemoryCache:
  *
  *   - Primeiro request escreve o lock ANTES de disparar fetch externo (evita
@@ -46,7 +49,7 @@ export async function ensureUpcomingFixturesSynced(
     );
     const calls: Promise<NormalizedFixture[]>[] = [];
     for (const date of days) {
-      for (const league of SUPPORTED_LEAGUES) {
+      for (const league of ACTIVE_LEAGUES) {
         calls.push(provider.getFixturesByDate(date, league));
       }
     }
