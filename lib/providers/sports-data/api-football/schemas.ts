@@ -134,6 +134,22 @@ const StandingSplitSchema = z.object({
   }),
 });
 
+// Home/away splits come back with all-null fields (or the whole object null)
+// for competitions without home/away records — e.g. the World Cup, where every
+// match is at a neutral venue, and pre-tournament before any match is played.
+const NullableStandingSplitSchema = z
+  .object({
+    played: z.number().int().nonnegative().nullable(),
+    win: z.number().int().nonnegative().nullable(),
+    draw: z.number().int().nonnegative().nullable(),
+    lose: z.number().int().nonnegative().nullable(),
+    goals: z.object({
+      for: z.number().int().nullable(),
+      against: z.number().int().nullable(),
+    }),
+  })
+  .nullable();
+
 const StandingRowSchema = z.object({
   rank: z.number().int(),
   team: z.object({
@@ -147,8 +163,8 @@ const StandingRowSchema = z.object({
   status: z.string().nullable().optional(),
   description: z.string().nullable().optional(),
   all: StandingSplitSchema,
-  home: StandingSplitSchema,
-  away: StandingSplitSchema,
+  home: NullableStandingSplitSchema,
+  away: NullableStandingSplitSchema,
   update: z.string(),
 });
 

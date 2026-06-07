@@ -57,6 +57,7 @@ describe("FootballDataOrgAdapter capabilities", () => {
     expect(a.capabilities.supportsLineups).toBe(true);
     expect(a.capabilities.supportedLeagues.has("brasileirao_a")).toBe(true);
     expect(a.capabilities.supportedLeagues.has("champions_league")).toBe(true);
+    expect(a.capabilities.supportedLeagues.has("world_cup")).toBe(true);
   });
 });
 
@@ -225,6 +226,36 @@ describe("toNormalizedStanding (football-data-org)", () => {
     const s = toNormalizedStanding(response, "champions_league");
     expect(s.tables).toHaveLength(2);
     expect(s.tables.map((t) => t.group).sort()).toEqual(["GROUP_A", "GROUP_B"]);
+  });
+
+  it("preserves World Cup group structure", () => {
+    const response: FootballDataOrgStandingsResponse = {
+      standings: [
+        { stage: "GROUP_STAGE", type: "TOTAL", group: "GROUP_A", table: [] },
+        { stage: "GROUP_STAGE", type: "TOTAL", group: "GROUP_L", table: [] },
+      ],
+    };
+    const s = toNormalizedStanding(response, "world_cup");
+    expect(s.tables).toHaveLength(2);
+    expect(s.tables.map((t) => t.group).sort()).toEqual(["GROUP_A", "GROUP_L"]);
+  });
+});
+
+describe("toNormalizedFixture — World Cup (football-data-org)", () => {
+  it("canonicalizes national-team names, including alias drift, for world_cup", () => {
+    const m = makeMatch({
+      id: 700001,
+      utcDate: "2026-06-12T02:00:00Z",
+      stage: "GROUP_STAGE",
+      group: "GROUP_A",
+      homeTeam: { id: 772, name: "South Korea" },
+      awayTeam: { id: 798, name: "Czechia" },
+    });
+    const n = toNormalizedFixture(m, "world_cup");
+    expect(n.league).toBe("world_cup");
+    expect(n.homeTeam).toBe("South Korea");
+    // football-data.org "Czechia" aliases to the canonical "Czech Republic".
+    expect(n.awayTeam).toBe("Czech Republic");
   });
 });
 

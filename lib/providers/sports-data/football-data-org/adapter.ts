@@ -448,6 +448,7 @@ export class FootballDataOrgAdapter implements SportsDataProvider {
     supportedLeagues: new Set<SupportedLeague>([
       "brasileirao_a",
       "champions_league",
+      "world_cup",
     ]),
   };
 

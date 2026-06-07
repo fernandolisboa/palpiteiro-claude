@@ -60,12 +60,14 @@ import {
   type NormalizedLineup,
   type NormalizedLineupPlayer,
   type NormalizedStanding,
+  type NormalizedStandingSplit,
   type NormalizedStandingTeam,
   type NormalizedTeamLineup,
   type ProviderCapabilities,
   type SportsDataProvider,
   SportsDataNotFoundError,
   SportsDataTransientError,
+  SportsDataUnsupportedError,
 } from "@/lib/providers/sports-data/types";
 
 // API-Football free tier is 10 req/min and 100 req/day. We throttle at 8/min
@@ -469,6 +471,37 @@ function toNormalizedFixture(
   };
 }
 
+type ApiFootballStandingSplit =
+  ApiFootballStandings["league"]["standings"][number][number]["home"];
+
+// Home/away splits can be null (whole object) or have null fields — e.g. the
+// World Cup (neutral venues / pre-tournament). homeSplit/awaySplit are optional
+// in the normalized shape, so omit them rather than emit nulls.
+function toNormalizedSplit(
+  split: ApiFootballStandingSplit,
+): NormalizedStandingSplit | undefined {
+  if (!split) return undefined;
+  const { played, win, draw, lose, goals } = split;
+  if (
+    played == null ||
+    win == null ||
+    draw == null ||
+    lose == null ||
+    goals.for == null ||
+    goals.against == null
+  ) {
+    return undefined;
+  }
+  return {
+    played,
+    wins: win,
+    draws: draw,
+    losses: lose,
+    goalsFor: goals.for,
+    goalsAgainst: goals.against,
+  };
+}
+
 function toNormalizedStanding(
   s: ApiFootballStandings,
   league: SupportedLeague,
@@ -476,6 +509,8 @@ function toNormalizedStanding(
   const tables = s.league.standings.map((group) => {
     const teams: NormalizedStandingTeam[] = group.map((row) => {
       const teamName = canonicalizeOrPassthrough(row.team.name, league);
+      const homeSplit = toNormalizedSplit(row.home);
+      const awaySplit = toNormalizedSplit(row.away);
       return {
         position: row.rank,
         team: teamName,
@@ -486,22 +521,8 @@ function toNormalizedStanding(
         goalsFor: row.all.goals.for,
         goalsAgainst: row.all.goals.against,
         points: row.points,
-        homeSplit: {
-          played: row.home.played,
-          wins: row.home.win,
-          draws: row.home.draw,
-          losses: row.home.lose,
-          goalsFor: row.home.goals.for,
-          goalsAgainst: row.home.goals.against,
-        },
-        awaySplit: {
-          played: row.away.played,
-          wins: row.away.win,
-          draws: row.away.draw,
-          losses: row.away.lose,
-          goalsFor: row.away.goals.for,
-          goalsAgainst: row.away.goals.against,
-        },
+        ...(homeSplit ? { homeSplit } : {}),
+        ...(awaySplit ? { awaySplit } : {}),
       } satisfies NormalizedStandingTeam;
     });
     const first = group[0];
@@ -668,6 +689,17 @@ function resolveApiFootballTeamId(
   return id;
 }
 
+// API-Football reports injuries=false in /leagues coverage for EVERY World Cup
+// season on record (2010, 2014, 2018, 2022, 2026) and /injuries returns no rows
+// for league 1. It is a structural gap for the competition, not a pre-tournament
+// state (club leagues on the same plan report injuries=true). football-data.org
+// (the fallback) has no injuries either. So injuries are genuinely unavailable
+// for the World Cup — surface that as Unsupported so predict.ts sets
+// absences_available=false ("dados indisponíveis") instead of the empty-list
+// path that reads as "squad fully fit". See ADR-0005 reavaliação note.
+const WORLD_CUP_NO_INJURIES =
+  "API-Football has no injury coverage for the World Cup competition";
+
 export class ApiFootballAdapter implements SportsDataProvider {
   readonly capabilities: ProviderCapabilities = {
     name: PROVIDER_NAME,
@@ -676,6 +708,7 @@ export class ApiFootballAdapter implements SportsDataProvider {
     supportedLeagues: new Set<SupportedLeague>([
       "brasileirao_a",
       "champions_league",
+      "world_cup",
     ]),
   };
 
@@ -774,6 +807,13 @@ export class ApiFootballAdapter implements SportsDataProvider {
   async getInjuriesByFixture(
     ref: FixtureRef,
   ): Promise<{ home: NormalizedInjury[]; away: NormalizedInjury[] }> {
+    if (ref.league === "world_cup") {
+      throw new SportsDataUnsupportedError(
+        WORLD_CUP_NO_INJURIES,
+        PROVIDER_NAME,
+        "getInjuriesByFixture",
+      );
+    }
     try {
       const fixture = await this.getFixtureByMatch(ref);
       if (!fixture) return { home: [], away: [] };
@@ -819,6 +859,13 @@ export class ApiFootballAdapter implements SportsDataProvider {
     team: string,
     league: SupportedLeague,
   ): Promise<NormalizedInjury[]> {
+    if (league === "world_cup") {
+      throw new SportsDataUnsupportedError(
+        WORLD_CUP_NO_INJURIES,
+        PROVIDER_NAME,
+        "getInjuriesByTeam",
+      );
+    }
     try {
       const teamId = resolveApiFootballTeamId(team, league, "getInjuriesByTeam");
       const injuries = await getInjuries({ teamId });
