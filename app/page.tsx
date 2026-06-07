@@ -1,4 +1,5 @@
 import Link from "next/link";
+import { redirect } from "next/navigation";
 import { ChevronRight, Inbox, Check } from "lucide-react";
 
 import { Badge } from "@/components/ui/badge";
@@ -11,6 +12,11 @@ import { RecentPredCard } from "@/components/recent-pred-card";
 import { SectionLabel } from "@/components/section-label";
 import { TeamAvatar } from "@/components/team-avatar";
 import { DEV_USER_ID } from "@/lib/auth/dev-user";
+import {
+  DEFAULT_LEAGUE_FILTER,
+  LIST_WINDOW_HOURS,
+  isActiveLeagueFilter,
+} from "@/lib/config/active-leagues";
 import { LEAGUE_LABEL } from "@/lib/format";
 import {
   getMatchIdsWithPredictionsByUser,
@@ -44,10 +50,15 @@ function filterToLeague(filter: LeagueFilter): SupportedLeague | undefined {
 
 export default async function HomePage({ searchParams }: PageProps) {
   const { league: leagueParam } = await searchParams;
-  const league = parseLeagueFilter(leagueParam);
+  // "no param" e param inválido caem em "all"; aplicamos o default ANTES de checar
+  // atividade pra evitar loop de redirect (/ → / → /). Só keys válidas-mas-inativas
+  // (bsa/ucl enquanto fora de temporada) redirecionam pra home limpa.
+  const parsed = parseLeagueFilter(leagueParam);
+  const league = parsed === "all" ? DEFAULT_LEAGUE_FILTER : parsed;
+  if (!isActiveLeagueFilter(league)) redirect("/");
 
   let dbMatches = await getUpcomingMatches({
-    windowHours: 48,
+    windowHours: LIST_WINDOW_HOURS,
     league: filterToLeague(league),
   });
 
@@ -57,7 +68,7 @@ export default async function HomePage({ searchParams }: PageProps) {
     try {
       await ensureUpcomingFixturesSynced();
       dbMatches = await getUpcomingMatches({
-        windowHours: 48,
+        windowHours: LIST_WINDOW_HOURS,
         league: filterToLeague(league),
       });
     } catch (err) {
@@ -139,7 +150,7 @@ type HomeContentProps = {
 function MobileHome({ matches, recents, league }: HomeContentProps) {
   return (
     <div className="min-h-screen bg-background text-foreground">
-      <PageHeader subtitle={`${matches.length} jogos · 48h`} />
+      <PageHeader subtitle={`${matches.length} jogos · 5 dias`} />
       <div className="px-5 pb-5 pt-1">
         <h1 className="text-[26px] font-medium leading-[1.05] tracking-[-0.03em]">
           Próximos jogos
@@ -153,7 +164,7 @@ function MobileHome({ matches, recents, league }: HomeContentProps) {
         <LeagueTabs value={league} />
       </div>
 
-      <SectionLabel>Próximas 48h</SectionLabel>
+      <SectionLabel>Próximos 5 dias</SectionLabel>
       {matches.length === 0 ? (
         <Card className="mx-5">
           <div className="flex flex-col items-center gap-3 px-6 py-12 text-center">
@@ -162,10 +173,10 @@ function MobileHome({ matches, recents, league }: HomeContentProps) {
             </span>
             <div className="flex flex-col gap-1">
               <span className="text-[14px] font-medium tracking-tight">
-                Sem jogos nas próximas 48h
+                Sem jogos nos próximos 5 dias
               </span>
               <span className="max-w-[240px] text-[12.5px] text-muted-foreground tracking-tight">
-                Brasileirão e Champions League sem partidas agendadas. Volte mais tarde ou ajuste o filtro.
+                Copa do Mundo sem partidas agendadas nessa janela. Volte mais perto do próximo jogo.
               </span>
             </div>
           </div>
@@ -215,7 +226,7 @@ function DesktopHome({ matches, recents, league }: HomeContentProps) {
               Próximos jogos
             </h1>
             <p className="text-[13.5px] text-muted-foreground tracking-tight">
-              {matches.length} partidas nas próximas 48h · Brasileirão Série A + UEFA Champions League
+              {matches.length} partidas nos próximos 5 dias · Copa do Mundo FIFA 2026
             </p>
           </div>
           <LeagueTabs value={league} />
@@ -228,10 +239,10 @@ function DesktopHome({ matches, recents, league }: HomeContentProps) {
                 <Inbox className="size-10" strokeWidth={1.25} />
               </span>
               <span className="text-[15px] font-medium tracking-tight">
-                Sem jogos nas próximas 48h
+                Sem jogos nos próximos 5 dias
               </span>
               <span className="text-[13px] text-muted-foreground tracking-tight">
-                Brasileirão e Champions League sem partidas agendadas. Volte mais tarde ou ajuste o filtro.
+                Copa do Mundo sem partidas agendadas nessa janela. Volte mais perto do próximo jogo.
               </span>
             </div>
           </Card>

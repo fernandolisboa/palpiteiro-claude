@@ -1,5 +1,6 @@
 import Link from "next/link";
 
+import { ACTIVE_LEAGUE_KEYS, ACTIVE_LEAGUES } from "@/lib/config/active-leagues";
 import { cn } from "@/lib/utils";
 import type { LeagueFilter } from "@/lib/view/types";
 
@@ -11,6 +12,19 @@ const ITEMS: Item[] = [
   { value: "ucl", label: "Champions" },
   { value: "wc", label: "Copa do Mundo" },
 ];
+
+/**
+ * Abas visíveis derivadas das ligas ativas. "Todos" só aparece quando há mais de
+ * uma liga ativa. Função pura (seam de teste sem precisar de @testing-library).
+ */
+export function visibleLeagueTabs(
+  activeKeys: readonly LeagueFilter[] = ACTIVE_LEAGUE_KEYS,
+): Item[] {
+  return ITEMS.filter((item) => {
+    if (item.value === "all") return ACTIVE_LEAGUES.length > 1;
+    return activeKeys.includes(item.value);
+  });
+}
 
 function buildHref(league: LeagueFilter): string {
   if (league === "all") return "/";
@@ -33,7 +47,7 @@ export function LeagueTabs({ value, className }: Props) {
       )}
       aria-label="Filtro de liga"
     >
-      {ITEMS.map((item) => {
+      {visibleLeagueTabs().map((item) => {
         const active = item.value === value;
         return (
           <Link
