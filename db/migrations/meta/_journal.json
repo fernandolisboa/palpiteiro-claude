@@ -15,6 +15,13 @@
       "when": 1778620901486,
       "tag": "0001_mighty_ozymandias",
       "breakpoints": true
+    },
+    {
+      "idx": 2,
+      "version": "7",
+      "when": 1780841138641,
+      "tag": "0002_plain_caretaker",
+      "breakpoints": true
     }
   ]
 }

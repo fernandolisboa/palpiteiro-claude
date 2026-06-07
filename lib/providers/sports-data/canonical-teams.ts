@@ -1,14 +1,15 @@
 import type { SupportedLeague } from "@/lib/providers/sports-data/leagues";
 
 /**
- * Canonical team names per league. Bootstrap source: football-data.org
- * /v4/competitions/{code}/teams. When API-Football is reachable, run
- * `pnpm tsx scripts/generate-team-ids.ts --provider=api-football` to
- * verify coverage and reconcile any spelling differences.
+ * Canonical team names per league. Each league is bootstrapped from the
+ * provider that first populated it (run the primary provider first so new
+ * leagues are seeded from it — ADR-0005). Re-run
+ * `scripts/generate-team-ids.ts` to verify coverage and reconcile
+ * spelling differences.
  *
  * Each adapter maintains its own `team-ids.ts` mapping these canonical
  * names to the provider-native team IDs. canonical-teams.test.ts asserts
- * both adapter maps cover 100% of this list.
+ * both adapter maps cover 100% of this list (where the provider serves it).
  */
 export const CANONICAL_TEAMS: Record<SupportedLeague, readonly string[]> = {
   brasileirao_a: [
@@ -70,6 +71,56 @@ export const CANONICAL_TEAMS: Record<SupportedLeague, readonly string[]> = {
     "Sporting Clube de Portugal",
     "Tottenham Hotspur FC",
     "Villarreal CF",
+  ] as const,
+  world_cup: [
+    "Algeria",
+    "Argentina",
+    "Australia",
+    "Austria",
+    "Belgium",
+    "Bosnia & Herzegovina",
+    "Brazil",
+    "Canada",
+    "Cape Verde Islands",
+    "Colombia",
+    "Congo DR",
+    "Croatia",
+    "Curaçao",
+    "Czech Republic",
+    "Ecuador",
+    "Egypt",
+    "England",
+    "France",
+    "Germany",
+    "Ghana",
+    "Haiti",
+    "Iran",
+    "Iraq",
+    "Ivory Coast",
+    "Japan",
+    "Jordan",
+    "Mexico",
+    "Morocco",
+    "Netherlands",
+    "New Zealand",
+    "Norway",
+    "Panama",
+    "Paraguay",
+    "Portugal",
+    "Qatar",
+    "Saudi Arabia",
+    "Scotland",
+    "Senegal",
+    "South Africa",
+    "South Korea",
+    "Spain",
+    "Sweden",
+    "Switzerland",
+    "Tunisia",
+    "Türkiye",
+    "USA",
+    "Uruguay",
+    "Uzbekistan",
   ] as const,
 };
 

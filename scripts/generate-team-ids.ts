@@ -2,18 +2,26 @@
  * Generates team-id maps for sports-data adapters.
  *
  * Usage:
- *   pnpm tsx scripts/generate-team-ids.ts --provider=football-data-org
  *   pnpm tsx scripts/generate-team-ids.ts --provider=api-football
+ *   pnpm tsx scripts/generate-team-ids.ts --provider=football-data-org
  *
  * What it does (per provider):
- * - Calls the provider's "teams in a competition" endpoint once per league.
- * - Writes the resulting `<provider>/team-ids.ts` with a canonical-name →
- *   provider-team-id map.
- * - If `canonical-teams.ts` is empty, also seeds it from the provider's team
- *   names — useful for bootstrap. Otherwise verifies coverage and reports
- *   mismatches (does NOT overwrite once populated).
+ * - Calls the provider's "teams in a competition" endpoint once per supported
+ *   league.
+ * - Writes `<provider>/team-ids.ts` as a CANONICAL-name -> provider-team-id
+ *   map. Provider-native names are reconciled to canonical names via
+ *   `canonicalizeTeamName` (exact + fuzzy) plus the explicit TEAM_NAME_ALIASES
+ *   below for spellings that don't fuzzy-match (national teams drift between
+ *   providers, e.g. "Czechia" vs "Czech Republic"). Provider teams that still
+ *   don't resolve, and canonical teams left without an id, are reported as
+ *   warnings for manual aliasing.
+ * - Seeds `canonical-teams.ts` for any league whose canonical list is still
+ *   empty (bootstrap), from the provider being run. Already-populated leagues
+ *   are kept as-is (their canonical source of truth is the provider that first
+ *   seeded them). Run the PRIMARY provider first so new leagues are seeded from
+ *   it (ADR-0005: canonical names come from the primary).
  *
- * Quota usage: 2 calls per provider (one per supported league).
+ * Quota usage: one call per supported league.
  *
  * Reads keys from .env.local.
  */
@@ -30,17 +38,22 @@ import {
   currentSeason,
   type SupportedLeague,
 } from "@/lib/providers/sports-data/leagues";
+import { canonicalizeTeamName } from "@/lib/providers/sports-data/team-names";
 
 type Provider = "football-data-org" | "api-football";
 
-type TeamEntry = { id: number | string; name: string };
+type TeamEntry = { id: number; name: string };
+
+function emptyByLeague<T>(make: () => T): Record<SupportedLeague, T> {
+  return Object.fromEntries(
+    SUPPORTED_LEAGUES.map((l) => [l, make()]),
+  ) as Record<SupportedLeague, T>;
+}
 
 function parseArgs(): { provider: Provider } {
   const arg = process.argv.find((a) => a.startsWith("--provider="));
   if (!arg) {
-    console.error(
-      "Missing --provider=<football-data-org|api-football>",
-    );
+    console.error("Missing --provider=<football-data-org|api-football>");
     process.exit(1);
   }
   const value = arg.slice("--provider=".length);
@@ -66,8 +79,12 @@ async function fetchFootballDataOrgTeams(
       `football-data.org GET ${url} -> HTTP ${res.status}\n${body.slice(0, 500)}`,
     );
   }
-  const json = (await res.json()) as { teams: Array<{ id: number; name: string }> };
-  console.log(`[fd-org] received ${json.teams.length} teams for ${league} (${code})`);
+  const json = (await res.json()) as {
+    teams: Array<{ id: number; name: string }>;
+  };
+  console.log(
+    `[fd-org] received ${json.teams.length} teams for ${league} (${code})`,
+  );
   return json.teams.map((t) => ({ id: t.id, name: t.name }));
 }
 
@@ -114,10 +131,7 @@ function loadCanonicalTeams(): Record<SupportedLeague, string[]> {
   );
   const src = readFileSync(path, "utf8");
   // Naive parse: extract array literal for each league.
-  const out: Record<SupportedLeague, string[]> = {
-    brasileirao_a: [],
-    champions_league: [],
-  };
+  const out = emptyByLeague<string[]>(() => []);
   for (const league of SUPPORTED_LEAGUES) {
     const m = src.match(new RegExp(`${league}:\\s*\\[([^\\]]*)\\]`, "s"));
     if (!m) continue;
@@ -139,14 +153,15 @@ function writeCanonicalTeams(
     `import type { SupportedLeague } from "@/lib/providers/sports-data/leagues";`,
     ``,
     `/**`,
-    ` * Canonical team names per league. Bootstrap source: football-data.org`,
-    ` * /v4/competitions/{code}/teams. When API-Football is reachable, run`,
-    ` * \`pnpm tsx scripts/generate-team-ids.ts --provider=api-football\` to`,
-    ` * verify coverage and reconcile any spelling differences.`,
+    ` * Canonical team names per league. Each league is bootstrapped from the`,
+    ` * provider that first populated it (run the primary provider first so new`,
+    ` * leagues are seeded from it — ADR-0005). Re-run`,
+    ` * \`scripts/generate-team-ids.ts\` to verify coverage and reconcile`,
+    ` * spelling differences.`,
     ` *`,
     ` * Each adapter maintains its own \`team-ids.ts\` mapping these canonical`,
     ` * names to the provider-native team IDs. canonical-teams.test.ts asserts`,
-    ` * both adapter maps cover 100% of this list.`,
+    ` * both adapter maps cover 100% of this list (where the provider serves it).`,
     ` */`,
     `export const CANONICAL_TEAMS: Record<SupportedLeague, readonly string[]> = {`,
   ];
@@ -168,11 +183,30 @@ function writeCanonicalTeams(
   console.log(`Wrote ${path}`);
 }
 
+/**
+ * Resolves a provider-native team name to its canonical name. Seeded leagues
+ * (canonical was just bootstrapped FROM this provider) use the provider name
+ * verbatim — it IS the canonical name. Otherwise defer to the shared
+ * `canonicalizeTeamName` (exact -> alias -> fuzzy); spelling drift is fixed by
+ * adding entries to TEAM_NAME_ALIASES in team-names.ts.
+ */
+function resolveCanonicalKey(
+  league: SupportedLeague,
+  providerName: string,
+  seeded: boolean,
+): string | undefined {
+  if (seeded) return providerName;
+  return canonicalizeTeamName(providerName, league);
+}
+
 function writeProviderTeamIds(
   provider: Provider,
   teamsByLeague: Record<SupportedLeague, TeamEntry[]>,
-): void {
-  const folder = provider === "football-data-org" ? "football-data-org" : "api-football";
+  canonicalByLeague: Record<SupportedLeague, string[]>,
+  seededLeagues: Set<SupportedLeague>,
+): { missing: number; unmatched: number } {
+  const folder =
+    provider === "football-data-org" ? "football-data-org" : "api-football";
   const constName =
     provider === "football-data-org"
       ? "FOOTBALL_DATA_ORG_TEAM_IDS"
@@ -185,6 +219,47 @@ function writeProviderTeamIds(
     process.cwd(),
     `lib/providers/sports-data/${folder}/team-ids.ts`,
   );
+
+  const mapByLeague = emptyByLeague<Record<string, number>>(() => ({}));
+  let missingTotal = 0;
+  let unmatchedTotal = 0;
+  for (const league of SUPPORTED_LEAGUES) {
+    const seeded = seededLeagues.has(league);
+    const unmatched: TeamEntry[] = [];
+    for (const t of teamsByLeague[league]) {
+      const key = resolveCanonicalKey(league, t.name, seeded);
+      if (key === undefined) {
+        unmatched.push(t);
+        continue;
+      }
+      mapByLeague[league][key] = t.id;
+    }
+    // Informational: provider teams with no canonical home. Expected for some
+    // leagues (e.g. API-Football's UCL endpoint returns qualifier teams that
+    // never reached the league phase). Only worth aliasing if one of these is
+    // actually a canonical team that should have matched.
+    if (unmatched.length > 0) {
+      unmatchedTotal += unmatched.length;
+      console.log(
+        `[team-ids] ${league}: ${unmatched.length} ${provider} team(s) outside the canonical list (info):\n  - ` +
+          unmatched
+            .map((t) => `${JSON.stringify(t.name)} (id ${t.id})`)
+            .join("\n  - "),
+      );
+    }
+    // Blocking: canonical teams with no provider id — coverage test will fail.
+    const missing = canonicalByLeague[league].filter(
+      (c) => !(c in mapByLeague[league]),
+    );
+    if (missing.length > 0) {
+      missingTotal += missing.length;
+      console.warn(
+        `[team-ids] ${league}: ${missing.length} canonical team(s) have NO ${provider} id (add an alias in team-names.ts):\n  - ` +
+          missing.join("\n  - "),
+      );
+    }
+  }
+
   const lines = [
     `import type { SupportedLeague } from "@/lib/providers/sports-data/leagues";`,
     ``,
@@ -196,9 +271,10 @@ function writeProviderTeamIds(
     `export const ${constName}: Record<SupportedLeague, Readonly<Record<string, number>>> = {`,
   ];
   for (const league of SUPPORTED_LEAGUES) {
-    const teams = teamsByLeague[league];
     lines.push(`  ${league}: {`);
-    for (const t of teams) lines.push(`    ${JSON.stringify(t.name)}: ${t.id},`);
+    for (const [name, id] of Object.entries(mapByLeague[league])) {
+      lines.push(`    ${JSON.stringify(name)}: ${id},`);
+    }
     lines.push(`  },`);
   }
   lines.push(`};`);
@@ -211,75 +287,72 @@ function writeProviderTeamIds(
   lines.push(``);
   writeFileSync(path, lines.join("\n"));
   console.log(`Wrote ${path}`);
+  return { missing: missingTotal, unmatched: unmatchedTotal };
 }
 
 async function main() {
   const { provider } = parseArgs();
   console.log(`Generating team-ids for ${provider}`);
 
-  const teamsByLeague: Record<SupportedLeague, TeamEntry[]> = {
-    brasileirao_a: [],
-    champions_league: [],
-  };
+  const teamsByLeague = emptyByLeague<TeamEntry[]>(() => []);
   for (const league of SUPPORTED_LEAGUES) {
-    const teams =
+    teamsByLeague[league] =
       provider === "football-data-org"
         ? await fetchFootballDataOrgTeams(league)
         : await fetchApiFootballTeams(league);
-    teamsByLeague[league] = teams;
   }
 
-  // Reconcile canonical-teams.ts.
+  // Reconcile canonical-teams.ts: seed empty leagues from this provider, keep
+  // already-populated leagues untouched.
   const existing = loadCanonicalTeams();
-  const anyExisting = SUPPORTED_LEAGUES.some((l) => existing[l].length > 0);
-  if (!anyExisting) {
-    console.log(
-      `[canonical] canonical-teams.ts is empty — seeding from ${provider}.`,
-    );
-    const namesByLeague: Record<SupportedLeague, string[]> = {
-      brasileirao_a: teamsByLeague.brasileirao_a.map((t) => t.name).sort(),
-      champions_league: teamsByLeague.champions_league.map((t) => t.name).sort(),
-    };
-    writeCanonicalTeams(namesByLeague);
-  } else {
-    console.log(`[canonical] verifying coverage against existing list`);
-    let mismatches = 0;
-    for (const league of SUPPORTED_LEAGUES) {
-      const providerNames = new Set(teamsByLeague[league].map((t) => t.name));
-      const missing = existing[league].filter((n) => !providerNames.has(n));
-      if (missing.length > 0) {
-        console.warn(
-          `[canonical] ${league}: ${missing.length} canonical team(s) missing from ${provider}:\n  - ` +
-            missing.join("\n  - "),
-        );
-        mismatches += missing.length;
-      }
-      const extras = teamsByLeague[league]
-        .map((t) => t.name)
-        .filter((n) => !existing[league].includes(n));
-      if (extras.length > 0) {
-        console.log(
-          `[canonical] ${league}: ${provider} has ${extras.length} extra team(s) not in canonical list (ignored):\n  - ` +
-            extras.join("\n  - "),
-        );
-      }
-    }
-    if (mismatches > 0) {
-      console.warn(
-        `[canonical] ${mismatches} canonical team(s) lack a mapping from ${provider}.`,
+  const merged = emptyByLeague<string[]>(() => []);
+  const seededLeagues = new Set<SupportedLeague>();
+  for (const league of SUPPORTED_LEAGUES) {
+    if (existing[league].length === 0) {
+      merged[league] = teamsByLeague[league].map((t) => t.name).sort();
+      seededLeagues.add(league);
+      console.log(
+        `[canonical] ${league}: empty — seeding ${merged[league].length} names from ${provider}.`,
       );
     } else {
-      console.log(`[canonical] all canonical teams covered by ${provider}.`);
+      merged[league] = [...existing[league]];
     }
   }
+  if (seededLeagues.size > 0) {
+    writeCanonicalTeams(merged);
+  } else {
+    console.log(`[canonical] all leagues already populated — not overwriting.`);
+  }
 
-  writeProviderTeamIds(provider, teamsByLeague);
-
-  const total =
-    teamsByLeague.brasileirao_a.length + teamsByLeague.champions_league.length;
-  console.log(
-    `\nDone. Wrote ${total} teams (${teamsByLeague.brasileirao_a.length} BSA + ${teamsByLeague.champions_league.length} CL). API calls used: 2.`,
+  const { missing, unmatched } = writeProviderTeamIds(
+    provider,
+    teamsByLeague,
+    merged,
+    seededLeagues,
   );
+
+  const total = SUPPORTED_LEAGUES.reduce(
+    (n, l) => n + teamsByLeague[l].length,
+    0,
+  );
+  const breakdown = SUPPORTED_LEAGUES.map(
+    (l) => `${teamsByLeague[l].length} ${l}`,
+  ).join(" + ");
+  console.log(
+    `\nDone. Fetched ${total} teams (${breakdown}). API calls used: ${SUPPORTED_LEAGUES.length}.`,
+  );
+  if (missing > 0) {
+    console.warn(
+      `\nBLOCKING: ${missing} canonical team(s) have no ${provider} id — add aliases to TEAM_NAME_ALIASES in team-names.ts and re-run, or the coverage test will fail.`,
+    );
+  } else {
+    console.log(`\nAll canonical teams covered by ${provider}. ✓`);
+  }
+  if (unmatched > 0) {
+    console.log(
+      `(${unmatched} ${provider} team(s) outside the canonical list — informational, e.g. UCL qualifiers.)`,
+    );
+  }
 }
 
 main().catch((err) => {

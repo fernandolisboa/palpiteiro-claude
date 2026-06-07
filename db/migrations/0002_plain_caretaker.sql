@@ -1,0 +1,1 @@
+ALTER TYPE "public"."league" ADD VALUE 'world_cup';
