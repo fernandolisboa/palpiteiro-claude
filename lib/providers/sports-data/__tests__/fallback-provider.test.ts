@@ -254,6 +254,50 @@ describe("FallbackProvider capability gating", () => {
     expect(p.__spies.getLineups).not.toHaveBeenCalled();
     expect(f.__spies.getLineups).toHaveBeenCalledTimes(1);
   });
+
+  it("bubbles up Unsupported for World Cup injuries without cascading to FDO", async () => {
+    // Mirrors production wiring (ADR-0006): API-Football supports injuries but
+    // throws Unsupported for World Cup; football-data.org has no injuries at
+    // all. The injuries gate filters FDO out, leaving only API-Football, whose
+    // Unsupported must bubble up (NOT cascade) so predict.ts sets
+    // absences_available=false rather than serving an empty injury list.
+    const wcRef: FixtureRef = {
+      league: "world_cup",
+      kickoffAt: "2026-06-20T19:00:00.000Z",
+      homeTeam: "Brazil",
+      awayTeam: "Argentina",
+    };
+    const apiFootball = makeMockProvider("api-football", {
+      supportsInjuries: true,
+      supportedLeagues: new Set<SupportedLeague>([
+        "brasileirao_a",
+        "champions_league",
+        "world_cup",
+      ]),
+    });
+    const footballDataOrg = makeMockProvider("football-data-org", {
+      supportsInjuries: false,
+      supportedLeagues: new Set<SupportedLeague>([
+        "brasileirao_a",
+        "champions_league",
+        "world_cup",
+      ]),
+    });
+    apiFootball.__spies.getInjuriesByFixture.mockRejectedValueOnce(
+      new SportsDataUnsupportedError(
+        "API-Football has no injury coverage for the World Cup competition",
+        "api-football",
+        "getInjuriesByFixture",
+      ),
+    );
+    const fp = new FallbackProvider(apiFootball, footballDataOrg);
+    await expect(fp.getInjuriesByFixture(wcRef)).rejects.toThrow(
+      SportsDataUnsupportedError,
+    );
+    expect(apiFootball.__spies.getInjuriesByFixture).toHaveBeenCalledTimes(1);
+    // FDO is gated out by supportsInjuries=false — it never serves WC injuries.
+    expect(footballDataOrg.__spies.getInjuriesByFixture).not.toHaveBeenCalled();
+  });
 });
 
 describe("FallbackProvider does not double-log on success", () => {
