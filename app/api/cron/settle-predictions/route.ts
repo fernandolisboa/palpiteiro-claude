@@ -10,18 +10,16 @@ export const dynamic = "force-dynamic";
 
 export async function GET(request: Request): Promise<Response> {
   const secret = process.env.CRON_SECRET;
+  // Vercel Cron sends `Authorization: Bearer <CRON_SECRET>` automatically.
+  // Fail closed: if the secret isn't configured, reject like any other
+  // unauthorized caller (401, generic body) — don't leak config state or
+  // return a 5xx that the scheduler would retry. The real reason is logged.
   if (!secret) {
-    // Fail closed: refuse to run unauthenticated if the secret isn't set.
     console.error(
       JSON.stringify({ scope: "settlement", event: "missing_cron_secret" }),
     );
-    return NextResponse.json(
-      { error: "CRON_SECRET not configured" },
-      { status: 500 },
-    );
+    return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
   }
-
-  // Vercel Cron sends `Authorization: Bearer <CRON_SECRET>` automatically.
   if (request.headers.get("authorization") !== `Bearer ${secret}`) {
     return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
   }

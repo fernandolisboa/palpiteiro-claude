@@ -32,13 +32,26 @@ export async function overridePredictionOutcome(
 ): Promise<OverrideResult> {
   const predictionId = String(formData.get("predictionId") ?? "");
   const result = String(formData.get("result") ?? "");
-  const homeScore = Number(formData.get("homeScore"));
-  const awayScore = Number(formData.get("awayScore"));
+  // Parse from the raw field: Number(null) is 0, so an absent/empty score must
+  // be rejected BEFORE conversion — otherwise a crafted no-body request would
+  // settle a bet on a fabricated 0-0.
+  const homeRaw = formData.get("homeScore");
+  const awayRaw = formData.get("awayScore");
 
   if (!predictionId) return { ok: false, error: "predictionId ausente." };
   if (!VALID_RESULTS.has(result)) {
     return { ok: false, error: "Resultado inválido." };
   }
+  if (
+    typeof homeRaw !== "string" ||
+    typeof awayRaw !== "string" ||
+    homeRaw.trim() === "" ||
+    awayRaw.trim() === ""
+  ) {
+    return { ok: false, error: "Placar (90') ausente." };
+  }
+  const homeScore = Number(homeRaw);
+  const awayScore = Number(awayRaw);
   if (
     !Number.isInteger(homeScore) ||
     !Number.isInteger(awayScore) ||

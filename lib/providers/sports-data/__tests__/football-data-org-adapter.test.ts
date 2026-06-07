@@ -136,6 +136,24 @@ describe("toNormalizedFixtureResult (football-data-org)", () => {
     expect(r.regulationScore).toEqual({ home: 1, away: 1 });
   });
 
+  it("refuses to settle (null) when a knockout went to ET but regularTime is missing", () => {
+    // Provider gap: duration says it went beyond 90' but no regularTime field.
+    // fullTime includes ET, so settling on it would be wrong → leave pending.
+    const r = toNormalizedFixtureResult(
+      makeMatch({
+        status: "FINISHED",
+        score: {
+          winner: "HOME_TEAM",
+          duration: "EXTRA_TIME",
+          fullTime: { home: 3, away: 2 },
+          extraTime: { home: 1, away: 0 },
+          halfTime: { home: 1, away: 1 },
+        },
+      }),
+    );
+    expect(r.regulationScore).toBeNull();
+  });
+
   it("falls back to fullTime when the match ended in regulation", () => {
     const r = toNormalizedFixtureResult(
       makeMatch({

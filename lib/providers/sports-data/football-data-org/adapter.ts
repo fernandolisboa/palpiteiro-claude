@@ -253,9 +253,16 @@ function toNormalizedFixture(
 function toNormalizedFixtureResult(
   m: FootballDataOrgMatch,
 ): NormalizedFixtureResult {
-  const reg = m.score.regularTime ?? m.score.fullTime;
+  // Prefer the explicit 90' field. fullTime is the running final score and on
+  // knockouts includes ET + penalties, so trust it ONLY when the match ended in
+  // regulation. If the match went beyond 90' but the provider didn't give us
+  // regularTime, refuse to settle (null) rather than settle on an ET score.
+  const wentBeyond90 =
+    (m.score.duration ?? "REGULAR") !== "REGULAR" || m.score.extraTime != null;
+  const reg =
+    m.score.regularTime ?? (wentBeyond90 ? null : m.score.fullTime);
   const regulationScore =
-    reg.home !== null && reg.away !== null
+    reg && reg.home !== null && reg.away !== null
       ? { home: reg.home, away: reg.away }
       : null;
   return {
