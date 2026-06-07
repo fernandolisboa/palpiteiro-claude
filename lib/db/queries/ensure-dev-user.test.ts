@@ -32,6 +32,8 @@ describe("ensureDevUser", () => {
     expect(inserted.role).toBe("admin");
     expect(inserted.allowed).toBe(true);
     // Idempotency is the whole point — must not throw on an existing row.
+    // No target → suppresses on any unique conflict (id or email).
     expect(onConflictDoNothing).toHaveBeenCalledTimes(1);
+    expect(onConflictDoNothing).toHaveBeenCalledWith();
   });
 });

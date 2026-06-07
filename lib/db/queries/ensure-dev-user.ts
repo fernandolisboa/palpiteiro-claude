@@ -24,5 +24,10 @@ export async function ensureDevUser(): Promise<void> {
       role: "admin",
       allowed: true,
     })
-    .onConflictDoNothing({ target: users.id });
+    // No target → suppress on ANY unique conflict (id OR email). Targeting only
+    // id would let a same-email/different-id row throw an unhandled unique
+    // violation up through analyzeMatch. The common cases (row absent, or
+    // present with this id) are covered; the pathological same-email case
+    // degrades to the FK-defense path, which persistAiCallError now surfaces.
+    .onConflictDoNothing();
 }

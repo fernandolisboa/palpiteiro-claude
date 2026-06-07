@@ -98,7 +98,7 @@ function findMatchingEvent(
 // ─── Helpers ─────────────────────────────────────────────────────────────────
 
 function truncate(text: string, limit: number): string {
-  return text.length > limit ? `${text.slice(0, limit)}…` : text;
+  return text.length > limit ? `${text.slice(0, limit - 1)}…` : text;
 }
 
 function classifyAnthropicError(err: unknown): {
