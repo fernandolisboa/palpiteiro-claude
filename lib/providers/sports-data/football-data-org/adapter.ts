@@ -49,6 +49,7 @@ import {
   SportsDataUnsupportedError,
   type FixtureRef,
   type NormalizedFixture,
+  type NormalizedFixtureResult,
   type NormalizedH2H,
   type NormalizedInjury,
   type NormalizedLineup,
@@ -242,6 +243,31 @@ function toNormalizedFixture(
     status: mapFootballDataOrgStatus(m.status),
     score: { home: m.score.fullTime.home, away: m.score.fullTime.away },
     venue: m.venue ?? undefined,
+  };
+}
+
+// Settlement result: 90' regulation score. v4's score.fullTime is the running
+// final score (includes extra time + penalties on knockouts), so prefer
+// score.regularTime, which holds the 90' result. fullTime is correct only when
+// the match ended in regulation (regularTime absent).
+function toNormalizedFixtureResult(
+  m: FootballDataOrgMatch,
+): NormalizedFixtureResult {
+  // Prefer the explicit 90' field. fullTime is the running final score and on
+  // knockouts includes ET + penalties, so trust it ONLY when the match ended in
+  // regulation. If the match went beyond 90' but the provider didn't give us
+  // regularTime, refuse to settle (null) rather than settle on an ET score.
+  const wentBeyond90 =
+    (m.score.duration ?? "REGULAR") !== "REGULAR" || m.score.extraTime != null;
+  const reg =
+    m.score.regularTime ?? (wentBeyond90 ? null : m.score.fullTime);
+  const regulationScore =
+    reg && reg.home !== null && reg.away !== null
+      ? { home: reg.home, away: reg.away }
+      : null;
+  return {
+    status: mapFootballDataOrgStatus(m.status),
+    regulationScore,
   };
 }
 
@@ -550,6 +576,24 @@ export class FootballDataOrgAdapter implements SportsDataProvider {
     }
   }
 
+  async getFixtureResult(
+    ref: FixtureRef,
+  ): Promise<NormalizedFixtureResult | undefined> {
+    try {
+      const date = ref.kickoffAt.slice(0, 10);
+      const list = await this.listCompetitionMatches(ref.league, date, date);
+      const match = list.matches.find((m) => {
+        const home = canonicalizeOrPassthrough(m.homeTeam.name, ref.league);
+        const away = canonicalizeOrPassthrough(m.awayTeam.name, ref.league);
+        return home === ref.homeTeam && away === ref.awayTeam;
+      });
+      if (!match) return undefined;
+      return toNormalizedFixtureResult(match);
+    } catch (err) {
+      wrapFootballDataOrgError(err, "getFixtureResult", { ref });
+    }
+  }
+
   async getH2H(
     homeTeam: string,
     awayTeam: string,
@@ -686,6 +730,7 @@ export class FootballDataOrgAdapter implements SportsDataProvider {
 // Internal exports for unit tests.
 export const __testing = {
   toNormalizedFixture,
+  toNormalizedFixtureResult,
   toNormalizedStanding,
   toNormalizedTeamLineup,
   wrapFootballDataOrgError,

@@ -1,0 +1,178 @@
+import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
+
+vi.mock("@/lib/db/queries/predictions", () => ({
+  getPendingSettlementPredictions: vi.fn(),
+}));
+vi.mock("@/lib/db/queries/prediction-outcomes", () => ({
+  insertOutcomeIfAbsent: vi.fn(),
+}));
+
+import { getPendingSettlementPredictions } from "@/lib/db/queries/predictions";
+import { insertOutcomeIfAbsent } from "@/lib/db/queries/prediction-outcomes";
+import {
+  __setSportsDataProviderForTesting,
+  getSportsDataProvider,
+} from "@/lib/providers/sports-data";
+import type {
+  FixtureRef,
+  NormalizedFixtureResult,
+  SportsDataProvider,
+} from "@/lib/providers/sports-data/types";
+import { settlePendingPredictions } from "@/lib/settlement/settle";
+
+const getPending = vi.mocked(getPendingSettlementPredictions);
+const insertOutcome = vi.mocked(insertOutcomeIfAbsent);
+
+type PendingRow = Awaited<
+  ReturnType<typeof getPendingSettlementPredictions>
+>[number];
+
+function pending(overrides: Partial<PendingRow>): PendingRow {
+  return {
+    predictionId: "p1",
+    recommendation: "over",
+    oddAtRecommendation: "1.900",
+    stakeUnits: "1",
+    matchId: "m1",
+    league: "world_cup",
+    kickoffAt: new Date("2026-06-20T18:00:00.000Z"),
+    homeTeam: "Brazil",
+    awayTeam: "Argentina",
+    ...overrides,
+  };
+}
+
+function installProvider(
+  resultFor: (ref: FixtureRef) => NormalizedFixtureResult | undefined,
+  spy?: ReturnType<typeof vi.fn>,
+): void {
+  const getFixtureResult = spy ?? vi.fn();
+  getFixtureResult.mockImplementation(async (ref: FixtureRef) =>
+    resultFor(ref),
+  );
+  __setSportsDataProviderForTesting({
+    getFixtureResult,
+  } as unknown as SportsDataProvider);
+}
+
+beforeEach(() => {
+  getPending.mockReset();
+  insertOutcome.mockReset();
+  insertOutcome.mockResolvedValue(true);
+});
+
+afterEach(() => {
+  __setSportsDataProviderForTesting(undefined);
+  vi.restoreAllMocks();
+});
+
+const finished = (home: number, away: number): NormalizedFixtureResult => ({
+  status: "finished",
+  regulationScore: { home, away },
+});
+
+describe("settlePendingPredictions", () => {
+  it("returns a no-op summary when nothing is pending", async () => {
+    getPending.mockResolvedValue([]);
+    installProvider(() => undefined);
+    const s = await settlePendingPredictions();
+    expect(s).toMatchObject({ considered: 0, settled: 0 });
+  });
+
+  it("settles over/under on the 90' total and fetches the match once", async () => {
+    getPending.mockResolvedValue([
+      pending({ predictionId: "over1", recommendation: "over" }),
+      pending({
+        predictionId: "under1",
+        recommendation: "under",
+        oddAtRecommendation: "2.100",
+      }),
+    ]);
+    const spy = vi.fn();
+    installProvider(() => finished(2, 1), spy); // 3 goals → over wins, under loses
+
+    const s = await settlePendingPredictions();
+
+    expect(spy).toHaveBeenCalledTimes(1); // deduped by match
+    expect(s.settled).toBe(2);
+    expect(s.byResult).toEqual({ won: 1, lost: 1, void: 0 });
+    expect(insertOutcome).toHaveBeenCalledWith(
+      expect.objectContaining({
+        predictionId: "over1",
+        totalGoals: 3,
+        result: "won",
+        profitUnits: 0.9,
+      }),
+    );
+    expect(insertOutcome).toHaveBeenCalledWith(
+      expect.objectContaining({ predictionId: "under1", result: "lost" }),
+    );
+  });
+
+  it("leaves non-finished matches pending", async () => {
+    getPending.mockResolvedValue([pending({})]);
+    installProvider(() => ({ status: "postponed", regulationScore: null }));
+    const s = await settlePendingPredictions();
+    expect(s.skipped).toBe(1);
+    expect(s.settled).toBe(0);
+    expect(insertOutcome).not.toHaveBeenCalled();
+  });
+
+  it("settles pass as void with zero profit", async () => {
+    getPending.mockResolvedValue([
+      pending({
+        predictionId: "pass1",
+        recommendation: "pass",
+        oddAtRecommendation: null,
+      }),
+    ]);
+    installProvider(() => finished(0, 0));
+    const s = await settlePendingPredictions();
+    expect(s.byResult.void).toBe(1);
+    expect(insertOutcome).toHaveBeenCalledWith(
+      expect.objectContaining({ result: "void", profitUnits: 0 }),
+    );
+  });
+
+  it("skips a non-pass bet that has no recorded entry odd", async () => {
+    getPending.mockResolvedValue([
+      pending({ recommendation: "over", oddAtRecommendation: null }),
+    ]);
+    installProvider(() => finished(3, 0));
+    const s = await settlePendingPredictions();
+    expect(s.skipped).toBe(1);
+    expect(insertOutcome).not.toHaveBeenCalled();
+  });
+
+  it("counts provider lookup failures as errors", async () => {
+    getPending.mockResolvedValue([pending({})]);
+    const provider = {
+      getFixtureResult: vi.fn().mockRejectedValue(new Error("boom")),
+    } as unknown as SportsDataProvider;
+    __setSportsDataProviderForTesting(provider);
+    const s = await settlePendingPredictions();
+    expect(s.errors).toBe(1);
+    expect(insertOutcome).not.toHaveBeenCalled();
+  });
+
+  it("counts idempotent re-runs as alreadySettled", async () => {
+    getPending.mockResolvedValue([pending({})]);
+    installProvider(() => finished(3, 0));
+    insertOutcome.mockResolvedValue(false); // conflict → no-op
+    const s = await settlePendingPredictions();
+    expect(s.alreadySettled).toBe(1);
+    expect(s.settled).toBe(0);
+  });
+});
+
+// Sanity: the testing override is wired the same way the real factory is read.
+describe("provider test seam", () => {
+  it("getSportsDataProvider returns the injected provider", () => {
+    const provider = {
+      getFixtureResult: vi.fn(),
+    } as unknown as SportsDataProvider;
+    __setSportsDataProviderForTesting(provider);
+    expect(getSportsDataProvider()).toBe(provider);
+    __setSportsDataProviderForTesting(undefined);
+  });
+});

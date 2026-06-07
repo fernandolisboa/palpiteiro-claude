@@ -19,6 +19,7 @@ import {
 
 const {
   toNormalizedFixture,
+  toNormalizedFixtureResult,
   toNormalizedStanding,
   toNormalizedTeamLineup,
   wrapFootballDataOrgError,
@@ -110,6 +111,66 @@ describe("toNormalizedFixture (football-data-org)", () => {
       "brasileirao_a",
     );
     expect(u.status).toBe("other");
+  });
+});
+
+describe("toNormalizedFixtureResult (football-data-org)", () => {
+  it("uses regularTime (90') when a knockout went to extra time / penalties", () => {
+    // v4: fullTime is the running final score incl. ET+pens (7-6 after a
+    // shootout); regularTime holds the 90' score (1-1) used for over/under.
+    const r = toNormalizedFixtureResult(
+      makeMatch({
+        status: "FINISHED",
+        score: {
+          winner: "HOME_TEAM",
+          duration: "PENALTY_SHOOTOUT",
+          fullTime: { home: 7, away: 6 },
+          regularTime: { home: 1, away: 1 },
+          halfTime: { home: 0, away: 1 },
+          extraTime: { home: 1, away: 1 },
+          penalties: { home: 5, away: 4 },
+        },
+      }),
+    );
+    expect(r.status).toBe("finished");
+    expect(r.regulationScore).toEqual({ home: 1, away: 1 });
+  });
+
+  it("refuses to settle (null) when a knockout went to ET but regularTime is missing", () => {
+    // Provider gap: duration says it went beyond 90' but no regularTime field.
+    // fullTime includes ET, so settling on it would be wrong → leave pending.
+    const r = toNormalizedFixtureResult(
+      makeMatch({
+        status: "FINISHED",
+        score: {
+          winner: "HOME_TEAM",
+          duration: "EXTRA_TIME",
+          fullTime: { home: 3, away: 2 },
+          extraTime: { home: 1, away: 0 },
+          halfTime: { home: 1, away: 1 },
+        },
+      }),
+    );
+    expect(r.regulationScore).toBeNull();
+  });
+
+  it("falls back to fullTime when the match ended in regulation", () => {
+    const r = toNormalizedFixtureResult(
+      makeMatch({
+        status: "FINISHED",
+        score: {
+          winner: "HOME_TEAM",
+          duration: "REGULAR",
+          fullTime: { home: 2, away: 1 },
+          halfTime: { home: 1, away: 0 },
+        },
+      }),
+    );
+    expect(r.regulationScore).toEqual({ home: 2, away: 1 });
+  });
+
+  it("returns null regulationScore before the match has a score", () => {
+    expect(toNormalizedFixtureResult(makeMatch()).regulationScore).toBeNull();
   });
 });
 

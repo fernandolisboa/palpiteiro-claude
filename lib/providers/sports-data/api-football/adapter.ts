@@ -54,6 +54,7 @@ import {
   compositeFixtureKey,
   type FixtureRef,
   type NormalizedFixture,
+  type NormalizedFixtureResult,
   type NormalizedFixtureStatus,
   type NormalizedH2H,
   type NormalizedInjury,
@@ -471,6 +472,24 @@ function toNormalizedFixture(
   };
 }
 
+// Settlement result: 90' regulation score from `score.fulltime` — NOT `goals`,
+// which on knockout fixtures already includes extra time. `fulltime` is null
+// until the 90' result exists, so regulationScore is null for not-yet-played
+// matches.
+function toNormalizedFixtureResult(
+  f: ApiFootballFixture,
+): NormalizedFixtureResult {
+  const ft = f.score.fulltime;
+  const regulationScore =
+    ft.home !== null && ft.away !== null
+      ? { home: ft.home, away: ft.away }
+      : null;
+  return {
+    status: mapStatusToNormalized(f.fixture.status.short),
+    regulationScore,
+  };
+}
+
 type ApiFootballStandingSplit =
   ApiFootballStandings["league"]["standings"][number][number]["home"];
 
@@ -767,6 +786,35 @@ export class ApiFootballAdapter implements SportsDataProvider {
     }
   }
 
+  async getFixtureResult(
+    ref: FixtureRef,
+  ): Promise<NormalizedFixtureResult | undefined> {
+    try {
+      // Pull the raw fixture (carries score.fulltime, dropped by normalization)
+      // by (date, league), matching on canonical team names — same pattern as
+      // getLineups/getInjuriesByFixture.
+      const leagueId = API_FOOTBALL_LEAGUE_IDS[ref.league];
+      const season = currentSeasonByLeague(ref.league);
+      const native = await getFixturesByDate(
+        ref.kickoffAt.slice(0, 10),
+        leagueId,
+        season,
+      );
+      const match = native.find(
+        (f) =>
+          canonicalizeOrPassthrough(f.teams.home.name, ref.league) ===
+            ref.homeTeam &&
+          canonicalizeOrPassthrough(f.teams.away.name, ref.league) ===
+            ref.awayTeam,
+      );
+      if (!match) return undefined;
+      return toNormalizedFixtureResult(match);
+    } catch (err) {
+      if (err instanceof SportsDataTransientError) throw err;
+      wrapApiFootballError(err, "getFixtureResult", { ref });
+    }
+  }
+
   async getH2H(
     homeTeam: string,
     awayTeam: string,
@@ -935,6 +983,7 @@ export class ApiFootballAdapter implements SportsDataProvider {
 // Internal exports for unit tests.
 export const __testing = {
   toNormalizedFixture,
+  toNormalizedFixtureResult,
   toNormalizedStanding,
   toNormalizedInjury,
   toNormalizedTeamLineup,

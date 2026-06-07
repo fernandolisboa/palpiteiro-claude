@@ -23,6 +23,7 @@ import {
 
 const {
   toNormalizedFixture,
+  toNormalizedFixtureResult,
   toNormalizedStanding,
   toNormalizedInjury,
   toNormalizedTeamLineup,
@@ -117,6 +118,39 @@ describe("toNormalizedFixture", () => {
     const n = toNormalizedFixture(f, "brasileirao_a");
     expect(n.homeTeam).toBe("MysteryTeamThatDoesNotMatchAnyCanonical");
     expect(n.awayTeam).toBe("Fluminense FC");
+  });
+});
+
+describe("toNormalizedFixtureResult", () => {
+  it("uses score.fulltime (90'), ignoring extra time on knockouts", () => {
+    // A knockout that went to extra time: goals (final) = 3-2 incl. ET, but the
+    // 90' regulation score was 1-1 → over/under must settle on 1-1 (2 goals).
+    const f = makeFixture({
+      fixture: {
+        id: 999,
+        date: "2026-07-10T19:00:00+00:00",
+        timestamp: Math.floor(Date.parse("2026-07-10T19:00:00Z") / 1000),
+        timezone: "UTC",
+        status: { long: "Match Finished After Extra Time", short: "AET", elapsed: 120 },
+        venue: { id: 1, name: "Stadium", city: "City" },
+      },
+      goals: { home: 3, away: 2 },
+      score: {
+        halftime: { home: 0, away: 1 },
+        fulltime: { home: 1, away: 1 },
+        extratime: { home: 2, away: 1 },
+        penalty: null,
+      },
+    });
+    const r = toNormalizedFixtureResult(f);
+    expect(r.status).toBe("finished");
+    expect(r.regulationScore).toEqual({ home: 1, away: 1 });
+  });
+
+  it("returns null regulationScore when the 90' score isn't available yet", () => {
+    const r = toNormalizedFixtureResult(makeFixture());
+    expect(r.status).toBe("scheduled");
+    expect(r.regulationScore).toBeNull();
   });
 });
 

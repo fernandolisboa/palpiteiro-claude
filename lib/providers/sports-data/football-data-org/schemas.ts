@@ -48,6 +48,10 @@ const ScoreSchema = z
     winner: z.string().nullable().optional(),
     duration: z.string().nullable().optional(),
     fullTime: ScoreLineSchema,
+    // 90' regulation score (v4). fullTime is the RUNNING final score and on
+    // knockout matches includes extra time + penalties, so regularTime is the
+    // field to use for over/under-by-90' settlement.
+    regularTime: ScoreLineSchema.optional(),
     halfTime: ScoreLineSchema.optional(),
     extraTime: ScoreLineSchema.optional(),
     penalties: ScoreLineSchema.optional(),
