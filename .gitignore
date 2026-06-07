@@ -24,6 +24,12 @@ yarn-error.log*
 *.tsbuildinfo
 next-env.d.ts
 
+# deploy
+.vercel
+
+# Claude Code local settings (machine-specific)
+.claude/settings.local.json
+
 # misc
 .DS_Store
 *.pem
