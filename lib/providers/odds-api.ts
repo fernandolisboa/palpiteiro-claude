@@ -135,6 +135,28 @@ function buildUrl(
   return url.toString();
 }
 
+// The Odds API requires commenceTimeFrom/To as `YYYY-MM-DDTHH:MM:SSZ`. It
+// rejects the millisecond form `Date#toISOString()` produces (".000Z") with a
+// 422 INVALID_COMMENCE_TIME_FROM — the failure behind #42, hit only on the
+// analysis path (the sole caller that passes commenceTime). Normalize any ISO
+// input to the accepted second-precision UTC form.
+function toOddsApiCommenceTime(iso: string | undefined): string | undefined {
+  if (iso === undefined) return undefined;
+  const ms = Date.parse(iso);
+  if (!Number.isFinite(ms)) return iso; // let the API surface a clear error
+  return new Date(ms).toISOString().replace(/\.\d{3}Z$/, "Z");
+}
+
+// regions and markets are mandatory on the odds endpoints; an empty array would
+// serialize to "" and trigger 422 MISSING_REGION. Fall back to defaults so no
+// request ever leaves without them.
+function resolveCsv(
+  values: readonly string[] | undefined,
+  fallback: readonly string[],
+): string {
+  return (values && values.length > 0 ? values : fallback).join(",");
+}
+
 function requireApiKey(): string {
   const key = process.env.ODDS_API_KEY;
   if (!key) {
@@ -308,16 +330,16 @@ export async function getOddsForSport(
   sport: string,
   options: GetOddsForSportOptions = {},
 ): Promise<OddsApiEventOdds[]> {
-  const regions = (options.regions ?? DEFAULT_REGIONS).join(",");
-  const markets = (options.markets ?? DEFAULT_MARKETS).join(",");
+  const regions = resolveCsv(options.regions, DEFAULT_REGIONS);
+  const markets = resolveCsv(options.markets, DEFAULT_MARKETS);
   const params: Params = {
     regions,
     markets,
     oddsFormat: "decimal",
     dateFormat: "iso",
     bookmakers: options.bookmakers?.join(","),
-    commenceTimeFrom: options.commenceTimeFrom,
-    commenceTimeTo: options.commenceTimeTo,
+    commenceTimeFrom: toOddsApiCommenceTime(options.commenceTimeFrom),
+    commenceTimeTo: toOddsApiCommenceTime(options.commenceTimeTo),
   };
   const endpoint = `/sports/${sport}/odds`;
   const cacheKey = buildCacheKey(endpoint, stripUndefined(params));
@@ -342,8 +364,8 @@ export async function getOddsForEvent(
   eventId: string,
   options: GetOddsForEventOptions = {},
 ): Promise<OddsApiEventOdds> {
-  const regions = (options.regions ?? DEFAULT_REGIONS).join(",");
-  const markets = (options.markets ?? DEFAULT_MARKETS).join(",");
+  const regions = resolveCsv(options.regions, DEFAULT_REGIONS);
+  const markets = resolveCsv(options.markets, DEFAULT_MARKETS);
   const params: Params = {
     regions,
     markets,
