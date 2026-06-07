@@ -1,35 +1,123 @@
 import type { SupportedLeague } from "@/lib/providers/sports-data/leagues";
 
 /**
- * Canonical-name -> API-Football team ID map.
- *
- * EMPTY ON PURPOSE — at the time of issue #24 the API-Football account was
- * suspended, so the generator could not be run for this provider. Populate by
- * running `pnpm tsx scripts/generate-team-ids.ts --provider=api-football`
- * once the account is reactivated. The script reads canonical names from
- * canonical-teams.ts and reconciles them against API-Football's spellings —
- * any mismatches surface as console warnings and need manual aliasing here.
- *
- * Until populated, the ApiFootballAdapter's name-based methods (getH2H,
- * getTeamForm, getInjuriesByTeam) throw SportsDataTransientError when an
- * unknown canonical name is requested. The FallbackProvider treats Transient
- * as a cascade signal, so the call is retried against the next adapter (e.g.
- * football-data-org). This is the deliberate ADR-0005 contract (see lines
- * 102–109): from the caller's perspective an unmapped name is functionally
- * equivalent to a provider outage, so cascading keeps the system operational
- * while this map is being populated.
+ * Canonical-name -> provider-native team ID map for api-football.
+ * Generated from /teams?league=X&season=Y.
+ * Re-run scripts/generate-team-ids.ts to refresh.
  */
-export const API_FOOTBALL_TEAM_IDS: Record<
-  SupportedLeague,
-  Readonly<Record<string, number>>
-> = {
-  brasileirao_a: {},
-  champions_league: {},
+export const API_FOOTBALL_TEAM_IDS: Record<SupportedLeague, Readonly<Record<string, number>>> = {
+  brasileirao_a: {
+    "EC Bahia": 118,
+    "SC Internacional": 119,
+    "Botafogo FR": 120,
+    "SE Palmeiras": 121,
+    "Fluminense FC": 124,
+    "São Paulo FC": 126,
+    "CR Flamengo": 127,
+    "Santos FC": 128,
+    "Grêmio FBPA": 130,
+    "SC Corinthians Paulista": 131,
+    "Chapecoense AF": 132,
+    "CR Vasco da Gama": 133,
+    "CA Paranaense": 134,
+    "Cruzeiro EC": 135,
+    "EC Vitória": 136,
+    "Coritiba FBC": 147,
+    "RB Bragantino": 794,
+    "CA Mineiro": 1062,
+    "Clube do Remo": 1198,
+    "Mirassol FC": 7848,
+  },
+  champions_league: {
+    "Newcastle United FC": 34,
+    "Liverpool FC": 40,
+    "Arsenal FC": 42,
+    "Tottenham Hotspur FC": 47,
+    "Chelsea FC": 49,
+    "Manchester City FC": 50,
+    "Olympique de Marseille": 81,
+    "Paris Saint-Germain FC": 85,
+    "AS Monaco FC": 91,
+    "FC Bayern München": 157,
+    "Borussia Dortmund": 165,
+    "Bayer 04 Leverkusen": 168,
+    "Eintracht Frankfurt": 169,
+    "AFC Ajax": 194,
+    "PSV": 197,
+    "Sport Lisboa e Benfica": 211,
+    "Sporting Clube de Portugal": 228,
+    "FK Bodø/Glimt": 327,
+    "FC København": 400,
+    "SSC Napoli": 492,
+    "Juventus FC": 496,
+    "Atalanta BC": 499,
+    "FC Internazionale Milano": 505,
+    "FC Barcelona": 529,
+    "Club Atlético de Madrid": 530,
+    "Athletic Club": 531,
+    "Villarreal CF": 533,
+    "Real Madrid CF": 541,
+    "PAE Olympiakos SFP": 553,
+    "Qarabağ Ağdam FK": 556,
+    "SK Slavia Praha": 560,
+    "Club Brugge KV": 569,
+    "Galatasaray SK": 645,
+    "FK Kairat": 664,
+    "Royale Union Saint-Gilloise": 1393,
+    "Paphos FC": 3403,
+  },
+  world_cup: {
+    "Belgium": 1,
+    "France": 2,
+    "Croatia": 3,
+    "Sweden": 5,
+    "Brazil": 6,
+    "Uruguay": 7,
+    "Colombia": 8,
+    "Spain": 9,
+    "England": 10,
+    "Panama": 11,
+    "Japan": 12,
+    "Senegal": 13,
+    "Switzerland": 15,
+    "Mexico": 16,
+    "South Korea": 17,
+    "Australia": 20,
+    "Iran": 22,
+    "Saudi Arabia": 23,
+    "Germany": 25,
+    "Argentina": 26,
+    "Portugal": 27,
+    "Tunisia": 28,
+    "Morocco": 31,
+    "Egypt": 32,
+    "Czech Republic": 770,
+    "Austria": 775,
+    "Türkiye": 777,
+    "Norway": 1090,
+    "Scotland": 1108,
+    "Bosnia & Herzegovina": 1113,
+    "Netherlands": 1118,
+    "Ivory Coast": 1501,
+    "Ghana": 1504,
+    "Congo DR": 1508,
+    "South Africa": 1531,
+    "Algeria": 1532,
+    "Cape Verde Islands": 1533,
+    "Jordan": 1548,
+    "Iraq": 1567,
+    "Uzbekistan": 1568,
+    "Qatar": 1569,
+    "Paraguay": 2380,
+    "Ecuador": 2382,
+    "USA": 2384,
+    "Haiti": 2386,
+    "New Zealand": 4673,
+    "Canada": 5529,
+    "Curaçao": 5530,
+  },
 };
 
-export function resolveTeamId(
-  name: string,
-  league: SupportedLeague,
-): number | undefined {
+export function resolveTeamId(name: string, league: SupportedLeague): number | undefined {
   return API_FOOTBALL_TEAM_IDS[league][name];
 }

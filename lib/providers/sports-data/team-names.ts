@@ -53,13 +53,59 @@ export function normalizeTeamName(name: string): string {
 }
 
 /**
+ * Explicit provider-spelling -> canonical-name overrides, per league, for names
+ * that match canonical via neither exact nor fuzzy logic. These are real
+ * cross-provider spelling differences: API-Football abbreviates club names
+ * ("Palmeiras" vs canonical "SE Palmeiras", "Bayer Leverkusen" vs
+ * "Bayer 04 Leverkusen") and national teams drift between providers
+ * (football-data.org "Czechia" vs API-Football "Czech Republic"). The table is
+ * provider-agnostic: each alternate spelling is unique to one provider, so a
+ * flat per-league map is unambiguous. Generated/maintained alongside
+ * scripts/generate-team-ids.ts (its warnings list anything still unmapped).
+ */
+const TEAM_NAME_ALIASES: Partial<
+  Record<SupportedLeague, Readonly<Record<string, string>>>
+> = {
+  brasileirao_a: {
+    Palmeiras: "SE Palmeiras",
+    Botafogo: "Botafogo FR",
+    Corinthians: "SC Corinthians Paulista",
+    "Atletico-MG": "CA Mineiro",
+  },
+  champions_league: {
+    Monaco: "AS Monaco FC",
+    "Bayer Leverkusen": "Bayer 04 Leverkusen",
+    Inter: "FC Internazionale Milano",
+    "FC Copenhagen": "FC København",
+    "Bodo/Glimt": "FK Bodø/Glimt",
+    "Kairat Almaty": "FK Kairat",
+    Newcastle: "Newcastle United FC",
+    Marseille: "Olympique de Marseille",
+    "Olympiakos Piraeus": "PAE Olympiakos SFP",
+    "PSV Eindhoven": "PSV",
+    Pafos: "Paphos FC",
+    Qarabag: "Qarabağ Ağdam FK",
+    "Union St. Gilloise": "Royale Union Saint-Gilloise",
+    Benfica: "Sport Lisboa e Benfica",
+    "Sporting CP": "Sporting Clube de Portugal",
+    Tottenham: "Tottenham Hotspur FC",
+  },
+  world_cup: {
+    Czechia: "Czech Republic",
+    Turkey: "Türkiye",
+    "United States": "USA",
+  },
+};
+
+/**
  * Maps a provider's team name to the canonical name for a given league.
  *
  * Strategy:
  *   1. Exact match against the canonical list (fast path — most provider
  *      names match canonical when canonical was seeded from that provider).
- *   2. Fuzzy match via normalizeTeamName comparison.
- *   3. Undefined when no match — caller decides what to do (typically pass
+ *   2. Explicit alias override (TEAM_NAME_ALIASES) for known spelling drift.
+ *   3. Fuzzy match via normalizeTeamName comparison.
+ *   4. Undefined when no match — caller decides what to do (typically pass
  *      the provider name through; downstream lookups may still match).
  */
 export function canonicalizeTeamName(
@@ -68,6 +114,8 @@ export function canonicalizeTeamName(
 ): string | undefined {
   const canonical = CANONICAL_TEAMS[league];
   if (canonical.includes(providerName)) return providerName;
+  const alias = TEAM_NAME_ALIASES[league]?.[providerName];
+  if (alias && canonical.includes(alias)) return alias;
   const normProvider = normalizeTeamName(providerName);
   if (!normProvider) return undefined;
   for (const c of canonical) {

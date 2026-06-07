@@ -16,6 +16,7 @@ export const userRoleEnum = pgEnum("user_role", ["admin", "user"]);
 export const leagueEnum = pgEnum("league", [
   "brasileirao_a",
   "champions_league",
+  "world_cup",
 ]);
 
 export const matchStatusEnum = pgEnum("match_status", [
