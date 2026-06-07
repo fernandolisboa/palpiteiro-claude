@@ -5,6 +5,7 @@ import {
   SportsDataUnsupportedError,
   type FixtureRef,
   type NormalizedFixture,
+  type NormalizedFixtureResult,
   type NormalizedH2H,
   type NormalizedInjury,
   type NormalizedLineup,
@@ -138,6 +139,16 @@ export class FallbackProvider implements SportsDataProvider {
       "getFixtureByMatch",
       (p) => p.capabilities.supportedLeagues.has(ref.league),
       (p) => p.getFixtureByMatch(ref),
+    );
+  }
+
+  getFixtureResult(
+    ref: FixtureRef,
+  ): Promise<NormalizedFixtureResult | undefined> {
+    return this.withFallback(
+      "getFixtureResult",
+      (p) => p.capabilities.supportedLeagues.has(ref.league),
+      (p) => p.getFixtureResult(ref),
     );
   }
 

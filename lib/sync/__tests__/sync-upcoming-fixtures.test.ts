@@ -33,6 +33,7 @@ function makeProvider(
     },
     getFixturesByDate: getFixturesByDate as never,
     getFixtureByMatch: vi.fn() as never,
+    getFixtureResult: vi.fn() as never,
     getH2H: vi.fn() as never,
     getStandings: vi.fn() as never,
     getInjuriesByFixture: vi.fn() as never,

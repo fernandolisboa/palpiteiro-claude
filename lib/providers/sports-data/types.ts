@@ -41,6 +41,20 @@ export type NormalizedFixture = z.infer<typeof NormalizedFixtureSchema>;
 export const NormalizedH2HSchema = NormalizedFixtureSchema;
 export type NormalizedH2H = NormalizedFixture;
 
+// Result of a fixture as needed for settlement. `regulationScore` is the score
+// at the end of 90' (regulation only), deliberately EXCLUDING extra time and
+// penalties — over/under 2.5 settles by the 90' result. It's null until the
+// match has a finished 90' score available (live/scheduled/postponed).
+export const NormalizedFixtureResultSchema = z.object({
+  status: NormalizedFixtureStatusSchema,
+  regulationScore: z
+    .object({ home: z.number().int(), away: z.number().int() })
+    .nullable(),
+});
+export type NormalizedFixtureResult = z.infer<
+  typeof NormalizedFixtureResultSchema
+>;
+
 export const NormalizedStandingSplitSchema = z.object({
   played: z.number().int().nonnegative(),
   wins: z.number().int().nonnegative(),
@@ -156,6 +170,11 @@ export interface SportsDataProvider {
     league: SupportedLeague,
   ): Promise<NormalizedFixture[]>;
   getFixtureByMatch(ref: FixtureRef): Promise<NormalizedFixture | undefined>;
+  // Fetches the settlement result (status + 90' regulation score) for a
+  // fixture. Returns undefined when the fixture can't be found at the provider.
+  getFixtureResult(
+    ref: FixtureRef,
+  ): Promise<NormalizedFixtureResult | undefined>;
   getH2H(
     homeTeam: string,
     awayTeam: string,

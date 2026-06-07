@@ -22,6 +22,7 @@ function makeMockProvider(
   const spies: Record<string, ReturnType<typeof vi.fn>> = {
     getFixturesByDate: vi.fn(),
     getFixtureByMatch: vi.fn(),
+    getFixtureResult: vi.fn(),
     getH2H: vi.fn(),
     getStandings: vi.fn(),
     getInjuriesByFixture: vi.fn(),
@@ -41,6 +42,7 @@ function makeMockProvider(
     capabilities,
     getFixturesByDate: spies.getFixturesByDate as never,
     getFixtureByMatch: spies.getFixtureByMatch as never,
+    getFixtureResult: spies.getFixtureResult as never,
     getH2H: spies.getH2H as never,
     getStandings: spies.getStandings as never,
     getInjuriesByFixture: spies.getInjuriesByFixture as never,

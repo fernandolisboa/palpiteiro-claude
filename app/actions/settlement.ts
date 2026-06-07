@@ -1,0 +1,80 @@
+"use server";
+
+import { revalidatePath } from "next/cache";
+
+import { DEV_USER_ID } from "@/lib/auth/dev-user";
+import { ensureDevUser } from "@/lib/db/queries/ensure-dev-user";
+import { upsertOutcomeOverride } from "@/lib/db/queries/prediction-outcomes";
+import { getPredictionForOverride } from "@/lib/db/queries/predictions";
+import { profitForResult, type OutcomeResult } from "@/lib/settlement/compute";
+
+export type OverrideResult = { ok: true } | { ok: false; error: string };
+
+const VALID_RESULTS: ReadonlySet<string> = new Set<OutcomeResult>([
+  "won",
+  "lost",
+  "void",
+]);
+
+/**
+ * Manual settlement override. Lets an admin set the 90' score + result for a
+ * prediction — correcting a wrong auto-settle, voiding an annulled match, or
+ * settling something the cron couldn't. Profit is derived from the chosen
+ * result + the prediction's entry odd/stake, never typed by hand, so it stays
+ * consistent.
+ *
+ * NOTE: not access-gated — there's no auth in Phase 1 (the app runs as the dev
+ * user). Real admin authorization lands with Auth.js (#12).
+ */
+export async function overridePredictionOutcome(
+  _prev: OverrideResult | null,
+  formData: FormData,
+): Promise<OverrideResult> {
+  const predictionId = String(formData.get("predictionId") ?? "");
+  const result = String(formData.get("result") ?? "");
+  const homeScore = Number(formData.get("homeScore"));
+  const awayScore = Number(formData.get("awayScore"));
+
+  if (!predictionId) return { ok: false, error: "predictionId ausente." };
+  if (!VALID_RESULTS.has(result)) {
+    return { ok: false, error: "Resultado inválido." };
+  }
+  if (
+    !Number.isInteger(homeScore) ||
+    !Number.isInteger(awayScore) ||
+    homeScore < 0 ||
+    awayScore < 0
+  ) {
+    return { ok: false, error: "Placar (90') inválido." };
+  }
+
+  const row = await getPredictionForOverride(predictionId);
+  if (!row) return { ok: false, error: "Predição não encontrada." };
+
+  const odd =
+    row.prediction.oddAtRecommendation !== null
+      ? Number(row.prediction.oddAtRecommendation)
+      : null;
+  const profitUnits = profitForResult(
+    result as OutcomeResult,
+    odd,
+    Number(row.prediction.stakeUnits),
+  );
+  if (profitUnits === null) {
+    return {
+      ok: false,
+      error: "Predição sem odd de entrada; só pode ser anulada (void).",
+    };
+  }
+
+  await ensureDevUser();
+  await upsertOutcomeOverride({
+    predictionId,
+    totalGoals: homeScore + awayScore,
+    result: result as OutcomeResult,
+    profitUnits,
+    overrideByUserId: DEV_USER_ID,
+  });
+  revalidatePath(`/admin/predictions/${predictionId}`);
+  return { ok: true };
+}
