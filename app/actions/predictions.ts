@@ -4,6 +4,7 @@ import { revalidatePath } from "next/cache";
 
 import { DEV_USER_ID } from "@/lib/auth/dev-user";
 import { PredictError, predict } from "@/lib/ai/predict";
+import { ensureDevUser } from "@/lib/db/queries/ensure-dev-user";
 import { getAiCallById } from "@/lib/db/queries/predictions";
 import { toAnalysisView } from "@/lib/view/analysis";
 import type { AnalysisView } from "@/lib/view/types";
@@ -49,6 +50,9 @@ export async function analyzeMatch(
     return { ok: false, error: "matchId ausente" };
   }
   try {
+    // Phase-1 stopgap until real auth (#12): guarantee the hardcoded user row
+    // exists so the ai_calls/predictions FK is satisfiable on first use.
+    await ensureDevUser();
     const prediction = await predict({ matchId, userId: DEV_USER_ID });
     const aiCall = await getAiCallById(prediction.aiCallId);
     revalidatePath(`/match/${matchId}`);
