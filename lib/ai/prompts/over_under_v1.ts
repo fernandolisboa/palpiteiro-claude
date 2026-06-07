@@ -1,6 +1,6 @@
 import type { OverUnderInput } from "../schemas/input";
 
-export const PROMPT_VERSION = "over_under_v1.1" as const;
+export const PROMPT_VERSION = "over_under_v1.2" as const;
 
 export const SYSTEM_PROMPT = `Você é um analista quantitativo de apostas esportivas focado exclusivamente no mercado over/under 2.5 gols.
 
@@ -44,7 +44,7 @@ export const SUBMIT_PREDICTION_TOOL = {
         minLength: 1,
         maxLength: 600,
         description:
-          "Racional em português, até 600 chars, explicando os fatores quantitativos decisivos.",
+          "Racional conciso em português, idealmente ~450 chars (máx. 600), explicando os fatores quantitativos decisivos. Seja objetivo: os fatores detalhados vão em key_factors.",
       },
       key_factors: {
         type: "array",
