@@ -57,6 +57,37 @@ describe("odds-api request construction", () => {
     expect(params.get("commenceTimeTo")).toMatch(SECOND_PRECISION_UTC);
   });
 
+  it("sends regions, markets AND a millisecond-free commenceTime together (predict.ts shape)", async () => {
+    const { calls } = captureFetch();
+    // The exact param set predict.ts builds: a kickoff window via toISOString().
+    await getOddsForSport("soccer_brazil_campeonato", {
+      regions: ["eu"],
+      markets: ["totals"],
+      commenceTimeFrom: "2026-06-07T18:00:00.000Z",
+      commenceTimeTo: "2026-06-08T06:00:00.000Z",
+      cache: new InMemoryCacheStore(),
+    });
+
+    const params = calls[0].searchParams;
+    expect(params.get("regions")).toBe("eu");
+    expect(params.get("markets")).toBe("totals");
+    expect(params.get("commenceTimeFrom")).toMatch(SECOND_PRECISION_UTC);
+    expect(params.get("commenceTimeTo")).toMatch(SECOND_PRECISION_UTC);
+  });
+
+  it("normalizes offset timezones to UTC and leaves second-precision input intact", async () => {
+    const { calls } = captureFetch();
+    await getOddsForSport("soccer_fifa_world_cup", {
+      commenceTimeFrom: "2026-06-07T21:00:00+03:00", // offset -> UTC
+      commenceTimeTo: "2026-06-08T06:00:00Z", // already correct, untouched
+      cache: new InMemoryCacheStore(),
+    });
+
+    const params = calls[0].searchParams;
+    expect(params.get("commenceTimeFrom")).toBe("2026-06-07T18:00:00Z");
+    expect(params.get("commenceTimeTo")).toBe("2026-06-08T06:00:00Z");
+  });
+
   it("always sends regions and markets on the sport odds request", async () => {
     const { calls } = captureFetch();
     await getOddsForSport("soccer_brazil_campeonato", {
