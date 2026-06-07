@@ -38,6 +38,7 @@ type PageProps = {
 function filterToLeague(filter: LeagueFilter): SupportedLeague | undefined {
   if (filter === "bsa") return "brasileirao_a";
   if (filter === "ucl") return "champions_league";
+  if (filter === "wc") return "world_cup";
   return undefined;
 }
 

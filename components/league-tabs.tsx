@@ -9,6 +9,7 @@ const ITEMS: Item[] = [
   { value: "all", label: "Todos" },
   { value: "bsa", label: "Brasileirão" },
   { value: "ucl", label: "Champions" },
+  { value: "wc", label: "Copa do Mundo" },
 ];
 
 function buildHref(league: LeagueFilter): string {

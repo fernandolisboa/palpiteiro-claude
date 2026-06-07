@@ -1,12 +1,32 @@
+import type { SupportedLeague } from "@/lib/providers/sports-data/leagues";
+
 export const ODDS_API_BASE_URL = "https://api.the-odds-api.com/v4";
 
-// Confirmed via GET /v4/sports (2026-05) — both keys present and active.
+// Confirmed via GET /v4/sports: Brasileirão + Champions (2026-05) and World Cup
+// (soccer_fifa_world_cup, active=true with totals/2.5 markets — 2026-06).
 export const SPORT_KEYS = {
   BRASILEIRAO_A: "soccer_brazil_campeonato",
   CHAMPIONS_LEAGUE: "soccer_uefa_champs_league",
+  WORLD_CUP: "soccer_fifa_world_cup",
 } as const;
 
 export type SportKey = (typeof SPORT_KEYS)[keyof typeof SPORT_KEYS];
+
+/**
+ * League -> The Odds API sport key. Exhaustive `Record<SupportedLeague, …>` so a
+ * newly added league is a COMPILE error here until mapped — replaces the old
+ * per-call ternaries in predict.ts / fetch-and-snapshot.ts that silently fell
+ * through to the Champions key for any non-Brasileirão league.
+ */
+export const SPORT_KEY_BY_LEAGUE: Record<SupportedLeague, SportKey> = {
+  brasileirao_a: SPORT_KEYS.BRASILEIRAO_A,
+  champions_league: SPORT_KEYS.CHAMPIONS_LEAGUE,
+  world_cup: SPORT_KEYS.WORLD_CUP,
+};
+
+export function leagueToSportKey(league: SupportedLeague): SportKey {
+  return SPORT_KEY_BY_LEAGUE[league];
+}
 
 // Market keys per https://the-odds-api.com/liveapi/guides/v4/#additional-markets
 export const MARKETS = {

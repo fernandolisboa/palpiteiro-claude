@@ -72,9 +72,11 @@ async function main() {
   const sports = await getSports();
   const brasileirao = sports.find((s) => s.key === SPORT_KEYS.BRASILEIRAO_A);
   const champions = sports.find((s) => s.key === SPORT_KEYS.CHAMPIONS_LEAGUE);
+  const worldCup = sports.find((s) => s.key === SPORT_KEYS.WORLD_CUP);
   console.log(
     `Sports (${sports.length} total): Brasileirão=${brasileirao?.active ? "active" : "missing/inactive"}, ` +
-      `Champions=${champions?.active ? "active" : "missing/inactive"}`,
+      `Champions=${champions?.active ? "active" : "missing/inactive"}, ` +
+      `World Cup=${worldCup?.active ? "active" : "missing/inactive"}`,
   );
 
   if (!brasileirao || !brasileirao.active) {
@@ -128,6 +130,31 @@ async function main() {
     }
   }
 
+  // 2b. World Cup totals (issue #38) — confirm the Copa is covered with O/U.
+  if (worldCup?.active) {
+    console.log(`\nFetching ${SPORT_KEYS.WORLD_CUP} totals (region=eu)…`);
+    const wcEvents = await getOddsForSport(SPORT_KEYS.WORLD_CUP, {
+      markets: ["totals"],
+      regions: ["eu"],
+    });
+    const withTotals = wcEvents.filter((e) => findTotalsBookmaker(e));
+    console.log(
+      `Got ${wcEvents.length} World Cup event(s), ${withTotals.length} with a totals market.`,
+    );
+    const sample = withTotals[0];
+    if (sample) {
+      const pick = findTotalsBookmaker(sample)!;
+      console.log(
+        `  e.g. ${sample.home_team} vs ${sample.away_team}: [${pick.bookmaker.title}] ` +
+          `line=${pick.point} over=${pick.overOdd.toFixed(2)} under=${pick.underOdd.toFixed(2)}`,
+      );
+    }
+  } else {
+    console.log(
+      `\n[world_cup] ${SPORT_KEYS.WORLD_CUP} not active — Copa odds unavailable.`,
+    );
+  }
+
   // 3. Cache demo — re-request should hit the in-memory cache.
   console.log("\n─── Cache demo ───");
   console.log("Re-calling getOddsForSport — expect cache_hit=true:");
@@ -137,7 +164,7 @@ async function main() {
   });
 
   console.log(
-    "\nBillable calls expected this run: 1 (/sports is free; the second /odds call comes from cache).",
+    "\nBillable calls expected this run: up to 2 (Brasileirão/Champions totals + World Cup totals; /sports is free; the cache demo re-call is free).",
   );
   console.log("Done.");
 }

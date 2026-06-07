@@ -4,13 +4,14 @@ import {
   formatKickoffRelative,
   leagueToKey,
 } from "@/lib/format";
+import type { SupportedLeague } from "@/lib/providers/sports-data/leagues";
 import { teamToTeam } from "@/lib/view/team";
 import { toMatchRowOdds, type OddsSnapshotInput } from "@/lib/view/odds";
 import type { MatchHeroView, MatchRowView } from "@/lib/view/types";
 
 export type MatchInput = {
   id: string;
-  league: "brasileirao_a" | "champions_league";
+  league: SupportedLeague;
   homeTeam: string;
   awayTeam: string;
   kickoffAt: Date;

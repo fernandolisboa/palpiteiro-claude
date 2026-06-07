@@ -157,7 +157,9 @@ describe("leagueToKey + LEAGUE_LABEL", () => {
   it("maps db enum to ui key and label", () => {
     expect(leagueToKey("brasileirao_a")).toBe("bsa");
     expect(leagueToKey("champions_league")).toBe("ucl");
+    expect(leagueToKey("world_cup")).toBe("wc");
     expect(LEAGUE_LABEL.bsa).toBe("Brasileirão");
     expect(LEAGUE_LABEL.ucl).toBe("Champions");
+    expect(LEAGUE_LABEL.wc).toBe("Copa do Mundo");
   });
 });

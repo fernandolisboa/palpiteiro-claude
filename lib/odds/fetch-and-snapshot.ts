@@ -1,5 +1,5 @@
 import { normalizeTeamName } from "@/lib/providers/sports-data/team-names";
-import { SPORT_KEYS } from "@/lib/providers/odds-api-constants";
+import { leagueToSportKey } from "@/lib/providers/odds-api-constants";
 import { getOddsForSport } from "@/lib/providers/odds-api";
 import { computeImpliedProbabilities } from "@/lib/odds/implied-probability";
 import { pickBestTotalsBookmaker } from "@/lib/odds/select-bookmaker";
@@ -19,14 +19,6 @@ function teamsMatch(a: string, b: string): boolean {
   const nb = normalizeTeamName(b);
   if (!na || !nb) return false;
   return na === nb || na.includes(nb) || nb.includes(na);
-}
-
-function leagueToSportKey(
-  league: DbMatch["league"],
-): (typeof SPORT_KEYS)[keyof typeof SPORT_KEYS] {
-  return league === "brasileirao_a"
-    ? SPORT_KEYS.BRASILEIRAO_A
-    : SPORT_KEYS.CHAMPIONS_LEAGUE;
 }
 
 function findEventForMatch(
