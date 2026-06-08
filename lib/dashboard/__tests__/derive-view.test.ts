@@ -81,12 +81,19 @@ describe("deriveDashboardView", () => {
     expect(availableLeagues).toEqual(["wc", "ucl"]);
   });
 
-  it("applies table filters BEFORE the row-view mapping", () => {
+  it("narrows table rows by a non-'all' status filter, then maps to row views", () => {
     const filters = parseDashboardFilters({ status: "won" });
     const { tableRows } = deriveDashboardView(rows, filters);
     expect(tableRows).toHaveLength(1);
     expect(tableRows[0].id).toBe("won"); // PredictionRowView.id === predictionId
     expect(tableRows[0].status).toBe("won");
+  });
+
+  it("narrows table rows by a league filter through the composition", () => {
+    // only the champions_league row (-> ucl) survives the league filter.
+    const filters = parseDashboardFilters({ league: "ucl" });
+    const { tableRows } = deriveDashboardView(rows, filters);
+    expect(tableRows.map((r) => r.id)).toEqual(["lost"]);
   });
 
   it("maps every row when filters are 'all'", () => {
