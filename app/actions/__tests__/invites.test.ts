@@ -77,6 +77,15 @@ describe("inviteUser", () => {
     expect(res.ok).toBe(false);
     expect(mockAdd).not.toHaveBeenCalled();
   });
+
+  it("admin + valid email with surrounding whitespace → trimmed and accepted", async () => {
+    mockAuth.mockResolvedValue(ADMIN);
+    const res = await inviteUser(null, form({ email: "  new@x.com " }));
+    expect(res).toEqual({ ok: true });
+    expect(mockAdd).toHaveBeenCalledWith(
+      expect.objectContaining({ email: "new@x.com" })
+    );
+  });
 });
 
 describe("revokeInvite", () => {

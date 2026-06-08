@@ -24,7 +24,10 @@ export async function inviteUser(
     return { ok: false, error: "Acesso negado." };
   }
 
-  const email = String(formData.get("email") ?? "");
+  // Trim ANTES de validar: z.email() não apara espaços, então um e-mail válido
+  // com espaços de borda falharia a validação (assimétrico com `note`, que é
+  // aparado). addPendingInvite ainda normaliza (trim+lowercase) na fronteira.
+  const email = String(formData.get("email") ?? "").trim();
   if (!emailSchema.safeParse(email).success) {
     return { ok: false, error: "E-mail inválido." };
   }

@@ -76,6 +76,7 @@ vi.mock("@/lib/db", () => {
   return { db: { select, update, delete: del, insert, batch: h.batchMock } };
 });
 
+import { pendingInvites } from "@/db/schema";
 import {
   addPendingInvite,
   isEmailWhitelistedInDb,
@@ -223,10 +224,15 @@ describe("listPendingInvites — convites pendentes, mais recentes primeiro", ()
     await expect(listPendingInvites()).resolves.toEqual(rows);
   });
 
-  it("ordena por createdAt DESC (orderBy recebe um desc())", async () => {
+  it("ordena por createdAt DESC (orderBy recebe desc(pendingInvites.createdAt))", async () => {
     h.state.listResult = [];
     await listPendingInvites();
-    const order = h.state.orderByArg as { op?: string } | undefined;
+    const order = h.state.orderByArg as
+      | { op?: string; col?: unknown }
+      | undefined;
     expect(order?.op).toBe("desc");
+    // Trava a COLUNA, não só a direção: ordenar por desc(email) passaria se só
+    // checássemos `op`. db/schema não é mockado, então é o objeto-coluna real.
+    expect(order?.col).toBe(pendingInvites.createdAt);
   });
 });
