@@ -1,6 +1,7 @@
 "use server";
 
 import { revalidatePath } from "next/cache";
+import { z } from "zod";
 
 import { auth } from "@/auth";
 import { PredictError, predict } from "@/lib/ai/predict";
@@ -49,6 +50,9 @@ export async function analyzeMatch(
   const matchId = String(formData.get("matchId") ?? "");
   if (!matchId) {
     return { ok: false, error: "matchId ausente" };
+  }
+  if (!z.uuid().safeParse(matchId).success) {
+    return { ok: false, error: "Identificador de jogo inválido." };
   }
   const session = await auth();
   if (!session?.user?.id) {

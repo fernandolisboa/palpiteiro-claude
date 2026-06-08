@@ -34,6 +34,8 @@ const SESSION = {
   expires: "2099-01-01",
 } as unknown as Session;
 
+const VALID_MATCH_ID = "550e8400-e29b-41d4-a716-446655440000";
+
 function form(fields: Record<string, string>): FormData {
   const fd = new FormData();
   for (const [k, v] of Object.entries(fields)) fd.append(k, v);
@@ -49,7 +51,7 @@ beforeEach(() => {
 describe("analyzeMatch", () => {
   it("rejects an unauthenticated request without calling predict (no Anthropic cost)", async () => {
     mockAuth.mockResolvedValue(null);
-    const res = await analyzeMatch(null, form({ matchId: "m1" }));
+    const res = await analyzeMatch(null, form({ matchId: VALID_MATCH_ID }));
     expect(res).toMatchObject({ ok: false });
     expect(mockPredict).not.toHaveBeenCalled();
   });
@@ -60,10 +62,19 @@ describe("analyzeMatch", () => {
     expect(mockPredict).not.toHaveBeenCalled();
   });
 
+  it("rejects a malformed (non-UUID) matchId without calling predict (no DB round-trip)", async () => {
+    const res = await analyzeMatch(null, form({ matchId: "foo" }));
+    expect(res).toEqual({
+      ok: false,
+      error: "Identificador de jogo inválido.",
+    });
+    expect(mockPredict).not.toHaveBeenCalled();
+  });
+
   it("bounces a session whose user row no longer exists, without calling predict (no Anthropic cost)", async () => {
     mockAuth.mockResolvedValue(SESSION);
     mockUserExists.mockResolvedValue(false);
-    const res = await analyzeMatch(null, form({ matchId: "m1" }));
+    const res = await analyzeMatch(null, form({ matchId: VALID_MATCH_ID }));
     expect(res).toEqual({
       ok: false,
       error: "Sua sessão expirou. Faça login novamente.",
