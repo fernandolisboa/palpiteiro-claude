@@ -41,6 +41,14 @@ export async function DesktopShell({ children }: { children: ReactNode }) {
             >
               dashboard
             </Link>
+            {user?.role === "admin" && (
+              <Link
+                href="/admin"
+                className="text-[12.5px] tracking-tight text-muted-foreground transition-colors hover:text-foreground"
+              >
+                admin
+              </Link>
+            )}
           </nav>
         </div>
         <div className="flex items-center gap-3">
