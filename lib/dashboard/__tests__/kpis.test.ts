@@ -75,6 +75,31 @@ describe("computeDashboardKpis", () => {
     expect(k.yield.n).toBe(2);
   });
 
+  it("excludes a real bet that was annulled (void) from the yield denominator", () => {
+    const base: DashboardRow[] = [
+      settled("won", "0.92", { oddAtRecommendation: "1.92" }),
+      settled("lost", "-1.00"),
+    ];
+    // A real over/under bet (non-pass) annulled to void via admin override:
+    // keeps its stake + entry odd but profit 0.
+    const withVoid: DashboardRow[] = [
+      ...base,
+      settled("void", "0", { recommendation: "over", oddAtRecommendation: "1.95" }),
+    ];
+    const k = computeDashboardKpis(withVoid);
+    const baseK = computeDashboardKpis(base);
+    expect(k.stakedUnits).toBeCloseTo(2, 5); // void stake NOT in denominator
+    expect(k.yield.value).toBeCloseTo(-4, 5);
+    expect(k.yield.n).toBe(2); // void not counted in sample size
+    // void must not move the yield at all
+    expect(k.yield.value).toBeCloseTo(baseK.yield.value!, 5);
+    expect(k.stakedUnits).toBeCloseTo(baseK.stakedUnits, 5);
+    expect(k.yield.n).toBe(baseK.yield.n);
+    // void IS still a settled void in the counts (visibility unchanged)
+    expect(k.void).toBe(1);
+    expect(k.settled).toBe(3);
+  });
+
   it("excludes void from win rate denominator", () => {
     const rows = [
       settled("won", "1"),

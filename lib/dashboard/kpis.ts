@@ -110,8 +110,12 @@ export function computeDashboardKpis(rows: DashboardRow[]): DashboardKpis {
   const totalProfitUnits = round2(
     sum(settledRows.map((r) => num(r.profitUnits))),
   );
-  // Pass não aposta nada → fora do volume do yield.
-  const settledBets = settledRows.filter((r) => r.recommendation !== "pass");
+  // Pass não aposta nada e void (jogo anulado) é no-bet → fora do volume do
+  // yield. Denominador conta só result IN ('won','lost'); void contribui 0
+  // tanto no numerador (profitUnits já é 0) quanto no denominador.
+  const settledBets = settledRows.filter(
+    (r) => r.recommendation !== "pass" && r.result !== "void",
+  );
   const stakedUnits = round2(sum(settledBets.map((r) => num(r.stakeUnits))));
 
   return {
