@@ -11,18 +11,11 @@ import { Card } from "@/components/ui/card";
 import { DesktopShell } from "@/components/desktop-shell";
 import { auth } from "@/auth";
 import {
-  applyTableFilters,
-  computeBankrollSeries,
-  computeDashboardKpis,
-  type DashboardFilters,
-  type MarketFilter,
-  type StatusFilter,
-} from "@/lib/dashboard/kpis";
+  deriveDashboardView,
+  parseDashboardFilters,
+} from "@/lib/dashboard/derive-view";
 import { getUserDashboardRows } from "@/lib/db/queries/dashboard";
 import { getUserById } from "@/lib/db/queries/users";
-import { leagueToKey } from "@/lib/format";
-import { toDashboardKpiView, toPredictionRowView } from "@/lib/view/dashboard";
-import { parseLeagueFilter, type LeagueKey } from "@/lib/view/types";
 
 export const dynamic = "force-dynamic";
 
@@ -34,22 +27,6 @@ type PageProps = {
     market?: string;
   }>;
 };
-
-function parseStatus(value: string | undefined): StatusFilter {
-  if (
-    value === "pending" ||
-    value === "won" ||
-    value === "lost" ||
-    value === "void"
-  ) {
-    return value;
-  }
-  return "all";
-}
-
-function parseMarket(value: string | undefined): MarketFilter {
-  return value === "over_under_2_5" ? "over_under_2_5" : "all";
-}
 
 // Gateado por app/admin/layout.tsx (role === "admin" → notFound pra outros).
 export default async function AdminUserTrackingPage({
@@ -76,20 +53,11 @@ export default async function AdminUserTrackingPage({
   // dentro do caminho gateado por admin. Assinatura segue userId-OBRIGATÓRIO.
   const rows = await getUserDashboardRows(userId);
 
-  const filters: DashboardFilters = {
-    status: parseStatus(status),
-    league: parseLeagueFilter(league),
-    market: parseMarket(market),
-  };
-
-  // KPIs e gráfico sobre TODAS as linhas; a tabela filtra à parte.
-  const kpis = toDashboardKpiView(computeDashboardKpis(rows));
-  const series = computeBankrollSeries(rows);
-  const tableRows = applyTableFilters(rows, filters).map(toPredictionRowView);
-
-  const availableLeagues: LeagueKey[] = [
-    ...new Set(rows.map((r) => leagueToKey(r.league))),
-  ];
+  const filters = parseDashboardFilters({ status, league, market });
+  const { kpis, series, tableRows, availableLeagues } = deriveDashboardView(
+    rows,
+    filters,
+  );
 
   const basePath = `/admin/users/${userId}`;
 
