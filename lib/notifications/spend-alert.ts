@@ -18,6 +18,7 @@ export type SpendAlertResult =
   | { skipped: "no_threshold" }
   | { skipped: "under_threshold"; spendUsd: number; thresholdUsd: number }
   | { skipped: "no_recipient" }
+  | { skipped: "no_from_address" }
   | { skipped: "already_sent"; spendUsd: number; thresholdUsd: number }
   | { sent: true; spendUsd: number; thresholdUsd: number };
 
@@ -57,7 +58,7 @@ export async function runSpendAlert(
     console.error(
       JSON.stringify({ scope: "spend_alert", event: "no_from_address" }),
     );
-    return { skipped: "no_recipient" };
+    return { skipped: "no_from_address" };
   }
 
   // 4) IDEMPOTÊNCIA (por dia UTC) — construção EXPLÍCITA do Redis (NÃO

@@ -116,6 +116,8 @@ describe("runSpendAlert", () => {
     expect(arg.text).toContain("$25.00");
     expect(arg.text).toContain("$10.00");
     expect(arg.subject).toContain("$25.00");
+    // GET-then-SET: o dedup consulta o dia ANTES de enviar; só marca depois.
+    expect(getMock).toHaveBeenCalledWith(EXPECTED_KEY);
     expect(setMock).toHaveBeenCalledWith(EXPECTED_KEY, "1", {
       ex: 60 * 60 * 48,
     });
@@ -191,6 +193,17 @@ describe("runSpendAlert", () => {
     const res = await run(NOW);
 
     expect(res).toEqual({ skipped: "no_recipient" });
+    expect(sendMock).not.toHaveBeenCalled();
+    expect(getMock).not.toHaveBeenCalled();
+  });
+
+  it("skips (no_from_address) before touching KV when RESEND_FROM_EMAIL is unset", async () => {
+    vi.stubEnv("RESEND_FROM_EMAIL", "");
+    costMock.mockResolvedValue(summary(25));
+    const run = await load();
+    const res = await run(NOW);
+
+    expect(res).toEqual({ skipped: "no_from_address" });
     expect(sendMock).not.toHaveBeenCalled();
     expect(getMock).not.toHaveBeenCalled();
   });
