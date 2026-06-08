@@ -18,6 +18,7 @@ vi.mock("@/lib/db/queries/predictions", () => ({
   getAiCallById: vi.fn(),
 }));
 vi.mock("@/lib/db/queries/users", () => ({ userExists: vi.fn() }));
+vi.mock("@/lib/rate-limit", () => ({ checkAnalysisRateLimit: vi.fn() }));
 vi.mock("@/lib/view/analysis", () => ({ toAnalysisView: vi.fn(() => ({})) }));
 
 import { analyzeMatch } from "@/app/actions/predictions";
@@ -25,12 +26,14 @@ import { auth } from "@/auth";
 import { predict } from "@/lib/ai/predict";
 import { getAiCallById } from "@/lib/db/queries/predictions";
 import { userExists } from "@/lib/db/queries/users";
+import { checkAnalysisRateLimit } from "@/lib/rate-limit";
 
 // `auth` é sobrecarregado; estreitamos pro uso como `auth()`.
 const mockAuth = auth as unknown as Mock<() => Promise<Session | null>>;
 const mockPredict = vi.mocked(predict);
 const mockUserExists = vi.mocked(userExists);
 const mockGetAiCall = vi.mocked(getAiCallById);
+const mockRateLimit = vi.mocked(checkAnalysisRateLimit);
 
 const SESSION = {
   user: { id: "u1", email: "a@b.com", role: "admin" },
@@ -69,6 +72,15 @@ beforeEach(() => {
   mockPredict.mockReset();
   mockUserExists.mockReset();
   mockGetAiCall.mockReset();
+  // Gate transparente por padrão (ok) pra que os testes existentes sigam verdes;
+  // os testes específicos do rate-limit sobrescrevem.
+  mockRateLimit.mockReset();
+  mockRateLimit.mockResolvedValue({
+    ok: true,
+    limit: 20,
+    remaining: 19,
+    reset: 0,
+  });
 });
 
 describe("analyzeMatch", () => {
@@ -103,6 +115,33 @@ describe("analyzeMatch", () => {
       error: "Sua sessão expirou. Faça login novamente.",
     });
     expect(mockPredict).not.toHaveBeenCalled();
+  });
+
+  it("rejects a rate-limited request without calling predict (no Anthropic cost)", async () => {
+    mockAuth.mockResolvedValue(SESSION);
+    mockUserExists.mockResolvedValue(true);
+    mockRateLimit.mockResolvedValue({
+      ok: false,
+      limit: 20,
+      remaining: 0,
+      reset: 0,
+    });
+    const res = await analyzeMatch(null, form({ matchId: VALID_MATCH_ID }));
+    expect(res).toEqual({
+      ok: false,
+      error: "Você atingiu o limite de 20 análises por dia. Tente novamente amanhã.",
+    });
+    expect(mockPredict).not.toHaveBeenCalled();
+  });
+
+  it("passes the user id and role to the rate-limit gate before predicting", async () => {
+    mockAuth.mockResolvedValue(USER_SESSION);
+    mockUserExists.mockResolvedValue(true);
+    mockPredict.mockResolvedValue(PREDICTION);
+    mockGetAiCall.mockResolvedValue({ costUsd: "0.01" } as never);
+    await analyzeMatch(null, form({ matchId: VALID_MATCH_ID }));
+    expect(mockRateLimit).toHaveBeenCalledWith("u2", "user");
+    expect(mockPredict).toHaveBeenCalled();
   });
 });
 
