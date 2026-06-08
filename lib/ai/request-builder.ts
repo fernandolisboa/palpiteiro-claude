@@ -11,6 +11,13 @@ import type { AIModel } from "./models";
 //   - thinkingMode "adaptive"     → `thinking: { type: "adaptive" }`, SEM temperature
 //   - thinkingMode "temperature"  → `temperature`, SEM `thinking`
 //
+// GOTCHA CRÍTICO #2 (Anthropic API): combinar `thinking` com `tool_choice` FORÇADO
+// (`{ type: "tool", name }`) dá 400 no Opus 4.8 — forced tool use é incompatível
+// com thinking. Por isso `tool_choice` é MODEL-AWARE:
+//   - adaptive (Opus 4.8)         → `tool_choice: { type: "auto" }` (predict.ts já
+//                                    trata a ausência do tool_use de submit_prediction)
+//   - temperature (Sonnet 4.5)    → `tool_choice: { type: "tool", name }` forçado
+//
 // O mesmo objeto retornado é usado para o inputPayload logado em ai_calls E para
 // a chamada real client.messages.create() — evita duplicação/divergência.
 export function buildAnthropicRequest(args: {
@@ -26,15 +33,24 @@ export function buildAnthropicRequest(args: {
     system: args.system,
     messages: [{ role: "user", content: args.userMessage }],
     tools: args.tools,
-    tool_choice: { type: "tool", name: args.toolName },
     max_tokens: args.maxTokens,
   };
 
   if (args.model.thinkingMode === "temperature") {
-    // Caminho Sonnet 4.5 — idêntico ao comportamento atual.
-    return { ...base, temperature: args.model.temperature ?? 0.3 };
+    // Caminho Sonnet 4.5 — força o submit_prediction (sem thinking, então é válido).
+    return {
+      ...base,
+      tool_choice: { type: "tool", name: args.toolName },
+      temperature: args.model.temperature ?? 0.3,
+    };
   }
 
-  // Caminho adaptive (Opus 4.8): OMITE temperature/top_p/top_k.
-  return { ...base, thinking: { type: "adaptive" } };
+  // Caminho adaptive (Opus 4.8): OMITE temperature/top_p/top_k e NÃO força o tool
+  // (forced tool_choice + thinking = 400). `auto` deixa o modelo chamar o tool por
+  // conta própria; predict.ts rejeita se ele não chamar submit_prediction.
+  return {
+    ...base,
+    tool_choice: { type: "auto" },
+    thinking: { type: "adaptive" },
+  };
 }

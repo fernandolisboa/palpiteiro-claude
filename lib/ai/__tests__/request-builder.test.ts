@@ -30,6 +30,20 @@ describe("buildAnthropicRequest — model-aware payload", () => {
     expect(payload.thinking).toEqual({ type: "adaptive" });
   });
 
+  it("Opus 4.8: tool_choice is 'auto' and NEVER pairs thinking with forced tool_choice", () => {
+    const payload = build(MODEL_REGISTRY["claude-opus-4-8"]);
+
+    // CRÍTICO: forced tool_choice + thinking dá 400 no Opus 4.8. O builder DEVE
+    // usar `auto` no caminho adaptive — predict.ts trata a ausência do tool_use.
+    expect(payload.tool_choice).toEqual({ type: "auto" });
+    // Garante a INVARIANTE que o 400 produz: thinking presente ⇒ tool_choice NÃO forçado.
+    expect(payload.thinking).toEqual({ type: "adaptive" });
+    expect(payload.tool_choice).not.toEqual({
+      type: "tool",
+      name: SUBMIT_PREDICTION_TOOL.name,
+    });
+  });
+
   it("Sonnet 4.5: temperature 0.3, NO thinking", () => {
     const payload = build(MODEL_REGISTRY["claude-sonnet-4-5-20250929"]);
 
@@ -38,13 +52,20 @@ describe("buildAnthropicRequest — model-aware payload", () => {
     expect(payload).not.toHaveProperty("thinking");
   });
 
-  it("both: tool_choice forces submit_prediction and max_tokens is wired", () => {
+  it("Sonnet 4.5: tool_choice forces submit_prediction (válido sem thinking)", () => {
+    const payload = build(MODEL_REGISTRY["claude-sonnet-4-5-20250929"]);
+
+    // Sonnet não usa thinking, então forçar o tool é válido e desejável.
+    expect(payload.tool_choice).toEqual({
+      type: "tool",
+      name: SUBMIT_PREDICTION_TOOL.name,
+    });
+    expect(payload).not.toHaveProperty("thinking");
+  });
+
+  it("both: max_tokens is wired", () => {
     for (const model of Object.values(MODEL_REGISTRY)) {
       const payload = build(model);
-      expect(payload.tool_choice).toEqual({
-        type: "tool",
-        name: SUBMIT_PREDICTION_TOOL.name,
-      });
       expect(payload.max_tokens).toBe(MAX_TOKENS);
     }
   });

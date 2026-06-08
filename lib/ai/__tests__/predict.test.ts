@@ -424,6 +424,9 @@ describe("predict() — model resolution (override > DB default) + model-aware r
     expect(arg.model).toBe("claude-opus-4-8");
     expect(arg).not.toHaveProperty("temperature");
     expect(arg.thinking).toEqual({ type: "adaptive" });
+    // CRÍTICO: o caminho default/non-admin é Opus 4.8 — forced tool_choice +
+    // thinking dá 400 em produção. O payload real DEVE usar `auto`, nunca forçar.
+    expect(arg.tool_choice).toEqual({ type: "auto" });
   });
 
   it("modelOverride Sonnet wins over DB default Opus → sonnet id + temperature 0.3", async () => {
@@ -443,6 +446,11 @@ describe("predict() — model resolution (override > DB default) + model-aware r
     expect(arg.model).toBe("claude-sonnet-4-5-20250929");
     expect(arg.temperature).toBe(0.3);
     expect(arg).not.toHaveProperty("thinking");
+    // Sonnet não usa thinking, então forçar o submit_prediction é válido.
+    expect(arg.tool_choice).toEqual({
+      type: "tool",
+      name: "submit_prediction",
+    });
   });
 
   it("no override + DB default Sonnet → Anthropic called with sonnet id", async () => {
