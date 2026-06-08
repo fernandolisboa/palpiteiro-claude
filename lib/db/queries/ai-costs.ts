@@ -86,12 +86,16 @@ export async function getCostSummary(
  * O cast `::date` no driver neon-http volta como string `YYYY-MM-DD`, então a
  * página renderiza sem ambiguidade de timezone de Date.
  */
-export async function getCostByDay(days = 30): Promise<CostByDay[]> {
+export async function getCostByDay(
+  days = 30,
+  now: Date = new Date(),
+): Promise<CostByDay[]> {
   const dayExpr = sql<string>`(${aiCalls.createdAt} at time zone 'UTC')::date`.as(
     "day",
   );
 
-  const cutoffUtc = startOfUtcDay(new Date());
+  // `now` injetável (default = agora) pra travar o offset -(days-1) em teste.
+  const cutoffUtc = startOfUtcDay(now);
   cutoffUtc.setUTCDate(cutoffUtc.getUTCDate() - (days - 1));
 
   const rows = await db

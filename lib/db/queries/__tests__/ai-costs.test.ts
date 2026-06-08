@@ -86,6 +86,13 @@ beforeEach(() => {
   h.state.orderByArg = undefined;
 });
 
+// Extrai o operando Date interpolado num `sum(sql`...`)` capturado em selectCols
+// (o stub de `sql` registra os `vals`; o operando de data é o único Date entre eles).
+function dateOperandOf(selectCol: unknown): Date | undefined {
+  const col = (selectCol as { col?: { vals?: unknown[] } })?.col;
+  return col?.vals?.find((v): v is Date => v instanceof Date);
+}
+
 // Coleta recursiva de todos os `op:"eq"` capturados numa condição (where/join).
 function collectEqs(cond: unknown): Array<{ a: unknown; b: unknown }> {
   const out: Array<{ a: unknown; b: unknown }> = [];
@@ -144,6 +151,18 @@ describe("getCostSummary — KPIs + conversão numeric-as-string", () => {
     expect(hasStatusEq).toBe(false);
     expect(h.state.whereArg).toBeUndefined();
   });
+
+  it("ancora 'hoje' no início do dia UTC e 'últimos 7d' em -6 dias (boundary)", async () => {
+    h.state.rows = [
+      { totalUsd: "0", todayUsd: "0", last7dUsd: "0", totalCalls: 0 },
+    ];
+    // 03:00Z do dia 08 → o limite de hoje é o início do dia UTC (08, 00:00Z),
+    // não a hora atual; os últimos 7d incluem hoje, logo começam no dia 02.
+    await getCostSummary(new Date("2026-06-08T03:00:00Z"));
+    const cols = h.state.selectCols as Record<string, unknown>;
+    expect(dateOperandOf(cols.todayUsd)?.getTime()).toBe(Date.UTC(2026, 5, 8));
+    expect(dateOperandOf(cols.last7dUsd)?.getTime()).toBe(Date.UTC(2026, 5, 2));
+  });
 });
 
 describe("getCostByDay — agrupado por dia UTC, recente primeiro", () => {
@@ -176,6 +195,22 @@ describe("getCostByDay — agrupado por dia UTC, recente primeiro", () => {
     expect(out[0]!.totalUsd).toBe(2.5);
     expect(out[0]!.calls).toBe(4);
     expect(out[0]!.day).toBe("2026-06-08");
+  });
+
+  it("janela = início do dia UTC menos (days-1) — sem off-by-one", async () => {
+    const now = new Date("2026-06-08T03:00:00Z");
+
+    // days=1 → só hoje: cutoff é o início do dia UTC corrente.
+    await getCostByDay(1, now);
+    expect((h.state.whereArg as { val?: Date }).val?.getTime()).toBe(
+      Date.UTC(2026, 5, 8),
+    );
+
+    // days=7 → hoje + 6 dias anteriores: cutoff no dia 02.
+    await getCostByDay(7, now);
+    expect((h.state.whereArg as { val?: Date }).val?.getTime()).toBe(
+      Date.UTC(2026, 5, 2),
+    );
   });
 });
 
