@@ -22,14 +22,22 @@ export function ModelOverrideSelect({ value, onChange }: Props) {
         name="modelOverride"
         value={value}
         onChange={(e) => onChange(e.target.value)}
-        // `color-scheme` faz o navegador renderizar o popup nativo do <select>
-        // no tema certo. Sem isso, no dark mode o popup vinha claro com texto
-        // claro (options quase invisíveis); só o item destacado era legível.
+        // `color-scheme` tematiza o fundo/chrome do popup nativo, MAS o Chromium
+        // não herda o `color` do <select> pras <option> do popup — sem cor
+        // explícita na própria option, o texto saía escuro no dark (escuro no
+        // escuro). Por isso a cor vai DIRETO em cada <option> abaixo
+        // (`bg-popover`/`text-popover-foreground`, que viram com o tema).
         className="w-full max-w-xs rounded-md border border-border bg-transparent px-3 py-2 text-[12.5px] text-foreground [color-scheme:light] dark:[color-scheme:dark]"
       >
-        <option value="default">Usar padrão global</option>
+        <option value="default" className="bg-popover text-popover-foreground">
+          Usar padrão global
+        </option>
         {SELECTABLE_MODELS.map((m) => (
-          <option key={m.id} value={m.id}>
+          <option
+            key={m.id}
+            value={m.id}
+            className="bg-popover text-popover-foreground"
+          >
             {m.label}
           </option>
         ))}
