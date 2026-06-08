@@ -1,6 +1,7 @@
 import { beforeEach, describe, expect, it, vi } from "vitest";
 
 import {
+  SportsDataNotFoundError,
   SportsDataTransientError,
   SportsDataUnsupportedError,
   type FixtureRef,
@@ -263,6 +264,9 @@ describe("predict() — graceful degrade on transient injuries error", () => {
     const args = spy.mock.calls[0]?.[0];
     expect(args?.home.absencesAvailable).toBe(false);
     expect(args?.away.absencesAvailable).toBe(false);
+    // Degraded payload forwarded to buildPredictionInput is the empty shape.
+    expect(args?.home.injuries).toEqual([]);
+    expect(args?.away.injuries).toEqual([]);
     // Analysis proceeded: the paid LLM call still happened.
     expect(anthropicCreate).toHaveBeenCalledTimes(1);
   });
@@ -284,6 +288,9 @@ describe("predict() — graceful degrade on transient injuries error", () => {
     const args = spy.mock.calls[0]?.[0];
     expect(args?.home.absencesAvailable).toBe(false);
     expect(args?.away.absencesAvailable).toBe(false);
+    // Degraded payload forwarded to buildPredictionInput is the empty shape.
+    expect(args?.home.injuries).toEqual([]);
+    expect(args?.away.injuries).toEqual([]);
     expect(anthropicCreate).toHaveBeenCalledTimes(1);
   });
 });
@@ -319,6 +326,26 @@ describe("predict() — transient error on a CRITICAL fetch is NOT over-caught",
     await expect(predict({ matchId: "m-1", userId: "u-1" })).rejects.toThrow(
       SportsDataTransientError,
     );
+    expect(anthropicCreate).not.toHaveBeenCalled();
+  });
+
+  it("Test D: a NON-degradeable injuries error (SportsDataNotFoundError) bubbles up and does NOT call the LLM", async () => {
+    // The injuries catch maps ONLY SportsDataTransientError and
+    // SportsDataUnsupportedError to the degraded signal; every other error must
+    // re-throw (reject predict) and never reach the paid LLM call. This pins the
+    // `throw err` branch so broadening the catch to swallow all errors regresses.
+    getInjuriesByFixture.mockRejectedValue(
+      new SportsDataNotFoundError(
+        "fixture has no injury entity",
+        "api-football",
+        "getInjuriesByFixture",
+      ),
+    );
+
+    await expect(predict({ matchId: "m-1", userId: "u-1" })).rejects.toThrow(
+      SportsDataNotFoundError,
+    );
+    // No degrade, no analysis: the paid LLM call must not happen.
     expect(anthropicCreate).not.toHaveBeenCalled();
   });
 });
