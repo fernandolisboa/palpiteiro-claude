@@ -2,6 +2,7 @@ import { normalizeTeamName } from "@/lib/providers/sports-data/team-names";
 import { leagueToSportKey } from "@/lib/providers/odds-api-constants";
 import { getOddsForSport } from "@/lib/providers/odds-api";
 import { computeImpliedProbabilities } from "@/lib/odds/implied-probability";
+import { ODDS_SNAPSHOT_FRESHNESS_MS } from "@/lib/odds/freshness-window";
 import { pickBestTotalsBookmaker } from "@/lib/odds/select-bookmaker";
 import {
   getLatestOddsSnapshot,
@@ -11,7 +12,6 @@ import {
 import { getMatchesInLeagueWindow, type DbMatch } from "@/lib/db/queries/matches";
 import type { OddsApiEventOdds } from "@/lib/providers/odds-api-schemas";
 
-const FRESHNESS_WINDOW_MS = 30 * 60 * 1000; // 30 min — TTL externo, justificativa no plano.
 const KICKOFF_PAIRING_WINDOW_MS = 6 * 60 * 60 * 1000;
 
 function teamsMatch(a: string, b: string): boolean {
@@ -43,7 +43,7 @@ function findEventForMatch(
 
 function isFresh(snapshot: DbOddsSnapshot | null, now: number): boolean {
   if (!snapshot) return false;
-  return now - snapshot.capturedAt.getTime() < FRESHNESS_WINDOW_MS;
+  return now - snapshot.capturedAt.getTime() < ODDS_SNAPSHOT_FRESHNESS_MS;
 }
 
 /**
