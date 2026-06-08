@@ -16,5 +16,7 @@ import { authConfig } from "@/auth.config";
 export const { auth: middleware } = NextAuth(authConfig);
 
 export const config = {
-  matcher: ["/((?!api|_next/static|_next/image|favicon.ico|signin).*)"],
+  // Âncoras (`api/`, `signin$`) evitam que rotas-irmãs hipotéticas (ex.:
+  // `/signin-foo`, `/apidocs`) escapem do gate por casarem o prefixo.
+  matcher: ["/((?!api/|_next/static|_next/image|favicon.ico|signin$).*)"],
 };
