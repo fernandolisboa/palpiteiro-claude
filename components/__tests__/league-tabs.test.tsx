@@ -31,22 +31,35 @@ describe("visibleLeagueTabs", () => {
 });
 
 describe("LeagueTabs rendering (a11y)", () => {
-  // Renderiza contra ACTIVE_LEAGUES real (wc ativa; bsa/ucl fora de temporada).
-  it("renderiza liga inativa como elemento desabilitado e liga ativa como link", () => {
+  // Derivado da config real de ACTIVE_LEAGUES via visibleLeagueTabs() (a mesma
+  // fonte que o componente usa): cada liga ativa vira link, cada inativa vira
+  // elemento desabilitado. Derivar da config — em vez de hardcodar bsa/ucl como
+  // inativas — mantém o teste correto mesmo após reativar uma liga (mudança de
+  // uma linha em active-leagues.ts, que é justamente o design desta feature).
+  it("renderiza cada liga ativa como link e cada liga inativa como elemento desabilitado", () => {
     const markup = renderToStaticMarkup(<LeagueTabs value="wc" />);
+    const leagueTabs = visibleLeagueTabs().filter((t) => t.value !== "all");
 
-    // Liga ativa (Copa) é um link real navegável.
-    expect(markup).toContain('href="/?league=wc"');
+    for (const tab of leagueTabs) {
+      if (tab.active) {
+        // Liga ativa é um link real navegável.
+        expect(markup).toContain(`href="/?league=${tab.value}"`);
+      } else {
+        // Liga inativa NÃO é navegável: sem href pro seu filtro.
+        expect(markup).not.toContain(`href="/?league=${tab.value}"`);
+      }
+    }
 
-    // Liga inativa (Brasileirão/Champions) NÃO é navegável: sem href pra esse filtro.
-    expect(markup).not.toContain('href="/?league=bsa"');
-    expect(markup).not.toContain('href="/?league=ucl"');
+    // Estado desabilitado comunicado a assistive tech quando há liga inativa
+    // (verdadeiro na config atual da Copa).
+    if (leagueTabs.some((t) => !t.active)) {
+      expect(markup).toContain('aria-disabled="true"');
+      expect(markup).toContain("(fora de temporada)");
+    }
 
-    // Estado desabilitado comunicado a assistive tech.
-    expect(markup).toContain('aria-disabled="true"');
-    expect(markup).toContain("(fora de temporada)");
-
-    // O label da liga inativa continua visível.
+    // #58 (núcleo): toda liga suportada é surfaçada — ativa ou desabilitada.
     expect(markup).toContain("Brasileirão");
+    expect(markup).toContain("Champions");
+    expect(markup).toContain("Copa do Mundo");
   });
 });
