@@ -4,7 +4,9 @@ import { revalidatePath } from "next/cache";
 
 import { auth } from "@/auth";
 import { PredictError, predict } from "@/lib/ai/predict";
+import { extractDbCause } from "@/lib/db/pg-error";
 import { getAiCallById } from "@/lib/db/queries/predictions";
+import { userExists } from "@/lib/db/queries/users";
 import { toAnalysisView } from "@/lib/view/analysis";
 import type { AnalysisView } from "@/lib/view/types";
 
@@ -52,6 +54,12 @@ export async function analyzeMatch(
   if (!session?.user?.id) {
     return { ok: false, error: "Faça login para analisar." };
   }
+  // Sessão JWT carrega o id do login; se a row do usuário sumiu (reset +
+  // claim-admin com cookie velho), recusa ANTES de gastar uma chamada paga ao
+  // Anthropic (senão a FK ai_calls_user_id_users_id_fk estoura pós-custo).
+  if (!(await userExists(session.user.id))) {
+    return { ok: false, error: "Sua sessão expirou. Faça login novamente." };
+  }
   try {
     const prediction = await predict({ matchId, userId: session.user.id });
     const aiCall = await getAiCallById(prediction.aiCallId);
@@ -87,12 +95,18 @@ export async function analyzeMatch(
       );
       return { ok: false, error: friendlyMessage(err) };
     }
+    const dbCause = extractDbCause(err);
     console.error(
       JSON.stringify({
         scope: "analyzeMatch",
         matchId,
         error: "unexpected",
         message: err instanceof Error ? err.message : String(err),
+        pgCode: dbCause.code,
+        constraint: dbCause.constraint,
+        detail: dbCause.detail,
+        table: dbCause.table,
+        column: dbCause.column,
       }),
     );
     return {
