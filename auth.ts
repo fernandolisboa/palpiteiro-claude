@@ -9,7 +9,9 @@ import {
   users,
   verificationTokens,
 } from "@/db/schema";
+import { isEmailAllowedWithDb } from "@/lib/auth/whitelist-db";
 import { db } from "@/lib/db";
+import { promoteInvitedUserOnLogin } from "@/lib/db/queries/invites";
 
 /**
  * Config completa (Node runtime) — estende o `authConfig` edge-safe com o
@@ -41,4 +43,23 @@ export const { handlers, auth, signIn, signOut } = NextAuth({
     sessionsTable: sessions,
     verificationTokensTable: verificationTokens,
   }),
+  // signIn DB-aware mora AQUI (Node), não no `auth.config.ts` edge — lê o DB
+  // (ADR 0009). Roda ANTES do envio do magic link (fluxo do @auth/core), então
+  // e-mail não autorizado = AccessDenied = nenhum e-mail/token (cost-safe).
+  // Spread de authConfig.callbacks PRIMEIRO pra preservar authorized/jwt/session;
+  // só o signIn é adicionado/sobrescrito.
+  callbacks: {
+    ...authConfig.callbacks,
+    async signIn({ user }) {
+      return isEmailAllowedWithDb(user.email);
+    },
+  },
+  // createUser dispara uma vez no primeiro login, DEPOIS do signIn ter
+  // autorizado. Promove o usuário recém-criado (allowed=true + apaga o convite)
+  // pra evitar lockout no próximo login.
+  events: {
+    async createUser({ user }) {
+      await promoteInvitedUserOnLogin(user);
+    },
+  },
 });
