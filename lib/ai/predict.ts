@@ -12,6 +12,7 @@ import type { OddsApiEventOdds } from "@/lib/providers/odds-api-schemas";
 import { getSportsDataProvider } from "@/lib/providers/sports-data";
 import { normalizeTeamName } from "@/lib/providers/sports-data/team-names";
 import {
+  SportsDataTransientError,
   SportsDataUnsupportedError,
   type FixtureRef,
   type NormalizedInjury,
@@ -239,9 +240,15 @@ export async function predict({
   //    (lib/providers/http/), so the Promise.all here expresses logical
   //    independence; the transport layer enforces rate limits.
   //
-  //    Injuries are wrapped in catch() to map SportsDataUnsupportedError
-  //    (e.g. football-data.org has no injury endpoint) to the absences-
-  //    unavailable signal for the AI input. Any other error bubbles up.
+  //    Injuries are wrapped in catch() to map both SportsDataUnsupportedError
+  //    (capability missing, e.g. football-data.org has no injury endpoint) AND
+  //    SportsDataTransientError (e.g. an api-football transient outage on the
+  //    injuries route) to the same absences-unavailable signal for the AI input
+  //    — the analysis proceeds and the LLM is told injuries are unavailable.
+  //    This graceful degrade is scoped to ONLY the injuries fetch: every other
+  //    fetch (form/h2h/standings/lineups) still rejects Promise.all on a
+  //    transient error, and any non-transient/non-unsupported injuries error
+  //    still bubbles up.
   const [homeForm, awayForm, h2h, standings, injuries, lineups] =
     await Promise.all([
       provider.getTeamForm(match.homeTeam, match.league, FORM_LAST),
@@ -252,7 +259,10 @@ export async function predict({
         .getInjuriesByFixture(ref)
         .then((data) => ({ data, unavailable: false }))
         .catch((err: unknown) => {
-          if (err instanceof SportsDataUnsupportedError) {
+          if (
+            err instanceof SportsDataUnsupportedError ||
+            err instanceof SportsDataTransientError
+          ) {
             return {
               data: {
                 home: [] as NormalizedInjury[],
