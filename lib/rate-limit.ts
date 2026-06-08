@@ -24,9 +24,11 @@ const DEFAULT_USER_LIMIT = 20;
 const DEFAULT_ADMIN_LIMIT = 200;
 
 /**
- * Lê um teto inteiro positivo do env, com fallback NaN-guarded — mesma estratégia
- * de `lib/auth/whitelist.ts` (reparseia o env a cada chamada, sem cache de módulo,
- * pra refletir mudança de env em runtime serverless; o custo é desprezível).
+ * Lê um teto inteiro positivo do env, com fallback NaN/<=0-guarded. Diferente do
+ * reparse-por-chamada de `lib/auth/whitelist.ts`: aqui o valor é lido UMA vez na
+ * construção do singleton (`getLimiters`), então mudar
+ * RATE_LIMIT_ANALYSES_PER_DAY(_ADMIN) exige restart do processo (cold start em
+ * serverless pega o valor novo).
  */
 function limitFromEnv(name: string, fallback: number): number {
   const n = Number(process.env[name]);
