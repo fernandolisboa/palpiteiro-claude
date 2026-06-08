@@ -640,3 +640,36 @@ describe("ApiFootballAdapter — World Cup injuries are Unsupported", () => {
     );
   });
 });
+
+describe("ApiFootballAdapter.getInjuriesByFixture — logs WARN when fixture not matched", () => {
+  const ref: FixtureRef = {
+    league: "brasileirao_a",
+    kickoffAt: "2026-05-15T19:00:00.000Z",
+    homeTeam: "Flamengo",
+    awayTeam: "Fluminense FC",
+  };
+
+  it("emits injuries_fixture_not_matched and returns empty arrays", async () => {
+    const a = new ApiFootballAdapter();
+    // getFixtureByMatch returning undefined simulates canonicalization drift
+    // (provider name unmapped) — the line-867 silent-return path.
+    vi.spyOn(a, "getFixtureByMatch").mockResolvedValue(undefined);
+    const warnSpy = vi.spyOn(console, "warn").mockImplementation(() => {});
+
+    const result = await a.getInjuriesByFixture(ref);
+
+    expect(result).toEqual({ home: [], away: [] });
+    expect(warnSpy).toHaveBeenCalledTimes(1);
+    const payload = JSON.parse(warnSpy.mock.calls[0]![0] as string);
+    expect(payload).toEqual({
+      event: "injuries_fixture_not_matched",
+      league: "brasileirao_a",
+      kickoffAt: "2026-05-15T19:00:00.000Z",
+      homeTeam: "Flamengo",
+      awayTeam: "Fluminense FC",
+    });
+
+    warnSpy.mockRestore();
+    vi.restoreAllMocks();
+  });
+});
