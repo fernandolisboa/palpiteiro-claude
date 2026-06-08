@@ -100,6 +100,38 @@ describe("computeDashboardKpis", () => {
     expect(k.settled).toBe(3);
   });
 
+  it("yields null for a wallet of only settled void real bets (zero denominator)", () => {
+    // All real (non-pass) bets annulled to void: won/lost set is empty, so the
+    // yield denominator is 0. Must report null/0 and never divide by zero.
+    const rows = [
+      settled("void", "0", { recommendation: "over", oddAtRecommendation: "1.95" }),
+      settled("void", "0", { recommendation: "under", oddAtRecommendation: "2.10" }),
+    ];
+    const k = computeDashboardKpis(rows);
+    expect(k.yield.value).toBeNull();
+    expect(k.yield.n).toBe(0);
+    expect(k.stakedUnits).toBe(0);
+    expect(k.void).toBe(2);
+    expect(k.settled).toBe(2);
+  });
+
+  it("yield numerator reflects only won/lost, even when a profitable void is present", () => {
+    // Guard against the numerator silently summing over void: a void carrying a
+    // nonzero profitUnits (settlement-invariant violation) must NOT move yield.
+    const wonLost = [
+      settled("won", "0.92", { oddAtRecommendation: "1.92" }),
+      settled("lost", "-1.00"),
+    ];
+    const withDirtyVoid = [
+      ...wonLost,
+      settled("void", "5.00", { recommendation: "over", oddAtRecommendation: "1.95" }),
+    ];
+    const baseK = computeDashboardKpis(wonLost);
+    const k = computeDashboardKpis(withDirtyVoid);
+    expect(k.yield.value).toBeCloseTo(baseK.yield.value!, 5);
+    expect(k.yield.n).toBe(baseK.yield.n);
+  });
+
   it("excludes void from win rate denominator", () => {
     const rows = [
       settled("won", "1"),

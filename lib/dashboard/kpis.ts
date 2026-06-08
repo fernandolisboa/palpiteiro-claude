@@ -92,8 +92,10 @@ export function rowStatus(row: DashboardRow): RowStatus {
 
 /**
  * KPIs por usuário sobre TODAS as linhas (a tabela filtra à parte; filtro nunca
- * distorce o KPI de topo). Yield = lucro / volume apostado (stake de bets
- * settled não-pass). Win rate exclui void. Pass rate é sobre todas as predições.
+ * distorce o KPI de topo). Yield = Σ profitUnits / Σ stake, ambos sobre o MESMO
+ * conjunto de bets settled com result IN ('won','lost') — pass E void ficam de
+ * fora do numerador e do denominador (não movem o yield). Win rate exclui void.
+ * Pass rate é sobre todas as predições.
  */
 export function computeDashboardKpis(rows: DashboardRow[]): DashboardKpis {
   const totalPredictions = rows.length;
@@ -112,11 +114,16 @@ export function computeDashboardKpis(rows: DashboardRow[]): DashboardKpis {
   );
   // Pass não aposta nada e void (jogo anulado) é no-bet → fora do volume do
   // yield. Denominador conta só result IN ('won','lost'); void contribui 0
-  // tanto no numerador (profitUnits já é 0) quanto no denominador.
+  // tanto no numerador quanto no denominador.
   const settledBets = settledRows.filter(
     (r) => r.recommendation !== "pass" && r.result !== "void",
   );
   const stakedUnits = round2(sum(settledBets.map((r) => num(r.stakeUnits))));
+  // Numerador do yield sobre o MESMO conjunto won/lost do denominador: a
+  // exclusão de void é estrutural, não depende de void.profitUnits === 0.
+  const settledBetsProfit = round2(
+    sum(settledBets.map((r) => num(r.profitUnits))),
+  );
 
   return {
     totalPredictions,
@@ -130,7 +137,7 @@ export function computeDashboardKpis(rows: DashboardRow[]): DashboardKpis {
     totalProfitUnits,
     stakedUnits,
     yield: {
-      value: stakedUnits > 0 ? (totalProfitUnits / stakedUnits) * 100 : null,
+      value: stakedUnits > 0 ? (settledBetsProfit / stakedUnits) * 100 : null,
       n: settledBets.length,
       lowSample:
         settledBets.length > 0 && settledBets.length < LOW_SAMPLE_THRESHOLD,
