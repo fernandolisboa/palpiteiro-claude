@@ -36,6 +36,13 @@ const matchRow = {
 
 // Chainable db stub: select().from().where().limit() resolves [matchRow];
 // insert().values().returning() resolves a stub row (ai_call then prediction).
+//
+// `insertValues` is a hoisted spy shared across every insert().values() call, so
+// tests can read the exact row written to each table. predict() inserts ai_calls
+// FIRST then predictions, so insertValues.mock.calls[0] is the ai_call row and
+// [1] is the prediction row. The returning() stub gives both an `id` (the
+// ai_call needs `aiCallId` downstream; the prediction row is the resolved value).
+const insertValues = vi.fn();
 vi.mock("@/lib/db", () => {
   const select = vi.fn(() => ({
     from: vi.fn(() => ({
@@ -45,11 +52,14 @@ vi.mock("@/lib/db", () => {
     })),
   }));
   const insert = vi.fn(() => ({
-    values: vi.fn(() => ({
-      returning: vi.fn(() =>
-        Promise.resolve([{ id: "row-1", aiCallId: "row-1" }]),
-      ),
-    })),
+    values: (...args: unknown[]) => {
+      insertValues(...args);
+      return {
+        returning: vi.fn(() =>
+          Promise.resolve([{ id: "row-1", aiCallId: "row-1" }]),
+        ),
+      };
+    },
   }));
   return { db: { select, insert } };
 });
@@ -97,8 +107,12 @@ vi.mock("@/lib/db/queries/odds-snapshots", () => ({
 
 const anthropicCreate = vi.fn();
 vi.mock("@/lib/ai/anthropic", () => ({
-  ANTHROPIC_MODEL: "claude-sonnet-4-5-20250929",
   getAnthropicClient: () => ({ messages: { create: anthropicCreate } }),
+}));
+
+const getDefaultModelId = vi.fn();
+vi.mock("@/lib/db/queries/ai-config", () => ({
+  getDefaultModelId: (...args: unknown[]) => getDefaultModelId(...args),
 }));
 
 // Spy on buildPredictionInput while keeping the real implementation (and
@@ -249,6 +263,8 @@ function setHappyPath() {
   // Default: no fresh snapshot, so every existing test keeps exercising the
   // getOddsForSport fallback path unchanged.
   getLatestFreshOddsSnapshot.mockResolvedValue(null);
+  // Default global resolvido pelo DB quando não há override (caminho comum).
+  getDefaultModelId.mockResolvedValue("claude-opus-4-8");
   anthropicCreate.mockResolvedValue(anthropicMessage());
 }
 
@@ -402,5 +418,128 @@ describe("predict() — odds snapshot reuse vs. fallback", () => {
 
     expect(getOddsForSport).toHaveBeenCalledTimes(1);
     expect(anthropicCreate).toHaveBeenCalledTimes(1);
+  });
+});
+
+describe("predict() — model resolution (override > DB default) + model-aware request", () => {
+  it("no override + DB default Opus → Anthropic called with opus id and NO temperature (adaptive)", async () => {
+    getDefaultModelId.mockResolvedValue("claude-opus-4-8");
+
+    await expect(
+      predict({ matchId: "m-1", userId: "u-1" }),
+    ).resolves.toBeDefined();
+
+    expect(getDefaultModelId).toHaveBeenCalledTimes(1);
+    const arg = anthropicCreate.mock.calls[0]?.[0];
+    expect(arg.model).toBe("claude-opus-4-8");
+    expect(arg).not.toHaveProperty("temperature");
+    expect(arg.thinking).toEqual({ type: "adaptive" });
+    // CRÍTICO: o caminho default/non-admin é Opus 4.8 — forced tool_choice +
+    // thinking dá 400 em produção. O payload real DEVE usar `auto`, nunca forçar.
+    expect(arg.tool_choice).toEqual({ type: "auto" });
+
+    // Critério de aceite do #57: as colunas de auditoria refletem o modelo
+    // RESOLVIDO, não o `response.model` (que aqui é o id stale "sonnet" do mock).
+    // ai_calls é inserido primeiro, predictions depois.
+    const aiCallRow = insertValues.mock.calls[0]?.[0] as { model: string };
+    const predictionRow = insertValues.mock.calls[1]?.[0] as {
+      modelVersion: string;
+    };
+    expect(aiCallRow.model).toBe("claude-opus-4-8");
+    expect(predictionRow.modelVersion).toBe("claude-opus-4-8");
+  });
+
+  it("modelOverride Sonnet wins over DB default Opus → sonnet id + temperature 0.3", async () => {
+    getDefaultModelId.mockResolvedValue("claude-opus-4-8");
+    // Resposta carrega um `model` STALE (≠ id resolvido) pra provar que as
+    // colunas de auditoria gravam o id RESOLVIDO, não `response.model`.
+    anthropicCreate.mockResolvedValueOnce({
+      ...anthropicMessage(),
+      model: "claude-opus-4-8",
+    });
+
+    await expect(
+      predict({
+        matchId: "m-1",
+        userId: "u-1",
+        modelOverride: "claude-sonnet-4-5-20250929",
+      }),
+    ).resolves.toBeDefined();
+
+    // Override curto-circuita o lookup do default global.
+    expect(getDefaultModelId).not.toHaveBeenCalled();
+    const arg = anthropicCreate.mock.calls[0]?.[0];
+    expect(arg.model).toBe("claude-sonnet-4-5-20250929");
+    expect(arg.temperature).toBe(0.3);
+    expect(arg).not.toHaveProperty("thinking");
+    // Sonnet não usa thinking, então forçar o submit_prediction é válido.
+    expect(arg.tool_choice).toEqual({
+      type: "tool",
+      name: "submit_prediction",
+    });
+
+    // Auditoria reflete o modelo RESOLVIDO (override), não o `response.model`
+    // stale ("claude-opus-4-8") devolvido pelo provider acima.
+    const aiCallRow = insertValues.mock.calls[0]?.[0] as { model: string };
+    const predictionRow = insertValues.mock.calls[1]?.[0] as {
+      modelVersion: string;
+    };
+    expect(aiCallRow.model).toBe("claude-sonnet-4-5-20250929");
+    expect(predictionRow.modelVersion).toBe("claude-sonnet-4-5-20250929");
+  });
+
+  it("no override + DB default Sonnet → Anthropic called with sonnet id", async () => {
+    getDefaultModelId.mockResolvedValue("claude-sonnet-4-5-20250929");
+
+    await expect(
+      predict({ matchId: "m-1", userId: "u-1" }),
+    ).resolves.toBeDefined();
+
+    const arg = anthropicCreate.mock.calls[0]?.[0];
+    expect(arg.model).toBe("claude-sonnet-4-5-20250929");
+    expect(arg.temperature).toBe(0.3);
+  });
+});
+
+describe("predict() — Opus adaptive path: model declines to call the tool", () => {
+  it("no submit_prediction tool_use (thinking/text only) → persists tool_missing ai_call, still paid, and throws", async () => {
+    // Caminho Opus: tool_choice é `auto` (forced + thinking = 400), então o
+    // modelo PODE não chamar submit_prediction — só devolver thinking/texto.
+    // predict() deve registrar o ai_call pago (tokens cobrados) com status
+    // tool_missing E lançar; nenhuma prediction é inserida.
+    getDefaultModelId.mockResolvedValue("claude-opus-4-8");
+    anthropicCreate.mockResolvedValue({
+      id: "msg-2",
+      type: "message",
+      role: "assistant",
+      model: "claude-opus-4-8",
+      stop_reason: "end_turn",
+      stop_sequence: null,
+      content: [
+        { type: "thinking", thinking: "ponderando o jogo...", signature: "sig" },
+        { type: "text", text: "Não tenho convicção suficiente." },
+      ],
+      usage: { input_tokens: 1200, output_tokens: 300 },
+    });
+
+    await expect(predict({ matchId: "m-1", userId: "u-1" })).rejects.toThrow(
+      "LLM did not call submit_prediction tool",
+    );
+
+    // A chamada paga ao LLM aconteceu (custo real) e foi auditada como
+    // tool_missing — exatamente UM insert (ai_calls), nenhuma prediction.
+    expect(anthropicCreate).toHaveBeenCalledTimes(1);
+    expect(insertValues).toHaveBeenCalledTimes(1);
+    const aiCallRow = insertValues.mock.calls[0]?.[0] as {
+      model: string;
+      status: string;
+      inputTokens: number;
+      outputTokens: number;
+    };
+    expect(aiCallRow.status).toBe("tool_missing");
+    // Modelo resolvido (Opus), não o response.model, e tokens cobrados.
+    expect(aiCallRow.model).toBe("claude-opus-4-8");
+    expect(aiCallRow.inputTokens).toBe(1200);
+    expect(aiCallRow.outputTokens).toBe(300);
   });
 });

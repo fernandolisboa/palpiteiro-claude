@@ -17,6 +17,3 @@ export function getAnthropicClient(): Anthropic {
   });
   return client;
 }
-
-export const ANTHROPIC_MODEL = "claude-sonnet-4-5-20250929" as const;
-export type AnthropicModelId = typeof ANTHROPIC_MODEL;

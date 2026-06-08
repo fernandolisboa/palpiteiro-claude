@@ -4,6 +4,7 @@ import { revalidatePath } from "next/cache";
 import { z } from "zod";
 
 import { auth } from "@/auth";
+import { isAIModelId, type AIModelId } from "@/lib/ai/models";
 import { PredictError, predict } from "@/lib/ai/predict";
 import { extractDbCause } from "@/lib/db/pg-error";
 import { getAiCallById } from "@/lib/db/queries/predictions";
@@ -64,8 +65,22 @@ export async function analyzeMatch(
   if (!(await userExists(session.user.id))) {
     return { ok: false, error: "Sua sessão expirou. Faça login novamente." };
   }
+  // Override de modelo por análise: ADMIN-only e revalidado aqui (server actions
+  // são POST chamáveis fora do layout). "default"/inválido/não-admin → cai no
+  // default global. Defense-in-depth além de esconder o seletor na UI.
+  const overrideRaw = String(formData.get("modelOverride") ?? "");
+  let modelOverride: AIModelId | undefined;
+  if (overrideRaw && overrideRaw !== "default") {
+    if (session.user.role === "admin" && isAIModelId(overrideRaw)) {
+      modelOverride = overrideRaw;
+    }
+  }
   try {
-    const prediction = await predict({ matchId, userId: session.user.id });
+    const prediction = await predict({
+      matchId,
+      userId: session.user.id,
+      modelOverride,
+    });
     const aiCall = await getAiCallById(prediction.aiCallId);
     revalidatePath(`/match/${matchId}`);
     revalidatePath("/");

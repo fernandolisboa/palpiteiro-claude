@@ -223,3 +223,14 @@ export const predictionOutcomes = pgTable("prediction_outcomes", {
   overrideByUserId: uuid().references(() => users.id, { onDelete: "set null" }),
   settledAt: timestamp({ withTimezone: true }).notNull().defaultNow(),
 });
+
+// Config global single-row (PK fixa em 1; a query layer faz upsert em id=1).
+// `defaultModelId` é text simples (validado contra MODEL_REGISTRY na query
+// layer, espelhando aiCalls.model / predictions.modelVersion) — evita uma
+// migration toda vez que o registry de modelos muda.
+export const aiConfig = pgTable("ai_config", {
+  id: integer().primaryKey().default(1),
+  defaultModelId: text().notNull(),
+  updatedByUserId: uuid().references(() => users.id, { onDelete: "set null" }),
+  updatedAt: timestamp({ withTimezone: true }).notNull().defaultNow(),
+});
