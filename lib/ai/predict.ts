@@ -3,9 +3,10 @@ import { eq } from "drizzle-orm";
 
 import { aiCalls, matches, predictions } from "@/db/schema";
 import { db } from "@/lib/db";
+import { getLatestFreshOddsSnapshot } from "@/lib/db/queries/odds-snapshots";
 import { extractDbCause } from "@/lib/db/pg-error";
 import { computeImpliedProbabilities } from "@/lib/odds/implied-probability";
-import { pickBestTotalsBookmaker } from "@/lib/odds/select-bookmaker";
+import { pickBestTotalsBookmaker, type OddsBundle } from "@/lib/odds/select-bookmaker";
 import { getOddsForSport } from "@/lib/providers/odds-api";
 import { leagueToSportKey } from "@/lib/providers/odds-api-constants";
 import type { OddsApiEventOdds } from "@/lib/providers/odds-api-schemas";
@@ -215,6 +216,7 @@ export async function predict({
       status: match.status,
     });
   }
+  const kickoffMs = match.kickoffAt.getTime();
 
   const provider = getSportsDataProvider();
   const ref: FixtureRef = {
@@ -277,37 +279,51 @@ export async function predict({
     ]);
   const absencesAvailable = !injuries.unavailable;
 
-  // 4. Fetch odds e seleção de bookmaker
-  const sportKey = leagueToSportKey(match.league);
-  const kickoffMs = match.kickoffAt.getTime();
-  const commenceTimeFrom = new Date(kickoffMs - ODDS_WINDOW_MS).toISOString();
-  const commenceTimeTo = new Date(kickoffMs + ODDS_WINDOW_MS).toISOString();
-  const events = await getOddsForSport(sportKey, {
-    markets: ["totals"],
-    regions: ["eu"],
-    commenceTimeFrom,
-    commenceTimeTo,
-  });
-  const event = findMatchingEvent(
-    events,
-    fixture.homeTeam,
-    fixture.awayTeam,
-    match.kickoffAt,
-  );
-  if (!event) {
-    throw new PredictError("no matching odds event found", {
-      home: fixture.homeTeam,
-      away: fixture.awayTeam,
-      kickoff: match.kickoffAt.toISOString(),
-      candidates: events.length,
+  // 4. Odds: reusa uma snapshot fresca se a página já capturou uma nesta
+  //    sessão (quota: evita uma 2ª call à Odds API). Cai no fetch direto
+  //    quando predict() roda standalone (script, sem render prévio).
+  let oddsBundle: OddsBundle;
+  const freshSnapshot = await getLatestFreshOddsSnapshot(match.id);
+  if (freshSnapshot) {
+    oddsBundle = {
+      bookmakerKey: "", // não usado downstream; schema guarda title, não key.
+      bookmakerTitle: freshSnapshot.bookmaker,
+      overOdd: Number(freshSnapshot.overOdd), // numeric → string no Drizzle.
+      underOdd: Number(freshSnapshot.underOdd),
+      capturedAt: freshSnapshot.capturedAt.toISOString(),
+    };
+  } else {
+    const sportKey = leagueToSportKey(match.league);
+    const commenceTimeFrom = new Date(kickoffMs - ODDS_WINDOW_MS).toISOString();
+    const commenceTimeTo = new Date(kickoffMs + ODDS_WINDOW_MS).toISOString();
+    const events = await getOddsForSport(sportKey, {
+      markets: ["totals"],
+      regions: ["eu"],
+      commenceTimeFrom,
+      commenceTimeTo,
     });
-  }
-  const oddsBundle = pickBestTotalsBookmaker(event);
-  if (!oddsBundle) {
-    throw new PredictError("no over/under 2.5 odds available for event", {
-      eventId: event.id,
-      bookmakers: event.bookmakers.length,
-    });
+    const event = findMatchingEvent(
+      events,
+      fixture.homeTeam,
+      fixture.awayTeam,
+      match.kickoffAt,
+    );
+    if (!event) {
+      throw new PredictError("no matching odds event found", {
+        home: fixture.homeTeam,
+        away: fixture.awayTeam,
+        kickoff: match.kickoffAt.toISOString(),
+        candidates: events.length,
+      });
+    }
+    const bundle = pickBestTotalsBookmaker(event);
+    if (!bundle) {
+      throw new PredictError("no over/under 2.5 odds available for event", {
+        eventId: event.id,
+        bookmakers: event.bookmakers.length,
+      });
+    }
+    oddsBundle = bundle;
   }
 
   // 5. Implied probabilities normalizadas

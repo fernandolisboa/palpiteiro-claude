@@ -2,6 +2,7 @@ import { and, desc, eq, inArray, sql } from "drizzle-orm";
 
 import { matchOddsSnapshots } from "@/db/schema";
 import { db } from "@/lib/db";
+import { ODDS_SNAPSHOT_FRESHNESS_MS } from "@/lib/odds/freshness-window";
 
 export type DbOddsSnapshot = typeof matchOddsSnapshots.$inferSelect;
 
@@ -20,6 +21,24 @@ export async function getLatestOddsSnapshot(
     .orderBy(desc(matchOddsSnapshots.capturedAt))
     .limit(1);
   return rows[0] ?? null;
+}
+
+/**
+ * Snapshot mais recente do match SOMENTE se ainda fresca (< TTL externo de
+ * 30min, mesma definição que ensureOddsSnapshotsFresh usa em isFresh()).
+ * Retorna null se não há snapshot ou se a existente já está stale.
+ *
+ * Comparador `<` idêntico ao de isFresh() pra que predict() (reuso) e
+ * ensureOddsSnapshotsFresh (refetch) nunca discordem na fronteira de idade.
+ */
+export async function getLatestFreshOddsSnapshot(
+  matchId: string,
+  now: Date = new Date(),
+): Promise<DbOddsSnapshot | null> {
+  const snapshot = await getLatestOddsSnapshot(matchId);
+  if (!snapshot) return null;
+  const ageMs = now.getTime() - snapshot.capturedAt.getTime();
+  return ageMs < ODDS_SNAPSHOT_FRESHNESS_MS ? snapshot : null;
 }
 
 /**

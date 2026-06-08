@@ -89,6 +89,12 @@ vi.mock("@/lib/providers/odds-api", () => ({
   getOddsForSport: (...args: unknown[]) => getOddsForSport(...args),
 }));
 
+const getLatestFreshOddsSnapshot = vi.fn();
+vi.mock("@/lib/db/queries/odds-snapshots", () => ({
+  getLatestFreshOddsSnapshot: (...args: unknown[]) =>
+    getLatestFreshOddsSnapshot(...args),
+}));
+
 const anthropicCreate = vi.fn();
 vi.mock("@/lib/ai/anthropic", () => ({
   ANTHROPIC_MODEL: "claude-sonnet-4-5-20250929",
@@ -187,6 +193,21 @@ const ODDS_EVENT: OddsApiEventOdds = {
   ],
 };
 
+// A persisted snapshot row, mirroring DbOddsSnapshot. Numeric/decimal columns
+// come back from Drizzle as JS STRINGS — predict() must Number() them at the
+// boundary before any edge math.
+const FRESH_SNAPSHOT = {
+  id: "snap-1",
+  matchId: "m-1",
+  bookmaker: "Pinnacle",
+  market: "over_under_2_5" as const,
+  line: "2.5",
+  overOdd: "1.900",
+  underOdd: "1.950",
+  overroundPct: "3.50",
+  capturedAt: new Date(),
+};
+
 // Anthropic.Message-shaped response with a tool_use block whose input
 // satisfies OverUnderOutputSchema.
 function anthropicMessage() {
@@ -225,6 +246,9 @@ function setHappyPath() {
   getInjuriesByFixture.mockResolvedValue({ home: [], away: [] });
   getLineups.mockResolvedValue(LINEUPS);
   getOddsForSport.mockResolvedValue([ODDS_EVENT]);
+  // Default: no fresh snapshot, so every existing test keeps exercising the
+  // getOddsForSport fallback path unchanged.
+  getLatestFreshOddsSnapshot.mockResolvedValue(null);
   anthropicCreate.mockResolvedValue(anthropicMessage());
 }
 
@@ -347,5 +371,36 @@ describe("predict() — transient error on a CRITICAL fetch is NOT over-caught",
     );
     // No degrade, no analysis: the paid LLM call must not happen.
     expect(anthropicCreate).not.toHaveBeenCalled();
+  });
+});
+
+describe("predict() — odds snapshot reuse vs. fallback", () => {
+  it("fresh snapshot present → predict uses it and does NOT call getOddsForSport", async () => {
+    getLatestFreshOddsSnapshot.mockResolvedValueOnce(FRESH_SNAPSHOT);
+    const spy = vi.spyOn(buildInputModule, "buildPredictionInput");
+
+    await expect(
+      predict({ matchId: "m-1", userId: "u-1" }),
+    ).resolves.toBeDefined();
+
+    // Quota guarantee: the snapshot path skips the Odds API entirely.
+    expect(getOddsForSport).not.toHaveBeenCalled();
+    expect(anthropicCreate).toHaveBeenCalledTimes(1);
+
+    // Proves Number() conversion of the string columns at the boundary.
+    const odds = spy.mock.calls[0]?.[0].odds;
+    expect(odds?.over_2_5_decimal).toBe(1.9);
+    expect(odds?.under_2_5_decimal).toBe(1.95);
+    expect(odds?.bookmaker).toBe("Pinnacle");
+  });
+
+  it("no fresh snapshot → predict falls back to getOddsForSport", async () => {
+    // setHappyPath default already stubs getLatestFreshOddsSnapshot → null.
+    await expect(
+      predict({ matchId: "m-1", userId: "u-1" }),
+    ).resolves.toBeDefined();
+
+    expect(getOddsForSport).toHaveBeenCalledTimes(1);
+    expect(anthropicCreate).toHaveBeenCalledTimes(1);
   });
 });
