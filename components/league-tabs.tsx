@@ -5,6 +5,7 @@ import { cn } from "@/lib/utils";
 import type { LeagueFilter } from "@/lib/view/types";
 
 type Item = { value: LeagueFilter; label: string };
+export type LeagueTabItem = Item & { active: boolean };
 
 const ITEMS: Item[] = [
   { value: "all", label: "Todos" },
@@ -14,15 +15,19 @@ const ITEMS: Item[] = [
 ];
 
 /**
- * Abas visíveis derivadas das ligas ativas. "Todos" só aparece quando há mais de
- * uma liga ativa. Função pura (seam de teste sem precisar de @testing-library).
+ * Todas as ligas suportadas, anotadas com `active` derivado das ligas ativas.
+ * Cada liga (bsa/ucl/wc) sempre aparece; as inativas são renderizadas
+ * desabilitadas. A aba "Todos" só aparece quando há mais de uma liga ativa.
+ * Função pura (seam de teste sem precisar de @testing-library).
  */
 export function visibleLeagueTabs(
   activeKeys: readonly LeagueFilter[] = ACTIVE_LEAGUE_KEYS,
-): Item[] {
-  return ITEMS.filter((item) => {
-    if (item.value === "all") return activeKeys.length > 1;
-    return activeKeys.includes(item.value);
+): LeagueTabItem[] {
+  return ITEMS.flatMap((item) => {
+    if (item.value === "all") {
+      return activeKeys.length > 1 ? [{ ...item, active: true }] : [];
+    }
+    return [{ ...item, active: activeKeys.includes(item.value) }];
   });
 }
 
@@ -47,21 +52,40 @@ export function LeagueTabs({ value, className }: Props) {
       )}
       aria-label="Filtro de liga"
     >
-      {visibleLeagueTabs().map((item) => {
-        const active = item.value === value;
+      {visibleLeagueTabs().map(({ value: itemValue, label, active }) => {
+        if (!active) {
+          // Liga fora de temporada: afordância de UI desabilitada. Um <span> sem
+          // href não é navegável nem focável (sem tabIndex); aria-disabled + texto
+          // sr-only comunicam o estado a leitores de tela. O guard em app/page.tsx
+          // continua sendo o enforcement real ("?league=" inativa redireciona).
+          return (
+            <span
+              key={itemValue}
+              aria-disabled="true"
+              title="Fora de temporada — volta em agosto"
+              className={cn(
+                "h-7 cursor-not-allowed select-none rounded-[5px] px-3 text-[12px] font-medium leading-7 text-muted-foreground/50",
+              )}
+            >
+              {label}
+              <span className="sr-only"> (fora de temporada)</span>
+            </span>
+          );
+        }
+        const selected = itemValue === value;
         return (
           <Link
-            key={item.value}
-            href={buildHref(item.value)}
-            aria-current={active ? "page" : undefined}
+            key={itemValue}
+            href={buildHref(itemValue)}
+            aria-current={selected ? "page" : undefined}
             className={cn(
               "h-7 rounded-[5px] px-3 text-[12px] font-medium leading-7 transition-colors",
-              active
+              selected
                 ? "bg-card text-foreground shadow-[0_1px_2px_rgb(0_0_0/0.4)]"
                 : "text-muted-foreground hover:text-foreground",
             )}
           >
-            {item.label}
+            {label}
           </Link>
         );
       })}
