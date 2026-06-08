@@ -689,7 +689,7 @@ describe("ApiFootballAdapter.getInjuriesByFixture — logs WARN when fixture not
     vi.useFakeTimers();
     vi.setSystemTime(new Date("2026-06-08T12:00:00.000Z")); // month 6 → season 2026
     const season = 2026;
-    const cacheKey = `api-football:fixtures:date:2026-05-15:league:71:season:${season}`;
+    const cacheKey = `sports-data:api-football:fixtures:date:2026-05-15:league:71:season:${season}`;
     // Raw fixture whose teams canonicalize to names that do NOT equal the ref,
     // so native.find(...) misses and we fall into the line-896 guard.
     const mismatchedRaw = makeFixture({

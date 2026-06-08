@@ -106,8 +106,8 @@ function buildCacheKey(
   const entries = Object.entries(params).sort(([a], [b]) => a.localeCompare(b));
   const tail = entries.map(([k, v]) => `${k}:${v}`).join(":");
   return tail
-    ? `api-football:${endpointSegment}:${tail}`
-    : `api-football:${endpointSegment}`;
+    ? `sports-data:api-football:${endpointSegment}:${tail}`
+    : `sports-data:api-football:${endpointSegment}`;
 }
 
 function buildUrl(
