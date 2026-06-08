@@ -1,4 +1,4 @@
-import { and, eq } from "drizzle-orm";
+import { and, desc, eq } from "drizzle-orm";
 
 import { pendingInvites, users } from "@/db/schema";
 import { db } from "@/lib/db";
@@ -110,4 +110,28 @@ export async function removePendingInvite(email: string): Promise<void> {
   await db
     .delete(pendingInvites)
     .where(eq(pendingInvites.email, normalizeEmail(email)));
+}
+
+/**
+ * Lista todos os convites pendentes, mais recentes primeiro. Usada pela UI de
+ * admin do #52 pra renderizar a whitelist editável. `invitedByUserId` pode ser
+ * null (inviter deletado → FK set null).
+ */
+export async function listPendingInvites(): Promise<
+  Array<{
+    email: string;
+    note: string | null;
+    invitedByUserId: string | null;
+    createdAt: Date;
+  }>
+> {
+  return db
+    .select({
+      email: pendingInvites.email,
+      note: pendingInvites.note,
+      invitedByUserId: pendingInvites.invitedByUserId,
+      createdAt: pendingInvites.createdAt,
+    })
+    .from(pendingInvites)
+    .orderBy(desc(pendingInvites.createdAt));
 }
