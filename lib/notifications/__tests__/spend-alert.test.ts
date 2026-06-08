@@ -99,6 +99,7 @@ describe("runSpendAlert", () => {
   it("sends once and marks the day when over threshold and not yet sent", async () => {
     costMock.mockResolvedValue(summary(25));
     getMock.mockResolvedValue(null);
+    sendMock.mockResolvedValue({ data: { id: "msg_1" }, error: null });
     const run = await load();
     const res = await run(NOW);
 
@@ -167,6 +168,7 @@ describe("runSpendAlert", () => {
     vi.stubEnv("KV_REST_API_URL", "");
     const warn = vi.spyOn(console, "warn").mockImplementation(() => {});
     costMock.mockResolvedValue(summary(25));
+    sendMock.mockResolvedValue({ data: { id: "msg_1" }, error: null });
     const run = await load();
 
     const res1 = await run(NOW);
@@ -200,6 +202,20 @@ describe("runSpendAlert", () => {
     const run = await load();
 
     await expect(run(NOW)).rejects.toThrow("resend boom");
+    expect(setMock).not.toHaveBeenCalled();
+  });
+
+  it("treats a resolved { data: null, error } as failure and does NOT mark the day as sent", async () => {
+    costMock.mockResolvedValue(summary(25));
+    getMock.mockResolvedValue(null);
+    // Resend devolve erros de API como valor RESOLVIDO, não como rejeição.
+    sendMock.mockResolvedValue({
+      data: null,
+      error: { name: "application_error", message: "domain not verified" },
+    });
+    const run = await load();
+
+    await expect(run(NOW)).rejects.toThrow("domain not verified");
     expect(setMock).not.toHaveBeenCalled();
   });
 });

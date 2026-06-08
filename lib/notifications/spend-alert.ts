@@ -85,7 +85,14 @@ export async function runSpendAlert(
   const text = `Aggregate AI spend for ${dateLabel} (UTC) reached ${formatCostUsdTotal(spendUsd)}, above the configured threshold of ${formatCostUsdTotal(thresholdUsd)}.\n\nThis is a daily budget alert from Palpiteiro. Review usage in the costs dashboard.`;
 
   const resend = new Resend(process.env.AUTH_RESEND_KEY);
-  await resend.emails.send({ from, to, subject, text });
+  // resend.emails.send() devolve erros de API como `{ data: null, error }`
+  // RESOLVIDO (não rejeitado). Sem inspecionar `error`, um envio falho marcaria
+  // o dia como enviado e suprimiria a retentativa — viola o invariante
+  // GET-then-SET-after-success. Lançar mapeia pro 500 (retryable) da rota.
+  const { error } = await resend.emails.send({ from, to, subject, text });
+  if (error) {
+    throw new Error(`resend send failed: ${error.message ?? error.name}`);
+  }
 
   // 6) MARK SENT só DEPOIS do envio bem-sucedido (TTL 48h).
   if (redis) {
