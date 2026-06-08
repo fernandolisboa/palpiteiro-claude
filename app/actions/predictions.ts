@@ -9,6 +9,7 @@ import { PredictError, predict } from "@/lib/ai/predict";
 import { extractDbCause } from "@/lib/db/pg-error";
 import { getAiCallById } from "@/lib/db/queries/predictions";
 import { userExists } from "@/lib/db/queries/users";
+import { checkAnalysisRateLimit } from "@/lib/rate-limit";
 import { toAnalysisView } from "@/lib/view/analysis";
 import type { AnalysisView } from "@/lib/view/types";
 
@@ -64,6 +65,19 @@ export async function analyzeMatch(
   // Anthropic (senão a FK ai_calls_user_id_users_id_fk estoura pós-custo).
   if (!(await userExists(session.user.id))) {
     return { ok: false, error: "Sua sessão expirou. Faça login novamente." };
+  }
+  // Teto diário por usuário (Upstash Ratelimit via Vercel KV): recusa ANTES de
+  // qualquer chamada paga ao Anthropic. Admin tem limite separado/maior. Sem KV
+  // configurado (dev local) o gate falha aberto — ver lib/rate-limit.ts.
+  const rateLimit = await checkAnalysisRateLimit(
+    session.user.id,
+    session.user.role,
+  );
+  if (!rateLimit.ok) {
+    return {
+      ok: false,
+      error: `Você atingiu o limite de ${rateLimit.limit} análises por dia. Tente novamente amanhã.`,
+    };
   }
   // Override de modelo por análise: ADMIN-only e revalidado aqui (server actions
   // são POST chamáveis fora do layout). "default"/inválido/não-admin → cai no
