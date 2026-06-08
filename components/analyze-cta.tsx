@@ -39,7 +39,7 @@ export function AnalyzeCTA({ pending }: Props) {
             <div key={i} className="flex items-center gap-2 font-mono text-[10.5px]">
               <span
                 className={cn(
-                  s.status === "done" && "text-edge-fg",
+                  s.status === "done" && "text-muted-foreground",
                   s.status === "active" && "text-accent-fg",
                   s.status === "pending" && "text-muted-fg-2",
                 )}
