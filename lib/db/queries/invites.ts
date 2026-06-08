@@ -73,6 +73,12 @@ export async function promoteInvitedUserOnLogin(user: {
 
 /**
  * Upsert idempotente de um convite por e-mail (PK). Reusado pela UI do #52.
+ *
+ * ATENÇÃO (clobber-on-conflict): no conflito, `invitedByUserId` e `note` são
+ * SOBRESCRITOS pelos valores passados (ou null se omitidos). Re-convidar um
+ * e-mail já pendente SEM repassar esses campos zera a metadata anterior. O #52
+ * deve repassar a metadata existente (ou só atualizar campos fornecidos) se
+ * quiser preservá-la.
  */
 export async function addPendingInvite(input: {
   email: string;
