@@ -1,17 +1,16 @@
-// Anthropic pricing per million tokens (USD). Source:
-// https://platform.claude.com/docs/en/docs/about-claude/pricing (Sonnet 4.5).
-// Cache write/read tiers omitted — MVP does not use prompt caching.
-export const MODEL_PRICING_USD_PER_MTOK = {
-  "claude-sonnet-4-5-20250929": { input: 3, output: 15 },
-} as const;
+import { MODEL_REGISTRY, type AIModelId } from "./models";
 
-export type PricedModel = keyof typeof MODEL_PRICING_USD_PER_MTOK;
-
+// Custo derivado do registry — garante que TODO modelo selecionável tem pricing.
+// (Antes só Sonnet 4.5 existia aqui; um call Opus indexaria undefined → NaN.)
 export function calculateCost(args: {
-  model: PricedModel;
+  model: AIModelId;
   inputTokens: number;
   outputTokens: number;
 }): number {
-  const p = MODEL_PRICING_USD_PER_MTOK[args.model];
-  return (args.inputTokens * p.input + args.outputTokens * p.output) / 1_000_000;
+  const m = MODEL_REGISTRY[args.model];
+  return (
+    (args.inputTokens * m.inputPricePerMTok +
+      args.outputTokens * m.outputPricePerMTok) /
+    1_000_000
+  );
 }

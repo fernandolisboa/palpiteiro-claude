@@ -7,15 +7,22 @@ import { analyzeMatch, type AnalyzeMatchResult } from "@/app/actions/predictions
 import { AnalysisErrorCard } from "@/components/analysis-error-card";
 import { AnalysisResult } from "@/components/analysis-result";
 import { AnalyzeCTA } from "@/components/analyze-cta";
+import { ModelOverrideSelect } from "@/components/model-override-select";
 import type { AnalysisView } from "@/lib/view/types";
 
 type Props = {
   matchId: string;
   existing: AnalysisView | null;
   oddsAvailable: boolean;
+  isAdmin: boolean;
 };
 
-export function AnalysisPanel({ matchId, existing, oddsAvailable }: Props) {
+export function AnalysisPanel({
+  matchId,
+  existing,
+  oddsAvailable,
+  isAdmin,
+}: Props) {
   const initial: AnalyzeMatchResult | null = existing
     ? { ok: true, view: existing }
     : null;
@@ -27,6 +34,9 @@ export function AnalysisPanel({ matchId, existing, oddsAvailable }: Props) {
   return (
     <form action={formAction} aria-busy={pending}>
       <input type="hidden" name="matchId" value={matchId} />
+      {/* Override por análise: só admin. Sem este select, a action não vê
+          modelOverride e usa o default global — comportamento do user comum. */}
+      {isAdmin && <ModelOverrideSelect />}
 
       {pending && view ? (
         <div className="relative">

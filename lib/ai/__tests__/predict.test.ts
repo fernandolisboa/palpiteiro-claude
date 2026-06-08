@@ -97,8 +97,12 @@ vi.mock("@/lib/db/queries/odds-snapshots", () => ({
 
 const anthropicCreate = vi.fn();
 vi.mock("@/lib/ai/anthropic", () => ({
-  ANTHROPIC_MODEL: "claude-sonnet-4-5-20250929",
   getAnthropicClient: () => ({ messages: { create: anthropicCreate } }),
+}));
+
+const getDefaultModelId = vi.fn();
+vi.mock("@/lib/db/queries/ai-config", () => ({
+  getDefaultModelId: (...args: unknown[]) => getDefaultModelId(...args),
 }));
 
 // Spy on buildPredictionInput while keeping the real implementation (and
@@ -249,6 +253,8 @@ function setHappyPath() {
   // Default: no fresh snapshot, so every existing test keeps exercising the
   // getOddsForSport fallback path unchanged.
   getLatestFreshOddsSnapshot.mockResolvedValue(null);
+  // Default global resolvido pelo DB quando não há override (caminho comum).
+  getDefaultModelId.mockResolvedValue("claude-opus-4-8");
   anthropicCreate.mockResolvedValue(anthropicMessage());
 }
 
@@ -402,5 +408,52 @@ describe("predict() — odds snapshot reuse vs. fallback", () => {
 
     expect(getOddsForSport).toHaveBeenCalledTimes(1);
     expect(anthropicCreate).toHaveBeenCalledTimes(1);
+  });
+});
+
+describe("predict() — model resolution (override > DB default) + model-aware request", () => {
+  it("no override + DB default Opus → Anthropic called with opus id and NO temperature (adaptive)", async () => {
+    getDefaultModelId.mockResolvedValue("claude-opus-4-8");
+
+    await expect(
+      predict({ matchId: "m-1", userId: "u-1" }),
+    ).resolves.toBeDefined();
+
+    expect(getDefaultModelId).toHaveBeenCalledTimes(1);
+    const arg = anthropicCreate.mock.calls[0]?.[0];
+    expect(arg.model).toBe("claude-opus-4-8");
+    expect(arg).not.toHaveProperty("temperature");
+    expect(arg.thinking).toEqual({ type: "adaptive" });
+  });
+
+  it("modelOverride Sonnet wins over DB default Opus → sonnet id + temperature 0.3", async () => {
+    getDefaultModelId.mockResolvedValue("claude-opus-4-8");
+
+    await expect(
+      predict({
+        matchId: "m-1",
+        userId: "u-1",
+        modelOverride: "claude-sonnet-4-5-20250929",
+      }),
+    ).resolves.toBeDefined();
+
+    // Override curto-circuita o lookup do default global.
+    expect(getDefaultModelId).not.toHaveBeenCalled();
+    const arg = anthropicCreate.mock.calls[0]?.[0];
+    expect(arg.model).toBe("claude-sonnet-4-5-20250929");
+    expect(arg.temperature).toBe(0.3);
+    expect(arg).not.toHaveProperty("thinking");
+  });
+
+  it("no override + DB default Sonnet → Anthropic called with sonnet id", async () => {
+    getDefaultModelId.mockResolvedValue("claude-sonnet-4-5-20250929");
+
+    await expect(
+      predict({ matchId: "m-1", userId: "u-1" }),
+    ).resolves.toBeDefined();
+
+    const arg = anthropicCreate.mock.calls[0]?.[0];
+    expect(arg.model).toBe("claude-sonnet-4-5-20250929");
+    expect(arg.temperature).toBe(0.3);
   });
 });

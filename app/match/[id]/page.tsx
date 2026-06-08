@@ -99,6 +99,7 @@ export default async function MatchPage({ params }: PageProps) {
   };
   const leagueKey = leagueToKey(match.league);
   const oddsAvailable = oddsView !== null;
+  const isAdmin = session.user.role === "admin";
 
   return (
     <>
@@ -111,6 +112,7 @@ export default async function MatchPage({ params }: PageProps) {
           fixtureRef={fixtureRef}
           leagueKey={leagueKey}
           oddsAvailable={oddsAvailable}
+          isAdmin={isAdmin}
         />
       </div>
       <div className="hidden lg:block">
@@ -122,6 +124,7 @@ export default async function MatchPage({ params }: PageProps) {
           fixtureRef={fixtureRef}
           leagueKey={leagueKey}
           oddsAvailable={oddsAvailable}
+          isAdmin={isAdmin}
         />
       </div>
     </>
@@ -136,6 +139,7 @@ type Common = {
   fixtureRef: FixtureRef;
   leagueKey: ReturnType<typeof leagueToKey>;
   oddsAvailable: boolean;
+  isAdmin: boolean;
 };
 
 function MobileMatch({
@@ -146,6 +150,7 @@ function MobileMatch({
   fixtureRef,
   leagueKey,
   oddsAvailable,
+  isAdmin,
 }: Common) {
   return (
     <div className="min-h-screen bg-background text-foreground">
@@ -173,6 +178,7 @@ function MobileMatch({
           matchId={matchId}
           existing={analysisExisting}
           oddsAvailable={oddsAvailable}
+          isAdmin={isAdmin}
         />
         <Suspense fallback={<MatchSectionsSkeleton />}>
           <MatchSections fixtureRef={fixtureRef} leagueKey={leagueKey} />
@@ -193,6 +199,7 @@ function DesktopMatch({
   fixtureRef,
   leagueKey,
   oddsAvailable,
+  isAdmin,
 }: Common) {
   return (
     <DesktopShell>
@@ -272,6 +279,7 @@ function DesktopMatch({
             matchId={matchId}
             existing={analysisExisting}
             oddsAvailable={oddsAvailable}
+            isAdmin={isAdmin}
           />
         </div>
 

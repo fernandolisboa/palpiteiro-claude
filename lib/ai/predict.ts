@@ -19,9 +19,13 @@ import {
   type NormalizedInjury,
 } from "@/lib/providers/sports-data/types";
 
-import { ANTHROPIC_MODEL, getAnthropicClient } from "./anthropic";
+import { getDefaultModelId } from "@/lib/db/queries/ai-config";
+
+import { getAnthropicClient } from "./anthropic";
 import { BuildInputError, buildPredictionInput } from "./build-input";
 import { calculateCost } from "./cost";
+import { MODEL_REGISTRY, type AIModelId } from "./models";
+import { buildAnthropicRequest } from "./request-builder";
 import {
   PROMPT_VERSION,
   SUBMIT_PREDICTION_TOOL,
@@ -35,6 +39,9 @@ import { OverUnderOutputSchema } from "./schemas/output";
 export type PredictArgs = {
   matchId: string;
   userId: string;
+  // Override admin-gated (já validado pelo caller); predict confia num
+  // AIModelId. Ausente → usa o default global do DB.
+  modelOverride?: AIModelId;
 };
 
 export type Prediction = typeof predictions.$inferSelect;
@@ -61,7 +68,6 @@ export class PredictError extends Error {
 const FORM_LAST = 5;
 const H2H_LAST = 5;
 const MAX_TOKENS = 2048;
-const TEMPERATURE = 0.3;
 const ODDS_WINDOW_MS = 6 * 60 * 60 * 1000;
 const ERROR_MESSAGE_MAX = 2000;
 
@@ -149,6 +155,7 @@ function serializeAnthropicError(err: unknown): Record<string, unknown> {
 async function persistAiCallError(args: {
   userId: string;
   matchId: string;
+  model: AIModelId;
   inputPayload: Record<string, unknown>;
   outputPayload: Record<string, unknown>;
   inputTokens: number;
@@ -158,7 +165,7 @@ async function persistAiCallError(args: {
   errorMessage: string;
 }): Promise<void> {
   const cost = calculateCost({
-    model: ANTHROPIC_MODEL,
+    model: args.model,
     inputTokens: args.inputTokens,
     outputTokens: args.outputTokens,
   });
@@ -170,7 +177,7 @@ async function persistAiCallError(args: {
       userId: args.userId,
       matchId: args.matchId,
       provider: "anthropic",
-      model: ANTHROPIC_MODEL,
+      model: args.model,
       promptVersion: PROMPT_VERSION,
       inputPayload: args.inputPayload,
       outputPayload: args.outputPayload,
@@ -199,7 +206,15 @@ async function persistAiCallError(args: {
 export async function predict({
   matchId,
   userId,
+  modelOverride,
 }: PredictArgs): Promise<Prediction> {
+  // 0. Resolve o modelo UMA vez: override admin (já validado) > default global.
+  //    O lookup do default é uma leitura barata (pulada quando há override),
+  //    negligível ante a chamada paga ao LLM.
+  const resolvedModelId: AIModelId =
+    modelOverride ?? (await getDefaultModelId());
+  const model = MODEL_REGISTRY[resolvedModelId];
+
   // 1. Lookup do match no DB
   const matchRows = await db
     .select()
@@ -382,36 +397,32 @@ export async function predict({
     Math.ceil((kickoffMs - Date.now()) / 86_400_000),
   );
   const userMessage = buildUserMessage(input, { daysToKickoff });
-  const inputPayload: Record<string, unknown> = {
-    model: ANTHROPIC_MODEL,
+  // Constrói UM objeto de request model-aware, reusado tanto pro inputPayload
+  // logado quanto pra chamada real (sem divergência). request-builder omite
+  // temperature em modelos adaptive (Opus 4.8 dá 400) e a mantém no Sonnet 4.5.
+  const request = buildAnthropicRequest({
+    model,
     system: SYSTEM_PROMPT,
-    messages: [{ role: "user", content: userMessage }],
-    tools: [SUBMIT_PREDICTION_TOOL],
-    tool_choice: { type: "tool", name: SUBMIT_PREDICTION_TOOL.name },
-    max_tokens: MAX_TOKENS,
-    temperature: TEMPERATURE,
-  };
+    userMessage,
+    tools: [SUBMIT_PREDICTION_TOOL as unknown as Anthropic.Tool],
+    toolName: SUBMIT_PREDICTION_TOOL.name,
+    maxTokens: MAX_TOKENS,
+  });
+  const inputPayload = request as unknown as Record<string, unknown>;
 
   // 8. Chamada do Claude (com cronômetro)
   const client = getAnthropicClient();
   const start = performance.now();
   let response: Anthropic.Message;
   try {
-    response = await client.messages.create({
-      model: ANTHROPIC_MODEL,
-      system: SYSTEM_PROMPT,
-      messages: [{ role: "user", content: userMessage }],
-      tools: [SUBMIT_PREDICTION_TOOL as unknown as Anthropic.Tool],
-      tool_choice: { type: "tool", name: SUBMIT_PREDICTION_TOOL.name },
-      max_tokens: MAX_TOKENS,
-      temperature: TEMPERATURE,
-    });
+    response = await client.messages.create(request);
   } catch (err) {
     const latencyMs = Math.round(performance.now() - start);
     const classified = classifyAnthropicError(err);
     await persistAiCallError({
       userId,
       matchId,
+      model: model.id,
       inputPayload,
       outputPayload: { error: serializeAnthropicError(err) },
       inputTokens: 0,
@@ -439,6 +450,7 @@ export async function predict({
     await persistAiCallError({
       userId,
       matchId,
+      model: model.id,
       inputPayload,
       outputPayload,
       inputTokens,
@@ -458,6 +470,7 @@ export async function predict({
     await persistAiCallError({
       userId,
       matchId,
+      model: model.id,
       inputPayload,
       outputPayload,
       inputTokens,
@@ -474,7 +487,7 @@ export async function predict({
 
   // 11. Persistência (sequencial — neon-http não suporta transações reais).
   const cost = calculateCost({
-    model: ANTHROPIC_MODEL,
+    model: model.id,
     inputTokens,
     outputTokens,
   });
@@ -486,7 +499,7 @@ export async function predict({
         userId,
         matchId,
         provider: "anthropic",
-        model: ANTHROPIC_MODEL,
+        model: model.id,
         promptVersion: PROMPT_VERSION,
         inputPayload,
         outputPayload,
@@ -548,7 +561,7 @@ export async function predict({
         bookmaker: side !== "pass" ? oddsBundle.bookmakerTitle : null,
         impliedProbPct: impliedPct?.toFixed(2) ?? null,
         edgePct: edge?.toFixed(2) ?? null,
-        modelVersion: ANTHROPIC_MODEL,
+        modelVersion: model.id,
         promptVersion: PROMPT_VERSION,
       })
       .returning();
