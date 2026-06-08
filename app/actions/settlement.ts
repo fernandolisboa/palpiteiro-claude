@@ -2,8 +2,7 @@
 
 import { revalidatePath } from "next/cache";
 
-import { DEV_USER_ID } from "@/lib/auth/dev-user";
-import { ensureDevUser } from "@/lib/db/queries/ensure-dev-user";
+import { auth } from "@/auth";
 import { upsertOutcomeOverride } from "@/lib/db/queries/prediction-outcomes";
 import { getPredictionForOverride } from "@/lib/db/queries/predictions";
 import { profitForResult, type OutcomeResult } from "@/lib/settlement/compute";
@@ -23,13 +22,19 @@ const VALID_RESULTS: ReadonlySet<string> = new Set<OutcomeResult>([
  * result + the prediction's entry odd/stake, never typed by hand, so it stays
  * consistent.
  *
- * NOTE: not access-gated — there's no auth in Phase 1 (the app runs as the dev
- * user). Real admin authorization lands with Auth.js (#12).
+ * Acesso restrito a admin: muta outcomes passados (integridade de Yield), então
+ * exige sessão com role "admin". Defense-in-depth com o gate em
+ * app/admin/layout.tsx.
  */
 export async function overridePredictionOutcome(
   _prev: OverrideResult | null,
   formData: FormData,
 ): Promise<OverrideResult> {
+  const session = await auth();
+  if (session?.user?.role !== "admin") {
+    return { ok: false, error: "Acesso restrito." };
+  }
+
   const predictionId = String(formData.get("predictionId") ?? "");
   const result = String(formData.get("result") ?? "");
   // Parse from the raw field: Number(null) is 0, so an absent/empty score must
@@ -80,13 +85,12 @@ export async function overridePredictionOutcome(
     };
   }
 
-  await ensureDevUser();
   await upsertOutcomeOverride({
     predictionId,
     totalGoals: homeScore + awayScore,
     result: result as OutcomeResult,
     profitUnits,
-    overrideByUserId: DEV_USER_ID,
+    overrideByUserId: session.user.id,
   });
   revalidatePath(`/admin/predictions/${predictionId}`);
   return { ok: true };

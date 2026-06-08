@@ -1,5 +1,5 @@
 import Link from "next/link";
-import { notFound } from "next/navigation";
+import { notFound, redirect } from "next/navigation";
 import { Suspense } from "react";
 import { ChevronLeft } from "lucide-react";
 
@@ -15,7 +15,7 @@ import {
   MatchAuxiliarySkeleton,
   MatchSectionsSkeleton,
 } from "@/components/skeletons/match-sections-skeleton";
-import { DEV_USER_ID } from "@/lib/auth/dev-user";
+import { auth } from "@/auth";
 import { LEAGUE_LABEL, leagueToKey } from "@/lib/format";
 import { getMatchById } from "@/lib/db/queries/matches";
 import { getLatestPredictionForMatch } from "@/lib/db/queries/predictions";
@@ -32,6 +32,10 @@ type PageProps = {
 
 export default async function MatchPage({ params }: PageProps) {
   const { id } = await params;
+  // Middleware garante sessão; redirect defensivo caso o matcher mude.
+  const session = await auth();
+  if (!session?.user?.id) redirect("/signin");
+
   const match = await getMatchById(id);
   if (!match) notFound();
 
@@ -39,7 +43,7 @@ export default async function MatchPage({ params }: PageProps) {
   // render síncrono do hero + odds + panel (não vão pra Suspense).
   const [snapshot, latestPred] = await Promise.all([
     ensureOddsSnapshotsFresh(match),
-    getLatestPredictionForMatch(match.id, DEV_USER_ID),
+    getLatestPredictionForMatch(match.id, session.user.id),
   ]);
 
   const heroView = toMatchRowView({

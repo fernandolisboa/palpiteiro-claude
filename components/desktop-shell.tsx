@@ -1,10 +1,20 @@
 import type { ReactNode } from "react";
 
+import { auth, signOut } from "@/auth";
 import { Separator } from "@/components/ui/separator";
 import { TeamAvatar } from "@/components/team-avatar";
 import { ThemeToggle } from "@/components/theme-toggle";
 
-export function DesktopShell({ children }: { children: ReactNode }) {
+function initialsFrom(value: string): string {
+  const cleaned = value.split("@")[0]?.replace(/[^a-zA-Z]/g, "") ?? "";
+  return (cleaned.slice(0, 2) || "??").toUpperCase();
+}
+
+export async function DesktopShell({ children }: { children: ReactNode }) {
+  const session = await auth();
+  const user = session?.user;
+  const label = user?.name?.trim() || user?.email || "";
+
   return (
     <div className="flex min-h-screen w-full flex-col bg-background text-foreground">
       <header className="flex h-14 items-center justify-between border-b border-border-subtle px-8">
@@ -17,14 +27,28 @@ export function DesktopShell({ children }: { children: ReactNode }) {
           </span>
         </div>
         <div className="flex items-center gap-3">
-          <span className="font-mono text-[11px] tabular-nums text-muted-foreground">
-            ROI 30d <span className="text-edge-fg">+4.2%</span>
-          </span>
-          <Separator orientation="vertical" className="!h-4" />
-          <div className="flex items-center gap-2">
-            <TeamAvatar initials="GU" hue={258} size={26} />
-            <span className="text-[12.5px] tracking-tight">gustavo</span>
-          </div>
+          {label && (
+            <>
+              <div className="flex items-center gap-2">
+                <TeamAvatar initials={initialsFrom(label)} hue={258} size={26} />
+                <span className="text-[12.5px] tracking-tight">{label}</span>
+              </div>
+              <Separator orientation="vertical" className="!h-4" />
+              <form
+                action={async () => {
+                  "use server";
+                  await signOut({ redirectTo: "/signin" });
+                }}
+              >
+                <button
+                  type="submit"
+                  className="font-mono text-[11px] uppercase tracking-[0.14em] text-muted-foreground transition-colors hover:text-foreground"
+                >
+                  sair
+                </button>
+              </form>
+            </>
+          )}
           <ThemeToggle />
         </div>
       </header>

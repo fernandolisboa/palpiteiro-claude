@@ -4,8 +4,7 @@ config({ path: ".env.local" });
 import { neon } from "@neondatabase/serverless";
 import { drizzle } from "drizzle-orm/neon-http";
 
-import { DEV_USER_ID } from "@/lib/auth/dev-user";
-import { matches, users } from "./schema";
+import { matches } from "./schema";
 
 if (!process.env.DATABASE_URL) {
   throw new Error("DATABASE_URL not set — create .env.local from .env.example");
@@ -17,23 +16,9 @@ const db = drizzle(sql, { casing: "snake_case" });
 async function main() {
   console.log("Seeding database...");
 
-  const [admin] = await db
-    .insert(users)
-    .values({
-      id: DEV_USER_ID,
-      email: "admin@palpiteiro.local",
-      name: "Admin",
-      role: "admin",
-      allowed: true,
-    })
-    .onConflictDoNothing({ target: users.email })
-    .returning();
-
-  if (admin) {
-    console.log(`  ✓ inserted admin user ${admin.email}`);
-  } else {
-    console.log("  · admin user already present, skipped");
-  }
+  // Usuários agora vêm do login real (Auth.js + whitelist, #12) — sem admin
+  // placeholder no seed. Em prod, a row do dev user é reivindicada uma vez via
+  // db/scripts/claim-admin.ts.
 
   const kickoff = new Date();
   kickoff.setUTCDate(kickoff.getUTCDate() + 7);

@@ -31,4 +31,14 @@ export const db: Db = new Proxy({} as Db, {
     const value = Reflect.get(cachedDb, prop, receiver);
     return typeof value === "function" ? value.bind(cachedDb) : value;
   },
+  // O DrizzleAdapter (@auth/drizzle-adapter) faz `is(db, PgDatabase)`, que
+  // inspeciona a cadeia de protótipos — não passa pelo trap `get`. Sem este
+  // trap, o Proxy resolve para Object.prototype e o adapter rejeita o cliente
+  // com "Unsupported database type". Resolver o protótipo real força a
+  // construção lazy aqui (DATABASE_URL é garantido no build: o script é
+  // `drizzle-kit migrate && next build`).
+  getPrototypeOf() {
+    if (!cachedDb) cachedDb = buildDb();
+    return Object.getPrototypeOf(cachedDb);
+  },
 });
