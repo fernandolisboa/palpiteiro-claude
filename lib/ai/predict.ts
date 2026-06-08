@@ -3,6 +3,7 @@ import { eq } from "drizzle-orm";
 
 import { aiCalls, matches, predictions } from "@/db/schema";
 import { db } from "@/lib/db";
+import { extractDbCause } from "@/lib/db/pg-error";
 import { computeImpliedProbabilities } from "@/lib/odds/implied-probability";
 import { pickBestTotalsBookmaker } from "@/lib/odds/select-bookmaker";
 import { getOddsForSport } from "@/lib/providers/odds-api";
@@ -451,24 +452,43 @@ export async function predict({
     inputTokens,
     outputTokens,
   });
-  const [aiCallRow] = await db
-    .insert(aiCalls)
-    .values({
-      userId,
-      matchId,
-      provider: "anthropic",
-      model: ANTHROPIC_MODEL,
-      promptVersion: PROMPT_VERSION,
-      inputPayload,
-      outputPayload,
-      inputTokens,
-      outputTokens,
-      latencyMs,
-      costUsd: cost.toFixed(6),
-      status: "ok",
-      errorMessage: null,
-    })
-    .returning();
+  let aiCallRow: typeof aiCalls.$inferSelect;
+  try {
+    const [row] = await db
+      .insert(aiCalls)
+      .values({
+        userId,
+        matchId,
+        provider: "anthropic",
+        model: ANTHROPIC_MODEL,
+        promptVersion: PROMPT_VERSION,
+        inputPayload,
+        outputPayload,
+        inputTokens,
+        outputTokens,
+        latencyMs,
+        costUsd: cost.toFixed(6),
+        status: "ok",
+        errorMessage: null,
+      })
+      .returning();
+    aiCallRow = row;
+  } catch (err) {
+    // O erro real do Postgres mora em err.cause; Drizzle só expõe o wrapper
+    // "Failed query:" em err.message. Sem isto, uma violação de FK/constraint
+    // some no log como "unexpected". Ver lib/db/pg-error.ts.
+    const cause = extractDbCause(err);
+    console.error(
+      JSON.stringify({
+        scope: "predict",
+        matchId,
+        userId,
+        error: "ai_call_insert_failed",
+        ...cause,
+      }),
+    );
+    throw new PredictError("failed to persist ai_call", cause);
+  }
 
   const side = output.recommendation;
   const oddAtRec =
@@ -484,26 +504,44 @@ export async function predict({
       ? output.confidence_pct - impliedPct
       : null;
 
-  const [predictionRow] = await db
-    .insert(predictions)
-    .values({
-      matchId,
-      userId,
-      aiCallId: aiCallRow.id,
-      market: "over_under_2_5",
-      recommendation: output.recommendation,
-      confidencePct: output.confidence_pct.toFixed(2),
-      rationale: output.rationale,
-      keyFactors: output.key_factors,
-      minimumOdd: output.minimum_odd?.toFixed(3) ?? null,
-      oddAtRecommendation: oddAtRec?.toFixed(3) ?? null,
-      bookmaker: side !== "pass" ? oddsBundle.bookmakerTitle : null,
-      impliedProbPct: impliedPct?.toFixed(2) ?? null,
-      edgePct: edge?.toFixed(2) ?? null,
-      modelVersion: ANTHROPIC_MODEL,
-      promptVersion: PROMPT_VERSION,
-    })
-    .returning();
+  let predictionRow: Prediction;
+  try {
+    const [row] = await db
+      .insert(predictions)
+      .values({
+        matchId,
+        userId,
+        aiCallId: aiCallRow.id,
+        market: "over_under_2_5",
+        recommendation: output.recommendation,
+        confidencePct: output.confidence_pct.toFixed(2),
+        rationale: output.rationale,
+        keyFactors: output.key_factors,
+        minimumOdd: output.minimum_odd?.toFixed(3) ?? null,
+        oddAtRecommendation: oddAtRec?.toFixed(3) ?? null,
+        bookmaker: side !== "pass" ? oddsBundle.bookmakerTitle : null,
+        impliedProbPct: impliedPct?.toFixed(2) ?? null,
+        edgePct: edge?.toFixed(2) ?? null,
+        modelVersion: ANTHROPIC_MODEL,
+        promptVersion: PROMPT_VERSION,
+      })
+      .returning();
+    predictionRow = row;
+  } catch (err) {
+    // ai_call já foi persistido (custo registrado); só a prediction falhou.
+    const cause = extractDbCause(err);
+    console.error(
+      JSON.stringify({
+        scope: "predict",
+        matchId,
+        userId,
+        aiCallId: aiCallRow.id,
+        error: "prediction_insert_failed",
+        ...cause,
+      }),
+    );
+    throw new PredictError("failed to persist prediction", cause);
+  }
 
   return predictionRow;
 }
