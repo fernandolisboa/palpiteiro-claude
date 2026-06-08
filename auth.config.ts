@@ -1,7 +1,5 @@
 import type { NextAuthConfig } from "next-auth";
 
-import { isEmailAllowed } from "@/lib/auth/whitelist";
-
 /**
  * Config edge-safe do Auth.js v5 — SEM adapter, SEM providers e SEM dependência
  * de DB, pra rodar no edge runtime (middleware). O `auth.ts` (Node) estende isto
@@ -26,14 +24,10 @@ export const authConfig = {
   // Providers ficam no `auth.ts` (Node), junto do adapter — ver comentário acima.
   providers: [],
   callbacks: {
-    /**
-     * Whitelist: roda ANTES do envio do magic link (verificado no source do
-     * @auth/core). E-mail fora da lista → AccessDenied → nenhum e-mail enviado,
-     * nenhum token criado. Protege login E custo de envio.
-     */
-    signIn({ user }) {
-      return isEmailAllowed(user.email);
-    },
+    // O gate de whitelist (signIn) vive no `auth.ts` (Node), não aqui, porque
+    // lê o DB (`pending_invites`/`users.allowed`) — ADR 0009. Este config é
+    // edge-safe e NÃO pode importar DB. O middleware só usa authorized/jwt/
+    // session, então a ausência do signIn aqui é segura.
     /** Gate do middleware: exige sessão pra qualquer rota protegida. */
     authorized({ auth }) {
       return !!auth?.user;

@@ -67,6 +67,19 @@ export const users = pgTable("users", {
   createdAt: timestamp({ withTimezone: true }).notNull().defaultNow(),
 });
 
+// Whitelist em DB (ADR 0009, emenda o 0007). O DrizzleAdapter só cria uma row em
+// `users` no primeiro login, então `users.allowed` não cobre convidados que
+// ainda NÃO logaram — `pending_invites` guarda esses e-mails autorizados. O
+// e-mail é a PK (de-dup natural; sempre gravado trimmed+lowercased na query
+// layer). `invitedByUserId` é set null no delete do inviter pro convite
+// sobreviver; `note` é livre pra futura UI de convites (#52).
+export const pendingInvites = pgTable("pending_invites", {
+  email: text().primaryKey(),
+  invitedByUserId: uuid().references(() => users.id, { onDelete: "set null" }),
+  note: text(),
+  createdAt: timestamp({ withTimezone: true }).notNull().defaultNow(),
+});
+
 // ─── Tabelas do adapter Auth.js v5 ───────────────────────────────────────────
 // Criadas para satisfazer o contrato do DrizzleAdapter. Com session.strategy
 // "jwt", `sessions`/`accounts` ficam inativas (prontas pra futuro OAuth /

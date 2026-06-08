@@ -13,7 +13,8 @@
     "db:migrate": "drizzle-kit migrate",
     "db:studio": "drizzle-kit studio",
     "db:seed": "tsx db/seed.ts",
-    "db:claim-admin": "tsx db/scripts/claim-admin.ts"
+    "db:claim-admin": "tsx db/scripts/claim-admin.ts",
+    "db:seed-invites": "tsx db/scripts/seed-invites.ts"
   },
   "dependencies": {
     "@anthropic-ai/sdk": "^0.95.2",

@@ -1,3 +1,6 @@
+import { readFileSync } from "node:fs";
+import { join } from "node:path";
+
 import { describe, expect, it } from "vitest";
 
 // IMPORTANTE: importa SÓ o config edge (`@/auth.config`). NÃO importar `@/auth`,
@@ -38,5 +41,30 @@ describe("auth.config (edge) — guarda MissingAdapter", () => {
       .filter((type): type is string => type !== undefined && ADAPTER_REQUIRING_TYPES.has(type));
 
     expect(offendingTypes).toEqual([]);
+  });
+});
+
+/**
+ * Guarda da fronteira DB-in-edge (ADR 0009).
+ *
+ * O signIn DB-aware (whitelist em tabela) lê o DB e vive SÓ no `auth.ts` (Node).
+ * Se um refactor re-adicionasse um signIn DB-backed — ou qualquer import de
+ * `@/lib/db` / `whitelist-db` — ao `auth.config.ts` edge, o cliente Neon entraria
+ * no bundle do middleware: compila, passa todos os testes atuais, e só quebra em
+ * runtime no edge (a mesma classe de outage que o teste MissingAdapter acima
+ * previne). Estes asserts travam essa fronteira.
+ */
+describe("auth.config (edge) — guarda DB-in-edge (ADR 0009)", () => {
+  it("não define o callback signIn no config edge (o DB-aware vive no auth.ts Node)", () => {
+    // `satisfies NextAuthConfig` dá a `callbacks` um tipo literal sem a chave
+    // `signIn`; checamos a ausência pela lista de chaves (type-safe).
+    expect(Object.keys(authConfig.callbacks ?? {})).not.toContain("signIn");
+  });
+
+  it("não importa código de DB (whitelist-db / @/lib/db)", () => {
+    // vitest roda na raiz do repo; o config edge vive em ./auth.config.ts.
+    const source = readFileSync(join(process.cwd(), "auth.config.ts"), "utf8");
+    expect(source).not.toMatch(/whitelist-db/);
+    expect(source).not.toMatch(/@\/lib\/db/);
   });
 });
