@@ -32,12 +32,31 @@ export const authConfig = {
     authorized({ auth }) {
       return !!auth?.user;
     },
-    /** Carimba id/role no JWT no momento do sign-in. */
-    jwt({ token, user }) {
+    /** Carimba id/role no JWT no sign-in; aplica edição de perfil no update. */
+    jwt({ token, user, trigger, session }) {
       if (user) {
         token.id = user.id;
         // role vem da row do usuário (via adapter) no sign-in.
         token.role = (user as { role?: "admin" | "user" }).role ?? "user";
+      }
+      // Edição de perfil (app/actions/profile.ts → unstable_update): reemite o
+      // token com nome/avatar novos sem exigir novo login. `session` é o dado
+      // passado ao update (tipo `any`) — validar a forma antes de usar. Continua
+      // edge-safe: sem ida ao DB. `image` mapeia pra `token.picture` (convenção
+      // do Auth.js → vira `session.user.image`).
+      if (
+        trigger === "update" &&
+        session &&
+        typeof session === "object" &&
+        "user" in session
+      ) {
+        const next = (session as { user?: { name?: unknown; image?: unknown } })
+          .user;
+        if (next) {
+          if (typeof next.name === "string") token.name = next.name;
+          if (typeof next.image === "string") token.picture = next.image;
+          else if (next.image === null) token.picture = null;
+        }
       }
       return token;
     },

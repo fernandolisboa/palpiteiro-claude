@@ -46,10 +46,18 @@ export async function DesktopShell({ children }: { children: ReactNode }) {
         <div className="flex items-center gap-3">
           {label && (
             <>
-              <div className="flex items-center gap-2">
-                <TeamAvatar initials={initialsFrom(label)} hue={258} size={26} />
+              <Link
+                href="/perfil"
+                className="flex items-center gap-2 transition-opacity hover:opacity-80"
+              >
+                <TeamAvatar
+                  initials={initialsFrom(label)}
+                  hue={258}
+                  size={26}
+                  src={user?.image ?? null}
+                />
                 <span className="text-[12.5px] tracking-tight">{label}</span>
-              </div>
+              </Link>
               <Separator orientation="vertical" className="!h-4" />
               <form
                 action={async () => {
