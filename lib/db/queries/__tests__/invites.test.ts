@@ -8,6 +8,8 @@ const h = vi.hoisted(() => {
     selectResults: [] as unknown[][],
     selectCallIndex: 0,
     whereArgs: [] as unknown[],
+    orderByArg: undefined as unknown,
+    listResult: [] as unknown[],
   };
   return {
     state,
@@ -25,6 +27,7 @@ const h = vi.hoisted(() => {
 vi.mock("drizzle-orm", () => ({
   eq: (col: unknown, val: unknown) => ({ op: "eq", col, val }),
   and: (...conds: unknown[]) => ({ op: "and", conds }),
+  desc: (col: unknown) => ({ op: "desc", col }),
 }));
 
 // Stub do db: select().from().where().limit() resolve a próxima entrada de
@@ -42,6 +45,10 @@ vi.mock("@/lib/db", () => {
             return Promise.resolve(rows);
           }),
         };
+      }),
+      orderBy: vi.fn((order: unknown) => {
+        h.state.orderByArg = order;
+        return Promise.resolve(h.state.listResult ?? []);
       }),
     })),
   }));
@@ -72,6 +79,7 @@ vi.mock("@/lib/db", () => {
 import {
   addPendingInvite,
   isEmailWhitelistedInDb,
+  listPendingInvites,
   promoteInvitedUserOnLogin,
   removePendingInvite,
 } from "@/lib/db/queries/invites";
@@ -101,6 +109,8 @@ beforeEach(() => {
   h.state.selectResults = [];
   h.state.selectCallIndex = 0;
   h.state.whereArgs.length = 0;
+  h.state.orderByArg = undefined;
+  h.state.listResult = [];
   batchMock.mockClear();
   updateSetWhere.mockClear();
   deleteWhere.mockClear();
@@ -190,5 +200,33 @@ describe("removePendingInvite", () => {
     await removePendingInvite("  A@B.COM ");
     expect(deleteWhere).toHaveBeenCalledTimes(1);
     expect(capturedEqValues()).toContain("a@b.com");
+  });
+});
+
+describe("listPendingInvites — convites pendentes, mais recentes primeiro", () => {
+  it("retorna as rows da query stubada", async () => {
+    const rows = [
+      {
+        email: "a@b.com",
+        note: null,
+        invitedByUserId: "u1",
+        createdAt: new Date(),
+      },
+      {
+        email: "c@d.com",
+        note: "amigo",
+        invitedByUserId: null,
+        createdAt: new Date(),
+      },
+    ];
+    h.state.listResult = rows;
+    await expect(listPendingInvites()).resolves.toEqual(rows);
+  });
+
+  it("ordena por createdAt DESC (orderBy recebe um desc())", async () => {
+    h.state.listResult = [];
+    await listPendingInvites();
+    const order = h.state.orderByArg as { op?: string } | undefined;
+    expect(order?.op).toBe("desc");
   });
 });
