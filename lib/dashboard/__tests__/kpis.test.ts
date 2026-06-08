@@ -75,6 +75,63 @@ describe("computeDashboardKpis", () => {
     expect(k.yield.n).toBe(2);
   });
 
+  it("excludes a real bet that was annulled (void) from the yield denominator", () => {
+    const base: DashboardRow[] = [
+      settled("won", "0.92", { oddAtRecommendation: "1.92" }),
+      settled("lost", "-1.00"),
+    ];
+    // A real over/under bet (non-pass) annulled to void via admin override:
+    // keeps its stake + entry odd but profit 0.
+    const withVoid: DashboardRow[] = [
+      ...base,
+      settled("void", "0", { recommendation: "over", oddAtRecommendation: "1.95" }),
+    ];
+    const k = computeDashboardKpis(withVoid);
+    const baseK = computeDashboardKpis(base);
+    expect(k.stakedUnits).toBeCloseTo(2, 5); // void stake NOT in denominator
+    expect(k.yield.value).toBeCloseTo(-4, 5);
+    expect(k.yield.n).toBe(2); // void not counted in sample size
+    // void must not move the yield at all
+    expect(k.yield.value).toBeCloseTo(baseK.yield.value!, 5);
+    expect(k.stakedUnits).toBeCloseTo(baseK.stakedUnits, 5);
+    expect(k.yield.n).toBe(baseK.yield.n);
+    // void IS still a settled void in the counts (visibility unchanged)
+    expect(k.void).toBe(1);
+    expect(k.settled).toBe(3);
+  });
+
+  it("yields null for a wallet of only settled void real bets (zero denominator)", () => {
+    // All real (non-pass) bets annulled to void: won/lost set is empty, so the
+    // yield denominator is 0. Must report null/0 and never divide by zero.
+    const rows = [
+      settled("void", "0", { recommendation: "over", oddAtRecommendation: "1.95" }),
+      settled("void", "0", { recommendation: "under", oddAtRecommendation: "2.10" }),
+    ];
+    const k = computeDashboardKpis(rows);
+    expect(k.yield.value).toBeNull();
+    expect(k.yield.n).toBe(0);
+    expect(k.stakedUnits).toBe(0);
+    expect(k.void).toBe(2);
+    expect(k.settled).toBe(2);
+  });
+
+  it("yield numerator reflects only won/lost, even when a profitable void is present", () => {
+    // Guard against the numerator silently summing over void: a void carrying a
+    // nonzero profitUnits (settlement-invariant violation) must NOT move yield.
+    const wonLost = [
+      settled("won", "0.92", { oddAtRecommendation: "1.92" }),
+      settled("lost", "-1.00"),
+    ];
+    const withDirtyVoid = [
+      ...wonLost,
+      settled("void", "5.00", { recommendation: "over", oddAtRecommendation: "1.95" }),
+    ];
+    const baseK = computeDashboardKpis(wonLost);
+    const k = computeDashboardKpis(withDirtyVoid);
+    expect(k.yield.value).toBeCloseTo(baseK.yield.value!, 5);
+    expect(k.yield.n).toBe(baseK.yield.n);
+  });
+
   it("excludes void from win rate denominator", () => {
     const rows = [
       settled("won", "1"),
