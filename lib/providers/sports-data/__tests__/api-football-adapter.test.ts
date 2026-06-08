@@ -1,5 +1,6 @@
 import { describe, expect, it, vi } from "vitest";
 
+import { inMemoryCache } from "@/lib/cache/in-memory";
 import { ApiFootballAdapter, __testing } from "@/lib/providers/sports-data/api-football/adapter";
 import {
   ApiFootballHttpError,
@@ -638,5 +639,89 @@ describe("ApiFootballAdapter — World Cup injuries are Unsupported", () => {
     await expect(a.getInjuriesByTeam("Brazil", "world_cup")).rejects.toThrow(
       SportsDataUnsupportedError,
     );
+  });
+});
+
+describe("ApiFootballAdapter.getInjuriesByFixture — logs WARN when fixture not matched", () => {
+  const ref: FixtureRef = {
+    league: "brasileirao_a",
+    kickoffAt: "2026-05-15T19:00:00.000Z",
+    homeTeam: "Flamengo",
+    awayTeam: "Fluminense FC",
+  };
+
+  it("emits injuries_fixture_not_matched and returns empty arrays", async () => {
+    const a = new ApiFootballAdapter();
+    // getFixtureByMatch returning undefined simulates canonicalization drift
+    // (provider name unmapped) — the line-867 silent-return path.
+    vi.spyOn(a, "getFixtureByMatch").mockResolvedValue(undefined);
+    const warnSpy = vi.spyOn(console, "warn").mockImplementation(() => {});
+
+    const result = await a.getInjuriesByFixture(ref);
+
+    expect(result).toEqual({ home: [], away: [] });
+    expect(warnSpy).toHaveBeenCalledTimes(1);
+    const payload = JSON.parse(warnSpy.mock.calls[0]![0] as string);
+    expect(payload).toEqual({
+      event: "injuries_fixture_not_matched",
+      league: "brasileirao_a",
+      kickoffAt: "2026-05-15T19:00:00.000Z",
+      homeTeam: "Flamengo",
+      awayTeam: "Fluminense FC",
+    });
+
+    warnSpy.mockRestore();
+    vi.restoreAllMocks();
+  });
+
+  it("emits injuries_fixture_not_matched when the raw re-match misses", async () => {
+    // Path 2 (adapter line ~896): getFixtureByMatch succeeds, but the raw
+    // getFixturesByDate result has no fixture whose canonicalized team names
+    // equal ref.homeTeam/ref.awayTeam, so the native id re-find returns
+    // undefined. This is a distinct emission from path 1 — the two log blocks
+    // are duplicated inline, so it needs its own coverage.
+    //
+    // We can't spy on the bare module-level getFixturesByDate the adapter calls
+    // internally (ESM same-module binding), so we seed inMemoryCache: the free
+    // getFixturesByDate hits the cache first and returns our raw envelope
+    // without any HTTP/API key. The clock is pinned so currentSeason (and thus
+    // the cache key) is deterministic.
+    vi.useFakeTimers();
+    vi.setSystemTime(new Date("2026-06-08T12:00:00.000Z")); // month 6 → season 2026
+    const season = 2026;
+    const cacheKey = `api-football:fixtures:date:2026-05-15:league:71:season:${season}`;
+    // Raw fixture whose teams canonicalize to names that do NOT equal the ref,
+    // so native.find(...) misses and we fall into the line-896 guard.
+    const mismatchedRaw = makeFixture({
+      teams: {
+        home: { id: 99, name: "Some Other FC", winner: null },
+        away: { id: 98, name: "Another Other FC", winner: null },
+      },
+    });
+    await inMemoryCache.set(cacheKey, { response: [mismatchedRaw] }, 60_000);
+
+    const a = new ApiFootballAdapter();
+    vi.spyOn(a, "getFixtureByMatch").mockResolvedValue(
+      toNormalizedFixture(makeFixture(), "brasileirao_a"),
+    );
+    const warnSpy = vi.spyOn(console, "warn").mockImplementation(() => {});
+
+    const result = await a.getInjuriesByFixture(ref);
+
+    expect(result).toEqual({ home: [], away: [] });
+    expect(warnSpy).toHaveBeenCalledTimes(1);
+    const payload = JSON.parse(warnSpy.mock.calls[0]![0] as string);
+    expect(payload).toEqual({
+      event: "injuries_fixture_not_matched",
+      league: "brasileirao_a",
+      kickoffAt: "2026-05-15T19:00:00.000Z",
+      homeTeam: "Flamengo",
+      awayTeam: "Fluminense FC",
+    });
+
+    await inMemoryCache.delete(cacheKey);
+    warnSpy.mockRestore();
+    vi.restoreAllMocks();
+    vi.useRealTimers();
   });
 });

@@ -864,7 +864,18 @@ export class ApiFootballAdapter implements SportsDataProvider {
     }
     try {
       const fixture = await this.getFixtureByMatch(ref);
-      if (!fixture) return { home: [], away: [] };
+      if (!fixture) {
+        console.warn(
+          JSON.stringify({
+            event: "injuries_fixture_not_matched",
+            league: ref.league,
+            kickoffAt: ref.kickoffAt,
+            homeTeam: ref.homeTeam,
+            awayTeam: ref.awayTeam,
+          }),
+        );
+        return { home: [], away: [] };
+      }
       // We need the API-Football fixture ID, but getFixtureByMatch went
       // through normalization which discarded it. Fetch the raw fixture by
       // (date, league) and pull the native id by team name match.
@@ -882,7 +893,18 @@ export class ApiFootballAdapter implements SportsDataProvider {
           canonicalizeOrPassthrough(f.teams.away.name, ref.league) ===
             ref.awayTeam,
       );
-      if (!match) return { home: [], away: [] };
+      if (!match) {
+        console.warn(
+          JSON.stringify({
+            event: "injuries_fixture_not_matched",
+            league: ref.league,
+            kickoffAt: ref.kickoffAt,
+            homeTeam: ref.homeTeam,
+            awayTeam: ref.awayTeam,
+          }),
+        );
+        return { home: [], away: [] };
+      }
       const injuries = await getInjuries({ fixtureId: match.fixture.id });
       const home: NormalizedInjury[] = [];
       const away: NormalizedInjury[] = [];
