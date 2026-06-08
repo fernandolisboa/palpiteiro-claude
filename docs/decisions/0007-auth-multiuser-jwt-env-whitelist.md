@@ -35,6 +35,11 @@ DB exigiria pré-provisionar rows. Para o MVP isso é complexidade desnecessári
    `auth.ts` (Node, com DrizzleAdapter). `id`/`role` são expostos via callbacks
    `jwt`/`session`. As tabelas `sessions`/`accounts` são criadas para satisfazer
    o contrato do adapter (e futuro OAuth), mas ficam inativas sob JWT.
+   Providers que exigem adapter (type `"email"`/`"webauthn"`, como o Resend) NÃO
+   podem morar no `auth.config.ts` edge — ficam só no `auth.ts` junto do adapter.
+   O `assertConfig` do @auth/core exige adapter pra qualquer provider de email em
+   TODA invocação de `Auth()` (inclusive a leitura de sessão do middleware); sem
+   ele dispara `MissingAdapter` e derruba toda rota protegida.
 
 3. **Claim do dev user in-place** — em prod a row `DEV_USER_ID` é renomeada
    (mesmo UUID) pro e-mail/nome real via `db/scripts/claim-admin.ts`, rodado uma
