@@ -2,12 +2,16 @@
 // e pricing de modelo — nada de strings de modelo soltas espalhadas pelo código
 // (CLAUDE.md). Cada consumidor (predict, cost, UI, server actions) resolve daqui.
 //
-// `thinkingMode` codifica a divergência crítica da API Anthropic: Opus 4.8 usa
-// ADAPTIVE THINKING e REJEITA (400) `temperature`/`top_p`/`top_k`; Sonnet 4.5
-// ACEITA `temperature`. A construção da request é model-aware em
+// `thinkingMode` codifica a divergência crítica da API Anthropic: Opus 4.8 e
+// Sonnet 4.6 usam ADAPTIVE THINKING (Opus 4.8 inclusive REJEITA 400 em
+// `temperature`/`top_p`/`top_k`); Sonnet 4.5 não tem adaptive thinking e roda
+// com `temperature`. A construção da request é model-aware em
 // lib/ai/request-builder.ts a partir deste campo.
 
-export type AIModelId = "claude-opus-4-8" | "claude-sonnet-4-5-20250929";
+export type AIModelId =
+  | "claude-opus-4-8"
+  | "claude-sonnet-4-6"
+  | "claude-sonnet-4-5-20250929";
 
 export type AIModel = {
   id: AIModelId;
@@ -27,6 +31,15 @@ export const MODEL_REGISTRY: Record<AIModelId, AIModel> = {
     label: "Opus 4.8",
     inputPricePerMTok: 5,
     outputPricePerMTok: 25,
+    thinkingMode: "adaptive",
+  },
+  "claude-sonnet-4-6": {
+    id: "claude-sonnet-4-6",
+    label: "Sonnet 4.6",
+    inputPricePerMTok: 3,
+    outputPricePerMTok: 15,
+    // Sonnet 4.6 suporta adaptive thinking (recomendado pela Anthropic) — reusa
+    // o mesmo caminho do Opus 4.8 no request-builder, sem `temperature`.
     thinkingMode: "adaptive",
   },
   "claude-sonnet-4-5-20250929": {

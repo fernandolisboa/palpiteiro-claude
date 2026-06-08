@@ -16,7 +16,9 @@ import {
   MatchSectionsSkeleton,
 } from "@/components/skeletons/match-sections-skeleton";
 import { auth } from "@/auth";
+import { MODEL_REGISTRY } from "@/lib/ai/models";
 import { LEAGUE_LABEL, leagueToKey } from "@/lib/format";
+import { getDefaultModelId } from "@/lib/db/queries/ai-config";
 import { getMatchById } from "@/lib/db/queries/matches";
 import { getLatestPredictionForMatch } from "@/lib/db/queries/predictions";
 import { ensureOddsSnapshotsFresh } from "@/lib/odds/fetch-and-snapshot";
@@ -41,10 +43,12 @@ export default async function MatchPage({ params }: PageProps) {
 
   // Odds e predição existente em paralelo. Ambas são pré-requisito pro
   // render síncrono do hero + odds + panel (não vão pra Suspense).
-  const [snapshot, latestPred] = await Promise.all([
+  const [snapshot, latestPred, defaultModelId] = await Promise.all([
     ensureOddsSnapshotsFresh(match),
     getLatestPredictionForMatch(match.id, session.user.id),
+    getDefaultModelId(),
   ]);
+  const defaultModelLabel = MODEL_REGISTRY[defaultModelId].label;
 
   const heroView = toMatchRowView({
     match: {
@@ -113,6 +117,7 @@ export default async function MatchPage({ params }: PageProps) {
           leagueKey={leagueKey}
           oddsAvailable={oddsAvailable}
           isAdmin={isAdmin}
+          defaultModelLabel={defaultModelLabel}
         />
       </div>
       <div className="hidden lg:block">
@@ -125,6 +130,7 @@ export default async function MatchPage({ params }: PageProps) {
           leagueKey={leagueKey}
           oddsAvailable={oddsAvailable}
           isAdmin={isAdmin}
+          defaultModelLabel={defaultModelLabel}
         />
       </div>
     </>
@@ -140,6 +146,7 @@ type Common = {
   leagueKey: ReturnType<typeof leagueToKey>;
   oddsAvailable: boolean;
   isAdmin: boolean;
+  defaultModelLabel: string;
 };
 
 function MobileMatch({
@@ -151,6 +158,7 @@ function MobileMatch({
   leagueKey,
   oddsAvailable,
   isAdmin,
+  defaultModelLabel,
 }: Common) {
   return (
     <div className="min-h-screen bg-background text-foreground">
@@ -179,6 +187,7 @@ function MobileMatch({
           existing={analysisExisting}
           oddsAvailable={oddsAvailable}
           isAdmin={isAdmin}
+          defaultModelLabel={defaultModelLabel}
         />
         <Suspense fallback={<MatchSectionsSkeleton />}>
           <MatchSections fixtureRef={fixtureRef} leagueKey={leagueKey} />
@@ -200,6 +209,7 @@ function DesktopMatch({
   leagueKey,
   oddsAvailable,
   isAdmin,
+  defaultModelLabel,
 }: Common) {
   return (
     <DesktopShell>
@@ -280,6 +290,7 @@ function DesktopMatch({
             existing={analysisExisting}
             oddsAvailable={oddsAvailable}
             isAdmin={isAdmin}
+            defaultModelLabel={defaultModelLabel}
           />
         </div>
 

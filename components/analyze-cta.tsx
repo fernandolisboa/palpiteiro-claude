@@ -7,17 +7,28 @@ import { cn } from "@/lib/utils";
 
 type Props = {
   pending: boolean;
+  // Modelo que a análise vai REALMENTE usar (override do admin ou default
+  // global), resolvido pelo AnalysisPanel. Mantém o passo "gerando análise (…)"
+  // honesto — antes era um literal stale fixo em claude-sonnet-4.5, alheio à
+  // seleção. Opcional: no estado não-pending nenhum passo é renderizado.
+  modelLabel?: string;
 };
 
-const STEPS = [
-  { label: "coletando contexto do jogo", status: "done" as const },
-  { label: "normalizando odds + overround", status: "done" as const },
-  { label: "gerando análise (claude-sonnet-4.5)", status: "active" as const },
-  { label: "validando schema + persistindo", status: "pending" as const },
-];
+function buildSteps(modelLabel?: string) {
+  return [
+    { label: "coletando contexto do jogo", status: "done" as const },
+    { label: "normalizando odds + overround", status: "done" as const },
+    {
+      label: modelLabel ? `gerando análise (${modelLabel})` : "gerando análise",
+      status: "active" as const,
+    },
+    { label: "validando schema + persistindo", status: "pending" as const },
+  ];
+}
 
-export function AnalyzeCTA({ pending }: Props) {
+export function AnalyzeCTA({ pending, modelLabel }: Props) {
   if (pending) {
+    const steps = buildSteps(modelLabel);
     return (
       <Card className="gap-0 p-0">
         <div className="flex items-center gap-3 px-4 py-4">
@@ -35,7 +46,7 @@ export function AnalyzeCTA({ pending }: Props) {
         </div>
         <Separator />
         <div className="flex flex-col gap-2 px-4 py-3">
-          {STEPS.map((s, i) => (
+          {steps.map((s, i) => (
             <div key={i} className="flex items-center gap-2 font-mono text-[10.5px]">
               <span
                 className={cn(
