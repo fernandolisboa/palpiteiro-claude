@@ -120,16 +120,18 @@ describe("analyzeMatch", () => {
   it("rejects a rate-limited request without calling predict (no Anthropic cost)", async () => {
     mockAuth.mockResolvedValue(SESSION);
     mockUserExists.mockResolvedValue(true);
+    // limit:7 (não o default 20) prova que a mensagem é interpolada do limite
+    // retornado pelo gate, não um "20" hardcoded.
     mockRateLimit.mockResolvedValue({
       ok: false,
-      limit: 20,
+      limit: 7,
       remaining: 0,
       reset: 0,
     });
     const res = await analyzeMatch(null, form({ matchId: VALID_MATCH_ID }));
     expect(res).toEqual({
       ok: false,
-      error: "Você atingiu o limite de 20 análises por dia. Tente novamente amanhã.",
+      error: "Você atingiu o limite de 7 análises por dia. Tente novamente amanhã.",
     });
     expect(mockPredict).not.toHaveBeenCalled();
   });
@@ -141,6 +143,16 @@ describe("analyzeMatch", () => {
     mockGetAiCall.mockResolvedValue({ costUsd: "0.01" } as never);
     await analyzeMatch(null, form({ matchId: VALID_MATCH_ID }));
     expect(mockRateLimit).toHaveBeenCalledWith("u2", "user");
+    expect(mockPredict).toHaveBeenCalled();
+  });
+
+  it("forwards an admin session's role to the rate-limit gate (admin tier)", async () => {
+    mockAuth.mockResolvedValue(SESSION);
+    mockUserExists.mockResolvedValue(true);
+    mockPredict.mockResolvedValue(PREDICTION);
+    mockGetAiCall.mockResolvedValue({ costUsd: "0.01" } as never);
+    await analyzeMatch(null, form({ matchId: VALID_MATCH_ID }));
+    expect(mockRateLimit).toHaveBeenCalledWith("u1", "admin");
     expect(mockPredict).toHaveBeenCalled();
   });
 });
