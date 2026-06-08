@@ -46,10 +46,10 @@ vi.mock("@/lib/db", () => {
     })),
   }));
   const update = vi.fn(() => ({
-    set: vi.fn(() => ({
+    set: vi.fn((values: unknown) => ({
       where: vi.fn((cond: unknown) => {
         h.updateSetWhere(cond);
-        return { kind: "update", cond };
+        return { kind: "update", cond, set: values };
       }),
     })),
   }));
@@ -142,7 +142,10 @@ describe("promoteInvitedUserOnLogin — allowed=true + delete no mesmo batch", (
   it("com e-mail: db.batch chamado 1x com array de 2 statements (update + delete)", async () => {
     await promoteInvitedUserOnLogin({ id: "u1", email: "a@b.com" });
     expect(batchMock).toHaveBeenCalledTimes(1);
-    const arg = batchMock.mock.calls[0]![0] as Array<{ kind: string }>;
+    const arg = batchMock.mock.calls[0]![0] as Array<{
+      kind: string;
+      set?: unknown;
+    }>;
     expect(Array.isArray(arg)).toBe(true);
     expect(arg).toHaveLength(2);
     // o batch contém AMBOS: o update (allowed=true) E o delete (do convite),
@@ -150,6 +153,10 @@ describe("promoteInvitedUserOnLogin — allowed=true + delete no mesmo batch", (
     const kinds = arg.map((s) => s.kind);
     expect(kinds).toContain("update");
     expect(kinds).toContain("delete");
+    // o update efetivamente seta allowed=true (não false) — sem isto o teste
+    // não distinguiria set({ allowed: true }) de set({ allowed: false }).
+    const updateStmt = arg.find((s) => s.kind === "update");
+    expect(updateStmt?.set).toEqual({ allowed: true });
     // o delete usa o e-mail normalizado
     expect(capturedEqValues()).toContain("a@b.com");
   });
