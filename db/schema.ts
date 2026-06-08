@@ -1,3 +1,4 @@
+import type { AdapterAccountType } from "next-auth/adapters";
 import {
   boolean,
   index,
@@ -6,6 +7,7 @@ import {
   numeric,
   pgEnum,
   pgTable,
+  primaryKey,
   text,
   timestamp,
   uuid,
@@ -58,8 +60,57 @@ export const users = pgTable("users", {
   name: text(),
   role: userRoleEnum().notNull().default("user"),
   allowed: boolean().notNull().default(false),
+  // Colunas exigidas pelo adapter do Auth.js v5 (@auth/drizzle-adapter).
+  // Aditivas e nullable — não afetam os FKs existentes.
+  emailVerified: timestamp({ withTimezone: true, mode: "date" }),
+  image: text(),
   createdAt: timestamp({ withTimezone: true }).notNull().defaultNow(),
 });
+
+// ─── Tabelas do adapter Auth.js v5 ───────────────────────────────────────────
+// Criadas para satisfazer o contrato do DrizzleAdapter. Com session.strategy
+// "jwt", `sessions`/`accounts` ficam inativas (prontas pra futuro OAuth /
+// DB-sessions); `verification_tokens` é usada no fluxo de magic link.
+
+export const accounts = pgTable(
+  "accounts",
+  {
+    userId: uuid()
+      .notNull()
+      .references(() => users.id, { onDelete: "cascade" }),
+    type: text().$type<AdapterAccountType>().notNull(),
+    provider: text().notNull(),
+    providerAccountId: text().notNull(),
+    refresh_token: text(),
+    access_token: text(),
+    expires_at: integer(),
+    token_type: text(),
+    scope: text(),
+    id_token: text(),
+    session_state: text(),
+  },
+  (t) => [
+    primaryKey({ columns: [t.provider, t.providerAccountId] }),
+  ],
+);
+
+export const sessions = pgTable("sessions", {
+  sessionToken: text().primaryKey(),
+  userId: uuid()
+    .notNull()
+    .references(() => users.id, { onDelete: "cascade" }),
+  expires: timestamp({ withTimezone: true, mode: "date" }).notNull(),
+});
+
+export const verificationTokens = pgTable(
+  "verification_tokens",
+  {
+    identifier: text().notNull(),
+    token: text().notNull(),
+    expires: timestamp({ withTimezone: true, mode: "date" }).notNull(),
+  },
+  (t) => [primaryKey({ columns: [t.identifier, t.token] })],
+);
 
 export const matches = pgTable(
   "matches",

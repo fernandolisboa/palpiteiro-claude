@@ -1,9 +1,8 @@
-import { beforeEach, describe, expect, it, vi } from "vitest";
+import { beforeEach, describe, expect, it, vi, type Mock } from "vitest";
+import type { Session } from "next-auth";
 
 vi.mock("next/cache", () => ({ revalidatePath: vi.fn() }));
-vi.mock("@/lib/db/queries/ensure-dev-user", () => ({
-  ensureDevUser: vi.fn(),
-}));
+vi.mock("@/auth", () => ({ auth: vi.fn() }));
 vi.mock("@/lib/db/queries/predictions", () => ({
   getPredictionForOverride: vi.fn(),
 }));
@@ -12,11 +11,19 @@ vi.mock("@/lib/db/queries/prediction-outcomes", () => ({
 }));
 
 import { overridePredictionOutcome } from "@/app/actions/settlement";
+import { auth } from "@/auth";
 import { getPredictionForOverride } from "@/lib/db/queries/predictions";
 import { upsertOutcomeOverride } from "@/lib/db/queries/prediction-outcomes";
 
+// `auth` é um tipo sobrecarregado (também serve de middleware); estreitamos pro
+// uso como `auth()` -> Promise<Session | null> pra tipar o mock.
+const mockAuth = auth as unknown as Mock<() => Promise<Session | null>>;
 const getRow = vi.mocked(getPredictionForOverride);
 const upsert = vi.mocked(upsertOutcomeOverride);
+
+const session = (role: "admin" | "user"): Session =>
+  ({ user: { id: `u-${role}`, role }, expires: "" }) as unknown as Session;
+const adminSession = session("admin");
 
 function row(oddAtRecommendation: string | null, stakeUnits = "1") {
   return {
@@ -35,9 +42,34 @@ function form(fields: Record<string, string>): FormData {
 beforeEach(() => {
   getRow.mockReset();
   upsert.mockReset();
+  mockAuth.mockReset();
+  // Default: authenticated admin. Individual tests override for auth cases.
+  mockAuth.mockResolvedValue(adminSession);
 });
 
 describe("overridePredictionOutcome", () => {
+  it("rejects when there is no session (unauthenticated)", async () => {
+    mockAuth.mockResolvedValue(null);
+    const res = await overridePredictionOutcome(
+      null,
+      form({ predictionId: "p1", result: "won", homeScore: "2", awayScore: "1" }),
+    );
+    expect(res).toMatchObject({ ok: false });
+    expect(getRow).not.toHaveBeenCalled();
+    expect(upsert).not.toHaveBeenCalled();
+  });
+
+  it("rejects a non-admin session", async () => {
+    mockAuth.mockResolvedValue(session("user"));
+    const res = await overridePredictionOutcome(
+      null,
+      form({ predictionId: "p1", result: "won", homeScore: "2", awayScore: "1" }),
+    );
+    expect(res).toMatchObject({ ok: false });
+    expect(getRow).not.toHaveBeenCalled();
+    expect(upsert).not.toHaveBeenCalled();
+  });
+
   it("rejects an absent score before any DB write (no fabricated 0-0)", async () => {
     const res = await overridePredictionOutcome(
       null,

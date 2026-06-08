@@ -11,7 +11,7 @@ import { PageHeader } from "@/components/page-header";
 import { RecentPredCard } from "@/components/recent-pred-card";
 import { SectionLabel } from "@/components/section-label";
 import { TeamAvatar } from "@/components/team-avatar";
-import { DEV_USER_ID } from "@/lib/auth/dev-user";
+import { auth } from "@/auth";
 import {
   DEFAULT_LEAGUE_FILTER,
   LIST_WINDOW_HOURS,
@@ -57,6 +57,11 @@ export default async function HomePage({ searchParams }: PageProps) {
   const league = parsed === "all" ? DEFAULT_LEAGUE_FILTER : parsed;
   if (!isActiveLeagueFilter(league)) redirect("/");
 
+  // Middleware garante sessão; redirect defensivo caso o matcher mude.
+  const session = await auth();
+  if (!session?.user?.id) redirect("/signin");
+  const userId = session.user.id;
+
   let dbMatches = await getUpcomingMatches({
     windowHours: LIST_WINDOW_HOURS,
     league: filterToLeague(league),
@@ -87,9 +92,9 @@ export default async function HomePage({ searchParams }: PageProps) {
     getLatestOddsSnapshotsForMatches(matchIds),
     getMatchIdsWithPredictionsByUser({
       matchIds,
-      userId: DEV_USER_ID,
+      userId,
     }),
-    getRecentPredictionsByUser(DEV_USER_ID, RECENT_LIMIT),
+    getRecentPredictionsByUser(userId, RECENT_LIMIT),
   ]);
 
   const now = new Date();

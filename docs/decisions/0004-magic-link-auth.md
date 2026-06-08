@@ -1,7 +1,9 @@
 # ADR 0004 — Auth.js v5 com magic link via e-mail
 
 ## Status
-Accepted (2026-05)
+Accepted (2026-05) — **emendado pelo ADR 0007**: o mecanismo de whitelist passou
+de tabela DB (`users.allowed_emails`) para env `ALLOWED_EMAILS` no MVP (#12). A
+escolha de Auth.js v5 + magic link via Resend permanece.
 
 ## Contexto
 
