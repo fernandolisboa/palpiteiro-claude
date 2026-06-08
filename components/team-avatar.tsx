@@ -10,6 +10,7 @@ type Props = {
 export function TeamAvatar({ initials, hue, size = 32, className }: Props) {
   return (
     <div
+      aria-hidden="true"
       className={cn(
         "inline-flex items-center justify-center rounded-full border border-border font-medium",
         className,
