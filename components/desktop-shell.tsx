@@ -1,3 +1,4 @@
+import Link from "next/link";
 import type { ReactNode } from "react";
 
 import { auth, signOut } from "@/auth";
@@ -18,13 +19,29 @@ export async function DesktopShell({ children }: { children: ReactNode }) {
   return (
     <div className="flex min-h-screen w-full flex-col bg-background text-foreground">
       <header className="flex h-14 items-center justify-between border-b border-border-subtle px-8">
-        <div className="flex items-baseline gap-3">
-          <span className="text-[17px] font-semibold tracking-[-0.04em]">
-            palpiteiro
-          </span>
-          <span className="font-mono text-[10px] uppercase tracking-[0.18em] text-muted-fg-2">
-            v0 · over/under 2.5
-          </span>
+        <div className="flex items-center gap-6">
+          <div className="flex items-baseline gap-3">
+            <span className="text-[17px] font-semibold tracking-[-0.04em]">
+              palpiteiro
+            </span>
+            <span className="hidden font-mono text-[10px] uppercase tracking-[0.18em] text-muted-fg-2 sm:inline">
+              v0 · over/under 2.5
+            </span>
+          </div>
+          <nav className="flex items-center gap-4">
+            <Link
+              href="/"
+              className="text-[12.5px] tracking-tight text-muted-foreground transition-colors hover:text-foreground"
+            >
+              jogos
+            </Link>
+            <Link
+              href="/dashboard"
+              className="text-[12.5px] tracking-tight text-muted-foreground transition-colors hover:text-foreground"
+            >
+              dashboard
+            </Link>
+          </nav>
         </div>
         <div className="flex items-center gap-3">
           {label && (
