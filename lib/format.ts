@@ -148,6 +148,20 @@ export function formatCostUsd(value: number | string | null | undefined): string
 }
 
 /**
+ * "$1.23" — 2 casas decimais com prefixo $. Para TOTAIS agregados (admin de
+ * custos #13), onde 2 casas leem melhor que as 3 do formatCostUsd por-linha.
+ * Aceita string (SUM numeric do Drizzle) ou number; null/NaN → "$0.00".
+ */
+export function formatCostUsdTotal(
+  value: number | string | null | undefined,
+): string {
+  if (value === null || value === undefined) return "$0.00";
+  const n = typeof value === "string" ? Number(value) : value;
+  if (!Number.isFinite(n)) return "$0.00";
+  return `$${n.toFixed(2)}`;
+}
+
+/**
  * "19 mai · 14:22" — formato do `generatedAt` no preview #33.
  */
 export function formatGeneratedAt(date: Date): string {

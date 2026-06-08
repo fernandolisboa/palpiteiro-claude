@@ -2,6 +2,7 @@ import { describe, expect, it } from "vitest";
 
 import {
   formatCostUsd,
+  formatCostUsdTotal,
   formatCountdown,
   formatEdge,
   formatGeneratedAt,
@@ -65,6 +66,22 @@ describe("formatCostUsd", () => {
   it("falls back to $0.000 for invalid input", () => {
     expect(formatCostUsd(null)).toBe("$0.000");
     expect(formatCostUsd("abc")).toBe("$0.000");
+  });
+});
+
+describe("formatCostUsdTotal", () => {
+  it("uses 2 decimals for aggregate totals ($X.XX)", () => {
+    expect(formatCostUsdTotal(1.234567)).toBe("$1.23");
+    expect(formatCostUsdTotal(0)).toBe("$0.00");
+  });
+  it("accepts string input (numeric SUM from Drizzle)", () => {
+    expect(formatCostUsdTotal("1.5")).toBe("$1.50");
+    expect(formatCostUsdTotal("0")).toBe("$0.00");
+  });
+  it("falls back to $0.00 for null/undefined/NaN", () => {
+    expect(formatCostUsdTotal(null)).toBe("$0.00");
+    expect(formatCostUsdTotal(undefined)).toBe("$0.00");
+    expect(formatCostUsdTotal("abc")).toBe("$0.00");
   });
 });
 
