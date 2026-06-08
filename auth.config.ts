@@ -53,9 +53,20 @@ export const authConfig = {
         const next = (session as { user?: { name?: unknown; image?: unknown } })
           .user;
         if (next) {
-          if (typeof next.name === "string") token.name = next.name;
-          if (typeof next.image === "string") token.picture = next.image;
-          else if (next.image === null) token.picture = null;
+          // Este callback é alcançável direto via POST /api/auth/session, fora
+          // da action — então espelha as constraints da validação (nome ≤ 80;
+          // avatar só http(s)) em vez de confiar no input.
+          if (typeof next.name === "string") {
+            token.name = next.name.slice(0, 80);
+          }
+          if (next.image === null) {
+            token.picture = null;
+          } else if (
+            typeof next.image === "string" &&
+            /^https?:\/\//i.test(next.image)
+          ) {
+            token.picture = next.image;
+          }
         }
       }
       return token;

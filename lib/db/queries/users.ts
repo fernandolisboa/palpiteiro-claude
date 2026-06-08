@@ -88,7 +88,7 @@ export async function getUserProfile(id: string): Promise<UserProfile | null> {
  */
 export async function updateUser(
   id: string,
-  data: { name: string; image: string | null },
+  data: { name: string; image: string | null }
 ): Promise<void> {
   await db
     .update(users)

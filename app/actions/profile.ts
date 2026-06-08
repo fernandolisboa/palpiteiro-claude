@@ -8,10 +8,12 @@ import { updateUser } from "@/lib/db/queries/users";
 
 export type UpdateProfileResult = { ok: boolean; error?: string };
 
-// Schemas locais (mesmo padrão de app/actions/invites.ts: trim manual antes do
-// safeParse, já que z.string()/z.url() não fazem trim).
+// Schemas locais. Trim manual antes do safeParse — mesma convenção de
+// app/actions/invites.ts, que apara antes do z.email() (z.string()/z.url() não
+// aparam). A URL do avatar é restrita a http(s): z.url() sozinho aceitaria
+// javascript:/data:/mailto: (não é XSS no <img>, mas o contrato é imagem http).
 const nameSchema = z.string().min(1).max(80);
-const urlSchema = z.url();
+const urlSchema = z.url({ protocol: /^https?$/ });
 
 export async function updateProfile(
   _prev: UpdateProfileResult | null,
@@ -43,8 +45,14 @@ export async function updateProfile(
   // Sessão é JWT: o token carrega name/picture desde o login e não revalida
   // contra o DB. Sem isto, o shell (que lê da sessão) mostraria o valor antigo
   // até o próximo login. `unstable_update` reemite o cookie pelo callback `jwt`
-  // (trigger "update"), refletindo o nome/avatar na hora.
-  await unstable_update({ user: { name, image } });
+  // (trigger "update"), refletindo o nome/avatar na hora. Best-effort: o DB já
+  // é a fonte da verdade, então uma falha de refresh não derruba o save (o
+  // revalidatePath puxa os valores novos no próximo render).
+  try {
+    await unstable_update({ user: { name, image } });
+  } catch {
+    // refresh best-effort; valor já persistido no DB.
+  }
 
   revalidatePath("/perfil");
   revalidatePath("/", "layout");

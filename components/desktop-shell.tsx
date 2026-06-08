@@ -48,6 +48,7 @@ export async function DesktopShell({ children }: { children: ReactNode }) {
             <>
               <Link
                 href="/perfil"
+                aria-label="Perfil"
                 className="flex items-center gap-2 transition-opacity hover:opacity-80"
               >
                 <TeamAvatar

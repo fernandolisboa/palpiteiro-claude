@@ -116,4 +116,31 @@ describe("updateProfile", () => {
       image: null,
     });
   });
+
+  it("non-http(s) avatar scheme (javascript:/mailto:/data:) → not ok, updateUser NOT called", async () => {
+    mockAuth.mockResolvedValue(USER);
+    for (const bad of [
+      "javascript:alert(1)",
+      "mailto:a@b.com",
+      "data:text/html,x",
+    ]) {
+      const res = await updateProfile(
+        null,
+        form({ name: "Fulano", image: bad })
+      );
+      expect(res.ok).toBe(false);
+    }
+    expect(mockUpdate).not.toHaveBeenCalled();
+  });
+
+  it("session refresh failure does not fail the save (DB is the source of truth)", async () => {
+    mockAuth.mockResolvedValue(USER);
+    mockSessionUpdate.mockRejectedValueOnce(new Error("edge refresh failed"));
+    const res = await updateProfile(null, form({ name: "Fulano" }));
+    expect(res).toEqual({ ok: true });
+    expect(mockUpdate).toHaveBeenCalledWith("u2", {
+      name: "Fulano",
+      image: null,
+    });
+  });
 });
