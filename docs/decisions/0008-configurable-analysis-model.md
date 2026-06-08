@@ -45,6 +45,12 @@ modelo são decisões técnicas relevantes que ficam documentadas aqui (CLAUDE.m
    porque a família Opus 4.x retorna **HTTP 400** em parâmetros de sampling — sem
    essa divergência, trocar pra Opus daria 400 em produção. O mesmo objeto é
    usado pro `inputPayload` logado e pra chamada real (sem duplicação).
+   - `tool_choice` também é model-aware: `tool_choice` FORÇADO
+     (`{ type: "tool", name }`) é **incompatível com adaptive thinking** e retorna
+     **HTTP 400** no Opus 4.8. Por isso o caminho adaptive (Opus) usa
+     `tool_choice: { type: "auto" }` e `predict.ts` trata o modelo decidir não
+     chamar `submit_prediction` (status `tool_missing` em `ai_calls`); só o
+     caminho temperature (Sonnet) força o tool.
 
 5. **`predict.ts` segue como única porta da LLM** (CLAUDE.md). Resolve o modelo
    uma vez (override → default global) e grava o modelo REAL usado em
