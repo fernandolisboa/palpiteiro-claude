@@ -1,4 +1,5 @@
 import { notFound } from "next/navigation";
+import { z } from "zod";
 
 import { PredictionDetail } from "@/components/dashboard/prediction-detail";
 import { DesktopShell } from "@/components/desktop-shell";
@@ -20,6 +21,15 @@ export default async function AdminUserPredictionPage({ params }: PageProps) {
   // Defense-in-depth — NÃO confiar só no gate do layout. Espelha costs/invites.
   const session = await auth();
   if (session?.user?.role !== "admin") notFound();
+
+  // userId/predictionId são colunas uuid: params não-UUID estourariam "invalid
+  // input syntax for type uuid" (500) no eq — guarda pra notFound limpo (#66).
+  if (
+    !z.uuid().safeParse(userId).success ||
+    !z.uuid().safeParse(predictionId).success
+  ) {
+    notFound();
+  }
 
   // Scoped por userId ALVO: se a predição NÃO for desse usuário → null → 404.
   // Preserva o invariante de no-cross-user-bleed mesmo no caminho de admin.

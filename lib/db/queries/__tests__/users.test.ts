@@ -83,6 +83,11 @@ describe("searchUsers — listagem admin por e-mail", () => {
 
     await expect(searchUsers(undefined)).resolves.toEqual(rows);
     expect(h.state.whereCalled).toBe(false);
+    // o orderBy asc(users.email) precisa valer também no ramo sem filtro — uma
+    // regressão que mudasse a ordem só aqui passaria pelo teste do ramo 'ana'.
+    const order = h.state.orderByArg as { op?: string; col?: unknown };
+    expect(order.op).toBe("asc");
+    expect(order.col).toBe(users.email);
   });
 
   it("q só com whitespace é tratado como vazio → sem where()", async () => {

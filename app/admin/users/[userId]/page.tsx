@@ -1,6 +1,7 @@
 import Link from "next/link";
 import { notFound } from "next/navigation";
 import { ChevronLeft, Inbox } from "lucide-react";
+import { z } from "zod";
 
 import { BankrollChart } from "@/components/dashboard/bankroll-chart";
 import { DashboardFiltersBar } from "@/components/dashboard/dashboard-filters";
@@ -62,6 +63,10 @@ export default async function AdminUserTrackingPage({
   // — NÃO confiar só no gate do layout. Espelha costs/invites.
   const session = await auth();
   if (session?.user?.role !== "admin") notFound();
+
+  // userId é coluna uuid: um param não-UUID estouraria "invalid input syntax
+  // for type uuid" (500) no eq — guarda pra notFound limpo (precedente #66).
+  if (!z.uuid().safeParse(userId).success) notFound();
 
   // O alvo precisa existir (header com o e-mail + 404 se id inválido/inexistente).
   const targetUser = await getUserById(userId);
