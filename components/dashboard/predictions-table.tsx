@@ -30,7 +30,13 @@ const REC_CLASS: Record<PredictionRowView["rec"], string> = {
   PASS: "text-muted-foreground",
 };
 
-export function PredictionsTable({ rows }: { rows: PredictionRowView[] }) {
+export function PredictionsTable({
+  rows,
+  basePath = "/dashboard",
+}: {
+  rows: PredictionRowView[];
+  basePath?: string;
+}) {
   if (rows.length === 0) {
     return (
       <div className="rounded-xl border border-border bg-card px-6 py-12 text-center text-[13px] text-muted-foreground">
@@ -75,7 +81,7 @@ export function PredictionsTable({ rows }: { rows: PredictionRowView[] }) {
               <TableRow key={r.id} className="border-border-subtle">
                 <TableCell className="max-w-[220px]">
                   <Link
-                    href={`/dashboard/${r.id}`}
+                    href={`${basePath}/${r.id}`}
                     className="font-medium tracking-tight hover:underline"
                   >
                     {r.home} × {r.away}
@@ -123,7 +129,7 @@ export function PredictionsTable({ rows }: { rows: PredictionRowView[] }) {
                 </TableCell>
                 <TableCell className="w-8">
                   <Link
-                    href={`/dashboard/${r.id}`}
+                    href={`${basePath}/${r.id}`}
                     aria-label="Abrir predição"
                     className="text-muted-fg-2 hover:text-foreground"
                   >
