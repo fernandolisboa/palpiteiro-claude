@@ -15,6 +15,7 @@ export function buildDashboardHref(
   current: DashboardFilters,
   dimension: FilterDimension,
   value: string,
+  basePath = "/dashboard",
 ): string {
   const next: DashboardFilters = { ...current, [dimension]: value };
   const params = new URLSearchParams();
@@ -22,7 +23,7 @@ export function buildDashboardHref(
   if (next.league !== "all") params.set("league", next.league);
   if (next.market !== "all") params.set("market", next.market);
   const qs = params.toString();
-  return qs ? `/dashboard?${qs}` : "/dashboard";
+  return qs ? `${basePath}?${qs}` : basePath;
 }
 
 type Option = { value: string; label: string };
@@ -46,12 +47,14 @@ function PillGroup({
   current,
   dimension,
   filters,
+  basePath,
 }: {
   label: string;
   options: Option[];
   current: string;
   dimension: FilterDimension;
   filters: DashboardFilters;
+  basePath: string;
 }) {
   if (options.length <= 1) return null;
   return (
@@ -65,7 +68,7 @@ function PillGroup({
           return (
             <Link
               key={opt.value}
-              href={buildDashboardHref(filters, dimension, opt.value)}
+              href={buildDashboardHref(filters, dimension, opt.value, basePath)}
               aria-current={active ? "page" : undefined}
               className={cn(
                 "h-6 rounded-[5px] px-2.5 text-[11.5px] font-medium leading-6 transition-colors",
@@ -86,9 +89,11 @@ function PillGroup({
 export function DashboardFiltersBar({
   filters,
   leagues,
+  basePath = "/dashboard",
 }: {
   filters: DashboardFilters;
   leagues: LeagueKey[];
+  basePath?: string;
 }) {
   const leagueOptions: Option[] = [
     { value: "all", label: "Todas" },
@@ -102,6 +107,7 @@ export function DashboardFiltersBar({
         current={filters.status}
         dimension="status"
         filters={filters}
+        basePath={basePath}
       />
       <PillGroup
         label="liga"
@@ -109,6 +115,7 @@ export function DashboardFiltersBar({
         current={filters.league}
         dimension="league"
         filters={filters}
+        basePath={basePath}
       />
       <PillGroup
         label="mercado"
@@ -116,6 +123,7 @@ export function DashboardFiltersBar({
         current={filters.market}
         dimension="market"
         filters={filters}
+        basePath={basePath}
       />
     </div>
   );

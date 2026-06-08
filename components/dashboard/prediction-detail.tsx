@@ -45,7 +45,15 @@ function RawPayload({ label, json }: { label: string; json: string }) {
   );
 }
 
-export function PredictionDetail({ view }: { view: PredictionDetailView }) {
+export function PredictionDetail({
+  view,
+  backHref = "/dashboard",
+  backLabel = "dashboard",
+}: {
+  view: PredictionDetailView;
+  backHref?: string;
+  backLabel?: string;
+}) {
   const { match, prediction, outcome, aiCall, rawPayloads } = view;
   const resultClass =
     outcome?.result === "won"
@@ -57,11 +65,11 @@ export function PredictionDetail({ view }: { view: PredictionDetailView }) {
   return (
     <div className="mx-auto w-full max-w-[680px] px-6 py-8">
       <Link
-        href="/dashboard"
+        href={backHref}
         className="inline-flex items-center gap-2 pb-6 text-muted-foreground hover:text-foreground"
       >
         <ChevronLeft className="size-3.5" />
-        <span className="text-[12.5px] tracking-tight">dashboard</span>
+        <span className="text-[12.5px] tracking-tight">{backLabel}</span>
       </Link>
 
       <h1 className="text-[22px] font-medium tracking-[-0.02em]">

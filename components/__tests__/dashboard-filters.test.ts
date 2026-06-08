@@ -29,4 +29,16 @@ describe("buildDashboardHref", () => {
   it("returns the bare path when everything is 'all'", () => {
     expect(buildDashboardHref(ALL, "market", "all")).toBe("/dashboard");
   });
+
+  it("honors a non-default basePath with a query string", () => {
+    expect(buildDashboardHref(ALL, "status", "won", "/admin/users/u1")).toBe(
+      "/admin/users/u1?status=won",
+    );
+  });
+
+  it("returns the bare non-default basePath when everything is 'all'", () => {
+    expect(buildDashboardHref(ALL, "market", "all", "/admin/users/u1")).toBe(
+      "/admin/users/u1",
+    );
+  });
 });
