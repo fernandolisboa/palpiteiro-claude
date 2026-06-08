@@ -36,7 +36,7 @@ export function H2HSection({ view }: Props) {
             variant="outline"
             className={
               r.tag === "over"
-                ? "h-[18px] rounded-full border-edge-border bg-edge-soft px-2 text-[9.5px] text-edge-fg"
+                ? "h-[18px] rounded-full border-border bg-secondary px-2 text-[9.5px] text-secondary-foreground"
                 : "h-[18px] rounded-full border-border bg-transparent px-2 text-[9.5px] text-muted-foreground"
             }
           >
