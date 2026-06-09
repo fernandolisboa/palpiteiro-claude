@@ -51,7 +51,16 @@ export function InviteForm() {
 
       {state &&
         (state.ok ? (
-          <p className="text-accent-fg text-[13px]">Convite adicionado.</p>
+          state.emailed === false ? (
+            <p className="text-[13px] text-amber-500">
+              Convite adicionado, mas não consegui enviar o e-mail de aviso —
+              avise a pessoa manualmente.
+            </p>
+          ) : (
+            <p className="text-accent-fg text-[13px]">
+              Convite adicionado. E-mail de aviso enviado.
+            </p>
+          )
         ) : (
           <p className="text-[13px] text-red-500">{state.error}</p>
         ))}
