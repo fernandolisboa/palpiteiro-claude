@@ -3,7 +3,7 @@ import type { ReactNode } from "react";
 
 import { auth, signOut } from "@/auth";
 import { Separator } from "@/components/ui/separator";
-import { TeamAvatar } from "@/components/team-avatar";
+import { UserAvatar } from "@/components/user-avatar";
 import { ThemeToggle } from "@/components/theme-toggle";
 
 function initialsFrom(value: string): string {
@@ -51,7 +51,7 @@ export async function DesktopShell({ children }: { children: ReactNode }) {
                 aria-label="Perfil"
                 className="flex items-center gap-2 transition-opacity hover:opacity-80"
               >
-                <TeamAvatar
+                <UserAvatar
                   initials={initialsFrom(label)}
                   hue={258}
                   size={26}
