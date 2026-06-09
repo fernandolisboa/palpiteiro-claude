@@ -8,11 +8,19 @@ import { Resend } from "resend";
  *
  * Nunca lança: quando isto roda o convite (whitelist) já está válido, então uma
  * falha de e-mail é soft (retorna `{ sent: false, reason }`) pra action não
- * derrubar o convite. Falhas são logadas pra observabilidade.
+ * derrubar o convite. Ausência de config esperada (env/base URL) loga como
+ * `warn`; falha inesperada de envio, como `error` (espelha o spend-alert).
  */
 export type InviteEmailResult =
   | { sent: true }
-  | { sent: false; reason: "no_from_address" | "no_api_key" | "send_failed" };
+  | {
+      sent: false;
+      reason: "no_from_address" | "no_api_key" | "no_base_url" | "send_failed";
+    };
+
+function warn(event: string): void {
+  console.warn(JSON.stringify({ scope: "invite_email", event }));
+}
 
 export async function sendInviteEmail(params: {
   to: string;
@@ -20,17 +28,21 @@ export async function sendInviteEmail(params: {
 }): Promise<InviteEmailResult> {
   const from = process.env.RESEND_FROM_EMAIL;
   if (!from) {
-    console.error(
-      JSON.stringify({ scope: "invite_email", event: "no_from_address" })
-    );
+    warn("no_from_address");
     return { sent: false, reason: "no_from_address" };
   }
   const apiKey = process.env.AUTH_RESEND_KEY;
   if (!apiKey) {
-    console.error(
-      JSON.stringify({ scope: "invite_email", event: "no_api_key" })
-    );
+    warn("no_api_key");
     return { sent: false, reason: "no_api_key" };
+  }
+  // signinUrl precisa ser absoluto pra ser clicável no e-mail. Com AUTH_URL
+  // ausente o chamador monta "/signin" (relativo) — não enviar um link quebrado
+  // como se fosse sucesso: o convite segue válido e a UI avisa pra notificar à
+  // mão (emailed: false).
+  if (!/^https?:\/\//i.test(params.signinUrl)) {
+    warn("no_base_url");
+    return { sent: false, reason: "no_base_url" };
   }
 
   const subject = "Você foi convidado pro Palpiteiro";

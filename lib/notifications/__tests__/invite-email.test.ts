@@ -20,9 +20,11 @@ const ORIGINAL_ENV = {
 };
 
 let errorSpy: ReturnType<typeof vi.spyOn>;
+let warnSpy: ReturnType<typeof vi.spyOn>;
 
 beforeEach(() => {
   errorSpy = vi.spyOn(console, "error").mockImplementation(() => {});
+  warnSpy = vi.spyOn(console, "warn").mockImplementation(() => {});
   sendMock.mockReset();
   sendMock.mockResolvedValue({ data: { id: "e1" }, error: null });
   process.env.RESEND_FROM_EMAIL = "from@palpiteiro.app";
@@ -31,6 +33,7 @@ beforeEach(() => {
 
 afterEach(() => {
   errorSpy.mockRestore();
+  warnSpy.mockRestore();
   for (const [k, v] of Object.entries(ORIGINAL_ENV)) {
     if (v === undefined) delete process.env[k];
     else process.env[k] = v;
@@ -51,6 +54,12 @@ describe("sendInviteEmail", () => {
     delete process.env.AUTH_RESEND_KEY;
     const res = await sendInviteEmail(PARAMS);
     expect(res).toEqual({ sent: false, reason: "no_api_key" });
+    expect(sendMock).not.toHaveBeenCalled();
+  });
+
+  it("relative signinUrl (AUTH_URL unset) → { sent: false, no_base_url }, no broken-link send", async () => {
+    const res = await sendInviteEmail({ to: "x@y.com", signinUrl: "/signin" });
+    expect(res).toEqual({ sent: false, reason: "no_base_url" });
     expect(sendMock).not.toHaveBeenCalled();
   });
 

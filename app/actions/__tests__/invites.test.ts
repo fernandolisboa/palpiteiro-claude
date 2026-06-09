@@ -134,6 +134,18 @@ describe("inviteUser", () => {
     expect(res).toEqual({ ok: true, emailed: false });
     expect(mockAdd).toHaveBeenCalledTimes(1); // convite persistido mesmo assim
   });
+
+  it("AUTH_URL unset → builds a relative /signin; module reports no_base_url → emailed false", async () => {
+    delete process.env.AUTH_URL;
+    mockAuth.mockResolvedValue(ADMIN);
+    mockSendEmail.mockResolvedValue({ sent: false, reason: "no_base_url" });
+    const res = await inviteUser(null, form({ email: "new@x.com" }));
+    expect(mockSendEmail).toHaveBeenCalledWith({
+      to: "new@x.com",
+      signinUrl: "/signin",
+    });
+    expect(res).toEqual({ ok: true, emailed: false });
+  });
 });
 
 describe("revokeInvite", () => {
