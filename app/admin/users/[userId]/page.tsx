@@ -15,7 +15,9 @@ import {
   parseDashboardFilters,
 } from "@/lib/dashboard/derive-view";
 import { getUserDashboardRows } from "@/lib/db/queries/dashboard";
-import { getUserById } from "@/lib/db/queries/users";
+import { getUserManagement } from "@/lib/db/queries/users";
+
+import { UserAdminControls } from "./user-admin-controls";
 
 export const dynamic = "force-dynamic";
 
@@ -46,7 +48,8 @@ export default async function AdminUserTrackingPage({
   if (!z.uuid().safeParse(userId).success) notFound();
 
   // O alvo precisa existir (header com o e-mail + 404 se id inválido/inexistente).
-  const targetUser = await getUserById(userId);
+  // getUserManagement traz role+allowed pros controles de admin (superset).
+  const targetUser = await getUserManagement(userId);
   if (!targetUser) notFound();
 
   // Reusa a query do #10 escopada por userId, passando o userId ALVO — só aqui,
@@ -80,6 +83,13 @@ export default async function AdminUserTrackingPage({
             {targetUser.email} — over/under 2.5, yield, racional e resultados.
           </p>
         </div>
+
+        <UserAdminControls
+          userId={targetUser.id}
+          role={targetUser.role}
+          allowed={targetUser.allowed}
+          isSelf={session.user.id === targetUser.id}
+        />
 
         {rows.length === 0 ? (
           <Card className="px-8 py-16 text-center">

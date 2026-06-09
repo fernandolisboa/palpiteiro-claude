@@ -1,4 +1,4 @@
-import { asc, eq, ilike } from "drizzle-orm";
+import { asc, count, eq, ilike } from "drizzle-orm";
 
 import { users } from "@/db/schema";
 import { db } from "@/lib/db";
@@ -18,9 +18,7 @@ export async function searchUsers(query?: string): Promise<UserSummary[]> {
   const base = db
     .select({ id: users.id, email: users.email, role: users.role })
     .from(users);
-  const filtered = q
-    ? base.where(ilike(users.email, `%${q}%`))
-    : base;
+  const filtered = q ? base.where(ilike(users.email, `%${q}%`)) : base;
   return filtered.orderBy(asc(users.email));
 }
 
@@ -82,9 +80,8 @@ export async function getUserProfile(id: string): Promise<UserProfile | null> {
 }
 
 /**
- * Atualiza nome/avatar de UM usuário. Primeira mutação deste módulo (as demais
- * são read-only). O gate de "só o dono edita" mora na server action
- * (`app/actions/profile.ts`); esta função confia no `id` recebido.
+ * Atualiza nome/avatar de UM usuário. O gate de "só o dono edita" mora na server
+ * action (`app/actions/profile.ts`); esta função confia no `id` recebido.
  */
 export async function updateUser(
   id: string,
@@ -94,4 +91,65 @@ export async function updateUser(
     .update(users)
     .set({ name: data.name, image: data.image })
     .where(eq(users.id, id));
+}
+
+type UserManagement = {
+  id: string;
+  email: string;
+  role: "admin" | "user";
+  allowed: boolean;
+};
+
+/**
+ * Lê id/email/role/allowed de UM usuário pra UI de gestão de admin
+ * (`app/admin/users/[userId]`). Superset do `getUserById`, que não traz
+ * `allowed`.
+ */
+export async function getUserManagement(
+  id: string
+): Promise<UserManagement | null> {
+  const rows = await db
+    .select({
+      id: users.id,
+      email: users.email,
+      role: users.role,
+      allowed: users.allowed,
+    })
+    .from(users)
+    .where(eq(users.id, id))
+    .limit(1);
+  return rows[0] ?? null;
+}
+
+/** Conta admins. Usado pela guarda anti-lockout (nunca rebaixar o último). */
+export async function countAdmins(): Promise<number> {
+  const [row] = await db
+    .select({ value: count() })
+    .from(users)
+    .where(eq(users.role, "admin"));
+  return row?.value ?? 0;
+}
+
+/**
+ * Muta a role de UM usuário. Mutação — o gate de admin e as guardas anti-lockout
+ * moram na server action (`app/actions/admin-users.ts`); esta função confia nos
+ * argumentos recebidos.
+ */
+export async function updateUserRole(
+  id: string,
+  role: "admin" | "user"
+): Promise<void> {
+  await db.update(users).set({ role }).where(eq(users.id, id));
+}
+
+/**
+ * Muta o acesso (whitelist em DB, ADR 0009) de UM usuário. `allowed=false`
+ * bloqueia logins FUTUROS (não a sessão vigente) e NÃO vale pra e-mails do env
+ * `ALLOWED_EMAILS` (floor). Gate/guardas na action.
+ */
+export async function updateUserAccess(
+  id: string,
+  allowed: boolean
+): Promise<void> {
+  await db.update(users).set({ allowed }).where(eq(users.id, id));
 }
