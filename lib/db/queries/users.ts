@@ -85,7 +85,7 @@ export async function getUserProfile(id: string): Promise<UserProfile | null> {
  */
 export async function updateUser(
   id: string,
-  data: { name: string; image: string | null },
+  data: { name: string; image: string | null }
 ): Promise<void> {
   await db
     .update(users)
@@ -106,7 +106,7 @@ type UserManagement = {
  * `allowed`.
  */
 export async function getUserManagement(
-  id: string,
+  id: string
 ): Promise<UserManagement | null> {
   const rows = await db
     .select({
@@ -137,7 +137,7 @@ export async function countAdmins(): Promise<number> {
  */
 export async function updateUserRole(
   id: string,
-  role: "admin" | "user",
+  role: "admin" | "user"
 ): Promise<void> {
   await db.update(users).set({ role }).where(eq(users.id, id));
 }
@@ -149,7 +149,7 @@ export async function updateUserRole(
  */
 export async function updateUserAccess(
   id: string,
-  allowed: boolean,
+  allowed: boolean
 ): Promise<void> {
   await db.update(users).set({ allowed }).where(eq(users.id, id));
 }
