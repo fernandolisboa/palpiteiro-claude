@@ -8,8 +8,15 @@ import {
   addPendingInvite,
   removePendingInvite,
 } from "@/lib/db/queries/invites";
+import { sendInviteEmail } from "@/lib/notifications/invite-email";
 
-export type InviteUserResult = { ok: boolean; error?: string };
+// `emailed` é o resultado best-effort do aviso ao convidado (só no inviteUser):
+// undefined em revoke; false quando o convite valeu mas o e-mail não saiu.
+export type InviteUserResult = {
+  ok: boolean;
+  error?: string;
+  emailed?: boolean;
+};
 
 const emailSchema = z.email();
 
@@ -38,8 +45,19 @@ export async function inviteUser(
   // Normalização do e-mail (trim+lowercase) acontece DENTRO de addPendingInvite
   // (é a PK de pending_invites) — não re-normalizar aqui.
   await addPendingInvite({ email, invitedByUserId: session.user.id, note });
+
+  // Aviso ao convidado (best-effort). NÃO é magic link — só um e-mail com o
+  // link pra /signin, onde a pessoa solicita o acesso. AUTH_URL é a base
+  // canônica (mesma que o Auth.js usa). Falha de e-mail NÃO derruba o convite:
+  // a whitelist já valeu; `emailed` sinaliza pra UI avisar manualmente.
+  const base = (process.env.AUTH_URL ?? "").replace(/\/+$/, "");
+  const emailResult = await sendInviteEmail({
+    to: email,
+    signinUrl: `${base}/signin`,
+  });
+
   revalidatePath("/admin/invites");
-  return { ok: true };
+  return { ok: true, emailed: emailResult.sent };
 }
 
 export async function revokeInvite(
