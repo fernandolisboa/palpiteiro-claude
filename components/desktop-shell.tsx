@@ -3,7 +3,7 @@ import type { ReactNode } from "react";
 
 import { auth, signOut } from "@/auth";
 import { Separator } from "@/components/ui/separator";
-import { TeamAvatar } from "@/components/team-avatar";
+import { UserAvatar } from "@/components/user-avatar";
 import { ThemeToggle } from "@/components/theme-toggle";
 
 function initialsFrom(value: string): string {
@@ -54,10 +54,19 @@ export async function DesktopShell({ children }: { children: ReactNode }) {
         <div className="flex items-center gap-3">
           {label && (
             <>
-              <div className="flex items-center gap-2">
-                <TeamAvatar initials={initialsFrom(label)} hue={258} size={26} />
+              <Link
+                href="/perfil"
+                aria-label="Perfil"
+                className="flex items-center gap-2 transition-opacity hover:opacity-80"
+              >
+                <UserAvatar
+                  initials={initialsFrom(label)}
+                  hue={258}
+                  size={26}
+                  src={user?.image ?? null}
+                />
                 <span className="text-[12.5px] tracking-tight">{label}</span>
-              </div>
+              </Link>
               <Separator orientation="vertical" className="!h-4" />
               <form
                 action={async () => {

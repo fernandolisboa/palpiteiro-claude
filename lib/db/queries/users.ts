@@ -55,3 +55,43 @@ export async function userExists(id: string): Promise<boolean> {
     .limit(1);
   return rows.length > 0;
 }
+
+type UserProfile = {
+  id: string;
+  email: string;
+  name: string | null;
+  image: string | null;
+};
+
+/**
+ * Lê o perfil editável (nome/avatar) do próprio usuário pra popular o form em
+ * `/perfil`. Distinto do `getUserById`, que devolve role (não name/image).
+ */
+export async function getUserProfile(id: string): Promise<UserProfile | null> {
+  const rows = await db
+    .select({
+      id: users.id,
+      email: users.email,
+      name: users.name,
+      image: users.image,
+    })
+    .from(users)
+    .where(eq(users.id, id))
+    .limit(1);
+  return rows[0] ?? null;
+}
+
+/**
+ * Atualiza nome/avatar de UM usuário. Primeira mutação deste módulo (as demais
+ * são read-only). O gate de "só o dono edita" mora na server action
+ * (`app/actions/profile.ts`); esta função confia no `id` recebido.
+ */
+export async function updateUser(
+  id: string,
+  data: { name: string; image: string | null }
+): Promise<void> {
+  await db
+    .update(users)
+    .set({ name: data.name, image: data.image })
+    .where(eq(users.id, id));
+}

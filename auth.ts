@@ -28,7 +28,7 @@ import { promoteInvitedUserOnLogin } from "@/lib/db/queries/invites";
  * (createUser/getUserByEmail/createVerificationToken/useVerificationToken).
  * `sessions`/`accounts` ficam inativas (prontas pra futuro OAuth/DB-sessions).
  */
-export const { handlers, auth, signIn, signOut } = NextAuth({
+export const { handlers, auth, signIn, signOut, unstable_update } = NextAuth({
   ...authConfig,
   // `providers` e `adapter` DEPOIS do spread de propósito: o spread traz
   // `providers: []` do edge config; estas chaves precisam sobrescrever isso.
