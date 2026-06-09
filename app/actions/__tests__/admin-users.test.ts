@@ -208,4 +208,14 @@ describe("setUserAccess", () => {
     expect(res.ok).toBe(false);
     expect(mockUpdateAccess).not.toHaveBeenCalled();
   });
+
+  it("malformed allowed value → invalid, NO silent revoke", async () => {
+    mockAuth.mockResolvedValue(ADMIN);
+    const res = await setUserAccess(
+      null,
+      form({ userId: TARGET_ID, allowed: "garbage" })
+    );
+    expect(res.ok).toBe(false);
+    expect(mockUpdateAccess).not.toHaveBeenCalled();
+  });
 });

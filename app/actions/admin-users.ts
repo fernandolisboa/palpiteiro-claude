@@ -14,7 +14,9 @@ import {
 export type AdminUserResult = { ok: boolean; error?: string };
 
 const roleSchema = z.enum(["admin", "user"]);
-const uuidSchema = z.uuid();
+const allowedSchema = z.enum(["true", "false"]);
+// users.id é defaultRandom() (v4); apertar pra v4 rejeita nil/variantes.
+const uuidSchema = z.uuid({ version: "v4" });
 
 function revalidateUser(userId: string): void {
   revalidatePath(`/admin/users/${userId}`);
@@ -87,7 +89,15 @@ export async function setUserAccess(
   if (!uuidSchema.safeParse(userId).success) {
     return { ok: false, error: "Usuário inválido." };
   }
-  const allowed = String(formData.get("allowed") ?? "") === "true";
+  // Valida explicitamente (espelha o caminho de `role`): sem isto, qualquer
+  // valor ≠ "true" num POST malformado viraria revoke silencioso.
+  const allowedParsed = allowedSchema.safeParse(
+    String(formData.get("allowed") ?? "")
+  );
+  if (!allowedParsed.success) {
+    return { ok: false, error: "Valor de acesso inválido." };
+  }
+  const allowed = allowedParsed.data === "true";
 
   // Guarda: nunca revogar o próprio acesso (auto-lockout no próximo login).
   if (userId === session.user.id && !allowed) {

@@ -39,12 +39,23 @@ implementar.
    - **Não revogar o próprio acesso.** `setUserAccess` recusa
      `userId === session.user.id && allowed === false`.
 
+   Os self-guards comparam contra `session.user.id` (id carimbado no JWT no
+   login, nunca revalidado contra o DB): num delete+recreate manual do operador
+   com novo id, o cookie velho não casaria o self-guard — mesmo trade-off de
+   staleness do JWT do ADR 0007. O guard do último admin ainda impede zerar
+   admins.
+
 3. **Semântica de `allowed` documentada.** Revogar `allowed` remove o usuário da
    whitelist em DB, MAS o env `ALLOWED_EMAILS` é o floor checado primeiro
    (`isEmailAllowedWithDb`): um e-mail no env continua entrando mesmo com
    `allowed=false`. E revogar NÃO encerra a sessão JWT vigente da vítima — o
-   token vale até expirar; o efeito é bloquear LOGINS FUTUROS. Ambos aceitos no
-   contexto solo/F&F e registrados pra não surpreender.
+   token vale até expirar; o efeito é bloquear LOGINS FUTUROS. O revoke também
+   depende da invariante de que um usuário existente NÃO tem `pending_invites`
+   (`promoteInvitedUserOnLogin` apaga o convite no primeiro login): como
+   `isEmailWhitelistedInDb` autoriza com `allowed=true` OU invite pendente, um
+   convite remanescente reabriria o acesso — mudanças no fluxo de invite/promoção
+   precisam preservar essa invariante. Tudo aceito no contexto solo/F&F e
+   registrado pra não surpreender.
 
 4. **TOCTOU aceito.** `countAdmins()` e o `update` são read/write separados
    (neon-http não tem transação interativa; `db.batch` não condiciona). A janela
