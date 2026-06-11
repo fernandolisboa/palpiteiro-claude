@@ -31,10 +31,14 @@ export function DefaultModelForm({ current }: Props) {
         <select
           name="modelId"
           defaultValue={current}
-          className="w-80 rounded-md border border-border bg-transparent px-3 py-2 text-sm"
+          className="text-foreground w-80 rounded-md border border-border bg-transparent px-3 py-2 text-sm [color-scheme:light] dark:[color-scheme:dark]"
         >
           {DEFAULT_MODEL_OPTIONS.map((m) => (
-            <option key={m.id} value={m.id}>
+            <option
+              key={m.id}
+              value={m.id}
+              className="bg-popover text-popover-foreground"
+            >
               {m.label} — ${m.inputPricePerMTok}/${m.outputPricePerMTok} por 1M
             </option>
           ))}
