@@ -195,7 +195,7 @@ function MobileHome({ matches, recents, league, range }: HomeContentProps) {
   const empty = rangeEmptyMessage(range);
   const navProps = rangeNavProps(range);
   return (
-    <div className="min-h-screen bg-background text-foreground">
+    <div className="min-h-screen overflow-x-clip bg-background text-foreground">
       <PageHeader
         subtitle={`${matches.length} jogos · ${label.toLowerCase()}`}
       />
@@ -246,14 +246,17 @@ function MobileHome({ matches, recents, league, range }: HomeContentProps) {
       <div className="pt-7" />
       <SectionLabel
         action={
-          <span className="font-mono text-[10px] text-muted-foreground tabular-nums">
-            {recents.length} / {RECENT_LIMIT}
-          </span>
+          <Link
+            href="/dashboard"
+            className="font-mono text-[10.5px] uppercase tracking-[0.18em] text-muted-foreground transition-colors hover:text-foreground"
+          >
+            ver todas →
+          </Link>
         }
       >
         Suas predições recentes
       </SectionLabel>
-      <div className="-mx-5 overflow-x-auto px-5 pb-6">
+      <div className="overflow-x-auto px-5 pb-6">
         {recents.length === 0 ? (
           <div className="text-[12.5px] text-muted-foreground tracking-tight">
             Nenhuma predição ainda.
@@ -398,9 +401,12 @@ function DesktopHome({ matches, recents, league, range }: HomeContentProps) {
             <span className="font-mono text-[10.5px] uppercase tracking-[0.18em] text-muted-foreground">
               suas predições recentes
             </span>
-            <span className="font-mono text-[10.5px] tabular-nums text-muted-foreground">
-              {recents.length} / {RECENT_LIMIT}
-            </span>
+            <Link
+              href="/dashboard"
+              className="font-mono text-[10.5px] uppercase tracking-[0.18em] text-muted-foreground transition-colors hover:text-foreground"
+            >
+              ver todas →
+            </Link>
           </div>
           {recents.length === 0 ? (
             <div className="text-[12.5px] text-muted-foreground tracking-tight">
