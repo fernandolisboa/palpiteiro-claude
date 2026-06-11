@@ -1,23 +1,20 @@
 import Link from "next/link";
 import { redirect } from "next/navigation";
-import { ChevronRight, Inbox } from "lucide-react";
+import { Inbox } from "lucide-react";
 
-import { Badge } from "@/components/ui/badge";
 import { Card } from "@/components/ui/card";
 import { DesktopShell } from "@/components/desktop-shell";
-import { DesktopStatusCell } from "@/components/desktop-status-cell";
 import { LeagueTabs } from "@/components/league-tabs";
-import { MatchRow } from "@/components/match-row";
 import { PageHeader } from "@/components/page-header";
 import { RecentPredCard } from "@/components/recent-pred-card";
 import { SectionLabel } from "@/components/section-label";
-import { TeamAvatar } from "@/components/team-avatar";
+import { UpcomingMatchesDesktop } from "@/components/upcoming-matches-desktop";
+import { UpcomingMatchesMobile } from "@/components/upcoming-matches-mobile";
 import { auth } from "@/auth";
 import {
   DEFAULT_LEAGUE_FILTER,
   isActiveLeagueFilter,
 } from "@/lib/config/active-leagues";
-import { LEAGUE_LABEL } from "@/lib/format";
 import { getMatchIdsWithPredictionsByUser } from "@/lib/db/queries/matches";
 import { loadRangeMatches } from "@/lib/db/queries/load-range-matches";
 import { getLatestOddsSnapshotsForMatches } from "@/lib/db/queries/odds-snapshots";
@@ -40,13 +37,6 @@ const RECENT_LIMIT = 5;
 // Cap pra ranges ilimitados (season): evita varrer a competição inteira numa
 // query só. Presets de janela já são limitados pelo `to`.
 const RANGE_LIMIT = 200;
-
-// Rótulo PT-BR pros status que não têm placar nem CTA de análise. `finished`
-// é tratado à parte (mostra placar); `scheduled`/`live` seguem o fluxo de odds.
-const STATUS_LABEL: Record<"postponed" | "cancelled", string> = {
-  postponed: "Adiado",
-  cancelled: "Cancelado",
-};
 
 type PageProps = {
   searchParams: Promise<{
@@ -194,6 +184,8 @@ function MobileHome({ matches, recents, league, range }: HomeContentProps) {
   const label = rangeLabel(range);
   const empty = rangeEmptyMessage(range);
   const navProps = rangeNavProps(range);
+  // Remonta a lista ao trocar de filtro (liga/range) pra resetar o reveal.
+  const listKey = `${league}-${range.preset}-${navProps.from ?? ""}-${navProps.to ?? ""}`;
   return (
     <div className="min-h-screen overflow-x-clip bg-background text-foreground">
       <PageHeader
@@ -236,11 +228,7 @@ function MobileHome({ matches, recents, league, range }: HomeContentProps) {
           </div>
         </Card>
       ) : (
-        <Card className="mx-5 gap-0 overflow-hidden p-0">
-          {matches.map((m, i) => (
-            <MatchRow key={m.id} m={m} last={i === matches.length - 1} />
-          ))}
-        </Card>
+        <UpcomingMatchesMobile key={listKey} matches={matches} />
       )}
 
       <div className="pt-7" />
@@ -277,6 +265,8 @@ function DesktopHome({ matches, recents, league, range }: HomeContentProps) {
   const label = rangeLabel(range);
   const empty = rangeEmptyMessage(range);
   const navProps = rangeNavProps(range);
+  // Remonta a grade ao trocar de filtro (liga/range) pra resetar o reveal.
+  const listKey = `${league}-${range.preset}-${navProps.from ?? ""}-${navProps.to ?? ""}`;
   return (
     <DesktopShell>
       <div className="mx-auto w-full max-w-[1040px] px-8 pt-10 pb-16">
@@ -315,85 +305,7 @@ function DesktopHome({ matches, recents, league, range }: HomeContentProps) {
             </div>
           </Card>
         ) : (
-          <Card className="gap-0 overflow-hidden p-0">
-            <div className="grid grid-cols-[160px_1fr_160px_140px_40px] gap-4 border-b border-border px-5 py-3 font-mono text-[10px] uppercase tracking-[0.14em] text-muted-foreground">
-              <span>liga · kickoff</span>
-              <span>jogo</span>
-              <span className="text-right">odds</span>
-              <span className="text-right">status</span>
-              <span />
-            </div>
-            {matches.map((m, i) => (
-              <Link
-                key={m.id}
-                href={`/match/${m.id}`}
-                className={`grid grid-cols-[160px_1fr_160px_140px_40px] items-center gap-4 px-5 py-4 transition-colors hover:bg-surface-2 ${
-                  i === matches.length - 1 ? "" : "border-b border-border-subtle"
-                }`}
-              >
-                <div className="flex flex-col gap-1">
-                  <Badge
-                    variant="outline"
-                    className="h-[18px] w-fit rounded-full px-2 text-[9.5px] uppercase tracking-[0.12em] text-muted-foreground"
-                  >
-                    {LEAGUE_LABEL[m.league]}
-                  </Badge>
-                  <span className="font-mono text-[11px] tabular-nums text-muted-foreground">
-                    {m.kickoff}
-                  </span>
-                </div>
-                <div className="flex flex-col gap-1.5">
-                  <div className="flex items-center gap-2">
-                    <TeamAvatar initials={m.home.short.slice(0, 2)} hue={m.home.hue} size={22} />
-                    <span className="text-[14px] font-medium tracking-tight">{m.home.name}</span>
-                  </div>
-                  <div className="flex items-center gap-2">
-                    <TeamAvatar initials={m.away.short.slice(0, 2)} hue={m.away.hue} size={22} />
-                    <span className="text-[14px] font-medium tracking-tight">{m.away.name}</span>
-                  </div>
-                </div>
-                <div className="flex flex-col items-end gap-1 font-mono text-[13px] tabular-nums">
-                  {m.status === "finished" &&
-                  m.homeScore !== null &&
-                  m.awayScore !== null ? (
-                    <span className="text-[15px] font-medium">
-                      {m.homeScore}
-                      <span className="px-1 text-muted-foreground">–</span>
-                      {m.awayScore}
-                    </span>
-                  ) : m.status === "finished" ? (
-                    // Encerrado sem placar reportado: não cai no "sem odd".
-                    <span className="text-[10.5px] uppercase tracking-[0.08em] text-muted-fg-2">
-                      —
-                    </span>
-                  ) : m.status === "postponed" || m.status === "cancelled" ? (
-                    <span className="text-[10.5px] uppercase tracking-[0.08em] text-muted-fg-2">
-                      {STATUS_LABEL[m.status]}
-                    </span>
-                  ) : m.odds ? (
-                    <>
-                      <span>
-                        <span className="text-muted-foreground">O</span> {m.odds.over}
-                      </span>
-                      <span>
-                        <span className="text-muted-foreground">U</span> {m.odds.under}
-                      </span>
-                    </>
-                  ) : (
-                    <span className="text-muted-fg-2">sem odd</span>
-                  )}
-                </div>
-                <DesktopStatusCell m={m} />
-                <span className="justify-self-end text-muted-fg-2">
-                  {m.status === "finished" ||
-                  m.status === "postponed" ||
-                  m.status === "cancelled" ? null : (
-                    <ChevronRight className="size-3.5" />
-                  )}
-                </span>
-              </Link>
-            ))}
-          </Card>
+          <UpcomingMatchesDesktop key={listKey} matches={matches} />
         )}
 
         <div className="pt-12">
