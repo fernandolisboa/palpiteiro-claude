@@ -68,6 +68,10 @@ describe("formatEvPct", () => {
   it("renders exact zero without sign", () => {
     expect(formatEvPct(0)).toBe("0.0%");
   });
+  it("normalizes values that round to zero — never '+0.0%' nor '-0.0%'", () => {
+    expect(formatEvPct(0.0004)).toBe("0.0%");
+    expect(formatEvPct(-0.0004)).toBe("0.0%");
+  });
   it("returns em-dash for null/NaN", () => {
     expect(formatEvPct(null)).toBe("—");
     expect(formatEvPct(NaN)).toBe("—");

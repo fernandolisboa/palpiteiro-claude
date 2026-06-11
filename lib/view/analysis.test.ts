@@ -172,8 +172,8 @@ describe("toAnalysisView", () => {
       bookmaker: null,
       expectedReturn: "—",
       expectedReturnTone: "neutral",
-      evLegend:
-        "ganho médio por aposta, no longo prazo, se a estimativa de 58% do modelo estiver certa",
+      // retorno "—" não ganha legenda — não explicar número que não existe.
+      evLegend: null,
       minEdgeLabel: "5pp",
       rationale: "old",
       factors: ["a"],
@@ -185,7 +185,6 @@ describe("toAnalysisView", () => {
   });
 
   it("warns when minimumOdd is above the odd frozen at recommendation", () => {
-    // Comparação NUMÉRICA ("2.050" > "1.920"), nunca lexicográfica.
     const view = toAnalysisView(
       {
         recommendation: "over",
@@ -210,6 +209,132 @@ describe("toAnalysisView", () => {
     expect(view.evLegend).toBe(
       "a odd registrada na análise (1.92) estava abaixo da mínima sugerida (2.05) — só vale a pena se a odd subir para ≥ 2.05",
     );
+  });
+
+  it("compares minimumOdd and oddAtRecommendation numerically, never lexicographically", () => {
+    // Strings do numeric do Drizzle: "10.000" < "9.000" lexicograficamente,
+    // mas 10 > 9 numericamente → o aviso DEVE disparar.
+    const warned = toAnalysisView(
+      {
+        recommendation: "over",
+        confidencePct: "58.00",
+        rationale: "blah",
+        keyFactors: ["a"],
+        minimumOdd: "10.000",
+        oddAtRecommendation: "9.000",
+        bookmaker: "bet365",
+        edgePct: "7.30",
+        modelVersion: "claude-sonnet-4-5-20250929",
+        promptVersion: "over_under_v1.1",
+        createdAt: baseCreatedAt,
+      },
+      null,
+      threeHoursLater,
+    );
+    expect(warned.expectedReturnTone).toBe("neutral");
+    expect(warned.evLegend).toBe(
+      "a odd registrada na análise (9.00) estava abaixo da mínima sugerida (10.00) — só vale a pena se a odd subir para ≥ 10.00",
+    );
+
+    // Inverso: "9.000" > "10.000" lexicograficamente, mas 9 < 10 → SEM aviso.
+    const ok = toAnalysisView(
+      {
+        recommendation: "over",
+        confidencePct: "58.00",
+        rationale: "blah",
+        keyFactors: ["a"],
+        minimumOdd: "9.000",
+        oddAtRecommendation: "10.000",
+        bookmaker: "bet365",
+        edgePct: "7.30",
+        modelVersion: "claude-sonnet-4-5-20250929",
+        promptVersion: "over_under_v1.1",
+        createdAt: baseCreatedAt,
+      },
+      null,
+      threeHoursLater,
+    );
+    expect(ok.expectedReturnTone).toBe("positive");
+    expect(ok.evLegend).toBe(
+      "ganho médio por aposta, no longo prazo, se a estimativa de 58% do modelo estiver certa",
+    );
+  });
+
+  it("does not warn when minimumOdd exceeds the frozen odd only past display precision", () => {
+    // 1.923 > 1.920 cru, mas ambos exibem "1.92" — o aviso mostraria dois
+    // números iguais declarados desiguais. EV à mão: 0.58 × 1.92 − 1 = +0.1136.
+    const view = toAnalysisView(
+      {
+        recommendation: "over",
+        confidencePct: "58.00",
+        rationale: "blah",
+        keyFactors: ["a"],
+        minimumOdd: "1.923",
+        oddAtRecommendation: "1.920",
+        bookmaker: "bet365",
+        edgePct: "7.30",
+        modelVersion: "claude-sonnet-4-5-20250929",
+        promptVersion: "over_under_v1.1",
+        createdAt: baseCreatedAt,
+      },
+      null,
+      threeHoursLater,
+    );
+    expect(view.expectedReturn).toBe("+11.4%");
+    expect(view.expectedReturnTone).toBe("positive");
+    expect(view.evLegend).toBe(
+      "ganho médio por aposta, no longo prazo, se a estimativa de 58% do modelo estiver certa",
+    );
+  });
+
+  it("keeps neutral tone when a positive EV rounds to 0.0% at display precision", () => {
+    // EV à mão: 0.61 × 1.64 − 1 = +0.0004 → exibe "0.0%"; verde aqui afirmaria
+    // direção que o número não mostra.
+    const view = toAnalysisView(
+      {
+        recommendation: "over",
+        confidencePct: "61.00",
+        rationale: "blah",
+        keyFactors: ["a"],
+        minimumOdd: "1.600",
+        oddAtRecommendation: "1.640",
+        bookmaker: "bet365",
+        edgePct: "5.10",
+        modelVersion: "claude-sonnet-4-5-20250929",
+        promptVersion: "over_under_v1.1",
+        createdAt: baseCreatedAt,
+      },
+      null,
+      threeHoursLater,
+    );
+    expect(view.expectedReturn).toBe("0.0%");
+    expect(view.expectedReturnTone).toBe("neutral");
+    expect(view.evLegend).toBe(
+      "ganho médio por aposta, no longo prazo, se a estimativa de 61% do modelo estiver certa",
+    );
+  });
+
+  it("labels a just-created prediction as 'há menos de 1min', never 'agora'", () => {
+    // Caminho mais comum: análise recém-gerada renderizada na hora — copy de
+    // valor congelado nunca afirma atualidade (ADR 0012, decisão 2).
+    const view = toAnalysisView(
+      {
+        recommendation: "over",
+        confidencePct: "58.00",
+        rationale: "blah",
+        keyFactors: ["a"],
+        minimumOdd: "1.750",
+        oddAtRecommendation: "1.920",
+        bookmaker: "bet365",
+        edgePct: "7.30",
+        modelVersion: "claude-sonnet-4-5-20250929",
+        promptVersion: "over_under_v1.1",
+        createdAt: baseCreatedAt,
+      },
+      null,
+      baseCreatedAt,
+    );
+    expect(view.oddAtRecAgo).toBe("há menos de 1min");
   });
 
   it("shows honest negative expected return in neutral tone (edge >= 5pp, raw odd below break-even)", () => {

@@ -131,12 +131,17 @@ describe("AnalysisResult — bloco 'Aposta recomendada' (#103)", () => {
           bookmaker: null,
           expectedReturn: "—",
           expectedReturnTone: "neutral",
+          evLegend: null,
         }}
       />,
     );
-    expect(markup).toContain("odd na análise (há 2d)");
-    expect(markup).toContain("—");
+    // em-dash ancorado nas CÉLULAS degradadas (o separador do betSummary
+    // também é "—" — um toContain solto passaria com qualquer render).
+    expect(markup).toMatch(/odd na análise \(há 2d\)<\/span><span[^>]*>—</);
+    expect(markup).toMatch(/retorno esperado<\/span><span[^>]*>—</);
     expect(markup).not.toContain("· bet365");
+    // sem retorno na tela, sem legenda explicando o número.
+    expect(markup).not.toContain("ganho médio");
   });
 
   it("pass: renders the no-bet phrase with the MIN_EDGE_PP threshold", () => {
