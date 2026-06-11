@@ -18,13 +18,10 @@ import {
   isActiveLeagueFilter,
 } from "@/lib/config/active-leagues";
 import { LEAGUE_LABEL } from "@/lib/format";
-import {
-  getMatchIdsWithPredictionsByUser,
-  getMatchesInRange,
-} from "@/lib/db/queries/matches";
+import { getMatchIdsWithPredictionsByUser } from "@/lib/db/queries/matches";
+import { loadRangeMatches } from "@/lib/db/queries/load-range-matches";
 import { getLatestOddsSnapshotsForMatches } from "@/lib/db/queries/odds-snapshots";
 import { getRecentPredictionsByUser } from "@/lib/db/queries/predictions";
-import { ensureUpcomingFixturesSynced } from "@/lib/sync/sync-upcoming-fixtures";
 import { DateRangeTabs } from "@/components/date-range-tabs";
 import { parseRangeParams, type ResolvedRange } from "@/lib/view/date-range";
 import { rangeEmptyMessage, rangeLabel } from "@/lib/view/range-href";
@@ -103,26 +100,7 @@ export default async function HomePage({ searchParams }: PageProps) {
     limit: RANGE_LIMIT,
   };
 
-  let dbMatches = await getMatchesInRange(matchesQuery);
-
-  if (dbMatches.length === 0) {
-    // Sync sob demanda quando o DB está vazio. O lock processo-local em
-    // ensureUpcomingFixturesSynced evita stampede em requests concorrentes.
-    // O sync popula a competição+temporada inteira, então ranges passados/season
-    // resolvem após um único sync.
-    try {
-      await ensureUpcomingFixturesSynced();
-      dbMatches = await getMatchesInRange(matchesQuery);
-    } catch (err) {
-      console.error(
-        JSON.stringify({
-          scope: "home-page",
-          error: "sync_failed",
-          message: err instanceof Error ? err.message : String(err),
-        }),
-      );
-    }
-  }
+  const dbMatches = await loadRangeMatches(matchesQuery);
 
   const matchIds = dbMatches.map((m) => m.id);
   const [snapshotByMatch, predictedMatchIds, recentRaw] = await Promise.all([
