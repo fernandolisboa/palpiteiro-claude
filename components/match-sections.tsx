@@ -104,7 +104,7 @@ export async function MatchSections({ fixtureRef, leagueKey }: Props) {
   return (
     <>
       <div className="grid grid-cols-1 gap-3 lg:grid-cols-2">
-        <MatchCollapsible title="Forma recente" meta="últimos 5" defaultOpen>
+        <MatchCollapsible title="Partidas recentes" meta="últimos 5" defaultOpen>
           <FormSection view={formView} />
         </MatchCollapsible>
         <MatchCollapsible

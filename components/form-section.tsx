@@ -33,20 +33,6 @@ export function FormSection({ view }: Props) {
           </div>
         </div>
       ))}
-      <div className="flex items-center justify-between pt-1 font-mono text-[10.5px] text-muted-foreground">
-        <span>últimos 5 jogos</span>
-        <span className="flex items-center gap-2.5">
-          <span className="inline-flex items-center gap-1">
-            <FormDot r="W" />V
-          </span>
-          <span className="inline-flex items-center gap-1">
-            <FormDot r="D" />E
-          </span>
-          <span className="inline-flex items-center gap-1">
-            <FormDot r="L" />D
-          </span>
-        </span>
-      </div>
     </div>
   );
 }
