@@ -46,19 +46,39 @@ describe("updateDefaultModel", () => {
     expect(mockSet).not.toHaveBeenCalled();
   });
 
-  it("admin + valid modelId → setter called with (modelId, userId), returns ok", async () => {
+  it("admin + userSelectable modelId → setter called with (modelId, userId), returns ok", async () => {
     mockAuth.mockResolvedValue(ADMIN);
     const res = await updateDefaultModel(
       null,
-      form({ modelId: "claude-sonnet-4-5-20250929" }),
+      form({ modelId: "claude-haiku-4-5" }),
     );
     expect(res).toEqual({ ok: true });
-    expect(mockSet).toHaveBeenCalledWith("claude-sonnet-4-5-20250929", "u1");
+    expect(mockSet).toHaveBeenCalledWith("claude-haiku-4-5", "u1");
   });
 
   it("admin + invalid modelId → not ok, setter not called", async () => {
     mockAuth.mockResolvedValue(ADMIN);
     const res = await updateDefaultModel(null, form({ modelId: "foo" }));
+    expect(res.ok).toBe(false);
+    expect(mockSet).not.toHaveBeenCalled();
+  });
+
+  it("admin + Fable 5 (admin-only) → not ok, setter not called (default global é só userSelectable)", async () => {
+    mockAuth.mockResolvedValue(ADMIN);
+    const res = await updateDefaultModel(
+      null,
+      form({ modelId: "claude-fable-5" }),
+    );
+    expect(res.ok).toBe(false);
+    expect(mockSet).not.toHaveBeenCalled();
+  });
+
+  it("admin + Sonnet 4.5 (admin-only) → not ok, setter not called", async () => {
+    mockAuth.mockResolvedValue(ADMIN);
+    const res = await updateDefaultModel(
+      null,
+      form({ modelId: "claude-sonnet-4-5-20250929" }),
+    );
     expect(res.ok).toBe(false);
     expect(mockSet).not.toHaveBeenCalled();
   });
