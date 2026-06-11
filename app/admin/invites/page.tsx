@@ -1,6 +1,4 @@
-import Link from "next/link";
-import { ChevronLeft } from "lucide-react";
-
+import { BackLink } from "@/components/back-link";
 import { listPendingInvites } from "@/lib/db/queries/invites";
 
 import { InviteForm } from "./invite-form";
@@ -15,13 +13,7 @@ export default async function AdminInvitesPage() {
   return (
     <div className="bg-background text-foreground min-h-screen">
       <div className="mx-auto w-full max-w-[640px] px-6 py-8">
-        <Link
-          href="/"
-          className="text-muted-foreground hover:text-foreground inline-flex items-center gap-2 pb-6"
-        >
-          <ChevronLeft className="size-3.5" />
-          <span className="text-[12.5px] tracking-tight">jogos</span>
-        </Link>
+        <BackLink href="/admin" label="admin" />
 
         <h1 className="text-[20px] font-medium tracking-[-0.02em]">
           Convidar Usuários

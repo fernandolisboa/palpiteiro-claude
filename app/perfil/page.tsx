@@ -1,7 +1,6 @@
-import Link from "next/link";
 import { redirect } from "next/navigation";
-import { ChevronLeft } from "lucide-react";
 
+import { BackLink } from "@/components/back-link";
 import { auth } from "@/auth";
 import { MODEL_REGISTRY, modelsForAudience } from "@/lib/ai/models";
 import { getDefaultModelId } from "@/lib/db/queries/ai-config";
@@ -38,13 +37,7 @@ export default async function PerfilPage() {
   return (
     <div className="bg-background text-foreground min-h-screen">
       <div className="mx-auto w-full max-w-[640px] px-6 py-8">
-        <Link
-          href="/"
-          className="text-muted-foreground hover:text-foreground inline-flex items-center gap-2 pb-6"
-        >
-          <ChevronLeft className="size-3.5" />
-          <span className="text-[12.5px] tracking-tight">jogos</span>
-        </Link>
+        <BackLink href="/" label="jogos" />
 
         <h1 className="text-[20px] font-medium tracking-[-0.02em]">Perfil</h1>
         <p className="text-muted-foreground pb-6 font-mono text-[11px]">

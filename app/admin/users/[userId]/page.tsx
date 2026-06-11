@@ -1,8 +1,8 @@
-import Link from "next/link";
 import { notFound } from "next/navigation";
-import { ChevronLeft, Inbox } from "lucide-react";
+import { Inbox } from "lucide-react";
 import { z } from "zod";
 
+import { BackLink } from "@/components/back-link";
 import { BankrollChart } from "@/components/dashboard/bankroll-chart";
 import { DashboardFiltersBar } from "@/components/dashboard/dashboard-filters";
 import { KpiCards } from "@/components/dashboard/kpi-cards";
@@ -67,13 +67,7 @@ export default async function AdminUserTrackingPage({
   return (
     <DesktopShell>
       <div className="mx-auto w-full max-w-[1040px] px-5 pb-16 pt-8 lg:px-8 lg:pt-10">
-        <Link
-          href="/admin/users"
-          className="inline-flex items-center gap-2 pb-6 text-muted-foreground hover:text-foreground"
-        >
-          <ChevronLeft className="size-3.5" />
-          <span className="text-[12.5px] tracking-tight">usuários</span>
-        </Link>
+        <BackLink href="/admin/users" label="usuários" />
 
         <div className="flex flex-col gap-1 pb-7">
           <h1 className="text-[28px] font-medium leading-[1.05] tracking-[-0.035em] lg:text-[32px]">

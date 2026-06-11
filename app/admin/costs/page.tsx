@@ -1,6 +1,4 @@
-import Link from "next/link";
-import { ChevronLeft } from "lucide-react";
-
+import { BackLink } from "@/components/back-link";
 import {
   getCostByDay,
   getCostByModel,
@@ -27,13 +25,7 @@ export default async function AdminCostsPage() {
   return (
     <div className="min-h-screen bg-background text-foreground">
       <div className="mx-auto w-full max-w-[640px] px-6 py-8">
-        <Link
-          href="/"
-          className="inline-flex items-center gap-2 pb-6 text-muted-foreground hover:text-foreground"
-        >
-          <ChevronLeft className="size-3.5" />
-          <span className="text-[12.5px] tracking-tight">jogos</span>
-        </Link>
+        <BackLink href="/admin" label="admin" />
 
         <h1 className="text-[20px] font-medium tracking-[-0.02em]">
           Custos de IA

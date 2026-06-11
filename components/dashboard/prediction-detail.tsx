@@ -1,6 +1,4 @@
-import Link from "next/link";
-import { ChevronLeft } from "lucide-react";
-
+import { BackLink } from "@/components/back-link";
 import { LEAGUE_LABEL } from "@/lib/format";
 import { cn } from "@/lib/utils";
 import type { PredictionDetailView } from "@/lib/view/dashboard";
@@ -64,13 +62,7 @@ export function PredictionDetail({
 
   return (
     <div className="mx-auto w-full max-w-[680px] px-6 py-8">
-      <Link
-        href={backHref}
-        className="inline-flex items-center gap-2 pb-6 text-muted-foreground hover:text-foreground"
-      >
-        <ChevronLeft className="size-3.5" />
-        <span className="text-[12.5px] tracking-tight">{backLabel}</span>
-      </Link>
+      <BackLink href={backHref} label={backLabel} />
 
       <h1 className="text-[22px] font-medium tracking-[-0.02em]">
         {match.home} × {match.away}
