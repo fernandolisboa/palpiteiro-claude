@@ -4,7 +4,7 @@ import { revalidatePath } from "next/cache";
 import { z } from "zod";
 
 import { auth } from "@/auth";
-import { isAIModelId, type AIModelId } from "@/lib/ai/models";
+import { isModelAllowedForAudience, type AIModelId } from "@/lib/ai/models";
 import { PredictError, predict } from "@/lib/ai/predict";
 import { extractDbCause } from "@/lib/db/pg-error";
 import { getAiCallById } from "@/lib/db/queries/predictions";
@@ -79,15 +79,20 @@ export async function analyzeMatch(
       error: `Você atingiu o limite de ${rateLimit.limit} análises por dia. Tente novamente amanhã.`,
     };
   }
-  // Override de modelo por análise: ADMIN-only e revalidado aqui (server actions
-  // são POST chamáveis fora do layout). "default"/inválido/não-admin → cai no
-  // default global. Defense-in-depth além de esconder o seletor na UI.
+  // Override de modelo por análise, gateado por AUDIÊNCIA (ADR 0013) e revalidado
+  // aqui (server actions são POST chamáveis fora do layout): usuário comum só
+  // pode escolher modelos userSelectable; admin enxerga todos.
+  // "default"/inválido/fora-da-audiência → cai no default global (sem erro).
+  // Defense-in-depth além de esconder o seletor/limitar a lista na UI.
+  const isAdmin = session.user.role === "admin";
   const overrideRaw = String(formData.get("modelOverride") ?? "");
   let modelOverride: AIModelId | undefined;
-  if (overrideRaw && overrideRaw !== "default") {
-    if (session.user.role === "admin" && isAIModelId(overrideRaw)) {
-      modelOverride = overrideRaw;
-    }
+  if (
+    overrideRaw &&
+    overrideRaw !== "default" &&
+    isModelAllowedForAudience(overrideRaw, isAdmin)
+  ) {
+    modelOverride = overrideRaw;
   }
   try {
     const prediction = await predict({

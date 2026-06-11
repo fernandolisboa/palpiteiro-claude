@@ -164,7 +164,46 @@ describe("analyzeMatch — model override gating", () => {
     mockGetAiCall.mockResolvedValue({ costUsd: "0.01" } as never);
   });
 
-  it("admin override is forwarded to predict", async () => {
+  it("regular user + userSelectable override (Haiku) is forwarded to predict", async () => {
+    mockAuth.mockResolvedValue(USER_SESSION);
+    await analyzeMatch(
+      null,
+      form({ matchId: VALID_MATCH_ID, modelOverride: "claude-haiku-4-5" }),
+    );
+    expect(mockPredict).toHaveBeenCalledWith({
+      matchId: VALID_MATCH_ID,
+      userId: "u2",
+      modelOverride: "claude-haiku-4-5",
+    });
+  });
+
+  it("regular user + admin-only override (Fable) is IGNORED (out of audience)", async () => {
+    mockAuth.mockResolvedValue(USER_SESSION);
+    await analyzeMatch(
+      null,
+      form({ matchId: VALID_MATCH_ID, modelOverride: "claude-fable-5" }),
+    );
+    expect(mockPredict).toHaveBeenCalledWith({
+      matchId: VALID_MATCH_ID,
+      userId: "u2",
+      modelOverride: undefined,
+    });
+  });
+
+  it("admin + admin-only override (Fable) is forwarded to predict", async () => {
+    mockAuth.mockResolvedValue(SESSION);
+    await analyzeMatch(
+      null,
+      form({ matchId: VALID_MATCH_ID, modelOverride: "claude-fable-5" }),
+    );
+    expect(mockPredict).toHaveBeenCalledWith({
+      matchId: VALID_MATCH_ID,
+      userId: "u1",
+      modelOverride: "claude-fable-5",
+    });
+  });
+
+  it("admin + userSelectable override (Sonnet 4.5 valid id) is forwarded", async () => {
     mockAuth.mockResolvedValue(SESSION);
     await analyzeMatch(
       null,
@@ -180,7 +219,7 @@ describe("analyzeMatch — model override gating", () => {
     });
   });
 
-  it("non-admin override is IGNORED (falls through to global default)", async () => {
+  it("non-admin override of a non-userSelectable id (Sonnet 4.5) is IGNORED", async () => {
     mockAuth.mockResolvedValue(USER_SESSION);
     await analyzeMatch(
       null,
