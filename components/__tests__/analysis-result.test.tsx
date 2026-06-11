@@ -30,8 +30,6 @@ const overScenarios: ScenariosView = {
 
 const baseView: AnalysisView = {
   kind: "OVER",
-  confidence: "58%",
-  edge: "+7.3",
   minOdd: "1.85",
   betSummary: {
     market: "Mais de 2.5 gols",
@@ -57,8 +55,6 @@ const baseView: AnalysisView = {
 const passView: AnalysisView = {
   ...baseView,
   kind: "PASS",
-  confidence: "53%",
-  edge: null,
   minOdd: null,
   betSummary: null,
   oddAtRec: null,

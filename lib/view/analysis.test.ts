@@ -31,8 +31,6 @@ describe("toAnalysisView", () => {
     // EV à mão: 0.58 × 1.92 − 1 = +0.1136 → "+11.4%"
     expect(view).toEqual({
       kind: "OVER",
-      confidence: "58%",
-      edge: "+7.3",
       minOdd: "1.75",
       betSummary: {
         market: "Mais de 2.5 gols",
@@ -107,8 +105,6 @@ describe("toAnalysisView", () => {
     // EV à mão: 0.56 × 1.85 − 1 = +0.036 → "+3.6%"
     expect(view).toEqual({
       kind: "UNDER",
-      confidence: "56%",
-      edge: "+6.7",
       minOdd: "1.80",
       betSummary: {
         market: "Menos de 2.5 gols",
@@ -182,8 +178,6 @@ describe("toAnalysisView", () => {
 
     expect(view).toEqual({
       kind: "PASS",
-      confidence: "53%",
-      edge: null,
       minOdd: null,
       betSummary: null,
       oddAtRec: null,
@@ -250,8 +244,6 @@ describe("toAnalysisView", () => {
 
     expect(view).toEqual({
       kind: "OVER",
-      confidence: "58%",
-      edge: "+7.3",
       minOdd: "1.75",
       betSummary: {
         market: "Mais de 2.5 gols",

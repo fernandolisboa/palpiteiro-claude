@@ -201,8 +201,6 @@ export function toAnalysisView(
 
   return {
     kind: KIND_MAP[prediction.recommendation],
-    confidence: formatPct(prediction.confidencePct),
-    edge: formatEdge(prediction.edgePct),
     minOdd: prediction.minimumOdd !== null ? formatOdd(prediction.minimumOdd) : null,
     scenarios: toScenariosView(prediction, confidenceNum),
     betSummary: isPass ? null : BET_SUMMARY[recommendation],

@@ -60,8 +60,10 @@ qual issue cada parte entrou.
 
 5. **Sem backfill de históricas.** Imutabilidade de predições (regra do
    repo); parsear `ai_calls.inputPayload` seria frágil. A UI degrada campos
-   ausentes com "—". *Status: implementada nesta issue (#103) —
-   `oddAtRecommendation`/`bookmaker` null degradam no view-mapper.*
+   ausentes com "—". *Status: implementada (#103:
+   `oddAtRecommendation`/`bookmaker` null degradam no view-mapper; #104: par
+   congelado null degrada as células dos cenários pra "—" com nota
+   explícita).*
 
 6. **Ponto de equilíbrio = `1/odd` CRU por design.** `breakEvenProbPct =
    100/odd` é a probabilidade real mínima pra EV ≥ 0 na odd dada — conceito
@@ -90,7 +92,7 @@ qual issue cada parte entrou.
    `predict.ts` (drift de spec registrado; correção do texto fica pra issue
    do prompt v1.3). A UI trata `minimum_odd > oddAtRecommendation` com aviso
    e tom neutro, sem invalidar a predição — endurecer o Zod jogaria fora
-   recomendações válidas. *Status: implementada nesta issue (#103).*
+   recomendações válidas. *Status: implementada (#103).*
 
 ## Razão
 

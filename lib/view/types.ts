@@ -66,8 +66,6 @@ export type ScenariosView = {
 
 export type AnalysisView = {
   kind: Recommendation;
-  confidence: string;
-  edge: string | null;
   minOdd: string | null;
   betSummary: BetSummary | null;
   oddAtRec: string | null;

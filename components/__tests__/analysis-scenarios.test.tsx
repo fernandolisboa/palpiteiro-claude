@@ -9,6 +9,21 @@ function countOccurrences(haystack: string, needle: string): number {
   return haystack.split(needle).length - 1;
 }
 
+// Isola o trecho de uma coluna: do seu marcador data-scenario-col até o
+// próximo marcador (ou o fim do markup, na última coluna). Independe da ordem
+// de render — a coluna alternativa pode vir antes (under recomendado) ou
+// depois (over recomendado) da recomendada.
+function columnSegment(
+  markup: string,
+  col: "recommended" | "alternative",
+): string {
+  const marker = `data-scenario-col="${col}"`;
+  const start = markup.indexOf(marker);
+  expect(start).toBeGreaterThan(-1);
+  const next = markup.indexOf("data-scenario-col=", start + marker.length);
+  return next === -1 ? markup.slice(start) : markup.slice(start, next);
+}
+
 const overScenarios: ScenariosView = {
   over: {
     modelProb: "58%",
@@ -29,6 +44,31 @@ const overScenarios: ScenariosView = {
   recommended: "over",
   framing:
     "a aposta em menos de 3 gols só sai do zero se a chance real for maior que 51.3% — na análise o modelo estimou 42%",
+  note: null,
+};
+
+// Espelho do caso under-recomendado do view-mapper (lib/view/analysis.test.ts):
+// aqui a coluna alternativa (over) renderiza ANTES da recomendada.
+const underScenarios: ScenariosView = {
+  over: {
+    modelProb: "44%",
+    marketProb: "50.7%",
+    odd: "1.98",
+    edge: "-6.7pp",
+    expectedReturn: "-12.9%",
+    modelBreakEvenOdd: "2.27",
+  },
+  under: {
+    modelProb: "56%",
+    marketProb: "49.3%",
+    odd: "1.85",
+    edge: "+6.7pp",
+    expectedReturn: "+3.6%",
+    modelBreakEvenOdd: "1.79",
+  },
+  recommended: "under",
+  framing:
+    "a aposta em pelo menos 3 gols só sai do zero se a chance real for maior que 50.5% — na análise o modelo estimou 44%",
   note: null,
 };
 
@@ -87,22 +127,44 @@ describe("AnalysisScenarios — bloco 'Cenários' (#104)", () => {
     const markup = renderToStaticMarkup(
       <AnalysisScenarios scenarios={overScenarios} returnTone="positive" />,
     );
-    // O alternativo (under) renderiza DEPOIS do recomendado (over) — tudo a
-    // partir do marcador da coluna alternativa (coluna + framing + rodapé)
-    // precisa ficar fora das famílias reservadas accent-*/edge-*.
-    const altStart = markup.indexOf('data-scenario-col="alternative"');
-    expect(altStart).toBeGreaterThan(-1);
-    const altOnwards = markup.slice(altStart);
-    expect(altOnwards).not.toContain("edge-fg");
-    expect(altOnwards).not.toContain("edge-soft");
-    expect(altOnwards).not.toContain("edge-border");
-    expect(altOnwards).not.toContain("accent-");
+    // Aqui (over recomendado) a alternativa é a última coluna — o segmento
+    // vai até o fim do markup, então framing + rodapé também ficam fora das
+    // famílias reservadas accent-*/edge-*.
+    const alt = columnSegment(markup, "alternative");
+    expect(alt).not.toContain("edge-fg");
+    expect(alt).not.toContain("edge-soft");
+    expect(alt).not.toContain("edge-border");
+    expect(alt).not.toContain("accent-");
     // superfície neutra explícita (ausência de token sozinha passaria vazio).
-    expect(altOnwards).toContain("bg-surface-2");
-    // sanidade: a coluna recomendada (antes do marcador) usa os tokens accent.
-    const recommendedPart = markup.slice(0, altStart);
-    expect(recommendedPart).toContain("bg-accent-soft");
-    expect(recommendedPart).toContain("border-accent-border");
+    expect(alt).toContain("bg-surface-2");
+    // sanidade: a coluna recomendada usa os tokens accent.
+    const recommended = columnSegment(markup, "recommended");
+    expect(recommended).toContain("bg-accent-soft");
+    expect(recommended).toContain("border-accent-border");
+  });
+
+  it("under recomendado: coluna alternativa (over, renderizada PRIMEIRO) é neutra e a badge cai no under", () => {
+    const markup = renderToStaticMarkup(
+      <AnalysisScenarios scenarios={underScenarios} returnTone="positive" />,
+    );
+    // A alternativa renderiza antes da recomendada — o segmento é delimitado
+    // pelo próximo marcador, não pelo fim do markup.
+    const alt = columnSegment(markup, "alternative");
+    expect(alt).toContain("mais de 2.5 gols");
+    expect(alt).toContain("cenário alternativo");
+    expect(alt).not.toContain("edge-fg");
+    expect(alt).not.toContain("edge-soft");
+    expect(alt).not.toContain("edge-border");
+    expect(alt).not.toContain("accent-");
+    expect(alt).toContain("bg-surface-2");
+
+    // badge exatamente uma vez, dentro da coluna recomendada (under).
+    expect(countOccurrences(markup, "recomendada")).toBe(1);
+    const recommended = columnSegment(markup, "recommended");
+    expect(recommended).toContain("menos de 2.5 gols");
+    expect(recommended).toContain("recomendada");
+    expect(recommended).toContain("bg-accent-soft");
+    expect(recommended).toContain("border-accent-border");
   });
 
   it("coluna alternativa tem a linha acionável da odd de equilíbrio do modelo", () => {
