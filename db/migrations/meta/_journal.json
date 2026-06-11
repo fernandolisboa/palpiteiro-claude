@@ -50,6 +50,13 @@
       "when": 1781179596225,
       "tag": "0006_unique_tarantula",
       "breakpoints": true
+    },
+    {
+      "idx": 7,
+      "version": "7",
+      "when": 1781183276727,
+      "tag": "0007_oval_maggott",
+      "breakpoints": true
     }
   ]
 }

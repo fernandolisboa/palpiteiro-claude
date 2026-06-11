@@ -218,6 +218,14 @@ export const predictions = pgTable(
     bookmaker: text(),
     impliedProbPct: numeric({ precision: 5, scale: 2 }),
     edgePct: numeric({ precision: 5, scale: 2 }),
+    // Par de odds congelado no momento da análise (ADR 0012, decisões 3-4),
+    // gravado pra TODA recomendação, inclusive pass — daí "AtPrediction", não
+    // "AtRecommendation" (em pass não existe recomendação). Nullable: rows
+    // históricas ficam null (sem backfill, decisão 5). Sem FK pra
+    // match_odds_snapshots: o fallback do predict() (Odds API direta) não
+    // persiste snapshot — cópia congelada, como oddAtRecommendation.
+    overOddAtPrediction: numeric({ precision: 6, scale: 3 }),
+    underOddAtPrediction: numeric({ precision: 6, scale: 3 }),
     stakeUnits: numeric({ precision: 6, scale: 2 }).notNull().default("1"),
     modelVersion: text().notNull(),
     promptVersion: text().notNull(),

@@ -578,9 +578,16 @@ export async function predict({
         keyFactors: output.key_factors,
         minimumOdd: output.minimum_odd?.toFixed(3) ?? null,
         oddAtRecommendation: oddAtRec?.toFixed(3) ?? null,
-        bookmaker: side !== "pass" ? oddsBundle.bookmakerTitle : null,
+        // bookmaker = fonte das odds analisadas — persiste também em pass
+        // (ADR 0012, decisão 3).
+        bookmaker: oddsBundle.bookmakerTitle,
         impliedProbPct: impliedPct?.toFixed(2) ?? null,
         edgePct: edge?.toFixed(2) ?? null,
+        // Par congelado dos DOIS lados, pra toda recomendação inclusive pass
+        // (ADR 0012, decisões 3-4) — alimenta o bloco de cenários sem depender
+        // de snapshot vivo.
+        overOddAtPrediction: oddsBundle.overOdd.toFixed(3),
+        underOddAtPrediction: oddsBundle.underOdd.toFixed(3),
         modelVersion: model.id,
         promptVersion: PROMPT_VERSION,
       })

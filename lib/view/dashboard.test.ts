@@ -116,6 +116,8 @@ function makeDetail(overrides: Partial<DashboardDetail> = {}): DashboardDetail {
     bookmaker: "BetX",
     impliedProbPct: "42.89",
     edgePct: "7.30",
+    overOddAtPrediction: "1.920",
+    underOddAtPrediction: "1.950",
     stakeUnits: "2.00",
     modelVersion: "claude-sonnet-4-5-20250929",
     promptVersion: "over_under_v1.2",
@@ -184,5 +186,48 @@ describe("toPredictionDetailView", () => {
       includeRawPayloads: true,
     });
     expect(v.outcome).toBeNull();
+  });
+
+  it("shows the real bookmaker on a pass prediction (frozen pair era, ADR 0012)", () => {
+    // Pass novas persistem bookmaker = fonte das odds analisadas — mudança
+    // aceita da #104; pass históricas (bookmaker null) seguem em "—".
+    const base = makeDetail({ outcome: null });
+    const v = toPredictionDetailView(
+      {
+        ...base,
+        prediction: {
+          ...base.prediction,
+          recommendation: "pass",
+          minimumOdd: null,
+          oddAtRecommendation: null,
+          impliedProbPct: null,
+          edgePct: null,
+          bookmaker: "BetX",
+        },
+      },
+      { includeRawPayloads: false },
+    );
+    expect(v.prediction.rec).toBe("PASS");
+    expect(v.prediction.bookmaker).toBe("BetX");
+    expect(v.prediction.odd).toBe("—");
+
+    const legacy = toPredictionDetailView(
+      {
+        ...base,
+        prediction: {
+          ...base.prediction,
+          recommendation: "pass",
+          minimumOdd: null,
+          oddAtRecommendation: null,
+          impliedProbPct: null,
+          edgePct: null,
+          bookmaker: null,
+          overOddAtPrediction: null,
+          underOddAtPrediction: null,
+        },
+      },
+      { includeRawPayloads: false },
+    );
+    expect(legacy.prediction.bookmaker).toBe("—");
   });
 });

@@ -429,6 +429,66 @@ describe("predict() — odds snapshot reuse vs. fallback", () => {
   });
 });
 
+describe("predict() — congelamento do par de odds na prediction (#104)", () => {
+  it("over: persists the frozen pair (toFixed(3)) plus bookmaker alongside the recommended-side columns", async () => {
+    await expect(
+      predict({ matchId: "m-1", userId: "u-1", isAdmin: false }),
+    ).resolves.toBeDefined();
+
+    // insertValues[0] = ai_calls; [1] = predictions.
+    const predictionRow = insertValues.mock.calls[1]?.[0] as Record<
+      string,
+      unknown
+    >;
+    expect(predictionRow.recommendation).toBe("over");
+    expect(predictionRow.overOddAtPrediction).toBe("1.900");
+    expect(predictionRow.underOddAtPrediction).toBe("1.950");
+    expect(predictionRow.bookmaker).toBe("Pinnacle");
+    // Colunas do lado recomendado preservadas (over → odd do over).
+    expect(predictionRow.oddAtRecommendation).toBe("1.900");
+  });
+
+  it("pass: persists the frozen pair AND bookmaker with null recommended-side columns", async () => {
+    // Fixture SEM minimum_odd — o superRefine do OverUnderOutputSchema proíbe
+    // minimum_odd quando recommendation é "pass".
+    anthropicCreate.mockResolvedValue({
+      ...anthropicMessage(),
+      content: [
+        {
+          type: "tool_use",
+          id: "tu-1",
+          name: "submit_prediction",
+          input: {
+            recommendation: "pass",
+            confidence_pct: 53,
+            rationale: "Edge too thin on both sides.",
+            key_factors: ["balanced market"],
+          },
+        },
+      ],
+    });
+
+    await expect(
+      predict({ matchId: "m-1", userId: "u-1", isAdmin: false }),
+    ).resolves.toBeDefined();
+
+    const predictionRow = insertValues.mock.calls[1]?.[0] as Record<
+      string,
+      unknown
+    >;
+    expect(predictionRow.recommendation).toBe("pass");
+    // Par congelado + bookmaker persistidos também em pass (ADR 0012).
+    expect(predictionRow.overOddAtPrediction).toBe("1.900");
+    expect(predictionRow.underOddAtPrediction).toBe("1.950");
+    expect(predictionRow.bookmaker).toBe("Pinnacle");
+    // Sem lado recomendado: colunas de recomendação continuam null.
+    expect(predictionRow.oddAtRecommendation).toBeNull();
+    expect(predictionRow.impliedProbPct).toBeNull();
+    expect(predictionRow.edgePct).toBeNull();
+    expect(predictionRow.minimumOdd).toBeNull();
+  });
+});
+
 describe("predict() — model resolution (override > DB default) + model-aware request", () => {
   it("no override + DB default Opus → Anthropic called with opus id and NO temperature (adaptive)", async () => {
     getDefaultModelId.mockResolvedValue("claude-opus-4-8");
