@@ -41,6 +41,29 @@ export type BetSummary = {
   plain: string;
 };
 
+// Uma coluna do bloco de cenários — 100% strings prontas pra render
+// (célula não-derivável = "—"). Valores congelados da análise, nunca do
+// snapshot vivo (ADR 0012).
+export type ScenarioSideView = {
+  modelProb: string; // "58%" — prob. do modelo (label unificado; nunca "confidence")
+  marketProb: string; // "50.7%" ou "—" — implied normalizada
+  odd: string; // "1.92" ou "—" — odd congelada na análise
+  edge: string; // "+7.3pp" ou "—"
+  expectedReturn: string; // "+11.4%" ou "—"
+  modelBreakEvenOdd: string; // "2.38" — odd de equilíbrio pelo modelo
+};
+
+export type ScenariosView = {
+  over: ScenarioSideView;
+  under: ScenarioSideView;
+  recommended: "over" | "under" | null;
+  // Frase full-width abaixo do grid: break-even da zebra (não-pass) ou copy
+  // de margem de erro (pass). null quando não derivável (histórica sem odd).
+  framing: string | null;
+  // Nota de degradação pra históricas sem o par congelado.
+  note: string | null;
+};
+
 export type AnalysisView = {
   kind: Recommendation;
   confidence: string;
@@ -54,6 +77,7 @@ export type AnalysisView = {
   expectedReturnTone: "positive" | "neutral";
   evLegend: string | null;
   minEdgeLabel: string;
+  scenarios: ScenariosView | null;
   rationale: string;
   factors: string[];
   generatedAt: string;

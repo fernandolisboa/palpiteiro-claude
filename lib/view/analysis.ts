@@ -8,8 +8,18 @@ import {
   formatPct,
   formatRelativeAgo,
 } from "@/lib/format";
-import { computeEvPerUnit, MIN_EDGE_PP } from "@/lib/odds/scenario";
-import type { AnalysisView, BetSummary, Recommendation } from "@/lib/view/types";
+import {
+  computeEvPerUnit,
+  computeScenarios,
+  MIN_EDGE_PP,
+  type ScenarioSide,
+} from "@/lib/odds/scenario";
+import type {
+  AnalysisView,
+  BetSummary,
+  Recommendation,
+  ScenarioSideView,
+} from "@/lib/view/types";
 
 type PredictionInput = {
   recommendation: "over" | "under" | "pass";
@@ -19,7 +29,10 @@ type PredictionInput = {
   minimumOdd: string | number | null;
   oddAtRecommendation: string | number | null;
   bookmaker: string | null;
+  impliedProbPct: string | number | null;
   edgePct: string | number | null;
+  overOddAtPrediction: string | number | null;
+  underOddAtPrediction: string | number | null;
   modelVersion: string;
   promptVersion: string;
   createdAt: Date;
@@ -40,6 +53,12 @@ const BET_SUMMARY: Record<"over" | "under", BetSummary> = {
   under: { market: "Menos de 2.5 gols", plain: "no máximo 2 gols no jogo" },
 };
 
+// Descrição leiga do lado na frase de framing do break-even da zebra.
+const FRAMING_SIDE_LABEL: Record<"over" | "under", string> = {
+  over: "pelo menos 3 gols",
+  under: "menos de 3 gols",
+};
+
 // numeric do Drizzle chega como STRING — converte na borda. Retorna null pra
 // valores ausentes/inválidos (históricas sem a coluna preenchida).
 function toFiniteNumber(value: string | number | null): number | null {
@@ -55,6 +74,79 @@ function toFiniteNumber(value: string | number | null): number | null {
 function relativeAgoLabel(createdAt: Date, now: Date): string {
   const ago = formatRelativeAgo(createdAt, now);
   return ago === "agora" ? "há menos de 1min" : `há ${ago}`;
+}
+
+// Odd congelada fora do domínio do módulo puro (≤ 1, defensivo) degrada pra
+// null — computeScenarios/computeEvPerUnit lançam pra entrada inválida; a view
+// renderiza "—".
+function toValidOdd(value: string | number | null): number | null {
+  const n = toFiniteNumber(value);
+  return n !== null && n > 1 ? n : null;
+}
+
+function toScenarioSideView(side: ScenarioSide): ScenarioSideView {
+  const edge = formatEdge(side.edgePct);
+  return {
+    modelProb: formatPct(side.modelProbPct),
+    marketProb:
+      side.impliedProbPct !== null ? formatPct(side.impliedProbPct) : "—",
+    odd: side.odd !== null ? formatOdd(side.odd) : "—",
+    edge: edge !== null ? `${edge}pp` : "—",
+    expectedReturn: formatEvPct(side.evPerUnit),
+    modelBreakEvenOdd: formatOdd(side.modelBreakEvenOdd),
+  };
+}
+
+// Bloco de cenários (ADR 0012): tudo derivado dos valores CONGELADOS da
+// prediction via computeScenarios (precedência: salvo vence recomputado —
+// invariante: o edge da coluna recomendada é o edgePct salvo da row). Nunca
+// usa o snapshot vivo; as odds atuais já têm casa no OddsCard.
+function toScenariosView(
+  prediction: PredictionInput,
+  confidenceNum: number | null,
+): AnalysisView["scenarios"] {
+  // Defensivo: confidence fora de (0, 100) degrada o bloco inteiro (o módulo
+  // puro lança; aqui dado ruim não pode derrubar a página).
+  if (confidenceNum === null || confidenceNum <= 0 || confidenceNum >= 100) {
+    return null;
+  }
+  const isPass = prediction.recommendation === "pass";
+  const computed = computeScenarios({
+    recommendation: prediction.recommendation,
+    confidencePct: confidenceNum,
+    oddAtRecommendation: toValidOdd(prediction.oddAtRecommendation),
+    impliedProbPct: toFiniteNumber(prediction.impliedProbPct),
+    edgePct: toFiniteNumber(prediction.edgePct),
+    overOdd: toValidOdd(prediction.overOddAtPrediction),
+    underOdd: toValidOdd(prediction.underOddAtPrediction),
+  });
+
+  // Lado alternativo (zebra) — só significa algo fora do pass.
+  const altKey: "over" | "under" =
+    computed.recommended === "under" ? "over" : "under";
+  const altSide = altKey === "over" ? computed.over : computed.under;
+
+  // Framing: linguagem de BREAK-EVEN ("só sai do zero") pra zebra — "vale a
+  // pena" é reservado ao critério de 5pp do lado recomendado (ADR 0012). No
+  // pass, copy de margem de erro: cobre inclusive retorno esperado POSITIVO
+  // sob o veredito de não apostar (edge < 5pp não implica EV ≤ 0).
+  let framing: string | null = null;
+  if (isPass) {
+    framing = `vantagens pequenas (abaixo de ${MIN_EDGE_PP}pp) ficam dentro da margem de erro do modelo — por isso não há recomendação`;
+  } else if (altSide.breakEvenProbPct !== null) {
+    framing = `a aposta em ${FRAMING_SIDE_LABEL[altKey]} só sai do zero se a chance real for maior que ${formatPct(altSide.breakEvenProbPct)} — na análise o modelo estimou ${formatPct(altSide.modelProbPct)}`;
+  }
+
+  return {
+    over: toScenarioSideView(computed.over),
+    under: toScenarioSideView(computed.under),
+    recommended: computed.recommended,
+    framing,
+    note:
+      !isPass && altSide.odd === null
+        ? "odds do outro lado não registradas nesta análise"
+        : null,
+  };
 }
 
 export function toAnalysisView(
@@ -112,6 +204,7 @@ export function toAnalysisView(
     confidence: formatPct(prediction.confidencePct),
     edge: formatEdge(prediction.edgePct),
     minOdd: prediction.minimumOdd !== null ? formatOdd(prediction.minimumOdd) : null,
+    scenarios: toScenariosView(prediction, confidenceNum),
     betSummary: isPass ? null : BET_SUMMARY[recommendation],
     oddAtRec: isPass ? null : formatOdd(prediction.oddAtRecommendation),
     oddAtRecAgo: isPass ? null : relativeAgoLabel(prediction.createdAt, now),
