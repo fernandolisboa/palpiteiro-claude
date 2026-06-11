@@ -24,6 +24,7 @@ export function mobileNavLinks(isAdmin: boolean): NavLink[] {
   const links: NavLink[] = [
     { href: "/", label: "jogos" },
     { href: "/dashboard", label: "dashboard" },
+    { href: "/como-funciona", label: "como funciona" },
   ];
   if (isAdmin) {
     links.push({ href: "/admin", label: "admin" });
