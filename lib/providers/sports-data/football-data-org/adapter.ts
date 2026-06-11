@@ -39,6 +39,7 @@ import {
 import { FOOTBALL_DATA_ORG_TEAM_IDS } from "@/lib/providers/sports-data/football-data-org/team-ids";
 import {
   FOOTBALL_DATA_ORG_LEAGUE_CODES,
+  currentSeason,
   type SupportedLeague,
 } from "@/lib/providers/sports-data/leagues";
 import { canonicalizeOrPassthrough } from "@/lib/providers/sports-data/team-names";
@@ -500,6 +501,30 @@ export class FootballDataOrgAdapter implements SportsDataProvider {
   }
 
   /**
+   * Internal: lists the WHOLE competition+season in one call via the v4
+   * `season` filter on /competitions/{code}/matches (confirmed: the docs
+   * accept `season` as a four-digit year, e.g. `?season=2025`; default is the
+   * current season). Distinct cache key from the date-window variant because
+   * the `season` param differs, so season-wide and day-window reads never
+   * collide. ONE_HOUR TTL mirrors getStandings — a competition-wide payload
+   * mixes finished and upcoming matches, so per-fixture imminent/live tightening
+   * isn't meaningful for the bulk fetch.
+   */
+  private async listCompetitionMatchesBySeason(
+    league: SupportedLeague,
+    season: number,
+  ): Promise<FootballDataOrgMatchesList> {
+    const code = FOOTBALL_DATA_ORG_LEAGUE_CODES[league];
+    const endpoint = `/competitions/${code}/matches`;
+    return await request({
+      endpoint,
+      params: { season },
+      schema: MatchesListSchema,
+      ttlMs: ONE_HOUR,
+    });
+  }
+
+  /**
    * Internal: fetches up to `limit` finished matches for a team. Shared cache
    * between getH2H and getTeamForm — both methods hit the same endpoint with
    * the same `{teamId, status, limit}` params, so a single fetch serves both.
@@ -541,6 +566,25 @@ export class FootballDataOrgAdapter implements SportsDataProvider {
       return fixtures;
     } catch (err) {
       wrapFootballDataOrgError(err, "getFixturesByDate", { date, league });
+    }
+  }
+
+  async getFixturesBySeason(
+    league: SupportedLeague,
+    season?: number,
+  ): Promise<NormalizedFixture[]> {
+    try {
+      const seasonValue = season ?? currentSeason(league);
+      // One call covers the whole competition+season via the v4 `season` filter,
+      // then normalize through the SAME toNormalizedFixture path getFixturesByDate
+      // uses so both entry points emit identical fixtures.
+      const list = await this.listCompetitionMatchesBySeason(
+        league,
+        seasonValue,
+      );
+      return list.matches.map((m) => toNormalizedFixture(m, league));
+    } catch (err) {
+      wrapFootballDataOrgError(err, "getFixturesBySeason", { league, season });
     }
   }
 

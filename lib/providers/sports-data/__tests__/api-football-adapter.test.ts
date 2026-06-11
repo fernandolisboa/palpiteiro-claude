@@ -1,4 +1,4 @@
-import { describe, expect, it, vi } from "vitest";
+import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 
 import { inMemoryCache } from "@/lib/cache/in-memory";
 import { ApiFootballAdapter, __testing } from "@/lib/providers/sports-data/api-football/adapter";
@@ -639,6 +639,91 @@ describe("ApiFootballAdapter — World Cup injuries are Unsupported", () => {
     await expect(a.getInjuriesByTeam("Brazil", "world_cup")).rejects.toThrow(
       SportsDataUnsupportedError,
     );
+  });
+});
+
+// ─── getFixturesBySeason — single competition+season fetch ──────────────────
+// Asserts the adapter issues ONE /fixtures?league&season call (no per-day
+// iteration) and returns normalized fixtures. We stub global fetch so the
+// request layer goes through the real cache/HTTP path but never hits the
+// network; the cache key for this league+season is cleared so we observe a
+// real fetch, not a cache hit.
+
+function jsonResponse(body: unknown): Response {
+  return new Response(JSON.stringify(body), {
+    status: 200,
+    headers: { "content-type": "application/json" },
+  });
+}
+
+// Wraps fixtures in the API-Football envelope FixtureEnvelopeSchema requires.
+function fixtureEnvelope(response: ApiFootballFixture[]): unknown {
+  return {
+    get: "fixtures",
+    parameters: {},
+    errors: [],
+    results: response.length,
+    paging: { current: 1, total: 1 },
+    response,
+  };
+}
+
+describe("ApiFootballAdapter.getFixturesBySeason", () => {
+  const ORIGINAL_KEY = process.env.API_FOOTBALL_KEY;
+  // Brasileirão season 2026: deterministic via currentSeasonByLeague (month >= 4
+  // in May → 2026). Cache key matches buildCacheKey("/fixtures", {league,season}).
+  const cacheKey = "sports-data:api-football:fixtures:league:71:season:2026";
+
+  beforeEach(async () => {
+    process.env.API_FOOTBALL_KEY = "test-key";
+    await inMemoryCache.delete(cacheKey);
+    vi.useFakeTimers();
+    vi.setSystemTime(new Date("2026-05-15T12:00:00.000Z"));
+  });
+
+  afterEach(() => {
+    vi.useRealTimers();
+    vi.restoreAllMocks();
+    if (ORIGINAL_KEY === undefined) delete process.env.API_FOOTBALL_KEY;
+    else process.env.API_FOOTBALL_KEY = ORIGINAL_KEY;
+  });
+
+  it("issues a SINGLE /fixtures?league&season call and normalizes fixtures", async () => {
+    const fetchSpy = vi
+      .spyOn(globalThis, "fetch")
+      .mockResolvedValue(jsonResponse(fixtureEnvelope([makeFixture()])));
+
+    const a = new ApiFootballAdapter();
+    const fixtures = await a.getFixturesBySeason("brasileirao_a");
+
+    // Exactly one HTTP call — the whole-competition fetch, not day-by-day.
+    expect(fetchSpy).toHaveBeenCalledTimes(1);
+    const calledUrl = String(fetchSpy.mock.calls[0]![0]);
+    expect(calledUrl).toContain("/fixtures");
+    expect(calledUrl).toContain("league=71");
+    expect(calledUrl).toContain("season=2026");
+    // No date param: this is the season-wide variant, not getFixturesByDate.
+    expect(calledUrl).not.toContain("date=");
+
+    // Output is normalized through the same toNormalizedFixture path.
+    expect(fixtures).toHaveLength(1);
+    expect(fixtures[0]).toEqual(
+      toNormalizedFixture(makeFixture(), "brasileirao_a"),
+    );
+  });
+
+  it("honors an explicit season override on the query", async () => {
+    const overrideKey = "sports-data:api-football:fixtures:league:71:season:2024";
+    await inMemoryCache.delete(overrideKey);
+    const fetchSpy = vi
+      .spyOn(globalThis, "fetch")
+      .mockResolvedValue(jsonResponse(fixtureEnvelope([])));
+
+    const a = new ApiFootballAdapter();
+    await a.getFixturesBySeason("brasileirao_a", 2024);
+
+    expect(fetchSpy).toHaveBeenCalledTimes(1);
+    expect(String(fetchSpy.mock.calls[0]![0])).toContain("season=2024");
   });
 });
 

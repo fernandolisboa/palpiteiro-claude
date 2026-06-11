@@ -32,6 +32,7 @@ function makeProvider(
       ]),
     },
     getFixturesByDate: getFixturesByDate as never,
+    getFixturesBySeason: vi.fn().mockResolvedValue([]) as never,
     getFixtureByMatch: vi.fn() as never,
     getFixtureResult: vi.fn() as never,
     getH2H: vi.fn() as never,

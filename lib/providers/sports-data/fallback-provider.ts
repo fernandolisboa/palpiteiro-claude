@@ -134,6 +134,17 @@ export class FallbackProvider implements SportsDataProvider {
     );
   }
 
+  getFixturesBySeason(
+    league: SupportedLeague,
+    season?: number,
+  ): Promise<NormalizedFixture[]> {
+    return this.withFallback(
+      "getFixturesBySeason",
+      (p) => p.capabilities.supportedLeagues.has(league),
+      (p) => p.getFixturesBySeason(league, season),
+    );
+  }
+
   getFixtureByMatch(ref: FixtureRef): Promise<NormalizedFixture | undefined> {
     return this.withFallback(
       "getFixtureByMatch",
