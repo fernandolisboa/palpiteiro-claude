@@ -112,8 +112,10 @@ vi.mock("@/lib/ai/anthropic", () => ({
 }));
 
 const getDefaultModelId = vi.fn();
+const getGenerationParams = vi.fn();
 vi.mock("@/lib/db/queries/ai-config", () => ({
   getDefaultModelId: (...args: unknown[]) => getDefaultModelId(...args),
+  getGenerationParams: (...args: unknown[]) => getGenerationParams(...args),
 }));
 
 const getPreferredModelId = vi.fn();
@@ -271,6 +273,11 @@ function setHappyPath() {
   getLatestFreshOddsSnapshot.mockResolvedValue(null);
   // Default global resolvido pelo DB quando não há override nem preferência.
   getDefaultModelId.mockResolvedValue("claude-opus-4-8");
+  getGenerationParams.mockResolvedValue({
+    maxTokens: 16000,
+    effort: "high",
+    temperature: 0.3,
+  });
   // Sem preferência por padrão — cada teste que exercita a preferência sobrescreve.
   getPreferredModelId.mockResolvedValue(null);
   anthropicCreate.mockResolvedValue(anthropicMessage());
@@ -515,6 +522,16 @@ describe("predict() — model resolution (override > DB default) + model-aware r
     };
     expect(aiCallRow.model).toBe("claude-opus-4-8");
     expect(predictionRow.modelVersion).toBe("claude-opus-4-8");
+  });
+
+  it("a request carrega o max_tokens configurado com folga pro thinking (guarda o bug stopReason max_tokens)", async () => {
+    await expect(
+      predict({ matchId: "m-1", userId: "u-1", isAdmin: false }),
+    ).resolves.toBeDefined();
+    const arg = anthropicCreate.mock.calls[0]?.[0];
+    expect(arg.max_tokens).toBe(16000);
+    // folga mínima: abaixo disso o thinking dos modelos adaptive estoura antes do tool_use
+    expect(arg.max_tokens).toBeGreaterThanOrEqual(4000);
   });
 
   it("modelOverride Sonnet wins over DB default Opus → sonnet id + temperature 0.3", async () => {

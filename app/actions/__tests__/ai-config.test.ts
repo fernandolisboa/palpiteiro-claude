@@ -5,14 +5,22 @@ vi.mock("next/cache", () => ({ revalidatePath: vi.fn() }));
 vi.mock("@/auth", () => ({ auth: vi.fn() }));
 vi.mock("@/lib/db/queries/ai-config", () => ({
   setDefaultModelId: vi.fn(),
+  setGenerationParams: vi.fn(),
 }));
 
-import { updateDefaultModel } from "@/app/actions/ai-config";
+import {
+  updateDefaultModel,
+  updateGenerationParams,
+} from "@/app/actions/ai-config";
 import { auth } from "@/auth";
-import { setDefaultModelId } from "@/lib/db/queries/ai-config";
+import {
+  setDefaultModelId,
+  setGenerationParams,
+} from "@/lib/db/queries/ai-config";
 
 const mockAuth = auth as unknown as Mock<() => Promise<Session | null>>;
 const mockSet = vi.mocked(setDefaultModelId);
+const mockSetParams = vi.mocked(setGenerationParams);
 
 const ADMIN = {
   user: { id: "u1", email: "a@b.com", role: "admin" },
@@ -33,6 +41,7 @@ function form(fields: Record<string, string>): FormData {
 beforeEach(() => {
   mockAuth.mockReset();
   mockSet.mockReset();
+  mockSetParams.mockReset();
 });
 
 describe("updateDefaultModel", () => {
@@ -81,5 +90,56 @@ describe("updateDefaultModel", () => {
     );
     expect(res.ok).toBe(false);
     expect(mockSet).not.toHaveBeenCalled();
+  });
+});
+
+describe("updateGenerationParams", () => {
+  const valid = { maxTokens: "12000", effort: "medium", temperature: "0.4" };
+
+  it("non-admin caller is rejected and setter is NOT called", async () => {
+    mockAuth.mockResolvedValue(USER);
+    const res = await updateGenerationParams(null, form(valid));
+    expect(res.ok).toBe(false);
+    expect(mockSetParams).not.toHaveBeenCalled();
+  });
+
+  it("admin + valid → setter called with parsed (params, userId), returns ok", async () => {
+    mockAuth.mockResolvedValue(ADMIN);
+    const res = await updateGenerationParams(null, form(valid));
+    expect(res).toEqual({ ok: true });
+    expect(mockSetParams).toHaveBeenCalledWith(
+      { maxTokens: 12000, effort: "medium", temperature: 0.4 },
+      "u1",
+    );
+  });
+
+  it("admin + maxTokens fora do range → not ok, setter not called", async () => {
+    mockAuth.mockResolvedValue(ADMIN);
+    const res = await updateGenerationParams(
+      null,
+      form({ ...valid, maxTokens: "999999" }),
+    );
+    expect(res.ok).toBe(false);
+    expect(mockSetParams).not.toHaveBeenCalled();
+  });
+
+  it("admin + effort inválido (xhigh) → not ok, setter not called", async () => {
+    mockAuth.mockResolvedValue(ADMIN);
+    const res = await updateGenerationParams(
+      null,
+      form({ ...valid, effort: "xhigh" }),
+    );
+    expect(res.ok).toBe(false);
+    expect(mockSetParams).not.toHaveBeenCalled();
+  });
+
+  it("admin + temperature fora de [0,1] → not ok, setter not called", async () => {
+    mockAuth.mockResolvedValue(ADMIN);
+    const res = await updateGenerationParams(
+      null,
+      form({ ...valid, temperature: "2" }),
+    );
+    expect(res.ok).toBe(false);
+    expect(mockSetParams).not.toHaveBeenCalled();
   });
 });

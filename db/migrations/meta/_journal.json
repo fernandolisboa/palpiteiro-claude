@@ -57,6 +57,13 @@
       "when": 1781183276727,
       "tag": "0007_oval_maggott",
       "breakpoints": true
+    },
+    {
+      "idx": 8,
+      "version": "7",
+      "when": 1781211682937,
+      "tag": "0008_add_generation_params",
+      "breakpoints": true
     }
   ]
 }

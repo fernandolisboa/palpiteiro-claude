@@ -98,6 +98,53 @@ describe("buildAnthropicRequest — model-aware payload", () => {
   });
 });
 
+describe("buildAnthropicRequest — calibração model-aware (effort/temperature)", () => {
+  function buildWith(
+    model: Parameters<typeof buildAnthropicRequest>[0]["model"],
+    extra: { effort?: "low" | "medium" | "high" | "max"; temperature?: number },
+  ) {
+    return buildAnthropicRequest({
+      model,
+      system: "sys",
+      userMessage: "msg",
+      tools: [SUBMIT_PREDICTION_TOOL as unknown as Anthropic.Tool],
+      toolName: SUBMIT_PREDICTION_TOOL.name,
+      maxTokens: 16000,
+      ...extra,
+    });
+  }
+
+  it("adaptive (Opus 4.8): effort vai em output_config; segue sem sampling", () => {
+    const payload = buildWith(MODEL_REGISTRY["claude-opus-4-8"], {
+      effort: "medium",
+    });
+    expect(payload.output_config).toEqual({
+      effort: "medium",
+    });
+    expect(payload).not.toHaveProperty("temperature");
+  });
+
+  it("adaptive sem effort: NÃO emite output_config (default do servidor)", () => {
+    const payload = buildWith(MODEL_REGISTRY["claude-opus-4-8"], {});
+    expect(payload.output_config).toBeUndefined();
+  });
+
+  it("temperature-mode (Haiku): usa a temperature calibrada e IGNORA effort", () => {
+    const payload = buildWith(MODEL_REGISTRY["claude-haiku-4-5"], {
+      effort: "max", // não deve vazar pro caminho temperature (Haiku dá erro)
+      temperature: 0.7,
+    });
+    expect(payload.temperature).toBe(0.7);
+    expect(payload.output_config).toBeUndefined();
+    expect(payload).not.toHaveProperty("thinking");
+  });
+
+  it("temperature-mode sem override: cai no default do registry (0.3)", () => {
+    const payload = buildWith(MODEL_REGISTRY["claude-sonnet-4-5-20250929"], {});
+    expect(payload.temperature).toBe(0.3);
+  });
+});
+
 describe("MIN_EDGE_PP ↔ SYSTEM_PROMPT sync", () => {
   it("the UI threshold constant matches the prompt's edge rule", () => {
     // Se um prompt futuro mudar o threshold de 5pp, este teste quebra em vez

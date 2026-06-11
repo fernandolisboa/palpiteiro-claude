@@ -258,6 +258,13 @@ export const predictionOutcomes = pgTable("prediction_outcomes", {
 export const aiConfig = pgTable("ai_config", {
   id: integer().primaryKey().default(1),
   defaultModelId: text().notNull(),
+  // Parâmetros de geração calibráveis em /admin/settings (ADR 0008, emenda 2).
+  // Defaults espelham lib/ai/generation-params.ts (GENERATION_PARAM_DEFAULTS);
+  // consumo MODEL-AWARE no request-builder (maxTokens p/ todos, effort só
+  // adaptive, temperature só temperature-mode). Validados na query layer.
+  maxTokens: integer().notNull().default(16000),
+  effort: text().notNull().default("high"),
+  temperature: numeric({ precision: 3, scale: 2 }).notNull().default("0.30"),
   updatedByUserId: uuid().references(() => users.id, { onDelete: "set null" }),
   updatedAt: timestamp({ withTimezone: true }).notNull().defaultNow(),
 });
