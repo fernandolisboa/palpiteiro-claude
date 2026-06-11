@@ -13,7 +13,8 @@ import type { LeagueFilter } from "@/lib/view/types";
  */
 export const ACTIVE_LEAGUES: readonly SupportedLeague[] = ["world_cup"];
 
-// Janela única compartilhada por lista (home) E sync (precisam mover juntos).
+// Janela default de EXIBIÇÃO da home (preset `today5`). NÃO dirige mais o sync:
+// o sync busca a competição+temporada inteira via getFixturesBySeason.
 export const LIST_WINDOW_HOURS = 120; // 5 dias
 
 // Keys de filtro derivadas das ligas ativas (ex.: ['wc']).
@@ -27,10 +28,6 @@ if (!firstActiveKey) {
   throw new Error("ACTIVE_LEAGUES must contain at least one league");
 }
 export const DEFAULT_LEAGUE_FILTER: LeagueFilter = firstActiveKey;
-
-// +1 day-bucket: o sync busca por dia-calendário (getFixturesByDate) e uma janela
-// rolante de LIST_WINDOW_HOURS cruza ceil(h/24)+1 dias-calendário.
-export const SYNC_HORIZON_DAYS = Math.ceil(LIST_WINDOW_HOURS / 24) + 1;
 
 /**
  * "all" só é considerado filtro ativo quando há mais de uma liga ativa (aí a aba

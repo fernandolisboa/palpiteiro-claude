@@ -1,8 +1,5 @@
 import { inMemoryCache } from "@/lib/cache/in-memory";
-import {
-  ACTIVE_LEAGUES,
-  SYNC_HORIZON_DAYS,
-} from "@/lib/config/active-leagues";
+import { ACTIVE_LEAGUES } from "@/lib/config/active-leagues";
 import { upsertMatchesFromProvider } from "@/lib/db/queries/matches";
 import { getSportsDataProvider } from "@/lib/providers/sports-data";
 import type { NormalizedFixture } from "@/lib/providers/sports-data/types";
@@ -10,20 +7,11 @@ import type { NormalizedFixture } from "@/lib/providers/sports-data/types";
 const SYNC_LOCK_TTL_MS = 60 * 60 * 1000; // 1h
 const SYNC_LOCK_KEY = "sync:upcoming-fixtures:lock";
 
-function pad2(n: number): string {
-  return n.toString().padStart(2, "0");
-}
-
-function isoDateForDay(now: Date, dayOffset: number): string {
-  const d = new Date(now);
-  d.setUTCDate(d.getUTCDate() + dayOffset);
-  return `${d.getUTCFullYear()}-${pad2(d.getUTCMonth() + 1)}-${pad2(d.getUTCDate())}`;
-}
-
 /**
- * Sync sob demanda das fixtures das ligas ativas (ACTIVE_LEAGUES) dentro do
- * horizonte SYNC_HORIZON_DAYS (derivado de LIST_WINDOW_HOURS). Idempotente
- * (upsert por composite key). Lock processo-local de 1h em inMemoryCache:
+ * Sync sob demanda das fixtures das ligas ativas (ACTIVE_LEAGUES). Para cada
+ * liga ativa busca a competição+temporada INTEIRA numa única chamada de provider
+ * (getFixturesBySeason) em vez de iterar dia-a-dia. Idempotente (upsert por
+ * composite key). Lock processo-local de 1h em inMemoryCache:
  *
  *   - Primeiro request escreve o lock ANTES de disparar fetch externo (evita
  *     stampede com requests concorrentes).
@@ -44,16 +32,9 @@ export async function ensureUpcomingFixturesSynced(
 
   try {
     const provider = getSportsDataProvider();
-    const days = Array.from({ length: SYNC_HORIZON_DAYS }, (_, i) =>
-      isoDateForDay(now, i),
+    const settled = await Promise.allSettled(
+      ACTIVE_LEAGUES.map((league) => provider.getFixturesBySeason(league)),
     );
-    const calls: Promise<NormalizedFixture[]>[] = [];
-    for (const date of days) {
-      for (const league of ACTIVE_LEAGUES) {
-        calls.push(provider.getFixturesByDate(date, league));
-      }
-    }
-    const settled = await Promise.allSettled(calls);
     const fixtures: NormalizedFixture[] = [];
     for (const r of settled) {
       if (r.status === "fulfilled") {

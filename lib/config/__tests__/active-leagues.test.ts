@@ -4,8 +4,6 @@ import {
   ACTIVE_LEAGUE_KEYS,
   ACTIVE_LEAGUES,
   DEFAULT_LEAGUE_FILTER,
-  LIST_WINDOW_HOURS,
-  SYNC_HORIZON_DAYS,
   isActiveLeagueFilter,
 } from "@/lib/config/active-leagues";
 
@@ -27,10 +25,5 @@ describe("active-leagues config", () => {
 
   it("não considera 'all' ativo quando há só uma liga ativa", () => {
     expect(isActiveLeagueFilter("all")).toBe(false);
-  });
-
-  it("deriva o horizonte de sync da janela da lista (cobre 120h)", () => {
-    expect(SYNC_HORIZON_DAYS * 24).toBeGreaterThanOrEqual(LIST_WINDOW_HOURS);
-    expect(SYNC_HORIZON_DAYS).toBe(Math.ceil(LIST_WINDOW_HOURS / 24) + 1);
   });
 });
