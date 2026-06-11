@@ -1,6 +1,7 @@
 import { RefreshCcw } from "lucide-react";
 
 import { AnalysisScenarios } from "@/components/analysis-scenarios";
+import { HelpHint } from "@/components/help-hint";
 import { Button } from "@/components/ui/button";
 import { Card } from "@/components/ui/card";
 import { Separator } from "@/components/ui/separator";
@@ -17,8 +18,13 @@ export function AnalysisResult({ view, again = false }: Props) {
     return (
       <div className="flex flex-col rounded-[10px] border border-dashed border-border-strong bg-card">
         <div className="flex items-center justify-between px-4 pt-3 pb-2">
-          <span className="font-mono text-[10.5px] uppercase tracking-[0.16em] text-muted-foreground">
+          <span className="flex items-center gap-1 font-mono text-[10.5px] uppercase tracking-[0.16em] text-muted-foreground">
             sem edge claro
+            <HelpHint
+              anchor="recomendacao"
+              label="PASS — sem edge claro"
+              blurb="PASS = sem edge claro = não apostar; isso é disciplina, não erro. Pass rate alto (30–60%) é bom."
+            />
           </span>
           <span className="font-mono text-[10px] text-muted-fg-2">
             {view.generatedAt}
@@ -129,8 +135,13 @@ export function AnalysisResult({ view, again = false }: Props) {
           </div>
           {view.minOdd && (
             <div className="flex items-baseline justify-between gap-2 border-t border-border-subtle pt-2">
-              <span className="font-mono text-[10.5px] uppercase tracking-[0.14em] text-muted-foreground">
+              <span className="flex items-center gap-1 font-mono text-[10.5px] uppercase tracking-[0.14em] text-muted-foreground">
                 vale a pena se odd ≥
+                <HelpHint
+                  anchor="odd-minima"
+                  label="odd mínima"
+                  blurb="A menor odd em que a aposta ainda mantém vantagem mínima — definida pela IA. Abaixo dela, a vantagem some."
+                />
               </span>
               <span className="font-mono text-[15px] font-medium tabular-nums tracking-tight">
                 {view.minOdd}

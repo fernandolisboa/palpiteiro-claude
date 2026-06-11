@@ -1,6 +1,7 @@
 // MIN_EDGE_PP vem de lib/odds/scenario.ts, NUNCA de lib/ai/prompts/ — este
 // componente é alcançável pelo client component AnalysisPanel ("use client");
 // importar de lib/ai/prompts embarcaria o SYSTEM_PROMPT no bundle do cliente.
+import { HelpHint } from "@/components/help-hint";
 import { MIN_EDGE_PP } from "@/lib/odds/scenario";
 import { cn } from "@/lib/utils";
 import type { ScenarioSideView, ScenariosView } from "@/lib/view/types";
@@ -70,6 +71,10 @@ type ColumnProps = {
 
 function ScenarioColumn({ side, view, recommended, returnTone }: ColumnProps) {
   const isRecommended = recommended === side;
+  // Cada métrica se repete nas duas colunas (over + under): o `?` aparece UMA
+  // vez só, ancorado na coluna canônica (over), pra não dobrar aria-labels nem
+  // poluir o grid. Os anchors apontam pro glossário da #148.
+  const showHints = side === "over";
   // "cenário alternativo" só existe quando HÁ recomendação; em pass as duas
   // colunas são neutras, sem badge e sem rótulo de alternativa.
   const isAlternative = recommended !== null && !isRecommended;
@@ -105,8 +110,32 @@ function ScenarioColumn({ side, view, recommended, returnTone }: ColumnProps) {
           </span>
         )}
       </div>
-      <ScenarioRow label="prob. do modelo" value={view.modelProb} />
-      <ScenarioRow label="prob. do mercado" value={view.marketProb} />
+      <ScenarioRow
+        label="prob. do modelo"
+        value={view.modelProb}
+        hint={
+          showHints
+            ? {
+                anchor: "prob-modelo",
+                blurb:
+                  "A chance que a IA dá ao lado recomendado, comparada com a do mercado pra medir o edge.",
+              }
+            : undefined
+        }
+      />
+      <ScenarioRow
+        label="prob. do mercado"
+        value={view.marketProb}
+        hint={
+          showHints
+            ? {
+                anchor: "prob-implicita",
+                blurb:
+                  "A chance que a odd embute, já descontada a margem da casa. Nunca é 1/odd cru.",
+              }
+            : undefined
+        }
+      />
       <ScenarioRow label="odd na análise" value={view.odd} />
       {/* text-edge-fg é reservado a valores POSITIVOS da recomendação:
           nunca na coluna alternativa/neutra, e no retorno só quando o tom do
@@ -115,11 +144,28 @@ function ScenarioColumn({ side, view, recommended, returnTone }: ColumnProps) {
         label="edge"
         value={view.edge}
         emphasis={isRecommended && view.edge.startsWith("+")}
+        hint={
+          showHints
+            ? {
+                anchor: "edge",
+                blurb: `Quanto a prob. do modelo supera a do mercado, em pontos percentuais. O app só recomenda com pelo menos ${MIN_EDGE_PP}pp.`,
+              }
+            : undefined
+        }
       />
       <ScenarioRow
         label="retorno esperado"
         value={view.expectedReturn}
         emphasis={isRecommended && returnTone === "positive"}
+        hint={
+          showHints
+            ? {
+                anchor: "retorno-esperado",
+                blurb:
+                  "Ganho médio por aposta, no longo prazo, se a estimativa do modelo estiver certa.",
+              }
+            : undefined
+        }
       />
       {!isRecommended && (
         <p className="border-t border-border-subtle pt-1.5 text-[11px] leading-snug tracking-tight text-muted-foreground">
@@ -134,13 +180,17 @@ type RowProps = {
   label: string;
   value: string;
   emphasis?: boolean;
+  hint?: { anchor: string; blurb: string };
 };
 
-function ScenarioRow({ label, value, emphasis = false }: RowProps) {
+function ScenarioRow({ label, value, emphasis = false, hint }: RowProps) {
   return (
     <div className="flex items-baseline justify-between gap-2">
-      <span className="font-mono text-[10px] uppercase tracking-[0.14em] text-muted-foreground">
+      <span className="flex items-center gap-1 font-mono text-[10px] uppercase tracking-[0.14em] text-muted-foreground">
         {label}
+        {hint && (
+          <HelpHint anchor={hint.anchor} label={label} blurb={hint.blurb} />
+        )}
       </span>
       <span
         className={cn(
