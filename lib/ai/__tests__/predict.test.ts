@@ -524,6 +524,16 @@ describe("predict() — model resolution (override > DB default) + model-aware r
     expect(predictionRow.modelVersion).toBe("claude-opus-4-8");
   });
 
+  it("a request carrega o max_tokens configurado com folga pro thinking (guarda o bug stopReason max_tokens)", async () => {
+    await expect(
+      predict({ matchId: "m-1", userId: "u-1", isAdmin: false }),
+    ).resolves.toBeDefined();
+    const arg = anthropicCreate.mock.calls[0]?.[0];
+    expect(arg.max_tokens).toBe(16000);
+    // folga mínima: abaixo disso o thinking dos modelos adaptive estoura antes do tool_use
+    expect(arg.max_tokens).toBeGreaterThanOrEqual(4000);
+  });
+
   it("modelOverride Sonnet wins over DB default Opus → sonnet id + temperature 0.3", async () => {
     getDefaultModelId.mockResolvedValue("claude-opus-4-8");
     // Resposta carrega um `model` STALE (≠ id resolvido) pra provar que as
