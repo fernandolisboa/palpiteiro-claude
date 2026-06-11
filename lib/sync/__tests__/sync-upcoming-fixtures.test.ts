@@ -1,6 +1,5 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 
-import { inMemoryCache } from "@/lib/cache/in-memory";
 import { ACTIVE_LEAGUES } from "@/lib/config/active-leagues";
 import type { SupportedLeague } from "@/lib/providers/sports-data/leagues";
 import { __setSportsDataProviderForTesting } from "@/lib/providers/sports-data";
@@ -9,6 +8,7 @@ import type {
   SportsDataProvider,
 } from "@/lib/providers/sports-data/types";
 import { ensureUpcomingFixturesSynced } from "@/lib/sync/sync-upcoming-fixtures";
+import { acquireSyncLock, releaseSyncLock } from "@/lib/sync/lock";
 
 // DB é mockado: o sync só deve persistir, não tocar Postgres real nos testes.
 const upsertSpy = vi.fn();
@@ -16,6 +16,30 @@ vi.mock("@/lib/db/queries/matches", () => ({
   upsertMatchesFromProvider: (fixtures: NormalizedFixture[]) =>
     upsertSpy(fixtures),
 }));
+
+// Lock mockado: simula a semântica check-and-set (1º acquire vence, próximos
+// no-mesmo-"lock" falham) sem KV nem in-memory store real. `force` sempre vence.
+// Estado de lock compartilhado pelo mock — via vi.hoisted pra ser inicializado
+// ANTES do factory hoisted de vi.mock, e externo (não closure-local) pra que
+// `beforeEach` possa zerá-lo.
+const lockState = vi.hoisted(() => ({ held: false }));
+vi.mock("@/lib/sync/lock", () => ({
+  acquireSyncLock: vi.fn(async (opts?: { force?: boolean; ttlMs?: number }) => {
+    if (opts?.force) {
+      lockState.held = true;
+      return true;
+    }
+    if (lockState.held) return false;
+    lockState.held = true;
+    return true;
+  }),
+  releaseSyncLock: vi.fn(async () => {
+    lockState.held = false;
+  }),
+}));
+
+const acquireMock = vi.mocked(acquireSyncLock);
+const releaseMock = vi.mocked(releaseSyncLock);
 
 function makeProvider(overrides?: {
   getFixturesBySeason?: ReturnType<typeof vi.fn>;
@@ -48,9 +72,11 @@ function makeProvider(overrides?: {
 }
 
 describe("ensureUpcomingFixturesSynced", () => {
-  beforeEach(async () => {
+  beforeEach(() => {
     upsertSpy.mockClear();
-    await inMemoryCache.delete("sync:upcoming-fixtures:lock");
+    acquireMock.mockClear();
+    releaseMock.mockClear();
+    lockState.held = false;
   });
 
   afterEach(() => {
@@ -64,7 +90,7 @@ describe("ensureUpcomingFixturesSynced", () => {
       makeProvider({ getFixturesBySeason, getFixturesByDate }),
     );
 
-    await ensureUpcomingFixturesSynced(new Date("2026-06-07T00:00:00.000Z"));
+    await ensureUpcomingFixturesSynced();
 
     // Uma chamada de getFixturesBySeason por liga ativa — sem laço de dias.
     expect(getFixturesBySeason).toHaveBeenCalledTimes(ACTIVE_LEAGUES.length);
@@ -80,7 +106,7 @@ describe("ensureUpcomingFixturesSynced", () => {
     const getFixturesBySeason = vi.fn().mockResolvedValue([]);
     __setSportsDataProviderForTesting(makeProvider({ getFixturesBySeason }));
 
-    await ensureUpcomingFixturesSynced(new Date("2026-06-07T00:00:00.000Z"));
+    await ensureUpcomingFixturesSynced();
 
     const leaguesRequested = getFixturesBySeason.mock.calls.map(
       ([league]) => league,
@@ -95,26 +121,54 @@ describe("ensureUpcomingFixturesSynced", () => {
     const getFixturesBySeason = vi.fn().mockResolvedValue([fixture]);
     __setSportsDataProviderForTesting(makeProvider({ getFixturesBySeason }));
 
-    await ensureUpcomingFixturesSynced(new Date("2026-06-07T00:00:00.000Z"));
+    await ensureUpcomingFixturesSynced();
 
     expect(upsertSpy).toHaveBeenCalledTimes(1);
     expect(upsertSpy).toHaveBeenCalledWith([fixture]);
+  });
+
+  it("não roda (no-op) quando o lock não é adquirido", async () => {
+    const getFixturesBySeason = vi.fn().mockResolvedValue([]);
+    __setSportsDataProviderForTesting(makeProvider({ getFixturesBySeason }));
+
+    // 1º acquire vence; 2º falha o lock → no-op.
+    await ensureUpcomingFixturesSynced();
+    await ensureUpcomingFixturesSynced();
+
+    expect(getFixturesBySeason).toHaveBeenCalledTimes(ACTIVE_LEAGUES.length);
+    expect(upsertSpy).toHaveBeenCalledTimes(1);
   });
 
   it("o lock evita um segundo sync concorrente (stampede)", async () => {
     const getFixturesBySeason = vi.fn().mockResolvedValue([]);
     __setSportsDataProviderForTesting(makeProvider({ getFixturesBySeason }));
 
-    const now = new Date("2026-06-07T00:00:00.000Z");
-    await ensureUpcomingFixturesSynced(now);
-    // Segundo request enquanto o lock de 1h ainda está válido: no-op.
-    await ensureUpcomingFixturesSynced(now);
+    await ensureUpcomingFixturesSynced();
+    // Segundo request enquanto o lock ainda está válido: no-op.
+    await ensureUpcomingFixturesSynced();
 
     expect(getFixturesBySeason).toHaveBeenCalledTimes(ACTIVE_LEAGUES.length);
     expect(upsertSpy).toHaveBeenCalledTimes(1);
   });
 
-  it("uma falha de provider é isolada por allSettled e libera nada do lock", async () => {
+  it("force:true roda MESMO com o lock já segurado (cron)", async () => {
+    const getFixturesBySeason = vi.fn().mockResolvedValue([]);
+    __setSportsDataProviderForTesting(makeProvider({ getFixturesBySeason }));
+
+    await ensureUpcomingFixturesSynced(); // segura o lock
+    await ensureUpcomingFixturesSynced({ force: true }); // bypassa e roda
+
+    // Duas rodadas completas: 2 chamadas por liga, 2 upserts.
+    expect(getFixturesBySeason).toHaveBeenCalledTimes(
+      ACTIVE_LEAGUES.length * 2,
+    );
+    expect(upsertSpy).toHaveBeenCalledTimes(2);
+    expect(acquireMock).toHaveBeenLastCalledWith(
+      expect.objectContaining({ force: true }),
+    );
+  });
+
+  it("uma falha de provider é isolada por allSettled e NÃO libera o lock", async () => {
     // Com >1 liga ativa, o allSettled isolaria a liga que falha e ainda
     // upsertaria as demais. Com uma única liga ativa, garantimos pelo menos
     // que a falha não derruba o sync: ainda há um upsert (com [] de fixtures)
@@ -124,13 +178,22 @@ describe("ensureUpcomingFixturesSynced", () => {
       .mockRejectedValue(new Error("provider boom"));
     __setSportsDataProviderForTesting(makeProvider({ getFixturesBySeason }));
 
-    await ensureUpcomingFixturesSynced(new Date("2026-06-07T00:00:00.000Z"));
+    await ensureUpcomingFixturesSynced();
 
     expect(upsertSpy).toHaveBeenCalledTimes(1);
     expect(upsertSpy).toHaveBeenCalledWith([]);
-    // Lock permanece (allSettled engole o erro), então um retry imediato é no-op.
-    expect(
-      await inMemoryCache.get<number>("sync:upcoming-fixtures:lock"),
-    ).not.toBeUndefined();
+    // Lock permanece (allSettled engole o erro): release nunca foi chamado.
+    expect(releaseMock).not.toHaveBeenCalled();
+  });
+
+  it("libera o lock e relança quando o upsert (não o provider) lança", async () => {
+    const getFixturesBySeason = vi.fn().mockResolvedValue([]);
+    __setSportsDataProviderForTesting(makeProvider({ getFixturesBySeason }));
+    upsertSpy.mockImplementationOnce(() => {
+      throw new Error("db down");
+    });
+
+    await expect(ensureUpcomingFixturesSynced()).rejects.toThrow("db down");
+    expect(releaseMock).toHaveBeenCalledTimes(1);
   });
 });

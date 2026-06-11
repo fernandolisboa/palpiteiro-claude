@@ -1,39 +1,42 @@
-import {
-  getMatchesInRange,
-  type DbMatch,
-} from "@/lib/db/queries/matches";
+import { after } from "next/server";
+
+import { getMatchesInRange, type DbMatch } from "@/lib/db/queries/matches";
 import { ensureUpcomingFixturesSynced } from "@/lib/sync/sync-upcoming-fixtures";
 
 type RangeQuery = Parameters<typeof getMatchesInRange>[0];
 
 /**
- * Carrega os jogos de um range disparando o sync da competição+temporada inteira
- * ANTES da query. `ensureUpcomingFixturesSynced` é idempotente (upsert por
- * composite key) e self-throttled (lock processo-local de 1h + cache ONE_HOUR no
- * provider), então isto é no máximo uma chamada getFixturesBySeason por liga por
- * hora por instância — barato o suficiente pra rodar em todo request.
+ * Carrega os jogos de um range. NÃO bloqueia o request no sync: a query do DB
+ * roda e retorna imediatamente, enquanto o sync da competição+temporada inteira
+ * é agendado via Next `after()` pra rodar PÓS-resposta.
+ *
+ * O DB é populado pelo cron (`/api/cron/sync-fixtures`, a cada 6h, `force`) +
+ * pelo lock DURÁVEL em KV (`lib/sync/lock.ts`). Sem `force` aqui, o `after()`
+ * é um no-op rápido enquanto o lock está segurado (TTL ≥ cadência do cron),
+ * então o gatilho da home só faz trabalho real num DB/KV genuinamente fresco —
+ * nunca na latência do usuário.
  *
  * (#124: o guard antigo `dbMatches.length === 0` refletia a fatia *filtrada* do
- * range, não "DB vazio". Como o DB já tinha ~3 jogos da Copa, o length nunca era
- * 0 e o sync da competição inteira nunca rodava — o schedule completo nunca
- * carregava. Agora o sync roda sempre, deduplicado pelo lock.)
+ * range, não "DB vazio", então o sync nunca rodava e o schedule completo nunca
+ * carregava. #126: o sync saiu do caminho do request — cron + lock durável
+ * populam o DB; este helper só garante um gatilho best-effort pós-resposta.)
  *
- * Best-effort: uma falha no provider degrada pra renderizar o que já está no DB
- * em vez de derrubar a página (500).
+ * Best-effort: uma falha no sync agendado é engolida (log) e nunca rejeita
+ * `loadRangeMatches` nem derruba a página.
  */
-export async function loadRangeMatches(
-  query: RangeQuery,
-): Promise<DbMatch[]> {
-  try {
-    await ensureUpcomingFixturesSynced();
-  } catch (err) {
-    console.error(
-      JSON.stringify({
-        scope: "home-page",
-        error: "sync_failed",
-        message: err instanceof Error ? err.message : String(err),
-      }),
-    );
-  }
+export async function loadRangeMatches(query: RangeQuery): Promise<DbMatch[]> {
+  after(async () => {
+    try {
+      await ensureUpcomingFixturesSynced();
+    } catch (err) {
+      console.error(
+        JSON.stringify({
+          scope: "home-page",
+          error: "sync_failed",
+          message: err instanceof Error ? err.message : String(err),
+        }),
+      );
+    }
+  });
   return getMatchesInRange(query);
 }

@@ -8,6 +8,10 @@
     {
       "path": "/api/cron/spend-alert",
       "schedule": "0 23 * * *"
+    },
+    {
+      "path": "/api/cron/sync-fixtures",
+      "schedule": "0 */6 * * *"
     }
   ]
 }
