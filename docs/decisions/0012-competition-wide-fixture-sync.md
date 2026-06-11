@@ -139,3 +139,33 @@ module-mock sem importar o RSC.
 A migração do lock per-instance → lock durável em KV + Vercel cron continua
 sendo o follow-up **deferido** (mesma limitação de cold-start concurrency
 registrada acima); a #124 não a endereça.
+
+### Atualização — #126 (lock durável + sync fora do request path)
+
+A #124 acertou a correção (72 jogos em vez de 3) mas o `await` em todo request
+bloqueava a home ~45s em cada instância serverless fria — o lock in-memory se
+perdia no cold start, então a instância re-rodava o fetch season-wide (o ~45s é
+o caminho do PROVIDER, não o upsert, que já é um único insert multi-row em
+batch). A #126 fecha o follow-up deferido acima:
+
+- **Lock migrado pra KV durável** (`lib/sync/lock.ts`): `SET key stamp NX EX
+  ttl` no Vercel KV (Upstash). `acquireSyncLock({ ttlMs, force })` → "OK" quando
+  vence a corrida (`true`), `null` quando o NX falha (`false`); `force: true`
+  dropa o `nx` e sempre sobrescreve (`true`). `releaseSyncLock` → `DEL`.
+  **Fail-open** quando KV_REST_API_URL/KV_REST_API_TOKEN não estão setados
+  (dev/test): cai no lock in-memory antigo, mesma semântica. Resolve a
+  cold-start concurrency: o lock agora é compartilhado entre instâncias.
+- **Sync fora do caminho do request**: a home (`load-range-matches.ts`) não dá
+  mais `await` no sync — agenda via Next `after()` (pós-resposta, sem `force` →
+  no-op enquanto o lock está segurado), então a query do DB retorna na hora. Um
+  cron novo (`/api/cron/sync-fixtures`, `schedule "0 */6 * * *"`,
+  `maxDuration=60`, auth Bearer `CRON_SECRET`) `force`-roda o sync a cada 6h e é
+  o único caminho que come os ~45s do fetch.
+- **TTL ≥ cadência do cron**: `SYNC_LOCK_TTL_MS = 7h` > os 6h do cron, então o
+  lock fica continuamente segurado entre rodadas (cada cron `force`-refresca o
+  TTL). Como o `force` bypassa qualquer lock, um TTL longo nunca causa deadlock.
+- **Warm-up no deploy**: como o cron só roda a cada 6h, um deploy num DB fresco
+  pode mostrar a home vazia até a primeira rodada. Disparar manualmente:
+  `curl -H "Authorization: Bearer $CRON_SECRET" https://<host>/api/cron/sync-fixtures`.
+
+Sem novos secrets — reusa `KV_REST_API_URL`/`KV_REST_API_TOKEN`/`CRON_SECRET`.
