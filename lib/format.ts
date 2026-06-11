@@ -138,6 +138,22 @@ export function formatEdge(
 }
 
 /**
+ * "+11.4%" / "-4.0%" / "—" se null. Recebe a FRAÇÃO por unidade (saída crua de
+ * computeEvPerUnit) e multiplica por 100 internamente — diferente da família
+ * formatEdge/formatPct, que recebe valores já em escala de exibição. Negativo
+ * usa o hífen ASCII do toFixed (convenção formatEdge). Valores que arredondam
+ * a zero na exibição normalizam pra "0.0%" sem sinal — nem "+0.0%" nem o
+ * "-0.0%" de signed zero, que afirmam direção que o número não mostra.
+ */
+export function formatEvPct(evPerUnit: number | null): string {
+  if (evPerUnit === null || !Number.isFinite(evPerUnit)) return "—";
+  const pct = evPerUnit * 100;
+  const fixed = pct.toFixed(1);
+  if (fixed === "0.0" || fixed === "-0.0") return "0.0%";
+  return `${pct > 0 ? "+" : ""}${fixed}%`;
+}
+
+/**
  * "$0.014" — 3 casas decimais com prefixo $. Preserva formato do preview #33.
  */
 export function formatCostUsd(value: number | string | null | undefined): string {

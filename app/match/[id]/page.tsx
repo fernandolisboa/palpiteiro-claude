@@ -89,6 +89,8 @@ export default async function MatchPage({ params }: PageProps) {
           rationale: latestPred.prediction.rationale,
           keyFactors: latestPred.prediction.keyFactors,
           minimumOdd: latestPred.prediction.minimumOdd,
+          oddAtRecommendation: latestPred.prediction.oddAtRecommendation,
+          bookmaker: latestPred.prediction.bookmaker,
           edgePct: latestPred.prediction.edgePct,
           modelVersion: latestPred.prediction.modelVersion,
           promptVersion: latestPred.prediction.promptVersion,
