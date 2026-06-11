@@ -123,3 +123,19 @@ recebe `SupportedLeague` + season, devolve `NormalizedFixture[]`.)
 - Se algum provider passar a paginar `/matches` por temporada (payloads grandes
   de temporada completa), revisitar a suposição de "1 chamada = competição
   inteira".
+
+### Atualização — #124 (trigger do sync na home)
+
+A home (`app/page.tsx`) disparava o sync só quando a query **filtrada** do range
+retornava zero rows (`dbMatches.length === 0`). Com ~3 jogos da Copa já no DB,
+esse length nunca era 0 → `ensureUpcomingFixturesSynced` nunca rodava → o
+schedule completo da WC 2026 nunca carregava (todo preset mostrava os mesmos 3
+jogos). A #124 removeu esse guard: o sync agora roda em **todo request** (sempre
+`await`, best-effort com try/catch), deduplicado pelo lock processo-local de 1h
+já existente — não pelo estado da query. A lógica vive num helper extraído
+`lib/db/queries/load-range-matches.ts` (`loadRangeMatches`), testável por
+module-mock sem importar o RSC.
+
+A migração do lock per-instance → lock durável em KV + Vercel cron continua
+sendo o follow-up **deferido** (mesma limitação de cold-start concurrency
+registrada acima); a #124 não a endereça.
