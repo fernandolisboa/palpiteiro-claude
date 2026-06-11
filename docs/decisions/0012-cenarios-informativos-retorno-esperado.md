@@ -18,9 +18,9 @@ na predição (`confidencePct`, `oddAtRecommendation`, `minimumOdd`,
 `impliedProbPct`, `edgePct`) mais um par de odds a congelar na issue de
 cenários. O LLM, o schema Zod e o prompt ficam intactos.
 
-Cada decisão abaixo carrega um marcador de status de implementação
-("implementada nesta issue (#103)" vs "follow-up: #104"), a atualizar no PR
-da #104.
+Cada decisão abaixo carrega um marcador de status de implementação. Com o PR
+da #104 mergeado, todas as decisões estão implementadas — o marcador indica em
+qual issue cada parte entrou.
 
 ## Decisão
 
@@ -28,7 +28,8 @@ da #104.
    mostra os dois lados, mas a postura do produto não muda: recomendação só
    com edge ≥ 5pp, pass rate alvo 30-60% intacto, e o tracking de Yield
    continua medindo só o lado recomendado (settlement intocado).
-   *Status: registrada aqui; bloco de cenários é follow-up: #104.*
+   *Status: implementada (#104) — bloco de cenários entregue com o lado
+   alternativo informativo, sem peso visual de recomendação.*
 
 2. **Terminologia e copy.** Label leigo **"retorno esperado"** — "EV" nunca
    aparece na UI (internamente o código chama `evPerUnit`). Legenda
@@ -40,9 +41,9 @@ da #104.
    reservado** ao critério de odd mínima do lado recomendado (margem de
    5pp); o lado alternativo usa linguagem de break-even ("só sai do zero").
    Copy temporal de valores congelados usa "na análise", nunca
-   "hoje"/"agora". *Status: implementada nesta issue (#103), exceto o rótulo
-   "prob. do modelo" e a linguagem de break-even do lado alternativo
-   (follow-up: #104).*
+   "hoje"/"agora". *Status: implementada (#103; rótulo "prob. do modelo" e
+   linguagem de break-even do lado alternativo entregues na #104 — o label
+   "confidence" saiu do card junto com o grid de stats).*
 
 3. **Congelamento do par de odds na predição.** Colunas aditivas nullable
    `overOddAtPrediction`/`underOddAtPrediction` em `predictions`, preenchidas
@@ -51,11 +52,11 @@ da #104.
    Consequência aceita: o dashboard passa a exibir bookmaker em predições
    pass novas (semântica: bookmaker = fonte das odds analisadas). Nunca
    preencher buracos com o snapshot vivo — odds atuais já têm casa no
-   OddsCard. *Status: follow-up: #104.*
+   OddsCard. *Status: implementada (#104).*
 
 4. **Naming `AtPrediction` (≠ `oddAtRecommendation`).** O par novo é gravado
    inclusive em pass, onde não existe recomendação — "AtRecommendation" seria
-   semanticamente errado pra essas rows. *Status: follow-up: #104.*
+   semanticamente errado pra essas rows. *Status: implementada (#104).*
 
 5. **Sem backfill de históricas.** Imutabilidade de predições (regra do
    repo); parsear `ai_calls.inputPayload` seria frágil. A UI degrada campos
@@ -68,9 +69,9 @@ da #104.
    overround do CLAUDE.md: o payout bruto é o que paga o apostador). A odd de
    equilíbrio do modelo = `100/modelProbPct` é distinta da `minimum_odd` do
    LLM (que embute margem de 5pp). O mesmo raciocínio vale pro
-   `computeEvPerUnit` desta issue: o EV é pago na odd crua. *Status: o EV na
-   odd crua é implementado nesta issue (#103); as funções de break-even são
-   follow-up: #104.*
+   `computeEvPerUnit` desta issue: o EV é pago na odd crua. *Status:
+   implementada (EV na odd crua na #103; `computeBreakEvenProbPct`,
+   `computeModelBreakEvenOdd` e `computeScenarios` na #104).*
 
 7. **Edge e retorno esperado são eixos diferentes e podem discordar.** Edge
    compara `confidencePct` com a implied NORMALIZADA; o retorno esperado é
@@ -79,8 +80,8 @@ da #104.
    odd 1.802 → EV −0.9% com edge exatamente 5pp) e retorno positivo em PASS
    (ex.: odds 1.92/1.92, conf 53 → edge +3pp → pass, mas EV over +1.8%).
    Ambos são estados legítimos, exibidos com valor honesto, tom neutro e
-   copy específica. *Status: retorno negativo em recomendação implementado
-   nesta issue (#103); copy do EV positivo em PASS é follow-up: #104.*
+   copy específica. *Status: implementada (retorno negativo em recomendação
+   na #103; copy de margem de erro do EV positivo em PASS na #104).*
 
 8. **`minimum_odd` vem do LLM sem recheck no código.** O Zod só valida
    `minimum_odd` como positivo e — ao contrário do que
@@ -124,13 +125,15 @@ da #104.
   `lib/ai/prompts/` — importável por client component sem vazar o
   SYSTEM_PROMPT no bundle), com teste de sincronia contra o prompt.
 - (−) Predições históricas sem `oddAtRecommendation` mostram "—" no retorno
-  esperado (aceito; decisão 5).
-- (−) O par de odds congelado e os cenários dos dois lados só chegam na
-  #104; até lá o lado alternativo não aparece no card.
+  esperado (aceito; decisão 5); históricas sem o par congelado degradam a
+  coluna alternativa pra "—" com nota explícita.
+- (±) Com o bookmaker persistido em pass (#104), o dashboard passa a exibir
+  um bookmaker real em predições pass novas — mudança aceita (decisão 3).
 
 ## Referências
 
-- Issues #103 (esta) e #104 (cenários + congelamento do par de odds).
+- Issues #103 (frase clara + retorno esperado) e #104 (cenários +
+  congelamento do par de odds) — ambas implementadas.
 - ADR 0003 (mercado único over/under 2.5) — a premissa binária
   (`100 − x` pro lado oposto) vale porque a linha 2.5 nunca dá push.
 - `docs/specs/over-under-prompt-design.md` — drift da linha 70 registrado na

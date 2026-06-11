@@ -1,12 +1,9 @@
 import { RefreshCcw } from "lucide-react";
 
+import { AnalysisScenarios } from "@/components/analysis-scenarios";
 import { Button } from "@/components/ui/button";
 import { Card } from "@/components/ui/card";
 import { Separator } from "@/components/ui/separator";
-// MIN_EDGE_PP vem de lib/odds/scenario.ts, NUNCA de lib/ai/prompts/ — este
-// componente é alcançável pelo client component AnalysisPanel ("use client");
-// importar de lib/ai/prompts embarcaria o SYSTEM_PROMPT no bundle do cliente.
-import { MIN_EDGE_PP } from "@/lib/odds/scenario";
 import { cn } from "@/lib/utils";
 import type { AnalysisView } from "@/lib/view/types";
 
@@ -28,6 +25,9 @@ export function AnalysisResult({ view, again = false }: Props) {
           </span>
         </div>
         <Separator />
+        {/* O grid de stats confidence/edge saiu do card (ADR 0012): os números
+            vivem no bloco de cenários com o label unificado "prob. do modelo"
+            — "confidence" exibia P(over) em pass sem dizer isso. */}
         <div className="flex items-start gap-4 px-4 py-4">
           <div className="flex flex-col items-start gap-1">
             <span className="font-mono text-[36px] font-medium tabular-nums leading-none tracking-tight text-muted-foreground">
@@ -37,15 +37,17 @@ export function AnalysisResult({ view, again = false }: Props) {
               não apostar
             </span>
           </div>
-          <div className="grid flex-1 grid-cols-2 gap-3 pt-1">
-            <Stat label="confidence" value={view.confidence} muted />
-            <Stat label="edge" value={`<${MIN_EDGE_PP}pp`} muted />
-          </div>
         </div>
         <p className="px-4 pb-4 text-[12.5px] leading-relaxed tracking-tight text-muted-foreground">
           Sem aposta recomendada — nenhum dos lados tem vantagem mínima de{" "}
           {view.minEdgeLabel} sobre o mercado
         </p>
+        {view.scenarios && (
+          <AnalysisScenarios
+            scenarios={view.scenarios}
+            returnTone={view.expectedReturnTone}
+          />
+        )}
         <Separator />
         <div className="px-4 py-3">
           <p className="text-[12.5px] leading-relaxed text-foreground tracking-tight">
@@ -70,6 +72,9 @@ export function AnalysisResult({ view, again = false }: Props) {
         </span>
       </div>
       <Separator />
+      {/* O grid de stats confidence/edge saiu da row (ADR 0012): os mesmos
+          números (valores salvos da row) vivem na coluna recomendada do bloco
+          de cenários, com labels unificados "prob. do modelo"/"edge". */}
       <div className="flex items-start gap-3 px-4 py-4">
         <div className="flex flex-col items-start gap-1">
           <span className="flex items-baseline gap-1 font-mono text-[36px] font-medium tabular-nums leading-none tracking-tight text-accent-strong-fg">
@@ -79,10 +84,6 @@ export function AnalysisResult({ view, again = false }: Props) {
           <span className="font-mono text-[10.5px] uppercase tracking-[0.12em] text-accent-fg">
             2.5 gols
           </span>
-        </div>
-        <div className="grid flex-1 grid-cols-2 gap-3 pt-1">
-          <Stat label="confidence" value={view.confidence} />
-          <Stat label="edge" value={view.edge ? `${view.edge}pp` : "—"} edge />
         </div>
       </div>
       {view.betSummary && (
@@ -138,6 +139,12 @@ export function AnalysisResult({ view, again = false }: Props) {
           )}
         </div>
       )}
+      {view.scenarios && (
+        <AnalysisScenarios
+          scenarios={view.scenarios}
+          returnTone={view.expectedReturnTone}
+        />
+      )}
       <Separator />
       <div className="px-4 py-3.5">
         <p className="text-[12.5px] leading-relaxed text-foreground tracking-tight">
@@ -147,31 +154,6 @@ export function AnalysisResult({ view, again = false }: Props) {
       </div>
       <AnalysisFooter view={view} again={again} />
     </Card>
-  );
-}
-
-type StatProps = {
-  label: string;
-  value: string;
-  edge?: boolean;
-  muted?: boolean;
-};
-
-function Stat({ label, value, edge = false, muted = false }: StatProps) {
-  return (
-    <div className="flex flex-col gap-0.5">
-      <span className="font-mono text-[10px] uppercase tracking-[0.14em] text-muted-foreground">
-        {label}
-      </span>
-      <span
-        className={cn(
-          "font-mono text-[18px] font-medium tabular-nums tracking-tight",
-          muted ? "text-muted-foreground" : edge ? "text-edge-fg" : "text-foreground",
-        )}
-      >
-        {value}
-      </span>
-    </div>
   );
 }
 

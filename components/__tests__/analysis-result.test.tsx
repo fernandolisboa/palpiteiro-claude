@@ -3,7 +3,30 @@ import { renderToStaticMarkup } from "react-dom/server";
 
 import { AnalysisResult } from "@/components/analysis-result";
 import { MIN_EDGE_PP } from "@/lib/odds/scenario";
-import type { AnalysisView } from "@/lib/view/types";
+import type { AnalysisView, ScenariosView } from "@/lib/view/types";
+
+const overScenarios: ScenariosView = {
+  over: {
+    modelProb: "58%",
+    marketProb: "50.7%",
+    odd: "1.92",
+    edge: "+7.3pp",
+    expectedReturn: "+11.4%",
+    modelBreakEvenOdd: "1.72",
+  },
+  under: {
+    modelProb: "42%",
+    marketProb: "49.3%",
+    odd: "1.95",
+    edge: "-7.3pp",
+    expectedReturn: "-18.1%",
+    modelBreakEvenOdd: "2.38",
+  },
+  recommended: "over",
+  framing:
+    "a aposta em menos de 3 gols só sai do zero se a chance real for maior que 51.3% — na análise o modelo estimou 42%",
+  note: null,
+};
 
 const baseView: AnalysisView = {
   kind: "OVER",
@@ -22,12 +45,49 @@ const baseView: AnalysisView = {
   evLegend:
     "ganho médio por aposta, no longo prazo, se a estimativa de 58% do modelo estiver certa",
   minEdgeLabel: `${MIN_EDGE_PP}pp`,
+  scenarios: overScenarios,
   rationale: "racional técnico",
   factors: ["fator um", "fator dois"],
   generatedAt: "19 mai · 14:22",
   promptVersion: "over_under_v1.2",
   model: "claude-sonnet-4.5",
   costUsd: "$0.014",
+};
+
+const passView: AnalysisView = {
+  ...baseView,
+  kind: "PASS",
+  confidence: "53%",
+  edge: null,
+  minOdd: null,
+  betSummary: null,
+  oddAtRec: null,
+  oddAtRecAgo: null,
+  bookmaker: null,
+  expectedReturn: null,
+  expectedReturnTone: "neutral",
+  evLegend: null,
+  scenarios: {
+    over: {
+      modelProb: "53%",
+      marketProb: "50%",
+      odd: "1.92",
+      edge: "+3.0pp",
+      expectedReturn: "+1.8%",
+      modelBreakEvenOdd: "1.89",
+    },
+    under: {
+      modelProb: "47%",
+      marketProb: "50%",
+      odd: "1.92",
+      edge: "-3.0pp",
+      expectedReturn: "-9.8%",
+      modelBreakEvenOdd: "2.13",
+    },
+    recommended: null,
+    framing: `vantagens pequenas (abaixo de ${MIN_EDGE_PP}pp) ficam dentro da margem de erro do modelo — por isso não há recomendação`,
+    note: null,
+  },
 };
 
 describe("AnalysisResult — bloco 'Aposta recomendada' (#103)", () => {
@@ -65,7 +125,7 @@ describe("AnalysisResult — bloco 'Aposta recomendada' (#103)", () => {
 
   it("over: positive tone paints the expected return with the reserved edge token", () => {
     const markup = renderToStaticMarkup(<AnalysisResult view={baseView} />);
-    // ancora o token no VALOR do retorno (o Stat de edge também usa edge-fg).
+    // ancora o token no VALOR do retorno.
     expect(markup).toMatch(/text-edge-fg[^>]*>\+11\.4%/);
   });
 
@@ -100,6 +160,8 @@ describe("AnalysisResult — bloco 'Aposta recomendada' (#103)", () => {
     );
     expect(markup).toContain("estava abaixo da mínima sugerida");
     expect(markup).toMatch(/text-foreground[^>]*>\+11\.4%/);
+    // tom neutro vale pro card inteiro — inclusive a coluna recomendada do
+    // bloco de cenários (mesmo número, mesmo tom).
     expect(markup).not.toMatch(/text-edge-fg[^>]*>\+11\.4%/);
   });
 
@@ -132,6 +194,21 @@ describe("AnalysisResult — bloco 'Aposta recomendada' (#103)", () => {
           expectedReturn: "—",
           expectedReturnTone: "neutral",
           evLegend: null,
+          scenarios: {
+            ...overScenarios,
+            over: {
+              ...overScenarios.over,
+              odd: "—",
+              expectedReturn: "—",
+            },
+            under: {
+              ...overScenarios.under,
+              odd: "—",
+              expectedReturn: "—",
+            },
+            framing: null,
+            note: "odds do outro lado não registradas nesta análise",
+          },
         }}
       />,
     );
@@ -145,30 +222,48 @@ describe("AnalysisResult — bloco 'Aposta recomendada' (#103)", () => {
   });
 
   it("pass: renders the no-bet phrase with the MIN_EDGE_PP threshold", () => {
-    const markup = renderToStaticMarkup(
-      <AnalysisResult
-        view={{
-          ...baseView,
-          kind: "PASS",
-          confidence: "51%",
-          edge: null,
-          minOdd: null,
-          betSummary: null,
-          oddAtRec: null,
-          oddAtRecAgo: null,
-          bookmaker: null,
-          expectedReturn: null,
-          expectedReturnTone: "neutral",
-          evLegend: null,
-        }}
-      />,
-    );
+    const markup = renderToStaticMarkup(<AnalysisResult view={passView} />);
     expect(markup).toContain("Sem aposta recomendada");
     expect(markup).toContain(
       `vantagem mínima de ${MIN_EDGE_PP}pp sobre o mercado`,
     );
-    // renderToStaticMarkup escapa "<" — o Stat de edge sai como &lt;5pp,
-    // sourced de MIN_EDGE_PP (mesmo texto visível de antes).
-    expect(markup).toContain(`&lt;${MIN_EDGE_PP}pp`);
+  });
+});
+
+describe("AnalysisResult — bloco 'Cenários' integrado e grid de stats removido (#104)", () => {
+  it("over: stats grid is gone — unified 'prob. do modelo' label, no 'confidence' anywhere", () => {
+    const markup = renderToStaticMarkup(<AnalysisResult view={baseView} />);
+    expect(markup).toContain("prob. do modelo");
+    expect(markup).toContain("prob. do mercado");
+    expect(markup).not.toContain("confidence");
+  });
+
+  it("pass: stats grid is gone — scenarios block carries the numbers, no 'confidence' label", () => {
+    const markup = renderToStaticMarkup(<AnalysisResult view={passView} />);
+    expect(markup).toContain("prob. do modelo");
+    expect(markup).not.toContain("confidence");
+    // copy de margem de erro presente no PASS (EV positivo sob pass coberto).
+    expect(markup).toContain(
+      "ficam dentro da margem de erro do modelo — por isso não há recomendação",
+    );
+  });
+
+  it("over: renders both scenario columns with the recommended badge on the over side", () => {
+    const markup = renderToStaticMarkup(<AnalysisResult view={baseView} />);
+    expect(markup).toContain("mais de 2.5 gols");
+    expect(markup).toContain("menos de 2.5 gols");
+    expect(markup).toContain("recomendada");
+    expect(markup).toContain("cenário alternativo");
+    // Invariante (ADR 0012): o edge da coluna recomendada é o edgePct salvo
+    // da row — o MESMO valor que o grid de stats exibia ("+7.3").
+    expect(markup).toContain("+7.3pp");
+  });
+
+  it("renders the scenarios block even when degraded (scenarios null hides it without crashing)", () => {
+    const markup = renderToStaticMarkup(
+      <AnalysisResult view={{ ...baseView, scenarios: null }} />,
+    );
+    expect(markup).toContain("aposta recomendada");
+    expect(markup).not.toContain("cenário alternativo");
   });
 });
