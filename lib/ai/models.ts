@@ -31,7 +31,21 @@ export type AIModel = {
   userSelectable: boolean;
 };
 
+// ORDEM = capacidade decrescente (Fable > Opus > Sonnet 4.6 > Sonnet 4.5 >
+// Haiku). A UI DEPENDE desta ordem: SELECTABLE_MODELS e modelsForAudience
+// preservam a ordem de inserção do objeto, então é ela que rege os dropdowns.
+// Não reordene sem querer mexer no que aparece nos seletores.
 export const MODEL_REGISTRY: Record<AIModelId, AIModel> = {
+  "claude-fable-5": {
+    id: "claude-fable-5",
+    label: "Fable 5",
+    inputPricePerMTok: 10,
+    outputPricePerMTok: 50,
+    // Adaptive thinking como Opus/Sonnet 4.6; Fable EXIGE adaptive sem temperature
+    // e sem thinking disabled — qualquer um dos dois dá 400 (ver request-builder).
+    thinkingMode: "adaptive",
+    userSelectable: false,
+  },
   "claude-opus-4-8": {
     id: "claude-opus-4-8",
     label: "Opus 4.8",
@@ -57,16 +71,6 @@ export const MODEL_REGISTRY: Record<AIModelId, AIModel> = {
     outputPricePerMTok: 15,
     thinkingMode: "temperature",
     temperature: 0.3,
-    userSelectable: false,
-  },
-  "claude-fable-5": {
-    id: "claude-fable-5",
-    label: "Fable 5",
-    inputPricePerMTok: 10,
-    outputPricePerMTok: 50,
-    // Adaptive thinking como Opus/Sonnet 4.6; Fable EXIGE adaptive sem temperature
-    // e sem thinking disabled — qualquer um dos dois dá 400 (ver request-builder).
-    thinkingMode: "adaptive",
     userSelectable: false,
   },
   "claude-haiku-4-5": {

@@ -8,9 +8,16 @@ import {
 } from "@/lib/ai/models";
 
 describe("modelsForAudience — gating por audiência (ADR 0013)", () => {
-  it("admin → todos os 5 modelos", () => {
+  it("admin → todos os 5 modelos, em capacidade decrescente (a UI depende da ordem)", () => {
     const ids = modelsForAudience(true).map((m) => m.id);
     expect(ids).toEqual(SELECTABLE_MODELS.map((m) => m.id));
+    expect(ids).toEqual([
+      "claude-fable-5",
+      "claude-opus-4-8",
+      "claude-sonnet-4-6",
+      "claude-sonnet-4-5-20250929",
+      "claude-haiku-4-5",
+    ]);
     expect(ids).toHaveLength(5);
   });
 

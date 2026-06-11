@@ -1,13 +1,14 @@
 "use client";
 
 import { useActionState, useState } from "react";
-import { Loader2 } from "lucide-react";
+import { Loader2, RefreshCcw } from "lucide-react";
 
 import { analyzeMatch, type AnalyzeMatchResult } from "@/app/actions/predictions";
 import { AnalysisErrorCard } from "@/components/analysis-error-card";
 import { AnalysisResult } from "@/components/analysis-result";
 import { AnalyzeCTA } from "@/components/analyze-cta";
 import { ModelOverrideSelect } from "@/components/model-override-select";
+import { Button } from "@/components/ui/button";
 import { MODEL_REGISTRY, isAIModelId } from "@/lib/ai/models";
 import type { AnalysisView } from "@/lib/view/types";
 
@@ -55,23 +56,43 @@ export function AnalysisPanel({
   const view = state?.ok ? state.view : existing;
   const errorMsg = state && !state.ok ? state.error : null;
 
+  const hasSelectableModels = selectableModels.length > 0;
+
+  // Override por análise, limitado à audiência (lista vinda do server). Sem
+  // modelos selecionáveis o select some e a action usa o default global.
+  const modelSelect = hasSelectableModels ? (
+    <ModelOverrideSelect
+      value={modelOverride}
+      onChange={setModelOverride}
+      models={selectableModels}
+      defaultModelLabel={defaultModelLabel}
+    />
+  ) : null;
+
   return (
     <form action={formAction} aria-busy={pending}>
       <input type="hidden" name="matchId" value={matchId} />
-      {/* Override por análise, limitado à audiência (lista vinda do server). Sem
-          modelos selecionáveis o select some e a action usa o default global. */}
-      {selectableModels.length > 0 && (
-        <ModelOverrideSelect
-          value={modelOverride}
-          onChange={setModelOverride}
-          models={selectableModels}
-        />
+
+      {/* Quando já existe predição e há modelos selecionáveis, a re-análise vem
+          do botão ao lado do dropdown (afordância ÚNICA) — por isso o
+          AnalysisResult abaixo NÃO recebe `again`, pra não duplicar o botão.
+          Na primeira análise (sem view) o dropdown aparece sozinho acima da CTA. */}
+      {view && hasSelectableModels ? (
+        <div className="flex flex-wrap items-end gap-3 pb-3">
+          {modelSelect}
+          <Button type="submit" size="sm" disabled={pending} className="h-9">
+            <RefreshCcw className="size-3.5" />
+            {pending ? "Reanalisando…" : "Analisar de novo"}
+          </Button>
+        </div>
+      ) : (
+        !view && modelSelect
       )}
 
       {pending && view ? (
         <div className="relative">
           <div className="pointer-events-none opacity-40">
-            <AnalysisResult view={view} again />
+            <AnalysisResult view={view} again={!hasSelectableModels} />
           </div>
           <div className="pointer-events-none absolute inset-0 flex items-center justify-center">
             <div className="flex items-center gap-2 rounded-md border border-border bg-card px-3 py-2 shadow">
@@ -85,7 +106,7 @@ export function AnalysisPanel({
       ) : pending ? (
         <AnalyzeCTA pending modelLabel={modelLabel} />
       ) : view ? (
-        <AnalysisResult view={view} again />
+        <AnalysisResult view={view} again={!hasSelectableModels} />
       ) : errorMsg ? (
         <AnalysisErrorCard error={errorMsg} />
       ) : oddsAvailable ? (
