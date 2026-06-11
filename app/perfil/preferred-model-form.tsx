@@ -16,9 +16,16 @@ type Props = {
   // Preferência atual crua do DB (pode ser null = sem preferência, ou um id
   // stale/fora-da-audiência). Só vira defaultValue se ainda estiver na lista.
   preferredModelId: string | null;
+  // Label do default global (resolvido no server) pra rotular a opção
+  // "Usar padrão global (…)" e deixar explícito qual modelo ela usa.
+  defaultModelLabel: string;
 };
 
-export function PreferredModelForm({ models, preferredModelId }: Props) {
+export function PreferredModelForm({
+  models,
+  preferredModelId,
+  defaultModelLabel,
+}: Props) {
   const [state, action, pending] = useActionState<
     UpdateProfileResult | null,
     FormData
@@ -45,7 +52,7 @@ export function PreferredModelForm({ models, preferredModelId }: Props) {
           className="border-border text-foreground w-80 max-w-xs rounded-md border bg-transparent px-3 py-2 text-[12.5px] [color-scheme:light] dark:[color-scheme:dark]"
         >
           <option value="default" className="bg-popover text-popover-foreground">
-            Usar padrão global
+            Usar padrão global ({defaultModelLabel})
           </option>
           {models.map((m) => (
             <option

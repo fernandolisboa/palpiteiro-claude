@@ -3,7 +3,8 @@ import { redirect } from "next/navigation";
 import { ChevronLeft } from "lucide-react";
 
 import { auth } from "@/auth";
-import { modelsForAudience } from "@/lib/ai/models";
+import { MODEL_REGISTRY, modelsForAudience } from "@/lib/ai/models";
+import { getDefaultModelId } from "@/lib/db/queries/ai-config";
 import { getUserProfile } from "@/lib/db/queries/users";
 
 import { PreferredModelForm } from "./preferred-model-form";
@@ -18,8 +19,12 @@ export default async function PerfilPage() {
 
   // Sessão JWT pode apontar pra um id que não existe mais (reset + claim-admin);
   // trata como sessão órfã, igual ao guard de `userExists` no fluxo de predição.
-  const profile = await getUserProfile(session.user.id);
+  const [profile, defaultModelId] = await Promise.all([
+    getUserProfile(session.user.id),
+    getDefaultModelId(),
+  ]);
   if (!profile) redirect("/signin");
+  const defaultModelLabel = MODEL_REGISTRY[defaultModelId].label;
 
   // Lista de modelos por audiência (ADR 0013), serializável ({id,label}) pra
   // cruzar a fronteira Server→Client. O gate efetivo é revalidado na action
@@ -62,6 +67,7 @@ export default async function PerfilPage() {
           <PreferredModelForm
             models={selectableModels}
             preferredModelId={profile.preferredModelId}
+            defaultModelLabel={defaultModelLabel}
           />
         </div>
       </div>
