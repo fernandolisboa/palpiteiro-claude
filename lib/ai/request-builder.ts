@@ -64,13 +64,11 @@ export function buildAnthropicRequest(args: {
   // e NÃO força o tool (forced tool_choice + thinking = 400). `auto` deixa o modelo
   // chamar o tool por conta própria; predict.ts rejeita se ele não chamar. `effort`
   // (se fornecido) calibra a profundidade do thinking via output_config.
-  const adaptive: Anthropic.MessageCreateParamsNonStreaming = {
+  return {
     ...base,
     tool_choice: { type: "auto" },
     thinking: { type: "adaptive" },
+    // effort calibra a profundidade do thinking (só adaptive); ausente → default do servidor.
+    ...(args.effort ? { output_config: { effort: args.effort } } : {}),
   };
-  if (args.effort) {
-    adaptive.output_config = { effort: args.effort };
-  }
-  return adaptive;
 }
