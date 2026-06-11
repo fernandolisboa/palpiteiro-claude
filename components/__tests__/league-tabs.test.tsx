@@ -37,7 +37,9 @@ describe("LeagueTabs rendering (a11y)", () => {
   // inativas — mantém o teste correto mesmo após reativar uma liga (mudança de
   // uma linha em active-leagues.ts, que é justamente o design desta feature).
   it("renderiza cada liga ativa como link e cada liga inativa como elemento desabilitado", () => {
-    const markup = renderToStaticMarkup(<LeagueTabs value="wc" />);
+    const markup = renderToStaticMarkup(
+      <LeagueTabs value="wc" range={{ preset: "today5" }} />,
+    );
     const leagueTabs = visibleLeagueTabs().filter((t) => t.value !== "all");
 
     for (const tab of leagueTabs) {
@@ -61,5 +63,13 @@ describe("LeagueTabs rendering (a11y)", () => {
     expect(markup).toContain("Brasileirão");
     expect(markup).toContain("Champions");
     expect(markup).toContain("Copa do Mundo");
+  });
+
+  it("preserva o range atual nos hrefs das ligas ativas (#98)", () => {
+    const markup = renderToStaticMarkup(
+      <LeagueTabs value="wc" range={{ preset: "today14" }} />,
+    );
+    // Trocar de liga mantém o preset selecionado — os dois filtros compõem.
+    expect(markup).toContain("href=\"/?league=wc&amp;preset=today14\"");
   });
 });

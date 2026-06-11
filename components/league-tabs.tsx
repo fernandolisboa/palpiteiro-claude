@@ -2,6 +2,8 @@ import Link from "next/link";
 
 import { ACTIVE_LEAGUE_KEYS } from "@/lib/config/active-leagues";
 import { cn } from "@/lib/utils";
+import { buildLeagueHref } from "@/lib/view/range-href";
+import type { RangePreset } from "@/lib/view/date-range";
 import type { LeagueFilter } from "@/lib/view/types";
 
 type Item = { value: LeagueFilter; label: string };
@@ -31,19 +33,20 @@ export function visibleLeagueTabs(
   });
 }
 
-function buildHref(league: LeagueFilter): string {
-  if (league === "all") return "/";
-  const params = new URLSearchParams();
-  params.set("league", league);
-  return `/?${params.toString()}`;
-}
+type RangeState = {
+  preset: RangePreset;
+  from?: string;
+  to?: string;
+};
 
 type Props = {
   value: LeagueFilter;
+  /** Range atual — preservado ao trocar de liga (os dois filtros compõem). */
+  range: RangeState;
   className?: string;
 };
 
-export function LeagueTabs({ value, className }: Props) {
+export function LeagueTabs({ value, range, className }: Props) {
   return (
     <nav
       className={cn(
@@ -76,7 +79,7 @@ export function LeagueTabs({ value, className }: Props) {
         return (
           <Link
             key={itemValue}
-            href={buildHref(itemValue)}
+            href={buildLeagueHref(range, itemValue)}
             aria-current={selected ? "page" : undefined}
             className={cn(
               "h-7 rounded-[5px] px-3 text-[12px] font-medium leading-7 transition-colors",
