@@ -5,6 +5,7 @@ import {
   formatCostUsdTotal,
   formatCountdown,
   formatEdge,
+  formatEvPct,
   formatGeneratedAt,
   formatKickoffAbsolute,
   formatKickoffRelative,
@@ -54,6 +55,22 @@ describe("formatEdge", () => {
   it("returns null when null/undefined", () => {
     expect(formatEdge(null)).toBeNull();
     expect(formatEdge(undefined)).toBeNull();
+  });
+});
+
+describe("formatEvPct", () => {
+  it("multiplies the raw fraction by 100 and prefixes positive with +", () => {
+    expect(formatEvPct(0.1136)).toBe("+11.4%");
+  });
+  it("keeps the ASCII hyphen from toFixed for negatives", () => {
+    expect(formatEvPct(-0.04)).toBe("-4.0%");
+  });
+  it("renders exact zero without sign", () => {
+    expect(formatEvPct(0)).toBe("0.0%");
+  });
+  it("returns em-dash for null/NaN", () => {
+    expect(formatEvPct(null)).toBe("—");
+    expect(formatEvPct(NaN)).toBe("—");
   });
 });
 

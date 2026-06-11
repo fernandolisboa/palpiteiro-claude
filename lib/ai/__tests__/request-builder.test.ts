@@ -3,7 +3,11 @@ import type Anthropic from "@anthropic-ai/sdk";
 
 import { MODEL_REGISTRY } from "@/lib/ai/models";
 import { buildAnthropicRequest } from "@/lib/ai/request-builder";
-import { SUBMIT_PREDICTION_TOOL } from "@/lib/ai/prompts/over_under_v1";
+import {
+  SUBMIT_PREDICTION_TOOL,
+  SYSTEM_PROMPT,
+} from "@/lib/ai/prompts/over_under_v1";
+import { MIN_EDGE_PP } from "@/lib/odds/scenario";
 
 const MAX_TOKENS = 2048;
 
@@ -91,5 +95,14 @@ describe("buildAnthropicRequest — model-aware payload", () => {
       const payload = build(model);
       expect(payload.max_tokens).toBe(MAX_TOKENS);
     }
+  });
+});
+
+describe("MIN_EDGE_PP ↔ SYSTEM_PROMPT sync", () => {
+  it("the UI threshold constant matches the prompt's edge rule", () => {
+    // Se um prompt futuro mudar o threshold de 5pp, este teste quebra em vez
+    // de a UI mentir. A constante mora em lib/odds/scenario.ts (não em
+    // lib/ai/prompts/) pra não vazar o SYSTEM_PROMPT pro client bundle.
+    expect(SYSTEM_PROMPT).toContain(`${MIN_EDGE_PP} pontos percentuais`);
   });
 });
