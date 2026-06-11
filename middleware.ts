@@ -12,11 +12,15 @@ import { authConfig } from "@/auth.config";
  *                CRON_SECRET). Excluir é essencial pro callback do magic link.
  *  - assets estáticos (`_next/static`, `_next/image`, `favicon.ico`)
  *  - `/signin` → a própria página de login
+ *  - `/como-funciona` → página pública de ajuda (sem sessão, conteúdo estático)
  */
 export const { auth: middleware } = NextAuth(authConfig);
 
 export const config = {
-  // Âncoras (`api/`, `signin$`) evitam que rotas-irmãs hipotéticas (ex.:
-  // `/signin-foo`, `/apidocs`) escapem do gate por casarem o prefixo.
-  matcher: ["/((?!api/|_next/static|_next/image|favicon.ico|signin$).*)"],
+  // Âncoras (`api/`, `signin$`, `como-funciona$`) evitam que rotas-irmãs
+  // hipotéticas (ex.: `/signin-foo`, `/como-funciona-foo`, `/apidocs`) escapem
+  // do gate por casarem o prefixo.
+  matcher: [
+    "/((?!api/|_next/static|_next/image|favicon.ico|signin$|como-funciona$).*)",
+  ],
 };
