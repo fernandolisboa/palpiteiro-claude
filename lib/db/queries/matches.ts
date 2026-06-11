@@ -1,4 +1,4 @@
-import { and, asc, desc, eq, gte, inArray, lte, or, sql } from "drizzle-orm";
+import { and, asc, desc, eq, gte, inArray, lte, sql } from "drizzle-orm";
 
 import { matches } from "@/db/schema";
 import { db } from "@/lib/db";
@@ -20,6 +20,37 @@ const STATUS_MAP: Record<NormalizedFixtureStatus, DbMatch["status"]> = {
   other: "scheduled",
 };
 
+/**
+ * Range query flexível sobre `matches`. `from`/`to` null = lado ilimitado.
+ * Predicado todo-undefined (sem filtros) retorna TODAS as rows — drizzle dropa
+ * operandos undefined dentro de `and(...)`, então não vira `WHERE false`.
+ */
+export async function getMatchesInRange(opts: {
+  from: Date | null; // null = unbounded past
+  to: Date | null; // null = unbounded future
+  league?: SupportedLeague;
+  statuses?: DbMatch["status"][]; // default: all statuses (no status filter)
+  order?: "asc" | "desc"; // default: "asc"
+  limit?: number; // safety cap for unbounded ranges
+}): Promise<DbMatch[]> {
+  const whereClause = and(
+    opts.from ? gte(matches.kickoffAt, opts.from) : undefined,
+    opts.to ? lte(matches.kickoffAt, opts.to) : undefined,
+    opts.league ? eq(matches.league, opts.league) : undefined,
+    opts.statuses && opts.statuses.length
+      ? inArray(matches.status, opts.statuses)
+      : undefined,
+  );
+  const ordered = db
+    .select()
+    .from(matches)
+    .where(whereClause)
+    .orderBy(
+      opts.order === "desc" ? desc(matches.kickoffAt) : asc(matches.kickoffAt),
+    );
+  return opts.limit !== undefined ? ordered.limit(opts.limit) : ordered;
+}
+
 export async function getUpcomingMatches(opts: {
   windowHours?: number;
   league?: SupportedLeague;
@@ -27,17 +58,12 @@ export async function getUpcomingMatches(opts: {
   const windowHours = opts.windowHours ?? 48;
   const now = new Date();
   const horizon = new Date(now.getTime() + windowHours * 60 * 60 * 1000);
-  const whereClause = and(
-    or(eq(matches.status, "scheduled"), eq(matches.status, "live")),
-    gte(matches.kickoffAt, now),
-    lte(matches.kickoffAt, horizon),
-    opts.league ? eq(matches.league, opts.league) : undefined,
-  );
-  return db
-    .select()
-    .from(matches)
-    .where(whereClause)
-    .orderBy(asc(matches.kickoffAt));
+  return getMatchesInRange({
+    from: now,
+    to: horizon,
+    league: opts.league,
+    statuses: ["scheduled", "live"],
+  });
 }
 
 export async function getMatchById(id: string): Promise<DbMatch | null> {
