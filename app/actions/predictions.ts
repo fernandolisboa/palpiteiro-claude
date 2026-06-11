@@ -98,6 +98,7 @@ export async function analyzeMatch(
     const prediction = await predict({
       matchId,
       userId: session.user.id,
+      isAdmin,
       modelOverride,
     });
     const aiCall = await getAiCallById(prediction.aiCallId);

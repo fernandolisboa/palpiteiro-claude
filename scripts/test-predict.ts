@@ -67,7 +67,13 @@ async function main() {
 
   console.log("\nCalling predict()…");
   try {
-    const prediction = await predict({ matchId, userId: cli.userId });
+    // Smoke test: isAdmin=true permite exercitar qualquer modelo do registry
+    // (a preferência do userId, se houver, não é filtrada por audiência aqui).
+    const prediction = await predict({
+      matchId,
+      userId: cli.userId,
+      isAdmin: true,
+    });
     console.log("\n✓ Prediction persisted:");
     console.log(`  recommendation : ${prediction.recommendation}`);
     console.log(`  confidence_pct : ${prediction.confidencePct}`);

@@ -21,6 +21,7 @@ import { LEAGUE_LABEL, leagueToKey } from "@/lib/format";
 import { getDefaultModelId } from "@/lib/db/queries/ai-config";
 import { getMatchById } from "@/lib/db/queries/matches";
 import { getLatestPredictionForMatch } from "@/lib/db/queries/predictions";
+import { getPreferredModelId } from "@/lib/db/queries/users";
 import { ensureOddsSnapshotsFresh } from "@/lib/odds/fetch-and-snapshot";
 import type { FixtureRef } from "@/lib/providers/sports-data/types";
 import { toAnalysisView } from "@/lib/view/analysis";
@@ -43,11 +44,13 @@ export default async function MatchPage({ params }: PageProps) {
 
   // Odds e predição existente em paralelo. Ambas são pré-requisito pro
   // render síncrono do hero + odds + panel (não vão pra Suspense).
-  const [snapshot, latestPred, defaultModelId] = await Promise.all([
-    ensureOddsSnapshotsFresh(match),
-    getLatestPredictionForMatch(match.id, session.user.id),
-    getDefaultModelId(),
-  ]);
+  const [snapshot, latestPred, defaultModelId, preferredModelId] =
+    await Promise.all([
+      ensureOddsSnapshotsFresh(match),
+      getLatestPredictionForMatch(match.id, session.user.id),
+      getDefaultModelId(),
+      getPreferredModelId(session.user.id),
+    ]);
   const defaultModelLabel = MODEL_REGISTRY[defaultModelId].label;
 
   const heroView = toMatchRowView({
@@ -124,6 +127,7 @@ export default async function MatchPage({ params }: PageProps) {
           oddsAvailable={oddsAvailable}
           selectableModels={selectableModels}
           defaultModelLabel={defaultModelLabel}
+          preferredModelId={preferredModelId}
         />
       </div>
       <div className="hidden lg:block">
@@ -137,6 +141,7 @@ export default async function MatchPage({ params }: PageProps) {
           oddsAvailable={oddsAvailable}
           selectableModels={selectableModels}
           defaultModelLabel={defaultModelLabel}
+          preferredModelId={preferredModelId}
         />
       </div>
     </>
@@ -153,6 +158,7 @@ type Common = {
   oddsAvailable: boolean;
   selectableModels: { id: string; label: string }[];
   defaultModelLabel: string;
+  preferredModelId: string | null;
 };
 
 function MobileMatch({
@@ -165,6 +171,7 @@ function MobileMatch({
   oddsAvailable,
   selectableModels,
   defaultModelLabel,
+  preferredModelId,
 }: Common) {
   return (
     <div className="min-h-screen bg-background text-foreground">
@@ -194,6 +201,7 @@ function MobileMatch({
           oddsAvailable={oddsAvailable}
           selectableModels={selectableModels}
           defaultModelLabel={defaultModelLabel}
+          preferredModelId={preferredModelId}
         />
         <Suspense fallback={<MatchSectionsSkeleton />}>
           <MatchSections fixtureRef={fixtureRef} leagueKey={leagueKey} />
@@ -216,6 +224,7 @@ function DesktopMatch({
   oddsAvailable,
   selectableModels,
   defaultModelLabel,
+  preferredModelId,
 }: Common) {
   return (
     <DesktopShell>
@@ -297,6 +306,7 @@ function DesktopMatch({
             oddsAvailable={oddsAvailable}
             selectableModels={selectableModels}
             defaultModelLabel={defaultModelLabel}
+            preferredModelId={preferredModelId}
           />
         </div>
 

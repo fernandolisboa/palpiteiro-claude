@@ -60,6 +60,12 @@ export const users = pgTable("users", {
   name: text(),
   role: userRoleEnum().notNull().default("user"),
   allowed: boolean().notNull().default(false),
+  // Preferência pessoal de modelo (ADR 0013). `null` = sem preferência → cai no
+  // default global. Text simples validado contra MODEL_REGISTRY na query layer
+  // (espelha aiConfig.defaultModelId) — evita migration a cada mudança no
+  // registry. O filtro de audiência (admin-only nunca roda pra usuário comum)
+  // mora em predict, não aqui.
+  preferredModelId: text(),
   // Colunas exigidas pelo adapter do Auth.js v5 (@auth/drizzle-adapter).
   // Aditivas e nullable — não afetam os FKs existentes.
   emailVerified: timestamp({ withTimezone: true, mode: "date" }),
