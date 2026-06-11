@@ -52,15 +52,27 @@ Origem dos campos por provider:
 
 ## Schema de saída (`lib/ai/schemas/output.ts`)
 
-Invariantes impostas via `superRefine`:
+O JSON Schema da tool (`SUBMIT_PREDICTION_TOOL.input_schema`) declara os limites
+`rationale` máx. 600 chars, `key_factors` 2–5 itens de até 160 chars cada — mas
+isso é **guia para o LLM**, não validação: a API da Anthropic não impõe
+`maxLength`/`minItems`/`maxItems`. A validação real é o `OverUnderOutputSchema`
+(Zod), deliberadamente **tolerante** nos campos de prosa (#45): um output que
+passa o shape mas estoura um limite de chars NUNCA deve descartar uma
+recomendação válida.
 
-- `minimum_odd` **obrigatório** quando `recommendation ∈ {"over","under"}`.
-- `minimum_odd` **omitido** quando `recommendation === "pass"`.
-- `confidence_pct` ∈ [0, 100].
-- `rationale` 1–600 chars.
-- `key_factors` 2–5 itens, cada um 1–160 chars.
+O que o Zod de fato impõe:
 
-`predict.ts` (issue #7) deve re-validar com `OverUnderOutputSchema.parse()` antes de persistir.
+- **`superRefine` impõe APENAS as regras de `minimum_odd`**: obrigatório quando
+  `recommendation ∈ {"over","under"}`, omitido quando `recommendation === "pass"`.
+- `confidence_pct` ∈ [0, 100] (validação simples de número).
+- `rationale`: floor `.min(1)` (prosa vazia é degenerada) e **truncate** em 2000
+  chars (teto de segurança; o `MAX_TOKENS` já limita o output) — não há cap em 600.
+- `key_factors`: floor `.min(1)` item (NÃO 2), cada item truncado em 300 chars, e
+  o array é cortado em no máx. 5 itens (`.slice(0, 5)`, descarta extras em vez de
+  rejeitar).
+
+`predict.ts` (issue #7) deve re-validar com `OverUnderOutputSchema.parse()` antes
+de persistir.
 
 ## Política de "pass" e floor de edge
 
@@ -72,7 +84,10 @@ Por ADR 0003 e PRD (pass rate alvo 30–60%), o LLM deve passar a vez quando `co
 ## Versionamento
 
 - Versão inicial: `over_under_v1.0`; **versão atual: `over_under_v1.3`** (constante `PROMPT_VERSION`).
+  - `v1.1` (commit `f4e7025`): rewire da entrada pro `SportsDataProvider` + nova regra tratando "Lesões / Suspensões: dados indisponíveis" como sinal pra reduzir confiança (não como ausência de lesões). Ver ADR 0006.
+  - `v1.2` (commit `b40b21b`, #45/#46): ajuste de texto pós-tolerância do Zod — nudge de concisão do `rationale` (~450 chars) na description da tool.
   - `v1.3` (#105): regras de redação do `rationale` em linguagem acessível a leigo (conclusão na primeira frase, jargão só se explicado em meia frase, mesma sustentação quantitativa e mesmo tamanho alvo de ~450 chars). Nenhum campo novo, nenhum limite alterado — shape do JSON Schema da tool e do Zod intactos.
+  - Detalhe completo de cada bump em `git log lib/ai/prompts/over_under_v1.ts` (convenção de commit `prompt:`).
 - Bump obrigatório em qualquer mudança que possa alterar a distribuição de respostas (system prompt, ordem das seções, redação de regras, schema). Mudanças cosméticas (whitespace, typos) não exigem bump.
 - Commits que alteram o prompt usam o tipo `prompt:` (convenção do `CLAUDE.md`).
 - `predictions.prompt_version` registra qual versão foi usada — permite A/B retrospectivo de Yield por versão.
