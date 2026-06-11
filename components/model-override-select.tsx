@@ -1,22 +1,23 @@
 "use client";
 
-import { SELECTABLE_MODELS } from "@/lib/ai/models";
-
 type Props = {
   value: string;
   onChange: (value: string) => void;
+  // Modelos selecionáveis para a audiência atual (resolvidos no server e
+  // passados como {id,label} serializável). A garantia de gating é server-side
+  // em analyzeMatch; aqui só limitamos o que aparece no <select>.
+  models: { id: string; label: string }[];
 };
 
-// Controle admin-only de override por análise. Vive dentro do <form> do
-// AnalysisPanel, então `modelOverride` viaja no mesmo FormData da action
-// analyzeMatch. Default "default" = usar o padrão global (um admin que não
-// mexe se comporta como usuário comum). Controlado pelo AnalysisPanel, que usa
-// o valor pra rotular o passo "gerando análise (…)" com o modelo escolhido.
-export function ModelOverrideSelect({ value, onChange }: Props) {
+// Controle de override por análise. Vive dentro do <form> do AnalysisPanel,
+// então `modelOverride` viaja no mesmo FormData da action analyzeMatch. Default
+// "default" = usar o padrão global. Controlado pelo AnalysisPanel, que usa o
+// valor pra rotular o passo "gerando análise (…)" com o modelo escolhido.
+export function ModelOverrideSelect({ value, onChange, models }: Props) {
   return (
     <label className="flex flex-col gap-1 pb-3">
       <span className="font-mono text-[10px] uppercase tracking-[0.14em] text-muted-foreground">
-        modelo (admin)
+        modelo
       </span>
       <select
         name="modelOverride"
@@ -32,7 +33,7 @@ export function ModelOverrideSelect({ value, onChange }: Props) {
         <option value="default" className="bg-popover text-popover-foreground">
           Usar padrão global
         </option>
-        {SELECTABLE_MODELS.map((m) => (
+        {models.map((m) => (
           <option
             key={m.id}
             value={m.id}

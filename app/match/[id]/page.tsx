@@ -16,7 +16,7 @@ import {
   MatchSectionsSkeleton,
 } from "@/components/skeletons/match-sections-skeleton";
 import { auth } from "@/auth";
-import { MODEL_REGISTRY } from "@/lib/ai/models";
+import { MODEL_REGISTRY, modelsForAudience } from "@/lib/ai/models";
 import { LEAGUE_LABEL, leagueToKey } from "@/lib/format";
 import { getDefaultModelId } from "@/lib/db/queries/ai-config";
 import { getMatchById } from "@/lib/db/queries/matches";
@@ -104,6 +104,12 @@ export default async function MatchPage({ params }: PageProps) {
   const leagueKey = leagueToKey(match.league);
   const oddsAvailable = oddsView !== null;
   const isAdmin = session.user.role === "admin";
+  // Lista de override por audiência (ADR 0013), serializável ({id,label}) pra
+  // cruzar a fronteira Server→Client. O gate efetivo é revalidado em analyzeMatch.
+  const selectableModels = modelsForAudience(isAdmin).map((m) => ({
+    id: m.id,
+    label: m.label,
+  }));
 
   return (
     <>
@@ -116,7 +122,7 @@ export default async function MatchPage({ params }: PageProps) {
           fixtureRef={fixtureRef}
           leagueKey={leagueKey}
           oddsAvailable={oddsAvailable}
-          isAdmin={isAdmin}
+          selectableModels={selectableModels}
           defaultModelLabel={defaultModelLabel}
         />
       </div>
@@ -129,7 +135,7 @@ export default async function MatchPage({ params }: PageProps) {
           fixtureRef={fixtureRef}
           leagueKey={leagueKey}
           oddsAvailable={oddsAvailable}
-          isAdmin={isAdmin}
+          selectableModels={selectableModels}
           defaultModelLabel={defaultModelLabel}
         />
       </div>
@@ -145,7 +151,7 @@ type Common = {
   fixtureRef: FixtureRef;
   leagueKey: ReturnType<typeof leagueToKey>;
   oddsAvailable: boolean;
-  isAdmin: boolean;
+  selectableModels: { id: string; label: string }[];
   defaultModelLabel: string;
 };
 
@@ -157,7 +163,7 @@ function MobileMatch({
   fixtureRef,
   leagueKey,
   oddsAvailable,
-  isAdmin,
+  selectableModels,
   defaultModelLabel,
 }: Common) {
   return (
@@ -186,7 +192,7 @@ function MobileMatch({
           matchId={matchId}
           existing={analysisExisting}
           oddsAvailable={oddsAvailable}
-          isAdmin={isAdmin}
+          selectableModels={selectableModels}
           defaultModelLabel={defaultModelLabel}
         />
         <Suspense fallback={<MatchSectionsSkeleton />}>
@@ -208,7 +214,7 @@ function DesktopMatch({
   fixtureRef,
   leagueKey,
   oddsAvailable,
-  isAdmin,
+  selectableModels,
   defaultModelLabel,
 }: Common) {
   return (
@@ -289,7 +295,7 @@ function DesktopMatch({
             matchId={matchId}
             existing={analysisExisting}
             oddsAvailable={oddsAvailable}
-            isAdmin={isAdmin}
+            selectableModels={selectableModels}
             defaultModelLabel={defaultModelLabel}
           />
         </div>

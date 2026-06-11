@@ -15,9 +15,12 @@ type Props = {
   matchId: string;
   existing: AnalysisView | null;
   oddsAvailable: boolean;
-  isAdmin: boolean;
+  // Modelos que esta audiência pode escolher como override ({id,label}
+  // serializável, resolvido no server). Vazio → seletor escondido. A garantia
+  // de gating é server-side em analyzeMatch.
+  selectableModels: { id: string; label: string }[];
   // Label do default global, resolvido no server. Usado quando não há override
-  // (usuário comum, ou admin em "Usar padrão global") pra rotular o progresso.
+  // (usuário comum, ou "Usar padrão global") pra rotular o progresso.
   defaultModelLabel: string;
 };
 
@@ -25,7 +28,7 @@ export function AnalysisPanel({
   matchId,
   existing,
   oddsAvailable,
-  isAdmin,
+  selectableModels,
   defaultModelLabel,
 }: Props) {
   const initial: AnalyzeMatchResult | null = existing
@@ -35,10 +38,10 @@ export function AnalysisPanel({
   const [modelOverride, setModelOverride] = useState("default");
 
   // Modelo que a análise vai REALMENTE usar — espelha a resolução da action
-  // analyzeMatch: override do admin quando selecionado e válido, senão o default
-  // global. Alimenta o passo "gerando análise (…)" do AnalyzeCTA.
+  // analyzeMatch: override quando selecionado e válido, senão o default global.
+  // Alimenta o passo "gerando análise (…)" do AnalyzeCTA.
   const modelLabel =
-    isAdmin && modelOverride !== "default" && isAIModelId(modelOverride)
+    modelOverride !== "default" && isAIModelId(modelOverride)
       ? MODEL_REGISTRY[modelOverride].label
       : defaultModelLabel;
 
@@ -48,12 +51,13 @@ export function AnalysisPanel({
   return (
     <form action={formAction} aria-busy={pending}>
       <input type="hidden" name="matchId" value={matchId} />
-      {/* Override por análise: só admin. Sem este select, a action não vê
-          modelOverride e usa o default global — comportamento do user comum. */}
-      {isAdmin && (
+      {/* Override por análise, limitado à audiência (lista vinda do server). Sem
+          modelos selecionáveis o select some e a action usa o default global. */}
+      {selectableModels.length > 0 && (
         <ModelOverrideSelect
           value={modelOverride}
           onChange={setModelOverride}
+          models={selectableModels}
         />
       )}
 

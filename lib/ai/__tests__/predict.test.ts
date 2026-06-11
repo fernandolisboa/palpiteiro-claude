@@ -488,6 +488,33 @@ describe("predict() — model resolution (override > DB default) + model-aware r
     expect(predictionRow.modelVersion).toBe("claude-sonnet-4-5-20250929");
   });
 
+  it("modelOverride Haiku → haiku id + temperature 0.3 (temperature mode), skips DB default", async () => {
+    getDefaultModelId.mockResolvedValue("claude-opus-4-8");
+
+    await expect(
+      predict({
+        matchId: "m-1",
+        userId: "u-1",
+        modelOverride: "claude-haiku-4-5",
+      }),
+    ).resolves.toBeDefined();
+
+    // Override curto-circuita o lookup do default global.
+    expect(getDefaultModelId).not.toHaveBeenCalled();
+    const arg = anthropicCreate.mock.calls[0]?.[0];
+    expect(arg.model).toBe("claude-haiku-4-5");
+    expect(arg.temperature).toBe(0.3);
+    expect(arg).not.toHaveProperty("thinking");
+
+    // Auditoria reflete o modelo resolvido (override).
+    const aiCallRow = insertValues.mock.calls[0]?.[0] as { model: string };
+    const predictionRow = insertValues.mock.calls[1]?.[0] as {
+      modelVersion: string;
+    };
+    expect(aiCallRow.model).toBe("claude-haiku-4-5");
+    expect(predictionRow.modelVersion).toBe("claude-haiku-4-5");
+  });
+
   it("no override + DB default Sonnet → Anthropic called with sonnet id", async () => {
     getDefaultModelId.mockResolvedValue("claude-sonnet-4-5-20250929");
 
