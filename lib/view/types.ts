@@ -33,11 +33,27 @@ export type OddsView = {
   updatedAgo: string;
 };
 
+// Frase leiga da aposta recomendada: `market` é o nome do mercado em linguagem
+// clara ("Mais de 2.5 gols") e `plain` a tradução literal ("pelo menos 3 gols
+// no jogo"). null em pass — não há aposta.
+export type BetSummary = {
+  market: string;
+  plain: string;
+};
+
 export type AnalysisView = {
   kind: Recommendation;
   confidence: string;
   edge: string | null;
   minOdd: string | null;
+  betSummary: BetSummary | null;
+  oddAtRec: string | null;
+  oddAtRecAgo: string | null;
+  bookmaker: string | null;
+  expectedReturn: string | null;
+  expectedReturnTone: "positive" | "neutral";
+  evLegend: string | null;
+  minEdgeLabel: string;
   rationale: string;
   factors: string[];
   generatedAt: string;

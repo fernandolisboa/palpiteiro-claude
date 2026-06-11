@@ -3,6 +3,10 @@ import { RefreshCcw } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Card } from "@/components/ui/card";
 import { Separator } from "@/components/ui/separator";
+// MIN_EDGE_PP vem de lib/odds/scenario.ts, NUNCA de lib/ai/prompts/ — este
+// componente é alcançável pelo client component AnalysisPanel ("use client");
+// importar de lib/ai/prompts embarcaria o SYSTEM_PROMPT no bundle do cliente.
+import { MIN_EDGE_PP } from "@/lib/odds/scenario";
 import { cn } from "@/lib/utils";
 import type { AnalysisView } from "@/lib/view/types";
 
@@ -35,9 +39,13 @@ export function AnalysisResult({ view, again = false }: Props) {
           </div>
           <div className="grid flex-1 grid-cols-2 gap-3 pt-1">
             <Stat label="confidence" value={view.confidence} muted />
-            <Stat label="edge" value="<5pp" muted />
+            <Stat label="edge" value={`<${MIN_EDGE_PP}pp`} muted />
           </div>
         </div>
+        <p className="px-4 pb-4 text-[12.5px] leading-relaxed tracking-tight text-muted-foreground">
+          Sem aposta recomendada — nenhum dos lados tem vantagem mínima de{" "}
+          {view.minEdgeLabel} sobre o mercado
+        </p>
         <Separator />
         <div className="px-4 py-3">
           <p className="text-[12.5px] leading-relaxed text-foreground tracking-tight">
@@ -77,14 +85,57 @@ export function AnalysisResult({ view, again = false }: Props) {
           <Stat label="edge" value={view.edge ? `${view.edge}pp` : "—"} edge />
         </div>
       </div>
-      {view.minOdd && (
-        <div className="mx-4 mb-4 flex items-center justify-between rounded-md border border-border-subtle bg-surface-2 px-3 py-2">
+      {view.betSummary && (
+        <div className="mx-4 mb-4 flex flex-col gap-2 rounded-md border border-border-subtle bg-surface-2 px-3 py-2.5">
           <span className="font-mono text-[10.5px] uppercase tracking-[0.14em] text-muted-foreground">
-            aposta se odd ≥
+            aposta recomendada
           </span>
-          <span className="font-mono text-[15px] font-medium tabular-nums tracking-tight">
-            {view.minOdd}
-          </span>
+          <p className="text-[13px] font-medium leading-snug tracking-tight text-foreground">
+            {view.betSummary.market} — {view.betSummary.plain}
+          </p>
+          <div className="flex items-baseline justify-between gap-2">
+            <span className="font-mono text-[10.5px] uppercase tracking-[0.14em] text-muted-foreground">
+              odd na análise{view.oddAtRecAgo ? ` (${view.oddAtRecAgo})` : ""}
+            </span>
+            <span className="font-mono text-[13px] font-medium tabular-nums tracking-tight text-foreground">
+              {view.oddAtRec}
+              {view.bookmaker ? ` · ${view.bookmaker}` : ""}
+            </span>
+          </div>
+          <div className="flex flex-col gap-1">
+            <div className="flex items-baseline justify-between gap-2">
+              <span className="font-mono text-[10.5px] uppercase tracking-[0.14em] text-muted-foreground">
+                retorno esperado
+              </span>
+              <span
+                className={cn(
+                  "font-mono text-[13px] font-medium tabular-nums tracking-tight",
+                  // text-edge-fg é reservado: só no retorno positivo da
+                  // recomendação (tone "positive" do view-mapper).
+                  view.expectedReturnTone === "positive"
+                    ? "text-edge-fg"
+                    : "text-foreground",
+                )}
+              >
+                {view.expectedReturn}
+              </span>
+            </div>
+            {view.evLegend && (
+              <p className="text-[11px] leading-snug tracking-tight text-muted-fg-2">
+                {view.evLegend}
+              </p>
+            )}
+          </div>
+          {view.minOdd && (
+            <div className="flex items-baseline justify-between gap-2 border-t border-border-subtle pt-2">
+              <span className="font-mono text-[10.5px] uppercase tracking-[0.14em] text-muted-foreground">
+                vale a pena se odd ≥
+              </span>
+              <span className="font-mono text-[15px] font-medium tabular-nums tracking-tight">
+                {view.minOdd}
+              </span>
+            </div>
+          )}
         </div>
       )}
       <Separator />

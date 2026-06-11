@@ -112,6 +112,8 @@ export async function analyzeMatch(
           rationale: prediction.rationale,
           keyFactors: prediction.keyFactors,
           minimumOdd: prediction.minimumOdd,
+          oddAtRecommendation: prediction.oddAtRecommendation,
+          bookmaker: prediction.bookmaker,
           edgePct: prediction.edgePct,
           modelVersion: prediction.modelVersion,
           promptVersion: prediction.promptVersion,
