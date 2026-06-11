@@ -115,6 +115,11 @@ vi.mock("@/lib/db/queries/ai-config", () => ({
   getDefaultModelId: (...args: unknown[]) => getDefaultModelId(...args),
 }));
 
+const getPreferredModelId = vi.fn();
+vi.mock("@/lib/db/queries/users", () => ({
+  getPreferredModelId: (...args: unknown[]) => getPreferredModelId(...args),
+}));
+
 // Spy on buildPredictionInput while keeping the real implementation (and
 // BuildInputError) so we can assert the absencesAvailable flag it receives.
 import * as buildInputModule from "@/lib/ai/build-input";
@@ -263,8 +268,10 @@ function setHappyPath() {
   // Default: no fresh snapshot, so every existing test keeps exercising the
   // getOddsForSport fallback path unchanged.
   getLatestFreshOddsSnapshot.mockResolvedValue(null);
-  // Default global resolvido pelo DB quando não há override (caminho comum).
+  // Default global resolvido pelo DB quando não há override nem preferência.
   getDefaultModelId.mockResolvedValue("claude-opus-4-8");
+  // Sem preferência por padrão — cada teste que exercita a preferência sobrescreve.
+  getPreferredModelId.mockResolvedValue(null);
   anthropicCreate.mockResolvedValue(anthropicMessage());
 }
 
@@ -277,7 +284,7 @@ beforeEach(() => {
 describe("predict() — graceful degrade on transient injuries error", () => {
   it("baseline: happy path resolves and calls Anthropic", async () => {
     const spy = vi.spyOn(buildInputModule, "buildPredictionInput");
-    await expect(predict({ matchId: "m-1", userId: "u-1" })).resolves.toEqual({
+    await expect(predict({ matchId: "m-1", userId: "u-1", isAdmin: false })).resolves.toEqual({
       id: "row-1",
       aiCallId: "row-1",
     });
@@ -298,7 +305,7 @@ describe("predict() — graceful degrade on transient injuries error", () => {
     const spy = vi.spyOn(buildInputModule, "buildPredictionInput");
 
     await expect(
-      predict({ matchId: "m-1", userId: "u-1" }),
+      predict({ matchId: "m-1", userId: "u-1", isAdmin: false }),
     ).resolves.toBeDefined();
 
     const args = spy.mock.calls[0]?.[0];
@@ -322,7 +329,7 @@ describe("predict() — graceful degrade on transient injuries error", () => {
     const spy = vi.spyOn(buildInputModule, "buildPredictionInput");
 
     await expect(
-      predict({ matchId: "m-1", userId: "u-1" }),
+      predict({ matchId: "m-1", userId: "u-1", isAdmin: false }),
     ).resolves.toBeDefined();
 
     const args = spy.mock.calls[0]?.[0];
@@ -346,7 +353,7 @@ describe("predict() — transient error on a CRITICAL fetch is NOT over-caught",
       ),
     );
 
-    await expect(predict({ matchId: "m-1", userId: "u-1" })).rejects.toThrow(
+    await expect(predict({ matchId: "m-1", userId: "u-1", isAdmin: false })).rejects.toThrow(
       SportsDataTransientError,
     );
     // No paid LLM call when a required fetch fails (cost safety).
@@ -363,7 +370,7 @@ describe("predict() — transient error on a CRITICAL fetch is NOT over-caught",
       ),
     );
 
-    await expect(predict({ matchId: "m-1", userId: "u-1" })).rejects.toThrow(
+    await expect(predict({ matchId: "m-1", userId: "u-1", isAdmin: false })).rejects.toThrow(
       SportsDataTransientError,
     );
     expect(anthropicCreate).not.toHaveBeenCalled();
@@ -382,7 +389,7 @@ describe("predict() — transient error on a CRITICAL fetch is NOT over-caught",
       ),
     );
 
-    await expect(predict({ matchId: "m-1", userId: "u-1" })).rejects.toThrow(
+    await expect(predict({ matchId: "m-1", userId: "u-1", isAdmin: false })).rejects.toThrow(
       SportsDataNotFoundError,
     );
     // No degrade, no analysis: the paid LLM call must not happen.
@@ -396,7 +403,7 @@ describe("predict() — odds snapshot reuse vs. fallback", () => {
     const spy = vi.spyOn(buildInputModule, "buildPredictionInput");
 
     await expect(
-      predict({ matchId: "m-1", userId: "u-1" }),
+      predict({ matchId: "m-1", userId: "u-1", isAdmin: false }),
     ).resolves.toBeDefined();
 
     // Quota guarantee: the snapshot path skips the Odds API entirely.
@@ -413,7 +420,7 @@ describe("predict() — odds snapshot reuse vs. fallback", () => {
   it("no fresh snapshot → predict falls back to getOddsForSport", async () => {
     // setHappyPath default already stubs getLatestFreshOddsSnapshot → null.
     await expect(
-      predict({ matchId: "m-1", userId: "u-1" }),
+      predict({ matchId: "m-1", userId: "u-1", isAdmin: false }),
     ).resolves.toBeDefined();
 
     expect(getOddsForSport).toHaveBeenCalledTimes(1);
@@ -426,7 +433,7 @@ describe("predict() — model resolution (override > DB default) + model-aware r
     getDefaultModelId.mockResolvedValue("claude-opus-4-8");
 
     await expect(
-      predict({ matchId: "m-1", userId: "u-1" }),
+      predict({ matchId: "m-1", userId: "u-1", isAdmin: false }),
     ).resolves.toBeDefined();
 
     expect(getDefaultModelId).toHaveBeenCalledTimes(1);
@@ -462,6 +469,7 @@ describe("predict() — model resolution (override > DB default) + model-aware r
       predict({
         matchId: "m-1",
         userId: "u-1",
+        isAdmin: false,
         modelOverride: "claude-sonnet-4-5-20250929",
       }),
     ).resolves.toBeDefined();
@@ -495,11 +503,13 @@ describe("predict() — model resolution (override > DB default) + model-aware r
       predict({
         matchId: "m-1",
         userId: "u-1",
+        isAdmin: false,
         modelOverride: "claude-haiku-4-5",
       }),
     ).resolves.toBeDefined();
 
-    // Override curto-circuita o lookup do default global.
+    // Override curto-circuita AMBOS os lookups (preferência E default global).
+    expect(getPreferredModelId).not.toHaveBeenCalled();
     expect(getDefaultModelId).not.toHaveBeenCalled();
     const arg = anthropicCreate.mock.calls[0]?.[0];
     expect(arg.model).toBe("claude-haiku-4-5");
@@ -519,12 +529,93 @@ describe("predict() — model resolution (override > DB default) + model-aware r
     getDefaultModelId.mockResolvedValue("claude-sonnet-4-5-20250929");
 
     await expect(
-      predict({ matchId: "m-1", userId: "u-1" }),
+      predict({ matchId: "m-1", userId: "u-1", isAdmin: false }),
     ).resolves.toBeDefined();
 
     const arg = anthropicCreate.mock.calls[0]?.[0];
     expect(arg.model).toBe("claude-sonnet-4-5-20250929");
     expect(arg.temperature).toBe(0.3);
+  });
+});
+
+describe("predict() — cascata completa: preferência do usuário + filtro de audiência", () => {
+  it("sem override + preferência Haiku (não-admin) → usa Haiku; default global NÃO é lido", async () => {
+    getPreferredModelId.mockResolvedValue("claude-haiku-4-5");
+    getDefaultModelId.mockResolvedValue("claude-opus-4-8");
+
+    await expect(
+      predict({ matchId: "m-1", userId: "u-1", isAdmin: false }),
+    ).resolves.toBeDefined();
+
+    const arg = anthropicCreate.mock.calls[0]?.[0];
+    expect(arg.model).toBe("claude-haiku-4-5");
+    // Preferência válida curto-circuita o default global.
+    expect(getDefaultModelId).not.toHaveBeenCalled();
+
+    const aiCallRow = insertValues.mock.calls[0]?.[0] as { model: string };
+    expect(aiCallRow.model).toBe("claude-haiku-4-5");
+  });
+
+  it("INVARIANTE ex-admin: preferência Fable (admin-only) + isAdmin=false → preferência IGNORADA, cai no default global", async () => {
+    getPreferredModelId.mockResolvedValue("claude-fable-5");
+    getDefaultModelId.mockResolvedValue("claude-opus-4-8");
+
+    await expect(
+      predict({ matchId: "m-1", userId: "u-1", isAdmin: false }),
+    ).resolves.toBeDefined();
+
+    const arg = anthropicCreate.mock.calls[0]?.[0];
+    // Fable não é userSelectable → filtro de audiência derruba a preferência e o
+    // default global (Opus) é usado. NUNCA roda Fable pra usuário comum.
+    expect(arg.model).toBe("claude-opus-4-8");
+    expect(getDefaultModelId).toHaveBeenCalledTimes(1);
+  });
+
+  it("sem override + preferência Fable + isAdmin=true → usa Fable (audiência admin)", async () => {
+    getPreferredModelId.mockResolvedValue("claude-fable-5");
+    getDefaultModelId.mockResolvedValue("claude-opus-4-8");
+
+    await expect(
+      predict({ matchId: "m-1", userId: "u-1", isAdmin: true }),
+    ).resolves.toBeDefined();
+
+    const arg = anthropicCreate.mock.calls[0]?.[0];
+    expect(arg.model).toBe("claude-fable-5");
+    // Preferência válida pra admin curto-circuita o default global.
+    expect(getDefaultModelId).not.toHaveBeenCalled();
+  });
+
+  it("override sempre vence a preferência: override Haiku + preferência Sonnet → usa Haiku", async () => {
+    getPreferredModelId.mockResolvedValue("claude-sonnet-4-5-20250929");
+    getDefaultModelId.mockResolvedValue("claude-opus-4-8");
+
+    await expect(
+      predict({
+        matchId: "m-1",
+        userId: "u-1",
+        isAdmin: false,
+        modelOverride: "claude-haiku-4-5",
+      }),
+    ).resolves.toBeDefined();
+
+    const arg = anthropicCreate.mock.calls[0]?.[0];
+    expect(arg.model).toBe("claude-haiku-4-5");
+    // Override curto-circuita preferência E default.
+    expect(getPreferredModelId).not.toHaveBeenCalled();
+    expect(getDefaultModelId).not.toHaveBeenCalled();
+  });
+
+  it("sem override + sem preferência (null) + default Opus → Opus (comportamento atual preservado)", async () => {
+    getPreferredModelId.mockResolvedValue(null);
+    getDefaultModelId.mockResolvedValue("claude-opus-4-8");
+
+    await expect(
+      predict({ matchId: "m-1", userId: "u-1", isAdmin: false }),
+    ).resolves.toBeDefined();
+
+    const arg = anthropicCreate.mock.calls[0]?.[0];
+    expect(arg.model).toBe("claude-opus-4-8");
+    expect(getDefaultModelId).toHaveBeenCalledTimes(1);
   });
 });
 
@@ -549,7 +640,7 @@ describe("predict() — Opus adaptive path: model declines to call the tool", ()
       usage: { input_tokens: 1200, output_tokens: 300 },
     });
 
-    await expect(predict({ matchId: "m-1", userId: "u-1" })).rejects.toThrow(
+    await expect(predict({ matchId: "m-1", userId: "u-1", isAdmin: false })).rejects.toThrow(
       "LLM did not call submit_prediction tool",
     );
 

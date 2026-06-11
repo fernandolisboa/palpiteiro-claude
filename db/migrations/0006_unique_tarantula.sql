@@ -1,0 +1,1 @@
+ALTER TABLE "users" ADD COLUMN "preferred_model_id" text;

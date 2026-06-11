@@ -3,8 +3,10 @@ import { redirect } from "next/navigation";
 import { ChevronLeft } from "lucide-react";
 
 import { auth } from "@/auth";
+import { modelsForAudience } from "@/lib/ai/models";
 import { getUserProfile } from "@/lib/db/queries/users";
 
+import { PreferredModelForm } from "./preferred-model-form";
 import { ProfileForm } from "./profile-form";
 
 export const dynamic = "force-dynamic";
@@ -18,6 +20,15 @@ export default async function PerfilPage() {
   // trata como sessão órfã, igual ao guard de `userExists` no fluxo de predição.
   const profile = await getUserProfile(session.user.id);
   if (!profile) redirect("/signin");
+
+  // Lista de modelos por audiência (ADR 0013), serializável ({id,label}) pra
+  // cruzar a fronteira Server→Client. O gate efetivo é revalidado na action
+  // updatePreferredModel.
+  const isAdmin = session.user.role === "admin";
+  const selectableModels = modelsForAudience(isAdmin).map((m) => ({
+    id: m.id,
+    label: m.label,
+  }));
 
   return (
     <div className="bg-background text-foreground min-h-screen">
@@ -40,6 +51,19 @@ export default async function PerfilPage() {
           initialName={profile.name ?? ""}
           initialImage={profile.image ?? ""}
         />
+
+        <div className="border-border mt-10 border-t pt-8">
+          <h2 className="text-[16px] font-medium tracking-[-0.02em]">
+            Modelo de análise
+          </h2>
+          <p className="text-muted-foreground pb-5 font-mono text-[11px]">
+            usado nas suas análises · sobrescreve o padrão global
+          </p>
+          <PreferredModelForm
+            models={selectableModels}
+            preferredModelId={profile.preferredModelId}
+          />
+        </div>
       </div>
     </div>
   );

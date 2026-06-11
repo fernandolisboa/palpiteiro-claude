@@ -3,18 +3,29 @@ import type { Session } from "next-auth";
 
 vi.mock("next/cache", () => ({ revalidatePath: vi.fn() }));
 vi.mock("@/auth", () => ({ auth: vi.fn(), unstable_update: vi.fn() }));
-vi.mock("@/lib/db/queries/users", () => ({ updateUser: vi.fn() }));
+vi.mock("@/lib/db/queries/users", () => ({
+  updateUser: vi.fn(),
+  setPreferredModelId: vi.fn(),
+}));
+// isModelAllowedForAudience NÃO é mockado de propósito: o gating de audiência é
+// a lógica sob teste aqui, então usamos a implementação real do registry.
 
-import { updateProfile } from "@/app/actions/profile";
+import { updatePreferredModel, updateProfile } from "@/app/actions/profile";
 import { auth, unstable_update } from "@/auth";
-import { updateUser } from "@/lib/db/queries/users";
+import { setPreferredModelId, updateUser } from "@/lib/db/queries/users";
 
 const mockAuth = auth as unknown as Mock<() => Promise<Session | null>>;
 const mockUpdate = vi.mocked(updateUser);
 const mockSessionUpdate = vi.mocked(unstable_update);
+const mockSetPreferred = vi.mocked(setPreferredModelId);
 
 const USER = {
   user: { id: "u2", email: "c@d.com", role: "user" },
+  expires: "2099-01-01",
+} as unknown as Session;
+
+const ADMIN = {
+  user: { id: "a1", email: "admin@d.com", role: "admin" },
   expires: "2099-01-01",
 } as unknown as Session;
 
@@ -28,6 +39,7 @@ beforeEach(() => {
   mockAuth.mockReset();
   mockUpdate.mockReset();
   mockSessionUpdate.mockReset();
+  mockSetPreferred.mockReset();
 });
 
 describe("updateProfile", () => {
@@ -142,5 +154,89 @@ describe("updateProfile", () => {
       name: "Fulano",
       image: null,
     });
+  });
+
+  it("não toca em setPreferredModelId (ações isoladas)", async () => {
+    mockAuth.mockResolvedValue(USER);
+    await updateProfile(null, form({ name: "Fulano" }));
+    expect(mockSetPreferred).not.toHaveBeenCalled();
+  });
+});
+
+describe("updatePreferredModel — preferência pessoal de modelo (ADR 0013)", () => {
+  it("no session → not ok and setPreferredModelId NOT called", async () => {
+    mockAuth.mockResolvedValue(null);
+    const res = await updatePreferredModel(
+      null,
+      form({ preferredModelId: "claude-haiku-4-5" }),
+    );
+    expect(res.ok).toBe(false);
+    expect(mockSetPreferred).not.toHaveBeenCalled();
+  });
+
+  it("usuário comum + Haiku (userSelectable) → grava o id na sessão; ok", async () => {
+    mockAuth.mockResolvedValue(USER);
+    const res = await updatePreferredModel(
+      null,
+      form({ preferredModelId: "claude-haiku-4-5" }),
+    );
+    expect(res).toEqual({ ok: true });
+    expect(mockSetPreferred).toHaveBeenCalledWith("u2", "claude-haiku-4-5");
+  });
+
+  it("usuário comum + Fable (admin-only) → erro, NÃO grava", async () => {
+    mockAuth.mockResolvedValue(USER);
+    const res = await updatePreferredModel(
+      null,
+      form({ preferredModelId: "claude-fable-5" }),
+    );
+    expect(res.ok).toBe(false);
+    expect(mockSetPreferred).not.toHaveBeenCalled();
+  });
+
+  it("'default' → grava null (limpa a preferência); ok", async () => {
+    mockAuth.mockResolvedValue(USER);
+    const res = await updatePreferredModel(
+      null,
+      form({ preferredModelId: "default" }),
+    );
+    expect(res).toEqual({ ok: true });
+    expect(mockSetPreferred).toHaveBeenCalledWith("u2", null);
+  });
+
+  it("vazio → grava null (limpa a preferência)", async () => {
+    mockAuth.mockResolvedValue(USER);
+    const res = await updatePreferredModel(null, form({ preferredModelId: "" }));
+    expect(res).toEqual({ ok: true });
+    expect(mockSetPreferred).toHaveBeenCalledWith("u2", null);
+  });
+
+  it("id desconhecido (fora do registry) → erro, NÃO grava", async () => {
+    mockAuth.mockResolvedValue(USER);
+    const res = await updatePreferredModel(
+      null,
+      form({ preferredModelId: "claude-nope-9" }),
+    );
+    expect(res.ok).toBe(false);
+    expect(mockSetPreferred).not.toHaveBeenCalled();
+  });
+
+  it("admin + Fable (admin-only) → grava o id; ok", async () => {
+    mockAuth.mockResolvedValue(ADMIN);
+    const res = await updatePreferredModel(
+      null,
+      form({ preferredModelId: "claude-fable-5" }),
+    );
+    expect(res).toEqual({ ok: true });
+    expect(mockSetPreferred).toHaveBeenCalledWith("a1", "claude-fable-5");
+  });
+
+  it("gate por dono: grava no id da SESSÃO, nunca num id smuggled no form", async () => {
+    mockAuth.mockResolvedValue(USER);
+    await updatePreferredModel(
+      null,
+      form({ preferredModelId: "claude-haiku-4-5", id: "someone-else" }),
+    );
+    expect(mockSetPreferred).toHaveBeenCalledWith("u2", "claude-haiku-4-5");
   });
 });

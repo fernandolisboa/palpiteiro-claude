@@ -20,11 +20,16 @@ import {
 } from "@/lib/providers/sports-data/types";
 
 import { getDefaultModelId } from "@/lib/db/queries/ai-config";
+import { getPreferredModelId } from "@/lib/db/queries/users";
 
 import { getAnthropicClient } from "./anthropic";
 import { BuildInputError, buildPredictionInput } from "./build-input";
 import { calculateCost } from "./cost";
-import { MODEL_REGISTRY, type AIModelId } from "./models";
+import {
+  MODEL_REGISTRY,
+  isModelAllowedForAudience,
+  type AIModelId,
+} from "./models";
 import { buildAnthropicRequest } from "./request-builder";
 import {
   PROMPT_VERSION,
@@ -39,8 +44,12 @@ import { OverUnderOutputSchema } from "./schemas/output";
 export type PredictArgs = {
   matchId: string;
   userId: string;
+  // Audiência do caller (ADR 0013). Decide se a preferência pessoal do usuário
+  // pode apontar pra um modelo admin-only: ex-admin rebaixado com Fable salvo
+  // cai no default. NÃO afeta o `modelOverride` (já validado pelo caller).
+  isAdmin: boolean;
   // Override admin-gated (já validado pelo caller); predict confia num
-  // AIModelId. Ausente → usa o default global do DB.
+  // AIModelId. Ausente → usa a preferência do usuário / default global do DB.
   modelOverride?: AIModelId;
 };
 
@@ -206,13 +215,24 @@ async function persistAiCallError(args: {
 export async function predict({
   matchId,
   userId,
+  isAdmin,
   modelOverride,
 }: PredictArgs): Promise<Prediction> {
-  // 0. Resolve o modelo UMA vez: override admin (já validado) > default global.
-  //    O lookup do default é uma leitura barata (pulada quando há override),
-  //    negligível ante a chamada paga ao LLM.
-  const resolvedModelId: AIModelId =
-    modelOverride ?? (await getDefaultModelId());
+  // 0. Resolve o modelo UMA vez pela cascata completa (ADR 0013):
+  //    override por análise > preferência do usuário > default global >
+  //    DEFAULT_MODEL_ID. A preferência só vale se passar no filtro de audiência
+  //    (admin-only nunca roda pra usuário comum — ex-admin rebaixado com Fable
+  //    salvo cai no default). Havendo override, nem lemos a preferência (query
+  //    desnecessária). As leituras de DB são baratas ante a chamada paga ao LLM.
+  let resolvedModelId: AIModelId;
+  if (modelOverride) {
+    resolvedModelId = modelOverride;
+  } else {
+    const pref = await getPreferredModelId(userId);
+    const usablePref =
+      pref && isModelAllowedForAudience(pref, isAdmin) ? pref : null;
+    resolvedModelId = usablePref ?? (await getDefaultModelId());
+  }
   const model = MODEL_REGISTRY[resolvedModelId];
 
   // 1. Lookup do match no DB

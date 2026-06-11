@@ -20,8 +20,12 @@ type Props = {
   // de gating é server-side em analyzeMatch.
   selectableModels: { id: string; label: string }[];
   // Label do default global, resolvido no server. Usado quando não há override
-  // (usuário comum, ou "Usar padrão global") pra rotular o progresso.
+  // nem preferência (ou "Usar padrão global") pra rotular o progresso.
   defaultModelLabel: string;
+  // Preferência pessoal do usuário (id cru, validado contra audiência no
+  // server) ou null. Espelha a cascata de predict: sem override, é o modelo que
+  // vai REALMENTE rodar — então rotula o passo "gerando análise (…)".
+  preferredModelId: string | null;
 };
 
 export function AnalysisPanel({
@@ -30,6 +34,7 @@ export function AnalysisPanel({
   oddsAvailable,
   selectableModels,
   defaultModelLabel,
+  preferredModelId,
 }: Props) {
   const initial: AnalyzeMatchResult | null = existing
     ? { ok: true, view: existing }
@@ -37,13 +42,15 @@ export function AnalysisPanel({
   const [state, formAction, pending] = useActionState(analyzeMatch, initial);
   const [modelOverride, setModelOverride] = useState("default");
 
-  // Modelo que a análise vai REALMENTE usar — espelha a resolução da action
-  // analyzeMatch: override quando selecionado e válido, senão o default global.
-  // Alimenta o passo "gerando análise (…)" do AnalyzeCTA.
+  // Modelo que a análise vai REALMENTE usar — espelha a cascata de predict:
+  // override por análise > preferência do usuário > default global. Alimenta o
+  // passo "gerando análise (…)" do AnalyzeCTA.
   const modelLabel =
     modelOverride !== "default" && isAIModelId(modelOverride)
       ? MODEL_REGISTRY[modelOverride].label
-      : defaultModelLabel;
+      : preferredModelId && isAIModelId(preferredModelId)
+        ? MODEL_REGISTRY[preferredModelId].label
+        : defaultModelLabel;
 
   const view = state?.ok ? state.view : existing;
   const errorMsg = state && !state.ok ? state.error : null;

@@ -2,6 +2,7 @@ import { asc, count, eq, ilike } from "drizzle-orm";
 
 import { users } from "@/db/schema";
 import { db } from "@/lib/db";
+import { isAIModelId, type AIModelId } from "@/lib/ai/models";
 
 type UserSummary = { id: string; email: string; role: "admin" | "user" };
 
@@ -59,11 +60,14 @@ type UserProfile = {
   email: string;
   name: string | null;
   image: string | null;
+  preferredModelId: string | null;
 };
 
 /**
- * Lê o perfil editável (nome/avatar) do próprio usuário pra popular o form em
- * `/perfil`. Distinto do `getUserById`, que devolve role (não name/image).
+ * Lê o perfil editável (nome/avatar/preferência de modelo) do próprio usuário
+ * pra popular o form em `/perfil`. Distinto do `getUserById`, que devolve role
+ * (não name/image). `preferredModelId` é o valor cru da coluna (validação de
+ * registry/audiência fica na page/action que renderiza o form).
  */
 export async function getUserProfile(id: string): Promise<UserProfile | null> {
   const rows = await db
@@ -72,11 +76,47 @@ export async function getUserProfile(id: string): Promise<UserProfile | null> {
       email: users.email,
       name: users.name,
       image: users.image,
+      preferredModelId: users.preferredModelId,
     })
     .from(users)
     .where(eq(users.id, id))
     .limit(1);
   return rows[0] ?? null;
+}
+
+/**
+ * Preferência pessoal de modelo do usuário, validada contra o registry. Se a
+ * coluna for null/ausente OU o valor persistido não estiver no registry
+ * (registry encolheu / dado ruim), devolve null — um id stale nunca chega à
+ * cascata de predict. NÃO filtra audiência: o gate admin-only mora em predict,
+ * que é quem resolve o modelo final.
+ */
+export async function getPreferredModelId(
+  userId: string,
+): Promise<AIModelId | null> {
+  const rows = await db
+    .select({ preferredModelId: users.preferredModelId })
+    .from(users)
+    .where(eq(users.id, userId))
+    .limit(1);
+  const stored = rows[0]?.preferredModelId;
+  if (stored && isAIModelId(stored)) return stored;
+  return null;
+}
+
+/**
+ * Grava (ou limpa, com `null`) a preferência pessoal de modelo de UM usuário. O
+ * gate de "só o dono edita" + a checagem de audiência moram na server action
+ * (`app/actions/profile.ts`); esta função confia nos argumentos recebidos.
+ */
+export async function setPreferredModelId(
+  userId: string,
+  modelId: AIModelId | null,
+): Promise<void> {
+  await db
+    .update(users)
+    .set({ preferredModelId: modelId })
+    .where(eq(users.id, userId));
 }
 
 /**

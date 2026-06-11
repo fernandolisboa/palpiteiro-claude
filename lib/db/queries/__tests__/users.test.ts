@@ -10,6 +10,10 @@ const h = vi.hoisted(() => {
     orderByArg: undefined as unknown,
     limitResult: [] as unknown[],
     listResult: [] as unknown[],
+    // update().set().where() — captura o objeto passado ao .set() e a condição
+    // do .where() pra travar o valor gravado e o id alvo.
+    updateSetArg: undefined as unknown,
+    updateWhereArg: undefined as unknown,
   };
   return { state };
 });
@@ -46,11 +50,27 @@ vi.mock("@/lib/db", () => {
     orderBy: orderByNode.orderBy,
   };
   const select = vi.fn(() => ({ from: vi.fn(() => fromNode) }));
-  return { db: { select } };
+  const update = vi.fn(() => ({
+    set: vi.fn((data: unknown) => {
+      h.state.updateSetArg = data;
+      return {
+        where: vi.fn((cond: unknown) => {
+          h.state.updateWhereArg = cond;
+          return Promise.resolve(undefined);
+        }),
+      };
+    }),
+  }));
+  return { db: { select, update } };
 });
 
 import { users } from "@/db/schema";
-import { getUserById, searchUsers } from "@/lib/db/queries/users";
+import {
+  getPreferredModelId,
+  getUserById,
+  searchUsers,
+  setPreferredModelId,
+} from "@/lib/db/queries/users";
 
 beforeEach(() => {
   h.state.whereCalled = false;
@@ -58,6 +78,8 @@ beforeEach(() => {
   h.state.orderByArg = undefined;
   h.state.limitResult = [];
   h.state.listResult = [];
+  h.state.updateSetArg = undefined;
+  h.state.updateWhereArg = undefined;
 });
 
 describe("searchUsers — listagem admin por e-mail", () => {
@@ -123,5 +145,55 @@ describe("getUserById — lookup tipado por id", () => {
   it("devolve null quando não existe row", async () => {
     h.state.limitResult = [];
     await expect(getUserById("nope")).resolves.toBeNull();
+  });
+});
+
+describe("getPreferredModelId — leitura validada contra o registry", () => {
+  it("id válido na coluna → retorna o id e aplica eq(users.id, userId)", async () => {
+    h.state.limitResult = [{ preferredModelId: "claude-haiku-4-5" }];
+    await expect(getPreferredModelId("u1")).resolves.toBe("claude-haiku-4-5");
+    expect(h.state.whereCalled).toBe(true);
+    const cond = h.state.whereArg as { op?: string; col?: unknown; val?: unknown };
+    expect(cond.op).toBe("eq");
+    expect(cond.col).toBe(users.id);
+    expect(cond.val).toBe("u1");
+  });
+
+  it("id fora do registry (stale) → null", async () => {
+    h.state.limitResult = [{ preferredModelId: "claude-ancient-1" }];
+    await expect(getPreferredModelId("u1")).resolves.toBeNull();
+  });
+
+  it("coluna null → null", async () => {
+    h.state.limitResult = [{ preferredModelId: null }];
+    await expect(getPreferredModelId("u1")).resolves.toBeNull();
+  });
+
+  it("sem row → null", async () => {
+    h.state.limitResult = [];
+    await expect(getPreferredModelId("nope")).resolves.toBeNull();
+  });
+});
+
+describe("setPreferredModelId — grava (ou limpa) a preferência", () => {
+  it("id válido → update().set({preferredModelId: id}).where(eq(users.id, userId))", async () => {
+    await setPreferredModelId("u1", "claude-opus-4-8");
+    expect(h.state.updateSetArg).toEqual({ preferredModelId: "claude-opus-4-8" });
+    const cond = h.state.updateWhereArg as {
+      op?: string;
+      col?: unknown;
+      val?: unknown;
+    };
+    expect(cond.op).toBe("eq");
+    expect(cond.col).toBe(users.id);
+    expect(cond.val).toBe("u1");
+  });
+
+  it("null → grava null (limpa a preferência)", async () => {
+    await setPreferredModelId("u1", null);
+    expect(h.state.updateSetArg).toEqual({ preferredModelId: null });
+    const cond = h.state.updateWhereArg as { op?: string; val?: unknown };
+    expect(cond.op).toBe("eq");
+    expect(cond.val).toBe("u1");
   });
 });

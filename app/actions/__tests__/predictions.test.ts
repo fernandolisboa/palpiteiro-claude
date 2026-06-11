@@ -173,6 +173,7 @@ describe("analyzeMatch — model override gating", () => {
     expect(mockPredict).toHaveBeenCalledWith({
       matchId: VALID_MATCH_ID,
       userId: "u2",
+      isAdmin: false,
       modelOverride: "claude-haiku-4-5",
     });
   });
@@ -186,6 +187,7 @@ describe("analyzeMatch — model override gating", () => {
     expect(mockPredict).toHaveBeenCalledWith({
       matchId: VALID_MATCH_ID,
       userId: "u2",
+      isAdmin: false,
       modelOverride: undefined,
     });
   });
@@ -199,6 +201,7 @@ describe("analyzeMatch — model override gating", () => {
     expect(mockPredict).toHaveBeenCalledWith({
       matchId: VALID_MATCH_ID,
       userId: "u1",
+      isAdmin: true,
       modelOverride: "claude-fable-5",
     });
   });
@@ -215,6 +218,7 @@ describe("analyzeMatch — model override gating", () => {
     expect(mockPredict).toHaveBeenCalledWith({
       matchId: VALID_MATCH_ID,
       userId: "u1",
+      isAdmin: true,
       modelOverride: "claude-sonnet-4-5-20250929",
     });
   });
@@ -231,6 +235,7 @@ describe("analyzeMatch — model override gating", () => {
     expect(mockPredict).toHaveBeenCalledWith({
       matchId: VALID_MATCH_ID,
       userId: "u2",
+      isAdmin: false,
       modelOverride: undefined,
     });
   });
@@ -244,6 +249,7 @@ describe("analyzeMatch — model override gating", () => {
     expect(mockPredict).toHaveBeenCalledWith({
       matchId: VALID_MATCH_ID,
       userId: "u1",
+      isAdmin: true,
       modelOverride: undefined,
     });
   });
@@ -257,6 +263,7 @@ describe("analyzeMatch — model override gating", () => {
     expect(mockPredict).toHaveBeenCalledWith({
       matchId: VALID_MATCH_ID,
       userId: "u1",
+      isAdmin: true,
       modelOverride: undefined,
     });
   });

@@ -4,7 +4,8 @@ import { revalidatePath } from "next/cache";
 import { z } from "zod";
 
 import { auth, unstable_update } from "@/auth";
-import { updateUser } from "@/lib/db/queries/users";
+import { isModelAllowedForAudience } from "@/lib/ai/models";
+import { setPreferredModelId, updateUser } from "@/lib/db/queries/users";
 
 export type UpdateProfileResult = { ok: boolean; error?: string };
 
@@ -54,6 +55,48 @@ export async function updateProfile(
     // refresh best-effort; valor já persistido no DB.
   }
 
+  revalidatePath("/perfil");
+  revalidatePath("/", "layout");
+  return { ok: true };
+}
+
+// Sentinela do <select>: "Usar padrão global" → grava null (sem preferência).
+const DEFAULT_SENTINEL = "default";
+
+/**
+ * Atualiza a preferência pessoal de modelo (ADR 0013). Action SEPARADA do
+ * `updateProfile` de propósito: o JWT (`unstable_update`) só carrega name/image,
+ * e a preferência mora só no DB (lida na cascata de predict). Mantê-las isoladas
+ * evita acoplar a preferência ao refresh do cookie e isola falhas.
+ *
+ * Gate por dono (id vem da sessão, nunca do form) + revalidação de audiência
+ * (ADR 0013): usuário comum não pode persistir um modelo admin-only (defense in
+ * depth além de limitar a lista no <select>).
+ */
+export async function updatePreferredModel(
+  _prev: UpdateProfileResult | null,
+  formData: FormData,
+): Promise<UpdateProfileResult> {
+  const session = await auth();
+  if (!session?.user?.id) {
+    return { ok: false, error: "Sessão inválida." };
+  }
+  const isAdmin = session.user.role === "admin";
+
+  const raw = String(formData.get("preferredModelId") ?? "").trim();
+  // Sentinela ou vazio → limpa a preferência (cai no default global).
+  if (!raw || raw === DEFAULT_SENTINEL) {
+    await setPreferredModelId(session.user.id, null);
+    revalidatePath("/perfil");
+    revalidatePath("/", "layout");
+    return { ok: true };
+  }
+  // Valida contra o registry E a audiência num passo (type guard estreita pra
+  // AIModelId). Um modelo admin-only vindo de usuário comum é recusado.
+  if (!isModelAllowedForAudience(raw, isAdmin)) {
+    return { ok: false, error: "Modelo indisponível para a sua conta." };
+  }
+  await setPreferredModelId(session.user.id, raw);
   revalidatePath("/perfil");
   revalidatePath("/", "layout");
   return { ok: true };
