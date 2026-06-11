@@ -76,7 +76,17 @@ export class PredictError extends Error {
 
 const FORM_LAST = 5;
 const H2H_LAST = 5;
-const MAX_TOKENS = 2048;
+// Teto de saída da chamada ao Claude. CRÍTICO: nos modelos adaptive (Opus 4.8,
+// Sonnet 4.6, Fable — ver request-builder.ts) os tokens de *thinking* contam
+// DENTRO do max_tokens. Com 2048 o thinking estourava o teto ANTES de o bloco
+// tool_use de submit_prediction sair → a resposta parava com stop_reason
+// "max_tokens" e predict caía em tool_missing ("LLM did not call
+// submit_prediction"), quebrando toda análise no default global. 16000 dá folga
+// pro thinking + a tool call (output do submit_prediction é pequeno; 16000 é a
+// recomendação não-streaming da Anthropic). Modelos temperature (Sonnet 4.5 /
+// Haiku) não tocam nessa folga — sem thinking e com tool_choice forçado, a tool
+// call cabe em poucos tokens. Ver ADR 0008 (emenda 2026-06-11).
+const MAX_TOKENS = 16000;
 const ODDS_WINDOW_MS = 6 * 60 * 60 * 1000;
 const ERROR_MESSAGE_MAX = 2000;
 

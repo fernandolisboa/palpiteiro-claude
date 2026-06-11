@@ -95,3 +95,27 @@ modelo são decisões técnicas relevantes que ficam documentadas aqui (CLAUDE.m
 - (−) Se a linha de seed for removida ao editar a migration, prod fica com tabela
   vazia → o getter cai no `DEFAULT_MODEL_ID` (ainda correto), mas a página de
   settings mostra o fallback até o primeiro save.
+
+## Emenda (2026-06)
+
+A decisão #4 descreve o caminho adaptive (Opus/Sonnet 4.6/Fable) usando
+`tool_choice: { type: "auto" }` e diz que "predict.ts trata o modelo decidir não
+chamar `submit_prediction`". Em produção o `tool_missing` NÃO era o modelo
+escolhendo não chamar a ferramenta: era o **`max_tokens` cortando o thinking**.
+
+Nos modelos adaptive os tokens de *thinking* contam **dentro** do `max_tokens`.
+O `MAX_TOKENS` estava fixo em **2048** (`lib/ai/predict.ts`) — suficiente para o
+caminho temperature (Sonnet 4.5/Haiku: sem thinking, tool forçado, output
+pequeno), mas baixo demais para o adaptive: o thinking estourava o teto **antes**
+de o bloco `tool_use` sair, a resposta parava com `stop_reason: "max_tokens"`, e
+`predict.ts` registrava `tool_missing` / `"LLM did not call submit_prediction
+tool"`. Como o default global é adaptive, isso quebrava **toda** análise (e ainda
+faturava ~2048 output tokens por falha). Trocar o default para Sonnet 4.6 não
+resolvia — também é adaptive.
+
+**Correção:** `MAX_TOKENS` 2048 → **16000** (recomendação não-streaming da
+Anthropic; dá folga pro thinking + a tool call sem forçar gasto, já que é teto e
+não meta). `effort` segue no default `high`. Tornar `max_tokens`/`effort`
+configuráveis via `/admin/settings` (em vez de hardcoded) é trabalho de
+follow-up. Ver também #123 (discovery: estratégia de modelo adaptive vs
+temperature).
