@@ -80,6 +80,7 @@ export default async function HomePage({ searchParams }: PageProps) {
   const session = await auth();
   if (!session?.user?.id) redirect("/signin");
   const userId = session.user.id;
+  const isAdmin = session.user.role === "admin";
 
   const matchesQuery = {
     from: range.from,
@@ -150,6 +151,7 @@ export default async function HomePage({ searchParams }: PageProps) {
           recents={recents}
           league={league}
           range={range}
+          isAdmin={isAdmin}
         />
       </div>
       <div className="hidden lg:block">
@@ -158,6 +160,7 @@ export default async function HomePage({ searchParams }: PageProps) {
           recents={recents}
           league={league}
           range={range}
+          isAdmin={isAdmin}
         />
       </div>
     </>
@@ -169,6 +172,9 @@ type HomeContentProps = {
   recents: RecentPredictionView[];
   league: LeagueFilter;
   range: ResolvedRange;
+  // Gateia o link de admin no drawer mobile (mesmo gate da nav desktop).
+  // DesktopHome ignora — a nav dele vive no DesktopShell.
+  isAdmin: boolean;
 };
 
 // Props compartilhadas pra preservar o range ao trocar de liga nas tabs.
@@ -180,7 +186,13 @@ function rangeNavProps(range: ResolvedRange) {
   return { preset: range.preset, from, to };
 }
 
-function MobileHome({ matches, recents, league, range }: HomeContentProps) {
+function MobileHome({
+  matches,
+  recents,
+  league,
+  range,
+  isAdmin,
+}: HomeContentProps) {
   const label = rangeLabel(range);
   const empty = rangeEmptyMessage(range);
   const navProps = rangeNavProps(range);
@@ -189,6 +201,7 @@ function MobileHome({ matches, recents, league, range }: HomeContentProps) {
   return (
     <div className="min-h-screen overflow-x-clip bg-background text-foreground">
       <PageHeader
+        isAdmin={isAdmin}
         subtitle={`${matches.length} jogos · ${label.toLowerCase()}`}
       />
       <div className="px-5 pb-5 pt-1">
