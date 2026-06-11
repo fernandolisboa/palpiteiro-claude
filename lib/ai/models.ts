@@ -11,7 +11,9 @@
 export type AIModelId =
   | "claude-opus-4-8"
   | "claude-sonnet-4-6"
-  | "claude-sonnet-4-5-20250929";
+  | "claude-sonnet-4-5-20250929"
+  | "claude-fable-5"
+  | "claude-haiku-4-5";
 
 export type AIModel = {
   id: AIModelId;
@@ -23,6 +25,10 @@ export type AIModel = {
   thinkingMode: "adaptive" | "temperature";
   // Só relevante quando thinkingMode === "temperature".
   temperature?: number;
+  // Audiência: `true` = visível/escolhível pelo usuário comum; `false` =
+  // admin-only (ADR 0013). O default global e a preferência do usuário comum só
+  // aceitam modelos userSelectable; admin enxerga todos.
+  userSelectable: boolean;
 };
 
 export const MODEL_REGISTRY: Record<AIModelId, AIModel> = {
@@ -32,6 +38,7 @@ export const MODEL_REGISTRY: Record<AIModelId, AIModel> = {
     inputPricePerMTok: 5,
     outputPricePerMTok: 25,
     thinkingMode: "adaptive",
+    userSelectable: true,
   },
   "claude-sonnet-4-6": {
     id: "claude-sonnet-4-6",
@@ -41,6 +48,7 @@ export const MODEL_REGISTRY: Record<AIModelId, AIModel> = {
     // Sonnet 4.6 suporta adaptive thinking (recomendado pela Anthropic) — reusa
     // o mesmo caminho do Opus 4.8 no request-builder, sem `temperature`.
     thinkingMode: "adaptive",
+    userSelectable: true,
   },
   "claude-sonnet-4-5-20250929": {
     id: "claude-sonnet-4-5-20250929",
@@ -49,6 +57,26 @@ export const MODEL_REGISTRY: Record<AIModelId, AIModel> = {
     outputPricePerMTok: 15,
     thinkingMode: "temperature",
     temperature: 0.3,
+    userSelectable: false,
+  },
+  "claude-fable-5": {
+    id: "claude-fable-5",
+    label: "Fable 5",
+    inputPricePerMTok: 10,
+    outputPricePerMTok: 50,
+    // Adaptive thinking como Opus/Sonnet 4.6; Fable EXIGE adaptive sem temperature
+    // e sem thinking disabled — qualquer um dos dois dá 400 (ver request-builder).
+    thinkingMode: "adaptive",
+    userSelectable: false,
+  },
+  "claude-haiku-4-5": {
+    id: "claude-haiku-4-5",
+    label: "Haiku 4.5 (econômico)",
+    inputPricePerMTok: 1,
+    outputPricePerMTok: 5,
+    thinkingMode: "temperature",
+    temperature: 0.3,
+    userSelectable: true,
   },
 };
 
@@ -60,4 +88,22 @@ export const SELECTABLE_MODELS: AIModel[] = Object.values(MODEL_REGISTRY);
 // Valida strings não-confiáveis (FormData / coluna text do DB) contra o registry.
 export function isAIModelId(v: string): v is AIModelId {
   return v in MODEL_REGISTRY;
+}
+
+// Lista de modelos por audiência (ADR 0013): admin enxerga todos; usuário comum
+// só os userSelectable. Usada pela UI e revalidada no servidor.
+export function modelsForAudience(isAdmin: boolean): AIModel[] {
+  return isAdmin
+    ? SELECTABLE_MODELS
+    : SELECTABLE_MODELS.filter((m) => m.userSelectable);
+}
+
+// Invariante de gating (ADR 0013): um modelo admin-only NUNCA é permitido pra
+// audiência de usuário comum. Type guard pra usar o id já validado a seguir.
+export function isModelAllowedForAudience(
+  id: string,
+  isAdmin: boolean,
+): id is AIModelId {
+  if (!isAIModelId(id)) return false;
+  return isAdmin || MODEL_REGISTRY[id].userSelectable;
 }

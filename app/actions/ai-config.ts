@@ -3,7 +3,7 @@
 import { revalidatePath } from "next/cache";
 
 import { auth } from "@/auth";
-import { isAIModelId } from "@/lib/ai/models";
+import { isModelAllowedForAudience } from "@/lib/ai/models";
 import { setDefaultModelId } from "@/lib/db/queries/ai-config";
 
 export type UpdateDefaultModelResult = { ok: boolean; error?: string };
@@ -20,7 +20,10 @@ export async function updateDefaultModel(
   }
 
   const modelId = String(formData.get("modelId") ?? "");
-  if (!isAIModelId(modelId)) {
+  // O default global vale pra TODOS (inclusive usuário comum), então só pode ser
+  // um modelo userSelectable — audiência "usuário comum" (isAdmin=false). Isso
+  // valida o id contra o registry E aplica o gating de audiência (ADR 0013).
+  if (!isModelAllowedForAudience(modelId, false)) {
     return { ok: false, error: "Modelo inválido." };
   }
 

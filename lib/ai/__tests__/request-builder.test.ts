@@ -63,6 +63,29 @@ describe("buildAnthropicRequest — model-aware payload", () => {
     expect(payload).not.toHaveProperty("thinking");
   });
 
+  it("Fable 5: adaptive thinking, tool_choice auto, NO temperature, NO disabled thinking", () => {
+    const payload = build(MODEL_REGISTRY["claude-fable-5"]);
+
+    expect(payload.model).toBe("claude-fable-5");
+    // Fable EXIGE adaptive sem temperature e sem thinking disabled — ambos dão 400.
+    expect(payload.thinking).toEqual({ type: "adaptive" });
+    expect(payload.tool_choice).toEqual({ type: "auto" });
+    expect(payload).not.toHaveProperty("temperature");
+    expect(payload.thinking).not.toEqual({ type: "disabled" });
+  });
+
+  it("Haiku 4.5: temperature 0.3, forced tool_choice, NO adaptive thinking", () => {
+    const payload = build(MODEL_REGISTRY["claude-haiku-4-5"]);
+
+    expect(payload.model).toBe("claude-haiku-4-5");
+    expect(payload.temperature).toBe(0.3);
+    expect(payload.tool_choice).toEqual({
+      type: "tool",
+      name: SUBMIT_PREDICTION_TOOL.name,
+    });
+    expect(payload).not.toHaveProperty("thinking");
+  });
+
   it("both: max_tokens is wired", () => {
     for (const model of Object.values(MODEL_REGISTRY)) {
       const payload = build(model);

@@ -6,7 +6,11 @@ import {
   updateDefaultModel,
   type UpdateDefaultModelResult,
 } from "@/app/actions/ai-config";
-import { SELECTABLE_MODELS, type AIModelId } from "@/lib/ai/models";
+import { modelsForAudience, type AIModelId } from "@/lib/ai/models";
+
+// Default global vale pra TODOS, então o dropdown lista só modelos userSelectable
+// (audiência usuário comum). Server revalida em updateDefaultModel (ADR 0013).
+const DEFAULT_MODEL_OPTIONS = modelsForAudience(false);
 
 type Props = {
   current: AIModelId;
@@ -29,7 +33,7 @@ export function DefaultModelForm({ current }: Props) {
           defaultValue={current}
           className="w-80 rounded-md border border-border bg-transparent px-3 py-2 text-sm"
         >
-          {SELECTABLE_MODELS.map((m) => (
+          {DEFAULT_MODEL_OPTIONS.map((m) => (
             <option key={m.id} value={m.id}>
               {m.label} — ${m.inputPricePerMTok}/${m.outputPricePerMTok} por 1M
             </option>
