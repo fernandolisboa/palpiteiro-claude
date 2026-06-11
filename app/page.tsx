@@ -14,17 +14,19 @@ import { TeamAvatar } from "@/components/team-avatar";
 import { auth } from "@/auth";
 import {
   DEFAULT_LEAGUE_FILTER,
-  LIST_WINDOW_HOURS,
   isActiveLeagueFilter,
 } from "@/lib/config/active-leagues";
 import { LEAGUE_LABEL } from "@/lib/format";
 import {
   getMatchIdsWithPredictionsByUser,
-  getUpcomingMatches,
+  getMatchesInRange,
 } from "@/lib/db/queries/matches";
 import { getLatestOddsSnapshotsForMatches } from "@/lib/db/queries/odds-snapshots";
 import { getRecentPredictionsByUser } from "@/lib/db/queries/predictions";
 import { ensureUpcomingFixturesSynced } from "@/lib/sync/sync-upcoming-fixtures";
+import { DateRangeTabs } from "@/components/date-range-tabs";
+import { parseRangeParams, type ResolvedRange } from "@/lib/view/date-range";
+import { rangeEmptyMessage, rangeLabel } from "@/lib/view/range-href";
 import { toMatchRowView } from "@/lib/view/match";
 import { toRecentPredictionView } from "@/lib/view/recent-prediction";
 import {
@@ -37,8 +39,17 @@ import type { SupportedLeague } from "@/lib/providers/sports-data/leagues";
 
 const RECENT_LIMIT = 5;
 
+// Cap pra ranges ilimitados (season): evita varrer a competição inteira numa
+// query só. Presets de janela já são limitados pelo `to`.
+const RANGE_LIMIT = 200;
+
 type PageProps = {
-  searchParams: Promise<{ league?: string }>;
+  searchParams: Promise<{
+    league?: string;
+    preset?: string;
+    from?: string;
+    to?: string;
+  }>;
 };
 
 function filterToLeague(filter: LeagueFilter): SupportedLeague | undefined {
@@ -49,7 +60,12 @@ function filterToLeague(filter: LeagueFilter): SupportedLeague | undefined {
 }
 
 export default async function HomePage({ searchParams }: PageProps) {
-  const { league: leagueParam } = await searchParams;
+  const {
+    league: leagueParam,
+    preset: presetParam,
+    from: fromParam,
+    to: toParam,
+  } = await searchParams;
   // "no param" e param inválido caem em "all"; aplicamos o default ANTES de checar
   // atividade pra evitar loop de redirect (/ → / → /). Só keys válidas-mas-inativas
   // (bsa/ucl enquanto fora de temporada) redirecionam pra home limpa.
@@ -57,25 +73,38 @@ export default async function HomePage({ searchParams }: PageProps) {
   const league = parsed === "all" ? DEFAULT_LEAGUE_FILTER : parsed;
   if (!isActiveLeagueFilter(league)) redirect("/");
 
+  // Range escolhido pelo usuário (5/14 dias, competição ou custom). Nunca lança
+  // — input inválido cai pro default today5.
+  const range = parseRangeParams({
+    preset: presetParam,
+    from: fromParam,
+    to: toParam,
+  });
+
   // Middleware garante sessão; redirect defensivo caso o matcher mude.
   const session = await auth();
   if (!session?.user?.id) redirect("/signin");
   const userId = session.user.id;
 
-  let dbMatches = await getUpcomingMatches({
-    windowHours: LIST_WINDOW_HOURS,
+  const matchesQuery = {
+    from: range.from,
+    to: range.to,
     league: filterToLeague(league),
-  });
+    statuses: range.statuses,
+    order: range.order,
+    limit: RANGE_LIMIT,
+  };
+
+  let dbMatches = await getMatchesInRange(matchesQuery);
 
   if (dbMatches.length === 0) {
     // Sync sob demanda quando o DB está vazio. O lock processo-local em
     // ensureUpcomingFixturesSynced evita stampede em requests concorrentes.
+    // O sync popula a competição+temporada inteira, então ranges passados/season
+    // resolvem após um único sync.
     try {
       await ensureUpcomingFixturesSynced();
-      dbMatches = await getUpcomingMatches({
-        windowHours: LIST_WINDOW_HOURS,
-        league: filterToLeague(league),
-      });
+      dbMatches = await getMatchesInRange(matchesQuery);
     } catch (err) {
       console.error(
         JSON.stringify({
@@ -137,10 +166,20 @@ export default async function HomePage({ searchParams }: PageProps) {
   return (
     <>
       <div className="lg:hidden">
-        <MobileHome matches={matches} recents={recents} league={league} />
+        <MobileHome
+          matches={matches}
+          recents={recents}
+          league={league}
+          range={range}
+        />
       </div>
       <div className="hidden lg:block">
-        <DesktopHome matches={matches} recents={recents} league={league} />
+        <DesktopHome
+          matches={matches}
+          recents={recents}
+          league={league}
+          range={range}
+        />
       </div>
     </>
   );
@@ -150,12 +189,27 @@ type HomeContentProps = {
   matches: MatchRowView[];
   recents: RecentPredictionView[];
   league: LeagueFilter;
+  range: ResolvedRange;
 };
 
-function MobileHome({ matches, recents, league }: HomeContentProps) {
+// Props compartilhadas pra preservar o range ao trocar de liga nas tabs.
+function rangeNavProps(range: ResolvedRange) {
+  const from = range.from
+    ? range.from.toISOString().slice(0, 10)
+    : undefined;
+  const to = range.to ? range.to.toISOString().slice(0, 10) : undefined;
+  return { preset: range.preset, from, to };
+}
+
+function MobileHome({ matches, recents, league, range }: HomeContentProps) {
+  const label = rangeLabel(range);
+  const empty = rangeEmptyMessage(range);
+  const navProps = rangeNavProps(range);
   return (
     <div className="min-h-screen bg-background text-foreground">
-      <PageHeader subtitle={`${matches.length} jogos · 5 dias`} />
+      <PageHeader
+        subtitle={`${matches.length} jogos · ${label.toLowerCase()}`}
+      />
       <div className="px-5 pb-5 pt-1">
         <h1 className="text-[26px] font-medium leading-[1.05] tracking-[-0.03em]">
           Próximos jogos
@@ -165,11 +219,17 @@ function MobileHome({ matches, recents, league }: HomeContentProps) {
         </p>
       </div>
 
-      <div className="px-5 pb-3">
-        <LeagueTabs value={league} />
+      <div className="flex flex-col gap-2 px-5 pb-3">
+        <LeagueTabs value={league} range={navProps} />
+        <DateRangeTabs
+          league={league}
+          preset={range.preset}
+          from={navProps.from}
+          to={navProps.to}
+        />
       </div>
 
-      <SectionLabel>Próximos 5 dias</SectionLabel>
+      <SectionLabel>{label}</SectionLabel>
       {matches.length === 0 ? (
         <Card className="mx-5">
           <div className="flex flex-col items-center gap-3 px-6 py-12 text-center">
@@ -178,10 +238,10 @@ function MobileHome({ matches, recents, league }: HomeContentProps) {
             </span>
             <div className="flex flex-col gap-1">
               <span className="text-[14px] font-medium tracking-tight">
-                Sem jogos nos próximos 5 dias
+                {empty.title}
               </span>
               <span className="max-w-[240px] text-[12.5px] text-muted-foreground tracking-tight">
-                Copa do Mundo sem partidas agendadas nessa janela. Volte mais perto do próximo jogo.
+                {empty.detail}
               </span>
             </div>
           </div>
@@ -221,7 +281,10 @@ function MobileHome({ matches, recents, league }: HomeContentProps) {
   );
 }
 
-function DesktopHome({ matches, recents, league }: HomeContentProps) {
+function DesktopHome({ matches, recents, league, range }: HomeContentProps) {
+  const label = rangeLabel(range);
+  const empty = rangeEmptyMessage(range);
+  const navProps = rangeNavProps(range);
   return (
     <DesktopShell>
       <div className="mx-auto w-full max-w-[1040px] px-8 pt-10 pb-16">
@@ -231,10 +294,18 @@ function DesktopHome({ matches, recents, league }: HomeContentProps) {
               Próximos jogos
             </h1>
             <p className="text-[13.5px] text-muted-foreground tracking-tight">
-              {matches.length} partidas nos próximos 5 dias · Copa do Mundo FIFA 2026
+              {matches.length} partidas · {label} · Copa do Mundo FIFA 2026
             </p>
           </div>
-          <LeagueTabs value={league} />
+          <div className="flex flex-col items-end gap-2">
+            <LeagueTabs value={league} range={navProps} />
+            <DateRangeTabs
+              league={league}
+              preset={range.preset}
+              from={navProps.from}
+              to={navProps.to}
+            />
+          </div>
         </div>
 
         {matches.length === 0 ? (
@@ -244,10 +315,10 @@ function DesktopHome({ matches, recents, league }: HomeContentProps) {
                 <Inbox className="size-10" strokeWidth={1.25} />
               </span>
               <span className="text-[15px] font-medium tracking-tight">
-                Sem jogos nos próximos 5 dias
+                {empty.title}
               </span>
               <span className="text-[13px] text-muted-foreground tracking-tight">
-                Copa do Mundo sem partidas agendadas nessa janela. Volte mais perto do próximo jogo.
+                {empty.detail}
               </span>
             </div>
           </Card>
