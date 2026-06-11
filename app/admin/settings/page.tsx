@@ -1,14 +1,19 @@
 import { BackLink } from "@/components/back-link";
 import { SELECTABLE_MODELS } from "@/lib/ai/models";
-import { getDefaultModelId } from "@/lib/db/queries/ai-config";
+import {
+  getDefaultModelId,
+  getGenerationParams,
+} from "@/lib/db/queries/ai-config";
 
 import { DefaultModelForm } from "./default-model-form";
+import { GenerationParamsForm } from "./generation-params-form";
 
 export const dynamic = "force-dynamic";
 
 // Gateado por app/admin/layout.tsx (role === "admin" → notFound pra outros).
 export default async function AdminSettingsPage() {
   const current = await getDefaultModelId();
+  const genParams = await getGenerationParams();
 
   return (
     <div className="min-h-screen bg-background text-foreground">
@@ -51,6 +56,13 @@ export default async function AdminSettingsPage() {
             padrão global
           </h2>
           <DefaultModelForm current={current} />
+        </section>
+
+        <section className="pt-10">
+          <h2 className="pb-4 font-mono text-[10.5px] uppercase tracking-[0.14em] text-muted-foreground">
+            parâmetros de geração
+          </h2>
+          <GenerationParamsForm current={genParams} />
         </section>
       </div>
     </div>

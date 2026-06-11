@@ -17,7 +17,11 @@ vi.mock("@/lib/db", () => {
   return { db: { select } };
 });
 
-import { getDefaultModelId } from "@/lib/db/queries/ai-config";
+import {
+  getDefaultModelId,
+  getGenerationParams,
+} from "@/lib/db/queries/ai-config";
+import { GENERATION_PARAM_DEFAULTS } from "@/lib/ai/generation-params";
 
 beforeEach(() => {
   defaultRows = [];
@@ -39,6 +43,31 @@ describe("getDefaultModelId — registry-validated fallback (ADR 0008)", () => {
     defaultRows = [{ defaultModelId: "claude-sonnet-4-5-20250929" }];
     await expect(getDefaultModelId()).resolves.toBe(
       "claude-sonnet-4-5-20250929",
+    );
+  });
+});
+
+describe("getGenerationParams — fallback POR CAMPO (ADR 0008 emenda 2)", () => {
+  it("no row (DB vazio) → defaults", async () => {
+    defaultRows = [];
+    await expect(getGenerationParams()).resolves.toEqual(
+      GENERATION_PARAM_DEFAULTS,
+    );
+  });
+
+  it("row válida → valores persistidos (temperature numeric string → number)", async () => {
+    defaultRows = [{ maxTokens: 8000, effort: "low", temperature: "0.50" }];
+    await expect(getGenerationParams()).resolves.toEqual({
+      maxTokens: 8000,
+      effort: "low",
+      temperature: 0.5,
+    });
+  });
+
+  it("cada campo inválido cai no default individualmente", async () => {
+    defaultRows = [{ maxTokens: 999999, effort: "xhigh", temperature: "9.9" }];
+    await expect(getGenerationParams()).resolves.toEqual(
+      GENERATION_PARAM_DEFAULTS,
     );
   });
 });

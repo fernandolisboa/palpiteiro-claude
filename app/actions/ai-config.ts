@@ -4,7 +4,19 @@ import { revalidatePath } from "next/cache";
 
 import { auth } from "@/auth";
 import { isModelAllowedForAudience } from "@/lib/ai/models";
-import { setDefaultModelId } from "@/lib/db/queries/ai-config";
+import {
+  isEffort,
+  isValidMaxTokens,
+  isValidTemperature,
+  MAX_TOKENS_MAX,
+  MAX_TOKENS_MIN,
+  TEMPERATURE_MAX,
+  TEMPERATURE_MIN,
+} from "@/lib/ai/generation-params";
+import {
+  setDefaultModelId,
+  setGenerationParams,
+} from "@/lib/db/queries/ai-config";
 
 export type UpdateDefaultModelResult = { ok: boolean; error?: string };
 
@@ -28,6 +40,47 @@ export async function updateDefaultModel(
   }
 
   await setDefaultModelId(modelId, session.user.id);
+  revalidatePath("/admin/settings");
+  return { ok: true };
+}
+
+export type UpdateGenerationParamsResult = { ok: boolean; error?: string };
+
+// Calibração dos parâmetros de geração (ADR 0008, emenda 2). Parâmetros sensíveis
+// — afetam custo/qualidade/latência de TODA análise — por isso a UI gateia a
+// edição atrás de um toggle + aviso, e aqui revalidamos role admin E os ranges.
+export async function updateGenerationParams(
+  _prev: UpdateGenerationParamsResult | null,
+  formData: FormData,
+): Promise<UpdateGenerationParamsResult> {
+  const session = await auth();
+  // Defense-in-depth igual ao updateDefaultModel: server actions são POST
+  // chamáveis fora do layout /admin, então a role é revalidada AQUI.
+  if (session?.user?.role !== "admin" || !session.user.id) {
+    return { ok: false, error: "Acesso negado." };
+  }
+
+  const maxTokens = Number(formData.get("maxTokens"));
+  const effort = String(formData.get("effort") ?? "");
+  const temperature = Number(formData.get("temperature"));
+
+  if (!isValidMaxTokens(maxTokens)) {
+    return {
+      ok: false,
+      error: `max_tokens deve ser um inteiro entre ${MAX_TOKENS_MIN} e ${MAX_TOKENS_MAX}.`,
+    };
+  }
+  if (!isEffort(effort)) {
+    return { ok: false, error: "Effort inválido." };
+  }
+  if (!isValidTemperature(temperature)) {
+    return {
+      ok: false,
+      error: `temperature deve estar entre ${TEMPERATURE_MIN} e ${TEMPERATURE_MAX}.`,
+    };
+  }
+
+  await setGenerationParams({ maxTokens, effort, temperature }, session.user.id);
   revalidatePath("/admin/settings");
   return { ok: true };
 }

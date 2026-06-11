@@ -112,8 +112,10 @@ vi.mock("@/lib/ai/anthropic", () => ({
 }));
 
 const getDefaultModelId = vi.fn();
+const getGenerationParams = vi.fn();
 vi.mock("@/lib/db/queries/ai-config", () => ({
   getDefaultModelId: (...args: unknown[]) => getDefaultModelId(...args),
+  getGenerationParams: (...args: unknown[]) => getGenerationParams(...args),
 }));
 
 const getPreferredModelId = vi.fn();
@@ -271,6 +273,11 @@ function setHappyPath() {
   getLatestFreshOddsSnapshot.mockResolvedValue(null);
   // Default global resolvido pelo DB quando não há override nem preferência.
   getDefaultModelId.mockResolvedValue("claude-opus-4-8");
+  getGenerationParams.mockResolvedValue({
+    maxTokens: 16000,
+    effort: "high",
+    temperature: 0.3,
+  });
   // Sem preferência por padrão — cada teste que exercita a preferência sobrescreve.
   getPreferredModelId.mockResolvedValue(null);
   anthropicCreate.mockResolvedValue(anthropicMessage());
