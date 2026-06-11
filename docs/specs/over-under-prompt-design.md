@@ -29,7 +29,7 @@ O LLM produz somente decisões qualitativas/probabilísticas. Campos derivados s
 | `edge_pct`                         | `predict.ts`          | `confidence_pct − implied_prob_pct` do lado recomendado                     |
 | `implied_prob_pct`                 | input.implied         | Normalizado por overround upstream                                          |
 | `odd_at_recommendation`, `bookmaker` | input.odds          | Snapshot da odd usada                                                       |
-| `prompt_version`                   | constante             | `over_under_v1.0`                                                           |
+| `prompt_version`                   | constante             | `PROMPT_VERSION` (atual: `over_under_v1.3`)                                 |
 | `model_version`                    | runtime               | Versão exata do Claude Sonnet usada                                         |
 | `ai_call_id`                       | runtime               | FK para `ai_calls` (audit log)                                              |
 
@@ -66,15 +66,17 @@ Invariantes impostas via `superRefine`:
 
 Por ADR 0003 e PRD (pass rate alvo 30–60%), o LLM deve passar a vez quando `confidence_pct − implied_prob_pct < 5` (em pontos percentuais) para ambos os lados. O floor de 5%:
 
-1. Fica codificado no `SYSTEM_PROMPT`.
-2. É re-checado por `predict.ts` antes de salvar (defesa em profundidade — se o LLM se contradisser, a chamada vira `pass` e o desvio fica logado em `ai_calls`).
+1. Fica codificado no `SYSTEM_PROMPT` (sincronia com a constante `MIN_EDGE_PP` da UI pinada por teste em `lib/ai/__tests__/request-builder.test.ts`).
+2. **Não é re-checado por `predict.ts`** — o runtime apenas computa `edge_pct` (`confidence_pct − implied_prob_pct`) e persiste o que o LLM mandou, incluindo `minimum_odd` (validado pelo Zod só como positivo). Uma versão anterior desta spec afirmava um recheck de defesa em profundidade que nunca existiu no código (drift registrado no ADR 0012, decisão 8); a UI trata contradições aritméticas (`minimum_odd > odd_at_recommendation`, retorno esperado ≤ 0) com aviso, sem invalidar a predição.
 
 ## Versionamento
 
-- Versão inicial: `over_under_v1.0` (constante `PROMPT_VERSION`).
+- Versão inicial: `over_under_v1.0`; **versão atual: `over_under_v1.3`** (constante `PROMPT_VERSION`).
+  - `v1.3` (#105): regras de redação do `rationale` em linguagem acessível a leigo (conclusão na primeira frase, jargão só se explicado em meia frase, mesma sustentação quantitativa e mesmo tamanho alvo de ~450 chars). Nenhum campo novo, nenhum limite alterado — shape do JSON Schema da tool e do Zod intactos.
 - Bump obrigatório em qualquer mudança que possa alterar a distribuição de respostas (system prompt, ordem das seções, redação de regras, schema). Mudanças cosméticas (whitespace, typos) não exigem bump.
 - Commits que alteram o prompt usam o tipo `prompt:` (convenção do `CLAUDE.md`).
 - `predictions.prompt_version` registra qual versão foi usada — permite A/B retrospectivo de Yield por versão.
+- Gate de mudanças de prompt sem eval harness: replay eval dev-only (`scripts/replay-prompt-eval.ts`) contra `inputPayload` armazenados em `ai_calls` — critério de abort: qualquer flip de `recommendation` ou mediana de |Δconfidence| > 5pp.
 
 ## Próximos passos
 
