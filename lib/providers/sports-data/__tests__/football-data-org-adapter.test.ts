@@ -1,5 +1,6 @@
-import { describe, expect, it } from "vitest";
+import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 
+import { inMemoryCache } from "@/lib/cache/in-memory";
 import { FootballDataOrgAdapter, __testing } from "@/lib/providers/sports-data/football-data-org/adapter";
 import {
   FootballDataOrgHttpError,
@@ -458,6 +459,78 @@ describe("getInjuries methods throw SportsDataUnsupportedError", () => {
     await expect(
       a.getInjuriesByTeam("SE Palmeiras", "brasileirao_a"),
     ).rejects.toThrow(SportsDataUnsupportedError);
+  });
+});
+
+// ─── getFixturesBySeason — single competition-matches fetch (season param) ──
+// Asserts the adapter issues ONE /competitions/{code}/matches?season call and
+// normalizes the result. The v4 `season` filter (confirmed via docs) returns
+// the whole competition+season in one shot — no date-window iteration.
+
+function jsonResponse(body: unknown): Response {
+  return new Response(JSON.stringify(body), {
+    status: 200,
+    headers: { "content-type": "application/json" },
+  });
+}
+
+describe("FootballDataOrgAdapter.getFixturesBySeason", () => {
+  const ORIGINAL_KEY = process.env.FOOTBALL_DATA_ORG_API_KEY;
+  // brasileirao_a calendar-year season: May 2026 → currentSeason returns 2026.
+  const cacheKey =
+    "sports-data:football-data-org:competitions:BSA:matches:season:2026";
+
+  beforeEach(async () => {
+    process.env.FOOTBALL_DATA_ORG_API_KEY = "test-key";
+    await inMemoryCache.delete(cacheKey);
+    vi.useFakeTimers();
+    vi.setSystemTime(new Date("2026-05-15T12:00:00.000Z"));
+  });
+
+  afterEach(() => {
+    vi.useRealTimers();
+    vi.restoreAllMocks();
+    if (ORIGINAL_KEY === undefined) delete process.env.FOOTBALL_DATA_ORG_API_KEY;
+    else process.env.FOOTBALL_DATA_ORG_API_KEY = ORIGINAL_KEY;
+  });
+
+  it("issues a SINGLE competition-matches call with season and normalizes", async () => {
+    const fetchSpy = vi
+      .spyOn(globalThis, "fetch")
+      .mockResolvedValue(jsonResponse({ matches: [makeMatch()] }));
+
+    const a = new FootballDataOrgAdapter();
+    const fixtures = await a.getFixturesBySeason("brasileirao_a");
+
+    // Exactly one HTTP call — the whole-competition fetch, not day-by-day.
+    expect(fetchSpy).toHaveBeenCalledTimes(1);
+    const calledUrl = String(fetchSpy.mock.calls[0]![0]);
+    expect(calledUrl).toContain("/competitions/BSA/matches");
+    expect(calledUrl).toContain("season=2026");
+    // Season-wide variant: no date window.
+    expect(calledUrl).not.toContain("dateFrom=");
+    expect(calledUrl).not.toContain("dateTo=");
+
+    // Output is normalized through the same toNormalizedFixture path.
+    expect(fixtures).toHaveLength(1);
+    expect(fixtures[0]).toEqual(
+      toNormalizedFixture(makeMatch(), "brasileirao_a"),
+    );
+  });
+
+  it("honors an explicit season override on the query", async () => {
+    const overrideKey =
+      "sports-data:football-data-org:competitions:BSA:matches:season:2024";
+    await inMemoryCache.delete(overrideKey);
+    const fetchSpy = vi
+      .spyOn(globalThis, "fetch")
+      .mockResolvedValue(jsonResponse({ matches: [] }));
+
+    const a = new FootballDataOrgAdapter();
+    await a.getFixturesBySeason("brasileirao_a", 2024);
+
+    expect(fetchSpy).toHaveBeenCalledTimes(1);
+    expect(String(fetchSpy.mock.calls[0]![0])).toContain("season=2024");
   });
 });
 

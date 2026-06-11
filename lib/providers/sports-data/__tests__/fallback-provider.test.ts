@@ -21,6 +21,7 @@ function makeMockProvider(
 ): SportsDataProvider & { __spies: Record<string, ReturnType<typeof vi.fn>> } {
   const spies: Record<string, ReturnType<typeof vi.fn>> = {
     getFixturesByDate: vi.fn(),
+    getFixturesBySeason: vi.fn(),
     getFixtureByMatch: vi.fn(),
     getFixtureResult: vi.fn(),
     getH2H: vi.fn(),
@@ -41,6 +42,7 @@ function makeMockProvider(
   return {
     capabilities,
     getFixturesByDate: spies.getFixturesByDate as never,
+    getFixturesBySeason: spies.getFixturesBySeason as never,
     getFixtureByMatch: spies.getFixtureByMatch as never,
     getFixtureResult: spies.getFixtureResult as never,
     getH2H: spies.getH2H as never,
@@ -117,6 +119,64 @@ describe("FallbackProvider cascade — happy path", () => {
     expect(result).toEqual([SAMPLE_FIXTURE]);
     expect(p.__spies.getFixturesByDate).toHaveBeenCalledTimes(1);
     expect(f.__spies.getFixturesByDate).not.toHaveBeenCalled();
+  });
+});
+
+describe("FallbackProvider.getFixturesBySeason cascade", () => {
+  it("returns primary result without touching fallback", async () => {
+    const p = makeMockProvider("p");
+    const f = makeMockProvider("f");
+    p.__spies.getFixturesBySeason.mockResolvedValueOnce([SAMPLE_FIXTURE]);
+    const fp = new FallbackProvider(p, f);
+    const result = await fp.getFixturesBySeason("brasileirao_a", 2026);
+    expect(result).toEqual([SAMPLE_FIXTURE]);
+    expect(p.__spies.getFixturesBySeason).toHaveBeenCalledTimes(1);
+    expect(p.__spies.getFixturesBySeason).toHaveBeenCalledWith(
+      "brasileirao_a",
+      2026,
+    );
+    expect(f.__spies.getFixturesBySeason).not.toHaveBeenCalled();
+  });
+
+  it("cascades primary→fallback on a transient error", async () => {
+    const warnSpy = vi.spyOn(console, "warn").mockImplementation(() => {});
+    const p = makeMockProvider("p");
+    const f = makeMockProvider("f");
+    p.__spies.getFixturesBySeason.mockRejectedValueOnce(
+      new SportsDataTransientError(
+        "503",
+        "p",
+        "getFixturesBySeason",
+        new Error("upstream"),
+      ),
+    );
+    f.__spies.getFixturesBySeason.mockResolvedValueOnce([SAMPLE_FIXTURE]);
+    const fp = new FallbackProvider(p, f);
+    const result = await fp.getFixturesBySeason("brasileirao_a");
+    expect(result).toEqual([SAMPLE_FIXTURE]);
+    expect(f.__spies.getFixturesBySeason).toHaveBeenCalledTimes(1);
+    const payload = JSON.parse(warnSpy.mock.calls[0]?.[0] as string);
+    expect(payload).toMatchObject({
+      event: "fallback_activated",
+      method: "getFixturesBySeason",
+      primary: "p",
+      fallback: "f",
+    });
+    warnSpy.mockRestore();
+  });
+
+  it("skips a provider that doesn't support the league", async () => {
+    const p = makeMockProvider("p", {
+      supportedLeagues: new Set<SupportedLeague>(["brasileirao_a"]),
+    });
+    const f = makeMockProvider("f", {
+      supportedLeagues: new Set<SupportedLeague>(["champions_league"]),
+    });
+    f.__spies.getFixturesBySeason.mockResolvedValueOnce([]);
+    const fp = new FallbackProvider(p, f);
+    await fp.getFixturesBySeason("champions_league");
+    expect(p.__spies.getFixturesBySeason).not.toHaveBeenCalled();
+    expect(f.__spies.getFixturesBySeason).toHaveBeenCalledTimes(1);
   });
 });
 

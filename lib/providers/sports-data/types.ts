@@ -169,6 +169,17 @@ export interface SportsDataProvider {
     date: string,
     league: SupportedLeague,
   ): Promise<NormalizedFixture[]>;
+  /**
+   * Fetches the ENTIRE competition+season in a single provider call, rather than
+   * iterating day by day like {@link getFixturesByDate}. When `season` is
+   * omitted, the adapter resolves the current season for the league (per
+   * `currentSeason` in leagues.ts). Returns every fixture the provider has for
+   * that competition+season, normalized into provider-agnostic fixtures.
+   */
+  getFixturesBySeason(
+    league: SupportedLeague,
+    season?: number,
+  ): Promise<NormalizedFixture[]>;
   getFixtureByMatch(ref: FixtureRef): Promise<NormalizedFixture | undefined>;
   // Fetches the settlement result (status + 90' regulation score) for a
   // fixture. Returns undefined when the fixture can't be found at the provider.

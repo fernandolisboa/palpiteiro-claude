@@ -757,6 +757,23 @@ export class ApiFootballAdapter implements SportsDataProvider {
     }
   }
 
+  async getFixturesBySeason(
+    league: SupportedLeague,
+    season?: number,
+  ): Promise<NormalizedFixture[]> {
+    try {
+      const leagueId = API_FOOTBALL_LEAGUE_IDS[league];
+      const seasonValue = season ?? currentSeasonByLeague(league);
+      // One call covers the whole competition+season: /fixtures?league&season
+      // (the free getFixturesByLeague), then normalize through the SAME path
+      // getFixturesByDate uses so both entry points emit identical fixtures.
+      const fixtures = await getFixturesByLeague(leagueId, seasonValue);
+      return fixtures.map((f) => toNormalizedFixture(f, league));
+    } catch (err) {
+      wrapApiFootballError(err, "getFixturesBySeason", { league, season });
+    }
+  }
+
   async getFixtureByMatch(
     ref: FixtureRef,
   ): Promise<NormalizedFixture | undefined> {
