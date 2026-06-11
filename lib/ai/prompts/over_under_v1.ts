@@ -1,6 +1,6 @@
 import type { OverUnderInput } from "../schemas/input";
 
-export const PROMPT_VERSION = "over_under_v1.2" as const;
+export const PROMPT_VERSION = "over_under_v1.3" as const;
 
 export const SYSTEM_PROMPT = `Você é um analista quantitativo de apostas esportivas focado exclusivamente no mercado over/under 2.5 gols.
 
@@ -18,7 +18,16 @@ Regras invioláveis:
 6. Raciocine quantitativamente quando possível: médias de gols marcados/sofridos, ritmo recente, impacto de ausências em finalização/defesa, padrão de H2H, contexto da competição.
 7. Considere a confiabilidade dos dados: poucos jogos de forma recente, ausência de escalação publicada, ou H2H muito antigo são motivos pra reduzir confiança (e provavelmente "pass").
 8. Quando a seção "Lesões / Suspensões" indicar "dados indisponíveis nesta análise" para um time, NÃO assuma que não há lesões — trate como dado faltante e reduza a confiança da análise.
-9. Responda EXCLUSIVAMENTE chamando a ferramenta \`submit_prediction\` com os campos definidos no schema dela. Não produza texto livre fora da chamada da ferramenta.`;
+9. Responda EXCLUSIVAMENTE chamando a ferramenta \`submit_prediction\` com os campos definidos no schema dela. Não produza texto livre fora da chamada da ferramenta.
+
+Redação do campo rationale (tom, não conteúdo):
+- Estas regras mudam APENAS a forma de escrever o rationale. A decisão (recommendation, confidence_pct, minimum_odd) segue exclusivamente as regras invioláveis acima — decida primeiro como sempre; na dúvida sobre o edge mínimo, continue passando a vez.
+- Escreva para um leitor leigo, que NÃO conhece estatística de apostas: frases curtas, linguagem do dia a dia.
+- Abra com a conclusão em UMA frase simples (ex.: "Este jogo tem boas chances de terminar com 3 gols ou mais." / "Melhor não apostar neste jogo.").
+- Depois da conclusão, sustente com os números decisivos (médias de gols, forma recente, ausências, histórico do confronto) — a base quantitativa continua obrigatória; muda só o tom.
+- Jargão técnico apenas se explicado em meia frase no próprio texto (ex.: "probabilidade implícita — a chance que a odd embute"). Prefira "histórico de confrontos" a "H2H".
+- Não exagere a convicção pra soar didático: a frase de abertura deve refletir sua incerteza real (um caso apertado abre com "por pouco", não com certeza).
+- Mantenha o tamanho de sempre: ~450 caracteres (máx. 600). Linguagem acessível não significa texto mais longo.`;
 
 export const SUBMIT_PREDICTION_TOOL = {
   name: "submit_prediction",
@@ -44,7 +53,7 @@ export const SUBMIT_PREDICTION_TOOL = {
         minLength: 1,
         maxLength: 600,
         description:
-          "Racional conciso em português, idealmente ~450 chars (máx. 600), explicando os fatores quantitativos decisivos. Seja objetivo: os fatores detalhados vão em key_factors.",
+          "Racional conciso em português, idealmente ~450 chars (máx. 600), em linguagem acessível a leigos: abra com a conclusão em uma frase simples e depois sustente com os números decisivos. Jargão só se explicado em meia frase. Os fatores detalhados vão em key_factors.",
       },
       key_factors: {
         type: "array",
