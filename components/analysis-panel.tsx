@@ -80,13 +80,13 @@ export function AnalysisPanel({
       {view && hasSelectableModels ? (
         <div className="flex flex-wrap items-end gap-3 pb-3">
           {modelSelect}
-          <Button type="submit" size="sm" disabled={pending} className="h-9">
+          <Button type="submit" size="sm" disabled={pending}>
             <RefreshCcw className="size-3.5" />
             {pending ? "Reanalisando…" : "Analisar de novo"}
           </Button>
         </div>
       ) : (
-        !view && modelSelect
+        !view && modelSelect && <div className="pb-3">{modelSelect}</div>
       )}
 
       {pending && view ? (
