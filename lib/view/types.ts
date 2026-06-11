@@ -2,6 +2,17 @@ export type LeagueKey = "bsa" | "ucl" | "wc";
 export type LeagueFilter = LeagueKey | "all";
 export type Recommendation = "OVER" | "UNDER" | "PASS";
 
+// Espelha matchStatusEnum (db/schema.ts). A view carrega o status pra decidir
+// entre render agendado (odds + analisar) e encerrado (placar). `finished`
+// mostra placar; `postponed`/`cancelled` precisam renderizar sãos (não como um
+// 0–0 encerrado); `live` mantém o comportamento de agendado.
+export type MatchStatus =
+  | "scheduled"
+  | "live"
+  | "finished"
+  | "postponed"
+  | "cancelled";
+
 export type Team = {
   name: string;
   short: string;
@@ -17,6 +28,13 @@ export type MatchRowView = {
   when: string;
   odds: { over: string; under: string } | null;
   hasPrediction: boolean;
+  status: MatchStatus;
+  // Placar final. Não-null só em jogos cujo provider já reportou gols
+  // (tipicamente `finished`). null em scheduled/live/postponed/cancelled — e
+  // mesmo num finished sem placar (dado faltando) — então a UI nunca inventa
+  // um 0–0.
+  homeScore: number | null;
+  awayScore: number | null;
   venue?: string;
   countdown?: string;
 };

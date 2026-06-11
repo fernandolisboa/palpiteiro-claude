@@ -4,6 +4,7 @@ import { Suspense } from "react";
 import { ChevronLeft } from "lucide-react";
 
 import { AnalysisPanel } from "@/components/analysis-panel";
+import { AnalysisResult } from "@/components/analysis-result";
 import { DesktopShell } from "@/components/desktop-shell";
 import { MatchAuxiliarySections } from "@/components/match-sections-auxiliary";
 import { MatchHero } from "@/components/match-hero";
@@ -60,6 +61,9 @@ export default async function MatchPage({ params }: PageProps) {
       homeTeam: match.homeTeam,
       awayTeam: match.awayTeam,
       kickoffAt: match.kickoffAt,
+      status: match.status,
+      homeScore: match.homeScore,
+      awayScore: match.awayScore,
     },
     odds: snapshot
       ? {
@@ -108,6 +112,17 @@ export default async function MatchPage({ params }: PageProps) {
   };
   const leagueKey = leagueToKey(match.league);
   const oddsAvailable = oddsView !== null;
+  // Espelha o gate de predict(): jogos encerrados/cancelados não são
+  // analisáveis. A CTA fica escondida nesses casos pra não submeter um form que
+  // o server rejeitaria. Predições já existentes continuam visíveis.
+  const analyzable =
+    match.status !== "finished" && match.status !== "cancelled";
+  // Placar final só pra jogos encerrados com gols reportados (heroView já
+  // anulou scores fora de `finished`).
+  const finalScore =
+    heroView.homeScore !== null && heroView.awayScore !== null
+      ? { home: heroView.homeScore, away: heroView.awayScore }
+      : null;
   const isAdmin = session.user.role === "admin";
   // Lista de override por audiência (ADR 0013), serializável ({id,label}) pra
   // cruzar a fronteira Server→Client. O gate efetivo é revalidado em analyzeMatch.
@@ -127,6 +142,8 @@ export default async function MatchPage({ params }: PageProps) {
           fixtureRef={fixtureRef}
           leagueKey={leagueKey}
           oddsAvailable={oddsAvailable}
+          analyzable={analyzable}
+          finalScore={finalScore}
           selectableModels={selectableModels}
           defaultModelLabel={defaultModelLabel}
           preferredModelId={preferredModelId}
@@ -141,6 +158,8 @@ export default async function MatchPage({ params }: PageProps) {
           fixtureRef={fixtureRef}
           leagueKey={leagueKey}
           oddsAvailable={oddsAvailable}
+          analyzable={analyzable}
+          finalScore={finalScore}
           selectableModels={selectableModels}
           defaultModelLabel={defaultModelLabel}
           preferredModelId={preferredModelId}
@@ -158,6 +177,10 @@ type Common = {
   fixtureRef: FixtureRef;
   leagueKey: ReturnType<typeof leagueToKey>;
   oddsAvailable: boolean;
+  // false em jogos encerrados/cancelados (predict() os rejeita). Esconde a CTA.
+  analyzable: boolean;
+  // Placar final pra jogos encerrados; null caso contrário.
+  finalScore: { home: number; away: number } | null;
   selectableModels: { id: string; label: string }[];
   defaultModelLabel: string;
   preferredModelId: string | null;
@@ -171,6 +194,8 @@ function MobileMatch({
   fixtureRef,
   leagueKey,
   oddsAvailable,
+  analyzable,
+  finalScore,
   selectableModels,
   defaultModelLabel,
   preferredModelId,
@@ -193,18 +218,30 @@ function MobileMatch({
         </div>
       </header>
 
-      <MatchHero view={heroView} />
+      <MatchHero
+        view={heroView}
+        status={heroView.status === "live" ? "live" : "scheduled"}
+        score={finalScore ?? undefined}
+      />
 
       <div className="flex flex-col gap-3 px-5 pb-6">
         <OddsCard view={oddsView} />
-        <AnalysisPanel
-          matchId={matchId}
-          existing={analysisExisting}
-          oddsAvailable={oddsAvailable}
-          selectableModels={selectableModels}
-          defaultModelLabel={defaultModelLabel}
-          preferredModelId={preferredModelId}
-        />
+        {analyzable ? (
+          <AnalysisPanel
+            matchId={matchId}
+            existing={analysisExisting}
+            oddsAvailable={oddsAvailable}
+            selectableModels={selectableModels}
+            defaultModelLabel={defaultModelLabel}
+            preferredModelId={preferredModelId}
+          />
+        ) : analysisExisting ? (
+          // Jogo encerrado/cancelado com predição já gerada: mostra o resultado
+          // em modo somente-leitura (sem CTA de reanálise — predict() rejeitaria).
+          <AnalysisResult view={analysisExisting} again={false} />
+        ) : (
+          <FinishedNotice score={finalScore} />
+        )}
         <Suspense fallback={<MatchSectionsSkeleton />}>
           <MatchSections fixtureRef={fixtureRef} leagueKey={leagueKey} />
         </Suspense>
@@ -224,6 +261,8 @@ function DesktopMatch({
   fixtureRef,
   leagueKey,
   oddsAvailable,
+  analyzable,
+  finalScore,
   selectableModels,
   defaultModelLabel,
   preferredModelId,
@@ -270,9 +309,22 @@ function DesktopMatch({
                   </span>
                 </div>
               </div>
-              <span className="text-[22px] font-medium text-muted-foreground tracking-tight">
-                vs
-              </span>
+              {finalScore ? (
+                <div className="flex flex-col items-center gap-0.5">
+                  <span className="font-mono text-[30px] font-medium tabular-nums tracking-tight">
+                    {finalScore.home}
+                    <span className="px-2 text-muted-foreground">–</span>
+                    {finalScore.away}
+                  </span>
+                  <span className="font-mono text-[10px] uppercase tracking-[0.14em] text-muted-fg-2">
+                    encerrado
+                  </span>
+                </div>
+              ) : (
+                <span className="text-[22px] font-medium text-muted-foreground tracking-tight">
+                  vs
+                </span>
+              )}
               <div className="flex items-center gap-3">
                 <TeamAvatar
                   initials={heroView.away.short.slice(0, 2)}
@@ -302,14 +354,21 @@ function DesktopMatch({
         </div>
 
         <div className="pb-6">
-          <AnalysisPanel
-            matchId={matchId}
-            existing={analysisExisting}
-            oddsAvailable={oddsAvailable}
-            selectableModels={selectableModels}
-            defaultModelLabel={defaultModelLabel}
-            preferredModelId={preferredModelId}
-          />
+          {analyzable ? (
+            <AnalysisPanel
+              matchId={matchId}
+              existing={analysisExisting}
+              oddsAvailable={oddsAvailable}
+              selectableModels={selectableModels}
+              defaultModelLabel={defaultModelLabel}
+              preferredModelId={preferredModelId}
+            />
+          ) : analysisExisting ? (
+            // Encerrado/cancelado com predição: somente-leitura (sem reanálise).
+            <AnalysisResult view={analysisExisting} again={false} />
+          ) : (
+            <FinishedNotice score={finalScore} />
+          )}
         </div>
 
         <Suspense fallback={<MatchSectionsSkeleton />}>
@@ -320,5 +379,27 @@ function DesktopMatch({
         </Suspense>
       </div>
     </DesktopShell>
+  );
+}
+
+// Mostrado em vez da CTA de análise quando o jogo já terminou/foi cancelado e
+// não há predição prévia: predict() rejeita esses jogos, então não há o que
+// analisar. O placar (quando há) reforça o estado encerrado.
+function FinishedNotice({
+  score,
+}: {
+  score: { home: number; away: number } | null;
+}) {
+  return (
+    <div className="flex flex-col gap-1.5 rounded-md border border-dashed border-border px-4 py-3.5">
+      <span className="font-mono text-[10.5px] uppercase tracking-[0.14em] text-muted-foreground">
+        jogo encerrado
+      </span>
+      <p className="text-[12.5px] text-muted-foreground tracking-tight">
+        {score
+          ? `Placar final ${score.home}–${score.away}. Análise indisponível para jogos já encerrados.`
+          : "Análise indisponível para jogos já encerrados ou cancelados."}
+      </p>
+    </div>
   );
 }

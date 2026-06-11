@@ -13,7 +13,14 @@ type Props = {
   last?: boolean;
 };
 
+const STATUS_LABEL: Record<"postponed" | "cancelled", string> = {
+  postponed: "Adiado",
+  cancelled: "Cancelado",
+};
+
 export function MatchRow({ m, last }: Props) {
+  const isFinished = m.status === "finished";
+  const hasScore = m.homeScore !== null && m.awayScore !== null;
   return (
     <Link
       href={`/match/${m.id}`}
@@ -59,7 +66,28 @@ export function MatchRow({ m, last }: Props) {
         </div>
 
         <div className="flex shrink-0 items-center gap-2">
-          {m.odds ? (
+          {isFinished && hasScore ? (
+            <div className="flex flex-col items-end gap-0.5">
+              <span className="font-mono text-[15px] font-medium tabular-nums">
+                {m.homeScore}
+                <span className="px-1 text-muted-foreground">–</span>
+                {m.awayScore}
+              </span>
+              <span className="font-mono text-[9.5px] uppercase tracking-[0.08em] text-muted-fg-2">
+                encerrado
+              </span>
+            </div>
+          ) : isFinished ? (
+            // Encerrado sem placar reportado: marca o estado sem inventar 0–0
+            // nem cair no "sem odd" (que sugeriria um jogo ainda apostável).
+            <span className="font-mono text-[10.5px] uppercase tracking-[0.08em] text-muted-fg-2">
+              encerrado
+            </span>
+          ) : m.status === "postponed" || m.status === "cancelled" ? (
+            <span className="font-mono text-[10.5px] uppercase tracking-[0.08em] text-muted-fg-2">
+              {STATUS_LABEL[m.status]}
+            </span>
+          ) : m.odds ? (
             <div className="flex flex-col items-end gap-1 font-mono text-[12.5px] tabular-nums">
               <span>
                 <span className="text-muted-foreground">O</span> {m.odds.over}
