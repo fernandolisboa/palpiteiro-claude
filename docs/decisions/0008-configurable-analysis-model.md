@@ -119,3 +119,49 @@ não meta). `effort` segue no default `high`. Tornar `max_tokens`/`effort`
 configuráveis via `/admin/settings` (em vez de hardcoded) é trabalho de
 follow-up. Ver também #123 (discovery: estratégia de modelo adaptive vs
 temperature).
+
+## Emenda 2 (2026-06)
+
+Implementa o follow-up citado acima: os parâmetros de geração saem do hardcode e
+viram **calibráveis em `/admin/settings`**, persistidos no `ai_config` (colunas
+`max_tokens`, `effort`, `temperature`).
+
+**Model awareness.** A calibração reusa a bifurcação por `thinkingMode` que o
+`request-builder.ts` já fazia (decisão #4). Cada knob só é aplicado onde a API
+aceita:
+
+- `max_tokens` — TODOS os modelos (é teto; inofensivo pros temperature, que não
+  usam a folga, e crítico pros adaptive, onde o thinking conta dentro dele).
+- `effort` — SÓ modelos adaptive (Opus 4.8 / Sonnet 4.6 / Fable), via
+  `output_config.effort`. Sonnet 4.5 / Haiku retornam erro com `effort`, então
+  ele NÃO entra no caminho temperature. Níveis oferecidos: low/medium/high/max
+  (todos suportados pelos adaptive do registry; `xhigh` omitido por não ser
+  universal — ex.: Sonnet 4.6).
+- `temperature` — SÓ modelos temperature-mode (Sonnet 4.5 / Haiku); substitui o
+  default `0.3` que era fixo no registry. Adaptive continua omitindo sampling
+  (400).
+
+**Defaults e fallback.** Centralizados em `lib/ai/generation-params.ts`
+(`GENERATION_PARAM_DEFAULTS` = 16000 / high / 0.3), espelhados no seed da
+migration e no fallback POR CAMPO da query layer (`getGenerationParams`): um
+valor ausente/inválido cai no default, nunca quebra a chamada (mesmo princípio do
+`getDefaultModelId`).
+
+**Edição protegida (UX).** Por serem sensíveis (mexem em custo/qualidade/latência
+de TODA análise), os campos em `/admin/settings` começam **desabilitados**; um
+toggle explícito ("entendo que são parâmetros sensíveis") libera a edição, com um
+aviso destacado. A server action `updateGenerationParams` revalida role admin
+(defense-in-depth) E os ranges, espelhando `updateDefaultModel`.
+
+**Nota de tipagem.** `effort`/`output_config` são GA no `/v1/messages` (sem beta
+header) e já vêm tipados no `MessageCreateParamsNonStreaming` do SDK
+`@anthropic-ai/sdk@0.95.2` (`output_config.effort`), então o `request-builder`
+seta direto, sem cast. O nosso `Effort` (low/medium/high/max) é subconjunto do
+union do SDK (que inclui xhigh/null) — atribuível sem fricção.
+
+### Consequências (emenda 2)
+
+- (+) Calibrar max_tokens/effort/temperature sem redeploy, model-aware, sem 400.
+- (+) `max_tokens` deixa de ser hardcode (a emenda 1 vira o default/seed).
+- (−) `ai_config` ganha 3 colunas (migration aditiva, com defaults → backfill
+  automático da row existente).

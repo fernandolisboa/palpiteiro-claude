@@ -1,5 +1,6 @@
 import type Anthropic from "@anthropic-ai/sdk";
 
+import type { Effort } from "./generation-params";
 import type { AIModel } from "./models";
 
 // Constrói o corpo da request ao Claude de forma MODEL-AWARE. Encapsulado aqui
@@ -18,8 +19,16 @@ import type { AIModel } from "./models";
 //                                    trata a ausência do tool_use de submit_prediction)
 //   - temperature (Sonnet 4.5)    → `tool_choice: { type: "tool", name }` forçado
 //
+// GOTCHA CRÍTICO #3 (calibração — ADR 0008 emenda 2): os parâmetros de geração são
+// MODEL-AWARE no mesmo eixo. `effort` (profundidade do thinking) só faz sentido —
+// e só é aceito — nos modelos adaptive; Sonnet 4.5/Haiku retornam erro com effort,
+// então NÃO entra no caminho temperature. `temperature` é o knob simétrico, só pro
+// caminho temperature. `maxTokens` vale pros dois. `output_config.effort` é GA no
+// /v1/messages (sem beta header) e já vem tipado no params do SDK — seta direto.
+//
 // O mesmo objeto retornado é usado para o inputPayload logado em ai_calls E para
 // a chamada real client.messages.create() — evita duplicação/divergência.
+
 export function buildAnthropicRequest(args: {
   model: AIModel;
   system: string;
@@ -27,6 +36,11 @@ export function buildAnthropicRequest(args: {
   tools: Anthropic.Tool[];
   toolName: string;
   maxTokens: number;
+  // MODEL-AWARE (ver generation-params.ts): `effort` só é aplicado no caminho
+  // adaptive; `temperature` só no caminho temperature. Ambos opcionais — ausência
+  // recai no default do registry / do servidor.
+  effort?: Effort;
+  temperature?: number;
 }): Anthropic.MessageCreateParamsNonStreaming {
   const base: Anthropic.MessageCreateParamsNonStreaming = {
     model: args.model.id,
@@ -37,20 +51,26 @@ export function buildAnthropicRequest(args: {
   };
 
   if (args.model.thinkingMode === "temperature") {
-    // Caminho Sonnet 4.5 — força o submit_prediction (sem thinking, então é válido).
+    // Caminho Sonnet 4.5 / Haiku — força o submit_prediction (sem thinking, então
+    // é válido). `temperature` calibrável; fallback no default do registry → 0.3.
     return {
       ...base,
       tool_choice: { type: "tool", name: args.toolName },
-      temperature: args.model.temperature ?? 0.3,
+      temperature: args.temperature ?? args.model.temperature ?? 0.3,
     };
   }
 
-  // Caminho adaptive (Opus 4.8): OMITE temperature/top_p/top_k e NÃO força o tool
-  // (forced tool_choice + thinking = 400). `auto` deixa o modelo chamar o tool por
-  // conta própria; predict.ts rejeita se ele não chamar submit_prediction.
-  return {
+  // Caminho adaptive (Opus 4.8 / Sonnet 4.6 / Fable): OMITE temperature/top_p/top_k
+  // e NÃO força o tool (forced tool_choice + thinking = 400). `auto` deixa o modelo
+  // chamar o tool por conta própria; predict.ts rejeita se ele não chamar. `effort`
+  // (se fornecido) calibra a profundidade do thinking via output_config.
+  const adaptive: Anthropic.MessageCreateParamsNonStreaming = {
     ...base,
     tool_choice: { type: "auto" },
     thinking: { type: "adaptive" },
   };
+  if (args.effort) {
+    adaptive.output_config = { effort: args.effort };
+  }
+  return adaptive;
 }
