@@ -1,29 +1,9 @@
-import { describe, expect, it, vi } from "vitest";
+import { describe, expect, it } from "vitest";
 import { renderToStaticMarkup } from "react-dom/server";
 
+import { DesktopStatusCell } from "@/components/desktop-status-cell";
 import { MatchRow } from "@/components/match-row";
 import type { MatchRowView } from "@/lib/view/types";
-
-// O desktop status cell vive em app/page.tsx, que importa módulos server-only
-// (auth, DB queries, sync de fixtures). Mockamos o suficiente pra importar o
-// componente puro sem tocar em env/rede — replica o padrão dos testes em
-// app/actions/__tests__.
-vi.mock("@/auth", () => ({ auth: vi.fn() }));
-vi.mock("@/lib/db/queries/matches", () => ({
-  getMatchIdsWithPredictionsByUser: vi.fn(),
-  getMatchesInRange: vi.fn(),
-}));
-vi.mock("@/lib/db/queries/odds-snapshots", () => ({
-  getLatestOddsSnapshotsForMatches: vi.fn(),
-}));
-vi.mock("@/lib/db/queries/predictions", () => ({
-  getRecentPredictionsByUser: vi.fn(),
-}));
-vi.mock("@/lib/sync/sync-upcoming-fixtures", () => ({
-  ensureUpcomingFixturesSynced: vi.fn(),
-}));
-
-import { DesktopStatusCell } from "@/app/page";
 
 function finishedAnalyzed(): MatchRowView {
   return {

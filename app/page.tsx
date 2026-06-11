@@ -1,10 +1,11 @@
 import Link from "next/link";
 import { redirect } from "next/navigation";
-import { ChevronRight, Inbox, Check } from "lucide-react";
+import { ChevronRight, Inbox } from "lucide-react";
 
 import { Badge } from "@/components/ui/badge";
 import { Card } from "@/components/ui/card";
 import { DesktopShell } from "@/components/desktop-shell";
+import { DesktopStatusCell } from "@/components/desktop-status-cell";
 import { LeagueTabs } from "@/components/league-tabs";
 import { MatchRow } from "@/components/match-row";
 import { PageHeader } from "@/components/page-header";
@@ -58,42 +59,6 @@ type PageProps = {
     to?: string;
   }>;
 };
-
-// Célula de status da grade desktop. Exportada pra ter teste de render próprio:
-// o marcador "analisado" precisa aparecer em jogos encerrados-já-analisados pra
-// casar com o mobile (components/match-row.tsx), evitando que as duas superfícies
-// divirjam de novo (#99).
-export function DesktopStatusCell({ m }: { m: MatchRowView }) {
-  return (
-    <div className="flex flex-col items-end justify-center gap-1">
-      {m.status === "finished" ? (
-        // Encerrado ainda surfaça "analisado" se o usuário já analisou: o
-        // resultado read-only segue acessível na página de detalhe.
-        <>
-          <span className="font-mono text-[10px] uppercase tracking-[0.08em] text-muted-fg-2">
-            encerrado
-          </span>
-          {m.hasPrediction && (
-            <span className="inline-flex items-center gap-1 font-mono text-[10px] tracking-[0.06em] text-accent-fg">
-              <Check className="size-3" /> analisado
-            </span>
-          )}
-        </>
-      ) : m.status === "postponed" || m.status === "cancelled" ? (
-        <span className="font-mono text-[10.5px] text-muted-fg-2">—</span>
-      ) : m.hasPrediction ? (
-        <Badge
-          variant="outline"
-          className="h-[20px] rounded-full border-accent-border bg-accent-soft px-2 text-[10px] text-accent-fg"
-        >
-          <Check className="size-3" /> analisado
-        </Badge>
-      ) : (
-        <span className="font-mono text-[10.5px] text-muted-fg-2">—</span>
-      )}
-    </div>
-  );
-}
 
 function filterToLeague(filter: LeagueFilter): SupportedLeague | undefined {
   if (filter === "bsa") return "brasileirao_a";
