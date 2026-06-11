@@ -1,5 +1,7 @@
 import Link from "next/link";
-import { ChevronLeft, ChevronRight } from "lucide-react";
+import { ChevronRight } from "lucide-react";
+
+import { BackLink } from "@/components/back-link";
 
 export const dynamic = "force-dynamic";
 
@@ -33,13 +35,7 @@ export default function AdminIndexPage() {
   return (
     <div className="bg-background text-foreground min-h-screen">
       <div className="mx-auto w-full max-w-[640px] px-6 py-8">
-        <Link
-          href="/"
-          className="text-muted-foreground hover:text-foreground inline-flex items-center gap-2 pb-6"
-        >
-          <ChevronLeft className="size-3.5" />
-          <span className="text-[12.5px] tracking-tight">jogos</span>
-        </Link>
+        <BackLink href="/" label="jogos" />
 
         <h1 className="text-[20px] font-medium tracking-[-0.02em]">Admin</h1>
         <p className="text-muted-foreground pb-6 font-mono text-[11px]">

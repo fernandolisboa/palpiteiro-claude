@@ -1,7 +1,8 @@
 import Link from "next/link";
 import { notFound } from "next/navigation";
-import { ChevronLeft, ChevronRight } from "lucide-react";
+import { ChevronRight } from "lucide-react";
 
+import { BackLink } from "@/components/back-link";
 import { auth } from "@/auth";
 import { searchUsers } from "@/lib/db/queries/users";
 
@@ -25,13 +26,7 @@ export default async function AdminUsersPage({ searchParams }: PageProps) {
   return (
     <div className="min-h-screen bg-background text-foreground">
       <div className="mx-auto w-full max-w-[640px] px-6 py-8">
-        <Link
-          href="/"
-          className="inline-flex items-center gap-2 pb-6 text-muted-foreground hover:text-foreground"
-        >
-          <ChevronLeft className="size-3.5" />
-          <span className="text-[12.5px] tracking-tight">jogos</span>
-        </Link>
+        <BackLink href="/admin" label="admin" />
 
         <h1 className="text-[20px] font-medium tracking-[-0.02em]">Usuários</h1>
         <p className="pb-6 font-mono text-[11px] text-muted-foreground">
