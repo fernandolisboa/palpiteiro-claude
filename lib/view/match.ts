@@ -7,7 +7,11 @@ import {
 import type { SupportedLeague } from "@/lib/providers/sports-data/leagues";
 import { teamToTeam } from "@/lib/view/team";
 import { toMatchRowOdds, type OddsSnapshotInput } from "@/lib/view/odds";
-import type { MatchHeroView, MatchRowView } from "@/lib/view/types";
+import type {
+  MatchHeroView,
+  MatchRowView,
+  MatchStatus,
+} from "@/lib/view/types";
 
 export type MatchInput = {
   id: string;
@@ -15,6 +19,9 @@ export type MatchInput = {
   homeTeam: string;
   awayTeam: string;
   kickoffAt: Date;
+  status: MatchStatus;
+  homeScore: number | null;
+  awayScore: number | null;
   venue?: string;
 };
 
@@ -40,6 +47,12 @@ export function toMatchRowView({
     when: formatKickoffAbsolute(match.kickoffAt, now),
     odds: toMatchRowOdds(odds),
     hasPrediction,
+    status: match.status,
+    // Só expõe placar em jogos encerrados. Um provider pode carregar gols
+    // parciais num `live` ou deixá-los preenchidos num `postponed`/`cancelled`;
+    // só `finished` deve mostrar placar final — os demais ficam null.
+    homeScore: match.status === "finished" ? match.homeScore : null,
+    awayScore: match.status === "finished" ? match.awayScore : null,
     venue: match.venue,
     countdown: formatCountdown(match.kickoffAt, now),
   };

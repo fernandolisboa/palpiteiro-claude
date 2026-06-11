@@ -43,6 +43,13 @@ const RECENT_LIMIT = 5;
 // query só. Presets de janela já são limitados pelo `to`.
 const RANGE_LIMIT = 200;
 
+// Rótulo PT-BR pros status que não têm placar nem CTA de análise. `finished`
+// é tratado à parte (mostra placar); `scheduled`/`live` seguem o fluxo de odds.
+const STATUS_LABEL: Record<"postponed" | "cancelled", string> = {
+  postponed: "Adiado",
+  cancelled: "Cancelado",
+};
+
 type PageProps = {
   searchParams: Promise<{
     league?: string;
@@ -51,6 +58,42 @@ type PageProps = {
     to?: string;
   }>;
 };
+
+// Célula de status da grade desktop. Exportada pra ter teste de render próprio:
+// o marcador "analisado" precisa aparecer em jogos encerrados-já-analisados pra
+// casar com o mobile (components/match-row.tsx), evitando que as duas superfícies
+// divirjam de novo (#99).
+export function DesktopStatusCell({ m }: { m: MatchRowView }) {
+  return (
+    <div className="flex flex-col items-end justify-center gap-1">
+      {m.status === "finished" ? (
+        // Encerrado ainda surfaça "analisado" se o usuário já analisou: o
+        // resultado read-only segue acessível na página de detalhe.
+        <>
+          <span className="font-mono text-[10px] uppercase tracking-[0.08em] text-muted-fg-2">
+            encerrado
+          </span>
+          {m.hasPrediction && (
+            <span className="inline-flex items-center gap-1 font-mono text-[10px] tracking-[0.06em] text-accent-fg">
+              <Check className="size-3" /> analisado
+            </span>
+          )}
+        </>
+      ) : m.status === "postponed" || m.status === "cancelled" ? (
+        <span className="font-mono text-[10.5px] text-muted-fg-2">—</span>
+      ) : m.hasPrediction ? (
+        <Badge
+          variant="outline"
+          className="h-[20px] rounded-full border-accent-border bg-accent-soft px-2 text-[10px] text-accent-fg"
+        >
+          <Check className="size-3" /> analisado
+        </Badge>
+      ) : (
+        <span className="font-mono text-[10.5px] text-muted-fg-2">—</span>
+      )}
+    </div>
+  );
+}
 
 function filterToLeague(filter: LeagueFilter): SupportedLeague | undefined {
   if (filter === "bsa") return "brasileirao_a";
@@ -136,6 +179,9 @@ export default async function HomePage({ searchParams }: PageProps) {
         homeTeam: m.homeTeam,
         awayTeam: m.awayTeam,
         kickoffAt: m.kickoffAt,
+        status: m.status,
+        homeScore: m.homeScore,
+        awayScore: m.awayScore,
       },
       odds: snapshot
         ? {
@@ -361,7 +407,24 @@ function DesktopHome({ matches, recents, league, range }: HomeContentProps) {
                   </div>
                 </div>
                 <div className="flex flex-col items-end gap-1 font-mono text-[13px] tabular-nums">
-                  {m.odds ? (
+                  {m.status === "finished" &&
+                  m.homeScore !== null &&
+                  m.awayScore !== null ? (
+                    <span className="text-[15px] font-medium">
+                      {m.homeScore}
+                      <span className="px-1 text-muted-foreground">–</span>
+                      {m.awayScore}
+                    </span>
+                  ) : m.status === "finished" ? (
+                    // Encerrado sem placar reportado: não cai no "sem odd".
+                    <span className="text-[10.5px] uppercase tracking-[0.08em] text-muted-fg-2">
+                      —
+                    </span>
+                  ) : m.status === "postponed" || m.status === "cancelled" ? (
+                    <span className="text-[10.5px] uppercase tracking-[0.08em] text-muted-fg-2">
+                      {STATUS_LABEL[m.status]}
+                    </span>
+                  ) : m.odds ? (
                     <>
                       <span>
                         <span className="text-muted-foreground">O</span> {m.odds.over}
@@ -374,20 +437,13 @@ function DesktopHome({ matches, recents, league, range }: HomeContentProps) {
                     <span className="text-muted-fg-2">sem odd</span>
                   )}
                 </div>
-                <div className="flex items-center justify-end">
-                  {m.hasPrediction ? (
-                    <Badge
-                      variant="outline"
-                      className="h-[20px] rounded-full border-accent-border bg-accent-soft px-2 text-[10px] text-accent-fg"
-                    >
-                      <Check className="size-3" /> analisado
-                    </Badge>
-                  ) : (
-                    <span className="font-mono text-[10.5px] text-muted-fg-2">—</span>
-                  )}
-                </div>
+                <DesktopStatusCell m={m} />
                 <span className="justify-self-end text-muted-fg-2">
-                  <ChevronRight className="size-3.5" />
+                  {m.status === "finished" ||
+                  m.status === "postponed" ||
+                  m.status === "cancelled" ? null : (
+                    <ChevronRight className="size-3.5" />
+                  )}
                 </span>
               </Link>
             ))}
