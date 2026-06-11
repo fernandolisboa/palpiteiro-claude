@@ -1,3 +1,4 @@
+import { HelpHint } from "@/components/help-hint";
 import { Card } from "@/components/ui/card";
 import { cn } from "@/lib/utils";
 import type { DashboardKpiView, RateView } from "@/lib/view/dashboard";
@@ -25,15 +26,20 @@ function RateCard({
   label,
   rate,
   valueClassName,
+  hint,
 }: {
   label: string;
   rate: RateView;
   valueClassName?: string;
+  hint?: { anchor: string; blurb: string };
 }) {
   return (
     <Card className="gap-2 p-5">
-      <span className="font-mono text-[10px] uppercase tracking-[0.14em] text-muted-foreground">
+      <span className="flex items-center gap-1 font-mono text-[10px] uppercase tracking-[0.14em] text-muted-foreground">
         {label}
+        {hint && (
+          <HelpHint anchor={hint.anchor} label={label} blurb={hint.blurb} />
+        )}
       </span>
       <span
         className={cn(
@@ -53,12 +59,41 @@ export function KpiCards({ view }: { view: DashboardKpiView }) {
   return (
     <div className="flex flex-col gap-4">
       <div className="grid grid-cols-2 gap-3 lg:grid-cols-4">
-        <RateCard label="yield" rate={view.yieldPct} />
-        <RateCard label="win rate" rate={view.winRate} />
-        <RateCard label="pass rate" rate={view.passRate} />
+        <RateCard
+          label="yield"
+          rate={view.yieldPct}
+          hint={{
+            anchor: "yield",
+            blurb:
+              "Lucro ÷ total apostado × 100. Conta só apostas liquidadas (exclui pass e void). Mede eficiência, não tamanho.",
+          }}
+        />
+        <RateCard
+          label="win rate"
+          rate={view.winRate}
+          hint={{
+            anchor: "win-rate",
+            blurb:
+              "% de apostas ganhas entre as liquidadas. Win rate alto não garante lucro — o que paga é o yield.",
+          }}
+        />
+        <RateCard
+          label="pass rate"
+          rate={view.passRate}
+          hint={{
+            anchor: "pass-rate",
+            blurb:
+              "% de jogos em que o app não apostou. Alvo saudável: 30–60%. Pass rate alto é disciplina, não fraqueza.",
+          }}
+        />
         <Card className="gap-2 p-5">
-          <span className="font-mono text-[10px] uppercase tracking-[0.14em] text-muted-foreground">
+          <span className="flex items-center gap-1 font-mono text-[10px] uppercase tracking-[0.14em] text-muted-foreground">
             lucro total
+            <HelpHint
+              anchor="lucro-total"
+              label="lucro total"
+              blurb="Soma de lucro/prejuízo acumulado em unidades das apostas já liquidadas, em dinheiro hipotético."
+            />
           </span>
           <span
             className={cn(
