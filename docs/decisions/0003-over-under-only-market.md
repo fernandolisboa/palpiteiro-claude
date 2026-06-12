@@ -1,7 +1,7 @@
 # ADR 0003 — Over/Under 2.5 gols como único mercado do MVP
 
 ## Status
-Accepted (2026-05)
+Superseded (2026-06-12) por **ADR 0015** — pivot multi-mercado: over/under 2.5 deixa de ser o único mercado e vira o **primeiro** de um motor de seleção de edge multi-mercado. Originalmente Accepted (2026-05). As premissas binárias derivadas deste ADR ("lado oposto = 100 − x", "linha 2.5 nunca dá push") são emendadas no **ADR 0018**.
 
 ## Contexto
 
