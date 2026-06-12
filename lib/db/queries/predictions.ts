@@ -37,6 +37,30 @@ export async function getLatestPredictionForMatch(
   return rows[0] ?? null;
 }
 
+/**
+ * Full prediction history for a match scoped to one user, newest first — the
+ * same select/leftJoin shape as getLatestPredictionForMatch but WITHOUT limit(1),
+ * so the caller gets every (re)analysis instead of only the latest. Scoped by
+ * userId so it never leaks other users' predictions. Market-agnostic (selects
+ * whole prediction rows), so it survives the multi-market pivot untouched.
+ */
+export async function getPredictionHistoryForMatch(
+  matchId: string,
+  userId: string,
+): Promise<PredictionWithAiCall[]> {
+  return db
+    .select({
+      prediction: predictions,
+      aiCall: aiCalls,
+    })
+    .from(predictions)
+    .leftJoin(aiCalls, eq(predictions.aiCallId, aiCalls.id))
+    .where(
+      and(eq(predictions.matchId, matchId), eq(predictions.userId, userId)),
+    )
+    .orderBy(desc(predictions.createdAt));
+}
+
 // Minimum elapsed time after kickoff before a fixture is worth polling for a
 // settlement result: 90' + halftime + stoppage, with margin. Settlement reads
 // the 90' regulation score, so we don't need to wait out extra time.
