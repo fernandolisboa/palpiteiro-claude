@@ -9,8 +9,10 @@ import {
 } from "@/lib/view/dashboard";
 
 function row(overrides: Partial<DashboardRow> = {}): DashboardRow {
+  const predictionId = overrides.predictionId ?? "p1";
   return {
-    predictionId: "p1",
+    predictionId,
+    matchId: `match-${predictionId}`,
     recommendation: "over",
     market: "over_under_2_5",
     league: "world_cup",

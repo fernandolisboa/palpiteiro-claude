@@ -9,8 +9,10 @@ import {
 } from "@/lib/dashboard/kpis";
 
 function row(overrides: Partial<DashboardRow> = {}): DashboardRow {
+  const predictionId = overrides.predictionId ?? "p";
   return {
-    predictionId: "p",
+    predictionId,
+    matchId: `match-${predictionId}`,
     recommendation: "over",
     market: "over_under_2_5",
     league: "world_cup",

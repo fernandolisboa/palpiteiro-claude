@@ -2,6 +2,7 @@ import {
   applyTableFilters,
   computeBankrollSeries,
   computeDashboardKpis,
+  keepLatestPerMatch,
   type BankrollPoint,
   type DashboardFilters,
   type DashboardRow,
@@ -51,11 +52,14 @@ export function deriveDashboardView(
   rows: DashboardRow[],
   filters: DashboardFilters,
 ): DashboardView {
-  // KPIs e gráfico sobre TODAS as linhas; a tabela filtra à parte.
+  // ADR 0020 / #116: conta no máximo uma predição por jogo (a mais recente) em
+  // TODOS os outputs — KPIs, gráfico E tabela — pra reanálise não inflar nada.
+  const deduped = keepLatestPerMatch(rows);
+  // KPIs e gráfico sobre as linhas deduplicadas; a tabela filtra à parte.
   return {
-    kpis: toDashboardKpiView(computeDashboardKpis(rows)),
-    series: computeBankrollSeries(rows),
-    tableRows: applyTableFilters(rows, filters).map(toPredictionRowView),
-    availableLeagues: [...new Set(rows.map((r) => leagueToKey(r.league)))],
+    kpis: toDashboardKpiView(computeDashboardKpis(deduped)),
+    series: computeBankrollSeries(deduped),
+    tableRows: applyTableFilters(deduped, filters).map(toPredictionRowView),
+    availableLeagues: [...new Set(deduped.map((r) => leagueToKey(r.league)))],
   };
 }
