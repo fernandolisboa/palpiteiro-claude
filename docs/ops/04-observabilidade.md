@@ -235,8 +235,8 @@ Setar na Vercel (ver [`02-vercel-prod.md`](./02-vercel-prod.md) pra onde clicar)
 
 ### Controle de custo/quota
 
-Tráfego é baixo, mas o que **estoura a cota free** é tracing e replay, não erros.
-Mantenha conservador:
+Tráfego é baixo, mas o que **estoura a cota free** é tracing e replay (quando
+ligado), não erros. Mantenha conservador:
 
 | Opção | Sugestão Fase 2 | Por quê |
 | --- | --- | --- |
@@ -244,6 +244,12 @@ Mantenha conservador:
 | `replaysSessionSampleRate` | `0.0` | Replay de sessão é o que mais consome quota; ligue só se precisar. |
 | `replaysOnErrorSampleRate` | `1.0` | Barato e útil: só grava replay quando há erro. |
 | Error Monitoring | sempre on | É o sinal que importa; raramente estoura 5k/mês nessa escala. |
+
+> ℹ️ **Replay não está habilitado hoje** — `instrumentation-client.ts` não
+> configura `replaysSessionSampleRate`/`replaysOnErrorSampleRate`, então não
+> consome cota de replay nem grava sessão. As duas linhas `replays*` acima são
+> guia pra **se** ligar; antes disso reavalie PII/LGPD (Replay grava DOM e
+> inputs do usuário). `tracesSampleRate` é o único knob de amostragem ativo.
 
 Documentação oficial do setup (confira, o SDK evolui):
 [Sentry · Next.js — Manual Setup](https://docs.sentry.io/platforms/javascript/guides/nextjs/manual-setup/).
@@ -268,7 +274,8 @@ podem conter PII; `sendDefaultPii` adiciona IP/headers) merece um registro leve:
   monitoring (free tier)`, explicando no body o porquê e o trade-off de quota.
 - **Melhor:** um ADR curto em [`docs/decisions/`](../decisions/) (feito:
   [`0022-sentry-error-monitoring.md`](../decisions/0022-sentry-error-monitoring.md)) — uma página: contexto (faltava visibilidade
-  de exceptions), decisão (Sentry free), alternativas (Axiom, Vercel logs),
+  de exceptions), decisão (Sentry free), alternativas (Datadog, Rollbar/Bugsnag,
+  logs do Vercel — ver a lista no ADR),
   consequências (PII em traces → ver [`05-legal-compliance.md`](./05-legal-compliance.md)
   sobre LGPD).
 
