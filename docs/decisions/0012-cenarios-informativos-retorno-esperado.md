@@ -2,7 +2,7 @@
 
 ## Status
 
-Accepted (2026-06)
+Accepted (2026-06) — **emendado pelo ADR 0018** (cenários multi-mercado de N vias; a premissa binária `100 − x` e "a linha 2.5 nunca dá push" caem — ver `## Emenda` no fim)
 
 ## Contexto
 
@@ -140,3 +140,31 @@ qual issue cada parte entrou.
   (`100 − x` pro lado oposto) vale porque a linha 2.5 nunca dá push.
 - `docs/specs/over-under-prompt-design.md` — drift da linha 70 registrado na
   decisão 8.
+
+## Emenda (2026-06) — cenários multi-mercado de N vias (ADR 0018)
+
+Com o pivot multi-mercado (**ADR 0015**), o **ADR 0018** generaliza a matemática de cenários pra N
+seleções e **emenda** este ADR. O que cai e o que fica:
+
+- **Cai a premissa binária.** A derivação do lado oposto por `100 − x`
+  (`scenario.ts:120/137-144`) e a afirmação das Referências acima — "a premissa binária (`100 − x`
+  pro lado oposto) vale porque a linha 2.5 nunca dá push" — **só valem pra N=2**. Com 1X2/Dupla
+  chance (3 vias), cada seleção tem `modelProb`, implícita **normalizada pelo overround do mercado
+  completo** e edge **próprios**; `edge_oposto = −edge` deixa de valer. E "a linha 2.5 nunca dá
+  push" cai de vez: linhas inteiras/handicap dão `push` (**ADR 0016**).
+- **A decisão 1 (cenário duplo é informação, não recomendação) é preservada na intenção e
+  generalizada na forma:** o "lado alternativo informativo" vira **a lista das outras seleções** do
+  mercado (recomendada destacada, as demais informativas). Pra over/under (N=2) o layout é
+  **idêntico** ao de hoje.
+- **A decisão 6 (break-even/EV pago na odd CRUA) SOBREVIVE intacta** e é reafirmada pelo ADR 0018: o
+  break-even (`100/odd`) e o EV (`modelProb · odd − 1`) continuam por seleção, na odd crua —
+  distintos da implícita normalizada que rege o edge. Os dois conceitos de probabilidade continuam
+  separados de propósito.
+- **A decisão 7 (edge e retorno podem discordar) generaliza por seleção;** a decisão 2 (copy leiga:
+  "retorno esperado", "prob. do modelo", break-even) é reaproveitada na base compartilhada dos
+  cartuchos de prompt (**ADR 0017**).
+- **`MIN_EDGE_PP` segue exportado de `lib/odds/scenario.ts`** e pinado ao prompt por teste; a regra
+  de 5pp passa a ser sobre a implícita normalizada de N vias (valor e pino inalterados).
+
+As decisões 3, 4, 5 e 8 (congelamento do par de odds, naming `AtPrediction`, sem backfill,
+`minimum_odd` sem recheck) **não** são afetadas por esta emenda.
