@@ -10,6 +10,7 @@ import type { LeagueFilter } from "@/lib/view/types";
  */
 export type DashboardRow = {
   predictionId: string;
+  matchId: string;
   recommendation: "over" | "under" | "pass";
   market: "over_under_2_5";
   league: SupportedLeague;
@@ -88,6 +89,32 @@ function makeRate(numerator: number, denominator: number): Rate {
 
 export function rowStatus(row: DashboardRow): RowStatus {
   return row.result ?? "pending";
+}
+
+/**
+ * Dedup de reanálise (ADR 0020 / #116): mantém só a predição mais recente por
+ * jogo — a de maior `createdAt`. Reanalisar um jogo cria uma predição nova
+ * (CLAUDE.md: nunca mutar predição passada); sem dedup, cada reanálise infla
+ * yield/winRate/passRate/bankroll. As antigas continuam no banco como histórico,
+ * só não contam pros KPIs.
+ *
+ * Keyed por `matchId` (o `userId` já está fixo pelo escopo da query). A chave se
+ * estende a `(matchId, market)` quando o pivot trouxer mais mercados; a
+ * segmentação de KPIs por mercado do #171 é um passo de agrupamento separado, em
+ * cima do conjunto já deduplicado.
+ *
+ * Order-independent: compara `createdAt` explicitamente (não assume a ordenação
+ * da query). Em empate de `createdAt`, vence o primeiro visto.
+ */
+export function keepLatestPerMatch(rows: DashboardRow[]): DashboardRow[] {
+  const latest = new Map<string, DashboardRow>();
+  for (const row of rows) {
+    const current = latest.get(row.matchId);
+    if (current == null || row.createdAt > current.createdAt) {
+      latest.set(row.matchId, row);
+    }
+  }
+  return [...latest.values()];
 }
 
 /**

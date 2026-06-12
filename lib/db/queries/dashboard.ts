@@ -27,6 +27,7 @@ export async function getUserDashboardRows(
   return db
     .select({
       predictionId: predictions.id,
+      matchId: predictions.matchId,
       recommendation: predictions.recommendation,
       market: predictions.market,
       league: matches.league,

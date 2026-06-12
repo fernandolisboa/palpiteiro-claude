@@ -159,6 +159,12 @@ export type RecentPredictionRow = {
   createdAt: Date;
 };
 
+/**
+ * Feed de "análises recentes" do usuário. NÃO deduplica por jogo — lista cada
+ * reanálise — por decisão de produto (ADR 0020): é um feed de atividade ("o que
+ * analisei recentemente"), não um resumo de performance. Diverge de propósito
+ * dos KPIs do dashboard, que contam só a predição mais recente por jogo (#116).
+ */
 export async function getRecentPredictionsByUser(
   userId: string,
   limit = 5,
