@@ -4,6 +4,8 @@
 
 Definir formalmente o contrato de entrada e saída do `lib/ai/predict.ts` para o único mercado do MVP (over/under 2.5 gols), **antes** da implementação do runtime. Esta spec acompanha o código em `lib/ai/schemas/input.ts`, `lib/ai/schemas/output.ts` e `lib/ai/prompts/over_under_v1.ts`.
 
+> **Nota (pivot multi-mercado):** esta é a spec do **mercado over/under** — o **primeiro cartucho**. O modelo geral de cartuchos de prompt por mercado está no [ADR 0017](../decisions/0017-cartuchos-de-prompt-por-mercado.md); a spec-mãe multi-mercado vem na **Fase 5** (#177). O corpo abaixo permanece a referência do cartucho over/under.
+
 Referências:
 
 - ADR 0001 — Claude Sonnet 4.5 como único provider do MVP

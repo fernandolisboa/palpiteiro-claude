@@ -4,7 +4,7 @@ Documento lido por Claude Code (e similares) ao iniciar sessões neste repositó
 
 ## Visão rápida
 
-**Palpiteiro** é um web app que usa LLM pra gerar recomendações de aposta em over/under 2.5 gols, com tracking obsessivo de Yield e racional. Side project solo, foco em uso pessoal e aprendizado de IA.
+**Palpiteiro** é um web app que usa LLM como **motor de seleção de edge multi-mercado** (1X2, over/under, BTTS, dupla chance): dada uma partida + mercados candidatos, emite **uma** recomendação por análise (mercado + seleção + linha + stake) ou `pass`, sempre com racional e Yield **segmentado por mercado**. Over/under 2.5 é o **primeiro mercado** do Tier 1, não o único. Side project solo, foco em uso pessoal e aprendizado de IA.
 
 Documentação primária:
 - [`docs/PRD.md`](./docs/PRD.md) — produto e escopo
@@ -62,7 +62,7 @@ pnpm build             # build de produção
 
 ### IA / Prompts
 - Prompts em `lib/ai/prompts/` como TS versionado
-- Cada prompt tem `version` semver-like (ex: `over_under_v1.2`)
+- Versionamento **por cartucho** de mercado (ADR 0017): cada prompt tem `version` semver-like própria (ex: `over_under_v1.3`, `match_result_v1`, `btts_v1`)
 - Mudanças em prompt → bump de versão → registrar no commit
 - Toda chamada de LLM passa por `lib/ai/predict.ts`, que loga em `ai_calls`
 - Output do LLM é **sempre** validado por Zod antes de uso
@@ -85,7 +85,7 @@ Flow padrão pra qualquer melhoria/feature não-trivial neste repo. Quando o ped
 ## Gotchas
 
 - **Custo de tokens**: cada chamada de LLM custa dinheiro real. Cache agressivo em `match` data. Se rodar análise N vezes num jogo só pra debug, mencione isso no PR
-- **Edge calculation**: NUNCA usar `1 / odd` direto como probabilidade implícita — bookmakers embutem margem (overround). Sempre normalizar pelo overround do mercado completo
+- **Edge calculation**: NUNCA usar `1 / odd` cru como probabilidade implícita — bookmakers embutem margem (overround). Sempre normalizar pelo overround do **mercado completo** (`Σ 1/odd` sobre **todas** as seleções). Em N=2 (over/under) é o caso binário; em N≥3 (1X2) cada seleção tem seu próprio edge `modelProb_i − implied_i` (ADR 0018)
 - **Settlement**: jogos podem ser anulados, adiados ou ter score corrigido após o fato. Settlement deve ser idempotente e suportar override manual
 - **Free tier de The Odds API é 500 req/mês** — cache e batching são obrigatórios; rodar em loop pode estourar em horas
 - **Neon cold start**: primeira query depois de inatividade tem latência ~1s. Não bloqueie UI esperando — use loading states
@@ -93,7 +93,7 @@ Flow padrão pra qualquer melhoria/feature não-trivial neste repo. Quando o ped
 
 ## O que NÃO fazer
 
-- ❌ Adicionar mercado novo, liga nova ou provider novo de IA sem ADR
+- ❌ Adicionar mercado de **Tier 3** (correct score, escanteios, cartões, player props, handicap asiático), liga nova ou provider novo de IA sem ADR. Os mercados do MVP (Tier 1: 1X2 + over/under; Tier 2: BTTS + dupla chance) são **fluxo suportado** pelos ADRs 0015–0019 — entram via migration seguindo o modelo de `markets`/`market_selections`, sem ADR novo. Liga nova continua exigindo o checklist; provider de IA novo continua exigindo ADR.
 - ❌ Commit de secrets ou API keys (mesmo que de teste)
 - ❌ Skip de Zod validation em output de LLM ("vai dar certo dessa vez")
 - ❌ Lógica de negócio complexa em components React — mover pra `lib/`

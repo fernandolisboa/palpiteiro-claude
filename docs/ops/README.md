@@ -8,7 +8,8 @@ observabilidade, conformidade legal e marca, terminando num checklist de go-live
 Leia na ordem abaixo; cada doc é autocontido e se cross-linka com os outros.
 
 > 💡 Lembrete de contexto: o Palpiteiro **não aceita dinheiro nem opera apostas** —
-> gera recomendações over/under 2.5 + tracking de Yield hipotético; a aposta real é
+> gera recomendações de seleção de edge multi-mercado (Tier 1: 1X2 / over-under;
+> Tier 2: BTTS / dupla chance) + tracking de Yield **segmentado por mercado**; a aposta real é
 > feita pelo usuário fora do app, em plataformas `.bet.br` autorizadas. Isso reduz
 > muito a carga regulatória (o app **não** é operador sob a
 > [Lei 14.790/2023](https://www.planalto.gov.br/ccivil_03/_ato2023-2026/2023/lei/l14790.htm)),

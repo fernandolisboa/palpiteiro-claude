@@ -11,6 +11,21 @@ Abrir pra 3-5 conhecidos via whitelist; observar uso real e refinar prompts com 
 ### Fase 3 — Público (não planejado neste roadmap)
 Condicionado a Yield positivo + revisão regulatória completa + decisão consciente de investir tempo/dinheiro.
 
+## Pivot multi-mercado (épico #183)
+
+O Palpiteiro deixa de ser tipster de over/under 2.5 e vira um **motor de seleção de edge multi-mercado**: domínio mercado-agnóstico, com over/under como o **primeiro registro** do registry (ADR 0015). Pivot por **expand-migrate-contract** (sem big-bang), com Yield histórico preservado. As fases abaixo correspondem às issues `pivot-fase-*`:
+
+| Fase | Tema | Issues |
+|---|---|---|
+| 0 | ADRs + docs (esta) | #152–158 |
+| 1 | Fundação de dados (`markets`/`market_selections`, `result_data`, backfill) | #159–162 |
+| 2 | Math + plumbing plugável (implícita/edge N-vias, settlement por mercado, cartuchos) | #163–168 |
+| 3 | UI multi-outcome + tracking por mercado (KPIs segmentados) | #169–172 |
+| 4 | Mercados novos (Tier 1 completo + Tier 2: BTTS / dupla chance) | #173–176 |
+| 5 | Refino + contract (spec-mãe multi-mercado, contrair enum `market`) | #177–182 |
+
+**Saída:** domínio mercado-agnóstico, over/under é o 1º registro; mercados do MVP entram via migration sem ADR novo (Tier 3 e provider novo de IA continuam exigindo ADR).
+
 ## Tarefas (alto nível)
 
 | # | Tarefa | Saída | Semanas |
@@ -55,7 +70,7 @@ Detalhes de skills, delegação humano/IA e entregáveis por tarefa: GitHub Issu
 
 | Risco | Probabilidade | Mitigação |
 |---|---|---|
-| LLM não bate baseline → produto sem valor | Alta | Tracking obsessivo desde dia 1; comparar com baseline trivial ("apostar sempre over") |
+| LLM não bate baseline → produto sem valor | Alta | Tracking obsessivo desde dia 1; comparar com baseline trivial **por mercado** (over/under: always over/under; 1X2: prior do favorito; BTTS: always yes/no) — ADR 0015 D9 |
 | Custo de tokens descontrolado | Média | Rate limit por usuário/dia; alerta de gasto; cache agressivo |
 | API-Football com cobertura ruim do Brasileirão | Média | Validação manual nos primeiros 10 jogos; ter fallback identificado |
 | Free tier de The Odds API insuficiente | Alta | Aceitar limite no MVP; consultar odds só quando usuário pede análise |

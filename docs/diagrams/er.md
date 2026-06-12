@@ -1,6 +1,8 @@
 # Entity-Relationship — Palpiteiro
 
-Diagrama do schema definido em [`db/schema.ts`](../../db/schema.ts). Reflete a migration `0000_same_molten_man.sql` (issue #4). Cardinalidades estão em notação Mermaid (crow's foot).
+Diagrama do schema definido em [`db/schema.ts`](../../db/schema.ts). Cardinalidades estão em notação Mermaid (crow's foot). O diagrama reflete o **modelo de domínio multi-mercado** do pivot (ADRs [0015](../decisions/0015-modelo-dominio-multi-mercado.md)/[0016](../decisions/0016-settlement-por-mercado.md)): `markets`/`market_selections` como tabelas de referência, `predictions` referenciando `market_id`/`selection_id`/`market_params`, e odds genéricas por seleção. A base mono-mercado vinha da migration `0000_same_molten_man.sql` (issue #4).
+
+> **Expand-migrate-contract (ADR 0015 D5):** durante a migração, o enum `market` (em `predictions` **e** `match_odds_snapshots`) **coexiste** com `market_id` até a fase de **contract**. O par fixo `over_odd`/`under_odd_at_prediction` em `predictions` (ADR 0012, nullable) é mantido como **legado** até lá; as odds passam a ser modeladas genericamente por seleção (`selection_odds_snapshots`). `prediction_outcomes.total_goals` vira **derivado** (`home_score + away_score` em `result_data`) e mantido por compat; `outcome_result` ganha `push` (ADR 0016).
 
 ```mermaid
 erDiagram
@@ -15,6 +17,10 @@ erDiagram
     AI_CALLS ||--o| PREDICTIONS : "produces"
 
     PREDICTIONS ||--|| PREDICTION_OUTCOMES : "settled by"
+
+    MARKETS ||--o{ MARKET_SELECTIONS : "offers"
+    MARKETS ||--o{ PREDICTIONS : "scoped by"
+    MARKET_SELECTIONS ||--o{ PREDICTIONS : "selected in (optional)"
 
     USERS {
         uuid id PK
@@ -38,14 +44,32 @@ erDiagram
         timestamptz updated_at
     }
 
+    MARKETS {
+        uuid id PK
+        text key UK
+        text label
+        text settlement_rule_key
+        boolean active
+        boolean graduated
+        timestamptz created_at
+    }
+
+    MARKET_SELECTIONS {
+        uuid id PK
+        uuid market_id FK
+        text key
+        text label
+        integer sort_order
+    }
+
     MATCH_ODDS_SNAPSHOTS {
         uuid id PK
         uuid match_id FK
         text bookmaker
-        market market
-        numeric line
-        numeric over_odd
-        numeric under_odd
+        uuid market_id FK
+        uuid selection_id FK
+        jsonb market_params
+        numeric odd
         numeric overround_pct
         timestamptz captured_at
     }
@@ -71,8 +95,9 @@ erDiagram
         uuid match_id FK
         uuid user_id FK
         uuid ai_call_id FK
-        market market
-        recommendation recommendation
+        uuid market_id FK
+        uuid selection_id FK
+        jsonb market_params
         numeric confidence_pct
         text rationale
         text_array key_factors
@@ -85,11 +110,14 @@ erDiagram
         text model_version
         text prompt_version
         timestamptz created_at
+        numeric over_odd_at_prediction
+        numeric under_odd_at_prediction
     }
 
     PREDICTION_OUTCOMES {
         uuid id PK
         uuid prediction_id FK_UK
+        jsonb result_data
         integer total_goals
         outcome_result result
         numeric profit_units
@@ -112,9 +140,15 @@ Princípio: predições e ai_calls são history imutável. Snapshots e outcomes 
 | `predictions.ai_call_id` → `ai_calls.id` | RESTRICT | Toda predição precisa do seu audit log. |
 | `prediction_outcomes.prediction_id` → `predictions.id` | CASCADE | Outcome só existe enquanto a predição existir. (`UNIQUE` garante 1:1.) |
 | `prediction_outcomes.override_by_user_id` → `users.id` | SET NULL | Override é metadado; sobrevive ao delete do autor com pointer nulo. |
+| `market_selections.market_id` → `markets.id` | CASCADE | Seleção só faz sentido com o mercado pai. |
+| `predictions.market_id` → `markets.id` | RESTRICT | Yield history exige o mercado presente (catálogo é seed/migration, não deletável em uso). |
+| `predictions.selection_id` → `market_selections.id` | RESTRICT | Seleção congelada na predição; nullable em `pass`. |
+| `match_odds_snapshots.market_id` → `markets.id` | RESTRICT | Snapshot referencia o catálogo de mercados. |
 
 ## Notas
 
 - `text_array` representa `text[]` (array nativo do Postgres) — Mermaid não tem tipo array dedicado.
-- Enums (`user_role`, `league`, `match_status`, `market`, `recommendation`, `outcome_result`, `ai_provider`) são `pgEnum` nativos. Lista de valores em `db/schema.ts`.
-- Índices não-PK/UK: `matches.kickoff_at`, `predictions.match_id`, `predictions.user_id`, `predictions.created_at`, `ai_calls.created_at`, `ai_calls.user_id`, `match_odds_snapshots.match_id`.
+- Enums (`user_role`, `league`, `match_status`, `outcome_result`, `ai_provider`) são `pgEnum` nativos. Lista de valores em `db/schema.ts`. `outcome_result` ganha `push` no pivot (ADR 0016).
+- `markets`/`market_selections` substituem os enums `market`/`recommendation` por **tabelas de referência** (seed + FK), evitando `ALTER TYPE ADD VALUE` a cada mercado/seleção (ADR 0015 D3). Os enums `market`/`recommendation` antigos seguem no schema até o **contract** (expand-migrate-contract).
+- `market_params`/`result_data` são JSONB validados por Zod no boundary (ADR 0015 D4); o agregável (Yield/edge/stake/result) fica em colunas tipadas.
+- Índices não-PK/UK: `matches.kickoff_at`, `predictions.match_id`, `predictions.user_id`, `predictions.created_at`, `predictions.market_id`, `ai_calls.created_at`, `ai_calls.user_id`, `match_odds_snapshots.match_id`, `market_selections.market_id`.

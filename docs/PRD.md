@@ -12,7 +12,7 @@ Web app (mobile-first) que:
 
 - Lista jogos próximos das ligas configuradas
 - Sob demanda, gera análise via LLM com base em dados estruturados (forma recente, H2H, classificação, lesões, escalação) + odds atuais
-- Recomenda **somente** quando estima edge ≥ 5% sobre a probabilidade implícita das odds (forçando "passar a vez" frequentemente)
+- Recomenda **somente** quando estima edge ≥ 5% sobre a probabilidade implícita normalizada das odds (forçando "passar a vez" frequentemente)
 - Registra cada palpite com input/output completos pra validação posterior
 - Mostra dashboard de Yield, win rate, pass rate e bankroll hipotético
 
@@ -35,7 +35,7 @@ Fora do escopo deste PRD. Decisão futura, condicionada a Yield positivo nas Fas
 
 - Auth via magic link (whitelist controlada manualmente)
 - Lista de jogos próximos (próximas 48h) das ligas configuradas
-- 1 mercado: **over/under 2.5 gols**
+- Mercados **Tier 1 (MVP)**: **1X2** + **over/under multi-linha** (1.5 / 2.5 / 3.5) — over/under 2.5 é o primeiro mercado (ADR 0015)
 - 2 ligas: **Brasileirão Série A + UEFA Champions League**
 - Botão "analisar" → recomendação estruturada com racional
 - Dashboard de tracking (Yield, win rate, pass rate, bankroll, drill-down por predição)
@@ -46,11 +46,18 @@ Fora do escopo deste PRD. Decisão futura, condicionada a Yield positivo nas Fas
 
 - App mobile nativo (web responsivo basta)
 - Múltiplos provedores de IA / BYOK
-- Mercados além de over/under (1x2, BTTS, escanteios, handicap)
-- Stake variável (Kelly criterion etc)
+- Staking via Kelly criterion (contínuo/fracionário) — o MVP usa **bandas determinísticas 1–3u por confiança** (ADR 0019), não Kelly
 - Notificações push proativas
 - Plano pago / monetização
 - Conformidade regulatória completa
+
+### Mercados por tier (pivot multi-mercado — ADR 0015)
+
+O eixo de expansão é **disponibilidade de dados**, não edge teórico:
+
+- **Tier 1 (MVP)**: 1X2 + over/under multi-linha (1.5 / 2.5 / 3.5) — settlam com o placar de 90' e têm odd featured na região `eu`.
+- **Tier 2 (na sequência)**: BTTS + dupla chance — settlam com o placar, odd "additional", cobertura `eu` validada (#158).
+- **Tier 3 (cada um = 1 ADR próprio)**: correct score, escanteios, cartões, player props, handicap asiático — exigem provider novo e nova forma de resultado.
 
 ## Métricas de sucesso
 
