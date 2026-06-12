@@ -22,7 +22,7 @@ ADRs em `docs/decisions/` documentam decisões críticas com contexto e alternat
 | Serviço | Uso | Limite (free) |
 |---|---|---|
 | API-Football | Jogos, escalações, lesões, forma, H2H, classificação, resultados | 100 req/dia (free) |
-| The Odds API | Odds atuais de over/under em bookmakers BR | 500 req/mês |
+| The Odds API | Odds atuais por mercado (1X2 / over-under / BTTS / dupla chance) na região `eu` — featured (`h2h`/`totals`) + additional (`btts`/`double_chance`) | 500 req/mês |
 | Anthropic API | Inference do LLM | Pay-as-you-go |
 | Resend | E-mail transacional (magic link) | 100 e-mails/dia (free) |
 
@@ -58,7 +58,7 @@ Tabelas principais:
 
 - `users` — whitelist + dados básicos
 - `matches` — jogos com dados estruturais (times, liga, data, status)
-- `match_odds_snapshots` — snapshots de odds ao longo do tempo (histórico de movimento)
+- `match_odds_snapshots` / odds por seleção (`selection_odds_snapshots`) — snapshots de odds genéricos **por seleção** ao longo do tempo (histórico de movimento); substitui o par fixo over/under (ADR 0015)
 - `predictions` — palpites gerados pela IA
 - `prediction_outcomes` — resultado real (preenchido pelo cron de settlement)
 - `ai_calls` — auditoria de cada chamada LLM (input, output, tokens, custo, latência, prompt_version)
@@ -68,24 +68,26 @@ Schema completo em `db/schema.ts`. Decisões de modelagem com tradeoffs ficam em
 ### Campos críticos em `predictions`
 
 - `match_id`, `user_id`, `created_at`
-- `market` (= `over_under_2_5` no MVP)
-- `recommendation` (`over` | `under` | `pass`)
+- `market_id` (FK → `markets`) + `selection_id` (FK → `market_selections`, nullable em `pass`) + `market_params` jsonb (forma do mercado, ex. `{ "line": 2.5 }`) — substitui os enums `market`/`recommendation` (ADR 0015 D4)
 - `confidence_pct` (probabilidade estimada pelo LLM)
 - `odd_at_recommendation`, `bookmaker`
-- `implied_prob_pct` (= 1/odd ajustado por overround do mercado)
-- `edge_pct` (= confidence_pct − implied_prob_pct)
-- `stake_units` (= 1 no MVP)
+- `implied_prob_pct` (= 1/odd da seleção normalizado pelo overround do mercado completo)
+- `edge_pct` (= confidence_pct − implied_prob_pct, por seleção)
+- `stake_units` (1–3u por confiança — ADR 0019)
+- `result`, `profit_units` (colunas tipadas pro agregável; **nunca** em JSONB)
 - `model_version`, `prompt_version`
 - `ai_call_id` (FK pra `ai_calls` — auditoria completa)
 
+Colunas **tipadas** pra tudo que é agregável/consultável (acima); JSONB **só** pra `market_params` e `result_data` (fatos do jogo), validados por Zod no boundary (ADR 0015 D4).
+
 ## Versionamento de prompts
 
-Cada prompt de IA tem `prompt_version` (semver-like, ex: `over_under_v1.2`).
+Versionamento **por cartucho de mercado** (ADR 0017): cada prompt tem `prompt_version` própria, semver-like (ex: `over_under_v1.3`, `match_result_v1`, `btts_v1`).
 
-- Prompts ficam em `lib/ai/prompts/` como TypeScript versionado
+- Prompts ficam em `lib/ai/prompts/` como TypeScript versionado, um cartucho por mercado
 - Cada predição salva qual versão de prompt usou
-- Permite análise retrospectiva: "predições com prompt v1.2 tiveram X% de Yield vs v1.1 com Y%"
-- Mudanças de prompt → bump de versão → mensagem de commit explícita
+- Permite análise retrospectiva: "predições com `over_under_v1.3` tiveram X% de Yield vs `over_under_v1.2` com Y%"
+- Mudanças de prompt → bump de versão **daquele cartucho** → mensagem de commit explícita
 
 ## Segurança
 

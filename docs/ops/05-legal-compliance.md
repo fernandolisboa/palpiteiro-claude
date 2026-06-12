@@ -2,7 +2,8 @@
 
 Este doc cobre o mínimo legal/ético pra abrir o Palpiteiro pros amigos (Fase 2) —
 um app **sobre** apostas que **não movimenta dinheiro real**. O Palpiteiro gera
-recomendações de over/under 2.5 e faz tracking de Yield hipotético; a aposta de
+recomendações de seleção de edge multi-mercado (mercado + linha + confiança) com
+racional e faz tracking de Yield hipotético; a aposta de
 verdade o usuário faz por conta dele, numa casa `.bet.br` autorizada, **fora** do
 app.
 
@@ -41,7 +42,7 @@ produto.
 
 | O que o Palpiteiro faz | O que o Palpiteiro **não** faz |
 | --- | --- |
-| Gera recomendações over/under 2.5 com racional | Aceita depósito, saldo ou dinheiro real |
+| Gera recomendações de seleção de edge multi-mercado (mercado + linha + confiança) com racional | Aceita depósito, saldo ou dinheiro real |
 | Calcula e mostra Yield **hipotético** | Processa pagamento ou paga prêmio |
 | Registra predições e resultados (tracking) | Casa a aposta / segura a posição |
 | Conteúdo informativo/educacional | Garante resultado ou lucro |

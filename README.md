@@ -1,6 +1,6 @@
 # palpiteiro-claude
 
-Web app que usa Claude para gerar recomendações de aposta em over/under 2.5 gols em partidas de futebol, com tracking obsessivo de Yield e transparência total no racional da IA.
+Web app que usa Claude como motor de seleção de edge multi-mercado em partidas de futebol: dada uma partida + mercados candidatos, emite **uma** recomendação por análise (mercado + seleção + linha + stake) ou `pass`, com tracking obsessivo de Yield **segmentado por mercado** e transparência total no racional da IA. Tier 1 (MVP) = 1X2 + over/under multi-linha; over/under 2.5 é o primeiro mercado.
 
 ## Setup de desenvolvimento
 
