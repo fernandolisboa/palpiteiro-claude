@@ -4,8 +4,10 @@ import type { NextConfig } from "next";
 const nextConfig: NextConfig = {};
 
 export default withSentryConfig(nextConfig, {
-  org: "filx-tecnologia",
-  project: "javascript-nextjs",
+  // Lidos do env (Vercel build + .env.local) — sem hard-code. Ausentes, o
+  // plugin só pula o upload de source maps (build não falha).
+  org: process.env.SENTRY_ORG,
+  project: process.env.SENTRY_PROJECT,
 
   silent: !process.env.CI,
 
