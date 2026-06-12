@@ -266,8 +266,8 @@ podem conter PII; `sendDefaultPii` adiciona IP/headers) merece um registro leve:
 
 - **Mínimo:** um commit `chore:` claro, ex. `chore(obs): add Sentry error
   monitoring (free tier)`, explicando no body o porquê e o trade-off de quota.
-- **Melhor:** um ADR curto em [`docs/decisions/`](../decisions/) (ex.
-  `0011-sentry-error-monitoring.md`) — uma página: contexto (faltava visibilidade
+- **Melhor:** um ADR curto em [`docs/decisions/`](../decisions/) (feito:
+  [`0022-sentry-error-monitoring.md`](../decisions/0022-sentry-error-monitoring.md)) — uma página: contexto (faltava visibilidade
   de exceptions), decisão (Sentry free), alternativas (Axiom, Vercel logs),
   consequências (PII em traces → ver [`05-legal-compliance.md`](./05-legal-compliance.md)
   sobre LGPD).
