@@ -1,4 +1,4 @@
-# ADR 0015 — Sentry para error monitoring e tracing
+# ADR 0022 — Sentry para error monitoring e tracing
 
 **Data:** 2026-06-12  
 **Status:** Aceito
