@@ -73,6 +73,15 @@ pnpm build             # build de produção
 - Mensagens descritivas; o "porquê" no body se relevante
 - Tipo extra `prompt:` pra mudanças de versão de prompt (importante pra rastreabilidade)
 
+## Fluxo de trabalho (features e melhorias)
+
+Flow padrão pra qualquer melhoria/feature não-trivial neste repo. Quando o pedido encaixar aqui, **siga sem precisar repetir estas instruções**:
+
+1. **Sanity-check primeiro**: avalie se a melhoria faz sentido. Se **não** fizer, diga isso e **abandone a ideia** — não execute no piloto automático.
+2. **Plano → issues**: trace um plano e, a partir dele, **crie uma ou mais issues no GitHub** (`gh issue create`) pra efetuar o trabalho de verdade. Issues no GitHub são o default deste projeto — não pergunte onde criar.
+3. **Um subagent de contexto fresco por passo**, nesta ordem: exploração → plano → review do plano → ajustes no plano → implementação → code review → correções vindas do code review.
+4. **Fechamento**: vá mergeando/completando os PRs e fechando as issues conforme cada um fica **verde e passando** (build/lint/typecheck/testes + checks do PR).
+
 ## Gotchas
 
 - **Custo de tokens**: cada chamada de LLM custa dinheiro real. Cache agressivo em `match` data. Se rodar análise N vezes num jogo só pra debug, mencione isso no PR
