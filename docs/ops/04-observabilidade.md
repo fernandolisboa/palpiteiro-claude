@@ -211,6 +211,11 @@ export default withSentryConfig(nextConfig, {
 > Sentry — o que muitos **adblockers** bloqueiam. Sem isso, você perde erros de
 > usuários com bloqueador. Só vale a pena quando o **client** está instrumentado.
 
+> ⚠️ Se o app tem middleware de auth (Auth.js), **exclua a `tunnelRoute` do
+> matcher** — senão a POST de telemetria de qualquer requisição sem sessão toma
+> 307→`/signin` e o evento some. Aqui o matcher em [`middleware.ts`](../../middleware.ts)
+> exclui `monitoring(?:/|$)`; ao trocar `tunnelRoute`, atualize o matcher junto.
+
 ### Envs do Sentry
 
 Setar na Vercel (ver [`02-vercel-prod.md`](./02-vercel-prod.md) pra onde clicar):
