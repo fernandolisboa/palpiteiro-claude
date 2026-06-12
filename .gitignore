@@ -29,6 +29,10 @@ next-env.d.ts
 
 # Claude Code local settings (machine-specific)
 .claude/settings.local.json
+# Claude Code agent worktrees and locally-installed skills (not shared via repo)
+.claude/worktrees/
+.claude/skills/
+.github/skills/
 
 # misc
 .DS_Store
