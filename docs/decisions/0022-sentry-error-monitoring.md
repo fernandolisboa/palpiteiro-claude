@@ -27,8 +27,9 @@ Stack de integração:
 
 ## Consequências
 
-- **PII em traces**: stack traces podem capturar dados de usuário. `sendDefaultPii` está desabilitado (não enviamos IPs/cookies por padrão). Compatível com a postura LGPD do projeto (ver `05-legal-compliance.md`).
-- **Custo**: free tier Developer (5k eventos/mês). `tracesSampleRate: 0.1` limita volume de performance traces. Erros são sempre enviados (sem sampling).
+- **PII em traces**: stack traces podem capturar dados de usuário. `sendDefaultPii: false` é setado **explicitamente** nos 3 inits (server/edge/client) — é o default do SDK, mas fixado como invariante pra não flipar silenciosamente num re-run do wizard. Não enviamos IPs/cookies. Compatível com a postura LGPD do projeto (ver `05-legal-compliance.md`).
+- **Custo**: o free tier tem cotas **separadas por categoria** — erros (5k/mês), performance/tracing e logs são buckets distintos; **logs não contam** nos 5k de erros. Na prática o que estoura a cota é tracing/replay, não erros (ver `04-observabilidade.md`). `tracesSampleRate: 0.1` limita o volume de traces; erros são sempre enviados (sem sampling).
+- **Logs**: a integração de logs do Sentry fica **desligada** (`enableLogs` foi removido dos inits — era no-op sem `consoleLoggingIntegration`/`Sentry.logger`). Só ligar de propósito e pareado com scrubbing (`beforeSendLog`), já que `console.error` no código pode carregar payload.
 - **Build**: source maps são enviados ao Sentry no CI via `SENTRY_AUTH_TOKEN`. Sem o token, o build funciona mas os stack traces em produção ficam minificados.
 - **Adblock**: `tunnelRoute: "/monitoring"` roteia eventos do browser pelo próprio domínio para evitar bloqueio.
-- **Ambiente**: Sentry desabilitado em desenvolvimento (`enabled: NODE_ENV === "production"`) para não poluir o painel com noise de dev.
+- **Ambiente**: Sentry desabilitado em dev (`enabled: NODE_ENV === "production"`). Em prod **e** preview da Vercel ambos reportam (o Next põe `NODE_ENV=production` nos dois), **distinguidos pela tag `environment`** — `VERCEL_ENV` no server/edge, `NEXT_PUBLIC_VERCEL_ENV` no client. ⚠️ Gap conhecido: preview ainda consome a cota do **mesmo** projeto; gatear preview off é opção futura (não feito pra preservar o smoke test em preview).

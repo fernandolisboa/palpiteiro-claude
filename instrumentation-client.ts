@@ -6,8 +6,10 @@ Sentry.init({
   // injeta quando "Expose System Environment Variables" está ligado; senão cai
   // em NODE_ENV e o preview acaba marcado como "production").
   environment: process.env.NEXT_PUBLIC_VERCEL_ENV ?? process.env.NODE_ENV,
+  // PII desligado explicitamente — é o default do SDK, fixado como invariante
+  // (não enviamos IP/cookies). Ver ADR 0022 + docs/ops/05-legal-compliance.md.
+  sendDefaultPii: false,
   tracesSampleRate: 0.1,
-  enableLogs: true,
   enabled: process.env.NODE_ENV === "production",
 });
 
