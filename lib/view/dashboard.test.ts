@@ -149,6 +149,7 @@ function makeDetail(overrides: Partial<DashboardDetail> = {}): DashboardDetail {
     id: "o1",
     predictionId: "p1",
     totalGoals: 3,
+    resultData: null,
     result: "won",
     profitUnits: "1.84",
     overrideByUserId: null,

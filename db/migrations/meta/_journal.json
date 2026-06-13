@@ -78,6 +78,20 @@
       "when": 1781313549574,
       "tag": "0010_bright_kronos",
       "breakpoints": true
+    },
+    {
+      "idx": 11,
+      "version": "7",
+      "when": 1781313946497,
+      "tag": "0011_plain_reavers",
+      "breakpoints": true
+    },
+    {
+      "idx": 12,
+      "version": "7",
+      "when": 1781314012405,
+      "tag": "0012_zippy_dakota_north",
+      "breakpoints": true
     }
   ]
 }

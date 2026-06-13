@@ -42,6 +42,12 @@ export const outcomeResultEnum = pgEnum("outcome_result", [
   "won",
   "lost",
   "void",
+  // push = aposta resolvida que devolve o stake (profit 0): seleção empata com a
+  // linha (ADR 0016 D5). Adicionado PROATIVAMENTE ao domínio — os mercados do MVP
+  // (linhas de meio-gol, seleções discretas) nunca dão push; nenhum caminho de
+  // código EMITE ou torna push selecionável na Fase 1 (settlement plugável + UI =
+  // Fase 2/3, #166/#171). Migration isolada (0011) por higiene (ver PR).
+  "push",
 ]);
 
 export const aiProviderEnum = pgEnum("ai_provider", ["anthropic"]);
@@ -323,11 +329,60 @@ export const predictionOutcomes = pgTable("prediction_outcomes", {
     .unique()
     .references(() => predictions.id, { onDelete: "cascade" }),
   totalGoals: integer().notNull(),
+  // Fato do jogo coletado 1x por jogo (ADR 0016 D2), NULLABLE no expand. MVP:
+  // { homeScore, awayScore, totalGoals } (camelCase — segue #161/#162; supersede a
+  // ilustração snake_case da ADR 0016 D2; validado por Zod no boundary do settlement
+  // na Fase 2 #166). homeScore/awayScore degradam a null em rows do histórico onde o
+  // split de 90' não for confiável; totalGoals carrega o escalar settled (verbatim).
+  // O escalar legado total_goals permanece (vira derivado) até o contract (Fase 5).
+  resultData: jsonb().$type<{
+    homeScore: number | null;
+    awayScore: number | null;
+    totalGoals: number;
+  }>(),
   result: outcomeResultEnum().notNull(),
   profitUnits: numeric({ precision: 8, scale: 2 }).notNull(),
   overrideByUserId: uuid().references(() => users.id, { onDelete: "set null" }),
   settledAt: timestamp({ withTimezone: true }).notNull().defaultNow(),
 });
+
+// Snapshots de odds AO VIVO por seleção — a generalização N-vias de
+// match_odds_snapshots (par fixo over/under), que permanece até o contract (Fase 5).
+// Uma row por (seleção, bookmaker, captura); overround_pct é do MERCADO COMPLETO.
+// UNIQUE(match_id, market_id, selection_id, captured_at, bookmaker) ancora a
+// idempotência do backfill (#162) E serve de índice de leitura "última por
+// (match, market, selection)" (prefixo + backward scan no captured_at) — espelha o
+// DISTINCT ON de lib/db/queries/odds-snapshots.ts. ensure/insert ao vivo entram na
+// Fase 2 (#164); o backfill copia o histórico binário (1 snapshot → 2 rows) em #162.
+export const selectionOddsSnapshots = pgTable(
+  "selection_odds_snapshots",
+  {
+    id: uuid().primaryKey().defaultRandom(),
+    matchId: uuid()
+      .notNull()
+      .references(() => matches.id, { onDelete: "cascade" }),
+    marketId: uuid()
+      .notNull()
+      .references(() => markets.id, { onDelete: "restrict" }),
+    selectionId: uuid()
+      .notNull()
+      .references(() => marketSelections.id, { onDelete: "restrict" }),
+    bookmaker: text().notNull(),
+    marketParams: jsonb().$type<{ line: number }>(),
+    odd: numeric({ precision: 6, scale: 3 }).notNull(),
+    overroundPct: numeric({ precision: 5, scale: 2 }).notNull(),
+    capturedAt: timestamp({ withTimezone: true }).notNull().defaultNow(),
+  },
+  (t) => [
+    unique("selection_odds_snapshots_dedup_key").on(
+      t.matchId,
+      t.marketId,
+      t.selectionId,
+      t.capturedAt,
+      t.bookmaker,
+    ),
+  ],
+);
 
 // Config global single-row (PK fixa em 1; a query layer faz upsert em id=1).
 // `defaultModelId` é text simples (validado contra MODEL_REGISTRY na query

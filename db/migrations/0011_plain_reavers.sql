@@ -1,0 +1,1 @@
+ALTER TYPE "public"."outcome_result" ADD VALUE 'push';

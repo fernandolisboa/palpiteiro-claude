@@ -31,7 +31,11 @@ export default async function AdminPredictionPage({ params }: PageProps) {
   if (!row) notFound();
   const { prediction, match, outcome } = row;
 
-  const defaultResult: OutcomeResult = outcome?.result ?? "void";
+  // `push` existe no enum desde #161 mas não é selecionável no override ainda
+  // (Fase 2 #166) — OutcomeResult segue won/lost/void. Em Phase 1 nenhuma row é
+  // push; o guard mantém o tipo são caso o enum traga o valor.
+  const defaultResult: OutcomeResult =
+    outcome && outcome.result !== "push" ? outcome.result : "void";
 
   return (
     <div className="min-h-screen bg-background text-foreground">
