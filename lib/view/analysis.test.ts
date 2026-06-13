@@ -767,16 +767,18 @@ describe("toOutcomesView (N-vias)", () => {
     // Labels vêm da apresentação do mercado (sem linha → só o label da seleção).
     expect(outcomes.map((o) => o.label)).toEqual(["Casa", "Empate", "Fora"]);
     expect(outcomes.map((o) => o.isRecommended)).toEqual([true, false, false]);
+    // Valores EXATOS do caminho N-vias (pina a fórmula edge/EV/break-even + o
+    // sufixo "pp", não só não-degradação). overround = Σ(1/odd) = 1.04809;
+    // home: implícita 0.47619/1.04809 = 45.4%; edge 50−45.4 = +4.6pp;
+    // EV 0.50×2.10−1 = +5.0%; breakEven = 100/50 = 2.00.
     expect(outcomes[0].modelProb).toBe("50%");
     expect(outcomes[0].odd).toBe("2.10");
-    // Mercado completo (todas as odds presentes) → implícita/edge normalizados e
-    // EV/break-even por seleção; nada degrada pra "—".
-    for (const o of outcomes) {
-      expect(o.odd).not.toBe("—");
-      expect(o.marketProb).not.toBe("—");
-      expect(o.edge).not.toBe("—");
-      expect(o.expectedReturn).not.toBe("—");
-      expect(o.breakEven).not.toBe("—");
-    }
+    expect(outcomes[0].marketProb).toBe("45.4%");
+    expect(outcomes[0].edge).toBe("+4.6pp");
+    expect(outcomes[0].expectedReturn).toBe("+5.0%");
+    expect(outcomes[0].breakEven).toBe("2.00");
+    // draw/away (não recomendados): fecha a normalização do overround (Σ = 100%).
+    expect(outcomes[1].marketProb).toBe("28.1%");
+    expect(outcomes[2].marketProb).toBe("26.5%");
   });
 });
