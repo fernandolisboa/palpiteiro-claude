@@ -22,6 +22,9 @@ const STATUS_META: Record<
   won: { label: "green", className: "text-emerald-500" },
   lost: { label: "red", className: "text-red-500" },
   void: { label: "anulada", className: "text-muted-fg-2" },
+  // push só aparece quando o settlement plugável (Fase 2 #166) o emitir; em Phase 1
+  // nenhuma row é push. Estilo neutro como void (no-action, stake devolvido — ADR 0016).
+  push: { label: "push", className: "text-muted-fg-2" },
 };
 
 const REC_CLASS: Record<PredictionRowView["rec"], string> = {

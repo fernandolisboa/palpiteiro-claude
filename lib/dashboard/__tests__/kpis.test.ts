@@ -31,7 +31,7 @@ function row(overrides: Partial<DashboardRow> = {}): DashboardRow {
 }
 
 function settled(
-  result: "won" | "lost" | "void",
+  result: "won" | "lost" | "void" | "push",
   profit: string,
   extra: Partial<DashboardRow> = {},
 ): DashboardRow {
@@ -99,6 +99,37 @@ describe("computeDashboardKpis", () => {
     expect(k.yield.n).toBe(baseK.yield.n);
     // void IS still a settled void in the counts (visibility unchanged)
     expect(k.void).toBe(1);
+    expect(k.settled).toBe(3);
+  });
+
+  // push entra no enum no expand da Fase 1 (#161); nenhum caminho o emite ainda,
+  // mas a exclusão estrutural do yield (ADR 0016 §5: no-action, devolve o stake)
+  // já é tratada como o void. Lock pra garantir paridade quando o settlement
+  // plugável (Fase 2 #166) começar a emitir push.
+  it("excludes a push (no-action, stake returned) bet from the yield like void", () => {
+    const base = [
+      settled("won", "0.95", { oddAtRecommendation: "1.95" }),
+      settled("lost", "-1", { predictionId: "p2", oddAtRecommendation: "1.95" }),
+    ];
+    const withPush = [
+      ...base,
+      settled("push", "0", {
+        predictionId: "p3",
+        recommendation: "over",
+        oddAtRecommendation: "1.95",
+      }),
+    ];
+    const k = computeDashboardKpis(withPush);
+    const baseK = computeDashboardKpis(base);
+    // push stake NOT in the denominator; yield identical to the push-free wallet
+    expect(k.stakedUnits).toBeCloseTo(2, 5);
+    expect(k.yield.value).toBeCloseTo(baseK.yield.value!, 5);
+    expect(k.yield.n).toBe(baseK.yield.n);
+    // push is neither a win nor a loss — win rate unmoved
+    expect(k.winRate.value).toBeCloseTo(baseK.winRate.value!, 5);
+    expect(k.won).toBe(1);
+    expect(k.lost).toBe(1);
+    // push IS still a settled row (visibility), just not yield-bearing
     expect(k.settled).toBe(3);
   });
 

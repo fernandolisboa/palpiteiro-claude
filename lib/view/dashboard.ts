@@ -87,7 +87,7 @@ export type PredictionRowView = {
   odd: string;
   edge: string | null;
   confidence: string;
-  status: "pending" | "won" | "lost" | "void";
+  status: "pending" | "won" | "lost" | "void" | "push";
   profit: string | null;
 };
 
@@ -152,7 +152,7 @@ export type PredictionDetailView = {
     createdAt: string;
   };
   outcome: {
-    result: "won" | "lost" | "void";
+    result: "won" | "lost" | "void" | "push";
     profit: string;
     totalGoals: number;
     settledAt: string;

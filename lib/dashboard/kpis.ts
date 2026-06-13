@@ -21,12 +21,17 @@ export type DashboardRow = {
   edgePct: string | null;
   confidencePct: string;
   createdAt: Date;
-  result: "won" | "lost" | "void" | null;
+  result: "won" | "lost" | "void" | "push" | null;
   profitUnits: string | null;
   settledAt: Date | null;
 };
 
-export type RowStatus = "pending" | "won" | "lost" | "void";
+// `push` entra no enum no expand da Fase 1 (#161), mas NENHUM caminho o emite ou o
+// torna selecionável ainda (settlement plugável = Fase 2 #166). Os tipos derivados
+// do enum o carregam por consistência; com zero rows push os KPIs são byte-idênticos.
+// Semântica futura (ADR 0016 §5): push é no-action (devolve stake) — excluído do
+// yield como o void; #171 segmenta por mercado e formaliza o tratamento.
+export type RowStatus = "pending" | "won" | "lost" | "void" | "push";
 export type StatusFilter = "all" | RowStatus;
 export type MarketFilter = "all" | "over_under_2_5";
 
@@ -143,7 +148,10 @@ export function computeDashboardKpis(rows: DashboardRow[]): DashboardKpis {
   // yield. Denominador conta só result IN ('won','lost'); void contribui 0
   // tanto no numerador quanto no denominador.
   const settledBets = settledRows.filter(
-    (r) => r.recommendation !== "pass" && r.result !== "void",
+    (r) =>
+      r.recommendation !== "pass" &&
+      r.result !== "void" &&
+      r.result !== "push",
   );
   const stakedUnits = round2(sum(settledBets.map((r) => num(r.stakeUnits))));
   // Numerador do yield sobre o MESMO conjunto won/lost do denominador: a
