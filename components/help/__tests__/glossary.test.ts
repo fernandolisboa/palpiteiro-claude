@@ -31,4 +31,26 @@ describe("GLOSSARY (contrato de dados)", () => {
     expect(edge).toBeDefined();
     expect(edge?.meaning).toContain(`${MIN_EDGE_PP}pp`);
   });
+
+  it("cita MIN_EDGE_PP no significado de #odd-minima (interpola, não hardcode)", () => {
+    const oddMinima = GLOSSARY.find((e) => e.anchor === "odd-minima");
+    expect(oddMinima).toBeDefined();
+    expect(oddMinima?.meaning).toContain(`${MIN_EDGE_PP}pp`);
+  });
+
+  it("preserva o conteúdo over/under em markets.over_under das entradas reescritas genéricas", () => {
+    // As 5 entradas O/U viraram genéricas (meaning) mas o conteúdo over/under é
+    // REAPROVEITADO em markets.over_under (não descartado). Anchors inalterados.
+    for (const anchor of [
+      "over-under-2-5",
+      "recomendacao",
+      "prob-implicita",
+      "overround",
+      "cenarios",
+    ]) {
+      const entry = GLOSSARY.find((e) => e.anchor === anchor);
+      expect(entry, anchor).toBeDefined();
+      expect(entry?.markets?.over_under?.trim().length ?? 0).toBeGreaterThan(0);
+    }
+  });
 });

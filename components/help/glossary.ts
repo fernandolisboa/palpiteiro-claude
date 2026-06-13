@@ -22,8 +22,15 @@ export type GlossaryEntry = {
   term: string;
   /** Slug kebab-case, estável: vira `id` no DOM e alvo de deep-link. */
   anchor: string;
-  /** Definição em PT-BR claro pra iniciante; nunca vazia. */
+  /** Definição em PT-BR claro pra iniciante; nunca vazia. Genérica (agnóstica de mercado). */
   meaning: string;
+  /**
+   * Detalhe específico por mercado (`marketKey` → texto), aditivo ao `meaning`
+   * genérico. Mantém a FONTE ÚNICA market-aware: o conteúdo over/under vive em
+   * `markets.over_under`, preservado verbatim; mercados novos (Fase 4) só
+   * adicionam suas chaves. Renderizado pela GlossarySection sob o significado.
+   */
+  markets?: Record<string, string>;
   /** Categoria temática do termo. Metadado; ainda não dirige a renderização (a lista do glossário é plana). */
   group: GlossaryGroup;
 };
@@ -33,7 +40,32 @@ export const GLOSSARY: readonly GlossaryEntry[] = [
     term: "over/under 2.5 gols",
     anchor: "over-under-2-5",
     meaning:
-      "Aposta no TOTAL de gols do jogo (os dois times somados). Over = 3 gols ou mais. Under = 0, 1 ou 2 gols. A linha 2.5 nunca empata — sempre dá Over ou Under.",
+      "Mercado de over/under: a aposta é se o TOTAL de uma métrica do jogo fica ACIMA (over) ou ABAIXO (under) de uma linha. A linha define o corte.",
+    markets: {
+      over_under:
+        "Aposta no TOTAL de gols do jogo (os dois times somados). Over = 3 gols ou mais. Under = 0, 1 ou 2 gols. A linha 2.5 nunca empata — sempre dá Over ou Under.",
+    },
+    group: "conceitos",
+  },
+  {
+    term: "mercado",
+    anchor: "mercado",
+    meaning:
+      "O tipo de aposta. Tier 1: over/under (total de gols) e 1X2 (resultado final); Tier 2: BTTS (ambos marcam) e dupla chance. Cada mercado tem suas seleções e, às vezes, uma linha. O app recomenda UM mercado por análise.",
+    group: "conceitos",
+  },
+  {
+    term: "seleção",
+    anchor: "selecao",
+    meaning:
+      "Uma opção dentro de um mercado. Over/under tem 2 (over e under); 1X2 tem 3 (casa, empate, fora). O app recomenda UMA seleção por análise — ou PASS.",
+    group: "conceitos",
+  },
+  {
+    term: "linha",
+    anchor: "linha",
+    meaning:
+      "O corte numérico de um mercado, quando ele tem um (ex.: 2.5 no over/under de gols). Linhas inteiras podem dar push (devolução) se o resultado bater exatamente nelas; a 2.5 nunca empata.",
     group: "conceitos",
   },
   {
@@ -47,7 +79,10 @@ export const GLOSSARY: readonly GlossaryEntry[] = [
     term: "over / under / PASS",
     anchor: "recomendacao",
     meaning:
-      "O app sugere over, under, ou PASS. PASS = não apostar, porque não há vantagem suficiente. PASS NÃO é erro — é disciplina; pass rate alto (30–60%) é BOM.",
+      "O app sugere UMA seleção do mercado, ou PASS. PASS = não apostar, porque não há vantagem suficiente. PASS NÃO é erro — é disciplina; pass rate alto (30–60%) é BOM.",
+    markets: {
+      over_under: "As seleções do over/under são over e under.",
+    },
     group: "decisao",
   },
   {
@@ -61,14 +96,22 @@ export const GLOSSARY: readonly GlossaryEntry[] = [
     term: 'prob. do mercado (também chamada "normalizada")',
     anchor: "prob-implicita",
     meaning:
-      "A chance que a odd embute, JÁ descontada a margem da casa. Normaliza os dois lados: (1/odd do lado) ÷ (1/odd_over + 1/odd_under). NUNCA é 1/odd cru — isso ignoraria a margem.",
+      "A chance que a odd embute, JÁ descontada a margem da casa. Normaliza TODAS as seleções: (1/odd da seleção) ÷ Σ(1/odd de todas as seleções). NUNCA é 1/odd cru — isso ignoraria a margem.",
+    markets: {
+      over_under:
+        "No over/under (2 seleções): (1/odd do lado) ÷ (1/odd_over + 1/odd_under).",
+    },
     group: "decisao",
   },
   {
     term: "overround / margem do mercado",
     anchor: "overround",
     meaning:
-      "A margem embutida pela casa. Por isso, no cru, over% + under% somam mais de 100% — o excedente é a margem. Fórmula: (1/odd_over + 1/odd_under) − 1.",
+      "A margem embutida pela casa. Por isso, no cru, as probabilidades de todas as seleções somam mais de 100% — o excedente é a margem. Fórmula: Σ(1/odd) − 1.",
+    markets: {
+      over_under:
+        "No over/under: over% + under% somam mais de 100%; (1/odd_over + 1/odd_under) − 1.",
+    },
     group: "decisao",
   },
   {
@@ -94,8 +137,7 @@ export const GLOSSARY: readonly GlossaryEntry[] = [
   {
     term: 'odd mínima ("vale a pena se odd ≥")',
     anchor: "odd-minima",
-    meaning:
-      "A menor odd em que a aposta ainda mantém edge de pelo menos 5pp — definida pela IA na análise. Se a casa baixar abaixo disso, a vantagem some.",
+    meaning: `A menor odd em que a aposta ainda mantém edge de pelo menos ${MIN_EDGE_PP}pp — definida pela IA na análise. Se a casa baixar abaixo disso, a vantagem some.`,
     group: "numeros",
   },
   {
@@ -113,10 +155,24 @@ export const GLOSSARY: readonly GlossaryEntry[] = [
     group: "numeros",
   },
   {
+    term: "stake por confiança (1–3u)",
+    anchor: "stake-confianca",
+    meaning:
+      "O tamanho da aposta varia com a força do sinal (edge × confiança): 1u, 2u ou 3u. Mais vantagem → mais unidades. As bandas são determinísticas (ADR 0019); o histórico antigo permanece tudo 1u.",
+    group: "numeros",
+  },
+  {
     term: "liquidação / settlement",
     anchor: "liquidacao",
     meaning:
       "A resolução da aposta depois do jogo: won (ganhou), lost (perdeu) ou void (anulada). Não é instantâneo — roda via cron depois do apito final.",
+    group: "numeros",
+  },
+  {
+    term: "push / devolução",
+    anchor: "push",
+    meaning:
+      "Resultado nulo: a aposta é devolvida (lucro 0), sem ganho nem perda. Acontece em linhas inteiras quando o placar bate exatamente nelas — raro no over/under 2.5, que nunca empata. Como o void, fica FORA do yield e do win rate.",
     group: "numeros",
   },
   {
@@ -172,7 +228,11 @@ export const GLOSSARY: readonly GlossaryEntry[] = [
     term: "cenários (lado alternativo)",
     anchor: "cenarios",
     meaning:
-      'Os dois lados (over e under) com os números congelados da análise. O lado marcado "cenário alternativo" é só informativo, NUNCA uma segunda recomendação. A frase "só sai do zero com odd ≥" é o break-even daquele lado.',
+      'As seleções do mercado com os números congelados da análise. A seleção recomendada é a aposta; as demais são só informativas, NUNCA segundas recomendações. A frase "só sai do zero com odd ≥" é o break-even daquela seleção.',
+    markets: {
+      over_under:
+        'No over/under, são os dois lados (over e under); o lado não-recomendado aparece como "cenário alternativo".',
+    },
     group: "numeros",
   },
   {
