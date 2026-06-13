@@ -154,6 +154,29 @@ export function formatEvPct(evPerUnit: number | null): string {
 }
 
 /**
+ * "+1.00 u" / "-1.00 u" — unidades de stake/lucro COM sinal (2 casas). Convenção
+ * única do dashboard (#170 centraliza aqui pra stake da análise não divergir).
+ * Toda string `numeric` do Drizzle deve virar número ANTES de chamar. "—" em
+ * non-finite.
+ */
+export function formatUnitsSigned(value: number): string {
+  if (!Number.isFinite(value)) return "—";
+  return `${value >= 0 ? "+" : ""}${value.toFixed(2)} u`;
+}
+
+/**
+ * "1.00 u" — stake em unidades SEM sinal (2 casas), formato do drill-down do
+ * dashboard (`prediction.stake`). Reusa formatUnitsSigned e tira o "+" pra não
+ * divergir da convenção (R3). null/non-finite → null (sem aposta).
+ */
+export function formatStakeUnits(value: number | string | null): string | null {
+  if (value === null) return null;
+  const n = typeof value === "string" ? Number(value) : value;
+  if (!Number.isFinite(n)) return null;
+  return formatUnitsSigned(n).replace("+", "");
+}
+
+/**
  * "$0.014" — 3 casas decimais com prefixo $. Preserva formato do preview #33.
  */
 export function formatCostUsd(value: number | string | null | undefined): string {

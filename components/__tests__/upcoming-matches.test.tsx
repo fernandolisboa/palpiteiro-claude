@@ -16,7 +16,14 @@ function fakeMatch(i: number): MatchRowView {
     league: "wc",
     kickoff: "10 jun, 16:00",
     when: "amanhã",
-    odds: { over: "1.90", under: "1.95" },
+    odds: {
+      // Chips densos da match-list usam o label CURTO ("Over"/"Under") — espelha
+      // toMatchRowOdds (compactação pré-pivot "O"/"U" sem o "2.5" verboso).
+      overLabel: "Over",
+      over: "1.90",
+      underLabel: "Under",
+      under: "1.95",
+    },
     hasPrediction: false,
     status: "scheduled",
     homeScore: null,

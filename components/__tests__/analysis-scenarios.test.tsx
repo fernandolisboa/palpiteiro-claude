@@ -3,7 +3,7 @@ import { renderToStaticMarkup } from "react-dom/server";
 
 import { AnalysisScenarios } from "@/components/analysis-scenarios";
 import { MIN_EDGE_PP } from "@/lib/odds/scenario";
-import type { ScenariosView } from "@/lib/view/types";
+import type { OutcomeView } from "@/lib/view/types";
 
 function countOccurrences(haystack: string, needle: string): number {
   return haystack.split(needle).length - 1;
@@ -24,80 +24,146 @@ function columnSegment(
   return next === -1 ? markup.slice(start) : markup.slice(start, next);
 }
 
-const overScenarios: ScenariosView = {
-  over: {
+// Fixtures no shape novo (outcomes[] da forma N-vias). scenarioLabel = rótulo
+// leigo da coluna ("mais/menos de 2.5 gols"), idêntico ao SIDE_LABEL pré-pivot.
+const overOutcomes: OutcomeView[] = [
+  {
+    id: "over",
+    label: "Over 2.5",
+    scenarioLabel: "mais de 2.5 gols",
     modelProb: "58%",
     marketProb: "50.7%",
     odd: "1.92",
     edge: "+7.3pp",
     expectedReturn: "+11.4%",
-    modelBreakEvenOdd: "1.72",
+    breakEven: "1.72",
+    isRecommended: true,
   },
-  under: {
+  {
+    id: "under",
+    label: "Under 2.5",
+    scenarioLabel: "menos de 2.5 gols",
     modelProb: "42%",
     marketProb: "49.3%",
     odd: "1.95",
     edge: "-7.3pp",
     expectedReturn: "-18.1%",
-    modelBreakEvenOdd: "2.38",
+    breakEven: "2.38",
+    isRecommended: false,
   },
-  recommended: "over",
-  framing:
-    "a aposta em menos de 3 gols só sai do zero se a chance real for maior que 51.3% — na análise o modelo estimou 42%",
-  note: null,
-};
+];
+const overFraming =
+  "a aposta em menos de 3 gols só sai do zero se a chance real for maior que 51.3% — na análise o modelo estimou 42%";
 
-// Espelho do caso under-recomendado do view-mapper (lib/view/analysis.test.ts):
-// aqui a coluna alternativa (over) renderiza ANTES da recomendada.
-const underScenarios: ScenariosView = {
-  over: {
+// Espelho do caso under-recomendado: a coluna alternativa (over) renderiza
+// ANTES da recomendada (a ordem do array é [over, under]).
+const underOutcomes: OutcomeView[] = [
+  {
+    id: "over",
+    label: "Over 2.5",
+    scenarioLabel: "mais de 2.5 gols",
     modelProb: "44%",
     marketProb: "50.7%",
     odd: "1.98",
     edge: "-6.7pp",
     expectedReturn: "-12.9%",
-    modelBreakEvenOdd: "2.27",
+    breakEven: "2.27",
+    isRecommended: false,
   },
-  under: {
+  {
+    id: "under",
+    label: "Under 2.5",
+    scenarioLabel: "menos de 2.5 gols",
     modelProb: "56%",
     marketProb: "49.3%",
     odd: "1.85",
     edge: "+6.7pp",
     expectedReturn: "+3.6%",
-    modelBreakEvenOdd: "1.79",
+    breakEven: "1.79",
+    isRecommended: true,
   },
-  recommended: "under",
-  framing:
-    "a aposta em pelo menos 3 gols só sai do zero se a chance real for maior que 50.5% — na análise o modelo estimou 44%",
-  note: null,
-};
+];
+const underFraming =
+  "a aposta em pelo menos 3 gols só sai do zero se a chance real for maior que 50.5% — na análise o modelo estimou 44%";
 
-const passScenarios: ScenariosView = {
-  over: {
+const passOutcomes: OutcomeView[] = [
+  {
+    id: "over",
+    label: "Over 2.5",
+    scenarioLabel: "mais de 2.5 gols",
     modelProb: "53%",
     marketProb: "50%",
     odd: "1.92",
     edge: "+3.0pp",
     expectedReturn: "+1.8%",
-    modelBreakEvenOdd: "1.89",
+    breakEven: "1.89",
+    isRecommended: false,
   },
-  under: {
+  {
+    id: "under",
+    label: "Under 2.5",
+    scenarioLabel: "menos de 2.5 gols",
     modelProb: "47%",
     marketProb: "50%",
     odd: "1.92",
     edge: "-3.0pp",
     expectedReturn: "-9.8%",
-    modelBreakEvenOdd: "2.13",
+    breakEven: "2.13",
+    isRecommended: false,
   },
-  recommended: null,
-  framing: `vantagens pequenas (abaixo de ${MIN_EDGE_PP}pp) ficam dentro da margem de erro do modelo — por isso não há recomendação`,
-  note: null,
-};
+];
+const passFraming = `vantagens pequenas (abaixo de ${MIN_EDGE_PP}pp) ficam dentro da margem de erro do modelo — por isso não há recomendação`;
+
+// 1X2 (match_result): 3 outcomes → 3 colunas (AC2). Labels/valores de fixture
+// mock — sem DB. home recomendado.
+const matchResultOutcomes: OutcomeView[] = [
+  {
+    id: "home",
+    label: "Casa",
+    scenarioLabel: "Casa",
+    modelProb: "50%",
+    marketProb: "45.4%",
+    odd: "2.10",
+    edge: "+4.6pp",
+    expectedReturn: "+5.0%",
+    breakEven: "2.00",
+    isRecommended: true,
+  },
+  {
+    id: "draw",
+    label: "Empate",
+    scenarioLabel: "Empate",
+    modelProb: "27%",
+    marketProb: "28.1%",
+    odd: "3.40",
+    edge: "-1.1pp",
+    expectedReturn: "-8.2%",
+    breakEven: "3.70",
+    isRecommended: false,
+  },
+  {
+    id: "away",
+    label: "Fora",
+    scenarioLabel: "Fora",
+    modelProb: "23%",
+    marketProb: "26.5%",
+    odd: "3.60",
+    edge: "-3.5pp",
+    expectedReturn: "-17.2%",
+    breakEven: "4.35",
+    isRecommended: false,
+  },
+];
 
 describe("AnalysisScenarios — bloco 'Cenários' (#104)", () => {
   it("over: badge 'recomendada' exatamente uma vez, na coluna do over", () => {
     const markup = renderToStaticMarkup(
-      <AnalysisScenarios scenarios={overScenarios} returnTone="positive" />,
+      <AnalysisScenarios
+        outcomes={overOutcomes}
+        framing={overFraming}
+        note={null}
+        returnTone="positive"
+      />,
     );
     expect(countOccurrences(markup, "recomendada")).toBe(1);
     // badge no lado recomendado; o alternativo é rotulado como tal.
@@ -108,7 +174,12 @@ describe("AnalysisScenarios — bloco 'Cenários' (#104)", () => {
 
   it("over: renders the five unified rows for both sides", () => {
     const markup = renderToStaticMarkup(
-      <AnalysisScenarios scenarios={overScenarios} returnTone="positive" />,
+      <AnalysisScenarios
+        outcomes={overOutcomes}
+        framing={overFraming}
+        note={null}
+        returnTone="positive"
+      />,
     );
     for (const label of [
       "prob. do modelo",
@@ -119,13 +190,19 @@ describe("AnalysisScenarios — bloco 'Cenários' (#104)", () => {
     ]) {
       expect(countOccurrences(markup, label)).toBeGreaterThanOrEqual(2);
     }
+    // scenarioLabel verbatim — paridade VISUAL com o header pré-pivot.
     expect(markup).toContain("mais de 2.5 gols");
     expect(markup).toContain("menos de 2.5 gols");
   });
 
   it("coluna alternativa é NEUTRA: nenhum token accent-* ou edge-* (reserva pinada)", () => {
     const markup = renderToStaticMarkup(
-      <AnalysisScenarios scenarios={overScenarios} returnTone="positive" />,
+      <AnalysisScenarios
+        outcomes={overOutcomes}
+        framing={overFraming}
+        note={null}
+        returnTone="positive"
+      />,
     );
     // Aqui (over recomendado) a alternativa é a última coluna — o segmento
     // vai até o fim do markup, então framing + rodapé também ficam fora das
@@ -145,7 +222,12 @@ describe("AnalysisScenarios — bloco 'Cenários' (#104)", () => {
 
   it("under recomendado: coluna alternativa (over, renderizada PRIMEIRO) é neutra e a badge cai no under", () => {
     const markup = renderToStaticMarkup(
-      <AnalysisScenarios scenarios={underScenarios} returnTone="positive" />,
+      <AnalysisScenarios
+        outcomes={underOutcomes}
+        framing={underFraming}
+        note={null}
+        returnTone="positive"
+      />,
     );
     // A alternativa renderiza antes da recomendada — o segmento é delimitado
     // pelo próximo marcador, não pelo fim do markup.
@@ -169,14 +251,24 @@ describe("AnalysisScenarios — bloco 'Cenários' (#104)", () => {
 
   it("coluna alternativa tem a linha acionável da odd de equilíbrio do modelo", () => {
     const markup = renderToStaticMarkup(
-      <AnalysisScenarios scenarios={overScenarios} returnTone="positive" />,
+      <AnalysisScenarios
+        outcomes={overOutcomes}
+        framing={overFraming}
+        note={null}
+        returnTone="positive"
+      />,
     );
     expect(markup).toContain("pelo modelo, só sai do zero com odd ≥ 2.38");
   });
 
   it("framing usa linguagem de break-even — nunca 'vale a pena' nem 'hoje'", () => {
     const markup = renderToStaticMarkup(
-      <AnalysisScenarios scenarios={overScenarios} returnTone="positive" />,
+      <AnalysisScenarios
+        outcomes={overOutcomes}
+        framing={overFraming}
+        note={null}
+        returnTone="positive"
+      />,
     );
     expect(markup).toContain("só sai do zero");
     expect(markup).toContain("na análise o modelo estimou");
@@ -188,7 +280,12 @@ describe("AnalysisScenarios — bloco 'Cenários' (#104)", () => {
 
   it("pass: nenhuma badge 'recomendada', colunas neutras e copy de margem de erro", () => {
     const markup = renderToStaticMarkup(
-      <AnalysisScenarios scenarios={passScenarios} returnTone="neutral" />,
+      <AnalysisScenarios
+        outcomes={passOutcomes}
+        framing={passFraming}
+        note={null}
+        returnTone="neutral"
+      />,
     );
     expect(countOccurrences(markup, "recomendada")).toBe(0);
     expect(markup).not.toContain("cenário alternativo");
@@ -197,9 +294,7 @@ describe("AnalysisScenarios — bloco 'Cenários' (#104)", () => {
     expect(markup).not.toContain("edge-fg");
     expect(markup).not.toContain("accent-");
     // margem de erro cobre inclusive EV positivo sob pass (ADR 0012).
-    expect(markup).toContain(
-      `vantagens pequenas (abaixo de ${MIN_EDGE_PP}pp) ficam dentro da margem de erro do modelo — por isso não há recomendação`,
-    );
+    expect(markup).toContain(passFraming);
     // em pass, os DOIS lados mostram a odd de equilíbrio do modelo.
     expect(markup).toContain("pelo modelo, só sai do zero com odd ≥ 1.89");
     expect(markup).toContain("pelo modelo, só sai do zero com odd ≥ 2.13");
@@ -208,16 +303,12 @@ describe("AnalysisScenarios — bloco 'Cenários' (#104)", () => {
   it("histórica degradada: nota renderizada quando note != null e células em '—'", () => {
     const markup = renderToStaticMarkup(
       <AnalysisScenarios
-        scenarios={{
-          ...overScenarios,
-          under: {
-            ...overScenarios.under,
-            odd: "—",
-            expectedReturn: "—",
-          },
-          framing: null,
-          note: "odds do outro lado não registradas nesta análise",
-        }}
+        outcomes={[
+          overOutcomes[0],
+          { ...overOutcomes[1], odd: "—", expectedReturn: "—" },
+        ]}
+        framing={null}
+        note="odds do outro lado não registradas nesta análise"
         returnTone="positive"
       />,
     );
@@ -228,7 +319,12 @@ describe("AnalysisScenarios — bloco 'Cenários' (#104)", () => {
 
   it("rodapé: threshold via MIN_EDGE_PP e remissão ao OddsCard", () => {
     const markup = renderToStaticMarkup(
-      <AnalysisScenarios scenarios={overScenarios} returnTone="positive" />,
+      <AnalysisScenarios
+        outcomes={overOutcomes}
+        framing={overFraming}
+        note={null}
+        returnTone="positive"
+      />,
     );
     expect(markup).toContain(
       `o app só recomenda com vantagem ≥ ${MIN_EDGE_PP}pp sobre o mercado`,
@@ -241,16 +337,104 @@ describe("AnalysisScenarios — bloco 'Cenários' (#104)", () => {
 
   it("retorno esperado do lado recomendado só fica verde com tone positivo", () => {
     const positive = renderToStaticMarkup(
-      <AnalysisScenarios scenarios={overScenarios} returnTone="positive" />,
+      <AnalysisScenarios
+        outcomes={overOutcomes}
+        framing={overFraming}
+        note={null}
+        returnTone="positive"
+      />,
     );
     expect(positive).toMatch(/text-edge-fg[^>]*>\+11\.4%/);
 
     // Tom neutro (minOdd acima da odd / EV ≤ 0 no view-mapper): sem verde no
     // retorno, mesmo positivo — espelha o bloco "Aposta recomendada".
     const neutral = renderToStaticMarkup(
-      <AnalysisScenarios scenarios={overScenarios} returnTone="neutral" />,
+      <AnalysisScenarios
+        outcomes={overOutcomes}
+        framing={overFraming}
+        note={null}
+        returnTone="neutral"
+      />,
     );
     expect(neutral).not.toMatch(/text-edge-fg[^>]*>\+11\.4%/);
     expect(neutral).toMatch(/text-foreground[^>]*>\+11\.4%/);
+  });
+});
+
+// AC2: mercado N-vias (1X2) renderiza 3 colunas por fixture mock (PURO, sem DB).
+describe("AnalysisScenarios — N-vias (1X2, AC2)", () => {
+  it("3 outcomes → 3 colunas data-driven; badge na recomendada, demais alternativas", () => {
+    const markup = renderToStaticMarkup(
+      <AnalysisScenarios
+        outcomes={matchResultOutcomes}
+        framing={null}
+        note={null}
+        returnTone="positive"
+      />,
+    );
+    // 3 colunas: 1 recomendada (home) + 2 alternativas (draw, away).
+    expect(countOccurrences(markup, "data-scenario-col=")).toBe(3);
+    expect(countOccurrences(markup, 'data-scenario-col="recommended"')).toBe(1);
+    expect(countOccurrences(markup, 'data-scenario-col="alternative"')).toBe(2);
+    expect(countOccurrences(markup, "recomendada")).toBe(1);
+    // rótulos leigos das colunas vêm do view (sem hardcode "Casa"/"Empate"/"Fora"
+    // no componente — AC3).
+    expect(markup).toContain("Casa");
+    expect(markup).toContain("Empate");
+    expect(markup).toContain("Fora");
+    // grid de 3 colunas em telas largas.
+    expect(markup).toContain("min-[480px]:grid-cols-3");
+  });
+});
+
+// R9: top-K com K=5 — mercado futuro N>5 trunca pra 5 colunas, recomendado
+// SEMPRE presente, mantidos = [recomendado, depois top modelProb desc], e
+// placeholder "+N outras" pro restante. PURO (fixture mock, sem DB).
+describe("AnalysisScenarios — top-K truncation (N>5, R9)", () => {
+  // 6 outcomes; o recomendado é o de MENOR modelProb (id "f", 20%) de propósito:
+  // se a seleção fosse só "top-5 por modelProb", ele cairia fora — o invariante
+  // "recomendado sempre presente" é o que o garante.
+  const sixOutcomes: OutcomeView[] = [
+    { id: "a", scenarioLabel: "Sel A", modelProb: "40%" },
+    { id: "b", scenarioLabel: "Sel B", modelProb: "35%" },
+    { id: "c", scenarioLabel: "Sel C", modelProb: "30%" },
+    { id: "d", scenarioLabel: "Sel D", modelProb: "25%" },
+    { id: "e", scenarioLabel: "Sel E", modelProb: "22%" },
+    { id: "f", scenarioLabel: "Sel F", modelProb: "20%" },
+  ].map((o) => ({
+    ...o,
+    label: o.scenarioLabel,
+    marketProb: "—",
+    odd: "—",
+    edge: "—",
+    expectedReturn: "—",
+    breakEven: "—",
+    isRecommended: o.id === "f",
+  }));
+
+  it("renders exactly 5 columns, recommended always kept, top modelProb desc, '+N outras' placeholder", () => {
+    const markup = renderToStaticMarkup(
+      <AnalysisScenarios
+        outcomes={sixOutcomes}
+        framing={null}
+        note={null}
+        returnTone="neutral"
+      />,
+    );
+
+    // Exatamente 5 colunas (K=5), nunca as 6.
+    expect(countOccurrences(markup, "data-scenario-col=")).toBe(5);
+    // O recomendado (f, menor modelProb) está SEMPRE presente.
+    expect(countOccurrences(markup, 'data-scenario-col="recommended"')).toBe(1);
+    expect(markup).toContain("Sel F");
+    // Mantidos = recomendado + top-4 por modelProb desc (a,b,c,d). "Sel E" (22%,
+    // 5º maior) é o que cai fora — a única seleção escondida.
+    expect(markup).toContain("Sel A");
+    expect(markup).toContain("Sel B");
+    expect(markup).toContain("Sel C");
+    expect(markup).toContain("Sel D");
+    expect(markup).not.toContain("Sel E");
+    // Placeholder "+N outras" (1 escondida).
+    expect(markup).toContain("+1 outras seleções não exibidas");
   });
 });

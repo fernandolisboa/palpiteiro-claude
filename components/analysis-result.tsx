@@ -14,7 +14,8 @@ type Props = {
 };
 
 export function AnalysisResult({ view, again = false }: Props) {
-  if (view.kind === "PASS") {
+  // pass = sem recomendação (recommendation null) — data-driven, não mais via kind.
+  if (view.recommendation === null) {
     return (
       <div className="flex flex-col rounded-[10px] border border-dashed border-border-strong bg-card">
         <div className="flex items-center justify-between px-4 pt-3 pb-2">
@@ -48,9 +49,11 @@ export function AnalysisResult({ view, again = false }: Props) {
           Sem aposta recomendada — nenhum dos lados tem vantagem mínima de{" "}
           {view.minEdgeLabel} sobre o mercado
         </p>
-        {view.scenarios && (
+        {view.outcomes.length > 0 && (
           <AnalysisScenarios
-            scenarios={view.scenarios}
+            outcomes={view.outcomes}
+            framing={view.framing}
+            note={view.note}
             returnTone={view.expectedReturnTone}
           />
         )}
@@ -66,7 +69,7 @@ export function AnalysisResult({ view, again = false }: Props) {
     );
   }
 
-  const isOver = view.kind === "OVER";
+  const rec = view.recommendation;
   return (
     <Card className="gap-0 overflow-hidden p-0">
       <div className="flex items-center justify-between px-4 pt-3 pb-2">
@@ -80,26 +83,51 @@ export function AnalysisResult({ view, again = false }: Props) {
       <Separator />
       {/* O grid de stats confidence/edge saiu da row (ADR 0012): os mesmos
           números (valores salvos da row) vivem na coluna recomendada do bloco
-          de cenários, com labels unificados "prob. do modelo"/"edge". */}
+          de cenários, com labels unificados "prob. do modelo"/"edge". O destaque
+          é o outcome label completo (mercado + seleção + linha já resolvido pela
+          view) — sem setas nem "2.5" hardcoded (data-driven, AC3). */}
       <div className="flex items-start gap-3 px-4 py-4">
         <div className="flex flex-col items-start gap-1">
-          <span className="flex items-baseline gap-1 font-mono text-[36px] font-medium tabular-nums leading-none tracking-tight text-accent-strong-fg">
-            <span>{view.kind}</span>
-            <span className="-translate-y-1 text-[22px]">{isOver ? "↑" : "↓"}</span>
+          <span className="font-mono text-[28px] font-medium leading-none tracking-tight text-accent-strong-fg">
+            {rec.selectionLabel}
+            {rec.line !== null ? ` ${rec.line}` : ""}
           </span>
           <span className="font-mono text-[10.5px] uppercase tracking-[0.12em] text-accent-fg">
-            2.5 gols
+            {rec.marketLabel}
           </span>
         </div>
       </div>
-      {view.betSummary && (
+      {rec && (
         <div className="mx-4 mb-4 flex flex-col gap-2 rounded-md border border-border-subtle bg-surface-2 px-3 py-2.5">
           <span className="font-mono text-[10.5px] uppercase tracking-[0.14em] text-muted-foreground">
             aposta recomendada
           </span>
+          {/* Frase estruturada data-driven (AC3): mercado + seleção + linha,
+              todos resolvidos pela view a partir do registry. Sem string de
+              mercado hardcoded no componente. */}
           <p className="text-[13px] font-medium leading-snug tracking-tight text-foreground">
-            {view.betSummary.market} — {view.betSummary.plain}
+            {rec.marketLabel} · {rec.selectionLabel}
+            {rec.line !== null ? ` ${rec.line}` : ""}
           </p>
+          {/* Tradução LEIGA (lay-friendly), vinda da view (betSummary): restaura
+              a frase pré-pivot "Mais de 2.5 gols — pelo menos 3 gols no jogo".
+              A sub-frase `plain` só aparece quando existe (over/under). */}
+          {rec.betSummary && (
+            <p className="text-[12.5px] leading-snug tracking-tight text-muted-foreground">
+              {rec.betSummary.market}
+              {rec.betSummary.plain ? ` — ${rec.betSummary.plain}` : ""}
+            </p>
+          )}
+          {view.stakeUnits && (
+            <div className="flex items-baseline justify-between gap-2">
+              <span className="font-mono text-[10.5px] uppercase tracking-[0.14em] text-muted-foreground">
+                stake
+              </span>
+              <span className="font-mono text-[13px] font-medium tabular-nums tracking-tight text-foreground">
+                {view.stakeUnits}
+              </span>
+            </div>
+          )}
           <div className="flex items-baseline justify-between gap-2">
             <span className="font-mono text-[10.5px] uppercase tracking-[0.14em] text-muted-foreground">
               odd na análise{view.oddAtRecAgo ? ` (${view.oddAtRecAgo})` : ""}
@@ -150,9 +178,11 @@ export function AnalysisResult({ view, again = false }: Props) {
           )}
         </div>
       )}
-      {view.scenarios && (
+      {view.outcomes.length > 0 && (
         <AnalysisScenarios
-          scenarios={view.scenarios}
+          outcomes={view.outcomes}
+          framing={view.framing}
+          note={view.note}
           returnTone={view.expectedReturnTone}
         />
       )}

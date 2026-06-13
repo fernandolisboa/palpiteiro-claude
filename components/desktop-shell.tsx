@@ -25,7 +25,7 @@ export async function DesktopShell({ children }: { children: ReactNode }) {
               palpiteiro
             </span>
             <span className="hidden font-mono text-[10px] uppercase tracking-[0.18em] text-muted-fg-2 sm:inline">
-              v0 · over/under 2.5
+              v0 · edge multi-mercado
             </span>
           </div>
           <nav className="flex items-center gap-4">

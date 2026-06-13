@@ -3,44 +3,25 @@ import { renderToStaticMarkup } from "react-dom/server";
 
 import { AnalysisResult } from "@/components/analysis-result";
 import { MIN_EDGE_PP } from "@/lib/odds/scenario";
-import type { AnalysisView, ScenariosView } from "@/lib/view/types";
-
-const overScenarios: ScenariosView = {
-  over: {
-    modelProb: "58%",
-    marketProb: "50.7%",
-    odd: "1.92",
-    edge: "+7.3pp",
-    expectedReturn: "+11.4%",
-    modelBreakEvenOdd: "1.72",
-  },
-  under: {
-    modelProb: "42%",
-    marketProb: "49.3%",
-    odd: "1.95",
-    edge: "-7.3pp",
-    expectedReturn: "-18.1%",
-    modelBreakEvenOdd: "2.38",
-  },
-  recommended: "over",
-  framing:
-    "a aposta em menos de 3 gols só sai do zero se a chance real for maior que 51.3% — na análise o modelo estimou 42%",
-  note: null,
-};
+import type { AnalysisView, OutcomeView } from "@/lib/view/types";
 
 const baseView: AnalysisView = {
-  kind: "OVER",
   recommendation: {
     marketKey: "over_under",
     marketLabel: "Over/Under gols",
     selectionKey: "over",
     selectionLabel: "Over",
     line: 2.5,
+    betSummary: {
+      market: "Mais de 2.5 gols",
+      plain: "pelo menos 3 gols no jogo",
+    },
   },
   outcomes: [
     {
       id: "over",
       label: "Over 2.5",
+      scenarioLabel: "mais de 2.5 gols",
       modelProb: "58%",
       marketProb: "50.7%",
       odd: "1.92",
@@ -52,6 +33,7 @@ const baseView: AnalysisView = {
     {
       id: "under",
       label: "Under 2.5",
+      scenarioLabel: "menos de 2.5 gols",
       modelProb: "42%",
       marketProb: "49.3%",
       odd: "1.95",
@@ -62,10 +44,10 @@ const baseView: AnalysisView = {
     },
   ],
   minOdd: "1.85",
-  betSummary: {
-    market: "Mais de 2.5 gols",
-    plain: "pelo menos 3 gols no jogo",
-  },
+  stakeUnits: "1.00 u",
+  framing:
+    "a aposta em menos de 3 gols só sai do zero se a chance real for maior que 51.3% — na análise o modelo estimou 42%",
+  note: null,
   oddAtRec: "1.92",
   oddAtRecAgo: "há 3h",
   bookmaker: "bet365",
@@ -74,7 +56,6 @@ const baseView: AnalysisView = {
   evLegend:
     "ganho médio por aposta, no longo prazo, se a estimativa de 58% do modelo estiver certa",
   minEdgeLabel: `${MIN_EDGE_PP}pp`,
-  scenarios: overScenarios,
   rationale: "racional técnico",
   factors: ["fator um", "fator dois"],
   generatedAt: "19 mai · 14:22",
@@ -85,12 +66,12 @@ const baseView: AnalysisView = {
 
 const passView: AnalysisView = {
   ...baseView,
-  kind: "PASS",
   recommendation: null,
   outcomes: [
     {
       id: "over",
       label: "Over 2.5",
+      scenarioLabel: "mais de 2.5 gols",
       modelProb: "53%",
       marketProb: "50%",
       odd: "1.92",
@@ -102,6 +83,7 @@ const passView: AnalysisView = {
     {
       id: "under",
       label: "Under 2.5",
+      scenarioLabel: "menos de 2.5 gols",
       modelProb: "47%",
       marketProb: "50%",
       odd: "1.92",
@@ -112,43 +94,88 @@ const passView: AnalysisView = {
     },
   ],
   minOdd: null,
-  betSummary: null,
+  stakeUnits: null,
+  framing: `vantagens pequenas (abaixo de ${MIN_EDGE_PP}pp) ficam dentro da margem de erro do modelo — por isso não há recomendação`,
+  note: null,
   oddAtRec: null,
   oddAtRecAgo: null,
   bookmaker: null,
   expectedReturn: null,
   expectedReturnTone: "neutral",
   evLegend: null,
-  scenarios: {
-    over: {
-      modelProb: "53%",
-      marketProb: "50%",
-      odd: "1.92",
-      edge: "+3.0pp",
-      expectedReturn: "+1.8%",
-      modelBreakEvenOdd: "1.89",
-    },
-    under: {
-      modelProb: "47%",
-      marketProb: "50%",
-      odd: "1.92",
-      edge: "-3.0pp",
-      expectedReturn: "-9.8%",
-      modelBreakEvenOdd: "2.13",
-    },
-    recommended: null,
-    framing: `vantagens pequenas (abaixo de ${MIN_EDGE_PP}pp) ficam dentro da margem de erro do modelo — por isso não há recomendação`,
-    note: null,
-  },
 };
 
-describe("AnalysisResult — bloco 'Aposta recomendada' (#103)", () => {
-  it("over: renders the plain-language bet, frozen odd, expected return and legend", () => {
+// 1X2 (match_result) — recomendação N-vias por fixture mock (AC2, PURE, sem DB).
+const matchResultOutcomes: OutcomeView[] = [
+  {
+    id: "home",
+    label: "Casa",
+    scenarioLabel: "Casa",
+    modelProb: "50%",
+    marketProb: "45.4%",
+    odd: "2.10",
+    edge: "+4.6pp",
+    expectedReturn: "+5.0%",
+    breakEven: "2.00",
+    isRecommended: true,
+  },
+  {
+    id: "draw",
+    label: "Empate",
+    scenarioLabel: "Empate",
+    modelProb: "27%",
+    marketProb: "28.1%",
+    odd: "3.40",
+    edge: "-1.1pp",
+    expectedReturn: "-8.2%",
+    breakEven: "3.70",
+    isRecommended: false,
+  },
+  {
+    id: "away",
+    label: "Fora",
+    scenarioLabel: "Fora",
+    modelProb: "23%",
+    marketProb: "26.5%",
+    odd: "3.60",
+    edge: "-3.5pp",
+    expectedReturn: "-17.2%",
+    breakEven: "4.35",
+    isRecommended: false,
+  },
+];
+
+const matchResultView: AnalysisView = {
+  ...baseView,
+  recommendation: {
+    marketKey: "match_result",
+    marketLabel: "Resultado (1X2)",
+    selectionKey: "home",
+    selectionLabel: "Casa",
+    line: null,
+    // 1X2 não tem frase leiga (plain ""); market = label da seleção.
+    betSummary: { market: "Casa", plain: "" },
+  },
+  outcomes: matchResultOutcomes,
+  // 1X2 não tem break-even binário (R4).
+  framing: null,
+  note: null,
+};
+
+describe("AnalysisResult — bloco 'Aposta recomendada' (#103/#170)", () => {
+  it("over: renders the structured bet (mercado + seleção + linha), STAKE, frozen odd, expected return and legend", () => {
     const markup = renderToStaticMarkup(<AnalysisResult view={baseView} />);
 
     expect(markup).toContain("aposta recomendada");
+    // Frase estruturada data-driven (AC3): mercado + seleção + linha do view.
+    expect(markup).toContain("Over/Under gols · Over 2.5");
+    // Tradução LEIGA (lay-friendly) restaurada da view (betSummary): a frase
+    // pré-pivot "Mais de 2.5 gols — pelo menos 3 gols no jogo".
     expect(markup).toContain("Mais de 2.5 gols");
     expect(markup).toContain("pelo menos 3 gols no jogo");
+    // STAKE da recomendação (R3, formato "1.00 u").
+    expect(markup).toContain("stake");
+    expect(markup).toContain("1.00 u");
     expect(markup).toContain("odd na análise (há 3h)");
     expect(markup).toContain("1.92 · bet365");
     expect(markup).toContain("retorno esperado");
@@ -160,17 +187,22 @@ describe("AnalysisResult — bloco 'Aposta recomendada' (#103)", () => {
     expect(markup).toContain("na análise");
     expect(markup).toContain("vale a pena se odd ≥");
     expect(markup).toContain("1.85");
+    // sem setas ↑/↓ nem "2.5 gols" hardcoded no destaque (AC3).
+    expect(markup).not.toContain("↑");
+    expect(markup).not.toContain("↓");
   });
 
-  it("over: keeps the contract order — frase leiga → odd → retorno → condição por último", () => {
+  it("over: keeps the contract order — frase estruturada → stake → odd → retorno → condição por último", () => {
     const markup = renderToStaticMarkup(<AnalysisResult view={baseView} />);
 
-    const phrase = markup.indexOf("Mais de 2.5 gols");
+    const phrase = markup.indexOf("Over/Under gols · Over 2.5");
+    const stake = markup.indexOf(">stake<");
     const odd = markup.indexOf("odd na análise");
     const evReturn = markup.indexOf("retorno esperado");
     const condition = markup.indexOf("vale a pena se odd");
     expect(phrase).toBeGreaterThan(-1);
-    expect(odd).toBeGreaterThan(phrase);
+    expect(stake).toBeGreaterThan(phrase);
+    expect(odd).toBeGreaterThan(stake);
     expect(evReturn).toBeGreaterThan(odd);
     expect(condition).toBeGreaterThan(evReturn);
   });
@@ -181,19 +213,27 @@ describe("AnalysisResult — bloco 'Aposta recomendada' (#103)", () => {
     expect(markup).toMatch(/text-edge-fg[^>]*>\+11\.4%/);
   });
 
-  it("under: renders the under phrasing", () => {
+  it("under: renders the under selection structured phrasing", () => {
     const markup = renderToStaticMarkup(
       <AnalysisResult
         view={{
           ...baseView,
-          kind: "UNDER",
-          betSummary: {
-            market: "Menos de 2.5 gols",
-            plain: "no máximo 2 gols no jogo",
+          recommendation: {
+            marketKey: "over_under",
+            marketLabel: "Over/Under gols",
+            selectionKey: "under",
+            selectionLabel: "Under",
+            line: 2.5,
+            betSummary: {
+              market: "Menos de 2.5 gols",
+              plain: "no máximo 2 gols no jogo",
+            },
           },
         }}
       />,
     );
+    expect(markup).toContain("Over/Under gols · Under 2.5");
+    // tradução leiga do under (lay-friendly).
     expect(markup).toContain("Menos de 2.5 gols");
     expect(markup).toContain("no máximo 2 gols no jogo");
   });
@@ -246,21 +286,12 @@ describe("AnalysisResult — bloco 'Aposta recomendada' (#103)", () => {
           expectedReturn: "—",
           expectedReturnTone: "neutral",
           evLegend: null,
-          scenarios: {
-            ...overScenarios,
-            over: {
-              ...overScenarios.over,
-              odd: "—",
-              expectedReturn: "—",
-            },
-            under: {
-              ...overScenarios.under,
-              odd: "—",
-              expectedReturn: "—",
-            },
-            framing: null,
-            note: "odds do outro lado não registradas nesta análise",
-          },
+          framing: null,
+          note: "odds do outro lado não registradas nesta análise",
+          outcomes: [
+            { ...baseView.outcomes[0], odd: "—", expectedReturn: "—" },
+            { ...baseView.outcomes[1], odd: "—", expectedReturn: "—" },
+          ],
         }}
       />,
     );
@@ -279,6 +310,11 @@ describe("AnalysisResult — bloco 'Aposta recomendada' (#103)", () => {
     expect(markup).toContain(
       `vantagem mínima de ${MIN_EDGE_PP}pp sobre o mercado`,
     );
+    // pass = recommendation null → sem betSummary, logo a tradução leiga não
+    // renderiza (a copy "Sem aposta recomendada" do pass não é o bloco da rec).
+    expect(passView.recommendation).toBeNull();
+    expect(markup).not.toContain("pelo menos 3 gols no jogo");
+    expect(markup).not.toContain("Mais de 2.5 gols");
   });
 });
 
@@ -311,11 +347,35 @@ describe("AnalysisResult — bloco 'Cenários' integrado e grid de stats removid
     expect(markup).toContain("+7.3pp");
   });
 
-  it("renders the scenarios block even when degraded (scenarios null hides it without crashing)", () => {
+  it("degraded analysis (outcomes empty) hides the scenarios block without crashing", () => {
     const markup = renderToStaticMarkup(
-      <AnalysisResult view={{ ...baseView, scenarios: null }} />,
+      <AnalysisResult view={{ ...baseView, outcomes: [] }} />,
     );
     expect(markup).toContain("aposta recomendada");
     expect(markup).not.toContain("cenário alternativo");
+  });
+});
+
+// AC2: recomendação 1X2 (3 outcomes) renderiza o destaque + 3 colunas, sem
+// nenhuma string de mercado hardcoded (tudo vem do view). PURE, sem DB.
+describe("AnalysisResult — recomendação N-vias (1X2, AC2)", () => {
+  it("renders the 1X2 highlight + 3 scenario columns from the view", () => {
+    const markup = renderToStaticMarkup(
+      <AnalysisResult view={matchResultView} />,
+    );
+    // Destaque: seleção (sem linha) + label do mercado, ambos do view.
+    expect(markup).toContain("Casa");
+    expect(markup).toContain("Resultado (1X2)");
+    // bloco aposta recomendada estruturado.
+    expect(markup).toContain("Resultado (1X2) · Casa");
+    // 3 colunas de cenário.
+    expect(
+      markup.split('data-scenario-col="').length - 1,
+    ).toBe(3);
+    expect(markup).toContain("Empate");
+    expect(markup).toContain("Fora");
+    // sem setas (de-hardcode AC3).
+    expect(markup).not.toContain("↑");
+    expect(markup).not.toContain("↓");
   });
 });

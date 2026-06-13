@@ -16,6 +16,10 @@ describe("getMarketPresentation", () => {
     expect(p.outcomeLabel("under", 2.5)).toBe("Under 2.5");
     // sem linha → só o label da seleção (defensivo).
     expect(p.outcomeLabel("over", null)).toBe("Over");
+    // scenarioLabel: header LEIGO da coluna de cenário — VERBATIM do SIDE_LABEL
+    // pré-pivot (paridade VISUAL), distinto de outcomeLabel ("Over 2.5").
+    expect(p.scenarioLabel("over", 2.5)).toBe("mais de 2.5 gols");
+    expect(p.scenarioLabel("under", 2.5)).toBe("menos de 2.5 gols");
     expect(p.betSummary("over", 2.5)).toEqual({
       market: "Mais de 2.5 gols",
       plain: "pelo menos 3 gols no jogo",
@@ -38,6 +42,10 @@ describe("getMarketPresentation", () => {
     expect(p.selectionLabel("home")).toBe("Casa");
     expect(p.outcomeLabel("draw", null)).toBe("Empate");
     expect(p.outcomeLabel("away", null)).toBe("Fora");
+    // scenarioLabel 1X2: Casa/Empate/Fora (sem linha, igual ao outcomeLabel).
+    expect(p.scenarioLabel("home", null)).toBe("Casa");
+    expect(p.scenarioLabel("draw", null)).toBe("Empate");
+    expect(p.scenarioLabel("away", null)).toBe("Fora");
     expect(p.classifyH2H).toBeNull();
   });
 

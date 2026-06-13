@@ -16,6 +16,8 @@ import {
   formatModelName,
   formatOdd,
   formatPct,
+  formatStakeUnits,
+  formatUnitsSigned,
   leagueToKey,
 } from "@/lib/format";
 import { getMarketPresentation } from "@/lib/view/markets/presentation";
@@ -27,11 +29,8 @@ const REC_MAP: Record<DashboardRow["recommendation"], Recommendation> = {
   pass: "PASS",
 };
 
-// Toda string `numeric` do Drizzle vira número ANTES de qualquer conta/format.
-function unitsLabel(value: number): string {
-  if (!Number.isFinite(value)) return "—";
-  return `${value >= 0 ? "+" : ""}${value.toFixed(2)} u`;
-}
+// Unidades COM sinal — convenção única, centralizada em lib/format (#170).
+const unitsLabel = formatUnitsSigned;
 
 // ─── KPIs ──────────────────────────────────────────────────────────────────
 
@@ -217,10 +216,9 @@ export type PredictionDetailView = {
   outcome: {
     result: "won" | "lost" | "void" | "push";
     profit: string;
-    totalGoals: number;
-    // Métrica de settlement market-aware (#169, additive): label do mercado +
-    // valor do fato do jogo. O #170 troca o Row legado "gols (90')" por esta e
-    // remove `totalGoals` (a "troca" do issue completa no contract da view).
+    // Métrica de settlement market-aware: label do mercado + valor do fato do
+    // jogo. Substituiu o Row legado "gols (90')" + o escalar `totalGoals` no
+    // contract da view (#170). A COLUNA de DB total_goals segue (legacy, Fase 5).
     settlementMetric: { label: string; value: string };
     settledAt: string;
     manual: boolean;
@@ -265,7 +263,7 @@ export function toPredictionDetailView(
       implied: formatPct(prediction.impliedProbPct),
       minOdd: formatOdd(prediction.minimumOdd),
       odd: formatOdd(prediction.oddAtRecommendation),
-      stake: unitsLabel(Number(prediction.stakeUnits)).replace("+", ""),
+      stake: formatStakeUnits(prediction.stakeUnits) ?? "—",
       bookmaker: prediction.bookmaker ?? "—",
       rationale: prediction.rationale,
       factors: prediction.keyFactors,
@@ -277,7 +275,6 @@ export function toPredictionDetailView(
       ? {
           result: outcome.result,
           profit: unitsLabel(Number(outcome.profitUnits)),
-          totalGoals: outcome.totalGoals,
           // VALOR do escalar notNull `total_goals` (resultData é nullable em
           // históricas — schema; cruza com resultData.totalGoals quando existe).
           // Label da apresentação do mercado. Default over_under até o #170/Fase 4

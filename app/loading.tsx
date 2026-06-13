@@ -1,4 +1,5 @@
 import { DesktopShell } from "@/components/desktop-shell";
+import { HOME_SUBTITLE } from "@/lib/copy";
 import { PageHeader } from "@/components/page-header";
 import { SectionLabel } from "@/components/section-label";
 import {
@@ -18,7 +19,7 @@ export default function Loading() {
               Próximos jogos
             </h1>
             <p className="pt-1.5 text-[13px] text-muted-foreground tracking-tight">
-              Over / under 2.5 — análise sob demanda.
+              {HOME_SUBTITLE}
             </p>
           </div>
           <div className="px-5 pb-3">

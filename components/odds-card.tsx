@@ -1,4 +1,4 @@
-import { TriangleAlert, ArrowUp, ArrowDown } from "lucide-react";
+import { TriangleAlert } from "lucide-react";
 
 import { HelpHint } from "@/components/help-hint";
 import { Badge } from "@/components/ui/badge";
@@ -23,8 +23,8 @@ export function OddsCard({ view }: Props) {
               Odds indisponíveis
             </span>
             <span className="text-[12px] text-muted-foreground tracking-tight">
-              Sem cotação de over/under 2.5 publicada para este jogo. Análise indisponível
-              até que o mercado abra.
+              Sem cotação publicada para este jogo. Análise indisponível até que o
+              mercado abra.
             </span>
             <span className="pt-1 font-mono text-[10.5px] text-muted-fg-2">
               fonte: the-odds-api
@@ -44,7 +44,7 @@ export function OddsCard({ view }: Props) {
             variant="outline"
             className="h-[17px] rounded-full px-2 text-[9.5px] text-muted-foreground"
           >
-            over/under 2.5
+            {view.marketLabel}
           </Badge>
         </div>
         <span className="font-mono text-[10px] text-muted-foreground">
@@ -55,7 +55,7 @@ export function OddsCard({ view }: Props) {
       <div className="grid grid-cols-2">
         <div className="flex flex-col gap-1 border-r border-border-subtle px-4 py-3.5">
           <span className="flex items-center gap-1.5 text-[11px] uppercase tracking-[0.12em] text-muted-foreground">
-            <ArrowUp className="size-3.5" /> Over 2.5
+            {view.overLabel}
           </span>
           <span className="font-mono text-[22px] font-medium tabular-nums tracking-tight">
             {view.over}
@@ -71,7 +71,7 @@ export function OddsCard({ view }: Props) {
         </div>
         <div className="flex flex-col gap-1 px-4 py-3.5">
           <span className="flex items-center gap-1.5 text-[11px] uppercase tracking-[0.12em] text-muted-foreground">
-            <ArrowDown className="size-3.5" /> Under 2.5
+            {view.underLabel}
           </span>
           <span className="font-mono text-[22px] font-medium tabular-nums tracking-tight">
             {view.under}

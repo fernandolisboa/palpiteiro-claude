@@ -11,6 +11,7 @@ import { SectionLabel } from "@/components/section-label";
 import { UpcomingMatchesDesktop } from "@/components/upcoming-matches-desktop";
 import { UpcomingMatchesMobile } from "@/components/upcoming-matches-mobile";
 import { auth } from "@/auth";
+import { HOME_SUBTITLE } from "@/lib/copy";
 import {
   DEFAULT_LEAGUE_FILTER,
   isActiveLeagueFilter,
@@ -209,7 +210,7 @@ function MobileHome({
           Próximos jogos
         </h1>
         <p className="pt-1.5 text-[13px] text-muted-foreground tracking-tight">
-          Over / under 2.5 — análise sob demanda.
+          {HOME_SUBTITLE}
         </p>
       </div>
 

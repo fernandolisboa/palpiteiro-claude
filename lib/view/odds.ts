@@ -1,6 +1,7 @@
 import { formatOdd, formatPct, formatRelativeAgo } from "@/lib/format";
 import { computeImpliedProbabilities } from "@/lib/odds/implied-probability";
-import type { OddsView } from "@/lib/view/types";
+import { getMarketPresentation } from "@/lib/view/markets/presentation";
+import type { MatchRowView, OddsView } from "@/lib/view/types";
 
 export type OddsSnapshotInput = {
   bookmaker: string;
@@ -8,6 +9,24 @@ export type OddsSnapshotInput = {
   underOdd: number | string;
   capturedAt: Date;
 };
+
+// O snapshot vivo é binário over/under (the-odds-api) — o único mercado com
+// reader de snapshot hoje. Resolve os rótulos por lado via registry pra
+// de-hardcodar "Over 2.5"/"O"/badge dos componentes (AC3); live N-vias = Fase 4.
+const LIVE_ODDS_PRESENTATION = getMarketPresentation("over_under");
+// Label COMPLETO ("Over 2.5"/"Under 2.5") — só os headers do OddsCard (toOddsView).
+const LIVE_OVER_LABEL = LIVE_ODDS_PRESENTATION.outcomeLabel(
+  "over",
+  LIVE_ODDS_PRESENTATION.defaultLine,
+);
+const LIVE_UNDER_LABEL = LIVE_ODDS_PRESENTATION.outcomeLabel(
+  "under",
+  LIVE_ODDS_PRESENTATION.defaultLine,
+);
+// Label CURTO ("Over"/"Under") — chips densos da match-list (coluna ~160px).
+// Mantém a compactação pré-pivot ("O"/"U") sem o "2.5" verboso na lista.
+const LIVE_OVER_SHORT = LIVE_ODDS_PRESENTATION.selectionLabel("over");
+const LIVE_UNDER_SHORT = LIVE_ODDS_PRESENTATION.selectionLabel("under");
 
 export function toOddsView(
   snapshot: OddsSnapshotInput,
@@ -20,6 +39,9 @@ export function toOddsView(
     underOdd,
   );
   return {
+    marketLabel: LIVE_ODDS_PRESENTATION.marketLabel,
+    overLabel: LIVE_OVER_LABEL,
+    underLabel: LIVE_UNDER_LABEL,
     over: formatOdd(overOdd),
     under: formatOdd(underOdd),
     overPct: formatPct(overProb * 100, { decimals: 1 }),
@@ -32,10 +54,12 @@ export function toOddsView(
 
 export function toMatchRowOdds(
   snapshot: OddsSnapshotInput | null,
-): { over: string; under: string } | null {
+): NonNullable<MatchRowView["odds"]> | null {
   if (!snapshot) return null;
   return {
+    overLabel: LIVE_OVER_SHORT,
     over: formatOdd(snapshot.overOdd),
+    underLabel: LIVE_UNDER_SHORT,
     under: formatOdd(snapshot.underOdd),
   };
 }

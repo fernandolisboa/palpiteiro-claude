@@ -18,6 +18,13 @@ export type DbPredictionOutcome = typeof predictionOutcomes.$inferSelect;
 export type PredictionWithAiCall = {
   prediction: DbPrediction;
   aiCall: DbAiCall | null;
+  // Identidade de mercado da predição, resolvida por LEFT JOIN (#170): a row só
+  // carrega marketId nullable, não a key. `marketKey` alimenta o registry de
+  // apresentação na view (labels/scenarioLabel); a seleção recomendada vem de
+  // prediction.recommendation, então o join de market_selections é desnecessário.
+  // Nullable em históricas sem mercado backfillado → o chamador faz coalesce
+  // 'over_under'.
+  marketKey: string | null;
 };
 
 export async function getLatestPredictionForMatch(
@@ -28,9 +35,13 @@ export async function getLatestPredictionForMatch(
     .select({
       prediction: predictions,
       aiCall: aiCalls,
+      // LEFT (não INNER): uma row sem mercado (histórica não backfillada) ainda
+      // volta — key null, view coalesce.
+      marketKey: markets.key,
     })
     .from(predictions)
     .leftJoin(aiCalls, eq(predictions.aiCallId, aiCalls.id))
+    .leftJoin(markets, eq(predictions.marketId, markets.id))
     .where(
       and(eq(predictions.matchId, matchId), eq(predictions.userId, userId)),
     )
@@ -38,6 +49,13 @@ export async function getLatestPredictionForMatch(
     .limit(1);
   return rows[0] ?? null;
 }
+
+// Linha do histórico: prediction + aiCall, SEM as keys de mercado (a função é
+// market-agnostic por design — não precisa do registry de apresentação).
+export type PredictionHistoryRow = {
+  prediction: DbPrediction;
+  aiCall: DbAiCall | null;
+};
 
 /**
  * Full prediction history for a match scoped to one user, newest first — the
@@ -49,7 +67,7 @@ export async function getLatestPredictionForMatch(
 export async function getPredictionHistoryForMatch(
   matchId: string,
   userId: string,
-): Promise<PredictionWithAiCall[]> {
+): Promise<PredictionHistoryRow[]> {
   return db
     .select({
       prediction: predictions,
