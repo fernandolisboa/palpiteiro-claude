@@ -1,4 +1,7 @@
-import { computeImpliedProbabilities } from "@/lib/odds/implied-probability";
+import {
+  computeImpliedProbabilities,
+  computeMarketImpliedProbabilities,
+} from "@/lib/odds/implied-probability";
 
 // Threshold de edge do prompt over_under_v1.x, exposto pra UI não hardcodear.
 // Sincronia pinada por teste server-side (lib/ai/__tests__/request-builder.test.ts):
@@ -51,6 +54,74 @@ export function computeModelBreakEvenOdd(modelProbPct: number): number {
   return 100 / modelProbPct;
 }
 
+// Edge por seleção em pontos percentuais (ADR 0018, decisão 2): model − implied.
+// A implícita é a NORMALIZADA pelo overround do mercado completo (não a crua).
+// NÃO existe edge_oposto = −edge fora de N=2 — cada seleção tem o seu.
+export function computeSelectionEdgePp(
+  modelProbPct: number,
+  impliedProbPct: number,
+): number {
+  return modelProbPct - impliedProbPct;
+}
+
+// Uma seleção no cenário N-ário (ADR 0018, decisão 4). impliedProbPct/edgePct
+// são null quando o mercado não pode ser normalizado (alguma odd ausente);
+// modelProbPct e modelBreakEvenOdd derivam sempre.
+export type ScenarioSelection = {
+  key: string;
+  modelProbPct: number;
+  impliedProbPct: number | null;
+  odd: number | null;
+  edgePct: number | null; // modelProbPct − impliedProbPct (normalizada)
+  evPerUnit: number | null; // null quando odd ausente; odd CRUA quando presente
+  breakEvenProbPct: number | null; // 100/odd cru; null quando odd ausente
+  modelBreakEvenOdd: number; // 100/modelProbPct — sempre derivável
+};
+
+// Cenários multi-outcome canônicos (ADR 0018, decisão 4), forma N-vias da qual
+// o binário computeScenarios é um caso particular (a ser unificado em #170).
+// PURA dos inputs (model probs + odds), sem DB/LLM.
+//
+// recommendedKey é ECHO/PASS-THROUGH: o gatilho edge ≥ MIN_EDGE_PP é do
+// LLM/prompt (ADR 0018 decisão 2), espelhando como computeScenarios repassa
+// input.recommendation. Esta função NÃO deriva a recomendação dos edges.
+//
+// Implícita/edge: SÓ quando TODAS as odds estão presentes o mercado pode ser
+// normalizado (Σraw completo) — daí implied_i via computeMarketImpliedProbabilities
+// e edge_i = model_i − implied_i. Se QUALQUER odd faltar, implied/edge de TODAS
+// as seleções viram null (mercado parcial não normaliza). EV/break-even saem da
+// odd CRUA por seleção (ADR 0018 decisão 3). SEM 100−x em nenhum ponto.
+export function computeMarketScenarios(input: {
+  selections: { key: string; modelProbPct: number; odd: number | null }[];
+  recommendedKey: string | null;
+}): { selections: ScenarioSelection[]; recommended: string | null } {
+  const allOddsPresent = input.selections.every((s) => s.odd !== null);
+  const impliedByIndex = allOddsPresent
+    ? computeMarketImpliedProbabilities(
+        input.selections.map((s) => s.odd as number),
+      ).probs.map((p) => p * 100)
+    : null;
+
+  const selections = input.selections.map((s, i): ScenarioSelection => {
+    const impliedProbPct = impliedByIndex !== null ? impliedByIndex[i] : null;
+    return {
+      key: s.key,
+      modelProbPct: s.modelProbPct,
+      impliedProbPct,
+      odd: s.odd,
+      edgePct:
+        impliedProbPct !== null
+          ? computeSelectionEdgePp(s.modelProbPct, impliedProbPct)
+          : null,
+      evPerUnit: s.odd !== null ? computeEvPerUnit(s.modelProbPct, s.odd) : null,
+      breakEvenProbPct: s.odd !== null ? computeBreakEvenProbPct(s.odd) : null,
+      modelBreakEvenOdd: computeModelBreakEvenOdd(s.modelProbPct),
+    };
+  });
+
+  return { selections, recommended: input.recommendedKey };
+}
+
 export type ScenarioSide = {
   modelProbPct: number;
   impliedProbPct: number | null;
@@ -85,9 +156,13 @@ export type Scenarios = {
 // 4. modelBreakEvenOdd = 100/modelProbPct nos dois lados, sempre.
 // 5. O que não for derivável fica null (UI renderiza "—").
 //
-// Premissa binária: P(lado oposto) = 100 − P(lado) vale porque a linha 2.5
-// nunca dá push (gols são inteiros — ADR 0003). Quebraria com linhas inteiras
-// futuras (push devolve o stake); revisar se outro mercado entrar.
+// A forma canônica de cenários agora é N-vias (computeMarketScenarios acima,
+// ADR 0018 decisão 5): cada seleção tem implícita/edge próprios, SEM 100−x.
+// A derivação 100−x do lado oposto AQUI no computeScenarios binário é um
+// adaptador de VIEW legado DELIBERADO pros valores .toFixed(2) congelados na
+// row — vale só porque a linha 2.5 nunca dá push (gols inteiros, ADR 0003) e
+// fica retido até #170 migrar a view pro contrato N-vias. NÃO é caminho N-ário
+// vivo nem esquecimento; quebraria com linhas inteiras (push devolve o stake).
 //
 // Convenção de confidencePct em pass (= prob do OVER, espelhando o schema de
 // output do LLM) é tratada AQUI, num único lugar testado, não em componente.

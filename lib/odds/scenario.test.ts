@@ -5,8 +5,10 @@ import { computeImpliedProbabilities } from "@/lib/odds/implied-probability";
 import {
   computeBreakEvenProbPct,
   computeEvPerUnit,
+  computeMarketScenarios,
   computeModelBreakEvenOdd,
   computeScenarios,
+  computeSelectionEdgePp,
 } from "@/lib/odds/scenario";
 
 describe("computeEvPerUnit", () => {
@@ -256,5 +258,155 @@ describe("computeScenarios", () => {
     expect(() => computeScenarios({ ...base, confidencePct: 0 })).toThrow();
     expect(() => computeScenarios({ ...base, confidencePct: 100 })).toThrow();
     expect(() => computeScenarios({ ...base, confidencePct: NaN })).toThrow();
+  });
+});
+
+describe("computeSelectionEdgePp", () => {
+  it("returns model − implied (positive when model > implied)", () => {
+    // ADR 0018 N=3: casa modelProb 52 − implied 45.4342984 = +6.5657016.
+    expect(computeSelectionEdgePp(52, 45.4342984)).toBeCloseTo(6.5657016, 6);
+  });
+
+  it("returns a negative edge when implied > model", () => {
+    expect(computeSelectionEdgePp(21, 26.5033408)).toBeCloseTo(-5.5033408, 6);
+  });
+
+  it("returns zero when model equals implied", () => {
+    expect(computeSelectionEdgePp(50, 50)).toBe(0);
+  });
+});
+
+describe("computeMarketScenarios", () => {
+  it("N=3 (1X2): pina todos os campos das 3 seleções (ADR 0018)", () => {
+    // Odds casa 2.10 / empate 3.40 / fora 3.60; modelProb 52 / 27 / 21.
+    const { selections, recommended } = computeMarketScenarios({
+      selections: [
+        { key: "home", modelProbPct: 52, odd: 2.1 },
+        { key: "draw", modelProbPct: 27, odd: 3.4 },
+        { key: "away", modelProbPct: 21, odd: 3.6 },
+      ],
+      recommendedKey: "home",
+    });
+
+    expect(recommended).toBe("home");
+    expect(selections.map((s) => s.key)).toEqual(["home", "draw", "away"]);
+
+    // implied normalizada (full-precision).
+    expect(selections[0].impliedProbPct).toBeCloseTo(45.4342984, 6);
+    expect(selections[1].impliedProbPct).toBeCloseTo(28.0623608, 6);
+    expect(selections[2].impliedProbPct).toBeCloseTo(26.5033408, 6);
+
+    // edge = model − implied.
+    expect(selections[0].edgePct).toBeCloseTo(6.5657016, 6);
+    expect(selections[1].edgePct).toBeCloseTo(-1.0623608, 6);
+    expect(selections[2].edgePct).toBeCloseTo(-5.5033408, 6);
+
+    // EV por unidade na odd CRUA.
+    expect(selections[0].evPerUnit).toBeCloseTo(0.092, 6);
+    expect(selections[1].evPerUnit).toBeCloseTo(-0.082, 6);
+    expect(selections[2].evPerUnit).toBeCloseTo(-0.244, 6);
+
+    // break-even (100/odd cru).
+    expect(selections[0].breakEvenProbPct).toBeCloseTo(47.6190476, 6);
+    expect(selections[1].breakEvenProbPct).toBeCloseTo(29.4117647, 6);
+    expect(selections[2].breakEvenProbPct).toBeCloseTo(27.7777778, 6);
+
+    // modelBreakEvenOdd = 100/modelProbPct.
+    expect(selections[0].modelBreakEvenOdd).toBeCloseTo(100 / 52, 6);
+    expect(selections[1].modelBreakEvenOdd).toBeCloseTo(100 / 27, 6);
+    expect(selections[2].modelBreakEvenOdd).toBeCloseTo(100 / 21, 6);
+  });
+
+  it("estrutural (morte do 100−x): Σ implied ≈ 100, nenhum edge é −outro, model passa intacto", () => {
+    const model = [52, 27, 21];
+    const { selections } = computeMarketScenarios({
+      selections: [
+        { key: "home", modelProbPct: model[0], odd: 2.1 },
+        { key: "draw", modelProbPct: model[1], odd: 3.4 },
+        { key: "away", modelProbPct: model[2], odd: 3.6 },
+      ],
+      recommendedKey: "home",
+    });
+
+    const sumImplied = selections.reduce(
+      (acc, s) => acc + (s.impliedProbPct ?? 0),
+      0,
+    );
+    expect(sumImplied).toBeCloseTo(100, 6);
+
+    // Nenhum par satisfaz edge_i === −edge_j (o invariante binário morreu).
+    for (let i = 0; i < selections.length; i++) {
+      for (let j = 0; j < selections.length; j++) {
+        if (i === j) continue;
+        const ei = selections[i].edgePct as number;
+        const ej = selections[j].edgePct as number;
+        expect(ei).not.toBe(-ej);
+      }
+    }
+
+    // modelProbPct passa intacto — sem complemento derivado.
+    expect(selections.map((s) => s.modelProbPct)).toEqual(model);
+  });
+
+  it("N=3 com recommendedKey=null (nenhuma seleção recomendada — echo)", () => {
+    const { selections, recommended } = computeMarketScenarios({
+      selections: [
+        { key: "home", modelProbPct: 34, odd: 2.1 },
+        { key: "draw", modelProbPct: 33, odd: 3.4 },
+        { key: "away", modelProbPct: 33, odd: 3.6 },
+      ],
+      recommendedKey: null,
+    });
+
+    expect(recommended).toBeNull();
+    // Implícitas/edge ainda computadas (todas as odds presentes).
+    expect(selections[0].impliedProbPct).toBeCloseTo(45.4342984, 6);
+    expect(selections.every((s) => s.edgePct !== null)).toBe(true);
+  });
+
+  it("ecoa recommendedKey fielmente mesmo quando discorda do ranking de edge (echo, não derivação)", () => {
+    // home carrega o MAIOR edge (+6.57); ainda assim recommendedKey aponta draw
+    // (edge −1.06). Uma implementação que derivasse a recomendação do max-edge
+    // devolveria "home" e falharia — trava o contrato de echo (ADR 0018 dec.2:
+    // o gatilho edge≥MIN_EDGE_PP é do LLM/prompt, não desta função pura).
+    const { selections, recommended } = computeMarketScenarios({
+      selections: [
+        { key: "home", modelProbPct: 52, odd: 2.1 },
+        { key: "draw", modelProbPct: 27, odd: 3.4 },
+        { key: "away", modelProbPct: 21, odd: 3.6 },
+      ],
+      recommendedKey: "draw",
+    });
+
+    expect(recommended).toBe("draw");
+    // sanity: home realmente tem edge maior que draw — logo "draw" só veio do echo.
+    expect(
+      (selections[0].edgePct as number) > (selections[1].edgePct as number),
+    ).toBe(true);
+  });
+
+  it("mercado parcial (uma odd ausente): implied/edge null em TODAS; model/odd-de-equilíbrio retidos", () => {
+    const { selections } = computeMarketScenarios({
+      selections: [
+        { key: "home", modelProbPct: 52, odd: 2.1 },
+        { key: "draw", modelProbPct: 27, odd: null },
+        { key: "away", modelProbPct: 21, odd: 3.6 },
+      ],
+      recommendedKey: "home",
+    });
+
+    for (const s of selections) {
+      expect(s.impliedProbPct).toBeNull();
+      expect(s.edgePct).toBeNull();
+    }
+    // modelProbPct e modelBreakEvenOdd seguem derivando.
+    expect(selections.map((s) => s.modelProbPct)).toEqual([52, 27, 21]);
+    expect(selections[0].modelBreakEvenOdd).toBeCloseTo(100 / 52, 6);
+    expect(selections[1].modelBreakEvenOdd).toBeCloseTo(100 / 27, 6);
+    // EV/break-even seguem a odd crua por seleção (null só onde a odd falta).
+    expect(selections[0].evPerUnit).toBeCloseTo(0.092, 6);
+    expect(selections[1].evPerUnit).toBeNull();
+    expect(selections[1].breakEvenProbPct).toBeNull();
+    expect(selections[2].evPerUnit).toBeCloseTo(-0.244, 6);
   });
 });
