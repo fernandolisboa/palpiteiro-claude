@@ -26,7 +26,7 @@ const MARKET_ENUM_TO_KEY: Record<string, string> = {
   over_under_2_5: "over_under",
 };
 
-function marketEnumToKey(market: string): string {
+export function marketEnumToKey(market: string): string {
   return MARKET_ENUM_TO_KEY[market] ?? "over_under";
 }
 
@@ -38,6 +38,32 @@ const MARKET_KEY_TO_LABEL: Record<string, string> = {
 
 function marketLabelForKey(key: string): string {
   return MARKET_KEY_TO_LABEL[key] ?? key;
+}
+
+// Row crua do select (markets via LEFT JOIN → key/label NULL quando a row não tem
+// marketId). `toDashboardRow` é PURA + exportada pra testar o coalesce — o caminho
+// PRIMÁRIO de paridade (marketId null → over_under) — sem subir um banco.
+export type RawUserDashboardRow = Omit<
+  DashboardRow,
+  "marketKey" | "marketLabel"
+> & {
+  market: string;
+  marketKey: string | null;
+  marketLabel: string | null;
+};
+
+export function toDashboardRow({
+  market,
+  marketKey,
+  marketLabel,
+  ...rest
+}: RawUserDashboardRow): DashboardRow {
+  const key = marketKey ?? marketEnumToKey(market);
+  return {
+    ...rest,
+    marketKey: key,
+    marketLabel: marketLabel ?? marketLabelForKey(key),
+  };
 }
 
 /**
@@ -83,14 +109,7 @@ export async function getUserDashboardRows(
     .where(eq(predictions.userId, userId))
     .orderBy(desc(predictions.createdAt));
 
-  return rows.map(({ market, marketKey, marketLabel, ...rest }) => {
-    const key = marketKey ?? marketEnumToKey(market);
-    return {
-      ...rest,
-      marketKey: key,
-      marketLabel: marketLabel ?? marketLabelForKey(key),
-    };
-  });
+  return rows.map(toDashboardRow);
 }
 
 export type DashboardDetail = {

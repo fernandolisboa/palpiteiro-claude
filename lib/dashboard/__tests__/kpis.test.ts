@@ -515,12 +515,19 @@ describe("computeYieldByStakeBand", () => {
         stakeUnits: "1.00",
         oddAtRecommendation: "1.95",
       }),
+      // a push real bet (1u, no-action — devolve o stake) também é excluída
+      settled("push", "0", {
+        predictionId: "push1",
+        recommendation: "over",
+        stakeUnits: "1.00",
+        oddAtRecommendation: "1.95",
+      }),
     ];
     const bands = computeYieldByStakeBand(rows);
     const byBand = Object.fromEntries(bands.map((b) => [b.band, b]));
 
     expect(byBand["1u"].yield.value).toBeCloseTo(0, 5);
-    expect(byBand["1u"].yield.n).toBe(2); // pass + void excluded
+    expect(byBand["1u"].yield.n).toBe(2); // pass + void + push excluídos
     expect(byBand["1u"].stakedUnits).toBeCloseTo(2, 5);
 
     expect(byBand["2u"].yield.value).toBeCloseTo(100, 5);
