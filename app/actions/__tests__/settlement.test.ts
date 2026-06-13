@@ -99,7 +99,7 @@ describe("overridePredictionOutcome", () => {
     expect(upsert).not.toHaveBeenCalled();
   });
 
-  it("voids with zero profit and totalGoals from the entered score", async () => {
+  it("voids with zero profit and full resultData from the entered score", async () => {
     getRow.mockResolvedValue(row(null));
     const res = await overridePredictionOutcome(
       null,
@@ -107,11 +107,16 @@ describe("overridePredictionOutcome", () => {
     );
     expect(res).toEqual({ ok: true });
     expect(upsert).toHaveBeenCalledWith(
-      expect.objectContaining({ result: "void", profitUnits: 0, totalGoals: 2 }),
+      expect.objectContaining({
+        result: "void",
+        profitUnits: 0,
+        totalGoals: 2,
+        resultData: { homeScore: 1, awayScore: 1, totalGoals: 2 },
+      }),
     );
   });
 
-  it("recomputes profit for a won override from odd + stake", async () => {
+  it("recomputes profit for a won override and passes full resultData", async () => {
     getRow.mockResolvedValue(row("1.900"));
     const res = await overridePredictionOutcome(
       null,
@@ -119,7 +124,22 @@ describe("overridePredictionOutcome", () => {
     );
     expect(res).toEqual({ ok: true });
     expect(upsert).toHaveBeenCalledWith(
-      expect.objectContaining({ result: "won", profitUnits: 0.9, totalGoals: 3 }),
+      expect.objectContaining({
+        result: "won",
+        profitUnits: 0.9,
+        totalGoals: 3,
+        resultData: { homeScore: 2, awayScore: 1, totalGoals: 3 },
+      }),
     );
+  });
+
+  it("still rejects a push override (VALID_RESULTS boundary; push is #168)", async () => {
+    const res = await overridePredictionOutcome(
+      null,
+      form({ predictionId: "p1", result: "push", homeScore: "1", awayScore: "1" }),
+    );
+    expect(res).toMatchObject({ ok: false });
+    expect(getRow).not.toHaveBeenCalled();
+    expect(upsert).not.toHaveBeenCalled();
   });
 });

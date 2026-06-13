@@ -2,6 +2,8 @@ import { and, desc, eq, isNull, lt } from "drizzle-orm";
 
 import {
   aiCalls,
+  marketSelections,
+  markets,
   matches,
   predictionOutcomes,
   predictions,
@@ -69,6 +71,13 @@ const SETTLEMENT_MIN_ELAPSED_MS = 150 * 60 * 1000;
 export type PendingSettlement = {
   predictionId: string;
   recommendation: DbPrediction["recommendation"];
+  // Dispatch do settlement plugável (#166): settlement_rule_key do mercado e a
+  // key da seleção escolhida, resolvidos por LEFT JOIN. Nullable: uma row sem
+  // mercado/seleção (não ocorre pós-backfill) NÃO some do pending set — chega ao
+  // settle, que a bucketa.
+  settlementRuleKey: string | null;
+  selectionKey: string | null;
+  marketParams: DbPrediction["marketParams"];
   oddAtRecommendation: DbPrediction["oddAtRecommendation"];
   stakeUnits: DbPrediction["stakeUnits"];
   matchId: string;
@@ -93,6 +102,11 @@ export async function getPendingSettlementPredictions(
     .select({
       predictionId: predictions.id,
       recommendation: predictions.recommendation,
+      // LEFT (não INNER): uma row sem mercado/seleção não é silenciosamente
+      // dropada do pending set — chega ao settle, que a bucketa.
+      settlementRuleKey: markets.settlementRuleKey,
+      selectionKey: marketSelections.key,
+      marketParams: predictions.marketParams,
       oddAtRecommendation: predictions.oddAtRecommendation,
       stakeUnits: predictions.stakeUnits,
       matchId: matches.id,
@@ -103,6 +117,11 @@ export async function getPendingSettlementPredictions(
     })
     .from(predictions)
     .innerJoin(matches, eq(predictions.matchId, matches.id))
+    .leftJoin(markets, eq(predictions.marketId, markets.id))
+    .leftJoin(
+      marketSelections,
+      eq(predictions.selectionId, marketSelections.id),
+    )
     .leftJoin(
       predictionOutcomes,
       eq(predictionOutcomes.predictionId, predictions.id),
