@@ -860,6 +860,42 @@ describe("predict() — stake congelado na row (#167 / ADR 0019)", () => {
     expect(predictionRow.edgePct).toBe("8.00");
     expect(predictionRow.stakeUnits).toBe("2.00");
   });
+
+  it("rounding-seam (confiança): raw conf 49.996 < 50 mas confidence_pct congela '50.00' → 2u", async () => {
+    // O fix arredonda OS DOIS eixos antes de bandar; este é o seam SIMÉTRICO ao de
+    // cima, no eixo da CONFIANÇA. implied(over | 2.40/1.60) = 40.00; conf raw =
+    // 49.996 (< 50 → daria 1u sem o freeze da confiança) arredonda pra "50.00".
+    // O edge fica firme em ~9.996 (∈ [8,12)), então SÓ a confiança está no seam: a
+    // banda decide sobre o "50.00" CONGELADO → 2u (não sobre 49.996 → 1u).
+    const impliedOver = impliedPctOf(2.4, 1.6, "over"); // 40.00
+    const confSeam = 49.996;
+    getLatestFreshOddsSnapshot.mockResolvedValueOnce(
+      freshSnapshotWith("2.400", "1.600"),
+    );
+    anthropicCreate.mockResolvedValue(
+      toolUseMessage({
+        recommendation: "over",
+        confidence_pct: confSeam,
+        rationale: "Confiança no limiar do arredondamento.",
+        key_factors: ["caso de seam (confiança)"],
+        minimum_odd: 1.8,
+      }),
+    );
+
+    await expect(
+      predict({ matchId: "m-1", userId: "u-1", isAdmin: false }),
+    ).resolves.toBeDefined();
+
+    const predictionRow = insertValues.mock.calls[1]?.[0] as Record<
+      string,
+      unknown
+    >;
+    // Sanidade: conf raw < 50 e edge firmemente ≥ 8 (só a confiança está no seam).
+    expect(confSeam).toBeLessThan(50);
+    expect(confSeam - impliedOver).toBeGreaterThanOrEqual(8);
+    expect(predictionRow.confidencePct).toBe("50.00");
+    expect(predictionRow.stakeUnits).toBe("2.00");
+  });
 });
 
 describe("predict() — bump over_under_v2.0: prompt/mensagem byte-idênticos ao v1.3", () => {
