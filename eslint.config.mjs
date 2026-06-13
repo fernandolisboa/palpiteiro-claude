@@ -14,8 +14,19 @@ const eslintConfig = [
   // skip build output, but `eslint .` does not — so a local build (or dev run)
   // leaves generated files on disk that `pnpm lint` then walks into. Ignore
   // them explicitly so lint covers source only and is stable regardless of
-  // whether a build ran first.
-  { ignores: [".next/", "out/", "build/", "coverage/", "next-env.d.ts"] },
+  // whether a build ran first. `.claude/` holds the agent harness's worktrees
+  // (gitignored full-repo checkouts); linting those floods `pnpm lint` with
+  // phantom errors from stale copies, so ignore the whole dir.
+  {
+    ignores: [
+      ".next/",
+      "out/",
+      "build/",
+      "coverage/",
+      "next-env.d.ts",
+      ".claude/",
+    ],
+  },
   ...compat.extends("next/core-web-vitals", "next/typescript"),
   {
     rules: {
