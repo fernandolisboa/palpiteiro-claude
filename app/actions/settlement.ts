@@ -88,6 +88,13 @@ export async function overridePredictionOutcome(
   await upsertOutcomeOverride({
     predictionId,
     totalGoals: homeScore + awayScore,
+    // O override já tem os scores inteiros do placar (90'): o split é confiável,
+    // grava o result_data rico completo.
+    resultData: {
+      homeScore,
+      awayScore,
+      totalGoals: homeScore + awayScore,
+    },
     result: result as OutcomeResult,
     profitUnits,
     overrideByUserId: session.user.id,

@@ -5,15 +5,24 @@ import type {
 } from "@/lib/providers/sports-data/types";
 import { getPendingSettlementPredictions } from "@/lib/db/queries/predictions";
 import { insertOutcomeIfAbsent } from "@/lib/db/queries/prediction-outcomes";
-import { computeSettlement } from "@/lib/settlement/compute";
+import {
+  computeSettlement,
+  type OutcomeResult,
+  type Settlement,
+} from "@/lib/settlement/compute";
+import {
+  resultDataFromRegulationScore,
+  SettlementError,
+  type ResultData,
+} from "@/lib/settlement/schemas";
 
 export type SettlementSummary = {
   considered: number;
   settled: number; // newly written outcome rows
   alreadySettled: number; // idempotent no-op (conflict on re-run)
   skipped: number; // match not final, or non-pass bet missing entry odd
-  errors: number; // provider lookup failed for the match
-  byResult: { won: number; lost: number; void: number };
+  errors: number; // provider lookup failed OR a per-row settlement computation threw
+  byResult: Record<OutcomeResult, number>;
 };
 
 function log(event: string, data: Record<string, unknown>): void {
@@ -38,7 +47,7 @@ export async function settlePendingPredictions(
     alreadySettled: 0,
     skipped: 0,
     errors: 0,
-    byResult: { won: 0, lost: 0, void: 0 },
+    byResult: { won: 0, lost: 0, void: 0, push: 0 },
   };
   if (pending.length === 0) {
     log("noop", { reason: "no_pending" });
@@ -85,25 +94,52 @@ export async function settlePendingPredictions(
       continue;
     }
 
-    const totalGoals =
-      result.regulationScore.home + result.regulationScore.away;
-    const settlement = computeSettlement({
-      recommendation: p.recommendation,
-      oddAtRecommendation:
-        p.oddAtRecommendation !== null ? Number(p.oddAtRecommendation) : null,
-      stakeUnits: Number(p.stakeUnits),
-      totalGoals,
-    });
+    // A construção do result_data (Zod, sobre o regulationScore ao vivo — o fato
+    // canônico, split sempre confiável) e o computeSettlement ficam DENTRO do try
+    // (I4): uma row ruim — score 90' não-inteiro, params/rule_key inválidos —
+    // bucketa em errors e os irmãos do mesmo batch ainda liquidam, nunca aborta.
+    let resultData: ResultData;
+    let settlement: Settlement | null;
+    try {
+      resultData = resultDataFromRegulationScore(result.regulationScore);
+      settlement = computeSettlement({
+        recommendation: p.recommendation,
+        settlementRuleKey: p.settlementRuleKey,
+        selectionKey: p.selectionKey,
+        marketParams: p.marketParams,
+        oddAtRecommendation:
+          p.oddAtRecommendation !== null
+            ? Number(p.oddAtRecommendation)
+            : null,
+        stakeUnits: Number(p.stakeUnits),
+        resultData,
+      });
+    } catch (err) {
+      // I4: uma row ruim (score malformado, params inválidos, rule_key
+      // desconhecido) bucketa em errors e os irmãos do batch ainda liquidam.
+      const ctx = err instanceof SettlementError ? err.context : undefined;
+      const message = err instanceof Error ? err.message : String(err);
+      summary.errors += 1;
+      log("settle_compute_error", {
+        predictionId: p.predictionId,
+        message,
+        context: ctx,
+      });
+      continue;
+    }
     if (settlement === null) {
-      // Non-pass bet with no entry odd: can't compute profit, leave pending.
+      // Non-pass bet with no entry odd, or a row with no market/selection to
+      // dispatch: can't compute profit, leave pending.
       log("skip_no_entry_odd", { predictionId: p.predictionId });
       summary.skipped += 1;
       continue;
     }
 
+    const totalGoals = resultData.totalGoals;
     const inserted = await insertOutcomeIfAbsent({
       predictionId: p.predictionId,
       totalGoals,
+      resultData,
       result: settlement.result,
       profitUnits: settlement.profitUnits,
     });

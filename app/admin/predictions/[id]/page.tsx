@@ -4,7 +4,6 @@ import { ChevronLeft } from "lucide-react";
 
 import { LEAGUE_LABEL, leagueToKey } from "@/lib/format";
 import { getPredictionForOverride } from "@/lib/db/queries/predictions";
-import type { OutcomeResult } from "@/lib/settlement/compute";
 
 import { OverrideForm } from "./override-form";
 
@@ -31,10 +30,11 @@ export default async function AdminPredictionPage({ params }: PageProps) {
   if (!row) notFound();
   const { prediction, match, outcome } = row;
 
-  // `push` existe no enum desde #161 mas não é selecionável no override ainda
-  // (Fase 2 #166) — OutcomeResult segue won/lost/void. Em Phase 1 nenhuma row é
-  // push; o guard mantém o tipo são caso o enum traga o valor.
-  const defaultResult: OutcomeResult =
+  // `push` existe no enum desde #161 e OutcomeResult agora o INCLUI (#166); push
+  // só some na UI até #168. O guard `!== "push"` é o que mantém o defaultResult
+  // dentro de won/lost/void (o que o OverrideForm aceita). Em Phase 1 nenhuma row
+  // é push; o guard mantém o tipo são caso o enum traga o valor.
+  const defaultResult =
     outcome && outcome.result !== "push" ? outcome.result : "void";
 
   return (

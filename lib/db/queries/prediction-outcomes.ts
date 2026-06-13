@@ -3,12 +3,16 @@ import { eq } from "drizzle-orm";
 import { predictionOutcomes } from "@/db/schema";
 import { db } from "@/lib/db";
 import type { OutcomeResult } from "@/lib/settlement/compute";
+import type { ResultData } from "@/lib/settlement/schemas";
 
 export type DbPredictionOutcome = typeof predictionOutcomes.$inferSelect;
 
 export type InsertOutcomeArgs = {
   predictionId: string;
   totalGoals: number;
+  // Fato do jogo rico (ADR 0016 D2): gravado no jsonb result_data junto do
+  // escalar legado totalGoals. Required — o caller (settle/override) sempre o tem.
+  resultData: ResultData;
   result: OutcomeResult;
   profitUnits: number;
 };
@@ -26,6 +30,7 @@ export async function insertOutcomeIfAbsent(
     .values({
       predictionId: args.predictionId,
       totalGoals: args.totalGoals,
+      resultData: args.resultData,
       result: args.result,
       profitUnits: args.profitUnits.toFixed(2),
     })
@@ -51,6 +56,7 @@ export async function upsertOutcomeOverride(
     .values({
       predictionId: args.predictionId,
       totalGoals: args.totalGoals,
+      resultData: args.resultData,
       result: args.result,
       profitUnits: args.profitUnits.toFixed(2),
       overrideByUserId: args.overrideByUserId,
@@ -59,6 +65,7 @@ export async function upsertOutcomeOverride(
       target: predictionOutcomes.predictionId,
       set: {
         totalGoals: args.totalGoals,
+        resultData: args.resultData,
         result: args.result,
         profitUnits: args.profitUnits.toFixed(2),
         overrideByUserId: args.overrideByUserId,

@@ -6,14 +6,19 @@ import {
   overridePredictionOutcome,
   type OverrideResult,
 } from "@/app/actions/settlement";
-import type { OutcomeResult } from "@/lib/settlement/compute";
+
+// Opções selecionáveis no override. DESACOPLADO do OutcomeResult (que agora
+// inclui `push`): push não é oferecido na UI até #168. Mantém prop/options/
+// page-guard consistentes.
+const OVERRIDE_RESULTS = ["won", "lost", "void"] as const;
+type OverrideResultOption = (typeof OVERRIDE_RESULTS)[number];
 
 type Props = {
   predictionId: string;
-  defaultResult: OutcomeResult;
+  defaultResult: OverrideResultOption;
 };
 
-const RESULT_LABEL: Record<OutcomeResult, string> = {
+const RESULT_LABEL: Record<OverrideResultOption, string> = {
   won: "Ganha (won)",
   lost: "Perdida (lost)",
   void: "Anulada (void)",
@@ -65,7 +70,7 @@ export function OverrideForm({ predictionId, defaultResult }: Props) {
           defaultValue={defaultResult}
           className="w-56 rounded-md border border-border bg-transparent px-3 py-2 text-sm"
         >
-          {(Object.keys(RESULT_LABEL) as OutcomeResult[]).map((r) => (
+          {OVERRIDE_RESULTS.map((r) => (
             <option key={r} value={r}>
               {RESULT_LABEL[r]}
             </option>
