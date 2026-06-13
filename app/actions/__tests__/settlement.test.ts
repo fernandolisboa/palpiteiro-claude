@@ -133,13 +133,36 @@ describe("overridePredictionOutcome", () => {
     );
   });
 
-  it("still rejects a push override (VALID_RESULTS boundary; push is #168)", async () => {
+  it("settles a push override (with entry odd) as profit 0, full resultData", async () => {
+    getRow.mockResolvedValue(row("2.000"));
+    const res = await overridePredictionOutcome(
+      null,
+      form({ predictionId: "p1", result: "push", homeScore: "1", awayScore: "1" }),
+    );
+    expect(res).toEqual({ ok: true });
+    expect(upsert).toHaveBeenCalledWith(
+      expect.objectContaining({
+        result: "push",
+        profitUnits: 0,
+        totalGoals: 2,
+        resultData: { homeScore: 1, awayScore: 1, totalGoals: 2 },
+      }),
+    );
+  });
+
+  it("refuses a push override when the prediction has no entry odd (sem odd → só void)", async () => {
+    // profitForResult("push", null, …) returns 0 (not null), so it's the explicit
+    // odd===null guard — not the null-check — that must reject this. getRow IS
+    // called (the odd is read from the row); the guard then blocks the DB write.
+    getRow.mockResolvedValue(row(null));
     const res = await overridePredictionOutcome(
       null,
       form({ predictionId: "p1", result: "push", homeScore: "1", awayScore: "1" }),
     );
     expect(res).toMatchObject({ ok: false });
-    expect(getRow).not.toHaveBeenCalled();
+    // Pin the guard's nature: it's a POST-fetch business rule (the odd is read
+    // from the row), not an early input reject — so getRow ran, but no DB write.
+    expect(getRow).toHaveBeenCalledTimes(1);
     expect(upsert).not.toHaveBeenCalled();
   });
 });

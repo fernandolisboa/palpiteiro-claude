@@ -6,6 +6,7 @@ import { auth } from "@/auth";
 import { upsertOutcomeOverride } from "@/lib/db/queries/prediction-outcomes";
 import { getPredictionForOverride } from "@/lib/db/queries/predictions";
 import { profitForResult, type OutcomeResult } from "@/lib/settlement/compute";
+import { resultDataFromRegulationScore } from "@/lib/settlement/schemas";
 
 export type OverrideResult = { ok: true } | { ok: false; error: string };
 
@@ -13,6 +14,9 @@ const VALID_RESULTS: ReadonlySet<string> = new Set<OutcomeResult>([
   "won",
   "lost",
   "void",
+  // push entra no override em #168 (devolve o stake, profit 0). O domínio já o
+  // carrega desde #161/#166; a regra "sem odd → só void" o cobre abaixo.
+  "push",
 ]);
 
 /**
@@ -73,28 +77,43 @@ export async function overridePredictionOutcome(
     row.prediction.oddAtRecommendation !== null
       ? Number(row.prediction.oddAtRecommendation)
       : null;
+  // Regra preservada (ADR 0016): uma predição sem odd de entrada não é uma aposta
+  // precificável — só pode ser ANULADA (void). Vale pra won/lost E push: push
+  // "devolve o stake", mas sem odd não houve aposta. profitForResult(push, null)
+  // devolve 0 (não null), então é este guard explícito — não o null-check abaixo —
+  // que barra um push sem odd.
+  if (odd === null && result !== "void") {
+    return {
+      ok: false,
+      error: "Predição sem odd de entrada; só pode ser anulada (void).",
+    };
+  }
   const profitUnits = profitForResult(
     result as OutcomeResult,
     odd,
     Number(row.prediction.stakeUnits),
   );
   if (profitUnits === null) {
+    // Inalcançável após o guard acima (won/lost sempre têm odd aqui; void/push →
+    // 0); narrowing de TS + defesa em profundidade.
     return {
       ok: false,
       error: "Predição sem odd de entrada; só pode ser anulada (void).",
     };
   }
 
+  // O override já tem os scores inteiros do placar (90'): o split é confiável.
+  // resultDataFromRegulationScore valida via Zod (mesma fronteira do cron, #166) e
+  // é a fonte única de totalGoals.
+  const resultData = resultDataFromRegulationScore({
+    home: homeScore,
+    away: awayScore,
+  });
+
   await upsertOutcomeOverride({
     predictionId,
-    totalGoals: homeScore + awayScore,
-    // O override já tem os scores inteiros do placar (90'): o split é confiável,
-    // grava o result_data rico completo.
-    resultData: {
-      homeScore,
-      awayScore,
-      totalGoals: homeScore + awayScore,
-    },
+    totalGoals: resultData.totalGoals,
+    resultData,
     result: result as OutcomeResult,
     profitUnits,
     overrideByUserId: session.user.id,
