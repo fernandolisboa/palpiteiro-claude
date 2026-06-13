@@ -59,6 +59,36 @@ export type BetSummary = {
   plain: string;
 };
 
+// Referência estruturada da aposta recomendada (multi-mercado, #169). Labels
+// vêm da apresentação de mercado (lib/view/markets/presentation.ts), que espelha
+// o seed `markets.label`/`market_selections.label`. null em pass. O #170 troca
+// `kind`/`betSummary` por esta referência nos componentes; em #169 coexistem
+// (expand-migrate-contract da view).
+export type BetReference = {
+  marketKey: string; // "over_under" | "match_result" | …
+  marketLabel: string; // "Over/Under gols" (seed markets.label)
+  selectionKey: string; // "over" | "under" | "home" | …
+  selectionLabel: string; // "Over" (seed market_selections.label)
+  line: number | null; // 2.5 (over/under) | null (mercado sem linha)
+};
+
+// Uma seleção do mercado, 100% strings prontas pra render (célula não-derivável
+// = "—"). Forma N-vias canônica da view (ADR 0018): over/under expõe 2 outcomes,
+// 1X2 expõe 3. Valores congelados da análise, consistentes byte-a-byte com
+// ScenarioSideView (mesmo cálculo, mesmos formatters). `breakEven` é a ODD de
+// equilíbrio pelo modelo (modelBreakEvenOdd), nunca a probabilidade.
+export type OutcomeView = {
+  id: string; // selectionKey
+  label: string; // "Over 2.5" — label da apresentação (seed + linha)
+  modelProb: string; // "58%"
+  marketProb: string; // "50.7%" | "—"
+  odd: string; // "1.92" | "—"
+  edge: string; // "+7.3pp" | "—"
+  expectedReturn: string; // "+11.4%" | "—"
+  breakEven: string; // "1.72" — modelBreakEvenOdd (sempre derivável)
+  isRecommended: boolean;
+};
+
 // Uma coluna do bloco de cenários — 100% strings prontas pra render
 // (célula não-derivável = "—"). Valores congelados da análise, nunca do
 // snapshot vivo (ADR 0012).
@@ -84,6 +114,13 @@ export type ScenariosView = {
 
 export type AnalysisView = {
   kind: Recommendation;
+  // Referência multi-mercado da recomendação (#169, additive). null em pass.
+  // Os componentes migram pra cá no #170; `kind` sai no contract.
+  recommendation: BetReference | null;
+  // Todas as seleções do mercado como array (#169, additive). Vazio quando o
+  // bloco de cenários degrada (confidence fora de domínio). over/under → 2;
+  // 1X2 → 3. Consumido pelos componentes no #170.
+  outcomes: OutcomeView[];
   minOdd: string | null;
   betSummary: BetSummary | null;
   oddAtRec: string | null;
@@ -130,7 +167,11 @@ export type H2HViewRow = {
   h: string;
   a: string;
   s: string;
-  tag: "over" | "under";
+  // Key da seleção do mercado-lente (over/under: "over"/"under"; mercado não
+  // baseado em gols: "" neutro). Alargado de "over"|"under" → string no #169 pra
+  // a lente de H2H ser parametrizável por mercado (toH2HView); o consumidor
+  // (h2h-section.tsx) só compara `=== "over"`, então segue compilando.
+  tag: string;
 };
 
 export type H2HView = {

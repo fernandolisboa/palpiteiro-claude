@@ -15,6 +15,7 @@ import {
   formatPct,
   leagueToKey,
 } from "@/lib/format";
+import { getMarketPresentation } from "@/lib/view/markets/presentation";
 import type { LeagueKey, Recommendation } from "@/lib/view/types";
 
 const REC_MAP: Record<DashboardRow["recommendation"], Recommendation> = {
@@ -155,6 +156,10 @@ export type PredictionDetailView = {
     result: "won" | "lost" | "void" | "push";
     profit: string;
     totalGoals: number;
+    // Métrica de settlement market-aware (#169, additive): label do mercado +
+    // valor do fato do jogo. O #170 troca o Row legado "gols (90')" por esta e
+    // remove `totalGoals` (a "troca" do issue completa no contract da view).
+    settlementMetric: { label: string; value: string };
     settledAt: string;
     manual: boolean;
   } | null;
@@ -211,6 +216,14 @@ export function toPredictionDetailView(
           result: outcome.result,
           profit: unitsLabel(Number(outcome.profitUnits)),
           totalGoals: outcome.totalGoals,
+          // VALOR do escalar notNull `total_goals` (resultData é nullable em
+          // históricas — schema; cruza com resultData.totalGoals quando existe).
+          // Label da apresentação do mercado. Default over_under até o #170/Fase 4
+          // resolver o marketKey da row — over/under é o único ativo.
+          settlementMetric: {
+            label: getMarketPresentation("over_under").settlementMetricLabel,
+            value: String(outcome.resultData?.totalGoals ?? outcome.totalGoals),
+          },
           settledAt: formatKickoffAbsolute(outcome.settledAt),
           manual: outcome.overrideByUserId !== null,
         }
