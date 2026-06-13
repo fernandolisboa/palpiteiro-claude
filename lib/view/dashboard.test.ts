@@ -191,8 +191,9 @@ describe("toPredictionDetailView", () => {
       label: "gols (90')",
       value: "3",
     });
-    // totalGoals legado segue exposto até o contract (#170).
-    expect(v.outcome?.totalGoals).toBe(3);
+    // O escalar legado `totalGoals` saiu da view no contract (#170) — só
+    // settlementMetric carrega o fato do settlement agora.
+    expect(v.outcome).not.toHaveProperty("totalGoals");
   });
 
   it("settlementMetric prefers resultData.totalGoals when present", () => {

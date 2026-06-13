@@ -122,6 +122,12 @@ export async function analyzeMatch(
           modelVersion: prediction.modelVersion,
           promptVersion: prediction.promptVersion,
           createdAt: prediction.createdAt,
+          // Fiação multi-mercado (#170). predict() roda over_under por default
+          // (único cartucho ativo); `line` da forma do mercado salva, stake da
+          // row recém-gravada — espelha a page pra view bater nas duas portas.
+          marketKey: "over_under",
+          line: prediction.marketParams?.line ?? null,
+          stakeUnits: prediction.stakeUnits,
         },
         aiCall ? { costUsd: aiCall.costUsd } : null,
       ),

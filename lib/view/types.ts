@@ -26,7 +26,10 @@ export type MatchRowView = {
   league: LeagueKey;
   kickoff: string;
   when: string;
-  odds: { over: string; under: string } | null;
+  // Par de odds da linha com os rótulos curtos por lado já resolvidos pela view
+  // (de-hardcode do prefixo "O"/"U" nos componentes — AC3). Shape binário
+  // mantido: live N-vias é Fase 4 (precisa de reader N-vias de snapshot).
+  odds: { overLabel: string; over: string; underLabel: string; under: string } | null;
   hasPrediction: boolean;
   status: MatchStatus;
   // Placar final. Não-null só em jogos cujo provider já reportou gols
@@ -42,6 +45,12 @@ export type MatchRowView = {
 export type MatchHeroView = MatchRowView;
 
 export type OddsView = {
+  // Rótulos curtos por lado, resolvidos pela view a partir do registry de
+  // apresentação (de-hardcode "Over 2.5"/"Under 2.5"/badge — AC3). `marketLabel`
+  // alimenta a badge do card. Shape binário mantido (live N-vias = Fase 4).
+  marketLabel: string;
+  overLabel: string;
+  underLabel: string;
   over: string;
   under: string;
   overPct: string;
@@ -51,19 +60,11 @@ export type OddsView = {
   updatedAgo: string;
 };
 
-// Frase leiga da aposta recomendada: `market` é o nome do mercado em linguagem
-// clara ("Mais de 2.5 gols") e `plain` a tradução literal ("pelo menos 3 gols
-// no jogo"). null em pass — não há aposta.
-export type BetSummary = {
-  market: string;
-  plain: string;
-};
-
-// Referência estruturada da aposta recomendada (multi-mercado, #169). Labels
-// vêm da apresentação de mercado (lib/view/markets/presentation.ts), que espelha
-// o seed `markets.label`/`market_selections.label`. null em pass. O #170 troca
-// `kind`/`betSummary` por esta referência nos componentes; em #169 coexistem
-// (expand-migrate-contract da view).
+// Referência estruturada da aposta recomendada (multi-mercado). Labels vêm da
+// apresentação de mercado (lib/view/markets/presentation.ts), que espelha o seed
+// `markets.label`/`market_selections.label`. null em pass. Os componentes leem
+// daqui (mercado + seleção + linha) — substituiu `kind`/`betSummary` no contract
+// da view (#170).
 export type BetReference = {
   marketKey: string; // "over_under" | "match_result" | …
   marketLabel: string; // "Over/Under gols" (seed markets.label)
@@ -80,6 +81,10 @@ export type BetReference = {
 export type OutcomeView = {
   id: string; // selectionKey
   label: string; // "Over 2.5" — label da apresentação (seed + linha)
+  // Rótulo LEIGO da COLUNA de cenário ("mais de 2.5 gols" — over/under; "Casa"
+  // — 1X2). Distinto de `label` ("Over 2.5"): preserva a frase do header de
+  // coluna pré-pivot (paridade VISUAL). Vem de presentation.scenarioLabel.
+  scenarioLabel: string;
   modelProb: string; // "58%"
   marketProb: string; // "50.7%" | "—"
   odd: string; // "1.92" | "—"
@@ -89,9 +94,10 @@ export type OutcomeView = {
   isRecommended: boolean;
 };
 
-// Uma coluna do bloco de cenários — 100% strings prontas pra render
-// (célula não-derivável = "—"). Valores congelados da análise, nunca do
-// snapshot vivo (ADR 0012).
+// Forma interna do bloco de cenários — 100% strings prontas pra render (célula
+// não-derivável = "—"). Valores congelados da análise, nunca do snapshot vivo
+// (ADR 0012). Usado só pelo mapper (toScenarioSideView → toOutcomeView); a view
+// pública expõe `outcomes: OutcomeView[]`, não esta forma binária.
 export type ScenarioSideView = {
   modelProb: string; // "58%" — prob. do modelo (label unificado; nunca "confidence")
   marketProb: string; // "50.7%" ou "—" — implied normalizada
@@ -101,28 +107,15 @@ export type ScenarioSideView = {
   modelBreakEvenOdd: string; // "2.38" — odd de equilíbrio pelo modelo
 };
 
-export type ScenariosView = {
-  over: ScenarioSideView;
-  under: ScenarioSideView;
-  recommended: "over" | "under" | null;
-  // Frase full-width abaixo do grid: break-even da zebra (não-pass) ou copy
-  // de margem de erro (pass). null quando não derivável (histórica sem odd).
-  framing: string | null;
-  // Nota de degradação pra históricas sem o par congelado.
-  note: string | null;
-};
-
 export type AnalysisView = {
-  kind: Recommendation;
-  // Referência multi-mercado da recomendação (#169, additive). null em pass.
-  // Os componentes migram pra cá no #170; `kind` sai no contract.
+  // Referência multi-mercado da recomendação. null em pass — os componentes
+  // detectam pass por `recommendation === null` (não mais por `kind`).
   recommendation: BetReference | null;
-  // Todas as seleções do mercado como array (#169, additive). Vazio quando o
-  // bloco de cenários degrada (confidence fora de domínio). over/under → 2;
-  // 1X2 → 3. Consumido pelos componentes no #170.
+  // Todas as seleções do mercado como array (forma N-vias canônica). Vazio
+  // quando o bloco de cenários degrada (confidence fora de domínio). over/under
+  // → 2; 1X2 → 3. É a fonte única de cenários dos componentes.
   outcomes: OutcomeView[];
   minOdd: string | null;
-  betSummary: BetSummary | null;
   oddAtRec: string | null;
   oddAtRecAgo: string | null;
   bookmaker: string | null;
@@ -130,7 +123,15 @@ export type AnalysisView = {
   expectedReturnTone: "positive" | "neutral";
   evLegend: string | null;
   minEdgeLabel: string;
-  scenarios: ScenariosView | null;
+  // Stake da recomendação no formato do dashboard ("1.00 u", sem sinal). null
+  // em pass (não há aposta). #170 liga as duas call sites de toAnalysisView.
+  stakeUnits: string | null;
+  // Frase full-width abaixo do grid de cenários (subida de `scenarios` pro topo
+  // — R4). over/under: break-even da zebra ou copy de margem de erro no pass.
+  // null quando não derivável (histórica sem odd) ou mercado N-vias (1X2).
+  framing: string | null;
+  // Nota de degradação pra históricas sem o par congelado (idem, subida do topo).
+  note: string | null;
   rationale: string;
   factors: string[];
   generatedAt: string;

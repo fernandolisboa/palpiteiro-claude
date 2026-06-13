@@ -110,7 +110,10 @@ export function PredictionDetail({
             }
           />
           <Row label="placar do jogo" value={match.score} />
-          <Row label="gols (90')" value={String(outcome.totalGoals)} />
+          <Row
+            label={outcome.settlementMetric.label}
+            value={outcome.settlementMetric.value}
+          />
           <Row label="liquidada em" value={outcome.settledAt} />
           <Row
             label="override manual"

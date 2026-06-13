@@ -39,6 +39,11 @@ export type MarketPresentation = {
   // Label do outcome composto com a linha: "Over" + 2.5 → "Over 2.5"; sem linha
   // (ex.: 1X2) → só o label da seleção ("Casa").
   outcomeLabel: (selectionKey: string, line: number | null) => string;
+  // Rótulo LEIGO da COLUNA de cenário ("mais de 2.5 gols"/"menos de 2.5 gols" —
+  // over/under; "Casa"/"Empate"/"Fora" — 1X2). Distinto de outcomeLabel ("Over
+  // 2.5"): preserva a frase exibida hoje no header da coluna (paridade VISUAL).
+  // Como betSummary/framingLabel, é frase leiga code-only (NÃO está no seed).
+  scenarioLabel: (selectionKey: string, line: number | null) => string;
   // Frase leiga da aposta recomendada (o seed não carrega). null-safe via fallback.
   betSummary: (selectionKey: string, line: number | null) => BetSummaryCopy;
   // Label do lado na frase de framing do break-even ("pelo menos 3 gols").
@@ -80,6 +85,14 @@ const OVER_UNDER_FRAMING_LABELS: Record<string, string> = {
   under: "menos de 3 gols",
 };
 
+// Header de COLUNA do bloco de cenários — VERBATIM do SIDE_LABEL pré-pivot
+// (analysis-scenarios.tsx). A linha "2.5" fica embutida de propósito (paridade
+// com a string pinada nos goldens); recompor de `line` é trabalho futuro (#175).
+const OVER_UNDER_SCENARIO_LABELS: Record<string, string> = {
+  over: "mais de 2.5 gols",
+  under: "menos de 2.5 gols",
+};
+
 const OVER_UNDER: MarketPresentation = {
   marketKey: "over_under",
   marketLabel: "Over/Under gols",
@@ -89,6 +102,12 @@ const OVER_UNDER: MarketPresentation = {
     const base = lookup(OVER_UNDER_SELECTION_LABELS, key, key);
     return line !== null ? `${base} ${line}` : base;
   },
+  scenarioLabel: (key) =>
+    lookup(
+      OVER_UNDER_SCENARIO_LABELS,
+      key,
+      lookup(OVER_UNDER_SELECTION_LABELS, key, key),
+    ),
   betSummary: (key) =>
     key in OVER_UNDER_BET_SUMMARY
       ? OVER_UNDER_BET_SUMMARY[key]
@@ -116,6 +135,7 @@ const MATCH_RESULT: MarketPresentation = {
   defaultLine: null,
   selectionLabel: (key) => lookup(MATCH_RESULT_SELECTION_LABELS, key, key),
   outcomeLabel: (key) => lookup(MATCH_RESULT_SELECTION_LABELS, key, key),
+  scenarioLabel: (key) => lookup(MATCH_RESULT_SELECTION_LABELS, key, key),
   betSummary: (key) => {
     const label = lookup(MATCH_RESULT_SELECTION_LABELS, key, key);
     return { market: label, plain: "" };

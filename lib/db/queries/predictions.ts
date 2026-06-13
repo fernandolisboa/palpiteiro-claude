@@ -18,6 +18,12 @@ export type DbPredictionOutcome = typeof predictionOutcomes.$inferSelect;
 export type PredictionWithAiCall = {
   prediction: DbPrediction;
   aiCall: DbAiCall | null;
+  // Identidade de mercado da predição, resolvida por LEFT JOIN (#170): a row só
+  // carrega marketId/selectionId nullable, não as keys. `marketKey` alimenta o
+  // registry de apresentação na view (labels/scenarioLabel). Nullable em
+  // históricas sem mercado backfillado → o chamador faz coalesce 'over_under'.
+  marketKey: string | null;
+  selectionKey: string | null;
 };
 
 export async function getLatestPredictionForMatch(
@@ -28,9 +34,18 @@ export async function getLatestPredictionForMatch(
     .select({
       prediction: predictions,
       aiCall: aiCalls,
+      // LEFT (não INNER): uma row sem mercado/seleção (histórica não backfillada,
+      // ou pass sem selectionId) ainda volta — keys null, view coalesce.
+      marketKey: markets.key,
+      selectionKey: marketSelections.key,
     })
     .from(predictions)
     .leftJoin(aiCalls, eq(predictions.aiCallId, aiCalls.id))
+    .leftJoin(markets, eq(predictions.marketId, markets.id))
+    .leftJoin(
+      marketSelections,
+      eq(predictions.selectionId, marketSelections.id),
+    )
     .where(
       and(eq(predictions.matchId, matchId), eq(predictions.userId, userId)),
     )
@@ -38,6 +53,13 @@ export async function getLatestPredictionForMatch(
     .limit(1);
   return rows[0] ?? null;
 }
+
+// Linha do histórico: prediction + aiCall, SEM as keys de mercado (a função é
+// market-agnostic por design — não precisa do registry de apresentação).
+export type PredictionHistoryRow = {
+  prediction: DbPrediction;
+  aiCall: DbAiCall | null;
+};
 
 /**
  * Full prediction history for a match scoped to one user, newest first — the
@@ -49,7 +71,7 @@ export async function getLatestPredictionForMatch(
 export async function getPredictionHistoryForMatch(
   matchId: string,
   userId: string,
-): Promise<PredictionWithAiCall[]> {
+): Promise<PredictionHistoryRow[]> {
   return db
     .select({
       prediction: predictions,

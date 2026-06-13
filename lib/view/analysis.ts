@@ -7,6 +7,7 @@ import {
   formatOdd,
   formatPct,
   formatRelativeAgo,
+  formatStakeUnits,
 } from "@/lib/format";
 import {
   computeEvPerUnit,
@@ -23,7 +24,6 @@ import {
 import type {
   AnalysisView,
   OutcomeView,
-  Recommendation,
   ScenarioSideView,
 } from "@/lib/view/types";
 
@@ -47,16 +47,13 @@ type PredictionInput = {
   // até o #170 ligar a fiação. `line` cai pra defaultLine da apresentação.
   marketKey?: string;
   line?: number | null;
+  // Stake da aposta (numeric do Drizzle → string). #170 liga as call sites
+  // (page + action). Ausente → stakeUnits null na view (compatibilidade).
+  stakeUnits?: string | number | null;
 };
 
 type AiCallInput = {
   costUsd: string | number;
-};
-
-const KIND_MAP: Record<PredictionInput["recommendation"], Recommendation> = {
-  over: "OVER",
-  under: "UNDER",
-  pass: "PASS",
 };
 
 // numeric do Drizzle chega como STRING — converte na borda. Retorna null pra
@@ -122,36 +119,33 @@ function computeBinaryScenarios(
   });
 }
 
-// Bloco de cenários (view legada) a partir do `Scenarios` já computado. Nunca usa
-// o snapshot vivo; as odds atuais já têm casa no OddsCard. `isPass` deriva de
-// `recommended === null` (pass não tem lado). Labels de framing vêm da
-// apresentação de mercado (single-source) — over/under produz as strings VERBATIM.
-function toScenariosView(
+// framing + note do cenário binário CONGELADO — fonte única consumida tanto
+// pelo bloco legado (toScenariosView) quanto pelo topo da AnalysisView (R4):
+// computar nos dois lugares garante byte-paridade com a string pré-relocação.
+//
+// Framing: linguagem de BREAK-EVEN ("só sai do zero") pra zebra — "vale a pena"
+// é reservado ao critério de 5pp do lado recomendado (ADR 0012). No pass, copy
+// de margem de erro: cobre inclusive retorno esperado POSITIVO sob o veredito de
+// não apostar (edge < 5pp não implica EV ≤ 0). Mercado N-vias (1X2): framing/note
+// null — o break-even binário da zebra não tem análogo (R4).
+function computeBinaryFramingNote(
   computed: Scenarios,
   presentation: MarketPresentation,
   line: number | null,
-): NonNullable<AnalysisView["scenarios"]> {
+): { framing: string | null; note: string | null } {
   const isPass = computed.recommended === null;
   // Lado alternativo (zebra) — só significa algo fora do pass.
   const altKey: "over" | "under" =
     computed.recommended === "under" ? "over" : "under";
   const altSide = altKey === "over" ? computed.over : computed.under;
 
-  // Framing: linguagem de BREAK-EVEN ("só sai do zero") pra zebra — "vale a
-  // pena" é reservado ao critério de 5pp do lado recomendado (ADR 0012). No
-  // pass, copy de margem de erro: cobre inclusive retorno esperado POSITIVO
-  // sob o veredito de não apostar (edge < 5pp não implica EV ≤ 0).
   let framing: string | null = null;
   if (isPass) {
     framing = `vantagens pequenas (abaixo de ${MIN_EDGE_PP}pp) ficam dentro da margem de erro do modelo — por isso não há recomendação`;
   } else if (altSide.breakEvenProbPct !== null) {
     framing = `a aposta em ${presentation.framingLabel(altKey, line)} só sai do zero se a chance real for maior que ${formatPct(altSide.breakEvenProbPct)} — na análise o modelo estimou ${formatPct(altSide.modelProbPct)}`;
   }
-
   return {
-    over: toScenarioSideView(computed.over),
-    under: toScenarioSideView(computed.under),
-    recommended: computed.recommended,
     framing,
     note:
       !isPass && altSide.odd === null
@@ -175,6 +169,7 @@ function toOutcomeView(
   return {
     id: key,
     label: presentation.outcomeLabel(key, line),
+    scenarioLabel: presentation.scenarioLabel(key, line),
     modelProb: sv.modelProb,
     marketProb: sv.marketProb,
     odd: sv.odd,
@@ -244,6 +239,14 @@ export function toAnalysisView(
   // quanto o array multi-outcome (outcomes) — mesmos números, paridade trivial.
   const computed = computeBinaryScenarios(prediction, confidenceNum);
 
+  // framing/note no TOPO (R4): mesma derivação do bloco scenarios, computada do
+  // `computed` ANTES do contract remover toScenariosView. Degrada pra null junto
+  // com o bloco (computed null).
+  const framingNote =
+    computed === null
+      ? { framing: null, note: null }
+      : computeBinaryFramingNote(computed, presentation, line);
+
   // EV do lado recomendado na odd CONGELADA da análise (nunca na odd viva —
   // o OddsCard cobre as atuais). computeEvPerUnit exige odd > 1; valores fora
   // do domínio (defensivo) degradam pra null → "—" na UI.
@@ -284,7 +287,6 @@ export function toAnalysisView(
   }
 
   return {
-    kind: KIND_MAP[prediction.recommendation],
     recommendation: isPass
       ? null
       : {
@@ -297,9 +299,11 @@ export function toAnalysisView(
     outcomes:
       computed === null ? [] : toBinaryOutcomes(computed, presentation, line),
     minOdd: prediction.minimumOdd !== null ? formatOdd(prediction.minimumOdd) : null,
-    scenarios:
-      computed === null ? null : toScenariosView(computed, presentation, line),
-    betSummary: isPass ? null : presentation.betSummary(recommendation, line),
+    stakeUnits: isPass
+      ? null
+      : formatStakeUnits(prediction.stakeUnits ?? null),
+    framing: framingNote.framing,
+    note: framingNote.note,
     oddAtRec: isPass ? null : formatOdd(prediction.oddAtRecommendation),
     oddAtRecAgo: isPass ? null : relativeAgoLabel(prediction.createdAt, now),
     bookmaker: isPass ? null : prediction.bookmaker,

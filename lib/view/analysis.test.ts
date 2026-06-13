@@ -33,7 +33,6 @@ describe("toAnalysisView", () => {
 
     // EV à mão: 0.58 × 1.92 − 1 = +0.1136 → "+11.4%"
     expect(view).toEqual({
-      kind: "OVER",
       recommendation: {
         marketKey: "over_under",
         marketLabel: "Over/Under gols",
@@ -41,12 +40,14 @@ describe("toAnalysisView", () => {
         selectionLabel: "Over",
         line: 2.5,
       },
-      // outcomes espelham byte-a-byte as células do bloco scenarios (mesmo
+      // outcomes espelham byte-a-byte as células do bloco de cenários (mesmo
       // computeScenarios, mesmos formatters); breakEven = modelBreakEvenOdd.
+      // scenarioLabel = rótulo leigo da coluna (paridade VISUAL, verbatim).
       outcomes: [
         {
           id: "over",
           label: "Over 2.5",
+          scenarioLabel: "mais de 2.5 gols",
           modelProb: "58%",
           marketProb: "50.7%",
           odd: "1.92",
@@ -58,6 +59,7 @@ describe("toAnalysisView", () => {
         {
           id: "under",
           label: "Under 2.5",
+          scenarioLabel: "menos de 2.5 gols",
           modelProb: "42%",
           marketProb: "49.3%",
           odd: "1.95",
@@ -68,10 +70,13 @@ describe("toAnalysisView", () => {
         },
       ],
       minOdd: "1.75",
-      betSummary: {
-        market: "Mais de 2.5 gols",
-        plain: "pelo menos 3 gols no jogo",
-      },
+      // input sem stakeUnits → null (a page/action ligam as call sites).
+      stakeUnits: null,
+      // framing/note no topo (R4): break-even da zebra (100/1.95 = 51.3%) —
+      // string idêntica à pré-relocação.
+      framing:
+        "a aposta em menos de 3 gols só sai do zero se a chance real for maior que 51.3% — na análise o modelo estimou 42%",
+      note: null,
       oddAtRec: "1.92",
       oddAtRecAgo: "há 3h",
       bookmaker: "bet365",
@@ -80,33 +85,6 @@ describe("toAnalysisView", () => {
       evLegend:
         "ganho médio por aposta, no longo prazo, se a estimativa de 58% do modelo estiver certa",
       minEdgeLabel: "5pp",
-      scenarios: {
-        // Invariante (ADR 0012): o edge da coluna recomendada é o edgePct
-        // SALVO da row ("+7.3"), nunca o recomputado das odds.
-        over: {
-          modelProb: "58%",
-          marketProb: "50.7%",
-          odd: "1.92",
-          edge: "+7.3pp",
-          expectedReturn: "+11.4%",
-          modelBreakEvenOdd: "1.72",
-        },
-        // Zebra derivada dos salvos: 100 − 50.7, −7.3; EV à mão:
-        // 0.42 × 1.95 − 1 = −0.181 → "-18.1%".
-        under: {
-          modelProb: "42%",
-          marketProb: "49.3%",
-          odd: "1.95",
-          edge: "-7.3pp",
-          expectedReturn: "-18.1%",
-          modelBreakEvenOdd: "2.38",
-        },
-        recommended: "over",
-        // Break-even da zebra: 100/1.95 = 51.28… → "51.3%".
-        framing:
-          "a aposta em menos de 3 gols só sai do zero se a chance real for maior que 51.3% — na análise o modelo estimou 42%",
-        note: null,
-      },
       rationale: "blah",
       factors: ["a", "b"],
       generatedAt: "19 mai · 14:22",
@@ -140,7 +118,6 @@ describe("toAnalysisView", () => {
 
     // EV à mão: 0.56 × 1.85 − 1 = +0.036 → "+3.6%"
     expect(view).toEqual({
-      kind: "UNDER",
       recommendation: {
         marketKey: "over_under",
         marketLabel: "Over/Under gols",
@@ -152,6 +129,7 @@ describe("toAnalysisView", () => {
         {
           id: "over",
           label: "Over 2.5",
+          scenarioLabel: "mais de 2.5 gols",
           modelProb: "44%",
           marketProb: "50.7%",
           odd: "1.98",
@@ -163,6 +141,7 @@ describe("toAnalysisView", () => {
         {
           id: "under",
           label: "Under 2.5",
+          scenarioLabel: "menos de 2.5 gols",
           modelProb: "56%",
           marketProb: "49.3%",
           odd: "1.85",
@@ -173,10 +152,11 @@ describe("toAnalysisView", () => {
         },
       ],
       minOdd: "1.80",
-      betSummary: {
-        market: "Menos de 2.5 gols",
-        plain: "no máximo 2 gols no jogo",
-      },
+      stakeUnits: null,
+      // Break-even da zebra (over): 100/1.98 = 50.5%.
+      framing:
+        "a aposta em pelo menos 3 gols só sai do zero se a chance real for maior que 50.5% — na análise o modelo estimou 44%",
+      note: null,
       oddAtRec: "1.85",
       oddAtRecAgo: "há 2h",
       bookmaker: "pinnacle",
@@ -185,30 +165,6 @@ describe("toAnalysisView", () => {
       evLegend:
         "ganho médio por aposta, no longo prazo, se a estimativa de 56% do modelo estiver certa",
       minEdgeLabel: "5pp",
-      scenarios: {
-        // Zebra (over): EV à mão 0.44 × 1.98 − 1 = −0.1288 → "-12.9%".
-        over: {
-          modelProb: "44%",
-          marketProb: "50.7%",
-          odd: "1.98",
-          edge: "-6.7pp",
-          expectedReturn: "-12.9%",
-          modelBreakEvenOdd: "2.27",
-        },
-        under: {
-          modelProb: "56%",
-          marketProb: "49.3%",
-          odd: "1.85",
-          edge: "+6.7pp",
-          expectedReturn: "+3.6%",
-          modelBreakEvenOdd: "1.79",
-        },
-        recommended: "under",
-        // Break-even da zebra: 100/1.98 = 50.50… → "50.5%".
-        framing:
-          "a aposta em pelo menos 3 gols só sai do zero se a chance real for maior que 50.5% — na análise o modelo estimou 44%",
-        note: null,
-      },
       rationale: "x",
       factors: ["a", "b"],
       generatedAt: "19 mai · 14:22",
@@ -244,7 +200,6 @@ describe("toAnalysisView", () => {
     );
 
     expect(view).toEqual({
-      kind: "PASS",
       // pass não tem aposta → recommendation null; mas os outcomes (probs/edges
       // neutros do par congelado) ainda são expostos, nenhum recomendado.
       recommendation: null,
@@ -252,6 +207,7 @@ describe("toAnalysisView", () => {
         {
           id: "over",
           label: "Over 2.5",
+          scenarioLabel: "mais de 2.5 gols",
           modelProb: "53%",
           marketProb: "50%",
           odd: "1.92",
@@ -263,6 +219,7 @@ describe("toAnalysisView", () => {
         {
           id: "under",
           label: "Under 2.5",
+          scenarioLabel: "menos de 2.5 gols",
           modelProb: "47%",
           marketProb: "50%",
           odd: "1.92",
@@ -273,7 +230,11 @@ describe("toAnalysisView", () => {
         },
       ],
       minOdd: null,
-      betSummary: null,
+      stakeUnits: null,
+      // pass: copy de margem de erro (cobre EV positivo sob veredito de não apostar).
+      framing:
+        "vantagens pequenas (abaixo de 5pp) ficam dentro da margem de erro do modelo — por isso não há recomendação",
+      note: null,
       oddAtRec: null,
       oddAtRecAgo: null,
       bookmaker: null,
@@ -281,30 +242,6 @@ describe("toAnalysisView", () => {
       expectedReturnTone: "neutral",
       evLegend: null,
       minEdgeLabel: "5pp",
-      scenarios: {
-        // Implied recomputada do par congelado (odds iguais → 50/50);
-        // edges = modelProb − implied; EV à mão: 0.53 × 1.92 − 1 = +0.0176.
-        over: {
-          modelProb: "53%",
-          marketProb: "50%",
-          odd: "1.92",
-          edge: "+3.0pp",
-          expectedReturn: "+1.8%",
-          modelBreakEvenOdd: "1.89",
-        },
-        under: {
-          modelProb: "47%",
-          marketProb: "50%",
-          odd: "1.92",
-          edge: "-3.0pp",
-          expectedReturn: "-9.8%",
-          modelBreakEvenOdd: "2.13",
-        },
-        recommended: null,
-        framing:
-          "vantagens pequenas (abaixo de 5pp) ficam dentro da margem de erro do modelo — por isso não há recomendação",
-        note: null,
-      },
       rationale: "no edge",
       factors: ["a", "b"],
       generatedAt: "19 mai · 14:22",
@@ -337,7 +274,6 @@ describe("toAnalysisView", () => {
     );
 
     expect(view).toEqual({
-      kind: "OVER",
       recommendation: {
         marketKey: "over_under",
         marketLabel: "Over/Under gols",
@@ -345,12 +281,13 @@ describe("toAnalysisView", () => {
         selectionLabel: "Over",
         line: 2.5,
       },
-      // Histórica sem par congelado: odd/EV degradam pra "—" (igual ao bloco
-      // scenarios); modelProb/edge/breakEven sobrevivem dos valores salvos.
+      // Histórica sem par congelado: odd/EV degradam pra "—"; modelProb/edge/
+      // breakEven sobrevivem dos valores salvos.
       outcomes: [
         {
           id: "over",
           label: "Over 2.5",
+          scenarioLabel: "mais de 2.5 gols",
           modelProb: "58%",
           marketProb: "50.7%",
           odd: "—",
@@ -362,6 +299,7 @@ describe("toAnalysisView", () => {
         {
           id: "under",
           label: "Under 2.5",
+          scenarioLabel: "menos de 2.5 gols",
           modelProb: "42%",
           marketProb: "49.3%",
           odd: "—",
@@ -372,10 +310,10 @@ describe("toAnalysisView", () => {
         },
       ],
       minOdd: "1.75",
-      betSummary: {
-        market: "Mais de 2.5 gols",
-        plain: "pelo menos 3 gols no jogo",
-      },
+      stakeUnits: null,
+      // Zebra sem odd registrada: framing não-derivável → null; nota de degradação.
+      framing: null,
+      note: "odds do outro lado não registradas nesta análise",
       oddAtRec: "—",
       oddAtRecAgo: "há 2d",
       bookmaker: null,
@@ -384,29 +322,6 @@ describe("toAnalysisView", () => {
       // retorno "—" não ganha legenda — não explicar número que não existe.
       evLegend: null,
       minEdgeLabel: "5pp",
-      scenarios: {
-        // Sem odd salva nem par congelado: probs/edge sobrevivem dos salvos;
-        // odd/EV viram "—"; modelBreakEvenOdd sempre derivável.
-        over: {
-          modelProb: "58%",
-          marketProb: "50.7%",
-          odd: "—",
-          edge: "+7.3pp",
-          expectedReturn: "—",
-          modelBreakEvenOdd: "1.72",
-        },
-        under: {
-          modelProb: "42%",
-          marketProb: "49.3%",
-          odd: "—",
-          edge: "-7.3pp",
-          expectedReturn: "—",
-          modelBreakEvenOdd: "2.38",
-        },
-        recommended: "over",
-        framing: null,
-        note: "odds do outro lado não registradas nesta análise",
-      },
       rationale: "old",
       factors: ["a"],
       generatedAt: "19 mai · 14:22",
@@ -438,32 +353,37 @@ describe("toAnalysisView", () => {
       threeHoursLater,
     );
 
-    expect(view.scenarios).toEqual({
-      // Lado recomendado completo via valores salvos da row (odd, implied,
-      // edge) + retorno/break-even computados de oddAtRecommendation.
-      over: {
+    // Cenários agora vivem em `outcomes` (forma N-vias). Lado recomendado
+    // completo via valores salvos da row; zebra com odd/EV "—" (par não
+    // registrado) mas probs/edge/break-even derivados. framing/note no topo.
+    expect(view.outcomes).toEqual([
+      {
+        id: "over",
+        label: "Over 2.5",
+        scenarioLabel: "mais de 2.5 gols",
         modelProb: "58%",
         marketProb: "50.7%",
         odd: "1.92",
         edge: "+7.3pp",
         expectedReturn: "+11.4%",
-        modelBreakEvenOdd: "1.72",
+        breakEven: "1.72",
+        isRecommended: true,
       },
-      // Zebra: probs/edge derivados (100 − x, −edge) + odd de equilíbrio do
-      // modelo; odd/EV congelados não registrados → "—". Nunca usar o
-      // snapshot vivo como substituto.
-      under: {
+      {
+        id: "under",
+        label: "Under 2.5",
+        scenarioLabel: "menos de 2.5 gols",
         modelProb: "42%",
         marketProb: "49.3%",
         odd: "—",
         edge: "-7.3pp",
         expectedReturn: "—",
-        modelBreakEvenOdd: "2.38",
+        breakEven: "2.38",
+        isRecommended: false,
       },
-      recommended: "over",
-      framing: null,
-      note: "odds do outro lado não registradas nesta análise",
-    });
+    ]);
+    expect(view.framing).toBeNull();
+    expect(view.note).toBe("odds do outro lado não registradas nesta análise");
   });
 
   it("historical pass: model probs + model break-even odds on both sides, everything else em-dash", () => {
@@ -488,28 +408,36 @@ describe("toAnalysisView", () => {
       threeHoursLater,
     );
 
-    expect(view.scenarios).toEqual({
-      over: {
+    expect(view.outcomes).toEqual([
+      {
+        id: "over",
+        label: "Over 2.5",
+        scenarioLabel: "mais de 2.5 gols",
         modelProb: "51%",
         marketProb: "—",
         odd: "—",
         edge: "—",
         expectedReturn: "—",
-        modelBreakEvenOdd: "1.96",
+        breakEven: "1.96",
+        isRecommended: false,
       },
-      under: {
+      {
+        id: "under",
+        label: "Under 2.5",
+        scenarioLabel: "menos de 2.5 gols",
         modelProb: "49%",
         marketProb: "—",
         odd: "—",
         edge: "—",
         expectedReturn: "—",
-        modelBreakEvenOdd: "2.04",
+        breakEven: "2.04",
+        isRecommended: false,
       },
-      recommended: null,
-      framing:
-        "vantagens pequenas (abaixo de 5pp) ficam dentro da margem de erro do modelo — por isso não há recomendação",
-      note: null,
-    });
+    ]);
+    expect(view.framing).toBe(
+      "vantagens pequenas (abaixo de 5pp) ficam dentro da margem de erro do modelo — por isso não há recomendação",
+    );
+    expect(view.note).toBeNull();
   });
 
   it("warns when minimumOdd is above the odd frozen at recommendation", () => {
@@ -715,7 +643,7 @@ describe("toAnalysisView", () => {
     );
   });
 
-  it("degrades the whole scenarios block to null on out-of-domain confidence (defensive)", () => {
+  it("degrades the whole scenarios block (outcomes empty, framing/note null) on out-of-domain confidence (defensive)", () => {
     const view = toAnalysisView(
       {
         recommendation: "over",
@@ -736,9 +664,62 @@ describe("toAnalysisView", () => {
       null,
       threeHoursLater,
     );
-    expect(view.scenarios).toBeNull();
-    // Bloco degradado → sem outcomes (o array acompanha o scenarios null).
+    // Bloco degradado → outcomes vazio, framing/note null (acompanham o
+    // cenário binário null).
     expect(view.outcomes).toEqual([]);
+    expect(view.framing).toBeNull();
+    expect(view.note).toBeNull();
+  });
+
+  it("formats stakeUnits via the dashboard convention (no sign, '1.00 u') — R3", () => {
+    const view = toAnalysisView(
+      {
+        recommendation: "over",
+        confidencePct: "58.00",
+        rationale: "blah",
+        keyFactors: ["a"],
+        minimumOdd: "1.750",
+        oddAtRecommendation: "1.920",
+        bookmaker: "bet365",
+        impliedProbPct: "50.70",
+        edgePct: "7.30",
+        overOddAtPrediction: "1.920",
+        underOddAtPrediction: "1.950",
+        modelVersion: "claude-sonnet-4-5-20250929",
+        promptVersion: "over_under_v1.1",
+        createdAt: baseCreatedAt,
+        // numeric do Drizzle chega como string.
+        stakeUnits: "1",
+      },
+      null,
+      threeHoursLater,
+    );
+    // SEM sinal (convenção do drill-down do dashboard), 2 casas.
+    expect(view.stakeUnits).toBe("1.00 u");
+
+    // pass não tem aposta → stakeUnits null mesmo com input.
+    const pass = toAnalysisView(
+      {
+        recommendation: "pass",
+        confidencePct: "53.00",
+        rationale: "no edge",
+        keyFactors: ["a"],
+        minimumOdd: null,
+        oddAtRecommendation: null,
+        bookmaker: null,
+        impliedProbPct: null,
+        edgePct: null,
+        overOddAtPrediction: "1.920",
+        underOddAtPrediction: "1.920",
+        modelVersion: "claude-sonnet-4-5-20250929",
+        promptVersion: "over_under_v1.1",
+        createdAt: baseCreatedAt,
+        stakeUnits: "1.5",
+      },
+      null,
+      threeHoursLater,
+    );
+    expect(pass.stakeUnits).toBeNull();
   });
 });
 

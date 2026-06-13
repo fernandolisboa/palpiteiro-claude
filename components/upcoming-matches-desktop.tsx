@@ -87,10 +87,12 @@ export function UpcomingMatchesDesktop({
             ) : m.odds ? (
               <>
                 <span>
-                  <span className="text-muted-foreground">O</span> {m.odds.over}
+                  <span className="text-muted-foreground">{m.odds.overLabel}</span>{" "}
+                  {m.odds.over}
                 </span>
                 <span>
-                  <span className="text-muted-foreground">U</span> {m.odds.under}
+                  <span className="text-muted-foreground">{m.odds.underLabel}</span>{" "}
+                  {m.odds.under}
                 </span>
               </>
             ) : (

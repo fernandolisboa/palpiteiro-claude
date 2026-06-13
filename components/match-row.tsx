@@ -90,10 +90,12 @@ export function MatchRow({ m, last }: Props) {
           ) : m.odds ? (
             <div className="flex flex-col items-end gap-1 font-mono text-[12.5px] tabular-nums">
               <span>
-                <span className="text-muted-foreground">O</span> {m.odds.over}
+                <span className="text-muted-foreground">{m.odds.overLabel}</span>{" "}
+                {m.odds.over}
               </span>
               <span>
-                <span className="text-muted-foreground">U</span> {m.odds.under}
+                <span className="text-muted-foreground">{m.odds.underLabel}</span>{" "}
+                {m.odds.under}
               </span>
             </div>
           ) : (

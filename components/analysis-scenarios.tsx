@@ -4,10 +4,17 @@
 import { HelpHint } from "@/components/help-hint";
 import { MIN_EDGE_PP } from "@/lib/odds/scenario";
 import { cn } from "@/lib/utils";
-import type { ScenarioSideView, ScenariosView } from "@/lib/view/types";
+import type { OutcomeView } from "@/lib/view/types";
 
 type Props = {
-  scenarios: ScenariosView;
+  // Seleções do mercado como array (forma N-vias canônica). over/under → 2;
+  // 1X2 → 3. Os rótulos/colunas vêm 100% do view-layer (AC3: nenhuma string de
+  // mercado no componente). A recomendação é re-derivada de `isRecommended`.
+  outcomes: OutcomeView[];
+  // Frase full-width de break-even/margem-de-erro (topo da AnalysisView, R4) e
+  // nota de degradação. null = não renderiza.
+  framing: string | null;
+  note: string | null;
   // Tom do retorno esperado do lado recomendado — espelha o bloco "Aposta
   // recomendada" (ADR 0012: avisos de minOdd acima da odd ou EV ≤ 0 tiram o
   // tom positivo também aqui; dois tons pro mesmo número no mesmo card seria
@@ -15,36 +22,70 @@ type Props = {
   returnTone: "positive" | "neutral";
 };
 
-const SIDE_LABEL: Record<"over" | "under", string> = {
-  over: "mais de 2.5 gols",
-  under: "menos de 2.5 gols",
-};
+// Top-K (R9): K=5 colunas no máximo. over/under(2)/1X2(3) NUNCA truncam.
+// Ordena [recomendado primeiro, depois os demais por modelProb desc] e corta em
+// K. `truncated` sinaliza "+N outras" (placeholder pra mercados futuros N>5).
+const MAX_COLUMNS = 5;
 
-// Bloco "Cenários" (ADR 0012): os dois lados com números CONGELADOS na
-// análise. O lado alternativo é informativo — nunca uma segunda recomendação
+function parsePct(value: string): number {
+  // "58%" → 58; "—" / não-numérico → -Infinity (vai pro fim na ordenação desc).
+  const n = Number.parseFloat(value);
+  return Number.isFinite(n) ? n : Number.NEGATIVE_INFINITY;
+}
+
+function selectColumns(outcomes: OutcomeView[]): {
+  columns: OutcomeView[];
+  hiddenCount: number;
+} {
+  if (outcomes.length <= MAX_COLUMNS) {
+    return { columns: outcomes, hiddenCount: 0 };
+  }
+  const recommended = outcomes.filter((o) => o.isRecommended);
+  const rest = outcomes
+    .filter((o) => !o.isRecommended)
+    .sort((a, b) => parsePct(b.modelProb) - parsePct(a.modelProb));
+  const columns = [...recommended, ...rest].slice(0, MAX_COLUMNS);
+  return { columns, hiddenCount: outcomes.length - columns.length };
+}
+
+// Grid responsivo por contagem de colunas. N=2 mantém o layout pré-pivot
+// (grid-cols-1 → min-[480px]:grid-cols-2) byte-a-byte (paridade VISUAL).
+function gridClass(count: number): string {
+  if (count <= 2) return "grid grid-cols-1 gap-2 min-[480px]:grid-cols-2";
+  if (count === 3) return "grid grid-cols-1 gap-2 min-[480px]:grid-cols-3";
+  return "grid grid-cols-1 gap-2 min-[480px]:grid-cols-2 lg:grid-cols-3";
+}
+
+// Bloco "Cenários" (ADR 0012): as seleções com números CONGELADOS na análise.
+// Os lados não-recomendados são informativos — nunca uma segunda recomendação
 // (sem accent, sem edge-*; pinado em teste). No mobile (~380px) as colunas
-// empilham (grid-cols-1) e abrem lado a lado a partir de 480px.
-export function AnalysisScenarios({ scenarios, returnTone }: Props) {
-  const { over, under, recommended, framing, note } = scenarios;
+// empilham (grid-cols-1) e abrem a partir de 480px.
+export function AnalysisScenarios({ outcomes, framing, note, returnTone }: Props) {
+  const { columns, hiddenCount } = selectColumns(outcomes);
+  const hasRecommendation = outcomes.some((o) => o.isRecommended);
   return (
     <div className="mx-4 mb-4 flex flex-col gap-2">
       <span className="font-mono text-[10.5px] uppercase tracking-[0.14em] text-muted-foreground">
         cenários
       </span>
-      <div className="grid grid-cols-1 gap-2 min-[480px]:grid-cols-2">
-        <ScenarioColumn
-          side="over"
-          view={over}
-          recommended={recommended}
-          returnTone={returnTone}
-        />
-        <ScenarioColumn
-          side="under"
-          view={under}
-          recommended={recommended}
-          returnTone={returnTone}
-        />
+      <div className={gridClass(columns.length)}>
+        {columns.map((outcome, i) => (
+          <ScenarioColumn
+            key={outcome.id}
+            outcome={outcome}
+            hasRecommendation={hasRecommendation}
+            returnTone={returnTone}
+            // O `?` (HelpHint) ancora UMA vez só, na primeira coluna, pra não
+            // dobrar aria-labels nem poluir o grid.
+            showHints={i === 0}
+          />
+        ))}
       </div>
+      {hiddenCount > 0 && (
+        <p className="font-mono text-[10px] leading-snug tracking-tight text-muted-fg-2">
+          {`+${hiddenCount} outras seleções não exibidas`}
+        </p>
+      )}
       {framing && (
         <p className="text-[11px] leading-snug tracking-tight text-muted-foreground">
           {framing}
@@ -63,21 +104,24 @@ export function AnalysisScenarios({ scenarios, returnTone }: Props) {
 }
 
 type ColumnProps = {
-  side: "over" | "under";
-  view: ScenarioSideView;
-  recommended: ScenariosView["recommended"];
+  outcome: OutcomeView;
+  // Há recomendação em ALGUMA coluna? Em pass nenhuma coluna é "alternativa" —
+  // todas neutras, sem badge nem rótulo de alternativa.
+  hasRecommendation: boolean;
   returnTone: "positive" | "neutral";
+  showHints: boolean;
 };
 
-function ScenarioColumn({ side, view, recommended, returnTone }: ColumnProps) {
-  const isRecommended = recommended === side;
-  // Cada métrica se repete nas duas colunas (over + under): o `?` aparece UMA
-  // vez só, ancorado na coluna canônica (over), pra não dobrar aria-labels nem
-  // poluir o grid. Os anchors apontam pro glossário da #148.
-  const showHints = side === "over";
-  // "cenário alternativo" só existe quando HÁ recomendação; em pass as duas
-  // colunas são neutras, sem badge e sem rótulo de alternativa.
-  const isAlternative = recommended !== null && !isRecommended;
+function ScenarioColumn({
+  outcome,
+  hasRecommendation,
+  returnTone,
+  showHints,
+}: ColumnProps) {
+  const isRecommended = outcome.isRecommended;
+  // "cenário alternativo" só existe quando HÁ recomendação; em pass as colunas
+  // são neutras, sem badge e sem rótulo de alternativa.
+  const isAlternative = hasRecommendation && !isRecommended;
   return (
     <div
       data-scenario-col={
@@ -97,7 +141,7 @@ function ScenarioColumn({ side, view, recommended, returnTone }: ColumnProps) {
             isRecommended ? "text-accent-fg" : "text-muted-foreground",
           )}
         >
-          {SIDE_LABEL[side]}
+          {outcome.scenarioLabel}
         </span>
         {isRecommended && (
           <span className="font-mono text-[9.5px] uppercase tracking-[0.12em] text-accent-fg">
@@ -112,7 +156,7 @@ function ScenarioColumn({ side, view, recommended, returnTone }: ColumnProps) {
       </div>
       <ScenarioRow
         label="prob. do modelo"
-        value={view.modelProb}
+        value={outcome.modelProb}
         hint={
           showHints
             ? {
@@ -125,7 +169,7 @@ function ScenarioColumn({ side, view, recommended, returnTone }: ColumnProps) {
       />
       <ScenarioRow
         label="prob. do mercado"
-        value={view.marketProb}
+        value={outcome.marketProb}
         hint={
           showHints
             ? {
@@ -136,14 +180,14 @@ function ScenarioColumn({ side, view, recommended, returnTone }: ColumnProps) {
             : undefined
         }
       />
-      <ScenarioRow label="odd na análise" value={view.odd} />
+      <ScenarioRow label="odd na análise" value={outcome.odd} />
       {/* text-edge-fg é reservado a valores POSITIVOS da recomendação:
           nunca na coluna alternativa/neutra, e no retorno só quando o tom do
           view-mapper é "positive". */}
       <ScenarioRow
         label="edge"
-        value={view.edge}
-        emphasis={isRecommended && view.edge.startsWith("+")}
+        value={outcome.edge}
+        emphasis={isRecommended && outcome.edge.startsWith("+")}
         hint={
           showHints
             ? {
@@ -155,7 +199,7 @@ function ScenarioColumn({ side, view, recommended, returnTone }: ColumnProps) {
       />
       <ScenarioRow
         label="retorno esperado"
-        value={view.expectedReturn}
+        value={outcome.expectedReturn}
         emphasis={isRecommended && returnTone === "positive"}
         hint={
           showHints
@@ -169,7 +213,7 @@ function ScenarioColumn({ side, view, recommended, returnTone }: ColumnProps) {
       />
       {!isRecommended && (
         <p className="border-t border-border-subtle pt-1.5 text-[11px] leading-snug tracking-tight text-muted-foreground">
-          {`pelo modelo, só sai do zero com odd ≥ ${view.modelBreakEvenOdd}`}
+          {`pelo modelo, só sai do zero com odd ≥ ${outcome.breakEven}`}
         </p>
       )}
     </div>

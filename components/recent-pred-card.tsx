@@ -2,16 +2,7 @@ import Link from "next/link";
 
 import { Badge } from "@/components/ui/badge";
 import { LEAGUE_LABEL } from "@/lib/format";
-import type {
-  RecentPredictionView,
-  Recommendation,
-} from "@/lib/view/types";
-
-const REC_ICON: Record<Recommendation, string> = {
-  OVER: "↑",
-  UNDER: "↓",
-  PASS: "—",
-};
+import type { RecentPredictionView } from "@/lib/view/types";
 
 export function RecentPredCard({ p }: { p: RecentPredictionView }) {
   const isPass = p.rec === "PASS";
@@ -40,7 +31,6 @@ export function RecentPredCard({ p }: { p: RecentPredictionView }) {
               : "h-[19px] rounded-full border-accent-border bg-accent-soft px-2 text-[10px] font-semibold tracking-wide text-accent-fg"
           }
         >
-          <span className="font-mono">{REC_ICON[p.rec]}</span>
           {p.rec}
         </Badge>
         {p.edge && (

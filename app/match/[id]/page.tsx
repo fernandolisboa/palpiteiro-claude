@@ -102,6 +102,12 @@ export default async function MatchPage({ params }: PageProps) {
           modelVersion: latestPred.prediction.modelVersion,
           promptVersion: latestPred.prediction.promptVersion,
           createdAt: latestPred.prediction.createdAt,
+          // Fiação multi-mercado (#170). marketId null (histórica sem backfill)
+          // → coalesce 'over_under', o único mercado ativo. `line` da forma do
+          // mercado salva (marketParams); cai pra defaultLine no mapper se null.
+          marketKey: latestPred.marketKey ?? "over_under",
+          line: latestPred.prediction.marketParams?.line ?? null,
+          stakeUnits: latestPred.prediction.stakeUnits,
         },
         latestPred.aiCall ? { costUsd: latestPred.aiCall.costUsd } : null,
       )
