@@ -71,6 +71,11 @@ export type BetReference = {
   selectionKey: string; // "over" | "under" | "home" | …
   selectionLabel: string; // "Over" (seed market_selections.label)
   line: number | null; // 2.5 (over/under) | null (mercado sem linha)
+  // Tradução LEIGA da aposta (lay-friendly): {market:"Mais de 2.5 gols",
+  // plain:"pelo menos 3 gols no jogo"} — over/under; {market:selectionLabel,
+  // plain:""} — 1X2 (sem frase leiga). Vem de presentation.betSummary; o
+  // componente renderiza a sub-linha quando `plain` é não-vazio.
+  betSummary: { market: string; plain: string } | null;
 };
 
 // Uma seleção do mercado, 100% strings prontas pra render (célula não-derivável

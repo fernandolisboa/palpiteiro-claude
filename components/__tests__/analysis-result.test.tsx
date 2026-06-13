@@ -12,6 +12,10 @@ const baseView: AnalysisView = {
     selectionKey: "over",
     selectionLabel: "Over",
     line: 2.5,
+    betSummary: {
+      market: "Mais de 2.5 gols",
+      plain: "pelo menos 3 gols no jogo",
+    },
   },
   outcomes: [
     {
@@ -149,6 +153,8 @@ const matchResultView: AnalysisView = {
     selectionKey: "home",
     selectionLabel: "Casa",
     line: null,
+    // 1X2 não tem frase leiga (plain ""); market = label da seleção.
+    betSummary: { market: "Casa", plain: "" },
   },
   outcomes: matchResultOutcomes,
   // 1X2 não tem break-even binário (R4).
@@ -163,6 +169,10 @@ describe("AnalysisResult — bloco 'Aposta recomendada' (#103/#170)", () => {
     expect(markup).toContain("aposta recomendada");
     // Frase estruturada data-driven (AC3): mercado + seleção + linha do view.
     expect(markup).toContain("Over/Under gols · Over 2.5");
+    // Tradução LEIGA (lay-friendly) restaurada da view (betSummary): a frase
+    // pré-pivot "Mais de 2.5 gols — pelo menos 3 gols no jogo".
+    expect(markup).toContain("Mais de 2.5 gols");
+    expect(markup).toContain("pelo menos 3 gols no jogo");
     // STAKE da recomendação (R3, formato "1.00 u").
     expect(markup).toContain("stake");
     expect(markup).toContain("1.00 u");
@@ -214,11 +224,18 @@ describe("AnalysisResult — bloco 'Aposta recomendada' (#103/#170)", () => {
             selectionKey: "under",
             selectionLabel: "Under",
             line: 2.5,
+            betSummary: {
+              market: "Menos de 2.5 gols",
+              plain: "no máximo 2 gols no jogo",
+            },
           },
         }}
       />,
     );
     expect(markup).toContain("Over/Under gols · Under 2.5");
+    // tradução leiga do under (lay-friendly).
+    expect(markup).toContain("Menos de 2.5 gols");
+    expect(markup).toContain("no máximo 2 gols no jogo");
   });
 
   it("neutral tone (minOdd > oddAtRec): warning legend renders and the value is not edge-colored", () => {
@@ -293,6 +310,11 @@ describe("AnalysisResult — bloco 'Aposta recomendada' (#103/#170)", () => {
     expect(markup).toContain(
       `vantagem mínima de ${MIN_EDGE_PP}pp sobre o mercado`,
     );
+    // pass = recommendation null → sem betSummary, logo a tradução leiga não
+    // renderiza (a copy "Sem aposta recomendada" do pass não é o bloco da rec).
+    expect(passView.recommendation).toBeNull();
+    expect(markup).not.toContain("pelo menos 3 gols no jogo");
+    expect(markup).not.toContain("Mais de 2.5 gols");
   });
 });
 

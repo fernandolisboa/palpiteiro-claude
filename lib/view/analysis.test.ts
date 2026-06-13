@@ -39,6 +39,10 @@ describe("toAnalysisView", () => {
         selectionKey: "over",
         selectionLabel: "Over",
         line: 2.5,
+        betSummary: {
+          market: "Mais de 2.5 gols",
+          plain: "pelo menos 3 gols no jogo",
+        },
       },
       // outcomes espelham byte-a-byte as células do bloco de cenários (mesmo
       // computeScenarios, mesmos formatters); breakEven = modelBreakEvenOdd.
@@ -124,6 +128,10 @@ describe("toAnalysisView", () => {
         selectionKey: "under",
         selectionLabel: "Under",
         line: 2.5,
+        betSummary: {
+          market: "Menos de 2.5 gols",
+          plain: "no máximo 2 gols no jogo",
+        },
       },
       outcomes: [
         {
@@ -280,6 +288,10 @@ describe("toAnalysisView", () => {
         selectionKey: "over",
         selectionLabel: "Over",
         line: 2.5,
+        betSummary: {
+          market: "Mais de 2.5 gols",
+          plain: "pelo menos 3 gols no jogo",
+        },
       },
       // Histórica sem par congelado: odd/EV degradam pra "—"; modelProb/edge/
       // breakEven sobrevivem dos valores salvos.

@@ -386,3 +386,55 @@ describe("AnalysisScenarios — N-vias (1X2, AC2)", () => {
     expect(markup).toContain("min-[480px]:grid-cols-3");
   });
 });
+
+// R9: top-K com K=5 — mercado futuro N>5 trunca pra 5 colunas, recomendado
+// SEMPRE presente, mantidos = [recomendado, depois top modelProb desc], e
+// placeholder "+N outras" pro restante. PURO (fixture mock, sem DB).
+describe("AnalysisScenarios — top-K truncation (N>5, R9)", () => {
+  // 6 outcomes; o recomendado é o de MENOR modelProb (id "f", 20%) de propósito:
+  // se a seleção fosse só "top-5 por modelProb", ele cairia fora — o invariante
+  // "recomendado sempre presente" é o que o garante.
+  const sixOutcomes: OutcomeView[] = [
+    { id: "a", scenarioLabel: "Sel A", modelProb: "40%" },
+    { id: "b", scenarioLabel: "Sel B", modelProb: "35%" },
+    { id: "c", scenarioLabel: "Sel C", modelProb: "30%" },
+    { id: "d", scenarioLabel: "Sel D", modelProb: "25%" },
+    { id: "e", scenarioLabel: "Sel E", modelProb: "22%" },
+    { id: "f", scenarioLabel: "Sel F", modelProb: "20%" },
+  ].map((o) => ({
+    ...o,
+    label: o.scenarioLabel,
+    marketProb: "—",
+    odd: "—",
+    edge: "—",
+    expectedReturn: "—",
+    breakEven: "—",
+    isRecommended: o.id === "f",
+  }));
+
+  it("renders exactly 5 columns, recommended always kept, top modelProb desc, '+N outras' placeholder", () => {
+    const markup = renderToStaticMarkup(
+      <AnalysisScenarios
+        outcomes={sixOutcomes}
+        framing={null}
+        note={null}
+        returnTone="neutral"
+      />,
+    );
+
+    // Exatamente 5 colunas (K=5), nunca as 6.
+    expect(countOccurrences(markup, "data-scenario-col=")).toBe(5);
+    // O recomendado (f, menor modelProb) está SEMPRE presente.
+    expect(countOccurrences(markup, 'data-scenario-col="recommended"')).toBe(1);
+    expect(markup).toContain("Sel F");
+    // Mantidos = recomendado + top-4 por modelProb desc (a,b,c,d). "Sel E" (22%,
+    // 5º maior) é o que cai fora — a única seleção escondida.
+    expect(markup).toContain("Sel A");
+    expect(markup).toContain("Sel B");
+    expect(markup).toContain("Sel C");
+    expect(markup).toContain("Sel D");
+    expect(markup).not.toContain("Sel E");
+    // Placeholder "+N outras" (1 escondida).
+    expect(markup).toContain("+1 outras seleções não exibidas");
+  });
+});

@@ -19,11 +19,12 @@ export type PredictionWithAiCall = {
   prediction: DbPrediction;
   aiCall: DbAiCall | null;
   // Identidade de mercado da predição, resolvida por LEFT JOIN (#170): a row só
-  // carrega marketId/selectionId nullable, não as keys. `marketKey` alimenta o
-  // registry de apresentação na view (labels/scenarioLabel). Nullable em
-  // históricas sem mercado backfillado → o chamador faz coalesce 'over_under'.
+  // carrega marketId nullable, não a key. `marketKey` alimenta o registry de
+  // apresentação na view (labels/scenarioLabel); a seleção recomendada vem de
+  // prediction.recommendation, então o join de market_selections é desnecessário.
+  // Nullable em históricas sem mercado backfillado → o chamador faz coalesce
+  // 'over_under'.
   marketKey: string | null;
-  selectionKey: string | null;
 };
 
 export async function getLatestPredictionForMatch(
@@ -34,18 +35,13 @@ export async function getLatestPredictionForMatch(
     .select({
       prediction: predictions,
       aiCall: aiCalls,
-      // LEFT (não INNER): uma row sem mercado/seleção (histórica não backfillada,
-      // ou pass sem selectionId) ainda volta — keys null, view coalesce.
+      // LEFT (não INNER): uma row sem mercado (histórica não backfillada) ainda
+      // volta — key null, view coalesce.
       marketKey: markets.key,
-      selectionKey: marketSelections.key,
     })
     .from(predictions)
     .leftJoin(aiCalls, eq(predictions.aiCallId, aiCalls.id))
     .leftJoin(markets, eq(predictions.marketId, markets.id))
-    .leftJoin(
-      marketSelections,
-      eq(predictions.selectionId, marketSelections.id),
-    )
     .where(
       and(eq(predictions.matchId, matchId), eq(predictions.userId, userId)),
     )

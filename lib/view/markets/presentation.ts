@@ -3,8 +3,8 @@
 // BUNDLE DO CLIENTE: este módulo NÃO importa `@/lib/ai*` (carrega o SYSTEM_PROMPT,
 // admin-only — ver o comentário de MIN_EDGE_PP em lib/odds/scenario.ts), nem
 // `@/lib/db`, nem `lib/odds/market-descriptor` (arrasta os schemas de provider).
-// O #170 importa `getMarketPresentation` num componente "use client", então a
-// pureza aqui é inegociável e está pinada por teste (presentation.test.ts).
+// A view-layer (alcançável por componentes "use client") consome este módulo, então
+// a pureza aqui é inegociável e está pinada por teste (presentation.test.ts).
 //
 // Divisão de fontes (resolução do plan-gate do #169):
 //   - LABELS CURTOS (selectionLabel/marketLabel): a fonte de verdade é o SEED

@@ -119,9 +119,8 @@ function computeBinaryScenarios(
   });
 }
 
-// framing + note do cenário binário CONGELADO — fonte única consumida tanto
-// pelo bloco legado (toScenariosView) quanto pelo topo da AnalysisView (R4):
-// computar nos dois lugares garante byte-paridade com a string pré-relocação.
+// framing + note do cenário binário CONGELADO, computados no topo da
+// AnalysisView (R4) — byte-idênticos à string pré-relocação.
 //
 // Framing: linguagem de BREAK-EVEN ("só sai do zero") pra zebra — "vale a pena"
 // é reservado ao critério de 5pp do lado recomendado (ADR 0012). No pass, copy
@@ -235,13 +234,12 @@ export function toAnalysisView(
   const presentation = getMarketPresentation(prediction.marketKey ?? "over_under");
   const line = prediction.line ?? presentation.defaultLine;
 
-  // Computa o cenário binário UMA vez e alimenta tanto o bloco legado (scenarios)
-  // quanto o array multi-outcome (outcomes) — mesmos números, paridade trivial.
+  // Computa o cenário binário UMA vez e alimenta o array multi-outcome
+  // (outcomes) + framing/note — mesmos números, paridade trivial.
   const computed = computeBinaryScenarios(prediction, confidenceNum);
 
-  // framing/note no TOPO (R4): mesma derivação do bloco scenarios, computada do
-  // `computed` ANTES do contract remover toScenariosView. Degrada pra null junto
-  // com o bloco (computed null).
+  // framing/note no TOPO (R4): derivados do `computed` binário. Degrada pra null
+  // junto com o bloco (computed null).
   const framingNote =
     computed === null
       ? { framing: null, note: null }
@@ -295,6 +293,10 @@ export function toAnalysisView(
           selectionKey: recommendation,
           selectionLabel: presentation.selectionLabel(recommendation),
           line,
+          // Tradução leiga (lay-friendly): over/under → {market:"Mais de 2.5
+          // gols", plain:"pelo menos 3 gols no jogo"}; 1X2 → {market:selectionLabel,
+          // plain:""}. O componente renderiza a sub-linha só quando `plain` ≠ "".
+          betSummary: presentation.betSummary(recommendation, line),
         },
     outcomes:
       computed === null ? [] : toBinaryOutcomes(computed, presentation, line),

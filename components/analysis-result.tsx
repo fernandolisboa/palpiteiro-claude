@@ -109,6 +109,15 @@ export function AnalysisResult({ view, again = false }: Props) {
             {rec.marketLabel} · {rec.selectionLabel}
             {rec.line !== null ? ` ${rec.line}` : ""}
           </p>
+          {/* Tradução LEIGA (lay-friendly), vinda da view (betSummary): restaura
+              a frase pré-pivot "Mais de 2.5 gols — pelo menos 3 gols no jogo".
+              A sub-frase `plain` só aparece quando existe (over/under). */}
+          {rec.betSummary && (
+            <p className="text-[12.5px] leading-snug tracking-tight text-muted-foreground">
+              {rec.betSummary.market}
+              {rec.betSummary.plain ? ` — ${rec.betSummary.plain}` : ""}
+            </p>
+          )}
           {view.stakeUnits && (
             <div className="flex items-baseline justify-between gap-2">
               <span className="font-mono text-[10.5px] uppercase tracking-[0.14em] text-muted-foreground">
