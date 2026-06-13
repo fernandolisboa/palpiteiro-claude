@@ -46,6 +46,7 @@
     ]
   },
   "devDependencies": {
+    "@electric-sql/pglite": "^0.5.2",
     "@eslint/eslintrc": "^3",
     "@tailwindcss/postcss": "^4",
     "@types/node": "^22",
