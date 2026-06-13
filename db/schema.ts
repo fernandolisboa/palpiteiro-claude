@@ -10,6 +10,7 @@ import {
   primaryKey,
   text,
   timestamp,
+  unique,
   uuid,
 } from "drizzle-orm/pg-core";
 
@@ -53,6 +54,42 @@ export const aiCallStatusEnum = pgEnum("ai_call_status", [
   "tool_missing",
   "rate_limited",
 ]);
+
+// ─── Catálogo de mercados (ADR 0015, decisão 3) ──────────────────────────────
+// Mercados e seleções como TABELAS DE REFERÊNCIA (seed + FK), não enums: leva ao
+// limite a convenção do repo "text + validação na app" (defaultModelId/preferred)
+// e evita um `ALTER TYPE ADD VALUE` a cada mercado novo. Na Fase 1 são puramente
+// aditivas — `predictions`/snapshots começam a referenciar `market_id`/`selection_id`
+// em #160/#161, e o enum `market` legado coexiste até o contract (Fase 5).
+// `settlement_rule_key` resolve a regra pura do registry de settlement (ADR 0016);
+// p/ over/under a string COMMITTED é `over_under` (a Fase 2 #166 resolve por ela).
+// `is_active`/`is_graduated` são o feature-flag por mercado (D9) — nada lê na Fase 1;
+// a graduação dos mercados novos é mantida pelo #171.
+export const markets = pgTable("markets", {
+  id: uuid().primaryKey().defaultRandom(),
+  key: text().notNull().unique(),
+  label: text().notNull(),
+  settlementRuleKey: text().notNull(),
+  isActive: boolean().notNull().default(false),
+  isGraduated: boolean().notNull().default(false),
+  createdAt: timestamp({ withTimezone: true }).notNull().defaultNow(),
+});
+
+export const marketSelections = pgTable(
+  "market_selections",
+  {
+    id: uuid().primaryKey().defaultRandom(),
+    marketId: uuid()
+      .notNull()
+      .references(() => markets.id, { onDelete: "cascade" }),
+    key: text().notNull(),
+    label: text().notNull(),
+    sortOrder: integer().notNull().default(0),
+  },
+  (t) => [
+    unique("market_selections_market_id_key_unique").on(t.marketId, t.key),
+  ],
+);
 
 export const users = pgTable("users", {
   id: uuid().primaryKey().defaultRandom(),
