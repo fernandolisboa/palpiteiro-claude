@@ -13,6 +13,7 @@ import {
 import {
   resultDataFromRegulationScore,
   SettlementError,
+  type ResultData,
 } from "@/lib/settlement/schemas";
 
 export type SettlementSummary = {
@@ -93,12 +94,14 @@ export async function settlePendingPredictions(
       continue;
     }
 
-    // O regulationScore ao vivo é o fato canônico (split sempre confiável).
-    const resultData = resultDataFromRegulationScore(result.regulationScore);
-    const totalGoals = resultData.totalGoals;
-
+    // A construção do result_data (Zod, sobre o regulationScore ao vivo — o fato
+    // canônico, split sempre confiável) e o computeSettlement ficam DENTRO do try
+    // (I4): uma row ruim — score 90' não-inteiro, params/rule_key inválidos —
+    // bucketa em errors e os irmãos do mesmo batch ainda liquidam, nunca aborta.
+    let resultData: ResultData;
     let settlement: Settlement | null;
     try {
+      resultData = resultDataFromRegulationScore(result.regulationScore);
       settlement = computeSettlement({
         recommendation: p.recommendation,
         settlementRuleKey: p.settlementRuleKey,
@@ -112,8 +115,8 @@ export async function settlePendingPredictions(
         resultData,
       });
     } catch (err) {
-      // I4: uma row ruim (params inválidos, rule_key desconhecido) bucketa em
-      // errors e os irmãos do mesmo batch ainda liquidam — nunca aborta o batch.
+      // I4: uma row ruim (score malformado, params inválidos, rule_key
+      // desconhecido) bucketa em errors e os irmãos do batch ainda liquidam.
       const ctx = err instanceof SettlementError ? err.context : undefined;
       const message = err instanceof Error ? err.message : String(err);
       summary.errors += 1;
@@ -132,6 +135,7 @@ export async function settlePendingPredictions(
       continue;
     }
 
+    const totalGoals = resultData.totalGoals;
     const inserted = await insertOutcomeIfAbsent({
       predictionId: p.predictionId,
       totalGoals,

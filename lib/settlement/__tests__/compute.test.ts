@@ -77,7 +77,7 @@ describe("computeSettlement", () => {
       computeSettlement(
         ou({ selectionKey: "over", oddAtRecommendation: 1.8, resultData: rd(0) }),
       ),
-    ).toMatchObject({ result: "lost" });
+    ).toEqual({ result: "lost", profitUnits: -1 });
     expect(
       computeSettlement(
         ou({
@@ -87,7 +87,7 @@ describe("computeSettlement", () => {
           resultData: rd(0),
         }),
       ),
-    ).toMatchObject({ result: "won" });
+    ).toEqual({ result: "won", profitUnits: 0.8 });
   });
 
   it("pass settles as void with zero profit (before the registry)", () => {

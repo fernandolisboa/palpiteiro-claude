@@ -52,6 +52,7 @@ import type {
   SportsDataProvider,
 } from "@/lib/providers/sports-data/types";
 import { settlePendingPredictions } from "@/lib/settlement/settle";
+import { insertOutcomeIfAbsent } from "@/lib/db/queries/prediction-outcomes";
 
 const ids: {
   userId: string;
@@ -372,6 +373,38 @@ describe("settle golden — real Postgres (pglite)", () => {
     expect(s.considered).toBe(0); // já tem outcome → fora do pending set
     const after = (await outcomesByPrediction()).get(overId)!;
     expect(after).toEqual(before); // intocado: override/cron never recompute
+  });
+
+  it("insertOutcomeIfAbsent is idempotent against real Postgres (ON CONFLICT DO NOTHING)", async () => {
+    // Exercita o belt de race-safety DIRETAMENTE: a query exclui rows já
+    // liquidadas (isNull), então o caminho onConflictDoNothing nunca dispara via
+    // settle — aqui chamamos o insert 2x contra Postgres real pra provar que o
+    // UNIQUE(prediction_id) + DO NOTHING ignora a 2ª escrita (não é override).
+    const matchId = await seedMatch("ext-golden-conflict");
+    const aiCallId = await seedAiCall(matchId);
+    const overId = await seedPrediction({
+      matchId,
+      aiCallId,
+      recommendation: "over",
+      selectionId: ids.ouOver,
+      marketParams: { line: 2.5 },
+      oddAtRecommendation: "1.900",
+    });
+    const args = {
+      predictionId: overId,
+      totalGoals: 3,
+      resultData: { homeScore: 2, awayScore: 1, totalGoals: 3 },
+      result: "won" as const,
+      profitUnits: 0.9,
+    };
+    expect(await insertOutcomeIfAbsent(args)).toBe(true);
+    const before = (await outcomesByPrediction()).get(overId)!;
+    // 2ª inserção com result/profit DIVERGENTES → ignorada (returns false).
+    expect(
+      await insertOutcomeIfAbsent({ ...args, result: "lost", profitUnits: -1 }),
+    ).toBe(false);
+    const after = (await outcomesByPrediction()).get(overId)!;
+    expect(after).toEqual(before); // row byte-intocada
   });
 });
 

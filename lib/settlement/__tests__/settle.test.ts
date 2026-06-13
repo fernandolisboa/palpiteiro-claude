@@ -216,6 +216,27 @@ describe("settlePendingPredictions", () => {
       expect.objectContaining({ predictionId: "good1", result: "won" }),
     );
   });
+
+  it("buckets a malformed (non-integer) 90' score to errors WITHOUT aborting the batch", async () => {
+    getPending.mockResolvedValue([
+      pending({ predictionId: "badscore1", matchId: "mBad", homeTeam: "BadTeam" }),
+      pending({ predictionId: "good2", matchId: "mGood" }),
+    ]);
+    // mBad: provider returns a non-integer 90' score → resultDataFromRegulationScore
+    // (ResultDataSchema int check) throws INSIDE the I4 try. mGood: a clean score.
+    installProvider((ref) =>
+      ref.homeTeam === "BadTeam"
+        ? { status: "finished", regulationScore: { home: 1.5, away: 1 } }
+        : finished(2, 1),
+    );
+    const s = await settlePendingPredictions();
+    expect(s.errors).toBe(1);
+    expect(s.settled).toBe(1);
+    expect(insertOutcome).toHaveBeenCalledTimes(1);
+    expect(insertOutcome).toHaveBeenCalledWith(
+      expect.objectContaining({ predictionId: "good2", result: "won" }),
+    );
+  });
 });
 
 // Sanity: the testing override is wired the same way the real factory is read.
