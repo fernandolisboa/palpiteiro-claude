@@ -1,12 +1,8 @@
 import { and, desc, eq, inArray, sql } from "drizzle-orm";
 
-import {
-  marketSelections,
-  markets,
-  matchOddsSnapshots,
-  selectionOddsSnapshots,
-} from "@/db/schema";
+import { matchOddsSnapshots, selectionOddsSnapshots } from "@/db/schema";
 import { db } from "@/lib/db";
+import { resolveMarketCatalog } from "@/lib/db/queries/market-catalog";
 import { ODDS_SNAPSHOT_FRESHNESS_MS } from "@/lib/odds/freshness-window";
 
 export type DbOddsSnapshot = typeof matchOddsSnapshots.$inferSelect;
@@ -186,36 +182,6 @@ export type LatestSelectionSnapshot = {
 };
 
 /**
- * Resolve `markets.id` + as `market_selections` (id↔key) de um `dbMarketKey`.
- * Hard-fail se o catálogo não tiver o mercado/seleções (estilo `selIdOf` do
- * backfill) — um catálogo incompleto é bug de seed, não algo a degradar.
- */
-async function resolveMarketCatalog(dbMarketKey: string): Promise<{
-  marketId: string;
-  selectionKeyById: Map<string, string>;
-}> {
-  const [mkt] = await db
-    .select({ id: markets.id })
-    .from(markets)
-    .where(eq(markets.key, dbMarketKey))
-    .limit(1);
-  if (!mkt) {
-    throw new Error(`market '${dbMarketKey}' não encontrado no catálogo`);
-  }
-  const sels = await db
-    .select({ id: marketSelections.id, key: marketSelections.key })
-    .from(marketSelections)
-    .where(eq(marketSelections.marketId, mkt.id));
-  if (sels.length === 0) {
-    throw new Error(`market '${dbMarketKey}' sem seleções no catálogo`);
-  }
-  return {
-    marketId: mkt.id,
-    selectionKeyById: new Map(sels.map((s) => [s.id, s.key])),
-  };
-}
-
-/**
  * Última captura de odds (mais recente por seleção) de um (match, market) na
  * tabela genérica. Padrão DISTINCT ON espelhando `getLatestOddsSnapshotsForMatches`
  * (odds-snapshots.ts) — `.selectDistinctOn([selectionId])` + ORDER BY começando
@@ -239,7 +205,7 @@ export async function getLatestSelectionOddsSnapshots(args: {
   params?: { line: number };
 }): Promise<LatestSelectionSnapshot | null> {
   const { matchId, dbMarketKey, params } = args;
-  const { marketId, selectionKeyById } = await resolveMarketCatalog(dbMarketKey);
+  const { marketId, keyById } = await resolveMarketCatalog(dbMarketKey);
 
   const conditions = [
     eq(selectionOddsSnapshots.matchId, matchId),
@@ -281,14 +247,14 @@ export async function getLatestSelectionOddsSnapshots(args: {
   // mercado incompleto — landmine de normalização do CLAUDE.md, e o #165 consome
   // `selections` justamente pra calcular edge. Hard-fail em vez de devolver curto
   // em silêncio (o write atômico torna parcial impossível hoje; isto é a guarda).
-  if (rows.length !== selectionKeyById.size) {
+  if (rows.length !== keyById.size) {
     throw new Error(
-      `getLatestSelectionOddsSnapshots: captura incompleta para match=${matchId} market=${dbMarketKey} — ${rows.length}/${selectionKeyById.size} seleções`,
+      `getLatestSelectionOddsSnapshots: captura incompleta para match=${matchId} market=${dbMarketKey} — ${rows.length}/${keyById.size} seleções`,
     );
   }
 
   const selections = rows.map((r) => {
-    const key = selectionKeyById.get(r.selectionId);
+    const key = keyById.get(r.selectionId);
     if (!key) {
       throw new Error(
         `selection_id ${r.selectionId} não pertence ao market '${dbMarketKey}'`,

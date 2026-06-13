@@ -39,9 +39,11 @@ const matchRow = {
 //
 // `insertValues` is a hoisted spy shared across every insert().values() call, so
 // tests can read the exact row written to each table. predict() inserts ai_calls
-// FIRST then predictions, so insertValues.mock.calls[0] is the ai_call row and
-// [1] is the prediction row. The returning() stub gives both an `id` (the
-// ai_call needs `aiCallId` downstream; the prediction row is the resolved value).
+// FIRST, then predictions, then prediction_selection_odds (SEQUENTIAL — #165),
+// so insertValues.mock.calls[0] is the ai_call row, [1] the prediction row, and
+// [2] the PSO rows array. The returning() stub gives the first two an `id` (the
+// ai_call needs `aiCallId` downstream; the prediction row is the resolved value);
+// the PSO insert awaits .values() directly (no .returning()).
 const insertValues = vi.fn();
 vi.mock("@/lib/db", () => {
   const select = vi.fn(() => ({
@@ -106,6 +108,15 @@ vi.mock("@/lib/db/queries/odds-snapshots", () => ({
     getLatestFreshOddsSnapshot(...args),
 }));
 
+// Catalog resolver consolidado (#165): predict() o chama no bloco de reads
+// PRÉ-chamada-paga (marketId + selection id↔key). Stub fixo do mercado
+// over/under — sem ele, a query de marketSelections (sem .limit()) cairia no
+// branch não-awaitable do select stub e estouraria com TypeError.
+const resolveMarketCatalog = vi.fn();
+vi.mock("@/lib/db/queries/market-catalog", () => ({
+  resolveMarketCatalog: (...args: unknown[]) => resolveMarketCatalog(...args),
+}));
+
 const anthropicCreate = vi.fn();
 vi.mock("@/lib/ai/anthropic", () => ({
   getAnthropicClient: () => ({ messages: { create: anthropicCreate } }),
@@ -125,7 +136,12 @@ vi.mock("@/lib/db/queries/users", () => ({
 
 // Spy on buildPredictionInput while keeping the real implementation (and
 // BuildInputError) so we can assert the absencesAvailable flag it receives.
-import * as buildInputModule from "@/lib/ai/build-input";
+// O módulo MOVEU pro cartucho over/under (#165) — predict.ts importa o mesmo
+// binding nomeado, então o vi.spyOn deste módulo continua interceptando.
+import * as buildInputModule from "@/lib/ai/markets/over_under/build-input";
+import { buildPredictionInput } from "@/lib/ai/markets/over_under/build-input";
+import { overUnderCartridge } from "@/lib/ai/markets/over_under";
+import { computeMarketImpliedProbabilities } from "@/lib/odds/implied-probability";
 
 import { predict } from "@/lib/ai/predict";
 
@@ -271,6 +287,19 @@ function setHappyPath() {
   // Default: no fresh snapshot, so every existing test keeps exercising the
   // getOddsForSport fallback path unchanged.
   getLatestFreshOddsSnapshot.mockResolvedValue(null);
+  // Catálogo over/under resolvido: marketId + os mapas seleção↔id que predict()
+  // usa pra selection_id (prediction) e pras rows do candidate set (PSO).
+  resolveMarketCatalog.mockResolvedValue({
+    marketId: "mkt-ou",
+    idByKey: new Map([
+      ["over", "sel-over"],
+      ["under", "sel-under"],
+    ]),
+    keyById: new Map([
+      ["sel-over", "over"],
+      ["sel-under", "under"],
+    ]),
+  });
   // Default global resolvido pelo DB quando não há override nem preferência.
   getDefaultModelId.mockResolvedValue("claude-opus-4-8");
   getGenerationParams.mockResolvedValue({
@@ -493,6 +522,238 @@ describe("predict() — congelamento do par de odds na prediction (#104)", () =>
     expect(predictionRow.impliedProbPct).toBeNull();
     expect(predictionRow.edgePct).toBeNull();
     expect(predictionRow.minimumOdd).toBeNull();
+  });
+});
+
+// ─── Paridade #165: colunas legadas byte-idênticas + colunas novas + PSO ─────
+
+// Snapshot fresco com odds arbitrárias (path conservador reuse) — controla os
+// bytes exatos sem depender do fallback de rede.
+function freshSnapshotWith(overOdd: string, underOdd: string) {
+  return {
+    id: "snap-x",
+    matchId: "m-1",
+    bookmaker: "Pinnacle",
+    market: "over_under_2_5" as const,
+    line: "2.5",
+    overOdd,
+    underOdd,
+    overroundPct: "3.50",
+    capturedAt: new Date(),
+  };
+}
+
+// Output mockado fixo (sem API paga) com a recomendação e confiança dadas.
+function toolUseMessage(input: Record<string, unknown>) {
+  return {
+    ...anthropicMessage(),
+    content: [{ type: "tool_use", id: "tu-1", name: "submit_prediction", input }],
+  };
+}
+
+// Implícita normalizada do lado, na MESMA ordem de operações do predict
+// (probs[idx] * 100), pra comparar o byte do .toFixed(2) gravado.
+function impliedPctOf(over: number, under: number, side: "over" | "under") {
+  const { probs } = computeMarketImpliedProbabilities([over, under]);
+  return (side === "over" ? probs[0] : probs[1]) * 100;
+}
+
+describe("predict() — paridade de colunas (#165): legado byte-idêntico + novas + PSO", () => {
+  it("over assimétrico (2.10/1.74): legado byte-idêntico + market/selection/params + PSO == par congelado", async () => {
+    getLatestFreshOddsSnapshot.mockResolvedValueOnce(
+      freshSnapshotWith("2.100", "1.740"),
+    );
+    anthropicCreate.mockResolvedValue(
+      toolUseMessage({
+        recommendation: "over",
+        confidence_pct: 60,
+        rationale: "Jogo aberto.",
+        key_factors: ["alto xG", "defesas vazadas"],
+        minimum_odd: 1.8,
+      }),
+    );
+
+    await expect(
+      predict({ matchId: "m-1", userId: "u-1", isAdmin: false }),
+    ).resolves.toBeDefined();
+
+    const predictionRow = insertValues.mock.calls[1]?.[0] as Record<
+      string,
+      unknown
+    >;
+    // Legado byte-idêntico (mesma matemática de implied/edge que predict.ts:367-372).
+    const impliedOver = impliedPctOf(2.1, 1.74, "over");
+    expect(predictionRow.market).toBe("over_under_2_5");
+    expect(predictionRow.recommendation).toBe("over");
+    expect(predictionRow.overOddAtPrediction).toBe("2.100");
+    expect(predictionRow.underOddAtPrediction).toBe("1.740");
+    expect(predictionRow.oddAtRecommendation).toBe("2.100");
+    expect(predictionRow.impliedProbPct).toBe(impliedOver.toFixed(2));
+    expect(predictionRow.edgePct).toBe((60 - impliedOver).toFixed(2));
+    expect(predictionRow.confidencePct).toBe("60.00");
+    expect(predictionRow.minimumOdd).toBe("1.800");
+    // stake_units fica IMPLÍCITO (default "1" no schema; #167 popula) — predict
+    // NÃO grava a coluna.
+    expect(predictionRow).not.toHaveProperty("stakeUnits");
+    // Colunas NOVAS multi-mercado.
+    expect(predictionRow.marketId).toBe("mkt-ou");
+    expect(predictionRow.selectionId).toBe("sel-over");
+    expect(predictionRow.marketParams).toEqual({ line: 2.5 });
+
+    // PSO: candidate set completo (over+under), odds == par congelado byte-a-byte.
+    const psoRows = insertValues.mock.calls[2]?.[0] as Array<{
+      predictionId: string;
+      selectionId: string;
+      odd: string;
+    }>;
+    expect(psoRows).toHaveLength(2);
+    const byKey = Object.fromEntries(
+      psoRows.map((r) => [r.selectionId, r.odd]),
+    );
+    expect(byKey["sel-over"]).toBe(predictionRow.overOddAtPrediction);
+    expect(byKey["sel-under"]).toBe(predictionRow.underOddAtPrediction);
+    expect(psoRows.every((r) => r.predictionId === "row-1")).toBe(true);
+  });
+
+  it("recommendation=under: impliedProbPct/edgePct do lado under byte-idênticos ao legado", async () => {
+    getLatestFreshOddsSnapshot.mockResolvedValueOnce(
+      freshSnapshotWith("2.100", "1.740"),
+    );
+    anthropicCreate.mockResolvedValue(
+      toolUseMessage({
+        recommendation: "under",
+        confidence_pct: 58,
+        rationale: "Poucos gols esperados.",
+        key_factors: ["defesas sólidas", "ritmo baixo"],
+        minimum_odd: 1.7,
+      }),
+    );
+
+    await expect(
+      predict({ matchId: "m-1", userId: "u-1", isAdmin: false }),
+    ).resolves.toBeDefined();
+
+    const predictionRow = insertValues.mock.calls[1]?.[0] as Record<
+      string,
+      unknown
+    >;
+    const impliedUnder = impliedPctOf(2.1, 1.74, "under");
+    expect(predictionRow.recommendation).toBe("under");
+    expect(predictionRow.selectionId).toBe("sel-under");
+    expect(predictionRow.oddAtRecommendation).toBe("1.740");
+    expect(predictionRow.impliedProbPct).toBe(impliedUnder.toFixed(2));
+    expect(predictionRow.edgePct).toBe((58 - impliedUnder).toFixed(2));
+  });
+
+  it("pass: selectionId null + PSO grava AMBAS as seleções do candidate set", async () => {
+    getLatestFreshOddsSnapshot.mockResolvedValueOnce(
+      freshSnapshotWith("1.900", "1.950"),
+    );
+    anthropicCreate.mockResolvedValue(
+      toolUseMessage({
+        recommendation: "pass",
+        confidence_pct: 51,
+        rationale: "Edge fino dos dois lados.",
+        key_factors: ["mercado equilibrado", "dados rasos"],
+      }),
+    );
+
+    await expect(
+      predict({ matchId: "m-1", userId: "u-1", isAdmin: false }),
+    ).resolves.toBeDefined();
+
+    const predictionRow = insertValues.mock.calls[1]?.[0] as Record<
+      string,
+      unknown
+    >;
+    expect(predictionRow.recommendation).toBe("pass");
+    expect(predictionRow.selectionId).toBeNull();
+    expect(predictionRow.marketId).toBe("mkt-ou");
+    expect(predictionRow.marketParams).toEqual({ line: 2.5 });
+
+    const psoRows = insertValues.mock.calls[2]?.[0] as Array<{
+      selectionId: string;
+      odd: string;
+    }>;
+    expect(psoRows).toHaveLength(2);
+    const ids = psoRows.map((r) => r.selectionId).sort();
+    expect(ids).toEqual(["sel-over", "sel-under"]);
+    const byKey = Object.fromEntries(
+      psoRows.map((r) => [r.selectionId, r.odd]),
+    );
+    expect(byKey["sel-over"]).toBe(predictionRow.overOddAtPrediction);
+    expect(byKey["sel-under"]).toBe(predictionRow.underOddAtPrediction);
+  });
+
+  it("partial PSO failure após prediction commitada: degrada (não-throw), retorna a prediction", async () => {
+    getLatestFreshOddsSnapshot.mockResolvedValueOnce(
+      freshSnapshotWith("1.900", "1.950"),
+    );
+    // 3º insert (PSO) falha; os 2 primeiros (ai_calls, predictions) passam.
+    let call = 0;
+    insertValues.mockImplementation(() => {
+      call += 1;
+      if (call === 3) throw new Error("PSO write failed");
+    });
+
+    await expect(
+      predict({ matchId: "m-1", userId: "u-1", isAdmin: false }),
+    ).resolves.toEqual({ id: "row-1", aiCallId: "row-1" });
+    // A prediction foi retornada apesar da falha do candidate set.
+    expect(insertValues).toHaveBeenCalledTimes(3);
+  });
+});
+
+describe("predict() — bump over_under_v2.0: prompt/mensagem byte-idênticos ao v1.3", () => {
+  it("cartridge.systemPrompt + buildUserMessage são byte-idênticos pro mesmo input", async () => {
+    // O cartucho ainda diz "v2.0" na versão, mas o TEXTO do prompt e a mensagem
+    // são idênticos ao v1.3 (puro restructure). Snapshot literal dos dois.
+    expect(overUnderCartridge.version).toBe("over_under_v2.0");
+    // Trecho fixo do system prompt (byte-a-byte do v1.3).
+    expect(overUnderCartridge.systemPrompt).toContain(
+      "Você é um analista quantitativo de apostas esportivas focado exclusivamente no mercado over/under 2.5 gols.",
+    );
+    expect(overUnderCartridge.systemPrompt).toContain(
+      "edge >= 5%). Caso contrário, retorne \"pass\".",
+    );
+
+    const input = buildPredictionInput({
+      match: {
+        externalId: "ext-1",
+        league: "brasileirao_a",
+        homeTeam: matchRow.homeTeam,
+        awayTeam: matchRow.awayTeam,
+        kickoffAt: matchRow.kickoffAt,
+        venue: "Maracanã",
+      },
+      standings: STANDINGS,
+      home: { form: [], injuries: [], absencesAvailable: true },
+      away: { form: [], injuries: [], absencesAvailable: true },
+      lineups: undefined,
+      h2h: [],
+      odds: {
+        bookmaker: "Pinnacle",
+        over_2_5_decimal: 1.9,
+        under_2_5_decimal: 1.95,
+        captured_at: "2026-05-15T12:00:00.000Z",
+      },
+      implied: { over_pct: 51.28, under_pct: 48.72 },
+    });
+    const message = overUnderCartridge.buildUserMessage(input, {
+      daysToKickoff: 3,
+    });
+    // Renderização markdown estável (v1.3): cabeçalho do jogo + bloco de odds.
+    expect(message).toContain("# Jogo");
+    expect(message).toContain(`- Mandante: ${matchRow.homeTeam}`);
+    expect(message).toContain(
+      "- Over 2.5: odd 1.90 → implícita normalizada 51.28%",
+    );
+    expect(message).toContain(
+      "- Under 2.5: odd 1.95 → implícita normalizada 48.72%",
+    );
+    expect(message).toContain(
+      "Decida: \"over\", \"under\" ou \"pass\". Aplique a regra de edge >= 5%.",
+    );
   });
 });
 

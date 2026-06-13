@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vitest";
 
-import { OverUnderOutputSchema } from "@/lib/ai/schemas/output";
+import { OverUnderOutputSchema } from "@/lib/ai/markets/over_under/schemas";
 
 type RawOutput = Record<string, unknown>;
 
