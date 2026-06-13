@@ -227,7 +227,10 @@ describe("ensureOddsSnapshotsFresh — dual-write against real Postgres (pglite)
     expect(latest!.capturedAt.getTime()).toBe(now.getTime());
   });
 
-  it("dual-write is atomic: an over/under fetch writes over_under to BOTH tables in one batch", async () => {
+  // NB: prova que as DUAS tabelas são escritas num único db.batch; NÃO prova
+  // rollback-on-partial-failure (o shim .batch awaita em sequência, sem txn — o
+  // round-trip transacional real é responsabilidade do neon-http em prod).
+  it("dual-write: uma busca over/under grava over_under nas DUAS tabelas (um db.batch)", async () => {
     getOddsForSport.mockResolvedValue([totalsEvent()]);
     const match = (
       await realDb.select().from(schema.matches).where(eq(schema.matches.id, matchIds.id))

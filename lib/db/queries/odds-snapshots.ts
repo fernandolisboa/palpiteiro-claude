@@ -276,6 +276,17 @@ export async function getLatestSelectionOddsSnapshots(args: {
     }
   }
 
+  // Completude: a captura tem que cobrir TODAS as seleções do mercado. Um bundle
+  // coerente-mas-parcial (faltando seleção) alimentaria overround/edge sobre um
+  // mercado incompleto — landmine de normalização do CLAUDE.md, e o #165 consome
+  // `selections` justamente pra calcular edge. Hard-fail em vez de devolver curto
+  // em silêncio (o write atômico torna parcial impossível hoje; isto é a guarda).
+  if (rows.length !== selectionKeyById.size) {
+    throw new Error(
+      `getLatestSelectionOddsSnapshots: captura incompleta para match=${matchId} market=${dbMarketKey} — ${rows.length}/${selectionKeyById.size} seleções`,
+    );
+  }
+
   const selections = rows.map((r) => {
     const key = selectionKeyById.get(r.selectionId);
     if (!key) {

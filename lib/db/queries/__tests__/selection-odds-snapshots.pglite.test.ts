@@ -235,6 +235,21 @@ describe("selection_odds_snapshots — real Postgres (pglite)", () => {
     ).rejects.toThrow(/incoerente/);
   });
 
+  it("hard-fails on an incomplete capture (faltando seleção do mercado)", async () => {
+    const t = new Date("2026-05-15T10:00:00Z");
+    // só 'over' gravado — captura coerente (1 row) mas PARCIAL: over_under tem 2
+    // seleções. Sem a guarda devolveria um bundle curto que alimentaria
+    // overround/edge sobre mercado incompleto (o #165 consome `selections`).
+    await insertSelectionOddsSnapshotsBatch([ouRow(ids.ouOver, "1.900", t)]);
+    await expect(
+      getLatestSelectionOddsSnapshots({
+        matchId: ids.matchId,
+        dbMarketKey: "over_under",
+        params: { line: 2.5 },
+      }),
+    ).rejects.toThrow(/incompleta/);
+  });
+
   it("getLatestFreshSelectionOddsSnapshots respects the strict-< TTL boundary", async () => {
     const now = new Date("2026-05-15T12:00:00Z");
     const captured = new Date(now.getTime() - 29 * 60 * 1000); // fresca
