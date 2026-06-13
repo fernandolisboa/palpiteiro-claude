@@ -82,6 +82,13 @@ Flow padrão pra qualquer melhoria/feature não-trivial neste repo. Quando o ped
 3. **Um subagent de contexto fresco por passo**, nesta ordem: exploração → plano → review do plano → ajustes no plano → implementação → code review → correções vindas do code review.
 4. **Fechamento**: vá mergeando/completando os PRs e fechando as issues conforme cada um fica **verde e passando** (build/lint/typecheck/testes + checks do PR).
 
+### Handoffs entre sessões
+
+Trabalho grande roda em **várias sessões** (ex.: o pivot multi-mercado, uma fase por sessão). Ao **encerrar uma sessão** que produz um `HANDOFF-fase-N.md`:
+
+- **Escreva/atualize o `HANDOFF-*.md`** (auto-suficiente: escopo, o que ler primeiro, ordem/dependências, princípios inegociáveis, landmines, critério de saída, gotchas de ambiente — aterrado no CÓDIGO real, não no doc).
+- **Logo em seguida, emita um _prompt de kickoff_ pronto pra colar**, espelhando a estrutura do kickoff da fase anterior, pra o usuário iniciar a próxima sessão sem re-derivar contexto. Saída como bloco copiável, no fim da resposta.
+
 ## Gotchas
 
 - **Custo de tokens**: cada chamada de LLM custa dinheiro real. Cache agressivo em `match` data. Se rodar análise N vezes num jogo só pra debug, mencione isso no PR
