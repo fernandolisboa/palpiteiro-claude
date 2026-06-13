@@ -2,6 +2,7 @@ import { and, desc, eq } from "drizzle-orm";
 
 import {
   aiCalls,
+  markets,
   matches,
   predictionOutcomes,
   predictions,
@@ -16,20 +17,76 @@ import type {
   DbPredictionOutcome,
 } from "./predictions";
 
+// Fallback enum→key pras rows SEM marketId (históricas pré-backfill, e qualquer
+// ambiente onde o backfill #162 — script manual, NÃO migration — não rodou: CI,
+// pglite, preview fresh). O enum legado `over_under_2_5` (schema.ts) é a key de
+// seed `over_under` (migration 0009). Coalesce SEMPRE pra uma key válida — nunca
+// null/"unknown" — ou a paridade quebra.
+const MARKET_ENUM_TO_KEY: Record<string, string> = {
+  over_under_2_5: "over_under",
+};
+
+export function marketEnumToKey(market: string): string {
+  return MARKET_ENUM_TO_KEY[market] ?? "over_under";
+}
+
+// Label de fallback espelha markets.label do seed 0009 (single-source quando o
+// join resolve; defensivo aqui pra rows sem marketId).
+const MARKET_KEY_TO_LABEL: Record<string, string> = {
+  over_under: "Over/Under gols",
+};
+
+function marketLabelForKey(key: string): string {
+  return MARKET_KEY_TO_LABEL[key] ?? key;
+}
+
+// Row crua do select (markets via LEFT JOIN → key/label NULL quando a row não tem
+// marketId). `toDashboardRow` é PURA + exportada pra testar o coalesce — o caminho
+// PRIMÁRIO de paridade (marketId null → over_under) — sem subir um banco.
+export type RawUserDashboardRow = Omit<
+  DashboardRow,
+  "marketKey" | "marketLabel"
+> & {
+  market: string;
+  marketKey: string | null;
+  marketLabel: string | null;
+};
+
+export function toDashboardRow({
+  market,
+  marketKey,
+  marketLabel,
+  ...rest
+}: RawUserDashboardRow): DashboardRow {
+  const key = marketKey ?? marketEnumToKey(market);
+  return {
+    ...rest,
+    marketKey: key,
+    marketLabel: marketLabel ?? marketLabelForKey(key),
+  };
+}
+
 /**
  * Todas as predições do usuário (+ outcome, se liquidado) pro dashboard. Lean:
  * só o necessário pra KPIs, gráfico e tabela. SCOPED por `userId` — base de toda
  * a privacidade per-user. Outcome via LEFT JOIN (null = pendente).
+ *
+ * LEFT JOIN markets (espelha o precedente em predictions.ts:120) resolve a key
+ * CANÔNICA do mercado. `markets.key` null (row sem marketId) cai no fallback
+ * enum→key, coalescendo pra `over_under` — o caminho PRIMÁRIO de paridade onde
+ * o backfill não rodou, não só defensivo (R2).
  */
 export async function getUserDashboardRows(
   userId: string,
 ): Promise<DashboardRow[]> {
-  return db
+  const rows = await db
     .select({
       predictionId: predictions.id,
       matchId: predictions.matchId,
       recommendation: predictions.recommendation,
       market: predictions.market,
+      marketKey: markets.key,
+      marketLabel: markets.label,
       league: matches.league,
       homeTeam: matches.homeTeam,
       awayTeam: matches.awayTeam,
@@ -44,12 +101,15 @@ export async function getUserDashboardRows(
     })
     .from(predictions)
     .innerJoin(matches, eq(predictions.matchId, matches.id))
+    .leftJoin(markets, eq(predictions.marketId, markets.id))
     .leftJoin(
       predictionOutcomes,
       eq(predictionOutcomes.predictionId, predictions.id),
     )
     .where(eq(predictions.userId, userId))
     .orderBy(desc(predictions.createdAt));
+
+  return rows.map(toDashboardRow);
 }
 
 export type DashboardDetail = {

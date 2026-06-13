@@ -12,7 +12,8 @@ function row(overrides: Partial<DashboardRow> = {}): DashboardRow {
     predictionId,
     matchId: `match-${predictionId}`,
     recommendation: "over",
-    market: "over_under_2_5",
+    marketKey: "over_under",
+    marketLabel: "Over/Under gols",
     league: "world_cup",
     homeTeam: "A",
     awayTeam: "B",
@@ -42,8 +43,8 @@ function settled(
 }
 
 describe("parseDashboardFilters", () => {
-  it("passes through each valid status", () => {
-    for (const s of ["pending", "won", "lost", "void"] as const) {
+  it("passes through each valid status, including push", () => {
+    for (const s of ["pending", "won", "lost", "void", "push"] as const) {
       expect(parseDashboardFilters({ status: s }).status).toBe(s);
     }
   });
@@ -53,12 +54,31 @@ describe("parseDashboardFilters", () => {
     expect(parseDashboardFilters({}).status).toBe("all");
   });
 
-  it("passes through the only valid market and defaults the rest", () => {
-    expect(parseDashboardFilters({ market: "over_under_2_5" }).market).toBe(
-      "over_under_2_5",
-    );
-    expect(parseDashboardFilters({ market: "btts" }).market).toBe("all");
-    expect(parseDashboardFilters({}).market).toBe("all");
+  // R8: parseMarket é DINÂMICO contra as keys disponíveis (passadas), não mais
+  // pinado a um literal. Key presente → passa; ausente / link antigo / sem lista
+  // → degrada pra "all" (sem contrato externo de URL).
+  it("passes through a market key only when it's in the available set", () => {
+    expect(
+      parseDashboardFilters({ market: "over_under" }, ["over_under"]).market,
+    ).toBe("over_under");
+    expect(
+      parseDashboardFilters({ market: "btts" }, ["over_under", "btts"]).market,
+    ).toBe("btts");
+  });
+
+  it("defaults an unavailable / legacy / missing market to 'all'", () => {
+    // Mercado fora da lista disponível
+    expect(
+      parseDashboardFilters({ market: "btts" }, ["over_under"]).market,
+    ).toBe("all");
+    // Link antigo com o enum legado → "all" (não está nas keys canônicas)
+    expect(
+      parseDashboardFilters({ market: "over_under_2_5" }, ["over_under"])
+        .market,
+    ).toBe("all");
+    // Sem lista de disponíveis → nada passa
+    expect(parseDashboardFilters({ market: "over_under" }).market).toBe("all");
+    expect(parseDashboardFilters({}, ["over_under"]).market).toBe("all");
   });
 
   it("delegates league to parseLeagueFilter", () => {
@@ -110,5 +130,45 @@ describe("deriveDashboardView", () => {
     expect(typeof kpis.yieldPct.value).toBe("string");
     expect(series).toHaveLength(2); // only the two settled rows
     expect(series.every((p) => typeof p.cumulative === "number")).toBe(true);
+  });
+
+  // R7: availableMarkets das rows-com-histórico (deduped), label de markets.label.
+  it("exposes availableMarkets from the deduped rows with their labels", () => {
+    const { availableMarkets } = deriveDashboardView(
+      rows,
+      parseDashboardFilters({}),
+    );
+    expect(availableMarkets).toEqual([
+      { key: "over_under", label: "Over/Under gols" },
+    ]);
+  });
+
+  it("segments by marketKey and the lone segment mirrors the aggregate (parity)", () => {
+    const { kpis, segments } = deriveDashboardView(
+      rows,
+      parseDashboardFilters({}),
+    );
+    expect(segments).toHaveLength(1);
+    expect(segments[0].marketKey).toBe("over_under");
+    expect(segments[0].marketLabel).toBe("Over/Under gols");
+    // single-market history → segment KPI view === aggregate KPI view
+    expect(segments[0].kpis).toEqual(kpis);
+  });
+
+  // R7 / empty-segment degradation: um mercado com aposta mas SEM resolução
+  // (yield.n === 0) marca o segmento como vazio — a régua/bandas degradam pra "—".
+  it("degrades a segment with no resolved bets to an empty state", () => {
+    const pendingOnly: DashboardRow[] = [
+      row({ predictionId: "pend1", result: null }),
+    ];
+    const { segments } = deriveDashboardView(
+      pendingOnly,
+      parseDashboardFilters({}),
+    );
+    expect(segments).toHaveLength(1);
+    expect(segments[0].empty).toBe(true);
+    expect(segments[0].graduation.resolved).toBe(0);
+    expect(segments[0].graduation.graduated).toBe(false);
+    expect(segments[0].kpis.yieldPct.value).toBe("—");
   });
 });

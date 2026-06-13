@@ -6,11 +6,13 @@ import { BackLink } from "@/components/back-link";
 import { BankrollChart } from "@/components/dashboard/bankroll-chart";
 import { DashboardFiltersBar } from "@/components/dashboard/dashboard-filters";
 import { KpiCards } from "@/components/dashboard/kpi-cards";
+import { MarketSegments } from "@/components/dashboard/market-segments";
 import { PredictionsTable } from "@/components/dashboard/predictions-table";
 import { Card } from "@/components/ui/card";
 import { DesktopShell } from "@/components/desktop-shell";
 import { auth } from "@/auth";
 import {
+  availableMarketKeys,
   deriveDashboardView,
   parseDashboardFilters,
 } from "@/lib/dashboard/derive-view";
@@ -56,11 +58,12 @@ export default async function AdminUserTrackingPage({
   // dentro do caminho gateado por admin. Assinatura segue userId-OBRIGATÓRIO.
   const rows = await getUserDashboardRows(userId);
 
-  const filters = parseDashboardFilters({ status, league, market });
-  const { kpis, series, tableRows, availableLeagues } = deriveDashboardView(
-    rows,
-    filters,
+  const filters = parseDashboardFilters(
+    { status, league, market },
+    availableMarketKeys(rows),
   );
+  const { kpis, segments, series, tableRows, availableLeagues, availableMarkets } =
+    deriveDashboardView(rows, filters);
 
   const basePath = `/admin/users/${userId}`;
 
@@ -103,6 +106,8 @@ export default async function AdminUserTrackingPage({
           <div className="flex flex-col gap-8">
             <KpiCards view={kpis} />
 
+            <MarketSegments segments={segments} />
+
             <section className="flex flex-col gap-3">
               <div className="flex items-baseline justify-between">
                 <span className="font-mono text-[10.5px] uppercase tracking-[0.18em] text-muted-foreground">
@@ -119,6 +124,7 @@ export default async function AdminUserTrackingPage({
               <DashboardFiltersBar
                 filters={filters}
                 leagues={availableLeagues}
+                markets={availableMarkets}
                 basePath={basePath}
               />
               <PredictionsTable rows={tableRows} basePath={basePath} />
