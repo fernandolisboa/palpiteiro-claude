@@ -389,6 +389,22 @@ export async function predict({
   //     do insert de ai_call. A persistência (passo 11) só CONSOME estes mapas.
   const catalog = await resolveMarketCatalog(cartridge.descriptor.dbMarketKey);
 
+  // 4c. Guarda de seed COMPLETO — PRÉ-chamada-paga. resolveMarketCatalog (shared
+  //     com #164) só hard-falha em mercado ausente ou ZERO seleções; um mercado
+  //     seedado com SÓ ALGUMAS seleções (ex.: 'over' sem 'under') passaria por ela
+  //     e só estouraria nos hard-fails por-seleção DEPOIS de client.messages.create()
+  //     (queimando spend + uma row de ai_call). O invariante "falha antes do gasto"
+  //     exige checar AQUI que TODA seleção do cartucho tem id no catálogo.
+  const missingSelections = cartridge.selections.filter(
+    (key) => !catalog.idByKey.has(key),
+  );
+  if (missingSelections.length > 0) {
+    throw new PredictError(
+      `market '${cartridge.descriptor.dbMarketKey}' seedado incompleto: faltam seleções [${missingSelections.join(", ")}]`,
+      { marketKey, missingSelections },
+    );
+  }
+
   // 5. Implied probabilities normalizadas (N seleções; contrato chave→índice).
   //    O candidate-odds array é montado na ordem `descriptor.selectionKeys`
   //    (['over','under']) SOBRE as odds do bundle — nunca por ordem de linhas de

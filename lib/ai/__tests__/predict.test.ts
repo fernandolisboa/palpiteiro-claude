@@ -1,3 +1,4 @@
+import Anthropic from "@anthropic-ai/sdk";
 import { beforeEach, describe, expect, it, vi } from "vitest";
 
 import {
@@ -705,18 +706,46 @@ describe("predict() — paridade de colunas (#165): legado byte-idêntico + nova
 });
 
 describe("predict() — bump over_under_v2.0: prompt/mensagem byte-idênticos ao v1.3", () => {
-  it("cartridge.systemPrompt + buildUserMessage são byte-idênticos pro mesmo input", async () => {
-    // O cartucho ainda diz "v2.0" na versão, mas o TEXTO do prompt e a mensagem
-    // são idênticos ao v1.3 (puro restructure). Snapshot literal dos dois.
+  it("cartridge.systemPrompt é byte-idêntico ao v1.3 (string-equality completa)", () => {
+    // O cartucho diz "v2.0" na versão, mas o TEXTO do prompt é idêntico ao v1.3
+    // (puro restructure). Snapshot LITERAL da string INTEIRA — não um toContain de
+    // trecho. É o único guard automático contra drift silencioso do prompt: QUALQUER
+    // mudança de UM caractere quebra este teste (e exige bump consciente de versão).
     expect(overUnderCartridge.version).toBe("over_under_v2.0");
-    // Trecho fixo do system prompt (byte-a-byte do v1.3).
-    expect(overUnderCartridge.systemPrompt).toContain(
-      "Você é um analista quantitativo de apostas esportivas focado exclusivamente no mercado over/under 2.5 gols.",
-    );
-    expect(overUnderCartridge.systemPrompt).toContain(
-      "edge >= 5%). Caso contrário, retorne \"pass\".",
-    );
+    expect(overUnderCartridge.systemPrompt).toMatchInlineSnapshot(`
+      "Você é um analista quantitativo de apostas esportivas focado exclusivamente no mercado over/under 2.5 gols.
 
+      Sua única tarefa é decidir, para o jogo descrito pelo usuário, entre três opções:
+      - "over": apostar em mais de 2.5 gols totais
+      - "under": apostar em menos de 2.5 gols totais
+      - "pass": não recomendar aposta neste jogo
+
+      Regras invioláveis:
+      1. Recomende "over" ou "under" SOMENTE se sua probabilidade estimada (confidence_pct) supera a probabilidade implícita normalizada do lado correspondente em pelo menos 5 pontos percentuais (edge >= 5%). Caso contrário, retorne "pass".
+      2. "pass" é a opção segura por padrão e um resultado válido e esperado. Em caso de dúvida, passe a vez. Não force uma recomendação.
+      3. confidence_pct é sua probabilidade estimada para o LADO RECOMENDADO. Quando "pass", reporte sua melhor estimativa para "over".
+      4. minimum_odd: odd decimal mínima na qual o palpite ainda mantém edge >= 5%. Obrigatório quando recommendation ∈ {"over","under"}; OMITIR quando "pass".
+      5. Use APENAS os dados fornecidos pelo usuário. Não invente jogadores, lesões, escalações, estatísticas ou tendências.
+      6. Raciocine quantitativamente quando possível: médias de gols marcados/sofridos, ritmo recente, impacto de ausências em finalização/defesa, padrão de H2H, contexto da competição.
+      7. Considere a confiabilidade dos dados: poucos jogos de forma recente, ausência de escalação publicada, ou H2H muito antigo são motivos pra reduzir confiança (e provavelmente "pass").
+      8. Quando a seção "Lesões / Suspensões" indicar "dados indisponíveis nesta análise" para um time, NÃO assuma que não há lesões — trate como dado faltante e reduza a confiança da análise.
+      9. Responda EXCLUSIVAMENTE chamando a ferramenta \`submit_prediction\` com os campos definidos no schema dela. Não produza texto livre fora da chamada da ferramenta.
+
+      Redação do campo rationale (tom, não conteúdo):
+      - Estas regras mudam APENAS a forma de escrever o rationale. A decisão (recommendation, confidence_pct, minimum_odd) segue exclusivamente as regras invioláveis acima — decida primeiro como sempre; na dúvida sobre o edge mínimo, continue passando a vez.
+      - Escreva para um leitor leigo, que NÃO conhece estatística de apostas: frases curtas, linguagem do dia a dia.
+      - Abra com a conclusão em UMA frase simples (ex.: "Este jogo tem boas chances de terminar com 3 gols ou mais." / "Melhor não apostar neste jogo.").
+      - Depois da conclusão, sustente com os números decisivos (médias de gols, forma recente, ausências, histórico do confronto) — a base quantitativa continua obrigatória; muda só o tom.
+      - Jargão técnico apenas se explicado em meia frase no próprio texto (ex.: "probabilidade implícita — a chance que a odd embute"). Prefira "histórico de confrontos" a "H2H".
+      - Não exagere a convicção pra soar didático: a frase de abertura deve refletir sua incerteza real (um caso apertado abre com "por pouco", não com certeza).
+      - Mantenha o tamanho de sempre: ~450 caracteres (máx. 600). Linguagem acessível não significa texto mais longo."
+    `);
+  });
+
+  it("buildUserMessage renderiza byte-idêntico ao v1.3 pro mesmo input (string-equality completa)", () => {
+    // Snapshot LITERAL da mensagem markdown INTEIRA renderizada pro fixture abaixo
+    // (não toContain de blocos). Pareia com o snapshot do systemPrompt: juntos
+    // travam o PAYLOAD completo (system + user) contra qualquer drift silencioso.
     const input = buildPredictionInput({
       match: {
         externalId: "ext-1",
@@ -742,18 +771,46 @@ describe("predict() — bump over_under_v2.0: prompt/mensagem byte-idênticos ao
     const message = overUnderCartridge.buildUserMessage(input, {
       daysToKickoff: 3,
     });
-    // Renderização markdown estável (v1.3): cabeçalho do jogo + bloco de odds.
-    expect(message).toContain("# Jogo");
-    expect(message).toContain(`- Mandante: ${matchRow.homeTeam}`);
-    expect(message).toContain(
-      "- Over 2.5: odd 1.90 → implícita normalizada 51.28%",
-    );
-    expect(message).toContain(
-      "- Under 2.5: odd 1.95 → implícita normalizada 48.72%",
-    );
-    expect(message).toContain(
-      "Decida: \"over\", \"under\" ou \"pass\". Aplique a regra de edge >= 5%.",
-    );
+    expect(message).toMatchInlineSnapshot(`
+      "# Jogo
+      - Competição: brasileirao_a
+      - Mandante: CR Flamengo
+      - Visitante: Fluminense FC
+      - Kickoff (UTC): 2026-05-15T19:00:00.000Z
+      - Local: Maracanã
+
+      # Mandante — CR Flamengo
+      ## Classificação
+      - Posição: 1, 20 pts em 10 jogos
+      - Gols: 18 pró / 9 contra (saldo 9)
+      ## Forma recente (mais recente primeiro)
+      - (sem dados)
+      ## Lesões / Suspensões
+      - (nenhuma reportada)
+
+      # Visitante — Fluminense FC
+      ## Classificação
+      - Posição: 2, 18 pts em 10 jogos
+      - Gols: 15 pró / 10 contra (saldo 5)
+      ## Forma recente (mais recente primeiro)
+      - (sem dados)
+      ## Lesões / Suspensões
+      - (nenhuma reportada)
+
+      # Confrontos diretos (H2H)
+      - (sem histórico fornecido)
+
+      # Odds e probabilidades implícitas
+      - Bookmaker: Pinnacle (capturado em 2026-05-15T12:00:00.000Z)
+      - Over 2.5: odd 1.90 → implícita normalizada 51.28%
+      - Under 2.5: odd 1.95 → implícita normalizada 48.72%
+
+      # Contexto temporal
+      - Dias até o jogo: 3 (≤1 = dados mais confiáveis; ≥5 = lineup ainda indefinido, lesões podem mudar)
+
+      # Sua tarefa
+      Decida: "over", "under" ou "pass". Aplique a regra de edge >= 5%. Chame a ferramenta submit_prediction com os campos do schema."
+    `);
   });
 });
 
@@ -998,5 +1055,99 @@ describe("predict() — Opus adaptive path: model declines to call the tool", ()
     expect(aiCallRow.model).toBe("claude-opus-4-8");
     expect(aiCallRow.inputTokens).toBe(1200);
     expect(aiCallRow.outputTokens).toBe(300);
+  });
+});
+
+describe("predict() — error paths: invariante 1 ai_call / 0 prediction / 0 PSO", () => {
+  // Espelha o teste de tool_missing acima pras OUTRAS duas classes de erro do
+  // PLAN-165 (invalid_output, provider_error): cada uma persiste EXATAMENTE um
+  // ai_call (a auditoria do erro via persistAiCallError) e ZERO prediction/PSO.
+
+  it("invalid_output: output do LLM falha o Zod do cartucho → 1 ai_call, 0 prediction, 0 PSO, throws", async () => {
+    // tool_use VÁLIDO (o modelo chamou submit_prediction), mas o input falha o
+    // outputSchema do cartucho — confidence_pct fora do range [0,100]. predict()
+    // audita como invalid_output (1 insert em ai_calls) e lança; nenhuma
+    // prediction nem candidate set é escrito.
+    anthropicCreate.mockResolvedValue({
+      id: "msg-3",
+      type: "message",
+      role: "assistant",
+      model: "claude-opus-4-8",
+      stop_reason: "tool_use",
+      stop_sequence: null,
+      content: [
+        {
+          type: "tool_use",
+          id: "tu-2",
+          name: "submit_prediction",
+          input: {
+            recommendation: "over",
+            confidence_pct: 150, // inválido: > 100, viola z.number().max(100)
+            rationale: "Defesas frágeis dos dois lados.",
+            key_factors: ["xG alto", "defesas vazadas"],
+            minimum_odd: 1.8,
+          },
+        },
+      ],
+      usage: { input_tokens: 1200, output_tokens: 300 },
+    });
+
+    await expect(
+      predict({ matchId: "m-1", userId: "u-1", isAdmin: false }),
+    ).rejects.toThrow("LLM output failed Zod validation");
+
+    // A chamada paga aconteceu; auditada como invalid_output — UM insert
+    // (ai_calls via persistAiCallError), nenhuma prediction, nenhum PSO.
+    expect(anthropicCreate).toHaveBeenCalledTimes(1);
+    expect(insertValues).toHaveBeenCalledTimes(1);
+    const aiCallRow = insertValues.mock.calls[0]?.[0] as { status: string };
+    expect(aiCallRow.status).toBe("invalid_output");
+  });
+
+  it("provider_error: client.messages.create rejeita (Anthropic.APIError) → 1 ai_call, 0 prediction, 0 PSO, throws", async () => {
+    // A chamada paga estoura com um erro do provider. classifyAnthropicError
+    // mapeia APIError → provider_error; persistAiCallError grava UM ai_call
+    // (tokens 0) e predict() relança como PredictError. Nenhuma prediction/PSO.
+    anthropicCreate.mockRejectedValue(
+      new Anthropic.APIError(
+        500,
+        undefined,
+        "internal server error",
+        undefined,
+      ),
+    );
+
+    await expect(
+      predict({ matchId: "m-1", userId: "u-1", isAdmin: false }),
+    ).rejects.toThrow("anthropic call failed");
+
+    expect(anthropicCreate).toHaveBeenCalledTimes(1);
+    expect(insertValues).toHaveBeenCalledTimes(1);
+    const aiCallRow = insertValues.mock.calls[0]?.[0] as { status: string };
+    expect(aiCallRow.status).toBe("provider_error");
+  });
+});
+
+describe("predict() — guarda de seed COMPLETO falha ANTES do gasto", () => {
+  it("mercado seedado parcialmente (falta 'under') → throws ANTES de client.messages.create, 0 inserts", async () => {
+    // resolveMarketCatalog (shared com #164) só hard-falha em mercado ausente ou
+    // ZERO seleções. Um catálogo com SÓ 'over' passaria por ela e, sem a guarda
+    // pré-paga, só quebraria nos hard-fails por-seleção DEPOIS da chamada paga —
+    // queimando spend + uma row de ai_call. A guarda checa o seed COMPLETO antes
+    // da chamada: predict() lança ANTES de tocar o LLM e sem nenhum insert.
+    resolveMarketCatalog.mockResolvedValue({
+      marketId: "mkt-ou",
+      idByKey: new Map([["over", "sel-over"]]), // falta 'under'
+      keyById: new Map([["sel-over", "over"]]),
+    });
+
+    await expect(
+      predict({ matchId: "m-1", userId: "u-1", isAdmin: false }),
+    ).rejects.toThrow("seedado incompleto");
+
+    // Falhou ANTES do gasto: nenhuma chamada paga ao LLM e nenhum insert
+    // (nem ai_call, nem prediction, nem PSO).
+    expect(anthropicCreate).not.toHaveBeenCalled();
+    expect(insertValues).not.toHaveBeenCalled();
   });
 });
