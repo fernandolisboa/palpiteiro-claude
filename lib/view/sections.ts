@@ -65,9 +65,21 @@ export function toFormView(args: {
   };
 }
 
+// Cut padrão (over/under na linha 2.5): total ≥ 3 gols → "over". Byte-idêntico ao
+// corte legado — é o default de toH2HView, então a paridade do over/under é exata.
+const overUnderClassify = (homeGoals: number, awayGoals: number): string =>
+  homeGoals + awayGoals >= 3 ? "over" : "under";
+
+// `classify` parametriza a lente de H2H por mercado (#169): mapeia os gols do
+// confronto numa key de seleção. `null` = mercado não baseado em gols → tags
+// neutras ("") e summary só com a média (sem "over X%"). O #170 passa
+// `getMarketPresentation(marketKey).classifyH2H`; o caller atual (match-sections)
+// não muda e cai no default over/under.
 export function toH2HView(
   h2h: NormalizedH2H[],
   limit = 5,
+  classify: ((homeGoals: number, awayGoals: number) => string) | null =
+    overUnderClassify,
 ): H2HView {
   const sorted = [...h2h].sort(
     (a, b) => b.kickoffTimestampMs - a.kickoffTimestampMs,
@@ -79,22 +91,26 @@ export function toH2HView(
   for (const f of sorted) {
     if (f.score.home === null || f.score.away === null) continue;
     const total = f.score.home + f.score.away;
+    const tag = classify ? classify(f.score.home, f.score.away) : "";
     rows.push({
       date: shortDate(new Date(f.kickoffTimestampMs)),
       h: f.homeTeam,
       a: f.awayTeam,
       s: `${f.score.home} – ${f.score.away}`,
-      tag: total >= 3 ? "over" : "under",
+      tag,
     });
-    if (total >= 3) overCount++;
+    if (tag === "over") overCount++;
     totalGoals += total;
     counted++;
     if (rows.length >= limit) break;
   }
+  const avgGoals = counted === 0 ? 0 : totalGoals / counted;
   const summary =
     counted === 0
       ? "sem histórico recente"
-      : `over ${Math.round((overCount / counted) * 100)}% · média ${(totalGoals / counted).toFixed(1)} gols`;
+      : classify === null
+        ? `média ${avgGoals.toFixed(1)} gols`
+        : `over ${Math.round((overCount / counted) * 100)}% · média ${avgGoals.toFixed(1)} gols`;
   return { rows, summary };
 }
 

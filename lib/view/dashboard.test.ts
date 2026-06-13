@@ -185,6 +185,36 @@ describe("toPredictionDetailView", () => {
     expect(v.prediction.stake).toBe("2.00 u");
     expect(v.outcome?.profit).toBe("+1.84 u");
     expect(v.match.score).toBe("2-1");
+    // Métrica de settlement market-aware (#169): label do mercado + valor do
+    // escalar notNull total_goals quando resultData é null (paridade c/ a Row legada).
+    expect(v.outcome?.settlementMetric).toEqual({
+      label: "gols (90')",
+      value: "3",
+    });
+    // totalGoals legado segue exposto até o contract (#170).
+    expect(v.outcome?.totalGoals).toBe(3);
+  });
+
+  it("settlementMetric prefers resultData.totalGoals when present", () => {
+    const v = toPredictionDetailView(
+      makeDetail({
+        outcome: {
+          id: "o1",
+          predictionId: "p1",
+          totalGoals: 3,
+          resultData: { homeScore: 2, awayScore: 2, totalGoals: 4 },
+          result: "won",
+          profitUnits: "1.84",
+          overrideByUserId: null,
+          settledAt: new Date("2026-06-12T05:00:00Z"),
+        },
+      }),
+      { includeRawPayloads: false },
+    );
+    expect(v.outcome?.settlementMetric).toEqual({
+      label: "gols (90')",
+      value: "4",
+    });
   });
 
   it("maps a still-pending prediction", () => {

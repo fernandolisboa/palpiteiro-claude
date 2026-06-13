@@ -1,6 +1,9 @@
 import { describe, expect, it } from "vitest";
 
-import { toAnalysisView } from "./analysis";
+import { computeMarketScenarios } from "@/lib/odds/scenario";
+
+import { toAnalysisView, toOutcomesView } from "./analysis";
+import { getMarketPresentation } from "./markets/presentation";
 
 const baseCreatedAt = new Date(2026, 4, 19, 14, 22);
 const threeHoursLater = new Date(2026, 4, 19, 17, 22);
@@ -31,6 +34,39 @@ describe("toAnalysisView", () => {
     // EV à mão: 0.58 × 1.92 − 1 = +0.1136 → "+11.4%"
     expect(view).toEqual({
       kind: "OVER",
+      recommendation: {
+        marketKey: "over_under",
+        marketLabel: "Over/Under gols",
+        selectionKey: "over",
+        selectionLabel: "Over",
+        line: 2.5,
+      },
+      // outcomes espelham byte-a-byte as células do bloco scenarios (mesmo
+      // computeScenarios, mesmos formatters); breakEven = modelBreakEvenOdd.
+      outcomes: [
+        {
+          id: "over",
+          label: "Over 2.5",
+          modelProb: "58%",
+          marketProb: "50.7%",
+          odd: "1.92",
+          edge: "+7.3pp",
+          expectedReturn: "+11.4%",
+          breakEven: "1.72",
+          isRecommended: true,
+        },
+        {
+          id: "under",
+          label: "Under 2.5",
+          modelProb: "42%",
+          marketProb: "49.3%",
+          odd: "1.95",
+          edge: "-7.3pp",
+          expectedReturn: "-18.1%",
+          breakEven: "2.38",
+          isRecommended: false,
+        },
+      ],
       minOdd: "1.75",
       betSummary: {
         market: "Mais de 2.5 gols",
@@ -105,6 +141,37 @@ describe("toAnalysisView", () => {
     // EV à mão: 0.56 × 1.85 − 1 = +0.036 → "+3.6%"
     expect(view).toEqual({
       kind: "UNDER",
+      recommendation: {
+        marketKey: "over_under",
+        marketLabel: "Over/Under gols",
+        selectionKey: "under",
+        selectionLabel: "Under",
+        line: 2.5,
+      },
+      outcomes: [
+        {
+          id: "over",
+          label: "Over 2.5",
+          modelProb: "44%",
+          marketProb: "50.7%",
+          odd: "1.98",
+          edge: "-6.7pp",
+          expectedReturn: "-12.9%",
+          breakEven: "2.27",
+          isRecommended: false,
+        },
+        {
+          id: "under",
+          label: "Under 2.5",
+          modelProb: "56%",
+          marketProb: "49.3%",
+          odd: "1.85",
+          edge: "+6.7pp",
+          expectedReturn: "+3.6%",
+          breakEven: "1.79",
+          isRecommended: true,
+        },
+      ],
       minOdd: "1.80",
       betSummary: {
         market: "Menos de 2.5 gols",
@@ -178,6 +245,33 @@ describe("toAnalysisView", () => {
 
     expect(view).toEqual({
       kind: "PASS",
+      // pass não tem aposta → recommendation null; mas os outcomes (probs/edges
+      // neutros do par congelado) ainda são expostos, nenhum recomendado.
+      recommendation: null,
+      outcomes: [
+        {
+          id: "over",
+          label: "Over 2.5",
+          modelProb: "53%",
+          marketProb: "50%",
+          odd: "1.92",
+          edge: "+3.0pp",
+          expectedReturn: "+1.8%",
+          breakEven: "1.89",
+          isRecommended: false,
+        },
+        {
+          id: "under",
+          label: "Under 2.5",
+          modelProb: "47%",
+          marketProb: "50%",
+          odd: "1.92",
+          edge: "-3.0pp",
+          expectedReturn: "-9.8%",
+          breakEven: "2.13",
+          isRecommended: false,
+        },
+      ],
       minOdd: null,
       betSummary: null,
       oddAtRec: null,
@@ -244,6 +338,39 @@ describe("toAnalysisView", () => {
 
     expect(view).toEqual({
       kind: "OVER",
+      recommendation: {
+        marketKey: "over_under",
+        marketLabel: "Over/Under gols",
+        selectionKey: "over",
+        selectionLabel: "Over",
+        line: 2.5,
+      },
+      // Histórica sem par congelado: odd/EV degradam pra "—" (igual ao bloco
+      // scenarios); modelProb/edge/breakEven sobrevivem dos valores salvos.
+      outcomes: [
+        {
+          id: "over",
+          label: "Over 2.5",
+          modelProb: "58%",
+          marketProb: "50.7%",
+          odd: "—",
+          edge: "+7.3pp",
+          expectedReturn: "—",
+          breakEven: "1.72",
+          isRecommended: true,
+        },
+        {
+          id: "under",
+          label: "Under 2.5",
+          modelProb: "42%",
+          marketProb: "49.3%",
+          odd: "—",
+          edge: "-7.3pp",
+          expectedReturn: "—",
+          breakEven: "2.38",
+          isRecommended: false,
+        },
+      ],
       minOdd: "1.75",
       betSummary: {
         market: "Mais de 2.5 gols",
@@ -610,5 +737,48 @@ describe("toAnalysisView", () => {
       threeHoursLater,
     );
     expect(view.scenarios).toBeNull();
+    // Bloco degradado → sem outcomes (o array acompanha o scenarios null).
+    expect(view.outcomes).toEqual([]);
+  });
+});
+
+// Caminho N-vias canônico (ADR 0018) exercitado por fixture mock ANTES da
+// ativação de mercados N≥3 no backend (Fase 4 / #173): toOutcomesView consome
+// computeMarketScenarios (puro, sem DB/catálogo) + a apresentação do mercado.
+describe("toOutcomesView (N-vias)", () => {
+  it("1X2 (match_result): produz 3 outcomes a partir de um fixture mock", () => {
+    const result = computeMarketScenarios({
+      selections: [
+        { key: "home", modelProbPct: 50, odd: 2.1 },
+        { key: "draw", modelProbPct: 27, odd: 3.4 },
+        { key: "away", modelProbPct: 23, odd: 3.6 },
+      ],
+      recommendedKey: "home",
+    });
+
+    const outcomes = toOutcomesView(
+      result,
+      getMarketPresentation("match_result"),
+      null,
+    );
+
+    expect(outcomes).toHaveLength(3);
+    expect(outcomes.map((o) => o.id)).toEqual(["home", "draw", "away"]);
+    // Labels vêm da apresentação do mercado (sem linha → só o label da seleção).
+    expect(outcomes.map((o) => o.label)).toEqual(["Casa", "Empate", "Fora"]);
+    expect(outcomes.map((o) => o.isRecommended)).toEqual([true, false, false]);
+    // Valores EXATOS do caminho N-vias (pina a fórmula edge/EV/break-even + o
+    // sufixo "pp", não só não-degradação). overround = Σ(1/odd) = 1.04809;
+    // home: implícita 0.47619/1.04809 = 45.4%; edge 50−45.4 = +4.6pp;
+    // EV 0.50×2.10−1 = +5.0%; breakEven = 100/50 = 2.00.
+    expect(outcomes[0].modelProb).toBe("50%");
+    expect(outcomes[0].odd).toBe("2.10");
+    expect(outcomes[0].marketProb).toBe("45.4%");
+    expect(outcomes[0].edge).toBe("+4.6pp");
+    expect(outcomes[0].expectedReturn).toBe("+5.0%");
+    expect(outcomes[0].breakEven).toBe("2.00");
+    // draw/away (não recomendados): fecha a normalização do overround (Σ = 100%).
+    expect(outcomes[1].marketProb).toBe("28.1%");
+    expect(outcomes[2].marketProb).toBe("26.5%");
   });
 });

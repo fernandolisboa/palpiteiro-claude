@@ -12,11 +12,17 @@ import {
   computeEvPerUnit,
   computeScenarios,
   MIN_EDGE_PP,
+  type ScenarioSelection,
+  type Scenarios,
   type ScenarioSide,
 } from "@/lib/odds/scenario";
+import {
+  getMarketPresentation,
+  type MarketPresentation,
+} from "@/lib/view/markets/presentation";
 import type {
   AnalysisView,
-  BetSummary,
+  OutcomeView,
   Recommendation,
   ScenarioSideView,
 } from "@/lib/view/types";
@@ -36,6 +42,11 @@ type PredictionInput = {
   modelVersion: string;
   promptVersion: string;
   createdAt: Date;
+  // Identidade de mercado (#169, additive/opcional). O page/action ainda NÃO
+  // passa (passa só o shape over/under) — default `over_under` mantém a paridade
+  // até o #170 ligar a fiação. `line` cai pra defaultLine da apresentação.
+  marketKey?: string;
+  line?: number | null;
 };
 
 type AiCallInput = {
@@ -46,17 +57,6 @@ const KIND_MAP: Record<PredictionInput["recommendation"], Recommendation> = {
   over: "OVER",
   under: "UNDER",
   pass: "PASS",
-};
-
-const BET_SUMMARY: Record<"over" | "under", BetSummary> = {
-  over: { market: "Mais de 2.5 gols", plain: "pelo menos 3 gols no jogo" },
-  under: { market: "Menos de 2.5 gols", plain: "no máximo 2 gols no jogo" },
-};
-
-// Descrição leiga do lado na frase de framing do break-even da zebra.
-const FRAMING_SIDE_LABEL: Record<"over" | "under", string> = {
-  over: "pelo menos 3 gols",
-  under: "menos de 3 gols",
 };
 
 // numeric do Drizzle chega como STRING — converte na borda. Retorna null pra
@@ -97,21 +97,21 @@ function toScenarioSideView(side: ScenarioSide): ScenarioSideView {
   };
 }
 
-// Bloco de cenários (ADR 0012): tudo derivado dos valores CONGELADOS da
-// prediction via computeScenarios (precedência: salvo vence recomputado —
-// invariante: o edge da coluna recomendada é o edgePct salvo da row). Nunca
-// usa o snapshot vivo; as odds atuais já têm casa no OddsCard.
-function toScenariosView(
+// Cenários binários CONGELADOS (ADR 0012) via computeScenarios (precedência:
+// salvo vence recomputado — invariante: o edge da coluna recomendada é o edgePct
+// salvo da row). Roteado por DADO (existência do par congelado over/under), NUNCA
+// por `if (market === "over_under")` — só over/under carrega esse par em #169; o
+// caminho N-vias canônico (computeMarketScenarios → toOutcomesView) cobre o resto.
+// Defensivo: confidence fora de (0, 100) degrada o bloco inteiro (o módulo puro
+// lança; aqui dado ruim não pode derrubar a página) → null.
+function computeBinaryScenarios(
   prediction: PredictionInput,
   confidenceNum: number | null,
-): AnalysisView["scenarios"] {
-  // Defensivo: confidence fora de (0, 100) degrada o bloco inteiro (o módulo
-  // puro lança; aqui dado ruim não pode derrubar a página).
+): Scenarios | null {
   if (confidenceNum === null || confidenceNum <= 0 || confidenceNum >= 100) {
     return null;
   }
-  const isPass = prediction.recommendation === "pass";
-  const computed = computeScenarios({
+  return computeScenarios({
     recommendation: prediction.recommendation,
     confidencePct: confidenceNum,
     oddAtRecommendation: toValidOdd(prediction.oddAtRecommendation),
@@ -120,7 +120,18 @@ function toScenariosView(
     overOdd: toValidOdd(prediction.overOddAtPrediction),
     underOdd: toValidOdd(prediction.underOddAtPrediction),
   });
+}
 
+// Bloco de cenários (view legada) a partir do `Scenarios` já computado. Nunca usa
+// o snapshot vivo; as odds atuais já têm casa no OddsCard. `isPass` deriva de
+// `recommended === null` (pass não tem lado). Labels de framing vêm da
+// apresentação de mercado (single-source) — over/under produz as strings VERBATIM.
+function toScenariosView(
+  computed: Scenarios,
+  presentation: MarketPresentation,
+  line: number | null,
+): NonNullable<AnalysisView["scenarios"]> {
+  const isPass = computed.recommended === null;
   // Lado alternativo (zebra) — só significa algo fora do pass.
   const altKey: "over" | "under" =
     computed.recommended === "under" ? "over" : "under";
@@ -134,7 +145,7 @@ function toScenariosView(
   if (isPass) {
     framing = `vantagens pequenas (abaixo de ${MIN_EDGE_PP}pp) ficam dentro da margem de erro do modelo — por isso não há recomendação`;
   } else if (altSide.breakEvenProbPct !== null) {
-    framing = `a aposta em ${FRAMING_SIDE_LABEL[altKey]} só sai do zero se a chance real for maior que ${formatPct(altSide.breakEvenProbPct)} — na análise o modelo estimou ${formatPct(altSide.modelProbPct)}`;
+    framing = `a aposta em ${presentation.framingLabel(altKey, line)} só sai do zero se a chance real for maior que ${formatPct(altSide.breakEvenProbPct)} — na análise o modelo estimou ${formatPct(altSide.modelProbPct)}`;
   }
 
   return {
@@ -149,6 +160,70 @@ function toScenariosView(
   };
 }
 
+// Uma seleção → OutcomeView, REUSANDO toScenarioSideView pra garantir formatação
+// byte-idêntica ao bloco de cenários (paridade). `breakEven` é a odd de
+// equilíbrio do modelo (modelBreakEvenOdd), nunca a probabilidade. ScenarioSide e
+// ScenarioSelection compartilham os campos numéricos, então serve aos dois caminhos.
+function toOutcomeView(
+  side: ScenarioSide,
+  key: string,
+  presentation: MarketPresentation,
+  line: number | null,
+  isRecommended: boolean,
+): OutcomeView {
+  const sv = toScenarioSideView(side);
+  return {
+    id: key,
+    label: presentation.outcomeLabel(key, line),
+    modelProb: sv.modelProb,
+    marketProb: sv.marketProb,
+    odd: sv.odd,
+    edge: sv.edge,
+    expectedReturn: sv.expectedReturn,
+    breakEven: sv.modelBreakEvenOdd,
+    isRecommended,
+  };
+}
+
+// Outcomes do over/under a partir do `Scenarios` binário — ordem [over, under]
+// (espelha market_selections.sort_order por construção, sem read de DB).
+function toBinaryOutcomes(
+  computed: Scenarios,
+  presentation: MarketPresentation,
+  line: number | null,
+): OutcomeView[] {
+  return [
+    toOutcomeView(
+      computed.over,
+      "over",
+      presentation,
+      line,
+      computed.recommended === "over",
+    ),
+    toOutcomeView(
+      computed.under,
+      "under",
+      presentation,
+      line,
+      computed.recommended === "under",
+    ),
+  ];
+}
+
+// Forma N-vias canônica (ADR 0018): outcomes a partir de computeMarketScenarios.
+// PURA — sem DB/catálogo. Exportada pra exercitar mercados N≥3 (ex.: 1X2 via
+// fixture mock) antes da ativação no backend (Fase 4). over/under usa o caminho
+// binário congelado (toBinaryOutcomes) por paridade; ambos passam por toOutcomeView.
+export function toOutcomesView(
+  result: { selections: ScenarioSelection[]; recommended: string | null },
+  presentation: MarketPresentation,
+  line: number | null,
+): OutcomeView[] {
+  return result.selections.map((s) =>
+    toOutcomeView(s, s.key, presentation, line, s.key === result.recommended),
+  );
+}
+
 export function toAnalysisView(
   prediction: PredictionInput,
   aiCall: AiCallInput | null,
@@ -159,6 +234,15 @@ export function toAnalysisView(
   const oddAtRecNum = toFiniteNumber(prediction.oddAtRecommendation);
   const minOddNum = toFiniteNumber(prediction.minimumOdd);
   const confidenceNum = toFiniteNumber(prediction.confidencePct);
+
+  // Apresentação do mercado (labels/frases). Default over_under: o page/action
+  // ainda não passa marketKey (#170 liga). `line` cai pra defaultLine do mercado.
+  const presentation = getMarketPresentation(prediction.marketKey ?? "over_under");
+  const line = prediction.line ?? presentation.defaultLine;
+
+  // Computa o cenário binário UMA vez e alimenta tanto o bloco legado (scenarios)
+  // quanto o array multi-outcome (outcomes) — mesmos números, paridade trivial.
+  const computed = computeBinaryScenarios(prediction, confidenceNum);
 
   // EV do lado recomendado na odd CONGELADA da análise (nunca na odd viva —
   // o OddsCard cobre as atuais). computeEvPerUnit exige odd > 1; valores fora
@@ -201,9 +285,21 @@ export function toAnalysisView(
 
   return {
     kind: KIND_MAP[prediction.recommendation],
+    recommendation: isPass
+      ? null
+      : {
+          marketKey: presentation.marketKey,
+          marketLabel: presentation.marketLabel,
+          selectionKey: recommendation,
+          selectionLabel: presentation.selectionLabel(recommendation),
+          line,
+        },
+    outcomes:
+      computed === null ? [] : toBinaryOutcomes(computed, presentation, line),
     minOdd: prediction.minimumOdd !== null ? formatOdd(prediction.minimumOdd) : null,
-    scenarios: toScenariosView(prediction, confidenceNum),
-    betSummary: isPass ? null : BET_SUMMARY[recommendation],
+    scenarios:
+      computed === null ? null : toScenariosView(computed, presentation, line),
+    betSummary: isPass ? null : presentation.betSummary(recommendation, line),
     oddAtRec: isPass ? null : formatOdd(prediction.oddAtRecommendation),
     oddAtRecAgo: isPass ? null : relativeAgoLabel(prediction.createdAt, now),
     bookmaker: isPass ? null : prediction.bookmaker,
