@@ -3,7 +3,10 @@ import type {
   BankrollPoint,
   DashboardKpis,
   DashboardRow,
+  Graduation,
+  MarketSegmentKpis,
   Rate,
+  StakeBandYield,
 } from "@/lib/dashboard/kpis";
 import { rowStatus } from "@/lib/dashboard/kpis";
 import {
@@ -73,6 +76,65 @@ export function toDashboardKpiView(kpis: DashboardKpis): DashboardKpiView {
       lost: kpis.lost,
       void: kpis.void,
     },
+  };
+}
+
+// ─── Segmento por mercado: régua D9 + bandas de stake (#171) ─────────────────
+
+export type GraduationView = {
+  resolved: number;
+  target: number;
+  graduated: boolean;
+  // "12 / 30 resolvidas" — string pronta pra render.
+  label: string;
+};
+
+export function toGraduationView(graduation: Graduation): GraduationView {
+  return {
+    resolved: graduation.resolved,
+    target: graduation.target,
+    graduated: graduation.graduated,
+    label: `${graduation.resolved} / ${graduation.target} resolvidas`,
+  };
+}
+
+export type StakeBandView = {
+  band: string;
+  yieldPct: RateView;
+  profit: string;
+};
+
+export function toStakeBandView(band: StakeBandYield): StakeBandView {
+  return {
+    band: band.band,
+    yieldPct: toRateView(band.yield),
+    profit: unitsLabel(band.totalProfitUnits),
+  };
+}
+
+export type MarketSegmentView = {
+  marketKey: string;
+  marketLabel: string;
+  kpis: DashboardKpiView;
+  graduation: GraduationView;
+  stakeBands: StakeBandView[];
+  // Segmento sem nenhuma aposta resolvida (yield.n === 0) → a régua/bandas
+  // degradam pra "—"; sinaliza pra UI mostrar estado claro de "ainda sem dados".
+  empty: boolean;
+};
+
+export function toMarketSegmentView(
+  segment: MarketSegmentKpis,
+  graduation: Graduation,
+  stakeBands: StakeBandYield[],
+): MarketSegmentView {
+  return {
+    marketKey: segment.marketKey,
+    marketLabel: segment.marketLabel,
+    kpis: toDashboardKpiView(segment.kpis),
+    graduation: toGraduationView(graduation),
+    stakeBands: stakeBands.map(toStakeBandView),
+    empty: segment.kpis.yield.n === 0,
   };
 }
 

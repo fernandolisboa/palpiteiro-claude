@@ -1,6 +1,7 @@
 import Link from "next/link";
 
 import type { DashboardFilters } from "@/lib/dashboard/kpis";
+import type { AvailableMarket } from "@/lib/dashboard/derive-view";
 import { LEAGUE_LABEL } from "@/lib/format";
 import { cn } from "@/lib/utils";
 import type { LeagueKey } from "@/lib/view/types";
@@ -34,11 +35,9 @@ const STATUS_OPTIONS: Option[] = [
   { value: "won", label: "Green" },
   { value: "lost", label: "Red" },
   { value: "void", label: "Anuladas" },
-];
-
-const MARKET_OPTIONS: Option[] = [
-  { value: "all", label: "Todos" },
-  { value: "over_under_2_5", label: "O/U 2.5" },
+  // push = no-action (devolve stake, ADR 0016). Selecionável quando o settlement
+  // plugável começar a emitir; com zero rows push o PillGroup nem aparece à parte.
+  { value: "push", label: "Push" },
 ];
 
 function PillGroup({
@@ -89,15 +88,23 @@ function PillGroup({
 export function DashboardFiltersBar({
   filters,
   leagues,
+  markets,
   basePath = "/dashboard",
 }: {
   filters: DashboardFilters;
   leagues: LeagueKey[];
+  markets: AvailableMarket[];
   basePath?: string;
 }) {
   const leagueOptions: Option[] = [
     { value: "all", label: "Todas" },
     ...leagues.map((k) => ({ value: k, label: LEAGUE_LABEL[k] })),
+  ];
+  // Dinâmico de availableMarkets (label de markets.label via join). PillGroup
+  // some quando há ≤1 mercado (≤1 opção real → options.length 1 com só "all").
+  const marketOptions: Option[] = [
+    { value: "all", label: "Todos" },
+    ...markets.map((m) => ({ value: m.key, label: m.label })),
   ];
   return (
     <div className="flex flex-wrap items-center gap-x-5 gap-y-3">
@@ -119,7 +126,7 @@ export function DashboardFiltersBar({
       />
       <PillGroup
         label="mercado"
-        options={MARKET_OPTIONS}
+        options={marketOptions}
         current={filters.market}
         dimension="market"
         filters={filters}

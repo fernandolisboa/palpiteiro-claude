@@ -4,6 +4,10 @@ import {
   applyTableFilters,
   computeBankrollSeries,
   computeDashboardKpis,
+  computeGraduation,
+  computeSegmentedKpis,
+  computeYieldByStakeBand,
+  keepLatestPerMatch,
   rowStatus,
   type DashboardRow,
 } from "@/lib/dashboard/kpis";
@@ -14,7 +18,8 @@ function row(overrides: Partial<DashboardRow> = {}): DashboardRow {
     predictionId,
     matchId: `match-${predictionId}`,
     recommendation: "over",
-    market: "over_under_2_5",
+    marketKey: "over_under",
+    marketLabel: "Over/Under gols",
     league: "world_cup",
     homeTeam: "A",
     awayTeam: "B",
@@ -295,5 +300,273 @@ describe("rowStatus", () => {
   it("maps a missing outcome to pending", () => {
     expect(rowStatus(row())).toBe("pending");
     expect(rowStatus(settled("won", "1"))).toBe("won");
+  });
+});
+
+// ─── Dedup por (matchId, marketKey) — R1 ─────────────────────────────────────
+
+describe("keepLatestPerMatch keys on (matchId, marketKey)", () => {
+  it("keeps both markets of the same match (each is an independent bet)", () => {
+    const out = keepLatestPerMatch([
+      settled("won", "1", {
+        matchId: "m1",
+        predictionId: "ou",
+        marketKey: "over_under",
+        marketLabel: "Over/Under gols",
+      }),
+      settled("lost", "-1", {
+        matchId: "m1",
+        predictionId: "btts",
+        marketKey: "btts",
+        marketLabel: "Ambos marcam",
+      }),
+    ]);
+    // Sem a chave composta, uma das duas seria DROPADA (mesmo matchId).
+    expect(out).toHaveLength(2);
+    expect(out.map((r) => r.predictionId).sort()).toEqual(["btts", "ou"]);
+  });
+
+  it("still collapses reanalyses within the same (match, market)", () => {
+    const out = keepLatestPerMatch([
+      settled("won", "1", {
+        matchId: "m1",
+        predictionId: "old",
+        marketKey: "over_under",
+        createdAt: new Date("2026-06-10T00:00:00Z"),
+      }),
+      settled("won", "1", {
+        matchId: "m1",
+        predictionId: "new",
+        marketKey: "over_under",
+        createdAt: new Date("2026-06-11T00:00:00Z"),
+      }),
+    ]);
+    expect(out).toHaveLength(1);
+    expect(out[0].predictionId).toBe("new");
+  });
+});
+
+// ─── Segmentação por mercado (#171) ──────────────────────────────────────────
+
+describe("computeSegmentedKpis", () => {
+  // Paridade (R2): histórico SÓ over/under — incl. uma row que veio do fallback
+  // enum→key (marketId null na query → marketKey "over_under" aqui) — o agregado
+  // é byte-a-byte igual ao único segmento.
+  it("single market (incl. a fallback-key row) → aggregate === segment", () => {
+    const rows = [
+      settled("won", "0.92", { predictionId: "a", oddAtRecommendation: "1.92" }),
+      settled("lost", "-1.00", { predictionId: "b" }),
+      // "row histórica": veio sem marketId, a query coalesceu pra over_under.
+      settled("won", "0.95", {
+        predictionId: "legacy",
+        marketKey: "over_under",
+        marketLabel: "Over/Under gols",
+        oddAtRecommendation: "1.95",
+      }),
+    ];
+    const { aggregate, segments } = computeSegmentedKpis(rows);
+    expect(segments).toHaveLength(1);
+    expect(segments[0].marketKey).toBe("over_under");
+    expect(segments[0].kpis).toEqual(aggregate);
+  });
+
+  // Multi-mercado: 2 marketKeys → cada um segmenta certo; o agregado soma os dois.
+  it("two markets segment independently and the aggregate sums them", () => {
+    const rows = [
+      // over_under: won 1u @2.00 (+1) e lost 1u (-1) → yield 0, n=2
+      settled("won", "1.00", {
+        predictionId: "ou-w",
+        marketKey: "over_under",
+        marketLabel: "Over/Under gols",
+        oddAtRecommendation: "2.00",
+      }),
+      settled("lost", "-1.00", {
+        predictionId: "ou-l",
+        marketKey: "over_under",
+        marketLabel: "Over/Under gols",
+      }),
+      // btts: won 1u @2.00 (+1) → yield 100, n=1
+      settled("won", "1.00", {
+        predictionId: "btts-w",
+        marketKey: "btts",
+        marketLabel: "Ambos marcam",
+        oddAtRecommendation: "2.00",
+      }),
+    ];
+    const { aggregate, segments } = computeSegmentedKpis(rows);
+    expect(segments.map((s) => s.marketKey)).toEqual(["over_under", "btts"]);
+
+    const ou = segments.find((s) => s.marketKey === "over_under")!;
+    const btts = segments.find((s) => s.marketKey === "btts")!;
+    expect(ou.kpis.yield.value).toBeCloseTo(0, 5); // (+1 -1) / 2
+    expect(ou.kpis.yield.n).toBe(2);
+    expect(btts.kpis.yield.value).toBeCloseTo(100, 5); // +1 / 1
+    expect(btts.kpis.yield.n).toBe(1);
+
+    // Agregado soma os volumes dos dois mercados.
+    expect(aggregate.stakedUnits).toBeCloseTo(3, 5); // 1 + 1 + 1
+    expect(aggregate.totalProfitUnits).toBeCloseTo(1, 5); // +1 -1 +1
+    expect(aggregate.yield.value).toBeCloseTo((1 / 3) * 100, 5);
+    expect(aggregate.yield.n).toBe(3);
+    expect(aggregate.won).toBe(2);
+    expect(aggregate.lost).toBe(1);
+  });
+
+  // R6: push NÃO distorce winRate POR SEGMENTO (não basta o teste agregado).
+  it("a push does not distort win rate within its own segment", () => {
+    const base = [
+      settled("won", "0.95", {
+        predictionId: "ou-w",
+        marketKey: "over_under",
+        marketLabel: "Over/Under gols",
+        oddAtRecommendation: "1.95",
+      }),
+      settled("lost", "-1.00", {
+        predictionId: "ou-l",
+        marketKey: "over_under",
+        marketLabel: "Over/Under gols",
+      }),
+    ];
+    const withPush = [
+      ...base,
+      settled("push", "0", {
+        predictionId: "ou-p",
+        marketKey: "over_under",
+        marketLabel: "Over/Under gols",
+        recommendation: "over",
+        oddAtRecommendation: "1.95",
+      }),
+    ];
+    const baseSeg = computeSegmentedKpis(base).segments[0];
+    const pushSeg = computeSegmentedKpis(withPush).segments[0];
+    // O push fica no MESMO segmento over_under e não move winRate nem yield.
+    expect(pushSeg.kpis.winRate.value).toBeCloseTo(baseSeg.kpis.winRate.value!, 5);
+    expect(pushSeg.kpis.winRate.n).toBe(baseSeg.kpis.winRate.n);
+    expect(pushSeg.kpis.yield.value).toBeCloseTo(baseSeg.kpis.yield.value!, 5);
+    expect(pushSeg.kpis.yield.n).toBe(baseSeg.kpis.yield.n);
+    // push segue visível como settled no segmento.
+    expect(pushSeg.kpis.settled).toBe(3);
+  });
+});
+
+// ─── Régua de graduação D9 (R3) ──────────────────────────────────────────────
+
+describe("computeGraduation", () => {
+  it("is not graduated below 30 resolved bets even with positive yield", () => {
+    const rows = Array.from({ length: 29 }, (_, i) =>
+      settled("won", "0.50", { predictionId: `w${i}`, oddAtRecommendation: "1.50" }),
+    );
+    const g = computeGraduation(computeDashboardKpis(rows));
+    expect(g.resolved).toBe(29);
+    expect(g.target).toBe(30);
+    expect(g.graduated).toBe(false);
+  });
+
+  it("graduates at >=30 resolved with positive yield", () => {
+    const rows = Array.from({ length: 30 }, (_, i) =>
+      settled("won", "0.50", { predictionId: `w${i}`, oddAtRecommendation: "1.50" }),
+    );
+    const g = computeGraduation(computeDashboardKpis(rows));
+    expect(g.resolved).toBe(30);
+    expect(g.graduated).toBe(true);
+  });
+
+  it("does NOT graduate at >=30 resolved when yield is negative", () => {
+    // 30 losses → yield negative, resolved 30 → still not graduated.
+    const rows = Array.from({ length: 30 }, (_, i) =>
+      settled("lost", "-1.00", { predictionId: `l${i}` }),
+    );
+    const g = computeGraduation(computeDashboardKpis(rows));
+    expect(g.resolved).toBe(30);
+    expect(g.graduated).toBe(false);
+  });
+
+  it("guards the zero-denominator (yield null) case", () => {
+    // No resolved bets (only pending) → yield.value null → not graduated, no NaN.
+    const g = computeGraduation(computeDashboardKpis([row(), row()]));
+    expect(g.resolved).toBe(0);
+    expect(g.graduated).toBe(false);
+  });
+});
+
+// ─── Breakdown por banda de stake (R4) ───────────────────────────────────────
+
+describe("computeYieldByStakeBand", () => {
+  it("scopes to settled bets and computes EXACT independent per-band yields", () => {
+    const rows = [
+      // 1u: won @2.00 (+1.0) + lost (-1.0) → stake 2, profit 0 → yield 0
+      settled("won", "1.00", { predictionId: "w1", stakeUnits: "1.00", oddAtRecommendation: "2.00" }),
+      settled("lost", "-1.00", { predictionId: "l1", stakeUnits: "1.00" }),
+      // 2u: won @2.00 (+2.0) → stake 2, profit 2 → yield 100
+      settled("won", "2.00", { predictionId: "w2", stakeUnits: "2.00", oddAtRecommendation: "2.00" }),
+      // 3u: lost (-3.0) → stake 3, profit -3 → yield -100
+      settled("lost", "-3.00", { predictionId: "l3", stakeUnits: "3.00" }),
+      // pass (stake "1.00") MUST NOT inflate the 1u band
+      settled("void", "0", {
+        predictionId: "pass1",
+        recommendation: "pass",
+        stakeUnits: "1.00",
+        oddAtRecommendation: null,
+      }),
+      // a void real bet (1u) MUST NOT enter the 1u band either
+      settled("void", "0", {
+        predictionId: "void1",
+        recommendation: "over",
+        stakeUnits: "1.00",
+        oddAtRecommendation: "1.95",
+      }),
+    ];
+    const bands = computeYieldByStakeBand(rows);
+    const byBand = Object.fromEntries(bands.map((b) => [b.band, b]));
+
+    expect(byBand["1u"].yield.value).toBeCloseTo(0, 5);
+    expect(byBand["1u"].yield.n).toBe(2); // pass + void excluded
+    expect(byBand["1u"].stakedUnits).toBeCloseTo(2, 5);
+
+    expect(byBand["2u"].yield.value).toBeCloseTo(100, 5);
+    expect(byBand["2u"].yield.n).toBe(1);
+
+    expect(byBand["3u"].yield.value).toBeCloseTo(-100, 5);
+    expect(byBand["3u"].yield.n).toBe(1);
+  });
+
+  it("collapses an all-1u history into the 1u band == aggregate (parity)", () => {
+    const rows = [
+      settled("won", "0.92", { predictionId: "a", stakeUnits: "1.00", oddAtRecommendation: "1.92" }),
+      settled("lost", "-1.00", { predictionId: "b", stakeUnits: "1.00" }),
+      settled("won", "0.90", { predictionId: "c", stakeUnits: "1.00", oddAtRecommendation: "1.90" }),
+    ];
+    const agg = computeDashboardKpis(rows);
+    const bands = computeYieldByStakeBand(rows);
+    const oneU = bands.find((b) => b.band === "1u")!;
+    const twoU = bands.find((b) => b.band === "2u")!;
+    const threeU = bands.find((b) => b.band === "3u")!;
+
+    // Tudo cai na banda 1u; o yield 1u é o agregado.
+    expect(oneU.yield.value).toBeCloseTo(agg.yield.value!, 5);
+    expect(oneU.yield.n).toBe(agg.yield.n);
+    expect(oneU.stakedUnits).toBeCloseTo(agg.stakedUnits, 5);
+    // 2u/3u vazias → yield null, n 0.
+    expect(twoU.yield.value).toBeNull();
+    expect(twoU.yield.n).toBe(0);
+    expect(threeU.yield.value).toBeNull();
+    expect(threeU.yield.n).toBe(0);
+  });
+});
+
+// ─── Filtro de mercado dinâmico (R5) ─────────────────────────────────────────
+
+describe("applyTableFilters by marketKey", () => {
+  it("filters rows by the canonical marketKey", () => {
+    const rows = [
+      settled("won", "1", { predictionId: "ou", marketKey: "over_under", marketLabel: "Over/Under gols" }),
+      settled("won", "1", { predictionId: "btts", marketKey: "btts", marketLabel: "Ambos marcam" }),
+    ];
+    const out = applyTableFilters(rows, {
+      status: "all",
+      league: "all",
+      market: "btts",
+    });
+    expect(out.map((r) => r.predictionId)).toEqual(["btts"]);
   });
 });
