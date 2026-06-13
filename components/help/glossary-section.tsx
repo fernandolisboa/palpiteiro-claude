@@ -13,7 +13,9 @@ import { GLOSSARY } from "@/components/help/glossary";
  * Glossário expansível: cada entrada é um `Collapsible` (primitivo existente —
  * sem Accordion/Tabs). O `id={anchor}` vive no elemento externo de cada item,
  * com `scroll-mt-20` pra folga nos deep-links (header não-sticky). Term = trigger,
- * meaning = content. Único trecho client da página `/como-funciona`.
+ * meaning (genérico) = content; os detalhes por mercado (`markets`) vêm como
+ * sub-parágrafos mais discretos sob o significado — é onde o conteúdo over/under
+ * fica preservado (market-aware, fonte única). Único trecho client da página.
  */
 export function GlossarySection() {
   return (
@@ -32,9 +34,18 @@ export function GlossarySection() {
               </span>
             </CollapsibleTrigger>
             <CollapsibleContent>
-              <p className="pb-3 pl-[22px] pr-2 text-[13px] leading-relaxed text-muted-foreground tracking-tight">
+              <p className="pl-[22px] pr-2 pt-0 pb-2 text-[13px] leading-relaxed text-muted-foreground tracking-tight">
                 {entry.meaning}
               </p>
+              {entry.markets &&
+                Object.entries(entry.markets).map(([marketKey, detail]) => (
+                  <p
+                    key={marketKey}
+                    className="pb-3 pl-[22px] pr-2 text-[12.5px] leading-relaxed text-muted-fg-2 tracking-tight"
+                  >
+                    {detail}
+                  </p>
+                ))}
             </CollapsibleContent>
           </Collapsible>
         </li>
