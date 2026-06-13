@@ -1,3 +1,4 @@
+import Anthropic from "@anthropic-ai/sdk";
 import { beforeEach, describe, expect, it, vi } from "vitest";
 
 import {
@@ -39,9 +40,11 @@ const matchRow = {
 //
 // `insertValues` is a hoisted spy shared across every insert().values() call, so
 // tests can read the exact row written to each table. predict() inserts ai_calls
-// FIRST then predictions, so insertValues.mock.calls[0] is the ai_call row and
-// [1] is the prediction row. The returning() stub gives both an `id` (the
-// ai_call needs `aiCallId` downstream; the prediction row is the resolved value).
+// FIRST, then predictions, then prediction_selection_odds (SEQUENTIAL — #165),
+// so insertValues.mock.calls[0] is the ai_call row, [1] the prediction row, and
+// [2] the PSO rows array. The returning() stub gives the first two an `id` (the
+// ai_call needs `aiCallId` downstream; the prediction row is the resolved value);
+// the PSO insert awaits .values() directly (no .returning()).
 const insertValues = vi.fn();
 vi.mock("@/lib/db", () => {
   const select = vi.fn(() => ({
@@ -106,6 +109,15 @@ vi.mock("@/lib/db/queries/odds-snapshots", () => ({
     getLatestFreshOddsSnapshot(...args),
 }));
 
+// Catalog resolver consolidado (#165): predict() o chama no bloco de reads
+// PRÉ-chamada-paga (marketId + selection id↔key). Stub fixo do mercado
+// over/under — sem ele, a query de marketSelections (sem .limit()) cairia no
+// branch não-awaitable do select stub e estouraria com TypeError.
+const resolveMarketCatalog = vi.fn();
+vi.mock("@/lib/db/queries/market-catalog", () => ({
+  resolveMarketCatalog: (...args: unknown[]) => resolveMarketCatalog(...args),
+}));
+
 const anthropicCreate = vi.fn();
 vi.mock("@/lib/ai/anthropic", () => ({
   getAnthropicClient: () => ({ messages: { create: anthropicCreate } }),
@@ -125,7 +137,12 @@ vi.mock("@/lib/db/queries/users", () => ({
 
 // Spy on buildPredictionInput while keeping the real implementation (and
 // BuildInputError) so we can assert the absencesAvailable flag it receives.
-import * as buildInputModule from "@/lib/ai/build-input";
+// O módulo MOVEU pro cartucho over/under (#165) — predict.ts importa o mesmo
+// binding nomeado, então o vi.spyOn deste módulo continua interceptando.
+import * as buildInputModule from "@/lib/ai/markets/over_under/build-input";
+import { buildPredictionInput } from "@/lib/ai/markets/over_under/build-input";
+import { overUnderCartridge } from "@/lib/ai/markets/over_under";
+import { computeMarketImpliedProbabilities } from "@/lib/odds/implied-probability";
 
 import { predict } from "@/lib/ai/predict";
 
@@ -271,6 +288,19 @@ function setHappyPath() {
   // Default: no fresh snapshot, so every existing test keeps exercising the
   // getOddsForSport fallback path unchanged.
   getLatestFreshOddsSnapshot.mockResolvedValue(null);
+  // Catálogo over/under resolvido: marketId + os mapas seleção↔id que predict()
+  // usa pra selection_id (prediction) e pras rows do candidate set (PSO).
+  resolveMarketCatalog.mockResolvedValue({
+    marketId: "mkt-ou",
+    idByKey: new Map([
+      ["over", "sel-over"],
+      ["under", "sel-under"],
+    ]),
+    keyById: new Map([
+      ["sel-over", "over"],
+      ["sel-under", "under"],
+    ]),
+  });
   // Default global resolvido pelo DB quando não há override nem preferência.
   getDefaultModelId.mockResolvedValue("claude-opus-4-8");
   getGenerationParams.mockResolvedValue({
@@ -493,6 +523,294 @@ describe("predict() — congelamento do par de odds na prediction (#104)", () =>
     expect(predictionRow.impliedProbPct).toBeNull();
     expect(predictionRow.edgePct).toBeNull();
     expect(predictionRow.minimumOdd).toBeNull();
+  });
+});
+
+// ─── Paridade #165: colunas legadas byte-idênticas + colunas novas + PSO ─────
+
+// Snapshot fresco com odds arbitrárias (path conservador reuse) — controla os
+// bytes exatos sem depender do fallback de rede.
+function freshSnapshotWith(overOdd: string, underOdd: string) {
+  return {
+    id: "snap-x",
+    matchId: "m-1",
+    bookmaker: "Pinnacle",
+    market: "over_under_2_5" as const,
+    line: "2.5",
+    overOdd,
+    underOdd,
+    overroundPct: "3.50",
+    capturedAt: new Date(),
+  };
+}
+
+// Output mockado fixo (sem API paga) com a recomendação e confiança dadas.
+function toolUseMessage(input: Record<string, unknown>) {
+  return {
+    ...anthropicMessage(),
+    content: [{ type: "tool_use", id: "tu-1", name: "submit_prediction", input }],
+  };
+}
+
+// Implícita normalizada do lado, na MESMA ordem de operações do predict
+// (probs[idx] * 100), pra comparar o byte do .toFixed(2) gravado.
+function impliedPctOf(over: number, under: number, side: "over" | "under") {
+  const { probs } = computeMarketImpliedProbabilities([over, under]);
+  return (side === "over" ? probs[0] : probs[1]) * 100;
+}
+
+describe("predict() — paridade de colunas (#165): legado byte-idêntico + novas + PSO", () => {
+  it("over assimétrico (2.10/1.74): legado byte-idêntico + market/selection/params + PSO == par congelado", async () => {
+    getLatestFreshOddsSnapshot.mockResolvedValueOnce(
+      freshSnapshotWith("2.100", "1.740"),
+    );
+    anthropicCreate.mockResolvedValue(
+      toolUseMessage({
+        recommendation: "over",
+        confidence_pct: 60,
+        rationale: "Jogo aberto.",
+        key_factors: ["alto xG", "defesas vazadas"],
+        minimum_odd: 1.8,
+      }),
+    );
+
+    await expect(
+      predict({ matchId: "m-1", userId: "u-1", isAdmin: false }),
+    ).resolves.toBeDefined();
+
+    const predictionRow = insertValues.mock.calls[1]?.[0] as Record<
+      string,
+      unknown
+    >;
+    // Legado byte-idêntico (mesma matemática de implied/edge que predict.ts:367-372).
+    const impliedOver = impliedPctOf(2.1, 1.74, "over");
+    expect(predictionRow.market).toBe("over_under_2_5");
+    expect(predictionRow.recommendation).toBe("over");
+    expect(predictionRow.overOddAtPrediction).toBe("2.100");
+    expect(predictionRow.underOddAtPrediction).toBe("1.740");
+    expect(predictionRow.oddAtRecommendation).toBe("2.100");
+    expect(predictionRow.impliedProbPct).toBe(impliedOver.toFixed(2));
+    expect(predictionRow.edgePct).toBe((60 - impliedOver).toFixed(2));
+    expect(predictionRow.confidencePct).toBe("60.00");
+    expect(predictionRow.minimumOdd).toBe("1.800");
+    // stake_units fica IMPLÍCITO (default "1" no schema; #167 popula) — predict
+    // NÃO grava a coluna.
+    expect(predictionRow).not.toHaveProperty("stakeUnits");
+    // Colunas NOVAS multi-mercado.
+    expect(predictionRow.marketId).toBe("mkt-ou");
+    expect(predictionRow.selectionId).toBe("sel-over");
+    expect(predictionRow.marketParams).toEqual({ line: 2.5 });
+
+    // PSO: candidate set completo (over+under), odds == par congelado byte-a-byte.
+    const psoRows = insertValues.mock.calls[2]?.[0] as Array<{
+      predictionId: string;
+      selectionId: string;
+      odd: string;
+    }>;
+    expect(psoRows).toHaveLength(2);
+    const byKey = Object.fromEntries(
+      psoRows.map((r) => [r.selectionId, r.odd]),
+    );
+    expect(byKey["sel-over"]).toBe(predictionRow.overOddAtPrediction);
+    expect(byKey["sel-under"]).toBe(predictionRow.underOddAtPrediction);
+    expect(psoRows.every((r) => r.predictionId === "row-1")).toBe(true);
+  });
+
+  it("recommendation=under: impliedProbPct/edgePct do lado under byte-idênticos ao legado", async () => {
+    getLatestFreshOddsSnapshot.mockResolvedValueOnce(
+      freshSnapshotWith("2.100", "1.740"),
+    );
+    anthropicCreate.mockResolvedValue(
+      toolUseMessage({
+        recommendation: "under",
+        confidence_pct: 58,
+        rationale: "Poucos gols esperados.",
+        key_factors: ["defesas sólidas", "ritmo baixo"],
+        minimum_odd: 1.7,
+      }),
+    );
+
+    await expect(
+      predict({ matchId: "m-1", userId: "u-1", isAdmin: false }),
+    ).resolves.toBeDefined();
+
+    const predictionRow = insertValues.mock.calls[1]?.[0] as Record<
+      string,
+      unknown
+    >;
+    const impliedUnder = impliedPctOf(2.1, 1.74, "under");
+    expect(predictionRow.recommendation).toBe("under");
+    expect(predictionRow.selectionId).toBe("sel-under");
+    expect(predictionRow.oddAtRecommendation).toBe("1.740");
+    expect(predictionRow.impliedProbPct).toBe(impliedUnder.toFixed(2));
+    expect(predictionRow.edgePct).toBe((58 - impliedUnder).toFixed(2));
+  });
+
+  it("pass: selectionId null + PSO grava AMBAS as seleções do candidate set", async () => {
+    getLatestFreshOddsSnapshot.mockResolvedValueOnce(
+      freshSnapshotWith("1.900", "1.950"),
+    );
+    anthropicCreate.mockResolvedValue(
+      toolUseMessage({
+        recommendation: "pass",
+        confidence_pct: 51,
+        rationale: "Edge fino dos dois lados.",
+        key_factors: ["mercado equilibrado", "dados rasos"],
+      }),
+    );
+
+    await expect(
+      predict({ matchId: "m-1", userId: "u-1", isAdmin: false }),
+    ).resolves.toBeDefined();
+
+    const predictionRow = insertValues.mock.calls[1]?.[0] as Record<
+      string,
+      unknown
+    >;
+    expect(predictionRow.recommendation).toBe("pass");
+    expect(predictionRow.selectionId).toBeNull();
+    expect(predictionRow.marketId).toBe("mkt-ou");
+    expect(predictionRow.marketParams).toEqual({ line: 2.5 });
+
+    const psoRows = insertValues.mock.calls[2]?.[0] as Array<{
+      selectionId: string;
+      odd: string;
+    }>;
+    expect(psoRows).toHaveLength(2);
+    const ids = psoRows.map((r) => r.selectionId).sort();
+    expect(ids).toEqual(["sel-over", "sel-under"]);
+    const byKey = Object.fromEntries(
+      psoRows.map((r) => [r.selectionId, r.odd]),
+    );
+    expect(byKey["sel-over"]).toBe(predictionRow.overOddAtPrediction);
+    expect(byKey["sel-under"]).toBe(predictionRow.underOddAtPrediction);
+  });
+
+  it("partial PSO failure após prediction commitada: degrada (não-throw), retorna a prediction", async () => {
+    getLatestFreshOddsSnapshot.mockResolvedValueOnce(
+      freshSnapshotWith("1.900", "1.950"),
+    );
+    // 3º insert (PSO) falha; os 2 primeiros (ai_calls, predictions) passam.
+    let call = 0;
+    insertValues.mockImplementation(() => {
+      call += 1;
+      if (call === 3) throw new Error("PSO write failed");
+    });
+
+    await expect(
+      predict({ matchId: "m-1", userId: "u-1", isAdmin: false }),
+    ).resolves.toEqual({ id: "row-1", aiCallId: "row-1" });
+    // A prediction foi retornada apesar da falha do candidate set.
+    expect(insertValues).toHaveBeenCalledTimes(3);
+  });
+});
+
+describe("predict() — bump over_under_v2.0: prompt/mensagem byte-idênticos ao v1.3", () => {
+  it("cartridge.systemPrompt é byte-idêntico ao v1.3 (string-equality completa)", () => {
+    // O cartucho diz "v2.0" na versão, mas o TEXTO do prompt é idêntico ao v1.3
+    // (puro restructure). Snapshot LITERAL da string INTEIRA — não um toContain de
+    // trecho. É o único guard automático contra drift silencioso do prompt: QUALQUER
+    // mudança de UM caractere quebra este teste (e exige bump consciente de versão).
+    expect(overUnderCartridge.version).toBe("over_under_v2.0");
+    expect(overUnderCartridge.systemPrompt).toMatchInlineSnapshot(`
+      "Você é um analista quantitativo de apostas esportivas focado exclusivamente no mercado over/under 2.5 gols.
+
+      Sua única tarefa é decidir, para o jogo descrito pelo usuário, entre três opções:
+      - "over": apostar em mais de 2.5 gols totais
+      - "under": apostar em menos de 2.5 gols totais
+      - "pass": não recomendar aposta neste jogo
+
+      Regras invioláveis:
+      1. Recomende "over" ou "under" SOMENTE se sua probabilidade estimada (confidence_pct) supera a probabilidade implícita normalizada do lado correspondente em pelo menos 5 pontos percentuais (edge >= 5%). Caso contrário, retorne "pass".
+      2. "pass" é a opção segura por padrão e um resultado válido e esperado. Em caso de dúvida, passe a vez. Não force uma recomendação.
+      3. confidence_pct é sua probabilidade estimada para o LADO RECOMENDADO. Quando "pass", reporte sua melhor estimativa para "over".
+      4. minimum_odd: odd decimal mínima na qual o palpite ainda mantém edge >= 5%. Obrigatório quando recommendation ∈ {"over","under"}; OMITIR quando "pass".
+      5. Use APENAS os dados fornecidos pelo usuário. Não invente jogadores, lesões, escalações, estatísticas ou tendências.
+      6. Raciocine quantitativamente quando possível: médias de gols marcados/sofridos, ritmo recente, impacto de ausências em finalização/defesa, padrão de H2H, contexto da competição.
+      7. Considere a confiabilidade dos dados: poucos jogos de forma recente, ausência de escalação publicada, ou H2H muito antigo são motivos pra reduzir confiança (e provavelmente "pass").
+      8. Quando a seção "Lesões / Suspensões" indicar "dados indisponíveis nesta análise" para um time, NÃO assuma que não há lesões — trate como dado faltante e reduza a confiança da análise.
+      9. Responda EXCLUSIVAMENTE chamando a ferramenta \`submit_prediction\` com os campos definidos no schema dela. Não produza texto livre fora da chamada da ferramenta.
+
+      Redação do campo rationale (tom, não conteúdo):
+      - Estas regras mudam APENAS a forma de escrever o rationale. A decisão (recommendation, confidence_pct, minimum_odd) segue exclusivamente as regras invioláveis acima — decida primeiro como sempre; na dúvida sobre o edge mínimo, continue passando a vez.
+      - Escreva para um leitor leigo, que NÃO conhece estatística de apostas: frases curtas, linguagem do dia a dia.
+      - Abra com a conclusão em UMA frase simples (ex.: "Este jogo tem boas chances de terminar com 3 gols ou mais." / "Melhor não apostar neste jogo.").
+      - Depois da conclusão, sustente com os números decisivos (médias de gols, forma recente, ausências, histórico do confronto) — a base quantitativa continua obrigatória; muda só o tom.
+      - Jargão técnico apenas se explicado em meia frase no próprio texto (ex.: "probabilidade implícita — a chance que a odd embute"). Prefira "histórico de confrontos" a "H2H".
+      - Não exagere a convicção pra soar didático: a frase de abertura deve refletir sua incerteza real (um caso apertado abre com "por pouco", não com certeza).
+      - Mantenha o tamanho de sempre: ~450 caracteres (máx. 600). Linguagem acessível não significa texto mais longo."
+    `);
+  });
+
+  it("buildUserMessage renderiza byte-idêntico ao v1.3 pro mesmo input (string-equality completa)", () => {
+    // Snapshot LITERAL da mensagem markdown INTEIRA renderizada pro fixture abaixo
+    // (não toContain de blocos). Pareia com o snapshot do systemPrompt: juntos
+    // travam o PAYLOAD completo (system + user) contra qualquer drift silencioso.
+    const input = buildPredictionInput({
+      match: {
+        externalId: "ext-1",
+        league: "brasileirao_a",
+        homeTeam: matchRow.homeTeam,
+        awayTeam: matchRow.awayTeam,
+        kickoffAt: matchRow.kickoffAt,
+        venue: "Maracanã",
+      },
+      standings: STANDINGS,
+      home: { form: [], injuries: [], absencesAvailable: true },
+      away: { form: [], injuries: [], absencesAvailable: true },
+      lineups: undefined,
+      h2h: [],
+      odds: {
+        bookmaker: "Pinnacle",
+        over_2_5_decimal: 1.9,
+        under_2_5_decimal: 1.95,
+        captured_at: "2026-05-15T12:00:00.000Z",
+      },
+      implied: { over_pct: 51.28, under_pct: 48.72 },
+    });
+    const message = overUnderCartridge.buildUserMessage(input, {
+      daysToKickoff: 3,
+    });
+    expect(message).toMatchInlineSnapshot(`
+      "# Jogo
+      - Competição: brasileirao_a
+      - Mandante: CR Flamengo
+      - Visitante: Fluminense FC
+      - Kickoff (UTC): 2026-05-15T19:00:00.000Z
+      - Local: Maracanã
+
+      # Mandante — CR Flamengo
+      ## Classificação
+      - Posição: 1, 20 pts em 10 jogos
+      - Gols: 18 pró / 9 contra (saldo 9)
+      ## Forma recente (mais recente primeiro)
+      - (sem dados)
+      ## Lesões / Suspensões
+      - (nenhuma reportada)
+
+      # Visitante — Fluminense FC
+      ## Classificação
+      - Posição: 2, 18 pts em 10 jogos
+      - Gols: 15 pró / 10 contra (saldo 5)
+      ## Forma recente (mais recente primeiro)
+      - (sem dados)
+      ## Lesões / Suspensões
+      - (nenhuma reportada)
+
+      # Confrontos diretos (H2H)
+      - (sem histórico fornecido)
+
+      # Odds e probabilidades implícitas
+      - Bookmaker: Pinnacle (capturado em 2026-05-15T12:00:00.000Z)
+      - Over 2.5: odd 1.90 → implícita normalizada 51.28%
+      - Under 2.5: odd 1.95 → implícita normalizada 48.72%
+
+      # Contexto temporal
+      - Dias até o jogo: 3 (≤1 = dados mais confiáveis; ≥5 = lineup ainda indefinido, lesões podem mudar)
+
+      # Sua tarefa
+      Decida: "over", "under" ou "pass". Aplique a regra de edge >= 5%. Chame a ferramenta submit_prediction com os campos do schema."
+    `);
   });
 });
 
@@ -737,5 +1055,99 @@ describe("predict() — Opus adaptive path: model declines to call the tool", ()
     expect(aiCallRow.model).toBe("claude-opus-4-8");
     expect(aiCallRow.inputTokens).toBe(1200);
     expect(aiCallRow.outputTokens).toBe(300);
+  });
+});
+
+describe("predict() — error paths: invariante 1 ai_call / 0 prediction / 0 PSO", () => {
+  // Espelha o teste de tool_missing acima pras OUTRAS duas classes de erro do
+  // PLAN-165 (invalid_output, provider_error): cada uma persiste EXATAMENTE um
+  // ai_call (a auditoria do erro via persistAiCallError) e ZERO prediction/PSO.
+
+  it("invalid_output: output do LLM falha o Zod do cartucho → 1 ai_call, 0 prediction, 0 PSO, throws", async () => {
+    // tool_use VÁLIDO (o modelo chamou submit_prediction), mas o input falha o
+    // outputSchema do cartucho — confidence_pct fora do range [0,100]. predict()
+    // audita como invalid_output (1 insert em ai_calls) e lança; nenhuma
+    // prediction nem candidate set é escrito.
+    anthropicCreate.mockResolvedValue({
+      id: "msg-3",
+      type: "message",
+      role: "assistant",
+      model: "claude-opus-4-8",
+      stop_reason: "tool_use",
+      stop_sequence: null,
+      content: [
+        {
+          type: "tool_use",
+          id: "tu-2",
+          name: "submit_prediction",
+          input: {
+            recommendation: "over",
+            confidence_pct: 150, // inválido: > 100, viola z.number().max(100)
+            rationale: "Defesas frágeis dos dois lados.",
+            key_factors: ["xG alto", "defesas vazadas"],
+            minimum_odd: 1.8,
+          },
+        },
+      ],
+      usage: { input_tokens: 1200, output_tokens: 300 },
+    });
+
+    await expect(
+      predict({ matchId: "m-1", userId: "u-1", isAdmin: false }),
+    ).rejects.toThrow("LLM output failed Zod validation");
+
+    // A chamada paga aconteceu; auditada como invalid_output — UM insert
+    // (ai_calls via persistAiCallError), nenhuma prediction, nenhum PSO.
+    expect(anthropicCreate).toHaveBeenCalledTimes(1);
+    expect(insertValues).toHaveBeenCalledTimes(1);
+    const aiCallRow = insertValues.mock.calls[0]?.[0] as { status: string };
+    expect(aiCallRow.status).toBe("invalid_output");
+  });
+
+  it("provider_error: client.messages.create rejeita (Anthropic.APIError) → 1 ai_call, 0 prediction, 0 PSO, throws", async () => {
+    // A chamada paga estoura com um erro do provider. classifyAnthropicError
+    // mapeia APIError → provider_error; persistAiCallError grava UM ai_call
+    // (tokens 0) e predict() relança como PredictError. Nenhuma prediction/PSO.
+    anthropicCreate.mockRejectedValue(
+      new Anthropic.APIError(
+        500,
+        undefined,
+        "internal server error",
+        undefined,
+      ),
+    );
+
+    await expect(
+      predict({ matchId: "m-1", userId: "u-1", isAdmin: false }),
+    ).rejects.toThrow("anthropic call failed");
+
+    expect(anthropicCreate).toHaveBeenCalledTimes(1);
+    expect(insertValues).toHaveBeenCalledTimes(1);
+    const aiCallRow = insertValues.mock.calls[0]?.[0] as { status: string };
+    expect(aiCallRow.status).toBe("provider_error");
+  });
+});
+
+describe("predict() — guarda de seed COMPLETO falha ANTES do gasto", () => {
+  it("mercado seedado parcialmente (falta 'under') → throws ANTES de client.messages.create, 0 inserts", async () => {
+    // resolveMarketCatalog (shared com #164) só hard-falha em mercado ausente ou
+    // ZERO seleções. Um catálogo com SÓ 'over' passaria por ela e, sem a guarda
+    // pré-paga, só quebraria nos hard-fails por-seleção DEPOIS da chamada paga —
+    // queimando spend + uma row de ai_call. A guarda checa o seed COMPLETO antes
+    // da chamada: predict() lança ANTES de tocar o LLM e sem nenhum insert.
+    resolveMarketCatalog.mockResolvedValue({
+      marketId: "mkt-ou",
+      idByKey: new Map([["over", "sel-over"]]), // falta 'under'
+      keyById: new Map([["sel-over", "over"]]),
+    });
+
+    await expect(
+      predict({ matchId: "m-1", userId: "u-1", isAdmin: false }),
+    ).rejects.toThrow("seedado incompleto");
+
+    // Falhou ANTES do gasto: nenhuma chamada paga ao LLM e nenhum insert
+    // (nem ai_call, nem prediction, nem PSO).
+    expect(anthropicCreate).not.toHaveBeenCalled();
+    expect(insertValues).not.toHaveBeenCalled();
   });
 });

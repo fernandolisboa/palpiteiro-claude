@@ -4,9 +4,9 @@ import type Anthropic from "@anthropic-ai/sdk";
 import { MODEL_REGISTRY } from "@/lib/ai/models";
 import { buildAnthropicRequest } from "@/lib/ai/request-builder";
 import {
+  overUnderCartridge,
   SUBMIT_PREDICTION_TOOL,
-  SYSTEM_PROMPT,
-} from "@/lib/ai/prompts/over_under_v1";
+} from "@/lib/ai/markets/over_under";
 import { MIN_EDGE_PP } from "@/lib/odds/scenario";
 
 const MAX_TOKENS = 2048;
@@ -148,8 +148,10 @@ describe("buildAnthropicRequest — calibração model-aware (effort/temperature
 describe("MIN_EDGE_PP ↔ SYSTEM_PROMPT sync", () => {
   it("the UI threshold constant matches the prompt's edge rule", () => {
     // Se um prompt futuro mudar o threshold de 5pp, este teste quebra em vez
-    // de a UI mentir. A constante mora em lib/odds/scenario.ts (não em
-    // lib/ai/prompts/) pra não vazar o SYSTEM_PROMPT pro client bundle.
-    expect(SYSTEM_PROMPT).toContain(`${MIN_EDGE_PP} pontos percentuais`);
+    // de a UI mentir. A constante mora em lib/odds/scenario.ts (não no cartucho)
+    // pra não vazar o systemPrompt pro client bundle.
+    expect(overUnderCartridge.systemPrompt).toContain(
+      `${MIN_EDGE_PP} pontos percentuais`,
+    );
   });
 });

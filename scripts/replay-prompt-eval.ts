@@ -8,8 +8,8 @@
  *    deduplicados por jogo (a ai_call mais recente por matchId).
  *  - Reaproveita o `inputPayload` armazenado (a request completa do Anthropic:
  *    model/messages/max_tokens/tool_choice/thinking|temperature) trocando o
- *    system prompt E o tools array pela versão atual de
- *    `lib/ai/prompts/over_under_v1`; o resto (model, messages, tool_choice,
+ *    system prompt E o tools array pela versão atual do CARTUCHO over/under
+ *    (`lib/ai/markets/over_under`); o resto (model, messages, tool_choice,
  *    thinking/temperature, max_tokens) é replayed byte a byte.
  *  - Chama a API da Anthropic e compara recommendation/confidence_pct/
  *    minimum_odd contra a baseline persistida do mesmo jogo.
@@ -38,13 +38,20 @@ import { aiCalls, matches, predictions } from "@/db/schema";
 import { db } from "@/lib/db";
 import { getAnthropicClient } from "@/lib/ai/anthropic";
 import { calculateCost } from "@/lib/ai/cost";
-import { isAIModelId } from "@/lib/ai/models";
+// Eval estrutural por cartucho/versão (ADR 0017): carrega o artefato de prompt e
+// os schemas do CARTUCHO over/under (não mais de módulos soltos). O candidato é
+// `cartridge.version`; quando houver 2º cartucho, parametrizar por marketKey.
 import {
-  PROMPT_VERSION,
-  SUBMIT_PREDICTION_TOOL,
-  SYSTEM_PROMPT,
-} from "@/lib/ai/prompts/over_under_v1";
-import { OverUnderOutputSchema, type OverUnderOutput } from "@/lib/ai/schemas/output";
+  overUnderCartridge,
+  OverUnderOutputSchema,
+  type OverUnderOutput,
+} from "@/lib/ai/markets/over_under";
+import { isAIModelId } from "@/lib/ai/models";
+
+const cartridge = overUnderCartridge;
+const PROMPT_VERSION = cartridge.version;
+const SYSTEM_PROMPT = cartridge.systemPrompt;
+const SUBMIT_PREDICTION_TOOL = cartridge.tool;
 
 const MIN_PAYLOADS = 5;
 const MAX_PAYLOADS = 10;
@@ -61,7 +68,7 @@ const FETCH_LIMIT = MAX_PAYLOADS * 5;
 const MAX_ATTEMPTS_PER_PAYLOAD = 2;
 
 // confidence_pct é P(lado recomendado) para over/under e P(over) para pass
-// (convenção em lib/ai/schemas/output.ts). Pra comparar |Δconfidence| entre
+// (convenção em lib/ai/markets/over_under/schemas.ts). Pra comparar |Δconfidence| entre
 // baseline e replay quando há flip envolvendo "under", normalizamos os dois
 // lados pra uma grandeza comum — P(over) — antes do delta. É identidade para
 // over/pass e o complemento (100 − conf) para under; em comparações de mesma
@@ -190,6 +197,15 @@ async function replayOne(args: {
 }
 
 async function main(): Promise<void> {
+  // Guarda sem-paga DEFENSIVA: este eval chama a API paga da Anthropic. O glob
+  // default do Vitest já exclui scripts/, e o único run-path é
+  // `pnpm tsx scripts/replay-prompt-eval.ts` (manual do usuário) — mas se algum
+  // CI invocar este arquivo, abortamos ANTES de queimar spend.
+  if (process.env.CI) {
+    throw new Error(
+      "replay-prompt-eval é manual e PAGO — não deve rodar em CI (process.env.CI setado)",
+    );
+  }
   requireEnv("DATABASE_URL");
   requireEnv("ANTHROPIC_API_KEY");
 

@@ -21,11 +21,7 @@ import {
 } from "@/lib/db/queries/odds-snapshots";
 import { getMatchesInLeagueWindow, type DbMatch } from "@/lib/db/queries/matches";
 import { db } from "@/lib/db";
-import {
-  marketSelections,
-  markets,
-} from "@/db/schema";
-import { eq } from "drizzle-orm";
+import { resolveMarketCatalog } from "@/lib/db/queries/market-catalog";
 import type { OddsApiEventOdds } from "@/lib/providers/odds-api-schemas";
 
 const KICKOFF_PAIRING_WINDOW_MS = 6 * 60 * 60 * 1000;
@@ -53,35 +49,6 @@ function findEventForMatch(
 function isFresh(snapshot: DbOddsSnapshot | null, now: number): boolean {
   if (!snapshot) return false;
   return now - snapshot.capturedAt.getTime() < ODDS_SNAPSHOT_FRESHNESS_MS;
-}
-
-/**
- * Resolve `markets.id` + (selectionKey → id) de um `dbMarketKey` (read, ANTES do
- * batch). Hard-fail se o catálogo estiver incompleto (estilo `selIdOf` do backfill).
- */
-async function resolveCatalog(dbMarketKey: string): Promise<{
-  marketId: string;
-  selIdByKey: Map<string, string>;
-}> {
-  const [mkt] = await db
-    .select({ id: markets.id })
-    .from(markets)
-    .where(eq(markets.key, dbMarketKey))
-    .limit(1);
-  if (!mkt) {
-    throw new Error(`market '${dbMarketKey}' não encontrado no catálogo`);
-  }
-  const sels = await db
-    .select({ id: marketSelections.id, key: marketSelections.key })
-    .from(marketSelections)
-    .where(eq(marketSelections.marketId, mkt.id));
-  if (sels.length === 0) {
-    throw new Error(`market '${dbMarketKey}' sem seleções no catálogo`);
-  }
-  return {
-    marketId: mkt.id,
-    selIdByKey: new Map(sels.map((s) => [s.key, s.id])),
-  };
 }
 
 export type EnsureOddsOptions = {
@@ -174,9 +141,11 @@ export async function ensureOddsSnapshotsFresh(
       windowHours: 7 * 24,
     });
 
-    const { marketId, selIdByKey } = await resolveCatalog(descriptor.dbMarketKey);
+    const { marketId, idByKey } = await resolveMarketCatalog(
+      descriptor.dbMarketKey,
+    );
     const selIdOf = (key: string): string => {
-      const id = selIdByKey.get(key);
+      const id = idByKey.get(key);
       if (!id) {
         throw new Error(
           `seleção '${key}' não seedada pro market '${descriptor.dbMarketKey}'`,

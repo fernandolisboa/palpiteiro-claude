@@ -1,7 +1,4 @@
-import {
-  OverUnderInputSchema,
-  type OverUnderInput,
-} from "@/lib/ai/schemas/input";
+import { OverUnderInputSchema, type OverUnderInput } from "./schemas";
 import type {
   NormalizedFixture,
   NormalizedH2H,

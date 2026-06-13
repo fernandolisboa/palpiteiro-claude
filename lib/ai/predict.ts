@@ -1,11 +1,17 @@
 import Anthropic from "@anthropic-ai/sdk";
 import { eq } from "drizzle-orm";
 
-import { aiCalls, matches, predictions } from "@/db/schema";
+import {
+  aiCalls,
+  matches,
+  predictionSelectionOdds,
+  predictions,
+} from "@/db/schema";
 import { db } from "@/lib/db";
+import { resolveMarketCatalog } from "@/lib/db/queries/market-catalog";
 import { getLatestFreshOddsSnapshot } from "@/lib/db/queries/odds-snapshots";
 import { extractDbCause } from "@/lib/db/pg-error";
-import { computeImpliedProbabilities } from "@/lib/odds/implied-probability";
+import { computeMarketImpliedProbabilities } from "@/lib/odds/implied-probability";
 import { pickBestTotalsBookmaker, type OddsBundle } from "@/lib/odds/select-bookmaker";
 import { getOddsForSport } from "@/lib/providers/odds-api";
 import { leagueToSportKey } from "@/lib/providers/odds-api-constants";
@@ -26,21 +32,22 @@ import {
 import { getPreferredModelId } from "@/lib/db/queries/users";
 
 import { getAnthropicClient } from "./anthropic";
-import { BuildInputError, buildPredictionInput } from "./build-input";
 import { calculateCost } from "./cost";
+import { getCartridge } from "./markets/registry";
+// O cartucho over/under expõe estes BINDINGS DE MÓDULO; predict.ts os importa
+// nomeados (não via o objeto do cartucho) pra que os spies do teste (vi.spyOn)
+// interceptem a montagem real do input e o catch de BuildInputError funcione.
+import {
+  BuildInputError,
+  buildPredictionInput,
+} from "./markets/over_under/build-input";
+import type { OverUnderOutput } from "./markets/over_under/schemas";
 import {
   MODEL_REGISTRY,
   isModelAllowedForAudience,
   type AIModelId,
 } from "./models";
 import { buildAnthropicRequest } from "./request-builder";
-import {
-  PROMPT_VERSION,
-  SUBMIT_PREDICTION_TOOL,
-  SYSTEM_PROMPT,
-  buildUserMessage,
-} from "./prompts/over_under_v1";
-import { OverUnderOutputSchema } from "./schemas/output";
 
 // ─── Types & errors ──────────────────────────────────────────────────────────
 
@@ -54,6 +61,10 @@ export type PredictArgs = {
   // Override admin-gated (já validado pelo caller); predict confia num
   // AIModelId. Ausente → usa a preferência do usuário / default global do DB.
   modelOverride?: AIModelId;
+  // Mercado a analisar (ADR 0017). Default `"over_under"` (o caller único hoje
+  // não passa). Resolve o cartucho via getCartridge — predict NÃO ramifica por
+  // `if (market === X)`.
+  marketKey?: string;
 };
 
 export type Prediction = typeof predictions.$inferSelect;
@@ -174,6 +185,7 @@ async function persistAiCallError(args: {
   latencyMs: number;
   status: AiCallStatus;
   errorMessage: string;
+  promptVersion: string;
 }): Promise<void> {
   const cost = calculateCost({
     model: args.model,
@@ -189,7 +201,7 @@ async function persistAiCallError(args: {
       matchId: args.matchId,
       provider: "anthropic",
       model: args.model,
-      promptVersion: PROMPT_VERSION,
+      promptVersion: args.promptVersion,
       inputPayload: args.inputPayload,
       outputPayload: args.outputPayload,
       inputTokens: args.inputTokens,
@@ -219,7 +231,13 @@ export async function predict({
   userId,
   isAdmin,
   modelOverride,
+  marketKey = "over_under",
 }: PredictArgs): Promise<Prediction> {
+  // Cartucho de mercado (ADR 0017): resolve por marketKey (throw em desconhecido).
+  // Read puro — roda ANTES de qualquer chamada paga; predict NÃO ramifica por
+  // `if (market === X)`, todo o comportamento específico vem do cartucho.
+  const cartridge = getCartridge(marketKey);
+
   // 0. Resolve o modelo UMA vez pela cascata completa (ADR 0013):
   //    override por análise > preferência do usuário > default global >
   //    DEFAULT_MODEL_ID. A preferência só vale se passar no filtro de audiência
@@ -334,7 +352,9 @@ export async function predict({
     const commenceTimeFrom = new Date(kickoffMs - ODDS_WINDOW_MS).toISOString();
     const commenceTimeTo = new Date(kickoffMs + ODDS_WINDOW_MS).toISOString();
     const events = await getOddsForSport(sportKey, {
-      markets: ["totals"],
+      // provider market key do descriptor (= "totals" pro over/under); request
+      // byte-idêntico ao literal antigo, mas sem hardcode no predict.
+      markets: [cartridge.descriptor.providerMarketKey],
       regions: ["eu"],
       commenceTimeFrom,
       commenceTimeTo,
@@ -363,13 +383,46 @@ export async function predict({
     oddsBundle = bundle;
   }
 
-  // 5. Implied probabilities normalizadas
-  const implied = computeImpliedProbabilities(
-    oddsBundle.overOdd,
-    oddsBundle.underOdd,
+  // 4b. Catálogo do mercado (marketId + mapas seleção↔id) — read PRÉ-chamada-paga,
+  //     keyed por dbMarketKey (= "over_under", NÃO o enum legado "over_under_2_5").
+  //     Hard-fail aqui (market sem seed) acontece ANTES de queimar spend e ANTES
+  //     do insert de ai_call. A persistência (passo 11) só CONSOME estes mapas.
+  const catalog = await resolveMarketCatalog(cartridge.descriptor.dbMarketKey);
+
+  // 4c. Guarda de seed COMPLETO — PRÉ-chamada-paga. resolveMarketCatalog (shared
+  //     com #164) só hard-falha em mercado ausente ou ZERO seleções; um mercado
+  //     seedado com SÓ ALGUMAS seleções (ex.: 'over' sem 'under') passaria por ela
+  //     e só estouraria nos hard-fails por-seleção DEPOIS de client.messages.create()
+  //     (queimando spend + uma row de ai_call). O invariante "falha antes do gasto"
+  //     exige checar AQUI que TODA seleção do cartucho tem id no catálogo.
+  const missingSelections = cartridge.selections.filter(
+    (key) => !catalog.idByKey.has(key),
   );
-  const overPct = implied.overProb * 100;
-  const underPct = implied.underProb * 100;
+  if (missingSelections.length > 0) {
+    throw new PredictError(
+      `market '${cartridge.descriptor.dbMarketKey}' seedado incompleto: faltam seleções [${missingSelections.join(", ")}]`,
+      { marketKey, missingSelections },
+    );
+  }
+
+  // 5. Implied probabilities normalizadas (N seleções; contrato chave→índice).
+  //    O candidate-odds array é montado na ordem `descriptor.selectionKeys`
+  //    (['over','under']) SOBRE as odds do bundle — nunca por ordem de linhas de
+  //    read. impliedByKey indexa o resultado pela MESMA chave, e o *100 segue a
+  //    ordem de operações de antes (probs[i] * 100) → bit-exato com o legado.
+  const selectionKeys = cartridge.descriptor.selectionKeys; // ['over','under']
+  const candidateOddsByKey: Record<string, number> = {
+    over: oddsBundle.overOdd,
+    under: oddsBundle.underOdd,
+  };
+  const candidateOdds = selectionKeys.map((key) => candidateOddsByKey[key]);
+  const { probs } = computeMarketImpliedProbabilities(candidateOdds);
+  const impliedByKey: Record<string, number> = {};
+  selectionKeys.forEach((key, i) => {
+    impliedByKey[key] = probs[i] * 100;
+  });
+  const overPct = impliedByKey.over;
+  const underPct = impliedByKey.under;
 
   // 6. Monta OverUnderInput
   let input: ReturnType<typeof buildPredictionInput>;
@@ -418,7 +471,7 @@ export async function predict({
     0,
     Math.ceil((kickoffMs - Date.now()) / 86_400_000),
   );
-  const userMessage = buildUserMessage(input, { daysToKickoff });
+  const userMessage = cartridge.buildUserMessage(input, { daysToKickoff });
   // Parâmetros de geração calibráveis (ADR 0008, emenda 2). Aplicados MODEL-AWARE
   // pelo request-builder: maxTokens p/ todos, effort só adaptive, temperature só
   // temperature-mode. Leitura barata de DB ante a chamada paga ao LLM.
@@ -428,10 +481,10 @@ export async function predict({
   // temperature em modelos adaptive (Opus 4.8 dá 400) e a mantém no Sonnet 4.5.
   const request = buildAnthropicRequest({
     model,
-    system: SYSTEM_PROMPT,
+    system: cartridge.systemPrompt,
     userMessage,
-    tools: [SUBMIT_PREDICTION_TOOL as unknown as Anthropic.Tool],
-    toolName: SUBMIT_PREDICTION_TOOL.name,
+    tools: [cartridge.tool],
+    toolName: cartridge.toolName,
     maxTokens: genParams.maxTokens,
     effort: genParams.effort,
     temperature: genParams.temperature,
@@ -458,6 +511,7 @@ export async function predict({
       latencyMs,
       status: classified.status,
       errorMessage: classified.message,
+      promptVersion: cartridge.version,
     });
     throw new PredictError(`anthropic call failed: ${classified.message}`, {
       cause: err,
@@ -471,7 +525,7 @@ export async function predict({
   // 9. Extração do tool_use block
   const toolUse = response.content.find(
     (block): block is Anthropic.ToolUseBlock =>
-      block.type === "tool_use" && block.name === SUBMIT_PREDICTION_TOOL.name,
+      block.type === "tool_use" && block.name === cartridge.toolName,
   );
   if (!toolUse) {
     const snippet = JSON.stringify(response.content).slice(0, 500);
@@ -485,15 +539,17 @@ export async function predict({
       outputTokens,
       latencyMs,
       status: "tool_missing",
-      errorMessage: `model did not call submit_prediction; content=${snippet}`,
+      errorMessage: `model did not call ${cartridge.toolName}; content=${snippet}`,
+      promptVersion: cartridge.version,
     });
     throw new PredictError("LLM did not call submit_prediction tool", {
       stopReason: response.stop_reason,
     });
   }
 
-  // 10. Validação Zod do output
-  const parsed = OverUnderOutputSchema.safeParse(toolUse.input);
+  // 10. Validação Zod do output (schema do cartucho; fronteira do CLAUDE.md —
+  //     output do LLM SEMPRE validado por Zod antes de uso).
+  const parsed = cartridge.outputSchema.safeParse(toolUse.input);
   if (!parsed.success) {
     await persistAiCallError({
       userId,
@@ -506,12 +562,16 @@ export async function predict({
       latencyMs,
       status: "invalid_output",
       errorMessage: JSON.stringify(parsed.error.issues),
+      promptVersion: cartridge.version,
     });
     throw new PredictError("LLM output failed Zod validation", {
       issues: parsed.error.issues,
     });
   }
-  const output = parsed.data;
+  // O registry apaga o genérico do schema (ZodType<unknown>); pro #165 o único
+  // cartucho é over/under e a costura de persistência (colunas legadas + PSO)
+  // é over/under-específica — narrow pro tipo concreto do output.
+  const output = parsed.data as OverUnderOutput;
 
   // 11. Persistência (sequencial — neon-http não suporta transações reais).
   const cost = calculateCost({
@@ -528,7 +588,7 @@ export async function predict({
         matchId,
         provider: "anthropic",
         model: model.id,
-        promptVersion: PROMPT_VERSION,
+        promptVersion: cartridge.version,
         inputPayload,
         outputPayload,
         inputTokens,
@@ -571,6 +631,41 @@ export async function predict({
       ? output.confidence_pct - impliedPct
       : null;
 
+  // Coluna NOVA `selection_id`: o lado escolhido (NULL em pass — não há seleção).
+  // Resolvido em MEMÓRIA pelo catálogo já lido — hard-fail ANTES do insert (não
+  // violação de FK opaca pós-paga) se a seleção recomendada não estiver seedada.
+  let selectionId: string | null = null;
+  if (side !== "pass") {
+    const id = catalog.idByKey.get(side);
+    if (!id) {
+      throw new PredictError(
+        `seleção '${side}' não seedada pro market '${cartridge.descriptor.dbMarketKey}'`,
+        { marketKey, recommendation: side },
+      );
+    }
+    selectionId = id;
+  }
+
+  // Rows do candidate set (over+under) pra prediction_selection_odds, montadas
+  // ANTES do insert da prediction pra que um seed faltante falhe SEM ter
+  // commitado a prediction (mesma semântica do hard-fail de selectionId acima).
+  // odds = EXATAMENTE o par legado do MESMO bundle → PSO["over"] ===
+  // overOddAtPrediction byte-a-byte. Uma row por seleção, INCLUSIVE em pass.
+  const oddByKey: Record<string, number> = {
+    over: oddsBundle.overOdd,
+    under: oddsBundle.underOdd,
+  };
+  const psoRowsToInsert = selectionKeys.map((key) => {
+    const sid = catalog.idByKey.get(key);
+    if (!sid) {
+      throw new PredictError(
+        `seleção '${key}' não seedada pro market '${cartridge.descriptor.dbMarketKey}'`,
+        { marketKey, key },
+      );
+    }
+    return { selectionId: sid, odd: oddByKey[key].toFixed(3) };
+  });
+
   let predictionRow: Prediction;
   try {
     const [row] = await db
@@ -580,6 +675,12 @@ export async function predict({
         userId,
         aiCallId: aiCallRow.id,
         market: "over_under_2_5",
+        // Colunas NOVAS multi-mercado (#165): marketId do catálogo; selectionId
+        // resolvido acima (NULL em pass); marketParams verbatim do descriptor
+        // (= { line: 2.5 } NUMBER).
+        marketId: catalog.marketId,
+        selectionId,
+        marketParams: cartridge.descriptor.params ?? null,
         recommendation: output.recommendation,
         confidencePct: output.confidence_pct.toFixed(2),
         rationale: output.rationale,
@@ -597,7 +698,7 @@ export async function predict({
         overOddAtPrediction: oddsBundle.overOdd.toFixed(3),
         underOddAtPrediction: oddsBundle.underOdd.toFixed(3),
         modelVersion: model.id,
-        promptVersion: PROMPT_VERSION,
+        promptVersion: cartridge.version,
       })
       .returning();
     predictionRow = row;
@@ -615,6 +716,38 @@ export async function predict({
       }),
     );
     throw new PredictError("failed to persist prediction", cause);
+  }
+
+  // 12. prediction_selection_odds (SEQUENCIAL, após prediction.id — o FK NOT NULL
+  //     só existe após .returning()). As rows (candidate set, INCLUSIVE pass) já
+  //     foram montadas acima; aqui só ligamos o predictionId e inserimos.
+  //
+  //     Falha AQUI (prediction já commitada) = log + DEGRADE (não throw): retorna
+  //     a prediction; o candidate set é re-preenchível pelo backfill #162
+  //     (idempotente via o UNIQUE). Janela de parcialidade tolerada (estilo
+  //     persistAiCallError — não mascarar a prediction válida com um erro de PSO).
+  try {
+    await db.insert(predictionSelectionOdds).values(
+      psoRowsToInsert.map((r) => ({
+        predictionId: predictionRow.id,
+        selectionId: r.selectionId,
+        odd: r.odd,
+      })),
+    );
+  } catch (err) {
+    const cause = extractDbCause(err);
+    console.error(
+      JSON.stringify({
+        scope: "predict",
+        matchId,
+        userId,
+        predictionId: predictionRow.id,
+        error: "prediction_selection_odds_insert_failed",
+        ...cause,
+      }),
+    );
+    // Degrade: a prediction já está persistida; não derrubar o caller por uma
+    // falha do candidate set (re-preenchível pelo backfill #162).
   }
 
   return predictionRow;
