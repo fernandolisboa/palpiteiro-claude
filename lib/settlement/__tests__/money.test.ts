@@ -21,6 +21,23 @@ describe("profitForOutcome", () => {
     expect(profitForOutcome("push", 1.9, 1)).toBe(0);
   });
 
+  // #167 / ADR 0019: o profit escala LINEAR com o stake (1–3u). Pin do critério
+  // "settlement multiplica o profit pelo stake correto, incl. push devolve o
+  // stake independente do tamanho".
+  it("won → escala linear com o stake (2u/3u)", () => {
+    expect(profitForOutcome("won", 1.9, 2)).toBe(1.8); // 2*(1.9-1)
+    expect(profitForOutcome("won", 2.0, 3)).toBe(3.0); // 3*(2.0-1)
+  });
+
+  it("lost → -stake escala (3u → -3)", () => {
+    expect(profitForOutcome("lost", 1.9, 3)).toBe(-3);
+  });
+
+  it("push → 0 independente do stake (devolve o stake; 2u e 3u → 0)", () => {
+    expect(profitForOutcome("push", 1.9, 2)).toBe(0);
+    expect(profitForOutcome("push", 2.5, 3)).toBe(0);
+  });
+
   it("half_win → 0.5*stake*(odd-1) (asian-handicap forward-proof, ADR 0016 D4)", () => {
     expect(profitForOutcome("half_win", 1.9, 2)).toBe(0.9);
   });
@@ -65,6 +82,15 @@ describe("profitForResult (override-facing)", () => {
   it("push → 0 (unreachable in #166, gated until #168, covered anyway)", () => {
     expect(profitForResult("push", 1.9, 1)).toBe(0);
     expect(profitForResult("push", null, 1)).toBe(0);
+  });
+
+  // #167 / ADR 0019: o override é o caminho REAL de re-settle e TAMBÉM escala com
+  // o stake. Espelha o pin de profitForOutcome no path manual.
+  it("won/lost escalam com o stake (3u); push devolve o stake (2u/3u → 0)", () => {
+    expect(profitForResult("won", 2.0, 3)).toBe(3.0); // 3*(2.0-1)
+    expect(profitForResult("lost", 1.9, 3)).toBe(-3);
+    expect(profitForResult("push", 1.9, 2)).toBe(0);
+    expect(profitForResult("push", 2.5, 3)).toBe(0);
   });
 
   it("won/lost with null odd → null (can't price, caller must reject)", () => {

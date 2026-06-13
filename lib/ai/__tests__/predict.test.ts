@@ -593,9 +593,9 @@ describe("predict() — paridade de colunas (#165): legado byte-idêntico + nova
     expect(predictionRow.edgePct).toBe((60 - impliedOver).toFixed(2));
     expect(predictionRow.confidencePct).toBe("60.00");
     expect(predictionRow.minimumOdd).toBe("1.800");
-    // stake_units fica IMPLÍCITO (default "1" no schema; #167 popula) — predict
-    // NÃO grava a coluna.
-    expect(predictionRow).not.toHaveProperty("stakeUnits");
+    // stake_units agora é gravado pela banda determinística (#167 / ADR 0019).
+    // edge = 60 − implied(2.10) = 14.69 (≥ 12) e conf 60 (≥ 55) → 3u → "3.00".
+    expect(predictionRow.stakeUnits).toBe("3.00");
     // Colunas NOVAS multi-mercado.
     expect(predictionRow.marketId).toBe("mkt-ou");
     expect(predictionRow.selectionId).toBe("sel-over");
@@ -702,6 +702,163 @@ describe("predict() — paridade de colunas (#165): legado byte-idêntico + nova
     ).resolves.toEqual({ id: "row-1", aiCallId: "row-1" });
     // A prediction foi retornada apesar da falha do candidate set.
     expect(insertValues).toHaveBeenCalledTimes(3);
+  });
+});
+
+// ─── #167 / ADR 0019: stake congelado na row pela banda determinística ───────
+//
+// Steeramos o EDGE pelas odds (freshSnapshotWith) + a confiança pelo output
+// mockado, pra cair INTERIOR a cada banda — a fronteira EXATA dos operadores
+// fica no staking.test (implícita normalizada é irracional, não bate número
+// redondo). impliedPctOf replica a conta do predict (probs[idx]*100) pra derivar
+// o edge esperado. O stake é gravado como STRING (numeric(6,2) → toFixed(2)).
+describe("predict() — stake congelado na row (#167 / ADR 0019)", () => {
+  it("1u: edge baixo (4.35) com conf 55 → stake_units '1.00'", async () => {
+    // implied(over | 1.90/1.95) ≈ 50.65; edge = 55 − 50.65 = 4.35 (< 8) → 1u.
+    getLatestFreshOddsSnapshot.mockResolvedValueOnce(
+      freshSnapshotWith("1.900", "1.950"),
+    );
+    anthropicCreate.mockResolvedValue(
+      toolUseMessage({
+        recommendation: "over",
+        confidence_pct: 55,
+        rationale: "Jogo equilibrado, edge fino.",
+        key_factors: ["mercado apertado"],
+        minimum_odd: 1.8,
+      }),
+    );
+
+    await expect(
+      predict({ matchId: "m-1", userId: "u-1", isAdmin: false }),
+    ).resolves.toBeDefined();
+
+    const predictionRow = insertValues.mock.calls[1]?.[0] as Record<
+      string,
+      unknown
+    >;
+    const impliedOver = impliedPctOf(1.9, 1.95, "over");
+    expect(predictionRow.edgePct).toBe((55 - impliedOver).toFixed(2));
+    expect(predictionRow.stakeUnits).toBe("1.00");
+  });
+
+  it("2u: edge 9.69 com conf 55 → stake_units '2.00'", async () => {
+    // implied(over | 2.10/1.74) ≈ 45.31; edge = 55 − 45.31 = 9.69 (∈ [8,12)) e
+    // conf 55 (≥ 50) → 2u.
+    getLatestFreshOddsSnapshot.mockResolvedValueOnce(
+      freshSnapshotWith("2.100", "1.740"),
+    );
+    anthropicCreate.mockResolvedValue(
+      toolUseMessage({
+        recommendation: "over",
+        confidence_pct: 55,
+        rationale: "Edge sólido no over.",
+        key_factors: ["alto xG"],
+        minimum_odd: 1.8,
+      }),
+    );
+
+    await expect(
+      predict({ matchId: "m-1", userId: "u-1", isAdmin: false }),
+    ).resolves.toBeDefined();
+
+    const predictionRow = insertValues.mock.calls[1]?.[0] as Record<
+      string,
+      unknown
+    >;
+    const impliedOver = impliedPctOf(2.1, 1.74, "over");
+    expect(predictionRow.edgePct).toBe((55 - impliedOver).toFixed(2));
+    expect(predictionRow.stakeUnits).toBe("2.00");
+  });
+
+  it("3u: edge 18.00 com conf 58 → stake_units '3.00'", async () => {
+    // implied(over | 2.40/1.60) = 40.00; edge = 58 − 40 = 18 (≥ 12) e conf 58
+    // (≥ 55) → 3u.
+    getLatestFreshOddsSnapshot.mockResolvedValueOnce(
+      freshSnapshotWith("2.400", "1.600"),
+    );
+    anthropicCreate.mockResolvedValue(
+      toolUseMessage({
+        recommendation: "over",
+        confidence_pct: 58,
+        rationale: "Edge forte e convicção alta.",
+        key_factors: ["defesas vazadas", "alto xG"],
+        minimum_odd: 1.8,
+      }),
+    );
+
+    await expect(
+      predict({ matchId: "m-1", userId: "u-1", isAdmin: false }),
+    ).resolves.toBeDefined();
+
+    const predictionRow = insertValues.mock.calls[1]?.[0] as Record<
+      string,
+      unknown
+    >;
+    const impliedOver = impliedPctOf(2.4, 1.6, "over");
+    expect(predictionRow.edgePct).toBe((58 - impliedOver).toFixed(2));
+    expect(predictionRow.stakeUnits).toBe("3.00");
+  });
+
+  it("pass: edge null → stake_units '1.00' (default, irrelevante no Yield)", async () => {
+    getLatestFreshOddsSnapshot.mockResolvedValueOnce(
+      freshSnapshotWith("1.900", "1.950"),
+    );
+    anthropicCreate.mockResolvedValue(
+      toolUseMessage({
+        recommendation: "pass",
+        confidence_pct: 70,
+        rationale: "Sem edge claro.",
+        key_factors: ["mercado eficiente"],
+      }),
+    );
+
+    await expect(
+      predict({ matchId: "m-1", userId: "u-1", isAdmin: false }),
+    ).resolves.toBeDefined();
+
+    const predictionRow = insertValues.mock.calls[1]?.[0] as Record<
+      string,
+      unknown
+    >;
+    expect(predictionRow.recommendation).toBe("pass");
+    // edge null → 1u mesmo com conf alta (não dimensiona sem edge).
+    expect(predictionRow.edgePct).toBeNull();
+    expect(predictionRow.stakeUnits).toBe("1.00");
+  });
+
+  it("rounding-seam: raw edge 7.997 < 8 mas edge_pct congela '8.00' → 2u (banda decide sobre o valor GRAVADO)", async () => {
+    // implied(over | 2.10/1.74) = 45.3125. confidence_pct = implied + 7.997 =
+    // 53.3095: o edge raw é 7.997 (< 8 → daria 1u sem o fix), mas toFixed(2) o
+    // arredonda pra "8.00". A banda decide sobre o "8.00" CONGELADO na row (não
+    // sobre 7.997), então grava 2u — caso contrário a banda divergiria do
+    // edge_pct visível (ADR 0019, auditabilidade).
+    const impliedOver = impliedPctOf(2.1, 1.74, "over"); // 45.3125
+    const confSeam = impliedOver + 7.997; // 53.3095
+    getLatestFreshOddsSnapshot.mockResolvedValueOnce(
+      freshSnapshotWith("2.100", "1.740"),
+    );
+    anthropicCreate.mockResolvedValue(
+      toolUseMessage({
+        recommendation: "over",
+        confidence_pct: confSeam,
+        rationale: "Edge no limiar do arredondamento.",
+        key_factors: ["caso de seam"],
+        minimum_odd: 1.8,
+      }),
+    );
+
+    await expect(
+      predict({ matchId: "m-1", userId: "u-1", isAdmin: false }),
+    ).resolves.toBeDefined();
+
+    const predictionRow = insertValues.mock.calls[1]?.[0] as Record<
+      string,
+      unknown
+    >;
+    // Sanidade: o raw edge é mesmo < 8, mas o byte gravado é "8.00".
+    expect(confSeam - impliedOver).toBeLessThan(8);
+    expect(predictionRow.edgePct).toBe("8.00");
+    expect(predictionRow.stakeUnits).toBe("2.00");
   });
 });
 
