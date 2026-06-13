@@ -7,10 +7,10 @@ import {
   type OverrideResult,
 } from "@/app/actions/settlement";
 
-// Opções selecionáveis no override. DESACOPLADO do OutcomeResult (que agora
-// inclui `push`): push não é oferecido na UI até #168. Mantém prop/options/
-// page-guard consistentes.
-const OVERRIDE_RESULTS = ["won", "lost", "void"] as const;
+// Opções selecionáveis no override. Subconjunto explícito do OutcomeResult
+// (mesma união desde #168, que adicionou push). A action valida result_data por
+// contrato e a regra "sem odd → só void" (que cobre push) no boundary.
+const OVERRIDE_RESULTS = ["won", "lost", "void", "push"] as const;
 type OverrideResultOption = (typeof OVERRIDE_RESULTS)[number];
 
 type Props = {
@@ -22,6 +22,7 @@ const RESULT_LABEL: Record<OverrideResultOption, string> = {
   won: "Ganha (won)",
   lost: "Perdida (lost)",
   void: "Anulada (void)",
+  push: "Push (devolve stake)",
 };
 
 export function OverrideForm({ predictionId, defaultResult }: Props) {
@@ -80,7 +81,8 @@ export function OverrideForm({ predictionId, defaultResult }: Props) {
 
       <p className="text-[12px] text-muted-foreground">
         O profit é recalculado a partir do resultado + odd de entrada + stake da
-        predição. &quot;void&quot; zera o profit.
+        predição. &quot;void&quot; e &quot;push&quot; zeram o profit (push devolve
+        o stake). Predição sem odd só pode ser anulada (void).
       </p>
 
       <button
