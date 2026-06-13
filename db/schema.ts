@@ -246,6 +246,16 @@ export const predictions = pgTable(
       .notNull()
       .references(() => aiCalls.id, { onDelete: "restrict" }),
     market: marketEnum().notNull().default("over_under_2_5"),
+    // Generalização multi-mercado do enum `market` legado (ADR 0015 D3/D4), todas
+    // NULLABLE no expand — predict.ts só passa a preencher na Fase 2 (#165); o
+    // histórico over/under é backfillado deterministicamente em #162. `selectionId`
+    // é NULL em `pass` (não há seleção). `marketParams` carrega a forma do mercado
+    // (ex.: { line: 2.5 }), validada por Zod no boundary quando surgir um reader.
+    marketId: uuid().references(() => markets.id, { onDelete: "restrict" }),
+    selectionId: uuid().references(() => marketSelections.id, {
+      onDelete: "restrict",
+    }),
+    marketParams: jsonb().$type<{ line: number }>(),
     recommendation: recommendationEnum().notNull(),
     confidencePct: numeric({ precision: 5, scale: 2 }).notNull(),
     rationale: text().notNull(),
@@ -272,6 +282,37 @@ export const predictions = pgTable(
     index("predictions_match_id_idx").on(t.matchId),
     index("predictions_user_id_idx").on(t.userId),
     index("predictions_created_at_idx").on(t.createdAt),
+    index("predictions_market_id_idx").on(t.marketId),
+    index("predictions_selection_id_idx").on(t.selectionId),
+  ],
+);
+
+// Odds CONGELADAS por seleção no momento da análise — a generalização N-vias do
+// par binário over/under_odd_at_prediction (ADR 0012, decisões 3-4). Guarda o
+// CANDIDATE SET: uma row por seleção do mercado avaliada na análise, congelada,
+// INCLUSIVE em `pass` (mesma semântica do par legado) e INDEPENDENTE de
+// predictions.selection_id (o lado escolhido, NULL em pass). NÃO é "a odd da
+// aposta" — é o leque de odds visto na hora. O par legado permanece até o
+// contract (Fase 5). predict.ts só grava na Fase 2 (#165); histórico em #162.
+// UNIQUE(prediction_id, selection_id) ancora o upsert idempotente do backfill.
+export const predictionSelectionOdds = pgTable(
+  "prediction_selection_odds",
+  {
+    id: uuid().primaryKey().defaultRandom(),
+    predictionId: uuid()
+      .notNull()
+      .references(() => predictions.id, { onDelete: "cascade" }),
+    selectionId: uuid()
+      .notNull()
+      .references(() => marketSelections.id, { onDelete: "restrict" }),
+    odd: numeric({ precision: 6, scale: 3 }).notNull(),
+  },
+  (t) => [
+    index("prediction_selection_odds_prediction_id_idx").on(t.predictionId),
+    unique("prediction_selection_odds_prediction_id_selection_id_unique").on(
+      t.predictionId,
+      t.selectionId,
+    ),
   ],
 );
 
