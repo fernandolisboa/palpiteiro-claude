@@ -1,0 +1,78 @@
+import { normalizeTeamName } from "@/lib/providers/sports-data/team-names";
+import type { OddsApiOutcome } from "@/lib/providers/odds-api-schemas";
+
+/**
+ * Descriptor local tipado de mercado (#164). NÃO é o registry do #165 — é o
+ * mínimo necessário pra generalizar a ingestão de odds binária (over/under) para
+ * N seleções, mantendo TRÊS vocabulários separados que historicamente colidiam:
+ *
+ *   - `providerMarketKey`: a chave do mercado no The Odds API (`'totals'` / `'h2h'`).
+ *   - `dbMarketKey`: a chave em `markets.key` (`'over_under'` / `'match_result'`).
+ *     NÃO confundir com o enum LEGADO `match_odds_snapshots.market = 'over_under_2_5'`
+ *     (esse carrega a linha no sufixo; aqui a linha vive em `market_params.line`).
+ *   - `dbSelectionKey`: a chave em `market_selections.key` (`'over'`/`'under'`,
+ *     `'home'`/`'draw'`/`'away'`).
+ *
+ * A linha (2.5, 3.5, …) é SEMPRE `params.line` — nunca um sufixo de key. Cada
+ * descriptor sabe mapear um `ProviderOutcome` cru → `dbSelectionKey` e qual é o
+ * conjunto canônico de seleções (usado pra validar "mercado completo": um book só
+ * é elegível se oferece TODAS as `selectionKeys`).
+ */
+export type MarketDescriptor = {
+  dbMarketKey: string;
+  providerMarketKey: string;
+  params?: { line: number };
+  resolveSelectionKey(
+    outcome: OddsApiOutcome,
+    ctx: { homeTeam: string; awayTeam: string },
+    params?: { line: number },
+  ): string | null;
+  selectionKeys: string[];
+};
+
+/**
+ * Casa o nome de um time vindo do provider contra o nome canônico do DB. Mesma
+ * heurística usada no pareamento de eventos (normaliza + igualdade/inclusão
+ * bidirecional) — definida AQUI como fonte única e reusada por
+ * `fetch-and-snapshot.ts` pra não divergir.
+ */
+export function teamsMatch(a: string, b: string): boolean {
+  const na = normalizeTeamName(a);
+  const nb = normalizeTeamName(b);
+  if (!na || !nb) return false;
+  return na === nb || na.includes(nb) || nb.includes(na);
+}
+
+// over/under 2.5 — o único mercado ATIVO em produção (markets.is_active=true,
+// seedado na migration 0009). Linha fixa em 2.5; outcomes 'Over'/'Under' do
+// provider mapeiam direto pra 'over'/'under', exigindo `point === params.line`.
+export const OVER_UNDER: MarketDescriptor = {
+  dbMarketKey: "over_under",
+  providerMarketKey: "totals",
+  params: { line: 2.5 },
+  resolveSelectionKey(outcome, _ctx, params) {
+    const line = params?.line ?? OVER_UNDER.params?.line;
+    if (outcome.point !== line) return null;
+    const name = outcome.name.toLowerCase();
+    if (name === "over") return "over";
+    if (name === "under") return "under";
+    return null;
+  },
+  selectionKeys: ["over", "under"],
+};
+
+// 1X2 (match_result) — NÃO seedado em produção (is_active=false; ativação real é
+// Fase 4/#173). Existe aqui só pra exercitar o caminho genérico N≥3 em dev/test.
+// 'Draw' → 'draw'; senão casa o nome do time contra home/away via `teamsMatch`
+// (NÃO igualdade exata — o provider pode usar grafias divergentes).
+export const MATCH_RESULT: MarketDescriptor = {
+  dbMarketKey: "match_result",
+  providerMarketKey: "h2h",
+  resolveSelectionKey(outcome, ctx) {
+    if (outcome.name.toLowerCase() === "draw") return "draw";
+    if (teamsMatch(outcome.name, ctx.homeTeam)) return "home";
+    if (teamsMatch(outcome.name, ctx.awayTeam)) return "away";
+    return null;
+  },
+  selectionKeys: ["home", "draw", "away"],
+};
