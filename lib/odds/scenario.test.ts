@@ -364,6 +364,27 @@ describe("computeMarketScenarios", () => {
     expect(selections.every((s) => s.edgePct !== null)).toBe(true);
   });
 
+  it("ecoa recommendedKey fielmente mesmo quando discorda do ranking de edge (echo, não derivação)", () => {
+    // home carrega o MAIOR edge (+6.57); ainda assim recommendedKey aponta draw
+    // (edge −1.06). Uma implementação que derivasse a recomendação do max-edge
+    // devolveria "home" e falharia — trava o contrato de echo (ADR 0018 dec.2:
+    // o gatilho edge≥MIN_EDGE_PP é do LLM/prompt, não desta função pura).
+    const { selections, recommended } = computeMarketScenarios({
+      selections: [
+        { key: "home", modelProbPct: 52, odd: 2.1 },
+        { key: "draw", modelProbPct: 27, odd: 3.4 },
+        { key: "away", modelProbPct: 21, odd: 3.6 },
+      ],
+      recommendedKey: "draw",
+    });
+
+    expect(recommended).toBe("draw");
+    // sanity: home realmente tem edge maior que draw — logo "draw" só veio do echo.
+    expect(
+      (selections[0].edgePct as number) > (selections[1].edgePct as number),
+    ).toBe(true);
+  });
+
   it("mercado parcial (uma odd ausente): implied/edge null em TODAS; model/odd-de-equilíbrio retidos", () => {
     const { selections } = computeMarketScenarios({
       selections: [
