@@ -33,6 +33,7 @@ import { getPreferredModelId } from "@/lib/db/queries/users";
 
 import { getAnthropicClient } from "./anthropic";
 import { calculateCost } from "./cost";
+import { computeStakeUnits } from "./staking";
 import { getCartridge } from "./markets/registry";
 // O cartucho over/under expõe estes BINDINGS DE MÓDULO; predict.ts os importa
 // nomeados (não via o objeto do cartucho) pra que os spies do teste (vi.spyOn)
@@ -631,6 +632,16 @@ export async function predict({
       ? output.confidence_pct - impliedPct
       : null;
 
+  // Staking determinístico (ADR 0019): decidido EM CÓDIGO, nunca pelo LLM. A
+  // banda usa os MESMOS valores CONGELADOS na row (edge/confiança arredondados a
+  // 2 casas) pra que a decisão nunca divirja do `edge_pct` visível — no seam
+  // 7.996→"8.00" a row mostra 8.00 e a banda decide sobre 8.00, não sobre o raw.
+  // As colunas persistidas seguem byte-idênticas (toFixed(2) do raw == do
+  // arredondado); só a DECISÃO passa a usar a precisão exata gravada.
+  const edgePctRounded = edge === null ? null : Number(edge.toFixed(2));
+  const confidencePctRounded = Number(output.confidence_pct.toFixed(2));
+  const stakeUnits = computeStakeUnits(edgePctRounded, confidencePctRounded);
+
   // Coluna NOVA `selection_id`: o lado escolhido (NULL em pass — não há seleção).
   // Resolvido em MEMÓRIA pelo catálogo já lido — hard-fail ANTES do insert (não
   // violação de FK opaca pós-paga) se a seleção recomendada não estiver seedada.
@@ -692,6 +703,9 @@ export async function predict({
         bookmaker: oddsBundle.bookmakerTitle,
         impliedProbPct: impliedPct?.toFixed(2) ?? null,
         edgePct: edge?.toFixed(2) ?? null,
+        // Stake congelado (ADR 0019): banda determinística sobre edge/confiança;
+        // pass → 1u (irrelevante, fora do Yield). numeric(6,2) → string.
+        stakeUnits: stakeUnits.toFixed(2),
         // Par congelado dos DOIS lados, pra toda recomendação inclusive pass
         // (ADR 0012, decisões 3-4) — alimenta o bloco de cenários sem depender
         // de snapshot vivo.

@@ -165,6 +165,54 @@ describe("computeDashboardKpis", () => {
     expect(k.yield.n).toBe(baseK.yield.n);
   });
 
+  // #167 / ADR 0019: o Yield já é stake-aware (Σ profit / Σ stake). Com stakes
+  // mistos (1–3u) o peso do stake é load-bearing: o Yield agregado DIFERE da
+  // média não-ponderada dos yields por aposta. Mistura histórico 1u com novos
+  // 1–3u e prova que soma certo (ADR 0019 §6).
+  it("yield is stake-weighted across mixed 1–3u stakes (≠ unweighted mean)", () => {
+    const rows = [
+      // won 3u @ 2.00 → profit +3.0
+      settled("won", "3.00", {
+        predictionId: "w3",
+        stakeUnits: "3.00",
+        oddAtRecommendation: "2.00",
+      }),
+      // lost 2u → profit -2.0
+      settled("lost", "-2.00", {
+        predictionId: "l2",
+        stakeUnits: "2.00",
+        oddAtRecommendation: "1.95",
+      }),
+      // won 1u @ 1.90 → profit +0.9
+      settled("won", "0.90", {
+        predictionId: "w1",
+        stakeUnits: "1.00",
+        oddAtRecommendation: "1.90",
+      }),
+      // histórico 1u (won @ 1.90) → profit +0.9 — soma junto, sem retrofit
+      settled("won", "0.90", {
+        predictionId: "hist1",
+        stakeUnits: "1.00",
+        oddAtRecommendation: "1.90",
+      }),
+    ];
+    const k = computeDashboardKpis(rows);
+    expect(k.stakedUnits).toBeCloseTo(7, 5); // 3 + 2 + 1 + 1
+    expect(k.totalProfitUnits).toBeCloseTo(2.8, 5); // 3 - 2 + 0.9 + 0.9
+    // Yield = (Σ profit / Σ stake) * 100 = (2.8 / 7) * 100 = 40
+    expect(k.yield.value).toBeCloseTo(40, 5);
+    expect(k.yield.n).toBe(4);
+    // A média NÃO-ponderada dos yields por aposta seria 45 — o peso do stake é
+    // o que move o agregado pra 40. Sem stake-weighting este teste falha.
+    const perBetYields = [100, -100, 90, 90]; // (profit/stake)*100 por aposta
+    const unweightedMean =
+      perBetYields.reduce((a, b) => a + b, 0) / perBetYields.length;
+    expect(unweightedMean).toBeCloseTo(45, 5);
+    expect(k.yield.value).not.toBeCloseTo(unweightedMean, 1);
+    // Win rate ignora o stake (3 won / 4 = 75%) — só o Yield é ponderado.
+    expect(k.winRate.value).toBeCloseTo(75, 5);
+  });
+
   it("excludes void from win rate denominator", () => {
     const rows = [
       settled("won", "1"),
