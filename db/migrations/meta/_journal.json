@@ -71,6 +71,13 @@
       "when": 1781312853290,
       "tag": "0009_clear_blue_blade",
       "breakpoints": true
+    },
+    {
+      "idx": 10,
+      "version": "7",
+      "when": 1781313549574,
+      "tag": "0010_bright_kronos",
+      "breakpoints": true
     }
   ]
 }
