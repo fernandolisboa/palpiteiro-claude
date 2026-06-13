@@ -160,6 +160,9 @@ describe("overridePredictionOutcome", () => {
       form({ predictionId: "p1", result: "push", homeScore: "1", awayScore: "1" }),
     );
     expect(res).toMatchObject({ ok: false });
+    // Pin the guard's nature: it's a POST-fetch business rule (the odd is read
+    // from the row), not an early input reject — so getRow ran, but no DB write.
+    expect(getRow).toHaveBeenCalledTimes(1);
     expect(upsert).not.toHaveBeenCalled();
   });
 });
