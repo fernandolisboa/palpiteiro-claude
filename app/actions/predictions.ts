@@ -40,6 +40,11 @@ function friendlyMessage(err: PredictError): string {
   if (msg.includes("no over/under 2.5 odds")) {
     return "Nenhum bookmaker oferece over/under 2.5 para este jogo.";
   }
+  // Mercado *additional* (btts) sem snapshot fresco = o pre-warm por evento não
+  // achou book ofertando o mercado pra este jogo (degradou sem escrever).
+  if (msg.includes("sem snapshot fresco")) {
+    return "Nenhum bookmaker oferece este mercado para o jogo no momento.";
+  }
   if (msg.includes("fixture not found in provider")) {
     return "Dados do jogo indisponíveis no provider esportivo.";
   }
@@ -113,6 +118,13 @@ export async function analyzeMatch(
   const match = await getMatchById(matchId);
   if (!match) {
     return { ok: false, error: "Jogo não encontrado." };
+  }
+  // Analisabilidade ANTES do pre-warm de odds (#174 code review): um jogo
+  // encerrado/cancelado faria o pre-warm por evento gastar 1 crédito (additional)
+  // só pra o predict lançar depois. Curto-circuita aqui (status já em escopo,
+  // read grátis), market-agnóstico — espelha o gate de predict.ts.
+  if (match.status === "finished" || match.status === "cancelled") {
+    return { ok: false, error: "Este jogo já foi encerrado ou cancelado." };
   }
   const marketKeyRaw = String(formData.get("marketKey") ?? "");
   // Audiência ∩ cobertura de liga (#158): um POST forjado com `marketKey=btts` numa

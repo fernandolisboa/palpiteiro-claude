@@ -16,6 +16,7 @@ import { afterAll, beforeAll, describe, expect, it } from "vitest";
 
 import * as schema from "@/db/schema";
 import { getMarketPresentation } from "@/lib/view/markets/presentation";
+import { getSettlementRule } from "@/lib/settlement/registry";
 
 let client: PGlite;
 let db: PgliteDatabase<typeof schema>;
@@ -67,6 +68,9 @@ describe("market presentation ↔ seed parity (btts)", () => {
     expect(mkt.isActive).toBe(true);
     expect(mkt.isGraduated).toBe(false);
     expect(mkt.settlementRuleKey).toBe("btts");
+    // contrato seed↔registry: o settlement_rule_key seedado DEVE resolver (senão a
+    // row settlaria como erro silencioso pra sempre). Pina o binding por construção.
+    expect(() => getSettlementRule(mkt.settlementRuleKey)).not.toThrow();
 
     const sels = await db
       .select()

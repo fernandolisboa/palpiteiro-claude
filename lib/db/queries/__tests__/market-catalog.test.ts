@@ -146,8 +146,13 @@ describe("marketsForLeague", () => {
     }
   });
 
-  it("mercado desconhecido (sem descriptor) faz pass-through (default seguro)", () => {
-    const out = marketsForLeague([{ key: "mystery" }], "brasileirao_a");
-    expect(out).toEqual([{ key: "mystery" }]);
+  it("mercado SEM descriptor é DROPADO (fail-closed: sem descriptor não há odds)", () => {
+    // drift DB↔código: um mercado seedado sem descriptor não é ofertável (não há como
+    // resolver odds). fail-closed evita ofertá-lo silenciosamente em qualquer liga.
+    const out = marketsForLeague(
+      [{ key: "mystery" }, { key: "over_under" }],
+      "brasileirao_a",
+    );
+    expect(out.map((m) => m.key)).toEqual(["over_under"]);
   });
 });

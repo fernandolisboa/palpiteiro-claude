@@ -351,6 +351,42 @@ describe("predict(btts) — N=2 binary happy path through the generic path", () 
     expect(byId["sel-yes"]).toBe("58.00");
     expect(byId["sel-no"]).toBe("42.00");
   });
+
+  it("rec 'no': selectionProbs complemento {yes:42,no:58}, edge por prob_no (ramo assimétrico)", async () => {
+    anthropicCreate.mockResolvedValue(
+      anthropicMessage({
+        recommendation: "no",
+        confidence_pct: 58, // P(no)
+        rationale: "Defesa sólida segura ao menos um lado sem marcar.",
+        key_factors: ["defesa forte", "pouco volume ofensivo visitante"],
+        minimum_odd: 1.5,
+      }),
+    );
+
+    const result = await predict({
+      matchId: "m-1",
+      userId: "u-1",
+      isAdmin: true,
+      marketKey: "btts",
+    });
+
+    // complemento: rec 'no' conf 58 → {yes:100-58, no:58}.
+    expect(result.selections).toEqual([
+      { key: "yes", modelProbPct: 42, odd: 2.06 },
+      { key: "no", modelProbPct: 58, odd: 1.81 },
+    ]);
+    const predictionRow = insertValues.mock.calls[1]?.[0] as Record<
+      string,
+      unknown
+    >;
+    expect(predictionRow.recommendation).toBe("no");
+    expect(predictionRow.selectionId).toBe("sel-no");
+    expect(predictionRow.oddAtRecommendation).toBe("1.810");
+    const impliedNo = impliedPctOf(2.06, 1.81, "no");
+    expect(predictionRow.impliedProbPct).toBe(impliedNo.toFixed(2));
+    // edge da prob_no (58), não 100−x.
+    expect(predictionRow.edgePct).toBe((58 - impliedNo).toFixed(2));
+  });
 });
 
 describe("predict(btts) — pass case", () => {

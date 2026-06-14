@@ -62,11 +62,12 @@ const OVER_UNDER_MARKET = { key: "over_under", label: "Over/Under gols" };
 const MATCH_RESULT_MARKET = { key: "match_result", label: "Resultado (1X2)" };
 const BTTS_MARKET = { key: "btts", label: "Ambas marcam" };
 
-// Match fixtures por liga (só `league` importa pro gate; o resto é shape mínimo).
-function matchInLeague(league: string) {
+// Match fixtures por liga (league p/ o gate de cobertura; status p/ analisabilidade).
+function matchInLeague(league: string, status = "scheduled") {
   return {
     id: "550e8400-e29b-41d4-a716-446655440000",
     league,
+    status,
     homeTeam: "Mexico",
     awayTeam: "South Africa",
     kickoffAt: new Date("2026-06-11T19:00:00.000Z"),
@@ -428,8 +429,46 @@ describe("analyzeMatch — market league coverage gating (#158)", () => {
       modelOverride: undefined,
       marketKey: "btts",
     });
-    // additional market → pre-warm por evento ANTES do predict (1x).
+    // additional market → pre-warm por evento ANTES do predict (1x), e nessa ORDEM
+    // (o pre-warm garante o snapshot fresco que o predict reusa). Pina a ordem pra um
+    // refactor que invertesse falhar em CI (#174 code review, finding 6).
     expect(mockEnsureOdds).toHaveBeenCalledTimes(1);
+    expect(mockEnsureOdds.mock.invocationCallOrder[0]).toBeLessThan(
+      mockPredict.mock.invocationCallOrder[0],
+    );
+  });
+
+  it("btts numa partida world_cup ENCERRADA → erro de analisabilidade, SEM pre-warm nem spend (#174)", async () => {
+    mockAuth.mockResolvedValue(SESSION);
+    mockGetMatchById.mockResolvedValue(matchInLeague("world_cup", "finished"));
+    const res = await analyzeMatch(
+      null,
+      form({ matchId: VALID_MATCH_ID, marketKey: "btts" }),
+    );
+    expect(res).toEqual({
+      ok: false,
+      error: "Este jogo já foi encerrado ou cancelado.",
+    });
+    // o pre-warm por evento (1 crédito) NUNCA roda pra um jogo não-analisável.
+    expect(mockEnsureOdds).not.toHaveBeenCalled();
+    expect(mockPredict).not.toHaveBeenCalled();
+  });
+
+  it("btts sem book ofertando (predict lança 'sem snapshot fresco') → copy específica", async () => {
+    mockAuth.mockResolvedValue(SESSION);
+    mockGetMatchById.mockResolvedValue(matchInLeague("world_cup"));
+    const { PredictError } = await import("@/lib/ai/predict");
+    mockPredict.mockRejectedValue(
+      new PredictError("additional-market 'btts' sem snapshot fresco", {}),
+    );
+    const res = await analyzeMatch(
+      null,
+      form({ matchId: VALID_MATCH_ID, marketKey: "btts" }),
+    );
+    expect(res).toEqual({
+      ok: false,
+      error: "Nenhum bookmaker oferece este mercado para o jogo no momento.",
+    });
   });
 
   it("admin + btts numa partida brasileirao (sem cobertura) → COERCIDO a over_under, SEM pre-warm", async () => {

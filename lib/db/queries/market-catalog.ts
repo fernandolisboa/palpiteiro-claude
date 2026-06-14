@@ -111,12 +111,19 @@ const COVERED_LEAGUES_BY_MARKET = new Map<
  * um POST forjado com `marketKey=btts` numa liga sem cobertura é coercido a over_under
  * ANTES da chamada paga). Adicionar uma liga coberta depois = editar `coveredLeagues`
  * no descriptor (1 linha), sem migration.
+ *
+ * FAIL-CLOSED (#174 code review): um mercado SEM descriptor em ALL_DESCRIPTORS é
+ * DROPADO (não pass-through). Sem descriptor não há como resolver odds — ofertá-lo
+ * seria um drift silencioso (DB seedou um mercado sem o código correspondente).
+ * `has()` distingue "descriptor presente, cobertura universal" (coveredLeagues
+ * undefined → passa) de "sem descriptor" (drop).
  */
 export function marketsForLeague<T extends { key: string }>(
   marketsList: T[],
   league: SupportedLeague,
 ): T[] {
   return marketsList.filter((m) => {
+    if (!COVERED_LEAGUES_BY_MARKET.has(m.key)) return false; // sem descriptor → fail-closed
     const covered = COVERED_LEAGUES_BY_MARKET.get(m.key);
     return covered === undefined || covered.includes(league);
   });

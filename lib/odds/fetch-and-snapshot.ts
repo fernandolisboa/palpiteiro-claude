@@ -143,6 +143,10 @@ export async function ensureOddsSnapshotsFresh(
     const newRows: SelectionSnapshotRow[] = bundle.selections.map((sel) => {
       const selectionId = idByKey.get(sel.key);
       if (!selectionId) {
+        // Hard-fail INTENCIONAL (não é caso de degrade como o fetch/!bundle acima):
+        // seleção sem seed é bug de migration, não condição de runtime. A seed 0016
+        // garante yes/no → inalcançável pós-migration (espelha selIdOf do featured +
+        // resolveMarketCatalog). Propaga p/ o catch da action como erro inesperado.
         throw new Error(
           `seleção '${sel.key}' não seedada pro market '${descriptor.dbMarketKey}'`,
         );
