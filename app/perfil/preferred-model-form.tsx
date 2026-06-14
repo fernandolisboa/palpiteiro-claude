@@ -32,7 +32,8 @@ export function PreferredModelForm({
   >(updatePreferredModel, null);
 
   // Só pré-seleciona a preferência se ela for um id válido E presente na lista
-  // desta audiência (ex-admin rebaixado com Fable salvo cai em "padrão global").
+  // desta audiência (preferência fora da audiência ou id stale/removido cai em
+  // "padrão global").
   const initial =
     preferredModelId &&
     isAIModelId(preferredModelId) &&

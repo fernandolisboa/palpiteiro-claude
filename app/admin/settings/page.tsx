@@ -32,13 +32,20 @@ export default async function AdminSettingsPage() {
             modelos disponíveis
           </h2>
           <div className="rounded-md border border-border">
+            {/* Lista TODO o registry. Hoje todos são userSelectable (após #240 +
+                #241), mas um modelo admin-only ganha um rótulo explícito — assim
+                a lista nunca insinua que um modelo não-salvável é padrão usável
+                (o dropdown de "padrão global" o desabilita em paralelo). */}
             {SELECTABLE_MODELS.map((m) => (
               <div
                 key={m.id}
                 className="flex items-center justify-between border-b border-border px-4 py-3 last:border-b-0"
               >
                 <div className="flex flex-col">
-                  <span className="text-[13px] font-medium">{m.label}</span>
+                  <span className="text-[13px] font-medium">
+                    {m.label}
+                    {m.userSelectable ? "" : " · admin-only"}
+                  </span>
                   <span className="font-mono text-[10.5px] text-muted-foreground">
                     {m.id}
                   </span>

@@ -4,6 +4,14 @@
 
 Accepted (2026-06-12) — **emenda o ADR 0008** (default global Opus 4.8 → Sonnet 4.5)
 
+> **Nota (2026-06-14):** O **Fable 5 foi removido do registry** (issues #240/#241)
+> por custo + indisponibilidade no Brasil; o Opus 4.8 cobre os overrides admin de
+> capacidade alta. O **Sonnet 4.5 foi promovido a `userSelectable: true`** (#240),
+> então **deixa de ser admin-only** — não sobra nenhum modelo admin-only. As
+> referências ao Fable e à condição admin-only do Sonnet 4.5 abaixo são de
+> 2026-06-12; a estratégia de reprodutibilidade (default temperature-mode + override
+> de capacidade) permanece, apenas sem o Fable na coluna de overrides.
+
 ## Contexto
 
 O default global da análise é o **Opus 4.8** (`DEFAULT_MODEL_ID` em `lib/ai/models.ts`),

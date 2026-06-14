@@ -1167,8 +1167,11 @@ describe("predict() — cascata completa: preferência do usuário + filtro de a
     expect(aiCallRow.model).toBe("claude-haiku-4-5");
   });
 
-  it("INVARIANTE ex-admin: preferência Fable (admin-only) + isAdmin=false → preferência IGNORADA, cai no default global", async () => {
-    getPreferredModelId.mockResolvedValue("claude-fable-5");
+  it("QUEDA GRACIOSA: preferência stale/removida (ex.: Fable após #241) → getPreferredModelId devolve null → cai no default global", async () => {
+    // getPreferredModelId (query real) filtra ids fora do registry pra null, então
+    // um preferredModelId='claude-fable-5' antigo no DB nunca chega à cascata: a
+    // predict recai no default global. Sem mudança de runtime — só confirma a queda.
+    getPreferredModelId.mockResolvedValue(null);
     getDefaultModelId.mockResolvedValue("claude-opus-4-8");
 
     await expect(
@@ -1176,23 +1179,22 @@ describe("predict() — cascata completa: preferência do usuário + filtro de a
     ).resolves.toBeDefined();
 
     const arg = anthropicCreate.mock.calls[0]?.[0];
-    // Fable não é userSelectable → filtro de audiência derruba a preferência e o
-    // default global (Opus) é usado. NUNCA roda Fable pra usuário comum.
     expect(arg.model).toBe("claude-opus-4-8");
     expect(getDefaultModelId).toHaveBeenCalledTimes(1);
   });
 
-  it("sem override + preferência Fable + isAdmin=true → usa Fable (audiência admin)", async () => {
-    getPreferredModelId.mockResolvedValue("claude-fable-5");
+  it("sem override + preferência Sonnet 4.5 (promovido em #240) + isAdmin=false → usa Sonnet 4.5", async () => {
+    // Sonnet 4.5 agora é userSelectable, então passa no filtro de audiência até
+    // pro usuário comum — a preferência válida curto-circuita o default global.
+    getPreferredModelId.mockResolvedValue("claude-sonnet-4-5-20250929");
     getDefaultModelId.mockResolvedValue("claude-opus-4-8");
 
     await expect(
-      predict({ matchId: "m-1", userId: "u-1", isAdmin: true }),
+      predict({ matchId: "m-1", userId: "u-1", isAdmin: false }),
     ).resolves.toBeDefined();
 
     const arg = anthropicCreate.mock.calls[0]?.[0];
-    expect(arg.model).toBe("claude-fable-5");
-    // Preferência válida pra admin curto-circuita o default global.
+    expect(arg.model).toBe("claude-sonnet-4-5-20250929");
     expect(getDefaultModelId).not.toHaveBeenCalled();
   });
 

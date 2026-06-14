@@ -67,11 +67,13 @@ describe("buildAnthropicRequest — model-aware payload", () => {
     expect(payload).not.toHaveProperty("thinking");
   });
 
-  it("Fable 5: adaptive thinking, tool_choice auto, NO temperature, NO disabled thinking", () => {
-    const payload = build(MODEL_REGISTRY["claude-fable-5"]);
+  it("Sonnet 4.6 (adaptive): adaptive thinking, tool_choice auto, NO temperature, NO disabled thinking", () => {
+    // O segundo modelo adaptive do registry — cobre a mesma invariante que o
+    // teste do Fable cobria antes da remoção (#241): adaptive sem temperature e
+    // sem thinking disabled (ambos dariam 400 no caminho adaptive).
+    const payload = build(MODEL_REGISTRY["claude-sonnet-4-6"]);
 
-    expect(payload.model).toBe("claude-fable-5");
-    // Fable EXIGE adaptive sem temperature e sem thinking disabled — ambos dão 400.
+    expect(payload.model).toBe("claude-sonnet-4-6");
     expect(payload.thinking).toEqual({ type: "adaptive" });
     expect(payload.tool_choice).toEqual({ type: "auto" });
     expect(payload).not.toHaveProperty("temperature");

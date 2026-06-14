@@ -258,7 +258,9 @@ describe("analyzeMatch — model override gating", () => {
     });
   });
 
-  it("regular user + admin-only override (Fable) is IGNORED (out of audience)", async () => {
+  it("regular user + stale/removed override (Fable, fora do registry após #241) is IGNORED", async () => {
+    // Após #241 o Fable não está no registry; um override forjado com esse id é
+    // tratado como desconhecido pelo gate e cai pro default — queda graciosa.
     mockAuth.mockResolvedValue(USER_SESSION);
     await analyzeMatch(
       null,
@@ -273,7 +275,11 @@ describe("analyzeMatch — model override gating", () => {
     });
   });
 
-  it("admin + admin-only override (Fable) is forwarded to predict", async () => {
+  it("admin + stale/removed override (Fable) is ALSO ignored (não há mais modelo admin-only)", async () => {
+    // Antes este caso provava que admin podia forçar um modelo admin-only. Após
+    // #240 + #241 não sobra modelo admin-only; o Fable virou id desconhecido e é
+    // ignorado até pra admin. O caminho "admin força id válido" fica coberto pelo
+    // teste de Sonnet 4.5 abaixo.
     mockAuth.mockResolvedValue(SESSION);
     await analyzeMatch(
       null,
@@ -283,7 +289,7 @@ describe("analyzeMatch — model override gating", () => {
       matchId: VALID_MATCH_ID,
       userId: "u1",
       isAdmin: true,
-      modelOverride: "claude-fable-5",
+      modelOverride: undefined,
       marketKey: "over_under",
     });
   });
@@ -306,7 +312,9 @@ describe("analyzeMatch — model override gating", () => {
     });
   });
 
-  it("non-admin override of a non-userSelectable id (Sonnet 4.5) is IGNORED", async () => {
+  it("regular user + Sonnet 4.5 override (promovido em #240) é AGORA encaminhado", async () => {
+    // Sonnet 4.5 passou a userSelectable em #240, então um usuário comum pode
+    // forçá-lo por análise — antes era ignorado por ser admin-only.
     mockAuth.mockResolvedValue(USER_SESSION);
     await analyzeMatch(
       null,
@@ -319,7 +327,7 @@ describe("analyzeMatch — model override gating", () => {
       matchId: VALID_MATCH_ID,
       userId: "u2",
       isAdmin: false,
-      modelOverride: undefined,
+      modelOverride: "claude-sonnet-4-5-20250929",
       marketKey: "over_under",
     });
   });

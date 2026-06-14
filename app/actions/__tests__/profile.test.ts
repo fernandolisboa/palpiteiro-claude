@@ -184,7 +184,9 @@ describe("updatePreferredModel — preferência pessoal de modelo (ADR 0013)", (
     expect(mockSetPreferred).toHaveBeenCalledWith("u2", "claude-haiku-4-5");
   });
 
-  it("usuário comum + Fable (admin-only) → erro, NÃO grava", async () => {
+  it("usuário comum + id stale/removido (Fable, fora do registry após #241) → erro, NÃO grava", async () => {
+    // Após #241 não há modelo admin-only real; um id de modelo aposentado salvo
+    // em form é tratado como desconhecido pelo gate e rejeitado — queda graciosa.
     mockAuth.mockResolvedValue(USER);
     const res = await updatePreferredModel(
       null,
@@ -192,6 +194,20 @@ describe("updatePreferredModel — preferência pessoal de modelo (ADR 0013)", (
     );
     expect(res.ok).toBe(false);
     expect(mockSetPreferred).not.toHaveBeenCalled();
+  });
+
+  it("usuário comum + Sonnet 4.5 (promovido em #240) → grava o id na sessão; ok", async () => {
+    // Sonnet 4.5 agora é userSelectable, então o usuário comum pode escolhê-lo.
+    mockAuth.mockResolvedValue(USER);
+    const res = await updatePreferredModel(
+      null,
+      form({ preferredModelId: "claude-sonnet-4-5-20250929" }),
+    );
+    expect(res).toEqual({ ok: true });
+    expect(mockSetPreferred).toHaveBeenCalledWith(
+      "u2",
+      "claude-sonnet-4-5-20250929",
+    );
   });
 
   it("'default' → grava null (limpa a preferência); ok", async () => {
@@ -221,14 +237,21 @@ describe("updatePreferredModel — preferência pessoal de modelo (ADR 0013)", (
     expect(mockSetPreferred).not.toHaveBeenCalled();
   });
 
-  it("admin + Fable (admin-only) → grava o id; ok", async () => {
+  it("admin + Sonnet 4.5 (id válido do registry) → grava o id; ok", async () => {
+    // Antes este caso usava o Fable (admin-only); como #241 o removeu e #240
+    // tornou todo modelo selecionável, cobre admin gravando um id real do
+    // registry. O caminho admin-only não tem mais exemplo real — a invariante de
+    // flag fica coberta em lib/ai/__tests__/models.test.ts.
     mockAuth.mockResolvedValue(ADMIN);
     const res = await updatePreferredModel(
       null,
-      form({ preferredModelId: "claude-fable-5" }),
+      form({ preferredModelId: "claude-sonnet-4-5-20250929" }),
     );
     expect(res).toEqual({ ok: true });
-    expect(mockSetPreferred).toHaveBeenCalledWith("a1", "claude-fable-5");
+    expect(mockSetPreferred).toHaveBeenCalledWith(
+      "a1",
+      "claude-sonnet-4-5-20250929",
+    );
   });
 
   it("gate por dono: grava no id da SESSÃO, nunca num id smuggled no form", async () => {

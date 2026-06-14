@@ -12,9 +12,9 @@
 export type Effort = "low" | "medium" | "high" | "max";
 
 // Níveis oferecidos na calibração. Restritos a low/medium/high/max: TODOS os
-// modelos adaptive do registry (Fable 5, Opus 4.8, Sonnet 4.6) suportam estes,
-// inclusive `max`. `xhigh` é omitido de propósito — nem todo adaptive o aceita
-// (ex.: Sonnet 4.6), o que daria 400 model-specific.
+// modelos adaptive do registry (Opus 4.8, Sonnet 4.6) suportam estes, inclusive
+// `max`. `xhigh` é omitido de propósito — nem todo adaptive o aceita (ex.: Sonnet
+// 4.6), o que daria 400 model-specific.
 export const EFFORT_LEVELS: readonly Effort[] = [
   "low",
   "medium",

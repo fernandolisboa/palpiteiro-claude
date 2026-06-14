@@ -60,7 +60,7 @@ export function buildAnthropicRequest(args: {
     };
   }
 
-  // Caminho adaptive (Opus 4.8 / Sonnet 4.6 / Fable): OMITE temperature/top_p/top_k
+  // Caminho adaptive (Opus 4.8 / Sonnet 4.6): OMITE temperature/top_p/top_k
   // e NÃO força o tool (forced tool_choice + thinking = 400). `auto` deixa o modelo
   // chamar o tool por conta própria; predict.ts rejeita se ele não chamar. `effort`
   // (se fornecido) calibra a profundidade do thinking via output_config.
