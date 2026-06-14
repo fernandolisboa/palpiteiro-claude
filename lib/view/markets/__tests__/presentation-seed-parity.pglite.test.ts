@@ -64,9 +64,9 @@ describe("market presentation ↔ seed parity (btts)", () => {
       .from(schema.markets)
       .where(eq(schema.markets.key, "btts"));
     expect(mkt).toBeDefined();
-    // seed admin-only: ativo, não graduado; settlement_rule_key resolve no registry.
+    // graduado pra todos (#261): ativo E graduado; settlement_rule_key resolve no registry.
     expect(mkt.isActive).toBe(true);
-    expect(mkt.isGraduated).toBe(false);
+    expect(mkt.isGraduated).toBe(true);
     expect(mkt.settlementRuleKey).toBe("btts");
     // contrato seed↔registry: o settlement_rule_key seedado DEVE resolver (senão a
     // row settlaria como erro silencioso pra sempre). Pina o binding por construção.
@@ -99,9 +99,9 @@ describe("market presentation ↔ seed parity (double_chance)", () => {
       .from(schema.markets)
       .where(eq(schema.markets.key, "double_chance"));
     expect(mkt).toBeDefined();
-    // seed admin-only: ativo, não graduado; settlement_rule_key resolve no registry.
+    // graduado pra todos (#261): ativo E graduado; settlement_rule_key resolve no registry.
     expect(mkt.isActive).toBe(true);
-    expect(mkt.isGraduated).toBe(false);
+    expect(mkt.isGraduated).toBe(true);
     expect(mkt.settlementRuleKey).toBe("double_chance");
     expect(() => getSettlementRule(mkt.settlementRuleKey)).not.toThrow();
 

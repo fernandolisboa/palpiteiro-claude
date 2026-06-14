@@ -74,7 +74,7 @@ beforeEach(() => {
 });
 
 describe("marketsForAudience", () => {
-  it("admin → filtra só por is_active (vê ATIVOS graduados OU não, ex.: match_result)", async () => {
+  it("admin → filtra só por is_active (NÃO restringe is_graduated)", async () => {
     h.state.rows = [
       { key: "over_under", label: "Over/Under gols" },
       { key: "match_result", label: "Resultado (1X2)" },
@@ -93,17 +93,17 @@ describe("marketsForAudience", () => {
     expect(out.map((m) => m.key)).toContain("match_result");
   });
 
-  it("usuário comum → filtra por is_active AND is_graduated (NÃO vê match_result ungraduated)", async () => {
+  it("usuário comum → filtra por is_active AND is_graduated (ambos os gates)", async () => {
     h.state.rows = [{ key: "over_under", label: "Over/Under gols" }];
     const out = await marketsForAudience(false);
 
-    // O gate de comum exige AMBOS: is_active=true E is_graduated=true.
+    // O gate de comum exige AMBOS: is_active=true E is_graduated=true (shape do
+    // WHERE — independe de quais mercados estão graduados num dado momento).
     expect(hasEq(markets.isActive, true)).toBe(true);
     expect(hasEq(markets.isGraduated, true)).toBe(true);
 
-    // Só mercados graduados voltam (over_under hoje); nenhum match_result.
+    // Só mercados graduados voltam (a row mockada aqui é ilustrativa).
     expect(out).toEqual([{ key: "over_under", label: "Over/Under gols" }]);
-    expect(out.map((m) => m.key)).not.toContain("match_result");
   });
 });
 
