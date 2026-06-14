@@ -1,7 +1,8 @@
 # Dupla chance — Prompt Design Spec (cartucho `double_chance`)
 
-**Status:** PLANEJADO (implementação em [#176](https://github.com/fernandolisboa/palpiteiro-claude/issues/176),
-atrás de feature-flag) · **Versão:** `double_chance_v1` (a confirmar) · **Mercado:** N=3, **sem linha**.
+**Status:** IMPLEMENTADO ([#176](https://github.com/fernandolisboa/palpiteiro-claude/issues/176), ATIVO
+atrás de flag, admin-only, restrito a `world_cup`) · **Versão:** `double_chance_v1` · **Mercado:** N=3
+(cobertura sobreposta), **sem linha**.
 
 Design spec — o contrato que #176 implementa. Instancia a [spec-mãe](./cartridge-prompt-contract.md).
 Terceiro mercado de seleções múltiplas — **reusa o shape 3-vias do 1X2** (#173 é dependência). Reconciliar
@@ -25,12 +26,16 @@ Single-rec + `confidence_pct` (mesma decisão de design do 1X2 — ver
 (`home_or_draw`/`away_or_draw`/`home_or_away`/`pass`) + `confidence_pct` do lado recomendado. Tolerância de
 prosa: spec-mãe §6.
 
-## Edge (N=3, ADR 0018)
+## Edge (N=3 NÃO-PARTIÇÃO, ADR 0018 + emenda)
 
-`implied_i` normalizado sobre as **3** odds da dupla chance; `edge_i = modelProb_i − implied_i`. **Atenção
-de produto:** odds de dupla chance são baixas (favoritos ~1.20) → a implícita é alta → o floor de edge ≥ 5pp
-vai gerar **muito `pass`**. Isso é **esperado e saudável** (`pass` é cidadão de 1ª classe); não relaxar o
-floor pra "achar" apostas.
+As 3 duplas se **sobrepõem** (1X/X2/12 cobrem 2 de 3 resultados cada) → a prob real soma **~200%**, não
+100%. A implícita é de-vigada das 3 odds **mantendo a semântica de par** (`implied_i = (raw_i / Σ raw)·2`,
+Σ=2) via `MarketDescriptor.impliedSumTarget = 2` — ver a **Emenda** do ADR 0018 (cobertura não-partição).
+Normalizar Σ=1 (como partição) deixaria o floor ~2× rígido OU exibiria prob enganosa (~48% pra uma dupla
+de favorito ~92%). O LLM emite as probs de par HONESTAS (somam ~200, cada ≤100) e
+`edge_i = modelProb_i − implied_i` fica na escala de par. **Atenção de produto:** odds de dupla chance são
+baixas (favoritos ~1.20) → a implícita é alta → o floor de edge ≥ 5pp vai gerar **muito `pass`**. Isso é
+**esperado e saudável** (`pass` é cidadão de 1ª classe); não relaxar o floor pra "achar" apostas.
 
 ## Settlement (`settlement_rule_key = "double_chance"`)
 
