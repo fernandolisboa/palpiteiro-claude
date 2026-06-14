@@ -32,7 +32,12 @@ export function leagueToSportKey(league: SupportedLeague): SportKey {
 export const MARKETS = {
   H2H: "h2h",
   SPREADS: "spreads",
-  TOTALS: "totals", // over/under — primeiro mercado do Tier 1
+  TOTALS: "totals", // over/under (linha featured, 2.5) — primeiro mercado do Tier 1
+  // alternate_totals é a ESCADA de over/under (1.5/2.5/3.5…) — mercado *additional*
+  // (só por evento /events/{id}/odds; o featured 'totals' traz só a linha principal).
+  // Usado pela variante OVER_UNDER_ALT (#175). Documental — a fonte de verdade do
+  // providerMarketKey é o descriptor.
+  ALTERNATE_TOTALS: "alternate_totals",
   // btts é um mercado *additional*: NÃO vem no batch /odds (featured); só pelo
   // endpoint por evento /events/{id}/odds. Ver descriptor BTTS (oddsSource).
   BTTS: "btts",

@@ -36,8 +36,25 @@ export type GenericOddsArgs = {
   bookmaker: string;
   captured_at: string;
   selections: { key: string; odd: number }[];
+  // Escada multi-linha (over_under v3.0, #175): odds + implícita do MELHOR book POR
+  // linha candidata (1.5/2.5/3.5). Só o build-input do v3 consome; predict deixa
+  // `undefined` pra todos os outros cartuchos E pro over_under flag-OFF (single-line).
+  // NÃO altera `selections` (par único do caminho legado) — additivo e inerte por default.
+  lineLadder?: LineLadderEntry[];
 };
 export type GenericImpliedArgs = { pct: Record<string, number> };
+
+// Uma linha candidata renderizável pela escada multi-linha (#175): a linha, o
+// melhor book daquela linha + odds por seleção + implícita (já de-vigada Σ=1 por
+// linha, partição — nunca 1/odd cru). predict monta a partir de um MarketOddsBundle
+// por linha; o cartucho v3 a renderiza pro LLM escolher (linha, over|under, stake).
+export type LineLadderEntry = {
+  line: number;
+  bookmaker: string;
+  captured_at: string;
+  selections: { key: string; odd: number }[];
+  impliedPct: Record<string, number>;
+};
 
 /**
  * Contrato de UM cartucho de mercado: tudo que `predict()` precisa pra rodar uma
@@ -91,6 +108,12 @@ export type MarketCartridge<
   // deriva `{[rec]: confidence, [outro]: 100−confidence}`; distribuição (1X2)
   // retorna as 3 probs diretas do output.
   selectionProbs: (output: Output) => Record<string, number>;
+  // Deriva os marketParams persistidos (a linha ESCOLHIDA) a partir do output do
+  // LLM — usado por mercados MULTI-LINHA (over_under v3.0, #175) onde a linha não é
+  // estática no descriptor. Quando presente, predict persiste marketParams DAQUI (a
+  // linha escolhida cai em marketParams.line → settlement). Ausente (todos os outros
+  // cartuchos + over_under v2.0) → predict usa descriptor.params (caminho de hoje).
+  resolveParams?: (output: Output) => { line: number };
   // Conjunto canônico de seleções do mercado (`["over","under"]`). Espelha
   // `descriptor.selectionKeys` — a ordem é o contrato chave→índice do edge N-vias.
   selections: string[];
