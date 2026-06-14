@@ -775,3 +775,103 @@ describe("toOutcomesView (N-vias)", () => {
     expect(outcomes[2].marketProb).toBe("26.5%");
   });
 });
+
+// Ramificação N-vias do toAnalysisView (§F, #173): com um candidate set de >2
+// seleções, os outcomes saem do caminho N-vias canônico (computeMarketScenarios),
+// NÃO do scenario binário — o GATE que mantém 1X2 fora do computeScenarios.
+describe("toAnalysisView (N-vias / 1X2)", () => {
+  it("3 seleções (match_result) → 3 outcomes via o caminho N-vias, sem framing binário", () => {
+    const view = toAnalysisView(
+      {
+        recommendation: "home",
+        confidencePct: "50.00",
+        rationale: "casa forte",
+        keyFactors: ["a", "b"],
+        minimumOdd: "2.000",
+        oddAtRecommendation: "2.100",
+        bookmaker: "bet365",
+        impliedProbPct: "45.40",
+        edgePct: "4.60",
+        // colunas binárias over/under NULL (1X2 não carrega o par congelado).
+        overOddAtPrediction: null,
+        underOddAtPrediction: null,
+        modelVersion: "claude-opus-4-8",
+        promptVersion: "match_result_v1",
+        createdAt: baseCreatedAt,
+        marketKey: "match_result",
+        line: null,
+        stakeUnits: "1",
+        // Candidate set N-vias (3 seleções) → dispara o branch N-vias.
+        selections: [
+          { key: "home", modelProbPct: 50, odd: 2.1 },
+          { key: "draw", modelProbPct: 27, odd: 3.4 },
+          { key: "away", modelProbPct: 23, odd: 3.6 },
+        ],
+      },
+      { costUsd: "0.05" },
+      threeHoursLater,
+    );
+
+    // 3 colunas, na ordem do candidate set, com labels da apresentação 1X2 e a
+    // recomendação marcada em "home" (selectionKey, não derivação binária).
+    expect(view.outcomes).toHaveLength(3);
+    expect(view.outcomes.map((o) => o.id)).toEqual(["home", "draw", "away"]);
+    expect(view.outcomes.map((o) => o.label)).toEqual(["Casa", "Empate", "Fora"]);
+    expect(view.outcomes.map((o) => o.isRecommended)).toEqual([
+      true,
+      false,
+      false,
+    ]);
+    // Valores N-vias pinados (mesma fórmula do toOutcomesView): home edge +4.6pp.
+    expect(view.outcomes[0].modelProb).toBe("50%");
+    expect(view.outcomes[0].marketProb).toBe("45.4%");
+    expect(view.outcomes[0].edge).toBe("+4.6pp");
+
+    // Bloco de recomendação usa a apresentação 1X2 (sem linha).
+    expect(view.recommendation).not.toBeNull();
+    expect(view.recommendation?.marketKey).toBe("match_result");
+    expect(view.recommendation?.selectionKey).toBe("home");
+    expect(view.recommendation?.selectionLabel).toBe("Casa");
+    expect(view.recommendation?.line).toBeNull();
+
+    // N-vias não tem o framing de break-even da zebra binária (R4) → null.
+    expect(view.framing).toBeNull();
+    expect(view.note).toBeNull();
+  });
+
+  it("pass em 1X2 (3 seleções) → outcomes sem coluna recomendada", () => {
+    const view = toAnalysisView(
+      {
+        recommendation: "pass",
+        confidencePct: "40.00",
+        rationale: "sem edge",
+        keyFactors: ["a"],
+        minimumOdd: null,
+        oddAtRecommendation: null,
+        bookmaker: null,
+        impliedProbPct: null,
+        edgePct: null,
+        overOddAtPrediction: null,
+        underOddAtPrediction: null,
+        modelVersion: "claude-opus-4-8",
+        promptVersion: "match_result_v1",
+        createdAt: baseCreatedAt,
+        marketKey: "match_result",
+        line: null,
+        selections: [
+          { key: "home", modelProbPct: 40, odd: 2.5 },
+          { key: "draw", modelProbPct: 30, odd: 3.2 },
+          { key: "away", modelProbPct: 30, odd: 3.0 },
+        ],
+      },
+      null,
+      threeHoursLater,
+    );
+
+    // pass → sem aposta recomendada e nenhuma coluna destacada (recommendedKey null).
+    expect(view.recommendation).toBeNull();
+    expect(view.outcomes).toHaveLength(3);
+    expect(view.outcomes.every((o) => !o.isRecommended)).toBe(true);
+    expect(view.framing).toBeNull();
+  });
+});

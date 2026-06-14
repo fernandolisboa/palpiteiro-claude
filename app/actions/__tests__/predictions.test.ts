@@ -17,6 +17,12 @@ vi.mock("@/lib/ai/predict", () => ({
 vi.mock("@/lib/db/queries/predictions", () => ({
   getAiCallById: vi.fn(),
 }));
+// marketsForAudience é a fonte do gate de mercado re-validado na action. Mockada
+// pra refletir o comportamento real (admin vê match_result; comum só over_under)
+// sem tocar no DB.
+vi.mock("@/lib/db/queries/market-catalog", () => ({
+  marketsForAudience: vi.fn(),
+}));
 vi.mock("@/lib/db/queries/users", () => ({ userExists: vi.fn() }));
 vi.mock("@/lib/rate-limit", () => ({ checkAnalysisRateLimit: vi.fn() }));
 vi.mock("@/lib/view/analysis", () => ({ toAnalysisView: vi.fn(() => ({})) }));
@@ -24,6 +30,7 @@ vi.mock("@/lib/view/analysis", () => ({ toAnalysisView: vi.fn(() => ({})) }));
 import { analyzeMatch } from "@/app/actions/predictions";
 import { auth } from "@/auth";
 import { predict } from "@/lib/ai/predict";
+import { marketsForAudience } from "@/lib/db/queries/market-catalog";
 import { getAiCallById } from "@/lib/db/queries/predictions";
 import { userExists } from "@/lib/db/queries/users";
 import { checkAnalysisRateLimit } from "@/lib/rate-limit";
@@ -31,9 +38,13 @@ import { checkAnalysisRateLimit } from "@/lib/rate-limit";
 // `auth` é sobrecarregado; estreitamos pro uso como `auth()`.
 const mockAuth = auth as unknown as Mock<() => Promise<Session | null>>;
 const mockPredict = vi.mocked(predict);
+const mockMarketsForAudience = vi.mocked(marketsForAudience);
 const mockUserExists = vi.mocked(userExists);
 const mockGetAiCall = vi.mocked(getAiCallById);
 const mockRateLimit = vi.mocked(checkAnalysisRateLimit);
+
+const OVER_UNDER_MARKET = { key: "over_under", label: "Over/Under gols" };
+const MATCH_RESULT_MARKET = { key: "match_result", label: "Resultado (1X2)" };
 
 const SESSION = {
   user: { id: "u1", email: "a@b.com", role: "admin" },
@@ -81,6 +92,14 @@ beforeEach(() => {
     remaining: 19,
     reset: 0,
   });
+  // Gate de mercado audiência-aware (espelha o resolver real): admin vê
+  // over_under + match_result; comum só over_under.
+  mockMarketsForAudience.mockReset();
+  mockMarketsForAudience.mockImplementation(async (isAdmin: boolean) =>
+    isAdmin
+      ? [OVER_UNDER_MARKET, MATCH_RESULT_MARKET]
+      : [OVER_UNDER_MARKET],
+  );
 });
 
 describe("analyzeMatch", () => {
@@ -175,6 +194,7 @@ describe("analyzeMatch — model override gating", () => {
       userId: "u2",
       isAdmin: false,
       modelOverride: "claude-haiku-4-5",
+      marketKey: "over_under",
     });
   });
 
@@ -189,6 +209,7 @@ describe("analyzeMatch — model override gating", () => {
       userId: "u2",
       isAdmin: false,
       modelOverride: undefined,
+      marketKey: "over_under",
     });
   });
 
@@ -203,6 +224,7 @@ describe("analyzeMatch — model override gating", () => {
       userId: "u1",
       isAdmin: true,
       modelOverride: "claude-fable-5",
+      marketKey: "over_under",
     });
   });
 
@@ -220,6 +242,7 @@ describe("analyzeMatch — model override gating", () => {
       userId: "u1",
       isAdmin: true,
       modelOverride: "claude-sonnet-4-5-20250929",
+      marketKey: "over_under",
     });
   });
 
@@ -237,6 +260,7 @@ describe("analyzeMatch — model override gating", () => {
       userId: "u2",
       isAdmin: false,
       modelOverride: undefined,
+      marketKey: "over_under",
     });
   });
 
@@ -251,6 +275,7 @@ describe("analyzeMatch — model override gating", () => {
       userId: "u1",
       isAdmin: true,
       modelOverride: undefined,
+      marketKey: "over_under",
     });
   });
 
@@ -265,6 +290,63 @@ describe("analyzeMatch — model override gating", () => {
       userId: "u1",
       isAdmin: true,
       modelOverride: undefined,
+      marketKey: "over_under",
+    });
+  });
+});
+
+describe("analyzeMatch — market audience gating", () => {
+  beforeEach(() => {
+    mockUserExists.mockResolvedValue(true);
+    mockPredict.mockResolvedValue(PREDICTION);
+    mockGetAiCall.mockResolvedValue({ costUsd: "0.01" } as never);
+  });
+
+  it("admin selecting match_result (in-audience) threads it to predict", async () => {
+    mockAuth.mockResolvedValue(SESSION);
+    await analyzeMatch(
+      null,
+      form({ matchId: VALID_MATCH_ID, marketKey: "match_result" }),
+    );
+    expect(mockPredict).toHaveBeenCalledWith({
+      matchId: VALID_MATCH_ID,
+      userId: "u1",
+      isAdmin: true,
+      modelOverride: undefined,
+      marketKey: "match_result",
+    });
+  });
+
+  it("non-admin POSTing marketKey=match_result (out of audience) is COERCED to over_under", async () => {
+    mockAuth.mockResolvedValue(USER_SESSION);
+    await analyzeMatch(
+      null,
+      form({ matchId: VALID_MATCH_ID, marketKey: "match_result" }),
+    );
+    // Defesa em profundidade: o resolver de audiência não devolve match_result pro
+    // usuário comum, então a action coerce o POST forjado pro default over_under —
+    // NUNCA chama predict com o mercado proibido.
+    expect(mockPredict).toHaveBeenCalledWith({
+      matchId: VALID_MATCH_ID,
+      userId: "u2",
+      isAdmin: false,
+      modelOverride: undefined,
+      marketKey: "over_under",
+    });
+  });
+
+  it("an unknown marketKey is coerced to over_under (admin)", async () => {
+    mockAuth.mockResolvedValue(SESSION);
+    await analyzeMatch(
+      null,
+      form({ matchId: VALID_MATCH_ID, marketKey: "asian_handicap" }),
+    );
+    expect(mockPredict).toHaveBeenCalledWith({
+      matchId: VALID_MATCH_ID,
+      userId: "u1",
+      isAdmin: true,
+      modelOverride: undefined,
+      marketKey: "over_under",
     });
   });
 });

@@ -11,6 +11,7 @@ import {
 } from "@/lib/format";
 import {
   computeEvPerUnit,
+  computeMarketScenarios,
   computeScenarios,
   MIN_EDGE_PP,
   type ScenarioSelection,
@@ -53,6 +54,12 @@ type PredictionInput = {
   // Stake da aposta (numeric do Drizzle → string). #170 liga as call sites
   // (page + action). Ausente → stakeUnits null na view (compatibilidade).
   stakeUnits?: string | number | null;
+  // Candidate set N-vias (#173): uma entrada por selectionKey com a prob do modelo
+  // e a odd congelada. Carrier vindo de predict() (action) ou de PSO (page). Quando
+  // `length > 2`, toAnalysisView ramifica pro caminho N-vias canônico
+  // (computeMarketScenarios → toOutcomesView) e mantém 1X2 FORA do scenario binário.
+  // Ausente/≤2 → caminho binário congelado (over/under byte-idêntico).
+  selections?: { key: string; modelProbPct: number; odd: number | null }[];
 };
 
 type AiCallInput = {
@@ -107,9 +114,9 @@ function toScenarioSideView(side: ScenarioSide): ScenarioSideView {
 // `computeScenarios` é binário DE PROPÓSITO (over/under/pass; plan §C2): a
 // derivação 100−x do lado oposto só vale em N=2. Em N≥3 (1X2) o bloco binário não
 // se aplica — a ramificação N-vias do toAnalysisView (computeMarketScenarios) é o
-// GATE que cobre esse caso (Fase 4, ainda não ligado neste COMMIT). Até lá, uma
-// recomendação não-binária degrada o bloco (null), como confidence fora de domínio
-// — nunca chega aqui em runtime (over/under é o único mercado que produz predição).
+// GATE que cobre esse caso (§F, agora LIGADO: candidate set >2 → caminho N-vias,
+// nunca chega aqui). Esta guarda permanece defensiva: uma recomendação não-binária
+// SEM candidate set (≤2) degrada o bloco (null), como confidence fora de domínio.
 function isBinaryRecommendation(
   rec: PredictionInput["recommendation"],
 ): rec is "over" | "under" | "pass" {
@@ -252,12 +259,36 @@ export function toAnalysisView(
   const presentation = getMarketPresentation(prediction.marketKey ?? "over_under");
   const line = prediction.line ?? presentation.defaultLine;
 
+  // Ramificação N-vias (§F, gate #3/#6): com um candidate set de >2 seleções
+  // (1X2), os outcomes saem do caminho N-vias canônico (computeMarketScenarios →
+  // toOutcomesView, ADR 0018) — cada seleção tem seu próprio edge, SEM 100−x. Este
+  // branch é o GATE que mantém 1X2 fora do computeScenarios binário (que fica
+  // binário de propósito; plan §C2). `recommendedKey` = a selectionKey escolhida,
+  // ou null em pass (a UI não destaca nenhuma coluna). N-vias não tem o framing de
+  // break-even da zebra binária (R4) → framing/note null.
+  //
+  // Sem selections OU ≤2 (over/under): caminho binário CONGELADO byte-idêntico —
+  // a paridade over/under depende deste fall-through inalterado.
+  const isNway = (prediction.selections?.length ?? 0) > 2;
+
+  const outcomesNway = isNway
+    ? toOutcomesView(
+        computeMarketScenarios({
+          selections: prediction.selections!,
+          recommendedKey: isPass ? null : recommendation,
+        }),
+        presentation,
+        line,
+      )
+    : null;
+
   // Computa o cenário binário UMA vez e alimenta o array multi-outcome
-  // (outcomes) + framing/note — mesmos números, paridade trivial.
-  const computed = computeBinaryScenarios(prediction, confidenceNum);
+  // (outcomes) + framing/note — mesmos números, paridade trivial. Só no caminho
+  // binário (≤2 seleções); em N-vias não há par congelado.
+  const computed = isNway ? null : computeBinaryScenarios(prediction, confidenceNum);
 
   // framing/note no TOPO (R4): derivados do `computed` binário. Degrada pra null
-  // junto com o bloco (computed null).
+  // junto com o bloco (computed null) e no caminho N-vias (sem análogo binário).
   const framingNote =
     computed === null
       ? { framing: null, note: null }
@@ -317,7 +348,8 @@ export function toAnalysisView(
           betSummary: presentation.betSummary(recommendation, line),
         },
     outcomes:
-      computed === null ? [] : toBinaryOutcomes(computed, presentation, line),
+      outcomesNway ??
+      (computed === null ? [] : toBinaryOutcomes(computed, presentation, line)),
     minOdd: prediction.minimumOdd !== null ? formatOdd(prediction.minimumOdd) : null,
     stakeUnits: isPass
       ? null

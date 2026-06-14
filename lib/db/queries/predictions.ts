@@ -1,4 +1,4 @@
-import { and, desc, eq, isNull, lt } from "drizzle-orm";
+import { and, asc, desc, eq, isNull, lt } from "drizzle-orm";
 
 import {
   aiCalls,
@@ -6,6 +6,7 @@ import {
   markets,
   matches,
   predictionOutcomes,
+  predictionSelectionOdds,
   predictions,
 } from "@/db/schema";
 import { db } from "@/lib/db";
@@ -25,6 +26,14 @@ export type PredictionWithAiCall = {
   // Nullable em históricas sem mercado backfillado → o chamador faz coalesce
   // 'over_under'.
   marketKey: string | null;
+  // Candidate set N-vias CONGELADO desta predição (#173), uma entrada por seleção
+  // do mercado (key resolvida via market_selections). Alimenta a grade N-vias do
+  // toAnalysisView ao REABRIR uma predição passada — sem ela a grade 1X2 não
+  // renderiza. over/under tem 2 rows e cai no caminho binário; 1X2 tem 3 e dispara
+  // o caminho N-vias. `modelProbPct` é NULLABLE (backfill histórico / over/under
+  // pré-#173 não a grava). Vazio em predições antigas sem PSO. numeric → string no
+  // Drizzle: Number() na fronteira (modelProbPct vira NaN→pulado se ausente).
+  selections: { key: string; modelProbPct: number; odd: number | null }[];
 };
 
 export async function getLatestPredictionForMatch(
@@ -47,7 +56,41 @@ export async function getLatestPredictionForMatch(
     )
     .orderBy(desc(predictions.createdAt))
     .limit(1);
-  return rows[0] ?? null;
+  const row = rows[0];
+  if (!row) return null;
+
+  // Candidate set congelado em query SEPARADA (não um leftJoin no select acima:
+  // PSO multiplica as rows por seleção e quebraria o limit(1) da predição mais
+  // recente). Ordenado por market_selections.sort_order pra a grade vir na ordem
+  // canônica (over,under / home,draw,away). model_prob_pct nullable → Number(null)
+  // = 0; só vale como prob quando gravado (Fase 4). odd numeric → Number() (gotcha
+  // drizzle-numeric-returns-string).
+  const selRows = await db
+    .select({
+      key: marketSelections.key,
+      sortOrder: marketSelections.sortOrder,
+      odd: predictionSelectionOdds.odd,
+      modelProbPct: predictionSelectionOdds.modelProbPct,
+    })
+    .from(predictionSelectionOdds)
+    .innerJoin(
+      marketSelections,
+      eq(predictionSelectionOdds.selectionId, marketSelections.id),
+    )
+    .where(eq(predictionSelectionOdds.predictionId, row.prediction.id))
+    .orderBy(asc(marketSelections.sortOrder));
+
+  return {
+    ...row,
+    selections: selRows.map((s) => ({
+      key: s.key,
+      // numeric → string no Drizzle; Number() na fronteira. modelProbPct nullable
+      // (over/under pré-#173 / históricas): coalesce 0 (a grade 1X2 vem do candidate
+      // set gravado pela Fase 4, sempre com modelProbPct).
+      modelProbPct: Number(s.modelProbPct ?? 0),
+      odd: s.odd === null ? null : Number(s.odd),
+    })),
+  };
 }
 
 // Linha do histórico: prediction + aiCall, SEM as keys de mercado (a função é

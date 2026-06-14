@@ -1,4 +1,4 @@
-import { eq } from "drizzle-orm";
+import { and, asc, eq, sql } from "drizzle-orm";
 
 import { marketSelections, markets } from "@/db/schema";
 import { db } from "@/lib/db";
@@ -51,4 +51,42 @@ export async function resolveMarketCatalog(
     idByKey: new Map(sels.map((s) => [s.key, s.id])),
     keyById: new Map(sels.map((s) => [s.id, s.key])),
   };
+}
+
+/**
+ * Mercado selecionável por uma AUDIÊNCIA (gate de ativação, ADR 0017). Espelha
+ * `modelsForAudience` (lib/ai/models.ts), mas a fonte é a tabela `markets` (não um
+ * registry em código): a graduação de um mercado é flip de `is_graduated=true` no
+ * banco — SEM mudança de código.
+ *
+ *   - usuário comum → só mercados GRADUADOS (`is_active AND is_graduated`) =
+ *     over/under hoje.
+ *   - admin → também os ATIVOS-mas-não-graduados (`is_active AND NOT is_graduated`)
+ *     = match_result (1X2) hoje.
+ *
+ * Este é o gate de DEFESA-EM-PROFUNDIDADE pro `marketKey` que viaja no FormData:
+ * a UI esconde/limita o seletor, mas a action re-valida contra esta lista (um POST
+ * forjado com `marketKey=match_result` de um não-admin é rejeitado/coercido). NUNCA
+ * gateado em predict.ts (ADR 0017) — lá o throw-on-unregistered-cartridge é o backstop.
+ *
+ * Ordenado com `over_under` primeiro (default sensato), depois alfabético por key —
+ * estável e independente da ordem de inserção das rows.
+ */
+export async function marketsForAudience(
+  isAdmin: boolean,
+): Promise<{ key: string; label: string }[]> {
+  // Admin: ativos (graduados OU não). Comum: só graduados.
+  const visibility = isAdmin
+    ? eq(markets.isActive, true)
+    : and(eq(markets.isActive, true), eq(markets.isGraduated, true));
+  const rows = await db
+    .select({ key: markets.key, label: markets.label })
+    .from(markets)
+    .where(visibility)
+    // over_under primeiro (0 vs 1), depois alfabético por key — determinístico.
+    .orderBy(
+      asc(sql`case when ${markets.key} = 'over_under' then 0 else 1 end`),
+      asc(markets.key),
+    );
+  return rows;
 }

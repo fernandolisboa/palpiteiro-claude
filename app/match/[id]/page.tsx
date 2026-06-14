@@ -20,6 +20,7 @@ import { auth } from "@/auth";
 import { MODEL_REGISTRY, modelsForAudience } from "@/lib/ai/models";
 import { LEAGUE_LABEL, leagueToKey } from "@/lib/format";
 import { getDefaultModelId } from "@/lib/db/queries/ai-config";
+import { marketsForAudience } from "@/lib/db/queries/market-catalog";
 import { getMatchById } from "@/lib/db/queries/matches";
 import { getLatestPredictionForMatch } from "@/lib/db/queries/predictions";
 import { getPreferredModelId } from "@/lib/db/queries/users";
@@ -43,14 +44,17 @@ export default async function MatchPage({ params }: PageProps) {
   const match = await getMatchById(id);
   if (!match) notFound();
 
+  const isAdmin = session.user.role === "admin";
+
   // Odds e predição existente em paralelo. Ambas são pré-requisito pro
   // render síncrono do hero + odds + panel (não vão pra Suspense).
-  const [snapshot, latestPred, defaultModelId, preferredModelId] =
+  const [snapshot, latestPred, defaultModelId, preferredModelId, audienceMarkets] =
     await Promise.all([
       ensureOddsSnapshotsFresh(match),
       getLatestPredictionForMatch(match.id, session.user.id),
       getDefaultModelId(),
       getPreferredModelId(session.user.id),
+      marketsForAudience(isAdmin),
     ]);
   const defaultModelLabel = MODEL_REGISTRY[defaultModelId].label;
 
@@ -108,6 +112,9 @@ export default async function MatchPage({ params }: PageProps) {
           marketKey: latestPred.marketKey ?? "over_under",
           line: latestPred.prediction.marketParams?.line ?? null,
           stakeUnits: latestPred.prediction.stakeUnits,
+          // Candidate set N-vias da PSO (#173): reabrir uma predição 1X2 passada
+          // renderiza a grade de 3. over/under (2 rows) cai no caminho binário.
+          selections: latestPred.selections,
         },
         latestPred.aiCall ? { costUsd: latestPred.aiCall.costUsd } : null,
       )
@@ -132,13 +139,16 @@ export default async function MatchPage({ params }: PageProps) {
     heroView.homeScore !== null && heroView.awayScore !== null
       ? { home: heroView.homeScore, away: heroView.awayScore }
       : null;
-  const isAdmin = session.user.role === "admin";
   // Lista de override por audiência (ADR 0013), serializável ({id,label}) pra
   // cruzar a fronteira Server→Client. O gate efetivo é revalidado em analyzeMatch.
   const selectableModels = modelsForAudience(isAdmin).map((m) => ({
     id: m.id,
     label: m.label,
   }));
+  // Mercados selecionáveis por audiência (ADR 0017), já {key,label} serializável
+  // (resolvido no server via marketsForAudience). Vazio/≤1 → seletor escondido na
+  // UI (default over_under). O gate efetivo é re-validado em analyzeMatch.
+  const selectableMarkets = audienceMarkets;
 
   return (
     <>
@@ -154,6 +164,7 @@ export default async function MatchPage({ params }: PageProps) {
           analyzable={analyzable}
           finalScore={finalScore}
           selectableModels={selectableModels}
+          selectableMarkets={selectableMarkets}
           defaultModelLabel={defaultModelLabel}
           preferredModelId={preferredModelId}
         />
@@ -170,6 +181,7 @@ export default async function MatchPage({ params }: PageProps) {
           analyzable={analyzable}
           finalScore={finalScore}
           selectableModels={selectableModels}
+          selectableMarkets={selectableMarkets}
           defaultModelLabel={defaultModelLabel}
           preferredModelId={preferredModelId}
         />
@@ -191,6 +203,9 @@ type Common = {
   // Placar final pra jogos encerrados; null caso contrário.
   finalScore: { home: number; away: number } | null;
   selectableModels: { id: string; label: string }[];
+  // Mercados que esta audiência pode escolher ({key,label} serializável). ≤1 →
+  // seletor escondido no painel (default over_under). Gate revalidado no server.
+  selectableMarkets: { key: string; label: string }[];
   defaultModelLabel: string;
   preferredModelId: string | null;
 };
@@ -206,6 +221,7 @@ function MobileMatch({
   analyzable,
   finalScore,
   selectableModels,
+  selectableMarkets,
   defaultModelLabel,
   preferredModelId,
 }: Common) {
@@ -241,6 +257,7 @@ function MobileMatch({
             existing={analysisExisting}
             oddsAvailable={oddsAvailable}
             selectableModels={selectableModels}
+            selectableMarkets={selectableMarkets}
             defaultModelLabel={defaultModelLabel}
             preferredModelId={preferredModelId}
           />
@@ -273,6 +290,7 @@ function DesktopMatch({
   analyzable,
   finalScore,
   selectableModels,
+  selectableMarkets,
   defaultModelLabel,
   preferredModelId,
 }: Common) {
@@ -369,6 +387,7 @@ function DesktopMatch({
               existing={analysisExisting}
               oddsAvailable={oddsAvailable}
               selectableModels={selectableModels}
+              selectableMarkets={selectableMarkets}
               defaultModelLabel={defaultModelLabel}
               preferredModelId={preferredModelId}
             />
