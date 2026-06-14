@@ -134,6 +134,13 @@
       "when": 1781450833241,
       "tag": "0018_seed_double_chance",
       "breakpoints": true
+    },
+    {
+      "idx": 19,
+      "version": "7",
+      "when": 1781477803383,
+      "tag": "0019_graduate_new_markets",
+      "breakpoints": true
     }
   ]
 }

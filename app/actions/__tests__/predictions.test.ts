@@ -141,19 +141,17 @@ beforeEach(() => {
     remaining: 19,
     reset: 0,
   });
-  // Gate de mercado audiência-aware (espelha o resolver real): admin vê
-  // over_under + match_result + btts + double_chance; comum só over_under.
+  // Gate de mercado audiência-aware (espelha o resolver real PÓS-graduação #261):
+  // todos os mercados ativos estão graduados, então admin E comum veem o mesmo
+  // conjunto (over_under + match_result + btts + double_chance). O recorte por liga
+  // (btts/dc → world_cup) fica por conta de marketsForLeague (gate real, não mockado).
   mockMarketsForAudience.mockReset();
-  mockMarketsForAudience.mockImplementation(async (isAdmin: boolean) =>
-    isAdmin
-      ? [
-          OVER_UNDER_MARKET,
-          MATCH_RESULT_MARKET,
-          BTTS_MARKET,
-          DOUBLE_CHANCE_MARKET,
-        ]
-      : [OVER_UNDER_MARKET],
-  );
+  mockMarketsForAudience.mockImplementation(async () => [
+    OVER_UNDER_MARKET,
+    MATCH_RESULT_MARKET,
+    BTTS_MARKET,
+    DOUBLE_CHANCE_MARKET,
+  ]);
   // Default: jogo world_cup (cobre btts). getMatchById é alcançado só após os gates
   // de pré-spend (auth/rate-limit retornam antes). ensureOddsSnapshotsFresh é no-op.
   mockGetMatchById.mockReset();
@@ -385,21 +383,20 @@ describe("analyzeMatch — market audience gating", () => {
     });
   });
 
-  it("non-admin POSTing marketKey=match_result (out of audience) is COERCED to over_under", async () => {
+  it("non-admin selecting match_result (graduado #261, in-audience) threads it to predict", async () => {
     mockAuth.mockResolvedValue(USER_SESSION);
     await analyzeMatch(
       null,
       form({ matchId: VALID_MATCH_ID, marketKey: "match_result" }),
     );
-    // Defesa em profundidade: o resolver de audiência não devolve match_result pro
-    // usuário comum, então a action coerce o POST forjado pro default over_under —
-    // NUNCA chama predict com o mercado proibido.
+    // Pós-graduação (#261): match_result está graduado, então o usuário comum o vê
+    // e a action o passa adiante — sem coerção. (1X2 não tem gate de liga.)
     expect(mockPredict).toHaveBeenCalledWith({
       matchId: VALID_MATCH_ID,
       userId: "u2",
       isAdmin: false,
       modelOverride: undefined,
-      marketKey: "over_under",
+      marketKey: "match_result",
     });
   });
 
