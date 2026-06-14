@@ -26,6 +26,14 @@ export type BetSummaryCopy = {
   plain: string;
 };
 
+// Shape estrutural LOCAL do resultData (espelha lib/settlement/schemas.ts sem
+// importar @/lib/db nem @/lib/settlement — pureza de bundle pinada por teste).
+type SettlementMetricResultData = {
+  homeScore: number | null;
+  awayScore: number | null;
+  totalGoals: number;
+} | null;
+
 export type MarketPresentation = {
   marketKey: string;
   // Espelha markets.label (seed).
@@ -51,6 +59,13 @@ export type MarketPresentation = {
   framingLabel: (selectionKey: string, line: number | null) => string;
   // Label da métrica de settlement no drill-down do dashboard ("gols (90')").
   settlementMetricLabel: string;
+  // Valor da métrica de settlement, derivado do resultData (registry-driven, sem
+  // hardcode de totalGoals no dashboard). over/under → total de gols; 1X2 → placar
+  // "2-1"; btts → "Sim"/"Não". `totalGoalsFallback` cobre resultData ausente.
+  settlementMetricValue: (
+    resultData: SettlementMetricResultData,
+    totalGoalsFallback: number,
+  ) => string;
   // Classifica os gols de um confronto numa key de seleção pra lente de H2H, ou
   // `null` quando o mercado não é baseado em gols (a view degrada pra neutro).
   classifyH2H:
@@ -116,6 +131,8 @@ const OVER_UNDER: MarketPresentation = {
   framingLabel: (key) =>
     lookup(OVER_UNDER_FRAMING_LABELS, key, lookup(OVER_UNDER_SELECTION_LABELS, key, key)),
   settlementMetricLabel: "gols (90')",
+  // Total de gols — byte-idêntico à expressão hardcoded anterior do dashboard.ts.
+  settlementMetricValue: (rd, fallback) => String(rd?.totalGoals ?? fallback),
   // Cut do over/under na linha 2.5: total de gols ESTRITAMENTE acima da linha é
   // "over". Em linha 2.5 (gols inteiros) total > 2.5 ⟺ total ≥ 3 — idêntico ao
   // corte legado de toH2HView, então a paridade é exata.
@@ -144,13 +161,62 @@ const MATCH_RESULT: MarketPresentation = {
   },
   framingLabel: (key) => lookup(MATCH_RESULT_SELECTION_LABELS, key, key),
   settlementMetricLabel: "resultado (90')",
+  // Placar de 90' ("2-1"); split nulo (histórica degradada) → total de gols.
+  settlementMetricValue: (rd, fallback) =>
+    rd && rd.homeScore !== null && rd.awayScore !== null
+      ? `${rd.homeScore}-${rd.awayScore}`
+      : String(rd?.totalGoals ?? fallback),
   // 1X2 não é mercado de gols — a lente over/under de H2H não se aplica.
+  classifyH2H: null,
+};
+
+// btts (ambas marcam) — seedado ativo admin-only (#174). Labels CURTOS espelham
+// o seed (markets.label "Ambas marcam" / market_selections.label "Sim"/"Não"),
+// pinados por presentation-seed-parity.pglite.test.ts. betSummary/framingLabel são
+// frase leiga code-only (não estão no seed). Renderiza pelo caminho N-vias (N=2).
+const BTTS_SELECTION_LABELS: Record<string, string> = {
+  yes: "Sim",
+  no: "Não",
+};
+
+const BTTS_BET_SUMMARY: Record<string, BetSummaryCopy> = {
+  yes: { market: "Ambos os times marcam", plain: "os dois times marcam no jogo" },
+  no: {
+    market: "Pelo menos um time não marca",
+    plain: "ao menos um time termina sem marcar",
+  },
+};
+
+const BTTS: MarketPresentation = {
+  marketKey: "btts",
+  marketLabel: "Ambas marcam",
+  defaultLine: null,
+  selectionLabel: (key) => lookup(BTTS_SELECTION_LABELS, key, key),
+  outcomeLabel: (key) => lookup(BTTS_SELECTION_LABELS, key, key),
+  scenarioLabel: (key) => lookup(BTTS_SELECTION_LABELS, key, key),
+  betSummary: (key) =>
+    key in BTTS_BET_SUMMARY
+      ? BTTS_BET_SUMMARY[key]
+      : { market: lookup(BTTS_SELECTION_LABELS, key, key), plain: "" },
+  framingLabel: (key) => lookup(BTTS_SELECTION_LABELS, key, key),
+  settlementMetricLabel: "ambas marcam (90')",
+  // "Sim"/"Não" a partir do split de 90'; split nulo → "—" (nunca fabrica um
+  // resultado — prefer skip over silent wrong settle). Ao vivo o split é sempre
+  // populado, então rows settladas de btts sempre mostram Sim/Não.
+  settlementMetricValue: (rd) =>
+    rd && rd.homeScore !== null && rd.awayScore !== null
+      ? rd.homeScore > 0 && rd.awayScore > 0
+        ? "Sim"
+        : "Não"
+      : "—",
+  // btts não é mercado de total de gols — a lente over/under de H2H não se aplica.
   classifyH2H: null,
 };
 
 const REGISTRY: Record<string, MarketPresentation> = {
   [OVER_UNDER.marketKey]: OVER_UNDER,
   [MATCH_RESULT.marketKey]: MATCH_RESULT,
+  [BTTS.marketKey]: BTTS,
 };
 
 /**

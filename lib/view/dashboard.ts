@@ -266,6 +266,7 @@ export function toPredictionDetailView(
   // getUserDashboardRows. Alimenta recToken (display da seleção) E o label da
   // métrica de settlement.
   const marketKey = detail.marketKey ?? "over_under";
+  const presentation = getMarketPresentation(marketKey);
 
   return {
     id: prediction.id,
@@ -299,12 +300,16 @@ export function toPredictionDetailView(
       ? {
           result: outcome.result,
           profit: unitsLabel(Number(outcome.profitUnits)),
-          // VALOR do escalar notNull `total_goals` (resultData é nullable em
-          // históricas — schema; cruza com resultData.totalGoals quando existe).
-          // Label da apresentação do mercado RESOLVIDO da row (marketKey do join).
+          // Métrica de settlement registry-driven pela apresentação do mercado
+          // RESOLVIDO da row (marketKey do join): over/under → total de gols
+          // (byte-idêntico ao legado), 1X2 → placar, btts → Sim/Não. O fallback é
+          // o escalar notNull `total_goals` (resultData é nullable em históricas).
           settlementMetric: {
-            label: getMarketPresentation(marketKey).settlementMetricLabel,
-            value: String(outcome.resultData?.totalGoals ?? outcome.totalGoals),
+            label: presentation.settlementMetricLabel,
+            value: presentation.settlementMetricValue(
+              outcome.resultData ?? null,
+              outcome.totalGoals,
+            ),
           },
           settledAt: formatKickoffAbsolute(outcome.settledAt),
           manual: outcome.overrideByUserId !== null,

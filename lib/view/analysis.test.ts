@@ -948,3 +948,147 @@ describe("toAnalysisView (N-vias / 1X2)", () => {
     expect(view.outcomes[1].breakEven).not.toBe("—");
   });
 });
+
+// btts é N=2 (yes/no) MAS roteia pelo caminho N-vias canônico — não pelo binário
+// congelado over/under. O predicado é IDENTIDADE (marketKey), não length: over_under
+// e btts são ambos length-2, então só a identidade os distingue.
+describe("toAnalysisView (N-vias / btts)", () => {
+  it("2 seleções (btts) → 2 outcomes via o caminho N-vias com labels Sim/Não", () => {
+    const view = toAnalysisView(
+      {
+        recommendation: "yes",
+        confidencePct: "60.00",
+        rationale: "ambos marcam",
+        keyFactors: ["a", "b"],
+        minimumOdd: "1.700",
+        oddAtRecommendation: "2.000",
+        bookmaker: "Pinnacle",
+        impliedProbPct: "50.00",
+        edgePct: "10.00",
+        // colunas binárias over/under NULL (btts não carrega o par congelado).
+        overOddAtPrediction: null,
+        underOddAtPrediction: null,
+        modelVersion: "claude-opus-4-8",
+        promptVersion: "btts_v1",
+        createdAt: baseCreatedAt,
+        marketKey: "btts",
+        line: null,
+        stakeUnits: "1",
+        // Candidate set N=2; mercado 100% (odds 2.0/2.0) → implícita 50/50.
+        selections: [
+          { key: "yes", modelProbPct: 60, odd: 2.0 },
+          { key: "no", modelProbPct: 40, odd: 2.0 },
+        ],
+      },
+      { costUsd: "0.05" },
+      threeHoursLater,
+    );
+
+    // 2 colunas yes/no via N-vias (NÃO over/under do caminho binário congelado).
+    expect(view.outcomes).toHaveLength(2);
+    expect(view.outcomes.map((o) => o.id)).toEqual(["yes", "no"]);
+    expect(view.outcomes.map((o) => o.label)).toEqual(["Sim", "Não"]);
+    expect(view.outcomes.map((o) => o.isRecommended)).toEqual([true, false]);
+    // Valores N-vias pinados: yes modelProb 60, implícita 50, edge +10.0pp.
+    expect(view.outcomes[0].modelProb).toBe("60%");
+    expect(view.outcomes[0].marketProb).toBe("50%");
+    expect(view.outcomes[0].edge).toBe("+10.0pp");
+    expect(view.outcomes[1].modelProb).toBe("40%");
+
+    // Bloco de recomendação usa a apresentação btts (sem linha) + sub-linha leiga.
+    expect(view.recommendation).not.toBeNull();
+    expect(view.recommendation?.marketKey).toBe("btts");
+    expect(view.recommendation?.marketLabel).toBe("Ambas marcam");
+    expect(view.recommendation?.selectionKey).toBe("yes");
+    expect(view.recommendation?.selectionLabel).toBe("Sim");
+    expect(view.recommendation?.line).toBeNull();
+    expect(view.recommendation?.betSummary).toEqual({
+      market: "Ambos os times marcam",
+      plain: "os dois times marcam no jogo",
+    });
+
+    // N-vias não tem o framing de break-even da zebra binária → null.
+    expect(view.framing).toBeNull();
+    expect(view.note).toBeNull();
+  });
+
+  it("pass em btts → 2 outcomes sem coluna recomendada", () => {
+    const view = toAnalysisView(
+      {
+        recommendation: "pass",
+        confidencePct: "48.00",
+        rationale: "sem edge",
+        keyFactors: ["a"],
+        minimumOdd: null,
+        oddAtRecommendation: null,
+        bookmaker: null,
+        impliedProbPct: null,
+        edgePct: null,
+        overOddAtPrediction: null,
+        underOddAtPrediction: null,
+        modelVersion: "claude-opus-4-8",
+        promptVersion: "btts_v1",
+        createdAt: baseCreatedAt,
+        marketKey: "btts",
+        line: null,
+        selections: [
+          { key: "yes", modelProbPct: 48, odd: 2.0 },
+          { key: "no", modelProbPct: 52, odd: 2.0 },
+        ],
+      },
+      null,
+      threeHoursLater,
+    );
+
+    expect(view.recommendation).toBeNull();
+    expect(view.outcomes).toHaveLength(2);
+    expect(view.outcomes.map((o) => o.id)).toEqual(["yes", "no"]);
+    expect(view.outcomes.every((o) => !o.isRecommended)).toBe(true);
+    expect(view.framing).toBeNull();
+  });
+});
+
+// REGRESSÃO de identidade: over_under com marketKey "over_under" E um candidate set
+// length-2 AINDA roteia pelo caminho binário CONGELADO (over/under), não N-vias —
+// prova que a IDENTIDADE governa o roteamento, não o length (que não distingue
+// over_under de btts, ambos N=2).
+describe("toAnalysisView — over_under stays frozen by identity (not length)", () => {
+  it("over_under com 2 selections → outcomes over/under do caminho binário, não N-vias", () => {
+    const view = toAnalysisView(
+      {
+        recommendation: "over",
+        confidencePct: "58.00",
+        rationale: "blah",
+        keyFactors: ["a", "b"],
+        minimumOdd: "1.750",
+        oddAtRecommendation: "1.920",
+        bookmaker: "bet365",
+        impliedProbPct: "50.70",
+        edgePct: "7.30",
+        overOddAtPrediction: "1.920",
+        underOddAtPrediction: "1.950",
+        modelVersion: "claude-sonnet-4-5-20250929",
+        promptVersion: "over_under_v2.0",
+        createdAt: baseCreatedAt,
+        marketKey: "over_under",
+        line: 2.5,
+        // Mesmo com um candidate set length-2 presente, a identidade over_under
+        // mantém o caminho binário congelado (não vira yes/no nem N-vias).
+        selections: [
+          { key: "over", modelProbPct: 58, odd: 1.92 },
+          { key: "under", modelProbPct: 42, odd: 1.95 },
+        ],
+      },
+      { costUsd: "0.014000" },
+      threeHoursLater,
+    );
+
+    // Outcomes over/under (caminho binário congelado), com a linha 2.5 no label —
+    // NÃO os ids/labels do caminho N-vias.
+    expect(view.outcomes.map((o) => o.id)).toEqual(["over", "under"]);
+    expect(view.outcomes.map((o) => o.label)).toEqual(["Over 2.5", "Under 2.5"]);
+    expect(view.outcomes[0].scenarioLabel).toBe("mais de 2.5 gols");
+    // framing binário da zebra presente (exclusivo do caminho congelado).
+    expect(view.framing).not.toBeNull();
+  });
+});

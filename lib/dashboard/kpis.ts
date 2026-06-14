@@ -17,9 +17,17 @@ export type DashboardRow = {
   predictionId: string;
   matchId: string;
   // = a key da seleção escolhida (multi-mercado, #173) ou "pass" (no-bet). Antes
-  // fechado em over/under; alargado p/ as keys 1X2 (home/draw/away) com a ativação
-  // do mercado. A view deriva o display da seleção+apresentação (REC_MAP total).
-  recommendation: "over" | "under" | "pass" | "home" | "draw" | "away";
+  // fechado em over/under; alargado p/ as keys 1X2 (home/draw/away) e btts (yes/no)
+  // com a ativação dos mercados. A view deriva o display da seleção+apresentação.
+  recommendation:
+    | "over"
+    | "under"
+    | "pass"
+    | "home"
+    | "draw"
+    | "away"
+    | "yes"
+    | "no";
   marketKey: string;
   marketLabel: string;
   league: SupportedLeague;

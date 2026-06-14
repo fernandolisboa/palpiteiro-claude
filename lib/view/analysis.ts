@@ -29,10 +29,18 @@ import type {
 } from "@/lib/view/types";
 
 type PredictionInput = {
-  // = key da seleção escolhida (multi-mercado, #173) ou "pass". A ramificação
-  // N-vias do toAnalysisView (§F) é quem mantém 1X2 fora do scenario binário;
-  // este COMMIT só alarga o tipo (o reader N-vias chega na Fase 4).
-  recommendation: "over" | "under" | "pass" | "home" | "draw" | "away";
+  // = key da seleção escolhida (multi-mercado, #173) ou "pass". A ramificação por
+  // IDENTIDADE do toAnalysisView mantém over_under no caminho binário congelado e
+  // manda os demais mercados (1X2, btts) pro caminho N-vias canônico.
+  recommendation:
+    | "over"
+    | "under"
+    | "pass"
+    | "home"
+    | "draw"
+    | "away"
+    | "yes"
+    | "no";
   confidencePct: string | number;
   rationale: string;
   keyFactors: string[];
@@ -259,17 +267,19 @@ export function toAnalysisView(
   const presentation = getMarketPresentation(prediction.marketKey ?? "over_under");
   const line = prediction.line ?? presentation.defaultLine;
 
-  // Ramificação N-vias (§F, gate #3/#6): com um candidate set de >2 seleções
-  // (1X2), os outcomes saem do caminho N-vias canônico (computeMarketScenarios →
-  // toOutcomesView, ADR 0018) — cada seleção tem seu próprio edge, SEM 100−x. Este
-  // branch é o GATE que mantém 1X2 fora do computeScenarios binário (que fica
-  // binário de propósito; plan §C2). `recommendedKey` = a selectionKey escolhida,
-  // ou null em pass (a UI não destaca nenhuma coluna). N-vias não tem o framing de
-  // break-even da zebra binária (R4) → framing/note null.
-  //
-  // Sem selections OU ≤2 (over/under): caminho binário CONGELADO byte-idêntico —
-  // a paridade over/under depende deste fall-through inalterado.
-  const isNway = (prediction.selections?.length ?? 0) > 2;
+  // Ramificação por IDENTIDADE (#174): over_under fica no caminho binário
+  // CONGELADO (computeScenarios/toBinaryOutcomes — hardcoded over/under, 100−x só
+  // vale em N=2 sem push); TODO o resto (1X2 N=3, btts N=2) vai pro caminho N-vias
+  // canônico (computeMarketScenarios → toOutcomesView, ADR 0018) — cada seleção
+  // com seu próprio edge, SEM 100−x. O predicado é IDENTIDADE (marketKey ===
+  // over_under), NUNCA length: over_under e btts são ambos N=2, então `length` não
+  // os distingue — só a identidade mantém a paridade over/under byte-idêntica. É o
+  // único branch de identidade permitido na view (espelha o guard de legacy-write
+  // por OVER_UNDER em predict.ts). `recommendedKey` = a selectionKey escolhida ou
+  // null em pass. N-vias não tem o framing de break-even binário (R4) → framing/note null.
+  const isBinaryFrozen =
+    (prediction.marketKey ?? "over_under") === "over_under";
+  const isNway = !isBinaryFrozen && (prediction.selections?.length ?? 0) >= 2;
 
   const outcomesNway = isNway
     ? toOutcomesView(

@@ -23,7 +23,15 @@ type RecentInput = {
   homeTeam: string;
   awayTeam: string;
   // = key da seleção escolhida (multi-mercado, #173) ou "pass". REC_MAP é total.
-  recommendation: "over" | "under" | "pass" | "home" | "draw" | "away";
+  recommendation:
+    | "over"
+    | "under"
+    | "pass"
+    | "home"
+    | "draw"
+    | "away"
+    | "yes"
+    | "no";
   edgePct: string | number | null;
   createdAt: Date;
 };

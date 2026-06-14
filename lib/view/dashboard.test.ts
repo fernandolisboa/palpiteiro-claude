@@ -263,6 +263,11 @@ describe("toPredictionDetailView", () => {
     );
     expect(v.prediction.rec).toBe("Casa");
     expect(v.outcome?.settlementMetric.label).toBe("resultado (90')");
+    // settlementMetricValue registry-driven: 1X2 mostra o placar (antes mostrava
+    // o escalar de gols "3" — bug latente corrigido junto com o deriver do #174).
+    // (O caso btts é testado no commit do enum/seed, quando DbPrediction.recommendation
+    // já aceita 'yes'/'no'.)
+    expect(v.outcome?.settlementMetric.value).toBe("2-1");
   });
 
   it("marketKey null (histórica sem marketId): coalesce over_under → saída byte-idêntica", () => {
