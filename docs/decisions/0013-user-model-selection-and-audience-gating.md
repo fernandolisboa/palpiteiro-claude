@@ -4,6 +4,14 @@
 
 Accepted (2026-06-11) — **emenda o ADR 0008** (modelo de análise configurável).
 
+> **Nota (2026-06-14):** O **Fable 5 foi removido do registry** (issues #240/#241)
+> por custo ($10/$50 por 1M) + indisponibilidade no Brasil; o Opus 4.8 cobre os
+> overrides admin. Em paralelo, o **Sonnet 4.5 foi promovido a `userSelectable:
+> true`** (#240). Com isso, **nenhum modelo permanece admin-only** — o mecanismo de
+> gating por audiência (`userSelectable` / `isModelAllowedForAudience`) segue válido
+> e testado, mas hoje não filtra nenhum modelo. As menções ao Fable e ao Sonnet 4.5
+> como admin-only abaixo refletem o estado de 2026-06-11, não o atual.
+
 ## Contexto
 
 O ADR 0008 deixou a seleção de modelo restrita a admin: default global em

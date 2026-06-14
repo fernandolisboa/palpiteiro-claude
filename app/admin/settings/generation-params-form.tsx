@@ -71,8 +71,8 @@ export function GenerationParamsForm({ current }: Props) {
           className="w-80 rounded-md border border-border bg-transparent px-3 py-2 text-sm text-foreground disabled:opacity-50"
         />
         <span className="text-[11px] text-muted-foreground">
-          Teto de saída. Nos modelos adaptive (Opus / Sonnet 4.6 / Fable) o
-          thinking conta aqui — valores baixos cortam a tool call.
+          Teto de saída. Nos modelos adaptive (Opus / Sonnet 4.6) o thinking
+          conta aqui — valores baixos cortam a tool call.
         </span>
       </label>
 

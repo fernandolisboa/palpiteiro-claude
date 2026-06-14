@@ -6,11 +6,17 @@ import {
   updateDefaultModel,
   type UpdateDefaultModelResult,
 } from "@/app/actions/ai-config";
-import { modelsForAudience, type AIModelId } from "@/lib/ai/models";
+import { SELECTABLE_MODELS, type AIModelId } from "@/lib/ai/models";
 
-// Default global vale pra TODOS, então o dropdown lista só modelos userSelectable
-// (audiência usuário comum). Server revalida em updateDefaultModel (ADR 0013).
-const DEFAULT_MODEL_OPTIONS = modelsForAudience(false);
+// O default global vale pra TODOS, então só um modelo `userSelectable` pode ser
+// salvo — o server revalida via isModelAllowedForAudience(false) em
+// updateDefaultModel (ADR 0013). Hoje, após #240 (ambos Sonnets selecionáveis) +
+// #241 (Fable removido), TODO o registry é userSelectable, então a lista inteira
+// é salvável. Mas em vez de FILTRAR modelos admin-only (sumiço silencioso), o
+// dropdown lista todos e desabilita os não-salváveis com nota — defensivo pra um
+// futuro modelo admin-only não reaparecer como "disponível mas impossível de
+// salvar". A ordem do registry rege a UI.
+const DEFAULT_MODEL_OPTIONS = SELECTABLE_MODELS;
 
 type Props = {
   current: AIModelId;
@@ -37,9 +43,15 @@ export function DefaultModelForm({ current }: Props) {
             <option
               key={m.id}
               value={m.id}
+              // Admin-only (userSelectable:false) NÃO pode virar padrão global —
+              // renderiza desabilitado com nota em vez de sumir (feedback visual).
+              disabled={!m.userSelectable}
               className="bg-popover text-popover-foreground"
             >
               {m.label} — ${m.inputPricePerMTok}/${m.outputPricePerMTok} por 1M
+              {m.userSelectable
+                ? ""
+                : " (admin-only — indisponível como padrão)"}
             </option>
           ))}
         </select>

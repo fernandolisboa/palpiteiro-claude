@@ -51,7 +51,7 @@ export type PredictArgs = {
   matchId: string;
   userId: string;
   // Audiência do caller (ADR 0013). Decide se a preferência pessoal do usuário
-  // pode apontar pra um modelo admin-only: ex-admin rebaixado com Fable salvo
+  // pode apontar pra um modelo admin-only: uma preferência fora da audiência
   // cai no default. NÃO afeta o `modelOverride` (já validado pelo caller).
   isAdmin: boolean;
   // Override admin-gated (já validado pelo caller); predict confia num
@@ -248,9 +248,10 @@ export async function predict({
   // 0. Resolve o modelo UMA vez pela cascata completa (ADR 0013):
   //    override por análise > preferência do usuário > default global >
   //    DEFAULT_MODEL_ID. A preferência só vale se passar no filtro de audiência
-  //    (admin-only nunca roda pra usuário comum — ex-admin rebaixado com Fable
-  //    salvo cai no default). Havendo override, nem lemos a preferência (query
-  //    desnecessária). As leituras de DB são baratas ante a chamada paga ao LLM.
+  //    (admin-only nunca roda pra usuário comum) e se ainda existir no registry
+  //    (um id stale/removido — ex.: um modelo aposentado salvo no DB — é filtrado
+  //    pra null por getPreferredModelId e cai no default). Havendo override, nem
+  //    lemos a preferência. As leituras de DB são baratas ante a chamada ao LLM.
   let resolvedModelId: AIModelId;
   if (modelOverride) {
     resolvedModelId = modelOverride;

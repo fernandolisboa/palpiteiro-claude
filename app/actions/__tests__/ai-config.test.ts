@@ -72,21 +72,36 @@ describe("updateDefaultModel", () => {
     expect(mockSet).not.toHaveBeenCalled();
   });
 
-  it("admin + Fable 5 (admin-only) → not ok, setter not called (default global é só userSelectable)", async () => {
-    mockAuth.mockResolvedValue(ADMIN);
-    const res = await updateDefaultModel(
-      null,
-      form({ modelId: "claude-fable-5" }),
-    );
-    expect(res.ok).toBe(false);
-    expect(mockSet).not.toHaveBeenCalled();
-  });
-
-  it("admin + Sonnet 4.5 (admin-only) → not ok, setter not called", async () => {
+  it("admin + Sonnet 4.5 (promovido a userSelectable em #240) → setter chamado, ok", async () => {
+    // Antes admin-only; após #240 ambos os Sonnets podem ser padrão global. Este
+    // é o caso de aceite central da issue #240.
     mockAuth.mockResolvedValue(ADMIN);
     const res = await updateDefaultModel(
       null,
       form({ modelId: "claude-sonnet-4-5-20250929" }),
+    );
+    expect(res).toEqual({ ok: true });
+    expect(mockSet).toHaveBeenCalledWith("claude-sonnet-4-5-20250929", "u1");
+  });
+
+  it("admin + Sonnet 4.6 (userSelectable) → setter chamado, ok", async () => {
+    mockAuth.mockResolvedValue(ADMIN);
+    const res = await updateDefaultModel(
+      null,
+      form({ modelId: "claude-sonnet-4-6" }),
+    );
+    expect(res).toEqual({ ok: true });
+    expect(mockSet).toHaveBeenCalledWith("claude-sonnet-4-6", "u1");
+  });
+
+  it("admin + id stale/removido (Fable, fora do registry após #241) → not ok, setter not called", async () => {
+    // Um id de modelo aposentado (Fable removido em #241) deixa de ser salvável:
+    // isModelAllowedForAudience o trata como desconhecido. Cobre a queda graciosa
+    // sem mudança de runtime.
+    mockAuth.mockResolvedValue(ADMIN);
+    const res = await updateDefaultModel(
+      null,
+      form({ modelId: "claude-fable-5" }),
     );
     expect(res.ok).toBe(false);
     expect(mockSet).not.toHaveBeenCalled();

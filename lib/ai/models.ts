@@ -12,7 +12,6 @@ export type AIModelId =
   | "claude-opus-4-8"
   | "claude-sonnet-4-6"
   | "claude-sonnet-4-5-20250929"
-  | "claude-fable-5"
   | "claude-haiku-4-5";
 
 export type AIModel = {
@@ -31,21 +30,11 @@ export type AIModel = {
   userSelectable: boolean;
 };
 
-// ORDEM = capacidade decrescente (Fable > Opus > Sonnet 4.6 > Sonnet 4.5 >
-// Haiku). A UI DEPENDE desta ordem: SELECTABLE_MODELS e modelsForAudience
-// preservam a ordem de inserção do objeto, então é ela que rege os dropdowns.
-// Não reordene sem querer mexer no que aparece nos seletores.
+// ORDEM = capacidade decrescente (Opus > Sonnet 4.6 > Sonnet 4.5 > Haiku). A UI
+// DEPENDE desta ordem: SELECTABLE_MODELS e modelsForAudience preservam a ordem de
+// inserção do objeto, então é ela que rege os dropdowns. Não reordene sem querer
+// mexer no que aparece nos seletores.
 export const MODEL_REGISTRY: Record<AIModelId, AIModel> = {
-  "claude-fable-5": {
-    id: "claude-fable-5",
-    label: "Fable 5",
-    inputPricePerMTok: 10,
-    outputPricePerMTok: 50,
-    // Adaptive thinking como Opus/Sonnet 4.6; Fable EXIGE adaptive sem temperature
-    // e sem thinking disabled — qualquer um dos dois dá 400 (ver request-builder).
-    thinkingMode: "adaptive",
-    userSelectable: false,
-  },
   "claude-opus-4-8": {
     id: "claude-opus-4-8",
     label: "Opus 4.8",
@@ -71,7 +60,10 @@ export const MODEL_REGISTRY: Record<AIModelId, AIModel> = {
     outputPricePerMTok: 15,
     thinkingMode: "temperature",
     temperature: 0.3,
-    userSelectable: false,
+    // Selecionável como padrão global e preferência do usuário comum (#240): o
+    // dono decidiu liberar AMBOS os Sonnets. Após esta promoção + a remoção do
+    // Fable, NENHUM modelo do registry é admin-only (`userSelectable: false`).
+    userSelectable: true,
   },
   "claude-haiku-4-5": {
     id: "claude-haiku-4-5",
