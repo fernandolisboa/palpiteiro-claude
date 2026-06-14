@@ -5,8 +5,10 @@ import type { CacheStore } from "@/lib/cache/types";
 import { ODDS_API_BASE_URL } from "@/lib/providers/odds-api-constants";
 import {
   EventOddsSchema,
+  EventsListResponseSchema,
   SportOddsResponseSchema,
   SportsResponseSchema,
+  type OddsApiEventListItem,
   type OddsApiEventOdds,
   type OddsApiSport,
 } from "@/lib/providers/odds-api-schemas";
@@ -314,6 +316,12 @@ export type GetOddsForEventOptions = {
   cache?: CacheStore;
 };
 
+export type GetEventsForSportOptions = {
+  commenceTimeFrom?: string; // ISO 8601
+  commenceTimeTo?: string; // ISO 8601
+  cache?: CacheStore;
+};
+
 export async function getSports(opts?: {
   cache?: CacheStore;
 }): Promise<OddsApiSport[]> {
@@ -323,6 +331,29 @@ export async function getSports(opts?: {
     schema: SportsResponseSchema,
     ttlMs: ONE_DAY,
     cache: opts?.cache,
+  });
+}
+
+// Lista de eventos SEM odds (/sports/{sport}/events). GRATUITO: a The Odds API
+// documenta que /sports e /sports/{sport}/events NÃO contam contra a quota
+// (0 créditos). NÃO manda regions/markets — logo NÃO passa por resolveCsv (sem o
+// fallback silencioso pra ['totals']). Usado pra resolver o eventId de um match
+// antes de um fetch *additional* por evento (btts), sem gastar 1 crédito de batch.
+export async function getEventsForSport(
+  sport: string,
+  options: GetEventsForSportOptions = {},
+): Promise<OddsApiEventListItem[]> {
+  const params: Params = {
+    dateFormat: "iso",
+    commenceTimeFrom: toOddsApiCommenceTime(options.commenceTimeFrom),
+    commenceTimeTo: toOddsApiCommenceTime(options.commenceTimeTo),
+  };
+  return request({
+    endpoint: `/sports/${sport}/events`,
+    params,
+    schema: EventsListResponseSchema,
+    ttlMs: FIFTEEN_MINUTES,
+    cache: options.cache,
   });
 }
 

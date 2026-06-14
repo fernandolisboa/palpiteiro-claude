@@ -30,14 +30,19 @@ vi.mock("@/lib/db", () => ({
   ),
 }));
 
-// getOddsForSport é mockado por teste (sem rede). leagueToSportKey/etc são reais.
+// getOddsForSport (featured/batch), getEventsForSport + getOddsForEvent (additional/
+// por evento) são mockados por teste (sem rede). leagueToSportKey/etc são reais.
 const getOddsForSport = vi.fn<() => Promise<OddsApiEventOdds[]>>();
+const getEventsForSport = vi.fn();
+const getOddsForEvent = vi.fn<() => Promise<OddsApiEventOdds>>();
 vi.mock("@/lib/providers/odds-api", () => ({
   getOddsForSport: (...args: unknown[]) => getOddsForSport(...(args as [])),
+  getEventsForSport: (...args: unknown[]) => getEventsForSport(...(args as [])),
+  getOddsForEvent: (...args: unknown[]) => getOddsForEvent(...(args as [])),
 }));
 
 import { ensureOddsSnapshotsFresh } from "@/lib/odds/fetch-and-snapshot";
-import { MATCH_RESULT, OVER_UNDER } from "@/lib/odds/market-descriptor";
+import { BTTS, MATCH_RESULT, OVER_UNDER } from "@/lib/odds/market-descriptor";
 import { getLatestSelectionOddsSnapshots } from "@/lib/db/queries/odds-snapshots";
 
 const KICKOFF = new Date(Date.now() + 24 * 60 * 60 * 1000); // dentro da janela de 7d
@@ -83,6 +88,8 @@ afterAll(async () => {
 
 beforeEach(async () => {
   getOddsForSport.mockReset();
+  getEventsForSport.mockReset();
+  getOddsForEvent.mockReset();
   await realDb.delete(schema.selectionOddsSnapshots);
   await realDb.delete(schema.matchOddsSnapshots);
 });
@@ -139,6 +146,44 @@ function h2hEvent(): OddsApiEventOdds {
         ],
       },
     ],
+  };
+}
+
+// btts (additional): payload por evento COM odds + item da lista GRATUITA (sem odds).
+function bttsEvent(): OddsApiEventOdds {
+  return {
+    id: "evt-1",
+    sport_key: "soccer_brazil_campeonato",
+    commence_time: KICKOFF.toISOString(),
+    home_team: "CR Flamengo",
+    away_team: "Fluminense FC",
+    bookmakers: [
+      {
+        key: "pinnacle",
+        title: "Pinnacle",
+        last_update: "2026-05-15T12:00:00Z",
+        markets: [
+          {
+            key: "btts",
+            last_update: "2026-05-15T12:00:00Z",
+            outcomes: [
+              { name: "Yes", price: 2.06 },
+              { name: "No", price: 1.81 },
+            ],
+          },
+        ],
+      },
+    ],
+  };
+}
+
+function bttsEventListItem() {
+  return {
+    id: "evt-1",
+    sport_key: "soccer_brazil_campeonato",
+    commence_time: KICKOFF.toISOString(),
+    home_team: "CR Flamengo",
+    away_team: "Fluminense FC",
   };
 }
 
@@ -239,5 +284,82 @@ describe("ensureOddsSnapshotsFresh — dual-write against real Postgres (pglite)
     ).length;
     expect(oldCount).toBe(1); // 1 row over/under (par numa row)
     expect(newCount).toBe(2); // 2 rows (over + under)
+  });
+});
+
+describe("ensureOddsSnapshotsFresh — btts additional per-event fetch (NUNCA batch)", () => {
+  it("busca por evento, grava só a tabela nova (yes/no), NUNCA chama getOddsForSport", async () => {
+    getEventsForSport.mockResolvedValue([bttsEventListItem()]); // lista gratuita
+    getOddsForEvent.mockResolvedValue(bttsEvent());
+    const now = new Date();
+    const match = (
+      await realDb.select().from(schema.matches).where(eq(schema.matches.id, matchIds.id))
+    )[0];
+
+    await ensureOddsSnapshotsFresh(match, { now, markets: [BTTS] });
+
+    // INVARIANTE DE QUOTA: additional NUNCA batcheia a liga.
+    expect(getOddsForSport).not.toHaveBeenCalled();
+    // 1 fetch por evento, com markets=['btts'] explícito (sem resolveCsv→totals).
+    expect(getOddsForEvent).toHaveBeenCalledTimes(1);
+    expect(getOddsForEvent).toHaveBeenCalledWith(
+      expect.any(String),
+      "evt-1",
+      expect.objectContaining({ markets: ["btts"], regions: ["eu"] }),
+    );
+
+    // tabela legada over/under intacta (guard de dual-write exclui btts).
+    const old = await realDb
+      .select()
+      .from(schema.matchOddsSnapshots)
+      .where(eq(schema.matchOddsSnapshots.matchId, matchIds.id));
+    expect(old).toHaveLength(0);
+
+    // tabela nova: 2 rows yes/no, mesmo book/captured_at.
+    const latest = await getLatestSelectionOddsSnapshots({
+      matchId: matchIds.id,
+      dbMarketKey: "btts",
+    });
+    expect(latest).not.toBeNull();
+    expect(latest!.selections).toHaveLength(2);
+    expect(latest!.bookmaker).toBe("Pinnacle");
+    const byKey = new Map(latest!.selections.map((s) => [s.key, s.odd]));
+    expect(byKey.get("yes")).toBe("2.060");
+    expect(byKey.get("no")).toBe("1.810");
+    expect(latest!.capturedAt.getTime()).toBe(now.getTime());
+  });
+
+  it("dedup pelo gate de frescor: 2ª análise dentro do TTL não re-gasta quota", async () => {
+    getEventsForSport.mockResolvedValue([bttsEventListItem()]);
+    getOddsForEvent.mockResolvedValue(bttsEvent());
+    const match = (
+      await realDb.select().from(schema.matches).where(eq(schema.matches.id, matchIds.id))
+    )[0];
+
+    const now = new Date();
+    await ensureOddsSnapshotsFresh(match, { now, markets: [BTTS] });
+    // 2ª chamada 1min depois (< 30min de frescor) → snapshot fresco, sem novo fetch.
+    await ensureOddsSnapshotsFresh(match, {
+      now: new Date(now.getTime() + 60_000),
+      markets: [BTTS],
+    });
+
+    expect(getOddsForEvent).toHaveBeenCalledTimes(1); // 1 crédito, não 2
+  });
+
+  it("sem evento pareado na lista → degrada sem fetch de odds e sem escrita", async () => {
+    getEventsForSport.mockResolvedValue([]); // nenhum evento
+    const match = (
+      await realDb.select().from(schema.matches).where(eq(schema.matches.id, matchIds.id))
+    )[0];
+
+    await ensureOddsSnapshotsFresh(match, { now: new Date(), markets: [BTTS] });
+
+    expect(getOddsForEvent).not.toHaveBeenCalled();
+    const latest = await getLatestSelectionOddsSnapshots({
+      matchId: matchIds.id,
+      dbMarketKey: "btts",
+    });
+    expect(latest).toBeNull();
   });
 });

@@ -44,6 +44,11 @@ export const recommendationEnum = pgEnum("recommendation", [
   "home",
   "draw",
   "away",
+  // Seleções btts (ambas marcam) — mesmo padrão expand: keys da coluna legada de
+  // `recommendation`. Fonte de verdade = markets/market_selections; migration
+  // isolada (0015) por higiene (espelha 0011/0013, ADR 0015).
+  "yes",
+  "no",
 ]);
 
 export const outcomeResultEnum = pgEnum("outcome_result", [

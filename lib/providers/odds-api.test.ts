@@ -1,7 +1,11 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 
 import { InMemoryCacheStore } from "@/lib/cache/in-memory";
-import { getOddsForEvent, getOddsForSport } from "@/lib/providers/odds-api";
+import {
+  getEventsForSport,
+  getOddsForEvent,
+  getOddsForSport,
+} from "@/lib/providers/odds-api";
 
 // Second-precision UTC, no milliseconds — the only form The Odds API accepts
 // for commenceTimeFrom/To (regression guard for #42).
@@ -121,5 +125,55 @@ describe("odds-api request construction", () => {
     const params = calls[0].searchParams;
     expect(params.get("regions")).toBe("eu");
     expect(params.get("markets")).toBe("totals");
+  });
+
+  // ── btts (additional market) per-event fetch ─────────────────────────────
+  it("sends markets=btts explicitly on the per-event odds request (no resolveCsv totals default)", async () => {
+    const { calls } = captureFetch(VALID_EVENT);
+    await getOddsForEvent("soccer_fifa_world_cup", "evt-123", {
+      regions: ["eu"],
+      markets: ["btts"],
+      cache: new InMemoryCacheStore(),
+    });
+
+    const params = calls[0].searchParams;
+    expect(params.get("markets")).toBe("btts");
+    expect(params.get("regions")).toBe("eu");
+  });
+
+  it("getEventsForSport hits /events and sends NEITHER regions NOR markets (free, 0 credits)", async () => {
+    const { calls } = captureFetch(
+      JSON.stringify([
+        {
+          id: "evt-123",
+          sport_key: "soccer_fifa_world_cup",
+          commence_time: "2026-06-11T19:00:00Z",
+          home_team: "Mexico",
+          away_team: "South Africa",
+        },
+      ]),
+    );
+    const events = await getEventsForSport("soccer_fifa_world_cup", {
+      cache: new InMemoryCacheStore(),
+    });
+
+    expect(calls[0].pathname).toMatch(/\/sports\/soccer_fifa_world_cup\/events$/);
+    const params = calls[0].searchParams;
+    expect(params.get("regions")).toBeNull();
+    expect(params.get("markets")).toBeNull();
+    expect(events).toHaveLength(1);
+    expect(events[0].id).toBe("evt-123");
+  });
+
+  it("getEventsForSport still normalizes commenceTime to second precision when passed", async () => {
+    const { calls } = captureFetch("[]");
+    await getEventsForSport("soccer_brazil_campeonato", {
+      commenceTimeFrom: "2026-06-07T00:00:00.000Z",
+      cache: new InMemoryCacheStore(),
+    });
+
+    const params = calls[0].searchParams;
+    expect(params.get("commenceTimeFrom")).toBe("2026-06-07T00:00:00Z");
+    expect(params.get("commenceTimeFrom")).toMatch(SECOND_PRECISION_UTC);
   });
 });

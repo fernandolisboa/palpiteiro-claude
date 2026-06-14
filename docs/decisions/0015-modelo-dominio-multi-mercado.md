@@ -86,6 +86,15 @@ mercado over/under, não descartada.
      2 requests quando o campeonato voltar, #158). **Se a re-checagem do Brasileirão for
      negativa, BTTS/Dupla chance ficam restritos às ligas com cobertura comprovada** — a flag de
      ativação por mercado (decisão 1/6) é o ponto de controle.
+   - **Ativação do BTTS (#174, 2026-06-14):** BTTS entrou ATIVO atrás de flag (admin-only),
+     **restrito a `world_cup`** via `MarketDescriptor.coveredLeagues = ['world_cup']` (filtrado por
+     `marketsForLeague`, aplicado na page E na action `analyzeMatch` — a fronteira de segurança).
+     A re-checagem do Brasileirão **segue pendente**: `getSports()` (0 créditos) em 2026-06-14
+     confirmou `soccer_brazil_campeonato` **AUSENTE** de `/sports` (e `soccer_uefa_champs_league`
+     também) durante a Copa — só `soccer_fifa_world_cup` está `active=true`. Adicionar o Brasileirão
+     (ou Champions) à cobertura quando voltarem = **1 linha** em `coveredLeagues` no descriptor, sem
+     migration. A odd do BTTS é buscada **lazy por evento** (`getEventsForSport` grátis → `getOddsForEvent`
+     `markets=['btts']`, 1 crédito), **nunca em batch** (`oddsSource: 'additional'`).
    - **Tier 3 (cada um = 1 ADR próprio):** correct score, escanteios, cartões, player props,
      handicap asiático fracionado (0.25/0.75). Exigem **provider novo** e **nova forma de
      resultado** — hoje só **persistimos** o placar 90' agregado (`prediction_outcomes.total_goals`);

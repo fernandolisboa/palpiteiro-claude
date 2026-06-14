@@ -6,8 +6,8 @@
 // vivem no código (lib/view/markets/presentation.ts) ESPELHANDO o seed — este
 // teste pina esse espelho contra `markets.label`/`market_selections.label`
 // semeados na migration 0009, então não há drift (o "(seed)" é honrado).
-// Só over/under é checado: match_result não é seedado (dev/test), labels code-only.
-// Roda em `node` (pglite falha sob jsdom: r.arrayBuffer is not a function).
+// over/under (0009) e btts (0016) são seedados e checados aqui; match_result não é
+// seedado em dev/test (labels code-only). Roda em `node` (pglite falha sob jsdom).
 import { PGlite } from "@electric-sql/pglite";
 import { drizzle, type PgliteDatabase } from "drizzle-orm/pglite";
 import { migrate } from "drizzle-orm/pglite/migrator";
@@ -16,6 +16,7 @@ import { afterAll, beforeAll, describe, expect, it } from "vitest";
 
 import * as schema from "@/db/schema";
 import { getMarketPresentation } from "@/lib/view/markets/presentation";
+import { getSettlementRule } from "@/lib/settlement/registry";
 
 let client: PGlite;
 let db: PgliteDatabase<typeof schema>;
@@ -50,6 +51,41 @@ describe("market presentation ↔ seed parity (over_under)", () => {
     // market label do código == seed.
     expect(pres.marketLabel).toBe(mkt.label);
     // cada selection label do código == seed (anti-drift).
+    for (const s of sels) {
+      expect(pres.selectionLabel(s.key)).toBe(s.label);
+    }
+  });
+});
+
+describe("market presentation ↔ seed parity (btts)", () => {
+  it("labels curtos espelham markets/market_selections semeados na 0016", async () => {
+    const [mkt] = await db
+      .select()
+      .from(schema.markets)
+      .where(eq(schema.markets.key, "btts"));
+    expect(mkt).toBeDefined();
+    // seed admin-only: ativo, não graduado; settlement_rule_key resolve no registry.
+    expect(mkt.isActive).toBe(true);
+    expect(mkt.isGraduated).toBe(false);
+    expect(mkt.settlementRuleKey).toBe("btts");
+    // contrato seed↔registry: o settlement_rule_key seedado DEVE resolver (senão a
+    // row settlaria como erro silencioso pra sempre). Pina o binding por construção.
+    expect(() => getSettlementRule(mkt.settlementRuleKey)).not.toThrow();
+
+    const sels = await db
+      .select()
+      .from(schema.marketSelections)
+      .where(eq(schema.marketSelections.marketId, mkt.id));
+    // sanidade: o seed carrega yes + no, com sort 0/1.
+    const byKey = new Map(sels.map((s) => [s.key, s]));
+    expect([...byKey.keys()].sort()).toEqual(["no", "yes"]);
+    expect(byKey.get("yes")!.sortOrder).toBe(0);
+    expect(byKey.get("no")!.sortOrder).toBe(1);
+
+    const pres = getMarketPresentation("btts");
+    // market label do código == seed ("Ambas marcam").
+    expect(pres.marketLabel).toBe(mkt.label);
+    // cada selection label do código == seed (anti-drift: "Sim"/"Não").
     for (const s of sels) {
       expect(pres.selectionLabel(s.key)).toBe(s.label);
     }

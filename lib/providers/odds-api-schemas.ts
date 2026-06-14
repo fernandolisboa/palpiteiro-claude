@@ -52,3 +52,20 @@ export type OddsApiBookmaker = z.infer<typeof BookmakerSchema>;
 export type OddsApiEventOdds = z.infer<typeof EventOddsSchema>;
 
 export const SportOddsResponseSchema = z.array(EventOddsSchema);
+
+// ─── /v4/sports/{sport}/events ───────────────────────────────────────────────
+// Lista de eventos SEM odds — endpoint gratuito (0 créditos), sem regions/markets.
+// Usado pra resolver o eventId de um match antes de um fetch *additional* por
+// evento (btts), sem gastar quota. NÃO carrega `bookmakers` (por isso NÃO reusa
+// EventOddsSchema, que os exige).
+export const EventListItemSchema = z.object({
+  id: z.string(),
+  sport_key: z.string(),
+  sport_title: z.string().optional(),
+  commence_time: z.string(), // ISO 8601
+  home_team: z.string(),
+  away_team: z.string(),
+});
+
+export type OddsApiEventListItem = z.infer<typeof EventListItemSchema>;
+export const EventsListResponseSchema = z.array(EventListItemSchema);

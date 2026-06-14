@@ -49,6 +49,50 @@ describe("getMarketPresentation", () => {
     expect(p.classifyH2H).toBeNull();
   });
 
+  it("btts: labels Sim/Não, sem linha, sub-linha leiga, sem lente de gols", () => {
+    const p = getMarketPresentation("btts");
+    expect(p.marketKey).toBe("btts");
+    // Labels CURTOS espelham o seed (pinados por seed-parity).
+    expect(p.marketLabel).toBe("Ambas marcam");
+    expect(p.defaultLine).toBeNull();
+    expect(p.selectionLabel("yes")).toBe("Sim");
+    expect(p.selectionLabel("no")).toBe("Não");
+    expect(p.outcomeLabel("yes", null)).toBe("Sim");
+    expect(p.scenarioLabel("no", null)).toBe("Não");
+    expect(p.betSummary("yes", null)).toEqual({
+      market: "Ambos os times marcam",
+      plain: "os dois times marcam no jogo",
+    });
+    expect(p.settlementMetricLabel).toBe("ambas marcam (90')");
+    expect(p.classifyH2H).toBeNull();
+  });
+
+  it("settlementMetricValue é registry-driven por mercado", () => {
+    const rd = (homeScore: number, awayScore: number) => ({
+      homeScore,
+      awayScore,
+      totalGoals: homeScore + awayScore,
+    });
+    // over_under: total de gols (byte-idêntico ao legado); fallback quando rd null.
+    const ou = getMarketPresentation("over_under");
+    expect(ou.settlementMetricValue(rd(2, 1), 3)).toBe("3");
+    expect(ou.settlementMetricValue(null, 4)).toBe("4");
+    // match_result: placar "2-1"; split nulo → fallback total.
+    const mr = getMarketPresentation("match_result");
+    expect(mr.settlementMetricValue(rd(2, 1), 3)).toBe("2-1");
+    expect(
+      mr.settlementMetricValue({ homeScore: null, awayScore: null, totalGoals: 3 }, 3),
+    ).toBe("3");
+    // btts: Sim quando ambos marcaram, Não senão; split nulo → "—".
+    const btts = getMarketPresentation("btts");
+    expect(btts.settlementMetricValue(rd(1, 1), 2)).toBe("Sim");
+    expect(btts.settlementMetricValue(rd(2, 0), 2)).toBe("Não");
+    expect(btts.settlementMetricValue(rd(0, 0), 0)).toBe("Não");
+    expect(
+      btts.settlementMetricValue({ homeScore: null, awayScore: 1, totalGoals: 1 }, 1),
+    ).toBe("—");
+  });
+
   it("lança em mercado desconhecido (bug de chamada, não degrada)", () => {
     expect(() => getMarketPresentation("nope")).toThrow(
       /unknown market presentation/,

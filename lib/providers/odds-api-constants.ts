@@ -32,7 +32,10 @@ export function leagueToSportKey(league: SupportedLeague): SportKey {
 export const MARKETS = {
   H2H: "h2h",
   SPREADS: "spreads",
-  TOTALS: "totals", // over/under — único mercado relevante no MVP
+  TOTALS: "totals", // over/under — primeiro mercado do Tier 1
+  // btts é um mercado *additional*: NÃO vem no batch /odds (featured); só pelo
+  // endpoint por evento /events/{id}/odds. Ver descriptor BTTS (oddsSource).
+  BTTS: "btts",
 } as const;
 
 export type MarketKey = (typeof MARKETS)[keyof typeof MARKETS];
