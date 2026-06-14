@@ -150,7 +150,7 @@ import { buildPredictionInput } from "@/lib/ai/markets/over_under/build-input";
 import { overUnderCartridge } from "@/lib/ai/markets/over_under";
 import { computeMarketImpliedProbabilities } from "@/lib/odds/implied-probability";
 
-import { predict } from "@/lib/ai/predict";
+import { predict, PredictError } from "@/lib/ai/predict";
 
 // ─── Fixtures for the happy-path mocks ───────────────────────────────────────
 
@@ -1342,6 +1342,164 @@ describe("predict() — error paths: invariante 1 ai_call / 0 prediction / 0 PSO
     expect(insertValues).toHaveBeenCalledTimes(1);
     const aiCallRow = insertValues.mock.calls[0]?.[0] as { status: string };
     expect(aiCallRow.status).toBe("provider_error");
+  });
+});
+
+// ─── #175: caminho MULTI-LINHA (over_under v3.0, extraLines:true) ────────────
+//
+// Com extraLines:true, getCartridge resolve o cartucho v3 (descriptor OVER_UNDER_ALT,
+// candidateLines [1.5,2.5,3.5]). predict lê o snapshot fresco UMA VEZ POR LINHA
+// (getLatestFreshSelectionOddsSnapshots com params:{line}), monta a escada pro LLM,
+// e — após o output INCLUIR `line` — FIXA o bundle/odds/implícita DAQUELA linha pra
+// todo o downstream (edge/colunas/PSO). marketParams = a linha ESCOLHIDA (resolveParams),
+// NÃO descriptor.params. O enum legado `market` só é 'over_under_2_5' quando a linha
+// escolhida é 2.5; 1.5/3.5 → null (gate `chosenLine === 2.5`).
+//
+// Bundles DISTINTOS por linha pra provar que predict usa as odds da linha CERTA: a
+// escada tem odds bem diferentes por linha, e os asserts checam que as colunas
+// gravadas batem com a linha ESCOLHIDA pelo LLM (não com a 2.5 nem a head da escada).
+const LINE_SNAPSHOTS: Record<number, ReturnType<typeof freshSnapshotWith>> = {
+  1.5: freshSnapshotWith("1.300", "3.500"),
+  2.5: freshSnapshotWith("1.900", "1.950"),
+  3.5: freshSnapshotWith("3.400", "1.320"),
+};
+
+// Mock POR-LINHA: predict chama getLatestFreshSelectionOddsSnapshots({matchId,
+// dbMarketKey, params:{line}}) uma vez por candidateLine. Despacha pelo `line` do
+// arg. Linha fora do mapa → null (escada parcial — não acontece nestes testes).
+function wireMultiLineSnapshots() {
+  getLatestFreshSelectionOddsSnapshots.mockImplementation(
+    (arg: { params?: { line?: number } }) => {
+      const line = arg?.params?.line;
+      return Promise.resolve(
+        line !== undefined ? (LINE_SNAPSHOTS[line] ?? null) : null,
+      );
+    },
+  );
+}
+
+describe("predict() — multi-linha (#175): linha escolhida round-trip pro persist", () => {
+  it("LLM escolhe 3.5: marketParams {line:3.5}, market enum null, odds/edge da 3.5 (não 2.5)", async () => {
+    wireMultiLineSnapshots();
+    anthropicCreate.mockResolvedValue(
+      toolUseMessage({
+        recommendation: "over",
+        line: 3.5,
+        confidence_pct: 60,
+        rationale: "Jogo com tendência de muitos gols.",
+        key_factors: ["alto xG", "defesas vazadas"],
+        minimum_odd: 2.5,
+      }),
+    );
+
+    const result = await predict({
+      matchId: "m-1",
+      userId: "u-1",
+      isAdmin: false,
+      marketKey: "over_under",
+      extraLines: true,
+    });
+    // Resolveu o cartucho v3 (promptVersion bate na ai_call).
+    expect(result.marketKey).toBe("over_under");
+    // Um snapshot lido POR linha candidata (1.5/2.5/3.5) = 3 chamadas.
+    expect(getLatestFreshSelectionOddsSnapshots).toHaveBeenCalledTimes(3);
+
+    const predictionRow = insertValues.mock.calls[1]?.[0] as Record<
+      string,
+      unknown
+    >;
+    // Linha escolhida round-trip → marketParams (settlement lê daqui).
+    expect(predictionRow.marketParams).toEqual({ line: 3.5 });
+    // Gate do enum legado: linha ≠ 2.5 → null (não há enum legado por linha).
+    expect(predictionRow.market).toBeNull();
+    // Par congelado = odds da 3.5 (NÃO 2.5 "1.900"/"1.950").
+    expect(predictionRow.overOddAtPrediction).toBe("3.400");
+    expect(predictionRow.underOddAtPrediction).toBe("1.320");
+    expect(predictionRow.oddAtRecommendation).toBe("3.400");
+    // edge computado da implícita da 3.5 (não da 2.5).
+    const impliedOver35 = impliedPctOf(3.4, 1.32, "over");
+    expect(predictionRow.impliedProbPct).toBe(impliedOver35.toFixed(2));
+    expect(predictionRow.edgePct).toBe((60 - impliedOver35).toFixed(2));
+    // promptVersion do cartucho v3 na ai_call (insertValues[0]).
+    const aiCallRow = insertValues.mock.calls[0]?.[0] as {
+      promptVersion: string;
+    };
+    expect(aiCallRow.promptVersion).toBe("over_under_v3.0");
+  });
+
+  it("LLM escolhe 2.5: market enum 'over_under_2_5' (gate da linha) + odds/edge da 2.5", async () => {
+    wireMultiLineSnapshots();
+    anthropicCreate.mockResolvedValue(
+      toolUseMessage({
+        recommendation: "over",
+        line: 2.5,
+        confidence_pct: 62,
+        rationale: "Edge sólido na linha do meio.",
+        key_factors: ["média alta de gols", "ritmo ofensivo"],
+        minimum_odd: 1.8,
+      }),
+    );
+
+    await expect(
+      predict({
+        matchId: "m-1",
+        userId: "u-1",
+        isAdmin: false,
+        marketKey: "over_under",
+        extraLines: true,
+      }),
+    ).resolves.toBeDefined();
+
+    const predictionRow = insertValues.mock.calls[1]?.[0] as Record<
+      string,
+      unknown
+    >;
+    expect(predictionRow.marketParams).toEqual({ line: 2.5 });
+    // Chosen-line gate: SÓ a 2.5 mapeia pro enum legado single-value.
+    expect(predictionRow.market).toBe("over_under_2_5");
+    // Odds da 2.5 (NÃO 1.5 nem 3.5).
+    expect(predictionRow.overOddAtPrediction).toBe("1.900");
+    expect(predictionRow.underOddAtPrediction).toBe("1.950");
+    expect(predictionRow.oddAtRecommendation).toBe("1.900");
+    const impliedOver25 = impliedPctOf(1.9, 1.95, "over");
+    expect(predictionRow.impliedProbPct).toBe(impliedOver25.toFixed(2));
+    expect(predictionRow.edgePct).toBe((62 - impliedOver25).toFixed(2));
+  });
+
+  it("LLM retorna uma linha FORA da escada resolvida → predict throws PredictError", async () => {
+    // A escada resolvida cobre 1.5/2.5/3.5. O schema v3 só aceita esses valores
+    // no `line`, então pra exercitar o guard de "linha fora da escada" derrubamos
+    // a 2.5 da escada (mock por-linha devolve null pra 2.5) e fazemos o LLM
+    // escolher 2.5: a linha passa no Zod mas não está em bundlesByLine → throw.
+    getLatestFreshSelectionOddsSnapshots.mockImplementation(
+      (arg: { params?: { line?: number } }) => {
+        const line = arg?.params?.line;
+        if (line === 2.5) return Promise.resolve(null); // 2.5 ausente da escada
+        return Promise.resolve(
+          line !== undefined ? (LINE_SNAPSHOTS[line] ?? null) : null,
+        );
+      },
+    );
+    anthropicCreate.mockResolvedValue(
+      toolUseMessage({
+        recommendation: "over",
+        line: 2.5, // válido no schema, mas FORA da escada resolvida
+        confidence_pct: 60,
+        rationale: "Escolha numa linha não disponível.",
+        key_factors: ["caso de guard", "linha ausente"],
+        minimum_odd: 1.8,
+      }),
+    );
+
+    await expect(
+      predict({
+        matchId: "m-1",
+        userId: "u-1",
+        isAdmin: false,
+        marketKey: "over_under",
+        extraLines: true,
+      }),
+    ).rejects.toThrow(PredictError);
   });
 });
 
