@@ -17,11 +17,20 @@ vi.mock("@/lib/ai/predict", () => ({
 vi.mock("@/lib/db/queries/predictions", () => ({
   getAiCallById: vi.fn(),
 }));
-// marketsForAudience é a fonte do gate de mercado re-validado na action. Mockada
-// pra refletir o comportamento real (admin vê match_result; comum só over_under)
-// sem tocar no DB.
-vi.mock("@/lib/db/queries/market-catalog", () => ({
-  marketsForAudience: vi.fn(),
+// marketsForAudience é a fonte do gate de AUDIÊNCIA re-validado na action (mockada
+// pra refletir admin vê match_result; comum só over_under). marketsForLeague (gate
+// de COBERTURA de liga, #158) fica REAL — pura, descriptor-driven — pra exercitar
+// o gate de verdade. db é Proxy lazy (importar não conecta).
+vi.mock("@/lib/db/queries/market-catalog", async (importOriginal) => {
+  const actual =
+    await importOriginal<typeof import("@/lib/db/queries/market-catalog")>();
+  return { ...actual, marketsForAudience: vi.fn() };
+});
+// getMatchById carrega a liga p/ o gate de cobertura ANTES da coerção/spend.
+vi.mock("@/lib/db/queries/matches", () => ({ getMatchById: vi.fn() }));
+// pre-warm de odds por evento (btts) — mockado (sem rede/quota nos testes).
+vi.mock("@/lib/odds/fetch-and-snapshot", () => ({
+  ensureOddsSnapshotsFresh: vi.fn(),
 }));
 vi.mock("@/lib/db/queries/users", () => ({ userExists: vi.fn() }));
 vi.mock("@/lib/rate-limit", () => ({ checkAnalysisRateLimit: vi.fn() }));
@@ -31,8 +40,10 @@ import { analyzeMatch } from "@/app/actions/predictions";
 import { auth } from "@/auth";
 import { predict } from "@/lib/ai/predict";
 import { marketsForAudience } from "@/lib/db/queries/market-catalog";
+import { getMatchById } from "@/lib/db/queries/matches";
 import { getAiCallById } from "@/lib/db/queries/predictions";
 import { userExists } from "@/lib/db/queries/users";
+import { ensureOddsSnapshotsFresh } from "@/lib/odds/fetch-and-snapshot";
 import { checkAnalysisRateLimit } from "@/lib/rate-limit";
 import { toAnalysisView } from "@/lib/view/analysis";
 
@@ -40,6 +51,8 @@ import { toAnalysisView } from "@/lib/view/analysis";
 const mockAuth = auth as unknown as Mock<() => Promise<Session | null>>;
 const mockPredict = vi.mocked(predict);
 const mockMarketsForAudience = vi.mocked(marketsForAudience);
+const mockGetMatchById = vi.mocked(getMatchById);
+const mockEnsureOdds = vi.mocked(ensureOddsSnapshotsFresh);
 const mockUserExists = vi.mocked(userExists);
 const mockGetAiCall = vi.mocked(getAiCallById);
 const mockRateLimit = vi.mocked(checkAnalysisRateLimit);
@@ -47,6 +60,18 @@ const mockToAnalysisView = vi.mocked(toAnalysisView);
 
 const OVER_UNDER_MARKET = { key: "over_under", label: "Over/Under gols" };
 const MATCH_RESULT_MARKET = { key: "match_result", label: "Resultado (1X2)" };
+const BTTS_MARKET = { key: "btts", label: "Ambas marcam" };
+
+// Match fixtures por liga (só `league` importa pro gate; o resto é shape mínimo).
+function matchInLeague(league: string) {
+  return {
+    id: "550e8400-e29b-41d4-a716-446655440000",
+    league,
+    homeTeam: "Mexico",
+    awayTeam: "South Africa",
+    kickoffAt: new Date("2026-06-11T19:00:00.000Z"),
+  } as unknown as Awaited<ReturnType<typeof getMatchById>>;
+}
 
 const SESSION = {
   user: { id: "u1", email: "a@b.com", role: "admin" },
@@ -115,13 +140,19 @@ beforeEach(() => {
     reset: 0,
   });
   // Gate de mercado audiência-aware (espelha o resolver real): admin vê
-  // over_under + match_result; comum só over_under.
+  // over_under + match_result + btts; comum só over_under.
   mockMarketsForAudience.mockReset();
   mockMarketsForAudience.mockImplementation(async (isAdmin: boolean) =>
     isAdmin
-      ? [OVER_UNDER_MARKET, MATCH_RESULT_MARKET]
+      ? [OVER_UNDER_MARKET, MATCH_RESULT_MARKET, BTTS_MARKET]
       : [OVER_UNDER_MARKET],
   );
+  // Default: jogo world_cup (cobre btts). getMatchById é alcançado só após os gates
+  // de pré-spend (auth/rate-limit retornam antes). ensureOddsSnapshotsFresh é no-op.
+  mockGetMatchById.mockReset();
+  mockGetMatchById.mockResolvedValue(matchInLeague("world_cup"));
+  mockEnsureOdds.mockReset();
+  mockEnsureOdds.mockResolvedValue(null);
 });
 
 describe("analyzeMatch", () => {
@@ -370,6 +401,80 @@ describe("analyzeMatch — market audience gating", () => {
       modelOverride: undefined,
       marketKey: "over_under",
     });
+  });
+});
+
+// #158: btts só é analisável em ligas com cobertura de odds validada (world_cup).
+// O gate de liga (marketsForLeague REAL) compõe com o de audiência; a action é a
+// FRONTEIRA DE SEGURANÇA (a UI só esconde o seletor).
+describe("analyzeMatch — market league coverage gating (#158)", () => {
+  beforeEach(() => {
+    mockUserExists.mockResolvedValue(true);
+    mockPredict.mockResolvedValue(PREDICTION);
+    mockGetAiCall.mockResolvedValue({ costUsd: "0.01" } as never);
+  });
+
+  it("admin + btts numa partida world_cup → btts threadeado + pre-warm de odds", async () => {
+    mockAuth.mockResolvedValue(SESSION);
+    mockGetMatchById.mockResolvedValue(matchInLeague("world_cup"));
+    await analyzeMatch(
+      null,
+      form({ matchId: VALID_MATCH_ID, marketKey: "btts" }),
+    );
+    expect(mockPredict).toHaveBeenCalledWith({
+      matchId: VALID_MATCH_ID,
+      userId: "u1",
+      isAdmin: true,
+      modelOverride: undefined,
+      marketKey: "btts",
+    });
+    // additional market → pre-warm por evento ANTES do predict (1x).
+    expect(mockEnsureOdds).toHaveBeenCalledTimes(1);
+  });
+
+  it("admin + btts numa partida brasileirao (sem cobertura) → COERCIDO a over_under, SEM pre-warm", async () => {
+    mockAuth.mockResolvedValue(SESSION);
+    mockGetMatchById.mockResolvedValue(matchInLeague("brasileirao_a"));
+    await analyzeMatch(
+      null,
+      form({ matchId: VALID_MATCH_ID, marketKey: "btts" }),
+    );
+    // btts não tem cobertura no brasileirao → marketsForLeague o dropa → coerce.
+    expect(mockPredict).toHaveBeenCalledWith({
+      matchId: VALID_MATCH_ID,
+      userId: "u1",
+      isAdmin: true,
+      modelOverride: undefined,
+      marketKey: "over_under",
+    });
+    // over_under é featured → nenhum pre-warm de odds por evento.
+    expect(mockEnsureOdds).not.toHaveBeenCalled();
+  });
+
+  it("over_under/match_result passam em QUALQUER liga (pass-through, paridade)", async () => {
+    mockAuth.mockResolvedValue(SESSION);
+    mockGetMatchById.mockResolvedValue(matchInLeague("brasileirao_a"));
+    await analyzeMatch(
+      null,
+      form({ matchId: VALID_MATCH_ID, marketKey: "match_result" }),
+    );
+    expect(mockPredict).toHaveBeenCalledWith({
+      matchId: VALID_MATCH_ID,
+      userId: "u1",
+      isAdmin: true,
+      modelOverride: undefined,
+      marketKey: "match_result",
+    });
+    expect(mockEnsureOdds).not.toHaveBeenCalled();
+  });
+
+  it("jogo inexistente → 'Jogo não encontrado' antes de qualquer spend", async () => {
+    mockAuth.mockResolvedValue(SESSION);
+    mockGetMatchById.mockResolvedValue(null);
+    const res = await analyzeMatch(null, form({ matchId: VALID_MATCH_ID }));
+    expect(res).toEqual({ ok: false, error: "Jogo não encontrado." });
+    expect(mockPredict).not.toHaveBeenCalled();
+    expect(mockEnsureOdds).not.toHaveBeenCalled();
   });
 });
 

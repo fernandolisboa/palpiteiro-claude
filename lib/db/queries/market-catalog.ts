@@ -2,6 +2,8 @@ import { and, asc, eq, sql } from "drizzle-orm";
 
 import { marketSelections, markets } from "@/db/schema";
 import { db } from "@/lib/db";
+import { ALL_DESCRIPTORS } from "@/lib/odds/market-descriptor";
+import type { SupportedLeague } from "@/lib/providers/sports-data/leagues";
 
 /**
  * Catálogo resolvido de UM mercado: `markets.id` + os mapas bidirecionais
@@ -89,4 +91,33 @@ export async function marketsForAudience(
       asc(markets.key),
     );
   return rows;
+}
+
+// Allowlist de cobertura de odds por mercado (descriptor.coveredLeagues), indexada
+// por dbMarketKey. `undefined` = coberto em TODAS as ligas (over_under/match_result).
+const COVERED_LEAGUES_BY_MARKET = new Map<
+  string,
+  readonly SupportedLeague[] | undefined
+>(ALL_DESCRIPTORS.map((d) => [d.dbMarketKey, d.coveredLeagues]));
+
+/**
+ * Filtra mercados pela COBERTURA de odds por liga (#158, ADR 0015). Compõe DEPOIS
+ * de `marketsForAudience` (não muda a assinatura dela): audiência ∩ liga. Um mercado
+ * com `coveredLeagues` (ex.: btts → ['world_cup']) só passa se `league` estiver na
+ * allowlist; mercados SEM allowlist (over_under/match_result) passam em TODA liga
+ * (pass-through — paridade). Data-driven pelo descriptor, nunca `if (market==='btts')`.
+ *
+ * Aplicado na page (esconde o seletor) E em analyzeMatch (a FRONTEIRA DE SEGURANÇA:
+ * um POST forjado com `marketKey=btts` numa liga sem cobertura é coercido a over_under
+ * ANTES da chamada paga). Adicionar uma liga coberta depois = editar `coveredLeagues`
+ * no descriptor (1 linha), sem migration.
+ */
+export function marketsForLeague<T extends { key: string }>(
+  marketsList: T[],
+  league: SupportedLeague,
+): T[] {
+  return marketsList.filter((m) => {
+    const covered = COVERED_LEAGUES_BY_MARKET.get(m.key);
+    return covered === undefined || covered.includes(league);
+  });
 }

@@ -4,12 +4,18 @@ import { revalidatePath } from "next/cache";
 import { z } from "zod";
 
 import { auth } from "@/auth";
+import { getCartridge } from "@/lib/ai/markets/registry";
 import { isModelAllowedForAudience, type AIModelId } from "@/lib/ai/models";
 import { PredictError, predict } from "@/lib/ai/predict";
 import { extractDbCause } from "@/lib/db/pg-error";
-import { marketsForAudience } from "@/lib/db/queries/market-catalog";
+import {
+  marketsForAudience,
+  marketsForLeague,
+} from "@/lib/db/queries/market-catalog";
+import { getMatchById } from "@/lib/db/queries/matches";
 import { getAiCallById } from "@/lib/db/queries/predictions";
 import { userExists } from "@/lib/db/queries/users";
+import { ensureOddsSnapshotsFresh } from "@/lib/odds/fetch-and-snapshot";
 import { checkAnalysisRateLimit } from "@/lib/rate-limit";
 import { toAnalysisView } from "@/lib/view/analysis";
 import type { AnalysisView } from "@/lib/view/types";
@@ -101,12 +107,33 @@ export async function analyzeMatch(
   // (match_result hoje). Um `marketKey` ausente/inválido/fora-da-audiência cai no
   // default over_under (sem erro) — defesa-em-profundidade além de esconder/limitar
   // o seletor na UI. NUNCA gateado em predict.ts (ADR 0017).
+  // O match é carregado AQUI (não só em predict) porque o gate de cobertura de liga
+  // (#158) precisa de `match.league` ANTES da coerção do marketKey + da chamada paga.
+  // Read barato vs LLM pago. predict() re-valida match/analisabilidade depois.
+  const match = await getMatchById(matchId);
+  if (!match) {
+    return { ok: false, error: "Jogo não encontrado." };
+  }
   const marketKeyRaw = String(formData.get("marketKey") ?? "");
-  const allowedMarkets = await marketsForAudience(isAdmin);
+  // Audiência ∩ cobertura de liga (#158): um POST forjado com `marketKey=btts` numa
+  // liga sem cobertura (ex.: brasileirao) é coercido a over_under ANTES de gastar.
+  const allowedMarkets = marketsForLeague(
+    await marketsForAudience(isAdmin),
+    match.league,
+  );
   const marketKey = allowedMarkets.some((m) => m.key === marketKeyRaw)
     ? marketKeyRaw
     : "over_under";
   try {
+    // Mercado *additional* (btts): pré-aquece a snapshot por evento (lazy, 1 crédito,
+    // deduplicado pelo gate de frescor) ANTES do predict, pra o caminho de reuso
+    // fresco sempre acertar (predict nunca batcheia additional). Data-driven por
+    // oddsSource, nunca `if (market==='btts')`.
+    if (getCartridge(marketKey).descriptor.oddsSource === "additional") {
+      await ensureOddsSnapshotsFresh(match, {
+        markets: [getCartridge(marketKey).descriptor],
+      });
+    }
     // predict() retorna o carrier N-vias { prediction, marketKey, selections }. O
     // marketKey RESOLVIDO + o candidate set alimentam a view N-vias (1X2 → grade
     // de 3) — síncrono, antes de qualquer re-query.

@@ -20,7 +20,10 @@ import { auth } from "@/auth";
 import { MODEL_REGISTRY, modelsForAudience } from "@/lib/ai/models";
 import { LEAGUE_LABEL, leagueToKey } from "@/lib/format";
 import { getDefaultModelId } from "@/lib/db/queries/ai-config";
-import { marketsForAudience } from "@/lib/db/queries/market-catalog";
+import {
+  marketsForAudience,
+  marketsForLeague,
+} from "@/lib/db/queries/market-catalog";
 import { getMatchById } from "@/lib/db/queries/matches";
 import { getLatestPredictionForMatch } from "@/lib/db/queries/predictions";
 import { getPreferredModelId } from "@/lib/db/queries/users";
@@ -145,10 +148,10 @@ export default async function MatchPage({ params }: PageProps) {
     id: m.id,
     label: m.label,
   }));
-  // Mercados selecionáveis por audiência (ADR 0017), já {key,label} serializável
-  // (resolvido no server via marketsForAudience). Vazio/≤1 → seletor escondido na
-  // UI (default over_under). O gate efetivo é re-validado em analyzeMatch.
-  const selectableMarkets = audienceMarkets;
+  // Mercados selecionáveis = audiência ∩ cobertura de liga (#158): btts só aparece
+  // em ligas com odds validadas (world_cup). {key,label} serializável. Vazio/≤1 →
+  // seletor escondido (default over_under). O gate efetivo é re-validado em analyzeMatch.
+  const selectableMarkets = marketsForLeague(audienceMarkets, match.league);
 
   return (
     <>

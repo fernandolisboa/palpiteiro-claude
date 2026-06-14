@@ -42,7 +42,10 @@ vi.mock("@/lib/db", () => {
 // Schema real (NÃO mockado): trava identidade de coluna (isActive vs isGraduated
 // é checagem exata, não comparação de string).
 import { markets } from "@/db/schema";
-import { marketsForAudience } from "@/lib/db/queries/market-catalog";
+import {
+  marketsForAudience,
+  marketsForLeague,
+} from "@/lib/db/queries/market-catalog";
 
 type Cond = { op?: string; a?: unknown; b?: unknown; conds?: Cond[] };
 
@@ -101,5 +104,50 @@ describe("marketsForAudience", () => {
     // Só mercados graduados voltam (over_under hoje); nenhum match_result.
     expect(out).toEqual([{ key: "over_under", label: "Over/Under gols" }]);
     expect(out.map((m) => m.key)).not.toContain("match_result");
+  });
+});
+
+// Pura (sem DB): filtra pela allowlist coveredLeagues dos descriptors (#158).
+describe("marketsForLeague", () => {
+  const ALL = [
+    { key: "over_under", label: "Over/Under gols" },
+    { key: "match_result", label: "Resultado (1X2)" },
+    { key: "btts", label: "Ambas marcam" },
+  ];
+
+  it("btts (coveredLeagues=['world_cup']) só passa em world_cup", () => {
+    expect(marketsForLeague(ALL, "world_cup").map((m) => m.key)).toEqual([
+      "over_under",
+      "match_result",
+      "btts",
+    ]);
+  });
+
+  it("btts é DROPADO em ligas sem cobertura (brasileirao, champions)", () => {
+    expect(marketsForLeague(ALL, "brasileirao_a").map((m) => m.key)).toEqual([
+      "over_under",
+      "match_result",
+    ]);
+    expect(marketsForLeague(ALL, "champions_league").map((m) => m.key)).toEqual([
+      "over_under",
+      "match_result",
+    ]);
+  });
+
+  it("mercados SEM allowlist (over_under/match_result) passam em toda liga", () => {
+    for (const league of [
+      "world_cup",
+      "brasileirao_a",
+      "champions_league",
+    ] as const) {
+      const keys = marketsForLeague(ALL, league).map((m) => m.key);
+      expect(keys).toContain("over_under");
+      expect(keys).toContain("match_result");
+    }
+  });
+
+  it("mercado desconhecido (sem descriptor) faz pass-through (default seguro)", () => {
+    const out = marketsForLeague([{ key: "mystery" }], "brasileirao_a");
+    expect(out).toEqual([{ key: "mystery" }]);
   });
 });
