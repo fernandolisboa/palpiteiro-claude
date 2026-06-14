@@ -265,9 +265,45 @@ describe("toPredictionDetailView", () => {
     expect(v.outcome?.settlementMetric.label).toBe("resultado (90')");
     // settlementMetricValue registry-driven: 1X2 mostra o placar (antes mostrava
     // o escalar de gols "3" — bug latente corrigido junto com o deriver do #174).
-    // (O caso btts é testado no commit do enum/seed, quando DbPrediction.recommendation
-    // já aceita 'yes'/'no'.)
     expect(v.outcome?.settlementMetric.value).toBe("2-1");
+  });
+
+  it("btts: rec mostra 'Sim' e settlementMetric mostra Sim/Não a partir do split", () => {
+    const base = makeDetail();
+    const mkBtts = (homeScore: number, awayScore: number) =>
+      toPredictionDetailView(
+        {
+          ...base,
+          marketKey: "btts",
+          prediction: {
+            ...base.prediction,
+            market: null,
+            recommendation: "yes",
+            overOddAtPrediction: null,
+            underOddAtPrediction: null,
+            promptVersion: "btts_v1",
+          },
+          outcome: {
+            id: "o1",
+            predictionId: "p1",
+            totalGoals: homeScore + awayScore,
+            resultData: { homeScore, awayScore, totalGoals: homeScore + awayScore },
+            result: "won",
+            profitUnits: "1.06",
+            overrideByUserId: null,
+            settledAt: new Date("2026-06-12T05:00:00Z"),
+          },
+        },
+        { includeRawPayloads: false },
+      );
+
+    const won = mkBtts(1, 1);
+    expect(won.prediction.rec).toBe("Sim");
+    expect(won.outcome?.settlementMetric.label).toBe("ambas marcam (90')");
+    expect(won.outcome?.settlementMetric.value).toBe("Sim");
+    // 2-0: só um lado marcou → "Não". 0-0: ninguém marcou → "Não".
+    expect(mkBtts(2, 0).outcome?.settlementMetric.value).toBe("Não");
+    expect(mkBtts(0, 0).outcome?.settlementMetric.value).toBe("Não");
   });
 
   it("marketKey null (histórica sem marketId): coalesce over_under → saída byte-idêntica", () => {

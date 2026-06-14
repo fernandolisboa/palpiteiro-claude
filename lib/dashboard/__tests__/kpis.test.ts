@@ -318,7 +318,7 @@ describe("keepLatestPerMatch keys on (matchId, marketKey)", () => {
         matchId: "m1",
         predictionId: "btts",
         marketKey: "btts",
-        marketLabel: "Ambos marcam",
+        marketLabel: "Ambas marcam",
       }),
     ]);
     // Sem a chave composta, uma das duas seria DROPADA (mesmo matchId).
@@ -389,7 +389,7 @@ describe("computeSegmentedKpis", () => {
       settled("won", "1.00", {
         predictionId: "btts-w",
         marketKey: "btts",
-        marketLabel: "Ambos marcam",
+        marketLabel: "Ambas marcam",
         oddAtRecommendation: "2.00",
       }),
     ];
