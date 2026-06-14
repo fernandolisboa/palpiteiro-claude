@@ -5,6 +5,7 @@ import {
   DOUBLE_CHANCE,
   MATCH_RESULT,
   OVER_UNDER,
+  OVER_UNDER_ALT,
 } from "@/lib/odds/market-descriptor";
 import {
   pickBestBookmaker,
@@ -334,5 +335,107 @@ describe("pickBestBookmaker — MATCH_RESULT (1X2, N=3)", () => {
       ],
     };
     expect(pickBestBookmaker({ event: evt, match, descriptor: MATCH_RESULT })).toBeNull();
+  });
+});
+
+// Book de alternate_totals: a ESCADA completa (várias meias-linhas) num só market,
+// como o payload real por evento (#175). Cada linha tem seu par Over/Under.
+function altTotalsBook(
+  key: string,
+  title: string,
+  ladder: { point: number; over: number; under: number }[],
+  lastUpdate = "2026-06-14T14:29:15Z",
+) {
+  return {
+    key,
+    title,
+    last_update: lastUpdate,
+    markets: [
+      {
+        key: "alternate_totals",
+        last_update: lastUpdate,
+        outcomes: ladder.flatMap((r) => [
+          { name: "Over", price: r.over, point: r.point },
+          { name: "Under", price: r.under, point: r.point },
+        ]),
+      },
+    ],
+  };
+}
+
+function altEvent(
+  bookmakers: ReturnType<typeof altTotalsBook>[],
+): OddsApiEventOdds {
+  return {
+    id: "evt-1",
+    sport_key: "soccer_fifa_world_cup",
+    commence_time: "2026-06-14T19:00:00Z",
+    home_team: "Ivory Coast",
+    away_team: "Ecuador",
+    bookmakers,
+  };
+}
+
+describe("pickBestBookmaker — OVER_UNDER_ALT (multi-linha, params override)", () => {
+  const ladder = [
+    { point: 1.5, over: 1.3, under: 3.5 },
+    { point: 2.5, over: 1.9, under: 1.95 },
+    { point: 3.5, over: 3.4, under: 1.32 },
+  ];
+
+  it("resolve a LINHA pedida da escada alternate_totals (params override)", () => {
+    const evt = altEvent([altTotalsBook("a", "Book A", ladder)]);
+    for (const rung of ladder) {
+      const bundle = pickBestBookmaker({
+        event: evt,
+        match: { homeTeam: "Ivory Coast", awayTeam: "Ecuador" },
+        descriptor: OVER_UNDER_ALT,
+        params: { line: rung.point },
+      });
+      expect(bundle).not.toBeNull();
+      expect(bundle!.selections).toEqual([
+        { key: "over", odd: rung.over },
+        { key: "under", odd: rung.under },
+      ]);
+    }
+  });
+
+  it("linha AUSENTE da escada → null (não cai pra outra linha)", () => {
+    const evt = altEvent([altTotalsBook("a", "Book A", ladder)]);
+    const bundle = pickBestBookmaker({
+      event: evt,
+      match: { homeTeam: "Ivory Coast", awayTeam: "Ecuador" },
+      descriptor: OVER_UNDER_ALT,
+      params: { line: 4.5 }, // fora da escada
+    });
+    expect(bundle).toBeNull();
+  });
+
+  it("escolhe o MELHOR book POR linha (menor overround daquela linha)", () => {
+    // Book A melhor no 2.5; Book B melhor no 1.5. A escolha é independente por linha.
+    const bookA = altTotalsBook("a", "Book A", [
+      { point: 1.5, over: 1.28, under: 3.7 }, // overround maior no 1.5
+      { point: 2.5, over: 1.95, under: 1.95 }, // overround menor no 2.5
+    ]);
+    const bookB = altTotalsBook("b", "Book B", [
+      { point: 1.5, over: 1.34, under: 3.5 }, // overround menor no 1.5
+      { point: 2.5, over: 1.88, under: 1.95 }, // overround maior no 2.5
+    ]);
+    const evt = altEvent([bookA, bookB]);
+    const match = { homeTeam: "Ivory Coast", awayTeam: "Ecuador" };
+    const at25 = pickBestBookmaker({
+      event: evt,
+      match,
+      descriptor: OVER_UNDER_ALT,
+      params: { line: 2.5 },
+    });
+    const at15 = pickBestBookmaker({
+      event: evt,
+      match,
+      descriptor: OVER_UNDER_ALT,
+      params: { line: 1.5 },
+    });
+    expect(at25!.bookmakerTitle).toBe("Book A");
+    expect(at15!.bookmakerTitle).toBe("Book B");
   });
 });

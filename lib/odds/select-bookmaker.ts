@@ -42,8 +42,14 @@ export function pickBestBookmaker(args: {
   event: OddsApiEventOdds;
   match: { homeTeam: string; awayTeam: string };
   descriptor: MarketDescriptor;
+  // Override de linha (#175 multi-linha): quando passado, a resolução de seleção
+  // usa ESTA linha em vez de `descriptor.params` — uma chamada por linha candidata
+  // contra o MESMO payload (a escada de alternate_totals traz N linhas por book).
+  // Ausente → `descriptor.params` (caminho de hoje, byte-idêntico p/ featured 2.5).
+  params?: { line: number };
 }): MarketOddsBundle | null {
   const { event, match, descriptor } = args;
+  const effectiveParams = args.params ?? descriptor.params;
   let best: MarketOddsBundle | null = null;
 
   for (const bookmaker of event.bookmakers) {
@@ -58,7 +64,7 @@ export function pickBestBookmaker(args: {
       const key = descriptor.resolveSelectionKey(
         outcome,
         { homeTeam: match.homeTeam, awayTeam: match.awayTeam },
-        descriptor.params,
+        effectiveParams,
       );
       if (key === null) continue;
       // primeira ocorrência vence — outcomes duplicados são ignorados.
