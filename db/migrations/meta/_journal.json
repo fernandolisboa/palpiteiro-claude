@@ -127,6 +127,13 @@
       "when": 1781450023936,
       "tag": "0017_double_chance_enum",
       "breakpoints": true
+    },
+    {
+      "idx": 18,
+      "version": "7",
+      "when": 1781450833241,
+      "tag": "0018_seed_double_chance",
+      "breakpoints": true
     }
   ]
 }

@@ -67,6 +67,21 @@ describe("getMarketPresentation", () => {
     expect(p.classifyH2H).toBeNull();
   });
 
+  it("double_chance: labels das 3 duplas, sem linha, sem lente de gols", () => {
+    const p = getMarketPresentation("double_chance");
+    expect(p.marketKey).toBe("double_chance");
+    // Labels CURTOS espelham o seed (pinados por seed-parity).
+    expect(p.marketLabel).toBe("Dupla chance");
+    expect(p.defaultLine).toBeNull();
+    expect(p.selectionLabel("home_or_draw")).toBe("Casa ou empate");
+    expect(p.selectionLabel("away_or_draw")).toBe("Empate ou fora");
+    expect(p.selectionLabel("home_or_away")).toBe("Casa ou fora");
+    expect(p.outcomeLabel("home_or_draw", null)).toBe("Casa ou empate");
+    expect(p.scenarioLabel("home_or_away", null)).toBe("Casa ou fora");
+    expect(p.settlementMetricLabel).toBe("resultado (90')");
+    expect(p.classifyH2H).toBeNull();
+  });
+
   it("settlementMetricValue é registry-driven por mercado", () => {
     const rd = (homeScore: number, awayScore: number) => ({
       homeScore,
@@ -91,6 +106,12 @@ describe("getMarketPresentation", () => {
     expect(
       btts.settlementMetricValue({ homeScore: null, awayScore: 1, totalGoals: 1 }, 1),
     ).toBe("—");
+    // double_chance: placar "2-1" (como 1X2); split nulo → fallback total.
+    const dc = getMarketPresentation("double_chance");
+    expect(dc.settlementMetricValue(rd(2, 1), 3)).toBe("2-1");
+    expect(
+      dc.settlementMetricValue({ homeScore: null, awayScore: null, totalGoals: 3 }, 3),
+    ).toBe("3");
   });
 
   it("lança em mercado desconhecido (bug de chamada, não degrada)", () => {
