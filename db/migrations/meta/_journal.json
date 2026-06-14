@@ -120,6 +120,13 @@
       "when": 1781443824572,
       "tag": "0016_seed_btts",
       "breakpoints": true
+    },
+    {
+      "idx": 17,
+      "version": "7",
+      "when": 1781450023936,
+      "tag": "0017_double_chance_enum",
+      "breakpoints": true
     }
   ]
 }

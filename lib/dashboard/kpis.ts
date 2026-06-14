@@ -27,7 +27,10 @@ export type DashboardRow = {
     | "draw"
     | "away"
     | "yes"
-    | "no";
+    | "no"
+    | "home_or_draw"
+    | "away_or_draw"
+    | "home_or_away";
   marketKey: string;
   marketLabel: string;
   league: SupportedLeague;

@@ -41,7 +41,10 @@ type PredictionInput = {
     | "draw"
     | "away"
     | "yes"
-    | "no";
+    | "no"
+    | "home_or_draw"
+    | "away_or_draw"
+    | "home_or_away";
   confidencePct: string | number;
   rationale: string;
   keyFactors: string[];

@@ -31,7 +31,10 @@ type RecentInput = {
     | "draw"
     | "away"
     | "yes"
-    | "no";
+    | "no"
+    | "home_or_draw"
+    | "away_or_draw"
+    | "home_or_away";
   edgePct: string | number | null;
   createdAt: Date;
 };
