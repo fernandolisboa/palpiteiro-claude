@@ -364,9 +364,43 @@ describe("predict(match_result) — 3-way happy path through the generic path", 
     >;
     const impliedHome = impliedPctOf(1.85, 3.5, 4.2, "home");
     expect(predictionRow.impliedProbPct).toBe(impliedHome.toFixed(2));
-    // edge = confidence(58) − normalized implied(home).
+    // edge = prob_home(58) − normalized implied(home). Aqui prob_home === confidence_pct.
     expect(predictionRow.edgePct).toBe((58 - impliedHome).toFixed(2));
     expect(predictionRow.oddAtRecommendation).toBe("1.850");
+  });
+
+  it("edge persistido usa selectionProbs(output)[rec] (prob_home), NÃO confidence_pct — casa com a grade N-vias", async () => {
+    // confidence_pct ≠ prob_home de propósito: o edge persistido deve sair de
+    // prob_home (a MESMA prob por seleção que a grade exibe), não de confidence_pct.
+    // Sem o fix, a row gravaria 62−implied e divergiria da grade (60−implied).
+    anthropicCreate.mockResolvedValue(
+      anthropicMessage({
+        ...HOME_OUTPUT,
+        confidence_pct: 62,
+        prob_home: 60,
+        prob_draw: 24,
+        prob_away: 16,
+      }),
+    );
+    await expect(
+      predict({
+        matchId: "m-1",
+        userId: "u-1",
+        isAdmin: true,
+        marketKey: "match_result",
+      }),
+    ).resolves.toBeDefined();
+
+    const predictionRow = insertValues.mock.calls[1]?.[0] as Record<
+      string,
+      unknown
+    >;
+    const impliedHome = impliedPctOf(1.85, 3.5, 4.2, "home");
+    // edge da prob_home (60), não da confidence_pct (62).
+    expect(predictionRow.edgePct).toBe((60 - impliedHome).toFixed(2));
+    expect(predictionRow.edgePct).not.toBe((62 - impliedHome).toFixed(2));
+    // confidence_pct persistido segue sendo output.confidence_pct (62) — intocado.
+    expect(predictionRow.confidencePct).toBe("62.00");
   });
 
   it("PSO carries model_prob_pct per selection for all 3 selections", async () => {

@@ -261,6 +261,12 @@ export function toPredictionDetailView(
       ? `${match.homeScore}-${match.awayScore}`
       : "—";
 
+  // Key do mercado resolvida pela query (LEFT JOIN markets). Coalesce null→
+  // "over_under" pras rows sem marketId (históricas pré-backfill), igual ao
+  // getUserDashboardRows. Alimenta recToken (display da seleção) E o label da
+  // métrica de settlement.
+  const marketKey = detail.marketKey ?? "over_under";
+
   return {
     id: prediction.id,
     match: {
@@ -272,11 +278,10 @@ export function toPredictionDetailView(
       score,
     },
     prediction: {
-      // marketKey ainda não chega no detail (a query não junta `markets`); default
-      // "over_under" espelha o mesmo fallback de settlementMetric abaixo (:283),
-      // resolvido junto com o marketKey da row no #170/Fase 4. over/under/pass ⇒
-      // token pinado (não consulta marketKey), então é byte-idêntico hoje.
-      rec: recToken(prediction.recommendation, "over_under"),
+      // marketKey resolvido pela query (LEFT JOIN markets); over/under/pass usam o
+      // token pinado (não consultam marketKey → byte-idêntico), mercados novos (1X2)
+      // derivam o display da seleção da apresentação ("Casa"/"Empate"/"Fora").
+      rec: recToken(prediction.recommendation, marketKey),
       confidence: formatPct(prediction.confidencePct),
       edge: formatEdge(prediction.edgePct),
       implied: formatPct(prediction.impliedProbPct),
@@ -296,10 +301,9 @@ export function toPredictionDetailView(
           profit: unitsLabel(Number(outcome.profitUnits)),
           // VALOR do escalar notNull `total_goals` (resultData é nullable em
           // históricas — schema; cruza com resultData.totalGoals quando existe).
-          // Label da apresentação do mercado. Default over_under até o #170/Fase 4
-          // resolver o marketKey da row — over/under é o único ativo.
+          // Label da apresentação do mercado RESOLVIDO da row (marketKey do join).
           settlementMetric: {
-            label: getMarketPresentation("over_under").settlementMetricLabel,
+            label: getMarketPresentation(marketKey).settlementMetricLabel,
             value: String(outcome.resultData?.totalGoals ?? outcome.totalGoals),
           },
           settledAt: formatKickoffAbsolute(outcome.settledAt),

@@ -874,4 +874,77 @@ describe("toAnalysisView (N-vias / 1X2)", () => {
     expect(view.outcomes.every((o) => !o.isRecommended)).toBe(true);
     expect(view.framing).toBeNull();
   });
+
+  it("uma seleção com prob 0 (schema-válida / row reaberta) NÃO derruba a view; breakEven dela vira '—'", () => {
+    // MatchResultOutputSchema permite prob 0, e uma row reaberta com model_prob_pct
+    // null coalesce pra 0 no boundary (predictions.ts). computeModelBreakEvenOdd
+    // lançaria em 100/0 — o branch N-vias precisa degradar a coluna, não derrubar
+    // o render (post-analysis e reabertura na match-page).
+    expect(() =>
+      toAnalysisView(
+        {
+          recommendation: "home",
+          confidencePct: "60.00",
+          rationale: "casa forte",
+          keyFactors: ["a"],
+          minimumOdd: "1.700",
+          oddAtRecommendation: "1.800",
+          bookmaker: "bet365",
+          impliedProbPct: "55.00",
+          edgePct: "5.00",
+          overOddAtPrediction: null,
+          underOddAtPrediction: null,
+          modelVersion: "claude-opus-4-8",
+          promptVersion: "match_result_v1",
+          createdAt: baseCreatedAt,
+          marketKey: "match_result",
+          line: null,
+          selections: [
+            { key: "home", modelProbPct: 60, odd: 1.8 },
+            { key: "draw", modelProbPct: 40, odd: 3.0 },
+            { key: "away", modelProbPct: 0, odd: 9.0 },
+          ],
+        },
+        { costUsd: "0.05" },
+        threeHoursLater,
+      ),
+    ).not.toThrow();
+
+    const view = toAnalysisView(
+      {
+        recommendation: "home",
+        confidencePct: "60.00",
+        rationale: "casa forte",
+        keyFactors: ["a"],
+        minimumOdd: "1.700",
+        oddAtRecommendation: "1.800",
+        bookmaker: "bet365",
+        impliedProbPct: "55.00",
+        edgePct: "5.00",
+        overOddAtPrediction: null,
+        underOddAtPrediction: null,
+        modelVersion: "claude-opus-4-8",
+        promptVersion: "match_result_v1",
+        createdAt: baseCreatedAt,
+        marketKey: "match_result",
+        line: null,
+        selections: [
+          { key: "home", modelProbPct: 60, odd: 1.8 },
+          { key: "draw", modelProbPct: 40, odd: 3.0 },
+          { key: "away", modelProbPct: 0, odd: 9.0 },
+        ],
+      },
+      { costUsd: "0.05" },
+      threeHoursLater,
+    );
+
+    // 3 colunas retornadas (sem crash); a seleção de prob 0 mostra breakEven "—".
+    expect(view.outcomes).toHaveLength(3);
+    expect(view.outcomes.map((o) => o.id)).toEqual(["home", "draw", "away"]);
+    expect(view.outcomes[2].modelProb).toBe("0%");
+    expect(view.outcomes[2].breakEven).toBe("—");
+    // As outras seleções seguem com breakEven derivado.
+    expect(view.outcomes[0].breakEven).not.toBe("—");
+    expect(view.outcomes[1].breakEven).not.toBe("—");
+  });
 });

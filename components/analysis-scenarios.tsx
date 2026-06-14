@@ -211,7 +211,9 @@ function ScenarioColumn({
             : undefined
         }
       />
-      {!isRecommended && (
+      {/* breakEven "—" (modelProb ≤ 0 → 100/0 indefinido): omite a frase de
+          equilíbrio em vez de renderizar "odd ≥ —". */}
+      {!isRecommended && outcome.breakEven !== "—" && (
         <p className="border-t border-border-subtle pt-1.5 text-[11px] leading-snug tracking-tight text-muted-foreground">
           {`pelo modelo, só sai do zero com odd ≥ ${outcome.breakEven}`}
         </p>

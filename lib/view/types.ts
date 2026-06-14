@@ -100,7 +100,7 @@ export type OutcomeView = {
   odd: string; // "1.92" | "—"
   edge: string; // "+7.3pp" | "—"
   expectedReturn: string; // "+11.4%" | "—"
-  breakEven: string; // "1.72" — modelBreakEvenOdd (sempre derivável)
+  breakEven: string; // "1.72" — modelBreakEvenOdd; "—" quando modelProb ≤ 0
   isRecommended: boolean;
 };
 

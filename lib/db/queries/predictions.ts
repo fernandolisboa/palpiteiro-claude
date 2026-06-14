@@ -32,7 +32,7 @@ export type PredictionWithAiCall = {
   // renderiza. over/under tem 2 rows e cai no caminho binário; 1X2 tem 3 e dispara
   // o caminho N-vias. `modelProbPct` é NULLABLE (backfill histórico / over/under
   // pré-#173 não a grava). Vazio em predições antigas sem PSO. numeric → string no
-  // Drizzle: Number() na fronteira (modelProbPct vira NaN→pulado se ausente).
+  // Drizzle: Number() na fronteira (modelProbPct ausente coalesce null→0).
   selections: { key: string; modelProbPct: number; odd: number | null }[];
 };
 

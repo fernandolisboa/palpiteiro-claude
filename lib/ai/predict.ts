@@ -670,17 +670,29 @@ export async function predict({
     throw new PredictError("failed to persist ai_call", cause);
   }
 
+  // Probabilidade do modelo por seleção (decisão B): derivada PURA do output pelo
+  // cartucho (binário em over/under, distribuição em 1X2). Alimenta a coluna NOVA
+  // `model_prob_pct` do PSO, a grade N-vias retornada (seam 8) E o edge persistido
+  // abaixo. Computada aqui (antes do edge) porque o edge usa a prob POR SELEÇÃO.
+  const modelProbByKey = cartridge.selectionProbs(output);
+
   // Edge N-vias (ADR 0018): cada seleção tem seu próprio edge `modelProb − implied`.
   // NUNCA `100−x` — em N≥3 não há complemento binário. `pass` → sem lado, sem edge.
   // O lado recomendado é uma selectionKey (`oddByKey`/`impliedByKey` indexados por
   // ela); o valor é `undefined` só se a seleção não está no mercado — bug de
   // contrato, não fluxo (o catalog/seed guard já barrou antes).
+  //
+  // `modelProb` do lado recomendado vem de selectionProbs(output)[side] — a MESMA
+  // prob por seleção que a grade exibe — não de confidence_pct. Em over/under são
+  // byte-idênticos (selectionProbs[rec] === confidence_pct, ver over_under/index.ts);
+  // em 1X2 o LLM pode emitir confidence_pct ≠ prob_<recomendado>, e aqui o edge
+  // persistido passa a casar com o edge da grade N-vias em vez de divergir.
   const side = output.recommendation;
   const oddAtRec = side === "pass" ? null : (oddByKey[side] ?? null);
   const impliedPct = side === "pass" ? null : (impliedByKey[side] ?? null);
   const edge =
     side !== "pass" && impliedPct !== null
-      ? output.confidence_pct - impliedPct
+      ? modelProbByKey[side] - impliedPct
       : null;
 
   // Staking determinístico (ADR 0019): decidido EM CÓDIGO, nunca pelo LLM. A
@@ -707,11 +719,6 @@ export async function predict({
     }
     selectionId = id;
   }
-
-  // Probabilidade do modelo por seleção (decisão B): derivada PURA do output pelo
-  // cartucho (binário em over/under, distribuição em 1X2). Alimenta a coluna NOVA
-  // `model_prob_pct` do PSO e a grade N-vias retornada (seam 8).
-  const modelProbByKey = cartridge.selectionProbs(output);
 
   // Rows do candidate set (N seleções) pra prediction_selection_odds, montadas
   // ANTES do insert da prediction pra que um seed faltante falhe SEM ter

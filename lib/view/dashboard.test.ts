@@ -156,7 +156,10 @@ function makeDetail(overrides: Partial<DashboardDetail> = {}): DashboardDetail {
     overrideByUserId: null,
     settledAt: new Date("2026-06-12T05:00:00Z"),
   };
-  return { prediction, match, outcome, aiCall, ...overrides };
+  // marketKey null por padrão (row sem marketId → LEFT JOIN markets devolve null),
+  // exatamente o caso histórico over/under: o view-mapper coalesce null→"over_under",
+  // então a saída fica byte-idêntica à anterior (sem o join).
+  return { prediction, match, outcome, aiCall, marketKey: null, ...overrides };
 }
 
 describe("toPredictionDetailView", () => {
@@ -224,6 +227,52 @@ describe("toPredictionDetailView", () => {
       includeRawPayloads: true,
     });
     expect(v.outcome).toBeNull();
+  });
+
+  it("1X2 (match_result): rec mostra 'Casa' (não 'home') e settlementMetric usa o label do mercado", () => {
+    // Antes do join de markets a detail view hardcodava "over_under": uma row 1X2
+    // renderizava o token cru "home" e o label de gols. Com o marketKey resolvido,
+    // recToken deriva o label da seleção da apresentação e o settlementMetric o do
+    // mercado certo.
+    const base = makeDetail();
+    const v = toPredictionDetailView(
+      {
+        ...base,
+        marketKey: "match_result",
+        prediction: {
+          ...base.prediction,
+          market: null,
+          recommendation: "home",
+          // 1X2 não carrega o par binário over/under.
+          overOddAtPrediction: null,
+          underOddAtPrediction: null,
+          promptVersion: "match_result_v1",
+        },
+        outcome: {
+          id: "o1",
+          predictionId: "p1",
+          totalGoals: 3,
+          resultData: { homeScore: 2, awayScore: 1, totalGoals: 3 },
+          result: "won",
+          profitUnits: "1.10",
+          overrideByUserId: null,
+          settledAt: new Date("2026-06-12T05:00:00Z"),
+        },
+      },
+      { includeRawPayloads: false },
+    );
+    expect(v.prediction.rec).toBe("Casa");
+    expect(v.outcome?.settlementMetric.label).toBe("resultado (90')");
+  });
+
+  it("marketKey null (histórica sem marketId): coalesce over_under → saída byte-idêntica", () => {
+    // Espelha a row pré-backfill (LEFT JOIN markets → null). O view-mapper coalesce
+    // pra over_under: rec pinado e label de gols, exatamente como antes do join.
+    const v = toPredictionDetailView(makeDetail({ marketKey: null }), {
+      includeRawPayloads: false,
+    });
+    expect(v.prediction.rec).toBe("OVER");
+    expect(v.outcome?.settlementMetric.label).toBe("gols (90')");
   });
 
   it("shows the real bookmaker on a pass prediction (frozen pair era, ADR 0012)", () => {

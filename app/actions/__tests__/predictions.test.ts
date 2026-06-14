@@ -34,6 +34,7 @@ import { marketsForAudience } from "@/lib/db/queries/market-catalog";
 import { getAiCallById } from "@/lib/db/queries/predictions";
 import { userExists } from "@/lib/db/queries/users";
 import { checkAnalysisRateLimit } from "@/lib/rate-limit";
+import { toAnalysisView } from "@/lib/view/analysis";
 
 // `auth` é sobrecarregado; estreitamos pro uso como `auth()`.
 const mockAuth = auth as unknown as Mock<() => Promise<Session | null>>;
@@ -42,6 +43,7 @@ const mockMarketsForAudience = vi.mocked(marketsForAudience);
 const mockUserExists = vi.mocked(userExists);
 const mockGetAiCall = vi.mocked(getAiCallById);
 const mockRateLimit = vi.mocked(checkAnalysisRateLimit);
+const mockToAnalysisView = vi.mocked(toAnalysisView);
 
 const OVER_UNDER_MARKET = { key: "over_under", label: "Over/Under gols" };
 const MATCH_RESULT_MARKET = { key: "match_result", label: "Resultado (1X2)" };
@@ -56,18 +58,35 @@ const USER_SESSION = {
   expires: "2099-01-01",
 } as unknown as Session;
 
-// Predição mínima pra o caminho de sucesso resolver sem estourar no view.
+// Carrier N-vias retornado por predict() (#173): { prediction, marketKey, selections }.
+// A action destrutura isto e monta a view via toAnalysisView — o mock precisa do
+// shape novo (não o flat antigo), senão o caminho de sucesso/destructure não é
+// exercitado (prediction.aiCallId estouraria e a action cairia no catch).
 const PREDICTION = {
-  aiCallId: "ac1",
-  recommendation: "over",
-  confidencePct: "60.00",
-  rationale: "r",
-  keyFactors: ["a", "b"],
-  minimumOdd: "1.800",
-  edgePct: "5.00",
-  modelVersion: "claude-opus-4-8",
-  promptVersion: "over_under_v1.2",
-  createdAt: new Date("2026-05-01T00:00:00.000Z"),
+  prediction: {
+    aiCallId: "ac1",
+    recommendation: "over",
+    confidencePct: "60.00",
+    rationale: "r",
+    keyFactors: ["a", "b"],
+    minimumOdd: "1.800",
+    oddAtRecommendation: "1.850",
+    bookmaker: "BetX",
+    impliedProbPct: "54.05",
+    edgePct: "5.00",
+    overOddAtPrediction: "1.850",
+    underOddAtPrediction: "2.000",
+    marketParams: { line: 2.5 },
+    stakeUnits: "1.00",
+    modelVersion: "claude-opus-4-8",
+    promptVersion: "over_under_v1.2",
+    createdAt: new Date("2026-05-01T00:00:00.000Z"),
+  },
+  marketKey: "over_under",
+  selections: [
+    { key: "over", modelProbPct: 60, odd: 1.85 },
+    { key: "under", modelProbPct: 40, odd: 2.0 },
+  ],
 } as unknown as Awaited<ReturnType<typeof predict>>;
 
 const VALID_MATCH_ID = "550e8400-e29b-41d4-a716-446655440000";
@@ -83,6 +102,9 @@ beforeEach(() => {
   mockPredict.mockReset();
   mockUserExists.mockReset();
   mockGetAiCall.mockReset();
+  // Só limpa o histórico de chamadas (mantém o `() => ({})` do vi.mock) pra os
+  // testes que inspecionam os args com que toAnalysisView foi chamada.
+  mockToAnalysisView.mockClear();
   // Gate transparente por padrão (ok) pra que os testes existentes sigam verdes;
   // os testes específicos do rate-limit sobrescrevem.
   mockRateLimit.mockReset();
@@ -348,5 +370,69 @@ describe("analyzeMatch — market audience gating", () => {
       modelOverride: undefined,
       marketKey: "over_under",
     });
+  });
+});
+
+// Caminho de SUCESSO: o carrier N-vias de predict() (#173) é destruturado e
+// threadeado em toAnalysisView (marketKey RESOLVIDO + candidate set), e a action
+// devolve { ok: true, view }. Sem o mock no shape novo, este caminho nem rodaria.
+describe("analyzeMatch — success path view wiring", () => {
+  beforeEach(() => {
+    mockAuth.mockResolvedValue(SESSION);
+    mockUserExists.mockResolvedValue(true);
+    mockPredict.mockResolvedValue(PREDICTION);
+    mockGetAiCall.mockResolvedValue({ costUsd: "0.01" } as never);
+  });
+
+  it("thread o marketKey resolvido + selections do carrier pra toAnalysisView e devolve { ok: true, view }", async () => {
+    const res = await analyzeMatch(null, form({ matchId: VALID_MATCH_ID }));
+
+    expect(res).toEqual({ ok: true, view: {} });
+    expect(mockToAnalysisView).toHaveBeenCalledTimes(1);
+
+    const [predictionArg, aiCallArg] = mockToAnalysisView.mock.calls[0];
+    // marketKey RESOLVIDO pelo carrier (não o literal 'over_under' hardcoded).
+    expect(predictionArg.marketKey).toBe("over_under");
+    // candidate set N-vias do carrier flui pra view (grade de cenários).
+    expect(predictionArg.selections).toEqual([
+      { key: "over", modelProbPct: 60, odd: 1.85 },
+      { key: "under", modelProbPct: 40, odd: 2.0 },
+    ]);
+    // campos da prediction destruturados do carrier.prediction.
+    expect(predictionArg.recommendation).toBe("over");
+    expect(predictionArg.stakeUnits).toBe("1.00");
+    expect(predictionArg.line).toBe(2.5);
+    // custo vem do getAiCallById(prediction.aiCallId).
+    expect(aiCallArg).toEqual({ costUsd: "0.01" });
+  });
+
+  it("admin analisando match_result: o marketKey 1X2 do carrier chega na view", async () => {
+    mockPredict.mockResolvedValue({
+      prediction: {
+        ...PREDICTION.prediction,
+        recommendation: "home",
+        marketParams: null,
+        overOddAtPrediction: null,
+        underOddAtPrediction: null,
+        promptVersion: "match_result_v1",
+      },
+      marketKey: "match_result",
+      selections: [
+        { key: "home", modelProbPct: 52, odd: 2.1 },
+        { key: "draw", modelProbPct: 27, odd: 3.4 },
+        { key: "away", modelProbPct: 21, odd: 3.6 },
+      ],
+    } as unknown as Awaited<ReturnType<typeof predict>>);
+
+    const res = await analyzeMatch(
+      null,
+      form({ matchId: VALID_MATCH_ID, marketKey: "match_result" }),
+    );
+
+    expect(res).toEqual({ ok: true, view: {} });
+    const [predictionArg] = mockToAnalysisView.mock.calls[0];
+    expect(predictionArg.marketKey).toBe("match_result");
+    expect(predictionArg.selections).toHaveLength(3);
+    expect(predictionArg.line).toBeNull();
   });
 });
