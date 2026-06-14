@@ -1092,3 +1092,59 @@ describe("toAnalysisView — over_under stays frozen by identity (not length)", 
     expect(view.framing).not.toBeNull();
   });
 });
+
+// Loop fechado do plan-gate: o edge EXIBIDO na grade de dupla chance deve casar
+// com o PERSISTIDO pelo predict — ambos usam o de-vig Σ=2 (impliedSumTarget=2 do
+// descriptor). A view re-deriva a implícita das odds via computeMarketScenarios;
+// sem o impliedSumTarget threadado, exibiria Σ=1 (~37.5%) e um edge ~+46.5pp,
+// divergindo do salvo. Mesmas odds/probs do predict.double-chance.test.ts.
+describe("toAnalysisView (N-vias / dupla chance) — edge da grade == edge persistido", () => {
+  it("usa o de-vig Σ=2 (não Σ=1) na implícita/edge exibidos", () => {
+    const view = toAnalysisView(
+      {
+        recommendation: "home_or_draw",
+        confidencePct: "84.00",
+        rationale: "favorito não perde",
+        keyFactors: ["a", "b"],
+        minimumOdd: "1.200",
+        oddAtRecommendation: "1.270",
+        bookmaker: "Pinnacle",
+        // edgePct PERSISTIDO (predict, de-vig Σ=2): 84 − 74.96 ≈ 9.04 → "+9.0pp".
+        impliedProbPct: "74.96",
+        edgePct: "9.04",
+        overOddAtPrediction: null,
+        underOddAtPrediction: null,
+        modelVersion: "claude-opus-4-8",
+        promptVersion: "double_chance_v1",
+        createdAt: baseCreatedAt,
+        marketKey: "double_chance",
+        line: null,
+        stakeUnits: "1",
+        selections: [
+          { key: "home_or_draw", modelProbPct: 84, odd: 1.27 },
+          { key: "away_or_draw", modelProbPct: 58, odd: 1.73 },
+          { key: "home_or_away", modelProbPct: 70, odd: 1.36 },
+        ],
+      },
+      { costUsd: "0.05" },
+      threeHoursLater,
+    );
+
+    expect(view.outcomes.map((o) => o.id)).toEqual([
+      "home_or_draw",
+      "away_or_draw",
+      "home_or_away",
+    ]);
+    expect(view.outcomes.map((o) => o.label)).toEqual([
+      "Casa ou empate",
+      "Empate ou fora",
+      "Casa ou fora",
+    ]);
+    // de-vig Σ=2: implícita ~75% (NÃO ~37.5% de Σ=1) → edge +9.0pp (== persistido).
+    expect(view.outcomes[0].marketProb).toBe("75%");
+    expect(view.outcomes[0].edge).toBe("+9.0pp");
+    expect(view.outcomes[0].isRecommended).toBe(true);
+    expect(view.recommendation?.marketKey).toBe("double_chance");
+    expect(view.recommendation?.selectionLabel).toBe("Casa ou empate");
+  });
+});

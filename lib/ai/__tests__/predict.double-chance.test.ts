@@ -112,6 +112,7 @@ vi.mock("@/lib/db/queries/users", () => ({
 }));
 
 import { doubleChanceCartridge } from "@/lib/ai/markets/double_chance";
+import { DOUBLE_CHANCE } from "@/lib/odds/market-descriptor";
 import { computeMarketImpliedProbabilities } from "@/lib/odds/implied-probability";
 import { predict } from "@/lib/ai/predict";
 
@@ -261,7 +262,8 @@ beforeEach(() => {
   setHappyPath();
 });
 
-// implícita de-vigada Σ=2 de uma dupla (impliedSumTarget=2): probs[idx]*100*2.
+// implícita de-vigada de uma dupla, lendo o impliedSumTarget DECLARADO no
+// descriptor (não um literal): a asserção casa produção × contrato do descriptor.
 function impliedPctOfDC(
   hd: number,
   ad: number,
@@ -270,7 +272,7 @@ function impliedPctOfDC(
 ) {
   const { probs } = computeMarketImpliedProbabilities([hd, ad, ha]);
   const idx = side === "hd" ? 0 : side === "ad" ? 1 : 2;
-  return probs[idx] * 100 * 2;
+  return probs[idx] * 100 * (DOUBLE_CHANCE.impliedSumTarget ?? 1);
 }
 
 describe("predict(double_chance) — N=3 happy path pelo caminho additional", () => {
@@ -398,5 +400,51 @@ describe("predict(double_chance) — pass case", () => {
     expect(predictionRow.impliedProbPct).toBeNull();
     expect(predictionRow.edgePct).toBeNull();
     expect(result.selections.map((s) => s.modelProbPct)).toEqual([80, 62, 58]);
+  });
+});
+
+describe("predict(double_chance) — book enviesado: implícita de-vig >100 NÃO derruba a predição", () => {
+  it("favorito extremo (de-vig Σ=2 da dupla 1X >100) persiste em vez de lançar BuildInputError", async () => {
+    // odds INCOERENTES mas válidas (todas >1): a de-vig Σ=2 da dupla 1X passa de
+    // 100% (raw_HD > raw_AD+raw_HA). Antes do max(200), o ImpliedProbabilitiesSchema
+    // [0,100] rejeitava → falha opaca. Agora flui e o edge fica fortemente negativo.
+    getLatestFreshSelectionOddsSnapshots.mockResolvedValue({
+      bookmaker: "Pinnacle",
+      capturedAt: new Date(),
+      overroundPct: "10.00",
+      selections: [
+        { key: "home_or_draw", odd: "1.020" },
+        { key: "away_or_draw", odd: "15.000" },
+        { key: "home_or_away", odd: "15.000" },
+      ],
+    });
+    anthropicCreate.mockResolvedValue(
+      anthropicMessage({
+        recommendation: "home_or_draw",
+        confidence_pct: 95,
+        prob_home_or_draw: 95,
+        prob_away_or_draw: 10,
+        prob_home_or_away: 95,
+        rationale: "Favorito extremo cobre casa ou empate com folga.",
+        key_factors: ["favorito extremo", "empate improvável"],
+        minimum_odd: 1.01,
+      }),
+    );
+
+    const result = await predict({
+      matchId: "m-1",
+      userId: "u-1",
+      isAdmin: true,
+      marketKey: "double_chance",
+    });
+
+    expect(result.prediction).toEqual({ id: "row-1", aiCallId: "row-1" });
+    const predictionRow = insertValues.mock.calls[1]?.[0] as Record<
+      string,
+      unknown
+    >;
+    const impliedHd = impliedPctOfDC(1.02, 15, 15, "hd");
+    expect(impliedHd).toBeGreaterThan(100); // o clamp antigo [0,100] teria rejeitado
+    expect(predictionRow.impliedProbPct).toBe(impliedHd.toFixed(2));
   });
 });
