@@ -1,3 +1,4 @@
+import { matchResultCartridge } from "./match_result";
 import { overUnderCartridge } from "./over_under";
 import type { MarketCartridge } from "./types";
 
@@ -7,6 +8,7 @@ import type { MarketCartridge } from "./types";
 // predict.ts.
 const REGISTRY: Record<string, MarketCartridge> = {
   [overUnderCartridge.marketKey]: overUnderCartridge as MarketCartridge,
+  [matchResultCartridge.marketKey]: matchResultCartridge as MarketCartridge,
 };
 
 /**

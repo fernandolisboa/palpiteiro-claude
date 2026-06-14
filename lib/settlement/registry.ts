@@ -1,3 +1,4 @@
+import { matchResultRule } from "@/lib/settlement/rules/match_result";
 import { overUnderRule } from "@/lib/settlement/rules/over_under";
 import type { ResultData, SettlementOutcome } from "@/lib/settlement/schemas";
 
@@ -16,6 +17,7 @@ export type SettlementRule = (
 // por aqui), sem tocar o dispatcher.
 const REGISTRY: Record<string, SettlementRule> = {
   over_under: overUnderRule,
+  match_result: matchResultRule,
 };
 
 /**
