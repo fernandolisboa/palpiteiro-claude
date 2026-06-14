@@ -96,12 +96,20 @@ export type ScenarioSelection = {
 export function computeMarketScenarios(input: {
   selections: { key: string; modelProbPct: number; odd: number | null }[];
   recommendedKey: string | null;
+  // Soma-alvo da implícita (ADR 0018 + emenda não-partição). Default 1 (partição:
+  // over/under, 1X2 — Σ implied = 1, byte-idêntico ao anterior). >1 p/ mercados de
+  // cobertura sobreposta (dupla chance = 2): escala a normalização Σ=1 do core, de
+  // modo que a implícita exibida e o edge da grade casem com os PERSISTIDOS pelo
+  // predict (que usa o MESMO impliedSumTarget do descriptor). Sem isso, a view
+  // re-derivaria Σ=1 e mostraria edge divergente do salvo (inaceitável).
+  impliedSumTarget?: number;
 }): { selections: ScenarioSelection[]; recommended: string | null } {
+  const sumTarget = input.impliedSumTarget ?? 1;
   const allOddsPresent = input.selections.every((s) => s.odd !== null);
   const impliedByIndex = allOddsPresent
     ? computeMarketImpliedProbabilities(
         input.selections.map((s) => s.odd as number),
-      ).probs.map((p) => p * 100)
+      ).probs.map((p) => p * 100 * sumTarget)
     : null;
 
   const selections = input.selections.map((s, i): ScenarioSelection => {

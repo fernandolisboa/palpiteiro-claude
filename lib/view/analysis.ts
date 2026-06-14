@@ -18,6 +18,7 @@ import {
   type Scenarios,
   type ScenarioSide,
 } from "@/lib/odds/scenario";
+import { getDescriptor } from "@/lib/odds/market-descriptor";
 import {
   getMarketPresentation,
   type MarketPresentation,
@@ -281,11 +282,17 @@ export function toAnalysisView(
     (prediction.marketKey ?? "over_under") === "over_under";
   const isNway = !isBinaryFrozen && (prediction.selections?.length ?? 0) >= 2;
 
+  // impliedSumTarget vem do descriptor (data-driven): 2 p/ dupla chance (cobertura
+  // sobreposta), 1 (default) p/ partição (1X2, btts) — mantém o edge da grade
+  // igual ao persistido pelo predict, que usa o mesmo fator.
+  const impliedSumTarget =
+    getDescriptor(prediction.marketKey ?? "over_under")?.impliedSumTarget ?? 1;
   const outcomesNway = isNway
     ? toOutcomesView(
         computeMarketScenarios({
           selections: prediction.selections!,
           recommendedKey: isPass ? null : recommendation,
+          impliedSumTarget,
         }),
         presentation,
         line,

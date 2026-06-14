@@ -40,6 +40,17 @@ export type MarketDescriptor = {
   // ofertado/analisável nessas ligas (#158). Adicionar uma liga depois é 1 linha,
   // sem migration.
   coveredLeagues?: readonly SupportedLeague[];
+  // Soma-alvo das probabilidades implícitas do mercado (ADR 0018 + emenda
+  // não-partição). `undefined`/1 = mercado de PARTIÇÃO (seleções mutuamente
+  // exclusivas — over/under, 1X2): Σ implied = 1 (100%), a normalização canônica.
+  // >1 = mercado de COBERTURA SOBREPOSTA (dupla chance): cada seleção cobre k de
+  // N resultados-base e elas se sobrepõem, então a prob REAL soma o nº de
+  // coberturas (dupla chance: cada par cobre 2 de 3 → Σ = 2). A implícita por
+  // seleção é de-vigada mantendo a semântica de par escalando a normalização
+  // Σ=1 por este fator; modelProb do LLM vem na MESMA escala (probs honestas
+  // somando ~impliedSumTarget·100). Aplicado em DOIS sites (predict + view) — o
+  // core computeMarketImpliedProbabilities fica Σ=1 (paridade over/under/1X2).
+  impliedSumTarget?: number;
 };
 
 /**
@@ -114,3 +125,11 @@ export const ALL_DESCRIPTORS: readonly MarketDescriptor[] = [
   MATCH_RESULT,
   BTTS,
 ];
+
+// Lookup por dbMarketKey (data-driven). Usado pela view (toAnalysisView) pra ler
+// `impliedSumTarget` sem hardcodear mercado — fonte única é o descriptor.
+export function getDescriptor(
+  dbMarketKey: string,
+): MarketDescriptor | undefined {
+  return ALL_DESCRIPTORS.find((d) => d.dbMarketKey === dbMarketKey);
+}
