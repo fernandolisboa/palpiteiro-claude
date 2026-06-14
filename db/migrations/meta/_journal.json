@@ -148,6 +148,13 @@
       "when": 1781479331711,
       "tag": "0020_selection_snapshots_line_dedup",
       "breakpoints": true
+    },
+    {
+      "idx": 21,
+      "version": "7",
+      "when": 1781479660145,
+      "tag": "0021_ai_config_extra_lines_flag",
+      "breakpoints": true
     }
   ]
 }

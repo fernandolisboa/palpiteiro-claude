@@ -53,6 +53,22 @@ export async function setDefaultModelId(
 }
 
 /**
+ * Feature-flag (#175): as linhas EXTRAS de over/under (1.5/3.5 via o cartucho
+ * multi-linha over_under_v3.0) estão ligadas? Lê do single-row (id=1); default OFF
+ * (false) quando não há row — o caminho de hoje (featured 2.5, byte-idêntico). Flip
+ * data-driven (sem deploy): true → todos os usuários recebem a análise multi-linha
+ * onde há cobertura de alternate_totals (world_cup).
+ */
+export async function getEnableOverUnderExtraLines(): Promise<boolean> {
+  const rows = await db
+    .select({ enabled: aiConfig.enableOverUnderExtraLines })
+    .from(aiConfig)
+    .where(eq(aiConfig.id, 1))
+    .limit(1);
+  return rows[0]?.enabled ?? false;
+}
+
+/**
  * Parâmetros de geração (ADR 0008, emenda 2). Lê do single-row (id=1) e cai nos
  * defaults seguros POR CAMPO se a row não existir ou o valor persistido for
  * inválido — espelha o fallback de getDefaultModelId (nunca manda lixo pro

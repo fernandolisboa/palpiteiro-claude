@@ -1,0 +1,1 @@
+ALTER TABLE "ai_config" ADD COLUMN "enable_over_under_extra_lines" boolean DEFAULT false NOT NULL;
