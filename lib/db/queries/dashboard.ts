@@ -26,8 +26,12 @@ const MARKET_ENUM_TO_KEY: Record<string, string> = {
   over_under_2_5: "over_under",
 };
 
-export function marketEnumToKey(market: string): string {
-  return MARKET_ENUM_TO_KEY[market] ?? "over_under";
+// `market` é nullable desde o expand multi-mercado (#173): rows de mercado novo
+// gravam `market=null` (fonte de verdade = marketId, resolvido pelo LEFT JOIN
+// acima). Aqui só importam as rows SEM marketId; null/desconhecido coalesce pra
+// "over_under" exatamente como o enum legado — o caso real é só over/under.
+export function marketEnumToKey(market: string | null): string {
+  return (market !== null && MARKET_ENUM_TO_KEY[market]) || "over_under";
 }
 
 // Label de fallback espelha markets.label do seed 0009 (single-source quando o
@@ -47,7 +51,7 @@ export type RawUserDashboardRow = Omit<
   DashboardRow,
   "marketKey" | "marketLabel"
 > & {
-  market: string;
+  market: string | null;
   marketKey: string | null;
   marketLabel: string | null;
 };

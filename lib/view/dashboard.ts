@@ -23,11 +23,26 @@ import {
 import { getMarketPresentation } from "@/lib/view/markets/presentation";
 import type { LeagueKey, Recommendation } from "@/lib/view/types";
 
-const REC_MAP: Record<DashboardRow["recommendation"], Recommendation> = {
+// Tokens pinados do over/under (paridade byte-idêntica). pass é market-agnóstico.
+const REC_TOKEN_OVER_UNDER: Record<string, Recommendation> = {
   over: "OVER",
   under: "UNDER",
   pass: "PASS",
 };
+
+// Display da recomendação TOTAL p/ qualquer mercado (#173). over/under/pass usam o
+// token pinado; mercados novos derivam o label da seleção da apresentação (via
+// marketKey da row) — ex.: 1X2 → "Casa"/"Empate"/"Fora". `pass` nunca é uma
+// seleção de mercado, então cai no token pinado independentemente do marketKey.
+function recToken(
+  recommendation: DashboardRow["recommendation"],
+  marketKey: string,
+): Recommendation {
+  if (recommendation in REC_TOKEN_OVER_UNDER) {
+    return REC_TOKEN_OVER_UNDER[recommendation];
+  }
+  return getMarketPresentation(marketKey).selectionLabel(recommendation);
+}
 
 // Unidades COM sinal — convenção única, centralizada em lib/format (#170).
 const unitsLabel = formatUnitsSigned;
@@ -161,7 +176,7 @@ export function toPredictionRowView(row: DashboardRow): PredictionRowView {
     away: row.awayTeam,
     league: leagueToKey(row.league),
     when: formatKickoffAbsolute(row.createdAt),
-    rec: REC_MAP[row.recommendation],
+    rec: recToken(row.recommendation, row.marketKey),
     odd: formatOdd(row.oddAtRecommendation),
     edge: formatEdge(row.edgePct),
     confidence: formatPct(row.confidencePct),
@@ -257,7 +272,11 @@ export function toPredictionDetailView(
       score,
     },
     prediction: {
-      rec: REC_MAP[prediction.recommendation],
+      // marketKey ainda não chega no detail (a query não junta `markets`); default
+      // "over_under" espelha o mesmo fallback de settlementMetric abaixo (:283),
+      // resolvido junto com o marketKey da row no #170/Fase 4. over/under/pass ⇒
+      // token pinado (não consulta marketKey), então é byte-idêntico hoje.
+      rec: recToken(prediction.recommendation, "over_under"),
       confidence: formatPct(prediction.confidencePct),
       edge: formatEdge(prediction.edgePct),
       implied: formatPct(prediction.impliedProbPct),

@@ -61,8 +61,8 @@ export const OVER_UNDER: MarketDescriptor = {
   selectionKeys: ["over", "under"],
 };
 
-// 1X2 (match_result) — NÃO seedado em produção (is_active=false; ativação real é
-// Fase 4/#173). Existe aqui só pra exercitar o caminho genérico N≥3 em dev/test.
+// 1X2 (match_result) — seedado ATIVO admin-only em produção (markets.is_active=true,
+// is_graduated=false, migration 0014/#173): selecionável só por admin até graduar.
 // 'Draw' → 'draw'; senão casa o nome do time contra home/away via `teamsMatch`
 // (NÃO igualdade exata — o provider pode usar grafias divergentes).
 export const MATCH_RESULT: MarketDescriptor = {

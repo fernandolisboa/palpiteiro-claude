@@ -1,8 +1,8 @@
 // @vitest-environment node
 //
-// Testes contra Postgres REAL via pglite (WASM). Rodam as migrations reais 1x e
-// SEMEIAM o catálogo match_result+home/draw/away NO SCHEMA DE TESTE (não é migration
-// de prod — a ativação real é Fase 4/#173). Cobrem o que stub de chain não pega:
+// Testes contra Postgres REAL via pglite (WASM). Rodam as migrations reais 1x —
+// o catálogo over_under (0009) E match_result+home/draw/away (0014/#173) já vêm
+// seedados pelas migrations; o setup só LÊ os ids. Cobrem o que stub de chain não pega:
 // DISTINCT-ON coerente, onConflict de 5 col, predicado jsonb de line, coerência da
 // captura. Roda em `node` (pglite falha sob jsdom: r.arrayBuffer is not a function).
 import { PGlite } from "@electric-sql/pglite";
@@ -94,26 +94,17 @@ beforeAll(async () => {
   ids.ouOver = ouSels.find((s) => s.key === "over")!.id;
   ids.ouUnder = ouSels.find((s) => s.key === "under")!.id;
 
-  // match_result NÃO é seedado em prod — semeamos só no schema de teste.
+  // match_result agora é seedado pela migration 0014 (#173) — lê o row semeado
+  // (como over_under acima), não insere (insert duplicado viola markets_key_unique).
   const [mr] = await base
-    .insert(schema.markets)
-    .values({
-      key: "match_result",
-      label: "Resultado (1X2)",
-      settlementRuleKey: "match_result",
-      isActive: false,
-      isGraduated: false,
-    })
-    .returning({ id: schema.markets.id });
+    .select({ id: schema.markets.id })
+    .from(schema.markets)
+    .where(eq(schema.markets.key, "match_result"));
   ids.mrMarketId = mr.id;
   const mrSels = await base
-    .insert(schema.marketSelections)
-    .values([
-      { marketId: mr.id, key: "home", label: "Casa", sortOrder: 0 },
-      { marketId: mr.id, key: "draw", label: "Empate", sortOrder: 1 },
-      { marketId: mr.id, key: "away", label: "Fora", sortOrder: 2 },
-    ])
-    .returning({ id: schema.marketSelections.id, key: schema.marketSelections.key });
+    .select({ id: schema.marketSelections.id, key: schema.marketSelections.key })
+    .from(schema.marketSelections)
+    .where(eq(schema.marketSelections.marketId, mr.id));
   ids.mrHome = mrSels.find((s) => s.key === "home")!.id;
   ids.mrDraw = mrSels.find((s) => s.key === "draw")!.id;
   ids.mrAway = mrSels.find((s) => s.key === "away")!.id;

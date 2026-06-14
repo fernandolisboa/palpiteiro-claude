@@ -28,7 +28,10 @@ import type {
 } from "@/lib/view/types";
 
 type PredictionInput = {
-  recommendation: "over" | "under" | "pass";
+  // = key da seleção escolhida (multi-mercado, #173) ou "pass". A ramificação
+  // N-vias do toAnalysisView (§F) é quem mantém 1X2 fora do scenario binário;
+  // este COMMIT só alarga o tipo (o reader N-vias chega na Fase 4).
+  recommendation: "over" | "under" | "pass" | "home" | "draw" | "away";
   confidencePct: string | number;
   rationale: string;
   keyFactors: string[];
@@ -101,11 +104,26 @@ function toScenarioSideView(side: ScenarioSide): ScenarioSideView {
 // caminho N-vias canônico (computeMarketScenarios → toOutcomesView) cobre o resto.
 // Defensivo: confidence fora de (0, 100) degrada o bloco inteiro (o módulo puro
 // lança; aqui dado ruim não pode derrubar a página) → null.
+// `computeScenarios` é binário DE PROPÓSITO (over/under/pass; plan §C2): a
+// derivação 100−x do lado oposto só vale em N=2. Em N≥3 (1X2) o bloco binário não
+// se aplica — a ramificação N-vias do toAnalysisView (computeMarketScenarios) é o
+// GATE que cobre esse caso (Fase 4, ainda não ligado neste COMMIT). Até lá, uma
+// recomendação não-binária degrada o bloco (null), como confidence fora de domínio
+// — nunca chega aqui em runtime (over/under é o único mercado que produz predição).
+function isBinaryRecommendation(
+  rec: PredictionInput["recommendation"],
+): rec is "over" | "under" | "pass" {
+  return rec === "over" || rec === "under" || rec === "pass";
+}
+
 function computeBinaryScenarios(
   prediction: PredictionInput,
   confidenceNum: number | null,
 ): Scenarios | null {
   if (confidenceNum === null || confidenceNum <= 0 || confidenceNum >= 100) {
+    return null;
+  }
+  if (!isBinaryRecommendation(prediction.recommendation)) {
     return null;
   }
   return computeScenarios({

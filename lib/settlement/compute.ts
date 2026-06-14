@@ -17,7 +17,12 @@ import type { OutcomeResult, ResultData } from "@/lib/settlement/schemas";
 export type { OutcomeResult, SettlementOutcome } from "@/lib/settlement/schemas";
 export { profitForResult } from "@/lib/settlement/money";
 
-export type Recommendation = "over" | "under" | "pass";
+// Market-agnóstico (#173): a recomendação É a key da seleção escolhida
+// (over/under/home/draw/away/…) ou "pass" (no-bet). O dispatcher só ramifica em
+// `=== "pass"` (curto-circuito void/0 ANTES do registry); toda outra string vai
+// pra regra do mercado via `selectionKey`. Alargar pra `string` mantém o gate
+// correto pra qualquer mercado e evita um literal por seleção.
+export type Recommendation = string;
 
 export type Settlement = {
   result: OutcomeResult;
