@@ -86,28 +86,50 @@ const OVER_UNDER_SELECTION_LABELS: Record<string, string> = {
   under: "Under",
 };
 
-// Frase leiga por lado — VERBATIM do BET_SUMMARY pré-pivot (analysis.ts). A linha
-// "2.5"/"3 gols" fica embutida no texto de propósito (não recalcular de `line`):
-// over/under só tem a linha 2.5 ativa, e recompor introduziria bug de refator
-// sem ganho. Linhas extras (1.5/3.5) são trabalho futuro (#175).
-const OVER_UNDER_BET_SUMMARY: Record<string, BetSummaryCopy> = {
-  over: { market: "Mais de 2.5 gols", plain: "pelo menos 3 gols no jogo" },
-  under: { market: "Menos de 2.5 gols", plain: "no máximo 2 gols no jogo" },
-};
+// Frase leiga over/under DIRIGIDA PELA LINHA (#175). Pré-pivot a linha "2.5"/"3
+// gols" ficava embutida nos textos; agora a VIEW threada `line` (analysis.ts
+// passa marketParams.line a estas closures), então uma predição em 1.5/3.5
+// renderiza a linha certa em vez de "2.5" hardcoded. Convenção (espelha o
+// `${base} ${line}` de outcomeLabel):
+//   - A linha exibida é `${line}` (ex.: "mais de 1.5 gols", "Menos de 3.5 gols").
+//   - "pelo menos N gols" (lado over) usa Math.ceil(line): 1.5→2, 2.5→3, 3.5→4.
+//   - "no máximo N gols" (plain do under) usa Math.ceil(line) − 1: 1.5→1, 2.5→2,
+//     3.5→3 (o complemento inteiro do over).
+//   - "menos de N gols" (framing do under) usa Math.ceil(line): 1.5→2, 2.5→3.
+// PINADO em line=2.5 byte-idêntico ao texto pré-pivot pelos goldens existentes.
+function overUnderBetSummary(key: string, line: number): BetSummaryCopy {
+  const atLeast = Math.ceil(line);
+  if (key === "over") {
+    return {
+      market: `Mais de ${line} gols`,
+      plain: `pelo menos ${atLeast} gols no jogo`,
+    };
+  }
+  if (key === "under") {
+    return {
+      market: `Menos de ${line} gols`,
+      plain: `no máximo ${atLeast - 1} gols no jogo`,
+    };
+  }
+  return { market: lookup(OVER_UNDER_SELECTION_LABELS, key, key), plain: "" };
+}
 
-// VERBATIM do FRAMING_SIDE_LABEL pré-pivot.
-const OVER_UNDER_FRAMING_LABELS: Record<string, string> = {
-  over: "pelo menos 3 gols",
-  under: "menos de 3 gols",
-};
+// Label do lado na frase de framing do break-even — DIRIGIDO PELA LINHA (#175).
+// "pelo menos N gols"/"menos de N gols" com N = Math.ceil(line).
+function overUnderFramingLabel(key: string, line: number): string {
+  const goals = Math.ceil(line);
+  if (key === "over") return `pelo menos ${goals} gols`;
+  if (key === "under") return `menos de ${goals} gols`;
+  return lookup(OVER_UNDER_SELECTION_LABELS, key, key);
+}
 
-// Header de COLUNA do bloco de cenários — VERBATIM do SIDE_LABEL pré-pivot
-// (analysis-scenarios.tsx). A linha "2.5" fica embutida de propósito (paridade
-// com a string pinada nos goldens); recompor de `line` é trabalho futuro (#175).
-const OVER_UNDER_SCENARIO_LABELS: Record<string, string> = {
-  over: "mais de 2.5 gols",
-  under: "menos de 2.5 gols",
-};
+// Header de COLUNA do bloco de cenários — DIRIGIDO PELA LINHA (#175). Mostra
+// `${line}` direto (decimal): "mais de 2.5 gols"/"menos de 2.5 gols".
+function overUnderScenarioLabel(key: string, line: number): string {
+  if (key === "over") return `mais de ${line} gols`;
+  if (key === "under") return `menos de ${line} gols`;
+  return lookup(OVER_UNDER_SELECTION_LABELS, key, key);
+}
 
 const OVER_UNDER: MarketPresentation = {
   marketKey: "over_under",
@@ -118,18 +140,11 @@ const OVER_UNDER: MarketPresentation = {
     const base = lookup(OVER_UNDER_SELECTION_LABELS, key, key);
     return line !== null ? `${base} ${line}` : base;
   },
-  scenarioLabel: (key) =>
-    lookup(
-      OVER_UNDER_SCENARIO_LABELS,
-      key,
-      lookup(OVER_UNDER_SELECTION_LABELS, key, key),
-    ),
-  betSummary: (key) =>
-    key in OVER_UNDER_BET_SUMMARY
-      ? OVER_UNDER_BET_SUMMARY[key]
-      : { market: lookup(OVER_UNDER_SELECTION_LABELS, key, key), plain: "" },
-  framingLabel: (key) =>
-    lookup(OVER_UNDER_FRAMING_LABELS, key, lookup(OVER_UNDER_SELECTION_LABELS, key, key)),
+  // line null (defensivo, ex.: row degradada) cai pro defaultLine 2.5 — preserva
+  // a frase pré-pivot quando o chamador não threada a linha.
+  scenarioLabel: (key, line) => overUnderScenarioLabel(key, line ?? 2.5),
+  betSummary: (key, line) => overUnderBetSummary(key, line ?? 2.5),
+  framingLabel: (key, line) => overUnderFramingLabel(key, line ?? 2.5),
   settlementMetricLabel: "gols (90')",
   // Total de gols — byte-idêntico à expressão hardcoded anterior do dashboard.ts.
   settlementMetricValue: (rd, fallback) => String(rd?.totalGoals ?? fallback),
