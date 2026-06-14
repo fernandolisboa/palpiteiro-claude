@@ -10,7 +10,10 @@ import { AnalyzeCTA } from "@/components/analyze-cta";
 import { MarketSelect } from "@/components/market-select";
 import { ModelOverrideSelect } from "@/components/model-override-select";
 import { Button } from "@/components/ui/button";
-import { initialModelOverride } from "@/lib/ai/model-override";
+import {
+  initialModelOverride,
+  resyncModelOverride,
+} from "@/lib/ai/model-override";
 import { MODEL_REGISTRY, isAIModelId } from "@/lib/ai/models";
 import type { AnalysisView } from "@/lib/view/types";
 
@@ -48,27 +51,27 @@ export function AnalysisPanel({
     ? { ok: true, view: existing }
     : null;
   const [state, formAction, pending] = useActionState(analyzeMatch, initial);
-  // Persistência do modelo escolhido entre reanálises (#239). O `<select>` é
-  // controlado por `modelOverride`; antes era semeado fixo em "default", então
-  // sempre que o componente perdia o state (remount após revalidatePath) o
-  // dropdown voltava pro padrão global, mesmo com preferência ativa ou após um
-  // override one-off. Agora o SEED reflete a preferência do usuário (cascata
-  // server-side: preferência > default global), e um override one-off vira a
-  // preferência viva via `seededOverride` — re-semeado a cada nova conclusão
-  // da action (comparação de identidade de `state` no render: padrão React de
-  // ajustar state ao mudar entrada, sem efeito nem flash do default). Sem URL
-  // nem localStorage (divergência incógnito/multi-device).
+  // Persiste o modelo escolhido entre reanálises (#239): sem isso, cada conclusão
+  // de análise repõe o dropdown no "default" (regra em `resyncModelOverride`). O
+  // seed é a preferência server-side; `seededOverride` guarda o valor "vivo" (a
+  // última escolha) que deve sobreviver à reanálise. Sem URL/localStorage (issue).
   const seededOverride = useRef(
     initialModelOverride(preferredModelId, selectableModels),
   );
   const [modelOverride, setModelOverride] = useState(seededOverride.current);
+  // Re-aplica a escolha viva quando a action conclui (identidade de `state` muda).
+  // setState na FASE DE RENDER é o padrão React intencional ("ajustar state ao
+  // mudar uma entrada" / store info from previous render) — NÃO troque por
+  // useEffect, que reintroduziria o flash do default.
   const prevState = useRef(state);
-  if (prevState.current !== state) {
-    prevState.current = state;
-    if (modelOverride !== seededOverride.current) {
-      setModelOverride(seededOverride.current);
-    }
-  }
+  const actionCompleted = prevState.current !== state;
+  prevState.current = state;
+  const resynced = resyncModelOverride({
+    displayed: modelOverride,
+    live: seededOverride.current,
+    actionCompleted,
+  });
+  if (resynced !== null) setModelOverride(resynced);
   // Cada escolha no dropdown vira o novo valor "vivo" a re-semear nas próximas
   // reanálises — assim um override one-off persiste como a preferência faria.
   const handleModelChange = (value: string) => {
