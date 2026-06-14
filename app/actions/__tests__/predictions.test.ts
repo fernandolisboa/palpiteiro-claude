@@ -61,6 +61,7 @@ const mockToAnalysisView = vi.mocked(toAnalysisView);
 const OVER_UNDER_MARKET = { key: "over_under", label: "Over/Under gols" };
 const MATCH_RESULT_MARKET = { key: "match_result", label: "Resultado (1X2)" };
 const BTTS_MARKET = { key: "btts", label: "Ambas marcam" };
+const DOUBLE_CHANCE_MARKET = { key: "double_chance", label: "Dupla chance" };
 
 // Match fixtures por liga (league p/ o gate de cobertura; status p/ analisabilidade).
 function matchInLeague(league: string, status = "scheduled") {
@@ -141,11 +142,16 @@ beforeEach(() => {
     reset: 0,
   });
   // Gate de mercado audiência-aware (espelha o resolver real): admin vê
-  // over_under + match_result + btts; comum só over_under.
+  // over_under + match_result + btts + double_chance; comum só over_under.
   mockMarketsForAudience.mockReset();
   mockMarketsForAudience.mockImplementation(async (isAdmin: boolean) =>
     isAdmin
-      ? [OVER_UNDER_MARKET, MATCH_RESULT_MARKET, BTTS_MARKET]
+      ? [
+          OVER_UNDER_MARKET,
+          MATCH_RESULT_MARKET,
+          BTTS_MARKET,
+          DOUBLE_CHANCE_MARKET,
+        ]
       : [OVER_UNDER_MARKET],
   );
   // Default: jogo world_cup (cobre btts). getMatchById é alcançado só após os gates
@@ -513,6 +519,70 @@ describe("analyzeMatch — market league coverage gating (#158)", () => {
     const res = await analyzeMatch(null, form({ matchId: VALID_MATCH_ID }));
     expect(res).toEqual({ ok: false, error: "Jogo não encontrado." });
     expect(mockPredict).not.toHaveBeenCalled();
+    expect(mockEnsureOdds).not.toHaveBeenCalled();
+  });
+});
+
+// #176: dupla chance é additional (odds por evento) + world_cup-only, idem btts.
+// Pina a mesma fronteira de segurança: gate de liga + pre-warm na ordem certa +
+// coerção fora da cobertura + sem spend em jogo encerrado.
+describe("analyzeMatch — double_chance league coverage gating (#176)", () => {
+  beforeEach(() => {
+    mockUserExists.mockResolvedValue(true);
+    mockPredict.mockResolvedValue(PREDICTION);
+    mockGetAiCall.mockResolvedValue({ costUsd: "0.01" } as never);
+  });
+
+  it("admin + double_chance numa partida world_cup → threadeado + pre-warm de odds (na ordem)", async () => {
+    mockAuth.mockResolvedValue(SESSION);
+    mockGetMatchById.mockResolvedValue(matchInLeague("world_cup"));
+    await analyzeMatch(
+      null,
+      form({ matchId: VALID_MATCH_ID, marketKey: "double_chance" }),
+    );
+    expect(mockPredict).toHaveBeenCalledWith({
+      matchId: VALID_MATCH_ID,
+      userId: "u1",
+      isAdmin: true,
+      modelOverride: undefined,
+      marketKey: "double_chance",
+    });
+    // additional market → pre-warm por evento ANTES do predict (1x), nessa ORDEM.
+    expect(mockEnsureOdds).toHaveBeenCalledTimes(1);
+    expect(mockEnsureOdds.mock.invocationCallOrder[0]).toBeLessThan(
+      mockPredict.mock.invocationCallOrder[0],
+    );
+  });
+
+  it("double_chance numa partida world_cup ENCERRADA → erro de analisabilidade, SEM pre-warm nem spend", async () => {
+    mockAuth.mockResolvedValue(SESSION);
+    mockGetMatchById.mockResolvedValue(matchInLeague("world_cup", "finished"));
+    const res = await analyzeMatch(
+      null,
+      form({ matchId: VALID_MATCH_ID, marketKey: "double_chance" }),
+    );
+    expect(res).toEqual({
+      ok: false,
+      error: "Este jogo já foi encerrado ou cancelado.",
+    });
+    expect(mockEnsureOdds).not.toHaveBeenCalled();
+    expect(mockPredict).not.toHaveBeenCalled();
+  });
+
+  it("admin + double_chance numa partida brasileirao (sem cobertura) → COERCIDO a over_under, SEM pre-warm", async () => {
+    mockAuth.mockResolvedValue(SESSION);
+    mockGetMatchById.mockResolvedValue(matchInLeague("brasileirao_a"));
+    await analyzeMatch(
+      null,
+      form({ matchId: VALID_MATCH_ID, marketKey: "double_chance" }),
+    );
+    expect(mockPredict).toHaveBeenCalledWith({
+      matchId: VALID_MATCH_ID,
+      userId: "u1",
+      isAdmin: true,
+      modelOverride: undefined,
+      marketKey: "over_under",
+    });
     expect(mockEnsureOdds).not.toHaveBeenCalled();
   });
 });
