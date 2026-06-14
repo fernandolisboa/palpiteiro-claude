@@ -118,12 +118,52 @@ export const BTTS: MarketDescriptor = {
   selectionKeys: ["yes", "no"],
 };
 
+// Dupla chance (1X/X2/12) — mercado N=3 de COBERTURA SOBREPOSTA (cada dupla cobre
+// 2 de 3 resultados → impliedSumTarget=2, ver emenda do ADR 0018). Odds *additional*
+// (só por evento, oddsSource:'additional'), cobertura validada na Copa (2026-06-12,
+// #158), restrito a world_cup até re-checar o Brasileirão. O provider nomeia os
+// outcomes com nomes de time COMPOSTOS, em ordem livre: "{home} or Draw" /
+// "{away} or Draw" / "{teamA} or {teamB}" (validado em payload real 1xBet eu).
+// resolveSelectionKey faz parsing estrutural + casa via teamsMatch, com null
+// defensivo em qualquer não-correspondência (book incompleto é dropado, nunca
+// mal-mapeado). #176.
+export const DOUBLE_CHANCE: MarketDescriptor = {
+  dbMarketKey: "double_chance",
+  providerMarketKey: "double_chance",
+  oddsSource: "additional",
+  coveredLeagues: ["world_cup"],
+  impliedSumTarget: 2,
+  resolveSelectionKey(outcome, ctx) {
+    const parts = outcome.name.split(/\s+or\s+/i).map((p) => p.trim());
+    if (parts.length !== 2) return null; // não adivinha nomes com " or " literal
+    const isDraw = (p: string) => normalizeTeamName(p) === "draw";
+    const [a, b] = parts;
+    const drawA = isDraw(a);
+    const drawB = isDraw(b);
+    if (drawA && drawB) return null;
+    if (drawA || drawB) {
+      const team = drawA ? b : a;
+      if (teamsMatch(team, ctx.homeTeam)) return "home_or_draw";
+      if (teamsMatch(team, ctx.awayTeam)) return "away_or_draw";
+      return null;
+    }
+    // Dois times (sem Draw) → 12; exige casar AMBOS home E away (ordem livre).
+    const homeAway =
+      teamsMatch(a, ctx.homeTeam) && teamsMatch(b, ctx.awayTeam);
+    const awayHome =
+      teamsMatch(a, ctx.awayTeam) && teamsMatch(b, ctx.homeTeam);
+    return homeAway || awayHome ? "home_or_away" : null;
+  },
+  selectionKeys: ["home_or_draw", "away_or_draw", "home_or_away"],
+};
+
 // Lista canônica de descriptors p/ índices data-driven (ex.: marketsForLeague
 // indexa por dbMarketKey). Um mercado novo entra aqui + no registry do cartucho.
 export const ALL_DESCRIPTORS: readonly MarketDescriptor[] = [
   OVER_UNDER,
   MATCH_RESULT,
   BTTS,
+  DOUBLE_CHANCE,
 ];
 
 // Lookup por dbMarketKey (data-driven). Usado pela view (toAnalysisView) pra ler
