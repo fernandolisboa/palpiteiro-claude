@@ -1,9 +1,15 @@
 import { describe, expect, it } from "vitest";
 
 import { bttsCartridge } from "@/lib/ai/markets/btts";
+import { doubleChanceCartridge } from "@/lib/ai/markets/double_chance";
 import { matchResultCartridge } from "@/lib/ai/markets/match_result";
 import { overUnderCartridge } from "@/lib/ai/markets/over_under";
-import { BTTS, MATCH_RESULT, OVER_UNDER } from "@/lib/odds/market-descriptor";
+import {
+  BTTS,
+  DOUBLE_CHANCE,
+  MATCH_RESULT,
+  OVER_UNDER,
+} from "@/lib/odds/market-descriptor";
 
 // A view (lib/view/analysis.ts) roteia o caminho binário CONGELADO por um LITERAL
 // "over_under" (não pode importar market-descriptor — pureza de bundle pinada por
@@ -21,13 +27,15 @@ describe("marketKey ↔ descriptor identity (espelho do literal da view)", () =>
       overUnderCartridge,
       matchResultCartridge,
       bttsCartridge,
+      doubleChanceCartridge,
     ]) {
       expect(cartridge.marketKey).toBe(cartridge.descriptor.dbMarketKey);
     }
   });
 
-  it("as keys de descriptor são as esperadas (over_under/match_result/btts)", () => {
+  it("as keys de descriptor são as esperadas (over_under/match_result/btts/double_chance)", () => {
     expect(MATCH_RESULT.dbMarketKey).toBe("match_result");
     expect(BTTS.dbMarketKey).toBe("btts");
+    expect(DOUBLE_CHANCE.dbMarketKey).toBe("double_chance");
   });
 });

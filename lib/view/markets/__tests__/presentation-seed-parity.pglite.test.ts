@@ -91,3 +91,41 @@ describe("market presentation ↔ seed parity (btts)", () => {
     }
   });
 });
+
+describe("market presentation ↔ seed parity (double_chance)", () => {
+  it("labels curtos espelham markets/market_selections semeados na 0018", async () => {
+    const [mkt] = await db
+      .select()
+      .from(schema.markets)
+      .where(eq(schema.markets.key, "double_chance"));
+    expect(mkt).toBeDefined();
+    // seed admin-only: ativo, não graduado; settlement_rule_key resolve no registry.
+    expect(mkt.isActive).toBe(true);
+    expect(mkt.isGraduated).toBe(false);
+    expect(mkt.settlementRuleKey).toBe("double_chance");
+    expect(() => getSettlementRule(mkt.settlementRuleKey)).not.toThrow();
+
+    const sels = await db
+      .select()
+      .from(schema.marketSelections)
+      .where(eq(schema.marketSelections.marketId, mkt.id));
+    // sanidade: o seed carrega as 3 duplas, com sort 0/1/2 (1X/X2/12).
+    const byKey = new Map(sels.map((s) => [s.key, s]));
+    expect([...byKey.keys()].sort()).toEqual([
+      "away_or_draw",
+      "home_or_away",
+      "home_or_draw",
+    ]);
+    expect(byKey.get("home_or_draw")!.sortOrder).toBe(0);
+    expect(byKey.get("away_or_draw")!.sortOrder).toBe(1);
+    expect(byKey.get("home_or_away")!.sortOrder).toBe(2);
+
+    const pres = getMarketPresentation("double_chance");
+    // market label do código == seed ("Dupla chance").
+    expect(pres.marketLabel).toBe(mkt.label);
+    // cada selection label do código == seed (anti-drift).
+    for (const s of sels) {
+      expect(pres.selectionLabel(s.key)).toBe(s.label);
+    }
+  });
+});

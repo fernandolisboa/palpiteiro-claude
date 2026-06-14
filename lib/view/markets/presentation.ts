@@ -213,10 +213,45 @@ const BTTS: MarketPresentation = {
   classifyH2H: null,
 };
 
+// dupla chance (1X/X2/12) — seedado ativo admin-only (#176). Labels CURTOS
+// espelham o seed (markets.label "Dupla chance" / market_selections.label
+// "Casa ou empate"/"Empate ou fora"/"Casa ou fora"), pinados por
+// presentation-seed-parity.pglite.test.ts. Renderiza pelo caminho N-vias (N=3,
+// como o 1X2); a implícita exibida vem de-vigada em Σ=2 (impliedSumTarget).
+const DOUBLE_CHANCE_SELECTION_LABELS: Record<string, string> = {
+  home_or_draw: "Casa ou empate",
+  away_or_draw: "Empate ou fora",
+  home_or_away: "Casa ou fora",
+};
+
+const DOUBLE_CHANCE: MarketPresentation = {
+  marketKey: "double_chance",
+  marketLabel: "Dupla chance",
+  defaultLine: null,
+  selectionLabel: (key) => lookup(DOUBLE_CHANCE_SELECTION_LABELS, key, key),
+  outcomeLabel: (key) => lookup(DOUBLE_CHANCE_SELECTION_LABELS, key, key),
+  scenarioLabel: (key) => lookup(DOUBLE_CHANCE_SELECTION_LABELS, key, key),
+  betSummary: (key) => {
+    const label = lookup(DOUBLE_CHANCE_SELECTION_LABELS, key, key);
+    return { market: label, plain: "" };
+  },
+  framingLabel: (key) => lookup(DOUBLE_CHANCE_SELECTION_LABELS, key, key),
+  settlementMetricLabel: "resultado (90')",
+  // Placar de 90' ("2-1"), como o 1X2 (o deriver só tem resultData, não a dupla);
+  // split nulo (histórica degradada) → total de gols.
+  settlementMetricValue: (rd, fallback) =>
+    rd && rd.homeScore !== null && rd.awayScore !== null
+      ? `${rd.homeScore}-${rd.awayScore}`
+      : String(rd?.totalGoals ?? fallback),
+  // dupla chance não é mercado de total de gols — a lente over/under não se aplica.
+  classifyH2H: null,
+};
+
 const REGISTRY: Record<string, MarketPresentation> = {
   [OVER_UNDER.marketKey]: OVER_UNDER,
   [MATCH_RESULT.marketKey]: MATCH_RESULT,
   [BTTS.marketKey]: BTTS,
+  [DOUBLE_CHANCE.marketKey]: DOUBLE_CHANCE,
 };
 
 /**

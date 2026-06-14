@@ -1,7 +1,11 @@
 import { describe, expect, it } from "vitest";
 
 import { computeMarketImpliedProbabilities } from "@/lib/odds/implied-probability";
-import { MATCH_RESULT, OVER_UNDER } from "@/lib/odds/market-descriptor";
+import {
+  DOUBLE_CHANCE,
+  MATCH_RESULT,
+  OVER_UNDER,
+} from "@/lib/odds/market-descriptor";
 import {
   pickBestBookmaker,
   pickBestTotalsBookmaker,
@@ -68,6 +72,107 @@ function event(bookmakers: ReturnType<typeof totalsBook>[]): OddsApiEventOdds {
     bookmakers,
   };
 }
+
+// Book de dupla chance no formato REAL do provider: outcomes com nomes de time
+// COMPOSTOS, ordem livre ("{away} or {home}" pro 12).
+function dcBook(
+  key: string,
+  title: string,
+  prices: { hd: number; ad: number; ha: number },
+  home = "Germany",
+  away = "Curaçao",
+  lastUpdate = "2026-06-14T14:29:15Z",
+) {
+  return {
+    key,
+    title,
+    last_update: lastUpdate,
+    markets: [
+      {
+        key: "double_chance",
+        last_update: lastUpdate,
+        outcomes: [
+          { name: `${home} or Draw`, price: prices.hd },
+          { name: `${away} or Draw`, price: prices.ad },
+          { name: `${away} or ${home}`, price: prices.ha },
+        ],
+      },
+    ],
+  };
+}
+
+function dcEvent(
+  bookmakers: ReturnType<typeof dcBook>[],
+): OddsApiEventOdds {
+  return {
+    id: "evt-dc",
+    sport_key: "soccer_fifa_world_cup",
+    commence_time: "2026-06-14T17:00:00Z",
+    home_team: "Germany",
+    away_team: "Curaçao",
+    bookmakers,
+  } as OddsApiEventOdds;
+}
+
+const DC_MATCH = { homeTeam: "Germany", awayTeam: "Curaçao" };
+
+describe("pickBestBookmaker — DOUBLE_CHANCE (nomes compostos + book inválido)", () => {
+  it("resolve um book 1xBet-style (3 outcomes compostos, ordem livre) → bundle com as 3 duplas", () => {
+    const bundle = pickBestBookmaker({
+      event: dcEvent([
+        dcBook("onexbet", "1xBet", { hd: 1.27, ad: 1.73, ha: 1.36 }),
+      ]),
+      match: DC_MATCH,
+      descriptor: DOUBLE_CHANCE,
+    });
+    expect(bundle).not.toBeNull();
+    expect(bundle!.selections.map((s) => s.key).sort()).toEqual([
+      "away_or_draw",
+      "home_or_away",
+      "home_or_draw",
+    ]);
+  });
+
+  it("pula um book com odd 1.0 (favorito extremo do payload real) e ainda escolhe o book válido", () => {
+    const bundle = pickBestBookmaker({
+      event: dcEvent([
+        dcBook("onexbet", "1xBet", { hd: 1.0, ad: 14.5, ha: 1.01 }), // odd 1.0 → inválido
+        dcBook("williamhill", "William Hill", { hd: 1.18, ad: 5.0, ha: 1.3 }),
+      ]),
+      match: DC_MATCH,
+      descriptor: DOUBLE_CHANCE,
+    });
+    // sem o skip por book, o 1.0 faria computeMarketImpliedProbabilities lançar e
+    // derrubar o evento inteiro. Com o fix, o 1xBet é pulado e o válido é escolhido.
+    expect(bundle).not.toBeNull();
+    expect(bundle!.bookmakerKey).toBe("williamhill");
+  });
+
+  it("book incompleto (uma dupla não resolve) → descartado (null se for o único)", () => {
+    const incomplete = {
+      key: "x",
+      title: "X",
+      last_update: "2026-06-14T14:29:15Z",
+      markets: [
+        {
+          key: "double_chance",
+          last_update: "2026-06-14T14:29:15Z",
+          outcomes: [
+            { name: "Germany or Draw", price: 1.27 },
+            { name: "Curaçao or Draw", price: 1.73 },
+            // falta a 12 → mercado incompleto
+          ],
+        },
+      ],
+    };
+    const bundle = pickBestBookmaker({
+      event: dcEvent([incomplete as unknown as ReturnType<typeof dcBook>]),
+      match: DC_MATCH,
+      descriptor: DOUBLE_CHANCE,
+    });
+    expect(bundle).toBeNull();
+  });
+});
 
 describe("pickBestBookmaker — OVER_UNDER", () => {
   it("matches pickBestTotalsBookmaker bit-for-bit (same book, odds, overround)", () => {

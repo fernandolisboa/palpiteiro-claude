@@ -95,6 +95,15 @@ mercado over/under, não descartada.
      (ou Champions) à cobertura quando voltarem = **1 linha** em `coveredLeagues` no descriptor, sem
      migration. A odd do BTTS é buscada **lazy por evento** (`getEventsForSport` grátis → `getOddsForEvent`
      `markets=['btts']`, 1 crédito), **nunca em batch** (`oddsSource: 'additional'`).
+   - **Ativação da Dupla chance (#176, 2026-06-14):** dupla chance (1X/X2/12) entrou ATIVA atrás de
+     flag (admin-only), **restrita a `world_cup`** (`coveredLeagues = ['world_cup']`, mesma fronteira
+     do BTTS — page + action), pelo caminho 100% genérico (cartucho `double_chance_v1` + descriptor +
+     settlement + seed + odds *additional* por evento). A odd é *additional* (`getOddsForEvent`
+     `markets=['double_chance']`, 1 crédito, **nunca batch**); os outcomes do provider vêm com nomes
+     de time COMPOSTOS (`'{home} or Draw'`/`'{away} or Draw'`/`'{teamA} or {teamB}'`, validados em
+     payload real), mapeados por `resolveSelectionKey`. Mesma pendência do Brasileirão (#158).
+     **Edge não-partição:** as 3 duplas se sobrepõem (Σ prob real ≈ 200%) → de-vig com
+     `impliedSumTarget = 2` (emenda ao ADR 0018), não a normalização Σ=1 de partição.
    - **Tier 3 (cada um = 1 ADR próprio):** correct score, escanteios, cartões, player props,
      handicap asiático fracionado (0.25/0.75). Exigem **provider novo** e **nova forma de
      resultado** — hoje só **persistimos** o placar 90' agregado (`prediction_outcomes.total_goals`);

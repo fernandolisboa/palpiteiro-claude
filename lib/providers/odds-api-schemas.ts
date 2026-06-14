@@ -32,7 +32,12 @@ export const MarketSchema = z.object({
 export const BookmakerSchema = z.object({
   key: z.string(), // ex.: "betfair_ex_eu", "pinnacle", "betano"
   title: z.string(),
-  last_update: z.string(), // ISO
+  // OPCIONAL: alguns bookmakers (ex.: 1xBet/onexbet no mercado `double_chance`)
+  // omitem o `last_update` no nível do bookmaker — só o do `market` vem. Exigi-lo
+  // fazia o getOddsForEvent INTEIRO lançar OddsApiSchemaError e o mercado nunca
+  // ter odds. Não é consumido (select-bookmaker usa o `market.last_update`, que
+  // segue obrigatório); relaxar aqui é seguro.
+  last_update: z.string().optional(), // ISO
   markets: z.array(MarketSchema),
 });
 

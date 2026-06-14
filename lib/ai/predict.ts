@@ -474,10 +474,15 @@ export async function predict({
     }
     return odd;
   });
+  // impliedSumTarget (ADR 0018 + emenda): 1 p/ partição (over/under, 1X2 — Σ=100,
+  // bit-exato com o legado); 2 p/ dupla chance (cobertura sobreposta, Σ=200). O
+  // core fica Σ=1; o fator é aplicado AQUI e no mesmo lugar da view
+  // (computeMarketScenarios) → edge persistido == edge da grade.
+  const impliedSumTarget = cartridge.descriptor.impliedSumTarget ?? 1;
   const { probs } = computeMarketImpliedProbabilities(candidateOdds);
   const impliedByKey: Record<string, number> = {};
   selectionKeys.forEach((key, i) => {
-    impliedByKey[key] = probs[i] * 100;
+    impliedByKey[key] = probs[i] * 100 * impliedSumTarget;
   });
 
   // 6. Monta o input do cartucho (over_under: down-mapeia o generic args

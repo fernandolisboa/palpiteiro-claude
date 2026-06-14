@@ -129,6 +129,32 @@ próprios, e `100 − implied_casa` (54.57%) **não** é a implícita de nenhuma
   bruto** (decisão 6 do ADR 0012-cenários); normalizar ali estaria errado.
 - **Renderizar todas as N seleções sempre:** rejeitado pra N>3 — polui a UI; top-K por relevância.
 
+## Emenda — mercados de cobertura NÃO-PARTIÇÃO (Dupla chance, #176)
+
+A decisão 1 (`Σ_i implied_i = 1`) e a decisão 2 (`modelProb_i` somam ~100%) assumem uma
+**partição**: seleções mutuamente exclusivas e exaustivas (over/under, 1X2). **Dupla chance NÃO é
+partição** — as 3 duplas (1X/X2/12) se **sobrepõem**: cada uma cobre 2 dos 3 resultados-base e cada
+resultado aparece em 2 duplas, então a soma das probabilidades REAIS das 3 duplas é **2** (não 1):
+
+```
+P(1X) + P(X2) + P(12) = (P_casa+P_emp) + (P_emp+P_fora) + (P_casa+P_fora) = 2·(P_casa+P_emp+P_fora) = 2
+```
+
+Normalizar a implícita pra Σ=1 nesse mercado estaria **errado**: ou deixaria o floor de 5pp **~2×
+rígido** (cada edge real vira ~metade → suprime aposta legítima), ou exibiria probabilidade
+**enganosa** (uma dupla "casa ou empate" de favorito ~92% apareceria como ~48%). A implícita continua
+**de-vigada** das 3 odds da dupla chance (nunca `1/odd` cru — o gotcha do overround vale), mas
+mantendo a **semântica de par**: `implied_i = (raw_i / Σ_j raw_j) · 2`, somando 2.
+
+**Generalização:** um mercado de cobertura declara `MarketDescriptor.impliedSumTarget` = nº de
+resultados-base que cada seleção cobre (partição = `1`, default; dupla chance = `2`). O fator escala a
+normalização Σ=1 do core nos **dois** sites de consumo — `predict.ts` (implícita persistida) e
+`computeMarketScenarios` (implícita exibida na grade) — pra o edge persistido == edge exibido. O core
+`computeMarketImpliedProbabilities` fica **Σ=1** (paridade byte-idêntica over/under/1X2; `select-bookmaker`
+compara overround por aí). O LLM emite as probs de par **honestas** (somam ~200%, cada ≤100%); o
+`selectionProbs` do cartucho as repassa direto (sem normalizar) e `edge_i = modelProb_i − implied_i`
+fica na escala de par. A decisão 3 (EV/break-even na **odd crua**) e o floor de 5pp ficam **intocados**.
+
 ## Referências
 
 - Issue **#155**; detalha o **ADR 0015** no eixo de odds-math/cenários. Implementação: Fase 2

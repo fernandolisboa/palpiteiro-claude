@@ -36,6 +36,10 @@ export const MARKETS = {
   // btts é um mercado *additional*: NÃO vem no batch /odds (featured); só pelo
   // endpoint por evento /events/{id}/odds. Ver descriptor BTTS (oddsSource).
   BTTS: "btts",
+  // dupla chance (1X/X2/12) — também *additional* (por evento). Ver descriptor
+  // DOUBLE_CHANCE (oddsSource). A fonte de verdade do providerMarketKey é o
+  // descriptor; esta const é documental (não é consumida no fetch).
+  DOUBLE_CHANCE: "double_chance",
 } as const;
 
 export type MarketKey = (typeof MARKETS)[keyof typeof MARKETS];

@@ -113,17 +113,19 @@ describe("marketsForLeague", () => {
     { key: "over_under", label: "Over/Under gols" },
     { key: "match_result", label: "Resultado (1X2)" },
     { key: "btts", label: "Ambas marcam" },
+    { key: "double_chance", label: "Dupla chance" },
   ];
 
-  it("btts (coveredLeagues=['world_cup']) só passa em world_cup", () => {
+  it("btts + double_chance (coveredLeagues=['world_cup']) só passam em world_cup", () => {
     expect(marketsForLeague(ALL, "world_cup").map((m) => m.key)).toEqual([
       "over_under",
       "match_result",
       "btts",
+      "double_chance",
     ]);
   });
 
-  it("btts é DROPADO em ligas sem cobertura (brasileirao, champions)", () => {
+  it("btts + double_chance são DROPADOS em ligas sem cobertura (brasileirao, champions)", () => {
     expect(marketsForLeague(ALL, "brasileirao_a").map((m) => m.key)).toEqual([
       "over_under",
       "match_result",

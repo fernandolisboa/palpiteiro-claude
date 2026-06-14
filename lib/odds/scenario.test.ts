@@ -348,6 +348,52 @@ describe("computeMarketScenarios", () => {
     expect(selections.map((s) => s.modelProbPct)).toEqual(model);
   });
 
+  it("impliedSumTarget=2 (dupla chance, cobertura sobreposta): Σ implied ≈ 200, exatamente 2× o default", () => {
+    // odds de dupla chance de um favorito (1X/X2/12). As 3 duplas se sobrepõem →
+    // a prob real soma ~200%. impliedSumTarget=2 escala a normalização Σ=1.
+    const odds = [
+      { key: "home_or_draw", modelProbPct: 90, odd: 1.2 },
+      { key: "away_or_draw", modelProbPct: 18, odd: 6.0 },
+      { key: "home_or_away", modelProbPct: 92, odd: 1.3 },
+    ];
+    const scaled = computeMarketScenarios({
+      selections: odds,
+      recommendedKey: "home_or_draw",
+      impliedSumTarget: 2,
+    });
+    const base = computeMarketScenarios({
+      selections: odds,
+      recommendedKey: "home_or_draw",
+    });
+
+    const sumScaled = scaled.selections.reduce(
+      (a, s) => a + (s.impliedProbPct ?? 0),
+      0,
+    );
+    const sumBase = base.selections.reduce(
+      (a, s) => a + (s.impliedProbPct ?? 0),
+      0,
+    );
+    expect(sumScaled).toBeCloseTo(200, 6);
+    expect(sumBase).toBeCloseTo(100, 6); // default = partição, byte-idêntico
+
+    // Cada implícita escalada é EXATAMENTE 2× a default → o de-vig só multiplica.
+    scaled.selections.forEach((s, i) => {
+      expect(s.impliedProbPct as number).toBeCloseTo(
+        (base.selections[i].impliedProbPct as number) * 2,
+        9,
+      );
+    });
+
+    // edge = modelProb honesto − implícita escalada (ambos na escala Σ≈200).
+    scaled.selections.forEach((s) => {
+      expect(s.edgePct as number).toBeCloseTo(
+        s.modelProbPct - (s.impliedProbPct as number),
+        9,
+      );
+    });
+  });
+
   it("N=3 com recommendedKey=null (nenhuma seleção recomendada — echo)", () => {
     const { selections, recommended } = computeMarketScenarios({
       selections: [
