@@ -112,6 +112,39 @@ export const OverUnderInputSchema = z.object({
 
 export type OverUnderInput = z.infer<typeof OverUnderInputSchema>;
 
+// Re-export ADITIVO das sub-schemas de contexto (match/home/away/h2h) pro v3
+// reaproveitar EXATAMENTE o mesmo shape sem redefinir. Não altera os exports v2.
+export {
+  MatchSchema as OverUnderMatchSchema,
+  TeamDataSchema as OverUnderTeamDataSchema,
+  H2HMatchSchema as OverUnderH2HMatchSchema,
+};
+
+// ─── Input schema v3 (multi-linha, #175) ─────────────────────────────────────
+
+// Uma linha da escada: a meia-linha avaliada + odds over/under + implícita já
+// de-vigada (Σ=1 por linha). Substitui o par único `odds`/`implied` do v2 por uma
+// lista; o resto do contexto (match/home/away/h2h) é IDÊNTICO ao v2.
+const LineEntrySchema = z.object({
+  line: z.number(),
+  bookmaker: z.string().min(1),
+  captured_at: z.string().datetime(),
+  over_decimal: z.number().positive(),
+  under_decimal: z.number().positive(),
+  over_pct: z.number().min(0).max(100),
+  under_pct: z.number().min(0).max(100),
+});
+
+export const OverUnderInputV3Schema = z.object({
+  match: MatchSchema,
+  home: TeamDataSchema,
+  away: TeamDataSchema,
+  h2h: z.array(H2HMatchSchema).max(20),
+  lines: z.array(LineEntrySchema).min(1),
+});
+
+export type OverUnderInputV3 = z.infer<typeof OverUnderInputV3Schema>;
+
 // ─── Output schema ───────────────────────────────────────────────────────────
 
 const RecommendationSchema = z.enum(["over", "under", "pass"]);
@@ -169,3 +202,53 @@ export const OverUnderOutputSchema = z
   });
 
 export type OverUnderOutput = z.infer<typeof OverUnderOutputSchema>;
+
+// ─── Output schema v3 (multi-linha, #175) ────────────────────────────────────
+
+// Meias-linhas válidas que o modelo pode escolher numa análise multi-linha.
+// Espelha OVER_UNDER_ALT.candidateLines. `line` é OBRIGATÓRIO mesmo em "pass" (o
+// modelo reporta a linha que avaliou como mais próxima de apostável → predict
+// persiste em marketParams.line pra view; settlement ignora em pass).
+const VALID_LINES = [1.5, 2.5, 3.5] as const;
+
+// Mesma tolerância de prosa do v2 (RATIONALE/KEY_FACTOR), mesma convenção de
+// confidence_pct e o MESMO superRefine de minimum_odd (omitido sse 'pass'); ADICIONA
+// `line` obrigatório com .refine pra meia-linha válida.
+export const OverUnderOutputV3Schema = z
+  .object({
+    recommendation: RecommendationSchema,
+    confidence_pct: z.number().min(0).max(100),
+    rationale: z
+      .string()
+      .min(1)
+      .transform((s) => truncate(s, RATIONALE_MAX_CHARS)),
+    key_factors: z
+      .array(z.string().min(1).transform((s) => truncate(s, KEY_FACTOR_MAX_CHARS)))
+      .min(1)
+      .transform((arr) => arr.slice(0, KEY_FACTORS_MAX_COUNT)),
+    line: z
+      .number()
+      .refine((l) => (VALID_LINES as readonly number[]).includes(l), {
+        message: "line must be one of 1.5, 2.5, 3.5",
+      }),
+    minimum_odd: z.number().positive().optional(),
+  })
+  .superRefine((data, ctx) => {
+    if (data.recommendation === "pass" && data.minimum_odd !== undefined) {
+      ctx.addIssue({
+        code: z.ZodIssueCode.custom,
+        path: ["minimum_odd"],
+        message: "minimum_odd must be omitted when recommendation is 'pass'",
+      });
+    }
+    if (data.recommendation !== "pass" && data.minimum_odd === undefined) {
+      ctx.addIssue({
+        code: z.ZodIssueCode.custom,
+        path: ["minimum_odd"],
+        message:
+          "minimum_odd is required when recommendation is 'over' or 'under'",
+      });
+    }
+  });
+
+export type OverUnderOutputV3 = z.infer<typeof OverUnderOutputV3Schema>;

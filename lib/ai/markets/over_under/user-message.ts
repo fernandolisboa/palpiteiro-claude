@@ -1,6 +1,6 @@
 import type { OverUnderInput } from "./schemas";
 
-const fmtNum = (n: number, digits = 2): string =>
+export const fmtNum = (n: number, digits = 2): string =>
   Number.isFinite(n) ? n.toFixed(digits) : "n/a";
 
 const fmtDate = (iso: string): string => iso.slice(0, 10);
@@ -9,10 +9,16 @@ export type UserMessageContext = {
   daysToKickoff: number;
 };
 
-export function buildUserMessage(
-  input: OverUnderInput,
-  context: UserMessageContext,
-): string {
+// Subconjunto de campos comuns a OverUnderInput (v2) e OverUnderInputV3 (v3): só o
+// CONTEXTO (match/home/away/h2h), sem o bloco de odds (que diverge entre v2 e v3).
+// O v3 reaproveita renderContextSections SEM duplicar — o snapshot golden do v2
+// prova que a saída ficou byte-idêntica (as primeiras seções não mudam).
+type ContextInput = Pick<OverUnderInput, "match" | "home" | "away" | "h2h">;
+
+// Renderiza as seções de contexto (# Jogo, # Mandante/Visitante, # Confrontos
+// diretos H2H) — tudo ATÉ o bloco de odds. Devolve as linhas (sem trailing blank)
+// pra cada cartucho anexar seu próprio bloco de odds + contexto temporal + tarefa.
+export function renderContextSections(input: ContextInput): string[] {
   const lines: string[] = [];
 
   lines.push("# Jogo");
@@ -101,6 +107,28 @@ export function buildUserMessage(
     }
   }
 
+  return lines;
+}
+
+// Bloco "# Contexto temporal" — compartilhado v2/v3 (idêntico). Empurra nas linhas
+// recebidas (com a linha em branco separadora antes do header).
+export function pushTemporalSection(
+  lines: string[],
+  context: UserMessageContext,
+): void {
+  lines.push("");
+  lines.push("# Contexto temporal");
+  lines.push(
+    `- Dias até o jogo: ${context.daysToKickoff} (≤1 = dados mais confiáveis; ≥5 = lineup ainda indefinido, lesões podem mudar)`,
+  );
+}
+
+export function buildUserMessage(
+  input: OverUnderInput,
+  context: UserMessageContext,
+): string {
+  const lines = renderContextSections(input);
+
   lines.push("");
   lines.push("# Odds e probabilidades implícitas");
   lines.push(
@@ -113,11 +141,7 @@ export function buildUserMessage(
     `- Under 2.5: odd ${fmtNum(input.odds.under_2_5_decimal)} → implícita normalizada ${fmtNum(input.implied.under_pct)}%`,
   );
 
-  lines.push("");
-  lines.push("# Contexto temporal");
-  lines.push(
-    `- Dias até o jogo: ${context.daysToKickoff} (≤1 = dados mais confiáveis; ≥5 = lineup ainda indefinido, lesões podem mudar)`,
-  );
+  pushTemporalSection(lines, context);
 
   lines.push("");
   lines.push("# Sua tarefa");

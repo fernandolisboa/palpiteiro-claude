@@ -1,4 +1,9 @@
-import { OverUnderInputSchema, type OverUnderInput } from "./schemas";
+import {
+  OverUnderInputSchema,
+  OverUnderInputV3Schema,
+  type OverUnderInput,
+  type OverUnderInputV3,
+} from "./schemas";
 import type { GenericImpliedArgs, GenericOddsArgs } from "../types";
 import type {
   NormalizedFixture,
@@ -27,7 +32,11 @@ function mapLineupRole(pos: string | null | undefined): PlayerRole {
   return "MID";
 }
 
-function findStandingTeamByName(
+// Os helpers de mapeamento sports-data abaixo são EXPORTADOS (aditivo) pra o
+// build-input do v3 (#175) reaproveitá-los — o shape de match/home/away/h2h é
+// idêntico ao v2 (mesmas sub-schemas). Mantidos como `function` nomeadas pra
+// preservar o uso interno do v2 sem indireção.
+export function findStandingTeamByName(
   standings: NormalizedStanding | undefined,
   teamName: string,
 ) {
@@ -39,7 +48,7 @@ function findStandingTeamByName(
   return undefined;
 }
 
-function buildStanding(
+export function buildStanding(
   row: NonNullable<ReturnType<typeof findStandingTeamByName>>,
 ): OverUnderInput["home"]["standing"] {
   return {
@@ -71,7 +80,7 @@ function buildStanding(
   };
 }
 
-function buildFormMatches(
+export function buildFormMatches(
   fixtures: NormalizedFixture[],
   teamName: string,
   limit: number,
@@ -104,7 +113,7 @@ function buildFormMatches(
   return matches;
 }
 
-function buildAbsences(
+export function buildAbsences(
   injuries: NormalizedInjury[],
 ): OverUnderInput["home"]["absences"] {
   return injuries.map((inj) => ({
@@ -118,7 +127,7 @@ function buildAbsences(
   }));
 }
 
-function buildLineupForSide(
+export function buildLineupForSide(
   lineup: NormalizedTeamLineup | undefined,
 ): OverUnderInput["home"]["lineup"] | undefined {
   if (!lineup) return undefined;
@@ -132,7 +141,7 @@ function buildLineupForSide(
   };
 }
 
-function buildH2H(
+export function buildH2H(
   fixtures: NormalizedH2H[],
   limit: number,
 ): OverUnderInput["h2h"] {
@@ -301,6 +310,133 @@ export function buildPredictionInput(
   const parsed = OverUnderInputSchema.safeParse(draft);
   if (!parsed.success) {
     throw new BuildInputError("OverUnderInputSchema validation failed", {
+      issues: parsed.error.issues,
+    });
+  }
+  return parsed.data;
+}
+
+// ─── build-input v3 (multi-linha, #175) ──────────────────────────────────────
+
+// Monta o OverUnderInputV3 consumindo a escada `args.odds.lineLadder` (montada por
+// predict UMA vez, um bundle por linha candidata). O CONTEXTO (match/home/away/h2h)
+// reusa os MESMOS helpers do v2 — shape idêntico. O bloco de odds vira a lista
+// `lines[]` (over=seleção 'over', under=seleção 'under', pct de impliedPct por linha).
+// Reaproveita BuildPredictionInputArgs: os campos de sports-data são os mesmos; só
+// trocamos o consumo de odds (lineLadder em vez do par único `odds.selections`).
+export function buildPredictionInputV3(
+  args: BuildPredictionInputArgs,
+): OverUnderInputV3 {
+  const homeRow = findStandingTeamByName(args.standings, args.match.homeTeam);
+  const awayRow = findStandingTeamByName(args.standings, args.match.awayTeam);
+  if (!homeRow || !awayRow) {
+    throw new BuildInputError("standings row missing for one or both teams", {
+      homeFound: Boolean(homeRow),
+      awayFound: Boolean(awayRow),
+      homeTeam: args.match.homeTeam,
+      awayTeam: args.match.awayTeam,
+    });
+  }
+
+  const ladder = args.odds.lineLadder;
+  if (!ladder || ladder.length === 0) {
+    throw new BuildInputError(
+      "over_under v3 odds missing lineLadder in generic args",
+      { hasLadder: Boolean(ladder), ladderLen: ladder?.length ?? 0 },
+    );
+  }
+
+  // Cada entrada da escada → uma linha do input v3. As chaves 'over'/'under' vêm de
+  // descriptor.selectionKeys (predict monta o ladder sobre essa ordem). Ausência de
+  // qualquer seleção/pct por linha = bug de seed/descriptor → BuildInputError.
+  const lines = ladder.map((entry) => {
+    const overSel = entry.selections.find((s) => s.key === "over");
+    const underSel = entry.selections.find((s) => s.key === "under");
+    if (!overSel || !underSel) {
+      throw new BuildInputError(
+        "over_under v3 lineLadder entry missing 'over'/'under' selection",
+        { line: entry.line, keys: entry.selections.map((s) => s.key) },
+      );
+    }
+    const overPct = entry.impliedPct.over;
+    const underPct = entry.impliedPct.under;
+    if (overPct === undefined || underPct === undefined) {
+      throw new BuildInputError(
+        "over_under v3 lineLadder entry missing 'over'/'under' implied pct",
+        { line: entry.line, keys: Object.keys(entry.impliedPct) },
+      );
+    }
+    return {
+      line: entry.line,
+      bookmaker: entry.bookmaker,
+      captured_at: entry.captured_at,
+      over_decimal: overSel.odd,
+      under_decimal: underSel.odd,
+      over_pct: overPct,
+      under_pct: underPct,
+    };
+  });
+
+  const draft: OverUnderInputV3 = {
+    match: {
+      id: args.match.externalId,
+      home_team: {
+        id: args.match.homeTeam,
+        name: args.match.homeTeam,
+      },
+      away_team: {
+        id: args.match.awayTeam,
+        name: args.match.awayTeam,
+      },
+      league: args.match.league,
+      kickoff_at: args.match.kickoffAt.toISOString(),
+      venue: args.match.venue,
+    },
+    home: {
+      form: {
+        matches: buildFormMatches(
+          args.home.form,
+          args.match.homeTeam,
+          FORM_LIMIT,
+        ),
+      },
+      standing: buildStanding(homeRow),
+      absences_available: args.home.absencesAvailable,
+      absences: buildAbsences(args.home.injuries),
+      lineup: buildLineupForSide(
+        args.lineups?.home.team === args.match.homeTeam
+          ? args.lineups.home
+          : args.lineups?.away.team === args.match.homeTeam
+            ? args.lineups.away
+            : undefined,
+      ),
+    },
+    away: {
+      form: {
+        matches: buildFormMatches(
+          args.away.form,
+          args.match.awayTeam,
+          FORM_LIMIT,
+        ),
+      },
+      standing: buildStanding(awayRow),
+      absences_available: args.away.absencesAvailable,
+      absences: buildAbsences(args.away.injuries),
+      lineup: buildLineupForSide(
+        args.lineups?.away.team === args.match.awayTeam
+          ? args.lineups.away
+          : args.lineups?.home.team === args.match.awayTeam
+            ? args.lineups.home
+            : undefined,
+      ),
+    },
+    h2h: buildH2H(args.h2h, H2H_LIMIT),
+    lines,
+  } satisfies OverUnderInputV3;
+
+  const parsed = OverUnderInputV3Schema.safeParse(draft);
+  if (!parsed.success) {
+    throw new BuildInputError("OverUnderInputV3Schema validation failed", {
       issues: parsed.error.issues,
     });
   }
