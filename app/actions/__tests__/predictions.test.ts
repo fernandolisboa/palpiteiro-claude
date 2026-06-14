@@ -35,10 +35,14 @@ vi.mock("@/lib/odds/fetch-and-snapshot", () => ({
 vi.mock("@/lib/db/queries/users", () => ({ userExists: vi.fn() }));
 vi.mock("@/lib/rate-limit", () => ({ checkAnalysisRateLimit: vi.fn() }));
 vi.mock("@/lib/view/analysis", () => ({ toAnalysisView: vi.fn(() => ({})) }));
+vi.mock("@/lib/db/queries/ai-config", () => ({
+  getEnableOverUnderExtraLines: vi.fn(),
+}));
 
 import { analyzeMatch } from "@/app/actions/predictions";
 import { auth } from "@/auth";
 import { predict } from "@/lib/ai/predict";
+import { getEnableOverUnderExtraLines } from "@/lib/db/queries/ai-config";
 import { marketsForAudience } from "@/lib/db/queries/market-catalog";
 import { getMatchById } from "@/lib/db/queries/matches";
 import { getAiCallById } from "@/lib/db/queries/predictions";
@@ -57,6 +61,7 @@ const mockUserExists = vi.mocked(userExists);
 const mockGetAiCall = vi.mocked(getAiCallById);
 const mockRateLimit = vi.mocked(checkAnalysisRateLimit);
 const mockToAnalysisView = vi.mocked(toAnalysisView);
+const mockExtraLinesFlag = vi.mocked(getEnableOverUnderExtraLines);
 
 const OVER_UNDER_MARKET = { key: "over_under", label: "Over/Under gols" };
 const MATCH_RESULT_MARKET = { key: "match_result", label: "Resultado (1X2)" };
@@ -129,6 +134,10 @@ beforeEach(() => {
   mockPredict.mockReset();
   mockUserExists.mockReset();
   mockGetAiCall.mockReset();
+  // Flag de linhas extras (#175) OFF por padrão → caminho de hoje; testes
+  // específicos sobrescrevem pra exercitar o multi-linha.
+  mockExtraLinesFlag.mockReset();
+  mockExtraLinesFlag.mockResolvedValue(false);
   // Só limpa o histórico de chamadas (mantém o `() => ({})` do vi.mock) pra os
   // testes que inspecionam os args com que toAnalysisView foi chamada.
   mockToAnalysisView.mockClear();
@@ -253,6 +262,7 @@ describe("analyzeMatch — model override gating", () => {
       isAdmin: false,
       modelOverride: "claude-haiku-4-5",
       marketKey: "over_under",
+      extraLines: false,
     });
   });
 
@@ -270,6 +280,7 @@ describe("analyzeMatch — model override gating", () => {
       isAdmin: false,
       modelOverride: undefined,
       marketKey: "over_under",
+      extraLines: false,
     });
   });
 
@@ -289,6 +300,7 @@ describe("analyzeMatch — model override gating", () => {
       isAdmin: true,
       modelOverride: undefined,
       marketKey: "over_under",
+      extraLines: false,
     });
   });
 
@@ -307,6 +319,7 @@ describe("analyzeMatch — model override gating", () => {
       isAdmin: true,
       modelOverride: "claude-sonnet-4-5-20250929",
       marketKey: "over_under",
+      extraLines: false,
     });
   });
 
@@ -327,6 +340,7 @@ describe("analyzeMatch — model override gating", () => {
       isAdmin: false,
       modelOverride: "claude-sonnet-4-5-20250929",
       marketKey: "over_under",
+      extraLines: false,
     });
   });
 
@@ -342,6 +356,7 @@ describe("analyzeMatch — model override gating", () => {
       isAdmin: true,
       modelOverride: undefined,
       marketKey: "over_under",
+      extraLines: false,
     });
   });
 
@@ -357,6 +372,7 @@ describe("analyzeMatch — model override gating", () => {
       isAdmin: true,
       modelOverride: undefined,
       marketKey: "over_under",
+      extraLines: false,
     });
   });
 });
@@ -380,6 +396,7 @@ describe("analyzeMatch — market audience gating", () => {
       isAdmin: true,
       modelOverride: undefined,
       marketKey: "match_result",
+      extraLines: false,
     });
   });
 
@@ -397,6 +414,7 @@ describe("analyzeMatch — market audience gating", () => {
       isAdmin: false,
       modelOverride: undefined,
       marketKey: "match_result",
+      extraLines: false,
     });
   });
 
@@ -412,6 +430,7 @@ describe("analyzeMatch — market audience gating", () => {
       isAdmin: true,
       modelOverride: undefined,
       marketKey: "over_under",
+      extraLines: false,
     });
   });
 });
@@ -439,6 +458,7 @@ describe("analyzeMatch — market league coverage gating (#158)", () => {
       isAdmin: true,
       modelOverride: undefined,
       marketKey: "btts",
+      extraLines: false,
     });
     // additional market → pre-warm por evento ANTES do predict (1x), e nessa ORDEM
     // (o pre-warm garante o snapshot fresco que o predict reusa). Pina a ordem pra um
@@ -496,6 +516,7 @@ describe("analyzeMatch — market league coverage gating (#158)", () => {
       isAdmin: true,
       modelOverride: undefined,
       marketKey: "over_under",
+      extraLines: false,
     });
     // over_under é featured → nenhum pre-warm de odds por evento.
     expect(mockEnsureOdds).not.toHaveBeenCalled();
@@ -514,6 +535,7 @@ describe("analyzeMatch — market league coverage gating (#158)", () => {
       isAdmin: true,
       modelOverride: undefined,
       marketKey: "match_result",
+      extraLines: false,
     });
     expect(mockEnsureOdds).not.toHaveBeenCalled();
   });
@@ -551,6 +573,7 @@ describe("analyzeMatch — double_chance league coverage gating (#176)", () => {
       isAdmin: true,
       modelOverride: undefined,
       marketKey: "double_chance",
+      extraLines: false,
     });
     // additional market → pre-warm por evento ANTES do predict (1x), nessa ORDEM.
     expect(mockEnsureOdds).toHaveBeenCalledTimes(1);
@@ -587,6 +610,7 @@ describe("analyzeMatch — double_chance league coverage gating (#176)", () => {
       isAdmin: true,
       modelOverride: undefined,
       marketKey: "over_under",
+      extraLines: false,
     });
     expect(mockEnsureOdds).not.toHaveBeenCalled();
   });
@@ -653,5 +677,68 @@ describe("analyzeMatch — success path view wiring", () => {
     expect(predictionArg.marketKey).toBe("match_result");
     expect(predictionArg.selections).toHaveLength(3);
     expect(predictionArg.line).toBeNull();
+  });
+});
+
+// #175: linhas extras de over/under atrás da flag (ai_config), pra TODOS os usuários
+// onde a variante multi-linha tem cobertura (alternate_totals → world_cup por ora).
+describe("analyzeMatch — over/under linhas extras (#175)", () => {
+  beforeEach(() => {
+    mockUserExists.mockResolvedValue(true);
+    mockPredict.mockResolvedValue(PREDICTION);
+    mockGetAiCall.mockResolvedValue({ costUsd: "0.01" } as never);
+  });
+
+  it("flag ON + over_under em world_cup (usuário COMUM) → extraLines:true + pre-warm additional alternate_totals", async () => {
+    mockAuth.mockResolvedValue(USER_SESSION);
+    mockExtraLinesFlag.mockResolvedValue(true);
+    mockGetMatchById.mockResolvedValue(matchInLeague("world_cup"));
+
+    await analyzeMatch(
+      null,
+      form({ matchId: VALID_MATCH_ID, marketKey: "over_under" }),
+    );
+
+    // predict recebe extraLines:true → getCartridge devolve a variante v3 (multi-linha).
+    expect(mockPredict).toHaveBeenCalledWith({
+      matchId: VALID_MATCH_ID,
+      userId: "u2",
+      isAdmin: false,
+      modelOverride: undefined,
+      marketKey: "over_under",
+      extraLines: true,
+    });
+    // over_under vira additional sob flag → pre-warm POR EVENTO da escada (1 crédito),
+    // ANTES do predict. O descriptor efetivo é o da variante (alternate_totals/escada).
+    expect(mockEnsureOdds).toHaveBeenCalledTimes(1);
+    const descriptor = mockEnsureOdds.mock.calls[0][1]?.markets?.[0];
+    expect(descriptor?.oddsSource).toBe("additional");
+    expect(descriptor?.providerMarketKey).toBe("alternate_totals");
+    expect(descriptor?.candidateLines).toEqual([1.5, 2.5, 3.5]);
+    expect(mockEnsureOdds.mock.invocationCallOrder[0]).toBeLessThan(
+      mockPredict.mock.invocationCallOrder[0],
+    );
+  });
+
+  it("flag ON mas liga SEM cobertura (brasileirao) → extraLines:false (graceful featured 2.5, sem pre-warm)", async () => {
+    mockAuth.mockResolvedValue(USER_SESSION);
+    mockExtraLinesFlag.mockResolvedValue(true);
+    mockGetMatchById.mockResolvedValue(matchInLeague("brasileirao_a"));
+
+    await analyzeMatch(
+      null,
+      form({ matchId: VALID_MATCH_ID, marketKey: "over_under" }),
+    );
+
+    expect(mockPredict).toHaveBeenCalledWith({
+      matchId: VALID_MATCH_ID,
+      userId: "u2",
+      isAdmin: false,
+      modelOverride: undefined,
+      marketKey: "over_under",
+      extraLines: false,
+    });
+    // featured 2.5 → SEM pre-warm additional.
+    expect(mockEnsureOdds).not.toHaveBeenCalled();
   });
 });

@@ -7,6 +7,7 @@ import { auth } from "@/auth";
 import { getCartridge } from "@/lib/ai/markets/registry";
 import { isModelAllowedForAudience, type AIModelId } from "@/lib/ai/models";
 import { PredictError, predict } from "@/lib/ai/predict";
+import { getEnableOverUnderExtraLines } from "@/lib/db/queries/ai-config";
 import { extractDbCause } from "@/lib/db/pg-error";
 import {
   marketsForAudience,
@@ -136,14 +137,34 @@ export async function analyzeMatch(
   const marketKey = allowedMarkets.some((m) => m.key === marketKeyRaw)
     ? marketKeyRaw
     : "over_under";
+  // Linhas extras de over/under (#175): flag global (ai_config) ∩ cobertura da
+  // variante multi-linha pra a liga deste match. getCartridge({extraLines}) devolve a
+  // variante onde existir (over_under → v3); `candidateLines` a distingue da base e
+  // `coveredLeagues` (data-driven, como btts/dc) restringe às ligas validadas. Liga
+  // sem cobertura → extraLines=false → caminho featured 2.5 (graceful). Sem literal
+  // de mercado: mercados sem variante caem na base mesmo com a flag ligada.
+  const extraLinesEnabled = await getEnableOverUnderExtraLines();
+  const variantDescriptor = getCartridge(marketKey, {
+    extraLines: extraLinesEnabled,
+  }).descriptor;
+  const extraLines =
+    extraLinesEnabled &&
+    variantDescriptor.candidateLines !== undefined &&
+    (variantDescriptor.coveredLeagues === undefined ||
+      variantDescriptor.coveredLeagues.includes(match.league));
   try {
-    // Mercado *additional* (btts): pré-aquece a snapshot por evento (lazy, 1 crédito,
-    // deduplicado pelo gate de frescor) ANTES do predict, pra o caminho de reuso
-    // fresco sempre acertar (predict nunca batcheia additional). Data-driven por
+    // Mercado *additional* (btts/dupla chance OU over_under multi-linha sob flag):
+    // pré-aquece a snapshot por evento (lazy, 1 crédito, deduplicado pelo gate de
+    // frescor) ANTES do predict, pra o caminho de reuso fresco sempre acertar (predict
+    // nunca batcheia additional). O descriptor EFETIVO sai de getCartridge(extraLines)
+    // — over_under multi-linha vira additional (alternate_totals). Data-driven por
     // oddsSource, nunca `if (market==='btts')`.
-    if (getCartridge(marketKey).descriptor.oddsSource === "additional") {
+    const effectiveDescriptor = getCartridge(marketKey, {
+      extraLines,
+    }).descriptor;
+    if (effectiveDescriptor.oddsSource === "additional") {
       await ensureOddsSnapshotsFresh(match, {
-        markets: [getCartridge(marketKey).descriptor],
+        markets: [effectiveDescriptor],
       });
     }
     // predict() retorna o carrier N-vias { prediction, marketKey, selections }. O
@@ -156,6 +177,7 @@ export async function analyzeMatch(
         isAdmin,
         modelOverride,
         marketKey,
+        extraLines,
       });
     const aiCall = await getAiCallById(prediction.aiCallId);
     revalidatePath(`/match/${matchId}`);
