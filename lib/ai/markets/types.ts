@@ -8,6 +8,38 @@ export type UserMessageContext = {
 };
 
 /**
+ * Shape comum a TODO output de cartucho (gate #9, decisão B). predict.ts narra
+ * `parsed.data as BaseMarketOutput` pra ler os campos compartilhados sem `any` e
+ * sem ramificar por mercado — `OverUnderOutput`/`MatchResultOutput` são
+ * assignáveis a este tipo (têm estes campos + extras próprios). `recommendation`
+ * é `string` (não enum fechado): cada cartucho o restringe ao seu próprio enum
+ * (`over|under|pass`, `home|draw|away|pass`), mas predict só precisa do valor cru
+ * (= selectionKey, ou "pass") pra persistir e calcular edge.
+ */
+export type BaseMarketOutput = {
+  recommendation: string;
+  confidence_pct: number;
+  rationale: string;
+  key_factors: string[];
+  minimum_odd?: number;
+};
+
+/**
+ * Shape GENÉRICO dos args de odds/implied que predict.ts monta UMA vez (a partir
+ * do `MarketOddsBundle.selections` + `impliedByKey` sobre `descriptor.selectionKeys`)
+ * e passa pro `buildPredictionInput` de QUALQUER cartucho. Cada cartucho DOWN-MAPEIA
+ * esse shape no seu input concreto (ex.: over_under → `over_2_5_decimal`/`under_2_5_decimal`).
+ * O `Args` de cada cartucho ESTENDE isto (mesmos campos de odds/implied; o resto é
+ * dado de sports-data específico). Ver `over_under/build-input.ts`.
+ */
+export type GenericOddsArgs = {
+  bookmaker: string;
+  captured_at: string;
+  selections: { key: string; odd: number }[];
+};
+export type GenericImpliedArgs = { pct: Record<string, number> };
+
+/**
  * Contrato de UM cartucho de mercado: tudo que `predict()` precisa pra rodar uma
  * análise market-agnostic (prompt + tool + schemas + montagem do input/mensagem
  * + descriptor de odds). predict.ts despacha por `marketKey` via `getCartridge`
@@ -52,6 +84,13 @@ export type MarketCartridge<
   ) => Error;
   // Renderiza a mensagem markdown do usuário a partir do input validado.
   buildUserMessage: (input: Input, ctx: UserMessageContext) => string;
+  // Deriva a probabilidade do MODELO (0–100) por seleção a partir do output do
+  // LLM, keyed por selectionKey (= `descriptor.selectionKeys`). Função PURA
+  // (não toca prompt/schema/payload) — predict grava `model_prob_pct` por seleção
+  // em prediction_selection_odds e alimenta a grade N-vias. binário (over_under)
+  // deriva `{[rec]: confidence, [outro]: 100−confidence}`; distribuição (1X2)
+  // retorna as 3 probs diretas do output.
+  selectionProbs: (output: Output) => Record<string, number>;
   // Conjunto canônico de seleções do mercado (`["over","under"]`). Espelha
   // `descriptor.selectionKeys` — a ordem é o contrato chave→índice do edge N-vias.
   selections: string[];

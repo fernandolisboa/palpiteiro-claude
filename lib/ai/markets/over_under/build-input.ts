@@ -1,4 +1,5 @@
 import { OverUnderInputSchema, type OverUnderInput } from "./schemas";
+import type { GenericImpliedArgs, GenericOddsArgs } from "../types";
 import type {
   NormalizedFixture,
   NormalizedH2H,
@@ -175,13 +176,12 @@ export type BuildPredictionInputArgs = {
   };
   lineups: NormalizedLineup | undefined;
   h2h: NormalizedH2H[];
-  odds: {
-    bookmaker: string;
-    over_2_5_decimal: number;
-    under_2_5_decimal: number;
-    captured_at: string;
-  };
-  implied: { over_pct: number; under_pct: number };
+  // odds/implied chegam no shape GENÉRICO que predict monta UMA vez pra qualquer
+  // cartucho (selections[] keyed por selectionKey + pct map). buildPredictionInput
+  // DOWN-MAPEIA pro shape binário do OverUnderInput (over_2_5_decimal/under_2_5_decimal,
+  // over_pct/under_pct) — ver abaixo. O OverUnderInput (schema) fica INTACTO.
+  odds: GenericOddsArgs;
+  implied: GenericImpliedArgs;
 };
 
 export class BuildInputError extends Error {
@@ -208,6 +208,28 @@ export function buildPredictionInput(
       homeTeam: args.match.homeTeam,
       awayTeam: args.match.awayTeam,
     });
+  }
+
+  // Down-map do shape GENÉRICO (selections[]/pct) pro binário do OverUnderInput.
+  // As chaves 'over'/'under' vêm de descriptor.selectionKeys (predict monta o
+  // generic args sobre essa ordem). Ausência = bug de seed/descriptor → BuildInputError.
+  const overSel = args.odds.selections.find((s) => s.key === "over");
+  const underSel = args.odds.selections.find((s) => s.key === "under");
+  if (!overSel || !underSel) {
+    throw new BuildInputError(
+      "over_under odds missing 'over'/'under' selection in generic args",
+      {
+        keys: args.odds.selections.map((s) => s.key),
+      },
+    );
+  }
+  const overPct = args.implied.pct.over;
+  const underPct = args.implied.pct.under;
+  if (overPct === undefined || underPct === undefined) {
+    throw new BuildInputError(
+      "over_under implied missing 'over'/'under' pct in generic args",
+      { keys: Object.keys(args.implied.pct) },
+    );
   }
 
   // The composite fixture key has the same shape as a team identifier per side.
@@ -267,8 +289,13 @@ export function buildPredictionInput(
       ),
     },
     h2h: buildH2H(args.h2h, H2H_LIMIT),
-    odds: args.odds,
-    implied: args.implied,
+    odds: {
+      bookmaker: args.odds.bookmaker,
+      over_2_5_decimal: overSel.odd,
+      under_2_5_decimal: underSel.odd,
+      captured_at: args.odds.captured_at,
+    },
+    implied: { over_pct: overPct, under_pct: underPct },
   } satisfies OverUnderInput;
 
   const parsed = OverUnderInputSchema.safeParse(draft);

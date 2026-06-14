@@ -69,7 +69,7 @@ async function main() {
   try {
     // Smoke test: isAdmin=true permite exercitar qualquer modelo do registry
     // (a preferência do userId, se houver, não é filtrada por audiência aqui).
-    const prediction = await predict({
+    const { prediction } = await predict({
       matchId,
       userId: cli.userId,
       isAdmin: true,

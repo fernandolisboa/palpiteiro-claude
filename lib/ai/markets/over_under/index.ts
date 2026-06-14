@@ -51,6 +51,20 @@ export const overUnderCartridge: MarketCartridge<
   buildPredictionInput,
   BuildInputError,
   buildUserMessage,
+  // Deriva P_over/P_under do output binário (função PURA — não toca prompt/schema,
+  // eval-noop). Convenção do confidence_pct (ver schemas.ts): em over/under é
+  // P(lado recomendado); em pass é P(over). Logo:
+  //   - rec "over"  → {over: conf,        under: 100−conf}
+  //   - rec "under" → {under: conf,       over: 100−conf}
+  //   - rec "pass"  → {over: conf,        under: 100−conf}  (conf = P(over))
+  selectionProbs(output) {
+    const conf = output.confidence_pct;
+    if (output.recommendation === "under") {
+      return { over: 100 - conf, under: conf };
+    }
+    // "over" e "pass" tratam conf como P(over) (ver convenção do schema).
+    return { over: conf, under: 100 - conf };
+  },
   selections: OVER_UNDER.selectionKeys,
   descriptor: OVER_UNDER,
 };

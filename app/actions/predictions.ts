@@ -95,7 +95,10 @@ export async function analyzeMatch(
     modelOverride = overrideRaw;
   }
   try {
-    const prediction = await predict({
+    // predict() agora retorna o carrier N-vias { prediction, marketKey, selections }.
+    // Por ora só a prediction é threadada (a view-mapper continua over/under-binária;
+    // a generalização da grade N-vias é um commit POSTERIOR — #173 PR-1 seam F).
+    const { prediction } = await predict({
       matchId,
       userId: session.user.id,
       isAdmin,
