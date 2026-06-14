@@ -1,6 +1,6 @@
 "use client";
 
-import { useActionState, useState } from "react";
+import { useActionState, useRef, useState } from "react";
 import { Loader2, RefreshCcw } from "lucide-react";
 
 import { analyzeMatch, type AnalyzeMatchResult } from "@/app/actions/predictions";
@@ -10,6 +10,10 @@ import { AnalyzeCTA } from "@/components/analyze-cta";
 import { MarketSelect } from "@/components/market-select";
 import { ModelOverrideSelect } from "@/components/model-override-select";
 import { Button } from "@/components/ui/button";
+import {
+  initialModelOverride,
+  resyncModelOverride,
+} from "@/lib/ai/model-override";
 import { MODEL_REGISTRY, isAIModelId } from "@/lib/ai/models";
 import type { AnalysisView } from "@/lib/view/types";
 
@@ -47,7 +51,33 @@ export function AnalysisPanel({
     ? { ok: true, view: existing }
     : null;
   const [state, formAction, pending] = useActionState(analyzeMatch, initial);
-  const [modelOverride, setModelOverride] = useState("default");
+  // Persiste o modelo escolhido entre reanálises (#239): sem isso, cada conclusão
+  // de análise repõe o dropdown no "default" (regra em `resyncModelOverride`). O
+  // seed é a preferência server-side; `seededOverride` guarda o valor "vivo" (a
+  // última escolha) que deve sobreviver à reanálise. Sem URL/localStorage (issue).
+  const seededOverride = useRef(
+    initialModelOverride(preferredModelId, selectableModels),
+  );
+  const [modelOverride, setModelOverride] = useState(seededOverride.current);
+  // Re-aplica a escolha viva quando a action conclui (identidade de `state` muda).
+  // setState na FASE DE RENDER é o padrão React intencional ("ajustar state ao
+  // mudar uma entrada" / store info from previous render) — NÃO troque por
+  // useEffect, que reintroduziria o flash do default.
+  const prevState = useRef(state);
+  const actionCompleted = prevState.current !== state;
+  prevState.current = state;
+  const resynced = resyncModelOverride({
+    displayed: modelOverride,
+    live: seededOverride.current,
+    actionCompleted,
+  });
+  if (resynced !== null) setModelOverride(resynced);
+  // Cada escolha no dropdown vira o novo valor "vivo" a re-semear nas próximas
+  // reanálises — assim um override one-off persiste como a preferência faria.
+  const handleModelChange = (value: string) => {
+    seededOverride.current = value;
+    setModelOverride(value);
+  };
   // Mercado a analisar. Default = primeiro mercado selecionável (over_under, que
   // sorta primeiro no server) ou "over_under" se a lista vier vazia. Com ≤1
   // mercado o seletor some e a action coerce pro default — defesa em profundidade.
@@ -79,7 +109,7 @@ export function AnalysisPanel({
   const modelSelect = hasSelectableModels ? (
     <ModelOverrideSelect
       value={modelOverride}
-      onChange={setModelOverride}
+      onChange={handleModelChange}
       models={selectableModels}
       defaultModelLabel={defaultModelLabel}
     />
