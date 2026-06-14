@@ -93,13 +93,16 @@ const OddsSchema = z.object({
 });
 
 // Implícitas de-vigadas mantendo a semântica de PAR (ADR 0018 + emenda
-// não-partição): as 3 duplas se sobrepõem, então SOMAM ~200% (não 100). Cada
-// dupla é ≤100% (a cobertura de um par nunca passa de certeza) — por isso o clamp
-// [0,100] por campo segue válido. Nunca `1/odd` cru.
+// não-partição): as 3 duplas se sobrepõem, então SOMAM ~200% (não 100). Numa
+// dupla chance COERENTE cada dupla fica ≤100% (raw_i ≤ raw_j+raw_k), mas um book
+// INCOERENTE/enviesado (ex.: favorito extremo com empate mal precificado) pode
+// de-vigar uma dupla acima de 100% — o teto ESTRUTURAL é a soma-alvo (Σ=200), não
+// 100. Clampar a 100 rejeitaria a predição (falha opaca); aceitamos até 200 e o
+// edge fica fortemente negativo → `pass` (gracioso). Nunca `1/odd` cru.
 const ImpliedProbabilitiesSchema = z.object({
-  home_or_draw_pct: z.number().min(0).max(100),
-  away_or_draw_pct: z.number().min(0).max(100),
-  home_or_away_pct: z.number().min(0).max(100),
+  home_or_draw_pct: z.number().min(0).max(200),
+  away_or_draw_pct: z.number().min(0).max(200),
+  home_or_away_pct: z.number().min(0).max(200),
 });
 
 const MatchSchema = z.object({

@@ -44,6 +44,17 @@ describe("DOUBLE_CHANCE.resolveSelectionKey", () => {
     expect(resolve("Draw or Draw")).toBeNull();
   });
 
+  it("é defensivo a nomes com colisão de substring (Korea / South Korea)", () => {
+    const ko = { homeTeam: "South Korea", awayTeam: "Korea" };
+    const r = (name: string) =>
+      DOUBLE_CHANCE.resolveSelectionKey(out(name), ko);
+    // "Korea" casa AMBOS os times via o includes() bidirecional → ambíguo na
+    // dupla com empate → null (dropa o book em vez de mapear o par errado).
+    expect(r("Korea or Draw")).toBeNull();
+    // O par de 2 times resolve (ambos presentes → 12, independente da ordem).
+    expect(r("South Korea or Korea")).toBe("home_or_away");
+  });
+
   it("descriptor: oddsSource additional, coveredLeagues world_cup, impliedSumTarget 2", () => {
     expect(DOUBLE_CHANCE.oddsSource).toBe("additional");
     expect(DOUBLE_CHANCE.coveredLeagues).toEqual(["world_cup"]);

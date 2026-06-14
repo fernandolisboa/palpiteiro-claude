@@ -143,8 +143,13 @@ export const DOUBLE_CHANCE: MarketDescriptor = {
     if (drawA && drawB) return null;
     if (drawA || drawB) {
       const team = drawA ? b : a;
-      if (teamsMatch(team, ctx.homeTeam)) return "home_or_draw";
-      if (teamsMatch(team, ctx.awayTeam)) return "away_or_draw";
+      const homeHit = teamsMatch(team, ctx.homeTeam);
+      const awayHit = teamsMatch(team, ctx.awayTeam);
+      // EXATAMENTE um time casa. Defensivo contra nomes em que um normaliza pra
+      // substring do outro (ex. "Korea"/"South Korea"): o includes() bidirecional
+      // do teamsMatch casaria AMBOS → ambíguo → null (nunca mapeia o par errado).
+      if (homeHit && !awayHit) return "home_or_draw";
+      if (awayHit && !homeHit) return "away_or_draw";
       return null;
     }
     // Dois times (sem Draw) → 12; exige casar AMBOS home E away (ordem livre).

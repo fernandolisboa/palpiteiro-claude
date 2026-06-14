@@ -78,6 +78,13 @@ export function pickBestBookmaker(args: {
     }
     if (!complete) continue;
 
+    // Pula um book com QUALQUER odd inválida (≤1 ou não-finita): uma odd ≤1 não
+    // existe como aposta e faria computeMarketImpliedProbabilities LANÇAR
+    // (assertValidOdd), poisonando TODO o evento (não só o book). Trata como
+    // inutilizável, igual a incompleto. O payload real de dupla chance já trouxe
+    // `price: 1.0` num favorito extremo (1xBet, Copa) — isso é frequente, não raro.
+    if (selections.some((s) => !Number.isFinite(s.odd) || s.odd <= 1)) continue;
+
     const { overround } = computeMarketImpliedProbabilities(
       selections.map((s) => s.odd),
     );
