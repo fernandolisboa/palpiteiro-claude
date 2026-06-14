@@ -378,6 +378,15 @@ export async function predict({
       selections,
       overround,
     };
+  } else if (cartridge.descriptor.oddsSource === "additional") {
+    // Mercado *additional* (btts): odds só por evento, NUNCA em batch (quota). O
+    // snapshot fresco DEVE ter sido garantido por evento antes do predict (pre-warm
+    // na action). Sem ele, NÃO batcheia getOddsForSport — falha explícita. Guard
+    // data-driven (oddsSource do descriptor), não um literal de nome de mercado.
+    throw new PredictError(
+      `additional-market '${cartridge.descriptor.dbMarketKey}' sem snapshot fresco; odds devem ser garantidas por evento antes do predict (nunca batch)`,
+      { matchId, dbMarketKey: cartridge.descriptor.dbMarketKey },
+    );
   } else {
     const sportKey = leagueToSportKey(match.league);
     const commenceTimeFrom = new Date(kickoffMs - ODDS_WINDOW_MS).toISOString();

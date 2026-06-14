@@ -1,10 +1,14 @@
 import { leagueToSportKey } from "@/lib/providers/odds-api-constants";
-import { getOddsForSport } from "@/lib/providers/odds-api";
+import {
+  getEventsForSport,
+  getOddsForEvent,
+  getOddsForSport,
+} from "@/lib/providers/odds-api";
 import { computeImpliedProbabilities } from "@/lib/odds/implied-probability";
 import { ODDS_SNAPSHOT_FRESHNESS_MS } from "@/lib/odds/freshness-window";
+import { findEventInList } from "@/lib/odds/match-event";
 import {
   OVER_UNDER,
-  teamsMatch,
   type MarketDescriptor,
 } from "@/lib/odds/market-descriptor";
 import {
@@ -23,28 +27,6 @@ import { getMatchesInLeagueWindow, type DbMatch } from "@/lib/db/queries/matches
 import { db } from "@/lib/db";
 import { resolveMarketCatalog } from "@/lib/db/queries/market-catalog";
 import type { OddsApiEventOdds } from "@/lib/providers/odds-api-schemas";
-
-const KICKOFF_PAIRING_WINDOW_MS = 6 * 60 * 60 * 1000;
-
-function findEventForMatch(
-  events: OddsApiEventOdds[],
-  match: DbMatch,
-): OddsApiEventOdds | undefined {
-  const kickoffMs = match.kickoffAt.getTime();
-  return events.find((event) => {
-    const ts = Date.parse(event.commence_time);
-    if (
-      !Number.isFinite(ts) ||
-      Math.abs(ts - kickoffMs) > KICKOFF_PAIRING_WINDOW_MS
-    ) {
-      return false;
-    }
-    return (
-      teamsMatch(event.home_team, match.homeTeam) &&
-      teamsMatch(event.away_team, match.awayTeam)
-    );
-  });
-}
 
 function isFresh(snapshot: DbOddsSnapshot | null, now: number): boolean {
   if (!snapshot) return false;
@@ -115,6 +97,72 @@ export async function ensureOddsSnapshotsFresh(
     }
   };
 
+  // Mercado *additional* (btts): odds só pelo endpoint POR EVENTO. NUNCA batch da
+  // liga (quota: custo = nº markets × regiões POR evento). Resolve o eventId pela
+  // lista GRATUITA de eventos (0 créditos) e busca SÓ este match → 1 crédito por
+  // análise (em miss), deduplicado pelo gate de frescor acima. Escreve só a tabela
+  // nova (selection_odds_snapshots) — o guard de dual-write já exclui não-over_under.
+  const fetchAndWriteAdditional = async (
+    descriptor: MarketDescriptor,
+  ): Promise<void> => {
+    const sportKey = leagueToSportKey(match.league);
+    let event: OddsApiEventOdds;
+    try {
+      const events = await getEventsForSport(sportKey); // gratuito (0 créditos)
+      const listItem = findEventInList(events, match);
+      if (!listItem) return; // sem evento pareado nesta liga; degrada
+      event = await getOddsForEvent(sportKey, listItem.id, {
+        markets: [descriptor.providerMarketKey], // explícito (evita resolveCsv→totals)
+        regions: ["eu"],
+      }); // 1 crédito
+    } catch (err) {
+      console.error(
+        JSON.stringify({
+          scope: "fetch-and-snapshot",
+          league: match.league,
+          matchId: match.id,
+          market: descriptor.dbMarketKey,
+          error: "additional_fetch_failed",
+          message: err instanceof Error ? err.message : String(err),
+        }),
+      );
+      return;
+    }
+
+    const bundle: MarketOddsBundle | null = pickBestBookmaker({
+      event,
+      match: { homeTeam: match.homeTeam, awayTeam: match.awayTeam },
+      descriptor,
+    });
+    if (!bundle) return; // nenhum book com o mercado completo; degrada
+
+    const { marketId, idByKey } = await resolveMarketCatalog(
+      descriptor.dbMarketKey,
+    );
+    const overroundPct = bundle.overround * 100;
+    const newRows: SelectionSnapshotRow[] = bundle.selections.map((sel) => {
+      const selectionId = idByKey.get(sel.key);
+      if (!selectionId) {
+        throw new Error(
+          `seleção '${sel.key}' não seedada pro market '${descriptor.dbMarketKey}'`,
+        );
+      }
+      return {
+        matchId: match.id,
+        marketId,
+        selectionId,
+        marketParams: descriptor.params ?? null,
+        odd: sel.odd.toFixed(3),
+        overroundPct: overroundPct.toFixed(2),
+        bookmaker: bundle.bookmakerTitle,
+        capturedAt: now,
+      };
+    });
+    if (newRows.length > 0) {
+      await insertSelectionOddsSnapshotsBatch(newRows);
+    }
+  };
+
   for (const descriptor of descriptors) {
     // ── Gate de frescor market-aware ────────────────────────────────────────
     if (descriptor.dbMarketKey === OVER_UNDER.dbMarketKey) {
@@ -132,7 +180,13 @@ export async function ensureOddsSnapshotsFresh(
       if (fresh) continue;
     }
 
-    // ── Stale: fetch da liga + resolução de ids (TUDO antes do batch) ───────
+    // ── Stale + additional (btts): fetch POR EVENTO, só este match (sem batch) ──
+    if (descriptor.oddsSource === "additional") {
+      await fetchAndWriteAdditional(descriptor);
+      continue;
+    }
+
+    // ── Stale + featured: fetch da liga + resolução de ids (TUDO antes do batch) ──
     const events = await fetchLeagueEvents([descriptor.providerMarketKey]);
     if (!events) continue; // fetch falhou; degrada (não crasha a UI).
 
@@ -164,7 +218,7 @@ export async function ensureOddsSnapshotsFresh(
     const newRows: SelectionSnapshotRow[] = [];
 
     for (const m of knownMatches) {
-      const event = findEventForMatch(events, m);
+      const event = findEventInList(events, m);
       if (!event) continue;
       const bundle: MarketOddsBundle | null = pickBestBookmaker({
         event,

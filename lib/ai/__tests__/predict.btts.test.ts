@@ -413,3 +413,24 @@ describe("predict(btts) — complete-seed guard fails before the paid call", () 
     expect(insertValues).not.toHaveBeenCalled();
   });
 });
+
+describe("predict(btts) — additional market never batch-fetches odds (quota)", () => {
+  it("sem snapshot fresco → LANÇA, NUNCA chama getOddsForSport (batch)", async () => {
+    // additional (btts): o fallback batch é estruturalmente proibido. Sem o snapshot
+    // fresco (que o pre-warm por evento garante na action), predict falha explícito.
+    getLatestFreshSelectionOddsSnapshots.mockResolvedValue(null);
+
+    await expect(
+      predict({
+        matchId: "m-1",
+        userId: "u-1",
+        isAdmin: true,
+        marketKey: "btts",
+      }),
+    ).rejects.toThrow(/additional-market 'btts' sem snapshot fresco/);
+
+    expect(getOddsForSport).not.toHaveBeenCalled();
+    expect(anthropicCreate).not.toHaveBeenCalled();
+    expect(insertValues).not.toHaveBeenCalled();
+  });
+});
