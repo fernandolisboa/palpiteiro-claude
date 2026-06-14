@@ -27,11 +27,17 @@ const STATUS_META: Record<
   push: { label: "push", className: "text-muted-fg-2" },
 };
 
-const REC_CLASS: Record<PredictionRowView["rec"], string> = {
+// Cor por token de recomendação. over/under/pass têm cor pinada; tokens de
+// mercado novo (1X2, #173 — ex.: "Casa"/"HOME") caem no neutro via recClass().
+const REC_CLASS: Record<string, string> = {
   OVER: "text-emerald-500",
   UNDER: "text-sky-500",
   PASS: "text-muted-foreground",
 };
+
+function recClass(rec: PredictionRowView["rec"]): string {
+  return REC_CLASS[rec] ?? "text-foreground";
+}
 
 export function PredictionsTable({
   rows,
@@ -102,7 +108,7 @@ export function PredictionsTable({
                   {r.when}
                 </TableCell>
                 <TableCell
-                  className={cn("font-mono text-[11.5px] font-medium", REC_CLASS[r.rec])}
+                  className={cn("font-mono text-[11.5px] font-medium", recClass(r.rec))}
                 >
                   {r.rec}
                 </TableCell>

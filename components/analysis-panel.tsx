@@ -7,6 +7,7 @@ import { analyzeMatch, type AnalyzeMatchResult } from "@/app/actions/predictions
 import { AnalysisErrorCard } from "@/components/analysis-error-card";
 import { AnalysisResult } from "@/components/analysis-result";
 import { AnalyzeCTA } from "@/components/analyze-cta";
+import { MarketSelect } from "@/components/market-select";
 import { ModelOverrideSelect } from "@/components/model-override-select";
 import { Button } from "@/components/ui/button";
 import { MODEL_REGISTRY, isAIModelId } from "@/lib/ai/models";
@@ -20,6 +21,10 @@ type Props = {
   // serializável, resolvido no server). Vazio → seletor escondido. A garantia
   // de gating é server-side em analyzeMatch.
   selectableModels: { id: string; label: string }[];
+  // Mercados que esta audiência pode analisar ({key,label} serializável,
+  // resolvido no server, over_under primeiro). ≤1 → seletor escondido (hidden,
+  // default over_under). Gate efetivo é re-validado server-side em analyzeMatch.
+  selectableMarkets: { key: string; label: string }[];
   // Label do default global, resolvido no server. Usado quando não há override
   // nem preferência (ou "Usar padrão global") pra rotular o progresso.
   defaultModelLabel: string;
@@ -34,6 +39,7 @@ export function AnalysisPanel({
   existing,
   oddsAvailable,
   selectableModels,
+  selectableMarkets,
   defaultModelLabel,
   preferredModelId,
 }: Props) {
@@ -42,6 +48,12 @@ export function AnalysisPanel({
     : null;
   const [state, formAction, pending] = useActionState(analyzeMatch, initial);
   const [modelOverride, setModelOverride] = useState("default");
+  // Mercado a analisar. Default = primeiro mercado selecionável (over_under, que
+  // sorta primeiro no server) ou "over_under" se a lista vier vazia. Com ≤1
+  // mercado o seletor some e a action coerce pro default — defesa em profundidade.
+  const [marketKey, setMarketKey] = useState(
+    selectableMarkets[0]?.key ?? "over_under",
+  );
 
   // Modelo que a análise vai REALMENTE usar — espelha a cascata de predict:
   // override por análise > preferência do usuário > default global. Alimenta o
@@ -57,6 +69,10 @@ export function AnalysisPanel({
   const errorMsg = state && !state.ok ? state.error : null;
 
   const hasSelectableModels = selectableModels.length > 0;
+  // Seletor de mercado só com >1 opção (audiência com match_result além do
+  // over_under = admin). Mercado único → seletor escondido, `marketKey` viaja num
+  // hidden input. Espelha o gate do ModelOverrideSelect.
+  const hasMarketChoice = selectableMarkets.length > 1;
 
   // Override por análise, limitado à audiência (lista vinda do server). Sem
   // modelos selecionáveis o select some e a action usa o default global.
@@ -69,30 +85,54 @@ export function AnalysisPanel({
     />
   ) : null;
 
+  const marketSelect = hasMarketChoice ? (
+    <MarketSelect
+      value={marketKey}
+      onChange={setMarketKey}
+      markets={selectableMarkets}
+    />
+  ) : null;
+
+  // Há algum controle (mercado e/ou modelo) acima da CTA?
+  const hasControls = hasSelectableModels || hasMarketChoice;
+  const controls = (
+    <>
+      {marketSelect}
+      {modelSelect}
+    </>
+  );
+
   return (
     <form action={formAction} aria-busy={pending}>
       <input type="hidden" name="matchId" value={matchId} />
+      {/* Mercado único: o seletor some, mas `marketKey` ainda viaja no FormData. */}
+      {!hasMarketChoice && (
+        <input type="hidden" name="marketKey" value={marketKey} />
+      )}
 
-      {/* Quando já existe predição e há modelos selecionáveis, a re-análise vem
-          do botão ao lado do dropdown (afordância ÚNICA) — por isso o
-          AnalysisResult abaixo NÃO recebe `again`, pra não duplicar o botão.
-          Na primeira análise (sem view) o dropdown aparece sozinho acima da CTA. */}
-      {view && hasSelectableModels ? (
+      {/* Quando já existe predição e há controles (mercado e/ou modelo), a
+          re-análise vem do botão ao lado dos dropdowns (afordância ÚNICA) — por
+          isso o AnalysisResult abaixo NÃO recebe `again`, pra não duplicar o botão.
+          Na primeira análise (sem view) os dropdowns aparecem sozinhos acima da CTA. */}
+      {view && hasControls ? (
         <div className="flex flex-wrap items-end gap-3 pb-3">
-          {modelSelect}
+          {controls}
           <Button type="submit" size="sm" disabled={pending}>
             <RefreshCcw className="size-3.5" />
             {pending ? "Reanalisando…" : "Analisar de novo"}
           </Button>
         </div>
       ) : (
-        !view && modelSelect && <div className="pb-3">{modelSelect}</div>
+        !view &&
+        hasControls && (
+          <div className="flex flex-wrap items-end gap-3 pb-3">{controls}</div>
+        )
       )}
 
       {pending && view ? (
         <div className="relative">
           <div className="pointer-events-none opacity-40">
-            <AnalysisResult view={view} again={!hasSelectableModels} />
+            <AnalysisResult view={view} again={!hasControls} />
           </div>
           <div className="pointer-events-none absolute inset-0 flex items-center justify-center">
             <div className="flex items-center gap-2 rounded-md border border-border bg-card px-3 py-2 shadow">
@@ -106,7 +146,7 @@ export function AnalysisPanel({
       ) : pending ? (
         <AnalyzeCTA pending modelLabel={modelLabel} />
       ) : view ? (
-        <AnalysisResult view={view} again={!hasSelectableModels} />
+        <AnalysisResult view={view} again={!hasControls} />
       ) : errorMsg ? (
         <AnalysisErrorCard error={errorMsg} />
       ) : oddsAvailable ? (

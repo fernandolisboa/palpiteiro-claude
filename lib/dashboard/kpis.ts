@@ -16,7 +16,10 @@ import type { LeagueFilter } from "@/lib/view/types";
 export type DashboardRow = {
   predictionId: string;
   matchId: string;
-  recommendation: "over" | "under" | "pass";
+  // = a key da seleção escolhida (multi-mercado, #173) ou "pass" (no-bet). Antes
+  // fechado em over/under; alargado p/ as keys 1X2 (home/draw/away) com a ativação
+  // do mercado. A view deriva o display da seleção+apresentação (REC_MAP total).
+  recommendation: "over" | "under" | "pass" | "home" | "draw" | "away";
   marketKey: string;
   marketLabel: string;
   league: SupportedLeague;

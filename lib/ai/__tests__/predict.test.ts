@@ -103,10 +103,14 @@ vi.mock("@/lib/providers/odds-api", () => ({
   getOddsForSport: (...args: unknown[]) => getOddsForSport(...args),
 }));
 
-const getLatestFreshOddsSnapshot = vi.fn();
+// predict() agora lê a captura genérica N-vias (selection_odds_snapshots) via
+// getLatestFreshSelectionOddsSnapshots — não mais o par binário legado. O mock
+// devolve um LatestSelectionSnapshot {bookmaker, capturedAt, overroundPct,
+// selections:[{key,odd:string}]} (numeric = string, como o Drizzle entrega).
+const getLatestFreshSelectionOddsSnapshots = vi.fn();
 vi.mock("@/lib/db/queries/odds-snapshots", () => ({
-  getLatestFreshOddsSnapshot: (...args: unknown[]) =>
-    getLatestFreshOddsSnapshot(...args),
+  getLatestFreshSelectionOddsSnapshots: (...args: unknown[]) =>
+    getLatestFreshSelectionOddsSnapshots(...args),
 }));
 
 // Catalog resolver consolidado (#165): predict() o chama no bloco de reads
@@ -135,11 +139,13 @@ vi.mock("@/lib/db/queries/users", () => ({
   getPreferredModelId: (...args: unknown[]) => getPreferredModelId(...args),
 }));
 
-// Spy on buildPredictionInput while keeping the real implementation (and
-// BuildInputError) so we can assert the absencesAvailable flag it receives.
-// O módulo MOVEU pro cartucho over/under (#165) — predict.ts importa o mesmo
-// binding nomeado, então o vi.spyOn deste módulo continua interceptando.
-import * as buildInputModule from "@/lib/ai/markets/over_under/build-input";
+// predict.ts agora despacha via `cartridge.buildPredictionInput` (#173): resolve
+// `getCartridge("over_under")` = a MESMA instância `overUnderCartridge`. Espionar a
+// PROPRIEDADE do cartucho (vi.spyOn(overUnderCartridge, "buildPredictionInput"))
+// intercepta a montagem real — se algum seam ainda chamasse o binding de módulo
+// antigo, o spy NÃO seria atingido e o `toHaveBeenCalledTimes(1)` falharia alto.
+// O binding nomeado `buildPredictionInput` segue importado só pro real-call do
+// snapshot :958 (eval-noop), que NÃO passa por predict.
 import { buildPredictionInput } from "@/lib/ai/markets/over_under/build-input";
 import { overUnderCartridge } from "@/lib/ai/markets/over_under";
 import { computeMarketImpliedProbabilities } from "@/lib/odds/implied-probability";
@@ -232,19 +238,17 @@ const ODDS_EVENT: OddsApiEventOdds = {
   ],
 };
 
-// A persisted snapshot row, mirroring DbOddsSnapshot. Numeric/decimal columns
-// come back from Drizzle as JS STRINGS — predict() must Number() them at the
-// boundary before any edge math.
+// A fresh N-way capture, mirroring LatestSelectionSnapshot. The `odd` fields come
+// back from Drizzle as JS STRINGS — predict() must Number() them at the boundary
+// before any edge math.
 const FRESH_SNAPSHOT = {
-  id: "snap-1",
-  matchId: "m-1",
   bookmaker: "Pinnacle",
-  market: "over_under_2_5" as const,
-  line: "2.5",
-  overOdd: "1.900",
-  underOdd: "1.950",
-  overroundPct: "3.50",
   capturedAt: new Date(),
+  overroundPct: "3.50",
+  selections: [
+    { key: "over", odd: "1.900" },
+    { key: "under", odd: "1.950" },
+  ],
 };
 
 // Anthropic.Message-shaped response with a tool_use block whose input
@@ -287,7 +291,7 @@ function setHappyPath() {
   getOddsForSport.mockResolvedValue([ODDS_EVENT]);
   // Default: no fresh snapshot, so every existing test keeps exercising the
   // getOddsForSport fallback path unchanged.
-  getLatestFreshOddsSnapshot.mockResolvedValue(null);
+  getLatestFreshSelectionOddsSnapshots.mockResolvedValue(null);
   // Catálogo over/under resolvido: marketId + os mapas seleção↔id que predict()
   // usa pra selection_id (prediction) e pras rows do candidate set (PSO).
   resolveMarketCatalog.mockResolvedValue({
@@ -321,12 +325,17 @@ beforeEach(() => {
 
 describe("predict() — graceful degrade on transient injuries error", () => {
   it("baseline: happy path resolves and calls Anthropic", async () => {
-    const spy = vi.spyOn(buildInputModule, "buildPredictionInput");
-    await expect(predict({ matchId: "m-1", userId: "u-1", isAdmin: false })).resolves.toEqual({
-      id: "row-1",
-      aiCallId: "row-1",
+    const spy = vi.spyOn(overUnderCartridge, "buildPredictionInput");
+    const result = await predict({
+      matchId: "m-1",
+      userId: "u-1",
+      isAdmin: false,
     });
+    expect(result.prediction).toEqual({ id: "row-1", aiCallId: "row-1" });
+    expect(result.marketKey).toBe("over_under");
     expect(anthropicCreate).toHaveBeenCalledTimes(1);
+    // Seam-guard (gate #23): predict DEVE despachar via o cartucho exatamente uma vez.
+    expect(spy).toHaveBeenCalledTimes(1);
     expect(spy.mock.calls[0]?.[0].home.absencesAvailable).toBe(true);
     expect(spy.mock.calls[0]?.[0].away.absencesAvailable).toBe(true);
   });
@@ -340,12 +349,13 @@ describe("predict() — graceful degrade on transient injuries error", () => {
         new Error("503"),
       ),
     );
-    const spy = vi.spyOn(buildInputModule, "buildPredictionInput");
+    const spy = vi.spyOn(overUnderCartridge, "buildPredictionInput");
 
     await expect(
       predict({ matchId: "m-1", userId: "u-1", isAdmin: false }),
     ).resolves.toBeDefined();
 
+    expect(spy).toHaveBeenCalledTimes(1);
     const args = spy.mock.calls[0]?.[0];
     expect(args?.home.absencesAvailable).toBe(false);
     expect(args?.away.absencesAvailable).toBe(false);
@@ -364,12 +374,13 @@ describe("predict() — graceful degrade on transient injuries error", () => {
         "getInjuriesByFixture",
       ),
     );
-    const spy = vi.spyOn(buildInputModule, "buildPredictionInput");
+    const spy = vi.spyOn(overUnderCartridge, "buildPredictionInput");
 
     await expect(
       predict({ matchId: "m-1", userId: "u-1", isAdmin: false }),
     ).resolves.toBeDefined();
 
+    expect(spy).toHaveBeenCalledTimes(1);
     const args = spy.mock.calls[0]?.[0];
     expect(args?.home.absencesAvailable).toBe(false);
     expect(args?.away.absencesAvailable).toBe(false);
@@ -437,8 +448,8 @@ describe("predict() — transient error on a CRITICAL fetch is NOT over-caught",
 
 describe("predict() — odds snapshot reuse vs. fallback", () => {
   it("fresh snapshot present → predict uses it and does NOT call getOddsForSport", async () => {
-    getLatestFreshOddsSnapshot.mockResolvedValueOnce(FRESH_SNAPSHOT);
-    const spy = vi.spyOn(buildInputModule, "buildPredictionInput");
+    getLatestFreshSelectionOddsSnapshots.mockResolvedValueOnce(FRESH_SNAPSHOT);
+    const spy = vi.spyOn(overUnderCartridge, "buildPredictionInput");
 
     await expect(
       predict({ matchId: "m-1", userId: "u-1", isAdmin: false }),
@@ -447,16 +458,21 @@ describe("predict() — odds snapshot reuse vs. fallback", () => {
     // Quota guarantee: the snapshot path skips the Odds API entirely.
     expect(getOddsForSport).not.toHaveBeenCalled();
     expect(anthropicCreate).toHaveBeenCalledTimes(1);
+    expect(spy).toHaveBeenCalledTimes(1);
 
-    // Proves Number() conversion of the string columns at the boundary.
+    // O cartucho recebe o GENERIC args (selections[]/pct), não o shape binário —
+    // predict monta UM args genérico. Prova o Number() das colunas string no
+    // boundary: '1.900'/'1.950' → 1.9/1.95 nas selections; bookmaker passthrough.
     const odds = spy.mock.calls[0]?.[0].odds;
-    expect(odds?.over_2_5_decimal).toBe(1.9);
-    expect(odds?.under_2_5_decimal).toBe(1.95);
+    expect(odds?.selections).toEqual([
+      { key: "over", odd: 1.9 },
+      { key: "under", odd: 1.95 },
+    ]);
     expect(odds?.bookmaker).toBe("Pinnacle");
   });
 
   it("no fresh snapshot → predict falls back to getOddsForSport", async () => {
-    // setHappyPath default already stubs getLatestFreshOddsSnapshot → null.
+    // setHappyPath default already stubs getLatestFreshSelectionOddsSnapshots → null.
     await expect(
       predict({ matchId: "m-1", userId: "u-1", isAdmin: false }),
     ).resolves.toBeDefined();
@@ -528,19 +544,17 @@ describe("predict() — congelamento do par de odds na prediction (#104)", () =>
 
 // ─── Paridade #165: colunas legadas byte-idênticas + colunas novas + PSO ─────
 
-// Snapshot fresco com odds arbitrárias (path conservador reuse) — controla os
-// bytes exatos sem depender do fallback de rede.
+// Captura fresca N-vias com odds arbitrárias (path conservador reuse) — controla
+// os bytes exatos sem depender do fallback de rede. Shape LatestSelectionSnapshot.
 function freshSnapshotWith(overOdd: string, underOdd: string) {
   return {
-    id: "snap-x",
-    matchId: "m-1",
     bookmaker: "Pinnacle",
-    market: "over_under_2_5" as const,
-    line: "2.5",
-    overOdd,
-    underOdd,
-    overroundPct: "3.50",
     capturedAt: new Date(),
+    overroundPct: "3.50",
+    selections: [
+      { key: "over", odd: overOdd },
+      { key: "under", odd: underOdd },
+    ],
   };
 }
 
@@ -561,7 +575,7 @@ function impliedPctOf(over: number, under: number, side: "over" | "under") {
 
 describe("predict() — paridade de colunas (#165): legado byte-idêntico + novas + PSO", () => {
   it("over assimétrico (2.10/1.74): legado byte-idêntico + market/selection/params + PSO == par congelado", async () => {
-    getLatestFreshOddsSnapshot.mockResolvedValueOnce(
+    getLatestFreshSelectionOddsSnapshots.mockResolvedValueOnce(
       freshSnapshotWith("2.100", "1.740"),
     );
     anthropicCreate.mockResolvedValue(
@@ -617,7 +631,7 @@ describe("predict() — paridade de colunas (#165): legado byte-idêntico + nova
   });
 
   it("recommendation=under: impliedProbPct/edgePct do lado under byte-idênticos ao legado", async () => {
-    getLatestFreshOddsSnapshot.mockResolvedValueOnce(
+    getLatestFreshSelectionOddsSnapshots.mockResolvedValueOnce(
       freshSnapshotWith("2.100", "1.740"),
     );
     anthropicCreate.mockResolvedValue(
@@ -647,7 +661,7 @@ describe("predict() — paridade de colunas (#165): legado byte-idêntico + nova
   });
 
   it("pass: selectionId null + PSO grava AMBAS as seleções do candidate set", async () => {
-    getLatestFreshOddsSnapshot.mockResolvedValueOnce(
+    getLatestFreshSelectionOddsSnapshots.mockResolvedValueOnce(
       freshSnapshotWith("1.900", "1.950"),
     );
     anthropicCreate.mockResolvedValue(
@@ -687,7 +701,7 @@ describe("predict() — paridade de colunas (#165): legado byte-idêntico + nova
   });
 
   it("partial PSO failure após prediction commitada: degrada (não-throw), retorna a prediction", async () => {
-    getLatestFreshOddsSnapshot.mockResolvedValueOnce(
+    getLatestFreshSelectionOddsSnapshots.mockResolvedValueOnce(
       freshSnapshotWith("1.900", "1.950"),
     );
     // 3º insert (PSO) falha; os 2 primeiros (ai_calls, predictions) passam.
@@ -697,10 +711,13 @@ describe("predict() — paridade de colunas (#165): legado byte-idêntico + nova
       if (call === 3) throw new Error("PSO write failed");
     });
 
-    await expect(
-      predict({ matchId: "m-1", userId: "u-1", isAdmin: false }),
-    ).resolves.toEqual({ id: "row-1", aiCallId: "row-1" });
-    // A prediction foi retornada apesar da falha do candidate set.
+    const result = await predict({
+      matchId: "m-1",
+      userId: "u-1",
+      isAdmin: false,
+    });
+    // A prediction foi retornada apesar da falha do candidate set (carrier #173).
+    expect(result.prediction).toEqual({ id: "row-1", aiCallId: "row-1" });
     expect(insertValues).toHaveBeenCalledTimes(3);
   });
 });
@@ -715,7 +732,7 @@ describe("predict() — paridade de colunas (#165): legado byte-idêntico + nova
 describe("predict() — stake congelado na row (#167 / ADR 0019)", () => {
   it("1u: edge baixo (4.35) com conf 55 → stake_units '1.00'", async () => {
     // implied(over | 1.90/1.95) ≈ 50.65; edge = 55 − 50.65 = 4.35 (< 8) → 1u.
-    getLatestFreshOddsSnapshot.mockResolvedValueOnce(
+    getLatestFreshSelectionOddsSnapshots.mockResolvedValueOnce(
       freshSnapshotWith("1.900", "1.950"),
     );
     anthropicCreate.mockResolvedValue(
@@ -744,7 +761,7 @@ describe("predict() — stake congelado na row (#167 / ADR 0019)", () => {
   it("2u: edge 9.69 com conf 55 → stake_units '2.00'", async () => {
     // implied(over | 2.10/1.74) ≈ 45.31; edge = 55 − 45.31 = 9.69 (∈ [8,12)) e
     // conf 55 (≥ 50) → 2u.
-    getLatestFreshOddsSnapshot.mockResolvedValueOnce(
+    getLatestFreshSelectionOddsSnapshots.mockResolvedValueOnce(
       freshSnapshotWith("2.100", "1.740"),
     );
     anthropicCreate.mockResolvedValue(
@@ -773,7 +790,7 @@ describe("predict() — stake congelado na row (#167 / ADR 0019)", () => {
   it("3u: edge 18.00 com conf 58 → stake_units '3.00'", async () => {
     // implied(over | 2.40/1.60) = 40.00; edge = 58 − 40 = 18 (≥ 12) e conf 58
     // (≥ 55) → 3u.
-    getLatestFreshOddsSnapshot.mockResolvedValueOnce(
+    getLatestFreshSelectionOddsSnapshots.mockResolvedValueOnce(
       freshSnapshotWith("2.400", "1.600"),
     );
     anthropicCreate.mockResolvedValue(
@@ -800,7 +817,7 @@ describe("predict() — stake congelado na row (#167 / ADR 0019)", () => {
   });
 
   it("pass: edge null → stake_units '1.00' (default, irrelevante no Yield)", async () => {
-    getLatestFreshOddsSnapshot.mockResolvedValueOnce(
+    getLatestFreshSelectionOddsSnapshots.mockResolvedValueOnce(
       freshSnapshotWith("1.900", "1.950"),
     );
     anthropicCreate.mockResolvedValue(
@@ -834,7 +851,7 @@ describe("predict() — stake congelado na row (#167 / ADR 0019)", () => {
     // edge_pct visível (ADR 0019, auditabilidade).
     const impliedOver = impliedPctOf(2.1, 1.74, "over"); // 45.3125
     const confSeam = impliedOver + 7.997; // 53.3095
-    getLatestFreshOddsSnapshot.mockResolvedValueOnce(
+    getLatestFreshSelectionOddsSnapshots.mockResolvedValueOnce(
       freshSnapshotWith("2.100", "1.740"),
     );
     anthropicCreate.mockResolvedValue(
@@ -869,7 +886,7 @@ describe("predict() — stake congelado na row (#167 / ADR 0019)", () => {
     // banda decide sobre o "50.00" CONGELADO → 2u (não sobre 49.996 → 1u).
     const impliedOver = impliedPctOf(2.4, 1.6, "over"); // 40.00
     const confSeam = 49.996;
-    getLatestFreshOddsSnapshot.mockResolvedValueOnce(
+    getLatestFreshSelectionOddsSnapshots.mockResolvedValueOnce(
       freshSnapshotWith("2.400", "1.600"),
     );
     anthropicCreate.mockResolvedValue(
@@ -953,13 +970,18 @@ describe("predict() — bump over_under_v2.0: prompt/mensagem byte-idênticos ao
       away: { form: [], injuries: [], absencesAvailable: true },
       lineups: undefined,
       h2h: [],
+      // Args GENÉRICO (#173): selections[]/pct map. O cartucho DOWN-MAPEIA pro
+      // OverUnderInput binário → a mensagem renderizada fica BYTE-IDÊNTICA (eval-noop;
+      // o snapshot abaixo não muda). over_pct/under_pct viram pct.over/pct.under.
       odds: {
         bookmaker: "Pinnacle",
-        over_2_5_decimal: 1.9,
-        under_2_5_decimal: 1.95,
         captured_at: "2026-05-15T12:00:00.000Z",
+        selections: [
+          { key: "over", odd: 1.9 },
+          { key: "under", odd: 1.95 },
+        ],
       },
-      implied: { over_pct: 51.28, under_pct: 48.72 },
+      implied: { pct: { over: 51.28, under: 48.72 } },
     });
     const message = overUnderCartridge.buildUserMessage(input, {
       daysToKickoff: 3,

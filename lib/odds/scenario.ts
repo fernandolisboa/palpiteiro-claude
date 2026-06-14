@@ -66,7 +66,9 @@ export function computeSelectionEdgePp(
 
 // Uma seleção no cenário N-ário (ADR 0018, decisão 4). impliedProbPct/edgePct
 // são null quando o mercado não pode ser normalizado (alguma odd ausente);
-// modelProbPct e modelBreakEvenOdd derivam sempre.
+// modelBreakEvenOdd (100/modelProbPct) é null quando modelProbPct ≤ 0 — uma
+// seleção pode chegar com prob 0 (MatchResultOutputSchema permite, e o backfill
+// histórico coalesce null→0), e 100/0 não existe.
 export type ScenarioSelection = {
   key: string;
   modelProbPct: number;
@@ -75,7 +77,7 @@ export type ScenarioSelection = {
   edgePct: number | null; // modelProbPct − impliedProbPct (normalizada)
   evPerUnit: number | null; // null quando odd ausente; odd CRUA quando presente
   breakEvenProbPct: number | null; // 100/odd cru; null quando odd ausente
-  modelBreakEvenOdd: number; // 100/modelProbPct — sempre derivável
+  modelBreakEvenOdd: number | null; // 100/modelProbPct; null quando modelProbPct ≤ 0
 };
 
 // Cenários multi-outcome canônicos (ADR 0018, decisão 4), forma N-vias da qual
@@ -115,7 +117,12 @@ export function computeMarketScenarios(input: {
           : null,
       evPerUnit: s.odd !== null ? computeEvPerUnit(s.modelProbPct, s.odd) : null,
       breakEvenProbPct: s.odd !== null ? computeBreakEvenProbPct(s.odd) : null,
-      modelBreakEvenOdd: computeModelBreakEvenOdd(s.modelProbPct),
+      // computeModelBreakEvenOdd lança pra modelProbPct ≤ 0 (contrato de odd > 1
+      // do caminho binário). Em N-vias uma seleção pode ter prob 0 (schema permite,
+      // backfill coalesce null→0) — degrada pra null como evPerUnit/breakEvenProbPct,
+      // sem derrubar a view N-vias.
+      modelBreakEvenOdd:
+        s.modelProbPct > 0 ? computeModelBreakEvenOdd(s.modelProbPct) : null,
     };
   });
 
@@ -129,7 +136,11 @@ export type ScenarioSide = {
   edgePct: number | null; // modelProbPct − impliedProbPct
   evPerUnit: number | null; // null quando odd ausente (histórica)
   breakEvenProbPct: number | null; // 100/odd cru; null quando odd ausente
-  modelBreakEvenOdd: number; // 100/modelProbPct — sempre derivável
+  // 100/modelProbPct. No caminho binário modelProbPct vem de computeScenarios, que
+  // valida confidence em (0, 100) → sempre derivável; o tipo só é `| null` por
+  // compatibilidade estrutural com ScenarioSelection (toScenarioSideView serve aos
+  // dois caminhos), onde uma seleção pode chegar com prob 0.
+  modelBreakEvenOdd: number | null;
 };
 
 export type Scenarios = {

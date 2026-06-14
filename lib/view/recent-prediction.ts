@@ -22,16 +22,28 @@ type RecentInput = {
   league: SupportedLeague;
   homeTeam: string;
   awayTeam: string;
-  recommendation: "over" | "under" | "pass";
+  // = key da seleção escolhida (multi-mercado, #173) ou "pass". REC_MAP é total.
+  recommendation: "over" | "under" | "pass" | "home" | "draw" | "away";
   edgePct: string | number | null;
   createdAt: Date;
 };
 
-const REC_MAP: Record<RecentInput["recommendation"], Recommendation> = {
+// Tokens pinados do over/under/pass (paridade byte-idêntica). O feed recente NÃO
+// junta `markets`, então não há marketKey aqui pra derivar o selectionLabel da
+// apresentação (#173, PR-1 escopo "fallback mínimo"): seleções de mercado novo
+// (1X2) caem num token neutro em MAIÚSCULAS (ex.: "HOME") — célula sã, não quebrada.
+// O display 1X2 polido (Casa/Empate/Fora) é PR-2, quando a query passar a juntar markets.
+const REC_TOKEN: Record<string, Recommendation> = {
   over: "OVER",
   under: "UNDER",
   pass: "PASS",
 };
+
+function recToken(recommendation: RecentInput["recommendation"]): Recommendation {
+  return recommendation in REC_TOKEN
+    ? REC_TOKEN[recommendation]
+    : recommendation.toUpperCase();
+}
 
 export function toRecentPredictionView(row: RecentInput): RecentPredictionView {
   return {
@@ -39,7 +51,7 @@ export function toRecentPredictionView(row: RecentInput): RecentPredictionView {
     matchId: row.matchId,
     home: teamToTeam(row.homeTeam).short,
     away: teamToTeam(row.awayTeam).short,
-    rec: REC_MAP[row.recommendation],
+    rec: recToken(row.recommendation),
     edge: formatEdge(row.edgePct),
     when: formatRecentWhen(row.createdAt),
     league: leagueToKey(row.league),

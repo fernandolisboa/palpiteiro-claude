@@ -409,4 +409,39 @@ describe("computeMarketScenarios", () => {
     expect(selections[1].breakEvenProbPct).toBeNull();
     expect(selections[2].evPerUnit).toBeCloseTo(-0.244, 6);
   });
+
+  it("seleção com modelProbPct=0 não lança: modelBreakEvenOdd dela vira null, as demais derivam", () => {
+    // MatchResultOutputSchema permite prob 0; uma row reaberta com model_prob_pct
+    // null vira 0 no boundary (Number(null) = 0). 100/0 é indefinido — degrada pra
+    // null em vez de derrubar a view N-vias (computeModelBreakEvenOdd lançaria).
+    expect(() =>
+      computeMarketScenarios({
+        selections: [
+          { key: "home", modelProbPct: 60, odd: 1.8 },
+          { key: "draw", modelProbPct: 40, odd: 3.0 },
+          { key: "away", modelProbPct: 0, odd: 9.0 },
+        ],
+        recommendedKey: "home",
+      }),
+    ).not.toThrow();
+
+    const { selections } = computeMarketScenarios({
+      selections: [
+        { key: "home", modelProbPct: 60, odd: 1.8 },
+        { key: "draw", modelProbPct: 40, odd: 3.0 },
+        { key: "away", modelProbPct: 0, odd: 9.0 },
+      ],
+      recommendedKey: "home",
+    });
+
+    // A seleção de prob 0 degrada modelBreakEvenOdd pra null…
+    expect(selections[2].modelBreakEvenOdd).toBeNull();
+    // …mas modelProbPct/odd/EV/break-even dela seguem derivando.
+    expect(selections[2].modelProbPct).toBe(0);
+    expect(selections[2].evPerUnit).toBeCloseTo(0 * 9 - 1, 6);
+    expect(selections[2].breakEvenProbPct).toBeCloseTo(100 / 9, 6);
+    // As outras seleções não são afetadas.
+    expect(selections[0].modelBreakEvenOdd).toBeCloseTo(100 / 60, 6);
+    expect(selections[1].modelBreakEvenOdd).toBeCloseTo(100 / 40, 6);
+  });
 });

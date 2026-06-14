@@ -36,6 +36,14 @@ export const recommendationEnum = pgEnum("recommendation", [
   "over",
   "under",
   "pass",
+  // Seleções 1X2 (match_result) — adicionadas ao enum legado/expand no #173 (ADR
+  // 0015 D3/D4). O enum permanece a coluna legada de `recommendation` (= a key da
+  // seleção escolhida; "pass" continua no-bet). A fonte de verdade do mercado é
+  // `markets`/`market_selections`; este enum só carrega as keys das seleções pra
+  // a coluna legada compilar. Migration isolada (0013) por higiene (espelha 0011).
+  "home",
+  "draw",
+  "away",
 ]);
 
 export const outcomeResultEnum = pgEnum("outcome_result", [
@@ -251,7 +259,12 @@ export const predictions = pgTable(
     aiCallId: uuid()
       .notNull()
       .references(() => aiCalls.id, { onDelete: "restrict" }),
-    market: marketEnum().notNull().default("over_under_2_5"),
+    // NULLABLE no expand multi-mercado (#173): mercados novos gravam `market=null`
+    // (a fonte de verdade vira `marketId`/`selectionId`); só over/under continua
+    // preenchendo o enum legado via legacy-write guard. Default removido pelo mesmo
+    // motivo — uma row de mercado novo não deve herdar 'over_under_2_5'. O enum
+    // `market` permanece single-value até o contract (Fase 5).
+    market: marketEnum(),
     // Generalização multi-mercado do enum `market` legado (ADR 0015 D3/D4), todas
     // NULLABLE no expand — predict.ts só passa a preencher na Fase 2 (#165); o
     // histórico over/under é backfillado deterministicamente em #162. `selectionId`
@@ -312,6 +325,12 @@ export const predictionSelectionOdds = pgTable(
       .notNull()
       .references(() => marketSelections.id, { onDelete: "restrict" }),
     odd: numeric({ precision: 6, scale: 3 }).notNull(),
+    // Probabilidade do MODELO (LLM) pra esta seleção, 0–100 (#173, decisão B).
+    // Alimenta a grade N-vias (edge por seleção) ao reabrir uma predição passada.
+    // NULLABLE: o backfill histórico (#162) e o over/under pré-#173 não a gravam;
+    // só a Fase 4 (predict.ts) passa a preencher. Mesma precisão/escala das demais
+    // colunas de percentual (impliedProbPct/edgePct/confidencePct).
+    modelProbPct: numeric({ precision: 5, scale: 2 }),
   },
   (t) => [
     index("prediction_selection_odds_prediction_id_idx").on(t.predictionId),

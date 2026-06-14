@@ -14,9 +14,10 @@
 //   - FRASE LEIGA (betSummary/framingLabel): o seed NÃO carrega — vive só aqui,
 //     copiada VERBATIM do analysis.ts pré-pivot pra over/under ficar paridade.
 //
-// over/under é o único mercado ativo em produção; match_result existe só pra
-// exercitar o caminho N-vias em dev/test (NÃO seedado — ver market-descriptor.ts),
-// então seus labels são code-only por design.
+// over/under e match_result (1X2) são ambos seedados ativos em produção (migration
+// 0009 e 0014); match_result é admin-only (is_graduated=false) até graduar. Os
+// labels CURTOS aqui ESPELHAM o seed (markets.label / market_selections.label) —
+// a paridade over/under é pinada por presentation-seed-parity.pglite.test.ts.
 
 export type BetSummaryCopy = {
   // Nome do mercado em linguagem clara ("Mais de 2.5 gols").
@@ -122,7 +123,8 @@ const OVER_UNDER: MarketPresentation = {
     homeGoals + awayGoals > (line ?? 2.5) ? "over" : "under",
 };
 
-// 1X2 (match_result) — code-only (não seedado; dev/test). Labels em PT-BR.
+// 1X2 (match_result) — seedado ativo admin-only (migration 0014/#173). Labels
+// PT-BR ESPELHANDO o seed market_selections.label (Casa/Empate/Fora).
 const MATCH_RESULT_SELECTION_LABELS: Record<string, string> = {
   home: "Casa",
   draw: "Empate",

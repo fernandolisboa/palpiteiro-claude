@@ -7,6 +7,7 @@ import { auth } from "@/auth";
 import { isModelAllowedForAudience, type AIModelId } from "@/lib/ai/models";
 import { PredictError, predict } from "@/lib/ai/predict";
 import { extractDbCause } from "@/lib/db/pg-error";
+import { marketsForAudience } from "@/lib/db/queries/market-catalog";
 import { getAiCallById } from "@/lib/db/queries/predictions";
 import { userExists } from "@/lib/db/queries/users";
 import { checkAnalysisRateLimit } from "@/lib/rate-limit";
@@ -94,13 +95,29 @@ export async function analyzeMatch(
   ) {
     modelOverride = overrideRaw;
   }
+  // Mercado a analisar, gateado por AUDIÊNCIA (ADR 0017) e re-validado AQUI
+  // (server actions são POST chamáveis fora do layout): usuário comum só pode
+  // escolher mercados graduados; admin enxerga também os ativos-não-graduados
+  // (match_result hoje). Um `marketKey` ausente/inválido/fora-da-audiência cai no
+  // default over_under (sem erro) — defesa-em-profundidade além de esconder/limitar
+  // o seletor na UI. NUNCA gateado em predict.ts (ADR 0017).
+  const marketKeyRaw = String(formData.get("marketKey") ?? "");
+  const allowedMarkets = await marketsForAudience(isAdmin);
+  const marketKey = allowedMarkets.some((m) => m.key === marketKeyRaw)
+    ? marketKeyRaw
+    : "over_under";
   try {
-    const prediction = await predict({
-      matchId,
-      userId: session.user.id,
-      isAdmin,
-      modelOverride,
-    });
+    // predict() retorna o carrier N-vias { prediction, marketKey, selections }. O
+    // marketKey RESOLVIDO + o candidate set alimentam a view N-vias (1X2 → grade
+    // de 3) — síncrono, antes de qualquer re-query.
+    const { prediction, marketKey: resolvedMarketKey, selections } =
+      await predict({
+        matchId,
+        userId: session.user.id,
+        isAdmin,
+        modelOverride,
+        marketKey,
+      });
     const aiCall = await getAiCallById(prediction.aiCallId);
     revalidatePath(`/match/${matchId}`);
     revalidatePath("/");
@@ -122,12 +139,14 @@ export async function analyzeMatch(
           modelVersion: prediction.modelVersion,
           promptVersion: prediction.promptVersion,
           createdAt: prediction.createdAt,
-          // Fiação multi-mercado (#170). predict() roda over_under por default
-          // (único cartucho ativo); `line` da forma do mercado salva, stake da
-          // row recém-gravada — espelha a page pra view bater nas duas portas.
-          marketKey: "over_under",
+          // Fiação multi-mercado (#170/#173): marketKey RESOLVIDO por predict()
+          // (não o literal 'over_under'); `line` da forma do mercado salva (null em
+          // 1X2); stake da row recém-gravada; candidate set N-vias retornado por
+          // predict() → grade de 3 colunas em 1X2 (toAnalysisView ramifica).
+          marketKey: resolvedMarketKey,
           line: prediction.marketParams?.line ?? null,
           stakeUnits: prediction.stakeUnits,
+          selections,
         },
         aiCall ? { costUsd: aiCall.costUsd } : null,
       ),

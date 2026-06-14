@@ -1,6 +1,11 @@
 export type LeagueKey = "bsa" | "ucl" | "wc";
 export type LeagueFilter = LeagueKey | "all";
-export type Recommendation = "OVER" | "UNDER" | "PASS";
+// Token de DISPLAY da recomendação na tabela/lista. over/under/pass mantêm os
+// tokens curtos pinados ("OVER"/"UNDER"/"PASS"); mercados novos (1X2, #173) derivam
+// o display do selectionLabel da apresentação ("Casa"/"Empate"/"Fora"). Alargado
+// p/ `string` pra cobrir qualquer mercado — REC_MAP fica total (sem TS2741) e o
+// REC_CLASS de cor cai num default neutro pra tokens fora de over/under/pass.
+export type Recommendation = string;
 
 // Espelha matchStatusEnum (db/schema.ts). A view carrega o status pra decidir
 // entre render agendado (odds + analisar) e encerrado (placar). `finished`
@@ -95,7 +100,7 @@ export type OutcomeView = {
   odd: string; // "1.92" | "—"
   edge: string; // "+7.3pp" | "—"
   expectedReturn: string; // "+11.4%" | "—"
-  breakEven: string; // "1.72" — modelBreakEvenOdd (sempre derivável)
+  breakEven: string; // "1.72" — modelBreakEvenOdd; "—" quando modelProb ≤ 0
   isRecommended: boolean;
 };
 

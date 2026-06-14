@@ -72,22 +72,9 @@ beforeAll(async () => {
     .returning({ id: schema.matches.id });
   matchIds.id = m.id;
 
-  // match_result seedado SÓ no schema de teste (não é migration de prod).
-  const [mr] = await realDb
-    .insert(schema.markets)
-    .values({
-      key: "match_result",
-      label: "Resultado (1X2)",
-      settlementRuleKey: "match_result",
-      isActive: false,
-      isGraduated: false,
-    })
-    .returning({ id: schema.markets.id });
-  await realDb.insert(schema.marketSelections).values([
-    { marketId: mr.id, key: "home", label: "Casa", sortOrder: 0 },
-    { marketId: mr.id, key: "draw", label: "Empate", sortOrder: 1 },
-    { marketId: mr.id, key: "away", label: "Fora", sortOrder: 2 },
-  ]);
+  // match_result (+ home/draw/away) agora é seedado pela migration 0014 (#173),
+  // junto com over_under (0009) — não precisa hand-seed aqui (insert duplicado
+  // violaria markets_key_unique). Os testes resolvem o mercado via dbMarketKey.
 });
 
 afterAll(async () => {

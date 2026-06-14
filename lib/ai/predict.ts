@@ -6,13 +6,15 @@ import {
   matches,
   predictionSelectionOdds,
   predictions,
+  recommendationEnum,
 } from "@/db/schema";
 import { db } from "@/lib/db";
 import { resolveMarketCatalog } from "@/lib/db/queries/market-catalog";
-import { getLatestFreshOddsSnapshot } from "@/lib/db/queries/odds-snapshots";
+import { getLatestFreshSelectionOddsSnapshots } from "@/lib/db/queries/odds-snapshots";
 import { extractDbCause } from "@/lib/db/pg-error";
 import { computeMarketImpliedProbabilities } from "@/lib/odds/implied-probability";
-import { pickBestTotalsBookmaker, type OddsBundle } from "@/lib/odds/select-bookmaker";
+import { OVER_UNDER } from "@/lib/odds/market-descriptor";
+import { pickBestBookmaker, type MarketOddsBundle } from "@/lib/odds/select-bookmaker";
 import { getOddsForSport } from "@/lib/providers/odds-api";
 import { leagueToSportKey } from "@/lib/providers/odds-api-constants";
 import type { OddsApiEventOdds } from "@/lib/providers/odds-api-schemas";
@@ -35,14 +37,7 @@ import { getAnthropicClient } from "./anthropic";
 import { calculateCost } from "./cost";
 import { computeStakeUnits } from "./staking";
 import { getCartridge } from "./markets/registry";
-// O cartucho over/under expõe estes BINDINGS DE MÓDULO; predict.ts os importa
-// nomeados (não via o objeto do cartucho) pra que os spies do teste (vi.spyOn)
-// interceptem a montagem real do input e o catch de BuildInputError funcione.
-import {
-  BuildInputError,
-  buildPredictionInput,
-} from "./markets/over_under/build-input";
-import type { OverUnderOutput } from "./markets/over_under/schemas";
+import type { BaseMarketOutput } from "./markets/types";
 import {
   MODEL_REGISTRY,
   isModelAllowedForAudience,
@@ -69,6 +64,17 @@ export type PredictArgs = {
 };
 
 export type Prediction = typeof predictions.$inferSelect;
+
+// Carrier do retorno do predict (gate #15): a prediction persistida + o marketKey
+// resolvido + a grade N-vias (uma entrada por selectionKey, com a prob do modelo e
+// a odd congelada). A action monta a view SÍNCRONA a partir de `selections` (o
+// painel renderiza antes de qualquer re-query). `odd` é null se a seleção não tem
+// odd no bundle (não acontece hoje — todo selectionKey vem do mercado completo).
+export type PredictResult = {
+  prediction: Prediction;
+  marketKey: string;
+  selections: { key: string; modelProbPct: number; odd: number | null }[];
+};
 
 type AiCallStatus =
   | "ok"
@@ -233,7 +239,7 @@ export async function predict({
   isAdmin,
   modelOverride,
   marketKey = "over_under",
-}: PredictArgs): Promise<Prediction> {
+}: PredictArgs): Promise<PredictResult> {
   // Cartucho de mercado (ADR 0017): resolve por marketKey (throw em desconhecido).
   // Read puro — roda ANTES de qualquer chamada paga; predict NÃO ramifica por
   // `if (market === X)`, todo o comportamento específico vem do cartucho.
@@ -335,18 +341,42 @@ export async function predict({
     ]);
   const absencesAvailable = !injuries.unavailable;
 
-  // 4. Odds: reusa uma snapshot fresca se a página já capturou uma nesta
-  //    sessão (quota: evita uma 2ª call à Odds API). Cai no fetch direto
-  //    quando predict() roda standalone (script, sem render prévio).
-  let oddsBundle: OddsBundle;
-  const freshSnapshot = await getLatestFreshOddsSnapshot(match.id);
+  // 4. Odds (N-vias): reusa uma captura fresca se a página já snapshotou nesta
+  //    sessão (quota: evita uma 2ª call à Odds API). Cai no fetch direto quando
+  //    predict() roda standalone (script, sem render prévio). Ambos os caminhos
+  //    produzem um `MarketOddsBundle` (selections[] keyed por selectionKey +
+  //    overround) — over/under é o caso N=2. O caminho fresh já é dual-escrito
+  //    pelo fetch-and-snapshot, então a paridade over/under é preservada.
+  let oddsBundle: MarketOddsBundle;
+  const freshSnapshot = await getLatestFreshSelectionOddsSnapshots({
+    matchId: match.id,
+    dbMarketKey: cartridge.descriptor.dbMarketKey,
+    params: cartridge.descriptor.params,
+  });
   if (freshSnapshot) {
+    // numeric → string no Drizzle; Number() na fronteira antes de qualquer math.
+    const selections = freshSnapshot.selections.map((s) => ({
+      key: s.key,
+      odd: Number(s.odd),
+    }));
+    const { overround } = computeMarketImpliedProbabilities(
+      cartridge.descriptor.selectionKeys.map((key) => {
+        const sel = selections.find((s) => s.key === key);
+        if (!sel) {
+          throw new PredictError(
+            `fresh snapshot missing selection '${key}' for market '${cartridge.descriptor.dbMarketKey}'`,
+            { matchId, key },
+          );
+        }
+        return sel.odd;
+      }),
+    );
     oddsBundle = {
       bookmakerKey: "", // não usado downstream; schema guarda title, não key.
       bookmakerTitle: freshSnapshot.bookmaker,
-      overOdd: Number(freshSnapshot.overOdd), // numeric → string no Drizzle.
-      underOdd: Number(freshSnapshot.underOdd),
-      capturedAt: freshSnapshot.capturedAt.toISOString(),
+      lastUpdate: freshSnapshot.capturedAt.toISOString(),
+      selections,
+      overround,
     };
   } else {
     const sportKey = leagueToSportKey(match.league);
@@ -374,12 +404,19 @@ export async function predict({
         candidates: events.length,
       });
     }
-    const bundle = pickBestTotalsBookmaker(event);
+    const bundle = pickBestBookmaker({
+      event,
+      match: { homeTeam: fixture.homeTeam, awayTeam: fixture.awayTeam },
+      descriptor: cartridge.descriptor,
+    });
     if (!bundle) {
-      throw new PredictError("no over/under 2.5 odds available for event", {
-        eventId: event.id,
-        bookmakers: event.bookmakers.length,
-      });
+      throw new PredictError(
+        `no complete '${cartridge.descriptor.dbMarketKey}' odds available for event`,
+        {
+          eventId: event.id,
+          bookmakers: event.bookmakers.length,
+        },
+      );
     }
     oddsBundle = bundle;
   }
@@ -408,27 +445,38 @@ export async function predict({
 
   // 5. Implied probabilities normalizadas (N seleções; contrato chave→índice).
   //    O candidate-odds array é montado na ordem `descriptor.selectionKeys`
-  //    (['over','under']) SOBRE as odds do bundle — nunca por ordem de linhas de
-  //    read. impliedByKey indexa o resultado pela MESMA chave, e o *100 segue a
-  //    ordem de operações de antes (probs[i] * 100) → bit-exato com o legado.
-  const selectionKeys = cartridge.descriptor.selectionKeys; // ['over','under']
-  const candidateOddsByKey: Record<string, number> = {
-    over: oddsBundle.overOdd,
-    under: oddsBundle.underOdd,
-  };
-  const candidateOdds = selectionKeys.map((key) => candidateOddsByKey[key]);
+  //    (['over','under'] / ['home','draw','away']) SOBRE as odds do bundle — nunca
+  //    por ordem de linhas de read. `oddByKey` mapeia selectionKey→odd a partir das
+  //    `bundle.selections`; impliedByKey indexa o resultado pela MESMA chave, e o
+  //    *100 segue a ordem de operações de antes (probs[i] * 100) → bit-exato com o
+  //    legado em N=2.
+  const selectionKeys = cartridge.descriptor.selectionKeys;
+  const oddByKey: Record<string, number> = {};
+  for (const sel of oddsBundle.selections) {
+    oddByKey[sel.key] = sel.odd;
+  }
+  const candidateOdds = selectionKeys.map((key) => {
+    const odd = oddByKey[key];
+    if (odd === undefined) {
+      throw new PredictError(
+        `odds bundle missing selection '${key}' for market '${cartridge.descriptor.dbMarketKey}'`,
+        { matchId, key },
+      );
+    }
+    return odd;
+  });
   const { probs } = computeMarketImpliedProbabilities(candidateOdds);
   const impliedByKey: Record<string, number> = {};
   selectionKeys.forEach((key, i) => {
     impliedByKey[key] = probs[i] * 100;
   });
-  const overPct = impliedByKey.over;
-  const underPct = impliedByKey.under;
 
-  // 6. Monta OverUnderInput
-  let input: ReturnType<typeof buildPredictionInput>;
+  // 6. Monta o input do cartucho (over_under: down-mapeia o generic args
+  //    selections[]/pct pro shape binário; ver build-input.ts). predict monta UM
+  //    args genérico que QUALQUER cartucho aceita.
+  let input: ReturnType<typeof cartridge.buildPredictionInput>;
   try {
-    input = buildPredictionInput({
+    input = cartridge.buildPredictionInput({
       match: {
         externalId: match.externalId,
         league: match.league,
@@ -452,16 +500,18 @@ export async function predict({
       h2h,
       odds: {
         bookmaker: oddsBundle.bookmakerTitle,
-        over_2_5_decimal: oddsBundle.overOdd,
-        under_2_5_decimal: oddsBundle.underOdd,
-        captured_at: new Date(oddsBundle.capturedAt).toISOString(),
+        // captured_at normalizado aqui (mantém o local do new Date().toISOString()
+        // do legado): o caminho fallback traz `lastUpdate` cru do provider
+        // ("...Z"); o fresh já traz ISO. O cartucho consome verbatim.
+        captured_at: new Date(oddsBundle.lastUpdate).toISOString(),
+        selections: selectionKeys.map((key) => ({ key, odd: oddByKey[key] })),
       },
-      implied: { over_pct: overPct, under_pct: underPct },
+      implied: { pct: impliedByKey },
     });
   } catch (err) {
-    if (err instanceof BuildInputError) {
+    if (err instanceof cartridge.BuildInputError) {
       throw new PredictError(`buildPredictionInput failed: ${err.message}`, {
-        ...err.context,
+        ...(err as { context?: Record<string, unknown> }).context,
       });
     }
     throw err;
@@ -569,10 +619,12 @@ export async function predict({
       issues: parsed.error.issues,
     });
   }
-  // O registry apaga o genérico do schema (ZodType<unknown>); pro #165 o único
-  // cartucho é over/under e a costura de persistência (colunas legadas + PSO)
-  // é over/under-específica — narrow pro tipo concreto do output.
-  const output = parsed.data as OverUnderOutput;
+  // O registry apaga o genérico do schema (ZodType<unknown>). predict é
+  // market-agnostic: lê só os campos compartilhados (recommendation/confidence_pct/
+  // rationale/key_factors/minimum_odd) via BaseMarketOutput — cada cartucho já
+  // validou o output completo pelo SEU schema acima. O comportamento específico de
+  // mercado vem de cartridge.selectionProbs / descriptor, nunca de `if (market===X)`.
+  const output = parsed.data as BaseMarketOutput;
 
   // 11. Persistência (sequencial — neon-http não suporta transações reais).
   const cost = calculateCost({
@@ -618,18 +670,29 @@ export async function predict({
     throw new PredictError("failed to persist ai_call", cause);
   }
 
+  // Probabilidade do modelo por seleção (decisão B): derivada PURA do output pelo
+  // cartucho (binário em over/under, distribuição em 1X2). Alimenta a coluna NOVA
+  // `model_prob_pct` do PSO, a grade N-vias retornada (seam 8) E o edge persistido
+  // abaixo. Computada aqui (antes do edge) porque o edge usa a prob POR SELEÇÃO.
+  const modelProbByKey = cartridge.selectionProbs(output);
+
+  // Edge N-vias (ADR 0018): cada seleção tem seu próprio edge `modelProb − implied`.
+  // NUNCA `100−x` — em N≥3 não há complemento binário. `pass` → sem lado, sem edge.
+  // O lado recomendado é uma selectionKey (`oddByKey`/`impliedByKey` indexados por
+  // ela); o valor é `undefined` só se a seleção não está no mercado — bug de
+  // contrato, não fluxo (o catalog/seed guard já barrou antes).
+  //
+  // `modelProb` do lado recomendado vem de selectionProbs(output)[side] — a MESMA
+  // prob por seleção que a grade exibe — não de confidence_pct. Em over/under são
+  // byte-idênticos (selectionProbs[rec] === confidence_pct, ver over_under/index.ts);
+  // em 1X2 o LLM pode emitir confidence_pct ≠ prob_<recomendado>, e aqui o edge
+  // persistido passa a casar com o edge da grade N-vias em vez de divergir.
   const side = output.recommendation;
-  const oddAtRec =
-    side === "over"
-      ? oddsBundle.overOdd
-      : side === "under"
-        ? oddsBundle.underOdd
-        : null;
-  const impliedPct =
-    side === "over" ? overPct : side === "under" ? underPct : null;
+  const oddAtRec = side === "pass" ? null : (oddByKey[side] ?? null);
+  const impliedPct = side === "pass" ? null : (impliedByKey[side] ?? null);
   const edge =
     side !== "pass" && impliedPct !== null
-      ? output.confidence_pct - impliedPct
+      ? modelProbByKey[side] - impliedPct
       : null;
 
   // Staking determinístico (ADR 0019): decidido EM CÓDIGO, nunca pelo LLM. A
@@ -657,15 +720,12 @@ export async function predict({
     selectionId = id;
   }
 
-  // Rows do candidate set (over+under) pra prediction_selection_odds, montadas
+  // Rows do candidate set (N seleções) pra prediction_selection_odds, montadas
   // ANTES do insert da prediction pra que um seed faltante falhe SEM ter
   // commitado a prediction (mesma semântica do hard-fail de selectionId acima).
-  // odds = EXATAMENTE o par legado do MESMO bundle → PSO["over"] ===
-  // overOddAtPrediction byte-a-byte. Uma row por seleção, INCLUSIVE em pass.
-  const oddByKey: Record<string, number> = {
-    over: oddsBundle.overOdd,
-    under: oddsBundle.underOdd,
-  };
+  // odds = EXATAMENTE o par do MESMO bundle → PSO["over"] === overOddAtPrediction
+  // byte-a-byte. Uma row por seleção, INCLUSIVE em pass. `model_prob_pct` vem do
+  // cartucho (numeric nullable; toFixed(2) no boundary).
   const psoRowsToInsert = selectionKeys.map((key) => {
     const sid = catalog.idByKey.get(key);
     if (!sid) {
@@ -674,9 +734,22 @@ export async function predict({
         { marketKey, key },
       );
     }
-    return { selectionId: sid, odd: oddByKey[key].toFixed(3) };
+    const modelProb = modelProbByKey[key];
+    return {
+      selectionId: sid,
+      odd: oddByKey[key].toFixed(3),
+      modelProbPct: modelProb === undefined ? null : modelProb.toFixed(2),
+    };
   });
 
+  // Legacy-write guard (gate #20): as colunas LEGADAS over/under-específicas
+  // (`market` enum + `overOddAtPrediction`/`underOddAtPrediction`) só são escritas
+  // pro over/under — comparação CONSTANTE com OVER_UNDER.dbMarketKey, espelhando
+  // fetch-and-snapshot.ts (NUNCA `=== "over_under"` literal). Pra qualquer outro
+  // mercado ficam null; a fonte-da-verdade é marketId/selectionId/marketParams (já
+  // genéricos) + o candidate set em PSO. O par binário só faz sentido em N=2.
+  const isOverUnder =
+    cartridge.descriptor.dbMarketKey === OVER_UNDER.dbMarketKey;
   let predictionRow: Prediction;
   try {
     const [row] = await db
@@ -685,14 +758,20 @@ export async function predict({
         matchId,
         userId,
         aiCallId: aiCallRow.id,
-        market: "over_under_2_5",
+        // Enum LEGADO single-value: só over/under; null pros novos mercados.
+        market: isOverUnder ? "over_under_2_5" : null,
         // Colunas NOVAS multi-mercado (#165): marketId do catálogo; selectionId
         // resolvido acima (NULL em pass); marketParams verbatim do descriptor
-        // (= { line: 2.5 } NUMBER).
+        // (= { line: 2.5 } NUMBER pro over/under; null pro 1X2).
         marketId: catalog.marketId,
         selectionId,
         marketParams: cartridge.descriptor.params ?? null,
-        recommendation: output.recommendation,
+        // recommendation = selectionKey (enum estendido com home/draw/away) ou "pass".
+        // O cartucho já validou output.recommendation contra o SEU enum (over|under|
+        // pass / home|draw|away|pass) — todos ⊆ recommendationEnum; o cast só estreita
+        // o `string` do BaseMarketOutput pro tipo da coluna.
+        recommendation:
+          output.recommendation as (typeof recommendationEnum.enumValues)[number],
         confidencePct: output.confidence_pct.toFixed(2),
         rationale: output.rationale,
         keyFactors: output.key_factors,
@@ -706,11 +785,11 @@ export async function predict({
         // Stake congelado (ADR 0019): banda determinística sobre edge/confiança;
         // pass → 1u (irrelevante, fora do Yield). numeric(6,2) → string.
         stakeUnits: stakeUnits.toFixed(2),
-        // Par congelado dos DOIS lados, pra toda recomendação inclusive pass
-        // (ADR 0012, decisões 3-4) — alimenta o bloco de cenários sem depender
-        // de snapshot vivo.
-        overOddAtPrediction: oddsBundle.overOdd.toFixed(3),
-        underOddAtPrediction: oddsBundle.underOdd.toFixed(3),
+        // Par congelado dos DOIS lados — SÓ over/under (binário). Em N≥3 não há par;
+        // o candidate set vive em PSO. Pra toda recomendação inclusive pass
+        // (ADR 0012, decisões 3-4) — alimenta o bloco de cenários binário.
+        overOddAtPrediction: isOverUnder ? oddByKey.over.toFixed(3) : null,
+        underOddAtPrediction: isOverUnder ? oddByKey.under.toFixed(3) : null,
         modelVersion: model.id,
         promptVersion: cartridge.version,
       })
@@ -746,6 +825,7 @@ export async function predict({
         predictionId: predictionRow.id,
         selectionId: r.selectionId,
         odd: r.odd,
+        modelProbPct: r.modelProbPct,
       })),
     );
   } catch (err) {
@@ -764,5 +844,17 @@ export async function predict({
     // falha do candidate set (re-preenchível pelo backfill #162).
   }
 
-  return predictionRow;
+  // Carrier da grade N-vias (gate #15): a prediction + o marketKey resolvido + uma
+  // entrada por selectionKey (prob do modelo + odd congelada). A action monta a
+  // view SÍNCRONA a partir disto. Tudo já em escopo (selectionKeys/modelProbByKey/
+  // oddByKey) — nenhuma re-query.
+  return {
+    prediction: predictionRow,
+    marketKey: cartridge.marketKey,
+    selections: selectionKeys.map((key) => ({
+      key,
+      modelProbPct: modelProbByKey[key],
+      odd: oddByKey[key] ?? null,
+    })),
+  };
 }

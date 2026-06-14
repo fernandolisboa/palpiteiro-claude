@@ -1,4 +1,4 @@
-import { OverUnderInputSchema, type OverUnderInput } from "./schemas";
+import { MatchResultInputSchema, type MatchResultInput } from "./schemas";
 import type { GenericImpliedArgs, GenericOddsArgs } from "../types";
 import type {
   NormalizedFixture,
@@ -11,17 +11,12 @@ import type {
 
 type PlayerRole = "GK" | "DEF" | "MID" | "FWD";
 type AbsenceStatus = "injured" | "suspended" | "doubtful";
-type SideOrientation = "home" | "away";
 
-// NormalizedInjury.type collapses to "injury" or "suspension"; NormalizedInjury.status
-// preserves the full three-state enum. Pass through directly.
+// NormalizedInjury.status preserva o enum de três estados — passa direto.
 function mapAbsenceStatus(injury: NormalizedInjury): AbsenceStatus {
   return injury.status;
 }
 
-// Normalized lineup players carry an optional position label already collapsed
-// to GK/DEF/MID/FWD by the adapter. Default to MID when the provider omits it
-// (mirrors the pre-issue-24 fallback in build-input.ts).
 function mapLineupRole(pos: string | null | undefined): PlayerRole {
   if (pos === "GK" || pos === "DEF" || pos === "MID" || pos === "FWD") return pos;
   return "MID";
@@ -41,7 +36,7 @@ function findStandingTeamByName(
 
 function buildStanding(
   row: NonNullable<ReturnType<typeof findStandingTeamByName>>,
-): OverUnderInput["home"]["standing"] {
+): MatchResultInput["home"]["standing"] {
   return {
     position: row.position,
     played: row.played,
@@ -75,9 +70,8 @@ function buildFormMatches(
   fixtures: NormalizedFixture[],
   teamName: string,
   limit: number,
-): OverUnderInput["home"]["form"]["matches"] {
-  const matches: OverUnderInput["home"]["form"]["matches"] = [];
-  // Already cronological-desc from the adapters; defensively sort again.
+): MatchResultInput["home"]["form"]["matches"] {
+  const matches: MatchResultInput["home"]["form"]["matches"] = [];
   const sorted = [...fixtures].sort(
     (a, b) => b.kickoffTimestampMs - a.kickoffTimestampMs,
   );
@@ -106,13 +100,9 @@ function buildFormMatches(
 
 function buildAbsences(
   injuries: NormalizedInjury[],
-): OverUnderInput["home"]["absences"] {
+): MatchResultInput["home"]["absences"] {
   return injuries.map((inj) => ({
     player: inj.player.name,
-    // NormalizedInjury doesn't carry position (not reliably available from
-    // the /injuries endpoints); default to MID. The prompt rule about
-    // absences_available makes this less critical — the AI knows when data
-    // is partial.
     role: "MID" as const,
     status: mapAbsenceStatus(inj),
   }));
@@ -120,7 +110,7 @@ function buildAbsences(
 
 function buildLineupForSide(
   lineup: NormalizedTeamLineup | undefined,
-): OverUnderInput["home"]["lineup"] | undefined {
+): MatchResultInput["home"]["lineup"] | undefined {
   if (!lineup) return undefined;
   if (lineup.starters.length !== 11) return undefined;
   return {
@@ -135,8 +125,8 @@ function buildLineupForSide(
 function buildH2H(
   fixtures: NormalizedH2H[],
   limit: number,
-): OverUnderInput["h2h"] {
-  const matches: OverUnderInput["h2h"] = [];
+): MatchResultInput["h2h"] {
+  const matches: MatchResultInput["h2h"] = [];
   const sorted = [...fixtures].sort(
     (a, b) => b.kickoffTimestampMs - a.kickoffTimestampMs,
   );
@@ -154,6 +144,10 @@ function buildH2H(
   return matches;
 }
 
+// MESMO shape de args que o over_under (predict monta UM args genérico pra
+// QUALQUER cartucho). odds/implied chegam no shape GENÉRICO (selections[] keyed
+// por selectionKey + pct map); buildPredictionInput DOWN-MAPEIA pro shape 3-vias
+// do MatchResultInput (home/draw/away decimals + per-selection implied).
 export type BuildPredictionInputArgs = {
   match: {
     externalId: string;
@@ -176,10 +170,6 @@ export type BuildPredictionInputArgs = {
   };
   lineups: NormalizedLineup | undefined;
   h2h: NormalizedH2H[];
-  // odds/implied chegam no shape GENÉRICO que predict monta UMA vez pra qualquer
-  // cartucho (selections[] keyed por selectionKey + pct map). buildPredictionInput
-  // DOWN-MAPEIA pro shape binário do OverUnderInput (over_2_5_decimal/under_2_5_decimal,
-  // over_pct/under_pct) — ver abaixo. O OverUnderInput (schema) fica INTACTO.
   odds: GenericOddsArgs;
   implied: GenericImpliedArgs;
 };
@@ -198,7 +188,7 @@ const H2H_LIMIT = 5;
 
 export function buildPredictionInput(
   args: BuildPredictionInputArgs,
-): OverUnderInput {
+): MatchResultInput {
   const homeRow = findStandingTeamByName(args.standings, args.match.homeTeam);
   const awayRow = findStandingTeamByName(args.standings, args.match.awayTeam);
   if (!homeRow || !awayRow) {
@@ -210,32 +200,33 @@ export function buildPredictionInput(
     });
   }
 
-  // Down-map do shape GENÉRICO (selections[]/pct) pro binário do OverUnderInput.
-  // As chaves 'over'/'under' vêm de descriptor.selectionKeys (predict monta o
-  // generic args sobre essa ordem). Ausência = bug de seed/descriptor → BuildInputError.
-  const overSel = args.odds.selections.find((s) => s.key === "over");
-  const underSel = args.odds.selections.find((s) => s.key === "under");
-  if (!overSel || !underSel) {
+  // Down-map do shape GENÉRICO (selections[]/pct) pro 3-vias do MatchResultInput.
+  // As chaves 'home'/'draw'/'away' vêm de descriptor.selectionKeys (predict monta
+  // o generic args nessa ordem). Ausência = bug de seed/descriptor → BuildInputError.
+  const homeSel = args.odds.selections.find((s) => s.key === "home");
+  const drawSel = args.odds.selections.find((s) => s.key === "draw");
+  const awaySel = args.odds.selections.find((s) => s.key === "away");
+  if (!homeSel || !drawSel || !awaySel) {
     throw new BuildInputError(
-      "over_under odds missing 'over'/'under' selection in generic args",
-      {
-        keys: args.odds.selections.map((s) => s.key),
-      },
+      "match_result odds missing 'home'/'draw'/'away' selection in generic args",
+      { keys: args.odds.selections.map((s) => s.key) },
     );
   }
-  const overPct = args.implied.pct.over;
-  const underPct = args.implied.pct.under;
-  if (overPct === undefined || underPct === undefined) {
+  const homePct = args.implied.pct.home;
+  const drawPct = args.implied.pct.draw;
+  const awayPct = args.implied.pct.away;
+  if (
+    homePct === undefined ||
+    drawPct === undefined ||
+    awayPct === undefined
+  ) {
     throw new BuildInputError(
-      "over_under implied missing 'over'/'under' pct in generic args",
+      "match_result implied missing 'home'/'draw'/'away' pct in generic args",
       { keys: Object.keys(args.implied.pct) },
     );
   }
 
-  // The composite fixture key has the same shape as a team identifier per side.
-  // The output schema wants `id` as a string and `name` as the display name —
-  // we use canonical name as both since IDs are no longer provider-bound.
-  const draft: OverUnderInput = {
+  const draft: MatchResultInput = {
     match: {
       id: args.match.externalId,
       home_team: {
@@ -291,20 +282,19 @@ export function buildPredictionInput(
     h2h: buildH2H(args.h2h, H2H_LIMIT),
     odds: {
       bookmaker: args.odds.bookmaker,
-      over_2_5_decimal: overSel.odd,
-      under_2_5_decimal: underSel.odd,
+      home_decimal: homeSel.odd,
+      draw_decimal: drawSel.odd,
+      away_decimal: awaySel.odd,
       captured_at: args.odds.captured_at,
     },
-    implied: { over_pct: overPct, under_pct: underPct },
-  } satisfies OverUnderInput;
+    implied: { home_pct: homePct, draw_pct: drawPct, away_pct: awayPct },
+  } satisfies MatchResultInput;
 
-  const parsed = OverUnderInputSchema.safeParse(draft);
+  const parsed = MatchResultInputSchema.safeParse(draft);
   if (!parsed.success) {
-    throw new BuildInputError("OverUnderInputSchema validation failed", {
+    throw new BuildInputError("MatchResultInputSchema validation failed", {
       issues: parsed.error.issues,
     });
   }
   return parsed.data;
 }
-
-export type { SideOrientation };

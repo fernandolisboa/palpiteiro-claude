@@ -26,8 +26,12 @@ const MARKET_ENUM_TO_KEY: Record<string, string> = {
   over_under_2_5: "over_under",
 };
 
-export function marketEnumToKey(market: string): string {
-  return MARKET_ENUM_TO_KEY[market] ?? "over_under";
+// `market` é nullable desde o expand multi-mercado (#173): rows de mercado novo
+// gravam `market=null` (fonte de verdade = marketId, resolvido pelo LEFT JOIN
+// acima). Aqui só importam as rows SEM marketId; null/desconhecido coalesce pra
+// "over_under" exatamente como o enum legado — o caso real é só over/under.
+export function marketEnumToKey(market: string | null): string {
+  return (market !== null && MARKET_ENUM_TO_KEY[market]) || "over_under";
 }
 
 // Label de fallback espelha markets.label do seed 0009 (single-source quando o
@@ -47,7 +51,7 @@ export type RawUserDashboardRow = Omit<
   DashboardRow,
   "marketKey" | "marketLabel"
 > & {
-  market: string;
+  market: string | null;
   marketKey: string | null;
   marketLabel: string | null;
 };
@@ -117,12 +121,21 @@ export type DashboardDetail = {
   match: DbMatch;
   outcome: DbPredictionOutcome | null;
   aiCall: DbAiCall | null;
+  // Key CANÔNICA do mercado, resolvida por LEFT JOIN markets (espelha
+  // getUserDashboardRows). Alimenta recToken/settlementMetricLabel da detail view
+  // (1X2 → "Casa"/label do mercado, não o default over_under). Nullable em rows sem
+  // marketId (históricas pré-backfill) → o chamador faz coalesce 'over_under'.
+  marketKey: string | null;
 };
 
 /**
  * Detalhe de UMA predição pro drill-down. SCOPED: `predictions.id = ? AND
  * predictions.userId = ?` — retorna null se a predição não for do usuário, então
  * a página dá 404 e ninguém vê predição/payload de outro usuário.
+ *
+ * LEFT JOIN markets (espelha getUserDashboardRows / predictions.ts) resolve a key
+ * canônica do mercado pra a detail view rotular 1X2 corretamente; null (row sem
+ * marketId) cai no coalesce 'over_under' do view-mapper.
  */
 export async function getPredictionDetailForUser(
   predictionId: string,
@@ -134,6 +147,7 @@ export async function getPredictionDetailForUser(
       match: matches,
       outcome: predictionOutcomes,
       aiCall: aiCalls,
+      marketKey: markets.key,
     })
     .from(predictions)
     .innerJoin(matches, eq(predictions.matchId, matches.id))
@@ -142,6 +156,7 @@ export async function getPredictionDetailForUser(
       eq(predictionOutcomes.predictionId, predictions.id),
     )
     .leftJoin(aiCalls, eq(predictions.aiCallId, aiCalls.id))
+    .leftJoin(markets, eq(predictions.marketId, markets.id))
     .where(and(eq(predictions.id, predictionId), eq(predictions.userId, userId)))
     .limit(1);
   return rows[0] ?? null;
