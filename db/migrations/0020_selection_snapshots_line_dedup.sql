@@ -1,0 +1,2 @@
+ALTER TABLE "selection_odds_snapshots" DROP CONSTRAINT "selection_odds_snapshots_dedup_key";--> statement-breakpoint
+ALTER TABLE "selection_odds_snapshots" ADD CONSTRAINT "selection_odds_snapshots_dedup_key" UNIQUE NULLS NOT DISTINCT("match_id","market_id","selection_id","captured_at","bookmaker","market_params");

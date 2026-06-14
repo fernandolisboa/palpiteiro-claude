@@ -164,12 +164,16 @@ export function insertSelectionOddsSnapshotsBatch(rows: SelectionSnapshotRow[]) 
       })),
     )
     .onConflictDoNothing({
+      // Espelha o unique `selection_odds_snapshots_dedup_key` (inclui marketParams,
+      // #175) — sem a linha aqui, o arbiter não casaria a constraint nova e o insert
+      // multi-linha falharia/colidiria. NULLS NOT DISTINCT no índice cobre btts/dc.
       target: [
         selectionOddsSnapshots.matchId,
         selectionOddsSnapshots.marketId,
         selectionOddsSnapshots.selectionId,
         selectionOddsSnapshots.capturedAt,
         selectionOddsSnapshots.bookmaker,
+        selectionOddsSnapshots.marketParams,
       ],
     });
 }

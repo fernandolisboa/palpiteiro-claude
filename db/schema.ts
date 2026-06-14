@@ -404,13 +404,20 @@ export const selectionOddsSnapshots = pgTable(
     capturedAt: timestamp({ withTimezone: true }).notNull().defaultNow(),
   },
   (t) => [
-    unique("selection_odds_snapshots_dedup_key").on(
-      t.matchId,
-      t.marketId,
-      t.selectionId,
-      t.capturedAt,
-      t.bookmaker,
-    ),
+    // Dedup inclui marketParams (#175): over/under multi-linha grava 1.5/2.5/3.5 da
+    // MESMA seleção no MESMO captured_at/bookmaker — sem a linha na chave, as três
+    // colidiriam e só uma sobreviveria. `nullsNotDistinct` preserva o dedup de btts/
+    // dupla chance (marketParams NULL): NULL = NULL → dedup; {line:X} ≠ {line:Y} → coexistem.
+    unique("selection_odds_snapshots_dedup_key")
+      .on(
+        t.matchId,
+        t.marketId,
+        t.selectionId,
+        t.capturedAt,
+        t.bookmaker,
+        t.marketParams,
+      )
+      .nullsNotDistinct(),
   ],
 );
 

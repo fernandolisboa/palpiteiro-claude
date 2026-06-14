@@ -129,39 +129,48 @@ export async function ensureOddsSnapshotsFresh(
       return;
     }
 
-    const bundle: MarketOddsBundle | null = pickBestBookmaker({
-      event,
-      match: { homeTeam: match.homeTeam, awayTeam: match.awayTeam },
-      descriptor,
-    });
-    if (!bundle) return; // nenhum book com o mercado completo; degrada
-
     const { marketId, idByKey } = await resolveMarketCatalog(
       descriptor.dbMarketKey,
     );
-    const overroundPct = bundle.overround * 100;
-    const newRows: SelectionSnapshotRow[] = bundle.selections.map((sel) => {
-      const selectionId = idByKey.get(sel.key);
-      if (!selectionId) {
-        // Hard-fail INTENCIONAL (não é caso de degrade como o fetch/!bundle acima):
-        // seleção sem seed é bug de migration, não condição de runtime. A seed 0016
-        // garante yes/no → inalcançável pós-migration (espelha selIdOf do featured +
-        // resolveMarketCatalog). Propaga p/ o catch da action como erro inesperado.
-        throw new Error(
-          `seleção '${sel.key}' não seedada pro market '${descriptor.dbMarketKey}'`,
-        );
+    // Multi-linha (#175): UM getOddsForEvent (acima) traz a escada inteira; aqui
+    // resolvemos o MELHOR book POR linha candidata e acumulamos um bundle por linha
+    // (marketParams:{line}). candidateLines ausente (btts/dupla chance) → [params.line]
+    // (= [undefined] quando sem linha) = UM bundle, byte-idêntico ao anterior. Linha
+    // sem book completo → pulada (escada parcial; analisa as disponíveis).
+    const candidateLines = descriptor.candidateLines ?? [descriptor.params?.line];
+    const newRows: SelectionSnapshotRow[] = [];
+    for (const line of candidateLines) {
+      const bundle: MarketOddsBundle | null = pickBestBookmaker({
+        event,
+        match: { homeTeam: match.homeTeam, awayTeam: match.awayTeam },
+        descriptor,
+        params: line === undefined ? undefined : { line },
+      });
+      if (!bundle) continue; // nenhum book com o mercado completo nesta linha; degrada
+      const overroundPct = bundle.overround * 100;
+      for (const sel of bundle.selections) {
+        const selectionId = idByKey.get(sel.key);
+        if (!selectionId) {
+          // Hard-fail INTENCIONAL (não é caso de degrade como o fetch/!bundle acima):
+          // seleção sem seed é bug de migration, não condição de runtime. A seed
+          // garante as seleções → inalcançável pós-migration. Propaga p/ o catch da
+          // action como erro inesperado.
+          throw new Error(
+            `seleção '${sel.key}' não seedada pro market '${descriptor.dbMarketKey}'`,
+          );
+        }
+        newRows.push({
+          matchId: match.id,
+          marketId,
+          selectionId,
+          marketParams: line === undefined ? null : { line },
+          odd: sel.odd.toFixed(3),
+          overroundPct: overroundPct.toFixed(2),
+          bookmaker: bundle.bookmakerTitle,
+          capturedAt: now,
+        });
       }
-      return {
-        matchId: match.id,
-        marketId,
-        selectionId,
-        marketParams: descriptor.params ?? null,
-        odd: sel.odd.toFixed(3),
-        overroundPct: overroundPct.toFixed(2),
-        bookmaker: bundle.bookmakerTitle,
-        capturedAt: now,
-      };
-    });
+    }
     if (newRows.length > 0) {
       await insertSelectionOddsSnapshotsBatch(newRows);
     }
@@ -169,19 +178,37 @@ export async function ensureOddsSnapshotsFresh(
 
   for (const descriptor of descriptors) {
     // ── Gate de frescor market-aware ────────────────────────────────────────
-    if (descriptor.dbMarketKey === OVER_UNDER.dbMarketKey) {
+    // FEATURED over_under (e SÓ ele) gateia pela tabela LEGADA (dual-write). A
+    // variante over_under_alt (#175) tem a MESMA dbMarketKey mas é `additional` →
+    // cai no gate da tabela nova (por linha), não no legado. Discrimina por oddsSource.
+    if (
+      descriptor.dbMarketKey === OVER_UNDER.dbMarketKey &&
+      descriptor.oddsSource !== "additional"
+    ) {
       const existing = await getLatestOddsSnapshot(match.id);
       if (isFresh(existing, now.getTime())) continue;
     } else {
-      const fresh = await getLatestFreshSelectionOddsSnapshots(
-        {
-          matchId: match.id,
-          dbMarketKey: descriptor.dbMarketKey,
-          params: descriptor.params,
-        },
-        now,
-      );
-      if (fresh) continue;
+      // Frescor POR linha candidata (#175): se QUALQUER linha estiver stale/ausente,
+      // o re-fetch (1 crédito, escada inteira) reescreve TODAS. Single-line (btts/
+      // dupla chance/match_result) → uma checagem (candidateLines ausente → [params.line]).
+      const candidateLines =
+        descriptor.candidateLines ?? [descriptor.params?.line];
+      let allFresh = true;
+      for (const line of candidateLines) {
+        const fresh = await getLatestFreshSelectionOddsSnapshots(
+          {
+            matchId: match.id,
+            dbMarketKey: descriptor.dbMarketKey,
+            params: line === undefined ? undefined : { line },
+          },
+          now,
+        );
+        if (!fresh) {
+          allFresh = false;
+          break;
+        }
+      }
+      if (allFresh) continue;
     }
 
     // ── Stale + additional (btts): fetch POR EVENTO, só este match (sem batch) ──
