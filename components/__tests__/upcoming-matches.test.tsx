@@ -69,3 +69,24 @@ describe("UpcomingMatchesDesktop reveal (#134)", () => {
     expect(html).toContain("Carregar mais");
   });
 });
+
+describe("UpcomingMatchesDesktop chip N-vias (1X2) — #173 PR-2", () => {
+  it("renderiza os 3 outcomes 1X2 no chip desktop (bloco byte-distinto do mobile)", () => {
+    const m: MatchRowView = {
+      ...fakeMatch(0),
+      odds: {
+        outcomes: [
+          { label: "Casa", odd: "2.10" },
+          { label: "Empate", odd: "3.40" },
+          { label: "Fora", odd: "3.90" },
+        ],
+      },
+    };
+    const html = renderToStaticMarkup(<UpcomingMatchesDesktop matches={[m]} />);
+    expect(html).toContain("Casa");
+    expect(html).toContain("Empate");
+    expect(html).toContain("Fora");
+    expect(html).toContain("2.10");
+    expect(html).toContain("3.90");
+  });
+});
