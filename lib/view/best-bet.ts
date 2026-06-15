@@ -79,10 +79,14 @@ function computeRank(
 export function toBestBetView(
   outcomes: FanOutOutcome[],
   aiCallByMarketKey: ReadonlyMap<string, AiCallCost>,
-  preWarmErrors: BestBetMarketError[] = [],
+  preWarmErrors: { marketKey: string; message: string }[] = [],
 ): BestBetView {
   const entries: BestBetEntry[] = [];
-  const rawErrors: BestBetMarketError[] = [...preWarmErrors];
+  const rawErrors: BestBetMarketError[] = preWarmErrors.map((e) => ({
+    marketKey: e.marketKey,
+    marketLabel: getMarketPresentation(e.marketKey).marketLabel,
+    message: e.message,
+  }));
 
   for (const o of outcomes) {
     const marketLabel = getMarketPresentation(o.marketKey).marketLabel;

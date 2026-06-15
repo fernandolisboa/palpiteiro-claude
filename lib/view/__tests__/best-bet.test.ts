@@ -135,9 +135,9 @@ describe("toBestBetView — rank LÊ os números que o card mostra (#178)", () =
     // double_chance falhou no pré-warm E no predict → 1 erro só.
     const dcFail: FanOutOutcome = { ok: false, marketKey: "double_chance", message: "sem snapshot fresco" };
     const preWarm = [
-      { marketKey: "double_chance", marketLabel: "Dupla chance", message: "pré-warm falhou" },
+      { marketKey: "double_chance", message: "pré-warm falhou" },
       // match_result "falhou" no pré-warm mas o predict deu certo → não é indisponível.
-      { marketKey: "match_result", marketLabel: "Resultado (1X2)", message: "pré-warm falhou" },
+      { marketKey: "match_result", message: "pré-warm falhou" },
     ];
     const view = toBestBetView([mr(), dcFail], new Map(), preWarm);
     expect(view.llmCalls).toBe(1);
