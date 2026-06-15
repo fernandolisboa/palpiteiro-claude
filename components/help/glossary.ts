@@ -58,7 +58,14 @@ export const GLOSSARY: readonly GlossaryEntry[] = [
     term: "seleção",
     anchor: "selecao",
     meaning:
-      "Uma opção dentro de um mercado. Over/under tem 2 (over e under); 1X2 tem 3 (casa, empate, fora). O app recomenda UMA seleção por análise — ou PASS.",
+      "Uma opção dentro de um mercado. O número de seleções muda por mercado. O app recomenda UMA seleção por análise — ou PASS.",
+    markets: {
+      over_under: "Over/under tem 2: over e under.",
+      match_result: "1X2 tem 3: casa, empate e fora.",
+      btts: "BTTS tem 2: sim e não.",
+      double_chance:
+        "Dupla chance tem 3: casa ou empate, empate ou fora e casa ou fora.",
+    },
     group: "conceitos",
   },
   {
@@ -82,6 +89,10 @@ export const GLOSSARY: readonly GlossaryEntry[] = [
       "O app sugere UMA seleção do mercado, ou PASS. PASS = não apostar, porque não há vantagem suficiente. PASS NÃO é erro — é disciplina; pass rate alto (30–60%) é BOM.",
     markets: {
       over_under: "As seleções do over/under são over e under.",
+      match_result: "No 1X2, são casa, empate e fora.",
+      btts: "No BTTS, são sim e não.",
+      double_chance:
+        "Na dupla chance, são casa ou empate, empate ou fora e casa ou fora.",
     },
     group: "decisao",
   },
@@ -100,6 +111,11 @@ export const GLOSSARY: readonly GlossaryEntry[] = [
     markets: {
       over_under:
         "No over/under (2 seleções): (1/odd do lado) ÷ (1/odd_over + 1/odd_under).",
+      match_result:
+        "No 1X2 (3 seleções): (1/odd da seleção) ÷ (soma dos três 1/odd).",
+      btts: "No BTTS (2 seleções): (1/odd do lado) ÷ (1/odd_sim + 1/odd_não).",
+      double_chance:
+        "Na dupla chance, as três opções cobrem dois resultados cada, então a soma alvo é 200% (não 100%) — a normalização usa esse alvo.",
     },
     group: "decisao",
   },
@@ -111,6 +127,10 @@ export const GLOSSARY: readonly GlossaryEntry[] = [
     markets: {
       over_under:
         "No over/under: over% + under% somam mais de 100%; (1/odd_over + 1/odd_under) − 1.",
+      match_result: "No 1X2: a soma dos três (1/odd) − 1.",
+      btts: "No BTTS: (1/odd_sim + 1/odd_não) − 1.",
+      double_chance:
+        "Na dupla chance: a soma dos três (1/odd) − 2 (o alvo é 200%, não 100%).",
     },
     group: "decisao",
   },
@@ -232,6 +252,10 @@ export const GLOSSARY: readonly GlossaryEntry[] = [
     markets: {
       over_under:
         'No over/under, são os dois lados (over e under); o lado não-recomendado aparece como "cenário alternativo".',
+      match_result:
+        "No 1X2, são as três seleções (casa, empate, fora); as não-recomendadas aparecem como cenário alternativo.",
+      btts: "No BTTS, são sim e não.",
+      double_chance: "Na dupla chance, são as três opções de par.",
     },
     group: "numeros",
   },
