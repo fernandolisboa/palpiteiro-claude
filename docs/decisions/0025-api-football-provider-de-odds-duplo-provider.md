@@ -72,8 +72,9 @@ disciplina de quota respeitada — sem loops). Os achados abaixo são primários
   evidência é cross-league e NÃO foi observada pra liga 71** (sua única rodada
   com odds é 2026-07-22, 5+ semanas à frente pela pausa do Mundial de Clubes; 0
   fixtures em 14 dias), **nem pro único book relevante (Bet365)** — cadência de
-  refresh é plausivelmente por liga/book. Precisa de gate (**G1**) antes de
-  confiar.
+  refresh é plausivelmente por liga/book. Risco **aceito sem teste prévio**
+  (decisão do dono — ver Refino): se preço estale virar problema, trata-se como
+  bug então.
 - **Histórico:** **indisponível em qualquer plano** — retenção de **7 dias por
   design** + `coverage.odds=false` pra 2021–2025 (true só 2026). `/odds`
   entrega 1 snapshot atual por book (1 timestamp `update`), sem série de
@@ -128,17 +129,18 @@ wiring aditivo, não de cobertura.
   `select-bookmaker.ts` pra mapear do DTO normalizado. **Também ungated:** o
   **wiring de settlement Tier 3 + coleta de stats** (`/fixtures/statistics`),
   cujos dados estão verificados e que é desacoplado de odds.
-- **ENFILEIRADO, gateado por G1/G2/G3:** a **perna de odds da api-football**
+- **ENFILEIRADO, gateado por G2/G3:** a **perna de odds da api-football**
   (correct score + artilheiro/assistência) e a **graduação** de qualquer
-  mercado Tier 3 (que ainda precisa de odds + backtest ≥20 + D9).
+  mercado Tier 3 (pela régua **D9 viva** — tracking real, **sem backtest**; ver
+  Refino pós-decisão).
 
 Sejamos honestos sobre o delta vs a alternativa "diferido": **o artefato que sai
 hoje é o mesmo seam nos dois casos**. A escolha de "agora" significa apenas que
 (1) **comprometemos e enfileiramos** o trabalho gateado como issues nomeadas, e
 (2) **pré-aceitamos** o custo de egress — porque correct score/artilheiro são um
 diferencial **exclusivo confirmado** (nenhum outro provider os precifica pro
-BR) e o dono quer começar a acumular CLV/backtest desses mercados **nesta
-temporada**, não na próxima, evitando um 2º round de ADR.
+BR) e o dono quer começar a acumular **tracking vivo (D9)** desses mercados
+**nesta temporada**, não na próxima, evitando um 2º round de ADR.
 
 Detalhamento:
 
@@ -152,24 +154,25 @@ Detalhamento:
    cascade/capability-gate é replicado num `OddsFallbackProvider` novo.
 4. Tier 3 ligado: **avaliar correct score + artilheiro** (NÃO corners/cards —
    sem odds em nenhum provider). Cada mercado: migration
-   `markets`/`market_selections` + novo `result_data` + regra de settlement
-   (ADRs 0015/0016) + **backtest ≥20 jogos** e régua **D9** antes de graduar.
-5. **Backtest/CLV: forward-capture.** Não há backtest retroativo **grátis** em
-   nenhum provider (api-football: retenção 7 dias + `coverage.odds=false`
-   pré-2026; The Odds API: arquivo histórico existe mas é **pago-only**,
-   inacessível ao free 500/mês). Logo, o caminho do gate D9 é **forward-capture**
-   (persistir snapshots pré-jogo no DB conforme as análises rodam, agnóstico de
-   provider); o arquivo pago do The Odds API fica como **fallback explícito**
-   (ver Reavaliação). Fundação do D9 e do CLV (#180).
+   `markets`/`market_selections` + cartucho + settlement por mercado
+   (ADRs 0015/0016) + régua **D9 viva** antes de graduar — **sem backtest**
+   (ver Refino pós-decisão).
+5. **Backtest desescopado.** Não há backtest retroativo **grátis** em nenhum
+   provider (api-football: retenção 7 dias + `coverage.odds=false` pré-2026;
+   The Odds API: arquivo histórico existe mas é **pago-only**, inacessível ao
+   free 500/mês) — e o dono **desescopou backtests de vez** (2026-06-15, ver
+   Refino). A graduação é por **tracking D9 vivo** (apostas resolvidas reais),
+   não por teste prévio. CLV segue como item próprio no #180.
 
-### Acceptance gates (precondições pra ligar a perna de odds da api-football)
+### Gates e riscos
 
-- **G1 — refresh near-KO da liga 71 (no book que importa):** re-rodar o teste de
-  `gap(KO − update)` numa rodada **real** do Brasileirão, **especificamente nas
-  linhas de correct score/artilheiro do Bet365** (o único book que cota a liga
-  71) — não só no `/odds` agregado. Inobservável hoje (pausa do Mundial de
-  Clubes). Se ficar coarse-refresh perto do KO → preços estale → edges
-  sistematicamente errados (gotcha #1 do `CLAUDE.md`) → **não** usar pra edge.
+- **Risco aceito (NÃO é gate) — refresh near-KO da liga 71:** o refresh perto do
+  KO foi confirmado cross-league (66% em ≤3h) mas **não** observado pra liga 71
+  nem pro Bet365 (única rodada com odds 5+ semanas à frente, pausa do Mundial de
+  Clubes). Se ficar coarse-refresh, preços estale dariam edges errados (gotcha #1
+  do `CLAUDE.md`). **O dono optou por NÃO planejar um teste prévio** (2026-06-15,
+  ver Refino): se isso virar problema quando as competições voltarem, trata-se
+  como **bug** então — não como gate que segura o trabalho no board.
 - **G2 — egress:** a api-football sports-data (fixtures/lineups/injuries) **já
   egressa do Vercel hoje** (crons em `app/api/cron/*`, runtime nodejs) **sem
   proxy/IP estático e sem bloqueio observado**, apesar do aviso do vendor contra
@@ -204,13 +207,14 @@ Detalhamento:
 
 - (+) Abre o **caminho** pra **correct score** e **artilheiro/assistência** pro
   Brasileirão — mercados que a The Odds API não precifica em lugar nenhum.
-  **Entrega real condicionada a G1/G2/G3 + backtest/D9** (não é entrega imediata).
+  **Entrega real condicionada a G2/G3 + graduação D9 viva** (não é entrega
+  imediata, mas sem gate de teste prévio que a segure).
 - (+) Habilita o **settlement Tier 3** (corners/cartões **settla-vel** via
   `/fixtures/statistics` — mesmo sem odds *bettable* hoje) como fundação
   desacoplada, reusável quando/se um book cotar (ver Reavaliação).
 - (+) Paga a dívida técnica: o path de odds ganha uma abstração (`OddsProvider`),
   fechando a assimetria com o sports-data (que já tem `SportsDataProvider`).
-  Esse seam **sobrevive mesmo se G1 falhar** (ver Reavaliação).
+  Esse seam **sobrevive mesmo se a perna de odds não vingar** (ver Reavaliação).
 - (+) Settlement de odds intocado: a decisão de odds não mexe em `settle.ts`.
 - (−) **Risco de viabilidade (correct score):** o complete-market gate de
   `select-bookmaker.ts` + book único Bet365 sobre ~30 vias pode **quebrar
@@ -221,8 +225,9 @@ Detalhamento:
 - (−) **Budget compartilhado:** ~8 calls/dia de odds são triviais contra
   Pro/7500, mas o consumo atual de sports-data nesse mesmo budget é **desconhecido**
   — medir antes de assumir folga.
-- (−) **Sem backtest retroativo grátis:** o gate D9 depende de forward-capture
-  acumulando ao longo das rodadas — sem atalho histórico sem pagar.
+- (−) **Backtest desescopado:** a graduação D9 é por **tracking vivo** (apostas
+  resolvidas reais), não por teste prévio nem forward-capture — sem atalho
+  histórico (nenhum provider dá grátis).
 - (−) **Esforço:** sem `OddsProvider` hoje; o seam + DTO + generalizar o
   `MarketDescriptor` e `select-bookmaker.ts` é trabalho de superfície ampla.
 - (−) **Doc-debt factual:** `.env.example` e ADR 0005 erram o plano (free 100/dia
@@ -230,49 +235,52 @@ Detalhamento:
 
 ## Reavaliação
 
-- **Quando a liga 71 voltar** (pós-pausa do Mundial de Clubes): rodar **G1** no
-  Bet365 antes de qualquer go-live de odds da api-football.
-- **Se G1 falhar** (refresh coarse perto do KO na liga 71): o **seam
-  `OddsProvider` + DTO + generalização do descriptor (issues 1–2) ainda valem**
-  como dívida técnica paga, e o **settlement Tier 3 (issue 7) ainda sai** — mas
-  o **adapter de odds da api-football é engavetado**. A parte irreversível é só o
-  seam; correct score/props odds são a aposta especulativa.
+- **Quando a liga 71 voltar** (pós-pausa do Mundial de Clubes): **sem teste
+  prévio planejado** (decisão do dono — ver Refino). Se preço estale na perna de
+  odds da api-football virar edges errados, tratar como **bug** quando surfaçar.
+- **Se a perna de odds não vingar** (preço estale / cobertura sumir): o **seam
+  `OddsProvider` + DTO + generalização do descriptor (#288) ainda valem** como
+  dívida técnica paga; só o **adapter de odds (#289) é engavetado**. A parte
+  irreversível é o seam.
 - **Corners/cards:** re-checar `/odds?league=71&bet=45/80` periodicamente; se
-  algum book passar a cotar, reabrir o mercado (a parte de settlement já existe).
-- **Backtest:** se forward-capture for lento demais pra graduar mercados,
-  reavaliar o arquivo histórico **pago** do The Odds API (multiplicador 10× de
-  créditos, só plano pago; ordem de grandeza ~US$30/20K créditos **a confirmar**)
-  pra um backfill único.
+  algum book passar a cotar, reabrir o mercado (settlement via stats é aditivo).
+- **Backtest:** desescopado hoje. Se um dia for revisitado, o único caminho
+  retroativo é o arquivo histórico **pago** do The Odds API (multiplicador 10× de
+  créditos, só plano pago; ordem de grandeza a confirmar) — nunca a api-football.
+
+## Refino pós-decisão (2026-06-15)
+
+Refino do dono ao derivar as issues de implementação, que vale como decisão
+permanente:
+
+- **Backtests desescopados de vez.** Já foram planejados e cancelados 2× no
+  pivot; não se planeja mais nenhum teste desse tipo. Mercados graduam **só pela
+  régua D9 viva** (tracking real de apostas resolvidas).
+- **Sem testes-gate de "quando a competição voltar".** Não criar tarefas de
+  acceptance test pendentes esperando o calendário; se um problema (ex.: preço
+  estale) surgir quando as ligas voltarem, trata-se como **bug** então.
+- **Board enxuto, tudo AFK.** Nada de issues HITL (human-in-the-loop) que ficam
+  paradas no board. A cauda deste ADR são **3 issues** só (abaixo).
 
 ## Issues derivadas
 
-A serem criadas (este ADR é o produto de #181; a implementação vive em issues
-próprias, fora do PR deste ADR). **Sequência:** as issues 1–3, 5 e 7 são
-ungated; a issue 6 (adapter de odds) só começa **depois de G1 passar**.
+Criadas a partir deste ADR (produto de #181; implementação fora do PR do ADR).
+Enxutas e todas **AFK** (ver Refino). Sequência por dependência:
 
-1. Extrair `OddsProvider` + DTO `NormalizedOdds`; envolver The Odds API como 1º
-   adapter; refatorar `fetch-and-snapshot.ts`/`predict.ts`/`select-bookmaker.ts`
-   (comportamento byte-idêntico). **Sem** adapter api-football ainda. *(ungated)*
-2. Generalizar `MarketDescriptor` pra mapear do DTO normalizado (tirar o
-   acoplamento `OddsApiOutcome`/`providerMarketKey`). *(ungated)*
-3. Corrigir docs/comments factualmente errados: `.env.example` + ADR 0005
-   (errata: plano = Pro 7500/dia supersede a premissa free 100/dia — é o que muda
-   o sizing de budget); **revisar** (não corrigir cego) o comentário de
-   `odds-api-constants.ts` à luz de #158 (Betano não retornou nos *additional* da
-   Copa); registrar que histórico do The Odds API é pago-only. *(ungated)*
-4. **G1** — acceptance test do refresh near-KO da liga 71 **no Bet365**
-   (correct score/artilheiro), a rodar quando o Brasileirão voltar; **G2** —
-   documentar a decisão de egress (monitorar + contingência static-IP). *(gate)*
-5. Forward-capture de snapshots de odds pré-jogo no DB (backtest/CLV,
-   agnóstico de provider) — fundação do gate D9 e do #180. *(ungated)*
-6. **G3 + adapter de odds da api-football** (correct score + artilheiro): definir
-   o bounding de `selectionKeys` (grid top-N + bucket OTHER) e validar o overround
-   de book único como denominador de edge (ADR 0018) **antes** de codar; medir a
-   baseline de consumo de sports-data no budget Pro/7500. **Começa só após G1.**
-   *(gated por G1/G2/G3)*
-7. Wiring de settlement Tier 3: novo `result_data` + método de coleta
-   (`/fixtures/statistics`|`/fixtures/events`) + regra no registry — honrando
-   skip-over-wrong-settle em stats nulos. *(ungated; desacoplado de odds)*
-8. (condicional, por mercado) Ligar **correct score** e **artilheiro** —
-   migration `markets`/`market_selections` + cartucho + backtest ≥20 jogos + D9.
-   *(gated pela 6 + 7)*
+1. **#288** — Seam `OddsProvider` + DTO `NormalizedOdds` + generalizar
+   `MarketDescriptor` + doc-fixes (`.env.example`/errata ADR 0005 do plano
+   Pro 7500; revisar comentário de `odds-api-constants.ts` vs #158). Refactor
+   byte-idêntico, sem adapter api-football ainda. *(ungated)*
+2. **#289** — Adapter de odds da api-football (correct score + artilheiro):
+   resolve **G3** inline (bounding de `selectionKeys` via grid top-N + bucket
+   OTHER; overround de book único vs ADR 0018) + nota operacional de egress
+   (**G2**, monitorar). Sem backtest, sem teste-gate. *(bloqueado por #288)*
+3. **#290** — Ligar correct score + artilheiro end-to-end: migration
+   `markets`/`market_selections` + cartuchos + settlement por mercado (correct
+   score sobre o placar 90' existente; artilheiro via `/fixtures/events`) + flag
+   admin-only, graduação por **D9 viva**. *(bloqueado por #289)*
+
+O **settlement de corners/cards via `/fixtures/statistics`** (o diferencial
+confirmado da api-football) **não** virou issue: esses mercados não são ligados
+(sem odds em nenhum provider). Fica como fundação a construir **se/quando** um
+book passar a cotá-los (ver Reavaliação).
