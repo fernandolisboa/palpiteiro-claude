@@ -137,6 +137,14 @@ export const users = pgTable("users", {
   // Aditivas e nullable — não afetam os FKs existentes.
   emailVerified: timestamp({ withTimezone: true, mode: "date" }),
   image: text(),
+  // Aceite de maioridade (auto-declaração 18+) carimbado no PRIMEIRO login via
+  // `events.createUser` em auth.ts (#282, ADR/ops 05). Nullable de propósito:
+  // o gate é a UI do /signin (checkbox obrigatório que destrava os 3 métodos),
+  // a row só nasce DEPOIS de passar por ela. Rows pré-existentes não passaram
+  // pelo gate — ficam null, NÃO reescrever (ADD COLUMN nullable é metadata-only).
+  // Não é controle de segurança/enforcement server-side: é o registro de
+  // auditoria do consentimento.
+  acceptedTermsAt: timestamp({ withTimezone: true, mode: "date" }),
   createdAt: timestamp({ withTimezone: true }).notNull().defaultNow(),
 });
 
