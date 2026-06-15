@@ -16,10 +16,17 @@ export function ComoFuncionaContent() {
       <p className="pb-8 pt-2 text-[13.5px] leading-relaxed text-muted-foreground tracking-tight">
         O Palpiteiro <strong className="font-medium text-foreground">recomenda</strong> e{" "}
         <strong className="font-medium text-foreground">acompanha</strong> apostas em
-        over/under 2.5 gols — e só isso. Você aposta por fora, na casa, com seu
-        próprio dinheiro; o dinheiro que aparece aqui dentro é hipotético, serve só
-        pra você medir se as recomendações estão valendo a pena. Esta página explica,
-        do zero, o que cada número da tela quer dizer.
+        vários mercados de futebol — over/under (total de gols), resultado final
+        (1X2), ambas marcam e dupla chance. Pra cada jogo ele compara as odds da casa
+        com a estimativa da IA, mede onde há vantagem (o{" "}
+        <strong className="font-medium text-foreground">edge</strong>) e devolve{" "}
+        <strong className="font-medium text-foreground">uma recomendação só</strong> —
+        mercado, seleção, linha e tamanho da aposta — ou{" "}
+        <strong className="font-medium text-foreground">PASS</strong>, quando não
+        compensa apostar. Você aposta por fora, na casa, com seu próprio dinheiro; o
+        dinheiro que aparece aqui dentro é hipotético, serve só pra você medir se as
+        recomendações estão valendo a pena. Esta página explica, do zero, o que cada
+        número da tela quer dizer.
       </p>
 
       {/* Seção 2 — over/under do zero */}
