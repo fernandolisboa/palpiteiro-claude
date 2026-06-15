@@ -3,7 +3,9 @@
 ## Status
 Accepted (2026-05) — **emendado pelo ADR 0007**: o mecanismo de whitelist passou
 de tabela DB (`users.allowed_emails`) para env `ALLOWED_EMAILS` no MVP (#12). A
-escolha de Auth.js v5 + magic link via Resend permanece.
+escolha de Auth.js v5 + magic link via Resend permanece. **Emendado também
+pelo ADR 0023**: OAuth/passkey são aceitos cedo (a "Fase 3" hipotética some);
+senha+e-mail **segue rejeitada**.
 
 ## Contexto
 
