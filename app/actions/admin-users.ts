@@ -71,10 +71,13 @@ export async function setUserRole(
 }
 
 /**
- * Revoga/concede o acesso (`users.allowed`, whitelist em DB do ADR 0009) de
- * OUTRO usuário. Revogar bloqueia LOGINS FUTUROS (não a sessão vigente) e NÃO
- * vale pra e-mails no env `ALLOWED_EMAILS` (floor). Guarda: nunca revogar o
- * próprio acesso.
+ * Revoga/concede o acesso (`users.allowed`, whitelist em DB do ADR 0009 / 0023)
+ * de OUTRO usuário. Revogar bloqueia LOGINS FUTUROS E passa a valer na sessão
+ * vigente: o jwt() do Node revalida `allowed` a cada request (#252) e
+ * analyzeMatch relê o DB direto antes de qualquer chamada paga (#264, guarda
+ * load-bearing). NÃO vale pra e-mails no env `ALLOWED_EMAILS` (floor permanente)
+ * — pra bloquear uma conta do floor é preciso removê-la do env também (ADR 0023).
+ * Guarda: nunca revogar o próprio acesso.
  */
 export async function setUserAccess(
   _prev: AdminUserResult | null,

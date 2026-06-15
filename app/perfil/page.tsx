@@ -17,7 +17,8 @@ export default async function PerfilPage() {
   if (!session?.user?.id) redirect("/signin");
 
   // Sessão JWT pode apontar pra um id que não existe mais (reset + claim-admin);
-  // trata como sessão órfã, igual ao guard de `userExists` no fluxo de predição.
+  // trata como sessão órfã, igual ao guard de `getUserAccessState` no fluxo de
+  // predição (e ao drop de sessão no jwt() do Node — #252).
   const [profile, defaultModelId] = await Promise.all([
     getUserProfile(session.user.id),
     getDefaultModelId(),

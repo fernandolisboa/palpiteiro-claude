@@ -32,7 +32,7 @@ vi.mock("@/lib/db/queries/matches", () => ({ getMatchById: vi.fn() }));
 vi.mock("@/lib/odds/fetch-and-snapshot", () => ({
   ensureOddsSnapshotsFresh: vi.fn(),
 }));
-vi.mock("@/lib/db/queries/users", () => ({ userExists: vi.fn() }));
+vi.mock("@/lib/db/queries/users", () => ({ getUserAccessState: vi.fn() }));
 vi.mock("@/lib/rate-limit", () => ({ checkAnalysisRateLimit: vi.fn() }));
 vi.mock("@/lib/view/analysis", () => ({ toAnalysisView: vi.fn(() => ({})) }));
 
@@ -42,7 +42,7 @@ import { predict } from "@/lib/ai/predict";
 import { marketsForAudience } from "@/lib/db/queries/market-catalog";
 import { getMatchById } from "@/lib/db/queries/matches";
 import { getAiCallById } from "@/lib/db/queries/predictions";
-import { userExists } from "@/lib/db/queries/users";
+import { getUserAccessState } from "@/lib/db/queries/users";
 import { ensureOddsSnapshotsFresh } from "@/lib/odds/fetch-and-snapshot";
 import { checkAnalysisRateLimit } from "@/lib/rate-limit";
 import { toAnalysisView } from "@/lib/view/analysis";
@@ -53,7 +53,11 @@ const mockPredict = vi.mocked(predict);
 const mockMarketsForAudience = vi.mocked(marketsForAudience);
 const mockGetMatchById = vi.mocked(getMatchById);
 const mockEnsureOdds = vi.mocked(ensureOddsSnapshotsFresh);
-const mockUserExists = vi.mocked(userExists);
+const mockGetAccess = vi.mocked(getUserAccessState);
+// Helpers de estado de acesso (DB) — ativo (allowed:true) é o default dos testes
+// que só querem passar do gate; bloqueado e órfão (null) têm testes dedicados.
+const ALLOWED_ADMIN = { role: "admin" as const, allowed: true };
+const ALLOWED_USER = { role: "user" as const, allowed: true };
 const mockGetAiCall = vi.mocked(getAiCallById);
 const mockRateLimit = vi.mocked(checkAnalysisRateLimit);
 const mockToAnalysisView = vi.mocked(toAnalysisView);
@@ -127,7 +131,7 @@ function form(fields: Record<string, string>): FormData {
 beforeEach(() => {
   mockAuth.mockReset();
   mockPredict.mockReset();
-  mockUserExists.mockReset();
+  mockGetAccess.mockReset();
   mockGetAiCall.mockReset();
   // Só limpa o histórico de chamadas (mantém o `() => ({})` do vi.mock) pra os
   // testes que inspecionam os args com que toAnalysisView foi chamada.
@@ -183,9 +187,9 @@ describe("analyzeMatch", () => {
     expect(mockPredict).not.toHaveBeenCalled();
   });
 
-  it("bounces a session whose user row no longer exists, without calling predict (no Anthropic cost)", async () => {
+  it("bounces a session whose user row no longer exists (getUserAccessState → null), without calling predict (no Anthropic cost)", async () => {
     mockAuth.mockResolvedValue(SESSION);
-    mockUserExists.mockResolvedValue(false);
+    mockGetAccess.mockResolvedValue(null);
     const res = await analyzeMatch(null, form({ matchId: VALID_MATCH_ID }));
     expect(res).toEqual({
       ok: false,
@@ -194,9 +198,31 @@ describe("analyzeMatch", () => {
     expect(mockPredict).not.toHaveBeenCalled();
   });
 
+  it("bloqueia um usuário com allowed=false (guarda de custo load-bearing #264), sem chamar predict", async () => {
+    mockAuth.mockResolvedValue(USER_SESSION);
+    mockGetAccess.mockResolvedValue({ role: "user", allowed: false });
+    const res = await analyzeMatch(null, form({ matchId: VALID_MATCH_ID }));
+    expect(res).toEqual({
+      ok: false,
+      error: "Seu acesso está bloqueado. Fale com o administrador.",
+    });
+    expect(mockPredict).not.toHaveBeenCalled();
+  });
+
+  it("bloqueia ATÉ um admin com allowed=false (sem bypass por role; #264/ADR 0023)", async () => {
+    mockAuth.mockResolvedValue(SESSION);
+    mockGetAccess.mockResolvedValue({ role: "admin", allowed: false });
+    const res = await analyzeMatch(null, form({ matchId: VALID_MATCH_ID }));
+    expect(res).toEqual({
+      ok: false,
+      error: "Seu acesso está bloqueado. Fale com o administrador.",
+    });
+    expect(mockPredict).not.toHaveBeenCalled();
+  });
+
   it("rejects a rate-limited request without calling predict (no Anthropic cost)", async () => {
     mockAuth.mockResolvedValue(SESSION);
-    mockUserExists.mockResolvedValue(true);
+    mockGetAccess.mockResolvedValue(ALLOWED_ADMIN);
     // limit:7 (não o default 20) prova que a mensagem é interpolada do limite
     // retornado pelo gate, não um "20" hardcoded.
     mockRateLimit.mockResolvedValue({
@@ -213,9 +239,48 @@ describe("analyzeMatch", () => {
     expect(mockPredict).not.toHaveBeenCalled();
   });
 
+  it("recusa com copy de indisponibilidade quando o rate-limit falha fechado (reason:'fail-closed'), sem chamar predict", async () => {
+    mockAuth.mockResolvedValue(USER_SESSION);
+    mockGetAccess.mockResolvedValue(ALLOWED_USER);
+    // Fail-closed (KV ausente p/ não-admin): o discriminador explícito, não limit:0.
+    mockRateLimit.mockResolvedValue({
+      ok: false,
+      limit: 0,
+      remaining: 0,
+      reset: 0,
+      reason: "fail-closed",
+    });
+    const res = await analyzeMatch(null, form({ matchId: VALID_MATCH_ID }));
+    expect(res).toEqual({
+      ok: false,
+      error: "Análises temporariamente indisponíveis. Tente mais tarde.",
+    });
+    expect(mockPredict).not.toHaveBeenCalled();
+  });
+
+  it("um limit:0 LEGÍTIMO (sem reason) cai na copy de teto real, não na de indisponibilidade", async () => {
+    // Prova que o discriminador desacoplou a copy de fail-closed do valor limit:0:
+    // um teto real de 0 (config inesperada do Upstash) não dispara mais a copy de
+    // indisponibilidade por engano (ADR 0023, finding de code review).
+    mockAuth.mockResolvedValue(USER_SESSION);
+    mockGetAccess.mockResolvedValue(ALLOWED_USER);
+    mockRateLimit.mockResolvedValue({
+      ok: false,
+      limit: 0,
+      remaining: 0,
+      reset: 0,
+    });
+    const res = await analyzeMatch(null, form({ matchId: VALID_MATCH_ID }));
+    expect(res).toEqual({
+      ok: false,
+      error: "Você atingiu o limite de 0 análises por dia. Tente novamente amanhã.",
+    });
+    expect(mockPredict).not.toHaveBeenCalled();
+  });
+
   it("passes the user id and role to the rate-limit gate before predicting", async () => {
     mockAuth.mockResolvedValue(USER_SESSION);
-    mockUserExists.mockResolvedValue(true);
+    mockGetAccess.mockResolvedValue(ALLOWED_USER);
     mockPredict.mockResolvedValue(PREDICTION);
     mockGetAiCall.mockResolvedValue({ costUsd: "0.01" } as never);
     await analyzeMatch(null, form({ matchId: VALID_MATCH_ID }));
@@ -225,7 +290,7 @@ describe("analyzeMatch", () => {
 
   it("forwards an admin session's role to the rate-limit gate (admin tier)", async () => {
     mockAuth.mockResolvedValue(SESSION);
-    mockUserExists.mockResolvedValue(true);
+    mockGetAccess.mockResolvedValue(ALLOWED_ADMIN);
     mockPredict.mockResolvedValue(PREDICTION);
     mockGetAiCall.mockResolvedValue({ costUsd: "0.01" } as never);
     await analyzeMatch(null, form({ matchId: VALID_MATCH_ID }));
@@ -236,7 +301,7 @@ describe("analyzeMatch", () => {
 
 describe("analyzeMatch — model override gating", () => {
   beforeEach(() => {
-    mockUserExists.mockResolvedValue(true);
+    mockGetAccess.mockResolvedValue(ALLOWED_ADMIN);
     mockPredict.mockResolvedValue(PREDICTION);
     mockGetAiCall.mockResolvedValue({ costUsd: "0.01" } as never);
   });
@@ -363,7 +428,7 @@ describe("analyzeMatch — model override gating", () => {
 
 describe("analyzeMatch — market audience gating", () => {
   beforeEach(() => {
-    mockUserExists.mockResolvedValue(true);
+    mockGetAccess.mockResolvedValue(ALLOWED_ADMIN);
     mockPredict.mockResolvedValue(PREDICTION);
     mockGetAiCall.mockResolvedValue({ costUsd: "0.01" } as never);
   });
@@ -421,7 +486,7 @@ describe("analyzeMatch — market audience gating", () => {
 // FRONTEIRA DE SEGURANÇA (a UI só esconde o seletor).
 describe("analyzeMatch — market league coverage gating (#158)", () => {
   beforeEach(() => {
-    mockUserExists.mockResolvedValue(true);
+    mockGetAccess.mockResolvedValue(ALLOWED_ADMIN);
     mockPredict.mockResolvedValue(PREDICTION);
     mockGetAiCall.mockResolvedValue({ costUsd: "0.01" } as never);
   });
@@ -533,7 +598,7 @@ describe("analyzeMatch — market league coverage gating (#158)", () => {
 // coerção fora da cobertura + sem spend em jogo encerrado.
 describe("analyzeMatch — double_chance league coverage gating (#176)", () => {
   beforeEach(() => {
-    mockUserExists.mockResolvedValue(true);
+    mockGetAccess.mockResolvedValue(ALLOWED_ADMIN);
     mockPredict.mockResolvedValue(PREDICTION);
     mockGetAiCall.mockResolvedValue({ costUsd: "0.01" } as never);
   });
@@ -598,7 +663,7 @@ describe("analyzeMatch — double_chance league coverage gating (#176)", () => {
 describe("analyzeMatch — success path view wiring", () => {
   beforeEach(() => {
     mockAuth.mockResolvedValue(SESSION);
-    mockUserExists.mockResolvedValue(true);
+    mockGetAccess.mockResolvedValue(ALLOWED_ADMIN);
     mockPredict.mockResolvedValue(PREDICTION);
     mockGetAiCall.mockResolvedValue({ costUsd: "0.01" } as never);
   });
