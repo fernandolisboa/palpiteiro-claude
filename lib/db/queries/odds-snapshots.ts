@@ -1,133 +1,9 @@
 import { and, desc, eq, inArray, sql } from "drizzle-orm";
 
-import {
-  marketSelections,
-  matchOddsSnapshots,
-  selectionOddsSnapshots,
-} from "@/db/schema";
+import { marketSelections, selectionOddsSnapshots } from "@/db/schema";
 import { db } from "@/lib/db";
 import { resolveMarketCatalog } from "@/lib/db/queries/market-catalog";
 import { ODDS_SNAPSHOT_FRESHNESS_MS } from "@/lib/odds/freshness-window";
-
-export type DbOddsSnapshot = typeof matchOddsSnapshots.$inferSelect;
-
-export async function getLatestOddsSnapshot(
-  matchId: string,
-): Promise<DbOddsSnapshot | null> {
-  const rows = await db
-    .select()
-    .from(matchOddsSnapshots)
-    .where(
-      and(
-        eq(matchOddsSnapshots.matchId, matchId),
-        eq(matchOddsSnapshots.market, "over_under_2_5"),
-      ),
-    )
-    .orderBy(desc(matchOddsSnapshots.capturedAt))
-    .limit(1);
-  return rows[0] ?? null;
-}
-
-/**
- * Snapshot mais recente do match SOMENTE se ainda fresca (< TTL externo de
- * 30min, mesma definição que ensureOddsSnapshotsFresh usa em isFresh()).
- * Retorna null se não há snapshot ou se a existente já está stale.
- *
- * Comparador `<` idêntico ao de isFresh() pra que predict() (reuso) e
- * ensureOddsSnapshotsFresh (refetch) nunca discordem na fronteira de idade.
- */
-export async function getLatestFreshOddsSnapshot(
-  matchId: string,
-  now: Date = new Date(),
-): Promise<DbOddsSnapshot | null> {
-  const snapshot = await getLatestOddsSnapshot(matchId);
-  if (!snapshot) return null;
-  const ageMs = now.getTime() - snapshot.capturedAt.getTime();
-  return ageMs < ODDS_SNAPSHOT_FRESHNESS_MS ? snapshot : null;
-}
-
-/**
- * Batch read das snapshots MAIS RECENTES de over/under 2.5 pra cada match.
- * Uma query só (DISTINCT ON via subquery), nunca dispara fetch externo.
- * Usada pela home pra evitar N+1. Matches sem snapshot ficam fora do Map.
- */
-export async function getLatestOddsSnapshotsForMatches(
-  matchIds: string[],
-): Promise<Map<string, DbOddsSnapshot>> {
-  if (matchIds.length === 0) return new Map();
-
-  // Postgres DISTINCT ON: pra cada match_id, pega a row com captured_at mais
-  // recente. ORDER BY match_id, captured_at DESC é obrigatório.
-  const rows = await db
-    .selectDistinctOn([matchOddsSnapshots.matchId])
-    .from(matchOddsSnapshots)
-    .where(
-      and(
-        inArray(matchOddsSnapshots.matchId, matchIds),
-        eq(matchOddsSnapshots.market, "over_under_2_5"),
-      ),
-    )
-    .orderBy(matchOddsSnapshots.matchId, desc(matchOddsSnapshots.capturedAt));
-
-  const out = new Map<string, DbOddsSnapshot>();
-  for (const row of rows) {
-    out.set(row.matchId, row);
-  }
-  return out;
-}
-
-export type InsertOddsSnapshotArgs = {
-  matchId: string;
-  bookmaker: string;
-  overOdd: number;
-  underOdd: number;
-  overroundPct: number;
-};
-
-export async function insertOddsSnapshot(
-  args: InsertOddsSnapshotArgs,
-): Promise<void> {
-  await db.insert(matchOddsSnapshots).values({
-    matchId: args.matchId,
-    bookmaker: args.bookmaker,
-    market: "over_under_2_5",
-    line: "2.5",
-    overOdd: args.overOdd.toFixed(3),
-    underOdd: args.underOdd.toFixed(3),
-    overroundPct: args.overroundPct.toFixed(2),
-  });
-}
-
-/**
- * Insert binário (tabela LEGADA `match_odds_snapshots`). Retorna o query builder
- * NÃO-awaited pra caber em `db.batch([...])` — neon-http não tem `db.transaction`
- * (LANÇA em runtime). Callers que só querem inserir podem `await` o retorno
- * normalmente.
- *
- * `capturedAt` é OPCIONAL: por default cai no `defaultNow()` do schema (back-compat
- * com o comportamento atual). O dual-write (#164) passa o MESMO `now` de escrita às
- * DUAS tabelas EXPLICITAMENTE, garantindo `old.captured_at === new.captured_at` —
- * impossível se a velha ficasse em `defaultNow()` e a nova em outro valor.
- *
- * NÃO chamar com `rows` vazio (`.values([])` falha) — o caller guarda emptiness.
- */
-export function insertOddsSnapshotsBatch(
-  rows: InsertOddsSnapshotArgs[],
-  capturedAt?: Date,
-) {
-  return db.insert(matchOddsSnapshots).values(
-    rows.map((r) => ({
-      matchId: r.matchId,
-      bookmaker: r.bookmaker,
-      market: "over_under_2_5" as const,
-      line: "2.5",
-      overOdd: r.overOdd.toFixed(3),
-      underOdd: r.underOdd.toFixed(3),
-      overroundPct: r.overroundPct.toFixed(2),
-      ...(capturedAt ? { capturedAt } : {}),
-    })),
-  );
-}
 
 // ─── Tabela genérica `selection_odds_snapshots` (N seleções, #164) ───────────
 // A generalização N-vias de `match_odds_snapshots`. Uma row por seleção; a
@@ -149,8 +25,8 @@ export type SelectionSnapshotRow = {
  * Insert genérico (tabela `selection_odds_snapshots`). `onConflictDoNothing` na
  * chave de 5 colunas (match, market, selection, captured_at, bookmaker) — a mesma
  * que ancora a idempotência do backfill (#162). Retorna o query builder NÃO-awaited
- * pra caber em `db.batch([...])` (ver `insertOddsSnapshotsBatch`). NÃO chamar com
- * `rows` vazio — o caller guarda emptiness.
+ * pra poder compor em `db.batch([...])` (neon-http não tem transação). NÃO chamar
+ * com `rows` vazio — o caller guarda emptiness.
  */
 export function insertSelectionOddsSnapshotsBatch(rows: SelectionSnapshotRow[]) {
   return db
@@ -191,9 +67,8 @@ export type LatestSelectionSnapshot = {
 
 /**
  * Última captura de odds (mais recente por seleção) de um (match, market) na
- * tabela genérica. Padrão DISTINCT ON espelhando `getLatestOddsSnapshotsForMatches`
- * (odds-snapshots.ts) — `.selectDistinctOn([selectionId])` + ORDER BY começando
- * por `selectionId` (obrigatório no Postgres) e `desc(capturedAt)`.
+ * tabela genérica. Padrão DISTINCT ON: `.selectDistinctOn([selectionId])` + ORDER BY
+ * começando por `selectionId` (obrigatório no Postgres) e `desc(capturedAt)`.
  *
  * Como toda captura é ATÔMICA (db.batch escreve as N rows com o MESMO
  * captured_at/bookmaker), "última por seleção" colapsa em "última captura". O
@@ -325,10 +200,12 @@ type BatchReaderRow = {
  * então um match incompleto/incoerente é OMITIDO do Map (degrada p/ "sem odd"),
  * não derruba a página. Matches sem captura também ficam fora do Map.
  *
- * **match_result / no-line ONLY.** Não aplica predicado de `market_params->>'line'`
- * — um caller over/under Frankenstein-mergearia 1.5/2.5/3.5 sob o mesmo selectionId
- * (o DISTINCT ON é por (match, selection), não por linha). over/under no card/chip
- * continua na tabela legada (`getLatestOddsSnapshot(sForMatches)`), byte-idêntico.
+ * **Line-aware via `params`.** Sem `params` (match_result/no-line) NÃO aplica
+ * predicado de linha. Mercados com escada (over/under) DEVEM passar `params: { line }`
+ * — sem ele um caller over/under Frankenstein-mergearia 1.5/2.5/3.5 sob o mesmo
+ * selectionId (o DISTINCT ON é por (match, selection), não por linha). Com o
+ * predicado `market_params->>'line'`, cada (match, selection) colapsa na captura
+ * mais recente DAQUELA linha.
  *
  * `sortOrder` é COLUNA do SELECT, ordenada em JS após agrupar — NUNCA no leading
  * ORDER BY (Postgres exige que o leading ORDER BY case com as colunas do DISTINCT ON).
@@ -336,6 +213,7 @@ type BatchReaderRow = {
 export async function getLatestSelectionOddsSnapshotsForMatches(
   matchIds: string[],
   dbMarketKey: string,
+  params?: { line: number },
 ): Promise<Map<string, OrderedSelectionSnapshot>> {
   if (matchIds.length === 0) return new Map();
   const { marketId, keyById } = await resolveMarketCatalog(dbMarketKey);
@@ -363,6 +241,11 @@ export async function getLatestSelectionOddsSnapshotsForMatches(
       and(
         eq(selectionOddsSnapshots.marketId, marketId),
         inArray(selectionOddsSnapshots.matchId, matchIds),
+        ...(params
+          ? [
+              sql`${selectionOddsSnapshots.marketParams}->>'line' = ${String(params.line)}`,
+            ]
+          : []),
       ),
     )
     .orderBy(
@@ -401,6 +284,77 @@ export async function getLatestSelectionOddsSnapshotsForMatches(
       overroundPct: first.overroundPct,
       selections,
     });
+  }
+  return out;
+}
+
+// ─── over/under ao vivo (forma binária, da tabela genérica) ──────────────────
+// A view do card/hero/chip over/under lê o par {overOdd, underOdd} congelado da
+// captura mais recente. Na Fase 5 a fonte deixou de ser a tabela legada
+// `match_odds_snapshots` e passou a ser `selection_odds_snapshots` (linha 2.5),
+// adaptada de volta pra forma binária que page/match consomem (mesmos NOMES de
+// campo). A escada 1.5/3.5 (#175) é filtrada pelo predicado de linha.
+
+export type OverUnderSnapshot = {
+  bookmaker: string;
+  overOdd: string;
+  underOdd: string;
+  overroundPct: string;
+  capturedAt: Date;
+};
+
+// over_under é a key do mercado (markets.key, seed) — NÃO o enum legado. Linha 2.5
+// é a única exibida ao vivo (a escada alternativa do #175 fica fora do card).
+const OVER_UNDER_DB_KEY = "over_under";
+const OVER_UNDER_LIVE_LINE = 2.5;
+
+function toOverUnderSnapshot(
+  snap: OrderedSelectionSnapshot | null,
+): OverUnderSnapshot | null {
+  if (!snap) return null;
+  const over = snap.selections.find((s) => s.key === "over")?.odd;
+  const under = snap.selections.find((s) => s.key === "under")?.odd;
+  if (over === undefined || under === undefined) return null;
+  return {
+    bookmaker: snap.bookmaker,
+    overOdd: over,
+    underOdd: under,
+    overroundPct: snap.overroundPct,
+    capturedAt: snap.capturedAt,
+  };
+}
+
+/**
+ * Última captura over/under (linha 2.5) na forma binária. BEST-EFFORT (reusa o
+ * batch reader que OMITE capturas incoerentes/incompletas em vez de `throw`ar) —
+ * mesma semântica não-fatal da `getLatestOddsSnapshot` legada que substitui no
+ * contrato de retorno do `ensureOddsSnapshotsFresh`. null se não há captura
+ * coerente/completa.
+ */
+export async function getLatestOverUnderSnapshot(
+  matchId: string,
+): Promise<OverUnderSnapshot | null> {
+  const map = await getLatestOverUnderSnapshotsForMatches([matchId]);
+  return map.get(matchId) ?? null;
+}
+
+/**
+ * Batch read over/under (linha 2.5) na forma binária pra home (evita N+1).
+ * Substitui a `getLatestOddsSnapshotsForMatches` legada. Matches sem captura
+ * coerente/completa ficam fora do Map.
+ */
+export async function getLatestOverUnderSnapshotsForMatches(
+  matchIds: string[],
+): Promise<Map<string, OverUnderSnapshot>> {
+  const raw = await getLatestSelectionOddsSnapshotsForMatches(
+    matchIds,
+    OVER_UNDER_DB_KEY,
+    { line: OVER_UNDER_LIVE_LINE },
+  );
+  const out = new Map<string, OverUnderSnapshot>();
+  for (const [matchId, snap] of raw) {
+    const adapted = toOverUnderSnapshot(snap);
+    if (adapted) out.set(matchId, adapted);
   }
   return out;
 }

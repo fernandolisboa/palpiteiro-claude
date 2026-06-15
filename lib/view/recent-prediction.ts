@@ -22,19 +22,9 @@ type RecentInput = {
   league: SupportedLeague;
   homeTeam: string;
   awayTeam: string;
-  // = key da seleção escolhida (multi-mercado, #173) ou "pass". REC_MAP é total.
-  recommendation:
-    | "over"
-    | "under"
-    | "pass"
-    | "home"
-    | "draw"
-    | "away"
-    | "yes"
-    | "no"
-    | "home_or_draw"
-    | "away_or_draw"
-    | "home_or_away";
+  // = key da seleção escolhida (qualquer mercado) ou "pass". `string` agnóstico
+  // desde o contract (#179); REC_TOKEN é total, com fallback toUpperCase.
+  recommendation: string;
   edgePct: string | number | null;
   createdAt: Date;
 };

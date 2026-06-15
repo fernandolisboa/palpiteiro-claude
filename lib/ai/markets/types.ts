@@ -73,8 +73,8 @@ export type MarketCartridge<
   Output = unknown,
   Args = unknown,
 > = {
-  // Chave de despacho do registry (`"over_under"`). NÃO é o enum legado
-  // `match_odds_snapshots.market = 'over_under_2_5'`.
+  // Chave de despacho do registry (`"over_under"` = markets.key). O enum/tabela
+  // legados (over_under_2_5 / match_odds_snapshots) saíram na Fase 5.
   marketKey: string;
   // Versão semver-like do cartucho (ADR 0017). Gravada em ai_calls.promptVersion
   // e predictions.promptVersion. Ex.: `"over_under_v2.0"`.

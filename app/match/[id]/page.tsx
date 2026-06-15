@@ -140,8 +140,6 @@ export default async function MatchPage({ params }: PageProps) {
           bookmaker: latestPred.prediction.bookmaker,
           impliedProbPct: latestPred.prediction.impliedProbPct,
           edgePct: latestPred.prediction.edgePct,
-          overOddAtPrediction: latestPred.prediction.overOddAtPrediction,
-          underOddAtPrediction: latestPred.prediction.underOddAtPrediction,
           modelVersion: latestPred.prediction.modelVersion,
           promptVersion: latestPred.prediction.promptVersion,
           createdAt: latestPred.prediction.createdAt,

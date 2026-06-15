@@ -336,10 +336,6 @@ describe("predict(match_result) — 3-way happy path through the generic path", 
       string,
       unknown
     >;
-    // Legacy over/under-only columns are NULL for a non-over_under market.
-    expect(predictionRow.market).toBeNull();
-    expect(predictionRow.overOddAtPrediction).toBeNull();
-    expect(predictionRow.underOddAtPrediction).toBeNull();
     // 1X2 carries no line.
     expect(predictionRow.marketParams).toBeNull();
     // Source-of-truth columns are set (generic).

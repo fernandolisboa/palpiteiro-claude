@@ -17,14 +17,13 @@ import type {
   DbPredictionOutcome,
 } from "./predictions";
 
-// Fallback enum→key pras rows SEM marketId (históricas pré-backfill, e qualquer
-// ambiente onde o backfill #162 — script manual, NÃO migration — não rodou: CI,
-// pglite, preview fresh). O enum legado `over_under_2_5` (schema.ts) é a key de
-// seed `over_under` (migration 0009). Coalesce SEMPRE pra uma key válida — nunca
-// null/"unknown" — ou a paridade quebra.
-const MARKET_ENUM_TO_KEY: Record<string, string> = {
-  over_under_2_5: "over_under",
-};
+// Fallback market(text)→key pras rows SEM marketId (históricas pré-backfill, e
+// qualquer ambiente onde o backfill #162 — script manual, NÃO migration — não
+// rodou: CI, pglite, preview fresh). O único valor histórico da coluna legada
+// `market` (ex-enum single-value) mapeia pra key de seed `over_under` (migration
+// 0009), coberto pelo default. Coalesce SEMPRE pra uma key válida — nunca null/
+// "unknown" — ou a paridade quebra. Map vazio: o `|| "over_under"` cobre o legado.
+const MARKET_ENUM_TO_KEY: Record<string, string> = {};
 
 // `market` é nullable desde o expand multi-mercado (#173): rows de mercado novo
 // gravam `market=null` (fonte de verdade = marketId, resolvido pelo LEFT JOIN

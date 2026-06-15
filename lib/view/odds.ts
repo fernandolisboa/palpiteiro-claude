@@ -1,8 +1,5 @@
 import { formatOdd, formatPct, formatRelativeAgo } from "@/lib/format";
-import {
-  computeImpliedProbabilities,
-  computeMarketImpliedProbabilities,
-} from "@/lib/odds/implied-probability";
+import { computeMarketImpliedProbabilities } from "@/lib/odds/implied-probability";
 import { getMarketPresentation } from "@/lib/view/markets/presentation";
 import type { MatchRowView, OddsView } from "@/lib/view/types";
 
@@ -37,10 +34,13 @@ export function toOddsView(
 ): OddsView {
   const overOdd = Number(snapshot.overOdd);
   const underOdd = Number(snapshot.underOdd);
-  const { overProb, underProb, overround } = computeImpliedProbabilities(
+  // over/under = caso N=2 do core (probs[0]=over, probs[1]=under) — bit-exato com
+  // o wrapper binário removido na Fase 5; DOM byte-idêntico (golden pina).
+  const { probs, overround } = computeMarketImpliedProbabilities([
     overOdd,
     underOdd,
-  );
+  ]);
+  const [overProb, underProb] = probs;
   return {
     marketLabel: LIVE_ODDS_PRESENTATION.marketLabel,
     // Forma N-vias (#173): over/under = 2 outcomes na ordem over→under. Mesmos

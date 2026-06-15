@@ -9,8 +9,8 @@ import type { SupportedLeague } from "@/lib/providers/sports-data/leagues";
  *
  *   - `providerMarketKey`: a chave do mercado no The Odds API (`'totals'` / `'h2h'`).
  *   - `dbMarketKey`: a chave em `markets.key` (`'over_under'` / `'match_result'`).
- *     NÃO confundir com o enum LEGADO `match_odds_snapshots.market = 'over_under_2_5'`
- *     (esse carrega a linha no sufixo; aqui a linha vive em `market_params.line`).
+ *     A linha vive em `market_params.line`, nunca num sufixo de key (o enum/tabela
+ *     legados over_under_2_5 / match_odds_snapshots saíram na Fase 5).
  *   - `dbSelectionKey`: a chave em `market_selections.key` (`'over'`/`'under'`,
  *     `'home'`/`'draw'`/`'away'`).
  *

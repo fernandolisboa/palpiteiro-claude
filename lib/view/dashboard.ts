@@ -233,7 +233,8 @@ export type PredictionDetailView = {
     profit: string;
     // Métrica de settlement market-aware: label do mercado + valor do fato do
     // jogo. Substituiu o Row legado "gols (90')" + o escalar `totalGoals` no
-    // contract da view (#170). A COLUNA de DB total_goals segue (legacy, Fase 5).
+    // contract da view (#170). A coluna de DB total_goals foi REMOVIDA no contract
+    // (Fase 5, #179) — a fonte é resultData.totalGoals (jsonb).
     settlementMetric: { label: string; value: string };
     settledAt: string;
     manual: boolean;
@@ -302,13 +303,14 @@ export function toPredictionDetailView(
           profit: unitsLabel(Number(outcome.profitUnits)),
           // Métrica de settlement registry-driven pela apresentação do mercado
           // RESOLVIDO da row (marketKey do join): over/under → total de gols
-          // (byte-idêntico ao legado), 1X2 → placar, btts → Sim/Não. O fallback é
-          // o escalar notNull `total_goals` (resultData é nullable em históricas).
+          // (byte-idêntico ao legado), 1X2 → placar, btts → Sim/Não. Fonte: o
+          // resultData jsonb (a coluna legada total_goals saiu do read path na
+          // Fase 5); rows sem resultData degradam pra "—" (nunca fabricam 0).
           settlementMetric: {
             label: presentation.settlementMetricLabel,
             value: presentation.settlementMetricValue(
               outcome.resultData ?? null,
-              outcome.totalGoals,
+              outcome.resultData?.totalGoals ?? null,
             ),
           },
           settledAt: formatKickoffAbsolute(outcome.settledAt),

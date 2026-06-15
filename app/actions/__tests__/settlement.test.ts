@@ -110,7 +110,6 @@ describe("overridePredictionOutcome", () => {
       expect.objectContaining({
         result: "void",
         profitUnits: 0,
-        totalGoals: 2,
         resultData: { homeScore: 1, awayScore: 1, totalGoals: 2 },
       }),
     );
@@ -127,7 +126,6 @@ describe("overridePredictionOutcome", () => {
       expect.objectContaining({
         result: "won",
         profitUnits: 0.9,
-        totalGoals: 3,
         resultData: { homeScore: 2, awayScore: 1, totalGoals: 3 },
       }),
     );
@@ -144,7 +142,6 @@ describe("overridePredictionOutcome", () => {
       expect.objectContaining({
         result: "push",
         profitUnits: 0,
-        totalGoals: 2,
         resultData: { homeScore: 1, awayScore: 1, totalGoals: 2 },
       }),
     );

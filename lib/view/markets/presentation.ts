@@ -61,10 +61,13 @@ export type MarketPresentation = {
   settlementMetricLabel: string;
   // Valor da métrica de settlement, derivado do resultData (registry-driven, sem
   // hardcode de totalGoals no dashboard). over/under → total de gols; 1X2 → placar
-  // "2-1"; btts → "Sim"/"Não". `totalGoalsFallback` cobre resultData ausente.
+  // "2-1"; btts → "Sim"/"Não". `totalGoalsFallback` é só rede de segurança quando
+  // o resultData não carrega o total; ausente nos dois → "—" (NUNCA fabrica 0 —
+  // prefer skip over silent wrong settle). O dashboard NÃO lê mais a coluna legada
+  // total_goals (Fase 5): a fonte é o resultData jsonb.
   settlementMetricValue: (
     resultData: SettlementMetricResultData,
-    totalGoalsFallback: number,
+    totalGoalsFallback: number | null,
   ) => string;
   // Classifica os gols de um confronto numa key de seleção pra lente de H2H, ou
   // `null` quando o mercado não é baseado em gols (a view degrada pra neutro).
@@ -79,6 +82,17 @@ function lookup(
   fallback: string,
 ): string {
   return key in table ? table[key] : fallback;
+}
+
+// Total de gols pra métrica de settlement: o resultData jsonb é a fonte, o
+// fallback é a rede de segurança histórica. Ausente nos dois → "—", NUNCA "0"
+// (não fabrica resultado — prefer skip over silent wrong settle).
+function totalOrDash(
+  rd: SettlementMetricResultData,
+  fallback: number | null,
+): string {
+  const total = rd?.totalGoals ?? fallback;
+  return total != null ? String(total) : "—";
 }
 
 const OVER_UNDER_SELECTION_LABELS: Record<string, string> = {
@@ -154,8 +168,9 @@ const OVER_UNDER: MarketPresentation = {
   betSummary: (key, line) => overUnderBetSummary(key, line ?? 2.5),
   framingLabel: (key, line) => overUnderFramingLabel(key, line ?? 2.5),
   settlementMetricLabel: "gols (90')",
-  // Total de gols — byte-idêntico à expressão hardcoded anterior do dashboard.ts.
-  settlementMetricValue: (rd, fallback) => String(rd?.totalGoals ?? fallback),
+  // Total de gols (do resultData jsonb; "—" se ausente) — byte-idêntico ao legado
+  // pra toda row liquidada com resultData (caso universal pós-backfill #162).
+  settlementMetricValue: (rd, fallback) => totalOrDash(rd, fallback),
   // Cut do over/under na linha 2.5: total de gols ESTRITAMENTE acima da linha é
   // "over". Em linha 2.5 (gols inteiros) total > 2.5 ⟺ total ≥ 3 — idêntico ao
   // corte legado de toH2HView, então a paridade é exata.
@@ -184,11 +199,12 @@ const MATCH_RESULT: MarketPresentation = {
   },
   framingLabel: (key) => lookup(MATCH_RESULT_SELECTION_LABELS, key, key),
   settlementMetricLabel: "resultado (90')",
-  // Placar de 90' ("2-1"); split nulo (histórica degradada) → total de gols.
+  // Placar de 90' ("2-1"); split nulo (histórica degradada) → total de gols ("—"
+  // se também ausente).
   settlementMetricValue: (rd, fallback) =>
     rd && rd.homeScore !== null && rd.awayScore !== null
       ? `${rd.homeScore}-${rd.awayScore}`
-      : String(rd?.totalGoals ?? fallback),
+      : totalOrDash(rd, fallback),
   // 1X2 não é mercado de gols — a lente over/under de H2H não se aplica.
   classifyH2H: null,
 };
@@ -261,11 +277,11 @@ const DOUBLE_CHANCE: MarketPresentation = {
   framingLabel: (key) => lookup(DOUBLE_CHANCE_SELECTION_LABELS, key, key),
   settlementMetricLabel: "resultado (90')",
   // Placar de 90' ("2-1"), como o 1X2 (o deriver só tem resultData, não a dupla);
-  // split nulo (histórica degradada) → total de gols.
+  // split nulo (histórica degradada) → total de gols ("—" se também ausente).
   settlementMetricValue: (rd, fallback) =>
     rd && rd.homeScore !== null && rd.awayScore !== null
       ? `${rd.homeScore}-${rd.awayScore}`
-      : String(rd?.totalGoals ?? fallback),
+      : totalOrDash(rd, fallback),
   // dupla chance não é mercado de total de gols — a lente over/under não se aplica.
   classifyH2H: null,
 };

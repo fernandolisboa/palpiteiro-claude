@@ -111,8 +111,6 @@ export function toBestBetView(
         bookmaker: prediction.bookmaker,
         impliedProbPct: prediction.impliedProbPct,
         edgePct: prediction.edgePct,
-        overOddAtPrediction: prediction.overOddAtPrediction,
-        underOddAtPrediction: prediction.underOddAtPrediction,
         modelVersion: prediction.modelVersion,
         promptVersion: prediction.promptVersion,
         createdAt: prediction.createdAt,

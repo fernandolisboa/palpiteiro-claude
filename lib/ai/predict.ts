@@ -6,14 +6,12 @@ import {
   matches,
   predictionSelectionOdds,
   predictions,
-  recommendationEnum,
 } from "@/db/schema";
 import { db } from "@/lib/db";
 import { resolveMarketCatalog } from "@/lib/db/queries/market-catalog";
 import { getLatestFreshSelectionOddsSnapshots } from "@/lib/db/queries/odds-snapshots";
 import { extractDbCause } from "@/lib/db/pg-error";
 import { computeMarketImpliedProbabilities } from "@/lib/odds/implied-probability";
-import { OVER_UNDER } from "@/lib/odds/market-descriptor";
 import { pickBestBookmaker, type MarketOddsBundle } from "@/lib/odds/select-bookmaker";
 import { getOddsForSport } from "@/lib/providers/odds-api";
 import { leagueToSportKey } from "@/lib/providers/odds-api-constants";
@@ -492,7 +490,7 @@ export async function predict({
   }
 
   // 4b. Catálogo do mercado (marketId + mapas seleção↔id) — read PRÉ-chamada-paga,
-  //     keyed por dbMarketKey (= "over_under", NÃO o enum legado "over_under_2_5").
+  //     keyed por dbMarketKey (= "over_under", a key de markets.key).
   //     Hard-fail aqui (market sem seed) acontece ANTES de queimar spend e ANTES
   //     do insert de ai_call. A persistência (passo 11) só CONSOME estes mapas.
   const catalog = await resolveMarketCatalog(cartridge.descriptor.dbMarketKey);
@@ -781,7 +779,6 @@ export async function predict({
   } else {
     marketParams = cartridge.descriptor.params ?? null;
   }
-  const chosenLine = marketParams?.line;
 
   // 11. Persistência (sequencial — neon-http não suporta transações reais).
   const cost = calculateCost({
@@ -880,9 +877,9 @@ export async function predict({
   // Rows do candidate set (N seleções) pra prediction_selection_odds, montadas
   // ANTES do insert da prediction pra que um seed faltante falhe SEM ter
   // commitado a prediction (mesma semântica do hard-fail de selectionId acima).
-  // odds = EXATAMENTE o par do MESMO bundle → PSO["over"] === overOddAtPrediction
-  // byte-a-byte. Uma row por seleção, INCLUSIVE em pass. `model_prob_pct` vem do
-  // cartucho (numeric nullable; toFixed(2) no boundary).
+  // odds = EXATAMENTE o par do MESMO bundle congelado. Uma row por seleção,
+  // INCLUSIVE em pass. `model_prob_pct` vem do cartucho (numeric nullable;
+  // toFixed(2) no boundary).
   const psoRowsToInsert = selectionKeys.map((key) => {
     const sid = catalog.idByKey.get(key);
     if (!sid) {
@@ -899,14 +896,6 @@ export async function predict({
     };
   });
 
-  // Legacy-write guard (gate #20): as colunas LEGADAS over/under-específicas
-  // (`market` enum + `overOddAtPrediction`/`underOddAtPrediction`) só são escritas
-  // pro over/under — comparação CONSTANTE com OVER_UNDER.dbMarketKey, espelhando
-  // fetch-and-snapshot.ts (NUNCA `=== "over_under"` literal). Pra qualquer outro
-  // mercado ficam null; a fonte-da-verdade é marketId/selectionId/marketParams (já
-  // genéricos) + o candidate set em PSO. O par binário só faz sentido em N=2.
-  const isOverUnder =
-    cartridge.descriptor.dbMarketKey === OVER_UNDER.dbMarketKey;
   let predictionRow: Prediction;
   try {
     const [row] = await db
@@ -915,23 +904,18 @@ export async function predict({
         matchId,
         userId,
         aiCallId: aiCallRow.id,
-        // Enum LEGADO single-value 'over_under_2_5': SÓ a linha 2.5 do over/under
-        // (#175 gate adicional `chosenLine === 2.5`). 1.5/3.5 → null (não há enum
-        // legado por linha; a linha vive em marketParams). null pros novos mercados.
-        market: isOverUnder && chosenLine === 2.5 ? "over_under_2_5" : null,
-        // Colunas NOVAS multi-mercado (#165): marketId do catálogo; selectionId
-        // resolvido acima (NULL em pass); marketParams = a linha ESCOLHIDA (#175):
-        // resolveParams(output) no multi-linha, descriptor.params no single-line
-        // (= { line: 2.5 } NUMBER pro over/under v2; null pro 1X2). Settlement lê daqui.
+        // Fonte-da-verdade mercado-agnóstica (#165): marketId do catálogo;
+        // selectionId resolvido acima (NULL em pass); marketParams = a linha
+        // ESCOLHIDA (#175): resolveParams(output) no multi-linha, descriptor.params
+        // no single-line (= { line: 2.5 } NUMBER pro over/under v2; null pro 1X2).
+        // Settlement lê daqui. O enum legado `market` saiu no contract (Fase 5).
         marketId: catalog.marketId,
         selectionId,
         marketParams,
-        // recommendation = selectionKey (enum estendido com home/draw/away) ou "pass".
-        // O cartucho já validou output.recommendation contra o SEU enum (over|under|
-        // pass / home|draw|away|pass) — todos ⊆ recommendationEnum; o cast só estreita
-        // o `string` do BaseMarketOutput pro tipo da coluna.
-        recommendation:
-          output.recommendation as (typeof recommendationEnum.enumValues)[number],
+        // recommendation = a key da seleção escolhida (over/under/home/draw/away/
+        // yes/no/dupla-chance) ou "pass". Coluna text mercado-agnóstica desde o
+        // contract (#179) — o cartucho já valida output.recommendation por Zod.
+        recommendation: output.recommendation,
         confidencePct: output.confidence_pct.toFixed(2),
         rationale: output.rationale,
         keyFactors: output.key_factors,
@@ -945,11 +929,6 @@ export async function predict({
         // Stake congelado (ADR 0019): banda determinística sobre edge/confiança;
         // pass → 1u (irrelevante, fora do Yield). numeric(6,2) → string.
         stakeUnits: stakeUnits.toFixed(2),
-        // Par congelado dos DOIS lados — SÓ over/under (binário). Em N≥3 não há par;
-        // o candidate set vive em PSO. Pra toda recomendação inclusive pass
-        // (ADR 0012, decisões 3-4) — alimenta o bloco de cenários binário.
-        overOddAtPrediction: isOverUnder ? oddByKey.over.toFixed(3) : null,
-        underOddAtPrediction: isOverUnder ? oddByKey.under.toFixed(3) : null,
         modelVersion: model.id,
         promptVersion: cartridge.version,
       })

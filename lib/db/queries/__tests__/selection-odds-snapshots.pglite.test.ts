@@ -35,6 +35,7 @@ vi.mock("@/lib/db", () => ({
 
 import {
   getLatestFreshSelectionOddsSnapshots,
+  getLatestOverUnderSnapshot,
   getLatestSelectionOddsSnapshots,
   insertSelectionOddsSnapshotsBatch,
   type SelectionSnapshotRow,
@@ -163,6 +164,29 @@ describe("selection_odds_snapshots — real Postgres (pglite)", () => {
     const byKey = new Map(latest!.selections.map((s) => [s.key, s.odd]));
     expect(byKey.get("over")).toBe("1.900");
     expect(byKey.get("under")).toBe("1.950");
+  });
+
+  it("getLatestOverUnderSnapshot adapta o par over/under (linha 2.5) pra forma binária", async () => {
+    const t = new Date("2026-05-15T12:00:00Z");
+    await insertSelectionOddsSnapshotsBatch([
+      ouRow(ids.ouOver, "1.900", t, "3.50", "Pinnacle"),
+      ouRow(ids.ouUnder, "1.950", t, "3.50", "Pinnacle"),
+    ]);
+    const snap = await getLatestOverUnderSnapshot(ids.matchId);
+    expect(snap).not.toBeNull();
+    expect(snap!.bookmaker).toBe("Pinnacle");
+    expect(snap!.overOdd).toBe("1.900");
+    expect(snap!.underOdd).toBe("1.950");
+    expect(snap!.overroundPct).toBe("3.50");
+    expect(snap!.capturedAt.getTime()).toBe(t.getTime());
+  });
+
+  it("getLatestOverUnderSnapshot → null quando o par está incompleto (só over)", async () => {
+    const t = new Date("2026-05-15T12:00:00Z");
+    // Só a seleção `over` (sem `under`): captura incompleta → o reader best-effort
+    // OMITE o match (completude 2/2), então o adapter devolve null (degrada, não throw).
+    await insertSelectionOddsSnapshotsBatch([ouRow(ids.ouOver, "1.900", t)]);
+    expect(await getLatestOverUnderSnapshot(ids.matchId)).toBeNull();
   });
 
   it("onConflictDoNothing on the 5-col key: same provider data + DIFFERENT write-time now → 2 rows", async () => {

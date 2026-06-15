@@ -122,8 +122,6 @@ function makeDetail(overrides: Partial<DashboardDetail> = {}): DashboardDetail {
     bookmaker: "BetX",
     impliedProbPct: "42.89",
     edgePct: "7.30",
-    overOddAtPrediction: "1.920",
-    underOddAtPrediction: "1.950",
     stakeUnits: "2.00",
     modelVersion: "claude-sonnet-4-5-20250929",
     promptVersion: "over_under_v1.2",
@@ -149,7 +147,6 @@ function makeDetail(overrides: Partial<DashboardDetail> = {}): DashboardDetail {
   const outcome: DashboardDetail["outcome"] = {
     id: "o1",
     predictionId: "p1",
-    totalGoals: 3,
     resultData: null,
     result: "won",
     profitUnits: "1.84",
@@ -189,11 +186,14 @@ describe("toPredictionDetailView", () => {
     expect(v.prediction.stake).toBe("2.00 u");
     expect(v.outcome?.profit).toBe("+1.84 u");
     expect(v.match.score).toBe("2-1");
-    // Métrica de settlement market-aware (#169): label do mercado + valor do
-    // escalar notNull total_goals quando resultData é null (paridade c/ a Row legada).
+    // Fase 5: o dashboard parou de ler a coluna legada total_goals. Uma row
+    // histórica pré-backfill (resultData null) degrada honestamente pra "—" no
+    // drill-down (NUNCA fabrica o "3" da coluna — prefer skip over silent wrong
+    // settle). Rows reais têm resultData populado pelo backfill #162 ANTES do DROP
+    // (gate §6 D); o caso resultData-presente é coberto pelo teste seguinte.
     expect(v.outcome?.settlementMetric).toEqual({
       label: "gols (90')",
-      value: "3",
+      value: "—",
     });
     // O escalar legado `totalGoals` saiu da view no contract (#170) — só
     // settlementMetric carrega o fato do settlement agora.
@@ -206,7 +206,6 @@ describe("toPredictionDetailView", () => {
         outcome: {
           id: "o1",
           predictionId: "p1",
-          totalGoals: 3,
           resultData: { homeScore: 2, awayScore: 2, totalGoals: 4 },
           result: "won",
           profitUnits: "1.84",
@@ -244,14 +243,11 @@ describe("toPredictionDetailView", () => {
           market: null,
           recommendation: "home",
           // 1X2 não carrega o par binário over/under.
-          overOddAtPrediction: null,
-          underOddAtPrediction: null,
           promptVersion: "match_result_v1",
         },
         outcome: {
           id: "o1",
           predictionId: "p1",
-          totalGoals: 3,
           resultData: { homeScore: 2, awayScore: 1, totalGoals: 3 },
           result: "won",
           profitUnits: "1.10",
@@ -279,14 +275,11 @@ describe("toPredictionDetailView", () => {
             ...base.prediction,
             market: null,
             recommendation: "yes",
-            overOddAtPrediction: null,
-            underOddAtPrediction: null,
             promptVersion: "btts_v1",
           },
           outcome: {
             id: "o1",
             predictionId: "p1",
-            totalGoals: homeScore + awayScore,
             resultData: { homeScore, awayScore, totalGoals: homeScore + awayScore },
             result: "won",
             profitUnits: "1.06",
@@ -350,8 +343,6 @@ describe("toPredictionDetailView", () => {
           impliedProbPct: null,
           edgePct: null,
           bookmaker: null,
-          overOddAtPrediction: null,
-          underOddAtPrediction: null,
         },
       },
       { includeRawPayloads: false },

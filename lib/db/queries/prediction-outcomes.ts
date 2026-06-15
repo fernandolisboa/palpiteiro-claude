@@ -9,9 +9,8 @@ export type DbPredictionOutcome = typeof predictionOutcomes.$inferSelect;
 
 export type InsertOutcomeArgs = {
   predictionId: string;
-  totalGoals: number;
-  // Fato do jogo rico (ADR 0016 D2): gravado no jsonb result_data junto do
-  // escalar legado totalGoals. Required — o caller (settle/override) sempre o tem.
+  // Fato do jogo rico (ADR 0016 D2), gravado no jsonb result_data. Fonte ÚNICA do
+  // total de gols desde o contract (#179) — a coluna escalar total_goals saiu.
   resultData: ResultData;
   result: OutcomeResult;
   profitUnits: number;
@@ -29,7 +28,6 @@ export async function insertOutcomeIfAbsent(
     .insert(predictionOutcomes)
     .values({
       predictionId: args.predictionId,
-      totalGoals: args.totalGoals,
       resultData: args.resultData,
       result: args.result,
       profitUnits: args.profitUnits.toFixed(2),
@@ -55,7 +53,6 @@ export async function upsertOutcomeOverride(
     .insert(predictionOutcomes)
     .values({
       predictionId: args.predictionId,
-      totalGoals: args.totalGoals,
       resultData: args.resultData,
       result: args.result,
       profitUnits: args.profitUnits.toFixed(2),
@@ -64,7 +61,6 @@ export async function upsertOutcomeOverride(
     .onConflictDoUpdate({
       target: predictionOutcomes.predictionId,
       set: {
-        totalGoals: args.totalGoals,
         resultData: args.resultData,
         result: args.result,
         profitUnits: args.profitUnits.toFixed(2),

@@ -257,7 +257,6 @@ describe("settle golden — real Postgres (pglite)", () => {
     const over = byPred.get(overId)!;
     expect(over.result).toBe("won");
     expect(over.profitUnits).toBe("0.90"); // numeric → string .toFixed(2)
-    expect(over.totalGoals).toBe(3);
     expect(over.resultData).toEqual({
       homeScore: 2,
       awayScore: 1,
@@ -354,7 +353,7 @@ describe("settle golden — real Postgres (pglite)", () => {
     const over = byPred.get(overId)!;
     expect(over.result).toBe("won");
     expect(over.profitUnits).toBe("0.30");
-    expect(over.totalGoals).toBe(2);
+    expect(over.resultData?.totalGoals).toBe(2);
     // under: perde 1 unidade.
     const under = byPred.get(underId)!;
     expect(under.result).toBe("lost");
@@ -396,7 +395,7 @@ describe("settle golden — real Postgres (pglite)", () => {
     const under = byPred.get(underId)!;
     expect(under.result).toBe("won");
     expect(under.profitUnits).toBe("0.32");
-    expect(under.totalGoals).toBe(3);
+    expect(under.resultData?.totalGoals).toBe(3);
     // over: perde 1 unidade (3 < 3.5).
     const over = byPred.get(overId)!;
     expect(over.result).toBe("lost");
@@ -449,7 +448,6 @@ describe("settle golden — real Postgres (pglite)", () => {
     // calcularia (over @ 3 gols daria won/+0.90; aqui gravamos lost/-1.00).
     await realDb.insert(schema.predictionOutcomes).values({
       predictionId: overId,
-      totalGoals: 3,
       resultData: { homeScore: 2, awayScore: 1, totalGoals: 3 },
       result: "lost",
       profitUnits: "-1.00",

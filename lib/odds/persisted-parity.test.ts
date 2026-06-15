@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vitest";
 
-import { computeImpliedProbabilities } from "@/lib/odds/implied-probability";
+import { computeMarketImpliedProbabilities } from "@/lib/odds/implied-probability";
 import { OVER_UNDER } from "@/lib/odds/market-descriptor";
 import {
   pickBestBookmaker,
@@ -70,12 +70,13 @@ describe("persisted-string parity (old binary path vs new selection path)", () =
       const newOverOddStr = newOver.odd.toFixed(3);
       const newUnderOddStr = newUnder.odd.toFixed(3);
 
-      // Caminho VELHO: o wrapper binário + a math de overround do legado.
+      // Caminho VELHO: pickBestTotalsBookmaker binário + a math de overround do
+      // legado, agora pelo core N-ário com [over, under] (wrapper removido na Fase 5).
       const binary = pickBestTotalsBookmaker(evt)!;
-      const { overround } = computeImpliedProbabilities(
+      const { overround } = computeMarketImpliedProbabilities([
         binary.overOdd,
         binary.underOdd,
-      );
+      ]);
       const oldOverroundPct = (overround * 100).toFixed(2);
       const oldOverOddStr = binary.overOdd.toFixed(3);
       const oldUnderOddStr = binary.underOdd.toFixed(3);

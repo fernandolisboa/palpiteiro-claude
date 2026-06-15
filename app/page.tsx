@@ -19,7 +19,7 @@ import {
 import { getMatchIdsWithPredictionsByUser } from "@/lib/db/queries/matches";
 import { loadRangeMatches } from "@/lib/db/queries/load-range-matches";
 import {
-  getLatestOddsSnapshotsForMatches,
+  getLatestOverUnderSnapshotsForMatches,
   getLatestSelectionOddsSnapshotsForMatches,
 } from "@/lib/db/queries/odds-snapshots";
 import { getRecentPredictionsByUser } from "@/lib/db/queries/predictions";
@@ -104,7 +104,7 @@ export default async function HomePage({ searchParams }: PageProps) {
   // semântica latest-not-fresh do chip over/under). Ambos batch, sem N+1.
   const [snapshotByMatch, matchResultByMatch, predictedMatchIds, recentRaw] =
     await Promise.all([
-      getLatestOddsSnapshotsForMatches(matchIds),
+      getLatestOverUnderSnapshotsForMatches(matchIds),
       getLatestSelectionOddsSnapshotsForMatches(matchIds, "match_result"),
       getMatchIdsWithPredictionsByUser({
         matchIds,

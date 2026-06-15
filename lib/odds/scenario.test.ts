@@ -1,7 +1,7 @@
 import { describe, it, expect } from "vitest";
 
 import { formatEdge } from "@/lib/format";
-import { computeImpliedProbabilities } from "@/lib/odds/implied-probability";
+import { computeMarketImpliedProbabilities } from "@/lib/odds/implied-probability";
 import {
   computeBreakEvenProbPct,
   computeEvPerUnit,
@@ -91,7 +91,7 @@ describe("computeScenarios", () => {
     // O recomputado de fato divergiria na exibição — pina que a divergência
     // existe e que o salvo é o exibido.
     const recomputedEdge =
-      58 - computeImpliedProbabilities(1.9, 1.95).overProb * 100;
+      58 - computeMarketImpliedProbabilities([1.9, 1.95]).probs[0] * 100;
     expect(formatEdge(recomputedEdge)).toBe("+7.4");
     expect(formatEdge(result.over.edgePct)).toBe("+7.3");
     // Derivados do lado recomendado.
@@ -150,7 +150,7 @@ describe("computeScenarios", () => {
     expect(result.recommended).toBeNull();
     expect(result.over.modelProbPct).toBe(53);
     expect(result.under.modelProbPct).toBe(47);
-    // Odds iguais → implied normalizada 50/50 (via computeImpliedProbabilities).
+    // Odds iguais → implied normalizada 50/50 (via computeMarketImpliedProbabilities).
     expect(result.over.impliedProbPct).toBeCloseTo(50, 10);
     expect(result.under.impliedProbPct).toBeCloseTo(50, 10);
     expect(result.over.edgePct).toBeCloseTo(3, 10);

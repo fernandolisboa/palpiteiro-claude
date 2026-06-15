@@ -1,7 +1,7 @@
 import { config } from "dotenv";
 config({ path: ".env.local" });
 
-import { computeImpliedProbabilities } from "@/lib/odds/implied-probability";
+import { computeMarketImpliedProbabilities } from "@/lib/odds/implied-probability";
 import {
   getOddsForSport,
   getSports,
@@ -118,14 +118,17 @@ async function main() {
         console.log("    (no bookmaker offers totals market for this event)");
         continue;
       }
-      const probs = computeImpliedProbabilities(pick.overOdd, pick.underOdd);
+      const implied = computeMarketImpliedProbabilities([
+        pick.overOdd,
+        pick.underOdd,
+      ]);
       console.log(
         `    [${pick.bookmaker.title}] line=${pick.point} ` +
           `over=${pick.overOdd.toFixed(2)} under=${pick.underOdd.toFixed(2)} ` +
-          `overround=${formatPct(probs.overround)}`,
+          `overround=${formatPct(implied.overround)}`,
       );
       console.log(
-        `    implied (normalized): over=${formatPct(probs.overProb)} under=${formatPct(probs.underProb)}`,
+        `    implied (normalized): over=${formatPct(implied.probs[0])} under=${formatPct(implied.probs[1])}`,
       );
     }
   }

@@ -320,9 +320,6 @@ describe("predict(double_chance) — N=3 happy path pelo caminho additional", ()
       string,
       unknown
     >;
-    expect(predictionRow.market).toBeNull();
-    expect(predictionRow.overOddAtPrediction).toBeNull();
-    expect(predictionRow.underOddAtPrediction).toBeNull();
     expect(predictionRow.marketParams).toBeNull();
     expect(predictionRow.marketId).toBe("mkt-dc");
     expect(predictionRow.selectionId).toBe("sel-hd");
