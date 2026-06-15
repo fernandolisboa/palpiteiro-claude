@@ -8,7 +8,7 @@ import { ComoFuncionaContent } from "./como-funciona-content";
 export const metadata: Metadata = {
   title: "Como funciona · Palpiteiro",
   description:
-    "Entenda over/under 2.5, edge, PASS e cada número do Palpiteiro — tutorial pra iniciante total e glossário.",
+    "Entenda como o Palpiteiro recomenda apostas em over/under, 1X2, ambas marcam e dupla chance — edge, PASS, stake e cada número da tela. Tutorial pra iniciante total e glossário.",
 };
 
 /**

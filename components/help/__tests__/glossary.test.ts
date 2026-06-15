@@ -53,4 +53,25 @@ describe("GLOSSARY (contrato de dados)", () => {
       expect(entry?.markets?.over_under?.trim().length ?? 0).toBeGreaterThan(0);
     }
   });
+
+  it("descreve os mercados novos (1X2, BTTS, dupla chance) em markets nas entradas market-aware", () => {
+    // O glossário virou multi-mercado junto com /como-funciona (#182): as entradas
+    // market-shaped ganham detalhe próprio por mercado, aditivo ao over_under.
+    for (const anchor of [
+      "selecao",
+      "recomendacao",
+      "prob-implicita",
+      "overround",
+      "cenarios",
+    ]) {
+      const entry = GLOSSARY.find((e) => e.anchor === anchor);
+      expect(entry, anchor).toBeDefined();
+      for (const marketKey of ["match_result", "btts", "double_chance"]) {
+        expect(
+          entry?.markets?.[marketKey]?.trim().length ?? 0,
+          `${anchor}.${marketKey}`,
+        ).toBeGreaterThan(0);
+      }
+    }
+  });
 });
