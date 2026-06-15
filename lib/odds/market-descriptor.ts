@@ -51,6 +51,12 @@ export type MarketDescriptor = {
   // somando ~impliedSumTarget·100). Aplicado em DOIS sites (predict + view) — o
   // core computeMarketImpliedProbabilities fica Σ=1 (paridade over/under/1X2).
   impliedSumTarget?: number;
+  // Linhas candidatas que o cartucho avalia numa ÚNICA análise (over_under
+  // multi-linha v3.0, #175: [1.5, 2.5, 3.5]). `undefined` = mercado de UMA linha
+  // (params.line) — o caminho de hoje, byte-idêntico. Quando definido, predict
+  // resolve um bundle POR linha, o cartucho vê todas e escolhe via `resolveParams`.
+  // Só meias-linhas (inteiras dariam push — fora de escopo).
+  candidateLines?: number[];
 };
 
 /**
@@ -66,8 +72,10 @@ export function teamsMatch(a: string, b: string): boolean {
   return na === nb || na.includes(nb) || nb.includes(na);
 }
 
-// over/under 2.5 — o único mercado ATIVO em produção (markets.is_active=true,
-// seedado na migration 0009). Linha fixa em 2.5; outcomes 'Over'/'Under' do
+// over/under FEATURED, linha 2.5 (caminho padrão / flag-OFF, seedado na 0009).
+// Sourcing featured ('totals', batch da liga). Linha 2.5 é o default; as linhas
+// extras (1.5/3.5) vivem na variante OVER_UNDER_ALT (#175), NÃO aqui — este
+// descriptor fica byte-idêntico (paridade flag-OFF). outcomes 'Over'/'Under' do
 // provider mapeiam direto pra 'over'/'under', exigindo `point === params.line`.
 export const OVER_UNDER: MarketDescriptor = {
   dbMarketKey: "over_under",
@@ -82,6 +90,28 @@ export const OVER_UNDER: MarketDescriptor = {
     return null;
   },
   selectionKeys: ["over", "under"],
+};
+
+// Variante MULTI-LINHA do over/under (over_under_v3.0, #175). MESMA identidade de
+// mercado que OVER_UNDER (dbMarketKey 'over_under', mesmas seleções, mesma
+// resolveSelectionKey por `point === params.line`, partição Σ=1), mas:
+//   - sourcing ADDITIONAL via 'alternate_totals' — a escada 1.5/2.5/3.5 só vem por
+//     evento (/events/{id}/odds); o featured 'totals' NÃO a entrega (live-validado
+//     2026-06-14: 3.5 ausente do featured; alternate traz a escada completa);
+//   - candidateLines = as meias-linhas avaliadas numa análise;
+//   - coveredLeagues ['world_cup']: cobertura de alternate_totals validada só na
+//     Copa por ora (mesma disciplina de btts/dupla chance) — expandir = 1 linha.
+// NÃO entra em ALL_DESCRIPTORS (mesma dbMarketKey de OVER_UNDER): getDescriptor e
+// COVERED_LEAGUES_BY_MARKET continuam resolvendo a variante featured (a view lê
+// impliedSumTarget do OVER_UNDER, idêntico). Referenciada SÓ pelo cartucho v3,
+// selecionado por flag. resolveSelectionKey é herdada (spread) — usa params.line
+// explícito por linha na resolução multi-bundle.
+export const OVER_UNDER_ALT: MarketDescriptor = {
+  ...OVER_UNDER,
+  providerMarketKey: "alternate_totals",
+  oddsSource: "additional",
+  coveredLeagues: ["world_cup"],
+  candidateLines: [1.5, 2.5, 3.5],
 };
 
 // 1X2 (match_result) — seedado ATIVO admin-only em produção (markets.is_active=true,

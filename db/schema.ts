@@ -404,13 +404,20 @@ export const selectionOddsSnapshots = pgTable(
     capturedAt: timestamp({ withTimezone: true }).notNull().defaultNow(),
   },
   (t) => [
-    unique("selection_odds_snapshots_dedup_key").on(
-      t.matchId,
-      t.marketId,
-      t.selectionId,
-      t.capturedAt,
-      t.bookmaker,
-    ),
+    // Dedup inclui marketParams (#175): over/under multi-linha grava 1.5/2.5/3.5 da
+    // MESMA seleção no MESMO captured_at/bookmaker — sem a linha na chave, as três
+    // colidiriam e só uma sobreviveria. `nullsNotDistinct` preserva o dedup de btts/
+    // dupla chance (marketParams NULL): NULL = NULL → dedup; {line:X} ≠ {line:Y} → coexistem.
+    unique("selection_odds_snapshots_dedup_key")
+      .on(
+        t.matchId,
+        t.marketId,
+        t.selectionId,
+        t.capturedAt,
+        t.bookmaker,
+        t.marketParams,
+      )
+      .nullsNotDistinct(),
   ],
 );
 
@@ -428,6 +435,11 @@ export const aiConfig = pgTable("ai_config", {
   maxTokens: integer().notNull().default(16000),
   effort: text().notNull().default("high"),
   temperature: numeric({ precision: 3, scale: 2 }).notNull().default("0.30"),
+  // Feature-flag (#175): liga as linhas EXTRAS de over/under (1.5/3.5 via o cartucho
+  // multi-linha over_under_v3.0 / alternate_totals). Default OFF = caminho de hoje
+  // (featured 2.5, byte-idêntico). Flip data-driven (sem deploy): true → todos os
+  // usuários recebem a análise multi-linha onde há cobertura (world_cup).
+  enableOverUnderExtraLines: boolean().notNull().default(false),
   updatedByUserId: uuid().references(() => users.id, { onDelete: "set null" }),
   updatedAt: timestamp({ withTimezone: true }).notNull().defaultNow(),
 });

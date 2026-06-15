@@ -61,6 +61,10 @@ export type PredictArgs = {
   // não passa). Resolve o cartucho via getCartridge — predict NÃO ramifica por
   // `if (market === X)`.
   marketKey?: string;
+  // Flag das linhas extras de over/under (#175). Quando true, getCartridge devolve
+  // a variante multi-linha (over_under_v3.0) onde existir. Lida na action a partir
+  // de ai_config; predict só a repassa pro registry. Default false = caminho de hoje.
+  extraLines?: boolean;
 };
 
 export type Prediction = typeof predictions.$inferSelect;
@@ -239,11 +243,13 @@ export async function predict({
   isAdmin,
   modelOverride,
   marketKey = "over_under",
+  extraLines = false,
 }: PredictArgs): Promise<PredictResult> {
   // Cartucho de mercado (ADR 0017): resolve por marketKey (throw em desconhecido).
   // Read puro — roda ANTES de qualquer chamada paga; predict NÃO ramifica por
-  // `if (market === X)`, todo o comportamento específico vem do cartucho.
-  const cartridge = getCartridge(marketKey);
+  // `if (market === X)`, todo o comportamento específico vem do cartucho. `extraLines`
+  // (#175) seleciona a variante multi-linha onde houver (data-driven no registry).
+  const cartridge = getCartridge(marketKey, { extraLines });
 
   // 0. Resolve o modelo UMA vez pela cascata completa (ADR 0013):
   //    override por análise > preferência do usuário > default global >
@@ -348,12 +354,63 @@ export async function predict({
   //    produzem um `MarketOddsBundle` (selections[] keyed por selectionKey +
   //    overround) — over/under é o caso N=2. O caminho fresh já é dual-escrito
   //    pelo fetch-and-snapshot, então a paridade over/under é preservada.
-  let oddsBundle: MarketOddsBundle;
-  const freshSnapshot = await getLatestFreshSelectionOddsSnapshots({
-    matchId: match.id,
-    dbMarketKey: cartridge.descriptor.dbMarketKey,
-    params: cartridge.descriptor.params,
-  });
+  // oddsBundle é o bundle EFETIVO (linha única hoje; linha ESCOLHIDA no multi-linha,
+  // fixado pós-output). `!` = definite-assignment: o single-line atribui aqui; o
+  // multi-linha atribui após a escolha do LLM — ambos antes do 1º uso (edge).
+  let oddsBundle!: MarketOddsBundle;
+  // Multi-linha (#175): um bundle por linha candidata; o LLM escolhe a linha.
+  let bundlesByLine: Map<number, MarketOddsBundle> | undefined;
+  const candidateLines = cartridge.descriptor.candidateLines;
+  if (candidateLines) {
+    // Lê o snapshot fresco POR linha (additional pré-aquecido por evento; ver
+    // fetch-and-snapshot). Linha sem snapshot → omitida (escada parcial: analisa as
+    // disponíveis). oddsBundle/oddByKey/impliedByKey finais saem da linha escolhida.
+    bundlesByLine = new Map();
+    for (const line of candidateLines) {
+      const fresh = await getLatestFreshSelectionOddsSnapshots({
+        matchId: match.id,
+        dbMarketKey: cartridge.descriptor.dbMarketKey,
+        params: { line },
+      });
+      if (!fresh) continue;
+      const sels = fresh.selections.map((s) => ({
+        key: s.key,
+        odd: Number(s.odd),
+      }));
+      const { overround } = computeMarketImpliedProbabilities(
+        cartridge.descriptor.selectionKeys.map((key) => {
+          const sel = sels.find((s) => s.key === key);
+          if (!sel) {
+            throw new PredictError(
+              `fresh snapshot missing selection '${key}' for market '${cartridge.descriptor.dbMarketKey}' line ${line}`,
+              { matchId, key, line },
+            );
+          }
+          return sel.odd;
+        }),
+      );
+      bundlesByLine.set(line, {
+        bookmakerKey: "",
+        bookmakerTitle: fresh.bookmaker,
+        lastUpdate: fresh.capturedAt.toISOString(),
+        selections: sels,
+        overround,
+      });
+    }
+    if (bundlesByLine.size === 0) {
+      throw new PredictError(
+        `multi-line market '${cartridge.descriptor.dbMarketKey}' sem snapshots frescos; odds devem ser pré-aquecidas por evento antes do predict (nunca batch)`,
+        { matchId, dbMarketKey: cartridge.descriptor.dbMarketKey, candidateLines },
+      );
+    }
+  }
+  const freshSnapshot = bundlesByLine
+    ? null
+    : await getLatestFreshSelectionOddsSnapshots({
+        matchId: match.id,
+        dbMarketKey: cartridge.descriptor.dbMarketKey,
+        params: cartridge.descriptor.params,
+      });
   if (freshSnapshot) {
     // numeric → string no Drizzle; Number() na fronteira antes de qualquer math.
     const selections = freshSnapshot.selections.map((s) => ({
@@ -379,7 +436,10 @@ export async function predict({
       selections,
       overround,
     };
-  } else if (cartridge.descriptor.oddsSource === "additional") {
+  } else if (
+    !bundlesByLine &&
+    cartridge.descriptor.oddsSource === "additional"
+  ) {
     // Mercado *additional* (btts): odds só por evento, NUNCA em batch (quota). O
     // snapshot fresco DEVE ter sido garantido por evento antes do predict (pre-warm
     // na action). Sem ele, NÃO batcheia getOddsForSport — falha explícita. Guard
@@ -388,7 +448,7 @@ export async function predict({
       `additional-market '${cartridge.descriptor.dbMarketKey}' sem snapshot fresco; odds devem ser garantidas por evento antes do predict (nunca batch)`,
       { matchId, dbMarketKey: cartridge.descriptor.dbMarketKey },
     );
-  } else {
+  } else if (!bundlesByLine) {
     const sportKey = leagueToSportKey(match.league);
     const commenceTimeFrom = new Date(kickoffMs - ODDS_WINDOW_MS).toISOString();
     const commenceTimeTo = new Date(kickoffMs + ODDS_WINDOW_MS).toISOString();
@@ -461,68 +521,118 @@ export async function predict({
   //    *100 segue a ordem de operações de antes (probs[i] * 100) → bit-exato com o
   //    legado em N=2.
   const selectionKeys = cartridge.descriptor.selectionKeys;
-  const oddByKey: Record<string, number> = {};
-  for (const sel of oddsBundle.selections) {
-    oddByKey[sel.key] = sel.odd;
-  }
-  const candidateOdds = selectionKeys.map((key) => {
-    const odd = oddByKey[key];
-    if (odd === undefined) {
-      throw new PredictError(
-        `odds bundle missing selection '${key}' for market '${cartridge.descriptor.dbMarketKey}'`,
-        { matchId, key },
-      );
-    }
-    return odd;
-  });
   // impliedSumTarget (ADR 0018 + emenda): 1 p/ partição (over/under, 1X2 — Σ=100,
   // bit-exato com o legado); 2 p/ dupla chance (cobertura sobreposta, Σ=200). O
   // core fica Σ=1; o fator é aplicado AQUI e no mesmo lugar da view
   // (computeMarketScenarios) → edge persistido == edge da grade.
   const impliedSumTarget = cartridge.descriptor.impliedSumTarget ?? 1;
-  const { probs } = computeMarketImpliedProbabilities(candidateOdds);
-  const impliedByKey: Record<string, number> = {};
-  selectionKeys.forEach((key, i) => {
-    impliedByKey[key] = probs[i] * 100 * impliedSumTarget;
-  });
+  // `oddByKey`/`impliedByKey` de UM bundle, na ordem `descriptor.selectionKeys`
+  // (SOBRE as odds do bundle — nunca por ordem de read). probs[i]*100*target →
+  // bit-exato com o legado em N=2. Multi-linha chama por linha (escada) e de novo
+  // na linha escolhida pós-output; single-line chama uma vez.
+  const deriveImplied = (
+    bundle: MarketOddsBundle,
+  ): {
+    oddByKey: Record<string, number>;
+    impliedByKey: Record<string, number>;
+  } => {
+    const obk: Record<string, number> = {};
+    for (const sel of bundle.selections) {
+      obk[sel.key] = sel.odd;
+    }
+    const candidateOdds = selectionKeys.map((key) => {
+      const odd = obk[key];
+      if (odd === undefined) {
+        throw new PredictError(
+          `odds bundle missing selection '${key}' for market '${cartridge.descriptor.dbMarketKey}'`,
+          { matchId, key },
+        );
+      }
+      return odd;
+    });
+    const { probs } = computeMarketImpliedProbabilities(candidateOdds);
+    const ibk: Record<string, number> = {};
+    selectionKeys.forEach((key, i) => {
+      ibk[key] = probs[i] * 100 * impliedSumTarget;
+    });
+    return { oddByKey: obk, impliedByKey: ibk };
+  };
+  // Finais (a linha ESCOLHIDA): single-line atribui já; multi-linha após o output.
+  let oddByKey: Record<string, number> = {};
+  let impliedByKey: Record<string, number> = {};
 
-  // 6. Monta o input do cartucho (over_under: down-mapeia o generic args
-  //    selections[]/pct pro shape binário; ver build-input.ts). predict monta UM
-  //    args genérico que QUALQUER cartucho aceita.
+  // 6. Monta o input do cartucho. Args comuns (sports-data) idênticos pros dois
+  //    caminhos; só odds/implied diferem (single: par binário; multi: escada).
+  const commonInputArgs = {
+    match: {
+      externalId: match.externalId,
+      league: match.league,
+      homeTeam: match.homeTeam,
+      awayTeam: match.awayTeam,
+      kickoffAt: match.kickoffAt,
+      venue: fixture.venue,
+    },
+    standings,
+    home: {
+      form: homeForm,
+      injuries: injuries.data.home,
+      absencesAvailable,
+    },
+    away: {
+      form: awayForm,
+      injuries: injuries.data.away,
+      absencesAvailable,
+    },
+    lineups,
+    h2h,
+  };
   let input: ReturnType<typeof cartridge.buildPredictionInput>;
   try {
-    input = cartridge.buildPredictionInput({
-      match: {
-        externalId: match.externalId,
-        league: match.league,
-        homeTeam: match.homeTeam,
-        awayTeam: match.awayTeam,
-        kickoffAt: match.kickoffAt,
-        venue: fixture.venue,
-      },
-      standings,
-      home: {
-        form: homeForm,
-        injuries: injuries.data.home,
-        absencesAvailable,
-      },
-      away: {
-        form: awayForm,
-        injuries: injuries.data.away,
-        absencesAvailable,
-      },
-      lineups,
-      h2h,
-      odds: {
-        bookmaker: oddsBundle.bookmakerTitle,
-        // captured_at normalizado aqui (mantém o local do new Date().toISOString()
-        // do legado): o caminho fallback traz `lastUpdate` cru do provider
-        // ("...Z"); o fresh já traz ISO. O cartucho consome verbatim.
-        captured_at: new Date(oddsBundle.lastUpdate).toISOString(),
-        selections: selectionKeys.map((key) => ({ key, odd: oddByKey[key] })),
-      },
-      implied: { pct: impliedByKey },
-    });
+    if (bundlesByLine) {
+      // Multi-linha: monta a ESCADA (odds+implícita por linha) pro LLM ver e
+      // escolher. oddByKey/impliedByKey/oddsBundle finais saem da linha escolhida,
+      // fixados pós-output. selections/bookmaker/captured_at do GenericOddsArgs são
+      // exigidos pelo tipo mas IGNORADOS pelo build-input v3 (lê lineLadder).
+      const lineLadder = [...bundlesByLine.entries()].map(([line, bundle]) => {
+        const derived = deriveImplied(bundle);
+        return {
+          line,
+          bookmaker: bundle.bookmakerTitle,
+          captured_at: new Date(bundle.lastUpdate).toISOString(),
+          selections: selectionKeys.map((key) => ({
+            key,
+            odd: derived.oddByKey[key],
+          })),
+          impliedPct: derived.impliedByKey,
+        };
+      });
+      const head = lineLadder[0];
+      input = cartridge.buildPredictionInput({
+        ...commonInputArgs,
+        odds: {
+          bookmaker: head.bookmaker,
+          captured_at: head.captured_at,
+          selections: head.selections,
+          lineLadder,
+        },
+        implied: { pct: head.impliedPct },
+      });
+    } else {
+      // Single-line: byte-idêntico ao caminho de hoje.
+      ({ oddByKey, impliedByKey } = deriveImplied(oddsBundle));
+      input = cartridge.buildPredictionInput({
+        ...commonInputArgs,
+        odds: {
+          bookmaker: oddsBundle.bookmakerTitle,
+          // captured_at normalizado aqui (mantém o local do new Date().toISOString()
+          // do legado): o caminho fallback traz `lastUpdate` cru do provider
+          // ("...Z"); o fresh já traz ISO. O cartucho consome verbatim.
+          captured_at: new Date(oddsBundle.lastUpdate).toISOString(),
+          selections: selectionKeys.map((key) => ({ key, odd: oddByKey[key] })),
+        },
+        implied: { pct: impliedByKey },
+      });
+    }
   } catch (err) {
     if (err instanceof cartridge.BuildInputError) {
       throw new PredictError(`buildPredictionInput failed: ${err.message}`, {
@@ -640,6 +750,38 @@ export async function predict({
   // validou o output completo pelo SEU schema acima. O comportamento específico de
   // mercado vem de cartridge.selectionProbs / descriptor, nunca de `if (market===X)`.
   const output = parsed.data as BaseMarketOutput;
+
+  // 10b. Linha escolhida + marketParams (#175). Multi-linha: a linha vem do output
+  //      via resolveParams (OBRIGATÓRIO — sem fallback a descriptor.params, que
+  //      settlaria a linha errada); fixa o bundle/odds/implícita DAQUELA linha pra
+  //      todo o downstream (edge/PSO/persist). Single-line / v2 (sem resolveParams):
+  //      marketParams = descriptor.params (caminho de hoje, byte-idêntico).
+  let marketParams: { line: number } | null;
+  if (bundlesByLine) {
+    if (!cartridge.resolveParams) {
+      throw new PredictError(
+        `multi-line cartridge '${marketKey}' sem resolveParams (linha escolhida indefinível)`,
+        { marketKey },
+      );
+    }
+    marketParams = cartridge.resolveParams(output);
+    const chosen = bundlesByLine.get(marketParams.line);
+    if (!chosen) {
+      throw new PredictError(
+        `LLM escolheu a linha ${marketParams.line} fora da escada resolvida`,
+        {
+          marketKey,
+          line: marketParams.line,
+          available: [...bundlesByLine.keys()],
+        },
+      );
+    }
+    oddsBundle = chosen;
+    ({ oddByKey, impliedByKey } = deriveImplied(chosen));
+  } else {
+    marketParams = cartridge.descriptor.params ?? null;
+  }
+  const chosenLine = marketParams?.line;
 
   // 11. Persistência (sequencial — neon-http não suporta transações reais).
   const cost = calculateCost({
@@ -773,14 +915,17 @@ export async function predict({
         matchId,
         userId,
         aiCallId: aiCallRow.id,
-        // Enum LEGADO single-value: só over/under; null pros novos mercados.
-        market: isOverUnder ? "over_under_2_5" : null,
+        // Enum LEGADO single-value 'over_under_2_5': SÓ a linha 2.5 do over/under
+        // (#175 gate adicional `chosenLine === 2.5`). 1.5/3.5 → null (não há enum
+        // legado por linha; a linha vive em marketParams). null pros novos mercados.
+        market: isOverUnder && chosenLine === 2.5 ? "over_under_2_5" : null,
         // Colunas NOVAS multi-mercado (#165): marketId do catálogo; selectionId
-        // resolvido acima (NULL em pass); marketParams verbatim do descriptor
-        // (= { line: 2.5 } NUMBER pro over/under; null pro 1X2).
+        // resolvido acima (NULL em pass); marketParams = a linha ESCOLHIDA (#175):
+        // resolveParams(output) no multi-linha, descriptor.params no single-line
+        // (= { line: 2.5 } NUMBER pro over/under v2; null pro 1X2). Settlement lê daqui.
         marketId: catalog.marketId,
         selectionId,
-        marketParams: cartridge.descriptor.params ?? null,
+        marketParams,
         // recommendation = selectionKey (enum estendido com home/draw/away) ou "pass".
         // O cartucho já validou output.recommendation contra o SEU enum (over|under|
         // pass / home|draw|away|pass) — todos ⊆ recommendationEnum; o cast só estreita

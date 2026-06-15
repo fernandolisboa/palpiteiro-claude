@@ -42,6 +42,49 @@ describe("overUnderRule (ADR 0016 scenario table)", () => {
     }
   });
 
+  // #175: linhas extras 1.5 e 3.5 liquidam pela MESMA regra parametrizada (lê a
+  // linha de marketParams). Limites: o gol decisivo é o 2º (1.5) e o 4º (3.5);
+  // meia-linha → nenhum total inteiro empata (push inalcançável).
+  it("line 1.5: 0-1 gol → under ganha/over perde; 2+ → over ganha/under perde", () => {
+    // Abaixo da linha (0 ou 1 gol): under ganha, over perde.
+    expect(overUnderRule("under", { line: 1.5 }, rd(0))).toBe("won");
+    expect(overUnderRule("over", { line: 1.5 }, rd(0))).toBe("lost");
+    expect(overUnderRule("under", { line: 1.5 }, rd(1))).toBe("won");
+    expect(overUnderRule("over", { line: 1.5 }, rd(1))).toBe("lost");
+    // No/Acima da linha (2+ gols): over ganha, under perde.
+    expect(overUnderRule("over", { line: 1.5 }, rd(2))).toBe("won");
+    expect(overUnderRule("under", { line: 1.5 }, rd(2))).toBe("lost");
+    expect(overUnderRule("over", { line: 1.5 }, rd(5))).toBe("won");
+    expect(overUnderRule("under", { line: 1.5 }, rd(5))).toBe("lost");
+  });
+
+  it("line 1.5 never pushes for integer totals", () => {
+    for (let total = 0; total <= 6; total++) {
+      expect(overUnderRule("over", { line: 1.5 }, rd(total))).not.toBe("push");
+      expect(overUnderRule("under", { line: 1.5 }, rd(total))).not.toBe("push");
+    }
+  });
+
+  it("line 3.5: 0-3 gols → under ganha/over perde; 4+ → over ganha/under perde", () => {
+    // Abaixo da linha (0..3 gols): under ganha, over perde.
+    for (const total of [0, 1, 2, 3]) {
+      expect(overUnderRule("under", { line: 3.5 }, rd(total))).toBe("won");
+      expect(overUnderRule("over", { line: 3.5 }, rd(total))).toBe("lost");
+    }
+    // Acima da linha (4+ gols): over ganha, under perde.
+    for (const total of [4, 5, 7]) {
+      expect(overUnderRule("over", { line: 3.5 }, rd(total))).toBe("won");
+      expect(overUnderRule("under", { line: 3.5 }, rd(total))).toBe("lost");
+    }
+  });
+
+  it("line 3.5 never pushes for integer totals", () => {
+    for (let total = 0; total <= 6; total++) {
+      expect(overUnderRule("over", { line: 3.5 }, rd(total))).not.toBe("push");
+      expect(overUnderRule("under", { line: 3.5 }, rd(total))).not.toBe("push");
+    }
+  });
+
   it("throws SettlementError on null params", () => {
     expect(() => overUnderRule("over", null, rd(3))).toThrow(SettlementError);
   });

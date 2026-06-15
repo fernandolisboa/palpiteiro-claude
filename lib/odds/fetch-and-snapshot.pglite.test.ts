@@ -42,7 +42,12 @@ vi.mock("@/lib/providers/odds-api", () => ({
 }));
 
 import { ensureOddsSnapshotsFresh } from "@/lib/odds/fetch-and-snapshot";
-import { BTTS, MATCH_RESULT, OVER_UNDER } from "@/lib/odds/market-descriptor";
+import {
+  BTTS,
+  MATCH_RESULT,
+  OVER_UNDER,
+  OVER_UNDER_ALT,
+} from "@/lib/odds/market-descriptor";
 import { getLatestSelectionOddsSnapshots } from "@/lib/db/queries/odds-snapshots";
 
 const KICKOFF = new Date(Date.now() + 24 * 60 * 60 * 1000); // dentro da janela de 7d
@@ -184,6 +189,40 @@ function bttsEventListItem() {
     commence_time: KICKOFF.toISOString(),
     home_team: "CR Flamengo",
     away_team: "Fluminense FC",
+  };
+}
+
+// alternate_totals (additional): a ESCADA por evento (#175) — 1.5/2.5/3.5 num só
+// market, cada linha com seu par Over/Under (como o payload real validado).
+function altTotalsEvent(): OddsApiEventOdds {
+  const rungs = [
+    { point: 1.5, over: 1.3, under: 3.5 },
+    { point: 2.5, over: 1.9, under: 1.95 },
+    { point: 3.5, over: 3.4, under: 1.32 },
+  ];
+  return {
+    id: "evt-1",
+    sport_key: "soccer_brazil_campeonato",
+    commence_time: KICKOFF.toISOString(),
+    home_team: "CR Flamengo",
+    away_team: "Fluminense FC",
+    bookmakers: [
+      {
+        key: "pinnacle",
+        title: "Pinnacle",
+        last_update: "2026-05-15T12:00:00Z",
+        markets: [
+          {
+            key: "alternate_totals",
+            last_update: "2026-05-15T12:00:00Z",
+            outcomes: rungs.flatMap((r) => [
+              { name: "Over", price: r.over, point: r.point },
+              { name: "Under", price: r.under, point: r.point },
+            ]),
+          },
+        ],
+      },
+    ],
   };
 }
 
@@ -361,5 +400,74 @@ describe("ensureOddsSnapshotsFresh — btts additional per-event fetch (NUNCA ba
       dbMarketKey: "btts",
     });
     expect(latest).toBeNull();
+  });
+});
+
+describe("ensureOddsSnapshotsFresh — over_under_alt additional multi-linha (#175)", () => {
+  it("UM fetch (alternate_totals) grava 3 linhas × 2 seleções na tabela nova; legado intacto", async () => {
+    getEventsForSport.mockResolvedValue([bttsEventListItem()]); // mesma lista gratuita
+    getOddsForEvent.mockResolvedValue(altTotalsEvent());
+    const now = new Date();
+    const match = (
+      await realDb.select().from(schema.matches).where(eq(schema.matches.id, matchIds.id))
+    )[0];
+
+    await ensureOddsSnapshotsFresh(match, { now, markets: [OVER_UNDER_ALT] });
+
+    // INVARIANTE DE QUOTA: 1 crédito (1 getOddsForEvent), NUNCA batch — a escada
+    // inteira (1.5/2.5/3.5) vem num só fetch com markets=['alternate_totals'].
+    expect(getOddsForSport).not.toHaveBeenCalled();
+    expect(getOddsForEvent).toHaveBeenCalledTimes(1);
+    expect(getOddsForEvent).toHaveBeenCalledWith(
+      expect.any(String),
+      "evt-1",
+      expect.objectContaining({ markets: ["alternate_totals"], regions: ["eu"] }),
+    );
+
+    // tabela LEGADA over/under (match_odds_snapshots) intacta — alt é additional,
+    // NÃO faz dual-write no legado (só linha 2.5 featured escreveria lá).
+    const old = await realDb
+      .select()
+      .from(schema.matchOddsSnapshots)
+      .where(eq(schema.matchOddsSnapshots.matchId, matchIds.id));
+    expect(old).toHaveLength(0);
+
+    // tabela nova: por linha, 2 seleções (over/under) com as odds da rung + marketParams.line.
+    const expected = new Map<number, { over: string; under: string }>([
+      [1.5, { over: "1.300", under: "3.500" }],
+      [2.5, { over: "1.900", under: "1.950" }],
+      [3.5, { over: "3.400", under: "1.320" }],
+    ]);
+    for (const [line, exp] of expected) {
+      const latest = await getLatestSelectionOddsSnapshots({
+        matchId: matchIds.id,
+        dbMarketKey: "over_under",
+        params: { line },
+      });
+      expect(latest, `linha ${line}`).not.toBeNull();
+      expect(latest!.selections).toHaveLength(2);
+      expect(latest!.bookmaker).toBe("Pinnacle");
+      const byKey = new Map(latest!.selections.map((s) => [s.key, s.odd]));
+      expect(byKey.get("over")).toBe(exp.over);
+      expect(byKey.get("under")).toBe(exp.under);
+      expect(latest!.capturedAt.getTime()).toBe(now.getTime());
+    }
+  });
+
+  it("dedup por linha: 2ª análise dentro do TTL não re-gasta quota", async () => {
+    getEventsForSport.mockResolvedValue([bttsEventListItem()]);
+    getOddsForEvent.mockResolvedValue(altTotalsEvent());
+    const now = new Date();
+    const match = (
+      await realDb.select().from(schema.matches).where(eq(schema.matches.id, matchIds.id))
+    )[0];
+
+    await ensureOddsSnapshotsFresh(match, { now, markets: [OVER_UNDER_ALT] });
+    await ensureOddsSnapshotsFresh(match, {
+      now: new Date(now.getTime() + 60_000),
+      markets: [OVER_UNDER_ALT],
+    });
+
+    expect(getOddsForEvent).toHaveBeenCalledTimes(1); // 1 crédito, não 2
   });
 });

@@ -36,6 +36,50 @@ describe("getMarketPresentation", () => {
     expect(p.classifyH2H?.(1, 1, 2.5)).toBe("under");
   });
 
+  it("over_under: labels são DIRIGIDOS PELA LINHA (1.5 / 3.5), não hardcoded em 2.5", () => {
+    const p = getMarketPresentation("over_under");
+
+    // linha 1.5 → exibe "1.5"; gols inteiros via ceil(1.5)=2 (over) e 2−1=1 (under).
+    expect(p.outcomeLabel("over", 1.5)).toBe("Over 1.5");
+    expect(p.outcomeLabel("under", 1.5)).toBe("Under 1.5");
+    expect(p.scenarioLabel("over", 1.5)).toBe("mais de 1.5 gols");
+    expect(p.scenarioLabel("under", 1.5)).toBe("menos de 1.5 gols");
+    expect(p.betSummary("over", 1.5)).toEqual({
+      market: "Mais de 1.5 gols",
+      plain: "pelo menos 2 gols no jogo",
+    });
+    expect(p.betSummary("under", 1.5)).toEqual({
+      market: "Menos de 1.5 gols",
+      plain: "no máximo 1 gol no jogo",
+    });
+    expect(p.framingLabel("over", 1.5)).toBe("pelo menos 2 gols");
+    expect(p.framingLabel("under", 1.5)).toBe("menos de 2 gols");
+
+    // linha 3.5 → exibe "3.5"; gols inteiros via ceil(3.5)=4 (over) e 4−1=3 (under).
+    expect(p.outcomeLabel("over", 3.5)).toBe("Over 3.5");
+    expect(p.outcomeLabel("under", 3.5)).toBe("Under 3.5");
+    expect(p.scenarioLabel("over", 3.5)).toBe("mais de 3.5 gols");
+    expect(p.scenarioLabel("under", 3.5)).toBe("menos de 3.5 gols");
+    expect(p.betSummary("over", 3.5)).toEqual({
+      market: "Mais de 3.5 gols",
+      plain: "pelo menos 4 gols no jogo",
+    });
+    expect(p.betSummary("under", 3.5)).toEqual({
+      market: "Menos de 3.5 gols",
+      plain: "no máximo 3 gols no jogo",
+    });
+    expect(p.framingLabel("over", 3.5)).toBe("pelo menos 4 gols");
+    expect(p.framingLabel("under", 3.5)).toBe("menos de 4 gols");
+
+    // line null (defensivo) cai pro defaultLine 2.5 → frase pré-pivot intacta.
+    expect(p.scenarioLabel("over", null)).toBe("mais de 2.5 gols");
+    expect(p.betSummary("over", null)).toEqual({
+      market: "Mais de 2.5 gols",
+      plain: "pelo menos 3 gols no jogo",
+    });
+    expect(p.framingLabel("under", null)).toBe("menos de 3 gols");
+  });
+
   it("match_result: labels home/draw/away, sem linha, sem lente de gols", () => {
     const p = getMarketPresentation("match_result");
     expect(p.defaultLine).toBeNull();

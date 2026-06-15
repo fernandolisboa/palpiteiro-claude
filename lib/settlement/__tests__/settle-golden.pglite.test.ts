@@ -315,6 +315,94 @@ describe("settle golden — real Postgres (pglite)", () => {
     });
   });
 
+  // #175: linhas extras (1.5/3.5) round-trip da escolha do LLM (marketParams.line)
+  // ATÉ o settlement. Uma prediction gravada com {line:1.5}/{line:3.5} liquida pela
+  // MESMA regra parametrizada que a 2.5 — provando que a linha persistida é lida de
+  // marketParams (não há enum legado por linha; só a 2.5 tem). Limites: 2 gols cruza
+  // a 1.5; o mesmo placar fica abaixo da 3.5. Meia-linha → push inalcançável.
+  it("settles line 1.5 via marketParams (finished 1-1 = 2 gols): over won / under lost", async () => {
+    const matchId = await seedMatch("ext-golden-1_5");
+    const aiCallId = await seedAiCall(matchId);
+    // over @ 2 gols com linha 1.5 → ganha (2 > 1.5); under perde.
+    const overId = await seedPrediction({
+      matchId,
+      aiCallId,
+      recommendation: "over",
+      selectionId: ids.ouOver,
+      marketParams: { line: 1.5 },
+      oddAtRecommendation: "1.300",
+      stakeUnits: "1",
+    });
+    const underId = await seedPrediction({
+      matchId,
+      aiCallId,
+      recommendation: "under",
+      selectionId: ids.ouUnder,
+      marketParams: { line: 1.5 },
+      oddAtRecommendation: "3.500",
+      stakeUnits: "1",
+    });
+
+    installProvider(() => finished(1, 1)); // 2 gols
+    const s = await settlePendingPredictions(new Date("2026-05-16T00:00:00Z"));
+
+    expect(s.settled).toBe(2);
+    expect(s.byResult).toEqual({ won: 1, lost: 1, void: 0, push: 0 });
+
+    const byPred = await outcomesByPrediction();
+    // over: stake 1, odd 1.3 → +0.30.
+    const over = byPred.get(overId)!;
+    expect(over.result).toBe("won");
+    expect(over.profitUnits).toBe("0.30");
+    expect(over.totalGoals).toBe(2);
+    // under: perde 1 unidade.
+    const under = byPred.get(underId)!;
+    expect(under.result).toBe("lost");
+    expect(under.profitUnits).toBe("-1.00");
+  });
+
+  it("settles line 3.5 via marketParams (finished 2-1 = 3 gols): under won / over lost", async () => {
+    const matchId = await seedMatch("ext-golden-3_5");
+    const aiCallId = await seedAiCall(matchId);
+    // under @ 3 gols com linha 3.5 → ganha (3 < 3.5); over perde. MESMO placar
+    // (3 gols) que faz a 2.5 dar over won/under lost — prova que a linha decide.
+    const underId = await seedPrediction({
+      matchId,
+      aiCallId,
+      recommendation: "under",
+      selectionId: ids.ouUnder,
+      marketParams: { line: 3.5 },
+      oddAtRecommendation: "1.320",
+      stakeUnits: "1",
+    });
+    const overId = await seedPrediction({
+      matchId,
+      aiCallId,
+      recommendation: "over",
+      selectionId: ids.ouOver,
+      marketParams: { line: 3.5 },
+      oddAtRecommendation: "3.400",
+      stakeUnits: "1",
+    });
+
+    installProvider(() => finished(2, 1)); // 3 gols
+    const s = await settlePendingPredictions(new Date("2026-05-16T00:00:00Z"));
+
+    expect(s.settled).toBe(2);
+    expect(s.byResult).toEqual({ won: 1, lost: 1, void: 0, push: 0 });
+
+    const byPred = await outcomesByPrediction();
+    // under: stake 1, odd 1.32 → +0.32.
+    const under = byPred.get(underId)!;
+    expect(under.result).toBe("won");
+    expect(under.profitUnits).toBe("0.32");
+    expect(under.totalGoals).toBe(3);
+    // over: perde 1 unidade (3 < 3.5).
+    const over = byPred.get(overId)!;
+    expect(over.result).toBe("lost");
+    expect(over.profitUnits).toBe("-1.00");
+  });
+
   it("is idempotent: a second run leaves every row byte-unchanged", async () => {
     const matchId = await seedMatch("ext-golden-idem");
     const aiCallId = await seedAiCall(matchId);
