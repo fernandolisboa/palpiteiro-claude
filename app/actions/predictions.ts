@@ -15,7 +15,7 @@ import {
 } from "@/lib/db/queries/market-catalog";
 import { getMatchById } from "@/lib/db/queries/matches";
 import { getAiCallById } from "@/lib/db/queries/predictions";
-import { userExists } from "@/lib/db/queries/users";
+import { getUserAccessState } from "@/lib/db/queries/users";
 import { ensureOddsSnapshotsFresh } from "@/lib/odds/fetch-and-snapshot";
 import { checkAnalysisRateLimit } from "@/lib/rate-limit";
 import { toAnalysisView } from "@/lib/view/analysis";
@@ -73,20 +73,40 @@ export async function analyzeMatch(
   if (!session?.user?.id) {
     return { ok: false, error: "Faça login para analisar." };
   }
-  // Sessão JWT carrega o id do login; se a row do usuário sumiu (reset +
-  // claim-admin com cookie velho), recusa ANTES de gastar uma chamada paga ao
-  // Anthropic (senão a FK ai_calls_user_id_users_id_fk estoura pós-custo).
-  if (!(await userExists(session.user.id))) {
+  // Guarda load-bearing de custo/abuso (#264, ADR 0023): leitura DIRETA do DB de
+  // `allowed` ANTES de qualquer chamada paga ao Anthropic — independente da
+  // frescura do JWT (que pode estar stale). `null` = row sumiu (reset +
+  // claim-admin com cookie velho): recusa a sessão órfã antes do custo (senão a
+  // FK ai_calls_user_id_users_id_fk estoura pós-gasto). `allowed=false` = bloqueado:
+  // recusa todo mundo, inclusive admin (admins são `allowed=true` no DB — ADR 0023).
+  const access = await getUserAccessState(session.user.id);
+  if (!access) {
     return { ok: false, error: "Sua sessão expirou. Faça login novamente." };
+  }
+  if (!access.allowed) {
+    return {
+      ok: false,
+      error: "Seu acesso está bloqueado. Fale com o administrador.",
+    };
   }
   // Teto diário por usuário (Upstash Ratelimit via Vercel KV): recusa ANTES de
   // qualquer chamada paga ao Anthropic. Admin tem limite separado/maior. Sem KV
-  // configurado (dev local) o gate falha aberto — ver lib/rate-limit.ts.
+  // configurado, o fallback é por role — admin fail-open, não-admin fail-closed
+  // (ADR 0023) — ver lib/rate-limit.ts.
   const rateLimit = await checkAnalysisRateLimit(
     session.user.id,
     session.user.role,
   );
   if (!rateLimit.ok) {
+    // reason:"fail-closed" = KV ausente p/ não-admin, não um teto real atingido:
+    // a copy de "limite de 0 análises" seria enganosa. Discriminador explícito
+    // (não `limit === 0`) pra um limit:0 legítimo do Upstash nunca a disparar.
+    if (rateLimit.reason === "fail-closed") {
+      return {
+        ok: false,
+        error: "Análises temporariamente indisponíveis. Tente mais tarde.",
+      };
+    }
     return {
       ok: false,
       error: `Você atingiu o limite de ${rateLimit.limit} análises por dia. Tente novamente amanhã.`,

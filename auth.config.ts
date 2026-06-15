@@ -19,7 +19,11 @@ import type { NextAuthConfig } from "next-auth";
  */
 export const authConfig = {
   trustHost: true,
-  session: { strategy: "jwt" },
+  // maxAge=7d (era o default ~30d): defesa-em-profundidade (ADR 0023) — mesmo no
+  // pior caso, um JWT carimbado não sobrevive a um bloqueio por mais de 7 dias.
+  // O `exp` do token, o cookie e o refresh rolante herdam este valor (um único
+  // lugar cobre edge + Node). Trade-off aceito: re-login semanal.
+  session: { strategy: "jwt", maxAge: 60 * 60 * 24 * 7 },
   pages: { signIn: "/signin" },
   // Providers ficam no `auth.ts` (Node), junto do adapter — ver comentário acima.
   providers: [],
@@ -32,7 +36,14 @@ export const authConfig = {
     authorized({ auth }) {
       return !!auth?.user;
     },
-    /** Carimba id/role no JWT no sign-in; aplica edição de perfil no update. */
+    /**
+     * Carimba id/role no JWT no sign-in; aplica edição de perfil no update.
+     * EDGE-SAFE: NÃO lê o DB (este config roda no middleware/edge). A
+     * revalidação de role+allowed contra o DB a cada request mora no override do
+     * `jwt()` em `auth.ts` (Node), DEPOIS do spread de `authConfig.callbacks` —
+     * espelhando o padrão do `signIn`. Manter este callback DB-free é o que
+     * impede o cliente Neon de vazar pro bundle do middleware (ADR 0009 / 0023).
+     */
     jwt({ token, user, trigger, session }) {
       if (user) {
         token.id = user.id;
@@ -71,11 +82,18 @@ export const authConfig = {
       }
       return token;
     },
-    /** Expõe id/role na sessão lida por Server Components/Actions. */
+    /**
+     * Expõe id/role/allowed na sessão lida por Server Components/Actions.
+     * Só lê `token` (DB-free), então fica seguro aqui no config edge mesmo que o
+     * `allowed` seja preenchido pelo override Node do `jwt()` (auth.ts). Em rotas
+     * edge sem aquele override, `token.allowed` é undefined — inofensivo (a
+     * guarda load-bearing de #264 relê o DB direto em analyzeMatch).
+     */
     session({ session, token }) {
       if (session.user) {
         session.user.id = token.id as string;
         session.user.role = token.role as "admin" | "user";
+        session.user.allowed = token.allowed as boolean | undefined;
       }
       return session;
     },

@@ -18,6 +18,11 @@ export type RateLimitResult = {
   limit: number;
   remaining: number;
   reset: number;
+  // Discriminador explícito do fallback fail-CLOSED (KV ausente p/ não-admin):
+  // o caller distingue "indisponível" de "teto real atingido" por ESTE campo, não
+  // por `limit === 0` — um `limit:0` legítimo (config de Upstash inesperada) nunca
+  // dispara a copy de indisponibilidade por engano (ADR 0023).
+  reason?: "fail-closed";
 };
 
 const DEFAULT_USER_LIMIT = 20;
@@ -45,12 +50,12 @@ function getLimiters(): { user: Ratelimit; admin: Ratelimit } | null {
   const url = process.env.KV_REST_API_URL;
   const token = process.env.KV_REST_API_TOKEN;
   if (!url || !token) {
-    // Fail-open: sem KV configurado (dev local) NÃO limitamos. A proteção de
-    // custo só importa em prod, onde as envs existem; falhar fechado quebraria
-    // as análises do `pnpm dev` (ver gotcha de Neon/dev em CLAUDE.md).
+    // Sem KV configurado: o caller (checkAnalysisRateLimit) decide o fallback por
+    // role — admin fail-OPEN (dono roda `pnpm dev` sem KV), não-admin fail-CLOSED
+    // (buraco de custo quando o cadastro abrir; ADR 0023). Aqui só avisamos uma vez.
     if (!warned) {
       console.warn(
-        "[rate-limit] KV_REST_API_URL/KV_REST_API_TOKEN unset — skipping per-user daily cap (fail-open, dev only).",
+        "[rate-limit] KV_REST_API_URL/KV_REST_API_TOKEN unset — admin fail-open, non-admin fail-closed (ADR 0023).",
       );
       warned = true;
     }
@@ -88,7 +93,17 @@ function getLimiters(): { user: Ratelimit; admin: Ratelimit } | null {
 /**
  * Verifica (e incrementa) o teto diário de análises do usuário. Admin
  * (`role === "admin"`, a mesma checagem usada no override de modelo) cai no
- * limiter de admin. Fail-open quando o KV não está configurado.
+ * limiter de admin.
+ *
+ * Sem KV configurado (dev local / KV ausente em prod), o fallback é por role
+ * (ADR 0023):
+ *  - admin → fail-OPEN (`ok:true`, limit Infinity): o dono roda `pnpm dev` sem
+ *    KV e nunca trava as próprias análises.
+ *  - não-admin → fail-CLOSED (`ok:false`, `reason:"fail-closed"`): sem o teto, um
+ *    usuário comum poderia gastar Anthropic sem limite quando o cadastro abrir.
+ *    Recusar é o default seguro de custo. O `reason` (não `limit:0`) sinaliza pro
+ *    caller (analyzeMatch) usar a copy de indisponibilidade em vez de "limite de 0
+ *    análises" — assim um `limit:0` legítimo do Upstash nunca a dispara por engano.
  */
 export async function checkAnalysisRateLimit(
   userId: string,
@@ -96,7 +111,16 @@ export async function checkAnalysisRateLimit(
 ): Promise<RateLimitResult> {
   const limiters = getLimiters();
   if (!limiters) {
-    return { ok: true, limit: Infinity, remaining: Infinity, reset: 0 };
+    if (role === "admin") {
+      return { ok: true, limit: Infinity, remaining: Infinity, reset: 0 };
+    }
+    return {
+      ok: false,
+      limit: 0,
+      remaining: 0,
+      reset: 0,
+      reason: "fail-closed",
+    };
   }
   const limiter = role === "admin" ? limiters.admin : limiters.user;
   const { success, limit, remaining, reset } = await limiter.limit(userId);

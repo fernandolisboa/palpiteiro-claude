@@ -26,8 +26,8 @@ export async function searchUsers(query?: string): Promise<UserSummary[]> {
 /**
  * Lookup tipado de UM usuário por id (id, email, role) ou null. Usado pelo
  * header da página de tracking de admin (`app/admin/users/[userId]`) pro e-mail
- * do alvo e pra existência (notFound se não existir). Distinto do `userExists`,
- * que só devolve boolean.
+ * do alvo e pra existência (notFound se não existir). Distinto do
+ * `getUserAccessState`, que devolve role+allowed (sem email) pro fluxo de auth.
  */
 export async function getUserById(id: string): Promise<UserSummary | null> {
   const rows = await db
@@ -38,21 +38,30 @@ export async function getUserById(id: string): Promise<UserSummary | null> {
   return rows[0] ?? null;
 }
 
+type UserAccessState = { role: "admin" | "user"; allowed: boolean };
+
 /**
- * True se existe uma row em `users` com este id. Sob sessão JWT o `token.id` é
- * carimbado no login e nunca revalidado contra o DB; se a row do usuário for
- * deletada/recriada depois (ex.: reset + claim-admin), o cookie segue apontando
- * pra um id que não existe mais. Usado pra recusar a sessão órfã ANTES de gastar
- * uma chamada paga ao Anthropic (FK `ai_calls_user_id_users_id_fk` falharia de
- * qualquer forma, mas só depois do custo).
+ * Lê role+allowed de UM usuário por id, ou null se a row não existe. Serve dois
+ * caminhos do estado-vivo de sessão (ADR 0023):
+ *  - jwt() do Node (`auth.ts`): revalida role+allowed a cada invocação pra que
+ *    mudança de role / bloqueio valham SEM novo login (bug da sessão carimbada-
+ *    só-no-login). `null` (row deletada — ex.: reset + claim-admin com cookie
+ *    velho) → drop da sessão.
+ *  - analyzeMatch (`app/actions/predictions.ts`): leitura DIRETA do DB de
+ *    `allowed` ANTES de qualquer chamada paga ao Anthropic (guarda load-bearing
+ *    do #264, independente da frescura do JWT). `null` também recusa a sessão
+ *    órfã antes do custo (a FK `ai_calls_user_id_users_id_fk` estouraria de
+ *    qualquer forma, mas só DEPOIS do gasto).
  */
-export async function userExists(id: string): Promise<boolean> {
+export async function getUserAccessState(
+  id: string,
+): Promise<UserAccessState | null> {
   const rows = await db
-    .select({ id: users.id })
+    .select({ role: users.role, allowed: users.allowed })
     .from(users)
     .where(eq(users.id, id))
     .limit(1);
-  return rows.length > 0;
+  return rows[0] ?? null;
 }
 
 type UserProfile = {
@@ -183,9 +192,13 @@ export async function updateUserRole(
 }
 
 /**
- * Muta o acesso (whitelist em DB, ADR 0009) de UM usuário. `allowed=false`
- * bloqueia logins FUTUROS (não a sessão vigente) e NÃO vale pra e-mails do env
- * `ALLOWED_EMAILS` (floor). Gate/guardas na action.
+ * Muta o acesso (whitelist em DB, ADR 0009 / 0023) de UM usuário.
+ * `allowed=false` bloqueia logins FUTUROS E, via revalidação no jwt() do Node
+ * (#252), passa a refletir na sessão vigente no próximo request — além de ser a
+ * guarda load-bearing recusada DIRETO em analyzeMatch antes de qualquer chamada
+ * paga (#264). NÃO vale pra e-mails do env `ALLOWED_EMAILS` (floor permanente):
+ * pra bloquear um e-mail do floor é preciso removê-lo do env também (ver ADR
+ * 0023 — evita loop de login pra contas do floor). Gate/guardas na action.
  */
 export async function updateUserAccess(
   id: string,

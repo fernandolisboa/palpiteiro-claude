@@ -132,24 +132,51 @@ describe("checkAnalysisRateLimit", () => {
     expect(limitedPrefixes).toEqual(["ratelimit:analyze"]);
   });
 
-  it("fails open (ok:true) and never touches Redis when KV env is unset", async () => {
+  it("admin fails OPEN (ok:true, Infinity) and never touches Redis when KV env is unset", async () => {
     vi.stubEnv("KV_REST_API_URL", "");
     const warn = vi.spyOn(console, "warn").mockImplementation(() => {});
     const check = await load();
-    const res = await check("u1");
+    const res = await check("a1", "admin");
+    // ADR 0023: o dono roda `pnpm dev` sem KV — admin nunca trava as análises.
     expect(res.ok).toBe(true);
     expect(res.limit).toBe(Infinity);
+    // fail-OPEN não carrega o discriminador de fail-closed (contrato do caller).
+    expect(res.reason).toBeUndefined();
     expect(mockLimit).not.toHaveBeenCalled();
     expect(warn).toHaveBeenCalledTimes(1);
     warn.mockRestore();
   });
 
-  it("warns only once across multiple fail-open calls", async () => {
+  it("non-admin fails CLOSED (ok:false, limit:0) and never touches Redis when KV env is unset", async () => {
+    vi.stubEnv("KV_REST_API_URL", "");
+    const warn = vi.spyOn(console, "warn").mockImplementation(() => {});
+    const check = await load();
+    // ADR 0023: sem o teto, um usuário comum gastaria Anthropic sem limite quando
+    // o cadastro abrir — recusar é o default seguro de custo. reason:"fail-closed"
+    // (não limit:0) sinaliza fail-closed pro caller (copy de indisponibilidade).
+    expect(await check("u1")).toEqual({
+      ok: false,
+      limit: 0,
+      remaining: 0,
+      reset: 0,
+      reason: "fail-closed",
+    });
+    // role explícito "user" tem o mesmo fallback fechado.
+    expect(await check("u2", "user")).toMatchObject({
+      ok: false,
+      reason: "fail-closed",
+    });
+    expect(mockLimit).not.toHaveBeenCalled();
+    expect(warn).toHaveBeenCalledTimes(1);
+    warn.mockRestore();
+  });
+
+  it("warns only once across multiple KV-unset calls (any role)", async () => {
     vi.stubEnv("KV_REST_API_URL", "");
     const warn = vi.spyOn(console, "warn").mockImplementation(() => {});
     const check = await load();
     await check("u1");
-    await check("u2");
+    await check("a1", "admin");
     expect(warn).toHaveBeenCalledTimes(1);
     warn.mockRestore();
   });

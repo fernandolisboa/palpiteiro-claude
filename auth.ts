@@ -10,8 +10,10 @@ import {
   verificationTokens,
 } from "@/db/schema";
 import { isEmailAllowedWithDb } from "@/lib/auth/whitelist-db";
+import { revalidateToken } from "@/lib/auth/jwt-revalidate";
 import { db } from "@/lib/db";
 import { promoteInvitedUserOnLogin } from "@/lib/db/queries/invites";
+import { getUserAccessState } from "@/lib/db/queries/users";
 
 /**
  * Config completa (Node runtime) — estende o `authConfig` edge-safe com o
@@ -52,6 +54,25 @@ export const { handlers, auth, signIn, signOut, unstable_update } = NextAuth({
     ...authConfig.callbacks,
     async signIn({ user }) {
       return isEmailAllowedWithDb(user.email);
+    },
+    // Override Node do jwt() (#252, ADR 0023): roda o jwt() edge-safe primeiro
+    // (carimbo de id/role no login + edição de perfil), depois revalida
+    // role+allowed contra o DB a cada invocação pra que mudança de role / bloqueio
+    // valham SEM novo login. DEPOIS do spread de authConfig.callbacks de propósito
+    // — espelha o padrão do signIn. A leitura do DB mora SÓ aqui (Node); o
+    // middleware usa só authConfig (jwt edge DB-free), então o cliente Neon nunca
+    // entra no bundle do edge. `jwt()` no Node roda em `auth()` (Server
+    // Components/Actions); +1 SELECT indexado por PK por invocação — barato, mas
+    // não roda no middleware (que fica DB-free). Ver ADR 0023.
+    async jwt(params) {
+      // Roda o jwt() edge-safe (carimbo) ANTES de revalidar contra o DB. Bind
+      // por destructuring (não `authConfig.callbacks!.jwt!(...)`): se um refactor
+      // futuro reestruturasse `auth.config.ts` e removesse o jwt edge, isto vira
+      // erro de tipo aqui em vez de um null-deref silencioso em runtime.
+      const { jwt: stampJwt } = authConfig.callbacks;
+      const stamped = await stampJwt(params);
+      if (!stamped) return stamped;
+      return revalidateToken(stamped, getUserAccessState);
     },
   },
   // createUser dispara uma vez no primeiro login, DEPOIS do signIn ter

@@ -67,4 +67,14 @@ describe("auth.config (edge) — guarda DB-in-edge (ADR 0009)", () => {
     expect(source).not.toMatch(/whitelist-db/);
     expect(source).not.toMatch(/@\/lib\/db/);
   });
+
+  it("não revalida role/allowed contra o DB no jwt() edge (#252/ADR 0023: vive no auth.ts Node)", () => {
+    // A revalidação de role+allowed por request (#252) lê o DB e DEVE morar no
+    // override do jwt() em auth.ts (Node). Se vazasse pro config edge, o cliente
+    // Neon entraria no bundle do middleware (mesma classe de outage do teste
+    // MissingAdapter). Travamos pela ausência da query/helper de revalidação.
+    const source = readFileSync(join(process.cwd(), "auth.config.ts"), "utf8");
+    expect(source).not.toMatch(/getUserAccessState/);
+    expect(source).not.toMatch(/jwt-revalidate/);
+  });
 });
