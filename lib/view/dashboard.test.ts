@@ -189,11 +189,14 @@ describe("toPredictionDetailView", () => {
     expect(v.prediction.stake).toBe("2.00 u");
     expect(v.outcome?.profit).toBe("+1.84 u");
     expect(v.match.score).toBe("2-1");
-    // Métrica de settlement market-aware (#169): label do mercado + valor do
-    // escalar notNull total_goals quando resultData é null (paridade c/ a Row legada).
+    // Fase 5: o dashboard parou de ler a coluna legada total_goals. Uma row
+    // histórica pré-backfill (resultData null) degrada honestamente pra "—" no
+    // drill-down (NUNCA fabrica o "3" da coluna — prefer skip over silent wrong
+    // settle). Rows reais têm resultData populado pelo backfill #162 ANTES do DROP
+    // (gate §6 D); o caso resultData-presente é coberto pelo teste seguinte.
     expect(v.outcome?.settlementMetric).toEqual({
       label: "gols (90')",
-      value: "3",
+      value: "—",
     });
     // O escalar legado `totalGoals` saiu da view no contract (#170) — só
     // settlementMetric carrega o fato do settlement agora.

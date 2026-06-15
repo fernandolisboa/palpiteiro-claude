@@ -84,7 +84,10 @@ export default async function AdminPredictionPage({ params }: PageProps) {
             <>
               <Row label="resultado" value={outcome.result} />
               <Row label="profit (u)" value={outcome.profitUnits} />
-              <Row label="gols (90')" value={String(outcome.totalGoals)} />
+              <Row
+                label="gols (90')"
+                value={String(outcome.resultData?.totalGoals ?? "—")}
+              />
               <Row
                 label="liquidado em"
                 value={outcome.settledAt.toISOString()}

@@ -302,13 +302,14 @@ export function toPredictionDetailView(
           profit: unitsLabel(Number(outcome.profitUnits)),
           // Métrica de settlement registry-driven pela apresentação do mercado
           // RESOLVIDO da row (marketKey do join): over/under → total de gols
-          // (byte-idêntico ao legado), 1X2 → placar, btts → Sim/Não. O fallback é
-          // o escalar notNull `total_goals` (resultData é nullable em históricas).
+          // (byte-idêntico ao legado), 1X2 → placar, btts → Sim/Não. Fonte: o
+          // resultData jsonb (a coluna legada total_goals saiu do read path na
+          // Fase 5); rows sem resultData degradam pra "—" (nunca fabricam 0).
           settlementMetric: {
             label: presentation.settlementMetricLabel,
             value: presentation.settlementMetricValue(
               outcome.resultData ?? null,
-              outcome.totalGoals,
+              outcome.resultData?.totalGoals ?? null,
             ),
           },
           settledAt: formatKickoffAbsolute(outcome.settledAt),

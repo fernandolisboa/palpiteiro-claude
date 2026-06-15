@@ -136,6 +136,15 @@ describe("getMarketPresentation", () => {
     const ou = getMarketPresentation("over_under");
     expect(ou.settlementMetricValue(rd(2, 1), 3)).toBe("3");
     expect(ou.settlementMetricValue(null, 4)).toBe("4");
+    // resultData ausente E sem fallback → "—" (NUNCA "0"); a Fase 5 parou de ler a
+    // coluna legada total_goals, então o caller passa null em vez do escalar.
+    expect(ou.settlementMetricValue(null, null)).toBe("—");
+    expect(
+      getMarketPresentation("match_result").settlementMetricValue(null, null),
+    ).toBe("—");
+    expect(
+      getMarketPresentation("double_chance").settlementMetricValue(null, null),
+    ).toBe("—");
     // match_result: placar "2-1"; split nulo → fallback total.
     const mr = getMarketPresentation("match_result");
     expect(mr.settlementMetricValue(rd(2, 1), 3)).toBe("2-1");
