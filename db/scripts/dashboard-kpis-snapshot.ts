@@ -21,12 +21,13 @@ import { predictions } from "../schema";
  * arredondados). A série completa do bankroll é emitida pra o diff constranger o
  * gráfico inteiro, não só o endpoint.
  *
- * Prova de paridade da Fase 1: rode ANTES do backfill, rode DEPOIS (--apply) e
- * compare a saída JSON — DEVE ser idêntica (o backfill não toca nenhuma coluna que
- * o dashboard lê). Não escreve nada.
+ * Prova de paridade: rode ANTES de uma mudança de pipeline, rode DEPOIS e compare a
+ * saída JSON — DEVE ser idêntica. Usado nas migrações expand→contract do pivot
+ * multi-mercado (a #179 dropou o legado over/under sem mexer em nenhum número que o
+ * dashboard lê). Não escreve nada.
  *
  *   pnpm tsx db/scripts/dashboard-kpis-snapshot.ts > before.json
- *   pnpm tsx db/scripts/backfill-multimarket.ts --apply
+ *   # aplique a mudança (slice de código / migration de contract)
  *   pnpm tsx db/scripts/dashboard-kpis-snapshot.ts > after.json
  *   diff before.json after.json   # vazio = paridade provada
  */

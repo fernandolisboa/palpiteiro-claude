@@ -5,8 +5,9 @@ import { overUnderCartridge } from "./over_under";
 import { overUnderCartridgeV3 } from "./over_under/index-v3";
 import type { MarketCartridge } from "./types";
 
-// Registry de cartuchos de mercado, keyed por `marketKey` (`"over_under"`). NÃO é
-// o enum legado `over_under_2_5`. over/under é o primeiro (Tier 1); novos mercados
+// Registry de cartuchos de mercado, keyed por `marketKey` (`"over_under"` = a key
+// de markets.key; o ex-enum `over_under_2_5` saiu na Fase 5). over/under é o
+// primeiro (Tier 1); novos mercados
 // (1X2, BTTS, dupla chance) entram aqui registrando seu cartucho, sem ramificar
 // predict.ts.
 const REGISTRY: Record<string, MarketCartridge> = {

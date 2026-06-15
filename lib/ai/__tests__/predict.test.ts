@@ -1359,9 +1359,9 @@ describe("predict() — error paths: invariante 1 ai_call / 0 prediction / 0 PSO
 // candidateLines [1.5,2.5,3.5]). predict lê o snapshot fresco UMA VEZ POR LINHA
 // (getLatestFreshSelectionOddsSnapshots com params:{line}), monta a escada pro LLM,
 // e — após o output INCLUIR `line` — FIXA o bundle/odds/implícita DAQUELA linha pra
-// todo o downstream (edge/colunas/PSO). marketParams = a linha ESCOLHIDA (resolveParams),
-// NÃO descriptor.params. O enum legado `market` só é 'over_under_2_5' quando a linha
-// escolhida é 2.5; 1.5/3.5 → null (gate `chosenLine === 2.5`).
+// todo o downstream (edge/PSO). marketParams = a linha ESCOLHIDA (resolveParams),
+// NÃO descriptor.params; o par congelado da linha vive na PSO (o enum legado `market`
+// e o par over/underOddAtPrediction saíram na Fase 5).
 //
 // Bundles DISTINTOS por linha pra provar que predict usa as odds da linha CERTA: a
 // escada tem odds bem diferentes por linha, e os asserts checam que as colunas
@@ -1434,7 +1434,7 @@ describe("predict() — multi-linha (#175): linha escolhida round-trip pro persi
     expect(aiCallRow.promptVersion).toBe("over_under_v3.0");
   });
 
-  it("LLM escolhe 2.5: market enum 'over_under_2_5' (gate da linha) + odds/edge da 2.5", async () => {
+  it("LLM escolhe 2.5: odds/edge da 2.5 (PSO da linha escolhida, não 1.5 nem 3.5)", async () => {
     wireMultiLineSnapshots();
     anthropicCreate.mockResolvedValue(
       toolUseMessage({

@@ -25,8 +25,8 @@ export type SelectionSnapshotRow = {
  * Insert genérico (tabela `selection_odds_snapshots`). `onConflictDoNothing` na
  * chave de 5 colunas (match, market, selection, captured_at, bookmaker) — a mesma
  * que ancora a idempotência do backfill (#162). Retorna o query builder NÃO-awaited
- * pra caber em `db.batch([...])` (ver `insertOddsSnapshotsBatch`). NÃO chamar com
- * `rows` vazio — o caller guarda emptiness.
+ * pra poder compor em `db.batch([...])` (neon-http não tem transação). NÃO chamar
+ * com `rows` vazio — o caller guarda emptiness.
  */
 export function insertSelectionOddsSnapshotsBatch(rows: SelectionSnapshotRow[]) {
   return db
@@ -67,9 +67,8 @@ export type LatestSelectionSnapshot = {
 
 /**
  * Última captura de odds (mais recente por seleção) de um (match, market) na
- * tabela genérica. Padrão DISTINCT ON espelhando `getLatestOddsSnapshotsForMatches`
- * (odds-snapshots.ts) — `.selectDistinctOn([selectionId])` + ORDER BY começando
- * por `selectionId` (obrigatório no Postgres) e `desc(capturedAt)`.
+ * tabela genérica. Padrão DISTINCT ON: `.selectDistinctOn([selectionId])` + ORDER BY
+ * começando por `selectionId` (obrigatório no Postgres) e `desc(capturedAt)`.
  *
  * Como toda captura é ATÔMICA (db.batch escreve as N rows com o MESMO
  * captured_at/bookmaker), "última por seleção" colapsa em "última captura". O

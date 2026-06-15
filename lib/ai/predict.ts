@@ -490,7 +490,7 @@ export async function predict({
   }
 
   // 4b. Catálogo do mercado (marketId + mapas seleção↔id) — read PRÉ-chamada-paga,
-  //     keyed por dbMarketKey (= "over_under", NÃO o enum legado "over_under_2_5").
+  //     keyed por dbMarketKey (= "over_under", a key de markets.key).
   //     Hard-fail aqui (market sem seed) acontece ANTES de queimar spend e ANTES
   //     do insert de ai_call. A persistência (passo 11) só CONSOME estes mapas.
   const catalog = await resolveMarketCatalog(cartridge.descriptor.dbMarketKey);
