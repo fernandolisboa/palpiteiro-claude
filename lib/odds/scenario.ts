@@ -188,7 +188,7 @@ export function computeScenarios(input: {
   oddAtRecommendation: number | null; // valores congelados já existentes na row
   impliedProbPct: number | null;
   edgePct: number | null;
-  overOdd: number | null; // colunas novas; null em históricas
+  overOdd: number | null; // par over/under da PSO (keys over/under); null em históricas sem par
   underOdd: number | null;
 }): Scenarios {
   if (

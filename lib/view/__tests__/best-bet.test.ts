@@ -22,8 +22,6 @@ function makePrediction(overrides: Partial<Prediction>): Prediction {
     bookmaker: "Bet365",
     impliedProbPct: "52.00",
     edgePct: "3.00",
-    overOddAtPrediction: null,
-    underOddAtPrediction: null,
     modelVersion: "claude-x",
     promptVersion: "match_result_v1",
     createdAt: new Date("2026-06-15T00:00:00Z"),

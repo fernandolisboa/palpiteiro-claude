@@ -233,7 +233,8 @@ export type PredictionDetailView = {
     profit: string;
     // Métrica de settlement market-aware: label do mercado + valor do fato do
     // jogo. Substituiu o Row legado "gols (90')" + o escalar `totalGoals` no
-    // contract da view (#170). A COLUNA de DB total_goals segue (legacy, Fase 5).
+    // contract da view (#170). A coluna de DB total_goals foi REMOVIDA no contract
+    // (Fase 5, #179) — a fonte é resultData.totalGoals (jsonb).
     settlementMetric: { label: string; value: string };
     settledAt: string;
     manual: boolean;
