@@ -155,6 +155,20 @@ export type AnalysisView = {
   costUsd: string;
 };
 
+// Item da seção colapsável "análises anteriores" (#204): uma predição passada
+// renderizada pelo <AnalysisResult/> existente + um header market-agnostic.
+export type PreviousAnalysisItem = {
+  // predictions.id — key React ESTÁVEL (NÃO o timestamp: reanálises do mesmo
+  // minuto colidiriam numa key derivada do horário).
+  id: string;
+  // getMarketPresentation(marketKey).marketLabel — header market-agnostic (AC3): o
+  // branch pass do AnalysisResult não imprime mercado, então o header identifica-o.
+  marketLabel: string;
+  // Rótulo preciso (com segundos) que desambigua reanálises do mesmo minuto.
+  generatedAt: string;
+  view: AnalysisView;
+};
+
 export type RecentPredictionView = {
   id: string;
   matchId: string;

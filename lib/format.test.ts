@@ -7,6 +7,7 @@ import {
   formatEdge,
   formatEvPct,
   formatGeneratedAt,
+  formatGeneratedAtSeconds,
   formatKickoffAbsolute,
   formatKickoffRelative,
   formatModelName,
@@ -111,6 +112,21 @@ describe("formatGeneratedAt", () => {
     // 19 may 2026 14:22 local
     const d = new Date(2026, 4, 19, 14, 22);
     expect(formatGeneratedAt(d)).toBe("19 mai · 14:22");
+  });
+});
+
+describe("formatGeneratedAtSeconds", () => {
+  it("appends zero-padded seconds (desambigua reanálises do mesmo minuto, #204)", () => {
+    const d = new Date(2026, 4, 19, 14, 22, 7);
+    expect(formatGeneratedAtSeconds(d)).toBe("19 mai · 14:22:07");
+  });
+
+  it("two analyses in the same minute differ only by the seconds suffix", () => {
+    const a = new Date(2026, 4, 19, 14, 22, 5);
+    const b = new Date(2026, 4, 19, 14, 22, 41);
+    expect(formatGeneratedAtSeconds(a)).toBe("19 mai · 14:22:05");
+    expect(formatGeneratedAtSeconds(b)).toBe("19 mai · 14:22:41");
+    expect(formatGeneratedAtSeconds(a)).not.toBe(formatGeneratedAtSeconds(b));
   });
 });
 

@@ -1,8 +1,16 @@
 import { describe, expect, it } from "vitest";
 
+import type {
+  DbPrediction,
+  PredictionWithAiCall,
+} from "@/lib/db/queries/predictions";
 import { computeMarketScenarios } from "@/lib/odds/scenario";
 
-import { toAnalysisView, toOutcomesView } from "./analysis";
+import {
+  toAnalysisView,
+  toOutcomesView,
+  toPreviousAnalysisItems,
+} from "./analysis";
 import { getMarketPresentation } from "./markets/presentation";
 
 const baseCreatedAt = new Date(2026, 4, 19, 14, 22);
@@ -1135,5 +1143,83 @@ describe("toAnalysisView (N-vias / dupla chance) — edge da grade == edge persi
     expect(view.outcomes[0].isRecommended).toBe(true);
     expect(view.recommendation?.marketKey).toBe("double_chance");
     expect(view.recommendation?.selectionLabel).toBe("Casa ou empate");
+  });
+});
+
+describe("toPreviousAnalysisItems", () => {
+  // Row mínima: só os campos lidos pelo mapper. Cast pontual pra não montar a
+  // DbPrediction inteira num teste de slicing/rotulagem (o mapeamento de view tem
+  // cobertura própria em toAnalysisView acima). recommendation "pass" mantém a row
+  // leve (a view de pass não precisa de odds/selections).
+  function mkRow(o: {
+    id: string;
+    marketKey: string | null;
+    createdAt: Date;
+  }): PredictionWithAiCall {
+    return {
+      prediction: {
+        id: o.id,
+        recommendation: "pass",
+        confidencePct: "55.00",
+        rationale: "r",
+        keyFactors: ["a"],
+        minimumOdd: null,
+        oddAtRecommendation: null,
+        bookmaker: null,
+        impliedProbPct: null,
+        edgePct: null,
+        modelVersion: "claude-opus-4-8",
+        promptVersion: "v1",
+        createdAt: o.createdAt,
+        marketParams: null,
+        stakeUnits: null,
+      } as unknown as DbPrediction,
+      aiCall: null,
+      marketKey: o.marketKey,
+      selections: [],
+    };
+  }
+
+  it("drops history[0] (a análise atual) e mapeia .slice(1) na ordem recebida", () => {
+    const items = toPreviousAnalysisItems([
+      mkRow({ id: "p3", marketKey: "over_under", createdAt: new Date(2026, 4, 19, 14, 0, 1) }),
+      mkRow({ id: "p2", marketKey: "over_under", createdAt: new Date(2026, 4, 19, 13, 0, 2) }),
+      mkRow({ id: "p1", marketKey: "over_under", createdAt: new Date(2026, 4, 19, 12, 0, 3) }),
+    ]);
+    expect(items.map((i) => i.id)).toEqual(["p2", "p1"]);
+  });
+
+  it("rótulo é market-agnostic: marketLabel vem do registry por marketKey (AC3)", () => {
+    const items = toPreviousAnalysisItems([
+      mkRow({ id: "cur", marketKey: "over_under", createdAt: new Date(2026, 4, 19, 15, 0, 0) }),
+      mkRow({ id: "mr", marketKey: "match_result", createdAt: new Date(2026, 4, 19, 14, 0, 0) }),
+      mkRow({ id: "ou", marketKey: "over_under", createdAt: new Date(2026, 4, 19, 13, 0, 0) }),
+      mkRow({ id: "hist", marketKey: null, createdAt: new Date(2026, 4, 19, 12, 0, 0) }),
+    ]);
+    expect(items.map((i) => i.marketLabel)).toEqual([
+      getMarketPresentation("match_result").marketLabel,
+      getMarketPresentation("over_under").marketLabel,
+      // marketKey null (histórica) coalesce 'over_under' — espelha toAnalysisView.
+      getMarketPresentation("over_under").marketLabel,
+    ]);
+  });
+
+  it("rótulo de tempo carrega segundos (desambigua reanálises do mesmo minuto)", () => {
+    const items = toPreviousAnalysisItems([
+      mkRow({ id: "cur", marketKey: "over_under", createdAt: new Date(2026, 4, 19, 14, 23, 0) }),
+      mkRow({ id: "prev", marketKey: "over_under", createdAt: new Date(2026, 4, 19, 14, 22, 7) }),
+    ]);
+    expect(items[0].generatedAt).toBe("19 mai · 14:22:07");
+    // A id (não o timestamp) é a key — reanálises do mesmo minuto não colidem.
+    expect(items[0].id).toBe("prev");
+  });
+
+  it("histórico vazio ou com 1 só (sem anteriores) → []", () => {
+    expect(toPreviousAnalysisItems([])).toEqual([]);
+    expect(
+      toPreviousAnalysisItems([
+        mkRow({ id: "only", marketKey: "over_under", createdAt: new Date() }),
+      ]),
+    ).toEqual([]);
   });
 });

@@ -1,8 +1,10 @@
+import type { PredictionWithAiCall } from "@/lib/db/queries/predictions";
 import {
   formatCostUsd,
   formatEdge,
   formatEvPct,
   formatGeneratedAt,
+  formatGeneratedAtSeconds,
   formatModelName,
   formatOdd,
   formatPct,
@@ -26,6 +28,7 @@ import {
 import type {
   AnalysisView,
   OutcomeView,
+  PreviousAnalysisItem,
   ScenarioSideView,
 } from "@/lib/view/types";
 
@@ -385,4 +388,55 @@ export function toAnalysisView(
     model: formatModelName(prediction.modelVersion),
     costUsd: formatCostUsd(aiCall?.costUsd ?? null),
   };
+}
+
+// Adapta uma row do DB (PredictionWithAiCall — de getLatestPredictionForMatch ou
+// getPredictionHistoryForMatch) pra AnalysisView. Centraliza a fiação multi-mercado
+// (#170/#173) que antes vivia inline na match page, agora reusada pra a análise
+// ATUAL e pra cada ANTERIOR (#204). marketId null (histórica sem backfill) → coalesce
+// 'over_under'; `line` da forma salva (null em 1X2); candidate set → grade N-vias.
+export function toAnalysisViewFromPrediction(
+  row: PredictionWithAiCall,
+  now: Date = new Date(),
+): AnalysisView {
+  return toAnalysisView(
+    {
+      recommendation: row.prediction.recommendation,
+      confidencePct: row.prediction.confidencePct,
+      rationale: row.prediction.rationale,
+      keyFactors: row.prediction.keyFactors,
+      minimumOdd: row.prediction.minimumOdd,
+      oddAtRecommendation: row.prediction.oddAtRecommendation,
+      bookmaker: row.prediction.bookmaker,
+      impliedProbPct: row.prediction.impliedProbPct,
+      edgePct: row.prediction.edgePct,
+      modelVersion: row.prediction.modelVersion,
+      promptVersion: row.prediction.promptVersion,
+      createdAt: row.prediction.createdAt,
+      marketKey: row.marketKey ?? "over_under",
+      line: row.prediction.marketParams?.line ?? null,
+      stakeUnits: row.prediction.stakeUnits,
+      selections: row.selections,
+    },
+    row.aiCall ? { costUsd: row.aiCall.costUsd } : null,
+    now,
+  );
+}
+
+// Seção "análises anteriores" (#204): history[0] é a análise ATUAL (renderizada
+// acima na match page); .slice(1) são as anteriores, da mais recente pra a mais
+// antiga (a query já ordena desc(createdAt)). PURA + testável (sem DB/IO).
+export function toPreviousAnalysisItems(
+  history: PredictionWithAiCall[],
+  now: Date = new Date(),
+): PreviousAnalysisItem[] {
+  return history.slice(1).map((row) => ({
+    id: row.prediction.id,
+    // marketLabel SEPARADO da view (espelha best-bet-results): o branch pass do
+    // AnalysisResult não imprime mercado, então o header o identifica (AC3). Mesmo
+    // coalesce 'over_under' do toAnalysisView (leftJoin domain = seed key ou null).
+    marketLabel: getMarketPresentation(row.marketKey ?? "over_under").marketLabel,
+    generatedAt: formatGeneratedAtSeconds(row.prediction.createdAt),
+    view: toAnalysisViewFromPrediction(row, now),
+  }));
 }
