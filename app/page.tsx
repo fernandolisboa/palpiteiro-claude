@@ -18,7 +18,10 @@ import {
 } from "@/lib/config/active-leagues";
 import { getMatchIdsWithPredictionsByUser } from "@/lib/db/queries/matches";
 import { loadRangeMatches } from "@/lib/db/queries/load-range-matches";
-import { getLatestOddsSnapshotsForMatches } from "@/lib/db/queries/odds-snapshots";
+import {
+  getLatestOddsSnapshotsForMatches,
+  getLatestSelectionOddsSnapshotsForMatches,
+} from "@/lib/db/queries/odds-snapshots";
 import { getRecentPredictionsByUser } from "@/lib/db/queries/predictions";
 import { DateRangeTabs } from "@/components/date-range-tabs";
 import { parseRangeParams, type ResolvedRange } from "@/lib/view/date-range";
@@ -95,18 +98,25 @@ export default async function HomePage({ searchParams }: PageProps) {
   const dbMatches = await loadRangeMatches(matchesQuery);
 
   const matchIds = dbMatches.map((m) => m.id);
-  const [snapshotByMatch, predictedMatchIds, recentRaw] = await Promise.all([
-    getLatestOddsSnapshotsForMatches(matchIds),
-    getMatchIdsWithPredictionsByUser({
-      matchIds,
-      userId,
-    }),
-    getRecentPredictionsByUser(userId, RECENT_LIMIT),
-  ]);
+  // Chip N-vias (#173): além do over/under legado (tabela velha), lê 1X2 da tabela
+  // genérica (best-effort, batch). A home NÃO busca odds (só lê) → 1X2 só aparece
+  // de visitas anteriores à match page que aqueceram a janela da liga (mesma
+  // semântica latest-not-fresh do chip over/under). Ambos batch, sem N+1.
+  const [snapshotByMatch, matchResultByMatch, predictedMatchIds, recentRaw] =
+    await Promise.all([
+      getLatestOddsSnapshotsForMatches(matchIds),
+      getLatestSelectionOddsSnapshotsForMatches(matchIds, "match_result"),
+      getMatchIdsWithPredictionsByUser({
+        matchIds,
+        userId,
+      }),
+      getRecentPredictionsByUser(userId, RECENT_LIMIT),
+    ]);
 
   const now = new Date();
   const matches: MatchRowView[] = dbMatches.map((m) => {
     const snapshot = snapshotByMatch.get(m.id);
+    const matchResult = matchResultByMatch.get(m.id);
     return toMatchRowView({
       match: {
         id: m.id,
@@ -126,6 +136,9 @@ export default async function HomePage({ searchParams }: PageProps) {
             capturedAt: snapshot.capturedAt,
           }
         : null,
+      // Prioridade resolvida no mapper: 1X2 quando há captura, senão over/under,
+      // senão "sem odd" (ambos ausentes → odds null).
+      matchResultOdds: matchResult ?? null,
       hasPrediction: predictedMatchIds.has(m.id),
       now,
     });

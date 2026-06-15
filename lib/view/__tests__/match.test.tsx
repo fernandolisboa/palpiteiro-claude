@@ -122,9 +122,10 @@ describe("MatchRow rendering by status", () => {
     expect(markup).toContain(">2<");
     expect(markup).toContain(">1<");
     expect(markup.toLowerCase()).toContain("encerrado");
-    // Odds labels / "sem odd" must NOT render for a finished match.
+    // Odds chip / "sem odd" must NOT render for a finished match (score branch).
     expect(markup).not.toContain("sem odd");
-    expect(markup).not.toMatch(/>O<\/span>/);
+    expect(markup).not.toContain("Over");
+    expect(markup).not.toContain("Under");
   });
 
   it("renders postponed/cancelled sanely (label, not a 0–0)", () => {
@@ -147,5 +148,77 @@ describe("MatchRow rendering by status", () => {
   it("shows 'sem odd' for a scheduled match without odds", () => {
     const markup = render(makeMatch({ status: "scheduled" }), false);
     expect(markup).toContain("sem odd");
+  });
+});
+
+describe("toMatchRowView — prioridade de mercado no chip (#173 PR-2)", () => {
+  const MR = {
+    selections: [
+      { key: "home", odd: "2.100" },
+      { key: "draw", odd: "3.400" },
+      { key: "away", odd: "3.900" },
+    ],
+  };
+  const OU = {
+    bookmaker: "bet365",
+    overOdd: "1.85",
+    underOdd: "1.95",
+    capturedAt: NOW,
+  };
+
+  it("PREFERE 1X2 quando há captura h2h (3 outcomes Casa/Empate/Fora, ordem canônica)", () => {
+    const view = toMatchRowView({
+      match: makeMatch(),
+      odds: OU,
+      matchResultOdds: MR,
+      hasPrediction: false,
+      now: NOW,
+    });
+    expect(view.odds?.outcomes).toEqual([
+      { label: "Casa", odd: "2.10" },
+      { label: "Empate", odd: "3.40" },
+      { label: "Fora", odd: "3.90" },
+    ]);
+  });
+
+  it("cai pro over/under quando não há captura 1X2", () => {
+    const view = toMatchRowView({
+      match: makeMatch(),
+      odds: OU,
+      matchResultOdds: null,
+      hasPrediction: false,
+      now: NOW,
+    });
+    expect(view.odds?.outcomes).toEqual([
+      { label: "Over", odd: "1.85" },
+      { label: "Under", odd: "1.95" },
+    ]);
+  });
+
+  it("odds null quando ambos ausentes → 'sem odd'", () => {
+    const view = toMatchRowView({
+      match: makeMatch(),
+      odds: null,
+      matchResultOdds: null,
+      hasPrediction: false,
+      now: NOW,
+    });
+    expect(view.odds).toBeNull();
+  });
+
+  it("MatchRow renderiza o chip 1X2 (Casa/Empate/Fora + odds)", () => {
+    const view = toMatchRowView({
+      match: makeMatch(),
+      odds: OU,
+      matchResultOdds: MR,
+      hasPrediction: false,
+      now: NOW,
+    });
+    const markup = renderToStaticMarkup(<MatchRow m={view} />);
+    expect(markup).toContain("Casa");
+    expect(markup).toContain("Empate");
+    expect(markup).toContain("Fora");
+    expect(markup).toContain("2.10");
+    expect(markup).toContain("3.90");
   });
 });

@@ -89,14 +89,12 @@ export function MatchRow({ m, last }: Props) {
             </span>
           ) : m.odds ? (
             <div className="flex flex-col items-end gap-1 font-mono text-[12.5px] tabular-nums">
-              <span>
-                <span className="text-muted-foreground">{m.odds.overLabel}</span>{" "}
-                {m.odds.over}
-              </span>
-              <span>
-                <span className="text-muted-foreground">{m.odds.underLabel}</span>{" "}
-                {m.odds.under}
-              </span>
+              {m.odds.outcomes.map((o, i) => (
+                <span key={i}>
+                  <span className="text-muted-foreground">{o.label}</span>{" "}
+                  {o.odd}
+                </span>
+              ))}
             </div>
           ) : (
             <span className="font-mono text-[10.5px] text-muted-fg-2">

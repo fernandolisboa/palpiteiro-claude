@@ -86,14 +86,12 @@ export function UpcomingMatchesDesktop({
               </span>
             ) : m.odds ? (
               <>
-                <span>
-                  <span className="text-muted-foreground">{m.odds.overLabel}</span>{" "}
-                  {m.odds.over}
-                </span>
-                <span>
-                  <span className="text-muted-foreground">{m.odds.underLabel}</span>{" "}
-                  {m.odds.under}
-                </span>
+                {m.odds.outcomes.map((o, i) => (
+                  <span key={i}>
+                    <span className="text-muted-foreground">{o.label}</span>{" "}
+                    {o.odd}
+                  </span>
+                ))}
               </>
             ) : (
               <span className="text-muted-fg-2">sem odd</span>

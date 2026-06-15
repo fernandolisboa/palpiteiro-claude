@@ -18,11 +18,11 @@ function fakeMatch(i: number): MatchRowView {
     when: "amanhã",
     odds: {
       // Chips densos da match-list usam o label CURTO ("Over"/"Under") — espelha
-      // toMatchRowOdds (compactação pré-pivot "O"/"U" sem o "2.5" verboso).
-      overLabel: "Over",
-      over: "1.90",
-      underLabel: "Under",
-      under: "1.95",
+      // toMatchRowOdds. Forma N-vias (#173): outcomes na ordem canônica.
+      outcomes: [
+        { label: "Over", odd: "1.90" },
+        { label: "Under", odd: "1.95" },
+      ],
     },
     hasPrediction: false,
     status: "scheduled",
@@ -67,5 +67,26 @@ describe("UpcomingMatchesDesktop reveal (#134)", () => {
     );
     expect(countRows(html)).toBe(INITIAL_BATCH);
     expect(html).toContain("Carregar mais");
+  });
+});
+
+describe("UpcomingMatchesDesktop chip N-vias (1X2) — #173 PR-2", () => {
+  it("renderiza os 3 outcomes 1X2 no chip desktop (bloco byte-distinto do mobile)", () => {
+    const m: MatchRowView = {
+      ...fakeMatch(0),
+      odds: {
+        outcomes: [
+          { label: "Casa", odd: "2.10" },
+          { label: "Empate", odd: "3.40" },
+          { label: "Fora", odd: "3.90" },
+        ],
+      },
+    };
+    const html = renderToStaticMarkup(<UpcomingMatchesDesktop matches={[m]} />);
+    expect(html).toContain("Casa");
+    expect(html).toContain("Empate");
+    expect(html).toContain("Fora");
+    expect(html).toContain("2.10");
+    expect(html).toContain("3.90");
   });
 });

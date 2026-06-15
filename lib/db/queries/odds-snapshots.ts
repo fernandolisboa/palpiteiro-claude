@@ -1,6 +1,10 @@
 import { and, desc, eq, inArray, sql } from "drizzle-orm";
 
-import { matchOddsSnapshots, selectionOddsSnapshots } from "@/db/schema";
+import {
+  marketSelections,
+  matchOddsSnapshots,
+  selectionOddsSnapshots,
+} from "@/db/schema";
 import { db } from "@/lib/db";
 import { resolveMarketCatalog } from "@/lib/db/queries/market-catalog";
 import { ODDS_SNAPSHOT_FRESHNESS_MS } from "@/lib/odds/freshness-window";
@@ -289,6 +293,116 @@ export async function getLatestFreshSelectionOddsSnapshots(
   if (!latest) return null;
   const ageMs = now.getTime() - latest.capturedAt.getTime();
   return ageMs < ODDS_SNAPSHOT_FRESHNESS_MS ? latest : null;
+}
+
+// Última captura por seleção, ORDENADA pela ordem canônica do mercado
+// (market_selections.sortOrder). Distinta de LatestSelectionSnapshot: aqui as
+// seleções vêm na ordem de DISPLAY (home→draw→away), não em selectionId.
+export type OrderedSelectionSnapshot = {
+  bookmaker: string;
+  capturedAt: Date;
+  overroundPct: string;
+  selections: { key: string; odd: string }[];
+};
+
+type BatchReaderRow = {
+  matchId: string;
+  key: string;
+  sortOrder: number;
+  capturedAt: Date;
+  bookmaker: string;
+  overroundPct: string;
+  odd: string;
+};
+
+/**
+ * Batch read N-vias BEST-EFFORT pra DISPLAY (card ao vivo + chips da home). Pra
+ * cada match, a última captura (mais recente por seleção) do `dbMarketKey`, com as
+ * seleções na ordem canônica (`market_selections.sortOrder`).
+ *
+ * **NUNCA `throw`a** — diferente de `getLatestSelectionOddsSnapshots` (que
+ * hard-faila p/ correção em predict): este roda no render SÍNCRONO da page/home,
+ * então um match incompleto/incoerente é OMITIDO do Map (degrada p/ "sem odd"),
+ * não derruba a página. Matches sem captura também ficam fora do Map.
+ *
+ * **match_result / no-line ONLY.** Não aplica predicado de `market_params->>'line'`
+ * — um caller over/under Frankenstein-mergearia 1.5/2.5/3.5 sob o mesmo selectionId
+ * (o DISTINCT ON é por (match, selection), não por linha). over/under no card/chip
+ * continua na tabela legada (`getLatestOddsSnapshot(sForMatches)`), byte-idêntico.
+ *
+ * `sortOrder` é COLUNA do SELECT, ordenada em JS após agrupar — NUNCA no leading
+ * ORDER BY (Postgres exige que o leading ORDER BY case com as colunas do DISTINCT ON).
+ */
+export async function getLatestSelectionOddsSnapshotsForMatches(
+  matchIds: string[],
+  dbMarketKey: string,
+): Promise<Map<string, OrderedSelectionSnapshot>> {
+  if (matchIds.length === 0) return new Map();
+  const { marketId, keyById } = await resolveMarketCatalog(dbMarketKey);
+  const expectedCount = keyById.size;
+
+  const rows: BatchReaderRow[] = await db
+    .selectDistinctOn(
+      [selectionOddsSnapshots.matchId, selectionOddsSnapshots.selectionId],
+      {
+        matchId: selectionOddsSnapshots.matchId,
+        key: marketSelections.key,
+        sortOrder: marketSelections.sortOrder,
+        capturedAt: selectionOddsSnapshots.capturedAt,
+        bookmaker: selectionOddsSnapshots.bookmaker,
+        overroundPct: selectionOddsSnapshots.overroundPct,
+        odd: selectionOddsSnapshots.odd,
+      },
+    )
+    .from(selectionOddsSnapshots)
+    .innerJoin(
+      marketSelections,
+      eq(selectionOddsSnapshots.selectionId, marketSelections.id),
+    )
+    .where(
+      and(
+        eq(selectionOddsSnapshots.marketId, marketId),
+        inArray(selectionOddsSnapshots.matchId, matchIds),
+      ),
+    )
+    .orderBy(
+      selectionOddsSnapshots.matchId,
+      selectionOddsSnapshots.selectionId,
+      desc(selectionOddsSnapshots.capturedAt),
+    );
+
+  const byMatch = new Map<string, BatchReaderRow[]>();
+  for (const r of rows) {
+    const list = byMatch.get(r.matchId);
+    if (list) list.push(r);
+    else byMatch.set(r.matchId, [r]);
+  }
+
+  const out = new Map<string, OrderedSelectionSnapshot>();
+  for (const [matchId, group] of byMatch) {
+    // Completude: a captura tem que cobrir TODAS as seleções (best-effort: omite,
+    // não throw como o reader de correção).
+    if (group.length !== expectedCount) continue;
+    // Coerência: a "última captura" tem que compartilhar (capturedAt, bookmaker) —
+    // senão é book Frankenstein. Omite.
+    const first = group[0];
+    const coherent = group.every(
+      (r) =>
+        r.capturedAt.getTime() === first.capturedAt.getTime() &&
+        r.bookmaker === first.bookmaker,
+    );
+    if (!coherent) continue;
+    const selections = [...group]
+      .sort((a, b) => a.sortOrder - b.sortOrder)
+      .map((r) => ({ key: r.key, odd: r.odd }));
+    out.set(matchId, {
+      bookmaker: first.bookmaker,
+      capturedAt: first.capturedAt,
+      overroundPct: first.overroundPct,
+      selections,
+    });
+  }
+  return out;
 }
 
 // Re-export for callers that compose further

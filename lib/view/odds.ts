@@ -1,5 +1,8 @@
 import { formatOdd, formatPct, formatRelativeAgo } from "@/lib/format";
-import { computeImpliedProbabilities } from "@/lib/odds/implied-probability";
+import {
+  computeImpliedProbabilities,
+  computeMarketImpliedProbabilities,
+} from "@/lib/odds/implied-probability";
 import { getMarketPresentation } from "@/lib/view/markets/presentation";
 import type { MatchRowView, OddsView } from "@/lib/view/types";
 
@@ -40,12 +43,58 @@ export function toOddsView(
   );
   return {
     marketLabel: LIVE_ODDS_PRESENTATION.marketLabel,
-    overLabel: LIVE_OVER_LABEL,
-    underLabel: LIVE_UNDER_LABEL,
-    over: formatOdd(overOdd),
-    under: formatOdd(underOdd),
-    overPct: formatPct(overProb * 100, { decimals: 1 }),
-    underPct: formatPct(underProb * 100, { decimals: 1 }),
+    // Forma N-vias (#173): over/under = 2 outcomes na ordem over→under. Mesmos
+    // valores/labels/formatters de antes → DOM byte-idêntico (golden pina).
+    outcomes: [
+      {
+        label: LIVE_OVER_LABEL,
+        odd: formatOdd(overOdd),
+        pct: formatPct(overProb * 100, { decimals: 1 }),
+      },
+      {
+        label: LIVE_UNDER_LABEL,
+        odd: formatOdd(underOdd),
+        pct: formatPct(underProb * 100, { decimals: 1 }),
+      },
+    ],
+    bookmaker: snapshot.bookmaker,
+    overround: formatPct(overround * 100, { decimals: 1 }),
+    updatedAgo: formatRelativeAgo(snapshot.capturedAt, now),
+  };
+}
+
+// Captura N-vias genérica (saída do reader best-effort) — o que o card 1X2 lê.
+// overroundPct armazenado é IGNORADO de propósito: a view RE-DERIVA (igual ao
+// over/under) pra os dois cards derivarem a implícita/overround do mesmo jeito.
+export type NwayOddsInput = {
+  bookmaker: string;
+  capturedAt: Date;
+  selections: { key: string; odd: string }[];
+};
+
+/**
+ * View genérica N-vias pra mercados Σ=1 featured (1X2 hoje). RE-DERIVA probs +
+ * overround do mercado COMPLETO via `computeMarketImpliedProbabilities` (nunca
+ * `1/odd` cru; nunca o overroundPct armazenado — paridade com toOddsView). Labels
+ * vêm do registry puro (`getMarketPresentation`) — este módulo NÃO importa
+ * market-descriptor (pureza de bundle; match_result é Σ=1, não precisa de
+ * impliedSumTarget). numeric do Drizzle = string → `Number()` no boundary.
+ */
+export function toNwayOddsView(
+  snapshot: NwayOddsInput,
+  marketKey: string,
+  now: Date = new Date(),
+): OddsView {
+  const presentation = getMarketPresentation(marketKey);
+  const odds = snapshot.selections.map((s) => Number(s.odd));
+  const { probs, overround } = computeMarketImpliedProbabilities(odds);
+  return {
+    marketLabel: presentation.marketLabel,
+    outcomes: snapshot.selections.map((s, i) => ({
+      label: presentation.outcomeLabel(s.key, presentation.defaultLine),
+      odd: formatOdd(odds[i]),
+      pct: formatPct(probs[i] * 100, { decimals: 1 }),
+    })),
     bookmaker: snapshot.bookmaker,
     overround: formatPct(overround * 100, { decimals: 1 }),
     updatedAgo: formatRelativeAgo(snapshot.capturedAt, now),
@@ -56,10 +105,29 @@ export function toMatchRowOdds(
   snapshot: OddsSnapshotInput | null,
 ): NonNullable<MatchRowView["odds"]> | null {
   if (!snapshot) return null;
+  // Forma N-vias (#173): over/under = 2 outcomes na ordem over→under, labels
+  // CURTOS. Byte-idêntico ao chip binário pré-#173 (golden pina). A regra de
+  // prioridade 1X2>over/under entra com a fonte N-vias (toMatchRowOddsResolved).
   return {
-    overLabel: LIVE_OVER_SHORT,
-    over: formatOdd(snapshot.overOdd),
-    underLabel: LIVE_UNDER_SHORT,
-    under: formatOdd(snapshot.underOdd),
+    outcomes: [
+      { label: LIVE_OVER_SHORT, odd: formatOdd(snapshot.overOdd) },
+      { label: LIVE_UNDER_SHORT, odd: formatOdd(snapshot.underOdd) },
+    ],
+  };
+}
+
+// Outcomes do chip pra uma captura N-vias (1X2) — labels CURTOS (selectionLabel:
+// "Casa"/"Empate"/"Fora"), na ordem canônica já resolvida pelo reader. Sem pct
+// (o chip mostra só odds). numeric do Drizzle = string → formatOdd coage.
+export function toMatchRowResultOdds(
+  snapshot: { selections: { key: string; odd: string }[] },
+  marketKey: string,
+): NonNullable<MatchRowView["odds"]> {
+  const presentation = getMarketPresentation(marketKey);
+  return {
+    outcomes: snapshot.selections.map((s) => ({
+      label: presentation.selectionLabel(s.key),
+      odd: formatOdd(s.odd),
+    })),
   };
 }
