@@ -1,14 +1,15 @@
 // @vitest-environment node
 //
 // End-to-end de `ensureOddsSnapshotsFresh` contra Postgres REAL (pglite): fetch
-// MOCKADO (getOddsForSport) → pickBestBookmaker → dual-write via db.batch → read
-// coerente. Cobre (a) coerência dual-write over/under (old.captured_at ===
-// new.captured_at, mesmas odds/book) e (b) 1X2 (h2h, 3 outcomes) write→read
-// ponta-a-ponta. Roda em `node` (pglite falha sob jsdom).
+// MOCKADO (getOddsForSport) → pickBestBookmaker → escrita em selection_odds_snapshots
+// → read coerente. Fase 5: a tabela legada match_odds_snapshots saiu, não há mais
+// dual-write; over/under escreve a MESMA tabela genérica que os demais mercados.
+// Cobre (a) over/under write→read + adapter de retorno binário e (b) 1X2 (h2h, 3
+// outcomes) write→read ponta-a-ponta. Roda em `node` (pglite falha sob jsdom).
 import { PGlite } from "@electric-sql/pglite";
 import { drizzle, type PgliteDatabase } from "drizzle-orm/pglite";
 import { migrate } from "drizzle-orm/pglite/migrator";
-import { and, eq } from "drizzle-orm";
+import { eq } from "drizzle-orm";
 import { afterAll, beforeAll, beforeEach, describe, expect, it, vi } from "vitest";
 
 import * as schema from "@/db/schema";
@@ -45,7 +46,6 @@ import { ensureOddsSnapshotsFresh } from "@/lib/odds/fetch-and-snapshot";
 import {
   BTTS,
   MATCH_RESULT,
-  OVER_UNDER,
   OVER_UNDER_ALT,
 } from "@/lib/odds/market-descriptor";
 import { getLatestSelectionOddsSnapshots } from "@/lib/db/queries/odds-snapshots";
@@ -96,7 +96,6 @@ beforeEach(async () => {
   getEventsForSport.mockReset();
   getOddsForEvent.mockReset();
   await realDb.delete(schema.selectionOddsSnapshots);
-  await realDb.delete(schema.matchOddsSnapshots);
 });
 
 function totalsEvent(): OddsApiEventOdds {
@@ -226,8 +225,8 @@ function altTotalsEvent(): OddsApiEventOdds {
   };
 }
 
-describe("ensureOddsSnapshotsFresh — dual-write against real Postgres (pglite)", () => {
-  it("over_under: writes both tables with old.captured_at === new.captured_at, same book/odds", async () => {
+describe("ensureOddsSnapshotsFresh — selection_odds_snapshots write against real Postgres (pglite)", () => {
+  it("over_under: writes selection_odds_snapshots (linha 2.5); retorno adapta o par binário", async () => {
     getOddsForSport.mockResolvedValue([totalsEvent()]);
     const now = new Date();
 
@@ -236,20 +235,14 @@ describe("ensureOddsSnapshotsFresh — dual-write against real Postgres (pglite)
     )[0];
     const result = await ensureOddsSnapshotsFresh(match, { now });
 
-    // retorno = snapshot over/under da tabela VELHA
+    // retorno = captura over/under adaptada da tabela genérica pra forma binária
     expect(result).not.toBeNull();
     expect(result!.bookmaker).toBe("Pinnacle");
     expect(result!.overOdd).toBe("1.900");
     expect(result!.underOdd).toBe("1.950");
+    expect(result!.capturedAt.getTime()).toBe(now.getTime());
 
-    // tabela velha: 1 row over/under
-    const old = await realDb
-      .select()
-      .from(schema.matchOddsSnapshots)
-      .where(eq(schema.matchOddsSnapshots.matchId, matchIds.id));
-    expect(old).toHaveLength(1);
-
-    // tabela nova: 2 rows (over + under), MESMO captured_at/bookmaker
+    // tabela genérica: 2 rows (over + under), MESMO captured_at/bookmaker/overround
     const latest = await getLatestSelectionOddsSnapshots({
       matchId: matchIds.id,
       dbMarketKey: "over_under",
@@ -261,10 +254,9 @@ describe("ensureOddsSnapshotsFresh — dual-write against real Postgres (pglite)
     const byKey = new Map(latest!.selections.map((s) => [s.key, s.odd]));
     expect(byKey.get("over")).toBe("1.900");
     expect(byKey.get("under")).toBe("1.950");
-
-    // COERÊNCIA dual-write: captured_at IDÊNTICO nas duas tabelas
-    expect(latest!.capturedAt.getTime()).toBe(old[0].capturedAt.getTime());
-    expect(latest!.overroundPct).toBe(old[0].overroundPct);
+    // captura coerente: ambas as seleções no mesmo captured_at + overround do retorno
+    expect(latest!.capturedAt.getTime()).toBe(now.getTime());
+    expect(latest!.overroundPct).toBe(result!.overroundPct);
   });
 
   it("match_result: 1X2 write→read end-to-end, 3 coherent rows, new table only", async () => {
@@ -275,13 +267,6 @@ describe("ensureOddsSnapshotsFresh — dual-write against real Postgres (pglite)
       await realDb.select().from(schema.matches).where(eq(schema.matches.id, matchIds.id))
     )[0];
     await ensureOddsSnapshotsFresh(match, { now, markets: [MATCH_RESULT] });
-
-    // só a tabela NOVA é populada (a velha é só over/under)
-    const old = await realDb
-      .select()
-      .from(schema.matchOddsSnapshots)
-      .where(eq(schema.matchOddsSnapshots.matchId, matchIds.id));
-    expect(old).toHaveLength(0);
 
     const latest = await getLatestSelectionOddsSnapshots({
       matchId: matchIds.id,
@@ -298,32 +283,6 @@ describe("ensureOddsSnapshotsFresh — dual-write against real Postgres (pglite)
     expect(latest!.capturedAt.getTime()).toBe(now.getTime());
   });
 
-  // NB: prova que as DUAS tabelas são escritas num único db.batch; NÃO prova
-  // rollback-on-partial-failure (o shim .batch awaita em sequência, sem txn — o
-  // round-trip transacional real é responsabilidade do neon-http em prod).
-  it("dual-write: uma busca over/under grava over_under nas DUAS tabelas (um db.batch)", async () => {
-    getOddsForSport.mockResolvedValue([totalsEvent()]);
-    const match = (
-      await realDb.select().from(schema.matches).where(eq(schema.matches.id, matchIds.id))
-    )[0];
-    await ensureOddsSnapshotsFresh(match, { now: new Date(), markets: [OVER_UNDER] });
-
-    const oldCount = (
-      await realDb.select().from(schema.matchOddsSnapshots)
-    ).length;
-    const newCount = (
-      await realDb
-        .select()
-        .from(schema.selectionOddsSnapshots)
-        .where(
-          and(
-            eq(schema.selectionOddsSnapshots.matchId, matchIds.id),
-          ),
-        )
-    ).length;
-    expect(oldCount).toBe(1); // 1 row over/under (par numa row)
-    expect(newCount).toBe(2); // 2 rows (over + under)
-  });
 });
 
 describe("ensureOddsSnapshotsFresh — btts additional per-event fetch (NUNCA batch)", () => {
@@ -347,14 +306,7 @@ describe("ensureOddsSnapshotsFresh — btts additional per-event fetch (NUNCA ba
       expect.objectContaining({ markets: ["btts"], regions: ["eu"] }),
     );
 
-    // tabela legada over/under intacta (guard de dual-write exclui btts).
-    const old = await realDb
-      .select()
-      .from(schema.matchOddsSnapshots)
-      .where(eq(schema.matchOddsSnapshots.matchId, matchIds.id));
-    expect(old).toHaveLength(0);
-
-    // tabela nova: 2 rows yes/no, mesmo book/captured_at.
+    // tabela genérica: 2 rows yes/no, mesmo book/captured_at.
     const latest = await getLatestSelectionOddsSnapshots({
       matchId: matchIds.id,
       dbMarketKey: "btts",
@@ -424,15 +376,7 @@ describe("ensureOddsSnapshotsFresh — over_under_alt additional multi-linha (#1
       expect.objectContaining({ markets: ["alternate_totals"], regions: ["eu"] }),
     );
 
-    // tabela LEGADA over/under (match_odds_snapshots) intacta — alt é additional,
-    // NÃO faz dual-write no legado (só linha 2.5 featured escreveria lá).
-    const old = await realDb
-      .select()
-      .from(schema.matchOddsSnapshots)
-      .where(eq(schema.matchOddsSnapshots.matchId, matchIds.id));
-    expect(old).toHaveLength(0);
-
-    // tabela nova: por linha, 2 seleções (over/under) com as odds da rung + marketParams.line.
+    // tabela genérica: por linha, 2 seleções (over/under) com as odds da rung + marketParams.line.
     const expected = new Map<number, { over: string; under: string }>([
       [1.5, { over: "1.300", under: "3.500" }],
       [2.5, { over: "1.900", under: "1.950" }],

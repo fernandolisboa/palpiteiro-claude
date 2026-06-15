@@ -4,8 +4,6 @@ import {
   getOddsForEvent,
   getOddsForSport,
 } from "@/lib/providers/odds-api";
-import { computeImpliedProbabilities } from "@/lib/odds/implied-probability";
-import { ODDS_SNAPSHOT_FRESHNESS_MS } from "@/lib/odds/freshness-window";
 import { findEventInList } from "@/lib/odds/match-event";
 import {
   OVER_UNDER,
@@ -17,21 +15,14 @@ import {
 } from "@/lib/odds/select-bookmaker";
 import {
   getLatestFreshSelectionOddsSnapshots,
-  getLatestOddsSnapshot,
-  insertOddsSnapshotsBatch,
+  getLatestOverUnderSnapshot,
   insertSelectionOddsSnapshotsBatch,
-  type DbOddsSnapshot,
+  type OverUnderSnapshot,
   type SelectionSnapshotRow,
 } from "@/lib/db/queries/odds-snapshots";
 import { getMatchesInLeagueWindow, type DbMatch } from "@/lib/db/queries/matches";
-import { db } from "@/lib/db";
 import { resolveMarketCatalog } from "@/lib/db/queries/market-catalog";
 import type { OddsApiEventOdds } from "@/lib/providers/odds-api-schemas";
-
-function isFresh(snapshot: DbOddsSnapshot | null, now: number): boolean {
-  if (!snapshot) return false;
-  return now - snapshot.capturedAt.getTime() < ODDS_SNAPSHOT_FRESHNESS_MS;
-}
 
 export type EnsureOddsOptions = {
   now?: Date;
@@ -44,28 +35,25 @@ export type EnsureOddsOptions = {
  * Estratégia de quota (inalterada): The Odds API free tier = 500 req/mês. 1 call =
  * liga inteira; persistimos snapshots pra TODOS os matches conhecidos da janela.
  *
- * Multi-mercado (#164): por descriptor, faz gate de frescor MARKET-AWARE
- *   - over_under: checa a tabela VELHA (`getLatestOddsSnapshot`, comportamento atual);
- *   - novos (match_result): checam a NOVA (`getLatestFreshSelectionOddsSnapshots`).
- * Sem isso, um snapshot fresco de over/under daria early-return antes do fetch h2h.
+ * Gate de frescor por descriptor, sempre contra `selection_odds_snapshots`
+ * (`getLatestFreshSelectionOddsSnapshots`, por linha candidata). Na Fase 5 a tabela
+ * legada `match_odds_snapshots` foi removida: over/under usa o MESMO gate por linha
+ * (featured → linha 2.5) que os demais mercados — nada mais discrimina over/under.
  *
  * Quando stale: fetch da liga (rede), `pickBestBookmaker` por match (UMA vez),
- * resolução de market/selection ids (reads) — TUDO antes do batch — e dual-write
- * ATÔMICO via `db.batch([...])` (neon-http não tem `db.transaction`):
- *   - over_under: VELHA (`insertOddsSnapshotsBatch(rows, now)`, strings idênticas) +
- *     NOVA (`insertSelectionOddsSnapshotsBatch`), AMBAS do mesmo bundle → mesmo
- *     captured_at (`now`)/bookmaker/overround;
- *   - match_result: SÓ a NOVA.
+ * resolução de market/selection ids (reads) e escrita em `selection_odds_snapshots`
+ * (`insertSelectionOddsSnapshotsBatch`) — uma row por seleção do mesmo bundle (mesmo
+ * captured_at (`now`)/bookmaker/overround). Sem mais dual-write.
  *
- * Retorna a snapshot over/under (tabela velha) MAIS RECENTE do match após a
- * operação — contrato inalterado pro caller (page de match), independente de quais
- * mercados foram pedidos. null se a liga não tem o evento ou nenhum book oferece o
- * mercado over/under completo.
+ * Retorna a captura over/under (linha 2.5) MAIS RECENTE do match na forma binária
+ * (`getLatestOverUnderSnapshot`, best-effort) após a operação — contrato inalterado
+ * pro caller (page de match), independente de quais mercados foram pedidos. null se a
+ * liga não tem o evento ou nenhum book oferece o over/under 2.5 completo/coerente.
  */
 export async function ensureOddsSnapshotsFresh(
   match: DbMatch,
   opts: EnsureOddsOptions = {},
-): Promise<DbOddsSnapshot | null> {
+): Promise<OverUnderSnapshot | null> {
   const now = opts.now ?? new Date();
   const descriptors = opts.markets ?? [OVER_UNDER];
 
@@ -177,39 +165,29 @@ export async function ensureOddsSnapshotsFresh(
   };
 
   for (const descriptor of descriptors) {
-    // ── Gate de frescor market-aware ────────────────────────────────────────
-    // FEATURED over_under (e SÓ ele) gateia pela tabela LEGADA (dual-write). A
-    // variante over_under_alt (#175) tem a MESMA dbMarketKey mas é `additional` →
-    // cai no gate da tabela nova (por linha), não no legado. Discrimina por oddsSource.
-    if (
-      descriptor.dbMarketKey === OVER_UNDER.dbMarketKey &&
-      descriptor.oddsSource !== "additional"
-    ) {
-      const existing = await getLatestOddsSnapshot(match.id);
-      if (isFresh(existing, now.getTime())) continue;
-    } else {
-      // Frescor POR linha candidata (#175): se QUALQUER linha estiver stale/ausente,
-      // o re-fetch (1 crédito, escada inteira) reescreve TODAS. Single-line (btts/
-      // dupla chance/match_result) → uma checagem (candidateLines ausente → [params.line]).
-      const candidateLines =
-        descriptor.candidateLines ?? [descriptor.params?.line];
-      let allFresh = true;
-      for (const line of candidateLines) {
-        const fresh = await getLatestFreshSelectionOddsSnapshots(
-          {
-            matchId: match.id,
-            dbMarketKey: descriptor.dbMarketKey,
-            params: line === undefined ? undefined : { line },
-          },
-          now,
-        );
-        if (!fresh) {
-          allFresh = false;
-          break;
-        }
+    // ── Gate de frescor por linha candidata (#175), sempre na tabela nova ─────
+    // Se QUALQUER linha estiver stale/ausente, o re-fetch (1 crédito, escada
+    // inteira) reescreve TODAS. Single-line (over/under featured 2.5, btts, dupla
+    // chance, match_result) → uma checagem (candidateLines ausente → [params.line]).
+    // over/under não tem mais gate especial (a tabela legada saiu na Fase 5).
+    const candidateLines =
+      descriptor.candidateLines ?? [descriptor.params?.line];
+    let allFresh = true;
+    for (const line of candidateLines) {
+      const fresh = await getLatestFreshSelectionOddsSnapshots(
+        {
+          matchId: match.id,
+          dbMarketKey: descriptor.dbMarketKey,
+          params: line === undefined ? undefined : { line },
+        },
+        now,
+      );
+      if (!fresh) {
+        allFresh = false;
+        break;
       }
-      if (allFresh) continue;
     }
+    if (allFresh) continue;
 
     // ── Stale + additional (btts): fetch POR EVENTO, só este match (sem batch) ──
     if (descriptor.oddsSource === "additional") {
@@ -239,13 +217,6 @@ export async function ensureOddsSnapshotsFresh(
       return id;
     };
 
-    const oldRows: Array<{
-      matchId: string;
-      bookmaker: string;
-      overOdd: number;
-      underOdd: number;
-      overroundPct: number;
-    }> = [];
     const newRows: SelectionSnapshotRow[] = [];
 
     for (const m of knownMatches) {
@@ -260,7 +231,7 @@ export async function ensureOddsSnapshotsFresh(
 
       const overroundPct = bundle.overround * 100;
 
-      // Linhas da tabela NOVA (todas as seleções; mesmo captured_at/bookmaker).
+      // Uma row por seleção (todas; mesmo captured_at/bookmaker/overround).
       for (const sel of bundle.selections) {
         newRows.push({
           matchId: m.id,
@@ -273,46 +244,16 @@ export async function ensureOddsSnapshotsFresh(
           capturedAt: now,
         });
       }
-
-      // Tabela VELHA: SÓ over_under. Strings IDÊNTICAS ao caminho legado — o
-      // overround é recomputado pelo wrapper binário (bit-exato com o do bundle).
-      if (descriptor.dbMarketKey === OVER_UNDER.dbMarketKey) {
-        const over = bundle.selections.find((s) => s.key === "over");
-        const under = bundle.selections.find((s) => s.key === "under");
-        if (over && under) {
-          const { overround } = computeImpliedProbabilities(over.odd, under.odd);
-          oldRows.push({
-            matchId: m.id,
-            bookmaker: bundle.bookmakerTitle,
-            overOdd: over.odd,
-            underOdd: under.odd,
-            overroundPct: overround * 100,
-          });
-        }
-      }
     }
 
-    // ── Dual-write atômico: só os builders não-awaited entram no batch ──────
-    // db.batch é o primitivo atômico do neon-http (db.transaction LANÇA).
-    // Falha antes daqui ⇒ nenhuma escrita; falha no batch ⇒ rollback
-    // de ambas. over_under escreve as DUAS tabelas no mesmo batch (mesmo `now`);
-    // match_result só a nova.
-    const writeOld =
-      descriptor.dbMarketKey === OVER_UNDER.dbMarketKey && oldRows.length > 0;
-    const writeNew = newRows.length > 0;
-
-    if (writeOld && writeNew) {
-      await db.batch([
-        insertOddsSnapshotsBatch(oldRows, now),
-        insertSelectionOddsSnapshotsBatch(newRows),
-      ]);
-    } else if (writeNew) {
+    // Escrita única em selection_odds_snapshots (sem mais dual-write; a tabela
+    // legada saiu na Fase 5). Falha antes daqui ⇒ nenhuma escrita.
+    if (newRows.length > 0) {
       await insertSelectionOddsSnapshotsBatch(newRows);
-    } else if (writeOld) {
-      await insertOddsSnapshotsBatch(oldRows, now);
     }
   }
 
-  // Contrato pro caller: a snapshot over/under (tabela velha) mais recente.
-  return getLatestOddsSnapshot(match.id);
+  // Contrato pro caller: a captura over/under (linha 2.5) mais recente, na forma
+  // binária adaptada de selection_odds_snapshots (best-effort, nunca throw).
+  return getLatestOverUnderSnapshot(match.id);
 }
