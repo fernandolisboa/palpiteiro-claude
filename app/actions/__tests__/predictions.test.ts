@@ -749,7 +749,7 @@ describe("analyzeMatch — success path view wiring", () => {
 // onde a variante multi-linha tem cobertura (alternate_totals → world_cup por ora).
 describe("analyzeMatch — over/under linhas extras (#175)", () => {
   beforeEach(() => {
-    mockUserExists.mockResolvedValue(true);
+    mockGetAccess.mockResolvedValue(ALLOWED_USER);
     mockPredict.mockResolvedValue(PREDICTION);
     mockGetAiCall.mockResolvedValue({ costUsd: "0.01" } as never);
   });
