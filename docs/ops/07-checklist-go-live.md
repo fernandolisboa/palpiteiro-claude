@@ -83,10 +83,10 @@ Use este doc como _runbook_ de go-live. Cada seção referencia o doc detalhado 
 > ✅ **DECISÃO (sua):** registrar marca no **INPI agora** ou **adiar**?
 > **Recomendação default: adiar na Fase 2.** Com app sem monetização e uso entre amigos, o registro INPI é custo/burocracia que pode esperar; o essencial agora é **não perder o nome** (domínio + handles). Reavalie se for abrir ao público. Custos e prazos em [`06-marca-inpi.md`](./06-marca-inpi.md).
 
-## (g) Whitelist dos amigos + claim-admin — [`auth-setup.md`](../runbooks/auth-setup.md)
+## (g) Acesso do dono + claim-admin — [`auth-setup.md`](../runbooks/auth-setup.md)
 
-- [ ] `ALLOWED_EMAILS` em Production inclui você **e os amigos** (lista por vírgula, case-insensitive).
-- [ ] Whitelist na **tabela do DB** populada para os amigos (via `/admin/invites` ou `pnpm db:seed-invites`) — complementa a env (ver [ADR 0009](../decisions/0009-whitelist-db-table.md)).
+- [ ] `ALLOWED_EMAILS` em Production inclui **você (o dono)** — é o env-floor anti-lockout (sempre entra, nunca bloqueável; ver [ADR 0023](../decisions/0023-estrategia-de-auth-oauth-passkey-open-signup.md)). Amigos **não precisam** estar na lista: o cadastro é aberto (#257).
+- [ ] ~~Popular whitelist no DB via `/admin/invites`/`pnpm db:seed-invites`~~ — **obsoleto** (removido no #281): o cadastro aberto (#257) auto-provisiona qualquer usuário (Google/passkey/magic link). Moderação é **a posteriori** — bloquear abusador em **Admin → Usuários** (`allowed=false`). O modelo invite-only do [ADR 0009](../decisions/0009-whitelist-db-table.md) foi superado pelo [ADR 0023](../decisions/0023-estrategia-de-auth-oauth-passkey-open-signup.md).
 - [ ] `pnpm db:claim-admin` **já rodado uma vez** contra o DB de **prod** (você é admin).
 - [ ] Você fez **logout + login** uma vez depois do claim (pro JWT carregar `role: "admin"`).
 
