@@ -21,6 +21,14 @@ async function sendMagicLink(formData: FormData) {
   await signIn("resend", { email, redirectTo: "/" });
 }
 
+async function signInWithGoogle() {
+  "use server";
+  // OAuth Google (método primário — ADR 0023). signIn redireciona pro consent do
+  // Google; na volta o callback signIn aplica o mesmo gate da whitelist (e-mail
+  // não autorizado → AccessDenied), idêntico ao magic link. Não capturar.
+  await signIn("google", { redirectTo: "/" });
+}
+
 export default async function SignInPage({ searchParams }: PageProps) {
   const session = await auth();
   if (session?.user) redirect("/");
@@ -48,8 +56,22 @@ export default async function SignInPage({ searchParams }: PageProps) {
             </span>
           </div>
           <p className="text-[13px] text-muted-foreground tracking-tight">
-            Entre com seu e-mail — enviamos um link de acesso.
+            Entre com sua conta Google ou com um link por e-mail.
           </p>
+        </div>
+
+        <form action={signInWithGoogle}>
+          <Button type="submit" variant="outline" className="w-full">
+            Entrar com Google
+          </Button>
+        </form>
+
+        <div className="flex items-center gap-3">
+          <span className="h-px flex-1 bg-border" />
+          <span className="font-mono text-[10px] uppercase tracking-[0.14em] text-muted-fg-2">
+            ou
+          </span>
+          <span className="h-px flex-1 bg-border" />
         </div>
 
         <Card className="p-5">

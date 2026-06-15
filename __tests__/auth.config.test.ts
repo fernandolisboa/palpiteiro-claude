@@ -77,4 +77,33 @@ describe("auth.config (edge) — guarda DB-in-edge (ADR 0009)", () => {
     expect(source).not.toMatch(/getUserAccessState/);
     expect(source).not.toMatch(/jwt-revalidate/);
   });
+
+  it("não registra o provider Google no config edge (OAuth vive no auth.ts Node — ADR 0023)", () => {
+    // O provider Google mora no auth.ts (Node), junto do adapter. Mantê-lo fora
+    // do edge evita puxar o DrizzleAdapter pro bundle do middleware. Lemos o
+    // source porque importar @/auth (Node) exigiria env de DB no sandbox.
+    const source = readFileSync(join(process.cwd(), "auth.config.ts"), "utf8");
+    expect(source).not.toMatch(/providers\/google/);
+  });
+});
+
+/**
+ * Guarda do provider Google (issue #256, ADR 0023).
+ *
+ * O provider OAuth Google vive no `auth.ts` (Node), com
+ * `allowDangerousEmailAccountLinking: true` (e-mail Google verificado → linka ao
+ * mesmo `users` do magic link). Importar `@/auth` aqui puxaria o DrizzleAdapter /
+ * Neon e exigiria env de DB; por isso afirmamos por leitura do source, mesmo
+ * padrão `readFileSync` dos guards acima.
+ */
+describe("auth.ts (Node) — provider Google (#256)", () => {
+  it("registra o provider Google com allowDangerousEmailAccountLinking", () => {
+    const source = readFileSync(join(process.cwd(), "auth.ts"), "utf8");
+    expect(source).toMatch(/from "next-auth\/providers\/google"/);
+    // Asserts independentes (não regex posicional): o Google() pode receber
+    // clientId/clientSecret explícitos ANTES da flag no futuro — o guard só exige
+    // que ambos existam, não a ordem das chaves.
+    expect(source).toMatch(/Google\(/);
+    expect(source).toMatch(/allowDangerousEmailAccountLinking:\s*true/);
+  });
 });

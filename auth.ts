@@ -1,5 +1,6 @@
 import { DrizzleAdapter } from "@auth/drizzle-adapter";
 import NextAuth from "next-auth";
+import Google from "next-auth/providers/google";
 import Resend from "next-auth/providers/resend";
 
 import { authConfig } from "@/auth.config";
@@ -27,8 +28,9 @@ import { getUserAccessState } from "@/lib/db/queries/users";
  * adapter. Junto do adapter, aqui, é o único lugar correto.
  *
  * Com strategy "jwt", o adapter é usado no fluxo de magic link
- * (createUser/getUserByEmail/createVerificationToken/useVerificationToken).
- * `sessions`/`accounts` ficam inativas (prontas pra futuro OAuth/DB-sessions).
+ * (createUser/getUserByEmail/createVerificationToken/useVerificationToken) e no
+ * OAuth Google, que grava a row de `accounts` (provider="google"). `sessions`
+ * segue inativa sob JWT (a sessão é o token, não uma row de DB).
  */
 export const { handlers, auth, signIn, signOut, unstable_update } = NextAuth({
   ...authConfig,
@@ -36,6 +38,10 @@ export const { handlers, auth, signIn, signOut, unstable_update } = NextAuth({
   // `providers: []` do edge config; estas chaves precisam sobrescrever isso.
   // Inverter a ordem zera os providers e quebra signIn("resend") silenciosamente.
   providers: [
+    // AUTH_GOOGLE_ID/AUTH_GOOGLE_SECRET são auto-detectadas pelo Auth.js v5.
+    // allowDangerousEmailAccountLinking: o e-mail do Google vem verificado, então
+    // linkar ao mesmo `users` de um login por magic link é seguro (ADR 0023).
+    Google({ allowDangerousEmailAccountLinking: true }),
     // apiKey é auto-detectada de AUTH_RESEND_KEY pelo Auth.js.
     Resend({ from: process.env.RESEND_FROM_EMAIL }),
   ],
