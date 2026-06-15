@@ -228,6 +228,52 @@ export type LineupView = {
   away?: LineupViewSide;
 };
 
+// ─── Melhor aposta do jogo (#178) ────────────────────────────────────────────
+// Fan-out cross-mercado: N análises por jogo (uma por mercado), ranqueadas no
+// cliente. Tipos PUROS (client-safe) — o painel "use client" recebe BestBetView
+// como props e re-ordena sobre os numerics de `rank` (zero recompute). As chaves de
+// `rank` LEEM os mesmos números que os cards mostram (edge da seleção recomendada via
+// computeMarketScenarios; evPerUnit = computeEvPerUnit, o expectedReturn do card).
+export type BestBetRank = {
+  // Edge (pp) da seleção RECOMENDADA, na escala nativa do mercado (Σ=impliedSumTarget;
+  // dupla chance = Σ2). É o número exibido no card. O sort divide por impliedSumTarget
+  // pra comparabilidade cross-mercado (base Σ=1 por outcome coberto). null em pass/odds ausentes.
+  edgePct: number | null;
+  // EV por unidade = computeEvPerUnit(confidencePct, oddAtRecommendation) — o MESMO EV
+  // que o card exibe (expectedReturn). Cross-comparável (overround-free). null em pass/odd ausente.
+  evPerUnit: number | null;
+  // Confiança do modelo na seleção recomendada (NOT NULL no schema). Em pass = prob do
+  // lado recomendado por convenção; todo comparador por confiança é guardado por isPass.
+  confidencePct: number;
+  // Odd CONGELADA da recomendação (ADR 0012), nunca a odd ao vivo. null só em anomalia.
+  oddAtRecommendation: number | null;
+  // Do descriptor (data-driven): 1 (partição) | 2 (dupla chance). Base do /impliedSumTarget no sort.
+  impliedSumTarget: number;
+  isPass: boolean;
+};
+
+export type BestBetEntry = {
+  marketKey: string;
+  // getMarketPresentation(marketKey).marketLabel — load-bearing: renderizado acima de
+  // TODO card (inclusive pass, cujo branch do AnalysisResult não imprime o label).
+  marketLabel: string;
+  analysis: AnalysisView; // renderizado pelo <AnalysisResult/> existente
+  rank: BestBetRank;
+};
+
+export type BestBetMarketError = {
+  marketKey: string;
+  marketLabel: string;
+  message: string;
+};
+
+export type BestBetView = {
+  entries: BestBetEntry[]; // mercados com sucesso, na ordem-base (o cliente ordena)
+  errors: BestBetMarketError[]; // falhas por-mercado (best-of-successful) + degrades de pré-warm
+  llmCalls: number; // = entries.length (chamadas de LLM pagas de fato) — AC#2
+  unavailableMarkets: number; // = errors.length (inclui rejeições pré-spend que NÃO pagaram)
+};
+
 export function parseLeagueFilter(input: string | undefined | null): LeagueFilter {
   if (input === "bsa" || input === "ucl" || input === "wc") return input;
   return "all";
