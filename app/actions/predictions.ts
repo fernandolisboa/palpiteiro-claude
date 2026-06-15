@@ -393,7 +393,11 @@ export async function analyzeBestBet(
     marketKey: c.key,
     extraLines: resolveExtraLines(c.key, match.league, extraLinesEnabled),
   }));
-  // Rate-limit é o ÚLTIMO gate antes do spend (incrementa 1× por run).
+  // Rate-limit é o ÚLTIMO gate antes do spend (incrementa 1× por run). ATENÇÃO: 1 slot
+  // aqui autoriza um RUN inteiro — até MAX_FANOUT_MARKETS predict() pagos + até
+  // MAX_ADDITIONAL_FETCHES créditos de odds. Diferente do analyzeMatch (1 slot = 1
+  // call). O teto diário (lib/rate-limit.ts) não foi rederivado pra esse multiplicador
+  // — re-avaliar o budget/dia (ou cobrar slots proporcionais) ANTES de ligar a flag.
   const rateLimit = await checkAnalysisRateLimit(
     session.user.id,
     session.user.role,
@@ -421,6 +425,10 @@ export async function analyzeBestBet(
         .descriptor,
     }))
     .filter((x) => x.descriptor.oddsSource === "additional");
+  // Teto de créditos: nunca pré-aquece mais que MAX_ADDITIONAL_FETCHES. Um mercado
+  // cortado aqui CONTINUA no fanOut → runFanOut chama predict() pra ele, mas predict
+  // lança "sem snapshot fresco" ANTES da chamada Anthropic (sem gasto de LLM nem
+  // crédito). Hoje inalcançável (WC tem ≤3 additional); move junto com MAX_FANOUT_MARKETS.
   const additionalToFetch =
     additional.length > MAX_ADDITIONAL_FETCHES
       ? additional.slice(0, MAX_ADDITIONAL_FETCHES)

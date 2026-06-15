@@ -28,6 +28,9 @@ vi.mock("@/lib/odds/fetch-and-snapshot", () => ({
   ensureOddsSnapshotsFresh: vi.fn(),
 }));
 vi.mock("@/lib/db/queries/users", () => ({ getUserAccessState: vi.fn() }));
+// Floor do env (#276): isEmailAllowed compõe com o gate de acesso. Default false nos
+// testes → quem tem allowed=false e não está no floor é bloqueado.
+vi.mock("@/lib/auth/whitelist", () => ({ isEmailAllowed: vi.fn(() => false) }));
 vi.mock("@/lib/rate-limit", () => ({ checkAnalysisRateLimit: vi.fn() }));
 // toAnalysisView mockado → {} (a corretude da view N-vias é coberta por best-bet.test).
 vi.mock("@/lib/view/analysis", () => ({ toAnalysisView: vi.fn(() => ({})) }));
@@ -213,6 +216,53 @@ describe("analyzeBestBet — gate order (rate-limit é o ÚLTIMO antes do spend)
       ok: false,
       error: "Você atingiu o limite de 7 análises por dia. Tente novamente amanhã.",
     });
+    expect(mockPredict).not.toHaveBeenCalled();
+  });
+
+  it("matchId ausente / inválido → {ok:false} antes de qualquer gate", async () => {
+    expect(await analyzeBestBet(null, form({}))).toEqual({
+      ok: false,
+      error: "matchId ausente",
+    });
+    expect(await analyzeBestBet(null, form({ matchId: "foo" }))).toEqual({
+      ok: false,
+      error: "Identificador de jogo inválido.",
+    });
+    expect(mockRateLimit).not.toHaveBeenCalled();
+    expect(mockPredict).not.toHaveBeenCalled();
+  });
+
+  it("sessão órfã (getUserAccessState → null) → {ok:false}, SEM rate-limit nem predict", async () => {
+    mockGetAccess.mockResolvedValue(null);
+    const res = await analyzeBestBet(null, form({ matchId: VALID_MATCH_ID }));
+    expect(res).toEqual({
+      ok: false,
+      error: "Sua sessão expirou. Faça login novamente.",
+    });
+    expect(mockRateLimit).not.toHaveBeenCalled();
+    expect(mockPredict).not.toHaveBeenCalled();
+  });
+
+  it("acesso bloqueado (allowed=false, e-mail fora do floor) → {ok:false}, SEM spend", async () => {
+    mockGetAccess.mockResolvedValue({ role: "user", allowed: false });
+    const res = await analyzeBestBet(null, form({ matchId: VALID_MATCH_ID }));
+    expect(res).toEqual({
+      ok: false,
+      error: "Seu acesso está bloqueado. Fale com o administrador.",
+    });
+    expect(mockRateLimit).not.toHaveBeenCalled();
+    expect(mockPredict).not.toHaveBeenCalled();
+  });
+
+  it("jogo encerrado → {ok:false}, SEM pré-warm de odds nem predict (guarda de custo)", async () => {
+    mockGetMatchById.mockResolvedValue(matchInLeague("world_cup", "finished"));
+    const res = await analyzeBestBet(null, form({ matchId: VALID_MATCH_ID }));
+    expect(res).toEqual({
+      ok: false,
+      error: "Este jogo já foi encerrado ou cancelado.",
+    });
+    expect(mockEnsureOdds).not.toHaveBeenCalled();
+    expect(mockRateLimit).not.toHaveBeenCalled();
     expect(mockPredict).not.toHaveBeenCalled();
   });
 });

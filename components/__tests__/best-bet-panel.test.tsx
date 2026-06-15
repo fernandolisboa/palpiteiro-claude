@@ -70,6 +70,25 @@ describe("sortBestBetEntries — ordenação por modo (#178)", () => {
     ]);
   });
 
+  it("edge × confiança: NÃO normaliza a confiança (dupla chance Σ2 não é penalizada em dobro)", () => {
+    // edge normalizado igual (5); DC tem confiança MAIOR → deve vir na frente.
+    // Bug do impliedSumTarget²: DC viraria 5×(90/2)=225 < OU 5×80=400 e seria demovida.
+    const dc = entry("double_chance", "DC", {
+      edgePct: 10,
+      impliedSumTarget: 2,
+      confidencePct: 90,
+    }); // edge norm = 5 ; edgeConf = 5×90 = 450
+    const ou = entry("over_under", "O/U", {
+      edgePct: 5,
+      impliedSumTarget: 1,
+      confidencePct: 80,
+    }); // edge norm = 5 ; edgeConf = 5×80 = 400
+    expect(keys(sortBestBetEntries([ou, dc], "edgeConf"))).toEqual([
+      "double_chance",
+      "over_under",
+    ]);
+  });
+
   it("normaliza edge por impliedSumTarget: dupla chance Σ2 não domina cru", () => {
     const ou = entry("over_under", "O/U", { edgePct: 6, impliedSumTarget: 1 });
     const dc = entry("double_chance", "DC", { edgePct: 10, impliedSumTarget: 2 }); // 10/2=5 < 6

@@ -42,6 +42,10 @@ function computeRank(
 
   let edgePct: number | null = null;
   if (!isPass) {
+    // Mercados N-vias (1X2/btts/dc): a grade do card usa esta MESMA fn → rank ===
+    // display. over_under (binário-congelado) exibe o edgePct PERSISTIDO (toFixed(2));
+    // aqui re-deriva das odds full-precision — divergência é sub-arredondamento
+    // (<0.01pp), nunca inverte o sort, e o número do rank nunca é renderizado.
     const recSel = computeMarketScenarios({
       selections,
       recommendedKey: recommendation,

@@ -14,10 +14,13 @@ export type BestBetSortMode = "edge" | "ev" | "edgeConf";
 // Regras (§ranking): passes (sem aposta) afundam por ÚLTIMO em TODO modo; entre os
 // não-pass o primário é a chave ativa (desc); o tiebreak é uma ORDEM TOTAL estável
 // (EV/unidade desc, depois marketKey alfabético) pra o #1 não pular conforme o
-// histórico do toggle. O edge é normalizado por impliedSumTarget (base Σ=1 por
-// outcome coberto) pra comparabilidade cross-mercado (ADR 0018); EV/unidade já é
-// overround-free e cross-comparável. Um não-pass com chave null cai entre os
-// não-pass (acima dos passes), nunca afundado junto deles.
+// histórico do toggle. Só o EDGE é normalizado por impliedSumTarget (o edgePct vive na
+// escala Σ=impliedSumTarget do mercado; ÷target o põe numa base Σ=1 por outcome coberto,
+// cross-comparável — ADR 0018). A CONFIANÇA NÃO é normalizada: é a prob do modelo pra a
+// seleção recomendada, já um [0,100] plano e diretamente comparável entre mercados
+// (dividir por impliedSumTarget penalizaria dupla chance em DOBRO — impliedSumTarget²).
+// EV/unidade já é overround-free e cross-comparável. Um não-pass com chave null cai
+// entre os não-pass (acima dos passes), nunca afundado junto deles.
 export function sortBestBetEntries(
   entries: BestBetEntry[],
   mode: BestBetSortMode,
@@ -28,7 +31,7 @@ export function sortBestBetEntries(
     const edge = r.edgePct !== null ? r.edgePct / r.impliedSumTarget : null;
     if (edge === null) return Number.NEGATIVE_INFINITY;
     if (mode === "edge") return edge;
-    return edge * (r.confidencePct / r.impliedSumTarget); // edgeConf
+    return edge * r.confidencePct; // edgeConf: edge já normalizado × confiança plana
   };
   return [...entries].sort((a, b) => {
     if (a.rank.isPass !== b.rank.isPass) return a.rank.isPass ? 1 : -1;
