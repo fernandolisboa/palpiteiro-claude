@@ -53,8 +53,6 @@ type PredictionInput = {
   bookmaker: string | null;
   impliedProbPct: string | number | null;
   edgePct: string | number | null;
-  overOddAtPrediction: string | number | null;
-  underOddAtPrediction: string | number | null;
   modelVersion: string;
   promptVersion: string;
   createdAt: Date;
@@ -145,14 +143,22 @@ function computeBinaryScenarios(
   if (!isBinaryRecommendation(prediction.recommendation)) {
     return null;
   }
+  // Par over/under congelado: a fonte é a grade de seleções (prediction_selection_odds,
+  // keys "over"/"under") — NÃO mais o par legado over/under_odd_at_prediction
+  // (dropado no contract da Fase 5). predict() grava a PSO byte-idêntica ao par
+  // legado; rows históricas sem par (pré-ADR-0012) carregam odd null → o MESMO
+  // degrade ("odds não registradas").
+  const overOdd = prediction.selections?.find((s) => s.key === "over")?.odd ?? null;
+  const underOdd =
+    prediction.selections?.find((s) => s.key === "under")?.odd ?? null;
   return computeScenarios({
     recommendation: prediction.recommendation,
     confidencePct: confidenceNum,
     oddAtRecommendation: toValidOdd(prediction.oddAtRecommendation),
     impliedProbPct: toFiniteNumber(prediction.impliedProbPct),
     edgePct: toFiniteNumber(prediction.edgePct),
-    overOdd: toValidOdd(prediction.overOddAtPrediction),
-    underOdd: toValidOdd(prediction.underOddAtPrediction),
+    overOdd: toValidOdd(overOdd),
+    underOdd: toValidOdd(underOdd),
   });
 }
 
