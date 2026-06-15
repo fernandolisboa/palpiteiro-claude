@@ -1,6 +1,6 @@
 import { beforeEach, describe, expect, it, vi } from "vitest";
 
-// Chain-stub no estilo de invites/odds-snapshots.test.ts. O construtor da query
+// Chain-stub no estilo de odds-snapshots.test.ts. O construtor da query
 // (select().from()...orderBy()) é um objeto encadeável que registra cada arg em
 // estado hoisted e é ele mesmo thenable, resolvendo as rows configuradas. Assim
 // tanto a query de summary (termina em .from) quanto as agregações (terminam em
@@ -68,7 +68,7 @@ vi.mock("@/lib/db", () => {
 });
 
 // Schema real (NÃO mockado): trava identidade de coluna (groupBy em
-// aiCalls.model vs aiCalls.userId é uma checagem exata, como em invites.test.ts).
+// aiCalls.model vs aiCalls.userId é uma checagem exata).
 import { aiCalls, users } from "@/db/schema";
 import {
   getCostByDay,

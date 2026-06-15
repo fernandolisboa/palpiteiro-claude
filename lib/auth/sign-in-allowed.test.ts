@@ -6,11 +6,6 @@ import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 vi.mock("@/lib/db/queries/users", () => ({
   getUserAllowedByEmail: vi.fn(),
 }));
-// invites também é importado por whitelist-db (isEmailAllowedWithDb) — mock pra
-// não puxar Neon ao importar o módulo.
-vi.mock("@/lib/db/queries/invites", () => ({
-  isEmailWhitelistedInDb: vi.fn(),
-}));
 
 import { isSignInAllowed } from "@/lib/auth/whitelist-db";
 import { getUserAllowedByEmail } from "@/lib/db/queries/users";

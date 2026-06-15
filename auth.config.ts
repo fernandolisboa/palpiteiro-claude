@@ -30,9 +30,9 @@ export const authConfig = {
   providers: [],
   callbacks: {
     // O gate de whitelist (signIn) vive no `auth.ts` (Node), não aqui, porque
-    // lê o DB (`pending_invites`/`users.allowed`) — ADR 0009. Este config é
-    // edge-safe e NÃO pode importar DB. O middleware só usa authorized/jwt/
-    // session, então a ausência do signIn aqui é segura.
+    // lê o DB (`users.allowed`) — ADR 0009/0023. Este config é edge-safe e NÃO
+    // pode importar DB. O middleware só usa authorized/jwt/session, então a
+    // ausência do signIn aqui é segura.
     /** Gate do middleware: exige sessão pra qualquer rota protegida. */
     authorized({ auth }) {
       return !!auth?.user;

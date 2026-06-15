@@ -18,7 +18,7 @@ export default async function AdminUserPredictionPage({ params }: PageProps) {
   const { userId, predictionId } = await params;
 
   // Re-check defensivo: dado privilegiado (predição + payloads de outro usuário).
-  // Defense-in-depth — NÃO confiar só no gate do layout. Espelha costs/invites.
+  // Defense-in-depth — NÃO confiar só no gate do layout. Espelha costs.
   const session = await auth();
   if (session?.user?.role !== "admin") notFound();
 

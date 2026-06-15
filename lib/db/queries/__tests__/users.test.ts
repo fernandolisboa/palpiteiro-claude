@@ -2,7 +2,7 @@ import { beforeEach, describe, expect, it, vi } from "vitest";
 
 // vi.hoisted: o factory do vi.mock é içado pro topo do arquivo, então qualquer
 // estado/spy que ele referencia precisa ser criado via vi.hoisted (também
-// içado). Espelha o chain-stub de invites.test.ts / odds-snapshots.
+// içado). Espelha o chain-stub de odds-snapshots.
 const h = vi.hoisted(() => {
   const state = {
     whereCalled: false,

@@ -15,7 +15,6 @@ import {
 import { isSignInAllowed } from "@/lib/auth/whitelist-db";
 import { revalidateToken } from "@/lib/auth/jwt-revalidate";
 import { db } from "@/lib/db";
-import { promoteInvitedUserOnLogin } from "@/lib/db/queries/invites";
 import { getUserAccessState } from "@/lib/db/queries/users";
 
 /**
@@ -104,14 +103,6 @@ export const { handlers, auth, signIn, signOut, unstable_update } = NextAuth({
       const stamped = await stampJwt(params);
       if (!stamped) return stamped;
       return revalidateToken(stamped, getUserAccessState);
-    },
-  },
-  // createUser dispara uma vez no primeiro login, DEPOIS do signIn ter
-  // autorizado. Promove o usuário recém-criado (allowed=true + apaga o convite)
-  // pra evitar lockout no próximo login.
-  events: {
-    async createUser({ user }) {
-      await promoteInvitedUserOnLogin(user);
     },
   },
 });

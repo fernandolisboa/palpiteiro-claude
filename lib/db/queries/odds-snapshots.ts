@@ -101,8 +101,8 @@ export async function insertOddsSnapshot(
 /**
  * Insert binário (tabela LEGADA `match_odds_snapshots`). Retorna o query builder
  * NÃO-awaited pra caber em `db.batch([...])` — neon-http não tem `db.transaction`
- * (LANÇA em runtime; ver `invites.ts`). Callers que só querem inserir podem
- * `await` o retorno normalmente.
+ * (LANÇA em runtime). Callers que só querem inserir podem `await` o retorno
+ * normalmente.
  *
  * `capturedAt` é OPCIONAL: por default cai no `defaultNow()` do schema (back-compat
  * com o comportamento atual). O dual-write (#164) passa o MESMO `now` de escrita às
