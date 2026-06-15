@@ -34,6 +34,15 @@ next-env.d.ts
 .claude/skills/
 .github/skills/
 
+# Playwright MCP session artifacts (page snapshots + console logs, machine-local)
+.playwright-mcp/
+
+# pnpm v10 build-script-approval stub: auto-generated, never filled in (placeholder
+# values), and committing it makes pnpm treat the repo as a WORKSPACE ROOT, which
+# breaks `pnpm install` on CI/other machines. Local artifact. If a REAL one is ever
+# needed (valid onlyBuiltDependencies), commit it deliberately with `git add -f`.
+pnpm-workspace.yaml
+
 # misc
 .DS_Store
 *.pem
