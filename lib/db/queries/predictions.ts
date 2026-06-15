@@ -1,4 +1,16 @@
-import { and, asc, desc, eq, isNull, lt } from "drizzle-orm";
+import {
+  and,
+  asc,
+  desc,
+  eq,
+  gt,
+  inArray,
+  isNotNull,
+  isNull,
+  lte,
+  lt,
+  ne,
+} from "drizzle-orm";
 
 import {
   aiCalls,
@@ -191,6 +203,59 @@ export async function getPendingSettlementPredictions(
       and(isNull(predictionOutcomes.id), lt(matches.kickoffAt, cutoff)),
     )
     .orderBy(desc(matches.kickoffAt));
+}
+
+// Um jogo perto do kickoff com ≥1 predição non-pass, + as keys de mercado distintas
+// dessas predições (pra resolver os descriptors a capturar). `match` é a row inteira
+// (ensureOddsSnapshotsFresh a consome).
+export type NearKickoffMatch = {
+  match: DbMatch;
+  marketKeys: string[];
+};
+
+/**
+ * Jogos com KO em (now, now+lookahead] que têm ≥1 predição NON-PASS (CLV, #180).
+ * Filtra `recommendation != 'pass'` E `selectionId IS NOT NULL` (sem captura pra
+ * pass — economia de quota, AC do #180) e status scheduled/live (não captura jogo
+ * cancelado/adiado/já-finalizado). Agrupa em JS as keys de mercado distintas por
+ * jogo: o caller resolve os descriptors e captura SÓ esses mercados. Rows sem
+ * marketKey (histórica não-backfillada) são dropadas (não há descriptor a buscar).
+ */
+export async function getNonPassPredictionsNearKickoff(args: {
+  now?: Date;
+  lookaheadMs: number;
+}): Promise<NearKickoffMatch[]> {
+  const now = args.now ?? new Date();
+  const until = new Date(now.getTime() + args.lookaheadMs);
+
+  const rows = await db
+    .select({ match: matches, marketKey: markets.key })
+    .from(predictions)
+    .innerJoin(matches, eq(predictions.matchId, matches.id))
+    .leftJoin(markets, eq(predictions.marketId, markets.id))
+    .where(
+      and(
+        ne(predictions.recommendation, "pass"),
+        isNotNull(predictions.selectionId),
+        inArray(matches.status, ["scheduled", "live"]),
+        gt(matches.kickoffAt, now),
+        lte(matches.kickoffAt, until),
+      ),
+    )
+    .orderBy(asc(matches.kickoffAt));
+
+  // Agrupa por jogo, keys de mercado distintas (Set). Sem marketKey → ignora.
+  const byMatch = new Map<string, { match: DbMatch; keys: Set<string> }>();
+  for (const r of rows) {
+    if (!r.marketKey) continue;
+    const entry = byMatch.get(r.match.id);
+    if (entry) entry.keys.add(r.marketKey);
+    else byMatch.set(r.match.id, { match: r.match, keys: new Set([r.marketKey]) });
+  }
+  return [...byMatch.values()].map((e) => ({
+    match: e.match,
+    marketKeys: [...e.keys],
+  }));
 }
 
 export type PredictionForOverride = {

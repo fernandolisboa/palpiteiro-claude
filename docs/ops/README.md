@@ -102,6 +102,10 @@ do go-live. Resumão do que cada etapa fecha:
 > (e-mail chega na caixa deles), veem recomendações + dashboard/Yield, e os crons
 > rodam autenticados. Detalhe completo em [`07-checklist-go-live.md`](./07-checklist-go-live.md).
 
+## Outros docs operacionais (fora da sequência de go-live)
+
+- [`08-clv-quota.md`](./08-clv-quota.md) — **CLV (closing line value): captura pré-kickoff e custo de quota.** Modelo de créditos/mês da The Odds API, como a quota é medida (logs por-call + summary do cron) e a flag `enableClvCapture` (default OFF). Ligar só quando a quota comportar.
+
 ## Cross-links
 
 - [`07-checklist-go-live.md`](./07-checklist-go-live.md) — checklist mestre de go-live (passo a passo).

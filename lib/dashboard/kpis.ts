@@ -1,3 +1,5 @@
+import { clvNoVigDeltaPp, clvOddsRatioPct } from "@/lib/odds/clv";
+import { getDescriptor } from "@/lib/odds/market-descriptor";
 import { leagueToKey } from "@/lib/format";
 import type { SupportedLeague } from "@/lib/providers/sports-data/leagues";
 import type { LeagueFilter } from "@/lib/view/types";
@@ -33,6 +35,19 @@ export type DashboardRow = {
   result: "won" | "lost" | "void" | "push" | null;
   profitUnits: string | null;
   settledAt: Date | null;
+  // ── CLV (#180): identidade da seleção/linha + insumos da prob no-vig ──────────
+  // selectionId NULL em pass; marketParams.line indexa a closing line por linha
+  // (over/under). impliedProbPct = prob no-vig da recomendação (já ×impliedSumTarget).
+  selectionId: string | null;
+  marketId: string | null;
+  marketParams: { line: number } | null;
+  kickoffAt: Date;
+  impliedProbPct: string | null;
+  // ENRIQUECIDOS pós-dedup (null na query; preenchidos por
+  // enrichDashboardRowsWithClosing). null = sem closing line capturada perto do KO
+  // → CLV null (honesto). overroundPct é do MERCADO COMPLETO (alimenta o CLV no-vig).
+  closingOdd: string | null;
+  closingOverroundPct: string | null;
 };
 
 // `push` entra no enum no expand da Fase 1 (#161), mas NENHUM caminho o emite ou o
@@ -69,6 +84,12 @@ export type DashboardKpis = {
   yield: Rate;
   winRate: Rate;
   passRate: Rate;
+  // CLV companheiro do Yield (#180): MÉDIA do CLV por predição non-pass COM closing
+  // line — settled OU não (o ponto do CLV é dar sinal ANTES do Yield convergir).
+  // `value` = média (+ = bateu o fechamento); `n` = predições com closing. Cada um
+  // independente: razão-de-odds só precisa das odds; o no-vig precisa de impliedProbPct.
+  clvOddsRatio: Rate;
+  clvNoVigDelta: Rate;
 };
 
 export type BankrollPoint = {
@@ -85,6 +106,55 @@ function num(value: string | null | undefined): number {
   if (value == null) return 0;
   const n = Number(value);
   return Number.isFinite(n) ? n : 0;
+}
+
+// Como `num`, mas preserva a ausência: null/inválido → null (NÃO 0). Pro CLV, odd
+// faltante tem que virar CLV null, não um 0 que entraria na média. [[drizzle-numeric-returns-string]]
+export function numOrNull(value: string | null | undefined): number | null {
+  if (value == null) return null;
+  const n = Number(value);
+  return Number.isFinite(n) ? n : null;
+}
+
+// Taxa = MÉDIA dos valores (diferente de makeRate, que é razão num/den). Pro CLV
+// agregado: média das métricas por predição. value null com amostra vazia → "—".
+function meanRate(values: number[]): Rate {
+  const n = values.length;
+  if (n === 0) return { value: null, n: 0, lowSample: false };
+  return { value: sum(values) / n, n, lowSample: n < LOW_SAMPLE_THRESHOLD };
+}
+
+// impliedSumTarget do mercado (1 partição: over/under, 1X2; 2 dupla chance) — fonte
+// única é o descriptor (ADR 0018). Mantém o CLV no-vig na MESMA escala que impliedProbPct.
+function impliedSumTargetForMarket(marketKey: string): number {
+  return getDescriptor(marketKey)?.impliedSumTarget ?? 1;
+}
+
+// As duas métricas de CLV agregadas sobre as rows non-pass COM closing line.
+function computeClvRates(rows: DashboardRow[]): {
+  clvOddsRatio: Rate;
+  clvNoVigDelta: Rate;
+} {
+  const nonPass = rows.filter((r) => r.recommendation !== "pass");
+  const oddsRatioVals = nonPass
+    .map((r) =>
+      clvOddsRatioPct(numOrNull(r.oddAtRecommendation), numOrNull(r.closingOdd)),
+    )
+    .filter((v): v is number => v !== null);
+  const noVigVals = nonPass
+    .map((r) =>
+      clvNoVigDeltaPp(
+        numOrNull(r.impliedProbPct),
+        numOrNull(r.closingOdd),
+        numOrNull(r.closingOverroundPct),
+        impliedSumTargetForMarket(r.marketKey),
+      ),
+    )
+    .filter((v): v is number => v !== null);
+  return {
+    clvOddsRatio: meanRate(oddsRatioVals),
+    clvNoVigDelta: meanRate(noVigVals),
+  };
 }
 
 function round2(n: number): number {
@@ -192,6 +262,7 @@ export function computeDashboardKpis(rows: DashboardRow[]): DashboardKpis {
     },
     winRate: makeRate(won, won + lost),
     passRate: makeRate(passes, totalPredictions),
+    ...computeClvRates(rows),
   };
 }
 

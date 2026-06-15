@@ -27,6 +27,13 @@ function row(overrides: Partial<DashboardRow> = {}): DashboardRow {
     result: null,
     profitUnits: null,
     settledAt: null,
+    selectionId: null,
+    marketId: null,
+    marketParams: null,
+    kickoffAt: new Date("2026-06-08T20:00:00Z"),
+    impliedProbPct: null,
+    closingOdd: null,
+    closingOverroundPct: null,
     ...overrides,
   };
 }
@@ -84,6 +91,23 @@ describe("toDashboardKpiView", () => {
     expect(v.winRate.value).toBe("100%");
     expect(v.winRate.n).toBe(1);
     expect(v.winRate.lowSample).toBe(true);
+  });
+
+  it("formata CLV sinalizado + unidade; '—' sem amostra (#180)", () => {
+    const empty = toDashboardKpiView(computeDashboardKpis([]));
+    expect(empty.clvOddsRatio.value).toBe("—");
+    expect(empty.clvNoVigDelta.value).toBe("—");
+
+    const v = toDashboardKpiView(
+      computeDashboardKpis([
+        row({ oddAtRecommendation: "2.10", closingOdd: "1.95" }),
+      ]),
+    );
+    expect(v.clvOddsRatio.value.startsWith("+")).toBe(true);
+    expect(v.clvOddsRatio.value.endsWith("%")).toBe(true);
+    expect(v.clvOddsRatio.n).toBe(1);
+    // sem impliedProbPct → no-vig "—" mesmo com a razão-de-odds presente.
+    expect(v.clvNoVigDelta.value).toBe("—");
   });
 });
 
@@ -348,5 +372,34 @@ describe("toPredictionDetailView", () => {
       { includeRawPayloads: false },
     );
     expect(legacy.prediction.bookmaker).toBe("—");
+  });
+
+  it("CLV por predição com closing line (#180): odd de fechamento + métricas sinalizadas", () => {
+    // makeDetail: oddRec 1.920, impliedProbPct 42.89, marketKey null → over_under (impliedSumTarget 1).
+    const v = toPredictionDetailView(makeDetail(), {
+      includeRawPayloads: false,
+      closing: {
+        oddClose: "1.850",
+        overroundPctClose: "4.50",
+        bookmaker: "BetY",
+        capturedAt: new Date("2026-06-12T01:55:00Z"),
+      },
+    });
+    expect(v.clv.available).toBe(true);
+    expect(v.clv.closingOdd).toBe("1.85");
+    // oddRec 1.92 > close 1.85 → bati o fechamento → +
+    expect(v.clv.oddsRatioPct.startsWith("+")).toBe(true);
+    expect(v.clv.oddsRatioPct.endsWith("%")).toBe(true);
+    expect(v.clv.noVigDeltaPp.endsWith(" pp")).toBe(true);
+  });
+
+  it("CLV ausente sem closing line capturada → tudo '—', available false", () => {
+    const v = toPredictionDetailView(makeDetail(), {
+      includeRawPayloads: false,
+    });
+    expect(v.clv.available).toBe(false);
+    expect(v.clv.closingOdd).toBe("—");
+    expect(v.clv.oddsRatioPct).toBe("—");
+    expect(v.clv.noVigDeltaPp).toBe("—");
   });
 });

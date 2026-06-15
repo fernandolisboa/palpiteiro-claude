@@ -15,6 +15,7 @@ import {
   deriveDashboardView,
   parseDashboardFilters,
 } from "@/lib/dashboard/derive-view";
+import { enrichDashboardRowsWithClosing } from "@/lib/dashboard/clv-enrich";
 import { getUserDashboardRows } from "@/lib/db/queries/dashboard";
 
 export const dynamic = "force-dynamic";
@@ -34,7 +35,10 @@ export default async function DashboardPage({ searchParams }: PageProps) {
   const session = await auth();
   if (!session?.user?.id) redirect("/signin");
 
-  const rows = await getUserDashboardRows(session.user.id);
+  // CLV (#180): anexa a closing line às rows que o dashboard conta (deduped+non-pass).
+  const rows = await enrichDashboardRowsWithClosing(
+    await getUserDashboardRows(session.user.id),
+  );
 
   const filters = parseDashboardFilters(
     { status, league, market },

@@ -15,6 +15,8 @@ function segment(
       yieldPct: { value: "+8%", n: 32, lowSample: false },
       winRate: { value: "55%", n: 32, lowSample: false },
       passRate: { value: "40%", n: 50, lowSample: false },
+      clvOddsRatio: { value: "+3.2%", n: 30, lowSample: false },
+      clvNoVigDelta: { value: "+1.8 pp", n: 30, lowSample: false },
       totalProfit: "+2.56 u",
       profitPositive: true,
       counts: {

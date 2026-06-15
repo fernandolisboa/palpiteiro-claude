@@ -1,4 +1,5 @@
 import type { DashboardDetail } from "@/lib/db/queries/dashboard";
+import type { ClosingSnapshot } from "@/lib/db/queries/clv-snapshots";
 import type {
   BankrollPoint,
   DashboardKpis,
@@ -8,7 +9,9 @@ import type {
   Rate,
   StakeBandYield,
 } from "@/lib/dashboard/kpis";
-import { rowStatus } from "@/lib/dashboard/kpis";
+import { numOrNull, rowStatus } from "@/lib/dashboard/kpis";
+import { computeClv } from "@/lib/odds/clv";
+import { getDescriptor } from "@/lib/odds/market-descriptor";
 import {
   formatCostUsd,
   formatEdge,
@@ -55,6 +58,10 @@ export type DashboardKpiView = {
   yieldPct: RateView;
   winRate: RateView;
   passRate: RateView;
+  // CLV companheiro do Yield (#180). Strings já com sinal+unidade ("+7.7%" / "+3.2 pp")
+  // ou "—" sem amostra. + = bateu o fechamento (bom).
+  clvOddsRatio: RateView;
+  clvNoVigDelta: RateView;
   totalProfit: string;
   profitPositive: boolean;
   counts: {
@@ -73,11 +80,28 @@ function toRateView(rate: Rate): RateView {
   return { value: formatPct(rate.value), n: rate.n, lowSample: rate.lowSample };
 }
 
+// CLV é SINALIZADO (+ = bom) e numa unidade própria (% pra razão-de-odds, pp pro
+// no-vig) — formatEdge dá "+7.7"/"-2.1"/null, append a unidade; null → "—".
+function formatClvValue(value: number | null, unit: string): string {
+  const formatted = formatEdge(value);
+  return formatted === null ? "—" : `${formatted}${unit}`;
+}
+
+function toClvRateView(rate: Rate, unit: string): RateView {
+  return {
+    value: formatClvValue(rate.value, unit),
+    n: rate.n,
+    lowSample: rate.lowSample,
+  };
+}
+
 export function toDashboardKpiView(kpis: DashboardKpis): DashboardKpiView {
   return {
     yieldPct: toRateView(kpis.yield),
     winRate: toRateView(kpis.winRate),
     passRate: toRateView(kpis.passRate),
+    clvOddsRatio: toClvRateView(kpis.clvOddsRatio, "%"),
+    clvNoVigDelta: toClvRateView(kpis.clvNoVigDelta, " pp"),
     totalProfit: unitsLabel(kpis.totalProfitUnits),
     profitPositive: kpis.totalProfitUnits >= 0,
     counts: {
@@ -228,6 +252,16 @@ export type PredictionDetailView = {
     promptVersion: string;
     createdAt: string;
   };
+  // CLV por predição (#180): odd de entrada vs odd de FECHAMENTO. `available` =
+  // houve closing line capturada na janela [KO−40min, KO]. Strings já formatadas
+  // (+ = bateu o fechamento) ou "—". no-vig pode faltar (sem impliedProbPct) mesmo
+  // com closing — fica "—" independente da razão-de-odds.
+  clv: {
+    available: boolean;
+    closingOdd: string;
+    oddsRatioPct: string;
+    noVigDeltaPp: string;
+  };
   outcome: {
     result: "won" | "lost" | "void" | "push";
     profit: string;
@@ -254,7 +288,7 @@ export type PredictionDetailView = {
 
 export function toPredictionDetailView(
   detail: DashboardDetail,
-  opts: { includeRawPayloads: boolean },
+  opts: { includeRawPayloads: boolean; closing?: ClosingSnapshot | null },
 ): PredictionDetailView {
   const { prediction, match, outcome, aiCall } = detail;
   const score =
@@ -268,6 +302,17 @@ export function toPredictionDetailView(
   // métrica de settlement.
   const marketKey = detail.marketKey ?? "over_under";
   const presentation = getMarketPresentation(marketKey);
+
+  // CLV (#180): odd de entrada vs odd de fechamento da seleção escolhida. impliedSumTarget
+  // do descriptor mantém o no-vig na MESMA escala de impliedProbPct. Sem closing → tudo "—".
+  const closing = opts.closing ?? null;
+  const clv = computeClv({
+    oddRec: numOrNull(prediction.oddAtRecommendation),
+    oddClose: numOrNull(closing?.oddClose),
+    overroundPctClose: numOrNull(closing?.overroundPctClose),
+    recImpliedPct: numOrNull(prediction.impliedProbPct),
+    impliedSumTarget: getDescriptor(marketKey)?.impliedSumTarget ?? 1,
+  });
 
   return {
     id: prediction.id,
@@ -296,6 +341,12 @@ export function toPredictionDetailView(
       model: formatModelName(prediction.modelVersion),
       promptVersion: prediction.promptVersion,
       createdAt: formatKickoffAbsolute(prediction.createdAt),
+    },
+    clv: {
+      available: closing !== null,
+      closingOdd: formatOdd(closing?.oddClose ?? null),
+      oddsRatioPct: formatClvValue(clv.oddsRatioPct, "%"),
+      noVigDeltaPp: formatClvValue(clv.noVigDeltaPp, " pp"),
     },
     outcome: outcome
       ? {

@@ -12,6 +12,10 @@
     {
       "path": "/api/cron/sync-fixtures",
       "schedule": "0 */6 * * *"
+    },
+    {
+      "path": "/api/cron/capture-closing-odds",
+      "schedule": "*/30 * * * *"
     }
   ]
 }
