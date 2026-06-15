@@ -1,6 +1,6 @@
 {
-  "id": "9afb6bcd-ce69-4908-beed-5ac26c554337",
-  "prevId": "124de9a1-b8c9-4df4-ae4a-e5d30a50c69a",
+  "id": "b99e577d-ea1b-4984-9bda-5875786839c3",
+  "prevId": "9afb6bcd-ce69-4908-beed-5ac26c554337",
   "version": "7",
   "dialect": "postgresql",
   "tables": {
@@ -312,6 +312,13 @@
         },
         "enable_over_under_extra_lines": {
           "name": "enable_over_under_extra_lines",
+          "type": "boolean",
+          "primaryKey": false,
+          "notNull": true,
+          "default": false
+        },
+        "enable_best_bet_fan_out": {
+          "name": "enable_best_bet_fan_out",
           "type": "boolean",
           "primaryKey": false,
           "notNull": true,

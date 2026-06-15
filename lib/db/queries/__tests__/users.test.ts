@@ -69,6 +69,7 @@ import {
   getPreferredModelId,
   getUserAllowedByEmail,
   getUserById,
+  markTermsAccepted,
   searchUsers,
   setPreferredModelId,
 } from "@/lib/db/queries/users";
@@ -215,6 +216,30 @@ describe("setPreferredModelId — grava (ou limpa) a preferência", () => {
     expect(h.state.updateSetArg).toEqual({ preferredModelId: null });
     const cond = h.state.updateWhereArg as { op?: string; val?: unknown };
     expect(cond.op).toBe("eq");
+    expect(cond.val).toBe("u1");
+  });
+});
+
+describe("markTermsAccepted — carimba o aceite 18+ no 1º login (#282)", () => {
+  it("grava acceptedTermsAt como Date e aplica eq(users.id, userId)", async () => {
+    const before = Date.now();
+    await markTermsAccepted("u1");
+    const after = Date.now();
+
+    const set = h.state.updateSetArg as { acceptedTermsAt?: unknown };
+    expect(set.acceptedTermsAt).toBeInstanceOf(Date);
+    // O carimbo é "agora" — dentro da janela da chamada (não um valor fixo/null).
+    const ts = (set.acceptedTermsAt as Date).getTime();
+    expect(ts).toBeGreaterThanOrEqual(before);
+    expect(ts).toBeLessThanOrEqual(after);
+
+    const cond = h.state.updateWhereArg as {
+      op?: string;
+      col?: unknown;
+      val?: unknown;
+    };
+    expect(cond.op).toBe("eq");
+    expect(cond.col).toBe(users.id);
     expect(cond.val).toBe("u1");
   });
 });

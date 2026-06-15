@@ -15,7 +15,7 @@ import {
 import { isSignInAllowed } from "@/lib/auth/whitelist-db";
 import { revalidateToken } from "@/lib/auth/jwt-revalidate";
 import { db } from "@/lib/db";
-import { getUserAccessState } from "@/lib/db/queries/users";
+import { getUserAccessState, markTermsAccepted } from "@/lib/db/queries/users";
 
 /**
  * Config completa (Node runtime) — estende o `authConfig` edge-safe com o
@@ -103,6 +103,22 @@ export const { handlers, auth, signIn, signOut, unstable_update } = NextAuth({
       const stamped = await stampJwt(params);
       if (!stamped) return stamped;
       return revalidateToken(stamped, getUserAccessState);
+    },
+  },
+  // Carimbo de auditoria do aceite de maioridade (#282, ADR/ops 05). `createUser`
+  // dispara quando o adapter INSERE a row de `users` — pra QUALQUER provider
+  // (Google / magic link / passkey-register) — então um ponto só cobre os três
+  // métodos. A row só nasce depois de o usuário ter destravado o método pelo
+  // checkbox obrigatório 18+ do /signin (o gate é a UI; isto é a prova
+  // persistida do consentimento). Vive AQUI (Node, junto do adapter/DB), NUNCA
+  // no `auth.config.ts` (edge): `markTermsAccepted` lê `@/lib/db` e puxaria o
+  // cliente Neon pro bundle do middleware — o guard de `auth.config.test.ts`
+  // trava DB no edge. Não toca signIn/jwt (cost-safety/whitelist intactos).
+  events: {
+    async createUser({ user }) {
+      // `user.id` é opcional no tipo do evento; o guard evita passar undefined
+      // sob strict (na prática o adapter sempre devolve a row com id).
+      if (user.id) await markTermsAccepted(user.id);
     },
   },
 });

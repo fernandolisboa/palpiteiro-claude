@@ -1,0 +1,1 @@
+ALTER TABLE "users" ADD COLUMN "accepted_terms_at" timestamp with time zone;
