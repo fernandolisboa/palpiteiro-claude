@@ -110,3 +110,36 @@ export async function getClosingSnapshotsForPredictions(
   }
   return out;
 }
+
+/**
+ * Closing line de UMA predição (drill-down: detail do usuário E do admin). Guarda
+ * defensiva tripla espelhando enrichDashboardRowsWithClosing: pass / sem marketId /
+ * sem selectionId → null (sem closing, CLV "—"). Centraliza pra os dois caminhos de
+ * detail não divergirem (o admin renderizava sempre "—" antes do #180 wire).
+ */
+export async function getClosingSnapshotForDetail(prediction: {
+  id: string;
+  matchId: string;
+  marketId: string | null;
+  selectionId: string | null;
+  recommendation: string;
+  marketParams: { line: number } | null;
+}): Promise<ClosingSnapshot | null> {
+  if (
+    prediction.recommendation === "pass" ||
+    prediction.marketId === null ||
+    prediction.selectionId === null
+  ) {
+    return null;
+  }
+  const map = await getClosingSnapshotsForPredictions([
+    {
+      predictionId: prediction.id,
+      matchId: prediction.matchId,
+      marketId: prediction.marketId,
+      selectionId: prediction.selectionId,
+      line: prediction.marketParams?.line ?? null,
+    },
+  ]);
+  return map.get(prediction.id) ?? null;
+}

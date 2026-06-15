@@ -29,7 +29,10 @@ vi.mock("@/lib/db", () => ({
   ),
 }));
 
-import { getClosingSnapshotsForPredictions } from "@/lib/db/queries/clv-snapshots";
+import {
+  getClosingSnapshotForDetail,
+  getClosingSnapshotsForPredictions,
+} from "@/lib/db/queries/clv-snapshots";
 import { getNonPassPredictionsNearKickoff } from "@/lib/db/queries/predictions";
 import { insertSelectionOddsSnapshotsBatch } from "@/lib/db/queries/odds-snapshots";
 
@@ -199,6 +202,51 @@ describe("getClosingSnapshotsForPredictions — janela [KO−40min, KO]", () => 
       input({ predictionId: "pass-1", selectionId: null }),
     ]);
     expect(map.size).toBe(0);
+  });
+});
+
+describe("getClosingSnapshotForDetail — guarda do drill-down", () => {
+  beforeEach(async () => {
+    await insertSelectionOddsSnapshotsBatch([
+      snap(ids.ouOver, "1.900", minutesBeforeKO(10)),
+    ]);
+  });
+
+  it("non-pass com seleção/mercado → retorna a closing line", async () => {
+    const c = await getClosingSnapshotForDetail({
+      id: "p",
+      matchId: ids.matchId,
+      marketId: ids.ouMarketId,
+      selectionId: ids.ouOver,
+      recommendation: "over",
+      marketParams: { line: 2.5 },
+    });
+    expect(c?.oddClose).toBe("1.900");
+  });
+
+  it("recommendation 'pass' → null mesmo com snapshot existente (guarda)", async () => {
+    const c = await getClosingSnapshotForDetail({
+      id: "p",
+      matchId: ids.matchId,
+      marketId: ids.ouMarketId,
+      selectionId: ids.ouOver, // mesmo com selectionId, pass não tem CLV
+      recommendation: "pass",
+      marketParams: { line: 2.5 },
+    });
+    expect(c).toBeNull();
+  });
+
+  it("marketId/selectionId null → null", async () => {
+    expect(
+      await getClosingSnapshotForDetail({
+        id: "p",
+        matchId: ids.matchId,
+        marketId: null,
+        selectionId: ids.ouOver,
+        recommendation: "over",
+        marketParams: { line: 2.5 },
+      }),
+    ).toBeNull();
   });
 });
 

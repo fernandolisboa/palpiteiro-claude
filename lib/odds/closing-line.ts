@@ -21,6 +21,8 @@ export type CaptureClosingLinesSummary = {
   errors: number;
   // Crédito mensal da The Odds API após o run (medição de quota — AC). Os logs
   // por-call do quota-logger já trazem a telemetria exata; isto é a linha de summary.
+  // `null` = nenhum fetch real neste run (flag OFF, zero candidato, ou TUDO cache-hit
+  // — quota só é registrada em call não-cache-hit) → consultar os logs por-call.
   quotaMonthlyRemaining: number | null;
   quotaMonthlyUsed: number | null;
 };
