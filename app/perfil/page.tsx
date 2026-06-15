@@ -4,8 +4,10 @@ import { BackLink } from "@/components/back-link";
 import { auth } from "@/auth";
 import { MODEL_REGISTRY, modelsForAudience } from "@/lib/ai/models";
 import { getDefaultModelId } from "@/lib/db/queries/ai-config";
+import { listAuthenticatorsByUserId } from "@/lib/db/queries/authenticators";
 import { getUserProfile } from "@/lib/db/queries/users";
 
+import { PasskeysSection } from "./passkeys-section";
 import { PreferredModelForm } from "./preferred-model-form";
 import { ProfileForm } from "./profile-form";
 
@@ -19,9 +21,10 @@ export default async function PerfilPage() {
   // Sessão JWT pode apontar pra um id que não existe mais (reset + claim-admin);
   // trata como sessão órfã, igual ao guard de `getUserAccessState` no fluxo de
   // predição (e ao drop de sessão no jwt() do Node — #252).
-  const [profile, defaultModelId] = await Promise.all([
+  const [profile, defaultModelId, authenticators] = await Promise.all([
     getUserProfile(session.user.id),
     getDefaultModelId(),
+    listAuthenticatorsByUserId(session.user.id),
   ]);
   if (!profile) redirect("/signin");
   const defaultModelLabel = MODEL_REGISTRY[defaultModelId].label;
@@ -63,6 +66,16 @@ export default async function PerfilPage() {
             preferredModelId={profile.preferredModelId}
             defaultModelLabel={defaultModelLabel}
           />
+        </div>
+
+        <div className="border-border mt-10 border-t pt-8">
+          <h2 className="text-[16px] font-medium tracking-[-0.02em]">
+            Passkeys
+          </h2>
+          <p className="text-muted-foreground pb-5 font-mono text-[11px]">
+            login sem senha · biometria ou PIN do dispositivo
+          </p>
+          <PasskeysSection authenticators={authenticators} />
         </div>
       </div>
     </div>

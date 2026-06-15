@@ -2,10 +2,12 @@ import { DrizzleAdapter } from "@auth/drizzle-adapter";
 import NextAuth from "next-auth";
 import Google from "next-auth/providers/google";
 import Resend from "next-auth/providers/resend";
+import WebAuthn from "next-auth/providers/webauthn";
 
 import { authConfig } from "@/auth.config";
 import {
   accounts,
+  authenticators,
   sessions,
   users,
   verificationTokens,
@@ -34,6 +36,12 @@ import { getUserAccessState } from "@/lib/db/queries/users";
  */
 export const { handlers, auth, signIn, signOut, unstable_update } = NextAuth({
   ...authConfig,
+  // WebAuthn/passkey é EXPERIMENTAL no Auth.js v5 beta; o flag precisa estar
+  // ligado pro provider WebAuthn registrar os endpoints (webauthn-options). Mora
+  // AQUI (Node, junto do adapter), NUNCA no `auth.config.ts` (edge): o provider
+  // arrasta o adapter + `@simplewebauthn/server` (Node-only), que quebrariam o
+  // bundle do middleware. ADR 0023.
+  experimental: { enableWebAuthn: true },
   // `providers` e `adapter` DEPOIS do spread de propósito: o spread traz
   // `providers: []` do edge config; estas chaves precisam sobrescrever isso.
   // Inverter a ordem zera os providers e quebra signIn("resend") silenciosamente.
@@ -44,12 +52,27 @@ export const { handlers, auth, signIn, signOut, unstable_update } = NextAuth({
     Google({ allowDangerousEmailAccountLinking: true }),
     // apiKey é auto-detectada de AUTH_RESEND_KEY pelo Auth.js.
     Resend({ from: process.env.RESEND_FROM_EMAIL }),
+    // Passkey (WebAuthn), método OPCIONAL adicional. `id: "passkey"` sobrescreve
+    // o default "webauthn" do provider — o `signIn` cliente (next-auth/webauthn)
+    // valida `providers[id].type === "webauthn"`, então o id customizado é só a
+    // chave/URL; os call-sites usam `signIn("passkey", …)`. SEM `relayingParty`
+    // literal: o default do provider deriva o RP id por-request (`url.hostname`)
+    // e origin (`url.origin`), o que com `trustHost: true` (auth.config.ts)
+    // resolve localhost / *.vercel.app / palpiteiro.live automaticamente, por
+    // ambiente, sem hardcode. Consequência esperada do WebAuthn (não bug): uma
+    // passkey é por-RP-id — registrada em localhost/preview não vale em prod nem
+    // em outro preview (host muda). Documentado no PR/ADR 0023.
+    WebAuthn({ id: "passkey" }),
   ],
   adapter: DrizzleAdapter(db, {
     usersTable: users,
     accountsTable: accounts,
     sessionsTable: sessions,
     verificationTokensTable: verificationTokens,
+    // Tabela das credenciais passkey — o provider WebAuthn usa
+    // createAuthenticator/getAuthenticator/listAuthenticatorsByUserId/
+    // updateAuthenticatorCounter. `userId` uuid casa o generic do adapter.
+    authenticatorsTable: authenticators,
   }),
   // signIn DB-aware mora AQUI (Node), não no `auth.config.ts` edge — lê o DB
   // (ADR 0009). Roda ANTES do envio do magic link (fluxo do @auth/core), então
