@@ -97,29 +97,37 @@ const OVER_UNDER_SELECTION_LABELS: Record<string, string> = {
 //     3.5→3 (o complemento inteiro do over).
 //   - "menos de N gols" (framing do under) usa Math.ceil(line): 1.5→2, 2.5→3.
 // PINADO em line=2.5 byte-idêntico ao texto pré-pivot pelos goldens existentes.
+// Pluralização PT-BR de contagem INTEIRA de gols: "1 gol" vs "N gols". Só afeta a
+// contagem singular (linha 1.5 under → "no máximo 1 gol"); em 2.5 as contagens são
+// 2/3 → "gols", byte-idêntico ao texto pré-pivot. Os labels DECIMAIS ("1.5 gols",
+// "mais de 2.5 gols") são sempre plural em PT-BR e não passam por aqui.
+function golsCount(n: number): string {
+  return n === 1 ? `${n} gol` : `${n} gols`;
+}
+
 function overUnderBetSummary(key: string, line: number): BetSummaryCopy {
   const atLeast = Math.ceil(line);
   if (key === "over") {
     return {
       market: `Mais de ${line} gols`,
-      plain: `pelo menos ${atLeast} gols no jogo`,
+      plain: `pelo menos ${golsCount(atLeast)} no jogo`,
     };
   }
   if (key === "under") {
     return {
       market: `Menos de ${line} gols`,
-      plain: `no máximo ${atLeast - 1} gols no jogo`,
+      plain: `no máximo ${golsCount(atLeast - 1)} no jogo`,
     };
   }
   return { market: lookup(OVER_UNDER_SELECTION_LABELS, key, key), plain: "" };
 }
 
 // Label do lado na frase de framing do break-even — DIRIGIDO PELA LINHA (#175).
-// "pelo menos N gols"/"menos de N gols" com N = Math.ceil(line).
+// "pelo menos N gols"/"menos de N gols" com N = Math.ceil(line) (pluralizado).
 function overUnderFramingLabel(key: string, line: number): string {
   const goals = Math.ceil(line);
-  if (key === "over") return `pelo menos ${goals} gols`;
-  if (key === "under") return `menos de ${goals} gols`;
+  if (key === "over") return `pelo menos ${golsCount(goals)}`;
+  if (key === "under") return `menos de ${golsCount(goals)}`;
   return lookup(OVER_UNDER_SELECTION_LABELS, key, key);
 }
 

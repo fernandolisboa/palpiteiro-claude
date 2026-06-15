@@ -50,7 +50,7 @@ describe("getMarketPresentation", () => {
     });
     expect(p.betSummary("under", 1.5)).toEqual({
       market: "Menos de 1.5 gols",
-      plain: "no máximo 1 gols no jogo",
+      plain: "no máximo 1 gol no jogo",
     });
     expect(p.framingLabel("over", 1.5)).toBe("pelo menos 2 gols");
     expect(p.framingLabel("under", 1.5)).toBe("menos de 2 gols");

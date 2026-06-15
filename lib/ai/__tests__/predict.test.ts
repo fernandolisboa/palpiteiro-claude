@@ -1466,6 +1466,48 @@ describe("predict() — multi-linha (#175): linha escolhida round-trip pro persi
     expect(predictionRow.edgePct).toBe((62 - impliedOver25).toFixed(2));
   });
 
+  it("LLM dá PASS na 1.5: marketParams {line:1.5} persistido, sem edge/seleção, par da 1.5 congelado", async () => {
+    wireMultiLineSnapshots();
+    anthropicCreate.mockResolvedValue(
+      toolUseMessage({
+        recommendation: "pass",
+        line: 1.5, // pass ainda reporta a linha avaliada → marketParams pra a view
+        confidence_pct: 48, // P(over) em pass (convenção do schema)
+        rationale: "Sem edge suficiente em nenhuma linha.",
+        key_factors: ["linhas eficientes", "amostra curta"],
+        // minimum_odd OMITIDO (v3 superRefine exige omissão em pass).
+      }),
+    );
+
+    await expect(
+      predict({
+        matchId: "m-1",
+        userId: "u-1",
+        isAdmin: false,
+        marketKey: "over_under",
+        extraLines: true,
+      }),
+    ).resolves.toBeDefined();
+
+    const predictionRow = insertValues.mock.calls[1]?.[0] as Record<
+      string,
+      unknown
+    >;
+    // A linha avaliada round-trip mesmo em pass (settlement ignora pass via void/0,
+    // mas a view usa marketParams.line pros labels).
+    expect(predictionRow.marketParams).toEqual({ line: 1.5 });
+    expect(predictionRow.market).toBeNull(); // 1.5 ≠ 2.5
+    expect(predictionRow.recommendation).toBe("pass");
+    // pass → sem lado: nem seleção, nem odd@rec, nem edge/implícita.
+    expect(predictionRow.selectionId).toBeNull();
+    expect(predictionRow.oddAtRecommendation).toBeNull();
+    expect(predictionRow.edgePct).toBeNull();
+    expect(predictionRow.impliedProbPct).toBeNull();
+    // Par congelado = odds da linha ESCOLHIDA (1.5), inclusive em pass (ADR 0012).
+    expect(predictionRow.overOddAtPrediction).toBe("1.300");
+    expect(predictionRow.underOddAtPrediction).toBe("3.500");
+  });
+
   it("LLM retorna uma linha FORA da escada resolvida → predict throws PredictError", async () => {
     // A escada resolvida cobre 1.5/2.5/3.5. O schema v3 só aceita esses valores
     // no `line`, então pra exercitar o guard de "linha fora da escada" derrubamos

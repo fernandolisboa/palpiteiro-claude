@@ -222,12 +222,16 @@ async function main(): Promise<void> {
       .insert(selectionOddsSnapshots)
       .values(sosRows)
       .onConflictDoNothing({
+        // Espelha o unique `selection_odds_snapshots_dedup_key` que passou a incluir
+        // marketParams (#175, migration 0020) — sem a linha aqui o arbiter não casaria
+        // a constraint nova e um re-run lançaria. Idêntico ao live path (odds-snapshots.ts).
         target: [
           selectionOddsSnapshots.matchId,
           selectionOddsSnapshots.marketId,
           selectionOddsSnapshots.selectionId,
           selectionOddsSnapshots.capturedAt,
           selectionOddsSnapshots.bookmaker,
+          selectionOddsSnapshots.marketParams,
         ],
       });
     log("    ✓ selection_odds_snapshots inseridas (idempotente)");
