@@ -1,6 +1,7 @@
 import { redirect } from "next/navigation";
 
 import { auth, signIn } from "@/auth";
+import { checkMagicLinkRateLimit } from "@/lib/auth/magic-link-rate-limit";
 import { Button } from "@/components/ui/button";
 import { Card } from "@/components/ui/card";
 import { Input } from "@/components/ui/input";
@@ -17,9 +18,15 @@ async function sendMagicLink(formData: FormData) {
     .trim()
     .toLowerCase();
   if (!email) redirect("/signin?error=MissingEmail");
-  // signIn redireciona internamente: sucesso → verifyRequest; e-mail fora da
-  // whitelist → AccessDenied (o callback signIn roda ANTES do envio, então
-  // nenhum e-mail/token é gerado). Não capturar — é um redirect do Next.
+  // Cost-safety (ADR 0023 §3, #257): com o cadastro aberto, rate-limita o envio
+  // ANTES do Resend — cada link é um e-mail pago e 4xx do Resend não é free de
+  // quota. Estourou → redirect, NUNCA chega a signIn("resend") → nenhum e-mail.
+  if (!(await checkMagicLinkRateLimit(email))) {
+    redirect("/signin?error=RateLimited");
+  }
+  // signIn redireciona internamente: sucesso → verifyRequest; e-mail bloqueado
+  // → AccessDenied (o callback signIn roda ANTES do envio, então nenhum
+  // e-mail/token é gerado). Não capturar — é um redirect do Next.
   await signIn("resend", { email, redirectTo: "/" });
 }
 
@@ -38,12 +45,14 @@ export default async function SignInPage({ searchParams }: PageProps) {
   const { error } = await searchParams;
   const message =
     error === "AccessDenied"
-      ? "Este e-mail não está autorizado. Fale com o admin pra entrar na whitelist."
-      : error === "MissingEmail"
-        ? "Informe um e-mail."
-        : error
-          ? "Não foi possível enviar o link. Tente novamente."
-          : null;
+      ? "Não foi possível entrar com este e-mail. Se o problema persistir, fale com o admin."
+      : error === "RateLimited"
+        ? "Muitos pedidos de link. Aguarde alguns minutos e tente de novo."
+        : error === "MissingEmail"
+          ? "Informe um e-mail."
+          : error
+            ? "Não foi possível enviar o link. Tente novamente."
+            : null;
 
   return (
     <div className="flex min-h-screen items-center justify-center bg-background px-5 text-foreground">
@@ -105,8 +114,8 @@ export default async function SignInPage({ searchParams }: PageProps) {
         </Card>
 
         <p className="text-[11.5px] text-muted-fg-2 tracking-tight">
-          Acesso restrito a e-mails autorizados. O link pode cair na pasta de
-          spam no primeiro envio.
+          Qualquer e-mail pode entrar. O link pode cair na pasta de spam no
+          primeiro envio.
         </p>
       </div>
     </div>

@@ -68,6 +68,16 @@ describe("auth.config (edge) — guarda DB-in-edge (ADR 0009)", () => {
     expect(source).not.toMatch(/@\/lib\/db/);
   });
 
+  it("não referencia o gate de signIn DB-aware do #257 (vive no auth.ts Node)", () => {
+    // O signIn DB-aware do self-provision aberto (#257) lê o DB por e-mail via
+    // `isSignInAllowed` → `getUserAllowedByEmail`. Se qualquer um vazasse pro
+    // config edge, o cliente Neon entraria no bundle do middleware (mesma classe
+    // de outage do teste MissingAdapter). Travamos pela ausência de ambos.
+    const source = readFileSync(join(process.cwd(), "auth.config.ts"), "utf8");
+    expect(source).not.toMatch(/isSignInAllowed/);
+    expect(source).not.toMatch(/getUserAllowedByEmail/);
+  });
+
   it("não revalida role/allowed contra o DB no jwt() edge (#252/ADR 0023: vive no auth.ts Node)", () => {
     // A revalidação de role+allowed por request (#252) lê o DB e DEVE morar no
     // override do jwt() em auth.ts (Node). Se vazasse pro config edge, o cliente
