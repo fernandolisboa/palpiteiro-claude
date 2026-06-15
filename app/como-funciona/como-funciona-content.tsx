@@ -125,8 +125,9 @@ export function ComoFuncionaContent() {
             </li>
             <li>
               <strong className="font-medium text-foreground">Edge</strong> = 58% − 50% ={" "}
-              <strong className="font-medium text-edge-fg">+8pp</strong> → passa do mínimo de
-              5pp → o app <strong className="font-medium text-foreground">recomenda over</strong>.
+              <strong className="font-medium text-edge-fg">+8pp</strong> → passa do mínimo de{" "}
+              {MIN_EDGE_PP}pp → o app{" "}
+              <strong className="font-medium text-foreground">recomenda over</strong>.
             </li>
             <li>
               <strong className="font-medium text-foreground">Retorno esperado</strong> (se os
