@@ -468,6 +468,12 @@ export const aiConfig = pgTable("ai_config", {
   // (featured 2.5, byte-idêntico). Flip data-driven (sem deploy): true → todos os
   // usuários recebem a análise multi-linha onde há cobertura (world_cup).
   enableOverUnderExtraLines: boolean().notNull().default(false),
+  // Feature-flag (#178): liga o modo "melhor aposta do jogo" — o fan-out cross-mercado
+  // EM CÓDIGO (N análises por jogo, uma por mercado candidato, ranqueadas por edge).
+  // Default OFF = só o analyze single-market de hoje. Flip data-driven (sem deploy):
+  // true → a CTA "Analisar todos os mercados" aparece pra TODOS os usuários onde há
+  // ≥2 mercados candidatos. Reversível (SET ... = false). Independente do flag acima.
+  enableBestBetFanOut: boolean().notNull().default(false),
   updatedByUserId: uuid().references(() => users.id, { onDelete: "set null" }),
   updatedAt: timestamp({ withTimezone: true }).notNull().defaultNow(),
 });
