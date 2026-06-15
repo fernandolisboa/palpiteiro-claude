@@ -84,10 +84,12 @@ Flow padrão pra qualquer melhoria/feature não-trivial neste repo. Quando o ped
 
 ### Handoffs entre sessões
 
-Trabalho grande roda em **várias sessões** (ex.: o pivot multi-mercado, uma fase por sessão). Ao **encerrar uma sessão** que produz um `HANDOFF-fase-N.md`:
+Trabalho grande roda em **várias sessões** (ex.: o pivot multi-mercado, uma fase por sessão). Ao **encerrar uma sessão** que produz um handoff:
 
-- **Escreva/atualize o `HANDOFF-*.md`** (auto-suficiente: escopo, o que ler primeiro, ordem/dependências, princípios inegociáveis, landmines, critério de saída, gotchas de ambiente — aterrado no CÓDIGO real, não no doc).
-- **Logo em seguida, emita um _prompt de kickoff_ pronto pra colar**, espelhando a estrutura do kickoff da fase anterior, pra o usuário iniciar a próxima sessão sem re-derivar contexto. Saída como bloco copiável, no fim da resposta.
+- **Escreva/atualize o handoff em [`docs/handoffs/HANDOFF-<issue|fase>.md`](./docs/handoffs/)** (versionado — auto-suficiente: escopo, o que ler primeiro, ordem/dependências, princípios inegociáveis, landmines, critério de saída, gotchas de ambiente — aterrado no CÓDIGO real, não no doc). São **snapshots de um ponto no tempo**, não specs vivas (ver o README do diretório).
+- **Logo em seguida, emita um _prompt de kickoff_ pronto pra colar** (LEAN — aponta pro handoff, não o duplica), pra o usuário iniciar a próxima sessão sem re-derivar contexto. Bloco copiável, no fim da resposta.
+- Planos de implementação pré-issue vão em [`docs/plans/PLAN-<issue>.md`](./docs/plans/) (mesma natureza de arquivo histórico).
+- **Artefatos locais NÃO versionados** (gitignored): `.playwright-mcp/` (snapshots/logs do Playwright MCP) e `pnpm-workspace.yaml` (stub auto-gerado do pnpm — committar quebra `pnpm install` em CI; rodar `pnpm install --ignore-workspace` localmente).
 
 ## Gotchas
 
