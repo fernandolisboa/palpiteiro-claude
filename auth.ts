@@ -12,7 +12,7 @@ import {
   users,
   verificationTokens,
 } from "@/db/schema";
-import { isEmailAllowedWithDb } from "@/lib/auth/whitelist-db";
+import { isSignInAllowed } from "@/lib/auth/whitelist-db";
 import { revalidateToken } from "@/lib/auth/jwt-revalidate";
 import { db } from "@/lib/db";
 import { promoteInvitedUserOnLogin } from "@/lib/db/queries/invites";
@@ -75,14 +75,16 @@ export const { handlers, auth, signIn, signOut, unstable_update } = NextAuth({
     authenticatorsTable: authenticators,
   }),
   // signIn DB-aware mora AQUI (Node), não no `auth.config.ts` edge — lê o DB
-  // (ADR 0009). Roda ANTES do envio do magic link (fluxo do @auth/core), então
-  // e-mail não autorizado = AccessDenied = nenhum e-mail/token (cost-safe).
-  // Spread de authConfig.callbacks PRIMEIRO pra preservar authorized/jwt/session;
-  // só o signIn é adicionado/sobrescrito.
+  // (ADR 0009/0023). Roda ANTES do envio do magic link (fluxo do @auth/core),
+  // então e-mail bloqueado = AccessDenied = nenhum e-mail/token (cost-safe).
+  // Self-provision ABERTO (#257): `isSignInAllowed` é allow-by-default — só
+  // recusa row com `allowed=false`; e-mail novo é auto-provisionado, env-floor
+  // é sempre permitido (anti-lockout). Spread de authConfig.callbacks PRIMEIRO
+  // pra preservar authorized/jwt/session; só o signIn é adicionado/sobrescrito.
   callbacks: {
     ...authConfig.callbacks,
     async signIn({ user }) {
-      return isEmailAllowedWithDb(user.email);
+      return isSignInAllowed(user.email);
     },
     // Override Node do jwt() (#252, ADR 0023): roda o jwt() edge-safe primeiro
     // (carimbo de id/role no login + edição de perfil), depois revalida

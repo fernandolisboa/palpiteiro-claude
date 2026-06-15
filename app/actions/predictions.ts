@@ -4,6 +4,7 @@ import { revalidatePath } from "next/cache";
 import { z } from "zod";
 
 import { auth } from "@/auth";
+import { isEmailAllowed } from "@/lib/auth/whitelist";
 import { getCartridge } from "@/lib/ai/markets/registry";
 import { isModelAllowedForAudience, type AIModelId } from "@/lib/ai/models";
 import { PredictError, predict } from "@/lib/ai/predict";
@@ -77,13 +78,18 @@ export async function analyzeMatch(
   // `allowed` ANTES de qualquer chamada paga ao Anthropic — independente da
   // frescura do JWT (que pode estar stale). `null` = row sumiu (reset +
   // claim-admin com cookie velho): recusa a sessão órfã antes do custo (senão a
-  // FK ai_calls_user_id_users_id_fk estoura pós-gasto). `allowed=false` = bloqueado:
-  // recusa todo mundo, inclusive admin (admins são `allowed=true` no DB — ADR 0023).
+  // FK ai_calls_user_id_users_id_fk estoura pós-gasto).
   const access = await getUserAccessState(session.user.id);
   if (!access) {
     return { ok: false, error: "Sua sessão expirou. Faça login novamente." };
   }
-  if (!access.allowed) {
+  // Compõe com o floor do env ANTES de decidir (ADR 0023 §3/§6, mesma semântica
+  // de `isEmailAllowedWithDb`/`isSignInAllowed`): um e-mail no floor do env é
+  // permitido MESMO com `allowed=false` no DB. Um read cru de `allowed` trancaria
+  // o dono/admin do floor (cuja row pode ser `allowed=false`) do próprio app — o
+  // auto-lockout que a §6 promete impossível. Bloqueio só morde quem NÃO está no
+  // floor e tem `allowed=false`.
+  if (!access.allowed && !isEmailAllowed(session.user.email)) {
     return {
       ok: false,
       error: "Seu acesso está bloqueado. Fale com o administrador.",
