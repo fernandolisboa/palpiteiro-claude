@@ -149,9 +149,11 @@ export const pendingInvites = pgTable("pending_invites", {
 });
 
 // ─── Tabelas do adapter Auth.js v5 ───────────────────────────────────────────
-// Criadas para satisfazer o contrato do DrizzleAdapter. Com session.strategy
-// "jwt", `sessions`/`accounts` ficam inativas (prontas pra futuro OAuth /
-// DB-sessions); `verification_tokens` é usada no fluxo de magic link.
+// Criadas para satisfazer o contrato do DrizzleAdapter. `accounts` é usada pelo
+// OAuth Google (grava a row provider="google", linkada ao mesmo `users` via
+// allowDangerousEmailAccountLinking — ADR 0023); `verification_tokens` é usada no
+// fluxo de magic link. Com session.strategy "jwt", só `sessions` fica inativa
+// (a sessão é o JWT, não uma row de DB).
 
 export const accounts = pgTable(
   "accounts",

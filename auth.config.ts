@@ -3,7 +3,8 @@ import type { NextAuthConfig } from "next-auth";
 /**
  * Config edge-safe do Auth.js v5 — SEM adapter, SEM providers e SEM dependência
  * de DB, pra rodar no edge runtime (middleware). O `auth.ts` (Node) estende isto
- * com o DrizzleAdapter E o provider Resend. Padrão "split config" do v5.
+ * com o DrizzleAdapter e os providers Resend (magic link) e Google (OAuth).
+ * Padrão "split config" do v5.
  *
  * IMPORTANTE: o provider Resend (type "email") NÃO pode morar aqui. O
  * `assertConfig` do @auth/core roda em TODA invocação de `Auth()` — inclusive a
