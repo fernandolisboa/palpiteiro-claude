@@ -27,11 +27,13 @@ import {
 import { getMatchById } from "@/lib/db/queries/matches";
 import { getLatestPredictionForMatch } from "@/lib/db/queries/predictions";
 import { getPreferredModelId } from "@/lib/db/queries/users";
+import { getLatestSelectionOddsSnapshotsForMatches } from "@/lib/db/queries/odds-snapshots";
 import { ensureOddsSnapshotsFresh } from "@/lib/odds/fetch-and-snapshot";
+import { PAGE_LIVE_MARKETS } from "@/lib/odds/live-card-markets";
 import type { FixtureRef } from "@/lib/providers/sports-data/types";
 import { toAnalysisView } from "@/lib/view/analysis";
 import { toMatchRowView } from "@/lib/view/match";
-import { toOddsView } from "@/lib/view/odds";
+import { toNwayOddsView, toOddsView } from "@/lib/view/odds";
 import type { OddsView } from "@/lib/view/types";
 
 type PageProps = {
@@ -49,16 +51,31 @@ export default async function MatchPage({ params }: PageProps) {
 
   const isAdmin = session.user.role === "admin";
 
+  // Pré-aquece over/under + 1X2 ao vivo (#173): featured/batch, +1 crédito de
+  // liga por refresh stale (h2h é market separado de totals). Retorna a snapshot
+  // over/under LEGADA (contrato inalterado). O card 1X2 lê selection_odds_snapshots
+  // DEPOIS do warm — encadeado no ensure (a leitura não pode correr antes da escrita).
+  const ensureP = ensureOddsSnapshotsFresh(match, { markets: PAGE_LIVE_MARKETS });
+  const matchResultP = ensureP.then(() =>
+    getLatestSelectionOddsSnapshotsForMatches([match.id], "match_result"),
+  );
   // Odds e predição existente em paralelo. Ambas são pré-requisito pro
   // render síncrono do hero + odds + panel (não vão pra Suspense).
-  const [snapshot, latestPred, defaultModelId, preferredModelId, audienceMarkets] =
-    await Promise.all([
-      ensureOddsSnapshotsFresh(match),
-      getLatestPredictionForMatch(match.id, session.user.id),
-      getDefaultModelId(),
-      getPreferredModelId(session.user.id),
-      marketsForAudience(isAdmin),
-    ]);
+  const [
+    snapshot,
+    matchResultMap,
+    latestPred,
+    defaultModelId,
+    preferredModelId,
+    audienceMarkets,
+  ] = await Promise.all([
+    ensureP,
+    matchResultP,
+    getLatestPredictionForMatch(match.id, session.user.id),
+    getDefaultModelId(),
+    getPreferredModelId(session.user.id),
+    marketsForAudience(isAdmin),
+  ]);
   const defaultModelLabel = MODEL_REGISTRY[defaultModelId].label;
 
   const heroView = toMatchRowView({
@@ -90,6 +107,13 @@ export default async function MatchPage({ params }: PageProps) {
         underOdd: snapshot.underOdd,
         capturedAt: snapshot.capturedAt,
       })
+    : null;
+
+  // Card 1X2 ao vivo (#173): best-effort — captura ausente/incompleta vira null
+  // (o reader OMITE, nunca throw) → card simplesmente não é empilhado.
+  const matchResultSnapshot = matchResultMap.get(match.id);
+  const matchResultOddsView: OddsView | null = matchResultSnapshot
+    ? toNwayOddsView(matchResultSnapshot, "match_result")
     : null;
 
   const existingAnalysis = latestPred
@@ -159,6 +183,7 @@ export default async function MatchPage({ params }: PageProps) {
         <MobileMatch
           heroView={heroView}
           oddsView={oddsView}
+          matchResultOddsView={matchResultOddsView}
           analysisExisting={existingAnalysis}
           matchId={match.id}
           fixtureRef={fixtureRef}
@@ -176,6 +201,7 @@ export default async function MatchPage({ params }: PageProps) {
         <DesktopMatch
           heroView={heroView}
           oddsView={oddsView}
+          matchResultOddsView={matchResultOddsView}
           analysisExisting={existingAnalysis}
           matchId={match.id}
           fixtureRef={fixtureRef}
@@ -196,6 +222,9 @@ export default async function MatchPage({ params }: PageProps) {
 type Common = {
   heroView: ReturnType<typeof toMatchRowView>;
   oddsView: OddsView | null;
+  // Card 1X2 ao vivo empilhado abaixo do over/under (#173). null = sem captura
+  // h2h pra este match (best-effort) → não renderiza o 2º card.
+  matchResultOddsView: OddsView | null;
   analysisExisting: ReturnType<typeof toAnalysisView> | null;
   matchId: string;
   fixtureRef: FixtureRef;
@@ -216,6 +245,7 @@ type Common = {
 function MobileMatch({
   heroView,
   oddsView,
+  matchResultOddsView,
   analysisExisting,
   matchId,
   fixtureRef,
@@ -254,6 +284,7 @@ function MobileMatch({
 
       <div className="flex flex-col gap-3 px-5 pb-6">
         <OddsCard view={oddsView} />
+        {matchResultOddsView && <OddsCard view={matchResultOddsView} />}
         {analyzable ? (
           <AnalysisPanel
             matchId={matchId}
@@ -285,6 +316,7 @@ function MobileMatch({
 function DesktopMatch({
   heroView,
   oddsView,
+  matchResultOddsView,
   analysisExisting,
   matchId,
   fixtureRef,
@@ -380,6 +412,7 @@ function DesktopMatch({
 
           <div className="flex flex-col gap-3">
             <OddsCard view={oddsView} />
+            {matchResultOddsView && <OddsCard view={matchResultOddsView} />}
           </div>
         </div>
 
