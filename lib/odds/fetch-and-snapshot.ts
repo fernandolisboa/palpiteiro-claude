@@ -51,7 +51,7 @@ export type EnsureOddsOptions = {
  *
  * Quando stale: fetch da liga (rede), `pickBestBookmaker` por match (UMA vez),
  * resolução de market/selection ids (reads) — TUDO antes do batch — e dual-write
- * ATÔMICO via `db.batch([...])` (neon-http não tem `db.transaction`; ver invites.ts):
+ * ATÔMICO via `db.batch([...])` (neon-http não tem `db.transaction`):
  *   - over_under: VELHA (`insertOddsSnapshotsBatch(rows, now)`, strings idênticas) +
  *     NOVA (`insertSelectionOddsSnapshotsBatch`), AMBAS do mesmo bundle → mesmo
  *     captured_at (`now`)/bookmaker/overround;
@@ -293,8 +293,8 @@ export async function ensureOddsSnapshotsFresh(
     }
 
     // ── Dual-write atômico: só os builders não-awaited entram no batch ──────
-    // db.batch é o primitivo atômico do neon-http (db.transaction LANÇA; ver
-    // invites.ts). Falha antes daqui ⇒ nenhuma escrita; falha no batch ⇒ rollback
+    // db.batch é o primitivo atômico do neon-http (db.transaction LANÇA).
+    // Falha antes daqui ⇒ nenhuma escrita; falha no batch ⇒ rollback
     // de ambas. over_under escreve as DUAS tabelas no mesmo batch (mesmo `now`);
     // match_result só a nova.
     const writeOld =

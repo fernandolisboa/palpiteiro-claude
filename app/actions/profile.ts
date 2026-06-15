@@ -10,9 +10,9 @@ import { setPreferredModelId, updateUser } from "@/lib/db/queries/users";
 
 export type UpdateProfileResult = { ok: boolean; error?: string };
 
-// Schemas locais. Trim manual antes do safeParse — mesma convenção de
-// app/actions/invites.ts, que apara antes do z.email() (z.string()/z.url() não
-// aparam). A URL do avatar é restrita a http(s): z.url() sozinho aceitaria
+// Schemas locais. Trim manual antes do safeParse — z.string()/z.url() não aparam
+// espaços de borda, então um valor válido com espaços falharia a validação. A URL
+// do avatar é restrita a http(s): z.url() sozinho aceitaria
 // javascript:/data:/mailto: (não é XSS no <img>, mas o contrato é imagem http).
 const nameSchema = z.string().min(1).max(80);
 const urlSchema = z.url({ protocol: /^https?$/ });

@@ -232,7 +232,7 @@ describe("analyzeMatch", () => {
   it("NÃO bloqueia o floor do env mesmo com allowed=false no DB (§3/§6, anti-lockout do dono)", async () => {
     // O env-floor é o admin permanente: um read CRU de `allowed` o trancaria do
     // próprio app (a row pode ser allowed=false). O gate compõe env-floor OU
-    // allowed (espelha isEmailAllowedWithDb). SESSION.user.email = a@b.com.
+    // allowed (espelha isSignInAllowed). SESSION.user.email = a@b.com.
     vi.stubEnv("ALLOWED_EMAILS", "a@b.com");
     mockAuth.mockResolvedValue(SESSION);
     mockGetAccess.mockResolvedValue({ role: "admin", allowed: false });

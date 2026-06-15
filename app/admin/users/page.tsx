@@ -17,7 +17,7 @@ export default async function AdminUsersPage({ searchParams }: PageProps) {
   const { q } = await searchParams;
 
   // Re-check defensivo: estes dados cruzam usuários (predições/payloads alheios).
-  // Defense-in-depth — NÃO confiar só no gate do layout. Espelha costs/invites.
+  // Defense-in-depth — NÃO confiar só no gate do layout. Espelha costs.
   const session = await auth();
   if (session?.user?.role !== "admin") notFound();
 

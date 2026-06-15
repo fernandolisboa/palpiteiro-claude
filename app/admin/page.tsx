@@ -15,11 +15,6 @@ const SECTIONS = [
     desc: "auditar o tracking de qualquer usuário · busca por e-mail",
   },
   {
-    href: "/admin/invites",
-    title: "Convidar Usuários",
-    desc: "whitelist · autoriza login sem redeploy",
-  },
-  {
     href: "/admin/costs",
     title: "Custos de IA",
     desc: "gasto agregado · por dia, usuário, modelo · USD",

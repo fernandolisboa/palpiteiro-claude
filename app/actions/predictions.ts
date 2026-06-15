@@ -95,7 +95,7 @@ export async function analyzeMatch(
     return { ok: false, error: "Sua sessão expirou. Faça login novamente." };
   }
   // Compõe com o floor do env ANTES de decidir (ADR 0023 §3/§6, mesma semântica
-  // de `isEmailAllowedWithDb`/`isSignInAllowed`): um e-mail no floor do env é
+  // de `isSignInAllowed`): um e-mail no floor do env é
   // permitido MESMO com `allowed=false` no DB. Um read cru de `allowed` trancaria
   // o dono/admin do floor (cuja row pode ser `allowed=false`) do próprio app — o
   // auto-lockout que a §6 promete impossível. Bloqueio só morde quem NÃO está no

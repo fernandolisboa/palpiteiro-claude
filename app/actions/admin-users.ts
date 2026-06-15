@@ -32,7 +32,7 @@ export async function setUserRole(
   _prev: AdminUserResult | null,
   formData: FormData
 ): Promise<AdminUserResult> {
-  // Gate defense-in-depth (POST chamável fora do layout) — espelha invites.
+  // Gate defense-in-depth (POST chamável fora do layout) — role revalidada aqui.
   const session = await auth();
   if (session?.user?.role !== "admin" || !session.user.id) {
     return { ok: false, error: "Acesso negado." };
