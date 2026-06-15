@@ -273,8 +273,11 @@ Aposte com responsabilidade."_
 - [ ] **`/signin`**: linha "ao continuar você declara ter 18+", links pra
       Termos/Privacidade.
 - [ ] **Resultado da análise**: linha de aviso de risco.
-- [ ] **Convite** (`/admin/invites`): a confirmação do convite menciona 18+ e
-      linka Termos/Privacidade (o amigo deve ver antes de logar).
+- [ ] **Gate de 18+ no cadastro aberto** (#282): o fluxo de convite foi removido
+      (#281; cadastro aberto #257), então a confirmação de 18+/Termos precisa de um
+      novo ponto de captura cobrindo **todos** os métodos (Google/passkey/magic link).
+      O item de `/signin` acima ("declara ter 18+") é o piso mínimo; o #282 decide se
+      há tela de consentimento com auditoria por usuário.
 
 > 💡 **Versão das páginas é forward-only**, igual migration. Carimbe
 > "Última atualização: AAAA-MM-DD" em cada página e bump a data quando mudar o
