@@ -195,6 +195,32 @@ export const verificationTokens = pgTable(
   (t) => [primaryKey({ columns: [t.identifier, t.token] })],
 );
 
+// Credenciais WebAuthn/passkey (ADR 0023): tabela do DrizzleAdapter, usada pelo
+// provider WebAuthn (login + registro) que vive SÓ no `auth.ts` (Node). As colunas
+// casam EXATAMENTE o contrato do adapter (@auth/drizzle-adapter/lib/pg.{js,d.ts}):
+// nomes camelCase no Drizzle → snake_case no DB via o `casing` global. Travas
+// load-bearing: `userId` é uuid (não text) pra fechar o FK→users.id (uuid); o
+// `.d.ts` aceita PgUUID em userId. `credentialID` é text (o adapter consulta por
+// ele sozinho em getAuthenticator/updateAuthenticatorCounter, então o `.unique()`
+// é load-bearing) E parte da PK composta [userId, credentialID]. Passkey é
+// método OPCIONAL: Google primário, magic link fallback.
+export const authenticators = pgTable(
+  "authenticators",
+  {
+    credentialID: text().notNull().unique(),
+    userId: uuid()
+      .notNull()
+      .references(() => users.id, { onDelete: "cascade" }),
+    providerAccountId: text().notNull(),
+    credentialPublicKey: text().notNull(),
+    counter: integer().notNull(),
+    credentialDeviceType: text().notNull(),
+    credentialBackedUp: boolean().notNull(),
+    transports: text(),
+  },
+  (t) => [primaryKey({ columns: [t.userId, t.credentialID] })],
+);
+
 export const matches = pgTable(
   "matches",
   {

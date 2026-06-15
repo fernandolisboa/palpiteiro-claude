@@ -21,6 +21,8 @@
     "@auth/drizzle-adapter": "^1.11.2",
     "@neondatabase/serverless": "^1.1.0",
     "@sentry/nextjs": "^10.57.0",
+    "@simplewebauthn/browser": "^9.0.1",
+    "@simplewebauthn/server": "^9.0.3",
     "@upstash/ratelimit": "^2",
     "@upstash/redis": "^1",
     "class-variance-authority": "^0.7.1",

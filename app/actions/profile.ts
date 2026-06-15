@@ -5,6 +5,7 @@ import { z } from "zod";
 
 import { auth, unstable_update } from "@/auth";
 import { isModelAllowedForAudience } from "@/lib/ai/models";
+import { deleteAuthenticator } from "@/lib/db/queries/authenticators";
 import { setPreferredModelId, updateUser } from "@/lib/db/queries/users";
 
 export type UpdateProfileResult = { ok: boolean; error?: string };
@@ -99,5 +100,34 @@ export async function updatePreferredModel(
   await setPreferredModelId(session.user.id, raw);
   revalidatePath("/perfil");
   revalidatePath("/", "layout");
+  return { ok: true };
+}
+
+/**
+ * Remove uma passkey do próprio usuário (#255). O REGISTRO de passkey NÃO é uma
+ * server action: a cerimônia WebAuthn roda no browser via
+ * `signIn("passkey", { action: "register" })` (next-auth/webauthn) — só a remoção
+ * é mutação de DB. Gate por dono em duas camadas: o `userId` vem SEMPRE da sessão
+ * (`auth()`), nunca do form; o `deleteAuthenticator` filtra por (userId,
+ * credentialID). Sem mexer no JWT (remover passkey não muda role/allowed), então
+ * sem `unstable_update` — só `revalidatePath` pra repopular a lista.
+ */
+export async function removePasskey(
+  _prev: UpdateProfileResult | null,
+  formData: FormData,
+): Promise<UpdateProfileResult> {
+  const session = await auth();
+  if (!session?.user?.id) {
+    return { ok: false, error: "Sessão inválida." };
+  }
+  const credentialID = String(formData.get("credentialID") ?? "").trim();
+  if (!credentialID) {
+    return { ok: false, error: "Passkey inválida." };
+  }
+  const removed = await deleteAuthenticator(session.user.id, credentialID);
+  if (removed === 0) {
+    return { ok: false, error: "Passkey não encontrada." };
+  }
+  revalidatePath("/perfil");
   return { ok: true };
 }

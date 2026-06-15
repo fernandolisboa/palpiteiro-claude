@@ -5,6 +5,8 @@ import { Button } from "@/components/ui/button";
 import { Card } from "@/components/ui/card";
 import { Input } from "@/components/ui/input";
 
+import { PasskeySignInButton } from "./passkey-signin-button";
+
 type PageProps = {
   searchParams: Promise<{ error?: string; sent?: string }>;
 };
@@ -56,7 +58,8 @@ export default async function SignInPage({ searchParams }: PageProps) {
             </span>
           </div>
           <p className="text-[13px] text-muted-foreground tracking-tight">
-            Entre com sua conta Google ou com um link por e-mail.
+            Entre com sua conta Google, com uma passkey ou com um link por
+            e-mail.
           </p>
         </div>
 
@@ -65,6 +68,8 @@ export default async function SignInPage({ searchParams }: PageProps) {
             Entrar com Google
           </Button>
         </form>
+
+        <PasskeySignInButton />
 
         <div className="flex items-center gap-3">
           <span className="h-px flex-1 bg-border" />
