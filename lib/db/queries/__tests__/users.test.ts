@@ -67,6 +67,7 @@ vi.mock("@/lib/db", () => {
 import { users } from "@/db/schema";
 import {
   getPreferredModelId,
+  getUserAllowedByEmail,
   getUserById,
   searchUsers,
   setPreferredModelId,
@@ -145,6 +146,26 @@ describe("getUserById — lookup tipado por id", () => {
   it("devolve null quando não existe row", async () => {
     h.state.limitResult = [];
     await expect(getUserById("nope")).resolves.toBeNull();
+  });
+});
+
+describe("getUserAllowedByEmail — lookup do flag allowed por e-mail (#257)", () => {
+  it("aplica eq(users.email, normalizado) e devolve { allowed }", async () => {
+    h.state.limitResult = [{ allowed: false }];
+    await expect(getUserAllowedByEmail("  Block@EX.com ")).resolves.toEqual({
+      allowed: false,
+    });
+    expect(h.state.whereCalled).toBe(true);
+    const cond = h.state.whereArg as { op?: string; col?: unknown; val?: unknown };
+    expect(cond.op).toBe("eq");
+    expect(cond.col).toBe(users.email);
+    // trim + lowercase: a chave casa com o e-mail gravado lowercased pelo adapter.
+    expect(cond.val).toBe("block@ex.com");
+  });
+
+  it("sem row → null (e-mail novo → o gate auto-provisiona)", async () => {
+    h.state.limitResult = [];
+    await expect(getUserAllowedByEmail("novo@ex.com")).resolves.toBeNull();
   });
 });
 

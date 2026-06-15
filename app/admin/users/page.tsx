@@ -66,6 +66,11 @@ export default async function AdminUsersPage({ searchParams }: PageProps) {
                   {u.email}
                 </span>
                 <div className="flex shrink-0 items-center gap-3">
+                  {!u.allowed && (
+                    <span className="rounded-sm bg-red-500/10 px-1.5 py-0.5 font-mono text-[10px] uppercase tracking-[0.12em] text-red-500">
+                      bloqueado
+                    </span>
+                  )}
                   <span className="font-mono text-[10px] uppercase tracking-[0.12em] text-muted-foreground">
                     {u.role}
                   </span>

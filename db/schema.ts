@@ -121,7 +121,12 @@ export const users = pgTable("users", {
   email: text().notNull().unique(),
   name: text(),
   role: userRoleEnum().notNull().default("user"),
-  allowed: boolean().notNull().default(false),
+  // Self-provision aberto (ADR 0023 §35, #257): novo usuário entra ATIVO. O floor
+  // do env (ALLOWED_EMAILS) segue sendo o admin permanente; `allowed=false` é
+  // bloqueio explícito feito por admin. Rows antigas com `allowed=false` (default
+  // anterior) continuam bloqueadas — desbloquear via UI admin ou re-entram pelo
+  // env-floor. Migration 0024: ALTER COLUMN allowed SET DEFAULT true.
+  allowed: boolean().notNull().default(true),
   // Preferência pessoal de modelo (ADR 0013). `null` = sem preferência → cai no
   // default global. Text simples validado contra MODEL_REGISTRY na query layer
   // (espelha aiConfig.defaultModelId) — evita migration a cada mudança no

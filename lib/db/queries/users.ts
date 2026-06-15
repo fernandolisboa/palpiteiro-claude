@@ -6,21 +6,53 @@ import { isAIModelId, type AIModelId } from "@/lib/ai/models";
 
 type UserSummary = { id: string; email: string; role: "admin" | "user" };
 
+type UserListItem = UserSummary & { allowed: boolean };
+
 /**
- * Lista usuários (id, email, role) pra área de admin, ordenados por e-mail. Se
- * `query` for não-vazio (após trim), filtra por `email ILIKE %q%` — ILIKE já é
- * case-insensitive, então só fazemos trim, sem lowercase. NÃO é escopado por
- * usuário: é listagem admin-only. As páginas chamadoras
- * (`app/admin/users/*`) são gateadas pelo `app/admin/layout.tsx` (role ===
- * "admin" → notFound) + um re-check defensivo de role na própria página.
+ * Lista usuários (id, email, role, allowed) pra área de admin, ordenados por
+ * e-mail. Se `query` for não-vazio (após trim), filtra por `email ILIKE %q%` —
+ * ILIKE já é case-insensitive, então só fazemos trim, sem lowercase. `allowed`
+ * é trazido pra a lista renderizar o estado de bloqueio (#258) sem abrir cada
+ * usuário. NÃO é escopado por usuário: é listagem admin-only. As páginas
+ * chamadoras (`app/admin/users/*`) são gateadas pelo `app/admin/layout.tsx`
+ * (role === "admin" → notFound) + um re-check defensivo de role na própria
+ * página.
  */
-export async function searchUsers(query?: string): Promise<UserSummary[]> {
+export async function searchUsers(query?: string): Promise<UserListItem[]> {
   const q = query?.trim() ?? "";
   const base = db
-    .select({ id: users.id, email: users.email, role: users.role })
+    .select({
+      id: users.id,
+      email: users.email,
+      role: users.role,
+      allowed: users.allowed,
+    })
     .from(users);
   const filtered = q ? base.where(ilike(users.email, `%${q}%`)) : base;
   return filtered.orderBy(asc(users.email));
+}
+
+/**
+ * Lê SÓ o flag `allowed` de UM usuário por e-mail, ou null se a row não existe.
+ * Serve o gate de signIn DB-aware (self-provision aberto, ADR 0023 §3/§6, #257):
+ * o callback `signIn` só tem `user.email` (no fluxo de magic link a row pode nem
+ * existir ainda), então o lookup é por e-mail — distinto de `getUserAccessState`
+ * (por id, pós-criação). `null` (sem row) sinaliza e-mail NOVO, que o gate
+ * auto-provisiona. O e-mail é normalizado (trim+lowercase) — `users.email` é
+ * gravado lowercased pelo adapter, mas normalizar no lookup é defensivo e barato.
+ * Módulo Node-only — NUNCA importar do `auth.config.ts`/edge (puxaria Neon pro
+ * bundle do middleware; o guard de `auth.config.test.ts` trava isso).
+ */
+export async function getUserAllowedByEmail(
+  email: string,
+): Promise<{ allowed: boolean } | null> {
+  const e = email.trim().toLowerCase();
+  const rows = await db
+    .select({ allowed: users.allowed })
+    .from(users)
+    .where(eq(users.email, e))
+    .limit(1);
+  return rows[0] ?? null;
 }
 
 /**
