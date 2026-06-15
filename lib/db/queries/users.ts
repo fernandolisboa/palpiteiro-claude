@@ -161,6 +161,21 @@ export async function setPreferredModelId(
 }
 
 /**
+ * Carimba o aceite de maioridade (auto-declaração 18+) de UM usuário, com `now()`
+ * (#282, ADR/ops 05). Chamada do `events.createUser` em `auth.ts`, que dispara
+ * quando o adapter INSERE a row de `users` (qualquer provider — Google / magic
+ * link / passkey-register), ou seja, só DEPOIS de o checkbox obrigatório do
+ * /signin ter destravado o método. O gate é a UI; esta função confia no `userId`
+ * recebido. Não precisa ser idempotente — `createUser` dispara só na inserção.
+ */
+export async function markTermsAccepted(userId: string): Promise<void> {
+  await db
+    .update(users)
+    .set({ acceptedTermsAt: new Date() })
+    .where(eq(users.id, userId));
+}
+
+/**
  * Atualiza nome/avatar de UM usuário. O gate de "só o dono edita" mora na server
  * action (`app/actions/profile.ts`); esta função confia no `id` recebido.
  */

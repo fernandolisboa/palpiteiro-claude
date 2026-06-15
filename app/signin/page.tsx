@@ -1,42 +1,12 @@
 import { redirect } from "next/navigation";
 
-import { auth, signIn } from "@/auth";
-import { checkMagicLinkRateLimit } from "@/lib/auth/magic-link-rate-limit";
-import { Button } from "@/components/ui/button";
-import { Card } from "@/components/ui/card";
-import { Input } from "@/components/ui/input";
+import { auth } from "@/auth";
 
-import { PasskeySignInButton } from "./passkey-signin-button";
+import { SignInMethods } from "./sign-in-methods";
 
 type PageProps = {
   searchParams: Promise<{ error?: string; sent?: string }>;
 };
-
-async function sendMagicLink(formData: FormData) {
-  "use server";
-  const email = String(formData.get("email") ?? "")
-    .trim()
-    .toLowerCase();
-  if (!email) redirect("/signin?error=MissingEmail");
-  // Cost-safety (ADR 0023 §3, #257): com o cadastro aberto, rate-limita o envio
-  // ANTES do Resend — cada link é um e-mail pago e 4xx do Resend não é free de
-  // quota. Estourou → redirect, NUNCA chega a signIn("resend") → nenhum e-mail.
-  if (!(await checkMagicLinkRateLimit(email))) {
-    redirect("/signin?error=RateLimited");
-  }
-  // signIn redireciona internamente: sucesso → verifyRequest; e-mail bloqueado
-  // → AccessDenied (o callback signIn roda ANTES do envio, então nenhum
-  // e-mail/token é gerado). Não capturar — é um redirect do Next.
-  await signIn("resend", { email, redirectTo: "/" });
-}
-
-async function signInWithGoogle() {
-  "use server";
-  // OAuth Google (método primário — ADR 0023). signIn redireciona pro consent do
-  // Google; na volta o callback signIn aplica o mesmo gate da whitelist (e-mail
-  // não autorizado → AccessDenied), idêntico ao magic link. Não capturar.
-  await signIn("google", { redirectTo: "/" });
-}
 
 export default async function SignInPage({ searchParams }: PageProps) {
   const session = await auth();
@@ -72,51 +42,10 @@ export default async function SignInPage({ searchParams }: PageProps) {
           </p>
         </div>
 
-        <form action={signInWithGoogle}>
-          <Button type="submit" variant="outline" className="w-full">
-            Entrar com Google
-          </Button>
-        </form>
-
-        <PasskeySignInButton />
-
-        <div className="flex items-center gap-3">
-          <span className="h-px flex-1 bg-border" />
-          <span className="font-mono text-[10px] uppercase tracking-[0.14em] text-muted-fg-2">
-            ou
-          </span>
-          <span className="h-px flex-1 bg-border" />
-        </div>
-
-        <Card className="p-5">
-          <form action={sendMagicLink} className="flex flex-col gap-3">
-            <label className="flex flex-col gap-1.5">
-              <span className="font-mono text-[10px] uppercase tracking-[0.14em] text-muted-foreground">
-                e-mail
-              </span>
-              <Input
-                type="email"
-                name="email"
-                required
-                autoComplete="email"
-                placeholder="voce@exemplo.com"
-              />
-            </label>
-            <Button type="submit" className="w-full">
-              Enviar link de acesso
-            </Button>
-            {message && (
-              <p className="text-[12.5px] text-destructive tracking-tight">
-                {message}
-              </p>
-            )}
-          </form>
-        </Card>
-
-        <p className="text-[11.5px] text-muted-fg-2 tracking-tight">
-          Qualquer e-mail pode entrar. O link pode cair na pasta de spam no
-          primeiro envio.
-        </p>
+        {/* O checkbox obrigatório 18+ e o gating dos 3 métodos vivem no wrapper
+            CLIENT (#282). A leitura de searchParams e o mapeamento de erro PT
+            ficam aqui no Server Component; a mensagem já-mapeada desce como prop. */}
+        <SignInMethods errorMessage={message} />
       </div>
     </div>
   );

@@ -19,7 +19,13 @@ import { Input } from "@/components/ui/input";
  * passkey, cerimônia abortada) sem sair da página — com `redirect: true` o helper
  * faz `window.location.href` e não devolve o erro.
  */
-export function PasskeySignInButton() {
+/**
+ * `enabled` (#282): gate de maioridade do /signin. O wrapper passa
+ * `canSubmit(accepted)`; enquanto o checkbox 18+ não estiver marcado, o botão
+ * fica desabilitado junto das outras condições (`pending || !email`). Default
+ * `true` pra não regredir um call-site sem o gate (defensivo — hoje só há um).
+ */
+export function PasskeySignInButton({ enabled = true }: { enabled?: boolean }) {
   const [email, setEmail] = useState("");
   const [pending, setPending] = useState(false);
   const [error, setError] = useState<string | null>(null);
@@ -74,7 +80,7 @@ export function PasskeySignInButton() {
         type="button"
         variant="outline"
         className="w-full"
-        disabled={pending || !email}
+        disabled={pending || !email || !enabled}
         onClick={onClick}
       >
         {pending ? "Verificando…" : "Entrar com passkey"}
