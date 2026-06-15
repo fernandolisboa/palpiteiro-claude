@@ -115,3 +115,19 @@ export function toMatchRowOdds(
     ],
   };
 }
+
+// Outcomes do chip pra uma captura N-vias (1X2) — labels CURTOS (selectionLabel:
+// "Casa"/"Empate"/"Fora"), na ordem canônica já resolvida pelo reader. Sem pct
+// (o chip mostra só odds). numeric do Drizzle = string → formatOdd coage.
+export function toMatchRowResultOdds(
+  snapshot: { selections: { key: string; odd: string }[] },
+  marketKey: string,
+): NonNullable<MatchRowView["odds"]> {
+  const presentation = getMarketPresentation(marketKey);
+  return {
+    outcomes: snapshot.selections.map((s) => ({
+      label: presentation.selectionLabel(s.key),
+      odd: formatOdd(s.odd),
+    })),
+  };
+}
