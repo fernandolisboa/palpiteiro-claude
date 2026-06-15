@@ -298,9 +298,6 @@ describe("predict(btts) — N=2 binary happy path through the generic path", () 
       string,
       unknown
     >;
-    expect(predictionRow.market).toBeNull();
-    expect(predictionRow.overOddAtPrediction).toBeNull();
-    expect(predictionRow.underOddAtPrediction).toBeNull();
     // btts carries no line.
     expect(predictionRow.marketParams).toBeNull();
     // Source-of-truth columns are set (generic).

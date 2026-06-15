@@ -494,8 +494,10 @@ describe("predict() — congelamento do par de odds na prediction (#104)", () =>
       unknown
     >;
     expect(predictionRow.recommendation).toBe("over");
-    expect(predictionRow.overOddAtPrediction).toBe("1.900");
-    expect(predictionRow.underOddAtPrediction).toBe("1.950");
+    // Par congelado agora na PSO (over+under), byte-idêntico ao par legado.
+    const psoByKey = psoOddByKey(insertValues.mock.calls[2]?.[0]);
+    expect(psoByKey["sel-over"]).toBe("1.900");
+    expect(psoByKey["sel-under"]).toBe("1.950");
     expect(predictionRow.bookmaker).toBe("Pinnacle");
     // Colunas do lado recomendado preservadas (over → odd do over).
     expect(predictionRow.oddAtRecommendation).toBe("1.900");
@@ -530,9 +532,10 @@ describe("predict() — congelamento do par de odds na prediction (#104)", () =>
       unknown
     >;
     expect(predictionRow.recommendation).toBe("pass");
-    // Par congelado + bookmaker persistidos também em pass (ADR 0012).
-    expect(predictionRow.overOddAtPrediction).toBe("1.900");
-    expect(predictionRow.underOddAtPrediction).toBe("1.950");
+    // Par congelado (na PSO) + bookmaker persistidos também em pass (ADR 0012).
+    const psoByKey = psoOddByKey(insertValues.mock.calls[2]?.[0]);
+    expect(psoByKey["sel-over"]).toBe("1.900");
+    expect(psoByKey["sel-under"]).toBe("1.950");
     expect(predictionRow.bookmaker).toBe("Pinnacle");
     // Sem lado recomendado: colunas de recomendação continuam null.
     expect(predictionRow.oddAtRecommendation).toBeNull();
@@ -573,6 +576,14 @@ function impliedPctOf(over: number, under: number, side: "over" | "under") {
   return (side === "over" ? probs[0] : probs[1]) * 100;
 }
 
+// PSO (prediction_selection_odds) é a 3ª chamada de insert: selectionId → odd.
+// O par over/under congelado vive aqui (Fase 5 dropou as colunas legadas
+// over/underOddAtPrediction); estes asserts substituem os antigos por coluna.
+function psoOddByKey(call: unknown): Record<string, string> {
+  const rows = (call ?? []) as Array<{ selectionId: string; odd: string }>;
+  return Object.fromEntries(rows.map((r) => [r.selectionId, r.odd]));
+}
+
 describe("predict() — paridade de colunas (#165): legado byte-idêntico + novas + PSO", () => {
   it("over assimétrico (2.10/1.74): legado byte-idêntico + market/selection/params + PSO == par congelado", async () => {
     getLatestFreshSelectionOddsSnapshots.mockResolvedValueOnce(
@@ -598,10 +609,7 @@ describe("predict() — paridade de colunas (#165): legado byte-idêntico + nova
     >;
     // Legado byte-idêntico (mesma matemática de implied/edge que predict.ts:367-372).
     const impliedOver = impliedPctOf(2.1, 1.74, "over");
-    expect(predictionRow.market).toBe("over_under_2_5");
     expect(predictionRow.recommendation).toBe("over");
-    expect(predictionRow.overOddAtPrediction).toBe("2.100");
-    expect(predictionRow.underOddAtPrediction).toBe("1.740");
     expect(predictionRow.oddAtRecommendation).toBe("2.100");
     expect(predictionRow.impliedProbPct).toBe(impliedOver.toFixed(2));
     expect(predictionRow.edgePct).toBe((60 - impliedOver).toFixed(2));
@@ -625,8 +633,8 @@ describe("predict() — paridade de colunas (#165): legado byte-idêntico + nova
     const byKey = Object.fromEntries(
       psoRows.map((r) => [r.selectionId, r.odd]),
     );
-    expect(byKey["sel-over"]).toBe(predictionRow.overOddAtPrediction);
-    expect(byKey["sel-under"]).toBe(predictionRow.underOddAtPrediction);
+    expect(byKey["sel-over"]).toBe("2.100");
+    expect(byKey["sel-under"]).toBe("1.740");
     expect(psoRows.every((r) => r.predictionId === "row-1")).toBe(true);
   });
 
@@ -696,8 +704,8 @@ describe("predict() — paridade de colunas (#165): legado byte-idêntico + nova
     const byKey = Object.fromEntries(
       psoRows.map((r) => [r.selectionId, r.odd]),
     );
-    expect(byKey["sel-over"]).toBe(predictionRow.overOddAtPrediction);
-    expect(byKey["sel-under"]).toBe(predictionRow.underOddAtPrediction);
+    expect(byKey["sel-over"]).toBe("1.900");
+    expect(byKey["sel-under"]).toBe("1.950");
   });
 
   it("partial PSO failure após prediction commitada: degrada (não-throw), retorna a prediction", async () => {
@@ -1410,11 +1418,10 @@ describe("predict() — multi-linha (#175): linha escolhida round-trip pro persi
     >;
     // Linha escolhida round-trip → marketParams (settlement lê daqui).
     expect(predictionRow.marketParams).toEqual({ line: 3.5 });
-    // Gate do enum legado: linha ≠ 2.5 → null (não há enum legado por linha).
-    expect(predictionRow.market).toBeNull();
-    // Par congelado = odds da 3.5 (NÃO 2.5 "1.900"/"1.950").
-    expect(predictionRow.overOddAtPrediction).toBe("3.400");
-    expect(predictionRow.underOddAtPrediction).toBe("1.320");
+    // Par congelado (na PSO) = odds da 3.5 (NÃO 2.5 "1.900"/"1.950").
+    const psoByKey = psoOddByKey(insertValues.mock.calls[2]?.[0]);
+    expect(psoByKey["sel-over"]).toBe("3.400");
+    expect(psoByKey["sel-under"]).toBe("1.320");
     expect(predictionRow.oddAtRecommendation).toBe("3.400");
     // edge computado da implícita da 3.5 (não da 2.5).
     const impliedOver35 = impliedPctOf(3.4, 1.32, "over");
@@ -1455,11 +1462,10 @@ describe("predict() — multi-linha (#175): linha escolhida round-trip pro persi
       unknown
     >;
     expect(predictionRow.marketParams).toEqual({ line: 2.5 });
-    // Chosen-line gate: SÓ a 2.5 mapeia pro enum legado single-value.
-    expect(predictionRow.market).toBe("over_under_2_5");
-    // Odds da 2.5 (NÃO 1.5 nem 3.5).
-    expect(predictionRow.overOddAtPrediction).toBe("1.900");
-    expect(predictionRow.underOddAtPrediction).toBe("1.950");
+    // Par congelado (na PSO) = odds da 2.5 (NÃO 1.5 nem 3.5).
+    const psoByKey = psoOddByKey(insertValues.mock.calls[2]?.[0]);
+    expect(psoByKey["sel-over"]).toBe("1.900");
+    expect(psoByKey["sel-under"]).toBe("1.950");
     expect(predictionRow.oddAtRecommendation).toBe("1.900");
     const impliedOver25 = impliedPctOf(1.9, 1.95, "over");
     expect(predictionRow.impliedProbPct).toBe(impliedOver25.toFixed(2));
@@ -1496,16 +1502,16 @@ describe("predict() — multi-linha (#175): linha escolhida round-trip pro persi
     // A linha avaliada round-trip mesmo em pass (settlement ignora pass via void/0,
     // mas a view usa marketParams.line pros labels).
     expect(predictionRow.marketParams).toEqual({ line: 1.5 });
-    expect(predictionRow.market).toBeNull(); // 1.5 ≠ 2.5
     expect(predictionRow.recommendation).toBe("pass");
     // pass → sem lado: nem seleção, nem odd@rec, nem edge/implícita.
     expect(predictionRow.selectionId).toBeNull();
     expect(predictionRow.oddAtRecommendation).toBeNull();
     expect(predictionRow.edgePct).toBeNull();
     expect(predictionRow.impliedProbPct).toBeNull();
-    // Par congelado = odds da linha ESCOLHIDA (1.5), inclusive em pass (ADR 0012).
-    expect(predictionRow.overOddAtPrediction).toBe("1.300");
-    expect(predictionRow.underOddAtPrediction).toBe("3.500");
+    // Par congelado (na PSO) = odds da linha ESCOLHIDA (1.5), inclusive em pass (ADR 0012).
+    const psoByKey = psoOddByKey(insertValues.mock.calls[2]?.[0]);
+    expect(psoByKey["sel-over"]).toBe("1.300");
+    expect(psoByKey["sel-under"]).toBe("3.500");
   });
 
   it("LLM retorna uma linha FORA da escada resolvida → predict throws PredictError", async () => {
