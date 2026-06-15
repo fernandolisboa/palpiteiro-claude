@@ -190,6 +190,13 @@
       "when": 1781498055802,
       "tag": "0026_great_bloodscream",
       "breakpoints": true
+    },
+    {
+      "idx": 27,
+      "version": "7",
+      "when": 1781499644719,
+      "tag": "0027_outgoing_mandrill",
+      "breakpoints": true
     }
   ]
 }

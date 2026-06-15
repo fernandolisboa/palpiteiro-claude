@@ -1,0 +1,1 @@
+ALTER TABLE "ai_config" ADD COLUMN "enable_best_bet_fan_out" boolean DEFAULT false NOT NULL;

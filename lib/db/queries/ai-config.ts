@@ -69,6 +69,22 @@ export async function getEnableOverUnderExtraLines(): Promise<boolean> {
 }
 
 /**
+ * Feature-flag (#178): o modo "melhor aposta do jogo" (fan-out cross-mercado em
+ * código) está ligado? Lê do single-row (id=1); default OFF (false) quando não há
+ * row — só o analyze single-market de hoje. Flip data-driven (sem deploy): true → a
+ * CTA "Analisar todos os mercados" aparece pra todos os usuários onde há ≥2 mercados
+ * candidatos. Independente de getEnableOverUnderExtraLines (que governa a multi-linha).
+ */
+export async function getEnableBestBetFanOut(): Promise<boolean> {
+  const rows = await db
+    .select({ enabled: aiConfig.enableBestBetFanOut })
+    .from(aiConfig)
+    .where(eq(aiConfig.id, 1))
+    .limit(1);
+  return rows[0]?.enabled ?? false;
+}
+
+/**
  * Parâmetros de geração (ADR 0008, emenda 2). Lê do single-row (id=1) e cai nos
  * defaults seguros POR CAMPO se a row não existir ou o valor persistido for
  * inválido — espelha o fallback de getDefaultModelId (nunca manda lixo pro

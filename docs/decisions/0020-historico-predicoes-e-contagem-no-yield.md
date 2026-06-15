@@ -105,10 +105,31 @@ sem migration, sem estado denormalizado a reconciliar). As rejeitadas:
 - (−) Lista de recentes e KPIs **divergem por design** (recentes lista cada reanálise);
   a reconciliação é conceitual (feed de atividade vs performance), não numérica.
 
+## Emenda — chave composta materializada (#178, 2026-06-15)
+
+A Decisão 2 foi escrita na era single-market, com a chave de dedup `(matchId, userId)`.
+Desde então:
+
+- **#171 realizou a extensão**: a dedup do read-path passou a ser keyed por
+  `(matchId, userId, marketKey)` (`keepLatestPerMatch` em `lib/dashboard/kpis.ts` chaveia
+  `\`${matchId}|${marketKey}\``; `computeSegmentedKpis` agrega por mercado + agregado). A
+  "mais recente vence" agora vale **por mercado** — predições de mercados DISTINTOS no
+  mesmo jogo coexistem nos KPIs, cada uma no seu segmento.
+- **#178 ("melhor aposta do jogo") é o PRIMEIRO recurso** em que uma única ação do
+  usuário **materializa N predições reais de mercados distintos** pro mesmo jogo num só
+  run (fan-out cross-mercado em código — `lib/ai/best-bet.ts`). É exatamente a condição
+  pra qual a chave composta foi pré-posicionada: cada mercado conta no SEU segmento, sem
+  dupla contagem no agregado. **Sem mudança de código** — a chave `(matchId, marketKey)`
+  já estava implementada; #178 só passou a exercê-la em volume.
+- over/under multi-linha (1.5/2.5/3.5) **compartilha um slot** de dedup: as três linhas
+  têm a mesma `markets.key='over_under'` (a chave NÃO inclui `marketParams`/linha), então
+  a mais recente vence line-agnóstico — comportamento intencional desta era.
+
 ## Referências
 
 - Registra as decisões pedidas no #115; a contagem é implementada no **#116** (dedup
-  no read-path, keyed por `(matchId)`, extensível a `(matchId, market)` no #171).
+  no read-path, keyed por `(matchId)`, estendida a `(matchId, marketKey)` no **#171** e
+  exercida em volume pelo fan-out cross-mercado do **#178**).
 - A query de histórico que materializa a decisão (1) é o **#114**
   (`getPredictionHistoryForMatch`).
 - CLAUDE.md — "nunca mutar predições passadas; sempre criar nova predição com

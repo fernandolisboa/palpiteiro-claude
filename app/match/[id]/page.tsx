@@ -5,6 +5,7 @@ import { ChevronLeft } from "lucide-react";
 
 import { AnalysisPanel } from "@/components/analysis-panel";
 import { AnalysisResult } from "@/components/analysis-result";
+import { BestBetPanel } from "@/components/best-bet-panel";
 import { DesktopShell } from "@/components/desktop-shell";
 import { MatchAuxiliarySections } from "@/components/match-sections-auxiliary";
 import { MatchHero } from "@/components/match-hero";
@@ -19,7 +20,10 @@ import {
 import { auth } from "@/auth";
 import { MODEL_REGISTRY, modelsForAudience } from "@/lib/ai/models";
 import { LEAGUE_LABEL, leagueToKey } from "@/lib/format";
-import { getDefaultModelId } from "@/lib/db/queries/ai-config";
+import {
+  getDefaultModelId,
+  getEnableBestBetFanOut,
+} from "@/lib/db/queries/ai-config";
 import {
   marketsForAudience,
   marketsForLeague,
@@ -35,6 +39,12 @@ import { toAnalysisView } from "@/lib/view/analysis";
 import { toMatchRowView } from "@/lib/view/match";
 import { toNwayOddsView, toOddsView } from "@/lib/view/odds";
 import type { OddsView } from "@/lib/view/types";
+
+// Fan-out "melhor aposta" (#178) roda até ~4 predict() SERIAIS num request — no pior
+// caso (retries do Anthropic) leva minutos. Estende o budget da rota (Vercel max).
+// Uma truncagem por timeout deixa as ≤N predições JÁ persistidas (reais) visíveis no
+// próximo load (keepLatestPerMatch), sem retornar a view deste request.
+export const maxDuration = 300;
 
 type PageProps = {
   params: Promise<{ id: string }>;
@@ -68,6 +78,7 @@ export default async function MatchPage({ params }: PageProps) {
     defaultModelId,
     preferredModelId,
     audienceMarkets,
+    bestBetEnabled,
   ] = await Promise.all([
     ensureP,
     matchResultP,
@@ -75,6 +86,7 @@ export default async function MatchPage({ params }: PageProps) {
     getDefaultModelId(),
     getPreferredModelId(session.user.id),
     marketsForAudience(isAdmin),
+    getEnableBestBetFanOut(),
   ]);
   const defaultModelLabel = MODEL_REGISTRY[defaultModelId].label;
 
@@ -195,6 +207,7 @@ export default async function MatchPage({ params }: PageProps) {
           selectableMarkets={selectableMarkets}
           defaultModelLabel={defaultModelLabel}
           preferredModelId={preferredModelId}
+          bestBetEnabled={bestBetEnabled}
         />
       </div>
       <div className="hidden lg:block">
@@ -213,6 +226,7 @@ export default async function MatchPage({ params }: PageProps) {
           selectableMarkets={selectableMarkets}
           defaultModelLabel={defaultModelLabel}
           preferredModelId={preferredModelId}
+          bestBetEnabled={bestBetEnabled}
         />
       </div>
     </>
@@ -240,6 +254,9 @@ type Common = {
   selectableMarkets: { key: string; label: string }[];
   defaultModelLabel: string;
   preferredModelId: string | null;
+  // Flag #178: a CTA "Analisar todos os mercados" (fan-out cross-mercado) só aparece
+  // com a flag ligada E ≥2 mercados candidatos. Gate efetivo revalidado em analyzeBestBet.
+  bestBetEnabled: boolean;
 };
 
 function MobileMatch({
@@ -257,6 +274,7 @@ function MobileMatch({
   selectableMarkets,
   defaultModelLabel,
   preferredModelId,
+  bestBetEnabled,
 }: Common) {
   return (
     <div className="min-h-screen bg-background text-foreground">
@@ -302,6 +320,14 @@ function MobileMatch({
         ) : (
           <FinishedNotice score={finalScore} />
         )}
+        {analyzable && bestBetEnabled && selectableMarkets.length > 1 && (
+          <div className="flex flex-col gap-2 border-t border-border pt-3">
+            <span className="font-mono text-[10px] uppercase tracking-[0.16em] text-muted-fg-2">
+              melhor aposta do jogo
+            </span>
+            <BestBetPanel matchId={matchId} />
+          </div>
+        )}
         <Suspense fallback={<MatchSectionsSkeleton />}>
           <MatchSections fixtureRef={fixtureRef} leagueKey={leagueKey} />
         </Suspense>
@@ -328,6 +354,7 @@ function DesktopMatch({
   selectableMarkets,
   defaultModelLabel,
   preferredModelId,
+  bestBetEnabled,
 }: Common) {
   return (
     <DesktopShell>
@@ -434,6 +461,15 @@ function DesktopMatch({
             <FinishedNotice score={finalScore} />
           )}
         </div>
+
+        {analyzable && bestBetEnabled && selectableMarkets.length > 1 && (
+          <div className="flex flex-col gap-2 border-t border-border pt-3 pb-6">
+            <span className="font-mono text-[10px] uppercase tracking-[0.16em] text-muted-fg-2">
+              melhor aposta do jogo
+            </span>
+            <BestBetPanel matchId={matchId} />
+          </div>
+        )}
 
         <Suspense fallback={<MatchSectionsSkeleton />}>
           <MatchSections fixtureRef={fixtureRef} leagueKey={leagueKey} />

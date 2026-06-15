@@ -4,11 +4,21 @@ import { revalidatePath } from "next/cache";
 import { z } from "zod";
 
 import { auth } from "@/auth";
-import { isEmailAllowed } from "@/lib/auth/whitelist";
+import {
+  MAX_ADDITIONAL_FETCHES,
+  MAX_FANOUT_MARKETS,
+  capCandidates,
+  runFanOut,
+  type FanOutMarket,
+} from "@/lib/ai/best-bet";
 import { getCartridge } from "@/lib/ai/markets/registry";
 import { isModelAllowedForAudience, type AIModelId } from "@/lib/ai/models";
 import { PredictError, predict } from "@/lib/ai/predict";
-import { getEnableOverUnderExtraLines } from "@/lib/db/queries/ai-config";
+import { isEmailAllowed } from "@/lib/auth/whitelist";
+import {
+  getEnableBestBetFanOut,
+  getEnableOverUnderExtraLines,
+} from "@/lib/db/queries/ai-config";
 import { extractDbCause } from "@/lib/db/pg-error";
 import {
   marketsForAudience,
@@ -20,7 +30,8 @@ import { getUserAccessState } from "@/lib/db/queries/users";
 import { ensureOddsSnapshotsFresh } from "@/lib/odds/fetch-and-snapshot";
 import { checkAnalysisRateLimit } from "@/lib/rate-limit";
 import { toAnalysisView } from "@/lib/view/analysis";
-import type { AnalysisView } from "@/lib/view/types";
+import { toBestBetView } from "@/lib/view/best-bet";
+import type { AnalysisView, BestBetView } from "@/lib/view/types";
 
 export type AnalyzeMatchResult =
   | { ok: true; view: AnalysisView }
@@ -270,4 +281,207 @@ export async function analyzeMatch(
       error: "Falha temporária ao gerar análise. Tente novamente.",
     };
   }
+}
+
+// ─── Modo "melhor aposta do jogo" (#178) ─────────────────────────────────────
+
+export type AnalyzeBestBetResult =
+  | { ok: true; view: BestBetView }
+  | { ok: false; error: string };
+
+// Mapeia QUALQUER erro pra mensagem amigável de UI. PredictError reusa o
+// friendlyMessage; o resto (inesperado: DB etc.) cai numa cópia genérica. Fica
+// server-side (passado pro orquestrador e pro pré-warm) — nunca vaza pro cliente.
+function friendlyMessageFromUnknown(err: unknown): string {
+  if (err instanceof PredictError) return friendlyMessage(err);
+  return "Falha temporária ao gerar análise. Tente novamente.";
+}
+
+// Resolve extraLines pra UM mercado — port VERBATIM do bloco inline do analyzeMatch
+// (L166-174), sem reler a flag (vem por parâmetro). Descriptor-driven, SEM literal de
+// mercado: getCartridge(extraLines) devolve a variante onde existir (over_under→v3),
+// `candidateLines` a distingue da base, `coveredLeagues` restringe às ligas validadas.
+// analyzeMatch NÃO adota este helper neste PR (mantém o single-market intocado/golden).
+function resolveExtraLines(
+  marketKey: string,
+  league: string,
+  flagEnabled: boolean,
+): boolean {
+  const d = getCartridge(marketKey, { extraLines: flagEnabled }).descriptor;
+  return (
+    flagEnabled &&
+    d.candidateLines !== undefined &&
+    (d.coveredLeagues === undefined ||
+      d.coveredLeagues.some((l) => l === league))
+  );
+}
+
+/**
+ * Fan-out cross-mercado: analisa TODOS os mercados ativos do jogo (audiência ∩ liga),
+ * uma predição REAL por mercado (cada uma logada em ai_calls), ranqueadas no cliente.
+ *
+ * Ordem dos gates é LOAD-BEARING: o flag re-check e o guard de candidatos-vazios vêm
+ * ANTES do checkAnalysisRateLimit (que INCREMENTA o contador — é consumo, não leitura),
+ * pra um POST flag-off ou um jogo sem mercado NUNCA queimar um slot diário. Rate-limit
+ * é o ÚLTIMO gate antes do spend. Best-of-successful: 1 mercado falho não derruba o run.
+ */
+export async function analyzeBestBet(
+  _prev: AnalyzeBestBetResult | null,
+  formData: FormData,
+): Promise<AnalyzeBestBetResult> {
+  const matchId = String(formData.get("matchId") ?? "");
+  if (!matchId) {
+    return { ok: false, error: "matchId ausente" };
+  }
+  if (!z.uuid().safeParse(matchId).success) {
+    return { ok: false, error: "Identificador de jogo inválido." };
+  }
+  const session = await auth();
+  if (!session?.user?.id) {
+    return { ok: false, error: "Faça login para analisar." };
+  }
+  const access = await getUserAccessState(session.user.id);
+  if (!access) {
+    return { ok: false, error: "Sua sessão expirou. Faça login novamente." };
+  }
+  // Compõe com o floor do env (ADR 0023 §3/§6, #276): um e-mail no floor é permitido
+  // mesmo com `allowed=false` no DB — espelha o gate do analyzeMatch.
+  if (!access.allowed && !isEmailAllowed(session.user.email)) {
+    return {
+      ok: false,
+      error: "Seu acesso está bloqueado. Fale com o administrador.",
+    };
+  }
+  // Flag re-check server-side ANTES de qualquer spend E antes do incremento do
+  // rate-limit (server actions são POST chamáveis fora do layout): flag-off = recurso
+  // indisponível, sem queimar slot.
+  const bestBetEnabled = await getEnableBestBetFanOut();
+  if (!bestBetEnabled) {
+    return { ok: false, error: "Recurso indisponível." };
+  }
+  const match = await getMatchById(matchId);
+  if (!match) {
+    return { ok: false, error: "Jogo não encontrado." };
+  }
+  if (match.status === "finished" || match.status === "cancelled") {
+    return { ok: false, error: "Este jogo já foi encerrado ou cancelado." };
+  }
+  const isAdmin = session.user.role === "admin";
+  const overrideRaw = String(formData.get("modelOverride") ?? "");
+  let modelOverride: AIModelId | undefined;
+  if (
+    overrideRaw &&
+    overrideRaw !== "default" &&
+    isModelAllowedForAudience(overrideRaw, isAdmin)
+  ) {
+    modelOverride = overrideRaw;
+  }
+  // Candidatos = audiência ∩ cobertura de liga (a MESMA expressão do analyzeMatch +
+  // page.tsx). Cap retendo Tier-1 (over/under + 1X2) p/ teto de LLM calls.
+  const candidates = capCandidates(
+    marketsForLeague(await marketsForAudience(isAdmin), match.league),
+    MAX_FANOUT_MARKETS,
+  );
+  if (candidates.length === 0) {
+    return { ok: false, error: "Nenhum mercado disponível para este jogo." };
+  }
+  // Linhas extras (#175): flag SEPARADA (enable_over_under_extra_lines), NÃO a do
+  // best-bet. Resolvida UMA vez por candidato no FanOutMarket — o MESMO valor alimenta
+  // o pré-warm e o predict (senão predict resolveria um cartucho diferente do aquecido).
+  const extraLinesEnabled = await getEnableOverUnderExtraLines();
+  const fanOut: FanOutMarket[] = candidates.map((c) => ({
+    marketKey: c.key,
+    extraLines: resolveExtraLines(c.key, match.league, extraLinesEnabled),
+  }));
+  // Rate-limit é o ÚLTIMO gate antes do spend (incrementa 1× por run). ATENÇÃO: 1 slot
+  // aqui autoriza um RUN inteiro — até MAX_FANOUT_MARKETS predict() pagos + até
+  // MAX_ADDITIONAL_FETCHES créditos de odds. Diferente do analyzeMatch (1 slot = 1
+  // call). O teto diário (lib/rate-limit.ts) não foi rederivado pra esse multiplicador
+  // — re-avaliar o budget/dia (ou cobrar slots proporcionais) ANTES de ligar a flag.
+  const rateLimit = await checkAnalysisRateLimit(
+    session.user.id,
+    session.user.role,
+  );
+  if (!rateLimit.ok) {
+    if (rateLimit.reason === "fail-closed") {
+      return {
+        ok: false,
+        error: "Análises temporariamente indisponíveis. Tente mais tarde.",
+      };
+    }
+    return {
+      ok: false,
+      error: `Você atingiu o limite de ${rateLimit.limit} análises por dia. Tente novamente amanhã.`,
+    };
+  }
+  // Pré-aquece os mercados *additional* (btts/dupla chance/over_under multi-linha): o
+  // descriptor EFETIVO sai do MESMO m.extraLines do FanOutMarket. Cada um numa chamada
+  // própria (ensureOddsSnapshotsFresh hard-throws em seed faltante) → a falha de um vira
+  // erro POR mercado, sem abortar os irmãos. Teto de créditos additional/run.
+  const additional = fanOut
+    .map((m) => ({
+      marketKey: m.marketKey,
+      descriptor: getCartridge(m.marketKey, { extraLines: m.extraLines })
+        .descriptor,
+    }))
+    .filter((x) => x.descriptor.oddsSource === "additional");
+  // Teto de créditos: nunca pré-aquece mais que MAX_ADDITIONAL_FETCHES. Um mercado
+  // cortado aqui CONTINUA no fanOut → runFanOut chama predict() pra ele, mas predict
+  // lança "sem snapshot fresco" ANTES da chamada Anthropic (sem gasto de LLM nem
+  // crédito). Hoje inalcançável (WC tem ≤3 additional); move junto com MAX_FANOUT_MARKETS.
+  const additionalToFetch =
+    additional.length > MAX_ADDITIONAL_FETCHES
+      ? additional.slice(0, MAX_ADDITIONAL_FETCHES)
+      : additional;
+  console.info(
+    JSON.stringify({
+      scope: "analyzeBestBet",
+      matchId,
+      candidates: fanOut.length,
+      additionalFetches: additionalToFetch.length,
+    }),
+  );
+  const preWarmErrors: { marketKey: string; message: string }[] = [];
+  for (const { marketKey: mk, descriptor } of additionalToFetch) {
+    try {
+      await ensureOddsSnapshotsFresh(match, { markets: [descriptor] });
+    } catch (err) {
+      preWarmErrors.push({
+        marketKey: mk,
+        message: friendlyMessageFromUnknown(err),
+      });
+    }
+  }
+  // Fan-out SERIAL: predict() por candidato (a única porta pro LLM), best-of-successful.
+  const outcomes = await runFanOut(
+    { matchId, userId: session.user.id, isAdmin, modelOverride },
+    fanOut,
+    friendlyMessageFromUnknown,
+  );
+  // Custo por análise bem-sucedida (lê a aiCall pra exibir).
+  const aiCallByMarketKey = new Map<
+    string,
+    { costUsd: string | number } | null
+  >();
+  for (const o of outcomes) {
+    if (o.ok) {
+      const aiCall = await getAiCallById(o.result.prediction.aiCallId);
+      aiCallByMarketKey.set(
+        o.marketKey,
+        aiCall ? { costUsd: aiCall.costUsd } : null,
+      );
+    }
+  }
+  const view = toBestBetView(outcomes, aiCallByMarketKey, preWarmErrors);
+  if (view.entries.length === 0) {
+    // Todos falharam → estado de erro (espelha o total-failure do analyzeMatch), NÃO um
+    // sucesso vazio. O run pode ter pago ≤N calls pós-Anthropic + 1 slot — surge como erro.
+    return {
+      ok: false,
+      error: view.errors[0]?.message ?? "Nenhum mercado pôde ser analisado.",
+    };
+  }
+  revalidatePath(`/match/${matchId}`);
+  revalidatePath("/");
+  return { ok: true, view };
 }
