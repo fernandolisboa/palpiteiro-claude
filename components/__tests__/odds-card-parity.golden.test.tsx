@@ -17,14 +17,14 @@ function normalizeMarkup(html: string): string {
     .replace(/:r[0-9a-z]+:/gi, ":rID:");
 }
 
+// Shape N-vias (#173 PR-2). Os MESMOS valores lógicos do binário pré-refactor —
+// o snapshot esperado abaixo é INALTERADO, então a igualdade prova byte-paridade.
 const OU_VIEW: OddsView = {
   marketLabel: "Over/Under gols",
-  overLabel: "Over 2.5",
-  underLabel: "Under 2.5",
-  over: "1.92",
-  under: "2.05",
-  overPct: "50.7%",
-  underPct: "49.3%",
+  outcomes: [
+    { label: "Over 2.5", odd: "1.92", pct: "50.7%" },
+    { label: "Under 2.5", odd: "2.05", pct: "49.3%" },
+  ],
   bookmaker: "Bet365",
   overround: "4.5%",
   updatedAgo: "5 min",

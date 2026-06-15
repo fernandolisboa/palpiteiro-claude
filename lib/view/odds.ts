@@ -40,12 +40,20 @@ export function toOddsView(
   );
   return {
     marketLabel: LIVE_ODDS_PRESENTATION.marketLabel,
-    overLabel: LIVE_OVER_LABEL,
-    underLabel: LIVE_UNDER_LABEL,
-    over: formatOdd(overOdd),
-    under: formatOdd(underOdd),
-    overPct: formatPct(overProb * 100, { decimals: 1 }),
-    underPct: formatPct(underProb * 100, { decimals: 1 }),
+    // Forma N-vias (#173): over/under = 2 outcomes na ordem over→under. Mesmos
+    // valores/labels/formatters de antes → DOM byte-idêntico (golden pina).
+    outcomes: [
+      {
+        label: LIVE_OVER_LABEL,
+        odd: formatOdd(overOdd),
+        pct: formatPct(overProb * 100, { decimals: 1 }),
+      },
+      {
+        label: LIVE_UNDER_LABEL,
+        odd: formatOdd(underOdd),
+        pct: formatPct(underProb * 100, { decimals: 1 }),
+      },
+    ],
     bookmaker: snapshot.bookmaker,
     overround: formatPct(overround * 100, { decimals: 1 }),
     updatedAgo: formatRelativeAgo(snapshot.capturedAt, now),

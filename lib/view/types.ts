@@ -49,17 +49,21 @@ export type MatchRowView = {
 
 export type MatchHeroView = MatchRowView;
 
+// Uma seleção do card de odds ao vivo, 100% strings prontas pra render. Forma
+// N-vias canônica (#173 PR-2): over/under expõe 2 outcomes, 1X2 expõe 3, na
+// ordem canônica do mercado (market_selections.sortOrder, resolvida no reader).
+export type OddsOutcomeView = {
+  label: string; // "Over 2.5" | "Casa" — outcomeLabel da apresentação (seed + linha)
+  odd: string; // "1.92"
+  pct: string; // "50.7%" — implícita normalizada (Σ=1) do mercado completo
+};
+
 export type OddsView = {
-  // Rótulos curtos por lado, resolvidos pela view a partir do registry de
-  // apresentação (de-hardcode "Over 2.5"/"Under 2.5"/badge — AC3). `marketLabel`
-  // alimenta a badge do card. Shape binário mantido (live N-vias = Fase 4).
+  // `marketLabel` alimenta a badge do card ("Over/Under gols"/"Resultado (1X2)").
+  // `outcomes` é a forma N-vias: o card renderiza grid-cols-{outcomes.length}.
+  // over/under (N=2) é byte-idêntico ao binário pré-#173 (golden pina o DOM).
   marketLabel: string;
-  overLabel: string;
-  underLabel: string;
-  over: string;
-  under: string;
-  overPct: string;
-  underPct: string;
+  outcomes: OddsOutcomeView[];
   bookmaker: string;
   overround: string;
   updatedAgo: string;

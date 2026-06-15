@@ -10,6 +10,13 @@ type Props = {
   view: OddsView | null;
 };
 
+// Classe de grid estática por nº de seleções — Tailwind não interpola classes
+// dinâmicas (`grid-cols-${n}` seria purgado). over/under=2, 1X2=3.
+const GRID_COLS: Record<number, string> = {
+  2: "grid-cols-2",
+  3: "grid-cols-3",
+};
+
 export function OddsCard({ view }: Props) {
   if (!view) {
     return (
@@ -52,34 +59,44 @@ export function OddsCard({ view }: Props) {
         </span>
       </div>
       <Separator />
-      <div className="grid grid-cols-2">
-        <div className="flex flex-col gap-1 border-r border-border-subtle px-4 py-3.5">
-          <span className="flex items-center gap-1.5 text-[11px] uppercase tracking-[0.12em] text-muted-foreground">
-            {view.overLabel}
-          </span>
-          <span className="font-mono text-[22px] font-medium tabular-nums tracking-tight">
-            {view.over}
-          </span>
-          <span className="flex items-center gap-1 font-mono text-[10.5px] tabular-nums text-muted-foreground">
-            {view.overPct} normalizada
-            <HelpHint
-              anchor="prob-implicita"
-              label="prob. do mercado (normalizada)"
-              blurb="A chance que a odd embute, já descontada a margem da casa. Normaliza os dois lados; nunca é 1/odd cru."
-            />
-          </span>
-        </div>
-        <div className="flex flex-col gap-1 px-4 py-3.5">
-          <span className="flex items-center gap-1.5 text-[11px] uppercase tracking-[0.12em] text-muted-foreground">
-            {view.underLabel}
-          </span>
-          <span className="font-mono text-[22px] font-medium tabular-nums tracking-tight">
-            {view.under}
-          </span>
-          <span className="font-mono text-[10.5px] tabular-nums text-muted-foreground">
-            {view.underPct} normalizada
-          </span>
-        </div>
+      {/* Grid N-vias: 2 col (over/under) ou 3 (1X2). Classe estática por N
+          (Tailwind não interpola). A cell 0 carrega o HelpHint da implícita e
+          `flex items-center gap-1` no pct; demais cells o pct é plano. `border-r`
+          em toda cell menos a última. n=2 = byte-idêntico ao binário (golden). */}
+      <div className={`grid ${GRID_COLS[view.outcomes.length]}`}>
+        {view.outcomes.map((o, i) => {
+          const isFirst = i === 0;
+          const isLast = i === view.outcomes.length - 1;
+          return (
+            <div
+              key={i}
+              className={`flex flex-col gap-1 ${isLast ? "" : "border-r border-border-subtle "}px-4 py-3.5`}
+            >
+              <span className="flex items-center gap-1.5 text-[11px] uppercase tracking-[0.12em] text-muted-foreground">
+                {o.label}
+              </span>
+              <span className="font-mono text-[22px] font-medium tabular-nums tracking-tight">
+                {o.odd}
+              </span>
+              <span
+                className={
+                  isFirst
+                    ? "flex items-center gap-1 font-mono text-[10.5px] tabular-nums text-muted-foreground"
+                    : "font-mono text-[10.5px] tabular-nums text-muted-foreground"
+                }
+              >
+                {o.pct} normalizada
+                {isFirst && (
+                  <HelpHint
+                    anchor="prob-implicita"
+                    label="prob. do mercado (normalizada)"
+                    blurb="A chance que a odd embute, já descontada a margem da casa. Normaliza os dois lados; nunca é 1/odd cru."
+                  />
+                )}
+              </span>
+            </div>
+          );
+        })}
       </div>
       <Separator />
       <div className="flex items-center justify-between px-4 py-2.5 font-mono text-[10px] text-muted-fg-2">
