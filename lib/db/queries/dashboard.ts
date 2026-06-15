@@ -46,9 +46,11 @@ function marketLabelForKey(key: string): string {
 // Row crua do select (markets via LEFT JOIN → key/label NULL quando a row não tem
 // marketId). `toDashboardRow` é PURA + exportada pra testar o coalesce — o caminho
 // PRIMÁRIO de paridade (marketId null → over_under) — sem subir um banco.
+// `closingOdd`/`closingOverroundPct` NÃO vêm da query (são enriquecidos pós-dedup
+// por enrichDashboardRowsWithClosing) → ficam fora do raw e nascem null aqui.
 export type RawUserDashboardRow = Omit<
   DashboardRow,
-  "marketKey" | "marketLabel"
+  "marketKey" | "marketLabel" | "closingOdd" | "closingOverroundPct"
 > & {
   market: string | null;
   marketKey: string | null;
@@ -66,6 +68,8 @@ export function toDashboardRow({
     ...rest,
     marketKey: key,
     marketLabel: marketLabel ?? marketLabelForKey(key),
+    closingOdd: null,
+    closingOverroundPct: null,
   };
 }
 
@@ -101,6 +105,12 @@ export async function getUserDashboardRows(
       result: predictionOutcomes.result,
       profitUnits: predictionOutcomes.profitUnits,
       settledAt: predictionOutcomes.settledAt,
+      // CLV (#180): identidade da seleção/linha + insumos do CLV no-vig.
+      selectionId: predictions.selectionId,
+      marketId: predictions.marketId,
+      marketParams: predictions.marketParams,
+      kickoffAt: matches.kickoffAt,
+      impliedProbPct: predictions.impliedProbPct,
     })
     .from(predictions)
     .innerJoin(matches, eq(predictions.matchId, matches.id))

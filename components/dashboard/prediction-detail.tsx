@@ -52,7 +52,14 @@ export function PredictionDetail({
   backHref?: string;
   backLabel?: string;
 }) {
-  const { match, prediction, outcome, aiCall, rawPayloads } = view;
+  const { match, prediction, clv, outcome, aiCall, rawPayloads } = view;
+  // CLV sinalizado: + (bateu o fechamento) = verde, − = vermelho, "—" = neutro.
+  const clvTone = (value: string) =>
+    value.startsWith("+")
+      ? "text-emerald-500"
+      : value.startsWith("-")
+        ? "text-red-500"
+        : "text-muted-foreground";
   const resultClass =
     outcome?.result === "won"
       ? "text-emerald-500"
@@ -85,6 +92,28 @@ export function PredictionDetail({
       <Row label="stake" value={prediction.stake} />
       <Row label="bookmaker" value={prediction.bookmaker} />
       <Row label="gerada em" value={prediction.createdAt} />
+
+      <SectionLabel>CLV (linha de fechamento)</SectionLabel>
+      {clv.available ? (
+        <>
+          <Row label="odd de fechamento" value={clv.closingOdd} />
+          <Row
+            label="CLV razão de odds"
+            value={clv.oddsRatioPct}
+            className={clvTone(clv.oddsRatioPct)}
+          />
+          <Row
+            label="CLV no-vig"
+            value={clv.noVigDeltaPp}
+            className={clvTone(clv.noVigDeltaPp)}
+          />
+        </>
+      ) : (
+        <p className="text-[13px] text-muted-foreground">
+          Sem closing line capturada — o CLV (seu preço vs o de fechamento)
+          aparece quando a odd de fechamento for capturada perto do kickoff.
+        </p>
+      )}
 
       <SectionLabel>racional</SectionLabel>
       <p className="text-[13.5px] leading-relaxed tracking-tight">

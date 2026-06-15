@@ -4,6 +4,7 @@ import { z } from "zod";
 import { PredictionDetail } from "@/components/dashboard/prediction-detail";
 import { DesktopShell } from "@/components/desktop-shell";
 import { auth } from "@/auth";
+import { getClosingSnapshotForDetail } from "@/lib/db/queries/clv-snapshots";
 import { getPredictionDetailForUser } from "@/lib/db/queries/dashboard";
 import { toPredictionDetailView } from "@/lib/view/dashboard";
 
@@ -36,8 +37,13 @@ export default async function AdminUserPredictionPage({ params }: PageProps) {
   const detail = await getPredictionDetailForUser(predictionId, userId);
   if (!detail) notFound();
 
-  // Caminho de admin → sempre inclui os payloads brutos (input/output do LLM).
-  const view = toPredictionDetailView(detail, { includeRawPayloads: true });
+  // CLV (#180): mesma closing line do detail do usuário (paridade — sem isso o admin
+  // veria sempre "—"). Caminho de admin → sempre inclui os payloads brutos do LLM.
+  const closing = await getClosingSnapshotForDetail(detail.prediction);
+  const view = toPredictionDetailView(detail, {
+    includeRawPayloads: true,
+    closing,
+  });
 
   return (
     <DesktopShell>

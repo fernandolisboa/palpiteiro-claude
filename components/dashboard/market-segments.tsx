@@ -50,6 +50,56 @@ function GraduationRuler({
   );
 }
 
+// Uma métrica de CLV: valor sinalizado (+ verde = bateu o fechamento; − vermelho;
+// amber em amostra pequena; "—" sem dado) + a amostra.
+function ClvMetric({
+  label,
+  view,
+}: {
+  label: string;
+  view: { value: string; n: number; lowSample: boolean };
+}) {
+  const tone = view.value.startsWith("+")
+    ? "text-emerald-500"
+    : view.value.startsWith("-")
+      ? "text-red-500"
+      : "text-muted-foreground";
+  return (
+    <div className="flex flex-col gap-0.5">
+      <span
+        className={cn(
+          "text-[15px] font-medium leading-none tracking-[-0.01em] tabular-nums",
+          view.lowSample ? "text-amber-500" : tone,
+        )}
+      >
+        {view.value}
+      </span>
+      <span className="font-mono text-[9.5px] uppercase tracking-[0.1em] text-muted-foreground">
+        {label} · n={view.n}
+      </span>
+    </div>
+  );
+}
+
+// CLV (#180) por mercado — companheiro do Yield, FORA do gate `empty`: aparece assim
+// que há closing line capturada, antes de qualquer aposta liquidar (o ponto do CLV).
+// Sem nenhuma closing (clvOddsRatio.n === 0) → não renderiza (evita "—").
+function ClvLine({ segment }: { segment: MarketSegmentView }) {
+  const { clvOddsRatio, clvNoVigDelta } = segment.kpis;
+  if (clvOddsRatio.n === 0) return null;
+  return (
+    <div className="flex flex-col gap-2 rounded-md border border-border bg-surface-2 px-3 py-2.5">
+      <span className="font-mono text-[10px] uppercase tracking-[0.14em] text-muted-foreground">
+        CLV vs fechamento
+      </span>
+      <div className="flex items-baseline gap-5">
+        <ClvMetric label="razão de odds" view={clvOddsRatio} />
+        <ClvMetric label="no-vig" view={clvNoVigDelta} />
+      </div>
+    </div>
+  );
+}
+
 function StakeBands({ segment }: { segment: MarketSegmentView }) {
   return (
     <div className="flex flex-col gap-2">
@@ -96,6 +146,7 @@ function MarketSegmentCard({ segment }: { segment: MarketSegmentView }) {
           {segment.kpis.counts.bets} apostas
         </span>
       </div>
+      <ClvLine segment={segment} />
       {segment.empty ? (
         <p className="text-[12.5px] tracking-tight text-muted-foreground">
           Sem apostas resolvidas ainda — a régua D9 e o yield por banda aparecem

@@ -25,6 +25,13 @@ function row(overrides: Partial<DashboardRow> = {}): DashboardRow {
     result: null,
     profitUnits: null,
     settledAt: null,
+    selectionId: null,
+    marketId: null,
+    marketParams: null,
+    kickoffAt: new Date("2026-06-10T20:00:00Z"),
+    impliedProbPct: null,
+    closingOdd: null,
+    closingOverroundPct: null,
     ...overrides,
   };
 }

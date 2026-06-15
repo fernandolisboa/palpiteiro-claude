@@ -435,6 +435,13 @@ export const aiConfig = pgTable("ai_config", {
   // true → a CTA "Analisar todos os mercados" aparece pra TODOS os usuários onde há
   // ≥2 mercados candidatos. Reversível (SET ... = false). Independente do flag acima.
   enableBestBetFanOut: boolean().notNull().default(false),
+  // Feature-flag (#180): liga a CAPTURA da closing line (snapshot pré-kickoff que
+  // alimenta o CLV — companheira do Yield). Default OFF = zero gasto de quota; a
+  // EXIBIÇÃO do CLV no dashboard/detail é sempre on (mostra null até haver dado).
+  // Flip data-driven (sem deploy): true → o cron /api/cron/capture-closing-odds
+  // passa a capturar odds perto do KO SÓ pra jogos com predição non-pass. Sem toggle
+  // de UI (consistente com as flags acima — DB-flip only). Reversível (SET = false).
+  enableClvCapture: boolean().notNull().default(false),
   updatedByUserId: uuid().references(() => users.id, { onDelete: "set null" }),
   updatedAt: timestamp({ withTimezone: true }).notNull().defaultNow(),
 });

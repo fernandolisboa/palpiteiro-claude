@@ -85,6 +85,22 @@ export async function getEnableBestBetFanOut(): Promise<boolean> {
 }
 
 /**
+ * Feature-flag (#180): a CAPTURA da closing line (snapshot pré-kickoff que alimenta
+ * o CLV) está ligada? Lê do single-row (id=1); default OFF (false) quando não há row
+ * — zero gasto de quota. Flip data-driven (sem deploy): true → o cron
+ * capture-closing-odds passa a buscar odds perto do KO só pra jogos com predição
+ * non-pass. A EXIBIÇÃO do CLV é independente desta flag (sempre on; mostra null sem dado).
+ */
+export async function getEnableClvCapture(): Promise<boolean> {
+  const rows = await db
+    .select({ enabled: aiConfig.enableClvCapture })
+    .from(aiConfig)
+    .where(eq(aiConfig.id, 1))
+    .limit(1);
+  return rows[0]?.enabled ?? false;
+}
+
+/**
  * Parâmetros de geração (ADR 0008, emenda 2). Lê do single-row (id=1) e cai nos
  * defaults seguros POR CAMPO se a row não existir ou o valor persistido for
  * inválido — espelha o fallback de getDefaultModelId (nunca manda lixo pro

@@ -18,6 +18,10 @@ import {
   HttpClientTimeoutError,
   RetryableHttpError,
 } from "@/lib/providers/http/client";
+import {
+  getLastQuota,
+  type ExtractedQuota,
+} from "@/lib/providers/http/quota-logger";
 
 const ONE_MINUTE = 60_000;
 const FIVE_MINUTES = 5 * ONE_MINUTE;
@@ -43,6 +47,17 @@ const oddsApiClient = createProviderClient({
     monthlyLimit: 500,
   },
 });
+
+/**
+ * Última quota da The Odds API vista nesta process-memory (monthly remaining/used),
+ * ou null se nenhum fetch real rodou ainda (cold start / só cache hits). Usada pelo
+ * cron de CLV (#180) pra logar o crédito mensal restante após seus fetches — a
+ * mensuração de quota é a telemetria por-call do logCall; isto só dá a linha de
+ * summary do run.
+ */
+export function getLastOddsApiQuota(): ExtractedQuota | null {
+  return getLastQuota("odds-api");
+}
 
 // ─── Errors ──────────────────────────────────────────────────────────────────
 

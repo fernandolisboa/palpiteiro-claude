@@ -1,0 +1,1 @@
+ALTER TABLE "ai_config" ADD COLUMN "enable_clv_capture" boolean DEFAULT false NOT NULL;
