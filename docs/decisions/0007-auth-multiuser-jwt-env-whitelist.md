@@ -1,7 +1,9 @@
 # ADR 0007 — Auth multi-user: JWT + whitelist por env
 
 ## Status
-Accepted (2026-06) — **emenda o ADR 0004** (mecanismo de whitelist).
+Accepted (2026-06) — **emenda o ADR 0004** (mecanismo de whitelist). **Emendado
+pelo ADR 0023**: `role`/`allowed` passam a ser revalidados do DB no `jwt()` +
+`maxAge` na sessão (some a staleness de role/allowed na sessão viva).
 
 ## Contexto
 

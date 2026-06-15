@@ -1,7 +1,10 @@
 # ADR 0009 — Whitelist em tabela DB (modelo de duas fontes)
 
 ## Status
-Accepted (2026-06) — **emenda o ADR 0007** (mecanismo de whitelist).
+Accepted (2026-06) — **emenda o ADR 0007** (mecanismo de whitelist). **Emendado
+pelo ADR 0023**: self-provision aberto substitui o invite-only como porta padrão;
+`users.allowed` vira o flag de acesso autoritativo (ativo vs. bloqueado), reusado
+como guarda de custo mid-session.
 
 ## Contexto
 
