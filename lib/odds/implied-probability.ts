@@ -1,11 +1,5 @@
 export type Overround = number;
 
-export type ImpliedProbabilities = {
-  overProb: number;
-  underProb: number;
-  overround: Overround;
-};
-
 export type MarketImpliedProbabilities = {
   probs: number[];
   overround: Overround;
@@ -19,7 +13,8 @@ function assertValidOdd(label: string, odd: number): void {
 
 // Core canônico N-ário (ADR 0018, decisão 1): normaliza as probabilidades
 // implícitas de um mercado de N seleções descontando o overround embutido.
-// O over/under (N=2) é o caso particular — ver computeImpliedProbabilities.
+// O over/under (N=2) é só um caso particular deste core (sem wrapper binário
+// dedicado desde a Fase 5 — os callers passam [overOdd, underOdd]).
 // Fórmulas:
 //   raw_i = 1/odds[i]
 //   sum = Σ_i raw_i
@@ -42,25 +37,3 @@ export function computeMarketImpliedProbabilities(
   };
 }
 
-// Wrapper binário (over/under) — assinatura, shape e nome preservados pros
-// consumidores existentes. Delega ao core N-ário com a MESMA ordem de
-// operações float (reduce a partir de 0 é bit-exato com rawOver + rawUnder),
-// então a paridade de arredondamento com a versão anterior é trivial.
-// As validações over/under antes de delegar são mantidas pela ORDEM (governa
-// qual odd é reportada no erro) e continuidade de debug.
-export function computeImpliedProbabilities(
-  overOdd: number,
-  underOdd: number,
-): ImpliedProbabilities {
-  assertValidOdd("over", overOdd);
-  assertValidOdd("under", underOdd);
-  const { probs, overround } = computeMarketImpliedProbabilities([
-    overOdd,
-    underOdd,
-  ]);
-  return {
-    overProb: probs[0],
-    underProb: probs[1],
-    overround,
-  };
-}

@@ -1,7 +1,4 @@
-import {
-  computeImpliedProbabilities,
-  computeMarketImpliedProbabilities,
-} from "@/lib/odds/implied-probability";
+import { computeMarketImpliedProbabilities } from "@/lib/odds/implied-probability";
 
 // Threshold de edge do prompt over_under_v1.x, exposto pra UI não hardcodear.
 // Sincronia pinada por teste server-side (lib/ai/__tests__/request-builder.test.ts):
@@ -28,7 +25,7 @@ export function computeEvPerUnit(modelProbPct: number, odd: number): number {
 
 // Probabilidade REAL mínima (0-100) pra EV ≥ 0 na odd dada: 100/odd —
 // deliberadamente 1/odd CRU. NÃO é a probabilidade implícita normalizada de
-// computeImpliedProbabilities (que desconta o overround e serve pro edge):
+// computeMarketImpliedProbabilities (que desconta o overround e serve pro edge):
 // quem paga o apostador é o payout bruto da odd, então o ponto de equilíbrio
 // é contra a odd crua. NÃO "corrigir" pra versão normalizada — quebraria a
 // matemática do break-even (ADR 0012, decisão 6).
@@ -170,7 +167,7 @@ export type Scenarios = {
 //    implied = 100 − impliedProbPct(salvo); edge = −edgePct(salvo).
 // 3. O par congelado overOdd/underOdd fornece odd/EV/break-even do lado
 //    oposto; SÓ em pass (implied/edge salvos são null por construção) a
-//    implied dos DOIS lados é recomputada via computeImpliedProbabilities e
+//    implied dos DOIS lados é recomputada via computeMarketImpliedProbabilities e
 //    os edges saem de modelProb − implied.
 // 4. modelBreakEvenOdd = 100/modelProbPct nos dois lados, sempre.
 // 5. O que não for derivável fica null (UI renderiza "—").
@@ -238,10 +235,14 @@ export function computeScenarios(input: {
     overEdge = input.edgePct !== null ? -input.edgePct : null;
   } else if (input.overOdd !== null && input.underOdd !== null) {
     // Pass: não há valores salvos — recomputa a implied normalizada do par
-    // congelado (única recomputação permitida; precedência 3).
-    const implied = computeImpliedProbabilities(input.overOdd, input.underOdd);
-    overImplied = implied.overProb * 100;
-    underImplied = implied.underProb * 100;
+    // congelado (única recomputação permitida; precedência 3). Core N-ário com
+    // [over, under]: probs[0]/probs[1] (bit-exato com o wrapper binário removido).
+    const { probs } = computeMarketImpliedProbabilities([
+      input.overOdd,
+      input.underOdd,
+    ]);
+    overImplied = probs[0] * 100;
+    underImplied = probs[1] * 100;
     overEdge = overModelProb - overImplied;
     underEdge = underModelProb - underImplied;
   }
