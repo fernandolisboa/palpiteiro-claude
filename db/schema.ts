@@ -30,32 +30,10 @@ export const matchStatusEnum = pgEnum("match_status", [
   "cancelled",
 ]);
 
-export const marketEnum = pgEnum("market", ["over_under_2_5"]);
-
-export const recommendationEnum = pgEnum("recommendation", [
-  "over",
-  "under",
-  "pass",
-  // Seleções 1X2 (match_result) — adicionadas ao enum legado/expand no #173 (ADR
-  // 0015 D3/D4). O enum permanece a coluna legada de `recommendation` (= a key da
-  // seleção escolhida; "pass" continua no-bet). A fonte de verdade do mercado é
-  // `markets`/`market_selections`; este enum só carrega as keys das seleções pra
-  // a coluna legada compilar. Migration isolada (0013) por higiene (espelha 0011).
-  "home",
-  "draw",
-  "away",
-  // Seleções btts (ambas marcam) — mesmo padrão expand: keys da coluna legada de
-  // `recommendation`. Fonte de verdade = markets/market_selections; migration
-  // isolada (0015) por higiene (espelha 0011/0013, ADR 0015).
-  "yes",
-  "no",
-  // Seleções dupla chance (1X/X2/12) — mesmo padrão expand: keys da coluna legada
-  // de `recommendation`. Fonte de verdade = markets/market_selections; migration
-  // isolada (0017) por higiene (espelha 0011/0013/0015, ADR 0015). #176.
-  "home_or_draw",
-  "away_or_draw",
-  "home_or_away",
-]);
+// Os enums legados `market` e `recommendation` foram removidos no contract da
+// Fase 5 (#179): `market` (single-value "over_under_2_5") e `recommendation` (que
+// carregava as keys das seleções) viraram colunas `text` mercado-agnósticas. A
+// fonte de verdade é `markets`/`market_selections` (marketId/selectionId).
 
 export const outcomeResultEnum = pgEnum("outcome_result", [
   "won",
@@ -238,23 +216,9 @@ export const matches = pgTable(
   (t) => [index("matches_kickoff_at_idx").on(t.kickoffAt)],
 );
 
-export const matchOddsSnapshots = pgTable(
-  "match_odds_snapshots",
-  {
-    id: uuid().primaryKey().defaultRandom(),
-    matchId: uuid()
-      .notNull()
-      .references(() => matches.id, { onDelete: "cascade" }),
-    bookmaker: text().notNull(),
-    market: marketEnum().notNull().default("over_under_2_5"),
-    line: numeric({ precision: 4, scale: 2 }).notNull().default("2.5"),
-    overOdd: numeric({ precision: 6, scale: 3 }).notNull(),
-    underOdd: numeric({ precision: 6, scale: 3 }).notNull(),
-    overroundPct: numeric({ precision: 5, scale: 2 }).notNull(),
-    capturedAt: timestamp({ withTimezone: true }).notNull().defaultNow(),
-  },
-  (t) => [index("match_odds_snapshots_match_id_idx").on(t.matchId)],
-);
+// A tabela legada binária `match_odds_snapshots` foi removida no contract da Fase 5
+// (#179): substituída por `selection_odds_snapshots` (N seleções), com o card/chip
+// over/under ao vivo adaptando a captura de linha 2.5 de volta pra forma binária.
 
 export const aiCalls = pgTable(
   "ai_calls",
@@ -298,12 +262,11 @@ export const predictions = pgTable(
     aiCallId: uuid()
       .notNull()
       .references(() => aiCalls.id, { onDelete: "restrict" }),
-    // NULLABLE no expand multi-mercado (#173): mercados novos gravam `market=null`
-    // (a fonte de verdade vira `marketId`/`selectionId`); só over/under continua
-    // preenchendo o enum legado via legacy-write guard. Default removido pelo mesmo
-    // motivo — uma row de mercado novo não deve herdar 'over_under_2_5'. O enum
-    // `market` permanece single-value até o contract (Fase 5).
-    market: marketEnum(),
+    // Coluna LEGADA (text livre, ex-enum single-value "over_under_2_5"): mantida só
+    // pro fallback histórico do dashboard (rows pré-backfill com marketId null).
+    // predict() NÃO escreve mais (Fase 5); a fonte de verdade é
+    // `marketId`/`selectionId`/`marketParams`. Virou text no contract (#179).
+    market: text(),
     // Generalização multi-mercado do enum `market` legado (ADR 0015 D3/D4), todas
     // NULLABLE no expand — predict.ts só passa a preencher na Fase 2 (#165); o
     // histórico over/under é backfillado deterministicamente em #162. `selectionId`
@@ -314,7 +277,10 @@ export const predictions = pgTable(
       onDelete: "restrict",
     }),
     marketParams: jsonb().$type<{ line: number }>(),
-    recommendation: recommendationEnum().notNull(),
+    // = a key da seleção escolhida (ou "pass"). Coluna text mercado-agnóstica
+    // (ex-enum `recommendation`, removido no contract #179) — alimenta o recToken
+    // do dashboard. `selectionId` é a fonte normalizada do lado escolhido.
+    recommendation: text().notNull(),
     confidencePct: numeric({ precision: 5, scale: 2 }).notNull(),
     rationale: text().notNull(),
     keyFactors: text().array().notNull(),
@@ -323,14 +289,9 @@ export const predictions = pgTable(
     bookmaker: text(),
     impliedProbPct: numeric({ precision: 5, scale: 2 }),
     edgePct: numeric({ precision: 5, scale: 2 }),
-    // Par de odds congelado no momento da análise (ADR 0012, decisões 3-4),
-    // gravado pra TODA recomendação, inclusive pass — daí "AtPrediction", não
-    // "AtRecommendation" (em pass não existe recomendação). Nullable: rows
-    // históricas ficam null (sem backfill, decisão 5). Sem FK pra
-    // match_odds_snapshots: o fallback do predict() (Odds API direta) não
-    // persiste snapshot — cópia congelada, como oddAtRecommendation.
-    overOddAtPrediction: numeric({ precision: 6, scale: 3 }),
-    underOddAtPrediction: numeric({ precision: 6, scale: 3 }),
+    // O par binário congelado over/under_odd_at_prediction (ADR 0012) foi removido
+    // no contract da Fase 5 (#179) — generalizado por `prediction_selection_odds`
+    // (uma row de odd congelada por seleção, N-vias, inclusive em pass).
     stakeUnits: numeric({ precision: 6, scale: 2 }).notNull().default("1"),
     modelVersion: text().notNull(),
     promptVersion: text().notNull(),
@@ -386,13 +347,13 @@ export const predictionOutcomes = pgTable("prediction_outcomes", {
     .notNull()
     .unique()
     .references(() => predictions.id, { onDelete: "cascade" }),
-  totalGoals: integer().notNull(),
-  // Fato do jogo coletado 1x por jogo (ADR 0016 D2), NULLABLE no expand. MVP:
+  // Fato do jogo coletado 1x por jogo (ADR 0016 D2). MVP:
   // { homeScore, awayScore, totalGoals } (camelCase — segue #161/#162; supersede a
   // ilustração snake_case da ADR 0016 D2; validado por Zod no boundary do settlement
   // na Fase 2 #166). homeScore/awayScore degradam a null em rows do histórico onde o
   // split de 90' não for confiável; totalGoals carrega o escalar settled (verbatim).
-  // O escalar legado total_goals permanece (vira derivado) até o contract (Fase 5).
+  // O escalar legado `total_goals` (coluna) foi REMOVIDO no contract da Fase 5 (#179)
+  // — `resultData.totalGoals` é a fonte única agora.
   resultData: jsonb().$type<{
     homeScore: number | null;
     awayScore: number | null;

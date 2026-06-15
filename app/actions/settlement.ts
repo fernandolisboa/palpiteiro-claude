@@ -104,7 +104,7 @@ export async function overridePredictionOutcome(
 
   // O override já tem os scores inteiros do placar (90'): o split é confiável.
   // resultDataFromRegulationScore valida via Zod (mesma fronteira do cron, #166) e
-  // é a fonte única de totalGoals.
+  // é a fonte única de totalGoals (jsonb result_data).
   const resultData = resultDataFromRegulationScore({
     home: homeScore,
     away: awayScore,
@@ -112,7 +112,6 @@ export async function overridePredictionOutcome(
 
   await upsertOutcomeOverride({
     predictionId,
-    totalGoals: resultData.totalGoals,
     resultData,
     result: result as OutcomeResult,
     profitUnits,

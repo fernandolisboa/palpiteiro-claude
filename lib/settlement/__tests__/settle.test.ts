@@ -107,7 +107,6 @@ describe("settlePendingPredictions", () => {
     expect(insertOutcome).toHaveBeenCalledWith(
       expect.objectContaining({
         predictionId: "over1",
-        totalGoals: 3,
         resultData: { homeScore: 2, awayScore: 1, totalGoals: 3 },
         result: "won",
         profitUnits: 0.9,

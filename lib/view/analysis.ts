@@ -30,21 +30,10 @@ import type {
 } from "@/lib/view/types";
 
 type PredictionInput = {
-  // = key da seleção escolhida (multi-mercado, #173) ou "pass". A ramificação por
-  // IDENTIDADE do toAnalysisView mantém over_under no caminho binário congelado e
-  // manda os demais mercados (1X2, btts) pro caminho N-vias canônico.
-  recommendation:
-    | "over"
-    | "under"
-    | "pass"
-    | "home"
-    | "draw"
-    | "away"
-    | "yes"
-    | "no"
-    | "home_or_draw"
-    | "away_or_draw"
-    | "home_or_away";
+  // = key da seleção escolhida (qualquer mercado) ou "pass". `string` agnóstico
+  // desde o contract (#179). isBinaryRecommendation estreita por VALOR (over/under/
+  // pass) → over_under fica no caminho binário congelado; o resto vai pro N-vias.
+  recommendation: string;
   confidencePct: string | number;
   rationale: string;
   keyFactors: string[];

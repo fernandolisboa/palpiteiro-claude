@@ -1,7 +1,9 @@
 /**
  * Lógica DETERMINÍSTICA do backfill multi-mercado (#162) como funções PURAS,
- * sem DB e sem LLM — para serem unit-testadas isoladamente. O runner
- * (`backfill-multimarket.ts`) usa estas funções; o que é testado é o que roda.
+ * sem DB e sem LLM. O runner one-shot que as orquestrava foi removido no contract
+ * da Fase 5 (#179) — junto com as colunas/tabela legadas que ele lia — depois de
+ * comprovada a cobertura em prod. Mantidas como registro auditável da migração,
+ * pinadas por backfill-mappings.test.ts.
  *
  * Princípios (ADR 0015 D6 + ADR 0016 D2): o backfill é determinístico, idempotente
  * e NÃO fabrica fatos. Onde o dado degrada (par de odds ausente, split de placar

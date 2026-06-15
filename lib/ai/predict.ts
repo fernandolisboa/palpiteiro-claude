@@ -6,7 +6,6 @@ import {
   matches,
   predictionSelectionOdds,
   predictions,
-  recommendationEnum,
 } from "@/db/schema";
 import { db } from "@/lib/db";
 import { resolveMarketCatalog } from "@/lib/db/queries/market-catalog";
@@ -913,12 +912,10 @@ export async function predict({
         marketId: catalog.marketId,
         selectionId,
         marketParams,
-        // recommendation = selectionKey (enum estendido com home/draw/away) ou "pass".
-        // O cartucho já validou output.recommendation contra o SEU enum (over|under|
-        // pass / home|draw|away|pass) — todos ⊆ recommendationEnum; o cast só estreita
-        // o `string` do BaseMarketOutput pro tipo da coluna.
-        recommendation:
-          output.recommendation as (typeof recommendationEnum.enumValues)[number],
+        // recommendation = a key da seleção escolhida (over/under/home/draw/away/
+        // yes/no/dupla-chance) ou "pass". Coluna text mercado-agnóstica desde o
+        // contract (#179) — o cartucho já valida output.recommendation por Zod.
+        recommendation: output.recommendation,
         confidencePct: output.confidence_pct.toFixed(2),
         rationale: output.rationale,
         keyFactors: output.key_factors,

@@ -135,10 +135,8 @@ export async function settlePendingPredictions(
       continue;
     }
 
-    const totalGoals = resultData.totalGoals;
     const inserted = await insertOutcomeIfAbsent({
       predictionId: p.predictionId,
-      totalGoals,
       resultData,
       result: settlement.result,
       profitUnits: settlement.profitUnits,
@@ -150,7 +148,7 @@ export async function settlePendingPredictions(
         predictionId: p.predictionId,
         matchId: p.matchId,
         result: settlement.result,
-        totalGoals,
+        totalGoals: resultData.totalGoals,
         profitUnits: settlement.profitUnits,
       });
     } else {
