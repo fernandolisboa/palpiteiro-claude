@@ -41,7 +41,7 @@ export default async function AdminUserTrackingPage({
   const { status, league, market } = await searchParams;
 
   // Re-check defensivo: lê predições de OUTRO usuário (cross-user). Defense-in-depth
-  // — NÃO confiar só no gate do layout. Espelha costs/invites.
+  // — NÃO confiar só no gate do layout. Espelha costs.
   const session = await auth();
   if (session?.user?.role !== "admin") notFound();
 
