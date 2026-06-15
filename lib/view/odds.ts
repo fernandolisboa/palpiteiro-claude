@@ -105,10 +105,13 @@ export function toMatchRowOdds(
   snapshot: OddsSnapshotInput | null,
 ): NonNullable<MatchRowView["odds"]> | null {
   if (!snapshot) return null;
+  // Forma N-vias (#173): over/under = 2 outcomes na ordem over→under, labels
+  // CURTOS. Byte-idêntico ao chip binário pré-#173 (golden pina). A regra de
+  // prioridade 1X2>over/under entra com a fonte N-vias (toMatchRowOddsResolved).
   return {
-    overLabel: LIVE_OVER_SHORT,
-    over: formatOdd(snapshot.overOdd),
-    underLabel: LIVE_UNDER_SHORT,
-    under: formatOdd(snapshot.underOdd),
+    outcomes: [
+      { label: LIVE_OVER_SHORT, odd: formatOdd(snapshot.overOdd) },
+      { label: LIVE_UNDER_SHORT, odd: formatOdd(snapshot.underOdd) },
+    ],
   };
 }

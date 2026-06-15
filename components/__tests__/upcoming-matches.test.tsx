@@ -18,11 +18,11 @@ function fakeMatch(i: number): MatchRowView {
     when: "amanhã",
     odds: {
       // Chips densos da match-list usam o label CURTO ("Over"/"Under") — espelha
-      // toMatchRowOdds (compactação pré-pivot "O"/"U" sem o "2.5" verboso).
-      overLabel: "Over",
-      over: "1.90",
-      underLabel: "Under",
-      under: "1.95",
+      // toMatchRowOdds. Forma N-vias (#173): outcomes na ordem canônica.
+      outcomes: [
+        { label: "Over", odd: "1.90" },
+        { label: "Under", odd: "1.95" },
+      ],
     },
     hasPrediction: false,
     status: "scheduled",

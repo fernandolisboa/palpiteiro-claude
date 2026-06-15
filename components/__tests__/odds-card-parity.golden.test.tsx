@@ -38,7 +38,12 @@ function ouMatch(): MatchRowView {
     league: "wc",
     kickoff: "10 jun, 16:00",
     when: "amanhã",
-    odds: { overLabel: "Over", over: "1.92", underLabel: "Under", under: "2.05" },
+    odds: {
+      outcomes: [
+        { label: "Over", odd: "1.92" },
+        { label: "Under", odd: "2.05" },
+      ],
+    },
     hasPrediction: false,
     status: "scheduled",
     homeScore: null,

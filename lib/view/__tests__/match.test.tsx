@@ -122,9 +122,10 @@ describe("MatchRow rendering by status", () => {
     expect(markup).toContain(">2<");
     expect(markup).toContain(">1<");
     expect(markup.toLowerCase()).toContain("encerrado");
-    // Odds labels / "sem odd" must NOT render for a finished match.
+    // Odds chip / "sem odd" must NOT render for a finished match (score branch).
     expect(markup).not.toContain("sem odd");
-    expect(markup).not.toMatch(/>O<\/span>/);
+    expect(markup).not.toContain("Over");
+    expect(markup).not.toContain("Under");
   });
 
   it("renders postponed/cancelled sanely (label, not a 0–0)", () => {

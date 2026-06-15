@@ -31,10 +31,11 @@ export type MatchRowView = {
   league: LeagueKey;
   kickoff: string;
   when: string;
-  // Par de odds da linha com os rótulos curtos por lado já resolvidos pela view
-  // (de-hardcode do prefixo "O"/"U" nos componentes — AC3). Shape binário
-  // mantido: live N-vias é Fase 4 (precisa de reader N-vias de snapshot).
-  odds: { overLabel: string; over: string; underLabel: string; under: string } | null;
+  // Odds da linha como outcomes N-vias (#173 PR-2): cada seleção {label curto, odd}
+  // na ordem canônica. over/under = 2 outcomes (byte-idêntico ao binário pré-#173;
+  // golden pina); 1X2 = 3. Qual mercado a linha mostra ("prefere 1X2 quando há
+  // captura h2h, senão over/under") é resolvido no mapper (toMatchRowOdds).
+  odds: { outcomes: { label: string; odd: string }[] } | null;
   hasPrediction: boolean;
   status: MatchStatus;
   // Placar final. Não-null só em jogos cujo provider já reportou gols
