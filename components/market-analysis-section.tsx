@@ -1,5 +1,6 @@
 import { AnalysisResult } from "@/components/analysis-result";
 import { MatchCollapsible } from "@/components/match-collapsible";
+import { SectionFooterDispatch } from "@/components/section-footer-dispatch";
 import type {
   AnalysisView,
   MarketAnalysisSectionItem,
@@ -17,60 +18,99 @@ function sectionMeta(view: AnalysisView): string {
   return `${rec.selectionLabel}${line}${odd}`;
 }
 
-// Uma seção colapsável por mercado (#243): reusa o MatchCollapsible (client) com o
-// AnalysisResult existente dentro (somente-leitura — `again={false}`; o disparo de
-// reanálise fica nos controles do topo do painel, e #244 move pra um rodapé por seção).
-// ISOMÓRFICO no sentido de previous-analyses.tsx: não adiciona fronteira de cliente
-// própria — só o MatchCollapsible filho é "use client". `marketLabel` é SIBLING da view
-// (o branch pass do AnalysisResult não imprime mercado → o título o identifica).
-export function MarketAnalysisSection({
-  marketLabel,
-  view,
-  defaultOpen = false,
-  again = false,
+// Props de dispatch da reanálise por seção (#244). Presentes só no caminho ANALISÁVEL
+// (painel client); ausentes no caminho encerrado (render read-only de Server Component).
+type DispatchProps = {
+  analyzable: boolean;
+  matchId: string;
+  selectableModels: { id: string; label: string }[];
+  defaultModelLabel: string;
+};
+
+// Conteúdo de uma seção: analisável → footer de reanálise por seção (#244, client, com
+// o resultado + dropdown de modelo + refresh); encerrado → AnalysisResult read-only
+// (sem hooks — montado direto de Server Component).
+function SectionContent({
+  item,
+  dispatch,
 }: {
-  marketLabel: string;
-  view: AnalysisView;
+  item: MarketAnalysisSectionItem;
+  dispatch: DispatchProps | null;
+}) {
+  if (dispatch?.analyzable) {
+    return (
+      <SectionFooterDispatch
+        matchId={dispatch.matchId}
+        marketKey={item.marketKey}
+        view={item.view}
+        modelId={item.modelId}
+        selectableModels={dispatch.selectableModels}
+        defaultModelLabel={dispatch.defaultModelLabel}
+      />
+    );
+  }
+  return <AnalysisResult view={item.view} />;
+}
+
+// Uma seção colapsável por mercado (#243): reusa o MatchCollapsible (client) com o
+// conteúdo dentro. ISOMÓRFICO (não adiciona fronteira de cliente própria — só
+// MatchCollapsible e, no caminho analisável, SectionFooterDispatch são "use client").
+// `marketLabel` é SIBLING da view (o branch pass do AnalysisResult não imprime mercado).
+export function MarketAnalysisSection({
+  item,
+  defaultOpen = false,
+  dispatch,
+}: {
+  item: MarketAnalysisSectionItem;
   defaultOpen?: boolean;
-  again?: boolean;
+  dispatch: DispatchProps | null;
 }) {
   return (
     <MatchCollapsible
-      title={marketLabel}
-      meta={sectionMeta(view)}
+      title={item.marketLabel}
+      meta={sectionMeta(item.view)}
       defaultOpen={defaultOpen}
     >
-      <AnalysisResult view={view} again={again} />
+      <SectionContent item={item} dispatch={dispatch} />
     </MatchCollapsible>
   );
 }
 
-// Área de resultados por-mercado. `sections.length` é a ÚNICA chave single-vs-multi
-// (espelha toMarketAnalysisSections): com ≤1 mercado renderiza o AnalysisResult CRU
-// (sem chrome de collapsible) — byte-idêntico ao atual, AC3 de produção (over/under);
-// com ≥2 empilha uma seção colapsável por mercado, a mais recente (índice 0) aberta por
-// padrão. key=item.id remonta SÓ a seção reanalisada (id novo) → ela reabre sem fechar
-// as outras (#243).
+// Área de resultados por-mercado. `sections.length` é a ÚNICA chave single-vs-multi: ≤1 →
+// conteúdo CRU (sem chrome de collapsible) — byte-idêntico ao atual no read-only, AC3 de
+// produção; ≥2 → uma seção colapsável por mercado, a mais recente (índice 0) aberta por
+// padrão. key=marketKey: a seção NÃO remonta na reanálise (#244) → o estado do footer
+// (dropdown de modelo) persiste; um mercado NOVO (key nova) monta e abre (defaultOpen).
 export function MarketAnalysisSections({
   sections,
-  again = false,
+  analyzable = false,
+  matchId,
+  selectableModels = [],
+  defaultModelLabel = "",
 }: {
   sections: MarketAnalysisSectionItem[];
-  again?: boolean;
+  analyzable?: boolean;
+  matchId?: string;
+  selectableModels?: { id: string; label: string }[];
+  defaultModelLabel?: string;
 }) {
   if (sections.length === 0) return null;
+  const dispatch: DispatchProps | null =
+    analyzable && matchId
+      ? { analyzable, matchId, selectableModels, defaultModelLabel }
+      : null;
+
   if (sections.length === 1) {
-    return <AnalysisResult view={sections[0].view} again={again} />;
+    return <SectionContent item={sections[0]} dispatch={dispatch} />;
   }
   return (
     <div className="flex flex-col gap-3">
       {sections.map((item, i) => (
         <MarketAnalysisSection
-          key={item.id}
-          marketLabel={item.marketLabel}
-          view={item.view}
+          key={item.marketKey}
+          item={item}
           defaultOpen={i === 0}
-          again={again}
+          dispatch={dispatch}
         />
       ))}
     </div>

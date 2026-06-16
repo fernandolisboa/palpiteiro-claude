@@ -1,8 +1,5 @@
-import { RefreshCcw } from "lucide-react";
-
 import { AnalysisScenarios } from "@/components/analysis-scenarios";
 import { HelpHint } from "@/components/help-hint";
-import { Button } from "@/components/ui/button";
 import { Card } from "@/components/ui/card";
 import { Separator } from "@/components/ui/separator";
 import { cn } from "@/lib/utils";
@@ -10,10 +7,9 @@ import type { AnalysisView } from "@/lib/view/types";
 
 type Props = {
   view: AnalysisView;
-  again?: boolean;
 };
 
-export function AnalysisResult({ view, again = false }: Props) {
+export function AnalysisResult({ view }: Props) {
   // pass = sem recomendação (recommendation null) — data-driven, não mais via kind.
   if (view.recommendation === null) {
     return (
@@ -64,7 +60,7 @@ export function AnalysisResult({ view, again = false }: Props) {
           </p>
           <KeyFactors items={view.factors} />
         </div>
-        <AnalysisFooter view={view} again={again} />
+        <AnalysisFooter view={view} />
       </div>
     );
   }
@@ -193,7 +189,7 @@ export function AnalysisResult({ view, again = false }: Props) {
         </p>
         <KeyFactors items={view.factors} />
       </div>
-      <AnalysisFooter view={view} again={again} />
+      <AnalysisFooter view={view} />
     </Card>
   );
 }
@@ -221,10 +217,11 @@ function KeyFactors({ items }: { items: string[] }) {
 
 type FooterProps = {
   view: AnalysisView;
-  again: boolean;
 };
 
-function AnalysisFooter({ view, again }: FooterProps) {
+// Rodapé técnico do resultado: versão do prompt · modelo que rodou · custo. O gatilho de
+// reanálise NÃO vive mais aqui (#244 moveu pro rodapé da seção, SectionFooterDispatch).
+function AnalysisFooter({ view }: FooterProps) {
   return (
     <>
       <Separator />
@@ -234,19 +231,6 @@ function AnalysisFooter({ view, again }: FooterProps) {
         </span>
         <span>{view.costUsd}</span>
       </div>
-      {again && (
-        <>
-          <Separator />
-          <div className="flex items-center justify-between px-4 py-2.5">
-            <span className="font-mono text-[10.5px] text-muted-foreground">
-              gerado em {view.generatedAt}
-            </span>
-            <Button type="submit" size="sm" variant="ghost" className="h-7 px-2">
-              <RefreshCcw className="size-3.5" /> Analisar novamente
-            </Button>
-          </div>
-        </>
-      )}
     </>
   );
 }

@@ -446,14 +446,19 @@ export function toMarketAnalysisSections(
     if (seen.has(marketKey)) continue;
     seen.add(marketKey);
     sections.push({
-      // id = predictions.id: key React estável; muda só quando ESTE mercado é
-      // reanalisado (nova predição) → React remonta SÓ esta seção (reabre via
-      // defaultOpen) sem fechar as outras (#243).
       id: row.prediction.id,
+      // key React da seção (#244): estável na reanálise (a seção não remonta → o estado
+      // do footer, ex. dropdown de modelo, persiste). Tb vai no hidden input do form de
+      // reanálise por seção. Coalesced 'over_under' = mesmo bucket do agrupamento.
+      marketKey,
       // marketLabel SIBLING da view (espelha PreviousAnalysisItem/BestBetEntry): o
       // branch pass do AnalysisResult não imprime mercado, então o título da seção o
       // identifica. Mesmo coalesce 'over_under' do bucket acima.
       marketLabel: getMarketPresentation(marketKey).marketLabel,
+      // modelVersion CRU (AIModelId) — semeia o dropdown do footer com o modelo que
+      // rodou aquela análise (#244). initialModelOverride cai pro "default" se for um id
+      // aposentado/fora-da-audiência (histórica), sem <option> órfã.
+      modelId: row.prediction.modelVersion,
       view: toAnalysisViewFromPrediction(row, now),
     });
   }

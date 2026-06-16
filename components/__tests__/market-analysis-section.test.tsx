@@ -1,10 +1,17 @@
-import { describe, expect, it } from "vitest";
+import { describe, expect, it, vi } from "vitest";
 import { renderToStaticMarkup } from "react-dom/server";
+
+// SectionFooterDispatch (no caminho analisável) importa o server action analyzeMatch —
+// mock leve pra não puxar server-only no env de teste.
+vi.mock("@/app/actions/predictions", () => ({
+  analyzeMatch: vi.fn(),
+}));
 
 import {
   MarketAnalysisSection,
   MarketAnalysisSections,
 } from "@/components/market-analysis-section";
+import { initialModelOverride } from "@/lib/ai/model-override";
 import type {
   AnalysisView,
   MarketAnalysisSectionItem,
@@ -24,161 +31,205 @@ const overOutcome: OutcomeView = {
   isRecommended: true,
 };
 
-// over/under com recomendação. meta esperada = "Over 2.5 · 1.92" (selectionLabel +
-// linha + odd congelada). Campos completos pro AnalysisResult renderizar sem quebrar.
-const ouRecView: AnalysisView = {
-  recommendation: {
+function mkView(o: {
+  marketKey: string;
+  marketLabel: string;
+  selectionLabel: string;
+  line: number | null;
+  oddAtRec: string;
+  rationale: string;
+  model?: string;
+}): AnalysisView {
+  return {
+    recommendation: {
+      marketKey: o.marketKey,
+      marketLabel: o.marketLabel,
+      selectionKey: "x",
+      selectionLabel: o.selectionLabel,
+      line: o.line,
+      betSummary: { market: o.selectionLabel, plain: "" },
+    },
+    outcomes: [overOutcome],
+    minOdd: "1.85",
+    stakeUnits: "1.00 u",
+    framing: null,
+    note: null,
+    oddAtRec: o.oddAtRec,
+    oddAtRecAgo: "há 3h",
+    bookmaker: "bet365",
+    expectedReturn: "+11.4%",
+    expectedReturnTone: "positive",
+    evLegend: "x",
+    minEdgeLabel: "5pp",
+    rationale: o.rationale,
+    factors: ["f"],
+    generatedAt: "19 mai · 14:22",
+    promptVersion: "v1",
+    model: o.model ?? "claude-sonnet-4.5",
+    costUsd: "$0.01",
+  };
+}
+
+function mkItem(o: {
+  marketKey: string;
+  marketLabel: string;
+  modelId: string;
+  view: AnalysisView;
+}): MarketAnalysisSectionItem {
+  return {
+    id: `${o.marketKey}-id`,
+    marketKey: o.marketKey,
+    marketLabel: o.marketLabel,
+    modelId: o.modelId,
+    view: o.view,
+  };
+}
+
+const OU = mkItem({
+  marketKey: "over_under",
+  marketLabel: "Over/Under gols",
+  modelId: "claude-sonnet-4-6",
+  view: mkView({
     marketKey: "over_under",
     marketLabel: "Over/Under gols",
-    selectionKey: "over",
     selectionLabel: "Over",
     line: 2.5,
-    betSummary: { market: "Mais de 2.5 gols", plain: "pelo menos 3 gols no jogo" },
-  },
-  outcomes: [overOutcome],
-  minOdd: "1.85",
-  stakeUnits: "1.00 u",
-  framing: null,
-  note: null,
-  oddAtRec: "1.92",
-  oddAtRecAgo: "há 3h",
-  bookmaker: "bet365",
-  expectedReturn: "+11.4%",
-  expectedReturnTone: "positive",
-  evLegend: "ganho médio por aposta",
-  minEdgeLabel: "5pp",
-  rationale: "racional over_under",
-  factors: ["fator um"],
-  generatedAt: "19 mai · 14:22",
-  promptVersion: "over_under_v1.2",
-  model: "claude-sonnet-4.5",
-  costUsd: "$0.014",
-};
-
-// 1X2: linha null → meta SEM a linha ("Casa · 2.10"). Prova que a meta é dirigida pela
-// view (market-agnostic), nunca "2.5" hardcoded.
-const mrRecView: AnalysisView = {
-  ...ouRecView,
-  recommendation: {
+    oddAtRec: "1.92",
+    rationale: "RACIONAL_OU",
+    model: "claude-sonnet-4.6",
+  }),
+});
+const MR = mkItem({
+  marketKey: "match_result",
+  marketLabel: "Resultado (1X2)",
+  modelId: "claude-opus-4-8",
+  view: mkView({
     marketKey: "match_result",
     marketLabel: "Resultado (1X2)",
-    selectionKey: "home",
     selectionLabel: "Casa",
     line: null,
-    betSummary: { market: "Casa", plain: "" },
-  },
-  outcomes: [{ ...overOutcome, id: "home", label: "Casa", scenarioLabel: "Casa" }],
-  oddAtRec: "2.10",
-  rationale: "racional match_result",
-};
+    oddAtRec: "2.10",
+    rationale: "RACIONAL_MR",
+  }),
+});
 
-// pass: sem recomendação → meta "sem aposta".
-const passView: AnalysisView = {
-  ...ouRecView,
-  recommendation: null,
-  outcomes: [{ ...overOutcome, isRecommended: false }],
-  minOdd: null,
-  stakeUnits: null,
-  oddAtRec: null,
-  oddAtRecAgo: null,
-  bookmaker: null,
-  expectedReturn: null,
-  expectedReturnTone: "neutral",
-  evLegend: null,
-  rationale: "racional pass",
-};
+const ADMIN_MODELS = [
+  { id: "claude-sonnet-4-6", label: "Sonnet 4.6" },
+  { id: "claude-opus-4-8", label: "Opus 4.8" },
+];
 
-describe("MarketAnalysisSection", () => {
-  it("título = marketLabel (SIBLING, não derivado da view) + conteúdo = AnalysisResult", () => {
+const occurrences = (s: string, sub: string) => s.split(sub).length - 1;
+
+describe("MarketAnalysisSection — header (#243)", () => {
+  it("título = marketLabel + meta (seleção + linha + odd), market-agnostic", () => {
     const markup = renderToStaticMarkup(
-      <MarketAnalysisSection
-        marketLabel="Resultado (1X2)"
-        view={mrRecView}
-        defaultOpen
-      />,
+      <MarketAnalysisSection item={MR} defaultOpen dispatch={null} />,
     );
-    // O título da seção vem do marketLabel passado (identifica até um pass, que o
-    // AnalysisResult não rotula).
     expect(markup).toContain("Resultado (1X2)");
-    // AnalysisResult renderizado dentro (aberto): o racional daquela análise aparece.
-    expect(markup).toContain("racional match_result");
-  });
-
-  it("meta da recomendação = seleção + linha + odd (market-agnostic)", () => {
-    const ou = renderToStaticMarkup(
-      <MarketAnalysisSection marketLabel="Over/Under gols" view={ouRecView} />,
-    );
-    expect(ou).toContain("Over 2.5 · 1.92");
-
-    // 1X2 sem linha → meta sem "2.5", só seleção + odd.
-    const mr = renderToStaticMarkup(
-      <MarketAnalysisSection marketLabel="Resultado (1X2)" view={mrRecView} />,
-    );
-    expect(mr).toContain("Casa · 2.10");
-    expect(mr).not.toContain("2.5");
-  });
-
-  it("pass → meta 'sem aposta'", () => {
-    const markup = renderToStaticMarkup(
-      <MarketAnalysisSection marketLabel="Over/Under gols" view={passView} />,
-    );
-    expect(markup).toContain("sem aposta");
-  });
-
-  it("defaultOpen controla o estado inicial da seção (data-state do Radix)", () => {
-    const open = renderToStaticMarkup(
-      <MarketAnalysisSection marketLabel="Over/Under gols" view={ouRecView} defaultOpen />,
-    );
-    expect(open).toContain('data-state="open"');
-    // Aberta → o conteúdo (racional) está presente.
-    expect(open).toContain("racional over_under");
-
-    const closed = renderToStaticMarkup(
-      <MarketAnalysisSection marketLabel="Over/Under gols" view={ouRecView} />,
-    );
-    expect(closed).toContain('data-state="closed"');
+    expect(markup).toContain("Casa · 2.10"); // sem linha (1X2)
+    expect(markup).toContain("RACIONAL_MR"); // conteúdo (aberto)
   });
 });
 
-describe("MarketAnalysisSections", () => {
-  const item = (id: string, marketLabel: string, view: AnalysisView): MarketAnalysisSectionItem => ({
-    id,
-    marketLabel,
-    view,
-  });
-
-  it("≤1 seção → AnalysisResult CRU (sem chrome de collapsible, AC3 over/under)", () => {
+describe("MarketAnalysisSections — read-only (jogo encerrado)", () => {
+  it("≤1 → AnalysisResult CRU, SEM footer de reanálise (#244)", () => {
     const markup = renderToStaticMarkup(
-      <MarketAnalysisSections sections={[item("a", "Over/Under gols", ouRecView)]} />,
+      <MarketAnalysisSections sections={[OU]} />,
     );
-    // Conteúdo do resultado presente…
-    expect(markup).toContain("racional over_under");
-    // …mas SEM o header colapsável: a meta "Over 2.5 · 1.92" só existe no trigger do
-    // MatchCollapsible, ausente no AnalysisResult cru (discrimina ≤1 de ≥2).
+    expect(markup).toContain("RACIONAL_OU");
+    // Sem chrome de collapsible (meta só no trigger ≥2)…
     expect(markup).not.toContain("Over 2.5 · 1.92");
+    // …e SEM footer de reanálise (read-only).
+    expect(markup).not.toContain("análise feita com modelo");
+    expect(markup).not.toContain('name="modelOverride"');
+    expect(markup).not.toContain("Analisar de novo");
   });
+});
 
-  it("≥2 seções → uma seção colapsável por mercado, a 1ª aberta por padrão", () => {
+describe("MarketAnalysisSections — analisável (footer por seção, #244)", () => {
+  it("regular (sem modelos selecionáveis): footer = label + refresh, SEM dropdown", () => {
     const markup = renderToStaticMarkup(
       <MarketAnalysisSections
-        sections={[
-          item("a", "Over/Under gols", ouRecView),
-          item("b", "Resultado (1X2)", mrRecView),
-        ]}
+        sections={[OU]}
+        analyzable
+        matchId="m"
+        selectableModels={[]}
+        defaultModelLabel="Opus 4.8"
       />,
     );
-    // Ambos os mercados viram seções (meta no trigger de cada).
-    expect(markup).toContain("Over 2.5 · 1.92");
-    expect(markup).toContain("Casa · 2.10");
-    // 1ª aberta, 2ª fechada (defaultOpen={i===0}).
-    expect(markup).toContain('data-state="open"');
-    expect(markup).toContain('data-state="closed"');
-    expect(markup.indexOf('data-state="open"')).toBeLessThan(
-      markup.indexOf('data-state="closed"'),
-    );
+    // Footer presente: label do modelo que rodou + botão refresh + hidden inputs.
+    expect(markup).toContain("análise feita com modelo claude-sonnet-4.6");
+    expect(markup).toContain("Analisar de novo");
+    expect(markup).toContain('name="matchId"');
+    expect(markup).toContain('name="marketKey"');
+    expect(markup).toContain('value="over_under"'); // marketKey hidden = mercado da seção
+    // Sem modelos selecionáveis (usuário regular) → sem dropdown de modelo.
+    expect(markup).not.toContain('name="modelOverride"');
   });
 
-  it("vazio → não renderiza nada", () => {
-    expect(renderToStaticMarkup(<MarketAnalysisSections sections={[]} />)).toBe("");
+  it("admin (≥2 mercados): seção colapsável por mercado; a aberta tem footer isolado", () => {
+    const markup = renderToStaticMarkup(
+      <MarketAnalysisSections
+        sections={[OU, MR]}
+        analyzable
+        matchId="m"
+        selectableModels={ADMIN_MODELS}
+        defaultModelLabel="Opus 4.8"
+      />,
+    );
+    // Uma seção colapsável por mercado (meta no trigger de CADA — sempre renderizado).
+    expect(markup).toContain("Over 2.5 · 1.92");
+    expect(markup).toContain("Casa · 2.10");
+    // Só a seção ABERTA (índice 0, defaultOpen) renderiza conteúdo no markup estático —
+    // o Radix Collapsible fechado não emite os filhos. Então o footer da aberta (OU):
+    expect(occurrences(markup, 'name="modelOverride"')).toBe(1);
+    expect(occurrences(markup, "Analisar de novo")).toBe(1);
+    // Form da seção aberta carrega o marketKey DELA (reanálise escopada — AC2). O da
+    // fechada (match_result) só aparece ao expandir; coberto pelo teste single abaixo.
+    expect(markup).toContain('value="over_under"');
+  });
+
+  it("seção analisável de mercado não-over_under carrega seu próprio marketKey + footer", () => {
+    // Single (bare, aberto) → prova que QUALQUER mercado, não só over_under, ganha footer
+    // com o SEU marketKey no hidden input (reanálise escopada por mercado, AC2).
+    const markup = renderToStaticMarkup(
+      <MarketAnalysisSections
+        sections={[MR]}
+        analyzable
+        matchId="m"
+        selectableModels={ADMIN_MODELS}
+        defaultModelLabel="Opus 4.8"
+      />,
+    );
+    expect(markup).toContain('value="match_result"');
+    expect(markup).toContain('name="modelOverride"');
+    expect(markup).toContain("Analisar de novo");
+  });
+
+  it("B3 por seção: a 1ª seção (aberta) renderiza seu racional UMA vez (sem duplicar state.view)", () => {
+    const markup = renderToStaticMarkup(
+      <MarketAnalysisSections
+        sections={[OU, MR]}
+        analyzable
+        matchId="m"
+        selectableModels={ADMIN_MODELS}
+        defaultModelLabel="Opus 4.8"
+      />,
+    );
+    expect(occurrences(markup, "RACIONAL_OU")).toBe(1);
+  });
+});
+
+describe("seed do dropdown da seção = modelo que rodou (#244)", () => {
+  it("initialModelOverride semeia o modelId da análise; id aposentado/fora-da-audiência → default", () => {
+    // Seed = o modelo que rodou aquela análise (quando selecionável).
+    expect(initialModelOverride("claude-sonnet-4-6", ADMIN_MODELS)).toBe(
+      "claude-sonnet-4-6",
+    );
+    // modelVersion histórico/aposentado (não está na audiência) → sentinel "default"
+    // (sem <option> órfã); guarda contra row antiga.
+    expect(initialModelOverride("retired-model-xyz", ADMIN_MODELS)).toBe(
+      "default",
+    );
   });
 });

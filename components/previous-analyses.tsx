@@ -4,8 +4,8 @@ import type { PreviousAnalysisItem } from "@/lib/view/types";
 
 // Seção colapsável "análises anteriores" (#204): as predições passadas de um jogo
 // (history.slice(1)) sob a análise atual. Cada item reusa o <AnalysisResult/>
-// existente em modo somente-leitura (`again={false}` — sem botão de reanalisar nem
-// overlay de pending). ISOMÓRFICO (sem "use client"): renderizado tanto dentro do
+// existente em modo somente-leitura (sem footer de reanálise — esse é só das seções
+// por mercado, #244). ISOMÓRFICO (sem "use client"): renderizado tanto dentro do
 // AnalysisPanel client (jogos analisáveis) quanto direto na page server (jogos
 // encerrados com histórico). Market-agnostic: o header vem de marketLabel (registry),
 // nunca de strings de mercado hardcoded — o branch pass do AnalysisResult não imprime
@@ -26,7 +26,7 @@ export function PreviousAnalyses({ items }: { items: PreviousAnalysisItem[] }) {
                 {item.generatedAt}
               </span>
             </div>
-            <AnalysisResult view={item.view} again={false} />
+            <AnalysisResult view={item.view} />
           </div>
         ))}
       </div>
