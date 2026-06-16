@@ -59,14 +59,14 @@ function gridClass(count: number): string {
   return "grid grid-cols-1 gap-2 min-[480px]:grid-cols-2 lg:grid-cols-3";
 }
 
-// "ver cenário alternativo · menos de 2.5 gols −7.3pp" — resumo do disclosure
+// "ver cenário alternativo · menos de 2.5 gols -7.3pp" — resumo do disclosure
 // (#242). Com UM alternativo, carrega o número que decide (edge) pra a tela seguir
 // legível MESMO fechada; com vários (1X2), só a contagem (mostrar N edges poluiria
 // de volta o que a issue veio resolver). `—` (edge degradado) cai pro só-rótulo.
 function alternativesSummaryLabel(alternatives: OutcomeView[]): string {
   if (alternatives.length === 1) {
     const alt = alternatives[0];
-    const edge = alt.edge && alt.edge !== "—" ? ` ${alt.edge}` : "";
+    const edge = alt.edge !== "—" ? ` ${alt.edge}` : "";
     return `ver cenário alternativo · ${alt.scenarioLabel}${edge}`;
   }
   return `ver ${alternatives.length} cenários alternativos`;
