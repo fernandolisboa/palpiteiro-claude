@@ -8,6 +8,7 @@ import { computeMarketScenarios } from "@/lib/odds/scenario";
 
 import {
   toAnalysisView,
+  toMarketAnalysisSections,
   toOutcomesView,
   toPreviousAnalysisItems,
 } from "./analysis";
@@ -1180,7 +1181,8 @@ describe("toPreviousAnalysisItems", () => {
     };
   }
 
-  it("drops history[0] (a análise atual) e mapeia .slice(1) na ordem recebida", () => {
+  it("1 só mercado: exclui a última (= seção) e mapeia o resto (== slice(1))", () => {
+    // Mercado único (produção over/under): pular a 1ª-por-mercado é exatamente slice(1).
     const items = toPreviousAnalysisItems([
       mkRow({ id: "p3", marketKey: "over_under", createdAt: new Date(2026, 4, 19, 14, 0, 1) }),
       mkRow({ id: "p2", marketKey: "over_under", createdAt: new Date(2026, 4, 19, 13, 0, 2) }),
@@ -1189,13 +1191,18 @@ describe("toPreviousAnalysisItems", () => {
     expect(items.map((i) => i.id)).toEqual(["p2", "p1"]);
   });
 
-  it("rótulo é market-agnostic: marketLabel vem do registry por marketKey (AC3)", () => {
+  it("multi-mercado: exclui a ÚLTIMA de CADA mercado (essas viram seção, #243)", () => {
+    // A última de cada mercado (cur_ou, cur_mr) vira seção por-mercado, então NÃO é
+    // "anterior". As reanálises mais antigas entram — com marketLabel market-agnostic
+    // do registry (AC3) e null coalesce 'over_under'.
     const items = toPreviousAnalysisItems([
-      mkRow({ id: "cur", marketKey: "over_under", createdAt: new Date(2026, 4, 19, 15, 0, 0) }),
-      mkRow({ id: "mr", marketKey: "match_result", createdAt: new Date(2026, 4, 19, 14, 0, 0) }),
-      mkRow({ id: "ou", marketKey: "over_under", createdAt: new Date(2026, 4, 19, 13, 0, 0) }),
+      mkRow({ id: "cur_ou", marketKey: "over_under", createdAt: new Date(2026, 4, 19, 15, 0, 0) }),
+      mkRow({ id: "cur_mr", marketKey: "match_result", createdAt: new Date(2026, 4, 19, 14, 0, 0) }),
+      mkRow({ id: "old_mr", marketKey: "match_result", createdAt: new Date(2026, 4, 19, 13, 0, 0) }),
+      mkRow({ id: "old_ou", marketKey: "over_under", createdAt: new Date(2026, 4, 19, 12, 30, 0) }),
       mkRow({ id: "hist", marketKey: null, createdAt: new Date(2026, 4, 19, 12, 0, 0) }),
     ]);
+    expect(items.map((i) => i.id)).toEqual(["old_mr", "old_ou", "hist"]);
     expect(items.map((i) => i.marketLabel)).toEqual([
       getMarketPresentation("match_result").marketLabel,
       getMarketPresentation("over_under").marketLabel,
@@ -1221,5 +1228,110 @@ describe("toPreviousAnalysisItems", () => {
         mkRow({ id: "only", marketKey: "over_under", createdAt: new Date() }),
       ]),
     ).toEqual([]);
+  });
+});
+
+describe("toMarketAnalysisSections", () => {
+  // Mesma row mínima do bloco acima: só os campos lidos pelo mapper (o mapeamento de
+  // view tem cobertura própria em toAnalysisView). Pass mantém a row leve.
+  function mkRow(o: {
+    id: string;
+    marketKey: string | null;
+    createdAt: Date;
+  }): PredictionWithAiCall {
+    return {
+      prediction: {
+        id: o.id,
+        recommendation: "pass",
+        confidencePct: "55.00",
+        rationale: "r",
+        keyFactors: ["a"],
+        minimumOdd: null,
+        oddAtRecommendation: null,
+        bookmaker: null,
+        impliedProbPct: null,
+        edgePct: null,
+        modelVersion: "claude-opus-4-8",
+        promptVersion: "v1",
+        createdAt: o.createdAt,
+        marketParams: null,
+        stakeUnits: null,
+      } as unknown as DbPrediction,
+      aiCall: null,
+      marketKey: o.marketKey,
+      selections: [],
+    };
+  }
+
+  it("≥2 mercados → uma seção por mercado, cada uma = a última daquele mercado (AC1)", () => {
+    const sections = toMarketAnalysisSections([
+      mkRow({ id: "ou2", marketKey: "over_under", createdAt: new Date(2026, 4, 19, 17, 0, 0) }),
+      mkRow({ id: "mr1", marketKey: "match_result", createdAt: new Date(2026, 4, 19, 16, 0, 0) }),
+      mkRow({ id: "ou1", marketKey: "over_under", createdAt: new Date(2026, 4, 19, 15, 0, 0) }),
+      mkRow({ id: "mr0", marketKey: "match_result", createdAt: new Date(2026, 4, 19, 14, 0, 0) }),
+    ]);
+    // 1 seção por mercado; a última de cada (ou2 vence ou1, mr1 vence mr0).
+    expect(sections.map((s) => s.id)).toEqual(["ou2", "mr1"]);
+    expect(sections.map((s) => s.marketLabel)).toEqual([
+      getMarketPresentation("over_under").marketLabel,
+      getMarketPresentation("match_result").marketLabel,
+    ]);
+  });
+
+  it("ordem = mercado (re)analisado mais recentemente primeiro (alimenta defaultOpen)", () => {
+    // over/under é o mais recente globalmente → 1ª seção (índice 0 abre por padrão).
+    const sections = toMarketAnalysisSections([
+      mkRow({ id: "ou", marketKey: "over_under", createdAt: new Date(2026, 4, 19, 17, 0, 0) }),
+      mkRow({ id: "mr", marketKey: "match_result", createdAt: new Date(2026, 4, 19, 16, 0, 0) }),
+    ]);
+    expect(sections[0].id).toBe("ou");
+  });
+
+  it("reanalisar um mercado o leva pro índice 0 com id NOVO (remonta/reabre, #243)", () => {
+    // Antes: match_result era a última seção. Depois de reanalisar over/under (id novo,
+    // createdAt mais recente), over/under salta pro índice 0 — a key React (=id) muda
+    // só pra essa seção, então React remonta SÓ ela (reabre via defaultOpen).
+    const sections = toMarketAnalysisSections([
+      mkRow({ id: "ou_new", marketKey: "over_under", createdAt: new Date(2026, 4, 19, 18, 0, 0) }),
+      mkRow({ id: "mr", marketKey: "match_result", createdAt: new Date(2026, 4, 19, 17, 0, 0) }),
+      mkRow({ id: "ou_old", marketKey: "over_under", createdAt: new Date(2026, 4, 19, 15, 0, 0) }),
+    ]);
+    expect(sections[0].id).toBe("ou_new");
+    expect(sections.map((s) => s.id)).toEqual(["ou_new", "mr"]);
+  });
+
+  it("marketId null (histórica) + over_under real → UMA seção, latest vence (AC4)", () => {
+    // O bucket é COALESCED (marketKey ?? 'over_under'): uma row sem mercado e uma
+    // over_under real NÃO viram duas seções — colapsam numa, com a mais recente vencendo.
+    const merged = toMarketAnalysisSections([
+      mkRow({ id: "ou_real", marketKey: "over_under", createdAt: new Date(2026, 4, 19, 14, 0, 0) }),
+      mkRow({ id: "null_old", marketKey: null, createdAt: new Date(2026, 4, 19, 13, 0, 0) }),
+    ]);
+    expect(merged).toHaveLength(1);
+    expect(merged[0].id).toBe("ou_real");
+    expect(merged[0].marketLabel).toBe(
+      getMarketPresentation("over_under").marketLabel,
+    );
+
+    // Ordem inversa: a histórica null é a mais recente → ela vence dentro do bucket.
+    const nullWins = toMarketAnalysisSections([
+      mkRow({ id: "null_new", marketKey: null, createdAt: new Date(2026, 4, 19, 14, 0, 0) }),
+      mkRow({ id: "ou_old", marketKey: "over_under", createdAt: new Date(2026, 4, 19, 13, 0, 0) }),
+    ]);
+    expect(nullWins).toHaveLength(1);
+    expect(nullWins[0].id).toBe("null_new");
+  });
+
+  it("1 só mercado → 1 seção (caminho ≤1 = AnalysisResult cru, AC3)", () => {
+    const sections = toMarketAnalysisSections([
+      mkRow({ id: "ou1", marketKey: "over_under", createdAt: new Date(2026, 4, 19, 14, 0, 0) }),
+      mkRow({ id: "ou0", marketKey: "over_under", createdAt: new Date(2026, 4, 19, 13, 0, 0) }),
+    ]);
+    expect(sections).toHaveLength(1);
+    expect(sections[0].id).toBe("ou1");
+  });
+
+  it("histórico vazio → []", () => {
+    expect(toMarketAnalysisSections([])).toEqual([]);
   });
 });
