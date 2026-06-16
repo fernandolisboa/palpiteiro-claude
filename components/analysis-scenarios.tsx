@@ -1,6 +1,8 @@
 // MIN_EDGE_PP vem de lib/odds/scenario.ts, NUNCA de lib/ai/prompts/ — este
 // componente é alcançável pelo client component AnalysisPanel ("use client");
 // importar de lib/ai/prompts embarcaria o SYSTEM_PROMPT no bundle do cliente.
+import { ChevronRight } from "lucide-react";
+
 import { HelpHint } from "@/components/help-hint";
 import { MIN_EDGE_PP } from "@/lib/odds/scenario";
 import { cn } from "@/lib/utils";
@@ -48,39 +50,96 @@ function selectColumns(outcomes: OutcomeView[]): {
   return { columns, hiddenCount: outcomes.length - columns.length };
 }
 
-// Grid responsivo por contagem de colunas. N=2 mantém o layout pré-pivot
-// (grid-cols-1 → min-[480px]:grid-cols-2) byte-a-byte (paridade VISUAL).
+// Grid responsivo por contagem de colunas. Usado pra a grade do PASS (todas as
+// colunas neutras) e pra a grade de cenários ALTERNATIVOS colapsados (#242) — não
+// mais pra o bloco inteiro: a recomendação agora é standalone (full-width) acima.
 function gridClass(count: number): string {
   if (count <= 2) return "grid grid-cols-1 gap-2 min-[480px]:grid-cols-2";
   if (count === 3) return "grid grid-cols-1 gap-2 min-[480px]:grid-cols-3";
   return "grid grid-cols-1 gap-2 min-[480px]:grid-cols-2 lg:grid-cols-3";
 }
 
+// "ver cenário alternativo · menos de 2.5 gols −7.3pp" — resumo do disclosure
+// (#242). Com UM alternativo, carrega o número que decide (edge) pra a tela seguir
+// legível MESMO fechada; com vários (1X2), só a contagem (mostrar N edges poluiria
+// de volta o que a issue veio resolver). `—` (edge degradado) cai pro só-rótulo.
+function alternativesSummaryLabel(alternatives: OutcomeView[]): string {
+  if (alternatives.length === 1) {
+    const alt = alternatives[0];
+    const edge = alt.edge && alt.edge !== "—" ? ` ${alt.edge}` : "";
+    return `ver cenário alternativo · ${alt.scenarioLabel}${edge}`;
+  }
+  return `ver ${alternatives.length} cenários alternativos`;
+}
+
 // Bloco "Cenários" (ADR 0012): as seleções com números CONGELADOS na análise.
-// Os lados não-recomendados são informativos — nunca uma segunda recomendação
-// (sem accent, sem edge-*; pinado em teste). No mobile (~380px) as colunas
-// empilham (grid-cols-1) e abrem a partir de 480px.
+// #242 — quando HÁ recomendação, ela é a ÚNICA coluna dominante (full-width); o(s)
+// lado(s) não-recomendado(s) ficam COLAPSADOS atrás de um <details> nativo (fechado
+// por padrão), pra a tela não poluir com o lado que o app NÃO recomenda. Nenhum dado
+// se perde — está a 1 clique, e o número-chave já viaja no resumo. <details> nativo
+// (não Radix) de propósito: mantém o componente ISOMÓRFICO (sem "use client"), que é
+// o que permite renderizar nos 4 contextos do AnalysisResult (painel, encerrado,
+// CADA item de "análises anteriores" #204, best-bet) sem fronteira de cliente. Os
+// alternativos seguem informativos/neutros (sem accent/edge-*; pinado em teste). No
+// PASS não há recomendação a subordinar → todas as colunas neutras, lado a lado.
 export function AnalysisScenarios({ outcomes, framing, note, returnTone }: Props) {
   const { columns, hiddenCount } = selectColumns(outcomes);
-  const hasRecommendation = outcomes.some((o) => o.isRecommended);
+  const hasRecommendation = columns.some((o) => o.isRecommended);
+  const recommended = columns.filter((o) => o.isRecommended);
+  const alternatives = columns.filter((o) => !o.isRecommended);
   return (
     <div className="mx-4 mb-4 flex flex-col gap-2">
       <span className="font-mono text-[10.5px] uppercase tracking-[0.14em] text-muted-foreground">
         cenários
       </span>
-      <div className={gridClass(columns.length)}>
-        {columns.map((outcome, i) => (
-          <ScenarioColumn
-            key={outcome.id}
-            outcome={outcome}
-            hasRecommendation={hasRecommendation}
-            returnTone={returnTone}
-            // O `?` (HelpHint) ancora UMA vez só, na primeira coluna, pra não
-            // dobrar aria-labels nem poluir o grid.
-            showHints={i === 0}
-          />
-        ))}
-      </div>
+      {hasRecommendation ? (
+        <>
+          {/* Recomendado DOMINANTE: standalone, largura cheia (sem grid). O `?`
+              (HelpHint) ancora aqui — a coluna sempre visível — pra não esconder a
+              ajuda atrás do disclosure nem duplicar âncoras. */}
+          {recommended.map((outcome) => (
+            <ScenarioColumn
+              key={outcome.id}
+              outcome={outcome}
+              hasRecommendation
+              returnTone={returnTone}
+              showHints
+            />
+          ))}
+          {alternatives.length > 0 && (
+            <details className="group">
+              <summary className="flex cursor-pointer list-none select-none items-center gap-1.5 rounded-md py-1.5 font-mono text-[10px] uppercase tracking-[0.14em] text-muted-foreground transition-colors hover:text-foreground focus-visible:outline-none focus-visible:ring-[3px] focus-visible:ring-ring/50 [&::-webkit-details-marker]:hidden">
+                <ChevronRight className="size-3 shrink-0 transition-transform group-open:rotate-90" />
+                {alternativesSummaryLabel(alternatives)}
+              </summary>
+              <div className={cn(gridClass(alternatives.length), "pt-2")}>
+                {alternatives.map((outcome) => (
+                  <ScenarioColumn
+                    key={outcome.id}
+                    outcome={outcome}
+                    hasRecommendation
+                    returnTone={returnTone}
+                    showHints={false}
+                  />
+                ))}
+              </div>
+            </details>
+          )}
+        </>
+      ) : (
+        <div className={gridClass(columns.length)}>
+          {columns.map((outcome, i) => (
+            <ScenarioColumn
+              key={outcome.id}
+              outcome={outcome}
+              hasRecommendation={false}
+              returnTone={returnTone}
+              // O `?` (HelpHint) ancora UMA vez só, na primeira coluna.
+              showHints={i === 0}
+            />
+          ))}
+        </div>
+      )}
       {hiddenCount > 0 && (
         <p className="font-mono text-[10px] leading-snug tracking-tight text-muted-fg-2">
           {`+${hiddenCount} outras seleções não exibidas`}
@@ -119,8 +178,9 @@ function ScenarioColumn({
   showHints,
 }: ColumnProps) {
   const isRecommended = outcome.isRecommended;
-  // "cenário alternativo" só existe quando HÁ recomendação; em pass as colunas
-  // são neutras, sem badge e sem rótulo de alternativa.
+  // Distingue a superfície "alternative" da "neutral" (pass) pro data-scenario-col
+  // (pinado em teste) — o ROTULO de alternativa agora vive no <summary> do disclosure
+  // (#242), não num badge por-coluna, que seria redundante com o resumo.
   const isAlternative = hasRecommendation && !isRecommended;
   return (
     <div
@@ -146,11 +206,6 @@ function ScenarioColumn({
         {isRecommended && (
           <span className="font-mono text-[9.5px] uppercase tracking-[0.12em] text-accent-fg">
             recomendada
-          </span>
-        )}
-        {isAlternative && (
-          <span className="font-mono text-[9.5px] uppercase tracking-[0.12em] text-muted-foreground">
-            cenário alternativo
           </span>
         )}
       </div>
