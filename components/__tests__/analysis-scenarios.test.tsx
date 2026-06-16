@@ -220,7 +220,7 @@ describe("AnalysisScenarios — bloco 'Cenários' (#104)", () => {
     expect(recommended).toContain("border-accent-border");
   });
 
-  it("under recomendado: coluna alternativa (over, renderizada PRIMEIRO) é neutra e a badge cai no under", () => {
+  it("under recomendado: recomendada (under) é standalone PRIMEIRO; alternativa (over) colapsada e neutra", () => {
     const markup = renderToStaticMarkup(
       <AnalysisScenarios
         outcomes={underOutcomes}
@@ -229,11 +229,12 @@ describe("AnalysisScenarios — bloco 'Cenários' (#104)", () => {
         returnTone="positive"
       />,
     );
-    // A alternativa renderiza antes da recomendada — o segmento é delimitado
-    // pelo próximo marcador, não pelo fim do markup.
+    // #242: a recomendada é forçada pra primeira/standalone; a alternativa fica no
+    // <details>. O rótulo "cenário alternativo" mora no <summary> agora (não na
+    // coluna), então o markup inteiro o contém mas o segmento da coluna alt não.
+    expect(markup).toContain("cenário alternativo");
     const alt = columnSegment(markup, "alternative");
     expect(alt).toContain("mais de 2.5 gols");
-    expect(alt).toContain("cenário alternativo");
     expect(alt).not.toContain("edge-fg");
     expect(alt).not.toContain("edge-soft");
     expect(alt).not.toContain("edge-border");
@@ -382,8 +383,10 @@ describe("AnalysisScenarios — N-vias (1X2, AC2)", () => {
     expect(markup).toContain("Casa");
     expect(markup).toContain("Empate");
     expect(markup).toContain("Fora");
-    // grid de 3 colunas em telas largas.
-    expect(markup).toContain("min-[480px]:grid-cols-3");
+    // #242: recomendada (home) standalone; as 2 alternativas (draw, away) ficam
+    // colapsadas no <details>, em grade de 2 colunas (não mais 3 lado a lado).
+    expect(markup).toContain("ver 2 cenários alternativos");
+    expect(markup).toContain("min-[480px]:grid-cols-2");
   });
 });
 
@@ -436,5 +439,93 @@ describe("AnalysisScenarios — top-K truncation (N>5, R9)", () => {
     expect(markup).not.toContain("Sel E");
     // Placeholder "+N outras" (1 escondida).
     expect(markup).toContain("+1 outras seleções não exibidas");
+  });
+});
+
+// #242: o(s) cenário(s) alternativo(s) ficam colapsados num <details> nativo
+// (fechado por padrão), com a recomendada dominante fora dele. Reduz a poluição da
+// tela sem perder dado (o número-chave viaja no resumo).
+describe("AnalysisScenarios — colapso do alternativo (#242)", () => {
+  it("alternativo num <details> FECHADO por padrão; recomendada vem ANTES dele", () => {
+    const markup = renderToStaticMarkup(
+      <AnalysisScenarios
+        outcomes={overOutcomes}
+        framing={overFraming}
+        note={null}
+        returnTone="positive"
+      />,
+    );
+    expect(markup).toContain("<details");
+    expect(markup).not.toContain("<details open"); // fechado por padrão
+    expect(markup).toContain("<summary");
+    // a recomendada está FORA do <details> (renderizada antes); a alternativa dentro.
+    const detailsStart = markup.indexOf("<details");
+    expect(markup.indexOf('data-scenario-col="recommended"')).toBeLessThan(
+      detailsStart,
+    );
+    expect(markup.indexOf('data-scenario-col="alternative"')).toBeGreaterThan(
+      detailsStart,
+    );
+  });
+
+  it("resumo (N=1) carrega o número que decide: rótulo + edge do alternativo", () => {
+    const markup = renderToStaticMarkup(
+      <AnalysisScenarios
+        outcomes={overOutcomes}
+        framing={overFraming}
+        note={null}
+        returnTone="positive"
+      />,
+    );
+    expect(markup).toContain("ver cenário alternativo · menos de 2.5 gols -7.3pp");
+  });
+
+  it("pluralização: 1 alternativo = singular; ≥2 (1X2) = 'ver N cenários alternativos'", () => {
+    const single = renderToStaticMarkup(
+      <AnalysisScenarios
+        outcomes={overOutcomes}
+        framing={overFraming}
+        note={null}
+        returnTone="positive"
+      />,
+    );
+    expect(single).toContain("ver cenário alternativo");
+    expect(single).not.toContain("cenários alternativos");
+    const multi = renderToStaticMarkup(
+      <AnalysisScenarios
+        outcomes={matchResultOutcomes}
+        framing={null}
+        note={null}
+        returnTone="positive"
+      />,
+    );
+    expect(multi).toContain("ver 2 cenários alternativos");
+  });
+
+  it("PASS não colapsa nada: sem <details> (não há recomendação a subordinar)", () => {
+    const markup = renderToStaticMarkup(
+      <AnalysisScenarios
+        outcomes={passOutcomes}
+        framing={passFraming}
+        note={null}
+        returnTone="neutral"
+      />,
+    );
+    expect(markup).not.toContain("<details");
+    expect(markup).not.toContain("<summary");
+  });
+
+  it("HelpHints ancoram só na coluna recomendada (sem duplicar âncoras)", () => {
+    const markup = renderToStaticMarkup(
+      <AnalysisScenarios
+        outcomes={overOutcomes}
+        framing={overFraming}
+        note={null}
+        returnTone="positive"
+      />,
+    );
+    // showHints só na recomendada (sempre visível) → cada âncora de ajuda 1x.
+    expect(countOccurrences(markup, "Ajuda: edge")).toBe(1);
+    expect(countOccurrences(markup, "Ajuda: prob. do modelo")).toBe(1);
   });
 });
