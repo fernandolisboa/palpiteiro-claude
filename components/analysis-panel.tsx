@@ -9,13 +9,14 @@ import { AnalysisResult } from "@/components/analysis-result";
 import { AnalyzeCTA } from "@/components/analyze-cta";
 import { MarketSelect } from "@/components/market-select";
 import { ModelOverrideSelect } from "@/components/model-override-select";
+import { PreviousAnalyses } from "@/components/previous-analyses";
 import { Button } from "@/components/ui/button";
 import {
   initialModelOverride,
   resyncModelOverride,
 } from "@/lib/ai/model-override";
 import { MODEL_REGISTRY, isAIModelId } from "@/lib/ai/models";
-import type { AnalysisView } from "@/lib/view/types";
+import type { AnalysisView, PreviousAnalysisItem } from "@/lib/view/types";
 
 type Props = {
   matchId: string;
@@ -36,6 +37,11 @@ type Props = {
   // server) ou null. Espelha a cascata de predict: sem override, é o modelo que
   // vai REALMENTE rodar — então rotula o passo "gerando análise (…)".
   preferredModelId: string | null;
+  // Análises ANTERIORES deste jogo (#204): history.slice(1), já mapeadas pra view
+  // no server. Renderizadas numa seção colapsável abaixo da atual, OCULTA durante
+  // pending (a lista server fica stale no meio da reanálise; após revalidatePath a
+  // recém-substituída entra no histórico). Vazio → a seção não renderiza.
+  previous: PreviousAnalysisItem[];
 };
 
 export function AnalysisPanel({
@@ -46,6 +52,7 @@ export function AnalysisPanel({
   selectableMarkets,
   defaultModelLabel,
   preferredModelId,
+  previous,
 }: Props) {
   const initial: AnalyzeMatchResult | null = existing
     ? { ok: true, view: existing }
@@ -132,59 +139,70 @@ export function AnalysisPanel({
     </>
   );
 
+  // Wrapper flex (NÃO fragmento): o gap-3 da match page espaça o PAINEL dos
+  // irmãos, não o form da seção de histórico DENTRO dele — um fragmento deixaria a
+  // costura form↔histórico colada. O <form> segue intacto (aria-busy + hidden
+  // inputs + contexto de submit) como 1º filho; a seção é o irmão depois dele.
   return (
-    <form action={formAction} aria-busy={pending}>
-      <input type="hidden" name="matchId" value={matchId} />
-      {/* Mercado único: o seletor some, mas `marketKey` ainda viaja no FormData. */}
-      {!hasMarketChoice && (
-        <input type="hidden" name="marketKey" value={marketKey} />
-      )}
+    <div className="flex flex-col gap-3">
+      <form action={formAction} aria-busy={pending}>
+        <input type="hidden" name="matchId" value={matchId} />
+        {/* Mercado único: o seletor some, mas `marketKey` ainda viaja no FormData. */}
+        {!hasMarketChoice && (
+          <input type="hidden" name="marketKey" value={marketKey} />
+        )}
 
-      {/* Quando já existe predição e há controles (mercado e/ou modelo), a
-          re-análise vem do botão ao lado dos dropdowns (afordância ÚNICA) — por
-          isso o AnalysisResult abaixo NÃO recebe `again`, pra não duplicar o botão.
-          Na primeira análise (sem view) os dropdowns aparecem sozinhos acima da CTA. */}
-      {view && hasControls ? (
-        <div className="flex flex-wrap items-end gap-3 pb-3">
-          {controls}
-          <Button type="submit" size="sm" disabled={pending}>
-            <RefreshCcw className="size-3.5" />
-            {pending ? "Reanalisando…" : "Analisar de novo"}
-          </Button>
-        </div>
-      ) : (
-        !view &&
-        hasControls && (
-          <div className="flex flex-wrap items-end gap-3 pb-3">{controls}</div>
-        )
-      )}
-
-      {pending && view ? (
-        <div className="relative">
-          <div className="pointer-events-none opacity-40">
-            <AnalysisResult view={view} again={!hasControls} />
+        {/* Quando já existe predição e há controles (mercado e/ou modelo), a
+            re-análise vem do botão ao lado dos dropdowns (afordância ÚNICA) — por
+            isso o AnalysisResult abaixo NÃO recebe `again`, pra não duplicar o botão.
+            Na primeira análise (sem view) os dropdowns aparecem sozinhos acima da CTA. */}
+        {view && hasControls ? (
+          <div className="flex flex-wrap items-end gap-3 pb-3">
+            {controls}
+            <Button type="submit" size="sm" disabled={pending}>
+              <RefreshCcw className="size-3.5" />
+              {pending ? "Reanalisando…" : "Analisar de novo"}
+            </Button>
           </div>
-          <div className="pointer-events-none absolute inset-0 flex items-center justify-center">
-            <div className="flex items-center gap-2 rounded-md border border-border bg-card px-3 py-2 shadow">
-              <Loader2 className="size-4 animate-spin text-accent-fg" />
-              <span className="text-[12.5px] font-medium tracking-tight">
-                Reanalisando…
-              </span>
+        ) : (
+          !view &&
+          hasControls && (
+            <div className="flex flex-wrap items-end gap-3 pb-3">{controls}</div>
+          )
+        )}
+
+        {pending && view ? (
+          <div className="relative">
+            <div className="pointer-events-none opacity-40">
+              <AnalysisResult view={view} again={!hasControls} />
+            </div>
+            <div className="pointer-events-none absolute inset-0 flex items-center justify-center">
+              <div className="flex items-center gap-2 rounded-md border border-border bg-card px-3 py-2 shadow">
+                <Loader2 className="size-4 animate-spin text-accent-fg" />
+                <span className="text-[12.5px] font-medium tracking-tight">
+                  Reanalisando…
+                </span>
+              </div>
             </div>
           </div>
-        </div>
-      ) : pending ? (
-        <AnalyzeCTA pending modelLabel={modelLabel} />
-      ) : view ? (
-        <AnalysisResult view={view} again={!hasControls} />
-      ) : errorMsg ? (
-        <AnalysisErrorCard error={errorMsg} />
-      ) : oddsAvailable ? (
-        <AnalyzeCTA pending={false} />
-      ) : (
-        <NoOddsHint />
-      )}
-    </form>
+        ) : pending ? (
+          <AnalyzeCTA pending modelLabel={modelLabel} />
+        ) : view ? (
+          <AnalysisResult view={view} again={!hasControls} />
+        ) : errorMsg ? (
+          <AnalysisErrorCard error={errorMsg} />
+        ) : oddsAvailable ? (
+          <AnalyzeCTA pending={false} />
+        ) : (
+          <NoOddsHint />
+        )}
+      </form>
+
+      {/* OCULTA durante pending: a lista server fica stale no meio da reanálise.
+          Após revalidatePath (analyzeMatch) a recém-substituída entra no histórico e
+          a seção reaparece com pending=false. Vazia → PreviousAnalyses retorna null. */}
+      {!pending && <PreviousAnalyses items={previous} />}
+    </div>
   );
 }
 

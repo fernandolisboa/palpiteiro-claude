@@ -210,6 +210,16 @@ export function formatGeneratedAt(date: Date): string {
 }
 
 /**
+ * "19 mai · 14:22:07" — como formatGeneratedAt mas com segundos. Usado no header
+ * das "análises anteriores" (#204) pra desambiguar reanálises do MESMO minuto (a
+ * key React é a id da predição, estável; o rótulo só ajuda o usuário a distinguir).
+ */
+export function formatGeneratedAtSeconds(date: Date): string {
+  const ss = date.getSeconds().toString().padStart(2, "0");
+  return `${formatGeneratedAt(date)}:${ss}`;
+}
+
+/**
  * "2min" / "12min" / "1h" / "2d" — usado no OddsCard "atualizado há X".
  */
 export function formatRelativeAgo(

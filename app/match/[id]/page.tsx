@@ -6,6 +6,7 @@ import { ChevronLeft } from "lucide-react";
 import { AnalysisPanel } from "@/components/analysis-panel";
 import { AnalysisResult } from "@/components/analysis-result";
 import { BestBetPanel } from "@/components/best-bet-panel";
+import { PreviousAnalyses } from "@/components/previous-analyses";
 import { DesktopShell } from "@/components/desktop-shell";
 import { MatchAuxiliarySections } from "@/components/match-sections-auxiliary";
 import { MatchHero } from "@/components/match-hero";
@@ -29,16 +30,23 @@ import {
   marketsForLeague,
 } from "@/lib/db/queries/market-catalog";
 import { getMatchById } from "@/lib/db/queries/matches";
-import { getLatestPredictionForMatch } from "@/lib/db/queries/predictions";
+import { getPredictionHistoryForMatch } from "@/lib/db/queries/predictions";
 import { getPreferredModelId } from "@/lib/db/queries/users";
 import { getLatestSelectionOddsSnapshotsForMatches } from "@/lib/db/queries/odds-snapshots";
 import { ensureOddsSnapshotsFresh } from "@/lib/odds/fetch-and-snapshot";
 import { PAGE_LIVE_MARKETS } from "@/lib/odds/live-card-markets";
 import type { FixtureRef } from "@/lib/providers/sports-data/types";
-import { toAnalysisView } from "@/lib/view/analysis";
+import {
+  toAnalysisViewFromPrediction,
+  toPreviousAnalysisItems,
+} from "@/lib/view/analysis";
 import { toMatchRowView } from "@/lib/view/match";
 import { toNwayOddsView, toOddsView } from "@/lib/view/odds";
-import type { OddsView } from "@/lib/view/types";
+import type {
+  AnalysisView,
+  OddsView,
+  PreviousAnalysisItem,
+} from "@/lib/view/types";
 
 // Fan-out "melhor aposta" (#178) roda até ~4 predict() SERIAIS num request — no pior
 // caso (retries do Anthropic) leva minutos. Estende o budget da rota (Vercel max).
@@ -74,7 +82,7 @@ export default async function MatchPage({ params }: PageProps) {
   const [
     snapshot,
     matchResultMap,
-    latestPred,
+    history,
     defaultModelId,
     preferredModelId,
     audienceMarkets,
@@ -82,13 +90,18 @@ export default async function MatchPage({ params }: PageProps) {
   ] = await Promise.all([
     ensureP,
     matchResultP,
-    getLatestPredictionForMatch(match.id, session.user.id),
+    // Histórico COMPLETO (#204): a análise atual é history[0], as anteriores são
+    // history.slice(1). Substitui getLatestPredictionForMatch (que ficou parkada
+    // pro cluster #242–#245) — a forma rica é a mesma, então history[0] é
+    // byte-idêntico ao que o latest devolvia. Scoped por userId (sem leak, AC2).
+    getPredictionHistoryForMatch(match.id, session.user.id),
     getDefaultModelId(),
     getPreferredModelId(session.user.id),
     marketsForAudience(isAdmin),
     getEnableBestBetFanOut(),
   ]);
   const defaultModelLabel = MODEL_REGISTRY[defaultModelId].label;
+  const latestPred = history[0] ?? null;
 
   const heroView = toMatchRowView({
     match: {
@@ -128,34 +141,14 @@ export default async function MatchPage({ params }: PageProps) {
     ? toNwayOddsView(matchResultSnapshot, "match_result")
     : null;
 
+  // Análise ATUAL (history[0]) + ANTERIORES (history.slice(1), #204), mapeadas pela
+  // MESMA fiação multi-mercado (#170/#173) centralizada em lib/view/analysis. A
+  // seção colapsável é market-agnostic (labels do registry) e sobrevive ao pivot.
   const existingAnalysis = latestPred
-    ? toAnalysisView(
-        {
-          recommendation: latestPred.prediction.recommendation,
-          confidencePct: latestPred.prediction.confidencePct,
-          rationale: latestPred.prediction.rationale,
-          keyFactors: latestPred.prediction.keyFactors,
-          minimumOdd: latestPred.prediction.minimumOdd,
-          oddAtRecommendation: latestPred.prediction.oddAtRecommendation,
-          bookmaker: latestPred.prediction.bookmaker,
-          impliedProbPct: latestPred.prediction.impliedProbPct,
-          edgePct: latestPred.prediction.edgePct,
-          modelVersion: latestPred.prediction.modelVersion,
-          promptVersion: latestPred.prediction.promptVersion,
-          createdAt: latestPred.prediction.createdAt,
-          // Fiação multi-mercado (#170). marketId null (histórica sem backfill)
-          // → coalesce 'over_under', o único mercado ativo. `line` da forma do
-          // mercado salva (marketParams); cai pra defaultLine no mapper se null.
-          marketKey: latestPred.marketKey ?? "over_under",
-          line: latestPred.prediction.marketParams?.line ?? null,
-          stakeUnits: latestPred.prediction.stakeUnits,
-          // Candidate set N-vias da PSO (#173): reabrir uma predição 1X2 passada
-          // renderiza a grade de 3. over/under (2 rows) cai no caminho binário.
-          selections: latestPred.selections,
-        },
-        latestPred.aiCall ? { costUsd: latestPred.aiCall.costUsd } : null,
-      )
+    ? toAnalysisViewFromPrediction(latestPred)
     : null;
+  const previousAnalyses: PreviousAnalysisItem[] =
+    toPreviousAnalysisItems(history);
 
   const fixtureRef: FixtureRef = {
     league: match.league,
@@ -195,6 +188,7 @@ export default async function MatchPage({ params }: PageProps) {
           oddsView={oddsView}
           matchResultOddsView={matchResultOddsView}
           analysisExisting={existingAnalysis}
+          previousAnalyses={previousAnalyses}
           matchId={match.id}
           fixtureRef={fixtureRef}
           leagueKey={leagueKey}
@@ -214,6 +208,7 @@ export default async function MatchPage({ params }: PageProps) {
           oddsView={oddsView}
           matchResultOddsView={matchResultOddsView}
           analysisExisting={existingAnalysis}
+          previousAnalyses={previousAnalyses}
           matchId={match.id}
           fixtureRef={fixtureRef}
           leagueKey={leagueKey}
@@ -237,7 +232,11 @@ type Common = {
   // Card 1X2 ao vivo empilhado abaixo do over/under (#173). null = sem captura
   // h2h pra este match (best-effort) → não renderiza o 2º card.
   matchResultOddsView: OddsView | null;
-  analysisExisting: ReturnType<typeof toAnalysisView> | null;
+  analysisExisting: AnalysisView | null;
+  // Análises anteriores deste jogo (#204): history.slice(1) mapeado. Renderizadas
+  // numa seção colapsável abaixo da atual (oculta durante pending no painel; sempre
+  // visível no caminho encerrado). Vazio → a seção não renderiza.
+  previousAnalyses: PreviousAnalysisItem[];
   matchId: string;
   fixtureRef: FixtureRef;
   leagueKey: ReturnType<typeof leagueToKey>;
@@ -262,6 +261,7 @@ function MobileMatch({
   oddsView,
   matchResultOddsView,
   analysisExisting,
+  previousAnalyses,
   matchId,
   fixtureRef,
   leagueKey,
@@ -310,11 +310,18 @@ function MobileMatch({
             selectableMarkets={selectableMarkets}
             defaultModelLabel={defaultModelLabel}
             preferredModelId={preferredModelId}
+            previous={previousAnalyses}
           />
         ) : analysisExisting ? (
           // Jogo encerrado/cancelado com predição já gerada: mostra o resultado
           // em modo somente-leitura (sem CTA de reanálise — predict() rejeitaria).
-          <AnalysisResult view={analysisExisting} again={false} />
+          // Histórico (#204) abaixo TAMBÉM aparece aqui (inclusão deliberada além do
+          // AC): sem pending no caminho encerrado, a seção é sempre visível. Wrapper
+          // flex próprio pra espaçar atual↔anteriores (não depende do gap do pai).
+          <div className="flex flex-col gap-3">
+            <AnalysisResult view={analysisExisting} again={false} />
+            <PreviousAnalyses items={previousAnalyses} />
+          </div>
         ) : (
           <FinishedNotice score={finalScore} />
         )}
@@ -342,6 +349,7 @@ function DesktopMatch({
   oddsView,
   matchResultOddsView,
   analysisExisting,
+  previousAnalyses,
   matchId,
   fixtureRef,
   leagueKey,
@@ -451,10 +459,16 @@ function DesktopMatch({
               selectableMarkets={selectableMarkets}
               defaultModelLabel={defaultModelLabel}
               preferredModelId={preferredModelId}
+              previous={previousAnalyses}
             />
           ) : analysisExisting ? (
             // Encerrado/cancelado com predição: somente-leitura (sem reanálise).
-            <AnalysisResult view={analysisExisting} again={false} />
+            // Histórico (#204) abaixo TAMBÉM aqui (inclusão deliberada além do AC);
+            // wrapper flex próprio pra espaçar atual↔anteriores.
+            <div className="flex flex-col gap-3">
+              <AnalysisResult view={analysisExisting} again={false} />
+              <PreviousAnalyses items={previousAnalyses} />
+            </div>
           ) : (
             <FinishedNotice score={finalScore} />
           )}

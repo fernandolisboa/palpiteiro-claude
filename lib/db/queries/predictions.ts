@@ -48,6 +48,28 @@ export type PredictionWithAiCall = {
   selections: { key: string; modelProbPct: number; odd: number | null }[];
 };
 
+// Mapeia uma row de prediction_selection_odds pra a forma da view. Casa ÚNICA da
+// regra (usada por getLatestPredictionForMatch + getPredictionHistoryForMatch):
+// numeric → string no Drizzle → Number() na fronteira (gotcha
+// drizzle-numeric-returns-string). modelProbPct nullable (over/under pré-#173 /
+// históricas) → coalesce 0; `odd` PRESERVA null (Number(odd ?? 0) viraria um 0
+// errado). A assimetria odd-null vs prob-coalesce mora aqui, não em 2 cópias.
+function mapSelectionRow(s: {
+  key: string;
+  odd: string | null;
+  modelProbPct: string | null;
+}): { key: string; modelProbPct: number; odd: number | null } {
+  return {
+    key: s.key,
+    modelProbPct: Number(s.modelProbPct ?? 0),
+    odd: s.odd === null ? null : Number(s.odd),
+  };
+}
+
+// PARKADA (#204): sem caller de produção depois que a match page passou a derivar a
+// análise atual de getPredictionHistoryForMatch()[0]. Mantida + testada pro cluster
+// de match-page UI #242–#245 (pode voltar a precisar de um read single-latest); se
+// esses pousarem consumindo o histórico, remover esta função + seu teste pglite.
 export async function getLatestPredictionForMatch(
   matchId: string,
   userId: string,
@@ -94,46 +116,85 @@ export async function getLatestPredictionForMatch(
 
   return {
     ...row,
-    selections: selRows.map((s) => ({
-      key: s.key,
-      // numeric → string no Drizzle; Number() na fronteira. modelProbPct nullable
-      // (over/under pré-#173 / históricas): coalesce 0 (a grade 1X2 vem do candidate
-      // set gravado pela Fase 4, sempre com modelProbPct).
-      modelProbPct: Number(s.modelProbPct ?? 0),
-      odd: s.odd === null ? null : Number(s.odd),
-    })),
+    selections: selRows.map(mapSelectionRow),
   };
 }
 
-// Linha do histórico: prediction + aiCall, SEM as keys de mercado (a função é
-// market-agnostic por design — não precisa do registry de apresentação).
-export type PredictionHistoryRow = {
-  prediction: DbPrediction;
-  aiCall: DbAiCall | null;
-};
-
 /**
- * Full prediction history for a match scoped to one user, newest first — the
- * same select/leftJoin shape as getLatestPredictionForMatch but WITHOUT limit(1),
- * so the caller gets every (re)analysis instead of only the latest. Scoped by
- * userId so it never leaks other users' predictions. Market-agnostic (selects
- * whole prediction rows), so it survives the multi-market pivot untouched.
+ * Histórico COMPLETO de predições de um jogo para um usuário, mais recente
+ * primeiro — a MESMA forma por-row de getLatestPredictionForMatch (marketKey +
+ * candidate set congelado), mas SEM limit(1): o chamador recebe cada (re)análise.
+ *
+ * A match page mapeia cada row por toAnalysisView pra renderizar o MESMO
+ * <AnalysisResult/> market-agnostic tanto da análise ATUAL (history[0]) quanto de
+ * cada ANTERIOR (history.slice(1) — a seção colapsável "análises anteriores", #204).
+ * Daí a forma rica: `marketKey` alimenta o registry de apresentação (NUNCA hardcodar
+ * over/under) e `selections` alimenta a grade N-vias (1X2). Escopada por (matchId E
+ * userId) — nunca vaza predições de outro usuário (AC2). Ordem DETERMINÍSTICA via o
+ * tiebreak desc(id): a lista inteira é renderizada agora, então um empate de
+ * createdAt não pode reordenar entre requests.
  */
 export async function getPredictionHistoryForMatch(
   matchId: string,
   userId: string,
-): Promise<PredictionHistoryRow[]> {
-  return db
+): Promise<PredictionWithAiCall[]> {
+  const rows = await db
     .select({
       prediction: predictions,
       aiCall: aiCalls,
+      // LEFT (não INNER): uma row sem mercado (histórica não backfillada) ainda
+      // volta — key null, a view coalesce pra 'over_under'.
+      marketKey: markets.key,
     })
     .from(predictions)
     .leftJoin(aiCalls, eq(predictions.aiCallId, aiCalls.id))
+    .leftJoin(markets, eq(predictions.marketId, markets.id))
     .where(
       and(eq(predictions.matchId, matchId), eq(predictions.userId, userId)),
     )
-    .orderBy(desc(predictions.createdAt));
+    .orderBy(desc(predictions.createdAt), desc(predictions.id));
+
+  if (rows.length === 0) return [];
+
+  // Candidate set congelado de TODAS as predições numa query BATCHEADA (inArray) —
+  // evita N+1 (uma query extra, independente do tamanho do histórico).
+  // orderBy(asc(predictionId), asc(sortOrder)): predictionId agrupa as rows de cada
+  // predição num bloco contíguo; sortOrder dá a ordem canônica DENTRO do bloco
+  // (over,under / home,draw,away) sem depender de ordem de stream implícita.
+  const predIds = rows.map((r) => r.prediction.id);
+  const selRows = await db
+    .select({
+      predictionId: predictionSelectionOdds.predictionId,
+      key: marketSelections.key,
+      odd: predictionSelectionOdds.odd,
+      modelProbPct: predictionSelectionOdds.modelProbPct,
+    })
+    .from(predictionSelectionOdds)
+    .innerJoin(
+      marketSelections,
+      eq(predictionSelectionOdds.selectionId, marketSelections.id),
+    )
+    .where(inArray(predictionSelectionOdds.predictionId, predIds))
+    .orderBy(
+      asc(predictionSelectionOdds.predictionId),
+      asc(marketSelections.sortOrder),
+    );
+
+  // Agrupa por predictionId; cada grupo já vem em sortOrder asc (orderBy acima).
+  const selByPrediction = new Map<
+    string,
+    { key: string; modelProbPct: number; odd: number | null }[]
+  >();
+  for (const s of selRows) {
+    const list = selByPrediction.get(s.predictionId) ?? [];
+    list.push(mapSelectionRow(s));
+    selByPrediction.set(s.predictionId, list);
+  }
+
+  return rows.map((r) => ({
+    ...r,
+    selections: selByPrediction.get(r.prediction.id) ?? [],
+  }));
 }
 
 // Minimum elapsed time after kickoff before a fixture is worth polling for a
