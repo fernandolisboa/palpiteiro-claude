@@ -27,6 +27,7 @@ import {
 } from "@/lib/view/markets/presentation";
 import type {
   AnalysisView,
+  MarketAnalysisSectionItem,
   OutcomeView,
   PreviousAnalysisItem,
   ScenarioSideView,
@@ -390,11 +391,11 @@ export function toAnalysisView(
   };
 }
 
-// Adapta uma row do DB (PredictionWithAiCall — de getLatestPredictionForMatch ou
-// getPredictionHistoryForMatch) pra AnalysisView. Centraliza a fiação multi-mercado
-// (#170/#173) que antes vivia inline na match page, agora reusada pra a análise
-// ATUAL e pra cada ANTERIOR (#204). marketId null (histórica sem backfill) → coalesce
-// 'over_under'; `line` da forma salva (null em 1X2); candidate set → grade N-vias.
+// Adapta uma row do DB (PredictionWithAiCall — de getPredictionHistoryForMatch) pra
+// AnalysisView. Centraliza a fiação multi-mercado (#170/#173) que antes vivia inline
+// na match page, agora reusada pra cada SEÇÃO por-mercado (#243) e pra cada ANTERIOR
+// (#204). marketId null (histórica sem backfill) → coalesce 'over_under'; `line` da
+// forma salva (null em 1X2); candidate set → grade N-vias.
 export function toAnalysisViewFromPrediction(
   row: PredictionWithAiCall,
   now: Date = new Date(),
@@ -423,20 +424,69 @@ export function toAnalysisViewFromPrediction(
   );
 }
 
-// Seção "análises anteriores" (#204): history[0] é a análise ATUAL (renderizada
-// acima na match page); .slice(1) são as anteriores, da mais recente pra a mais
-// antiga (a query já ordena desc(createdAt)). PURA + testável (sem DB/IO).
+// Última análise de CADA mercado de um jogo (#243): agrupa o histórico (já
+// desc(createdAt), desc(id)) por mercado e devolve o 1º de cada bucket = a mais
+// recente daquele mercado. A key do bucket é COALESCED (`marketKey ?? "over_under"`,
+// igual a toAnalysisView/toPreviousAnalysisItems) — uma row sem mercado backfillado
+// cai no MESMO bucket over_under, então um jogo com [over_under real + histórica null]
+// vira UMA seção (o latest vence), nunca duas (AC4). Ordem das seções = primeira
+// aparição em desc(createdAt) = mercado (re)analisado mais recentemente primeiro, o que
+// alimenta `defaultOpen={i===0}` na seção colapsável (a mais recente abre). PURA.
+//
+// INVARIANTE p/ #243/#244: `sections.length` é a ÚNICA fonte de single-vs-multi —
+// `<= 1` DEVE renderizar o AnalysisResult cru byte-idêntico ao atual (AC3).
+export function toMarketAnalysisSections(
+  history: PredictionWithAiCall[],
+  now: Date = new Date(),
+): MarketAnalysisSectionItem[] {
+  const seen = new Set<string>();
+  const sections: MarketAnalysisSectionItem[] = [];
+  for (const row of history) {
+    const marketKey = row.marketKey ?? "over_under";
+    if (seen.has(marketKey)) continue;
+    seen.add(marketKey);
+    sections.push({
+      // id = predictions.id: key React estável; muda só quando ESTE mercado é
+      // reanalisado (nova predição) → React remonta SÓ esta seção (reabre via
+      // defaultOpen) sem fechar as outras (#243).
+      id: row.prediction.id,
+      // marketLabel SIBLING da view (espelha PreviousAnalysisItem/BestBetEntry): o
+      // branch pass do AnalysisResult não imprime mercado, então o título da seção o
+      // identifica. Mesmo coalesce 'over_under' do bucket acima.
+      marketLabel: getMarketPresentation(marketKey).marketLabel,
+      view: toAnalysisViewFromPrediction(row, now),
+    });
+  }
+  return sections;
+}
+
+// Seção "análises anteriores" (#204): as predições que NÃO são a última de cada
+// mercado (essas viram seção por-mercado, #243), da mais recente pra a mais antiga (a
+// query já ordena desc(createdAt)). Pula o 1º de cada bucket coalesced — com 1 só
+// mercado isso é exatamente `slice(1)` (idêntico ao #204), com N mercados exclui os N
+// latests (que estão nas seções) sem duplicar. PURA + testável (sem DB/IO).
 export function toPreviousAnalysisItems(
   history: PredictionWithAiCall[],
   now: Date = new Date(),
 ): PreviousAnalysisItem[] {
-  return history.slice(1).map((row) => ({
-    id: row.prediction.id,
-    // marketLabel SEPARADO da view (espelha best-bet-results): o branch pass do
-    // AnalysisResult não imprime mercado, então o header o identifica (AC3). Mesmo
-    // coalesce 'over_under' do toAnalysisView (leftJoin domain = seed key ou null).
-    marketLabel: getMarketPresentation(row.marketKey ?? "over_under").marketLabel,
-    generatedAt: formatGeneratedAtSeconds(row.prediction.createdAt),
-    view: toAnalysisViewFromPrediction(row, now),
-  }));
+  const seen = new Set<string>();
+  const items: PreviousAnalysisItem[] = [];
+  for (const row of history) {
+    const marketKey = row.marketKey ?? "over_under";
+    // 1ª aparição do mercado = a última análise dele (vira seção, #243) → não é
+    // "anterior". As demais (reanálises mais antigas) entram aqui.
+    if (!seen.has(marketKey)) {
+      seen.add(marketKey);
+      continue;
+    }
+    items.push({
+      id: row.prediction.id,
+      // marketLabel SEPARADO da view: o branch pass do AnalysisResult não imprime
+      // mercado, então o header o identifica (AC3). Mesmo coalesce 'over_under'.
+      marketLabel: getMarketPresentation(marketKey).marketLabel,
+      generatedAt: formatGeneratedAtSeconds(row.prediction.createdAt),
+      view: toAnalysisViewFromPrediction(row, now),
+    });
+  }
+  return items;
 }

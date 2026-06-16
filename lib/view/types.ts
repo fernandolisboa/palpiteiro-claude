@@ -169,6 +169,17 @@ export type PreviousAnalysisItem = {
   view: AnalysisView;
 };
 
+// Seção colapsável por mercado (#243): a ÚLTIMA análise de cada mercado de um jogo.
+// Espelha PreviousAnalysisItem/BestBetEntry — `marketLabel` é SIBLING da view (não um
+// campo dela): o branch pass do AnalysisResult não imprime mercado, então o título da
+// seção o identifica (market-agnostic, do registry). `id` = predictions.id: key React
+// ESTÁVEL + remonta SÓ a seção reanalisada (id novo) p/ ela reabrir sem fechar as outras.
+export type MarketAnalysisSectionItem = {
+  id: string;
+  marketLabel: string;
+  view: AnalysisView;
+};
+
 export type RecentPredictionView = {
   id: string;
   matchId: string;

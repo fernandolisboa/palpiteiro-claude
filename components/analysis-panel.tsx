@@ -7,6 +7,7 @@ import { analyzeMatch, type AnalyzeMatchResult } from "@/app/actions/predictions
 import { AnalysisErrorCard } from "@/components/analysis-error-card";
 import { AnalysisResult } from "@/components/analysis-result";
 import { AnalyzeCTA } from "@/components/analyze-cta";
+import { MarketAnalysisSections } from "@/components/market-analysis-section";
 import { MarketSelect } from "@/components/market-select";
 import { ModelOverrideSelect } from "@/components/model-override-select";
 import { PreviousAnalyses } from "@/components/previous-analyses";
@@ -16,11 +17,19 @@ import {
   resyncModelOverride,
 } from "@/lib/ai/model-override";
 import { MODEL_REGISTRY, isAIModelId } from "@/lib/ai/models";
-import type { AnalysisView, PreviousAnalysisItem } from "@/lib/view/types";
+import type {
+  MarketAnalysisSectionItem,
+  PreviousAnalysisItem,
+} from "@/lib/view/types";
 
 type Props = {
   matchId: string;
-  existing: AnalysisView | null;
+  // Última análise de CADA mercado deste jogo (#243), agrupada no server
+  // (toMarketAnalysisSections). `length` decide o render: ≤1 → AnalysisResult cru
+  // (byte-idêntico ao atual, AC3 over/under); ≥2 → uma seção colapsável por mercado.
+  // O disparo de reanálise (controles do topo) atualiza SÓ a seção do mercado escolhido
+  // via revalidatePath (#243); #244 move o disparo pra um rodapé por seção.
+  sections: MarketAnalysisSectionItem[];
   oddsAvailable: boolean;
   // Modelos que esta audiência pode escolher como override ({id,label}
   // serializável, resolvido no server). Vazio → seletor escondido. A garantia
@@ -46,7 +55,7 @@ type Props = {
 
 export function AnalysisPanel({
   matchId,
-  existing,
+  sections,
   oddsAvailable,
   selectableModels,
   selectableMarkets,
@@ -54,6 +63,12 @@ export function AnalysisPanel({
   preferredModelId,
   previous,
 }: Props) {
+  // ≥2 mercados analisados → seções colapsáveis por mercado; ≤1 → caminho de HOJE
+  // (resultado inline com overlay de pending). `existing` = a última do mercado mais
+  // recente: seed do useActionState + render single-mode. Em multi é IDENTITY-ONLY
+  // (nunca renderizado — as seções vêm de `sections`/props, B3).
+  const isMulti = sections.length >= 2;
+  const existing = sections[0]?.view ?? null;
   const initial: AnalyzeMatchResult | null = existing
     ? { ok: true, view: existing }
     : null;
@@ -171,7 +186,19 @@ export function AnalysisPanel({
           )
         )}
 
-        {pending && view ? (
+        {isMulti ? (
+          // MULTI (#243): as seções por-mercado vêm SÓ de `sections`/props (refrescadas
+          // por revalidatePath). O retorno transiente da action (state.view) é
+          // DESCARTADO de propósito — renderizá-lo aqui duplicaria a recém-reanalisada
+          // acima das seções (B3). O indicador de pending é o botão "Reanalisando…"
+          // (disabled) nos controles do topo; as seções ficam visíveis (stale) e só a
+          // do mercado reanalisado muda após o revalidate. #244 NÃO deve reintroduzir
+          // leitura de state.view aqui (move o disparo pro rodapé de cada seção).
+          <>
+            {!pending && errorMsg && <AnalysisErrorCard error={errorMsg} />}
+            <MarketAnalysisSections sections={sections} again={false} />
+          </>
+        ) : pending && view ? (
           <div className="relative">
             <div className="pointer-events-none opacity-40">
               <AnalysisResult view={view} again={!hasControls} />
