@@ -141,7 +141,7 @@ function BestBetCard({
           {entry.marketLabel}
         </span>
       </div>
-      <AnalysisResult view={entry.analysis} again={false} />
+      <AnalysisResult view={entry.analysis} />
     </div>
   );
 }

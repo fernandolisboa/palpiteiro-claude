@@ -321,7 +321,7 @@ function MobileMatch({
           // AC): sem pending no caminho encerrado, a seção é sempre visível. Wrapper
           // flex próprio pra espaçar seções↔anteriores (não depende do gap do pai).
           <div className="flex flex-col gap-3">
-            <MarketAnalysisSections sections={sections} again={false} />
+            <MarketAnalysisSections sections={sections} />
             <PreviousAnalyses items={previousAnalyses} />
           </div>
         ) : (
@@ -469,7 +469,7 @@ function DesktopMatch({
             // Histórico (#204) abaixo TAMBÉM aqui (inclusão deliberada além do AC);
             // wrapper flex próprio pra espaçar seções↔anteriores.
             <div className="flex flex-col gap-3">
-              <MarketAnalysisSections sections={sections} again={false} />
+              <MarketAnalysisSections sections={sections} />
               <PreviousAnalyses items={previousAnalyses} />
             </div>
           ) : (

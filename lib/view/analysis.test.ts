@@ -1331,6 +1331,17 @@ describe("toMarketAnalysisSections", () => {
     expect(sections[0].id).toBe("ou1");
   });
 
+  it("popula marketKey (coalesced) e modelId (= modelVersion) por seção (#244)", () => {
+    const sections = toMarketAnalysisSections([
+      mkRow({ id: "ou", marketKey: "over_under", createdAt: new Date(2026, 4, 19, 15, 0, 0) }),
+      mkRow({ id: "nullrow", marketKey: null, createdAt: new Date(2026, 4, 19, 14, 0, 0) }),
+    ]);
+    // marketKey = a key coalesced do bucket (key React da seção + hidden input do form).
+    expect(sections.map((s) => s.marketKey)).toEqual(["over_under"]);
+    // modelId = modelVersion CRU da análise (seed do dropdown do footer, #244).
+    expect(sections[0].modelId).toBe("claude-opus-4-8");
+  });
+
   it("histórico vazio → []", () => {
     expect(toMarketAnalysisSections([])).toEqual([]);
   });

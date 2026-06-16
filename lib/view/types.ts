@@ -172,11 +172,18 @@ export type PreviousAnalysisItem = {
 // Seção colapsável por mercado (#243): a ÚLTIMA análise de cada mercado de um jogo.
 // Espelha PreviousAnalysisItem/BestBetEntry — `marketLabel` é SIBLING da view (não um
 // campo dela): o branch pass do AnalysisResult não imprime mercado, então o título da
-// seção o identifica (market-agnostic, do registry). `id` = predictions.id: key React
-// ESTÁVEL + remonta SÓ a seção reanalisada (id novo) p/ ela reabrir sem fechar as outras.
+// seção o identifica (market-agnostic, do registry).
 export type MarketAnalysisSectionItem = {
+  // predictions.id — key estável p/ debugging/diffs; NÃO é a key React da seção (essa é
+  // `marketKey`, p/ a seção sobreviver à reanálise sem remontar — #244).
   id: string;
+  // marketKey CRU (coalesced 'over_under') — key React da seção (estável na reanálise) +
+  // hidden input do form de reanálise por seção (#244).
+  marketKey: string;
   marketLabel: string;
+  // modelVersion CRU da análise (AIModelId) — semeia o dropdown do footer da seção com o
+  // modelo que rodou aquela análise (#244). `view.model` é o display; aqui é o id.
+  modelId: string;
   view: AnalysisView;
 };
 
