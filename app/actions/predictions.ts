@@ -565,9 +565,11 @@ export async function analyzeMarkets(
     match.league,
   );
   // Seleção do usuário (N hidden inputs name="marketKeys" → getAll), dedupada e re-validada.
-  // `chosen` preserva {key,label} do SERVER (não do POST) e a ordem determinística de `allowed`
-  // (over_under primeiro = base de exibição do sumário). Um marketKey forjado fora da
-  // audiência/liga é dropado aqui (sem gastar slot); duplicatas colapsam. Cap mantém Tier-1.
+  // `chosen` preserva {key,label} do SERVER (não do POST). Ordem = a de `allowed`
+  // (`marketsForAudience`: over_under primeiro = base de exibição do sumário); sob o cap
+  // `capCandidates` re-particiona Tier-1-first, mas over_under é Tier-1 → segue 1º (e o cap é
+  // inalcançável hoje: só 4 descriptors). Um marketKey forjado fora da audiência/liga é dropado
+  // aqui (sem gastar slot); duplicatas colapsam.
   const requested = new Set(formData.getAll("marketKeys").map((v) => String(v)));
   const chosen = capCandidates(
     allowed.filter((m) => requested.has(m.key)),
@@ -634,7 +636,7 @@ export async function analyzeMarkets(
     JSON.stringify({
       scope: "analyzeMarkets",
       matchId,
-      selected: chosen.length,
+      candidates: chosen.length,
       granted: granted.length,
       rateLimited: rateLimited.length,
       additionalFetches: additionalToFetch.length,

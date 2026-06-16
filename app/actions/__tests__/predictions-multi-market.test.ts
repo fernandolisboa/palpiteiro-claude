@@ -202,6 +202,8 @@ describe("analyzeMarkets — fan-out multi-mercado (custo/rate-limit por N)", ()
       "match_result",
     ]);
     expect(mockRateLimit).toHaveBeenCalledTimes(3);
+    // btts (additional) foi rate-limited → não entrou no fanOut → NÃO pré-aquece (crédito poupado).
+    expect(mockEnsureOdds).not.toHaveBeenCalled();
     expect(res.ok).toBe(true);
     if (res.ok) {
       expect(res.summaries.map((s) => [s.marketKey, s.status])).toEqual([
@@ -267,6 +269,35 @@ describe("analyzeMarkets — fan-out multi-mercado (custo/rate-limit por N)", ()
       expect(res.summaries[0].message).not.toBe(res.summaries[1].message);
     }
     expect(vi.mocked(revalidatePath)).toHaveBeenCalledWith(`/match/${VALID_MATCH_ID}`);
+  });
+});
+
+describe("analyzeMarkets — pré-warm de odds *additional* SÓ sobre os concedidos (crédito The Odds API)", () => {
+  it("btts concedido (additional) → pré-warm EXATAMENTE 1× pra btts; over_under (featured) não", async () => {
+    const res = await analyzeMarkets(
+      null,
+      form({ matchId: VALID_MATCH_ID, marketKeys: ["over_under", "btts"] }),
+    );
+    expect(res.ok).toBe(true);
+    expect(mockEnsureOdds).toHaveBeenCalledTimes(1);
+    expect(mockEnsureOdds.mock.calls[0][1]?.markets?.[0]?.providerMarketKey).toBe(
+      "btts",
+    );
+  });
+
+  it("btts (additional) RATE-LIMITED → NUNCA pré-aquece (pega regressão chosen-vs-granted que queimaria crédito)", async () => {
+    // over_under concedido (1 slot), btts cai no cap → rate-limited, fora do fanOut.
+    mockRateLimit
+      .mockResolvedValueOnce({ ok: true, limit: 20, remaining: 0, reset: 0 })
+      .mockResolvedValueOnce({ ok: false, limit: 20, remaining: 0, reset: 0 });
+    const res = await analyzeMarkets(
+      null,
+      form({ matchId: VALID_MATCH_ID, marketKeys: ["over_under", "btts"] }),
+    );
+    expect(res.ok).toBe(true);
+    expect(mockPredict.mock.calls.map((c) => c[0].marketKey)).toEqual(["over_under"]);
+    // O pré-warm roda sobre `granted` (não `chosen`) → btts rate-limited NÃO gasta crédito.
+    expect(mockEnsureOdds).not.toHaveBeenCalled();
   });
 });
 

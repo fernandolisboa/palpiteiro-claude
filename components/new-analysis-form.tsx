@@ -113,17 +113,16 @@ export function NewAnalysisForm({
     const seed = defaultSelection(unanalyzedMarkets);
     return new Set(seed ? [seed] : []);
   });
-  // Re-sync na fase de render (padrão React) COM guard de mudança de membership: poda as keys que
-  // saíram de unanalyzedMarkets (um mercado recém-analisado ganhou seção e o form re-renderiza
-  // sem ele); se esvaziar, re-semeia o default. Set é igualdade por referência → um setSelected
-  // INCONDICIONAL aqui loopa pra sempre; só re-setamos quando a membership de fato mudou. Renderiza
-  // a partir de `effective` (a versão podada) pra não submeter uma key stale por um frame.
+  // Re-sync na fase de render (padrão React) COM guard de mudança de membership: SÓ poda as keys
+  // que saíram de unanalyzedMarkets (um mercado recém-analisado ganhou seção e o form re-renderiza
+  // sem ele) — NÃO re-semeia. O default inicial vem do useState acima; deixar a seleção esvaziar é
+  // intencional (multi-select pode ficar vazio → o CTA desabilita e a action rejeita "nenhum
+  // mercado válido"). Re-semear aqui (a) tornaria `disabled` dead code e (b) impediria o usuário de
+  // limpar a seleção (springs back). Set é igualdade por referência → um setSelected INCONDICIONAL
+  // loopa pra sempre; só re-setamos quando a membership de fato mudou. Renderiza a partir de
+  // `effective` (a versão podada) pra não submeter uma key stale por um frame.
   const present = new Set(unanalyzedMarkets.map((m) => m.key));
-  let effective = new Set([...selected].filter((k) => present.has(k)));
-  if (effective.size === 0 && unanalyzedMarkets.length > 0) {
-    const seed = defaultSelection(unanalyzedMarkets);
-    effective = new Set(seed ? [seed] : []);
-  }
+  const effective = new Set([...selected].filter((k) => present.has(k)));
   const membershipChanged =
     effective.size !== selected.size ||
     [...selected].some((k) => !effective.has(k));

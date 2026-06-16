@@ -47,6 +47,20 @@ describe("AnalyzeCTA multi-market progress copy (#245)", () => {
   });
 });
 
+describe("AnalyzeCTA disabled (#245 seleção vazia)", () => {
+  // O Button (shadcn) sempre carrega classes `disabled:*` no className → casamos o ATRIBUTO
+  // `disabled=""` (renderToStaticMarkup), não o substring.
+  it("disabled → botão de submit com atributo disabled", () => {
+    const markup = renderToStaticMarkup(<AnalyzeCTA pending={false} disabled />);
+    expect(markup).toContain('disabled=""');
+  });
+
+  it("sem disabled → botão habilitado (markup de hoje, paridade)", () => {
+    const markup = renderToStaticMarkup(<AnalyzeCTA pending={false} />);
+    expect(markup).not.toContain('disabled=""');
+  });
+});
+
 describe("AnalyzeCTA loading-step color semantics (#71)", () => {
   it("does not reuse the reserved edge-fg token for the completed-step checkmark", () => {
     const markup = renderToStaticMarkup(<AnalyzeCTA pending={true} />);
