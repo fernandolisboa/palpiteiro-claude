@@ -48,6 +48,28 @@ export type PredictionWithAiCall = {
   selections: { key: string; modelProbPct: number; odd: number | null }[];
 };
 
+// Mapeia uma row de prediction_selection_odds pra a forma da view. Casa ÚNICA da
+// regra (usada por getLatestPredictionForMatch + getPredictionHistoryForMatch):
+// numeric → string no Drizzle → Number() na fronteira (gotcha
+// drizzle-numeric-returns-string). modelProbPct nullable (over/under pré-#173 /
+// históricas) → coalesce 0; `odd` PRESERVA null (Number(odd ?? 0) viraria um 0
+// errado). A assimetria odd-null vs prob-coalesce mora aqui, não em 2 cópias.
+function mapSelectionRow(s: {
+  key: string;
+  odd: string | null;
+  modelProbPct: string | null;
+}): { key: string; modelProbPct: number; odd: number | null } {
+  return {
+    key: s.key,
+    modelProbPct: Number(s.modelProbPct ?? 0),
+    odd: s.odd === null ? null : Number(s.odd),
+  };
+}
+
+// PARKADA (#204): sem caller de produção depois que a match page passou a derivar a
+// análise atual de getPredictionHistoryForMatch()[0]. Mantida + testada pro cluster
+// de match-page UI #242–#245 (pode voltar a precisar de um read single-latest); se
+// esses pousarem consumindo o histórico, remover esta função + seu teste pglite.
 export async function getLatestPredictionForMatch(
   matchId: string,
   userId: string,
@@ -94,14 +116,7 @@ export async function getLatestPredictionForMatch(
 
   return {
     ...row,
-    selections: selRows.map((s) => ({
-      key: s.key,
-      // numeric → string no Drizzle; Number() na fronteira. modelProbPct nullable
-      // (over/under pré-#173 / históricas): coalesce 0 (a grade 1X2 vem do candidate
-      // set gravado pela Fase 4, sempre com modelProbPct).
-      modelProbPct: Number(s.modelProbPct ?? 0),
-      odd: s.odd === null ? null : Number(s.odd),
-    })),
+    selections: selRows.map(mapSelectionRow),
   };
 }
 
@@ -172,14 +187,7 @@ export async function getPredictionHistoryForMatch(
   >();
   for (const s of selRows) {
     const list = selByPrediction.get(s.predictionId) ?? [];
-    list.push({
-      key: s.key,
-      // numeric → string no Drizzle; Number() na fronteira. modelProbPct nullable
-      // (over/under pré-#173 / históricas): coalesce 0. `odd` PRESERVA null
-      // (Number(odd ?? 0) viraria um 0 errado) — verbatim de getLatestPredictionForMatch.
-      modelProbPct: Number(s.modelProbPct ?? 0),
-      odd: s.odd === null ? null : Number(s.odd),
-    });
+    list.push(mapSelectionRow(s));
     selByPrediction.set(s.predictionId, list);
   }
 

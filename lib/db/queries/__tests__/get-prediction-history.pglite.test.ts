@@ -39,6 +39,7 @@ const ids: {
   userId: string;
   otherUserId: string;
   matchId: string;
+  otherMatchId: string;
   aiCallId: string;
   ouMarketId: string;
   ouOver: string;
@@ -80,6 +81,20 @@ beforeAll(async () => {
     })
     .returning({ id: schema.matches.id });
   ids.matchId = m.id;
+
+  // 2º jogo — pra provar o escopo por matchId (uma predição de OUTRO jogo do MESMO
+  // usuário não pode vazar pra este jogo).
+  const [m2] = await base
+    .insert(schema.matches)
+    .values({
+      externalId: "ext-history-2",
+      league: "brasileirao_a",
+      homeTeam: "SE Palmeiras",
+      awayTeam: "SC Corinthians",
+      kickoffAt: new Date("2026-05-16T19:00:00Z"),
+    })
+    .returning({ id: schema.matches.id });
+  ids.otherMatchId = m2.id;
 
   const [ac] = await base
     .insert(schema.aiCalls)
@@ -137,6 +152,7 @@ beforeEach(async () => {
 
 async function insertPrediction(values: {
   userId?: string;
+  matchId?: string;
   marketId?: string | null;
   selectionId?: string | null;
   recommendation: string;
@@ -145,7 +161,7 @@ async function insertPrediction(values: {
   const [p] = await realDb
     .insert(schema.predictions)
     .values({
-      matchId: ids.matchId,
+      matchId: values.matchId ?? ids.matchId,
       userId: values.userId ?? ids.userId,
       aiCallId: ids.aiCallId,
       marketId: values.marketId ?? null,
@@ -180,6 +196,36 @@ describe("getPredictionHistoryForMatch — escopo e ordem", () => {
     expect(out).toHaveLength(1);
     expect(out[0].prediction.id).toBe(mine);
     expect(out.map((r) => r.prediction.id)).not.toContain(theirs);
+  });
+
+  it("escopa por matchId — predição de OUTRO jogo do mesmo usuário não vaza", async () => {
+    const thisMatch = await insertPrediction({
+      marketId: ids.ouMarketId,
+      selectionId: ids.ouOver,
+      recommendation: "over",
+    });
+    const otherMatch = await insertPrediction({
+      matchId: ids.otherMatchId,
+      marketId: ids.ouMarketId,
+      selectionId: ids.ouUnder,
+      recommendation: "under",
+    });
+
+    const out = await getPredictionHistoryForMatch(ids.matchId, ids.userId);
+    expect(out).toHaveLength(1);
+    expect(out[0].prediction.id).toBe(thisMatch);
+    expect(out.map((r) => r.prediction.id)).not.toContain(otherMatch);
+  });
+
+  it("popula o leftJoin de aiCall (costUsd round-trips)", async () => {
+    await insertPrediction({
+      marketId: ids.ouMarketId,
+      selectionId: ids.ouOver,
+      recommendation: "over",
+    });
+    const out = await getPredictionHistoryForMatch(ids.matchId, ids.userId);
+    expect(out[0].aiCall).not.toBeNull();
+    expect(out[0].aiCall?.costUsd).toBe("0.010000");
   });
 
   it("retorna a história COMPLETA (sem limit) em ordem newest-first", async () => {
