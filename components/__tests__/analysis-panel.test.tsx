@@ -1,10 +1,12 @@
 import { describe, expect, it, vi } from "vitest";
 import { renderToStaticMarkup } from "react-dom/server";
 
-// O painel orquestra NewAnalysisForm + as seções (SectionFooterDispatch), ambos importam
-// o server action analyzeMatch — mock leve pra não puxar server-only no env de teste.
+// O painel orquestra NewAnalysisForm (disparo de nova análise, multi-mercado #245 →
+// analyzeMarkets) + as seções (SectionFooterDispatch → analyzeMatch single) — mock leve pra
+// não puxar server-only no env de teste.
 vi.mock("@/app/actions/predictions", () => ({
   analyzeMatch: vi.fn(),
+  analyzeMarkets: vi.fn(),
 }));
 
 import { AnalysisPanel } from "@/components/analysis-panel";

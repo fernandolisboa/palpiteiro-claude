@@ -12,6 +12,13 @@ type Props = {
   // honesto — antes era um literal stale fixo em claude-sonnet-4.5, alheio à
   // seleção. Opcional: no estado não-pending nenhum passo é renderizado.
   modelLabel?: string;
+  // Nº de mercados no disparo multi-mercado (#245). >1 → copy agregada
+  // ("Analisando N mercados…", fan-out serial). undefined/≤1 → copy single
+  // BYTE-IDÊNTICA à de hoje (paridade do over/under sozinho, AC4).
+  marketCount?: number;
+  // Desabilita o botão de submit (#245: nenhum mercado marcado). undefined →
+  // sem atributo disabled (markup idêntico ao de hoje).
+  disabled?: boolean;
 };
 
 function buildSteps(modelLabel?: string) {
@@ -26,9 +33,15 @@ function buildSteps(modelLabel?: string) {
   ];
 }
 
-export function AnalyzeCTA({ pending, modelLabel }: Props) {
+export function AnalyzeCTA({
+  pending,
+  modelLabel,
+  marketCount,
+  disabled,
+}: Props) {
   if (pending) {
     const steps = buildSteps(modelLabel);
+    const multi = typeof marketCount === "number" && marketCount > 1;
     return (
       <Card className="gap-0 p-0">
         <div className="flex items-center gap-3 px-4 py-4">
@@ -37,10 +50,12 @@ export function AnalyzeCTA({ pending, modelLabel }: Props) {
           </span>
           <div className="flex flex-1 flex-col gap-0.5">
             <span className="text-[13px] font-medium tracking-tight">
-              Analisando jogo…
+              {multi ? `Analisando ${marketCount} mercados…` : "Analisando jogo…"}
             </span>
             <span className="text-[11.5px] text-muted-foreground tracking-tight">
-              Claude está revisando forma, H2H, lesões e odds. Cerca de 8–12s.
+              {multi
+                ? "Claude analisa cada mercado em sequência. Cerca de 8–12s por mercado."
+                : "Claude está revisando forma, H2H, lesões e odds. Cerca de 8–12s."}
             </span>
           </div>
         </div>
@@ -74,7 +89,12 @@ export function AnalyzeCTA({ pending, modelLabel }: Props) {
   }
 
   return (
-    <Button type="submit" size="lg" className="h-12 w-full text-[14px]">
+    <Button
+      type="submit"
+      size="lg"
+      disabled={disabled}
+      className="h-12 w-full text-[14px]"
+    >
       <Sparkles className="size-4" /> Analisar com IA
     </Button>
   );

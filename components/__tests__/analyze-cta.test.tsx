@@ -26,6 +26,27 @@ describe("AnalyzeCTA model-aware progress label", () => {
   });
 });
 
+describe("AnalyzeCTA multi-market progress copy (#245)", () => {
+  it("marketCount>1 → header agregado 'Analisando N mercados…'", () => {
+    const markup = renderToStaticMarkup(<AnalyzeCTA pending marketCount={3} />);
+    expect(markup).toContain("Analisando 3 mercados…");
+    expect(markup).not.toContain("Analisando jogo…");
+  });
+
+  it("marketCount=1 → copy single BYTE-IDÊNTICA à de hoje (paridade AC4)", () => {
+    const baseline = renderToStaticMarkup(<AnalyzeCTA pending />);
+    const single = renderToStaticMarkup(<AnalyzeCTA pending marketCount={1} />);
+    expect(single).toBe(baseline);
+    expect(single).toContain("Analisando jogo…");
+  });
+
+  it("marketCount undefined → copy single (sem mercados…)", () => {
+    const markup = renderToStaticMarkup(<AnalyzeCTA pending />);
+    expect(markup).toContain("Analisando jogo…");
+    expect(markup).not.toContain("mercados…");
+  });
+});
+
 describe("AnalyzeCTA loading-step color semantics (#71)", () => {
   it("does not reuse the reserved edge-fg token for the completed-step checkmark", () => {
     const markup = renderToStaticMarkup(<AnalyzeCTA pending={true} />);

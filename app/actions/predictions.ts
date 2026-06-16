@@ -28,7 +28,7 @@ import { getMatchById } from "@/lib/db/queries/matches";
 import { getAiCallById } from "@/lib/db/queries/predictions";
 import { getUserAccessState } from "@/lib/db/queries/users";
 import { ensureOddsSnapshotsFresh } from "@/lib/odds/fetch-and-snapshot";
-import { checkAnalysisRateLimit } from "@/lib/rate-limit";
+import { checkAnalysisRateLimit, type RateLimitResult } from "@/lib/rate-limit";
 import { toAnalysisView } from "@/lib/view/analysis";
 import { toBestBetView } from "@/lib/view/best-bet";
 import type { AnalysisView, BestBetView } from "@/lib/view/types";
@@ -482,4 +482,216 @@ export async function analyzeBestBet(
   revalidatePath(`/match/${matchId}`);
   revalidatePath("/");
   return { ok: true, view };
+}
+
+// ─── Análise multi-mercado SELECIONADA pelo usuário (#245) ────────────────────
+
+export type MarketRunStatus = "ok" | "failed" | "rate-limited";
+
+export type MarketRunSummaryItem = {
+  marketKey: string;
+  marketLabel: string; // label do allowlist server-side, NUNCA do POST
+  status: MarketRunStatus;
+  message?: string; // failed | rate-limited
+};
+
+export type AnalyzeMarketsResult =
+  | { ok: true; summaries: MarketRunSummaryItem[] }
+  | { ok: false; error: string };
+
+/**
+ * Fan-out multi-mercado ESCOLHIDO PELO USUÁRIO (#245) — distinto do analyzeBestBet (#178,
+ * fan-out AUTOMÁTICO + best-edge). Aqui o usuário marca QUAIS mercados; TODOS os escolhidos são
+ * analisados (sem "melhor" pick), cada um vira sua predição + ai_call (custo por mercado) e
+ * aterrissa na sua seção colapsável (#243) via revalidatePath → toMarketAnalysisSections.
+ *
+ * DINHEIRO REAL: N mercados = N predict() pagos. Diferente do analyzeBestBet (1 slot autoriza o
+ * run inteiro), aqui o rate-limit é cobrado POR MERCADO (N slots) — o AC do #245 exige que
+ * custo/rate-limit reflitam N análises. checkAnalysisRateLimit incrementa 1/call (sem count
+ * param), então creditamos N chamando-o 1× por mercado, ANTES do spend, parando no 1º não-ok
+ * (degrada com graça: os concedidos rodam, a cauda vira "rate-limited"). Spend de pior caso =
+ * min(remaining, MAX_FANOUT_MARKETS) chamadas pagas.
+ *
+ * Ordem dos gates é LOAD-BEARING (igual aos irmãos): TODOS os gates grátis (auth, acesso, jogo,
+ * analisabilidade, allowlist de mercado) vêm ANTES do 1º checkAnalysisRateLimit (que CONSOME
+ * slot), pra um POST forjado/vazio NUNCA queimar um slot diário.
+ */
+export async function analyzeMarkets(
+  _prev: AnalyzeMarketsResult | null,
+  formData: FormData,
+): Promise<AnalyzeMarketsResult> {
+  const matchId = String(formData.get("matchId") ?? "");
+  if (!matchId) {
+    return { ok: false, error: "matchId ausente" };
+  }
+  if (!z.uuid().safeParse(matchId).success) {
+    return { ok: false, error: "Identificador de jogo inválido." };
+  }
+  const session = await auth();
+  if (!session?.user?.id) {
+    return { ok: false, error: "Faça login para analisar." };
+  }
+  const access = await getUserAccessState(session.user.id);
+  if (!access) {
+    return { ok: false, error: "Sua sessão expirou. Faça login novamente." };
+  }
+  if (!access.allowed && !isEmailAllowed(session.user.email)) {
+    return {
+      ok: false,
+      error: "Seu acesso está bloqueado. Fale com o administrador.",
+    };
+  }
+  const match = await getMatchById(matchId);
+  if (!match) {
+    return { ok: false, error: "Jogo não encontrado." };
+  }
+  if (match.status === "finished" || match.status === "cancelled") {
+    return { ok: false, error: "Este jogo já foi encerrado ou cancelado." };
+  }
+  const isAdmin = session.user.role === "admin";
+  const overrideRaw = String(formData.get("modelOverride") ?? "");
+  let modelOverride: AIModelId | undefined;
+  if (
+    overrideRaw &&
+    overrideRaw !== "default" &&
+    isModelAllowedForAudience(overrideRaw, isAdmin)
+  ) {
+    modelOverride = overrideRaw;
+  }
+  // Allowlist server-side: audiência ∩ cobertura de liga (MESMA expressão de analyzeMatch e
+  // page.tsx). A seleção do POST é re-validada contra ESTA lista — nunca confiar no cliente.
+  const allowed = marketsForLeague(
+    await marketsForAudience(isAdmin),
+    match.league,
+  );
+  // Seleção do usuário (N hidden inputs name="marketKeys" → getAll), dedupada e re-validada.
+  // `chosen` preserva {key,label} do SERVER (não do POST) e a ordem determinística de `allowed`
+  // (over_under primeiro = base de exibição do sumário). Um marketKey forjado fora da
+  // audiência/liga é dropado aqui (sem gastar slot); duplicatas colapsam. Cap mantém Tier-1.
+  const requested = new Set(formData.getAll("marketKeys").map((v) => String(v)));
+  const chosen = capCandidates(
+    allowed.filter((m) => requested.has(m.key)),
+    MAX_FANOUT_MARKETS,
+  );
+  if (chosen.length === 0) {
+    return { ok: false, error: "Nenhum mercado válido selecionado." };
+  }
+  // Rate-limit POR MERCADO (N slots): 1 slot por mercado, em ordem, ANTES do spend. Para no 1º
+  // não-ok pra não queimar slots além do teto. `granted` é sempre um PREFIXO de `chosen`
+  // (quebramos no 1º não-ok) → `chosen.slice(granted.length)` é a cauda exata de rate-limited.
+  // Invariante de spend: slots consumidos == granted.length == mercados no runFanOut ==
+  // chamadas predict(). capCandidates rodou ANTES do loop → N-selecionados-mas-capados nunca
+  // sobre-cobram.
+  const granted: { key: string; label: string }[] = [];
+  let capRl: RateLimitResult | null = null;
+  for (const c of chosen) {
+    const rl = await checkAnalysisRateLimit(session.user.id, session.user.role);
+    if (rl.ok) {
+      granted.push(c);
+      continue;
+    }
+    if (rl.reason === "fail-closed") {
+      // KV ausente p/ não-admin: indisponível (não um teto real). Aborta o run inteiro ANTES de
+      // qualquer spend — espelha o single-market analyzeMatch.
+      return {
+        ok: false,
+        error: "Análises temporariamente indisponíveis. Tente mais tarde.",
+      };
+    }
+    // Teto real atingido: para de consumir; este + a cauda viram rate-limited.
+    capRl = rl;
+    break;
+  }
+  const rateLimited = chosen.slice(granted.length);
+  if (granted.length === 0) {
+    // capRl SEMPRE setado aqui: fail-closed já retornou acima; granted vazio só por cap na 1ª call.
+    return {
+      ok: false,
+      error: `Você atingiu o limite de ${capRl?.limit ?? 0} análises por dia. Tente novamente amanhã.`,
+    };
+  }
+  // FanOut só sobre os CONCEDIDOS. extraLines resolvido 1× por mercado (mesmo valor alimenta o
+  // pré-warm e o predict, senão predict resolveria um cartucho diferente do aquecido).
+  const extraLinesEnabled = await getEnableOverUnderExtraLines();
+  const fanOut: FanOutMarket[] = granted.map((c) => ({
+    marketKey: c.key,
+    extraLines: resolveExtraLines(c.key, match.league, extraLinesEnabled),
+  }));
+  // Pré-aquece os mercados *additional* (btts/dupla chance/over_under multi-linha) — bloco
+  // DUPLICADO do analyzeBestBet de propósito: extrair um helper mudaria o console.info
+  // (additionalFetches) do analyzeBestBet, path pago golden fora do escopo do #245. Só sobre os
+  // CONCEDIDOS (nunca rate-limited) → nenhum crédito da The Odds API gasto num mercado que não
+  // vai rodar. Cada um numa chamada própria; falha de um vira erro POR mercado (predict lança
+  // "sem snapshot fresco" depois, sem custo de LLM), sem abortar os irmãos. Teto additional/run.
+  const additionalDescriptors = fanOut
+    .map((m) => getCartridge(m.marketKey, { extraLines: m.extraLines }).descriptor)
+    .filter((d) => d.oddsSource === "additional");
+  const additionalToFetch =
+    additionalDescriptors.length > MAX_ADDITIONAL_FETCHES
+      ? additionalDescriptors.slice(0, MAX_ADDITIONAL_FETCHES)
+      : additionalDescriptors;
+  console.info(
+    JSON.stringify({
+      scope: "analyzeMarkets",
+      matchId,
+      selected: chosen.length,
+      granted: granted.length,
+      rateLimited: rateLimited.length,
+      additionalFetches: additionalToFetch.length,
+    }),
+  );
+  for (const descriptor of additionalToFetch) {
+    try {
+      await ensureOddsSnapshotsFresh(match, { markets: [descriptor] });
+    } catch (err) {
+      // Pré-warm falho → o mercado segue no fanOut; predict lança "sem snapshot fresco" ANTES do
+      // Anthropic (sem custo) → vira `failed` no outcome com a copy amigável. Só logamos; o
+      // outcome já reporta a falha por mercado (sem thread separado de pré-warm errors).
+      console.warn(
+        JSON.stringify({
+          scope: "analyzeMarkets",
+          matchId,
+          preWarm: descriptor.providerMarketKey,
+          message: err instanceof Error ? err.message : String(err),
+        }),
+      );
+    }
+  }
+  // Fan-out SERIAL: predict() por mercado concedido (a única porta pro LLM), erro isolado por
+  // mercado — NÃO best-of-successful (#245 mostra TODOS, sem ranking).
+  const outcomes = await runFanOut(
+    { matchId, userId: session.user.id, isAdmin, modelOverride },
+    fanOut,
+    friendlyMessageFromUnknown,
+  );
+  const labelByKey = new Map(chosen.map((c) => [c.key, c.label]));
+  const summaries: MarketRunSummaryItem[] = [
+    ...outcomes.map((o) =>
+      o.ok
+        ? {
+            marketKey: o.marketKey,
+            marketLabel: labelByKey.get(o.marketKey) ?? o.marketKey,
+            status: "ok" as const,
+          }
+        : {
+            marketKey: o.marketKey,
+            marketLabel: labelByKey.get(o.marketKey) ?? o.marketKey,
+            status: "failed" as const,
+            message: o.message,
+          },
+    ),
+    ...rateLimited.map((c) => ({
+      marketKey: c.key,
+      marketLabel: c.label,
+      status: "rate-limited" as const,
+      message: "Limite diário atingido — não analisado.",
+    })),
+  ];
+  // ≥1 predict rodou (granted.length>0). Mesmo se TODOS falharem, mantemos ok:true com o detalhe
+  // por-mercado (≠ analyzeBestBet, que vira ok:false em entries vazio): aqui já gastamos N slots
+  // e o banner explica qual falhou — uma string de erro única perderia o detalhe. Nenhuma seção
+  // nova aparece pros que falharam; revalidate é inócuo nesse caso.
+  revalidatePath(`/match/${matchId}`);
+  revalidatePath("/");
+  return { ok: true, summaries };
 }
