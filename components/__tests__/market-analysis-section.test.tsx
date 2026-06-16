@@ -187,6 +187,10 @@ describe("MarketAnalysisSections — analisável (footer por seção, #244)", ()
     // Form da seção aberta carrega o marketKey DELA (reanálise escopada — AC2). O da
     // fechada (match_result) só aparece ao expandir; coberto pelo teste single abaixo.
     expect(markup).toContain('value="over_under"');
+    // SEED do dropdown = o modelo que RODOU aquela análise (item.modelId, id CRU), não
+    // view.model (display "claude-sonnet-4.6", inválido como AIModelId → cairia em
+    // "default"). Trava a fiação modelId→<select> (AC de persistência #244/#239).
+    expect(markup).toMatch(/value="claude-sonnet-4-6"[^>]*selected/);
   });
 
   it("seção analisável de mercado não-over_under carrega seu próprio marketKey + footer", () => {
