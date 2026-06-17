@@ -8,9 +8,18 @@ import {
   predictions,
 } from "@/db/schema";
 import { db } from "@/lib/db";
-import { resolveMarketCatalog } from "@/lib/db/queries/market-catalog";
+import {
+  ensureScorerSelections,
+  resolveMarketCatalog,
+  resolveMarketRow,
+} from "@/lib/db/queries/market-catalog";
 import { getLatestFreshSelectionOddsSnapshots } from "@/lib/db/queries/odds-snapshots";
 import { extractDbCause } from "@/lib/db/pg-error";
+import {
+  collectIndependentBinaries,
+  deriveIndependentImplied,
+  type IndependentBinaryBundle,
+} from "@/lib/odds/collect-independent-binaries";
 import { computeMarketImpliedProbabilities } from "@/lib/odds/implied-probability";
 import { pickBestBookmaker, type MarketOddsBundle } from "@/lib/odds/select-bookmaker";
 import { getOddsProvider } from "@/lib/providers/odds";
@@ -75,7 +84,15 @@ export type Prediction = typeof predictions.$inferSelect;
 export type PredictResult = {
   prediction: Prediction;
   marketKey: string;
-  selections: { key: string; modelProbPct: number; odd: number | null }[];
+  // `label` (nome do jogador) viaja só pra mercados dynamicSelections (#290) — a
+  // view o prefere ao presentation.selectionLabel(key) (que devolveria a key crua
+  // num mercado de seleções dinâmicas). Ausente pros mercados de partição.
+  selections: {
+    key: string;
+    modelProbPct: number;
+    odd: number | null;
+    label?: string;
+  }[];
 };
 
 type AiCallStatus =
@@ -249,6 +266,13 @@ export async function predict({
   // (#175) seleciona a variante multi-linha onde houver (data-driven no registry).
   const cartridge = getCartridge(marketKey, { extraLines });
 
+  // Fork data-driven (#290, ADR 0025 emenda): independent_binary (scorer/assist)
+  // tem conjunto de jogadores ILIMITADO cotado só no yes — caminho próprio de
+  // aquisição de odds (collectIndependentBinaries), implícita-teto e catálogo
+  // lazy. NUNCA `if (market === X)`: o fork chaveia em marketKind.
+  const isIndependentBinary =
+    (cartridge.descriptor.marketKind ?? "partition") === "independent_binary";
+
   // 0. Resolve o modelo UMA vez pela cascata completa (ADR 0013):
   //    override por análise > preferência do usuário > default global >
   //    DEFAULT_MODEL_ID. A preferência só vale se passar no filtro de audiência
@@ -356,10 +380,53 @@ export async function predict({
   // fixado pós-output). `!` = definite-assignment: o single-line atribui aqui; o
   // multi-linha atribui após a escolha do LLM — ambos antes do 1º uso (edge).
   let oddsBundle!: MarketOddsBundle;
+  // Bundle scorer (#290): jogadores cotados yes-only de UM book. Atribuído só no
+  // caminho independent_binary; usado pra threadar selectionKeys/labels/implícita.
+  let scorerBundle: IndependentBinaryBundle | undefined;
   // Multi-linha (#175): um bundle por linha candidata; o LLM escolhe a linha.
   let bundlesByLine: Map<number, MarketOddsBundle> | undefined;
   const candidateLines = cartridge.descriptor.candidateLines;
-  if (candidateLines) {
+  if (isIndependentBinary) {
+    // independent_binary (#290): batch /odds da liga pelo providerMarketKey
+    // (bet_92/212) → o OddsFallbackProvider roteia pro ApiFootballOddsAdapter
+    // (supportsMarket). collectIndependentBinaries escolhe o book com mais
+    // jogadores, SEM complete-market gate, SEM overround. Nenhum snapshot fresco
+    // (estes mercados não pré-aquecem por evento como btts) — fetch direto.
+    const sportKey = leagueToSportKey(match.league);
+    const commenceTimeFrom = new Date(kickoffMs - ODDS_WINDOW_MS).toISOString();
+    const commenceTimeTo = new Date(kickoffMs + ODDS_WINDOW_MS).toISOString();
+    const events = await getOddsProvider().getOddsForSport(sportKey, {
+      markets: [cartridge.descriptor.providerMarketKey],
+      regions: ["eu"],
+      commenceTimeFrom,
+      commenceTimeTo,
+    });
+    const event = findMatchingEvent(
+      events,
+      fixture.homeTeam,
+      fixture.awayTeam,
+      match.kickoffAt,
+    );
+    if (!event) {
+      throw new PredictError("no matching odds event found", {
+        home: fixture.homeTeam,
+        away: fixture.awayTeam,
+        kickoff: match.kickoffAt.toISOString(),
+        candidates: events.length,
+        market: cartridge.descriptor.dbMarketKey,
+      });
+    }
+    scorerBundle = collectIndependentBinaries({
+      event,
+      descriptor: cartridge.descriptor,
+    });
+    if (!scorerBundle) {
+      throw new PredictError(
+        `no '${cartridge.descriptor.dbMarketKey}' player odds available for event`,
+        { eventId: event.id, bookmakers: event.bookmakers.length },
+      );
+    }
+  } else if (candidateLines) {
     // Lê o snapshot fresco POR linha (additional pré-aquecido por evento; ver
     // fetch-and-snapshot). Linha sem snapshot → omitida (escada parcial: analisa as
     // disponíveis). oddsBundle/oddByKey/impliedByKey finais saem da linha escolhida.
@@ -402,13 +469,14 @@ export async function predict({
       );
     }
   }
-  const freshSnapshot = bundlesByLine
-    ? null
-    : await getLatestFreshSelectionOddsSnapshots({
-        matchId: match.id,
-        dbMarketKey: cartridge.descriptor.dbMarketKey,
-        params: cartridge.descriptor.params,
-      });
+  const freshSnapshot =
+    bundlesByLine || isIndependentBinary
+      ? null
+      : await getLatestFreshSelectionOddsSnapshots({
+          matchId: match.id,
+          dbMarketKey: cartridge.descriptor.dbMarketKey,
+          params: cartridge.descriptor.params,
+        });
   if (freshSnapshot) {
     // numeric → string no Drizzle; Number() na fronteira antes de qualquer math.
     const selections = freshSnapshot.selections.map((s) => ({
@@ -436,6 +504,7 @@ export async function predict({
     };
   } else if (
     !bundlesByLine &&
+    !isIndependentBinary &&
     cartridge.descriptor.oddsSource === "additional"
   ) {
     // Mercado *additional* (btts): odds só por evento, NUNCA em batch (quota). O
@@ -446,7 +515,7 @@ export async function predict({
       `additional-market '${cartridge.descriptor.dbMarketKey}' sem snapshot fresco; odds devem ser garantidas por evento antes do predict (nunca batch)`,
       { matchId, dbMarketKey: cartridge.descriptor.dbMarketKey },
     );
-  } else if (!bundlesByLine) {
+  } else if (!bundlesByLine && !isIndependentBinary) {
     const sportKey = leagueToSportKey(match.league);
     const commenceTimeFrom = new Date(kickoffMs - ODDS_WINDOW_MS).toISOString();
     const commenceTimeTo = new Date(kickoffMs + ODDS_WINDOW_MS).toISOString();
@@ -493,22 +562,39 @@ export async function predict({
   //     keyed por dbMarketKey (= "over_under", a key de markets.key).
   //     Hard-fail aqui (market sem seed) acontece ANTES de queimar spend e ANTES
   //     do insert de ai_call. A persistência (passo 11) só CONSOME estes mapas.
-  const catalog = await resolveMarketCatalog(cartridge.descriptor.dbMarketKey);
-
-  // 4c. Guarda de seed COMPLETO — PRÉ-chamada-paga. resolveMarketCatalog (shared
-  //     com #164) só hard-falha em mercado ausente ou ZERO seleções; um mercado
-  //     seedado com SÓ ALGUMAS seleções (ex.: 'over' sem 'under') passaria por ela
-  //     e só estouraria nos hard-fails por-seleção DEPOIS de client.messages.create()
-  //     (queimando spend + uma row de ai_call). O invariante "falha antes do gasto"
-  //     exige checar AQUI que TODA seleção do cartucho tem id no catálogo.
-  const missingSelections = cartridge.selections.filter(
-    (key) => !catalog.idByKey.has(key),
-  );
-  if (missingSelections.length > 0) {
-    throw new PredictError(
-      `market '${cartridge.descriptor.dbMarketKey}' seedado incompleto: faltam seleções [${missingSelections.join(", ")}]`,
-      { marketKey, missingSelections },
+  //
+  //     independent_binary (#290): resolve SÓ a row markets (resolveMarketRow, sem
+  //     o hard-fail de zero-seleção) + materializa LAZY as seleções por jogador
+  //     (ensureScorerSelections, pré-paid — falha de DB nunca queima spend), NUNCA
+  //     re-entrando em resolveMarketCatalog. idByKey vem do upsert+re-read.
+  let catalog: { marketId: string; idByKey: Map<string, string> };
+  if (isIndependentBinary) {
+    const row = await resolveMarketRow(cartridge.descriptor.dbMarketKey);
+    const { idByKey } = await ensureScorerSelections(
+      row.marketId,
+      scorerBundle!.players.map((p) => ({ key: p.key, label: p.label })),
     );
+    catalog = { marketId: row.marketId, idByKey };
+  } else {
+    const resolved = await resolveMarketCatalog(cartridge.descriptor.dbMarketKey);
+    catalog = { marketId: resolved.marketId, idByKey: resolved.idByKey };
+
+    // 4c. Guarda de seed COMPLETO — PRÉ-chamada-paga. resolveMarketCatalog (shared
+    //     com #164) só hard-falha em mercado ausente ou ZERO seleções; um mercado
+    //     seedado com SÓ ALGUMAS seleções (ex.: 'over' sem 'under') passaria por ela
+    //     e só estouraria nos hard-fails por-seleção DEPOIS de client.messages.create()
+    //     (queimando spend + uma row de ai_call). O invariante "falha antes do gasto"
+    //     exige checar AQUI que TODA seleção do cartucho tem id no catálogo. PULADO
+    //     pra dynamicSelections (as seleções crescem lazy; não há set estático a checar).
+    const missingSelections = cartridge.selections.filter(
+      (key) => !catalog.idByKey.has(key),
+    );
+    if (missingSelections.length > 0) {
+      throw new PredictError(
+        `market '${cartridge.descriptor.dbMarketKey}' seedado incompleto: faltam seleções [${missingSelections.join(", ")}]`,
+        { marketKey, missingSelections },
+      );
+    }
   }
 
   // 5. Implied probabilities normalizadas (N seleções; contrato chave→índice).
@@ -518,7 +604,12 @@ export async function predict({
   //    `bundle.selections`; impliedByKey indexa o resultado pela MESMA chave, e o
   //    *100 segue a ordem de operações de antes (probs[i] * 100) → bit-exato com o
   //    legado em N=2.
-  const selectionKeys = cartridge.descriptor.selectionKeys;
+  //
+  //    C7 (#290): selectionKeys é forkado por DADO — scorer usa as keys do bundle
+  //    (descriptor.selectionKeys é [] pra dynamicSelections); partição é byte-idêntico.
+  const selectionKeys = isIndependentBinary
+    ? scorerBundle!.players.map((p) => p.key)
+    : cartridge.descriptor.selectionKeys;
   // impliedSumTarget (ADR 0018 + emenda): 1 p/ partição (over/under, 1X2 — Σ=100,
   // bit-exato com o legado); 2 p/ dupla chance (cobertura sobreposta, Σ=200). O
   // core fica Σ=1; o fator é aplicado AQUI e no mesmo lugar da view
@@ -586,7 +677,26 @@ export async function predict({
   };
   let input: ReturnType<typeof cartridge.buildPredictionInput>;
   try {
-    if (bundlesByLine) {
+    if (isIndependentBinary) {
+      // independent_binary (#290): oddByKey direto do bundle; implícita = TETO
+      // (1/odd)*100 via deriveIndependentImplied — NUNCA computeMarketImpliedProbabilities
+      // (normalização inaplicável). playerLabels carrega o nome pro cartucho.
+      const players = scorerBundle!.players;
+      for (const p of players) oddByKey[p.key] = p.odd;
+      impliedByKey = deriveIndependentImplied(players);
+      const playerLabels: Record<string, string> = {};
+      for (const p of players) playerLabels[p.key] = p.label;
+      input = cartridge.buildPredictionInput({
+        ...commonInputArgs,
+        odds: {
+          bookmaker: scorerBundle!.bookmakerTitle,
+          captured_at: new Date(scorerBundle!.lastUpdate).toISOString(),
+          selections: players.map((p) => ({ key: p.key, odd: p.odd })),
+          playerLabels,
+        },
+        implied: { pct: impliedByKey },
+      });
+    } else if (bundlesByLine) {
       // Multi-linha: monta a ESCADA (odds+implícita por linha) pro LLM ver e
       // escolher. oddByKey/impliedByKey/oddsBundle finais saem da linha escolhida,
       // fixados pós-output. selections/bookmaker/captured_at do GenericOddsArgs são
@@ -779,6 +889,12 @@ export async function predict({
   } else {
     marketParams = cartridge.descriptor.params ?? null;
   }
+  // bookmaker persistido = título do book das odds analisadas. scorer não usa
+  // `oddsBundle` (MarketOddsBundle de partição); vem do scorerBundle. Resolvido
+  // num único lugar pra a persistência não tocar `oddsBundle` no caminho scorer.
+  const bookmakerTitle = isIndependentBinary
+    ? scorerBundle!.bookmakerTitle
+    : oddsBundle.bookmakerTitle;
 
   // 11. Persistência (sequencial — neon-http não suporta transações reais).
   const cost = calculateCost({
@@ -922,8 +1038,8 @@ export async function predict({
         minimumOdd: output.minimum_odd?.toFixed(3) ?? null,
         oddAtRecommendation: oddAtRec?.toFixed(3) ?? null,
         // bookmaker = fonte das odds analisadas — persiste também em pass
-        // (ADR 0012, decisão 3).
-        bookmaker: oddsBundle.bookmakerTitle,
+        // (ADR 0012, decisão 3). scorer: do scorerBundle (ver bookmakerTitle).
+        bookmaker: bookmakerTitle,
         impliedProbPct: impliedPct?.toFixed(2) ?? null,
         edgePct: edge?.toFixed(2) ?? null,
         // Stake congelado (ADR 0019): banda determinística sobre edge/confiança;
@@ -986,7 +1102,11 @@ export async function predict({
   // Carrier da grade N-vias (gate #15): a prediction + o marketKey resolvido + uma
   // entrada por selectionKey (prob do modelo + odd congelada). A action monta a
   // view SÍNCRONA a partir disto. Tudo já em escopo (selectionKeys/modelProbByKey/
-  // oddByKey) — nenhuma re-query.
+  // oddByKey) — nenhuma re-query. `label` (nome do jogador) viaja só pro scorer:
+  // a view o prefere ao presentation.selectionLabel(key) (que devolveria a key crua).
+  const labelByKey: Record<string, string> | null = isIndependentBinary
+    ? Object.fromEntries(scorerBundle!.players.map((p) => [p.key, p.label]))
+    : null;
   return {
     prediction: predictionRow,
     marketKey: cartridge.marketKey,
@@ -994,6 +1114,7 @@ export async function predict({
       key,
       modelProbPct: modelProbByKey[key],
       odd: oddByKey[key] ?? null,
+      ...(labelByKey ? { label: labelByKey[key] } : {}),
     })),
   };
 }
