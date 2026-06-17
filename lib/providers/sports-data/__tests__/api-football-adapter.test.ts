@@ -466,13 +466,15 @@ function makeInjury(overrides: Partial<ApiFootballInjury["player"]> = {}): ApiFo
 }
 
 describe("toNormalizedInjury", () => {
-  it("maps Missing Fixture + Knee -> injured", () => {
+  it("maps Missing Fixture + Knee -> injured (com proveniência source:official, #226)", () => {
     const n = toNormalizedInjury(makeInjury());
     expect(n).toEqual({
       player: { name: "Test Player" },
       type: "injury",
       reason: "Knee injury",
       status: "injured",
+      // Proveniência (ADR 0026, #226): API-Football é fonte oficial estruturada.
+      source: "official",
     });
   });
   it("maps Questionable -> doubtful", () => {
