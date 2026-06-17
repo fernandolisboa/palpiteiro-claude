@@ -346,6 +346,9 @@ async function main(): Promise<void> {
     // === flip (estrito, sem rerun).
     let inputTokens = usage.inputTokens;
     let outputTokens = usage.outputTokens;
+    // attempts acumula TODAS as tentativas (incl. as internas de cada rerun, até
+    // MAX_ATTEMPTS_PER_PAYLOAD) — senão o volume de chamadas pagas é subreportado.
+    let totalAttempts = attempts;
     let flipConfirmed = flip;
     let reproRuns: number | undefined;
     let reproFlipped: number | undefined;
@@ -356,6 +359,7 @@ async function main(): Promise<void> {
           const rep = await replayOne({ client, inputPayload: row.inputPayload });
           inputTokens += rep.usage.inputTokens;
           outputTokens += rep.usage.outputTokens;
+          totalAttempts += rep.attempts;
           const repFlip = rep.output.recommendation !== row.recommendation;
           if (repFlip) flippedRuns++;
           console.log(
@@ -409,7 +413,7 @@ async function main(): Promise<void> {
       flipConfirmed,
       reproRuns,
       reproFlipped,
-      attempts,
+      attempts: totalAttempts,
       inputTokens,
       outputTokens,
       costUsd,
@@ -424,7 +428,7 @@ async function main(): Promise<void> {
       `  ${row.recommendation} → ${output.recommendation}${flipNote} | ` +
         `conf ${baselineConf.toFixed(1)} → ${output.confidence_pct.toFixed(1)} (|Δ P(over)|=${deltaConf.toFixed(1)}pp) | ` +
         `minOdd ${fmt(row.minimumOdd === null ? null : Number(row.minimumOdd), 3)} → ${fmt(output.minimum_odd ?? null, 3)}` +
-        `${attempts > 1 ? ` | ${attempts} tentativas` : ""}`,
+        `${totalAttempts > 1 ? ` | ${totalAttempts} tentativas` : ""}`,
     );
   }
 
