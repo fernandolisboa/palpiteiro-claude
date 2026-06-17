@@ -12,7 +12,6 @@ import {
   getLastQuota,
   type ExtractedQuota,
 } from "@/lib/providers/http/quota-logger";
-import { BET_ID_CORRECT_SCORE } from "@/lib/providers/odds/api-football/constants";
 import {
   OddsEnvelopeSchema,
   type ApiFootballOddsItem,
@@ -212,20 +211,22 @@ async function request<S extends z.ZodTypeAny>(
 }
 
 /**
- * Odds de correct score (bet=10) da liga inteira. A api-football devolve a rodada
- * inteira numa página (books+bets aninhados por fixture) — ~1 call. TTL 5min casa o
- * gate de frescor do snapshot; o refresh do provider é ~3h, então a maioria dos hits
- * é cache. Cada item carrega só `fixture.id` (sem times) — o adapter enriquece via a
- * metadata de fixture.
+ * Odds de UM bet (bet=10 correct score, bet=92 anytime scorer, bet=212 assist)
+ * da liga inteira (#289/#290). A api-football devolve a rodada inteira numa página
+ * (books+bets aninhados por fixture) — ~1 call por bet. TTL 5min casa o gate de
+ * frescor do snapshot; o refresh do provider é ~3h, então a maioria dos hits é
+ * cache. Cada item carrega só `fixture.id` (sem times) — o adapter enriquece via a
+ * metadata de fixture. O `betId` segrega o cache por mercado (params do request).
  */
-export async function getCorrectScoreOdds(
+export async function getOddsByBetId(
   leagueId: number,
   season: number,
+  betId: number,
   opts?: { cache?: CacheStore },
 ): Promise<ApiFootballOddsItem[]> {
   const envelope = await request({
     endpoint: "/odds",
-    params: { league: leagueId, season, bet: BET_ID_CORRECT_SCORE },
+    params: { league: leagueId, season, bet: betId },
     schema: OddsEnvelopeSchema,
     ttlMs: FIVE_MINUTES,
     cache: opts?.cache,

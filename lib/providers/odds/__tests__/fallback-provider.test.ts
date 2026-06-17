@@ -23,11 +23,13 @@ function fakeProvider(
   };
 }
 
-// primary = api-football (só bet_10 + BR); fallback = The Odds API (tudo não-bet_).
+// primary = api-football (bet_10/bet_92/bet_212 + BR); fallback = The Odds API
+// (tudo não-bet_). Espelha o supportsMarket real do ApiFootballOddsAdapter.
+const AF_BET_KEYS = new Set(["bet_10", "bet_92", "bet_212"]);
 function build() {
   const primary = fakeProvider(
     "af",
-    (a) => a.providerMarketKey === "bet_10" && a.sportKey === BR,
+    (a) => AF_BET_KEYS.has(a.providerMarketKey) && a.sportKey === BR,
   );
   const fallback = fakeProvider("toa", (a) => !a.providerMarketKey.startsWith("bet_"));
   return { primary, fallback, composite: new OddsFallbackProvider(primary, fallback) };
@@ -40,6 +42,15 @@ describe("OddsFallbackProvider (router por capability)", () => {
     expect(primary.getOddsForSport).toHaveBeenCalledWith(BR, { markets: ["bet_10"] });
     expect(fallback.getOddsForSport).not.toHaveBeenCalled();
     expect(events[0].id).toBe("af");
+  });
+
+  it("roteia bet_92/bet_212 (scorer/assist) + Brasileirão pro primary (#290)", async () => {
+    for (const market of ["bet_92", "bet_212"]) {
+      const { primary, fallback, composite } = build();
+      await composite.getOddsForSport(BR, { markets: [market] });
+      expect(primary.getOddsForSport).toHaveBeenCalledWith(BR, { markets: [market] });
+      expect(fallback.getOddsForSport).not.toHaveBeenCalled();
+    }
   });
 
   it("roteia totals/h2h/btts pro fallback (The Odds API) — passthrough byte-idêntico", async () => {

@@ -1,14 +1,19 @@
 import { beforeEach, describe, expect, it, vi } from "vitest";
 
 import { ApiFootballOddsAdapter } from "@/lib/providers/odds/api-football/adapter";
-import { getCorrectScoreOdds } from "@/lib/providers/odds/api-football/client";
+import { getOddsByBetId } from "@/lib/providers/odds/api-football/client";
+import {
+  BET_ID_ANYTIME_SCORER,
+  BET_ID_ASSIST,
+  BET_ID_CORRECT_SCORE,
+} from "@/lib/providers/odds/api-football/constants";
 import type { ApiFootballOddsItem } from "@/lib/providers/odds/api-football/schemas";
 import { NormalizedOddsEventSchema } from "@/lib/providers/odds/types";
 import { getFixturesByLeague } from "@/lib/providers/sports-data/api-football/adapter";
 import type { ApiFootballFixture } from "@/lib/providers/sports-data/api-football/schemas";
 
 vi.mock("@/lib/providers/odds/api-football/client", () => ({
-  getCorrectScoreOdds: vi.fn(),
+  getOddsByBetId: vi.fn(),
 }));
 vi.mock("@/lib/providers/sports-data/api-football/adapter", () => ({
   getFixturesByLeague: vi.fn(),
@@ -29,6 +34,29 @@ const oddsItem: ApiFootballOddsItem = {
             { value: "1:0", odd: "8.50" },
             { value: "2:1", odd: "11.00" },
             { value: "Any Other Score", odd: "3.20" },
+          ],
+        },
+      ],
+    },
+  ],
+};
+
+// Payload de artilheiro (bet=92): UM bet com N values yes-only por jogador.
+// Mesma forma do correct_score — só muda o conteúdo do value (nome de jogador).
+const scorerItem: ApiFootballOddsItem = {
+  fixture: { id: 12345 },
+  update: "2026-07-22T20:00:00+00:00",
+  bookmakers: [
+    {
+      id: 8,
+      name: "Bet365",
+      bets: [
+        {
+          id: 92,
+          name: "Anytime Goal Scorer",
+          values: [
+            { value: "Pedro", odd: "2.50" },
+            { value: "Gabriel Barbosa", odd: "3.20" },
           ],
         },
       ],
@@ -57,16 +85,19 @@ describe("ApiFootballOddsAdapter", () => {
     expect(adapter.capabilities.supportedLeagues.has("world_cup")).toBe(false);
   });
 
-  it("supportsMarket: só bet_10 + Brasileirão", () => {
+  it("supportsMarket: bet_10/bet_92/bet_212 + Brasileirão (#289/#290)", () => {
     expect(adapter.supportsMarket({ sportKey: BR, providerMarketKey: "bet_10" })).toBe(true);
+    expect(adapter.supportsMarket({ sportKey: BR, providerMarketKey: "bet_92" })).toBe(true);
+    expect(adapter.supportsMarket({ sportKey: BR, providerMarketKey: "bet_212" })).toBe(true);
     expect(adapter.supportsMarket({ sportKey: BR, providerMarketKey: "totals" })).toBe(false);
+    expect(adapter.supportsMarket({ sportKey: BR, providerMarketKey: "bet_93" })).toBe(false);
     expect(
       adapter.supportsMarket({ sportKey: "soccer_uefa_champs_league", providerMarketKey: "bet_10" }),
     ).toBe(false);
   });
 
-  it("normaliza /odds bet=10 → NormalizedOddsEvent com times enriquecidos + price number", async () => {
-    vi.mocked(getCorrectScoreOdds).mockResolvedValue([oddsItem]);
+  it("normaliza /odds bet=10 (default) → NormalizedOddsEvent com times enriquecidos + price number", async () => {
+    vi.mocked(getOddsByBetId).mockResolvedValue([oddsItem]);
     vi.mocked(getFixturesByLeague).mockResolvedValue([fixture]);
 
     const events = await adapter.getOddsForSport(BR);
@@ -79,6 +110,9 @@ describe("ApiFootballOddsAdapter", () => {
     expect(event.awayTeam).toBe("Palmeiras");
     expect(event.commenceTime).toBe("2026-07-22T23:00:00+00:00");
 
+    // Default (sem markets) → bet=10 (byte-idêntico ao #289).
+    expect(vi.mocked(getOddsByBetId).mock.calls[0]?.[2]).toBe(BET_ID_CORRECT_SCORE);
+
     const market = event.bookmakers[0].markets[0];
     expect(market.key).toBe("bet_10"); // casa contra descriptor.providerMarketKey
     expect(market.lastUpdate).toBe("2026-07-22T20:00:00+00:00");
@@ -89,15 +123,38 @@ describe("ApiFootballOddsAdapter", () => {
     expect(market.outcomes.map((o) => o.name)).toEqual(["1:0", "2:1", "Any Other Score"]);
   });
 
+  it("roteia bet=92 (artilheiro): values por jogador, key bet_92 (#290)", async () => {
+    vi.mocked(getOddsByBetId).mockResolvedValue([scorerItem]);
+    vi.mocked(getFixturesByLeague).mockResolvedValue([fixture]);
+
+    const events = await adapter.getOddsForSport(BR, { markets: ["bet_92"] });
+    expect(events).toHaveLength(1);
+    // Pediu bet=92 → busca bet=92.
+    expect(vi.mocked(getOddsByBetId).mock.calls[0]?.[2]).toBe(BET_ID_ANYTIME_SCORER);
+    const market = events[0].bookmakers[0].markets[0];
+    expect(market.key).toBe("bet_92"); // estampa a provider key pedida
+    expect(market.outcomes).toEqual([
+      { name: "Pedro", price: 2.5 },
+      { name: "Gabriel Barbosa", price: 3.2 },
+    ]);
+  });
+
+  it("roteia bet=212 (assist): busca bet=212, estampa key bet_212 (#290)", async () => {
+    vi.mocked(getOddsByBetId).mockResolvedValue([]);
+    vi.mocked(getFixturesByLeague).mockResolvedValue([fixture]);
+    await adapter.getOddsForSport(BR, { markets: ["bet_212"] });
+    expect(vi.mocked(getOddsByBetId).mock.calls[0]?.[2]).toBe(BET_ID_ASSIST);
+  });
+
   it("dropa odds sem metadata de fixture pareável (não inventa times)", async () => {
-    vi.mocked(getCorrectScoreOdds).mockResolvedValue([oddsItem]);
+    vi.mocked(getOddsByBetId).mockResolvedValue([oddsItem]);
     vi.mocked(getFixturesByLeague).mockResolvedValue([]);
     expect(await adapter.getOddsForSport(BR)).toEqual([]);
   });
 
   it("sportKey não-Brasileirão → sem eventos (capability gate)", async () => {
     expect(await adapter.getOddsForSport("soccer_uefa_champs_league")).toEqual([]);
-    expect(getCorrectScoreOdds).not.toHaveBeenCalled();
+    expect(getOddsByBetId).not.toHaveBeenCalled();
   });
 
   it("getOddsForEvent / getEventsForSport lançam (correct score é batch)", async () => {
