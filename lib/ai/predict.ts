@@ -13,9 +13,9 @@ import { getLatestFreshSelectionOddsSnapshots } from "@/lib/db/queries/odds-snap
 import { extractDbCause } from "@/lib/db/pg-error";
 import { computeMarketImpliedProbabilities } from "@/lib/odds/implied-probability";
 import { pickBestBookmaker, type MarketOddsBundle } from "@/lib/odds/select-bookmaker";
-import { getOddsForSport } from "@/lib/providers/odds-api";
+import { getOddsProvider } from "@/lib/providers/odds";
 import { leagueToSportKey } from "@/lib/providers/odds-api-constants";
-import type { OddsApiEventOdds } from "@/lib/providers/odds-api-schemas";
+import type { NormalizedOddsEvent } from "@/lib/providers/odds/types";
 import { getSportsDataProvider } from "@/lib/providers/sports-data";
 import { normalizeTeamName } from "@/lib/providers/sports-data/team-names";
 import {
@@ -117,20 +117,20 @@ function teamNamesMatch(a: string, b: string): boolean {
 // ─── Odds matching ───────────────────────────────────────────────────────────
 
 function findMatchingEvent(
-  events: OddsApiEventOdds[],
+  events: NormalizedOddsEvent[],
   homeName: string,
   awayName: string,
   kickoffAt: Date,
-): OddsApiEventOdds | undefined {
+): NormalizedOddsEvent | undefined {
   const kickoffMs = kickoffAt.getTime();
   return events.find((event) => {
-    const ts = Date.parse(event.commence_time);
+    const ts = Date.parse(event.commenceTime);
     if (!Number.isFinite(ts) || Math.abs(ts - kickoffMs) > ODDS_WINDOW_MS) {
       return false;
     }
     return (
-      teamNamesMatch(event.home_team, homeName) &&
-      teamNamesMatch(event.away_team, awayName)
+      teamNamesMatch(event.homeTeam, homeName) &&
+      teamNamesMatch(event.awayTeam, awayName)
     );
   });
 }
@@ -450,7 +450,7 @@ export async function predict({
     const sportKey = leagueToSportKey(match.league);
     const commenceTimeFrom = new Date(kickoffMs - ODDS_WINDOW_MS).toISOString();
     const commenceTimeTo = new Date(kickoffMs + ODDS_WINDOW_MS).toISOString();
-    const events = await getOddsForSport(sportKey, {
+    const events = await getOddsProvider().getOddsForSport(sportKey, {
       // provider market key do descriptor (= "totals" pro over/under); request
       // byte-idêntico ao literal antigo, mas sem hardcode no predict.
       markets: [cartridge.descriptor.providerMarketKey],

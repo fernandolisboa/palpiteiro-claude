@@ -10,13 +10,12 @@ const match = {
 };
 
 // Lista GRATUITA de eventos (sem bookmakers) — o shape estrutural mínimo.
-function listItem(over: Partial<{ id: string; home_team: string; away_team: string; commence_time: string }> = {}) {
+function listItem(over: Partial<{ id: string; homeTeam: string; awayTeam: string; commenceTime: string }> = {}) {
   return {
     id: "evt-1",
-    sport_key: "soccer_fifa_world_cup",
-    commence_time: KICKOFF.toISOString(),
-    home_team: "CR Flamengo",
-    away_team: "Fluminense FC",
+    commenceTime: KICKOFF.toISOString(),
+    homeTeam: "CR Flamengo",
+    awayTeam: "Fluminense FC",
     ...over,
   };
 }
@@ -29,7 +28,7 @@ describe("findEventInList", () => {
 
   it("tolera grafia divergente do provider (teamsMatch: inclusão bidirecional)", () => {
     const found = findEventInList(
-      [listItem({ home_team: "Flamengo", away_team: "Fluminense" })],
+      [listItem({ homeTeam: "Flamengo", awayTeam: "Fluminense" })],
       match,
     );
     expect(found?.id).toBe("evt-1");
@@ -38,7 +37,7 @@ describe("findEventInList", () => {
   it("rejeita evento fora da janela de ±6h (mesma dupla, jogo errado)", () => {
     const outside = new Date(KICKOFF.getTime() + KICKOFF_PAIRING_WINDOW_MS + 60_000);
     const found = findEventInList(
-      [listItem({ commence_time: outside.toISOString() })],
+      [listItem({ commenceTime: outside.toISOString() })],
       match,
     );
     expect(found).toBeUndefined();
@@ -46,7 +45,7 @@ describe("findEventInList", () => {
 
   it("rejeita dupla de times diferente dentro da janela", () => {
     const found = findEventInList(
-      [listItem({ home_team: "Palmeiras", away_team: "Corinthians" })],
+      [listItem({ homeTeam: "Palmeiras", awayTeam: "Corinthians" })],
       match,
     );
     expect(found).toBeUndefined();

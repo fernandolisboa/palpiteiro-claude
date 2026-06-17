@@ -1,11 +1,11 @@
 import { describe, expect, it } from "vitest";
 
 import { DOUBLE_CHANCE, getDescriptor } from "@/lib/odds/market-descriptor";
-import type { OddsApiOutcome } from "@/lib/providers/odds-api-schemas";
+import type { NormalizedOddsOutcome } from "@/lib/providers/odds/types";
 
 // ctx do payload REAL validado (1xBet eu, soccer_fifa_world_cup, 2026-06-14).
 const ctx = { homeTeam: "Germany", awayTeam: "Curaçao" };
-const out = (name: string): OddsApiOutcome => ({ name, price: 1.5 });
+const out = (name: string): NormalizedOddsOutcome => ({ name, price: 1.5 });
 const resolve = (name: string) =>
   DOUBLE_CHANCE.resolveSelectionKey(out(name), ctx);
 

@@ -1,5 +1,5 @@
 import { normalizeTeamName } from "@/lib/providers/sports-data/team-names";
-import type { OddsApiOutcome } from "@/lib/providers/odds-api-schemas";
+import type { NormalizedOddsOutcome } from "@/lib/providers/odds/types";
 import type { SupportedLeague } from "@/lib/providers/sports-data/leagues";
 
 /**
@@ -24,7 +24,7 @@ export type MarketDescriptor = {
   providerMarketKey: string;
   params?: { line: number };
   resolveSelectionKey(
-    outcome: OddsApiOutcome,
+    outcome: NormalizedOddsOutcome,
     ctx: { homeTeam: string; awayTeam: string },
     params?: { line: number },
   ): string | null;

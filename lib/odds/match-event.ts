@@ -5,9 +5,9 @@ import { teamsMatch } from "@/lib/odds/market-descriptor";
 export const KICKOFF_PAIRING_WINDOW_MS = 6 * 60 * 60 * 1000;
 
 type EventLike = {
-  commence_time: string;
-  home_team: string;
-  away_team: string;
+  commenceTime: string;
+  homeTeam: string;
+  awayTeam: string;
 };
 
 type MatchLike = {
@@ -19,10 +19,11 @@ type MatchLike = {
 /**
  * Pareia um evento do provider contra um match do DB pela dupla de times
  * (`teamsMatch`) dentro da janela de kickoff. ESTRUTURAL de propósito: aceita
- * tanto a lista GRATUITA de eventos (`/events`, sem `bookmakers`) quanto o payload
- * de odds (`OddsApiEventOdds`, com `bookmakers`) — só lê commence_time/times.
- * Fonte única do pareamento (espelha `teamsMatch` em market-descriptor.ts), reusada
- * pelo caminho featured (batch) E pelo additional (por evento) em fetch-and-snapshot.
+ * tanto a lista GRATUITA de eventos (`NormalizedOddsEventListItem`, sem
+ * `bookmakers`) quanto o payload de odds (`NormalizedOddsEvent`, com
+ * `bookmakers`) — só lê commenceTime/times. Fonte única do pareamento (espelha
+ * `teamsMatch` em market-descriptor.ts), reusada pelo caminho featured (batch) E
+ * pelo additional (por evento) em fetch-and-snapshot.
  */
 export function findEventInList<T extends EventLike>(
   events: readonly T[],
@@ -30,7 +31,7 @@ export function findEventInList<T extends EventLike>(
 ): T | undefined {
   const kickoffMs = match.kickoffAt.getTime();
   return events.find((event) => {
-    const ts = Date.parse(event.commence_time);
+    const ts = Date.parse(event.commenceTime);
     if (
       !Number.isFinite(ts) ||
       Math.abs(ts - kickoffMs) > KICKOFF_PAIRING_WINDOW_MS
@@ -38,8 +39,8 @@ export function findEventInList<T extends EventLike>(
       return false;
     }
     return (
-      teamsMatch(event.home_team, match.homeTeam) &&
-      teamsMatch(event.away_team, match.awayTeam)
+      teamsMatch(event.homeTeam, match.homeTeam) &&
+      teamsMatch(event.awayTeam, match.awayTeam)
     );
   });
 }

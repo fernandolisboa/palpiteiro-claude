@@ -1,7 +1,7 @@
 import { computeMarketImpliedProbabilities } from "@/lib/odds/implied-probability";
 import type { MarketDescriptor } from "@/lib/odds/market-descriptor";
 import { OVER_UNDER } from "@/lib/odds/market-descriptor";
-import type { OddsApiEventOdds } from "@/lib/providers/odds-api-schemas";
+import type { NormalizedOddsEvent } from "@/lib/providers/odds/types";
 
 export type OddsBundle = {
   bookmakerKey: string;
@@ -39,7 +39,7 @@ export type MarketOddsBundle = {
  * Retorna null se nenhum bookmaker tem o mercado completo.
  */
 export function pickBestBookmaker(args: {
-  event: OddsApiEventOdds;
+  event: NormalizedOddsEvent;
   match: { homeTeam: string; awayTeam: string };
   descriptor: MarketDescriptor;
   // Override de linha (#175 multi-linha): quando passado, a resolução de seleção
@@ -98,7 +98,7 @@ export function pickBestBookmaker(args: {
       best = {
         bookmakerKey: bookmaker.key,
         bookmakerTitle: bookmaker.title,
-        lastUpdate: market.last_update,
+        lastUpdate: market.lastUpdate,
         selections,
         overround,
       };
@@ -118,11 +118,11 @@ export function pickBestBookmaker(args: {
  * `capturedAt` = `market.last_update` do provider (string), idêntico ao anterior.
  */
 export function pickBestTotalsBookmaker(
-  event: OddsApiEventOdds,
+  event: NormalizedOddsEvent,
 ): OddsBundle | undefined {
   const bundle = pickBestBookmaker({
     event,
-    match: { homeTeam: event.home_team, awayTeam: event.away_team },
+    match: { homeTeam: event.homeTeam, awayTeam: event.awayTeam },
     descriptor: OVER_UNDER,
   });
   if (!bundle) return undefined;

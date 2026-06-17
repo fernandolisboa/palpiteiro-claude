@@ -1,9 +1,5 @@
 import { leagueToSportKey } from "@/lib/providers/odds-api-constants";
-import {
-  getEventsForSport,
-  getOddsForEvent,
-  getOddsForSport,
-} from "@/lib/providers/odds-api";
+import { getOddsProvider } from "@/lib/providers/odds";
 import { findEventInList } from "@/lib/odds/match-event";
 import {
   OVER_UNDER,
@@ -22,7 +18,7 @@ import {
 } from "@/lib/db/queries/odds-snapshots";
 import { getMatchesInLeagueWindow, type DbMatch } from "@/lib/db/queries/matches";
 import { resolveMarketCatalog } from "@/lib/db/queries/market-catalog";
-import type { OddsApiEventOdds } from "@/lib/providers/odds-api-schemas";
+import type { NormalizedOddsEvent } from "@/lib/providers/odds/types";
 
 export type EnsureOddsOptions = {
   now?: Date;
@@ -59,7 +55,7 @@ export async function ensureOddsSnapshotsFresh(
 
   const fetchLeagueEvents = async (
     providerMarkets: string[],
-  ): Promise<OddsApiEventOdds[] | null> => {
+  ): Promise<NormalizedOddsEvent[] | null> => {
     // markets[] do provider NÃO pode ser vazio (guarda contra o fallback silencioso
     // de resolveCsv → ['totals'] em odds-api.ts).
     if (providerMarkets.length === 0) {
@@ -67,7 +63,7 @@ export async function ensureOddsSnapshotsFresh(
     }
     const sportKey = leagueToSportKey(match.league);
     try {
-      return await getOddsForSport(sportKey, {
+      return await getOddsProvider().getOddsForSport(sportKey, {
         markets: providerMarkets,
         regions: ["eu"],
       });
@@ -94,12 +90,12 @@ export async function ensureOddsSnapshotsFresh(
     descriptor: MarketDescriptor,
   ): Promise<void> => {
     const sportKey = leagueToSportKey(match.league);
-    let event: OddsApiEventOdds;
+    let event: NormalizedOddsEvent;
     try {
-      const events = await getEventsForSport(sportKey); // gratuito (0 créditos)
+      const events = await getOddsProvider().getEventsForSport(sportKey); // gratuito (0 créditos)
       const listItem = findEventInList(events, match);
       if (!listItem) return; // sem evento pareado nesta liga; degrada
-      event = await getOddsForEvent(sportKey, listItem.id, {
+      event = await getOddsProvider().getOddsForEvent(sportKey, listItem.id, {
         markets: [descriptor.providerMarketKey], // explícito (evita resolveCsv→totals)
         regions: ["eu"],
       }); // 1 crédito

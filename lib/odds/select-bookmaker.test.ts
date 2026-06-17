@@ -11,7 +11,7 @@ import {
   pickBestBookmaker,
   pickBestTotalsBookmaker,
 } from "@/lib/odds/select-bookmaker";
-import type { OddsApiEventOdds } from "@/lib/providers/odds-api-schemas";
+import type { NormalizedOddsEvent } from "@/lib/providers/odds/types";
 
 function totalsBook(
   key: string,
@@ -24,11 +24,10 @@ function totalsBook(
   return {
     key,
     title,
-    last_update: lastUpdate,
     markets: [
       {
         key: "totals",
-        last_update: lastUpdate,
+        lastUpdate,
         outcomes: [
           { name: "Over", price: over, point },
           { name: "Under", price: under, point },
@@ -48,11 +47,10 @@ function h2hBook(
   return {
     key,
     title,
-    last_update: lastUpdate,
     markets: [
       {
         key: "h2h",
-        last_update: lastUpdate,
+        lastUpdate,
         outcomes: [
           { name: names.home, price: prices.home },
           { name: names.draw, price: prices.draw },
@@ -63,13 +61,12 @@ function h2hBook(
   };
 }
 
-function event(bookmakers: ReturnType<typeof totalsBook>[]): OddsApiEventOdds {
+function event(bookmakers: ReturnType<typeof totalsBook>[]): NormalizedOddsEvent {
   return {
     id: "evt-1",
-    sport_key: "soccer_brazil_campeonato",
-    commence_time: "2026-05-15T19:00:00Z",
-    home_team: "CR Flamengo",
-    away_team: "Fluminense FC",
+    commenceTime: "2026-05-15T19:00:00Z",
+    homeTeam: "CR Flamengo",
+    awayTeam: "Fluminense FC",
     bookmakers,
   };
 }
@@ -87,11 +84,10 @@ function dcBook(
   return {
     key,
     title,
-    last_update: lastUpdate,
     markets: [
       {
         key: "double_chance",
-        last_update: lastUpdate,
+        lastUpdate,
         outcomes: [
           { name: `${home} or Draw`, price: prices.hd },
           { name: `${away} or Draw`, price: prices.ad },
@@ -104,15 +100,14 @@ function dcBook(
 
 function dcEvent(
   bookmakers: ReturnType<typeof dcBook>[],
-): OddsApiEventOdds {
+): NormalizedOddsEvent {
   return {
     id: "evt-dc",
-    sport_key: "soccer_fifa_world_cup",
-    commence_time: "2026-06-14T17:00:00Z",
-    home_team: "Germany",
-    away_team: "Curaçao",
+    commenceTime: "2026-06-14T17:00:00Z",
+    homeTeam: "Germany",
+    awayTeam: "Curaçao",
     bookmakers,
-  } as OddsApiEventOdds;
+  } as NormalizedOddsEvent;
 }
 
 const DC_MATCH = { homeTeam: "Germany", awayTeam: "Curaçao" };
@@ -153,11 +148,10 @@ describe("pickBestBookmaker — DOUBLE_CHANCE (nomes compostos + book inválido)
     const incomplete = {
       key: "x",
       title: "X",
-      last_update: "2026-06-14T14:29:15Z",
       markets: [
         {
           key: "double_chance",
-          last_update: "2026-06-14T14:29:15Z",
+          lastUpdate: "2026-06-14T14:29:15Z",
           outcomes: [
             { name: "Germany or Draw", price: 1.27 },
             { name: "Curaçao or Draw", price: 1.73 },
@@ -184,7 +178,7 @@ describe("pickBestBookmaker — OVER_UNDER", () => {
 
     const generic = pickBestBookmaker({
       event: evt,
-      match: { homeTeam: evt.home_team, awayTeam: evt.away_team },
+      match: { homeTeam: evt.homeTeam, awayTeam: evt.awayTeam },
       descriptor: OVER_UNDER,
     });
     const binary = pickBestTotalsBookmaker(evt);
@@ -214,11 +208,10 @@ describe("pickBestBookmaker — OVER_UNDER", () => {
       {
         key: "x",
         title: "Book X",
-        last_update: "2026-05-15T12:00:00Z",
         markets: [
           {
             key: "totals",
-            last_update: "2026-05-15T12:00:00Z",
+            lastUpdate: "2026-05-15T12:00:00Z",
             outcomes: [{ name: "Over", price: 1.9, point: 2.5 }], // sem Under
           },
         ],
@@ -254,12 +247,11 @@ describe("pickBestBookmaker — MATCH_RESULT (1X2, N=3)", () => {
   const match = { homeTeam: "CR Flamengo", awayTeam: "Fluminense FC" };
 
   it("picks the complete h2h book with the lowest overround, mapping draw + teams", () => {
-    const evt: OddsApiEventOdds = {
+    const evt: NormalizedOddsEvent = {
       id: "evt-1",
-      sport_key: "soccer_brazil_campeonato",
-      commence_time: "2026-05-15T19:00:00Z",
-      home_team: match.homeTeam,
-      away_team: match.awayTeam,
+      commenceTime: "2026-05-15T19:00:00Z",
+      homeTeam: match.homeTeam,
+      awayTeam: match.awayTeam,
       bookmakers: [
         // overround maior
         h2hBook(
@@ -289,12 +281,11 @@ describe("pickBestBookmaker — MATCH_RESULT (1X2, N=3)", () => {
   });
 
   it("matches team names via teamsMatch, not exact equality (divergent spellings)", () => {
-    const evt: OddsApiEventOdds = {
+    const evt: NormalizedOddsEvent = {
       id: "evt-1",
-      sport_key: "soccer_brazil_campeonato",
-      commence_time: "2026-05-15T19:00:00Z",
-      home_team: match.homeTeam,
-      away_team: match.awayTeam,
+      commenceTime: "2026-05-15T19:00:00Z",
+      homeTeam: match.homeTeam,
+      awayTeam: match.awayTeam,
       bookmakers: [
         h2hBook(
           "a",
@@ -309,21 +300,19 @@ describe("pickBestBookmaker — MATCH_RESULT (1X2, N=3)", () => {
   });
 
   it("discards a book missing one of the three outcomes", () => {
-    const evt: OddsApiEventOdds = {
+    const evt: NormalizedOddsEvent = {
       id: "evt-1",
-      sport_key: "soccer_brazil_campeonato",
-      commence_time: "2026-05-15T19:00:00Z",
-      home_team: match.homeTeam,
-      away_team: match.awayTeam,
+      commenceTime: "2026-05-15T19:00:00Z",
+      homeTeam: match.homeTeam,
+      awayTeam: match.awayTeam,
       bookmakers: [
         {
           key: "a",
           title: "Book A",
-          last_update: "2026-05-15T12:00:00Z",
           markets: [
             {
               key: "h2h",
-              last_update: "2026-05-15T12:00:00Z",
+              lastUpdate: "2026-05-15T12:00:00Z",
               outcomes: [
                 { name: "CR Flamengo", price: 2.0 },
                 { name: "Draw", price: 3.2 },
@@ -349,11 +338,10 @@ function altTotalsBook(
   return {
     key,
     title,
-    last_update: lastUpdate,
     markets: [
       {
         key: "alternate_totals",
-        last_update: lastUpdate,
+        lastUpdate,
         outcomes: ladder.flatMap((r) => [
           { name: "Over", price: r.over, point: r.point },
           { name: "Under", price: r.under, point: r.point },
@@ -365,13 +353,12 @@ function altTotalsBook(
 
 function altEvent(
   bookmakers: ReturnType<typeof altTotalsBook>[],
-): OddsApiEventOdds {
+): NormalizedOddsEvent {
   return {
     id: "evt-1",
-    sport_key: "soccer_fifa_world_cup",
-    commence_time: "2026-06-14T19:00:00Z",
-    home_team: "Ivory Coast",
-    away_team: "Ecuador",
+    commenceTime: "2026-06-14T19:00:00Z",
+    homeTeam: "Ivory Coast",
+    awayTeam: "Ecuador",
     bookmakers,
   };
 }
