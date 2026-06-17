@@ -192,6 +192,44 @@ export const DOUBLE_CHANCE: MarketDescriptor = {
   selectionKeys: ["home_or_draw", "away_or_draw", "home_or_away"],
 };
 
+// Correct score (placar exato) — mercado N=16 de PARTIÇÃO bounded (#289, ADR 0025).
+// bet=10 da api-football, cotado só pelo Bet365 pro Brasileirão (ADR 0025 §1).
+// Grid fixo 0..3 × 0..3 (16 células): torna o "mercado completo de book único" do
+// select-bookmaker satisfazível (estruturalmente igual a MATCH_RESULT/BTTS). SEM
+// bucket OTHER sintético — o fio não garante uma odd "Any Other Score" e sintetizá-la
+// violaria a regra de não-fabricar odds (select-bookmaker:87-92); placares fora do
+// grid → null (dropados, defensivo, espelha DOUBLE_CHANCE). O overround é
+// bounded-grid-relative: model + implied normalizam sobre as MESMAS 16 (Σ=1, o
+// cartucho do #290 garante a mesma base) → edge condicional coerente. Book único
+// (Bet365) é o denominador aceito (única casa que cota BR correct score; graduação
+// por D9 viva, sem backtest — ADR 0025 G3). EXPORTADO mas FORA de ALL_DESCRIPTORS:
+// entra na #290 com a migration que seeda markets/market_selections (espelha
+// OVER_UNDER_ALT) — adicioná-lo aqui faria getDescriptor/marketsForLeague indexar uma
+// dbMarketKey sem row no DB. Shape do bet=10 NÃO verificado ao vivo (liga pausada) →
+// resolveSelectionKey defensivo; confirmar formato do `value` no 1º payload real.
+export const CORRECT_SCORE: MarketDescriptor = {
+  dbMarketKey: "correct_score",
+  providerMarketKey: "bet_10",
+  oddsSource: "featured",
+  coveredLeagues: ["brasileirao_a"],
+  selectionKeys: [
+    "cs_0_0", "cs_0_1", "cs_0_2", "cs_0_3",
+    "cs_1_0", "cs_1_1", "cs_1_2", "cs_1_3",
+    "cs_2_0", "cs_2_1", "cs_2_2", "cs_2_3",
+    "cs_3_0", "cs_3_1", "cs_3_2", "cs_3_3",
+  ],
+  resolveSelectionKey(outcome) {
+    // Aceita "H:A" e "H-A" (formato do fio NÃO confirmado ao vivo). Fora do grid
+    // 0..3, rótulos não-placar ("Any Other Score"), ou lixo → null (dropado).
+    const m = outcome.name.trim().match(/^(\d+)\s*[:-]\s*(\d+)$/);
+    if (!m) return null;
+    const home = Number(m[1]);
+    const away = Number(m[2]);
+    if (home <= 3 && away <= 3) return `cs_${home}_${away}`;
+    return null;
+  },
+};
+
 // Lista canônica de descriptors p/ índices data-driven (ex.: marketsForLeague
 // indexa por dbMarketKey). Um mercado novo entra aqui + no registry do cartucho.
 export const ALL_DESCRIPTORS: readonly MarketDescriptor[] = [
