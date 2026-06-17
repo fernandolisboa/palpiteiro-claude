@@ -6,7 +6,7 @@ import {
   pickBestBookmaker,
   pickBestTotalsBookmaker,
 } from "@/lib/odds/select-bookmaker";
-import type { OddsApiEventOdds } from "@/lib/providers/odds-api-schemas";
+import type { NormalizedOddsEvent } from "@/lib/providers/odds/types";
 
 // Paridade de STRINGS PERSISTIDAS: as colunas numeric do Postgres são gravadas
 // como strings (.toFixed). O dual-write precisa produzir, pro mesmo bundle, EXATAMENTE
@@ -18,22 +18,20 @@ function event(
   over: number,
   under: number,
   title = "Pinnacle",
-): OddsApiEventOdds {
+): NormalizedOddsEvent {
   return {
     id: "evt-1",
-    sport_key: "soccer_brazil_campeonato",
-    commence_time: "2026-05-15T19:00:00Z",
-    home_team: "CR Flamengo",
-    away_team: "Fluminense FC",
+    commenceTime: "2026-05-15T19:00:00Z",
+    homeTeam: "CR Flamengo",
+    awayTeam: "Fluminense FC",
     bookmakers: [
       {
         key: "pinnacle",
         title,
-        last_update: "2026-05-15T12:00:00Z",
         markets: [
           {
             key: "totals",
-            last_update: "2026-05-15T12:00:00Z",
+            lastUpdate: "2026-05-15T12:00:00Z",
             outcomes: [
               { name: "Over", price: over, point: 2.5 },
               { name: "Under", price: under, point: 2.5 },
@@ -61,7 +59,7 @@ describe("persisted-string parity (old binary path vs new selection path)", () =
       // Caminho NOVO: o bundle genérico + shaping da row de seleção.
       const bundle = pickBestBookmaker({
         event: evt,
-        match: { homeTeam: evt.home_team, awayTeam: evt.away_team },
+        match: { homeTeam: evt.homeTeam, awayTeam: evt.awayTeam },
         descriptor: OVER_UNDER,
       })!;
       const newOver = bundle.selections.find((s) => s.key === "over")!;

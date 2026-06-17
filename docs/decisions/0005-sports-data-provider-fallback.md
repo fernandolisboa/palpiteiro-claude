@@ -16,6 +16,13 @@ escalações, lesões, H2H e classificação. Dois riscos materializados:
    football-data.org tem 10 req/min sem cap diário. Usar os dois multiplicaria
    a janela operacional.
 
+> **Errata (2026-06-17, #288):** o "100 req/dia" acima era o free tier da época
+> (#24, 2026-05). A chave de **produção** está hoje no plano **Pro, 7500 req/dia**
+> (verificado via `GET /status` em 2026-06, ADR 0025). A análise segue válida: a
+> motivação do fallback (single-point-of-failure do #7 + composição de janelas) não
+> muda; em cascata com football-data.org (10 req/min) a cobertura de Brasileirão +
+> Champions com fallback automático continua de pé.
+
 Era preciso (a) introduzir uma abstração que permitisse swap entre providers,
 (b) adicionar um segundo provider real (football-data.org), e (c) compor os
 dois com fallback automático em caso de falha do primário.

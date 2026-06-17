@@ -49,8 +49,12 @@ export const MARKETS = {
 
 export type MarketKey = (typeof MARKETS)[keyof typeof MARKETS];
 
-// Bookmakers brasileiros (Betano, bet365, Pinnacle, Betfair EX EU) ficam todos
-// sob a região "eu". Não existe região dedicada "br" na The Odds API.
+// Não existe região dedicada "br" na The Odds API — bookmakers BR-facing
+// (Betano, bet365, Betfair EX EU), quando presentes, aparecem sob a região "eu".
+// ATENÇÃO (#158, Copa 2026): nos mercados *additional* validados ao vivo, só
+// retornaram casas EU/US (Pinnacle, William Hill, 1xBet) — NENHUMA casa BR-facing.
+// A cobertura BR-facing (e a re-checagem do Brasileirão pós-pausa da Copa) segue
+// PENDENTE de validação; não assumir Betano/bet365 sem confirmar (ADR 0025 D10).
 export const REGIONS = {
   EU: "eu",
   UK: "uk",
