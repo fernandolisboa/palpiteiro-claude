@@ -1,4 +1,8 @@
 import { normalizeTeamName } from "@/lib/providers/sports-data/team-names";
+import {
+  ANYTIME_SCORER_PROVIDER_KEY,
+  ASSIST_PROVIDER_KEY,
+} from "@/lib/providers/odds/api-football/constants";
 import type { NormalizedOddsOutcome } from "@/lib/providers/odds/types";
 import type { SupportedLeague } from "@/lib/providers/sports-data/leagues";
 
@@ -57,6 +61,27 @@ export type MarketDescriptor = {
   // resolve um bundle POR linha, o cartucho vê todas e escolhe via `resolveParams`.
   // Só meias-linhas (inteiras dariam push — fora de escopo).
   candidateLines?: number[];
+  // Taxonomia de mercado (#290, ADR 0025 emenda). AUSENTE ⇒ "partition" (TODO
+  // descriptor existente + correct_score): seleções mutuamente exclusivas, Σ
+  // implied = impliedSumTarget, normalização canônica via
+  // computeMarketImpliedProbabilities. "independent_binary": cada seleção é um
+  // binário independente cotado SÓ no yes (artilheiro/assist) — NÃO há partição,
+  // Σ 1/odd_yes é contagem esperada (não overround), normalização é INAPLICÁVEL;
+  // a implícita por seleção é o TETO (1/odd)*100 e o edge é PISO. Todo fork lê
+  // `descriptor.marketKind ?? "partition"`, NUNCA o marketKey.
+  marketKind?: "partition" | "independent_binary";
+  // Seleções materializadas LAZY por jogador (#290): o conjunto de jogadores é
+  // ilimitado e desconhecido até o fetch de odds. `true` ⇒ `selectionKeys` fica
+  // vazio no descriptor e as seleções crescem via `ensureScorerSelections`; o
+  // guard de seed-completude do predict é PULADO. Ausente/false = conjunto
+  // estático (caminho de hoje, byte-idêntico).
+  dynamicSelections?: boolean;
+  // Piso de edge em pontos percentuais (#290). Fonte ÚNICA do número consumido
+  // pelo (i) literal do PROMPT do cartucho e (ii) a view (minEdgeLabel/framing).
+  // Default 5 (partition — over_under/btts hardcodam 5); 8 pro scorer (compensa
+  // a margem não-removível do teto 1/odd). NÃO muda banda de stake
+  // (computeStakeUnits fica byte-idêntico) — é piso de PROMPT, não gate de código.
+  minEdgePp?: number;
 };
 
 /**
@@ -230,8 +255,71 @@ export const CORRECT_SCORE: MarketDescriptor = {
   },
 };
 
+// Canonicaliza um nome de jogador numa chave de seleção estável (#290). Sem
+// `playerId` confiável no fio (NÃO verificado ao vivo), a identidade do jogador é
+// o nome canônico: lowercase, sem acentos, espaços→underscore, dropa não-alfanum.
+// `scorer_<slug>` / `assist_<slug>`. Drift de acentos sem id estável pode dividir
+// o histórico de um jogador em 2 linhas (risco aceito na emenda).
+function playerSlug(name: string): string {
+  return name
+    .normalize("NFD")
+    .replace(/[̀-ͯ]/g, "")
+    .toLowerCase()
+    .replace(/[^a-z0-9]+/g, "_")
+    .replace(/^_+|_+$/g, "");
+}
+
+export function scorerSelectionKey(playerName: string): string | null {
+  const slug = playerSlug(playerName);
+  return slug ? `scorer_${slug}` : null;
+}
+
+export function assistSelectionKey(playerName: string): string | null {
+  const slug = playerSlug(playerName);
+  return slug ? `assist_${slug}` : null;
+}
+
+// Artilheiro a qualquer momento (anytime scorer, bet=92) — mercado
+// independent_binary (#290, ADR 0025 emenda). Cada jogador é um binário
+// independente cotado SÓ no yes (Bet365 BR). dynamicSelections: as seleções por
+// jogador crescem LAZY (ensureScorerSelections), selectionKeys fica []. minEdgePp
+// 8 (compensa o teto 1/odd). resolveSelectionKey keya por nome canônico (sem id
+// confiável). LIGADO end-to-end na #290 PR2 (entra em ALL_DESCRIPTORS na ativação
+// junto com a migration + cartucho + settlement). Wire bet=92 NÃO verificado.
+export const ANYTIME_SCORER: MarketDescriptor = {
+  dbMarketKey: "anytime_scorer",
+  providerMarketKey: ANYTIME_SCORER_PROVIDER_KEY,
+  oddsSource: "featured",
+  coveredLeagues: ["brasileirao_a"],
+  marketKind: "independent_binary",
+  dynamicSelections: true,
+  minEdgePp: 8,
+  selectionKeys: [],
+  resolveSelectionKey(outcome) {
+    return scorerSelectionKey(outcome.name);
+  },
+};
+
+// Assistência (bet=212) — mesma forma independent_binary que ANYTIME_SCORER.
+export const ASSIST: MarketDescriptor = {
+  dbMarketKey: "assist",
+  providerMarketKey: ASSIST_PROVIDER_KEY,
+  oddsSource: "featured",
+  coveredLeagues: ["brasileirao_a"],
+  marketKind: "independent_binary",
+  dynamicSelections: true,
+  minEdgePp: 8,
+  selectionKeys: [],
+  resolveSelectionKey(outcome) {
+    return assistSelectionKey(outcome.name);
+  },
+};
+
 // Lista canônica de descriptors p/ índices data-driven (ex.: marketsForLeague
 // indexa por dbMarketKey). Um mercado novo entra aqui + no registry do cartucho.
+// ANYTIME_SCORER/ASSIST ficam FORA até a ativação da #290 PR2 (migration +
+// cartuchos + settlement + presentation), pra os mercados só ficarem alcançáveis
+// quando totalmente fiados — espelha como CORRECT_SCORE foi estagiado pré-PR1.
 export const ALL_DESCRIPTORS: readonly MarketDescriptor[] = [
   OVER_UNDER,
   MATCH_RESULT,

@@ -1,8 +1,12 @@
 import { describe, expect, it } from "vitest";
 
 import {
+  ANYTIME_SCORER,
+  ASSIST,
   CORRECT_SCORE,
   DOUBLE_CHANCE,
+  MATCH_RESULT,
+  OVER_UNDER,
   getDescriptor,
 } from "@/lib/odds/market-descriptor";
 import type { NormalizedOddsOutcome } from "@/lib/providers/odds/types";
@@ -116,5 +120,60 @@ describe("CORRECT_SCORE.resolveSelectionKey (grid 16 células, sem OTHER)", () =
     expect(CORRECT_SCORE.selectionKeys).toContain("cs_3_3");
     // EM ALL_DESCRIPTORS desde a #290 (PR1): seedado + cartucho + settlement ligados.
     expect(getDescriptor("correct_score")).toBe(CORRECT_SCORE);
+  });
+});
+
+describe("marketKind discriminant (byte-parity, #290)", () => {
+  it("descriptors de PARTIÇÃO têm marketKind ausente (⇒ partition) e não-dynamic", () => {
+    // O fork lê `marketKind ?? "partition"`; ausente é o caminho de hoje. Pinar
+    // present-but-undefined garante que over_under/correct_score não entram no
+    // fork scorer (byte-parity #288).
+    for (const d of [OVER_UNDER, MATCH_RESULT, DOUBLE_CHANCE, CORRECT_SCORE]) {
+      expect(d.marketKind).toBeUndefined();
+      expect(d.dynamicSelections).toBeUndefined();
+    }
+  });
+});
+
+describe("ANYTIME_SCORER / ASSIST descriptors (independent_binary, #290)", () => {
+  it("ANYTIME_SCORER: independent_binary, dynamic, minEdgePp 8, bet_92 BR", () => {
+    expect(ANYTIME_SCORER.dbMarketKey).toBe("anytime_scorer");
+    expect(ANYTIME_SCORER.providerMarketKey).toBe("bet_92");
+    expect(ANYTIME_SCORER.marketKind).toBe("independent_binary");
+    expect(ANYTIME_SCORER.dynamicSelections).toBe(true);
+    expect(ANYTIME_SCORER.minEdgePp).toBe(8);
+    expect(ANYTIME_SCORER.selectionKeys).toEqual([]);
+    expect(ANYTIME_SCORER.coveredLeagues).toEqual(["brasileirao_a"]);
+    // sem impliedSumTarget (normalização inaplicável a independent_binary).
+    expect(ANYTIME_SCORER.impliedSumTarget).toBeUndefined();
+  });
+
+  it("ASSIST: independent_binary, dynamic, minEdgePp 8, bet_212 BR", () => {
+    expect(ASSIST.dbMarketKey).toBe("assist");
+    expect(ASSIST.providerMarketKey).toBe("bet_212");
+    expect(ASSIST.marketKind).toBe("independent_binary");
+    expect(ASSIST.dynamicSelections).toBe(true);
+    expect(ASSIST.minEdgePp).toBe(8);
+  });
+
+  it("resolveSelectionKey keya por nome canônico (sem acento, slug)", () => {
+    const out = (name: string): NormalizedOddsOutcome => ({ name, price: 2.5 });
+    expect(ANYTIME_SCORER.resolveSelectionKey(out("Pedro"), {} as never)).toBe(
+      "scorer_pedro",
+    );
+    expect(
+      ANYTIME_SCORER.resolveSelectionKey(out("José Aldánio"), {} as never),
+    ).toBe("scorer_jose_aldanio");
+    expect(ASSIST.resolveSelectionKey(out("Gerson"), {} as never)).toBe(
+      "assist_gerson",
+    );
+    expect(ANYTIME_SCORER.resolveSelectionKey(out("   "), {} as never)).toBeNull();
+  });
+
+  it("FORA de ALL_DESCRIPTORS até a ativação da #290 PR2 (migration+cartucho)", () => {
+    // Espelha como CORRECT_SCORE ficou estagiado pré-PR1: getDescriptor não
+    // resolve até a migration + cartucho + settlement + presentation existirem.
+    expect(getDescriptor("anytime_scorer")).toBeUndefined();
+    expect(getDescriptor("assist")).toBeUndefined();
   });
 });
