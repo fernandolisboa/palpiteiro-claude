@@ -45,21 +45,30 @@ export type PredictionWithAiCall = {
   // o caminho N-vias. `modelProbPct` é NULLABLE (backfill histórico / over/under
   // pré-#173 não a grava). Vazio em predições antigas sem PSO. numeric → string no
   // Drizzle: Number() na fronteira (modelProbPct ausente coalesce null→0).
-  selections: { key: string; modelProbPct: number; odd: number | null }[];
+  selections: {
+    key: string;
+    modelProbPct: number;
+    odd: number | null;
+    label?: string;
+  }[];
 };
 
 // Mapeia uma row de prediction_selection_odds pra a forma da view. Casa ÚNICA da
 // regra (usada por getPredictionHistoryForMatch): numeric → string no Drizzle →
 // Number() na fronteira (gotcha drizzle-numeric-returns-string). modelProbPct nullable
 // (over/under pré-#173 / históricas) → coalesce 0; `odd` PRESERVA null (Number(odd ??
-// 0) viraria um 0 errado). A assimetria odd-null vs prob-coalesce mora aqui.
+// 0) viraria um 0 errado). A assimetria odd-null vs prob-coalesce mora aqui. `label`
+// (market_selections.label, #290) viaja pra a view preferir o nome do jogador à key
+// crua em mercados dynamicSelections (scorer); inerte pros demais (label é o seed).
 function mapSelectionRow(s: {
   key: string;
+  label: string;
   odd: string | null;
   modelProbPct: string | null;
-}): { key: string; modelProbPct: number; odd: number | null } {
+}): { key: string; modelProbPct: number; odd: number | null; label: string } {
   return {
     key: s.key,
+    label: s.label,
     modelProbPct: Number(s.modelProbPct ?? 0),
     odd: s.odd === null ? null : Number(s.odd),
   };
@@ -111,6 +120,7 @@ export async function getPredictionHistoryForMatch(
     .select({
       predictionId: predictionSelectionOdds.predictionId,
       key: marketSelections.key,
+      label: marketSelections.label,
       odd: predictionSelectionOdds.odd,
       modelProbPct: predictionSelectionOdds.modelProbPct,
     })
@@ -128,7 +138,7 @@ export async function getPredictionHistoryForMatch(
   // Agrupa por predictionId; cada grupo já vem em sortOrder asc (orderBy acima).
   const selByPrediction = new Map<
     string,
-    { key: string; modelProbPct: number; odd: number | null }[]
+    { key: string; modelProbPct: number; odd: number | null; label: string }[]
   >();
   for (const s of selRows) {
     const list = selByPrediction.get(s.predictionId) ?? [];

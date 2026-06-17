@@ -1,6 +1,7 @@
 import { getSportsDataProvider } from "@/lib/providers/sports-data";
 import type {
   FixtureRef,
+  NormalizedFixtureEvents,
   NormalizedFixtureResult,
 } from "@/lib/providers/sports-data/types";
 import { getPendingSettlementPredictions } from "@/lib/db/queries/predictions";
@@ -14,7 +15,14 @@ import {
   resultDataFromRegulationScore,
   SettlementError,
   type ResultData,
+  type ResultScorer,
 } from "@/lib/settlement/schemas";
+
+// rule_keys que exigem o fetch extra de /fixtures/events (#290). Data-driven (não
+// `if (market === X)` fora deste set): uma predição pendente com rule_key aqui
+// dispara o 2º fetch per-match; matches só-partition mantêm SÓ getFixtureResult
+// (byte-idêntico, sem egress extra).
+const EVENT_BACKED_RULE_KEYS = new Set(["anytime_scorer", "assist"]);
 
 export type SettlementSummary = {
   considered: number;
@@ -27,6 +35,41 @@ export type SettlementSummary = {
 
 function log(event: string, data: Record<string, unknown>): void {
   console.log(JSON.stringify({ scope: "settlement", event, ...data }));
+}
+
+// Spread (SEM re-parse, C8) dos artilheiros/assistentes de 90' creditados + o flag
+// eventsAvailable sobre o resultData base. Filtra REGULATION-90 + EXCLUI own goals
+// (regra de mercado: artilheiro é quem marca a favor). `events` undefined (fetch
+// falhou/não-encontrado) → eventsAvailable=false → a regra deixa PENDING (nunca
+// fabrica loss). Devolve um NOVO objeto contendo as chaves scorer (persistido
+// verbatim por insertOutcomeIfAbsent → round-trip preservado).
+function mergeFixtureEvents(
+  base: ResultData,
+  events: NormalizedFixtureEvents | undefined,
+): ResultData {
+  if (!events || events.eventsAvailable !== true) {
+    return { ...base, eventsAvailable: false };
+  }
+  // Guarda de consistência (prefer-skip sobre silent-wrong-settle): o fio
+  // /fixtures/events pode atrasar/voltar [] num jogo finalizado. Se o placar de 90'
+  // tem gols mas a lista de gols de REGULAÇÃO (own goals INCLUSOS — contam pro placar)
+  // veio VAZIA, o feed está incompleto → deixa PENDING em vez de fabricar LOSTs (um
+  // 3-1 finalizado com feed vazio settlaria todo mundo como LOST sem esta guarda). O
+  // 0-0 legítimo (totalGoals=0, lista vazia) passa e settla certo. Gaps PARCIAIS
+  // (feed com menos gols que o placar) ficam como risco residual até o fio ser
+  // verificado ao vivo (ADR 0025 manda inspecionar o 1º payload real) — não dá pra
+  // distinguir gap de discrepância benigna no fio não-verificado sem over-pending.
+  const regulationGoalCount = events.goals.filter((g) => g.isRegulation).length;
+  if (base.totalGoals > 0 && regulationGoalCount === 0) {
+    return { ...base, eventsAvailable: false };
+  }
+  const scorers: ResultScorer[] = events.goals
+    .filter((g) => g.isRegulation && !g.isOwnGoal)
+    .map((g) => ({ playerId: g.playerId, canonicalName: g.playerName }));
+  const assisters: ResultScorer[] = events.assists
+    .filter((a) => a.isRegulation)
+    .map((a) => ({ playerId: a.playerId, canonicalName: a.playerName }));
+  return { ...base, eventsAvailable: true, scorers, assisters };
 }
 
 /**
@@ -81,6 +124,39 @@ export async function settlePendingPredictions(
     }
   }
 
+  // Fetch extra de /fixtures/events (#290): SÓ pros matches com ≥1 predição
+  // pendente de scorer/assist. Memoizado per-match. undefined = fetch falhou ou
+  // não-encontrado → a regra de settlement deixa PENDING (eventsAvailable !== true).
+  const eventsByMatch = new Map<
+    string,
+    NormalizedFixtureEvents | undefined | null
+  >();
+  for (const p of pending) {
+    if (
+      p.settlementRuleKey === null ||
+      !EVENT_BACKED_RULE_KEYS.has(p.settlementRuleKey)
+    ) {
+      continue;
+    }
+    if (eventsByMatch.has(p.matchId)) continue;
+    const ref: FixtureRef = {
+      league: p.league,
+      kickoffAt: p.kickoffAt.toISOString(),
+      homeTeam: p.homeTeam,
+      awayTeam: p.awayTeam,
+    };
+    try {
+      eventsByMatch.set(p.matchId, await provider.getFixtureEvents(ref));
+    } catch (err) {
+      log("provider_error", {
+        matchId: p.matchId,
+        method: "getFixtureEvents",
+        message: err instanceof Error ? err.message : String(err),
+      });
+      eventsByMatch.set(p.matchId, null);
+    }
+  }
+
   for (const p of pending) {
     const result = resultByMatch.get(p.matchId);
     if (result === null) {
@@ -102,6 +178,18 @@ export async function settlePendingPredictions(
     let settlement: Settlement | null;
     try {
       resultData = resultDataFromRegulationScore(result.regulationScore);
+      // #290: pra predições event-backed (scorer/assist), MERGE os artilheiros/
+      // assistentes + eventsAvailable no MESMO objeto resultData via SPREAD (C8:
+      // NUNCA re-parsear o objeto merged contra um sub-schema — z.object faria
+      // strip e os scorers sumiriam → PENDING eterno). O objeto entregue a
+      // computeSettlement E a insertOutcomeIfAbsent é o MESMO e contém as chaves.
+      if (
+        p.settlementRuleKey !== null &&
+        EVENT_BACKED_RULE_KEYS.has(p.settlementRuleKey)
+      ) {
+        const events = eventsByMatch.get(p.matchId);
+        resultData = mergeFixtureEvents(resultData, events ?? undefined);
+      }
       settlement = computeSettlement({
         recommendation: p.recommendation,
         settlementRuleKey: p.settlementRuleKey,

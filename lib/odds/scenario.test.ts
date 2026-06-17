@@ -394,6 +394,46 @@ describe("computeMarketScenarios", () => {
     });
   });
 
+  it("marketKind=independent_binary (scorer): implícita-TETO (1/odd)*100, SEM normalização", () => {
+    // 3 jogadores yes-only: odds 2.5/4.0/5.0; modelProb 52/28/18. A implícita-teto
+    // por jogador é (1/odd)*100 e NÃO normaliza (Σ pode passar de 100). Casa com o
+    // edge-teto persistido pelo predict (não o caminho Σ=1 de partição).
+    const { selections } = computeMarketScenarios({
+      selections: [
+        { key: "scorer_a", modelProbPct: 52, odd: 2.5 },
+        { key: "scorer_b", modelProbPct: 28, odd: 4.0 },
+        { key: "scorer_c", modelProbPct: 18, odd: 5.0 },
+      ],
+      recommendedKey: "scorer_a",
+      marketKind: "independent_binary",
+    });
+    expect(selections[0].impliedProbPct).toBeCloseTo(40, 9); // 1/2.5*100
+    expect(selections[1].impliedProbPct).toBeCloseTo(25, 9); // 1/4.0*100
+    expect(selections[2].impliedProbPct).toBeCloseTo(20, 9); // 1/5.0*100
+    // edge = modelProb − teto (PISO conservador).
+    expect(selections[0].edgePct).toBeCloseTo(12, 9);
+    // Σ teto = 85, NÃO normalizado a 100 (binários independentes).
+    const sum = selections.reduce((a, s) => a + (s.impliedProbPct ?? 0), 0);
+    expect(sum).toBeCloseTo(85, 9);
+  });
+
+  it("partition (default) vs independent_binary divergem: o default NORMALIZA, o scorer não", () => {
+    const sel = [
+      { key: "a", modelProbPct: 50, odd: 2.0 },
+      { key: "b", modelProbPct: 50, odd: 2.0 },
+    ];
+    const partition = computeMarketScenarios({ selections: sel, recommendedKey: "a" });
+    const scorer = computeMarketScenarios({
+      selections: sel,
+      recommendedKey: "a",
+      marketKind: "independent_binary",
+    });
+    // partition: Σ=100 (50/50). scorer: cada teto = 50, Σ=100 aqui POR ACASO (odd 2.0),
+    // mas a derivação é diferente — em odds desbalanceadas elas divergem.
+    expect(partition.selections[0].impliedProbPct).toBeCloseTo(50, 9);
+    expect(scorer.selections[0].impliedProbPct).toBeCloseTo(50, 9);
+  });
+
   it("N=3 com recommendedKey=null (nenhuma seleção recomendada — echo)", () => {
     const { selections, recommended } = computeMarketScenarios({
       selections: [

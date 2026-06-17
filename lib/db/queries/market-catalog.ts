@@ -56,6 +56,74 @@ export async function resolveMarketCatalog(
 }
 
 /**
+ * Resolve SÓ a row `markets` de um dbMarketKey (sem ler market_selections) — pra
+ * mercados `dynamicSelections` (#290), cujas seleções não existem até crescerem
+ * lazily. SEPARADO de `resolveMarketCatalog` de PROPÓSITO: o reader genérico
+ * hard-falha em ZERO seleções (market-catalog:48-50), o que é correto pra mercados
+ * estáticos (seed incompleto = bug) mas FATAL pra um mercado scorer recém-seedado
+ * (0 jogadores até a 1ª análise). Hard-fail só no mercado ausente.
+ */
+export async function resolveMarketRow(
+  dbMarketKey: string,
+): Promise<{ marketId: string }> {
+  const [mkt] = await db
+    .select({ id: markets.id })
+    .from(markets)
+    .where(eq(markets.key, dbMarketKey))
+    .limit(1);
+  if (!mkt) {
+    throw new Error(`market '${dbMarketKey}' não encontrado no catálogo`);
+  }
+  return { marketId: mkt.id };
+}
+
+/**
+ * Materializa LAZY as `market_selections` de um mercado `dynamicSelections`
+ * (#290 scorer/assist): um jogador por seleção, chave `scorer_<slug>`/`assist_<slug>`
+ * + o NOME no `label` (coluna NOT NULL — sem ele a view renderiza a key crua ou
+ * crasha em getMarketPresentation).
+ *
+ * Upsert IDEMPOTENTE via `onConflictDoNothing` no UNIQUE(market_id, key) existente
+ * — uma re-análise do mesmo jogo não duplica linhas e uma corrida concorrente é
+ * fechada pelo UNIQUE + re-read. Roda PRÉ-chamada-paga no predict (uma falha de DB
+ * nunca queima spend). Retorna `idByKey` (key → selectionId) RE-LIDO do banco após
+ * o upsert (pega tanto as linhas novas quanto as pré-existentes da corrida).
+ *
+ * NUNCA re-entra em `resolveMarketCatalog` (que assere completude/zero-seleção).
+ */
+export async function ensureScorerSelections(
+  marketId: string,
+  players: { key: string; label: string }[],
+): Promise<{ idByKey: Map<string, string> }> {
+  // Dedup por key em memória (o bundle de odds já dedup, mas defensivo) — evita
+  // VALUES com a mesma key na mesma sentença.
+  const byKey = new Map<string, string>();
+  for (const p of players) {
+    if (!byKey.has(p.key)) byKey.set(p.key, p.label);
+  }
+  const rows = [...byKey.entries()].map(([key, label]) => ({
+    marketId,
+    key,
+    label,
+  }));
+  if (rows.length > 0) {
+    await db
+      .insert(marketSelections)
+      .values(rows)
+      .onConflictDoNothing({
+        target: [marketSelections.marketId, marketSelections.key],
+      });
+  }
+  // Re-read: pega linhas novas + pré-existentes (corrida concorrente). Escopado ao
+  // mercado; idByKey alimenta selectionId/PSO no predict.
+  const sels = await db
+    .select({ id: marketSelections.id, key: marketSelections.key })
+    .from(marketSelections)
+    .where(eq(marketSelections.marketId, marketId));
+  return { idByKey: new Map(sels.map((s) => [s.key, s.id])) };
+}
+
+/**
  * Mercado selecionável por uma AUDIÊNCIA (gate de ativação, ADR 0017). Espelha
  * `modelsForAudience` (lib/ai/models.ts), mas a fonte é a tabela `markets` (não um
  * registry em código): a graduação de um mercado é flip de `is_graduated=true` no

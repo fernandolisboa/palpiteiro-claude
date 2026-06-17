@@ -55,6 +55,52 @@ export type NormalizedFixtureResult = z.infer<
   typeof NormalizedFixtureResultSchema
 >;
 
+// Eventos de um fixture pra settlement de mercados de jogador (#290, ADR 0025
+// emenda): artilheiro (bet_92) e assistência (bet_212). Cada gol/assistência
+// carrega o jogador (id numérico do provider quando disponível + nome canônico
+// pra match por nome) e o flag `isRegulation` (ocorreu no tempo regulamentar de
+// 90', INCLUINDO acréscimos — exclui prorrogação 91-120' e pênaltis de
+// disputa). Own goals (`isOwnGoal`) NÃO creditam o autor (regra de mercado);
+// pênaltis (`isPenalty`) creditam normalmente. `eventsAvailable` é true SÓ
+// quando o fetch teve sucesso num fixture finalizado — settlement de scorer só
+// liquida com `eventsAvailable === true` (senão deixa pending, nunca fabrica
+// loss). `teamSide` é informativo (não usado no settlement yes-only).
+export const NormalizedGoalEventSchema = z.object({
+  playerId: z.number().int().nullable(),
+  playerName: z.string().min(1),
+  teamSide: z.enum(["home", "away"]),
+  minute: z.number().int().nullable(),
+  isPenalty: z.boolean(),
+  isOwnGoal: z.boolean(),
+  isRegulation: z.boolean(),
+});
+export type NormalizedGoalEvent = z.infer<typeof NormalizedGoalEventSchema>;
+
+export const NormalizedAssistEventSchema = z.object({
+  playerId: z.number().int().nullable(),
+  playerName: z.string().min(1),
+  teamSide: z.enum(["home", "away"]),
+  minute: z.number().int().nullable(),
+  isRegulation: z.boolean(),
+});
+export type NormalizedAssistEvent = z.infer<
+  typeof NormalizedAssistEventSchema
+>;
+
+export const NormalizedFixtureEventsSchema = z.object({
+  fixtureStatus: NormalizedFixtureStatusSchema,
+  // true SÓ quando o fetch teve sucesso num fixture finalizado. settlement de
+  // scorer só liquida com isto true; false/undefined → pending (prefer-skip).
+  eventsAvailable: z.boolean(),
+  // Gols/assistências de 90' (regulation). Own goals presentes mas marcados
+  // (não creditam). A regra de settlement filtra por isRegulation + isOwnGoal.
+  goals: z.array(NormalizedGoalEventSchema),
+  assists: z.array(NormalizedAssistEventSchema),
+});
+export type NormalizedFixtureEvents = z.infer<
+  typeof NormalizedFixtureEventsSchema
+>;
+
 export const NormalizedStandingSplitSchema = z.object({
   played: z.number().int().nonnegative(),
   wins: z.number().int().nonnegative(),
@@ -159,6 +205,12 @@ export type ProviderCapabilities = {
   readonly supportsInjuries: boolean;
   readonly supportsLineups: boolean;
   readonly supportedLeagues: ReadonlySet<SupportedLeague>;
+  // Eventos de fixture (gols/assistências) pra settlement de scorer/assist
+  // (#290). OPCIONAL: os 9 literais de capability existentes compilam sem
+  // mudança (ausente ⇒ falsy); o FallbackProvider lê `=== true` no gate. Só a
+  // api-football a declara true (football-data-org não expõe eventos por jogador
+  // no tier grátis).
+  readonly supportsFixtureEvents?: boolean;
 };
 
 // ─── SportsDataProvider interface ────────────────────────────────────────────
@@ -186,6 +238,12 @@ export interface SportsDataProvider {
   getFixtureResult(
     ref: FixtureRef,
   ): Promise<NormalizedFixtureResult | undefined>;
+  // Eventos de 90' (gols/assistências por jogador) pra settlement de scorer/
+  // assist (#290). Retorna undefined quando o fixture não é encontrado no
+  // provider. Providers sem a capability lançam SportsDataUnsupportedError.
+  getFixtureEvents(
+    ref: FixtureRef,
+  ): Promise<NormalizedFixtureEvents | undefined>;
   getH2H(
     homeTeam: string,
     awayTeam: string,

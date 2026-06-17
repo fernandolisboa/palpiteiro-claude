@@ -41,6 +41,10 @@ export type GenericOddsArgs = {
   // `undefined` pra todos os outros cartuchos E pro over_under flag-OFF (single-line).
   // NÃO altera `selections` (par único do caminho legado) — additivo e inerte por default.
   lineLadder?: LineLadderEntry[];
+  // Rótulo (nome do jogador) por selectionKey, p/ mercados independent_binary
+  // (scorer/assist, #290): a `selections` carrega só key/odd, mas o cartucho precisa
+  // do NOME pra renderizar a mensagem pro LLM. Inerte (undefined) pros demais.
+  playerLabels?: Record<string, string>;
 };
 export type GenericImpliedArgs = { pct: Record<string, number> };
 

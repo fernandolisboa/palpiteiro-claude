@@ -1,3 +1,5 @@
+import { anytimeScorerCartridge } from "./anytime_scorer";
+import { assistCartridge } from "./assist";
 import { bttsCartridge } from "./btts";
 import { correctScoreCartridge } from "./correct_score";
 import { doubleChanceCartridge } from "./double_chance";
@@ -17,6 +19,8 @@ const REGISTRY: Record<string, MarketCartridge> = {
   [bttsCartridge.marketKey]: bttsCartridge as MarketCartridge,
   [doubleChanceCartridge.marketKey]: doubleChanceCartridge as MarketCartridge,
   [correctScoreCartridge.marketKey]: correctScoreCartridge as MarketCartridge,
+  [anytimeScorerCartridge.marketKey]: anytimeScorerCartridge as MarketCartridge,
+  [assistCartridge.marketKey]: assistCartridge as MarketCartridge,
 };
 
 // Variantes MULTI-LINHA (#175): cartuchos alternativos keyed por marketKey,

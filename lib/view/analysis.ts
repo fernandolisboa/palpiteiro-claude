@@ -61,8 +61,15 @@ type PredictionInput = {
   // e a odd congelada. Carrier vindo de predict() (action) ou de PSO (page). Quando
   // `length > 2`, toAnalysisView ramifica pro caminho N-vias canônico
   // (computeMarketScenarios → toOutcomesView) e mantém 1X2 FORA do scenario binário.
-  // Ausente/≤2 → caminho binário congelado (over/under byte-idêntico).
-  selections?: { key: string; modelProbPct: number; odd: number | null }[];
+  // Ausente/≤2 → caminho binário congelado (over/under byte-idêntico). `label`
+  // (nome do jogador, #290) viaja só pra mercados dynamicSelections — a view o
+  // prefere ao presentation.selectionLabel(key) (que devolveria a key crua).
+  selections?: {
+    key: string;
+    modelProbPct: number;
+    odd: number | null;
+    label?: string;
+  }[];
 };
 
 type AiCallInput = {
@@ -199,12 +206,16 @@ function toOutcomeView(
   presentation: MarketPresentation,
   line: number | null,
   isRecommended: boolean,
+  // Label DINÂMICO (nome do jogador, #290) que sobrescreve presentation.*Label(key)
+  // — pra mercados dynamicSelections onde a key (scorer_pedro) não é legível. Ausente
+  // (partição) → presentation labels (byte-idêntico).
+  dynamicLabel?: string,
 ): OutcomeView {
   const sv = toScenarioSideView(side);
   return {
     id: key,
-    label: presentation.outcomeLabel(key, line),
-    scenarioLabel: presentation.scenarioLabel(key, line),
+    label: dynamicLabel ?? presentation.outcomeLabel(key, line),
+    scenarioLabel: dynamicLabel ?? presentation.scenarioLabel(key, line),
     modelProb: sv.modelProb,
     marketProb: sv.marketProb,
     odd: sv.odd,
@@ -248,9 +259,22 @@ export function toOutcomesView(
   result: { selections: ScenarioSelection[]; recommended: string | null },
   presentation: MarketPresentation,
   line: number | null,
+  // Carrier com labels por seleção (#290 dynamicSelections): quando presente,
+  // o label do jogador sobrescreve presentation.*Label(key). Ausente → byte-idêntico.
+  labeledSelections?: { key: string; label?: string }[],
 ): OutcomeView[] {
+  const labelByKey = labeledSelections
+    ? new Map(labeledSelections.map((s) => [s.key, s.label]))
+    : null;
   return result.selections.map((s) =>
-    toOutcomeView(s, s.key, presentation, line, s.key === result.recommended),
+    toOutcomeView(
+      s,
+      s.key,
+      presentation,
+      line,
+      s.key === result.recommended,
+      labelByKey?.get(s.key) ?? undefined,
+    ),
   );
 }
 
@@ -284,20 +308,30 @@ export function toAnalysisView(
     (prediction.marketKey ?? "over_under") === "over_under";
   const isNway = !isBinaryFrozen && (prediction.selections?.length ?? 0) >= 2;
 
-  // impliedSumTarget vem do descriptor (data-driven): 2 p/ dupla chance (cobertura
-  // sobreposta), 1 (default) p/ partição (1X2, btts) — mantém o edge da grade
-  // igual ao persistido pelo predict, que usa o mesmo fator.
-  const impliedSumTarget =
-    getDescriptor(prediction.marketKey ?? "over_under")?.impliedSumTarget ?? 1;
+  // impliedSumTarget/marketKind vêm do descriptor (data-driven): 2 p/ dupla chance
+  // (cobertura sobreposta), 1 (default) p/ partição; independent_binary (scorer)
+  // usa a implícita-TETO (sem normalização). Mantém o edge da grade igual ao
+  // persistido pelo predict, que usa os MESMOS fatores.
+  const descriptor = getDescriptor(prediction.marketKey ?? "over_under");
+  const impliedSumTarget = descriptor?.impliedSumTarget ?? 1;
+  const marketKind = descriptor?.marketKind ?? "partition";
+  // Piso de edge do mercado (C5): default 5 (partition) / 8 (scorer). Threadado pra
+  // minEdgeLabel + a prop minEdgePp do AnalysisScenarios — a view nunca hardcoda 5
+  // pra um mercado de piso 8.
+  const minEdgePp = descriptor?.minEdgePp ?? MIN_EDGE_PP;
   const outcomesNway = isNway
     ? toOutcomesView(
         computeMarketScenarios({
           selections: prediction.selections!,
           recommendedKey: isPass ? null : recommendation,
           impliedSumTarget,
+          marketKind,
         }),
         presentation,
         line,
+        // Mercados dynamicSelections (scorer): a key crua (scorer_pedro) não é
+        // legível — prefere o label threadado do DB (nome do jogador).
+        descriptor?.dynamicSelections ? prediction.selections : undefined,
       )
     : null;
 
@@ -352,6 +386,12 @@ export function toAnalysisView(
     // não explicar um número que não existe na tela.
   }
 
+  // Label da seleção recomendada: mercados dynamicSelections (scorer) preferem o
+  // nome do jogador threadado do DB; senão a apresentação (byte-idêntico).
+  const recommendedDynamicLabel =
+    descriptor?.dynamicSelections && !isPass
+      ? prediction.selections?.find((s) => s.key === recommendation)?.label
+      : undefined;
   return {
     recommendation: isPass
       ? null
@@ -359,12 +399,17 @@ export function toAnalysisView(
           marketKey: presentation.marketKey,
           marketLabel: presentation.marketLabel,
           selectionKey: recommendation,
-          selectionLabel: presentation.selectionLabel(recommendation),
+          selectionLabel:
+            recommendedDynamicLabel ??
+            presentation.selectionLabel(recommendation),
           line,
           // Tradução leiga (lay-friendly): over/under → {market:"Mais de 2.5
           // gols", plain:"pelo menos 3 gols no jogo"}; 1X2 → {market:selectionLabel,
           // plain:""}. O componente renderiza a sub-linha só quando `plain` ≠ "".
-          betSummary: presentation.betSummary(recommendation, line),
+          // scorer (dynamicSelections): {market: nome do jogador, plain: ""}.
+          betSummary: recommendedDynamicLabel
+            ? { market: recommendedDynamicLabel, plain: "" }
+            : presentation.betSummary(recommendation, line),
         },
     outcomes:
       outcomesNway ??
@@ -381,7 +426,11 @@ export function toAnalysisView(
     expectedReturn: isPass ? null : formatEvPct(evPerUnit),
     expectedReturnTone,
     evLegend,
-    minEdgeLabel: `${MIN_EDGE_PP}pp`,
+    // #290: piso de edge do MERCADO (descriptor.minEdgePp) — scorer mostra 8pp, não
+    // a constante 5 hardcoded. Default 5 (partition) mantém over_under/correct_score
+    // byte-idênticos. A view nunca "mente" o piso por mercado.
+    minEdgeLabel: `${minEdgePp}pp`,
+    minEdgePp,
     rationale: prediction.rationale,
     factors: prediction.keyFactors,
     generatedAt: formatGeneratedAt(prediction.createdAt),

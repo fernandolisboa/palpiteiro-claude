@@ -9,6 +9,7 @@ import {
 } from "@/lib/providers/sports-data/api-football/errors";
 import type {
   ApiFootballFixture,
+  ApiFootballFixtureEvent,
   ApiFootballInjury,
   ApiFootballLineup,
   ApiFootballStandings,
@@ -25,6 +26,7 @@ import {
 const {
   toNormalizedFixture,
   toNormalizedFixtureResult,
+  toNormalizedFixtureEvents,
   toNormalizedStanding,
   toNormalizedInjury,
   toNormalizedTeamLineup,
@@ -152,6 +154,120 @@ describe("toNormalizedFixtureResult", () => {
     const r = toNormalizedFixtureResult(makeFixture());
     expect(r.status).toBe("scheduled");
     expect(r.regulationScore).toBeNull();
+  });
+});
+
+// ─── Fixture events normalization (#290 scorer/assist) ───────────────────────
+
+function ev(overrides: Partial<ApiFootballFixtureEvent>): ApiFootballFixtureEvent {
+  return {
+    time: { elapsed: 23, extra: null },
+    team: { id: 127, name: "Flamengo" },
+    player: { id: 1, name: "Player One" },
+    assist: { id: null, name: null },
+    type: "Goal",
+    detail: "Normal Goal",
+    ...overrides,
+  };
+}
+
+describe("toNormalizedFixtureEvents", () => {
+  const finished = makeFixture({
+    fixture: {
+      id: 999,
+      date: "2026-05-15T19:00:00+00:00",
+      timestamp: Math.floor(Date.parse("2026-05-15T19:00:00Z") / 1000),
+      timezone: "UTC",
+      status: { long: "Match Finished", short: "FT", elapsed: 90 },
+      venue: { id: 1, name: "Maracanã", city: "Rio de Janeiro" },
+    },
+  });
+
+  it("credits a normal regulation goal to the scorer", () => {
+    const r = toNormalizedFixtureEvents(finished, [
+      ev({ player: { id: 10, name: "Pedro" }, time: { elapsed: 33, extra: null } }),
+    ]);
+    expect(r.eventsAvailable).toBe(true);
+    expect(r.goals).toHaveLength(1);
+    expect(r.goals[0]).toMatchObject({
+      playerId: 10,
+      playerName: "Pedro",
+      isOwnGoal: false,
+      isPenalty: false,
+      isRegulation: true,
+    });
+  });
+
+  it("marks own goals (does NOT credit) and skips their assist", () => {
+    const r = toNormalizedFixtureEvents(finished, [
+      ev({
+        player: { id: 5, name: "Defender" },
+        assist: { id: 7, name: "Crosser" },
+        detail: "Own Goal",
+      }),
+    ]);
+    expect(r.goals).toHaveLength(1);
+    expect(r.goals[0]?.isOwnGoal).toBe(true);
+    // Own goal has no creditable assist.
+    expect(r.assists).toHaveLength(0);
+  });
+
+  it("credits a penalty goal (isPenalty=true, still a goal)", () => {
+    const r = toNormalizedFixtureEvents(finished, [
+      ev({ player: { id: 11, name: "Striker" }, detail: "Penalty" }),
+    ]);
+    expect(r.goals).toHaveLength(1);
+    expect(r.goals[0]?.isPenalty).toBe(true);
+    expect(r.goals[0]?.isOwnGoal).toBe(false);
+  });
+
+  it("excludes a missed penalty (not a goal)", () => {
+    const r = toNormalizedFixtureEvents(finished, [
+      ev({ detail: "Missed Penalty" }),
+    ]);
+    expect(r.goals).toHaveLength(0);
+  });
+
+  it("flags extra-time goals (elapsed > 90) as non-regulation", () => {
+    const r = toNormalizedFixtureEvents(finished, [
+      ev({ time: { elapsed: 105, extra: null } }),
+    ]);
+    expect(r.goals).toHaveLength(1);
+    expect(r.goals[0]?.isRegulation).toBe(false);
+  });
+
+  it("treats minute 90 (+ stoppage) as regulation", () => {
+    const r = toNormalizedFixtureEvents(finished, [
+      ev({ time: { elapsed: 90, extra: 4 } }),
+    ]);
+    expect(r.goals[0]?.isRegulation).toBe(true);
+  });
+
+  it("records an assist on a non-own-goal", () => {
+    const r = toNormalizedFixtureEvents(finished, [
+      ev({
+        player: { id: 9, name: "Scorer" },
+        assist: { id: 8, name: "Passer" },
+      }),
+    ]);
+    expect(r.assists).toHaveLength(1);
+    expect(r.assists[0]).toMatchObject({ playerId: 8, playerName: "Passer" });
+  });
+
+  it("drops non-Goal events (cards, subs) and events without a player name", () => {
+    const r = toNormalizedFixtureEvents(finished, [
+      ev({ type: "Card", detail: "Yellow Card" }),
+      ev({ type: "subst", detail: "Substitution 1" }),
+      ev({ player: { id: null, name: null } }),
+    ]);
+    expect(r.goals).toHaveLength(0);
+  });
+
+  it("eventsAvailable=false when the fixture isn't finished", () => {
+    const r = toNormalizedFixtureEvents(makeFixture(), [
+      ev({ player: { id: 1, name: "Player" } }),
+    ]);
+    expect(r.eventsAvailable).toBe(false);
   });
 });
 

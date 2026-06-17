@@ -100,6 +100,7 @@ describe("toAnalysisView", () => {
       evLegend:
         "ganho médio por aposta, no longo prazo, se a estimativa de 58% do modelo estiver certa",
       minEdgeLabel: "5pp",
+      minEdgePp: 5,
       rationale: "blah",
       factors: ["a", "b"],
       generatedAt: "19 mai · 14:22",
@@ -186,6 +187,7 @@ describe("toAnalysisView", () => {
       evLegend:
         "ganho médio por aposta, no longo prazo, se a estimativa de 56% do modelo estiver certa",
       minEdgeLabel: "5pp",
+      minEdgePp: 5,
       rationale: "x",
       factors: ["a", "b"],
       generatedAt: "19 mai · 14:22",
@@ -265,6 +267,7 @@ describe("toAnalysisView", () => {
       expectedReturnTone: "neutral",
       evLegend: null,
       minEdgeLabel: "5pp",
+      minEdgePp: 5,
       rationale: "no edge",
       factors: ["a", "b"],
       generatedAt: "19 mai · 14:22",
@@ -347,6 +350,7 @@ describe("toAnalysisView", () => {
       // retorno "—" não ganha legenda — não explicar número que não existe.
       evLegend: null,
       minEdgeLabel: "5pp",
+      minEdgePp: 5,
       rationale: "old",
       factors: ["a"],
       generatedAt: "19 mai · 14:22",
@@ -1344,5 +1348,66 @@ describe("toMarketAnalysisSections", () => {
 
   it("histórico vazio → []", () => {
     expect(toMarketAnalysisSections([])).toEqual([]);
+  });
+});
+
+describe("toAnalysisView — anytime_scorer (independent_binary, #290)", () => {
+  // Prediction de scorer: recommendation = key do jogador, selections com label
+  // (nome). getDescriptor('anytime_scorer') resolve (ativado em ALL_DESCRIPTORS).
+  function scorerView(recommendation: string) {
+    return toAnalysisView(
+      {
+      recommendation,
+      confidencePct: "52",
+      rationale: "Pedro é o melhor palpite de artilheiro.",
+      keyFactors: ["forma recente"],
+      minimumOdd: "2.100",
+      oddAtRecommendation: "2.500",
+      bookmaker: "Bet365",
+      impliedProbPct: "40.00",
+      edgePct: "12.00",
+      modelVersion: "claude-opus-4-8",
+      promptVersion: "anytime_scorer_v1",
+      createdAt: baseCreatedAt,
+      marketKey: "anytime_scorer",
+      line: null,
+      stakeUnits: "1.00",
+      selections: [
+        { key: "scorer_pedro", modelProbPct: 52, odd: 2.5, label: "Pedro" },
+        {
+          key: "scorer_arrascaeta",
+          modelProbPct: 28,
+          odd: 4.0,
+          label: "Arrascaeta",
+        },
+      ],
+      },
+      null,
+    );
+  }
+
+  it("renderiza o NOME do jogador (não a key crua) na recomendação e na grade", () => {
+    const view = scorerView("scorer_pedro");
+    expect(view.recommendation?.selectionLabel).toBe("Pedro");
+    expect(view.recommendation?.betSummary?.market).toBe("Pedro");
+    // grade N-vias: o outcome usa o nome, não scorer_pedro.
+    const labels = view.outcomes.map((o) => o.label);
+    expect(labels).toContain("Pedro");
+    expect(labels).toContain("Arrascaeta");
+    expect(labels.some((l) => l.startsWith("scorer_"))).toBe(false);
+  });
+
+  it("mostra o piso de edge do mercado = 8pp (não a constante 5)", () => {
+    const view = scorerView("scorer_pedro");
+    expect(view.minEdgeLabel).toBe("8pp");
+    expect(view.minEdgePp).toBe(8);
+  });
+
+  it("edge da grade usa a implícita-TETO (1/odd*100), sem normalização Σ=1", () => {
+    const view = scorerView("scorer_pedro");
+    const pedro = view.outcomes.find((o) => o.label === "Pedro");
+    // implícita-teto 1/2.5*100 = 40 → "40%"; edge model(52)−40 = +12pp.
+    expect(pedro?.marketProb).toBe("40%");
+    expect(pedro?.edge).toBe("+12.0pp");
   });
 });

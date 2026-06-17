@@ -24,6 +24,7 @@ function makeMockProvider(
     getFixturesBySeason: vi.fn(),
     getFixtureByMatch: vi.fn(),
     getFixtureResult: vi.fn(),
+    getFixtureEvents: vi.fn(),
     getH2H: vi.fn(),
     getStandings: vi.fn(),
     getInjuriesByFixture: vi.fn(),
@@ -35,6 +36,7 @@ function makeMockProvider(
     name,
     supportsInjuries: caps.supportsInjuries ?? true,
     supportsLineups: caps.supportsLineups ?? true,
+    supportsFixtureEvents: caps.supportsFixtureEvents ?? false,
     supportedLeagues:
       caps.supportedLeagues ??
       new Set<SupportedLeague>(["brasileirao_a", "champions_league"]),
@@ -45,6 +47,7 @@ function makeMockProvider(
     getFixturesBySeason: spies.getFixturesBySeason as never,
     getFixtureByMatch: spies.getFixtureByMatch as never,
     getFixtureResult: spies.getFixtureResult as never,
+    getFixtureEvents: spies.getFixtureEvents as never,
     getH2H: spies.getH2H as never,
     getStandings: spies.getStandings as never,
     getInjuriesByFixture: spies.getInjuriesByFixture as never,
@@ -315,6 +318,39 @@ describe("FallbackProvider capability gating", () => {
     await fp.getLineups(REF);
     expect(p.__spies.getLineups).not.toHaveBeenCalled();
     expect(f.__spies.getLineups).toHaveBeenCalledTimes(1);
+  });
+
+  it("getFixtureEvents routes to the provider with supportsFixtureEvents (#290)", async () => {
+    // Mirrors production wiring: api-football declares supportsFixtureEvents,
+    // football-data-org does not. The gate filters FDO out, so only the
+    // events-capable provider is invoked.
+    const af = makeMockProvider("api-football", {
+      supportsFixtureEvents: true,
+    });
+    const fdo = makeMockProvider("football-data-org", {
+      supportsFixtureEvents: false,
+    });
+    af.__spies.getFixtureEvents.mockResolvedValueOnce({
+      fixtureStatus: "finished",
+      eventsAvailable: true,
+      goals: [],
+      assists: [],
+    });
+    const fp = new FallbackProvider(af, fdo);
+    await fp.getFixtureEvents(REF);
+    expect(af.__spies.getFixtureEvents).toHaveBeenCalledTimes(1);
+    expect(fdo.__spies.getFixtureEvents).not.toHaveBeenCalled();
+  });
+
+  it("getFixtureEvents throws Unsupported when no provider supports events", async () => {
+    const p = makeMockProvider("p", { supportsFixtureEvents: false });
+    const f = makeMockProvider("f", { supportsFixtureEvents: false });
+    const fp = new FallbackProvider(p, f);
+    await expect(fp.getFixtureEvents(REF)).rejects.toThrow(
+      SportsDataUnsupportedError,
+    );
+    expect(p.__spies.getFixtureEvents).not.toHaveBeenCalled();
+    expect(f.__spies.getFixtureEvents).not.toHaveBeenCalled();
   });
 
   it("bubbles up Unsupported for World Cup injuries without cascading to FDO", async () => {

@@ -28,10 +28,15 @@ export type BetSummaryCopy = {
 
 // Shape estrutural LOCAL do resultData (espelha lib/settlement/schemas.ts sem
 // importar @/lib/db nem @/lib/settlement — pureza de bundle pinada por teste).
+// scorers/assisters/eventsAvailable são ADITIVOS (#290), OPCIONAIS — rows
+// partition seguem byte-idênticas.
 type SettlementMetricResultData = {
   homeScore: number | null;
   awayScore: number | null;
   totalGoals: number;
+  scorers?: { playerId: number | null; canonicalName: string }[];
+  assisters?: { playerId: number | null; canonicalName: string }[];
+  eventsAvailable?: boolean;
 } | null;
 
 export type MarketPresentation = {
@@ -318,12 +323,50 @@ const CORRECT_SCORE: MarketPresentation = {
   classifyH2H: null,
 };
 
+// anytime_scorer / assist (independent_binary, #290) — seedados ativos admin-only.
+// Seleções DINÂMICAS (um jogador por seleção, key scorer_<slug>/assist_<slug>): o
+// selectionLabel fallback devolveria a key crua, então a VIEW prefere o
+// `selection.label` threadado do DB (market_selections.label = nome do jogador) —
+// estas entries existem pra getMarketPresentation NÃO dar throw no render
+// (analysis/dashboard/best-bet) e pra rotular marketLabel/métrica. classifyH2H null
+// (não é mercado de gols-totais). settlementMetricValue não tem placar a compor —
+// rótulo fixo do mercado (o desfecho por-jogador vive na own row, não aqui).
+const ANYTIME_SCORER: MarketPresentation = {
+  marketKey: "anytime_scorer",
+  marketLabel: "Artilheiro",
+  defaultLine: null,
+  selectionLabel: (key) => key,
+  outcomeLabel: (key) => key,
+  scenarioLabel: (key) => key,
+  betSummary: (key) => ({ market: key, plain: "" }),
+  framingLabel: (key) => key,
+  settlementMetricLabel: "artilheiro (90')",
+  settlementMetricValue: () => "artilheiro (90')",
+  classifyH2H: null,
+};
+
+const ASSIST: MarketPresentation = {
+  marketKey: "assist",
+  marketLabel: "Assistência",
+  defaultLine: null,
+  selectionLabel: (key) => key,
+  outcomeLabel: (key) => key,
+  scenarioLabel: (key) => key,
+  betSummary: (key) => ({ market: key, plain: "" }),
+  framingLabel: (key) => key,
+  settlementMetricLabel: "assistência (90')",
+  settlementMetricValue: () => "assistência (90')",
+  classifyH2H: null,
+};
+
 const REGISTRY: Record<string, MarketPresentation> = {
   [OVER_UNDER.marketKey]: OVER_UNDER,
   [MATCH_RESULT.marketKey]: MATCH_RESULT,
   [BTTS.marketKey]: BTTS,
   [DOUBLE_CHANCE.marketKey]: DOUBLE_CHANCE,
   [CORRECT_SCORE.marketKey]: CORRECT_SCORE,
+  [ANYTIME_SCORER.marketKey]: ANYTIME_SCORER,
+  [ASSIST.marketKey]: ASSIST,
 };
 
 /**

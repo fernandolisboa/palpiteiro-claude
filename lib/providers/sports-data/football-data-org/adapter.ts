@@ -50,6 +50,7 @@ import {
   SportsDataUnsupportedError,
   type FixtureRef,
   type NormalizedFixture,
+  type NormalizedFixtureEvents,
   type NormalizedFixtureResult,
   type NormalizedH2H,
   type NormalizedInjury,
@@ -636,6 +637,20 @@ export class FootballDataOrgAdapter implements SportsDataProvider {
     } catch (err) {
       wrapFootballDataOrgError(err, "getFixtureResult", { ref });
     }
+  }
+
+  async getFixtureEvents(
+    _ref: FixtureRef,
+  ): Promise<NormalizedFixtureEvents | undefined> {
+    // football-data.org (tier grátis) NÃO expõe eventos de gol/assistência por
+    // jogador — settlement de scorer/assist (#290) só roda via api-football. O
+    // FallbackProvider faz capability-gate em supportsFixtureEvents, então este
+    // throw é só o backstop (provider sem a capability nunca deveria ser chamado).
+    throw new SportsDataUnsupportedError(
+      "football-data.org free tier does not expose per-player fixture events",
+      PROVIDER_NAME,
+      "getFixtureEvents",
+    );
   }
 
   async getH2H(

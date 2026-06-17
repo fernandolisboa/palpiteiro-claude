@@ -69,6 +69,7 @@ vi.mock("@/lib/providers/sports-data", () => ({
       getFixturesBySeason: vi.fn() as never,
       getFixtureByMatch: getFixtureByMatch as never,
       getFixtureResult: vi.fn() as never,
+      getFixtureEvents: vi.fn() as never,
       getH2H: getH2H as never,
       getStandings: getStandings as never,
       getInjuriesByFixture: getInjuriesByFixture as never,
