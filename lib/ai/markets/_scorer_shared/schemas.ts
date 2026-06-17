@@ -149,6 +149,23 @@ export const ScorerOutputSchema = z
         message: "minimum_odd is required when recommendation is a player",
       });
     }
+    // O jogador recomendado PRECISA ter uma prob finita em `player_probs` (espelha
+    // a garantia do correct_score, cujo `recommendation` é enum e `cell_probs` é
+    // refinado a conter todas as células). Sem isso, `modelProbByKey[side]` seria
+    // undefined no predict → `undefined − implied = NaN` persistido em numeric +
+    // stake colapsado a 1u silenciosamente. Outros jogadores podem faltar (a grade
+    // coalesce a null), mas o RECOMENDADO não.
+    if (
+      data.recommendation !== "pass" &&
+      !Number.isFinite(data.player_probs[data.recommendation])
+    ) {
+      ctx.addIssue({
+        code: z.ZodIssueCode.custom,
+        path: ["player_probs"],
+        message:
+          "player_probs must contain a finite probability for the recommended player",
+      });
+    }
   });
 
 export type ScorerOutput = z.infer<typeof ScorerOutputSchema>;

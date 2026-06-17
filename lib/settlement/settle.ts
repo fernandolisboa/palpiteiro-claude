@@ -50,6 +50,19 @@ function mergeFixtureEvents(
   if (!events || events.eventsAvailable !== true) {
     return { ...base, eventsAvailable: false };
   }
+  // Guarda de consistência (prefer-skip sobre silent-wrong-settle): o fio
+  // /fixtures/events pode atrasar/voltar [] num jogo finalizado. Se o placar de 90'
+  // tem gols mas a lista de gols de REGULAÇÃO (own goals INCLUSOS — contam pro placar)
+  // veio VAZIA, o feed está incompleto → deixa PENDING em vez de fabricar LOSTs (um
+  // 3-1 finalizado com feed vazio settlaria todo mundo como LOST sem esta guarda). O
+  // 0-0 legítimo (totalGoals=0, lista vazia) passa e settla certo. Gaps PARCIAIS
+  // (feed com menos gols que o placar) ficam como risco residual até o fio ser
+  // verificado ao vivo (ADR 0025 manda inspecionar o 1º payload real) — não dá pra
+  // distinguir gap de discrepância benigna no fio não-verificado sem over-pending.
+  const regulationGoalCount = events.goals.filter((g) => g.isRegulation).length;
+  if (base.totalGoals > 0 && regulationGoalCount === 0) {
+    return { ...base, eventsAvailable: false };
+  }
   const scorers: ResultScorer[] = events.goals
     .filter((g) => g.isRegulation && !g.isOwnGoal)
     .map((g) => ({ playerId: g.playerId, canonicalName: g.playerName }));

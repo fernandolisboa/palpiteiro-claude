@@ -148,4 +148,18 @@ describe("anytime_scorer selectionProbs", () => {
       }).success,
     ).toBe(false);
   });
+
+  it("rejeita recommendation ausente de player_probs (guarda anti-NaN edge)", () => {
+    // Pedro é recomendado mas não tem prob → predict faria undefined−implied=NaN.
+    // O superRefine barra no boundary Zod (predict loga invalid_output + throw).
+    const r = ScorerOutputSchema.safeParse({
+      recommendation: "scorer_pedro",
+      confidence_pct: 52,
+      player_probs: { scorer_arrascaeta: 28 },
+      rationale: "Pedro.",
+      key_factors: ["a", "b"],
+      minimum_odd: 2.1,
+    });
+    expect(r.success).toBe(false);
+  });
 });

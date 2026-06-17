@@ -283,6 +283,32 @@ describe("settle scorer — real Postgres (pglite)", () => {
     expect(await outcomeFor(predId)).toBeUndefined(); // fica pendente
   });
 
+  it("PENDING quando o placar de 90' tem gols mas o feed de eventos volta vazio (prefer-skip)", async () => {
+    const matchId = await seedMatch("ext-scorer-empty-feed");
+    const aiCallId = await seedAiCall(matchId);
+    const predId = await seedScorerPrediction({
+      matchId,
+      aiCallId,
+      recommendation: "scorer_pedro",
+      selectionId: ids.selPedro,
+    });
+    // Placar é 2-1 (installProvider) → 3 gols, mas /fixtures/events volta [] (lag do
+    // provider). NÃO pode settlar todo mundo como LOST: a guarda em mergeFixtureEvents
+    // marca eventsAvailable=false → a regra deixa pendente.
+    installProvider({
+      events: () => ({
+        fixtureStatus: "finished",
+        eventsAvailable: true,
+        goals: [],
+        assists: [],
+      }),
+    });
+    const s = await settlePendingPredictions(NOW);
+    expect(s.settled).toBe(0);
+    expect(s.errors).toBeGreaterThanOrEqual(1);
+    expect(await outcomeFor(predId)).toBeUndefined(); // pendente, não LOST fabricado
+  });
+
   it("own goals e gols de prorrogação NÃO creditam o autor (LOST se foi só isso)", async () => {
     const matchId = await seedMatch("ext-scorer-og-et");
     const aiCallId = await seedAiCall(matchId);

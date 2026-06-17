@@ -960,9 +960,15 @@ export async function predict({
   const side = output.recommendation;
   const oddAtRec = side === "pass" ? null : (oddByKey[side] ?? null);
   const impliedPct = side === "pass" ? null : (impliedByKey[side] ?? null);
+  // `modelProbByKey[side]` é sempre finito em mercados partition (enum + refine
+  // garantem a chave) — `?? null` é no-op lá (byte-idêntico). Em independent_binary
+  // o schema scorer já exige a prob do recomendado, mas guardamos como defesa: um
+  // cartucho free-form que omitisse a chave faria `undefined − impliedPct = NaN`
+  // gravado em numeric + stake 1u silencioso. Aqui vira edge=null (nunca NaN).
+  const recModelProb = side === "pass" ? null : (modelProbByKey[side] ?? null);
   const edge =
-    side !== "pass" && impliedPct !== null
-      ? modelProbByKey[side] - impliedPct
+    side !== "pass" && impliedPct !== null && recModelProb !== null
+      ? recModelProb - impliedPct
       : null;
 
   // Staking determinístico (ADR 0019): decidido EM CÓDIGO, nunca pelo LLM. A
