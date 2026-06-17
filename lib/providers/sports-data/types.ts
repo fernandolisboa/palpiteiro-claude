@@ -144,11 +144,19 @@ export const NormalizedStandingSchema = z.object({
 });
 export type NormalizedStanding = z.infer<typeof NormalizedStandingSchema>;
 
+// Proveniência (ADR 0026, #226): seam oficial-primeiro. `source` distingue dado
+// estruturado oficial de fallback não-oficial; `confidence`/`capturedAt` ficam pro
+// fallback do #227 popular. TODOS opcionais (additive — não quebra os ~13
+// consumidores/construtores de NormalizedInjury). Hoje só a API-Football produz
+// injuries e marca `source:"official"`.
 export const NormalizedInjurySchema = z.object({
   player: z.object({ name: z.string().min(1) }),
   type: z.enum(["injury", "suspension"]),
   reason: z.string().optional(),
   status: z.enum(["injured", "suspended", "doubtful"]),
+  source: z.enum(["official", "unofficial"]).optional(),
+  confidence: z.number().min(0).max(100).optional(),
+  capturedAt: z.string().datetime().optional(),
 });
 export type NormalizedInjury = z.infer<typeof NormalizedInjurySchema>;
 

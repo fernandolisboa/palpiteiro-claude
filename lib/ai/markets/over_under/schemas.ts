@@ -53,6 +53,12 @@ const PlayerAbsenceSchema = z.object({
   player: z.string().min(1),
   role: PlayerRoleSchema,
   status: z.enum(["injured", "suspended", "doubtful"]),
+  // Proveniência (ADR 0026, #226): `source` distingue oficial de fallback não-oficial
+  // (o prompt pondera a confiança). `confidence`/`capturedAt` ficam pro #227 popular.
+  // TODOS opcionais (additive) — hoje só `source:"official"` é preenchido.
+  source: z.enum(["official", "unofficial"]).optional(),
+  confidence: z.number().min(0).max(100).optional(),
+  capturedAt: z.string().datetime().optional(),
 });
 
 const LineupPlayerSchema = z.object({

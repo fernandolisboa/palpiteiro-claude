@@ -682,6 +682,9 @@ function toNormalizedInjury(injury: ApiFootballInjury): NormalizedInjury {
     type: status === "suspended" ? "suspension" : "injury",
     reason: injury.player.reason ?? undefined,
     status,
+    // Proveniência (ADR 0026, #226): API-Football é dado estruturado licenciado →
+    // oficial. confidence/capturedAt ficam pro fallback não-oficial (#227).
+    source: "official",
   };
 }
 

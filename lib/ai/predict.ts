@@ -368,7 +368,12 @@ export async function predict({
         }),
       provider.getLineups(ref),
     ]);
-  const absencesAvailable = !injuries.unavailable;
+  // Per-side seam (#226, ADR 0026): hoje a fonte de desfalques é única (API-Football,
+  // per-liga) → home e away compartilham a MESMA disponibilidade; divergem quando um
+  // provider per-team/multi-source (oficial + fallback) aterrissar no #227. Threadar
+  // separado já cria a fronteira sem mudar o comportamento atual.
+  const absencesAvailableHome = !injuries.unavailable;
+  const absencesAvailableAway = !injuries.unavailable;
 
   // 4. Odds (N-vias): reusa uma captura fresca se a página já snapshotou nesta
   //    sessão (quota: evita uma 2ª call à Odds API). Cai no fetch direto quando
@@ -665,12 +670,12 @@ export async function predict({
     home: {
       form: homeForm,
       injuries: injuries.data.home,
-      absencesAvailable,
+      absencesAvailable: absencesAvailableHome,
     },
     away: {
       form: awayForm,
       injuries: injuries.data.away,
-      absencesAvailable,
+      absencesAvailable: absencesAvailableAway,
     },
     lineups,
     h2h,

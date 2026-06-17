@@ -79,7 +79,10 @@ export function renderContextSections(input: ContextInput): string[] {
       lines.push("- (nenhuma reportada)");
     } else {
       for (const a of team.absences) {
-        lines.push(`- ${a.player} (${a.role}, ${a.status})`);
+        // Proveniência (ADR 0026, #226): expõe `fonte` quando presente pro prompt
+        // ponderar confiança (oficial > não-oficial). Compartilhado v2+v3.
+        const fonte = a.source ? `, fonte: ${a.source}` : "";
+        lines.push(`- ${a.player} (${a.role}, ${a.status}${fonte})`);
       }
     }
 

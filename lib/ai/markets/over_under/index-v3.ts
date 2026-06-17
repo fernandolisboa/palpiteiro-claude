@@ -21,7 +21,9 @@ import { buildUserMessageV3 } from "./user-message-v3";
 // payload MUDOU (escada 1.5/2.5/3.5 + campo `line` no output) — não é restructure
 // no-op. Selecionado SÓ via getCartridge('over_under', { extraLines: true }); o
 // caminho default continua no v2 (byte-idêntico).
-export const OVER_UNDER_V3_VERSION = "over_under_v3.0" as const;
+// BUMP MINOR v3.0 → v3.1 (#226, ADR 0026): proveniência de desfalques (`fonte` no
+// user-message compartilhado + regra de ponderação por source no prompt-v3).
+export const OVER_UNDER_V3_VERSION = "over_under_v3.1" as const;
 
 export {
   buildPredictionInputV3,

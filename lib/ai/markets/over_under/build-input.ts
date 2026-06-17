@@ -124,6 +124,10 @@ export function buildAbsences(
     // is partial.
     role: "MID" as const,
     status: mapAbsenceStatus(inj),
+    // Proveniência (ADR 0026, #226): propaga `source` quando presente. Spread
+    // condicional pra NÃO poluir o payload com `source: undefined` (a fonte é
+    // opcional). confidence/capturedAt seguem o mesmo padrão quando o #227 popular.
+    ...(inj.source ? { source: inj.source } : {}),
   }));
 }
 
