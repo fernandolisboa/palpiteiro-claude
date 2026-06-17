@@ -218,6 +218,13 @@
       "when": 1781708777747,
       "tag": "0030_seed_correct_score",
       "breakpoints": true
+    },
+    {
+      "idx": 31,
+      "version": "7",
+      "when": 1781712386268,
+      "tag": "0031_seed_scorer_assist",
+      "breakpoints": true
     }
   ]
 }

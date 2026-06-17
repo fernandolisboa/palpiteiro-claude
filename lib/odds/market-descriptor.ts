@@ -317,15 +317,19 @@ export const ASSIST: MarketDescriptor = {
 
 // Lista canônica de descriptors p/ índices data-driven (ex.: marketsForLeague
 // indexa por dbMarketKey). Um mercado novo entra aqui + no registry do cartucho.
-// ANYTIME_SCORER/ASSIST ficam FORA até a ativação da #290 PR2 (migration +
-// cartuchos + settlement + presentation), pra os mercados só ficarem alcançáveis
-// quando totalmente fiados — espelha como CORRECT_SCORE foi estagiado pré-PR1.
+// ANYTIME_SCORER/ASSIST entram na ATIVAÇÃO da #290 PR2 (junto com a migration que
+// seeda as rows markets + cartuchos + settlement + presentation) — espelha como
+// CORRECT_SCORE entrou na PR1. Agora alcançáveis: marketsForLeague os oferece ao
+// seletor admin no Brasileirão, getDescriptor resolve, e o fork do predict (forkado
+// off dynamicSelections antes da guarda de seed) roda.
 export const ALL_DESCRIPTORS: readonly MarketDescriptor[] = [
   OVER_UNDER,
   MATCH_RESULT,
   BTTS,
   DOUBLE_CHANCE,
   CORRECT_SCORE,
+  ANYTIME_SCORER,
+  ASSIST,
 ];
 
 // Lookup por dbMarketKey (data-driven). Usado pela view (toAnalysisView) pra ler

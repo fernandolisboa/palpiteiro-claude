@@ -170,10 +170,9 @@ describe("ANYTIME_SCORER / ASSIST descriptors (independent_binary, #290)", () =>
     expect(ANYTIME_SCORER.resolveSelectionKey(out("   "), {} as never)).toBeNull();
   });
 
-  it("FORA de ALL_DESCRIPTORS até a ativação da #290 PR2 (migration+cartucho)", () => {
-    // Espelha como CORRECT_SCORE ficou estagiado pré-PR1: getDescriptor não
-    // resolve até a migration + cartucho + settlement + presentation existirem.
-    expect(getDescriptor("anytime_scorer")).toBeUndefined();
-    expect(getDescriptor("assist")).toBeUndefined();
+  it("EM ALL_DESCRIPTORS desde a ativação da #290 PR2 (migration+cartucho+settlement)", () => {
+    // Ligados end-to-end: getDescriptor resolve (espelha CORRECT_SCORE pós-PR1).
+    expect(getDescriptor("anytime_scorer")).toBe(ANYTIME_SCORER);
+    expect(getDescriptor("assist")).toBe(ASSIST);
   });
 });

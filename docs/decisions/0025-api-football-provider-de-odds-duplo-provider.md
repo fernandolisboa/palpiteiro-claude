@@ -284,3 +284,37 @@ O **settlement de corners/cards via `/fixtures/statistics`** (o diferencial
 confirmado da api-football) **não** virou issue: esses mercados não são ligados
 (sem odds em nenhum provider). Fica como fundação a construir **se/quando** um
 book passar a cotá-los (ver Reavaliação).
+
+## Emenda (2026-06-17) — mercados `independent_binary` (scorer/assist, #290)
+
+- **Contexto**: #290 liga correct_score (partition limpo, #289) E scorer/assist.
+  Scorer quebra 3 premissas da ADR base: conjunto de jogadores **ilimitado** por
+  jogo; binários **independentes yes-only** (sem partição pra normalizar); novo
+  anchor de settlement (`/fixtures/events`).
+- **Decisão**: discriminante `marketKind` (`partition` | `independent_binary`) em
+  `MarketDescriptor` (ausente ⇒ `partition`, byte-paridade #288); ship `bet_92`
+  (anytime_scorer) + `bet_212` (assist); **defer `bet_93` (first_scorer)** —
+  vencedor único mutuamente-exclusivo, precisa de regra partition-ish, não o modelo
+  independent-binary; corte ratificado aqui.
+- **Metodologia** (núcleo): cada jogador é binário independente cotado só no yes;
+  NÃO se normaliza pelo overround (`Σ 1/odd_yes` é contagem esperada de artilheiros,
+  não overround) e NÃO se sintetiza a odd `no` (proibido); a implícita por jogador é
+  o **teto** `impliedCeilingPct = (1/odd_yes)*100` (rótulo explícito, nunca prob
+  de-vigada); como teto, `edge = modelProb − impliedCeilingPct` é **piso** do edge
+  real (conservador na direção da margem); compensa-se elevando `minEdgePp` (default
+  8pp, piso de **prompt** — não muda banda de stake); EV/break-even na odd crua
+  (decisão 3 intacta, cita precedente `scenario.ts`/ADR 0012 D6); `impliedSumTarget`
+  N/A.
+- **Consequências**: `market_selections` por jogador crescidas **lazy**
+  (`ensureScorerSelections`, separado do reader que assere zero-seleção); settlement
+  via `eventsAvailable`-ou-pending (`/fixtures/events`, base regulation-90, own goals
+  não creditam, pênaltis creditam); **edge_pct scorer NÃO comparável a edge_pct
+  partition** (segmentar Yield por mercado). Adapter de odds api-football estendido
+  pra rotear/buscar bet_92/212 (o roteador #289 só cobria bet_10).
+- **Riscos**: fio `bet_92/212` **NÃO verificado** ao vivo (liga pausada) →
+  prefer-skip, inspecionar 1º payload real antes de confiar no matching nome↔nome;
+  `minEdgePp=8` é chute de graduação D9 (sem backtest, por decisão do dono); shapes
+  de own-goal/ET/penalty de `/fixtures/events` **NÃO verificados** ao vivo; drift de
+  nome (acentos) sem `playerId` estável pode dividir o histórico de um jogador em 2
+  linhas.
+

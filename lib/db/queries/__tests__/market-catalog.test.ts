@@ -115,9 +115,11 @@ describe("marketsForLeague", () => {
     { key: "btts", label: "Ambas marcam" },
     { key: "double_chance", label: "Dupla chance" },
     { key: "correct_score", label: "Placar exato" },
+    { key: "anytime_scorer", label: "Artilheiro" },
+    { key: "assist", label: "Assistência" },
   ];
 
-  it("btts + double_chance (coveredLeagues=['world_cup']) só passam em world_cup; correct_score só no brasileirao", () => {
+  it("btts + double_chance (coveredLeagues=['world_cup']) só passam em world_cup; scorer/assist só no brasileirao", () => {
     expect(marketsForLeague(ALL, "world_cup").map((m) => m.key)).toEqual([
       "over_under",
       "match_result",
@@ -126,11 +128,13 @@ describe("marketsForLeague", () => {
     ]);
   });
 
-  it("btts/double_chance dropados fora da Copa; correct_score (coveredLeagues=['brasileirao_a']) só no brasileirao", () => {
+  it("btts/double_chance dropados fora da Copa; correct_score/anytime_scorer/assist (coveredLeagues=['brasileirao_a']) só no brasileirao", () => {
     expect(marketsForLeague(ALL, "brasileirao_a").map((m) => m.key)).toEqual([
       "over_under",
       "match_result",
       "correct_score",
+      "anytime_scorer",
+      "assist",
     ]);
     expect(marketsForLeague(ALL, "champions_league").map((m) => m.key)).toEqual([
       "over_under",

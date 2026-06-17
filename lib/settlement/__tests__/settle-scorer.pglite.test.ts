@@ -155,18 +155,15 @@ beforeAll(async () => {
     .returning({ id: schema.users.id });
   ids.userId = u.id;
 
+  // anytime_scorer já é seedado pela migration 0031 (markets row, SEM seleções).
   const [m] = await base
-    .insert(schema.markets)
-    .values({
-      key: "anytime_scorer",
-      label: "Artilheiro",
-      settlementRuleKey: "anytime_scorer",
-      isActive: true,
-      isGraduated: false,
-    })
-    .returning({ id: schema.markets.id });
+    .select({ id: schema.markets.id })
+    .from(schema.markets)
+    .where(eq(schema.markets.key, "anytime_scorer"));
   ids.scorerMarketId = m.id;
 
+  // As seleções por jogador crescem lazy em produção (ensureScorerSelections);
+  // aqui o teste de settlement as cria diretamente.
   const sels = await base
     .insert(schema.marketSelections)
     .values([

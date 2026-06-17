@@ -48,16 +48,12 @@ beforeAll(async () => {
   realDb = base;
   await migrate(base, { migrationsFolder: "./db/migrations" });
 
+  // anytime_scorer já é seedado pela migration 0031 (markets row, sem seleções —
+  // as seleções por jogador é o que ensureScorerSelections cresce). Lê o id.
   const [m] = await base
-    .insert(schema.markets)
-    .values({
-      key: "anytime_scorer",
-      label: "Artilheiro",
-      settlementRuleKey: "anytime_scorer",
-      isActive: true,
-      isGraduated: false,
-    })
-    .returning({ id: schema.markets.id });
+    .select({ id: schema.markets.id })
+    .from(schema.markets)
+    .where(eq(schema.markets.key, "anytime_scorer"));
   scorerMarketId = m.id;
 });
 
