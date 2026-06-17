@@ -89,6 +89,11 @@ export type GetEventsForSportOptions = {
 export interface OddsProvider {
   readonly capabilities: OddsProviderCapabilities;
 
+  // Capacidade data-driven por (sportKey, providerMarketKey). O OddsFallbackProvider
+  // (#289) roteia por ISTO, nunca por nome de provider. Adapters cobre-tudo (The Odds
+  // API) retornam true amplamente; adapters de cauda (api-football) só pra seu key+liga.
+  supportsMarket(args: { sportKey: string; providerMarketKey: string }): boolean;
+
   // Odds em batch da liga (mercados featured: totals/h2h). `markets` =
   // providerMarketKeys.
   getOddsForSport(

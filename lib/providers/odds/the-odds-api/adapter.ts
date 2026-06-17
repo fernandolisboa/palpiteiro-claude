@@ -80,6 +80,19 @@ const CAPABILITIES: OddsProviderCapabilities = {
 export class TheOddsApiAdapter implements OddsProvider {
   readonly capabilities = CAPABILITIES;
 
+  supportsMarket(args: {
+    sportKey: string;
+    providerMarketKey: string;
+  }): boolean {
+    // Cede o namespace `bet_*` (api-football). Todo o resto (totals/h2h/btts/
+    // double_chance/alternate_totals) continua roteando pra cá — byte-idêntico ao
+    // #288. Reconhece só sportKeys mapeados (senão o fio falharia).
+    if (args.providerMarketKey.startsWith("bet_")) return false;
+    return (Object.values(SPORT_KEY_BY_LEAGUE) as string[]).includes(
+      args.sportKey,
+    );
+  }
+
   async getOddsForSport(
     sportKey: string,
     options?: GetOddsForSportOptions,
