@@ -28,10 +28,15 @@ export type BetSummaryCopy = {
 
 // Shape estrutural LOCAL do resultData (espelha lib/settlement/schemas.ts sem
 // importar @/lib/db nem @/lib/settlement — pureza de bundle pinada por teste).
+// scorers/assisters/eventsAvailable são ADITIVOS (#290), OPCIONAIS — rows
+// partition seguem byte-idênticas.
 type SettlementMetricResultData = {
   homeScore: number | null;
   awayScore: number | null;
   totalGoals: number;
+  scorers?: { playerId: number | null; canonicalName: string }[];
+  assisters?: { playerId: number | null; canonicalName: string }[];
+  eventsAvailable?: boolean;
 } | null;
 
 export type MarketPresentation = {

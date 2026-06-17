@@ -85,6 +85,7 @@ function makeFailingMockProvider(name = "mock-primary"): SportsDataProvider {
     getFixturesBySeason: () => fail("getFixturesBySeason"),
     getFixtureByMatch: () => fail("getFixtureByMatch"),
     getFixtureResult: () => fail("getFixtureResult"),
+    getFixtureEvents: () => fail("getFixtureEvents"),
     getH2H: () => fail("getH2H"),
     getStandings: () => fail("getStandings"),
     getInjuriesByFixture: () => fail("getInjuriesByFixture"),

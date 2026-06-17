@@ -25,10 +25,30 @@ export type SettlementOutcome =
 // degradam a null em rows do histórico onde o split de 90' não for confiável;
 // totalGoals carrega o escalar settled (verbatim). Nenhuma regra do MVP exige o
 // split — só totalGoals (I2). Espelha predictionOutcomes.resultData em db/schema.ts.
+// Um artilheiro/assistente autoritativo de 90' (#290). `playerId` é o id numérico
+// do provider quando o fio o entrega; `canonicalName` é o nome normalizado pro
+// match por nome (fallback quando o id falta — fio NÃO verificado ao vivo).
+export const ResultScorerSchema = z.object({
+  playerId: z.number().int().nullable(),
+  canonicalName: z.string(),
+});
+export type ResultScorer = z.infer<typeof ResultScorerSchema>;
+
+// ADITIVO (#290, sem DDL de coluna): `scorers`/`eventsAvailable` OPCIONAIS. Linhas
+// de histórico (partition) parseiam byte-idênticas — z.object por default IGNORA
+// chaves desconhecidas e campos ausentes opcionais ficam undefined. SEM `.strict()`
+// (quebraria o round-trip). scorers/eventsAvailable só são populados pra mercados
+// independent_binary (anytime_scorer/assist); regras partition nunca os leem.
 export const ResultDataSchema = z.object({
   homeScore: z.number().int().nullable(),
   awayScore: z.number().int().nullable(),
   totalGoals: z.number().int(),
+  // Artilheiros/assistentes de 90' (independent_binary, #290). Quando undefined +
+  // eventsAvailable !== true, a regra de scorer deixa PENDING (nunca fabrica loss).
+  scorers: z.array(ResultScorerSchema).optional(),
+  assisters: z.array(ResultScorerSchema).optional(),
+  // true SÓ quando /fixtures/events foi coletado num fixture finalizado.
+  eventsAvailable: z.boolean().optional(),
 });
 export type ResultData = z.infer<typeof ResultDataSchema>;
 

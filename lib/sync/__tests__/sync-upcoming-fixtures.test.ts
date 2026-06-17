@@ -62,6 +62,7 @@ function makeProvider(overrides?: {
       vi.fn().mockResolvedValue([])) as never,
     getFixtureByMatch: vi.fn() as never,
     getFixtureResult: vi.fn() as never,
+    getFixtureEvents: vi.fn() as never,
     getH2H: vi.fn() as never,
     getStandings: vi.fn() as never,
     getInjuriesByFixture: vi.fn() as never,

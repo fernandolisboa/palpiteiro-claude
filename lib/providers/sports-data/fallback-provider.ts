@@ -5,6 +5,7 @@ import {
   SportsDataUnsupportedError,
   type FixtureRef,
   type NormalizedFixture,
+  type NormalizedFixtureEvents,
   type NormalizedFixtureResult,
   type NormalizedH2H,
   type NormalizedInjury,
@@ -160,6 +161,21 @@ export class FallbackProvider implements SportsDataProvider {
       "getFixtureResult",
       (p) => p.capabilities.supportedLeagues.has(ref.league),
       (p) => p.getFixtureResult(ref),
+    );
+  }
+
+  getFixtureEvents(
+    ref: FixtureRef,
+  ): Promise<NormalizedFixtureEvents | undefined> {
+    return this.withFallback(
+      "getFixtureEvents",
+      // Capability-gated (#290): só providers com supportsFixtureEvents === true
+      // (api-football) entram; football-data-org é filtrado fora. Se nenhum
+      // suporta, withFallback lança SportsDataUnsupportedError.
+      (p) =>
+        p.capabilities.supportsFixtureEvents === true &&
+        p.capabilities.supportedLeagues.has(ref.league),
+      (p) => p.getFixtureEvents(ref),
     );
   }
 

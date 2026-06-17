@@ -30,11 +30,13 @@ import {
 import {
   envelopeErrorsAreEmpty,
   FixtureEnvelopeSchema,
+  FixtureEventEnvelopeSchema,
   InjuryEnvelopeSchema,
   LineupEnvelopeSchema,
   StandingsEnvelopeSchema,
   StatusResponseSchema,
   type ApiFootballFixture,
+  type ApiFootballFixtureEvent,
   type ApiFootballInjury,
   type ApiFootballLineup,
   type ApiFootballStandings,
@@ -53,9 +55,12 @@ import {
 import {
   compositeFixtureKey,
   type FixtureRef,
+  type NormalizedAssistEvent,
   type NormalizedFixture,
+  type NormalizedFixtureEvents,
   type NormalizedFixtureResult,
   type NormalizedFixtureStatus,
+  type NormalizedGoalEvent,
   type NormalizedH2H,
   type NormalizedInjury,
   type NormalizedLineup,
@@ -337,6 +342,21 @@ export async function getFixtureById(
   return envelope.response[0];
 }
 
+// Eventos de um fixture (/fixtures/events?fixture={id}, #290) pros mercados de
+// jogador. Cache 15min (settlement roda no cron, não em loop). Cada item é um
+// gol/cartão/substituição/VAR — o normalizer filtra gols/assists de 90'.
+export async function getFixtureEvents(
+  fixtureId: number,
+): Promise<ApiFootballFixtureEvent[]> {
+  const envelope = await request({
+    endpoint: "/fixtures/events",
+    params: { fixture: fixtureId },
+    schema: FixtureEventEnvelopeSchema,
+    ttlMs: FIFTEEN_MINUTES,
+  });
+  return envelope.response;
+}
+
 export async function getH2H(
   team1: number,
   team2: number,
@@ -487,6 +507,80 @@ function toNormalizedFixtureResult(
   return {
     status: mapStatusToNormalized(f.fixture.status.short),
     regulationScore,
+  };
+}
+
+// Settlement de scorer/assist (#290): normaliza /fixtures/events pro shape
+// neutro. base REGULATION-90 (espelha toNormalizedFixtureResult, que usa
+// score.fulltime, NÃO goals que já inclui prorrogação): `time.elapsed <= 90`
+// (+ acréscimos de 1º/2º tempo, elapsed segue <= 90+extra mas a api-football
+// reporta o 2º tempo de acréscimos como elapsed=90 com `extra`) crédita;
+// prorrogação (91-120) e pênaltis de disputa NÃO. Gol normal/pênalti creditam o
+// autor; OWN GOAL marca isOwnGoal=true e NÃO credita (regra de mercado: artilheiro
+// é quem marca a favor). `eventsAvailable` só true num fixture finalizado com fetch
+// OK. Wire `player.id`/`assist.id` NÃO verificado ao vivo → nullable, match por
+// nome no fallback. Defensivo: evento sem nome de jogador é dropado (não dá pra
+// settlar uma seleção sem identidade).
+function isRegulationMinute(elapsed: number | null): boolean {
+  // null elapsed (raríssimo) é conservadoramente tratado como regulation=false
+  // (não credita um gol sem minuto confiável). Prorrogação > 90.
+  if (elapsed === null) return false;
+  return elapsed <= 90;
+}
+
+function toNormalizedFixtureEvents(
+  f: ApiFootballFixture,
+  rawEvents: ApiFootballFixtureEvent[],
+): NormalizedFixtureEvents {
+  const status = mapStatusToNormalized(f.fixture.status.short);
+  const homeTeamId = f.teams.home.id;
+  const goals: NormalizedGoalEvent[] = [];
+  const assists: NormalizedAssistEvent[] = [];
+
+  for (const ev of rawEvents) {
+    if (ev.type !== "Goal") continue;
+    const detail = ev.detail ?? "";
+    // "Missed Penalty" NÃO é gol — dropa (api-football usa type=Goal pra ele).
+    if (detail === "Missed Penalty") continue;
+    const playerName = ev.player?.name ?? null;
+    if (!playerName) continue; // sem identidade → não settla
+    const isOwnGoal = detail === "Own Goal";
+    const isPenalty = detail === "Penalty";
+    const isRegulation = isRegulationMinute(ev.time.elapsed);
+    const teamSide: "home" | "away" =
+      ev.team?.id != null && homeTeamId != null && ev.team.id === homeTeamId
+        ? "home"
+        : "away";
+    goals.push({
+      playerId: ev.player?.id ?? null,
+      playerName,
+      teamSide,
+      minute: ev.time.elapsed,
+      isPenalty,
+      isOwnGoal,
+      isRegulation,
+    });
+    // Assistência: só num gol não-own-goal com `assist` presente (own goal não
+    // tem assistente creditável).
+    const assistName = ev.assist?.name ?? null;
+    if (!isOwnGoal && assistName) {
+      assists.push({
+        playerId: ev.assist?.id ?? null,
+        playerName: assistName,
+        teamSide,
+        minute: ev.time.elapsed,
+        isRegulation,
+      });
+    }
+  }
+
+  return {
+    fixtureStatus: status,
+    // eventsAvailable só num fixture FINALIZADO (mid-game os eventos não são
+    // autoritativos). Espelha "settla só no 90' finalizado" do getFixtureResult.
+    eventsAvailable: status === "finished",
+    goals,
+    assists,
   };
 }
 
@@ -724,6 +818,7 @@ export class ApiFootballAdapter implements SportsDataProvider {
     name: PROVIDER_NAME,
     supportsInjuries: true,
     supportsLineups: true,
+    supportsFixtureEvents: true,
     supportedLeagues: new Set<SupportedLeague>([
       "brasileirao_a",
       "champions_league",
@@ -829,6 +924,37 @@ export class ApiFootballAdapter implements SportsDataProvider {
     } catch (err) {
       if (err instanceof SportsDataTransientError) throw err;
       wrapApiFootballError(err, "getFixtureResult", { ref });
+    }
+  }
+
+  async getFixtureEvents(
+    ref: FixtureRef,
+  ): Promise<NormalizedFixtureEvents | undefined> {
+    try {
+      // Resolve o fixture EXATAMENTE como getFixtureResult (date+nome canônico),
+      // depois busca eventos por fixture.id. Eventos só são autoritativos num
+      // fixture finalizado — toNormalizedFixtureEvents reflete isso em
+      // eventsAvailable.
+      const leagueId = API_FOOTBALL_LEAGUE_IDS[ref.league];
+      const season = currentSeasonByLeague(ref.league);
+      const native = await getFixturesByDate(
+        ref.kickoffAt.slice(0, 10),
+        leagueId,
+        season,
+      );
+      const match = native.find(
+        (f) =>
+          canonicalizeOrPassthrough(f.teams.home.name, ref.league) ===
+            ref.homeTeam &&
+          canonicalizeOrPassthrough(f.teams.away.name, ref.league) ===
+            ref.awayTeam,
+      );
+      if (!match) return undefined;
+      const rawEvents = await getFixtureEvents(match.fixture.id);
+      return toNormalizedFixtureEvents(match, rawEvents);
+    } catch (err) {
+      if (err instanceof SportsDataTransientError) throw err;
+      wrapApiFootballError(err, "getFixtureEvents", { ref });
     }
   }
 
@@ -1023,6 +1149,7 @@ export class ApiFootballAdapter implements SportsDataProvider {
 export const __testing = {
   toNormalizedFixture,
   toNormalizedFixtureResult,
+  toNormalizedFixtureEvents,
   toNormalizedStanding,
   toNormalizedInjury,
   toNormalizedTeamLineup,

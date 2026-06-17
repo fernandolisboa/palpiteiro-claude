@@ -358,6 +358,12 @@ export const predictionOutcomes = pgTable("prediction_outcomes", {
     homeScore: number | null;
     awayScore: number | null;
     totalGoals: number;
+    // ADITIVO (#290, sem DDL — jsonb): artilheiros/assistentes de 90' +
+    // eventsAvailable pra settlement de scorer/assist (independent_binary).
+    // OPCIONAIS: rows partition existentes seguem byte-idênticas.
+    scorers?: { playerId: number | null; canonicalName: string }[];
+    assisters?: { playerId: number | null; canonicalName: string }[];
+    eventsAvailable?: boolean;
   }>(),
   result: outcomeResultEnum().notNull(),
   profitUnits: numeric({ precision: 8, scale: 2 }).notNull(),

@@ -94,6 +94,43 @@ export const FixtureItemSchema = z.object({
 
 export type ApiFootballFixture = z.infer<typeof FixtureItemSchema>;
 
+// Item de /fixtures/events?fixture={id} (#290): cada evento do jogo (gol,
+// cartão, substituição, VAR). Tolerante (Zod descarta chaves extras): só
+// `time.elapsed`, `team`, `player`, `assist`, `type`, `detail` são load-bearing
+// pro settlement de scorer/assist. `player.id`/`assist.id` podem faltar (fio NÃO
+// verificado ao vivo, liga pausada) → nullable + match por nome canônico no
+// fallback. `type` é "Goal"/"Card"/"subst"/"Var"; `detail` distingue "Normal
+// Goal"/"Penalty"/"Own Goal"/"Missed Penalty".
+export const FixtureEventItemSchema = z.object({
+  time: z.object({
+    elapsed: z.number().int().nullable(),
+    extra: z.number().int().nullable().optional(),
+  }),
+  team: z
+    .object({
+      id: z.number().int().nullable().optional(),
+      name: z.string().nullable().optional(),
+    })
+    .optional(),
+  player: z
+    .object({
+      id: z.number().int().nullable().optional(),
+      name: z.string().nullable().optional(),
+    })
+    .optional(),
+  assist: z
+    .object({
+      id: z.number().int().nullable().optional(),
+      name: z.string().nullable().optional(),
+    })
+    .optional(),
+  type: z.string(),
+  detail: z.string().nullable().optional(),
+});
+
+export type ApiFootballFixtureEvent = z.infer<typeof FixtureEventItemSchema>;
+export const FixtureEventEnvelopeSchema = envelope(FixtureEventItemSchema);
+
 const LineupPlayerSchema = z.object({
   player: z.object({
     id: z.number().int().nullable(),
