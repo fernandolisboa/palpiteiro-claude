@@ -13,6 +13,7 @@ import {
   type SportsDataProvider,
 } from "@/lib/providers/sports-data/types";
 import type { SupportedLeague } from "@/lib/providers/sports-data/leagues";
+import { __setAbsencesProviderForTesting } from "@/lib/providers/absences";
 import type { OddsApiEventOdds } from "@/lib/providers/odds-api-schemas";
 
 // ─── Module mocks (every external boundary predict() touches) ────────────────
@@ -80,6 +81,10 @@ vi.mock("@/lib/providers/sports-data", () => ({
       name: "mock",
       supportsInjuries: true,
       supportsLineups: true,
+      // #227: desfalques agora vão via AbsencesProvider (wrapper desta SportsData
+      // mock). O gate da cascata filtra por supportsAbsences — espelha o real
+      // (api-football declara true) pra o wrapper ser gated-in e delegar a getInjuries*.
+      supportsAbsences: true,
       supportedLeagues: new Set<SupportedLeague>(["brasileirao_a"]),
     };
     return {
@@ -321,6 +326,9 @@ function setHappyPath() {
 beforeEach(() => {
   vi.clearAllMocks();
   vi.restoreAllMocks();
+  // #227: limpa o cache memoizado do getAbsencesProvider entre testes (isolamento)
+  // — rebuilda do env e delega ao SportsDataProvider mockado a cada teste.
+  __setAbsencesProviderForTesting(undefined);
   setHappyPath();
 });
 

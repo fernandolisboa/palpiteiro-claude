@@ -26,6 +26,7 @@ import { getOddsProvider } from "@/lib/providers/odds";
 import { leagueToSportKey } from "@/lib/providers/odds-api-constants";
 import type { NormalizedOddsEvent } from "@/lib/providers/odds/types";
 import { getSportsDataProvider } from "@/lib/providers/sports-data";
+import { getAbsencesProvider } from "@/lib/providers/absences";
 import { normalizeTeamName } from "@/lib/providers/sports-data/team-names";
 import {
   SportsDataTransientError,
@@ -348,8 +349,12 @@ export async function predict({
       provider.getTeamForm(match.awayTeam, match.league, FORM_LAST),
       provider.getH2H(match.homeTeam, match.awayTeam, match.league, H2H_LAST),
       provider.getStandings(match.league),
-      provider
-        .getInjuriesByFixture(ref)
+      // Desfalques via AbsencesProvider (ADR 0026 D2, #227): seam estreito próprio,
+      // separado das outras fetches (que seguem no SportsDataProvider). Sem
+      // SPORTMONKS_API_TOKEN, a cascata = só o primário (wrapper da api-football) =
+      // caminho de hoje. O MESMO catch() gate degrada pra unavailable.
+      getAbsencesProvider()
+        .getAbsencesByFixture(ref)
         .then((data) => ({ data, unavailable: false }))
         .catch((err: unknown) => {
           if (

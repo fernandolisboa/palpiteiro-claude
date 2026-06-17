@@ -114,6 +114,7 @@ Trabalho grande roda em **várias sessões** (ex.: o pivot multi-mercado, uma fa
 
 - `lib/ai/predict.ts`: única porta de entrada pra LLM. Tudo passa por aqui pra garantir logging em `ai_calls`
 - `lib/providers/`: clientes pra APIs externas (api-football, odds-api). Nunca chamar `fetch` direto pra esses serviços fora desses módulos
+- `lib/providers/absences/`: cascata DEDICADA de desfalques (`AbsencesProvider` estreito, ADR 0026/#227), separada da `SportsDataProvider` gorda. `predict.ts` step 3 puxa desfalques daqui (`getAbsencesProvider()`); o resto (form/h2h/standings/lineups) segue na `SportsDataProvider`. Fallback SportMonks é **key-gated** (`SPORTMONKS_API_TOKEN`): sem token, `supportsAbsences=false` → filtrado no gate (inerte). Schema/endpoints do SportMonks são inferidos dos docs — validar ao vivo quando houver key
 - `lib/db/queries/`: queries reusáveis ao DB. Se uma query aparecer em 2+ lugares, mover pra cá
 
 ## Quando estiver em dúvida

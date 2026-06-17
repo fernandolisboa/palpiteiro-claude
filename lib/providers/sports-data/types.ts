@@ -219,6 +219,10 @@ export type ProviderCapabilities = {
   // api-football a declara true (football-data-org não expõe eventos por jogador
   // no tier grátis).
   readonly supportsFixtureEvents?: boolean;
+  // Desfalques estruturados (lesões/suspensões) — gate da AbsencesProvider
+  // (ADR 0026 D3, #227). OPCIONAL (additive). api-football=true (BR/CL);
+  // football-data-org=false; o adapter SportMonks computa true só com token.
+  readonly supportsAbsences?: boolean;
 };
 
 // ─── SportsDataProvider interface ────────────────────────────────────────────
@@ -262,6 +266,10 @@ export interface SportsDataProvider {
     league: SupportedLeague,
     season?: number,
   ): Promise<NormalizedStanding | undefined>;
+  // Desfalques: desde o #227 (ADR 0026) o app consome estes métodos SÓ via o
+  // `SportsDataAbsencesAdapter` (wrapper que os expõe na cascata DEDICADA de
+  // `AbsencesProvider`); predict.ts não os chama direto. Seguem no contrato da
+  // SportsDataProvider de propósito (reuso pelo wrapper, sem duplicar a lógica).
   getInjuriesByFixture(
     ref: FixtureRef,
   ): Promise<{ home: NormalizedInjury[]; away: NormalizedInjury[] }>;
