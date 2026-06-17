@@ -1075,6 +1075,27 @@ describe("predict() — model resolution (override > DB default) + model-aware r
     expect(predictionRow.modelVersion).toBe("claude-opus-4-8");
   });
 
+  it("seam (#230): tools[0] e system do request batem byte a byte com o cartucho (ToolDef round-trip = identidade)", async () => {
+    getDefaultModelId.mockResolvedValue("claude-opus-4-8");
+
+    await expect(
+      predict({ matchId: "m-1", userId: "u-1", isAdmin: false }),
+    ).resolves.toBeDefined();
+
+    // O adapter reconstrói tools[0] a partir do ToolDef neutro {name, description,
+    // inputSchema}. CARACTERIZAÇÃO não-circular: tools[0] DEVE bater byte a byte com
+    // o literal do cartucho — prova que o round-trip não adicionou nem perdeu chave
+    // (o risco real do refactor). O resto do request vem do buildAnthropicRequest
+    // INALTERADO (re-exportado), coberto pelos outros testes deste describe.
+    const sent = anthropicCreate.mock.calls[0]?.[0] as {
+      tools: unknown[];
+      system: string;
+    };
+    expect(sent.tools).toHaveLength(1);
+    expect(sent.tools[0]).toEqual(overUnderCartridge.tool);
+    expect(sent.system).toBe(overUnderCartridge.systemPrompt);
+  });
+
   it("a request carrega o max_tokens configurado com folga pro thinking (guarda o bug stopReason max_tokens)", async () => {
     await expect(
       predict({ matchId: "m-1", userId: "u-1", isAdmin: false }),
@@ -1284,12 +1305,23 @@ describe("predict() — Opus adaptive path: model declines to call the tool", ()
       status: string;
       inputTokens: number;
       outputTokens: number;
+      errorMessage: string;
     };
     expect(aiCallRow.status).toBe("tool_missing");
     // Modelo resolvido (Opus), não o response.model, e tokens cobrados.
     expect(aiCallRow.model).toBe("claude-opus-4-8");
     expect(aiCallRow.inputTokens).toBe(1200);
     expect(aiCallRow.outputTokens).toBe(300);
+    // #230: o snippet do errorMessage vem agora do outputPayload do seam (== o
+    // response cru castado), não mais de response.content direto. Trava os bytes
+    // byte-idênticos ao comportamento pré-seam.
+    const expectedSnippet = JSON.stringify([
+      { type: "thinking", thinking: "ponderando o jogo...", signature: "sig" },
+      { type: "text", text: "Não tenho convicção suficiente." },
+    ]).slice(0, 500);
+    expect(aiCallRow.errorMessage).toBe(
+      `model did not call submit_prediction; content=${expectedSnippet}`,
+    );
   });
 });
 
