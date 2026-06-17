@@ -129,3 +129,47 @@ describe("market presentation ↔ seed parity (double_chance)", () => {
     }
   });
 });
+
+describe("market presentation ↔ seed parity (correct_score)", () => {
+  it("labels curtos espelham markets/market_selections semeados na 0030", async () => {
+    const [mkt] = await db
+      .select()
+      .from(schema.markets)
+      .where(eq(schema.markets.key, "correct_score"));
+    expect(mkt).toBeDefined();
+    // admin-only (#290): ativo MAS NÃO graduado (gradua via D9 viva, sem backtest);
+    // settlement_rule_key resolve no registry.
+    expect(mkt.isActive).toBe(true);
+    expect(mkt.isGraduated).toBe(false);
+    expect(mkt.settlementRuleKey).toBe("correct_score");
+    // contrato seed↔registry: o settlement_rule_key seedado DEVE resolver (senão a
+    // row settlaria como erro silencioso pra sempre). Pina o binding por construção.
+    expect(() => getSettlementRule(mkt.settlementRuleKey)).not.toThrow();
+
+    const sels = await db
+      .select()
+      .from(schema.marketSelections)
+      .where(eq(schema.marketSelections.marketId, mkt.id));
+    // sanidade: o seed carrega as 16 células cs_0_0..cs_3_3, sort 0..15 row-major.
+    expect(sels).toHaveLength(16);
+    const expectedKeys = Array.from({ length: 16 }, (_, i) => {
+      const home = Math.floor(i / 4);
+      const away = i % 4;
+      return { key: `cs_${home}_${away}`, sortOrder: i };
+    });
+    const byKey = new Map(sels.map((s) => [s.key, s]));
+    for (const { key, sortOrder } of expectedKeys) {
+      const s = byKey.get(key);
+      expect(s, `missing seed for ${key}`).toBeDefined();
+      expect(s!.sortOrder).toBe(sortOrder);
+    }
+
+    const pres = getMarketPresentation("correct_score");
+    // market label do código == seed ("Placar exato").
+    expect(pres.marketLabel).toBe(mkt.label);
+    // cada selection label do código == seed (anti-drift: "0-0".."3-3").
+    for (const s of sels) {
+      expect(pres.selectionLabel(s.key)).toBe(s.label);
+    }
+  });
+});

@@ -1,11 +1,13 @@
 import { describe, expect, it } from "vitest";
 
 import { bttsCartridge } from "@/lib/ai/markets/btts";
+import { correctScoreCartridge } from "@/lib/ai/markets/correct_score";
 import { doubleChanceCartridge } from "@/lib/ai/markets/double_chance";
 import { matchResultCartridge } from "@/lib/ai/markets/match_result";
 import { overUnderCartridge } from "@/lib/ai/markets/over_under";
 import {
   BTTS,
+  CORRECT_SCORE,
   DOUBLE_CHANCE,
   MATCH_RESULT,
   OVER_UNDER,
@@ -28,14 +30,17 @@ describe("marketKey ↔ descriptor identity (espelho do literal da view)", () =>
       matchResultCartridge,
       bttsCartridge,
       doubleChanceCartridge,
+      correctScoreCartridge,
     ]) {
       expect(cartridge.marketKey).toBe(cartridge.descriptor.dbMarketKey);
     }
   });
 
-  it("as keys de descriptor são as esperadas (over_under/match_result/btts/double_chance)", () => {
+  it("as keys de descriptor são as esperadas (over_under/match_result/btts/double_chance/correct_score)", () => {
     expect(MATCH_RESULT.dbMarketKey).toBe("match_result");
     expect(BTTS.dbMarketKey).toBe("btts");
     expect(DOUBLE_CHANCE.dbMarketKey).toBe("double_chance");
+    expect(CORRECT_SCORE.dbMarketKey).toBe("correct_score");
+    expect(correctScoreCartridge.marketKey).toBe("correct_score");
   });
 });

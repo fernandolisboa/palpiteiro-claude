@@ -286,11 +286,44 @@ const DOUBLE_CHANCE: MarketPresentation = {
   classifyH2H: null,
 };
 
+// correct_score (placar exato) — seedado ativo admin-only (#290). Os 16 labels
+// CURTOS são derivados da própria key (cs_H_A → "H-A") em vez de um mapa literal
+// (16 entradas), mas ESPELHAM byte-a-byte o seed market_selections.label
+// ('0-0'..'3-3'), pinado por presentation-seed-parity.pglite.test.ts. Renderiza
+// pelo caminho N-vias (N=16, partição); a implícita é normalizada Σ=1 sobre o grid.
+const CORRECT_SCORE_KEY_RE = /^cs_(\d+)_(\d+)$/;
+
+function correctScoreSelectionLabel(key: string): string {
+  const m = key.match(CORRECT_SCORE_KEY_RE);
+  return m ? `${m[1]}-${m[2]}` : key;
+}
+
+const CORRECT_SCORE: MarketPresentation = {
+  marketKey: "correct_score",
+  marketLabel: "Placar exato",
+  defaultLine: null,
+  selectionLabel: (key) => correctScoreSelectionLabel(key),
+  outcomeLabel: (key) => correctScoreSelectionLabel(key),
+  scenarioLabel: (key) => correctScoreSelectionLabel(key),
+  betSummary: (key) => ({ market: correctScoreSelectionLabel(key), plain: "" }),
+  framingLabel: (key) => correctScoreSelectionLabel(key),
+  settlementMetricLabel: "placar (90')",
+  // Placar de 90' ("2-1"), como o 1X2; split nulo (histórica degradada) → total
+  // de gols ("—" se também ausente).
+  settlementMetricValue: (rd, fallback) =>
+    rd && rd.homeScore !== null && rd.awayScore !== null
+      ? `${rd.homeScore}-${rd.awayScore}`
+      : totalOrDash(rd, fallback),
+  // placar exato não é mercado de total de gols — a lente over/under de H2H não se aplica.
+  classifyH2H: null,
+};
+
 const REGISTRY: Record<string, MarketPresentation> = {
   [OVER_UNDER.marketKey]: OVER_UNDER,
   [MATCH_RESULT.marketKey]: MATCH_RESULT,
   [BTTS.marketKey]: BTTS,
   [DOUBLE_CHANCE.marketKey]: DOUBLE_CHANCE,
+  [CORRECT_SCORE.marketKey]: CORRECT_SCORE,
 };
 
 /**
