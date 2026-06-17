@@ -202,11 +202,11 @@ export const DOUBLE_CHANCE: MarketDescriptor = {
 // bounded-grid-relative: model + implied normalizam sobre as MESMAS 16 (Σ=1, o
 // cartucho do #290 garante a mesma base) → edge condicional coerente. Book único
 // (Bet365) é o denominador aceito (única casa que cota BR correct score; graduação
-// por D9 viva, sem backtest — ADR 0025 G3). EXPORTADO mas FORA de ALL_DESCRIPTORS:
-// entra na #290 com a migration que seeda markets/market_selections (espelha
-// OVER_UNDER_ALT) — adicioná-lo aqui faria getDescriptor/marketsForLeague indexar uma
-// dbMarketKey sem row no DB. Shape do bet=10 NÃO verificado ao vivo (liga pausada) →
-// resolveSelectionKey defensivo; confirmar formato do `value` no 1º payload real.
+// por D9 viva, sem backtest — ADR 0025 G3). LIGADO end-to-end na #290 (PR1): entra
+// em ALL_DESCRIPTORS junto com a migration que seeda markets/market_selections + o
+// cartucho correct_score + a regra de settlement. Shape do bet=10 NÃO verificado ao
+// vivo (liga pausada) → resolveSelectionKey defensivo; confirmar formato do `value`
+// no 1º payload real.
 export const CORRECT_SCORE: MarketDescriptor = {
   dbMarketKey: "correct_score",
   providerMarketKey: "bet_10",
@@ -237,6 +237,7 @@ export const ALL_DESCRIPTORS: readonly MarketDescriptor[] = [
   MATCH_RESULT,
   BTTS,
   DOUBLE_CHANCE,
+  CORRECT_SCORE,
 ];
 
 // Lookup por dbMarketKey (data-driven). Usado pela view (toAnalysisView) pra ler

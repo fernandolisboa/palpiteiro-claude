@@ -105,7 +105,7 @@ describe("CORRECT_SCORE.resolveSelectionKey (grid 16 células, sem OTHER)", () =
     expect(resolve("")).toBeNull();
   });
 
-  it("descriptor: featured, só Brasileirão, partição (16 células), FORA de ALL_DESCRIPTORS", () => {
+  it("descriptor: featured, só Brasileirão, partição (16 células), EM ALL_DESCRIPTORS", () => {
     expect(CORRECT_SCORE.dbMarketKey).toBe("correct_score");
     expect(CORRECT_SCORE.providerMarketKey).toBe("bet_10");
     expect(CORRECT_SCORE.oddsSource).toBe("featured");
@@ -114,7 +114,7 @@ describe("CORRECT_SCORE.resolveSelectionKey (grid 16 células, sem OTHER)", () =
     expect(CORRECT_SCORE.selectionKeys).toHaveLength(16);
     expect(CORRECT_SCORE.selectionKeys).toContain("cs_0_0");
     expect(CORRECT_SCORE.selectionKeys).toContain("cs_3_3");
-    // FORA de ALL_DESCRIPTORS até a #290 seedar markets/market_selections.
-    expect(getDescriptor("correct_score")).toBeUndefined();
+    // EM ALL_DESCRIPTORS desde a #290 (PR1): seedado + cartucho + settlement ligados.
+    expect(getDescriptor("correct_score")).toBe(CORRECT_SCORE);
   });
 });

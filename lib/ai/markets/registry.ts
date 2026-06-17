@@ -1,4 +1,5 @@
 import { bttsCartridge } from "./btts";
+import { correctScoreCartridge } from "./correct_score";
 import { doubleChanceCartridge } from "./double_chance";
 import { matchResultCartridge } from "./match_result";
 import { overUnderCartridge } from "./over_under";
@@ -15,6 +16,7 @@ const REGISTRY: Record<string, MarketCartridge> = {
   [matchResultCartridge.marketKey]: matchResultCartridge as MarketCartridge,
   [bttsCartridge.marketKey]: bttsCartridge as MarketCartridge,
   [doubleChanceCartridge.marketKey]: doubleChanceCartridge as MarketCartridge,
+  [correctScoreCartridge.marketKey]: correctScoreCartridge as MarketCartridge,
 };
 
 // Variantes MULTI-LINHA (#175): cartuchos alternativos keyed por marketKey,
