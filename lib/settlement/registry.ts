@@ -3,6 +3,10 @@ import { correctScoreRule } from "@/lib/settlement/rules/correct_score";
 import { doubleChanceRule } from "@/lib/settlement/rules/double_chance";
 import { matchResultRule } from "@/lib/settlement/rules/match_result";
 import { overUnderRule } from "@/lib/settlement/rules/over_under";
+import {
+  anytimeScorerRule,
+  assistRule,
+} from "@/lib/settlement/rules/scorer";
 import type { ResultData, SettlementOutcome } from "@/lib/settlement/schemas";
 
 // Uma regra de settlement: pura, sem I/O. Recebe a seleção escolhida (key
@@ -24,6 +28,8 @@ const REGISTRY: Record<string, SettlementRule> = {
   btts: bttsRule,
   double_chance: doubleChanceRule,
   correct_score: correctScoreRule,
+  anytime_scorer: anytimeScorerRule,
+  assist: assistRule,
 };
 
 /**
