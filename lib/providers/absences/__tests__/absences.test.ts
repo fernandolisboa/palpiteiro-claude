@@ -55,6 +55,15 @@ function fakeAbsences(opts: {
   };
 }
 
+// Silencia os logs `absences_fallback_activated` (console.warn) que o cascade emite
+// ao cair no fallback — espelha o pattern do teste do FallbackProvider de sports-data.
+beforeEach(() => {
+  vi.spyOn(console, "warn").mockImplementation(() => {});
+});
+afterEach(() => {
+  vi.restoreAllMocks();
+});
+
 describe("AbsencesFallbackProvider — contrato de cascata (ADR 0026 D4, #227)", () => {
   it("primário Transient → cai no fallback", async () => {
     const primary = fakeAbsences({

@@ -266,6 +266,10 @@ export interface SportsDataProvider {
     league: SupportedLeague,
     season?: number,
   ): Promise<NormalizedStanding | undefined>;
+  // Desfalques: desde o #227 (ADR 0026) o app consome estes métodos SÓ via o
+  // `SportsDataAbsencesAdapter` (wrapper que os expõe na cascata DEDICADA de
+  // `AbsencesProvider`); predict.ts não os chama direto. Seguem no contrato da
+  // SportsDataProvider de propósito (reuso pelo wrapper, sem duplicar a lógica).
   getInjuriesByFixture(
     ref: FixtureRef,
   ): Promise<{ home: NormalizedInjury[]; away: NormalizedInjury[] }>;

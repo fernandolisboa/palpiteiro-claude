@@ -131,8 +131,21 @@ function wrapError(err: unknown, endpoint: string): never {
 }
 
 async function fetchTeamSidelined(team: string): Promise<NormalizedInjury[]> {
-  const token = requireSportMonksToken();
   const endpoint = `/teams/search/${encodeURIComponent(team)}`;
+  // TOCTOU: o token é checado no gate (capabilities) e de novo aqui. Se sumir entre
+  // os dois (env mutado), trata como TRANSIENT (cascateia/degrada) em vez de estourar
+  // um Error genérico que violaria o contrato de cascata do AbsencesFallbackProvider.
+  let token: string;
+  try {
+    token = requireSportMonksToken();
+  } catch (err) {
+    throw new SportsDataTransientError(
+      "SPORTMONKS_API_TOKEN ausente no fetch (sumiu após o gate)",
+      PROVIDER_NAME,
+      endpoint,
+      err,
+    );
+  }
   const url = new URL(SPORTMONKS_BASE_URL + endpoint);
   url.searchParams.set("api_token", token);
   url.searchParams.set("include", "sidelined.player;sidelined.type");

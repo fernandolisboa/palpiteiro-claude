@@ -13,6 +13,7 @@ import {
   type SportsDataProvider,
 } from "@/lib/providers/sports-data/types";
 import type { SupportedLeague } from "@/lib/providers/sports-data/leagues";
+import { __setAbsencesProviderForTesting } from "@/lib/providers/absences";
 import type { OddsApiEventOdds } from "@/lib/providers/odds-api-schemas";
 
 // ─── Module mocks (every external boundary predict() touches) ────────────────
@@ -325,6 +326,9 @@ function setHappyPath() {
 beforeEach(() => {
   vi.clearAllMocks();
   vi.restoreAllMocks();
+  // #227: limpa o cache memoizado do getAbsencesProvider entre testes (isolamento)
+  // — rebuilda do env e delega ao SportsDataProvider mockado a cada teste.
+  __setAbsencesProviderForTesting(undefined);
   setHappyPath();
 });
 
