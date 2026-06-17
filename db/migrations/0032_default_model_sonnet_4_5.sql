@@ -1,0 +1,12 @@
+-- Promove o Sonnet 4.5 a default global PERSISTIDO da análise (ADR 0021, #203),
+-- emendando o seed Opus 4.8 da 0004. O default em RUNTIME é a row ai_config.id=1
+-- lida por getDefaultModelId() — mudar só DEFAULT_MODEL_ID no código NÃO muda prod.
+--
+-- A row id=1 é garantida pela 0004 (INSERT ... ON CONFLICT DO NOTHING), então um
+-- UPDATE simples basta (modelo 0022) — sem upsert. INCONDICIONAL (WHERE id=1): impõe
+-- a decisão do ADR de forma determinística em qualquer ambiente (AC#1), sobrescrevendo
+-- de propósito qualquer valor anterior. DML idempotente (set de valor fixo; re-aplicar
+-- é no-op). Reversível via /admin/settings (setDefaultModelId) ou SET de volta pra
+-- 'claude-opus-4-8'. SEM ALTER (zero schema change). DB novo flui 0004 (opus) → 0032
+-- (sonnet). Sonnet 4.5 é userSelectable (ADR 0013): o default vale pra todos.
+UPDATE "ai_config" SET "default_model_id" = 'claude-sonnet-4-5-20250929' WHERE "id" = 1;
