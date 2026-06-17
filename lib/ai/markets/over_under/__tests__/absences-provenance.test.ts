@@ -94,4 +94,13 @@ describe("user-message — renderização de 'fonte:' (renderContextSections, co
     const msg = renderContextSections(ctx([], false)).join("\n");
     expect(msg).toContain("dados indisponíveis nesta análise");
   });
+
+  it("renderiza 'fonte:' no lado VISITANTE também (per-side, não só mandante)", () => {
+    const input = {
+      ...ctx([]),
+      away: team([absence({ player: "Beltrano", source: "official" })]),
+    };
+    const msg = renderContextSections(input).join("\n");
+    expect(msg).toContain("- Beltrano (MID, injured, fonte: official)");
+  });
 });
