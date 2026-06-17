@@ -211,6 +211,13 @@
       "when": 1781555216378,
       "tag": "0029_cynical_gargoyle",
       "breakpoints": true
+    },
+    {
+      "idx": 30,
+      "version": "7",
+      "when": 1781708777747,
+      "tag": "0030_seed_correct_score",
+      "breakpoints": true
     }
   ]
 }
