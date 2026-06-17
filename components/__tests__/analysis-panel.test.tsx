@@ -51,6 +51,7 @@ function mkView(rationale: string): AnalysisView {
     expectedReturnTone: "positive",
     evLegend: "x",
     minEdgeLabel: "5pp",
+    minEdgePp: 5,
     rationale,
     factors: ["f"],
     generatedAt: "19 mai · 14:22",

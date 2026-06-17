@@ -51,6 +51,7 @@ export function AnalysisResult({ view }: Props) {
             framing={view.framing}
             note={view.note}
             returnTone={view.expectedReturnTone}
+            minEdgePp={view.minEdgePp}
           />
         )}
         <Separator />
@@ -180,6 +181,7 @@ export function AnalysisResult({ view }: Props) {
           framing={view.framing}
           note={view.note}
           returnTone={view.expectedReturnTone}
+          minEdgePp={view.minEdgePp}
         />
       )}
       <Separator />

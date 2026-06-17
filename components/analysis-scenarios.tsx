@@ -22,6 +22,10 @@ type Props = {
   // tom positivo também aqui; dois tons pro mesmo número no mesmo card seria
   // contradição).
   returnTone: "positive" | "neutral";
+  // Piso de edge do mercado em pp (#290): default MIN_EDGE_PP (5, partition);
+  // scorer passa 8. Número PURO vindo da view (NUNCA importa lib/ai — pureza de
+  // bundle). A UI mostra o piso REAL do mercado em vez de hardcodar 5.
+  minEdgePp?: number;
 };
 
 // Top-K (R9): K=5 colunas no máximo. over/under(2)/1X2(3) NUNCA truncam.
@@ -82,7 +86,13 @@ function alternativesSummaryLabel(alternatives: OutcomeView[]): string {
 // CADA item de "análises anteriores" #204, best-bet) sem fronteira de cliente. Os
 // alternativos seguem informativos/neutros (sem accent/edge-*; pinado em teste). No
 // PASS não há recomendação a subordinar → todas as colunas neutras, lado a lado.
-export function AnalysisScenarios({ outcomes, framing, note, returnTone }: Props) {
+export function AnalysisScenarios({
+  outcomes,
+  framing,
+  note,
+  returnTone,
+  minEdgePp = MIN_EDGE_PP,
+}: Props) {
   const { columns, hiddenCount } = selectColumns(outcomes);
   const hasRecommendation = columns.some((o) => o.isRecommended);
   const recommended = columns.filter((o) => o.isRecommended);
@@ -104,6 +114,7 @@ export function AnalysisScenarios({ outcomes, framing, note, returnTone }: Props
               hasRecommendation
               returnTone={returnTone}
               showHints
+              minEdgePp={minEdgePp}
             />
           ))}
           {alternatives.length > 0 && (
@@ -120,6 +131,7 @@ export function AnalysisScenarios({ outcomes, framing, note, returnTone }: Props
                     hasRecommendation
                     returnTone={returnTone}
                     showHints={false}
+                    minEdgePp={minEdgePp}
                   />
                 ))}
               </div>
@@ -136,6 +148,7 @@ export function AnalysisScenarios({ outcomes, framing, note, returnTone }: Props
               returnTone={returnTone}
               // O `?` (HelpHint) ancora UMA vez só, na primeira coluna.
               showHints={i === 0}
+              minEdgePp={minEdgePp}
             />
           ))}
         </div>
@@ -156,7 +169,7 @@ export function AnalysisScenarios({ outcomes, framing, note, returnTone }: Props
         </p>
       )}
       <p className="font-mono text-[10px] leading-snug tracking-tight text-muted-fg-2">
-        {`o app só recomenda com vantagem ≥ ${MIN_EDGE_PP}pp sobre o mercado; os números acima são informativos · odds do momento da análise — as atuais estão no card acima`}
+        {`o app só recomenda com vantagem ≥ ${minEdgePp}pp sobre o mercado; os números acima são informativos · odds do momento da análise — as atuais estão no card acima`}
       </p>
     </div>
   );
@@ -169,6 +182,8 @@ type ColumnProps = {
   hasRecommendation: boolean;
   returnTone: "positive" | "neutral";
   showHints: boolean;
+  // Piso de edge do mercado (#290) — usado no HelpHint do edge. Default 5.
+  minEdgePp: number;
 };
 
 function ScenarioColumn({
@@ -176,6 +191,7 @@ function ScenarioColumn({
   hasRecommendation,
   returnTone,
   showHints,
+  minEdgePp,
 }: ColumnProps) {
   const isRecommended = outcome.isRecommended;
   // Distingue a superfície "alternative" da "neutral" (pass) pro data-scenario-col
@@ -247,7 +263,7 @@ function ScenarioColumn({
           showHints
             ? {
                 anchor: "edge",
-                blurb: `Quanto a prob. do modelo supera a do mercado, em pontos percentuais. O app só recomenda com pelo menos ${MIN_EDGE_PP}pp.`,
+                blurb: `Quanto a prob. do modelo supera a do mercado, em pontos percentuais. O app só recomenda com pelo menos ${minEdgePp}pp.`,
               }
             : undefined
         }

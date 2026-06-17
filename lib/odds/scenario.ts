@@ -100,14 +100,26 @@ export function computeMarketScenarios(input: {
   // predict (que usa o MESMO impliedSumTarget do descriptor). Sem isso, a view
   // re-derivaria Σ=1 e mostraria edge divergente do salvo (inaceitável).
   impliedSumTarget?: number;
+  // Taxonomia do mercado (#290). Default 'partition' = caminho de hoje (implícita
+  // normalizada Σ=impliedSumTarget via computeMarketImpliedProbabilities — byte-
+  // idêntico). 'independent_binary' (scorer/assist): a implícita por seleção é o
+  // TETO (1/odd)*100 — NÃO normaliza (Σ=1 inaplicável), NUNCA chama
+  // computeMarketImpliedProbabilities. Casa com o edge-teto persistido pelo predict.
+  marketKind?: "partition" | "independent_binary";
 }): { selections: ScenarioSelection[]; recommended: string | null } {
   const sumTarget = input.impliedSumTarget ?? 1;
+  const isIndependentBinary =
+    (input.marketKind ?? "partition") === "independent_binary";
   const allOddsPresent = input.selections.every((s) => s.odd !== null);
-  const impliedByIndex = allOddsPresent
-    ? computeMarketImpliedProbabilities(
-        input.selections.map((s) => s.odd as number),
-      ).probs.map((p) => p * 100 * sumTarget)
-    : null;
+  // independent_binary: implícita-TETO por seleção (1/odd*100), SEM normalização
+  // (não toca computeMarketImpliedProbabilities). partition: caminho de hoje.
+  const impliedByIndex = !allOddsPresent
+    ? null
+    : isIndependentBinary
+      ? input.selections.map((s) => (1 / (s.odd as number)) * 100)
+      : computeMarketImpliedProbabilities(
+          input.selections.map((s) => s.odd as number),
+        ).probs.map((p) => p * 100 * sumTarget);
 
   const selections = input.selections.map((s, i): ScenarioSelection => {
     const impliedProbPct = impliedByIndex !== null ? impliedByIndex[i] : null;

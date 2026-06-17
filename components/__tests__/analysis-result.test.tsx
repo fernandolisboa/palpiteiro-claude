@@ -56,6 +56,7 @@ const baseView: AnalysisView = {
   evLegend:
     "ganho médio por aposta, no longo prazo, se a estimativa de 58% do modelo estiver certa",
   minEdgeLabel: `${MIN_EDGE_PP}pp`,
+  minEdgePp: MIN_EDGE_PP,
   rationale: "racional técnico",
   factors: ["fator um", "fator dois"],
   generatedAt: "19 mai · 14:22",

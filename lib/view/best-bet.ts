@@ -38,7 +38,12 @@ function computeRank(
     prediction.oddAtRecommendation !== null
       ? Number(prediction.oddAtRecommendation)
       : null;
-  const impliedSumTarget = getDescriptor(marketKey)?.impliedSumTarget ?? 1;
+  const descriptor = getDescriptor(marketKey);
+  const impliedSumTarget = descriptor?.impliedSumTarget ?? 1;
+  // C6 (#290): SEGUNDO call-site de computeMarketScenarios. Sem o marketKind, o
+  // ranking "melhor aposta do jogo" deflacionaria por Σ=1 o edge yes-only do scorer.
+  // independent_binary usa o edge-TETO por jogador, casando com o display do card.
+  const marketKind = descriptor?.marketKind ?? "partition";
 
   let edgePct: number | null = null;
   if (!isPass) {
@@ -50,6 +55,7 @@ function computeRank(
       selections,
       recommendedKey: recommendation,
       impliedSumTarget,
+      marketKind,
     }).selections.find((s) => s.key === recommendation);
     edgePct = recSel?.edgePct ?? null;
   }

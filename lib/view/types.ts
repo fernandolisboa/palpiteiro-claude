@@ -138,6 +138,10 @@ export type AnalysisView = {
   expectedReturnTone: "positive" | "neutral";
   evLegend: string | null;
   minEdgeLabel: string;
+  // Piso de edge do mercado em pp (#290): 5 (partition) / 8 (scorer). Número PURO
+  // pro AnalysisScenarios (footer + HelpHint do edge) — a view nunca hardcoda 5 pra
+  // um mercado de piso 8. Vem de descriptor.minEdgePp; default 5 = byte-idêntico.
+  minEdgePp: number;
   // Stake da recomendação no formato do dashboard ("1.00 u", sem sinal). null
   // em pass (não há aposta). #170 liga as duas call sites de toAnalysisView.
   stakeUnits: string | null;

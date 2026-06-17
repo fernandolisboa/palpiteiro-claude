@@ -100,6 +100,7 @@ describe("toAnalysisView", () => {
       evLegend:
         "ganho médio por aposta, no longo prazo, se a estimativa de 58% do modelo estiver certa",
       minEdgeLabel: "5pp",
+      minEdgePp: 5,
       rationale: "blah",
       factors: ["a", "b"],
       generatedAt: "19 mai · 14:22",
@@ -186,6 +187,7 @@ describe("toAnalysisView", () => {
       evLegend:
         "ganho médio por aposta, no longo prazo, se a estimativa de 56% do modelo estiver certa",
       minEdgeLabel: "5pp",
+      minEdgePp: 5,
       rationale: "x",
       factors: ["a", "b"],
       generatedAt: "19 mai · 14:22",
@@ -265,6 +267,7 @@ describe("toAnalysisView", () => {
       expectedReturnTone: "neutral",
       evLegend: null,
       minEdgeLabel: "5pp",
+      minEdgePp: 5,
       rationale: "no edge",
       factors: ["a", "b"],
       generatedAt: "19 mai · 14:22",
@@ -347,6 +350,7 @@ describe("toAnalysisView", () => {
       // retorno "—" não ganha legenda — não explicar número que não existe.
       evLegend: null,
       minEdgeLabel: "5pp",
+      minEdgePp: 5,
       rationale: "old",
       factors: ["a"],
       generatedAt: "19 mai · 14:22",

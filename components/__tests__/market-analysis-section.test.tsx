@@ -61,6 +61,7 @@ function mkView(o: {
     expectedReturnTone: "positive",
     evLegend: "x",
     minEdgeLabel: "5pp",
+    minEdgePp: 5,
     rationale: o.rationale,
     factors: ["f"],
     generatedAt: "19 mai · 14:22",
