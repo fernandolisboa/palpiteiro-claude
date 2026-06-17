@@ -14,9 +14,18 @@
  *  - Chama a API da Anthropic e compara recommendation/confidence_pct/
  *    minimum_odd contra a baseline persistida do mesmo jogo.
  *
- * Critério de abort (não mergear o bump se REPROVADO):
- *  - qualquer flip de `recommendation`, OU
- *  - mediana de |Δconfidence| > 5pp.
+ * Critério de abort (não mergear o bump se REPROVADO) — a regra de FLIP é
+ * MODEL-AWARE (ADR 0021, #203):
+ *  - flip de `recommendation` no caminho TEMPERATURE (Sonnet 4.5/Haiku, amostragem
+ *    fixa 0.3) — ESTRITO: qualquer flip reprova; OU
+ *  - flip no caminho ADAPTIVE (Opus/Sonnet 4.6, sem knob de amostragem) que
+ *    REPRODUZA na maioria de N re-replays do MESMO payload (ADAPTIVE_FLIP_REPRO_RUNS);
+ *    flip esporádico é ruído de amostragem (o modo de falha A/A do #105) — tolerado
+ *    e logado, NÃO reprova; OU
+ *  - mediana de |Δconfidence| > 5pp (GLOBAL, intocado); OU
+ *  - qualquer payload com ERRO de replay (GLOBAL, intocado).
+ * A bifurcação por caminho e o veredito vivem em scripts/replay-eval-core.ts (puro,
+ * unit-testado a seco); o loop de reprodução PAGO fica aqui no main().
  *
  * Fronteira de lib/ai/predict.ts: este script chama o SDK direto e isso é uma
  * exceção DELIBERADA (registrada na issue #105) — a fronteira existe pra
@@ -47,6 +56,15 @@ import {
   type OverUnderOutput,
 } from "@/lib/ai/markets/over_under";
 import { isAIModelId } from "@/lib/ai/models";
+import {
+  ADAPTIVE_FLIP_REPRO_RUNS,
+  classifyThinkingMode,
+  computeVerdict,
+  isAdaptiveFlipConfirmed,
+  MAX_DELTA_CONF_MEDIAN_PP,
+  pOver,
+  type ThinkingPath,
+} from "@/scripts/replay-eval-core";
 
 const cartridge = overUnderCartridge;
 const PROMPT_VERSION = cartridge.version;
@@ -55,7 +73,8 @@ const SUBMIT_PREDICTION_TOOL = cartridge.tool;
 
 const MIN_PAYLOADS = 5;
 const MAX_PAYLOADS = 10;
-const MAX_DELTA_CONF_MEDIAN_PP = 5;
+// MAX_DELTA_CONF_MEDIAN_PP e os helpers puros (median/pOver) vivem em
+// scripts/replay-eval-core.ts (importados acima) — reusados pelo veredito.
 // Buscamos mais linhas do que MAX_PAYLOADS porque a query dedup por jogo em
 // memória (a ai_call mais recente por matchId) antes de cortar — re-análises do
 // mesmo jogo não devem ocupar slots nem dobrar peso na mediana.
@@ -67,29 +86,10 @@ const FETCH_LIMIT = MAX_PAYLOADS * 5;
 // output inválido, e o usage das tentativas falhas é somado ao custo total.
 const MAX_ATTEMPTS_PER_PAYLOAD = 2;
 
-// confidence_pct é P(lado recomendado) para over/under e P(over) para pass
-// (convenção em lib/ai/markets/over_under/schemas.ts). Pra comparar |Δconfidence| entre
-// baseline e replay quando há flip envolvendo "under", normalizamos os dois
-// lados pra uma grandeza comum — P(over) — antes do delta. É identidade para
-// over/pass e o complemento (100 − conf) para under; em comparações de mesma
-// recommendation o resultado é idêntico ao delta cru.
-function pOver(recommendation: string, confidencePct: number): number {
-  return recommendation === "under" ? 100 - confidencePct : confidencePct;
-}
-
 function requireEnv(name: string): void {
   if (!process.env[name]) {
     throw new Error(`${name} not set — populate .env.local from .env.example`);
   }
-}
-
-function median(values: number[]): number {
-  if (values.length === 0) return 0;
-  const sorted = [...values].sort((a, b) => a - b);
-  const mid = Math.floor(sorted.length / 2);
-  return sorted.length % 2 === 1
-    ? sorted[mid]
-    : (sorted[mid - 1] + sorted[mid]) / 2;
 }
 
 function fmt(v: number | null, digits: number): string {
@@ -99,6 +99,9 @@ function fmt(v: number | null, digits: number): string {
 type ReplayResult = {
   label: string;
   model: string;
+  // Caminho de amostragem (ADR 0021): rege se o flip é estrito (temperature) ou
+  // sujeito à reprodução em N runs (adaptive). Modelo fora do registry → "temperature".
+  thinkingMode: ThinkingPath;
   baseline: {
     recommendation: string;
     confidencePct: number;
@@ -107,7 +110,14 @@ type ReplayResult = {
   };
   replay: OverUnderOutput;
   deltaConf: number;
+  // flip = flipou no 1º replay (autoritativo no caminho temperature).
   flip: boolean;
+  // flipConfirmed = conta como reprovação: no temperature === flip; no adaptive é o
+  // resultado da reprodução em N runs (maioria).
+  flipConfirmed: boolean;
+  // Tally da reprodução adaptive (só preenchido quando houve reprodução).
+  reproRuns?: number;
+  reproFlipped?: number;
   attempts: number;
   inputTokens: number;
   outputTokens: number;
@@ -317,29 +327,76 @@ async function main(): Promise<void> {
 
     const baselineConf = Number(row.confidencePct);
     const flip = output.recommendation !== row.recommendation;
+    const thinkingMode = classifyThinkingMode(row.model);
     // |Δconfidence| normalizado pra P(over) nos dois lados — sem isso, um flip
-    // pass→under compararia P(over) contra P(under), grandezas diferentes.
+    // pass→under compararia P(over) contra P(under), grandezas diferentes. É SEMPRE
+    // o delta do 1º replay (paridade com o single-shot temperature); pra flips
+    // adaptive confirmados pode sub-representar o sinal dos reruns — a contagem de
+    // confirmados no veredito é a autoridade.
     const deltaConf = Math.abs(
       pOver(output.recommendation, output.confidence_pct) -
         pOver(row.recommendation, baselineConf),
     );
+
+    // Reprodução model-aware (ADR 0021): um flip no caminho ADAPTIVE dispara N-1
+    // re-replays do MESMO payload; só conta como reprovação (flipConfirmed) se
+    // flipar na MAIORIA dos N runs. Custo-mínimo: só payloads adaptive que já
+    // fliparam re-rodam. Tokens/custo acumulam TODAS as tentativas (1 row por
+    // payload, paridade com temperature). No caminho temperature, flipConfirmed
+    // === flip (estrito, sem rerun).
+    let inputTokens = usage.inputTokens;
+    let outputTokens = usage.outputTokens;
+    let flipConfirmed = flip;
+    let reproRuns: number | undefined;
+    let reproFlipped: number | undefined;
+    if (flip && thinkingMode === "adaptive") {
+      let flippedRuns = 1; // o 1º replay (já flipou) é o run 1 de N.
+      for (let run = 2; run <= ADAPTIVE_FLIP_REPRO_RUNS; run++) {
+        try {
+          const rep = await replayOne({ client, inputPayload: row.inputPayload });
+          inputTokens += rep.usage.inputTokens;
+          outputTokens += rep.usage.outputTokens;
+          const repFlip = rep.output.recommendation !== row.recommendation;
+          if (repFlip) flippedRuns++;
+          console.log(
+            `     reprodução ${run}/${ADAPTIVE_FLIP_REPRO_RUNS}: → ${rep.output.recommendation}${repFlip ? " ⚠ flip" : " (sem flip)"}`,
+          );
+        } catch (err) {
+          // Rerun que erra conta como NÃO-flip (não incrementa flippedRuns) contra o
+          // N fixo — empurra pra TOLERAR (não reprova o gate por API flaky). NÃO
+          // entra em errors[]: o 1º replay já sucedeu, o payload foi avaliado.
+          const reason = err instanceof Error ? err.message : String(err);
+          console.warn(
+            `     ⚠ reprodução ${run}/${ADAPTIVE_FLIP_REPRO_RUNS} errou (conta como não-flip): ${reason}`,
+          );
+        }
+      }
+      flipConfirmed = isAdaptiveFlipConfirmed(flippedRuns, ADAPTIVE_FLIP_REPRO_RUNS);
+      reproRuns = ADAPTIVE_FLIP_REPRO_RUNS;
+      reproFlipped = flippedRuns;
+      console.log(
+        `     → ${flippedRuns}/${ADAPTIVE_FLIP_REPRO_RUNS} flips — ${flipConfirmed ? "CONFIRMADO (reprova)" : "tolerado como ruído de amostragem (NÃO reprova)"}`,
+      );
+    }
+
+    // isAIModelId inline no ternário pra TS narrow row.model (string) → AIModelId;
+    // um boolean intermediário não estreita o tipo.
     const costKnown = isAIModelId(row.model);
     const costUsd = isAIModelId(row.model)
-      ? calculateCost({
-          model: row.model,
-          inputTokens: usage.inputTokens,
-          outputTokens: usage.outputTokens,
-        })
+      ? calculateCost({ model: row.model, inputTokens, outputTokens })
       : 0;
     if (!costKnown) {
+      // Modelo fora do registry → custo desconhecido E classificado como ESTRITO
+      // (temperature) pro flip. Logado de propósito: nunca tolera flip em silêncio.
       console.warn(
-        `  ⚠ modelo "${row.model}" fora do MODEL_REGISTRY — custo desconhecido (reportado como n/a, não $0)`,
+        `  ⚠ modelo "${row.model}" fora do MODEL_REGISTRY — custo desconhecido (n/a, não $0) e flip avaliado ESTRITO (caminho temperature)`,
       );
     }
 
     results.push({
       label,
       model: row.model,
+      thinkingMode,
       baseline: {
         recommendation: row.recommendation,
         confidencePct: baselineConf,
@@ -349,14 +406,22 @@ async function main(): Promise<void> {
       replay: output,
       deltaConf,
       flip,
+      flipConfirmed,
+      reproRuns,
+      reproFlipped,
       attempts,
-      inputTokens: usage.inputTokens,
-      outputTokens: usage.outputTokens,
+      inputTokens,
+      outputTokens,
       costUsd,
       costKnown,
     });
+    const flipNote = !flip
+      ? ""
+      : flipConfirmed
+        ? "  ⚠ FLIP"
+        : "  ~ flip (ruído tolerado)";
     console.log(
-      `  ${row.recommendation} → ${output.recommendation}${flip ? "  ⚠ FLIP" : ""} | ` +
+      `  ${row.recommendation} → ${output.recommendation}${flipNote} | ` +
         `conf ${baselineConf.toFixed(1)} → ${output.confidence_pct.toFixed(1)} (|Δ P(over)|=${deltaConf.toFixed(1)}pp) | ` +
         `minOdd ${fmt(row.minimumOdd === null ? null : Number(row.minimumOdd), 3)} → ${fmt(output.minimum_odd ?? null, 3)}` +
         `${attempts > 1 ? ` | ${attempts} tentativas` : ""}`,
@@ -385,7 +450,7 @@ async function main(): Promise<void> {
       [
         r.label.slice(0, 34).padEnd(34),
         r.model.padEnd(28),
-        `${r.baseline.recommendation}→${r.replay.recommendation}${r.flip ? " ⚠" : ""}`.padEnd(14),
+        `${r.baseline.recommendation}→${r.replay.recommendation}${r.flip ? (r.flipConfirmed ? " ⚠" : " ~") : ""}`.padEnd(14),
         `${r.baseline.confidencePct.toFixed(1)}→${r.replay.confidence_pct.toFixed(1)} (${r.deltaConf.toFixed(1)}pp)`.padEnd(30),
         `${fmt(r.baseline.minimumOdd, 3)}→${fmt(r.replay.minimum_odd ?? null, 3)}`.padEnd(18),
         `${r.inputTokens}/${r.outputTokens}`.padEnd(14),
@@ -407,22 +472,37 @@ async function main(): Promise<void> {
     );
   }
 
-  // ── Veredito ──────────────────────────────────────────────────────────────
-  const flips = results.filter((r) => r.flip);
-  const medianDelta = median(results.map((r) => r.deltaConf));
+  // ── Veredito (model-aware, ADR 0021) ──────────────────────────────────────
+  // A regra de flip vive em computeVerdict (puro/testado): flips CONFIRMADOS
+  // reprovam (temperature: qualquer flip; adaptive: reproduzido na maioria de N
+  // runs); flips adaptive NÃO reproduzidos são ruído tolerado (logados, não
+  // reprovam). Mediana de |Δconf| e errors seguem GLOBAIS e intocados. Payload que
+  // erra (malformado ou falha dupla no 1º replay) ⇒ REPROVADO: não certificar um
+  // bump sem ter avaliado todos os jogos da amostra.
+  const { failed, confirmedFlips, toleratedNoiseFlips, medianDelta } =
+    computeVerdict({
+      results: results.map((r) => ({
+        thinkingMode: r.thinkingMode,
+        flip: r.flip,
+        flipConfirmed: r.flipConfirmed,
+        deltaConf: r.deltaConf,
+      })),
+      errorCount: errors.length,
+    });
   const totalCost = results.reduce((acc, r) => acc + r.costUsd, 0);
   const someCostUnknown = results.some((r) => !r.costKnown);
-  // Payload que erra (malformado ou falha dupla) ⇒ REPROVADO: não certificar um
-  // bump sem ter avaliado todos os jogos da amostra.
-  const failed =
-    flips.length > 0 || medianDelta > MAX_DELTA_CONF_MEDIAN_PP || errors.length > 0;
 
   console.log("\n─── Veredito ───");
   console.log(`amostra avaliada        : ${results.length} jogos`);
   if (errors.length > 0) {
     console.log(`payloads com ERRO       : ${errors.length} (excluídos da amostra)`);
   }
-  console.log(`flips de recommendation : ${flips.length}`);
+  console.log(`flips que reprovam      : ${confirmedFlips}`);
+  if (toleratedNoiseFlips > 0) {
+    console.log(
+      `flips tolerados (ruído) : ${toleratedNoiseFlips} (adaptive, não reproduzido em ${ADAPTIVE_FLIP_REPRO_RUNS} runs)`,
+    );
+  }
   console.log(
     `mediana |Δconfidence|   : ${medianDelta.toFixed(1)}pp (escala P(over); limite: ${MAX_DELTA_CONF_MEDIAN_PP}pp)`,
   );

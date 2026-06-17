@@ -76,8 +76,14 @@ export const MODEL_REGISTRY: Record<AIModelId, AIModel> = {
   },
 };
 
-// Default global de fallback (e seed da migration). Opus 4.8.
-export const DEFAULT_MODEL_ID: AIModelId = "claude-opus-4-8";
+// Default global de fallback terminal da cascata (predict.ts) e seed do INSERT
+// de ai_config. Sonnet 4.5 (ADR 0021, #203): caminho `temperature` (reproduzível,
+// ~40% mais barato que Opus) e `userSelectable: true` — satisfaz a invariante do
+// ADR 0013 (o default vale pra TODOS, então tem que passar o gate de audiência).
+// O default em RUNTIME é a row ai_config.id=1 (migration 0032); esta constante só
+// entra quando a row falta/é inválida. Trocar aqui exige atualizar models.test.ts
+// (sentinel) + a row persistida (migration), senão prod não muda.
+export const DEFAULT_MODEL_ID: AIModelId = "claude-sonnet-4-5-20250929";
 
 export const SELECTABLE_MODELS: AIModel[] = Object.values(MODEL_REGISTRY);
 

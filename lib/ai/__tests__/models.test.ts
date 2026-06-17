@@ -1,6 +1,7 @@
 import { describe, expect, it } from "vitest";
 
 import {
+  DEFAULT_MODEL_ID,
   MODEL_REGISTRY,
   SELECTABLE_MODELS,
   isModelAllowedForAudience,
@@ -122,5 +123,26 @@ describe("registry — sanidade dos modelos", () => {
 
   it("o Fable foi removido do registry (#241)", () => {
     expect("claude-fable-5" in MODEL_REGISTRY).toBe(false);
+  });
+});
+
+describe("DEFAULT_MODEL_ID — default global (ADR 0021, #203)", () => {
+  // SENTINEL: o default da análise está TRAVADO no Sonnet 4.5 (caminho temperature,
+  // reproduzível, ~40% mais barato que Opus — ADR 0021). Mudar DEFAULT_MODEL_ID exige
+  // atualizar este teste + a row persistida (migration de ai_config) + ADR 0021/PLAN-203.
+  it("é o Sonnet 4.5 (não mais o Opus 4.8 do ADR 0008)", () => {
+    expect(DEFAULT_MODEL_ID).toBe("claude-sonnet-4-5-20250929");
+    expect(DEFAULT_MODEL_ID).not.toBe("claude-opus-4-8");
+  });
+
+  it("é userSelectable (invariante do ADR 0013: o default vale pra TODOS)", () => {
+    // O default global passa pelo gate de audiência de usuário comum, senão a cascata
+    // de predict.ts entregaria um modelo admin-only pra todo mundo.
+    expect(MODEL_REGISTRY[DEFAULT_MODEL_ID].userSelectable).toBe(true);
+    expect(isModelAllowedForAudience(DEFAULT_MODEL_ID, false)).toBe(true);
+  });
+
+  it("é caminho temperature (reproduzível — a razão de ser do ADR 0021)", () => {
+    expect(MODEL_REGISTRY[DEFAULT_MODEL_ID].thinkingMode).toBe("temperature");
   });
 });
