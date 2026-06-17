@@ -1,4 +1,5 @@
 import { bttsRule } from "@/lib/settlement/rules/btts";
+import { correctScoreRule } from "@/lib/settlement/rules/correct_score";
 import { doubleChanceRule } from "@/lib/settlement/rules/double_chance";
 import { matchResultRule } from "@/lib/settlement/rules/match_result";
 import { overUnderRule } from "@/lib/settlement/rules/over_under";
@@ -22,6 +23,7 @@ const REGISTRY: Record<string, SettlementRule> = {
   match_result: matchResultRule,
   btts: bttsRule,
   double_chance: doubleChanceRule,
+  correct_score: correctScoreRule,
 };
 
 /**
