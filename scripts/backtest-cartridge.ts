@@ -83,6 +83,7 @@ import { getDefaultModelId, getGenerationParams } from "@/lib/db/queries/ai-conf
 import { getLatestSelectionOddsSnapshots } from "@/lib/db/queries/odds-snapshots";
 import { computeMarketImpliedProbabilities } from "@/lib/odds/implied-probability";
 import { getSportsDataProvider } from "@/lib/providers/sports-data";
+import { getAbsencesProvider } from "@/lib/providers/absences";
 import {
   SportsDataTransientError,
   SportsDataUnsupportedError,
@@ -693,8 +694,9 @@ async function gatherSupportingData(
       provider.getTeamForm(m.awayTeam, m.league, FORM_LAST),
       provider.getH2H(m.homeTeam, m.awayTeam, m.league, H2H_LAST),
       provider.getStandings(m.league),
-      provider
-        .getInjuriesByFixture(ref)
+      // Desfalques via AbsencesProvider (#227) — consistente com predict.ts.
+      getAbsencesProvider()
+        .getAbsencesByFixture(ref)
         .then((data) => ({ data, unavailable: false }))
         .catch((err: unknown) => {
           if (

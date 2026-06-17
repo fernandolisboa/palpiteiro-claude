@@ -473,6 +473,8 @@ export class FootballDataOrgAdapter implements SportsDataProvider {
     name: PROVIDER_NAME,
     supportsInjuries: false,
     supportsLineups: true,
+    // Sem endpoint de desfalques no tier grátis (#227) — espelha supportsInjuries.
+    supportsAbsences: false,
     supportedLeagues: new Set<SupportedLeague>([
       "brasileirao_a",
       "champions_league",

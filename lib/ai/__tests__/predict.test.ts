@@ -80,6 +80,10 @@ vi.mock("@/lib/providers/sports-data", () => ({
       name: "mock",
       supportsInjuries: true,
       supportsLineups: true,
+      // #227: desfalques agora vão via AbsencesProvider (wrapper desta SportsData
+      // mock). O gate da cascata filtra por supportsAbsences — espelha o real
+      // (api-football declara true) pra o wrapper ser gated-in e delegar a getInjuries*.
+      supportsAbsences: true,
       supportedLeagues: new Set<SupportedLeague>(["brasileirao_a"]),
     };
     return {

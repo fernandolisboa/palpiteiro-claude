@@ -52,6 +52,11 @@ export class FallbackProvider implements SportsDataProvider {
       supportsLineups:
         primary.capabilities.supportsLineups ||
         fallback.capabilities.supportsLineups,
+      // OR agregado (#227): senão o wrapper de absences enxerga undefined e o
+      // gate filtraria o primário fora — desfalques sumiriam silenciosamente.
+      supportsAbsences:
+        primary.capabilities.supportsAbsences === true ||
+        fallback.capabilities.supportsAbsences === true,
       supportedLeagues: leagues,
     };
   }

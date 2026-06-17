@@ -822,6 +822,8 @@ export class ApiFootballAdapter implements SportsDataProvider {
     supportsInjuries: true,
     supportsLineups: true,
     supportsFixtureEvents: true,
+    // Desfalques (#227): mesma cobertura das injuries (BR/CL; WC lança Unsupported).
+    supportsAbsences: true,
     supportedLeagues: new Set<SupportedLeague>([
       "brasileirao_a",
       "champions_league",
