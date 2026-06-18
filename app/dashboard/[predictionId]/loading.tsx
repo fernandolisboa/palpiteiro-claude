@@ -4,7 +4,7 @@ import { DesktopShell } from "@/components/desktop-shell";
 export default function PredictionDetailLoading() {
   return (
     <DesktopShell>
-      <div className="mx-auto w-full max-w-[680px] px-6 py-8">
+      <div className="mx-auto w-full max-w-reading px-6 py-8">
         <Skeleton className="h-4 w-24" />
         <Skeleton className="mt-6 h-7 w-64" />
         <Skeleton className="mt-2 h-3 w-48" />

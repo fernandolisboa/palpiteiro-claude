@@ -7,8 +7,8 @@ function SampleNote({ rate }: { rate: RateView }) {
   return (
     <span
       className={cn(
-        "font-mono text-[10px] tabular-nums",
-        rate.lowSample ? "text-amber-500" : "text-muted-foreground",
+        "font-mono text-eyebrow tabular-nums",
+        rate.lowSample ? "text-warn-fg" : "text-muted-foreground",
       )}
       title={
         rate.lowSample
@@ -35,7 +35,7 @@ function RateCard({
 }) {
   return (
     <Card className="gap-2 p-5">
-      <span className="flex items-center gap-1 font-mono text-[10px] uppercase tracking-[0.14em] text-muted-foreground">
+      <span className="flex items-center gap-1 font-mono text-eyebrow uppercase tracking-label text-muted-foreground">
         {label}
         {hint && (
           <HelpHint anchor={hint.anchor} label={label} blurb={hint.blurb} />
@@ -43,7 +43,7 @@ function RateCard({
       </span>
       <span
         className={cn(
-          "text-[26px] font-medium leading-none tracking-[-0.02em] tabular-nums",
+          "text-display-md font-medium leading-none tracking-tight tabular-nums",
           valueClassName,
         )}
       >
@@ -87,7 +87,7 @@ export function KpiCards({ view }: { view: DashboardKpiView }) {
           }}
         />
         <Card className="gap-2 p-5">
-          <span className="flex items-center gap-1 font-mono text-[10px] uppercase tracking-[0.14em] text-muted-foreground">
+          <span className="flex items-center gap-1 font-mono text-eyebrow uppercase tracking-label text-muted-foreground">
             lucro total
             <HelpHint
               anchor="lucro-total"
@@ -97,18 +97,18 @@ export function KpiCards({ view }: { view: DashboardKpiView }) {
           </span>
           <span
             className={cn(
-              "text-[26px] font-medium leading-none tracking-[-0.02em] tabular-nums",
-              view.profitPositive ? "text-emerald-500" : "text-red-500",
+              "text-display-md font-medium leading-none tracking-tight tabular-nums",
+              view.profitPositive ? "text-edge-fg" : "text-destructive",
             )}
           >
             {view.totalProfit}
           </span>
-          <span className="font-mono text-[10px] tabular-nums text-muted-foreground">
+          <span className="font-mono text-eyebrow tabular-nums text-muted-foreground">
             {counts.settled} liquidada{counts.settled === 1 ? "" : "s"}
           </span>
         </Card>
       </div>
-      <div className="flex flex-wrap gap-x-4 gap-y-1 font-mono text-[11px] tabular-nums text-muted-foreground">
+      <div className="flex flex-wrap gap-x-4 gap-y-1 font-mono text-meta tabular-nums text-muted-foreground">
         <span>{counts.total} predições</span>
         <span>· {counts.bets} apostas</span>
         <span>· {counts.passes} pass</span>

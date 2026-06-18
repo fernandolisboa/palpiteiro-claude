@@ -58,7 +58,7 @@ function PillGroup({
   if (options.length <= 1) return null;
   return (
     <div className="flex items-center gap-2">
-      <span className="font-mono text-[9.5px] uppercase tracking-[0.14em] text-muted-foreground">
+      <span className="font-mono text-eyebrow-xs uppercase tracking-label text-muted-foreground">
         {label}
       </span>
       <nav className="inline-flex h-8 items-center rounded-md border border-border bg-surface-2 p-1">
@@ -70,9 +70,9 @@ function PillGroup({
               href={buildDashboardHref(filters, dimension, opt.value, basePath)}
               aria-current={active ? "page" : undefined}
               className={cn(
-                "h-6 rounded-[5px] px-2.5 text-[11.5px] font-medium leading-6 transition-colors",
+                "h-6 rounded-sm px-2.5 text-meta font-medium leading-6 transition-colors focus-visible:outline-none focus-visible:ring-[3px] focus-visible:ring-ring/50",
                 active
-                  ? "bg-card text-foreground shadow-[0_1px_2px_rgb(0_0_0/0.4)]"
+                  ? "bg-card text-foreground shadow-sm"
                   : "text-muted-foreground hover:text-foreground",
               )}
             >
