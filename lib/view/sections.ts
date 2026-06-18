@@ -146,10 +146,12 @@ export function toStandingsView(args: {
   const anchor = focusPositions.length
     ? Math.max(1, Math.min(...focusPositions) - 1)
     : 1;
-  const sliced = table.teams.slice(
-    Math.max(0, anchor - 1),
-    Math.max(0, anchor - 1) + window,
-  );
+  // Clampa o início da janela contra o fim da tabela: sem isso, quando os times
+  // de foco ficam perto do fundo, a janela estoura o array e descarta as linhas
+  // do topo (incluindo o líder) — ex.: grupo de 4 com jogo entre pos 3 e 4 some
+  // o pos 1. Clampar também evita janela sub-preenchida no fundo (issue #337).
+  const start = Math.max(0, Math.min(anchor - 1, table.teams.length - window));
+  const sliced = table.teams.slice(start, start + window);
   const rows: StandingsViewRow[] = sliced.map((t) => ({
     pos: t.position,
     team: t.team,
