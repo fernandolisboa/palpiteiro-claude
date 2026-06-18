@@ -1,7 +1,7 @@
 import Link from "next/link";
 import { ChevronRight } from "lucide-react";
 
-import { BackLink } from "@/components/back-link";
+import { PageHeading } from "@/components/admin/page-heading";
 
 export const dynamic = "force-dynamic";
 
@@ -29,24 +29,23 @@ const SECTIONS = [
 export default function AdminIndexPage() {
   return (
     <div className="bg-background text-foreground min-h-screen">
-      <div className="mx-auto w-full max-w-[640px] px-6 py-8">
-        <BackLink href="/" label="jogos" />
-
-        <h1 className="text-[20px] font-medium tracking-[-0.02em]">Admin</h1>
-        <p className="text-muted-foreground pb-6 font-mono text-[11px]">
-          painel · acesso restrito a administradores
-        </p>
+      <div className="mx-auto w-full max-w-reading px-6 py-8">
+        <PageHeading
+          backLink={{ href: "/", label: "jogos" }}
+          title="Admin"
+          subtitle="painel · acesso restrito a administradores"
+        />
 
         <nav className="border-border rounded-md border">
           {SECTIONS.map((section) => (
             <Link
               key={section.href}
               href={section.href}
-              className="border-border hover:bg-surface-2 flex items-center justify-between gap-4 border-b px-4 py-3 transition-colors last:border-b-0"
+              className="border-border hover:bg-surface-2 flex items-center justify-between gap-4 border-b px-4 py-3 transition-colors last:border-b-0 focus-visible:outline-none focus-visible:ring-[3px] focus-visible:ring-ring/50 focus-visible:ring-inset"
             >
               <div className="flex flex-col">
-                <span className="text-[13px] font-medium">{section.title}</span>
-                <span className="text-muted-foreground font-mono text-[10.5px]">
+                <span className="text-body font-medium">{section.title}</span>
+                <span className="text-muted-foreground font-mono text-eyebrow">
                   {section.desc}
                 </span>
               </div>

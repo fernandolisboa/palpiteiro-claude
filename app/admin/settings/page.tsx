@@ -1,4 +1,5 @@
-import { BackLink } from "@/components/back-link";
+import { DefinitionRow } from "@/components/admin/definition-row";
+import { PageHeading } from "@/components/admin/page-heading";
 import { SELECTABLE_MODELS } from "@/lib/ai/models";
 import {
   getDefaultModelId,
@@ -17,18 +18,15 @@ export default async function AdminSettingsPage() {
 
   return (
     <div className="min-h-screen bg-background text-foreground">
-      <div className="mx-auto w-full max-w-[640px] px-6 py-8">
-        <BackLink href="/admin" label="admin" />
-
-        <h1 className="text-[20px] font-medium tracking-[-0.02em]">
-          Configurações de IA
-        </h1>
-        <p className="pb-6 font-mono text-[11px] text-muted-foreground">
-          modelo de análise · default global
-        </p>
+      <div className="mx-auto w-full max-w-reading px-6 py-8">
+        <PageHeading
+          backLink={{ href: "/admin", label: "admin" }}
+          title="Configurações de IA"
+          subtitle="modelo de análise · default global"
+        />
 
         <section className="pb-8">
-          <h2 className="pb-3 font-mono text-[10.5px] uppercase tracking-[0.14em] text-muted-foreground">
+          <h2 className="pb-3 font-mono text-eyebrow uppercase tracking-label text-muted-foreground">
             modelos disponíveis
           </h2>
           <div className="rounded-md border border-border">
@@ -37,36 +35,39 @@ export default async function AdminSettingsPage() {
                 a lista nunca insinua que um modelo não-salvável é padrão usável
                 (o dropdown de "padrão global" o desabilita em paralelo). */}
             {SELECTABLE_MODELS.map((m) => (
-              <div
+              <DefinitionRow
                 key={m.id}
-                className="flex items-center justify-between border-b border-border px-4 py-3 last:border-b-0"
-              >
-                <div className="flex flex-col">
-                  <span className="text-[13px] font-medium">
-                    {m.label}
-                    {m.userSelectable ? "" : " · admin-only"}
+                className="px-4 py-3 last:border-b-0"
+                label={
+                  <div className="flex flex-col">
+                    <span className="text-body font-medium">
+                      {m.label}
+                      {m.userSelectable ? "" : " · admin-only"}
+                    </span>
+                    <span className="font-mono text-eyebrow text-muted-foreground">
+                      {m.id}
+                    </span>
+                  </div>
+                }
+                value={
+                  <span className="font-mono text-meta tabular-nums text-muted-foreground">
+                    ${m.inputPricePerMTok} in / ${m.outputPricePerMTok} out · 1M
                   </span>
-                  <span className="font-mono text-[10.5px] text-muted-foreground">
-                    {m.id}
-                  </span>
-                </div>
-                <span className="font-mono text-[11px] tabular-nums text-muted-foreground">
-                  ${m.inputPricePerMTok} in / ${m.outputPricePerMTok} out · 1M
-                </span>
-              </div>
+                }
+              />
             ))}
           </div>
         </section>
 
         <section>
-          <h2 className="pb-4 font-mono text-[10.5px] uppercase tracking-[0.14em] text-muted-foreground">
+          <h2 className="pb-4 font-mono text-eyebrow uppercase tracking-label text-muted-foreground">
             padrão global
           </h2>
           <DefaultModelForm current={current} />
         </section>
 
         <section className="pt-10">
-          <h2 className="pb-4 font-mono text-[10.5px] uppercase tracking-[0.14em] text-muted-foreground">
+          <h2 className="pb-4 font-mono text-eyebrow uppercase tracking-label text-muted-foreground">
             parâmetros de geração
           </h2>
           <GenerationParamsForm current={genParams} />

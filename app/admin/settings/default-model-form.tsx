@@ -6,6 +6,7 @@ import {
   updateDefaultModel,
   type UpdateDefaultModelResult,
 } from "@/app/actions/ai-config";
+import { Select } from "@/components/ui/select";
 import { SELECTABLE_MODELS, type AIModelId } from "@/lib/ai/models";
 
 // O default global vale pra TODOS, então só um modelo `userSelectable` pode ser
@@ -31,33 +32,31 @@ export function DefaultModelForm({ current }: Props) {
   return (
     <form action={action} className="flex flex-col gap-4">
       <label className="flex flex-col gap-1">
-        <span className="font-mono text-[10px] uppercase tracking-[0.14em] text-muted-foreground">
+        <span className="font-mono text-eyebrow uppercase tracking-label text-muted-foreground">
           modelo padrão global
         </span>
-        <select
-          name="modelId"
-          defaultValue={current}
-          className="text-foreground w-80 rounded-md border border-border bg-transparent px-3 py-2 text-sm [color-scheme:light] dark:[color-scheme:dark]"
-        >
-          {DEFAULT_MODEL_OPTIONS.map((m) => (
-            <option
-              key={m.id}
-              value={m.id}
-              // Admin-only (userSelectable:false) NÃO pode virar padrão global —
-              // renderiza desabilitado com nota em vez de sumir (feedback visual).
-              disabled={!m.userSelectable}
-              className="bg-popover text-popover-foreground"
-            >
-              {m.label} — ${m.inputPricePerMTok}/${m.outputPricePerMTok} por 1M
-              {m.userSelectable
-                ? ""
-                : " (admin-only — indisponível como padrão)"}
-            </option>
-          ))}
-        </select>
+        <div className="max-w-aside">
+          <Select name="modelId" defaultValue={current}>
+            {DEFAULT_MODEL_OPTIONS.map((m) => (
+              <option
+                key={m.id}
+                value={m.id}
+                // Admin-only (userSelectable:false) NÃO pode virar padrão global —
+                // renderiza desabilitado com nota em vez de sumir (feedback visual).
+                disabled={!m.userSelectable}
+                className="bg-popover text-popover-foreground"
+              >
+                {m.label} — ${m.inputPricePerMTok}/${m.outputPricePerMTok} por 1M
+                {m.userSelectable
+                  ? ""
+                  : " (admin-only — indisponível como padrão)"}
+              </option>
+            ))}
+          </Select>
+        </div>
       </label>
 
-      <p className="text-[12px] text-muted-foreground">
+      <p className="text-body-sm text-muted-foreground">
         Define o modelo usado por padrão em toda análise. Vale para todos os
         usuários, sem redeploy. Admins podem sobrescrever por análise na página
         do jogo.
@@ -66,16 +65,16 @@ export function DefaultModelForm({ current }: Props) {
       <button
         type="submit"
         disabled={pending}
-        className="w-fit rounded-md border border-border bg-foreground px-4 py-2 text-sm font-medium text-background disabled:opacity-50"
+        className="w-fit rounded-md border border-border bg-foreground px-4 py-2 text-label font-medium text-background focus-visible:outline-none focus-visible:ring-[3px] focus-visible:ring-ring/50 disabled:opacity-50"
       >
         {pending ? "Salvando…" : "Salvar padrão"}
       </button>
 
       {state &&
         (state.ok ? (
-          <p className="text-[13px] text-accent-fg">Padrão salvo.</p>
+          <p className="text-body text-accent-fg">Padrão salvo.</p>
         ) : (
-          <p className="text-[13px] text-red-500">{state.error}</p>
+          <p className="text-body text-destructive">{state.error}</p>
         ))}
     </form>
   );
