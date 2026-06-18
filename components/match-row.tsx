@@ -25,7 +25,7 @@ export function MatchRow({ m, last }: Props) {
     <Link
       href={`/match/${m.id}`}
       className={cn(
-        "block px-5 py-4 transition-colors hover:bg-surface-2 focus-visible:outline-none focus-visible:ring-[3px] focus-visible:ring-ring/50",
+        "block px-5 py-4 transition-colors hover:bg-surface-2 focus-visible:outline-none focus-visible:ring-[3px] focus-visible:ring-ring/50 focus-visible:ring-inset",
         !last && "border-b border-border-subtle",
       )}
     >

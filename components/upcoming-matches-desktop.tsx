@@ -43,7 +43,7 @@ export function UpcomingMatchesDesktop({
         <Link
           key={m.id}
           href={`/match/${m.id}`}
-          className={`grid ${UPCOMING_GRID} items-center gap-4 px-5 py-4 transition-colors hover:bg-surface-2 focus-visible:outline-none focus-visible:ring-[3px] focus-visible:ring-ring/50 ${
+          className={`grid ${UPCOMING_GRID} items-center gap-4 px-5 py-4 transition-colors hover:bg-surface-2 focus-visible:outline-none focus-visible:ring-[3px] focus-visible:ring-ring/50 focus-visible:ring-inset ${
             i === arr.length - 1 ? "" : "border-b border-border-subtle"
           }`}
         >
