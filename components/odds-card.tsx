@@ -2,6 +2,7 @@ import { TriangleAlert } from "lucide-react";
 
 import { HelpHint } from "@/components/help-hint";
 import { Badge } from "@/components/ui/badge";
+import { Callout } from "@/components/ui/callout";
 import { Card } from "@/components/ui/card";
 import { Separator } from "@/components/ui/separator";
 import type { OddsView } from "@/lib/view/types";
@@ -19,26 +20,21 @@ const GRID_COLS: Record<number, string> = {
 
 export function OddsCard({ view }: Props) {
   if (!view) {
+    // Estado pré-mercado esperado (não é erro) → Callout info (calmo).
     return (
-      <Card className="gap-0 p-0">
-        <div className="flex items-start gap-3 px-4 py-4">
-          <span className="pt-0.5 text-muted-fg-2">
-            <TriangleAlert className="size-4" />
-          </span>
-          <div className="flex flex-col gap-1">
-            <span className="text-[13px] font-medium tracking-tight">
-              Odds indisponíveis
-            </span>
-            <span className="text-[12px] text-muted-foreground tracking-tight">
-              Sem cotação publicada para este jogo. Análise indisponível até que o
-              mercado abra.
-            </span>
-            <span className="pt-1 font-mono text-[10.5px] text-muted-fg-2">
-              fonte: the-odds-api
-            </span>
-          </div>
-        </div>
-      </Card>
+      <Callout
+        variant="info"
+        icon={<TriangleAlert className="size-4" />}
+        title="Odds indisponíveis"
+      >
+        <span className="text-body-sm text-muted-foreground tracking-tight">
+          Sem cotação publicada para este jogo. Análise indisponível até que o
+          mercado abra.
+        </span>
+        <span className="pt-1 font-mono text-eyebrow text-muted-fg-2">
+          fonte: the-odds-api
+        </span>
+      </Callout>
     );
   }
 
@@ -46,15 +42,15 @@ export function OddsCard({ view }: Props) {
     <Card className="gap-0 overflow-hidden p-0">
       <div className="flex items-center justify-between px-4 pt-3.5 pb-3">
         <div className="flex items-center gap-2">
-          <span className="text-[13px] font-medium tracking-tight">Odds atuais</span>
+          <span className="text-body font-medium tracking-tight">Odds atuais</span>
           <Badge
             variant="outline"
-            className="h-[17px] rounded-full px-2 text-[9.5px] text-muted-foreground"
+            className="h-[17px] rounded-full px-2 text-eyebrow-xs text-muted-foreground"
           >
             {view.marketLabel}
           </Badge>
         </div>
-        <span className="font-mono text-[10px] text-muted-foreground">
+        <span className="font-mono text-eyebrow text-muted-foreground">
           atualizado há {view.updatedAgo}
         </span>
       </div>
@@ -72,17 +68,18 @@ export function OddsCard({ view }: Props) {
               key={i}
               className={`flex flex-col gap-1 ${isLast ? "" : "border-r border-border-subtle "}px-4 py-3.5`}
             >
-              <span className="flex items-center gap-1.5 text-[11px] uppercase tracking-[0.12em] text-muted-foreground">
+              <span className="flex items-center gap-1.5 text-meta uppercase tracking-label text-muted-foreground">
                 {o.label}
               </span>
+              {/* 22px: outlier heroic da odd — sem degrau na escala (ADR 0029) */}
               <span className="font-mono text-[22px] font-medium tabular-nums tracking-tight">
                 {o.odd}
               </span>
               <span
                 className={
                   isFirst
-                    ? "flex items-center gap-1 font-mono text-[10.5px] tabular-nums text-muted-foreground"
-                    : "font-mono text-[10.5px] tabular-nums text-muted-foreground"
+                    ? "flex items-center gap-1 font-mono text-eyebrow tabular-nums text-muted-foreground"
+                    : "font-mono text-eyebrow tabular-nums text-muted-foreground"
                 }
               >
                 {o.pct} normalizada
@@ -99,7 +96,7 @@ export function OddsCard({ view }: Props) {
         })}
       </div>
       <Separator />
-      <div className="flex items-center justify-between px-4 py-2.5 font-mono text-[10px] text-muted-fg-2">
+      <div className="flex items-center justify-between px-4 py-2.5 font-mono text-eyebrow text-muted-fg-2">
         <span>bookmaker · {view.bookmaker}</span>
         <span className="flex items-center gap-1 tabular-nums">
           overround {view.overround}

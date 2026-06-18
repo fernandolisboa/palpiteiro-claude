@@ -63,7 +63,7 @@ export function BestBetResults({ view }: { view: BestBetView }) {
   return (
     <div className="flex flex-col gap-3">
       <div className="flex flex-wrap items-center justify-between gap-2">
-        <span className="text-[12px] tracking-tight text-muted-foreground">
+        <span className="text-body-sm tracking-tight text-muted-foreground">
           {view.llmCalls}{" "}
           {plural(view.llmCalls, "análise gerada", "análises geradas")}
           {view.unavailableMarkets > 0
@@ -97,13 +97,13 @@ export function BestBetResults({ view }: { view: BestBetView }) {
 
       {view.errors.length > 0 && (
         <div className="flex flex-col gap-1 rounded-md border border-dashed border-border px-3 py-2">
-          <span className="text-[10.5px] font-mono uppercase tracking-[0.14em] text-muted-foreground">
+          <span className="text-eyebrow font-mono uppercase tracking-label text-muted-foreground">
             Mercados indisponíveis
           </span>
           {view.errors.map((err) => (
             <span
               key={err.marketKey}
-              className="text-[12px] tracking-tight text-muted-foreground"
+              className="text-body-sm tracking-tight text-muted-foreground"
             >
               {err.marketLabel}: {err.message}
             </span>
@@ -128,16 +128,16 @@ function BestBetCard({
     <div
       className={cn(
         "flex flex-col gap-1.5",
-        highlighted && "rounded-[12px] p-0.5 ring-2 ring-accent-fg/40",
+        highlighted && "rounded-lg p-0.5 ring-2 ring-accent-fg/40",
       )}
     >
       <div className="flex items-center gap-2 px-0.5">
         {highlighted && (
-          <span className="inline-flex items-center gap-1 rounded-full bg-accent-fg/10 px-2 py-0.5 font-mono text-[10px] uppercase tracking-[0.12em] text-accent-fg">
+          <span className="inline-flex items-center gap-1 rounded-full bg-accent-fg/10 px-2 py-0.5 font-mono text-eyebrow-xs uppercase tracking-label text-accent-fg">
             <Sparkles className="size-3" /> Melhor aposta
           </span>
         )}
-        <span className="font-mono text-[10.5px] uppercase tracking-[0.14em] text-muted-foreground">
+        <span className="font-mono text-eyebrow uppercase tracking-label text-muted-foreground">
           {entry.marketLabel}
         </span>
       </div>

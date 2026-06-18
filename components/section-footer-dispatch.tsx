@@ -88,7 +88,7 @@ export function SectionFooterDispatch({
           <div className="pointer-events-none absolute inset-0 flex items-center justify-center">
             <div className="flex items-center gap-2 rounded-md border border-border bg-card px-3 py-2 shadow">
               <Loader2 className="size-4 animate-spin text-accent-fg" />
-              <span className="text-[12.5px] font-medium tracking-tight">
+              <span className="text-body-sm font-medium tracking-tight">
                 Reanalisando…
               </span>
             </div>
@@ -101,7 +101,7 @@ export function SectionFooterDispatch({
       {/* Erro de reanálise: mantém o resultado anterior visível (shownView=view) e
           mostra um aviso; o refresh do rodapé tenta de novo. */}
       {errorMsg && (
-        <p className="px-4 pt-2 text-[12px] text-warn-fg tracking-tight">
+        <p className="px-4 pt-2 text-body-sm text-warn-fg tracking-tight">
           {errorMsg}
         </p>
       )}
@@ -109,7 +109,7 @@ export function SectionFooterDispatch({
       {/* Rodapé: label do modelo que rodou + (admin) dropdown inline + refresh à direita. */}
       <div className="mt-3 flex flex-wrap items-end justify-between gap-3 border-t border-border pt-3">
         <div className="flex flex-wrap items-end gap-3">
-          <span className="font-mono text-[10.5px] text-muted-foreground tracking-tight">
+          <span className="font-mono text-eyebrow text-muted-foreground tracking-tight">
             análise feita com modelo {shownView.model}
           </span>
           {hasModelChoice && (

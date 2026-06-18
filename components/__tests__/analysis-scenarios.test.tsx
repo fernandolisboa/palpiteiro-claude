@@ -386,7 +386,7 @@ describe("AnalysisScenarios — N-vias (1X2, AC2)", () => {
     // #242: recomendada (home) standalone; as 2 alternativas (draw, away) ficam
     // colapsadas no <details>, em grade de 2 colunas (não mais 3 lado a lado).
     expect(markup).toContain("ver 2 cenários alternativos");
-    expect(markup).toContain("min-[480px]:grid-cols-2");
+    expect(markup).toContain("sm:grid-cols-2");
   });
 });
 

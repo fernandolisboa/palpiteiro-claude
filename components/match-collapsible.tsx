@@ -25,7 +25,7 @@ export function MatchCollapsible({ title, meta, defaultOpen = false, children }:
     <Card className="gap-0 overflow-hidden p-0">
       <Collapsible open={open} onOpenChange={setOpen}>
         <CollapsibleTrigger className="flex w-full items-center justify-between px-4 py-3.5 text-left transition-colors hover:bg-surface-2">
-          <span className="flex items-center gap-2 text-[13px] font-medium tracking-tight">
+          <span className="flex items-center gap-2 text-body font-medium tracking-tight">
             <span className="text-muted-fg-2">
               <ChevronRight
                 className={cn("size-3.5 transition-transform", open && "rotate-90")}
@@ -34,7 +34,7 @@ export function MatchCollapsible({ title, meta, defaultOpen = false, children }:
             {title}
           </span>
           {meta && (
-            <span className="font-mono text-[10.5px] tabular-nums text-muted-foreground">
+            <span className="font-mono text-eyebrow tabular-nums text-muted-foreground">
               {meta}
             </span>
           )}

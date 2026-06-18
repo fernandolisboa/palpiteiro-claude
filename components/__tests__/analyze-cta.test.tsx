@@ -69,8 +69,8 @@ describe("AnalyzeCTA loading-step color semantics (#71)", () => {
     // Bind the muted token to the CHECKMARK specifically. text-muted-foreground
     // also appears on the subtitle and the done LABEL, so a plain toContain
     // passes even against unfixed main — it wouldn't catch the checkmark being
-    // pointed at some other token. The ✓-anchored regex fails if the checkmark
-    // moves off muted-foreground (and still requires the glyph to render).
-    expect(markup).toMatch(/text-muted-foreground[^>]*>\s*✓/);
+    // pointed at some other token. The lucide-check-anchored regex fails if the
+    // checkmark moves off muted-foreground (and still requires the icon to render).
+    expect(markup).toMatch(/text-muted-foreground[^>]*>\s*<svg[^>]*lucide-check/);
   });
 });

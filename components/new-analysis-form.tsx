@@ -202,7 +202,7 @@ export function NewAnalysisForm({
 
 function NoOddsHint() {
   return (
-    <div className="rounded-md border border-dashed border-border px-4 py-3 text-[11.5px] text-muted-foreground tracking-tight">
+    <div className="rounded-md border border-dashed border-border px-4 py-3 text-meta text-muted-foreground tracking-tight">
       Análise indisponível enquanto não houver odds publicadas para este jogo.
     </div>
   );

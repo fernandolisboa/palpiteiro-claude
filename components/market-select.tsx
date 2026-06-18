@@ -16,7 +16,7 @@ type Props = {
 export function MarketSelect({ value, onChange, markets }: Props) {
   return (
     <label className="flex flex-col gap-1">
-      <span className="font-mono text-[10px] uppercase tracking-[0.14em] text-muted-foreground">
+      <span className="font-mono text-eyebrow-xs uppercase tracking-label text-muted-foreground">
         mercado
       </span>
       <select
@@ -26,7 +26,7 @@ export function MarketSelect({ value, onChange, markets }: Props) {
         // Mesma tematização do ModelOverrideSelect: `color-scheme` dá o chrome do
         // popup nativo, mas o Chromium não herda a cor do texto pras <option> —
         // por isso a cor vai direto em cada option (bg-popover/text-popover-foreground).
-        className="h-8 w-full max-w-xs rounded-md border border-border bg-transparent px-3 text-[12.5px] text-foreground [color-scheme:light] dark:[color-scheme:dark]"
+        className="h-8 w-full max-w-xs rounded-md border border-border bg-transparent px-3 text-body-sm text-foreground outline-none [color-scheme:light] focus-visible:border-ring focus-visible:ring-[3px] focus-visible:ring-ring/50 dark:[color-scheme:dark]"
       >
         {markets.map((m) => (
           <option

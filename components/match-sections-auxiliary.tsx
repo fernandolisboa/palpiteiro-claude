@@ -1,3 +1,4 @@
+import { EmptyState } from "@/components/empty-state";
 import { MatchCollapsible } from "@/components/match-collapsible";
 import { Separator } from "@/components/ui/separator";
 import { getSportsDataProvider } from "@/lib/providers/sports-data";
@@ -94,14 +95,15 @@ export async function MatchAuxiliarySections({ fixtureRef }: Props) {
           injuriesView.home.length + injuriesView.away.length > 0 ? (
             <InjuriesBody view={injuriesView} />
           ) : injuriesView.available ? (
-            <div className="text-[12px] text-muted-foreground tracking-tight">
-              Nenhuma baixa reportada para esta partida.
-            </div>
+            <EmptyState
+              className="py-6"
+              title="Nenhuma baixa reportada para esta partida."
+            />
           ) : (
-            <div className="text-[12px] text-muted-foreground tracking-tight">
-              O provider atual não disponibiliza lesões e suspensões pra esta
-              competição.
-            </div>
+            <EmptyState
+              className="py-6"
+              title="O provider atual não disponibiliza lesões e suspensões pra esta competição."
+            />
           )}
         </MatchCollapsible>
       </div>
@@ -110,9 +112,10 @@ export async function MatchAuxiliarySections({ fixtureRef }: Props) {
           {lineupView.available ? (
             <LineupBody view={lineupView} />
           ) : (
-            <div className="text-[12px] text-muted-foreground tracking-tight">
-              Escalações ainda não foram divulgadas pela competição.
-            </div>
+            <EmptyState
+              className="py-6"
+              title="Escalações ainda não foram divulgadas pela competição."
+            />
           )}
         </MatchCollapsible>
       </div>
@@ -132,16 +135,16 @@ function InjuriesBody({
         if (items.length === 0) return null;
         return (
           <div key={side} className="flex flex-col gap-1">
-            <span className="font-mono text-[10.5px] uppercase tracking-[0.14em] text-muted-foreground">
+            <span className="font-mono text-eyebrow uppercase tracking-label text-muted-foreground">
               {side === "home" ? "casa" : "visitante"}
             </span>
             {items.map((p) => (
               <div
                 key={`${side}-${p.name}`}
-                className="flex items-center justify-between text-[12.5px] tracking-tight"
+                className="flex items-center justify-between text-body-sm tracking-tight"
               >
                 <span className="text-foreground">{p.name}</span>
-                <span className="font-mono text-[10.5px] text-muted-foreground">
+                <span className="font-mono text-eyebrow text-muted-foreground">
                   {p.status}
                 </span>
               </div>
@@ -172,12 +175,12 @@ function LineupBody({
                 {side === "home" ? "casa" : "visitante"}
               </span>
               {lineup.formation && (
-                <span className="font-mono text-[10.5px] tabular-nums text-muted-foreground">
+                <span className="font-mono text-eyebrow tabular-nums text-muted-foreground">
                   {lineup.formation}
                 </span>
               )}
             </div>
-            <div className="flex flex-wrap gap-x-3 gap-y-1 text-[12px] tracking-tight">
+            <div className="flex flex-wrap gap-x-3 gap-y-1 text-body-sm tracking-tight">
               {lineup.starters.map((p) => (
                 <span key={p}>{p}</span>
               ))}

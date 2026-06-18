@@ -7,16 +7,16 @@ import { Card } from "@/components/ui/card";
 export default function MatchNotFound() {
   return (
     <main className="min-h-screen bg-background text-foreground">
-      <div className="mx-auto w-full max-w-[480px] px-5 pt-16">
+      <div className="mx-auto w-full max-w-narrow px-5 pt-16">
         <Card className="px-6 py-10 text-center">
           <div className="flex flex-col items-center gap-4">
-            <span className="font-mono text-[11px] uppercase tracking-[0.18em] text-muted-fg-2">
+            <span className="font-mono text-meta uppercase tracking-eyebrow text-muted-fg-2">
               404
             </span>
-            <span className="text-[16px] font-medium tracking-tight">
+            <span className="text-display-sm font-medium tracking-tight">
               Jogo não encontrado
             </span>
-            <span className="max-w-[280px] text-[12.5px] text-muted-foreground tracking-tight">
+            <span className="max-w-[280px] text-body-sm text-muted-foreground tracking-tight">
               Este id não corresponde a nenhum jogo das próximas 48h. Ele pode ter sido
               removido, adiado ou nunca existiu.
             </span>
