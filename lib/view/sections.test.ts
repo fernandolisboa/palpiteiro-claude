@@ -1,9 +1,13 @@
 import { describe, expect, it } from "vitest";
 
-import type { NormalizedH2H } from "@/lib/providers/sports-data/types";
+import type {
+  NormalizedH2H,
+  NormalizedStanding,
+  NormalizedStandingTeam,
+} from "@/lib/providers/sports-data/types";
 
 import { getMarketPresentation } from "./markets/presentation";
-import { toH2HView } from "./sections";
+import { toH2HView, toStandingsView } from "./sections";
 
 // Confronto mínimo (toH2HView só lê score + kickoffTimestampMs + times).
 function fx(homeGoals: number, awayGoals: number, ms: number): NormalizedH2H {
@@ -49,5 +53,101 @@ describe("toH2HView", () => {
   it("sem histórico: summary degrada", () => {
     expect(toH2HView([]).summary).toBe("sem histórico recente");
     expect(toH2HView([], 5, null).summary).toBe("sem histórico recente");
+  });
+});
+
+// Time mínimo de classificação (toStandingsView lê pos/team/points/gf/ga + foco).
+function team(position: number, name: string): NormalizedStandingTeam {
+  return {
+    position,
+    team: name,
+    played: 1,
+    won: 0,
+    draw: 0,
+    lost: 0,
+    goalsFor: 0,
+    goalsAgainst: 0,
+    points: 0,
+  };
+}
+
+// Tabela com N times em ordem de posição (índice 0 = pos 1 = líder), como os
+// providers entregam. Nomes determinísticos "T<pos>" pra asserts legíveis.
+function standing(size: number): NormalizedStanding {
+  return {
+    league: "brasileirao_a",
+    season: 2026,
+    tables: [
+      {
+        teams: Array.from({ length: size }, (_, i) => team(i + 1, `T${i + 1}`)),
+      },
+    ],
+  };
+}
+
+describe("toStandingsView (janela)", () => {
+  // Regressão #337: grupo de 4 com jogo entre pos 3 e 4 — o líder (pos 1) sumia
+  // porque a janela ancorava acima do foco sem clampar contra o fim do array.
+  it("grupo de 4, jogo entre pos 3 e 4: mostra os 4 times com o líder visível", () => {
+    const view = toStandingsView({
+      standing: standing(4),
+      homeTeam: "T3",
+      awayTeam: "T4",
+    });
+    expect(view.rows.map((r) => r.pos)).toEqual([1, 2, 3, 4]);
+    expect(view.rows.find((r) => r.pos === 1)?.team).toBe("T1");
+    expect(view.rows.filter((r) => r.focus).map((r) => r.pos)).toEqual([3, 4]);
+  });
+
+  it("liga de 20, jogo no fundo (pos 18 e 19): clampa nas últimas 5 com ambos os focos", () => {
+    const view = toStandingsView({
+      standing: standing(20),
+      homeTeam: "T18",
+      awayTeam: "T19",
+    });
+    expect(view.rows.map((r) => r.pos)).toEqual([16, 17, 18, 19, 20]);
+    expect(view.rows.filter((r) => r.focus).map((r) => r.pos)).toEqual([18, 19]);
+  });
+
+  it("liga de 20, jogo no topo (pos 1 e 2): janela inalterada (1–5)", () => {
+    const view = toStandingsView({
+      standing: standing(20),
+      homeTeam: "T1",
+      awayTeam: "T2",
+    });
+    expect(view.rows.map((r) => r.pos)).toEqual([1, 2, 3, 4, 5]);
+  });
+
+  it("liga de 20, jogo no meio (pos 7 e 8): janela uma acima do foco (6–10)", () => {
+    const view = toStandingsView({
+      standing: standing(20),
+      homeTeam: "T7",
+      awayTeam: "T8",
+    });
+    expect(view.rows.map((r) => r.pos)).toEqual([6, 7, 8, 9, 10]);
+  });
+
+  it("window >= tamanho da tabela: mostra todas as linhas", () => {
+    const view = toStandingsView({
+      standing: standing(3),
+      homeTeam: "T2",
+      awayTeam: "T3",
+      windowSize: 5,
+    });
+    expect(view.rows.map((r) => r.pos)).toEqual([1, 2, 3]);
+  });
+
+  it("sem time de foco na tabela: mostra o topo (primeiras window linhas)", () => {
+    const view = toStandingsView({
+      standing: standing(20),
+      homeTeam: "Fantasma A",
+      awayTeam: "Fantasma B",
+    });
+    expect(view.rows.map((r) => r.pos)).toEqual([1, 2, 3, 4, 5]);
+    expect(view.rows.every((r) => r.focus === false)).toBe(true);
+  });
+
+  it("standing ausente: rows vazio (EmptyState)", () => {
+    expect(toStandingsView({ standing: undefined, homeTeam: "T1", awayTeam: "T2" }).rows).toEqual([]);
   });
 });
