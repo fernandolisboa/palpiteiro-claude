@@ -1,3 +1,4 @@
+import { Badge } from "@/components/ui/badge";
 import { Card } from "@/components/ui/card";
 import { cn } from "@/lib/utils";
 import type { MarketSegmentView } from "@/lib/view/dashboard";
@@ -19,15 +20,19 @@ function GraduationRuler({
   return (
     <div className="flex flex-col gap-2">
       <div className="flex items-center justify-between">
-        <span className="font-mono text-[10px] uppercase tracking-[0.14em] text-muted-foreground">
+        <span className="font-mono text-eyebrow uppercase tracking-label text-muted-foreground">
           graduação D9
         </span>
         {graduation.graduated ? (
-          <span className="rounded-[5px] bg-emerald-500/15 px-2 py-0.5 font-mono text-[10px] font-medium uppercase tracking-[0.1em] text-emerald-500">
+          <Badge
+            variant="outline"
+            size="xs"
+            className="border-edge-border bg-edge-soft uppercase tracking-label text-edge-fg"
+          >
             graduado
-          </span>
+          </Badge>
         ) : (
-          <span className="font-mono text-[10px] tabular-nums text-muted-foreground">
+          <span className="font-mono text-eyebrow tabular-nums text-muted-foreground">
             graduando
           </span>
         )}
@@ -36,12 +41,12 @@ function GraduationRuler({
         <div
           className={cn(
             "h-full rounded-full transition-all",
-            graduation.graduated ? "bg-emerald-500" : "bg-accent-fg/60",
+            graduation.graduated ? "bg-edge-fg" : "bg-accent-fg/60",
           )}
           style={{ width: `${pct}%` }}
         />
       </div>
-      <span className="font-mono text-[11px] tabular-nums text-muted-foreground">
+      <span className="font-mono text-meta tabular-nums text-muted-foreground">
         {graduation.label}
         {" · "}
         yield {segment.kpis.yieldPct.value}
@@ -60,21 +65,21 @@ function ClvMetric({
   view: { value: string; n: number; lowSample: boolean };
 }) {
   const tone = view.value.startsWith("+")
-    ? "text-emerald-500"
+    ? "text-edge-fg"
     : view.value.startsWith("-")
-      ? "text-red-500"
+      ? "text-destructive"
       : "text-muted-foreground";
   return (
     <div className="flex flex-col gap-0.5">
       <span
         className={cn(
-          "text-[15px] font-medium leading-none tracking-[-0.01em] tabular-nums",
-          view.lowSample ? "text-amber-500" : tone,
+          "text-label font-medium leading-none tracking-tight tabular-nums",
+          view.lowSample ? "text-warn-fg" : tone,
         )}
       >
         {view.value}
       </span>
-      <span className="font-mono text-[9.5px] uppercase tracking-[0.1em] text-muted-foreground">
+      <span className="font-mono text-eyebrow-xs uppercase tracking-label text-muted-foreground">
         {label} · n={view.n}
       </span>
     </div>
@@ -89,7 +94,7 @@ function ClvLine({ segment }: { segment: MarketSegmentView }) {
   if (clvOddsRatio.n === 0) return null;
   return (
     <div className="flex flex-col gap-2 rounded-md border border-border bg-surface-2 px-3 py-2.5">
-      <span className="font-mono text-[10px] uppercase tracking-[0.14em] text-muted-foreground">
+      <span className="font-mono text-eyebrow uppercase tracking-label text-muted-foreground">
         CLV vs fechamento
       </span>
       <div className="flex items-baseline gap-5">
@@ -103,7 +108,7 @@ function ClvLine({ segment }: { segment: MarketSegmentView }) {
 function StakeBands({ segment }: { segment: MarketSegmentView }) {
   return (
     <div className="flex flex-col gap-2">
-      <span className="font-mono text-[10px] uppercase tracking-[0.14em] text-muted-foreground">
+      <span className="font-mono text-eyebrow uppercase tracking-label text-muted-foreground">
         yield por banda de stake
       </span>
       <div className="grid grid-cols-3 gap-2">
@@ -112,20 +117,20 @@ function StakeBands({ segment }: { segment: MarketSegmentView }) {
             key={band.band}
             className="flex flex-col gap-1 rounded-md border border-border bg-surface-2 px-3 py-2"
           >
-            <span className="font-mono text-[10px] uppercase tracking-[0.1em] text-muted-foreground">
+            <span className="font-mono text-eyebrow uppercase tracking-label text-muted-foreground">
               {band.band}
             </span>
             <span
               className={cn(
-                "text-[16px] font-medium leading-none tracking-[-0.01em] tabular-nums",
+                "text-label font-medium leading-none tracking-tight tabular-nums",
                 band.yieldPct.lowSample
-                  ? "text-amber-500"
+                  ? "text-warn-fg"
                   : "text-foreground",
               )}
             >
               {band.yieldPct.value}
             </span>
-            <span className="font-mono text-[10px] tabular-nums text-muted-foreground">
+            <span className="font-mono text-eyebrow tabular-nums text-muted-foreground">
               n={band.yieldPct.n}
             </span>
           </div>
@@ -139,16 +144,16 @@ function MarketSegmentCard({ segment }: { segment: MarketSegmentView }) {
   return (
     <Card className="gap-4 p-5">
       <div className="flex items-baseline justify-between">
-        <span className="text-[14px] font-medium tracking-tight">
+        <span className="text-label font-medium tracking-tight">
           {segment.marketLabel}
         </span>
-        <span className="font-mono text-[10px] tabular-nums text-muted-foreground">
+        <span className="font-mono text-eyebrow tabular-nums text-muted-foreground">
           {segment.kpis.counts.bets} apostas
         </span>
       </div>
       <ClvLine segment={segment} />
       {segment.empty ? (
-        <p className="text-[12.5px] tracking-tight text-muted-foreground">
+        <p className="text-body-sm tracking-tight text-muted-foreground">
           Sem apostas resolvidas ainda — a régua D9 e o yield por banda aparecem
           quando começarem a liquidar.
         </p>
@@ -170,7 +175,7 @@ export function MarketSegments({
   if (segments.length === 0) return null;
   return (
     <section className="flex flex-col gap-3">
-      <span className="font-mono text-[10.5px] uppercase tracking-[0.18em] text-muted-foreground">
+      <span className="font-mono text-eyebrow uppercase tracking-eyebrow text-muted-foreground">
         por mercado — régua D9 + banda de stake
       </span>
       <div className="grid grid-cols-1 gap-3 lg:grid-cols-2">

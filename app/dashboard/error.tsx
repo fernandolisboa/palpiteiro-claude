@@ -20,17 +20,17 @@ export default function DashboardError({
 
   return (
     <div className="min-h-screen bg-background text-foreground">
-      <div className="mx-auto flex max-w-[480px] flex-col items-center gap-4 px-6 py-24 text-center">
-        <span className="text-amber-500">
+      <div className="mx-auto flex max-w-narrow flex-col items-center gap-4 px-6 py-24 text-center">
+        <span className="text-warn-fg">
           <TriangleAlert className="size-9" strokeWidth={1.25} />
         </span>
-        <h1 className="text-[18px] font-medium tracking-tight">
+        <h1 className="text-display-sm font-medium tracking-tight">
           Falha ao carregar o dashboard
         </h1>
-        <p className="text-[13px] text-muted-foreground">
+        <p className="text-body text-muted-foreground">
           Tente novamente em instantes.
           {error.digest ? (
-            <span className="block pt-1 font-mono text-[11px] text-muted-fg-2">
+            <span className="block pt-1 font-mono text-meta text-muted-fg-2">
               {error.digest}
             </span>
           ) : null}
@@ -41,7 +41,7 @@ export default function DashboardError({
           </Button>
           <Link
             href="/"
-            className="text-[13px] text-muted-foreground hover:text-foreground"
+            className="rounded-sm text-body text-muted-foreground hover:text-foreground focus-visible:outline-none focus-visible:ring-[3px] focus-visible:ring-ring/50"
           >
             Início
           </Link>

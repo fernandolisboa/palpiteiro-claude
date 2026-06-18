@@ -14,17 +14,17 @@ function Row({
 }) {
   return (
     <div className="flex items-center justify-between border-b border-border-subtle py-2">
-      <span className="font-mono text-[10px] uppercase tracking-[0.14em] text-muted-foreground">
+      <span className="font-mono text-eyebrow uppercase tracking-label text-muted-foreground">
         {label}
       </span>
-      <span className={cn("text-[13px] tabular-nums", className)}>{value}</span>
+      <span className={cn("text-body tabular-nums", className)}>{value}</span>
     </div>
   );
 }
 
 function SectionLabel({ children }: { children: string }) {
   return (
-    <h2 className="pb-2 pt-7 font-mono text-[10px] uppercase tracking-[0.14em] text-muted-foreground">
+    <h2 className="pb-2 pt-7 font-mono text-eyebrow uppercase tracking-label text-muted-foreground">
       {children}
     </h2>
   );
@@ -33,10 +33,10 @@ function SectionLabel({ children }: { children: string }) {
 function RawPayload({ label, json }: { label: string; json: string }) {
   return (
     <details className="rounded-lg border border-border bg-surface-2">
-      <summary className="cursor-pointer select-none px-4 py-2.5 font-mono text-[11px] uppercase tracking-[0.12em] text-muted-foreground">
+      <summary className="cursor-pointer select-none rounded-md px-4 py-2.5 font-mono text-meta uppercase tracking-label text-muted-foreground focus-visible:outline-none focus-visible:ring-[3px] focus-visible:ring-ring/50">
         {label}
       </summary>
-      <pre className="max-h-[420px] overflow-auto border-t border-border px-4 py-3 font-mono text-[11px] leading-relaxed">
+      <pre className="max-h-[420px] overflow-auto border-t border-border px-4 py-3 font-mono text-meta leading-relaxed">
         {json}
       </pre>
     </details>
@@ -56,25 +56,26 @@ export function PredictionDetail({
   // CLV sinalizado: + (bateu o fechamento) = verde, − = vermelho, "—" = neutro.
   const clvTone = (value: string) =>
     value.startsWith("+")
-      ? "text-emerald-500"
+      ? "text-edge-fg"
       : value.startsWith("-")
-        ? "text-red-500"
+        ? "text-destructive"
         : "text-muted-foreground";
   const resultClass =
     outcome?.result === "won"
-      ? "text-emerald-500"
+      ? "text-edge-fg"
       : outcome?.result === "lost"
-        ? "text-red-500"
+        ? "text-destructive"
         : "text-muted-foreground";
 
   return (
-    <div className="mx-auto w-full max-w-[680px] px-6 py-8">
+    <div className="mx-auto w-full max-w-reading px-6 py-8">
       <BackLink href={backHref} label={backLabel} />
 
-      <h1 className="text-[22px] font-medium tracking-[-0.02em]">
+      {/* text-[22px]: heroic-display outlier (sem degrau na escala; gap display-sm 18 → display-md 26), sancionado pela ADR 0029 espelhando a match page (#246) — NÃO tokenizar. */}
+      <h1 className="text-[22px] font-medium tracking-tight">
         {match.home} × {match.away}
       </h1>
-      <p className="pb-2 font-mono text-[11px] text-muted-foreground">
+      <p className="pb-2 font-mono text-meta text-muted-foreground">
         {LEAGUE_LABEL[match.league]} · {match.kickoff} · prediction{" "}
         {view.id.slice(0, 8)}
       </p>
@@ -109,17 +110,17 @@ export function PredictionDetail({
           />
         </>
       ) : (
-        <p className="text-[13px] text-muted-foreground">
+        <p className="text-body text-muted-foreground">
           Sem closing line capturada — o CLV (seu preço vs o de fechamento)
           aparece quando a odd de fechamento for capturada perto do kickoff.
         </p>
       )}
 
       <SectionLabel>racional</SectionLabel>
-      <p className="text-[13.5px] leading-relaxed tracking-tight">
+      <p className="text-body leading-relaxed tracking-tight">
         {prediction.rationale}
       </p>
-      <ul className="flex list-disc flex-col gap-1 pl-5 pt-3 text-[12.5px] text-muted-foreground">
+      <ul className="flex list-disc flex-col gap-1 pl-5 pt-3 text-body-sm text-muted-foreground">
         {prediction.factors.map((f, i) => (
           <li key={i}>{f}</li>
         ))}
@@ -134,8 +135,8 @@ export function PredictionDetail({
             value={outcome.profit}
             className={
               outcome.profit.startsWith("-")
-                ? "text-red-500"
-                : "text-emerald-500"
+                ? "text-destructive"
+                : "text-edge-fg"
             }
           />
           <Row label="placar do jogo" value={match.score} />
@@ -150,7 +151,7 @@ export function PredictionDetail({
           />
         </>
       ) : (
-        <p className="text-[13px] text-muted-foreground">
+        <p className="text-body text-muted-foreground">
           Ainda pendente — o resultado aparece após o jogo ser liquidado.
         </p>
       )}
@@ -182,7 +183,7 @@ export function PredictionDetail({
         aiCall && (
           <>
             <SectionLabel>payloads brutos</SectionLabel>
-            <p className="text-[12.5px] text-muted-foreground">
+            <p className="text-body-sm text-muted-foreground">
               Disponíveis só para admin (protegem o prompt do sistema).
             </p>
           </>
