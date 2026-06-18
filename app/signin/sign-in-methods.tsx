@@ -45,7 +45,7 @@ export function SignInMethods({
           checked={accepted}
           onCheckedChange={(v) => setAccepted(v === true)}
           className={cn(
-            "mt-0.5 flex size-4 shrink-0 items-center justify-center rounded-[4px] border border-input bg-transparent shadow-xs outline-none transition-colors",
+            "mt-0.5 flex size-4 shrink-0 items-center justify-center rounded-sm border border-input bg-transparent shadow-xs outline-none transition-colors",
             "focus-visible:border-ring focus-visible:ring-[3px] focus-visible:ring-ring/50",
             "data-[state=checked]:border-primary data-[state=checked]:bg-primary data-[state=checked]:text-primary-foreground",
           )}
@@ -54,7 +54,7 @@ export function SignInMethods({
             <Check className="size-3" strokeWidth={3} />
           </Checkbox.Indicator>
         </Checkbox.Root>
-        <span className="text-[12.5px] leading-snug tracking-tight text-muted-foreground">
+        <span className="text-body-sm leading-snug tracking-tight text-muted-foreground">
           Declaro ter 18 anos ou mais.
         </span>
       </label>
@@ -74,7 +74,7 @@ export function SignInMethods({
 
       <div className="flex items-center gap-3">
         <span className="h-px flex-1 bg-border" />
-        <span className="font-mono text-[10px] uppercase tracking-[0.14em] text-muted-fg-2">
+        <span className="font-mono text-eyebrow uppercase tracking-label text-muted-fg-2">
           ou
         </span>
         <span className="h-px flex-1 bg-border" />
@@ -83,7 +83,7 @@ export function SignInMethods({
       <Card className="p-5">
         <form action={sendMagicLink} className="flex flex-col gap-3">
           <label className="flex flex-col gap-1.5">
-            <span className="font-mono text-[10px] uppercase tracking-[0.14em] text-muted-foreground">
+            <span className="font-mono text-eyebrow uppercase tracking-label text-muted-foreground">
               e-mail
             </span>
             <Input
@@ -98,14 +98,14 @@ export function SignInMethods({
             Enviar link de acesso
           </Button>
           {errorMessage && (
-            <p className="text-[12.5px] text-destructive tracking-tight">
+            <p className="text-body-sm text-destructive tracking-tight">
               {errorMessage}
             </p>
           )}
         </form>
       </Card>
 
-      <p className="text-[11.5px] text-muted-fg-2 tracking-tight">
+      <p className="text-meta text-muted-fg-2 tracking-tight">
         Qualquer e-mail pode entrar. O link pode cair na pasta de spam no
         primeiro envio.
       </p>

@@ -2,6 +2,7 @@ import type { Metadata } from "next";
 
 import { BackLink } from "@/components/back-link";
 import { ThemeToggle } from "@/components/theme-toggle";
+import { Wordmark } from "@/components/wordmark";
 
 import { ComoFuncionaContent } from "./como-funciona-content";
 
@@ -24,18 +25,11 @@ export default function ComoFuncionaPage() {
   return (
     <div className="min-h-screen bg-background text-foreground">
       <header className="flex h-14 items-center justify-between border-b border-border-subtle px-6">
-        <div className="flex items-baseline gap-3">
-          <span className="text-[17px] font-semibold tracking-[-0.04em]">
-            palpiteiro
-          </span>
-          <span className="hidden font-mono text-[10px] uppercase tracking-[0.18em] text-muted-fg-2 sm:inline">
-            como funciona
-          </span>
-        </div>
+        <Wordmark suffix="como funciona" suffixClassName="hidden sm:inline" />
         <ThemeToggle />
       </header>
 
-      <div className="mx-auto w-full max-w-[640px] px-6 py-8">
+      <div className="mx-auto w-full max-w-reading px-6 py-8">
         <BackLink href="/" label="jogos" />
         <ComoFuncionaContent />
       </div>

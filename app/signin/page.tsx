@@ -29,7 +29,7 @@ export default async function SignInPage({ searchParams }: PageProps) {
     <div className="flex min-h-screen items-center justify-center bg-background px-5 text-foreground">
       <div className="flex w-full max-w-form flex-col gap-6">
         <div className="flex flex-col gap-1.5">
-          <Wordmark suffix="· over/under 2.5" />
+          <Wordmark suffix="· edge multi-mercado" />
           <p className="text-body text-muted-foreground tracking-tight">
             Entre com sua conta Google, com uma passkey ou com um link por
             e-mail.
