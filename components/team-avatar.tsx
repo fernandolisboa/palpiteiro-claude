@@ -30,7 +30,7 @@ export function TeamAvatar({
         width={size}
         height={size}
         className={cn(
-          "border-border inline-block shrink-0 rounded-full border object-cover",
+          "border-border inline-block shrink-0 rounded-full border",
           className
         )}
         style={{ width: size, height: size }}
