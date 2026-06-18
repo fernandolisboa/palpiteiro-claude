@@ -15,10 +15,10 @@ export default function Loading() {
         <div className="min-h-screen bg-background text-foreground">
           <PageHeader subtitle="carregando…" />
           <div className="px-5 pb-5 pt-1">
-            <h1 className="text-[26px] font-medium leading-[1.05] tracking-[-0.03em]">
+            <h1 className="text-display-md font-medium leading-none tracking-tight">
               Próximos jogos
             </h1>
-            <p className="pt-1.5 text-[13px] text-muted-foreground tracking-tight">
+            <p className="pt-1.5 text-body text-muted-foreground tracking-tight">
               {HOME_SUBTITLE}
             </p>
           </div>
@@ -31,10 +31,10 @@ export default function Loading() {
       </div>
       <div className="hidden lg:block">
         <DesktopShell>
-          <div className="mx-auto w-full max-w-[1040px] px-8 pt-10 pb-16">
+          <div className="mx-auto w-full max-w-content px-8 pt-10 pb-16">
             <div className="flex items-end justify-between pb-6">
               <div className="flex flex-col gap-2">
-                <h1 className="text-[32px] font-medium leading-[1] tracking-[-0.035em]">
+                <h1 className="text-display-lg font-medium leading-none tracking-tight">
                   Próximos jogos
                 </h1>
                 <Skeleton className="h-[14px] w-72" />

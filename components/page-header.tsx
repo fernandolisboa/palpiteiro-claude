@@ -1,5 +1,6 @@
 import { MobileNav } from "@/components/mobile-nav";
 import { ThemeToggle } from "@/components/theme-toggle";
+import { Wordmark } from "@/components/wordmark";
 
 type Props = {
   subtitle?: string;
@@ -19,18 +20,11 @@ export function PageHeader({ subtitle, isAdmin = false }: Props) {
             (sempre visível, um toque). Mantém o header limpo em ≤430px. */}
         <div className="flex items-center gap-1.5">
           <MobileNav isAdmin={isAdmin} />
-          <div className="flex items-baseline gap-2">
-            <span className="text-[18px] font-semibold tracking-[-0.04em]">
-              palpiteiro
-            </span>
-            <span className="font-mono text-[10px] uppercase tracking-[0.18em] text-muted-fg-2">
-              ·&nbsp;v0
-            </span>
-          </div>
+          <Wordmark suffix={"· v0"} />
         </div>
         <div className="flex items-center gap-2">
           {subtitle && (
-            <span className="font-mono text-[10.5px] text-muted-foreground">
+            <span className="font-mono text-eyebrow text-muted-foreground">
               {subtitle}
             </span>
           )}

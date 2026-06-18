@@ -37,18 +37,18 @@ export function HelpHint({ anchor, label, blurb }: HelpHintProps) {
         <button
           type="button"
           aria-label={`Ajuda: ${label}`}
-          className="inline-flex size-[15px] shrink-0 items-center justify-center rounded-full border border-border-subtle font-mono text-[9px] leading-none text-muted-foreground transition-colors hover:text-foreground focus-visible:ring-[3px] focus-visible:ring-ring/50 focus-visible:outline-none"
+          className="inline-flex size-[15px] shrink-0 items-center justify-center rounded-full border border-border-subtle font-mono text-eyebrow-xs leading-none text-muted-foreground transition-colors hover:text-foreground focus-visible:ring-[3px] focus-visible:ring-ring/50 focus-visible:outline-none"
         >
           ?
         </button>
       </PopoverTrigger>
       <PopoverContent className="flex flex-col gap-2">
-        <p className="text-[12px] leading-snug tracking-tight text-foreground">
+        <p className="text-body-sm leading-snug tracking-tight text-foreground">
           {blurb}
         </p>
         <Link
           href={`/como-funciona#${anchor}`}
-          className="font-mono text-[11px] tracking-tight text-muted-foreground underline-offset-2 hover:text-foreground hover:underline"
+          className="font-mono text-meta tracking-tight text-muted-foreground underline-offset-2 hover:text-foreground hover:underline"
         >
           saiba mais
         </Link>

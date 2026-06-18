@@ -1,10 +1,12 @@
 "use client";
 
 import Link from "next/link";
+import { usePathname } from "next/navigation";
 import { Menu } from "lucide-react";
 
 import { signOutAction } from "@/app/actions/auth";
 import { Button } from "@/components/ui/button";
+import { isActivePath, navLinkVariants } from "@/components/nav-link";
 import {
   Sheet,
   SheetClose,
@@ -13,7 +15,7 @@ import {
   SheetTrigger,
 } from "@/components/ui/sheet";
 
-type NavLink = { href: string; label: string };
+type NavLinkItem = { href: string; label: string };
 
 /**
  * Links de navegação do drawer mobile. As entradas de jogos/dashboard/como
@@ -24,8 +26,8 @@ type NavLink = { href: string; label: string };
  * no drawer — divergência intencional. Função pura (seam de teste sem precisar
  * de @testing-library), no estilo de `visibleLeagueTabs`.
  */
-export function mobileNavLinks(isAdmin: boolean): NavLink[] {
-  const links: NavLink[] = [
+export function mobileNavLinks(isAdmin: boolean): NavLinkItem[] {
+  const links: NavLinkItem[] = [
     { href: "/", label: "jogos" },
     { href: "/dashboard", label: "dashboard" },
     { href: "/como-funciona", label: "como funciona" },
@@ -37,14 +39,9 @@ export function mobileNavLinks(isAdmin: boolean): NavLink[] {
   return links;
 }
 
-// Estilo compartilhado entre os links de nav e o botão "sair", pra que as duas
-// linhas (Link e <button>) permaneçam visualmente idênticas e não divirjam num
-// refactor futuro. `min-h-11` garante o alvo de toque de 44px. O botão acrescenta
-// `w-full text-left` (só ele precisa, por ser <button> e não <a> inline).
-const navRowClass =
-  "flex min-h-11 items-center rounded-md px-3 py-3 text-[15px] tracking-tight text-muted-foreground transition-colors hover:bg-accent hover:text-foreground";
-
 export function MobileNav({ isAdmin }: { isAdmin: boolean }) {
+  const pathname = usePathname();
+
   return (
     <Sheet>
       <SheetTrigger asChild>
@@ -56,10 +53,17 @@ export function MobileNav({ isAdmin }: { isAdmin: boolean }) {
       <SheetContent side="left" className="w-64 p-4">
         {/* Radix Dialog exige um título pra a11y; não queremos exibi-lo. */}
         <SheetTitle className="sr-only">Navegação</SheetTitle>
-        <nav className="flex flex-col gap-1 pt-2">
+        <nav
+          aria-label="Navegação principal"
+          className="flex flex-col gap-1 pt-2"
+        >
           {mobileNavLinks(isAdmin).map(({ href, label }) => (
             <SheetClose asChild key={href}>
-              <Link href={href} className={navRowClass}>
+              <Link
+                href={href}
+                aria-current={isActivePath(pathname, href) ? "page" : undefined}
+                className={navLinkVariants({ variant: "row" })}
+              >
                 {label}
               </Link>
             </SheetClose>
@@ -73,7 +77,10 @@ export function MobileNav({ isAdmin }: { isAdmin: boolean }) {
             (onOpenChange(false)) desmontar antes do dispatch da action.
           */}
           <form action={signOutAction}>
-            <button type="submit" className={`${navRowClass} w-full text-left`}>
+            <button
+              type="submit"
+              className={`${navLinkVariants({ variant: "row" })} w-full text-left`}
+            >
               sair
             </button>
           </form>
