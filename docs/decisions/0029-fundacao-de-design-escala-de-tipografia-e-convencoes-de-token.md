@@ -154,6 +154,28 @@ Duas frentes, ambas **presentation-only**.
   `oklch(...)→oklch(var(...))` com dígitos de hue + valores light preservados). Não editamos os
   arquivos de conteúdo — só o snapshot reflete a mudança da primitiva.
 
+## Exceções registradas pela #246 (referência viva)
+
+A fatia #246 (de-slop da match page) é a **referência viva** onde a escala é exercida primeiro;
+onde a tela diverge, #246 ganha e esta ADR registra (doc-only — sem cunhar token novo):
+
+- **`text-[22px]` / `text-[30px]` como outliers sancionados de _heroic display_**: o valor da odd
+  (`odds-card.tsx`) e o hero desktop (nome do time, "vs", placar) usam 22px/30px, que **não têm
+  degrau** na escala (gaps display-sm 18 → display-md 26 → display-lg 32). Colapsar achataria a
+  hierarquia da tela de referência. Ficam como `text-[Npx]`/`lg:text-[Npx]` arbitrários
+  **comentados**, NÃO um token — adicionar `--text-display-xs` é decisão de fundação (futura,
+  #321/#320) que pré-emptaria os heirs; **#246 não cunha token**.
+- **Tracking de eyebrow normaliza pra `--tracking-label`(0.14em)**: os `tracking-[0.12em]` ad-hoc da
+  match-tela passam pro token dominante (0.14em) — mudança de valor consciente, não rename.
+- **`EmptyState` ganha uso com override in-card**: aninhado em collapsibles/section cards o
+  py-12/centering shell-grade é alto demais → consumidores passam `className="py-6"`. #246 é o
+  primeiro consumidor real de conteúdo do primitivo (carve-out previsto nas Consequências).
+- **Breakpoint 480→640**: banir `min-[480px]:` (regra desta ADR) move o reflow do grid de cenários
+  pra `sm`(640px) — consequência intencional, sem custom screen.
+- **Geometria de grid-track**: a ADR não tem namespace de token pra larguras de coluna; templates
+  mágicos repetidos (`grid-cols-[20px_1fr_36px_36px_44px]` em standings) viram **const nomeada**
+  (`STANDINGS_GRID`) — convenção sancionada (extract-to-const).
+
 ## Alternativas consideradas
 
 1. **Só lint/convenção sem tokens no `@theme`** — rejeitado: sem escala nomeada cada superfície

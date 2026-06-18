@@ -58,9 +58,9 @@ function selectColumns(outcomes: OutcomeView[]): {
 // colunas neutras) e pra a grade de cenários ALTERNATIVOS colapsados (#242) — não
 // mais pra o bloco inteiro: a recomendação agora é standalone (full-width) acima.
 function gridClass(count: number): string {
-  if (count <= 2) return "grid grid-cols-1 gap-2 min-[480px]:grid-cols-2";
-  if (count === 3) return "grid grid-cols-1 gap-2 min-[480px]:grid-cols-3";
-  return "grid grid-cols-1 gap-2 min-[480px]:grid-cols-2 lg:grid-cols-3";
+  if (count <= 2) return "grid grid-cols-1 gap-2 sm:grid-cols-2";
+  if (count === 3) return "grid grid-cols-1 gap-2 sm:grid-cols-3";
+  return "grid grid-cols-1 gap-2 sm:grid-cols-2 lg:grid-cols-3";
 }
 
 // "ver cenário alternativo · menos de 2.5 gols -7.3pp" — resumo do disclosure
@@ -99,7 +99,7 @@ export function AnalysisScenarios({
   const alternatives = columns.filter((o) => !o.isRecommended);
   return (
     <div className="mx-4 mb-4 flex flex-col gap-2">
-      <span className="font-mono text-[10.5px] uppercase tracking-[0.14em] text-muted-foreground">
+      <span className="font-mono text-eyebrow uppercase tracking-label text-muted-foreground">
         cenários
       </span>
       {hasRecommendation ? (
@@ -119,7 +119,7 @@ export function AnalysisScenarios({
           ))}
           {alternatives.length > 0 && (
             <details className="group">
-              <summary className="flex cursor-pointer list-none select-none items-center gap-1.5 rounded-md py-1.5 font-mono text-[10px] uppercase tracking-[0.14em] text-muted-foreground transition-colors hover:text-foreground focus-visible:outline-none focus-visible:ring-[3px] focus-visible:ring-ring/50 [&::-webkit-details-marker]:hidden">
+              <summary className="flex cursor-pointer list-none select-none items-center gap-1.5 rounded-md py-1.5 font-mono text-eyebrow-xs uppercase tracking-label text-muted-foreground transition-colors hover:text-foreground focus-visible:outline-none focus-visible:ring-[3px] focus-visible:ring-ring/50 [&::-webkit-details-marker]:hidden">
                 <ChevronRight className="size-3 shrink-0 transition-transform group-open:rotate-90" />
                 {alternativesSummaryLabel(alternatives)}
               </summary>
@@ -154,21 +154,21 @@ export function AnalysisScenarios({
         </div>
       )}
       {hiddenCount > 0 && (
-        <p className="font-mono text-[10px] leading-snug tracking-tight text-muted-fg-2">
+        <p className="font-mono text-eyebrow-xs leading-snug tracking-tight text-muted-fg-2">
           {`+${hiddenCount} outras seleções não exibidas`}
         </p>
       )}
       {framing && (
-        <p className="text-[11px] leading-snug tracking-tight text-muted-foreground">
+        <p className="text-meta leading-snug tracking-tight text-muted-foreground">
           {framing}
         </p>
       )}
       {note && (
-        <p className="font-mono text-[10px] leading-snug tracking-tight text-muted-fg-2">
+        <p className="font-mono text-eyebrow-xs leading-snug tracking-tight text-muted-fg-2">
           {note}
         </p>
       )}
-      <p className="font-mono text-[10px] leading-snug tracking-tight text-muted-fg-2">
+      <p className="font-mono text-eyebrow-xs leading-snug tracking-tight text-muted-fg-2">
         {`o app só recomenda com vantagem ≥ ${minEdgePp}pp sobre o mercado; os números acima são informativos · odds do momento da análise — as atuais estão no card acima`}
       </p>
     </div>
@@ -213,14 +213,14 @@ function ScenarioColumn({
       <div className="flex items-baseline justify-between gap-2 pb-0.5">
         <span
           className={cn(
-            "font-mono text-[10.5px] uppercase tracking-[0.14em]",
+            "font-mono text-eyebrow uppercase tracking-label",
             isRecommended ? "text-accent-fg" : "text-muted-foreground",
           )}
         >
           {outcome.scenarioLabel}
         </span>
         {isRecommended && (
-          <span className="font-mono text-[9.5px] uppercase tracking-[0.12em] text-accent-fg">
+          <span className="font-mono text-eyebrow-xs uppercase tracking-label text-accent-fg">
             recomendada
           </span>
         )}
@@ -285,7 +285,7 @@ function ScenarioColumn({
       {/* breakEven "—" (modelProb ≤ 0 → 100/0 indefinido): omite a frase de
           equilíbrio em vez de renderizar "odd ≥ —". */}
       {!isRecommended && outcome.breakEven !== "—" && (
-        <p className="border-t border-border-subtle pt-1.5 text-[11px] leading-snug tracking-tight text-muted-foreground">
+        <p className="border-t border-border-subtle pt-1.5 text-meta leading-snug tracking-tight text-muted-foreground">
           {`pelo modelo, só sai do zero com odd ≥ ${outcome.breakEven}`}
         </p>
       )}
@@ -303,7 +303,7 @@ type RowProps = {
 function ScenarioRow({ label, value, emphasis = false, hint }: RowProps) {
   return (
     <div className="flex items-baseline justify-between gap-2">
-      <span className="flex items-center gap-1 font-mono text-[10px] uppercase tracking-[0.14em] text-muted-foreground">
+      <span className="flex items-center gap-1 font-mono text-eyebrow-xs uppercase tracking-label text-muted-foreground">
         {label}
         {hint && (
           <HelpHint anchor={hint.anchor} label={label} blurb={hint.blurb} />
@@ -311,7 +311,7 @@ function ScenarioRow({ label, value, emphasis = false, hint }: RowProps) {
       </span>
       <span
         className={cn(
-          "font-mono text-[12.5px] font-medium tabular-nums tracking-tight",
+          "font-mono text-body-sm font-medium tabular-nums tracking-tight",
           emphasis ? "text-edge-fg" : "text-foreground",
         )}
       >

@@ -12,7 +12,6 @@ import { MatchAuxiliarySections } from "@/components/match-sections-auxiliary";
 import { MatchHero } from "@/components/match-hero";
 import { MatchSections } from "@/components/match-sections";
 import { OddsCard } from "@/components/odds-card";
-import { TeamAvatar } from "@/components/team-avatar";
 import { ThemeToggle } from "@/components/theme-toggle";
 import {
   MatchAuxiliarySkeleton,
@@ -20,7 +19,7 @@ import {
 } from "@/components/skeletons/match-sections-skeleton";
 import { auth } from "@/auth";
 import { MODEL_REGISTRY, modelsForAudience } from "@/lib/ai/models";
-import { LEAGUE_LABEL, leagueToKey } from "@/lib/format";
+import { leagueToKey } from "@/lib/format";
 import {
   getDefaultModelId,
   getEnableBestBetFanOut,
@@ -280,13 +279,13 @@ function MobileMatch({
       <header className="flex items-center justify-between px-5 pt-5 pb-2">
         <Link
           href="/"
-          className="flex items-center gap-2 text-muted-foreground hover:text-foreground"
+          className="flex items-center gap-2 rounded-sm text-muted-foreground hover:text-foreground focus-visible:outline-none focus-visible:ring-[3px] focus-visible:ring-ring/50"
         >
           <ChevronLeft className="size-3.5" />
-          <span className="text-[12.5px] tracking-tight">jogos</span>
+          <span className="text-body-sm tracking-tight">jogos</span>
         </Link>
         <div className="flex items-center gap-2">
-          <span className="font-mono text-[10px] uppercase tracking-[0.16em] text-muted-fg-2">
+          <span className="font-mono text-eyebrow-xs uppercase tracking-eyebrow text-muted-fg-2">
             match · {matchId.slice(0, 8)}
           </span>
           <ThemeToggle />
@@ -329,7 +328,7 @@ function MobileMatch({
         )}
         {analyzable && bestBetEnabled && selectableMarkets.length > 1 && (
           <div className="flex flex-col gap-2 border-t border-border pt-3">
-            <span className="font-mono text-[10px] uppercase tracking-[0.16em] text-muted-fg-2">
+            <span className="font-mono text-eyebrow-xs uppercase tracking-eyebrow text-muted-fg-2">
               melhor aposta do jogo
             </span>
             <BestBetPanel matchId={matchId} />
@@ -366,84 +365,21 @@ function DesktopMatch({
 }: Common) {
   return (
     <DesktopShell>
-      <div className="mx-auto w-full max-w-[1100px] px-8 pt-8 pb-16">
+      <div className="mx-auto w-full max-w-content px-8 pt-8 pb-16">
         <Link
           href="/"
-          className="inline-flex items-center gap-2 pb-6 text-muted-foreground hover:text-foreground"
+          className="mb-6 inline-flex items-center gap-2 rounded-sm text-muted-foreground hover:text-foreground focus-visible:outline-none focus-visible:ring-[3px] focus-visible:ring-ring/50"
         >
           <ChevronLeft className="size-3.5" />
-          <span className="text-[12.5px] tracking-tight">jogos</span>
+          <span className="text-body-sm tracking-tight">jogos</span>
         </Link>
 
         <div className="grid grid-cols-[1fr_320px] gap-8 pb-8">
-          <div>
-            <div className="flex items-center gap-3 pb-5">
-              <span className="inline-flex h-5 items-center rounded-full border border-border bg-transparent px-2 text-[10px] uppercase tracking-[0.12em] text-muted-foreground">
-                {LEAGUE_LABEL[heroView.league]}
-              </span>
-              <span className="font-mono text-[11px] tabular-nums text-muted-foreground">
-                {heroView.when}
-              </span>
-              {heroView.countdown && (
-                <span className="font-mono text-[11px] tabular-nums text-accent-fg">
-                  {heroView.countdown}
-                </span>
-              )}
-            </div>
-            <div className="flex items-center gap-8">
-              <div className="flex items-center gap-3">
-                <TeamAvatar
-                  initials={heroView.home.short.slice(0, 2)}
-                  hue={heroView.home.hue}
-                  size={56}
-                />
-                <div className="flex flex-col">
-                  <span className="text-[22px] font-medium tracking-[-0.02em]">
-                    {heroView.home.name}
-                  </span>
-                  <span className="font-mono text-[10.5px] uppercase tracking-[0.14em] text-muted-foreground">
-                    casa
-                  </span>
-                </div>
-              </div>
-              {finalScore ? (
-                <div className="flex flex-col items-center gap-0.5">
-                  <span className="font-mono text-[30px] font-medium tabular-nums tracking-tight">
-                    {finalScore.home}
-                    <span className="px-2 text-muted-foreground">–</span>
-                    {finalScore.away}
-                  </span>
-                  <span className="font-mono text-[10px] uppercase tracking-[0.14em] text-muted-fg-2">
-                    encerrado
-                  </span>
-                </div>
-              ) : (
-                <span className="text-[22px] font-medium text-muted-foreground tracking-tight">
-                  vs
-                </span>
-              )}
-              <div className="flex items-center gap-3">
-                <TeamAvatar
-                  initials={heroView.away.short.slice(0, 2)}
-                  hue={heroView.away.hue}
-                  size={56}
-                />
-                <div className="flex flex-col">
-                  <span className="text-[22px] font-medium tracking-[-0.02em]">
-                    {heroView.away.name}
-                  </span>
-                  <span className="font-mono text-[10.5px] uppercase tracking-[0.14em] text-muted-foreground">
-                    visitante
-                  </span>
-                </div>
-              </div>
-            </div>
-            {heroView.venue && (
-              <div className="flex items-center gap-4 pt-5 font-mono text-[10.5px] uppercase tracking-[0.14em] text-muted-fg-2">
-                <span>{heroView.venue}</span>
-              </div>
-            )}
-          </div>
+          <MatchHero
+            view={heroView}
+            status={heroView.status === "live" ? "live" : "scheduled"}
+            score={finalScore ?? undefined}
+          />
 
           <div className="flex flex-col gap-3">
             <OddsCard view={oddsView} />
@@ -479,7 +415,7 @@ function DesktopMatch({
 
         {analyzable && bestBetEnabled && selectableMarkets.length > 1 && (
           <div className="flex flex-col gap-2 border-t border-border pt-3 pb-6">
-            <span className="font-mono text-[10px] uppercase tracking-[0.16em] text-muted-fg-2">
+            <span className="font-mono text-eyebrow-xs uppercase tracking-eyebrow text-muted-fg-2">
               melhor aposta do jogo
             </span>
             <BestBetPanel matchId={matchId} />
@@ -507,10 +443,10 @@ function FinishedNotice({
 }) {
   return (
     <div className="flex flex-col gap-1.5 rounded-md border border-dashed border-border px-4 py-3.5">
-      <span className="font-mono text-[10.5px] uppercase tracking-[0.14em] text-muted-foreground">
+      <span className="font-mono text-eyebrow uppercase tracking-label text-muted-foreground">
         jogo encerrado
       </span>
-      <p className="text-[12.5px] text-muted-foreground tracking-tight">
+      <p className="text-body-sm text-muted-foreground tracking-tight">
         {score
           ? `Placar final ${score.home}–${score.away}. Análise indisponível para jogos já encerrados.`
           : "Análise indisponível para jogos já encerrados ou cancelados."}

@@ -24,7 +24,7 @@ export function ModelOverrideSelect({
 }: Props) {
   return (
     <label className="flex flex-col gap-1">
-      <span className="font-mono text-[10px] uppercase tracking-[0.14em] text-muted-foreground">
+      <span className="font-mono text-eyebrow-xs uppercase tracking-label text-muted-foreground">
         modelo
       </span>
       <select
@@ -36,7 +36,7 @@ export function ModelOverrideSelect({
         // explícita na própria option, o texto saía escuro no dark (escuro no
         // escuro). Por isso a cor vai DIRETO em cada <option> abaixo
         // (`bg-popover`/`text-popover-foreground`, que viram com o tema).
-        className="h-8 w-full max-w-xs rounded-md border border-border bg-transparent px-3 text-[12.5px] text-foreground [color-scheme:light] dark:[color-scheme:dark]"
+        className="h-8 w-full max-w-xs rounded-md border border-border bg-transparent px-3 text-body-sm text-foreground outline-none [color-scheme:light] focus-visible:border-ring focus-visible:ring-[3px] focus-visible:ring-ring/50 dark:[color-scheme:dark]"
       >
         <option value="default" className="bg-popover text-popover-foreground">
           Usar padrão global ({defaultModelLabel})

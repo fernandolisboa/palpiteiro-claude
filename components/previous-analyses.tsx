@@ -19,10 +19,10 @@ export function PreviousAnalyses({ items }: { items: PreviousAnalysisItem[] }) {
           // key = predictions.id (estável): reanálises do mesmo minuto não colidem.
           <div key={item.id} className="flex flex-col gap-1.5">
             <div className="flex items-center justify-between gap-2 px-0.5">
-              <span className="font-mono text-[10.5px] uppercase tracking-[0.14em] text-muted-foreground">
+              <span className="font-mono text-eyebrow uppercase tracking-label text-muted-foreground">
                 {item.marketLabel}
               </span>
-              <span className="font-mono text-[10px] tabular-nums text-muted-fg-2">
+              <span className="font-mono text-eyebrow-xs tabular-nums text-muted-fg-2">
                 {item.generatedAt}
               </span>
             </div>

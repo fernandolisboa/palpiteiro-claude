@@ -41,7 +41,7 @@ function Callout({
   title,
   children,
   ...props
-}: React.ComponentProps<"div"> &
+}: Omit<React.ComponentProps<"div">, "title"> &
   VariantProps<typeof calloutVariants> & {
     icon?: React.ReactNode
     title?: React.ReactNode

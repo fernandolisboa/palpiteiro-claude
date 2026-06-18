@@ -1,4 +1,4 @@
-import { Loader2, Sparkles } from "lucide-react";
+import { Check, ChevronRight, Circle, Loader2, Sparkles } from "lucide-react";
 
 import { Button } from "@/components/ui/button";
 import { Card } from "@/components/ui/card";
@@ -49,10 +49,10 @@ export function AnalyzeCTA({
             <Loader2 className="size-4 animate-spin" />
           </span>
           <div className="flex flex-1 flex-col gap-0.5">
-            <span className="text-[13px] font-medium tracking-tight">
+            <span className="text-body font-medium tracking-tight">
               {multi ? `Analisando ${marketCount} mercados…` : "Analisando jogo…"}
             </span>
-            <span className="text-[11.5px] text-muted-foreground tracking-tight">
+            <span className="text-meta text-muted-foreground tracking-tight">
               {multi
                 ? "Claude analisa cada mercado em sequência. Cerca de 8–12s por mercado."
                 : "Claude está revisando forma, H2H, lesões e odds. Cerca de 8–12s."}
@@ -62,15 +62,22 @@ export function AnalyzeCTA({
         <Separator />
         <div className="flex flex-col gap-2 px-4 py-3">
           {steps.map((s, i) => (
-            <div key={i} className="flex items-center gap-2 font-mono text-[10.5px]">
+            <div key={i} className="flex items-center gap-2 font-mono text-eyebrow">
               <span
                 className={cn(
+                  "[&_svg]:size-3.5",
                   s.status === "done" && "text-muted-foreground",
                   s.status === "active" && "text-accent-fg",
                   s.status === "pending" && "text-muted-fg-2",
                 )}
               >
-                {s.status === "done" ? "✓" : s.status === "active" ? "▸" : "·"}
+                {s.status === "done" ? (
+                  <Check aria-hidden="true" />
+                ) : s.status === "active" ? (
+                  <ChevronRight aria-hidden="true" />
+                ) : (
+                  <Circle aria-hidden="true" />
+                )}
               </span>
               <span
                 className={cn(
@@ -93,7 +100,7 @@ export function AnalyzeCTA({
       type="submit"
       size="lg"
       disabled={disabled}
-      className="h-12 w-full text-[14px]"
+      className="h-12 w-full text-label"
     >
       <Sparkles className="size-4" /> Analisar com IA
     </Button>
