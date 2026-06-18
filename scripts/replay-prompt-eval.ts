@@ -34,6 +34,13 @@
  * importar `predict.ts` aqui (dispararia coleta de dados e persistência).
  * Zero quota da Odds API: os payloads já estão armazenados, sem fetch.
  *
+ * Seam AIProvider (ADR 0027 / #230): este script fica DELIBERADAMENTE Anthropic-only
+ * e FORA do seam. O gate de flip é model-aware por `thinkingMode` (adaptive vs
+ * temperature, #203) — Anthropic-específico —, ele replaya `inputPayload`s no shape
+ * Anthropic (`MessageCreateParamsNonStreaming`) e usa `Anthropic.ToolUseBlock`
+ * direto, então portá-lo pro seam é NO-GO (ADR 0027). Importa `getAnthropicClient`
+ * via o shim `@/lib/ai/anthropic` (não pelo adapter) — fora da porta única do app.
+ *
  * Run: pnpm tsx scripts/replay-prompt-eval.ts
  */
 import { config } from "dotenv";

@@ -1,4 +1,3 @@
-import Anthropic from "@anthropic-ai/sdk";
 import { eq } from "drizzle-orm";
 
 import {
@@ -41,7 +40,6 @@ import {
 } from "@/lib/db/queries/ai-config";
 import { getPreferredModelId } from "@/lib/db/queries/users";
 
-import { getAnthropicClient } from "./anthropic";
 import { calculateCost } from "./cost";
 import { computeStakeUnits } from "./staking";
 import { getCartridge } from "./markets/registry";
@@ -51,7 +49,8 @@ import {
   isModelAllowedForAudience,
   type AIModelId,
 } from "./models";
-import { buildAnthropicRequest } from "./request-builder";
+import { getProviderForModel } from "./providers";
+import type { AnalysisRequest, ToolDef } from "./providers/types";
 
 // ─── Types & errors ──────────────────────────────────────────────────────────
 
@@ -159,49 +158,14 @@ function truncate(text: string, limit: number): string {
   return text.length > limit ? `${text.slice(0, limit - 1)}…` : text;
 }
 
-function classifyAnthropicError(err: unknown): {
-  status: Exclude<AiCallStatus, "ok" | "invalid_output" | "tool_missing">;
-  message: string;
-} {
-  if (err instanceof Anthropic.APIConnectionTimeoutError) {
-    return { status: "timeout", message: err.message };
-  }
-  if (err instanceof Anthropic.RateLimitError) {
-    const retryAfter = err.headers?.get?.("retry-after") ?? null;
-    return {
-      status: "rate_limited",
-      message: `${err.status}: ${err.message}${retryAfter ? ` (retry-after=${retryAfter})` : ""}`,
-    };
-  }
-  if (err instanceof Anthropic.APIError) {
-    const requestId = err.headers?.get?.("request-id") ?? null;
-    return {
-      status: "provider_error",
-      message: `${err.status ?? "?"}: ${err.message}${requestId ? ` (request-id=${requestId})` : ""}`,
-    };
-  }
-  return {
-    status: "provider_error",
-    message: err instanceof Error ? err.message : String(err),
-  };
-}
-
-function serializeAnthropicError(err: unknown): Record<string, unknown> {
-  if (err instanceof Anthropic.APIError) {
-    return {
-      name: err.name,
-      message: err.message,
-      status: err.status ?? null,
-      requestId: err.headers?.get?.("request-id") ?? null,
-    };
-  }
-  if (err instanceof Error) {
-    return { name: err.name, message: err.message };
-  }
-  return { error: String(err) };
-}
+// Tipo do valor escrito em `ai_calls.provider`. No #230 a coluna é o pgEnum
+// (`["anthropic"]`), então isto é `"anthropic"` e os call-sites castam
+// `provider.providerKey` (string no seam) pra cá — fail-loud em compile. O #231
+// migra a coluna pra `text`, e este alias passa a ser `string` (de-hardcode pleno).
+type AiCallProvider = NonNullable<(typeof aiCalls.$inferInsert)["provider"]>;
 
 async function persistAiCallError(args: {
+  provider: AiCallProvider;
   userId: string;
   matchId: string;
   model: AIModelId;
@@ -226,7 +190,7 @@ async function persistAiCallError(args: {
     await db.insert(aiCalls).values({
       userId: args.userId,
       matchId: args.matchId,
-      provider: "anthropic",
+      provider: args.provider,
       model: args.model,
       promptVersion: args.promptVersion,
       inputPayload: args.inputPayload,
@@ -592,7 +556,7 @@ export async function predict({
     // 4c. Guarda de seed COMPLETO — PRÉ-chamada-paga. resolveMarketCatalog (shared
     //     com #164) só hard-falha em mercado ausente ou ZERO seleções; um mercado
     //     seedado com SÓ ALGUMAS seleções (ex.: 'over' sem 'under') passaria por ela
-    //     e só estouraria nos hard-fails por-seleção DEPOIS de client.messages.create()
+    //     e só estouraria nos hard-fails por-seleção DEPOIS da chamada paga ao provider
     //     (queimando spend + uma row de ai_call). O invariante "falha antes do gasto"
     //     exige checar AQUI que TODA seleção do cartucho tem id no catálogo. PULADO
     //     pra dynamicSelections (as seleções crescem lazy; não há set estático a checar).
@@ -760,72 +724,79 @@ export async function predict({
     throw err;
   }
 
-  // 7. Monta payload do Claude
+  // 7. Monta a request da análise (provider-neutra; ADR 0027). O cartucho fornece
+  //    system/tool/toolName; os genParams são MODEL-AWARE dentro do adapter
+  //    (maxTokens p/ todos, effort só adaptive, temperature só temperature-mode).
+  //    Leitura barata de DB ante a chamada paga ao LLM.
   const daysToKickoff = Math.max(
     0,
     Math.ceil((kickoffMs - Date.now()) / 86_400_000),
   );
   const userMessage = cartridge.buildUserMessage(input, { daysToKickoff });
-  // Parâmetros de geração calibráveis (ADR 0008, emenda 2). Aplicados MODEL-AWARE
-  // pelo request-builder: maxTokens p/ todos, effort só adaptive, temperature só
-  // temperature-mode. Leitura barata de DB ante a chamada paga ao LLM.
   const genParams = await getGenerationParams();
-  // Constrói UM objeto de request model-aware, reusado tanto pro inputPayload
-  // logado quanto pra chamada real (sem divergência). request-builder omite
-  // temperature em modelos adaptive (Opus 4.8 dá 400) e a mantém no Sonnet 4.5.
-  const request = buildAnthropicRequest({
+  const toolDef: ToolDef = {
+    name: cartridge.tool.name,
+    description: cartridge.tool.description,
+    // cartridge.tool ainda carrega o tipo do SDK (resíduo type-only em
+    // markets/types.ts; #231 troca por ToolDef). input_schema é o JSON-Schema
+    // canônico; cast porque o tipo tem `type:"object"` literal e não estreita
+    // direto pra Record<string, unknown>.
+    inputSchema: cartridge.tool.input_schema as unknown as Record<
+      string,
+      unknown
+    >,
+  };
+  const analysisRequest: AnalysisRequest = {
     model,
     system: cartridge.systemPrompt,
     userMessage,
-    tools: [cartridge.tool],
+    tool: toolDef,
     toolName: cartridge.toolName,
     maxTokens: genParams.maxTokens,
     effort: genParams.effort,
     temperature: genParams.temperature,
-  });
-  const inputPayload = request as unknown as Record<string, unknown>;
+  };
 
-  // 8. Chamada do Claude (com cronômetro)
-  const client = getAnthropicClient();
-  const start = performance.now();
-  let response: Anthropic.Message;
-  try {
-    response = await client.messages.create(request);
-  } catch (err) {
-    const latencyMs = Math.round(performance.now() - start);
-    const classified = classifyAnthropicError(err);
+  // 8. Chamada paga via o seam AIProvider (o adapter é dono do SDK e do cronômetro
+  //    TIGHT). predict não importa mais nenhum SDK de IA (fronteira CLAUDE.md).
+  const aiProvider = getProviderForModel(model);
+  const result = await aiProvider.runAnalysis(analysisRequest);
+  const latencyMs = result.latencyMs;
+  if (!result.ok) {
     await persistAiCallError({
       userId,
       matchId,
+      provider: aiProvider.providerKey as AiCallProvider,
       model: model.id,
-      inputPayload,
-      outputPayload: { error: serializeAnthropicError(err) },
-      inputTokens: 0,
-      outputTokens: 0,
+      inputPayload: result.inputPayload,
+      outputPayload: result.outputPayload,
+      inputTokens: result.usage.inputTokens,
+      outputTokens: result.usage.outputTokens,
       latencyMs,
-      status: classified.status,
-      errorMessage: classified.message,
+      status: result.status,
+      errorMessage: result.message,
       promptVersion: cartridge.version,
     });
-    throw new PredictError(`anthropic call failed: ${classified.message}`, {
-      cause: err,
+    throw new PredictError(`anthropic call failed: ${result.message}`, {
+      cause: result.cause,
     });
   }
-  const latencyMs = Math.round(performance.now() - start);
-  const inputTokens = response.usage.input_tokens;
-  const outputTokens = response.usage.output_tokens;
-  const outputPayload = response as unknown as Record<string, unknown>;
+  const inputTokens = result.usage.inputTokens;
+  const outputTokens = result.usage.outputTokens;
+  const inputPayload = result.inputPayload;
+  const outputPayload = result.outputPayload;
 
-  // 9. Extração do tool_use block
-  const toolUse = response.content.find(
-    (block): block is Anthropic.ToolUseBlock =>
-      block.type === "tool_use" && block.name === cartridge.toolName,
-  );
-  if (!toolUse) {
-    const snippet = JSON.stringify(response.content).slice(0, 500);
+  // 9. tool_missing é provider-neutro: o adapter devolve `toolInput === undefined`
+  //    quando o modelo não chamou o tool (predict é dono da classificação +
+  //    persistência; o snippet sai do outputPayload, byte-idêntico ao response.content).
+  if (result.toolInput === undefined) {
+    const snippet = JSON.stringify(
+      (result.outputPayload as { content?: unknown }).content,
+    ).slice(0, 500);
     await persistAiCallError({
       userId,
       matchId,
+      provider: aiProvider.providerKey as AiCallProvider,
       model: model.id,
       inputPayload,
       outputPayload,
@@ -837,17 +808,18 @@ export async function predict({
       promptVersion: cartridge.version,
     });
     throw new PredictError("LLM did not call submit_prediction tool", {
-      stopReason: response.stop_reason,
+      stopReason: result.stopReason,
     });
   }
 
   // 10. Validação Zod do output (schema do cartucho; fronteira do CLAUDE.md —
   //     output do LLM SEMPRE validado por Zod antes de uso).
-  const parsed = cartridge.outputSchema.safeParse(toolUse.input);
+  const parsed = cartridge.outputSchema.safeParse(result.toolInput);
   if (!parsed.success) {
     await persistAiCallError({
       userId,
       matchId,
+      provider: aiProvider.providerKey as AiCallProvider,
       model: model.id,
       inputPayload,
       outputPayload,
@@ -919,7 +891,7 @@ export async function predict({
       .values({
         userId,
         matchId,
-        provider: "anthropic",
+        provider: aiProvider.providerKey as AiCallProvider,
         model: model.id,
         promptVersion: cartridge.version,
         inputPayload,
