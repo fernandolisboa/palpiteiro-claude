@@ -1,19 +1,22 @@
 // Barrel do seam de providers (ADR 0027). predict.ts resolve o provider DAQUI e
-// nunca importa um SDK de IA direto. No #230 só existe o Anthropic, então
-// `getProviderForModel` devolve INCONDICIONALMENTE o `anthropicProvider`; o #231
-// amplia pra despachar por `model.provider` (campo novo no registry) + filtro de
-// `hasKey()`/audiência.
+// nunca importa um SDK de IA direto. Despacha por `model.provider`; o gate de
+// audiência + `providerHasKey` (modelsForAudience, models.ts) garante que um
+// provider sem chave nunca chega a ser roteado pelo fluxo normal.
 
-import type { AIModel } from "@/lib/ai/models";
+import type { AIModel, AIProviderKey } from "@/lib/ai/models";
 
 import { anthropicProvider } from "./anthropic";
+import { openaiProvider } from "./openai";
 import type { AIProvider } from "./types";
 
+// Total sobre AIProviderKey — um provider novo no union força uma entrada aqui.
+const PROVIDERS: Record<AIProviderKey, AIProvider> = {
+  anthropic: anthropicProvider,
+  openai: openaiProvider,
+};
+
 export function getProviderForModel(model: AIModel): AIProvider {
-  // #231: dispatch por `model.provider` + gate de audiência/`hasKey()`. Hoje
-  // (#230) é Anthropic-only — o parâmetro existe pra fixar a assinatura do seam.
-  void model;
-  return anthropicProvider;
+  return PROVIDERS[model.provider];
 }
 
 export type {

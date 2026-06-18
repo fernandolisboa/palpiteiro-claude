@@ -42,6 +42,14 @@ describe("classifyThinkingMode — bifurcação por caminho de amostragem", () =
     expect(classifyThinkingMode("claude-fable-5")).toBe("temperature");
     expect(classifyThinkingMode("lixo-qualquer")).toBe("temperature");
   });
+
+  it("gpt-5-mini (OpenAI, #231) → temperature por LOOKUP no registry (não pelo fallback)", () => {
+    // O provider de prova OpenAI está NO registry com thinkingMode "temperature"
+    // (ADR 0027): classifyThinkingMode devolve o modo DECLARADO, não o fallback de
+    // id-desconhecido. (O gate de replay segue Anthropic-only e cerca rows OpenAI;
+    // este assert só garante que, se classificado, é o caminho ESTRITO.)
+    expect(classifyThinkingMode("gpt-5-mini")).toBe("temperature");
+  });
 });
 
 describe("isAdaptiveFlipConfirmed — maioria de N runs", () => {

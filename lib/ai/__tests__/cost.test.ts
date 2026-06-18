@@ -1,8 +1,37 @@
 import { describe, expect, it } from "vitest";
 
 import { calculateCost } from "@/lib/ai/cost";
+import { MODEL_REGISTRY, type AIModelId } from "@/lib/ai/models";
 
 describe("calculateCost — derived from MODEL_REGISTRY", () => {
+  // SENTINELA anti-NaN (ADR 0027 #231): costUsd é numeric(10,6) NOT NULL — um modelo
+  // SEM pricing no registry faria calculateCost devolver NaN e o INSERT falhar DEPOIS
+  // de gastar. Trava: TODO id do registry produz custo FINITO e POSITIVO. Pega de
+  // imediato uma entrada nova (ex.: o gpt-5-mini do #231) sem pricing.
+  it("custo é finito e > 0 para TODO id do registry (guarda de NaN/pricing-ausente)", () => {
+    for (const id of Object.keys(MODEL_REGISTRY) as AIModelId[]) {
+      const cost = calculateCost({
+        model: id,
+        inputTokens: 1_000_000,
+        outputTokens: 1_000_000,
+      });
+      expect(Number.isFinite(cost), `custo não-finito para ${id}`).toBe(true);
+      expect(cost, `custo não-positivo para ${id}`).toBeGreaterThan(0);
+    }
+  });
+
+  it("gpt-5-mini (OpenAI #231): $0.25 in + $2.00 out per 1M → 2.25 for 1M+1M (drift sentinel)", () => {
+    // Pricing VERIFY-BEFORE-MERGE contra a página oficial; este valor é o
+    // change-detector — se o pricing do registry mudar, atualizar aqui de propósito.
+    expect(
+      calculateCost({
+        model: "gpt-5-mini",
+        inputTokens: 1_000_000,
+        outputTokens: 1_000_000,
+      }),
+    ).toBe(2.25);
+  });
+
   it("Opus 4.8: $5 in + $25 out per 1M → 30 for 1M+1M", () => {
     expect(
       calculateCost({

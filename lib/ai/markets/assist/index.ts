@@ -1,8 +1,7 @@
-import type Anthropic from "@anthropic-ai/sdk";
 
 import { ASSIST } from "@/lib/odds/market-descriptor";
 
-import type { MarketCartridge } from "../types";
+import { type MarketCartridge, toToolDef } from "../types";
 import {
   buildScorerInput,
   BuildInputError,
@@ -65,7 +64,7 @@ export const assistCartridge: MarketCartridge<
   marketKey: "assist",
   version: ASSIST_VERSION,
   systemPrompt: SYSTEM_PROMPT,
-  tool: SUBMIT_PREDICTION_TOOL as unknown as Anthropic.Tool,
+  tool: toToolDef(SUBMIT_PREDICTION_TOOL),
   toolName: SUBMIT_PREDICTION_TOOL.name,
   inputSchema: ScorerInputSchema,
   outputSchema: ScorerOutputSchema,

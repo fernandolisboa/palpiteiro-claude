@@ -214,6 +214,8 @@ function anthropicMessage(input: Record<string, unknown>) {
 }
 
 beforeEach(() => {
+  // #231: predict tem backstop hasKey() (client mockado → só a PRESENÇA importa).
+  process.env.ANTHROPIC_API_KEY = "test-anthropic-key";
   vi.clearAllMocks();
   getFixtureByMatch.mockResolvedValue(FIXTURE);
   getTeamForm.mockResolvedValue([]);

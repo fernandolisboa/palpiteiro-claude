@@ -1,7 +1,23 @@
-import type Anthropic from "@anthropic-ai/sdk";
 import type { ZodType } from "zod";
 
 import type { MarketDescriptor } from "@/lib/odds/market-descriptor";
+import type { ToolDef } from "@/lib/ai/providers/types";
+
+// Mapeia o literal de tool dos cartuchos (shape herdado `{name, description,
+// input_schema}`, geralmente `as const`) pro `ToolDef` neutro do seam (ADR 0027).
+// De-para snake→camel num ÚNICO lugar (em vez de repetir/cast em cada cartucho); o
+// adapter de cada provider re-mapeia daqui pro shape do seu SDK.
+export function toToolDef(t: {
+  readonly name: string;
+  readonly description?: string;
+  readonly input_schema: unknown;
+}): ToolDef {
+  return {
+    name: t.name,
+    description: t.description,
+    inputSchema: t.input_schema as Record<string, unknown>,
+  };
+}
 
 export type UserMessageContext = {
   daysToKickoff: number;
@@ -85,9 +101,10 @@ export type MarketCartridge<
   version: string;
   // SYSTEM_PROMPT byte-idêntico ao do prompt versionado original.
   systemPrompt: string;
-  // Tool definition (já no shape do Anthropic SDK) + o nome usado no tool_choice
-  // e na extração do tool_use block.
-  tool: Anthropic.Tool;
+  // Tool definition NEUTRA (ADR 0027): ToolDef provider-agnóstico (era Anthropic.Tool
+  // até o #231). Cada adapter down-mapeia pro shape do seu SDK. `toolName` é o nome
+  // usado no tool_choice e na extração do tool call.
+  tool: ToolDef;
   toolName: string;
   // Schema Zod do input montado (validado em buildPredictionInput) + schema do
   // output do LLM (validado sempre, antes de qualquer uso — fronteira do CLAUDE.md).

@@ -237,7 +237,16 @@ async function main(): Promise<void> {
     .select({ promptVersion: aiCalls.promptVersion })
     .from(aiCalls)
     .where(
-      and(eq(aiCalls.status, "ok"), ne(aiCalls.promptVersion, PROMPT_VERSION)),
+      and(
+        eq(aiCalls.status, "ok"),
+        // Cerca o gate ao Anthropic (ADR 0027 #231): provider virou `text` e pode
+        // conter 'openai'. O gate model-aware é Anthropic-thinkingMode-específico
+        // (#203) e replaya payloads no shape Anthropic — uma row OpenAI seria
+        // rejeitada pelo StoredRequestSchema (max_completion_tokens) de qualquer
+        // forma, mas filtrá-la aqui evita poluir o dedup/contagem.
+        eq(aiCalls.provider, "anthropic"),
+        ne(aiCalls.promptVersion, PROMPT_VERSION),
+      ),
     )
     .orderBy(desc(aiCalls.createdAt))
     .limit(1);
@@ -278,7 +287,11 @@ async function main(): Promise<void> {
     .innerJoin(predictions, eq(predictions.aiCallId, aiCalls.id))
     .innerJoin(matches, eq(matches.id, aiCalls.matchId))
     .where(
-      and(eq(aiCalls.status, "ok"), eq(aiCalls.promptVersion, baselineVersion)),
+      and(
+        eq(aiCalls.status, "ok"),
+        eq(aiCalls.provider, "anthropic"), // gate Anthropic-only (ADR 0027 #231)
+        eq(aiCalls.promptVersion, baselineVersion),
+      ),
     )
     .orderBy(desc(aiCalls.createdAt))
     .limit(FETCH_LIMIT);

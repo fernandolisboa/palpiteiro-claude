@@ -324,6 +324,9 @@ function setHappyPath() {
 }
 
 beforeEach(() => {
+  // #231: predict tem backstop hasKey(); o client Anthropic é mockado, então só a
+  // PRESENÇA da chave importa (anthropic SEMPRE tem chave em prod; OPENAI ausente).
+  process.env.ANTHROPIC_API_KEY = "test-anthropic-key";
   vi.clearAllMocks();
   vi.restoreAllMocks();
   // #227: limpa o cache memoizado do getAbsencesProvider entre testes (isolamento)
@@ -1098,9 +1101,15 @@ describe("predict() — model resolution (override > DB default) + model-aware r
       system: string;
     };
     expect(sent.tools).toHaveLength(1);
-    expect(sent.tools[0]).toEqual(overUnderCartridge.tool);
-    // toEqual elide chave com valor undefined; trava o CONJUNTO de chaves pra
-    // provar que o round-trip não ADICIONOU nem PERDEU campo (ex.: description).
+    // O adapter Anthropic down-mapeia o ToolDef neutro do cartucho (camelCase
+    // inputSchema, ADR 0027 #231) pro shape do SDK (snake_case input_schema). O que
+    // chega no client.messages.create DEVE ser exatamente esse de-para: name +
+    // description verbatim e inputSchema → input_schema, sem chave a mais/menos.
+    expect(sent.tools[0]).toEqual({
+      name: overUnderCartridge.tool.name,
+      description: overUnderCartridge.tool.description,
+      input_schema: overUnderCartridge.tool.inputSchema,
+    });
     expect(Object.keys(sent.tools[0] as object).sort()).toEqual([
       "description",
       "input_schema",
@@ -1281,6 +1290,36 @@ describe("predict() — cascata completa: preferência do usuário + filtro de a
     const arg = anthropicCreate.mock.calls[0]?.[0];
     expect(arg.model).toBe("claude-opus-4-8");
     expect(getDefaultModelId).toHaveBeenCalledTimes(1);
+  });
+});
+
+describe("predict() — provider de prova inerte sem chave (#231, ADR 0027)", () => {
+  it("override admin pra gpt-5-mini SEM OPENAI_API_KEY → provider_error AUDITADO, zero chamada paga", async () => {
+    // beforeEach garante OPENAI_API_KEY ausente (e ANTHROPIC presente). O override
+    // resolve o provider OpenAI inerte; o backstop hasKey() de predict falha GRACIOSO
+    // e AUDITADO antes de qualquer chamada paga — não o throw cru de getOpenAIClient.
+    await expect(
+      predict({
+        matchId: "m-1",
+        userId: "u-1",
+        isAdmin: true,
+        modelOverride: "gpt-5-mini",
+      }),
+    ).rejects.toThrow("openai provider has no API key");
+
+    // Nenhum client (anthropic nem openai) chamado; UM ai_call provider_error; 0 prediction.
+    expect(anthropicCreate).not.toHaveBeenCalled();
+    expect(insertValues).toHaveBeenCalledTimes(1);
+    const aiCallRow = insertValues.mock.calls[0]?.[0] as {
+      provider: string;
+      status: string;
+      inputTokens: number;
+      outputTokens: number;
+    };
+    expect(aiCallRow.provider).toBe("openai");
+    expect(aiCallRow.status).toBe("provider_error");
+    expect(aiCallRow.inputTokens).toBe(0);
+    expect(aiCallRow.outputTokens).toBe(0);
   });
 });
 
