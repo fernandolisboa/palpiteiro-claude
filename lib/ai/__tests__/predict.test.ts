@@ -1098,9 +1098,15 @@ describe("predict() — model resolution (override > DB default) + model-aware r
       system: string;
     };
     expect(sent.tools).toHaveLength(1);
-    expect(sent.tools[0]).toEqual(overUnderCartridge.tool);
-    // toEqual elide chave com valor undefined; trava o CONJUNTO de chaves pra
-    // provar que o round-trip não ADICIONOU nem PERDEU campo (ex.: description).
+    // O adapter Anthropic down-mapeia o ToolDef neutro do cartucho (camelCase
+    // inputSchema, ADR 0027 #231) pro shape do SDK (snake_case input_schema). O que
+    // chega no client.messages.create DEVE ser exatamente esse de-para: name +
+    // description verbatim e inputSchema → input_schema, sem chave a mais/menos.
+    expect(sent.tools[0]).toEqual({
+      name: overUnderCartridge.tool.name,
+      description: overUnderCartridge.tool.description,
+      input_schema: overUnderCartridge.tool.inputSchema,
+    });
     expect(Object.keys(sent.tools[0] as object).sort()).toEqual([
       "description",
       "input_schema",

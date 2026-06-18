@@ -232,6 +232,13 @@
       "when": 1781718606019,
       "tag": "0032_default_model_sonnet_4_5",
       "breakpoints": true
+    },
+    {
+      "idx": 33,
+      "version": "7",
+      "when": 1781742498607,
+      "tag": "0033_black_george_stacy",
+      "breakpoints": true
     }
   ]
 }

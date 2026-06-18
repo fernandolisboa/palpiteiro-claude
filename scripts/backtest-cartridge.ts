@@ -473,7 +473,15 @@ async function main(): Promise<void> {
       model,
       system: cartridge.systemPrompt,
       userMessage,
-      tools: [cartridge.tool],
+      // cartridge.tool é ToolDef neutro (ADR 0027 #231); down-map pro shape do SDK
+      // Anthropic aqui (script SDK-direto, fora do seam — mesmo de-para do adapter).
+      tools: [
+        {
+          name: cartridge.tool.name,
+          description: cartridge.tool.description,
+          input_schema: cartridge.tool.inputSchema,
+        } as unknown as Anthropic.Tool,
+      ],
       toolName: cartridge.toolName,
       maxTokens: genParams.maxTokens,
       effort: genParams.effort,

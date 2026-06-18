@@ -47,7 +47,9 @@ export const outcomeResultEnum = pgEnum("outcome_result", [
   "push",
 ]);
 
-export const aiProviderEnum = pgEnum("ai_provider", ["anthropic"]);
+// `provider` migrou de pgEnum pra `text` validado-na-app (ADR 0027 / #231) — mesma
+// convenção de `model`/`defaultModelId` (ver :62-64), pra um provider novo virar
+// edição de registry sem ALTER TYPE. Validado por isAIProvider() no boundary de escrita.
 
 export const aiCallStatusEnum = pgEnum("ai_call_status", [
   "ok",
@@ -230,7 +232,7 @@ export const aiCalls = pgTable(
     matchId: uuid()
       .notNull()
       .references(() => matches.id, { onDelete: "restrict" }),
-    provider: aiProviderEnum().notNull().default("anthropic"),
+    provider: text().notNull().default("anthropic"),
     model: text().notNull(),
     promptVersion: text().notNull(),
     inputPayload: jsonb().notNull(),

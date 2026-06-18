@@ -1,8 +1,7 @@
-import type Anthropic from "@anthropic-ai/sdk";
 
 import { DOUBLE_CHANCE } from "@/lib/odds/market-descriptor";
 
-import type { MarketCartridge } from "../types";
+import { type MarketCartridge, toToolDef } from "../types";
 import {
   buildPredictionInput,
   BuildInputError,
@@ -41,7 +40,7 @@ export const doubleChanceCartridge: MarketCartridge<
   marketKey: "double_chance",
   version: DOUBLE_CHANCE_VERSION,
   systemPrompt: SYSTEM_PROMPT,
-  tool: SUBMIT_PREDICTION_TOOL as unknown as Anthropic.Tool,
+  tool: toToolDef(SUBMIT_PREDICTION_TOOL),
   toolName: SUBMIT_PREDICTION_TOOL.name,
   inputSchema: DoubleChanceInputSchema,
   outputSchema: DoubleChanceOutputSchema,

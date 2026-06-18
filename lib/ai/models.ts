@@ -8,17 +8,26 @@
 // com `temperature`. A construção da request é model-aware em
 // lib/ai/request-builder.ts a partir deste campo.
 
+// Provider de IA que atende um modelo (ADR 0027). União FECHADA: um provider novo
+// é uma edição aqui + um adapter no seam. Validado contra strings não-confiáveis
+// por isAIProvider (espelha isAIModelId).
+export type AIProviderKey = "anthropic" | "openai";
+
 export type AIModelId =
   | "claude-opus-4-8"
   | "claude-sonnet-4-6"
   | "claude-sonnet-4-5-20250929"
-  | "claude-haiku-4-5";
+  | "claude-haiku-4-5"
+  | "gpt-5-mini";
 
 export type AIModel = {
   id: AIModelId;
+  // Provider que atende este modelo (ADR 0027): despacha o adapter no seam
+  // (getProviderForModel) e é gravado em ai_calls.provider.
+  provider: AIProviderKey;
   label: string;
   // Pricing por 1M de tokens em USD (cache write/read omitidos — sem prompt
-  // caching no MVP). Fonte: pricing oficial Anthropic.
+  // caching no MVP). Fonte: pricing oficial do provider.
   inputPricePerMTok: number;
   outputPricePerMTok: number;
   thinkingMode: "adaptive" | "temperature";
@@ -37,6 +46,7 @@ export type AIModel = {
 export const MODEL_REGISTRY: Record<AIModelId, AIModel> = {
   "claude-opus-4-8": {
     id: "claude-opus-4-8",
+    provider: "anthropic",
     label: "Opus 4.8",
     inputPricePerMTok: 5,
     outputPricePerMTok: 25,
@@ -45,6 +55,7 @@ export const MODEL_REGISTRY: Record<AIModelId, AIModel> = {
   },
   "claude-sonnet-4-6": {
     id: "claude-sonnet-4-6",
+    provider: "anthropic",
     label: "Sonnet 4.6",
     inputPricePerMTok: 3,
     outputPricePerMTok: 15,
@@ -55,6 +66,7 @@ export const MODEL_REGISTRY: Record<AIModelId, AIModel> = {
   },
   "claude-sonnet-4-5-20250929": {
     id: "claude-sonnet-4-5-20250929",
+    provider: "anthropic",
     label: "Sonnet 4.5",
     inputPricePerMTok: 3,
     outputPricePerMTok: 15,
@@ -67,12 +79,34 @@ export const MODEL_REGISTRY: Record<AIModelId, AIModel> = {
   },
   "claude-haiku-4-5": {
     id: "claude-haiku-4-5",
+    provider: "anthropic",
     label: "Haiku 4.5 (econômico)",
     inputPricePerMTok: 1,
     outputPricePerMTok: 5,
     thinkingMode: "temperature",
     temperature: 0.3,
     userSelectable: true,
+  },
+  // Provider de PROVA OpenAI (ADR 0027 / #231): admin-only + key-gated inerte
+  // (sem OPENAI_API_KEY ⇒ filtrado, nunca roteado). APPEND no FIM — a ordem de
+  // inserção rege os dropdowns (ver acima); manter as 4 posições Anthropic estáveis.
+  "gpt-5-mini": {
+    id: "gpt-5-mini",
+    provider: "openai",
+    label: "GPT-5 mini (OpenAI · admin)",
+    // ⚠️ Pricing VERIFY-BEFORE-MERGE — developers.openai.com/api/docs/models/gpt-5-mini
+    // (jun/2026: $0.25 in / $2.00 out por 1M tokens). costUsd é NOT NULL e
+    // calculateCost depende disto; confirmar na página oficial antes de roteamento real.
+    inputPricePerMTok: 0.25,
+    outputPricePerMTok: 2.0,
+    // gpt-5-mini é modelo de RACIOCÍNIO: o adapter OpenAI OMITE `temperature`
+    // incondicionalmente (rejeitada, como o Opus). `thinkingMode` aqui é só
+    // CLASSIFICAÇÃO (o replay-gate é Anthropic-only e cerca rows não-anthropic):
+    // "temperature" = caminho ESTRITO por padrão (ADR 0027 — nunca "adaptive").
+    thinkingMode: "temperature",
+    // Admin-only de início (ADR 0013/0021): preserva a reprodutibilidade — só o dono,
+    // via override, alcança. Promover exige ADR futuro (critério de saída A/B).
+    userSelectable: false,
   },
 };
 
@@ -92,12 +126,31 @@ export function isAIModelId(v: string): v is AIModelId {
   return v in MODEL_REGISTRY;
 }
 
-// Lista de modelos por audiência (ADR 0013): admin enxerga todos; usuário comum
-// só os userSelectable. Usada pela UI e revalidada no servidor.
+// Valida string não-confiável contra os providers conhecidos (ADR 0027) — gate no
+// boundary de escrita de ai_calls.provider (que virou `text`), espelha isAIModelId.
+export function isAIProvider(v: string): v is AIProviderKey {
+  return v === "anthropic" || v === "openai";
+}
+
+// Chave do provider presente? (padrão SportMonks/#227, ADR 0026): sem chave ⇒
+// provider INERTE (filtrado da seleção, nunca roteado). Lê o env no momento da
+// chamada. Map INLINE aqui (não importa lib/ai/providers) pra manter o grafo de
+// imports acíclico — o adapter tem o próprio hasKey pro caminho pago.
+export function providerHasKey(provider: AIProviderKey): boolean {
+  const ENV_BY_PROVIDER: Record<AIProviderKey, string | undefined> = {
+    anthropic: process.env.ANTHROPIC_API_KEY,
+    openai: process.env.OPENAI_API_KEY,
+  };
+  return Boolean(ENV_BY_PROVIDER[provider]);
+}
+
+// Lista de modelos por audiência (ADR 0013 + ADR 0027): além do gate de audiência
+// (admin vê todos; usuário comum só userSelectable), filtra modelos cujo provider
+// NÃO tem chave — um provider inerte (ex.: OpenAI sem OPENAI_API_KEY) some da
+// seleção em TODAS as audiências. Usada pela UI e revalidada no servidor.
 export function modelsForAudience(isAdmin: boolean): AIModel[] {
-  return isAdmin
-    ? SELECTABLE_MODELS
-    : SELECTABLE_MODELS.filter((m) => m.userSelectable);
+  const withKey = SELECTABLE_MODELS.filter((m) => providerHasKey(m.provider));
+  return isAdmin ? withKey : withKey.filter((m) => m.userSelectable);
 }
 
 // Invariante de gating (ADR 0013): um modelo admin-only NUNCA é permitido pra

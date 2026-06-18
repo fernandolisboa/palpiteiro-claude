@@ -46,11 +46,13 @@ import { getCartridge } from "./markets/registry";
 import type { BaseMarketOutput } from "./markets/types";
 import {
   MODEL_REGISTRY,
+  isAIProvider,
   isModelAllowedForAudience,
   type AIModelId,
+  type AIProviderKey,
 } from "./models";
 import { getProviderForModel } from "./providers";
-import type { AnalysisRequest, ToolDef } from "./providers/types";
+import type { AnalysisRequest } from "./providers/types";
 
 // ─── Types & errors ──────────────────────────────────────────────────────────
 
@@ -158,14 +160,8 @@ function truncate(text: string, limit: number): string {
   return text.length > limit ? `${text.slice(0, limit - 1)}…` : text;
 }
 
-// Tipo do valor escrito em `ai_calls.provider`. No #230 a coluna é o pgEnum
-// (`["anthropic"]`), então isto é `"anthropic"` e os call-sites castam
-// `provider.providerKey` (string no seam) pra cá — fail-loud em compile. O #231
-// migra a coluna pra `text`, e este alias passa a ser `string` (de-hardcode pleno).
-type AiCallProvider = NonNullable<(typeof aiCalls.$inferInsert)["provider"]>;
-
 async function persistAiCallError(args: {
-  provider: AiCallProvider;
+  provider: AIProviderKey;
   userId: string;
   matchId: string;
   model: AIModelId;
@@ -734,23 +730,13 @@ export async function predict({
   );
   const userMessage = cartridge.buildUserMessage(input, { daysToKickoff });
   const genParams = await getGenerationParams();
-  const toolDef: ToolDef = {
-    name: cartridge.tool.name,
-    description: cartridge.tool.description,
-    // cartridge.tool ainda carrega o tipo do SDK (resíduo type-only em
-    // markets/types.ts; #231 troca por ToolDef). input_schema é o JSON-Schema
-    // canônico; cast porque o tipo tem `type:"object"` literal e não estreita
-    // direto pra Record<string, unknown>.
-    inputSchema: cartridge.tool.input_schema as unknown as Record<
-      string,
-      unknown
-    >,
-  };
   const analysisRequest: AnalysisRequest = {
     model,
     system: cartridge.systemPrompt,
     userMessage,
-    tool: toolDef,
+    // cartridge.tool já é o ToolDef neutro (ADR 0027 #231) — passado direto, sem
+    // reconstrução; cada adapter down-mapeia pro shape do seu SDK.
+    tool: cartridge.tool,
     toolName: cartridge.toolName,
     maxTokens: genParams.maxTokens,
     effort: genParams.effort,
@@ -760,13 +746,23 @@ export async function predict({
   // 8. Chamada paga via o seam AIProvider (o adapter é dono do SDK e do cronômetro
   //    TIGHT). predict não importa mais nenhum SDK de IA (fronteira CLAUDE.md).
   const aiProvider = getProviderForModel(model);
+  // providerKey é gravado em ai_calls.provider (text, pós-migration #231). Validado
+  // UMA vez contra o allowlist (isAIProvider) — o gate do de-hardcode: zero literal
+  // de provider em predict; uma key fora do allowlist falha alto, não corrompe a auditoria.
+  const providerKey = aiProvider.providerKey;
+  if (!isAIProvider(providerKey)) {
+    throw new PredictError(
+      `unknown AI provider '${providerKey}' for model ${model.id}`,
+      { provider: providerKey, model: model.id },
+    );
+  }
   const result = await aiProvider.runAnalysis(analysisRequest);
   const latencyMs = result.latencyMs;
   if (!result.ok) {
     await persistAiCallError({
       userId,
       matchId,
-      provider: aiProvider.providerKey as AiCallProvider,
+      provider: providerKey,
       model: model.id,
       inputPayload: result.inputPayload,
       outputPayload: result.outputPayload,
@@ -796,7 +792,7 @@ export async function predict({
     await persistAiCallError({
       userId,
       matchId,
-      provider: aiProvider.providerKey as AiCallProvider,
+      provider: providerKey,
       model: model.id,
       inputPayload,
       outputPayload,
@@ -819,7 +815,7 @@ export async function predict({
     await persistAiCallError({
       userId,
       matchId,
-      provider: aiProvider.providerKey as AiCallProvider,
+      provider: providerKey,
       model: model.id,
       inputPayload,
       outputPayload,
@@ -891,7 +887,7 @@ export async function predict({
       .values({
         userId,
         matchId,
-        provider: aiProvider.providerKey as AiCallProvider,
+        provider: providerKey,
         model: model.id,
         promptVersion: cartridge.version,
         inputPayload,

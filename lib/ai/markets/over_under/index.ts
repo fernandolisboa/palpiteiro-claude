@@ -1,8 +1,7 @@
-import type Anthropic from "@anthropic-ai/sdk";
 
 import { OVER_UNDER } from "@/lib/odds/market-descriptor";
 
-import type { MarketCartridge } from "../types";
+import { type MarketCartridge, toToolDef } from "../types";
 import {
   buildPredictionInput,
   BuildInputError,
@@ -45,7 +44,7 @@ export const overUnderCartridge: MarketCartridge<
   marketKey: "over_under",
   version: OVER_UNDER_VERSION,
   systemPrompt: SYSTEM_PROMPT,
-  tool: SUBMIT_PREDICTION_TOOL as unknown as Anthropic.Tool,
+  tool: toToolDef(SUBMIT_PREDICTION_TOOL),
   toolName: SUBMIT_PREDICTION_TOOL.name,
   inputSchema: OverUnderInputSchema,
   outputSchema: OverUnderOutputSchema,

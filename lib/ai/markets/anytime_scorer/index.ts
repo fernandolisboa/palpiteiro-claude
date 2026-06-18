@@ -1,8 +1,7 @@
-import type Anthropic from "@anthropic-ai/sdk";
 
 import { ANYTIME_SCORER } from "@/lib/odds/market-descriptor";
 
-import type { MarketCartridge } from "../types";
+import { type MarketCartridge, toToolDef } from "../types";
 import {
   buildScorerInput,
   BuildInputError,
@@ -67,7 +66,7 @@ export const anytimeScorerCartridge: MarketCartridge<
   marketKey: "anytime_scorer",
   version: ANYTIME_SCORER_VERSION,
   systemPrompt: SYSTEM_PROMPT,
-  tool: SUBMIT_PREDICTION_TOOL as unknown as Anthropic.Tool,
+  tool: toToolDef(SUBMIT_PREDICTION_TOOL),
   toolName: SUBMIT_PREDICTION_TOOL.name,
   inputSchema: ScorerInputSchema,
   outputSchema: ScorerOutputSchema,
