@@ -1,3 +1,4 @@
+import { leagueToKey } from "@/lib/format";
 import type {
   NormalizedFixture,
   NormalizedH2H,
@@ -5,6 +6,7 @@ import type {
   NormalizedLineup,
   NormalizedStanding,
 } from "@/lib/providers/sports-data/types";
+import { displayTeamName } from "@/lib/view/team-labels";
 import type {
   FormResult,
   FormView,
@@ -152,9 +154,13 @@ export function toStandingsView(args: {
   // o pos 1. Clampar também evita janela sub-preenchida no fundo (issue #337).
   const start = Math.max(0, Math.min(anchor - 1, table.teams.length - window));
   const sliced = table.teams.slice(start, start + window);
+  // Tradução display-only (#340): a classificação não passa pelo seam teamToTeam,
+  // então roteamos o mesmo mapa aqui pra Copa concordar com feed/hero. O `team`
+  // exibido vira PT-BR; o `focus` continua comparando o canonical cru.
+  const leagueKey = leagueToKey(standing.league);
   const rows: StandingsViewRow[] = sliced.map((t) => ({
     pos: t.position,
-    team: t.team,
+    team: displayTeamName(t.team, leagueKey),
     p: t.points,
     gf: t.goalsFor,
     ga: t.goalsAgainst,
