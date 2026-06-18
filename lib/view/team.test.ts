@@ -40,4 +40,10 @@ describe("teamToTeam", () => {
   it("não traduz o mesmo nome fora da Copa (clubes passam verbatim)", () => {
     expect(teamToTeam("Mexico", "bsa").name).toBe("Mexico");
   });
+
+  it("anexa flagCode na Copa; undefined em clubes (#341)", () => {
+    expect(teamToTeam("Mexico", "wc").flagCode).toBe("mx");
+    expect(teamToTeam("South Korea", "wc").flagCode).toBe("kr");
+    expect(teamToTeam("SE Palmeiras", "bsa").flagCode).toBeUndefined();
+  });
 });

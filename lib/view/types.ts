@@ -22,6 +22,9 @@ export type Team = {
   name: string;
   short: string;
   hue: number;
+  // Código de bandeira (ISO/subdivisão) p/ seleções da Copa (#341). Undefined em
+  // clubes — o avatar cai nas iniciais. Display-only, resolve public/flags/wc/.
+  flagCode?: string;
 };
 
 export type MatchRowView = {
