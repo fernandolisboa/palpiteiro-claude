@@ -28,6 +28,9 @@ describe("anthropic adapter — classifyAnthropicError", () => {
     );
     const out = classifyAnthropicError(err);
     expect(out.status).toBe("rate_limited");
+    // O prefixo `${err.status}: ` é código do adapter (determinístico, não é
+    // reescrito pelo makeMessage do SDK) → travável.
+    expect(out.message).toMatch(/^429: /);
     expect(out.message).toContain("retry-after=30");
   });
 
@@ -40,7 +43,15 @@ describe("anthropic adapter — classifyAnthropicError", () => {
     );
     const out = classifyAnthropicError(err);
     expect(out.status).toBe("provider_error");
+    expect(out.message).toMatch(/^500: /);
     expect(out.message).toContain("request-id=req_123");
+  });
+
+  it("APIError sem status → prefixo de fallback '?: '", () => {
+    const err = new Anthropic.APIError(undefined, undefined, "mystery", undefined);
+    const out = classifyAnthropicError(err);
+    expect(out.status).toBe("provider_error");
+    expect(out.message).toMatch(/^\?: /);
   });
 
   it("Error comum → provider_error com a própria mensagem", () => {

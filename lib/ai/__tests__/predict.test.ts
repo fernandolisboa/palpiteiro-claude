@@ -1067,12 +1067,18 @@ describe("predict() — model resolution (override > DB default) + model-aware r
     // Critério de aceite do #57: as colunas de auditoria refletem o modelo
     // RESOLVIDO, não o `response.model` (que aqui é o id stale "sonnet" do mock).
     // ai_calls é inserido primeiro, predictions depois.
-    const aiCallRow = insertValues.mock.calls[0]?.[0] as { model: string };
+    const aiCallRow = insertValues.mock.calls[0]?.[0] as {
+      model: string;
+      provider: string;
+    };
     const predictionRow = insertValues.mock.calls[1]?.[0] as {
       modelVersion: string;
     };
     expect(aiCallRow.model).toBe("claude-opus-4-8");
     expect(predictionRow.modelVersion).toBe("claude-opus-4-8");
+    // #230: a coluna provider é a ÚNICA cuja FONTE o refactor trocou (literal
+    // "anthropic" → aiProvider.providerKey). Trava o valor persistido no caminho ok.
+    expect(aiCallRow.provider).toBe("anthropic");
   });
 
   it("seam (#230): tools[0] e system do request batem byte a byte com o cartucho (ToolDef round-trip = identidade)", async () => {
@@ -1093,6 +1099,13 @@ describe("predict() — model resolution (override > DB default) + model-aware r
     };
     expect(sent.tools).toHaveLength(1);
     expect(sent.tools[0]).toEqual(overUnderCartridge.tool);
+    // toEqual elide chave com valor undefined; trava o CONJUNTO de chaves pra
+    // provar que o round-trip não ADICIONOU nem PERDEU campo (ex.: description).
+    expect(Object.keys(sent.tools[0] as object).sort()).toEqual([
+      "description",
+      "input_schema",
+      "name",
+    ]);
     expect(sent.system).toBe(overUnderCartridge.systemPrompt);
   });
 
@@ -1306,8 +1319,11 @@ describe("predict() — Opus adaptive path: model declines to call the tool", ()
       inputTokens: number;
       outputTokens: number;
       errorMessage: string;
+      provider: string;
     };
     expect(aiCallRow.status).toBe("tool_missing");
+    // #230: caminho de erro também escreve provider via providerKey (não literal).
+    expect(aiCallRow.provider).toBe("anthropic");
     // Modelo resolvido (Opus), não o response.model, e tokens cobrados.
     expect(aiCallRow.model).toBe("claude-opus-4-8");
     expect(aiCallRow.inputTokens).toBe(1200);
