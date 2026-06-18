@@ -9,32 +9,33 @@ export function RecentPredCard({ p }: { p: RecentPredictionView }) {
   return (
     <Link
       href={`/match/${p.matchId}`}
-      className="flex min-w-[180px] shrink-0 flex-col gap-2 rounded-[10px] border border-border bg-card px-3 py-3 transition-colors hover:bg-surface-2"
+      className="flex min-w-[180px] shrink-0 flex-col gap-2 rounded-lg border border-border bg-card px-3 py-3 transition-colors hover:bg-surface-2 focus-visible:outline-none focus-visible:ring-[3px] focus-visible:ring-ring/50"
     >
       <div className="flex items-center justify-between">
-        <span className="font-mono text-[10px] uppercase tracking-[0.14em] text-muted-foreground">
+        <span className="font-mono text-eyebrow uppercase tracking-label text-muted-foreground">
           {LEAGUE_LABEL[p.league]}
         </span>
-        <span className="font-mono text-[10px] tabular-nums text-muted-foreground">
+        <span className="font-mono text-eyebrow tabular-nums text-muted-foreground">
           {p.when}
         </span>
       </div>
-      <div className="font-mono text-[12.5px] tabular-nums tracking-tight">
+      <div className="font-mono text-body-sm tabular-nums tracking-tight">
         {p.home} <span className="text-muted-foreground">vs</span> {p.away}
       </div>
       <div className="flex items-center justify-between pt-1">
         <Badge
           variant="outline"
+          size="sm"
           className={
             isPass
-              ? "h-[19px] rounded-full border-border bg-transparent px-2 text-[10px] font-semibold tracking-wide text-muted-foreground"
-              : "h-[19px] rounded-full border-accent-border bg-accent-soft px-2 text-[10px] font-semibold tracking-wide text-accent-fg"
+              ? "border-border bg-transparent font-semibold tracking-wide text-muted-foreground"
+              : "border-accent-border bg-accent-soft font-semibold tracking-wide text-accent-fg"
           }
         >
           {p.rec}
         </Badge>
         {p.edge && (
-          <span className="font-mono text-[11px] tabular-nums text-edge-fg">
+          <span className="font-mono text-meta tabular-nums text-edge-fg">
             {p.edge}pp
           </span>
         )}

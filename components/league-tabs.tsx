@@ -67,7 +67,7 @@ export function LeagueTabs({ value, range, className }: Props) {
               aria-disabled="true"
               title="Fora de temporada — volta em agosto"
               className={cn(
-                "h-7 cursor-not-allowed select-none rounded-[5px] px-3 text-[12px] font-medium leading-7 text-muted-foreground/50",
+                "h-7 cursor-not-allowed select-none rounded-sm px-3 text-body-sm font-medium leading-7 text-muted-foreground/50",
               )}
             >
               {label}
@@ -82,9 +82,9 @@ export function LeagueTabs({ value, range, className }: Props) {
             href={buildLeagueHref(range, itemValue)}
             aria-current={selected ? "page" : undefined}
             className={cn(
-              "h-7 rounded-[5px] px-3 text-[12px] font-medium leading-7 transition-colors",
+              "h-7 rounded-sm px-3 text-body-sm font-medium leading-7 transition-colors focus-visible:outline-none focus-visible:ring-[3px] focus-visible:ring-ring/50",
               selected
-                ? "bg-card text-foreground shadow-[0_1px_2px_rgb(0_0_0/0.4)]"
+                ? "bg-card text-foreground shadow-sm"
                 : "text-muted-foreground hover:text-foreground",
             )}
           >

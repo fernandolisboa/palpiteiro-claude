@@ -60,9 +60,9 @@ export function DateRangeTabs({ league, preset, from, to, className }: Props) {
               href={buildRangeHref({ league }, { preset: value })}
               aria-current={selected ? "page" : undefined}
               className={cn(
-                "h-7 rounded-[5px] px-3 text-[12px] font-medium leading-7 transition-colors",
+                "h-7 rounded-sm px-3 text-body-sm font-medium leading-7 transition-colors focus-visible:outline-none focus-visible:ring-[3px] focus-visible:ring-ring/50",
                 selected
-                  ? "bg-card text-foreground shadow-[0_1px_2px_rgb(0_0_0/0.4)]"
+                  ? "bg-card text-foreground shadow-sm"
                   : "text-muted-foreground hover:text-foreground",
               )}
             >
@@ -92,9 +92,9 @@ export function DateRangeTabs({ league, preset, from, to, className }: Props) {
             );
             navigateCustom(el.value, sibling?.value ?? to ?? "");
           }}
-          className="bg-transparent text-[11.5px] tabular-nums text-foreground outline-none [color-scheme:dark]"
+          className="bg-transparent text-meta tabular-nums text-foreground outline-none [color-scheme:light] dark:[color-scheme:dark] focus-visible:border-ring focus-visible:ring-[3px] focus-visible:ring-ring/50"
         />
-        <span className="text-[11px] text-muted-foreground">–</span>
+        <span className="text-meta text-muted-foreground">–</span>
         <input
           type="date"
           aria-label="Até"
@@ -106,7 +106,7 @@ export function DateRangeTabs({ league, preset, from, to, className }: Props) {
             );
             navigateCustom(sibling?.value ?? from ?? "", el.value);
           }}
-          className="bg-transparent text-[11.5px] tabular-nums text-foreground outline-none [color-scheme:dark]"
+          className="bg-transparent text-meta tabular-nums text-foreground outline-none [color-scheme:light] dark:[color-scheme:dark] focus-visible:border-ring focus-visible:ring-[3px] focus-visible:ring-ring/50"
         />
       </div>
     </div>
