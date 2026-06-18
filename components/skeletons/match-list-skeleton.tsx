@@ -1,6 +1,7 @@
 import { Card } from "@/components/ui/card";
 import { Skeleton } from "@/components/ui/skeleton";
 import { MatchRowSkeleton } from "@/components/match-row";
+import { UPCOMING_GRID } from "@/components/upcoming-matches-desktop";
 
 export function MobileMatchListSkeleton() {
   return (
@@ -18,7 +19,7 @@ export function DesktopMatchListSkeleton() {
       {[0, 1, 2, 3, 4].map((i) => (
         <div
           key={i}
-          className={`grid grid-cols-[160px_1fr_160px_140px_40px] items-center gap-4 px-5 py-4 ${
+          className={`grid ${UPCOMING_GRID} items-center gap-4 px-5 py-4 ${
             i === 4 ? "" : "border-b border-border-subtle"
           }`}
         >
@@ -41,7 +42,7 @@ export function DesktopMatchListSkeleton() {
             <Skeleton className="h-[13px] w-14" />
           </div>
           <div className="flex justify-end">
-            <Skeleton className="h-[18px] w-16" />
+            <Skeleton className="h-5 w-16" />
           </div>
           <span />
         </div>

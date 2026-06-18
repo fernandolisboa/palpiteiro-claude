@@ -25,7 +25,7 @@ export function MatchRow({ m, last }: Props) {
     <Link
       href={`/match/${m.id}`}
       className={cn(
-        "block px-5 py-4 transition-colors hover:bg-surface-2",
+        "block px-5 py-4 transition-colors hover:bg-surface-2 focus-visible:outline-none focus-visible:ring-[3px] focus-visible:ring-ring/50 focus-visible:ring-inset",
         !last && "border-b border-border-subtle",
       )}
     >
@@ -33,18 +33,19 @@ export function MatchRow({ m, last }: Props) {
         <div className="flex items-center gap-2">
           <Badge
             variant="outline"
-            className="h-[18px] rounded-full px-2 text-[9.5px] uppercase tracking-[0.12em] text-muted-foreground"
+            size="xs"
+            className="uppercase tracking-label text-muted-foreground"
           >
             {LEAGUE_LABEL[m.league]}
           </Badge>
           {m.hasPrediction && (
-            <span className="inline-flex items-center gap-1 font-mono text-[10px] tracking-[0.06em] text-accent-fg">
+            <span className="inline-flex items-center gap-1 font-mono text-eyebrow text-accent-fg">
               <Check className="size-3" />
               analisado
             </span>
           )}
         </div>
-        <span className="font-mono text-[11px] tabular-nums text-muted-foreground">
+        <span className="font-mono text-meta tabular-nums text-muted-foreground">
           {m.kickoff}
         </span>
       </div>
@@ -53,13 +54,13 @@ export function MatchRow({ m, last }: Props) {
         <div className="flex min-w-0 flex-col gap-1">
           <div className="flex items-center gap-2">
             <TeamAvatar initials={m.home.short.slice(0, 2)} hue={m.home.hue} size={22} />
-            <span className="truncate text-[14px] font-medium tracking-tight">
+            <span className="truncate text-label font-medium tracking-tight">
               {m.home.name}
             </span>
           </div>
           <div className="flex items-center gap-2">
             <TeamAvatar initials={m.away.short.slice(0, 2)} hue={m.away.hue} size={22} />
-            <span className="truncate text-[14px] font-medium tracking-tight">
+            <span className="truncate text-label font-medium tracking-tight">
               {m.away.name}
             </span>
           </div>
@@ -68,27 +69,27 @@ export function MatchRow({ m, last }: Props) {
         <div className="flex shrink-0 items-center gap-2">
           {isFinished && hasScore ? (
             <div className="flex flex-col items-end gap-0.5">
-              <span className="font-mono text-[15px] font-medium tabular-nums">
+              <span className="font-mono text-label font-medium tabular-nums">
                 {m.homeScore}
                 <span className="px-1 text-muted-foreground">–</span>
                 {m.awayScore}
               </span>
-              <span className="font-mono text-[9.5px] uppercase tracking-[0.08em] text-muted-fg-2">
+              <span className="font-mono text-eyebrow-xs uppercase tracking-label text-muted-fg-2">
                 encerrado
               </span>
             </div>
           ) : isFinished ? (
             // Encerrado sem placar reportado: marca o estado sem inventar 0–0
             // nem cair no "sem odd" (que sugeriria um jogo ainda apostável).
-            <span className="font-mono text-[10.5px] uppercase tracking-[0.08em] text-muted-fg-2">
+            <span className="font-mono text-eyebrow uppercase tracking-label text-muted-fg-2">
               encerrado
             </span>
           ) : m.status === "postponed" || m.status === "cancelled" ? (
-            <span className="font-mono text-[10.5px] uppercase tracking-[0.08em] text-muted-fg-2">
+            <span className="font-mono text-eyebrow uppercase tracking-label text-muted-fg-2">
               {STATUS_LABEL[m.status]}
             </span>
           ) : m.odds ? (
-            <div className="flex flex-col items-end gap-1 font-mono text-[12.5px] tabular-nums">
+            <div className="flex flex-col items-end gap-1 font-mono text-body-sm tabular-nums">
               {m.odds.outcomes.map((o, i) => (
                 <span key={i}>
                   <span className="text-muted-foreground">{o.label}</span>{" "}
@@ -97,7 +98,7 @@ export function MatchRow({ m, last }: Props) {
               ))}
             </div>
           ) : (
-            <span className="font-mono text-[10.5px] text-muted-fg-2">
+            <span className="font-mono text-eyebrow text-muted-fg-2">
               sem odd
             </span>
           )}

@@ -15,26 +15,27 @@ export function DesktopStatusCell({ m }: { m: MatchRowView }) {
         // Encerrado ainda surfaça "analisado" se o usuário já analisou: o
         // resultado read-only segue acessível na página de detalhe.
         <>
-          <span className="font-mono text-[10px] uppercase tracking-[0.08em] text-muted-fg-2">
+          <span className="font-mono text-eyebrow uppercase tracking-label text-muted-fg-2">
             encerrado
           </span>
           {m.hasPrediction && (
-            <span className="inline-flex items-center gap-1 font-mono text-[10px] tracking-[0.06em] text-accent-fg">
+            <span className="inline-flex items-center gap-1 font-mono text-eyebrow text-accent-fg">
               <Check className="size-3" /> analisado
             </span>
           )}
         </>
       ) : m.status === "postponed" || m.status === "cancelled" ? (
-        <span className="font-mono text-[10.5px] text-muted-fg-2">—</span>
+        <span className="font-mono text-eyebrow text-muted-fg-2">—</span>
       ) : m.hasPrediction ? (
         <Badge
           variant="outline"
-          className="h-[20px] rounded-full border-accent-border bg-accent-soft px-2 text-[10px] text-accent-fg"
+          size="sm"
+          className="border-accent-border bg-accent-soft text-accent-fg"
         >
           <Check className="size-3" /> analisado
         </Badge>
       ) : (
-        <span className="font-mono text-[10.5px] text-muted-fg-2">—</span>
+        <span className="font-mono text-eyebrow text-muted-fg-2">—</span>
       )}
     </div>
   );
