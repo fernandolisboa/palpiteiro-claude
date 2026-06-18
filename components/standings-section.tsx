@@ -32,7 +32,9 @@ export function StandingsSection({ view }: Props) {
         const sg = r.gf - r.ga;
         return (
           <div
-            key={r.team}
+            // Chave pela posição (estável p/ canonical): o `team` exibido pode
+            // estar traduzido na Copa (#340), a posição não.
+            key={r.pos}
             className={cn(
               "grid items-center gap-2 rounded-md px-1 py-1.5 text-body-sm tracking-tight tabular-nums",
               STANDINGS_GRID,

@@ -51,6 +51,8 @@ export function toRecentPredictionView(row: RecentInput): RecentPredictionView {
   return {
     id: row.predictionId,
     matchId: row.matchId,
+    // `.short` deriva sempre do canonical (league-inerte); o league vai junto só
+    // pra manter a assinatura uniforme do seam — a tradução de `.name` é descartada.
     home: teamToTeam(row.homeTeam, league).short,
     away: teamToTeam(row.awayTeam, league).short,
     rec: recToken(row.recommendation),
