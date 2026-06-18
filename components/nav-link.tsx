@@ -29,9 +29,14 @@ const navLinkVariants = cva(
   }
 );
 
-/** True se `href` é a rota ativa (raiz casa exata; o resto por prefixo). */
+/**
+ * True se `href` é a rota ativa: raiz casa exata; o resto casa exato OU como
+ * prefixo delimitado por "/" (ex.: "/dashboard" ativa "/dashboard/123", mas NÃO
+ * "/dashboard-foo" — sem o boundary, startsWith daria falso-positivo).
+ */
 export function isActivePath(pathname: string, href: string): boolean {
-  return href === "/" ? pathname === "/" : pathname.startsWith(href);
+  if (href === "/") return pathname === "/";
+  return pathname === href || pathname.startsWith(href + "/");
 }
 
 type Props = ComponentProps<typeof Link> & VariantProps<typeof navLinkVariants>;

@@ -48,7 +48,7 @@ export function HelpHint({ anchor, label, blurb }: HelpHintProps) {
         </p>
         <Link
           href={`/como-funciona#${anchor}`}
-          className="font-mono text-meta tracking-tight text-muted-foreground underline-offset-2 hover:text-foreground hover:underline"
+          className="font-mono text-meta tracking-tight text-muted-foreground underline-offset-2 hover:text-foreground hover:underline focus-visible:rounded-sm focus-visible:outline-none focus-visible:ring-[3px] focus-visible:ring-ring/50"
         >
           saiba mais
         </Link>

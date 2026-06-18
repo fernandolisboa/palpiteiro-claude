@@ -20,6 +20,7 @@ export function PageHeader({ subtitle, isAdmin = false }: Props) {
             (sempre visível, um toque). Mantém o header limpo em ≤430px. */}
         <div className="flex items-center gap-1.5">
           <MobileNav isAdmin={isAdmin} />
+          {/* nbsp entre "·" e "v0" pra não quebrar linha (paridade com o &nbsp; original) */}
           <Wordmark suffix={"· v0"} />
         </div>
         <div className="flex items-center gap-2">
