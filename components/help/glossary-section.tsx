@@ -29,19 +29,19 @@ export function GlossarySection() {
           <Collapsible>
             <CollapsibleTrigger className="group flex w-full items-center gap-2 py-3 text-left">
               <ChevronRight className="size-3.5 shrink-0 text-muted-foreground transition-transform group-data-[state=open]:rotate-90" />
-              <span className="text-[14px] font-medium tracking-tight">
+              <span className="text-label font-medium tracking-tight">
                 {entry.term}
               </span>
             </CollapsibleTrigger>
             <CollapsibleContent>
-              <p className="pl-[22px] pr-2 pt-0 pb-2 text-[13px] leading-relaxed text-muted-foreground tracking-tight">
+              <p className="pl-5.5 pr-2 pt-0 pb-2 text-body leading-relaxed text-muted-foreground tracking-tight">
                 {entry.meaning}
               </p>
               {entry.markets &&
                 Object.entries(entry.markets).map(([marketKey, detail]) => (
                   <p
                     key={marketKey}
-                    className="pb-3 pl-[22px] pr-2 text-[12.5px] leading-relaxed text-muted-fg-2 tracking-tight"
+                    className="pb-3 pl-5.5 pr-2 text-body-sm leading-relaxed text-muted-fg-2 tracking-tight"
                   >
                     {detail}
                   </p>

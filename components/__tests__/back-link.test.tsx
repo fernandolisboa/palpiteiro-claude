@@ -17,8 +17,8 @@ describe("BackLink", () => {
       <BackLink href="/admin" label="admin" />,
     );
     expect(html).toContain("text-muted-foreground");
-    expect(html).toContain("pb-6");
-    expect(html).toContain("text-[12.5px]");
+    expect(html).toContain("mb-6");
+    expect(html).toContain("text-body-sm");
     expect(html).toContain("size-3.5");
   });
 

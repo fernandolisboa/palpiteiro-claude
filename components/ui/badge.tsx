@@ -19,9 +19,18 @@ const badgeVariants = cva(
         ghost: "[a&]:hover:bg-accent [a&]:hover:text-accent-foreground",
         link: "text-primary underline-offset-4 [a&]:hover:underline",
       },
+      // Eixo de TAMANHO aditivo (ADR 0029) p/ absorver os badges hand-rolled
+      // (`h-[17..20px]`+`text-[9.5..10px]`). `default` é no-op ⇒ rendering atual
+      // e golden snapshots intocados; consumidores de conteúdo adotam nos heirs.
+      size: {
+        default: "",
+        sm: "h-5 px-2 text-eyebrow",
+        xs: "h-[18px] px-2 text-eyebrow",
+      },
     },
     defaultVariants: {
       variant: "default",
+      size: "default",
     },
   }
 )
@@ -29,6 +38,7 @@ const badgeVariants = cva(
 function Badge({
   className,
   variant = "default",
+  size = "default",
   asChild = false,
   ...props
 }: React.ComponentProps<"span"> &
@@ -39,7 +49,7 @@ function Badge({
     <Comp
       data-slot="badge"
       data-variant={variant}
-      className={cn(badgeVariants({ variant }), className)}
+      className={cn(badgeVariants({ variant, size }), className)}
       {...props}
     />
   )

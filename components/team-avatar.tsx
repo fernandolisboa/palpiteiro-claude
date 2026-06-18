@@ -18,8 +18,10 @@ export function TeamAvatar({ initials, hue, size = 32, className }: Props) {
       style={{
         width: size,
         height: size,
-        background: `oklch(0.32 0.04 ${hue})`,
-        color: `oklch(0.88 0.04 ${hue})`,
+        // Lightness via token por-tema (ADR 0029); o hue fica inline/intocado
+        // (identidade estável). Light = 0.32/0.88 (paridade); só o dark é novo.
+        background: `oklch(var(--ta-bg-l) 0.04 ${hue})`,
+        color: `oklch(var(--ta-fg-l) 0.04 ${hue})`,
         fontSize: size * 0.36,
         letterSpacing: "-0.02em",
       }}

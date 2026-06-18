@@ -62,6 +62,31 @@
   --radius-md: calc(var(--radius) - 2px);
   --radius-lg: var(--radius);
   --radius-xl: calc(var(--radius) + 4px);
+
+  /* Typography scale — ADR 0029. font-size ONLY (no --text-*--line-height
+     companion ⇒ line-height inherits, byte-identical to the text-[Npx] it
+     replaces). Whole-px; half-pixels collapsed to the nearest step. */
+  --text-eyebrow-xs: 9px;
+  --text-eyebrow: 10px;
+  --text-meta: 11px;
+  --text-body-sm: 12px;
+  --text-body: 13px;
+  --text-label: 14px;
+  --text-display-sm: 18px;
+  --text-display-md: 26px;
+  --text-display-lg: 32px;
+
+  /* Letter-spacing — eyebrow/label scale (the negative band keeps Tailwind's
+     default `tracking-tight`; these two are net-new, non-colliding names). */
+  --tracking-label: 0.14em;
+  --tracking-eyebrow: 0.18em;
+
+  /* Layout widths — named max-w-* constants (max-w-content/aside/narrow/…). */
+  --container-content: 1040px;
+  --container-aside: 320px;
+  --container-narrow: 480px;
+  --container-reading: 640px;
+  --container-form: 380px;
 }
 
 :root {
@@ -128,6 +153,10 @@
   --form-loss-fg: oklch(0.45 0.13 25);
   --form-draw-bg: oklch(0.93 0 0);
   --form-draw-fg: oklch(0.40 0 0);
+
+  /* Team-avatar lightness (hue stays inline, per-team) — ADR 0029 */
+  --ta-bg-l: 0.32;
+  --ta-fg-l: 0.88;
 }
 
 .dark {
@@ -193,6 +222,10 @@
   --form-loss-fg: oklch(0.78 0.13 25);
   --form-draw-bg: oklch(0.32 0 0);
   --form-draw-fg: oklch(0.75 0 0);
+
+  /* Team-avatar lightness — dark branch (light stays 0.32/0.88) — ADR 0029 */
+  --ta-bg-l: 0.40;
+  --ta-fg-l: 0.92;
 }
 
 * {
@@ -202,4 +235,18 @@
 body {
   background-color: var(--background);
   color: var(--foreground);
+}
+
+/* Respeita a preferência do SO de movimento reduzido (ADR 0029). Zera SÓ a
+   duração — nunca animation-name/display — pra Radix (sheet/popover) ainda
+   montar e abrir/fechar (instantâneo) sob reduce. */
+@media (prefers-reduced-motion: reduce) {
+  *,
+  ::before,
+  ::after {
+    animation-duration: 0.01ms !important;
+    animation-iteration-count: 1 !important;
+    transition-duration: 0.01ms !important;
+    scroll-behavior: auto !important;
+  }
 }

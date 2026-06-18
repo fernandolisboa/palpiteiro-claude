@@ -22,7 +22,7 @@ export function FormDot({ r }: { r: Result }) {
   const cfg = CONFIG[r];
   return (
     <span
-      className={`inline-flex h-5 w-5 items-center justify-center rounded-full font-mono text-[10px] font-semibold ${cfg.className}`}
+      className={`inline-flex h-5 w-5 items-center justify-center rounded-full font-mono text-eyebrow font-semibold ${cfg.className}`}
       aria-label={cfg.title}
     >
       {cfg.label}
