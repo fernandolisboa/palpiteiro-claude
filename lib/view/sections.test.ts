@@ -147,6 +147,39 @@ describe("toStandingsView (janela)", () => {
     expect(view.rows.every((r) => r.focus === false)).toBe(true);
   });
 
+  it("um só time de foco na tabela: janela ancora nele, só uma linha com foco", () => {
+    const view = toStandingsView({
+      standing: standing(20),
+      homeTeam: "T8",
+      awayTeam: "Fantasma",
+    });
+    expect(view.rows.map((r) => r.pos)).toEqual([7, 8, 9, 10, 11]);
+    expect(view.rows.filter((r) => r.focus).map((r) => r.pos)).toEqual([8]);
+  });
+
+  it("grupos (ex.: fase de grupos): janela usa a tabela do grupo dos times de foco", () => {
+    // Dois grupos de 4; o jogo é entre dois times do grupo B (pos 3 e 4 do B).
+    // O clamp tem que rodar contra a tabela SELECIONADA, não tables[0].
+    const grouped: NormalizedStanding = {
+      league: "brasileirao_a",
+      season: 2026,
+      tables: [
+        { group: "A", teams: ["A1", "A2", "A3", "A4"].map((n, i) => team(i + 1, n)) },
+        { group: "B", teams: ["B1", "B2", "B3", "B4"].map((n, i) => team(i + 1, n)) },
+      ],
+    };
+    const view = toStandingsView({
+      standing: grouped,
+      homeTeam: "B3",
+      awayTeam: "B4",
+    });
+    expect(view.rows.map((r) => r.team)).toEqual(["B1", "B2", "B3", "B4"]);
+    expect(view.rows.filter((r) => r.focus).map((r) => r.team)).toEqual([
+      "B3",
+      "B4",
+    ]);
+  });
+
   it("standing ausente: rows vazio (EmptyState)", () => {
     expect(toStandingsView({ standing: undefined, homeTeam: "T1", awayTeam: "T2" }).rows).toEqual([]);
   });
