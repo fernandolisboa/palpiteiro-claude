@@ -24,6 +24,7 @@ import {
 } from "@/lib/db/queries/odds-snapshots";
 import { getRecentPredictionsByUser } from "@/lib/db/queries/predictions";
 import { DateRangeTabs } from "@/components/date-range-tabs";
+import { EmptyState } from "@/components/empty-state";
 import { parseRangeParams, type ResolvedRange } from "@/lib/view/date-range";
 import { rangeEmptyMessage, rangeLabel } from "@/lib/view/range-href";
 import { toMatchRowView } from "@/lib/view/match";
@@ -219,10 +220,10 @@ function MobileHome({
         subtitle={`${matches.length} jogos · ${label.toLowerCase()}`}
       />
       <div className="px-5 pb-5 pt-1">
-        <h1 className="text-[26px] font-medium leading-[1.05] tracking-[-0.03em]">
+        <h1 className="text-display-md font-medium leading-none tracking-tight">
           Próximos jogos
         </h1>
-        <p className="pt-1.5 text-[13px] text-muted-foreground tracking-tight">
+        <p className="pt-1.5 text-body text-muted-foreground tracking-tight">
           {HOME_SUBTITLE}
         </p>
       </div>
@@ -240,19 +241,12 @@ function MobileHome({
       <SectionLabel>{label}</SectionLabel>
       {matches.length === 0 ? (
         <Card className="mx-5">
-          <div className="flex flex-col items-center gap-3 px-6 py-12 text-center">
-            <span className="text-muted-fg-2">
-              <Inbox className="size-9" strokeWidth={1.25} />
-            </span>
-            <div className="flex flex-col gap-1">
-              <span className="text-[14px] font-medium tracking-tight">
-                {empty.title}
-              </span>
-              <span className="max-w-[240px] text-[12.5px] text-muted-foreground tracking-tight">
-                {empty.detail}
-              </span>
-            </div>
-          </div>
+          <EmptyState
+            className="py-6"
+            icon={<Inbox aria-hidden="true" className="size-10" strokeWidth={1.25} />}
+            title={empty.title}
+            description={empty.detail}
+          />
         </Card>
       ) : (
         <UpcomingMatchesMobile key={listKey} matches={matches} />
@@ -263,7 +257,7 @@ function MobileHome({
         action={
           <Link
             href="/dashboard"
-            className="font-mono text-[10.5px] uppercase tracking-[0.18em] text-muted-foreground transition-colors hover:text-foreground"
+            className="font-mono text-eyebrow uppercase tracking-eyebrow text-muted-foreground transition-colors hover:text-foreground focus-visible:outline-none focus-visible:ring-[3px] focus-visible:ring-ring/50 rounded-sm"
           >
             ver todas →
           </Link>
@@ -273,7 +267,7 @@ function MobileHome({
       </SectionLabel>
       <div className="overflow-x-auto px-5 pb-6">
         {recents.length === 0 ? (
-          <div className="text-[12.5px] text-muted-foreground tracking-tight">
+          <div className="text-body-sm text-muted-foreground tracking-tight">
             Nenhuma predição ainda.
           </div>
         ) : (
@@ -296,13 +290,13 @@ function DesktopHome({ matches, recents, league, range }: HomeContentProps) {
   const listKey = `${league}-${range.preset}-${navProps.from ?? ""}-${navProps.to ?? ""}`;
   return (
     <DesktopShell>
-      <div className="mx-auto w-full max-w-[1040px] px-8 pt-10 pb-16">
+      <div className="mx-auto w-full max-w-content px-8 pt-10 pb-16">
         <div className="flex items-end justify-between pb-6">
           <div className="flex flex-col gap-2">
-            <h1 className="text-[32px] font-medium leading-[1] tracking-[-0.035em]">
+            <h1 className="text-display-lg font-medium leading-none tracking-tight">
               Próximos jogos
             </h1>
-            <p className="text-[13.5px] text-muted-foreground tracking-tight">
+            <p className="text-body text-muted-foreground tracking-tight">
               {matches.length} partidas · {label} · Copa do Mundo FIFA 2026
             </p>
           </div>
@@ -319,36 +313,32 @@ function DesktopHome({ matches, recents, league, range }: HomeContentProps) {
 
         {matches.length === 0 ? (
           <Card className="px-8 py-16 text-center">
-            <div className="mx-auto flex max-w-[360px] flex-col items-center gap-3">
-              <span className="text-muted-fg-2">
-                <Inbox className="size-10" strokeWidth={1.25} />
-              </span>
-              <span className="text-[15px] font-medium tracking-tight">
-                {empty.title}
-              </span>
-              <span className="text-[13px] text-muted-foreground tracking-tight">
-                {empty.detail}
-              </span>
-            </div>
+            <EmptyState
+              className="py-6"
+              icon={<Inbox aria-hidden="true" className="size-10" strokeWidth={1.25} />}
+              title={empty.title}
+              description={empty.detail}
+            />
           </Card>
         ) : (
           <UpcomingMatchesDesktop key={listKey} matches={matches} />
         )}
 
         <div className="pt-12">
-          <div className="flex items-baseline justify-between pb-3">
-            <span className="font-mono text-[10.5px] uppercase tracking-[0.18em] text-muted-foreground">
-              suas predições recentes
-            </span>
-            <Link
-              href="/dashboard"
-              className="font-mono text-[10.5px] uppercase tracking-[0.18em] text-muted-foreground transition-colors hover:text-foreground"
-            >
-              ver todas →
-            </Link>
-          </div>
+          <SectionLabel
+            action={
+              <Link
+                href="/dashboard"
+                className="font-mono text-eyebrow uppercase tracking-eyebrow text-muted-foreground transition-colors hover:text-foreground focus-visible:outline-none focus-visible:ring-[3px] focus-visible:ring-ring/50 rounded-sm"
+              >
+                ver todas →
+              </Link>
+            }
+          >
+            Suas predições recentes
+          </SectionLabel>
           {recents.length === 0 ? (
-            <div className="text-[12.5px] text-muted-foreground tracking-tight">
+            <div className="text-body-sm text-muted-foreground tracking-tight">
               Nenhuma predição ainda.
             </div>
           ) : (

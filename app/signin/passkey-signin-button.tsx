@@ -65,7 +65,7 @@ export function PasskeySignInButton({ enabled = true }: { enabled?: boolean }) {
   return (
     <div className="flex flex-col gap-3">
       <label className="flex flex-col gap-1.5">
-        <span className="text-muted-foreground font-mono text-[10px] tracking-[0.14em] uppercase">
+        <span className="text-muted-foreground font-mono text-eyebrow tracking-label uppercase">
           e-mail (passkey)
         </span>
         <Input
@@ -86,7 +86,7 @@ export function PasskeySignInButton({ enabled = true }: { enabled?: boolean }) {
         {pending ? "Verificando…" : "Entrar com passkey"}
       </Button>
       {error && (
-        <p className="text-destructive text-[12.5px] tracking-tight">{error}</p>
+        <p className="text-destructive text-body-sm tracking-tight">{error}</p>
       )}
     </div>
   );

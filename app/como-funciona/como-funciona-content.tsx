@@ -10,10 +10,10 @@ import { GlossarySection } from "@/components/help/glossary-section";
 export function ComoFuncionaContent() {
   return (
     <>
-      <h1 className="text-[20px] font-medium tracking-[-0.02em]">
+      <h1 className="text-display-md font-medium tracking-tight">
         Como funciona
       </h1>
-      <p className="pb-8 pt-2 text-[13.5px] leading-relaxed text-muted-foreground tracking-tight">
+      <p className="pb-8 pt-2 text-body leading-relaxed text-muted-foreground tracking-tight">
         O Palpiteiro <strong className="font-medium text-foreground">recomenda</strong> e{" "}
         <strong className="font-medium text-foreground">acompanha</strong> apostas em
         vários mercados de futebol — over/under (total de gols), resultado final
@@ -32,12 +32,12 @@ export function ComoFuncionaContent() {
       {/* Seção 2 — over/under do zero (= seção de ajuda do mercado over/under) */}
       <section
         id="mercado-over-under"
-        className="border-border scroll-mt-20 border-t pt-8"
+        className="border-border scroll-mt-20 border-t pt-8 mt-8"
       >
-        <h2 className="text-[16px] font-medium tracking-[-0.02em]">
+        <h2 className="text-display-sm font-medium tracking-tight">
           O que é over/under 2.5 (do zero)
         </h2>
-        <div className="flex flex-col gap-3 pt-3 text-[13.5px] leading-relaxed text-muted-foreground tracking-tight">
+        <div className="flex flex-col gap-3 pt-3 text-body leading-relaxed text-muted-foreground tracking-tight">
           <p>
             A aposta é no <strong className="font-medium text-foreground">total de gols</strong>{" "}
             do jogo, somando os dois times — não importa quem marca.{" "}
@@ -52,7 +52,7 @@ export function ComoFuncionaContent() {
           </p>
           <p>
             Cada lado tem uma{" "}
-            <a href="#odd-decimal" className="text-foreground underline underline-offset-2 decoration-border-strong hover:decoration-foreground">
+            <a href="#odd-decimal" className="text-foreground underline underline-offset-2 decoration-border-strong hover:decoration-foreground focus-visible:rounded-sm focus-visible:outline-none focus-visible:ring-[3px] focus-visible:ring-ring/50">
               odd decimal
             </a>
             : o multiplicador do que você recebe se acertar.
@@ -62,25 +62,25 @@ export function ComoFuncionaContent() {
 
       {/* Seção 3 — como o app decide */}
       <section className="border-border border-t pt-8 mt-8">
-        <h2 className="text-[16px] font-medium tracking-[-0.02em]">
+        <h2 className="text-display-sm font-medium tracking-tight">
           Como o app decide: edge, confiança e PASS
         </h2>
-        <div className="flex flex-col gap-3 pt-3 text-[13.5px] leading-relaxed text-muted-foreground tracking-tight">
+        <div className="flex flex-col gap-3 pt-3 text-body leading-relaxed text-muted-foreground tracking-tight">
           <p>
             Pra cada jogo o Palpiteiro compara duas chances: a{" "}
-            <a href="#prob-modelo" className="text-foreground underline underline-offset-2 decoration-border-strong hover:decoration-foreground">
+            <a href="#prob-modelo" className="text-foreground underline underline-offset-2 decoration-border-strong hover:decoration-foreground focus-visible:rounded-sm focus-visible:outline-none focus-visible:ring-[3px] focus-visible:ring-ring/50">
               prob. do modelo
             </a>{" "}
             (o quanto a IA acredita num lado) e a{" "}
-            <a href="#prob-implicita" className="text-foreground underline underline-offset-2 decoration-border-strong hover:decoration-foreground">
+            <a href="#prob-implicita" className="text-foreground underline underline-offset-2 decoration-border-strong hover:decoration-foreground focus-visible:rounded-sm focus-visible:outline-none focus-visible:ring-[3px] focus-visible:ring-ring/50">
               prob. do mercado
             </a>{" "}
             (a chance que a odd embute, já descontada a{" "}
-            <a href="#overround" className="text-foreground underline underline-offset-2 decoration-border-strong hover:decoration-foreground">
+            <a href="#overround" className="text-foreground underline underline-offset-2 decoration-border-strong hover:decoration-foreground focus-visible:rounded-sm focus-visible:outline-none focus-visible:ring-[3px] focus-visible:ring-ring/50">
               margem da casa
             </a>
             ). A diferença entre as duas é o{" "}
-            <a href="#edge" className="text-foreground underline underline-offset-2 decoration-border-strong hover:decoration-foreground">
+            <a href="#edge" className="text-foreground underline underline-offset-2 decoration-border-strong hover:decoration-foreground focus-visible:rounded-sm focus-visible:outline-none focus-visible:ring-[3px] focus-visible:ring-ring/50">
               edge
             </a>
             .
@@ -92,7 +92,7 @@ export function ComoFuncionaContent() {
             <strong className="font-medium text-foreground">PASS</strong> — ou seja, não
             apostar. PASS <strong className="font-medium text-foreground">não é erro</strong>:
             é disciplina. Recusar jogos ruins é o que separa apostar de torcer. Um{" "}
-            <a href="#pass-rate" className="text-foreground underline underline-offset-2 decoration-border-strong hover:decoration-foreground">
+            <a href="#pass-rate" className="text-foreground underline underline-offset-2 decoration-border-strong hover:decoration-foreground focus-visible:rounded-sm focus-visible:outline-none focus-visible:ring-[3px] focus-visible:ring-ring/50">
               pass rate
             </a>{" "}
             entre 30% e 60% é saudável e esperado.
@@ -101,7 +101,7 @@ export function ComoFuncionaContent() {
             Você escolhe o mercado de um jogo; dentro dele o app compara cada
             seleção e recomenda a de maior edge — ou PASS, se nenhuma passa do
             mínimo. Quando recomenda, o tamanho da aposta vai de{" "}
-            <a href="#stake-confianca" className="text-foreground underline underline-offset-2 decoration-border-strong hover:decoration-foreground">
+            <a href="#stake-confianca" className="text-foreground underline underline-offset-2 decoration-border-strong hover:decoration-foreground focus-visible:rounded-sm focus-visible:outline-none focus-visible:ring-[3px] focus-visible:ring-ring/50">
               1 a 3 unidades
             </a>
             , conforme a força do sinal — quanto mais edge e confiança, mais
@@ -110,11 +110,11 @@ export function ComoFuncionaContent() {
         </div>
 
         {/* Box do exemplo numérico ponta-a-ponta — números EXATOS do spec */}
-        <div className="border-border bg-surface-2 mt-5 rounded-lg border p-4">
-          <p className="font-mono text-[10.5px] uppercase tracking-[0.16em] text-muted-foreground">
+        <div className="border-border bg-surface-2 mt-5 rounded-xl border p-4">
+          <p className="font-mono text-eyebrow uppercase tracking-label text-muted-foreground">
             um jogo de exemplo, ponta a ponta
           </p>
-          <ul className="mt-3 flex flex-col gap-2 text-[13px] leading-relaxed text-muted-foreground tracking-tight">
+          <ul className="mt-3 flex flex-col gap-2 text-body leading-relaxed text-muted-foreground tracking-tight">
             <li>
               Odds da casa:{" "}
               <strong className="font-medium text-foreground">over 1.92 / under 1.92</strong>.
@@ -158,10 +158,10 @@ export function ComoFuncionaContent() {
           Mesma matemática do método acima (ADR 0018): a implícita NORMALIZADA
           governa o edge, a odd CRUA governa o retorno; cada seleção tem seu edge. */}
       <section className="border-border border-t pt-8 mt-8">
-        <h2 className="text-[16px] font-medium tracking-[-0.02em]">
+        <h2 className="text-display-sm font-medium tracking-tight">
           Os outros mercados
         </h2>
-        <div className="flex flex-col gap-3 pt-3 text-[13.5px] leading-relaxed text-muted-foreground tracking-tight">
+        <div className="flex flex-col gap-3 pt-3 text-body leading-relaxed text-muted-foreground tracking-tight">
           <p>
             O mesmo método vale pra todos os mercados — prob. do modelo contra
             prob. do mercado, edge de pelo menos{" "}
@@ -172,13 +172,13 @@ export function ComoFuncionaContent() {
 
         {/* 1X2 — do zero, completo (3 seleções, edge por seleção) */}
         <div id="mercado-1x2" className="scroll-mt-20 pt-6">
-          <h3 className="text-[14px] font-medium tracking-tight">
+          <h3 className="text-label font-medium tracking-tight">
             Resultado final: 1X2
           </h3>
-          <div className="flex flex-col gap-3 pt-3 text-[13.5px] leading-relaxed text-muted-foreground tracking-tight">
+          <div className="flex flex-col gap-3 pt-3 text-body leading-relaxed text-muted-foreground tracking-tight">
             <p>
               A aposta é em quem vence os 90 minutos. São três{" "}
-              <a href="#selecao" className="text-foreground underline underline-offset-2 decoration-border-strong hover:decoration-foreground">
+              <a href="#selecao" className="text-foreground underline underline-offset-2 decoration-border-strong hover:decoration-foreground focus-visible:rounded-sm focus-visible:outline-none focus-visible:ring-[3px] focus-visible:ring-ring/50">
                 seleções
               </a>
               : <strong className="font-medium text-foreground">casa</strong> (o
@@ -190,23 +190,23 @@ export function ComoFuncionaContent() {
             </p>
             <p>
               Com três seleções, a conta da{" "}
-              <a href="#overround" className="text-foreground underline underline-offset-2 decoration-border-strong hover:decoration-foreground">
+              <a href="#overround" className="text-foreground underline underline-offset-2 decoration-border-strong hover:decoration-foreground focus-visible:rounded-sm focus-visible:outline-none focus-visible:ring-[3px] focus-visible:ring-ring/50">
                 margem
               </a>{" "}
               muda: somam-se as três probabilidades cruas e normaliza-se cada uma
               por essa soma. Cada seleção tem o seu próprio{" "}
-              <a href="#edge" className="text-foreground underline underline-offset-2 decoration-border-strong hover:decoration-foreground">
+              <a href="#edge" className="text-foreground underline underline-offset-2 decoration-border-strong hover:decoration-foreground focus-visible:rounded-sm focus-visible:outline-none focus-visible:ring-[3px] focus-visible:ring-ring/50">
                 edge
               </a>
               .
             </p>
           </div>
 
-          <div className="border-border bg-surface-2 mt-5 rounded-lg border p-4">
-            <p className="font-mono text-[10.5px] uppercase tracking-[0.16em] text-muted-foreground">
+          <div className="border-border bg-surface-2 mt-5 rounded-xl border p-4">
+            <p className="font-mono text-eyebrow uppercase tracking-label text-muted-foreground">
               1x2 — um jogo de exemplo, ponta a ponta
             </p>
-            <ul className="mt-3 flex flex-col gap-2 text-[13px] leading-relaxed text-muted-foreground tracking-tight">
+            <ul className="mt-3 flex flex-col gap-2 text-body leading-relaxed text-muted-foreground tracking-tight">
               <li>
                 Odds da casa:{" "}
                 <strong className="font-medium text-foreground">casa 2.10 / empate 3.40 / fora 3.60</strong>.
@@ -253,10 +253,10 @@ export function ComoFuncionaContent() {
 
         {/* BTTS — conciso (N=2, mecânica do over/under) */}
         <div id="mercado-btts" className="scroll-mt-20 pt-8">
-          <h3 className="text-[14px] font-medium tracking-tight">
+          <h3 className="text-label font-medium tracking-tight">
             Ambas marcam (BTTS)
           </h3>
-          <div className="flex flex-col gap-3 pt-3 text-[13.5px] leading-relaxed text-muted-foreground tracking-tight">
+          <div className="flex flex-col gap-3 pt-3 text-body leading-relaxed text-muted-foreground tracking-tight">
             <p>
               BTTS (<em>both teams to score</em>) é sobre os dois times marcarem no
               jogo. Duas seleções:{" "}
@@ -268,11 +268,11 @@ export function ComoFuncionaContent() {
             </p>
           </div>
 
-          <div className="border-border bg-surface-2 mt-5 rounded-lg border p-4">
-            <p className="font-mono text-[10.5px] uppercase tracking-[0.16em] text-muted-foreground">
+          <div className="border-border bg-surface-2 mt-5 rounded-xl border p-4">
+            <p className="font-mono text-eyebrow uppercase tracking-label text-muted-foreground">
               btts — um jogo de exemplo
             </p>
-            <ul className="mt-3 flex flex-col gap-2 text-[13px] leading-relaxed text-muted-foreground tracking-tight">
+            <ul className="mt-3 flex flex-col gap-2 text-body leading-relaxed text-muted-foreground tracking-tight">
               <li>
                 Odds:{" "}
                 <strong className="font-medium text-foreground">sim 1.80 / não 2.00</strong>.
@@ -295,17 +295,17 @@ export function ComoFuncionaContent() {
               </li>
             </ul>
           </div>
-          <p className="text-muted-fg-2 mt-3 text-[12.5px]">
+          <p className="text-muted-fg-2 mt-3 text-body-sm">
             Hoje disponível só em jogos de Copa do Mundo.
           </p>
         </div>
 
         {/* Dupla chance — conciso (3 seleções, mercado par: implícitas somam ~200%) */}
         <div id="mercado-dupla-chance" className="scroll-mt-20 pt-8">
-          <h3 className="text-[14px] font-medium tracking-tight">
+          <h3 className="text-label font-medium tracking-tight">
             Dupla chance
           </h3>
-          <div className="flex flex-col gap-3 pt-3 text-[13.5px] leading-relaxed text-muted-foreground tracking-tight">
+          <div className="flex flex-col gap-3 pt-3 text-body leading-relaxed text-muted-foreground tracking-tight">
             <p>
               Dupla chance cobre{" "}
               <strong className="font-medium text-foreground">dois dos três</strong>{" "}
@@ -321,11 +321,11 @@ export function ComoFuncionaContent() {
             </p>
           </div>
 
-          <div className="border-border bg-surface-2 mt-5 rounded-lg border p-4">
-            <p className="font-mono text-[10.5px] uppercase tracking-[0.16em] text-muted-foreground">
+          <div className="border-border bg-surface-2 mt-5 rounded-xl border p-4">
+            <p className="font-mono text-eyebrow uppercase tracking-label text-muted-foreground">
               dupla chance — um jogo de exemplo
             </p>
-            <ul className="mt-3 flex flex-col gap-2 text-[13px] leading-relaxed text-muted-foreground tracking-tight">
+            <ul className="mt-3 flex flex-col gap-2 text-body leading-relaxed text-muted-foreground tracking-tight">
               <li>
                 Odds:{" "}
                 <strong className="font-medium text-foreground">casa ou empate 1.25 / empate ou fora 2.00 / casa ou fora 1.30</strong>.
@@ -348,7 +348,7 @@ export function ComoFuncionaContent() {
               </li>
             </ul>
           </div>
-          <p className="text-muted-fg-2 mt-3 text-[12.5px]">
+          <p className="text-muted-fg-2 mt-3 text-body-sm">
             Hoje disponível só em jogos de Copa do Mundo.
           </p>
         </div>
@@ -356,30 +356,30 @@ export function ComoFuncionaContent() {
 
       {/* Seção 4 — como ler os números */}
       <section className="border-border border-t pt-8 mt-8">
-        <h2 className="text-[16px] font-medium tracking-[-0.02em]">
+        <h2 className="text-display-sm font-medium tracking-tight">
           Como ler os números (análise + dashboard)
         </h2>
-        <div className="flex flex-col gap-3 pt-3 text-[13.5px] leading-relaxed text-muted-foreground tracking-tight">
+        <div className="flex flex-col gap-3 pt-3 text-body leading-relaxed text-muted-foreground tracking-tight">
           <p>
             Na <strong className="font-medium text-foreground">análise</strong> de um jogo você
             vê o{" "}
-            <a href="#retorno-esperado" className="text-foreground underline underline-offset-2 decoration-border-strong hover:decoration-foreground">
+            <a href="#retorno-esperado" className="text-foreground underline underline-offset-2 decoration-border-strong hover:decoration-foreground focus-visible:rounded-sm focus-visible:outline-none focus-visible:ring-[3px] focus-visible:ring-ring/50">
               retorno esperado
             </a>
             , a{" "}
-            <a href="#odd-na-analise" className="text-foreground underline underline-offset-2 decoration-border-strong hover:decoration-foreground">
+            <a href="#odd-na-analise" className="text-foreground underline underline-offset-2 decoration-border-strong hover:decoration-foreground focus-visible:rounded-sm focus-visible:outline-none focus-visible:ring-[3px] focus-visible:ring-ring/50">
               odd congelada
             </a>{" "}
             no momento da análise, a{" "}
-            <a href="#odd-minima" className="text-foreground underline underline-offset-2 decoration-border-strong hover:decoration-foreground">
+            <a href="#odd-minima" className="text-foreground underline underline-offset-2 decoration-border-strong hover:decoration-foreground focus-visible:rounded-sm focus-visible:outline-none focus-visible:ring-[3px] focus-visible:ring-ring/50">
               odd mínima
             </a>{" "}
             que ainda vale a pena, os{" "}
-            <a href="#cenarios" className="text-foreground underline underline-offset-2 decoration-border-strong hover:decoration-foreground">
+            <a href="#cenarios" className="text-foreground underline underline-offset-2 decoration-border-strong hover:decoration-foreground focus-visible:rounded-sm focus-visible:outline-none focus-visible:ring-[3px] focus-visible:ring-ring/50">
               cenários
             </a>{" "}
             dos dois lados e os{" "}
-            <a href="#inputs-analise" className="text-foreground underline underline-offset-2 decoration-border-strong hover:decoration-foreground">
+            <a href="#inputs-analise" className="text-foreground underline underline-offset-2 decoration-border-strong hover:decoration-foreground focus-visible:rounded-sm focus-visible:outline-none focus-visible:ring-[3px] focus-visible:ring-ring/50">
               inputs
             </a>{" "}
             que a IA usou.
@@ -387,46 +387,46 @@ export function ComoFuncionaContent() {
           <p>
             No <strong className="font-medium text-foreground">dashboard</strong>, cada aposta
             usa uma{" "}
-            <a href="#stake-unidade" className="text-foreground underline underline-offset-2 decoration-border-strong hover:decoration-foreground">
+            <a href="#stake-unidade" className="text-foreground underline underline-offset-2 decoration-border-strong hover:decoration-foreground focus-visible:rounded-sm focus-visible:outline-none focus-visible:ring-[3px] focus-visible:ring-ring/50">
               unidade
             </a>{" "}
             abstrata e, depois do jogo, é{" "}
-            <a href="#liquidacao" className="text-foreground underline underline-offset-2 decoration-border-strong hover:decoration-foreground">
+            <a href="#liquidacao" className="text-foreground underline underline-offset-2 decoration-border-strong hover:decoration-foreground focus-visible:rounded-sm focus-visible:outline-none focus-visible:ring-[3px] focus-visible:ring-ring/50">
               liquidada
             </a>{" "}
             (de{" "}
-            <a href="#pendente-liquidada" className="text-foreground underline underline-offset-2 decoration-border-strong hover:decoration-foreground">
+            <a href="#pendente-liquidada" className="text-foreground underline underline-offset-2 decoration-border-strong hover:decoration-foreground focus-visible:rounded-sm focus-visible:outline-none focus-visible:ring-[3px] focus-visible:ring-ring/50">
               pendente a liquidada
             </a>
             ). As métricas que importam:{" "}
-            <a href="#yield" className="text-foreground underline underline-offset-2 decoration-border-strong hover:decoration-foreground">
+            <a href="#yield" className="text-foreground underline underline-offset-2 decoration-border-strong hover:decoration-foreground focus-visible:rounded-sm focus-visible:outline-none focus-visible:ring-[3px] focus-visible:ring-ring/50">
               yield
             </a>{" "}
             (eficiência),{" "}
-            <a href="#win-rate" className="text-foreground underline underline-offset-2 decoration-border-strong hover:decoration-foreground">
+            <a href="#win-rate" className="text-foreground underline underline-offset-2 decoration-border-strong hover:decoration-foreground focus-visible:rounded-sm focus-visible:outline-none focus-visible:ring-[3px] focus-visible:ring-ring/50">
               win rate
             </a>
             ,{" "}
-            <a href="#pass-rate" className="text-foreground underline underline-offset-2 decoration-border-strong hover:decoration-foreground">
+            <a href="#pass-rate" className="text-foreground underline underline-offset-2 decoration-border-strong hover:decoration-foreground focus-visible:rounded-sm focus-visible:outline-none focus-visible:ring-[3px] focus-visible:ring-ring/50">
               pass rate
             </a>
             ,{" "}
-            <a href="#lucro-total" className="text-foreground underline underline-offset-2 decoration-border-strong hover:decoration-foreground">
+            <a href="#lucro-total" className="text-foreground underline underline-offset-2 decoration-border-strong hover:decoration-foreground focus-visible:rounded-sm focus-visible:outline-none focus-visible:ring-[3px] focus-visible:ring-ring/50">
               lucro total
             </a>{" "}
             e a trajetória do{" "}
-            <a href="#bankroll" className="text-foreground underline underline-offset-2 decoration-border-strong hover:decoration-foreground">
+            <a href="#bankroll" className="text-foreground underline underline-offset-2 decoration-border-strong hover:decoration-foreground focus-visible:rounded-sm focus-visible:outline-none focus-visible:ring-[3px] focus-visible:ring-ring/50">
               bankroll
             </a>
             . Com menos de 20 apostas o app marca{" "}
-            <a href="#amostra-pequena" className="text-foreground underline underline-offset-2 decoration-border-strong hover:decoration-foreground">
+            <a href="#amostra-pequena" className="text-foreground underline underline-offset-2 decoration-border-strong hover:decoration-foreground focus-visible:rounded-sm focus-visible:outline-none focus-visible:ring-[3px] focus-visible:ring-ring/50">
               amostra pequena
             </a>{" "}
             — não conclua nada cedo demais.
           </p>
           <p>
             Com vários mercados no ar, o{" "}
-            <a href="#yield" className="text-foreground underline underline-offset-2 decoration-border-strong hover:decoration-foreground">
+            <a href="#yield" className="text-foreground underline underline-offset-2 decoration-border-strong hover:decoration-foreground focus-visible:rounded-sm focus-visible:outline-none focus-visible:ring-[3px] focus-visible:ring-ring/50">
               yield
             </a>{" "}
             e as demais métricas também aparecem{" "}
@@ -435,7 +435,7 @@ export function ComoFuncionaContent() {
           </p>
           <p>
             Lembrando que{" "}
-            <a href="#app-nao-aposta" className="text-foreground underline underline-offset-2 decoration-border-strong hover:decoration-foreground">
+            <a href="#app-nao-aposta" className="text-foreground underline underline-offset-2 decoration-border-strong hover:decoration-foreground focus-visible:rounded-sm focus-visible:outline-none focus-visible:ring-[3px] focus-visible:ring-ring/50">
               o app não aposta por você
             </a>
             : tudo aqui é registro e medição.
@@ -445,8 +445,8 @@ export function ComoFuncionaContent() {
 
       {/* Seção 5 — glossário expansível */}
       <section className="border-border border-t pt-8 mt-8">
-        <h2 className="text-[16px] font-medium tracking-[-0.02em]">Glossário</h2>
-        <p className="pb-4 pt-1 font-mono text-[11px] text-muted-foreground">
+        <h2 className="text-display-sm font-medium tracking-tight">Glossário</h2>
+        <p className="pb-4 pt-1 font-mono text-meta text-muted-foreground">
           toque pra expandir · casa de cada termo do app
         </p>
         <GlossarySection />
@@ -455,14 +455,14 @@ export function ComoFuncionaContent() {
       {/* Seção 6 — jogo responsável / aviso legal (copy exata do doc) */}
       <section className="border-border border-t pt-8 mt-8">
         <div className="flex items-center gap-2">
-          <h2 className="text-[16px] font-medium tracking-[-0.02em]">
+          <h2 className="text-display-sm font-medium tracking-tight">
             Jogo responsável
           </h2>
-          <span className="border-warn-border bg-warn-soft text-warn-fg rounded-md border px-1.5 py-0.5 font-mono text-[11px] font-medium tracking-[0.04em]">
+          <span className="border-warn-border bg-warn-soft text-warn-fg rounded-md border px-1.5 py-0.5 font-mono text-meta font-medium tracking-label">
             18+
           </span>
         </div>
-        <div className="flex flex-col gap-3 pt-3 text-[13.5px] leading-relaxed text-muted-foreground tracking-tight">
+        <div className="flex flex-col gap-3 pt-3 text-body leading-relaxed text-muted-foreground tracking-tight">
           <p>
             <strong className="font-medium text-foreground">Aposta não é investimento.</strong>{" "}
             As recomendações do Palpiteiro são análises e{" "}
@@ -479,7 +479,7 @@ export function ComoFuncionaContent() {
                 href="https://www.cvv.org.br/"
                 target="_blank"
                 rel="noopener noreferrer"
-                className="text-foreground underline underline-offset-2 decoration-border-strong hover:decoration-foreground"
+                className="text-foreground underline underline-offset-2 decoration-border-strong hover:decoration-foreground focus-visible:rounded-sm focus-visible:outline-none focus-visible:ring-[3px] focus-visible:ring-ring/50"
               >
                 cvv.org.br
               </a>
@@ -491,13 +491,13 @@ export function ComoFuncionaContent() {
                 href="https://jogadoresanonimos.com.br/"
                 target="_blank"
                 rel="noopener noreferrer"
-                className="text-foreground underline underline-offset-2 decoration-border-strong hover:decoration-foreground"
+                className="text-foreground underline underline-offset-2 decoration-border-strong hover:decoration-foreground focus-visible:rounded-sm focus-visible:outline-none focus-visible:ring-[3px] focus-visible:ring-ring/50"
               >
                 jogadoresanonimos.com.br
               </a>
             </li>
           </ul>
-          <p className="text-muted-fg-2 text-[12.5px]">
+          <p className="text-muted-fg-2 text-body-sm">
             Palpiteiro é uma ferramenta de análise. Não é casa de apostas e não
             aceita dinheiro real.
           </p>
