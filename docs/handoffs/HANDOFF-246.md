@@ -1,6 +1,8 @@
-# HANDOFF — #246: polish visual da página do jogo (ÚLTIMA do pós-pivot)
+# HANDOFF — #246: polish visual da página do jogo
 
 > Snapshot 2026-06-17. LEAN — aponta pro código real, não duplica a issue. Snapshot de um ponto no tempo, não spec viva.
+
+> **⚠️ SUPERSEDED (mesmo dia):** o dono expandiu o polish de só-#246 pra a **app inteira** → virou o **épico #320**. A #246 agora é a **fatia 2 (referência viva)** dele; a **fatia 1 é #321** (ADR 0029 + fundação: escala de tipografia/espaçamento + tokens + shell/primitivas — fonte da verdade) e roda ANTES/junto. Demais fatias: #322 dashboard, #323 público, #324 admin, #325 perfil. Este doc segue válido pro escopo da match page; pra o quadro completo veja o épico #320. (NÃO é mais "a única do pós-pivot".)
 
 ## TL;DR
 
