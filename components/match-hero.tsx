@@ -16,7 +16,7 @@ type Props = {
 function TeamBlock({ team, role }: { team: MatchHeroView["home"]; role: string }) {
   return (
     <div className="flex flex-col items-center gap-2.5 lg:flex-row lg:items-center lg:gap-3">
-      <TeamAvatar initials={team.short.slice(0, 2)} hue={team.hue} size={56} />
+      <TeamAvatar initials={team.short.slice(0, 2)} hue={team.hue} size={56} flagCode={team.flagCode} />
       <div className="flex flex-col items-center lg:items-start">
         <span className="text-center text-body font-medium leading-tight tracking-tight lg:text-left lg:text-[22px] lg:tracking-[-0.02em]">
           {team.name}

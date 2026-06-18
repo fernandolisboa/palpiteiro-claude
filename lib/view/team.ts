@@ -1,3 +1,4 @@
+import { flagCodeForTeam } from "@/lib/view/country-codes";
 import { displayTeamName } from "@/lib/view/team-labels";
 import type { LeagueKey, Team } from "@/lib/view/types";
 
@@ -158,5 +159,7 @@ export function teamToTeam(canonicalName: string, league: LeagueKey): Team {
     name: displayTeamName(canonicalName, league),
     short: SHORT_BY_CANONICAL[canonicalName] ?? deriveShort(canonicalName),
     hue: HUE_BY_CANONICAL[canonicalName] ?? hashHue(canonicalName),
+    // Bandeira só na Copa (#341); undefined em clubes → avatar cai nas iniciais.
+    flagCode: flagCodeForTeam(canonicalName, league),
   };
 }
