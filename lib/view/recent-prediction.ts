@@ -47,14 +47,17 @@ function recToken(recommendation: RecentInput["recommendation"]): Recommendation
 }
 
 export function toRecentPredictionView(row: RecentInput): RecentPredictionView {
+  const league = leagueToKey(row.league);
   return {
     id: row.predictionId,
     matchId: row.matchId,
-    home: teamToTeam(row.homeTeam).short,
-    away: teamToTeam(row.awayTeam).short,
+    // `.short` deriva sempre do canonical (league-inerte); o league vai junto só
+    // pra manter a assinatura uniforme do seam — a tradução de `.name` é descartada.
+    home: teamToTeam(row.homeTeam, league).short,
+    away: teamToTeam(row.awayTeam, league).short,
     rec: recToken(row.recommendation),
     edge: formatEdge(row.edgePct),
     when: formatRecentWhen(row.createdAt),
-    league: leagueToKey(row.league),
+    league,
   };
 }

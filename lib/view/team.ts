@@ -1,4 +1,5 @@
-import type { Team } from "@/lib/view/types";
+import { displayTeamName } from "@/lib/view/team-labels";
+import type { LeagueKey, Team } from "@/lib/view/types";
 
 const HUE_BY_CANONICAL: Record<string, number> = {
   // Brasileirão — seed dos hues que apareciam em lib/fixtures.ts do preview #33.
@@ -150,9 +151,11 @@ function deriveShort(name: string): string {
     .join("");
 }
 
-export function teamToTeam(canonicalName: string): Team {
+export function teamToTeam(canonicalName: string, league: LeagueKey): Team {
   return {
-    name: canonicalName,
+    // Tradução display-only por liga (#340): só a Copa ('wc') vira PT-BR; o
+    // canonical EN segue intocado em short/hue e em todo o matching downstream.
+    name: displayTeamName(canonicalName, league),
     short: SHORT_BY_CANONICAL[canonicalName] ?? deriveShort(canonicalName),
     hue: HUE_BY_CANONICAL[canonicalName] ?? hashHue(canonicalName),
   };

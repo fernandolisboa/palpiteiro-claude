@@ -47,11 +47,12 @@ export function toMatchRowView({
   hasPrediction,
   now = new Date(),
 }: ToMatchRowArgs): MatchRowView {
+  const league = leagueToKey(match.league);
   return {
     id: match.id,
-    home: teamToTeam(match.homeTeam),
-    away: teamToTeam(match.awayTeam),
-    league: leagueToKey(match.league),
+    home: teamToTeam(match.homeTeam, league),
+    away: teamToTeam(match.awayTeam, league),
+    league,
     kickoff: formatKickoffRelative(match.kickoffAt, now),
     when: formatKickoffAbsolute(match.kickoffAt, now),
     // Prioridade de display (#173): 1X2 quando há captura h2h, senão over/under,

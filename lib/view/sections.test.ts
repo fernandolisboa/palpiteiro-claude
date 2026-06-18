@@ -183,4 +183,36 @@ describe("toStandingsView (janela)", () => {
   it("standing ausente: rows vazio (EmptyState)", () => {
     expect(toStandingsView({ standing: undefined, homeTeam: "T1", awayTeam: "T2" }).rows).toEqual([]);
   });
+
+  it("Copa: exibe os nomes das seleções em PT-BR; foco casa pelo canonical (#340)", () => {
+    // Grupo real de 4; o jogo é Ecuador x Curaçao (o cenário do bug #337).
+    const wc: NormalizedStanding = {
+      league: "world_cup",
+      season: 2026,
+      tables: [
+        {
+          teams: [
+            team(1, "Germany"),
+            team(2, "Ivory Coast"),
+            team(3, "Ecuador"),
+            team(4, "Curaçao"),
+          ],
+        },
+      ],
+    };
+    const view = toStandingsView({
+      standing: wc,
+      homeTeam: "Ecuador",
+      awayTeam: "Curaçao",
+    });
+    // Nome exibido = PT-BR (líder visível, vindo do fix do #337).
+    expect(view.rows.map((r) => r.team)).toEqual([
+      "Alemanha",
+      "Costa do Marfim",
+      "Equador",
+      "Curaçao",
+    ]);
+    // Foco continua casando pelo canonical EN, não pelo label traduzido.
+    expect(view.rows.filter((r) => r.focus).map((r) => r.pos)).toEqual([3, 4]);
+  });
 });

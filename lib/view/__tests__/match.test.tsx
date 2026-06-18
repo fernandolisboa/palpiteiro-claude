@@ -222,3 +222,33 @@ describe("toMatchRowView — prioridade de mercado no chip (#173 PR-2)", () => {
     expect(markup).toContain("3.90");
   });
 });
+
+// Garante que o caller thread o league certo até teamToTeam (#340). O invariante
+// display-only é provado no unit de teamToTeam/toStandingsView; aqui fechamos a
+// fiação: uma regressão que passasse o league errado compilaria e passaria calada.
+describe("toMatchRowView — nomes da Copa em PT-BR (fiação do caller)", () => {
+  it("Copa: home/away viram PT-BR e league = 'wc'", () => {
+    const view = toMatchRowView({
+      match: makeMatch({ homeTeam: "Mexico", awayTeam: "South Korea" }),
+      odds: null,
+      hasPrediction: false,
+      now: NOW,
+    });
+    expect(view.league).toBe("wc");
+    expect(view.home.name).toBe("México");
+    expect(view.away.name).toBe("Coreia do Sul");
+    // short/hue seguem no canonical EN (invariante de matching).
+    expect(view.home.short).toBe("MEX");
+  });
+
+  it("fora da Copa: o mesmo nome passa verbatim", () => {
+    const view = toMatchRowView({
+      match: makeMatch({ league: "brasileirao_a", homeTeam: "Mexico" }),
+      odds: null,
+      hasPrediction: false,
+      now: NOW,
+    });
+    expect(view.league).toBe("bsa");
+    expect(view.home.name).toBe("Mexico");
+  });
+});
