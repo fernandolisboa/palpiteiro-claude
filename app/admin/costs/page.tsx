@@ -1,4 +1,5 @@
-import { BackLink } from "@/components/back-link";
+import { DefinitionRow } from "@/components/admin/definition-row";
+import { PageHeading } from "@/components/admin/page-heading";
 import {
   getCostByDay,
   getCostByModel,
@@ -24,18 +25,15 @@ export default async function AdminCostsPage() {
 
   return (
     <div className="min-h-screen bg-background text-foreground">
-      <div className="mx-auto w-full max-w-[640px] px-6 py-8">
-        <BackLink href="/admin" label="admin" />
-
-        <h1 className="text-[20px] font-medium tracking-[-0.02em]">
-          Custos de IA
-        </h1>
-        <p className="pb-6 font-mono text-[11px] text-muted-foreground">
-          gasto agregado · por dia, usuário, modelo · USD
-        </p>
+      <div className="mx-auto w-full max-w-reading px-6 py-8">
+        <PageHeading
+          backLink={{ href: "/admin", label: "admin" }}
+          title="Custos de IA"
+          subtitle="gasto agregado · por dia, usuário, modelo · USD"
+        />
 
         <section className="pb-8">
-          <h2 className="pb-3 font-mono text-[10.5px] uppercase tracking-[0.14em] text-muted-foreground">
+          <h2 className="pb-3 font-mono text-eyebrow uppercase tracking-label text-muted-foreground">
             resumo
           </h2>
           <div className="grid grid-cols-2 gap-px overflow-hidden rounded-md border border-border bg-border sm:grid-cols-4">
@@ -53,101 +51,110 @@ export default async function AdminCostsPage() {
         </section>
 
         <section className="pb-8">
-          <h2 className="pb-3 font-mono text-[10.5px] uppercase tracking-[0.14em] text-muted-foreground">
+          <h2 className="pb-3 font-mono text-eyebrow uppercase tracking-label text-muted-foreground">
             por dia
           </h2>
           {byDay.length === 0 ? (
-            <p className="text-[13px] text-muted-foreground">
+            <p className="text-body text-muted-foreground">
               Nenhuma chamada registrada.
             </p>
           ) : (
             <div className="rounded-md border border-border">
               {byDay.map((r) => (
-                <div
+                <DefinitionRow
                   key={r.day}
-                  className="flex items-center justify-between gap-4 border-b border-border px-4 py-3 last:border-b-0"
-                >
-                  <span className="font-mono text-[12.5px] tabular-nums">
-                    {formatDay(r.day)}
-                  </span>
-                  <div className="flex items-center gap-4">
-                    <span className="font-mono text-[12.5px] tabular-nums text-muted-foreground">
-                      {r.calls} chamadas
+                  className="gap-4 px-4 py-3 last:border-b-0"
+                  label={
+                    <span className="font-mono text-body-sm tabular-nums">
+                      {formatDay(r.day)}
                     </span>
-                    <span className="font-mono text-[13px] tabular-nums">
-                      {formatCostUsd(r.totalUsd)}
-                    </span>
-                  </div>
-                </div>
+                  }
+                  value={
+                    <div className="flex items-center gap-4">
+                      <span className="font-mono text-body-sm tabular-nums text-muted-foreground">
+                        {r.calls} chamadas
+                      </span>
+                      <span className="font-mono text-body tabular-nums">
+                        {formatCostUsd(r.totalUsd)}
+                      </span>
+                    </div>
+                  }
+                />
               ))}
             </div>
           )}
         </section>
 
         <section className="pb-8">
-          <h2 className="pb-3 font-mono text-[10.5px] uppercase tracking-[0.14em] text-muted-foreground">
+          <h2 className="pb-3 font-mono text-eyebrow uppercase tracking-label text-muted-foreground">
             por usuário
           </h2>
           {byUser.length === 0 ? (
-            <p className="text-[13px] text-muted-foreground">
+            <p className="text-body text-muted-foreground">
               Nenhuma chamada registrada.
             </p>
           ) : (
             <div className="rounded-md border border-border">
               {byUser.map((u) => (
-                <div
+                <DefinitionRow
                   key={u.userId}
-                  className="flex items-center justify-between gap-4 border-b border-border px-4 py-3 last:border-b-0"
-                >
-                  <span className="truncate text-[13px] font-medium">
-                    {u.email}
-                  </span>
-                  <div className="flex shrink-0 items-center gap-4">
-                    <span className="font-mono text-[12.5px] tabular-nums text-muted-foreground">
-                      {u.calls} chamadas
+                  className="gap-4 px-4 py-3 last:border-b-0"
+                  label={
+                    <span className="truncate text-body font-medium">
+                      {u.email}
                     </span>
-                    <span className="font-mono text-[13px] tabular-nums">
-                      {formatCostUsd(u.totalUsd)}
-                    </span>
-                  </div>
-                </div>
+                  }
+                  value={
+                    <div className="flex shrink-0 items-center gap-4">
+                      <span className="font-mono text-body-sm tabular-nums text-muted-foreground">
+                        {u.calls} chamadas
+                      </span>
+                      <span className="font-mono text-body tabular-nums">
+                        {formatCostUsd(u.totalUsd)}
+                      </span>
+                    </div>
+                  }
+                />
               ))}
             </div>
           )}
         </section>
 
         <section>
-          <h2 className="pb-3 font-mono text-[10.5px] uppercase tracking-[0.14em] text-muted-foreground">
+          <h2 className="pb-3 font-mono text-eyebrow uppercase tracking-label text-muted-foreground">
             por modelo
           </h2>
           {byModel.length === 0 ? (
-            <p className="text-[13px] text-muted-foreground">
+            <p className="text-body text-muted-foreground">
               Nenhuma chamada registrada.
             </p>
           ) : (
             <div className="rounded-md border border-border">
               {byModel.map((m) => (
-                <div
+                <DefinitionRow
                   key={m.model}
-                  className="flex items-center justify-between gap-4 border-b border-border px-4 py-3 last:border-b-0"
-                >
-                  <div className="flex min-w-0 flex-col">
-                    <span className="truncate text-[13px] font-medium">
-                      {formatModelName(m.model)}
-                    </span>
-                    <span className="truncate font-mono text-[10.5px] text-muted-foreground">
-                      {m.model}
-                    </span>
-                  </div>
-                  <div className="flex shrink-0 items-center gap-4">
-                    <span className="font-mono text-[12.5px] tabular-nums text-muted-foreground">
-                      {m.calls} chamadas
-                    </span>
-                    <span className="font-mono text-[13px] tabular-nums">
-                      {formatCostUsd(m.totalUsd)}
-                    </span>
-                  </div>
-                </div>
+                  className="gap-4 px-4 py-3 last:border-b-0"
+                  label={
+                    <div className="flex min-w-0 flex-col">
+                      <span className="truncate text-body font-medium">
+                        {formatModelName(m.model)}
+                      </span>
+                      <span className="truncate font-mono text-eyebrow text-muted-foreground">
+                        {m.model}
+                      </span>
+                    </div>
+                  }
+                  value={
+                    <div className="flex shrink-0 items-center gap-4">
+                      <span className="font-mono text-body-sm tabular-nums text-muted-foreground">
+                        {m.calls} chamadas
+                      </span>
+                      <span className="font-mono text-body tabular-nums">
+                        {formatCostUsd(m.totalUsd)}
+                      </span>
+                    </div>
+                  }
+                />
               ))}
             </div>
           )}
@@ -160,9 +167,10 @@ export default async function AdminCostsPage() {
 function Kpi({ label, value }: { label: string; value: string }) {
   return (
     <div className="flex flex-col gap-1 bg-background px-4 py-3">
-      <span className="font-mono text-[10px] uppercase tracking-[0.12em] text-muted-foreground">
+      <span className="font-mono text-eyebrow uppercase tracking-label text-muted-foreground">
         {label}
       </span>
+      {/* outlier de escala: 16px não tem degrau (sem 14↔18); mantido literal, ADR 0029 §A.1 */}
       <span className="font-mono text-[16px] tabular-nums">{value}</span>
     </div>
   );

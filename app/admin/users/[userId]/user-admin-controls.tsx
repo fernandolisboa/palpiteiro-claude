@@ -18,9 +18,9 @@ type Props = {
 function Status({ state }: { state: AdminUserResult | null }) {
   if (!state) return null;
   return state.ok ? (
-    <span className="text-accent-fg text-[12px]">Atualizado.</span>
+    <span className="text-accent-fg text-body-sm">Atualizado.</span>
   ) : (
-    <span className="text-[12px] text-red-500">{state.error}</span>
+    <span className="text-body-sm text-destructive">{state.error}</span>
   );
 }
 
@@ -39,11 +39,11 @@ export function UserAdminControls({ userId, role, allowed, isSelf }: Props) {
   return (
     <section className="border-border mb-8 rounded-md border">
       <div className="border-border border-b px-4 py-3">
-        <h2 className="text-muted-foreground font-mono text-[10.5px] tracking-[0.14em] uppercase">
+        <h2 className="text-muted-foreground font-mono text-eyebrow tracking-label uppercase">
           controle de acesso
         </h2>
         {isSelf && (
-          <p className="text-muted-foreground pt-1 text-[12px]">
+          <p className="text-muted-foreground pt-1 text-body-sm">
             Esta é a sua conta — você não pode alterar a própria role nem
             revogar o próprio acesso.
           </p>
@@ -52,8 +52,8 @@ export function UserAdminControls({ userId, role, allowed, isSelf }: Props) {
 
       <div className="border-border flex items-center justify-between gap-4 border-b px-4 py-3">
         <div className="flex flex-col">
-          <span className="text-[13px] font-medium">Role</span>
-          <span className="text-muted-foreground font-mono text-[10.5px] uppercase">
+          <span className="text-body font-medium">Role</span>
+          <span className="text-muted-foreground font-mono text-eyebrow uppercase">
             {role}
           </span>
         </div>
@@ -65,7 +65,7 @@ export function UserAdminControls({ userId, role, allowed, isSelf }: Props) {
             <button
               type="submit"
               disabled={rolePending || isSelf}
-              className="border-border rounded-md border px-3 py-1.5 text-[12.5px] disabled:opacity-50"
+              className="border-border rounded-md border px-3 py-1.5 text-body-sm focus-visible:outline-none focus-visible:ring-[3px] focus-visible:ring-ring/50 disabled:opacity-50"
             >
               {role === "admin" ? "Rebaixar p/ usuário" : "Tornar admin"}
             </button>
@@ -75,8 +75,8 @@ export function UserAdminControls({ userId, role, allowed, isSelf }: Props) {
 
       <div className="flex items-center justify-between gap-4 px-4 py-3">
         <div className="flex flex-col">
-          <span className="text-[13px] font-medium">Acesso</span>
-          <span className="text-muted-foreground font-mono text-[10.5px] uppercase">
+          <span className="text-body font-medium">Acesso</span>
+          <span className="text-muted-foreground font-mono text-eyebrow uppercase">
             {allowed ? "permitido" : "revogado"}
           </span>
         </div>
@@ -88,7 +88,7 @@ export function UserAdminControls({ userId, role, allowed, isSelf }: Props) {
             <button
               type="submit"
               disabled={accessPending || (isSelf && allowed)}
-              className="border-border rounded-md border px-3 py-1.5 text-[12.5px] disabled:opacity-50"
+              className="border-border rounded-md border px-3 py-1.5 text-body-sm focus-visible:outline-none focus-visible:ring-[3px] focus-visible:ring-ring/50 disabled:opacity-50"
             >
               {allowed ? "Revogar acesso" : "Conceder acesso"}
             </button>

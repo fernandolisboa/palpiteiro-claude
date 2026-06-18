@@ -1,11 +1,13 @@
 "use client";
 
+import { TriangleAlert } from "lucide-react";
 import { useActionState, useId, useState } from "react";
 
 import {
   updateGenerationParams,
   type UpdateGenerationParamsResult,
 } from "@/app/actions/ai-config";
+import { Select } from "@/components/ui/select";
 import {
   EFFORT_LEVELS,
   MAX_TOKENS_MAX,
@@ -34,10 +36,13 @@ export function GenerationParamsForm({ current }: Props) {
     <form action={action} className="flex flex-col gap-4">
       <div
         role="note"
-        className="rounded-md border border-amber-500/40 bg-amber-500/10 px-4 py-3 text-[12px] text-amber-700 dark:text-amber-300"
+        className="rounded-md border border-warn-border bg-warn-soft px-4 py-3 text-body-sm text-warn-fg"
       >
-        <p className="font-medium">⚠ Parâmetros sensíveis</p>
-        <p className="mt-1 text-amber-700/90 dark:text-amber-300/90">
+        <p className="flex items-center gap-1.5 font-medium">
+          <TriangleAlert className="size-4" aria-hidden="true" />
+          Parâmetros sensíveis
+        </p>
+        <p className="mt-1 text-warn-fg">
           Estes valores afetam custo, qualidade e latência de{" "}
           <strong>toda análise</strong>, para todos os usuários. Os campos
           começam bloqueados — habilite a edição abaixo só se souber o que está
@@ -45,19 +50,19 @@ export function GenerationParamsForm({ current }: Props) {
         </p>
       </div>
 
-      <label htmlFor={toggleId} className="flex items-center gap-2 text-[13px]">
+      <label htmlFor={toggleId} className="flex items-center gap-2 text-body">
         <input
           id={toggleId}
           type="checkbox"
           checked={enabled}
           onChange={(e) => setEnabled(e.target.checked)}
-          className="size-4"
+          className="size-4 rounded-sm focus-visible:outline-none focus-visible:ring-[3px] focus-visible:ring-ring/50"
         />
         Habilitar edição (entendo que são parâmetros sensíveis)
       </label>
 
       <label className="flex flex-col gap-1">
-        <span className="font-mono text-[10px] uppercase tracking-[0.14em] text-muted-foreground">
+        <span className="font-mono text-eyebrow uppercase tracking-label text-muted-foreground">
           max_tokens (todos os modelos)
         </span>
         <input
@@ -68,42 +73,39 @@ export function GenerationParamsForm({ current }: Props) {
           max={MAX_TOKENS_MAX}
           step={1}
           disabled={!enabled}
-          className="w-80 rounded-md border border-border bg-transparent px-3 py-2 text-sm text-foreground disabled:opacity-50"
+          className="w-80 rounded-md border border-border bg-transparent px-3 py-2 text-body-sm text-foreground focus-visible:outline-none focus-visible:ring-[3px] focus-visible:ring-ring/50 disabled:opacity-50"
         />
-        <span className="text-[11px] text-muted-foreground">
+        <span className="text-meta text-muted-foreground">
           Teto de saída. Nos modelos adaptive (Opus / Sonnet 4.6) o thinking
           conta aqui — valores baixos cortam a tool call.
         </span>
       </label>
 
       <label className="flex flex-col gap-1">
-        <span className="font-mono text-[10px] uppercase tracking-[0.14em] text-muted-foreground">
+        <span className="font-mono text-eyebrow uppercase tracking-label text-muted-foreground">
           effort (só modelos adaptive)
         </span>
-        <select
-          name="effort"
-          defaultValue={current.effort}
-          disabled={!enabled}
-          className="w-80 rounded-md border border-border bg-transparent px-3 py-2 text-sm text-foreground [color-scheme:light] disabled:opacity-50 dark:[color-scheme:dark]"
-        >
-          {EFFORT_LEVELS.map((level) => (
-            <option
-              key={level}
-              value={level}
-              className="bg-popover text-popover-foreground"
-            >
-              {level}
-            </option>
-          ))}
-        </select>
-        <span className="text-[11px] text-muted-foreground">
+        <div className="max-w-aside">
+          <Select name="effort" defaultValue={current.effort} disabled={!enabled}>
+            {EFFORT_LEVELS.map((level) => (
+              <option
+                key={level}
+                value={level}
+                className="bg-popover text-popover-foreground"
+              >
+                {level}
+              </option>
+            ))}
+          </Select>
+        </div>
+        <span className="text-meta text-muted-foreground">
           Profundidade do raciocínio. Ignorado pelos modelos temperature (Sonnet
           4.5 / Haiku).
         </span>
       </label>
 
       <label className="flex flex-col gap-1">
-        <span className="font-mono text-[10px] uppercase tracking-[0.14em] text-muted-foreground">
+        <span className="font-mono text-eyebrow uppercase tracking-label text-muted-foreground">
           temperature (só modelos temperature)
         </span>
         <input
@@ -114,9 +116,9 @@ export function GenerationParamsForm({ current }: Props) {
           max={TEMPERATURE_MAX}
           step={0.05}
           disabled={!enabled}
-          className="w-80 rounded-md border border-border bg-transparent px-3 py-2 text-sm text-foreground disabled:opacity-50"
+          className="w-80 rounded-md border border-border bg-transparent px-3 py-2 text-body-sm text-foreground focus-visible:outline-none focus-visible:ring-[3px] focus-visible:ring-ring/50 disabled:opacity-50"
         />
-        <span className="text-[11px] text-muted-foreground">
+        <span className="text-meta text-muted-foreground">
           Aleatoriedade da amostragem. Só Sonnet 4.5 / Haiku; ignorado pelos
           adaptive.
         </span>
@@ -125,16 +127,16 @@ export function GenerationParamsForm({ current }: Props) {
       <button
         type="submit"
         disabled={!enabled || pending}
-        className="w-fit rounded-md border border-border bg-foreground px-4 py-2 text-sm font-medium text-background disabled:opacity-50"
+        className="w-fit rounded-md border border-border bg-foreground px-4 py-2 text-label font-medium text-background focus-visible:outline-none focus-visible:ring-[3px] focus-visible:ring-ring/50 disabled:opacity-50"
       >
         {pending ? "Salvando…" : "Salvar parâmetros"}
       </button>
 
       {state &&
         (state.ok ? (
-          <p className="text-[13px] text-accent-fg">Parâmetros salvos.</p>
+          <p className="text-body text-accent-fg">Parâmetros salvos.</p>
         ) : (
-          <p className="text-[13px] text-red-500">{state.error}</p>
+          <p className="text-body text-destructive">{state.error}</p>
         ))}
     </form>
   );

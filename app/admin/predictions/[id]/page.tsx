@@ -1,7 +1,7 @@
-import Link from "next/link";
 import { notFound } from "next/navigation";
-import { ChevronLeft } from "lucide-react";
 
+import { DefinitionRow } from "@/components/admin/definition-row";
+import { PageHeading } from "@/components/admin/page-heading";
 import { LEAGUE_LABEL, leagueToKey } from "@/lib/format";
 import { getPredictionForOverride } from "@/lib/db/queries/predictions";
 
@@ -15,12 +15,14 @@ type PageProps = {
 
 function Row({ label, value }: { label: string; value: string }) {
   return (
-    <div className="flex items-center justify-between border-b border-border py-2">
-      <span className="font-mono text-[10.5px] uppercase tracking-[0.14em] text-muted-foreground">
-        {label}
-      </span>
-      <span className="text-[13px] tabular-nums">{value}</span>
-    </div>
+    <DefinitionRow
+      label={
+        <span className="font-mono text-eyebrow uppercase tracking-label text-muted-foreground">
+          {label}
+        </span>
+      }
+      value={<span className="text-body tabular-nums">{value}</span>}
+    />
   );
 }
 
@@ -37,21 +39,12 @@ export default async function AdminPredictionPage({ params }: PageProps) {
 
   return (
     <div className="min-h-screen bg-background text-foreground">
-      <div className="mx-auto w-full max-w-[640px] px-6 py-8">
-        <Link
-          href={`/match/${match.id}`}
-          className="inline-flex items-center gap-2 pb-6 text-muted-foreground hover:text-foreground"
-        >
-          <ChevronLeft className="size-3.5" />
-          <span className="text-[12.5px] tracking-tight">jogo</span>
-        </Link>
-
-        <h1 className="text-[20px] font-medium tracking-[-0.02em]">
-          Override de settlement
-        </h1>
-        <p className="pb-6 font-mono text-[11px] text-muted-foreground">
-          prediction · {prediction.id.slice(0, 8)}
-        </p>
+      <div className="mx-auto w-full max-w-reading px-6 py-8">
+        <PageHeading
+          backLink={{ href: `/match/${match.id}`, label: "jogo" }}
+          title="Override de settlement"
+          subtitle={`prediction · ${prediction.id.slice(0, 8)}`}
+        />
 
         <section className="pb-8">
           <Row
@@ -77,7 +70,7 @@ export default async function AdminPredictionPage({ params }: PageProps) {
         </section>
 
         <section className="pb-8">
-          <h2 className="pb-2 font-mono text-[10.5px] uppercase tracking-[0.14em] text-muted-foreground">
+          <h2 className="pb-2 font-mono text-eyebrow uppercase tracking-label text-muted-foreground">
             outcome atual
           </h2>
           {outcome ? (
@@ -98,14 +91,14 @@ export default async function AdminPredictionPage({ params }: PageProps) {
               />
             </>
           ) : (
-            <p className="text-[13px] text-muted-foreground">
+            <p className="text-body text-muted-foreground">
               Ainda pendente (sem outcome).
             </p>
           )}
         </section>
 
         <section>
-          <h2 className="pb-4 font-mono text-[10.5px] uppercase tracking-[0.14em] text-muted-foreground">
+          <h2 className="pb-4 font-mono text-eyebrow uppercase tracking-label text-muted-foreground">
             novo override
           </h2>
           <OverrideForm
