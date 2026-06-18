@@ -1,8 +1,18 @@
-import { and, asc, desc, eq, inArray } from "drizzle-orm";
+import { and, asc, desc, eq, inArray, isNull, lt } from "drizzle-orm";
 
-import { aiCalls, palpiteOutcomes, palpiteSets, palpites } from "@/db/schema";
+import {
+  aiCalls,
+  matches,
+  palpiteOutcomes,
+  palpiteSets,
+  palpites,
+} from "@/db/schema";
 import { db } from "@/lib/db";
-import type { DbAiCall } from "@/lib/db/queries/predictions";
+import {
+  SETTLEMENT_MIN_ELAPSED_MS,
+  type DbAiCall,
+  type DbMatch,
+} from "@/lib/db/queries/predictions";
 
 export type DbPalpiteSet = typeof palpiteSets.$inferSelect;
 export type DbPalpite = typeof palpites.$inferSelect;
@@ -90,4 +100,55 @@ export async function getPalpiteSetsForMatch(
     aiCall: s.aiCall,
     palpites: linesBySet.get(s.palpiteSet.id) ?? [],
   }));
+}
+
+export type PendingPalpiteSettlement = {
+  palpiteId: string;
+  params: DbPalpite["params"];
+  matchId: string;
+  league: DbMatch["league"];
+  kickoffAt: Date;
+  homeTeam: string;
+  awayTeam: string;
+};
+
+/**
+ * Palpites de placar exato ainda aguardando liquidação: sem palpite_outcomes row
+ * E o jogo começou há tempo suficiente pra ter um placar de 90'. Espelha
+ * getPendingSettlementPredictions (lib/db/queries/predictions.ts) — mesmo cutoff
+ * SETTLEMENT_MIN_ELAPSED_MS (importado, NÃO duplicado), mesmo LEFT-join IS NULL
+ * (um palpite já liquidado/overridden tem outcome row → excluído).
+ *
+ * O filtro `type='exact_score' AND settleable=true` é o GATE que honra "prefer
+ * skip over silent wrong settle" (ADR 0028 §3): red_card/corners (settleable=false)
+ * NUNCA entram no pending set, nunca recebem outcome. Gate duplo (type E
+ * settleable) — defense-in-depth contra uma escrita errada.
+ */
+export async function getPendingPalpiteSettlements(
+  now: Date = new Date()
+): Promise<PendingPalpiteSettlement[]> {
+  const cutoff = new Date(now.getTime() - SETTLEMENT_MIN_ELAPSED_MS);
+  return db
+    .select({
+      palpiteId: palpites.id,
+      params: palpites.params,
+      matchId: matches.id,
+      league: matches.league,
+      kickoffAt: matches.kickoffAt,
+      homeTeam: matches.homeTeam,
+      awayTeam: matches.awayTeam,
+    })
+    .from(palpites)
+    .innerJoin(palpiteSets, eq(palpites.palpiteSetId, palpiteSets.id))
+    .innerJoin(matches, eq(palpiteSets.matchId, matches.id))
+    .leftJoin(palpiteOutcomes, eq(palpiteOutcomes.palpiteId, palpites.id))
+    .where(
+      and(
+        eq(palpites.type, "exact_score"),
+        eq(palpites.settleable, true),
+        isNull(palpiteOutcomes.id),
+        lt(matches.kickoffAt, cutoff)
+      )
+    )
+    .orderBy(desc(matches.kickoffAt));
 }

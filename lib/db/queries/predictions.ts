@@ -90,7 +90,7 @@ function mapSelectionRow(s: {
  */
 export async function getPredictionHistoryForMatch(
   matchId: string,
-  userId: string,
+  userId: string
 ): Promise<PredictionWithAiCall[]> {
   const rows = await db
     .select({
@@ -104,7 +104,7 @@ export async function getPredictionHistoryForMatch(
     .leftJoin(aiCalls, eq(predictions.aiCallId, aiCalls.id))
     .leftJoin(markets, eq(predictions.marketId, markets.id))
     .where(
-      and(eq(predictions.matchId, matchId), eq(predictions.userId, userId)),
+      and(eq(predictions.matchId, matchId), eq(predictions.userId, userId))
     )
     .orderBy(desc(predictions.createdAt), desc(predictions.id));
 
@@ -127,12 +127,12 @@ export async function getPredictionHistoryForMatch(
     .from(predictionSelectionOdds)
     .innerJoin(
       marketSelections,
-      eq(predictionSelectionOdds.selectionId, marketSelections.id),
+      eq(predictionSelectionOdds.selectionId, marketSelections.id)
     )
     .where(inArray(predictionSelectionOdds.predictionId, predIds))
     .orderBy(
       asc(predictionSelectionOdds.predictionId),
-      asc(marketSelections.sortOrder),
+      asc(marketSelections.sortOrder)
     );
 
   // Agrupa por predictionId; cada grupo já vem em sortOrder asc (orderBy acima).
@@ -154,8 +154,10 @@ export async function getPredictionHistoryForMatch(
 
 // Minimum elapsed time after kickoff before a fixture is worth polling for a
 // settlement result: 90' + halftime + stoppage, with margin. Settlement reads
-// the 90' regulation score, so we don't need to wait out extra time.
-const SETTLEMENT_MIN_ELAPSED_MS = 150 * 60 * 1000;
+// the 90' regulation score, so we don't need to wait out extra time. Exported:
+// getPendingPalpiteSettlements (lib/db/queries/palpites.ts) reuses the SAME cutoff
+// so the two settlement paths never drift (PLAN-314 §3.3).
+export const SETTLEMENT_MIN_ELAPSED_MS = 150 * 60 * 1000;
 
 export type PendingSettlement = {
   predictionId: string;
@@ -184,7 +186,7 @@ export type PendingSettlement = {
  * re-touched by the cron.
  */
 export async function getPendingSettlementPredictions(
-  now: Date = new Date(),
+  now: Date = new Date()
 ): Promise<PendingSettlement[]> {
   const cutoff = new Date(now.getTime() - SETTLEMENT_MIN_ELAPSED_MS);
   return db
@@ -209,15 +211,13 @@ export async function getPendingSettlementPredictions(
     .leftJoin(markets, eq(predictions.marketId, markets.id))
     .leftJoin(
       marketSelections,
-      eq(predictions.selectionId, marketSelections.id),
+      eq(predictions.selectionId, marketSelections.id)
     )
     .leftJoin(
       predictionOutcomes,
-      eq(predictionOutcomes.predictionId, predictions.id),
+      eq(predictionOutcomes.predictionId, predictions.id)
     )
-    .where(
-      and(isNull(predictionOutcomes.id), lt(matches.kickoffAt, cutoff)),
-    )
+    .where(and(isNull(predictionOutcomes.id), lt(matches.kickoffAt, cutoff)))
     .orderBy(desc(matches.kickoffAt));
 }
 
@@ -255,8 +255,8 @@ export async function getNonPassPredictionsNearKickoff(args: {
         isNotNull(predictions.selectionId),
         inArray(matches.status, ["scheduled", "live"]),
         gt(matches.kickoffAt, now),
-        lte(matches.kickoffAt, until),
-      ),
+        lte(matches.kickoffAt, until)
+      )
     )
     .orderBy(asc(matches.kickoffAt));
 
@@ -266,7 +266,8 @@ export async function getNonPassPredictionsNearKickoff(args: {
     if (!r.marketKey) continue;
     const entry = byMatch.get(r.match.id);
     if (entry) entry.keys.add(r.marketKey);
-    else byMatch.set(r.match.id, { match: r.match, keys: new Set([r.marketKey]) });
+    else
+      byMatch.set(r.match.id, { match: r.match, keys: new Set([r.marketKey]) });
   }
   return [...byMatch.values()].map((e) => ({
     match: e.match,
@@ -281,7 +282,7 @@ export type PredictionForOverride = {
 };
 
 export async function getPredictionForOverride(
-  predictionId: string,
+  predictionId: string
 ): Promise<PredictionForOverride | null> {
   const rows = await db
     .select({
@@ -293,7 +294,7 @@ export async function getPredictionForOverride(
     .innerJoin(matches, eq(predictions.matchId, matches.id))
     .leftJoin(
       predictionOutcomes,
-      eq(predictionOutcomes.predictionId, predictions.id),
+      eq(predictionOutcomes.predictionId, predictions.id)
     )
     .where(eq(predictions.id, predictionId))
     .limit(1);
@@ -328,7 +329,7 @@ export type RecentPredictionRow = {
  */
 export async function getRecentPredictionsByUser(
   userId: string,
-  limit = 5,
+  limit = 5
 ): Promise<RecentPredictionRow[]> {
   const rows = await db
     .select({
