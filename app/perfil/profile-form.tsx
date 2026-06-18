@@ -2,6 +2,9 @@
 
 import { useActionState } from "react";
 
+import { Button } from "@/components/ui/button";
+import { Input } from "@/components/ui/input";
+
 import { updateProfile, type UpdateProfileResult } from "@/app/actions/profile";
 
 type Props = {
@@ -19,65 +22,69 @@ export function ProfileForm({ email, initialName, initialImage }: Props) {
   return (
     <form action={action} className="flex flex-col gap-4">
       <label className="flex flex-col gap-1">
-        <span className="text-muted-foreground font-mono text-[10px] tracking-[0.14em] uppercase">
+        <span className="text-muted-foreground text-eyebrow font-mono tracking-label uppercase">
           e-mail
         </span>
-        <input
+        <Input
           type="email"
           value={email}
           disabled
           readOnly
-          className="border-border text-muted-foreground w-80 rounded-md border bg-transparent px-3 py-2 text-sm"
+          className="max-w-aside text-muted-foreground"
         />
-        <span className="text-muted-foreground text-[11px]">
+        <span className="text-muted-foreground text-meta">
           O e-mail é a sua identidade de login e não é editável aqui.
         </span>
       </label>
 
       <label className="flex flex-col gap-1">
-        <span className="text-muted-foreground font-mono text-[10px] tracking-[0.14em] uppercase">
+        <span className="text-muted-foreground text-eyebrow font-mono tracking-label uppercase">
           nome
         </span>
-        <input
+        <Input
           type="text"
           name="name"
           required
           maxLength={80}
           defaultValue={initialName}
           placeholder="Seu nome"
-          className="border-border w-80 rounded-md border bg-transparent px-3 py-2 text-sm"
+          className="max-w-aside"
         />
       </label>
 
       <label className="flex flex-col gap-1">
-        <span className="text-muted-foreground font-mono text-[10px] tracking-[0.14em] uppercase">
+        <span className="text-muted-foreground text-eyebrow font-mono tracking-label uppercase">
           avatar (URL)
         </span>
-        <input
+        <Input
           type="url"
           name="image"
           defaultValue={initialImage}
           placeholder="https://…"
-          className="border-border w-80 rounded-md border bg-transparent px-3 py-2 text-sm"
+          className="max-w-aside"
         />
-        <span className="text-muted-foreground text-[11px]">
+        <span className="text-muted-foreground text-meta">
           Cole a URL de uma imagem. Deixe em branco pra usar as iniciais.
         </span>
       </label>
 
-      <button
-        type="submit"
-        disabled={pending}
-        className="border-border bg-foreground text-background w-fit rounded-md border px-4 py-2 text-sm font-medium disabled:opacity-50"
-      >
+      <Button type="submit" disabled={pending} className="w-fit">
         {pending ? "Salvando…" : "Salvar"}
-      </button>
+      </Button>
 
       {state &&
         (state.ok ? (
-          <p className="text-accent-fg text-[13px]">Perfil atualizado.</p>
+          <p className="text-edge-fg text-body" role="status" aria-live="polite">
+            Perfil atualizado.
+          </p>
         ) : (
-          <p className="text-[13px] text-red-500">{state.error}</p>
+          <p
+            className="text-body text-destructive"
+            role="alert"
+            aria-live="assertive"
+          >
+            {state.error}
+          </p>
         ))}
     </form>
   );

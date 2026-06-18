@@ -40,11 +40,11 @@ export default async function PerfilPage() {
 
   return (
     <div className="bg-background text-foreground min-h-screen">
-      <div className="mx-auto w-full max-w-[640px] px-6 py-8">
+      <div className="mx-auto w-full max-w-reading px-6 py-8">
         <BackLink href="/" label="jogos" />
 
-        <h1 className="text-[20px] font-medium tracking-[-0.02em]">Perfil</h1>
-        <p className="text-muted-foreground pb-6 font-mono text-[11px]">
+        <h1 className="text-display-md font-medium tracking-tight">Perfil</h1>
+        <p className="text-muted-foreground pb-6 font-mono text-meta">
           seu nome e avatar · visíveis no app
         </p>
 
@@ -55,10 +55,10 @@ export default async function PerfilPage() {
         />
 
         <div className="border-border mt-10 border-t pt-8">
-          <h2 className="text-[16px] font-medium tracking-[-0.02em]">
+          <h2 className="text-display-sm font-medium tracking-tight">
             Modelo de análise
           </h2>
-          <p className="text-muted-foreground pb-5 font-mono text-[11px]">
+          <p className="text-muted-foreground pb-6 font-mono text-meta">
             usado nas suas análises · sobrescreve o padrão global
           </p>
           <PreferredModelForm
@@ -69,10 +69,10 @@ export default async function PerfilPage() {
         </div>
 
         <div className="border-border mt-10 border-t pt-8">
-          <h2 className="text-[16px] font-medium tracking-[-0.02em]">
+          <h2 className="text-display-sm font-medium tracking-tight">
             Passkeys
           </h2>
-          <p className="text-muted-foreground pb-5 font-mono text-[11px]">
+          <p className="text-muted-foreground pb-6 font-mono text-meta">
             login sem senha · biometria ou PIN do dispositivo
           </p>
           <PasskeysSection authenticators={authenticators} />

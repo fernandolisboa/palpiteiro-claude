@@ -3,8 +3,11 @@
 import { useState, useTransition } from "react";
 import { useRouter } from "next/navigation";
 import { signIn } from "next-auth/webauthn";
+import { KeyRound } from "lucide-react";
 
 import { removePasskey } from "@/app/actions/profile";
+import { Button } from "@/components/ui/button";
+import { EmptyState } from "@/components/empty-state";
 import type { AuthenticatorSummary } from "@/lib/db/queries/authenticators";
 
 type Props = {
@@ -89,10 +92,12 @@ export function PasskeysSection({ authenticators }: Props) {
   return (
     <div className="flex flex-col gap-4">
       {authenticators.length === 0 ? (
-        <p className="text-muted-foreground text-[13px]">
-          Nenhuma passkey registrada. Uma passkey deixa você entrar com
-          biometria ou PIN do dispositivo, sem senha nem link por e-mail.
-        </p>
+        <EmptyState
+          className="py-6"
+          icon={<KeyRound className="size-10" strokeWidth={1.25} />}
+          title="Nenhuma passkey registrada."
+          description="Uma passkey deixa você entrar com biometria ou PIN do dispositivo, sem senha nem link por e-mail."
+        />
       ) : (
         <ul className="flex flex-col gap-2">
           {authenticators.map((a) => (
@@ -101,39 +106,43 @@ export function PasskeysSection({ authenticators }: Props) {
               className="border-border flex items-center justify-between gap-3 rounded-md border px-3 py-2"
             >
               <div className="flex flex-col">
-                <span className="text-[13px]">{deviceLabel(a)}</span>
-                <span className="text-muted-foreground font-mono text-[10px]">
+                <span className="text-body">{deviceLabel(a)}</span>
+                <span className="text-muted-foreground font-mono text-eyebrow">
                   {a.credentialID.slice(0, 12)}…
                 </span>
               </div>
-              <button
+              <Button
                 type="button"
+                variant="outline"
+                size="sm"
                 disabled={removingId === a.credentialID}
                 onClick={() => onRemove(a.credentialID)}
-                className="border-border rounded-md border px-3 py-1.5 text-[12.5px] text-red-500 disabled:opacity-50"
+                className="text-destructive hover:text-destructive"
               >
                 {removingId === a.credentialID ? "Removendo…" : "Remover"}
-              </button>
+              </Button>
             </li>
           ))}
         </ul>
       )}
 
-      <button
+      <Button
         type="button"
         disabled={registering}
         onClick={onRegister}
-        className="border-border bg-foreground text-background w-fit rounded-md border px-4 py-2 text-sm font-medium disabled:opacity-50"
+        className="w-fit"
       >
         {registering ? "Registrando…" : "Registrar passkey"}
-      </button>
+      </Button>
 
       {message && (
         <p
+          role={message.ok ? "status" : "alert"}
+          aria-live={message.ok ? "polite" : "assertive"}
           className={
             message.ok
-              ? "text-accent-fg text-[13px]"
-              : "text-[13px] text-red-500"
+              ? "text-edge-fg text-body"
+              : "text-body text-destructive"
           }
         >
           {message.text}
