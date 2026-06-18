@@ -6,6 +6,8 @@ import {
   updatePreferredModel,
   type UpdateProfileResult,
 } from "@/app/actions/profile";
+import { ModelSelect } from "@/components/model-select";
+import { Button } from "@/components/ui/button";
 import { isAIModelId } from "@/lib/ai/models";
 
 type Props = {
@@ -44,46 +46,42 @@ export function PreferredModelForm({
   return (
     <form action={action} className="flex flex-col gap-4">
       <label className="flex flex-col gap-1">
-        <span className="text-muted-foreground font-mono text-[10px] tracking-[0.14em] uppercase">
+        <span className="text-muted-foreground font-mono text-eyebrow tracking-label uppercase">
           modelo preferido
         </span>
-        <select
+        <ModelSelect
           name="preferredModelId"
           defaultValue={initial}
-          className="border-border text-foreground w-80 max-w-xs rounded-md border bg-transparent px-3 py-2 text-[12.5px] [color-scheme:light] dark:[color-scheme:dark]"
-        >
-          <option value="default" className="bg-popover text-popover-foreground">
-            Usar padrão global ({defaultModelLabel})
-          </option>
-          {models.map((m) => (
-            <option
-              key={m.id}
-              value={m.id}
-              className="bg-popover text-popover-foreground"
-            >
-              {m.label}
-            </option>
-          ))}
-        </select>
-        <span className="text-muted-foreground text-[11px]">
+          models={models}
+          defaultModelLabel={defaultModelLabel}
+        />
+        <span className="text-muted-foreground text-meta">
           Escolha o modelo usado nas suas análises. Você ainda pode trocar o
           modelo numa análise específica.
         </span>
       </label>
 
-      <button
-        type="submit"
-        disabled={pending}
-        className="border-border bg-foreground text-background w-fit rounded-md border px-4 py-2 text-sm font-medium disabled:opacity-50"
-      >
+      <Button type="submit" disabled={pending} className="w-fit">
         {pending ? "Salvando…" : "Salvar"}
-      </button>
+      </Button>
 
       {state &&
         (state.ok ? (
-          <p className="text-accent-fg text-[13px]">Preferência atualizada.</p>
+          <p
+            className="text-edge-fg text-body"
+            role="status"
+            aria-live="polite"
+          >
+            Preferência atualizada.
+          </p>
         ) : (
-          <p className="text-[13px] text-red-500">{state.error}</p>
+          <p
+            className="text-body text-destructive"
+            role="alert"
+            aria-live="assertive"
+          >
+            {state.error}
+          </p>
         ))}
     </form>
   );
