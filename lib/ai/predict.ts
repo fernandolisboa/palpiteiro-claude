@@ -756,6 +756,29 @@ export async function predict({
       { provider: providerKey, model: model.id },
     );
   }
+  // Backstop de inertness (ADR 0027 #231): a SELEÇÃO (modelsForAudience) já filtra
+  // providers sem chave, mas o gate de override/preferência (isModelAllowedForAudience)
+  // NÃO é key-gated — um override admin ou uma preferência stale pode resolver um
+  // provider INERTE (ex.: OpenAI sem OPENAI_API_KEY). Falha aqui GRACIOSA e AUDITADA
+  // (provider_error em ai_calls), zero gasto, em vez do throw cru de getXClient() no adapter.
+  if (!aiProvider.hasKey()) {
+    const noKeyMsg = `${providerKey} provider has no API key configured`;
+    await persistAiCallError({
+      userId,
+      matchId,
+      provider: providerKey,
+      model: model.id,
+      inputPayload: analysisRequest as unknown as Record<string, unknown>,
+      outputPayload: { error: noKeyMsg },
+      inputTokens: 0,
+      outputTokens: 0,
+      latencyMs: 0,
+      status: "provider_error",
+      errorMessage: noKeyMsg,
+      promptVersion: cartridge.version,
+    });
+    throw new PredictError(noKeyMsg, { provider: providerKey, model: model.id });
+  }
   const result = await aiProvider.runAnalysis(analysisRequest);
   const latencyMs = result.latencyMs;
   if (!result.ok) {
