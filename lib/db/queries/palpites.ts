@@ -80,17 +80,18 @@ export async function getPalpiteSetsForMatch(
 
   // Agrupa as linhas por palpiteSetId (mesmo padrão de selByPrediction em
   // predictions.ts). `result` da coluna é o pgEnum amplo (won/lost/void/push); o
-  // caminho de palpite só EMITE won/lost (PLAN §1.4) — afunilamos pro literal
-  // estreito aqui (cast seguro: nenhum void/push é gravado em palpite_outcomes).
+  // caminho de palpite só EMITE won/lost (PLAN §1.4). Afunilamos por NARROW
+  // explícito em runtime (não cast): qualquer coisa fora de won/lost — incluindo
+  // null, ou um void/push hipotético de mau-uso futuro do enum — vira outcome null.
   const linesBySet = new Map<string, PalpiteSetWithLines["palpites"]>();
   for (const l of lines) {
     const list = linesBySet.get(l.palpite.palpiteSetId) ?? [];
     list.push({
       ...l.palpite,
       outcome:
-        l.outcomeResult === null
-          ? null
-          : { result: l.outcomeResult as "won" | "lost" },
+        l.outcomeResult === "won" || l.outcomeResult === "lost"
+          ? { result: l.outcomeResult }
+          : null,
     });
     linesBySet.set(l.palpite.palpiteSetId, list);
   }

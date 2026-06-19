@@ -9,6 +9,7 @@ import { settleExactScorePalpite } from "@/lib/settlement/rules/exact_score_palp
 import {
   resultDataFromRegulationScore,
   SettlementError,
+  type ResultData,
 } from "@/lib/settlement/schemas";
 
 export type PalpiteSettlementSummary = {
@@ -101,7 +102,7 @@ export async function settlePendingPalpites(
     // uma row ruim (score 90' não-inteiro, params inválidos) bucketa em errors e
     // os irmãos do mesmo batch ainda liquidam — nunca aborta o loop.
     let result_: "won" | "lost";
-    let resultData;
+    let resultData: ResultData;
     try {
       resultData = resultDataFromRegulationScore(result.regulationScore);
       result_ = settleExactScorePalpite(p.params, resultData);
