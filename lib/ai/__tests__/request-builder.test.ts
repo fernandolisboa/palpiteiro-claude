@@ -1,7 +1,7 @@
 import { describe, expect, it } from "vitest";
 import type Anthropic from "@anthropic-ai/sdk";
 
-import { MODEL_REGISTRY } from "@/lib/ai/models";
+import { MODEL_REGISTRY, type AIModel } from "@/lib/ai/models";
 import { buildAnthropicRequest } from "@/lib/ai/request-builder";
 import {
   overUnderCartridge,
@@ -10,6 +10,23 @@ import {
 import { MIN_EDGE_PP } from "@/lib/odds/scenario";
 
 const MAX_TOKENS = 2048;
+
+// Fixture INLINE de um modelo ADAPTIVE. Pós-#374 o registry só tem modelos
+// `temperature` (Sonnet 4.5 + Haiku), mas o ramo `adaptive` do request-builder
+// segue VIVO (dead-but-live — predict.ts/request-builder estão congelados).
+// Este fixture exercita esse ramo direto, preservando a invariante de PRODUÇÃO
+// (thinking + tool_choice forçado = 400 na API Anthropic) sem depender de uma
+// entrada de registry adaptive. O `id` precisa ser um AIModelId válido; o que
+// importa aqui é `thinkingMode: "adaptive"`.
+const ADAPTIVE_MODEL: AIModel = {
+  id: "claude-sonnet-4-5-20250929",
+  provider: "anthropic",
+  label: "Adaptive fixture (#374)",
+  inputPricePerMTok: 3,
+  outputPricePerMTok: 15,
+  thinkingMode: "adaptive",
+  userSelectable: true,
+};
 
 function build(model: Parameters<typeof buildAnthropicRequest>[0]["model"]) {
   return buildAnthropicRequest({
@@ -23,22 +40,22 @@ function build(model: Parameters<typeof buildAnthropicRequest>[0]["model"]) {
 }
 
 describe("buildAnthropicRequest — model-aware payload", () => {
-  it("Opus 4.8: adaptive thinking, NO temperature/top_p/top_k", () => {
-    const payload = build(MODEL_REGISTRY["claude-opus-4-8"]);
+  it("adaptive (fixture #374): adaptive thinking, NO temperature/top_p/top_k", () => {
+    const payload = build(ADAPTIVE_MODEL);
 
-    expect(payload.model).toBe("claude-opus-4-8");
-    // CRÍTICO: Opus 4.x dá 400 em sampling params; o builder DEVE omiti-los.
+    // CRÍTICO: modelos adaptive dão 400 em sampling params; o builder DEVE omiti-los.
     expect(payload).not.toHaveProperty("temperature");
     expect(payload).not.toHaveProperty("top_p");
     expect(payload).not.toHaveProperty("top_k");
     expect(payload.thinking).toEqual({ type: "adaptive" });
   });
 
-  it("Opus 4.8: tool_choice is 'auto' and NEVER pairs thinking with forced tool_choice", () => {
-    const payload = build(MODEL_REGISTRY["claude-opus-4-8"]);
+  it("adaptive (fixture #374): tool_choice is 'auto' and NEVER pairs thinking with forced tool_choice", () => {
+    const payload = build(ADAPTIVE_MODEL);
 
-    // CRÍTICO: forced tool_choice + thinking dá 400 no Opus 4.8. O builder DEVE
-    // usar `auto` no caminho adaptive — predict.ts trata a ausência do tool_use.
+    // CRÍTICO: forced tool_choice + thinking dá 400 no caminho adaptive. O builder
+    // DEVE usar `auto` — predict.ts trata a ausência do tool_use. Guarda de PRODUÇÃO
+    // que sobrevive mesmo sem modelo adaptive no registry (#374).
     expect(payload.tool_choice).toEqual({ type: "auto" });
     // Garante a INVARIANTE que o 400 produz: thinking presente ⇒ tool_choice NÃO forçado.
     expect(payload.thinking).toEqual({ type: "adaptive" });
@@ -46,6 +63,8 @@ describe("buildAnthropicRequest — model-aware payload", () => {
       type: "tool",
       name: SUBMIT_PREDICTION_TOOL.name,
     });
+    // adaptive nunca emite thinking disabled (também dá 400 no caminho adaptive).
+    expect(payload.thinking).not.toEqual({ type: "disabled" });
   });
 
   it("Sonnet 4.5: temperature 0.3, NO thinking", () => {
@@ -65,19 +84,6 @@ describe("buildAnthropicRequest — model-aware payload", () => {
       name: SUBMIT_PREDICTION_TOOL.name,
     });
     expect(payload).not.toHaveProperty("thinking");
-  });
-
-  it("Sonnet 4.6 (adaptive): adaptive thinking, tool_choice auto, NO temperature, NO disabled thinking", () => {
-    // O segundo modelo adaptive do registry — cobre a mesma invariante que o
-    // teste do Fable cobria antes da remoção (#241): adaptive sem temperature e
-    // sem thinking disabled (ambos dariam 400 no caminho adaptive).
-    const payload = build(MODEL_REGISTRY["claude-sonnet-4-6"]);
-
-    expect(payload.model).toBe("claude-sonnet-4-6");
-    expect(payload.thinking).toEqual({ type: "adaptive" });
-    expect(payload.tool_choice).toEqual({ type: "auto" });
-    expect(payload).not.toHaveProperty("temperature");
-    expect(payload.thinking).not.toEqual({ type: "disabled" });
   });
 
   it("Haiku 4.5: temperature 0.3, forced tool_choice, NO adaptive thinking", () => {
@@ -116,8 +122,8 @@ describe("buildAnthropicRequest — calibração model-aware (effort/temperature
     });
   }
 
-  it("adaptive (Opus 4.8): effort vai em output_config; segue sem sampling", () => {
-    const payload = buildWith(MODEL_REGISTRY["claude-opus-4-8"], {
+  it("adaptive (fixture #374): effort vai em output_config; segue sem sampling", () => {
+    const payload = buildWith(ADAPTIVE_MODEL, {
       effort: "medium",
     });
     expect(payload.output_config).toEqual({
@@ -127,7 +133,7 @@ describe("buildAnthropicRequest — calibração model-aware (effort/temperature
   });
 
   it("adaptive sem effort: NÃO emite output_config (default do servidor)", () => {
-    const payload = buildWith(MODEL_REGISTRY["claude-opus-4-8"], {});
+    const payload = buildWith(ADAPTIVE_MODEL, {});
     expect(payload.output_config).toBeUndefined();
   });
 

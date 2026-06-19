@@ -49,7 +49,7 @@ describe("updateDefaultModel", () => {
     mockAuth.mockResolvedValue(USER);
     const res = await updateDefaultModel(
       null,
-      form({ modelId: "claude-opus-4-8" }),
+      form({ modelId: "claude-haiku-4-5" }),
     );
     expect(res.ok).toBe(false);
     expect(mockSet).not.toHaveBeenCalled();
@@ -84,14 +84,20 @@ describe("updateDefaultModel", () => {
     expect(mockSet).toHaveBeenCalledWith("claude-sonnet-4-5-20250929", "u1");
   });
 
-  it("admin + Sonnet 4.6 (userSelectable) → setter chamado, ok", async () => {
+  it("admin + id removido em #374 (Opus 4.8 / Sonnet 4.6 / gpt-5-mini) → not ok, setter not called", async () => {
+    // Após #374 esses ids saíram do registry: isModelAllowedForAudience os trata
+    // como desconhecidos, então não são mais salváveis como default global. Guarda
+    // de remoção complementar à do Fable (#241) logo abaixo.
     mockAuth.mockResolvedValue(ADMIN);
-    const res = await updateDefaultModel(
-      null,
-      form({ modelId: "claude-sonnet-4-6" }),
-    );
-    expect(res).toEqual({ ok: true });
-    expect(mockSet).toHaveBeenCalledWith("claude-sonnet-4-6", "u1");
+    for (const modelId of [
+      "claude-opus-4-8",
+      "claude-sonnet-4-6",
+      "gpt-5-mini",
+    ]) {
+      const res = await updateDefaultModel(null, form({ modelId }));
+      expect(res.ok).toBe(false);
+    }
+    expect(mockSet).not.toHaveBeenCalled();
   });
 
   it("admin + id stale/removido (Fable, fora do registry após #241) → not ok, setter not called", async () => {

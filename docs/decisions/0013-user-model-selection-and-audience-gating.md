@@ -12,6 +12,15 @@ Accepted (2026-06-11) — **emenda o ADR 0008** (modelo de análise configuráve
 > e testado, mas hoje não filtra nenhum modelo. As menções ao Fable e ao Sonnet 4.5
 > como admin-only abaixo refletem o estado de 2026-06-11, não o atual.
 
+> **Nota (2026-06-19, #374):** O registry foi **enxugado para 2 modelos** — **Opus
+> 4.8, Sonnet 4.6 e o gpt-5-mini (prova OpenAI) foram removidos** do `MODEL_REGISTRY`
+> e da `AIModelId`. Sobram **Sonnet 4.5 (default) + Haiku 4.5**, ambos
+> `temperature`/reproduzíveis e `userSelectable`. **Nenhum modelo permanece
+> admin-only** — o mecanismo de gating (`userSelectable` / `isModelAllowedForAudience`)
+> continua válido e testado, mas hoje **não filtra nenhum modelo**. Predições
+> históricas com os ids removidos renderizam **graciosamente** via `formatModelName`
+> (mesmo padrão do Fable, #241). Higiene/reprodutibilidade, **não** custo.
+
 ## Contexto
 
 O ADR 0008 deixou a seleção de modelo restrita a admin: default global em

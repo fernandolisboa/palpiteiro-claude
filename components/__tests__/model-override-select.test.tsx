@@ -9,11 +9,11 @@ describe("ModelOverrideSelect — opção de padrão global rotulada (#112)", ()
       <ModelOverrideSelect
         value="default"
         onChange={() => {}}
-        models={[{ id: "claude-opus-4-8", label: "Opus 4.8" }]}
-        defaultModelLabel="Opus 4.8"
+        models={[{ id: "claude-sonnet-4-5-20250929", label: "Sonnet 4.5" }]}
+        defaultModelLabel="Sonnet 4.5"
       />,
     );
-    expect(markup).toContain("Usar padrão global (Opus 4.8)");
+    expect(markup).toContain("Usar padrão global (Sonnet 4.5)");
   });
 
   it("reflete um default global diferente verbatim", () => {
@@ -21,11 +21,11 @@ describe("ModelOverrideSelect — opção de padrão global rotulada (#112)", ()
       <ModelOverrideSelect
         value="default"
         onChange={() => {}}
-        models={[{ id: "claude-sonnet-4-6", label: "Sonnet 4.6" }]}
-        defaultModelLabel="Sonnet 4.6"
+        models={[{ id: "claude-haiku-4-5", label: "Haiku 4.5 (econômico)" }]}
+        defaultModelLabel="Haiku 4.5 (econômico)"
       />,
     );
-    expect(markup).toContain("Usar padrão global (Sonnet 4.6)");
+    expect(markup).toContain("Usar padrão global (Haiku 4.5 (econômico))");
   });
 
   it("renderiza os modelos da audiência na ordem recebida", () => {
@@ -34,13 +34,13 @@ describe("ModelOverrideSelect — opção de padrão global rotulada (#112)", ()
         value="default"
         onChange={() => {}}
         models={[
-          { id: "claude-opus-4-8", label: "Opus 4.8" },
+          { id: "claude-sonnet-4-5-20250929", label: "Sonnet 4.5" },
           { id: "claude-haiku-4-5", label: "Haiku 4.5 (econômico)" },
         ]}
-        defaultModelLabel="Opus 4.8"
+        defaultModelLabel="Sonnet 4.5"
       />,
     );
-    expect(markup.indexOf("Opus 4.8")).toBeLessThan(
+    expect(markup.indexOf("Sonnet 4.5")).toBeLessThan(
       markup.indexOf("Haiku 4.5"),
     );
   });

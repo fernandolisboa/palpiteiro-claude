@@ -12,6 +12,15 @@ Accepted (2026-06-12) — **emenda o ADR 0008** (default global Opus 4.8 → Son
 > 2026-06-12; a estratégia de reprodutibilidade (default temperature-mode + override
 > de capacidade) permanece, apenas sem o Fable na coluna de overrides.
 
+> **Nota (2026-06-19, #374):** A opção de **override de capacidade adaptive** (Opus
+> 4.8, citada aqui na coluna de overrides) **não existe mais no registry** — Opus 4.8
+> e Sonnet 4.6 (os dois modelos `adaptive`) foram removidos, junto com o gpt-5-mini de
+> prova. O registry foi estreitado aos **dois modelos `temperature`/reproduzíveis**
+> (Sonnet 4.5 + Haiku 4.5). O **default permanece o Sonnet 4.5** (sem migration — a row
+> `ai_config` já estava seedada nele desde a migration 0032). O ramo `adaptive` do
+> request-builder segue **vivo no código mas inalcançável** por qualquer modelo de
+> registry (preservado para um futuro modelo adaptive sem ressuscitar código).
+
 ## Contexto
 
 O default global da análise é o **Opus 4.8** (`DEFAULT_MODEL_ID` em `lib/ai/models.ts`),

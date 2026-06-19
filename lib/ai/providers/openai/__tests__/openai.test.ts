@@ -5,8 +5,23 @@ import {
 } from "openai";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 
-import { MODEL_REGISTRY } from "@/lib/ai/models";
+import type { AIModel } from "@/lib/ai/models";
 import type { AnalysisRequest } from "@/lib/ai/providers/types";
+
+// Modelo INLINE com provider:'openai'. Pós-#374 o registry não tem modelo OpenAI
+// (o gpt-5-mini de prova saiu), mas o SEAM segue intacto (AIProviderKey mantém
+// 'openai'). Este adapter testa a normalização do structured output STRING-JSON
+// independente do registry — basta um AIModel com provider:'openai'. O `id` é só
+// um placeholder válido (AIModelId); o que importa é o `provider`.
+const OPENAI_MODEL_FIXTURE: AIModel = {
+  id: "claude-haiku-4-5",
+  provider: "openai",
+  label: "OpenAI seam fixture (#374)",
+  inputPricePerMTok: 0.25,
+  outputPricePerMTok: 2.0,
+  thinkingMode: "temperature",
+  userSelectable: false,
+};
 
 // Mocka SÓ o shim @/lib/ai/openai (boundary mockável): o adapter importa
 // getOpenAIClient DAQUI. `hasKey` vem de ./client (não mockado, lê env). NENHUM
@@ -21,7 +36,7 @@ vi.mock("@/lib/ai/openai", () => ({
 import { openaiProvider } from "../index";
 
 const REQUEST: AnalysisRequest = {
-  model: MODEL_REGISTRY["gpt-5-mini"],
+  model: OPENAI_MODEL_FIXTURE,
   system: "system prompt",
   userMessage: "user message",
   tool: {

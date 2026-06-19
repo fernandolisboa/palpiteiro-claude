@@ -2,23 +2,20 @@
 // e pricing de modelo — nada de strings de modelo soltas espalhadas pelo código
 // (CLAUDE.md). Cada consumidor (predict, cost, UI, server actions) resolve daqui.
 //
-// `thinkingMode` codifica a divergência crítica da API Anthropic: Opus 4.8 e
-// Sonnet 4.6 usam ADAPTIVE THINKING (Opus 4.8 inclusive REJEITA 400 em
-// `temperature`/`top_p`/`top_k`); Sonnet 4.5 não tem adaptive thinking e roda
-// com `temperature`. A construção da request é model-aware em
-// lib/ai/request-builder.ts a partir deste campo.
+// `thinkingMode` codifica a divergência crítica da API Anthropic: o modo
+// ADAPTIVE THINKING (modelos que REJEITAM 400 em `temperature`/`top_p`/`top_k`)
+// vs. o modo `temperature` (reproduzível). Os dois modelos do registry atual
+// (Sonnet 4.5 + Haiku 4.5) são ambos `temperature`; o ramo `adaptive` do
+// request-builder permanece vivo mas sem modelo de registry que o alcance
+// (#374). A construção da request é model-aware em lib/ai/request-builder.ts a
+// partir deste campo.
 
 // Provider de IA que atende um modelo (ADR 0027). União FECHADA: um provider novo
 // é uma edição aqui + um adapter no seam. Validado contra strings não-confiáveis
 // por isAIProvider (espelha isAIModelId).
 export type AIProviderKey = "anthropic" | "openai";
 
-export type AIModelId =
-  | "claude-opus-4-8"
-  | "claude-sonnet-4-6"
-  | "claude-sonnet-4-5-20250929"
-  | "claude-haiku-4-5"
-  | "gpt-5-mini";
+export type AIModelId = "claude-sonnet-4-5-20250929" | "claude-haiku-4-5";
 
 export type AIModel = {
   id: AIModelId;
@@ -39,31 +36,11 @@ export type AIModel = {
   userSelectable: boolean;
 };
 
-// ORDEM = capacidade decrescente (Opus > Sonnet 4.6 > Sonnet 4.5 > Haiku). A UI
-// DEPENDE desta ordem: SELECTABLE_MODELS e modelsForAudience preservam a ordem de
-// inserção do objeto, então é ela que rege os dropdowns. Não reordene sem querer
-// mexer no que aparece nos seletores.
+// ORDEM = capacidade decrescente (Sonnet 4.5 > Haiku). A UI DEPENDE desta ordem:
+// SELECTABLE_MODELS e modelsForAudience preservam a ordem de inserção do objeto,
+// então é ela que rege os dropdowns. Sonnet 4.5 primeiro = default + maior
+// capacidade. Não reordene sem querer mexer no que aparece nos seletores.
 export const MODEL_REGISTRY: Record<AIModelId, AIModel> = {
-  "claude-opus-4-8": {
-    id: "claude-opus-4-8",
-    provider: "anthropic",
-    label: "Opus 4.8",
-    inputPricePerMTok: 5,
-    outputPricePerMTok: 25,
-    thinkingMode: "adaptive",
-    userSelectable: true,
-  },
-  "claude-sonnet-4-6": {
-    id: "claude-sonnet-4-6",
-    provider: "anthropic",
-    label: "Sonnet 4.6",
-    inputPricePerMTok: 3,
-    outputPricePerMTok: 15,
-    // Sonnet 4.6 suporta adaptive thinking (recomendado pela Anthropic) — reusa
-    // o mesmo caminho do Opus 4.8 no request-builder, sem `temperature`.
-    thinkingMode: "adaptive",
-    userSelectable: true,
-  },
   "claude-sonnet-4-5-20250929": {
     id: "claude-sonnet-4-5-20250929",
     provider: "anthropic",
@@ -72,9 +49,9 @@ export const MODEL_REGISTRY: Record<AIModelId, AIModel> = {
     outputPricePerMTok: 15,
     thinkingMode: "temperature",
     temperature: 0.3,
-    // Selecionável como padrão global e preferência do usuário comum (#240): o
-    // dono decidiu liberar AMBOS os Sonnets. Após esta promoção + a remoção do
-    // Fable, NENHUM modelo do registry é admin-only (`userSelectable: false`).
+    // Default global + selecionável pelo usuário comum (#240/#203). Após o enxugar
+    // do registry (#374 — Opus 4.8, Sonnet 4.6 e o gpt-5-mini de prova removidos),
+    // NENHUM modelo do registry é admin-only (`userSelectable: false`).
     userSelectable: true,
   },
   "claude-haiku-4-5": {
@@ -87,27 +64,10 @@ export const MODEL_REGISTRY: Record<AIModelId, AIModel> = {
     temperature: 0.3,
     userSelectable: true,
   },
-  // Provider de PROVA OpenAI (ADR 0027 / #231): admin-only + key-gated inerte
-  // (sem OPENAI_API_KEY ⇒ filtrado, nunca roteado). APPEND no FIM — a ordem de
-  // inserção rege os dropdowns (ver acima); manter as 4 posições Anthropic estáveis.
-  "gpt-5-mini": {
-    id: "gpt-5-mini",
-    provider: "openai",
-    label: "GPT-5 mini (OpenAI · admin)",
-    // ⚠️ Pricing VERIFY-BEFORE-MERGE — developers.openai.com/api/docs/models/gpt-5-mini
-    // (jun/2026: $0.25 in / $2.00 out por 1M tokens). costUsd é NOT NULL e
-    // calculateCost depende disto; confirmar na página oficial antes de roteamento real.
-    inputPricePerMTok: 0.25,
-    outputPricePerMTok: 2.0,
-    // gpt-5-mini é modelo de RACIOCÍNIO: o adapter OpenAI OMITE `temperature`
-    // incondicionalmente (rejeitada, como o Opus). `thinkingMode` aqui é só
-    // CLASSIFICAÇÃO (o replay-gate é Anthropic-only e cerca rows não-anthropic):
-    // "temperature" = caminho ESTRITO por padrão (ADR 0027 — nunca "adaptive").
-    thinkingMode: "temperature",
-    // Admin-only de início (ADR 0013/0021): preserva a reprodutibilidade — só o dono,
-    // via override, alcança. Promover exige ADR futuro (critério de saída A/B).
-    userSelectable: false,
-  },
+  // Seam OpenAI (ADR 0027) permanece RETIDO no código (AIProviderKey, PROVIDERS,
+  // openaiProvider, isAIProvider, providerHasKey) — mas SEM modelo de registry
+  // após #374 (o gpt-5-mini de prova foi removido). Um provider novo reentra via
+  // uma entrada de registry aqui + adapter no seam, sem ressuscitar código.
 };
 
 // Default global de fallback terminal da cascata (predict.ts) e seed do INSERT

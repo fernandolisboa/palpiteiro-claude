@@ -199,8 +199,8 @@ describe("getPreferredModelId — leitura validada contra o registry", () => {
 
 describe("setPreferredModelId — grava (ou limpa) a preferência", () => {
   it("id válido → update().set({preferredModelId: id}).where(eq(users.id, userId))", async () => {
-    await setPreferredModelId("u1", "claude-opus-4-8");
-    expect(h.state.updateSetArg).toEqual({ preferredModelId: "claude-opus-4-8" });
+    await setPreferredModelId("u1", "claude-haiku-4-5");
+    expect(h.state.updateSetArg).toEqual({ preferredModelId: "claude-haiku-4-5" });
     const cond = h.state.updateWhereArg as {
       op?: string;
       col?: unknown;

@@ -247,7 +247,7 @@ function setHappyPath() {
   getOddsForSport.mockResolvedValue([]); // additional NUNCA batcheia
   getLatestFreshSelectionOddsSnapshots.mockResolvedValue(freshSnapshotDC());
   resolveMarketCatalog.mockResolvedValue(catalogDC());
-  getDefaultModelId.mockResolvedValue("claude-opus-4-8");
+  getDefaultModelId.mockResolvedValue("claude-sonnet-4-5-20250929");
   getGenerationParams.mockResolvedValue({
     maxTokens: 16000,
     effort: "high",

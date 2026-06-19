@@ -10,17 +10,19 @@ import {
   providerHasKey,
 } from "@/lib/ai/models";
 
-const ANTHROPIC_IDS = [
-  "claude-opus-4-8",
-  "claude-sonnet-4-6",
-  "claude-sonnet-4-5-20250929",
-  "claude-haiku-4-5",
-];
+const ANTHROPIC_IDS = ["claude-sonnet-4-5-20250929", "claude-haiku-4-5"];
+
+// Ids removidos do registry em #374 (eram Opus 4.8 + Sonnet 4.6 adaptive + o
+// gpt-5-mini de prova OpenAI). Permanecem como strings stale: NÃO estão no
+// registry e NÃO passam o gate de audiência — predições históricas com esses ids
+// renderizam graciosamente via formatModelName (padrão #241).
+const REMOVED_IDS = ["claude-opus-4-8", "claude-sonnet-4-6", "gpt-5-mini"];
 
 // modelsForAudience é KEY-GATED (ADR 0027): um modelo cujo provider não tem chave
-// some da seleção. Estado-base dos testes = espelho de PROD: ANTHROPIC_API_KEY
-// presente, OPENAI_API_KEY ausente ⇒ gpt-5-mini inerte. Restaura o env no afterEach
-// (mesmo padrão dos testes de absences togglando SPORTMONKS_API_TOKEN).
+// some da seleção. O seam OpenAI segue RETIDO no código (#374) mas SEM modelo de
+// registry. Estado-base dos testes = espelho de PROD: ANTHROPIC_API_KEY presente,
+// OPENAI_API_KEY ausente. Restaura o env no afterEach (mesmo padrão dos testes de
+// absences togglando SPORTMONKS_API_TOKEN).
 let prevAnthropic: string | undefined;
 let prevOpenai: string | undefined;
 beforeEach(() => {
@@ -37,68 +39,50 @@ afterEach(() => {
 });
 
 describe("modelsForAudience — gating por audiência (ADR 0013) + key-gate (ADR 0027)", () => {
-  it("admin (sem OPENAI key) → os 4 Anthropic, em capacidade decrescente (a UI depende da ordem)", () => {
+  it("admin → os 2 Anthropic (Sonnet 4.5, Haiku), em capacidade decrescente (a UI depende da ordem)", () => {
     const ids = modelsForAudience(true).map((m) => m.id);
-    // gpt-5-mini é inerte sem OPENAI_API_KEY → admin vê só os 4 Anthropic.
     expect(ids).toEqual(ANTHROPIC_IDS);
-    expect(ids).toHaveLength(4);
+    expect(ids).toHaveLength(2);
   });
 
-  it("usuário comum → os 4 userSelectable Anthropic (ambos Sonnets: #240 + #241)", () => {
+  it("usuário comum → os 2 userSelectable Anthropic", () => {
     const ids = modelsForAudience(false).map((m) => m.id);
     expect(ids).toEqual(ANTHROPIC_IDS);
+    expect(ids).toHaveLength(2);
   });
 
-  it("ambos os Sonnets aparecem pro usuário comum (4.5 promovido em #240)", () => {
+  it("Sonnet 4.5 (default) e Haiku aparecem pro usuário comum", () => {
     const ids = modelsForAudience(false).map((m) => m.id);
-    expect(ids).toContain("claude-sonnet-4-6");
     expect(ids).toContain("claude-sonnet-4-5-20250929");
+    expect(ids).toContain("claude-haiku-4-5");
   });
 
-  it("o Fable foi removido do registry (#241) — não aparece pra nenhuma audiência", () => {
-    expect(modelsForAudience(true).map((m) => m.id)).not.toContain(
-      "claude-fable-5",
-    );
-    expect(modelsForAudience(false).map((m) => m.id)).not.toContain(
-      "claude-fable-5",
-    );
+  it("ids removidos (#374 + Fable #241) não aparecem pra nenhuma audiência", () => {
+    for (const id of [...REMOVED_IDS, "claude-fable-5"]) {
+      expect(modelsForAudience(true).map((m) => m.id)).not.toContain(id);
+      expect(modelsForAudience(false).map((m) => m.id)).not.toContain(id);
+    }
   });
 });
 
-describe("provider de prova OpenAI — admin-only + key-gated inerte (ADR 0027 / #231)", () => {
-  it("sem OPENAI_API_KEY: gpt-5-mini é INERTE — some de TODAS as audiências", () => {
-    // beforeEach já garante OPENAI_API_KEY ausente.
-    expect(modelsForAudience(true).map((m) => m.id)).not.toContain("gpt-5-mini");
-    expect(modelsForAudience(false).map((m) => m.id)).not.toContain(
-      "gpt-5-mini",
-    );
-  });
-
-  it("COM OPENAI_API_KEY: gpt-5-mini aparece pro ADMIN (último, ordem estável), nunca pro comum", () => {
+describe("seam AIProvider preservado (ADR 0027) — sem modelo OpenAI no registry (#374)", () => {
+  it("o gpt-5-mini de prova foi removido do registry, mas o seam OpenAI continua válido", () => {
+    // O MODELO saiu (não há entrada de registry openai); o SEAM (AIProviderKey,
+    // isAIProvider, providerHasKey) permanece intacto para um provider futuro.
+    expect("gpt-5-mini" in MODEL_REGISTRY).toBe(false);
+    // Mesmo com a chave OpenAI presente, nenhum modelo OpenAI entra na seleção.
     process.env.OPENAI_API_KEY = "test-openai-key";
-    const adminIds = modelsForAudience(true).map((m) => m.id);
-    // Os 4 Anthropic mantêm as posições; gpt-5-mini entra POR ÚLTIMO.
-    expect(adminIds).toEqual([...ANTHROPIC_IDS, "gpt-5-mini"]);
-    // userSelectable:false ⇒ NUNCA pro usuário comum, mesmo com chave.
-    expect(modelsForAudience(false).map((m) => m.id)).toEqual(ANTHROPIC_IDS);
+    expect(modelsForAudience(true).map((m) => m.id)).toEqual(ANTHROPIC_IDS);
   });
 
-  it("gpt-5-mini é admin-only no registry (preserva a reprodutibilidade do ADR 0021)", () => {
-    expect(MODEL_REGISTRY["gpt-5-mini"].userSelectable).toBe(false);
-    // Com chave, o gate de audiência é o que barra o usuário comum.
-    process.env.OPENAI_API_KEY = "test-openai-key";
-    expect(isModelAllowedForAudience("gpt-5-mini", false)).toBe(false);
-    expect(isModelAllowedForAudience("gpt-5-mini", true)).toBe(true);
-  });
-
-  it("providerHasKey reflete o env por provider", () => {
+  it("providerHasKey reflete o env por provider (seam intacto)", () => {
     expect(providerHasKey("anthropic")).toBe(true); // setado no beforeEach
     expect(providerHasKey("openai")).toBe(false); // ausente no beforeEach
     process.env.OPENAI_API_KEY = "test-openai-key";
     expect(providerHasKey("openai")).toBe(true);
   });
 
-  it("isAIProvider valida strings contra o allowlist", () => {
+  it("isAIProvider valida strings contra o allowlist (anthropic + openai)", () => {
     expect(isAIProvider("anthropic")).toBe(true);
     expect(isAIProvider("openai")).toBe(true);
     expect(isAIProvider("gemini")).toBe(false);
@@ -120,26 +104,23 @@ describe("isModelAllowedForAudience — invariante de gating (ADR 0013)", () => 
     expect(isModelAllowedForAudience("claude-haiku-4-5", false)).toBe(true);
   });
 
-  it("gpt-5-mini (admin-only): NUNCA permitido pro usuário comum", () => {
-    expect(isModelAllowedForAudience("gpt-5-mini", false)).toBe(false);
-    expect(isModelAllowedForAudience("gpt-5-mini", true)).toBe(true);
-  });
-
   it("id inválido → false mesmo pra admin", () => {
     expect(isModelAllowedForAudience("gpt-4", true)).toBe(false);
   });
 
-  it("id stale/removido (ex.: 'claude-fable-5') → false (cai graciosamente)", () => {
-    expect(isModelAllowedForAudience("claude-fable-5", true)).toBe(false);
-    expect(isModelAllowedForAudience("claude-fable-5", false)).toBe(false);
+  it("ids removidos (#374 + Fable #241) → false (caem graciosamente)", () => {
+    for (const id of [...REMOVED_IDS, "claude-fable-5"]) {
+      expect(isModelAllowedForAudience(id, true)).toBe(false);
+      expect(isModelAllowedForAudience(id, false)).toBe(false);
+    }
   });
 
-  it("todo modelo ANTHROPIC do registry passa pro comum (regra de flag userSelectable)", () => {
-    // gpt-5-mini é a EXCEÇÃO admin-only (coberta acima); os Anthropic seguem todos
-    // userSelectable. Se um futuro modelo Anthropic voltar a ser admin-only, este
-    // loop falha e força o autor a reintroduzir a asserção admin-only específica.
-    for (const m of SELECTABLE_MODELS.filter((x) => x.provider === "anthropic")) {
-      expect(m.userSelectable).toBe(true);
+  it("todo modelo do registry passa pro comum (todos userSelectable pós-#374)", () => {
+    // Pós-#374 não há mais modelo admin-only no registry. Se um futuro modelo
+    // voltar a ser admin-only (userSelectable:false), este loop falha e força o
+    // autor a reintroduzir a asserção admin-only específica.
+    expect(SELECTABLE_MODELS.every((m) => m.userSelectable)).toBe(true);
+    for (const m of SELECTABLE_MODELS) {
       expect(isModelAllowedForAudience(m.id, false)).toBe(true);
     }
   });
@@ -165,7 +146,7 @@ describe("registry — sanidade dos modelos", () => {
     expect(m.userSelectable).toBe(true);
   });
 
-  it("todos os modelos Anthropic carregam provider:'anthropic'", () => {
+  it("todos os modelos do registry carregam provider:'anthropic' (pós-#374)", () => {
     for (const id of ANTHROPIC_IDS) {
       expect(MODEL_REGISTRY[id as keyof typeof MODEL_REGISTRY].provider).toBe(
         "anthropic",
@@ -173,18 +154,14 @@ describe("registry — sanidade dos modelos", () => {
     }
   });
 
-  it("gpt-5-mini: provider 'openai', pricing finito>0, thinkingMode temperature, admin-only", () => {
-    const m = MODEL_REGISTRY["gpt-5-mini"];
-    expect(m.provider).toBe("openai");
-    // Pricing VERIFY-BEFORE-MERGE (jun/2026: 0.25 in / 2.0 out) — sentinela de drift.
-    expect(m.inputPricePerMTok).toBe(0.25);
-    expect(m.outputPricePerMTok).toBe(2.0);
-    expect(m.thinkingMode).toBe("temperature");
-    expect(m.userSelectable).toBe(false);
+  it("o registry tem exatamente 2 modelos (Sonnet 4.5 + Haiku, #374)", () => {
+    expect(Object.keys(MODEL_REGISTRY)).toEqual(ANTHROPIC_IDS);
   });
 
-  it("o Fable foi removido do registry (#241)", () => {
-    expect("claude-fable-5" in MODEL_REGISTRY).toBe(false);
+  it("ids removidos (#374 + Fable #241) não estão mais no registry", () => {
+    for (const id of [...REMOVED_IDS, "claude-fable-5"]) {
+      expect(id in MODEL_REGISTRY).toBe(false);
+    }
   });
 });
 
