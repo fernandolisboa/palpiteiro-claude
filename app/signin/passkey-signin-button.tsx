@@ -37,7 +37,7 @@ export function PasskeySignInButton({ enabled = true }: { enabled?: boolean }) {
       const res = await signIn("passkey", {
         email,
         redirect: false,
-        redirectTo: "/",
+        redirectTo: "/jogos",
       });
       // `redirect: false` devolve { ok, error, url }. O ramo de sucesso depende de
       // a lib ANULAR `url` em caso de erro client-safe (ex.: AccessDenied retorna

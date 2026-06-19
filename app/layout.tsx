@@ -15,6 +15,7 @@ const geistMono = Geist_Mono({
 });
 
 export const metadata: Metadata = {
+  metadataBase: new URL("https://palpiteiro.live"),
   title: "Palpiteiro",
   description: "Recomendações de aposta em over/under 2.5 gols com análise por IA",
 };

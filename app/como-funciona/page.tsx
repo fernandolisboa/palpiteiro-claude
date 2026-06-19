@@ -30,7 +30,7 @@ export default function ComoFuncionaPage() {
       </header>
 
       <div className="mx-auto w-full max-w-reading px-6 py-8">
-        <BackLink href="/" label="jogos" />
+        <BackLink href="/jogos" label="jogos" />
         <ComoFuncionaContent />
       </div>
     </div>

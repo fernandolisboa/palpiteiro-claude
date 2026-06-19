@@ -23,7 +23,7 @@ export default function MatchError({
     <main className="min-h-screen bg-background text-foreground">
       <header className="flex items-center justify-between px-5 pt-5 pb-2">
         <Link
-          href="/"
+          href="/jogos"
           className="flex items-center gap-2 rounded-sm text-muted-foreground hover:text-foreground focus-visible:outline-none focus-visible:ring-[3px] focus-visible:ring-ring/50"
         >
           <ChevronLeft className="size-3.5" />
@@ -49,7 +49,7 @@ export default function MatchError({
               <RefreshCcw className="size-3.5" /> Tentar novamente
             </Button>
             <Button asChild size="sm" variant="ghost">
-              <Link href="/">Voltar para a lista</Link>
+              <Link href="/jogos">Voltar para a lista</Link>
             </Button>
           </div>
         </Callout>

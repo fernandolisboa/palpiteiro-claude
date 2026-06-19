@@ -41,7 +41,7 @@ export default async function PerfilPage() {
   return (
     <div className="bg-background text-foreground min-h-screen">
       <div className="mx-auto w-full max-w-reading px-6 py-8">
-        <BackLink href="/" label="jogos" />
+        <BackLink href="/jogos" label="jogos" />
 
         <h1 className="text-display-md font-medium tracking-tight">Perfil</h1>
         <p className="text-muted-foreground pb-6 font-mono text-meta">

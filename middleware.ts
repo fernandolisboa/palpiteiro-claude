@@ -17,6 +17,8 @@ import { authConfig } from "@/auth.config";
  *  - assets estáticos (`_next/static`, `_next/image`, `favicon.ico`)
  *  - `/signin` → a própria página de login
  *  - `/como-funciona` → página pública de ajuda (sem sessão, conteúdo estático)
+ *  - `/` (raiz exata, âncora `$`) → landing pública estática (#373). A home
+ *    autenticada mudou pra `/jogos`, que continua gateada (casa o matcher).
  */
 export const { auth: middleware } = NextAuth(authConfig);
 
@@ -26,7 +28,10 @@ export const config = {
   // `/apidocs`, `/monitoringfoo`) escapem do gate por casarem o prefixo.
   // `monitoring(?:/|$)` é a rota de túnel do Sentry — manter em sincronia com
   // `tunnelRoute` em next.config.ts.
+  // `$` no fim do grupo libera APENAS a raiz exata `/` (landing pública, #373):
+  // o caminho após o `/` inicial é vazio só pra raiz, então `$` casa só ela —
+  // `/jogos`, `/dashboard`, `/perfil`, `/match/123`, `/admin` seguem gateados.
   matcher: [
-    "/((?!api/|monitoring(?:/|$)|_next/static|_next/image|favicon.ico|signin$|como-funciona$).*)",
+    "/((?!api/|monitoring(?:/|$)|_next/static|_next/image|favicon.ico|signin$|como-funciona$|$).*)",
   ],
 };
