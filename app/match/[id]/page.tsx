@@ -12,6 +12,7 @@ import { MatchAuxiliarySections } from "@/components/match-sections-auxiliary";
 import { MatchHero } from "@/components/match-hero";
 import { MatchSections } from "@/components/match-sections";
 import { OddsCard } from "@/components/odds-card";
+import { PalpiteAutoRun } from "@/components/palpites/palpite-auto-run";
 import { ThemeToggle } from "@/components/theme-toggle";
 import {
   MatchAuxiliarySkeleton,
@@ -179,6 +180,10 @@ export default async function MatchPage({ params }: PageProps) {
 
   return (
     <>
+      {/* Auto-geração de palpites na entrada do jogo (#315). ZERO UI; idempotente no
+          servidor. Fora dos wrappers mobile/desktop pra montar UMA vez só (ambos
+          ficam no DOM via CSS). O painel/lista que consome os sets é #316. */}
+      <PalpiteAutoRun matchId={match.id} />
       <div className="lg:hidden">
         <MobileMatch
           heroView={heroView}
