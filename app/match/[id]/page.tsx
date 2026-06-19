@@ -281,11 +281,9 @@ function MobileMatch({
           finalScore={finalScore}
         />
 
-        {/* Zona NEUTRA de valor (firewall §3.4): odds (preços) + detalhe por mercado
-            (edge/EV/stake/odd = conteúdo legítimo aqui). A fronteira quente→neutra é a
-            fronteira opinião→valor. */}
-        <OddsCard view={oddsView} />
-        {matchResultOddsView && <OddsCard view={matchResultOddsView} />}
+        {/* Detalhe por mercado LOGO ABAIXO do palpite: é o "quero ver mais" imediato da
+            manchete. Collapsed por padrão → nenhum número de valor vaza pro topo (firewall
+            ADR 0030 intacto: edge/EV/stake/odd vivem DENTRO do disclosure). */}
         <NeutralAnalysisDetail
           sections={sections}
           previousAnalyses={previousAnalyses}
@@ -293,6 +291,11 @@ function MobileMatch({
         {!analyzable && sections.length === 0 && (
           <FinishedNotice score={finalScore} />
         )}
+
+        {/* Odds (preços de referência) DEPOIS do detalhe — em tela estreita ficam abaixo do
+            palpite+análise, sem empurrar a análise pra longe da manchete. */}
+        <OddsCard view={oddsView} />
+        {matchResultOddsView && <OddsCard view={matchResultOddsView} />}
 
         <Suspense fallback={<MatchSectionsSkeleton />}>
           <MatchSections fixtureRef={fixtureRef} leagueKey={leagueKey} />
@@ -330,36 +333,42 @@ function DesktopMatch({
           <span className="text-body-sm tracking-tight">jogos</span>
         </Link>
 
-        {/* Palpite-first (#351, §11.3): o grid [1fr_320px] hero|odds foi DROPADO. A
-            identidade do jogo + o HERO empilham FULL-WIDTH (narrativa em max-w-reading);
-            odds + detalhe descem pra zona neutra abaixo. */}
-        <div className="flex flex-col gap-6 pb-8">
+        {/* Identidade do jogo FULL-WIDTH no topo. */}
+        <div className="pb-6">
           <MatchHero
             view={heroView}
             status={heroView.status === "live" ? "live" : "scheduled"}
             score={finalScore ?? undefined}
           />
-          <PalpiteHero
-            heroPalpite={heroPalpite}
-            matchId={matchId}
-            analyzable={analyzable}
-            fanOutEnabled={bestBetEnabled}
-            finalScore={finalScore}
-          />
         </div>
 
-        {/* Zona NEUTRA de valor (firewall §3.4): odds + detalhe por mercado. A fronteira
-            quente→neutra é a fronteira opinião→valor (números de valor são legítimos aqui). */}
-        <div className="flex flex-col gap-3 pb-6">
-          <OddsCard view={oddsView} />
-          {matchResultOddsView && <OddsCard view={matchResultOddsView} />}
-          <NeutralAnalysisDetail
-            sections={sections}
-            previousAnalyses={previousAnalyses}
-          />
-          {!analyzable && sections.length === 0 && (
-            <FinishedNotice score={finalScore} />
-          )}
+        {/* Grid [1fr_320px] (restaura o par hero|odds que o skeleton de loading sempre
+            manteve): à ESQUERDA o palpite + o detalhe por mercado LOGO abaixo dele; à DIREITA
+            as odds (preços de referência). items-start: as odds ancoram no topo ao lado da
+            manchete, sem esticar. No <lg cai pro branch mobile (1 coluna: palpite → detalhe →
+            odds). Firewall ADR 0030 intacto: o detalhe é disclosure collapsed, nenhum número
+            de valor no componente do HERO. */}
+        <div className="grid grid-cols-[1fr_320px] items-start gap-8 pb-6">
+          <div className="flex flex-col gap-3">
+            <PalpiteHero
+              heroPalpite={heroPalpite}
+              matchId={matchId}
+              analyzable={analyzable}
+              fanOutEnabled={bestBetEnabled}
+              finalScore={finalScore}
+            />
+            <NeutralAnalysisDetail
+              sections={sections}
+              previousAnalyses={previousAnalyses}
+            />
+            {!analyzable && sections.length === 0 && (
+              <FinishedNotice score={finalScore} />
+            )}
+          </div>
+          <div className="flex flex-col gap-3">
+            <OddsCard view={oddsView} />
+            {matchResultOddsView && <OddsCard view={matchResultOddsView} />}
+          </div>
         </div>
 
         <Suspense fallback={<MatchSectionsSkeleton />}>
