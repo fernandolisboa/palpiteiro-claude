@@ -71,7 +71,7 @@ async function seedSetWithScore(args: {
       userId: args.userId,
       aiCallId: null,
       modelVersion: "claude-haiku-4-5",
-      promptVersion: "palpites_v2",
+      promptVersion: "palpites_v3",
       createdAt: args.createdAt,
     })
     .returning({ id: schema.palpiteSets.id });
@@ -87,6 +87,56 @@ async function seedSetWithScore(args: {
     .returning({ id: schema.palpites.id });
   return { setId: s.id, palpiteId: p.id };
 }
+
+// #354: semeia um set com N linhas (tipo + params + settleable), espelhando a geração
+// multi-row. Devolve o setId + os palpiteIds por tipo.
+async function seedSetWithLines(args: {
+  matchId: string;
+  userId: string;
+  createdAt: Date;
+  lines: {
+    type: (typeof schema.palpiteTypeEnum.enumValues)[number];
+    params: Record<string, unknown> | null;
+    settleable: boolean;
+  }[];
+}): Promise<{ setId: string; palpiteIds: Record<string, string> }> {
+  const [s] = await realDb
+    .insert(schema.palpiteSets)
+    .values({
+      matchId: args.matchId,
+      userId: args.userId,
+      aiCallId: null,
+      modelVersion: "claude-haiku-4-5",
+      promptVersion: "palpites_v3",
+      createdAt: args.createdAt,
+    })
+    .returning({ id: schema.palpiteSets.id });
+  const palpiteIds: Record<string, string> = {};
+  for (const l of args.lines) {
+    const [p] = await realDb
+      .insert(schema.palpites)
+      .values({
+        palpiteSetId: s.id,
+        type: l.type,
+        text: "stub",
+        // eslint-disable-next-line @typescript-eslint/no-explicit-any
+        params: l.params as any,
+        settleable: l.settleable,
+      })
+      .returning({ id: schema.palpites.id });
+    palpiteIds[l.type] = p.id;
+  }
+  return { setId: s.id, palpiteIds };
+}
+
+// As 5 dimensões settleable de um set (espelha buildSettleablePalpiteRows).
+const ALL_FIVE_LINES = [
+  { type: "exact_score" as const, params: { home: 2, away: 0 }, settleable: true },
+  { type: "margin" as const, params: { side: "home", minMargin: 2 }, settleable: true },
+  { type: "clean_sheet" as const, params: { side: "home" }, settleable: true },
+  { type: "first_half_score" as const, params: { home: 1, away: 0 }, settleable: true },
+  { type: "first_to_score" as const, params: { firstToScore: "home" }, settleable: true },
+];
 
 beforeAll(async () => {
   client = new PGlite();
@@ -195,5 +245,77 @@ describe("getPendingPalpiteSettlements — latest-only", () => {
     expect(set.has(mine.palpiteId)).toBe(true);
     expect(set.has(theirs.palpiteId)).toBe(true);
     expect(pending).toHaveLength(2);
+  });
+});
+
+describe("getPendingPalpiteSettlements — multi-tipo (#354)", () => {
+  it("set com as 5 dimensões settleable → todas as 5 rows voltam pendentes, com `type`", async () => {
+    const matchId = await seedMatch("ext-5dims");
+    const { palpiteIds } = await seedSetWithLines({
+      matchId,
+      userId: ids.userId,
+      createdAt: new Date("2026-05-14T10:00:00Z"),
+      lines: ALL_FIVE_LINES,
+    });
+    const pending = await getPendingPalpiteSettlements(NOW);
+    expect(pending).toHaveLength(5);
+    const types = new Set(pending.map((p) => p.type));
+    expect(types).toEqual(
+      new Set([
+        "exact_score",
+        "margin",
+        "clean_sheet",
+        "first_half_score",
+        "first_to_score",
+      ]),
+    );
+    // `type` presente no shape e casando o palpiteId.
+    for (const p of pending) {
+      expect(p.palpiteId).toBe(palpiteIds[p.type]);
+    }
+  });
+
+  it("LATEST-ONLY com multi-row: 2 sets de 5 dims → SÓ as 5 do último set; nenhuma das 5 antigas vaza", async () => {
+    const matchId = await seedMatch("ext-2sets-5dims");
+    const older = await seedSetWithLines({
+      matchId,
+      userId: ids.userId,
+      createdAt: new Date("2026-05-14T10:00:00Z"),
+      lines: ALL_FIVE_LINES,
+    });
+    const newer = await seedSetWithLines({
+      matchId,
+      userId: ids.userId,
+      createdAt: new Date("2026-05-14T12:00:00Z"),
+      lines: ALL_FIVE_LINES,
+    });
+    const pending = await getPendingPalpiteSettlements(NOW);
+    expect(pending).toHaveLength(5);
+    const pendingIds = new Set(pending.map((p) => p.palpiteId));
+    for (const id of Object.values(newer.palpiteIds)) {
+      expect(pendingIds.has(id)).toBe(true);
+    }
+    for (const id of Object.values(older.palpiteIds)) {
+      expect(pendingIds.has(id)).toBe(false);
+    }
+  });
+
+  it("red_card/corners (settleable=false) NUNCA voltam (gate inArray + settleable)", async () => {
+    const matchId = await seedMatch("ext-funonly");
+    const { palpiteIds } = await seedSetWithLines({
+      matchId,
+      userId: ids.userId,
+      createdAt: new Date("2026-05-14T10:00:00Z"),
+      lines: [
+        ...ALL_FIVE_LINES,
+        { type: "red_card", params: null, settleable: false },
+        { type: "corners", params: null, settleable: false },
+      ],
+    });
+    const pending = await getPendingPalpiteSettlements(NOW);
+    const pendingIds = new Set(pending.map((p) => p.palpiteId));
+    expect(pending).toHaveLength(5);
+    expect(pendingIds.has(palpiteIds.red_card)).toBe(false);
+    expect(pendingIds.has(palpiteIds.corners)).toBe(false);
   });
 });

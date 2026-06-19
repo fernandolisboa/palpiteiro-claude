@@ -166,7 +166,18 @@ function palpiteResult() {
       },
     },
     palpites: [
-      { type: "exact_score", params: { home: 2, away: 1 } },
+      {
+        type: "exact_score",
+        params: { home: 2, away: 1 },
+        text: "Placar provável: 2–1",
+        settleable: true,
+      },
+      {
+        type: "first_to_score",
+        params: { firstToScore: "home" },
+        text: "Mandante marca primeiro",
+        settleable: true,
+      },
     ],
     aiCall: { id: "ac-palpite" },
   } as unknown as Awaited<ReturnType<typeof generatePalpites>>;
@@ -458,6 +469,9 @@ describe("analyzeBestBet — passo de síntese (#353, palpite-first)", () => {
         narrative: "O mandante leva.",
         citedMarkets: ["Resultado (1X2)"],
         badge: null, // fresco → pendente
+        // #354: a dimensão first_to_score do set fresco vira chip pendente; exact_score
+        // fica na manchete (fora de dimensions).
+        dimensions: [{ label: "Mandante marca primeiro", badge: null }],
       });
     }
   });

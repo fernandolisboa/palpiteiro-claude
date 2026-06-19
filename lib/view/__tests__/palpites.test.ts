@@ -146,6 +146,23 @@ describe("toPalpitesView — typeLabel e text verbatim", () => {
       ["escanteios", "mais de 9 escanteios"],
     ]);
   });
+
+  it("#354: rotula os tipos goal-derived settleable", () => {
+    const v = toPalpitesView([
+      set("s1", "2026-06-01T12:00:00Z", [
+        line({ id: "m", type: "margin", settleable: true, text: "Mandante ganha por 2+" }),
+        line({ id: "c", type: "clean_sheet", settleable: true, text: "Mandante não sofre gol" }),
+        line({ id: "fh", type: "first_half_score", settleable: true, text: "1º tempo: 1–0" }),
+        line({ id: "ft", type: "first_to_score", settleable: true, text: "Mandante marca primeiro" }),
+      ]),
+    ]);
+    expect(v.current?.lines.map((l) => l.typeLabel)).toEqual([
+      "margem de vitória",
+      "não sofrer gol",
+      "placar do 1º tempo",
+      "primeiro a marcar",
+    ]);
+  });
 });
 
 describe("toPalpitesView — current/previous split", () => {
