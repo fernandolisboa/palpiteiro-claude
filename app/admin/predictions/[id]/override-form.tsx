@@ -2,6 +2,7 @@
 
 import { useActionState } from "react";
 
+import { Button } from "@/components/ui/button";
 import { Select } from "@/components/ui/select";
 
 import {
@@ -85,19 +86,23 @@ export function OverrideForm({ predictionId, defaultResult }: Props) {
         o stake). Predição sem odd só pode ser anulada (void).
       </p>
 
-      <button
-        type="submit"
-        disabled={pending}
-        className="w-fit rounded-md border border-border bg-foreground px-4 py-2 text-label font-medium text-background disabled:opacity-50 focus-visible:outline-none focus-visible:ring-[3px] focus-visible:ring-ring/50"
-      >
+      <Button type="submit" disabled={pending} className="w-fit">
         {pending ? "Salvando…" : "Salvar override"}
-      </button>
+      </Button>
 
       {state &&
         (state.ok ? (
-          <p className="text-body text-accent-fg">Override salvo.</p>
+          <p className="text-body text-edge-fg" role="status" aria-live="polite">
+            Override salvo.
+          </p>
         ) : (
-          <p className="text-body text-destructive">{state.error}</p>
+          <p
+            className="text-body text-destructive"
+            role="alert"
+            aria-live="assertive"
+          >
+            {state.error}
+          </p>
         ))}
     </form>
   );

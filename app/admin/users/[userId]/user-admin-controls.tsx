@@ -7,6 +7,7 @@ import {
   setUserRole,
   type AdminUserResult,
 } from "@/app/actions/admin-users";
+import { Button } from "@/components/ui/button";
 
 type Props = {
   userId: string;
@@ -18,9 +19,21 @@ type Props = {
 function Status({ state }: { state: AdminUserResult | null }) {
   if (!state) return null;
   return state.ok ? (
-    <span className="text-accent-fg text-body-sm">Atualizado.</span>
+    <span
+      className="text-edge-fg text-body-sm"
+      role="status"
+      aria-live="polite"
+    >
+      Atualizado.
+    </span>
   ) : (
-    <span className="text-body-sm text-destructive">{state.error}</span>
+    <span
+      className="text-body-sm text-destructive"
+      role="alert"
+      aria-live="assertive"
+    >
+      {state.error}
+    </span>
   );
 }
 
@@ -62,13 +75,14 @@ export function UserAdminControls({ userId, role, allowed, isSelf }: Props) {
           <form action={roleAction}>
             <input type="hidden" name="userId" value={userId} />
             <input type="hidden" name="role" value={nextRole} />
-            <button
+            <Button
               type="submit"
+              variant="outline"
+              size="sm"
               disabled={rolePending || isSelf}
-              className="border-border rounded-md border px-3 py-1.5 text-body-sm focus-visible:outline-none focus-visible:ring-[3px] focus-visible:ring-ring/50 disabled:opacity-50"
             >
               {role === "admin" ? "Rebaixar p/ usuário" : "Tornar admin"}
-            </button>
+            </Button>
           </form>
         </div>
       </div>
@@ -85,13 +99,14 @@ export function UserAdminControls({ userId, role, allowed, isSelf }: Props) {
           <form action={accessAction}>
             <input type="hidden" name="userId" value={userId} />
             <input type="hidden" name="allowed" value={String(!allowed)} />
-            <button
+            <Button
               type="submit"
+              variant="outline"
+              size="sm"
               disabled={accessPending || (isSelf && allowed)}
-              className="border-border rounded-md border px-3 py-1.5 text-body-sm focus-visible:outline-none focus-visible:ring-[3px] focus-visible:ring-ring/50 disabled:opacity-50"
             >
               {allowed ? "Revogar acesso" : "Conceder acesso"}
-            </button>
+            </Button>
           </form>
         </div>
       </div>

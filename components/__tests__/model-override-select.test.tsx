@@ -44,4 +44,19 @@ describe("ModelOverrideSelect — opção de padrão global rotulada (#112)", ()
       markup.indexOf("Haiku 4.5"),
     );
   });
+
+  // Contrato de FormData: a action analyzeMatch lê `modelOverride` do FormData
+  // (predictions.ts) e o teste de action o fixa. A migração pro primitivo
+  // ModelSelect tem que repassar o `name` ao <select> nativo via ...selectProps.
+  it("preserva name=\"modelOverride\" no <select> nativo (contrato de FormData)", () => {
+    const markup = renderToStaticMarkup(
+      <ModelOverrideSelect
+        value="default"
+        onChange={() => {}}
+        models={[{ id: "claude-sonnet-4-5-20250929", label: "Sonnet 4.5" }]}
+        defaultModelLabel="Sonnet 4.5"
+      />,
+    );
+    expect(markup).toContain('name="modelOverride"');
+  });
 });

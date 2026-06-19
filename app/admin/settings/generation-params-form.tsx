@@ -7,6 +7,7 @@ import {
   updateGenerationParams,
   type UpdateGenerationParamsResult,
 } from "@/app/actions/ai-config";
+import { Button } from "@/components/ui/button";
 import { Select } from "@/components/ui/select";
 import {
   EFFORT_LEVELS,
@@ -124,19 +125,23 @@ export function GenerationParamsForm({ current }: Props) {
         </span>
       </label>
 
-      <button
-        type="submit"
-        disabled={!enabled || pending}
-        className="w-fit rounded-md border border-border bg-foreground px-4 py-2 text-label font-medium text-background focus-visible:outline-none focus-visible:ring-[3px] focus-visible:ring-ring/50 disabled:opacity-50"
-      >
+      <Button type="submit" disabled={!enabled || pending} className="w-fit">
         {pending ? "Salvando…" : "Salvar parâmetros"}
-      </button>
+      </Button>
 
       {state &&
         (state.ok ? (
-          <p className="text-body text-accent-fg">Parâmetros salvos.</p>
+          <p className="text-body text-edge-fg" role="status" aria-live="polite">
+            Parâmetros salvos.
+          </p>
         ) : (
-          <p className="text-body text-destructive">{state.error}</p>
+          <p
+            className="text-body text-destructive"
+            role="alert"
+            aria-live="assertive"
+          >
+            {state.error}
+          </p>
         ))}
     </form>
   );
