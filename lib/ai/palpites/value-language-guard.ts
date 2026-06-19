@@ -17,6 +17,7 @@ const VALUE_LANGUAGE_PATTERNS: RegExp[] = [
   /\bunidades?\b/i,
   /\byield\b/i,
   /\blucros?\b/i,
+  /\bretornos?\b/i,
   /\bprofit\b/i,
   /\bodds?\b/i,
   /\bcota(?:ç(?:ã|a)o|ções|coes)\b/i,

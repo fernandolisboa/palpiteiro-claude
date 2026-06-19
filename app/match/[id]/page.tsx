@@ -3,35 +3,26 @@ import { notFound, redirect } from "next/navigation";
 import { Suspense } from "react";
 import { ChevronLeft } from "lucide-react";
 
-import { AnalysisPanel } from "@/components/analysis-panel";
 import { MarketAnalysisSections } from "@/components/market-analysis-section";
-import { BestBetPanel } from "@/components/best-bet-panel";
+import { MatchCollapsible } from "@/components/match-collapsible";
 import { PreviousAnalyses } from "@/components/previous-analyses";
 import { DesktopShell } from "@/components/desktop-shell";
 import { MatchAuxiliarySections } from "@/components/match-sections-auxiliary";
 import { MatchHero } from "@/components/match-hero";
 import { MatchSections } from "@/components/match-sections";
 import { OddsCard } from "@/components/odds-card";
-import { PalpitesPanel } from "@/components/palpites/palpites-panel";
+import { PalpiteHero } from "@/components/palpites/palpite-hero";
 import { ThemeToggle } from "@/components/theme-toggle";
 import {
   MatchAuxiliarySkeleton,
   MatchSectionsSkeleton,
 } from "@/components/skeletons/match-sections-skeleton";
 import { auth } from "@/auth";
-import { MODEL_REGISTRY, modelsForAudience } from "@/lib/ai/models";
 import { leagueToKey } from "@/lib/format";
-import {
-  getDefaultModelId,
-  getEnableBestBetFanOut,
-} from "@/lib/db/queries/ai-config";
-import {
-  marketsForAudience,
-  marketsForLeague,
-} from "@/lib/db/queries/market-catalog";
+import { getEnableBestBetFanOut } from "@/lib/db/queries/ai-config";
 import { getMatchById } from "@/lib/db/queries/matches";
+import { getPalpiteSetsForMatch } from "@/lib/db/queries/palpites";
 import { getPredictionHistoryForMatch } from "@/lib/db/queries/predictions";
-import { getPreferredModelId } from "@/lib/db/queries/users";
 import { getLatestSelectionOddsSnapshotsForMatches } from "@/lib/db/queries/odds-snapshots";
 import { ensureOddsSnapshotsFresh } from "@/lib/odds/fetch-and-snapshot";
 import { PAGE_LIVE_MARKETS } from "@/lib/odds/live-card-markets";
@@ -41,6 +32,10 @@ import {
   toPreviousAnalysisItems,
 } from "@/lib/view/analysis";
 import { toMatchRowView } from "@/lib/view/match";
+import {
+  toPalpiteHeadlineViewFromSet,
+  type PalpiteHeadlineView,
+} from "@/lib/view/palpites-headline";
 import { toNwayOddsView, toOddsView } from "@/lib/view/odds";
 import type {
   MarketAnalysisSectionItem,
@@ -67,8 +62,6 @@ export default async function MatchPage({ params }: PageProps) {
   const match = await getMatchById(id);
   if (!match) notFound();
 
-  const isAdmin = session.user.role === "admin";
-
   // Pré-aquece over/under + 1X2 ao vivo (#173): featured/batch, +1 crédito de
   // liga por refresh stale (h2h é market separado de totals). Retorna a snapshot
   // over/under LEGADA (contrato inalterado). O card 1X2 lê selection_odds_snapshots
@@ -79,28 +72,28 @@ export default async function MatchPage({ params }: PageProps) {
   );
   // Odds e predição existente em paralelo. Ambas são pré-requisito pro
   // render síncrono do hero + odds + panel (não vão pra Suspense).
-  const [
-    snapshot,
-    matchResultMap,
-    history,
-    defaultModelId,
-    preferredModelId,
-    audienceMarkets,
-    bestBetEnabled,
-  ] = await Promise.all([
-    ensureP,
-    matchResultP,
-    // Histórico COMPLETO: agrupado por mercado em toMarketAnalysisSections (#243, a
-    // última de cada mercado = uma seção) e em toPreviousAnalysisItems (as reanálises
-    // mais antigas, #204). Scoped por userId (sem leak, AC2).
-    getPredictionHistoryForMatch(match.id, session.user.id),
-    getDefaultModelId(),
-    getPreferredModelId(session.user.id),
-    marketsForAudience(isAdmin),
-    getEnableBestBetFanOut(),
-  ]);
-  const defaultModelLabel = MODEL_REGISTRY[defaultModelId].label;
+  const [snapshot, matchResultMap, history, palpiteSets, bestBetEnabled] =
+    await Promise.all([
+      ensureP,
+      matchResultP,
+      // Histórico COMPLETO: agrupado por mercado em toMarketAnalysisSections (#243, a
+      // última de cada mercado = uma seção) e em toPreviousAnalysisItems (as reanálises
+      // mais antigas, #204). Scoped por userId (sem leak, AC2).
+      getPredictionHistoryForMatch(match.id, session.user.id),
+      // Sets de palpite persistidos (#351): só `sets[0]` (o mais recente) alimenta o HERO.
+      // A query traz o histórico completo (espelha o painel interim); overhead mínimo —
+      // uma query "latest-only" seria follow-up se virar gargalo (PLAN §3.1 nota).
+      getPalpiteSetsForMatch(match.id, session.user.id),
+      getEnableBestBetFanOut(),
+    ]);
   const latestPred = history[0] ?? null;
+
+  // Manchete palpite-first (ADR 0030 / #351): o HERO server-rendered lê o set mais
+  // recente. null = sem palpite ainda (estado empty/CTA) OU set antigo pré-#353 sem
+  // manchete. Dado puro sem número de valor (firewall no tipo) → cruza Server→Client.
+  const heroPalpite: PalpiteHeadlineView | null = palpiteSets[0]
+    ? toPalpiteHeadlineViewFromSet(palpiteSets[0])
+    : null;
 
   const heroView = toMatchRowView({
     match: {
@@ -155,34 +148,25 @@ export default async function MatchPage({ params }: PageProps) {
     awayTeam: match.awayTeam,
   };
   const leagueKey = leagueToKey(match.league);
-  const oddsAvailable = oddsView !== null;
   // Espelha o gate de predict(): jogos encerrados/cancelados não são
-  // analisáveis. A CTA fica escondida nesses casos pra não submeter um form que
-  // o server rejeitaria. Predições já existentes continuam visíveis.
+  // analisáveis. A CTA do HERO fica escondida nesses casos pra não submeter um form que
+  // o server rejeitaria. Predições/palpites já existentes continuam visíveis.
   const analyzable =
     match.status !== "finished" && match.status !== "cancelled";
   // Placar final só pra jogos encerrados com gols reportados (heroView já
-  // anulou scores fora de `finished`).
+  // anulou scores fora de `finished`). Alimenta o recibo settled do HERO + FinishedNotice.
   const finalScore =
     heroView.homeScore !== null && heroView.awayScore !== null
       ? { home: heroView.homeScore, away: heroView.awayScore }
       : null;
-  // Lista de override por audiência (ADR 0013), serializável ({id,label}) pra
-  // cruzar a fronteira Server→Client. O gate efetivo é revalidado em analyzeMatch.
-  const selectableModels = modelsForAudience(isAdmin).map((m) => ({
-    id: m.id,
-    label: m.label,
-  }));
-  // Mercados selecionáveis = audiência ∩ cobertura de liga (#158): btts só aparece
-  // em ligas com odds validadas (world_cup). {key,label} serializável. Vazio/≤1 →
-  // seletor escondido (default over_under). O gate efetivo é re-validado em analyzeMatch.
-  const selectableMarkets = marketsForLeague(audienceMarkets, match.league);
 
   return (
     <>
-      {/* Palpite-first (ADR 0030 / #353): o auto-run pré-análise foi DROPADO — a
-          manchete agora é sintetizada DENTRO do analyzeBestBet (botão). O PalpitesPanel
-          abaixo lê os sets persistidos (vazio até o 1º run). O HERO chega no #351. */}
+      {/* Palpite-first (ADR 0030 / #351): a manchete sintetizada é o HERO no topo; as
+          análises por mercado viram detalhe recolhível NEUTRO abaixo. Layout única (sem
+          flag de apresentação) — o botão "Analisar com IA" do HERO dispara o fan-out →
+          síntese → revalidatePath. `analyzeBestBet` segue gated por enable_best_bet_fan_out
+          como kill-switch de spend (go-live = o dono flipa a flag). */}
       <div className="lg:hidden">
         <MobileMatch
           heroView={heroView}
@@ -193,14 +177,10 @@ export default async function MatchPage({ params }: PageProps) {
           matchId={match.id}
           fixtureRef={fixtureRef}
           leagueKey={leagueKey}
-          oddsAvailable={oddsAvailable}
           analyzable={analyzable}
           finalScore={finalScore}
-          selectableModels={selectableModels}
-          selectableMarkets={selectableMarkets}
-          defaultModelLabel={defaultModelLabel}
-          preferredModelId={preferredModelId}
           bestBetEnabled={bestBetEnabled}
+          heroPalpite={heroPalpite}
         />
       </div>
       <div className="hidden lg:block">
@@ -213,14 +193,10 @@ export default async function MatchPage({ params }: PageProps) {
           matchId={match.id}
           fixtureRef={fixtureRef}
           leagueKey={leagueKey}
-          oddsAvailable={oddsAvailable}
           analyzable={analyzable}
           finalScore={finalScore}
-          selectableModels={selectableModels}
-          selectableMarkets={selectableMarkets}
-          defaultModelLabel={defaultModelLabel}
-          preferredModelId={preferredModelId}
           bestBetEnabled={bestBetEnabled}
+          heroPalpite={heroPalpite}
         />
       </div>
     </>
@@ -244,20 +220,16 @@ type Common = {
   matchId: string;
   fixtureRef: FixtureRef;
   leagueKey: ReturnType<typeof leagueToKey>;
-  oddsAvailable: boolean;
   // false em jogos encerrados/cancelados (predict() os rejeita). Esconde a CTA.
   analyzable: boolean;
   // Placar final pra jogos encerrados; null caso contrário.
   finalScore: { home: number; away: number } | null;
-  selectableModels: { id: string; label: string }[];
-  // Mercados que esta audiência pode escolher ({key,label} serializável). ≤1 →
-  // seletor escondido no painel (default over_under). Gate revalidado no server.
-  selectableMarkets: { key: string; label: string }[];
-  defaultModelLabel: string;
-  preferredModelId: string | null;
-  // Flag #178: a CTA "Analisar todos os mercados" (fan-out cross-mercado) só aparece
-  // com a flag ligada E ≥2 mercados candidatos. Gate efetivo revalidado em analyzeBestBet.
+  // Flag #178/#351: o kill-switch de spend (enable_best_bet_fan_out). Passado ao HERO
+  // como `fanOutEnabled` — controla SÓ o botão "Analisar com IA" (não mais a layout, que
+  // é palpite-first sempre). Gate efetivo revalidado server-side em analyzeBestBet.
   bestBetEnabled: boolean;
+  // Manchete palpite-first do HERO (#351). null = sem palpite ainda → estado empty/CTA.
+  heroPalpite: PalpiteHeadlineView | null;
 };
 
 function MobileMatch({
@@ -269,14 +241,10 @@ function MobileMatch({
   matchId,
   fixtureRef,
   leagueKey,
-  oddsAvailable,
   analyzable,
   finalScore,
-  selectableModels,
-  selectableMarkets,
-  defaultModelLabel,
-  preferredModelId,
   bestBetEnabled,
+  heroPalpite,
 }: Common) {
   return (
     <div className="min-h-screen bg-background text-foreground">
@@ -303,45 +271,29 @@ function MobileMatch({
       />
 
       <div className="flex flex-col gap-3 px-5 pb-6">
+        {/* HERO palpite-first (#351): a manchete sintetizada é a PROEMINÊNCIA, logo
+            abaixo da identidade do jogo. O botão dispara o fan-out → síntese. */}
+        <PalpiteHero
+          heroPalpite={heroPalpite}
+          matchId={matchId}
+          analyzable={analyzable}
+          fanOutEnabled={bestBetEnabled}
+          finalScore={finalScore}
+        />
+
+        {/* Zona NEUTRA de valor (firewall §3.4): odds (preços) + detalhe por mercado
+            (edge/EV/stake/odd = conteúdo legítimo aqui). A fronteira quente→neutra é a
+            fronteira opinião→valor. */}
         <OddsCard view={oddsView} />
         {matchResultOddsView && <OddsCard view={matchResultOddsView} />}
-        {/* Palpites: warm lane playful, ENTRE odds e a pilha de análise. Aditivo,
-            irmão no flex gap-3 (herda o spacing). INTERIM: lê os sets persistidos
-            (vazio até o 1º run da análise); o HERO da manchete chega no #351. */}
-        <PalpitesPanel matchId={matchId} />
-        {analyzable ? (
-          <AnalysisPanel
-            matchId={matchId}
-            sections={sections}
-            oddsAvailable={oddsAvailable}
-            selectableModels={selectableModels}
-            selectableMarkets={selectableMarkets}
-            defaultModelLabel={defaultModelLabel}
-            preferredModelId={preferredModelId}
-            previous={previousAnalyses}
-          />
-        ) : sections.length > 0 ? (
-          // Jogo encerrado/cancelado com predição já gerada: mostra o resultado
-          // em modo somente-leitura (sem CTA de reanálise — predict() rejeitaria).
-          // ≤1 mercado → resultado cru; ≥2 → uma seção colapsável por mercado (#243).
-          // Histórico (#204) abaixo TAMBÉM aparece aqui (inclusão deliberada além do
-          // AC): sem pending no caminho encerrado, a seção é sempre visível. Wrapper
-          // flex próprio pra espaçar seções↔anteriores (não depende do gap do pai).
-          <div className="flex flex-col gap-3">
-            <MarketAnalysisSections sections={sections} />
-            <PreviousAnalyses items={previousAnalyses} />
-          </div>
-        ) : (
+        <NeutralAnalysisDetail
+          sections={sections}
+          previousAnalyses={previousAnalyses}
+        />
+        {!analyzable && sections.length === 0 && (
           <FinishedNotice score={finalScore} />
         )}
-        {analyzable && bestBetEnabled && selectableMarkets.length > 1 && (
-          <div className="flex flex-col gap-2 border-t border-border pt-3">
-            <span className="font-mono text-eyebrow-xs uppercase tracking-eyebrow text-muted-fg-2">
-              melhor aposta do jogo
-            </span>
-            <BestBetPanel matchId={matchId} />
-          </div>
-        )}
+
         <Suspense fallback={<MatchSectionsSkeleton />}>
           <MatchSections fixtureRef={fixtureRef} leagueKey={leagueKey} />
         </Suspense>
@@ -362,14 +314,10 @@ function DesktopMatch({
   matchId,
   fixtureRef,
   leagueKey,
-  oddsAvailable,
   analyzable,
   finalScore,
-  selectableModels,
-  selectableMarkets,
-  defaultModelLabel,
-  preferredModelId,
   bestBetEnabled,
+  heroPalpite,
 }: Common) {
   return (
     <DesktopShell>
@@ -382,59 +330,37 @@ function DesktopMatch({
           <span className="text-body-sm tracking-tight">jogos</span>
         </Link>
 
-        <div className="grid grid-cols-[1fr_320px] gap-8 pb-8">
+        {/* Palpite-first (#351, §11.3): o grid [1fr_320px] hero|odds foi DROPADO. A
+            identidade do jogo + o HERO empilham FULL-WIDTH (narrativa em max-w-reading);
+            odds + detalhe descem pra zona neutra abaixo. */}
+        <div className="flex flex-col gap-6 pb-8">
           <MatchHero
             view={heroView}
             status={heroView.status === "live" ? "live" : "scheduled"}
             score={finalScore ?? undefined}
           />
-
-          <div className="flex flex-col gap-3">
-            <OddsCard view={oddsView} />
-            {matchResultOddsView && <OddsCard view={matchResultOddsView} />}
-          </div>
+          <PalpiteHero
+            heroPalpite={heroPalpite}
+            matchId={matchId}
+            analyzable={analyzable}
+            fanOutEnabled={bestBetEnabled}
+            finalScore={finalScore}
+          />
         </div>
 
-        {/* Palpites (#316): full-width APÓS o grid, ANTES do wrapper pb-6 da
-            análise — espelha o spacing. Aditivo, nunca substitui a análise. */}
-        <div className="pb-6">
-          <PalpitesPanel matchId={matchId} />
-        </div>
-
-        <div className="pb-6">
-          {analyzable ? (
-            <AnalysisPanel
-              matchId={matchId}
-              sections={sections}
-              oddsAvailable={oddsAvailable}
-              selectableModels={selectableModels}
-              selectableMarkets={selectableMarkets}
-              defaultModelLabel={defaultModelLabel}
-              preferredModelId={preferredModelId}
-              previous={previousAnalyses}
-            />
-          ) : sections.length > 0 ? (
-            // Encerrado/cancelado com predição: somente-leitura (sem reanálise). ≤1
-            // mercado → resultado cru; ≥2 → uma seção colapsável por mercado (#243).
-            // Histórico (#204) abaixo TAMBÉM aqui (inclusão deliberada além do AC);
-            // wrapper flex próprio pra espaçar seções↔anteriores.
-            <div className="flex flex-col gap-3">
-              <MarketAnalysisSections sections={sections} />
-              <PreviousAnalyses items={previousAnalyses} />
-            </div>
-          ) : (
+        {/* Zona NEUTRA de valor (firewall §3.4): odds + detalhe por mercado. A fronteira
+            quente→neutra é a fronteira opinião→valor (números de valor são legítimos aqui). */}
+        <div className="flex flex-col gap-3 pb-6">
+          <OddsCard view={oddsView} />
+          {matchResultOddsView && <OddsCard view={matchResultOddsView} />}
+          <NeutralAnalysisDetail
+            sections={sections}
+            previousAnalyses={previousAnalyses}
+          />
+          {!analyzable && sections.length === 0 && (
             <FinishedNotice score={finalScore} />
           )}
         </div>
-
-        {analyzable && bestBetEnabled && selectableMarkets.length > 1 && (
-          <div className="flex flex-col gap-2 border-t border-border pt-3 pb-6">
-            <span className="font-mono text-eyebrow-xs uppercase tracking-eyebrow text-muted-fg-2">
-              melhor aposta do jogo
-            </span>
-            <BestBetPanel matchId={matchId} />
-          </div>
-        )}
 
         <Suspense fallback={<MatchSectionsSkeleton />}>
           <MatchSections fixtureRef={fixtureRef} leagueKey={leagueKey} />
@@ -444,6 +370,33 @@ function DesktopMatch({
         </Suspense>
       </div>
     </DesktopShell>
+  );
+}
+
+// Detalhe NEUTRO por mercado (#351, §3.3): o MatchCollapsible (chrome neutro — a costura
+// cromática) envolve o MarketAnalysisSections em modo READ-ONLY (sem analyzable/matchId →
+// sem footer de reanálise; o botão do HERO re-roda tudo). PreviousAnalyses (#204) dentro
+// do mesmo detalhe. Os números de valor (edge/EV/stake/odd) são conteúdo LEGÍTIMO aqui —
+// o firewall só barra o HERO. Renderiza só quando há análise (sections.length > 0).
+//
+// O `view` retornado por analyzeBestBet é IGNORADO de propósito: o detalhe vem do
+// `sections` revalidado (não-stale), e o contrato #353 do action não pode ser tocado
+// (predictions-best-bet.test.ts o pina). O HERO usa só `palpite`/`ok`/`error` do action.
+function NeutralAnalysisDetail({
+  sections,
+  previousAnalyses,
+}: {
+  sections: MarketAnalysisSectionItem[];
+  previousAnalyses: PreviousAnalysisItem[];
+}) {
+  if (sections.length === 0) return null;
+  return (
+    <MatchCollapsible title="ver análise por mercado">
+      <div className="flex flex-col gap-3">
+        <MarketAnalysisSections sections={sections} />
+        <PreviousAnalyses items={previousAnalyses} />
+      </div>
+    </MatchCollapsible>
   );
 }
 
