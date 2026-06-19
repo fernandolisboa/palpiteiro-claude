@@ -63,7 +63,7 @@ que resta (#354/#350/#352) é enriquecimento/discovery.
 ## Sequência + dependências
 
 - **#353** `feat(ai)` — **passo de SÍNTESE** (multi-mercado → palpite-manchete). ✅ **MERGED (PR #358).**
-- **#351** `feat(match-ui)` — HERO da manchete + detalhe recolhível. ✅ **MERGED (PR #360).** Spine palpite-first COMPLETO (falta só o **GO-LIVE flip** do dono — ver "Onde estamos").
+- **#351** `feat(match-ui)` — HERO da manchete + detalhe recolhível. ✅ **MERGED (PR #360).** Spine palpite-first COMPLETO + **AO VIVO** (flag `enable_best_bet_fan_out` ON — ver "Onde estamos").
 - **#354** `feat` — tipos de palpite liquidáveis **goal-derived** (margem, clean sheet, quem marca 1º, placar 1º tempo — badge de graça do placar 90', sem provider novo). Enriquecimento; pode vir depois do #351.
 - **#350** `discovery` — cartão/escanteio liquidável → exige stats provider + **ADR Tier 3** (normalizer hoje é goal-only, `adapter.ts:541`).
 - **#352** `discovery/ADR` — "Analise minha aposta" (avaliador selection-pinned da aposta do usuário; feature de VALOR, reusa o motor, exige ADR).
