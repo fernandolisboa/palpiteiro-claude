@@ -9,6 +9,7 @@ vi.mock("@/app/actions/predictions", () => ({
 }));
 
 import { PalpiteHero } from "@/components/palpites/palpite-hero";
+import { containsValueLanguage } from "@/lib/ai/palpites/value-language-guard";
 import type { PalpiteHeadlineView } from "@/lib/view/palpites-headline";
 
 // Manchete POVOADA de propósito (com confiança qualitativa + placar) — a asserção-chave
@@ -23,9 +24,15 @@ const POPULATED: PalpiteHeadlineView = {
   badge: null,
 };
 
-// Regex do firewall (PLAN §5): NENHUM termo/símbolo de valor pode aparecer no HERO.
-// `odd` casa "odds"/"odd"; mantém word-ish boundaries via o set do plano.
-const VALUE_LANGUAGE = /R\$|%|\bEV\b|stake|odd|edge|lucro|retorno/i;
+// Firewall do HERO (PLAN §5): reusa o MESMO guard de DADO (containsValueLanguage, os 13
+// padrões do ADR 0030 §3 com word-boundaries — edge/EV/stake/odd/yield/unidades/lucro/
+// retorno/cotação/valor esperado/R$) como FONTE ÚNICA: a UI passa a casar exatamente o
+// que a camada de dado barra (o \bedge\b já pega até uma classe `edge-*`). Soma a regra
+// HERO-específica "sem %" (confiança é PALAVRA, nunca percentual; o guard de dado não bane
+// % de propósito). Um vazamento — número de valor OU % — falha aqui.
+function leaksValue(html: string): boolean {
+  return containsValueLanguage(html) || /%/.test(html);
+}
 
 function render(props: Partial<Parameters<typeof PalpiteHero>[0]> = {}): string {
   return renderToStaticMarkup(
@@ -43,7 +50,7 @@ function render(props: Partial<Parameters<typeof PalpiteHero>[0]> = {}): string 
 describe("PalpiteHero — firewall de valor (ADR 0030 §3, inviolável)", () => {
   it("populated: ZERO número/termo de valor no DOM e nenhuma classe edge-*", () => {
     const html = render();
-    expect(html).not.toMatch(VALUE_LANGUAGE);
+    expect(leaksValue(html)).toBe(false);
     expect(html).not.toContain("edge-");
   });
 
@@ -52,13 +59,13 @@ describe("PalpiteHero — firewall de valor (ADR 0030 §3, inviolável)", () => 
       heroPalpite: { ...POPULATED, badge: "won" },
       finalScore: { home: 2, away: 1 },
     });
-    expect(html).not.toMatch(VALUE_LANGUAGE);
+    expect(leaksValue(html)).toBe(false);
     expect(html).not.toContain("edge-");
   });
 
   it("empty + CTA: a casca vazia também é firewall-limpa", () => {
     const html = render({ heroPalpite: null });
-    expect(html).not.toMatch(VALUE_LANGUAGE);
+    expect(leaksValue(html)).toBe(false);
     expect(html).not.toContain("edge-");
   });
 });
@@ -110,7 +117,7 @@ describe("PalpiteHero — settled honesty (palavra, nunca só cor; a11y)", () =>
       heroPalpite: { ...POPULATED, badge: "won" },
       finalScore: { home: 2, away: 1 },
     });
-    expect(html).toContain("placar provável");
+    expect(html).toContain("provável");
     expect(html).toContain("placar real");
   });
 });

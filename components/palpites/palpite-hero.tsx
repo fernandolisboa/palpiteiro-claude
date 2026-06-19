@@ -143,18 +143,22 @@ function PopulatedHero({
           )}
         </div>
 
-        <p className="max-w-reading text-balance text-display-lg font-medium leading-[1.08] tracking-tight text-foreground lg:text-[40px]">
-          {view.verdict}
-        </p>
-
-        {settled ? (
-          <SettledReceipt
-            probableScore={view.probableScore}
-            finalScore={finalScore}
-          />
-        ) : (
-          <ProbableScore score={view.probableScore} />
-        )}
+        {/* Veredito + placar AGRUPADOS (gap-2): leem como UMA fala do amigo
+            ("Vai dar Palmeiras / provável 2–1"), o registro D-leaning que o dono
+            escolheu — não veredito + stat-row separado. */}
+        <div className="flex flex-col gap-2">
+          <p className="max-w-reading text-balance text-display-lg font-medium leading-[1.08] tracking-tight text-foreground lg:text-[40px]">
+            {view.verdict}
+          </p>
+          {settled ? (
+            <SettledReceipt
+              probableScore={view.probableScore}
+              finalScore={finalScore}
+            />
+          ) : (
+            <ProbableScore score={view.probableScore} />
+          )}
+        </div>
 
         <p className="max-w-reading text-body leading-relaxed tracking-tight text-muted-foreground">
           {view.narrative}
@@ -315,14 +319,15 @@ function ConfidenceChip({
   );
 }
 
-// Placar provável tecido junto do veredito. Enquadramento "placar provável" load-bearing
-// (firewall §9.3): mono neutro/quente-cuidadoso, NUNCA verde edge-*, NUNCA lido como odd.
+// Placar provável tecido como a CONTINUAÇÃO da fala (D-leaning): "provável 2–1" colado
+// no veredito. Enquadramento "provável" load-bearing (firewall §9.3) — mono quente-
+// cuidadoso, NUNCA verde edge-*, NUNCA lido como odd (placar 2–1 ≠ cotação 2.10).
 function ProbableScore({ score }: { score: { home: number; away: number } }) {
   return (
-    <div className="flex items-baseline gap-2">
-      <ScoreLabel>placar provável</ScoreLabel>
+    <p className="flex items-baseline gap-2">
+      <ScoreLabel>provável</ScoreLabel>
       <ScoreDigits home={score.home} away={score.away} />
-    </div>
+    </p>
   );
 }
 
@@ -338,29 +343,29 @@ function SettledReceipt({
 }) {
   return (
     <div className="flex flex-wrap items-baseline gap-x-3 gap-y-1.5">
-      <div className="flex items-baseline gap-2">
-        <ScoreLabel>placar provável</ScoreLabel>
+      <p className="flex items-baseline gap-2">
+        <ScoreLabel>provável</ScoreLabel>
         <ScoreDigits home={probableScore.home} away={probableScore.away} />
-      </div>
+      </p>
       {finalScore && (
-        <div className="flex items-baseline gap-2">
+        <p className="flex items-baseline gap-2">
           <ScoreLabel>placar real</ScoreLabel>
           <span className="font-mono text-display-sm font-medium tabular-nums tracking-tight text-foreground">
             {finalScore.home}
             <span className="px-1 text-muted-foreground">–</span>
             {finalScore.away}
           </span>
-        </div>
+        </p>
       )}
     </div>
   );
 }
 
+// Rótulo do placar — sans minúsculo conversacional (não o eyebrow mono uppercase): casa
+// com o registro de fala ("provável 2–1"), não com um stat-row de dashboard.
 function ScoreLabel({ children }: { children: React.ReactNode }) {
   return (
-    <span className="font-mono text-eyebrow uppercase tracking-label text-muted-foreground">
-      {children}
-    </span>
+    <span className="text-label tracking-tight text-muted-foreground">{children}</span>
   );
 }
 
