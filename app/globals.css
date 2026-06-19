@@ -52,6 +52,10 @@
   --color-warn-fg: var(--warn-fg);
   --color-warn-soft: var(--warn-soft);
   --color-warn-border: var(--warn-border);
+  --color-palpite-fg: var(--palpite-fg);
+  --color-palpite-strong-fg: var(--palpite-strong-fg);
+  --color-palpite-soft: var(--palpite-soft);
+  --color-palpite-border: var(--palpite-border);
   --color-form-win-bg: var(--form-win-bg);
   --color-form-win-fg: var(--form-win-fg);
   --color-form-loss-bg: var(--form-loss-bg);
@@ -146,6 +150,14 @@
   --warn-soft: oklch(0.96 0.05 55);
   --warn-border: oklch(0.85 0.08 55);
 
+  /* Palpite — warm terracotta (engajamento, hue ~40). Identidade do domínio de
+     palpites (playful), paralela ao edge-* do domínio de valor — distinta do
+     cobalt (258), edge-green (145) e warn-amber (55). */
+  --palpite-fg: oklch(0.52 0.16 40);
+  --palpite-strong-fg: oklch(0.45 0.18 40);
+  --palpite-soft: oklch(0.96 0.045 40);
+  --palpite-border: oklch(0.84 0.09 40);
+
   /* Form dots — W/D/L */
   --form-win-bg: oklch(0.93 0.06 145);
   --form-win-fg: oklch(0.38 0.10 145);
@@ -214,6 +226,13 @@
   --warn-fg: oklch(0.78 0.13 55);
   --warn-soft: oklch(0.28 0.07 55);
   --warn-border: oklch(0.36 0.09 55);
+
+  /* Palpite — warm terracotta (dark): mesma hue ~40, L invertido (fg claro,
+     soft/border escuros). Contraste calibrado no browser (/impeccable audit). */
+  --palpite-fg: oklch(0.78 0.13 40);
+  --palpite-strong-fg: oklch(0.82 0.14 40);
+  --palpite-soft: oklch(0.28 0.07 40);
+  --palpite-border: oklch(0.40 0.10 40);
 
   /* Form dots — W/D/L */
   --form-win-bg: oklch(0.36 0.07 145);

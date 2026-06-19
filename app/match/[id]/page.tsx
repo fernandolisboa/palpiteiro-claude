@@ -13,6 +13,7 @@ import { MatchHero } from "@/components/match-hero";
 import { MatchSections } from "@/components/match-sections";
 import { OddsCard } from "@/components/odds-card";
 import { PalpiteAutoRun } from "@/components/palpites/palpite-auto-run";
+import { PalpitesPanel } from "@/components/palpites/palpites-panel";
 import { ThemeToggle } from "@/components/theme-toggle";
 import {
   MatchAuxiliarySkeleton,
@@ -306,6 +307,10 @@ function MobileMatch({
       <div className="flex flex-col gap-3 px-5 pb-6">
         <OddsCard view={oddsView} />
         {matchResultOddsView && <OddsCard view={matchResultOddsView} />}
+        {/* Palpites (#316): warm lane playful, ENTRE odds e a pilha de análise.
+            Aditivo, irmão no flex gap-3 (herda o spacing). Auto-run já montado em
+            PalpiteAutoRun (1x, fora dos wrappers) — não re-adicionar. */}
+        <PalpitesPanel matchId={matchId} />
         {analyzable ? (
           <AnalysisPanel
             matchId={matchId}
@@ -390,6 +395,12 @@ function DesktopMatch({
             <OddsCard view={oddsView} />
             {matchResultOddsView && <OddsCard view={matchResultOddsView} />}
           </div>
+        </div>
+
+        {/* Palpites (#316): full-width APÓS o grid, ANTES do wrapper pb-6 da
+            análise — espelha o spacing. Aditivo, nunca substitui a análise. */}
+        <div className="pb-6">
+          <PalpitesPanel matchId={matchId} />
         </div>
 
         <div className="pb-6">
