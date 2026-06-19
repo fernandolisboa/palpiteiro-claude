@@ -40,6 +40,7 @@ import {
   insertSelectionOddsSnapshotsBatch,
   type SelectionSnapshotRow,
 } from "@/lib/db/queries/odds-snapshots";
+import { ODDS_SNAPSHOT_FRESHNESS_FAR_MS } from "@/lib/odds/freshness-window";
 
 const ids: {
   matchId: string;
@@ -284,6 +285,38 @@ describe("selection_odds_snapshots — real Postgres (pglite)", () => {
       staleNow,
     );
     expect(stale).toBeNull();
+  });
+
+  it("freshnessMs explícito (janela larga) só flipa reuso-vs-refetch, nunca a SHAPE", async () => {
+    // Uma captura de 45min — STALE pro gate default (30min), FRESCA pra janela larga
+    // (60min, ODDS_SNAPSHOT_FRESHNESS_FAR_MS, usada por ensureOddsSnapshotsFresh em
+    // jogos >24h). O dado DEVOLVIDO é o MESMO bundle; só muda se a idade conta como
+    // fresca — i.e. reusar vs refazer, nunca a forma/seleção da snapshot.
+    const now = new Date("2026-05-15T12:00:00Z");
+    const captured = new Date(now.getTime() - 45 * 60 * 1000);
+    await insertSelectionOddsSnapshotsBatch([
+      ouRow(ids.ouOver, "1.900", captured),
+      ouRow(ids.ouUnder, "1.950", captured),
+    ]);
+
+    // Default (30min): 45min > 30min → stale → null.
+    const atDefault = await getLatestFreshSelectionOddsSnapshots(
+      { matchId: ids.matchId, dbMarketKey: "over_under", params: { line: 2.5 } },
+      now,
+    );
+    expect(atDefault).toBeNull();
+
+    // Janela larga (60min): 45min < 60min → fresca → MESMO bundle.
+    const atFar = await getLatestFreshSelectionOddsSnapshots(
+      { matchId: ids.matchId, dbMarketKey: "over_under", params: { line: 2.5 } },
+      now,
+      ODDS_SNAPSHOT_FRESHNESS_FAR_MS,
+    );
+    expect(atFar).not.toBeNull();
+    expect(atFar!.capturedAt.getTime()).toBe(captured.getTime());
+    const byKey = new Map(atFar!.selections.map((s) => [s.key, s.odd]));
+    expect(byKey.get("over")).toBe("1.900");
+    expect(byKey.get("under")).toBe("1.950");
   });
 
   it("match_result (N=3) write→read coherent (1X2 candidate set)", async () => {

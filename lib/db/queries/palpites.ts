@@ -49,6 +49,29 @@ export type PalpiteSetWithLines = {
   })[];
 };
 
+// Linhas + outcome de TODOS os sets numa query BATCHEADA (inArray) — evita N+1
+// (uma 2ª query independente do tamanho do histórico). SEAM nomeado extraído de
+// getPalpiteSetsForMatch (#372): SQL/ordenação byte-idêntica ao inline anterior —
+// pura legibilidade + costura pra um futuro Suspense, sem mudança de comportamento.
+// `[]` em entrada vazia (o caller já guarda emptiness antes de chamar, mas a guarda
+// torna o helper seguro isolado). orderBy(asc(palpiteSetId), asc(createdAt),
+// asc(id)): palpiteSetId agrupa cada set num bloco contíguo; createdAt+id dão ordem
+// canônica e determinística DENTRO do bloco. outcomeResult vem do LEFT join (null em
+// settleable=false ou ainda-pendente).
+async function getPalpiteLinesForSetIds(setIds: string[]) {
+  if (setIds.length === 0) return [];
+  return db
+    .select({ palpite: palpites, outcomeResult: palpiteOutcomes.result })
+    .from(palpites)
+    .leftJoin(palpiteOutcomes, eq(palpiteOutcomes.palpiteId, palpites.id))
+    .where(inArray(palpites.palpiteSetId, setIds))
+    .orderBy(
+      asc(palpites.palpiteSetId),
+      asc(palpites.createdAt),
+      asc(palpites.id)
+    );
+}
+
 /**
  * Histórico COMPLETO de palpite_sets de um jogo para um usuário, mais recente
  * primeiro — espelha getPredictionHistoryForMatch (lib/db/queries/predictions.ts):
@@ -76,22 +99,13 @@ export async function getPalpiteSetsForMatch(
     .orderBy(desc(palpiteSets.createdAt), desc(palpiteSets.id));
   if (sets.length === 0) return [];
 
-  // Query 2: linhas + outcome de TODOS os sets numa query BATCHEADA (inArray) —
-  // evita N+1. orderBy(asc(palpiteSetId), asc(createdAt), asc(id)): palpiteSetId
-  // agrupa cada set num bloco contíguo; createdAt+id dão ordem canônica e
-  // determinística DENTRO do bloco. outcomeResult vem do LEFT join (null em
-  // settleable=false ou ainda-pendente).
+  // Query 2 (batcheada, sem N+1): linhas + outcome de TODOS os sets via helper
+  // nomeado getPalpiteLinesForSetIds (#372). Depende dos setIds derivados da Query 1
+  // (data dependency real: o inArray é construído a partir dos ids retornados), então
+  // NÃO é colapsável num Promise.all([q1,q2]) — a concorrência genuína (com a query de
+  // predições) já vive no Promise.all da match page.
   const setIds = sets.map((s) => s.palpiteSet.id);
-  const lines = await db
-    .select({ palpite: palpites, outcomeResult: palpiteOutcomes.result })
-    .from(palpites)
-    .leftJoin(palpiteOutcomes, eq(palpiteOutcomes.palpiteId, palpites.id))
-    .where(inArray(palpites.palpiteSetId, setIds))
-    .orderBy(
-      asc(palpites.palpiteSetId),
-      asc(palpites.createdAt),
-      asc(palpites.id)
-    );
+  const lines = await getPalpiteLinesForSetIds(setIds);
 
   // Agrupa as linhas por palpiteSetId (mesmo padrão de selByPrediction em
   // predictions.ts). `result` da coluna é o pgEnum amplo (won/lost/void/push); o
