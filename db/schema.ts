@@ -60,6 +60,18 @@ export const aiCallStatusEnum = pgEnum("ai_call_status", [
   "rate_limited",
 ]);
 
+// Tipos de palpite de ENGAJAMENTO (ADR 0028). Enum controlado (não tabela de
+// catálogo): um tipo é só um rótulo fechado sem atributos próprios — diferente de
+// `markets`, que carrega settlement_rule_key/seleções (FK). `exact_score` é o
+// ÚNICO settleable na v1 (liquida por placar de 90'); os demais são "fun-only"
+// (settleable=false, NUNCA entram no cron — ADR 0028 §3). Tipo novo = ALTER TYPE
+// ADD VALUE numa migration (raro). `settleable` mora na linha `palpites`, não aqui.
+export const palpiteTypeEnum = pgEnum("palpite_type", [
+  "exact_score",
+  "red_card",
+  "corners",
+]);
+
 // ─── Catálogo de mercados (ADR 0015, decisão 3) ──────────────────────────────
 // Mercados e seleções como TABELAS DE REFERÊNCIA (seed + FK), não enums: leva ao
 // limite a convenção do repo "text + validação na app" (defaultModelId/preferred)
@@ -369,6 +381,101 @@ export const predictionOutcomes = pgTable("prediction_outcomes", {
   }>(),
   result: outcomeResultEnum().notNull(),
   profitUnits: numeric({ precision: 8, scale: 2 }).notNull(),
+  overrideByUserId: uuid().references(() => users.id, { onDelete: "set null" }),
+  settledAt: timestamp({ withTimezone: true }).notNull().defaultNow(),
+});
+
+// ─── Palpites de engajamento (ADR 0028) ──────────────────────────────────────
+// Domínio SEPARADO das recomendações de valor: palpite é uma PREDIÇÃO de
+// engajamento (placar exato, cartão vermelho, escanteios…), NUNCA carrega
+// edge/implied/stake/Yield (ADR 0028 §1 — contaminaria o motor de valor). Um
+// `palpite_set` = um evento de geração por (match, user); imutável. As linhas
+// individuais ficam em `palpites`. Liquidação só de `exact_score` (ADR 0028 §3).
+
+// Um EVENTO de geração de palpites por (match, user). Espelha as FKs de
+// `predictions` (matchId/userId notNull restrict) EXCETO `aiCallId`, que é
+// NULLABLE: a auto-geração (#315) é fire-and-forget e pode falhar silenciosamente,
+// então um set pode existir sem ai_call (`predictions.aiCallId` é notNull).
+// `modelVersion`/`promptVersion` notNull = proveniência de cartucho (ADR 0017 +
+// ADR 0028 §5); como aiCallId é nullable, ai_calls não pode ser a única casa da
+// versão. Imutável: revisão = novo set (mesma disciplina de predictions).
+export const palpiteSets = pgTable(
+  "palpite_sets",
+  {
+    id: uuid().primaryKey().defaultRandom(),
+    matchId: uuid()
+      .notNull()
+      .references(() => matches.id, { onDelete: "restrict" }),
+    userId: uuid()
+      .notNull()
+      .references(() => users.id, { onDelete: "restrict" }),
+    aiCallId: uuid().references(() => aiCalls.id, { onDelete: "restrict" }),
+    modelVersion: text().notNull(),
+    promptVersion: text().notNull(),
+    createdAt: timestamp({ withTimezone: true }).notNull().defaultNow(),
+  },
+  (t) => [
+    index("palpite_sets_match_id_idx").on(t.matchId),
+    index("palpite_sets_user_id_idx").on(t.userId),
+    index("palpite_sets_created_at_idx").on(t.createdAt),
+  ],
+);
+
+// Uma LINHA de palpite dentro de um set. `type` (enum controlado), `text` (a
+// frase humana renderizada na UI), `params` jsonb OPCIONAL (forma estruturada,
+// p.ex. {home, away} no exact_score; null em tipos sem params), `settleable`
+// (bit: só exact_score=true na v1). NUNCA edge/stake/Yield (ADR 0028 §1).
+// settleable=false NUNCA gera outcome nem entra no cron (ADR 0028 §3).
+export const palpites = pgTable(
+  "palpites",
+  {
+    id: uuid().primaryKey().defaultRandom(),
+    palpiteSetId: uuid()
+      .notNull()
+      .references(() => palpiteSets.id, { onDelete: "cascade" }),
+    type: palpiteTypeEnum().notNull(),
+    text: text().notNull(),
+    // OPCIONAL: forma estruturada do palpite. exact_score → {home, away}
+    // (inteiros). Validada por Zod no boundary de escrita (#315) e no compare de
+    // settlement. Tipos fun-only podem deixar null.
+    params: jsonb().$type<{ home: number; away: number }>(),
+    // Só exact_score=true na v1. O cron de placar filtra por (type='exact_score'
+    // AND settleable=true) — defense-in-depth contra um seed errado.
+    settleable: boolean().notNull().default(false),
+    createdAt: timestamp({ withTimezone: true }).notNull().defaultNow(),
+  },
+  (t) => [
+    index("palpites_palpite_set_id_idx").on(t.palpiteSetId),
+    // Suporta o pending-set do cron (WHERE type='exact_score' AND settleable).
+    index("palpites_type_idx").on(t.type),
+  ],
+);
+
+// Forma ESTREITA do resultData de palpite — NOMEADA (não a ResultData rica de
+// prediction_outcomes). Só {homeScore, awayScore, totalGoals}; SEM
+// scorers?/assisters?/eventsAvailable? (que ficariam inertes e ambíguos). É
+// produzida internamente por resultDataFromRegulationScore (já validada por Zod
+// upstream), não por output de LLM — sem validador Zod no read path.
+export type PalpiteResultData = {
+  homeScore: number | null;
+  awayScore: number | null;
+  totalGoals: number;
+};
+
+// Outcome de um palpite SETTLEABLE. Espelha `prediction_outcomes` MAS sem
+// `profitUnits` (palpite não tem stake/profit — ADR 0028 §1) e referenciando
+// `palpites.id`. `palpiteId` UNIQUE → 1:1 idempotente (mesmo contrato de
+// `prediction_outcomes.predictionId`). `resultData` usa a forma estreita
+// `PalpiteResultData`. `result` reusa `outcomeResultEnum` restrito a won/lost no
+// app (void/push não se aplicam a placar — ADR 0028; ver PLAN §1.4).
+export const palpiteOutcomes = pgTable("palpite_outcomes", {
+  id: uuid().primaryKey().defaultRandom(),
+  palpiteId: uuid()
+    .notNull()
+    .unique()
+    .references(() => palpites.id, { onDelete: "cascade" }),
+  resultData: jsonb().$type<PalpiteResultData>(),
+  result: outcomeResultEnum().notNull(),
   overrideByUserId: uuid().references(() => users.id, { onDelete: "set null" }),
   settledAt: timestamp({ withTimezone: true }).notNull().defaultNow(),
 });
