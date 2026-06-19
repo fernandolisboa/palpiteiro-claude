@@ -21,7 +21,7 @@ export default function MatchNotFound() {
               removido, adiado ou nunca existiu.
             </span>
             <Button asChild size="sm" variant="secondary" className="mt-2">
-              <Link href="/">
+              <Link href="/jogos">
                 <ChevronLeft className="size-3.5" /> Voltar para a lista
               </Link>
             </Button>

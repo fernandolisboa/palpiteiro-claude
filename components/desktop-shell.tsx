@@ -30,7 +30,7 @@ export async function DesktopShell({ children }: { children: ReactNode }) {
             aria-label="Navegação principal"
             className="flex items-center gap-4"
           >
-            <NavLink href="/">jogos</NavLink>
+            <NavLink href="/jogos">jogos</NavLink>
             <NavLink href="/dashboard">dashboard</NavLink>
             <NavLink href="/como-funciona">como funciona</NavLink>
             {user?.role === "admin" && <NavLink href="/admin">admin</NavLink>}

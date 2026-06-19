@@ -11,7 +11,7 @@ type PageProps = {
 
 export default async function SignInPage({ searchParams }: PageProps) {
   const session = await auth();
-  if (session?.user) redirect("/");
+  if (session?.user) redirect("/jogos");
 
   const { error } = await searchParams;
   const message =

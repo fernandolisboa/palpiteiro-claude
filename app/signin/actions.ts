@@ -26,12 +26,12 @@ export async function sendMagicLink(formData: FormData) {
   // signIn redireciona internamente: sucesso → verifyRequest; e-mail bloqueado
   // → AccessDenied (o callback signIn roda ANTES do envio, então nenhum
   // e-mail/token é gerado). Não capturar — é um redirect do Next.
-  await signIn("resend", { email, redirectTo: "/" });
+  await signIn("resend", { email, redirectTo: "/jogos" });
 }
 
 export async function signInWithGoogle() {
   // OAuth Google (método primário — ADR 0023). signIn redireciona pro consent do
   // Google; na volta o callback signIn aplica o mesmo gate da whitelist (e-mail
   // não autorizado → AccessDenied), idêntico ao magic link. Não capturar.
-  await signIn("google", { redirectTo: "/" });
+  await signIn("google", { redirectTo: "/jogos" });
 }

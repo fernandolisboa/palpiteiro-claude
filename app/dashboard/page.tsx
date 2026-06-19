@@ -70,7 +70,7 @@ export default async function DashboardPage({ searchParams }: PageProps) {
               description="Gere uma análise num jogo pra começar a trackear seu yield."
               action={
                 <Link
-                  href="/"
+                  href="/jogos"
                   className="mt-1 rounded-sm text-body font-medium text-accent-fg hover:underline focus-visible:outline-none focus-visible:ring-[3px] focus-visible:ring-ring/50"
                 >
                   Ver próximos jogos →

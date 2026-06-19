@@ -40,7 +40,7 @@ export default function DashboardError({
             Tentar novamente
           </Button>
           <Link
-            href="/"
+            href="/jogos"
             className="rounded-sm text-body text-muted-foreground hover:text-foreground focus-visible:outline-none focus-visible:ring-[3px] focus-visible:ring-ring/50"
           >
             Início

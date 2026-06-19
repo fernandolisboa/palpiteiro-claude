@@ -42,7 +42,7 @@ export default function GlobalError({
               <RefreshCcw className="size-3.5" /> Tentar novamente
             </Button>
             <Button asChild size="sm" variant="ghost">
-              <Link href="/">Voltar para a lista</Link>
+              <Link href="/jogos">Voltar para a lista</Link>
             </Button>
           </div>
         </Callout>
