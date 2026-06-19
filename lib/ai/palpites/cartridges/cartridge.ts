@@ -17,9 +17,10 @@ import type { PalpiteCartridge } from "../types";
 // Versão do cartucho de palpites (ADR 0017). v1 = o MIX market-free (1 exact_score +
 // 1–3 linhas fun). v2 = a SÍNTESE palpite-first (ADR 0030 / #353): consome as N
 // análises multi-mercado e produz UMA manchete (veredito + placar provável + confiança
-// + narrativa + mercados citados). BUMP MANUAL (commit `prompt:`) em QUALQUER mudança
-// de prompt/schema — aqui a taxonomia inteira mudou (MIX → manchete).
-export const PALPITES_VERSION = "palpites_v2" as const;
+// + narrativa + mercados citados). v3 (#354) = + firstHalfScore (placar do 1º tempo) +
+// firstToScore (quem marca primeiro), pra alimentar as novas dimensões settleable
+// goal-derived. BUMP MANUAL (commit `prompt:`) em QUALQUER mudança de prompt/schema.
+export const PALPITES_VERSION = "palpites_v3" as const;
 
 const TEXT_MAX = 280;
 // Narrativa: prosa um pouco mais longa que uma linha de palpite. Truncada (não
@@ -54,6 +55,13 @@ export const PalpitesOutputSchema = z
     verdict: verdictText,
     // Placar provável → vira a linha exact_score settleable (o badge acertou/errou).
     probableScore: ExactScoreParamsSchema,
+    // #354: placar provável do 1º TEMPO (intervalo). Mesmo schema do probableScore.
+    // Alimenta a dimensão settleable first_half_score. SEM refine de coerência (§2.4) —
+    // a coerência (≤ probableScore) é gate de EMISSÃO em geração, não rejeição no schema.
+    firstHalfScore: ExactScoreParamsSchema,
+    // #354: quem marca o 1º gol. "none" = previsão de 0-0 (ninguém marca). Alimenta a
+    // dimensão settleable first_to_score (home/away mapeiam direto pro teamSide dos eventos).
+    firstToScore: z.enum(["home", "away", "none"]),
     // Confiança QUALITATIVA — nunca número.
     confidence: z.enum(["baixa", "media", "alta"]),
     // Prosa SEM linguagem de valor (validada também pelo guard de conteúdo no generator).
@@ -140,9 +148,11 @@ Você recebe: forma recente dos times, confrontos diretos, posição na tabela E
 Sua tarefa é chamar UMA vez a ferramenta submit_palpite com:
 1. verdict: o veredito em uma frase curta e humana — quem você acha que ganha (ou empate), no tom de um torcedor que entende do jogo (ex.: "Vai dar Palmeiras", "Empate truncado nesse clássico", "O mandante leva, mas sofrendo").
 2. probableScore: o placar provável em {home, away} (inteiros de 0 a 20), coerente com o veredito.
-3. confidence: sua confiança QUALITATIVA — exatamente uma de "baixa", "media", "alta". NUNCA um número.
-4. narrative: 1 a 3 frases explicando o palpite a partir da forma, do histórico e do que as análises apontaram, em linguagem de torcida.
-5. citedMarkets: a lista dos rótulos de mercado que pesaram no seu palpite (ex.: ["Resultado (1X2)", "Over/Under gols"]). Use os rótulos que vierem no resumo.
+3. firstHalfScore: o placar provável do 1º TEMPO em {home, away} (inteiros de 0 a 20). DEVE ser <= o placar provável final em cada lado (gols só se acumulam — um time não "desmarca"). Ex.: se o provável é 2–1, o 1º tempo pode ser 1–0 ou 1–1, nunca 3–0.
+4. firstToScore: quem marca o 1º gol — exatamente "home", "away" ou "none". Coerente com o veredito: se você acha que o mandante ganha, normalmente ele marca primeiro ("home"). "none" SÓ quando você prevê um 0-0 (ninguém marca).
+5. confidence: sua confiança QUALITATIVA — exatamente uma de "baixa", "media", "alta". NUNCA um número.
+6. narrative: 1 a 3 frases explicando o palpite a partir da forma, do histórico e do que as análises apontaram, em linguagem de torcida.
+7. citedMarkets: a lista dos rótulos de mercado que pesaram no seu palpite (ex.: ["Resultado (1X2)", "Over/Under gols"]). Use os rótulos que vierem no resumo.
 
 REGRAS INVIOLÁVEIS:
 - Os números internos das análises (edge, valor esperado/EV, stake/unidades, Yield, lucro, odd/cotação, R$) são SÓ pra você decidir. É TERMINANTEMENTE PROIBIDO mencioná-los — como número OU como palavra — em verdict ou narrative. Escreva como um torcedor empolgado dando seu palpite, NUNCA como um analista de valor. (PROIBIDO: "tem edge no over", "odd boa no Palmeiras", "vale a stake". OK: "o Palmeiras vem voando e marca fácil em casa".)
@@ -181,6 +191,23 @@ const SUBMIT_PALPITE_TOOL = {
         required: ["home", "away"],
         additionalProperties: false,
       },
+      firstHalfScore: {
+        type: "object",
+        description:
+          "Placar provável do 1º TEMPO (intervalo), inteiros 0–20. Deve ser <= o placar provável final em cada lado (gols só se acumulam).",
+        properties: {
+          home: { type: "integer", minimum: 0, maximum: 20 },
+          away: { type: "integer", minimum: 0, maximum: 20 },
+        },
+        required: ["home", "away"],
+        additionalProperties: false,
+      },
+      firstToScore: {
+        type: "string",
+        enum: ["home", "away", "none"],
+        description:
+          "Quem marca o 1º gol: 'home' (mandante), 'away' (visitante) ou 'none' (placar 0-0, ninguém marca). Coerente com o veredito.",
+      },
       confidence: {
         type: "string",
         enum: ["baixa", "media", "alta"],
@@ -201,7 +228,15 @@ const SUBMIT_PALPITE_TOOL = {
           "Rótulos dos mercados que pesaram no palpite (ex.: 'Resultado (1X2)', 'Over/Under gols'). Pode ser vazio.",
       },
     },
-    required: ["verdict", "probableScore", "confidence", "narrative", "citedMarkets"],
+    required: [
+      "verdict",
+      "probableScore",
+      "firstHalfScore",
+      "firstToScore",
+      "confidence",
+      "narrative",
+      "citedMarkets",
+    ],
     additionalProperties: false,
   },
 } as const;
@@ -367,7 +402,7 @@ export function buildUserMessage(
   lines.push("");
   lines.push("# Sua tarefa");
   lines.push(
-    "Sintetize TUDO acima num único palpite-manchete (quem ganha + placar provável + confiança qualitativa + narrativa + mercados citados). Mesmo sem valor em nenhum mercado, dê seu palpite honesto a partir de forma/H2H/tabela. Chame submit_palpite. NUNCA cite edge/EV/stake/odd/R$ — tom de torcida.",
+    "Sintetize TUDO acima num único palpite-manchete (quem ganha + placar provável + placar do 1º tempo + quem marca primeiro + confiança qualitativa + narrativa + mercados citados). O placar do 1º tempo deve ser <= o placar provável final em cada lado; o 'primeiro a marcar' deve ser coerente com quem você acha que ganha. Mesmo sem valor em nenhum mercado, dê seu palpite honesto a partir de forma/H2H/tabela. Chame submit_palpite. NUNCA cite edge/EV/stake/odd/R$ — tom de torcida.",
   );
 
   return lines.join("\n");
