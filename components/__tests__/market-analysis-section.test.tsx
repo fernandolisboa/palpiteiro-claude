@@ -168,7 +168,7 @@ describe("MarketAnalysisSections — analisável (footer por seção, #244)", ()
     expect(markup).not.toContain('name="modelOverride"');
   });
 
-  it("admin (≥2 mercados): seção colapsável por mercado; a aberta tem footer isolado", () => {
+  it("admin (≥2 mercados): seção colapsável por mercado, TODAS colapsadas por padrão (#366)", () => {
     const markup = renderToStaticMarkup(
       <MarketAnalysisSections
         sections={[OU, MR]}
@@ -181,17 +181,38 @@ describe("MarketAnalysisSections — analisável (footer por seção, #244)", ()
     // Uma seção colapsável por mercado (meta no trigger de CADA — sempre renderizado).
     expect(markup).toContain("Over 2.5 · 1.92");
     expect(markup).toContain("Casa · 2.10");
-    // Só a seção ABERTA (índice 0, defaultOpen) renderiza conteúdo no markup estático —
-    // o Radix Collapsible fechado não emite os filhos. Então o footer da aberta (OU):
-    expect(occurrences(markup, 'name="modelOverride"')).toBe(1);
-    expect(occurrences(markup, "Analisar de novo")).toBe(1);
-    // Form da seção aberta carrega o marketKey DELA (reanálise escopada — AC2). O da
-    // fechada (match_result) só aparece ao expandir; coberto pelo teste single abaixo.
+    // Refino #366: NENHUMA seção aberta por padrão. O Radix Collapsible fechado não emite
+    // os filhos → sem footer/racional de NENHUM mercado no markup estático (abrem só no
+    // clique). Antes a 1ª (índice 0) vinha aberta; agora o usuário escolhe qual abrir.
+    expect(occurrences(markup, 'name="modelOverride"')).toBe(0);
+    expect(occurrences(markup, "Analisar de novo")).toBe(0);
+    expect(markup).not.toContain("RACIONAL_OU");
+    expect(markup).not.toContain("RACIONAL_MR");
+  });
+
+  it("seção ABERTA (defaultOpen): footer escopado + dropdown semeado pelo modelId + racional UMA vez", () => {
+    // Cobre o caminho de seção expandida (o usuário clicou): footer isolado da seção, com
+    // o marketKey DELA (reanálise escopada — AC2) e o dropdown semeado pelo modelo que
+    // RODOU (item.modelId, id CRU), não view.model (display "claude-sonnet-4.6", inválido
+    // como AIModelId → cairia em "default"). Trava a fiação modelId→<select> (#244/#239).
+    const markup = renderToStaticMarkup(
+      <MarketAnalysisSection
+        item={OU}
+        defaultOpen
+        dispatch={{
+          analyzable: true,
+          matchId: "m",
+          selectableModels: ADMIN_MODELS,
+          defaultModelLabel: "Opus 4.8",
+        }}
+      />,
+    );
     expect(markup).toContain('value="over_under"');
-    // SEED do dropdown = o modelo que RODOU aquela análise (item.modelId, id CRU), não
-    // view.model (display "claude-sonnet-4.6", inválido como AIModelId → cairia em
-    // "default"). Trava a fiação modelId→<select> (AC de persistência #244/#239).
+    expect(markup).toContain('name="modelOverride"');
+    expect(markup).toContain("Analisar de novo");
     expect(markup).toMatch(/value="claude-sonnet-4-6"[^>]*selected/);
+    // B3: racional da seção aberta renderizado UMA vez (sem duplicar state.view).
+    expect(occurrences(markup, "RACIONAL_OU")).toBe(1);
   });
 
   it("seção analisável de mercado não-over_under carrega seu próprio marketKey + footer", () => {
@@ -211,18 +232,6 @@ describe("MarketAnalysisSections — analisável (footer por seção, #244)", ()
     expect(markup).toContain("Analisar de novo");
   });
 
-  it("B3 por seção: a 1ª seção (aberta) renderiza seu racional UMA vez (sem duplicar state.view)", () => {
-    const markup = renderToStaticMarkup(
-      <MarketAnalysisSections
-        sections={[OU, MR]}
-        analyzable
-        matchId="m"
-        selectableModels={ADMIN_MODELS}
-        defaultModelLabel="Opus 4.8"
-      />,
-    );
-    expect(occurrences(markup, "RACIONAL_OU")).toBe(1);
-  });
 });
 
 describe("seed do dropdown da seção = modelo que rodou (#244)", () => {

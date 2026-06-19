@@ -342,33 +342,35 @@ function DesktopMatch({
           />
         </div>
 
-        {/* Grid [1fr_320px] (restaura o par hero|odds que o skeleton de loading sempre
-            manteve): à ESQUERDA o palpite + o detalhe por mercado LOGO abaixo dele; à DIREITA
-            as odds (preços de referência). items-start: as odds ancoram no topo ao lado da
-            manchete, sem esticar. No <lg cai pro branch mobile (1 coluna: palpite → detalhe →
-            odds). Firewall ADR 0030 intacto: o detalhe é disclosure collapsed, nenhum número
-            de valor no componente do HERO. */}
+        {/* Grid [1fr_320px]: à ESQUERDA o palpite (a manchete), à DIREITA as odds (preços
+            de referência). items-start: as odds ancoram no topo ao lado da manchete, sem
+            esticar. */}
         <div className="grid grid-cols-[1fr_320px] items-start gap-8 pb-6">
-          <div className="flex flex-col gap-3">
-            <PalpiteHero
-              heroPalpite={heroPalpite}
-              matchId={matchId}
-              analyzable={analyzable}
-              fanOutEnabled={bestBetEnabled}
-              finalScore={finalScore}
-            />
-            <NeutralAnalysisDetail
-              sections={sections}
-              previousAnalyses={previousAnalyses}
-            />
-            {!analyzable && sections.length === 0 && (
-              <FinishedNotice score={finalScore} />
-            )}
-          </div>
+          <PalpiteHero
+            heroPalpite={heroPalpite}
+            matchId={matchId}
+            analyzable={analyzable}
+            fanOutEnabled={bestBetEnabled}
+            finalScore={finalScore}
+          />
           <div className="flex flex-col gap-3">
             <OddsCard view={oddsView} />
             {matchResultOddsView && <OddsCard view={matchResultOddsView} />}
           </div>
+        </div>
+
+        {/* Detalhe por mercado FULL-WIDTH abaixo do grid: collapsed por padrão, ocupa a
+            largura toda ao expandir (não fica preso na coluna do palpite). Fica logo abaixo
+            da manchete (o palpite é o elemento alto do grid). Firewall ADR 0030 intacto: é
+            disclosure collapsed; edge/EV/stake vivem DENTRO dele, nada de valor no HERO. */}
+        <div className="flex flex-col gap-3 pb-6">
+          <NeutralAnalysisDetail
+            sections={sections}
+            previousAnalyses={previousAnalyses}
+          />
+          {!analyzable && sections.length === 0 && (
+            <FinishedNotice score={finalScore} />
+          )}
         </div>
 
         <Suspense fallback={<MatchSectionsSkeleton />}>

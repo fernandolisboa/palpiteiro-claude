@@ -1282,8 +1282,9 @@ describe("toMarketAnalysisSections", () => {
     ]);
   });
 
-  it("ordem = mercado (re)analisado mais recentemente primeiro (alimenta defaultOpen)", () => {
-    // over/under é o mais recente globalmente → 1ª seção (índice 0 abre por padrão).
+  it("ordem = mercado (re)analisado mais recentemente primeiro", () => {
+    // over/under é o mais recente globalmente → 1ª seção (índice 0). Ordena a lista; o
+    // estado aberto/fechado é por-seção (todas colapsadas por padrão desde #366).
     const sections = toMarketAnalysisSections([
       mkRow({ id: "ou", marketKey: "over_under", createdAt: new Date(2026, 4, 19, 17, 0, 0) }),
       mkRow({ id: "mr", marketKey: "match_result", createdAt: new Date(2026, 4, 19, 16, 0, 0) }),
@@ -1291,10 +1292,10 @@ describe("toMarketAnalysisSections", () => {
     expect(sections[0].id).toBe("ou");
   });
 
-  it("reanalisar um mercado o leva pro índice 0 com id NOVO (remonta/reabre, #243)", () => {
+  it("reanalisar um mercado o leva pro índice 0 com id NOVO (remonta, #243)", () => {
     // Antes: match_result era a última seção. Depois de reanalisar over/under (id novo,
     // createdAt mais recente), over/under salta pro índice 0 — a key React (=id) muda
-    // só pra essa seção, então React remonta SÓ ela (reabre via defaultOpen).
+    // só pra essa seção, então React remonta SÓ ela (resetando seu estado de aberto).
     const sections = toMarketAnalysisSections([
       mkRow({ id: "ou_new", marketKey: "over_under", createdAt: new Date(2026, 4, 19, 18, 0, 0) }),
       mkRow({ id: "mr", marketKey: "match_result", createdAt: new Date(2026, 4, 19, 17, 0, 0) }),
