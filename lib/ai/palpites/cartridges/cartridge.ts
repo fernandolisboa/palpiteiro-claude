@@ -10,18 +10,23 @@ import type {
 import type {
   DbMatch,
 } from "@/lib/db/queries/predictions";
-import type { PalpiteSetWithLines } from "@/lib/db/queries/palpites";
 
+import type { MarketAnalysisSummary } from "../synthesis-input";
 import type { PalpiteCartridge } from "../types";
 
-// Versão do cartucho de palpites (ADR 0017). v1 = o MIX (exatamente um exact_score
-// settleable + 1–3 linhas fun red_card/corners). BUMP MANUAL (commit `prompt:`) em
-// QUALQUER mudança de prompt/schema; um TIPO novo ou uma REGRA de settlement nova = v2.
-export const PALPITES_VERSION = "palpites_v1" as const;
+// Versão do cartucho de palpites (ADR 0017). v1 = o MIX market-free (1 exact_score +
+// 1–3 linhas fun). v2 = a SÍNTESE palpite-first (ADR 0030 / #353): consome as N
+// análises multi-mercado e produz UMA manchete (veredito + placar provável + confiança
+// + narrativa + mercados citados). BUMP MANUAL (commit `prompt:`) em QUALQUER mudança
+// de prompt/schema — aqui a taxonomia inteira mudou (MIX → manchete).
+export const PALPITES_VERSION = "palpites_v2" as const;
 
 const TEXT_MAX = 280;
+// Narrativa: prosa um pouco mais longa que uma linha de palpite. Truncada (não
+// rejeitada) — uma frase comprida nunca derruba uma síntese válida.
+const NARRATIVE_MAX = 600;
 
-// ─── Output schema (discriminated union — settleable NUNCA vem do LLM) ─────────
+// ─── Output schema (a MANCHETE — .strict() exclui chaves de valor estruturalmente) ──
 
 const ExactScoreParamsSchema = z.object({
   home: z.number().int().min(0).max(20),
@@ -29,41 +34,37 @@ const ExactScoreParamsSchema = z.object({
 });
 export type ExactScoreParams = z.infer<typeof ExactScoreParamsSchema>;
 
-// Prose-tolerante: `text` >280 é TRUNCADO (não rejeitado) — uma frase longa nunca
-// derruba um set válido (gotcha de prosa). `.min(1)` continua barrando texto vazio.
-const palpiteText = z
+// Prose-tolerante: `verdict`/`narrative` >max são TRUNCADOS, não rejeitados. `.min(1)`
+// continua barrando texto vazio.
+const verdictText = z
   .string()
   .min(1)
   .transform((s) => truncate(s, TEXT_MAX));
+const narrativeText = z
+  .string()
+  .min(1)
+  .transform((s) => truncate(s, NARRATIVE_MAX));
 
-// Discriminated union por `type`: SÓ exact_score carrega `params`; uma red_card/corners
-// COM params é falha de Zod (não removida em silêncio). O output NÃO declara `settleable`
-// (derivado no boundary de escrita) e o objeto externo é `.strict()` → um settleable
-// parasita do LLM é REJEITADO.
-const PalpiteLineSchema = z.discriminatedUnion("type", [
-  z.object({
-    type: z.literal("exact_score"),
-    text: palpiteText,
-    params: ExactScoreParamsSchema,
-  }),
-  z.object({
-    type: z.literal("red_card"),
-    text: palpiteText,
-    params: z.null().optional(),
-  }),
-  z.object({
-    type: z.literal("corners"),
-    text: palpiteText,
-    params: z.null().optional(),
-  }),
-]);
-
+// A manchete. `.strict()` → uma chave de VALOR parasita do LLM (edgePct, ev, stake,
+// odd, …) é REJEITADA estruturalmente (firewall leg (a), ADR 0030 §3). NÃO há campo de
+// valor aqui. `confidence` é QUALITATIVO (baixa/media/alta), nunca %.
 export const PalpitesOutputSchema = z
   .object({
-    palpites: z.array(PalpiteLineSchema).min(2).max(4),
+    // Veredito "quem ganha" / opinião ("Vai dar Palmeiras").
+    verdict: verdictText,
+    // Placar provável → vira a linha exact_score settleable (o badge acertou/errou).
+    probableScore: ExactScoreParamsSchema,
+    // Confiança QUALITATIVA — nunca número.
+    confidence: z.enum(["baixa", "media", "alta"]),
+    // Prosa SEM linguagem de valor (validada também pelo guard de conteúdo no generator).
+    narrative: narrativeText,
+    // Rótulos de mercados citados ("Resultado", "Mais de 2.5"). Pode ser vazio.
+    citedMarkets: z.array(z.string().min(1)).max(10),
   })
   .strict();
-export type PalpitesOutput = z.infer<typeof PalpitesOutputSchema>;
+export type PalpiteSynthesisOutput = z.infer<typeof PalpitesOutputSchema>;
+// Alias histórico (consumidores antigos). O tipo concreto agora é a manchete.
+export type PalpitesOutput = PalpiteSynthesisOutput;
 export { ExactScoreParamsSchema };
 
 // ─── Input schema ─────────────────────────────────────────────────────────────
@@ -90,6 +91,29 @@ const StandingLineSchema = z.object({
   points: z.number().int().nonnegative(),
 });
 
+// Uma análise de mercado já paga (projeção de MarketAnalysisSummary). Carrega edge/EV
+// como DADO (informa o veredito) — o firewall garante que não vaza pra manchete.
+const MarketAnalysisSchema = z.object({
+  marketKey: z.string().min(1),
+  marketLabel: z.string().min(1),
+  recommendation: z.string().min(1),
+  recommendedLabel: z.string().nullable(),
+  isPass: z.boolean(),
+  modelProbPct: z.number().nullable(),
+  edgePct: z.number().nullable(),
+  confidencePct: z.number().nullable(),
+  oddAtRecommendation: z.number().nullable(),
+  rationale: z.string(),
+  predictionId: z.string().min(1),
+  selections: z.array(
+    z.object({
+      key: z.string().min(1),
+      label: z.string().optional(),
+      modelProbPct: z.number(),
+    }),
+  ),
+});
+
 export const PalpitesInputSchema = z.object({
   match: z.object({
     league: z.string().min(1),
@@ -98,110 +122,93 @@ export const PalpitesInputSchema = z.object({
     kickoffAt: z.string().min(1),
     venue: z.string().min(1).optional(),
   }),
+  // As N análises multi-mercado já apuradas pelo fan-out (ADR 0030 §2). Pode ser
+  // vazia em teoria, mas o caller só sintetiza com ≥1 sucesso.
+  analyses: z.array(MarketAnalysisSchema),
   homeForm: FormSummarySchema,
   awayForm: FormSummarySchema,
   h2h: z.array(H2HEntrySchema).max(10),
   homeStanding: StandingLineSchema.optional(),
   awayStanding: StandingLineSchema.optional(),
-  // Contexto de EXCLUSÃO (regen sem repetir, §2.5). Vazios na 1ª geração.
-  excludedScores: z.array(ExactScoreParamsSchema),
-  excludedFunIdeas: z.array(
-    z.object({ type: z.enum(["red_card", "corners"]), text: z.string() }),
-  ),
 });
 export type PalpitesInput = z.infer<typeof PalpitesInputSchema>;
 
 // ─── System prompt ────────────────────────────────────────────────────────────
 
-export const SYSTEM_PROMPT = `Você é o "Palpiteiro": um amigo animado que arrisca palpites divertidos sobre um jogo de futebol, só pela diversão e pelo engajamento. NÃO é análise de aposta de valor.
+export const SYSTEM_PROMPT = `Você é o "Palpiteiro": um amigo animado que, depois de olhar a análise de vários mercados de um jogo de futebol, dá UM palpite-manchete legível — o veredito de QUEM GANHA e o placar provável. É entretenimento e opinião informada, NÃO conselho de aposta.
 
-Sua tarefa é emitir EXATAMENTE este conjunto (o "mix"), chamando UMA vez a ferramenta submit_palpites:
-1. EXATAMENTE UM palpite de PLACAR EXATO (type "exact_score"), com os gols de mandante e visitante em params {home, away} (inteiros de 0 a 20) e uma frase curta e humana no campo text (ex.: "Acho que sai um 2 a 1 pro mandante, jogo aberto!").
-2. DE 1 A 3 linhas de DIVERSÃO, cada uma com type "red_card" (vai rolar cartão vermelho?) OU "corners" (muito escanteio?) e SÓ o campo text (uma frase curta e leve). NÃO mande params nessas linhas.
+Você recebe: forma recente dos times, confrontos diretos, posição na tabela E um resumo de análises por mercado (resultado 1X2, mais/menos gols, ambas marcam, etc.), cada uma com a recomendação do motor e seus números internos.
 
-Total: de 2 a 4 linhas (1 placar + 1 a 3 linhas fun).
+Sua tarefa é chamar UMA vez a ferramenta submit_palpite com:
+1. verdict: o veredito em uma frase curta e humana — quem você acha que ganha (ou empate), no tom de um torcedor que entende do jogo (ex.: "Vai dar Palmeiras", "Empate truncado nesse clássico", "O mandante leva, mas sofrendo").
+2. probableScore: o placar provável em {home, away} (inteiros de 0 a 20), coerente com o veredito.
+3. confidence: sua confiança QUALITATIVA — exatamente uma de "baixa", "media", "alta". NUNCA um número.
+4. narrative: 1 a 3 frases explicando o palpite a partir da forma, do histórico e do que as análises apontaram, em linguagem de torcida.
+5. citedMarkets: a lista dos rótulos de mercado que pesaram no seu palpite (ex.: ["Resultado (1X2)", "Over/Under gols"]). Use os rótulos que vierem no resumo.
 
 REGRAS INVIOLÁVEIS:
-- PROIBIDO mencionar, em QUALQUER campo text (inclusive nas linhas fun), qualquer linguagem de VALOR: nada de odd, porcentagem, "%", chance numérica, probabilidade, edge, stake, retorno, "value", lucro ou "Yield" — nem como número, nem como palavra. Escreva como um torcedor empolgado palpitando, não como um analista. (Ex. PROIBIDO: "70% de chance de cartão". Ex. OK: "Esse clássico pega fogo, não duvido de um vermelho!").
-- Apenas o PLACAR EXATO é conferido depois (acertou/errou). As linhas de cartão e escanteio são DIVERSÃO PURA, sem placar e sem conferência — NÃO prometa "acerto garantido" nem trate como aposta.
-- Use SÓ os dados fornecidos (forma recente, médias de gols, confrontos diretos, posição na tabela). NÃO invente jogadores, lesões, números ou tendências.
-- NÃO repita nenhum placar exato nem nenhuma ideia de diversão que já tenham sido sugeridos antes (a lista vem na seção "Não repita", quando houver).
-- Responda EXCLUSIVAMENTE chamando a ferramenta submit_palpites com os campos do schema. Não escreva texto livre fora da chamada.
+- Os números internos das análises (edge, valor esperado/EV, stake/unidades, Yield, lucro, odd/cotação, R$) são SÓ pra você decidir. É TERMINANTEMENTE PROIBIDO mencioná-los — como número OU como palavra — em verdict ou narrative. Escreva como um torcedor empolgado dando seu palpite, NUNCA como um analista de valor. (PROIBIDO: "tem edge no over", "odd boa no Palmeiras", "vale a stake". OK: "o Palmeiras vem voando e marca fácil em casa".)
+- Mesmo que NENHUM mercado tenha valor (todas as análises deem "pass"/sem recomendação), DÊ MESMO ASSIM seu palpite honesto de quem ganha + placar provável, derivado da forma, do histórico e da tabela. Nunca recuse o palpite por falta de valor.
+- Use SÓ os dados fornecidos. NÃO invente jogadores, lesões ou números.
+- O placar provável é o ÚNICO ponto conferido depois (acertou/errou). Trate como palpite divertido, nunca como "acerto garantido".
+- Responda EXCLUSIVAMENTE chamando a ferramenta submit_palpite. Não escreva texto livre fora da chamada.
 
-Tom: leve, brasileiro, animado, frases curtas. É papo de torcida, não relatório.`;
+Tom: leve, brasileiro, animado, frases curtas. É papo de torcida com embasamento, não relatório.`;
 
 // ─── Tool (ToolDef NEUTRO, ADR 0027) — espelha o Zod acima ────────────────────
 
-// O inputSchema (JSON Schema pro LLM) espelha a discriminated union do Zod: oneOf
-// por `type`, com `params` obrigatório SÓ no exact_score. Sem campo `settleable`.
-const SUBMIT_PALPITES_TOOL = {
-  name: "submit_palpites",
+// O inputSchema (JSON Schema pro LLM) espelha o output Zod: a manchete. SEM nenhum
+// campo de valor (edge/ev/stake/odd) — additionalProperties:false reforça o .strict().
+const SUBMIT_PALPITE_TOOL = {
+  name: "submit_palpite",
   description:
-    "Envia o mix de palpites do jogo: EXATAMENTE um placar exato (exact_score) + 1 a 3 linhas de diversão (red_card/corners). Chame esta ferramenta EXATAMENTE UMA VEZ.",
+    "Envia o palpite-manchete do jogo: veredito de quem ganha, placar provável, confiança qualitativa, narrativa e mercados citados. Chame esta ferramenta EXATAMENTE UMA VEZ. NUNCA inclua números de valor (edge/EV/stake/odd).",
   input_schema: {
     type: "object",
     properties: {
-      palpites: {
-        type: "array",
-        minItems: 2,
-        maxItems: 4,
+      verdict: {
+        type: "string",
+        minLength: 1,
+        maxLength: 280,
         description:
-          "De 2 a 4 linhas: exatamente uma do tipo exact_score (com params) + de 1 a 3 linhas fun (red_card/corners, sem params).",
-        items: {
-          oneOf: [
-            {
-              type: "object",
-              description: "Palpite de placar exato (conferido depois).",
-              properties: {
-                type: { type: "string", enum: ["exact_score"] },
-                text: {
-                  type: "string",
-                  minLength: 1,
-                  maxLength: 280,
-                  description:
-                    "Frase curta e humana sobre o placar. SEM linguagem de valor (odd/%/edge/etc.).",
-                },
-                params: {
-                  type: "object",
-                  description: "Gols de mandante e visitante (inteiros 0–20).",
-                  properties: {
-                    home: { type: "integer", minimum: 0, maximum: 20 },
-                    away: { type: "integer", minimum: 0, maximum: 20 },
-                  },
-                  required: ["home", "away"],
-                  additionalProperties: false,
-                },
-              },
-              required: ["type", "text", "params"],
-              additionalProperties: false,
-            },
-            {
-              type: "object",
-              description:
-                "Linha de diversão (cartão vermelho ou escanteios). SEM params, SEM conferência.",
-              properties: {
-                type: { type: "string", enum: ["red_card", "corners"] },
-                text: {
-                  type: "string",
-                  minLength: 1,
-                  maxLength: 280,
-                  description:
-                    "Frase curta e leve. SEM linguagem de valor (odd/%/edge/probabilidade/etc.).",
-                },
-              },
-              required: ["type", "text"],
-              additionalProperties: false,
-            },
-          ],
+          "Veredito de quem ganha, em uma frase curta e humana (ex.: 'Vai dar Palmeiras'). SEM linguagem de valor.",
+      },
+      probableScore: {
+        type: "object",
+        description: "Placar provável (inteiros 0–20), coerente com o veredito.",
+        properties: {
+          home: { type: "integer", minimum: 0, maximum: 20 },
+          away: { type: "integer", minimum: 0, maximum: 20 },
         },
+        required: ["home", "away"],
+        additionalProperties: false,
+      },
+      confidence: {
+        type: "string",
+        enum: ["baixa", "media", "alta"],
+        description: "Confiança QUALITATIVA. Exatamente uma de baixa/media/alta. NUNCA número.",
+      },
+      narrative: {
+        type: "string",
+        minLength: 1,
+        maxLength: 600,
+        description:
+          "1 a 3 frases explicando o palpite a partir de forma/histórico/análises. SEM linguagem de valor (edge/EV/stake/odd/R$).",
+      },
+      citedMarkets: {
+        type: "array",
+        maxItems: 10,
+        items: { type: "string", minLength: 1 },
+        description:
+          "Rótulos dos mercados que pesaram no palpite (ex.: 'Resultado (1X2)', 'Over/Under gols'). Pode ser vazio.",
       },
     },
-    required: ["palpites"],
+    required: ["verdict", "probableScore", "confidence", "narrative", "citedMarkets"],
     additionalProperties: false,
   },
 } as const;
 
-export { SUBMIT_PALPITES_TOOL };
+export { SUBMIT_PALPITE_TOOL };
 
 // ─── buildPredictionInput ─────────────────────────────────────────────────────
 
@@ -212,7 +219,8 @@ export type BuildPalpitesInputArgs = {
   awayForm: NormalizedFixture[];
   h2h: NormalizedH2H[];
   standings: NormalizedStanding | undefined;
-  previousSets: PalpiteSetWithLines[];
+  // As N análises multi-mercado já apuradas (ADR 0030 §2). Insumo central da síntese.
+  analyses: MarketAnalysisSummary[];
 };
 
 // Resume a forma de UM time a partir das fixtures recentes (já desc do adapter):
@@ -257,29 +265,7 @@ function findStanding(
   return undefined;
 }
 
-// Achata o histórico prévio em DUAS listas de exclusão (§2.5): placares já chutados
-// (linhas exact_score com params) E ideias fun já usadas (linhas red_card/corners).
-// Necessário separar porque as linhas fun não têm `params` para achatar.
-function buildExclusions(previousSets: PalpiteSetWithLines[]): {
-  excludedScores: ExactScoreParams[];
-  excludedFunIdeas: { type: "red_card" | "corners"; text: string }[];
-} {
-  const excludedScores: ExactScoreParams[] = [];
-  const excludedFunIdeas: { type: "red_card" | "corners"; text: string }[] = [];
-  for (const set of previousSets) {
-    for (const line of set.palpites) {
-      if (line.type === "exact_score" && line.params) {
-        excludedScores.push({ home: line.params.home, away: line.params.away });
-      } else if (line.type === "red_card" || line.type === "corners") {
-        excludedFunIdeas.push({ type: line.type, text: line.text });
-      }
-    }
-  }
-  return { excludedScores, excludedFunIdeas };
-}
-
 export function buildPredictionInput(args: BuildPalpitesInputArgs): PalpitesInput {
-  const { excludedScores, excludedFunIdeas } = buildExclusions(args.previousSets);
   const input: PalpitesInput = {
     match: {
       league: args.match.league,
@@ -288,6 +274,7 @@ export function buildPredictionInput(args: BuildPalpitesInputArgs): PalpitesInpu
       kickoffAt: args.match.kickoffAt.toISOString(),
       venue: args.fixture?.venue,
     },
+    analyses: args.analyses,
     homeForm: summarizeForm(args.match.homeTeam, args.homeForm),
     awayForm: summarizeForm(args.match.awayTeam, args.awayForm),
     h2h: args.h2h.slice(0, 10).map((m) => ({
@@ -299,8 +286,6 @@ export function buildPredictionInput(args: BuildPalpitesInputArgs): PalpitesInpu
     })),
     homeStanding: findStanding(args.standings, args.match.homeTeam),
     awayStanding: findStanding(args.standings, args.match.awayTeam),
-    excludedScores,
-    excludedFunIdeas,
   };
   // Valida no boundary de montagem (fronteira do CLAUDE.md p/ o input do LLM).
   return PalpitesInputSchema.parse(input);
@@ -354,29 +339,37 @@ export function buildUserMessage(
     }
   }
 
-  // Seção "Não repita" — lista AMBOS (placares e ideias fun) quando não-vazios;
-  // omite a sub-seção vazia. Contrato de regen sem repetição.
-  if (input.excludedScores.length > 0 || input.excludedFunIdeas.length > 0) {
-    lines.push("");
-    lines.push("# Não repita (já sugerido antes)");
-    if (input.excludedScores.length > 0) {
-      lines.push("## Placares já sugeridos");
-      for (const s of input.excludedScores) {
-        lines.push(`- ${s.home}-${s.away}`);
+  // # Análises por mercado — o INSUMO central da síntese (ADR 0030). Inclui os números
+  // internos (edge/odd/prob) como DADO pro veredito; o firewall garante que não vazam
+  // pra manchete (output .strict() + guard de conteúdo).
+  lines.push("");
+  lines.push("# Análises por mercado (insumo — NÃO cite estes números na manchete)");
+  if (input.analyses.length === 0) {
+    lines.push(
+      "- (nenhuma análise disponível — derive o palpite só de forma/H2H/tabela)",
+    );
+  } else {
+    for (const a of input.analyses) {
+      if (a.isPass) {
+        lines.push(`- ${a.marketLabel}: sem valor recomendado (pass).`);
+      } else {
+        const rec = a.recommendedLabel ?? a.recommendation;
+        const prob = a.modelProbPct !== null ? `${fmt1(a.modelProbPct)}%` : "n/a";
+        const edge = a.edgePct !== null ? `${fmt1(a.edgePct)}pp` : "n/a";
+        const odd =
+          a.oddAtRecommendation !== null ? a.oddAtRecommendation.toFixed(2) : "n/a";
+        lines.push(
+          `- ${a.marketLabel}: recomenda "${rec}" (prob modelo ${prob}, edge ${edge}, odd ${odd}).`,
+        );
       }
-    }
-    if (input.excludedFunIdeas.length > 0) {
-      lines.push("## Ideias fun já usadas");
-      for (const f of input.excludedFunIdeas) {
-        lines.push(`- (${f.type}) ${f.text}`);
-      }
+      if (a.rationale) lines.push(`  Racional: ${a.rationale}`);
     }
   }
 
   lines.push("");
   lines.push("# Sua tarefa");
   lines.push(
-    "Emita o mix: EXATAMENTE um placar exato + 1 a 3 linhas de diversão (cartão/escanteio). Chame submit_palpites. Tom de torcida, sem linguagem de valor.",
+    "Sintetize TUDO acima num único palpite-manchete (quem ganha + placar provável + confiança qualitativa + narrativa + mercados citados). Mesmo sem valor em nenhum mercado, dê seu palpite honesto a partir de forma/H2H/tabela. Chame submit_palpite. NUNCA cite edge/EV/stake/odd/R$ — tom de torcida.",
   );
 
   return lines.join("\n");
@@ -386,13 +379,13 @@ export function buildUserMessage(
 
 export const palpitesCartridge: PalpiteCartridge<
   PalpitesInput,
-  PalpitesOutput,
+  PalpiteSynthesisOutput,
   BuildPalpitesInputArgs
 > = {
   version: PALPITES_VERSION,
   systemPrompt: SYSTEM_PROMPT,
-  tool: toToolDef(SUBMIT_PALPITES_TOOL),
-  toolName: SUBMIT_PALPITES_TOOL.name,
+  tool: toToolDef(SUBMIT_PALPITE_TOOL),
+  toolName: SUBMIT_PALPITE_TOOL.name,
   inputSchema: PalpitesInputSchema,
   outputSchema: PalpitesOutputSchema,
   buildPredictionInput,

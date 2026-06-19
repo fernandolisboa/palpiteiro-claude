@@ -1,9 +1,6 @@
 import { describe, expect, it } from "vitest";
 
-import type {
-  DbPalpite,
-  PalpiteSetWithLines,
-} from "@/lib/db/queries/palpites";
+import type { MarketAnalysisSummary } from "@/lib/ai/palpites/synthesis-input";
 import type {
   NormalizedFixture,
   NormalizedStanding,
@@ -12,7 +9,7 @@ import type {
 import {
   PALPITES_VERSION,
   PalpitesOutputSchema,
-  SUBMIT_PALPITES_TOOL,
+  SUBMIT_PALPITE_TOOL,
   buildPredictionInput,
   buildUserMessage,
   palpitesCartridge,
@@ -20,126 +17,149 @@ import {
 } from "../cartridge";
 import { deriveSettleable } from "../../settleable";
 
-// ─── PalpitesOutputSchema ─────────────────────────────────────────────────────
+// ─── PalpitesOutputSchema (a MANCHETE, v2) ────────────────────────────────────
 
-const validMix = {
-  palpites: [
-    { type: "exact_score", text: "2 a 1 pro mandante", params: { home: 2, away: 1 } },
-    { type: "red_card", text: "Esse clássico pega fogo!" },
-    { type: "corners", text: "Vai ter escanteio pra todo lado." },
-  ],
+const validHeadline = {
+  verdict: "Vai dar Flamengo",
+  probableScore: { home: 2, away: 1 },
+  confidence: "alta" as const,
+  narrative: "O Fla vem voando em casa e o Flu sofre fora.",
+  citedMarkets: ["Resultado (1X2)", "Over/Under gols"],
 };
 
-describe("PalpitesOutputSchema", () => {
-  it("aceita um MIX válido (1 exact_score + linhas fun, 2–4 itens)", () => {
-    const parsed = PalpitesOutputSchema.safeParse(validMix);
+describe("PalpitesOutputSchema (síntese v2)", () => {
+  it("aceita uma manchete válida", () => {
+    const parsed = PalpitesOutputSchema.safeParse(validHeadline);
     expect(parsed.success).toBe(true);
   });
 
-  it("aceita o mínimo (1 exact_score + 1 fun = 2 itens)", () => {
+  it("aceita citedMarkets vazio", () => {
     const parsed = PalpitesOutputSchema.safeParse({
-      palpites: [
-        { type: "exact_score", text: "1 a 0", params: { home: 1, away: 0 } },
-        { type: "corners", text: "muito escanteio" },
-      ],
+      ...validHeadline,
+      citedMarkets: [],
     });
     expect(parsed.success).toBe(true);
   });
 
-  it("rejeita params FALTANDO no exact_score", () => {
+  it("aceita o caso all-pass (manchete derivada de forma/tabela)", () => {
     const parsed = PalpitesOutputSchema.safeParse({
-      palpites: [
-        { type: "exact_score", text: "sem params" },
-        { type: "red_card", text: "vermelho" },
-      ],
+      verdict: "Jogo equilibrado, leve favoritismo da casa",
+      probableScore: { home: 1, away: 1 },
+      confidence: "baixa",
+      narrative: "Sem destaque claro nos mercados; aposto num empate apertado.",
+      citedMarkets: [],
     });
-    expect(parsed.success).toBe(false);
+    expect(parsed.success).toBe(true);
   });
 
-  it("rejeita home negativo / não-inteiro / >20", () => {
-    for (const params of [
+  it("confidence aceita só baixa/media/alta (enum qualitativo, nunca número)", () => {
+    for (const confidence of ["baixa", "media", "alta"]) {
+      expect(
+        PalpitesOutputSchema.safeParse({ ...validHeadline, confidence }).success,
+      ).toBe(true);
+    }
+    for (const bad of ["high", "70", 70, "altíssima"]) {
+      expect(
+        PalpitesOutputSchema.safeParse({ ...validHeadline, confidence: bad })
+          .success,
+      ).toBe(false);
+    }
+  });
+
+  it("rejeita probableScore faltando / negativo / não-inteiro / >20", () => {
+    expect(
+      PalpitesOutputSchema.safeParse({
+        verdict: "x",
+        confidence: "media",
+        narrative: "y",
+        citedMarkets: [],
+      }).success,
+    ).toBe(false);
+    for (const probableScore of [
       { home: -1, away: 0 },
       { home: 1.5, away: 0 },
       { home: 21, away: 0 },
     ]) {
+      expect(
+        PalpitesOutputSchema.safeParse({ ...validHeadline, probableScore })
+          .success,
+      ).toBe(false);
+    }
+  });
+
+  it("rejeita verdict / narrative vazios", () => {
+    expect(
+      PalpitesOutputSchema.safeParse({ ...validHeadline, verdict: "" }).success,
+    ).toBe(false);
+    expect(
+      PalpitesOutputSchema.safeParse({ ...validHeadline, narrative: "" }).success,
+    ).toBe(false);
+  });
+
+  it(".strict() rejeita uma CHAVE DE VALOR parasita (firewall leg a)", () => {
+    for (const valueKey of [
+      { edgePct: 8 },
+      { ev: 0.12 },
+      { stakeUnits: 2 },
+      { oddAtRecommendation: 1.85 },
+      { extra: "x" },
+    ]) {
       const parsed = PalpitesOutputSchema.safeParse({
-        palpites: [
-          { type: "exact_score", text: "x", params },
-          { type: "red_card", text: "y" },
-        ],
+        ...validHeadline,
+        ...valueKey,
       });
       expect(parsed.success).toBe(false);
     }
   });
 
-  it("rejeita array com <2 ou >4 itens", () => {
-    const tooFew = PalpitesOutputSchema.safeParse({
-      palpites: [
-        { type: "exact_score", text: "x", params: { home: 1, away: 1 } },
-      ],
-    });
-    expect(tooFew.success).toBe(false);
-
-    const tooMany = PalpitesOutputSchema.safeParse({
-      palpites: [
-        { type: "exact_score", text: "x", params: { home: 1, away: 1 } },
-        { type: "red_card", text: "a" },
-        { type: "corners", text: "b" },
-        { type: "red_card", text: "c" },
-        { type: "corners", text: "d" },
-      ],
-    });
-    expect(tooMany.success).toBe(false);
-  });
-
-  it("rejeita text vazio", () => {
-    const parsed = PalpitesOutputSchema.safeParse({
-      palpites: [
-        { type: "exact_score", text: "", params: { home: 1, away: 1 } },
-        { type: "red_card", text: "ok" },
-      ],
-    });
-    expect(parsed.success).toBe(false);
-  });
-
-  it("rejeita params numa linha FUN (discriminated union)", () => {
+  it("NÃO produz/aceita as chaves do MIX antigo (palpites array, red_card/corners)", () => {
+    // O schema da manchete não tem `palpites` — o shape do MIX é rejeitado.
     const parsed = PalpitesOutputSchema.safeParse({
       palpites: [
         { type: "exact_score", text: "x", params: { home: 1, away: 1 } },
-        { type: "red_card", text: "y", params: { home: 0, away: 0 } },
+        { type: "red_card", text: "y" },
       ],
     });
     expect(parsed.success).toBe(false);
+    // E uma manchete VÁLIDA não carrega red_card/corners em nenhum lugar.
+    const ok = PalpitesOutputSchema.safeParse(validHeadline);
+    expect(ok.success).toBe(true);
+    if (ok.success) {
+      expect(JSON.stringify(ok.data)).not.toContain("red_card");
+      expect(JSON.stringify(ok.data)).not.toContain("corners");
+    }
   });
 
-  it("rejeita um campo settleable parasita no output (.strict)", () => {
-    const parsed = PalpitesOutputSchema.safeParse({
-      palpites: validMix.palpites,
-      settleable: true,
-    });
-    expect(parsed.success).toBe(false);
-  });
-
-  it("trunca text >280 (prose-tolerante, não rejeita)", () => {
+  it("trunca verdict >280 (prose-tolerante, não rejeita)", () => {
     const long = "a".repeat(400);
     const parsed = PalpitesOutputSchema.safeParse({
-      palpites: [
-        { type: "exact_score", text: long, params: { home: 1, away: 1 } },
-        { type: "red_card", text: "ok" },
-      ],
+      ...validHeadline,
+      verdict: long,
     });
     expect(parsed.success).toBe(true);
     if (parsed.success) {
-      expect(parsed.data.palpites[0].text.length).toBe(280);
-      expect(parsed.data.palpites[0].text.endsWith("…")).toBe(true);
+      expect(parsed.data.verdict.length).toBe(280);
+      expect(parsed.data.verdict.endsWith("…")).toBe(true);
+    }
+  });
+
+  it("trunca narrative >600 (prose-tolerante)", () => {
+    const long = "b".repeat(800);
+    const parsed = PalpitesOutputSchema.safeParse({
+      ...validHeadline,
+      narrative: long,
+    });
+    expect(parsed.success).toBe(true);
+    if (parsed.success) {
+      expect(parsed.data.narrative.length).toBe(600);
     }
   });
 });
 
-// ─── deriveSettleable ─────────────────────────────────────────────────────────
+// ─── deriveSettleable (só exact_score liquida — Tier 3 de pé) ──────────────────
 
 describe("deriveSettleable", () => {
-  it("exact_score → true; red_card/corners → false", () => {
+  it("exact_score → true; red_card/corners → false (enum preservado, não gerado)", () => {
     expect(deriveSettleable("exact_score")).toBe(true);
     expect(deriveSettleable("red_card")).toBe(false);
     expect(deriveSettleable("corners")).toBe(false);
@@ -148,31 +168,52 @@ describe("deriveSettleable", () => {
 
 // ─── tool shape ───────────────────────────────────────────────────────────────
 
-describe("SUBMIT_PALPITES_TOOL", () => {
-  it("o cartucho expõe o ToolDef neutro com o mesmo nome", () => {
-    expect(palpitesCartridge.toolName).toBe("submit_palpites");
-    expect(palpitesCartridge.tool.name).toBe("submit_palpites");
+describe("SUBMIT_PALPITE_TOOL", () => {
+  it("o cartucho expõe o ToolDef neutro com o mesmo nome (submit_palpite)", () => {
+    expect(palpitesCartridge.toolName).toBe("submit_palpite");
+    expect(palpitesCartridge.tool.name).toBe("submit_palpite");
     expect(palpitesCartridge.tool.inputSchema).toBe(
-      SUBMIT_PALPITES_TOOL.input_schema,
+      SUBMIT_PALPITE_TOOL.input_schema,
     );
   });
-  it("a versão é palpites_v1", () => {
-    expect(PALPITES_VERSION).toBe("palpites_v1");
-    expect(palpitesCartridge.version).toBe("palpites_v1");
+  it("a versão é palpites_v2", () => {
+    expect(PALPITES_VERSION).toBe("palpites_v2");
+    expect(palpitesCartridge.version).toBe("palpites_v2");
+  });
+  it("o tool NÃO declara campos de valor (firewall estrutural)", () => {
+    const props = SUBMIT_PALPITE_TOOL.input_schema.properties as Record<
+      string,
+      unknown
+    >;
+    expect(Object.keys(props).sort()).toEqual([
+      "citedMarkets",
+      "confidence",
+      "narrative",
+      "probableScore",
+      "verdict",
+    ]);
+    expect(SUBMIT_PALPITE_TOOL.input_schema.additionalProperties).toBe(false);
   });
 });
 
-// ─── prompt: proibição de value-language ──────────────────────────────────────
+// ─── prompt: proíbe value-language, exige a manchete + cobre all-pass ──────────
 
 describe("SYSTEM_PROMPT", () => {
-  it("proíbe explicitamente odd/edge/stake/Yield e exige o mix", () => {
+  it("proíbe explicitamente odd/edge/stake/Yield e exige a chamada do tool", () => {
     const p = palpitesCartridge.systemPrompt.toLowerCase();
     expect(p).toContain("odd");
     expect(p).toContain("edge");
     expect(p).toContain("stake");
     expect(p).toContain("yield");
-    expect(p).toContain("exatamente um");
-    expect(p).toContain("submit_palpites");
+    expect(p).toContain("submit_palpite");
+    // Veredito + placar provável.
+    expect(p).toContain("placar provável");
+  });
+
+  it("instrui o caso ALL-PASS (palpite mesmo sem valor em nenhum mercado)", () => {
+    const p = palpitesCartridge.systemPrompt.toLowerCase();
+    expect(p).toContain("pass");
+    expect(p).toMatch(/mesmo que nenhum|mesmo sem|nunca recuse/);
   });
 });
 
@@ -224,7 +265,29 @@ const standings: NormalizedStanding = {
   ],
 };
 
-function baseArgs(previousSets: PalpiteSetWithLines[] = []): BuildPalpitesInputArgs {
+function analysis(over: Partial<MarketAnalysisSummary> = {}): MarketAnalysisSummary {
+  return {
+    marketKey: "match_result",
+    marketLabel: "Resultado (1X2)",
+    recommendation: "home",
+    recommendedLabel: "Casa",
+    isPass: false,
+    modelProbPct: 58,
+    edgePct: 9,
+    confidencePct: 60,
+    oddAtRecommendation: 1.85,
+    rationale: "Mandante muito superior.",
+    predictionId: "pred-1",
+    selections: [
+      { key: "home", modelProbPct: 58 },
+      { key: "draw", modelProbPct: 24 },
+      { key: "away", modelProbPct: 18 },
+    ],
+    ...over,
+  };
+}
+
+function baseArgs(analyses: MarketAnalysisSummary[] = [analysis()]): BuildPalpitesInputArgs {
   return {
     match: {
       league: "brasileirao_a" as never,
@@ -240,40 +303,12 @@ function baseArgs(previousSets: PalpiteSetWithLines[] = []): BuildPalpitesInputA
     awayForm: [fixture("Fluminense FC", "Z", 1, 1)],
     h2h: [fixture("CR Flamengo", "Fluminense FC", 2, 1)],
     standings,
-    previousSets,
-  };
-}
-
-function makeLine(over: Partial<DbPalpite>): DbPalpite {
-  return {
-    id: over.id ?? "p-1",
-    palpiteSetId: "s-1",
-    type: over.type ?? "exact_score",
-    text: over.text ?? "x",
-    params: over.params ?? null,
-    settleable: over.settleable ?? false,
-    createdAt: new Date(),
-  };
-}
-
-function makeSet(lines: DbPalpite[]): PalpiteSetWithLines {
-  return {
-    palpiteSet: {
-      id: "s-1",
-      matchId: "m-1",
-      userId: "u-1",
-      aiCallId: null,
-      modelVersion: "claude-haiku-4-5",
-      promptVersion: "palpites_v1",
-      createdAt: new Date(),
-    },
-    aiCall: null,
-    palpites: lines.map((l) => ({ ...l, outcome: null })),
+    analyses,
   };
 }
 
 describe("buildPredictionInput", () => {
-  it("resume forma (médias na perspectiva do time) e acha standings", () => {
+  it("resume forma, acha standings e carrega as análises", () => {
     const input = buildPredictionInput(baseArgs());
     expect(input.match.homeTeam).toBe("CR Flamengo");
     expect(input.match.venue).toBe("Maracanã");
@@ -283,72 +318,39 @@ describe("buildPredictionInput", () => {
     expect(input.homeForm.results).toEqual(["W", "W"]);
     expect(input.homeStanding?.position).toBe(1);
     expect(input.awayStanding?.position).toBe(5);
+    expect(input.analyses).toHaveLength(1);
+    expect(input.analyses[0].marketLabel).toBe("Resultado (1X2)");
   });
 
-  it("achata previousSets em excludedScores E excludedFunIdeas", () => {
-    const prev = makeSet([
-      makeLine({
-        id: "a",
-        type: "exact_score",
-        params: { home: 2, away: 1 },
-        settleable: true,
-      }),
-      makeLine({ id: "b", type: "red_card", text: "vai ter vermelho" }),
-      makeLine({ id: "c", type: "corners", text: "muito escanteio" }),
-    ]);
-    const input = buildPredictionInput(baseArgs([prev]));
-    expect(input.excludedScores).toEqual([{ home: 2, away: 1 }]);
-    expect(input.excludedFunIdeas).toEqual([
-      { type: "red_card", text: "vai ter vermelho" },
-      { type: "corners", text: "muito escanteio" },
-    ]);
-  });
-
-  it("listas de exclusão vazias na 1ª geração (previousSets [])", () => {
+  it("aceita analyses vazio (caso degenerado)", () => {
     const input = buildPredictionInput(baseArgs([]));
-    expect(input.excludedScores).toEqual([]);
-    expect(input.excludedFunIdeas).toEqual([]);
+    expect(input.analyses).toEqual([]);
   });
 });
 
 describe("buildUserMessage", () => {
-  it("omite a seção 'Não repita' quando não há exclusões", () => {
+  it("inclui a seção de análises com edge/odd (DADO) e o racional", () => {
+    const input = buildPredictionInput(baseArgs());
+    const msg = buildUserMessage(input, { daysToKickoff: 2 });
+    expect(msg).toContain("Análises por mercado");
+    expect(msg).toContain("Resultado (1X2)");
+    expect(msg).toContain("Casa");
+    expect(msg).toContain("edge");
+    expect(msg).toContain("Mandante muito superior.");
+  });
+
+  it("renderiza o pass como 'sem valor recomendado'", () => {
+    const input = buildPredictionInput(
+      baseArgs([analysis({ isPass: true, recommendation: "pass", recommendedLabel: null, edgePct: null, oddAtRecommendation: null, modelProbPct: null })]),
+    );
+    const msg = buildUserMessage(input, { daysToKickoff: 2 });
+    expect(msg).toContain("sem valor recomendado (pass)");
+  });
+
+  it("instrui a síntese mesmo sem análises (all-empty)", () => {
     const input = buildPredictionInput(baseArgs([]));
     const msg = buildUserMessage(input, { daysToKickoff: 2 });
-    expect(msg).not.toContain("Não repita");
-  });
-
-  it("inclui placares E ideias fun na seção 'Não repita' quando há exclusões", () => {
-    const prev = makeSet([
-      makeLine({
-        id: "a",
-        type: "exact_score",
-        params: { home: 3, away: 0 },
-        settleable: true,
-      }),
-      makeLine({ id: "b", type: "red_card", text: "vermelho saindo" }),
-    ]);
-    const input = buildPredictionInput(baseArgs([prev]));
-    const msg = buildUserMessage(input, { daysToKickoff: 1 });
-    expect(msg).toContain("Não repita");
-    expect(msg).toContain("Placares já sugeridos");
-    expect(msg).toContain("3-0");
-    expect(msg).toContain("Ideias fun já usadas");
-    expect(msg).toContain("vermelho saindo");
-  });
-
-  it("renderiza só a sub-seção de placares quando não há ideias fun prévias", () => {
-    const prev = makeSet([
-      makeLine({
-        id: "a",
-        type: "exact_score",
-        params: { home: 1, away: 1 },
-        settleable: true,
-      }),
-    ]);
-    const input = buildPredictionInput(baseArgs([prev]));
-    const msg = buildUserMessage(input, { daysToKickoff: 1 });
-    expect(msg).toContain("Placares já sugeridos");
-    expect(msg).not.toContain("Ideias fun já usadas");
+    expect(msg).toContain("nenhuma análise disponível");
+    expect(msg).toContain("Sua tarefa");
   });
 });

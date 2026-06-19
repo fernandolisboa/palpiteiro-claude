@@ -2,11 +2,9 @@ import type { ZodType } from "zod";
 
 import type { ToolDef } from "@/lib/ai/providers/types";
 import type { AIModelId } from "@/lib/ai/models";
-import type {
-  DbPalpite,
-  DbPalpiteSet,
-  PalpiteSetWithLines,
-} from "@/lib/db/queries/palpites";
+import type { DbPalpite, DbPalpiteSet } from "@/lib/db/queries/palpites";
+
+import type { MarketAnalysisSummary } from "./synthesis-input";
 
 // ─── Cartridge contract (disjunto do MarketCartridge) ─────────────────────────
 //
@@ -31,9 +29,11 @@ export type PalpiteCartridge<Input = unknown, Output = unknown, Args = unknown> 
 export type GeneratePalpiteArgs = {
   matchId: string;
   userId: string;
-  // Histórico prévio (newest-first) como CONTEXTO DE EXCLUSÃO (regen sem repetir).
-  // [] na primeira geração. Vem de getPalpiteSetsForMatch.
-  previousSets: PalpiteSetWithLines[];
+  // As N análises multi-mercado já apuradas pelo fan-out (ADR 0030 §2 / #353). É o
+  // INSUMO central da síntese — a manchete deriva delas. REQUIRED (sem ela não há o
+  // que sintetizar); o caller (analyzeBestBet) passa
+  // summarizeAnalysesForSynthesis(outcomes).
+  analyses: MarketAnalysisSummary[];
   // Default Haiku (econômico). NÃO admin-gated; NÃO cascateia preferência do usuário
   // (palpite é universal). Arg só p/ testabilidade — o caller sempre passa "claude-haiku-4-5".
   modelOverride?: AIModelId;
