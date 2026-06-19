@@ -1,0 +1,63 @@
+# HANDOFF — Arco palpite-first (pós ADR 0030)
+
+> Snapshot de um ponto no tempo (2026-06-19). Auto-suficiente, aterrado no CÓDIGO
+> real. Não é spec viva — a fonte da verdade é a ADR 0030 + as issues.
+
+## Onde estamos
+
+**ADR 0030 (#349) MERGED** — o pivot **palpite-first** está cravado: o palpite vira
+a **manchete sintetizada** da análise multi-mercado (HERO no topo), as análises por
+mercado viram **detalhe recolhível**. Emenda o ADR 0028 (firewall de geração cai da
+camada de DADO pra a de APRESENTAÇÃO).
+
+**Arco antigo #313→#316 = 100% MERGED** (ADR 0028 + DB domain `palpites`/migration 0034
++ gerador Haiku `lib/ai/palpites/` + `<PalpitesPanel/>` interim). O #351 vai retrabalhar
+a UI do #316. O gerador independente do #315 será **re-significado** como passo de síntese.
+
+## Ler primeiro (nesta ordem)
+
+1. `docs/decisions/0030-palpite-first-sintese-da-analise.md` — a decisão, aterrada em file:line.
+2. Memória `palpites-engajamento-arc` (banner do topo = o pivot; corpo = o arco antigo concluído).
+3. `gh issue view 353` → `351` → `354` → `350` → `352` (a cadeia).
+4. `CLAUDE.md` (fluxo: sanity-check → issues → subagent por passo; "O que NÃO fazer").
+
+## Sequência + dependências
+
+- **#353** `feat(ai)` — **passo de SÍNTESE** (multi-mercado → palpite-manchete). **PRÓXIMO; blocker do #351.**
+- **#351** `feat(match-ui)` — página palpite-first: HERO da manchete no topo + análises como detalhe recolhível. **`/impeccable` no plano E na revisão.** Depende do #353.
+- **#354** `feat` — tipos de palpite liquidáveis **goal-derived** (margem, clean sheet, quem marca 1º, placar 1º tempo — badge de graça do placar 90', sem provider novo). Enriquecimento; pode vir depois do #351.
+- **#350** `discovery` — cartão/escanteio liquidável → exige stats provider + **ADR Tier 3** (normalizer hoje é goal-only, `adapter.ts:541`).
+- **#352** `discovery/ADR` — "Analise minha aposta" (avaliador selection-pinned da aposta do usuário; feature de VALOR, reusa o motor, exige ADR).
+
+## Princípios inegociáveis (do ADR 0030)
+
+1. **Edge consumido no DADO, NUNCA na manchete.** A síntese PODE ler `predictions`/edge; o componente HERO **nunca** renderiza EV/stake/Yield/"lucro esperado". A firewall virou **disciplina de UI** — exige um **guard/teste de apresentação espelhando `lib/view/palpites.ts:79`** (que descarta `aiCall`). Postura regulatória (Lei 14.790/2023, `docs/ops/05-legal-compliance.md §1/§6`) é mantida na UI.
+2. **`predict.ts` é a única porta da LLM** (ADR 0027). A síntese é **UM `predict()` adicional por run**, logado em `ai_calls`. Sem chamar o SDK Anthropic direto.
+3. **Custo atrás do botão.** Sem auto-run caro novo. `analyzeBestBet` já queima **1 slot por run inteiro** do rate-limit 20/dia (`app/actions/predictions.ts:394-414`), não 1 por mercado. O auto-run fire-and-forget do #315 (`generatePalpitesAction`) é **DROPADO**.
+4. **Manchete = veredito/opinião** ("Vai dar Palmeiras, provável 2×1"). Números de valor só no detalhe.
+5. **Gate Tier 3 de pé** — a síntese consome só mercados já suportados (Tier 1/2); tipo liquidável novo exige ADR (#350).
+
+## Landmines (aterradas no código)
+
+- **A machinery de fan-out JÁ EXISTE e JÁ RODA** — não reconstruir. `analyzeBestBet` (`app/actions/predictions.ts:326-485`) → `runFanOut(base, markets, mapError): FanOutOutcome[]` (`lib/ai/best-bet.ts:64-88`, serial `predict()` por mercado, `MAX_FANOUT_MARKETS=6`, `capCandidates` preserva Tier-1). As N análises voltam ranqueadas por edge/EV em `toBestBetView` (`lib/view/best-bet.ts:29-80`) — **mas SEM manchete única**. O #353 adiciona **só o último passo** (síntese), não o fan-out.
+- **Caminho de dado a CONSTRUIR (#353):** `GeneratePalpiteArgs` (`lib/ai/palpites/types.ts:31-40`) e `BuildPalpitesInputArgs` (`lib/ai/palpites/cartridges/cartridge.ts:208-216`) **NÃO** aceitam `predictions` hoje — precisa adicionar o campo + o cartucho de síntese ler as análises. O `generatePalpites()` (`lib/ai/palpites/index.ts:47`) é market-free hoje (lê só `SportsDataProvider`); vira a síntese.
+- **Reorder de UI nos DOIS branches (#351):** a hierarquia peer atual (`MatchHero → OddsCard → PalpitesPanel → AnalysisPanel`) existe em mobile `lg:hidden` (`app/match/[id]/page.tsx:301-314`) **E** desktop `hidden lg:block` (`~:388-408`). Mexer em ambos. O `<PalpitesPanel/>` interim do #316 é retrabalhado/dobrado no HERO.
+- **O detalhe recolhível (#351)** reusa `components/analysis-result.tsx` (mostra stake/odd/EV `:120-162` — conteúdo do detalhe, nunca da manchete) + o padrão de `MatchCollapsible`.
+- **#354 goal-derived:** BTTS/over/1X2/DC TAMBÉM liquidam por placar 90', mas DUPLICAM os mercados de valor → **evitar**; ficar em margem/clean-sheet/quem-marca-1º/placar-1ºT (badge de graça, sem provider novo).
+
+## Critério de saída (por issue)
+
+- **#353:** síntese tipada/validada por Zod produz a manchete a partir das `predictions`/`FanOutOutcome[]`; passa por `predict.ts` (loga `ai_calls`); testes; gates verdes. Sem EV/stake no output destinado à manchete.
+- **#351:** HERO da manchete + detalhe recolhível, ambos os branches; guard de UI (zero número de valor no herói, testado); `/impeccable` no plano E na revisão + verificado no app real; gates verdes.
+
+## Gotchas de ambiente
+
+- **Worktree isolado** (sessão paralela ativa compartilha o checkout — worktree `palpiteiro-114` visto). `git worktree add -b <branch> ../palpiteiro-<n> origin/main`; `pnpm install --ignore-workspace` (stub `pnpm-workspace.yaml` torna o install normal um no-op vs `node_modules` stale); `cp .env.local` pro worktree (gitignored).
+- **Merge do worktree:** mergear do checkout principal (não de dentro do worktree — gotcha "main already used by worktree"); depois `git worktree remove --force` + deletar branches local/remota.
+- **`pnpm build` roda `drizzle-kit migrate && next build`** → aplica migration no Neon **dev compartilhado** (aditiva/idempotente). Migration nova: `pnpm db:generate` (NUNCA hand-number; conferir o `.sql`).
+- **Testes pglite:** `pnpm test --no-file-parallelism` (flake de beforeAll em 8-core; CI 2-core verde).
+- **`gh pr merge --squash`**; "Closes #N" (inglês) auto-fecha; "Fecha #N" (PT-BR) NÃO.
+
+## Fluxo usado neste repo (replicar)
+
+exploração (workflow read-only) → plano (`docs/plans/PLAN-<n>.md`) → **plan-gate adversarial 3 lentes** (pegou o defeito de escopo do #315) → implementação (subagent em worktree) → **code-review 3 lentes** → CI verde → merge → fechar. Para #351 (UI): `/impeccable shape` no design + audit/critique na revisão; `PRODUCT.md`/`DESIGN.md` na raiz já dão o contexto de design.
