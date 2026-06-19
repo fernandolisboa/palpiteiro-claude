@@ -1,4 +1,5 @@
-import { and, asc, desc, eq, inArray, isNull, lt } from "drizzle-orm";
+import { and, asc, desc, eq, gt, inArray, isNull, lt, notExists } from "drizzle-orm";
+import { alias } from "drizzle-orm/pg-core";
 
 import {
   aiCalls,
@@ -124,11 +125,18 @@ export type PendingPalpiteSettlement = {
  * skip over silent wrong settle" (ADR 0028 §3): red_card/corners (settleable=false)
  * NUNCA entram no pending set, nunca recebem outcome. Gate duplo (type E
  * settleable) — defense-in-depth contra uma escrita errada.
+ *
+ * LATEST-ONLY (ADR 0030 / #353, blocker #2): cada run do palpite-first grava um
+ * `palpite_set` novo (semântica de regen, sets imutáveis newest-first), então um jogo
+ * pode ter N sets/usuário. SÓ a ÚLTIMA geração por (matchId,userId) liquida —
+ * `notExists` de um set mais novo do mesmo (match,user). Mantém paridade com o display,
+ * que já mostra `sets[0]`. Sem isso, N badges/jogo apareceriam.
  */
 export async function getPendingPalpiteSettlements(
   now: Date = new Date()
 ): Promise<PendingPalpiteSettlement[]> {
   const cutoff = new Date(now.getTime() - SETTLEMENT_MIN_ELAPSED_MS);
+  const newerSet = alias(palpiteSets, "newer_set");
   return db
     .select({
       palpiteId: palpites.id,
@@ -148,7 +156,22 @@ export async function getPendingPalpiteSettlements(
         eq(palpites.type, "exact_score"),
         eq(palpites.settleable, true),
         isNull(palpiteOutcomes.id),
-        lt(matches.kickoffAt, cutoff)
+        lt(matches.kickoffAt, cutoff),
+        // Só a última geração por (matchId,userId): não existe um set mais novo do
+        // MESMO match+user. Tiebreak por id (createdAt pode empatar em writes do
+        // mesmo instante) — espelha o desc(createdAt), desc(id) do display.
+        notExists(
+          db
+            .select({ one: newerSet.id })
+            .from(newerSet)
+            .where(
+              and(
+                eq(newerSet.matchId, palpiteSets.matchId),
+                eq(newerSet.userId, palpiteSets.userId),
+                gt(newerSet.createdAt, palpiteSets.createdAt)
+              )
+            )
+        )
       )
     )
     .orderBy(desc(matches.kickoffAt));

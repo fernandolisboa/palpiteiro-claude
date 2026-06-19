@@ -1,0 +1,1 @@
+ALTER TABLE "palpite_sets" ADD COLUMN "headline" jsonb;

@@ -399,6 +399,18 @@ export const predictionOutcomes = pgTable("prediction_outcomes", {
 // `modelVersion`/`promptVersion` notNull = proveniência de cartucho (ADR 0017 +
 // ADR 0028 §5); como aiCallId é nullable, ai_calls não pode ser a única casa da
 // versão. Imutável: revisão = novo set (mesma disciplina de predictions).
+// A MANCHETE do palpite-first (ADR 0030 / #353): veredito + confiança qualitativa +
+// narrativa + mercados citados + proveniência (as predictions que a alimentaram).
+// ZERO número de valor (edge/EV/stake/Yield) — firewall de apresentação. O placar
+// provável NÃO mora aqui: vira a linha `palpites` exact_score settleable (o badge).
+export type PalpiteHeadline = {
+  verdict: string;
+  confidence: "baixa" | "media" | "alta";
+  narrative: string;
+  citedMarkets: string[];
+  sourcePredictionIds: string[];
+};
+
 export const palpiteSets = pgTable(
   "palpite_sets",
   {
@@ -412,6 +424,9 @@ export const palpiteSets = pgTable(
     aiCallId: uuid().references(() => aiCalls.id, { onDelete: "restrict" }),
     modelVersion: text().notNull(),
     promptVersion: text().notNull(),
+    // ADITIVA NULLABLE (ADR 0030 §4): a manchete sintetizada. Null em sets antigos
+    // (pré-#353, do gerador MIX). Auto-flui pra $inferSelect.
+    headline: jsonb().$type<PalpiteHeadline>(),
     createdAt: timestamp({ withTimezone: true }).notNull().defaultNow(),
   },
   (t) => [
