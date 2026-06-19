@@ -43,6 +43,16 @@ async function load() {
   return mod.checkAnalysisRateLimit;
 }
 
+// Carrega ambos os checks do MESMO módulo (mesmo singleton de limiters) pra provar
+// o isolamento entre análise e palpites num único processo.
+async function loadBoth() {
+  const mod = await import("@/lib/rate-limit");
+  return {
+    checkAnalysisRateLimit: mod.checkAnalysisRateLimit,
+    checkPalpitesRateLimit: mod.checkPalpitesRateLimit,
+  };
+}
+
 beforeEach(() => {
   vi.resetModules();
   mockLimit.mockReset();
@@ -52,6 +62,7 @@ beforeEach(() => {
   vi.stubEnv("KV_REST_API_TOKEN", "tok");
   vi.stubEnv("RATE_LIMIT_ANALYSES_PER_DAY", "20");
   vi.stubEnv("RATE_LIMIT_ANALYSES_PER_DAY_ADMIN", "200");
+  vi.stubEnv("RATE_LIMIT_PALPITES_PER_DAY", "50");
 });
 
 afterEach(() => {
@@ -196,6 +207,93 @@ describe("checkAnalysisRateLimit", () => {
       await check("u1");
       // <=0 e NaN caem no default (20), nunca num limiter que bloqueia todo mundo.
       expect(fixedWindow).toHaveBeenCalledWith(20, "1 d");
+    }
+  });
+});
+
+describe("checkPalpitesRateLimit — bucket isolado (#315)", () => {
+  it("usa o prefixo DISTINTO ratelimit:palpites (nunca o de análise)", async () => {
+    mockLimit.mockResolvedValue({
+      success: true,
+      limit: 50,
+      remaining: 49,
+      reset: 0,
+    });
+    const { checkPalpitesRateLimit } = await loadBoth();
+    const res = await checkPalpitesRateLimit("u1");
+    // A .limit() que rodou foi a do bucket palpites — não a de analyze/admin.
+    expect(limitedPrefixes).toEqual(["ratelimit:palpites"]);
+    expect(mockLimit).toHaveBeenCalledWith("u1");
+    expect(res).toEqual({ ok: true, limit: 50, remaining: 49, reset: 0 });
+    // O bucket de palpites é construído com seu próprio default (50/dia).
+    expect(fixedWindow).toHaveBeenCalledWith(50, "1 d");
+  });
+
+  it("o palpite NÃO incrementa o limiter de análise (buckets distintos)", async () => {
+    mockLimit.mockResolvedValue({
+      success: true,
+      limit: 50,
+      remaining: 49,
+      reset: 0,
+    });
+    const { checkAnalysisRateLimit, checkPalpitesRateLimit } = await loadBoth();
+    // Auto-run de palpite: bate SÓ o bucket palpites.
+    await checkPalpitesRateLimit("u1");
+    // Análise paga em seguida: bate SÓ o bucket analyze (user).
+    await checkAnalysisRateLimit("u1", "user");
+    // Prova de isolamento: a sequência de prefixos atingidos é palpites, depois
+    // analyze — o palpite jamais drena os 20/dia de análise (e vice-versa).
+    expect(limitedPrefixes).toEqual([
+      "ratelimit:palpites",
+      "ratelimit:analyze",
+    ]);
+  });
+
+  it("retorna ok:false quando atinge o teto", async () => {
+    mockLimit.mockResolvedValue({
+      success: false,
+      limit: 50,
+      remaining: 0,
+      reset: 999,
+    });
+    const { checkPalpitesRateLimit } = await loadBoth();
+    const res = await checkPalpitesRateLimit("u1");
+    expect(res.ok).toBe(false);
+    expect(res.limit).toBe(50);
+  });
+
+  it("fail-OPEN (ok:true, Infinity) sem KV — decisão final PLAN §3", async () => {
+    vi.stubEnv("KV_REST_API_URL", "");
+    const warn = vi.spyOn(console, "warn").mockImplementation(() => {});
+    const { checkPalpitesRateLimit } = await loadBoth();
+    const res = await checkPalpitesRateLimit("u1");
+    // Diferente da análise não-admin (fail-CLOSED): palpite é barato + silencioso.
+    expect(res).toEqual({
+      ok: true,
+      limit: Infinity,
+      remaining: Infinity,
+      reset: 0,
+    });
+    // fail-open não carrega o discriminador de fail-closed.
+    expect(res.reason).toBeUndefined();
+    expect(mockLimit).not.toHaveBeenCalled();
+    warn.mockRestore();
+  });
+
+  it("default 50/dia em env NaN/zero/negativo", async () => {
+    for (const bad of ["not-a-number", "0", "-1"]) {
+      vi.resetModules();
+      fixedWindow.mockClear();
+      vi.stubEnv("RATE_LIMIT_PALPITES_PER_DAY", bad);
+      mockLimit.mockResolvedValue({
+        success: true,
+        limit: 50,
+        remaining: 49,
+        reset: 0,
+      });
+      const { checkPalpitesRateLimit } = await loadBoth();
+      await checkPalpitesRateLimit("u1");
+      expect(fixedWindow).toHaveBeenCalledWith(50, "1 d");
     }
   });
 });

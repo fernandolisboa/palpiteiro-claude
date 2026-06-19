@@ -27,6 +27,11 @@ export type RateLimitResult = {
 
 const DEFAULT_USER_LIMIT = 20;
 const DEFAULT_ADMIN_LIMIT = 200;
+// Teto diário de geração de palpites por usuário (#315, ADR 0028). Bucket SEPARADO
+// das análises pagas: palpite roda em Haiku (~US$0.002/set), é universal (sem split
+// admin) e o auto-run já falha em silêncio — daí o fail-OPEN sem KV (ver
+// checkPalpitesRateLimit). Owner-tunável via RATE_LIMIT_PALPITES_PER_DAY.
+const DEFAULT_PALPITES_LIMIT = 50;
 
 /**
  * Lê um teto inteiro positivo do env, com fallback NaN/<=0-guarded. Diferente do
@@ -43,10 +48,18 @@ function limitFromEnv(name: string, fallback: number): number {
 // Singleton por processo: o cliente Redis + os limiters são construídos UMA vez,
 // mas só quando as envs do KV existem (construir no top-level do módulo
 // impediria o fail-open e o stub de env nos testes).
-let cached: { user: Ratelimit; admin: Ratelimit } | null = null;
+let cached: {
+  user: Ratelimit;
+  admin: Ratelimit;
+  palpites: Ratelimit;
+} | null = null;
 let warned = false;
 
-function getLimiters(): { user: Ratelimit; admin: Ratelimit } | null {
+function getLimiters(): {
+  user: Ratelimit;
+  admin: Ratelimit;
+  palpites: Ratelimit;
+} | null {
   const url = process.env.KV_REST_API_URL;
   const token = process.env.KV_REST_API_TOKEN;
   if (!url || !token) {
@@ -84,6 +97,17 @@ function getLimiters(): { user: Ratelimit; admin: Ratelimit } | null {
           "1 d",
         ),
         prefix: "ratelimit:analyze:admin",
+      }),
+      // Palpites (#315): prefixo DISTINTO — NUNCA colide com analyze, então o
+      // auto-run de palpite jamais dreana os 20/dia de análise paga. Sem split de
+      // role (palpite é universal). 50/dia por usuário (owner-tunável).
+      palpites: new Ratelimit({
+        redis,
+        limiter: Ratelimit.fixedWindow(
+          limitFromEnv("RATE_LIMIT_PALPITES_PER_DAY", DEFAULT_PALPITES_LIMIT),
+          "1 d",
+        ),
+        prefix: "ratelimit:palpites",
       }),
     };
   }
@@ -124,5 +148,27 @@ export async function checkAnalysisRateLimit(
   }
   const limiter = role === "admin" ? limiters.admin : limiters.user;
   const { success, limit, remaining, reset } = await limiter.limit(userId);
+  return { ok: success, limit, remaining, reset };
+}
+
+/**
+ * Verifica (e incrementa) o teto diário de GERAÇÃO de palpites do usuário (#315,
+ * ADR 0028). Bucket próprio (prefixo `ratelimit:palpites`), SEM split de role —
+ * palpite é universal e roda em Haiku.
+ *
+ * Sem KV configurado → fail-OPEN (decisão FINAL, PLAN §3): diferente da análise
+ * paga (fail-closed por custo), travar palpite por falta de KV só degradaria a UX
+ * sem ganho material — Haiku é barato e o auto-run já falha em silêncio. Em prod
+ * com KV, o limite de 50/dia por usuário vale.
+ */
+export async function checkPalpitesRateLimit(
+  userId: string,
+): Promise<RateLimitResult> {
+  const limiters = getLimiters();
+  if (!limiters) {
+    return { ok: true, limit: Infinity, remaining: Infinity, reset: 0 };
+  }
+  const { success, limit, remaining, reset } =
+    await limiters.palpites.limit(userId);
   return { ok: success, limit, remaining, reset };
 }
