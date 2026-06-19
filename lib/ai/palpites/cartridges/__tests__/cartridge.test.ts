@@ -204,9 +204,9 @@ describe("SUBMIT_PALPITE_TOOL", () => {
       SUBMIT_PALPITE_TOOL.input_schema,
     );
   });
-  it("a versão é palpites_v3", () => {
-    expect(PALPITES_VERSION).toBe("palpites_v3");
-    expect(palpitesCartridge.version).toBe("palpites_v3");
+  it("a versão é palpites_v4", () => {
+    expect(PALPITES_VERSION).toBe("palpites_v4");
+    expect(palpitesCartridge.version).toBe("palpites_v4");
   });
   it("o tool NÃO declara campos de valor (firewall estrutural); declara firstHalfScore + firstToScore (#354)", () => {
     const props = SUBMIT_PALPITE_TOOL.input_schema.properties as Record<
@@ -382,5 +382,37 @@ describe("buildUserMessage", () => {
     const msg = buildUserMessage(input, { daysToKickoff: 2 });
     expect(msg).toContain("nenhuma análise disponível");
     expect(msg).toContain("Sua tarefa");
+  });
+
+  it("v4: pré-conta a forma (V/E/D) + renderiza a sequência rotulada do mais recente ao mais antigo", () => {
+    // Forma do mandante: 3 vitórias / 1 empate / 1 derrota, na ordem (mais recente →
+    // mais antigo) D W W W L → display "E V V V D". Cuidado com a colisão de D:
+    // D=empate→"E", L=derrota→"D".
+    const args = baseArgs();
+    args.homeForm = [
+      fixture("X", "CR Flamengo", 1, 1), // empate (E) — mais recente
+      fixture("CR Flamengo", "X", 2, 0), // vitória (V)
+      fixture("CR Flamengo", "Y", 3, 1), // vitória (V)
+      fixture("Z", "CR Flamengo", 0, 1), // vitória (V)
+      fixture("CR Flamengo", "W", 0, 2), // derrota (D) — mais antigo
+    ];
+    const input = buildPredictionInput(args);
+    // summarizeForm preserva a ordem das fixtures → results = D W W W L (W/D/L interno).
+    expect(input.homeForm.results).toEqual(["D", "W", "W", "W", "L"]);
+
+    const msg = buildUserMessage(input, { daysToKickoff: 2 });
+    expect(msg).toContain(
+      "- Forma recente (últimos 5): 3V 1E 1D · do mais recente ao mais antigo: E V V V D",
+    );
+    // NÃO renderiza mais a string crua de letras internas (W/D/L colados).
+    expect(msg).not.toContain("DWWWL");
+  });
+
+  it("v4: forma vazia preserva a affordance (sem dados)", () => {
+    const args = baseArgs();
+    args.homeForm = [];
+    const input = buildPredictionInput(args);
+    const msg = buildUserMessage(input, { daysToKickoff: 2 });
+    expect(msg).toContain("- Forma recente: (sem dados)");
   });
 });
