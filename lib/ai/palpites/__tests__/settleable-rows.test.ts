@@ -39,6 +39,27 @@ describe("buildSettleablePalpiteRows — strings derivadas (golden, templates FI
     expect(m.get("first_to_score")?.text).toBe("Mandante marca primeiro");
   });
 
+  it("lado VISITANTE: strings EXATAS + params do lado away", () => {
+    // 0-2, HT 0-1, away marca → margem 2 (>=2) pro away, clean sheet away (home zera),
+    // 1º tempo 0-1, away 1º. Pina o ramo "Visitante" dos templates (o golden anterior
+    // só cobria "Mandante").
+    const rows = rowsFor({
+      probableScore: { home: 0, away: 2 },
+      firstHalfScore: { home: 0, away: 1 },
+      firstToScore: "away",
+    });
+    const m = byType(rows);
+    expect(m.get("exact_score")?.text).toBe("Placar provável: 0–2");
+    expect(m.get("margin")?.text).toBe("Visitante ganha por 2+");
+    expect(m.get("clean_sheet")?.text).toBe("Visitante não sofre gol");
+    expect(m.get("first_half_score")?.text).toBe("1º tempo: 0–1");
+    expect(m.get("first_to_score")?.text).toBe("Visitante marca primeiro");
+    // params do lado away.
+    expect(m.get("margin")?.params).toEqual({ side: "away", minMargin: 2 });
+    expect(m.get("clean_sheet")?.params).toEqual({ side: "away" });
+    expect(m.get("first_to_score")?.params).toEqual({ firstToScore: "away" });
+  });
+
   it("params por tipo são o shape esperado", () => {
     const m = byType(rowsFor());
     expect(m.get("exact_score")?.params).toEqual({ home: 2, away: 0 });
@@ -112,6 +133,19 @@ describe("buildSettleablePalpiteRows — emissão condicional (gates de coerênc
     // probableScore 2-0 (home vence) mas firstToScore 'away' → incoerente, pula.
     const m = byType(
       rowsFor({ probableScore: { home: 2, away: 0 }, firstHalfScore: { home: 1, away: 0 }, firstToScore: "away" }),
+    );
+    expect(m.has("first_to_score")).toBe(false);
+  });
+
+  it("empate previsto (1-1) com firstToScore 'home' → NÃO emite first_to_score (vencedor indefinido no empate)", () => {
+    // Sob placar provável de empate o vencedor implícito é undefined → o gate de
+    // coerência (winnerAgrees) reprova qualquer firstToScore → row pulada.
+    const m = byType(
+      rowsFor({
+        probableScore: { home: 1, away: 1 },
+        firstHalfScore: { home: 0, away: 0 },
+        firstToScore: "home",
+      }),
     );
     expect(m.has("first_to_score")).toBe(false);
   });

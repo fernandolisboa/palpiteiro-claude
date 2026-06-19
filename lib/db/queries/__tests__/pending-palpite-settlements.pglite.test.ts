@@ -35,6 +35,7 @@ vi.mock("@/lib/db", () => ({
   ),
 }));
 
+import type { DbPalpite } from "@/lib/db/queries/palpites";
 import { getPendingPalpiteSettlements } from "@/lib/db/queries/palpites";
 
 const ids: { userId: string; otherUserId: string } = {} as never;
@@ -90,15 +91,17 @@ async function seedSetWithScore(args: {
 
 // #354: semeia um set com N linhas (tipo + params + settleable), espelhando a geração
 // multi-row. Devolve o setId + os palpiteIds por tipo.
+type SeedLine = {
+  type: (typeof schema.palpiteTypeEnum.enumValues)[number];
+  params: DbPalpite["params"] | null;
+  settleable: boolean;
+};
+
 async function seedSetWithLines(args: {
   matchId: string;
   userId: string;
   createdAt: Date;
-  lines: {
-    type: (typeof schema.palpiteTypeEnum.enumValues)[number];
-    params: Record<string, unknown> | null;
-    settleable: boolean;
-  }[];
+  lines: SeedLine[];
 }): Promise<{ setId: string; palpiteIds: Record<string, string> }> {
   const [s] = await realDb
     .insert(schema.palpiteSets)
@@ -119,8 +122,7 @@ async function seedSetWithLines(args: {
         palpiteSetId: s.id,
         type: l.type,
         text: "stub",
-        // eslint-disable-next-line @typescript-eslint/no-explicit-any
-        params: l.params as any,
+        params: l.params,
         settleable: l.settleable,
       })
       .returning({ id: schema.palpites.id });
@@ -130,12 +132,12 @@ async function seedSetWithLines(args: {
 }
 
 // As 5 dimensões settleable de um set (espelha buildSettleablePalpiteRows).
-const ALL_FIVE_LINES = [
-  { type: "exact_score" as const, params: { home: 2, away: 0 }, settleable: true },
-  { type: "margin" as const, params: { side: "home", minMargin: 2 }, settleable: true },
-  { type: "clean_sheet" as const, params: { side: "home" }, settleable: true },
-  { type: "first_half_score" as const, params: { home: 1, away: 0 }, settleable: true },
-  { type: "first_to_score" as const, params: { firstToScore: "home" }, settleable: true },
+const ALL_FIVE_LINES: SeedLine[] = [
+  { type: "exact_score", params: { home: 2, away: 0 }, settleable: true },
+  { type: "margin", params: { side: "home", minMargin: 2 }, settleable: true },
+  { type: "clean_sheet", params: { side: "home" }, settleable: true },
+  { type: "first_half_score", params: { home: 1, away: 0 }, settleable: true },
+  { type: "first_to_score", params: { firstToScore: "home" }, settleable: true },
 ];
 
 beforeAll(async () => {
