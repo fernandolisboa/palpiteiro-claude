@@ -40,6 +40,7 @@ import {
 } from "@/lib/db/queries/ai-config";
 import { getPreferredModelId } from "@/lib/db/queries/users";
 
+import { persistAiCallError } from "./ai-call-logging";
 import { calculateCost } from "./cost";
 import { computeStakeUnits } from "./staking";
 import { getCartridge } from "./markets/registry";
@@ -49,7 +50,6 @@ import {
   isAIProvider,
   isModelAllowedForAudience,
   type AIModelId,
-  type AIProviderKey,
 } from "./models";
 import { getProviderForModel } from "./providers";
 import type { AnalysisRequest } from "./providers/types";
@@ -97,14 +97,6 @@ export type PredictResult = {
   }[];
 };
 
-type AiCallStatus =
-  | "ok"
-  | "invalid_output"
-  | "provider_error"
-  | "timeout"
-  | "tool_missing"
-  | "rate_limited";
-
 export class PredictError extends Error {
   readonly context: Record<string, unknown>;
   constructor(message: string, context: Record<string, unknown> = {}) {
@@ -119,7 +111,6 @@ export class PredictError extends Error {
 const FORM_LAST = 5;
 const H2H_LAST = 5;
 const ODDS_WINDOW_MS = 6 * 60 * 60 * 1000;
-const ERROR_MESSAGE_MAX = 2000;
 
 // Re-export normalizeTeamName for back-compat with any caller still importing
 // it from this module (e.g. tests). Canonical location is now
@@ -152,63 +143,6 @@ function findMatchingEvent(
       teamNamesMatch(event.awayTeam, awayName)
     );
   });
-}
-
-// ─── Helpers ─────────────────────────────────────────────────────────────────
-
-function truncate(text: string, limit: number): string {
-  return text.length > limit ? `${text.slice(0, limit - 1)}…` : text;
-}
-
-async function persistAiCallError(args: {
-  provider: AIProviderKey;
-  userId: string;
-  matchId: string;
-  model: AIModelId;
-  inputPayload: Record<string, unknown>;
-  outputPayload: Record<string, unknown>;
-  inputTokens: number;
-  outputTokens: number;
-  latencyMs: number;
-  status: AiCallStatus;
-  errorMessage: string;
-  promptVersion: string;
-}): Promise<void> {
-  const cost = calculateCost({
-    model: args.model,
-    inputTokens: args.inputTokens,
-    outputTokens: args.outputTokens,
-  });
-  // This logs an error that ALREADY happened, so its own failure must not mask
-  // the primary error by throwing a raw "Failed query: insert into ai_calls".
-  // Swallow + log so the original PredictError surfaces to the caller.
-  try {
-    await db.insert(aiCalls).values({
-      userId: args.userId,
-      matchId: args.matchId,
-      provider: args.provider,
-      model: args.model,
-      promptVersion: args.promptVersion,
-      inputPayload: args.inputPayload,
-      outputPayload: args.outputPayload,
-      inputTokens: args.inputTokens,
-      outputTokens: args.outputTokens,
-      latencyMs: args.latencyMs,
-      costUsd: cost.toFixed(6),
-      status: args.status,
-      errorMessage: truncate(args.errorMessage, ERROR_MESSAGE_MAX),
-    });
-  } catch (err) {
-    console.error(
-      JSON.stringify({
-        scope: "persistAiCallError",
-        matchId: args.matchId,
-        error: "ai_call_audit_insert_failed",
-        originalStatus: args.status,
-        message: err instanceof Error ? err.message : String(err),
-      }),
-    );
-  }
 }
 
 // ─── Public API ──────────────────────────────────────────────────────────────
