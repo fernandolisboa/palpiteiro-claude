@@ -13,6 +13,8 @@ import {
 } from "@/lib/ai/best-bet";
 import { getCartridge } from "@/lib/ai/markets/registry";
 import { isModelAllowedForAudience, type AIModelId } from "@/lib/ai/models";
+import { generatePalpites } from "@/lib/ai/palpites";
+import { summarizeAnalysesForSynthesis } from "@/lib/ai/palpites/synthesis-input";
 import { PredictError, predict } from "@/lib/ai/predict";
 import { isEmailAllowed } from "@/lib/auth/whitelist";
 import {
@@ -31,6 +33,10 @@ import { ensureOddsSnapshotsFresh } from "@/lib/odds/fetch-and-snapshot";
 import { checkAnalysisRateLimit, type RateLimitResult } from "@/lib/rate-limit";
 import { toAnalysisView } from "@/lib/view/analysis";
 import { toBestBetView } from "@/lib/view/best-bet";
+import {
+  toPalpiteHeadlineView,
+  type PalpiteHeadlineView,
+} from "@/lib/view/palpites-headline";
 import type { AnalysisView, BestBetView } from "@/lib/view/types";
 
 export type AnalyzeMatchResult =
@@ -284,7 +290,7 @@ export async function analyzeMatch(
 // ─── Modo "melhor aposta do jogo" (#178) ─────────────────────────────────────
 
 export type AnalyzeBestBetResult =
-  | { ok: true; view: BestBetView }
+  | { ok: true; view: BestBetView; palpite: PalpiteHeadlineView | null }
   | { ok: false; error: string };
 
 // Mapeia QUALQUER erro pra mensagem amigável de UI. PredictError reusa o
@@ -479,9 +485,44 @@ export async function analyzeBestBet(
       error: view.errors[0]?.message ?? "Nenhum mercado pôde ser analisado.",
     };
   }
+  // PASSO DE SÍNTESE (ADR 0030 / #353): turna as N análises numa manchete. Roda DENTRO
+  // do mesmo run (mesmo slot de rate-limit), sobre o FanOutOutcome[] EM MEMÓRIA — sem
+  // re-query. Haiku (default do gerador). NULLABLE é LOAD-BEARING: a síntese roda DEPOIS
+  // de até 6 predict() PAGOS; se ela falhar (Haiku throw, value-leak, …), o fan-out pago
+  // NÃO pode ser descartado → log + palpite:null. Espelha a assimetria do generator (o
+  // log de ai_call pode falhar sem afundar o produto).
+  let palpite: PalpiteHeadlineView | null = null;
+  try {
+    const summaries = summarizeAnalysesForSynthesis(outcomes);
+    const result = await generatePalpites({
+      matchId,
+      userId: session.user.id,
+      analyses: summaries,
+      modelOverride: "claude-haiku-4-5",
+    });
+    // A linha settleable recém-gravada ainda está PENDENTE (sem outcome) → badge null.
+    const scoreLine = result.palpites.find((p) => p.type === "exact_score");
+    if (result.palpiteSet.headline && scoreLine?.params) {
+      palpite = toPalpiteHeadlineView({
+        headline: result.palpiteSet.headline,
+        probableScore: scoreLine.params,
+        outcome: null,
+      });
+    }
+  } catch (err) {
+    // Síntese falhou: o fan-out pago SOBREVIVE (view retorna), só a manchete some.
+    console.error(
+      JSON.stringify({
+        scope: "analyzeBestBet",
+        matchId,
+        error: "synthesis_failed",
+        message: err instanceof Error ? err.message : String(err),
+      }),
+    );
+  }
   revalidatePath(`/match/${matchId}`);
   revalidatePath("/");
-  return { ok: true, view };
+  return { ok: true, view, palpite };
 }
 
 // ─── Análise multi-mercado SELECIONADA pelo usuário (#245) ────────────────────

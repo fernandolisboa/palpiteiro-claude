@@ -1,5 +1,6 @@
 import { beforeEach, describe, expect, it, vi } from "vitest";
 
+import type { MarketAnalysisSummary } from "@/lib/ai/palpites/synthesis-input";
 import type { SupportedLeague } from "@/lib/providers/sports-data/leagues";
 import type {
   NormalizedFixture,
@@ -28,7 +29,7 @@ const matchRow = {
 };
 
 // db stub: select().from().where().limit() → [matchRow]; insert().values().returning()
-// → stub rows. insertValues spy compartilhado: [0]=ai_call, [1]=palpite_set, [2..]=linhas.
+// → stub rows. insertValues spy compartilhado: [0]=ai_call, [1]=palpite_set, [2]=linha.
 const insertValues = vi.fn();
 const insertTable = vi.fn();
 vi.mock("@/lib/db", () => {
@@ -118,12 +119,34 @@ function fixture(home: string, away: string, sh: number, sa: number): Normalized
   };
 }
 
-const validToolInput = {
-  palpites: [
-    { type: "exact_score", text: "2 a 1 pro Fla", params: { home: 2, away: 1 } },
-    { type: "red_card", text: "Clássico pega fogo!" },
-    { type: "corners", text: "Vai chover escanteio." },
-  ],
+function analysis(over: Partial<MarketAnalysisSummary> = {}): MarketAnalysisSummary {
+  return {
+    marketKey: "match_result",
+    marketLabel: "Resultado (1X2)",
+    recommendation: "home",
+    recommendedLabel: "Casa",
+    isPass: false,
+    modelProbPct: 58,
+    edgePct: 9,
+    confidencePct: 60,
+    oddAtRecommendation: 1.85,
+    rationale: "Mandante superior.",
+    predictionId: "pred-1",
+    selections: [
+      { key: "home", modelProbPct: 58 },
+      { key: "draw", modelProbPct: 24 },
+      { key: "away", modelProbPct: 18 },
+    ],
+    ...over,
+  };
+}
+
+const validHeadline = {
+  verdict: "Vai dar Flamengo",
+  probableScore: { home: 2, away: 1 },
+  confidence: "alta",
+  narrative: "O Fla vem voando em casa e o Flu sofre fora.",
+  citedMarkets: ["Resultado (1X2)"],
 };
 
 function okResult(toolInput: unknown): AnalysisResult {
@@ -165,97 +188,130 @@ beforeEach(() => {
 const baseCall = {
   matchId: "m-1",
   userId: "u-1",
-  previousSets: [],
+  analyses: [analysis()],
   modelOverride: "claude-haiku-4-5" as const,
 };
 
-describe("generatePalpites — caminho ok", () => {
-  it("loga ai_call(ok) → palpite_set → linhas com settleable derivado", async () => {
-    runAnalysis.mockResolvedValue(okResult(validToolInput));
+describe("generatePalpites (síntese) — caminho ok", () => {
+  it("loga ai_call(ok) → palpite_set com headline → 1 linha exact_score settleable", async () => {
+    runAnalysis.mockResolvedValue(okResult(validHeadline));
     const res = await generatePalpites(baseCall);
 
-    // Sequência de inserts: ai_calls, palpite_sets, palpites x3.
+    // Sequência de inserts: ai_calls, palpite_sets, palpites (1).
     const aiCallRow = insertValues.mock.calls[0][0] as Record<string, unknown>;
     expect(aiCallRow.status).toBe("ok");
     expect(aiCallRow.model).toBe("claude-haiku-4-5");
-    expect(aiCallRow.promptVersion).toBe("palpites_v1");
+    expect(aiCallRow.promptVersion).toBe("palpites_v2");
 
     const setRow = insertValues.mock.calls[1][0] as Record<string, unknown>;
     expect(setRow.modelVersion).toBe("claude-haiku-4-5");
-    expect(setRow.promptVersion).toBe("palpites_v1");
+    expect(setRow.promptVersion).toBe("palpites_v2");
     expect(setRow.aiCallId).toBe("row-1");
+    // headline jsonb: a manchete SEM placar (vira a linha) e SEM número de valor.
+    expect(setRow.headline).toEqual({
+      verdict: "Vai dar Flamengo",
+      confidence: "alta",
+      narrative: "O Fla vem voando em casa e o Flu sofre fora.",
+      citedMarkets: ["Resultado (1X2)"],
+      sourcePredictionIds: ["pred-1"],
+    });
 
-    // Linhas: exact_score settleable=true; fun settleable=false.
-    const line0 = insertValues.mock.calls[2][0] as Record<string, unknown>;
-    const line1 = insertValues.mock.calls[3][0] as Record<string, unknown>;
-    const line2 = insertValues.mock.calls[4][0] as Record<string, unknown>;
-    expect(line0.type).toBe("exact_score");
-    expect(line0.settleable).toBe(true);
-    expect(line0.params).toEqual({ home: 2, away: 1 });
-    expect(line1.type).toBe("red_card");
-    expect(line1.settleable).toBe(false);
-    expect(line1.params).toBeNull();
-    expect(line2.settleable).toBe(false);
+    // UMA linha settleable exact_score com o placar provável.
+    const line = insertValues.mock.calls[2][0] as Record<string, unknown>;
+    expect(line.type).toBe("exact_score");
+    expect(line.settleable).toBe(true);
+    expect(line.params).toEqual({ home: 2, away: 1 });
+    // Só 3 inserts no total (ai_call + set + 1 linha) — nada de red_card/corners.
+    expect(insertValues.mock.calls).toHaveLength(3);
 
     expect(res.aiCall).toEqual({ id: "row-1" });
-    expect(res.palpites).toHaveLength(3);
+    expect(res.palpites).toHaveLength(1);
   });
 
-  it("golden payload: a AnalysisRequest leva temperature 0.3 (de model.temperature)", async () => {
-    runAnalysis.mockResolvedValue(okResult(validToolInput));
+  it("o input do LLM carrega as análises (edge/odd como DADO) + sem value-language no output", async () => {
+    runAnalysis.mockResolvedValue(okResult(validHeadline));
+    await generatePalpites(baseCall);
+    const req = runAnalysis.mock.calls[0][0] as AnalysisRequest;
+    expect(req.userMessage).toContain("Análises por mercado");
+    expect(req.userMessage).toContain("Resultado (1X2)");
+    // O OUTPUT persistido (headline + text) não contém termo de valor.
+    const setRow = insertValues.mock.calls[1][0] as Record<string, unknown>;
+    const headline = setRow.headline as { verdict: string; narrative: string };
+    const serialized = `${headline.verdict} ${headline.narrative}`.toLowerCase();
+    for (const term of ["edge", "stake", "yield", "odd", "r$"]) {
+      expect(serialized).not.toContain(term);
+    }
+  });
+
+  it("golden payload: a AnalysisRequest leva temperature 0.3 e o tool submit_palpite", async () => {
+    runAnalysis.mockResolvedValue(okResult(validHeadline));
     await generatePalpites(baseCall);
     const req = runAnalysis.mock.calls[0][0] as AnalysisRequest;
     expect(req.temperature).toBe(0.3);
-    // Haiku é temperature-mode: effort NÃO é passado.
     expect(req.effort).toBeUndefined();
-    expect(req.toolName).toBe("submit_palpites");
+    expect(req.toolName).toBe("submit_palpite");
     expect(req.maxTokens).toBe(16000);
   });
 
-  it("exclusão: previousSets não-vazio injeta os placares prévios no userMessage", async () => {
-    runAnalysis.mockResolvedValue(okResult(validToolInput));
-    const previousSets = [
-      {
-        palpiteSet: {
-          id: "s-prev",
-          matchId: "m-1",
-          userId: "u-1",
-          aiCallId: null,
-          modelVersion: "claude-haiku-4-5",
-          promptVersion: "palpites_v1",
-          createdAt: new Date(),
-        },
-        aiCall: null,
-        palpites: [
-          {
-            id: "x",
-            palpiteSetId: "s-prev",
-            type: "exact_score" as const,
-            text: "3 a 0",
-            params: { home: 3, away: 0 },
-            settleable: true,
-            createdAt: new Date(),
-            outcome: null,
-          },
-        ],
-      },
+  it("all-pass: análises todas pass ainda sintetizam manchete + linha settleable", async () => {
+    runAnalysis.mockResolvedValue(okResult(validHeadline));
+    const passOnly = [
+      analysis({
+        isPass: true,
+        recommendation: "pass",
+        recommendedLabel: null,
+        edgePct: null,
+        oddAtRecommendation: null,
+        modelProbPct: null,
+        predictionId: "pred-pass",
+      }),
     ];
-    await generatePalpites({ ...baseCall, previousSets });
+    await generatePalpites({ ...baseCall, analyses: passOnly });
     const req = runAnalysis.mock.calls[0][0] as AnalysisRequest;
-    expect(req.userMessage).toContain("Não repita");
-    expect(req.userMessage).toContain("3-0");
+    expect(req.userMessage).toContain("sem valor recomendado (pass)");
+    // Ainda grava set + linha settleable (síntese honesta no all-pass).
+    const line = insertValues.mock.calls[2][0] as Record<string, unknown>;
+    expect(line.type).toBe("exact_score");
+    expect(line.settleable).toBe(true);
   });
 });
 
-describe("generatePalpites — caminhos de erro (auditados, sem set)", () => {
+describe("generatePalpites (síntese) — firewall de value-language (blocker #5)", () => {
+  it("verdict com 'odd' → invalid_output, throw, sem set", async () => {
+    runAnalysis.mockResolvedValue(
+      okResult({ ...validHeadline, verdict: "Aposta no Fla, odd boa" }),
+    );
+    await expect(generatePalpites(baseCall)).rejects.toBeInstanceOf(PalpiteError);
+    const row = insertValues.mock.calls[0][0] as Record<string, unknown>;
+    expect(row.status).toBe("invalid_output");
+    // Nenhum palpite_set escrito.
+    expect(
+      insertValues.mock.calls.some(
+        (c) => (c[0] as { modelVersion?: string }).modelVersion !== undefined,
+      ),
+    ).toBe(false);
+  });
+
+  it("narrative com 'edge'/'stake' → invalid_output, throw", async () => {
+    runAnalysis.mockResolvedValue(
+      okResult({
+        ...validHeadline,
+        narrative: "Tem edge claro e vale a stake no over.",
+      }),
+    );
+    await expect(generatePalpites(baseCall)).rejects.toBeInstanceOf(PalpiteError);
+    const row = insertValues.mock.calls[0][0] as Record<string, unknown>;
+    expect(row.status).toBe("invalid_output");
+  });
+});
+
+describe("generatePalpites (síntese) — caminhos de erro (auditados, sem set)", () => {
   it("hasKey()===false → provider_error, throw, zero runAnalysis", async () => {
     hasKey.mockReturnValue(false);
     await expect(generatePalpites(baseCall)).rejects.toBeInstanceOf(PalpiteError);
     expect(runAnalysis).not.toHaveBeenCalled();
-    // ai_call de erro foi logado (provider_error).
     const row = insertValues.mock.calls[0][0] as Record<string, unknown>;
     expect(row.status).toBe("provider_error");
-    // Nenhum palpite_set inserido.
     expect(
       insertValues.mock.calls.some(
         (c) => (c[0] as { modelVersion?: string }).modelVersion !== undefined,
@@ -270,19 +326,27 @@ describe("generatePalpites — caminhos de erro (auditados, sem set)", () => {
     expect(row.status).toBe("tool_missing");
   });
 
-  it("output inválido → invalid_output, throw, sem set", async () => {
+  it("output inválido (placar faltando) → invalid_output, throw, sem set", async () => {
     runAnalysis.mockResolvedValue(
-      okResult({ palpites: [{ type: "exact_score", text: "x" }] }), // params faltando
+      okResult({ verdict: "x", confidence: "alta", narrative: "y", citedMarkets: [] }),
     );
     await expect(generatePalpites(baseCall)).rejects.toBeInstanceOf(PalpiteError);
     const row = insertValues.mock.calls[0][0] as Record<string, unknown>;
     expect(row.status).toBe("invalid_output");
-    // Nenhum palpite_set.
     expect(
       insertValues.mock.calls.some(
         (c) => (c[0] as { modelVersion?: string }).modelVersion !== undefined,
       ),
     ).toBe(false);
+  });
+
+  it("chave de valor parasita no output (.strict) → invalid_output, throw", async () => {
+    runAnalysis.mockResolvedValue(
+      okResult({ ...validHeadline, edgePct: 8 }),
+    );
+    await expect(generatePalpites(baseCall)).rejects.toBeInstanceOf(PalpiteError);
+    const row = insertValues.mock.calls[0][0] as Record<string, unknown>;
+    expect(row.status).toBe("invalid_output");
   });
 
   it("provider !ok → loga o status do provider + throw", async () => {
@@ -302,7 +366,6 @@ describe("generatePalpites — caminhos de erro (auditados, sem set)", () => {
   });
 
   it("jogo encerrado → throw 'match is not analyzable', sem chamada ao provider", async () => {
-    // Re-mock o db pra devolver um match finished neste teste.
     const finished = { ...matchRow, status: "finished" as const };
     const { db } = await import("@/lib/db");
     vi.mocked(db.select).mockReturnValueOnce({

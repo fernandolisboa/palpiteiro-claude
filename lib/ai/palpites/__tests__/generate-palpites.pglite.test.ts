@@ -126,16 +126,38 @@ vi.mock("@/lib/ai/providers", () => ({
 }));
 
 import { generatePalpites, PalpiteError } from "@/lib/ai/palpites";
+import type { MarketAnalysisSummary } from "@/lib/ai/palpites/synthesis-input";
 import { getPalpiteSetsForMatch } from "@/lib/db/queries/palpites";
 
 const ids: { userId: string; matchId: string } = {} as never;
 
+const analyses: MarketAnalysisSummary[] = [
+  {
+    marketKey: "match_result",
+    marketLabel: "Resultado (1X2)",
+    recommendation: "home",
+    recommendedLabel: "Casa",
+    isPass: false,
+    modelProbPct: 58,
+    edgePct: 9,
+    confidencePct: 60,
+    oddAtRecommendation: 1.85,
+    rationale: "Mandante superior.",
+    predictionId: "00000000-0000-0000-0000-000000000abc",
+    selections: [
+      { key: "home", modelProbPct: 58 },
+      { key: "draw", modelProbPct: 24 },
+      { key: "away", modelProbPct: 18 },
+    ],
+  },
+];
+
 const validToolInput = {
-  palpites: [
-    { type: "exact_score", text: "2 a 1", params: { home: 2, away: 1 } },
-    { type: "red_card", text: "Vai ter vermelho!" },
-    { type: "corners", text: "Muito escanteio." },
-  ],
+  verdict: "Vai dar Flamengo",
+  probableScore: { home: 2, away: 1 },
+  confidence: "alta",
+  narrative: "O Fla vem voando em casa.",
+  citedMarkets: ["Resultado (1X2)"],
 };
 
 function okResult(toolInput: unknown): AnalysisResult {
@@ -212,13 +234,13 @@ const call = (over?: Partial<Parameters<typeof generatePalpites>[0]>) =>
   generatePalpites({
     matchId: ids.matchId,
     userId: ids.userId,
-    previousSets: [],
+    analyses,
     modelOverride: "claude-haiku-4-5",
     ...over,
   });
 
-describe("generatePalpites — write path real (pglite)", () => {
-  it("ok: 1 set com N linhas, aiCallId não-null, settleable correto", async () => {
+describe("generatePalpites (síntese) — write path real (pglite)", () => {
+  it("ok: 1 set com headline + 1 linha exact_score settleable, aiCallId não-null", async () => {
     runAnalysis.mockResolvedValue(okResult(validToolInput));
     const res = await call();
     expect(res.aiCall).not.toBeNull();
@@ -227,15 +249,21 @@ describe("generatePalpites — write path real (pglite)", () => {
     expect(sets).toHaveLength(1);
     expect(sets[0].aiCall).not.toBeNull();
     expect(sets[0].aiCall?.status).toBe("ok");
+    // headline jsonb persistido (round-trip via Postgres real).
+    expect(sets[0].palpiteSet.headline).toEqual({
+      verdict: "Vai dar Flamengo",
+      confidence: "alta",
+      narrative: "O Fla vem voando em casa.",
+      citedMarkets: ["Resultado (1X2)"],
+      sourcePredictionIds: ["00000000-0000-0000-0000-000000000abc"],
+    });
+    // EXATAMENTE 1 linha: o placar provável (settleable). Nada de red_card/corners.
     const lines = sets[0].palpites;
-    expect(lines).toHaveLength(3);
-    const exact = lines.find((l) => l.type === "exact_score")!;
+    expect(lines).toHaveLength(1);
+    const exact = lines[0];
+    expect(exact.type).toBe("exact_score");
     expect(exact.settleable).toBe(true);
     expect(exact.params).toEqual({ home: 2, away: 1 });
-    for (const fun of lines.filter((l) => l.type !== "exact_score")) {
-      expect(fun.settleable).toBe(false);
-      expect(fun.params).toBeNull();
-    }
   });
 
   it("assimetria: ai_call falha → set sobrevive com aiCallId=null", async () => {
@@ -251,8 +279,8 @@ describe("generatePalpites — write path real (pglite)", () => {
     expect(sets).toHaveLength(1);
     expect(sets[0].palpiteSet.aiCallId).toBeNull();
     expect(sets[0].aiCall).toBeNull();
-    // As linhas ainda foram escritas.
-    expect(sets[0].palpites).toHaveLength(3);
+    // A linha settleable ainda foi escrita.
+    expect(sets[0].palpites).toHaveLength(1);
   });
 
   it("assimetria: palpite_set falha → throw, NENHUMA row órfã", async () => {

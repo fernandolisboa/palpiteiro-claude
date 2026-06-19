@@ -38,8 +38,13 @@ vi.mock("@/lib/db/queries/ai-config", () => ({
   getEnableOverUnderExtraLines: vi.fn(),
   getEnableBestBetFanOut: vi.fn(),
 }));
+// Passo de síntese (#353): generatePalpites é a porta da síntese (Haiku) — mockada
+// aqui (a corretude do gerador é coberta por generate-palpites.test). summarize roda
+// REAL (lê os outcomes do fan-out). toPalpiteHeadlineView roda REAL (puro).
+vi.mock("@/lib/ai/palpites", () => ({ generatePalpites: vi.fn() }));
 
 import { analyzeBestBet } from "@/app/actions/predictions";
+import { generatePalpites } from "@/lib/ai/palpites";
 import { auth } from "@/auth";
 import { predict } from "@/lib/ai/predict";
 import {
@@ -130,15 +135,41 @@ function resultFor(marketKey: string) {
   const spec = SELECTIONS[marketKey];
   return {
     prediction: {
+      id: `pred-${marketKey}`,
       aiCallId: `ac-${marketKey}`,
       recommendation: spec.recommendation,
       confidencePct: "55.00",
       oddAtRecommendation: "1.90",
+      edgePct: "8.00",
+      rationale: `racional ${marketKey}`,
       marketParams: null,
     },
     marketKey,
     selections: spec.selections,
   } as unknown as Awaited<ReturnType<typeof predict>>;
+}
+
+const mockGeneratePalpites = vi.mocked(generatePalpites);
+
+// Resultado padrão do gerador de síntese: set com headline + 1 linha exact_score
+// pendente (badge null no retorno fresco).
+function palpiteResult() {
+  return {
+    palpiteSet: {
+      id: "set-1",
+      headline: {
+        verdict: "Vai dar a casa",
+        confidence: "media" as const,
+        narrative: "O mandante leva.",
+        citedMarkets: ["Resultado (1X2)"],
+        sourcePredictionIds: ["pred-match_result"],
+      },
+    },
+    palpites: [
+      { type: "exact_score", params: { home: 2, away: 1 } },
+    ],
+    aiCall: { id: "ac-palpite" },
+  } as unknown as Awaited<ReturnType<typeof generatePalpites>>;
 }
 
 function form(fields: Record<string, string>): FormData {
@@ -173,6 +204,8 @@ beforeEach(() => {
   mockExtraLinesFlag.mockResolvedValue(false);
   mockBestBetFlag.mockReset();
   mockBestBetFlag.mockResolvedValue(true);
+  mockGeneratePalpites.mockReset();
+  mockGeneratePalpites.mockResolvedValue(palpiteResult());
 });
 
 describe("analyzeBestBet — gate order (rate-limit é o ÚLTIMO antes do spend)", () => {
@@ -403,5 +436,58 @@ describe("analyzeBestBet — best-of-successful / all-fail", () => {
         "Nenhum bookmaker oferece este mercado para o jogo no momento.",
       );
     }
+  });
+});
+
+describe("analyzeBestBet — passo de síntese (#353, palpite-first)", () => {
+  it("happy: síntese chamada 1× com Haiku + as análises; retorna palpite (manchete)", async () => {
+    const res = await analyzeBestBet(null, form({ matchId: VALID_MATCH_ID }));
+    expect(mockGeneratePalpites).toHaveBeenCalledTimes(1);
+    const args = mockGeneratePalpites.mock.calls[0][0];
+    expect(args.matchId).toBe(VALID_MATCH_ID);
+    expect(args.userId).toBe("u1");
+    expect(args.modelOverride).toBe("claude-haiku-4-5");
+    // As análises projetadas alimentam a síntese (1 por mercado WC = 4).
+    expect(args.analyses).toHaveLength(4);
+    expect(res.ok).toBe(true);
+    if (res.ok) {
+      expect(res.palpite).toEqual({
+        verdict: "Vai dar a casa",
+        probableScore: { home: 2, away: 1 },
+        confidence: "media",
+        narrative: "O mandante leva.",
+        citedMarkets: ["Resultado (1X2)"],
+        badge: null, // fresco → pendente
+      });
+    }
+  });
+
+  it("a manchete retornada NÃO contém número de valor (firewall na fronteira do action)", async () => {
+    const res = await analyzeBestBet(null, form({ matchId: VALID_MATCH_ID }));
+    expect(res.ok).toBe(true);
+    if (res.ok && res.palpite) {
+      const serialized = JSON.stringify(res.palpite);
+      for (const k of ["edgePct", "evPerUnit", "stakeUnits", "oddAtRecommendation"]) {
+        expect(serialized).not.toContain(k);
+      }
+    }
+  });
+
+  it("síntese THROWA → view sobrevive (fan-out pago não descartado), palpite null", async () => {
+    mockGeneratePalpites.mockRejectedValue(new Error("haiku timeout"));
+    const res = await analyzeBestBet(null, form({ matchId: VALID_MATCH_ID }));
+    expect(res.ok).toBe(true);
+    if (res.ok) {
+      expect(res.view.entries).toHaveLength(4); // fan-out intacto
+      expect(res.palpite).toBeNull();
+    }
+  });
+
+  it("síntese NÃO roda quando todos os mercados falham (sem entries, ok:false antes)", async () => {
+    const { PredictError } = await import("@/lib/ai/predict");
+    mockPredict.mockRejectedValue(new PredictError("sem snapshot fresco", {}));
+    const res = await analyzeBestBet(null, form({ matchId: VALID_MATCH_ID }));
+    expect(res.ok).toBe(false);
+    expect(mockGeneratePalpites).not.toHaveBeenCalled();
   });
 });
