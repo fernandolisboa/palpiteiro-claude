@@ -2,11 +2,9 @@ import type { ZodType } from "zod";
 
 import type { ToolDef } from "@/lib/ai/providers/types";
 import type { AIModelId } from "@/lib/ai/models";
-import type {
-  DbPalpite,
-  DbPalpiteSet,
-  PalpiteSetWithLines,
-} from "@/lib/db/queries/palpites";
+import type { DbPalpite, DbPalpiteSet } from "@/lib/db/queries/palpites";
+
+import type { MarketAnalysisSummary } from "./synthesis-input";
 
 // ─── Cartridge contract (disjunto do MarketCartridge) ─────────────────────────
 //
@@ -15,7 +13,7 @@ import type {
 // palpite não tem odds/edge nem gate de "dados insuficientes" (degrada para menos
 // linhas, nunca throw). O `tool` é um ToolDef NEUTRO (ADR 0027).
 export type PalpiteCartridge<Input = unknown, Output = unknown, Args = unknown> = {
-  // "palpites_v1" (ADR 0017) → grava em ai_calls.promptVersion + palpite_sets.promptVersion.
+  // "palpites_v2" (ADR 0017) → grava em ai_calls.promptVersion + palpite_sets.promptVersion.
   version: string;
   systemPrompt: string;
   tool: ToolDef;
@@ -31,9 +29,11 @@ export type PalpiteCartridge<Input = unknown, Output = unknown, Args = unknown> 
 export type GeneratePalpiteArgs = {
   matchId: string;
   userId: string;
-  // Histórico prévio (newest-first) como CONTEXTO DE EXCLUSÃO (regen sem repetir).
-  // [] na primeira geração. Vem de getPalpiteSetsForMatch.
-  previousSets: PalpiteSetWithLines[];
+  // As N análises multi-mercado já apuradas pelo fan-out (ADR 0030 §2 / #353). É o
+  // INSUMO central da síntese — a manchete deriva delas. REQUIRED (sem ela não há o
+  // que sintetizar); o caller (analyzeBestBet) passa
+  // summarizeAnalysesForSynthesis(outcomes).
+  analyses: MarketAnalysisSummary[];
   // Default Haiku (econômico). NÃO admin-gated; NÃO cascateia preferência do usuário
   // (palpite é universal). Arg só p/ testabilidade — o caller sempre passa "claude-haiku-4-5".
   modelOverride?: AIModelId;
@@ -42,7 +42,7 @@ export type GeneratePalpiteArgs = {
 export type PalpiteGenerationResult = {
   palpiteSet: DbPalpiteSet;
   palpites: DbPalpite[];
-  // NULLABLE: a auto-geração fire-and-forget pode falhar no log (aiCallId é nullable
+  // NULLABLE: o log do ai_call da síntese (#353) pode falhar (aiCallId é nullable
   // em palpite_sets). O set ainda é válido. No caminho ok, é não-null.
   aiCall: { id: string } | null;
 };

@@ -12,7 +12,6 @@ import { MatchAuxiliarySections } from "@/components/match-sections-auxiliary";
 import { MatchHero } from "@/components/match-hero";
 import { MatchSections } from "@/components/match-sections";
 import { OddsCard } from "@/components/odds-card";
-import { PalpiteAutoRun } from "@/components/palpites/palpite-auto-run";
 import { PalpitesPanel } from "@/components/palpites/palpites-panel";
 import { ThemeToggle } from "@/components/theme-toggle";
 import {
@@ -181,10 +180,9 @@ export default async function MatchPage({ params }: PageProps) {
 
   return (
     <>
-      {/* Auto-geração de palpites na entrada do jogo (#315). ZERO UI; idempotente no
-          servidor. Fora dos wrappers mobile/desktop pra montar UMA vez só (ambos
-          ficam no DOM via CSS). O painel/lista que consome os sets é #316. */}
-      <PalpiteAutoRun matchId={match.id} />
+      {/* Palpite-first (ADR 0030 / #353): o auto-run pré-análise foi DROPADO — a
+          manchete agora é sintetizada DENTRO do analyzeBestBet (botão). O PalpitesPanel
+          abaixo lê os sets persistidos (vazio até o 1º run). O HERO chega no #351. */}
       <div className="lg:hidden">
         <MobileMatch
           heroView={heroView}
@@ -307,9 +305,9 @@ function MobileMatch({
       <div className="flex flex-col gap-3 px-5 pb-6">
         <OddsCard view={oddsView} />
         {matchResultOddsView && <OddsCard view={matchResultOddsView} />}
-        {/* Palpites (#316): warm lane playful, ENTRE odds e a pilha de análise.
-            Aditivo, irmão no flex gap-3 (herda o spacing). Auto-run já montado em
-            PalpiteAutoRun (1x, fora dos wrappers) — não re-adicionar. */}
+        {/* Palpites: warm lane playful, ENTRE odds e a pilha de análise. Aditivo,
+            irmão no flex gap-3 (herda o spacing). INTERIM: lê os sets persistidos
+            (vazio até o 1º run da análise); o HERO da manchete chega no #351. */}
         <PalpitesPanel matchId={matchId} />
         {analyzable ? (
           <AnalysisPanel
