@@ -10,9 +10,30 @@ a **manchete sintetizada** da análise multi-mercado (HERO no topo), as análise
 mercado viram **detalhe recolhível**. Emenda o ADR 0028 (firewall de geração cai da
 camada de DADO pra a de APRESENTAÇÃO).
 
+**#353 (passo de síntese) MERGED 2026-06-19 (PR #358, squash 07e94b1f)** — o spine de
+DADO/IA do palpite-first está pronto **e ships dark** (flag `enableBestBetFanOut` OFF em
+prod). Em `main` agora:
+- `summarizeAnalysesForSynthesis(FanOutOutcome[]) → MarketAnalysisSummary[]`
+  (`lib/ai/palpites/synthesis-input.ts`) — lê os campos PERSISTIDOS da prediction; edge entra como **DADO**.
+- Cartucho **`palpites_v2`**: output vira a manchete `PalpiteSynthesisOutput {verdict,
+  probableScore, confidence (qual: baixa/media/alta), narrative, citedMarkets}` `.strict()`.
+  Fun `red_card`/`corners` **deixam de ser geradas** (enum preservado → Tier 3 de pé).
+- **Firewall 3 camadas** (§3): `.strict()` + `containsValueLanguage` guard pós-Zod sobre
+  verdict/narrative/text/**citedMarkets** (`value-language-guard.ts`, hit=`invalid_output`)
+  + `PalpiteHeadlineView` sem nº de valor.
+- `analyzeBestBet` roda a síntese (Haiku) **em try/catch** → `{ok, view, palpite:
+  PalpiteHeadlineView | null}` (falha degrada sem descartar o fan-out pago).
+- Coluna aditiva **`headline jsonb`** em `palpite_sets` (migration **0035**); settlement
+  **latest-only** (só a última geração por matchId/userId; tiebreak createdAt+id).
+- **Teardown:** auto-run #315 (`generatePalpitesAction`/`PalpiteAutoRun`) + regen
+  (`regeneratePalpitesAction`/`RegenButton`) **removidos**. `GeneratePalpiteArgs =
+  {matchId, userId, analyses, modelOverride?}`.
+
 **Arco antigo #313→#316 = 100% MERGED** (ADR 0028 + DB domain `palpites`/migration 0034
-+ gerador Haiku `lib/ai/palpites/` + `<PalpitesPanel/>` interim). O #351 vai retrabalhar
-a UI do #316. O gerador independente do #315 será **re-significado** como passo de síntese.
++ gerador Haiku `lib/ai/palpites/` + `<PalpitesPanel/>` interim). **Pós-teardown:** o
+`<PalpitesPanel/>` interim ficou **sem auto-run** (empty-state até o #351). O #351
+reworka essa UI e wira o `palpite` retornado por `analyzeBestBet` (tipo
+`PalpiteHeadlineView` já existe em `lib/view/palpites-headline.ts`).
 
 ## Ler primeiro (nesta ordem)
 
@@ -23,8 +44,8 @@ a UI do #316. O gerador independente do #315 será **re-significado** como passo
 
 ## Sequência + dependências
 
-- **#353** `feat(ai)` — **passo de SÍNTESE** (multi-mercado → palpite-manchete). **PRÓXIMO; blocker do #351.**
-- **#351** `feat(match-ui)` — página palpite-first: HERO da manchete no topo + análises como detalhe recolhível. **`/impeccable` no plano E na revisão.** Depende do #353.
+- **#353** `feat(ai)` — **passo de SÍNTESE** (multi-mercado → palpite-manchete). ✅ **MERGED (PR #358).**
+- **#351** `feat(match-ui)` — página palpite-first: HERO da manchete no topo + análises como detalhe recolhível. **`/impeccable` no plano E na revisão.** **PRÓXIMO; #353 (blocker) destravado.**
 - **#354** `feat` — tipos de palpite liquidáveis **goal-derived** (margem, clean sheet, quem marca 1º, placar 1º tempo — badge de graça do placar 90', sem provider novo). Enriquecimento; pode vir depois do #351.
 - **#350** `discovery` — cartão/escanteio liquidável → exige stats provider + **ADR Tier 3** (normalizer hoje é goal-only, `adapter.ts:541`).
 - **#352** `discovery/ADR` — "Analise minha aposta" (avaliador selection-pinned da aposta do usuário; feature de VALOR, reusa o motor, exige ADR).
