@@ -43,12 +43,11 @@ prod). Em `main` agora:
   `MatchCollapsible` read-only com `MarketAnalysisSections`} → seções). DELETADOS:
   `palpites-panel`/`palpite-row`/`previous-palpites`/`best-bet-panel`/`analysis-panel`/
   `new-analysis-form` (+ testes). `palpite-badges` (SettleableBadge) FICA — o HERO reusa.
-- **⚠️ GO-LIVE PENDENTE (ação do DONO):** palpite-first é a ÚNICA layout, MAS `analyzeBestBet`
-  segue gated por `enable_best_bet_fan_out` (kill-switch de spend; rate-limit 20/dia NÃO foi
-  rederivado pro multiplicador do fan-out, `predictions.ts:404`). **Pra ir ao ar:** `UPDATE
-  ai_config SET enable_best_bet_fan_out = true WHERE id=1` (DB-flip, reversível, sem deploy).
-  Sem o flip o HERO mostra o estado kill-switch ("temporariamente indisponível"). Custo do
-  go-live: cada run = até 6 predict() pagos + créditos de odds + 1 síntese Haiku, em 1 slot.
+- **✅ GO-LIVE FEITO 2026-06-19:** a flag `enable_best_bet_fan_out` foi flipada **ON** no DB
+  (neondb sa-east-1) — palpite-first **ATIVO**. O dono não quer gate manual; a flag FICA no
+  código como **kill-switch DORMENTE** de spend (útil quando entrarem mais usuários — rate-limit
+  20/dia NÃO rederivado pro multiplicador do fan-out, `predictions.ts:404`). Reversível
+  (`SET = false`). Custo por run: até 6 predict() pagos + créditos de odds + 1 síntese Haiku, 1 slot.
 
 **Arco antigo #313→#316 = 100% MERGED**; o `<PalpitesPanel/>` interim foi **substituído pelo
 HERO** (deletado no #351). **O spine palpite-first (DADO #353 + UI #351) está COMPLETO** — o
@@ -64,7 +63,7 @@ que resta (#354/#350/#352) é enriquecimento/discovery.
 ## Sequência + dependências
 
 - **#353** `feat(ai)` — **passo de SÍNTESE** (multi-mercado → palpite-manchete). ✅ **MERGED (PR #358).**
-- **#351** `feat(match-ui)` — HERO da manchete + detalhe recolhível. ✅ **MERGED (PR #360).** Spine palpite-first COMPLETO (falta só o **GO-LIVE flip** do dono — ver "Onde estamos").
+- **#351** `feat(match-ui)` — HERO da manchete + detalhe recolhível. ✅ **MERGED (PR #360).** Spine palpite-first COMPLETO + **AO VIVO** (flag `enable_best_bet_fan_out` ON — ver "Onde estamos").
 - **#354** `feat` — tipos de palpite liquidáveis **goal-derived** (margem, clean sheet, quem marca 1º, placar 1º tempo — badge de graça do placar 90', sem provider novo). Enriquecimento; pode vir depois do #351.
 - **#350** `discovery` — cartão/escanteio liquidável → exige stats provider + **ADR Tier 3** (normalizer hoje é goal-only, `adapter.ts:541`).
 - **#352** `discovery/ADR` — "Analise minha aposta" (avaliador selection-pinned da aposta do usuário; feature de VALOR, reusa o motor, exige ADR).
