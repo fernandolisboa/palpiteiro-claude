@@ -62,7 +62,14 @@ export function PalpiteHero({
   const error = state && !state.ok ? state.error : null;
 
   return (
-    <form action={formAction} aria-busy={pending}>
+    // lg:flex+flex-col: no desktop o <form> é o item do grid (esticado pela linha); vira
+    // coluna flex pra a casca (WarmShell) crescer e casar a altura com a coluna de odds
+    // (min-height = odds; cresce se o palpite for maior). No mobile fica bloco normal.
+    <form
+      action={formAction}
+      aria-busy={pending}
+      className="lg:flex lg:flex-col"
+    >
       <input type="hidden" name="matchId" value={matchId} />
       <HeroBody
         heroPalpite={heroPalpite}
@@ -287,7 +294,9 @@ function WarmShell({
     <section
       aria-label="palpite"
       className={cn(
-        "rounded-xl border p-5 lg:p-6",
+        // lg:flex-1 → no desktop a casca cresce pra preencher o <form> esticado pelo grid
+        // (altura casada com odds). Conteúdo fica no topo; sobra vira respiro no rodapé.
+        "rounded-xl border p-5 lg:p-6 lg:flex-1",
         tone === "full"
           ? "border-palpite-border bg-palpite-soft/40 ring-1 ring-palpite-border/40"
           : "border-palpite-border/60 bg-palpite-soft/30",
