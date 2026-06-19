@@ -50,21 +50,49 @@ prod). Em `main` agora:
   (`SET = false`). Custo por run: até 6 predict() pagos + créditos de odds + 1 síntese Haiku, 1 slot.
 
 **Arco antigo #313→#316 = 100% MERGED**; o `<PalpitesPanel/>` interim foi **substituído pelo
-HERO** (deletado no #351). **O spine palpite-first (DADO #353 + UI #351) está COMPLETO** — o
-que resta (#354/#350/#352) é enriquecimento/discovery.
+HERO** (deletado no #351). **O spine palpite-first (DADO #353 + UI #351) está COMPLETO** e a
+**Faixa A de enriquecimento (#354) também** — o que resta (#350/#352) é **discovery/ADR**.
+
+**#354 (tipos liquidáveis goal-derived) MERGED 2026-06-19 (PR #364, squash `42e38d05`).** Em `main`:
+- **4 tipos** liquidáveis novos, espelhando `exact_score`, **sem provider novo**: `margin`
+  (floor **≥2** "ganha por 2+" → ortogonal a 1X2), `clean_sheet`, `first_half_score` (placar
+  do intervalo), `first_to_score` (home/away). Enum +4 valores (migration **0036**, só `ALTER
+  TYPE ADD VALUE`).
+- **Gate único** `SETTLEABLE_PALPITE_TYPES` (`lib/ai/palpites/settleable.ts`) dirige
+  `deriveSettleable` **e** o predicado SQL `inArray` (`lib/db/queries/palpites.ts`) — sem drift.
+  `red_card`/`corners` ficam de fora (Tier-3 de pé).
+- **Dispatch por tipo** `PALPITE_SETTLEMENT_RULES` (`lib/settlement/rules/palpite-dispatch.ts`,
+  **NÃO** o `registry.ts` de valor — separação ADR 0028) + 4 regras puras +
+  `lib/settlement/palpite-result-data.ts` (deriva `firstToScore`; **own-goal-como-1º /
+  minute-null / empate-de-minuto / feed-incompleto → undefined → PENDING**; o wire `ev.team`
+  de own goal da api-football **não** é confiado — prefer-skip).
+- **Adapter** passa `halftimeScore` adiante (`api-football/adapter.ts`; football-data.org=`null`
+  → `first_half_score`/`first_to_score` ficam PENDING nesses fixtures, nunca LOST). Cron de
+  palpite ganha fetch de eventos **só** p/ matches com row `first_to_score` pendente (quota guard
+  testado).
+- **Síntese `palpites_v2`→`palpites_v3`** (+`firstHalfScore` +`firstToScore` no schema `.strict()`
+  + tool + prompt). Geração **multi-row** com **gate de EMISSÃO por coerência** (margin≥2;
+  `first_half` ≤ `probableScore`; `first_to_score` só home/away coerente com o vencedor previsto;
+  `"none"` nunca vira row) — **não** `.refine()` rejeitante (degradaria o palpite a null).
+- **Firewall ADR 0030 mantido**: labels do scorecard vêm de **templates FIXOS pinados** + guard
+  `containsValueLanguage` roda na geração sobre cada `text`. UI: scorecard "ficha" **quieto** no
+  HERO (`palpite-hero.tsx`), abaixo do veredito, escondido a 0 dimensões.
+- Idempotência por-row preservada (UNIQUE `palpiteId`). Code-review 3 lentes: **0 blocker, 0
+  firewall leak, 0 silent-wrong-settle** — só hardening de teste aplicado. Plano:
+  `docs/plans/PLAN-354.md`.
 
 ## Ler primeiro (nesta ordem)
 
 1. `docs/decisions/0030-palpite-first-sintese-da-analise.md` — a decisão, aterrada em file:line.
 2. Memória `palpites-engajamento-arc` (banner do topo = o pivot; corpo = o arco antigo concluído).
-3. `gh issue view 354` → `350` → `352` (a cadeia restante; #353/#351 = MERGED).
+3. `gh issue view 350` → `352` (a cadeia restante; #353/#351/#354 = MERGED).
 4. `CLAUDE.md` (fluxo: sanity-check → issues → subagent por passo; "O que NÃO fazer").
 
 ## Sequência + dependências
 
 - **#353** `feat(ai)` — **passo de SÍNTESE** (multi-mercado → palpite-manchete). ✅ **MERGED (PR #358).**
 - **#351** `feat(match-ui)` — HERO da manchete + detalhe recolhível. ✅ **MERGED (PR #360).** Spine palpite-first COMPLETO + **AO VIVO** (flag `enable_best_bet_fan_out` ON — ver "Onde estamos").
-- **#354** `feat` — tipos de palpite liquidáveis **goal-derived** (margem, clean sheet, quem marca 1º, placar 1º tempo — badge de graça do placar 90', sem provider novo). Enriquecimento; pode vir depois do #351.
+- **#354** `feat` — tipos de palpite liquidáveis **goal-derived**. ✅ **MERGED (PR #364, squash `42e38d05`).** Faixa A completa (ver "Onde estamos").
 - **#350** `discovery` — cartão/escanteio liquidável → exige stats provider + **ADR Tier 3** (normalizer hoje é goal-only, `adapter.ts:541`).
 - **#352** `discovery/ADR` — "Analise minha aposta" (avaliador selection-pinned da aposta do usuário; feature de VALOR, reusa o motor, exige ADR).
 
