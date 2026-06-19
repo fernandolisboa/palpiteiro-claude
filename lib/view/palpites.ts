@@ -1,15 +1,19 @@
+import type { PalpiteType } from "@/lib/ai/palpites/settleable";
 import type { PalpiteSetWithLines } from "@/lib/db/queries/palpites";
 
-// Tipo de palpite (espelha db/schema palpiteTypeEnum). exact_score é o ÚNICO
-// settleable na v1; red_card/corners são fun-only (ADR 0028 §3).
-type PalpiteType = "exact_score" | "red_card" | "corners";
-
 // Rótulo PT-BR humano por tipo — a única tradução de domínio da view. Mapa fechado
-// (Record) pra o TS exigir cobertura de todo membro do enum.
+// (Record sobre o enum CANÔNICO) → o TS exige cobertura EXAUSTIVA de todo membro do
+// enum (qualquer tipo novo sem label vira erro de compilação — remove a trap de
+// `undefined` silencioso, #354 / major F). settleable: exact_score + os 4 goal-derived;
+// red_card/corners são fun-only (ADR 0028 §3).
 const TYPE_LABEL: Record<PalpiteType, string> = {
   exact_score: "placar exato",
   red_card: "cartão vermelho",
   corners: "escanteios",
+  margin: "margem de vitória",
+  clean_sheet: "não sofrer gol",
+  first_half_score: "placar do 1º tempo",
+  first_to_score: "primeiro a marcar",
 };
 
 // Estado DERIVADO de cada linha (PLAN §3) — calculado AQUI, nunca no JSX:
@@ -55,7 +59,9 @@ function deriveState(
 function toLineView(
   line: PalpiteSetWithLines["palpites"][number],
 ): PalpiteLineView {
-  const type = line.type as PalpiteType;
+  // `line.type` já é o enum canônico completo (DbPalpite["type"]) → sem cast; o
+  // TYPE_LABEL é exhaustiveness-checked pelo TS (major F).
+  const type = line.type;
   return {
     id: line.id,
     type,

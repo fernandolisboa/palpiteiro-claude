@@ -38,15 +38,18 @@ vi.mock("@/lib/db", () => ({
   ),
 }));
 
+import type { DbPalpite } from "@/lib/db/queries/palpites";
 import {
   __setSportsDataProviderForTesting,
   getSportsDataProvider,
 } from "@/lib/providers/sports-data";
 import type {
   FixtureRef,
+  NormalizedFixtureEvents,
   NormalizedFixtureResult,
   SportsDataProvider,
 } from "@/lib/providers/sports-data/types";
+import { SportsDataUnsupportedError } from "@/lib/providers/sports-data/types";
 import { settlePendingPalpites } from "@/lib/settlement/settle-palpites";
 
 const ids: { userId: string } = {} as never;
@@ -85,8 +88,8 @@ async function seedSet(matchId: string): Promise<string> {
 
 async function seedPalpite(args: {
   palpiteSetId: string;
-  type?: "exact_score" | "red_card" | "corners";
-  params?: { home: number; away: number } | null;
+  type?: (typeof schema.palpiteTypeEnum.enumValues)[number];
+  params?: DbPalpite["params"] | null;
   settleable?: boolean;
 }): Promise<string> {
   const [p] = await realDb
@@ -118,18 +121,177 @@ async function seedExactScore(
 }
 
 function installProvider(
-  resultFor: (ref: FixtureRef) => NormalizedFixtureResult | undefined
-): void {
+  resultFor: (ref: FixtureRef) => NormalizedFixtureResult | undefined,
+  opts: {
+    eventsFor?: (ref: FixtureRef) => NormalizedFixtureEvents | undefined;
+    eventsUnsupported?: boolean;
+  } = {}
+): {
+  getFixtureResult: ReturnType<typeof vi.fn>;
+  getFixtureEvents: ReturnType<typeof vi.fn>;
+} {
   const getFixtureResult = vi.fn(async (ref: FixtureRef) => resultFor(ref));
+  const getFixtureEvents = vi.fn(async (ref: FixtureRef) => {
+    if (opts.eventsUnsupported) {
+      throw new SportsDataUnsupportedError(
+        "events unsupported",
+        "football-data-org-like",
+        "getFixtureEvents"
+      );
+    }
+    return opts.eventsFor ? opts.eventsFor(ref) : undefined;
+  });
   __setSportsDataProviderForTesting({
     getFixtureResult,
+    getFixtureEvents,
   } as unknown as SportsDataProvider);
+  return { getFixtureResult, getFixtureEvents };
 }
 
-const finished = (home: number, away: number): NormalizedFixtureResult => ({
+const finished = (
+  home: number,
+  away: number,
+  halftimeScore?: { home: number; away: number } | null
+): NormalizedFixtureResult => ({
   status: "finished",
   regulationScore: { home, away },
+  ...(halftimeScore !== undefined ? { halftimeScore } : {}),
 });
+
+// Eventos com 1 gol home aos 20' (home marca primeiro).
+function eventsHomeFirst(): NormalizedFixtureEvents {
+  return {
+    fixtureStatus: "finished",
+    eventsAvailable: true,
+    goals: [
+      {
+        playerId: null,
+        playerName: "Pedro",
+        teamSide: "home",
+        minute: 20,
+        isPenalty: false,
+        isOwnGoal: false,
+        isRegulation: true,
+      },
+    ],
+    assists: [],
+  };
+}
+
+// Eventos coerentes com um 2-1 onde o VISITANTE marca primeiro (gol away aos 10',
+// gols home aos 50' e 70'). first_to_score derivado = "away".
+function eventsAwayFirst21(): NormalizedFixtureEvents {
+  return {
+    fixtureStatus: "finished",
+    eventsAvailable: true,
+    goals: [
+      {
+        playerId: null,
+        playerName: "Cano",
+        teamSide: "away",
+        minute: 10,
+        isPenalty: false,
+        isOwnGoal: false,
+        isRegulation: true,
+      },
+      {
+        playerId: null,
+        playerName: "Pedro",
+        teamSide: "home",
+        minute: 50,
+        isPenalty: false,
+        isOwnGoal: false,
+        isRegulation: true,
+      },
+      {
+        playerId: null,
+        playerName: "Arrascaeta",
+        teamSide: "home",
+        minute: 70,
+        isPenalty: false,
+        isOwnGoal: false,
+        isRegulation: true,
+      },
+    ],
+    assists: [],
+  };
+}
+
+// Semeia um set com as 5 dimensões settleable num jogo finished. Devolve os ids por tipo.
+async function seedFiveDimensions(
+  externalId: string
+): Promise<{ matchId: string; ids: Record<string, string> }> {
+  const matchId = await seedMatch(externalId);
+  const setId = await seedSet(matchId);
+  const out: Record<string, string> = {};
+  out.exact_score = await seedPalpite({
+    palpiteSetId: setId,
+    type: "exact_score",
+    params: { home: 2, away: 0 },
+    settleable: true,
+  });
+  out.margin = await seedPalpite({
+    palpiteSetId: setId,
+    type: "margin",
+    params: { side: "home", minMargin: 2 },
+    settleable: true,
+  });
+  out.clean_sheet = await seedPalpite({
+    palpiteSetId: setId,
+    type: "clean_sheet",
+    params: { side: "home" },
+    settleable: true,
+  });
+  out.first_half_score = await seedPalpite({
+    palpiteSetId: setId,
+    type: "first_half_score",
+    params: { home: 1, away: 0 },
+    settleable: true,
+  });
+  out.first_to_score = await seedPalpite({
+    palpiteSetId: setId,
+    type: "first_to_score",
+    params: { firstToScore: "home" },
+    settleable: true,
+  });
+  return { matchId, ids: out };
+}
+
+// Semeia um set SÓ com dimensões NÃO event-backed (exact_score + margin + clean_sheet +
+// first_half_score) — i.e. SEM nenhuma row first_to_score. Usado pra pinar o gate de
+// quota: getFixtureEvents NUNCA deve ser chamado quando não há row event-backed pendente.
+async function seedNonEventBackedDimensions(
+  externalId: string
+): Promise<{ matchId: string; ids: Record<string, string> }> {
+  const matchId = await seedMatch(externalId);
+  const setId = await seedSet(matchId);
+  const out: Record<string, string> = {};
+  out.exact_score = await seedPalpite({
+    palpiteSetId: setId,
+    type: "exact_score",
+    params: { home: 2, away: 0 },
+    settleable: true,
+  });
+  out.margin = await seedPalpite({
+    palpiteSetId: setId,
+    type: "margin",
+    params: { side: "home", minMargin: 2 },
+    settleable: true,
+  });
+  out.clean_sheet = await seedPalpite({
+    palpiteSetId: setId,
+    type: "clean_sheet",
+    params: { side: "home" },
+    settleable: true,
+  });
+  out.first_half_score = await seedPalpite({
+    palpiteSetId: setId,
+    type: "first_half_score",
+    params: { home: 1, away: 0 },
+    settleable: true,
+  });
+  return { matchId, ids: out };
+}
 
 beforeAll(async () => {
   client = new PGlite();
@@ -312,6 +474,195 @@ describe("settlePendingPalpites — idempotência", () => {
     expect(second.alreadySettled).toBe(0);
     const after = (await outcomesByPalpite()).get(id)!;
     expect(after).toEqual(before); // byte-idêntico (incl. settledAt)
+  });
+});
+
+describe("settlePendingPalpites — multi-dimensão goal-derived (#354)", () => {
+  it("2-0, HT 1-0, home marca aos 20' → settla as 5 dimensões com os resultados certos", async () => {
+    const { ids: lineIds } = await seedFiveDimensions("ext-5dims");
+    const { getFixtureEvents } = installProvider(
+      () => finished(2, 0, { home: 1, away: 0 }),
+      { eventsFor: eventsHomeFirst }
+    );
+
+    const s = await settlePendingPalpites(NOW);
+    expect(s.considered).toBe(5);
+    expect(s.settled).toBe(5);
+    expect(s.byResult).toEqual({ won: 5, lost: 0 });
+
+    const out = await outcomesByPalpite();
+    expect(out.get(lineIds.exact_score)!.result).toBe("won"); // 2-0 == 2-0
+    expect(out.get(lineIds.margin)!.result).toBe("won"); // home por 2 >= 2
+    expect(out.get(lineIds.clean_sheet)!.result).toBe("won"); // away marcou 0
+    expect(out.get(lineIds.first_half_score)!.result).toBe("won"); // HT 1-0 == 1-0
+    expect(out.get(lineIds.first_to_score)!.result).toBe("won"); // home marca 1º
+
+    // Gate de quota: o set TEM uma row first_to_score (event-backed) → /fixtures/events
+    // é buscado EXATAMENTE 1x (memoizado por match).
+    expect(getFixtureEvents).toHaveBeenCalledTimes(1);
+  });
+
+  it("set SEM row event-backed (sem first_to_score) → getFixtureEvents NUNCA é chamado (gate de quota)", async () => {
+    // exact_score + margin + clean_sheet + first_half_score, nenhuma first_to_score:
+    // buscar /fixtures/events seria egress de api-football desperdiçado. O gate
+    // EVENT_BACKED_PALPITE_TYPES.has(p.type) tem que pular o fetch inteiro.
+    const { ids: lineIds } = await seedNonEventBackedDimensions("ext-no-event-backed");
+    const { getFixtureEvents } = installProvider(
+      () => finished(2, 0, { home: 1, away: 0 }),
+      { eventsFor: eventsHomeFirst }
+    );
+
+    const s = await settlePendingPalpites(NOW);
+    expect(s.considered).toBe(4);
+    expect(s.settled).toBe(4);
+    expect(s.byResult).toEqual({ won: 4, lost: 0 });
+
+    const out = await outcomesByPalpite();
+    expect(out.get(lineIds.exact_score)!.result).toBe("won");
+    expect(out.get(lineIds.margin)!.result).toBe("won");
+    expect(out.get(lineIds.clean_sheet)!.result).toBe("won");
+    expect(out.get(lineIds.first_half_score)!.result).toBe("won");
+
+    // O invariante: NENHUM fetch de eventos sem row event-backed pendente.
+    expect(getFixtureEvents).not.toHaveBeenCalled();
+  });
+
+  it("placar 2-1 com away marcando 1º → margin e first_to_score settlam LOST; irmãs corretas", async () => {
+    // Fixture COERENTE: final 2-1 (home vence), VISITANTE marca aos 10', home vira no 2º
+    // tempo (50' + 70'); HT 0-1. Os params semeados são "errados" pra esse placar em 2
+    // dimensões → settlam LOST:
+    //   - margin {side:home, minMargin:2}: home venceu por 1 (<2)        → LOST
+    //   - first_to_score {firstToScore:home}: na real o away marcou 1º   → LOST
+    // As irmãs settlam correto pro 2-1:
+    //   - exact_score {2,1}        == 2-1     → WON
+    //   - first_half_score {0,1}   == HT 0-1  → WON
+    //   - clean_sheet {side:away}: adversário (home) marcou 2 ≠ 0 → away NÃO segurou → LOST
+    const matchId = await seedMatch("ext-21-away-first");
+    const setId = await seedSet(matchId);
+    const lineIds: Record<string, string> = {};
+    lineIds.exact_score = await seedPalpite({
+      palpiteSetId: setId,
+      type: "exact_score",
+      params: { home: 2, away: 1 },
+      settleable: true,
+    });
+    lineIds.margin = await seedPalpite({
+      palpiteSetId: setId,
+      type: "margin",
+      params: { side: "home", minMargin: 2 },
+      settleable: true,
+    });
+    lineIds.clean_sheet = await seedPalpite({
+      palpiteSetId: setId,
+      type: "clean_sheet",
+      params: { side: "away" },
+      settleable: true,
+    });
+    lineIds.first_half_score = await seedPalpite({
+      palpiteSetId: setId,
+      type: "first_half_score",
+      params: { home: 0, away: 1 },
+      settleable: true,
+    });
+    lineIds.first_to_score = await seedPalpite({
+      palpiteSetId: setId,
+      type: "first_to_score",
+      params: { firstToScore: "home" },
+      settleable: true,
+    });
+
+    installProvider(() => finished(2, 1, { home: 0, away: 1 }), {
+      eventsFor: eventsAwayFirst21,
+    });
+
+    const s = await settlePendingPalpites(NOW);
+    expect(s.considered).toBe(5);
+    expect(s.settled).toBe(5);
+    expect(s.byResult).toEqual({ won: 2, lost: 3 });
+
+    const out = await outcomesByPalpite();
+    expect(out.get(lineIds.margin)!.result).toBe("lost"); // home por 1 < 2
+    expect(out.get(lineIds.first_to_score)!.result).toBe("lost"); // away marcou 1º
+    expect(out.get(lineIds.exact_score)!.result).toBe("won"); // 2-1 == 2-1
+    expect(out.get(lineIds.first_half_score)!.result).toBe("won"); // HT 0-1 == 0-1
+    expect(out.get(lineIds.clean_sheet)!.result).toBe("lost"); // home marcou 2 → away levou gol
+  });
+
+  it("halftime AUSENTE (null) → first_half_score PENDING; as outras 4 settlam", async () => {
+    const { ids: lineIds } = await seedFiveDimensions("ext-no-ht");
+    installProvider(() => finished(2, 0, null), { eventsFor: eventsHomeFirst });
+
+    const s = await settlePendingPalpites(NOW);
+    expect(s.considered).toBe(5);
+    expect(s.settled).toBe(4);
+    expect(s.errors).toBe(1); // first_half_score lança → bucketa em errors → PENDING
+
+    const out = await outcomesByPalpite();
+    expect(out.has(lineIds.first_half_score)).toBe(false);
+    expect(out.get(lineIds.exact_score)!.result).toBe("won");
+    expect(out.get(lineIds.margin)!.result).toBe("won");
+    expect(out.get(lineIds.clean_sheet)!.result).toBe("won");
+    expect(out.get(lineIds.first_to_score)!.result).toBe("won");
+  });
+
+  it("eventos Unsupported (provider football-data-org-like) → first_to_score PENDING; match NÃO erra inteiro", async () => {
+    const { ids: lineIds } = await seedFiveDimensions("ext-no-events");
+    installProvider(() => finished(2, 0, { home: 1, away: 0 }), {
+      eventsUnsupported: true,
+    });
+
+    const s = await settlePendingPalpites(NOW);
+    expect(s.considered).toBe(5);
+    expect(s.settled).toBe(4);
+    expect(s.errors).toBe(1); // first_to_score: eventsAvailable !== true → PENDING
+
+    const out = await outcomesByPalpite();
+    expect(out.has(lineIds.first_to_score)).toBe(false);
+    expect(out.get(lineIds.exact_score)!.result).toBe("won");
+    expect(out.get(lineIds.margin)!.result).toBe("won");
+    expect(out.get(lineIds.clean_sheet)!.result).toBe("won");
+    expect(out.get(lineIds.first_half_score)!.result).toBe("won");
+  });
+
+  it("idempotência multi-row: 2ª run = no-op (alreadySettled) pras 5 rows", async () => {
+    await seedFiveDimensions("ext-5dims-idem");
+    installProvider(() => finished(2, 0, { home: 1, away: 0 }), {
+      eventsFor: eventsHomeFirst,
+    });
+
+    const first = await settlePendingPalpites(NOW);
+    expect(first.settled).toBe(5);
+
+    const second = await settlePendingPalpites(NOW);
+    // Todas já liquidadas (isNull outcome) → fora do pending set → considered 0.
+    expect(second.considered).toBe(0);
+    expect(second.settled).toBe(0);
+  });
+
+  it("parcial-depois-completa: run1 sem HT → first_half PENDING; run2 com HT → settla, irmãs intactas", async () => {
+    const { ids: lineIds } = await seedFiveDimensions("ext-partial-then-complete");
+
+    // Run 1: sem halftime → first_half_score PENDING, as outras 4 settlam.
+    installProvider(() => finished(2, 0, null), { eventsFor: eventsHomeFirst });
+    const run1 = await settlePendingPalpites(NOW);
+    expect(run1.settled).toBe(4);
+    const afterRun1 = await outcomesByPalpite();
+    expect(afterRun1.size).toBe(4);
+    expect(afterRun1.has(lineIds.first_half_score)).toBe(false);
+    const exactBefore = afterRun1.get(lineIds.exact_score)!;
+
+    // Run 2: halftime AGORA disponível → first_half_score settla; as 4 irmãs são
+    // alreadySettled (já têm outcome) → nenhuma row nova pra elas.
+    installProvider(() => finished(2, 0, { home: 1, away: 0 }), {
+      eventsFor: eventsHomeFirst,
+    });
+    const run2 = await settlePendingPalpites(NOW);
+    expect(run2.settled).toBe(1); // só o first_half_score
+    const afterRun2 = await outcomesByPalpite();
+    expect(afterRun2.size).toBe(5); // N → N+1
+    expect(afterRun2.get(lineIds.first_half_score)!.result).toBe("won");
+    // As irmãs ficam byte-idênticas.
+    expect(afterRun2.get(lineIds.exact_score)!).toEqual(exactBefore);
   });
 });
 

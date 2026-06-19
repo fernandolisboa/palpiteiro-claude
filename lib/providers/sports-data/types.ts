@@ -50,6 +50,13 @@ export const NormalizedFixtureResultSchema = z.object({
   regulationScore: z
     .object({ home: z.number().int(), away: z.number().int() })
     .nullable(),
+  // #354: placar do INTERVALO (1º tempo), separado do regulationScore de 90'.
+  // OPCIONAL (additive — football-data-org não expõe o split → omite). null quando
+  // o split não existe. first_half_score liquida disto; null/ausente → PENDING.
+  halftimeScore: z
+    .object({ home: z.number().int(), away: z.number().int() })
+    .nullable()
+    .optional(),
 });
 export type NormalizedFixtureResult = z.infer<
   typeof NormalizedFixtureResultSchema

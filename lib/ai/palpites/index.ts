@@ -8,17 +8,14 @@ import { getSportsDataProvider } from "@/lib/providers/sports-data";
 import type { FixtureRef } from "@/lib/providers/sports-data/types";
 import { getGenerationParams } from "@/lib/db/queries/ai-config";
 
-import { persistAiCallError, truncate } from "../ai-call-logging";
+import { persistAiCallError } from "../ai-call-logging";
 import { calculateCost } from "../cost";
 import { MODEL_REGISTRY, isAIProvider, type AIModelId } from "../models";
 import { getProviderForModel } from "../providers";
 import type { AnalysisRequest } from "../providers/types";
-import {
-  ExactScoreParamsSchema,
-  type PalpiteSynthesisOutput,
-} from "./cartridges/cartridge";
+import { type PalpiteSynthesisOutput } from "./cartridges/cartridge";
 import { getPalpiteCartridge } from "./registry";
-import { deriveSettleable } from "./settleable";
+import { buildSettleablePalpiteRows } from "./settleable-rows";
 import { containsValueLanguage } from "./value-language-guard";
 import {
   PalpiteError,
@@ -34,7 +31,6 @@ export type {
 
 const FORM_LAST = 5;
 const H2H_LAST = 5;
-const TEXT_MAX = 280;
 
 /**
  * Passo de SÍNTESE do palpite-first (ADR 0030 / #353): turna as N análises
@@ -245,15 +241,16 @@ export async function generatePalpites({
   // 11b. FIREWALL leg (b) — guard de CONTEÚDO pós-Zod (ADR 0030 §3, blocker #5). O
   //      `.strict()` só barra chaves; o LLM pode ecoar um TERMO de valor numa string.
   //      Rodamos sobre TODO campo que cruza pra manchete/view: verdict + narrative +
-  //      o `text` derivado da linha settleable + os rótulos de citedMarkets (LLM-livre,
-  //      vão verbatim pro PalpiteHeadlineView). Hit → tratado como `invalid_output`
-  //      (mesmo path auditado do Zod) → throw → degrada pra palpite:null no try/catch
-  //      do analyzeBestBet. REJEITAR > VAZAR.
-  const settleableText = `${output.verdict} — provável ${output.probableScore.home}×${output.probableScore.away}`;
+  //      o `text` derivado de CADA linha settleable (templates fixos, #354) + os
+  //      rótulos de citedMarkets (LLM-livre, vão verbatim pro PalpiteHeadlineView). Hit
+  //      → tratado como `invalid_output` (mesmo path auditado do Zod) → throw → degrada
+  //      pra palpite:null no try/catch do analyzeBestBet. REJEITAR > VAZAR. As rows são
+  //      construídas AQUI (puras, sem DB) e reusadas no insert em batch (12c).
+  const settleableRows = buildSettleablePalpiteRows("", output);
   const valueLeak =
     containsValueLanguage(output.verdict) ||
     containsValueLanguage(output.narrative) ||
-    containsValueLanguage(settleableText) ||
+    settleableRows.some((r) => containsValueLanguage(r.text)) ||
     output.citedMarkets.some(containsValueLanguage);
   if (valueLeak) {
     await persistAiCallError({
@@ -353,28 +350,19 @@ export async function generatePalpites({
     throw new PalpiteError("failed to persist palpite_set", cause);
   }
 
-  // 12c. palpites — UMA linha settleable `exact_score` derivada do `probableScore`
-  //      (ADR 0030: o placar provável é o único ponto conferido = o badge). settleable
-  //      DERIVADO da constante de tipo (NUNCA do LLM); params re-validado por Zod no
-  //      boundary; text = label derivado do veredito + placar (já passou pelo guard de
-  //      value-language acima, junto com verdict/narrative). NÃO gera mais red_card/
-  //      corners (os valores do enum permanecem; ADR 0030 — gate Tier 3 de pé).
-  const params = ExactScoreParamsSchema.parse(output.probableScore);
-  const settleable = deriveSettleable("exact_score");
-  const [pRow] = await db
-    .insert(palpites)
-    .values({
-      palpiteSetId: setRow.id,
-      type: "exact_score",
-      text: truncate(settleableText, TEXT_MAX),
-      params,
-      settleable,
-    })
-    .returning();
+  // 12c. palpites — N linhas settleable derivadas da síntese (#354): sempre exact_score
+  //      (o placar provável, o ponto central conferido) + 0..4 dimensões goal-derived
+  //      (margin/clean_sheet/first_half_score/first_to_score) EMITIDAS só quando
+  //      coerentes (gate em buildSettleablePalpiteRows). settleable DERIVADO da
+  //      constante de tipo (NUNCA do LLM); params/text de templates FIXOS já passaram
+  //      pelo guard de value-language acima. Insert em batch único; `inserted` é o array
+  //      completo de rows. NÃO gera red_card/corners (gate Tier 3 de pé, ADR 0028).
+  const rows = settleableRows.map((r) => ({ ...r, palpiteSetId: setRow.id }));
+  const inserted = await db.insert(palpites).values(rows).returning();
 
   return {
     palpiteSet: setRow,
-    palpites: [pRow],
+    palpites: inserted,
     aiCall: aiCallId ? { id: aiCallId } : null,
   };
 }

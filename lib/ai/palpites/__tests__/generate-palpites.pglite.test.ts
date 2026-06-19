@@ -155,6 +155,8 @@ const analyses: MarketAnalysisSummary[] = [
 const validToolInput = {
   verdict: "Vai dar Flamengo",
   probableScore: { home: 2, away: 1 },
+  firstHalfScore: { home: 1, away: 0 },
+  firstToScore: "home",
   confidence: "alta",
   narrative: "O Fla vem voando em casa.",
   citedMarkets: ["Resultado (1X2)"],
@@ -240,7 +242,7 @@ const call = (over?: Partial<Parameters<typeof generatePalpites>[0]>) =>
   });
 
 describe("generatePalpites (síntese) — write path real (pglite)", () => {
-  it("ok: 1 set com headline + 1 linha exact_score settleable, aiCallId não-null", async () => {
+  it("ok: 1 set com headline + linhas settleable em batch (#354), aiCallId não-null", async () => {
     runAnalysis.mockResolvedValue(okResult(validToolInput));
     const res = await call();
     expect(res.aiCall).not.toBeNull();
@@ -257,13 +259,18 @@ describe("generatePalpites (síntese) — write path real (pglite)", () => {
       citedMarkets: ["Resultado (1X2)"],
       sourcePredictionIds: ["00000000-0000-0000-0000-000000000abc"],
     });
-    // EXATAMENTE 1 linha: o placar provável (settleable). Nada de red_card/corners.
+    // 2-1, HT 1-0, home 1º → exact_score + first_half_score + first_to_score
+    // (margin pula <2; clean_sheet pula — away marcou). Nada de red_card/corners.
     const lines = sets[0].palpites;
-    expect(lines).toHaveLength(1);
-    const exact = lines[0];
-    expect(exact.type).toBe("exact_score");
+    const byType = new Map(lines.map((l) => [l.type, l]));
+    expect(new Set(byType.keys())).toEqual(
+      new Set(["exact_score", "first_half_score", "first_to_score"]),
+    );
+    const exact = byType.get("exact_score")!;
     expect(exact.settleable).toBe(true);
     expect(exact.params).toEqual({ home: 2, away: 1 });
+    expect(byType.get("first_half_score")!.params).toEqual({ home: 1, away: 0 });
+    expect(byType.get("first_to_score")!.params).toEqual({ firstToScore: "home" });
   });
 
   it("assimetria: ai_call falha → set sobrevive com aiCallId=null", async () => {
@@ -279,8 +286,9 @@ describe("generatePalpites (síntese) — write path real (pglite)", () => {
     expect(sets).toHaveLength(1);
     expect(sets[0].palpiteSet.aiCallId).toBeNull();
     expect(sets[0].aiCall).toBeNull();
-    // A linha settleable ainda foi escrita.
-    expect(sets[0].palpites).toHaveLength(1);
+    // As linhas settleable ainda foram escritas (batch).
+    expect(sets[0].palpites.length).toBeGreaterThanOrEqual(1);
+    expect(sets[0].palpites.some((l) => l.type === "exact_score")).toBe(true);
   });
 
   it("assimetria: palpite_set falha → throw, NENHUMA row órfã", async () => {

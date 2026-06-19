@@ -17,17 +17,19 @@ import {
 } from "../cartridge";
 import { deriveSettleable } from "../../settleable";
 
-// ─── PalpitesOutputSchema (a MANCHETE, v2) ────────────────────────────────────
+// ─── PalpitesOutputSchema (a MANCHETE, v3) ────────────────────────────────────
 
 const validHeadline = {
   verdict: "Vai dar Flamengo",
   probableScore: { home: 2, away: 1 },
+  firstHalfScore: { home: 1, away: 0 },
+  firstToScore: "home" as const,
   confidence: "alta" as const,
   narrative: "O Fla vem voando em casa e o Flu sofre fora.",
   citedMarkets: ["Resultado (1X2)", "Over/Under gols"],
 };
 
-describe("PalpitesOutputSchema (síntese v2)", () => {
+describe("PalpitesOutputSchema (síntese v3)", () => {
   it("aceita uma manchete válida", () => {
     const parsed = PalpitesOutputSchema.safeParse(validHeadline);
     expect(parsed.success).toBe(true);
@@ -45,11 +47,33 @@ describe("PalpitesOutputSchema (síntese v2)", () => {
     const parsed = PalpitesOutputSchema.safeParse({
       verdict: "Jogo equilibrado, leve favoritismo da casa",
       probableScore: { home: 1, away: 1 },
+      firstHalfScore: { home: 0, away: 0 },
+      firstToScore: "none",
       confidence: "baixa",
       narrative: "Sem destaque claro nos mercados; aposto num empate apertado.",
       citedMarkets: [],
     });
     expect(parsed.success).toBe(true);
+  });
+
+  it("#354: aceita firstHalfScore + firstToScore; rejeita firstToScore fora do enum / firstHalfScore inválido", () => {
+    expect(
+      PalpitesOutputSchema.safeParse({
+        ...validHeadline,
+        firstToScore: "both",
+      }).success,
+    ).toBe(false);
+    expect(
+      PalpitesOutputSchema.safeParse({
+        ...validHeadline,
+        firstHalfScore: { home: 21, away: 0 },
+      }).success,
+    ).toBe(false);
+    // firstHalfScore/firstToScore faltando → rejeita (são required).
+    const { firstHalfScore, firstToScore, ...withoutNew } = validHeadline;
+    void firstHalfScore;
+    void firstToScore;
+    expect(PalpitesOutputSchema.safeParse(withoutNew).success).toBe(false);
   });
 
   it("confidence aceita só baixa/media/alta (enum qualitativo, nunca número)", () => {
@@ -159,8 +183,12 @@ describe("PalpitesOutputSchema (síntese v2)", () => {
 // ─── deriveSettleable (só exact_score liquida — Tier 3 de pé) ──────────────────
 
 describe("deriveSettleable", () => {
-  it("exact_score → true; red_card/corners → false (enum preservado, não gerado)", () => {
+  it("exact_score + goal-derived (#354) → true; red_card/corners → false (Tier 3 de pé)", () => {
     expect(deriveSettleable("exact_score")).toBe(true);
+    expect(deriveSettleable("margin")).toBe(true);
+    expect(deriveSettleable("clean_sheet")).toBe(true);
+    expect(deriveSettleable("first_half_score")).toBe(true);
+    expect(deriveSettleable("first_to_score")).toBe(true);
     expect(deriveSettleable("red_card")).toBe(false);
     expect(deriveSettleable("corners")).toBe(false);
   });
@@ -176,11 +204,11 @@ describe("SUBMIT_PALPITE_TOOL", () => {
       SUBMIT_PALPITE_TOOL.input_schema,
     );
   });
-  it("a versão é palpites_v2", () => {
-    expect(PALPITES_VERSION).toBe("palpites_v2");
-    expect(palpitesCartridge.version).toBe("palpites_v2");
+  it("a versão é palpites_v3", () => {
+    expect(PALPITES_VERSION).toBe("palpites_v3");
+    expect(palpitesCartridge.version).toBe("palpites_v3");
   });
-  it("o tool NÃO declara campos de valor (firewall estrutural)", () => {
+  it("o tool NÃO declara campos de valor (firewall estrutural); declara firstHalfScore + firstToScore (#354)", () => {
     const props = SUBMIT_PALPITE_TOOL.input_schema.properties as Record<
       string,
       unknown
@@ -188,6 +216,8 @@ describe("SUBMIT_PALPITE_TOOL", () => {
     expect(Object.keys(props).sort()).toEqual([
       "citedMarkets",
       "confidence",
+      "firstHalfScore",
+      "firstToScore",
       "narrative",
       "probableScore",
       "verdict",

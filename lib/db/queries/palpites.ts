@@ -19,6 +19,10 @@ import {
   palpiteSets,
   palpites,
 } from "@/db/schema";
+import {
+  SETTLEABLE_PALPITE_TYPES,
+  type SettleablePalpiteType,
+} from "@/lib/ai/palpites/settleable";
 import { db } from "@/lib/db";
 import {
   SETTLEMENT_MIN_ELAPSED_MS,
@@ -116,6 +120,13 @@ export async function getPalpiteSetsForMatch(
 
 export type PendingPalpiteSettlement = {
   palpiteId: string;
+  // O tipo settleable da linha — a regra de settlement faz dispatch por ele (#354).
+  // NARROW-not-cast: a query filtra por inArray(SETTLEABLE_PALPITE_TYPES), mas o
+  // Drizzle não refina o tipo do resultado a partir do predicado runtime → estreitamos
+  // explicitamente no .map (igual ao narrow de outcomeResult em getPalpiteSetsForMatch),
+  // jogando fora qualquer row cujo type não esteja no set (defense-in-depth, nunca
+  // deve acontecer dado o gate SQL).
+  type: SettleablePalpiteType;
   params: DbPalpite["params"];
   matchId: string;
   league: DbMatch["league"];
@@ -124,6 +135,19 @@ export type PendingPalpiteSettlement = {
   awayTeam: string;
 };
 
+const SETTLEABLE_TYPE_SET: ReadonlySet<DbPalpite["type"]> = new Set(
+  SETTLEABLE_PALPITE_TYPES,
+);
+
+// Type-guard sobre a ROW inteira (não só o campo): estreita `type` do enum largo pro
+// subconjunto settleable, e o `.filter` propaga a narrowing pro tipo do array — sem
+// cast cru (convenção narrow-not-cast do repo).
+function rowHasSettleableType<T extends { type: DbPalpite["type"] }>(
+  row: T,
+): row is T & { type: SettleablePalpiteType } {
+  return SETTLEABLE_TYPE_SET.has(row.type);
+}
+
 /**
  * Palpites de placar exato ainda aguardando liquidação: sem palpite_outcomes row
  * E o jogo começou há tempo suficiente pra ter um placar de 90'. Espelha
@@ -131,10 +155,12 @@ export type PendingPalpiteSettlement = {
  * SETTLEMENT_MIN_ELAPSED_MS (importado, NÃO duplicado), mesmo LEFT-join IS NULL
  * (um palpite já liquidado/overridden tem outcome row → excluído).
  *
- * O filtro `type='exact_score' AND settleable=true` é o GATE que honra "prefer
- * skip over silent wrong settle" (ADR 0028 §3): red_card/corners (settleable=false)
- * NUNCA entram no pending set, nunca recebem outcome. Gate duplo (type E
- * settleable) — defense-in-depth contra uma escrita errada.
+ * O filtro `type IN SETTLEABLE_PALPITE_TYPES AND settleable=true` é o GATE que honra
+ * "prefer skip over silent wrong settle" (ADR 0028 §3): red_card/corners
+ * (settleable=false, FORA da tupla) NUNCA entram no pending set, nunca recebem outcome.
+ * Gate duplo (type E settleable) — defense-in-depth contra uma escrita errada. A tupla
+ * SETTLEABLE_PALPITE_TYPES é a fonte ÚNICA que dirige este predicado E deriveSettleable
+ * (#354) — sem drift.
  *
  * LATEST-ONLY (ADR 0030 / #353, blocker #2): cada run do palpite-first grava um
  * `palpite_set` novo (semântica de regen, sets imutáveis newest-first), então um jogo
@@ -147,9 +173,10 @@ export async function getPendingPalpiteSettlements(
 ): Promise<PendingPalpiteSettlement[]> {
   const cutoff = new Date(now.getTime() - SETTLEMENT_MIN_ELAPSED_MS);
   const newerSet = alias(palpiteSets, "newer_set");
-  return db
+  const rows = await db
     .select({
       palpiteId: palpites.id,
+      type: palpites.type,
       params: palpites.params,
       matchId: matches.id,
       league: matches.league,
@@ -163,7 +190,7 @@ export async function getPendingPalpiteSettlements(
     .leftJoin(palpiteOutcomes, eq(palpiteOutcomes.palpiteId, palpites.id))
     .where(
       and(
-        eq(palpites.type, "exact_score"),
+        inArray(palpites.type, SETTLEABLE_PALPITE_TYPES),
         eq(palpites.settleable, true),
         isNull(palpiteOutcomes.id),
         lt(matches.kickoffAt, cutoff),
@@ -194,4 +221,10 @@ export async function getPendingPalpiteSettlements(
       )
     )
     .orderBy(desc(matches.kickoffAt));
+
+  // NARROW-not-cast: o predicado inArray garante em runtime que `type` é settleable,
+  // mas o Drizzle não refina o tipo do resultado a partir dele. Estreitamos por
+  // type-guard sobre a row (filter), descartando qualquer linha fora da tupla (nunca
+  // deve acontecer dado o gate SQL — defense-in-depth).
+  return rows.filter(rowHasSettleableType);
 }

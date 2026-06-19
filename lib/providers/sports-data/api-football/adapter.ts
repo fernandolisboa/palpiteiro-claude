@@ -504,9 +504,17 @@ function toNormalizedFixtureResult(
     ft.home !== null && ft.away !== null
       ? { home: ft.home, away: ft.away }
       : null;
+  // #354: split do 1º tempo (já parseado em schemas.ts). null quando indisponível
+  // → first_half_score fica PENDING (prefer-skip).
+  const ht = f.score.halftime;
+  const halftimeScore =
+    ht.home !== null && ht.away !== null
+      ? { home: ht.home, away: ht.away }
+      : null;
   return {
     status: mapStatusToNormalized(f.fixture.status.short),
     regulationScore,
+    halftimeScore,
   };
 }
 

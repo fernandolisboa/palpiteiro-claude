@@ -32,8 +32,10 @@ import { getUserAccessState } from "@/lib/db/queries/users";
 import { ensureOddsSnapshotsFresh } from "@/lib/odds/fetch-and-snapshot";
 import { checkAnalysisRateLimit, type RateLimitResult } from "@/lib/rate-limit";
 import { toAnalysisView } from "@/lib/view/analysis";
+import { ExactScoreParamsSchema } from "@/lib/ai/palpites/cartridges/cartridge";
 import { toBestBetView } from "@/lib/view/best-bet";
 import {
+  toDimensionViews,
   toPalpiteHeadlineView,
   type PalpiteHeadlineView,
 } from "@/lib/view/palpites-headline";
@@ -500,13 +502,26 @@ export async function analyzeBestBet(
       analyses: summaries,
       modelOverride: "claude-haiku-4-5",
     });
-    // A linha settleable recém-gravada ainda está PENDENTE (sem outcome) → badge null.
+    // As linhas settleable recém-gravadas estão TODAS pendentes (sem outcome) → badge
+    // null. NARROW-not-cast (#354 / blocker §3.2): `params` é a union larga do jsonb;
+    // estreitamos via ExactScoreParamsSchema.safeParse (prefer-skip: params ruins →
+    // manchete null em vez de render quebrado). As dimensões (margin/clean_sheet/…) vêm
+    // do MESMO helper que o reload (toDimensionViews) sobre as rows em memória com
+    // outcome=null → fresh == reload, sem glitch de sumir-no-fresh-aparecer-no-reload.
     const scoreLine = result.palpites.find((p) => p.type === "exact_score");
-    if (result.palpiteSet.headline && scoreLine?.params) {
+    const ps = scoreLine?.params
+      ? ExactScoreParamsSchema.safeParse(scoreLine.params)
+      : null;
+    if (result.palpiteSet.headline && ps?.success) {
+      const linesWithPendingOutcome = result.palpites.map((p) => ({
+        ...p,
+        outcome: null,
+      }));
       palpite = toPalpiteHeadlineView({
         headline: result.palpiteSet.headline,
-        probableScore: scoreLine.params,
+        probableScore: ps.data,
         outcome: null,
+        dimensions: toDimensionViews(linesWithPendingOutcome),
       });
     }
   } catch (err) {

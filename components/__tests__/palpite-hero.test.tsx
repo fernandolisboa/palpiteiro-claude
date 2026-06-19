@@ -22,6 +22,7 @@ const POPULATED: PalpiteHeadlineView = {
     "O Verdão vem melhor em casa e tende a controlar o jogo do meio pra frente.",
   citedMarkets: ["Resultado (1X2)", "Over/Under gols"],
   badge: null,
+  dimensions: [],
 };
 
 // Firewall do HERO (PLAN §5): reusa o MESMO guard de DADO (containsValueLanguage, os 13
@@ -119,6 +120,53 @@ describe("PalpiteHero — settled honesty (palavra, nunca só cor; a11y)", () =>
     });
     expect(html).toContain("provável");
     expect(html).toContain("placar real");
+  });
+});
+
+describe("PalpiteHero — ficha de dimensões (#354, major D)", () => {
+  it("0 dimensões → scorecard ESCONDIDO inteiro (sem 'e ainda')", () => {
+    const html = render({ heroPalpite: { ...POPULATED, dimensions: [] } });
+    expect(html).not.toContain("e ainda");
+  });
+
+  it("1–2 dimensões → renderiza os labels + badges, firewall limpo", () => {
+    const html = render({
+      heroPalpite: {
+        ...POPULATED,
+        dimensions: [
+          { label: "Mandante ganha por 2+", badge: null },
+          { label: "1º tempo: 1–0", badge: "won" },
+        ],
+      },
+    });
+    expect(html).toContain("e ainda");
+    expect(html).toContain("Mandante ganha por 2+");
+    expect(html).toContain("1º tempo: 1–0");
+    expect(html).toContain("aguardando placar"); // pending badge
+    expect(html).toContain("acertou"); // won badge
+    expect(leaksValue(html)).toBe(false);
+    expect(html).not.toContain("edge-");
+  });
+
+  it("várias dimensões settled + pending misturadas → firewall continua limpo", () => {
+    const html = render({
+      heroPalpite: {
+        ...POPULATED,
+        dimensions: [
+          { label: "Mandante ganha por 2+", badge: "won" },
+          { label: "Mandante não sofre gol", badge: "lost" },
+          { label: "1º tempo: 1–0", badge: null },
+          { label: "Mandante marca primeiro", badge: "won" },
+        ],
+      },
+    });
+    expect(html).toContain("Mandante não sofre gol");
+    expect(html).toContain("Mandante marca primeiro");
+    expect(html).toContain("acertou");
+    expect(html).toContain("errou");
+    expect(html).toContain("aguardando placar");
+    expect(leaksValue(html)).toBe(false);
+    expect(html).not.toContain("edge-");
   });
 });
 

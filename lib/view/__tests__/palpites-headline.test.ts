@@ -3,6 +3,7 @@ import { describe, expect, it } from "vitest";
 import type { PalpiteHeadline } from "@/db/schema";
 import type { PalpiteSetWithLines } from "@/lib/db/queries/palpites";
 import {
+  toDimensionViews,
   toPalpiteHeadlineView,
   toPalpiteHeadlineViewFromSet,
   type PalpiteHeadlineSource,
@@ -31,7 +32,7 @@ function source(
 }
 
 describe("toPalpiteHeadlineView", () => {
-  it("mapeia verdict/probableScore/confidence/narrative/citedMarkets; badge null quando pendente", () => {
+  it("mapeia verdict/probableScore/confidence/narrative/citedMarkets; badge null quando pendente; dimensions vazio por default", () => {
     const v = toPalpiteHeadlineView(source());
     expect(v).toEqual({
       verdict: "Vai dar Flamengo",
@@ -40,6 +41,7 @@ describe("toPalpiteHeadlineView", () => {
       narrative: "O Fla vem voando em casa.",
       citedMarkets: ["Resultado (1X2)", "Over/Under gols"],
       badge: null,
+      dimensions: [],
     });
   });
 
@@ -102,8 +104,20 @@ function setWith(
   };
 }
 
+// Helpers de linhas settleable não-exact_score (dimensões da ficha).
+function dimLine(over: Partial<SetLine> & Pick<SetLine, "id" | "type" | "text">): SetLine {
+  return {
+    palpiteSetId: "set-1",
+    params: null,
+    settleable: true,
+    createdAt: new Date("2026-06-01T12:00:00Z"),
+    outcome: null,
+    ...over,
+  };
+}
+
 describe("toPalpiteHeadlineViewFromSet", () => {
-  it("set persistido → view (manchete + placar provável da linha exact_score)", () => {
+  it("set persistido → view (manchete + placar provável da linha exact_score); dimensions vazio sem outras rows", () => {
     expect(toPalpiteHeadlineViewFromSet(setWith())).toEqual({
       verdict: "Vai dar Flamengo",
       probableScore: { home: 2, away: 1 },
@@ -111,7 +125,43 @@ describe("toPalpiteHeadlineViewFromSet", () => {
       narrative: "O Fla vem voando em casa.",
       citedMarkets: ["Resultado (1X2)", "Over/Under gols"],
       badge: null,
+      dimensions: [],
     });
+  });
+
+  it("#354: dimensões settleable não-exact_score mapeiam pra `dimensions` (label do text, badge do outcome); exact_score NÃO entra", () => {
+    const v = toPalpiteHeadlineViewFromSet(
+      setWith({
+        lines: [
+          line(),
+          dimLine({ id: "m", type: "margin", text: "Mandante ganha por 2+" }),
+          dimLine({
+            id: "fh",
+            type: "first_half_score",
+            text: "1º tempo: 1–0",
+            outcome: { result: "won" },
+          }),
+          dimLine({
+            id: "ft",
+            type: "first_to_score",
+            text: "Mandante marca primeiro",
+            outcome: { result: "lost" },
+          }),
+        ],
+      }),
+    );
+    expect(v?.dimensions).toEqual([
+      { label: "Mandante ganha por 2+", badge: null },
+      { label: "1º tempo: 1–0", badge: "won" },
+      { label: "Mandante marca primeiro", badge: "lost" },
+    ]);
+    // exact_score continua sendo a manchete, fora de dimensions.
+    expect(v?.dimensions.some((d) => d.label.includes("provável"))).toBe(false);
+    // Firewall: nenhum número de valor nos labels.
+    const serialized = JSON.stringify(v?.dimensions);
+    for (const term of ["edge", "ev", "stake", "odd", "yield", "R$", "%"]) {
+      expect(serialized.toLowerCase()).not.toContain(term.toLowerCase());
+    }
   });
 
   it("headline null (set antigo pré-#353) → null", () => {
@@ -141,5 +191,18 @@ describe("toPalpiteHeadlineViewFromSet", () => {
         setWith({ lines: [line({ outcome: { result: "lost" } })] }),
       )?.badge,
     ).toBe("lost");
+  });
+
+  it("#354 / minor K: fresh (toDimensionViews sobre rows em memória) == reload (toPalpiteHeadlineViewFromSet) — sem glitch", () => {
+    const lines = [
+      line(),
+      dimLine({ id: "m", type: "margin", text: "Mandante ganha por 2+" }),
+      dimLine({ id: "fh", type: "first_half_score", text: "1º tempo: 1–0" }),
+    ];
+    // Fresh: as rows recém-geradas têm outcome=null.
+    const fresh = toDimensionViews(lines);
+    // Reload: o mesmo set persistido (outcome=null ainda) → dimensions iguais.
+    const reload = toPalpiteHeadlineViewFromSet(setWith({ lines }))?.dimensions;
+    expect(fresh).toEqual(reload);
   });
 });

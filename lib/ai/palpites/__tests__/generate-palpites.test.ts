@@ -144,6 +144,8 @@ function analysis(over: Partial<MarketAnalysisSummary> = {}): MarketAnalysisSumm
 const validHeadline = {
   verdict: "Vai dar Flamengo",
   probableScore: { home: 2, away: 1 },
+  firstHalfScore: { home: 1, away: 0 },
+  firstToScore: "home",
   confidence: "alta",
   narrative: "O Fla vem voando em casa e o Flu sofre fora.",
   citedMarkets: ["Resultado (1X2)"],
@@ -193,19 +195,19 @@ const baseCall = {
 };
 
 describe("generatePalpites (síntese) — caminho ok", () => {
-  it("loga ai_call(ok) → palpite_set com headline → 1 linha exact_score settleable", async () => {
+  it("loga ai_call(ok) → palpite_set com headline → linhas settleable em BATCH (#354)", async () => {
     runAnalysis.mockResolvedValue(okResult(validHeadline));
     const res = await generatePalpites(baseCall);
 
-    // Sequência de inserts: ai_calls, palpite_sets, palpites (1).
+    // Sequência de inserts: ai_calls, palpite_sets, palpites (UM batch).
     const aiCallRow = insertValues.mock.calls[0][0] as Record<string, unknown>;
     expect(aiCallRow.status).toBe("ok");
     expect(aiCallRow.model).toBe("claude-haiku-4-5");
-    expect(aiCallRow.promptVersion).toBe("palpites_v2");
+    expect(aiCallRow.promptVersion).toBe("palpites_v3");
 
     const setRow = insertValues.mock.calls[1][0] as Record<string, unknown>;
     expect(setRow.modelVersion).toBe("claude-haiku-4-5");
-    expect(setRow.promptVersion).toBe("palpites_v2");
+    expect(setRow.promptVersion).toBe("palpites_v3");
     expect(setRow.aiCallId).toBe("row-1");
     // headline jsonb: a manchete SEM placar (vira a linha) e SEM número de valor.
     expect(setRow.headline).toEqual({
@@ -216,16 +218,27 @@ describe("generatePalpites (síntese) — caminho ok", () => {
       sourcePredictionIds: ["pred-1"],
     });
 
-    // UMA linha settleable exact_score com o placar provável.
-    const line = insertValues.mock.calls[2][0] as Record<string, unknown>;
-    expect(line.type).toBe("exact_score");
-    expect(line.settleable).toBe(true);
-    expect(line.params).toEqual({ home: 2, away: 1 });
-    // Só 3 inserts no total (ai_call + set + 1 linha) — nada de red_card/corners.
+    // As linhas vêm num ÚNICO insert em batch (array). validHeadline (2-1, HT 1-0,
+    // home 1º): exact_score + first_half_score + first_to_score (margin pula <2;
+    // clean_sheet pula — away marcou).
+    const rows = insertValues.mock.calls[2][0] as Record<string, unknown>[];
+    expect(Array.isArray(rows)).toBe(true);
+    const exact = rows.find((r) => r.type === "exact_score")!;
+    expect(exact.settleable).toBe(true);
+    expect(exact.params).toEqual({ home: 2, away: 1 });
+    const types = rows.map((r) => r.type);
+    expect(types).toContain("exact_score");
+    expect(types).toContain("first_half_score");
+    expect(types).toContain("first_to_score");
+    expect(types).not.toContain("margin");
+    expect(types).not.toContain("clean_sheet");
+    expect(types).not.toContain("red_card");
+    // 3 inserts no total (ai_call + set + batch de linhas).
     expect(insertValues.mock.calls).toHaveLength(3);
 
     expect(res.aiCall).toEqual({ id: "row-1" });
-    expect(res.palpites).toHaveLength(1);
+    // res.palpites é o retorno do batch (o mock devolve 1 row stub).
+    expect(res.palpites.length).toBeGreaterThanOrEqual(1);
   });
 
   it("o input do LLM carrega as análises (edge/odd como DADO) + sem value-language no output", async () => {
@@ -269,10 +282,11 @@ describe("generatePalpites (síntese) — caminho ok", () => {
     await generatePalpites({ ...baseCall, analyses: passOnly });
     const req = runAnalysis.mock.calls[0][0] as AnalysisRequest;
     expect(req.userMessage).toContain("sem valor recomendado (pass)");
-    // Ainda grava set + linha settleable (síntese honesta no all-pass).
-    const line = insertValues.mock.calls[2][0] as Record<string, unknown>;
-    expect(line.type).toBe("exact_score");
-    expect(line.settleable).toBe(true);
+    // Ainda grava set + linhas settleable (síntese honesta no all-pass).
+    const rows = insertValues.mock.calls[2][0] as Record<string, unknown>[];
+    const exact = rows.find((r) => r.type === "exact_score")!;
+    expect(exact.type).toBe("exact_score");
+    expect(exact.settleable).toBe(true);
   });
 });
 

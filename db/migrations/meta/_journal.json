@@ -253,6 +253,13 @@
       "when": 1781844983168,
       "tag": "0035_small_tyrannus",
       "breakpoints": true
+    },
+    {
+      "idx": 36,
+      "version": "7",
+      "when": 1781875398514,
+      "tag": "0036_square_energizer",
+      "breakpoints": true
     }
   ]
 }
