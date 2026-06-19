@@ -9,6 +9,7 @@ import {
   pickBestBookmaker,
   type MarketOddsBundle,
 } from "@/lib/odds/select-bookmaker";
+import { oddsFreshnessMsForKickoff } from "@/lib/odds/freshness-window";
 import {
   getLatestFreshSelectionOddsSnapshots,
   getLatestOverUnderSnapshot,
@@ -52,6 +53,12 @@ export async function ensureOddsSnapshotsFresh(
 ): Promise<OverUnderSnapshot | null> {
   const now = opts.now ?? new Date();
   const descriptors = opts.markets ?? [OVER_UNDER];
+
+  // Janela de frescor em função do tempo-até-kickoff: 60min pra jogos distantes
+  // (>24h), 30min pra iminentes (≤24h, inclui o conjunto de captura do CLV de KO
+  // ≤90min — SEMPRE 30min por construção). Único ponto de aplicação; o cron de
+  // prewarm (#371) herda isto de graça por chamar este mesmo ensureOddsSnapshotsFresh.
+  const freshnessMs = oddsFreshnessMsForKickoff(match.kickoffAt, now);
 
   const fetchLeagueEvents = async (
     providerMarkets: string[],
@@ -177,6 +184,7 @@ export async function ensureOddsSnapshotsFresh(
           params: line === undefined ? undefined : { line },
         },
         now,
+        freshnessMs,
       );
       if (!fresh) {
         allFresh = false;

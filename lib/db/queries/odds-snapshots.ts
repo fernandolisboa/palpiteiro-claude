@@ -155,19 +155,25 @@ export async function getLatestSelectionOddsSnapshots(args: {
 }
 
 /**
- * Última captura genérica SOMENTE se fresca (< TTL externo de 30min) — mesma
- * constante/comparador `<` de `getLatestFreshOddsSnapshot`, pra que reuso e
- * refetch nunca discordem na fronteira de idade. Retorna null se não há captura
- * ou se a existente já está stale.
+ * Última captura genérica SOMENTE se fresca (< TTL externo) — mesmo comparador
+ * `<` que reuso e refetch compartilham, pra nunca discordarem na fronteira de
+ * idade. Retorna null se não há captura ou se a existente já está stale.
+ *
+ * `freshnessMs` é OPCIONAL e default = ODDS_SNAPSHOT_FRESHNESS_MS (30min): os
+ * callers que o omitem (predict.ts, leituras) mantêm EXATAMENTE o comportamento de
+ * hoje (back-compat por construção). `ensureOddsSnapshotsFresh` passa uma janela em
+ * função do tempo-até-kickoff (oddsFreshnessMsForKickoff) — mais larga só pra jogos
+ * distantes (>24h), nunca pro conjunto de captura do CLV (KO ≤90min).
  */
 export async function getLatestFreshSelectionOddsSnapshots(
   args: { matchId: string; dbMarketKey: string; params?: { line: number } },
   now: Date = new Date(),
+  freshnessMs: number = ODDS_SNAPSHOT_FRESHNESS_MS,
 ): Promise<LatestSelectionSnapshot | null> {
   const latest = await getLatestSelectionOddsSnapshots(args);
   if (!latest) return null;
   const ageMs = now.getTime() - latest.capturedAt.getTime();
-  return ageMs < ODDS_SNAPSHOT_FRESHNESS_MS ? latest : null;
+  return ageMs < freshnessMs ? latest : null;
 }
 
 // Última captura por seleção, ORDENADA pela ordem canônica do mercado

@@ -74,6 +74,37 @@ function mapSelectionRow(s: {
   };
 }
 
+// Candidate set congelado (uma entrada por seleção) de TODAS as predições numa
+// query BATCHEADA (inArray) — evita N+1 (uma query extra, independente do tamanho do
+// histórico). SEAM nomeado extraído de getPredictionHistoryForMatch (#372):
+// SQL/ordenação/join byte-idêntica ao inline anterior — pura legibilidade + costura
+// pra um futuro Suspense, sem mudança de comportamento. `[]` em entrada vazia (o
+// caller já guarda emptiness antes de chamar). orderBy(asc(predictionId),
+// asc(sortOrder)): predictionId agrupa as rows de cada predição num bloco contíguo;
+// sortOrder dá a ordem canônica DENTRO do bloco (over,under / home,draw,away) sem
+// depender de ordem de stream implícita.
+async function getSelectionsForPredictionIds(predIds: string[]) {
+  if (predIds.length === 0) return [];
+  return db
+    .select({
+      predictionId: predictionSelectionOdds.predictionId,
+      key: marketSelections.key,
+      label: marketSelections.label,
+      odd: predictionSelectionOdds.odd,
+      modelProbPct: predictionSelectionOdds.modelProbPct,
+    })
+    .from(predictionSelectionOdds)
+    .innerJoin(
+      marketSelections,
+      eq(predictionSelectionOdds.selectionId, marketSelections.id)
+    )
+    .where(inArray(predictionSelectionOdds.predictionId, predIds))
+    .orderBy(
+      asc(predictionSelectionOdds.predictionId),
+      asc(marketSelections.sortOrder)
+    );
+}
+
 /**
  * Histórico COMPLETO de predições de um jogo para um usuário, mais recente
  * primeiro — uma row rica por (re)análise (marketKey + candidate set congelado),
@@ -110,30 +141,13 @@ export async function getPredictionHistoryForMatch(
 
   if (rows.length === 0) return [];
 
-  // Candidate set congelado de TODAS as predições numa query BATCHEADA (inArray) —
-  // evita N+1 (uma query extra, independente do tamanho do histórico).
-  // orderBy(asc(predictionId), asc(sortOrder)): predictionId agrupa as rows de cada
-  // predição num bloco contíguo; sortOrder dá a ordem canônica DENTRO do bloco
-  // (over,under / home,draw,away) sem depender de ordem de stream implícita.
+  // Candidate set congelado (batcheado, sem N+1) de TODAS as predições via helper
+  // nomeado getSelectionsForPredictionIds (#372). Depende dos predIds derivados da
+  // 1ª query (data dependency real: o inArray vem dos ids retornados), então NÃO é
+  // colapsável num Promise.all([q1,q2]) — a concorrência genuína (com a query de
+  // palpites) já vive no Promise.all da match page.
   const predIds = rows.map((r) => r.prediction.id);
-  const selRows = await db
-    .select({
-      predictionId: predictionSelectionOdds.predictionId,
-      key: marketSelections.key,
-      label: marketSelections.label,
-      odd: predictionSelectionOdds.odd,
-      modelProbPct: predictionSelectionOdds.modelProbPct,
-    })
-    .from(predictionSelectionOdds)
-    .innerJoin(
-      marketSelections,
-      eq(predictionSelectionOdds.selectionId, marketSelections.id)
-    )
-    .where(inArray(predictionSelectionOdds.predictionId, predIds))
-    .orderBy(
-      asc(predictionSelectionOdds.predictionId),
-      asc(marketSelections.sortOrder)
-    );
+  const selRows = await getSelectionsForPredictionIds(predIds);
 
   // Agrupa por predictionId; cada grupo já vem em sortOrder asc (orderBy acima).
   const selByPrediction = new Map<
