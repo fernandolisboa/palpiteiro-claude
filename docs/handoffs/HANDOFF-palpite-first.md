@@ -29,23 +29,42 @@ prod). Em `main` agora:
   (`regeneratePalpitesAction`/`RegenButton`) **removidos**. `GeneratePalpiteArgs =
   {matchId, userId, analyses, modelOverride?}`.
 
-**Arco antigo #313→#316 = 100% MERGED** (ADR 0028 + DB domain `palpites`/migration 0034
-+ gerador Haiku `lib/ai/palpites/` + `<PalpitesPanel/>` interim). **Pós-teardown:** o
-`<PalpitesPanel/>` interim ficou **sem auto-run** (empty-state até o #351). O #351
-reworka essa UI e wira o `palpite` retornado por `analyzeBestBet` (tipo
-`PalpiteHeadlineView` já existe em `lib/view/palpites-headline.ts`).
+**#351 (HERO palpite-first) MERGED 2026-06-19 (PR #360, squash 255de30b)** — o spine de
+**APRESENTAÇÃO** está pronto. Em `main`:
+- `<PalpiteHero/>` (`components/palpites/palpite-hero.tsx`, client) — server-fed por
+  `toPalpiteHeadlineViewFromSet(sets[0])` (`lib/view/palpites-headline.ts`); 8 estados
+  (empty/CTA · kill-switch · encerrado · pending-skeleton · populated · settled won/lost ·
+  erro). Botão único "Analisar com IA" → `analyzeBestBet` → `revalidatePath` (server re-feed).
+  Dial **D-leaning** (escolha do dono): placar TECIDO no veredito ("Vai dar Palmeiras /
+  provável 2–1"); kicker "O PALPITE"; confiança = palavra-chip (NUNCA meter/%/pip).
+- **Firewall de UI** (`palpite-hero.test.tsx`) reusa `containsValueLanguage` + regra "sem %"
+  — zero nº de valor no HERO. Costura cromática: HERO quente (`palpite-*`) → detalhe NEUTRO.
+- `app/match/[id]/page.tsx` reordenado nos DOIS branches (HERO topo → zona neutra {odds +
+  `MatchCollapsible` read-only com `MarketAnalysisSections`} → seções). DELETADOS:
+  `palpites-panel`/`palpite-row`/`previous-palpites`/`best-bet-panel`/`analysis-panel`/
+  `new-analysis-form` (+ testes). `palpite-badges` (SettleableBadge) FICA — o HERO reusa.
+- **⚠️ GO-LIVE PENDENTE (ação do DONO):** palpite-first é a ÚNICA layout, MAS `analyzeBestBet`
+  segue gated por `enable_best_bet_fan_out` (kill-switch de spend; rate-limit 20/dia NÃO foi
+  rederivado pro multiplicador do fan-out, `predictions.ts:404`). **Pra ir ao ar:** `UPDATE
+  ai_config SET enable_best_bet_fan_out = true WHERE id=1` (DB-flip, reversível, sem deploy).
+  Sem o flip o HERO mostra o estado kill-switch ("temporariamente indisponível"). Custo do
+  go-live: cada run = até 6 predict() pagos + créditos de odds + 1 síntese Haiku, em 1 slot.
+
+**Arco antigo #313→#316 = 100% MERGED**; o `<PalpitesPanel/>` interim foi **substituído pelo
+HERO** (deletado no #351). **O spine palpite-first (DADO #353 + UI #351) está COMPLETO** — o
+que resta (#354/#350/#352) é enriquecimento/discovery.
 
 ## Ler primeiro (nesta ordem)
 
 1. `docs/decisions/0030-palpite-first-sintese-da-analise.md` — a decisão, aterrada em file:line.
 2. Memória `palpites-engajamento-arc` (banner do topo = o pivot; corpo = o arco antigo concluído).
-3. `gh issue view 353` → `351` → `354` → `350` → `352` (a cadeia).
+3. `gh issue view 354` → `350` → `352` (a cadeia restante; #353/#351 = MERGED).
 4. `CLAUDE.md` (fluxo: sanity-check → issues → subagent por passo; "O que NÃO fazer").
 
 ## Sequência + dependências
 
 - **#353** `feat(ai)` — **passo de SÍNTESE** (multi-mercado → palpite-manchete). ✅ **MERGED (PR #358).**
-- **#351** `feat(match-ui)` — página palpite-first: HERO da manchete no topo + análises como detalhe recolhível. **`/impeccable` no plano E na revisão.** **PRÓXIMO; #353 (blocker) destravado.**
+- **#351** `feat(match-ui)` — HERO da manchete + detalhe recolhível. ✅ **MERGED (PR #360).** Spine palpite-first COMPLETO (falta só o **GO-LIVE flip** do dono — ver "Onde estamos").
 - **#354** `feat` — tipos de palpite liquidáveis **goal-derived** (margem, clean sheet, quem marca 1º, placar 1º tempo — badge de graça do placar 90', sem provider novo). Enriquecimento; pode vir depois do #351.
 - **#350** `discovery` — cartão/escanteio liquidável → exige stats provider + **ADR Tier 3** (normalizer hoje é goal-only, `adapter.ts:541`).
 - **#352** `discovery/ADR` — "Analise minha aposta" (avaliador selection-pinned da aposta do usuário; feature de VALOR, reusa o motor, exige ADR).
