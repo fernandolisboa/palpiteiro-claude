@@ -74,9 +74,11 @@ export default function MatchLoading() {
         <div className="min-h-screen bg-background text-foreground">
           <HeaderBar />
           <HeroSkeleton />
+          {/* Casa o layout carregado: palpite → detalhe → odds (anti-CLS). */}
           <div className="flex flex-col gap-3 px-5 pb-6">
-            <OddsSkeleton />
+            <Skeleton className="h-80 w-full rounded-xl" />
             <Skeleton className="h-12 w-full rounded-md" />
+            <OddsSkeleton />
             <MatchSectionsSkeleton />
             <MatchAuxiliarySkeleton />
           </div>
@@ -85,11 +87,18 @@ export default function MatchLoading() {
       <div className="hidden lg:block">
         <DesktopShell>
           <div className="mx-auto w-full max-w-content px-8 pt-8 pb-16">
-            <div className="grid grid-cols-[1fr_320px] gap-8 pb-8">
+            {/* Casa o layout carregado: identidade full-width + grid [1fr_320px]
+                {palpite + detalhe | odds} (anti-CLS). */}
+            <div className="pb-6">
               <HeroSkeleton />
+            </div>
+            <div className="grid grid-cols-[1fr_320px] items-start gap-8 pb-6">
+              <div className="flex flex-col gap-3">
+                <Skeleton className="h-80 w-full rounded-xl" />
+                <Skeleton className="h-12 w-48 rounded-md" />
+              </div>
               <OddsSkeleton />
             </div>
-            <Skeleton className="mb-6 h-12 w-48 rounded-md" />
             <MatchSectionsSkeleton />
             <MatchAuxiliarySkeleton />
           </div>
