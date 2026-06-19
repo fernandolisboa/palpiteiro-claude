@@ -31,24 +31,17 @@ describe("classifyThinkingMode — bifurcação por caminho de amostragem", () =
     expect(classifyThinkingMode("claude-haiku-4-5")).toBe("temperature");
   });
 
-  it("Opus 4.8 / Sonnet 4.6 → adaptive (sujeito a reprodução)", () => {
-    expect(classifyThinkingMode("claude-opus-4-8")).toBe("adaptive");
-    expect(classifyThinkingMode("claude-sonnet-4-6")).toBe("adaptive");
-  });
-
   it("id fora do registry (legado/removido) → temperature = ESTRITO (conservador)", () => {
-    // Um payload de modelo aposentado (ex.: Fable) é avaliado estrito: qualquer flip
-    // conta. Nunca tolera flip de um modelo que não conseguimos classificar.
+    // Um payload de modelo aposentado é avaliado estrito: qualquer flip conta.
+    // Nunca tolera flip de um modelo que não conseguimos classificar. Pós-#374 os
+    // ids removidos (Opus 4.8, Sonnet 4.6 adaptive e o gpt-5-mini de prova) caem
+    // AQUI — saíram do registry, então classificam pelo fallback estrito, não mais
+    // pelo lookup. O gate de replay segue Anthropic-only e cerca rows não-anthropic.
+    expect(classifyThinkingMode("claude-opus-4-8")).toBe("temperature");
+    expect(classifyThinkingMode("claude-sonnet-4-6")).toBe("temperature");
+    expect(classifyThinkingMode("gpt-5-mini")).toBe("temperature");
     expect(classifyThinkingMode("claude-fable-5")).toBe("temperature");
     expect(classifyThinkingMode("lixo-qualquer")).toBe("temperature");
-  });
-
-  it("gpt-5-mini (OpenAI, #231) → temperature por LOOKUP no registry (não pelo fallback)", () => {
-    // O provider de prova OpenAI está NO registry com thinkingMode "temperature"
-    // (ADR 0027): classifyThinkingMode devolve o modo DECLARADO, não o fallback de
-    // id-desconhecido. (O gate de replay segue Anthropic-only e cerca rows OpenAI;
-    // este assert só garante que, se classificado, é o caminho ESTRITO.)
-    expect(classifyThinkingMode("gpt-5-mini")).toBe("temperature");
   });
 });
 

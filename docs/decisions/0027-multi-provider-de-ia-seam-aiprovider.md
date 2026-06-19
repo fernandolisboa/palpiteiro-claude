@@ -19,6 +19,18 @@ e o default reproduzível Sonnet 4.5 que o **#203** landou. Cita o ADR 0026/#227
 > gasto). O _wire shape_ do OpenAI é codificado a partir dos docs e **não-verificado ao vivo** —
 > mesma postura do SportMonks (#227/ADR 0026): schema inferido, validar quando houver chave.
 
+> **Nota (2026-06-19, #374):** O **MODELO de prova OpenAI (`gpt-5-mini`) saiu do
+> `MODEL_REGISTRY`** (e da `AIModelId`), mas o **seam `AIProvider` permanece INTACTO**:
+> `AIProviderKey = "anthropic" | "openai"`, o map `PROVIDERS` (total `Record`), o
+> `openaiProvider` (adapter), `isAIProvider` e `providerHasKey` seguem **inalterados** no
+> código. O provider OpenAI fica **referenciado-só-pelo-seam (inerte)**: um provider futuro
+> reentra na seleção via uma **entrada de registry** (+ adapter já existente), **sem
+> ressuscitar código**. A cobertura de backstop de `predict.ts` (override admin → provider
+> sem chave → `provider_error` auditado) foi **conscientemente perdida** neste passo (o id de
+> prova não pode mais ser passado como `modelOverride`, que é `AIModelId`-typed); o código
+> backstop segue vivo. Follow-up pos-pivot: reintroduzir essa cobertura quando um provider
+> OpenAI voltar ao registry.
+
 ## Contexto
 
 `lib/ai/predict.ts` é a **única porta** da LLM (todo o logging em `ai_calls` passa por ela), mas

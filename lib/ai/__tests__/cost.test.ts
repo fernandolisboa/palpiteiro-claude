@@ -20,28 +20,6 @@ describe("calculateCost — derived from MODEL_REGISTRY", () => {
     }
   });
 
-  it("gpt-5-mini (OpenAI #231): $0.25 in + $2.00 out per 1M → 2.25 for 1M+1M (drift sentinel)", () => {
-    // Pricing VERIFY-BEFORE-MERGE contra a página oficial; este valor é o
-    // change-detector — se o pricing do registry mudar, atualizar aqui de propósito.
-    expect(
-      calculateCost({
-        model: "gpt-5-mini",
-        inputTokens: 1_000_000,
-        outputTokens: 1_000_000,
-      }),
-    ).toBe(2.25);
-  });
-
-  it("Opus 4.8: $5 in + $25 out per 1M → 30 for 1M+1M", () => {
-    expect(
-      calculateCost({
-        model: "claude-opus-4-8",
-        inputTokens: 1_000_000,
-        outputTokens: 1_000_000,
-      }),
-    ).toBe(30);
-  });
-
   it("Sonnet 4.5: $3 in + $15 out per 1M → 18 for 1M+1M", () => {
     expect(
       calculateCost({
@@ -50,5 +28,15 @@ describe("calculateCost — derived from MODEL_REGISTRY", () => {
         outputTokens: 1_000_000,
       }),
     ).toBe(18);
+  });
+
+  it("Haiku 4.5: $1 in + $5 out per 1M → 6 for 1M+1M", () => {
+    expect(
+      calculateCost({
+        model: "claude-haiku-4-5",
+        inputTokens: 1_000_000,
+        outputTokens: 1_000_000,
+      }),
+    ).toBe(6);
   });
 });

@@ -11,7 +11,10 @@ import {
 // "default") pra o modelo escolhido PERSISTIR entre reanálises — mas só quando a
 // preferência é um modelo de fato selecionável pela audiência atual.
 describe("initialModelOverride — seed do dropdown de modelo (#239)", () => {
-  const selectable = [{ id: "claude-opus-4-8" }, { id: "claude-haiku-4-5" }];
+  const selectable = [
+    { id: "claude-sonnet-4-5-20250929" },
+    { id: "claude-haiku-4-5" },
+  ];
 
   it("semeia com a preferência quando ela é um modelo selecionável", () => {
     expect(initialModelOverride("claude-haiku-4-5", selectable)).toBe(
@@ -24,21 +27,24 @@ describe("initialModelOverride — seed do dropdown de modelo (#239)", () => {
   });
 
   it("cai no sentinel quando a preferência não é um AIModelId válido", () => {
+    // Inclui ids removidos em #374 (Opus/Sonnet 4.6/gpt-5-mini): após a remoção
+    // eles deixaram de ser AIModelId válidos, então caem aqui — não há mais o caso
+    // "AIModelId válido mas fora da audiência" construível com ids reais (só restam
+    // 2 survivors, ambos selecionáveis).
     expect(initialModelOverride("modelo-inexistente", selectable)).toBe(
       "default",
     );
-  });
-
-  it("cai no sentinel quando a preferência está fora da audiência (sem <option>)", () => {
-    // claude-sonnet-4-6 é um AIModelId válido, mas não está na lista selecionável
-    // desta audiência — semear com ele deixaria o <select> com um value órfão.
-    expect(initialModelOverride("claude-sonnet-4-6", selectable)).toBe(
-      "default",
-    );
+    for (const removed of [
+      "claude-opus-4-8",
+      "claude-sonnet-4-6",
+      "gpt-5-mini",
+    ]) {
+      expect(initialModelOverride(removed, selectable)).toBe("default");
+    }
   });
 
   it("cai no sentinel quando a audiência não tem modelos selecionáveis", () => {
-    expect(initialModelOverride("claude-opus-4-8", [])).toBe("default");
+    expect(initialModelOverride("claude-haiku-4-5", [])).toBe("default");
   });
 });
 
@@ -127,18 +133,18 @@ describe("resyncModelOverride — persistência do dropdown entre reanálises (#
     panel.completeAnalysis();
     expect(panel.value).toBe("claude-haiku-4-5");
 
-    panel.choose("claude-opus-4-8"); // troca de novo
+    panel.choose("claude-sonnet-4-5-20250929"); // troca de novo
     panel.completeAnalysis();
-    expect(panel.value).toBe("claude-opus-4-8");
+    expect(panel.value).toBe("claude-sonnet-4-5-20250929");
   });
 
   it("preserva a PREFERÊNCIA semeada (não-default) através da reanálise", () => {
     // Sem escolha one-off: o seed já é a preferência server-side e deve sobreviver.
-    const panel = makePanelModel("claude-opus-4-8");
+    const panel = makePanelModel("claude-sonnet-4-5-20250929");
 
     panel.completeAnalysis();
 
-    expect(panel.value).toBe("claude-opus-4-8");
+    expect(panel.value).toBe("claude-sonnet-4-5-20250929");
   });
 
   it("não força mudança quando displayed já é igual a live (no-op estável)", () => {

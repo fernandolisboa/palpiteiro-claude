@@ -89,7 +89,7 @@ function mkItem(o: {
 const OU = mkItem({
   marketKey: "over_under",
   marketLabel: "Over/Under gols",
-  modelId: "claude-sonnet-4-6",
+  modelId: "claude-sonnet-4-5-20250929",
   view: mkView({
     marketKey: "over_under",
     marketLabel: "Over/Under gols",
@@ -97,13 +97,13 @@ const OU = mkItem({
     line: 2.5,
     oddAtRec: "1.92",
     rationale: "RACIONAL_OU",
-    model: "claude-sonnet-4.6",
+    model: "claude-sonnet-4.5",
   }),
 });
 const MR = mkItem({
   marketKey: "match_result",
   marketLabel: "Resultado (1X2)",
-  modelId: "claude-opus-4-8",
+  modelId: "claude-haiku-4-5",
   view: mkView({
     marketKey: "match_result",
     marketLabel: "Resultado (1X2)",
@@ -114,9 +114,11 @@ const MR = mkItem({
   }),
 });
 
+// Pós-#374: o registry só expõe Sonnet 4.5 (default) + Haiku 4.5. Os modelos
+// selecionáveis da seção espelham esse universo.
 const ADMIN_MODELS = [
-  { id: "claude-sonnet-4-6", label: "Sonnet 4.6" },
-  { id: "claude-opus-4-8", label: "Opus 4.8" },
+  { id: "claude-sonnet-4-5-20250929", label: "Sonnet 4.5" },
+  { id: "claude-haiku-4-5", label: "Haiku 4.5" },
 ];
 
 const occurrences = (s: string, sub: string) => s.split(sub).length - 1;
@@ -155,11 +157,11 @@ describe("MarketAnalysisSections — analisável (footer por seção, #244)", ()
         analyzable
         matchId="m"
         selectableModels={[]}
-        defaultModelLabel="Opus 4.8"
+        defaultModelLabel="Sonnet 4.5"
       />,
     );
     // Footer presente: label do modelo que rodou + botão refresh + hidden inputs.
-    expect(markup).toContain("análise feita com modelo claude-sonnet-4.6");
+    expect(markup).toContain("análise feita com modelo claude-sonnet-4.5");
     expect(markup).toContain("Analisar de novo");
     expect(markup).toContain('name="matchId"');
     expect(markup).toContain('name="marketKey"');
@@ -175,7 +177,7 @@ describe("MarketAnalysisSections — analisável (footer por seção, #244)", ()
         analyzable
         matchId="m"
         selectableModels={ADMIN_MODELS}
-        defaultModelLabel="Opus 4.8"
+        defaultModelLabel="Sonnet 4.5"
       />,
     );
     // Uma seção colapsável por mercado (meta no trigger de CADA — sempre renderizado).
@@ -193,7 +195,7 @@ describe("MarketAnalysisSections — analisável (footer por seção, #244)", ()
   it("seção ABERTA (defaultOpen): footer escopado + dropdown semeado pelo modelId + racional UMA vez", () => {
     // Cobre o caminho de seção expandida (o usuário clicou): footer isolado da seção, com
     // o marketKey DELA (reanálise escopada — AC2) e o dropdown semeado pelo modelo que
-    // RODOU (item.modelId, id CRU), não view.model (display "claude-sonnet-4.6", inválido
+    // RODOU (item.modelId, id CRU), não view.model (display "claude-sonnet-4.5", inválido
     // como AIModelId → cairia em "default"). Trava a fiação modelId→<select> (#244/#239).
     const markup = renderToStaticMarkup(
       <MarketAnalysisSection
@@ -203,14 +205,14 @@ describe("MarketAnalysisSections — analisável (footer por seção, #244)", ()
           analyzable: true,
           matchId: "m",
           selectableModels: ADMIN_MODELS,
-          defaultModelLabel: "Opus 4.8",
+          defaultModelLabel: "Sonnet 4.5",
         }}
       />,
     );
     expect(markup).toContain('value="over_under"');
     expect(markup).toContain('name="modelOverride"');
     expect(markup).toContain("Analisar de novo");
-    expect(markup).toMatch(/value="claude-sonnet-4-6"[^>]*selected/);
+    expect(markup).toMatch(/value="claude-sonnet-4-5-20250929"[^>]*selected/);
     // B3: racional da seção aberta renderizado UMA vez (sem duplicar state.view).
     expect(occurrences(markup, "RACIONAL_OU")).toBe(1);
   });
@@ -224,7 +226,7 @@ describe("MarketAnalysisSections — analisável (footer por seção, #244)", ()
         analyzable
         matchId="m"
         selectableModels={ADMIN_MODELS}
-        defaultModelLabel="Opus 4.8"
+        defaultModelLabel="Sonnet 4.5"
       />,
     );
     expect(markup).toContain('value="match_result"');
@@ -237,12 +239,15 @@ describe("MarketAnalysisSections — analisável (footer por seção, #244)", ()
 describe("seed do dropdown da seção = modelo que rodou (#244)", () => {
   it("initialModelOverride semeia o modelId da análise; id aposentado/fora-da-audiência → default", () => {
     // Seed = o modelo que rodou aquela análise (quando selecionável).
-    expect(initialModelOverride("claude-sonnet-4-6", ADMIN_MODELS)).toBe(
-      "claude-sonnet-4-6",
-    );
+    expect(
+      initialModelOverride("claude-sonnet-4-5-20250929", ADMIN_MODELS),
+    ).toBe("claude-sonnet-4-5-20250929");
     // modelVersion histórico/aposentado (não está na audiência) → sentinel "default"
-    // (sem <option> órfã); guarda contra row antiga.
+    // (sem <option> órfã); guarda contra row antiga. Inclui ids removidos em #374.
     expect(initialModelOverride("retired-model-xyz", ADMIN_MODELS)).toBe(
+      "default",
+    );
+    expect(initialModelOverride("claude-sonnet-4-6", ADMIN_MODELS)).toBe(
       "default",
     );
   });

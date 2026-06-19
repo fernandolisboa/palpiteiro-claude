@@ -271,7 +271,7 @@ function setHappyPath() {
   getOddsForSport.mockResolvedValue([ODDS_EVENT]);
   getLatestFreshSelectionOddsSnapshots.mockResolvedValue(freshSnapshot3Way());
   resolveMarketCatalog.mockResolvedValue(catalog3Way());
-  getDefaultModelId.mockResolvedValue("claude-opus-4-8");
+  getDefaultModelId.mockResolvedValue("claude-sonnet-4-5-20250929");
   getGenerationParams.mockResolvedValue({
     maxTokens: 16000,
     effort: "high",
