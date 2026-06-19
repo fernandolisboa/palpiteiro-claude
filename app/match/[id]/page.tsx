@@ -343,9 +343,11 @@ function DesktopMatch({
         </div>
 
         {/* Grid [1fr_320px]: à ESQUERDA o palpite (a manchete), à DIREITA as odds (preços
-            de referência). items-start: as odds ancoram no topo ao lado da manchete, sem
-            esticar. */}
-        <div className="grid grid-cols-[1fr_320px] items-start gap-8 pb-6">
+            de referência). SEM items-start → stretch padrão: o card do palpite acompanha a
+            altura da coluna de odds (altura mínima = odds). Se o palpite for MAIOR, ele cresce
+            naturalmente e a coluna de odds NÃO estica (`self-start`). Nada de truncar/scroll/
+            colapsar — só min-height casada. */}
+        <div className="grid grid-cols-[1fr_320px] gap-8 pb-6">
           <PalpiteHero
             heroPalpite={heroPalpite}
             matchId={matchId}
@@ -353,7 +355,7 @@ function DesktopMatch({
             fanOutEnabled={bestBetEnabled}
             finalScore={finalScore}
           />
-          <div className="flex flex-col gap-3">
+          <div className="flex flex-col gap-3 self-start">
             <OddsCard view={oddsView} />
             {matchResultOddsView && <OddsCard view={matchResultOddsView} />}
           </div>
