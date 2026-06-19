@@ -27,7 +27,12 @@ export function FormSection({ view }: Props) {
                 sem histórico
               </span>
             ) : (
-              r.results.map((res, i) => <FormDot key={i} r={res} />)
+              // Cronológico: mais ANTIGO à esquerda, mais RECENTE à direita (convenção de
+              // form guide). `results` vem most-recent-first do builder → invertemos só na
+              // EXIBIÇÃO (cópia; não afeta o dado nem o input da síntese).
+              [...r.results]
+                .reverse()
+                .map((res, i) => <FormDot key={i} r={res} />)
             )}
           </div>
         </div>
