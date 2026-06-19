@@ -88,17 +88,15 @@ export default function MatchLoading() {
         <DesktopShell>
           <div className="mx-auto w-full max-w-content px-8 pt-8 pb-16">
             {/* Casa o layout carregado: identidade full-width + grid [1fr_320px]
-                {palpite + detalhe | odds} (anti-CLS). */}
+                {palpite | odds} + detalhe full-width abaixo (anti-CLS). */}
             <div className="pb-6">
               <HeroSkeleton />
             </div>
             <div className="grid grid-cols-[1fr_320px] items-start gap-8 pb-6">
-              <div className="flex flex-col gap-3">
-                <Skeleton className="h-80 w-full rounded-xl" />
-                <Skeleton className="h-12 w-48 rounded-md" />
-              </div>
+              <Skeleton className="h-80 w-full rounded-xl" />
               <OddsSkeleton />
             </div>
+            <Skeleton className="mb-6 h-12 w-full rounded-md" />
             <MatchSectionsSkeleton />
             <MatchAuxiliarySkeleton />
           </div>

@@ -78,9 +78,10 @@ export function MarketAnalysisSection({
 
 // Área de resultados por-mercado. `sections.length` é a ÚNICA chave single-vs-multi: ≤1 →
 // conteúdo CRU (sem chrome de collapsible) — byte-idêntico ao atual no read-only, AC3 de
-// produção; ≥2 → uma seção colapsável por mercado, a mais recente (índice 0) aberta por
-// padrão. key=marketKey: a seção NÃO remonta na reanálise (#244) → o estado do footer
-// (dropdown de modelo) persiste; um mercado NOVO (key nova) monta e abre (defaultOpen).
+// produção; ≥2 → uma seção colapsável por mercado, TODAS COLAPSADAS por padrão (refino
+// #366: ao abrir "ver análise por mercado", nenhum mercado vem expandido — o usuário
+// escolhe qual abrir). key=marketKey: a seção NÃO remonta na reanálise (#244) → o estado
+// do footer (dropdown de modelo) persiste.
 export function MarketAnalysisSections({
   sections,
   analyzable = false,
@@ -105,11 +106,10 @@ export function MarketAnalysisSections({
   }
   return (
     <div className="flex flex-col gap-3">
-      {sections.map((item, i) => (
+      {sections.map((item) => (
         <MarketAnalysisSection
           key={item.marketKey}
           item={item}
-          defaultOpen={i === 0}
           dispatch={dispatch}
         />
       ))}
