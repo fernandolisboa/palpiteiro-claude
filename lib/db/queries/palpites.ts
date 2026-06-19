@@ -1,4 +1,15 @@
-import { and, asc, desc, eq, gt, inArray, isNull, lt, notExists } from "drizzle-orm";
+import {
+  and,
+  asc,
+  desc,
+  eq,
+  gt,
+  inArray,
+  isNull,
+  lt,
+  notExists,
+  or,
+} from "drizzle-orm";
 import { alias } from "drizzle-orm/pg-core";
 
 import {
@@ -22,9 +33,8 @@ export type DbPalpiteOutcome = typeof palpiteOutcomes.$inferSelect;
 export type PalpiteSetWithLines = {
   palpiteSet: DbPalpiteSet;
   // Nullable: aiCallId é NULLABLE em palpite_sets (divergência deliberada vs
-  // predictions.aiCallId notNull — a auto-geração #315 pode falhar e ainda
-  // produzir um set válido). LEFT join → null quando não há ai_call. O consumidor
-  // (#316) trata.
+  // predictions.aiCallId notNull — o log do ai_call da síntese (#353) pode falhar e
+  // ainda produzir um set válido). LEFT join → null quando não há ai_call. A UI trata.
   aiCall: DbAiCall | null;
   // Linhas do set + outcome estreito. `outcome` é null quando a linha não é
   // settleable (red_card/corners) OU ainda não foi liquidada (exact_score
@@ -44,8 +54,8 @@ export type PalpiteSetWithLines = {
  * limit, e as linhas BATCHEADAS via inArray (sem N+1, uma 2ª query independente do
  * tamanho do histórico).
  *
- * Retorna SEMPRE `[]` quando vazio (nunca null). Consumida por #316 (UI) e pelo
- * gerador de #315 (contexto de exclusão).
+ * Retorna SEMPRE `[]` quando vazio (nunca null). Consumida pela UI (painel interim /
+ * HERO do #351).
  */
 export async function getPalpiteSetsForMatch(
   matchId: string,
@@ -158,8 +168,11 @@ export async function getPendingPalpiteSettlements(
         isNull(palpiteOutcomes.id),
         lt(matches.kickoffAt, cutoff),
         // Só a última geração por (matchId,userId): não existe um set mais novo do
-        // MESMO match+user. Tiebreak por id (createdAt pode empatar em writes do
-        // mesmo instante) — espelha o desc(createdAt), desc(id) do display.
+        // MESMO match+user. "Mais novo" = createdAt maior, OU createdAt igual e id
+        // maior — espelha EXATAMENTE o desc(createdAt), desc(id) do display, então o
+        // mesmo set único vence nos dois caminhos mesmo num empate de instante (writes
+        // sequenciais quase nunca empatam, mas o tiebreak determinístico fecha a
+        // divergência display↔settlement).
         notExists(
           db
             .select({ one: newerSet.id })
@@ -168,7 +181,13 @@ export async function getPendingPalpiteSettlements(
               and(
                 eq(newerSet.matchId, palpiteSets.matchId),
                 eq(newerSet.userId, palpiteSets.userId),
-                gt(newerSet.createdAt, palpiteSets.createdAt)
+                or(
+                  gt(newerSet.createdAt, palpiteSets.createdAt),
+                  and(
+                    eq(newerSet.createdAt, palpiteSets.createdAt),
+                    gt(newerSet.id, palpiteSets.id)
+                  )
+                )
               )
             )
         )

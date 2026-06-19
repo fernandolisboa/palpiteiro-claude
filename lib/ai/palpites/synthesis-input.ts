@@ -43,7 +43,15 @@ export function summarizeAnalysesForSynthesis(
   for (const o of outcomes) {
     if (!o.ok) continue;
     const { prediction, marketKey, selections } = o.result;
-    const presentation = getMarketPresentation(marketKey);
+    // getMarketPresentation THROWA em marketKey desconhecido. Pula este mercado em vez
+    // de anular a manchete inteira (espelha a tolerância de toBestBetView) — defesa
+    // contra um mercado novo sem rótulo de presentation; os mercados vivos têm todos.
+    let presentation;
+    try {
+      presentation = getMarketPresentation(marketKey);
+    } catch {
+      continue;
+    }
     const recommendation = prediction.recommendation;
     const isPass = recommendation === "pass";
 

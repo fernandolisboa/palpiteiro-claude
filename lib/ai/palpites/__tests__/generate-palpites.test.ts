@@ -303,6 +303,20 @@ describe("generatePalpites (síntese) — firewall de value-language (blocker #5
     const row = insertValues.mock.calls[0][0] as Record<string, unknown>;
     expect(row.status).toBe("invalid_output");
   });
+
+  it("citedMarkets com 'edge' → invalid_output, throw, sem set (rótulo cruza pra view)", async () => {
+    runAnalysis.mockResolvedValue(
+      okResult({ ...validHeadline, citedMarkets: ["Resultado", "Over com edge"] }),
+    );
+    await expect(generatePalpites(baseCall)).rejects.toBeInstanceOf(PalpiteError);
+    const row = insertValues.mock.calls[0][0] as Record<string, unknown>;
+    expect(row.status).toBe("invalid_output");
+    expect(
+      insertValues.mock.calls.some(
+        (c) => (c[0] as { modelVersion?: string }).modelVersion !== undefined,
+      ),
+    ).toBe(false);
+  });
 });
 
 describe("generatePalpites (síntese) — caminhos de erro (auditados, sem set)", () => {

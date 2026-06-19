@@ -212,7 +212,7 @@ export async function generatePalpites({
       errorMessage: `model did not call ${cartridge.toolName}; content=${snippet}`,
       promptVersion: cartridge.version,
     });
-    throw new PalpiteError("LLM did not call submit_palpites tool", {
+    throw new PalpiteError(`LLM did not call ${cartridge.toolName} tool`, {
       stopReason: result.stopReason,
     });
   }
@@ -244,14 +244,17 @@ export async function generatePalpites({
 
   // 11b. FIREWALL leg (b) — guard de CONTEÚDO pós-Zod (ADR 0030 §3, blocker #5). O
   //      `.strict()` só barra chaves; o LLM pode ecoar um TERMO de valor numa string.
-  //      Rodamos sobre verdict + narrative + o `text` derivado da linha settleable.
-  //      Hit → tratado como `invalid_output` (mesmo path auditado do Zod) → throw →
-  //      degrada pra palpite:null no try/catch do analyzeBestBet. REJEITAR > VAZAR.
+  //      Rodamos sobre TODO campo que cruza pra manchete/view: verdict + narrative +
+  //      o `text` derivado da linha settleable + os rótulos de citedMarkets (LLM-livre,
+  //      vão verbatim pro PalpiteHeadlineView). Hit → tratado como `invalid_output`
+  //      (mesmo path auditado do Zod) → throw → degrada pra palpite:null no try/catch
+  //      do analyzeBestBet. REJEITAR > VAZAR.
   const settleableText = `${output.verdict} — provável ${output.probableScore.home}×${output.probableScore.away}`;
   const valueLeak =
     containsValueLanguage(output.verdict) ||
     containsValueLanguage(output.narrative) ||
-    containsValueLanguage(settleableText);
+    containsValueLanguage(settleableText) ||
+    output.citedMarkets.some(containsValueLanguage);
   if (valueLeak) {
     await persistAiCallError({
       userId,

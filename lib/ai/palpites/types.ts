@@ -13,7 +13,7 @@ import type { MarketAnalysisSummary } from "./synthesis-input";
 // palpite não tem odds/edge nem gate de "dados insuficientes" (degrada para menos
 // linhas, nunca throw). O `tool` é um ToolDef NEUTRO (ADR 0027).
 export type PalpiteCartridge<Input = unknown, Output = unknown, Args = unknown> = {
-  // "palpites_v1" (ADR 0017) → grava em ai_calls.promptVersion + palpite_sets.promptVersion.
+  // "palpites_v2" (ADR 0017) → grava em ai_calls.promptVersion + palpite_sets.promptVersion.
   version: string;
   systemPrompt: string;
   tool: ToolDef;
@@ -42,7 +42,7 @@ export type GeneratePalpiteArgs = {
 export type PalpiteGenerationResult = {
   palpiteSet: DbPalpiteSet;
   palpites: DbPalpite[];
-  // NULLABLE: a auto-geração fire-and-forget pode falhar no log (aiCallId é nullable
+  // NULLABLE: o log do ai_call da síntese (#353) pode falhar (aiCallId é nullable
   // em palpite_sets). O set ainda é válido. No caminho ok, é não-null.
   aiCall: { id: string } | null;
 };

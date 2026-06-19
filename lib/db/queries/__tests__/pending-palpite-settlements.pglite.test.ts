@@ -139,6 +139,30 @@ describe("getPendingPalpiteSettlements — latest-only", () => {
     expect(pending).toHaveLength(1);
   });
 
+  it("empate de createdAt → SÓ a geração de maior id é pendente (tiebreak determinístico, espelha o desc(id) do display)", async () => {
+    const matchId = await seedMatch("ext-tie");
+    const sameTs = new Date("2026-05-14T10:00:00Z");
+    const a = await seedSetWithScore({
+      matchId,
+      userId: ids.userId,
+      createdAt: sameTs,
+      params: { home: 1, away: 0 },
+    });
+    const b = await seedSetWithScore({
+      matchId,
+      userId: ids.userId,
+      createdAt: sameTs,
+      params: { home: 2, away: 2 },
+    });
+    // id é uuid: a comparação lexicográfica do texto canônico (lowercase) casa com a
+    // ordenação de uuid do Postgres → o de maior id vence o tiebreak (gt(id)).
+    const winner = a.setId > b.setId ? a : b;
+    const loser = a.setId > b.setId ? b : a;
+    const pending = await getPendingPalpiteSettlements(NOW);
+    expect(pending.map((p) => p.palpiteId)).toEqual([winner.palpiteId]);
+    expect(pending.map((p) => p.palpiteId)).not.toContain(loser.palpiteId);
+  });
+
   it("1 set → liquida normalmente (não filtra a única geração)", async () => {
     const matchId = await seedMatch("ext-1set");
     const only = await seedSetWithScore({

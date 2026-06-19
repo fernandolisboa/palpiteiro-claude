@@ -63,8 +63,6 @@ export const PalpitesOutputSchema = z
   })
   .strict();
 export type PalpiteSynthesisOutput = z.infer<typeof PalpitesOutputSchema>;
-// Alias histórico (consumidores antigos). O tipo concreto agora é a manchete.
-export type PalpitesOutput = PalpiteSynthesisOutput;
 export { ExactScoreParamsSchema };
 
 // ─── Input schema ─────────────────────────────────────────────────────────────
