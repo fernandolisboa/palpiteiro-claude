@@ -19,8 +19,11 @@ import type { PalpiteCartridge } from "../types";
 // análises multi-mercado e produz UMA manchete (veredito + placar provável + confiança
 // + narrativa + mercados citados). v3 (#354) = + firstHalfScore (placar do 1º tempo) +
 // firstToScore (quem marca primeiro), pra alimentar as novas dimensões settleable
-// goal-derived. BUMP MANUAL (commit `prompt:`) em QUALQUER mudança de prompt/schema.
-export const PALPITES_VERSION = "palpites_v3" as const;
+// goal-derived. v4 = forma recente PRÉ-CONTADA: o LLM recebe os totais V/E/D já apurados
+// + a sequência rotulada (mais recente → mais antigo) em vez da string crua de letras,
+// pra parar de errar a contagem (ex.: ler "DWWWL" como "4 vitórias" em vez de 3V 1E 1D).
+// BUMP MANUAL (commit `prompt:`) em QUALQUER mudança de prompt/schema.
+export const PALPITES_VERSION = "palpites_v4" as const;
 
 const TEXT_MAX = 280;
 // Narrativa: prosa um pouco mais longa que uma linha de palpite. Truncada (não
@@ -350,11 +353,22 @@ export function buildUserMessage(
     if (standing) {
       lines.push(`- Posição: ${standing.position}º (${standing.points} pts)`);
     }
-    lines.push(
-      `- Forma recente (${form.gamesConsidered} jogos): ${
-        form.results.join("") || "(sem dados)"
-      }`,
-    );
+    if (form.gamesConsidered === 0 || form.results.length === 0) {
+      lines.push("- Forma recente: (sem dados)");
+    } else {
+      // Pré-conta V/E/D pro LLM (ele NUNCA deve contar letras — v4). `results` vem do
+      // mais recente ao mais antigo (summarizeForm). Mapeia W/D/L → V/E/D em PT (cuidado:
+      // D colide — D=Draw vira "E" de Empate, L=Loss vira "D" de Derrota).
+      const wins = form.results.filter((r) => r === "W").length;
+      const draws = form.results.filter((r) => r === "D").length;
+      const losses = form.results.filter((r) => r === "L").length;
+      const seq = form.results
+        .map((r) => (r === "W" ? "V" : r === "D" ? "E" : "D"))
+        .join(" ");
+      lines.push(
+        `- Forma recente (últimos ${form.gamesConsidered}): ${wins}V ${draws}E ${losses}D · do mais recente ao mais antigo: ${seq}`,
+      );
+    }
     lines.push(
       `- Média de gols: ${fmt1(form.avgGoalsFor)} marcados / ${fmt1(
         form.avgGoalsAgainst,
