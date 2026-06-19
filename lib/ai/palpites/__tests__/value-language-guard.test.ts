@@ -12,6 +12,8 @@ describe("containsValueLanguage — barra linguagem de valor (ADR 0030 §3)", ()
     "Boas 3 unidades nesse",
     "Yield alto nesse mercado",
     "Lucro garantido no Fla",
+    "O retorno esperado é alto",
+    "Bons retornos nesse mercado",
     "Nice profit on this one",
     "A odd está boa",
     "As odds favorecem o mandante",

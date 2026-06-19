@@ -1,8 +1,10 @@
 import { describe, expect, it } from "vitest";
 
 import type { PalpiteHeadline } from "@/db/schema";
+import type { PalpiteSetWithLines } from "@/lib/db/queries/palpites";
 import {
   toPalpiteHeadlineView,
+  toPalpiteHeadlineViewFromSet,
   type PalpiteHeadlineSource,
 } from "@/lib/view/palpites-headline";
 
@@ -60,5 +62,84 @@ describe("toPalpiteHeadlineView", () => {
       expect(k in v).toBe(false);
     }
     expect("sourcePredictionIds" in v).toBe(false);
+  });
+});
+
+// ─── toPalpiteHeadlineViewFromSet (mapper do set persistido) ──────────────────
+
+type SetLine = PalpiteSetWithLines["palpites"][number];
+
+function line(over: Partial<SetLine> = {}): SetLine {
+  return {
+    id: "line-1",
+    palpiteSetId: "set-1",
+    type: "exact_score",
+    text: "2 a 1 pro mandante",
+    params: { home: 2, away: 1 },
+    settleable: true,
+    createdAt: new Date("2026-06-01T12:00:00Z"),
+    outcome: null,
+    ...over,
+  };
+}
+
+function setWith(
+  over: { headline?: PalpiteHeadline | null; lines?: SetLine[] } = {},
+): PalpiteSetWithLines {
+  return {
+    palpiteSet: {
+      id: "set-1",
+      matchId: "match-1",
+      userId: "user-1",
+      aiCallId: null,
+      modelVersion: "claude-haiku-4-5",
+      promptVersion: "palpites_v2",
+      headline: over.headline === undefined ? headline : over.headline,
+      createdAt: new Date("2026-06-01T12:00:00Z"),
+    },
+    aiCall: null,
+    palpites: over.lines ?? [line()],
+  };
+}
+
+describe("toPalpiteHeadlineViewFromSet", () => {
+  it("set persistido → view (manchete + placar provável da linha exact_score)", () => {
+    expect(toPalpiteHeadlineViewFromSet(setWith())).toEqual({
+      verdict: "Vai dar Flamengo",
+      probableScore: { home: 2, away: 1 },
+      confidence: "alta",
+      narrative: "O Fla vem voando em casa.",
+      citedMarkets: ["Resultado (1X2)", "Over/Under gols"],
+      badge: null,
+    });
+  });
+
+  it("headline null (set antigo pré-#353) → null", () => {
+    expect(toPalpiteHeadlineViewFromSet(setWith({ headline: null }))).toBeNull();
+  });
+
+  it("sem linha exact_score → null", () => {
+    const onlyFun = setWith({
+      lines: [line({ type: "red_card", params: null, settleable: false })],
+    });
+    expect(toPalpiteHeadlineViewFromSet(onlyFun)).toBeNull();
+  });
+
+  it("linha exact_score sem params → null", () => {
+    const noParams = setWith({ lines: [line({ params: null })] });
+    expect(toPalpiteHeadlineViewFromSet(noParams)).toBeNull();
+  });
+
+  it("outcome settled (won/lost) da linha → badge", () => {
+    expect(
+      toPalpiteHeadlineViewFromSet(
+        setWith({ lines: [line({ outcome: { result: "won" } })] }),
+      )?.badge,
+    ).toBe("won");
+    expect(
+      toPalpiteHeadlineViewFromSet(
+        setWith({ lines: [line({ outcome: { result: "lost" } })] }),
+      )?.badge,
+    ).toBe("lost");
   });
 });
