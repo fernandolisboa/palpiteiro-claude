@@ -70,6 +70,13 @@ export const palpiteTypeEnum = pgEnum("palpite_type", [
   "exact_score",
   "red_card",
   "corners",
+  // #354 — tipos goal-derived settleable (liquidam do placar de 90'/intervalo/
+  // eventos, sem provider novo). Acrescentados ao FINAL (ordem do enum é cosmética;
+  // append evita ruído no snapshot). O gate settleable mora em SETTLEABLE_PALPITE_TYPES.
+  "margin",
+  "clean_sheet",
+  "first_half_score",
+  "first_to_score",
 ]);
 
 // ─── Catálogo de mercados (ADR 0015, decisão 3) ──────────────────────────────
@@ -450,10 +457,19 @@ export const palpites = pgTable(
       .references(() => palpiteSets.id, { onDelete: "cascade" }),
     type: palpiteTypeEnum().notNull(),
     text: text().notNull(),
-    // OPCIONAL: forma estruturada do palpite. exact_score → {home, away}
-    // (inteiros). Validada por Zod no boundary de escrita (#315) e no compare de
+    // OPCIONAL: forma estruturada do palpite. Union LARGA por tipo (#354):
+    // exact_score/first_half_score → {home, away}; margin → {side, minMargin};
+    // clean_sheet → {side}; first_to_score → {firstToScore}. O `$type` é só largo
+    // o bastante pros call-sites de ESCRITA — o read path NÃO confia nele: cada regra
+    // de settlement faz `safeParse` do seu próprio schema (defense-in-depth, igual ao
+    // exact_score). Validada por Zod no boundary de escrita (#315) e no compare de
     // settlement. Tipos fun-only podem deixar null.
-    params: jsonb().$type<{ home: number; away: number }>(),
+    params: jsonb().$type<
+      | { home: number; away: number } // exact_score, first_half_score
+      | { side: "home" | "away"; minMargin: number } // margin
+      | { side: "home" | "away" } // clean_sheet
+      | { firstToScore: "home" | "away" | "none" } // first_to_score
+    >(),
     // Só exact_score=true na v1. O cron de placar filtra por (type='exact_score'
     // AND settleable=true) — defense-in-depth contra um seed errado.
     settleable: boolean().notNull().default(false),
@@ -475,6 +491,14 @@ export type PalpiteResultData = {
   homeScore: number | null;
   awayScore: number | null;
   totalGoals: number;
+  // #354: split do 1º tempo (first_half_score). undefined em rows antigas e quando
+  // o provider não entrega halftime → a regra deixa PENDING (prefer-skip).
+  halftimeHomeScore?: number | null;
+  halftimeAwayScore?: number | null;
+  // #354: quem marcou 1º por eventos de regulação (first_to_score). undefined quando
+  // eventsAvailable !== true → a regra deixa PENDING. "none" = 0 gols de regulação.
+  firstToScore?: "home" | "away" | "none";
+  eventsAvailable?: boolean;
 };
 
 // Outcome de um palpite SETTLEABLE. Espelha `prediction_outcomes` MAS sem

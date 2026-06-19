@@ -8,7 +8,10 @@ import { SettleableBadge } from "@/components/palpites/palpite-badges";
 import { Button } from "@/components/ui/button";
 import { Callout } from "@/components/ui/callout";
 import { cn } from "@/lib/utils";
-import type { PalpiteHeadlineView } from "@/lib/view/palpites-headline";
+import type {
+  PalpiteDimensionView,
+  PalpiteHeadlineView,
+} from "@/lib/view/palpites-headline";
 
 // Rótulo qualitativo da confiança (firewall: PALAVRA, nunca dígito/%/meter/pip). O
 // `aria-label` repete a palavra inteira pro leitor de tela ("confiança média").
@@ -169,6 +172,8 @@ function PopulatedHero({
             a partir de: {view.citedMarkets.join(" · ")}
           </p>
         )}
+
+        <DimensionScorecard dimensions={view.dimensions} />
 
         {analyzable && (
           <Button
@@ -376,6 +381,50 @@ function ScoreDigits({ home, away }: { home: number; away: number }) {
       <span className="px-1 text-muted-foreground">–</span>
       {away}
     </span>
+  );
+}
+
+// "Ficha" QUIETA das dimensões secundárias do palpite (#354 / ADR 0030 §3, major D): o
+// track-record das apostas secundárias do amigo (margem, placar do 1º tempo, quem marca
+// 1º, clean sheet). Vive ESTRITAMENTE ABAIXO de veredito/placar/narrativa/citedMarkets,
+// no registro CONVERSACIONAL (warm), pra ler como badges de "fala do amigo" continuada —
+// NÃO um grid/stat-row de dashboard (que o ADR 0030 removeu). FIREWALL: cada label é
+// placar/proposição (firewall-safe), ZERO número de valor; o badge reusa SettleableBadge
+// (palavra, nunca só cor). Degrada gracioso: ESCONDE inteiro em 0 dimensões; inline
+// (flex-wrap) em 1–2; nunca um card torto.
+function DimensionScorecard({
+  dimensions,
+}: {
+  dimensions: PalpiteDimensionView[];
+}) {
+  if (dimensions.length === 0) return null;
+  return (
+    <div className="flex flex-col gap-1.5">
+      <span className="text-label tracking-tight text-muted-foreground">
+        e ainda
+      </span>
+      <ul className="flex flex-wrap gap-2">
+        {dimensions.map((d, i) => (
+          <li
+            key={`${d.label}-${i}`}
+            className="inline-flex items-center gap-2 rounded-full border border-palpite-border/60 bg-palpite-soft/40 px-3 py-1"
+          >
+            <span className="text-body-sm tracking-tight text-foreground">
+              {d.label}
+            </span>
+            {/* Adapter do badge (#354 / minor H): a prop do SettleableBadge é
+                {kind:"pending"|"settled"; result?}, NÃO "won"|"lost"|null. */}
+            <SettleableBadge
+              state={
+                d.badge === null
+                  ? { kind: "pending" }
+                  : { kind: "settled", result: d.badge }
+              }
+            />
+          </li>
+        ))}
+      </ul>
+    </div>
   );
 }
 

@@ -267,9 +267,13 @@ function toNormalizedFixtureResult(
     reg && reg.home !== null && reg.away !== null
       ? { home: reg.home, away: reg.away }
       : null;
+  // #354: football-data.org não expõe split de intervalo confiável no tier grátis →
+  // halftimeScore null. first_half_score fica PENDING para fixtures servidos por este
+  // provider (cross-provider safe, mesmo tratamento dos eventos: prefer-skip, nunca LOST).
   return {
     status: mapFootballDataOrgStatus(m.status),
     regulationScore,
+    halftimeScore: null,
   };
 }
 
