@@ -39,7 +39,10 @@ vi.mock("@/lib/db/queries/ai-config", () => ({
   getEnableOverUnderExtraLines: vi.fn(),
 }));
 
-import { analyzeMatch } from "@/app/actions/predictions";
+import {
+  analyzeMatch,
+  notAnalyzableMessage,
+} from "@/app/actions/predictions";
 import { auth } from "@/auth";
 import { predict } from "@/lib/ai/predict";
 import { getEnableOverUnderExtraLines } from "@/lib/db/queries/ai-config";
@@ -80,7 +83,10 @@ function matchInLeague(league: string, status = "scheduled") {
     status,
     homeTeam: "Mexico",
     awayTeam: "South Africa",
-    kickoffAt: new Date("2026-06-11T19:00:00.000Z"),
+    // Kickoff no FUTURO: o gate de analisabilidade (#385) agora exige
+    // scheduled E kickoff > now, então um fixture com data passada cairia em
+    // "em andamento" e quebraria os caminhos de sucesso scheduled.
+    kickoffAt: new Date("2099-06-11T19:00:00.000Z"),
   } as unknown as Awaited<ReturnType<typeof getMatchById>>;
 }
 
@@ -848,5 +854,85 @@ describe("analyzeMatch — over/under linhas extras (#175)", () => {
     });
     // featured 2.5 → SEM pre-warm additional.
     expect(mockEnsureOdds).not.toHaveBeenCalled();
+  });
+});
+
+// REGRESSÃO #399/#385: o gate PERMANECE fechado pro caso que VAZAVA — um jogo
+// DB-`scheduled` cujo kickoff JÁ passou (enum stale até o cron 6h virar). O teste
+// 'live'-only antigo provava o invariante ERRADO: o vazamento é o scheduled-apitado,
+// não o live (que já era barrado).
+describe("notAnalyzableMessage — gate hardening (#385)", () => {
+  const PAST = new Date("2020-01-01T00:00:00.000Z");
+  const FUTURE = new Date("2099-01-01T00:00:00.000Z");
+
+  it("scheduled + kickoff no PASSADO → mensagem NÃO-null (em andamento) — o caso que vazava", () => {
+    const msg = notAnalyzableMessage("scheduled", PAST);
+    expect(msg).not.toBeNull();
+    expect(msg).toContain("andamento");
+  });
+
+  it("scheduled + kickoff no FUTURO → null (segue analisável pré-jogo)", () => {
+    expect(notAnalyzableMessage("scheduled", FUTURE)).toBeNull();
+  });
+
+  it("scheduled SEM kickoffAt (caminho de race) → null (cai no switch por status)", () => {
+    expect(notAnalyzableMessage("scheduled")).toBeNull();
+  });
+
+  it("'live' (qualquer kickoff) → continua NÃO-null", () => {
+    expect(notAnalyzableMessage("live", FUTURE)).not.toBeNull();
+    expect(notAnalyzableMessage("live", PAST)).not.toBeNull();
+    expect(notAnalyzableMessage("live")).not.toBeNull();
+  });
+
+  it("postponed/finished/cancelled → NÃO-null (fail-closed)", () => {
+    expect(notAnalyzableMessage("postponed", FUTURE)).not.toBeNull();
+    expect(notAnalyzableMessage("finished", FUTURE)).not.toBeNull();
+    expect(notAnalyzableMessage("cancelled", FUTURE)).not.toBeNull();
+  });
+
+  it("usa o `now` injetado pra decidir a borda do kickoff", () => {
+    const now = new Date("2026-06-11T12:00:00.000Z");
+    // kickoff 1min no futuro relativo ao now injetado → analisável.
+    expect(
+      notAnalyzableMessage(
+        "scheduled",
+        new Date(now.getTime() + 60 * 1000),
+        now,
+      ),
+    ).toBeNull();
+    // kickoff 1min no passado → em andamento.
+    expect(
+      notAnalyzableMessage(
+        "scheduled",
+        new Date(now.getTime() - 60 * 1000),
+        now,
+      ),
+    ).not.toBeNull();
+  });
+});
+
+// Prova end-to-end no action: scheduled-apitado → {ok:false} em andamento, SEM
+// pré-warm nem spend (o gate fecha ANTES de qualquer custo).
+describe("analyzeMatch — scheduled já apitado NÃO gasta (#385)", () => {
+  it("scheduled com kickoff no passado → erro 'em andamento', SEM pré-warm nem predict", async () => {
+    mockAuth.mockResolvedValue(SESSION);
+    mockGetAccess.mockResolvedValue(ALLOWED_ADMIN);
+    // world_cup scheduled, mas com kickoff no passado (enum stale).
+    mockGetMatchById.mockResolvedValue({
+      ...(matchInLeague("world_cup", "scheduled") as object),
+      kickoffAt: new Date("2020-01-01T00:00:00.000Z"),
+    } as Awaited<ReturnType<typeof getMatchById>>);
+    const res = await analyzeMatch(
+      null,
+      form({ matchId: VALID_MATCH_ID, marketKey: "over_under" }),
+    );
+    expect(res).toEqual({
+      ok: false,
+      error:
+        "Jogo em andamento — a análise fica disponível só antes do apito inicial.",
+    });
+    expect(mockEnsureOdds).not.toHaveBeenCalled();
+    expect(mockPredict).not.toHaveBeenCalled();
   });
 });

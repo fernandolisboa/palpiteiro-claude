@@ -3,6 +3,7 @@ import { Check, ChevronRight } from "lucide-react";
 
 import { Badge } from "@/components/ui/badge";
 import { Skeleton } from "@/components/ui/skeleton";
+import { LiveBadge } from "@/components/live-badge";
 import { TeamAvatar } from "@/components/team-avatar";
 import { appendBackParam } from "@/lib/view/back-href";
 import { cn } from "@/lib/utils";
@@ -25,6 +26,11 @@ const STATUS_LABEL: Record<"postponed" | "cancelled", string> = {
 export function MatchRow({ m, last, listHref }: Props) {
   const isFinished = m.status === "finished";
   const hasScore = m.homeScore !== null && m.awayScore !== null;
+  // "Ao vivo" = status DB `live` OU derivado isInProgress (#385): o último pega o
+  // jogo recém-apitado ainda DB-`scheduled`; o `live` cru pega um jogo de verdade
+  // ao vivo mais velho que 3h (que isInProgress exclui) — sem ele cairia no branch
+  // de odds e pareceria apostável.
+  const isLive = m.status === "live" || m.isInProgress;
   return (
     <Link
       href={appendBackParam(`/match/${m.id}`, listHref, "/jogos")}
@@ -49,9 +55,19 @@ export function MatchRow({ m, last, listHref }: Props) {
             </span>
           )}
         </div>
-        <span className="font-mono text-meta tabular-nums text-muted-foreground">
-          {m.kickoff}
-        </span>
+        {isLive ? (
+          // Ao vivo (#385): a badge precede o kickoff num flex. A linha agendada
+          // mantém o <span> simples original (golden byte-idêntico — só a linha
+          // live ganha o wrapper).
+          <span className="flex items-center gap-2 font-mono text-meta tabular-nums text-muted-foreground">
+            <LiveBadge />
+            {m.kickoff}
+          </span>
+        ) : (
+          <span className="font-mono text-meta tabular-nums text-muted-foreground">
+            {m.kickoff}
+          </span>
+        )}
       </div>
 
       <div className="flex items-center justify-between gap-3">
@@ -71,7 +87,13 @@ export function MatchRow({ m, last, listHref }: Props) {
         </div>
 
         <div className="flex shrink-0 items-center gap-2">
-          {isFinished && hasScore ? (
+          {isLive ? (
+            // Ao vivo preempta odds/placar: visualmente distinto de agendado
+            // (kickoff+odds) e encerrado (placar+encerrado), e nunca "apostável".
+            <span className="font-mono text-eyebrow uppercase tracking-label text-warn-fg">
+              ao vivo
+            </span>
+          ) : isFinished && hasScore ? (
             <div className="flex flex-col items-end gap-0.5">
               <span className="font-mono text-label font-medium tabular-nums">
                 {m.homeScore}

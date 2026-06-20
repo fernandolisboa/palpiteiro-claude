@@ -73,6 +73,11 @@ export default async function MatchPage({ params, searchParams }: PageProps) {
   const match = await getMatchById(id);
   if (!match) notFound();
 
+  // Instante ÚNICO do request: alimenta o gate de analisabilidade (kickoff>now) E
+  // o heroView (isInProgress p/ a badge "ao vivo"). Um único `now` garante que o
+  // gate e a badge não discordem por milissegundos (#385).
+  const now = new Date();
+
   // Fuso de exibição do usuário (#1) — kickoff/countdown do hero no fuso do navegador.
   const timeZone = await getRequestTimeZone();
 
@@ -133,6 +138,7 @@ export default async function MatchPage({ params, searchParams }: PageProps) {
         }
       : null,
     hasPrediction: latestPred !== null,
+    now,
     timeZone,
   });
 
@@ -174,12 +180,14 @@ export default async function MatchPage({ params, searchParams }: PageProps) {
     awayTeam: match.awayTeam,
   };
   const leagueKey = leagueToKey(match.league);
-  // Espelha o gate de predict()/actions: SÓ jogo pré-jogo (`scheduled`) é
-  // analisável. `live`/`postponed` também NÃO (sem odds pré-jogo / sem data
-  // definida) — antes ficavam analisáveis e a análise quebrava no fetch de odds.
-  // A CTA do HERO fica escondida nesses casos pra não submeter um form que o
-  // server rejeitaria; predições/palpites já existentes continuam visíveis.
-  const analyzable = match.status === "scheduled";
+  // Espelha o gate de predict()/actions: pré-jogo = `scheduled` E kickoff no
+  // FUTURO (#385). O enum DB pode ficar stale `scheduled` por até ~6h depois do
+  // apito (cron 0 */6) — o gate não pode confiar só no status, ou um jogo já em
+  // andamento gastaria numa análise. `live`/`postponed`/encerrado também NÃO são
+  // analisáveis. A CTA do HERO fica escondida nesses casos pra não submeter um
+  // form que o server rejeitaria; predições/palpites já existentes seguem visíveis.
+  const analyzable =
+    match.status === "scheduled" && match.kickoffAt.getTime() > now.getTime();
   // Placar final só pra jogos encerrados com gols reportados (heroView já
   // anulou scores fora de `finished`). Alimenta o recibo settled do HERO + FinishedNotice.
   const finalScore =
@@ -315,7 +323,11 @@ function MobileMatch({
 
       <MatchHero
         view={heroView}
-        status={heroView.status === "live" ? "live" : "scheduled"}
+        status={
+          heroView.status === "live" || heroView.isInProgress
+            ? "live"
+            : "scheduled"
+        }
         score={finalScore ?? undefined}
       />
 
@@ -392,7 +404,11 @@ function DesktopMatch({
         <div className="pb-6">
           <MatchHero
             view={heroView}
-            status={heroView.status === "live" ? "live" : "scheduled"}
+            status={
+              heroView.status === "live" || heroView.isInProgress
+                ? "live"
+                : "scheduled"
+            }
             score={finalScore ?? undefined}
           />
         </div>

@@ -1,6 +1,7 @@
 import { Check } from "lucide-react";
 
 import { Badge } from "@/components/ui/badge";
+import { LiveBadge } from "@/components/live-badge";
 import type { MatchRowView } from "@/lib/view/types";
 
 // Célula de status da grade desktop (home). Vive num arquivo próprio (NÃO pode
@@ -11,7 +12,11 @@ import type { MatchRowView } from "@/lib/view/types";
 export function DesktopStatusCell({ m }: { m: MatchRowView }) {
   return (
     <div className="flex flex-col items-end justify-center gap-1">
-      {m.status === "finished" ? (
+      {m.status === "live" || m.isInProgress ? (
+        // Em andamento (#385): o pulso amber em vez de '—'/'analisado'. Mesmo gate
+        // OR do mobile — isInProgress pega o recém-apitado stale-`scheduled`.
+        <LiveBadge />
+      ) : m.status === "finished" ? (
         // Encerrado ainda surfaça "analisado" se o usuário já analisou: o
         // resultado read-only segue acessível na página de detalhe.
         <>

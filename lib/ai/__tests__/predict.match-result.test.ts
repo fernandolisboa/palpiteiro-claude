@@ -1,4 +1,4 @@
-import { beforeEach, describe, expect, it, vi } from "vitest";
+import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 
 import {
   type FixtureRef,
@@ -286,7 +286,14 @@ beforeEach(() => {
   process.env.ANTHROPIC_API_KEY = "test-anthropic-key";
   vi.clearAllMocks();
   vi.restoreAllMocks();
+  // #385: gate de predict() exige kickoff > Date.now(); congela ANTES do kickoff.
+  vi.useFakeTimers({ toFake: ["Date"] });
+  vi.setSystemTime(new Date("2026-05-12T00:00:00.000Z"));
   setHappyPath();
+});
+
+afterEach(() => {
+  vi.useRealTimers();
 });
 
 // implied normalizada de uma seleção, na MESMA ordem do predict (probs[idx]*100).

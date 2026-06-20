@@ -71,7 +71,9 @@ function matchInLeague(league: string, status = "scheduled") {
     status,
     homeTeam: "Mexico",
     awayTeam: "South Africa",
-    kickoffAt: new Date("2026-06-11T19:00:00.000Z"),
+    // Kickoff no FUTURO: o gate de analisabilidade (#385) exige scheduled E
+    // kickoff > now; data passada cairia em "em andamento" e quebraria o sucesso.
+    kickoffAt: new Date("2099-06-11T19:00:00.000Z"),
   } as unknown as Awaited<ReturnType<typeof getMatchById>>;
 }
 

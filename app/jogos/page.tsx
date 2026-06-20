@@ -26,7 +26,11 @@ import {
 import { getRecentPredictionsByUser } from "@/lib/db/queries/predictions";
 import { DateRangeTabs } from "@/components/date-range-tabs";
 import { EmptyState } from "@/components/empty-state";
-import { parseRangeParams, type ResolvedRange } from "@/lib/view/date-range";
+import {
+  parseRangeParams,
+  windowedQueryFrom,
+  type ResolvedRange,
+} from "@/lib/view/date-range";
 import {
   buildLeagueHref,
   rangeEmptyMessage,
@@ -84,13 +88,22 @@ export default async function JogosPage({ searchParams }: PageProps) {
   const league = parsed === "all" ? DEFAULT_LEAGUE_FILTER : parsed;
   if (!isActiveLeagueFilter(league)) redirect("/jogos");
 
+  // Instante ÚNICO do request: alimenta o resolver de range (bound da query) E
+  // todo toMatchRowView (elegibilidade da badge). Dois `new Date()` separados
+  // dessincronizariam pertinência-na-lista × badge na borda de 3h (race). Fuso de
+  // exibição (#1) é separado — só formata strings, não decide instantes.
+  const now = new Date();
+
   // Range escolhido pelo usuário (5/14 dias, competição ou custom). Nunca lança
   // — input inválido cai pro default today5.
-  const range = parseRangeParams({
-    preset: presetParam,
-    from: fromParam,
-    to: toParam,
-  });
+  const range = parseRangeParams(
+    {
+      preset: presetParam,
+      from: fromParam,
+      to: toParam,
+    },
+    now,
+  );
 
   // Middleware garante sessão; redirect defensivo caso o matcher mude.
   const session = await auth();
@@ -99,7 +112,10 @@ export default async function JogosPage({ searchParams }: PageProps) {
   const isAdmin = session.user.role === "admin";
 
   const matchesQuery = {
-    from: range.from,
+    // Bound inferior recuado em 3h só nas presets de janela (#385): admite os
+    // jogos já apitados que matches.ts gte() de outra forma dropava ANTES do
+    // filtro de status. Concern de query — range.from segue intocado.
+    from: windowedQueryFrom(range),
     to: range.to,
     league: filterToLeague(league),
     statuses: range.statuses,
@@ -125,7 +141,6 @@ export default async function JogosPage({ searchParams }: PageProps) {
       getRecentPredictionsByUser(userId, RECENT_LIMIT),
     ]);
 
-  const now = new Date();
   // Fuso de exibição do usuário (#1) — formata kickoff/datas no fuso do navegador.
   const timeZone = await getRequestTimeZone();
   const matches: MatchRowView[] = dbMatches.map((m) => {
