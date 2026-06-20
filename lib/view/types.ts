@@ -245,7 +245,12 @@ export type H2HView = {
 
 export type StandingsViewRow = {
   pos: number;
+  // Nome EXIBIDO (traduzido PT-BR p/ Copa via displayTeamName, #340). Display-only.
   team: string;
+  // Nome CANÔNICO cru (= matches.homeTeam/awayTeam) — chave de identidade do time
+  // (#408): a row da classificação linka /time/[teamKey] (não /time/[team], que na
+  // Copa estaria traduzido). Igual a `team` p/ clubes; difere só na Copa.
+  teamKey: string;
   p: number;
   gf: number;
   ga: number;

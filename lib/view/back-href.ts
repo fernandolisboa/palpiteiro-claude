@@ -26,14 +26,39 @@ export function appendBackParam(
 
 /**
  * Resolve o href de "voltar" a partir do `back` (já decodificado pelo Next em
- * searchParams). SÓ aceita uma rota interna sob `base` (`/jogos` ou `/jogos?…`):
- * rejeita absoluto (`https://…`), protocol-relative (`//…`) e outra rota (ex.:
- * `/jogosX`, `/admin`) — anti open-redirect. Qualquer coisa fora disso → `base`.
+ * searchParams). SÓ aceita uma rota interna sob algum `base` permitido: igual à
+ * base (`/jogos`), com query sob ela (`/jogos?…`) OU um segmento de path sob ela
+ * (`/time/Brazil` sob base `/time`). Rejeita absoluto (`https://…`),
+ * protocol-relative (`//…`) e outra rota (`/jogosX`, `/admin`) — anti
+ * open-redirect (o delimitador `?`/`/` impede que `/jogosX` passe por `/jogos`).
+ *
+ * `base` aceita string única (caso comum) ou lista (uma página de detalhe pode ser
+ * alcançada de origens distintas — ex.: /match abre de /jogos OU de /time/[team]).
+ * O fallback é a PRIMEIRA base (a origem default).
+ *
+ * Hardening (#408 review): mesmo sob uma base válida, o arm de path-segment
+ * (`${b}/…`) rejeita traversal/normalização — `..` (sobe diretório: `/time/../admin`),
+ * `//` (segmento protocol-relative-ish: `/time//evil.com`) e `\` (truque de path
+ * Windows). Defense-in-depth: o pior caso já é interno+gateado, mas um "voltar" só
+ * deve recompor a lista de origem, nunca pular pra outra rota. Nomes de time com
+ * barra chegam `%2F`-encoded no `back` (o producer usa `encodeURIComponent`), então
+ * não há `/` literal extra — o caso legítimo sobrevive.
  */
 export function resolveBackHref(
   back: string | undefined,
-  base: string,
+  base: string | string[],
 ): string {
-  if (back && (back === base || back.startsWith(`${base}?`))) return back;
-  return base;
+  const bases = Array.isArray(base) ? base : [base];
+  const fallback = bases[0];
+  if (!back || back.includes("..") || back.includes("//") || back.includes("\\")) {
+    return fallback;
+  }
+  if (
+    bases.some(
+      (b) => back === b || back.startsWith(`${b}?`) || back.startsWith(`${b}/`),
+    )
+  ) {
+    return back;
+  }
+  return fallback;
 }

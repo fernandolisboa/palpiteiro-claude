@@ -16,6 +16,10 @@ type Props = {
   // URL filtrada da lista de origem (/jogos?…) → preserva o estado de busca ao
   // abrir o jogo e voltar. Ausente → link limpo (`/match/<id>`), goldens intactos.
   listHref?: string;
+  // Href completo de "voltar" pra origens FORA de /jogos (ex.: histórico do time
+  // /time/[team], #408). Quando presente, é anexado como ?back= verbatim (tem
+  // precedência sobre listHref). Mantém os call sites de /jogos byte-idênticos.
+  backHref?: string;
 };
 
 const STATUS_LABEL: Record<"postponed" | "cancelled", string> = {
@@ -23,7 +27,12 @@ const STATUS_LABEL: Record<"postponed" | "cancelled", string> = {
   cancelled: "Cancelado",
 };
 
-export function MatchRow({ m, last, listHref }: Props) {
+export function MatchRow({ m, last, listHref, backHref }: Props) {
+  // /time/[team] (#408) passa o backHref pronto; /jogos passa listHref e deriva o
+  // back via appendBackParam (base /jogos). Mutuamente exclusivos na prática.
+  const href = backHref
+    ? `/match/${m.id}?back=${encodeURIComponent(backHref)}`
+    : appendBackParam(`/match/${m.id}`, listHref, "/jogos");
   const isFinished = m.status === "finished";
   const hasScore = m.homeScore !== null && m.awayScore !== null;
   // "Ao vivo" = status DB `live` OU derivado isInProgress (#385): o último pega o
@@ -33,7 +42,7 @@ export function MatchRow({ m, last, listHref }: Props) {
   const isLive = m.status === "live" || m.isInProgress;
   return (
     <Link
-      href={appendBackParam(`/match/${m.id}`, listHref, "/jogos")}
+      href={href}
       className={cn(
         "block px-5 py-4 transition-colors hover:bg-surface-2 focus-visible:outline-none focus-visible:ring-[3px] focus-visible:ring-ring/50 focus-visible:ring-inset",
         !last && "border-b border-border-subtle",

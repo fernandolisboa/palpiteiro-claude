@@ -99,6 +99,17 @@ describe("toStandingsView (janela)", () => {
     expect(view.rows.filter((r) => r.focus).map((r) => r.pos)).toEqual([3, 4]);
   });
 
+  it("clube (liga ≠ Copa): teamKey === team (canonical = display)", () => {
+    const view = toStandingsView({
+      standing: standing(4),
+      homeTeam: "T3",
+      awayTeam: "T4",
+    });
+    // Sem tradução fora da Copa: a chave do link e o display coincidem.
+    expect(view.rows.map((r) => r.teamKey)).toEqual(view.rows.map((r) => r.team));
+    expect(view.rows.map((r) => r.teamKey)).toEqual(["T1", "T2", "T3", "T4"]);
+  });
+
   it("liga de 20, jogo no fundo (pos 18 e 19): clampa nas últimas 5 com ambos os focos", () => {
     const view = toStandingsView({
       standing: standing(20),
@@ -210,6 +221,14 @@ describe("toStandingsView (janela)", () => {
       "Alemanha",
       "Costa do Marfim",
       "Equador",
+      "Curaçao",
+    ]);
+    // teamKey = canonical EN cru (a chave do link /time/[team], #408) — NÃO o
+    // PT-BR traduzido; senão /time/Alemanha ≠ matches.homeTeam="Germany".
+    expect(view.rows.map((r) => r.teamKey)).toEqual([
+      "Germany",
+      "Ivory Coast",
+      "Ecuador",
       "Curaçao",
     ]);
     // Foco continua casando pelo canonical EN, não pelo label traduzido.

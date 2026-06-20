@@ -4,12 +4,23 @@ import { beforeEach, describe, expect, it, vi } from "vitest";
 // referencia precisa ser criado via vi.hoisted (também içado). Espelha o
 // chain-stub de odds-snapshots.test.ts / users.test.ts.
 const h = vi.hoisted(() => {
+  type Call = {
+    whereArg: unknown;
+    orderByArg: unknown;
+    limitArg: unknown;
+    limitCalled: boolean;
+  };
   const state = {
     whereArg: undefined as unknown,
     orderByArg: undefined as unknown,
     limitArg: undefined as unknown,
     limitCalled: false,
     rows: [] as unknown[],
+    // Cada select().from().where().orderBy() registra uma entrada aqui (na ordem
+    // de chamada). getMatchesInRange faz 1 select; getMatchesByTeam faz 2 (past,
+    // future) — calls[0]/calls[1]. whereArg/orderByArg/limitArg apontam pro ÚLTIMO
+    // (compat: os testes de 1 select leem o singleton).
+    calls: [] as Call[],
   };
   return { state };
 });
@@ -24,8 +35,13 @@ vi.mock("drizzle-orm", () => ({
     const filtered = conds.filter((c) => c !== undefined);
     return filtered.length ? { op: "and", conds: filtered } : undefined;
   },
+  or: (...conds: unknown[]) => {
+    const filtered = conds.filter((c) => c !== undefined);
+    return filtered.length ? { op: "or", conds: filtered } : undefined;
+  },
   eq: (col: unknown, val: unknown) => ({ op: "eq", col, val }),
   gte: (col: unknown, val: unknown) => ({ op: "gte", col, val }),
+  lt: (col: unknown, val: unknown) => ({ op: "lt", col, val }),
   lte: (col: unknown, val: unknown) => ({ op: "lte", col, val }),
   inArray: (col: unknown, val: unknown) => ({ op: "inArray", col, val }),
   asc: (col: unknown) => ({ op: "asc", col }),
@@ -38,35 +54,53 @@ vi.mock("drizzle-orm", () => ({
 // "thenable" que TAMBÉM expõe .limit(). Assim a query resolve pros rows quer
 // getMatchesInRange chame .limit() (limit fornecido) ou não (sem limit).
 vi.mock("@/lib/db", () => {
-  const makeOrderByResult = () => {
-    const result = {
+  // Cada select() abre uma NOVA entrada em h.state.calls e propaga os ponteiros
+  // singleton (whereArg/orderByArg/limitArg) pro ÚLTIMO valor capturado — assim os
+  // testes de 1 select seguem lendo o singleton, e os de 2 selects (getMatchesByTeam)
+  // leem calls[0]/calls[1].
+  const makeChain = () => {
+    const call = {
+      whereArg: undefined as unknown,
+      orderByArg: undefined as unknown,
+      limitArg: undefined as unknown,
+      limitCalled: false,
+    };
+    h.state.calls.push(call);
+    const makeOrderByResult = () => ({
       then: (resolve: (rows: unknown[]) => unknown) =>
         Promise.resolve(h.state.rows).then(resolve),
       limit: vi.fn((n: unknown) => {
+        call.limitCalled = true;
+        call.limitArg = n;
         h.state.limitCalled = true;
         h.state.limitArg = n;
         return Promise.resolve(h.state.rows);
       }),
+    });
+    return {
+      where: vi.fn((cond: unknown) => {
+        call.whereArg = cond;
+        h.state.whereArg = cond;
+        return {
+          orderBy: vi.fn((order: unknown) => {
+            call.orderByArg = order;
+            h.state.orderByArg = order;
+            return makeOrderByResult();
+          }),
+        };
+      }),
     };
-    return result;
   };
-  const fromNode = {
-    where: vi.fn((cond: unknown) => {
-      h.state.whereArg = cond;
-      return {
-        orderBy: vi.fn((order: unknown) => {
-          h.state.orderByArg = order;
-          return makeOrderByResult();
-        }),
-      };
-    }),
-  };
-  const select = vi.fn(() => ({ from: vi.fn(() => fromNode) }));
+  const select = vi.fn(() => ({ from: vi.fn(() => makeChain()) }));
   return { db: { select } };
 });
 
 import { matches } from "@/db/schema";
-import { getMatchesInRange, getUpcomingMatches } from "@/lib/db/queries/matches";
+import {
+  getMatchesByTeam,
+  getMatchesInRange,
+  getUpcomingMatches,
+} from "@/lib/db/queries/matches";
 
 type Cond = { op?: string; col?: unknown; val?: unknown; conds?: Cond[] };
 
@@ -89,6 +123,7 @@ beforeEach(() => {
   h.state.limitArg = undefined;
   h.state.limitCalled = false;
   h.state.rows = [];
+  h.state.calls = [];
 });
 
 describe("getMatchesInRange — range query flexível", () => {
@@ -232,5 +267,103 @@ describe("getUpcomingMatches — wrapper sobre getMatchesInRange", () => {
     const rows = [{ id: "u1" }];
     h.state.rows = rows;
     await expect(getUpcomingMatches()).resolves.toEqual(rows);
+  });
+});
+
+describe("getMatchesByTeam — histórico do time (2 fatias)", () => {
+  // and() do call N: lê whereArg da entrada calls[N] (não o singleton, que só vale
+  // p/ 1-select). Devolve as conds do and() externo (que inclui o or() do time).
+  function callAndConds(idx: number): Cond[] {
+    const where = h.state.calls[idx]?.whereArg as Cond | undefined;
+    expect(where?.op).toBe("and");
+    return where?.conds ?? [];
+  }
+  function callFindCond(idx: number, op: string): Cond | undefined {
+    return callAndConds(idx).find((c) => c.op === op);
+  }
+
+  it("filtro de time = or(eq(homeTeam,team), eq(awayTeam,team)) nas DUAS fatias", async () => {
+    await getMatchesByTeam("Brazil");
+    for (const idx of [0, 1]) {
+      const orCond = callFindCond(idx, "or");
+      expect(orCond?.conds).toEqual([
+        { op: "eq", col: matches.homeTeam, val: "Brazil" },
+        { op: "eq", col: matches.awayTeam, val: "Brazil" },
+      ]);
+    }
+  });
+
+  it("PAST (calls[0]) = kickoff<now + status='finished' + desc + limit 5", async () => {
+    const before = Date.now();
+    await getMatchesByTeam("Brazil");
+    const after = Date.now();
+
+    // kickoff < now via lt(kickoffAt, now)
+    const lt = callFindCond(0, "lt");
+    expect(lt?.col).toBe(matches.kickoffAt);
+    const now = (lt?.val as Date).getTime();
+    expect(now).toBeGreaterThanOrEqual(before);
+    expect(now).toBeLessThanOrEqual(after);
+
+    // status = 'finished' (eq, não inArray)
+    const status = callFindCond(0, "eq");
+    expect(status?.col).toBe(matches.status);
+    expect(status?.val).toBe("finished");
+
+    // desc kickoffAt + limit default 5
+    expect((h.state.calls[0].orderByArg as Cond).op).toBe("desc");
+    expect((h.state.calls[0].orderByArg as Cond).col).toBe(matches.kickoffAt);
+    expect(h.state.calls[0].limitCalled).toBe(true);
+    expect(h.state.calls[0].limitArg).toBe(5);
+  });
+
+  it("FUTURE (calls[1]) = kickoff>=now + status IN [scheduled,live] + asc + limit 10", async () => {
+    await getMatchesByTeam("Brazil");
+
+    const gte = callFindCond(1, "gte");
+    expect(gte?.col).toBe(matches.kickoffAt);
+
+    const status = callFindCond(1, "inArray");
+    expect(status?.col).toBe(matches.status);
+    expect(status?.val).toEqual(["scheduled", "live"]);
+
+    expect((h.state.calls[1].orderByArg as Cond).op).toBe("asc");
+    expect((h.state.calls[1].orderByArg as Cond).col).toBe(matches.kickoffAt);
+    expect(h.state.calls[1].limitCalled).toBe(true);
+    expect(h.state.calls[1].limitArg).toBe(10);
+  });
+
+  it("league opcional → eq(league, ...) nas duas fatias; ausente → sem filtro de liga", async () => {
+    await getMatchesByTeam("Brazil", { league: "world_cup" });
+    for (const idx of [0, 1]) {
+      const leagueCond = callAndConds(idx).find(
+        (c) => c.op === "eq" && c.col === matches.league,
+      );
+      expect(leagueCond?.val).toBe("world_cup");
+    }
+
+    h.state.calls = [];
+    await getMatchesByTeam("Brazil");
+    for (const idx of [0, 1]) {
+      const leagueCond = callAndConds(idx).find(
+        (c) => c.op === "eq" && c.col === matches.league,
+      );
+      expect(leagueCond).toBeUndefined();
+    }
+  });
+
+  it("limits customizados são repassados a cada fatia", async () => {
+    await getMatchesByTeam("Brazil", { pastLimit: 3, futureLimit: 7 });
+    expect(h.state.calls[0].limitArg).toBe(3);
+    expect(h.state.calls[1].limitArg).toBe(7);
+  });
+
+  it("retorna { past, future } com as rows stubadas", async () => {
+    const rows = [{ id: "t1" }];
+    h.state.rows = rows;
+    await expect(getMatchesByTeam("Brazil")).resolves.toEqual({
+      past: rows,
+      future: rows,
+    });
   });
 });

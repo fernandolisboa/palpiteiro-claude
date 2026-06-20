@@ -161,6 +161,10 @@ export function toStandingsView(args: {
   const rows: StandingsViewRow[] = sliced.map((t) => ({
     pos: t.position,
     team: displayTeamName(t.team, leagueKey),
+    // Canonical cru preservado p/ o link /time/[team] (#408): o `team` exibido
+    // pode estar traduzido (Copa), mas a identidade da rota é o canonical, igual
+    // ao `focus` e ao WHERE de getMatchesByTeam.
+    teamKey: t.team,
     p: t.points,
     gf: t.goalsFor,
     ga: t.goalsAgainst,
