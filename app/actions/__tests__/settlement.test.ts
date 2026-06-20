@@ -12,6 +12,7 @@ vi.mock("@/lib/db/queries/prediction-outcomes", () => ({
 vi.mock("@/lib/db/queries/palpite-outcomes", () => ({
   upsertPalpiteOutcomeOverride: vi.fn(),
 }));
+vi.mock("@/lib/db/queries/palpites", () => ({ getPalpiteById: vi.fn() }));
 
 import {
   overridePalpiteOutcome,
@@ -19,6 +20,7 @@ import {
 } from "@/app/actions/settlement";
 import { auth } from "@/auth";
 import { upsertPalpiteOutcomeOverride } from "@/lib/db/queries/palpite-outcomes";
+import { getPalpiteById } from "@/lib/db/queries/palpites";
 import { getPredictionForOverride } from "@/lib/db/queries/predictions";
 import { upsertOutcomeOverride } from "@/lib/db/queries/prediction-outcomes";
 
@@ -28,6 +30,7 @@ const mockAuth = auth as unknown as Mock<() => Promise<Session | null>>;
 const getRow = vi.mocked(getPredictionForOverride);
 const upsert = vi.mocked(upsertOutcomeOverride);
 const upsertPalpite = vi.mocked(upsertPalpiteOutcomeOverride);
+const getPal = vi.mocked(getPalpiteById);
 
 const session = (role: "admin" | "user"): Session =>
   ({ user: { id: `u-${role}`, role }, expires: "" }) as unknown as Session;
@@ -51,6 +54,9 @@ beforeEach(() => {
   getRow.mockReset();
   upsert.mockReset();
   upsertPalpite.mockReset();
+  getPal.mockReset();
+  // Default: o palpite existe (testes de caminho feliz). Casos de ausência sobrescrevem.
+  getPal.mockResolvedValue({ id: "pal1" } as never);
   mockAuth.mockReset();
   // Default: authenticated admin. Individual tests override for auth cases.
   mockAuth.mockResolvedValue(adminSession);
@@ -197,6 +203,19 @@ describe("overridePalpiteOutcome", () => {
   it("rejects an absent palpiteId before any DB write", async () => {
     const res = await overridePalpiteOutcome(null, form({ result: "won" }));
     expect(res).toMatchObject({ ok: false });
+    expect(upsertPalpite).not.toHaveBeenCalled();
+  });
+
+  it("rejects when the palpite não existe (guard de FK) — sem write", async () => {
+    getPal.mockResolvedValue(null);
+    const res = await overridePalpiteOutcome(
+      null,
+      form({ palpiteId: "inexistente", result: "won" }),
+    );
+    expect(res).toEqual({
+      ok: false,
+      error: expect.stringMatching(/não encontrado/i),
+    });
     expect(upsertPalpite).not.toHaveBeenCalled();
   });
 

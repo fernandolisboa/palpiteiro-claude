@@ -154,7 +154,7 @@ export async function settlePendingPalpites(
       continue; // cedo demais / indisponível: nenhuma tentativa consumida
     }
     if (await attemptsExceedCap(p.palpiteId)) continue; // palpite esgotou o cap
-    await incrementAttempt(p.palpiteId); // ANTES da chamada paga, incondicional
+    await incrementAttempt(p.palpiteId, now); // ANTES da chamada paga, incondicional
     if (cardsByMatch.has(p.matchId)) continue; // jogo já extraído neste tick → reusa
     const ref: CardExtractRef = {
       league: p.league,

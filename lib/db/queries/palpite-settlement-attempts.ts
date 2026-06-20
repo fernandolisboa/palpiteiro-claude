@@ -4,8 +4,10 @@ import { palpiteSettlementAttempts } from "@/db/schema";
 import { db } from "@/lib/db";
 
 // Limite de tentativas cross-tick da extração web-grounded de cartões (#394, ADR 0033).
-// CAP=3: uma row que repete A≠B (ou contagem nula) é re-extraída no MÁXIMO 3 ticks (≤ 2
-// web-searches por tick = ≤ 6 buscas por row stuck) e depois fica PENDENTE até override.
+// CAP=3: uma row que repete A≠B (ou contagem nula) é re-extraída no MÁXIMO 3 ticks e
+// depois fica PENDENTE até override. Pior caso de gasto por tick = 2 LEITURAS (A+B), cada
+// uma com até max_uses=2 BUSCAS web ⇒ ≤ 4 web-searches/tick ⇒ ≤ 4×CAP = ≤ 12 buscas por
+// row stuck (leitura ≠ busca — não confundir os dois). Com CARDS_COVERED_LEAGUES vazio = 0.
 export const CARDS_SETTLEMENT_ATTEMPT_CAP = 3;
 
 /**

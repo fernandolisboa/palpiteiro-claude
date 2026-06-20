@@ -180,10 +180,23 @@ ENTRA no pending set — a inércia é 100% da cobertura, não do gate SQL. **N�
 mantém fora). `WEB_GROUNDED_PALPITE_TYPES` ∩ `EVENT_BACKED_PALPITE_TYPES` = ∅ (invariante de
 import-time): cartões NÃO disparam `/fixtures/events` + web search ao mesmo tempo.
 
-**9. Custo.** Por liquidação de cartão: 2 web-searches (A+B) × ~$0,01 + 2 Haiku, RETENTADO por tick
-até o cap (≤ 2×CAP buscas por row stuck). A taxa de web search **NÃO entra em `ai_calls.costUsd`**
-(metered out-of-band, ADR 0032 §4). Com `CARDS_COVERED_LEAGUES` vazio = literalmente **zero** até uma
-liga ser ligada.
+**9. Custo.** Por liquidação de cartão: **2 LEITURAS** (A+B), cada uma com até `max_uses=2` **BUSCAS**
+web (≤ **4 web-searches por tick** × ~$0,01) + 2 Haiku, RETENTADO por tick até o cap ⇒ ≤ **4×CAP = 12
+web-searches por row stuck**. (Leitura ≠ busca: uma leitura = um `runAnalysis`, que pode disparar até
+`max_uses` buscas server-side.) A taxa de web search **NÃO entra em `ai_calls.costUsd`** (metered
+out-of-band, ADR 0032 §4). Com `CARDS_COVERED_LEAGUES` vazio = literalmente **zero** até uma liga ser
+ligada.
+
+**10. Caveat de ativação por liga (open-risk, antes de ligar `CARDS_COVERED_LEAGUES`).** O gate "≥1
+fonte por leitura" lê os blocos `web_search_tool_result` do **TURNO FINAL** da resposta
+(`collectOrigins` ← `result.contentBlocks`, mesma fronteira herdada do seam #377/news). Se a busca
+disparar um `pause_turn` e o turno final NÃO re-emitir os blocos de resultado, `sourceCount=0` →
+extração devolve `null` → PENDENTE **mesmo numa contagem correta** (direção SEGURA: skip, nunca
+wrong-settle; pré-existente — o provider de notícias já tem a mesma limitação em prod). Antes de ligar
+QUALQUER liga, validar empiricamente que a contagem reconcilia com fonte ≥1/pool nas extrações reais
+(taxa de PENDENTE-falso-positivo). Se necessário, acumular `contentBlocks` cross-turno no adapter
+(opt-in aditivo) ou afrouxar o gate de fonte pra ocorrência de busca server-side. Enquanto a cobertura
+está vazia, é inerte e o caveat não morde.
 
 Referências do addendum: #419 (linha fun-only), `extract-cards-from-web.ts`, `origin-collapse.ts`,
 `cards-coverage.ts`, `cards_palpite.ts`, `palpite-settlement-attempts.ts`, migration

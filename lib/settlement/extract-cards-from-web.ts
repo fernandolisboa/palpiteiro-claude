@@ -41,8 +41,10 @@ export type CardExtractAudit = { userId: string; matchId: string };
 const CARDS_EXTRACT_PROMPT_VERSION = "cards_extract_v1";
 const CARDS_MODEL_ID: AIModelId = "claude-haiku-4-5";
 const CARDS_MAX_TOKENS = 1024;
-// Algumas buscas por leitura — o número pode exigir conferir mais de uma página.
-const CARDS_MAX_SEARCH_USES = 3;
+// max_uses=2 por leitura: um único fato (total de amarelos) raramente exige mais de uma
+// busca; 2 dá folga pra conferir uma 2ª página sem inflar a taxa metered. Pior caso de
+// gasto = 2 leituras (A+B) × 2 buscas = ≤ 4 web-searches por tick (ver attempt-cap).
+const CARDS_MAX_SEARCH_USES = 2;
 // Sanity bound do parse: um jogo realista não passa de ~20 amarelos; acima disso é
 // artefato de parse (minuto, placar, ano) → descarta.
 const CARDS_COUNT_MAX = 40;

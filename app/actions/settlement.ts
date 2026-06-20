@@ -5,6 +5,7 @@ import { revalidatePath } from "next/cache";
 import type { PalpiteResultData } from "@/db/schema";
 import { auth } from "@/auth";
 import { upsertPalpiteOutcomeOverride } from "@/lib/db/queries/palpite-outcomes";
+import { getPalpiteById } from "@/lib/db/queries/palpites";
 import { upsertOutcomeOverride } from "@/lib/db/queries/prediction-outcomes";
 import { getPredictionForOverride } from "@/lib/db/queries/predictions";
 import { profitForResult, type OutcomeResult } from "@/lib/settlement/compute";
@@ -178,6 +179,12 @@ export async function overridePalpiteOutcome(
       yellowCardsTotal: yellow,
     };
   }
+
+  // Guard de existência (espelha overridePredictionOutcome): sem isto um palpiteId
+  // inexistente estouraria a FK de palpite_outcomes como exceção não-tratada em vez do
+  // contrato {ok:false}. Roda DEPOIS das validações de input (reject-empty-first preservado).
+  const palpite = await getPalpiteById(palpiteId);
+  if (!palpite) return { ok: false, error: "Palpite não encontrado." };
 
   await upsertPalpiteOutcomeOverride({
     palpiteId,

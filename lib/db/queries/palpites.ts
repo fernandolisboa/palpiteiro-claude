@@ -35,6 +35,23 @@ export type DbPalpiteSet = typeof palpiteSets.$inferSelect;
 export type DbPalpite = typeof palpites.$inferSelect;
 export type DbPalpiteOutcome = typeof palpiteOutcomes.$inferSelect;
 
+/**
+ * Lê UMA linha de `palpites` por id (ou null). Usada pelo override admin (#394) como
+ * guard de existência ANTES do upsert do outcome — sem isso um palpiteId inexistente
+ * estouraria a FK de palpite_outcomes como exceção não-tratada (em vez do contrato
+ * {ok:false}), divergindo do override de predição.
+ */
+export async function getPalpiteById(
+  palpiteId: string,
+): Promise<DbPalpite | null> {
+  const [row] = await db
+    .select()
+    .from(palpites)
+    .where(eq(palpites.id, palpiteId))
+    .limit(1);
+  return row ?? null;
+}
+
 export type PalpiteSetWithLines = {
   palpiteSet: DbPalpiteSet;
   // Nullable: aiCallId é NULLABLE em palpite_sets (divergência deliberada vs
