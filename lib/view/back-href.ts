@@ -35,6 +35,14 @@ export function appendBackParam(
  * `base` aceita string única (caso comum) ou lista (uma página de detalhe pode ser
  * alcançada de origens distintas — ex.: /match abre de /jogos OU de /time/[team]).
  * O fallback é a PRIMEIRA base (a origem default).
+ *
+ * Hardening (#408 review): mesmo sob uma base válida, o arm de path-segment
+ * (`${b}/…`) rejeita traversal/normalização — `..` (sobe diretório: `/time/../admin`),
+ * `//` (segmento protocol-relative-ish: `/time//evil.com`) e `\` (truque de path
+ * Windows). Defense-in-depth: o pior caso já é interno+gateado, mas um "voltar" só
+ * deve recompor a lista de origem, nunca pular pra outra rota. Nomes de time com
+ * barra chegam `%2F`-encoded no `back` (o producer usa `encodeURIComponent`), então
+ * não há `/` literal extra — o caso legítimo sobrevive.
  */
 export function resolveBackHref(
   back: string | undefined,
@@ -42,13 +50,12 @@ export function resolveBackHref(
 ): string {
   const bases = Array.isArray(base) ? base : [base];
   const fallback = bases[0];
+  if (!back || back.includes("..") || back.includes("//") || back.includes("\\")) {
+    return fallback;
+  }
   if (
-    back &&
     bases.some(
-      (b) =>
-        back === b ||
-        back.startsWith(`${b}?`) ||
-        back.startsWith(`${b}/`),
+      (b) => back === b || back.startsWith(`${b}?`) || back.startsWith(`${b}/`),
     )
   ) {
     return back;

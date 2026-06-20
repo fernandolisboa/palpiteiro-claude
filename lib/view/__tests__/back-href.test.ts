@@ -85,6 +85,18 @@ describe("resolveBackHref", () => {
     expect(resolveBackHref("/timeX/Brazil", "/time")).toBe("/time");
   });
 
+  it("hardening: rejeita traversal/double-slash/backslash mesmo sob base válida (#408 review)", () => {
+    // `..` sobe diretório (/time/../admin → /admin) — rejeitado
+    expect(resolveBackHref("/time/../admin", "/time")).toBe("/time");
+    expect(resolveBackHref("/time/..%2Fadmin/..", "/time")).toBe("/time");
+    // `//` segmento protocol-relative-ish — rejeitado
+    expect(resolveBackHref("/time//evil.com", "/time")).toBe("/time");
+    // backslash (truque de path Windows/normalização) — rejeitado
+    expect(resolveBackHref("/time/\\evil", "/time")).toBe("/time");
+    // o caso legítimo (sem `..`/`//`/`\`) segue aceito
+    expect(resolveBackHref("/time/Brazil", "/time")).toBe("/time/Brazil");
+  });
+
   it("lista de bases → aceita qualquer uma; fallback = a primeira", () => {
     expect(resolveBackHref("/time/Brazil", ["/jogos", "/time"])).toBe(
       "/time/Brazil",

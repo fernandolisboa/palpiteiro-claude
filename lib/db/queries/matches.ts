@@ -56,8 +56,13 @@ export async function getMatchesInRange(opts: {
  * contíguo. O time é identificado pela string CANÔNICA (= `matches.homeTeam`/
  * `awayTeam`, mesma fonte que `t.team` da classificação); não há team-id/teams
  * table. PAST = jogos já apitados E encerrados (`status='finished'` — só esses têm
- * placar confiável), mais recentes primeiro; FUTURE = agendados/ao-vivo no futuro,
- * mais próximos primeiro. `now` é capturado uma vez pra as duas fatias casarem.
+ * placar confiável), mais recentes primeiro; FUTURE = `kickoff >= now` E ainda
+ * `scheduled`/`live`, mais próximos primeiro. GAP CONSCIENTE: um jogo `live` já
+ * apitado (kickoff no passado, ainda não `finished`) cai FORA das duas fatias até o
+ * cron settlar pra `finished` — PAST exige placar confiável, FUTURE exige kickoff
+ * futuro. Bounded (reaparece ao encerrar); o destaque "ao vivo" do /jogos
+ * (windowedQueryFrom, #385) é outra superfície. `now` é capturado uma vez pra as
+ * duas fatias particionarem contra o mesmo instante.
  */
 export async function getMatchesByTeam(
   team: string,

@@ -38,7 +38,9 @@ export default async function TeamHistoryPage({ params }: PageProps) {
   // Fuso de exibição do usuário (#1) — threadado em TODA chamada de
   // toMatchRowView; omitir reverteria pra UTC (o bug exato do #409/#410).
   const timeZone = await getRequestTimeZone();
-  // Instante único do request pras DUAS fatias (kickoff relativo/countdown).
+  // `now` da VIEW — só formata kickoff relativo/countdown nas rows. O particionamento
+  // das fatias (past/future) usa o `now` próprio da query (getMatchesByTeam); são
+  // instantes independentes (a diferença de ms é irrelevante pra formatação).
   const now = new Date();
 
   const { past, future } = await getMatchesByTeam(canonical);
