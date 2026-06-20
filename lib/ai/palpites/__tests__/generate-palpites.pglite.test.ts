@@ -295,7 +295,7 @@ describe("generatePalpites (síntese) — write path real (pglite)", () => {
     expect(byType.get("first_to_score")!.params).toEqual({ firstToScore: "home" });
   });
 
-  it("#419: cardsTemperature persiste linha cards fun-only (settleable=false, params) que o cron NUNCA busca", async () => {
+  it("#394: cardsTemperature persiste linha cards settleable=true (promovida); ENTRA no pending — inércia vem da COBERTURA, não do gate SQL", async () => {
     runAnalysis.mockResolvedValue(
       okResult({ ...validToolInput, cardsTemperature: "muito_pegado" }),
     );
@@ -306,20 +306,24 @@ describe("generatePalpites (síntese) — write path real (pglite)", () => {
     const byType = new Map(sets[0].palpites.map((l) => [l.type, l]));
     const cards = byType.get("cards");
     expect(cards).toBeDefined();
-    expect(cards!.settleable).toBe(false);
+    // #394: row NOVA é settleable=true (deriveSettleable('cards') promovido). A linha/params
+    // continuam idênticas ao #419 (do PROJETO, não do LLM).
+    expect(cards!.settleable).toBe(true);
     expect(cards!.text).toBe("6+ cartões amarelos");
     expect(cards!.params).toEqual({ line: 6, scope: "total" });
 
-    // O cron de settlement (gate: type IN SETTLEABLE_PALPITE_TYPES AND settleable=true)
-    // NUNCA traz a linha cards. `now` bem no futuro do kickoff (2026-05-15) p/ passar o
-    // cutoff de elapsed — só prova que NEM o tipo NEM o settleable casam.
+    // O cron passa o gate SQL DUPLO (type ∈ SETTLEABLE_PALPITE_TYPES AND settleable=true)
+    // → a linha cards AGORA aparece no pending set (`now` no futuro do kickoff p/ passar o
+    // cutoff). A inércia NÃO é mais o gate SQL — é o gate de COBERTURA
+    // (CARDS_COVERED_LEAGUES vazio) no ORQUESTRADOR, que barra a extração paga ANTES de
+    // qualquer chamada e deixa a row PENDENTE (coberto em settle-palpites-cards*.pglite).
     const pending = await getPendingPalpiteSettlements(
       new Date("2026-06-01T00:00:00Z"),
     );
-    // A linha cards (settleable=false, type fora da tupla) NUNCA volta no pending set. O
-    // tipo de retorno já NARROW-exclui "cards" (SettleablePalpiteType) — prova em compile-
-    // time; aqui confirmamos em runtime que o id da row cards não aparece.
-    expect(pending.some((p) => p.palpiteId === cards!.id)).toBe(false);
+    expect(pending.some((p) => p.palpiteId === cards!.id)).toBe(true);
+    // E o userId do dono viaja na pending row (#394: ai_calls do cron loga sob o dono).
+    const cardsPending = pending.find((p) => p.palpiteId === cards!.id);
+    expect(cardsPending?.userId).toBe(ids.userId);
   });
 
   it("assimetria: ai_call falha → set sobrevive com aiCallId=null", async () => {

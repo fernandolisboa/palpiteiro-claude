@@ -1,16 +1,26 @@
 import type { PalpiteResultData } from "@/db/schema";
 import { getPendingPalpiteSettlements } from "@/lib/db/queries/palpites";
 import { insertPalpiteOutcomeIfAbsent } from "@/lib/db/queries/palpite-outcomes";
+import {
+  attemptsExceedCap,
+  incrementAttempt,
+} from "@/lib/db/queries/palpite-settlement-attempts";
 import { getSportsDataProvider } from "@/lib/providers/sports-data";
 import type {
   FixtureRef,
   NormalizedFixtureEvents,
   NormalizedFixtureResult,
 } from "@/lib/providers/sports-data/types";
+import { isCardsCovered } from "@/lib/settlement/cards-coverage";
+import {
+  extractCardCount,
+  type CardExtractRef,
+} from "@/lib/settlement/extract-cards-from-web";
 import { palpiteResultDataFrom } from "@/lib/settlement/palpite-result-data";
 import {
   EVENT_BACKED_PALPITE_TYPES,
   PALPITE_SETTLEMENT_RULES,
+  WEB_GROUNDED_PALPITE_TYPES,
 } from "@/lib/settlement/rules/palpite-dispatch";
 import { SettlementError } from "@/lib/settlement/schemas";
 
@@ -121,6 +131,54 @@ export async function settlePendingPalpites(
     }
   }
 
+  // Fan-out WEB-GROUNDED de cartões (#394, ADR 0033) — IRMÃO do loop event-backed, mas
+  // por busca web (seam #377) em vez de api-football. TRÊS estados no Map (undefined =
+  // não tentado; null = A≠B/falhou/sem-chave; number = A≡B reconciliado). Memoizado
+  // per-match (uma extração serve todas as rows de cartão do mesmo jogo).
+  //
+  // GATES DE GASTO, NESTA ORDEM (todos ANTES de qualquer chamada paga):
+  //   1. tipo web-grounded (cards);
+  //   2. cobertura da liga — CARDS_COVERED_LEAGUES vazio ⇒ NADA dispara (inércia total);
+  //   3. jogo finalizado com placar de 90' — uma contagem final exige jogo encerrado
+  //      (sem isso NÃO conta como tentativa: é "cedo demais", não esgota o cap);
+  //   4. attempt-cap — `attempts < CAP` por palpite (sidecar cross-tick);
+  // só então INCREMENTA (ANTES da chamada paga, incondicional) e extrai. A memoização
+  // per-match vem DEPOIS do incremento → cada row de cartão do jogo conta sua tentativa
+  // (simétrico: todas atingem o cap juntas), e só a 1ª faz a extração paga no tick.
+  const cardsByMatch = new Map<string, number | null>();
+  for (const p of pending) {
+    if (!WEB_GROUNDED_PALPITE_TYPES.has(p.type)) continue;
+    if (!isCardsCovered(p.league)) continue;
+    const result = resultByMatch.get(p.matchId);
+    if (!result || result.status !== "finished" || !result.regulationScore) {
+      continue; // cedo demais / indisponível: nenhuma tentativa consumida
+    }
+    if (await attemptsExceedCap(p.palpiteId)) continue; // palpite esgotou o cap
+    await incrementAttempt(p.palpiteId); // ANTES da chamada paga, incondicional
+    if (cardsByMatch.has(p.matchId)) continue; // jogo já extraído neste tick → reusa
+    const ref: CardExtractRef = {
+      league: p.league,
+      kickoffAt: p.kickoffAt.toISOString(),
+      homeTeam: p.homeTeam,
+      awayTeam: p.awayTeam,
+    };
+    try {
+      cardsByMatch.set(
+        p.matchId,
+        await extractCardCount(ref, { userId: p.userId, matchId: p.matchId }),
+      );
+    } catch (err) {
+      // extractCardCount não deve lançar (degrada a null internamente), mas blindamos o
+      // cron all-or-nothing: um throw inesperado vira null → PENDENTE, nunca aborta.
+      log("provider_error", {
+        matchId: p.matchId,
+        method: "extractCardCount",
+        message: err instanceof Error ? err.message : String(err),
+      });
+      cardsByMatch.set(p.matchId, null);
+    }
+  }
+
   for (const p of pending) {
     const result = resultByMatch.get(p.matchId);
     if (result === null) {
@@ -159,6 +217,17 @@ export async function settlePendingPalpites(
         halftimeScore: result.halftimeScore ?? null,
         events: events ?? undefined,
       });
+      // PROVENIÊNCIA SEPARADA (#394): o total de amarelos é WEB-GROUNDED, NÃO goal-derived
+      // — setado AQUI no orquestrador, nunca em palpiteResultDataFrom (que fica
+      // goal-derived puro; cardsTotal:undefined lá seria indistinguível de "não é row de
+      // cartão"). Só no caminho RECONCILIADO (number) E re-checando cobertura
+      // (defense-in-depth). null/undefined → a regra `cards` lança → PENDENTE.
+      if (WEB_GROUNDED_PALPITE_TYPES.has(p.type) && isCardsCovered(p.league)) {
+        const count = cardsByMatch.get(p.matchId);
+        if (typeof count === "number") {
+          resultData = { ...resultData, yellowCardsTotal: count };
+        }
+      }
       result_ = rule(p.params, resultData);
     } catch (err) {
       const ctx = err instanceof SettlementError ? err.context : undefined;

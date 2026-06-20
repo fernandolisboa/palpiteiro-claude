@@ -222,6 +222,11 @@ export type PendingPalpiteSettlement = {
   type: SettleablePalpiteType;
   params: DbPalpite["params"];
   matchId: string;
+  // O DONO do palpite (#394): a extração web-grounded de cartões loga ai_calls
+  // (userId/matchId notNull+restrict) e o cron não tem usuário requisitante → cada
+  // extração loga sob o id do dono. Já vem do join de palpiteSets (usado no notExists),
+  // só não era selecionado.
+  userId: string;
   league: DbMatch["league"];
   kickoffAt: Date;
   homeTeam: string;
@@ -272,6 +277,7 @@ export async function getPendingPalpiteSettlements(
       type: palpites.type,
       params: palpites.params,
       matchId: matches.id,
+      userId: palpiteSets.userId,
       league: matches.league,
       kickoffAt: matches.kickoffAt,
       homeTeam: matches.homeTeam,

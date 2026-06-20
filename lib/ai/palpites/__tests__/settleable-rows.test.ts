@@ -155,7 +155,7 @@ describe("buildSettleablePalpiteRows — emissão condicional (gates de coerênc
   });
 });
 
-describe("buildSettleablePalpiteRows — cards (#419, fun-only)", () => {
+describe("buildSettleablePalpiteRows — cards (#419 emite a linha, #394 liquida)", () => {
   it("GOLDEN: cardsTemperature 'pegado' → text '4+ cartões amarelos' + params {line:4, scope:'total'}", () => {
     const m = byType(rowsFor({ cardsTemperature: "pegado" }));
     expect(m.get("cards")?.text).toBe("4+ cartões amarelos");
@@ -168,9 +168,12 @@ describe("buildSettleablePalpiteRows — cards (#419, fun-only)", () => {
     expect(m.get("cards")?.params).toEqual({ line: 6, scope: "total" });
   });
 
-  it("a linha cards é settleable=false (fun-only — 'cards' FORA de SETTLEABLE_PALPITE_TYPES)", () => {
+  it("a linha cards NOVA é settleable=true (#394 promoveu 'cards' a SETTLEABLE_PALPITE_TYPES)", () => {
+    // #394: deriveSettleable('cards') passou a true. A inércia da row NOVA vem da
+    // COBERTURA vazia (cards-coverage.ts), NÃO de settleable=false. As rows #419
+    // ANTIGAS, persistidas com settleable=false, continuam fora do cron (sem backfill).
     const m = byType(rowsFor({ cardsTemperature: "muito_pegado" }));
-    expect(m.get("cards")?.settleable).toBe(false);
+    expect(m.get("cards")?.settleable).toBe(true);
   });
 
   it("OMITE a linha cards quando cardsTemperature é undefined (jogo morno / honesty valve)", () => {

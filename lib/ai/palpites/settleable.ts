@@ -5,19 +5,26 @@
 // lib/db/queries/palpites.ts) — defense-in-depth contra um seed errado / drift.
 // `red_card`/`corners` ficam FORA da tupla → continuam settleable=false, nunca entram
 // no cron (gate Tier-3 de pé, ADR 0028). Os tipos goal-derived (#354) liquidam do
-// placar de 90'/intervalo/eventos, sem provider novo.
+// placar de 90'/intervalo/eventos, sem provider novo. `cards` (#394) é o ÚNICO tipo
+// web-grounded (extração via web search, ADR 0033) — settleável MAS inerte por COBERTURA
+// (CARDS_COVERED_LEAGUES vazio, lib/settlement/cards-coverage.ts), nunca por flag manual.
 import type { palpiteTypeEnum } from "@/db/schema";
 
 export type PalpiteType = (typeof palpiteTypeEnum.enumValues)[number];
 
 // Tupla readonly — fonte única do gate. `satisfies readonly PalpiteType[]` garante em
 // compile-time que só contém valores válidos do enum (um typo vira erro de tipo).
+// Adicionar um tipo aqui é a FUNÇÃO FORÇANTE: (a) deriveSettleable passa a true pras
+// rows NOVAS, (b) o predicado SQL da pending query alarga (inArray), e (c) o
+// `Record<SettleablePalpiteType, PalpiteRuleFn>` (palpite-dispatch.ts) quebra a compilação
+// até a regra do tipo ser registrada — exaustividade verificada pelo compilador.
 export const SETTLEABLE_PALPITE_TYPES = [
   "exact_score",
   "margin",
   "clean_sheet",
   "first_half_score",
   "first_to_score",
+  "cards",
 ] as const satisfies readonly PalpiteType[];
 
 // O subconjunto settleable do enum, como union literal. O dispatch de settlement

@@ -209,7 +209,7 @@ describe("PalpitesOutputSchema (síntese v3)", () => {
 // ─── deriveSettleable (só exact_score liquida — Tier 3 de pé) ──────────────────
 
 describe("deriveSettleable", () => {
-  it("exact_score + goal-derived (#354) → true; red_card/corners → false (Tier 3 de pé)", () => {
+  it("exact_score + goal-derived (#354) + cards (#394) → true; red_card/corners → false (Tier 3 de pé)", () => {
     expect(deriveSettleable("exact_score")).toBe(true);
     expect(deriveSettleable("margin")).toBe(true);
     expect(deriveSettleable("clean_sheet")).toBe(true);
@@ -217,8 +217,10 @@ describe("deriveSettleable", () => {
     expect(deriveSettleable("first_to_score")).toBe(true);
     expect(deriveSettleable("red_card")).toBe(false);
     expect(deriveSettleable("corners")).toBe(false);
-    // #419 — cards é fun-only (FORA da tupla settleable; o #394 o promove).
-    expect(deriveSettleable("cards")).toBe(false);
+    // #394 — cards PROMOVIDO a settleable (web-grounded). deriveSettleable é league-BLIND:
+    // a inércia das rows NOVAS vem da COBERTURA vazia (cards-coverage.ts), não daqui. As
+    // rows #419 ANTIGAS seguem inertes pelo settleable=false PERSISTIDO (sem backfill).
+    expect(deriveSettleable("cards")).toBe(true);
   });
 });
 

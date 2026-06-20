@@ -518,6 +518,13 @@ export type PalpiteResultData = {
   // eventsAvailable !== true → a regra deixa PENDING. "none" = 0 gols de regulação.
   firstToScore?: "home" | "away" | "none";
   eventsAvailable?: boolean;
+  // #394: total de cartões AMARELOS do jogo (ambos os times), via extração web-grounded
+  // (NÃO goal-derived — setado pelo ORQUESTRADOR settle-palpites.ts no caminho A≡B
+  // reconciliado, nunca pelo builder palpite-result-data.ts). undefined → a regra `cards`
+  // deixa PENDING (prefer-skip). NOME ÚNICO em todo o caminho (schema/setter/rule/test);
+  // um typo aqui leria undefined → PENDENTE eterno disfarçado de inerte. jsonb $type
+  // only — sem coluna nova (mesma forma aditiva do firstToScore/#354).
+  yellowCardsTotal?: number;
 };
 
 // Outcome de um palpite SETTLEABLE. Espelha `prediction_outcomes` MAS sem
@@ -536,6 +543,22 @@ export const palpiteOutcomes = pgTable("palpite_outcomes", {
   result: outcomeResultEnum().notNull(),
   overrideByUserId: uuid().references(() => users.id, { onDelete: "set null" }),
   settledAt: timestamp({ withTimezone: true }).notNull().defaultNow(),
+});
+
+// Sidecar de CONTAGEM DE TENTATIVAS de liquidação web-grounded (#394, ADR 0033 addendum).
+// O cron de cartões é all-or-nothing + re-tentado pelo Vercel SEM transação; sem um
+// limite cross-tick uma row que repete A≠B (ou conta nula) seria re-extraída pra sempre,
+// queimando 2 web-searches por tick indefinidamente. PK = palpiteId (1:1, FK cascade) —
+// o incremento dispara ANTES da chamada paga (settle-palpites.ts), e o fan-out só roda
+// com `attempts < CAP`. KV foi REJEITADO: o TTL zera o contador silenciosamente → re-gasto.
+// Esgotou o cap → a row fica PENDENTE até um override manual. `lastAttemptAt` é
+// observabilidade (qual a última tentativa), nullable até o 1º incremento.
+export const palpiteSettlementAttempts = pgTable("palpite_settlement_attempts", {
+  palpiteId: uuid()
+    .primaryKey()
+    .references(() => palpites.id, { onDelete: "cascade" }),
+  attempts: integer().notNull().default(0),
+  lastAttemptAt: timestamp({ withTimezone: true }),
 });
 
 // Snapshots de odds AO VIVO por seleção — a generalização N-vias de
