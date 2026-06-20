@@ -196,17 +196,28 @@ export async function predict({
   if (!match) {
     throw new PredictError("match not found", { matchId });
   }
-  // Só jogo pré-jogo (`scheduled`) é analisável: `live`/`postponed` não têm odds
-  // pré-jogo (ou data definida) e `finished`/`cancelled` já passaram. Allowlist
-  // (não denylist) pega qualquer status futuro. As actions barram ANTES com copy
-  // por status; aqui é defense-in-depth (predict é a porta do LLM).
+  const kickoffMs = match.kickoffAt.getTime();
+  // Pré-jogo = `scheduled` E kickoff no FUTURO (#385). `live`/`postponed` não têm
+  // odds pré-jogo (ou data definida) e `finished`/`cancelled` já passaram —
+  // allowlist (não denylist) pega qualquer status futuro. O 2º guard fecha o
+  // jogo que apitou mas segue DB-`scheduled` por até ~6h (cron 0 */6 / sync lock):
+  // o status sozinho deixaria gastar. As actions barram ANTES com copy por status;
+  // aqui é defense-in-depth (predict é a porta NÃO-bypassável do LLM). `kickoffMs`
+  // vai no context pra a action (friendlyMessage) escolher a copy "em andamento".
   if (match.status !== "scheduled") {
     throw new PredictError("match is not analyzable", {
       matchId,
       status: match.status,
+      kickoffMs,
     });
   }
-  const kickoffMs = match.kickoffAt.getTime();
+  if (kickoffMs <= Date.now()) {
+    throw new PredictError("match is not analyzable", {
+      matchId,
+      status: match.status,
+      kickoffMs,
+    });
+  }
 
   const provider = getSportsDataProvider();
   const ref: FixtureRef = {

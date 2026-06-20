@@ -4,6 +4,7 @@ import { renderToStaticMarkup } from "react-dom/server";
 import { MatchRow } from "@/components/match-row";
 import type { MatchInput } from "@/lib/view/match";
 import { toMatchRowView } from "@/lib/view/match";
+import { IN_PROGRESS_WINDOW_MS } from "@/lib/view/date-range";
 import type { MatchStatus } from "@/lib/view/types";
 
 // Deterministic anchor so relative time helpers don't depend on wall clock.
@@ -94,6 +95,77 @@ describe("toMatchRowView scores + status", () => {
   });
 });
 
+describe("toMatchRowView — isInProgress derivation (#385)", () => {
+  // Relógio fixo; o kickoff é deslocado relativo a este NOW pra exercitar a janela.
+  const N = new Date("2026-06-11T12:00:00.000Z");
+
+  function viewWith(status: MatchStatus, kickoffOffsetMs: number) {
+    return toMatchRowView({
+      match: makeMatch({
+        status,
+        kickoffAt: new Date(N.getTime() + kickoffOffsetMs),
+      }),
+      odds: null,
+      hasPrediction: false,
+      now: N,
+    });
+  }
+
+  it("TRUE quando scheduled e kickoff <= now < kickoff+3h (recém-apitado, enum stale)", () => {
+    const view = viewWith("scheduled", -20 * 60 * 1000); // apitou há 20min
+    expect(view.isInProgress).toBe(true);
+  });
+
+  it("TRUE para status 'live' dentro da janela", () => {
+    const view = viewWith("live", -30 * 60 * 1000);
+    expect(view.isInProgress).toBe(true);
+  });
+
+  it("FALSE exatamente em kickoff+3h (upper-EXCLUSIVO — para de pendurar)", () => {
+    // now == kickoff + IN_PROGRESS_WINDOW_MS → fora da janela.
+    const view = viewWith("scheduled", -IN_PROGRESS_WINDOW_MS);
+    expect(view.isInProgress).toBe(false);
+  });
+
+  it("FALSE >3h após o apito mesmo se o status ainda for 'scheduled' (cron não virou)", () => {
+    const view = viewWith("scheduled", -(IN_PROGRESS_WINDOW_MS + 60 * 1000));
+    expect(view.isInProgress).toBe(false);
+  });
+
+  it("FALSE antes do apito (now < kickoff)", () => {
+    const view = viewWith("scheduled", +60 * 60 * 1000); // apita em 1h
+    expect(view.isInProgress).toBe(false);
+  });
+
+  it("FALSE p/ finished/cancelled/postponed mesmo DENTRO da janela (exclusão explícita)", () => {
+    for (const status of [
+      "finished",
+      "cancelled",
+      "postponed",
+    ] as MatchStatus[]) {
+      const view = viewWith(status, -30 * 60 * 1000);
+      expect(view.isInProgress).toBe(false);
+    }
+  });
+
+  it("placar fica null num jogo in-progress (badge-only, sem placar fabricado)", () => {
+    const view = toMatchRowView({
+      match: makeMatch({
+        status: "scheduled",
+        kickoffAt: new Date(N.getTime() - 30 * 60 * 1000),
+        homeScore: 1,
+        awayScore: 0,
+      }),
+      odds: null,
+      hasPrediction: false,
+      now: N,
+    });
+    expect(view.isInProgress).toBe(true);
+    expect(view.homeScore).toBeNull();
+    expect(view.awayScore).toBeNull();
+  });
+});
+
 describe("MatchRow rendering by status", () => {
   function render(match: MatchInput, odds = false) {
     const view = toMatchRowView({
@@ -148,6 +220,42 @@ describe("MatchRow rendering by status", () => {
   it("shows 'sem odd' for a scheduled match without odds", () => {
     const markup = render(makeMatch({ status: "scheduled" }), false);
     expect(markup).toContain("sem odd");
+  });
+
+  it("in-progress (scheduled apitado há 20min): 'ao vivo', SEM odds/sem odd/placar", () => {
+    // kickoff no passado relativo ao NOW → isInProgress derivado = true.
+    const markup = render(
+      makeMatch({
+        status: "scheduled",
+        kickoffAt: new Date(NOW.getTime() - 20 * 60 * 1000),
+      }),
+      true, // odds presentes — devem ser preemptadas pelo branch ao vivo
+    );
+    expect(markup).toContain("ao vivo");
+    expect(markup).not.toContain("sem odd");
+    expect(markup).not.toContain("1.85");
+    expect(markup.toLowerCase()).not.toContain("encerrado");
+  });
+
+  it("live >3h (isInProgress false pelo upper-bound) AINDA mostra 'ao vivo' (OR de status)", () => {
+    // kickoff há 4h: isInProgress=false (upper-exclusive), mas status 'live' cru
+    // mantém a badge — um jogo longo nunca cai no branch de odds (parece apostável).
+    const markup = render(
+      makeMatch({
+        status: "live",
+        kickoffAt: new Date(NOW.getTime() - 4 * 60 * 60 * 1000),
+      }),
+      true,
+    );
+    expect(markup).toContain("ao vivo");
+    expect(markup).not.toContain("1.85");
+  });
+
+  it("scheduled futuro (isInProgress false): kickoff+odds, SEM badge ao vivo", () => {
+    const markup = render(makeMatch({ status: "scheduled" }), true);
+    expect(markup).toContain("1.85");
+    expect(markup).not.toContain("ao vivo");
+    expect(markup).not.toContain("AO VIVO");
   });
 });
 

@@ -1,5 +1,5 @@
 import Anthropic from "@anthropic-ai/sdk";
-import { beforeEach, describe, expect, it, vi } from "vitest";
+import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 
 import {
   type FixtureRef,
@@ -217,6 +217,9 @@ beforeEach(() => {
   // #231: predict tem backstop hasKey() (client mockado → só a PRESENÇA importa).
   process.env.ANTHROPIC_API_KEY = "test-anthropic-key";
   vi.clearAllMocks();
+  // #385: gate de predict() exige kickoff > Date.now(); congela ANTES do kickoff.
+  vi.useFakeTimers({ toFake: ["Date"] });
+  vi.setSystemTime(new Date("2026-05-12T00:00:00.000Z"));
   getFixtureByMatch.mockResolvedValue(FIXTURE);
   getTeamForm.mockResolvedValue([]);
   getH2H.mockResolvedValue([]);
@@ -239,6 +242,10 @@ beforeEach(() => {
     temperature: 0.3,
   });
   getPreferredModelId.mockResolvedValue(null);
+});
+
+afterEach(() => {
+  vi.useRealTimers();
 });
 
 describe("predict — anytime_scorer (independent_binary fork)", () => {

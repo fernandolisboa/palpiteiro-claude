@@ -10,7 +10,9 @@ export type Recommendation = string;
 // Espelha matchStatusEnum (db/schema.ts). A view carrega o status pra decidir
 // entre render agendado (odds + analisar) e encerrado (placar). `finished`
 // mostra placar; `postponed`/`cancelled` precisam renderizar sãos (não como um
-// 0–0 encerrado); `live` mantém o comportamento de agendado.
+// 0–0 encerrado); `live`/em-andamento renderizam distinto via a badge "ao vivo"
+// (status==='live' || isInProgress — #385). O enum DB segue inalterado; a
+// analisabilidade permanece derivada de status+kickoff, NUNCA de isInProgress.
 export type MatchStatus =
   | "scheduled"
   | "live"
@@ -41,6 +43,13 @@ export type MatchRowView = {
   odds: { outcomes: { label: string; odd: string }[] } | null;
   hasPrediction: boolean;
   status: MatchStatus;
+  // DERIVADO (NÃO um status DB): jogo que JÁ apitou mas ainda não terminou,
+  // dentro de IN_PROGRESS_WINDOW_MS (kickoff <= now < kickoff+3h e status ∉
+  // {finished,cancelled,postponed}). Pega o jogo recém-apitado que o cron 6h
+  // ainda não virou de `scheduled`. Dirige a badge "ao vivo"; NUNCA a
+  // analisabilidade (essa é status+kickoff). Obrigatório — um false é decisão
+  // deliberada do call site, não default acidental.
+  isInProgress: boolean;
   // Placar final. Não-null só em jogos cujo provider já reportou gols
   // (tipicamente `finished`). null em scheduled/live/postponed/cancelled — e
   // mesmo num finished sem placar (dado faltando) — então a UI nunca inventa

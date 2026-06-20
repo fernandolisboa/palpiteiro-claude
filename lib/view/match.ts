@@ -4,6 +4,11 @@ import {
   formatKickoffRelative,
   leagueToKey,
 } from "@/lib/format";
+// Bound compartilhado da janela "em andamento" — DEVE casar com o bound da query
+// em app/jogos/page.tsx, senão pertinência-na-lista e elegibilidade-da-badge
+// dessincronizam (jogo na lista mas isInProgress=false → cai no branch de odds =
+// parece apostável).
+import { IN_PROGRESS_WINDOW_MS } from "@/lib/view/date-range";
 import type { SupportedLeague } from "@/lib/providers/sports-data/leagues";
 import { teamToTeam } from "@/lib/view/team";
 import {
@@ -51,6 +56,20 @@ export function toMatchRowView({
   timeZone,
 }: ToMatchRowArgs): MatchRowView {
   const league = leagueToKey(match.league);
+  // "Em andamento" derivado de kickoff+now+status (NÃO de um status DB novo, que
+  // exigiria a chamada de API proibida): jogo que apitou (kickoff <= now), ainda
+  // dentro da janela de 3h (upper-EXCLUSIVO: passou de kickoff+3h some da lista E
+  // perde a badge — não fica pendurado pra sempre) e cujo status não é terminal.
+  // Exclusão EXPLÍCITA de finished/cancelled/postponed (não denylist de `live`):
+  // um adiado cujo kickoff original passou NÃO vira "em andamento".
+  const nowMs = now.getTime();
+  const kickoffMs = match.kickoffAt.getTime();
+  const inProgress =
+    kickoffMs <= nowMs &&
+    nowMs < kickoffMs + IN_PROGRESS_WINDOW_MS &&
+    match.status !== "finished" &&
+    match.status !== "cancelled" &&
+    match.status !== "postponed";
   return {
     id: match.id,
     home: teamToTeam(match.homeTeam, league),
@@ -67,9 +86,11 @@ export function toMatchRowView({
       : toMatchRowOdds(odds),
     hasPrediction,
     status: match.status,
+    isInProgress: inProgress,
     // Só expõe placar em jogos encerrados. Um provider pode carregar gols
-    // parciais num `live` ou deixá-los preenchidos num `postponed`/`cancelled`;
-    // só `finished` deve mostrar placar final — os demais ficam null.
+    // parciais num `live`/em-andamento ou deixá-los preenchidos num
+    // `postponed`/`cancelled`; só `finished` deve mostrar placar final — os
+    // demais ficam null (a badge "ao vivo" é só indicador, sem placar fabricado).
     homeScore: match.status === "finished" ? match.homeScore : null,
     awayScore: match.status === "finished" ? match.awayScore : null,
     venue: match.venue,

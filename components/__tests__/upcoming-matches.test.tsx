@@ -26,6 +26,7 @@ function fakeMatch(i: number): MatchRowView {
     },
     hasPrediction: false,
     status: "scheduled",
+    isInProgress: false,
     homeScore: null,
     awayScore: null,
   };

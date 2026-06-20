@@ -1,5 +1,5 @@
 import Anthropic from "@anthropic-ai/sdk";
-import { beforeEach, describe, expect, it, vi } from "vitest";
+import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 
 import {
   SportsDataNotFoundError,
@@ -329,10 +329,20 @@ beforeEach(() => {
   process.env.ANTHROPIC_API_KEY = "test-anthropic-key";
   vi.clearAllMocks();
   vi.restoreAllMocks();
+  // #385: o gate de predict() agora exige kickoff > Date.now(). O fixture tem
+  // kickoff passado (e pina o prompt c/ essa data), então congelamos o relógio
+  // ANTES do kickoff em vez de remarcar a data (que mudaria o snapshot do prompt).
+  // Só Date é fakeado — timers de Anthropic/async seguem reais.
+  vi.useFakeTimers({ toFake: ["Date"] });
+  vi.setSystemTime(new Date("2026-05-12T00:00:00.000Z"));
   // #227: limpa o cache memoizado do getAbsencesProvider entre testes (isolamento)
   // — rebuilda do env e delega ao SportsDataProvider mockado a cada teste.
   __setAbsencesProviderForTesting(undefined);
   setHappyPath();
+});
+
+afterEach(() => {
+  vi.useRealTimers();
 });
 
 describe("predict() — graceful degrade on transient injuries error", () => {
@@ -399,6 +409,30 @@ describe("predict() — graceful degrade on transient injuries error", () => {
     // Degraded payload forwarded to buildPredictionInput is the empty shape.
     expect(args?.home.injuries).toEqual([]);
     expect(args?.away.injuries).toEqual([]);
+    expect(anthropicCreate).toHaveBeenCalledTimes(1);
+  });
+});
+
+// REGRESSÃO #385: defesa-em-profundidade na porta do LLM. Mesmo se a page e as
+// actions fossem burladas, predict() recusa gastar num jogo cujo kickoff passou.
+describe("predict() — gate de kickoff (#385)", () => {
+  it("scheduled mas kickoff JÁ passou → throws 'not analyzable', SEM chamada paga", async () => {
+    // Avança o relógio fakeado pra DEPOIS do kickoff do fixture (2026-05-15T19:00).
+    vi.setSystemTime(new Date("2026-05-16T00:00:00.000Z"));
+    await expect(
+      predict({ matchId: "m-1", userId: "u-1", isAdmin: false }),
+    ).rejects.toThrow("match is not analyzable");
+    expect(anthropicCreate).not.toHaveBeenCalled();
+  });
+
+  it("scheduled com kickoff no FUTURO segue analisável (baseline: chama o LLM)", async () => {
+    // O beforeEach já congela em 2026-05-12 (antes do kickoff) → passa o gate.
+    const result = await predict({
+      matchId: "m-1",
+      userId: "u-1",
+      isAdmin: false,
+    });
+    expect(result.prediction).toBeDefined();
     expect(anthropicCreate).toHaveBeenCalledTimes(1);
   });
 });

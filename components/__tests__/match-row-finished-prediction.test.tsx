@@ -16,6 +16,7 @@ function finishedAnalyzed(): MatchRowView {
     odds: null,
     hasPrediction: true,
     status: "finished",
+    isInProgress: false,
     homeScore: 2,
     awayScore: 1,
   };

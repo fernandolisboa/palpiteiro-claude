@@ -75,9 +75,16 @@ export function UpcomingMatchesDesktop({
             </div>
           </div>
           <div className="flex flex-col items-end gap-1 font-mono text-body tabular-nums">
-            {m.status === "finished" &&
-            m.homeScore !== null &&
-            m.awayScore !== null ? (
+            {m.status === "live" || m.isInProgress ? (
+              // Em andamento (#385): "ao vivo" em vez de odds pré-jogo (consistente
+              // com o mobile + não-apostável). Mesmo gate OR. Chevron mantido abaixo
+              // (live não é finished/postponed/cancelled) → linha segue clicável.
+              <span className="text-eyebrow uppercase tracking-label text-warn-fg">
+                ao vivo
+              </span>
+            ) : m.status === "finished" &&
+              m.homeScore !== null &&
+              m.awayScore !== null ? (
               <span className="text-label font-medium">
                 {m.homeScore}
                 <span className="px-1 text-muted-foreground">–</span>

@@ -1,4 +1,5 @@
 import { Badge } from "@/components/ui/badge";
+import { LiveBadge } from "@/components/live-badge";
 import { TeamAvatar } from "@/components/team-avatar";
 import { LEAGUE_LABEL } from "@/lib/format";
 import type { MatchHeroView } from "@/lib/view/types";
@@ -46,12 +47,7 @@ export function MatchHero({ view, status = "scheduled", score }: Props) {
           {LEAGUE_LABEL[league]}
         </Badge>
         <div className="flex items-center gap-2 font-mono text-eyebrow tabular-nums text-muted-foreground lg:text-meta">
-          {status === "live" && (
-            <span className="inline-flex items-center gap-1 text-warn-fg">
-              <span className="size-1.5 rounded-full bg-warn-fg animate-pulse motion-reduce:animate-none" />
-              LIVE
-            </span>
-          )}
+          {status === "live" && <LiveBadge />}
           {when}
         </div>
         {countdown && (

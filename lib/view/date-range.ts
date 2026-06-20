@@ -22,6 +22,35 @@ const UPCOMING_STATUSES: DbMatch["status"][] = ["scheduled", "live"];
 
 const HOUR_MS = 60 * 60 * 1000;
 
+// Janela em que um jogo que JÁ apitou ainda conta como "em andamento": ~90' +
+// acréscimos + intervalo (mata-mata com prorrogação/pênaltis ≈ teto de 3h). É o
+// ÚNICO dono deste limite — consumido por (a) o bound inferior da QUERY em
+// app/jogos/page.tsx (admite a cauda de 3h de jogos já apitados nas presets de
+// janela) E (b) a derivação de `isInProgress` em lib/view/match.ts (a badge "ao
+// vivo"). Os dois DEVEM ler esta constante (nunca um `3*HOUR_MS` inline), senão
+// pertinência-na-lista e elegibilidade-da-badge dessincronizam na borda. NÃO
+// altera ResolvedRange.from (continua = início da janela do usuário p/ nav/labels).
+export const IN_PROGRESS_WINDOW_MS = 3 * HOUR_MS;
+
+/**
+ * Bound inferior da QUERY (NÃO o início da janela do usuário). Só as presets de
+ * janela (today5/today14) recuam o `from` em IN_PROGRESS_WINDOW_MS pra admitir a
+ * cauda de jogos que JÁ apitaram (status DB fica stale `scheduled` até o cron 6h
+ * virar): matches.ts gte(kickoffAt, from) de outra forma dropava-os ANTES do
+ * filtro de status. season (from=null) e custom mantêm seus próprios bounds. É
+ * CONCERN de query — ResolvedRange.from segue intocado (rangeNavProps/labels/
+ * listKey leem o original, sem flip no boundary 21:00 UTC). Pura/testável; usa a
+ * MESMA constante da badge (match.ts) → pertinência-na-lista ⟺ elegibilidade-badge.
+ */
+export function windowedQueryFrom(range: ResolvedRange): Date | null {
+  if (range.preset === "today5" || range.preset === "today14") {
+    return range.from
+      ? new Date(range.from.getTime() - IN_PROGRESS_WINDOW_MS)
+      : null;
+  }
+  return range.from;
+}
+
 const presetSchema = z.enum(["today5", "today14", "season", "custom"]);
 
 // `YYYY-MM-DD` shape AND a real calendar date (rejects e.g. 2026-02-30).

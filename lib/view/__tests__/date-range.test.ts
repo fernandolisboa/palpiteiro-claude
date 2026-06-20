@@ -1,7 +1,11 @@
 import { describe, expect, it } from "vitest";
 
 import { matchStatusEnum } from "@/db/schema";
-import { parseRangeParams } from "@/lib/view/date-range";
+import {
+  IN_PROGRESS_WINDOW_MS,
+  parseRangeParams,
+  windowedQueryFrom,
+} from "@/lib/view/date-range";
 
 // Fixed, non-midnight UTC anchor so window math is unambiguous.
 const NOW = new Date("2026-06-11T09:30:00.000Z");
@@ -159,5 +163,67 @@ describe("parseRangeParams", () => {
     const before = NOW.getTime();
     parseRangeParams({ preset: "today5" }, NOW);
     expect(NOW.getTime()).toBe(before);
+  });
+});
+
+describe("IN_PROGRESS_WINDOW_MS (#385)", () => {
+  it("is exported and equals 3 hours in ms", () => {
+    expect(IN_PROGRESS_WINDOW_MS).toBe(3 * 60 * 60 * 1000);
+  });
+});
+
+describe("windowedQueryFrom (#385): query bound recuado 3h só nas presets de janela", () => {
+  it("today5 recua o from em IN_PROGRESS_WINDOW_MS", () => {
+    const range = parseRangeParams({ preset: "today5" }, NOW);
+    const queryFrom = windowedQueryFrom(range);
+    expect(queryFrom).toEqual(
+      new Date(NOW.getTime() - IN_PROGRESS_WINDOW_MS),
+    );
+  });
+
+  it("today14 recua o from em IN_PROGRESS_WINDOW_MS", () => {
+    const range = parseRangeParams({ preset: "today14" }, NOW);
+    const queryFrom = windowedQueryFrom(range);
+    expect(queryFrom).toEqual(
+      new Date(NOW.getTime() - IN_PROGRESS_WINDOW_MS),
+    );
+  });
+
+  it("season mantém from null (sem recuo)", () => {
+    const range = parseRangeParams({ preset: "season" }, NOW);
+    expect(windowedQueryFrom(range)).toBeNull();
+  });
+
+  it("custom mantém o from original (sem recuo)", () => {
+    const range = parseRangeParams(
+      { preset: "custom", from: "2026-03-01", to: "2026-03-15" },
+      NOW,
+    );
+    expect(windowedQueryFrom(range)).toEqual(range.from);
+    expect(windowedQueryFrom(range)).toEqual(
+      new Date("2026-03-01T00:00:00.000Z"),
+    );
+  });
+
+  it("NÃO muta ResolvedRange.from (nav/labels leem o original)", () => {
+    const range = parseRangeParams({ preset: "today5" }, NOW);
+    windowedQueryFrom(range);
+    expect(range.from).toEqual(NOW);
+  });
+
+  it("um jogo apitado há 20min ENTRA na janela today5 (kickoff >= queryFrom)", () => {
+    const range = parseRangeParams({ preset: "today5" }, NOW);
+    const queryFrom = windowedQueryFrom(range)!;
+    const kickoff20minAgo = new Date(NOW.getTime() - 20 * 60 * 1000);
+    expect(kickoff20minAgo.getTime()).toBeGreaterThanOrEqual(
+      queryFrom.getTime(),
+    );
+  });
+
+  it("um jogo apitado há 4h SAI da janela today5 (não fica pendurado pra sempre)", () => {
+    const range = parseRangeParams({ preset: "today5" }, NOW);
+    const queryFrom = windowedQueryFrom(range)!;
+    const kickoff4hAgo = new Date(NOW.getTime() - 4 * 60 * 60 * 1000);
+    expect(kickoff4hAgo.getTime()).toBeLessThan(queryFrom.getTime());
   });
 });

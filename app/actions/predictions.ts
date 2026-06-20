@@ -3,6 +3,7 @@
 import { revalidatePath } from "next/cache";
 import { z } from "zod";
 
+import { notAnalyzableMessage } from "./not-analyzable";
 import { auth } from "@/auth";
 import {
   MAX_ADDITIONAL_FETCHES,
@@ -54,13 +55,18 @@ function friendlyMessage(err: PredictError): string {
     return "Jogo não encontrado.";
   }
   if (msg.includes("match is not analyzable")) {
-    // Race: o status pode ter virado live/postponed entre o guard da action e o
-    // gate de predict(). Usa o `status` anexado ao context (predict.ts) pra não
-    // dizer "encerrado" num jogo ao vivo — MESMA copy-por-status do guard.
+    // Race: o status pode ter virado live/postponed — OU o jogo apitou e o enum
+    // segue stale `scheduled` (#385) — entre o guard da action e o gate de
+    // predict(). Usa o `status` + `kickoffMs` anexados ao context (predict.ts) pra
+    // escolher a copy certa (em-andamento p/ scheduled-já-apitado, não "encerrado").
     const status =
       typeof err.context.status === "string" ? err.context.status : "";
+    const kickoffAt =
+      typeof err.context.kickoffMs === "number"
+        ? new Date(err.context.kickoffMs)
+        : undefined;
     return (
-      notAnalyzableMessage(status) ??
+      notAnalyzableMessage(status, kickoffAt) ??
       "Este jogo já foi encerrado ou cancelado."
     );
   }
@@ -85,28 +91,6 @@ function friendlyMessage(err: PredictError): string {
     return "A resposta do modelo não passou na validação. Nenhum custo cobrado.";
   }
   return "Falha temporária ao gerar análise. Tente novamente.";
-}
-
-/**
- * Gate de analisabilidade market-agnóstico, compartilhado pelos 3 fan-outs. Só
- * jogo `scheduled` (pré-jogo) é analisável: `live`/`postponed` NÃO têm odds
- * pré-jogo publicadas (ou data definida) e `finished`/`cancelled` já passaram.
- * Retorna `null` quando analisável; senão a copy de UI POR status (pra não dizer
- * "encerrado" num jogo ao vivo). Espelha o gate de `predict.ts` — read grátis,
- * curto-circuita ANTES de qualquer pré-warm/spend.
- */
-function notAnalyzableMessage(status: string): string | null {
-  switch (status) {
-    case "scheduled":
-      return null;
-    case "live":
-      return "Jogo em andamento — a análise fica disponível só antes do apito inicial.";
-    case "postponed":
-      return "Jogo adiado — análise indisponível até o jogo ser remarcado.";
-    default:
-      // finished | cancelled (+ qualquer status futuro): fail-closed.
-      return "Este jogo já foi encerrado ou cancelado.";
-  }
 }
 
 export async function analyzeMatch(
@@ -201,7 +185,7 @@ export async function analyzeMatch(
   // evento gastar 1 crédito (additional) só pra o predict lançar depois.
   // Curto-circuita aqui (status já em escopo, read grátis), market-agnóstico —
   // espelha o gate de predict.ts.
-  const notAnalyzable = notAnalyzableMessage(match.status);
+  const notAnalyzable = notAnalyzableMessage(match.status, match.kickoffAt);
   if (notAnalyzable) {
     return { ok: false, error: notAnalyzable };
   }
@@ -406,7 +390,7 @@ export async function analyzeBestBet(
   if (!match) {
     return { ok: false, error: "Jogo não encontrado." };
   }
-  const notAnalyzable = notAnalyzableMessage(match.status);
+  const notAnalyzable = notAnalyzableMessage(match.status, match.kickoffAt);
   if (notAnalyzable) {
     return { ok: false, error: notAnalyzable };
   }
@@ -639,7 +623,7 @@ export async function analyzeMarkets(
   if (!match) {
     return { ok: false, error: "Jogo não encontrado." };
   }
-  const notAnalyzable = notAnalyzableMessage(match.status);
+  const notAnalyzable = notAnalyzableMessage(match.status, match.kickoffAt);
   if (notAnalyzable) {
     return { ok: false, error: notAnalyzable };
   }
