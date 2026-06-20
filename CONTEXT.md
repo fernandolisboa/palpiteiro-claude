@@ -11,3 +11,5 @@ Glossário do domínio do Palpiteiro: o vocabulário compartilhado do produto. S
 - **Linguagem de valor:** edge / EV / stake / odd / retorno / lucro / yield / cotação / R$ — barrada na manchete (firewall), legítima na Análise.
 
 - **Fonte de notícia:** uma fonte real e verificável (título + URL) que informou o palpite, exibida como link clicável; nunca inventada pela LLM.
+
+- **Palpite compartilhado (snapshot público):** a versão pública, read-only e imutável de um palpite — manchete-only (veredito + placar provável + confiança + narrativa + times + mercados citados + fontes), SEM odds/EV/edge/stake nem proveniência; a imagem que circula no zap/redes quando o usuário escolhe compartilhar. Opt-in por palpite, anônima, com disclaimer e firewall de linguagem de valor herdados da manchete. Primeira superfície pública de conteúdo além da landing estática.
