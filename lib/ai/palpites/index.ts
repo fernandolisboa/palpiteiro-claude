@@ -72,8 +72,15 @@ export async function generatePalpites({
   const resolvedModelId: AIModelId = modelOverride ?? "claude-haiku-4-5";
   const model = MODEL_REGISTRY[resolvedModelId];
 
-  // 2. Lookup do match. Gate de analisabilidade idêntico ao predict (finished/
-  //    cancelled → throw): não geramos palpite de jogo encerrado.
+  // 2. Lookup do match. Backstop de analisabilidade da SÍNTESE — só barra estados
+  //    TERMINAIS (finished/cancelled → throw). NÃO espelha o gate de pré-jogo do
+  //    predict (#385: scheduled E kickoff no futuro): a síntese roda DEPOIS das
+  //    análises (que já passaram pelo gate endurecido em predict.ts + o
+  //    notAnalyzableMessage da action), então re-rejeitar por kickoff aqui
+  //    descartaria o palpite de um jogo que apitou DURANTE uma análise longa.
+  //    Defense-in-depth: o único caller (analyzeBestBet) já está a jusante do gate
+  //    da action E de cada predict() — este throw é a última rede contra um set de
+  //    jogo já encerrado/cancelado.
   const matchRows = await db
     .select()
     .from(matches)
