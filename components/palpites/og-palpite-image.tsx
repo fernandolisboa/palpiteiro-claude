@@ -50,7 +50,10 @@ function verdictUnsafeForImage(verdict: string): boolean {
   return (
     containsValueLanguage(verdict) ||
     /%/.test(verdict) ||
-    /\b\d+[.,]\d{1,2}\b/.test(verdict)
+    // Qualquer decimal solto (preço/odd): `\d+[.,]\d+` pega 1-2 casas ("2.10") E
+    // 3+ ("1.955") — a imagem é PNG irrevogável, então o guard não pode deixar um
+    // preço de 3+ casas escapar pela fronteira de palavra (`\b...\d{1,2}\b`, review #384).
+    /\d+[.,]\d+/.test(verdict)
   );
 }
 

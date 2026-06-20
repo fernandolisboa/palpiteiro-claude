@@ -167,6 +167,28 @@ describe("loadSharedPalpite — projeção pública não vaza o raw match", () =
       ["awayTeam", "finalScore", "homeTeam", "league"].sort(),
     );
   });
+
+  // makeSet() popula os 5 marcadores de proveniência (userId/aiCallId/modelVersion/
+  // promptVersion/sourcePredictionIds). Asserir sobre o `out` INTEIRO (view + match)
+  // cobre a fronteira row→view do mapper end-to-end: uma regressão que copiasse
+  // proveniência pra view apareceria aqui, não só na projeção do match (review #384).
+  it("nem view nem match emitem qualquer campo de proveniência", async () => {
+    getSharedPalpiteSet.mockResolvedValue({
+      palpiteSetWithLines: makeSet(),
+      match: makeMatch({ status: "finished", homeScore: 2, awayScore: 1 }),
+    });
+    const out = await loadSharedPalpite(freshUuid());
+    const serialized = JSON.stringify(out);
+    for (const secret of [
+      "leak-pred-1",
+      "leak-user",
+      "leak-call",
+      "leak-model",
+      "leak-prompt",
+    ]) {
+      expect(serialized).not.toContain(secret);
+    }
+  });
 });
 
 describe("NEUTRAL_DESCRIPTION — firewall-safe", () => {
