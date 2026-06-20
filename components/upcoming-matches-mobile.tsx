@@ -13,14 +13,21 @@ import type { MatchRowView } from "@/lib/view/types";
 export const INITIAL_BATCH = 15;
 const BATCH_STEP = 15;
 
-export function UpcomingMatchesMobile({ matches }: { matches: MatchRowView[] }) {
+export function UpcomingMatchesMobile({
+  matches,
+  listHref,
+}: {
+  matches: MatchRowView[];
+  // URL filtrada da lista (/jogos?…) propagada ao link de cada jogo (ver MatchRow).
+  listHref?: string;
+}) {
   const [visible, setVisible] = useState(INITIAL_BATCH);
   const slice = matches.slice(0, visible);
   return (
     <>
       <Card className="mx-5 gap-0 overflow-hidden p-0">
         {slice.map((m, i, arr) => (
-          <MatchRow key={m.id} m={m} last={i === arr.length - 1} />
+          <MatchRow key={m.id} m={m} last={i === arr.length - 1} listHref={listHref} />
         ))}
       </Card>
       {visible < matches.length && (

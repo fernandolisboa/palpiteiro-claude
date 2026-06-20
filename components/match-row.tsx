@@ -4,6 +4,7 @@ import { Check, ChevronRight } from "lucide-react";
 import { Badge } from "@/components/ui/badge";
 import { Skeleton } from "@/components/ui/skeleton";
 import { TeamAvatar } from "@/components/team-avatar";
+import { appendBackParam } from "@/lib/view/back-href";
 import { cn } from "@/lib/utils";
 import { LEAGUE_LABEL } from "@/lib/format";
 import type { MatchRowView } from "@/lib/view/types";
@@ -11,6 +12,9 @@ import type { MatchRowView } from "@/lib/view/types";
 type Props = {
   m: MatchRowView;
   last?: boolean;
+  // URL filtrada da lista de origem (/jogos?…) → preserva o estado de busca ao
+  // abrir o jogo e voltar. Ausente → link limpo (`/match/<id>`), goldens intactos.
+  listHref?: string;
 };
 
 const STATUS_LABEL: Record<"postponed" | "cancelled", string> = {
@@ -18,12 +22,12 @@ const STATUS_LABEL: Record<"postponed" | "cancelled", string> = {
   cancelled: "Cancelado",
 };
 
-export function MatchRow({ m, last }: Props) {
+export function MatchRow({ m, last, listHref }: Props) {
   const isFinished = m.status === "finished";
   const hasScore = m.homeScore !== null && m.awayScore !== null;
   return (
     <Link
-      href={`/match/${m.id}`}
+      href={appendBackParam(`/match/${m.id}`, listHref, "/jogos")}
       className={cn(
         "block px-5 py-4 transition-colors hover:bg-surface-2 focus-visible:outline-none focus-visible:ring-[3px] focus-visible:ring-ring/50 focus-visible:ring-inset",
         !last && "border-b border-border-subtle",

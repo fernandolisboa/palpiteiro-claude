@@ -36,6 +36,7 @@ import {
   toPalpiteHeadlineViewFromSet,
   type PalpiteHeadlineView,
 } from "@/lib/view/palpites-headline";
+import { resolveBackHref } from "@/lib/view/back-href";
 import { toNwayOddsView, toOddsView } from "@/lib/view/odds";
 import type {
   MarketAnalysisSectionItem,
@@ -52,10 +53,14 @@ export const maxDuration = 300;
 
 type PageProps = {
   params: Promise<{ id: string }>;
+  searchParams: Promise<{ back?: string }>;
 };
 
-export default async function MatchPage({ params }: PageProps) {
+export default async function MatchPage({ params, searchParams }: PageProps) {
   const { id } = await params;
+  // "Voltar" preserva o estado de busca da lista: recompõe a URL filtrada de
+  // /jogos a partir do param `back` (validado anti open-redirect; fallback /jogos).
+  const backHref = resolveBackHref((await searchParams).back, "/jogos");
   // Middleware garante sessão; redirect defensivo caso o matcher mude.
   const session = await auth();
   if (!session?.user?.id) redirect("/signin");
@@ -181,6 +186,7 @@ export default async function MatchPage({ params }: PageProps) {
           leagueKey={leagueKey}
           analyzable={analyzable}
           matchStatus={match.status}
+          backHref={backHref}
           finalScore={finalScore}
           bestBetEnabled={bestBetEnabled}
           heroPalpite={heroPalpite}
@@ -198,6 +204,7 @@ export default async function MatchPage({ params }: PageProps) {
           leagueKey={leagueKey}
           analyzable={analyzable}
           matchStatus={match.status}
+          backHref={backHref}
           finalScore={finalScore}
           bestBetEnabled={bestBetEnabled}
           heroPalpite={heroPalpite}
@@ -230,6 +237,9 @@ type Common = {
   // Status cru do jogo: escolhe a copy do empty-state (OddsCard) e do aviso de
   // não-analisável (live vs adiado vs encerrado).
   matchStatus: MatchStatus;
+  // Href de "voltar" — recompõe a lista filtrada (/jogos?…) de origem; /jogos
+  // como fallback (deep-link / sem `back`).
+  backHref: string;
   // Placar final pra jogos encerrados; null caso contrário.
   finalScore: { home: number; away: number } | null;
   // Flag #178/#351: o kill-switch de spend (enable_best_bet_fan_out). Passado ao HERO
@@ -251,6 +261,7 @@ function MobileMatch({
   leagueKey,
   analyzable,
   matchStatus,
+  backHref,
   finalScore,
   bestBetEnabled,
   heroPalpite,
@@ -259,7 +270,7 @@ function MobileMatch({
     <div className="min-h-screen bg-background text-foreground">
       <header className="flex items-center justify-between px-5 pt-5 pb-2">
         <Link
-          href="/jogos"
+          href={backHref}
           className="flex items-center gap-2 rounded-sm text-muted-foreground hover:text-foreground focus-visible:outline-none focus-visible:ring-[3px] focus-visible:ring-ring/50"
         >
           <ChevronLeft className="size-3.5" />
@@ -328,6 +339,7 @@ function DesktopMatch({
   leagueKey,
   analyzable,
   matchStatus,
+  backHref,
   finalScore,
   bestBetEnabled,
   heroPalpite,
@@ -336,7 +348,7 @@ function DesktopMatch({
     <DesktopShell>
       <div className="mx-auto w-full max-w-content px-8 pt-8 pb-16">
         <Link
-          href="/jogos"
+          href={backHref}
           className="mb-6 inline-flex items-center gap-2 rounded-sm text-muted-foreground hover:text-foreground focus-visible:outline-none focus-visible:ring-[3px] focus-visible:ring-ring/50"
         >
           <ChevronLeft className="size-3.5" />

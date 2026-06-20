@@ -1,14 +1,22 @@
 import Link from "next/link";
 
 import { Badge } from "@/components/ui/badge";
+import { appendBackParam } from "@/lib/view/back-href";
 import { LEAGUE_LABEL } from "@/lib/format";
 import type { RecentPredictionView } from "@/lib/view/types";
 
-export function RecentPredCard({ p }: { p: RecentPredictionView }) {
+export function RecentPredCard({
+  p,
+  listHref,
+}: {
+  p: RecentPredictionView;
+  // URL filtrada da lista (/jogos?…) → preserva o estado de busca ao voltar.
+  listHref?: string;
+}) {
   const isPass = p.rec === "PASS";
   return (
     <Link
-      href={`/match/${p.matchId}`}
+      href={appendBackParam(`/match/${p.matchId}`, listHref, "/jogos")}
       className="flex min-w-[180px] shrink-0 flex-col gap-2 rounded-lg border border-border bg-card px-3 py-3 transition-colors hover:bg-surface-2 focus-visible:outline-none focus-visible:ring-[3px] focus-visible:ring-ring/50"
     >
       <div className="flex items-center justify-between">

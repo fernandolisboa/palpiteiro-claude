@@ -26,7 +26,11 @@ import { getRecentPredictionsByUser } from "@/lib/db/queries/predictions";
 import { DateRangeTabs } from "@/components/date-range-tabs";
 import { EmptyState } from "@/components/empty-state";
 import { parseRangeParams, type ResolvedRange } from "@/lib/view/date-range";
-import { rangeEmptyMessage, rangeLabel } from "@/lib/view/range-href";
+import {
+  buildLeagueHref,
+  rangeEmptyMessage,
+  rangeLabel,
+} from "@/lib/view/range-href";
 import { toMatchRowView } from "@/lib/view/match";
 import { toRecentPredictionView } from "@/lib/view/recent-prediction";
 import {
@@ -212,6 +216,9 @@ function MobileHome({
   const label = rangeLabel(range);
   const empty = rangeEmptyMessage(range);
   const navProps = rangeNavProps(range);
+  // URL filtrada atual da lista — propagada aos links de jogo pra preservar o
+  // estado de busca (liga + date range) ao abrir um jogo e voltar.
+  const listHref = buildLeagueHref(navProps, league);
   // Remonta a lista ao trocar de filtro (liga/range) pra resetar o reveal.
   const listKey = `${league}-${range.preset}-${navProps.from ?? ""}-${navProps.to ?? ""}`;
   return (
@@ -250,7 +257,7 @@ function MobileHome({
           />
         </Card>
       ) : (
-        <UpcomingMatchesMobile key={listKey} matches={matches} />
+        <UpcomingMatchesMobile key={listKey} matches={matches} listHref={listHref} />
       )}
 
       <div className="pt-7" />
@@ -274,7 +281,7 @@ function MobileHome({
         ) : (
           <div className="flex gap-2">
             {recents.map((p) => (
-              <RecentPredCard key={p.id} p={p} />
+              <RecentPredCard key={p.id} p={p} listHref={listHref} />
             ))}
           </div>
         )}
@@ -287,6 +294,8 @@ function DesktopHome({ matches, recents, league, range }: HomeContentProps) {
   const label = rangeLabel(range);
   const empty = rangeEmptyMessage(range);
   const navProps = rangeNavProps(range);
+  // URL filtrada atual da lista — propagada aos links de jogo (preserva busca ao voltar).
+  const listHref = buildLeagueHref(navProps, league);
   // Remonta a grade ao trocar de filtro (liga/range) pra resetar o reveal.
   const listKey = `${league}-${range.preset}-${navProps.from ?? ""}-${navProps.to ?? ""}`;
   return (
@@ -322,7 +331,7 @@ function DesktopHome({ matches, recents, league, range }: HomeContentProps) {
             />
           </Card>
         ) : (
-          <UpcomingMatchesDesktop key={listKey} matches={matches} />
+          <UpcomingMatchesDesktop key={listKey} matches={matches} listHref={listHref} />
         )}
 
         <div className="pt-12">
@@ -345,7 +354,7 @@ function DesktopHome({ matches, recents, league, range }: HomeContentProps) {
           ) : (
             <div className="grid grid-cols-5 gap-3">
               {recents.map((p) => (
-                <RecentPredCard key={p.id} p={p} />
+                <RecentPredCard key={p.id} p={p} listHref={listHref} />
               ))}
             </div>
           )}
