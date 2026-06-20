@@ -5,6 +5,7 @@ import {
   eq,
   gt,
   inArray,
+  isNotNull,
   isNull,
   lt,
   notExists,
@@ -130,6 +131,84 @@ export async function getPalpiteSetsForMatch(
     aiCall: s.aiCall,
     palpites: linesBySet.get(s.palpiteSet.id) ?? [],
   }));
+}
+
+/**
+ * Lê UM palpite_set público por id (ADR 0035 / #384), com o GATE opt-in
+ * `shared_at IS NOT NULL` (NULL = privado, nunca resolvível em /p/[id]). Retorna a
+ * MESMA forma `PalpiteSetWithLines` (mapper reusado VERBATIM) + a row crua de `matches`
+ * (o loader projeta/gateia downstream — o raw DbMatch NUNCA cruza pro cliente).
+ *
+ * NÃO escopa por userId/matchId (diferente de getPalpiteSetsForMatch): o link público é
+ * resolvível por QUALQUER um — a privacidade é o opt-in `shared_at`, não a sessão. A
+ * projeção pública (drop de proveniência) acontece no MAPPER (toPalpiteHeadlineViewFromSet),
+ * não aqui.
+ */
+export async function getSharedPalpiteSet(
+  setId: string,
+): Promise<{ palpiteSetWithLines: PalpiteSetWithLines; match: DbMatch } | null> {
+  // Query 1: o set + aiCall (LEFT, nullable) + a row de matches (INNER — todo set tem
+  // jogo). GATE: shared_at IS NOT NULL (opt-in). Sem row → null (set inexistente OU privado).
+  const [row] = await db
+    .select({ palpiteSet: palpiteSets, aiCall: aiCalls, match: matches })
+    .from(palpiteSets)
+    .leftJoin(aiCalls, eq(palpiteSets.aiCallId, aiCalls.id))
+    .innerJoin(matches, eq(palpiteSets.matchId, matches.id))
+    .where(and(eq(palpiteSets.id, setId), isNotNull(palpiteSets.sharedAt)))
+    .limit(1);
+  if (!row) return null;
+
+  // Query 2 (mesmo helper batcheado): as linhas + outcome do set.
+  const lines = await getPalpiteLinesForSetIds([row.palpiteSet.id]);
+
+  // NARROW-not-cast won/lost (VERBATIM de getPalpiteSetsForMatch :115-126): só won/lost
+  // alcançam palpite; null/void/push → outcome null.
+  const palpitesWithOutcome: PalpiteSetWithLines["palpites"] = lines.map((l) => ({
+    ...l.palpite,
+    outcome:
+      l.outcomeResult === "won" || l.outcomeResult === "lost"
+        ? { result: l.outcomeResult }
+        : null,
+  }));
+
+  return {
+    palpiteSetWithLines: {
+      palpiteSet: row.palpiteSet,
+      aiCall: row.aiCall,
+      palpites: palpitesWithOutcome,
+    },
+    match: row.match,
+  };
+}
+
+/**
+ * Dono + sharedAt de um set por id (ADR 0035 / #384) — SEM o gate shared_at: a share-action
+ * checa ownership ANTES de compartilhar E precisa do sharedAt pra pular re-stamp (skip-not-
+ * restamp). Retorna null em set inexistente (a action colapsa 404/403 num erro opaco).
+ */
+export async function getPalpiteSetOwner(
+  setId: string,
+): Promise<{ userId: string; sharedAt: Date | null } | null> {
+  const [row] = await db
+    .select({ userId: palpiteSets.userId, sharedAt: palpiteSets.sharedAt })
+    .from(palpiteSets)
+    .where(eq(palpiteSets.id, setId))
+    .limit(1);
+  return row ?? null;
+}
+
+/**
+ * Carimba `shared_at` de um set (ADR 0035 / #384) — o gesto opt-in de compartilhar. A
+ * action garante ownership + skip-not-restamp ANTES de chamar; aqui é só a escrita.
+ */
+export async function setPalpiteSetSharedAt(
+  setId: string,
+  at: Date,
+): Promise<void> {
+  await db
+    .update(palpiteSets)
+    .set({ sharedAt: at })
+    .where(eq(palpiteSets.id, setId));
 }
 
 export type PendingPalpiteSettlement = {

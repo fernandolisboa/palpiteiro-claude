@@ -124,6 +124,7 @@ function setWith(
       modelVersion: "claude-haiku-4-5",
       promptVersion: "palpites_v2",
       headline: over.headline === undefined ? headline : over.headline,
+      sharedAt: null,
       createdAt: new Date("2026-06-01T12:00:00Z"),
     },
     aiCall: null,

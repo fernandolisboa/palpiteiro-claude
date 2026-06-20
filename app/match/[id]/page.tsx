@@ -108,6 +108,10 @@ export default async function MatchPage({ params, searchParams }: PageProps) {
   const heroPalpite: PalpiteHeadlineView | null = palpiteSets[0]
     ? toPalpiteHeadlineViewFromSet(palpiteSets[0])
     : null;
+  // #384: id + shared_at do set mais recente, pro botão de compartilhar do HERO (gera/copia
+  // o link /p/[id] e ramifica Compartilhar/Copiar). null quando não há set persistido ainda.
+  const heroSetId = palpiteSets[0]?.palpiteSet.id ?? null;
+  const heroSharedAt = palpiteSets[0]?.palpiteSet.sharedAt ?? null;
 
   const heroView = toMatchRowView({
     match: {
@@ -206,6 +210,8 @@ export default async function MatchPage({ params, searchParams }: PageProps) {
           finalScore={finalScore}
           bestBetEnabled={bestBetEnabled}
           heroPalpite={heroPalpite}
+          heroSetId={heroSetId}
+          heroSharedAt={heroSharedAt}
         />
       </div>
       <div className="hidden lg:block">
@@ -224,6 +230,8 @@ export default async function MatchPage({ params, searchParams }: PageProps) {
           finalScore={finalScore}
           bestBetEnabled={bestBetEnabled}
           heroPalpite={heroPalpite}
+          heroSetId={heroSetId}
+          heroSharedAt={heroSharedAt}
         />
       </div>
     </>
@@ -264,6 +272,9 @@ type Common = {
   bestBetEnabled: boolean;
   // Manchete palpite-first do HERO (#351). null = sem palpite ainda → estado empty/CTA.
   heroPalpite: PalpiteHeadlineView | null;
+  // #384: id + shared_at do set mais recente, pro botão de compartilhar do HERO. null = sem set.
+  heroSetId: string | null;
+  heroSharedAt: Date | null;
 };
 
 function MobileMatch({
@@ -281,6 +292,8 @@ function MobileMatch({
   finalScore,
   bestBetEnabled,
   heroPalpite,
+  heroSetId,
+  heroSharedAt,
 }: Common) {
   return (
     <div className="min-h-screen bg-background text-foreground">
@@ -315,6 +328,8 @@ function MobileMatch({
           analyzable={analyzable}
           fanOutEnabled={bestBetEnabled}
           finalScore={finalScore}
+          setId={heroSetId}
+          sharedAt={heroSharedAt}
         />
 
         {/* Detalhe por mercado LOGO ABAIXO do palpite: é o "quero ver mais" imediato da
@@ -359,6 +374,8 @@ function DesktopMatch({
   finalScore,
   bestBetEnabled,
   heroPalpite,
+  heroSetId,
+  heroSharedAt,
 }: Common) {
   return (
     <DesktopShell>
@@ -392,6 +409,8 @@ function DesktopMatch({
             analyzable={analyzable}
             fanOutEnabled={bestBetEnabled}
             finalScore={finalScore}
+            setId={heroSetId}
+            sharedAt={heroSharedAt}
           />
           <div className="flex flex-col gap-3 self-start">
             <OddsCard view={oddsView} matchStatus={matchStatus} />

@@ -445,6 +445,9 @@ export const palpiteSets = pgTable(
     // ADITIVA NULLABLE (ADR 0030 §4): a manchete sintetizada. Null em sets antigos
     // (pré-#353, do gerador MIX). Auto-flui pra $inferSelect.
     headline: jsonb().$type<PalpiteHeadline>(),
+    // ADR 0035 §7 (#383): gesto opt-in de compartilhar (LGPD). NULL = privado (default,
+    // sem backfill); set = snapshot público resolvível em /p/[id]; clear = kill-switch.
+    sharedAt: timestamp({ withTimezone: true }),
     createdAt: timestamp({ withTimezone: true }).notNull().defaultNow(),
   },
   (t) => [
