@@ -11,7 +11,17 @@ const MONTH_ABBR_PT = [
   "jul", "ago", "set", "out", "nov", "dez",
 ];
 
-function formatRecentWhen(date: Date): string {
+// "DD mmm" no fuso do usuário (#1). Undefined = fuso do runtime (legado/testes).
+function formatRecentWhen(date: Date, timeZone?: string): string {
+  if (timeZone) {
+    const parts = new Intl.DateTimeFormat("en-US", {
+      timeZone,
+      month: "2-digit",
+      day: "2-digit",
+    }).formatToParts(date);
+    const pick = (t: string) => Number(parts.find((p) => p.type === t)?.value);
+    return `${pick("day").toString().padStart(2, "0")} ${MONTH_ABBR_PT[pick("month") - 1]}`;
+  }
   const day = date.getDate().toString().padStart(2, "0");
   return `${day} ${MONTH_ABBR_PT[date.getMonth()]}`;
 }
@@ -46,7 +56,10 @@ function recToken(recommendation: RecentInput["recommendation"]): Recommendation
     : recommendation.toUpperCase();
 }
 
-export function toRecentPredictionView(row: RecentInput): RecentPredictionView {
+export function toRecentPredictionView(
+  row: RecentInput,
+  timeZone?: string,
+): RecentPredictionView {
   const league = leagueToKey(row.league);
   return {
     id: row.predictionId,
@@ -57,7 +70,7 @@ export function toRecentPredictionView(row: RecentInput): RecentPredictionView {
     away: teamToTeam(row.awayTeam, league).short,
     rec: recToken(row.recommendation),
     edge: formatEdge(row.edgePct),
-    when: formatRecentWhen(row.createdAt),
+    when: formatRecentWhen(row.createdAt, timeZone),
     league,
   };
 }

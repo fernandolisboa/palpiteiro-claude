@@ -31,6 +31,7 @@ import { getAiCallById } from "@/lib/db/queries/predictions";
 import { getUserAccessState } from "@/lib/db/queries/users";
 import { ensureOddsSnapshotsFresh } from "@/lib/odds/fetch-and-snapshot";
 import { checkAnalysisRateLimit, type RateLimitResult } from "@/lib/rate-limit";
+import { getRequestTimeZone } from "@/lib/server/request-timezone";
 import { toAnalysisView } from "@/lib/view/analysis";
 import { ExactScoreParamsSchema } from "@/lib/ai/palpites/cartridges/cartridge";
 import { toBestBetView } from "@/lib/view/best-bet";
@@ -257,6 +258,8 @@ export async function analyzeMatch(
         extraLines,
       });
     const aiCall = await getAiCallById(prediction.aiCallId);
+    // Fuso do usuário (#1) pro "gerado em" da view fresca retornada ao cliente.
+    const timeZone = await getRequestTimeZone();
     revalidatePath(`/match/${matchId}`);
     revalidatePath("/jogos");
     return {
@@ -285,6 +288,8 @@ export async function analyzeMatch(
           selections,
         },
         aiCall ? { costUsd: aiCall.costUsd } : null,
+        new Date(),
+        timeZone,
       ),
     };
   } catch (err) {

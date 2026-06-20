@@ -16,6 +16,7 @@ import {
   DEFAULT_LEAGUE_FILTER,
   isActiveLeagueFilter,
 } from "@/lib/config/active-leagues";
+import { getRequestTimeZone } from "@/lib/server/request-timezone";
 import { getMatchIdsWithPredictionsByUser } from "@/lib/db/queries/matches";
 import { loadRangeMatches } from "@/lib/db/queries/load-range-matches";
 import {
@@ -40,6 +41,11 @@ import {
   type RecentPredictionView,
 } from "@/lib/view/types";
 import type { SupportedLeague } from "@/lib/providers/sports-data/leagues";
+
+// Render dinâmico explícito: a rota lê o cookie de fuso (#1) por-request via
+// getRequestTimeZone(); auth() já a tornava dinâmica, mas o explícito blinda a
+// correção de fuso de um eventual passe estático (PPR/Cache Components futuros).
+export const dynamic = "force-dynamic";
 
 const RECENT_LIMIT = 5;
 
@@ -120,6 +126,8 @@ export default async function JogosPage({ searchParams }: PageProps) {
     ]);
 
   const now = new Date();
+  // Fuso de exibição do usuário (#1) — formata kickoff/datas no fuso do navegador.
+  const timeZone = await getRequestTimeZone();
   const matches: MatchRowView[] = dbMatches.map((m) => {
     const snapshot = snapshotByMatch.get(m.id);
     const matchResult = matchResultByMatch.get(m.id);
@@ -147,6 +155,7 @@ export default async function JogosPage({ searchParams }: PageProps) {
       matchResultOdds: matchResult ?? null,
       hasPrediction: predictedMatchIds.has(m.id),
       now,
+      timeZone,
     });
   });
 
@@ -160,7 +169,7 @@ export default async function JogosPage({ searchParams }: PageProps) {
       recommendation: r.recommendation,
       edgePct: r.edgePct,
       createdAt: r.createdAt,
-    }),
+    }, timeZone),
   );
 
   return (

@@ -3,6 +3,7 @@ import { notFound, redirect } from "next/navigation";
 import { PredictionDetail } from "@/components/dashboard/prediction-detail";
 import { DesktopShell } from "@/components/desktop-shell";
 import { auth } from "@/auth";
+import { getRequestTimeZone } from "@/lib/server/request-timezone";
 import { resolveBackHref } from "@/lib/view/back-href";
 import { getClosingSnapshotForDetail } from "@/lib/db/queries/clv-snapshots";
 import { getPredictionDetailForUser } from "@/lib/db/queries/dashboard";
@@ -40,6 +41,7 @@ export default async function PredictionDetailPage({
   const view = toPredictionDetailView(detail, {
     includeRawPayloads: isAdmin,
     closing,
+    timeZone: await getRequestTimeZone(),
   });
 
   return (

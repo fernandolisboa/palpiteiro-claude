@@ -20,6 +20,7 @@ import {
   parseDashboardFilters,
 } from "@/lib/dashboard/derive-view";
 import { enrichDashboardRowsWithClosing } from "@/lib/dashboard/clv-enrich";
+import { getRequestTimeZone } from "@/lib/server/request-timezone";
 import { getUserDashboardRows } from "@/lib/db/queries/dashboard";
 
 export const dynamic = "force-dynamic";
@@ -48,8 +49,10 @@ export default async function DashboardPage({ searchParams }: PageProps) {
     { status, league, market },
     availableMarketKeys(rows),
   );
+  // Fuso de exibição do usuário (#1) — coluna "data" da tabela no fuso do navegador.
+  const timeZone = await getRequestTimeZone();
   const { kpis, segments, series, tableRows, availableLeagues, availableMarkets } =
-    deriveDashboardView(rows, filters);
+    deriveDashboardView(rows, filters, timeZone);
 
   // URL filtrada atual — propagada aos links da tabela pra preservar a busca ao
   // abrir uma predição e voltar.
@@ -100,7 +103,7 @@ export default async function DashboardPage({ searchParams }: PageProps) {
                   {series.length} liquidada{series.length === 1 ? "" : "s"}
                 </span>
               </div>
-              <BankrollChart data={series} />
+              <BankrollChart data={series} timeZone={timeZone} />
             </section>
 
             <section className="flex flex-col gap-4">

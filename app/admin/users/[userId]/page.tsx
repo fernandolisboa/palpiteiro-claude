@@ -19,6 +19,7 @@ import {
 } from "@/lib/dashboard/derive-view";
 import { getUserDashboardRows } from "@/lib/db/queries/dashboard";
 import { getUserManagement } from "@/lib/db/queries/users";
+import { getRequestTimeZone } from "@/lib/server/request-timezone";
 
 import { UserAdminControls } from "./user-admin-controls";
 
@@ -63,8 +64,10 @@ export default async function AdminUserTrackingPage({
     { status, league, market },
     availableMarketKeys(rows),
   );
+  // Fuso de exibição do ADMIN (viewer) — coluna "data" da tabela + tick do gráfico.
+  const timeZone = await getRequestTimeZone();
   const { kpis, segments, series, tableRows, availableLeagues, availableMarkets } =
-    deriveDashboardView(rows, filters);
+    deriveDashboardView(rows, filters, timeZone);
 
   const basePath = `/admin/users/${userId}`;
 
@@ -114,7 +117,7 @@ export default async function AdminUserTrackingPage({
                   {series.length} liquidada{series.length === 1 ? "" : "s"}
                 </span>
               </div>
-              <BankrollChart data={series} />
+              <BankrollChart data={series} timeZone={timeZone} />
             </section>
 
             <section className="flex flex-col gap-4">

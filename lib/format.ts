@@ -25,64 +25,122 @@ const MONTH_ABBR_PT = [
 
 const WEEKDAY_ABBR_PT = ["dom", "seg", "ter", "qua", "qui", "sex", "sáb"];
 
-function isSameDay(a: Date, b: Date): boolean {
+// ── Componentes de data/hora num fuso (#1 timezone) ──────────────────────────
+// `timeZone` undefined = comportamento LEGADO (fuso do runtime, via getHours/…):
+// preserva os testes existentes e os call sites que ainda não threadam o fuso.
+// Definido = formatação no fuso do usuário via `Intl` (robusto a DST/offsets).
+
+type DateParts = {
+  year: number;
+  month: number; // 1-12
+  day: number;
+  hour: number; // 0-23
+  minute: number;
+};
+
+function zonedParts(d: Date, timeZone: string): DateParts {
+  const parts = new Intl.DateTimeFormat("en-US", {
+    timeZone,
+    year: "numeric",
+    month: "2-digit",
+    day: "2-digit",
+    hour: "2-digit",
+    minute: "2-digit",
+    hour12: false,
+  }).formatToParts(d);
+  const pick = (t: string) => Number(parts.find((p) => p.type === t)?.value);
+  let hour = pick("hour");
+  if (hour === 24) hour = 0; // guard defensivo (hour12:false dá 00-23 por spec)
+  return {
+    year: pick("year"),
+    month: pick("month"),
+    day: pick("day"),
+    hour,
+    minute: pick("minute"),
+  };
+}
+
+function partsOf(d: Date, timeZone?: string): DateParts {
+  if (timeZone) return zonedParts(d, timeZone);
+  return {
+    year: d.getFullYear(),
+    month: d.getMonth() + 1,
+    day: d.getDate(),
+    hour: d.getHours(),
+    minute: d.getMinutes(),
+  };
+}
+
+// 0=dom..6=sáb pra a data CIVIL (independe de fuso, via Date.UTC).
+function weekdayOf(p: DateParts): number {
+  return new Date(Date.UTC(p.year, p.month - 1, p.day)).getUTCDay();
+}
+
+function isSameDay(a: DateParts, b: DateParts): boolean {
+  return a.year === b.year && a.month === b.month && a.day === b.day;
+}
+
+function isNextDay(a: DateParts, base: DateParts): boolean {
+  const next = new Date(Date.UTC(base.year, base.month - 1, base.day + 1));
   return (
-    a.getFullYear() === b.getFullYear() &&
-    a.getMonth() === b.getMonth() &&
-    a.getDate() === b.getDate()
+    a.year === next.getUTCFullYear() &&
+    a.month === next.getUTCMonth() + 1 &&
+    a.day === next.getUTCDate()
   );
 }
 
-function isNextDay(a: Date, base: Date): boolean {
-  const next = new Date(base);
-  next.setDate(next.getDate() + 1);
-  return isSameDay(a, next);
-}
-
-function hhmm(d: Date): string {
-  const h = d.getHours().toString().padStart(2, "0");
-  const m = d.getMinutes().toString().padStart(2, "0");
-  return `${h}:${m}`;
+function hhmm(p: DateParts): string {
+  return `${p.hour.toString().padStart(2, "0")}:${p.minute
+    .toString()
+    .padStart(2, "0")}`;
 }
 
 /**
  * "em 3h 24min" para kickoffs em <24h; "amanhã, 16:00" pro próximo dia;
- * "qui, 21:00" pra esta semana; "DD mmm" pra mais distante.
+ * "qui, 21:00" pra esta semana; "DD mmm" pra mais distante. Formata no `timeZone`
+ * do usuário (undefined = fuso do runtime, legado).
  */
 export function formatKickoffRelative(
   kickoff: Date,
   now: Date = new Date(),
+  timeZone?: string,
 ): string {
   const deltaMs = kickoff.getTime() - now.getTime();
-  if (deltaMs > 0 && deltaMs < 24 * 60 * 60 * 1000 && isSameDay(kickoff, now)) {
+  const k = partsOf(kickoff, timeZone);
+  const n = partsOf(now, timeZone);
+  if (deltaMs > 0 && deltaMs < 24 * 60 * 60 * 1000 && isSameDay(k, n)) {
     const totalMin = Math.floor(deltaMs / 60_000);
     const h = Math.floor(totalMin / 60);
     const m = totalMin % 60;
     if (h === 0) return `em ${m}min`;
     return `em ${h}h ${m.toString().padStart(2, "0")}min`;
   }
-  if (isNextDay(kickoff, now)) {
-    return `amanhã, ${hhmm(kickoff)}`;
+  if (isNextDay(k, n)) {
+    return `amanhã, ${hhmm(k)}`;
   }
   const within7d = deltaMs > 0 && deltaMs < 7 * 24 * 60 * 60 * 1000;
   if (within7d) {
-    return `${WEEKDAY_ABBR_PT[kickoff.getDay()]}, ${hhmm(kickoff)}`;
+    return `${WEEKDAY_ABBR_PT[weekdayOf(k)]}, ${hhmm(k)}`;
   }
-  return `${kickoff.getDate().toString().padStart(2, "0")} ${MONTH_ABBR_PT[kickoff.getMonth()]}`;
+  return `${k.day.toString().padStart(2, "0")} ${MONTH_ABBR_PT[k.month - 1]}`;
 }
 
 /**
- * "hoje, 21:30" / "amanhã, 16:00" / "qua, 23 mai". Usado no MatchHero.
+ * "hoje, 21:30" / "amanhã, 16:00" / "qua, 23 mai". Usado no MatchHero. Formata no
+ * `timeZone` do usuário (undefined = fuso do runtime, legado).
  */
 export function formatKickoffAbsolute(
   kickoff: Date,
   now: Date = new Date(),
+  timeZone?: string,
 ): string {
-  if (isSameDay(kickoff, now)) return `hoje, ${hhmm(kickoff)}`;
-  if (isNextDay(kickoff, now)) return `amanhã, ${hhmm(kickoff)}`;
-  const wk = WEEKDAY_ABBR_PT[kickoff.getDay()];
-  const day = kickoff.getDate().toString().padStart(2, "0");
-  const mon = MONTH_ABBR_PT[kickoff.getMonth()];
+  const k = partsOf(kickoff, timeZone);
+  const n = partsOf(now, timeZone);
+  if (isSameDay(k, n)) return `hoje, ${hhmm(k)}`;
+  if (isNextDay(k, n)) return `amanhã, ${hhmm(k)}`;
+  const wk = WEEKDAY_ABBR_PT[weekdayOf(k)];
+  const day = k.day.toString().padStart(2, "0");
+  const mon = MONTH_ABBR_PT[k.month - 1];
   return `${wk}, ${day} ${mon}`;
 }
 
@@ -93,11 +151,14 @@ export function formatKickoffAbsolute(
 export function formatCountdown(
   kickoff: Date,
   now: Date = new Date(),
+  timeZone?: string,
 ): string | undefined {
   const deltaMs = kickoff.getTime() - now.getTime();
   if (deltaMs <= 0 || deltaMs >= 24 * 60 * 60 * 1000) return undefined;
-  if (!isSameDay(kickoff, now)) return undefined;
-  return formatKickoffRelative(kickoff, now);
+  if (!isSameDay(partsOf(kickoff, timeZone), partsOf(now, timeZone))) {
+    return undefined;
+  }
+  return formatKickoffRelative(kickoff, now, timeZone);
 }
 
 /**
@@ -201,22 +262,25 @@ export function formatCostUsdTotal(
 }
 
 /**
- * "19 mai · 14:22" — formato do `generatedAt` no preview #33.
+ * "19 mai · 14:22" — formato do `generatedAt` no preview #33. Formata no
+ * `timeZone` do usuário (undefined = fuso do runtime, legado).
  */
-export function formatGeneratedAt(date: Date): string {
-  const day = date.getDate().toString().padStart(2, "0");
-  const mon = MONTH_ABBR_PT[date.getMonth()];
-  return `${day} ${mon} · ${hhmm(date)}`;
+export function formatGeneratedAt(date: Date, timeZone?: string): string {
+  const p = partsOf(date, timeZone);
+  const day = p.day.toString().padStart(2, "0");
+  const mon = MONTH_ABBR_PT[p.month - 1];
+  return `${day} ${mon} · ${hhmm(p)}`;
 }
 
 /**
  * "19 mai · 14:22:07" — como formatGeneratedAt mas com segundos. Usado no header
  * das "análises anteriores" (#204) pra desambiguar reanálises do MESMO minuto (a
  * key React é a id da predição, estável; o rótulo só ajuda o usuário a distinguir).
+ * Segundos são invariantes ao fuso (offsets são de minutos inteiros).
  */
-export function formatGeneratedAtSeconds(date: Date): string {
+export function formatGeneratedAtSeconds(date: Date, timeZone?: string): string {
   const ss = date.getSeconds().toString().padStart(2, "0");
-  return `${formatGeneratedAt(date)}:${ss}`;
+  return `${formatGeneratedAt(date, timeZone)}:${ss}`;
 }
 
 /**

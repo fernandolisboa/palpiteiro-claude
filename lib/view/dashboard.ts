@@ -192,14 +192,17 @@ export type PredictionRowView = {
   profit: string | null;
 };
 
-export function toPredictionRowView(row: DashboardRow): PredictionRowView {
+export function toPredictionRowView(
+  row: DashboardRow,
+  timeZone?: string,
+): PredictionRowView {
   const profitNum = row.profitUnits === null ? null : Number(row.profitUnits);
   return {
     id: row.predictionId,
     home: row.homeTeam,
     away: row.awayTeam,
     league: leagueToKey(row.league),
-    when: formatKickoffAbsolute(row.createdAt),
+    when: formatKickoffAbsolute(row.createdAt, new Date(), timeZone),
     rec: recToken(row.recommendation, row.marketKey),
     odd: formatOdd(row.oddAtRecommendation),
     edge: formatEdge(row.edgePct),
@@ -288,9 +291,15 @@ export type PredictionDetailView = {
 
 export function toPredictionDetailView(
   detail: DashboardDetail,
-  opts: { includeRawPayloads: boolean; closing?: ClosingSnapshot | null },
+  opts: {
+    includeRawPayloads: boolean;
+    closing?: ClosingSnapshot | null;
+    // Fuso de exibição do usuário (#1). Undefined = fuso do runtime (legado/testes).
+    timeZone?: string;
+  },
 ): PredictionDetailView {
   const { prediction, match, outcome, aiCall } = detail;
+  const now = new Date();
   const score =
     match.homeScore !== null && match.awayScore !== null
       ? `${match.homeScore}-${match.awayScore}`
@@ -320,7 +329,7 @@ export function toPredictionDetailView(
       home: match.homeTeam,
       away: match.awayTeam,
       league: leagueToKey(match.league),
-      kickoff: formatKickoffAbsolute(match.kickoffAt),
+      kickoff: formatKickoffAbsolute(match.kickoffAt, now, opts.timeZone),
       status: match.status,
       score,
     },
@@ -340,7 +349,7 @@ export function toPredictionDetailView(
       factors: prediction.keyFactors,
       model: formatModelName(prediction.modelVersion),
       promptVersion: prediction.promptVersion,
-      createdAt: formatKickoffAbsolute(prediction.createdAt),
+      createdAt: formatKickoffAbsolute(prediction.createdAt, now, opts.timeZone),
     },
     clv: {
       available: closing !== null,
@@ -364,7 +373,7 @@ export function toPredictionDetailView(
               outcome.resultData?.totalGoals ?? null,
             ),
           },
-          settledAt: formatKickoffAbsolute(outcome.settledAt),
+          settledAt: formatKickoffAbsolute(outcome.settledAt, now, opts.timeZone),
           manual: outcome.overrideByUserId !== null,
         }
       : null,
