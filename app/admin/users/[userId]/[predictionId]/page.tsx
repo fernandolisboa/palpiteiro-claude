@@ -6,6 +6,7 @@ import { DesktopShell } from "@/components/desktop-shell";
 import { auth } from "@/auth";
 import { getClosingSnapshotForDetail } from "@/lib/db/queries/clv-snapshots";
 import { getPredictionDetailForUser } from "@/lib/db/queries/dashboard";
+import { getRequestTimeZone } from "@/lib/server/request-timezone";
 import { toPredictionDetailView } from "@/lib/view/dashboard";
 
 export const dynamic = "force-dynamic";
@@ -43,6 +44,7 @@ export default async function AdminUserPredictionPage({ params }: PageProps) {
   const view = toPredictionDetailView(detail, {
     includeRawPayloads: true,
     closing,
+    timeZone: await getRequestTimeZone(),
   });
 
   return (

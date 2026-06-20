@@ -196,6 +196,43 @@ describe("formatCountdown", () => {
   });
 });
 
+describe("formatKickoff* com timeZone (fuso do usuário, #1)", () => {
+  // Mesmo INSTANTE (00:30 UTC) → hora local por fuso: 21:30 BRT (UTC-3, dia
+  // anterior), 01:30 em Lisboa (UTC+1), 09:30 em Tóquio (UTC+9). Era o bug: o
+  // app mostrava 00:30 (UTC do runtime) em vez de 21:30 (BRT).
+  const kickoff = new Date("2026-06-20T00:30:00Z");
+  const now = new Date("2026-06-19T23:00:00Z");
+
+  it("absolute em BRT mostra 21:30 (não 00:30 UTC)", () => {
+    expect(formatKickoffAbsolute(kickoff, now, "America/Sao_Paulo")).toBe(
+      "hoje, 21:30",
+    );
+  });
+
+  it("absolute: o MESMO instante muda por fuso", () => {
+    expect(formatKickoffAbsolute(kickoff, now, "Europe/Lisbon")).toBe(
+      "hoje, 01:30",
+    );
+    expect(formatKickoffAbsolute(kickoff, now, "Asia/Tokyo")).toBe(
+      "hoje, 09:30",
+    );
+    // UTC explícito reproduz o comportamento antigo (00:30, vira "amanhã").
+    expect(formatKickoffAbsolute(kickoff, now, "UTC")).toBe("amanhã, 00:30");
+  });
+
+  it("relative em BRT: <24h no mesmo dia → 'em 1h 30min'", () => {
+    expect(formatKickoffRelative(kickoff, now, "America/Sao_Paulo")).toBe(
+      "em 1h 30min",
+    );
+  });
+
+  it("countdown em BRT: <24h mesmo dia BRT → 'em 1h 30min'", () => {
+    expect(formatCountdown(kickoff, now, "America/Sao_Paulo")).toBe(
+      "em 1h 30min",
+    );
+  });
+});
+
 describe("formatModelName", () => {
   it("compacts version sufix", () => {
     expect(formatModelName("claude-sonnet-4-5-20250929")).toBe(

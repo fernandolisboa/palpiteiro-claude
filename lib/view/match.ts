@@ -38,6 +38,8 @@ export type ToMatchRowArgs = {
   matchResultOdds?: { selections: { key: string; odd: string }[] } | null;
   hasPrediction: boolean;
   now?: Date;
+  // Fuso de exibição do usuário (#1). Undefined = fuso do runtime (legado/testes).
+  timeZone?: string;
 };
 
 export function toMatchRowView({
@@ -46,6 +48,7 @@ export function toMatchRowView({
   matchResultOdds,
   hasPrediction,
   now = new Date(),
+  timeZone,
 }: ToMatchRowArgs): MatchRowView {
   const league = leagueToKey(match.league);
   return {
@@ -53,8 +56,8 @@ export function toMatchRowView({
     home: teamToTeam(match.homeTeam, league),
     away: teamToTeam(match.awayTeam, league),
     league,
-    kickoff: formatKickoffRelative(match.kickoffAt, now),
-    when: formatKickoffAbsolute(match.kickoffAt, now),
+    kickoff: formatKickoffRelative(match.kickoffAt, now, timeZone),
+    when: formatKickoffAbsolute(match.kickoffAt, now, timeZone),
     // Prioridade de display (#173): 1X2 quando há captura h2h, senão over/under,
     // senão sem odd. Única market-literal sancionada na view — roteamento de
     // FONTE (tabelas distintas), não dispatch de normalização. Um 3º mercado ao
@@ -70,7 +73,7 @@ export function toMatchRowView({
     homeScore: match.status === "finished" ? match.homeScore : null,
     awayScore: match.status === "finished" ? match.awayScore : null,
     venue: match.venue,
-    countdown: formatCountdown(match.kickoffAt, now),
+    countdown: formatCountdown(match.kickoffAt, now, timeZone),
   };
 }
 

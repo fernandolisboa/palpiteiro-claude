@@ -18,8 +18,21 @@ const MONTH_ABBR_PT = [
   "jul", "ago", "set", "out", "nov", "dez",
 ];
 
-function formatTick(iso: string): string {
+// Tick do eixo X no fuso do usuário (#1). `timeZone` EXPLÍCITO torna a formatação
+// determinística: o MESMO output no SSR (server) e na hidratação (cliente) — sem
+// getDate/getMonth do runtime, que divergiria UTC↔navegador perto da meia-noite
+// (mismatch de hidratação). Undefined = legado (runtime-local) só fora das páginas.
+function formatTick(iso: string, timeZone?: string): string {
   const d = new Date(iso);
+  if (timeZone) {
+    const parts = new Intl.DateTimeFormat("en-US", {
+      timeZone,
+      day: "2-digit",
+      month: "2-digit",
+    }).formatToParts(d);
+    const pick = (t: string) => Number(parts.find((p) => p.type === t)?.value);
+    return `${pick("day").toString().padStart(2, "0")} ${MONTH_ABBR_PT[pick("month") - 1]}`;
+  }
   return `${d.getDate().toString().padStart(2, "0")} ${MONTH_ABBR_PT[d.getMonth()]}`;
 }
 
@@ -49,7 +62,14 @@ function ChartTooltip({
   );
 }
 
-export function BankrollChart({ data }: { data: BankrollChartPoint[] }) {
+export function BankrollChart({
+  data,
+  timeZone,
+}: {
+  data: BankrollChartPoint[];
+  // Fuso de exibição do usuário (#1) — formatação determinística do tick (ver formatTick).
+  timeZone?: string;
+}) {
   if (data.length === 0) {
     return (
       <div className="flex h-[260px] items-center justify-center rounded-xl border border-border bg-card px-6 text-center text-body text-muted-foreground">
@@ -64,7 +84,7 @@ export function BankrollChart({ data }: { data: BankrollChartPoint[] }) {
           <CartesianGrid stroke="currentColor" strokeOpacity={0.14} vertical={false} />
           <XAxis
             dataKey="t"
-            tickFormatter={formatTick}
+            tickFormatter={(iso: string) => formatTick(iso, timeZone)}
             tick={{ fontSize: 11, fill: "currentColor" }}
             tickLine={false}
             axisLine={{ stroke: "currentColor", strokeOpacity: 0.2 }}

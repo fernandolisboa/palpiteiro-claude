@@ -282,6 +282,8 @@ export function toAnalysisView(
   prediction: PredictionInput,
   aiCall: AiCallInput | null,
   now: Date = new Date(),
+  // Fuso de exibição do usuário (#1) p/ o "gerado em". Undefined = runtime (legado).
+  timeZone?: string,
 ): AnalysisView {
   const recommendation = prediction.recommendation;
   const isPass = recommendation === "pass";
@@ -433,7 +435,7 @@ export function toAnalysisView(
     minEdgePp,
     rationale: prediction.rationale,
     factors: prediction.keyFactors,
-    generatedAt: formatGeneratedAt(prediction.createdAt),
+    generatedAt: formatGeneratedAt(prediction.createdAt, timeZone),
     promptVersion: prediction.promptVersion,
     model: formatModelName(prediction.modelVersion),
     costUsd: formatCostUsd(aiCall?.costUsd ?? null),
@@ -448,6 +450,7 @@ export function toAnalysisView(
 export function toAnalysisViewFromPrediction(
   row: PredictionWithAiCall,
   now: Date = new Date(),
+  timeZone?: string,
 ): AnalysisView {
   return toAnalysisView(
     {
@@ -470,6 +473,7 @@ export function toAnalysisViewFromPrediction(
     },
     row.aiCall ? { costUsd: row.aiCall.costUsd } : null,
     now,
+    timeZone,
   );
 }
 
@@ -487,6 +491,7 @@ export function toAnalysisViewFromPrediction(
 export function toMarketAnalysisSections(
   history: PredictionWithAiCall[],
   now: Date = new Date(),
+  timeZone?: string,
 ): MarketAnalysisSectionItem[] {
   const seen = new Set<string>();
   const sections: MarketAnalysisSectionItem[] = [];
@@ -508,7 +513,7 @@ export function toMarketAnalysisSections(
       // rodou aquela análise (#244). initialModelOverride cai pro "default" se for um id
       // aposentado/fora-da-audiência (histórica), sem <option> órfã.
       modelId: row.prediction.modelVersion,
-      view: toAnalysisViewFromPrediction(row, now),
+      view: toAnalysisViewFromPrediction(row, now, timeZone),
     });
   }
   return sections;
@@ -522,6 +527,7 @@ export function toMarketAnalysisSections(
 export function toPreviousAnalysisItems(
   history: PredictionWithAiCall[],
   now: Date = new Date(),
+  timeZone?: string,
 ): PreviousAnalysisItem[] {
   const seen = new Set<string>();
   const items: PreviousAnalysisItem[] = [];
@@ -538,8 +544,8 @@ export function toPreviousAnalysisItems(
       // marketLabel SEPARADO da view: o branch pass do AnalysisResult não imprime
       // mercado, então o header o identifica (AC3). Mesmo coalesce 'over_under'.
       marketLabel: getMarketPresentation(marketKey).marketLabel,
-      generatedAt: formatGeneratedAtSeconds(row.prediction.createdAt),
-      view: toAnalysisViewFromPrediction(row, now),
+      generatedAt: formatGeneratedAtSeconds(row.prediction.createdAt, timeZone),
+      view: toAnalysisViewFromPrediction(row, now, timeZone),
     });
   }
   return items;

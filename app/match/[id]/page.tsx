@@ -36,6 +36,7 @@ import {
   toPalpiteHeadlineViewFromSet,
   type PalpiteHeadlineView,
 } from "@/lib/view/palpites-headline";
+import { getRequestTimeZone } from "@/lib/server/request-timezone";
 import { resolveBackHref } from "@/lib/view/back-href";
 import { toNwayOddsView, toOddsView } from "@/lib/view/odds";
 import type {
@@ -50,6 +51,10 @@ import type {
 // Uma truncagem por timeout deixa as ≤N predições JÁ persistidas (reais) visíveis no
 // próximo load (keepLatestPerMatch), sem retornar a view deste request.
 export const maxDuration = 300;
+
+// Render dinâmico explícito: lê o cookie de fuso (#1) por-request. auth() já a
+// tornava dinâmica; o explícito blinda a correção de fuso de um passe estático.
+export const dynamic = "force-dynamic";
 
 type PageProps = {
   params: Promise<{ id: string }>;
@@ -67,6 +72,9 @@ export default async function MatchPage({ params, searchParams }: PageProps) {
 
   const match = await getMatchById(id);
   if (!match) notFound();
+
+  // Fuso de exibição do usuário (#1) — kickoff/countdown do hero no fuso do navegador.
+  const timeZone = await getRequestTimeZone();
 
   // Pré-aquece over/under + 1X2 ao vivo (#173): featured/batch, +1 crédito de
   // liga por refresh stale (h2h é market separado de totals). Retorna a snapshot
@@ -121,6 +129,7 @@ export default async function MatchPage({ params, searchParams }: PageProps) {
         }
       : null,
     hasPrediction: latestPred !== null,
+    timeZone,
   });
 
   const oddsView: OddsView | null = snapshot
@@ -143,9 +152,16 @@ export default async function MatchPage({ params, searchParams }: PageProps) {
   // resultado cru (≤1, idêntico ao atual). ANTERIORES (#204) = as reanálises mais
   // antigas (não-latest de cada mercado). Ambas pela MESMA fiação multi-mercado
   // (#170/#173) centralizada em lib/view/analysis, market-agnostic (labels do registry).
-  const sections: MarketAnalysisSectionItem[] = toMarketAnalysisSections(history);
-  const previousAnalyses: PreviousAnalysisItem[] =
-    toPreviousAnalysisItems(history);
+  const sections: MarketAnalysisSectionItem[] = toMarketAnalysisSections(
+    history,
+    new Date(),
+    timeZone,
+  );
+  const previousAnalyses: PreviousAnalysisItem[] = toPreviousAnalysisItems(
+    history,
+    new Date(),
+    timeZone,
+  );
 
   const fixtureRef: FixtureRef = {
     league: match.league,

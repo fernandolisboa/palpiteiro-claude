@@ -82,6 +82,9 @@ export type DashboardView = {
 export function deriveDashboardView(
   rows: DashboardRow[],
   filters: DashboardFilters,
+  // Fuso de exibição do usuário (#1), forwarded pra a coluna "data" da tabela.
+  // Undefined = fuso do runtime (legado/testes).
+  timeZone?: string,
 ): DashboardView {
   // ADR 0020 / #116: conta no máximo uma predição por (jogo, mercado) — a mais
   // recente — em TODOS os outputs (KPIs, gráfico E tabela) pra reanálise não
@@ -112,7 +115,9 @@ export function deriveDashboardView(
     kpis: toDashboardKpiView(segmented.aggregate),
     segments,
     series: computeBankrollSeries(deduped),
-    tableRows: applyTableFilters(deduped, filters).map(toPredictionRowView),
+    tableRows: applyTableFilters(deduped, filters).map((r) =>
+      toPredictionRowView(r, timeZone),
+    ),
     availableLeagues: [...new Set(deduped.map((r) => leagueToKey(r.league)))],
     availableMarkets,
   };
