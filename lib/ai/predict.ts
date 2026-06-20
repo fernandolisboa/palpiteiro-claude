@@ -196,7 +196,11 @@ export async function predict({
   if (!match) {
     throw new PredictError("match not found", { matchId });
   }
-  if (match.status === "finished" || match.status === "cancelled") {
+  // Só jogo pré-jogo (`scheduled`) é analisável: `live`/`postponed` não têm odds
+  // pré-jogo (ou data definida) e `finished`/`cancelled` já passaram. Allowlist
+  // (não denylist) pega qualquer status futuro. As actions barram ANTES com copy
+  // por status; aqui é defense-in-depth (predict é a porta do LLM).
+  if (match.status !== "scheduled") {
     throw new PredictError("match is not analyzable", {
       matchId,
       status: match.status,

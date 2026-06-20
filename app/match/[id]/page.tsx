@@ -39,6 +39,7 @@ import {
 import { toNwayOddsView, toOddsView } from "@/lib/view/odds";
 import type {
   MarketAnalysisSectionItem,
+  MatchStatus,
   OddsView,
   PreviousAnalysisItem,
 } from "@/lib/view/types";
@@ -148,11 +149,12 @@ export default async function MatchPage({ params }: PageProps) {
     awayTeam: match.awayTeam,
   };
   const leagueKey = leagueToKey(match.league);
-  // Espelha o gate de predict(): jogos encerrados/cancelados não são
-  // analisáveis. A CTA do HERO fica escondida nesses casos pra não submeter um form que
-  // o server rejeitaria. Predições/palpites já existentes continuam visíveis.
-  const analyzable =
-    match.status !== "finished" && match.status !== "cancelled";
+  // Espelha o gate de predict()/actions: SÓ jogo pré-jogo (`scheduled`) é
+  // analisável. `live`/`postponed` também NÃO (sem odds pré-jogo / sem data
+  // definida) — antes ficavam analisáveis e a análise quebrava no fetch de odds.
+  // A CTA do HERO fica escondida nesses casos pra não submeter um form que o
+  // server rejeitaria; predições/palpites já existentes continuam visíveis.
+  const analyzable = match.status === "scheduled";
   // Placar final só pra jogos encerrados com gols reportados (heroView já
   // anulou scores fora de `finished`). Alimenta o recibo settled do HERO + FinishedNotice.
   const finalScore =
@@ -178,6 +180,7 @@ export default async function MatchPage({ params }: PageProps) {
           fixtureRef={fixtureRef}
           leagueKey={leagueKey}
           analyzable={analyzable}
+          matchStatus={match.status}
           finalScore={finalScore}
           bestBetEnabled={bestBetEnabled}
           heroPalpite={heroPalpite}
@@ -194,6 +197,7 @@ export default async function MatchPage({ params }: PageProps) {
           fixtureRef={fixtureRef}
           leagueKey={leagueKey}
           analyzable={analyzable}
+          matchStatus={match.status}
           finalScore={finalScore}
           bestBetEnabled={bestBetEnabled}
           heroPalpite={heroPalpite}
@@ -220,8 +224,12 @@ type Common = {
   matchId: string;
   fixtureRef: FixtureRef;
   leagueKey: ReturnType<typeof leagueToKey>;
-  // false em jogos encerrados/cancelados (predict() os rejeita). Esconde a CTA.
+  // false em jogos não-`scheduled` (live/postponed/finished/cancelled — predict()
+  // os rejeita). Esconde a CTA.
   analyzable: boolean;
+  // Status cru do jogo: escolhe a copy do empty-state (OddsCard) e do aviso de
+  // não-analisável (live vs adiado vs encerrado).
+  matchStatus: MatchStatus;
   // Placar final pra jogos encerrados; null caso contrário.
   finalScore: { home: number; away: number } | null;
   // Flag #178/#351: o kill-switch de spend (enable_best_bet_fan_out). Passado ao HERO
@@ -242,6 +250,7 @@ function MobileMatch({
   fixtureRef,
   leagueKey,
   analyzable,
+  matchStatus,
   finalScore,
   bestBetEnabled,
   heroPalpite,
@@ -289,12 +298,12 @@ function MobileMatch({
           previousAnalyses={previousAnalyses}
         />
         {!analyzable && sections.length === 0 && (
-          <FinishedNotice score={finalScore} />
+          <NotAnalyzableNotice status={matchStatus} score={finalScore} />
         )}
 
         {/* Odds (preços de referência) DEPOIS do detalhe — em tela estreita ficam abaixo do
             palpite+análise, sem empurrar a análise pra longe da manchete. */}
-        <OddsCard view={oddsView} />
+        <OddsCard view={oddsView} matchStatus={matchStatus} />
         {matchResultOddsView && <OddsCard view={matchResultOddsView} />}
 
         <Suspense fallback={<MatchSectionsSkeleton />}>
@@ -318,6 +327,7 @@ function DesktopMatch({
   fixtureRef,
   leagueKey,
   analyzable,
+  matchStatus,
   finalScore,
   bestBetEnabled,
   heroPalpite,
@@ -356,7 +366,7 @@ function DesktopMatch({
             finalScore={finalScore}
           />
           <div className="flex flex-col gap-3 self-start">
-            <OddsCard view={oddsView} />
+            <OddsCard view={oddsView} matchStatus={matchStatus} />
             {matchResultOddsView && <OddsCard view={matchResultOddsView} />}
           </div>
         </div>
@@ -371,7 +381,7 @@ function DesktopMatch({
             previousAnalyses={previousAnalyses}
           />
           {!analyzable && sections.length === 0 && (
-            <FinishedNotice score={finalScore} />
+            <NotAnalyzableNotice status={matchStatus} score={finalScore} />
           )}
         </div>
 
@@ -413,24 +423,51 @@ function NeutralAnalysisDetail({
   );
 }
 
-// Mostrado em vez da CTA de análise quando o jogo já terminou/foi cancelado e
-// não há predição prévia: predict() rejeita esses jogos, então não há o que
-// analisar. O placar (quando há) reforça o estado encerrado.
-function FinishedNotice({
+// Copy do aviso de não-analisável POR status — mesma informação/tom de
+// notAnalyzableMessage das actions (aqui em label+detail pra o card; lá numa
+// string só). live → "antes do apito"; postponed → "até ser remarcado"; o resto
+// (finished/cancelled) → encerrado, com placar quando há.
+function notAnalyzableNoticeCopy(
+  status: MatchStatus,
+  score: { home: number; away: number } | null,
+): { label: string; detail: string } {
+  if (status === "live") {
+    return {
+      label: "jogo em andamento",
+      detail: "A análise fica disponível só antes do apito inicial.",
+    };
+  }
+  if (status === "postponed") {
+    return {
+      label: "jogo adiado",
+      detail: "Análise indisponível até o jogo ser remarcado.",
+    };
+  }
+  return {
+    label: "jogo encerrado",
+    detail: score
+      ? `Placar final ${score.home}–${score.away}. Análise indisponível para jogos já encerrados.`
+      : "Análise indisponível para jogos já encerrados ou cancelados.",
+  };
+}
+
+// Mostrado em vez da CTA de análise quando o jogo não é analisável (não-`scheduled`)
+// e não há predição prévia: predict()/actions rejeitam esses jogos, então não há o
+// que analisar. A copy varia por status (ao vivo / adiado / encerrado).
+function NotAnalyzableNotice({
+  status,
   score,
 }: {
+  status: MatchStatus;
   score: { home: number; away: number } | null;
 }) {
+  const { label, detail } = notAnalyzableNoticeCopy(status, score);
   return (
     <div className="flex flex-col gap-1.5 rounded-md border border-dashed border-border px-4 py-3.5">
       <span className="font-mono text-eyebrow uppercase tracking-label text-muted-foreground">
-        jogo encerrado
+        {label}
       </span>
-      <p className="text-body-sm text-muted-foreground tracking-tight">
-        {score
-          ? `Placar final ${score.home}–${score.away}. Análise indisponível para jogos já encerrados.`
-          : "Análise indisponível para jogos já encerrados ou cancelados."}
-      </p>
+      <p className="text-body-sm text-muted-foreground tracking-tight">{detail}</p>
     </div>
   );
 }

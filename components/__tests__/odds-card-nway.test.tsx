@@ -37,3 +37,34 @@ describe("OddsCard N-vias (1X2, N=3) — #173 PR-2", () => {
     expect(html).toContain('aria-label="Ajuda: overround"');
   });
 });
+
+describe("OddsCard empty-state (view=null) — copy por status", () => {
+  it("sem status (pré-jogo default) → 'até que o mercado abra'", () => {
+    const html = renderToStaticMarkup(<OddsCard view={null} />);
+    expect(html).toContain("Odds indisponíveis");
+    expect(html).toContain("até que o mercado abra");
+  });
+
+  it("scheduled → mesma copy pré-jogo", () => {
+    const html = renderToStaticMarkup(
+      <OddsCard view={null} matchStatus="scheduled" />,
+    );
+    expect(html).toContain("até que o mercado abra");
+  });
+
+  it("live → copy 'em andamento' SEM 'até que o mercado abra' (enganoso ao vivo)", () => {
+    const html = renderToStaticMarkup(
+      <OddsCard view={null} matchStatus="live" />,
+    );
+    expect(html).toContain("Jogo em andamento");
+    expect(html).not.toContain("até que o mercado abra");
+  });
+
+  it("finished → copy neutra de referência, sem 'até que o mercado abra'", () => {
+    const html = renderToStaticMarkup(
+      <OddsCard view={null} matchStatus="finished" />,
+    );
+    expect(html).toContain("Sem cotação de referência");
+    expect(html).not.toContain("até que o mercado abra");
+  });
+});
