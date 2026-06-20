@@ -39,10 +39,8 @@ vi.mock("@/lib/db/queries/ai-config", () => ({
   getEnableOverUnderExtraLines: vi.fn(),
 }));
 
-import {
-  analyzeMatch,
-  notAnalyzableMessage,
-} from "@/app/actions/predictions";
+import { analyzeMatch } from "@/app/actions/predictions";
+import { notAnalyzableMessage } from "@/app/actions/not-analyzable";
 import { auth } from "@/auth";
 import { predict } from "@/lib/ai/predict";
 import { getEnableOverUnderExtraLines } from "@/lib/db/queries/ai-config";
