@@ -243,4 +243,26 @@ describe("toPalpiteHeadlineViewFromSet", () => {
     const reload = toPalpiteHeadlineViewFromSet(setWith({ lines }))?.dimensions;
     expect(fresh).toEqual(reload);
   });
+
+  it("#419: a linha cards fun-only (settleable=false) NÃO entra no HERO (toDimensionViews a filtra) — fresh == reload", () => {
+    const lines = [
+      line(),
+      dimLine({ id: "m", type: "margin", text: "Mandante ganha por 2+" }),
+      // Linha cards fun-only: settleable=false → filtrada do hero (#394 a promove).
+      dimLine({
+        id: "c",
+        type: "cards",
+        text: "6+ cartões amarelos",
+        params: { line: 6, scope: "total" },
+        settleable: false,
+      }),
+    ];
+    const fresh = toDimensionViews(lines);
+    const reload = toPalpiteHeadlineViewFromSet(setWith({ lines }))?.dimensions;
+    // A dimensão cards NÃO aparece em nenhum dos caminhos (settleable=false → filtrada).
+    expect(fresh.some((d) => d.label.includes("cartões"))).toBe(false);
+    expect(fresh).toEqual([{ label: "Mandante ganha por 2+", badge: null }]);
+    // Paridade fresh == reload mantida (a #354 anti-glitch invariant segue de pé).
+    expect(fresh).toEqual(reload);
+  });
 });

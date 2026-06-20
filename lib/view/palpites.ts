@@ -14,6 +14,9 @@ const TYPE_LABEL: Record<PalpiteType, string> = {
   clean_sheet: "não sofrer gol",
   first_half_score: "placar do 1º tempo",
   first_to_score: "primeiro a marcar",
+  // #419 — rótulo yellow-específico (casa a chave de liquidação do #394, ADR 0033),
+  // não "amarelos"/"cartões" soltos. Linha fun-only (settleable=false).
+  cards: "cartões amarelos",
 };
 
 // Estado DERIVADO de cada linha (PLAN §3) — calculado AQUI, nunca no JSX:

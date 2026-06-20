@@ -1,0 +1,1 @@
+ALTER TYPE "public"."palpite_type" ADD VALUE 'cards';

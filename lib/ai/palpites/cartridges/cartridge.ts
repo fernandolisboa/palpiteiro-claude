@@ -45,8 +45,16 @@ import type { PalpiteCartridge } from "../types";
 // aproveitamento (espírito do firewall). O firewall trio + o badge liquidável seguem
 // intactos por construção (os fatos são INPUT — contagens inteiras + nomes de time —
 // nunca tocam o output); nenhuma row liquidável nova.
+// v8 (#419) = + cardsTemperature (OPCIONAL): TEMPERATURA de cartões (rung qualitativa
+// "pegado"/"muito_pegado" que o modelo INFERE de rivalidade/decisão/notícia) → vira uma
+// linha FIXA de total de AMARELOS (4/6, do PROJETO — não do LLM) no boundary do template,
+// emitida como dimensão FUN-ONLY (settleable=false, fora do cron; o #394 a promove). O
+// input não tem dado de cartão → enum coarse mata a precisão-fingida. Firewall trio +
+// badge liquidável intactos; CLÁUSULA NOVA: o prompt PROÍBE citar cartões/árbitro/contagem
+// em verdict/narrative — a estimativa vai SÓ no campo estruturado cardsTemperature (fecha o
+// único vetor de fabricação que nem o value-guard nem o validador de fidelidade pegam).
 // BUMP MANUAL (commit `prompt:`) em QUALQUER mudança de prompt/schema.
-export const PALPITES_VERSION = "palpites_v7" as const;
+export const PALPITES_VERSION = "palpites_v8" as const;
 
 const TEXT_MAX = 280;
 // Narrativa: prosa um pouco mais longa que uma linha de palpite. Truncada (não
@@ -88,6 +96,13 @@ export const PalpitesOutputSchema = z
     // #354: quem marca o 1º gol. "none" = previsão de 0-0 (ninguém marca). Alimenta a
     // dimensão settleable first_to_score (home/away mapeiam direto pro teamSide dos eventos).
     firstToScore: z.enum(["home", "away", "none"]),
+    // v8 (#419): TEMPERATURA de cartões — dimensão MAIS RUIDOSA e divertida, fun-only.
+    // OPCIONAL: o modelo OMITE em jogo morno em vez de fingir. NÃO é contagem precisa
+    // (o input não tem dado de cartão/árbitro/faltas) — é uma RUNG qualitativa que o
+    // modelo infere de rivalidade/decisão/notícia. Mapeada a uma LINHA FIXA de total de
+    // AMARELOS (projeto, não LLM) no boundary do template. `scope` fica fora do schema —
+    // é sempre "total" na v1 (constante do template), aditivo no futuro.
+    cardsTemperature: z.enum(["pegado", "muito_pegado"]).optional(),
     // Confiança QUALITATIVA — nunca número.
     confidence: z.enum(["baixa", "media", "alta"]),
     // Prosa SEM linguagem de valor (validada também pelo guard de conteúdo no generator).
@@ -223,11 +238,13 @@ Sua tarefa é chamar UMA vez a ferramenta submit_palpite com:
 5. confidence: sua confiança QUALITATIVA — exatamente uma de "baixa", "media", "alta". NUNCA um número.
 6. narrative: 1 a 3 frases explicando o palpite a partir da forma, do histórico e do que as análises apontaram, em linguagem de torcida.
 7. citedMarkets: a lista dos rótulos de mercado que pesaram no seu palpite (ex.: ["Resultado (1X2)", "Over/Under gols"]). Use os rótulos que vierem no resumo.
+8. cardsTemperature (OPCIONAL): se o jogo tem CARA de pegado (clássico, rivalidade quente, jogo decisivo, ou árbitro rigoroso citado nas notícias), escolha "pegado" ou "muito_pegado". É a dimensão MAIS RUIDOSA e divertida — em jogo morno/amistoso ou na dúvida, OMITA o campo (não force). NUNCA um número de cartões. E NUNCA mencione cartões, árbitro ou contagem de cartões em verdict ou narrative — essa estimativa vai SÓ no campo estruturado cardsTemperature.
 
 REGRAS INVIOLÁVEIS:
 - Os números internos das análises (edge, valor esperado/EV, stake/unidades, Yield, lucro, odd/cotação, R$) são SÓ pra você decidir. É TERMINANTEMENTE PROIBIDO mencioná-los — como número OU como palavra — em verdict ou narrative. Escreva como um torcedor empolgado dando seu palpite, NUNCA como um analista de valor. (PROIBIDO: "tem edge no over", "odd boa no Palmeiras", "vale a stake". OK: "o Palmeiras vem voando e marca fácil em casa".)
 - Use o sinal das análises (incl. o edge/EV/odd internos) como insumo legítimo da SUA previsão — pra você decidir, não pra mencionar. Quando esse sinal, somado a forma/histórico/tabela, aponta o azarão, crave o azarão. Mas mesmo que NENHUM mercado tenha valor (todas as análises deem "pass"/sem recomendação), DÊ MESMO ASSIM seu palpite honesto de quem ganha + placar provável, derivado da forma, do histórico e da tabela. Nunca recuse o palpite por falta de valor.
 - Use SÓ os dados fornecidos. NÃO invente jogadores, lesões ou números.
+- Cartões/árbitro: a temperatura de cartões vai EXCLUSIVAMENTE no campo estruturado cardsTemperature ("pegado"/"muito_pegado" ou omitido). É TERMINANTEMENTE PROIBIDO mencionar cartões, árbitro, faltas ou QUALQUER contagem de cartões em verdict ou narrative — nem como número, nem como palavra. O input não traz dado de cartão; inventar um número de cartões na prosa é proibido.
 - O placar provável é o ÚNICO ponto conferido depois (acertou/errou). Trate como palpite divertido, nunca como "acerto garantido".
 - Responda EXCLUSIVAMENTE chamando a ferramenta submit_palpite. Não escreva texto livre fora da chamada.
 
@@ -277,6 +294,12 @@ const SUBMIT_PALPITE_TOOL = {
         enum: ["home", "away", "none"],
         description:
           "Quem marca o 1º gol: 'home' (mandante), 'away' (visitante) ou 'none' (placar 0-0, ninguém marca). Coerente com o veredito.",
+      },
+      cardsTemperature: {
+        type: "string",
+        enum: ["pegado", "muito_pegado"],
+        description:
+          "OPCIONAL: temperatura de cartões do jogo — 'pegado' (clássico/decisão/rivalidade → vira linha 4+ amarelos) ou 'muito_pegado' (rivalidade quente/árbitro citado → 6+). OMITA em jogo morno. NUNCA um número exato. NUNCA mencione cartões/árbitro em verdict/narrative.",
       },
       confidence: {
         type: "string",
@@ -617,7 +640,7 @@ export function buildUserMessage(
   lines.push("");
   lines.push("# Sua tarefa");
   lines.push(
-    "Sintetize TUDO acima num único palpite-manchete (quem ganha + placar provável + placar do 1º tempo + quem marca primeiro + confiança qualitativa + narrativa + mercados citados). Use TODO o insumo — forma/H2H/tabela MAIS o sinal das análises MAIS as notícias factuais — pra dar a sua MELHOR previsão; pode cravar o lado menos óbvio/azarão quando o conjunto justifica. O placar do 1º tempo deve ser <= o placar provável final em cada lado; o 'primeiro a marcar' deve ser coerente com quem você acha que ganha. Mesmo sem valor em nenhum mercado, dê seu palpite honesto a partir de forma/H2H/tabela. Chame submit_palpite. NUNCA cite edge/EV/stake/odd/R$ — tom de torcida.",
+    "Sintetize TUDO acima num único palpite-manchete (quem ganha + placar provável + placar do 1º tempo + quem marca primeiro + confiança qualitativa + narrativa + mercados citados). Use TODO o insumo — forma/H2H/tabela MAIS o sinal das análises MAIS as notícias factuais — pra dar a sua MELHOR previsão; pode cravar o lado menos óbvio/azarão quando o conjunto justifica. O placar do 1º tempo deve ser <= o placar provável final em cada lado; o 'primeiro a marcar' deve ser coerente com quem você acha que ganha. Opcionalmente preencha cardsTemperature ('pegado'/'muito_pegado') se o jogo tem cara de pegado (clássico/decisão/rivalidade/árbitro citado) — OMITA em jogo morno; NUNCA cite cartões/árbitro em verdict ou narrative (a estimativa vai SÓ no campo cardsTemperature). Mesmo sem valor em nenhum mercado, dê seu palpite honesto a partir de forma/H2H/tabela. Chame submit_palpite. NUNCA cite edge/EV/stake/odd/R$ — tom de torcida.",
   );
 
   return lines.join("\n");

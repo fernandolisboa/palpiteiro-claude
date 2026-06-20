@@ -146,7 +146,10 @@ vi.mock("@/lib/providers/news", () => ({
 
 import { generatePalpites, PalpiteError } from "@/lib/ai/palpites";
 import type { MarketAnalysisSummary } from "@/lib/ai/palpites/synthesis-input";
-import { getPalpiteSetsForMatch } from "@/lib/db/queries/palpites";
+import {
+  getPalpiteSetsForMatch,
+  getPendingPalpiteSettlements,
+} from "@/lib/db/queries/palpites";
 
 const ids: { userId: string; matchId: string } = {} as never;
 
@@ -290,6 +293,33 @@ describe("generatePalpites (síntese) — write path real (pglite)", () => {
     expect(exact.params).toEqual({ home: 2, away: 1 });
     expect(byType.get("first_half_score")!.params).toEqual({ home: 1, away: 0 });
     expect(byType.get("first_to_score")!.params).toEqual({ firstToScore: "home" });
+  });
+
+  it("#419: cardsTemperature persiste linha cards fun-only (settleable=false, params) que o cron NUNCA busca", async () => {
+    runAnalysis.mockResolvedValue(
+      okResult({ ...validToolInput, cardsTemperature: "muito_pegado" }),
+    );
+    await call();
+
+    const sets = await getPalpiteSetsForMatch(ids.matchId, ids.userId);
+    expect(sets).toHaveLength(1);
+    const byType = new Map(sets[0].palpites.map((l) => [l.type, l]));
+    const cards = byType.get("cards");
+    expect(cards).toBeDefined();
+    expect(cards!.settleable).toBe(false);
+    expect(cards!.text).toBe("6+ cartões amarelos");
+    expect(cards!.params).toEqual({ line: 6, scope: "total" });
+
+    // O cron de settlement (gate: type IN SETTLEABLE_PALPITE_TYPES AND settleable=true)
+    // NUNCA traz a linha cards. `now` bem no futuro do kickoff (2026-05-15) p/ passar o
+    // cutoff de elapsed — só prova que NEM o tipo NEM o settleable casam.
+    const pending = await getPendingPalpiteSettlements(
+      new Date("2026-06-01T00:00:00Z"),
+    );
+    // A linha cards (settleable=false, type fora da tupla) NUNCA volta no pending set. O
+    // tipo de retorno já NARROW-exclui "cards" (SettleablePalpiteType) — prova em compile-
+    // time; aqui confirmamos em runtime que o id da row cards não aparece.
+    expect(pending.some((p) => p.palpiteId === cards!.id)).toBe(false);
   });
 
   it("assimetria: ai_call falha → set sobrevive com aiCallId=null", async () => {

@@ -1,6 +1,6 @@
 import type { palpites } from "@/db/schema";
 import type { PalpiteSynthesisOutput } from "./cartridges/cartridge";
-import { deriveSettleable, type SettleablePalpiteType } from "./settleable";
+import { deriveSettleable, type PalpiteType } from "./settleable";
 
 // Linha a inserir em `palpites` (shape de escrita). `palpiteSetId` é preenchido pelo
 // caller (id do set recém-inserido). `params` carrega a union LARGA por tipo (#354).
@@ -40,8 +40,25 @@ function firstToScoreText(side: "home" | "away"): string {
   return `${SIDE_LABEL[side]} marca primeiro`;
 }
 
+// #419 — A LINHA é do PROJETO, não do LLM (mata a precisão-fingida): a rung qualitativa
+// do modelo (cardsTemperature) vira uma linha FIXA de total de AMARELOS. O #394 liquida
+// `total yellows >= line`. O input não tem dado de cartão/árbitro/faltas → um inteiro
+// livre seria precisão fingida; o mapa coarse 4/6 é a credibilidade.
+const CARDS_LINE: Record<"pegado" | "muito_pegado", number> = {
+  pegado: 4,
+  muito_pegado: 6,
+};
+function cardsText(t: "pegado" | "muito_pegado"): string {
+  // Honesto com a CHAVE de liquidação (amarelos, ADR 0033) — NÃO "Jogo pegado" (tempo,
+  // que incluiria vermelhos/brigas). O #394 confere total de AMARELOS >= line.
+  return `${CARDS_LINE[t]}+ cartões amarelos`;
+}
+
+// O param `type` é PalpiteType (enum completo) — largo o bastante pro caso fun-only
+// `cards` (#419), que está FORA de SettleablePalpiteType. deriveSettleable já recebe
+// PalpiteType, então o widening é seguro: settleable continua DERIVADO do tipo.
 function row(
-  type: SettleablePalpiteType,
+  type: PalpiteType,
   text: string,
   params: SettleableRowInsert["params"],
 ): Omit<SettleableRowInsert, "palpiteSetId"> {
@@ -70,6 +87,11 @@ function row(
  *   - first_half_score: só se <= probableScore em CADA lado (gols só acumulam).
  *   - first_to_score: só se ∈{home,away} E concorda com o vencedor implícito de
  *     probableScore. "none" NUNCA emite row (fica só como caso interno de settlement).
+ *
+ * #419 — `cards` (fun-only, settleable=false derivado): uma linha A MAIS, ORTOGONAL ao
+ * placar (cartões não derivam de probableScore) → SEM gate de coerência, só presença-
+ * gated (o modelo OMITE cardsTemperature em jogo morno). A LINHA de amarelos é do
+ * PROJETO (CARDS_LINE), não do LLM. Não entra no cron (#394 a promove a settleable).
  */
 export function buildSettleablePalpiteRows(
   palpiteSetId: string,
@@ -128,6 +150,14 @@ export function buildSettleablePalpiteRows(
     rows.push(
       row("first_to_score", firstToScoreText(firstToScore), { firstToScore }),
     );
+  }
+
+  // cards — fun-only (settleable=false derivado de "cards" estar FORA da tupla settleable).
+  // ORTOGONAL ao placar: SEM gate de coerência (cartões não derivam de probableScore).
+  // Presença-gated (cardsTemperature é OPCIONAL — o modelo OMITE em jogo morno).
+  if (output.cardsTemperature) {
+    const t = output.cardsTemperature;
+    rows.push(row("cards", cardsText(t), { line: CARDS_LINE[t], scope: "total" }));
   }
 
   return rows.map((r) => ({ ...r, palpiteSetId }));
