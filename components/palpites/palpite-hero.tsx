@@ -1,9 +1,10 @@
 "use client";
 
-import { useActionState } from "react";
-import { Info, Loader2, Sparkles, TriangleAlert } from "lucide-react";
+import { useActionState, useState } from "react";
+import { Check, Info, Link2, Loader2, Sparkles, TriangleAlert } from "lucide-react";
 
 import { analyzeBestBet } from "@/app/actions/predictions";
+import { shareSet } from "@/app/actions/share";
 import { SettleableBadge } from "@/components/palpites/palpite-badges";
 import { Button } from "@/components/ui/button";
 import { Callout } from "@/components/ui/callout";
@@ -34,6 +35,12 @@ type Props = {
   // de liquidação "placar provável N–M · placar real X–Y" quando o palpite está settled.
   // null = jogo não encerrado / sem gols reportados. Firewall-safe (placar ≠ odd/edge).
   finalScore: { home: number; away: number } | null;
+  // #384: id do set persistido pro botão de compartilhar (gera/copia o link /p/[id]). null
+  // = sem set persistido ainda (estado empty) → sem botão de share.
+  setId: string | null;
+  // #384: shared_at do set (null = ainda não compartilhado). Ramifica o botão: não-compartilhado
+  // → "Compartilhar" (chama shareSet); já-compartilhado → "Copiar link" (copia direto).
+  sharedAt: Date | null;
 };
 
 /**
@@ -67,6 +74,8 @@ export function PalpiteHero({
   analyzable,
   fanOutEnabled,
   finalScore,
+  setId,
+  sharedAt,
 }: Props) {
   const [state, formAction, pending] = useActionState(analyzeBestBet, null);
   // Erro só importa quando o action falhou neste render (state.ok === false). Em sucesso,
@@ -88,6 +97,8 @@ export function PalpiteHero({
         analyzable={analyzable}
         fanOutEnabled={fanOutEnabled}
         finalScore={finalScore}
+        setId={setId}
+        sharedAt={sharedAt}
         pending={pending}
         error={error}
       />
@@ -100,6 +111,8 @@ function HeroBody({
   analyzable,
   fanOutEnabled,
   finalScore,
+  setId,
+  sharedAt,
   pending,
   error,
 }: {
@@ -107,6 +120,8 @@ function HeroBody({
   analyzable: boolean;
   fanOutEnabled: boolean;
   finalScore: { home: number; away: number } | null;
+  setId: string | null;
+  sharedAt: Date | null;
   pending: boolean;
   error: string | null;
 }) {
@@ -122,6 +137,8 @@ function HeroBody({
         view={heroPalpite}
         analyzable={analyzable}
         finalScore={finalScore}
+        setId={setId}
+        sharedAt={sharedAt}
         error={error}
       />
     );
@@ -143,11 +160,15 @@ function PopulatedHero({
   view,
   analyzable,
   finalScore,
+  setId,
+  sharedAt,
   error,
 }: {
   view: PalpiteHeadlineView;
   analyzable: boolean;
   finalScore: { home: number; away: number } | null;
+  setId: string | null;
+  sharedAt: Date | null;
   error: string | null;
 }) {
   const settled = view.badge !== null;
@@ -196,16 +217,21 @@ function PopulatedHero({
 
         <CitedSources sources={view.sources} />
 
-        {analyzable && (
-          <Button
-            type="submit"
-            size="sm"
-            variant="ghost"
-            className="self-start text-palpite-strong-fg hover:bg-palpite-soft"
-          >
-            <Sparkles className="size-3.5" /> Analisar de novo
-          </Button>
-        )}
+        <div className="flex flex-wrap items-center gap-2">
+          {analyzable && (
+            <Button
+              type="submit"
+              size="sm"
+              variant="ghost"
+              className="self-start text-palpite-strong-fg hover:bg-palpite-soft"
+            >
+              <Sparkles className="size-3.5" /> Analisar de novo
+            </Button>
+          )}
+          {/* #384: compartilhar. Só com set persistido (setId). IMPERATIVO (type="button",
+              onClick) — NÃO sequestra o <form action={analyzeBestBet}>. */}
+          {setId !== null && <ShareButton setId={setId} sharedAt={sharedAt} />}
+        </div>
 
         {/* Disclaimer regulatório estático (ADR 0031 §5 / #376): ÚLTIMO filho, footnote
             mudo — deliberadamente separado do placar/recibo pra não ler como aviso de
@@ -217,6 +243,87 @@ function PopulatedHero({
         </p>
       </div>
     </WarmShell>
+  );
+}
+
+// Botão de compartilhar (#384): IMPERATIVO (type="button", onClick) — não toca o <form
+// action={analyzeBestBet}>. Ramifica em sharedAt: ainda-não-compartilhado → "Compartilhar"
+// (chama shareSet, que carimba shared_at, depois copia o link); já-compartilhado → "Copiar
+// link" (copia direto SEM re-chamar o action). Confirmação "Link copiado" via useState local.
+// navigator.share é progressive enhancement opcional sobre o copy baseline.
+function ShareButton({
+  setId,
+  sharedAt,
+}: {
+  setId: string;
+  sharedAt: Date | null;
+}) {
+  const [copied, setCopied] = useState(false);
+  const [error, setError] = useState<string | null>(null);
+  const [busy, setBusy] = useState(false);
+  const alreadyShared = sharedAt !== null;
+
+  async function copyLink(path: string) {
+    const url = window.location.origin + path;
+    try {
+      await navigator.clipboard.writeText(url);
+      setCopied(true);
+      window.setTimeout(() => setCopied(false), 2000);
+    } catch {
+      setError("Não consegui copiar o link.");
+    }
+  }
+
+  async function onClick() {
+    setError(null);
+    if (alreadyShared) {
+      // Já compartilhado: copia o link direto, sem re-chamar o action (skip-not-restamp).
+      await copyLink(`/p/${setId}`);
+      return;
+    }
+    setBusy(true);
+    try {
+      const r = await shareSet(setId);
+      if (r.ok) {
+        await copyLink(r.path);
+      } else {
+        setError(r.error);
+      }
+    } finally {
+      setBusy(false);
+    }
+  }
+
+  const label = copied
+    ? "Link copiado"
+    : alreadyShared
+      ? "Copiar link"
+      : "Compartilhar";
+
+  return (
+    <span className="flex flex-col gap-1">
+      <Button
+        type="button"
+        size="sm"
+        variant="ghost"
+        onClick={onClick}
+        disabled={busy}
+        aria-live="polite"
+        className="self-start text-palpite-strong-fg hover:bg-palpite-soft"
+      >
+        {copied ? (
+          <Check className="size-3.5" />
+        ) : (
+          <Link2 className="size-3.5" />
+        )}{" "}
+        {label}
+      </Button>
+      {error && (
+        <span className="text-eyebrow-xs tracking-tight text-muted-foreground">
+          {error}
+        </span>
+      )}
+    </span>
   );
 }
 

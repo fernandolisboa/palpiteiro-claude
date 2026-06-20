@@ -8,6 +8,12 @@ vi.mock("@/app/actions/predictions", () => ({
   analyzeBestBet: vi.fn(),
 }));
 
+// shareSet é "use server" — mock leve pra não puxar o server action no env de teste. O
+// render estático nunca dispara o onClick, então o mock não é chamado (só resolve o import).
+vi.mock("@/app/actions/share", () => ({
+  shareSet: vi.fn(),
+}));
+
 import { PalpiteHero } from "@/components/palpites/palpite-hero";
 import { containsValueLanguage } from "@/lib/ai/palpites/value-language-guard";
 import {
@@ -46,6 +52,8 @@ function render(props: Partial<Parameters<typeof PalpiteHero>[0]> = {}): string 
       analyzable
       fanOutEnabled
       finalScore={null}
+      setId="22222222-2222-2222-2222-222222222222"
+      sharedAt={null}
       {...props}
     />,
   );

@@ -369,6 +369,14 @@ const REGISTRY: Record<string, MarketPresentation> = {
   [ASSIST.marketKey]: ASSIST,
 };
 
+// As 7 categorias canônicas de mercado (marketLabel do REGISTRY) — fonte ÚNICA do
+// conjunto canônico que o normalizador público de citedMarkets (#384) emite. Derivada
+// do REGISTRY (não re-literalizada) pra não driftar: um mercado novo entra aqui de graça.
+// Bundle-pure como o resto do módulo (nenhum import @/lib/ai ou @/lib/db).
+export const MARKET_CATEGORY_LABELS: readonly string[] = Object.values(
+  REGISTRY,
+).map((p) => p.marketLabel);
+
 /**
  * Resolve a apresentação de um `marketKey`. LANÇA em chave desconhecida — um
  * mercado sem apresentação é bug de chamada, não algo a degradar (espelha

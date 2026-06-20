@@ -33,9 +33,24 @@ const nextConfig: NextConfig = {
         // metadata). Se um ícone estático for adicionado (ex.: `app/favicon.ico`,
         // `app/icon.png`), estenda o lookahead (ex.: `|favicon\.ico|icon|apple-icon`)
         // pra ele não cair em `no-cache` em vez de cache longo (ADR 0024).
-        source: "/:path((?!_next/|api/|monitoring(?:/|$)).*)",
+        source: "/:path((?!_next/|api/|monitoring(?:/|$)|p/).*)",
         headers: [
           { key: "Cache-Control", value: "no-cache, must-revalidate" },
+        ],
+      },
+      {
+        // /p/[id] + /p/[id]/opengraph-image (#384, ADR 0035 §8/§11/§13): snapshot público
+        // imutável (cache longo) + noindex + no-referrer. `:path*` cobre a página E a sub-rota
+        // OG. A página (Server Component, sem Cache-Control próprio) pega este header limpo; a
+        // rota OG self-seta `max-age=0,must-revalidate` (merge layer-dependent) → o cache longo
+        // da imagem vem do `export const revalidate=86400` da rota, não garantido por headers()
+        // (verificar com `curl -I` no `next start`). X-Robots-Tag/Referrer-Policy são aditivos
+        // (sem colisão) e alcançam página + OG.
+        source: "/p/:path*",
+        headers: [
+          { key: "Cache-Control", value: "public, max-age=86400, immutable" },
+          { key: "X-Robots-Tag", value: "noindex" },
+          { key: "Referrer-Policy", value: "no-referrer" },
         ],
       },
     ];

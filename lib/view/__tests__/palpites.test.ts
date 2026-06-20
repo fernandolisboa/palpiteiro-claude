@@ -55,6 +55,7 @@ function set(
       modelVersion: "claude-haiku-4-5",
       promptVersion: "palpites_v2",
       headline: null,
+      sharedAt: null,
       createdAt: new Date(createdAt),
     },
     aiCall,

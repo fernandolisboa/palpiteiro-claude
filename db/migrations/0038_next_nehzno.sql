@@ -1,0 +1,1 @@
+ALTER TABLE "palpite_sets" ADD COLUMN "shared_at" timestamp with time zone;
