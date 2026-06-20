@@ -34,8 +34,19 @@ import type { PalpiteCartridge } from "../types";
 // provider dedicado — NUNCA inventadas) como contexto adicional. A regra: cite o FATO,
 // NUNCA a linguagem de valor da fonte, NUNCA invente. O firewall trio + o badge seguem
 // intactos; as fontes são contexto aditivo, fora das rows liquidáveis.
+// v7 (#379) = ESTENDE o tally do v4 a mais dois fatos do input: H2H PRÉ-APURADO (Nv
+// vitórias do mandante / Ne empates / Nd vitórias do visitante + a sequência rotulada,
+// do mais recente ao mais antigo) e RESUMO dos últimos placares de cada lado (V/E/D +
+// gols pró/contra totais), em vez de fixtures cruas — pra o modelo parar de ALUCINAR
+// contagem ("4 vitórias" quando é 3V 1E 1D). Os fatos derivam do que JÁ chega no input
+// (h2h/homeForm/awayForm da SportsDataProvider): ZERO chamada nova de LLM, ZERO migration.
+// Perspectiva do H2H = as-played, claramente rotulada (mandante/visitante DAQUELE jogo) —
+// não reorienta pro mandante do jogo vindouro. Tudo INTEIRO + RÓTULO, sem % / sem
+// aproveitamento (espírito do firewall). O firewall trio + o badge liquidável seguem
+// intactos por construção (os fatos são INPUT — contagens inteiras + nomes de time —
+// nunca tocam o output); nenhuma row liquidável nova.
 // BUMP MANUAL (commit `prompt:`) em QUALQUER mudança de prompt/schema.
-export const PALPITES_VERSION = "palpites_v6" as const;
+export const PALPITES_VERSION = "palpites_v7" as const;
 
 const TEXT_MAX = 280;
 // Narrativa: prosa um pouco mais longa que uma linha de palpite. Truncada (não
@@ -143,6 +154,34 @@ const NewsItemSchema = z.object({
   url: z.string().min(1),
 });
 
+// #379 — H2H PRÉ-APURADO: as contagens (vitórias do mandante / empates / vitórias do
+// visitante DAQUELE confronto, perspectiva as-played) já feitas pelo helper, + a
+// sequência rotulada (do mais recente ao mais antigo). O LLM NUNCA conta — recebe os
+// inteiros prontos (espelha o tally de forma v4). SEM % / sem aproveitamento.
+const H2HSummarySchema = z.object({
+  homeTeam: z.string().min(1),
+  awayTeam: z.string().min(1),
+  homeWins: z.number().int().nonnegative(),
+  awayWins: z.number().int().nonnegative(),
+  draws: z.number().int().nonnegative(),
+  gamesConsidered: z.number().int().nonnegative(),
+  // Do mais recente ao mais antigo, na perspectiva as-played de cada confronto.
+  sequence: z.array(z.enum(["home_win", "away_win", "draw"])),
+});
+
+// #379 — RESUMO dos últimos placares de UM time: V/E/D já contados + gols pró/contra
+// TOTAIS (não médias — os totais são o fato bruto que o tally de placares carrega).
+// Sem campo `side`: o naming home/away dos campos de PalpitesInput já desambigua.
+const RecentScoresSummarySchema = z.object({
+  team: z.string().min(1),
+  gamesConsidered: z.number().int().nonnegative(),
+  wins: z.number().int().nonnegative(),
+  draws: z.number().int().nonnegative(),
+  losses: z.number().int().nonnegative(),
+  goalsFor: z.number().int().nonnegative(),
+  goalsAgainst: z.number().int().nonnegative(),
+});
+
 export const PalpitesInputSchema = z.object({
   match: z.object({
     league: z.string().min(1),
@@ -161,6 +200,12 @@ export const PalpitesInputSchema = z.object({
   awayStanding: StandingLineSchema.optional(),
   // ADR 0032 / #377 — fontes de notícia reais (insumo factual). Default [] (sem notícia).
   news: z.array(NewsItemSchema).max(10).default([]),
+  // #379 — fatos estruturados PRÉ-CONTADOS (espelham o tally de forma v4). OPCIONAIS pra
+  // não quebrar o baseInput montado à mão nos testes de news; buildPredictionInput
+  // sempre os popula via os helpers. São INPUT (contagens + nomes), nunca tocam o output.
+  h2hSummary: H2HSummarySchema.optional(),
+  homeRecentScores: RecentScoresSummarySchema.optional(),
+  awayRecentScores: RecentScoresSummarySchema.optional(),
 });
 export type PalpitesInput = z.infer<typeof PalpitesInputSchema>;
 
@@ -326,6 +371,81 @@ function findStanding(
   return undefined;
 }
 
+// #379 — PRÉ-CONTA o H2H (espelha summarizeForm v4): conta vitória do mandante / empate /
+// vitória do visitante na perspectiva as-played de CADA confronto (quem foi mandante/
+// visitante NAQUELE jogo, não no jogo vindouro). Pula fixtures sem placar (score null).
+// `gamesConsidered = sequence.length` (só os confrontos efetivamente contados). homeTeam/
+// awayTeam carregam os nomes do JOGO vindouro só pra rotular o tally no prompt.
+function summarizeH2H(
+  homeTeam: string,
+  awayTeam: string,
+  h2h: NormalizedH2H[],
+): z.infer<typeof H2HSummarySchema> {
+  const sequence: ("home_win" | "away_win" | "draw")[] = [];
+  let homeWins = 0;
+  let awayWins = 0;
+  let draws = 0;
+  for (const m of h2h) {
+    const hs = m.score.home;
+    const as = m.score.away;
+    if (hs === null || as === null) continue;
+    if (hs > as) {
+      homeWins += 1;
+      sequence.push("home_win");
+    } else if (hs < as) {
+      awayWins += 1;
+      sequence.push("away_win");
+    } else {
+      draws += 1;
+      sequence.push("draw");
+    }
+  }
+  return {
+    homeTeam,
+    awayTeam,
+    homeWins,
+    awayWins,
+    draws,
+    gamesConsidered: sequence.length,
+    sequence,
+  };
+}
+
+// #379 — PRÉ-CONTA os últimos placares de UM time (espelha summarizeForm v4): V/E/D +
+// gols pró/contra TOTAIS na perspectiva do time. Pula fixtures sem placar (score null).
+function summarizeRecentScores(
+  team: string,
+  fixtures: NormalizedFixture[],
+): z.infer<typeof RecentScoresSummarySchema> {
+  let wins = 0;
+  let draws = 0;
+  let losses = 0;
+  let goalsFor = 0;
+  let goalsAgainst = 0;
+  let counted = 0;
+  for (const fx of fixtures) {
+    const isHome = fx.homeTeam === team;
+    const gf = isHome ? fx.score.home : fx.score.away;
+    const ga = isHome ? fx.score.away : fx.score.home;
+    if (gf === null || ga === null) continue;
+    counted += 1;
+    goalsFor += gf;
+    goalsAgainst += ga;
+    if (gf > ga) wins += 1;
+    else if (gf < ga) losses += 1;
+    else draws += 1;
+  }
+  return {
+    team,
+    gamesConsidered: counted,
+    wins,
+    draws,
+    losses,
+    goalsFor,
+    goalsAgainst,
+  };
+}
+
 export function buildPredictionInput(args: BuildPalpitesInputArgs): PalpitesInput {
   const input: PalpitesInput = {
     match: {
@@ -349,6 +469,15 @@ export function buildPredictionInput(args: BuildPalpitesInputArgs): PalpitesInpu
     awayStanding: findStanding(args.standings, args.match.awayTeam),
     // ADR 0032 / #377 — fontes de notícia reais (cap 10 no schema). Default [].
     news: (args.news ?? []).slice(0, 10),
+    // #379 — fatos PRÉ-CONTADOS (espelham o tally de forma v4). Derivam do que JÁ chega
+    // no input (h2h/homeForm/awayForm): ZERO fetch novo, ZERO chamada de LLM.
+    h2hSummary: summarizeH2H(
+      args.match.homeTeam,
+      args.match.awayTeam,
+      args.h2h,
+    ),
+    homeRecentScores: summarizeRecentScores(args.match.homeTeam, args.homeForm),
+    awayRecentScores: summarizeRecentScores(args.match.awayTeam, args.awayForm),
   };
   // Valida no boundary de montagem (fronteira do CLAUDE.md p/ o input do LLM).
   return PalpitesInputSchema.parse(input);
@@ -374,6 +503,8 @@ export function buildUserMessage(
   for (const side of ["home", "away"] as const) {
     const form = side === "home" ? input.homeForm : input.awayForm;
     const standing = side === "home" ? input.homeStanding : input.awayStanding;
+    const recentScores =
+      side === "home" ? input.homeRecentScores : input.awayRecentScores;
     const label = side === "home" ? "Mandante" : "Visitante";
     lines.push("");
     lines.push(`# ${label} — ${form.team}`);
@@ -401,13 +532,40 @@ export function buildUserMessage(
         form.avgGoalsAgainst,
       )} sofridos por jogo`,
     );
+    // #379 — últimos placares PRÉ-CONTADOS (espelha o tally de forma v4): V/E/D + gols
+    // pró/contra TOTAIS, inteiros + rótulos só (sem % / sem aproveitamento). O LLM NUNCA
+    // soma — recebe os totais prontos.
+    if (recentScores && recentScores.gamesConsidered > 0) {
+      lines.push(
+        `- Últimos ${recentScores.gamesConsidered} jogos (placares contados): ${recentScores.wins}V ${recentScores.draws}E ${recentScores.losses}D · ${recentScores.goalsFor} gols marcados / ${recentScores.goalsAgainst} sofridos no total`,
+      );
+    }
   }
 
   lines.push("");
   lines.push("# Confrontos diretos (H2H)");
+  // #379 — PRÉ-CONTADO (espelha o tally de forma v4): lidera com o tally rotulado
+  // (vitórias do mandante / empates / vitórias do visitante DAQUELE confronto, as-played)
+  // + a sequência do mais recente ao mais antigo, em vez do dump por-fixture. O LLM NUNCA
+  // conta — recebe os inteiros prontos pra não alucinar ("4 vitórias" quando é 3V 1E 1D).
+  // Inteiros + rótulos só; sem % / sem aproveitamento.
+  const h2hSummary = input.h2hSummary;
   if (input.h2h.length === 0) {
     lines.push("- (sem histórico fornecido)");
+  } else if (h2hSummary && h2hSummary.gamesConsidered > 0) {
+    const seqLabel: Record<"home_win" | "away_win" | "draw", string> = {
+      home_win: "vitória do mandante",
+      away_win: "vitória do visitante",
+      draw: "empate",
+    };
+    const seq = h2hSummary.sequence.map((r) => seqLabel[r]).join(", ");
+    lines.push(
+      `- Em ${h2hSummary.gamesConsidered} confronto(s): ${h2hSummary.homeWins} vitória(s) do mandante do jogo (${h2hSummary.homeTeam}), ${h2hSummary.draws} empate(s), ${h2hSummary.awayWins} vitória(s) do visitante do jogo (${h2hSummary.awayTeam}). Perspectiva: mandante/visitante de CADA confronto (como foi jogado).`,
+    );
+    lines.push(`- Do mais recente ao mais antigo: ${seq}`);
   } else {
+    // Fallback raw: sem summary (back-comply) ou todos os placares ausentes
+    // (gamesConsidered=0). Dump por-fixture como antes do #379.
     for (const m of input.h2h) {
       lines.push(`- ${m.date}: ${m.home} ${m.scoreHome}-${m.scoreAway} ${m.away}`);
     }

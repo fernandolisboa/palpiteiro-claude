@@ -217,11 +217,11 @@ describe("generatePalpites (síntese) — caminho ok", () => {
     const aiCallRow = insertValues.mock.calls[0][0] as Record<string, unknown>;
     expect(aiCallRow.status).toBe("ok");
     expect(aiCallRow.model).toBe("claude-haiku-4-5");
-    expect(aiCallRow.promptVersion).toBe("palpites_v6");
+    expect(aiCallRow.promptVersion).toBe("palpites_v7");
 
     const setRow = insertValues.mock.calls[1][0] as Record<string, unknown>;
     expect(setRow.modelVersion).toBe("claude-haiku-4-5");
-    expect(setRow.promptVersion).toBe("palpites_v6");
+    expect(setRow.promptVersion).toBe("palpites_v7");
     expect(setRow.aiCallId).toBe("row-1");
     // headline jsonb: a manchete SEM placar (vira a linha) e SEM número de valor.
     expect(setRow.headline).toEqual({
@@ -253,6 +253,18 @@ describe("generatePalpites (síntese) — caminho ok", () => {
     expect(res.aiCall).toEqual({ id: "row-1" });
     // res.palpites é o retorno do batch (o mock devolve 1 row stub).
     expect(res.palpites.length).toBeGreaterThanOrEqual(1);
+  });
+
+  it("#379: SEM custo de LLM extra — fatos pré-contados em buildPredictionInput (síntese = 1 chamada ao provider) + input carrega os fatos", async () => {
+    runAnalysis.mockResolvedValue(okResult(validHeadline));
+    await generatePalpites(baseCall);
+    // Os fatos estruturados (H2H + placares) são montados num builder PURO — nenhuma
+    // chamada nova ao provider de LLM. A síntese segue sendo EXATAMENTE 1 chamada.
+    expect(runAnalysis.mock.calls).toHaveLength(1);
+    // E o input carrega os fatos pré-contados (tally do H2H + placares contados).
+    const req = runAnalysis.mock.calls[0][0] as AnalysisRequest;
+    expect(req.userMessage).toContain("mandante do jogo");
+    expect(req.userMessage).toContain("placares contados");
   });
 
   it("o input do LLM carrega as análises (edge/odd como DADO) + sem value-language no output", async () => {

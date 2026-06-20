@@ -17,6 +17,7 @@ import {
   type BuildPalpitesInputArgs,
 } from "../cartridge";
 import { deriveSettleable } from "../../settleable";
+import { containsValueLanguage } from "../../value-language-guard";
 
 // ─── PalpitesOutputSchema (a MANCHETE, v3) ────────────────────────────────────
 
@@ -205,9 +206,9 @@ describe("SUBMIT_PALPITE_TOOL", () => {
       SUBMIT_PALPITE_TOOL.input_schema,
     );
   });
-  it("a versão é palpites_v6 (#377 / ADR 0032 — notícias)", () => {
-    expect(PALPITES_VERSION).toBe("palpites_v6");
-    expect(palpitesCartridge.version).toBe("palpites_v6");
+  it("a versão é palpites_v7 (#379 — fatos estruturados: H2H + placares pré-contados)", () => {
+    expect(PALPITES_VERSION).toBe("palpites_v7");
+    expect(palpitesCartridge.version).toBe("palpites_v7");
   });
   it("o tool NÃO declara campos de valor (firewall estrutural); declara firstHalfScore + firstToScore (#354)", () => {
     const props = SUBMIT_PALPITE_TOOL.input_schema.properties as Record<
@@ -516,5 +517,214 @@ describe("buildUserMessage", () => {
     const msg = buildUserMessage(input, { daysToKickoff: 2 });
     expect(msg).toContain("Notícias recentes (fontes reais)");
     expect(msg).toContain("(nenhuma notícia encontrada)");
+  });
+});
+
+// ─── #379: fatos estruturados (H2H + últimos placares PRÉ-CONTADOS) ────────────
+
+describe("#379 — buildPredictionInput deriva os fatos pré-contados", () => {
+  it("deriva h2hSummary na perspectiva as-played (Flamengo 2-1 Flu, Flu 0-1 Flamengo → 1V mandante, 1V visitante, 0E)", () => {
+    const args = baseArgs();
+    // Dois confrontos com mandante/visitante INVERTIDOS entre eles (as-played):
+    // (1) Flamengo 2-1 Fluminense → vitória do mandante DAQUELE jogo (home_win).
+    // (2) Fluminense 0-1 Flamengo → vitória do visitante DAQUELE jogo (away_win).
+    args.h2h = [
+      fixture("CR Flamengo", "Fluminense FC", 2, 1),
+      fixture("Fluminense FC", "CR Flamengo", 0, 1),
+    ];
+    const input = buildPredictionInput(args);
+    const s = input.h2hSummary!;
+    expect(s.gamesConsidered).toBe(2);
+    expect(s.homeWins).toBe(1);
+    expect(s.awayWins).toBe(1);
+    expect(s.draws).toBe(0);
+    expect(s.sequence).toEqual(["home_win", "away_win"]);
+    // Rótulos do JOGO vindouro (só pra rotular o tally no prompt).
+    expect(s.homeTeam).toBe("CR Flamengo");
+    expect(s.awayTeam).toBe("Fluminense FC");
+  });
+
+  it("h2hSummary pula confrontos sem placar (score null) — gamesConsidered conta só os contados", () => {
+    const args = baseArgs();
+    const nullScore = fixture("CR Flamengo", "Fluminense FC", 0, 0);
+    nullScore.score = { home: null, away: null };
+    args.h2h = [
+      fixture("CR Flamengo", "Fluminense FC", 3, 0), // home_win
+      nullScore, // pulado
+    ];
+    const input = buildPredictionInput(args);
+    expect(input.h2hSummary!.gamesConsidered).toBe(1);
+    expect(input.h2hSummary!.homeWins).toBe(1);
+    expect(input.h2hSummary!.sequence).toEqual(["home_win"]);
+  });
+
+  it("deriva homeRecentScores/awayRecentScores (V/E/D + gols pró/contra totais, perspectiva do time)", () => {
+    // homeForm do baseArgs: Flamengo 3-1 X (V, 3 pró/1 contra) + Y 0-2 Flamengo
+    // (Flamengo fora: 2 pró/0 contra, V). Total: 2V 0E 0D, 5 gols pró / 1 contra.
+    const input = buildPredictionInput(baseArgs());
+    const home = input.homeRecentScores!;
+    expect(home.gamesConsidered).toBe(2);
+    expect(home.wins).toBe(2);
+    expect(home.draws).toBe(0);
+    expect(home.losses).toBe(0);
+    expect(home.goalsFor).toBe(5);
+    expect(home.goalsAgainst).toBe(1);
+    // awayForm: Fluminense 1-1 Z → 1 jogo, 1 empate, 1 pró / 1 contra.
+    const away = input.awayRecentScores!;
+    expect(away.gamesConsidered).toBe(1);
+    expect(away.draws).toBe(1);
+    expect(away.goalsFor).toBe(1);
+    expect(away.goalsAgainst).toBe(1);
+  });
+});
+
+describe("#379 — PalpitesInputSchema aceita os 3 campos novos opcionais", () => {
+  const baseInput = {
+    match: {
+      league: "brasileirao_a",
+      homeTeam: "CR Flamengo",
+      awayTeam: "Fluminense FC",
+      kickoffAt: "2026-05-15T19:00:00.000Z",
+    },
+    analyses: [],
+    homeForm: {
+      team: "CR Flamengo",
+      gamesConsidered: 0,
+      avgGoalsFor: 0,
+      avgGoalsAgainst: 0,
+      results: [],
+    },
+    awayForm: {
+      team: "Fluminense FC",
+      gamesConsidered: 0,
+      avgGoalsFor: 0,
+      avgGoalsAgainst: 0,
+      results: [],
+    },
+    h2h: [],
+  };
+
+  it("parseia SEM os 3 campos (back-comply — baseInput montado à mão dos testes de news)", () => {
+    const parsed = PalpitesInputSchema.safeParse(baseInput);
+    expect(parsed.success).toBe(true);
+    if (parsed.success) {
+      expect(parsed.data.h2hSummary).toBeUndefined();
+      expect(parsed.data.homeRecentScores).toBeUndefined();
+      expect(parsed.data.awayRecentScores).toBeUndefined();
+    }
+  });
+
+  it("aceita os 3 campos quando presentes", () => {
+    const parsed = PalpitesInputSchema.safeParse({
+      ...baseInput,
+      h2hSummary: {
+        homeTeam: "CR Flamengo",
+        awayTeam: "Fluminense FC",
+        homeWins: 1,
+        awayWins: 0,
+        draws: 0,
+        gamesConsidered: 1,
+        sequence: ["home_win"],
+      },
+      homeRecentScores: {
+        team: "CR Flamengo",
+        gamesConsidered: 2,
+        wins: 2,
+        draws: 0,
+        losses: 0,
+        goalsFor: 5,
+        goalsAgainst: 1,
+      },
+      awayRecentScores: {
+        team: "Fluminense FC",
+        gamesConsidered: 1,
+        wins: 0,
+        draws: 1,
+        losses: 0,
+        goalsFor: 1,
+        goalsAgainst: 1,
+      },
+    });
+    expect(parsed.success).toBe(true);
+  });
+});
+
+describe("#379 — buildUserMessage renderiza os fatos pré-contados (tally, não dump)", () => {
+  it("H2H: lidera com o tally rotulado (mandante/visitante do jogo) + sequência, NÃO o dump por-fixture", () => {
+    const args = baseArgs();
+    args.h2h = [
+      fixture("CR Flamengo", "Fluminense FC", 2, 1), // home_win
+      fixture("Fluminense FC", "CR Flamengo", 0, 1), // away_win
+    ];
+    const input = buildPredictionInput(args);
+    const msg = buildUserMessage(input, { daysToKickoff: 2 });
+    expect(msg).toContain("Em 2 confronto(s):");
+    expect(msg).toContain("vitória(s) do mandante do jogo");
+    expect(msg).toContain("vitória(s) do visitante do jogo");
+    expect(msg).toContain("Do mais recente ao mais antigo:");
+    // Inteiros + rótulos só — NUNCA % / aproveitamento (espírito do firewall). Recorta
+    // só o bloco do H2H (do header até o próximo '#') pra não pegar o % das Análises.
+    const start = msg.indexOf("# Confrontos diretos");
+    const end = msg.indexOf("\n#", start + 1);
+    const h2hBlock = msg.slice(start, end === -1 ? undefined : end);
+    expect(h2hBlock).not.toContain("%");
+    expect(h2hBlock.toLowerCase()).not.toContain("aproveitamento");
+  });
+
+  it("H2H vazio → '(sem histórico fornecido)'", () => {
+    const args = baseArgs();
+    args.h2h = [];
+    const input = buildPredictionInput(args);
+    const msg = buildUserMessage(input, { daysToKickoff: 2 });
+    expect(msg).toContain("- (sem histórico fornecido)");
+  });
+
+  it("últimos placares: bullet pré-contada (placares contados + gols marcados/sofridos)", () => {
+    const input = buildPredictionInput(baseArgs());
+    const msg = buildUserMessage(input, { daysToKickoff: 2 });
+    expect(msg).toContain("placares contados");
+    expect(msg).toContain("gols marcados");
+    expect(msg).toContain("sofridos no total");
+    // Mandante: 2V 0E 0D, 5 gols marcados / 1 sofrido.
+    expect(msg).toContain(
+      "- Últimos 2 jogos (placares contados): 2V 0E 0D · 5 gols marcados / 1 sofridos no total",
+    );
+  });
+
+  it("pin de branch: h2h.length>0 com TODOS os placares null → gamesConsidered=0 → fallback raw (quirk pré-existente do ?? 0)", () => {
+    const args = baseArgs();
+    const a = fixture("CR Flamengo", "Fluminense FC", 0, 0);
+    a.score = { home: null, away: null };
+    const b = fixture("Fluminense FC", "CR Flamengo", 0, 0);
+    b.score = { home: null, away: null };
+    args.h2h = [a, b];
+    const input = buildPredictionInput(args);
+    // summarizeH2H pula ambos → gamesConsidered=0 → cai no fallback raw, que renderiza
+    // 0-0 (quirk pré-existente do `?? 0` no map de h2h — não introduzido por #379).
+    expect(input.h2hSummary!.gamesConsidered).toBe(0);
+    const msg = buildUserMessage(input, { daysToKickoff: 2 });
+    expect(msg).not.toContain("Em 0 confronto(s):");
+    // Dump raw: linha datada com o placar 0-0 do fallback.
+    expect(msg).toContain("CR Flamengo 0-0 Fluminense FC");
+  });
+
+  it("FIREWALL-NO-INPUT: um time com substring de valor ('Odd FC') renderiza como FATO e NÃO derruba a síntese nem vaza valor", () => {
+    // 'Odd FC' é um clube REAL — e casa o termo value-ish do guard (\bodds?\b). Como é
+    // INPUT (nome de time num fato estruturado), NUNCA pode tropeçar no firewall nem
+    // vazar pra manchete. Pina a invariante: o guard só lê o OUTPUT.
+    expect(containsValueLanguage("Odd FC")).toBe(true); // o termo É value-ish…
+    const args = baseArgs();
+    args.match.awayTeam = "Odd FC";
+    args.awayForm = [fixture("Odd FC", "Z", 1, 0)];
+    args.h2h = [fixture("CR Flamengo", "Odd FC", 2, 1)];
+    const input = buildPredictionInput(args);
+    const msg = buildUserMessage(input, { daysToKickoff: 2 });
+    // …e renderiza como FATO nas novas seções (tally do H2H + nome no cabeçalho).
+    expect(msg).toContain("Odd FC");
+    expect(msg).toContain("vitória(s) do visitante do jogo (Odd FC)");
+    // A síntese (um output LIMPO) segue passando o guard — o nome do time é INPUT, o
+    // guard nunca o lê. (validHeadline não contém 'Odd' → manchete limpa.)
+    expect(containsValueLanguage(validHeadline.verdict)).toBe(false);
+    expect(containsValueLanguage(validHeadline.narrative)).toBe(false);
   });
 });
