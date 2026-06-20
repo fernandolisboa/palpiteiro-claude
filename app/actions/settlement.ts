@@ -2,7 +2,10 @@
 
 import { revalidatePath } from "next/cache";
 
+import type { PalpiteResultData } from "@/db/schema";
 import { auth } from "@/auth";
+import { upsertPalpiteOutcomeOverride } from "@/lib/db/queries/palpite-outcomes";
+import { getPalpiteById } from "@/lib/db/queries/palpites";
 import { upsertOutcomeOverride } from "@/lib/db/queries/prediction-outcomes";
 import { getPredictionForOverride } from "@/lib/db/queries/predictions";
 import { profitForResult, type OutcomeResult } from "@/lib/settlement/compute";
@@ -118,5 +121,80 @@ export async function overridePredictionOutcome(
     overrideByUserId: session.user.id,
   });
   revalidatePath(`/admin/predictions/${predictionId}`);
+  return { ok: true };
+}
+
+// won/lost só pra palpites: void/push não se aplicam a placar/proposição (sem stake,
+// ADR 0028 §1). Restringe ANTES de qualquer escrita.
+const VALID_PALPITE_RESULTS: ReadonlySet<string> = new Set<"won" | "lost">([
+  "won",
+  "lost",
+]);
+
+/**
+ * Override MANUAL de liquidação de PALPITE (#394) — a saída pra rows de cartão stuck
+ * (cap esgotado / A≠B perpétuo) ou já liquidadas errado. Espelha
+ * overridePredictionOutcome MAS no domínio de palpite: won/lost só, SEM odd/stake/profit.
+ *
+ * O `yellowCardsTotal` é OPCIONAL e digitado à mão: quando presente é validado (inteiro
+ * ≥0) e gravado no resultData; quando ausente grava resultData=null (override puro
+ * operator-trust). EM AMBOS os casos a row é TRUST-THE-ADMIN — NÃO re-validada pela regra
+ * pura contra `line` (o admin é a autoridade, igual ao override de predição).
+ *
+ * Acesso restrito a admin (muta outcome passado): defense-in-depth com o gate de
+ * app/admin/layout.tsx.
+ */
+export async function overridePalpiteOutcome(
+  _prev: OverrideResult | null,
+  formData: FormData,
+): Promise<OverrideResult> {
+  const session = await auth();
+  if (session?.user?.role !== "admin") {
+    return { ok: false, error: "Acesso restrito." };
+  }
+
+  const palpiteId = String(formData.get("palpiteId") ?? "");
+  const result = String(formData.get("result") ?? "");
+  // Lê do campo cru ANTES de qualquer conversão: um POST sem corpo não pode fabricar um
+  // outcome (mesma disciplina homeRaw/awayRaw do override de predição).
+  const yellowRaw = formData.get("yellowCardsTotal");
+
+  if (!palpiteId) return { ok: false, error: "palpiteId ausente." };
+  if (!VALID_PALPITE_RESULTS.has(result)) {
+    return { ok: false, error: "Resultado inválido (won/lost)." };
+  }
+
+  // yellowCardsTotal opcional. Ausente/vazio → resultData null (override puro). Presente →
+  // valida inteiro ≥0 e grava o fato. NUNCA aceita um valor não-inteiro/negativo.
+  let resultData: PalpiteResultData | null = null;
+  if (typeof yellowRaw === "string" && yellowRaw.trim() !== "") {
+    const yellow = Number(yellowRaw);
+    if (!Number.isInteger(yellow) || yellow < 0) {
+      return { ok: false, error: "Total de amarelos inválido." };
+    }
+    resultData = {
+      homeScore: null,
+      awayScore: null,
+      totalGoals: 0,
+      yellowCardsTotal: yellow,
+    };
+  }
+
+  // Guard de existência (espelha overridePredictionOutcome): sem isto um palpiteId
+  // inexistente estouraria a FK de palpite_outcomes como exceção não-tratada em vez do
+  // contrato {ok:false}. Roda DEPOIS das validações de input (reject-empty-first preservado).
+  const palpite = await getPalpiteById(palpiteId);
+  if (!palpite) return { ok: false, error: "Palpite não encontrado." };
+
+  await upsertPalpiteOutcomeOverride({
+    palpiteId,
+    resultData,
+    result: result as "won" | "lost",
+    overrideByUserId: session.user.id,
+  });
+  // SEM revalidatePath deliberado: não existe rota de admin keyed por palpiteId (ao
+  // contrário de /admin/predictions/[id]). O badge no jogo/compartilhamento é
+  // dinamicamente lido do DB e pega o override no próximo render — uma revalidação
+  // adivinhada (ex.: /p/<setId>, que NÃO é o palpiteId) tocaria o caminho errado.
   return { ok: true };
 }

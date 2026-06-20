@@ -9,9 +9,18 @@ vi.mock("@/lib/db/queries/predictions", () => ({
 vi.mock("@/lib/db/queries/prediction-outcomes", () => ({
   upsertOutcomeOverride: vi.fn(),
 }));
+vi.mock("@/lib/db/queries/palpite-outcomes", () => ({
+  upsertPalpiteOutcomeOverride: vi.fn(),
+}));
+vi.mock("@/lib/db/queries/palpites", () => ({ getPalpiteById: vi.fn() }));
 
-import { overridePredictionOutcome } from "@/app/actions/settlement";
+import {
+  overridePalpiteOutcome,
+  overridePredictionOutcome,
+} from "@/app/actions/settlement";
 import { auth } from "@/auth";
+import { upsertPalpiteOutcomeOverride } from "@/lib/db/queries/palpite-outcomes";
+import { getPalpiteById } from "@/lib/db/queries/palpites";
 import { getPredictionForOverride } from "@/lib/db/queries/predictions";
 import { upsertOutcomeOverride } from "@/lib/db/queries/prediction-outcomes";
 
@@ -20,6 +29,8 @@ import { upsertOutcomeOverride } from "@/lib/db/queries/prediction-outcomes";
 const mockAuth = auth as unknown as Mock<() => Promise<Session | null>>;
 const getRow = vi.mocked(getPredictionForOverride);
 const upsert = vi.mocked(upsertOutcomeOverride);
+const upsertPalpite = vi.mocked(upsertPalpiteOutcomeOverride);
+const getPal = vi.mocked(getPalpiteById);
 
 const session = (role: "admin" | "user"): Session =>
   ({ user: { id: `u-${role}`, role }, expires: "" }) as unknown as Session;
@@ -42,6 +53,10 @@ function form(fields: Record<string, string>): FormData {
 beforeEach(() => {
   getRow.mockReset();
   upsert.mockReset();
+  upsertPalpite.mockReset();
+  getPal.mockReset();
+  // Default: o palpite existe (testes de caminho feliz). Casos de ausência sobrescrevem.
+  getPal.mockResolvedValue({ id: "pal1" } as never);
   mockAuth.mockReset();
   // Default: authenticated admin. Individual tests override for auth cases.
   mockAuth.mockResolvedValue(adminSession);
@@ -161,5 +176,108 @@ describe("overridePredictionOutcome", () => {
     // from the row), not an early input reject — so getRow ran, but no DB write.
     expect(getRow).toHaveBeenCalledTimes(1);
     expect(upsert).not.toHaveBeenCalled();
+  });
+});
+
+describe("overridePalpiteOutcome", () => {
+  it("rejects when there is no session (unauthenticated)", async () => {
+    mockAuth.mockResolvedValue(null);
+    const res = await overridePalpiteOutcome(
+      null,
+      form({ palpiteId: "pal1", result: "won" }),
+    );
+    expect(res).toMatchObject({ ok: false });
+    expect(upsertPalpite).not.toHaveBeenCalled();
+  });
+
+  it("rejects a non-admin session", async () => {
+    mockAuth.mockResolvedValue(session("user"));
+    const res = await overridePalpiteOutcome(
+      null,
+      form({ palpiteId: "pal1", result: "won" }),
+    );
+    expect(res).toMatchObject({ ok: false });
+    expect(upsertPalpite).not.toHaveBeenCalled();
+  });
+
+  it("rejects an absent palpiteId before any DB write", async () => {
+    const res = await overridePalpiteOutcome(null, form({ result: "won" }));
+    expect(res).toMatchObject({ ok: false });
+    expect(upsertPalpite).not.toHaveBeenCalled();
+  });
+
+  it("rejects when the palpite não existe (guard de FK) — sem write", async () => {
+    getPal.mockResolvedValue(null);
+    const res = await overridePalpiteOutcome(
+      null,
+      form({ palpiteId: "inexistente", result: "won" }),
+    );
+    expect(res).toEqual({
+      ok: false,
+      error: expect.stringMatching(/não encontrado/i),
+    });
+    expect(upsertPalpite).not.toHaveBeenCalled();
+  });
+
+  it("rejects void/push (palpite has no stake) — só won/lost", async () => {
+    const resVoid = await overridePalpiteOutcome(
+      null,
+      form({ palpiteId: "pal1", result: "void" }),
+    );
+    expect(resVoid).toMatchObject({ ok: false });
+    const resPush = await overridePalpiteOutcome(
+      null,
+      form({ palpiteId: "pal1", result: "push" }),
+    );
+    expect(resPush).toMatchObject({ ok: false });
+    expect(upsertPalpite).not.toHaveBeenCalled();
+  });
+
+  it("override puro (sem yellowCardsTotal) → resultData null, trust-the-admin", async () => {
+    const res = await overridePalpiteOutcome(
+      null,
+      form({ palpiteId: "pal1", result: "won" }),
+    );
+    expect(res).toEqual({ ok: true });
+    expect(upsertPalpite).toHaveBeenCalledWith({
+      palpiteId: "pal1",
+      result: "won",
+      resultData: null,
+      overrideByUserId: "u-admin",
+    });
+  });
+
+  it("yellowCardsTotal válido → grava o fato no resultData", async () => {
+    const res = await overridePalpiteOutcome(
+      null,
+      form({ palpiteId: "pal1", result: "won", yellowCardsTotal: "7" }),
+    );
+    expect(res).toEqual({ ok: true });
+    expect(upsertPalpite).toHaveBeenCalledWith(
+      expect.objectContaining({
+        palpiteId: "pal1",
+        result: "won",
+        resultData: {
+          homeScore: null,
+          awayScore: null,
+          totalGoals: 0,
+          yellowCardsTotal: 7,
+        },
+      }),
+    );
+  });
+
+  it("yellowCardsTotal não-inteiro/negativo → rejeita antes de escrever", async () => {
+    const resNeg = await overridePalpiteOutcome(
+      null,
+      form({ palpiteId: "pal1", result: "won", yellowCardsTotal: "-2" }),
+    );
+    expect(resNeg).toMatchObject({ ok: false });
+    const resFloat = await overridePalpiteOutcome(
+      null,
+      form({ palpiteId: "pal1", result: "lost", yellowCardsTotal: "3.5" }),
+    );
+    expect(resFloat).toMatchObject({ ok: false });
+    expect(upsertPalpite).not.toHaveBeenCalled();
   });
 });

@@ -112,3 +112,93 @@ não duplicar.
 0025 (Tier 3 odds+settlement) / 0026 (provider dedicado de dado) / 0030 (palpite-first firewall) /
 0032 (seam de web search), `adapter.ts:549`, `settleable.ts:15-21`, `palpite-dispatch.ts:33-35`,
 `active-leagues.ts:14`.
+
+## Addendum (2026-06-20, #394) — reconciliação pós-#419 e pós-reshape
+
+Esta decisão (0033) precede o **#419** (que JÁ embarcou a linha de cartão fun-only) e os
+guardrails reshaped no design do #394. O addendum corrige o texto original ponto a ponto;
+**onde conflita, o addendum vence**.
+
+**1. Tipo = `cards` (amarelos), NÃO "amarelo + vermelho".** §1/§3 e o escopo do Status diziam
+"cartões (amarelo + vermelho)". O #419 embarcou UM tipo `cards` (enum migr 0039) com params
+`{line, scope:'total'}` = **TOTAL DE AMARELOS `>= line`, line ∈ {4,6}** (`CARDS_LINE`,
+`settleable-rows.ts`). O #394 liquida **só total de amarelos**. Vermelhos ficam fora da chave de
+liquidação. `red_card`/`corners` seguem fun-only (FORA de `SETTLEABLE_PALPITE_TYPES`).
+
+**2. Seam = `runAnalysis`, NÃO `predict()`.** §2 dizia "pela fronteira `lib/ai/predict.ts`".
+CORRIGE: a extração vai por
+`getProviderForModel(MODEL_REGISTRY['claude-haiku-4-5']).runAnalysis({…serverTool:{kind:'web_search', allowedDomains, maxUses}})`
+(o padrão #377/`lib/providers/news/anthropic-web-search.ts`), logada em `ai_calls`, `hasKey()`-gated
+(zero gasto sem chave), SEM provider novo, SEM SDK direto. `predict.ts` NÃO é a porta de entrada aqui
+(é a porta do caminho de VALOR; o caminho web-grounded de notícias/cartões usa o seam direto, mirror
+da AbsencesProvider/ADR 0026). `lib/settlement/extract-cards-from-web.ts` é o módulo.
+
+**3. A≡B DECORRELACIONADO, não "dupla leitura cega".** §3 pedia duas extrações cegas
+"independentes". SHARPEN: A e B rodam com partições `allowedDomains` **DISJUNTAS** (A =
+`CARD_DOMAINS_BR`, B = `CARD_DOMAINS_INTL`, em `allowed-domains.ts`) — pools de busca fisicamente
+distintos, não clones byte-idênticos. Liquida só se ambos não-nulos E iguais; qualquer `null` ou
+`A≠B` → PENDENTE.
+
+**4. Garantia de origens — DOWNGRADE honesto do que é construível.** §3 pedia "≥2 fontes citando o
+mesmo número numa página efetivamente lida". REALIDADE DO SEAM: no modo server-tool
+`runServerToolAnalysis` devolve `toolInput:undefined` (`tool_choice:auto`, sem submit forçado) e o
+`extractSources` (o firewall) só carrega `{title,url}` — **NÃO há canal estruturado pra um número
+por-fonte**. A CONTAGEM vem do bloco de **TEXTO (prosa)** do modelo, ancorada pela busca server-side
+mas **NÃO protegida pelo firewall**. Isso é ACEITÁVEL aqui: uma contagem de cartões é um **FATO de
+liquidação, não uma afirmação de VALOR** (EV/odd/stake) — o firewall de linguagem-de-valor (ADR
+0030/0032) **NÃO se aplica**. Parse defensivo (um único inteiro via sentinela `AMARELOS_TOTAL=`;
+ambíguo/`INDISPONIVEL`/múltiplo → `null` → PENDENTE). A garantia REAL construída:
+`A.count === B.count` sobre pools disjuntos **E** cada leitura com ≥1 fonte real **E** união de
+ORIGENS EDITORIAIS distintas (colapsadas: `espn.com`+`espn.com.br`→1, `*.globo.com`→1, via a tabela
+pinada `origin-collapse.ts`) **≥ 2**. O `{origin,count}` por-fonte do texto original é mecanicamente
+inderivável e está **RETRATADO**. Além disso: cartões têm UMA súmula oficial upstream, então **A≡B é
+CONCORDÂNCIA de VEÍCULOS, NÃO corroboração independente**; a proteção real é skip-on-disagreement +
+attempt-cap + override.
+
+**5. Override manual concreto.** §3 "override manual" agora é um writer real:
+`upsertPalpiteOutcomeOverride` (espelha `upsertOutcomeOverride` MENOS `profitUnits`) +
+`overridePalpiteOutcome` admin-gated (won/lost só, reject-empty-first). Rows overridden são
+**trust-the-admin** (NÃO re-validadas pela regra contra `line`).
+
+**6. Attempt-cap cross-tick (NOVO).** Rows stuck-PENDING (A≠B repetido) NÃO são re-extraídas pra
+sempre: sidecar `palpite_settlement_attempts` (migration **0040**, a ÚNICA do #394), incremento ANTES
+da chamada paga (incondicional), fan-out gated em `attempts < CAP` (=3). Esgotou → PENDENTE
+permanente até override. KV foi rejeitado (TTL zera o cap silenciosamente → re-gasto).
+
+**7. `ai_calls` do cron loga sob o DONO do palpite.** `ai_calls.userId`/`matchId` são
+notNull+restrict; o cron não tem usuário requisitante. A pending query passa a SELECT
+`palpiteSets.userId` → cada extração loga sob o id do dono do palpite (matchId já na row). Sem
+migration de coluna nullable, sem usuário sentinela.
+
+**8. Inércia por COBERTURA, não por flag.** §5 falava "flag per-market + `coveredLeagues`". CONCRETIZA:
+`CARDS_COVERED_LEAGUES` (`cards-coverage.ts`) **VAZIO** ⇒ o fan-out web NÃO dispara pra liga nenhuma
+(gate ANTES da chamada paga, no orquestrador `settle-palpites.ts`) ⇒ zero gasto, zero badge. Ligar uma
+liga exige prova empírica de fonte ao vivo (decisão de ENGENHARIA, não flag que o dono vira).
+**`deriveSettleable` é league-BLIND** (só vê `type`): a row NOVA de cartão é `settleable=true` e
+ENTRA no pending set — a inércia é 100% da cobertura, não do gate SQL. **NÃO há backfill** de
+`palpites.settleable` nas rows #419 antigas (elas persistiram `settleable=false` e o gate SQL duplo as
+mantém fora). `WEB_GROUNDED_PALPITE_TYPES` ∩ `EVENT_BACKED_PALPITE_TYPES` = ∅ (invariante de
+import-time): cartões NÃO disparam `/fixtures/events` + web search ao mesmo tempo.
+
+**9. Custo.** Por liquidação de cartão: **2 LEITURAS** (A+B), cada uma com até `max_uses=2` **BUSCAS**
+web (≤ **4 web-searches por tick** × ~$0,01) + 2 Haiku, RETENTADO por tick até o cap ⇒ ≤ **4×CAP = 12
+web-searches por row stuck**. (Leitura ≠ busca: uma leitura = um `runAnalysis`, que pode disparar até
+`max_uses` buscas server-side.) A taxa de web search **NÃO entra em `ai_calls.costUsd`** (metered
+out-of-band, ADR 0032 §4). Com `CARDS_COVERED_LEAGUES` vazio = literalmente **zero** até uma liga ser
+ligada.
+
+**10. Caveat de ativação por liga (open-risk, antes de ligar `CARDS_COVERED_LEAGUES`).** O gate "≥1
+fonte por leitura" lê os blocos `web_search_tool_result` do **TURNO FINAL** da resposta
+(`collectOrigins` ← `result.contentBlocks`, mesma fronteira herdada do seam #377/news). Se a busca
+disparar um `pause_turn` e o turno final NÃO re-emitir os blocos de resultado, `sourceCount=0` →
+extração devolve `null` → PENDENTE **mesmo numa contagem correta** (direção SEGURA: skip, nunca
+wrong-settle; pré-existente — o provider de notícias já tem a mesma limitação em prod). Antes de ligar
+QUALQUER liga, validar empiricamente que a contagem reconcilia com fonte ≥1/pool nas extrações reais
+(taxa de PENDENTE-falso-positivo). Se necessário, acumular `contentBlocks` cross-turno no adapter
+(opt-in aditivo) ou afrouxar o gate de fonte pra ocorrência de busca server-side. Enquanto a cobertura
+está vazia, é inerte e o caveat não morde.
+
+Referências do addendum: #419 (linha fun-only), `extract-cards-from-web.ts`, `origin-collapse.ts`,
+`cards-coverage.ts`, `cards_palpite.ts`, `palpite-settlement-attempts.ts`, migration
+`0040_modern_giant_girl.sql`, `settle-palpites.ts` (orquestração), `settleable.ts:15-22` (forcing
+function), `allowed-domains.ts` (partições A/B).

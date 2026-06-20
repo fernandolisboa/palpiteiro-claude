@@ -35,6 +35,23 @@ export type DbPalpiteSet = typeof palpiteSets.$inferSelect;
 export type DbPalpite = typeof palpites.$inferSelect;
 export type DbPalpiteOutcome = typeof palpiteOutcomes.$inferSelect;
 
+/**
+ * Lê UMA linha de `palpites` por id (ou null). Usada pelo override admin (#394) como
+ * guard de existência ANTES do upsert do outcome — sem isso um palpiteId inexistente
+ * estouraria a FK de palpite_outcomes como exceção não-tratada (em vez do contrato
+ * {ok:false}), divergindo do override de predição.
+ */
+export async function getPalpiteById(
+  palpiteId: string,
+): Promise<DbPalpite | null> {
+  const [row] = await db
+    .select()
+    .from(palpites)
+    .where(eq(palpites.id, palpiteId))
+    .limit(1);
+  return row ?? null;
+}
+
 export type PalpiteSetWithLines = {
   palpiteSet: DbPalpiteSet;
   // Nullable: aiCallId é NULLABLE em palpite_sets (divergência deliberada vs
@@ -222,6 +239,11 @@ export type PendingPalpiteSettlement = {
   type: SettleablePalpiteType;
   params: DbPalpite["params"];
   matchId: string;
+  // O DONO do palpite (#394): a extração web-grounded de cartões loga ai_calls
+  // (userId/matchId notNull+restrict) e o cron não tem usuário requisitante → cada
+  // extração loga sob o id do dono. Já vem do join de palpiteSets (usado no notExists),
+  // só não era selecionado.
+  userId: string;
   league: DbMatch["league"];
   kickoffAt: Date;
   homeTeam: string;
@@ -272,6 +294,7 @@ export async function getPendingPalpiteSettlements(
       type: palpites.type,
       params: palpites.params,
       matchId: matches.id,
+      userId: palpiteSets.userId,
       league: matches.league,
       kickoffAt: matches.kickoffAt,
       homeTeam: matches.homeTeam,
