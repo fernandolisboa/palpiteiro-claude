@@ -7,6 +7,16 @@
 > é uma chamada real ao provider (§0). **Pricing de provider sai de docs públicos atrás de
 > Cloudflare/403** → re-confirmar na página de preços antes de citar pro dono.
 
+> **DECISÃO (2026-06-20, delegada pelo dono → ADR 0033):** o dado que falta na Copa é **domínio
+> público trivial** — pega-se via **web search** (não precisa de provider estruturado caro). A sonda
+> empírica (§8) decidiu o ESCOPO: **cartões (amarelo+vermelho) liquidáveis** via extração web-grounded
+> (reusa o seam de web search da Claude, ADR 0032), atrás do guardrail estrito A≡B + ≥2 fontes
+> independentes + skip-não-fabrica; **escanteios ficam fun-only/diferidos** (a sonda os reprovou:
+> variância de ±1 entre providers + tabelas JS-rendered). Cruza o gate Tier 3 → **ADR 0033** (Accepted).
+> Build sequenciado depois do provider de web search (#377). Pra ligas de CLUBE (quando voltarem), a
+> api-football estruturada segue como caminho barato preferido — o web-grounded é a solução do buraco
+> de cobertura da Copa.
+
 ## 0. Meça primeiro (a verdade só vem de uma chamada ao vivo)
 
 A pergunta do #350 — "dá pra dar badge de cartão/escanteio?" — colapsa em UMA pergunta empírica:
@@ -237,3 +247,41 @@ os clubes" por construção.
   e custo real do add-on (~€44+, não €15).
 - **Odds de cartão/escanteio** — gap não-resolvido em todos os providers; dependência de qualquer
   futuro value-aware.
+
+## 8. Sonda de confiabilidade web-search (2026-06-20)
+
+Teste empírico: para 6 jogos ENCERRADOS da Copa 2026, rodamos **duas buscas independentes e cegas (A e B)** por jogo, mirando estatísticas de liquidação (escanteios totais; cartões amarelos; cartões vermelhos), exigindo fontes públicas citadas. Barra de liquidação: um número só vale se **fontes independentes concordarem** nele; sem confirmação → `null` / `not-found` (nunca inventar).
+
+### Tabela comparativa (A / B)
+
+| Jogo | Escanteios A/B | Amarelos A/B | Vermelhos A/B | Concordância |
+|---|---|---|---|---|
+| Germany 7-1 Curaçao | 9 / 9 | 0 / 0 | 0 / 0 | **Total** — único jogo realmente limpo (escanteios via DOM renderizado em 2 fontes; cartões com confirmação editorialmente independente da Wikipedia) |
+| France 3-1 Senegal | 10 / **null** | 0 / **null** | 0 / **null** | **Falha** — B não conseguiu ler NENHUM alvo; o "10" de A veio só de resumo de IA (single-source, não-promovível) |
+| Argentina 3-0 Algeria | 4 / 4 | 0 / 0 | 0 / 0 | **Parcial** — A/B batem, mas só theScore deu tabela estática; resto é agregação de busca (confiança média) |
+| England 4-2 Croatia | 10 / 10 | 0 / 0 | 0 / 0 | **Parcial** — A/B batem em 10, porém recap em prosa do SofaScore dizia 9 (split de +/-1 escanteio) |
+| USA 4-1 Paraguay | 4 / **null** | 6 / 6 | 0 / 0 | **Cartões sim, escanteios não** — amarelos batem EXATO (6, enumerados nome a nome); escanteios em conflito vivo (3 vs 4) → B retornou null |
+| Switzerland 4-1 Bosnia | 10 / 10 | 3 / 3 | 1 / 1 | **Cartões fortes, escanteios com ressalva** — vermelho (Muharemovic, ~80') UNÂNIME; recap VAVEL dizia 9 escanteios vs tabela 7-3=10 |
+
+### Taxas de concordância (A vs B, onde ambos não-nulos)
+
+- **Vermelhos:** 5/5 exato (cinco 0s + um 1). O único vermelho foi unânime em 6+ fontes. **Determinístico.**
+- **Amarelos:** 5/5 exato (0,0,0,0,6). Único furo: France (B null por falha de fetch, não conflito de valor). **Confiável quando lido de eventos enumerados**, não de agregados crus (snippets do FOX inflaram amarelos com "jogadores não nomeados" — pego pela lista nominal).
+- **Escanteios:** total não-nulo coincidente em apenas 4/6; 2/6 sem resolução (France, USA). E mesmo nos 4 "acordos", 3 carregam um split de +/-1 escanteio entre tabela estruturada e recap em prosa. **Não é settlement-grade.**
+
+### Veredito
+
+**VIÁVEL APENAS PARA CARTÕES (cards-only).** Duas causas-raiz condenam escanteios: (1) as tabelas estatísticas autoritativas (SofaScore, FotMob, FlashScore, WhoScored, abas de stats do ESPN/FOX, FIFA) são **renderizadas via JS** e invisíveis ao fetch puro — escanteios só apareceram via Playwright/`__NEXT_DATA__` ou via resumos de IA ruidosos; (2) há **variância real de ~1 escanteio entre provedores** (prosa vs feed Opta), e 1 escanteio vira uma linha de over/under. Cartões, ao contrário, vivem no play-by-play/box score que faz fetch limpo; vermelhos são quase determinísticos.
+
+### Guardrails justificados pelos dados
+
+1. **GLOBAL:** liquidar só se **A e B retornarem valor não-nulo E iguais**; qualquer null ou A!=B deixa o mercado **PENDENTE** (revisão manual). Nunca auto-liquidar com um analista só.
+2. **GLOBAL:** exigir **>=2 fontes independentes** citando o mesmo número explícito em página efetivamente lida; nunca promover valor que só apareça em resumo de IA/buscador (isso sozinho teria liquidado France escanteios=10 errado).
+3. **CARTÕES (amarelo+vermelho):** auto-liquidar sob a regra A==B + 2-fontes; **preferir bookings nomeados** (play-by-play / box por jogador) a contagens agregadas — desconfiar de agregado que "completa" com jogadores não nomeados.
+4. **VERMELHOS:** célula de maior confiança; um vermelho unânime em SofaScore/ESPN/FOX/Opta é settlement-grade.
+5. **ESCANTEIOS:** **não** auto-liquidar via busca web. Exigir tabela estruturada renderizada (Playwright DOM ou Opta JSON) lida verbatim — nunca prosa nem resumo; sem isso, deixar pendente.
+6. **ESCANTEIOS:** mesmo com A==B, se **qualquer** fonte mostrar split de +/-1 (recap diz 9 vs tabela 10), cair para manual.
+7. **ESCANTEIOS:** tratar theScore/SofaScore/FotMob como possivelmente uma única origem Opta; exigir confirmação não-Opta (Sky/Wikipedia) antes de confiar.
+8. **OPERACIONAL:** o caminho fetch-only não lê tabelas JS (SofaScore/FotMob/FlashScore/WhoScored/ESPN-stats/FIFA deram vazio ou 403). Cartões podem ir em fetch-only (play-by-play); escanteios exigem renderer JS (Playwright) ou API estruturada antes de qualquer confiança.
+
+**Recomendação:** lançar liquidação por busca web **só para cartões**, atrás do guardrail estrito A==B + 2-fontes, com disclaimer e override manual idempotente (alinhado ao shield regulatório e ao princípio "prefer skip over silent wrong settle"). Escanteios ficam **fora** até existir renderer JS-capaz + regra "+/-1 split => pendente"; e mesmo então, preferir deixar pendente a auto-liquidar.
