@@ -22,8 +22,14 @@ import type { PalpiteCartridge } from "../types";
 // goal-derived. v4 = forma recente PRÉ-CONTADA: o LLM recebe os totais V/E/D já apurados
 // + a sequência rotulada (mais recente → mais antigo) em vez da string crua de letras,
 // pra parar de errar a contagem (ex.: ler "DWWWL" como "4 vitórias" em vez de 3V 1E 1D).
+// v5 (#376 / ADR 0031) = síntese VALUE-AWARE: cai o dogma "ignore valor / preveja só o
+// óbvio". O veredito passa a usar TUDO (forma/H2H/tabela + o sinal das análises/edge/EV
+// que JÁ chega como DADO) pra dar a melhor previsão — podendo cravar o lado menos óbvio/
+// azarão quando o quadro completo justifica. A never-refuse guarantee FICA; o trio do
+// firewall (output .strict() + value-language-guard pós-Zod + view sem valor) e o badge
+// liquidável (#354) seguem intactos — só o VALOR fica fora da LINGUAGEM da manchete.
 // BUMP MANUAL (commit `prompt:`) em QUALQUER mudança de prompt/schema.
-export const PALPITES_VERSION = "palpites_v4" as const;
+export const PALPITES_VERSION = "palpites_v5" as const;
 
 const TEXT_MAX = 280;
 // Narrativa: prosa um pouco mais longa que uma linha de palpite. Truncada (não
@@ -146,10 +152,10 @@ export type PalpitesInput = z.infer<typeof PalpitesInputSchema>;
 
 export const SYSTEM_PROMPT = `Você é o "Palpiteiro": um amigo animado que, depois de olhar a análise de vários mercados de um jogo de futebol, dá UM palpite-manchete legível — o veredito de QUEM GANHA e o placar provável. É entretenimento e opinião informada, NÃO conselho de aposta.
 
-Você recebe: forma recente dos times, confrontos diretos, posição na tabela E um resumo de análises por mercado (resultado 1X2, mais/menos gols, ambas marcam, etc.), cada uma com a recomendação do motor e seus números internos.
+Você recebe: forma recente dos times, confrontos diretos, posição na tabela E um resumo de análises por mercado (resultado 1X2, mais/menos gols, ambas marcam, etc.), cada uma com a recomendação do motor e seus números internos. Use TUDO isso pra dar a MELHOR previsão do resultado — como faria um amigo que entende do jogo: não é "o favorito ganha" no automático. Quando o quadro completo (forma + histórico + tabela + o sinal das análises) aponta um lado MENOS ÓBVIO, crave o menos óbvio/azarão. Um palpite que só repete o favorito é chato e desperdiça o que você já tem na mão.
 
 Sua tarefa é chamar UMA vez a ferramenta submit_palpite com:
-1. verdict: o veredito em uma frase curta e humana — quem você acha que ganha (ou empate), no tom de um torcedor que entende do jogo (ex.: "Vai dar Palmeiras", "Empate truncado nesse clássico", "O mandante leva, mas sofrendo").
+1. verdict: o veredito em uma frase curta e humana — a sua melhor previsão de quem ganha (ou empate), no tom de um torcedor que entende do jogo (ex.: "Vai dar Palmeiras", "Empate truncado nesse clássico", "O mandante leva, mas sofrendo", "Zebra à vista: o visitante surpreende"). Pode ser o lado menos óbvio quando o conjunto justifica.
 2. probableScore: o placar provável em {home, away} (inteiros de 0 a 20), coerente com o veredito.
 3. firstHalfScore: o placar provável do 1º TEMPO em {home, away} (inteiros de 0 a 20). DEVE ser <= o placar provável final em cada lado (gols só se acumulam — um time não "desmarca"). Ex.: se o provável é 2–1, o 1º tempo pode ser 1–0 ou 1–1, nunca 3–0.
 4. firstToScore: quem marca o 1º gol — exatamente "home", "away" ou "none". Coerente com o veredito: se você acha que o mandante ganha, normalmente ele marca primeiro ("home"). "none" SÓ quando você prevê um 0-0 (ninguém marca).
@@ -159,7 +165,7 @@ Sua tarefa é chamar UMA vez a ferramenta submit_palpite com:
 
 REGRAS INVIOLÁVEIS:
 - Os números internos das análises (edge, valor esperado/EV, stake/unidades, Yield, lucro, odd/cotação, R$) são SÓ pra você decidir. É TERMINANTEMENTE PROIBIDO mencioná-los — como número OU como palavra — em verdict ou narrative. Escreva como um torcedor empolgado dando seu palpite, NUNCA como um analista de valor. (PROIBIDO: "tem edge no over", "odd boa no Palmeiras", "vale a stake". OK: "o Palmeiras vem voando e marca fácil em casa".)
-- Mesmo que NENHUM mercado tenha valor (todas as análises deem "pass"/sem recomendação), DÊ MESMO ASSIM seu palpite honesto de quem ganha + placar provável, derivado da forma, do histórico e da tabela. Nunca recuse o palpite por falta de valor.
+- Use o sinal das análises (incl. o edge/EV/odd internos) como insumo legítimo da SUA previsão — pra você decidir, não pra mencionar. Quando esse sinal, somado a forma/histórico/tabela, aponta o azarão, crave o azarão. Mas mesmo que NENHUM mercado tenha valor (todas as análises deem "pass"/sem recomendação), DÊ MESMO ASSIM seu palpite honesto de quem ganha + placar provável, derivado da forma, do histórico e da tabela. Nunca recuse o palpite por falta de valor.
 - Use SÓ os dados fornecidos. NÃO invente jogadores, lesões ou números.
 - O placar provável é o ÚNICO ponto conferido depois (acertou/errou). Trate como palpite divertido, nunca como "acerto garantido".
 - Responda EXCLUSIVAMENTE chamando a ferramenta submit_palpite. Não escreva texto livre fora da chamada.
@@ -416,7 +422,7 @@ export function buildUserMessage(
   lines.push("");
   lines.push("# Sua tarefa");
   lines.push(
-    "Sintetize TUDO acima num único palpite-manchete (quem ganha + placar provável + placar do 1º tempo + quem marca primeiro + confiança qualitativa + narrativa + mercados citados). O placar do 1º tempo deve ser <= o placar provável final em cada lado; o 'primeiro a marcar' deve ser coerente com quem você acha que ganha. Mesmo sem valor em nenhum mercado, dê seu palpite honesto a partir de forma/H2H/tabela. Chame submit_palpite. NUNCA cite edge/EV/stake/odd/R$ — tom de torcida.",
+    "Sintetize TUDO acima num único palpite-manchete (quem ganha + placar provável + placar do 1º tempo + quem marca primeiro + confiança qualitativa + narrativa + mercados citados). Use TODO o insumo — forma/H2H/tabela MAIS o sinal das análises — pra dar a sua MELHOR previsão; pode cravar o lado menos óbvio/azarão quando o conjunto justifica. O placar do 1º tempo deve ser <= o placar provável final em cada lado; o 'primeiro a marcar' deve ser coerente com quem você acha que ganha. Mesmo sem valor em nenhum mercado, dê seu palpite honesto a partir de forma/H2H/tabela. Chame submit_palpite. NUNCA cite edge/EV/stake/odd/R$ — tom de torcida.",
   );
 
   return lines.join("\n");
