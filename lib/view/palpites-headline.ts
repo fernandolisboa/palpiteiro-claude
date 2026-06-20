@@ -37,6 +37,14 @@ export type PalpiteHeadlineView = {
   // força AMBOS os call-sites (fresh + reload) a popular, sem glitch sumir/aparecer.
   // Pode ser `[]` (o scorecard se esconde inteiro).
   dimensions: PalpiteDimensionView[];
+  // ADR 0032 / #378: as fontes de notícia REAIS (título+URL) que alimentaram o palpite,
+  // capturadas via web search (#377) e persistidas em `headline.sources`. OPCIONAL: sets
+  // pré-#377 e o caso "sem notícia" não carregam (o HERO esconde a seção inteira).
+  // FIREWALL-SAFE por construção: {title,url} é TOOL OUTPUT (nunca prosa do LLM), então NÃO
+  // entra no guard containsValueLanguage — o guard pega edge/EV ECOADO em prosa gerada, e
+  // título/URL não são gerados. A UI rende só texto do título + href, cor warm (NUNCA
+  // edge-* verde) → asserido firewall-limpo por leaksValue() sobre o HTML renderizado.
+  sources?: Array<{ title: string; url: string }>;
 };
 
 // Insumos do mapper — tipos puros (sem importar @/lib/db pra não arrastar Drizzle pra
@@ -70,6 +78,9 @@ export function toPalpiteHeadlineView(
     citedMarkets: source.headline.citedMarkets,
     badge: source.outcome?.result ?? null,
     dimensions: source.dimensions ?? [],
+    // #378: passthrough das fontes persistidas (undefined em sets pré-#377). NÃO derramamos
+    // em prosa nem cruzamos pelo guard de valor — é tool output, renderizado verbatim como link.
+    sources: source.headline.sources,
   };
 }
 

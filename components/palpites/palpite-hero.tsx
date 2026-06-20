@@ -1,7 +1,7 @@
 "use client";
 
 import { useActionState } from "react";
-import { Loader2, Sparkles, TriangleAlert } from "lucide-react";
+import { Info, Loader2, Sparkles, TriangleAlert } from "lucide-react";
 
 import { analyzeBestBet } from "@/app/actions/predictions";
 import { SettleableBadge } from "@/components/palpites/palpite-badges";
@@ -54,7 +54,12 @@ type Props = {
  * rótulo regulatório ESTÁTICO (PALPITE_DISCLAIMER) — "é só um palpite, não é recomendação
  * de aposta". É invariante (não dado per-palpite), renderizado como footnote mudo no FIM
  * do PopulatedHero, deliberadamente LONGE do placar/recibo pra não ler como disclaimer de
- * liquidação. #378 dá a polish visual fina.
+ * liquidação. #378 deu a polish visual fina (footnote com border-top + ícone Info mudo).
+ *
+ * FONTES (ADR 0032 / #378): quando o palpite leu notícias reais (web search, #377), o HERO
+ * lista as fontes como links clicáveis (título → URL, nova aba) entre a ficha de dimensões
+ * e a CTA. FIREWALL-SAFE: {title,url} é tool output, render só texto+href, cor warm
+ * (palpite-strong-fg, NUNCA edge-* verde) — esconde a seção inteira sem fontes.
  */
 export function PalpiteHero({
   heroPalpite,
@@ -189,6 +194,8 @@ function PopulatedHero({
 
         <DimensionScorecard dimensions={view.dimensions} />
 
+        <CitedSources sources={view.sources} />
+
         {analyzable && (
           <Button
             type="submit"
@@ -202,8 +209,10 @@ function PopulatedHero({
 
         {/* Disclaimer regulatório estático (ADR 0031 §5 / #376): ÚLTIMO filho, footnote
             mudo — deliberadamente separado do placar/recibo pra não ler como aviso de
-            liquidação. #378 restiliza. */}
-        <p className="text-eyebrow-xs tracking-tight text-muted-fg-2">
+            liquidação. #378 deu a polish: border-top quente sutil + ícone Info mudo, pra
+            ler como nota de rodapé regulatória (não disclaimer de liquidação). */}
+        <p className="mt-1 flex items-center gap-1.5 border-t border-palpite-border/40 pt-3 text-eyebrow-xs tracking-tight text-muted-fg-2">
+          <Info className="size-3 shrink-0" aria-hidden="true" />
           {PALPITE_DISCLAIMER}
         </p>
       </div>
@@ -444,6 +453,48 @@ function DimensionScorecard({
                   : { kind: "settled", result: d.badge }
               }
             />
+          </li>
+        ))}
+      </ul>
+    </div>
+  );
+}
+
+// Fontes de notícia citadas (ADR 0032 / #378): os links reais que o palpite LEU (web
+// search, #377) — título → URL (nova aba). Vive ENTRE a ficha de dimensões e a CTA, no
+// mesmo registro conversacional quieto (label-then-list, igual ao DimensionScorecard).
+// FIREWALL: {title,url} é TOOL OUTPUT (nunca prosa do LLM), render só texto do título +
+// href — cor warm `text-palpite-strong-fg` (a identidade do palpite), NUNCA edge-* verde,
+// ZERO dígito/%/meter/token de valor. Degrada gracioso: ESCONDE inteiro sem fontes (sets
+// pré-#377 ou jogo sem notícia). Responsivo: empilha no mobile (flex-col) → inline com `·`
+// no desktop (sm:flex-row sm:flex-wrap; o separador é hidden sm:inline).
+function CitedSources({
+  sources,
+}: {
+  sources?: Array<{ title: string; url: string }>;
+}) {
+  if (!sources || sources.length === 0) return null;
+  return (
+    <div className="flex flex-col gap-1.5">
+      <span className="text-label tracking-tight text-muted-foreground">
+        o palpite leu
+      </span>
+      <ul className="flex flex-col gap-1.5 sm:flex-row sm:flex-wrap sm:items-baseline sm:gap-x-2">
+        {sources.map((s, i) => (
+          <li key={`${s.url}-${i}`} className="flex items-baseline gap-2">
+            {i > 0 && (
+              <span aria-hidden="true" className="hidden text-muted-fg-2 sm:inline">
+                ·
+              </span>
+            )}
+            <a
+              href={s.url}
+              target="_blank"
+              rel="noopener noreferrer"
+              className="rounded-sm text-body-sm tracking-tight text-palpite-strong-fg underline decoration-palpite-border underline-offset-2 hover:decoration-palpite-strong-fg focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-palpite-border"
+            >
+              {s.title}
+            </a>
           </li>
         ))}
       </ul>
