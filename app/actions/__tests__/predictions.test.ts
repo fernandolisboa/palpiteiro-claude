@@ -564,6 +564,37 @@ describe("analyzeMatch — market league coverage gating (#158)", () => {
     expect(mockPredict).not.toHaveBeenCalled();
   });
 
+  it("jogo AO VIVO → erro 'em andamento', SEM pre-warm nem spend", async () => {
+    mockAuth.mockResolvedValue(SESSION);
+    mockGetMatchById.mockResolvedValue(matchInLeague("world_cup", "live"));
+    const res = await analyzeMatch(
+      null,
+      form({ matchId: VALID_MATCH_ID, marketKey: "btts" }),
+    );
+    expect(res).toEqual({
+      ok: false,
+      error:
+        "Jogo em andamento — a análise fica disponível só antes do apito inicial.",
+    });
+    expect(mockEnsureOdds).not.toHaveBeenCalled();
+    expect(mockPredict).not.toHaveBeenCalled();
+  });
+
+  it("jogo ADIADO → erro 'adiado', SEM pre-warm nem spend", async () => {
+    mockAuth.mockResolvedValue(SESSION);
+    mockGetMatchById.mockResolvedValue(matchInLeague("world_cup", "postponed"));
+    const res = await analyzeMatch(
+      null,
+      form({ matchId: VALID_MATCH_ID, marketKey: "over_under" }),
+    );
+    expect(res).toEqual({
+      ok: false,
+      error: "Jogo adiado — análise indisponível até o jogo ser remarcado.",
+    });
+    expect(mockEnsureOdds).not.toHaveBeenCalled();
+    expect(mockPredict).not.toHaveBeenCalled();
+  });
+
   it("btts sem book ofertando (predict lança 'sem snapshot fresco') → copy específica", async () => {
     mockAuth.mockResolvedValue(SESSION);
     mockGetMatchById.mockResolvedValue(matchInLeague("world_cup"));

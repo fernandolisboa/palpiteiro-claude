@@ -53,7 +53,15 @@ function friendlyMessage(err: PredictError): string {
     return "Jogo não encontrado.";
   }
   if (msg.includes("match is not analyzable")) {
-    return "Este jogo já foi encerrado ou cancelado.";
+    // Race: o status pode ter virado live/postponed entre o guard da action e o
+    // gate de predict(). Usa o `status` anexado ao context (predict.ts) pra não
+    // dizer "encerrado" num jogo ao vivo — MESMA copy-por-status do guard.
+    const status =
+      typeof err.context.status === "string" ? err.context.status : "";
+    return (
+      notAnalyzableMessage(status) ??
+      "Este jogo já foi encerrado ou cancelado."
+    );
   }
   if (msg.includes("no matching odds")) {
     return "Sem odds publicadas para este jogo no momento.";
@@ -76,6 +84,28 @@ function friendlyMessage(err: PredictError): string {
     return "A resposta do modelo não passou na validação. Nenhum custo cobrado.";
   }
   return "Falha temporária ao gerar análise. Tente novamente.";
+}
+
+/**
+ * Gate de analisabilidade market-agnóstico, compartilhado pelos 3 fan-outs. Só
+ * jogo `scheduled` (pré-jogo) é analisável: `live`/`postponed` NÃO têm odds
+ * pré-jogo publicadas (ou data definida) e `finished`/`cancelled` já passaram.
+ * Retorna `null` quando analisável; senão a copy de UI POR status (pra não dizer
+ * "encerrado" num jogo ao vivo). Espelha o gate de `predict.ts` — read grátis,
+ * curto-circuita ANTES de qualquer pré-warm/spend.
+ */
+function notAnalyzableMessage(status: string): string | null {
+  switch (status) {
+    case "scheduled":
+      return null;
+    case "live":
+      return "Jogo em andamento — a análise fica disponível só antes do apito inicial.";
+    case "postponed":
+      return "Jogo adiado — análise indisponível até o jogo ser remarcado.";
+    default:
+      // finished | cancelled (+ qualquer status futuro): fail-closed.
+      return "Este jogo já foi encerrado ou cancelado.";
+  }
 }
 
 export async function analyzeMatch(
@@ -166,11 +196,13 @@ export async function analyzeMatch(
     return { ok: false, error: "Jogo não encontrado." };
   }
   // Analisabilidade ANTES do pre-warm de odds (#174 code review): um jogo
-  // encerrado/cancelado faria o pre-warm por evento gastar 1 crédito (additional)
-  // só pra o predict lançar depois. Curto-circuita aqui (status já em escopo,
-  // read grátis), market-agnóstico — espelha o gate de predict.ts.
-  if (match.status === "finished" || match.status === "cancelled") {
-    return { ok: false, error: "Este jogo já foi encerrado ou cancelado." };
+  // não-`scheduled` (encerrado/cancelado/ao vivo/adiado) faria o pre-warm por
+  // evento gastar 1 crédito (additional) só pra o predict lançar depois.
+  // Curto-circuita aqui (status já em escopo, read grátis), market-agnóstico —
+  // espelha o gate de predict.ts.
+  const notAnalyzable = notAnalyzableMessage(match.status);
+  if (notAnalyzable) {
+    return { ok: false, error: notAnalyzable };
   }
   const marketKeyRaw = String(formData.get("marketKey") ?? "");
   // Audiência ∩ cobertura de liga (#158): um POST forjado com `marketKey=btts` numa
@@ -226,7 +258,7 @@ export async function analyzeMatch(
       });
     const aiCall = await getAiCallById(prediction.aiCallId);
     revalidatePath(`/match/${matchId}`);
-    revalidatePath("/");
+    revalidatePath("/jogos");
     return {
       ok: true,
       view: toAnalysisView(
@@ -369,8 +401,9 @@ export async function analyzeBestBet(
   if (!match) {
     return { ok: false, error: "Jogo não encontrado." };
   }
-  if (match.status === "finished" || match.status === "cancelled") {
-    return { ok: false, error: "Este jogo já foi encerrado ou cancelado." };
+  const notAnalyzable = notAnalyzableMessage(match.status);
+  if (notAnalyzable) {
+    return { ok: false, error: notAnalyzable };
   }
   const isAdmin = session.user.role === "admin";
   const overrideRaw = String(formData.get("modelOverride") ?? "");
@@ -536,7 +569,7 @@ export async function analyzeBestBet(
     );
   }
   revalidatePath(`/match/${matchId}`);
-  revalidatePath("/");
+  revalidatePath("/jogos");
   return { ok: true, view, palpite };
 }
 
@@ -601,8 +634,9 @@ export async function analyzeMarkets(
   if (!match) {
     return { ok: false, error: "Jogo não encontrado." };
   }
-  if (match.status === "finished" || match.status === "cancelled") {
-    return { ok: false, error: "Este jogo já foi encerrado ou cancelado." };
+  const notAnalyzable = notAnalyzableMessage(match.status);
+  if (notAnalyzable) {
+    return { ok: false, error: notAnalyzable };
   }
   const isAdmin = session.user.role === "admin";
   const overrideRaw = String(formData.get("modelOverride") ?? "");
@@ -750,6 +784,6 @@ export async function analyzeMarkets(
   // e o banner explica qual falhou — uma string de erro única perderia o detalhe. Nenhuma seção
   // nova aparece pros que falharam; revalidate é inócuo nesse caso.
   revalidatePath(`/match/${matchId}`);
-  revalidatePath("/");
+  revalidatePath("/jogos");
   return { ok: true, summaries };
 }

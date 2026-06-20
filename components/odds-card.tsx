@@ -5,10 +5,14 @@ import { Badge } from "@/components/ui/badge";
 import { Callout } from "@/components/ui/callout";
 import { Card } from "@/components/ui/card";
 import { Separator } from "@/components/ui/separator";
-import type { OddsView } from "@/lib/view/types";
+import type { MatchStatus, OddsView } from "@/lib/view/types";
 
 type Props = {
   view: OddsView | null;
+  // Status do jogo pra a copy do empty-state: pré-jogo ("até que o mercado abra")
+  // vs ao vivo/encerrado (onde não há cotação pré-jogo a publicar). Opcional —
+  // ausente cai na copy pré-jogo (default histórico).
+  matchStatus?: MatchStatus;
 };
 
 // Classe de grid estática por nº de seleções — Tailwind não interpola classes
@@ -18,9 +22,19 @@ const GRID_COLS: Record<number, string> = {
   3: "grid-cols-3",
 };
 
-export function OddsCard({ view }: Props) {
+export function OddsCard({ view, matchStatus }: Props) {
   if (!view) {
-    // Estado pré-mercado esperado (não é erro) → Callout info (calmo).
+    // Estado sem-cotação esperado (não é erro) → Callout info (calmo). Copy por
+    // status: pré-jogo aguarda o mercado abrir; ao vivo/encerrado não tem cotação
+    // pré-jogo a publicar (dizer "até que o mercado abra" ali seria enganoso).
+    const body =
+      matchStatus === "live"
+        ? "Jogo em andamento — sem cotação pré-jogo publicada."
+        : matchStatus === "finished" ||
+            matchStatus === "cancelled" ||
+            matchStatus === "postponed"
+          ? "Sem cotação de referência para este jogo."
+          : "Sem cotação publicada para este jogo. Análise indisponível até que o mercado abra.";
     return (
       <Callout
         variant="info"
@@ -28,8 +42,7 @@ export function OddsCard({ view }: Props) {
         title="Odds indisponíveis"
       >
         <span className="text-body-sm text-muted-foreground tracking-tight">
-          Sem cotação publicada para este jogo. Análise indisponível até que o
-          mercado abra.
+          {body}
         </span>
         <span className="pt-1 font-mono text-eyebrow text-muted-fg-2">
           fonte: the-odds-api
