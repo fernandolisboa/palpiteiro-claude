@@ -9,31 +9,33 @@ import {
 } from "@/lib/view/range-href";
 
 describe("buildRangeHref", () => {
-  it("today5 com liga 'all' → home limpa (default não polui URL)", () => {
-    expect(buildRangeHref({ league: "all" }, { preset: "today5" })).toBe("/");
+  it("today5 com liga 'all' → /jogos limpo (default não polui URL)", () => {
+    expect(buildRangeHref({ league: "all" }, { preset: "today5" })).toBe(
+      "/jogos",
+    );
   });
 
   it("preserva a liga ao escolher um preset", () => {
     expect(buildRangeHref({ league: "wc" }, { preset: "today5" })).toBe(
-      "/?league=wc",
+      "/jogos?league=wc",
     );
   });
 
   it("today14 com liga", () => {
     expect(buildRangeHref({ league: "wc" }, { preset: "today14" })).toBe(
-      "/?league=wc&preset=today14",
+      "/jogos?league=wc&preset=today14",
     );
   });
 
   it("season com liga", () => {
     expect(buildRangeHref({ league: "bsa" }, { preset: "season" })).toBe(
-      "/?league=bsa&preset=season",
+      "/jogos?league=bsa&preset=season",
     );
   });
 
   it("season sem liga (all)", () => {
     expect(buildRangeHref({ league: "all" }, { preset: "season" })).toBe(
-      "/?preset=season",
+      "/jogos?preset=season",
     );
   });
 
@@ -43,7 +45,7 @@ describe("buildRangeHref", () => {
         { league: "wc" },
         { preset: "custom", from: "2026-06-10", to: "2026-06-20" },
       ),
-    ).toBe("/?league=wc&preset=custom&from=2026-06-10&to=2026-06-20");
+    ).toBe("/jogos?league=wc&preset=custom&from=2026-06-10&to=2026-06-20");
   });
 
   it("custom sem liga (all) omite o param league", () => {
@@ -52,19 +54,19 @@ describe("buildRangeHref", () => {
         { league: "all" },
         { preset: "custom", from: "2026-06-10", to: "2026-06-20" },
       ),
-    ).toBe("/?preset=custom&from=2026-06-10&to=2026-06-20");
+    ).toBe("/jogos?preset=custom&from=2026-06-10&to=2026-06-20");
   });
 });
 
 describe("buildLeagueHref", () => {
   it("troca a liga preservando o preset today14", () => {
     expect(buildLeagueHref({ preset: "today14" }, "wc")).toBe(
-      "/?league=wc&preset=today14",
+      "/jogos?league=wc&preset=today14",
     );
   });
 
   it("today5 → não escreve preset, só a liga", () => {
-    expect(buildLeagueHref({ preset: "today5" }, "wc")).toBe("/?league=wc");
+    expect(buildLeagueHref({ preset: "today5" }, "wc")).toBe("/jogos?league=wc");
   });
 
   it("preserva um range custom com from/to ao trocar liga", () => {
@@ -73,15 +75,17 @@ describe("buildLeagueHref", () => {
         { preset: "custom", from: "2026-06-10", to: "2026-06-20" },
         "bsa",
       ),
-    ).toBe("/?league=bsa&preset=custom&from=2026-06-10&to=2026-06-20");
+    ).toBe("/jogos?league=bsa&preset=custom&from=2026-06-10&to=2026-06-20");
   });
 
   it("trocar pra 'all' limpa a liga mas mantém o preset", () => {
-    expect(buildLeagueHref({ preset: "season" }, "all")).toBe("/?preset=season");
+    expect(buildLeagueHref({ preset: "season" }, "all")).toBe(
+      "/jogos?preset=season",
+    );
   });
 
   it("custom sem from/to válidos degrada pro default today5", () => {
-    expect(buildLeagueHref({ preset: "custom" }, "wc")).toBe("/?league=wc");
+    expect(buildLeagueHref({ preset: "custom" }, "wc")).toBe("/jogos?league=wc");
   });
 });
 

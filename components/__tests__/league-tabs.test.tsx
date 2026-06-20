@@ -44,11 +44,11 @@ describe("LeagueTabs rendering (a11y)", () => {
 
     for (const tab of leagueTabs) {
       if (tab.active) {
-        // Liga ativa é um link real navegável.
-        expect(markup).toContain(`href="/?league=${tab.value}"`);
+        // Liga ativa é um link real navegável (pra /jogos, a home authed).
+        expect(markup).toContain(`href="/jogos?league=${tab.value}"`);
       } else {
         // Liga inativa NÃO é navegável: sem href pro seu filtro.
-        expect(markup).not.toContain(`href="/?league=${tab.value}"`);
+        expect(markup).not.toContain(`href="/jogos?league=${tab.value}"`);
       }
     }
 
@@ -70,6 +70,6 @@ describe("LeagueTabs rendering (a11y)", () => {
       <LeagueTabs value="wc" range={{ preset: "today14" }} />,
     );
     // Trocar de liga mantém o preset selecionado — os dois filtros compõem.
-    expect(markup).toContain("href=\"/?league=wc&amp;preset=today14\"");
+    expect(markup).toContain("href=\"/jogos?league=wc&amp;preset=today14\"");
   });
 });

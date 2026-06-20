@@ -22,9 +22,11 @@ export type RangeChoice =
   | { preset: "custom"; from: string; to: string };
 
 /**
- * Href puro pra home preservando a liga atual e aplicando a próxima escolha de
- * range. Espelha `buildHref`/`buildDashboardHref`: omite params no default
- * (`league=all` e `preset=today5` não aparecem na URL → home limpa).
+ * Href puro pra home autenticada (`/jogos`) preservando a liga atual e aplicando
+ * a próxima escolha de range. Espelha `buildDashboardHref`: omite params no
+ * default (`league=all` e `preset=today5` não aparecem na URL → `/jogos` limpa).
+ * Aponta SEMPRE pra `/jogos`, nunca pra `/` — a raiz virou landing pública
+ * estática (#373); apontar pra `/` joga o filtro na landing.
  *
  * Função pura (seam de teste sem @testing-library).
  */
@@ -46,7 +48,7 @@ export function buildRangeHref(
   }
 
   const qs = params.toString();
-  return qs ? `/?${qs}` : "/";
+  return qs ? `/jogos?${qs}` : "/jogos";
 }
 
 /**

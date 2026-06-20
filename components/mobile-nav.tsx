@@ -28,7 +28,7 @@ type NavLinkItem = { href: string; label: string };
  */
 export function mobileNavLinks(isAdmin: boolean): NavLinkItem[] {
   const links: NavLinkItem[] = [
-    { href: "/", label: "jogos" },
+    { href: "/jogos", label: "jogos" },
     { href: "/dashboard", label: "dashboard" },
     { href: "/como-funciona", label: "como funciona" },
   ];
