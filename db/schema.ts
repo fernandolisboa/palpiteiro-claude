@@ -416,6 +416,11 @@ export type PalpiteHeadline = {
   narrative: string;
   citedMarkets: string[];
   sourcePredictionIds: string[];
+  // ADR 0032 / #377 — fontes de notícia REAIS (título+URL) capturadas via web search
+  // da Claude que alimentaram o palpite. CAPTURADAS, NUNCA inventadas (são tool output,
+  // não prosa do LLM). Opcional: sets pré-#377 e o caso "sem notícia" não carregam.
+  // jsonb é schema-less no DB → mudança SÓ de tipo TS, SEM migration/DDL.
+  sources?: Array<{ title: string; url: string }>;
 };
 
 export const palpiteSets = pgTable(

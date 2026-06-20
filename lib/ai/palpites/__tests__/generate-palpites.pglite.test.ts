@@ -125,6 +125,17 @@ vi.mock("@/lib/ai/providers", () => ({
   getProviderForModel: vi.fn(() => fakeProvider),
 }));
 
+// Provider de notícias (ADR 0032 / #377): mockado INERTE (sem notícia) — este teste
+// foca na persistência real do palpite_set/palpites via pglite, não na busca de notícia
+// (coberta no unit test do adapter). Não-mockar faria o adapter real chamar o seam
+// mockado e consumir a fila de runAnalysis.
+const getNewsByMatch = vi.fn(() =>
+  Promise.resolve({ results: [], aiCall: null, unavailable: true }),
+);
+vi.mock("@/lib/providers/news", () => ({
+  getNewsProvider: vi.fn(() => ({ getNewsByMatch })),
+}));
+
 import { generatePalpites, PalpiteError } from "@/lib/ai/palpites";
 import type { MarketAnalysisSummary } from "@/lib/ai/palpites/synthesis-input";
 import { getPalpiteSetsForMatch } from "@/lib/db/queries/palpites";

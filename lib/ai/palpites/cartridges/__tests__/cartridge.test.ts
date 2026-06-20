@@ -8,6 +8,7 @@ import type {
 
 import {
   PALPITES_VERSION,
+  PalpitesInputSchema,
   PalpitesOutputSchema,
   SUBMIT_PALPITE_TOOL,
   buildPredictionInput,
@@ -204,9 +205,9 @@ describe("SUBMIT_PALPITE_TOOL", () => {
       SUBMIT_PALPITE_TOOL.input_schema,
     );
   });
-  it("a versão é palpites_v5", () => {
-    expect(PALPITES_VERSION).toBe("palpites_v5");
-    expect(palpitesCartridge.version).toBe("palpites_v5");
+  it("a versão é palpites_v6 (#377 / ADR 0032 — notícias)", () => {
+    expect(PALPITES_VERSION).toBe("palpites_v6");
+    expect(palpitesCartridge.version).toBe("palpites_v6");
   });
   it("o tool NÃO declara campos de valor (firewall estrutural); declara firstHalfScore + firstToScore (#354)", () => {
     const props = SUBMIT_PALPITE_TOOL.input_schema.properties as Record<
@@ -352,6 +353,73 @@ function baseArgs(analyses: MarketAnalysisSummary[] = [analysis()]): BuildPalpit
   };
 }
 
+// ─── PalpitesInputSchema: news (#377 / ADR 0032) ──────────────────────────────
+
+describe("PalpitesInputSchema — news (#377)", () => {
+  const baseInput = {
+    match: {
+      league: "brasileirao_a",
+      homeTeam: "CR Flamengo",
+      awayTeam: "Fluminense FC",
+      kickoffAt: "2026-05-15T19:00:00.000Z",
+    },
+    analyses: [],
+    homeForm: {
+      team: "CR Flamengo",
+      gamesConsidered: 0,
+      avgGoalsFor: 0,
+      avgGoalsAgainst: 0,
+      results: [],
+    },
+    awayForm: {
+      team: "Fluminense FC",
+      gamesConsidered: 0,
+      avgGoalsFor: 0,
+      avgGoalsAgainst: 0,
+      results: [],
+    },
+    h2h: [],
+  };
+
+  it("aceita news com {title,url}", () => {
+    const parsed = PalpitesInputSchema.safeParse({
+      ...baseInput,
+      news: [{ title: "Desfalque confirmado", url: "https://ge.globo.com/a" }],
+    });
+    expect(parsed.success).toBe(true);
+  });
+
+  it("default [] quando news é omitido", () => {
+    const parsed = PalpitesInputSchema.safeParse(baseInput);
+    expect(parsed.success).toBe(true);
+    if (parsed.success) expect(parsed.data.news).toEqual([]);
+  });
+
+  it("rejeita >10 notícias", () => {
+    const eleven = Array.from({ length: 11 }, (_, i) => ({
+      title: `T${i}`,
+      url: `https://ge.globo.com/${i}`,
+    }));
+    const parsed = PalpitesInputSchema.safeParse({ ...baseInput, news: eleven });
+    expect(parsed.success).toBe(false);
+  });
+
+  it("rejeita title ou url vazios (nunca inventa fonte)", () => {
+    expect(
+      PalpitesInputSchema.safeParse({
+        ...baseInput,
+        news: [{ title: "", url: "https://ge.globo.com/a" }],
+      }).success,
+    ).toBe(false);
+    expect(
+      PalpitesInputSchema.safeParse({
+        ...baseInput,
+        news: [{ title: "ok", url: "" }],
+      }).success,
+    ).toBe(false);
+  });
+});
+
 describe("buildPredictionInput", () => {
   it("resume forma, acha standings e carrega as análises", () => {
     const input = buildPredictionInput(baseArgs());
@@ -429,5 +497,24 @@ describe("buildUserMessage", () => {
     const input = buildPredictionInput(args);
     const msg = buildUserMessage(input, { daysToKickoff: 2 });
     expect(msg).toContain("- Forma recente: (sem dados)");
+  });
+
+  it("#377: renderiza a seção de notícias com título+URL + a instrução 'cite o fato, nunca o valor'", () => {
+    const args = baseArgs();
+    args.news = [
+      { title: "Flamengo perde titular", url: "https://ge.globo.com/x" },
+    ];
+    const input = buildPredictionInput(args);
+    const msg = buildUserMessage(input, { daysToKickoff: 2 });
+    expect(msg).toContain("Notícias recentes (fontes reais)");
+    expect(msg).toContain("Flamengo perde titular (https://ge.globo.com/x)");
+    expect(msg).toContain("cite o fato, NUNCA a linguagem de valor da fonte");
+  });
+
+  it("#377: sem notícias renderiza '(nenhuma notícia encontrada)'", () => {
+    const input = buildPredictionInput(baseArgs());
+    const msg = buildUserMessage(input, { daysToKickoff: 2 });
+    expect(msg).toContain("Notícias recentes (fontes reais)");
+    expect(msg).toContain("(nenhuma notícia encontrada)");
   });
 });

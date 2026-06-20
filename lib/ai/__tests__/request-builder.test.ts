@@ -153,6 +153,68 @@ describe("buildAnthropicRequest — calibração model-aware (effort/temperature
   });
 });
 
+describe("buildAnthropicRequest — ramo server-tool (web search, ADR 0032 / #377)", () => {
+  function buildWithServerTool(
+    model: Parameters<typeof buildAnthropicRequest>[0]["model"],
+  ) {
+    return buildAnthropicRequest({
+      model,
+      system: "sys",
+      userMessage: "msg",
+      // No modo server-tool o tool forçado é ignorado; passamos vazio.
+      tools: [],
+      toolName: "submit_palpite",
+      maxTokens: 4096,
+      serverTool: {
+        kind: "web_search",
+        allowedDomains: ["ge.globo.com", "bbc.com"],
+        maxUses: 1,
+      },
+    });
+  }
+
+  it("emite a web_search_20250305 (básica) com allowed_domains + max_uses; tool_choice auto; SEM submit forçado", () => {
+    const payload = buildWithServerTool(MODEL_REGISTRY["claude-haiku-4-5"]) as unknown as {
+      tools: Array<Record<string, unknown>>;
+      tool_choice: unknown;
+    };
+    const tool = payload.tools[0];
+    // Travado em web_search_20250305: o registry só tem modelos temperature-mode
+    // (Haiku/Sonnet 4.5); a _20260209 exige 4.6+ (fora do registry).
+    expect(tool.type).toBe("web_search_20250305");
+    expect(tool.name).toBe("web_search");
+    expect(tool.allowed_domains).toEqual(["ge.globo.com", "bbc.com"]);
+    expect(tool.max_uses).toBe(1);
+    // tool_choice é auto (web search não pode ser forçado como o submit).
+    expect(payload.tool_choice).toEqual({ type: "auto" });
+    // NÃO força nem declara o submit_palpite.
+    expect(payload.tools).toHaveLength(1);
+    expect(JSON.stringify(payload.tools)).not.toContain("submit_palpite");
+  });
+
+  it("temperature-mode (Haiku): carrega temperature, SEM thinking", () => {
+    const payload = buildWithServerTool(MODEL_REGISTRY["claude-haiku-4-5"]);
+    expect(payload.temperature).toBe(0.3);
+    expect(payload).not.toHaveProperty("thinking");
+  });
+
+  it("NÃO declara code_execution junto (a básica não usa dynamic filtering)", () => {
+    const payload = buildWithServerTool(MODEL_REGISTRY["claude-haiku-4-5"]);
+    expect(JSON.stringify(payload)).not.toContain("code_execution");
+  });
+
+  it("sem serverTool: caminho forçado byte-idêntico (submit_prediction forçado, golden intacto)", () => {
+    // Guarda anti-regressão: provar que a ausência de serverTool deixa o caminho
+    // forçado EXATAMENTE como antes (o ramo aditivo não vazou pro forçado).
+    const payload = build(MODEL_REGISTRY["claude-haiku-4-5"]);
+    expect(payload.tool_choice).toEqual({
+      type: "tool",
+      name: SUBMIT_PREDICTION_TOOL.name,
+    });
+    expect(JSON.stringify(payload.tools)).not.toContain("web_search");
+  });
+});
+
 describe("MIN_EDGE_PP ↔ SYSTEM_PROMPT sync", () => {
   it("the UI threshold constant matches the prompt's edge rule", () => {
     // Se um prompt futuro mudar o threshold de 5pp, este teste quebra em vez

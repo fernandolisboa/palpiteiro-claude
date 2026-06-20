@@ -26,6 +26,29 @@ function coerceTokens(n: number | undefined): number {
 async function runAnalysis(
   request: AnalysisRequest,
 ): Promise<AnalysisResult> {
+  // GUARD SERVER-TOOL (ADR 0032 / #377). A server tool de web search é da Claude; news
+  // só roteia pra Anthropic. Se uma request `serverTool` chegar aqui, NÃO cai
+  // silenciosamente pro caminho forçado (geraria uma busca falsa/sem fonte) — devolve um
+  // AnalysisErr(provider_error) bem-formado (usage {0,0}, payloads serializáveis), que o
+  // caller degrada graciosamente. Sem chamada paga.
+  if (request.serverTool) {
+    const msg = "openai provider does not support server tools (web search is Claude-only)";
+    const inputPayload = {
+      model: request.model.id,
+      serverTool: request.serverTool,
+    } as Record<string, unknown>;
+    return {
+      ok: false,
+      status: "provider_error",
+      message: msg,
+      usage: { inputTokens: 0, outputTokens: 0 },
+      inputPayload,
+      outputPayload: { error: msg },
+      stopReason: null,
+      latencyMs: 0,
+    };
+  }
+
   // ToolDef → função OpenAI. strict:false é uma limitação DELIBERADA da PoC: o tool
   // over_under tem additionalProperties:false MAS omite minimum_odd de `required`, e
   // o strict:true (Structured Outputs) exige todas as keys em `required` → daria 400.
