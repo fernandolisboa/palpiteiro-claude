@@ -480,13 +480,15 @@ export async function generatePalpites({
     throw new PalpiteError("failed to persist palpite_set", cause);
   }
 
-  // 12c. palpites — N linhas settleable derivadas da síntese (#354): sempre exact_score
-  //      (o placar provável, o ponto central conferido) + 0..4 dimensões goal-derived
+  // 12c. palpites — N linhas derivadas da síntese (#354): sempre exact_score (o placar
+  //      provável, o ponto central conferido) + 0..4 dimensões goal-derived
   //      (margin/clean_sheet/first_half_score/first_to_score) EMITIDAS só quando
-  //      coerentes (gate em buildSettleablePalpiteRows). settleable DERIVADO da
-  //      constante de tipo (NUNCA do LLM); params/text de templates FIXOS já passaram
-  //      pelo guard de value-language acima. Insert em batch único; `inserted` é o array
-  //      completo de rows. NÃO gera red_card/corners (gate Tier 3 de pé, ADR 0028).
+  //      coerentes (gate em buildSettleablePalpiteRows). v8 (#419) também emite, quando
+  //      cardsTemperature está presente, uma linha FUN-ONLY `cards` (settleable=false
+  //      derivado → NUNCA entra no cron; o #394 a promove a liquidável). settleable
+  //      DERIVADO da constante de tipo (NUNCA do LLM); params/text de templates FIXOS já
+  //      passaram pelo guard de value-language acima. Insert em batch único; `inserted` é
+  //      o array completo de rows. NÃO gera red_card/corners (gate Tier 3 de pé, ADR 0028).
   const rows = settleableRows.map((r) => ({ ...r, palpiteSetId: setRow.id }));
   const inserted = await db.insert(palpites).values(rows).returning();
 

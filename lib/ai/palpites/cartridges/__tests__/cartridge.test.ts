@@ -78,6 +78,30 @@ describe("PalpitesOutputSchema (síntese v3)", () => {
     expect(PalpitesOutputSchema.safeParse(withoutNew).success).toBe(false);
   });
 
+  it("#419: cardsTemperature é OPCIONAL — aceita OMITIDO + 'pegado'/'muito_pegado'", () => {
+    // Omitido (jogo morno) → válido + undefined no parsed.
+    const omitted = PalpitesOutputSchema.safeParse(validHeadline);
+    expect(omitted.success).toBe(true);
+    if (omitted.success) expect(omitted.data.cardsTemperature).toBeUndefined();
+    for (const t of ["pegado", "muito_pegado"]) {
+      expect(
+        PalpitesOutputSchema.safeParse({ ...validHeadline, cardsTemperature: t })
+          .success,
+      ).toBe(true);
+    }
+  });
+
+  it("#419: cardsTemperature REJEITA qualquer outro valor (sem precisão-fingida)", () => {
+    for (const bad of ["morno", "4", 7, "pegadissimo", true]) {
+      expect(
+        PalpitesOutputSchema.safeParse({
+          ...validHeadline,
+          cardsTemperature: bad,
+        }).success,
+      ).toBe(false);
+    }
+  });
+
   it("confidence aceita só baixa/media/alta (enum qualitativo, nunca número)", () => {
     for (const confidence of ["baixa", "media", "alta"]) {
       expect(
@@ -193,6 +217,8 @@ describe("deriveSettleable", () => {
     expect(deriveSettleable("first_to_score")).toBe(true);
     expect(deriveSettleable("red_card")).toBe(false);
     expect(deriveSettleable("corners")).toBe(false);
+    // #419 — cards é fun-only (FORA da tupla settleable; o #394 o promove).
+    expect(deriveSettleable("cards")).toBe(false);
   });
 });
 
@@ -206,16 +232,17 @@ describe("SUBMIT_PALPITE_TOOL", () => {
       SUBMIT_PALPITE_TOOL.input_schema,
     );
   });
-  it("a versão é palpites_v7 (#379 — fatos estruturados: H2H + placares pré-contados)", () => {
-    expect(PALPITES_VERSION).toBe("palpites_v7");
-    expect(palpitesCartridge.version).toBe("palpites_v7");
+  it("a versão é palpites_v8 (#419 — cardsTemperature fun-only)", () => {
+    expect(PALPITES_VERSION).toBe("palpites_v8");
+    expect(palpitesCartridge.version).toBe("palpites_v8");
   });
-  it("o tool NÃO declara campos de valor (firewall estrutural); declara firstHalfScore + firstToScore (#354)", () => {
+  it("o tool NÃO declara campos de valor (firewall estrutural); declara firstHalfScore + firstToScore (#354) + cardsTemperature (#419)", () => {
     const props = SUBMIT_PALPITE_TOOL.input_schema.properties as Record<
       string,
       unknown
     >;
     expect(Object.keys(props).sort()).toEqual([
+      "cardsTemperature",
       "citedMarkets",
       "confidence",
       "firstHalfScore",
@@ -225,6 +252,27 @@ describe("SUBMIT_PALPITE_TOOL", () => {
       "verdict",
     ]);
     expect(SUBMIT_PALPITE_TOOL.input_schema.additionalProperties).toBe(false);
+  });
+
+  it("#419 mirror: cardsTemperature tem enum ['pegado','muito_pegado'] e NÃO está em `required` (OPCIONAL — espelha o Zod .optional())", () => {
+    const props = SUBMIT_PALPITE_TOOL.input_schema.properties as Record<
+      string,
+      { enum?: unknown }
+    >;
+    expect(props.cardsTemperature.enum).toEqual(["pegado", "muito_pegado"]);
+    expect(SUBMIT_PALPITE_TOOL.input_schema.required).not.toContain(
+      "cardsTemperature",
+    );
+    // os 7 campos obrigatórios de hoje seguem required (cardsTemperature é o único opcional).
+    expect([...SUBMIT_PALPITE_TOOL.input_schema.required].sort()).toEqual([
+      "citedMarkets",
+      "confidence",
+      "firstHalfScore",
+      "firstToScore",
+      "narrative",
+      "probableScore",
+      "verdict",
+    ]);
   });
 });
 
@@ -261,6 +309,28 @@ describe("SYSTEM_PROMPT", () => {
     // A cláusula de coerência do badge liquidável (#354) segue no prompt.
     expect(p).toContain("placar provável");
     expect(p).toContain("coerente com o veredito");
+  });
+
+  it("#419: instrui cardsTemperature como campo OPCIONAL (omite em jogo morno) — temperatura, NÃO número", () => {
+    const p = palpitesCartridge.systemPrompt.toLowerCase();
+    expect(p).toContain("cardstemperature");
+    expect(p).toContain("pegado");
+    expect(p).toContain("muito_pegado");
+    // É opcional (pode omitir) e NUNCA um número de cartões.
+    expect(p).toMatch(/omita|opcional/);
+    expect(p).toContain("nunca um número de cartões");
+  });
+
+  it("#419 FIREWALL: proíbe mencionar cartões/árbitro/contagem em verdict ou narrative (a estimativa vai SÓ no campo estruturado)", () => {
+    const p = palpitesCartridge.systemPrompt.toLowerCase();
+    // O único vetor de fabricação não-coberto pelo value-guard/validador de fidelidade
+    // é fechado por uma cláusula de prompt: nada de cartão/árbitro na prosa.
+    expect(p).toContain("cardstemperature");
+    expect(p).toContain("verdict");
+    expect(p).toContain("narrative");
+    expect(p).toContain("árbitro");
+    // Proibição explícita de cartões na prosa.
+    expect(p).toMatch(/proibido mencionar cartões|nunca mencione cartões/);
   });
 });
 
@@ -466,6 +536,14 @@ describe("buildUserMessage", () => {
     const msg = buildUserMessage(input, { daysToKickoff: 2 });
     expect(msg).toContain("nenhuma análise disponível");
     expect(msg).toContain("Sua tarefa");
+  });
+
+  it("#419: a '# Sua tarefa' menciona cardsTemperature como OPCIONAL e reforça NÃO citar cartões/árbitro na prosa", () => {
+    const input = buildPredictionInput(baseArgs());
+    const msg = buildUserMessage(input, { daysToKickoff: 2 });
+    expect(msg).toContain("cardsTemperature");
+    expect(msg.toLowerCase()).toContain("pegado");
+    expect(msg.toLowerCase()).toMatch(/nunca cite cartões|omita/);
   });
 
   it("v4: pré-conta a forma (V/E/D) + renderiza a sequência rotulada do mais recente ao mais antigo", () => {

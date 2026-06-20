@@ -154,3 +154,55 @@ describe("buildSettleablePalpiteRows — emissão condicional (gates de coerênc
     expect(byType(rowsFor({ probableScore: { home: 1, away: 1 }, firstHalfScore: { home: 0, away: 0 }, firstToScore: "none" })).has("exact_score")).toBe(true);
   });
 });
+
+describe("buildSettleablePalpiteRows — cards (#419, fun-only)", () => {
+  it("GOLDEN: cardsTemperature 'pegado' → text '4+ cartões amarelos' + params {line:4, scope:'total'}", () => {
+    const m = byType(rowsFor({ cardsTemperature: "pegado" }));
+    expect(m.get("cards")?.text).toBe("4+ cartões amarelos");
+    expect(m.get("cards")?.params).toEqual({ line: 4, scope: "total" });
+  });
+
+  it("GOLDEN: cardsTemperature 'muito_pegado' → text '6+ cartões amarelos' + params {line:6, scope:'total'}", () => {
+    const m = byType(rowsFor({ cardsTemperature: "muito_pegado" }));
+    expect(m.get("cards")?.text).toBe("6+ cartões amarelos");
+    expect(m.get("cards")?.params).toEqual({ line: 6, scope: "total" });
+  });
+
+  it("a linha cards é settleable=false (fun-only — 'cards' FORA de SETTLEABLE_PALPITE_TYPES)", () => {
+    const m = byType(rowsFor({ cardsTemperature: "muito_pegado" }));
+    expect(m.get("cards")?.settleable).toBe(false);
+  });
+
+  it("OMITE a linha cards quando cardsTemperature é undefined (jogo morno / honesty valve)", () => {
+    // output() default NÃO traz cardsTemperature.
+    const m = byType(rowsFor());
+    expect(m.has("cards")).toBe(false);
+  });
+
+  it("FIREWALL (regression): o text da linha cards passa containsValueLanguage === false", () => {
+    // O loop golden acima usa rowsFor() cujo default NÃO tem cardsTemperature → não cobre
+    // a linha cards. Aqui forçamos a presença e varremos TODO o text incl. a linha cards.
+    for (const t of ["pegado", "muito_pegado"] as const) {
+      for (const r of rowsFor({ cardsTemperature: t })) {
+        expect(containsValueLanguage(r.text)).toBe(false);
+      }
+    }
+    // Pin explícito das duas strings fixas.
+    expect(containsValueLanguage("4+ cartões amarelos")).toBe(false);
+    expect(containsValueLanguage("6+ cartões amarelos")).toBe(false);
+  });
+
+  it("ortogonal ao placar: cards é emitido SEM gate de coerência (até num empate previsto)", () => {
+    const m = byType(
+      rowsFor({
+        probableScore: { home: 1, away: 1 },
+        firstHalfScore: { home: 0, away: 0 },
+        firstToScore: "none",
+        cardsTemperature: "pegado",
+      }),
+    );
+    // margin/clean_sheet/first_to_score são pulados no empate, mas cards SAI mesmo assim.
+    expect(m.has("cards")).toBe(true);
+    expect(m.get("cards")?.text).toBe("4+ cartões amarelos");
+  });
+});

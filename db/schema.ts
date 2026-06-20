@@ -83,6 +83,9 @@ export const palpiteTypeEnum = pgEnum("palpite_type", [
   "clean_sheet",
   "first_half_score",
   "first_to_score",
+  // #419 — cards (fun-only, v8): temperatura de cartões → linha FIXA de amarelos.
+  // FORA de SETTLEABLE_PALPITE_TYPES → settleable=false; o #394 liquida (total>=line).
+  "cards",
 ]);
 
 // ─── Catálogo de mercados (ADR 0015, decisão 3) ──────────────────────────────
@@ -473,16 +476,18 @@ export const palpites = pgTable(
     text: text().notNull(),
     // OPCIONAL: forma estruturada do palpite. Union LARGA por tipo (#354):
     // exact_score/first_half_score → {home, away}; margin → {side, minMargin};
-    // clean_sheet → {side}; first_to_score → {firstToScore}. O `$type` é só largo
-    // o bastante pros call-sites de ESCRITA — o read path NÃO confia nele: cada regra
-    // de settlement faz `safeParse` do seu próprio schema (defense-in-depth, igual ao
-    // exact_score). Validada por Zod no boundary de escrita (#315) e no compare de
+    // clean_sheet → {side}; first_to_score → {firstToScore}; cards → {line, scope}
+    // (#419, fun-only — o #394 lê pra liquidar total de amarelos >= line). O `$type` é
+    // só largo o bastante pros call-sites de ESCRITA — o read path NÃO confia nele: cada
+    // regra de settlement faz `safeParse` do seu próprio schema (defense-in-depth, igual
+    // ao exact_score). Validada por Zod no boundary de escrita (#315) e no compare de
     // settlement. Tipos fun-only podem deixar null.
     params: jsonb().$type<
       | { home: number; away: number } // exact_score, first_half_score
       | { side: "home" | "away"; minMargin: number } // margin
       | { side: "home" | "away" } // clean_sheet
       | { firstToScore: "home" | "away" | "none" } // first_to_score
+      | { line: number; scope: "total" } // cards (#419, fun-only; #394 lê p/ liquidar total>=line)
     >(),
     // Só exact_score=true na v1. O cron de placar filtra por (type='exact_score'
     // AND settleable=true) — defense-in-depth contra um seed errado.
