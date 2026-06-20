@@ -7,15 +7,18 @@
 import type { Effort } from "@/lib/ai/generation-params";
 import type { AIModel } from "@/lib/ai/models";
 
-// Os 6 status reais — espelham `AiCallStatus` (predict.ts) e `aiCallStatusEnum`
-// (db/schema.ts). União FECHADA: um provider novo NÃO adiciona status.
+// Os status reais — espelham `aiCallStatusEnum` (db/schema.ts). União FECHADA: um
+// provider novo NÃO adiciona status. `fidelity_divergence` (#380) é emitido SÓ pelo
+// generator de palpites (não por providers — fica fora do Exclude<> de erro do adapter
+// abaixo, junto de ok/invalid_output/tool_missing, que também não são donos de provider).
 export type AiCallStatus =
   | "ok"
   | "invalid_output"
   | "provider_error"
   | "timeout"
   | "tool_missing"
-  | "rate_limited";
+  | "rate_limited"
+  | "fidelity_divergence";
 
 // Tool definition provider-neutra. `Anthropic.Tool` é `{name, description,
 // input_schema}`; OpenAI (#231) é `{type:"function", function:{name, parameters,
@@ -95,12 +98,15 @@ export type AnalysisOk = {
 
 // Falha: o adapter CLASSIFICA o PRÓPRIO erro de SDK num SUBCONJUNTO de
 // `AiCallStatus`. O `Exclude<>` torna ERRO DE TIPO um adapter emitir
-// `ok`/`invalid_output`/`tool_missing` — esses três são donos de predict. `usage`
-// é `{0,0}` quando nenhum corpo chegou. `cause` preserva o erro de SDK original
-// pra `PredictError.cause`.
+// `ok`/`invalid_output`/`tool_missing`/`fidelity_divergence` — esses são donos do
+// predict/generator, não do provider. `usage` é `{0,0}` quando nenhum corpo chegou.
+// `cause` preserva o erro de SDK original pra `PredictError.cause`.
 export type AnalysisErr = {
   ok: false;
-  status: Exclude<AiCallStatus, "ok" | "invalid_output" | "tool_missing">;
+  status: Exclude<
+    AiCallStatus,
+    "ok" | "invalid_output" | "tool_missing" | "fidelity_divergence"
+  >;
   message: string;
   cause?: unknown;
   usage: AnalysisUsage;

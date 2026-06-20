@@ -101,6 +101,24 @@ export async function getEnableClvCapture(): Promise<boolean> {
 }
 
 /**
+ * Feature-flag (#380): a VALIDAÇÃO DE FIDELIDADE pós-síntese está ligada? Lê do
+ * single-row (id=1); default ON (true) — DUPLAMENTE seguro: a COLUNA default é true E
+ * o fallback de no-row é `?? true`, então um DB fresco/vazio (testes, primeiro deploy)
+ * também valida por padrão, casando o intent ON-dia-1 e exercitando o caminho real sem
+ * seed. Flip data-driven (sem deploy): UPDATE ai_config SET enable_fidelity_validation =
+ * false WHERE id = 1 → validação pulada, comportamento de hoje, ZERO custo extra. Default
+ * INVERTIDO vs. as flags acima (que são OFF-by-default) — o padrão sem-gates do dono.
+ */
+export async function getEnableFidelityValidation(): Promise<boolean> {
+  const rows = await db
+    .select({ enabled: aiConfig.enableFidelityValidation })
+    .from(aiConfig)
+    .where(eq(aiConfig.id, 1))
+    .limit(1);
+  return rows[0]?.enabled ?? true;
+}
+
+/**
  * Parâmetros de geração (ADR 0008, emenda 2). Lê do single-row (id=1) e cai nos
  * defaults seguros POR CAMPO se a row não existir ou o valor persistido for
  * inválido — espelha o fallback de getDefaultModelId (nunca manda lixo pro
