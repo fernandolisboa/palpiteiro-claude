@@ -1,3 +1,5 @@
+import Link from "next/link";
+
 import { Badge } from "@/components/ui/badge";
 import { LiveBadge } from "@/components/live-badge";
 import { TeamAvatar } from "@/components/team-avatar";
@@ -8,19 +10,43 @@ type Props = {
   view: MatchHeroView;
   status?: "scheduled" | "live" | "finished";
   score?: { home: number; away: number };
+  // Hrefs do histórico de cada time (#408), montados em nível de página a partir
+  // do canonical persistido (match.homeTeam/awayTeam) → imunes a mismatch por
+  // construção. Ausentes (default) → nome não clicável (call sites legados intactos).
+  homeHref?: string;
+  awayHref?: string;
 };
 
 // Bloco de um time: vertical no mobile (avatar em cima, nome centrado), linha no
 // desktop (avatar à esquerda, nome + rótulo casa/visitante à direita). O rótulo
 // (literal de apresentação; i18n é #323) só aparece no desktop. 22px do nome é um
 // outlier heroic sem degrau na escala (ADR 0029) — preservado em lg:.
-function TeamBlock({ team, role }: { team: MatchHeroView["home"]; role: string }) {
+function TeamBlock({
+  team,
+  role,
+  href,
+}: {
+  team: MatchHeroView["home"];
+  role: string;
+  href?: string;
+}) {
+  // Nome clicável (#408) → histórico do time. Sem href, segue um <span> simples.
+  const name = href ? (
+    <Link
+      href={href}
+      className="rounded-sm hover:underline focus-visible:outline-none focus-visible:ring-[3px] focus-visible:ring-ring/50"
+    >
+      {team.name}
+    </Link>
+  ) : (
+    team.name
+  );
   return (
     <div className="flex flex-col items-center gap-2.5 lg:flex-row lg:items-center lg:gap-3">
       <TeamAvatar initials={team.short.slice(0, 2)} hue={team.hue} size={56} flagCode={team.flagCode} />
       <div className="flex flex-col items-center lg:items-start">
         <span className="text-center text-body font-medium leading-tight tracking-tight lg:text-left lg:text-[22px] lg:tracking-[-0.02em]">
-          {team.name}
+          {name}
         </span>
         <span className="hidden font-mono text-eyebrow uppercase tracking-label text-muted-foreground lg:inline">
           {role}
@@ -35,7 +61,13 @@ function TeamBlock({ team, role }: { team: MatchHeroView["home"]; role: string }
 // gates (score→placar, status==='live'→pill, venue) ⇒ paridade de dados. Deltas de
 // apresentação conscientes: o desktop ganha a pill LIVE (estado raro, aditivo) e o
 // countdown é guardado por viewport (header no desktop, sob o placar no mobile).
-export function MatchHero({ view, status = "scheduled", score }: Props) {
+export function MatchHero({
+  view,
+  status = "scheduled",
+  score,
+  homeHref,
+  awayHref,
+}: Props) {
   const { home, away, league, when, countdown, venue } = view;
   return (
     <div className="px-5 pt-5 pb-5 lg:px-0 lg:pt-0 lg:pb-0">
@@ -58,7 +90,7 @@ export function MatchHero({ view, status = "scheduled", score }: Props) {
       </div>
 
       <div className="grid grid-cols-[1fr_auto_1fr] items-center gap-3 lg:flex lg:items-center lg:gap-8">
-        <TeamBlock team={home} role="casa" />
+        <TeamBlock team={home} role="casa" href={homeHref} />
         <div className="flex flex-col items-center gap-0.5">
           {score ? (
             <span className="font-mono text-display-md font-medium leading-none tabular-nums tracking-tight lg:text-[30px]">
@@ -82,7 +114,7 @@ export function MatchHero({ view, status = "scheduled", score }: Props) {
             </span>
           )}
         </div>
-        <TeamBlock team={away} role="visitante" />
+        <TeamBlock team={away} role="visitante" href={awayHref} />
       </div>
 
       {venue && (

@@ -1,4 +1,4 @@
-import { and, asc, desc, eq, gte, inArray, lte, sql } from "drizzle-orm";
+import { and, asc, desc, eq, gte, inArray, lt, lte, or, sql } from "drizzle-orm";
 
 import { matches } from "@/db/schema";
 import { db } from "@/lib/db";
@@ -49,6 +49,62 @@ export async function getMatchesInRange(opts: {
       opts.order === "desc" ? desc(matches.kickoffAt) : asc(matches.kickoffAt),
     );
   return opts.limit !== undefined ? ordered.limit(opts.limit) : ordered;
+}
+
+/**
+ * Histórico de um time (#408): duas fatias ordenadas e capadas — NÃO um range
+ * contíguo. O time é identificado pela string CANÔNICA (= `matches.homeTeam`/
+ * `awayTeam`, mesma fonte que `t.team` da classificação); não há team-id/teams
+ * table. PAST = jogos já apitados E encerrados (`status='finished'` — só esses têm
+ * placar confiável), mais recentes primeiro; FUTURE = agendados/ao-vivo no futuro,
+ * mais próximos primeiro. `now` é capturado uma vez pra as duas fatias casarem.
+ */
+export async function getMatchesByTeam(
+  team: string,
+  opts: {
+    league?: SupportedLeague;
+    pastLimit?: number;
+    futureLimit?: number;
+  } = {},
+): Promise<{ past: DbMatch[]; future: DbMatch[] }> {
+  const now = new Date();
+  // Filtro de time: o canonical aparece como mandante OU visitante. Mesma string
+  // dos dois lados (canonicalizeOrPassthrough na ingestão), então `or(eq,eq)` casa.
+  const teamFilter = or(eq(matches.homeTeam, team), eq(matches.awayTeam, team));
+  const leagueFilter = opts.league
+    ? eq(matches.league, opts.league)
+    : undefined;
+
+  const past = db
+    .select()
+    .from(matches)
+    .where(
+      and(
+        teamFilter,
+        leagueFilter,
+        lt(matches.kickoffAt, now),
+        eq(matches.status, "finished"),
+      ),
+    )
+    .orderBy(desc(matches.kickoffAt))
+    .limit(opts.pastLimit ?? 5);
+
+  const future = db
+    .select()
+    .from(matches)
+    .where(
+      and(
+        teamFilter,
+        leagueFilter,
+        gte(matches.kickoffAt, now),
+        inArray(matches.status, ["scheduled", "live"]),
+      ),
+    )
+    .orderBy(asc(matches.kickoffAt))
+    .limit(opts.futureLimit ?? 10);
+
+  const [pastRows, futureRows] = await Promise.all([past, future]);
+  return { past: pastRows, future: futureRows };
 }
 
 export async function getUpcomingMatches(opts: {

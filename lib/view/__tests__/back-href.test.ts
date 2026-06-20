@@ -74,4 +74,28 @@ describe("resolveBackHref", () => {
     );
     expect(resolveBackHref("/jogos?league=wc", "/dashboard")).toBe("/dashboard");
   });
+
+  it("segmento de path sob a base → aceita (rota /time/[team] sob /time)", () => {
+    expect(resolveBackHref("/time/Brazil", "/time")).toBe("/time/Brazil");
+    // canonical URL-encoded (espaços/acentos) também round-trips
+    expect(resolveBackHref("/time/S%C3%A3o%20Paulo%20FC", "/time")).toBe(
+      "/time/S%C3%A3o%20Paulo%20FC",
+    );
+    // delimitador `/` impede que /timeX passe por /time
+    expect(resolveBackHref("/timeX/Brazil", "/time")).toBe("/time");
+  });
+
+  it("lista de bases → aceita qualquer uma; fallback = a primeira", () => {
+    expect(resolveBackHref("/time/Brazil", ["/jogos", "/time"])).toBe(
+      "/time/Brazil",
+    );
+    expect(resolveBackHref("/jogos?league=wc", ["/jogos", "/time"])).toBe(
+      "/jogos?league=wc",
+    );
+    // back inválido (open-redirect) cai na PRIMEIRA base
+    expect(resolveBackHref("https://evil.com", ["/jogos", "/time"])).toBe(
+      "/jogos",
+    );
+    expect(resolveBackHref(undefined, ["/jogos", "/time"])).toBe("/jogos");
+  });
 });

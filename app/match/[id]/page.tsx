@@ -63,9 +63,11 @@ type PageProps = {
 
 export default async function MatchPage({ params, searchParams }: PageProps) {
   const { id } = await params;
-  // "Voltar" preserva o estado de busca da lista: recompõe a URL filtrada de
-  // /jogos a partir do param `back` (validado anti open-redirect; fallback /jogos).
-  const backHref = resolveBackHref((await searchParams).back, "/jogos");
+  // "Voltar" preserva o estado de busca da origem: recompõe a URL a partir do
+  // param `back` (validado anti open-redirect; fallback /jogos). Um jogo pode ser
+  // aberto da lista /jogos OU do histórico de um time (/time/[team], #408) — ambas
+  // as bases são aceitas; fallback = /jogos (origem default).
+  const backHref = resolveBackHref((await searchParams).back, ["/jogos", "/time"]);
   // Middleware garante sessão; redirect defensivo caso o matcher mude.
   const session = await auth();
   if (!session?.user?.id) redirect("/signin");
@@ -180,6 +182,11 @@ export default async function MatchPage({ params, searchParams }: PageProps) {
     awayTeam: match.awayTeam,
   };
   const leagueKey = leagueToKey(match.league);
+  // Histórico do time (#408): o nome de cada time no hero linka pra /time/[team].
+  // A chave É o canonical PERSISTIDO (match.homeTeam/awayTeam) — a MESMA string do
+  // WHERE em getMatchesByTeam → imune a mismatch por construção. URL-encoded (#407).
+  const homeTeamHref = `/time/${encodeURIComponent(match.homeTeam)}`;
+  const awayTeamHref = `/time/${encodeURIComponent(match.awayTeam)}`;
   // Espelha o gate de predict()/actions: pré-jogo = `scheduled` E kickoff no
   // FUTURO (#385). O enum DB pode ficar stale `scheduled` por até ~6h depois do
   // apito (cron 0 */6) — o gate não pode confiar só no status, ou um jogo já em
@@ -220,6 +227,8 @@ export default async function MatchPage({ params, searchParams }: PageProps) {
           heroPalpite={heroPalpite}
           heroSetId={heroSetId}
           heroSharedAt={heroSharedAt}
+          homeTeamHref={homeTeamHref}
+          awayTeamHref={awayTeamHref}
         />
       </div>
       <div className="hidden lg:block">
@@ -240,6 +249,8 @@ export default async function MatchPage({ params, searchParams }: PageProps) {
           heroPalpite={heroPalpite}
           heroSetId={heroSetId}
           heroSharedAt={heroSharedAt}
+          homeTeamHref={homeTeamHref}
+          awayTeamHref={awayTeamHref}
         />
       </div>
     </>
@@ -283,6 +294,10 @@ type Common = {
   // #384: id + shared_at do set mais recente, pro botão de compartilhar do HERO. null = sem set.
   heroSetId: string | null;
   heroSharedAt: Date | null;
+  // #408: hrefs do histórico de cada time, montados do canonical persistido →
+  // passados aos nomes do MatchHero (imunes a mismatch por construção).
+  homeTeamHref: string;
+  awayTeamHref: string;
 };
 
 function MobileMatch({
@@ -302,6 +317,8 @@ function MobileMatch({
   heroPalpite,
   heroSetId,
   heroSharedAt,
+  homeTeamHref,
+  awayTeamHref,
 }: Common) {
   return (
     <div className="min-h-screen bg-background text-foreground">
@@ -329,6 +346,8 @@ function MobileMatch({
             : "scheduled"
         }
         score={finalScore ?? undefined}
+        homeHref={homeTeamHref}
+        awayHref={awayTeamHref}
       />
 
       <div className="flex flex-col gap-3 px-5 pb-6">
@@ -388,6 +407,8 @@ function DesktopMatch({
   heroPalpite,
   heroSetId,
   heroSharedAt,
+  homeTeamHref,
+  awayTeamHref,
 }: Common) {
   return (
     <DesktopShell>
@@ -410,6 +431,8 @@ function DesktopMatch({
                 : "scheduled"
             }
             score={finalScore ?? undefined}
+            homeHref={homeTeamHref}
+            awayHref={awayTeamHref}
           />
         </div>
 
