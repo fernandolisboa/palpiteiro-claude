@@ -10,7 +10,10 @@ vi.mock("@/app/actions/predictions", () => ({
 
 import { PalpiteHero } from "@/components/palpites/palpite-hero";
 import { containsValueLanguage } from "@/lib/ai/palpites/value-language-guard";
-import type { PalpiteHeadlineView } from "@/lib/view/palpites-headline";
+import {
+  PALPITE_DISCLAIMER,
+  type PalpiteHeadlineView,
+} from "@/lib/view/palpites-headline";
 
 // Manchete POVOADA de propósito (com confiança qualitativa + placar) — a asserção-chave
 // é que NENHUM número de valor cruza pra UI. Espelha o POPULATED do guard de dado.
@@ -167,6 +170,43 @@ describe("PalpiteHero — ficha de dimensões (#354, major D)", () => {
     expect(html).toContain("aguardando placar");
     expect(leaksValue(html)).toBe(false);
     expect(html).not.toContain("edge-");
+  });
+});
+
+describe("PalpiteHero — fontes citadas (#378, ADR 0032)", () => {
+  const SOURCES = [
+    { title: "Palmeiras confirma escalação titular", url: "https://ge.globo.com/a" },
+    { title: "Verdão chega embalado pra decisão", url: "https://espn.com.br/b" },
+  ];
+
+  it("sem sources → seção escondida (sem 'o palpite leu'), mas disclaimer continua presente", () => {
+    const html = render({ heroPalpite: { ...POPULATED, sources: undefined } });
+    expect(html).not.toContain("o palpite leu");
+    // O disclaimer regulatório (último filho) NÃO depende das fontes.
+    expect(html).toContain(PALPITE_DISCLAIMER);
+  });
+
+  it("com sources → títulos viram links reais (href, nova aba, rel seguro, texto do título)", () => {
+    const html = render({ heroPalpite: { ...POPULATED, sources: SOURCES } });
+    expect(html).toContain("o palpite leu");
+    for (const s of SOURCES) {
+      expect(html).toContain(`href="${s.url}"`);
+      expect(html).toContain(s.title);
+    }
+    expect(html).toContain('target="_blank"');
+    expect(html).toContain('rel="noopener noreferrer"');
+  });
+
+  it("com sources → firewall continua limpo (sem número/termo de valor, sem classe edge-*)", () => {
+    const html = render({ heroPalpite: { ...POPULATED, sources: SOURCES } });
+    expect(leaksValue(html)).toBe(false);
+    expect(html).not.toContain("edge-");
+  });
+
+  it("disclaimer continua firewall-clean mesmo com as fontes presentes", () => {
+    const html = render({ heroPalpite: { ...POPULATED, sources: SOURCES } });
+    expect(html).toContain(PALPITE_DISCLAIMER);
+    expect(containsValueLanguage(PALPITE_DISCLAIMER)).toBe(false);
   });
 });
 

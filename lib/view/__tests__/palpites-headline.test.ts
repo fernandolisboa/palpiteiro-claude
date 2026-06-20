@@ -67,6 +67,20 @@ describe("toPalpiteHeadlineView", () => {
     ).toBe("lost");
   });
 
+  it("#378: thread headline.sources → view.sources quando presente (tool output, render verbatim)", () => {
+    const sources = [
+      { title: "Palmeiras confirma escalação", url: "https://ge.globo.com/a" },
+      { title: "Verdão vem embalado em casa", url: "https://espn.com.br/b" },
+    ];
+    const v = toPalpiteHeadlineView(source({ headline: { ...headline, sources } }));
+    expect(v.sources).toEqual(sources);
+  });
+
+  it("#378: view.sources é undefined quando a manchete não carrega sources (sets pré-#377)", () => {
+    // O fixture `headline` não tem sources → o passthrough rende undefined (seção escondida).
+    expect(toPalpiteHeadlineView(source()).sources).toBeUndefined();
+  });
+
   it("NÃO vaza sourcePredictionIds nem nenhum número de valor (firewall leg c)", () => {
     const v = toPalpiteHeadlineView(source({ outcome: { result: "won" } }));
     const serialized = JSON.stringify(v);
@@ -175,6 +189,16 @@ describe("toPalpiteHeadlineViewFromSet", () => {
     for (const term of ["edge", "ev", "stake", "odd", "yield", "R$", "%"]) {
       expect(serialized.toLowerCase()).not.toContain(term.toLowerCase());
     }
+  });
+
+  it("#378: sources da manchete do set atravessam pro view (mapper do set herda o passthrough)", () => {
+    const sources = [
+      { title: "Flamengo confirma time titular", url: "https://ge.globo.com/fla" },
+    ];
+    const v = toPalpiteHeadlineViewFromSet(
+      setWith({ headline: { ...headline, sources } }),
+    );
+    expect(v?.sources).toEqual(sources);
   });
 
   it("headline null (set antigo pré-#353) → null", () => {
