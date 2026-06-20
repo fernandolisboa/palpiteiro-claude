@@ -204,9 +204,9 @@ describe("SUBMIT_PALPITE_TOOL", () => {
       SUBMIT_PALPITE_TOOL.input_schema,
     );
   });
-  it("a versão é palpites_v4", () => {
-    expect(PALPITES_VERSION).toBe("palpites_v4");
-    expect(palpitesCartridge.version).toBe("palpites_v4");
+  it("a versão é palpites_v5", () => {
+    expect(PALPITES_VERSION).toBe("palpites_v5");
+    expect(palpitesCartridge.version).toBe("palpites_v5");
   });
   it("o tool NÃO declara campos de valor (firewall estrutural); declara firstHalfScore + firstToScore (#354)", () => {
     const props = SUBMIT_PALPITE_TOOL.input_schema.properties as Record<
@@ -244,6 +244,21 @@ describe("SYSTEM_PROMPT", () => {
     const p = palpitesCartridge.systemPrompt.toLowerCase();
     expect(p).toContain("pass");
     expect(p).toMatch(/mesmo que nenhum|mesmo sem|nunca recuse/);
+  });
+
+  it("#376 / ADR 0031: é value-aware — autoriza o lado menos óbvio/azarão usando as análises", () => {
+    const p = palpitesCartridge.systemPrompt.toLowerCase();
+    // O dogma do óbvio caiu: o prompt agora autoriza explicitamente o lado não-óbvio.
+    expect(p).toMatch(/menos óbvio|azarão|não-óbvio/);
+    // E o sinal das análises é insumo legítimo da previsão (não algo a ignorar).
+    expect(p).toContain("análises");
+  });
+
+  it("#376: coherence-survival — a expansão value-aware NÃO derruba a exigência de placar provável coerente (badge settleable)", () => {
+    const p = palpitesCartridge.systemPrompt.toLowerCase();
+    // A cláusula de coerência do badge liquidável (#354) segue no prompt.
+    expect(p).toContain("placar provável");
+    expect(p).toContain("coerente com o veredito");
   });
 });
 

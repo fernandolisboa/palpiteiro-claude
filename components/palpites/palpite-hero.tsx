@@ -8,9 +8,10 @@ import { SettleableBadge } from "@/components/palpites/palpite-badges";
 import { Button } from "@/components/ui/button";
 import { Callout } from "@/components/ui/callout";
 import { cn } from "@/lib/utils";
-import type {
-  PalpiteDimensionView,
-  PalpiteHeadlineView,
+import {
+  PALPITE_DISCLAIMER,
+  type PalpiteDimensionView,
+  type PalpiteHeadlineView,
 } from "@/lib/view/palpites-headline";
 
 // Rótulo qualitativo da confiança (firewall: PALAVRA, nunca dígito/%/meter/pip). O
@@ -48,6 +49,12 @@ type Props = {
  * (nunca meter/pip/%). O placar provável é tecido como "placar provável" em mono
  * neutro/quente-cuidadoso, NUNCA lido como odd, NUNCA verde edge-*. Os números de valor
  * são conteúdo LEGÍTIMO do detalhe recolhível neutro abaixo, nunca aqui.
+ *
+ * DISCLAIMER (ADR 0031 §5 / #376): a manchete agora é value-aware, então carrega um
+ * rótulo regulatório ESTÁTICO (PALPITE_DISCLAIMER) — "é só um palpite, não é recomendação
+ * de aposta". É invariante (não dado per-palpite), renderizado como footnote mudo no FIM
+ * do PopulatedHero, deliberadamente LONGE do placar/recibo pra não ler como disclaimer de
+ * liquidação. #378 dá a polish visual fina.
  */
 export function PalpiteHero({
   heroPalpite,
@@ -192,6 +199,13 @@ function PopulatedHero({
             <Sparkles className="size-3.5" /> Analisar de novo
           </Button>
         )}
+
+        {/* Disclaimer regulatório estático (ADR 0031 §5 / #376): ÚLTIMO filho, footnote
+            mudo — deliberadamente separado do placar/recibo pra não ler como aviso de
+            liquidação. #378 restiliza. */}
+        <p className="text-eyebrow-xs tracking-tight text-muted-fg-2">
+          {PALPITE_DISCLAIMER}
+        </p>
       </div>
     </WarmShell>
   );

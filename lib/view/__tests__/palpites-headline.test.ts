@@ -1,8 +1,10 @@
 import { describe, expect, it } from "vitest";
 
 import type { PalpiteHeadline } from "@/db/schema";
+import { containsValueLanguage } from "@/lib/ai/palpites/value-language-guard";
 import type { PalpiteSetWithLines } from "@/lib/db/queries/palpites";
 import {
+  PALPITE_DISCLAIMER,
   toDimensionViews,
   toPalpiteHeadlineView,
   toPalpiteHeadlineViewFromSet,
@@ -30,6 +32,17 @@ function source(
     ...over,
   };
 }
+
+// ─── PALPITE_DISCLAIMER (rótulo regulatório estático, ADR 0031 §5 / #376) ──────
+
+describe("PALPITE_DISCLAIMER", () => {
+  it("existe, é não-vazio e é firewall-clean (containsValueLanguage === false)", () => {
+    expect(typeof PALPITE_DISCLAIMER).toBe("string");
+    expect(PALPITE_DISCLAIMER.length).toBeGreaterThan(0);
+    // O disclaimer estático NUNCA pode carregar linguagem de valor (firewall leg b/c).
+    expect(containsValueLanguage(PALPITE_DISCLAIMER)).toBe(false);
+  });
+});
 
 describe("toPalpiteHeadlineView", () => {
   it("mapeia verdict/probableScore/confidence/narrative/citedMarkets; badge null quando pendente; dimensions vazio por default", () => {

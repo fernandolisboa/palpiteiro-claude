@@ -7,6 +7,15 @@ import type { PalpiteSetWithLines } from "@/lib/db/queries/palpites";
 // carregam edge/EV/odd, NENHUM número de valor cruza pra cá. Espelha o descarte de
 // `lib/view/palpites.ts:79` (que joga fora o aiCall integralmente).
 
+// Disclaimer regulatório ESTÁTICO da manchete value-aware (ADR 0031 §5 / #376). É um
+// INVARIANTE — rótulo fixo na cara do usuário, NÃO dado per-palpite: por isso é constante
+// de render (fonte única, #378 restiliza), não um campo de PalpiteHeadlineView nem do
+// jsonb (sem migration, sem schema). Firewall-safe por construção: ZERO linguagem de valor
+// (asserido por teste). Espelha docs/ops/05-legal-compliance.md §3 (aviso de risco) / §5
+// (ferramenta informativa, não casa de apostas).
+export const PALPITE_DISCLAIMER =
+  "É só um palpite, não é recomendação de aposta." as const;
+
 // #354: uma DIMENSÃO settleable secundária (margin/clean_sheet/first_half_score/
 // first_to_score) — um rótulo (placar/proposição, NUNCA número de valor) + o badge
 // acertou/errou/pendente. exact_score NÃO entra aqui (é a manchete/placar central).
