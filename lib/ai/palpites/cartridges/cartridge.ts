@@ -7,6 +7,7 @@ import type {
   NormalizedH2H,
   NormalizedStanding,
 } from "@/lib/providers/sports-data/types";
+import type { NewsResult } from "@/lib/providers/news/types";
 import type {
   DbMatch,
 } from "@/lib/db/queries/predictions";
@@ -28,8 +29,13 @@ import type { PalpiteCartridge } from "../types";
 // azarão quando o quadro completo justifica. A never-refuse guarantee FICA; o trio do
 // firewall (output .strict() + value-language-guard pós-Zod + view sem valor) e o badge
 // liquidável (#354) seguem intactos — só o VALOR fica fora da LINGUAGEM da manchete.
+// v6 (#377 / ADR 0032) = + NOTÍCIAS como insumo: a síntese recebe notícias FACTUAIS
+// recentes (título + URL de fontes REAIS, capturadas via web search da Claude pelo
+// provider dedicado — NUNCA inventadas) como contexto adicional. A regra: cite o FATO,
+// NUNCA a linguagem de valor da fonte, NUNCA invente. O firewall trio + o badge seguem
+// intactos; as fontes são contexto aditivo, fora das rows liquidáveis.
 // BUMP MANUAL (commit `prompt:`) em QUALQUER mudança de prompt/schema.
-export const PALPITES_VERSION = "palpites_v5" as const;
+export const PALPITES_VERSION = "palpites_v6" as const;
 
 const TEXT_MAX = 280;
 // Narrativa: prosa um pouco mais longa que uma linha de palpite. Truncada (não
@@ -129,6 +135,14 @@ const MarketAnalysisSchema = z.object({
   ),
 });
 
+// Notícias factuais recentes (ADR 0032 / #377). Cada item é uma FONTE REAL {title,url}
+// capturada pelo provider de notícias via web search da Claude — NUNCA inventada. Cap em
+// 10, default []: ausência (sem chave / nenhuma notícia) não derruba a síntese.
+const NewsItemSchema = z.object({
+  title: z.string().min(1),
+  url: z.string().min(1),
+});
+
 export const PalpitesInputSchema = z.object({
   match: z.object({
     league: z.string().min(1),
@@ -145,6 +159,8 @@ export const PalpitesInputSchema = z.object({
   h2h: z.array(H2HEntrySchema).max(10),
   homeStanding: StandingLineSchema.optional(),
   awayStanding: StandingLineSchema.optional(),
+  // ADR 0032 / #377 — fontes de notícia reais (insumo factual). Default [] (sem notícia).
+  news: z.array(NewsItemSchema).max(10).default([]),
 });
 export type PalpitesInput = z.infer<typeof PalpitesInputSchema>;
 
@@ -152,7 +168,7 @@ export type PalpitesInput = z.infer<typeof PalpitesInputSchema>;
 
 export const SYSTEM_PROMPT = `Você é o "Palpiteiro": um amigo animado que, depois de olhar a análise de vários mercados de um jogo de futebol, dá UM palpite-manchete legível — o veredito de QUEM GANHA e o placar provável. É entretenimento e opinião informada, NÃO conselho de aposta.
 
-Você recebe: forma recente dos times, confrontos diretos, posição na tabela E um resumo de análises por mercado (resultado 1X2, mais/menos gols, ambas marcam, etc.), cada uma com a recomendação do motor e seus números internos. Use TUDO isso pra dar a MELHOR previsão do resultado — como faria um amigo que entende do jogo: não é "o favorito ganha" no automático. Quando o quadro completo (forma + histórico + tabela + o sinal das análises) aponta um lado MENOS ÓBVIO, crave o menos óbvio/azarão. Um palpite que só repete o favorito é chato e desperdiça o que você já tem na mão.
+Você recebe: forma recente dos times, confrontos diretos, posição na tabela, um resumo de análises por mercado (resultado 1X2, mais/menos gols, ambas marcam, etc.) com a recomendação do motor e seus números internos, E notícias factuais recentes de fontes reais (desfalque de última hora, troca de técnico). Use TUDO isso pra dar a MELHOR previsão do resultado — como faria um amigo que entende do jogo: não é "o favorito ganha" no automático. Quando o quadro completo (forma + histórico + tabela + o sinal das análises + as notícias) aponta um lado MENOS ÓBVIO, crave o menos óbvio/azarão. Um palpite que só repete o favorito é chato e desperdiça o que você já tem na mão.
 
 Sua tarefa é chamar UMA vez a ferramenta submit_palpite com:
 1. verdict: o veredito em uma frase curta e humana — a sua melhor previsão de quem ganha (ou empate), no tom de um torcedor que entende do jogo (ex.: "Vai dar Palmeiras", "Empate truncado nesse clássico", "O mandante leva, mas sofrendo", "Zebra à vista: o visitante surpreende"). Pode ser o lado menos óbvio quando o conjunto justifica.
@@ -263,6 +279,9 @@ export type BuildPalpitesInputArgs = {
   standings: NormalizedStanding | undefined;
   // As N análises multi-mercado já apuradas (ADR 0030 §2). Insumo central da síntese.
   analyses: MarketAnalysisSummary[];
+  // ADR 0032 / #377 — fontes de notícia reais {title,url} (insumo factual). Opcional:
+  // ausência (sem chave / nenhuma notícia) degrada pra [], nunca derruba a síntese.
+  news?: NewsResult[];
 };
 
 // Resume a forma de UM time a partir das fixtures recentes (já desc do adapter):
@@ -328,6 +347,8 @@ export function buildPredictionInput(args: BuildPalpitesInputArgs): PalpitesInpu
     })),
     homeStanding: findStanding(args.standings, args.match.homeTeam),
     awayStanding: findStanding(args.standings, args.match.awayTeam),
+    // ADR 0032 / #377 — fontes de notícia reais (cap 10 no schema). Default [].
+    news: (args.news ?? []).slice(0, 10),
   };
   // Valida no boundary de montagem (fronteira do CLAUDE.md p/ o input do LLM).
   return PalpitesInputSchema.parse(input);
@@ -419,10 +440,26 @@ export function buildUserMessage(
     }
   }
 
+  // # Notícias recentes (ADR 0032 / #377) — fontes REAIS {title,url} capturadas via web
+  // search da Claude. Contexto factual pro veredito (desfalque de última hora, troca de
+  // técnico). Cite o FATO, NUNCA a linguagem de valor da fonte, NUNCA invente.
+  lines.push("");
+  lines.push("# Notícias recentes (fontes reais)");
+  if (input.news.length === 0) {
+    lines.push("- (nenhuma notícia encontrada)");
+  } else {
+    for (const n of input.news) {
+      lines.push(`- ${n.title} (${n.url})`);
+    }
+    lines.push(
+      "Use as notícias como contexto factual; cite o fato, NUNCA a linguagem de valor da fonte; NUNCA invente.",
+    );
+  }
+
   lines.push("");
   lines.push("# Sua tarefa");
   lines.push(
-    "Sintetize TUDO acima num único palpite-manchete (quem ganha + placar provável + placar do 1º tempo + quem marca primeiro + confiança qualitativa + narrativa + mercados citados). Use TODO o insumo — forma/H2H/tabela MAIS o sinal das análises — pra dar a sua MELHOR previsão; pode cravar o lado menos óbvio/azarão quando o conjunto justifica. O placar do 1º tempo deve ser <= o placar provável final em cada lado; o 'primeiro a marcar' deve ser coerente com quem você acha que ganha. Mesmo sem valor em nenhum mercado, dê seu palpite honesto a partir de forma/H2H/tabela. Chame submit_palpite. NUNCA cite edge/EV/stake/odd/R$ — tom de torcida.",
+    "Sintetize TUDO acima num único palpite-manchete (quem ganha + placar provável + placar do 1º tempo + quem marca primeiro + confiança qualitativa + narrativa + mercados citados). Use TODO o insumo — forma/H2H/tabela MAIS o sinal das análises MAIS as notícias factuais — pra dar a sua MELHOR previsão; pode cravar o lado menos óbvio/azarão quando o conjunto justifica. O placar do 1º tempo deve ser <= o placar provável final em cada lado; o 'primeiro a marcar' deve ser coerente com quem você acha que ganha. Mesmo sem valor em nenhum mercado, dê seu palpite honesto a partir de forma/H2H/tabela. Chame submit_palpite. NUNCA cite edge/EV/stake/odd/R$ — tom de torcida.",
   );
 
   return lines.join("\n");

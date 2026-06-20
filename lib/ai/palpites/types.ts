@@ -6,6 +6,10 @@ import type { DbPalpite, DbPalpiteSet } from "@/lib/db/queries/palpites";
 
 import type { MarketAnalysisSummary } from "./synthesis-input";
 
+// Re-export pra os tipos do cartucho resolverem sem ciclo cross-layer (lib/ai/palpites
+// já importa lib/providers/sports-data; lib/providers/news é a mesma direção). ADR 0032.
+export type { NewsResult } from "@/lib/providers/news/types";
+
 // ─── Cartridge contract (disjunto do MarketCartridge) ─────────────────────────
 //
 // O cartucho de palpite é um tipo NOVO MENOR que MarketCartridge (ADR 0028): SEM

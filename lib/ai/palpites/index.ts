@@ -6,6 +6,8 @@ import { extractDbCause } from "@/lib/db/pg-error";
 import type { DbPalpiteSet } from "@/lib/db/queries/palpites";
 import { getSportsDataProvider } from "@/lib/providers/sports-data";
 import type { FixtureRef } from "@/lib/providers/sports-data/types";
+import { getNewsProvider } from "@/lib/providers/news";
+import type { NewsResult } from "@/lib/providers/news/types";
 import { getGenerationParams } from "@/lib/db/queries/ai-config";
 
 import { persistAiCallError } from "../ai-call-logging";
@@ -90,13 +92,41 @@ export async function generatePalpites({
     homeTeam: match.homeTeam,
     awayTeam: match.awayTeam,
   };
-  const [fixture, homeForm, awayForm, h2h, standings] = await Promise.all([
-    provider.getFixtureByMatch(ref),
-    provider.getTeamForm(match.homeTeam, match.league, FORM_LAST),
-    provider.getTeamForm(match.awayTeam, match.league, FORM_LAST),
-    provider.getH2H(match.homeTeam, match.awayTeam, match.league, H2H_LAST),
-    provider.getStandings(match.league),
-  ]);
+  // Notícias (ADR 0032 / #377): provider DEDICADO via web search da Claude, em paralelo
+  // ao fetch de suporte. Degrada GRACIOSO (mirror absences): QUALQUER falha → results:[]
+  // e o palpite ainda embarca — NUNCA bloqueia a manchete por notícia. O provider já loga
+  // seu próprio ai_call (predict.ts é a única porta); aqui só capturamos o resultado.
+  const newsFetch = getNewsProvider()
+    .getNewsByMatch(
+      {
+        league: match.league,
+        homeTeam: match.homeTeam,
+        awayTeam: match.awayTeam,
+        kickoffAt: match.kickoffAt.toISOString(),
+      },
+      { userId, matchId },
+    )
+    .catch((err) => {
+      console.error(
+        JSON.stringify({
+          scope: "generatePalpites",
+          matchId,
+          error: "news_fetch_failed",
+          message: err instanceof Error ? err.message : String(err),
+        }),
+      );
+      return { results: [] as NewsResult[], aiCall: null, unavailable: true };
+    });
+
+  const [fixture, homeForm, awayForm, h2h, standings, newsOutcome] =
+    await Promise.all([
+      provider.getFixtureByMatch(ref),
+      provider.getTeamForm(match.homeTeam, match.league, FORM_LAST),
+      provider.getTeamForm(match.awayTeam, match.league, FORM_LAST),
+      provider.getH2H(match.homeTeam, match.awayTeam, match.league, H2H_LAST),
+      provider.getStandings(match.league),
+      newsFetch,
+    ]);
 
   // 5. Monta input (com as análises) + 6. userMessage.
   const input = cartridge.buildPredictionInput({
@@ -112,6 +142,8 @@ export async function generatePalpites({
     h2h,
     standings,
     analyses,
+    // ADR 0032 / #377 — notícias factuais reais como insumo da síntese.
+    news: newsOutcome.results,
   });
   const daysToKickoff = Math.max(
     0,
@@ -332,6 +364,11 @@ export async function generatePalpites({
           narrative: output.narrative,
           citedMarkets: output.citedMarkets,
           sourcePredictionIds,
+          // ADR 0032 / #377 — fontes de notícia REAIS capturadas que alimentaram o
+          // palpite (no jsonb existente, sem migration). Omitido quando não houve notícia.
+          ...(newsOutcome.results.length > 0
+            ? { sources: newsOutcome.results }
+            : {}),
         },
       })
       .returning();

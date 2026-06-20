@@ -101,6 +101,23 @@ describe("openaiProvider — contrato do seam", () => {
   });
 });
 
+describe("openaiProvider.runAnalysis — guard de server-tool (ADR 0032 / #377)", () => {
+  it("serverTool presente → AnalysisErr(provider_error) bem-formado, NUNCA silencia nem chama o SDK", async () => {
+    const result = await openaiProvider.runAnalysis({
+      ...REQUEST,
+      serverTool: { kind: "web_search", maxUses: 1 },
+    });
+    expect(result.ok).toBe(false);
+    if (result.ok) throw new Error("unreachable");
+    expect(result.status).toBe("provider_error");
+    expect(result.usage).toEqual({ inputTokens: 0, outputTokens: 0 });
+    // payloads serializáveis (jsonb NOT NULL) + nenhuma chamada paga.
+    expect(result.inputPayload).toBeTypeOf("object");
+    expect(result.outputPayload).toBeTypeOf("object");
+    expect(openaiCreate).not.toHaveBeenCalled();
+  });
+});
+
 describe("openaiProvider.runAnalysis — normalização do structured output", () => {
   it("arguments STRING JSON → toolInput PARSEADO (o passo de prova falsificável)", async () => {
     openaiCreate.mockResolvedValue(completion());

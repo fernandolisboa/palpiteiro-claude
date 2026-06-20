@@ -104,6 +104,13 @@ vi.mock("@/lib/ai/providers", () => ({
   getProviderForModel: vi.fn(() => fakeProvider),
 }));
 
+// Provider de notícias (ADR 0032 / #377): mockado no seam. Default = sem notícia
+// (degrade gracioso). Casos específicos sobrescrevem `getNewsByMatch`.
+const getNewsByMatch = vi.fn();
+vi.mock("@/lib/providers/news", () => ({
+  getNewsProvider: vi.fn(() => ({ getNewsByMatch })),
+}));
+
 import { generatePalpites, PalpiteError } from "@/lib/ai/palpites";
 
 function fixture(home: string, away: string, sh: number, sa: number): NormalizedFixture {
@@ -169,6 +176,13 @@ beforeEach(() => {
   runAnalysis.mockReset();
   hasKey.mockReset();
   hasKey.mockReturnValue(true);
+  getNewsByMatch.mockReset();
+  // Default: provider de notícias inerte (sem notícia). Degrade gracioso é o normal.
+  getNewsByMatch.mockResolvedValue({
+    results: [],
+    aiCall: null,
+    unavailable: true,
+  });
   getFixtureByMatch.mockResolvedValue({
     ...fixture("CR Flamengo", "Fluminense FC", 0, 0),
     venue: "Maracanã",
@@ -203,11 +217,11 @@ describe("generatePalpites (síntese) — caminho ok", () => {
     const aiCallRow = insertValues.mock.calls[0][0] as Record<string, unknown>;
     expect(aiCallRow.status).toBe("ok");
     expect(aiCallRow.model).toBe("claude-haiku-4-5");
-    expect(aiCallRow.promptVersion).toBe("palpites_v5");
+    expect(aiCallRow.promptVersion).toBe("palpites_v6");
 
     const setRow = insertValues.mock.calls[1][0] as Record<string, unknown>;
     expect(setRow.modelVersion).toBe("claude-haiku-4-5");
-    expect(setRow.promptVersion).toBe("palpites_v5");
+    expect(setRow.promptVersion).toBe("palpites_v6");
     expect(setRow.aiCallId).toBe("row-1");
     // headline jsonb: a manchete SEM placar (vira a linha) e SEM número de valor.
     expect(setRow.headline).toEqual({
@@ -330,6 +344,80 @@ describe("generatePalpites (síntese) — firewall de value-language (blocker #5
         (c) => (c[0] as { modelVersion?: string }).modelVersion !== undefined,
       ),
     ).toBe(false);
+  });
+});
+
+describe("generatePalpites (síntese) — notícias (#377 / ADR 0032)", () => {
+  const newsSources = [
+    { title: "Flamengo perde titular por lesão", url: "https://ge.globo.com/x" },
+    { title: "Fluminense confirma escalação", url: "https://lance.com.br/y" },
+  ];
+
+  it("alimenta o userMessage com as notícias E persiste headline.sources", async () => {
+    getNewsByMatch.mockResolvedValue({
+      results: newsSources,
+      aiCall: { id: "news-1" },
+      unavailable: false,
+    });
+    runAnalysis.mockResolvedValue(okResult(validHeadline));
+    await generatePalpites(baseCall);
+
+    // O input do LLM carrega a seção de notícias + o título real da fonte.
+    const req = runAnalysis.mock.calls[0][0] as AnalysisRequest;
+    expect(req.userMessage).toContain("Notícias recentes");
+    expect(req.userMessage).toContain("Flamengo perde titular por lesão");
+
+    // A headline persiste as fontes capturadas {title,url}.
+    const setRow = insertValues.mock.calls[1][0] as Record<string, unknown>;
+    const headline = setRow.headline as { sources?: unknown };
+    expect(headline.sources).toEqual(newsSources);
+  });
+
+  it("sem notícia (degrade gracioso) → headline SEM sources; palpite ainda embarca", async () => {
+    getNewsByMatch.mockResolvedValue({ results: [], aiCall: null, unavailable: true });
+    runAnalysis.mockResolvedValue(okResult(validHeadline));
+    const res = await generatePalpites(baseCall);
+    const setRow = insertValues.mock.calls[1][0] as Record<string, unknown>;
+    const headline = setRow.headline as Record<string, unknown>;
+    expect(headline.sources).toBeUndefined();
+    // O set ainda foi gravado (notícia nunca bloqueia a manchete).
+    expect(setRow.modelVersion).toBe("claude-haiku-4-5");
+    expect(res.palpiteSet).toBeDefined();
+  });
+
+  it("FIREWALL-REGRESSION: termo de valor numa NOTÍCIA não derruba a síntese NEM vaza pra manchete", async () => {
+    // Uma fonte com "odd" no título é INPUT (sources), não verdict/narrative — não
+    // pode tropeçar no guard de value-language. E o output limpo (validHeadline) não
+    // vaza o termo pra manchete. Defesa-em-profundidade: se o LLM ECOASSE "odd" no
+    // output, o guard existente ainda pegaria (provado nos testes de firewall acima).
+    getNewsByMatch.mockResolvedValue({
+      results: [
+        { title: "Palmeiras com odd alta no mercado", url: "https://ge.globo.com/odd" },
+      ],
+      aiCall: { id: "news-2" },
+      unavailable: false,
+    });
+    runAnalysis.mockResolvedValue(okResult(validHeadline));
+
+    // Não lança (a notícia com "odd" é fonte, não manchete).
+    const res = await generatePalpites(baseCall);
+    expect(res.palpiteSet).toBeDefined();
+
+    // A fonte (com "odd") foi persistida como sources…
+    const setRow = insertValues.mock.calls[1][0] as Record<string, unknown>;
+    const headline = setRow.headline as {
+      verdict: string;
+      narrative: string;
+      sources?: Array<{ title: string }>;
+    };
+    expect(headline.sources?.[0].title).toContain("odd");
+    // …mas NÃO vazou pra verdict/narrative (a manchete segue limpa).
+    const serialized = `${headline.verdict} ${headline.narrative}`.toLowerCase();
+    expect(serialized).not.toContain("odd");
+
+    // O ai_call(ok) foi gravado (a síntese não foi rejeitada pelo firewall).
+    const aiCallRow = insertValues.mock.calls[0][0] as Record<string, unknown>;
+    expect(aiCallRow.status).toBe("ok");
   });
 });
 

@@ -2,6 +2,7 @@ import type Anthropic from "@anthropic-ai/sdk";
 
 import type { Effort } from "@/lib/ai/generation-params";
 import type { AIModel } from "@/lib/ai/models";
+import type { ServerToolDef } from "../types";
 
 // Constrói o corpo da request ao Claude de forma MODEL-AWARE. Encapsulado aqui
 // (em vez de inline em predict.ts) pra que a lógica condicional — a única parte
@@ -41,7 +42,47 @@ export function buildAnthropicRequest(args: {
   // recai no default do registry / do servidor.
   effort?: Effort;
   temperature?: number;
+  // ADITIVO opt-in (ADR 0032, #377). Presente ⇒ ramo server-tool; ausente ⇒ caminho
+  // forçado byte-idêntico (todo o resto deste builder).
+  serverTool?: ServerToolDef;
 }): Anthropic.MessageCreateParamsNonStreaming {
+  // RAMO SERVER-TOOL (ADR 0032, #377). PRECEDE tudo: web search precisa de
+  // tool_choice:auto (NÃO o submit forçado) e roda no caminho temperature (Haiku/
+  // Sonnet 4.5 do registry). NÃO declara o submit tool nem code_execution.
+  //
+  // GOTCHA (Anthropic API, ADR 0032 §1): usamos `web_search_20250305` (BÁSICA), travado
+  // a DOIS fatos: (1) o registry pós-#374 só tem modelos temperature-mode (Sonnet 4.5 /
+  // Haiku 4.5); a variante `web_search_20260209` (dynamic filtering) exige Opus 4.6+/
+  // Sonnet 4.6 — fora do registry — E puxa a code_execution tool por baixo (confunde o
+  // modelo). (2) É first-party Anthropic (a API que este app usa): no Bedrock web search
+  // não existe e no Vertex só a básica. Validado contra a doc de web search da Anthropic
+  // na implementação. NÃO troque por `_20260209` sem subir o tier do registry.
+  if (args.serverTool) {
+    const webSearch = {
+      type: "web_search_20250305",
+      name: "web_search",
+      ...(args.serverTool.maxUses !== undefined
+        ? { max_uses: args.serverTool.maxUses }
+        : {}),
+      ...(args.serverTool.allowedDomains
+        ? { allowed_domains: args.serverTool.allowedDomains }
+        : {}),
+    } as unknown as Anthropic.Tool;
+    return {
+      model: args.model.id,
+      system: args.system,
+      messages: [{ role: "user", content: args.userMessage }],
+      tools: [webSearch],
+      tool_choice: { type: "auto" },
+      max_tokens: args.maxTokens,
+      // Caminho temperature (Haiku/Sonnet 4.5): SEM thinking; temperature opcional
+      // (default do registry → 0.3). SEM forçar submit, então `auto` é válido.
+      ...(args.model.thinkingMode === "temperature"
+        ? { temperature: args.temperature ?? args.model.temperature ?? 0.3 }
+        : {}),
+    };
+  }
+
   const base: Anthropic.MessageCreateParamsNonStreaming = {
     model: args.model.id,
     system: args.system,

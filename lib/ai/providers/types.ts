@@ -26,6 +26,21 @@ export type ToolDef = {
   inputSchema: Record<string, unknown>;
 };
 
+// SERVER-TOOL aditivo, opt-in (ADR 0032, #377). É a porta pra ferramentas
+// EXECUTADAS NO SERVIDOR da Claude (web search) — distinta do `tool`/`toolName`
+// forçado (submit_palpite/submit_prediction). `serverTool` PRESENTE ⇒ o adapter
+// entra no ramo server-tool (tool_choice:auto, sem forçar o submit); AUSENTE (todo
+// caller de hoje) ⇒ caminho forçado BYTE-IDÊNTICO (preserva os golden tests). Só o
+// adapter Anthropic implementa; o OpenAI rejeita com provider_error (news só roteia
+// pra Anthropic).
+export type ServerToolDef = {
+  kind: "web_search";
+  // Curadoria de domínios (ADR 0032 §3) — restringe a busca a fontes reputadas.
+  allowedDomains?: string[];
+  // Teto de buscas por chamada (ADR 0032 §4) — custo metered, limitado por construção.
+  maxUses?: number;
+};
+
 // O que predict entrega ao seam (substitui os args de `buildAnthropicRequest`).
 // Tudo já é provider-neutro em predict hoje. O MAPEAMENTO de `effort`/`temperature`
 // pros campos do request (adaptive→thinking / temperature→forced-tool; modelos de
@@ -40,6 +55,11 @@ export type AnalysisRequest = {
   maxTokens: number;
   effort?: Effort;
   temperature?: number;
+  // ADITIVO opt-in (ADR 0032, #377). Presente ⇒ o adapter Anthropic usa a server
+  // tool (web search, tool_choice:auto) em vez de forçar o `tool`. Ausente (todo
+  // caller de hoje) ⇒ caminho forçado byte-idêntico. `tool`/`toolName` ainda são
+  // REQUIRED no shape — no modo server-tool o adapter os IGNORA (não há submit forçado).
+  serverTool?: ServerToolDef;
 };
 
 // Uso provider-neutro. Os ÚNICOS dois campos consumidos hoje (→ `calculateCost` +
@@ -66,6 +86,11 @@ export type AnalysisOk = {
   outputPayload: Record<string, unknown>;
   stopReason: string | null;
   latencyMs: number;
+  // ADITIVO opt-in (ADR 0032, #377). Só populado no modo server-tool: os blocos de
+  // conteúdo CRUS da resposta final (após resolver pause_turn), pra o provider de
+  // notícias andar atrás dos `web_search_tool_result`. `undefined` no caminho forçado
+  // (não toca os golden tests). O adapter NÃO interpreta — devolve verbatim.
+  contentBlocks?: unknown[];
 };
 
 // Falha: o adapter CLASSIFICA o PRÓPRIO erro de SDK num SUBCONJUNTO de
