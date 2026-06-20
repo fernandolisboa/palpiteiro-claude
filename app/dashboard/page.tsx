@@ -3,7 +3,10 @@ import { redirect } from "next/navigation";
 import { Inbox } from "lucide-react";
 
 import { BankrollChart } from "@/components/dashboard/bankroll-chart";
-import { DashboardFiltersBar } from "@/components/dashboard/dashboard-filters";
+import {
+  DashboardFiltersBar,
+  currentDashboardHref,
+} from "@/components/dashboard/dashboard-filters";
 import { KpiCards } from "@/components/dashboard/kpi-cards";
 import { MarketSegments } from "@/components/dashboard/market-segments";
 import { PredictionsTable } from "@/components/dashboard/predictions-table";
@@ -47,6 +50,10 @@ export default async function DashboardPage({ searchParams }: PageProps) {
   );
   const { kpis, segments, series, tableRows, availableLeagues, availableMarkets } =
     deriveDashboardView(rows, filters);
+
+  // URL filtrada atual — propagada aos links da tabela pra preservar a busca ao
+  // abrir uma predição e voltar.
+  const listHref = currentDashboardHref(filters);
 
   return (
     <DesktopShell>
@@ -102,7 +109,7 @@ export default async function DashboardPage({ searchParams }: PageProps) {
                 leagues={availableLeagues}
                 markets={availableMarkets}
               />
-              <PredictionsTable rows={tableRows} />
+              <PredictionsTable rows={tableRows} listHref={listHref} />
             </section>
           </div>
         )}

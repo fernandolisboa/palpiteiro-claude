@@ -9,6 +9,23 @@ import type { LeagueKey } from "@/lib/view/types";
 export type FilterDimension = "status" | "league" | "market";
 
 /**
+ * URL do dashboard pros filtros ATUAIS (omite os defaults "all"). Pura/testável.
+ * Usada pra preservar o estado de busca ao abrir uma predição e voltar (param
+ * `back` em PredictionsTable), e como base do `buildDashboardHref`.
+ */
+export function currentDashboardHref(
+  filters: DashboardFilters,
+  basePath = "/dashboard",
+): string {
+  const params = new URLSearchParams();
+  if (filters.status !== "all") params.set("status", filters.status);
+  if (filters.league !== "all") params.set("league", filters.league);
+  if (filters.market !== "all") params.set("market", filters.market);
+  const qs = params.toString();
+  return qs ? `${basePath}?${qs}` : basePath;
+}
+
+/**
  * Href preservando as outras dimensões; "all" limpa o param. Função pura
  * (testável sem render), espelha `buildHref` de `league-tabs`.
  */
@@ -18,13 +35,7 @@ export function buildDashboardHref(
   value: string,
   basePath = "/dashboard",
 ): string {
-  const next: DashboardFilters = { ...current, [dimension]: value };
-  const params = new URLSearchParams();
-  if (next.status !== "all") params.set("status", next.status);
-  if (next.league !== "all") params.set("league", next.league);
-  if (next.market !== "all") params.set("market", next.market);
-  const qs = params.toString();
-  return qs ? `${basePath}?${qs}` : basePath;
+  return currentDashboardHref({ ...current, [dimension]: value }, basePath);
 }
 
 type Option = { value: string; label: string };

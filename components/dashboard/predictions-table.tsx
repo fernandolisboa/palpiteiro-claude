@@ -11,6 +11,7 @@ import {
   TableHeader,
   TableRow,
 } from "@/components/ui/table";
+import { appendBackParam } from "@/lib/view/back-href";
 import { LEAGUE_LABEL } from "@/lib/format";
 import { cn } from "@/lib/utils";
 import type { PredictionRowView } from "@/lib/view/dashboard";
@@ -43,9 +44,13 @@ function recClass(rec: PredictionRowView["rec"]): string {
 export function PredictionsTable({
   rows,
   basePath = "/dashboard",
+  listHref,
 }: {
   rows: PredictionRowView[];
   basePath?: string;
+  // URL filtrada do dashboard (/dashboard?…) → preserva o estado de busca ao abrir
+  // uma predição e voltar. Ausente → link de detalhe limpo.
+  listHref?: string;
 }) {
   if (rows.length === 0) {
     return <EmptyState title="Nenhuma predição com esses filtros." />;
@@ -87,7 +92,7 @@ export function PredictionsTable({
               <TableRow key={r.id} className="border-border-subtle">
                 <TableCell className="max-w-[220px]">
                   <Link
-                    href={`${basePath}/${r.id}`}
+                    href={appendBackParam(`${basePath}/${r.id}`, listHref, basePath)}
                     className="rounded-sm font-medium tracking-tight hover:underline focus-visible:outline-none focus-visible:ring-[3px] focus-visible:ring-ring/50"
                   >
                     {r.home} × {r.away}
@@ -136,7 +141,7 @@ export function PredictionsTable({
                 </TableCell>
                 <TableCell className="w-8">
                   <Link
-                    href={`${basePath}/${r.id}`}
+                    href={appendBackParam(`${basePath}/${r.id}`, listHref, basePath)}
                     aria-label="Abrir predição"
                     className="rounded-sm text-muted-fg-2 hover:text-foreground focus-visible:outline-none focus-visible:ring-[3px] focus-visible:ring-ring/50"
                   >

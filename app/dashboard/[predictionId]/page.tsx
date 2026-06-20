@@ -3,6 +3,7 @@ import { notFound, redirect } from "next/navigation";
 import { PredictionDetail } from "@/components/dashboard/prediction-detail";
 import { DesktopShell } from "@/components/desktop-shell";
 import { auth } from "@/auth";
+import { resolveBackHref } from "@/lib/view/back-href";
 import { getClosingSnapshotForDetail } from "@/lib/db/queries/clv-snapshots";
 import { getPredictionDetailForUser } from "@/lib/db/queries/dashboard";
 import { toPredictionDetailView } from "@/lib/view/dashboard";
@@ -11,10 +12,16 @@ export const dynamic = "force-dynamic";
 
 type PageProps = {
   params: Promise<{ predictionId: string }>;
+  searchParams: Promise<{ back?: string }>;
 };
 
-export default async function PredictionDetailPage({ params }: PageProps) {
+export default async function PredictionDetailPage({
+  params,
+  searchParams,
+}: PageProps) {
   const { predictionId } = await params;
+  // "Voltar" preserva os filtros do dashboard via o param `back` (validado).
+  const backHref = resolveBackHref((await searchParams).back, "/dashboard");
 
   const session = await auth();
   if (!session?.user?.id) redirect("/signin");
@@ -37,7 +44,7 @@ export default async function PredictionDetailPage({ params }: PageProps) {
 
   return (
     <DesktopShell>
-      <PredictionDetail view={view} />
+      <PredictionDetail view={view} backHref={backHref} />
     </DesktopShell>
   );
 }

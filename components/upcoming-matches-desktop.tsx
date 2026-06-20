@@ -9,6 +9,7 @@ import { Button } from "@/components/ui/button";
 import { Card } from "@/components/ui/card";
 import { DesktopStatusCell } from "@/components/desktop-status-cell";
 import { TeamAvatar } from "@/components/team-avatar";
+import { appendBackParam } from "@/lib/view/back-href";
 import { LEAGUE_LABEL } from "@/lib/format";
 import type { MatchRowView } from "@/lib/view/types";
 
@@ -25,8 +26,12 @@ const STATUS_LABEL: Record<"postponed" | "cancelled", string> = {
 
 export function UpcomingMatchesDesktop({
   matches,
+  listHref,
 }: {
   matches: MatchRowView[];
+  // URL filtrada da lista de origem (/jogos?…) pra preservar o estado de busca
+  // ao abrir um jogo e voltar. Ausente → link de detalhe limpo (goldens intactos).
+  listHref?: string;
 }) {
   const [visible, setVisible] = useState(INITIAL_BATCH);
   const slice = matches.slice(0, visible);
@@ -42,7 +47,7 @@ export function UpcomingMatchesDesktop({
       {slice.map((m, i, arr) => (
         <Link
           key={m.id}
-          href={`/match/${m.id}`}
+          href={appendBackParam(`/match/${m.id}`, listHref, "/jogos")}
           className={`grid ${UPCOMING_GRID} items-center gap-4 px-5 py-4 transition-colors hover:bg-surface-2 focus-visible:outline-none focus-visible:ring-[3px] focus-visible:ring-ring/50 focus-visible:ring-inset ${
             i === arr.length - 1 ? "" : "border-b border-border-subtle"
           }`}
