@@ -8,7 +8,10 @@ import { getSportsDataProvider } from "@/lib/providers/sports-data";
 import type { FixtureRef } from "@/lib/providers/sports-data/types";
 import { getNewsProvider } from "@/lib/providers/news";
 import type { NewsResult } from "@/lib/providers/news/types";
-import { getGenerationParams } from "@/lib/db/queries/ai-config";
+import {
+  getGenerationParams,
+  getEnableFidelityValidation,
+} from "@/lib/db/queries/ai-config";
 
 import { persistAiCallError } from "../ai-call-logging";
 import { calculateCost } from "../cost";
@@ -16,6 +19,7 @@ import { MODEL_REGISTRY, isAIProvider, type AIModelId } from "../models";
 import { getProviderForModel } from "../providers";
 import type { AnalysisRequest } from "../providers/types";
 import { type PalpiteSynthesisOutput } from "./cartridges/cartridge";
+import { checkFidelity } from "./fidelity-validator";
 import { getPalpiteCartridge } from "./registry";
 import { buildSettleablePalpiteRows } from "./settleable-rows";
 import { containsValueLanguage } from "./value-language-guard";
@@ -33,6 +37,15 @@ export type {
 
 const FORM_LAST = 5;
 const H2H_LAST = 5;
+
+// #380 — quantas SÍNTESES PAGAS no máximo por geração quando a validação de fidelidade
+// está ON. DEFAULT = 1: na divergência, DEGRADA IMEDIATAMENTE (palpite:null) sem pagar
+// uma 2ª chamada. Racional: uma contagem errada a temp 0.3 na MESMA request é sistemática,
+// não ruído de amostragem → re-rodar raramente recupera; descartar o palpite é a escolha
+// honesta e custo-neutra (alinha com prefer-skip-over-silent-wrong). Subir pra 2 (uma
+// regeneração) é um flip trivial de preferência do dono — e valeria um nudge de prompt
+// corretivo na retry pra a regen valer o custo (non-goal de v1).
+const MAX_FIDELITY_ATTEMPTS = 1;
 
 /**
  * Passo de SÍNTESE do palpite-first (ADR 0030 / #353): turna as N análises
@@ -193,39 +206,158 @@ export async function generatePalpites({
     });
     throw new PalpiteError(noKeyMsg, { provider: providerKey, model: model.id });
   }
-  const result = await aiProvider.runAnalysis(analysisRequest);
-  const latencyMs = result.latencyMs;
 
-  // 9. Erro do provider.
-  if (!result.ok) {
-    await persistAiCallError({
-      userId,
-      matchId,
-      provider: providerKey,
-      model: model.id,
-      inputPayload: result.inputPayload,
-      outputPayload: result.outputPayload,
-      inputTokens: result.usage.inputTokens,
-      outputTokens: result.usage.outputTokens,
-      latencyMs,
-      status: result.status,
-      errorMessage: result.message,
-      promptVersion: cartridge.version,
-    });
-    throw new PalpiteError(`palpite generation failed: ${result.message}`, {
-      cause: result.cause,
-    });
-  }
-  const inputTokens = result.usage.inputTokens;
-  const outputTokens = result.usage.outputTokens;
-  const inputPayload = result.inputPayload;
-  const outputPayload = result.outputPayload;
+  // 8b. Flag de validação de fidelidade (#380). Lida UMA VEZ antes do loop — default ON
+  //     (?? true): em DB fresco/vazio (testes, primeiro deploy) também valida por padrão.
+  //     OFF → caminho de hoje, byte-idêntico, ZERO custo extra (sem checkFidelity, sem regen).
+  const validateFidelity = await getEnableFidelityValidation();
 
-  // 10. tool_missing.
-  if (result.toolInput === undefined) {
-    const snippet = JSON.stringify(
-      (result.outputPayload as { content?: unknown }).content,
-    ).slice(0, 500);
+  // 8c–11b. LOOP BOUNDED de síntese (#380). O firewall (3 pernas, ADR 0030 §3) fica DENTRO
+  //   do loop: qualquer candidato (inclusive uma regeneração) RE-LIMPA todas as pernas antes
+  //   de poder ser aceito ou sequer fidelity-checado. O validador de fidelidade roda DEPOIS
+  //   do firewall e só pode ADICIONAR uma rejeição (regen/degrade), nunca burlar/enfraquecer
+  //   o guard. Sai APENAS por `break` (aceite) ou `throw` (degrade/erro terminal) — sem
+  //   recursão. Com MAX_FIDELITY_ATTEMPTS=1, divergência → degrada na hora (sem 2ª paga).
+  let output: PalpiteSynthesisOutput;
+  let settleableRows: ReturnType<typeof buildSettleablePalpiteRows>;
+  let latencyMs: number;
+  let inputTokens: number;
+  let outputTokens: number;
+  let inputPayload: Record<string, unknown>;
+  let outputPayload: Record<string, unknown>;
+
+  for (let attempt = 1; ; attempt += 1) {
+    const result = await aiProvider.runAnalysis(analysisRequest);
+    latencyMs = result.latencyMs;
+
+    // 9. Erro do provider.
+    if (!result.ok) {
+      await persistAiCallError({
+        userId,
+        matchId,
+        provider: providerKey,
+        model: model.id,
+        inputPayload: result.inputPayload,
+        outputPayload: result.outputPayload,
+        inputTokens: result.usage.inputTokens,
+        outputTokens: result.usage.outputTokens,
+        latencyMs,
+        status: result.status,
+        errorMessage: result.message,
+        promptVersion: cartridge.version,
+      });
+      throw new PalpiteError(`palpite generation failed: ${result.message}`, {
+        cause: result.cause,
+      });
+    }
+    inputTokens = result.usage.inputTokens;
+    outputTokens = result.usage.outputTokens;
+    inputPayload = result.inputPayload;
+    outputPayload = result.outputPayload;
+
+    // 10. tool_missing.
+    if (result.toolInput === undefined) {
+      const snippet = JSON.stringify(
+        (result.outputPayload as { content?: unknown }).content,
+      ).slice(0, 500);
+      await persistAiCallError({
+        userId,
+        matchId,
+        provider: providerKey,
+        model: model.id,
+        inputPayload,
+        outputPayload,
+        inputTokens,
+        outputTokens,
+        latencyMs,
+        status: "tool_missing",
+        errorMessage: `model did not call ${cartridge.toolName}; content=${snippet}`,
+        promptVersion: cartridge.version,
+      });
+      throw new PalpiteError(`LLM did not call ${cartridge.toolName} tool`, {
+        stopReason: result.stopReason,
+      });
+    }
+
+    // 11. Validação Zod (fronteira do CLAUDE.md).
+    const parsed = cartridge.outputSchema.safeParse(result.toolInput);
+    if (!parsed.success) {
+      await persistAiCallError({
+        userId,
+        matchId,
+        provider: providerKey,
+        model: model.id,
+        inputPayload,
+        outputPayload,
+        inputTokens,
+        outputTokens,
+        latencyMs,
+        status: "invalid_output",
+        errorMessage: JSON.stringify(parsed.error.issues),
+        promptVersion: cartridge.version,
+      });
+      throw new PalpiteError("LLM output failed Zod validation", {
+        issues: parsed.error.issues,
+      });
+    }
+    // Já tipado pelo schema concreto do cartucho (diferente de predict, que apaga
+    // para BaseMarketOutput).
+    const candidate: PalpiteSynthesisOutput = parsed.data;
+
+    // 11b. FIREWALL leg (b) — guard de CONTEÚDO pós-Zod (ADR 0030 §3, blocker #5). O
+    //      `.strict()` só barra chaves; o LLM pode ecoar um TERMO de valor numa string.
+    //      Rodamos sobre TODO campo que cruza pra manchete/view: verdict + narrative +
+    //      o `text` derivado de CADA linha settleable (templates fixos, #354) + os
+    //      rótulos de citedMarkets (LLM-livre, vão verbatim pro PalpiteHeadlineView). Hit
+    //      → tratado como `invalid_output` (mesmo path auditado do Zod) → throw → degrada
+    //      pra palpite:null no try/catch do analyzeBestBet. REJEITAR > VAZAR. As rows são
+    //      construídas AQUI (puras, sem DB) e reusadas no insert em batch (12c).
+    const candidateRows = buildSettleablePalpiteRows("", candidate);
+    const valueLeak =
+      containsValueLanguage(candidate.verdict) ||
+      containsValueLanguage(candidate.narrative) ||
+      candidateRows.some((r) => containsValueLanguage(r.text)) ||
+      candidate.citedMarkets.some(containsValueLanguage);
+    if (valueLeak) {
+      await persistAiCallError({
+        userId,
+        matchId,
+        provider: providerKey,
+        model: model.id,
+        inputPayload,
+        outputPayload,
+        inputTokens,
+        outputTokens,
+        latencyMs,
+        status: "invalid_output",
+        errorMessage:
+          "manchete contém linguagem de valor (firewall ADR 0030 §3)",
+        promptVersion: cartridge.version,
+      });
+      throw new PalpiteError("palpite headline leaked value language", {
+        matchId,
+      });
+    }
+
+    // 11c. VALIDAÇÃO DE FIDELIDADE (#380) — pós-firewall, pré-persist. Flag-OFF → aceita o
+    //      primeiro candidato firewall-limpo (caminho de hoje, sem checkFidelity, custo zero).
+    //      Flag-ON → checkFidelity (PURO, determinístico, NUNCA lança): se as contagens
+    //      citadas na manchete batem com os fatos pré-contados do #379, aceita; em
+    //      CONTRADIÇÃO, loga uma row de auditoria `fidelity_divergence` em ai_calls (sinal de
+    //      frequência pra a kill-switch — NÃO uma chamada nova de LLM) + console.warn, e então
+    //      DEGRADA (MAX=1: throw → palpite:null no try/catch do analyzeBestBet) ou regenera
+    //      (MAX>1: re-síntese paga, re-limpa o firewall acima na próxima iteração).
+    if (!validateFidelity) {
+      output = candidate;
+      settleableRows = candidateRows;
+      break;
+    }
+    const fidelity = checkFidelity(candidate, input);
+    if (fidelity.ok) {
+      output = candidate;
+      settleableRows = candidateRows;
+      break;
+    }
     await persistAiCallError({
       userId,
       matchId,
@@ -236,72 +368,26 @@ export async function generatePalpites({
       inputTokens,
       outputTokens,
       latencyMs,
-      status: "tool_missing",
-      errorMessage: `model did not call ${cartridge.toolName}; content=${snippet}`,
+      status: "fidelity_divergence",
+      errorMessage: `validação de fidelidade falhou (#380): ${fidelity.reason}`,
       promptVersion: cartridge.version,
     });
-    throw new PalpiteError(`LLM did not call ${cartridge.toolName} tool`, {
-      stopReason: result.stopReason,
-    });
-  }
-
-  // 11. Validação Zod (fronteira do CLAUDE.md).
-  const parsed = cartridge.outputSchema.safeParse(result.toolInput);
-  if (!parsed.success) {
-    await persistAiCallError({
-      userId,
-      matchId,
-      provider: providerKey,
-      model: model.id,
-      inputPayload,
-      outputPayload,
-      inputTokens,
-      outputTokens,
-      latencyMs,
-      status: "invalid_output",
-      errorMessage: JSON.stringify(parsed.error.issues),
-      promptVersion: cartridge.version,
-    });
-    throw new PalpiteError("LLM output failed Zod validation", {
-      issues: parsed.error.issues,
-    });
-  }
-  // Já tipado pelo schema concreto do cartucho (diferente de predict, que apaga
-  // para BaseMarketOutput).
-  const output: PalpiteSynthesisOutput = parsed.data;
-
-  // 11b. FIREWALL leg (b) — guard de CONTEÚDO pós-Zod (ADR 0030 §3, blocker #5). O
-  //      `.strict()` só barra chaves; o LLM pode ecoar um TERMO de valor numa string.
-  //      Rodamos sobre TODO campo que cruza pra manchete/view: verdict + narrative +
-  //      o `text` derivado de CADA linha settleable (templates fixos, #354) + os
-  //      rótulos de citedMarkets (LLM-livre, vão verbatim pro PalpiteHeadlineView). Hit
-  //      → tratado como `invalid_output` (mesmo path auditado do Zod) → throw → degrada
-  //      pra palpite:null no try/catch do analyzeBestBet. REJEITAR > VAZAR. As rows são
-  //      construídas AQUI (puras, sem DB) e reusadas no insert em batch (12c).
-  const settleableRows = buildSettleablePalpiteRows("", output);
-  const valueLeak =
-    containsValueLanguage(output.verdict) ||
-    containsValueLanguage(output.narrative) ||
-    settleableRows.some((r) => containsValueLanguage(r.text)) ||
-    output.citedMarkets.some(containsValueLanguage);
-  if (valueLeak) {
-    await persistAiCallError({
-      userId,
-      matchId,
-      provider: providerKey,
-      model: model.id,
-      inputPayload,
-      outputPayload,
-      inputTokens,
-      outputTokens,
-      latencyMs,
-      status: "invalid_output",
-      errorMessage: "manchete contém linguagem de valor (firewall ADR 0030 §3)",
-      promptVersion: cartridge.version,
-    });
-    throw new PalpiteError("palpite headline leaked value language", {
-      matchId,
-    });
+    console.warn(
+      JSON.stringify({
+        scope: "generatePalpites",
+        matchId,
+        attempt,
+        warning: "fidelity_divergence",
+        reason: fidelity.reason,
+      }),
+    );
+    if (attempt >= MAX_FIDELITY_ATTEMPTS) {
+      throw new PalpiteError(
+        "fidelity validation failed after bounded retries",
+        { matchId, reason: fidelity.reason },
+      );
+    }
+    // MAX>1: cai pra a próxima iteração — uma SÍNTESE PAGA a mais (a regeneração).
   }
 
   // 12. Persistência (sequencial — neon-http não suporta transação real).

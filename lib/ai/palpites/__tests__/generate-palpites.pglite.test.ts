@@ -110,8 +110,16 @@ vi.mock("@/lib/providers/sports-data", () => ({
 }));
 
 const getGenerationParams = vi.fn();
+// #380 — getEnableFidelityValidation mockado ON (default true). As fixtures deste suite
+// são fidelity-clean: getH2H=[] (sem contagem de confronto) e validToolInput.narrative
+// não cita contagem alguma → o validador default-ON aceita (não vira degrade silencioso).
+const getEnableFidelityValidation = vi.fn(
+  (..._args: unknown[]): Promise<boolean> => Promise.resolve(true),
+);
 vi.mock("@/lib/db/queries/ai-config", () => ({
   getGenerationParams: (...args: unknown[]) => getGenerationParams(...args),
+  getEnableFidelityValidation: (...args: unknown[]) =>
+    getEnableFidelityValidation(...args),
 }));
 
 const runAnalysis = vi.fn();

@@ -6,9 +6,13 @@ import type { AiCallStatus } from "../types";
 // verbatim de predict.ts (#230): o `instanceof` nas classes do SDK + a extração de
 // header é EXATAMENTE a parte provider-específica que vive atrás do adapter. O
 // status fica no subconjunto que o adapter pode emitir (provider_error|timeout|
-// rate_limited); `ok`/`invalid_output`/`tool_missing` são donos de predict.
+// rate_limited); `ok`/`invalid_output`/`tool_missing`/`fidelity_divergence` são donos
+// de predict/generator.
 export function classifyAnthropicError(err: unknown): {
-  status: Exclude<AiCallStatus, "ok" | "invalid_output" | "tool_missing">;
+  status: Exclude<
+    AiCallStatus,
+    "ok" | "invalid_output" | "tool_missing" | "fidelity_divergence"
+  >;
   message: string;
 } {
   if (err instanceof Anthropic.APIConnectionTimeoutError) {

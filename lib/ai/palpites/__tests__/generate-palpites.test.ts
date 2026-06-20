@@ -88,8 +88,13 @@ vi.mock("@/lib/providers/sports-data", () => ({
 }));
 
 const getGenerationParams = vi.fn();
+// #380 — getEnableFidelityValidation precisa estar no mock (senão a chamada nova vira
+// undefined()→throw em TODO teste). Default ON (true) — exercita o validador no happy path.
+const getEnableFidelityValidation = vi.fn();
 vi.mock("@/lib/db/queries/ai-config", () => ({
   getGenerationParams: (...args: unknown[]) => getGenerationParams(...args),
+  getEnableFidelityValidation: (...args: unknown[]) =>
+    getEnableFidelityValidation(...args),
 }));
 
 // Seam de provider (ADR 0027): mockamos getProviderForModel → runAnalysis capturado.
@@ -199,6 +204,9 @@ beforeEach(() => {
     effort: "high",
     temperature: 0.3,
   });
+  // #380 — default ON (espelha a coluna default true). Casos flag-OFF sobrescrevem.
+  getEnableFidelityValidation.mockReset();
+  getEnableFidelityValidation.mockResolvedValue(true);
 });
 
 const baseCall = {
@@ -356,6 +364,76 @@ describe("generatePalpites (síntese) — firewall de value-language (blocker #5
         (c) => (c[0] as { modelVersion?: string }).modelVersion !== undefined,
       ),
     ).toBe(false);
+  });
+});
+
+describe("generatePalpites (síntese) — validação de fidelidade (#380)", () => {
+  // Facts mockados (beforeEach): getH2H = 1 fixture → h2hSummary.gamesConsidered = 1.
+  // Uma manchete citando "Em 3 confrontos" CONTRADIZ o fato pré-contado (3 ≠ 1).
+  const divergentHeadline = {
+    ...validHeadline,
+    narrative: "Em 3 confrontos diretos o Fla sempre venceu.",
+  };
+
+  it("flag OFF → validação pulada: manchete count-divergente (mas firewall-limpa) ainda embarca (comportamento de hoje)", async () => {
+    getEnableFidelityValidation.mockResolvedValue(false);
+    runAnalysis.mockResolvedValue(okResult(divergentHeadline));
+
+    const res = await generatePalpites(baseCall);
+    // 1 chamada ao provider (sem regen), set persistido (ai_call ok + set + linhas).
+    expect(runAnalysis.mock.calls).toHaveLength(1);
+    const aiCallRow = insertValues.mock.calls[0][0] as Record<string, unknown>;
+    expect(aiCallRow.status).toBe("ok");
+    const setRow = insertValues.mock.calls[1][0] as Record<string, unknown>;
+    expect(setRow.modelVersion).toBe("claude-haiku-4-5");
+    expect(res.palpiteSet).toBeDefined();
+  });
+
+  it("flag ON + divergência (MAX=1) → degrada: throw, ai_call fidelity_divergence, sem set", async () => {
+    getEnableFidelityValidation.mockResolvedValue(true);
+    runAnalysis.mockResolvedValue(okResult(divergentHeadline));
+
+    await expect(generatePalpites(baseCall)).rejects.toBeInstanceOf(PalpiteError);
+    // MAX=1: degrada na hora, SEM 2ª síntese paga.
+    expect(runAnalysis.mock.calls).toHaveLength(1);
+    // A tentativa paga divergente foi logada em ai_calls como auditoria (não chamada de LLM).
+    const aiCallRow = insertValues.mock.calls[0][0] as Record<string, unknown>;
+    expect(aiCallRow.status).toBe("fidelity_divergence");
+    expect(String(aiCallRow.errorMessage)).toContain("h2h.gamesConsidered");
+    // Nenhum palpite_set escrito (degradou pra null).
+    expect(
+      insertValues.mock.calls.some(
+        (c) => (c[0] as { modelVersion?: string }).modelVersion !== undefined,
+      ),
+    ).toBe(false);
+  });
+
+  it("flag ON + manchete fiel (sem contagem citada) → aceita normalmente (caminho comum, custo zero)", async () => {
+    getEnableFidelityValidation.mockResolvedValue(true);
+    runAnalysis.mockResolvedValue(okResult(validHeadline));
+
+    const res = await generatePalpites(baseCall);
+    expect(runAnalysis.mock.calls).toHaveLength(1);
+    const aiCallRow = insertValues.mock.calls[0][0] as Record<string, unknown>;
+    expect(aiCallRow.status).toBe("ok");
+    expect(res.palpiteSet).toBeDefined();
+  });
+
+  it("FIREWALL roda ANTES da fidelidade (dentro do loop): value-leak → invalid_output, nunca fidelity_divergence", async () => {
+    // Manchete que é AO MESMO TEMPO divergente (confrontos) E vaza valor ("odd"). O
+    // firewall deve pegá-la primeiro (invalid_output), provando que o guard roda dentro
+    // do loop ANTES do validador de fidelidade — fidelidade só ADICIONA rejeição.
+    getEnableFidelityValidation.mockResolvedValue(true);
+    runAnalysis.mockResolvedValue(
+      okResult({
+        ...divergentHeadline,
+        verdict: "Em 3 confrontos, odd boa no Fla",
+      }),
+    );
+    await expect(generatePalpites(baseCall)).rejects.toBeInstanceOf(PalpiteError);
+    const aiCallRow = insertValues.mock.calls[0][0] as Record<string, unknown>;
+    expect(aiCallRow.status).toBe("invalid_output");
+    expect(aiCallRow.status).not.toBe("fidelity_divergence");
   });
 });
 

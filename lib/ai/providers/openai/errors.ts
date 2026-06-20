@@ -7,7 +7,10 @@ import type { AiCallStatus } from "../types";
 // Anthropic (status/message/headers-com-request-id). O status fica no subconjunto
 // que o adapter pode emitir (provider_error|timeout|rate_limited).
 export function classifyOpenAIError(err: unknown): {
-  status: Exclude<AiCallStatus, "ok" | "invalid_output" | "tool_missing">;
+  status: Exclude<
+    AiCallStatus,
+    "ok" | "invalid_output" | "tool_missing" | "fidelity_divergence"
+  >;
   message: string;
 } {
   if (err instanceof APIConnectionTimeoutError) {

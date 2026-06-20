@@ -260,6 +260,13 @@
       "when": 1781875398514,
       "tag": "0036_square_energizer",
       "breakpoints": true
+    },
+    {
+      "idx": 37,
+      "version": "7",
+      "when": 1781937909383,
+      "tag": "0037_unusual_doctor_doom",
+      "breakpoints": true
     }
   ]
 }

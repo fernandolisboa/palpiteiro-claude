@@ -58,6 +58,12 @@ export const aiCallStatusEnum = pgEnum("ai_call_status", [
   "timeout",
   "tool_missing",
   "rate_limited",
+  // #380 — uma síntese de palpite que PASSOU Zod + firewall mas cuja manchete
+  // CONTRADIZ um fato pré-contado do #379 (validação de fidelidade). NÃO é erro de
+  // provider/Zod/firewall: é uma row de AUDITORIA da chamada paga descartada por
+  // divergência factual — o sinal de frequência que a kill-switch (enableFidelityValidation)
+  // precisa pra decidir. Logada via persistAiCallError; NUNCA uma chamada nova de LLM.
+  "fidelity_divergence",
 ]);
 
 // Tipos de palpite de ENGAJAMENTO (ADR 0028). Enum controlado (não tabela de
@@ -601,6 +607,16 @@ export const aiConfig = pgTable("ai_config", {
   // passa a capturar odds perto do KO SÓ pra jogos com predição non-pass. Sem toggle
   // de UI (consistente com as flags acima — DB-flip only). Reversível (SET = false).
   enableClvCapture: boolean().notNull().default(false),
+  // Feature-flag (#380): liga a VALIDAÇÃO DE FIDELIDADE pós-síntese — um validador
+  // DETERMINÍSTICO (regras, sem juiz LLM) que checa se contagens citadas na manchete
+  // (confrontos H2H / gols marcados-sofridos) CONTRADIZEM os fatos pré-contados do #379.
+  // Default ON (kill-switch dormente, padrão sem-gates do dono): em divergência o palpite
+  // DEGRADA (palpite:null) em vez de embarcar uma manchete factualmente errada. Flip
+  // data-driven (SET ... = false, sem deploy): validação pulada → comportamento de hoje,
+  // ZERO custo extra. Custo quando ON: validação limpa (caso comum) = ZERO (regex +
+  // compare de inteiros, sem LLM); divergência com MAX_FIDELITY_ATTEMPTS=1 = degrada sem
+  // pagar 2ª síntese (custo-neutro). Reversível.
+  enableFidelityValidation: boolean().notNull().default(true),
   updatedByUserId: uuid().references(() => users.id, { onDelete: "set null" }),
   updatedAt: timestamp({ withTimezone: true }).notNull().defaultNow(),
 });
