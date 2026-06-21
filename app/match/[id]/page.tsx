@@ -17,9 +17,20 @@ import {
   MatchAuxiliarySkeleton,
   MatchSectionsSkeleton,
 } from "@/components/skeletons/match-sections-skeleton";
+import { MatchAnalysisTabs } from "@/components/match-analysis-tabs";
+import type {
+  GradeMarketOption,
+  GradeMyBetPrefill,
+} from "@/components/grade-my-bet";
 import { auth } from "@/auth";
 import { leagueToKey } from "@/lib/format";
 import { getEnableBestBetFanOut } from "@/lib/db/queries/ai-config";
+import {
+  marketsForAudience,
+  marketsForLeague,
+} from "@/lib/db/queries/market-catalog";
+import { getDescriptor } from "@/lib/odds/market-descriptor";
+import { getMarketPresentation } from "@/lib/view/markets/presentation";
 import { getMatchById } from "@/lib/db/queries/matches";
 import { getPalpiteSetsForMatch } from "@/lib/db/queries/palpites";
 import { getPredictionHistoryForMatch } from "@/lib/db/queries/predictions";
@@ -195,6 +206,71 @@ export default async function MatchPage({ params, searchParams }: PageProps) {
   // form que o server rejeitaria; predições/palpites já existentes seguem visíveis.
   const analyzable =
     match.status === "scheduled" && match.kickoffAt.getTime() > now.getTime();
+
+  // "Analise minha aposta" (#412, ADR 0034): a aba só é montada quando analisável
+  // (a action rejeitaria o resto). Mercados = audiência ∩ cobertura de liga (a MESMA
+  // expressão da action/analyzeMatch). Para cada um: selectionKeys ESTÁTICAS (vazio
+  // em dynamicSelections → mercado inerte, dropado) + os labels do registry. O prefill
+  // vem da última predição (mercado resolvido + recommendation non-pass + linha), com
+  // fallback over_under/over/2.5.
+  const isAdmin = session.user.role === "admin";
+  let gradeMarkets: GradeMarketOption[] = [];
+  let gradePrefill: GradeMyBetPrefill = {
+    marketKey: "over_under",
+    selectionKey: "over",
+    line: 2.5,
+  };
+  if (analyzable) {
+    const allowedMarkets = marketsForLeague(
+      await marketsForAudience(isAdmin),
+      match.league,
+    );
+    gradeMarkets = allowedMarkets
+      .map((m): GradeMarketOption | null => {
+        const descriptor = getDescriptor(m.key);
+        if (!descriptor || descriptor.selectionKeys.length === 0) return null;
+        const presentation = getMarketPresentation(m.key);
+        const hasLine = m.key === "over_under";
+        const line = hasLine ? presentation.defaultLine : null;
+        return {
+          key: m.key,
+          label: presentation.marketLabel,
+          hasLine,
+          selections: descriptor.selectionKeys.map((sk) => ({
+            key: sk,
+            label: presentation.outcomeLabel(sk, line),
+          })),
+        };
+      })
+      .filter((m): m is GradeMarketOption => m !== null);
+    // Prefill da última predição: mercado resolvido + recommendation non-pass; cai no
+    // fallback quando não há predição OU o mercado/seleção saíram da cobertura atual.
+    const predMarketKey = latestPred?.marketKey ?? null;
+    const predRec = latestPred?.prediction.recommendation ?? null;
+    const predLine = latestPred?.prediction.marketParams?.line ?? null;
+    const prefillMarket =
+      predMarketKey && gradeMarkets.some((m) => m.key === predMarketKey)
+        ? gradeMarkets.find((m) => m.key === predMarketKey)!
+        : gradeMarkets[0] ?? null;
+    if (prefillMarket) {
+      const recValid =
+        predRec !== null &&
+        predRec !== "pass" &&
+        prefillMarket.selections.some((s) => s.key === predRec);
+      gradePrefill = {
+        marketKey: prefillMarket.key,
+        selectionKey: recValid
+          ? (predRec as string)
+          : prefillMarket.selections[0]?.key ?? "",
+        line: prefillMarket.hasLine
+          ? predMarketKey === prefillMarket.key && predLine !== null
+            ? predLine
+            : getMarketPresentation(prefillMarket.key).defaultLine
+          : null,
+      };
+    }
+  }
+
   // Placar final só pra jogos encerrados com gols reportados (heroView já
   // anulou scores fora de `finished`). Alimenta o recibo settled do HERO + FinishedNotice.
   const finalScore =
@@ -229,6 +305,8 @@ export default async function MatchPage({ params, searchParams }: PageProps) {
           heroSharedAt={heroSharedAt}
           homeTeamHref={homeTeamHref}
           awayTeamHref={awayTeamHref}
+          gradeMarkets={gradeMarkets}
+          gradePrefill={gradePrefill}
         />
       </div>
       <div className="hidden lg:block">
@@ -251,6 +329,8 @@ export default async function MatchPage({ params, searchParams }: PageProps) {
           heroSharedAt={heroSharedAt}
           homeTeamHref={homeTeamHref}
           awayTeamHref={awayTeamHref}
+          gradeMarkets={gradeMarkets}
+          gradePrefill={gradePrefill}
         />
       </div>
     </>
@@ -298,6 +378,11 @@ type Common = {
   // passados aos nomes do MatchHero (imunes a mismatch por construção).
   homeTeamHref: string;
   awayTeamHref: string;
+  // #412 (ADR 0034): mercados elegíveis (audiência∩liga, com selectionKeys estáticas)
+  // + prefill da última predição, pro form "Minha aposta" da aba de análise. Vazio
+  // quando o jogo não é analisável (a aba não é montada).
+  gradeMarkets: GradeMarketOption[];
+  gradePrefill: GradeMyBetPrefill;
 };
 
 function MobileMatch({
@@ -319,6 +404,8 @@ function MobileMatch({
   heroSharedAt,
   homeTeamHref,
   awayTeamHref,
+  gradeMarkets,
+  gradePrefill,
 }: Common) {
   return (
     <div className="min-h-screen bg-background text-foreground">
@@ -365,11 +452,24 @@ function MobileMatch({
 
         {/* Detalhe por mercado LOGO ABAIXO do palpite: é o "quero ver mais" imediato da
             manchete. Collapsed por padrão → nenhum número de valor vaza pro topo (firewall
-            ADR 0030 intacto: edge/EV/stake/odd vivem DENTRO do disclosure). */}
-        <NeutralAnalysisDetail
-          sections={sections}
-          previousAnalyses={previousAnalyses}
-        />
+            ADR 0030 intacto: edge/EV/stake/odd vivem DENTRO do disclosure). Em jogo
+            analisável, a aba [ Análise | Minha aposta ] (#412) embrulha o detalhe. */}
+        {analyzable ? (
+          <MatchAnalysisTabs
+            analysisSlot={
+              <NeutralAnalysisDetail
+                sections={sections}
+                previousAnalyses={previousAnalyses}
+              />
+            }
+            gradeProps={{ matchId, markets: gradeMarkets, prefill: gradePrefill }}
+          />
+        ) : (
+          <NeutralAnalysisDetail
+            sections={sections}
+            previousAnalyses={previousAnalyses}
+          />
+        )}
         {!analyzable && sections.length === 0 && (
           <NotAnalyzableNotice status={matchStatus} score={finalScore} />
         )}
@@ -409,6 +509,8 @@ function DesktopMatch({
   heroSharedAt,
   homeTeamHref,
   awayTeamHref,
+  gradeMarkets,
+  gradePrefill,
 }: Common) {
   return (
     <DesktopShell>
@@ -460,12 +562,29 @@ function DesktopMatch({
         {/* Detalhe por mercado FULL-WIDTH abaixo do grid: collapsed por padrão, ocupa a
             largura toda ao expandir (não fica preso na coluna do palpite). Fica logo abaixo
             da manchete (o palpite é o elemento alto do grid). Firewall ADR 0030 intacto: é
-            disclosure collapsed; edge/EV/stake vivem DENTRO dele, nada de valor no HERO. */}
+            disclosure collapsed; edge/EV/stake vivem DENTRO dele, nada de valor no HERO. Em
+            jogo analisável, a aba [ Análise | Minha aposta ] (#412) embrulha o detalhe. */}
         <div className="flex flex-col gap-3 pb-6">
-          <NeutralAnalysisDetail
-            sections={sections}
-            previousAnalyses={previousAnalyses}
-          />
+          {analyzable ? (
+            <MatchAnalysisTabs
+              analysisSlot={
+                <NeutralAnalysisDetail
+                  sections={sections}
+                  previousAnalyses={previousAnalyses}
+                />
+              }
+              gradeProps={{
+                matchId,
+                markets: gradeMarkets,
+                prefill: gradePrefill,
+              }}
+            />
+          ) : (
+            <NeutralAnalysisDetail
+              sections={sections}
+              previousAnalyses={previousAnalyses}
+            />
+          )}
           {!analyzable && sections.length === 0 && (
             <NotAnalyzableNotice status={matchStatus} score={finalScore} />
           )}
