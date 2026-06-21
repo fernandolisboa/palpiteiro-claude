@@ -121,7 +121,8 @@ export async function getMatchesByTeam(
  * filtro de status, sumindo o jogo recém-apitado. Recuar o bound + manter `live` no
  * filtro admite essa cauda de ~3h. Lê a MESMA constante da badge/`isInProgress` (nunca
  * um `3h` inline) pra pertinência-na-lista ⟺ elegibilidade-da-badge não dessincronizarem
- * — qualquer superfície que derive `isInProgress` no view layer fica consistente.
+ * — a derivação de `isInProgress` em si é DOWNSTREAM (view layer, sobre o DbMatch[] que
+ * este helper retorna), então consumidores conseguem derivá-la de forma consistente.
  */
 export async function getUpcomingMatches(opts: {
   windowHours?: number;
