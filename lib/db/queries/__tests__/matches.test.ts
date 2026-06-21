@@ -96,6 +96,7 @@ vi.mock("@/lib/db", () => {
 });
 
 import { matches } from "@/db/schema";
+import { IN_PROGRESS_WINDOW_MS } from "@/lib/view/date-range";
 import {
   getMatchesByTeam,
   getMatchesInRange,
@@ -220,7 +221,7 @@ describe("getMatchesInRange — range query flexível", () => {
 });
 
 describe("getUpcomingMatches — wrapper sobre getMatchesInRange", () => {
-  it("from=now, to=now+window, statuses [scheduled,live], asc, sem limit", async () => {
+  it("from=now-IN_PROGRESS_WINDOW_MS, to=now+window, statuses [scheduled,live], asc, sem limit", async () => {
     const before = Date.now();
     await getUpcomingMatches();
     const after = Date.now();
@@ -230,12 +231,14 @@ describe("getUpcomingMatches — wrapper sobre getMatchesInRange", () => {
     const from = gte?.val as Date;
     const to = lte?.val as Date;
 
-    // from ≈ now (entre o antes/depois da chamada)
-    expect(from.getTime()).toBeGreaterThanOrEqual(before);
-    expect(from.getTime()).toBeLessThanOrEqual(after);
+    // from ≈ now - IN_PROGRESS_WINDOW_MS (#418): o bound inferior recua a janela
+    // in-progress pra não dropar o jogo recém-apitado (DB-`scheduled` stale).
+    expect(from.getTime()).toBeGreaterThanOrEqual(before - IN_PROGRESS_WINDOW_MS);
+    expect(from.getTime()).toBeLessThanOrEqual(after - IN_PROGRESS_WINDOW_MS);
 
-    // janela default = 48h
-    expect(to.getTime() - from.getTime()).toBe(48 * 60 * 60 * 1000);
+    // janela default = 48h À FRENTE de now (to ≈ now+48h), independente do recuo do from
+    expect(to.getTime()).toBeGreaterThanOrEqual(before + 48 * 60 * 60 * 1000);
+    expect(to.getTime()).toBeLessThanOrEqual(after + 48 * 60 * 60 * 1000);
 
     // status scheduled+live via inArray
     const status = findCond("inArray");
@@ -249,11 +252,12 @@ describe("getUpcomingMatches — wrapper sobre getMatchesInRange", () => {
     expect(h.state.limitCalled).toBe(false);
   });
 
-  it("windowHours custom → to = from + windowHours", async () => {
+  it("recuo do bound inferior = exatamente IN_PROGRESS_WINDOW_MS antes da janela à frente (#418)", async () => {
     await getUpcomingMatches({ windowHours: 6 });
     const from = (findCond("gte")?.val as Date).getTime();
     const to = (findCond("lte")?.val as Date).getTime();
-    expect(to - from).toBe(6 * 60 * 60 * 1000);
+    // span total = recuo (IN_PROGRESS_WINDOW_MS) + janela à frente (windowHours).
+    expect(to - from).toBe(IN_PROGRESS_WINDOW_MS + 6 * 60 * 60 * 1000);
   });
 
   it("league repassada → eq(league, ...)", async () => {

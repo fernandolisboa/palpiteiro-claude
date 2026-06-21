@@ -2,6 +2,7 @@ import { and, asc, desc, eq, gte, inArray, lt, lte, or, sql } from "drizzle-orm"
 
 import { matches } from "@/db/schema";
 import { db } from "@/lib/db";
+import { IN_PROGRESS_WINDOW_MS } from "@/lib/view/date-range";
 import { compositeFixtureKey } from "@/lib/providers/sports-data/types";
 import type {
   NormalizedFixture,
@@ -112,6 +113,17 @@ export async function getMatchesByTeam(
   return { past: pastRows, future: futureRows };
 }
 
+/**
+ * Próximos jogos numa janela à frente. O bound INFERIOR recua IN_PROGRESS_WINDOW_MS
+ * (não `now`) pela MESMA razão que `windowedQueryFrom` recua o /jogos (#385/#418):
+ * um jogo que JÁ apitou fica DB-`scheduled` stale até o cron de fixtures (6h) virá-lo
+ * pra `live`/`finished`; com `from: now`, o `gte(kickoffAt, now)` o dropava ANTES do
+ * filtro de status, sumindo o jogo recém-apitado. Recuar o bound + manter `live` no
+ * filtro admite essa cauda de ~3h. Lê a MESMA constante da badge/`isInProgress` (nunca
+ * um `3h` inline) pra pertinência-na-lista ⟺ elegibilidade-da-badge não dessincronizarem
+ * — a derivação de `isInProgress` em si é DOWNSTREAM (view layer, sobre o DbMatch[] que
+ * este helper retorna), então consumidores conseguem derivá-la de forma consistente.
+ */
 export async function getUpcomingMatches(opts: {
   windowHours?: number;
   league?: SupportedLeague;
@@ -120,7 +132,7 @@ export async function getUpcomingMatches(opts: {
   const now = new Date();
   const horizon = new Date(now.getTime() + windowHours * 60 * 60 * 1000);
   return getMatchesInRange({
-    from: now,
+    from: new Date(now.getTime() - IN_PROGRESS_WINDOW_MS),
     to: horizon,
     league: opts.league,
     statuses: ["scheduled", "live"],
