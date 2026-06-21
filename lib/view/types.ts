@@ -331,3 +331,59 @@ export function parseLeagueFilter(input: string | undefined | null): LeagueFilte
   if (input === "bsa" || input === "ucl" || input === "wc") return input;
   return "all";
 }
+
+// ─── "Analise minha aposta" — leitor de valor selection-pinned (#412, ADR 0034) ──
+// View do mapper PURO (lib/view/grade-my-bet.ts), tipos client-safe espelhando
+// BestBetView. UNION DISCRIMINADO por `kind`. NB: os estados de FALHA da ação
+// (rate-limited / input-invalido / nao-analisavel / match-nao-encontrado) NÃO vivem
+// aqui — moram no union de RETORNO da action (GradeMyBetResult com ok:boolean),
+// espelhando AnalyzeMatchResult. Este View cobre só o que o mapper produz a partir
+// de uma aposta JÁ aceita pelos gates.
+export type GradeMyBetView =
+  // Coberto E (snapshot completo OU seleção recomendada com persistido): edge
+  // (PERSISTIDO se pinned===recommendation, alimentando display E stake do MESMO
+  // número; senão recomputado), EV@userOdd PRIMÁRIO, break-even, stake, lucro,
+  // valueReading derivado SÓ de sign(EV@userOdd).
+  | {
+      kind: "grade-coberto";
+      pinnedLabel: string; // outcomeLabel da seleção fixada ("Over 2.5"/"Casa")
+      marketLabel: string; // marketLabel do registry ("Over/Under gols")
+      line: number | null;
+      userOdd: number;
+      valueReading: string; // template-derivado de sign(EV@userOdd) — NUNCA prosa do LLM
+      edge: number | null; // edge do NOSSO board (null se snapshot incompleto)
+      edgeLabel: string; // "+7.3pp" | "—"
+      evPerUnit: number; // computeEvPerUnit(modelProbPct, userOdd) DIRETO
+      breakEvenProbPct: number; // computeBreakEvenProbPct(userOdd)
+      stakeUnits: number; // do MESMO número que alimenta o edge-display
+      stakeLabel: string; // rótulo do stake primário
+      // Sob coherenceWarning o stake-de-nosso-edge sai SÓ aqui (secundário), nunca
+      // como manchete; null quando não há divergência de sinal.
+      secondaryStakeLabel: string | null;
+      profitIfWon: number; // profitForOutcome('won', userOdd, stakeUnits)
+      coherenceWarning: boolean; // edge!==null && sign(EV@userOdd)!==sign(edge)
+      modelProbPct: number;
+      impliedProbPct: number | null;
+      createdAt: string;
+    }
+  // Coberto, não-recomendada, board incompleto: edge='—' (honesto), EV@userOdd +
+  // break-even + lucro AINDA presentes (canal odd-do-usuário independe do board);
+  // stake = 1u "dimensionamento de mercado".
+  | {
+      kind: "degradado-sem-snapshot";
+      pinnedLabel: string;
+      marketLabel: string;
+      line: number | null;
+      userOdd: number;
+      valueReading: string;
+      edgeLabel: string; // "—" (sempre, sem snapshot)
+      evPerUnit: number;
+      breakEvenProbPct: number;
+      stakeUnits: number; // 1u
+      stakeLabel: string; // "dimensionamento de mercado"
+      profitIfWon: number;
+      modelProbPct: number;
+      createdAt: string;
+    }
+  // Mercado/linha/seleção que NÃO modelamos (fail-closed, skip-not-fabricate §8).
+  | { kind: "nao-avalio"; reason: string };

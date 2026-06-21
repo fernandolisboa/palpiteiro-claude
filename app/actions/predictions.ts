@@ -28,20 +28,30 @@ import {
   marketsForLeague,
 } from "@/lib/db/queries/market-catalog";
 import { getMatchById } from "@/lib/db/queries/matches";
-import { getAiCallById } from "@/lib/db/queries/predictions";
+import {
+  getAiCallById,
+  getLatestPredictionForPin,
+} from "@/lib/db/queries/predictions";
 import { getUserAccessState } from "@/lib/db/queries/users";
+import { getDescriptor } from "@/lib/odds/market-descriptor";
 import { ensureOddsSnapshotsFresh } from "@/lib/odds/fetch-and-snapshot";
 import { checkAnalysisRateLimit, type RateLimitResult } from "@/lib/rate-limit";
 import { getRequestTimeZone } from "@/lib/server/request-timezone";
 import { toAnalysisView } from "@/lib/view/analysis";
 import { ExactScoreParamsSchema } from "@/lib/ai/palpites/cartridges/cartridge";
 import { toBestBetView } from "@/lib/view/best-bet";
+import { toGradeMyBetView } from "@/lib/view/grade-my-bet";
+import { GradeMyBetInputSchema } from "@/lib/view/grade-my-bet-input";
 import {
   toDimensionViews,
   toPalpiteHeadlineView,
   type PalpiteHeadlineView,
 } from "@/lib/view/palpites-headline";
-import type { AnalysisView, BestBetView } from "@/lib/view/types";
+import type {
+  AnalysisView,
+  BestBetView,
+  GradeMyBetView,
+} from "@/lib/view/types";
 
 export type AnalyzeMatchResult =
   | { ok: true; view: AnalysisView }
@@ -775,4 +785,278 @@ export async function analyzeMarkets(
   revalidatePath(`/match/${matchId}`);
   revalidatePath("/jogos");
   return { ok: true, summaries };
+}
+
+// ─── "Analise minha aposta" — leitor de valor selection-pinned (#412, ADR 0034) ──
+
+export type GradeMyBetResult =
+  | { ok: true; view: GradeMyBetView }
+  | {
+      ok: false;
+      error: string;
+      kind?: "rate-limited" | "input-invalido" | "nao-analisavel";
+    };
+
+/**
+ * Avalia o VALOR de uma aposta FIXADA pelo usuário (mercado + seleção + linha + a
+ * odd que ele pegou na casa) — variante selection-pinned do analyzeMatch (ADR 0034).
+ * Cache-FIRST: lê a distribuição persistida (zero LLM, zero ai_calls); só no MISS
+ * passa pelo rate-limit e chama predict() (a ÚNICA porta LLM). A fixação é 100% no
+ * mapper (selections.find) — predict.ts NÃO é tocado, PredictArgs NÃO é estendido.
+ *
+ * GATES EM ORDEM EXATA (espelha analyzeMatch): matchId → auth → acesso → match →
+ * não-analisável → ZOD (boundary barato, ANTES de qualquer DB read de predição) →
+ * re-validação audiência∩liga + seleção (firewall POST forjado, SEM coerção) →
+ * linha-modelável ANTES DE GASTAR → cache-first (HIT sem rate-limit; MISS:
+ * rate-limit → predict). A ordem é load-bearing: nada que GASTE (rate-limit/predict)
+ * roda antes de todos os gates grátis.
+ */
+export async function gradeMyBet(
+  _prev: GradeMyBetResult | null,
+  formData: FormData,
+): Promise<GradeMyBetResult> {
+  // 1. matchId.
+  const matchId = String(formData.get("matchId") ?? "");
+  if (!matchId) {
+    return { ok: false, error: "matchId ausente" };
+  }
+  if (!z.uuid().safeParse(matchId).success) {
+    return { ok: false, error: "Identificador de jogo inválido." };
+  }
+  // 2. auth.
+  const session = await auth();
+  if (!session?.user?.id) {
+    return { ok: false, error: "Faça login para analisar." };
+  }
+  // 3. acesso (DB direto + floor do env — espelha analyzeMatch).
+  const access = await getUserAccessState(session.user.id);
+  if (!access) {
+    return { ok: false, error: "Sua sessão expirou. Faça login novamente." };
+  }
+  if (!access.allowed && !isEmailAllowed(session.user.email)) {
+    return {
+      ok: false,
+      error: "Seu acesso está bloqueado. Fale com o administrador.",
+    };
+  }
+  // 4. match (carrega liga p/ o gate de cobertura ANTES de gastar).
+  const match = await getMatchById(matchId);
+  if (!match) {
+    return { ok: false, error: "Jogo não encontrado." };
+  }
+  // 5. analisabilidade (status≠scheduled / kickoff passado).
+  const notAnalyzable = notAnalyzableMessage(match.status, match.kickoffAt);
+  if (notAnalyzable) {
+    return { ok: false, error: notAnalyzable, kind: "nao-analisavel" };
+  }
+  // 6. ZOD BOUNDARY (barato, ANTES de qualquer read de predição): odd parseada
+  // (vírgula PT-BR) + > 1, linha coercida a number, mercado/seleção não-vazios.
+  const parsed = GradeMyBetInputSchema.safeParse({
+    marketKey: String(formData.get("marketKey") ?? ""),
+    selectionKey: String(formData.get("selectionKey") ?? ""),
+    line: formData.get("line") ?? undefined,
+    odd: String(formData.get("odd") ?? ""),
+  });
+  if (!parsed.success) {
+    return {
+      ok: false,
+      error: "Aposta inválida. Confira mercado, seleção, linha e a odd (> 1).",
+      kind: "input-invalido",
+    };
+  }
+  const { marketKey, selectionKey, line, odd: userOdd } = parsed.data;
+  // 7. RE-VALIDAÇÃO server-side (firewall contra POST forjado): mercado ∈ audiência
+  // ∩ liga; seleção ∈ selectionKeys ESTÁTICO. DIVERGÊNCIA DELIBERADA de analyzeMatch:
+  // um mercado fora da cobertura NÃO é coercido a over_under (a seleção é FIXADA —
+  // coercir avaliaria OUTRA aposta), vira nao-avalio.
+  const isAdmin = session.user.role === "admin";
+  const allowedMarkets = marketsForLeague(
+    await marketsForAudience(isAdmin),
+    match.league,
+  );
+  if (!allowedMarkets.some((m) => m.key === marketKey)) {
+    return {
+      ok: true,
+      view: {
+        kind: "nao-avalio",
+        reason: "Não avalio esse mercado ainda neste jogo.",
+      },
+    };
+  }
+  const descriptor = getDescriptor(marketKey);
+  // selectionKeys vazio (dynamicSelections) → nenhuma seleção estática casa → inerte.
+  if (!descriptor || !descriptor.selectionKeys.includes(selectionKey)) {
+    return {
+      ok: true,
+      view: {
+        kind: "nao-avalio",
+        reason: "Não avalio essa seleção ainda neste mercado.",
+      },
+    };
+  }
+  // 8. GATE DE LINHA-MODELÁVEL ANTES DE GASTAR: over/under só modela {2.5}(featured)
+  // ∪ candidateLines (quando a variante multi-linha resolve p/ a liga). over 3.5 fora
+  // de world_cup NUNCA é modelável (OVER_UNDER_ALT.coveredLeagues=['world_cup']) →
+  // nao-avalio SEM rate-limit, SEM predict (senão predict só produziria a 2.5 e
+  // queimaria slot+ai_call à toa).
+  if (marketKey === "over_under") {
+    const extraLinesEnabled = await getEnableOverUnderExtraLines();
+    const extraLines = resolveExtraLines(
+      marketKey,
+      match.league,
+      extraLinesEnabled,
+    );
+    const altDescriptor = getCartridge(marketKey, { extraLines }).descriptor;
+    const modelableLines = new Set<number>([2.5]);
+    if (extraLines && altDescriptor.candidateLines !== undefined) {
+      for (const l of altDescriptor.candidateLines) modelableLines.add(l);
+    }
+    if (line === undefined || !modelableLines.has(line)) {
+      return {
+        ok: true,
+        view: {
+          kind: "nao-avalio",
+          reason: "Não avalio essa linha ainda neste jogo.",
+        },
+      };
+    }
+  }
+  // 9. CACHE-FIRST. over/under casa por linha (Number()'da na fronteira); os demais
+  // por marketKey só (line=null). HIT → SEM rate-limit (leitura grátis). MISS →
+  // rate-limit → predict() (gasto real).
+  const cacheLine = marketKey === "over_under" ? line ?? null : null;
+  let hit = await getLatestPredictionForPin(
+    matchId,
+    session.user.id,
+    marketKey,
+    cacheLine,
+  );
+  let persisted: {
+    edgePct: number | null;
+    impliedProbPct: number | null;
+    stakeUnits: number | null;
+  } | null = null;
+  let extraLinesForPredict = false;
+  if (marketKey === "over_under") {
+    const extraLinesEnabled = await getEnableOverUnderExtraLines();
+    extraLinesForPredict = resolveExtraLines(
+      marketKey,
+      match.league,
+      extraLinesEnabled,
+    );
+  }
+  if (!hit) {
+    // MISS → rate-limit (incrementa o contador — gasto real, espelha analyzeMatch).
+    const rateLimit = await checkAnalysisRateLimit(
+      session.user.id,
+      session.user.role,
+    );
+    if (!rateLimit.ok) {
+      if (rateLimit.reason === "fail-closed") {
+        return {
+          ok: false,
+          error: "Análises temporariamente indisponíveis. Tente mais tarde.",
+          kind: "rate-limited",
+        };
+      }
+      return {
+        ok: false,
+        error: `Você atingiu o limite de ${rateLimit.limit} análises por dia. Tente novamente amanhã.`,
+        kind: "rate-limited",
+      };
+    }
+    try {
+      // Pré-aquece mercados *additional* (btts/dupla chance / over_under multi-linha)
+      // como analyzeMatch, pra o predict achar a snapshot fresca.
+      const effectiveDescriptor = getCartridge(marketKey, {
+        extraLines: extraLinesForPredict,
+      }).descriptor;
+      if (effectiveDescriptor.oddsSource === "additional") {
+        await ensureOddsSnapshotsFresh(match, {
+          markets: [effectiveDescriptor],
+        });
+      }
+      await predict({
+        matchId,
+        userId: session.user.id,
+        isAdmin,
+        marketKey,
+        extraLines: extraLinesForPredict,
+      });
+    } catch (err) {
+      if (err instanceof PredictError) {
+        console.error(
+          JSON.stringify({
+            scope: "gradeMyBet",
+            matchId,
+            error: "predict_failed",
+            message: err.message,
+            context: err.context,
+          }),
+        );
+        return { ok: false, error: friendlyMessage(err) };
+      }
+      console.error(
+        JSON.stringify({
+          scope: "gradeMyBet",
+          matchId,
+          error: "unexpected",
+          message: err instanceof Error ? err.message : String(err),
+        }),
+      );
+      return {
+        ok: false,
+        error: "Falha temporária ao avaliar a aposta. Tente novamente.",
+      };
+    }
+    // Re-lê a distribuição recém-persistida (a fixação é 100% no mapper).
+    hit = await getLatestPredictionForPin(
+      matchId,
+      session.user.id,
+      marketKey,
+      cacheLine,
+    );
+    if (!hit) {
+      // Predict rodou mas não produziu a linha/mercado fixados (ex.: a escada não
+      // tem a linha): não modelamos → skip-not-fabricate.
+      return {
+        ok: true,
+        view: {
+          kind: "nao-avalio",
+          reason: "Não avalio essa aposta ainda neste jogo.",
+        },
+      };
+    }
+  }
+  // persisted SÓ quando a seleção fixada É a recomendada pela análise — só aí há
+  // edge/implied/stake persistidos da seleção. Number() na fronteira drizzle
+  // (numeric → string): os campos voltam STRING e DEVEM virar number ANTES do mapper.
+  if (hit.prediction.recommendation === selectionKey) {
+    persisted = {
+      edgePct:
+        hit.prediction.edgePct === null ? null : Number(hit.prediction.edgePct),
+      impliedProbPct:
+        hit.prediction.impliedProbPct === null
+          ? null
+          : Number(hit.prediction.impliedProbPct),
+      stakeUnits:
+        hit.prediction.stakeUnits === null
+          ? null
+          : Number(hit.prediction.stakeUnits),
+    };
+  }
+  const timeZone = await getRequestTimeZone();
+  const view = toGradeMyBetView({
+    // hit.selections já vem Number()'do (mapSelectionRow na fronteira drizzle).
+    selections: hit.selections,
+    pinnedKey: selectionKey,
+    userOdd,
+    marketKey,
+    line: hit.prediction.marketParams?.line ?? null,
+    recommendation: hit.prediction.recommendation,
+    persisted,
+    createdAt: hit.prediction.createdAt.toLocaleString("pt-BR", { timeZone }),
+  });
+  revalidatePath(`/match/${matchId}`);
+  return { ok: true, view };
 }

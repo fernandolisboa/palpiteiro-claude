@@ -166,6 +166,46 @@ export async function getPredictionHistoryForMatch(
   }));
 }
 
+/**
+ * Predição mais recente que CASA uma aposta PINNED (matchId, userId, marketKey,
+ * linha) — leitura cache-first do "Analise minha aposta" (#412, ADR 0034). Reusa
+ * getPredictionHistoryForMatch (já desc(createdAt),desc(id), scoped por userId) e
+ * filtra em JS pelo mercado FIXADO, com o discriminante de linha KEYED no marketKey
+ * (NÃO uma heurística per-row "a row tem linha?"):
+ *
+ *   - `marketKey === 'over_under'` (a única família com params.line): exige
+ *     `Number(row.marketParams?.line) === Number(line)` STRICT. Uma análise persiste
+ *     UMA linha escolhida (predict grava marketParams = a linha resolvida), NUNCA a
+ *     escada — uma row legada com marketParams=null OU de linha diferente é PULADA
+ *     (continua escaneando), nunca um line-mismatch silencioso.
+ *   - todo OUTRO mercado: casa só por marketKey (rows têm marketParams=null; o caller
+ *     passa line=null). NUNCA `?.line === line` (confunde undefined×null — daria MISS
+ *     errado em 1X2, cobrando um predict() à toa).
+ *
+ * marketKey null da row (histórica não-backfillada) coalesce 'over_under' (espelha a
+ * view). Retorna a 1ª (mais recente) que casa, ou null (→ a action gasta no MISS).
+ */
+export async function getLatestPredictionForPin(
+  matchId: string,
+  userId: string,
+  marketKey: string,
+  line: number | null,
+): Promise<PredictionWithAiCall | null> {
+  const history = await getPredictionHistoryForMatch(matchId, userId);
+  for (const row of history) {
+    const rowMarketKey = row.marketKey ?? "over_under";
+    if (rowMarketKey !== marketKey) continue;
+    if (marketKey === "over_under") {
+      const rowLine = row.prediction.marketParams?.line;
+      // STRICT: null legado OU linha diferente → pula (nunca line-mismatch).
+      if (rowLine === undefined || rowLine === null) continue;
+      if (Number(rowLine) !== Number(line)) continue;
+    }
+    return row;
+  }
+  return null;
+}
+
 // Minimum elapsed time after kickoff before a fixture is worth polling for a
 // settlement result: 90' + halftime + stoppage, with margin. Settlement reads
 // the 90' regulation score, so we don't need to wait out extra time. Exported:
