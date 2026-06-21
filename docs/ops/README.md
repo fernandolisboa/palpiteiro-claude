@@ -1,7 +1,18 @@
 # Ops do Palpiteiro — colocar em produção e abrir pros amigos (Fase 2)
 
-Este diretório é o guia passo a passo pra tirar o Palpiteiro do uso solo (rodando
-hoje num subdomínio `*.vercel.app`) e **abrir pros amigos** — a **Fase 2** do
+> ✅ **STATUS — FASE 2 EXECUTADA (2026-06).** Produção no ar em **`palpiteiro.live`**
+> (apex canônico, `www` redireciona; HTTPS automático da Vercel). Decisões fechadas no
+> go-live: domínio **`.live`** (`.bet` foi cogitado e **descartado** por risco regulatório
+> — um `.bet` pareceria operador sob a Lei 14.790; os defaults do guia eram `.com.br`/`.com`,
+> mas `.live` foi a escolha), **Vercel Pro**, **Sentry instalado** (`@sentry/nextjs`),
+> `RESEND_FROM_EMAIL` = **`contato@palpiteiro.live`**, e a meta de **≥3 usuários** logando por
+> magic link já foi batida. Este guia agora é **runbook / registro histórico** — os passos
+> abaixo já foram feitos; reuse pra um domínio novo ou pra a Fase 3. Os únicos itens ainda
+> **em aberto** são os que não dá pra confirmar pelo código: páginas `/termos` `/privacidade`
+> (05), INPI e handles sociais (06).
+
+Este diretório é o guia passo a passo que tirou o Palpiteiro do uso solo (que rodava
+num subdomínio `*.vercel.app`) e o **abriu pros amigos** — a **Fase 2** do
 [roadmap](../ROADMAP.md) (meta: **≥3 usuários** logando por convite/whitelist). Os
 docs cobrem domínio, configuração de produção na Vercel, e-mail entregável,
 observabilidade, conformidade legal e marca, terminando num checklist de go-live.
@@ -23,7 +34,7 @@ próprio, o Resend não sai do modo teste e nenhum amigo recebe magic link.
 1. [`01-dominio.md`](./01-dominio.md) — **Comprar o domínio + apontar DNS pra Vercel.** Escolher nome/TLD, registrar e apontar A/CNAME (ou nameservers) pra Vercel, com SSL automático. É o gargalo da Fase 2.
 2. [`02-vercel-prod.md`](./02-vercel-prod.md) — **Configurar a Vercel pra produção.** Anexar o domínio custom, preencher a matriz de env vars, proteger os crons com `CRON_SECRET`, confirmar Neon/KV e decidir Hobby vs Pro.
 3. [`03-email-resend.md`](./03-email-resend.md) — **Tirar o Resend do modo teste.** Verificar o domínio (SPF/DKIM/DMARC) pra o magic link e o spend-alert chegarem na caixa dos amigos, não só na sua conta Resend.
-4. [`04-observabilidade.md`](./04-observabilidade.md) — **Sentry, logs, uptime e alertas.** Instrumentar o Sentry do zero (greenfield), saber onde ver logs e confirmar o spend-alert já existente.
+4. [`04-observabilidade.md`](./04-observabilidade.md) — **Sentry, logs, uptime e alertas.** ✅ Sentry **já instalado** (`@sentry/nextjs` + `withSentryConfig`); o doc vira referência de onde ver logs e do spend-alert.
 5. [`05-legal-compliance.md`](./05-legal-compliance.md) — **18+, jogo responsável, LGPD e termos.** Páginas `/termos` e `/privacidade`, footer com selo 18+, aviso de risco e o contexto da Lei 14.790/2023.
 6. [`06-marca-inpi.md`](./06-marca-inpi.md) — **Registro de marca no INPI (avaliar/adiar).** Busca de anterioridade grátis agora, garantir domínio + handles, e por que o registro formal pode esperar a Fase 3.
 7. [`07-checklist-go-live.md`](./07-checklist-go-live.md) — **Checklist final de produção.** Runbook de go-live com checkboxes, matriz de env vars, smoke tests e plano de rollback. **Fonte da verdade do passo a passo.**
@@ -67,10 +78,16 @@ Tabela consolidada (reconcilia os custos dos docs 01–07). Preços/limites são
 
 ## Decisões abertas (suas)
 
-Agregadas dos docs 01–07. A primeira destrava as outras — **resolva o nome do
-domínio antes**, porque Resend, marca e e-mail de contato legal dependem dele.
+> ✅ **A maioria foi RESOLVIDA no go-live da Fase 2** (ver banner do topo). Resolvidas:
+> **#1** domínio = `palpiteiro.live`, **#3** DNS na Vercel, **#4** Vercel **Pro**, **#5** apex
+> canônico (`www` redireciona), **#7** envio no Resend (`contato@palpiteiro.live`), **#8**
+> Sentry **ligado e instalado**. Seguem genuinamente **em aberto**: **#10** (páginas legais
+> `/termos` `/privacidade` ainda não publicadas — os disclaimers 18+/CVV existem só nas
+> superfícies de palpite) e **#11** (INPI/handles). #6 (spend-alert) e #9 (uptime) são opt-in.
 
-1. **Nome + TLD do domínio** (candidato: `palpiteiro.com.br`; `.com`/`.app` também na mesa). _Default: `.com.br`_ pelo público BR. Checar disponibilidade **e** handles sociais antes de fechar. Ver [`01-dominio.md`](./01-dominio.md).
+Agregadas dos docs 01–07 (estado original do planejamento, mantido como registro):
+
+1. ✅ **RESOLVIDA — domínio = `palpiteiro.live`.** (Candidato original era `.com.br`; `.bet` foi descartado por risco regulatório.) Ver [`01-dominio.md`](./01-dominio.md).
 2. **Registrador do `.com`/`.app`**: Cloudflare Registrar (preço de custo, prende ao DNS Cloudflare) vs Namecheap (não prende) vs Vercel Domains (mais caro, conveniente). Ver [`01-dominio.md`](./01-dominio.md).
 3. **Caminho de DNS**: registros A/CNAME (_default_, mantém DNS no registrador) vs nameservers da Vercel (centraliza, obrigatório p/ wildcard). Ver [`01-dominio.md`](./01-dominio.md).
 4. **Plano Vercel**: Hobby (_default_, uso não-comercial) vs Pro. Confirmar a leitura de "não-comercial" no Fair Use atual. Ver [`02-vercel-prod.md`](./02-vercel-prod.md).
@@ -90,17 +107,17 @@ do go-live. Resumão do que cada etapa fecha:
 
 | # | Etapa | Doc | Estado |
 | --- | --- | --- | :---: |
-| a | Domínio comprado + DNS apontado | [`01`](./01-dominio.md) | [ ] |
-| b | Vercel produção + matriz de env vars + crons | [`02`](./02-vercel-prod.md) | [ ] |
-| c | Resend fora do modo teste (domínio verificado) | [`03`](./03-email-resend.md) | [ ] |
-| d | Observabilidade (Sentry/logs) + spend-alert | [`04`](./04-observabilidade.md) | [ ] |
-| e | Páginas legais (`/termos`, `/privacidade`) + footer 18+ | [`05`](./05-legal-compliance.md) | [ ] |
-| f | Marca: domínio/handles garantidos, INPI adiado | [`06`](./06-marca-inpi.md) | [ ] |
-| g | Whitelist dos amigos + `db:claim-admin` | [`auth-setup.md`](../runbooks/auth-setup.md) | [ ] |
+| a | Domínio comprado + DNS apontado (`palpiteiro.live`) | [`01`](./01-dominio.md) | ✅ |
+| b | Vercel produção (Pro) + env vars + crons | [`02`](./02-vercel-prod.md) | ✅ |
+| c | Resend fora do modo teste (domínio verificado) | [`03`](./03-email-resend.md) | ✅ |
+| d | Observabilidade (Sentry instalado/logs) + spend-alert | [`04`](./04-observabilidade.md) | ✅ |
+| e | Páginas legais (`/termos`, `/privacidade`) + footer 18+ | [`05`](./05-legal-compliance.md) | ⬜ pendente |
+| f | Marca: domínio garantido; INPI/handles | [`06`](./06-marca-inpi.md) | ⬜ a confirmar |
+| g | Whitelist dos amigos + `db:claim-admin` | [`auth-setup.md`](../runbooks/auth-setup.md) | ✅ |
 
-> ✅ **Definition of done (Fase 2):** ≥3 amigos convidados logam por magic link
-> (e-mail chega na caixa deles), veem recomendações + dashboard/Yield, e os crons
-> rodam autenticados. Detalhe completo em [`07-checklist-go-live.md`](./07-checklist-go-live.md).
+> ✅ **Definition of done (Fase 2) — ATINGIDA:** amigos convidados logam por magic link
+> (e-mail chega na caixa deles), veem recomendações + dashboard/Yield, e os crons rodam
+> autenticados em `palpiteiro.live`. Detalhe completo em [`07-checklist-go-live.md`](./07-checklist-go-live.md).
 
 ## Outros docs operacionais (fora da sequência de go-live)
 

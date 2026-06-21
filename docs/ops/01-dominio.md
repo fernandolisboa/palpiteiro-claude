@@ -1,9 +1,14 @@
 # Comprar o domínio e apontar pra Vercel
 
-Hoje o Palpiteiro roda num subdomínio `*.vercel.app`. Pra destravar a **Fase 2**
-(abrir pros amigos), o primeiro passo é ter um **domínio próprio**: ele é
+> ✅ **JÁ FEITO (2026-06): domínio = `palpiteiro.live`**, no ar (apex canônico, `www`
+> redireciona, SSL automático da Vercel). Este doc fica como **runbook** (reuso pra outro
+> domínio / Fase 3). A seção "Decisão" abaixo está resolvida; os exemplos genéricos seguem
+> ilustrativos.
+
+O Palpiteiro rodava num subdomínio `*.vercel.app`. Pra destravar a **Fase 2**
+(abrir pros amigos), o primeiro passo era ter um **domínio próprio**: ele é
 pré-requisito pra verificar e-mail no Resend (sem isso, magic link só chega pra
-você), dá uma URL apresentável e vira a base da marca. Este doc te leva de
+você), dá uma URL apresentável e vira a base da marca. Este doc levou de
 "ainda não decidi o nome" até "DNS apontado e SSL emitido na Vercel".
 
 > ⚠️ Por que o domínio é o gargalo da Fase 2: subdomínios `*.vercel.app` **não**
@@ -25,9 +30,11 @@ você), dá uma URL apresentável e vira a base da marca. Este doc te leva de
 
 ## Decisão: qual extensão de domínio
 
-> 🟡 **DECISÃO DO USUÁRIO — nome ainda não definido.** Candidato mencionado:
-> `palpiteiro.com.br`. As opções `.com` e `.app` também estão na mesa. A tabela
-> abaixo compara; a escolha é sua.
+> ✅ **DECIDIDO — `palpiteiro.live`.** O candidato original era `palpiteiro.com.br` (default
+> do guia), e um `.bet` chegou a ser cogitado pelo apelo "de aposta" — mas foi **descartado
+> por risco regulatório** (um `.bet`/`.bet.br` sinaliza *operador* sob a Lei 14.790, e o
+> Palpiteiro **não** opera apostas). `.live` ficou: neutro, disponível, e sem a leitura de
+> operador. A tabela abaixo fica como comparação de referência.
 
 | Extensão | Onde registra | Exige CPF/CNPJ? | Prós | Contras |
 | --- | --- | --- | --- | --- |

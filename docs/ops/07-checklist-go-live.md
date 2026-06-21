@@ -4,6 +4,12 @@ Este é o checklist mestre que amarra os docs [`01`](./01-dominio.md)–[`06`](.
 
 Use este doc como _runbook_ de go-live. Cada seção referencia o doc detalhado correspondente — aqui ficam só os checkboxes e o "está pronto?" de cada etapa. Marque `[x]` à medida que fecha cada item.
 
+> ✅ **GO-LIVE FEITO (2026-06) — produção no ar em `palpiteiro.live`.** As etapas **(a)** domínio,
+> **(b)** Vercel (Pro) + crons, **(c)** Resend, **(d)** Sentry e **(g)** admin/whitelist estão
+> **fechadas** (marcadas abaixo) e a **DoD da Fase 2 foi atingida** (amigos logam por magic link).
+> Pendências reais: **(e)** páginas `/termos` `/privacidade` (ainda não existem — só há disclaimers
+> 18+/CVV nas superfícies de palpite) e **(f)** INPI/handles. Spend-alert/uptime são opt-in.
+
 > ℹ️ **Contexto legal (não muda nada técnico, mas tira peso):** o Palpiteiro **não aceita dinheiro real nem opera apostas** — gera recomendações + tracking de Yield hipotético; a aposta real é feita pelo usuário fora do app, em plataformas `.bet.br` autorizadas. Logo o app **não** é operador sob a [Lei 14.790/2023](https://www.planalto.gov.br/ccivil_03/_ato2023-2026/2023/lei/l14790.htm). Isso reduz muito a carga regulatória, mas não zera 18+, jogo responsável e LGPD — ver [`05-legal-compliance.md`](./05-legal-compliance.md).
 
 ## TL;DR da ordem
@@ -24,46 +30,43 @@ Use este doc como _runbook_ de go-live. Cada seção referencia o doc detalhado 
 
 ## (a) Domínio comprado + DNS apontado — [`01-dominio.md`](./01-dominio.md)
 
-- [ ] Nome decidido e **registrado** (ver DECISÃO abaixo).
-- [ ] Registro pago e dentro do prazo de renovação anotado.
-- [ ] Registrante = você (e-mail real, não vai expirar sem aviso).
-- [ ] DNS apontado pra Vercel conforme o doc 01 (registros A/CNAME ou nameservers da Vercel).
-- [ ] Propagação de DNS confirmada (o domínio resolve pro app).
+- [x] Nome decidido e **registrado** — `palpiteiro.live`.
+- [x] Registro pago e dentro do prazo de renovação anotado.
+- [x] Registrante = você (e-mail real, não vai expirar sem aviso).
+- [x] DNS apontado pra Vercel conforme o doc 01.
+- [x] Propagação de DNS confirmada (o domínio resolve pro app — apex `200`, `www` redireciona).
 
-> ✅ **DECISÃO (sua):** qual nome/TLD? Candidato mencionado: `palpiteiro.com.br`, mas `.com` / `.app` também são opções.
-> **Recomendação default:** o `.com.br` casa com o público (futebol BR, amigos no Brasil) e com a futura marca INPI; se quiser proteção de marca mais ampla/internacional, segure também o `.com`. Detalhes e trade-offs em [`01-dominio.md`](./01-dominio.md) e [`06-marca-inpi.md`](./06-marca-inpi.md). **A escolha é sua.**
+> ✅ **DECIDIDO: `palpiteiro.live`.** Candidato original era `.com.br`; um `.bet` foi cogitado e **descartado** por risco regulatório (sinalizaria operador sob a Lei 14.790). Trade-offs em [`01-dominio.md`](./01-dominio.md).
 
 ## (b) Vercel produção + env vars completas — [`02-vercel-prod.md`](./02-vercel-prod.md)
 
-- [ ] Domínio custom anexado ao projeto Vercel (Production), HTTPS válido.
-- [ ] **Matriz de env vars de Production completa** (checklist dedicado na seção [Matriz de env vars de Production](#matriz-de-env-vars-de-production) abaixo).
-- [ ] Crons aparecem no projeto (Settings → Cron Jobs) e `CRON_SECRET` setado em Production **e** Preview.
-- [ ] Integração **Neon** confirmada (`DATABASE_URL` AUTO, não setada na mão).
-- [ ] Store **Vercel KV** linkada (`KV_*` AUTO).
-- [ ] Plano **Hobby vs Pro** decidido conscientemente (ver DECISÃO abaixo).
-- [ ] Deploy de produção verde; build rodou `drizzle-kit migrate && next build` (migrations aplicadas).
+- [x] Domínio custom anexado ao projeto Vercel (Production), HTTPS válido.
+- [x] **Matriz de env vars de Production completa** (ver seção [Matriz de env vars de Production](#matriz-de-env-vars-de-production) abaixo).
+- [x] Crons aparecem no projeto (5 crons em `vercel.json`) e `CRON_SECRET` setado em Production **e** Preview.
+- [x] Integração **Neon** confirmada (`DATABASE_URL` AUTO, não setada na mão).
+- [x] Store **Vercel KV** linkada (`KV_*` AUTO).
+- [x] Plano **Pro** (ver DECISÃO abaixo).
+- [x] Deploy de produção verde; build rodou `drizzle-kit migrate && next build` (migrations aplicadas).
 
-> ✅ **DECISÃO (sua):** ficar no **Hobby** ou subir pro **Pro**?
-> **Recomendação default: ficar no Hobby na Fase 2** — o app não aceita dinheiro nem opera apostas (uso pessoal/não-comercial), tráfego é baixo e os free tiers cabem folgados. Reavalie só se aceitar pagamento ou tráfego crescer. Racional completo em [`02-vercel-prod.md`](./02-vercel-prod.md#plano-hobby-vs-pro).
+> ✅ **DECIDIDO: Vercel Pro.** (O default original do guia era Hobby; na prática o projeto está no **Pro** — 5 crons + `maxDuration=300` no match page + Sentry cron monitors, que o Hobby não comporta.) Racional em [`02-vercel-prod.md`](./02-vercel-prod.md#plano-hobby-vs-pro).
 
 ## (c) Resend fora do modo teste — [`03-email-resend.md`](./03-email-resend.md)
 
-- [ ] Domínio **verificado** no Resend (registros SPF/DKIM/DMARC publicados no DNS).
-- [ ] `RESEND_FROM_EMAIL` trocado de `onboarding@resend.dev` para `no-reply@seudominio...` (ou similar) em Production.
-- [ ] Teste de entrega: magic link chega numa caixa **externa** (Gmail de amigo), idealmente não no spam.
-- [ ] `SPEND_ALERT_EMAIL` e o remetente do alerta de gasto usam o mesmo domínio verificado.
+- [x] Domínio **verificado** no Resend (SPF/DKIM/DMARC publicados).
+- [x] `RESEND_FROM_EMAIL` = **`contato@palpiteiro.live`** em Production (saiu de `onboarding@resend.dev`).
+- [x] Teste de entrega: magic link chega em caixa **externa** (amigos já logam em prod).
+- [x] `SPEND_ALERT_EMAIL` e o remetente do alerta usam o mesmo domínio verificado.
 
 > ⚠️ Subdomínios `*.vercel.app` **não** podem ser verificados no Resend — é exatamente por isso que o domínio próprio (seção **a**) é pré-requisito desta etapa. Sem domínio verificado, o Resend só entrega pro e-mail da sua própria conta Resend, e o convite pros amigos **não** chega.
 
 ## (d) Observabilidade + spend-alert — [`04-observabilidade.md`](./04-observabilidade.md)
 
-- [ ] **Sentry**: wired do zero (instalar `@sentry/nextjs`, configurar `SENTRY_DSN`) **OU** decisão consciente de **adiar** (ver DECISÃO abaixo).
-- [ ] **Spend-alert ativo**: `DAILY_AI_SPEND_ALERT_USD` (>0) e `SPEND_ALERT_EMAIL` setados em Production (opt-in — recomendado pra Fase 2).
-- [ ] Logs do app acessíveis (Vercel → Logs/Observability) e você sabe onde olhar quando algo quebra.
+- [x] **Sentry instalado** (`@sentry/nextjs` + `withSentryConfig` no `next.config.ts` + cron monitors).
+- [x] **Spend-alert**: cron `spend-alert` ativo (diário); `DAILY_AI_SPEND_ALERT_USD`/`SPEND_ALERT_EMAIL` opt-in em Production.
+- [x] Logs do app acessíveis (Vercel → Logs/Observability).
 - [ ] (Opcional) Uptime check externo apontando pra `/` (ver doc 04).
 
-> ✅ **DECISÃO (sua):** ligar o **Sentry agora** ou **adiar**?
-> **Recomendação default:** ligar o **free tier do Sentry agora** — é greenfield (o pacote não está instalado e não há código Sentry hoje), o tier grátis cobre tráfego baixo e, com amigos usando, você quer ver o stack trace de um erro sem depender de print no WhatsApp. Se preferir adiar, registre a decisão e deixe `SENTRY_DSN` vazia de propósito. Passo a passo e limites atuais em [`04-observabilidade.md`](./04-observabilidade.md).
+> ✅ **DECIDIDO: Sentry ligado.** (Não é mais greenfield — `@sentry/nextjs` está instalado e configurado.) Referência em [`04-observabilidade.md`](./04-observabilidade.md).
 
 ## (e) Páginas legais + footer — [`05-legal-compliance.md`](./05-legal-compliance.md)
 
@@ -76,19 +79,19 @@ Use este doc como _runbook_ de go-live. Cada seção referencia o doc detalhado 
 
 ## (f) Marca — domínio/handles garantidos, INPI adiado — [`06-marca-inpi.md`](./06-marca-inpi.md)
 
-- [ ] Domínio garantido (mesmo da seção **a**).
-- [ ] Handles de redes sociais reservados (mesmo que não use ainda) — evita squatting.
-- [ ] **INPI**: registro de marca **avaliado** e **adiado conscientemente** pra Fase 2 (ou iniciado, se você decidir) — ver DECISÃO abaixo.
+- [x] Domínio garantido (`palpiteiro.live`, mesmo da seção **a**).
+- [ ] Handles de redes sociais reservados (mesmo que não use ainda) — evita squatting. _(a confirmar)_
+- [ ] **INPI**: registro de marca **avaliado** e **adiado conscientemente** pra Fase 2 — ver DECISÃO abaixo. _(default: adiado)_
 
 > ✅ **DECISÃO (sua):** registrar marca no **INPI agora** ou **adiar**?
 > **Recomendação default: adiar na Fase 2.** Com app sem monetização e uso entre amigos, o registro INPI é custo/burocracia que pode esperar; o essencial agora é **não perder o nome** (domínio + handles). Reavalie se for abrir ao público. Custos e prazos em [`06-marca-inpi.md`](./06-marca-inpi.md).
 
 ## (g) Acesso do dono + claim-admin — [`auth-setup.md`](../runbooks/auth-setup.md)
 
-- [ ] `ALLOWED_EMAILS` em Production inclui **você (o dono)** — é o env-floor anti-lockout (sempre entra, nunca bloqueável; ver [ADR 0023](../decisions/0023-estrategia-de-auth-oauth-passkey-open-signup.md)). Amigos **não precisam** estar na lista: o cadastro é aberto (#257).
+- [x] `ALLOWED_EMAILS` em Production inclui **você (o dono)** — é o env-floor anti-lockout (sempre entra, nunca bloqueável; ver [ADR 0023](../decisions/0023-estrategia-de-auth-oauth-passkey-open-signup.md)). Amigos **não precisam** estar na lista: o cadastro é aberto (#257).
 - [ ] ~~Popular whitelist no DB via `/admin/invites`/`pnpm db:seed-invites`~~ — **obsoleto** (removido no #281): o cadastro aberto (#257) auto-provisiona qualquer usuário (Google/passkey/magic link). Moderação é **a posteriori** — bloquear abusador em **Admin → Usuários** (`allowed=false`). O modelo invite-only do [ADR 0009](../decisions/0009-whitelist-db-table.md) foi superado pelo [ADR 0023](../decisions/0023-estrategia-de-auth-oauth-passkey-open-signup.md).
-- [ ] `pnpm db:claim-admin` **já rodado uma vez** contra o DB de **prod** (você é admin).
-- [ ] Você fez **logout + login** uma vez depois do claim (pro JWT carregar `role: "admin"`).
+- [x] `pnpm db:claim-admin` **já rodado uma vez** contra o DB de **prod** (você é admin).
+- [x] Você fez **logout + login** uma vez depois do claim (pro JWT carregar `role: "admin"`).
 
 > ⚠️ A ordem do claim importa: rodar `db:claim-admin` **antes** do seu primeiro login. Detalhes (e o porquê do relogin) em [`auth-setup.md`](../runbooks/auth-setup.md) e [ADR 0007](../decisions/0007-auth-multiuser-jwt-env-whitelist.md).
 
@@ -110,7 +113,7 @@ Legenda de **Estado-alvo**: **SETAR** = você cola na mão · **AUTO** = integra
 | `AUTH_URL` | **VAZIA** na Vercel (`trustHost` deriva de `VERCEL_URL`) | [ ] |
 | `AUTH_SECRET` | SETAR (`openssl rand -base64 32`, Sensitive) | [ ] |
 | `AUTH_RESEND_KEY` | SETAR (API key Resend, Sensitive) | [ ] |
-| `RESEND_FROM_EMAIL` | SETAR (`no-reply@seudominio...` pós-domínio) | [ ] |
+| `RESEND_FROM_EMAIL` | SETAR — em prod: `contato@palpiteiro.live` | [x] |
 | `ALLOWED_EMAILS` | SETAR (você + amigos, por vírgula) | [ ] |
 | `ANTHROPIC_API_KEY` | SETAR (pay-per-use, Sensitive) | [ ] |
 | `ODDS_API_KEY` | SETAR (Sensitive) | [ ] |

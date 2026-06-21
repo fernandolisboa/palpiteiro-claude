@@ -1,5 +1,9 @@
 # Observabilidade — Sentry, logs, uptime e alertas
 
+> ✅ **JÁ FEITO (2026-06): Sentry instalado.** `@sentry/nextjs` + `withSentryConfig` no
+> `next.config.ts` (com cron monitors) — **não é mais greenfield**. Onde o doc abaixo diz
+> "instalar do zero", leia como referência de config/limites. Spend-alert diário já roda.
+
 Como dar visibilidade de erros e saúde do app em produção **sem gastar à toa**.
 O objetivo aqui é destravar a Fase 2 (abrir pros amigos) com a tranquilidade de
 saber quando algo quebrou — não montar um stack de SRE. Tráfego é baixo e os free
