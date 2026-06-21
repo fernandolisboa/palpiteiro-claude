@@ -1,5 +1,10 @@
 # Sair do modo teste do Resend: verificar domínio e entregabilidade
 
+> ✅ **JÁ FEITO (2026-06).** Domínio **`palpiteiro.live`** verificado no Resend e fora do modo
+> teste — `RESEND_FROM_EMAIL` = **`contato@palpiteiro.live`**, magic link chega em caixas
+> externas (amigos já logam). Este doc vira **runbook** (reuse pra outro domínio); onde lê
+> `send.SEUDOMINIO`/`no-reply@...`, o valor efetivo é `contato@palpiteiro.live`.
+
 Operacional. Hoje o Resend do Palpiteiro está em **modo teste**: sem domínio
 verificado, ele só envia de `onboarding@resend.dev` e só entrega pro e-mail da
 própria conta Resend. Isso trava o magic link pra qualquer outra pessoa — ou

@@ -1,5 +1,11 @@
 # Configurar o projeto Vercel pra produção
 
+> ✅ **JÁ FEITO (2026-06).** Produção no ar em **`palpiteiro.live`** (apex canônico, `www`
+> redireciona), plano **Vercel Pro**, 5 crons + `CRON_SECRET`, Neon/KV integrados,
+> `RESEND_FROM_EMAIL` = `contato@palpiteiro.live`. Este doc vira **runbook** (a decisão
+> "Hobby vs Pro" abaixo já é **Pro**). Estado consolidado no [`README`](./README.md) e no
+> [`07-checklist-go-live.md`](./07-checklist-go-live.md).
+
 Operacional. Como deixar o projeto Vercel **pronto pra produção** da Fase 2
 (abrir pros amigos): domínio custom anexado, matriz de env vars correta, crons
 protegidos, integrações Neon/KV confirmadas e um deploy de produção verificado.
