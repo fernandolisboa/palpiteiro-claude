@@ -50,9 +50,13 @@ const nextConfig: NextConfig = {
         //     cache-friendly → a imagem é agressivamente cacheada de qualquer jeito; o duplo-header
         //     é cosmético, não fura o escudo (NÃO é o `max-age=0` que um comentário antigo supunha).
         // X-Robots-Tag/Referrer-Policy são aditivos (sem colisão) e alcançam página + OG.
-        // NOTA dead-link: no `next start` o notFound também herda este header (headers() aplica
-        // literalmente); na Vercel o render dinâmico do notFound vem `private, no-store` (não cacheia
-        // o 404) — divergência local/prod esperada, sem impacto no escudo do caso válido.
+        // NOTA dead-link (#416, VERIFICADO em prod): no `next start` o notFound herda este header
+        // (headers() aplica literalmente). Em prod — `curl -I https://palpiteiro.live/p/<dead>` — o
+        // caminho notFound retorna `private, no-cache, no-store, max-age=0, must-revalidate` +
+        // `x-vercel-cache: MISS`: o Next força no-store no notFound, sobrescrevendo este header → o
+        // 404 NÃO é cacheado. Reforço: este header é `max-age` (diretiva de BROWSER), SEM `s-maxage`;
+        // a CDN da Vercel só cacheia function-response com `s-maxage`, então nem o caso local
+        // poderia envenenar a CDN compartilhada com um 404. Escudo do caso válido intacto.
         source: "/p/:path*",
         headers: [
           { key: "Cache-Control", value: "public, max-age=86400, immutable" },

@@ -9,6 +9,9 @@ import { NEUTRAL_DESCRIPTION } from "@/app/p/[id]/load-shared-palpite";
 // pra og:description num dead-link público regulatório. Reafirmamos a description NEUTRA aqui
 // (espelha o branch no-data do generateMetadata da page) + noindex/nofollow. SEM isto, o 404
 // semântico vaza linguagem de valor. Verificado com curl no head do dead-link.
+// O app/p/layout.tsx declara o MESMO piso pro segmento inteiro — redundância intencional
+// (defense-in-depth): este export protege o 404 independente do comportamento de herança da
+// metadata do layout na boundary not-found.
 export const metadata: Metadata = {
   robots: { index: false, follow: false },
   description: NEUTRAL_DESCRIPTION,
