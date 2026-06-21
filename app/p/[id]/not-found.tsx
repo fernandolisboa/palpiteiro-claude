@@ -1,4 +1,19 @@
+import type { Metadata } from "next";
+
 import { Wordmark } from "@/components/wordmark";
+import { NEUTRAL_DESCRIPTION } from "@/app/p/[id]/load-shared-palpite";
+
+// Metadata do 404 público (#416, privacy MAJOR 3): no HARD-404 (sem loading.tsx, page.tsx
+// #416) o Next descarta o generateMetadata da página e resolve a metadata DESTA boundary —
+// que, sem export próprio, cascateia a description "Recomendações de aposta…" da root layout
+// pra og:description num dead-link público regulatório. Reafirmamos a description NEUTRA aqui
+// (espelha o branch no-data do generateMetadata da page) + noindex/nofollow. SEM isto, o 404
+// semântico vaza linguagem de valor. Verificado com curl no head do dead-link.
+export const metadata: Metadata = {
+  robots: { index: false, follow: false },
+  description: NEUTRAL_DESCRIPTION,
+  openGraph: { description: NEUTRAL_DESCRIPTION },
+};
 
 // 404 público mínimo do /p (ADR 0035 §6 / #384): cobre o kill-switch (set sem shared_at →
 // getSharedPalpiteSet null → notFound) E os 3 triggers de 404, pousando numa casca pública
