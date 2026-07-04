@@ -29,6 +29,7 @@ em ondas, o placar dos 8 pedidos). Depois mergulhe conforme o interesse:
 | 06 | [SEO e conteúdo](./06-seo-e-conteudo.md) | Quick-wins de SEO + blog/news como motor orgânico |
 | 07 | [Monetização](./07-monetizacao.md) | Caminhos sequenciados + exposição regulatória de cada |
 | 08 | [Concorrente PalpiteiroFC + marca](./08-concorrente-palpiteirofc-e-marca.md) | Benchmark + risco regulatório + nome/INPI |
+| 09 | [O que precisa de você](./09-precisa-de-voce.md) | Estado da execução: PRs a revisar, decisões suas, backlog |
 
 ## Fios que cruzam vários reports
 
