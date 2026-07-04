@@ -1,6 +1,7 @@
 import type { Metadata } from "next";
 import { Geist, Geist_Mono } from "next/font/google";
 import "./globals.css";
+import { SiteFooter } from "@/components/site-footer";
 import { ThemeProvider } from "@/components/theme-provider";
 import { TimezoneSync } from "@/components/timezone-sync";
 import { VersionChecker } from "@/components/version-checker";
@@ -18,7 +19,14 @@ const geistMono = Geist_Mono({
 export const metadata: Metadata = {
   metadataBase: new URL("https://palpiteiro.live"),
   title: "Palpiteiro",
-  description: "Recomendações de aposta em over/under 2.5 gols com análise por IA",
+  // Descrição palpite-first e neutra: multi-mercado (não só over/under 2.5) e SEM a frase
+  // "Recomendações de aposta" (o posicionamento sancionado é "ferramenta de análise, não é
+  // recomendação de aposta"). Esta descrição cascateia como fallback pra rotas sem metadata
+  // própria — daí o cuidado regulatório (o segmento /p reafirma sua NEUTRAL_DESCRIPTION por
+  // cima; ver app/p/layout.tsx). O overhaul completo de metadata (template/twitter/canonical)
+  // é issue separada (#441).
+  description:
+    "Palpiteiro — palpites de futebol com IA, um por jogo, com o racional. Ferramenta de análise; não é casa de apostas.",
 };
 
 export default function RootLayout({
@@ -38,6 +46,7 @@ export default function RootLayout({
           disableTransitionOnChange
         >
           {children}
+          <SiteFooter />
         </ThemeProvider>
         <TimezoneSync />
         <VersionChecker />
