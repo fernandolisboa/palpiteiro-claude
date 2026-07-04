@@ -1,5 +1,6 @@
 import { NextResponse } from "next/server";
 
+import { isAuthorizedCron } from "@/lib/auth/cron-auth";
 import { runSpendAlert } from "@/lib/notifications/spend-alert";
 
 // Vercel Cron hits this endpoint (GET) once a day (23:00 UTC) and sends
@@ -9,14 +10,7 @@ export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
 
 export async function GET(request: Request): Promise<Response> {
-  const secret = process.env.CRON_SECRET;
-  if (!secret) {
-    console.error(
-      JSON.stringify({ scope: "spend_alert", event: "missing_cron_secret" }),
-    );
-    return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
-  }
-  if (request.headers.get("authorization") !== `Bearer ${secret}`) {
+  if (!isAuthorizedCron(request, "spend_alert")) {
     return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
   }
 

@@ -1,5 +1,6 @@
 import { NextResponse } from "next/server";
 
+import { isAuthorizedCron } from "@/lib/auth/cron-auth";
 import { ensureUpcomingFixturesSynced } from "@/lib/sync/sync-upcoming-fixtures";
 
 // Vercel Cron hits this endpoint (GET) every 6h (see vercel.json) and sends
@@ -15,14 +16,7 @@ export const dynamic = "force-dynamic";
 export const maxDuration = 60;
 
 export async function GET(request: Request): Promise<Response> {
-  const secret = process.env.CRON_SECRET;
-  if (!secret) {
-    console.error(
-      JSON.stringify({ scope: "sync_fixtures", event: "missing_cron_secret" }),
-    );
-    return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
-  }
-  if (request.headers.get("authorization") !== `Bearer ${secret}`) {
+  if (!isAuthorizedCron(request, "sync_fixtures")) {
     return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
   }
 

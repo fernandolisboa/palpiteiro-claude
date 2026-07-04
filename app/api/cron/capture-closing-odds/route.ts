@@ -1,5 +1,6 @@
 import { NextResponse } from "next/server";
 
+import { isAuthorizedCron } from "@/lib/auth/cron-auth";
 import { captureClosingLines } from "@/lib/odds/closing-line";
 
 // Vercel Cron hits this endpoint (GET) a cada 30min. Captura a closing line (snapshot
@@ -11,20 +12,10 @@ export const dynamic = "force-dynamic";
 export const maxDuration = 60;
 
 export async function GET(request: Request): Promise<Response> {
-  const secret = process.env.CRON_SECRET;
   // Vercel Cron envia `Authorization: Bearer <CRON_SECRET>`. Fail-closed: sem secret
-  // configurado, rejeita como qualquer caller não-autorizado (401, body genérico) —
-  // não vaza estado de config nem devolve 5xx que o scheduler re-tentaria.
-  if (!secret) {
-    console.error(
-      JSON.stringify({
-        scope: "capture_closing_odds",
-        event: "missing_cron_secret",
-      }),
-    );
-    return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
-  }
-  if (request.headers.get("authorization") !== `Bearer ${secret}`) {
+  // configurado (ou header divergente), rejeita como qualquer caller não-autorizado
+  // (401, body genérico) — não vaza config nem devolve 5xx que o scheduler re-tentaria.
+  if (!isAuthorizedCron(request, "capture_closing_odds")) {
     return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
   }
 
