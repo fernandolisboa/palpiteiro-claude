@@ -15,6 +15,10 @@ import { authConfig } from "@/auth.config";
  *                    públicas/pré-login não há sessão, então sem excluir o
  *                    evento toma 307→/signin e some silenciosamente.
  *  - assets estáticos (`_next/static`, `_next/image`, `favicon.ico`)
+ *  - `/robots.txt` e `/sitemap.xml` → rotas de metadata do Next (SEO, #439): têm
+ *    que ser lidas por crawlers SEM sessão. Sem excluir, tomavam 307→/signin e
+ *    sumiam pros bots (report 06 achado #2). Ancoradas (`robots.txt$`/`sitemap.xml$`)
+ *    como as irmãs — liberam só o arquivo exato; `/robots.txtfoo` segue gateado.
  *  - `/signin` → a própria página de login
  *  - `/como-funciona` → página pública de ajuda (sem sessão, conteúdo estático)
  *  - `/termos` e `/privacidade` → páginas legais públicas (ops 05 §7): precisam ser
@@ -39,6 +43,6 @@ export const config = {
   // o caminho após o `/` inicial é vazio só pra raiz, então `$` casa só ela —
   // `/jogos`, `/dashboard`, `/perfil`, `/match/123`, `/admin` seguem gateados.
   matcher: [
-    "/((?!api/|monitoring(?:/|$)|_next/static|_next/image|favicon.ico|signin$|como-funciona$|termos$|privacidade$|p/[^/]+(?:/opengraph-image[^/]*)?$|$).*)",
+    "/((?!api/|monitoring(?:/|$)|_next/static|_next/image|favicon.ico|robots.txt$|sitemap.xml$|signin$|como-funciona$|termos$|privacidade$|p/[^/]+(?:/opengraph-image[^/]*)?$|$).*)",
   ],
 };
