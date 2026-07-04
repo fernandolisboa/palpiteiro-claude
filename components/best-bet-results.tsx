@@ -1,11 +1,12 @@
 "use client";
 
 import { useState } from "react";
-import { Sparkles } from "lucide-react";
+import { Info, Sparkles } from "lucide-react";
 
 import { AnalysisResult } from "@/components/analysis-result";
 import { Button } from "@/components/ui/button";
 import { cn } from "@/lib/utils";
+import { ANALYSIS_RISK_DISCLAIMER } from "@/lib/view/analysis";
 import type { BestBetEntry, BestBetView } from "@/lib/view/types";
 
 export type BestBetSortMode = "edge" | "ev" | "edgeConf";
@@ -110,6 +111,14 @@ export function BestBetResults({ view }: { view: BestBetView }) {
           ))}
         </div>
       )}
+
+      {/* Aviso de risco (#434): UMA linha muda pro fan-out inteiro (os cards passam
+          showRiskDisclaimer={false} pra não repetir por card). Superfície SÓBRIA —
+          fora do firewall de valor da manchete. */}
+      <p className="flex items-center gap-1.5 px-0.5 text-meta leading-snug tracking-tight text-muted-fg-2">
+        <Info className="size-3 shrink-0" aria-hidden="true" />
+        {ANALYSIS_RISK_DISCLAIMER}
+      </p>
     </div>
   );
 }
@@ -141,7 +150,9 @@ function BestBetCard({
           {entry.marketLabel}
         </span>
       </div>
-      <AnalysisResult view={entry.analysis} />
+      {/* showRiskDisclaimer={false}: o aviso de risco sai UMA vez no fim do painel
+          (BestBetResults), não uma vez por card do fan-out. */}
+      <AnalysisResult view={entry.analysis} showRiskDisclaimer={false} />
     </div>
   );
 }

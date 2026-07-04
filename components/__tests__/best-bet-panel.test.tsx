@@ -180,6 +180,17 @@ describe("BestBetResults — render", () => {
     const html = renderToStaticMarkup(<BestBetResults view={passView} />);
     expect(html).toContain("Resultado (1X2)");
   });
+
+  // #434: o aviso de risco sai UMA vez no fim do painel (não por card — os cards
+  // passam showRiskDisclaimer={false}). AnalysisResult é mockado aqui, então a
+  // linha do painel é a ÚNICA fonte → deve aparecer exatamente uma vez.
+  it("renderiza o aviso de risco UMA vez no rodapé do fan-out", () => {
+    const RISK =
+      "Recomendação analítica, sem garantia de resultado. Aposte com responsabilidade.";
+    const html = renderToStaticMarkup(<BestBetResults view={view} />);
+    expect(html).toContain(RISK);
+    expect(html.split(RISK).length - 1).toBe(1);
+  });
 });
 
 // Garante que o union de modos não regrediu silenciosamente.
