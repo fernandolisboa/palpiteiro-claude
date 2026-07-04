@@ -17,6 +17,9 @@ import { authConfig } from "@/auth.config";
  *  - assets estáticos (`_next/static`, `_next/image`, `favicon.ico`)
  *  - `/signin` → a própria página de login
  *  - `/como-funciona` → página pública de ajuda (sem sessão, conteúdo estático)
+ *  - `/termos` e `/privacidade` → páginas legais públicas (ops 05 §7): precisam ser
+ *    lidas ANTES do login (linkadas no /signin e no footer global). Estáticas, sem
+ *    sessão/DB. Ancoradas (`termos$`/`privacidade$`) como as irmãs.
  *  - `/p/[id]` (+ a sub-rota OG `/p/[id]/opengraph-image`) → página pública de palpite
  *    compartilhado (#384, ADR 0035): read-only, resolvível por qualquer um (privacidade é
  *    o opt-in `shared_at`, gateado na query). `p/[^/]+(?:/opengraph-image[^/]*)?$` libera
@@ -36,6 +39,6 @@ export const config = {
   // o caminho após o `/` inicial é vazio só pra raiz, então `$` casa só ela —
   // `/jogos`, `/dashboard`, `/perfil`, `/match/123`, `/admin` seguem gateados.
   matcher: [
-    "/((?!api/|monitoring(?:/|$)|_next/static|_next/image|favicon.ico|signin$|como-funciona$|p/[^/]+(?:/opengraph-image[^/]*)?$|$).*)",
+    "/((?!api/|monitoring(?:/|$)|_next/static|_next/image|favicon.ico|signin$|como-funciona$|termos$|privacidade$|p/[^/]+(?:/opengraph-image[^/]*)?$|$).*)",
   ],
 };

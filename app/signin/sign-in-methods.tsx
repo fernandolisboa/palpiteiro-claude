@@ -1,5 +1,6 @@
 "use client";
 
+import Link from "next/link";
 import { useState } from "react";
 import { Checkbox } from "radix-ui";
 import { Check } from "lucide-react";
@@ -36,28 +37,54 @@ export function SignInMethods({
 
   return (
     <div className="flex flex-col gap-6">
-      {/* Gate de maioridade: destrava os três métodos. TODO(go-live): quando
-          /termos e /privacidade existirem (ADR/ops 05), estender o texto para
-          "Declaro ter 18 anos ou mais e aceito os Termos e a Política de
-          Privacidade" com links. Por ora SÓ a auto-declaração 18+. */}
-      <label className="flex cursor-pointer items-start gap-2.5">
-        <Checkbox.Root
-          checked={accepted}
-          onCheckedChange={(v) => setAccepted(v === true)}
-          className={cn(
-            "mt-0.5 flex size-4 shrink-0 items-center justify-center rounded-sm border border-input bg-transparent shadow-xs outline-none transition-colors",
-            "focus-visible:border-ring focus-visible:ring-[3px] focus-visible:ring-ring/50",
-            "data-[state=checked]:border-primary data-[state=checked]:bg-primary data-[state=checked]:text-primary-foreground",
-          )}
-        >
-          <Checkbox.Indicator>
-            <Check className="size-3" strokeWidth={3} />
-          </Checkbox.Indicator>
-        </Checkbox.Root>
-        <span className="text-body-sm leading-snug tracking-tight text-muted-foreground">
-          Declaro ter 18 anos ou mais.
-        </span>
-      </label>
+      {/* Gate de maioridade (18+): a auto-declaração destrava os três métodos.
+          O aceite de Termos/Privacidade é IMPLÍCITO no ato de entrar, com links
+          visíveis logo abaixo — o default sancionado da ops 05 (§Decisões abertas:
+          "escala de amigos → implícito + links visíveis"). Os links vivem FORA do
+          <label> que toggla o checkbox de propósito (abrir a página não deve marcar
+          o checkbox) e abrem em nova aba pra não perder o estado do /signin. A
+          auditoria do consentimento segue no accepted_terms_at (events.createUser). */}
+      <div className="flex flex-col gap-2">
+        <label className="flex cursor-pointer items-start gap-2.5">
+          <Checkbox.Root
+            checked={accepted}
+            onCheckedChange={(v) => setAccepted(v === true)}
+            className={cn(
+              "mt-0.5 flex size-4 shrink-0 items-center justify-center rounded-sm border border-input bg-transparent shadow-xs outline-none transition-colors",
+              "focus-visible:border-ring focus-visible:ring-[3px] focus-visible:ring-ring/50",
+              "data-[state=checked]:border-primary data-[state=checked]:bg-primary data-[state=checked]:text-primary-foreground",
+            )}
+          >
+            <Checkbox.Indicator>
+              <Check className="size-3" strokeWidth={3} />
+            </Checkbox.Indicator>
+          </Checkbox.Root>
+          <span className="text-body-sm leading-snug tracking-tight text-muted-foreground">
+            Declaro ter 18 anos ou mais.
+          </span>
+        </label>
+        <p className="pl-[26px] text-meta leading-snug tracking-tight text-muted-fg-2">
+          Ao entrar, você concorda com os{" "}
+          <Link
+            href="/termos"
+            target="_blank"
+            rel="noopener noreferrer"
+            className="rounded-sm underline underline-offset-2 hover:text-foreground focus-visible:outline-none focus-visible:ring-[3px] focus-visible:ring-ring/50"
+          >
+            Termos de Uso
+          </Link>{" "}
+          e a{" "}
+          <Link
+            href="/privacidade"
+            target="_blank"
+            rel="noopener noreferrer"
+            className="rounded-sm underline underline-offset-2 hover:text-foreground focus-visible:outline-none focus-visible:ring-[3px] focus-visible:ring-ring/50"
+          >
+            Política de Privacidade
+          </Link>
+          .
+        </p>
+      </div>
 
       <form action={signInWithGoogle}>
         <Button
