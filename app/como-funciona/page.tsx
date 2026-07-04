@@ -9,7 +9,7 @@ import { ComoFuncionaContent } from "./como-funciona-content";
 export const metadata: Metadata = {
   title: "Como funciona · Palpiteiro",
   description:
-    "Entenda como o Palpiteiro recomenda apostas em over/under, 1X2, ambas marcam e dupla chance — edge, PASS, stake e cada número da tela. Tutorial pra iniciante total e glossário.",
+    "Entenda os dois registros do Palpiteiro: O Palpite — a manchete brincalhona (confiança, placar provável, acertou/errou) — e o motor de valor que recomenda apostas em over/under, 1X2, ambas marcam e dupla chance (edge, PASS, stake e cada número da tela). Tutorial pra iniciante total e glossário.",
 };
 
 /**
