@@ -6,7 +6,9 @@ import { Wordmark } from "@/components/wordmark";
 import { LandingContent } from "./landing-content";
 
 export const metadata: Metadata = {
-  title: "Palpiteiro · um palpite por jogo, com racional",
+  // `absolute` opta o título fora do `template: "%s · Palpiteiro"` do root — a
+  // string já carrega a marca, então o template duplicaria (" · Palpiteiro").
+  title: { absolute: "Palpiteiro · um palpite por jogo, com racional" },
   description:
     "Motor de seleção de edge multi-mercado que emite UM palpite por jogo, com racional — resultado, total de gols, ambas marcam e dupla chance. Leitura pronta, análise como detalhe.",
   openGraph: {
