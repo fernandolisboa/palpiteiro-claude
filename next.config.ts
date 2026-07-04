@@ -64,6 +64,38 @@ const nextConfig: NextConfig = {
           { key: "Referrer-Policy", value: "no-referrer" },
         ],
       },
+      {
+        // Headers de segurança globais (report 01 achado #2 / #436). Aplicam a TODAS as
+        // rotas (inclui /p, que só ADICIONA os seus). SEM CSP por ora: o app tem scripts
+        // inline do Next + o túnel Sentry (/monitoring), então CSP exige nonce ou
+        // report-only — follow-up cuidadoso, não este PR. Permissions-Policy nomeia só
+        // camera/microphone/geolocation (nega): WebAuthn/passkey usa
+        // `publickey-credentials-get`, que NÃO é listado → mantém o default (self), intacto.
+        // X-Frame-Options DENY: o app não é embutido em iframe (o Sentry usa fetch, não frame).
+        // HSTS sem `preload` de propósito (reversível; adicionar preload é compromisso do dono).
+        source: "/:path*",
+        headers: [
+          { key: "X-Frame-Options", value: "DENY" },
+          { key: "X-Content-Type-Options", value: "nosniff" },
+          {
+            key: "Strict-Transport-Security",
+            value: "max-age=63072000; includeSubDomains",
+          },
+          {
+            key: "Permissions-Policy",
+            value: "camera=(), microphone=(), geolocation=()",
+          },
+        ],
+      },
+      {
+        // Referrer-Policy padrão em TUDO EXCETO /p — a rota /p já seta `no-referrer` (mais
+        // estrito, ADR 0035) no bloco dela; excluir /p aqui evita dois Referrer-Policy no
+        // mesmo response. O lookahead `(?!p/)` casa a raiz e as demais rotas, barra `p/...`.
+        source: "/:path((?!p/).*)",
+        headers: [
+          { key: "Referrer-Policy", value: "strict-origin-when-cross-origin" },
+        ],
+      },
     ];
   },
 };

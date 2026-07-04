@@ -22,6 +22,12 @@ import { Ratelimit } from "@upstash/ratelimit";
 import { Redis } from "@upstash/redis";
 
 const DEFAULT_PER_HOUR = 5;
+// Teto por IP de origem (report 01 achado #1 / #435). O teto por-e-mail acima não barra
+// email-bombing: um atacante distribui ≤5 envios/h por endereço sobre uma lista ILIMITADA
+// de e-mails de vítimas, de IPs ilimitados → volume agregado ilimitado de e-mails Resend
+// pagos. O teto por IP corta o agregado na origem. Mais folgado que o por-e-mail (um usuário
+// legítimo raramente pede >10 links/h).
+const DEFAULT_IP_PER_HOUR = 10;
 
 /**
  * Lê um teto inteiro positivo do env, com fallback NaN/<=0-guarded. Lido UMA vez
@@ -80,5 +86,47 @@ export async function checkMagicLinkRateLimit(email: string): Promise<boolean> {
   if (!limiter) return true;
   const key = email.trim().toLowerCase();
   const { success } = await limiter.limit(key);
+  return success;
+}
+
+// Limiter por IP — singleton separado (prefixo/bucket próprios) pra o contador por-IP
+// não colidir com o por-e-mail. Mesma construção lazy + fail-OPEN sem KV.
+let cachedIp: Ratelimit | null = null;
+
+function getIpLimiter(): Ratelimit | null {
+  const url = process.env.KV_REST_API_URL;
+  const token = process.env.KV_REST_API_TOKEN;
+  if (!url || !token) {
+    if (!warned) {
+      console.warn(
+        "[magic-link-rate-limit] KV_REST_API_URL/KV_REST_API_TOKEN unset — fail-open (dev only, ADR 0023).",
+      );
+      warned = true;
+    }
+    return null;
+  }
+  if (!cachedIp) {
+    const redis = new Redis({ url, token });
+    cachedIp = new Ratelimit({
+      redis,
+      limiter: Ratelimit.fixedWindow(
+        limitFromEnv("RATE_LIMIT_MAGIC_LINK_IP_PER_HOUR", DEFAULT_IP_PER_HOUR),
+        "1 h",
+      ),
+      prefix: "ratelimit:magic-link-ip",
+    });
+  }
+  return cachedIp;
+}
+
+/**
+ * Verifica (e incrementa) o teto de envios de magic link pro IP de origem. Retorna
+ * `true` quando permitido, `false` quando estourou. Sem KV: fail-OPEN (`true`), mesma
+ * política do limiter por-e-mail (o caminho de login não pode travar em dev).
+ */
+export async function checkMagicLinkIpRateLimit(ip: string): Promise<boolean> {
+  const limiter = getIpLimiter();
+  if (!limiter) return true;
+  const { success } = await limiter.limit(ip);
   return success;
 }
