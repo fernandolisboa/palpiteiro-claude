@@ -1,17 +1,21 @@
-import { Dot } from "lucide-react";
+import { Dot, Info } from "lucide-react";
 
 import { AnalysisScenarios } from "@/components/analysis-scenarios";
 import { HelpHint } from "@/components/help-hint";
 import { Card } from "@/components/ui/card";
 import { Separator } from "@/components/ui/separator";
 import { cn } from "@/lib/utils";
+import { ANALYSIS_RISK_DISCLAIMER } from "@/lib/view/analysis";
 import type { AnalysisView } from "@/lib/view/types";
 
 type Props = {
   view: AnalysisView;
+  // Aviso de risco no rodapé (#434). Default true → todo card sóbrio o carrega. O fan-out
+  // (BestBetResults) passa false: ele mostra UMA linha no fim do painel, não uma por card.
+  showRiskDisclaimer?: boolean;
 };
 
-export function AnalysisResult({ view }: Props) {
+export function AnalysisResult({ view, showRiskDisclaimer = true }: Props) {
   // pass = sem recomendação (recommendation null) — data-driven, não mais via kind.
   if (view.recommendation === null) {
     return (
@@ -63,7 +67,7 @@ export function AnalysisResult({ view }: Props) {
           </p>
           <KeyFactors items={view.factors} />
         </div>
-        <AnalysisFooter view={view} />
+        <AnalysisFooter view={view} showRiskDisclaimer={showRiskDisclaimer} />
       </div>
     );
   }
@@ -193,7 +197,7 @@ export function AnalysisResult({ view }: Props) {
         </p>
         <KeyFactors items={view.factors} />
       </div>
-      <AnalysisFooter view={view} />
+      <AnalysisFooter view={view} showRiskDisclaimer={showRiskDisclaimer} />
     </Card>
   );
 }
@@ -219,14 +223,24 @@ function KeyFactors({ items }: { items: string[] }) {
 
 type FooterProps = {
   view: AnalysisView;
+  showRiskDisclaimer: boolean;
 };
 
 // Rodapé técnico do resultado: versão do prompt · modelo que rodou · custo. O gatilho de
 // reanálise NÃO vive mais aqui (#244 moveu pro rodapé da seção, SectionFooterDispatch).
-function AnalysisFooter({ view }: FooterProps) {
+// Acima da meta técnica vai o aviso de risco (#434) — footnote muda espelhando o disclaimer
+// do HERO palpite (Info + text-meta), quando showRiskDisclaimer (default; o fan-out desliga
+// e mostra UMA linha no fim do painel).
+function AnalysisFooter({ view, showRiskDisclaimer }: FooterProps) {
   return (
     <>
       <Separator />
+      {showRiskDisclaimer && (
+        <p className="flex items-center gap-1.5 px-4 pt-2.5 text-meta leading-snug tracking-tight text-muted-fg-2">
+          <Info className="size-3 shrink-0" aria-hidden="true" />
+          {ANALYSIS_RISK_DISCLAIMER}
+        </p>
+      )}
       <div className="flex items-center justify-between px-4 py-2.5 font-mono text-eyebrow-xs text-muted-fg-2 tabular-nums">
         <span>
           {view.promptVersion} · {view.model}

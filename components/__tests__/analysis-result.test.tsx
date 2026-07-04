@@ -357,6 +357,31 @@ describe("AnalysisResult — bloco 'Cenários' integrado e grid de stats removid
   });
 });
 
+// Aviso de risco no rodapé do card sóbrio (#434): linha muda ESTÁTICA, presente por
+// padrão em rec E pass (superfície de maior intenção de aposta). Suprimível via prop
+// (o fan-out mostra UMA no fim do painel, não uma por card).
+describe("AnalysisResult — aviso de risco no rodapé (#434)", () => {
+  const RISK =
+    "Recomendação analítica, sem garantia de resultado. Aposte com responsabilidade.";
+
+  it("renderiza o aviso por padrão na recomendação", () => {
+    const markup = renderToStaticMarkup(<AnalysisResult view={baseView} />);
+    expect(markup).toContain(RISK);
+  });
+
+  it("renderiza o aviso por padrão também no PASS", () => {
+    const markup = renderToStaticMarkup(<AnalysisResult view={passView} />);
+    expect(markup).toContain(RISK);
+  });
+
+  it("showRiskDisclaimer={false} suprime a linha (caminho do fan-out por card)", () => {
+    const markup = renderToStaticMarkup(
+      <AnalysisResult view={baseView} showRiskDisclaimer={false} />,
+    );
+    expect(markup).not.toContain(RISK);
+  });
+});
+
 // AC2: recomendação 1X2 (3 outcomes) renderiza o destaque + 3 colunas, sem
 // nenhuma string de mercado hardcoded (tudo vem do view). PURE, sem DB.
 describe("AnalysisResult — recomendação N-vias (1X2, AC2)", () => {

@@ -33,6 +33,17 @@ import type {
   ScenarioSideView,
 } from "@/lib/view/types";
 
+// Aviso de risco ESTÁTICO da superfície de Análise/Recomendação sóbria (Report 05 rec. 4 /
+// #434). Espelha PALPITE_DISCLAIMER (lib/view/palpites-headline.ts): rótulo fixo na cara do
+// usuário, NÃO dado per-análise → constante de render (sem schema/migration). Renderizado
+// como UMA linha muda: no rodapé de cada card (AnalysisResult) e uma vez no fan-out
+// cross-mercado (BestBetResults). FIREWALL: esta é a superfície SÓBRIA onde edge/EV/stake/
+// odd são SANCIONADOS (ADR 0030/0031) — a linha de risco NÃO passa por containsValueLanguage
+// (o firewall só barra linguagem de valor da MANCHETE palpite, não da Análise). Copy: versão
+// condensada de docs/ops/05-legal-compliance.md §3 pro card de análise.
+export const ANALYSIS_RISK_DISCLAIMER =
+  "Recomendação analítica, sem garantia de resultado. Aposte com responsabilidade." as const;
+
 type PredictionInput = {
   // = key da seleção escolhida (qualquer mercado) ou "pass". `string` agnóstico
   // desde o contract (#179). isBinaryRecommendation estreita por VALOR (over/under/
