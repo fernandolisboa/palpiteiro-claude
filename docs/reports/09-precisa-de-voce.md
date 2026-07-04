@@ -91,13 +91,13 @@ onde aplicável), prontos pra mergear. Revise e faça o merge (auto-deploya pra 
 
 ## 4. 🟩 Follow-ups técnicos que eu deixei anotados (posso fazer, não bloqueiam)
 
-- **#437 restante — delimitadores anti-prompt-injection** no prompt de síntese
-  (`cartridge.ts`). Deixei de fora do PR de segurança por ser superfície firewall-sensível;
-  faço num PR dedicado com revisão cuidadosa.
-- **CSP** (report 01 #2): os headers de segurança foram (#462), mas CSP ficou de fora — precisa
+- **#466 — delimitadores anti-prompt-injection** no prompt de síntese (`cartridge.ts`),
+  o restante do #437 (já fechado). Deixei de fora do PR de segurança por ser superfície
+  firewall-sensível; faço num PR dedicado com revisão cuidadosa.
+- **CSP → #467** (report 01 #2): os headers de segurança foram (#462), mas CSP ficou de fora — precisa
   de nonce ou report-only por causa dos scripts inline do Next + túnel Sentry. Follow-up cuidadoso.
-- **next.config cache-lookahead** pra ícones/robots (ADR 0024): adiei pra não conflitar com o
-  #462 (ambos tocam next.config). Fazer depois que #462 mergear.
+- **next.config cache-lookahead → #468** pra ícones/robots (ADR 0024, item obrigatório do #439):
+  adiei pra não conflitar com o #462 (ambos tocam next.config). Fazer depois que #462 mergear.
 - **Ícones + manifest + OG image da landing** (#440, #442): deixei como issues — são
   **design-sensíveis** e ganham com o teu /impeccable. A OG image é alto valor pra unfurl.
 - **#438 — re-auditar a `/p/[id]`**: a rota de share (shipada) não foi coberta pela auditoria
@@ -109,7 +109,7 @@ onde aplicável), prontos pra mergear. Revise e faça o merge (auto-deploya pra 
 
 25 issues: **#431–#455**. As de Onda 0 estão quase todas feitas/em-PR (acima). Restantes por onda:
 
-- **Onda 0 restante:** #440 (ícones), #442 (OG image), #445 (copy-debt), #446 (empty-state), #438 (re-audit /p), #437-restante.
+- **Onda 0 restante:** #440 (ícones), #442 (OG image), #445 (copy-debt), #446 (empty-state), #438 (re-audit /p), #466 (delimitadores, ex-#437), #467 (CSP), #468 (cache-lookahead), #469 (hardening rate-limit), #449 (tokens palpite-* no DESIGN.md).
 - **Onda 1 (item 4):** #451 (ADR), #452 (Poisson), + downstream do ADR.
 - **Onda 2 (item 3):** #450 (ADR), #453 (calibração), #452 (Poisson, compartilhado).
 - **Onda 3 (crescimento):** #454 (blog), + UX de retenção (report 02: digest, track record, dashboard mobile, seguir times).
