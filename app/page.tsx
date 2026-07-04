@@ -6,7 +6,9 @@ import { Wordmark } from "@/components/wordmark";
 import { LandingContent } from "./landing-content";
 
 export const metadata: Metadata = {
-  title: "Palpiteiro · um palpite por jogo, com racional",
+  // `absolute` opta o título fora do `template: "%s · Palpiteiro"` do root — a
+  // string já carrega a marca, então o template duplicaria (" · Palpiteiro").
+  title: { absolute: "Palpiteiro · um palpite por jogo, com racional" },
   description:
     "Motor de seleção de edge multi-mercado que emite UM palpite por jogo, com racional — resultado, total de gols, ambas marcam e dupla chance. Leitura pronta, análise como detalhe.",
   openGraph: {
@@ -15,7 +17,29 @@ export const metadata: Metadata = {
       "Motor de seleção de edge multi-mercado que emite UM palpite por jogo, com racional. A IA escolhe o mercado, você lê o porquê.",
     type: "website",
   },
+  alternates: { canonical: "/" },
 };
+
+// JSON-LD Organization + WebSite (SEO baseline, #443). Const estático tipado —
+// NENHUM input de usuário flui aqui, então serializar com JSON.stringify e injetar
+// via dangerouslySetInnerHTML é seguro (sem risco de XSS). `url` espelha o
+// metadataBase (app/layout.tsx). SportsEvent/Article ficam deferidos (flip do /p, blog).
+const JSON_LD = {
+  "@context": "https://schema.org",
+  "@graph": [
+    {
+      "@type": "Organization",
+      name: "Palpiteiro",
+      url: "https://palpiteiro.live",
+    },
+    {
+      "@type": "WebSite",
+      name: "Palpiteiro",
+      url: "https://palpiteiro.live",
+      inLanguage: "pt-BR",
+    },
+  ],
+} as const;
 
 /**
  * Landing pública estática na raiz `/` (#373). Server Component que **NÃO**
@@ -30,6 +54,11 @@ export const metadata: Metadata = {
 export default function LandingPage() {
   return (
     <div className="min-h-screen bg-background text-foreground">
+      <script
+        type="application/ld+json"
+        // Server-rendered no HTML da landing (Server Component) — sem hidratação.
+        dangerouslySetInnerHTML={{ __html: JSON.stringify(JSON_LD) }}
+      />
       <header className="flex h-14 items-center justify-between border-b border-border-subtle px-6">
         <Wordmark suffix="edge multi-mercado" suffixClassName="hidden sm:inline" />
         <ThemeToggle />

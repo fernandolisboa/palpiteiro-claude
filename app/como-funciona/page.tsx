@@ -7,9 +7,12 @@ import { Wordmark } from "@/components/wordmark";
 import { ComoFuncionaContent } from "./como-funciona-content";
 
 export const metadata: Metadata = {
-  title: "Como funciona · Palpiteiro",
+  // `absolute` opta o título fora do `template: "%s · Palpiteiro"` do root — a
+  // string já carrega a marca, então o template duplicaria (" · Palpiteiro").
+  title: { absolute: "Como funciona · Palpiteiro" },
   description:
     "Entenda os dois registros do Palpiteiro: O Palpite — a manchete brincalhona (confiança, placar provável, acertou/errou) — e o motor de valor que recomenda apostas em over/under, 1X2, ambas marcam e dupla chance (edge, PASS, stake e cada número da tela). Tutorial pra iniciante total e glossário.",
+  alternates: { canonical: "/como-funciona" },
 };
 
 /**
