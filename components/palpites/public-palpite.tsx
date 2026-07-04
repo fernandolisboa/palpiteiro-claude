@@ -1,3 +1,4 @@
+import Link from "next/link";
 import { Info } from "lucide-react";
 
 import { SettleableBadge } from "@/components/palpites/palpite-badges";
@@ -122,6 +123,17 @@ export function PublicPalpite({
           </a>
         </p>
       </div>
+
+      {/* CTA de conversão (ADR 0035-safe, #444): registro muted, ZERO linguagem de valor — só
+          um convite a entrar no app (`/` é a landing pública/estática). É a única ponta de
+          crescimento no dead-end do unfurl; firewall-clean por construção (copy sem odds/EV/
+          stake/R$/%) e coberta pelo teste de firewall deste componente. */}
+      <Link
+        href="/"
+        className="mt-1 w-fit rounded-sm text-body-sm font-medium tracking-tight text-muted-foreground transition-colors hover:text-foreground focus-visible:outline-none focus-visible:ring-[3px] focus-visible:ring-ring/50"
+      >
+        Peça o palpite do seu jogo →
+      </Link>
     </section>
   );
 }
