@@ -146,6 +146,27 @@ describe("getNewsByMatchViaWebSearch — 'nunca inventa fonte'", () => {
     ]);
   });
 
+  it("dropa url com esquema não-http(s) (javascript:/data:/mailto:/relativa)", async () => {
+    runAnalysis.mockResolvedValue(
+      okResult([
+        searchResultBlock([
+          { title: "OK http", url: "http://ge.globo.com/a" },
+          { title: "OK https", url: "https://espn.com.br/b" },
+          { title: "XSS", url: "javascript:alert(1)" },
+          { title: "Data", url: "data:text/html,<script>1</script>" },
+          { title: "Mail", url: "mailto:x@y.com" },
+          { title: "Protocol-relative", url: "//evil.com/x" },
+          { title: "Sem esquema", url: "ge.globo.com/c" },
+        ]),
+      ]),
+    );
+    const out = await getNewsByMatchViaWebSearch(CTX, AUDIT);
+    expect(out.results).toEqual([
+      { title: "OK http", url: "http://ge.globo.com/a" },
+      { title: "OK https", url: "https://espn.com.br/b" },
+    ]);
+  });
+
   it("dedup por url", async () => {
     runAnalysis.mockResolvedValue(
       okResult([

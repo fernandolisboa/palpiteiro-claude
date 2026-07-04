@@ -1,5 +1,6 @@
 import { NextResponse } from "next/server";
 
+import { isAuthorizedCron } from "@/lib/auth/cron-auth";
 import { settlePendingPredictions } from "@/lib/settlement/settle";
 import { settlePendingPalpites } from "@/lib/settlement/settle-palpites";
 
@@ -10,18 +11,11 @@ export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
 
 export async function GET(request: Request): Promise<Response> {
-  const secret = process.env.CRON_SECRET;
-  // Vercel Cron sends `Authorization: Bearer <CRON_SECRET>` automatically.
-  // Fail closed: if the secret isn't configured, reject like any other
-  // unauthorized caller (401, generic body) — don't leak config state or
-  // return a 5xx that the scheduler would retry. The real reason is logged.
-  if (!secret) {
-    console.error(
-      JSON.stringify({ scope: "settlement", event: "missing_cron_secret" })
-    );
-    return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
-  }
-  if (request.headers.get("authorization") !== `Bearer ${secret}`) {
+  // Vercel Cron sends `Authorization: Bearer <CRON_SECRET>` automatically. Fail
+  // closed: if the secret isn't configured or the header mismatches, reject like
+  // any other unauthorized caller (401, generic body) — don't leak config state
+  // or return a 5xx that the scheduler would retry. The real reason is logged.
+  if (!isAuthorizedCron(request, "settlement")) {
     return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
   }
 

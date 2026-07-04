@@ -61,7 +61,8 @@ function buildUserMessage(ctx: NewsMatchContext): string {
 // extrai SÓ os {title, url} reais (ADR 0032 §2). Na server tool da Claude:
 //   - sucesso: block.content é uma LISTA de web_search_result ({title,url,...})
 //   - erro:    block.content é um OBJETO { error_code } (HTTP 200, não cobrado)
-// Dropa qualquer item sem title NÃO-VAZIO E url válido (nunca inventa); dedup por url.
+// Dropa qualquer item sem title NÃO-VAZIO E url http(s) válida (nunca inventa); dedup
+// por url.
 function extractSources(contentBlocks: unknown[] | undefined): NewsResult[] {
   if (!Array.isArray(contentBlocks)) return [];
   const out: NewsResult[] = [];
@@ -82,10 +83,16 @@ function extractSources(contentBlocks: unknown[] | undefined): NewsResult[] {
       const title = (item as { title?: unknown }).title;
       const url = (item as { url?: unknown }).url;
       if (typeof title !== "string" || title.trim() === "") continue;
-      if (typeof url !== "string" || url.trim() === "") continue;
-      if (seen.has(url)) continue;
-      seen.add(url);
-      out.push({ title: title.trim(), url: url.trim() });
+      if (typeof url !== "string") continue;
+      const cleanUrl = url.trim();
+      // Só http(s): a url vira <a href> na UI, então dropamos esquemas perigosos/
+      // estranhos (javascript:, data:, mailto:, //protocol-relative, …). Espelha o
+      // urlSchema do avatar em app/actions/profile.ts (report 01 achado #5). Cobre
+      // também a url vazia (trim === "" não casa o regex).
+      if (!/^https?:\/\//i.test(cleanUrl)) continue;
+      if (seen.has(cleanUrl)) continue;
+      seen.add(cleanUrl);
+      out.push({ title: title.trim(), url: cleanUrl });
       if (out.length >= MAX_RESULTS) return out;
     }
   }
