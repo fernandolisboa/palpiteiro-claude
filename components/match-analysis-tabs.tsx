@@ -14,6 +14,11 @@ import {
 // (Server Component dentro de Client é OK no App Router). "Minha aposta" mostra o
 // form + a leitura de valor inline. Só renderizado quando o jogo é analisável (a
 // page gateia em `analyzable`) — em jogo não-analisável a aba nem aparece.
+//
+// A11y (#448): NÃO usa role=tablist/tab — o padrão ARIA de tabs exige roving
+// tabindex + setas + aria-controls, que não implementávamos (contrato anunciado
+// mas não honrado). É um grupo de botões-toggle (role=group + aria-pressed):
+// cada botão é focável e anuncia seu estado pressionado de forma honesta.
 
 type GradeProps = {
   matchId: string;
@@ -34,7 +39,7 @@ export function MatchAnalysisTabs({ analysisSlot, gradeProps }: Props) {
   return (
     <div className="flex flex-col gap-3">
       <div
-        role="tablist"
+        role="group"
         aria-label="modo de análise"
         className="inline-flex w-fit gap-1 rounded-md border border-border p-1"
       >
@@ -77,8 +82,7 @@ function TabButton({
   return (
     <button
       type="button"
-      role="tab"
-      aria-selected={active}
+      aria-pressed={active}
       onClick={onClick}
       className={cn(
         "rounded-sm px-3 py-1.5 font-mono text-eyebrow uppercase tracking-label transition-colors focus-visible:outline-none focus-visible:ring-[3px] focus-visible:ring-ring/50",

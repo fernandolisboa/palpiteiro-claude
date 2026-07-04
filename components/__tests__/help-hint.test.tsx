@@ -60,6 +60,7 @@ describe("HelpHint — contrato dos anchors", () => {
     normalizada: "prob-implicita",
     PASS: "recomendacao",
     "odd mínima": "odd-minima",
+    "amostra pequena": "amostra-pequena",
   };
 
   it("todo anchor referenciado por um placement existe em GLOSSARY", () => {
