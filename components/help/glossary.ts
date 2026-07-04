@@ -48,6 +48,55 @@ export const GLOSSARY: readonly GlossaryEntry[] = [
     group: "conceitos",
   },
   {
+    term: "O Palpite (a manchete)",
+    anchor: "palpite",
+    meaning:
+      "A previsão do jogo no topo da página, escrita como um amigo daria: quem leva, o placar provável e o porquê. É o registro brincalhão do app, sintetizado das análises de mercado — mas SEM nenhum número de valor (odd, edge, stake, %). É previsão informada e diversão, NÃO recomendação de aposta.",
+    group: "conceitos",
+  },
+  {
+    term: "confiança do palpite (palavra)",
+    anchor: "confianca-palpite",
+    meaning:
+      "A convicção do palpite, dita em PALAVRA — baixa, média ou alta. Nunca porcentagem, barra ou dígito. Não confundir com a prob. do modelo do motor de valor: aqui é só o tom da manchete.",
+    group: "conceitos",
+  },
+  {
+    term: "placar provável",
+    anchor: "placar-provavel",
+    meaning:
+      "O palpite de placar do jogo (ex.: 2–1). É um palpite de resultado, NÃO uma odd — um placar não é uma cotação. Quando o jogo acaba, vira o selo acertou/errou da manchete.",
+    group: "conceitos",
+  },
+  {
+    term: '"e ainda" (dimensões do palpite)',
+    anchor: "e-ainda",
+    meaning:
+      "Os palpites secundários do jogo, abaixo do placar: a margem, o placar do primeiro tempo, quem marca primeiro, o time que não sofre gol. Cada um vira acertou/errou quando dá pra conferir, ou fica “só por diversão” quando não dá.",
+    group: "conceitos",
+  },
+  {
+    term: "acertou / errou / só por diversão",
+    anchor: "acertou-errou",
+    meaning:
+      "Como o palpite presta contas depois do jogo. Acertou/errou = a previsão dava pra conferir no placar final (fica “aguardando placar” até o apito). “Só por diversão” = não dá pra cravar de forma justa (ex.: cartão vermelho, escanteios) — nunca vira acertou/errou. O palpite não mente sobre o próprio retrospecto.",
+    group: "conceitos",
+  },
+  {
+    term: '"o palpite leu" (fontes)',
+    anchor: "fontes-palpite",
+    meaning:
+      "As notícias reais que a IA leu pra montar o palpite, mostradas como links clicáveis (o título leva à matéria). São fontes de verdade e verificáveis, nunca inventadas — pra você checar de onde veio a informação.",
+    group: "conceitos",
+  },
+  {
+    term: '"não é recomendação de aposta"',
+    anchor: "nao-e-recomendacao",
+    meaning:
+      "O rótulo fixo no rodapé do palpite. Literal: o palpite é entretenimento e previsão informada, não orientação pra apostar. Quem trata de valor é a parte sóbria do app — as recomendações de mercado.",
+    group: "conceitos",
+  },
+  {
     term: "mercado",
     anchor: "mercado",
     meaning:

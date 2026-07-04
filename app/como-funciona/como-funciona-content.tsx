@@ -25,8 +25,13 @@ export function ComoFuncionaContent() {
         <strong className="font-medium text-foreground">PASS</strong>, quando não
         compensa apostar. Você aposta por fora, na casa, com seu próprio dinheiro; o
         dinheiro que aparece aqui dentro é hipotético, serve só pra você medir se as
-        recomendações estão valendo a pena. Esta página explica, do zero, o que cada
-        número da tela quer dizer.
+        recomendações estão valendo a pena. E, no topo de cada jogo, tem ainda{" "}
+        <a href="#o-palpite" className="text-foreground underline underline-offset-2 decoration-border-strong hover:decoration-foreground focus-visible:rounded-sm focus-visible:outline-none focus-visible:ring-[3px] focus-visible:ring-ring/50">
+          O Palpite
+        </a>{" "}
+        — a manchete brincalhona que a IA crava (quem leva, o placar provável), um
+        registro à parte do motor de valor. Esta página explica os dois, do zero: o que
+        cada número da tela quer dizer e o que é o palpite.
       </p>
 
       {/* Seção 2 — over/under do zero (= seção de ajuda do mercado over/under) */}
@@ -439,6 +444,106 @@ export function ComoFuncionaContent() {
               o app não aposta por você
             </a>
             : tudo aqui é registro e medição.
+          </p>
+        </div>
+      </section>
+
+      {/* Seção — O Palpite (o registro-manchete, ADR 0030/0031). Explica o
+          registro brincalhão que vive no topo de cada jogo. O firewall de
+          linguagem de valor vale AQUI também: é copy EDUCATIVA sobre o palpite,
+          então nomeia os conceitos (edge/odd/stake) sem despejar NÚMERO de valor. */}
+      <section
+        id="o-palpite"
+        className="border-border scroll-mt-20 border-t pt-8 mt-8"
+      >
+        <h2 className="text-display-sm font-medium tracking-tight">O Palpite</h2>
+        <div className="flex flex-col gap-3 pt-3 text-body leading-relaxed text-muted-foreground tracking-tight">
+          <p>
+            No topo da página de cada jogo, antes de qualquer número, tem{" "}
+            <a href="#palpite" className="text-foreground underline underline-offset-2 decoration-border-strong hover:decoration-foreground focus-visible:rounded-sm focus-visible:outline-none focus-visible:ring-[3px] focus-visible:ring-ring/50">
+              O Palpite
+            </a>{" "}
+            — uma previsão do jogo escrita como um amigo daria: quem leva, o placar
+            provável e o porquê. É o registro{" "}
+            <strong className="font-medium text-foreground">brincalhão</strong> do
+            app, o oposto do tom sóbrio das recomendações. A IA lê os dois times,
+            os números, as análises de mercado e até notícias recentes pra cravar
+            um palpite só — mas o que sai é sempre uma fala, nunca uma cotação.
+          </p>
+          <p>
+            É um palpite{" "}
+            <strong className="font-medium text-foreground">informado</strong>, não
+            um chute — e também não é conselho de aposta. Ele nasce das mesmas
+            análises que medem valor, mas{" "}
+            <strong className="font-medium text-foreground">nenhum número de valor</strong>{" "}
+            atravessa pra manchete: aqui não tem odd, não tem{" "}
+            <a href="#edge" className="text-foreground underline underline-offset-2 decoration-border-strong hover:decoration-foreground focus-visible:rounded-sm focus-visible:outline-none focus-visible:ring-[3px] focus-visible:ring-ring/50">
+              edge
+            </a>
+            , não tem stake nem porcentagem. É de propósito — o palpite é diversão
+            e previsão, e não deve ser confundido com a recomendação sóbria que
+            mexe com dinheiro.
+          </p>
+          <p>
+            A convicção do palpite aparece como uma{" "}
+            <a href="#confianca-palpite" className="text-foreground underline underline-offset-2 decoration-border-strong hover:decoration-foreground focus-visible:rounded-sm focus-visible:outline-none focus-visible:ring-[3px] focus-visible:ring-ring/50">
+              palavra de confiança
+            </a>{" "}
+            — <strong className="font-medium text-foreground">baixa</strong>,{" "}
+            <strong className="font-medium text-foreground">média</strong> ou{" "}
+            <strong className="font-medium text-foreground">alta</strong> —, nunca
+            uma porcentagem ou uma barrinha. E o{" "}
+            <a href="#placar-provavel" className="text-foreground underline underline-offset-2 decoration-border-strong hover:decoration-foreground focus-visible:rounded-sm focus-visible:outline-none focus-visible:ring-[3px] focus-visible:ring-ring/50">
+              placar provável
+            </a>{" "}
+            (tipo 2–1) é só isso: um palpite de placar.{" "}
+            <strong className="font-medium text-foreground">Não é uma odd</strong> —
+            um placar não é uma cotação.
+          </p>
+          <p>
+            Abaixo do placar vem o{" "}
+            <a href="#e-ainda" className="text-foreground underline underline-offset-2 decoration-border-strong hover:decoration-foreground focus-visible:rounded-sm focus-visible:outline-none focus-visible:ring-[3px] focus-visible:ring-ring/50">
+              “e ainda”
+            </a>
+            : os palpites secundários do jogo — a margem, o placar do primeiro
+            tempo, quem marca primeiro, o time que não sofre gol. Aqui mora a
+            honestidade do app. O que dá pra conferir no placar final ganha um selo{" "}
+            <a href="#acertou-errou" className="text-foreground underline underline-offset-2 decoration-border-strong hover:decoration-foreground focus-visible:rounded-sm focus-visible:outline-none focus-visible:ring-[3px] focus-visible:ring-ring/50">
+              acertou ou errou
+            </a>{" "}
+            depois do apito (e fica “aguardando placar” até lá); o que não dá pra
+            cravar de forma justa — tipo cartão vermelho ou escanteios — fica
+            marcado como{" "}
+            <strong className="font-medium text-foreground">“só por diversão”</strong>{" "}
+            e <strong className="font-medium text-foreground">nunca</strong> vira
+            acertou/errou. O palpite não mente sobre o próprio retrospecto.
+          </p>
+          <p>
+            Quando a IA leu notícias de verdade pra montar a previsão, elas
+            aparecem em{" "}
+            <a href="#fontes-palpite" className="text-foreground underline underline-offset-2 decoration-border-strong hover:decoration-foreground focus-visible:rounded-sm focus-visible:outline-none focus-visible:ring-[3px] focus-visible:ring-ring/50">
+              “o palpite leu”
+            </a>{" "}
+            — links clicáveis pras fontes reais (o título leva à matéria), pra você
+            checar de onde veio a informação. São fontes de verdade, nunca
+            inventadas.
+          </p>
+          <p>
+            E o rodapé{" "}
+            <a href="#nao-e-recomendacao" className="text-foreground underline underline-offset-2 decoration-border-strong hover:decoration-foreground focus-visible:rounded-sm focus-visible:outline-none focus-visible:ring-[3px] focus-visible:ring-ring/50">
+              “é só um palpite, não é recomendação de aposta”
+            </a>{" "}
+            é literal: o palpite é entretenimento e previsão informada, não uma
+            orientação pra você apostar. Quem cuida do que vale dinheiro é a parte
+            sóbria do app — as recomendações de mercado, com{" "}
+            <a href="#edge" className="text-foreground underline underline-offset-2 decoration-border-strong hover:decoration-foreground focus-visible:rounded-sm focus-visible:outline-none focus-visible:ring-[3px] focus-visible:ring-ring/50">
+              edge
+            </a>
+            ,{" "}
+            <a href="#recomendacao" className="text-foreground underline underline-offset-2 decoration-border-strong hover:decoration-foreground focus-visible:rounded-sm focus-visible:outline-none focus-visible:ring-[3px] focus-visible:ring-ring/50">
+              PASS
+            </a>{" "}
+            e stake.
           </p>
         </div>
       </section>
