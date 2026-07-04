@@ -4,20 +4,26 @@ import { cn } from "@/lib/utils";
 import type { DashboardKpiView, RateView } from "@/lib/view/dashboard";
 
 function SampleNote({ rate }: { rate: RateView }) {
+  // #448: a explicação da amostra pequena morava só num `title` (inalcançável no
+  // touch). Migrada pro popover HelpHint (mesmo padrão dos KPIs), tocável.
   return (
     <span
       className={cn(
-        "font-mono text-eyebrow tabular-nums",
+        "inline-flex items-center gap-1 font-mono text-eyebrow tabular-nums",
         rate.lowSample ? "text-warn-fg" : "text-muted-foreground",
       )}
-      title={
-        rate.lowSample
-          ? "Amostra pequena — resultado ainda é ruído, não skill"
-          : undefined
-      }
     >
       n={rate.n}
-      {rate.lowSample ? " · amostra pequena" : ""}
+      {rate.lowSample && (
+        <>
+          {" · amostra pequena"}
+          <HelpHint
+            anchor="amostra-pequena"
+            label="amostra pequena"
+            blurb="Menos de 20 apostas liquidadas. Com tão poucas, os números são ruído de sorte, não habilidade — não conclua cedo demais."
+          />
+        </>
+      )}
     </span>
   );
 }

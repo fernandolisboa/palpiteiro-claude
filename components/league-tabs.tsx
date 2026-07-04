@@ -59,8 +59,11 @@ export function LeagueTabs({ value, range, className }: Props) {
         if (!active) {
           // Liga fora de temporada: afordância de UI desabilitada. Um <span> sem
           // href não é navegável nem focável (sem tabIndex); aria-disabled + texto
-          // sr-only comunicam o estado a leitores de tela. O guard em app/page.tsx
-          // continua sendo o enforcement real ("?league=" inativa redireciona).
+          // sr-only comunicam o estado a leitores de tela. O detalhe "volta em
+          // agosto" vive no sr-only (não só no `title`, que é inalcançável no
+          // touch/leitor de tela — #448); o `title` fica pro hover do desktop. O
+          // guard em app/page.tsx continua sendo o enforcement real ("?league="
+          // inativa redireciona).
           return (
             <span
               key={itemValue}
@@ -71,7 +74,7 @@ export function LeagueTabs({ value, range, className }: Props) {
               )}
             >
               {label}
-              <span className="sr-only"> (fora de temporada)</span>
+              <span className="sr-only"> (fora de temporada — volta em agosto)</span>
             </span>
           );
         }

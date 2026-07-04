@@ -56,7 +56,9 @@ describe("LeagueTabs rendering (a11y)", () => {
     // (verdadeiro na config atual da Copa).
     if (leagueTabs.some((t) => !t.active)) {
       expect(markup).toContain('aria-disabled="true"');
-      expect(markup).toContain("(fora de temporada)");
+      // O detalhe da sazonalidade agora vive no sr-only (não só no `title`
+      // inalcançável no touch/leitor de tela — #448).
+      expect(markup).toContain("(fora de temporada — volta em agosto)");
     }
 
     // #58 (núcleo): toda liga suportada é surfaçada — ativa ou desabilitada.
