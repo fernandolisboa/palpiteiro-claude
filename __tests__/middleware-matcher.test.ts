@@ -23,7 +23,10 @@ const matcherMatch = source.match(/matcher:\s*\[\s*"([^"]+)"/);
 if (!matcherMatch) {
   throw new Error("não achei o matcher em middleware.ts");
 }
-const matcher = matcherMatch[1];
+// O capture vem dos BYTES do source: um `\.` escrito na string TS aparece aqui
+// como `\\.`. Desfaz o escape de string (como o TS faria) antes de compilar,
+// senão o `\\` viraria backslash literal na regex.
+const matcher = matcherMatch[1].replace(/\\\\/g, "\\");
 const matcherRe = new RegExp(`^${matcher}$`);
 
 /** Reproduz a decisão do Next: casou o matcher ⇒ middleware roda ⇒ rota gateada. */
@@ -44,10 +47,15 @@ describe("middleware matcher — exclusões de SEO (#439)", () => {
     expect(isGated("/robots.txtfoo")).toBe(true);
     expect(isGated("/sitemap.xmlfoo")).toBe(true);
   });
+
+  it("escapa o ponto — /robotsXtxt e /sitemapXxml seguem gateados", () => {
+    expect(isGated("/robotsXtxt")).toBe(true);
+    expect(isGated("/sitemapXxml")).toBe(true);
+  });
 });
 
 describe("middleware matcher — app autenticado segue gateado", () => {
-  it.each(["/jogos", "/dashboard", "/match/123", "/perfil", "/admin"])(
+  it.each(["/jogos", "/dashboard", "/match/123", "/perfil", "/admin", "/time/palmeiras"])(
     "gateia %s",
     (path) => {
       expect(isGated(path)).toBe(true);
