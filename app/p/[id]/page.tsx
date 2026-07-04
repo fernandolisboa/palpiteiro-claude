@@ -1,5 +1,6 @@
 import { notFound } from "next/navigation";
 import type { Metadata } from "next";
+import Link from "next/link";
 
 import { Wordmark } from "@/components/wordmark";
 import { PublicPalpite } from "@/components/palpites/public-palpite";
@@ -70,9 +71,15 @@ export default async function PublicPalpitePage({ params }: PageProps) {
   return (
     <main className="min-h-screen bg-background text-foreground">
       {/* Chrome público mínimo e auto-contido: só a marca, sem nav/back/DesktopShell (que
-          puxam contexto autenticado). */}
+          puxam contexto autenticado). A marca linka pra landing `/` (on-ramp de crescimento,
+          #444) — firewall-safe: `/` é pública/estática, sem linguagem de valor. */}
       <header className="border-b border-border/60 px-5 py-4">
-        <Wordmark />
+        <Link
+          href="/"
+          className="inline-flex w-fit rounded-sm transition-opacity hover:opacity-80 focus-visible:outline-none focus-visible:ring-[3px] focus-visible:ring-ring/50"
+        >
+          <Wordmark />
+        </Link>
       </header>
       <div className="mx-auto w-full max-w-content px-5 py-8">
         <PublicPalpite view={shared.view} match={shared.match} />
