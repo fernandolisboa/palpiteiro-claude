@@ -38,6 +38,11 @@ async function load() {
   return mod.checkMagicLinkRateLimit;
 }
 
+async function loadIp() {
+  const mod = await import("@/lib/auth/magic-link-rate-limit");
+  return mod.checkMagicLinkIpRateLimit;
+}
+
 beforeEach(() => {
   vi.resetModules();
   mockLimit.mockReset();
@@ -103,5 +108,39 @@ describe("checkMagicLinkRateLimit", () => {
       await check("a@ex.com");
       expect(fixedWindow).toHaveBeenCalledWith(5, "1 h");
     }
+  });
+});
+
+describe("checkMagicLinkIpRateLimit", () => {
+  it("retorna true quando abaixo do teto", async () => {
+    mockLimit.mockResolvedValue({ success: true });
+    const check = await loadIp();
+    expect(await check("203.0.113.7")).toBe(true);
+  });
+
+  it("retorna false quando estoura o teto", async () => {
+    mockLimit.mockResolvedValue({ success: false });
+    const check = await loadIp();
+    expect(await check("203.0.113.7")).toBe(false);
+  });
+
+  it("usa prefixo/bucket próprios ('ratelimit:magic-link-ip'), chaveia pelo IP e default 10/1h", async () => {
+    mockLimit.mockResolvedValue({ success: true });
+    const check = await loadIp();
+    await check("203.0.113.7");
+    // Default 10 (sem RATE_LIMIT_MAGIC_LINK_IP_PER_HOUR no env), janela 1h, chave = IP cru.
+    expect(fixedWindow).toHaveBeenCalledWith(10, "1 h");
+    expect(limited).toEqual([
+      { prefix: "ratelimit:magic-link-ip", key: "203.0.113.7" },
+    ]);
+  });
+
+  it("fail-OPEN (true) sem KV — o caminho de login não pode travar", async () => {
+    vi.stubEnv("KV_REST_API_URL", "");
+    const warn = vi.spyOn(console, "warn").mockImplementation(() => {});
+    const check = await loadIp();
+    expect(await check("203.0.113.7")).toBe(true);
+    expect(mockLimit).not.toHaveBeenCalled();
+    warn.mockRestore();
   });
 });
