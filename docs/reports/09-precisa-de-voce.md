@@ -37,7 +37,8 @@ onde aplicável), prontos pra mergear. Revise e faça o merge (auto-deploya pra 
 |---|---|---|---|
 | #462 | **Segurança**: rate-limit por IP no magic link (o único exploit CONFIRMADO) + headers de segurança HTTP | #435 #436 | Sem CSP (precisa nonce — ver §4). HSTS sem `preload` (reversível) |
 | #463 | Linha de aviso de risco na Análise sóbria + fan-out | #434 | Firewall intacto (superfície sóbria, não a manchete) |
-| **SEO** | robots.ts + sitemap.ts + emenda do middleware + metadata (title template/twitter/canonical) + JSON-LD | #439 #443 (avança #441) | Confere a regex do middleware antes de mergear |
+| #465 | **SEO**: robots.ts + sitemap.ts + emenda do middleware + metadata (title template/twitter/canonical) + JSON-LD | #439 #443 (avança #441) | Confere a regex do middleware (validada no PR). Resto do #441 (títulos absolutos, /signin noindex, generateMetadata do /match) fica de follow-up |
+| #464 | Este report (09) | — | — |
 
 > Depois de mergear #462 e a SEO: ambos tocam superfície pública; um `curl -I` rápido em
 > prod confirma os headers (`X-Frame-Options`, `HSTS`) e o `/robots.txt`/`/sitemap.xml` (200,
