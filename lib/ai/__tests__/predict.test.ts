@@ -969,7 +969,7 @@ describe("predict() — stake congelado na row (#167 / ADR 0019)", () => {
   });
 });
 
-describe("predict() — over_under_v2.1: snapshot literal do prompt (guard anti-drift) + proveniência #226", () => {
+describe("predict() — over_under_v2.2: snapshot literal do prompt (guard anti-drift) + baseline Poisson #482", () => {
   it("cartridge.systemPrompt: snapshot literal (regra 6 agora ancora no baseline Poisson — ADR 0037)", () => {
     // v2.1→v2.2 (#482, ADR 0037): a regra 6 passou a mandar ancorar no "Baseline do
     // modelo de placar (Poisson)" e NÃO copiar a implícita. (v2.0→v2.1 #226 = a
