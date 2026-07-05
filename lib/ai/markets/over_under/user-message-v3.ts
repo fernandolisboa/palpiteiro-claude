@@ -18,6 +18,16 @@ export function buildUserMessageV3(
 ): string {
   const lines = renderContextSections(input);
 
+  // Baseline Poisson por linha (ADR 0037): mapa line→P(over)% do modelo de placar.
+  // DADO ancorador, não verdade — o prompt instrui a partir dele, não da implícita.
+  const poissonByLine = new Map<number, number>();
+  for (const pl of input.scoreline_model?.per_line ?? []) {
+    poissonByLine.set(pl.line, pl.over_pct);
+  }
+  const degradedNote = input.scoreline_model?.degraded
+    ? " (dados limitados: baseado no prior da liga)"
+    : "";
+
   lines.push("");
   lines.push("# Odds e probabilidades implícitas por linha");
   for (const ln of input.lines) {
@@ -31,6 +41,12 @@ export function buildUserMessageV3(
     lines.push(
       `- Under ${fmtNum(ln.line, 1)}: odd ${fmtNum(ln.under_decimal)} → implícita normalizada ${fmtNum(ln.under_pct)}%`,
     );
+    const poissonOver = poissonByLine.get(ln.line);
+    if (poissonOver !== undefined) {
+      lines.push(
+        `- Baseline do modelo de placar (Poisson)${degradedNote}: Over ${fmtNum(ln.line, 1)} ≈ ${fmtNum(poissonOver)}% · Under ${fmtNum(ln.line, 1)} ≈ ${fmtNum(100 - poissonOver)}%`,
+      );
+    }
   }
 
   pushTemporalSection(lines, context);

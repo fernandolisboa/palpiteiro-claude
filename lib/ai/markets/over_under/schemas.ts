@@ -107,6 +107,25 @@ const MatchSchema = z.object({
   venue: z.string().min(1).optional(),
 });
 
+// Baseline do modelo de placar (Poisson) — insumo estruturado do ADR 0037. P(over)
+// por linha, computado em predict.ts sobre a matriz double-Poisson (fonte DADO, não
+// verdade; o LLM ancora nele, ver prompt). OPCIONAL: ausente quando standings
+// indisponível/degenerado (escada de degradação — o cartucho roda como antes).
+const ScorelineModelSchema = z.object({
+  source: z.literal("poisson"),
+  // true = λ do prior de liga (splits ausentes/<5 jogos) → "dados limitados".
+  degraded: z.boolean(),
+  per_line: z
+    .array(
+      z.object({
+        line: z.number(),
+        over_pct: z.number().min(0).max(100),
+      }),
+    )
+    .min(1),
+});
+export type ScorelineModelFacts = z.infer<typeof ScorelineModelSchema>;
+
 export const OverUnderInputSchema = z.object({
   match: MatchSchema,
   home: TeamDataSchema,
@@ -114,6 +133,7 @@ export const OverUnderInputSchema = z.object({
   h2h: z.array(H2HMatchSchema).max(20),
   odds: OddsSchema,
   implied: ImpliedProbabilitiesSchema,
+  scoreline_model: ScorelineModelSchema.optional(),
 });
 
 export type OverUnderInput = z.infer<typeof OverUnderInputSchema>;
@@ -147,6 +167,7 @@ export const OverUnderInputV3Schema = z.object({
   away: TeamDataSchema,
   h2h: z.array(H2HMatchSchema).max(20),
   lines: z.array(LineEntrySchema).min(1),
+  scoreline_model: ScorelineModelSchema.optional(),
 });
 
 export type OverUnderInputV3 = z.infer<typeof OverUnderInputV3Schema>;

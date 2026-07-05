@@ -969,14 +969,14 @@ describe("predict() — stake congelado na row (#167 / ADR 0019)", () => {
   });
 });
 
-describe("predict() — over_under_v2.1: snapshot literal do prompt (guard anti-drift) + proveniência #226", () => {
-  it("cartridge.systemPrompt: snapshot literal (regra 8 agora pondera proveniência — #226, ADR 0026)", () => {
-    // v2.0→v2.1 (#226): a regra 8 ganhou a cláusula de proveniência (`fonte`
-    // oficial/não-oficial) PRESERVANDO "dados indisponíveis != elenco saudável".
-    // Snapshot LITERAL da string INTEIRA — não um toContain de trecho. É o único guard
-    // automático contra drift silencioso do prompt: QUALQUER mudança de UM caractere
-    // quebra este teste (e exige bump consciente de versão).
-    expect(overUnderCartridge.version).toBe("over_under_v2.1");
+describe("predict() — over_under_v2.2: snapshot literal do prompt (guard anti-drift) + baseline Poisson #482", () => {
+  it("cartridge.systemPrompt: snapshot literal (regra 6 agora ancora no baseline Poisson — ADR 0037)", () => {
+    // v2.1→v2.2 (#482, ADR 0037): a regra 6 passou a mandar ancorar no "Baseline do
+    // modelo de placar (Poisson)" e NÃO copiar a implícita. (v2.0→v2.1 #226 = a
+    // cláusula de proveniência na regra 8.) Snapshot LITERAL da string INTEIRA — não um
+    // toContain de trecho. É o único guard automático contra drift silencioso do prompt:
+    // QUALQUER mudança de UM caractere quebra este teste (e exige bump consciente de versão).
+    expect(overUnderCartridge.version).toBe("over_under_v2.2");
     expect(overUnderCartridge.systemPrompt).toMatchInlineSnapshot(`
       "Você é um analista quantitativo de apostas esportivas focado exclusivamente no mercado over/under 2.5 gols.
 
@@ -991,7 +991,7 @@ describe("predict() — over_under_v2.1: snapshot literal do prompt (guard anti-
       3. confidence_pct é sua probabilidade estimada para o LADO RECOMENDADO. Quando "pass", reporte sua melhor estimativa para "over".
       4. minimum_odd: odd decimal mínima na qual o palpite ainda mantém edge >= 5%. Obrigatório quando recommendation ∈ {"over","under"}; OMITIR quando "pass".
       5. Use APENAS os dados fornecidos pelo usuário. Não invente jogadores, lesões, escalações, estatísticas ou tendências.
-      6. Raciocine quantitativamente quando possível: médias de gols marcados/sofridos, ritmo recente, impacto de ausências em finalização/defesa, padrão de H2H, contexto da competição.
+      6. Raciocine quantitativamente. Quando fornecido, o "Baseline do modelo de placar (Poisson)" é seu PONTO DE PARTIDA para a probabilidade de over/under 2.5 — ancore seu confidence_pct nele e só se afaste com justificativa concreta (desfalque de peso, notícia relevante, forma recente muito destoante da tabela, ou o rótulo "dados limitados" pedindo cautela). NÃO derive sua estimativa da probabilidade IMPLÍCITA do mercado: a implícita é o que você COMPARA contra pra achar edge, nunca a fonte da sua estimativa (copiá-la zeraria qualquer edge). Complemente o baseline com: médias de gols marcados/sofridos, ritmo recente, impacto de ausências em finalização/defesa, padrão de H2H, contexto da competição.
       7. Considere a confiabilidade dos dados: poucos jogos de forma recente, ausência de escalação publicada, ou H2H muito antigo são motivos pra reduzir confiança (e provavelmente "pass").
       8. Quando a seção "Lesões / Suspensões" indicar "dados indisponíveis nesta análise" para um time, NÃO assuma que não há lesões — trate como dado faltante e reduza a confiança da análise. Quando um desfalque trouxer uma "fonte": "official" é dado estruturado confiável (peso normal na leitura); "unofficial" é fonte não-oficial/fallback — trate com cautela (menor peso; não deixe um desfalque não-oficial sozinho dominar a recomendação). Sem "fonte" indicada, assuma confiável. Isso NÃO altera a regra acima: "dados indisponíveis" continua significando dado faltante, NUNCA elenco saudável.
       9. Responda EXCLUSIVAMENTE chamando a ferramenta \`submit_prediction\` com os campos definidos no schema dela. Não produza texto livre fora da chamada da ferramenta.
@@ -1544,7 +1544,7 @@ describe("predict() — multi-linha (#175): linha escolhida round-trip pro persi
     const aiCallRow = insertValues.mock.calls[0]?.[0] as {
       promptVersion: string;
     };
-    expect(aiCallRow.promptVersion).toBe("over_under_v3.1");
+    expect(aiCallRow.promptVersion).toBe("over_under_v3.2");
   });
 
   it("LLM escolhe 2.5: odds/edge da 2.5 (PSO da linha escolhida, não 1.5 nem 3.5)", async () => {

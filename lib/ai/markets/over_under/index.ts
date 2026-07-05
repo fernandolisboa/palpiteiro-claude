@@ -20,7 +20,7 @@ import { buildUserMessage } from "./user-message";
 // cartucho (ADR 0017). BUMP MINOR v2.0 → v2.1 (#226, ADR 0026): proveniência de
 // desfalques (`fonte` no user-message + regra de ponderação por source no prompt).
 // O payload MUDOU (campo `source` opcional nas absences) — rodar o replay-eval.
-export const OVER_UNDER_VERSION = "over_under_v2.1" as const;
+export const OVER_UNDER_VERSION = "over_under_v2.2" as const;
 
 // Re-exports nomeados: predict.ts importa `buildPredictionInput`/`BuildInputError`
 // como BINDINGS DE MÓDULO (não via o objeto do cartucho) pra que os spies do

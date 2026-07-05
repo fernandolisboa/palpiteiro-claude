@@ -3,6 +3,7 @@ import {
   OverUnderInputV3Schema,
   type OverUnderInput,
   type OverUnderInputV3,
+  type ScorelineModelFacts,
 } from "./schemas";
 import type { GenericImpliedArgs, GenericOddsArgs } from "../types";
 import type {
@@ -195,7 +196,27 @@ export type BuildPredictionInputArgs = {
   // over_pct/under_pct) — ver abaixo. O OverUnderInput (schema) fica INTACTO.
   odds: GenericOddsArgs;
   implied: GenericImpliedArgs;
+  // Baseline Poisson por linha (ADR 0037) — predict computa sobre a matriz e passa
+  // aqui em camelCase; mapeamos pro snake_case do schema. Opcional (ausente = escada
+  // de degradação: standings indisponível → cartucho roda como antes).
+  scorelineModel?: {
+    source: "poisson";
+    degraded: boolean;
+    perLine: { line: number; overPct: number }[];
+  };
 };
+
+// camelCase (args de predict) → snake_case (schema). undefined preserva a ausência.
+function buildScorelineModel(
+  m: BuildPredictionInputArgs["scorelineModel"],
+): ScorelineModelFacts | undefined {
+  if (!m) return undefined;
+  return {
+    source: m.source,
+    degraded: m.degraded,
+    per_line: m.perLine.map((l) => ({ line: l.line, over_pct: l.overPct })),
+  };
+}
 
 export class BuildInputError extends Error {
   readonly context: Record<string, unknown>;
@@ -309,6 +330,7 @@ export function buildPredictionInput(
       captured_at: args.odds.captured_at,
     },
     implied: { over_pct: overPct, under_pct: underPct },
+    scoreline_model: buildScorelineModel(args.scorelineModel),
   } satisfies OverUnderInput;
 
   const parsed = OverUnderInputSchema.safeParse(draft);
@@ -436,6 +458,7 @@ export function buildPredictionInputV3(
     },
     h2h: buildH2H(args.h2h, H2H_LIMIT),
     lines,
+    scoreline_model: buildScorelineModel(args.scorelineModel),
   } satisfies OverUnderInputV3;
 
   const parsed = OverUnderInputV3Schema.safeParse(draft);
