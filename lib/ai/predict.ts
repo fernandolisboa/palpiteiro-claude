@@ -26,7 +26,9 @@ import { leagueToSportKey } from "@/lib/providers/odds-api-constants";
 import type { NormalizedOddsEvent } from "@/lib/providers/odds/types";
 import { getSportsDataProvider } from "@/lib/providers/sports-data";
 import { getAbsencesProvider } from "@/lib/providers/absences";
+import { computeMatchLambdas } from "@/lib/providers/sports-data/match-lambdas";
 import { normalizeTeamName } from "@/lib/providers/sports-data/team-names";
+import { pOverUnder, scorelineMatrix } from "@/lib/quant/scoreline-model";
 import {
   SportsDataTransientError,
   SportsDataUnsupportedError,
@@ -569,6 +571,40 @@ export async function predict({
   let oddByKey: Record<string, number> = {};
   let impliedByKey: Record<string, number> = {};
 
+  // 5.5 (ADR 0037): baseline Poisson do modelo de placar como FATO estruturado pro
+  //    cartucho over/under. Matriz UMA vez da tabela via o adapter promovido
+  //    (lib/providers/sports-data/match-lambdas); ausente (undefined) quando standings
+  //    indisponível/degenerado — escada de degradação, o cartucho roda como antes, zero
+  //    regressão. Só over/under lê o bloco no v1; injetado via spread condicional pra
+  //    não virar excess-property nos outros cartuchos (que ignoram o campo).
+  const scorelineMatrixForMatch =
+    cartridge.descriptor.dbMarketKey === "over_under"
+      ? (() => {
+          const lambdas = computeMatchLambdas({
+            standing: standings,
+            homeTeam: match.homeTeam,
+            awayTeam: match.awayTeam,
+            neutral: match.league === "world_cup",
+          });
+          if (!lambdas) return null;
+          return {
+            matrix: scorelineMatrix(lambdas.lambdaHome, lambdas.lambdaAway),
+            degraded: lambdas.degradedData,
+          };
+        })()
+      : null;
+  const scorelineModelForLines = (lines: number[]) =>
+    scorelineMatrixForMatch
+      ? {
+          source: "poisson" as const,
+          degraded: scorelineMatrixForMatch.degraded,
+          perLine: lines.map((line) => ({
+            line,
+            overPct: pOverUnder(scorelineMatrixForMatch.matrix, line) * 100,
+          })),
+        }
+      : undefined;
+
   // 6. Monta o input do cartucho. Args comuns (sports-data) idênticos pros dois
   //    caminhos; só odds/implied diferem (single: par binário; multi: escada).
   const commonInputArgs = {
@@ -634,6 +670,9 @@ export async function predict({
         };
       });
       const head = lineLadder[0];
+      // Bloco Poisson espelhando as linhas da escada (ADR 0037). Spread condicional:
+      // ausente quando standings indisponível → cartucho renderiza como antes.
+      const v3Block = scorelineModelForLines(lineLadder.map((l) => l.line));
       input = cartridge.buildPredictionInput({
         ...commonInputArgs,
         odds: {
@@ -643,10 +682,13 @@ export async function predict({
           lineLadder,
         },
         implied: { pct: head.impliedPct },
+        ...(v3Block ? { scorelineModel: v3Block } : {}),
       });
     } else {
       // Single-line: byte-idêntico ao caminho de hoje.
       ({ oddByKey, impliedByKey } = deriveImplied(oddsBundle));
+      // Bloco Poisson na linha 2.5 (v2 é 2.5-only); undefined pros mercados não-over/under.
+      const singleBlock = scorelineModelForLines([2.5]);
       input = cartridge.buildPredictionInput({
         ...commonInputArgs,
         odds: {
@@ -658,6 +700,7 @@ export async function predict({
           selections: selectionKeys.map((key) => ({ key, odd: oddByKey[key] })),
         },
         implied: { pct: impliedByKey },
+        ...(singleBlock ? { scorelineModel: singleBlock } : {}),
       });
     }
   } catch (err) {

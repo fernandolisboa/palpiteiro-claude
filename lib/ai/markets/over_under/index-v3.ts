@@ -22,7 +22,7 @@ import { buildUserMessageV3 } from "./user-message-v3";
 // caminho default continua no v2 (byte-idêntico).
 // BUMP MINOR v3.0 → v3.1 (#226, ADR 0026): proveniência de desfalques (`fonte` no
 // user-message compartilhado + regra de ponderação por source no prompt-v3).
-export const OVER_UNDER_V3_VERSION = "over_under_v3.1" as const;
+export const OVER_UNDER_V3_VERSION = "over_under_v3.2" as const;
 
 export {
   buildPredictionInputV3,

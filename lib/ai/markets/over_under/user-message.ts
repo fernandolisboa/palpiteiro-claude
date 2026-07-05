@@ -144,6 +144,20 @@ export function buildUserMessage(
     `- Under 2.5: odd ${fmtNum(input.odds.under_2_5_decimal)} → implícita normalizada ${fmtNum(input.implied.under_pct)}%`,
   );
 
+  // Baseline Poisson (ADR 0037): P(over) do modelo de placar na linha 2.5. DADO
+  // ancorador, não verdade — o prompt instrui a partir dele, não da implícita.
+  const poissonOver = input.scoreline_model?.per_line.find(
+    (pl) => pl.line === 2.5,
+  )?.over_pct;
+  if (poissonOver !== undefined) {
+    const degradedNote = input.scoreline_model?.degraded
+      ? " (dados limitados: baseado no prior da liga)"
+      : "";
+    lines.push(
+      `- Baseline do modelo de placar (Poisson)${degradedNote}: Over 2.5 ≈ ${fmtNum(poissonOver)}% · Under 2.5 ≈ ${fmtNum(100 - poissonOver)}%`,
+    );
+  }
+
   pushTemporalSection(lines, context);
 
   lines.push("");
