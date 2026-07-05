@@ -15,7 +15,9 @@ import {
 import { getCartridge } from "@/lib/ai/markets/registry";
 import { isEmailAllowed } from "@/lib/auth/whitelist";
 import {
+  computeSlipJoint,
   gradeScorelineLeg,
+  legToScorePredicate,
   type ScorelineKind,
 } from "@/lib/bets/grade-scoreline";
 import { db } from "@/lib/db";
@@ -37,8 +39,17 @@ import {
   checkBetSlipsRateLimit,
 } from "@/lib/rate-limit";
 import { deriveBetLegSettleable } from "@/lib/settlement/rules/user-bet-dispatch";
-import { betLegLabel, toFreeBetLegView, SETTLE_BADGE_PT_BR } from "@/lib/view/free-bet";
-import type { FreeBetLegView, GradeMyBetView } from "@/lib/view/types";
+import {
+  betLegLabel,
+  toFreeBetComboView,
+  toFreeBetLegView,
+  SETTLE_BADGE_PT_BR,
+} from "@/lib/view/free-bet";
+import type {
+  FreeBetComboView,
+  FreeBetLegView,
+  GradeMyBetView,
+} from "@/lib/view/types";
 
 import { gradeMyBet } from "./predictions";
 import { notAnalyzableMessage } from "./not-analyzable";
@@ -243,7 +254,7 @@ export type ConfirmLegView =
   | { route: "rate_limited"; selectionLabel: string }; // slot esgotado mid-slip
 
 export type ConfirmBetResult =
-  | { ok: true; legs: ConfirmLegView[] }
+  | { ok: true; legs: ConfirmLegView[]; combo: FreeBetComboView | null }
   | {
       ok: false;
       error: string;
@@ -422,6 +433,70 @@ async function processLeg(
   };
 }
 
+// ── Combinada same-game via joint-sum (Decisão 4) ────────────────────────────
+// Só computa quando o slip tem ≥2 pernas E TODAS mapeiam predicado de placar (fora
+// da matriz = 1º tempo/first_to_score/cards/corners → null) E TODAS foram gradeadas
+// (número real). Qualquer perna fora/sem-grade OU standings indisponível → "combinada
+// não avaliada" (NUNCA precifica um combo diferente do apostado). Devolve a view +
+// jointProbPct pra persistir (congelado). O joint e as marginais saem da MESMA matriz
+// (computeSlipJoint) — coerência de tela garantida (joint ≤ min das marginais Poisson).
+function buildCombo(
+  legs: ConfirmBetLeg[],
+  processed: NewBetLeg[],
+  ctx: LegContext,
+  comboUserOdd: number | null,
+): { view: FreeBetComboView | null; jointProbPct: number | null } {
+  if (legs.length < 2) return { view: null, jointProbPct: null };
+
+  const naoAvaliada = (reason: string) => ({
+    view: toFreeBetComboView({ status: "nao-avaliada", reason }),
+    jointProbPct: null,
+  });
+
+  const allInMatrix = legs.every(
+    (l) => legToScorePredicate(l.kind, l.params as BetLegParams) !== null,
+  );
+  const allGraded = processed.every(
+    (p) =>
+      p.gradeStatus === "graded" || p.gradeStatus === "degraded_no_snapshot",
+  );
+  if (!allInMatrix || !allGraded) {
+    return naoAvaliada(
+      "Não avaliamos esta combinada: tem perna fora do modelo de placar (1º tempo, quem marca primeiro, cartões ou escanteios) ou que não consegui avaliar agora. As pernas aparecem individualmente acima.",
+    );
+  }
+
+  const joint = computeSlipJoint({
+    standing: ctx.standing,
+    homeTeam: ctx.homeTeam,
+    awayTeam: ctx.awayTeam,
+    neutral: ctx.neutral,
+    legs: legs.map((l) => ({
+      kind: l.kind,
+      params: l.params as BetLegParams,
+    })),
+  });
+  if (joint === null) {
+    return naoAvaliada(
+      "Não consegui avaliar a combinada agora — sem tabela de classificação pra estimar o placar.",
+    );
+  }
+
+  return {
+    view: toFreeBetComboView({
+      status: "combinada",
+      jointProbPct: joint.jointProbPct,
+      degradedData: joint.degradedData,
+      legs: legs.map((l, i) => ({
+        selectionLabel: betLegLabel(l.kind, l.params as Record<string, unknown>),
+        marginalPct: joint.marginalsPct[i],
+      })),
+      comboUserOdd,
+    }),
+    jointProbPct: joint.jointProbPct,
+  };
+}
+
 export async function confirmBet(
   _prev: ConfirmBetResult | null,
   formData: FormData,
@@ -530,16 +605,25 @@ export async function confirmBet(
     processed.push(await processLeg(leg, ctx));
   }
 
-  // 9. Persiste slip + pernas (congelado, no confirm). Slip imutável depois.
+  // 9. Combinada same-game (Decisão 4): joint sobre a matriz do slip, congelado.
+  const combo = buildCombo(
+    slip.legs,
+    processed.map((p) => p.newLeg),
+    ctx,
+    slip.comboUserOdd ?? null,
+  );
+
+  // 10. Persiste slip + pernas + joint (congelado, no confirm). Slip imutável depois.
   await insertBetSlipWithLegs({
     matchId: slip.matchId,
     userId: session.user.id,
     rawInput: slip.rawInput,
     parseAiCallId: safeParseAiCallId,
     comboUserOdd: slip.comboUserOdd ?? null,
+    jointProbPct: combo.jointProbPct,
     legs: processed.map((p) => p.newLeg),
   });
 
   revalidatePath(`/match/${slip.matchId}`);
-  return { ok: true, legs: processed.map((p) => p.view) };
+  return { ok: true, legs: processed.map((p) => p.view), combo: combo.view };
 }

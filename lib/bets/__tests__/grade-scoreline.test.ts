@@ -3,7 +3,9 @@ import { describe, expect, it } from "vitest";
 import type { BetLegParams } from "@/db/schema";
 import {
   computeMatchLambdas,
+  computeSlipJoint,
   gradeScorelineLeg,
+  legToScorePredicate,
   type ScorelineKind,
 } from "@/lib/bets/grade-scoreline";
 import type {
@@ -207,5 +209,121 @@ describe("gradeScorelineLeg — todos os kinds do Caminho B", () => {
   it("first_half_score: prob em (0,100)", () => {
     const g = grade("first_half_score", { home: 1, away: 0 });
     expect(g.status).toBe("graded");
+  });
+});
+
+// ── legToScorePredicate: cada predicado ESPELHA o reader (mesma medida) ───────
+describe("legToScorePredicate", () => {
+  it("kinds fora da matriz → null (derrubam a combinada)", () => {
+    expect(legToScorePredicate("first_half_score", { home: 1, away: 0 })).toBeNull();
+    expect(
+      legToScorePredicate("first_half_over_under", { selection: "over", line: 0.5 }),
+    ).toBeNull();
+    expect(legToScorePredicate("first_to_score", { firstToScore: "home" })).toBeNull();
+    expect(legToScorePredicate("cards", { selection: "over", line: 3.5 })).toBeNull();
+    expect(legToScorePredicate("corners", { selection: "over", line: 8.5 })).toBeNull();
+  });
+
+  it("cada predicado da matriz bate a marginal do reader (grade)", () => {
+    // Pra cada kind de placar, joint([pred]) sobre a matriz do slip == modelProbPct
+    // do gradeScorelineLeg da mesma perna (o predicado é a MESMA soma do reader).
+    const cases: Array<[ScorelineKind, BetLegParams]> = [
+      ["exact_score", { home: 2, away: 0 }],
+      ["margin", { side: "home", minMargin: 2 }],
+      ["clean_sheet", { side: "home" }],
+      ["over_under", { selection: "over", line: 2.5 }],
+      ["over_under", { selection: "under", line: 2.5 }],
+      ["match_result", { selection: "home" }],
+      ["match_result", { selection: "draw" }],
+      ["match_result", { selection: "away" }],
+      ["btts", { selection: "yes" }],
+      ["btts", { selection: "no" }],
+      ["double_chance", { selection: "home_draw" }],
+      ["double_chance", { selection: "home_away" }],
+      ["double_chance", { selection: "draw_away" }],
+    ];
+    for (const [kind, params] of cases) {
+      const g = grade(kind, params);
+      const joint = computeSlipJoint({
+        standing: TABLE,
+        homeTeam: "Forte",
+        awayTeam: "Fraco",
+        neutral: false,
+        legs: [{ kind, params }],
+      });
+      if (g.status !== "graded" || joint === null)
+        throw new Error(`graded/joint ${kind}`);
+      expect(joint.jointProbPct).toBeCloseTo(g.modelProbPct, 6);
+      expect(joint.marginalsPct[0]).toBeCloseTo(g.modelProbPct, 6);
+    }
+  });
+});
+
+describe("computeSlipJoint (combinada same-game)", () => {
+  const slipJoint = (legs: Array<{ kind: string; params: BetLegParams }>) =>
+    computeSlipJoint({
+      standing: TABLE,
+      homeTeam: "Forte",
+      awayTeam: "Fraco",
+      neutral: false,
+      legs,
+    });
+
+  it("standings ausente → null (combinada não avaliada)", () => {
+    expect(
+      computeSlipJoint({
+        standing: undefined,
+        homeTeam: "Forte",
+        awayTeam: "Fraco",
+        neutral: false,
+        legs: [{ kind: "match_result", params: { selection: "home" } }],
+      }),
+    ).toBeNull();
+  });
+
+  it("qualquer perna fora da matriz → null", () => {
+    expect(
+      slipJoint([
+        { kind: "match_result", params: { selection: "home" } },
+        { kind: "first_to_score", params: { firstToScore: "home" } },
+      ]),
+    ).toBeNull();
+  });
+
+  it("joint ≤ min(marginais) — invariante de coerência de tela", () => {
+    const j = slipJoint([
+      { kind: "match_result", params: { selection: "home" } },
+      { kind: "over_under", params: { selection: "over", line: 1.5 } },
+    ]);
+    if (j === null) throw new Error("joint");
+    expect(j.jointProbPct).toBeLessThanOrEqual(Math.min(...j.marginalsPct) + 1e-9);
+  });
+
+  it("joint(super-conjunto) ≤ joint(sub-conjunto) — monotonicidade", () => {
+    const sub = slipJoint([
+      { kind: "match_result", params: { selection: "home" } },
+    ]);
+    const sup = slipJoint([
+      { kind: "match_result", params: { selection: "home" } },
+      { kind: "over_under", params: { selection: "over", line: 2.5 } },
+    ]);
+    if (sub === null || sup === null) throw new Error("joint");
+    expect(sup.jointProbPct).toBeLessThanOrEqual(sub.jointProbPct + 1e-9);
+  });
+
+  // PINADO (Decisão 4 / Consequência "armadilha de correlação"): a conjunta NUNCA é o
+  // produto das marginais. Mandante-forte vence e over são POSITIVAMENTE correlacionados
+  // (mais gols do mandante empurra os dois) → joint > produto. O teste trava qualquer
+  // regressão pra multiplicação ingênua de probs de pernas do mesmo jogo.
+  it("NUNCA multiplica: joint ≠ produto das marginais (correlação)", () => {
+    const j = slipJoint([
+      { kind: "match_result", params: { selection: "home" } },
+      { kind: "over_under", params: { selection: "over", line: 2.5 } },
+    ]);
+    if (j === null) throw new Error("joint");
+    const product = (j.marginalsPct[0] / 100) * (j.marginalsPct[1] / 100) * 100;
+    expect(j.jointProbPct).not.toBeCloseTo(product, 2);
+    // Correlação positiva ⇒ joint estritamente acima do produto (independência).
+    expect(j.jointProbPct).toBeGreaterThan(product);
   });
 });

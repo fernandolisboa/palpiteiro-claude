@@ -3,7 +3,7 @@ import {
   computeEvPerUnit,
 } from "@/lib/odds/scenario";
 import { profitForOutcome } from "@/lib/settlement/money";
-import type { FreeBetLegView } from "@/lib/view/types";
+import type { FreeBetComboView, FreeBetLegView } from "@/lib/view/types";
 
 // Mapper PURO da perna de "aposta livre" gradeada pelo CAMINHO B (modelo de placar,
 // ADR 0036, Decisão 3). Roda SERVER-SIDE (chamado pela action confirmBet) e devolve
@@ -94,6 +94,56 @@ export function toFreeBetLegView(input: FreeBetLegMapperInput): FreeBetLegView {
     edgeLabel: "—",
     settleBadge: SETTLE_BADGE_PT_BR,
     value,
+  };
+}
+
+// ── Mapper da COMBINADA same-game (joint-sum, #473, ADR 0036 Decisão 4) ──────
+// PURO, server-side (chamado por confirmBet e pela view do histórico). O joint e as
+// marginais chegam JÁ computados sobre a MESMA matriz (lib/bets/grade-scoreline.ts:
+// computeSlipJoint) — este mapper só formata o canal de valor. Mesma disciplina do
+// mapper de perna: sem edge, EV só com odd, valueReading template-derivado.
+export type FreeBetComboMapperInput =
+  | {
+      status: "combinada";
+      jointProbPct: number;
+      degradedData: boolean;
+      legs: { selectionLabel: string; marginalPct: number }[];
+      comboUserOdd: number | null;
+    }
+  | { status: "nao-avaliada"; reason: string };
+
+export function toFreeBetComboView(
+  input: FreeBetComboMapperInput,
+): FreeBetComboView {
+  if (input.status === "nao-avaliada") {
+    return { kind: "combinada-nao-avaliada", reason: input.reason };
+  }
+
+  const sourceLabel = input.degradedData
+    ? "modelo simplificado (dados limitados)"
+    : "modelo simplificado";
+
+  // EV/break-even/lucro SÓ quando o usuário deu a odd combinada E o joint é computável
+  // (este ramo). Sem odd → só a conjunta + marginais (nunca EV parcial — Decisão 4c).
+  const comboValue =
+    input.comboUserOdd === null
+      ? null
+      : {
+          comboUserOdd: input.comboUserOdd,
+          valueReading: valueReadingForSign(
+            Math.sign(computeEvPerUnit(input.jointProbPct, input.comboUserOdd)),
+          ),
+          evPerUnit: computeEvPerUnit(input.jointProbPct, input.comboUserOdd),
+          breakEvenProbPct: computeBreakEvenProbPct(input.comboUserOdd),
+          profitIfWon: profitForOutcome("won", input.comboUserOdd, 1),
+        };
+
+  return {
+    kind: "combinada",
+    jointProbPct: input.jointProbPct,
+    sourceLabel,
+    legs: input.legs,
+    value: comboValue,
   };
 }
 

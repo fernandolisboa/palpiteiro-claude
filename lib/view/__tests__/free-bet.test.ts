@@ -6,7 +6,8 @@ import {
   computeBreakEvenProbPct,
   computeEvPerUnit,
 } from "@/lib/odds/scenario";
-import { toFreeBetLegView } from "@/lib/view/free-bet";
+import { profitForOutcome } from "@/lib/settlement/money";
+import { toFreeBetComboView, toFreeBetLegView } from "@/lib/view/free-bet";
 
 describe("toFreeBetLegView (mapper CAMINHO B)", () => {
   it("graded com odd: EV/break-even batem as primitivas puras; edge é SEMPRE '—'", () => {
@@ -104,5 +105,78 @@ describe("toFreeBetLegView (mapper CAMINHO B)", () => {
     expect(imports).not.toContain("computeMarketImpliedProbabilities");
     expect(imports).not.toContain("implied-probability");
     expect(imports).not.toContain("computeMarketScenarios");
+  });
+});
+
+describe("toFreeBetComboView (mapper da combinada same-game)", () => {
+  const legs = [
+    { selectionLabel: "Vitória do mandante", marginalPct: 60 },
+    { selectionLabel: "Mais de 1.5 gols", marginalPct: 75 },
+  ];
+
+  it("combinada com odd: EV/break-even/lucro batem as primitivas; edge ausente", () => {
+    const jointProbPct = 48;
+    const comboUserOdd = 2.1;
+    const view = toFreeBetComboView({
+      status: "combinada",
+      jointProbPct,
+      degradedData: false,
+      legs,
+      comboUserOdd,
+    });
+    if (view.kind !== "combinada") throw new Error("kind");
+    expect(view.sourceLabel).toBe("modelo simplificado");
+    expect(view.jointProbPct).toBe(jointProbPct);
+    expect(view.legs).toEqual(legs);
+    expect(view.value).not.toBeNull();
+    expect(view.value?.evPerUnit).toBeCloseTo(
+      computeEvPerUnit(jointProbPct, comboUserOdd),
+      9,
+    );
+    expect(view.value?.breakEvenProbPct).toBeCloseTo(
+      computeBreakEvenProbPct(comboUserOdd),
+      9,
+    );
+    expect(view.value?.profitIfWon).toBeCloseTo(
+      profitForOutcome("won", comboUserOdd, 1),
+      9,
+    );
+    // Sem canal de edge no view da combinada (perna B).
+    expect(view).not.toHaveProperty("edge");
+  });
+
+  it("combinada sem odd: value=null (só a conjunta + marginais, nunca EV parcial)", () => {
+    const view = toFreeBetComboView({
+      status: "combinada",
+      jointProbPct: 30,
+      degradedData: false,
+      legs,
+      comboUserOdd: null,
+    });
+    if (view.kind !== "combinada") throw new Error("kind");
+    expect(view.value).toBeNull();
+    expect(view.legs).toHaveLength(2);
+  });
+
+  it("degradedData → rótulo 'dados limitados'", () => {
+    const view = toFreeBetComboView({
+      status: "combinada",
+      jointProbPct: 30,
+      degradedData: true,
+      legs,
+      comboUserOdd: null,
+    });
+    if (view.kind !== "combinada") throw new Error("kind");
+    expect(view.sourceLabel).toBe("modelo simplificado (dados limitados)");
+  });
+
+  it("nao-avaliada → kind combinada-nao-avaliada com motivo", () => {
+    const view = toFreeBetComboView({
+      status: "nao-avaliada",
+      reason: "perna fora da matriz",
+    });
+    expect(view.kind).toBe("combinada-nao-avaliada");
+    if (view.kind !== "combinada-nao-avaliada") throw new Error("kind");
+    expect(view.reason).toBe("perna fora da matriz");
   });
 });

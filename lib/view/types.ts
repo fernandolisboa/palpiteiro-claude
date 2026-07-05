@@ -416,3 +416,29 @@ export type FreeBetLegView =
     }
   // Standings indisponível/degenerado no grade → não avalio (prefer-skip, NUNCA λ fabricado).
   | { kind: "nao-avalio"; selectionLabel: string; reason: string };
+
+// ─── "Aposta livre" — combinada same-game via joint-sum (#473, ADR 0036 Dec. 4) ──
+// A conjunta vem SEMPRE de UMA matriz coerente (modelo simplificado). INVARIANTE DE
+// COERÊNCIA DE TELA (PINADO): o card exibe o joint E as marginais Poisson das pernas
+// participantes — TODAS da MESMA matriz → `joint ≤ min(marginais)`. EV só com odd
+// combinada E joint computável (nunca EV parcial — Decisão 4c). Sem edge (perna B).
+export type FreeBetComboView =
+  | {
+      kind: "combinada";
+      jointProbPct: number; // 0-100, congelado no write
+      sourceLabel: string; // "modelo simplificado" | "... (dados limitados)"
+      // As marginais Poisson das pernas participantes, MESMA matriz do joint. O card
+      // as renderiza JUNTO do joint (a forma-dura é joint sem elas na mesma tela).
+      legs: { selectionLabel: string; marginalPct: number }[];
+      // Canal odd-combinada (price-only). null = usuário não deu odd → só a conjunta.
+      value: {
+        comboUserOdd: number;
+        valueReading: string; // template-derivado de sign(EV) — NUNCA prosa do LLM
+        evPerUnit: number; // computeEvPerUnit(jointProbPct, comboUserOdd)
+        breakEvenProbPct: number; // computeBreakEvenProbPct(comboUserOdd)
+        profitIfWon: number; // profitForOutcome('won', comboUserOdd, 1)
+      } | null;
+    }
+  // Alguma perna fora da matriz (1º tempo/first_to_score/cards/corners), sem grade, OU
+  // standings indisponível → NUNCA precifica um combo diferente do apostado.
+  | { kind: "combinada-nao-avaliada"; reason: string };

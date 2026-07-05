@@ -1,4 +1,4 @@
-import { and, desc, eq, inArray, isNull, lt } from "drizzle-orm";
+import { and, desc, eq, inArray, isNull, lt, or } from "drizzle-orm";
 
 import {
   betLegOutcomes,
@@ -43,6 +43,10 @@ export type NewBetSlip = {
   rawInput: string | null;
   parseAiCallId: string | null;
   comboUserOdd: number | null;
+  // Conjunta congelada (0-100) da combinada same-game (#473, Decisão 4). null quando
+  // o slip é de perna única OU a combinada não é avaliável (perna fora da matriz/sem
+  // grade/standings indisponível). numeric → string no insert.
+  jointProbPct: number | null;
   legs: NewBetLeg[];
 };
 
@@ -63,6 +67,8 @@ export async function insertBetSlipWithLegs(
       parseAiCallId: slip.parseAiCallId,
       comboUserOdd:
         slip.comboUserOdd === null ? null : slip.comboUserOdd.toFixed(3),
+      jointProbPct:
+        slip.jointProbPct === null ? null : slip.jointProbPct.toFixed(2),
     })
     .returning({ id: betSlips.id });
   const slipId = slipRow.id;
@@ -206,4 +212,132 @@ export async function getUserBetSlipsForMatch(
     slip.legs.push({ ...r.leg, outcome: r.outcome });
   }
   return [...bySlip.values()];
+}
+
+// ── Histórico "Minhas apostas" (#473, ADR 0036) ──────────────────────────────
+// Status do slip DERIVADO EM LEITURA (nunca coluna denormalizada). PRECEDÊNCIA PINADA
+// (Decisão 5, lost domina): (1) alguma perna com outcome `lost` → errou; (2) senão
+// alguma perna `settleable=false` → nao_conferida; (3) senão TODA perna com outcome
+// `won` → acertou; (4) senão pendente. Perna pendente/não-liquidada tem outcome=null →
+// não conta como `won` → nunca falso-acertou (a armadilha do `bool_and` sobre o NULL do
+// LEFT JOIN). Função PURA — pglite-testável, sem drift com o render.
+export type SlipStatus = "acertou" | "errou" | "pendente" | "nao_conferida";
+
+export function deriveSlipStatus(
+  legs: Array<{ settleable: boolean; outcome: { result: string } | null }>,
+): SlipStatus {
+  if (legs.some((l) => l.outcome?.result === "lost")) return "errou";
+  if (legs.some((l) => !l.settleable)) return "nao_conferida";
+  if (legs.length > 0 && legs.every((l) => l.outcome?.result === "won"))
+    return "acertou";
+  return "pendente";
+}
+
+export type BetSlipMatch = {
+  homeTeam: string;
+  awayTeam: string;
+  league: DbMatch["league"];
+  kickoffAt: Date;
+};
+export type BetSlipHistoryRow = DbBetSlip & {
+  match: BetSlipMatch;
+  legs: UserBetLegRow[];
+  status: SlipStatus;
+};
+export type BetSlipsPage = {
+  slips: BetSlipHistoryRow[];
+  // Cursor OPACO (`<iso createdAt>|<id>`) do último slip da página quando há mais.
+  nextCursor: string | null;
+};
+
+// Keyset COMPOSTO (createdAt, id): sem carregar o `id`, dois slips no MESMO `createdAt`
+// seriam pulados no limite da página (o `desc(id)` do ORDER BY ficaria inerte). Cursor
+// opaco pra não expor a forma; decode tolerante (cursor inválido = primeira página).
+function encodeSlipCursor(createdAt: Date, id: string): string {
+  return `${createdAt.toISOString()}|${id}`;
+}
+function decodeSlipCursor(
+  cursor: string,
+): { createdAt: Date; id: string } | null {
+  const idx = cursor.lastIndexOf("|");
+  if (idx <= 0) return null;
+  const createdAt = new Date(cursor.slice(0, idx));
+  const id = cursor.slice(idx + 1);
+  if (Number.isNaN(createdAt.getTime()) || id.length === 0) return null;
+  return { createdAt, id };
+}
+
+/**
+ * Página do histórico de slips do usuário — keyset COMPOSTO por `(createdAt, id) desc`,
+ * ~20 por página. `userId` vem SEMPRE do `auth()` da página (anti-IDOR — nunca de rota/
+ * query). Duas queries: (1) slips paginados + join `matches` pro cabeçalho; (2) pernas+
+ * outcomes das slip ids da página. Status derivado por `deriveSlipStatus` em leitura.
+ * Slip é imutável e privado — nada aqui cruza fronteira pública (`/p/[id]`/OG).
+ */
+export async function getUserBetSlipsPage(args: {
+  userId: string;
+  cursor?: string;
+  limit?: number;
+}): Promise<BetSlipsPage> {
+  const limit = args.limit ?? 20;
+  const cur = args.cursor ? decodeSlipCursor(args.cursor) : null;
+
+  const slipRows = await db
+    .select({
+      slip: betSlips,
+      match: {
+        homeTeam: matches.homeTeam,
+        awayTeam: matches.awayTeam,
+        league: matches.league,
+        kickoffAt: matches.kickoffAt,
+      },
+    })
+    .from(betSlips)
+    .innerJoin(matches, eq(betSlips.matchId, matches.id))
+    .where(
+      and(
+        eq(betSlips.userId, args.userId),
+        cur
+          ? or(
+              lt(betSlips.createdAt, cur.createdAt),
+              and(
+                eq(betSlips.createdAt, cur.createdAt),
+                lt(betSlips.id, cur.id),
+              ),
+            )
+          : undefined,
+      ),
+    )
+    .orderBy(desc(betSlips.createdAt), desc(betSlips.id))
+    .limit(limit + 1);
+
+  const hasMore = slipRows.length > limit;
+  const pageRows = hasMore ? slipRows.slice(0, limit) : slipRows;
+  const ids = pageRows.map((r) => r.slip.id);
+
+  const legRows = ids.length
+    ? await db
+        .select({ leg: betLegs, outcome: betLegOutcomes })
+        .from(betLegs)
+        .leftJoin(betLegOutcomes, eq(betLegOutcomes.legId, betLegs.id))
+        .where(inArray(betLegs.slipId, ids))
+        .orderBy(betLegs.createdAt)
+    : [];
+
+  const legsBySlip = new Map<string, UserBetLegRow[]>();
+  for (const r of legRows) {
+    const list = legsBySlip.get(r.leg.slipId) ?? [];
+    list.push({ ...r.leg, outcome: r.outcome });
+    legsBySlip.set(r.leg.slipId, list);
+  }
+
+  const slips: BetSlipHistoryRow[] = pageRows.map((r) => {
+    const legs = legsBySlip.get(r.slip.id) ?? [];
+    return { ...r.slip, match: r.match, legs, status: deriveSlipStatus(legs) };
+  });
+
+  const last = pageRows[pageRows.length - 1];
+  const nextCursor =
+    hasMore && last ? encodeSlipCursor(last.slip.createdAt, last.slip.id) : null;
+  return { slips, nextCursor };
 }
