@@ -6,7 +6,7 @@ import { SettlementError } from "@/lib/settlement/schemas";
 // Primeiro a marcar de PALPITE (#354): {firstToScore: "home"|"away"|"none"}.
 // "none" = previsão de 0-0 (ninguém marca). Liquida dos eventos de gol de regulação
 // (derivados no builder palpite-result-data.ts), NÃO do placar puro.
-const FirstToScoreParamsSchema = z.object({
+export const FirstToScoreParamsSchema = z.object({
   firstToScore: z.enum(["home", "away", "none"]),
 });
 

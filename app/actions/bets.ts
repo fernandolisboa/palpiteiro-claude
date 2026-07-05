@@ -5,16 +5,25 @@ import { and, eq } from "drizzle-orm";
 import { z } from "zod";
 
 import { auth } from "@/auth";
-import { aiCalls } from "@/db/schema";
+import { aiCalls, type BetLegParams } from "@/db/schema";
 import { parseBetText } from "@/lib/ai/bet-parse/parse";
 import {
   ConfirmedSlipSchema,
   MAX_RAW_INPUT,
   type ConfirmBetLeg,
 } from "@/lib/ai/bet-parse/schema";
+import { getCartridge } from "@/lib/ai/markets/registry";
 import { isEmailAllowed } from "@/lib/auth/whitelist";
-import { gradeExactScoreFromStandings } from "@/lib/bets/grade-exact-score";
+import {
+  gradeScorelineLeg,
+  type ScorelineKind,
+} from "@/lib/bets/grade-scoreline";
 import { db } from "@/lib/db";
+import { getEnableOverUnderExtraLines } from "@/lib/db/queries/ai-config";
+import {
+  marketsForAudience,
+  marketsForLeague,
+} from "@/lib/db/queries/market-catalog";
 import { getMatchById } from "@/lib/db/queries/matches";
 import { getUserAccessState } from "@/lib/db/queries/users";
 import {
@@ -28,28 +37,85 @@ import {
   checkBetSlipsRateLimit,
 } from "@/lib/rate-limit";
 import { deriveBetLegSettleable } from "@/lib/settlement/rules/user-bet-dispatch";
-import {
-  exactScoreLabel,
-  toFreeBetLegView,
-  SETTLE_BADGE_PT_BR,
-} from "@/lib/view/free-bet";
-import type { FreeBetLegView } from "@/lib/view/types";
+import { betLegLabel, toFreeBetLegView, SETTLE_BADGE_PT_BR } from "@/lib/view/free-bet";
+import type { FreeBetLegView, GradeMyBetView } from "@/lib/view/types";
 
+import { gradeMyBet } from "./predictions";
 import { notAnalyzableMessage } from "./not-analyzable";
 
-// Actions da "aposta livre" (ADR 0036, tracer Fase 1 #471). DUAS portas:
-//   parseBet   — NL → pernas tipadas (echo em chips). SEM persistência.
-//   confirmBet — slip confirmado (Zod fail-closed) → grade CAMINHO B + persiste.
-// O NL é açúcar na FRENTE do boundary fail-closed; o que entra no motor de valor é
-// EXCLUSIVAMENTE o slip re-validado server-side no confirm (Decisão 1).
+// Actions da "aposta livre" (ADR 0036, Fase 2 #472). DUAS portas: parseBet (NL →
+// pernas tipadas) e confirmBet (slip Zod fail-closed → grade roteado kind×gate →
+// persiste congelado). O NL é açúcar na FRENTE do boundary fail-closed; o que entra
+// no motor de valor é EXCLUSIVAMENTE o slip re-validado server-side no confirm.
 
-// ─── parseBet ────────────────────────────────────────────────────────────────
+// ── Roteamento kind×gate (Decisão 3) ─────────────────────────────────────────
+// Kinds de MERCADO: CAMINHO A (cartucho, com edge) DENTRO do gate audiência∩liga;
+// CAMINHO B (modelo, sem edge) fora do gate. Props: sempre B. cards/corners: none.
+const MARKET_KINDS = new Set(["over_under", "match_result", "btts", "double_chance"]);
+const NONE_KINDS = new Set(["cards", "corners"]);
 
-// Chip de perna ecoado de volta pro cliente (editável). Fase 1: só exact_score.
+// Mapa leg → (marketKey, selectionKey, line) do cartucho (CAMINHO A). selectionKeys
+// batem exceto double_chance (home_draw → home_or_draw, etc.).
+const DC_SELECTION: Record<string, string> = {
+  home_draw: "home_or_draw",
+  home_away: "home_or_away",
+  draw_away: "away_or_draw",
+};
+// Espelha o gate de linha-modelável do gradeMyBet (predictions.ts §8): over/under só
+// modela {2.5} ∪ candidateLines (quando a variante multi-linha resolve pra a liga).
+// PRECISA bater com aquele gate — assim, quando decidimos "modelável", uma resposta
+// nao-avalio de gradeMyBet só pode ser PÓS-gasto (nunca a queda pré-gasto da linha),
+// e o fallback A→terminal (nunca B) fica correto (Decisão 3).
+async function isMarketLegModelable(
+  kind: string,
+  params: Record<string, unknown>,
+  league: string,
+): Promise<boolean> {
+  if (kind !== "over_under") return true; // 1X2/btts/dupla chance não têm gate de linha
+  const line = Number(params.line);
+  const flagEnabled = await getEnableOverUnderExtraLines();
+  const d = getCartridge("over_under", { extraLines: flagEnabled }).descriptor;
+  const extraLines =
+    flagEnabled &&
+    d.candidateLines !== undefined &&
+    (d.coveredLeagues === undefined ||
+      d.coveredLeagues.some((l) => l === league));
+  const modelable = new Set<number>([2.5]);
+  if (extraLines && d.candidateLines) for (const l of d.candidateLines) modelable.add(l);
+  return modelable.has(line);
+}
+
+function toMarketPin(
+  kind: string,
+  params: Record<string, unknown>,
+): { marketKey: string; selectionKey: string; line?: number } | null {
+  switch (kind) {
+    case "over_under":
+      return {
+        marketKey: "over_under",
+        selectionKey: String(params.selection),
+        line: Number(params.line),
+      };
+    case "match_result":
+      return { marketKey: "match_result", selectionKey: String(params.selection) };
+    case "btts":
+      return { marketKey: "btts", selectionKey: String(params.selection) };
+    case "double_chance":
+      return {
+        marketKey: "double_chance",
+        selectionKey: DC_SELECTION[String(params.selection)],
+      };
+    default:
+      return null;
+  }
+}
+
+// ── parseBet ─────────────────────────────────────────────────────────────────
+
 export type ParsedLegChip = {
-  kind: "exact_score";
+  kind: string;
   selectionLabel: string;
-  params: { home: number; away: number };
+  params: BetLegParams;
   userOdd: number | null;
   settleable: boolean;
   settleBadge: string;
@@ -71,6 +137,13 @@ export type ParseBetResult =
     };
 
 const RawInputSchema = z.string().trim().min(1).max(MAX_RAW_INPUT);
+
+function settleBadgeFor(kind: string, settleable: boolean): string {
+  if (settleable) return SETTLE_BADGE_PT_BR;
+  if (kind === "corners") return "não conferimos escanteios";
+  if (kind === "cards") return "não conferimos cartões por ora";
+  return "não conferimos essa aposta";
+}
 
 export async function parseBet(
   _prev: ParseBetResult | null,
@@ -103,8 +176,6 @@ export async function parseBet(
     return { ok: false, error: notAnalyzable, kind: "nao-analisavel" };
   }
 
-  // Boundary Zod: cap ~280 chars (fecha o custo pior-caso do parse + minimiza o
-  // rawInput persistido — LGPD). Rejeição com mensagem clara.
   const raw = RawInputSchema.safeParse(formData.get("text") ?? "");
   if (!raw.success) {
     return {
@@ -114,10 +185,7 @@ export async function parseBet(
     };
   }
 
-  // Limiter próprio do parse (fail-closed pra não-admin): gatilho spammable, NÃO
-  // consome os slots de análise (Decisão 8a).
-  const role = session.user.role;
-  const rl = await checkBetParseRateLimit(session.user.id, role);
+  const rl = await checkBetParseRateLimit(session.user.id, session.user.role);
   if (!rl.ok) {
     return {
       ok: false,
@@ -143,14 +211,17 @@ export async function parseBet(
     };
   }
 
-  const legs: ParsedLegChip[] = parsed.legs.map((l) => ({
-    kind: "exact_score",
-    selectionLabel: exactScoreLabel(l.params.home, l.params.away),
-    params: l.params,
-    userOdd: l.userOdd ?? null,
-    settleable: deriveBetLegSettleable(l.kind),
-    settleBadge: SETTLE_BADGE_PT_BR,
-  }));
+  const legs: ParsedLegChip[] = parsed.legs.map((l) => {
+    const settleable = deriveBetLegSettleable(l.kind);
+    return {
+      kind: l.kind,
+      selectionLabel: betLegLabel(l.kind, l.params as Record<string, unknown>),
+      params: l.params as BetLegParams,
+      userOdd: l.userOdd ?? null,
+      settleable,
+      settleBadge: settleBadgeFor(l.kind, settleable),
+    };
+  });
 
   return {
     ok: true,
@@ -162,10 +233,17 @@ export async function parseBet(
   };
 }
 
-// ─── confirmBet ──────────────────────────────────────────────────────────────
+// ── confirmBet ───────────────────────────────────────────────────────────────
+
+// View por perna no resultado do confirm — roteada pela fonte do grade.
+export type ConfirmLegView =
+  | { route: "cartridge"; view: GradeMyBetView } // CAMINHO A (com edge)
+  | { route: "model"; view: FreeBetLegView } // CAMINHO B (modelo, sem edge)
+  | { route: "none"; selectionLabel: string; message: string } // cards/corners
+  | { route: "rate_limited"; selectionLabel: string }; // slot esgotado mid-slip
 
 export type ConfirmBetResult =
-  | { ok: true; legs: FreeBetLegView[] }
+  | { ok: true; legs: ConfirmLegView[] }
   | {
       ok: false;
       error: string;
@@ -176,65 +254,171 @@ export type ConfirmBetResult =
         | "limite-de-slips";
     };
 
-// Grade de UMA perna exact_score pelo CAMINHO B, dado o standings já buscado.
-function gradeLeg(
+type LegContext = {
+  matchId: string;
+  league: string;
+  homeTeam: string;
+  awayTeam: string;
+  neutral: boolean;
+  standing: NormalizedStanding | undefined;
+  allowedMarketKeys: ReadonlySet<string>;
+};
+
+async function processLeg(
   leg: ConfirmBetLeg,
-  standing: NormalizedStanding | undefined,
-  homeTeam: string,
-  awayTeam: string,
-  neutral: boolean,
-): { newLeg: NewBetLeg; view: FreeBetLegView } {
-  const selectionLabel = exactScoreLabel(leg.params.home, leg.params.away);
-  const grade = gradeExactScoreFromStandings({
-    standing,
-    homeTeam,
-    awayTeam,
-    home: leg.params.home,
-    away: leg.params.away,
-    neutral,
-  });
+  ctx: LegContext,
+): Promise<{ newLeg: NewBetLeg; view: ConfirmLegView }> {
+  const params = leg.params as Record<string, unknown>;
+  const label = betLegLabel(leg.kind, params);
   const settleable = deriveBetLegSettleable(leg.kind);
   const userOdd = leg.userOdd ?? null;
+  const base = {
+    kind: leg.kind,
+    params: leg.params as BetLegParams,
+    userOdd,
+    settleable,
+    pinnedPredictionId: null,
+  };
 
-  if (grade.status === "no_data") {
+  // NONE: cards/corners aceitas-não-gradeadas (Decisão 3).
+  if (NONE_KINDS.has(leg.kind)) {
     return {
       newLeg: {
-        kind: leg.kind,
-        params: leg.params,
-        userOdd,
+        ...base,
         modelProbPct: null,
         gradeSource: "none",
-        gradeStatus: "no_data",
-        settleable,
-        pinnedPredictionId: null,
+        gradeStatus: "not_covered",
       },
-      view: toFreeBetLegView({
-        status: "no_data",
-        selectionLabel,
-        reason:
-          "Não avalio essa aposta agora — sem tabela de classificação disponível pra estimar o placar.",
-      }),
+      view: {
+        route: "none",
+        selectionLabel: label,
+        message:
+          leg.kind === "corners"
+            ? "Registramos sua aposta, mas não avaliamos escanteios como número."
+            : "Registramos sua aposta, mas não avaliamos cartões como número por ora.",
+      },
     };
   }
 
+  // CAMINHO A vs B (Decisão 3): kind de mercado DENTRO do gate audiência∩liga, com odd
+  // E linha modelável → A (cartucho). Se o mercado está fora do gate, a linha está fora
+  // da escada, OU não há odd → é queda PRÉ-gasto legítima → CAMINHO B. Mas uma vez
+  // DENTRO do gate modelável, A é o ÚNICO caminho: falha transiente / MISS pós-predict
+  // NUNCA rebaixa pra B (landmine "dois números pra mesma linha") — vira terminal no_data.
+  if (
+    MARKET_KINDS.has(leg.kind) &&
+    ctx.allowedMarketKeys.has(leg.kind) &&
+    userOdd !== null &&
+    (await isMarketLegModelable(leg.kind, params, ctx.league))
+  ) {
+    const pin = toMarketPin(leg.kind, params);
+    if (pin) {
+      const fd = new FormData();
+      fd.set("matchId", ctx.matchId);
+      fd.set("marketKey", pin.marketKey);
+      fd.set("selectionKey", pin.selectionKey);
+      if (pin.line !== undefined) fd.set("line", String(pin.line));
+      fd.set("odd", String(userOdd));
+      const res = await gradeMyBet(null, fd);
+      if (
+        res.ok &&
+        (res.view.kind === "grade-coberto" ||
+          res.view.kind === "degradado-sem-snapshot")
+      ) {
+        const gradeStatus =
+          res.view.kind === "degradado-sem-snapshot"
+            ? "degraded_no_snapshot"
+            : "graded";
+        return {
+          newLeg: {
+            ...base,
+            modelProbPct: res.view.modelProbPct,
+            gradeSource: "cartridge",
+            gradeStatus,
+          },
+          view: { route: "cartridge", view: res.view },
+        };
+      }
+      if (!res.ok && res.kind === "rate-limited") {
+        // Slot de análise esgotado mid-slip: perna sem número, sem rollback (Decisão 8b).
+        return {
+          newLeg: {
+            ...base,
+            modelProbPct: null,
+            gradeSource: "none",
+            gradeStatus: "rate_limited",
+          },
+          view: { route: "rate_limited", selectionLabel: label },
+        };
+      }
+      // TERMINAL (Decisão 3): dentro do gate modelável, qualquer outra resposta —
+      // PredictError, erro inesperado, ou MISS pós-predict (nao-avalio já GASTO) —
+      // NUNCA vira número de modelo. Fica sem número, honesto.
+      return {
+        newLeg: {
+          ...base,
+          modelProbPct: null,
+          gradeSource: "none",
+          gradeStatus: "no_data",
+        },
+        view: {
+          route: "model",
+          view: toFreeBetLegView({
+            status: "no_data",
+            selectionLabel: label,
+            reason:
+              "Não consegui avaliar esta aposta agora (análise indisponível). Tente de novo em instantes.",
+          }),
+        },
+      };
+    }
+  }
+
+  // CAMINHO B: modelo de placar (props sempre; mercado fora do gate; line fora da escada).
+  const grade = gradeScorelineLeg({
+    standing: ctx.standing,
+    homeTeam: ctx.homeTeam,
+    awayTeam: ctx.awayTeam,
+    neutral: ctx.neutral,
+    kind: leg.kind as ScorelineKind,
+    params: leg.params as BetLegParams,
+  });
+  if (grade.status === "no_data") {
+    return {
+      newLeg: {
+        ...base,
+        modelProbPct: null,
+        gradeSource: "none",
+        gradeStatus: "no_data",
+      },
+      view: {
+        route: "model",
+        view: toFreeBetLegView({
+          status: "no_data",
+          selectionLabel: label,
+          reason:
+            "Não avalio essa aposta agora — sem tabela de classificação pra estimar o placar.",
+        }),
+      },
+    };
+  }
   return {
     newLeg: {
-      kind: leg.kind,
-      params: leg.params,
-      userOdd,
+      ...base,
       modelProbPct: grade.modelProbPct,
       gradeSource: "scoreline_model",
       gradeStatus: "graded",
-      settleable,
-      pinnedPredictionId: null,
     },
-    view: toFreeBetLegView({
-      status: "graded",
-      selectionLabel,
-      modelProbPct: grade.modelProbPct,
-      degradedData: grade.degradedData,
-      userOdd,
-    }),
+    view: {
+      route: "model",
+      view: toFreeBetLegView({
+        status: "graded",
+        selectionLabel: label,
+        modelProbPct: grade.modelProbPct,
+        degradedData: grade.degradedData,
+        userOdd,
+      }),
+    },
   };
 }
 
@@ -242,9 +426,7 @@ export async function confirmBet(
   _prev: ConfirmBetResult | null,
   formData: FormData,
 ): Promise<ConfirmBetResult> {
-  // 1. Boundary Zod fail-closed: o slip confirmado é o ÚNICO contrato (Decisão 1). O
-  //    cliente reposta rawInput + parseAiCallId + pernas + odds. JSON malformado ou
-  //    fora do schema → slip-invalido.
+  // 1. Boundary Zod fail-closed: o slip confirmado é o ÚNICO contrato (Decisão 1).
   let rawJson: unknown;
   try {
     rawJson = JSON.parse(String(formData.get("slip") ?? ""));
@@ -286,8 +468,8 @@ export async function confirmBet(
     return { ok: false, error: notAnalyzable, kind: "nao-analisavel" };
   }
 
-  // 4. parseAiCallId (metadado de auditoria, do cliente NÃO-confiável): coalesce pra
-  //    null se o uuid não existir/não for do usuário — evita violar a FK e um 500.
+  // 4. parseAiCallId (do cliente não-confiável): coalesce pra null se não existir/não
+  //    for do usuário — evita violar a FK e um 500.
   let safeParseAiCallId: string | null = null;
   if (slip.parseAiCallId) {
     const rows = await db
@@ -303,8 +485,8 @@ export async function confirmBet(
     safeParseAiCallId = rows.length > 0 ? slip.parseAiCallId : null;
   }
 
-  // 5. Limiter de criação de slips ANTES de gastar (writes + getStandings). Fail-closed
-  //    pra não-admin. Cobre também slips editor-only (Decisão 8f).
+  // 5. Limiter de criação de slips ANTES de gastar (writes + getStandings + possível
+  //    predict do CAMINHO A). Fail-closed pra não-admin (Decisão 8f).
   const rl = await checkBetSlipsRateLimit(session.user.id, session.user.role);
   if (!rl.ok) {
     return {
@@ -317,31 +499,47 @@ export async function confirmBet(
     };
   }
 
-  // 6. Grade CAMINHO B: getStandings UMA vez (novo 3º call-site), reusado por todas
-  //    as pernas. Falha do provider → undefined → no_data (prefer-skip).
+  // 6. Gate audiência∩liga (mesmo de gradeMyBet) → decide A vs B por perna de mercado.
+  const isAdmin = session.user.role === "admin";
+  const allowedMarketKeys = new Set(
+    marketsForLeague(await marketsForAudience(isAdmin), match.league).map(
+      (m) => m.key,
+    ),
+  );
+
+  // 7. Standings UMA vez pro CAMINHO B (novo 3º call-site). Falha → undefined → no_data.
   let standing: NormalizedStanding | undefined;
   try {
     standing = await getSportsDataProvider().getStandings(match.league);
   } catch {
     standing = undefined;
   }
-  const neutral = match.league === "world_cup";
+  const ctx: LegContext = {
+    matchId: slip.matchId,
+    league: match.league,
+    homeTeam: match.homeTeam,
+    awayTeam: match.awayTeam,
+    neutral: match.league === "world_cup",
+    standing,
+    allowedMarketKeys,
+  };
 
-  const graded = slip.legs.map((leg) =>
-    gradeLeg(leg, standing, match.homeTeam, match.awayTeam, neutral),
-  );
+  // 8. Grade cada perna (sequencial — CAMINHO A pode gastar rate-limit/predict).
+  const processed: { newLeg: NewBetLeg; view: ConfirmLegView }[] = [];
+  for (const leg of slip.legs) {
+    processed.push(await processLeg(leg, ctx));
+  }
 
-  // 7. Persiste slip + pernas (congelado, no confirm). Slip imutável depois.
+  // 9. Persiste slip + pernas (congelado, no confirm). Slip imutável depois.
   await insertBetSlipWithLegs({
     matchId: slip.matchId,
     userId: session.user.id,
     rawInput: slip.rawInput,
     parseAiCallId: safeParseAiCallId,
     comboUserOdd: slip.comboUserOdd ?? null,
-    legs: graded.map((g) => g.newLeg),
+    legs: processed.map((p) => p.newLeg),
   });
 
   revalidatePath(`/match/${slip.matchId}`);
-
-  return { ok: true, legs: graded.map((g) => g.view) };
+  return { ok: true, legs: processed.map((p) => p.view) };
 }

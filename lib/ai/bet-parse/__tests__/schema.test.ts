@@ -60,6 +60,52 @@ describe("BetLegSchema (validação por-item do parse)", () => {
   });
 });
 
+describe("BetLegSchema — kinds da Fase 2", () => {
+  it("over_under aceita linha k+0.5 e rejeita linha inteira", () => {
+    expect(
+      BetLegSchema.safeParse({
+        kind: "over_under",
+        params: { selection: "over", line: 2.5 },
+      }).success,
+    ).toBe(true);
+    expect(
+      BetLegSchema.safeParse({
+        kind: "over_under",
+        params: { selection: "over", line: 2 },
+      }).success,
+    ).toBe(false);
+  });
+
+  it("match_result / btts / double_chance / margin válidos", () => {
+    expect(
+      BetLegSchema.safeParse({ kind: "match_result", params: { selection: "home" } })
+        .success,
+    ).toBe(true);
+    expect(
+      BetLegSchema.safeParse({ kind: "btts", params: { selection: "yes" } }).success,
+    ).toBe(true);
+    expect(
+      BetLegSchema.safeParse({
+        kind: "double_chance",
+        params: { selection: "home_draw" },
+      }).success,
+    ).toBe(true);
+    expect(
+      BetLegSchema.safeParse({
+        kind: "margin",
+        params: { side: "home", minMargin: 2 },
+      }).success,
+    ).toBe(true);
+  });
+
+  it("rejeita selection inválida (defense-in-depth por kind)", () => {
+    expect(
+      BetLegSchema.safeParse({ kind: "btts", params: { selection: "talvez" } })
+        .success,
+    ).toBe(false);
+  });
+});
+
 describe("BetParseEnvelopeSchema", () => {
   it("legs vem como unknown[] (validação é por-item, não aqui)", () => {
     // Um item claramente inválido NÃO faz o envelope falhar — ele passa como unknown.

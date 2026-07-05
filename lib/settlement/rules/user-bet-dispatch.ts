@@ -1,13 +1,26 @@
 import { betLegKindEnum } from "@/db/schema";
 import type { PalpiteResultData } from "@/db/schema";
 
+import { settleCleanSheetPalpite } from "./clean_sheet_palpite";
 import { settleExactScorePalpite } from "./exact_score_palpite";
+import { settleFirstHalfScorePalpite } from "./first_half_score_palpite";
+import { settleFirstToScorePalpite } from "./first_to_score_palpite";
+import { settleMarginPalpite } from "./margin_palpite";
+import {
+  settleBttsLeg,
+  settleDoubleChanceLeg,
+  settleFirstHalfOverUnderLeg,
+  settleMatchResultLeg,
+  settleOverUnderLeg,
+} from "./user-bet-market";
 
-// Dispatch de settlement das pernas da aposta livre (ADR 0036, Decisão 6). As
-// regras são as MESMAS puras `(params, resultData) => won|lost` das regras de
-// palpite — sem acoplamento de tabela — então a Fase 1 REUSA a de exact_score
-// verbatim. A Fase 2 acrescenta as regras binárias de mercado (linha garantida
-// k+0.5) e `first_half_over_under` (sobre halftime), compondo com este dispatch.
+// Dispatch de settlement das pernas da aposta livre (ADR 0036, Decisão 6). As regras
+// são puras `(params, resultData) => won|lost` — os kinds goal/half/event-derived
+// REUSAM as regras de palpite verbatim; os kinds de mercado (over_under/match_result/
+// btts/double_chance) e first_half_over_under são NOVOS (user-bet-market.ts, linha
+// garantida k+0.5 → binário sem push). `cards`/`corners` ficam FORA (Decisão 3: none):
+// corners é não-liquidável; cards é web-grounded e depende do sidecar de attempts
+// (deferido) → settleable=false na Fase 2 pra não virar stuck-pending eterno.
 
 export type BetLegKind = (typeof betLegKindEnum.enumValues)[number];
 
@@ -16,25 +29,52 @@ export type BetLegRuleFn = (
   resultData: PalpiteResultData,
 ) => "won" | "lost";
 
-// Só exact_score no tracer. `Partial` porque a maioria dos kinds ainda não tem
-// regra (Fase 2) — o lookup no orquestrador é guardado (kind ausente → PENDING).
 export const USER_BET_SETTLEMENT_RULES: Partial<Record<BetLegKind, BetLegRuleFn>> =
   {
+    // goal-derived (reuso verbatim das regras de palpite)
     exact_score: settleExactScorePalpite,
+    margin: settleMarginPalpite,
+    clean_sheet: settleCleanSheetPalpite,
+    first_half_score: settleFirstHalfScorePalpite,
+    first_to_score: settleFirstToScorePalpite,
+    // mercado + 1º-tempo total (regras novas, binárias k+0.5)
+    over_under: settleOverUnderLeg,
+    match_result: settleMatchResultLeg,
+    btts: settleBttsLeg,
+    double_chance: settleDoubleChanceLeg,
+    first_half_over_under: settleFirstHalfOverUnderLeg,
   };
 
-// Kinds que o settlement sabe liquidar HOJE — o GATE da query de pendências. Cresce
-// na Fase 2 junto com USER_BET_SETTLEMENT_RULES (mesma fonte, sem drift).
-export const SETTLEABLE_USER_BET_KINDS = [
-  "exact_score",
-] as const satisfies readonly BetLegKind[];
-export type SettleableUserBetKind = (typeof SETTLEABLE_USER_BET_KINDS)[number];
+// Kinds que o settlement sabe liquidar HOJE — o GATE da query de pendências. Deriva
+// das CHAVES do dispatch (fonte única, sem drift com deriveBetLegSettleable).
+export const SETTLEABLE_USER_BET_KINDS = Object.keys(
+  USER_BET_SETTLEMENT_RULES,
+) as BetLegKind[];
 
-// `settleable` (coluna) derivado DO KIND (Decisão 5), NUNCA do LLM. Fase 1: só
-// exact_score é settleable — é o único com caminho de liquidação. Manter alinhado
-// com SETTLEABLE_USER_BET_KINDS evita perna settleable=true SEM regra (stuck-pending
-// eterno). A Fase 2 estende os dois juntos (Decisão 6: props/mercado true, corners
-// false).
+const SETTLEABLE_SET: ReadonlySet<BetLegKind> = new Set(
+  SETTLEABLE_USER_BET_KINDS,
+);
+
+export type SettleableUserBetKind = BetLegKind;
+
+// Kinds que exigem o fetch extra de /fixtures/events no cron (espelha
+// EVENT_BACKED_PALPITE_TYPES). Só first_to_score. Os demais usam só getFixtureResult
+// (placar + halftime).
+export const EVENT_BACKED_USER_BET_KINDS = new Set<BetLegKind>(["first_to_score"]);
+
+// `settleable` (coluna) derivado DO KIND (Decisão 5), NUNCA do LLM. É exatamente o
+// conjunto com regra de settlement (cresce junto com o dispatch, sem drift). cards/
+// corners → false na Fase 2 (fora do dispatch).
+//
+// DECISÃO cards=false na Fase 2 (vs. o "cards settleable" do ADR Decisão 6): a extração
+// WEB_GROUNDED (yellowCardsTotal) NÃO foi portada pra settle-user-bets, então marcar
+// settleable=true prometeria uma conferência que não acontece — badge enganoso (o ADR
+// alerta contra "frustração com perna não-liquidável, expectativa setada no confirm").
+// false mantém o badge honesto ("não conferimos cartões por ora"). TRADE-OFF conhecido:
+// settleable é congelado no write, então quando a cobertura de cards for ligada (fase
+// futura, com o sidecar de attempts — Consequência do ADR), as legs de cards já criadas
+// precisam de um backfill trivial (`UPDATE bet_legs SET settleable=true WHERE kind='cards'`)
+// + adicionar `cards: settleCardsPalpite` ao dispatch acima + portar o fan-out web-grounded.
 export function deriveBetLegSettleable(kind: BetLegKind): boolean {
-  return (SETTLEABLE_USER_BET_KINDS as readonly string[]).includes(kind);
+  return SETTLEABLE_SET.has(kind);
 }

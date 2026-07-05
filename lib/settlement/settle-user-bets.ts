@@ -6,10 +6,14 @@ import {
 import { getSportsDataProvider } from "@/lib/providers/sports-data";
 import type {
   FixtureRef,
+  NormalizedFixtureEvents,
   NormalizedFixtureResult,
 } from "@/lib/providers/sports-data/types";
 import { palpiteResultDataFrom } from "@/lib/settlement/palpite-result-data";
-import { USER_BET_SETTLEMENT_RULES } from "@/lib/settlement/rules/user-bet-dispatch";
+import {
+  EVENT_BACKED_USER_BET_KINDS,
+  USER_BET_SETTLEMENT_RULES,
+} from "@/lib/settlement/rules/user-bet-dispatch";
 import { SettlementError } from "@/lib/settlement/schemas";
 
 export type UserBetSettlementSummary = {
@@ -79,6 +83,34 @@ export async function settleUserBetLegs(
     }
   }
 
+  // Fetch extra de /fixtures/events SÓ pros matches com ≥1 perna event-backed
+  // pendente (first_to_score) — espelha settle-palpites. Erro/Unsupported → null → a
+  // regra trata como eventos ausentes → PENDING (nunca erra o match inteiro).
+  const eventsByMatch = new Map<
+    string,
+    NormalizedFixtureEvents | undefined | null
+  >();
+  for (const p of pending) {
+    if (!EVENT_BACKED_USER_BET_KINDS.has(p.kind)) continue;
+    if (eventsByMatch.has(p.matchId)) continue;
+    const ref: FixtureRef = {
+      league: p.league,
+      kickoffAt: p.kickoffAt.toISOString(),
+      homeTeam: p.homeTeam,
+      awayTeam: p.awayTeam,
+    };
+    try {
+      eventsByMatch.set(p.matchId, await provider.getFixtureEvents(ref));
+    } catch (err) {
+      log("provider_error", {
+        matchId: p.matchId,
+        method: "getFixtureEvents",
+        message: err instanceof Error ? err.message : String(err),
+      });
+      eventsByMatch.set(p.matchId, null);
+    }
+  }
+
   for (const p of pending) {
     const result = resultByMatch.get(p.matchId);
     if (result === null) {
@@ -103,8 +135,12 @@ export async function settleUserBetLegs(
           kind: p.kind,
         });
       }
+      const events = EVENT_BACKED_USER_BET_KINDS.has(p.kind)
+        ? eventsByMatch.get(p.matchId) ?? undefined
+        : undefined;
       resultData = palpiteResultDataFrom(result.regulationScore, {
         halftimeScore: result.halftimeScore ?? null,
+        events: events ?? undefined,
       });
       outcome = rule(p.params, resultData);
     } catch (err) {

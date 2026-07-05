@@ -612,8 +612,18 @@ export const gradeStatusEnum = pgEnum("grade_status", [
 
 // Params estruturais da perna, narrowed por Zod no boundary (reusa os schemas das
 // regras de settlement — guard anti-drift Decisão 2b). $type largo o bastante pros
-// call-sites de ESCRITA; o read path re-valida por kind. Fase 1: só {home, away}.
-export type BetLegParams = { home: number; away: number }; // exact_score (widened na Fase 2)
+// call-sites de ESCRITA; o read path re-valida por kind (defense-in-depth). União da
+// Decisão 2 (Fase 2). O `line` de qualquer total é k+0.5 (o boundary do parse veta
+// linha inteira/quarto).
+export type BetLegParams =
+  | { home: number; away: number } // exact_score, first_half_score
+  | { side: "home" | "away"; minMargin: number } // margin
+  | { side: "home" | "away" } // clean_sheet
+  | { firstToScore: "home" | "away" | "none" } // first_to_score
+  | { selection: "over" | "under"; line: number } // over_under, first_half_over_under, cards, corners
+  | { selection: "home" | "draw" | "away" } // match_result
+  | { selection: "yes" | "no" } // btts
+  | { selection: "home_draw" | "home_away" | "draw_away" }; // double_chance
 
 // Cabeçalho da aposta do usuário. rawInput (NL cru, capado ~280 chars) e
 // parseAiCallId são NULLABLE (slip editor-only não tem parse). comboUserOdd/

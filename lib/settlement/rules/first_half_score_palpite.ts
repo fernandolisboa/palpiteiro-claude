@@ -5,7 +5,7 @@ import { SettlementError } from "@/lib/settlement/schemas";
 
 // Placar do 1º tempo de PALPITE (#354): {home, away} (0–20). Liquida do split do
 // intervalo (halftimeHomeScore/Away), NÃO do placar de 90'. Mesmo schema do exact_score.
-const FirstHalfScoreParamsSchema = z.object({
+export const FirstHalfScoreParamsSchema = z.object({
   home: z.number().int().min(0).max(20),
   away: z.number().int().min(0).max(20),
 });

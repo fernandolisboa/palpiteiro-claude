@@ -256,3 +256,124 @@ describe("settleUserBetLegs — idempotência", () => {
     expect(after).toEqual(before);
   });
 });
+
+// ── Fase 2: kinds de mercado + 1º tempo + event-backed ───────────────────────
+import type { NormalizedFixtureEvents } from "@/lib/providers/sports-data/types";
+
+function installProviderFull(
+  result: NormalizedFixtureResult,
+  events?: NormalizedFixtureEvents,
+): { getFixtureEvents: ReturnType<typeof vi.fn> } {
+  const getFixtureResult = vi.fn(async () => result);
+  const getFixtureEvents = vi.fn(async () => events);
+  __setSportsDataProviderForTesting({
+    getFixtureResult,
+    getFixtureEvents,
+  } as unknown as SportsDataProvider);
+  return { getFixtureEvents };
+}
+
+const finishedHt = (
+  home: number,
+  away: number,
+  ht: { home: number; away: number },
+): NormalizedFixtureResult => ({
+  status: "finished",
+  regulationScore: { home, away },
+  halftimeScore: ht,
+});
+
+function eventsHomeFirst(): NormalizedFixtureEvents {
+  return {
+    fixtureStatus: "finished",
+    eventsAvailable: true,
+    goals: [
+      {
+        playerId: null,
+        playerName: "Pedro",
+        teamSide: "home",
+        minute: 20,
+        isPenalty: false,
+        isOwnGoal: false,
+        isRegulation: true,
+      },
+    ],
+    assists: [],
+  };
+}
+
+describe("settleUserBetLegs — kinds de mercado (Fase 2)", () => {
+  it("over_under over 2.5 sobre 3-0 → won; match_result home → won", async () => {
+    const matchId = await seedMatch("ext-market");
+    const slipId = await seedSlip(matchId);
+    const ou = await seedLeg({
+      slipId,
+      kind: "over_under",
+      params: { selection: "over", line: 2.5 },
+    });
+    const mr = await seedLeg({
+      slipId,
+      kind: "match_result",
+      params: { selection: "home" },
+    });
+    installProvider(() => finished(3, 0));
+
+    const s = await settleUserBetLegs(NOW);
+    expect(s.considered).toBe(2);
+    expect(s.settled).toBe(2);
+    const out = await outcomesByLeg();
+    expect(out.get(ou)!.result).toBe("won");
+    expect(out.get(mr)!.result).toBe("won");
+  });
+
+  it("first_half_over_under over 0.5 com HT 1-0 → won", async () => {
+    const matchId = await seedMatch("ext-fhou");
+    const slipId = await seedSlip(matchId);
+    const leg = await seedLeg({
+      slipId,
+      kind: "first_half_over_under",
+      params: { selection: "over", line: 0.5 },
+    });
+    installProviderFull(finishedHt(2, 0, { home: 1, away: 0 }));
+
+    const s = await settleUserBetLegs(NOW);
+    expect(s.settled).toBe(1);
+    expect((await outcomesByLeg()).get(leg)!.result).toBe("won");
+  });
+
+  it("first_to_score (event-backed): busca eventos e liquida home", async () => {
+    const matchId = await seedMatch("ext-fts");
+    const slipId = await seedSlip(matchId);
+    const leg = await seedLeg({
+      slipId,
+      kind: "first_to_score",
+      params: { firstToScore: "home" },
+    });
+    const { getFixtureEvents } = installProviderFull(
+      finishedHt(2, 0, { home: 1, away: 0 }),
+      eventsHomeFirst(),
+    );
+
+    const s = await settleUserBetLegs(NOW);
+    expect(s.settled).toBe(1);
+    expect((await outcomesByLeg()).get(leg)!.result).toBe("won");
+    // O fetch de eventos SÓ dispara com uma perna event-backed pendente.
+    expect(getFixtureEvents).toHaveBeenCalledTimes(1);
+  });
+
+  it("first_to_score sem eventos (undefined) → PENDING (prefer-skip)", async () => {
+    const matchId = await seedMatch("ext-fts-noevents");
+    const slipId = await seedSlip(matchId);
+    const leg = await seedLeg({
+      slipId,
+      kind: "first_to_score",
+      params: { firstToScore: "home" },
+    });
+    installProviderFull(finishedHt(2, 0, { home: 1, away: 0 }), undefined);
+
+    const s = await settleUserBetLegs(NOW);
+    expect(s.settled).toBe(0);
+    expect(s.errors).toBe(1);
+    expect((await outcomesByLeg()).has(leg)).toBe(false);
+  });
+});
