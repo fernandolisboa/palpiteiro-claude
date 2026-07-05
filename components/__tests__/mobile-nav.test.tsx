@@ -12,6 +12,7 @@ describe("mobileNavLinks", () => {
     const links = mobileNavLinks(true);
     expect(links.map((l) => l.href)).toEqual([
       "/jogos",
+      "/apostas",
       "/dashboard",
       "/como-funciona",
       "/admin",

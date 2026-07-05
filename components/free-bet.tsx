@@ -15,7 +15,11 @@ import {
 } from "@/app/actions/bets";
 import { MAX_RAW_INPUT } from "@/lib/ai/bet-parse/schema";
 import type { BetLegParams } from "@/db/schema";
-import type { FreeBetLegView, GradeMyBetView } from "@/lib/view/types";
+import type {
+  FreeBetComboView,
+  FreeBetLegView,
+  GradeMyBetView,
+} from "@/lib/view/types";
 
 // "Aposta livre" (ADR 0036, Fase 2 #472): input NL → chips confirmáveis → grade
 // roteado (cartucho com edge DENTRO do gate; modelo de placar sem edge fora dele;
@@ -54,6 +58,8 @@ export function FreeBet({ matchId }: { matchId: string }) {
 
   const [legs, setLegs] = useState<EditableLeg[]>([]);
   const [meta, setMeta] = useState<SlipMeta | null>(null);
+  // Odd combinada editável (string PT-BR) — semeada do parse, aplicada só com ≥2 pernas.
+  const [comboOddInput, setComboOddInput] = useState("");
 
   // Semeia o editor a partir do echo do parse (chips editáveis).
   useEffect(() => {
@@ -72,6 +78,11 @@ export function FreeBet({ matchId }: { matchId: string }) {
         parseAiCallId: parseState.parseAiCallId,
         comboUserOdd: parseState.comboUserOdd,
       });
+      setComboOddInput(
+        parseState.comboUserOdd === null
+          ? ""
+          : String(parseState.comboUserOdd),
+      );
     }
   }, [parseState]);
 
@@ -88,8 +99,9 @@ export function FreeBet({ matchId }: { matchId: string }) {
             params: l.params,
             ...(l.oddInput.trim() ? { userOdd: l.oddInput.trim() } : {}),
           })),
-          ...(meta.comboUserOdd !== null
-            ? { comboUserOdd: String(meta.comboUserOdd) }
+          // Odd combinada só faz sentido com ≥2 pernas (o boundary ignora numa perna só).
+          ...(legs.length >= 2 && comboOddInput.trim()
+            ? { comboUserOdd: comboOddInput.trim() }
             : {}),
         };
 
@@ -191,6 +203,24 @@ export function FreeBet({ matchId }: { matchId: string }) {
               </label>
             </div>
           ))}
+          {legs.length >= 2 && (
+            <label className="flex flex-col gap-1 rounded-md border border-dashed border-border px-4 py-3">
+              <span className="font-mono text-eyebrow uppercase tracking-label text-muted-foreground">
+                odd da combinada (opcional)
+              </span>
+              <input
+                type="text"
+                inputMode="decimal"
+                value={comboOddInput}
+                placeholder="2,10"
+                onChange={(e) => setComboOddInput(e.target.value)}
+                className="w-28 rounded-md border border-border bg-transparent px-3 py-2 text-body-sm tabular-nums focus-visible:outline-none focus-visible:ring-[3px] focus-visible:ring-ring/50"
+              />
+              <span className="font-mono text-eyebrow-xs text-muted-fg-2">
+                a odd única que a casa paga pelas {legs.length} pernas juntas
+              </span>
+            </label>
+          )}
           <Button type="submit" disabled={confirming} className="w-fit">
             {confirming ? "Confirmando…" : "Confirmar aposta"}
           </Button>
@@ -209,6 +239,10 @@ export function FreeBet({ matchId }: { matchId: string }) {
 
       {confirmState?.ok &&
         confirmState.legs.map((leg, i) => <LegResult key={i} leg={leg} />)}
+
+      {confirmState?.ok && confirmState.combo && (
+        <ComboResult combo={confirmState.combo} />
+      )}
 
       {/* Disclaimer §3 COMPLETO — sempre visível (máxima intenção, §12). */}
       <p className="text-meta leading-relaxed text-muted-fg-2 tracking-tight">
@@ -337,6 +371,72 @@ function ModelResult({ view }: { view: FreeBetLegView }) {
         )}
         <Row label="nosso edge" value={view.edgeLabel} />
       </div>
+    </Card>
+  );
+}
+
+// Combinada same-game (Decisão 4). INVARIANTE DE COERÊNCIA DE TELA: o joint SEMPRE
+// aparece com as marginais Poisson das pernas participantes na MESMA tela (joint ≤ min
+// garantido pela matriz única). Rótulo "modelo simplificado" onipresente; sem edge.
+function ComboResult({ combo }: { combo: FreeBetComboView }) {
+  if (combo.kind === "combinada-nao-avaliada") {
+    return <Notice label="combinada não avaliada" body={combo.reason} />;
+  }
+  return (
+    <Card className="gap-0 overflow-hidden p-0">
+      <div className="flex items-center justify-between px-4 pt-3 pb-2">
+        <span className="font-mono text-eyebrow uppercase tracking-eyebrow text-muted-foreground">
+          combinada (todas as pernas juntas)
+        </span>
+        <span className="font-mono text-eyebrow-xs text-muted-fg-2">
+          {combo.sourceLabel}
+        </span>
+      </div>
+      <Separator />
+      <div className="flex flex-col gap-1 px-4 py-4">
+        <span className="font-mono text-display-sm font-medium leading-none tracking-tight text-foreground">
+          {pct(combo.jointProbPct)}
+        </span>
+        <span className="font-mono text-eyebrow uppercase tracking-label text-muted-foreground">
+          chance da combinada acontecer
+        </span>
+      </div>
+      {combo.value && (
+        <p className="px-4 pb-3 text-body-sm leading-relaxed text-foreground tracking-tight">
+          {combo.value.valueReading}
+        </p>
+      )}
+      <Separator />
+      {/* Marginais Poisson por perna — a mesma matriz do joint (invariante de coerência). */}
+      <div className="flex flex-col gap-2 px-4 py-4">
+        {combo.legs.map((l, i) => (
+          <Row
+            key={i}
+            label={`prob. de "${l.selectionLabel}"`}
+            value={pct(l.marginalPct)}
+          />
+        ))}
+      </div>
+      {combo.value && (
+        <>
+          <Separator />
+          <div className="flex flex-col gap-2 px-4 py-4">
+            <Row
+              label="retorno esperado nessa odd"
+              value={`${combo.value.evPerUnit >= 0 ? "+" : ""}${(combo.value.evPerUnit * 100).toFixed(1)}%`}
+            />
+            <Row
+              label="break-even (prob. mínima)"
+              value={pct(combo.value.breakEvenProbPct)}
+            />
+            <Row
+              label="lucro se ganhar (1u × odd)"
+              value={`R$ ${combo.value.profitIfWon.toFixed(2)}`}
+            />
+            <Row label="nosso edge" value="—" />
+          </div>
+        </>
+      )}
     </Card>
   );
 }
