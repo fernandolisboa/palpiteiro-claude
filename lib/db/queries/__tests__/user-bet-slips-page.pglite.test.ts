@@ -221,17 +221,45 @@ describe("getUserBetSlipsPage — histórico paginado", () => {
     const p2 = await getUserBetSlipsPage({
       userId: ids.userId,
       limit: 2,
-      cursor: new Date(p1.nextCursor!),
+      cursor: p1.nextCursor!,
     });
     expect(p2.slips.map((s) => s.id)).toEqual(expectedDesc.slice(2, 4));
 
     const p3 = await getUserBetSlipsPage({
       userId: ids.userId,
       limit: 2,
-      cursor: new Date(p2.nextCursor!),
+      cursor: p2.nextCursor!,
     });
     expect(p3.slips.map((s) => s.id)).toEqual(expectedDesc.slice(4, 5));
     expect(p3.nextCursor).toBeNull();
+  });
+
+  it("keyset composto: slips no MESMO createdAt não são pulados no limite da página", async () => {
+    const matchId = await seedMatch("ext-tie");
+    const sameInstant = new Date(Date.UTC(2026, 2, 3, 12, 0, 0));
+    const slipIds: string[] = [];
+    for (let i = 0; i < 4; i++) {
+      const slip = await seedSlip({
+        matchId,
+        userId: ids.userId,
+        createdAt: sameInstant,
+      });
+      await seedLeg({ slipId: slip, params: { selection: "home" } });
+      slipIds.push(slip);
+    }
+
+    // Pagina de 2 em 2 sobre o mesmo instante: a união das duas páginas cobre os 4
+    // sem overlap nem buraco (o `id desc` do keyset desempata deterministicamente).
+    const p1 = await getUserBetSlipsPage({ userId: ids.userId, limit: 2 });
+    const p2 = await getUserBetSlipsPage({
+      userId: ids.userId,
+      limit: 2,
+      cursor: p1.nextCursor!,
+    });
+    const seen = [...p1.slips, ...p2.slips].map((s) => s.id);
+    expect(new Set(seen).size).toBe(4);
+    expect([...seen].sort()).toEqual([...slipIds].sort());
+    expect(p2.nextCursor).toBeNull();
   });
 
   it("carrega match + comboUserOdd + legs por slip", async () => {

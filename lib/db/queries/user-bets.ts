@@ -1,4 +1,4 @@
-import { and, desc, eq, inArray, isNull, lt } from "drizzle-orm";
+import { and, desc, eq, inArray, isNull, lt, or } from "drizzle-orm";
 
 import {
   betLegOutcomes,
@@ -246,24 +246,41 @@ export type BetSlipHistoryRow = DbBetSlip & {
 };
 export type BetSlipsPage = {
   slips: BetSlipHistoryRow[];
-  // ISO createdAt do último slip da página quando há mais — passar de volta como cursor.
+  // Cursor OPACO (`<iso createdAt>|<id>`) do último slip da página quando há mais.
   nextCursor: string | null;
 };
 
+// Keyset COMPOSTO (createdAt, id): sem carregar o `id`, dois slips no MESMO `createdAt`
+// seriam pulados no limite da página (o `desc(id)` do ORDER BY ficaria inerte). Cursor
+// opaco pra não expor a forma; decode tolerante (cursor inválido = primeira página).
+function encodeSlipCursor(createdAt: Date, id: string): string {
+  return `${createdAt.toISOString()}|${id}`;
+}
+function decodeSlipCursor(
+  cursor: string,
+): { createdAt: Date; id: string } | null {
+  const idx = cursor.lastIndexOf("|");
+  if (idx <= 0) return null;
+  const createdAt = new Date(cursor.slice(0, idx));
+  const id = cursor.slice(idx + 1);
+  if (Number.isNaN(createdAt.getTime()) || id.length === 0) return null;
+  return { createdAt, id };
+}
+
 /**
- * Página do histórico de slips do usuário — cursor por `createdAt desc` (+ `id desc` de
- * tiebreak determinístico), ~20 por página. `userId` vem SEMPRE do `auth()` da página
- * (anti-IDOR — nunca de rota/query). Duas queries: (1) slips paginados + join `matches`
- * pro cabeçalho; (2) pernas+outcomes das slip ids da página. Status derivado por
- * `deriveSlipStatus` em leitura. Slip é imutável e privado — nada aqui cruza fronteira
- * pública (`/p/[id]`/OG).
+ * Página do histórico de slips do usuário — keyset COMPOSTO por `(createdAt, id) desc`,
+ * ~20 por página. `userId` vem SEMPRE do `auth()` da página (anti-IDOR — nunca de rota/
+ * query). Duas queries: (1) slips paginados + join `matches` pro cabeçalho; (2) pernas+
+ * outcomes das slip ids da página. Status derivado por `deriveSlipStatus` em leitura.
+ * Slip é imutável e privado — nada aqui cruza fronteira pública (`/p/[id]`/OG).
  */
 export async function getUserBetSlipsPage(args: {
   userId: string;
-  cursor?: Date;
+  cursor?: string;
   limit?: number;
 }): Promise<BetSlipsPage> {
   const limit = args.limit ?? 20;
+  const cur = args.cursor ? decodeSlipCursor(args.cursor) : null;
 
   const slipRows = await db
     .select({
@@ -280,7 +297,15 @@ export async function getUserBetSlipsPage(args: {
     .where(
       and(
         eq(betSlips.userId, args.userId),
-        args.cursor ? lt(betSlips.createdAt, args.cursor) : undefined,
+        cur
+          ? or(
+              lt(betSlips.createdAt, cur.createdAt),
+              and(
+                eq(betSlips.createdAt, cur.createdAt),
+                lt(betSlips.id, cur.id),
+              ),
+            )
+          : undefined,
       ),
     )
     .orderBy(desc(betSlips.createdAt), desc(betSlips.id))
@@ -312,6 +337,7 @@ export async function getUserBetSlipsPage(args: {
   });
 
   const last = pageRows[pageRows.length - 1];
-  const nextCursor = hasMore && last ? last.slip.createdAt.toISOString() : null;
+  const nextCursor =
+    hasMore && last ? encodeSlipCursor(last.slip.createdAt, last.slip.id) : null;
   return { slips, nextCursor };
 }

@@ -57,11 +57,9 @@ export default async function ApostasPage({ searchParams }: PageProps) {
   if (!session?.user?.id) redirect("/signin");
 
   const { cursor } = await searchParams;
-  const cursorDate = cursor ? new Date(cursor) : undefined;
   const page = await getUserBetSlipsPage({
     userId: session.user.id,
-    cursor:
-      cursorDate && !Number.isNaN(cursorDate.getTime()) ? cursorDate : undefined,
+    cursor,
   });
   const timeZone = await getRequestTimeZone();
   const now = new Date();
