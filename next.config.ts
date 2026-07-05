@@ -33,9 +33,30 @@ const nextConfig: NextConfig = {
         // metadata). Se um ícone estático for adicionado (ex.: `app/favicon.ico`,
         // `app/icon.png`), estenda o lookahead (ex.: `|favicon\.ico|icon|apple-icon`)
         // pra ele não cair em `no-cache` em vez de cache longo (ADR 0024).
-        source: "/:path((?!_next/|api/|monitoring(?:/|$)|p/).*)",
+        //
+        // `robots\.txt`/`sitemap\.xml` (#468, fecha #439): metadata routes ESTÁTICAS
+        // (`○` prerendered) que mudam só no deploy — não são documento HTML e não
+        // devem tomar `no-cache`. Excluídas aqui (como `_next/`) e cacheadas no bloco
+        // dedicado abaixo. Sem essa exclusão, o crawler re-baixaria as duas a cada hit.
+        source:
+          "/:path((?!_next/|api/|monitoring(?:/|$)|p/|robots\\.txt|sitemap\\.xml).*)",
         headers: [
           { key: "Cache-Control", value: "no-cache, must-revalidate" },
+        ],
+      },
+      {
+        // /robots.txt + /sitemap.xml (#468, ADR 0024): conteúdo estático que só muda
+        // no deploy (a Vercel invalida o cache de CDN a cada deploy novo). `max-age=0,
+        // must-revalidate` no BROWSER (revalida barato via 304) + `s-maxage=86400` na
+        // CDN (serve cacheado por 24h entre deploys). Header ÚNICO de Cache-Control:
+        // o bloco no-cache acima agora as exclui, então não há colisão. Verificar em
+        // prod: `curl -I https://palpiteiro.live/robots.txt` (e /sitemap.xml).
+        source: "/:path(robots\\.txt|sitemap\\.xml)",
+        headers: [
+          {
+            key: "Cache-Control",
+            value: "public, max-age=0, s-maxage=86400, must-revalidate",
+          },
         ],
       },
       {
