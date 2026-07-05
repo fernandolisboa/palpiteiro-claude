@@ -3,6 +3,7 @@ import { NextResponse } from "next/server";
 import { isAuthorizedCron } from "@/lib/auth/cron-auth";
 import { settlePendingPredictions } from "@/lib/settlement/settle";
 import { settlePendingPalpites } from "@/lib/settlement/settle-palpites";
+import { settleUserBetLegs } from "@/lib/settlement/settle-user-bets";
 
 // Vercel Cron hits this endpoint (GET) once a day. It's the only API route in
 // the app — settlement needs an HTTP trigger that the platform scheduler can
@@ -26,7 +27,15 @@ export async function GET(request: Request): Promise<Response> {
     // Vercel re-tenta — seguro porque AMBOS são idempotentes (onConflictDoNothing
     // no UNIQUE). Sequencial (não paralelo) pra não duplicar pressão no provider.
     const palpiteSummary = await settlePendingPalpites();
-    return NextResponse.json({ ok: true, summary, palpiteSummary });
+    // Liquidação das apostas livres (ADR 0036), sequencial no MESMO try — idempotente
+    // (onConflictDoNothing no UNIQUE legId), então o re-try do Vercel é seguro.
+    const userBetSummary = await settleUserBetLegs();
+    return NextResponse.json({
+      ok: true,
+      summary,
+      palpiteSummary,
+      userBetSummary,
+    });
   } catch (err) {
     console.error(
       JSON.stringify({

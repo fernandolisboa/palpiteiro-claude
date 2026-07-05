@@ -6,7 +6,12 @@ import { SettlementError } from "@/lib/settlement/schemas";
 // {home, away} do palpite — inteiros >= 0. Distinto do correctScoreRule: SEM a
 // grade 0-3, então um 4-1 liquida normalmente (ADR 0028 §3). Validado aqui como
 // defense-in-depth — #315 já valida na escrita do params jsonb.
-const ExactScoreParamsSchema = z.object({
+//
+// EXPORTADO pra o boundary do parse da aposta livre (ADR 0036, Decisão 2b): a perna
+// exact_score do slip REUSA este MESMO schema, garantindo que o shape do params
+// gravado bate byte-a-byte com o que esta regra safeParse'a na liquidação — drift
+// aqui deixaria a perna PENDING pra sempre via SettlementError.
+export const ExactScoreParamsSchema = z.object({
   home: z.number().int().nonnegative(),
   away: z.number().int().nonnegative(),
 });
