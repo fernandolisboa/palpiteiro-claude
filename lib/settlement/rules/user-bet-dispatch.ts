@@ -65,6 +65,16 @@ export const EVENT_BACKED_USER_BET_KINDS = new Set<BetLegKind>(["first_to_score"
 // `settleable` (coluna) derivado DO KIND (Decisão 5), NUNCA do LLM. É exatamente o
 // conjunto com regra de settlement (cresce junto com o dispatch, sem drift). cards/
 // corners → false na Fase 2 (fora do dispatch).
+//
+// DECISÃO cards=false na Fase 2 (vs. o "cards settleable" do ADR Decisão 6): a extração
+// WEB_GROUNDED (yellowCardsTotal) NÃO foi portada pra settle-user-bets, então marcar
+// settleable=true prometeria uma conferência que não acontece — badge enganoso (o ADR
+// alerta contra "frustração com perna não-liquidável, expectativa setada no confirm").
+// false mantém o badge honesto ("não conferimos cartões por ora"). TRADE-OFF conhecido:
+// settleable é congelado no write, então quando a cobertura de cards for ligada (fase
+// futura, com o sidecar de attempts — Consequência do ADR), as legs de cards já criadas
+// precisam de um backfill trivial (`UPDATE bet_legs SET settleable=true WHERE kind='cards'`)
+// + adicionar `cards: settleCardsPalpite` ao dispatch acima + portar o fan-out web-grounded.
 export function deriveBetLegSettleable(kind: BetLegKind): boolean {
   return SETTLEABLE_SET.has(kind);
 }

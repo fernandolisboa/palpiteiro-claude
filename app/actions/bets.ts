@@ -12,12 +12,14 @@ import {
   MAX_RAW_INPUT,
   type ConfirmBetLeg,
 } from "@/lib/ai/bet-parse/schema";
+import { getCartridge } from "@/lib/ai/markets/registry";
 import { isEmailAllowed } from "@/lib/auth/whitelist";
 import {
   gradeScorelineLeg,
   type ScorelineKind,
 } from "@/lib/bets/grade-scoreline";
 import { db } from "@/lib/db";
+import { getEnableOverUnderExtraLines } from "@/lib/db/queries/ai-config";
 import {
   marketsForAudience,
   marketsForLeague,
@@ -59,6 +61,30 @@ const DC_SELECTION: Record<string, string> = {
   home_away: "home_or_away",
   draw_away: "away_or_draw",
 };
+// Espelha o gate de linha-modelável do gradeMyBet (predictions.ts §8): over/under só
+// modela {2.5} ∪ candidateLines (quando a variante multi-linha resolve pra a liga).
+// PRECISA bater com aquele gate — assim, quando decidimos "modelável", uma resposta
+// nao-avalio de gradeMyBet só pode ser PÓS-gasto (nunca a queda pré-gasto da linha),
+// e o fallback A→terminal (nunca B) fica correto (Decisão 3).
+async function isMarketLegModelable(
+  kind: string,
+  params: Record<string, unknown>,
+  league: string,
+): Promise<boolean> {
+  if (kind !== "over_under") return true; // 1X2/btts/dupla chance não têm gate de linha
+  const line = Number(params.line);
+  const flagEnabled = await getEnableOverUnderExtraLines();
+  const d = getCartridge("over_under", { extraLines: flagEnabled }).descriptor;
+  const extraLines =
+    flagEnabled &&
+    d.candidateLines !== undefined &&
+    (d.coveredLeagues === undefined ||
+      d.coveredLeagues.some((l) => l === league));
+  const modelable = new Set<number>([2.5]);
+  if (extraLines && d.candidateLines) for (const l of d.candidateLines) modelable.add(l);
+  return modelable.has(line);
+}
+
 function toMarketPin(
   kind: string,
   params: Record<string, unknown>,
@@ -230,6 +256,7 @@ export type ConfirmBetResult =
 
 type LegContext = {
   matchId: string;
+  league: string;
   homeTeam: string;
   awayTeam: string;
   neutral: boolean;
@@ -273,10 +300,17 @@ async function processLeg(
     };
   }
 
-  // CAMINHO A: kind de mercado DENTRO do gate E com odd → reusa o core cache-first do
-  // #412 verbatim (chama gradeMyBet). Sem odd → cai pro B (gradeMyBet exige odd). Line
-  // fora da escada / mercado fora do gate → gradeMyBet devolve nao-avalio → cai pro B.
-  if (MARKET_KINDS.has(leg.kind) && ctx.allowedMarketKeys.has(leg.kind) && userOdd !== null) {
+  // CAMINHO A vs B (Decisão 3): kind de mercado DENTRO do gate audiência∩liga, com odd
+  // E linha modelável → A (cartucho). Se o mercado está fora do gate, a linha está fora
+  // da escada, OU não há odd → é queda PRÉ-gasto legítima → CAMINHO B. Mas uma vez
+  // DENTRO do gate modelável, A é o ÚNICO caminho: falha transiente / MISS pós-predict
+  // NUNCA rebaixa pra B (landmine "dois números pra mesma linha") — vira terminal no_data.
+  if (
+    MARKET_KINDS.has(leg.kind) &&
+    ctx.allowedMarketKeys.has(leg.kind) &&
+    userOdd !== null &&
+    (await isMarketLegModelable(leg.kind, params, ctx.league))
+  ) {
     const pin = toMarketPin(leg.kind, params);
     if (pin) {
       const fd = new FormData();
@@ -317,7 +351,26 @@ async function processLeg(
           view: { route: "rate_limited", selectionLabel: label },
         };
       }
-      // nao-avalio / erro → cai pro CAMINHO B abaixo.
+      // TERMINAL (Decisão 3): dentro do gate modelável, qualquer outra resposta —
+      // PredictError, erro inesperado, ou MISS pós-predict (nao-avalio já GASTO) —
+      // NUNCA vira número de modelo. Fica sem número, honesto.
+      return {
+        newLeg: {
+          ...base,
+          modelProbPct: null,
+          gradeSource: "none",
+          gradeStatus: "no_data",
+        },
+        view: {
+          route: "model",
+          view: toFreeBetLegView({
+            status: "no_data",
+            selectionLabel: label,
+            reason:
+              "Não consegui avaliar esta aposta agora (análise indisponível). Tente de novo em instantes.",
+          }),
+        },
+      };
     }
   }
 
@@ -463,6 +516,7 @@ export async function confirmBet(
   }
   const ctx: LegContext = {
     matchId: slip.matchId,
+    league: match.league,
     homeTeam: match.homeTeam,
     awayTeam: match.awayTeam,
     neutral: match.league === "world_cup",
