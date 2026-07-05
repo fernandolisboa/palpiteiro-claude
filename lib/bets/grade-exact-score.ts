@@ -4,6 +4,7 @@ import type {
 } from "@/lib/providers/sports-data/types";
 import {
   estimateLambdas,
+  poolSplitRates,
   pScoreline,
   scorelineMatrix,
   type SplitGoalRates,
@@ -84,11 +85,26 @@ export function gradeExactScoreFromStandings(args: {
   const homeRow = findTeamRow(standing, homeTeam);
   const awayRow = findTeamRow(standing, awayTeam);
 
+  // Resolve as taxas por time NA FRONTEIRA (Decisão 3): jogo normal → fatia CASA do
+  // mandante × fatia FORA do visitante (vantagem de mando); mando neutro (Copa) → o
+  // pool casa+fora de CADA time (poolSplitRates POR TIME — nunca cruzando os times).
+  const homeRates = neutral
+    ? poolSplitRates(
+        toSplitRates(homeRow?.homeSplit),
+        toSplitRates(homeRow?.awaySplit),
+      )
+    : toSplitRates(homeRow?.homeSplit);
+  const awayRates = neutral
+    ? poolSplitRates(
+        toSplitRates(awayRow?.homeSplit),
+        toSplitRates(awayRow?.awaySplit),
+      )
+    : toSplitRates(awayRow?.awaySplit);
+
   const { lambdaHome, lambdaAway, meta } = estimateLambdas({
-    home: toSplitRates(homeRow?.homeSplit),
-    away: toSplitRates(awayRow?.awaySplit),
+    home: homeRates,
+    away: awayRates,
     leagueAvgGoalsPerTeam: leagueAvg,
-    neutral,
   });
 
   const matrix = scorelineMatrix(lambdaHome, lambdaAway);

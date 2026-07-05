@@ -12,6 +12,7 @@ import {
   type ConfirmBetResult,
   type ParseBetResult,
 } from "@/app/actions/bets";
+import { MAX_RAW_INPUT } from "@/lib/ai/bet-parse/schema";
 import type { FreeBetLegView } from "@/lib/view/types";
 
 // "Aposta livre" (ADR 0036, tracer #471): input NL → chips confirmáveis → grade do
@@ -102,7 +103,7 @@ export function FreeBet({ matchId }: { matchId: string }) {
           <textarea
             name="text"
             required
-            maxLength={280}
+            maxLength={MAX_RAW_INPUT}
             rows={2}
             placeholder="Ex.: Palmeiras 2 a 0, odd 9.00"
             className="rounded-md border border-border bg-transparent px-3 py-2 text-body-sm tracking-tight focus-visible:outline-none focus-visible:ring-[3px] focus-visible:ring-ring/50"

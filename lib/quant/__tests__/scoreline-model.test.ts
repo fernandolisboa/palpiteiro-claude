@@ -5,6 +5,7 @@ import {
   LAMBDA_MAX,
   LAMBDA_MIN,
   estimateLambdas,
+  poolSplitRates,
   pScoreline,
   scorelineMatrix,
   type SplitGoalRates,
@@ -126,17 +127,16 @@ describe("estimateLambdas", () => {
     expect(meta.source).toBe("prior");
   });
 
-  it("neutro: usa o pool casa+fora por time", () => {
-    const { lambdaHome, lambdaAway, meta } = estimateLambdas({
-      home: homeSplit,
-      away: awaySplit,
-      leagueAvgGoalsPerTeam: 1.3,
-      neutral: true,
-    });
-    // pool(home) = home = {10,20,10}; pool(away) = away = {10,10,15} (só uma fatia cada
-    // no input) — simétrico: ambos usam o MESMO pool dos dois → home==away.
-    expect(meta.source).toBe("splits");
-    expect(lambdaHome).toBeCloseTo(lambdaAway, 9);
+  it("poolSplitRates: soma as contagens das duas fatias do MESMO time", () => {
+    const pooled = poolSplitRates(
+      { played: 5, goalsFor: 12, goalsAgainst: 3 },
+      { played: 5, goalsFor: 8, goalsAgainst: 5 },
+    );
+    expect(pooled).toEqual({ played: 10, goalsFor: 20, goalsAgainst: 8 });
+    expect(poolSplitRates(null, null)).toBeNull();
+    expect(poolSplitRates({ played: 5, goalsFor: 4, goalsAgainst: 4 }, null)).toEqual(
+      { played: 5, goalsFor: 4, goalsAgainst: 4 },
+    );
   });
 
   it("clampa λ ao range são [0.2, 4.5]", () => {

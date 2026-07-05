@@ -125,6 +125,44 @@ describe("gradeExactScoreFromStandings", () => {
     expect(r.degradedData).toBe(true);
   });
 
+  it("[neutro] poolea casa+fora POR TIME (não cruza os times): prob válida, degradedData false", () => {
+    // Times com forças bem distintas: o mandante marca muito (pool alto), o visitante
+    // pouco. Se o pooling cruzasse os times (bug do review), os dois lados ficariam
+    // idênticos e a distribuição seria simétrica. Aqui exercitamos placares assimétricos.
+    const table = standing([
+      team(1, "Seleção Forte", 10, 24, 6, {
+        home: split(5, 14, 2),
+        away: split(5, 10, 4),
+      }),
+      team(2, "Seleção Fraca", 10, 6, 20, {
+        home: split(5, 4, 9),
+        away: split(5, 2, 11),
+      }),
+    ]);
+    const win = gradeExactScoreFromStandings({
+      standing: table,
+      homeTeam: "Seleção Forte",
+      awayTeam: "Seleção Fraca",
+      home: 3,
+      away: 0,
+      neutral: true,
+    });
+    const loss = gradeExactScoreFromStandings({
+      standing: table,
+      homeTeam: "Seleção Forte",
+      awayTeam: "Seleção Fraca",
+      home: 0,
+      away: 3,
+      neutral: true,
+    });
+    expect(win.status).toBe("graded");
+    expect(loss.status).toBe("graded");
+    if (win.status !== "graded" || loss.status !== "graded") return;
+    expect(win.degradedData).toBe(false);
+    // P(forte 3-0) > P(forte 0-3): o pool por-time preserva a assimetria de força.
+    expect(win.modelProbPct).toBeGreaterThan(loss.modelProbPct);
+  });
+
   it("time fora da tabela → split ausente → prior (degradedData true)", () => {
     const table = standing([
       team(1, "Palmeiras", 10, 20, 8, {

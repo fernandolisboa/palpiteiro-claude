@@ -19,17 +19,17 @@ export type SplitGoalRates = {
 };
 
 export type EstimateLambdasInput = {
-  // Fatia CASA do mandante e fatia FORA do visitante (captura a vantagem de mando
-  // sem termo HFA explícito). null quando a tabela não traz splits (World Cup, etc.).
+  // Taxas de gol do MANDANTE e do VISITANTE, já resolvidas pelo ADAPTER na sua
+  // fronteira (Decisão 3): jogo normal → fatia CASA do mandante × fatia FORA do
+  // visitante (captura a vantagem de mando sem termo HFA); mando neutro (Copa) → o
+  // pool casa+fora POR TIME (via poolSplitRates). null quando a tabela não traz o
+  // split → degrau (ii). O módulo é agnóstico ao mando — só recebe as taxas prontas.
   home: SplitGoalRates | null;
   away: SplitGoalRates | null;
   // Gols médios por time-jogo da liga (Σ goalsFor / Σ played das colunas OVERALL),
   // computado pelo adapter na fronteira. PRECONDIÇÃO: finito e > 0 — o caller guarda
   // o caso degenerado (Σ played = 0) ANTES de chamar (Decisão 3, guarda B1).
   leagueAvgGoalsPerTeam: number;
-  // Mata-mata / mando neutro (Copa): split casa/fora perde sentido → usa o pool
-  // casa+fora por time. Default false (liga com pontos corridos).
-  neutral?: boolean;
 };
 
 export type LambdaMeta = {
@@ -73,8 +73,11 @@ function usableSplit(split: SplitGoalRates | null): split is SplitGoalRates {
   return split !== null && split.played >= MIN_GAMES_FOR_SPLITS;
 }
 
-// Pool casa+fora de um time (mando neutro). null se nenhuma fatia existir.
-function poolSplits(
+// Pool de DUAS fatias do MESMO time (casa+fora) — usado pelo adapter no mando
+// neutro (Copa/mata-mata): a soma das contagens vira a taxa geral do time, sem
+// distinção de mando. EXPORTADO pra o adapter poolear POR TIME (cada consumidor
+// adapta na sua fronteira — o módulo não conhece "mando"). null se nenhuma existir.
+export function poolSplitRates(
   a: SplitGoalRates | null,
   b: SplitGoalRates | null,
 ): SplitGoalRates | null {
@@ -97,8 +100,9 @@ function poolSplits(
  * (iii) standings indisponível → NÃO é responsabilidade do módulo: o adapter não
  *       chama esta função e devolve "não avalio" (prefer-skip).
  *
- * Neutro: usa o pool casa+fora por time. Defensivo: qualquer λ não-finito recai no
- * degrau (ii) — o módulo puro NUNCA devolve λ NaN (guarda B1 do review).
+ * O mando (casa/fora/neutro) já foi resolvido pelo adapter nas taxas home/away —
+ * este módulo é agnóstico. Defensivo: qualquer λ não-finito recai no degrau (ii) —
+ * o módulo puro NUNCA devolve λ NaN (guarda B1 do review).
  */
 export function estimateLambdas(input: EstimateLambdasInput): {
   lambdaHome: number;
@@ -115,12 +119,8 @@ export function estimateLambdas(input: EstimateLambdasInput): {
   // Precondição violada (caller deveria ter guardado) → prior é o mais seguro que dá.
   if (!Number.isFinite(prior) || prior <= 0) return priorResult;
 
-  const homeSplit = input.neutral
-    ? poolSplits(input.home, input.away)
-    : input.home;
-  const awaySplit = input.neutral
-    ? poolSplits(input.home, input.away)
-    : input.away;
+  const homeSplit = input.home;
+  const awaySplit = input.away;
 
   if (!usableSplit(homeSplit) || !usableSplit(awaySplit)) return priorResult;
 
