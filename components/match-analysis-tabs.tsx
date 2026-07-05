@@ -3,6 +3,8 @@
 import { useState, type ReactNode } from "react";
 
 import { cn } from "@/lib/utils";
+import { Separator } from "@/components/ui/separator";
+import { FreeBet } from "@/components/free-bet";
 import {
   GradeMyBet,
   type GradeMarketOption,
@@ -60,11 +62,17 @@ export function MatchAnalysisTabs({ analysisSlot, gradeProps }: Props) {
       {tab === "analise" ? (
         analysisSlot
       ) : (
-        <GradeMyBet
-          matchId={gradeProps.matchId}
-          markets={gradeProps.markets}
-          prefill={gradeProps.prefill}
-        />
+        <div className="flex flex-col gap-6">
+          {/* Aposta livre (ADR 0036, tracer #471): input NL → chip → modelo de placar.
+              Fica ACIMA do picker v1 (que a Fase 2 funde no editor por-chip). */}
+          <FreeBet matchId={gradeProps.matchId} />
+          <Separator />
+          <GradeMyBet
+            matchId={gradeProps.matchId}
+            markets={gradeProps.markets}
+            prefill={gradeProps.prefill}
+          />
+        </div>
       )}
     </div>
   );

@@ -32,6 +32,14 @@ const DEFAULT_ADMIN_LIMIT = 200;
 // admin) e o auto-run já falha em silêncio — daí o fail-OPEN sem KV (ver
 // checkPalpitesRateLimit). Owner-tunável via RATE_LIMIT_PALPITES_PER_DAY.
 const DEFAULT_PALPITES_LIMIT = 50;
+// Tetos diários da "aposta livre" (ADR 0036, Decisão 8). Buckets SEPARADOS e
+// fail-CLOSED pra não-admin (como as análises pagas, NÃO como palpites): o gatilho é
+// input arbitrário digitado pelo usuário — spammable — então sem KV o default seguro
+// é negar (mesmo racional do ADR 0023). O parse cobre 1 chamada Haiku por texto; o
+// de slips cobre a criação (inclusive slips editor-only/Poisson-only, que não passam
+// pelo parse), fechando o único caminho não-metrado. Owner-tunáveis via env.
+const DEFAULT_BET_PARSE_LIMIT = 30;
+const DEFAULT_BET_SLIPS_LIMIT = 30;
 
 /**
  * Lê um teto inteiro positivo do env, com fallback NaN/<=0-guarded. Diferente do
@@ -52,6 +60,8 @@ let cached: {
   user: Ratelimit;
   admin: Ratelimit;
   palpites: Ratelimit;
+  betParse: Ratelimit;
+  betSlips: Ratelimit;
 } | null = null;
 let warned = false;
 
@@ -59,6 +69,8 @@ function getLimiters(): {
   user: Ratelimit;
   admin: Ratelimit;
   palpites: Ratelimit;
+  betParse: Ratelimit;
+  betSlips: Ratelimit;
 } | null {
   const url = process.env.KV_REST_API_URL;
   const token = process.env.KV_REST_API_TOKEN;
@@ -109,9 +121,72 @@ function getLimiters(): {
         ),
         prefix: "ratelimit:palpites",
       }),
+      // Aposta livre (ADR 0036): prefixos DISTINTOS. betParse cobre o parse Haiku;
+      // betSlips cobre a criação de slip no confirm. Sem split de role no limiter
+      // (o fail-closed por role vive nos checks abaixo).
+      betParse: new Ratelimit({
+        redis,
+        limiter: Ratelimit.fixedWindow(
+          limitFromEnv("RATE_LIMIT_BET_PARSE_PER_DAY", DEFAULT_BET_PARSE_LIMIT),
+          "1 d",
+        ),
+        prefix: "ratelimit:bet-parse",
+      }),
+      betSlips: new Ratelimit({
+        redis,
+        limiter: Ratelimit.fixedWindow(
+          limitFromEnv("RATE_LIMIT_BET_SLIPS_PER_DAY", DEFAULT_BET_SLIPS_LIMIT),
+          "1 d",
+        ),
+        prefix: "ratelimit:bet-slips",
+      }),
     };
   }
   return cached;
+}
+
+// Fallback fail-CLOSED por role (ADR 0023), compartilhado pelos dois limiters da
+// aposta livre: admin fail-OPEN (dono roda sem KV), não-admin fail-CLOSED (negar é
+// o default seguro de custo pra um gatilho spammable).
+function failClosedByRole(role?: string): RateLimitResult {
+  if (role === "admin") {
+    return { ok: true, limit: Infinity, remaining: Infinity, reset: 0 };
+  }
+  return { ok: false, limit: 0, remaining: 0, reset: 0, reason: "fail-closed" };
+}
+
+/**
+ * Teto diário do PARSE de aposta livre (ADR 0036, Decisão 8a). Bucket próprio
+ * (prefixo `ratelimit:bet-parse`), fail-CLOSED pra não-admin sem KV — o parse é
+ * gatilhado por texto arbitrário digitado (spammable), então NÃO consome os 20/dia
+ * de análise (cobrar um slot por um typo seria mis-escalado).
+ */
+export async function checkBetParseRateLimit(
+  userId: string,
+  role?: string,
+): Promise<RateLimitResult> {
+  const limiters = getLimiters();
+  if (!limiters) return failClosedByRole(role);
+  const { success, limit, remaining, reset } =
+    await limiters.betParse.limit(userId);
+  return { ok: success, limit, remaining, reset };
+}
+
+/**
+ * Teto diário de CRIAÇÃO de slips (ADR 0036, Decisão 8f). Cobrado no confirm —
+ * cobre TAMBÉM slips editor-only (sem parse), fechando o único caminho não-metrado
+ * de escrita/getStandings. Bucket próprio (`ratelimit:bet-slips`), fail-CLOSED
+ * pra não-admin (mesmo racional do parse).
+ */
+export async function checkBetSlipsRateLimit(
+  userId: string,
+  role?: string,
+): Promise<RateLimitResult> {
+  const limiters = getLimiters();
+  if (!limiters) return failClosedByRole(role);
+  const { success, limit, remaining, reset } =
+    await limiters.betSlips.limit(userId);
+  return { ok: success, limit, remaining, reset };
 }
 
 /**

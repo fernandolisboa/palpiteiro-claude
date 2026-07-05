@@ -561,6 +561,131 @@ export const palpiteSettlementAttempts = pgTable("palpite_settlement_attempts", 
   lastAttemptAt: timestamp({ withTimezone: true }),
 });
 
+// ─── Aposta livre (ADR 0036) ─────────────────────────────────────────────────
+// Registro de "apostas do usuário" em linguagem natural: slip (cabeçalho) → legs
+// (pernas tipadas) → outcomes (liquidação). Espelha a FORMA de palpite_sets/
+// palpites/palpite_outcomes, mas em tabelas PRÓPRIAS (partição ADR 0028: aposta do
+// usuário é registro Análise — NUNCA polui as métricas/auditoria de palpite). A
+// Fase 1 (#471, tracer) exercita SÓ exact_score (Caminho B / modelo de placar); os
+// enums nascem COMPLETOS (Decisão 5) pra evitar ALTER TYPE nas fases seguintes.
+
+// União COMPLETA da Decisão 2 (kinds de mercado + props de placar). Só exact_score
+// é gradeado/liquidado no tracer; os demais entram no enum agora (ALTER TYPE ADD
+// VALUE depois seria migration extra). `settleable` deriva do kind no código
+// (deriveBetLegSettleable), NUNCA do LLM.
+export const betLegKindEnum = pgEnum("bet_leg_kind", [
+  "over_under",
+  "match_result",
+  "btts",
+  "double_chance",
+  "exact_score",
+  "margin",
+  "clean_sheet",
+  "first_half_score",
+  "first_half_over_under",
+  "first_to_score",
+  "cards",
+  "corners",
+]);
+
+// Fonte do número da perna (Decisão 3): cartridge = core cache-first do #412;
+// scoreline_model = double-Poisson determinístico (lib/quant); none = sem número
+// (cards/corners aceitas-não-gradeadas, ou grade que faltou). Rótulo "modelo
+// simplificado" na UI/dado ⟺ scoreline_model.
+export const gradeSourceEnum = pgEnum("grade_source", [
+  "cartridge",
+  "scoreline_model",
+  "none",
+]);
+
+// Estado por-perna do grade (Decisões 5/10). O PAR (gradeSource, gradeStatus)
+// determina a view: graded = número congelado; not_covered/no_data/rate_limited =
+// sem número (gradeSource='none'); degraded_no_snapshot = número + EV normais, só
+// edge='—' (Caminho A, Fase 2). No tracer só graded/no_data são alcançáveis.
+export const gradeStatusEnum = pgEnum("grade_status", [
+  "graded",
+  "not_covered",
+  "no_data",
+  "rate_limited",
+  "degraded_no_snapshot",
+]);
+
+// Params estruturais da perna, narrowed por Zod no boundary (reusa os schemas das
+// regras de settlement — guard anti-drift Decisão 2b). $type largo o bastante pros
+// call-sites de ESCRITA; o read path re-valida por kind. Fase 1: só {home, away}.
+export type BetLegParams = { home: number; away: number }; // exact_score (widened na Fase 2)
+
+// Cabeçalho da aposta do usuário. rawInput (NL cru, capado ~280 chars) e
+// parseAiCallId são NULLABLE (slip editor-only não tem parse). comboUserOdd/
+// jointProbPct entram já na migration da Fase 1 (consumidas na Fase 3: nullable e
+// baratas, evitam churn). FKs restrict pra users/matches (espelha palpite_sets).
+export const betSlips = pgTable(
+  "bet_slips",
+  {
+    id: uuid().primaryKey().defaultRandom(),
+    matchId: uuid()
+      .notNull()
+      .references(() => matches.id, { onDelete: "restrict" }),
+    userId: uuid()
+      .notNull()
+      .references(() => users.id, { onDelete: "restrict" }),
+    rawInput: text(),
+    parseAiCallId: uuid().references(() => aiCalls.id, { onDelete: "set null" }),
+    comboUserOdd: numeric({ precision: 6, scale: 3 }),
+    jointProbPct: numeric({ precision: 5, scale: 2 }),
+    createdAt: timestamp({ withTimezone: true }).notNull().defaultNow(),
+  },
+  (t) => [
+    // (userId, createdAt) serve o histórico "Minhas apostas" (ORDER BY createdAt
+    // desc — postgres varre pra trás). E o (matchId) pro read pós-confirm.
+    index("bet_slips_user_id_created_at_idx").on(t.userId, t.createdAt),
+    index("bet_slips_match_id_idx").on(t.matchId),
+  ],
+);
+
+// Uma perna tipada dentro de um slip. params jsonb narrowed por Zod; userOdd/
+// modelProbPct CONGELADOS no confirm (Number()'dos na fronteira de view, nunca
+// recomputados). gradeSource/gradeStatus = o par de estado. settleable derivado DO
+// KIND. pinnedPredictionId = perna gradeada por cartucho (Caminho A, Fase 2); null
+// no tracer (exact_score é sempre Caminho B).
+export const betLegs = pgTable(
+  "bet_legs",
+  {
+    id: uuid().primaryKey().defaultRandom(),
+    slipId: uuid()
+      .notNull()
+      .references(() => betSlips.id, { onDelete: "cascade" }),
+    kind: betLegKindEnum().notNull(),
+    params: jsonb().$type<BetLegParams>().notNull(),
+    userOdd: numeric({ precision: 6, scale: 3 }),
+    modelProbPct: numeric({ precision: 5, scale: 2 }),
+    gradeSource: gradeSourceEnum().notNull(),
+    gradeStatus: gradeStatusEnum().notNull(),
+    pinnedPredictionId: uuid().references(() => predictions.id, {
+      onDelete: "set null",
+    }),
+    settleable: boolean().notNull(),
+    createdAt: timestamp({ withTimezone: true }).notNull().defaultNow(),
+  },
+  (t) => [index("bet_legs_slip_id_idx").on(t.slipId)],
+);
+
+// Outcome de uma perna SETTLEABLE — espelho FIEL de palpite_outcomes: won/lost via
+// outcomeResultEnum (void/push não se aplicam — linha garantida k+0.5, placar é
+// binário), legId UNIQUE → 1:1 idempotente, overrideByUserId pro override manual
+// que o CLAUDE.md exige. resultData usa a MESMA forma estreita PalpiteResultData.
+export const betLegOutcomes = pgTable("bet_leg_outcomes", {
+  id: uuid().primaryKey().defaultRandom(),
+  legId: uuid()
+    .notNull()
+    .unique()
+    .references(() => betLegs.id, { onDelete: "cascade" }),
+  result: outcomeResultEnum().notNull(),
+  resultData: jsonb().$type<PalpiteResultData>(),
+  overrideByUserId: uuid().references(() => users.id, { onDelete: "set null" }),
+  settledAt: timestamp({ withTimezone: true }).notNull().defaultNow(),
+});
+
 // Snapshots de odds AO VIVO por seleção — a generalização N-vias de
 // match_odds_snapshots (par fixo over/under), que permanece até o contract (Fase 5).
 // Uma row por (seleção, bookmaker, captura); overround_pct é do MERCADO COMPLETO.

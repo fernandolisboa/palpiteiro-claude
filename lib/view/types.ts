@@ -387,3 +387,32 @@ export type GradeMyBetView =
     }
   // Mercado/linha/seleção que NÃO modelamos (fail-closed, skip-not-fabricate §8).
   | { kind: "nao-avalio"; reason: string };
+
+// ─── "Aposta livre" — perna do CAMINHO B (modelo de placar) (#471, ADR 0036) ─────
+// View do mapper PURO (lib/view/free-bet.ts) da perna gradeada pelo double-Poisson
+// determinístico. Espelha a disciplina de GradeMyBetView (registro Análise, números
+// de valor legítimos), mas SEM edge/implícita: perna B não tem board completo → sem
+// de-vig (ADR 0018) → `edgeLabel` é SEMPRE "—" e NUNCA se deriva pseudo-implícita de
+// 1/userOdd (Decisão 3). O canal odd-do-usuário (EV/break-even/lucro price-only) só
+// aparece quando o usuário deu odd. Os estados de FALHA da action (parse-falhou/
+// slip-invalido/nao-analisavel/limite-de-slips/rate-limited) vivem no union de retorno
+// da action, não aqui.
+export type FreeBetLegView =
+  | {
+      kind: "grade-modelo-simplificado";
+      selectionLabel: string; // "Placar exato: 2 a 0"
+      sourceLabel: string; // "modelo simplificado" | "modelo simplificado (dados limitados)"
+      modelProbPct: number; // 0-100, congelado no write
+      edgeLabel: "—"; // SEMPRE — perna B não tem canal de edge
+      settleBadge: string; // "conferimos após o jogo"
+      // Canal odd-do-usuário (price-only §2/§3). null = usuário não deu odd → prob-only.
+      value: {
+        userOdd: number;
+        valueReading: string; // template-derivado de sign(EV@userOdd) — NUNCA prosa do LLM
+        evPerUnit: number; // computeEvPerUnit(modelProbPct, userOdd)
+        breakEvenProbPct: number; // computeBreakEvenProbPct(userOdd)
+        profitIfWon: number; // profitForOutcome('won', userOdd, 1)
+      } | null;
+    }
+  // Standings indisponível/degenerado no grade → não avalio (prefer-skip, NUNCA λ fabricado).
+  | { kind: "nao-avalio"; selectionLabel: string; reason: string };

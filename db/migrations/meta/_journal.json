@@ -288,6 +288,13 @@
       "when": 1781993667293,
       "tag": "0040_modern_giant_girl",
       "breakpoints": true
+    },
+    {
+      "idx": 41,
+      "version": "7",
+      "when": 1783271888383,
+      "tag": "0041_loud_ozymandias",
+      "breakpoints": true
     }
   ]
 }
