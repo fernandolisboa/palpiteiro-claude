@@ -10,27 +10,28 @@ import {
   confirmBet,
   parseBet,
   type ConfirmBetResult,
+  type ConfirmLegView,
   type ParseBetResult,
 } from "@/app/actions/bets";
 import { MAX_RAW_INPUT } from "@/lib/ai/bet-parse/schema";
-import type { FreeBetLegView } from "@/lib/view/types";
+import type { BetLegParams } from "@/db/schema";
+import type { FreeBetLegView, GradeMyBetView } from "@/lib/view/types";
 
-// "Aposta livre" (ADR 0036, tracer #471): input NL → chips confirmáveis → grade do
-// modelo de placar. Registro Análise DESGUARDADO (números de valor legítimos, ADR
-// 0034 §9) — o componente só RENDERIZA; a governança vive nos dados do view. SEM CTA
-// "faça esta aposta", SEM link/banner pra casa (§12).
+// "Aposta livre" (ADR 0036, Fase 2 #472): input NL → chips confirmáveis → grade
+// roteado (cartucho com edge DENTRO do gate; modelo de placar sem edge fora dele;
+// cards/corners aceitas-não-gradeadas). Registro Análise DESGUARDADO (números de
+// valor legítimos, ADR 0034 §9) — o componente só RENDERIZA. SEM CTA "faça esta
+// aposta", SEM link/banner pra casa (§12).
 
 // Disclaimer §3 (aviso de risco) — docs/ops/05-legal-compliance.md:102-105, VERBATIM.
-// Constante LOCAL de propósito (espelha grade-my-bet.tsx:18): single-source via
-// disclaimer.ts arrastaria o firewall (value-language-guard) pro import-graph desta
-// superfície, o que é proibido (ADR 0034 §9 / 0036 §7).
+// Constante LOCAL de propósito (espelha grade-my-bet.tsx:18).
 const RISK_DISCLAIMER_PT_BR =
   "Aposta não é investimento. As recomendações do Palpiteiro são análises e não garantem resultado. Aposte com responsabilidade, só o que você pode perder, e nunca para recuperar perdas. Se a aposta deixou de ser diversão, procure ajuda.";
 
 type EditableLeg = {
-  kind: "exact_score";
+  kind: string;
   selectionLabel: string;
-  params: { home: number; away: number };
+  params: BetLegParams;
   oddInput: string;
   settleBadge: string;
 };
@@ -105,7 +106,7 @@ export function FreeBet({ matchId }: { matchId: string }) {
             required
             maxLength={MAX_RAW_INPUT}
             rows={2}
-            placeholder="Ex.: Palmeiras 2 a 0, odd 9.00"
+            placeholder="Ex.: Palmeiras vence, mais de 2.5 gols, odd 3.20"
             className="rounded-md border border-border bg-transparent px-3 py-2 text-body-sm tracking-tight focus-visible:outline-none focus-visible:ring-[3px] focus-visible:ring-ring/50"
           />
         </label>
@@ -155,10 +156,19 @@ export function FreeBet({ matchId }: { matchId: string }) {
                 <span className="font-mono text-body font-medium tracking-tight text-foreground">
                   {leg.selectionLabel}
                 </span>
-                <span className="font-mono text-eyebrow-xs uppercase tracking-label text-muted-fg-2">
-                  {leg.settleBadge}
-                </span>
+                <button
+                  type="button"
+                  onClick={() =>
+                    setLegs((prev) => prev.filter((_, j) => j !== i))
+                  }
+                  className="font-mono text-eyebrow-xs uppercase tracking-label text-muted-fg-2 hover:text-destructive"
+                >
+                  remover
+                </button>
               </div>
+              <span className="font-mono text-eyebrow-xs uppercase tracking-label text-muted-fg-2">
+                {leg.settleBadge}
+              </span>
               <label className="flex flex-col gap-1">
                 <span className="font-mono text-eyebrow uppercase tracking-label text-muted-foreground">
                   odd que você pegou
@@ -167,7 +177,7 @@ export function FreeBet({ matchId }: { matchId: string }) {
                   type="text"
                   inputMode="decimal"
                   value={leg.oddInput}
-                  placeholder="9,00"
+                  placeholder="3,20"
                   onChange={(e) => {
                     const next = e.target.value;
                     setLegs((prev) =>
@@ -198,7 +208,7 @@ export function FreeBet({ matchId }: { matchId: string }) {
       )}
 
       {confirmState?.ok &&
-        confirmState.legs.map((view, i) => <FreeBetResult key={i} view={view} />)}
+        confirmState.legs.map((leg, i) => <LegResult key={i} leg={leg} />)}
 
       {/* Disclaimer §3 COMPLETO — sempre visível (máxima intenção, §12). */}
       <p className="text-meta leading-relaxed text-muted-fg-2 tracking-tight">
@@ -208,24 +218,80 @@ export function FreeBet({ matchId }: { matchId: string }) {
   );
 }
 
-// Render do resultado de UMA perna — registro Análise DESGUARDADO. PROIBIDO (§10):
-// nota/letra/score/medidor/chip verde-vermelho. Perna B: edge é SEMPRE "—".
-function FreeBetResult({ view }: { view: FreeBetLegView }) {
-  if (view.kind === "nao-avalio") {
+// Roteia o render por fonte do grade. cartridge (CAMINHO A) mostra edge; model
+// (CAMINHO B) nunca; none/rate_limited são avisos.
+function LegResult({ leg }: { leg: ConfirmLegView }) {
+  if (leg.route === "none") {
+    return <Notice label="não avaliamos como número" body={leg.message} />;
+  }
+  if (leg.route === "rate_limited") {
     return (
-      <div className="flex flex-col gap-1.5 rounded-md border border-dashed border-border px-4 py-3.5">
-        <span className="font-mono text-eyebrow uppercase tracking-label text-muted-foreground">
-          não avalio
-        </span>
-        <p className="text-body-sm text-muted-foreground tracking-tight">
-          {view.reason}
-        </p>
-      </div>
+      <Notice
+        label={leg.selectionLabel}
+        body="Você atingiu o limite de análises hoje — registramos a aposta, mas não avaliei esta perna. Tente amanhã."
+      />
     );
   }
+  if (leg.route === "cartridge") return <CartridgeResult view={leg.view} />;
+  return <ModelResult view={leg.view} />;
+}
 
-  const pct = (n: number) => `${n.toFixed(1)}%`;
+function Notice({ label, body }: { label: string; body: string }) {
+  return (
+    <div className="flex flex-col gap-1.5 rounded-md border border-dashed border-border px-4 py-3.5">
+      <span className="font-mono text-eyebrow uppercase tracking-label text-muted-foreground">
+        {label}
+      </span>
+      <p className="text-body-sm text-muted-foreground tracking-tight">{body}</p>
+    </div>
+  );
+}
 
+const pct = (n: number) => `${n.toFixed(1)}%`;
+
+// CAMINHO A — cartucho (com edge). Renderiza o GradeMyBetView (mesmos números da
+// aba Análise, sem duplicar fonte). Números de valor LEGÍTIMOS (registro Análise).
+function CartridgeResult({ view }: { view: GradeMyBetView }) {
+  if (view.kind === "nao-avalio") {
+    return <Notice label="não avalio" body={view.reason} />;
+  }
+  const evLabel = `${view.evPerUnit >= 0 ? "+" : ""}${(view.evPerUnit * 100).toFixed(1)}%`;
+  return (
+    <Card className="gap-0 overflow-hidden p-0">
+      <div className="flex items-center justify-between px-4 pt-3 pb-2">
+        <span className="font-mono text-eyebrow uppercase tracking-eyebrow text-muted-foreground">
+          nossa avaliação de valor
+        </span>
+        <span className="font-mono text-eyebrow-xs text-muted-fg-2">análise</span>
+      </div>
+      <Separator />
+      <div className="flex flex-col gap-1 px-4 py-4">
+        <span className="font-mono text-display-sm font-medium leading-none tracking-tight text-foreground">
+          {view.pinnedLabel}
+        </span>
+        <span className="font-mono text-eyebrow uppercase tracking-label text-muted-foreground">
+          {view.marketLabel} · odd {view.userOdd}
+        </span>
+      </div>
+      <p className="px-4 pb-3 text-body-sm leading-relaxed text-foreground tracking-tight">
+        {view.valueReading}
+      </p>
+      <Separator />
+      <div className="flex flex-col gap-2 px-4 py-4">
+        <Row label="retorno esperado nessa odd" value={evLabel} />
+        <Row label="break-even (prob. mínima)" value={pct(view.breakEvenProbPct)} />
+        <Row label="prob. do modelo" value={pct(view.modelProbPct)} />
+        <Row label="nosso edge" value={view.edgeLabel} />
+      </div>
+    </Card>
+  );
+}
+
+// CAMINHO B — modelo de placar (sem edge). edge é SEMPRE "—".
+function ModelResult({ view }: { view: FreeBetLegView }) {
+  if (view.kind === "nao-avalio") {
+    return <Notice label="não avalio" body={view.reason} />;
+  }
   return (
     <Card className="gap-0 overflow-hidden p-0">
       <div className="flex items-center justify-between px-4 pt-3 pb-2">
@@ -245,13 +311,11 @@ function FreeBetResult({ view }: { view: FreeBetLegView }) {
           {view.settleBadge}
         </span>
       </div>
-
       {view.value && (
         <p className="px-4 pb-3 text-body-sm leading-relaxed text-foreground tracking-tight">
           {view.value.valueReading}
         </p>
       )}
-
       <Separator />
       <div className="flex flex-col gap-2 px-4 py-4">
         <Row label="prob. do modelo" value={pct(view.modelProbPct)} />

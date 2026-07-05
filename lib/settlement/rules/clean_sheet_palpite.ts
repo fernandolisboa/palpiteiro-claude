@@ -5,7 +5,7 @@ import { SettlementError } from "@/lib/settlement/schemas";
 
 // Clean sheet de PALPITE (#354): "o lado `side` NÃO sofre gol" — i.e. o ADVERSÁRIO
 // marca 0 no placar de 90'. side="home" → awayScore === 0. Liquida só do regulationScore.
-const CleanSheetParamsSchema = z.object({
+export const CleanSheetParamsSchema = z.object({
   side: z.enum(["home", "away"]),
 });
 

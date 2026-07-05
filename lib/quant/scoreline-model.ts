@@ -223,3 +223,132 @@ export function pScoreline(
   }
   return matrix.cells[home][away];
 }
+
+// ── Readers sobre a MATRIZ (Fase 2, #472/#452) ───────────────────────────────
+// Todos somam células da MESMA matriz (nunca λ direto, pra a correção τ ser
+// drop-in). São os predicados sobre o placar final que os kinds de aposta consomem.
+
+// Soma as células cujo (home, away) satisfaz `pred`. Base dos readers de predicado.
+function sumWhere(
+  matrix: ScorelineMatrix,
+  pred: (home: number, away: number) => boolean,
+): number {
+  let acc = 0;
+  for (let h = 0; h <= matrix.maxGoals; h++) {
+    for (let a = 0; a <= matrix.maxGoals; a++) {
+      if (pred(h, a)) acc += matrix.cells[h][a];
+    }
+  }
+  return acc;
+}
+
+// P(o time `side` vence por margem >= k). k inteiro >= 1 (margin params minMargin).
+export function pMarginAtLeast(
+  matrix: ScorelineMatrix,
+  side: "home" | "away",
+  k: number,
+): number {
+  return sumWhere(matrix, (h, a) =>
+    side === "home" ? h - a >= k : a - h >= k,
+  );
+}
+
+// P(o time `side` mantém a meta zerada = o ADVERSÁRIO marca 0). clean_sheet {side}.
+export function pCleanSheet(
+  matrix: ScorelineMatrix,
+  side: "home" | "away",
+): number {
+  return sumWhere(matrix, (h, a) => (side === "home" ? a === 0 : h === 0));
+}
+
+// P(total de gols > line). line é k+0.5 (sem push). Under = 1 - pOverUnder.
+export function pOverUnder(matrix: ScorelineMatrix, line: number): number {
+  return sumWhere(matrix, (h, a) => h + a > line);
+}
+
+// P(ambos marcam) = P(home>=1 E away>=1).
+export function pBtts(matrix: ScorelineMatrix): number {
+  return sumWhere(matrix, (h, a) => h >= 1 && a >= 1);
+}
+
+// P(1X2) = { home: P(h>a), draw: P(h==a), away: P(a>h) }.
+export function p1X2(matrix: ScorelineMatrix): {
+  home: number;
+  draw: number;
+  away: number;
+} {
+  return {
+    home: sumWhere(matrix, (h, a) => h > a),
+    draw: sumWhere(matrix, (h, a) => h === a),
+    away: sumWhere(matrix, (h, a) => a > h),
+  };
+}
+
+// Grade de placar exato 0-3 × 0-3 (16 células) — a grade clássica de correct-score
+// (o `cs16` da Decisão 9). `other` = a massa fora da grade (renormaliza a 1 com as 16).
+export function cs16(matrix: ScorelineMatrix): {
+  grid: number[][]; // grid[h][a], h,a ∈ 0..3
+  other: number;
+} {
+  const grid = Array.from({ length: 4 }, (_, h) =>
+    Array.from({ length: 4 }, (_, a) => pScoreline(matrix, h, a)),
+  );
+  let inGrid = 0;
+  for (const row of grid) for (const c of row) inGrid += c;
+  return { grid, other: Math.max(0, 1 - inGrid) };
+}
+
+// P(conjunta) = Σ das células que satisfazem TODOS os predicados (Decisão 4,
+// consumido pela combinada same-game na Fase 3). Uma única distribuição coerente.
+export function jointProbability(
+  matrix: ScorelineMatrix,
+  predicates: Array<(home: number, away: number) => boolean>,
+): number {
+  return sumWhere(matrix, (h, a) => predicates.every((p) => p(h, a)));
+}
+
+// ── 1º tempo via time-share κ (Decisão 3/9) ──────────────────────────────────
+// O 1º tempo é ~κ do jogo (literatura ≈0.45). λ_1T = κ·λ → uma matriz própria de 1º
+// tempo, sobre a qual pScoreline (first_half_score) e pOverUnder (first_half_over_under)
+// operam. κ pinado; ajustável com golden.
+export const KAPPA_FIRST_HALF = 0.45;
+
+export function firstHalfScorelineMatrix(
+  lambdaHome: number,
+  lambdaAway: number,
+  opts?: { rho?: number; maxGoals?: number },
+): ScorelineMatrix {
+  return scorelineMatrix(
+    lambdaHome * KAPPA_FIRST_HALF,
+    lambdaAway * KAPPA_FIRST_HALF,
+    opts,
+  );
+}
+
+// ── Quem marca primeiro (forma fechada, processo temporal — NÃO da matriz) ───
+// P(home marca 1º) = λh/(λh+λa)·(1−e^{−(λh+λa)}). first_to_score: away é simétrico,
+// none = e^{−(λh+λa)} (nenhum gol). Soma dos três = 1.
+export function pHomeScoresFirst(
+  lambdaHome: number,
+  lambdaAway: number,
+): number {
+  const total = lambdaHome + lambdaAway;
+  if (total <= 0) return 0;
+  return (lambdaHome / total) * (1 - Math.exp(-total));
+}
+
+// { home, away, none } — a distribuição completa de "quem marca primeiro".
+export function firstToScoreProbs(
+  lambdaHome: number,
+  lambdaAway: number,
+): { home: number; away: number; none: number } {
+  const total = lambdaHome + lambdaAway;
+  const none = Math.exp(-total);
+  if (total <= 0) return { home: 0, away: 0, none: 1 };
+  const scored = 1 - none;
+  return {
+    home: (lambdaHome / total) * scored,
+    away: (lambdaAway / total) * scored,
+    none,
+  };
+}

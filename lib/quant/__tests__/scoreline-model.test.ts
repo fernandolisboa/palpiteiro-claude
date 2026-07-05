@@ -2,9 +2,20 @@ import { describe, expect, it } from "vitest";
 
 import {
   DIXON_COLES_RHO,
+  KAPPA_FIRST_HALF,
   LAMBDA_MAX,
   LAMBDA_MIN,
+  cs16,
   estimateLambdas,
+  firstHalfScorelineMatrix,
+  firstToScoreProbs,
+  jointProbability,
+  p1X2,
+  pBtts,
+  pCleanSheet,
+  pHomeScoresFirst,
+  pMarginAtLeast,
+  pOverUnder,
   poolSplitRates,
   pScoreline,
   scorelineMatrix,
@@ -173,5 +184,103 @@ describe("estimateLambdas", () => {
       leagueAvgGoalsPerTeam: 1.3,
     }).lambdaHome;
     expect(more).toBeGreaterThan(base);
+  });
+});
+
+describe("readers sobre a matriz (Fase 2)", () => {
+  // Matriz sem τ (ρ=0) → produto de Poisson: oráculos de forma fechada limpos.
+  const lh = 1.6;
+  const la = 1.0;
+  const m = scorelineMatrix(lh, la, { rho: 0 });
+
+  it("p1X2 soma 1 e bate as marginais; mandante mais forte ⇒ home > away", () => {
+    const { home, draw, away } = p1X2(m);
+    expect(home + draw + away).toBeCloseTo(1, 9);
+    expect(home).toBeGreaterThan(away);
+  });
+
+  it("pBtts = 1 − P(h=0) − P(a=0) + P(0,0) (inclusão-exclusão)", () => {
+    const pH0 = pois(0, lh); // ~normalizado (tail desprezível em λ<=1.6)
+    // Usa a própria matriz pros marginais renormalizados (evita erro de truncamento):
+    let pHome0 = 0;
+    let pAway0 = 0;
+    for (let a = 0; a <= m.maxGoals; a++) pHome0 += pScoreline(m, 0, a);
+    for (let h = 0; h <= m.maxGoals; h++) pAway0 += pScoreline(m, h, 0);
+    const expected = 1 - pHome0 - pAway0 + pScoreline(m, 0, 0);
+    expect(pBtts(m)).toBeCloseTo(expected, 9);
+    expect(pH0).toBeGreaterThan(0); // sanity do helper
+  });
+
+  it("pOverUnder(2.5) + P(under 2.5) = 1; monotônico decrescente na linha", () => {
+    const over15 = pOverUnder(m, 1.5);
+    const over25 = pOverUnder(m, 2.5);
+    const over35 = pOverUnder(m, 3.5);
+    expect(over15).toBeGreaterThan(over25);
+    expect(over25).toBeGreaterThan(over35);
+    // under 2.5 = 1 - over 2.5 (sem push em k+0.5).
+    expect(1 - over25).toBeGreaterThan(0);
+  });
+
+  it("pMarginAtLeast: home por >=2 ⊂ home por >=1; away idem", () => {
+    expect(pMarginAtLeast(m, "home", 1)).toBeGreaterThan(
+      pMarginAtLeast(m, "home", 2),
+    );
+    expect(pMarginAtLeast(m, "home", 1)).toBeCloseTo(p1X2(m).home, 9); // margem>=1 == vitória
+    expect(pMarginAtLeast(m, "away", 1)).toBeCloseTo(p1X2(m).away, 9);
+  });
+
+  it("pCleanSheet(home) = Σ_h P(h,0) = P(away marca 0)", () => {
+    let pAwayZero = 0;
+    for (let h = 0; h <= m.maxGoals; h++) pAwayZero += pScoreline(m, h, 0);
+    expect(pCleanSheet(m, "home")).toBeCloseTo(pAwayZero, 9);
+  });
+
+  it("cs16: 16 células 0-3×0-3 + other ≈ 1", () => {
+    const { grid, other } = cs16(m);
+    expect(grid.length).toBe(4);
+    expect(grid[0].length).toBe(4);
+    let sum = other;
+    for (const row of grid) for (const c of row) sum += c;
+    expect(sum).toBeCloseTo(1, 9);
+    expect(grid[2][0]).toBeCloseTo(pScoreline(m, 2, 0), 12);
+  });
+
+  it("jointProbability: AND de predicados = Σ células que satisfazem todos", () => {
+    // joint(home vence E over 1.5) <= min das marginais; e == pOverUnder condicional manual.
+    const joint = jointProbability(m, [
+      (h, a) => h > a,
+      (h, a) => h + a > 1.5,
+    ]);
+    expect(joint).toBeLessThanOrEqual(p1X2(m).home);
+    expect(joint).toBeLessThanOrEqual(pOverUnder(m, 1.5));
+    // conferência direta
+    let manual = 0;
+    for (let h = 0; h <= m.maxGoals; h++)
+      for (let a = 0; a <= m.maxGoals; a++)
+        if (h > a && h + a > 1.5) manual += pScoreline(m, h, a);
+    expect(joint).toBeCloseTo(manual, 12);
+  });
+
+  it("firstHalfScorelineMatrix: λ_1T = κ·λ (mais 0-0 que a matriz cheia)", () => {
+    const fh = firstHalfScorelineMatrix(lh, la, { rho: 0 });
+    // No 1º tempo há menos gols → P(0-0) maior que no jogo cheio.
+    expect(pScoreline(fh, 0, 0)).toBeGreaterThan(pScoreline(m, 0, 0));
+    // Oráculo: fh(1,0)/fh(0,0) = λh·κ (razão de Poisson).
+    expect(pScoreline(fh, 1, 0) / pScoreline(fh, 0, 0)).toBeCloseTo(
+      lh * KAPPA_FIRST_HALF,
+      6,
+    );
+  });
+
+  it("firstToScoreProbs: soma 1; home>away com mandante forte; none = e^{-(λh+λa)}", () => {
+    const { home, away, none } = firstToScoreProbs(lh, la);
+    expect(home + away + none).toBeCloseTo(1, 12);
+    expect(home).toBeGreaterThan(away);
+    expect(none).toBeCloseTo(Math.exp(-(lh + la)), 12);
+    expect(pHomeScoresFirst(lh, la)).toBeCloseTo(home, 12);
+  });
+
+  it("firstToScoreProbs: λ total 0 → none=1", () => {
+    expect(firstToScoreProbs(0, 0)).toEqual({ home: 0, away: 0, none: 1 });
   });
 });

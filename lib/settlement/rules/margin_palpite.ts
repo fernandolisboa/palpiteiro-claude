@@ -7,7 +7,7 @@ import { SettlementError } from "@/lib/settlement/schemas";
 // `minMargin` >= 1 (a regra aceita qualquer margem; o FLOOR >= 2 é gate de EMISSÃO em
 // geração, não aqui). Liquida só do regulationScore (90'). Validado por Zod como
 // defense-in-depth (a geração já escreve o shape certo).
-const MarginParamsSchema = z.object({
+export const MarginParamsSchema = z.object({
   side: z.enum(["home", "away"]),
   minMargin: z.number().int().min(1),
 });
