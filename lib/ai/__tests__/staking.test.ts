@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vitest";
 
-import { computeStakeUnits } from "@/lib/ai/staking";
+import { computeStakeUnits, isBelowEdgeFloor } from "@/lib/ai/staking";
 
 describe("computeStakeUnits — mapeamento determinístico (ADR 0019)", () => {
   // ── Tabela de exemplos do ADR 0019 (1:1, é o oráculo) ───────────────────────
@@ -71,5 +71,29 @@ describe("computeStakeUnits — mapeamento determinístico (ADR 0019)", () => {
     it("null, conf 99 → 1u (confiança altíssima não levanta sem edge)", () => {
       expect(computeStakeUnits(null, 99)).toBe(1);
     });
+  });
+});
+
+describe("isBelowEdgeFloor — gate de edge (ADR 0038)", () => {
+  it("edge abaixo do piso → rebaixa (true)", () => {
+    expect(isBelowEdgeFloor("over", 3.2, 5)).toBe(true);
+    expect(isBelowEdgeFloor("home", 4.99, 5)).toBe(true);
+  });
+  it("edge NO piso passa (fronteira estrita, casa o '≥' do prompt)", () => {
+    expect(isBelowEdgeFloor("over", 5, 5)).toBe(false);
+    expect(isBelowEdgeFloor("over", 5.01, 5)).toBe(false);
+  });
+  it("edge acima do piso → mantém (false)", () => {
+    expect(isBelowEdgeFloor("scorer_pedro", 9, 8)).toBe(false);
+  });
+  it("scorer abaixo do piso de 8 → rebaixa", () => {
+    expect(isBelowEdgeFloor("scorer_pedro", 6, 8)).toBe(true);
+  });
+  it("edge nulo (board degradado) NUNCA rebaixa — incerteza ≠ abaixo do piso", () => {
+    expect(isBelowEdgeFloor("over", null, 5)).toBe(false);
+  });
+  it("já é pass → nunca rebaixa de novo", () => {
+    expect(isBelowEdgeFloor("pass", null, 5)).toBe(false);
+    expect(isBelowEdgeFloor("pass", 2, 5)).toBe(false);
   });
 });

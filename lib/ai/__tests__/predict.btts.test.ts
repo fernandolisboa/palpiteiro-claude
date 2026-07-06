@@ -364,7 +364,7 @@ describe("predict(btts) — N=2 binary happy path through the generic path", () 
     anthropicCreate.mockResolvedValue(
       anthropicMessage({
         recommendation: "no",
-        confidence_pct: 58, // P(no)
+        confidence_pct: 62, // P(no) — edge ~8.77 (acima do piso do gate, ADR 0038)
         rationale: "Defesa sólida segura ao menos um lado sem marcar.",
         key_factors: ["defesa forte", "pouco volume ofensivo visitante"],
         minimum_odd: 1.5,
@@ -378,10 +378,10 @@ describe("predict(btts) — N=2 binary happy path through the generic path", () 
       marketKey: "btts",
     });
 
-    // complemento: rec 'no' conf 58 → {yes:100-58, no:58}.
+    // complemento: rec 'no' conf 62 → {yes:100-62, no:62}.
     expect(result.selections).toEqual([
-      { key: "yes", modelProbPct: 42, odd: 2.06 },
-      { key: "no", modelProbPct: 58, odd: 1.81 },
+      { key: "yes", modelProbPct: 38, odd: 2.06 },
+      { key: "no", modelProbPct: 62, odd: 1.81 },
     ]);
     const predictionRow = insertValues.mock.calls[1]?.[0] as Record<
       string,
@@ -392,8 +392,8 @@ describe("predict(btts) — N=2 binary happy path through the generic path", () 
     expect(predictionRow.oddAtRecommendation).toBe("1.810");
     const impliedNo = impliedPctOf(2.06, 1.81, "no");
     expect(predictionRow.impliedProbPct).toBe(impliedNo.toFixed(2));
-    // edge da prob_no (58), não 100−x.
-    expect(predictionRow.edgePct).toBe((58 - impliedNo).toFixed(2));
+    // edge da prob_no (62), não 100−x.
+    expect(predictionRow.edgePct).toBe((62 - impliedNo).toFixed(2));
   });
 });
 
