@@ -1,0 +1,13 @@
+-- Liga a CAPTURA da closing line em prod (Report 03 rec. 4, #486) — o CLV é o proxy de
+-- edge que converge mais rápido; deixá-lo OFF é o melhor sinal não acumulando (regra do
+-- dono: sem flag manual deixada OFF). O default em RUNTIME é a row ai_config.id=1 lida
+-- por getEnableClvCapture() — mudar só o default da coluna NÃO liga prod (a row já existe
+-- com false).
+--
+-- A row id=1 é garantida pela 0004 (INSERT ... ON CONFLICT DO NOTHING), então um UPDATE
+-- simples basta (mesmo modelo da 0032). INCONDICIONAL (WHERE id=1): impõe o flip de forma
+-- determinística em qualquer ambiente, sobrescrevendo de propósito. DML idempotente (set
+-- de valor fixo; re-aplicar é no-op). Reversível (SET ... = false WHERE id = 1). SEM ALTER
+-- (zero schema change). Custo: cron capture-closing-odds passa a gastar quota SÓ pra jogos
+-- com predição non-pass perto do KO (~dezenas de créditos/mês; ver docs/ops/08-clv-quota.md).
+UPDATE "ai_config" SET "enable_clv_capture" = true WHERE "id" = 1;
