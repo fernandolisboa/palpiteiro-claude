@@ -5,6 +5,7 @@ import {
 } from "@/lib/providers/odds/api-football/constants";
 import type { NormalizedOddsOutcome } from "@/lib/providers/odds/types";
 import type { SupportedLeague } from "@/lib/providers/sports-data/leagues";
+import { SCORER_MIN_EDGE_PP } from "@/lib/odds/scenario";
 
 /**
  * Descriptor local tipado de mercado (#164). NÃO é o registry do #165 — é o
@@ -76,11 +77,12 @@ export type MarketDescriptor = {
   // guard de seed-completude do predict é PULADO. Ausente/false = conjunto
   // estático (caminho de hoje, byte-idêntico).
   dynamicSelections?: boolean;
-  // Piso de edge em pontos percentuais (#290). Fonte ÚNICA do número consumido
-  // pelo (i) literal do PROMPT do cartucho e (ii) a view (minEdgeLabel/framing).
-  // Default 5 (partition — over_under/btts hardcodam 5); 8 pro scorer (compensa
-  // a margem não-removível do teto 1/odd). NÃO muda banda de stake
-  // (computeStakeUnits fica byte-idêntico) — é piso de PROMPT, não gate de código.
+  // Piso de edge em pontos percentuais (#290). Fonte ÚNICA do número consumido por
+  // (i) o PROMPT do cartucho, (ii) a view (minEdgeLabel/framing) E (iii) o GATE DE
+  // EDGE DETERMINÍSTICO do predict (ADR 0038 — rebaixa rec com edge < piso pra pass).
+  // `undefined` = partition, default 5 via `?? MIN_EDGE_PP` (o piso lido em predict/
+  // view); 8 pro scorer/assist (compensa a margem não-removível do teto 1/odd). NÃO
+  // muda banda de stake — computeStakeUnits fica byte-idêntico.
   minEdgePp?: number;
 };
 
@@ -293,7 +295,7 @@ export const ANYTIME_SCORER: MarketDescriptor = {
   coveredLeagues: ["brasileirao_a"],
   marketKind: "independent_binary",
   dynamicSelections: true,
-  minEdgePp: 8,
+  minEdgePp: SCORER_MIN_EDGE_PP,
   selectionKeys: [],
   resolveSelectionKey(outcome) {
     return scorerSelectionKey(outcome.name);
@@ -308,7 +310,7 @@ export const ASSIST: MarketDescriptor = {
   coveredLeagues: ["brasileirao_a"],
   marketKind: "independent_binary",
   dynamicSelections: true,
-  minEdgePp: 8,
+  minEdgePp: SCORER_MIN_EDGE_PP,
   selectionKeys: [],
   resolveSelectionKey(outcome) {
     return assistSelectionKey(outcome.name);

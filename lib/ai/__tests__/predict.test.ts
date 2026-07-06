@@ -589,6 +589,65 @@ describe("predict() — congelamento do par de odds na prediction (#104)", () =>
     expect(predictionRow.edgePct).toBeNull();
     expect(predictionRow.minimumOdd).toBeNull();
   });
+
+  // GATE DE EDGE (ADR 0038): um "over" com edge < MIN_EDGE_PP (5) é rebaixado pra pass.
+  // Odds default 1.900/1.950 → implícita de-vigada do over ≈ 50.65%; confidence 53 →
+  // edge ≈ 2.35 < 5 → gate dispara. A row precisa ficar IDÊNTICA a um pass genuíno.
+  it("edge sub-piso: 'over' com confidence 53 (edge ~2.35) → rebaixado pra pass genuíno", async () => {
+    anthropicCreate.mockResolvedValue(
+      toolUseMessage({
+        recommendation: "over",
+        confidence_pct: 53,
+        rationale: "Gosto do over aqui.", // prosa pró-over → NÃO viaja pro card
+        key_factors: ["ataque em fase"],
+        minimum_odd: 1.95,
+      }),
+    );
+
+    await expect(
+      predict({ matchId: "m-1", userId: "u-1", isAdmin: false }),
+    ).resolves.toBeDefined();
+
+    const predictionRow = insertValues.mock.calls[1]?.[0] as Record<
+      string,
+      unknown
+    >;
+    // Rebaixado: recommendation vira pass, colunas de lado-recomendado nulas, stake 1u.
+    expect(predictionRow.recommendation).toBe("pass");
+    expect(predictionRow.oddAtRecommendation).toBeNull();
+    expect(predictionRow.impliedProbPct).toBeNull();
+    expect(predictionRow.edgePct).toBeNull();
+    expect(predictionRow.minimumOdd).toBeNull();
+    expect(predictionRow.selectionId).toBeNull();
+    expect(predictionRow.stakeUnits).toBe("1.00");
+    // Rationale/keyFactors NEUTROS (a prosa pró-over do LLM não vai pro card — seria
+    // contraditória sob "sem aposta"; o cru fica em ai_calls.outputPayload). Confidence
+    // do LLM segue (estimativa do lado, como num pass genuíno).
+    expect(predictionRow.rationale).toContain("abaixo do piso mínimo");
+    expect(predictionRow.rationale).not.toContain("Gosto do over");
+    expect(predictionRow.keyFactors).toEqual([]);
+    expect(predictionRow.confidencePct).toBe("53.00");
+    // O output CRU do LLM (com a prosa pró-over) fica logado em ai_calls (insert[0]).
+    const aiCallRow = insertValues.mock.calls[0]?.[0] as Record<string, unknown>;
+    expect(JSON.stringify(aiCallRow.outputPayload)).toContain("Gosto do over aqui.");
+    // PSO (candidate set) segue com o par congelado, INCLUSIVE no pass gateado.
+    const psoByKey = psoOddByKey(insertValues.mock.calls[2]?.[0]);
+    expect(psoByKey["sel-over"]).toBe("1.900");
+    expect(psoByKey["sel-under"]).toBe("1.950");
+  });
+
+  // Controle: edge ACIMA do piso NÃO é tocado (default confidence 60 → edge ~9.35).
+  it("edge acima do piso: 'over' confidence 60 (edge ~9.35) → mantém a recomendação", async () => {
+    await expect(
+      predict({ matchId: "m-1", userId: "u-1", isAdmin: false }),
+    ).resolves.toBeDefined();
+    const predictionRow = insertValues.mock.calls[1]?.[0] as Record<
+      string,
+      unknown
+    >;
+    expect(predictionRow.recommendation).toBe("over");
+    expect(predictionRow.edgePct).not.toBeNull();
+  });
 });
 
 // ─── Paridade #165: colunas legadas byte-idênticas + colunas novas + PSO ─────
@@ -691,7 +750,7 @@ describe("predict() — paridade de colunas (#165): legado byte-idêntico + nova
     anthropicCreate.mockResolvedValue(
       toolUseMessage({
         recommendation: "under",
-        confidence_pct: 58,
+        confidence_pct: 62,
         rationale: "Poucos gols esperados.",
         key_factors: ["defesas sólidas", "ritmo baixo"],
         minimum_odd: 1.7,
@@ -711,7 +770,7 @@ describe("predict() — paridade de colunas (#165): legado byte-idêntico + nova
     expect(predictionRow.selectionId).toBe("sel-under");
     expect(predictionRow.oddAtRecommendation).toBe("1.740");
     expect(predictionRow.impliedProbPct).toBe(impliedUnder.toFixed(2));
-    expect(predictionRow.edgePct).toBe((58 - impliedUnder).toFixed(2));
+    expect(predictionRow.edgePct).toBe((62 - impliedUnder).toFixed(2));
   });
 
   it("pass: selectionId null + PSO grava AMBAS as seleções do candidate set", async () => {
@@ -784,15 +843,16 @@ describe("predict() — paridade de colunas (#165): legado byte-idêntico + nova
 // redondo). impliedPctOf replica a conta do predict (probs[idx]*100) pra derivar
 // o edge esperado. O stake é gravado como STRING (numeric(6,2) → toFixed(2)).
 describe("predict() — stake congelado na row (#167 / ADR 0019)", () => {
-  it("1u: edge baixo (4.35) com conf 55 → stake_units '1.00'", async () => {
-    // implied(over | 1.90/1.95) ≈ 50.65; edge = 55 − 50.65 = 4.35 (< 8) → 1u.
+  it("1u: edge no band-de-baixo (6.35, ∈ [5,8)) com conf 57 → stake_units '1.00'", async () => {
+    // implied(over | 1.90/1.95) ≈ 50.65; edge = 57 − 50.65 = 6.35 (∈ [5,8), acima do
+    // piso do gate ADR 0038 → NÃO rebaixa; abaixo da banda de 8 → 1u).
     getLatestFreshSelectionOddsSnapshots.mockResolvedValueOnce(
       freshSnapshotWith("1.900", "1.950"),
     );
     anthropicCreate.mockResolvedValue(
       toolUseMessage({
         recommendation: "over",
-        confidence_pct: 55,
+        confidence_pct: 57,
         rationale: "Jogo equilibrado, edge fino.",
         key_factors: ["mercado apertado"],
         minimum_odd: 1.8,
@@ -808,7 +868,8 @@ describe("predict() — stake congelado na row (#167 / ADR 0019)", () => {
       unknown
     >;
     const impliedOver = impliedPctOf(1.9, 1.95, "over");
-    expect(predictionRow.edgePct).toBe((55 - impliedOver).toFixed(2));
+    expect(predictionRow.recommendation).toBe("over"); // acima do piso → mantém
+    expect(predictionRow.edgePct).toBe((57 - impliedOver).toFixed(2));
     expect(predictionRow.stakeUnits).toBe("1.00");
   });
 

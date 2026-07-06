@@ -1,13 +1,11 @@
 // Builder de SYSTEM_PROMPT + tool COMPARTILHADO dos cartuchos independent_binary
-// (artilheiro/assist, #290). Parametrizado pelos rótulos do mercado. O piso de edge
-// de 8 pontos percentuais é HARDCODED no prompt (compensa a margem não-removível do
-// teto 1/odd — ADR 0025 emenda); pinado por teste `toContain` dedicado em cada
-// cartucho (espelha o 5 do over_under). É a FONTE única do número 8 no LLM; a view
-// lê o mesmo de descriptor.minEdgePp.
-//
-// minEdgePp do scorer = 8 (literal abaixo). NÃO muda banda de stake (é piso de
-// PROMPT, não gate de código — computeStakeUnits fica byte-idêntico).
-const SCORER_MIN_EDGE_PP = 8;
+// (artilheiro/assist, #290). Parametrizado pelos rótulos do mercado. O piso de edge de
+// 8 pontos percentuais compensa a margem não-removível do teto 1/odd (ADR 0025 emenda);
+// pinado por teste `toContain` dedicado em cada cartucho (espelha o 5 do over_under). A
+// FONTE ÚNICA do 8 é `SCORER_MIN_EDGE_PP` em lib/odds/scenario.ts (ADR 0038): o prompt,
+// o `descriptor.minEdgePp` (gate) e a view leem o MESMO símbolo — sem literais que
+// driftem. É piso de PROMPT E de gate de código (ADR 0038); NÃO muda banda de stake.
+import { SCORER_MIN_EDGE_PP } from "@/lib/odds/scenario";
 
 export type ScorerMarketCopy = {
   // "artilheiro (marcar a qualquer momento)" / "dar uma assistência"

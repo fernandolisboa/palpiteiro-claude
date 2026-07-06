@@ -445,13 +445,23 @@ describe("predict(double_chance) — book enviesado: implícita de-vig >100 NÃO
       marketKey: "double_chance",
     });
 
+    // O pipeline RESOLVE (não lança): a de-vig Σ=2 >100 fluiu pelo
+    // ImpliedProbabilitiesSchema do buildPredictionInput sem o clamp antigo [0,100]
+    // rejeitar — a garantia central deste teste, provada pelo predict() não lançar.
     expect(result.prediction).toEqual({ id: "row-1", aiCallId: "row-1" });
+    const impliedHd = impliedPctOfDC(1.02, 15, 15, "hd");
+    expect(impliedHd).toBeGreaterThan(100); // o clamp antigo [0,100] teria rejeitado
+
+    // GATE DE EDGE (ADR 0038): implícita >100 → edge = 95 − (>100) fortemente NEGATIVO
+    // (< piso) → a rec é rebaixada pra pass GENUÍNO. É o comportamento certo (edge
+    // negativo não é aposta); as colunas de lado-recomendado ficam null.
     const predictionRow = insertValues.mock.calls[1]?.[0] as Record<
       string,
       unknown
     >;
-    const impliedHd = impliedPctOfDC(1.02, 15, 15, "hd");
-    expect(impliedHd).toBeGreaterThan(100); // o clamp antigo [0,100] teria rejeitado
-    expect(predictionRow.impliedProbPct).toBe(impliedHd.toFixed(2));
+    expect(predictionRow.recommendation).toBe("pass");
+    expect(predictionRow.impliedProbPct).toBeNull();
+    expect(predictionRow.edgePct).toBeNull();
+    expect(predictionRow.selectionId).toBeNull();
   });
 });

@@ -8,6 +8,13 @@ import { computeMarketImpliedProbabilities } from "@/lib/odds/implied-probabilit
 // lá embarcaria o SYSTEM_PROMPT (admin-only) no bundle JS do cliente.
 export const MIN_EDGE_PP = 5;
 
+// Piso de edge dos mercados independent_binary (scorer/assist) — implícita de TETO
+// (1/odd cru, sem de-vig) → piso mais alto que os partition (ADR 0025 emenda). FONTE
+// ÚNICA (ADR 0038): o descriptor (gate), o prompt do scorer e a view leem ESTE símbolo,
+// sem literais duplicados que driftem. Vive aqui junto do MIN_EDGE_PP (mesma razão de
+// bundle: alcançável por client component sem embarcar SYSTEM_PROMPT).
+export const SCORER_MIN_EDGE_PP = 8;
+
 function assertValidOdd(odd: number): void {
   if (!Number.isFinite(odd) || odd <= 1) {
     throw new Error(`Invalid odd: ${odd} (must be finite and > 1)`);

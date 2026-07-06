@@ -91,7 +91,10 @@ export function BestBetResults({ view }: { view: BestBetView }) {
         </div>
       </div>
 
-      {best && <BestBetCard entry={best} highlighted />}
+      {/* Não cravar "Melhor aposta" quando o topo é pass: com o gate de edge (ADR
+          0038) um jogo inteiro pode não ter aposta acima do piso — a resposta honesta
+          é "nenhuma", não badgear um pass como a melhor. */}
+      {best && <BestBetCard entry={best} highlighted={!best.rank.isPass} />}
       {rest.map((entry) => (
         <BestBetCard key={entry.marketKey} entry={entry} />
       ))}
