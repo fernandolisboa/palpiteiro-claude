@@ -1,0 +1,218 @@
+import { PageHeading } from "@/components/admin/page-heading";
+import { EmptyState } from "@/components/empty-state";
+import {
+  deriveCalibration,
+  type CalibrationGroup,
+} from "@/lib/calibration/derive";
+import type { ReliabilityBin } from "@/lib/calibration/metrics";
+import { getOverUnderCalibrationRows } from "@/lib/db/queries/calibration";
+
+export const dynamic = "force-dynamic";
+
+// Gateado por app/admin/layout.tsx (role === "admin" → notFound pra outros).
+// Harness de calibração (Report 03 rec. 3, ADR 0037): mede o P(over) do modelo (LLM
+// ancorado no Poisson, tracer #482) contra os resultados liquidados, com o mercado
+// no-vig de benchmark. Substituto vivo dos backtests desescopados — enche com o D9.
+
+const fmt3 = (n: number) => (Number.isFinite(n) ? n.toFixed(3) : "—");
+const fmtSkill = (n: number) =>
+  Number.isFinite(n) ? `${n >= 0 ? "+" : ""}${n.toFixed(3)}` : "—";
+const fmtPct = (n: number | null) =>
+  n === null ? "—" : `${(n * 100).toFixed(0)}%`;
+
+export default async function AdminCalibrationPage() {
+  const rows = await getOverUnderCalibrationRows();
+  const { overall, byVersion } = deriveCalibration(rows);
+
+  return (
+    <div className="min-h-screen bg-background text-foreground">
+      <div className="mx-auto w-full max-w-reading px-6 py-8">
+        <PageHeading
+          backLink={{ href: "/admin", label: "admin" }}
+          title="Calibração"
+          subtitle="over/under · P(over) do modelo vs resultados · benchmark = mercado no-vig"
+        />
+
+        {overall === null ? (
+          <EmptyState
+            title="Sem predições over/under liquidadas ainda"
+            description="O harness enche conforme as análises de over/under são liquidadas (com P(over) do modelo persistido). Volte depois de alguns jogos."
+          />
+        ) : (
+          <>
+            {/* Resumo agregado */}
+            <section className="pb-8">
+              <h2 className="pb-3 font-mono text-eyebrow uppercase tracking-label text-muted-foreground">
+                resumo · {overall.n} predições
+              </h2>
+              <div className="grid grid-cols-2 gap-px overflow-hidden rounded-md border border-border bg-border sm:grid-cols-4">
+                <Kpi label="log-loss modelo" value={fmt3(overall.model.logLoss)} />
+                <Kpi
+                  label="log-loss mercado"
+                  value={fmt3(overall.market.logLoss)}
+                />
+                <Kpi label="brier modelo" value={fmt3(overall.model.brier)} />
+                <Kpi
+                  label="skill (log-loss)"
+                  value={fmtSkill(overall.logLossSkill)}
+                  hint={
+                    overall.logLossSkill >= 0
+                      ? "modelo bate o mercado"
+                      : "mercado bate o modelo"
+                  }
+                />
+              </div>
+            </section>
+
+            {/* Por versão de prompt */}
+            <section className="pb-8">
+              <h2 className="pb-3 font-mono text-eyebrow uppercase tracking-label text-muted-foreground">
+                por versão de prompt
+              </h2>
+              <div className="overflow-x-auto rounded-md border border-border">
+                <table className="w-full text-body-sm tabular-nums">
+                  <thead>
+                    <tr className="border-b border-border text-left font-mono text-eyebrow uppercase tracking-label text-muted-foreground">
+                      <Th>versão</Th>
+                      <Th align="right">n</Th>
+                      <Th align="right">LL modelo</Th>
+                      <Th align="right">LL mercado</Th>
+                      <Th align="right">Brier mod.</Th>
+                      <Th align="right">Brier merc.</Th>
+                      <Th align="right">skill LL</Th>
+                    </tr>
+                  </thead>
+                  <tbody>
+                    {byVersion.map((g) => (
+                      <VersionRow key={g.promptVersion} g={g} />
+                    ))}
+                  </tbody>
+                </table>
+              </div>
+            </section>
+
+            {/* Confiabilidade agregada (10 bins) */}
+            <section className="pb-8">
+              <h2 className="pb-3 font-mono text-eyebrow uppercase tracking-label text-muted-foreground">
+                confiabilidade do modelo · 10 bins
+              </h2>
+              <p className="pb-3 text-meta leading-relaxed text-muted-fg-2 tracking-tight">
+                Bem calibrado ⇒ previsto ≈ observado em cada faixa. Faixas vazias omitidas.
+              </p>
+              <div className="overflow-x-auto rounded-md border border-border">
+                <table className="w-full text-body-sm tabular-nums">
+                  <thead>
+                    <tr className="border-b border-border text-left font-mono text-eyebrow uppercase tracking-label text-muted-foreground">
+                      <Th>faixa P(over)</Th>
+                      <Th align="right">n</Th>
+                      <Th align="right">previsto</Th>
+                      <Th align="right">observado</Th>
+                    </tr>
+                  </thead>
+                  <tbody>
+                    {overall.model.bins
+                      .filter((b) => b.n > 0)
+                      .map((b) => (
+                        <BinRow key={b.lo} b={b} />
+                      ))}
+                  </tbody>
+                </table>
+              </div>
+            </section>
+          </>
+        )}
+      </div>
+    </div>
+  );
+}
+
+function Kpi({
+  label,
+  value,
+  hint,
+}: {
+  label: string;
+  value: string;
+  hint?: string;
+}) {
+  return (
+    <div className="flex flex-col gap-1 bg-background px-4 py-3">
+      <span className="font-mono text-eyebrow uppercase tracking-label text-muted-foreground">
+        {label}
+      </span>
+      <span className="text-body font-medium tabular-nums">{value}</span>
+      {hint && (
+        <span className="font-mono text-eyebrow-xs text-muted-fg-2">{hint}</span>
+      )}
+    </div>
+  );
+}
+
+function Th({
+  children,
+  align = "left",
+}: {
+  children: React.ReactNode;
+  align?: "left" | "right";
+}) {
+  return (
+    <th
+      className={`px-3 py-2 font-normal ${align === "right" ? "text-right" : ""}`}
+    >
+      {children}
+    </th>
+  );
+}
+
+function Td({
+  children,
+  align = "left",
+}: {
+  children: React.ReactNode;
+  align?: "left" | "right";
+}) {
+  return (
+    <td className={`px-3 py-2 ${align === "right" ? "text-right" : ""}`}>
+      {children}
+    </td>
+  );
+}
+
+function VersionRow({ g }: { g: CalibrationGroup }) {
+  return (
+    <tr className="border-b border-border last:border-b-0">
+      <Td>
+        <span className="font-mono text-meta">{g.promptVersion}</span>
+      </Td>
+      <Td align="right">{g.n}</Td>
+      <Td align="right">{fmt3(g.model.logLoss)}</Td>
+      <Td align="right">{fmt3(g.market.logLoss)}</Td>
+      <Td align="right">{fmt3(g.model.brier)}</Td>
+      <Td align="right">{fmt3(g.market.brier)}</Td>
+      <Td align="right">
+        <span
+          className={
+            g.logLossSkill >= 0 ? "text-foreground" : "text-muted-foreground"
+          }
+        >
+          {fmtSkill(g.logLossSkill)}
+        </span>
+      </Td>
+    </tr>
+  );
+}
+
+function BinRow({ b }: { b: ReliabilityBin }) {
+  return (
+    <tr className="border-b border-border last:border-b-0">
+      <Td>
+        <span className="font-mono text-meta">
+          {`${(b.lo * 100).toFixed(0)}–${(b.hi * 100).toFixed(0)}%`}
+        </span>
+      </Td>
+      <Td align="right">{b.n}</Td>
+      <Td align="right">{fmtPct(b.meanForecast)}</Td>
+      <Td align="right">{fmtPct(b.meanOutcome)}</Td>
+    </tr>
+  );
+}

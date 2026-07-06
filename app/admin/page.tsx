@@ -20,6 +20,11 @@ const SECTIONS = [
     desc: "gasto agregado · por dia, usuário, modelo · USD",
   },
   {
+    href: "/admin/calibration",
+    title: "Calibração",
+    desc: "over/under · P(over) do modelo vs resultados · benchmark de mercado",
+  },
+  {
     href: "/admin/settings",
     title: "Configurações de IA",
     desc: "modelo de análise · default global",
