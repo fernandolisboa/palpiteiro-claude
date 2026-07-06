@@ -1,4 +1,4 @@
-import { and, eq, inArray } from "drizzle-orm";
+import { and, eq, inArray, ne } from "drizzle-orm";
 
 import {
   marketSelections,
@@ -55,7 +55,15 @@ export async function getOverUnderCalibrationRows(): Promise<
       predictionOutcomes,
       eq(predictionOutcomes.predictionId, predictions.id),
     )
-    .where(eq(predictions.marketId, ou.id));
+    // `void` = jogo abandonado → totalGoals sem sentido pra o rótulo. won/lost/push
+    // têm um placar real (em push k+0.5 não ocorre; num inteiro legado, over=total>line
+    // segue determinado). Exclui só o void.
+    .where(
+      and(
+        eq(predictions.marketId, ou.id),
+        ne(predictionOutcomes.result, "void"),
+      ),
+    );
   if (settled.length === 0) return [];
 
   // 3. PSO das seleções over/under dessas predições (odd por seleção + modelProbPct do over).
@@ -110,14 +118,21 @@ export async function getOverUnderCalibrationRows(): Promise<
     ) {
       continue;
     }
-    const { probs } = computeMarketImpliedProbabilities([
-      slot.overOdd,
-      slot.underOdd,
-    ]);
+    // De-vig pode lançar se alguma odd congelada vier ≤ 1 (validada >1 na escrita, mas
+    // uma row corrompida não pode derrubar a página inteira) — pula a row, não 500.
+    let marketPOver: number;
+    try {
+      marketPOver = computeMarketImpliedProbabilities([
+        slot.overOdd,
+        slot.underOdd,
+      ]).probs[0];
+    } catch {
+      continue;
+    }
     rows.push({
       promptVersion: s.promptVersion,
       modelPOver: slot.overModelPct / 100,
-      marketPOver: probs[0],
+      marketPOver,
       overHappened: totalGoals > line ? 1 : 0,
     });
   }

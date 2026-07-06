@@ -48,6 +48,7 @@ async function seedOU(args: {
   overOdd: string;
   underOdd: string;
   withOutcome?: boolean;
+  result?: "won" | "lost" | "void";
 }): Promise<void> {
   const [m] = await realDb
     .insert(schema.matches)
@@ -86,7 +87,7 @@ async function seedOU(args: {
         awayScore: null,
         totalGoals: args.totalGoals,
       },
-      result: "won",
+      result: args.result ?? "won",
       profitUnits: "0",
     });
   }
@@ -214,6 +215,19 @@ describe("getOverUnderCalibrationRows", () => {
       overModelPct: null,
       overOdd: "1.900",
       underOdd: "1.950",
+    });
+    expect(await getOverUnderCalibrationRows()).toEqual([]);
+  });
+
+  it("exclui outcome 'void' (jogo abandonado — rótulo sem sentido)", async () => {
+    await seedOU({
+      promptVersion: "v",
+      line: 2.5,
+      totalGoals: 3,
+      overModelPct: 60,
+      overOdd: "1.900",
+      underOdd: "1.950",
+      result: "void",
     });
     expect(await getOverUnderCalibrationRows()).toEqual([]);
   });
