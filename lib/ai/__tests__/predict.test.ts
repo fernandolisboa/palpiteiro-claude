@@ -598,7 +598,7 @@ describe("predict() — congelamento do par de odds na prediction (#104)", () =>
       toolUseMessage({
         recommendation: "over",
         confidence_pct: 53,
-        rationale: "Gosto do over aqui.", // rationale pró-over SOBREVIVE (auditoria)
+        rationale: "Gosto do over aqui.", // prosa pró-over → NÃO viaja pro card
         key_factors: ["ataque em fase"],
         minimum_odd: 1.95,
       }),
@@ -620,9 +620,16 @@ describe("predict() — congelamento do par de odds na prediction (#104)", () =>
     expect(predictionRow.minimumOdd).toBeNull();
     expect(predictionRow.selectionId).toBeNull();
     expect(predictionRow.stakeUnits).toBe("1.00");
-    // Rastro de auditoria: rationale/keyFactors/confidence do LLM PRESERVADOS.
-    expect(predictionRow.rationale).toBe("Gosto do over aqui.");
+    // Rationale/keyFactors NEUTROS (a prosa pró-over do LLM não vai pro card — seria
+    // contraditória sob "sem aposta"; o cru fica em ai_calls.outputPayload). Confidence
+    // do LLM segue (estimativa do lado, como num pass genuíno).
+    expect(predictionRow.rationale).toContain("abaixo do piso mínimo");
+    expect(predictionRow.rationale).not.toContain("Gosto do over");
+    expect(predictionRow.keyFactors).toEqual([]);
     expect(predictionRow.confidencePct).toBe("53.00");
+    // O output CRU do LLM (com a prosa pró-over) fica logado em ai_calls (insert[0]).
+    const aiCallRow = insertValues.mock.calls[0]?.[0] as Record<string, unknown>;
+    expect(JSON.stringify(aiCallRow.outputPayload)).toContain("Gosto do over aqui.");
     // PSO (candidate set) segue com o par congelado, INCLUSIVE no pass gateado.
     const psoByKey = psoOddByKey(insertValues.mock.calls[2]?.[0]);
     expect(psoByKey["sel-over"]).toBe("1.900");

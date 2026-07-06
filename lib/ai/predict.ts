@@ -41,11 +41,10 @@ import {
   getGenerationParams,
 } from "@/lib/db/queries/ai-config";
 import { getPreferredModelId } from "@/lib/db/queries/users";
+import { MIN_EDGE_PP } from "@/lib/odds/scenario";
 
 import { persistAiCallError } from "./ai-call-logging";
 import { calculateCost } from "./cost";
-import { MIN_EDGE_PP } from "@/lib/odds/scenario";
-
 import { computeStakeUnits, isBelowEdgeFloor } from "./staking";
 import { getCartridge } from "./markets/registry";
 import type { BaseMarketOutput } from "./markets/types";
@@ -57,6 +56,12 @@ import {
 } from "./models";
 import { getProviderForModel } from "./providers";
 import type { AnalysisRequest } from "./providers/types";
+
+// Rationale neutro de um pass REBAIXADO pelo gate de edge (ADR 0038) — coerente com a
+// manchete "sem aposta recomendada", em vez da prosa pró-lado do LLM (que fica em
+// ai_calls.outputPayload pra auditoria). Determinístico, não vem do LLM.
+const GATED_PASS_RATIONALE =
+  "O modelo apontou um lado, mas a vantagem estimada (edge) ficou abaixo do piso mínimo — sem aposta recomendada.";
 
 // ─── Types & errors ──────────────────────────────────────────────────────────
 
@@ -967,8 +972,7 @@ export async function predict({
   // rebaixa pra "pass" (a disciplina de MIN_EDGE_PP deixa de ser só compliance-de-
   // prompt e vira invariante de código). Reatribuir `side` ANTES das expressões
   // `side === "pass" ? null : …` produz uma row de pass GENUÍNA (selectionId/odd/
-  // implícita/edge null, stake 1u) — sem row-quimera; o rationale/keyFactors/
-  // confidence do LLM sobrevivem (independem de `side`) → rebaixamento auditável.
+  // implícita/edge null, stake 1u) — sem row-quimera.
   // Piso resolvido igual à view (analysis.ts): descriptor.minEdgePp ?? MIN_EDGE_PP.
   const side = isBelowEdgeFloor(
     rawSide,
@@ -977,6 +981,11 @@ export async function predict({
   )
     ? "pass"
     : rawSide;
+  // Rebaixado PELO gate (vs. pass genuíno do LLM). O rationale/keyFactors pró-lado do
+  // LLM NÃO viajam pra o card (seriam prosa "gosto do over" sob a manchete "sem aposta"
+  // — contradição visível E entraria como sinal pró-lado na síntese). Rationale neutro
+  // no lugar; o output cru do LLM fica auditável em ai_calls.outputPayload (via aiCallId).
+  const gatedToPass = side === "pass" && rawSide !== "pass";
   const oddAtRec = side === "pass" ? null : (oddByKey[side] ?? null);
   const impliedPct = side === "pass" ? null : (impliedByKey[side] ?? null);
   // `modelProbByKey[side]` é sempre finito em mercados partition (enum + refine
@@ -1057,11 +1066,13 @@ export async function predict({
         // yes/no/dupla-chance) ou "pass". `side` = a recomendação JÁ GATEADA (ADR
         // 0038): igual a output.recommendation, exceto quando o gate rebaixou pra pass.
         recommendation: side,
-        // confidence/rationale/keyFactors do LLM sobrevivem AO gate (independem de
-        // `side`) — o rastro de auditoria do rebaixamento (rationale pró-lado + rec=pass).
+        // confidence do LLM segue (é a estimativa do lado, consistente com pass genuíno).
+        // Num pass REBAIXADO, rationale/keyFactors viram neutros (a prosa pró-lado do LLM
+        // sob "sem aposta" seria contraditória no card E sinal pró-lado na síntese); o cru
+        // fica em ai_calls.outputPayload. Pass genuíno e rec real seguem com o do LLM.
         confidencePct: output.confidence_pct.toFixed(2),
-        rationale: output.rationale,
-        keyFactors: output.key_factors,
+        rationale: gatedToPass ? GATED_PASS_RATIONALE : output.rationale,
+        keyFactors: gatedToPass ? [] : output.key_factors,
         // minimum_odd só existe pra recomendação real; num pass (inclusive gateado)
         // é null — casa a row de pass genuína (o LLM omite minimum_odd em pass).
         minimumOdd: side === "pass" ? null : (output.minimum_odd?.toFixed(3) ?? null),
