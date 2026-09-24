@@ -2,7 +2,7 @@
 
 ## Status
 
-Proposed (2026-09-24). Issue #501.
+Proposed (2026-09-24). Issue #501. Revisado no mesmo dia: a implementação não espera o backtest (pedido do Fernando).
 
 O desenho foi escolhido pelo Fernando entre três opções:
 
@@ -23,7 +23,7 @@ Este ADR pede um provider de IA novo, a TypeSafe, e por isso precisa de ADR (CLA
 - o firewall da manchete nem o registro Palpite (ADR 0028);
 - o grade-my-bet (ADRs 0034/0036).
 
-> **Escopo:** decisão de arquitetura + plano de validação. **Nenhum código de app neste PR.** As issues de implementação são abertas **só se o backtest (Decisão 7) aprovar**.
+> **Escopo:** decisão de arquitetura, plano de implementação e plano de validação. Este PR só traz o ADR. A implementação entra em PRs separados, **atrás do flag `analysis_engine`** (Decisão 5), que começa em `llm`. O backtest (Decisão 7) roda em paralelo e **não bloqueia** a implementação: ele calibra os pesos e informa quando virar o flag. Virar o flag é decisão do Fernando.
 
 ## Contexto
 
@@ -166,7 +166,7 @@ Cada noul carrega `criteria` com os casos de borda escritos, como pede a jaggedn
   - `costUsd` pela tabela de preço do registry.
 
   A invariante "toda chamada de IA passa por `predict.ts` e loga" continua valendo (CLAUDE.md).
-- **Flag de motor:** `analysis_engine ∈ {llm, code_jev}` em `ai_config`, com default `llm` até a promoção.
+- **Flag de motor:** `analysis_engine ∈ {llm, code_jev}` é uma coluna aditiva em `ai_config`, ao lado de `enableClvCapture`, lida e gravada por `lib/db/queries/ai-config.ts`. Começa em `llm` e é **editável na tela de admin**, sem env var e sem deploy: é o padrão pedido pelo Fernando pra chaves desse tipo.
   - `modelVersion` e `promptVersion` das predições passam a carregar o motor. Exemplo: `engine=code_jev;lambda=poisson_v1;judg=jev_judgments_v1;w=v1;narr=narrator_v1`.
   - Com isso, a calibração e o Yield segmentam por motor.
 
@@ -184,7 +184,7 @@ Cada noul carrega `criteria` com os casos de borda escritos, como pede a jaggedn
   A decisão fica **recomputável** a partir do registro. Isso ecoa a Decisão 4 do ADR 0038 e é a garantia de auditabilidade que motivou a mudança.
 - Nunca mutar predições passadas. O motor novo só afeta análises novas.
 
-### 7. Validação: backtest antes de qualquer código de produção
+### 7. Validação: backtest em paralelo à implementação
 
 **Setup**
 
@@ -213,22 +213,24 @@ Cada noul carrega `criteria` com os casos de borda escritos, como pede a jaggedn
 - Desfalques históricos por fixture vêm da API-Football (`/injuries?fixture=`), em cache local do run. O consumo de quota é checado antes do run.
 - Rotação e motivação saem do calendário e da tabela point-in-time, derivados do próprio loader.
 
-**Critérios de promoção** (todos obrigatórios; senão o ADR fica "Rejected by data")
+**Leituras que o backtest entrega**
 
-1. **S2 vs S1:** o log-loss 1X2 de S2 é menor que o de S1, com IC 95% por bootstrap da diferença excluindo 0. Se o JEV não melhora o estatístico, ele não entra, e o motor `code` puro vira decisão do ADR 0039.
-2. **S2 vs S3:** o log-loss de S2 é menor ou igual ao de S3 na mesma amostra. A troca não pode piorar a qualidade.
-3. **CLV:** o CLV médio das apostas que S2 **autoraria** (edge ≥ piso contra a odd de abertura, ou AvgC quando não houver abertura) é ≥ 0.
-4. **Estabilidade:** rodar S2 duas vezes no mesmo jogo muda no máximo 0,5pp em P(seleção). Isso mede a consistência alegada do JEV.
+Não são portões de merge. São os números mostrados pro Fernando antes e depois de virar o flag, e o insumo pra ajustar os pesos da Decisão 3:
+
+1. **S2 vs S1:** diferença de log-loss 1X2, com IC 95% por bootstrap. Se o JEV não melhorar o estatístico, os pesos tendem a zero, e o motor passa a funcionar como `code` puro sem mudança de arquitetura.
+2. **S2 vs S3:** log-loss de S2 contra o LLM atual, na mesma amostra. Mostra quanto se ganha ou se perde em qualidade ao trocar.
+3. **CLV:** CLV médio das apostas que S2 **autoraria** (edge ≥ piso contra a odd de abertura, ou AvgC quando não houver abertura).
+4. **Estabilidade:** variação de P(seleção) ao rodar S2 duas vezes no mesmo jogo. O esperado é ≤ 0,5pp. Isso mede a consistência alegada do JEV.
 
 **Custo estimado do backtest:** JEV em ~277 jogos a ~2k tokens dá < US$ 0,05; S3 fica em ~US$ 2; a API-Football entra dentro da quota.
 
-### 8. Rollout (issues abertas só após o backtest aprovar)
+### 8. Rollout (PRs pequenos, tudo atrás do flag)
 
 1. Cliente TypeSafe, módulo `lib/ai/judgments/` e pesos, com testes unitários da conversão e do clamp.
 2. Motor `code_jev` atrás do flag, com o cartucho `narrator_v1` e a coluna `judgments`.
 3. Best bet no motor novo: avaliação em código de todos os mercados e 1 narração.
 4. `/admin/calibration` segmentado por motor.
-5. Flip do flag, que é decisão do Fernando.
+5. Virar o flag. É decisão do Fernando e pode acontecer a qualquer momento depois do passo 2. Voltar é trocar o flag, sem deploy.
 
 ## Consequências
 
@@ -250,7 +252,7 @@ Cada noul carrega `criteria` com os casos de borda escritos, como pede a jaggedn
   - O billing é pré-requisito, e a chave vai no Vercel e no ambiente de dev.
 - **Teto de qualidade.**
   - O motor fica limitado ao estatístico + ajustes de ±15%.
-  - O LLM hoje pode "ver" coisas fora do modelo. Isso só se decide no backtest (critério 2).
+  - O LLM hoje pode "ver" coisas fora do modelo. O backtest (leitura 2) mostra quanto isso vale.
 - **Pesos são um modelo.** Precisam de re-backtest a cada bump do JEV ou do λ_base.
 - **Cobertura de mercados.** O motor novo só cobre mercados partition derivados de placar. Os caminhos atuais de scorer/assist, cartões (ADR 0033) e palpite não mudam.
 
@@ -260,7 +262,7 @@ Cada noul carrega `criteria` com os casos de borda escritos, como pede a jaggedn
   - Com Poisson heurístico, funciona hoje.
   - Com Dixon-Coles, herda a melhoria sem mudança.
 - Kelly fracionário (rec. 7) consome `modelProbPct`. No motor `code_jev`, esse valor é o número do código, o que é mais adequado pra Kelly que o `confidence_pct` do LLM.
-- O gate de dados da Fase C (≥150 apostas liquidadas) é substituído, **para este ADR**, pelo backtest da Decisão 7. Os mesmos dados e o mesmo loader servem aos dois ADRs.
+- O gate de dados da Fase C (≥150 apostas liquidadas) não se aplica a este ADR. A validação dele é o backtest da Decisão 7, que roda em paralelo. Os mesmos dados e o mesmo loader servem aos dois ADRs.
 
 ## Revisão legal (LGPD, Lei 13.709/2018; Lei 14.790/2023)
 
@@ -284,5 +286,5 @@ Cada noul carrega `criteria` com os casos de borda escritos, como pede a jaggedn
    - Não há como limitar o dano de um erro.
 2. **JEV substituindo o LLM por completo.** **Rejeitada.** Não gera o racional, que é central na UI (`components/analysis-result.tsx`) e é input verbatim da síntese do palpite (ADRs 0030/0031).
 3. **JEV só em shadow ao lado do motor atual, sem backtest.** **Rejeitada.** Com um único usuário, o volume nunca dá leitura.
-4. **Motor `code` puro, sem JEV.** **Não descartado.** É o resultado se o critério 1 falhar, e nesse caso vira decisão do ADR 0039.
+4. **Motor `code` puro, sem JEV.** **Não descartado.** É o que o motor vira, na prática, se o backtest zerar os pesos (leitura 1).
 5. **Blend `w·P_estatístico + (1−w)·P_LLM`.** Mantém a não-reprodutibilidade e o custo por mercado. O ADR 0037 (Decisão 4) já o adiou.
