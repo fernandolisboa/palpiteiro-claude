@@ -6,10 +6,13 @@ import {
 } from "@/lib/calibration/derive";
 import type { ReliabilityBin } from "@/lib/calibration/metrics";
 import {
-  evaluatePhaseCGate,
-  type PhaseCGate,
+  evaluateKellyGate,
+  type KellyGate,
 } from "@/lib/calibration/phase-c-gate";
+import { enrichDashboardRowsWithClosing } from "@/lib/dashboard/clv-enrich";
+import { clvNoVigDeltas, keepLatestPerMatch } from "@/lib/dashboard/kpis";
 import { getOverUnderCalibrationRows } from "@/lib/db/queries/calibration";
+import { getAllDashboardRows } from "@/lib/db/queries/dashboard";
 
 export const dynamic = "force-dynamic";
 
@@ -27,7 +30,15 @@ const fmtPct = (n: number | null) =>
 export default async function AdminCalibrationPage() {
   const rows = await getOverUnderCalibrationRows();
   const { overall, byVersion } = deriveCalibration(rows);
-  const gate = evaluatePhaseCGate(rows);
+  // CLV das recomendações de TODOS os usuários (mede o modelo), deduped por
+  // (jogo, mercado) como o dashboard (ADR 0020).
+  const withClosing = keepLatestPerMatch(
+    await enrichDashboardRowsWithClosing(await getAllDashboardRows()),
+  );
+  const gate = evaluateKellyGate({
+    clvNoVigDeltasPp: clvNoVigDeltas(withClosing),
+    calibrationRows: rows,
+  });
   const betCount = rows.filter((r) => r.isBet).length;
 
   return (
@@ -39,6 +50,8 @@ export default async function AdminCalibrationPage() {
           subtitle="over/under · P(over) do modelo vs resultados · benchmark = mercado no-vig"
         />
 
+        <GateSection gate={gate} />
+
         {overall === null ? (
           <EmptyState
             title="Sem predições over/under liquidadas ainda"
@@ -46,8 +59,6 @@ export default async function AdminCalibrationPage() {
           />
         ) : (
           <>
-            <GateSection gate={gate} />
-
             {/* Resumo agregado */}
             <section className="pb-8">
               <h2 className="pb-3 font-mono text-eyebrow uppercase tracking-label text-muted-foreground">
@@ -142,13 +153,14 @@ export default async function AdminCalibrationPage() {
   );
 }
 
-// Veredito do gate de dados da Fase C (ADR 0019 / Report 03 rec. 6-7), só sobre
-// apostas. "pronto" não liga nada: é o sinal pra abrir a Fase C (ADR 0039).
-function GateSection({ gate }: { gate: PhaseCGate }) {
+// Gates da Fase C (ADR 0039). O Dixon-Coles é julgado por backtest offline; aqui só
+// o Kelly, que depende do dado ao vivo. "pronto" não liga nada: é o sinal pra abrir
+// o build do Kelly. As bandas do ADR 0019 seguem até lá.
+function GateSection({ gate }: { gate: KellyGate }) {
   return (
     <section className="pb-8">
       <h2 className="pb-3 font-mono text-eyebrow uppercase tracking-label text-muted-foreground">
-        gate da fase c · {gate.ready ? "pronto" : "ainda não"}
+        gate do kelly · {gate.ready ? "pronto" : "ainda não"}
       </h2>
       <div className="overflow-x-auto rounded-md border border-border">
         <table className="w-full text-body-sm tabular-nums">
@@ -172,7 +184,9 @@ function GateSection({ gate }: { gate: PhaseCGate }) {
         </table>
       </div>
       <p className="pt-2 text-meta leading-relaxed text-muted-fg-2 tracking-tight">
-        Medido só sobre apostas (passes fora): é onde o Kelly vai dimensionar stake.
+        CLV = Δ no-vig contra a linha de fechamento (+ = bateu o mercado). Skill =
+        log-loss do mercado − do modelo por análise de over/under, passes incluídos.
+        O Dixon-Coles é validado por backtest (ADR 0039), não por este gate.
       </p>
     </section>
   );

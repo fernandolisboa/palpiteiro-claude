@@ -1,6 +1,7 @@
 import { describe, expect, it } from "vitest";
 
 import {
+  bootstrapMeanCi,
   brierScore,
   calibrationSlope,
   computeCalibration,
@@ -127,5 +128,24 @@ describe("calibrationSlope", () => {
   it("separação completa → NaN (MLE diverge)", () => {
     const pairs = [...pairsAt(0.3, 3, 0), ...pairsAt(0.7, 3, 3)];
     expect(calibrationSlope(pairs)).toBeNaN();
+  });
+});
+
+describe("bootstrapMeanCi", () => {
+  it("< 2 valores → null", () => {
+    expect(bootstrapMeanCi([])).toBeNull();
+    expect(bootstrapMeanCi([1])).toBeNull();
+  });
+
+  it("valores constantes → IC degenerado no próprio valor", () => {
+    expect(bootstrapMeanCi([2, 2, 2, 2])).toEqual({ lo: 2, hi: 2 });
+  });
+
+  it("IC contém a média e é determinístico pela semente", () => {
+    const xs = Array.from({ length: 100 }, (_, i) => (i % 10) - 4.5);
+    const ci = bootstrapMeanCi(xs)!;
+    expect(ci.lo).toBeLessThan(0);
+    expect(ci.hi).toBeGreaterThan(0);
+    expect(bootstrapMeanCi(xs)).toEqual(ci);
   });
 });

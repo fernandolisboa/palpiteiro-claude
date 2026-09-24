@@ -119,6 +119,38 @@ export function calibrationSlope(pairs: CalibrationPair[]): number {
   return NaN;
 }
 
+// IC percentil por bootstrap da MÉDIA de `values` (reamostragem com reposição).
+// Determinístico: PRNG mulberry32 semeado, então o mesmo dado dá o mesmo IC em todo
+// render. null com < 2 valores (sem variância pra reamostrar).
+export function bootstrapMeanCi(
+  values: number[],
+  level = 0.9,
+  iterations = 2000,
+  seed = 0x5eed,
+): { lo: number; hi: number } | null {
+  if (values.length < 2) return null;
+  let state = seed >>> 0;
+  const rand = () => {
+    state = (state + 0x6d2b79f5) >>> 0;
+    let t = state;
+    t = Math.imul(t ^ (t >>> 15), t | 1);
+    t ^= t + Math.imul(t ^ (t >>> 7), t | 61);
+    return ((t ^ (t >>> 14)) >>> 0) / 4294967296;
+  };
+  const n = values.length;
+  const means = new Array<number>(iterations);
+  for (let b = 0; b < iterations; b++) {
+    let sum = 0;
+    for (let i = 0; i < n; i++) sum += values[Math.floor(rand() * n)];
+    means[b] = sum / n;
+  }
+  means.sort((a, b) => a - b);
+  const tail = (1 - level) / 2;
+  const at = (q: number) =>
+    means[Math.min(iterations - 1, Math.max(0, Math.floor(q * iterations)))];
+  return { lo: at(tail), hi: at(1 - tail) };
+}
+
 export type CalibrationSummary = {
   n: number;
   brier: number;
