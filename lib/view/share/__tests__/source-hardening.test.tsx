@@ -20,6 +20,14 @@ describe("hardenSources — firewall do título", () => {
     ]);
     expect(out).toEqual([]);
   });
+
+  it("título com decimal solto (odd) é DROPPADO; o limpo sobrevive (#438)", () => {
+    const out = hardenSources([
+      { title: "Bet365 paga 3.5 no Palmeiras", url: "https://ge.globo.com/a" },
+      { title: "Escalação confirmada", url: "https://ge.globo.com/b" },
+    ]);
+    expect(out.map((s) => s.title)).toEqual(["Escalação confirmada"]);
+  });
 });
 
 describe("hardenSources — URL", () => {

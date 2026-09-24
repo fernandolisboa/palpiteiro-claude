@@ -215,12 +215,13 @@ export async function getPalpiteSetOwner(
 }
 
 /**
- * Carimba `shared_at` de um set (ADR 0035 / #384) — o gesto opt-in de compartilhar. A
- * action garante ownership + skip-not-restamp ANTES de chamar; aqui é só a escrita.
+ * Carimba `shared_at` de um set (ADR 0035 / #384) — o gesto opt-in de compartilhar — ou o
+ * LIMPA (`null`, kill-switch do §3e / #438: o set volta a privado e /p/[id] 404a). As
+ * actions (shareSet/unshareSet) garantem ownership ANTES de chamar; aqui é só a escrita.
  */
 export async function setPalpiteSetSharedAt(
   setId: string,
-  at: Date,
+  at: Date | null,
 ): Promise<void> {
   await db
     .update(palpiteSets)

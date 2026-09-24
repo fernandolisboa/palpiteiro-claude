@@ -1,6 +1,8 @@
 import { withSentryConfig } from "@sentry/nextjs";
 import type { NextConfig } from "next";
 
+import { CSP_HEADER, cspForEnv, PUBLIC_HTML_SOURCES } from "./lib/security/csp";
+
 const nextConfig: NextConfig = {
   // Build id determinístico a partir do commit SHA do deploy (ADR 0024). `null`
   // = comportamento default do Next (id aleatório) em dev/local, onde a env não
@@ -15,7 +17,13 @@ const nextConfig: NextConfig = {
       process.env.VERCEL_GIT_COMMIT_SHA ?? "dev",
   },
   async headers() {
+    const publicCsp = cspForEnv();
     return [
+      // Content-Security-Policy (#467, ADR 0040) — fase report-only; ver lib/security/csp.ts.
+      ...PUBLIC_HTML_SOURCES.map((source) => ({
+        source,
+        headers: [{ key: CSP_HEADER, value: publicCsp }],
+      })),
       {
         // Documento HTML → no-cache pra o Safari (iOS) não segurar HTML antigo
         // por dias após deploy (ADR 0024). CRÍTICO: o lookahead negativo exclui
@@ -40,9 +48,7 @@ const nextConfig: NextConfig = {
         // dedicado abaixo. Sem essa exclusão, o crawler re-baixaria as duas a cada hit.
         source:
           "/:path((?!_next/|api/|monitoring(?:/|$)|p/|robots\\.txt|sitemap\\.xml).*)",
-        headers: [
-          { key: "Cache-Control", value: "no-cache, must-revalidate" },
-        ],
+        headers: [{ key: "Cache-Control", value: "no-cache, must-revalidate" }],
       },
       {
         // /robots.txt + /sitemap.xml (#468, ADR 0024): conteúdo estático que só muda
@@ -60,36 +66,37 @@ const nextConfig: NextConfig = {
         ],
       },
       {
-        // /p/[id] + /p/[id]/opengraph-image (#384/#416, ADR 0035 §8/§11/§13): snapshot público
-        // imutável (cache longo) + noindex + no-referrer. `:path*` cobre a página E a sub-rota OG.
-        // VERIFICADO via `curl -I` no `next start` num palpite REAL compartilhado (#416 item 2):
-        //   - PÁGINA válida → `Cache-Control: public, max-age=86400, immutable` (header único, este
-        //     daqui). É o escudo de custo: link viral não re-bate no Postgres a cada view (CDN/ISR
-        //     servem o snapshot cacheado; revalida em 24h).
-        //   - ROTA OG → DOIS headers Cache-Control: este (`max-age=86400, immutable`) MAIS o que o
-        //     ImageResponse self-seta (`public, immutable, no-transform, max-age=31536000`). Ambos
-        //     cache-friendly → a imagem é agressivamente cacheada de qualquer jeito; o duplo-header
-        //     é cosmético, não fura o escudo (NÃO é o `max-age=0` que um comentário antigo supunha).
+        // /p/[id] + /p/[id]/opengraph-image (#384/#416/#438, ADR 0035 §3e/§8/§11/§13): snapshot
+        // público + noindex + no-referrer. `:path*` cobre a página E a sub-rota OG.
+        // Cache-Control `public, max-age=0, must-revalidate` (#438): o BROWSER revalida a cada
+        // view; o escudo de custo contra link viral é o ISR (`revalidate = 86400` da página),
+        // que a Vercel cacheia independente deste header e que `revalidatePath` purga. Antes era
+        // `max-age=86400, immutable`, que pinava a página no browser por 24h — o kill-switch
+        // (unshareSet limpa shared_at + revalidatePath) não alcançava quem já tinha aberto o link.
+        // SEM `s-maxage` de propósito: com ele a CDN poderia guardar um 404/redirect por 24h
+        // fora do controle do revalidatePath.
+        //   - ROTA OG → DOIS headers Cache-Control: este MAIS o que o ImageResponse self-seta
+        //     (`public, immutable, no-transform, max-age=31536000`). A imagem segue agressivamente
+        //     cacheada pelo próprio ImageResponse; o duplo-header é cosmético. Unfurls já raspados
+        //     (WhatsApp/X) vivem no cache do scraper e não são revogáveis por nós de qualquer jeito.
         // X-Robots-Tag/Referrer-Policy são aditivos (sem colisão) e alcançam página + OG.
-        // NOTA dead-link (#416, VERIFICADO em prod): no `next start` o notFound herda este header
-        // (headers() aplica literalmente). Em prod — `curl -I https://palpiteiro.live/p/<dead>` — o
-        // caminho notFound retorna `private, no-cache, no-store, max-age=0, must-revalidate` +
-        // `x-vercel-cache: MISS`: o Next força no-store no notFound, sobrescrevendo este header → o
-        // 404 NÃO é cacheado. Reforço: este header é `max-age` (diretiva de BROWSER), SEM `s-maxage`;
-        // a CDN da Vercel só cacheia function-response com `s-maxage`, então nem o caso local
-        // poderia envenenar a CDN compartilhada com um 404. Escudo do caso válido intacto.
+        // NOTA dead-link (#416, VERIFICADO em prod): o caminho notFound retorna `private,
+        // no-cache, no-store, max-age=0, must-revalidate` + `x-vercel-cache: MISS` — o Next força
+        // no-store no notFound → o 404 NÃO é cacheado.
         source: "/p/:path*",
         headers: [
-          { key: "Cache-Control", value: "public, max-age=86400, immutable" },
+          {
+            key: "Cache-Control",
+            value: "public, max-age=0, must-revalidate",
+          },
           { key: "X-Robots-Tag", value: "noindex" },
           { key: "Referrer-Policy", value: "no-referrer" },
         ],
       },
       {
         // Headers de segurança globais (report 01 achado #2 / #436). Aplicam a TODAS as
-        // rotas (inclui /p, que só ADICIONA os seus). SEM CSP por ora: o app tem scripts
-        // inline do Next + o túnel Sentry (/monitoring), então CSP exige nonce ou
-        // report-only — follow-up cuidadoso, não este PR. Permissions-Policy nomeia só
+        // rotas (inclui /p, que só ADICIONA os seus). A CSP mora no topo desta lista (páginas
+        // públicas) e no middleware (gateadas, com nonce) — #467. Permissions-Policy nomeia só
         // camera/microphone/geolocation (nega): WebAuthn/passkey usa
         // `publickey-credentials-get`, que NÃO é listado → mantém o default (self), intacto.
         // X-Frame-Options DENY: o app não é embutido em iframe (o Sentry usa fetch, não frame).
