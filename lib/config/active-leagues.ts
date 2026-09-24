@@ -28,14 +28,24 @@ export const LIST_WINDOW_HOURS = 120; // 5 dias
 // Keys de filtro derivadas das ligas ativas (ex.: ['bsa', 'ucl']).
 export const ACTIVE_LEAGUE_KEYS = ACTIVE_LEAGUES.map(leagueToKey);
 
-// Filtro default da home quando não há ?league= (primeira liga ativa).
-// Guard de runtime: config vazia falha alto em vez de virar undefined silencioso
-// (que causaria loop de redirect a cada request).
-const firstActiveKey = ACTIVE_LEAGUE_KEYS[0];
-if (!firstActiveKey) {
-  throw new Error("ACTIVE_LEAGUES must contain at least one league");
+/**
+ * Filtro default da home quando não há ?league=: "Todos" com >1 liga ativa (decisão
+ * do dono, #491); com 1 liga só, a própria liga (aí "Todos" nem existe como aba).
+ * Guard de runtime: config vazia falha alto em vez de virar undefined silencioso
+ * (que causaria loop de redirect a cada request).
+ */
+export function defaultLeagueFilter(
+  activeKeys: readonly LeagueFilter[],
+): LeagueFilter {
+  const first = activeKeys[0];
+  if (!first) {
+    throw new Error("ACTIVE_LEAGUES must contain at least one league");
+  }
+  return activeKeys.length > 1 ? "all" : first;
 }
-export const DEFAULT_LEAGUE_FILTER: LeagueFilter = firstActiveKey;
+
+export const DEFAULT_LEAGUE_FILTER: LeagueFilter =
+  defaultLeagueFilter(ACTIVE_LEAGUE_KEYS);
 
 /**
  * "all" só é considerado filtro ativo quando há mais de uma liga ativa (aí a aba
@@ -50,7 +60,7 @@ export function isActiveLeagueFilter(f: LeagueFilter): boolean {
 /**
  * Resolve o `?league=` da home (/jogos) pro filtro efetivo, ou `null` quando a
  * página deve redirecionar pra /jogos limpa. Sem param / param inválido → default
- * (primeira liga ativa, sempre ativa → nunca loop de redirect). `?league=all`
+ * (DEFAULT_LEAGUE_FILTER, sempre ativo → nunca loop de redirect). `?league=all`
  * EXPLÍCITO = aba "Todos" (só vale com >1 liga ativa). Key válida-mas-inativa (ex.:
  * `?league=wc` bookmarkado da Copa) → `null` → redirect pro default.
  */

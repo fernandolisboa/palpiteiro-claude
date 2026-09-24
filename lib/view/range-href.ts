@@ -24,9 +24,9 @@ export type RangeChoice =
 /**
  * Href puro pra home autenticada (`/jogos`) preservando a liga atual e aplicando
  * a próxima escolha de range. `preset=today5` (default) não aparece na URL. A liga
- * vai SEMPRE explícita, inclusive `league=all`: sem param, /jogos cai na PRIMEIRA
- * liga ativa (DEFAULT_LEAGUE_FILTER), não em "Todos" — omitir `all` faria a aba
- * "Todos" apontar pra liga default (#491).
+ * vai SEMPRE explícita, inclusive `league=all`: o default de /jogos sem param
+ * (DEFAULT_LEAGUE_FILTER) depende de quantas ligas estão ativas, então o href não
+ * pode assumir que omitir o param dá "Todos" (#491).
  * Aponta SEMPRE pra `/jogos`, nunca pra `/` — a raiz virou landing pública
  * estática (#373); apontar pra `/` joga o filtro na landing.
  *
