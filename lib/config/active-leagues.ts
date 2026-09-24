@@ -1,23 +1,31 @@
 import { leagueToKey } from "@/lib/format";
 import type { SupportedLeague } from "@/lib/providers/sports-data/leagues";
-import type { LeagueFilter } from "@/lib/view/types";
+import { parseLeagueFilter, type LeagueFilter } from "@/lib/view/types";
 
 /**
- * TEMPORÁRIO (Copa 2026): só a Copa está ativa enquanto Brasileirão e Champions
- * estão fora de temporada (voltam jul/ago). Reativar uma liga de clube = adicionar
- * de volta abaixo (mudança de uma linha). NÃO deletar suporte em SUPPORTED_LEAGUES /
- * providers / DB enum / canonical teams — eles devem permanecer 100% intactos.
+ * Ligas ATIVAS (temporada 2026/27, pós-Copa — #491): Brasileirão Série A e
+ * Champions League. A Copa do Mundo 2026 acabou e saiu daqui; o histórico dos
+ * jogos da Copa segue renderizando normalmente (páginas de jogo, dashboard,
+ * predições liquidadas) porque nada disso lê esta constante.
+ *
+ * Ativar/desativar uma liga = adicionar/remover abaixo (mudança de uma linha). NÃO
+ * deletar suporte em SUPPORTED_LEAGUES / providers / DB enum / canonical teams —
+ * eles devem permanecer 100% intactos (inclusive `world_cup`).
  *
  * Esta constante é a fonte de verdade única que dirige: (a) abas renderizadas em
- * league-tabs, (b) filtro default da home, (c) o que sync-upcoming-fixtures itera.
+ * league-tabs, (b) filtro default da home (a PRIMEIRA liga daqui), (c) o que
+ * sync-upcoming-fixtures itera, (d) o que prewarm-odds aquece.
  */
-export const ACTIVE_LEAGUES: readonly SupportedLeague[] = ["world_cup"];
+export const ACTIVE_LEAGUES: readonly SupportedLeague[] = [
+  "brasileirao_a",
+  "champions_league",
+];
 
 // Janela default de EXIBIÇÃO da home (preset `today5`). NÃO dirige mais o sync:
 // o sync busca a competição+temporada inteira via getFixturesBySeason.
 export const LIST_WINDOW_HOURS = 120; // 5 dias
 
-// Keys de filtro derivadas das ligas ativas (ex.: ['wc']).
+// Keys de filtro derivadas das ligas ativas (ex.: ['bsa', 'ucl']).
 export const ACTIVE_LEAGUE_KEYS = ACTIVE_LEAGUES.map(leagueToKey);
 
 // Filtro default da home quando não há ?league= (primeira liga ativa).
@@ -31,9 +39,26 @@ export const DEFAULT_LEAGUE_FILTER: LeagueFilter = firstActiveKey;
 
 /**
  * "all" só é considerado filtro ativo quando há mais de uma liga ativa (aí a aba
- * "Todos" faz sentido). Caso contrário, só keys de ligas ativas passam.
+ * "Todos" faz sentido — ela lista só as ligas ATIVAS, nunca uma inativa como a
+ * Copa). Caso contrário, só keys de ligas ativas passam.
  */
 export function isActiveLeagueFilter(f: LeagueFilter): boolean {
   if (f === "all") return ACTIVE_LEAGUES.length > 1;
   return (ACTIVE_LEAGUE_KEYS as string[]).includes(f);
+}
+
+/**
+ * Resolve o `?league=` da home (/jogos) pro filtro efetivo, ou `null` quando a
+ * página deve redirecionar pra /jogos limpa. Sem param / param inválido → default
+ * (primeira liga ativa, sempre ativa → nunca loop de redirect). `?league=all`
+ * EXPLÍCITO = aba "Todos" (só vale com >1 liga ativa). Key válida-mas-inativa (ex.:
+ * `?league=wc` bookmarkado da Copa) → `null` → redirect pro default.
+ */
+export function resolveHomeLeagueFilter(
+  param: string | undefined,
+): LeagueFilter | null {
+  const parsed = parseLeagueFilter(param);
+  const league: LeagueFilter =
+    param === "all" ? "all" : parsed === "all" ? DEFAULT_LEAGUE_FILTER : parsed;
+  return isActiveLeagueFilter(league) ? league : null;
 }

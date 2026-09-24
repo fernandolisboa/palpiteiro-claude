@@ -23,8 +23,10 @@ export type RangeChoice =
 
 /**
  * Href puro pra home autenticada (`/jogos`) preservando a liga atual e aplicando
- * a próxima escolha de range. Espelha `buildDashboardHref`: omite params no
- * default (`league=all` e `preset=today5` não aparecem na URL → `/jogos` limpa).
+ * a próxima escolha de range. `preset=today5` (default) não aparece na URL. A liga
+ * vai SEMPRE explícita, inclusive `league=all`: sem param, /jogos cai na PRIMEIRA
+ * liga ativa (DEFAULT_LEAGUE_FILTER), não em "Todos" — omitir `all` faria a aba
+ * "Todos" apontar pra liga default (#491).
  * Aponta SEMPRE pra `/jogos`, nunca pra `/` — a raiz virou landing pública
  * estática (#373); apontar pra `/` joga o filtro na landing.
  *
@@ -36,9 +38,9 @@ export function buildRangeHref(
 ): string {
   const params = new URLSearchParams();
 
-  if (current.league !== "all") params.set("league", current.league);
+  params.set("league", current.league);
 
-  // `today5` é o default — não polui a URL (mesma convenção de league=all).
+  // `today5` é o default — não polui a URL.
   if (next.preset !== "today5") {
     params.set("preset", next.preset);
     if (next.preset === "custom") {
@@ -47,8 +49,7 @@ export function buildRangeHref(
     }
   }
 
-  const qs = params.toString();
-  return qs ? `/jogos?${qs}` : "/jogos";
+  return `/jogos?${params.toString()}`;
 }
 
 /**
@@ -120,6 +121,6 @@ export function rangeEmptyMessage(range: ResolvedRange): {
   return {
     title: `Sem jogos — ${rangeLabel(range).toLowerCase()}`,
     detail:
-      "Copa do Mundo sem partidas agendadas nessa janela. Volte mais perto do próximo jogo.",
+      "Sem partidas agendadas nessa janela. Volte mais perto do próximo jogo.",
   };
 }
