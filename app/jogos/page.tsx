@@ -72,6 +72,9 @@ function filterToLeagues(filter: LeagueFilter): readonly SupportedLeague[] {
   if (filter === "bsa") return ["brasileirao_a"];
   if (filter === "ucl") return ["champions_league"];
   if (filter === "wc") return ["world_cup"];
+  if (filter === "sa") return ["serie_a"];
+  if (filter === "bl") return ["bundesliga"];
+  if (filter === "l1") return ["ligue_1"];
   return ACTIVE_LEAGUES;
 }
 

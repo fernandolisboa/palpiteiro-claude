@@ -122,6 +122,11 @@ export const CANONICAL_TEAMS: Record<SupportedLeague, readonly string[]> = {
     "Uruguay",
     "Uzbekistan",
   ] as const,
+  // Bootstrap vazio: scripts/generate-team-ids.ts semeia estas listas a partir do
+  // provider primário antes de a liga entrar em ACTIVE_LEAGUES.
+  serie_a: [],
+  bundesliga: [],
+  ligue_1: [],
 };
 
 export function isCanonicalTeam(name: string, league: SupportedLeague): boolean {
