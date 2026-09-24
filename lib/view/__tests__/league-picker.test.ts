@@ -7,8 +7,7 @@ import { SUPPORTED_LEAGUES } from "@/lib/providers/sports-data/leagues";
 
 const flat = (groups: ReturnType<typeof leaguePickerGroups>) =>
   groups.flatMap((g) => g.options);
-// Só as opções habilitadas: ligas de clube registradas mas fora de ACTIVE_LEAGUES
-// (ex.: Libertadores/Sul-Americana, ADR 0042) aparecem desabilitadas e não entram.
+// Só as opções habilitadas (liga de clube inativa aparece desabilitada).
 const activeValues = (groups: ReturnType<typeof leaguePickerGroups>) =>
   flat(groups)
     .filter((o) => o.active)
@@ -17,12 +16,7 @@ const activeValues = (groups: ReturnType<typeof leaguePickerGroups>) =>
 describe("leaguePickerGroups", () => {
   it("config pós-Copa (bsa+ucl): 'Todas' primeiro, depois Brasil e Europa, sem Copa (#491)", () => {
     const groups = leaguePickerGroups(["bsa", "ucl"]);
-    expect(groups.map((g) => g.label)).toEqual([
-      null,
-      "Brasil",
-      "América do Sul",
-      "Europa",
-    ]);
+    expect(groups.map((g) => g.label)).toEqual([null, "Brasil", "Europa"]);
     expect(activeValues(groups)).toEqual(["all", "bsa", "ucl"]);
   });
 
@@ -40,13 +34,7 @@ describe("leaguePickerGroups", () => {
   it("torneio inativo some; ativo volta com seu grupo", () => {
     expect(flat(leaguePickerGroups(["bsa", "ucl"])).some((o) => o.value === "wc")).toBe(false);
     const groups = leaguePickerGroups(["wc", "bsa"]);
-    expect(groups.map((g) => g.label)).toEqual([
-      null,
-      "Brasil",
-      "América do Sul",
-      "Europa",
-      "Seleções",
-    ]);
+    expect(groups.map((g) => g.label)).toEqual([null, "Brasil", "Europa", "Seleções"]);
     const byValue = Object.fromEntries(flat(groups).map((o) => [o.value, o.active]));
     expect(byValue).toMatchObject({ all: true, bsa: true, ucl: false, wc: true });
   });
@@ -58,7 +46,11 @@ describe("leaguePickerGroups", () => {
     expect([...values.slice(1)].sort()).toEqual([...allKeys].sort());
   });
 
-  it("Libertadores e Sul-Americana ficam em América do Sul (ADR 0042)", () => {
+  it("copas CONMEBOL inativas somem; ativas ficam em América do Sul (ADR 0045)", () => {
+    const values = flat(leaguePickerGroups(["bsa", "ucl"])).map((o) => o.value);
+    expect(values).not.toContain("lib");
+    expect(values).not.toContain("sula");
+
     const groups = leaguePickerGroups(["bsa", "lib", "sula"]);
     const southAmerica = groups.find((g) => g.label === "América do Sul");
     expect(southAmerica?.options).toEqual([

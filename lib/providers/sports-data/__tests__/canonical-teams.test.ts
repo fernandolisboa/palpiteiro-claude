@@ -42,7 +42,7 @@ describe("CANONICAL_TEAMS", () => {
 
 describe("FOOTBALL_DATA_ORG_TEAM_IDS coverage", () => {
   // Only leagues football-data.org serves (the CONMEBOL cups aren't on its free
-  // tier — ADR 0042); API-Football covers every league below.
+  // tier — ADR 0045); API-Football covers every league below.
   it("covers every canonical team in every league it serves", () => {
     for (const league of SUPPORTED_LEAGUES) {
       if (!FOOTBALL_DATA_ORG_LEAGUE_CODES[league]) continue;

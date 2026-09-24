@@ -16,7 +16,7 @@ export const SupportedLeagueSchema = z.enum(SUPPORTED_LEAGUES);
 //   football-data.org v4: codes BSA / CL / WC (numeric IDs 2013 / 2001 / 2000 also accepted).
 //   The CONMEBOL cups are NOT on football-data.org's free tier (Libertadores is paid
 //   "CLI"; Sudamericana isn't offered), so they have no code: API-Football is their
-//   only fixtures source (ADR 0042).
+//   only fixtures source (ADR 0045).
 export const API_FOOTBALL_LEAGUE_IDS: Record<SupportedLeague, number> = {
   brasileirao_a: 71,
   champions_league: 2,

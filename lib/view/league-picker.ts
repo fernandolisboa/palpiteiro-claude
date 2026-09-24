@@ -19,7 +19,12 @@ const LEAGUE_REGION: Record<LeagueKey, Region> = {
 
 // Torneio (Copa, a cada 4 anos) inativo é ESCONDIDO — "fora de temporada" pra Copa
 // seria mentira (#491). Liga de clube inativa aparece desabilitada.
-const HIDE_WHEN_INACTIVE: ReadonlySet<LeagueKey> = new Set<LeagueKey>(["wc"]);
+const HIDE_WHEN_INACTIVE: ReadonlySet<LeagueKey> = new Set<LeagueKey>([
+  "wc",
+  // Copas CONMEBOL registradas mas desligadas pelo orçamento da The Odds API (ADR 0045).
+  "lib",
+  "sula",
+]);
 
 export const ALL_LEAGUES_LABEL = "Todas as ligas";
 

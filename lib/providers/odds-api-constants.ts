@@ -9,7 +9,7 @@ export const SPORT_KEYS = {
   CHAMPIONS_LEAGUE: "soccer_uefa_champs_league",
   WORLD_CUP: "soccer_fifa_world_cup",
   // Listed on the-odds-api.com/sports-odds-data/sports-apis.html (2026-09); not yet
-  // confirmed via GET /v4/sports from here (cloud env has no key). ADR 0042.
+  // confirmed via GET /v4/sports from here (cloud env has no key). ADR 0045.
   COPA_LIBERTADORES: "soccer_conmebol_copa_libertadores",
   COPA_SUDAMERICANA: "soccer_conmebol_copa_sudamericana",
 } as const;

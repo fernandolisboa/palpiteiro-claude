@@ -454,7 +454,7 @@ function wrapFootballDataOrgError(
 }
 
 // Competition code for a league this provider serves. Leagues without a code (the
-// CONMEBOL cups — ADR 0042) are left out of supportedLeagues, so this only throws
+// CONMEBOL cups — ADR 0045) are left out of supportedLeagues, so this only throws
 // if a caller bypasses the FallbackProvider's capability gate.
 function competitionCode(league: SupportedLeague, method: string): string {
   const code = FOOTBALL_DATA_ORG_LEAGUE_CODES[league];
