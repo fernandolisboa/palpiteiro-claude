@@ -7,6 +7,8 @@ export const SUPPORTED_LEAGUES = [
   "serie_a",
   "bundesliga",
   "ligue_1",
+  "premier_league",
+  "la_liga",
 ] as const;
 export type SupportedLeague = (typeof SUPPORTED_LEAGUES)[number];
 export const SupportedLeagueSchema = z.enum(SUPPORTED_LEAGUES);
@@ -16,6 +18,8 @@ export const SupportedLeagueSchema = z.enum(SUPPORTED_LEAGUES);
 //   78 (Bundesliga), 61 (Ligue 1).
 //   football-data.org v4: codes BSA / CL / WC / SA / BL1 / FL1 (numeric IDs
 //   2013 / 2001 / 2000 / 2019 / 2002 / 2015 also accepted) — all in the free tier.
+//   Premier League / La Liga: API-Football 39 / 140; football-data.org PL / PD
+//   (IDs 2021 / 2014), also free tier.
 export const API_FOOTBALL_LEAGUE_IDS: Record<SupportedLeague, number> = {
   brasileirao_a: 71,
   champions_league: 2,
@@ -23,6 +27,8 @@ export const API_FOOTBALL_LEAGUE_IDS: Record<SupportedLeague, number> = {
   serie_a: 135,
   bundesliga: 78,
   ligue_1: 61,
+  premier_league: 39,
+  la_liga: 140,
 };
 
 export const FOOTBALL_DATA_ORG_LEAGUE_CODES: Record<SupportedLeague, string> = {
@@ -32,6 +38,8 @@ export const FOOTBALL_DATA_ORG_LEAGUE_CODES: Record<SupportedLeague, string> = {
   serie_a: "SA",
   bundesliga: "BL1",
   ligue_1: "FL1",
+  premier_league: "PL",
+  la_liga: "PD",
 };
 
 /**
@@ -42,8 +50,8 @@ export const FOOTBALL_DATA_ORG_LEAGUE_CODES: Record<SupportedLeague, string> = {
  *   prior year's label (last season is the most recently completed one — the
  *   current season hasn't kicked off yet).
  * - Champions League and the European domestic leagues (Serie A, Bundesliga,
- *   Ligue 1) are cross-year: August–May. The label is the year the season
- *   starts. January–July uses the prior year's label.
+ *   Ligue 1, Premier League, La Liga) are cross-year: August–May. The label is
+ *   the year the season starts. January–July uses the prior year's label.
  * - World Cup: single edition. Both providers key the 2026 tournament on
  *   season `2026` (the year it starts). Bump this when the next edition (2030)
  *   is onboarded.

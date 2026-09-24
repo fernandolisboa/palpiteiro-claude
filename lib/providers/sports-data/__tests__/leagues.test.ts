@@ -17,6 +17,8 @@ describe("SUPPORTED_LEAGUES", () => {
       "serie_a",
       "bundesliga",
       "ligue_1",
+      "premier_league",
+      "la_liga",
     ]);
   });
 });
@@ -42,6 +44,8 @@ describe("provider league maps", () => {
     expect(API_FOOTBALL_LEAGUE_IDS.serie_a).toBe(135);
     expect(API_FOOTBALL_LEAGUE_IDS.bundesliga).toBe(78);
     expect(API_FOOTBALL_LEAGUE_IDS.ligue_1).toBe(61);
+    expect(API_FOOTBALL_LEAGUE_IDS.premier_league).toBe(39);
+    expect(API_FOOTBALL_LEAGUE_IDS.la_liga).toBe(140);
   });
 
   it("expected football-data.org codes", () => {
@@ -51,6 +55,8 @@ describe("provider league maps", () => {
     expect(FOOTBALL_DATA_ORG_LEAGUE_CODES.serie_a).toBe("SA");
     expect(FOOTBALL_DATA_ORG_LEAGUE_CODES.bundesliga).toBe("BL1");
     expect(FOOTBALL_DATA_ORG_LEAGUE_CODES.ligue_1).toBe("FL1");
+    expect(FOOTBALL_DATA_ORG_LEAGUE_CODES.premier_league).toBe("PL");
+    expect(FOOTBALL_DATA_ORG_LEAGUE_CODES.la_liga).toBe("PD");
   });
 });
 
@@ -150,5 +156,17 @@ describe("currentSeason — European domestic leagues (cross-year, like UCL)", (
     for (const l of leagues) {
       expect(currentSeason(l, new Date("2027-05-20T12:00:00Z"))).toBe(2026);
     }
+  });
+});
+
+describe("currentSeason — Premier League / La Liga (cross-year)", () => {
+  it("August → current year (season kicks off)", () => {
+    expect(currentSeason("premier_league", new Date("2026-08-22T12:00:00Z"))).toBe(2026);
+    expect(currentSeason("la_liga", new Date("2026-08-15T12:00:00Z"))).toBe(2026);
+  });
+
+  it("May → previous year (season finishing)", () => {
+    expect(currentSeason("premier_league", new Date("2027-05-20T12:00:00Z"))).toBe(2026);
+    expect(currentSeason("la_liga", new Date("2027-05-20T12:00:00Z"))).toBe(2026);
   });
 });

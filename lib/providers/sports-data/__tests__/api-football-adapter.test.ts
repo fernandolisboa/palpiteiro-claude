@@ -655,7 +655,7 @@ describe("seasonForApiFootballLeagueId — Champions League (id 2)", () => {
 describe("seasonForApiFootballLeagueId — unmapped id", () => {
   it("throws so callers can't silently use a wrong season", () => {
     expect(() =>
-      seasonForApiFootballLeagueId(39, new Date("2026-05-15T12:00:00Z")),
+      seasonForApiFootballLeagueId(999999, new Date("2026-05-15T12:00:00Z")),
     ).toThrow(/No SupportedLeague mapped/);
   });
 });

@@ -16,7 +16,10 @@ import { getLastOddsApiQuota } from "@/lib/providers/odds-api";
 // NÃO é a cobertura do snapshot nem o gasto de quota: a escrita interna cobre a janela
 // HARDCODED de 7d dentro de `ensureOddsSnapshotsFresh` (fetch-and-snapshot.ts), que
 // esta fase não edita. Não "consertar" este arg esperando mudar cobertura.
-export const ODDS_PREWARM_WINDOW_HOURS = 48;
+// 24h (era 48h): com 4 ligas ativas (ADR 0045), cada run com jogo na janela custa
+// 2 créditos por liga (h2h + totals, região eu). 24h corta os runs "vazios" da
+// véspera e mantém o prewarm dentro dos 500 créditos/mês do plano grátis.
+export const ODDS_PREWARM_WINDOW_HOURS = 24;
 
 export type PrewarmOddsSummary = {
   consideredLeagues: number;

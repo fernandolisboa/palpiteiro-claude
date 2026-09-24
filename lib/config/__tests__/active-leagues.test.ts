@@ -10,9 +10,13 @@ import {
 } from "@/lib/config/active-leagues";
 
 describe("active-leagues config", () => {
-  it("ativa Brasileirão + Champions (pós-Copa, #491), Brasileirão primeiro", () => {
-    expect(ACTIVE_LEAGUES).toEqual(["brasileirao_a", "champions_league"]);
-    expect(ACTIVE_LEAGUE_KEYS).toEqual(["bsa", "ucl"]);
+  it("ativa Brasileirão + Champions + Premier League (#491, ADR 0045), Brasileirão primeiro", () => {
+    expect(ACTIVE_LEAGUES).toEqual([
+      "brasileirao_a",
+      "champions_league",
+      "premier_league",
+    ]);
+    expect(ACTIVE_LEAGUE_KEYS).toEqual(["bsa", "ucl", "epl"]);
   });
 
   it("usa 'all' (Todos) como filtro default com >1 liga ativa", () => {
@@ -28,7 +32,9 @@ describe("active-leagues config", () => {
   it("considera ativas só as keys de ligas ativas — Copa encerrada fica de fora", () => {
     expect(isActiveLeagueFilter("bsa")).toBe(true);
     expect(isActiveLeagueFilter("ucl")).toBe(true);
+    expect(isActiveLeagueFilter("epl")).toBe(true);
     expect(isActiveLeagueFilter("wc")).toBe(false);
+    expect(isActiveLeagueFilter("laliga")).toBe(false);
   });
 
   it("considera 'all' ativo quando há mais de uma liga ativa", () => {

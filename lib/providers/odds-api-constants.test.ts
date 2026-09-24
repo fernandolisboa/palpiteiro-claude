@@ -25,6 +25,8 @@ describe("leagueToSportKey", () => {
     expect(leagueToSportKey("champions_league")).toBe(
       SPORT_KEYS.CHAMPIONS_LEAGUE,
     );
+    expect(leagueToSportKey("premier_league")).toBe("soccer_epl");
+    expect(leagueToSportKey("la_liga")).toBe("soccer_spain_la_liga");
   });
 
   it("covers every SupportedLeague with a distinct sport key", () => {

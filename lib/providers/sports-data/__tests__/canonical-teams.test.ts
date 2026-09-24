@@ -21,6 +21,11 @@ describe("CANONICAL_TEAMS", () => {
     expect(CANONICAL_TEAMS.world_cup.length).toBe(48);
   });
 
+  it("has 20 Premier League and 20 La Liga teams (2026/27)", () => {
+    expect(CANONICAL_TEAMS.premier_league.length).toBe(20);
+    expect(CANONICAL_TEAMS.la_liga.length).toBe(20);
+  });
+
   it("names are non-empty and unique within each league", () => {
     for (const league of SUPPORTED_LEAGUES) {
       const names = CANONICAL_TEAMS[league];
@@ -37,12 +42,20 @@ describe("CANONICAL_TEAMS", () => {
   });
 });
 
+// Lacuna conhecida e explícita (ADR 0045 §3): id do football-data não confirmado
+// sem key. A API-Football (primária) cobre o time; fecha ao rodar
+// scripts/generate-team-ids.ts --provider=football-data-org.
+const FOOTBALL_DATA_ORG_KNOWN_GAPS: Partial<Record<string, readonly string[]>> = {
+  la_liga: ["Racing Santander"],
+};
+
 describe("FOOTBALL_DATA_ORG_TEAM_IDS coverage", () => {
   it("covers every canonical team in every league", () => {
     for (const league of SUPPORTED_LEAGUES) {
       const map = FOOTBALL_DATA_ORG_TEAM_IDS[league];
+      const gaps = FOOTBALL_DATA_ORG_KNOWN_GAPS[league] ?? [];
       const missing = CANONICAL_TEAMS[league].filter(
-        (name) => !(name in map),
+        (name) => !(name in map) && !gaps.includes(name),
       );
       expect(missing, `football-data-org missing teams in ${league}`).toEqual(
         [],

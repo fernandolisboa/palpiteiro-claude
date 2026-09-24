@@ -16,6 +16,8 @@ const LEAGUE_REGION: Record<LeagueKey, Region> = {
   sa: "Europa",
   bl: "Europa",
   l1: "Europa",
+  epl: "Europa",
+  laliga: "Europa",
 };
 
 // Torneio (Copa, a cada 4 anos) inativo é ESCONDIDO — "fora de temporada" pra Copa
@@ -28,6 +30,8 @@ const HIDE_WHEN_INACTIVE: ReadonlySet<LeagueKey> = new Set<LeagueKey>([
   "sa",
   "bl",
   "l1",
+  // La Liga: mesmo motivo (orçamento), ADR 0045 §5.
+  "laliga",
 ]);
 
 export const ALL_LEAGUES_LABEL = "Todas as ligas";

@@ -29,8 +29,11 @@ const TEAM_NAME_STOPWORDS = new Set([
   "da",
   "club",
   "clube",
-  "atletico",
-  "athletic",
+  // "and": The Odds API escreve "Brighton and Hove Albion"; football-data usa "&".
+  "and",
+  // "atletico"/"athletic" NÃO são stopwords (ADR 0045): com elas, "Atlético Madrid"
+  // virava "madrid" e casava por inclusão com "Real Madrid" (1X2 invertido no
+  // dérbi), e "Athletic Club" virava "" (nunca casava odds de "Athletic Bilbao").
 ]);
 
 /**
@@ -94,6 +97,30 @@ const TEAM_NAME_ALIASES: Partial<
     Czechia: "Czech Republic",
     Turkey: "Türkiye",
     "United States": "USA",
+  },
+  premier_league: {
+    Brighton: "Brighton & Hove Albion FC",
+    Coventry: "Coventry City FC",
+    Ipswich: "Ipswich Town FC",
+    Leeds: "Leeds United FC",
+    Newcastle: "Newcastle United FC",
+    Tottenham: "Tottenham Hotspur FC",
+  },
+  la_liga: {
+    Alaves: "Deportivo Alavés",
+    "Celta Vigo": "RC Celta de Vigo",
+    "Deportivo La Coruna": "RC Deportivo La Coruña",
+    Espanyol: "RCD Espanyol",
+    Levante: "Levante UD",
+    "Real Betis": "Real Betis Balompié",
+    "Real Sociedad": "Real Sociedad de Fútbol",
+    // Canônicos encurtados de propósito (ADR 0045): o nome completo do
+    // football-data contém "Barcelona"/"Madrid" e casaria por inclusão as odds
+    // do rival da mesma cidade.
+    "RCD Espanyol de Barcelona": "RCD Espanyol",
+    "Rayo Vallecano de Madrid": "Rayo Vallecano",
+    "Real Racing Club de Santander": "Racing Santander",
+    "Real Racing Club": "Racing Santander",
   },
 };
 

@@ -12,21 +12,19 @@ describe("leaguePickerGroups", () => {
   it("config pós-Copa (bsa+ucl): 'Todas' primeiro, depois Brasil e Europa, sem Copa (#491)", () => {
     const groups = leaguePickerGroups(["bsa", "ucl"]);
     expect(groups.map((g) => g.label)).toEqual([null, "Brasil", "Europa"]);
-    expect(flat(groups).map((o) => o.value)).toEqual(["all", "bsa", "ucl"]);
-    expect(flat(groups).every((o) => o.active)).toBe(true);
+    expect(flat(groups).map((o) => o.value)).toEqual(["all", "bsa", "ucl", "epl"]);
+    expect(flat(groups).find((o) => o.value === "epl")?.active).toBe(false);
   });
 
   it("usa a config real por default (ACTIVE_LEAGUE_KEYS)", () => {
-    expect(flat(leaguePickerGroups()).map((o) => o.value)).toEqual([
-      "all",
-      "bsa",
-      "ucl",
-    ]);
+    const options = flat(leaguePickerGroups());
+    expect(options.map((o) => o.value)).toEqual(["all", "bsa", "ucl", "epl"]);
+    expect(options.every((o) => o.active)).toBe(true);
   });
 
   it("sem 'Todas' com uma liga ativa; liga de clube inativa fica desabilitada", () => {
     const options = flat(leaguePickerGroups(["bsa"]));
-    expect(options.map((o) => o.value)).toEqual(["bsa", "ucl"]);
+    expect(options.map((o) => o.value)).toEqual(["bsa", "ucl", "epl"]);
     expect(options.find((o) => o.value === "ucl")?.active).toBe(false);
   });
 
@@ -35,7 +33,18 @@ describe("leaguePickerGroups", () => {
     const groups = leaguePickerGroups(["wc", "bsa"]);
     expect(groups.map((g) => g.label)).toEqual([null, "Brasil", "Europa", "Seleções"]);
     const byValue = Object.fromEntries(flat(groups).map((o) => [o.value, o.active]));
-    expect(byValue).toEqual({ all: true, bsa: true, ucl: false, wc: true });
+    expect(byValue).toEqual({ all: true, bsa: true, ucl: false, wc: true, epl: false });
+  });
+
+  it("La Liga desligada por orçamento some do seletor; ativada, aparece em Europa (ADR 0045)", () => {
+    expect(flat(leaguePickerGroups(["bsa", "ucl", "epl"])).some((o) => o.value === "laliga")).toBe(false);
+    const groups = leaguePickerGroups(["bsa", "laliga"]);
+    const europa = groups.find((g) => g.label === "Europa");
+    expect(europa?.options.find((o) => o.value === "laliga")).toEqual({
+      value: "laliga",
+      label: "La Liga",
+      active: true,
+    });
   });
 
   it("ligas europeias fora do orçamento somem quando inativas; ativas aparecem em Europa", () => {
@@ -43,7 +52,8 @@ describe("leaguePickerGroups", () => {
     for (const k of ["sa", "bl", "l1"]) expect(inactive).not.toContain(k);
     const groups = leaguePickerGroups(["bsa", "ucl", "sa"]);
     const europa = groups.find((g) => g.label === "Europa");
-    expect(europa?.options.map((o) => o.value)).toEqual(["ucl", "sa"]);
+    // epl é liga de clube registrada e não escondida: aparece desabilitada.
+    expect(europa?.options.map((o) => o.value)).toEqual(["ucl", "sa", "epl"]);
   });
 
   it("toda liga suportada tem opção (escala com SUPPORTED_LEAGUES)", () => {

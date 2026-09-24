@@ -23,6 +23,8 @@ export const leagueEnum = pgEnum("league", [
   "serie_a",
   "bundesliga",
   "ligue_1",
+  "premier_league",
+  "la_liga",
 ]);
 
 export const matchStatusEnum = pgEnum("match_status", [
