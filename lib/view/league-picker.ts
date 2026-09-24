@@ -30,8 +30,6 @@ const HIDE_WHEN_INACTIVE: ReadonlySet<LeagueKey> = new Set<LeagueKey>([
   "sa",
   "bl",
   "l1",
-  // La Liga: mesmo motivo (orçamento), ADR 0045 §5.
-  "laliga",
 ]);
 
 export const ALL_LEAGUES_LABEL = "Todas as ligas";

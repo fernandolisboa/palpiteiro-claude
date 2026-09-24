@@ -105,7 +105,7 @@ describe("ensureUpcomingFixturesSynced", () => {
     expect(getFixturesByDate).not.toHaveBeenCalled();
   });
 
-  it("sincroniza só ligas ativas (Brasileirão + Champions + Premier League), nunca a Copa encerrada (#491) nem La Liga desligada (ADR 0045)", async () => {
+  it("sincroniza só ligas ativas (Brasileirão + Champions + Premier League + La Liga), nunca a Copa encerrada (#491)", async () => {
     const getFixturesBySeason = vi.fn().mockResolvedValue([]);
     __setSportsDataProviderForTesting(makeProvider({ getFixturesBySeason }));
 
@@ -115,20 +115,22 @@ describe("ensureUpcomingFixturesSynced", () => {
       ([league]) => league,
     );
     expect(new Set(leaguesRequested)).toEqual(
-      new Set(["brasileirao_a", "champions_league", "premier_league"]),
+      new Set(["brasileirao_a", "champions_league", "premier_league", "la_liga"]),
     );
     expect(leaguesRequested).not.toContain("world_cup");
-    expect(leaguesRequested).not.toContain("la_liga");
+    expect(leaguesRequested).not.toContain("serie_a");
   });
 
   it("upserta as fixtures de todas as ligas ativas num upsert só", async () => {
     const bsa = { id: "bsa-1" } as unknown as NormalizedFixture;
     const ucl = { id: "ucl-1" } as unknown as NormalizedFixture;
     const epl = { id: "epl-1" } as unknown as NormalizedFixture;
+    const lal = { id: "lal-1" } as unknown as NormalizedFixture;
     const byLeague: Record<string, NormalizedFixture[]> = {
       brasileirao_a: [bsa],
       champions_league: [ucl],
       premier_league: [epl],
+      la_liga: [lal],
     };
     const getFixturesBySeason = vi.fn((league: string) =>
       Promise.resolve(byLeague[league] ?? []),
@@ -138,7 +140,7 @@ describe("ensureUpcomingFixturesSynced", () => {
     await ensureUpcomingFixturesSynced();
 
     expect(upsertSpy).toHaveBeenCalledTimes(1);
-    expect(upsertSpy).toHaveBeenCalledWith([bsa, ucl, epl]);
+    expect(upsertSpy).toHaveBeenCalledWith([bsa, ucl, epl, lal]);
   });
 
   it("não roda (no-op) quando o lock não é adquirido", async () => {

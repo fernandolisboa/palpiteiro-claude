@@ -1,4 +1,4 @@
-# ADR 0045 — Premier League e La Liga como ligas suportadas (PL ativa, La Liga desligada por orçamento)
+# ADR 0045 — Premier League e La Liga como ligas suportadas e ativas
 
 ## Status
 
@@ -26,7 +26,7 @@ O id do Racing no football-data não foi confirmado, então ficou fora do mapa, 
 
 `teamsMatch` casa por igualdade **ou inclusão** do nome normalizado. Com `atletico`/`athletic` como stopwords, "Atlético Madrid" virava "madrid" e casava com "Real Madrid CF" e "Rayo Vallecano de Madrid" (no dérbi, o 1X2 inverteria casa/fora), e "Athletic Club" virava "" (nunca achava as odds de "Athletic Bilbao"). Decisões: tirar `atletico`/`athletic` das stopwords e adicionar `and` ("Brighton and Hove Albion" × "Brighton & Hove Albion FC"). Encurtar dois canônicos pra o nome não conter o do rival da mesma cidade: "RCD Espanyol" (não "… de Barcelona") e "Rayo Vallecano" (não "… de Madrid"), com alias pro nome longo do football-data. Um teste pina que cada nome da Odds API casa **exatamente um** canônico e que nenhum par de canônicos se casa. Os nomes da Odds API do teste vêm da convenção conhecida do provider e não foram validados ao vivo, porque não há `ODDS_API_KEY` neste ambiente. A mudança de stopwords foi conferida contra Brasileirão e Champions pela suíte existente.
 
-### 5. Orçamento: janela de prewarm 48h → 24h, e só a Premier League ligada
+### 5. Orçamento: janela de prewarm 48h → 24h, e as duas ligadas por decisão do dono
 
 Custo por fonte, lido do código:
 
@@ -43,19 +43,21 @@ Estimativa mensal do prewarm com janela de 24h, contando os runs com jogo nas pr
 | Premier League (concentrada sáb/dom, pausas FIFA) | ~10–15 | ~90–130 |
 | La Liga (sexta a segunda quase toda semana) | ~13–16 | ~110–140 |
 
-Brasileirão + Champions + as duas = **~425–535** só de prewarm, antes do uso. Não cabe com folga em 500, e estourar a cota derruba odds de **todas** as ligas até o reset. Com **só a Premier League**: **~315–395** + uso (~30–80 pra um usuário) = **~345–475**. Cabe. Com a janela antiga de 48h, a mesma PL somaria ~50% a mais. Daí a decisão: PL em `ACTIVE_LEAGUES`; La Liga registrada, fora de `ACTIVE_LEAGUES` e escondida do seletor (`HIDE_WHEN_INACTIVE`, mesmo mecanismo da ADR 0044), porque "fora de temporada" seria mentira. Quando o Brasileirão acabar (dezembro), abrem ~200 créditos/mês e La Liga cabe.
+Brasileirão + Champions + as duas = **~425–535** só de prewarm, antes do uso (~30–80 pra um usuário). Isso fica **no limite ou acima** dos 500. Estourar a cota derruba as odds de **todas** as ligas até o reset mensal. Só a Premier League daria ~345–475 com o uso. Com a janela antiga de 48h, cada liga somaria ~50% a mais.
 
-**Ativar La Liga** = adicionar `"la_liga"` em `ACTIVE_LEAGUES` (`lib/config/active-leagues.ts`) e tirar `"laliga"` de `HIDE_WHEN_INACTIVE` (`lib/view/league-picker.ts`). Trocar PL por La Liga é a mesma edição invertida.
+**Decisão do dono (2026-09-24): as duas ligadas**, ciente do risco de estouro. Ambas entram em `ACTIVE_LEAGUES`, e nenhuma fica em `HIDE_WHEN_INACTIVE`. Quando o Brasileirão acabar (dezembro), abrem ~200 créditos/mês e a folga volta.
+
+**Recuo se a cota apertar** (acompanhar `quotaMonthlyUsed` no log `prewarm_odds.run_complete`; se passar de ~400 antes do dia 20): tirar `"la_liga"` de `ACTIVE_LEAGUES` (`lib/config/active-leagues.ts`) e pôr `"laliga"` em `HIDE_WHEN_INACTIVE` (`lib/view/league-picker.ts`). É o mesmo mecanismo da ADR 0044.
 
 ## Alternativas rejeitadas
 
-1. **As duas ligadas com janela de 24h**: ~425–535 só de prewarm. Estourar a cota apaga as odds de todas as ligas.
+1. **Só a Premier League ligada**: cabe com folga, mas o dono preferiu ter as duas e aceitar o risco de cota (§5).
 2. **Prewarm só em ligas com análise recente**: economiza, mas muda a política de cache de todas as ligas. Fica como follow-up se o dono quiser as duas no plano grátis.
 3. **Odds featured via API-Football (plano Pro pago)**: o roteador de odds (ADR 0025) manda featured pra The Odds API. Trocar isso é decisão de provider, com ADR próprio.
 4. **Canônicos longos do football-data sem mexer em stopwords**: mantém o 1X2 invertido nos dérbis de Madri/Barcelona e as odds do Athletic ausentes.
 
 ## Consequências
 
-- /jogos ganha a Premier League (região Europa); La Liga não aparece até ser ativada.
-- O sync de fixtures (football-data grátis cobre `PL`/`PD`) passa a buscar a temporada da PL a cada 6h.
-- O teto real da cota continua sendo a medição do `prewarm_odds.run_complete` (`quotaMonthlyUsed`). Se passar de ~400 no meio do mês, desligue a PL.
+- /jogos ganha Premier League e La Liga (região Europa).
+- O sync de fixtures (football-data grátis cobre `PL`/`PD`) passa a buscar as duas temporadas a cada 6h.
+- O teto real da cota continua sendo a medição do `prewarm_odds.run_complete` (`quotaMonthlyUsed`). Se passar de ~400 no meio do mês, aplique o recuo do §5.

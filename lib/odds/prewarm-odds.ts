@@ -18,7 +18,7 @@ import { getLastOddsApiQuota } from "@/lib/providers/odds-api";
 // esta fase não edita. Não "consertar" este arg esperando mudar cobertura.
 // 24h (era 48h): com mais ligas ativas (ADR 0045), cada run com jogo na janela custa
 // 2 créditos por liga (h2h + totals, região eu). 24h corta os runs "vazios" da
-// véspera e mantém o prewarm dentro dos 500 créditos/mês do plano grátis.
+// véspera, pra caber o máximo possível nos 500 créditos/mês do plano grátis (conta no §5).
 export const ODDS_PREWARM_WINDOW_HOURS = 24;
 
 export type PrewarmOddsSummary = {
