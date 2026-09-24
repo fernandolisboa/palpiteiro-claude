@@ -357,10 +357,11 @@ function resolveExtraLines(
  * Fan-out cross-mercado: analisa TODOS os mercados ativos do jogo (audiência ∩ liga),
  * uma predição REAL por mercado (cada uma logada em ai_calls), ranqueadas no cliente.
  *
- * Ordem dos gates é LOAD-BEARING: o flag re-check e o guard de candidatos-vazios vêm
- * ANTES do checkAnalysisRateLimit (que INCREMENTA o contador — é consumo, não leitura),
- * pra um POST flag-off ou um jogo sem mercado NUNCA queimar um slot diário. Rate-limit
- * é o ÚLTIMO gate antes do spend. Best-of-successful: 1 mercado falho não derruba o run.
+ * Ordem dos gates é LOAD-BEARING: TODOS os gates grátis (auth, acesso, flag re-check, jogo,
+ * analisabilidade, candidatos-vazios) vêm ANTES do 1º checkAnalysisRateLimit (que INCREMENTA
+ * o contador — é consumo, não leitura), pra um POST flag-off ou um jogo sem mercado NUNCA
+ * queimar um slot diário. Rate-limit é o ÚLTIMO gate antes do spend e cobra 1 slot POR
+ * mercado (#492), como o analyzeMarkets. Best-of-successful: 1 mercado falho não derruba o run.
  */
 export async function analyzeBestBet(
   _prev: AnalyzeBestBetResult | null,
@@ -424,34 +425,60 @@ export async function analyzeBestBet(
     return { ok: false, error: "Nenhum mercado disponível para este jogo." };
   }
   // Linhas extras (#175): flag SEPARADA (enable_over_under_extra_lines), NÃO a do
-  // best-bet. Resolvida UMA vez por candidato no FanOutMarket — o MESMO valor alimenta
-  // o pré-warm e o predict (senão predict resolveria um cartucho diferente do aquecido).
+  // best-bet. Leitura grátis → ANTES do 1º slot. Resolvida UMA vez por mercado no
+  // FanOutMarket — o MESMO valor alimenta o pré-warm e o predict (senão predict
+  // resolveria um cartucho diferente do aquecido).
   const extraLinesEnabled = await getEnableOverUnderExtraLines();
-  const fanOut: FanOutMarket[] = candidates.map((c) => ({
-    marketKey: c.key,
-    extraLines: resolveExtraLines(c.key, match.league, extraLinesEnabled),
-  }));
-  // Rate-limit é o ÚLTIMO gate antes do spend (incrementa 1× por run). ATENÇÃO: 1 slot
-  // aqui autoriza um RUN inteiro — até MAX_FANOUT_MARKETS predict() pagos + até
-  // MAX_ADDITIONAL_FETCHES créditos de odds. Diferente do analyzeMatch (1 slot = 1
-  // call). O teto diário (lib/rate-limit.ts) não foi rederivado pra esse multiplicador
-  // — re-avaliar o budget/dia (ou cobrar slots proporcionais) ANTES de ligar a flag.
-  const rateLimit = await checkAnalysisRateLimit(
-    session.user.id,
-    session.user.role,
-  );
-  if (!rateLimit.ok) {
-    if (rateLimit.reason === "fail-closed") {
+  // Rate-limit POR MERCADO (N slots, #492 / Report 01 #3): 1 slot por candidato, em ordem,
+  // ANTES do spend — mesma disciplina do analyzeMarkets. checkAnalysisRateLimit incrementa
+  // 1/call (sem count param), então N chamadas = N slots. Para no 1º não-ok pra não queimar
+  // slots além do teto. `granted` é sempre um PREFIXO de `candidates` → `candidates.slice(
+  // granted.length)` é a cauda exata sem slot. Invariante de spend: slots consumidos ==
+  // granted.length == mercados no runFanOut == predict() pagos. extraLines é resolvido POR
+  // mercado (flag do cartucho), nunca vira mercado extra → não cobra slot a mais.
+  //
+  // Budget parcial: DEGRADA como o analyzeMarkets (roda os concedidos, a cauda vira
+  // "indisponível" na view) em vez de recusar. Seguro pra semântica de "melhor aposta": o
+  // rank é por-entry (independente dos irmãos) e o painel já é best-of-successful — um
+  // mercado não analisado aparece em "Mercados indisponíveis" com o motivo, então o "melhor"
+  // fica explicitamente limitado aos analisados. A ordem de `candidates` (marketsForAudience,
+  // capCandidates Tier-1-first) faz over/under + 1X2 serem os primeiros concedidos.
+  const granted: typeof candidates = [];
+  let capRl: RateLimitResult | null = null;
+  for (const c of candidates) {
+    const rl = await checkAnalysisRateLimit(session.user.id, session.user.role);
+    if (rl.ok) {
+      granted.push(c);
+      continue;
+    }
+    if (rl.reason === "fail-closed") {
+      // KV ausente p/ não-admin: indisponível (não um teto real). Aborta o run inteiro
+      // ANTES de qualquer spend (fail-closed só ocorre na 1ª call: sem KV não há limiter).
       return {
         ok: false,
         error: "Análises temporariamente indisponíveis. Tente mais tarde.",
       };
     }
+    // Teto real atingido: para de consumir; este + a cauda ficam sem análise.
+    capRl = rl;
+    break;
+  }
+  if (granted.length === 0) {
+    // capRl SEMPRE setado aqui: fail-closed já retornou; granted vazio só por cap na 1ª call.
     return {
       ok: false,
-      error: `Você atingiu o limite de ${rateLimit.limit} análises por dia. Tente novamente amanhã.`,
+      error: `Você atingiu o limite de ${capRl?.limit ?? 0} análises por dia. Tente novamente amanhã.`,
     };
   }
+  const rateLimitedErrors = candidates.slice(granted.length).map((c) => ({
+    marketKey: c.key,
+    message: "Limite diário atingido — não analisado.",
+  }));
+  // FanOut só sobre os CONCEDIDOS → nenhum predict() nem crédito de odds num mercado sem slot.
+  const fanOut: FanOutMarket[] = granted.map((c) => ({
+    marketKey: c.key,
+    extraLines: resolveExtraLines(c.key, match.league, extraLinesEnabled),
+  }));
   // Pré-aquece os mercados *additional* (btts/dupla chance/over_under multi-linha): o
   // descriptor EFETIVO sai do MESMO m.extraLines do FanOutMarket. Cada um numa chamada
   // própria (ensureOddsSnapshotsFresh hard-throws em seed faltante) → a falha de um vira
@@ -475,7 +502,9 @@ export async function analyzeBestBet(
     JSON.stringify({
       scope: "analyzeBestBet",
       matchId,
-      candidates: fanOut.length,
+      candidates: candidates.length,
+      granted: granted.length,
+      rateLimited: rateLimitedErrors.length,
       additionalFetches: additionalToFetch.length,
     }),
   );
@@ -490,7 +519,7 @@ export async function analyzeBestBet(
       });
     }
   }
-  // Fan-out SERIAL: predict() por candidato (a única porta pro LLM), best-of-successful.
+  // Fan-out SERIAL: predict() por mercado concedido (a única porta pro LLM), best-of-successful.
   const outcomes = await runFanOut(
     { matchId, userId: session.user.id, isAdmin, modelOverride },
     fanOut,
@@ -510,17 +539,22 @@ export async function analyzeBestBet(
       );
     }
   }
-  const view = toBestBetView(outcomes, aiCallByMarketKey, preWarmErrors);
+  const view = toBestBetView(
+    outcomes,
+    aiCallByMarketKey,
+    preWarmErrors,
+    rateLimitedErrors,
+  );
   if (view.entries.length === 0) {
     // Todos falharam → estado de erro (espelha o total-failure do analyzeMatch), NÃO um
-    // sucesso vazio. O run pode ter pago ≤N calls pós-Anthropic + 1 slot — surge como erro.
+    // sucesso vazio. O run pode ter pago ≤N calls pós-Anthropic + N slots — surge como erro.
     return {
       ok: false,
       error: view.errors[0]?.message ?? "Nenhum mercado pôde ser analisado.",
     };
   }
   // PASSO DE SÍNTESE (ADR 0030 / #353): turna as N análises numa manchete. Roda DENTRO
-  // do mesmo run (mesmo slot de rate-limit), sobre o FanOutOutcome[] EM MEMÓRIA — sem
+  // do mesmo run (sem slot próprio — ver Report 01 #3), sobre o FanOutOutcome[] EM MEMÓRIA — sem
   // re-query. Haiku (default do gerador). NULLABLE é LOAD-BEARING: a síntese roda DEPOIS
   // de até 6 predict() PAGOS; se ela falhar (Haiku throw, value-leak, …), o fan-out pago
   // NÃO pode ser descartado → log + palpite:null. Espelha a assimetria do generator (o
@@ -593,8 +627,8 @@ export type AnalyzeMarketsResult =
  * analisados (sem "melhor" pick), cada um vira sua predição + ai_call (custo por mercado) e
  * aterrissa na sua seção colapsável (#243) via revalidatePath → toMarketAnalysisSections.
  *
- * DINHEIRO REAL: N mercados = N predict() pagos. Diferente do analyzeBestBet (1 slot autoriza o
- * run inteiro), aqui o rate-limit é cobrado POR MERCADO (N slots) — o AC do #245 exige que
+ * DINHEIRO REAL: N mercados = N predict() pagos. Como o analyzeBestBet (#492), o rate-limit é
+ * cobrado POR MERCADO (N slots) — o AC do #245 exige que
  * custo/rate-limit reflitam N análises. checkAnalysisRateLimit incrementa 1/call (sem count
  * param), então creditamos N chamando-o 1× por mercado, ANTES do spend, parando no 1º não-ok
  * (degrada com graça: os concedidos rodam, a cauda vira "rate-limited"). Spend de pior caso =

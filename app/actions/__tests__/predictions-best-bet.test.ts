@@ -249,21 +249,6 @@ describe("analyzeBestBet — gate order (rate-limit é o ÚLTIMO antes do spend)
     expect(mockPredict).not.toHaveBeenCalled();
   });
 
-  it("happy path WC → rate-limit chamado EXATAMENTE 1× pra N mercados", async () => {
-    await analyzeBestBet(null, form({ matchId: VALID_MATCH_ID }));
-    expect(mockRateLimit).toHaveBeenCalledTimes(1);
-    expect(mockRateLimit).toHaveBeenCalledWith("u1", "admin");
-  });
-
-  it("rate-limit atingido → {ok:false}, SEM predict", async () => {
-    mockRateLimit.mockResolvedValue({ ok: false, limit: 7, remaining: 0, reset: 0 });
-    const res = await analyzeBestBet(null, form({ matchId: VALID_MATCH_ID }));
-    expect(res).toEqual({
-      ok: false,
-      error: "Você atingiu o limite de 7 análises por dia. Tente novamente amanhã.",
-    });
-    expect(mockPredict).not.toHaveBeenCalled();
-  });
 
   it("matchId ausente / inválido → {ok:false} antes de qualquer gate", async () => {
     expect(await analyzeBestBet(null, form({}))).toEqual({
@@ -310,6 +295,137 @@ describe("analyzeBestBet — gate order (rate-limit é o ÚLTIMO antes do spend)
     expect(mockEnsureOdds).not.toHaveBeenCalled();
     expect(mockRateLimit).not.toHaveBeenCalled();
     expect(mockPredict).not.toHaveBeenCalled();
+  });
+});
+
+describe("analyzeBestBet — rate-limit POR MERCADO (#492, Report 01 #3)", () => {
+  const ok = { ok: true, limit: 20, remaining: 19, reset: 0 };
+  const capped = { ok: false, limit: 7, remaining: 0, reset: 0 };
+
+  it("WC (4 mercados) → EXATAMENTE 4 slots consumidos == 4 predict()", async () => {
+    const res = await analyzeBestBet(null, form({ matchId: VALID_MATCH_ID }));
+    expect(mockRateLimit).toHaveBeenCalledTimes(4);
+    for (const call of mockRateLimit.mock.calls) {
+      expect(call).toEqual(["u1", "admin"]);
+    }
+    expect(mockPredict).toHaveBeenCalledTimes(4);
+    expect(res.ok).toBe(true);
+    if (res.ok) expect(res.view.unavailableMarkets).toBe(0);
+  });
+
+  it("non-WC (2 mercados) → 2 slots, não 4", async () => {
+    mockGetMatchById.mockResolvedValue(matchInLeague("brasileirao_a"));
+    await analyzeBestBet(null, form({ matchId: VALID_MATCH_ID }));
+    expect(mockRateLimit).toHaveBeenCalledTimes(2);
+    expect(mockPredict).toHaveBeenCalledTimes(2);
+  });
+
+  it("extra-lines ON NÃO cobra slot extra (linhas extras ≠ mercado extra)", async () => {
+    mockExtraLinesFlag.mockResolvedValue(true);
+    await analyzeBestBet(null, form({ matchId: VALID_MATCH_ID }));
+    expect(mockRateLimit).toHaveBeenCalledTimes(4);
+    expect(mockPredict).toHaveBeenCalledTimes(4);
+  });
+
+  it("budget esgotado ANTES do início → {ok:false}, 1 tentativa de slot, ZERO spend", async () => {
+    mockRateLimit.mockResolvedValue(capped);
+    const res = await analyzeBestBet(null, form({ matchId: VALID_MATCH_ID }));
+    expect(res).toEqual({
+      ok: false,
+      error: "Você atingiu o limite de 7 análises por dia. Tente novamente amanhã.",
+    });
+    // Para no 1º não-ok: não martela o limiter pelos 4 mercados.
+    expect(mockRateLimit).toHaveBeenCalledTimes(1);
+    expect(mockPredict).not.toHaveBeenCalled();
+    expect(mockEnsureOdds).not.toHaveBeenCalled();
+    expect(mockGeneratePalpites).not.toHaveBeenCalled();
+  });
+
+  it("budget PARCIAL (2 slots) → roda só o prefixo concedido; cauda vira 'indisponível' SEM spend", async () => {
+    mockRateLimit
+      .mockResolvedValueOnce(ok)
+      .mockResolvedValueOnce(ok)
+      .mockResolvedValue(capped);
+    const res = await analyzeBestBet(null, form({ matchId: VALID_MATCH_ID }));
+    // 2 concedidos + 1 negado (para no 1º não-ok) = 3 chamadas; slots consumidos = 2.
+    expect(mockRateLimit).toHaveBeenCalledTimes(3);
+    // Prefixo Tier-1 (over/under + 1X2) roda; btts/dc NÃO → sem predict nem crédito de odds.
+    expect(mockPredict.mock.calls.map((c) => c[0].marketKey)).toEqual([
+      "over_under",
+      "match_result",
+    ]);
+    expect(mockEnsureOdds).not.toHaveBeenCalled();
+    expect(res.ok).toBe(true);
+    if (res.ok) {
+      expect(res.view.entries.map((e) => e.marketKey)).toEqual([
+        "over_under",
+        "match_result",
+      ]);
+      expect(res.view.llmCalls).toBe(2);
+      // O "melhor" fica explicitamente limitado: os não analisados aparecem com o motivo.
+      expect(res.view.errors).toEqual([
+        {
+          marketKey: "btts",
+          marketLabel: expect.any(String),
+          message: "Limite diário atingido — não analisado.",
+        },
+        {
+          marketKey: "double_chance",
+          marketLabel: expect.any(String),
+          message: "Limite diário atingido — não analisado.",
+        },
+      ]);
+      expect(res.view.unavailableMarkets).toBe(2);
+    }
+    // A síntese vê só as análises que rodaram.
+    expect(mockGeneratePalpites.mock.calls[0][0].analyses).toHaveLength(2);
+  });
+
+  it("budget parcial + TODOS os concedidos falham → errors[0] é a falha real, não o aviso de teto", async () => {
+    mockRateLimit.mockResolvedValueOnce(ok).mockResolvedValue(capped);
+    const { PredictError } = await import("@/lib/ai/predict");
+    mockPredict.mockRejectedValue(new PredictError("sem snapshot fresco", {}));
+    const res = await analyzeBestBet(null, form({ matchId: VALID_MATCH_ID }));
+    expect(mockPredict).toHaveBeenCalledTimes(1);
+    expect(res).toEqual({
+      ok: false,
+      error: "Nenhum bookmaker oferece este mercado para o jogo no momento.",
+    });
+  });
+
+  it("fail-closed (KV ausente p/ não-admin) → copy de indisponibilidade, ZERO spend", async () => {
+    mockRateLimit.mockResolvedValue({
+      ok: false,
+      limit: 0,
+      remaining: 0,
+      reset: 0,
+      reason: "fail-closed",
+    });
+    const res = await analyzeBestBet(null, form({ matchId: VALID_MATCH_ID }));
+    expect(res).toEqual({
+      ok: false,
+      error: "Análises temporariamente indisponíveis. Tente mais tarde.",
+    });
+    expect(mockRateLimit).toHaveBeenCalledTimes(1);
+    expect(mockPredict).not.toHaveBeenCalled();
+    expect(mockEnsureOdds).not.toHaveBeenCalled();
+  });
+
+  it("fail-closed no MEIO do loop → aborta o run inteiro ANTES de qualquer spend", async () => {
+    mockRateLimit.mockResolvedValueOnce(ok).mockResolvedValue({
+      ok: false,
+      limit: 0,
+      remaining: 0,
+      reset: 0,
+      reason: "fail-closed",
+    });
+    const res = await analyzeBestBet(null, form({ matchId: VALID_MATCH_ID }));
+    expect(res).toEqual({
+      ok: false,
+      error: "Análises temporariamente indisponíveis. Tente mais tarde.",
+    });
+    expect(mockPredict).not.toHaveBeenCalled();
+    expect(mockEnsureOdds).not.toHaveBeenCalled();
   });
 });
 

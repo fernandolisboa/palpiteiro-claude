@@ -85,11 +85,16 @@ function computeRank(
  * custo) e os insumos de rank. Falhas (pré-warm + predict) viram `errors` por-mercado
  * — deduplicadas por marketKey e excluindo qualquer mercado que acabou virando entry
  * (um mercado nunca é "disponível" e "indisponível" ao mesmo tempo).
+ *
+ * `notRunErrors` (#492): mercados que NUNCA rodaram (sem slot de rate-limit) — entram
+ * DEPOIS das falhas de predict, pra `errors[0]` num all-fail seguir sendo a falha real
+ * de um mercado que rodou, não o aviso de teto.
  */
 export function toBestBetView(
   outcomes: FanOutOutcome[],
   aiCallByMarketKey: ReadonlyMap<string, AiCallCost>,
   preWarmErrors: { marketKey: string; message: string }[] = [],
+  notRunErrors: { marketKey: string; message: string }[] = [],
 ): BestBetView {
   const entries: BestBetEntry[] = [];
   const rawErrors: BestBetMarketError[] = preWarmErrors.map((e) => ({
@@ -132,6 +137,14 @@ export function toBestBetView(
       marketLabel,
       analysis,
       rank: computeRank(prediction, marketKey, selections),
+    });
+  }
+
+  for (const e of notRunErrors) {
+    rawErrors.push({
+      marketKey: e.marketKey,
+      marketLabel: getMarketPresentation(e.marketKey).marketLabel,
+      message: e.message,
     });
   }
 

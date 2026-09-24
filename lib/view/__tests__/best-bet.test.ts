@@ -142,6 +142,19 @@ describe("toBestBetView — rank LÊ os números que o card mostra (#178)", () =
     expect(view.unavailableMarkets).toBe(1);
     expect(view.errors.map((e) => e.marketKey)).toEqual(["double_chance"]);
   });
+
+  it("notRunErrors (#492, sem slot) entram DEPOIS das falhas de predict e contam como indisponíveis", () => {
+    const bttsFail: FanOutOutcome = { ok: false, marketKey: "btts", message: "sem snapshot fresco" };
+    const notRun = [{ marketKey: "double_chance", message: "Limite diário atingido — não analisado." }];
+    const view = toBestBetView([mr(), bttsFail], new Map(), [], notRun);
+    expect(view.llmCalls).toBe(1);
+    expect(view.unavailableMarkets).toBe(2);
+    expect(view.errors.map((e) => e.marketKey)).toEqual(["btts", "double_chance"]);
+    expect(view.errors[1]).toMatchObject({
+      marketLabel: getMarketPresentation("double_chance").marketLabel,
+      message: "Limite diário atingido — não analisado.",
+    });
+  });
 });
 
 describe("toBestBetView — bundle safety (server-side mapper, painel só recebe o tipo)", () => {
