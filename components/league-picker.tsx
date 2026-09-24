@@ -1,5 +1,6 @@
 "use client";
 
+import { useEffect, useState, useTransition } from "react";
 import { useRouter } from "next/navigation";
 
 import { Select } from "@/components/ui/select";
@@ -48,16 +49,24 @@ function OptionItem({ option }: { option: LeaguePickerOption }) {
 export function LeaguePicker({ value, range, className }: Props) {
   const router = useRouter();
   const groups = leaguePickerGroups();
+  // Estado local otimista: sem ele o <select> controlado volta pra liga antiga
+  // enquanto a navegação (transition) espera o RSC — a escolha parece "desfeita".
+  const [selected, setSelected] = useState(value);
+  const [pending, startTransition] = useTransition();
+  useEffect(() => setSelected(value), [value]);
 
   return (
     <div className={cn("w-full sm:w-56", className)}>
       <Select
         aria-label="Filtro de liga"
-        value={value}
-        onChange={(e) =>
-          router.push(buildLeagueHref(range, e.target.value as LeagueFilter))
-        }
-        className="bg-surface-2 font-medium"
+        value={selected}
+        aria-busy={pending || undefined}
+        onChange={(e) => {
+          const next = e.target.value as LeagueFilter;
+          setSelected(next);
+          startTransition(() => router.push(buildLeagueHref(range, next)));
+        }}
+        className={cn("bg-surface-2 font-medium", pending && "opacity-70")}
       >
         {groups.map((group) =>
           group.label === null ? (
