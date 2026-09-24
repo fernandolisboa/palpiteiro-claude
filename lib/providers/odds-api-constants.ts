@@ -8,6 +8,10 @@ export const SPORT_KEYS = {
   BRASILEIRAO_A: "soccer_brazil_campeonato",
   CHAMPIONS_LEAGUE: "soccer_uefa_champs_league",
   WORLD_CUP: "soccer_fifa_world_cup",
+  // Listed on the-odds-api.com/sports-odds-data/sports-apis.html (2026-09); not yet
+  // confirmed via GET /v4/sports from here (cloud env has no key). ADR 0042.
+  COPA_LIBERTADORES: "soccer_conmebol_copa_libertadores",
+  COPA_SUDAMERICANA: "soccer_conmebol_copa_sudamericana",
 } as const;
 
 export type SportKey = (typeof SPORT_KEYS)[keyof typeof SPORT_KEYS];
@@ -22,6 +26,8 @@ export const SPORT_KEY_BY_LEAGUE: Record<SupportedLeague, SportKey> = {
   brasileirao_a: SPORT_KEYS.BRASILEIRAO_A,
   champions_league: SPORT_KEYS.CHAMPIONS_LEAGUE,
   world_cup: SPORT_KEYS.WORLD_CUP,
+  copa_libertadores: SPORT_KEYS.COPA_LIBERTADORES,
+  copa_sudamericana: SPORT_KEYS.COPA_SUDAMERICANA,
 };
 
 export function leagueToSportKey(league: SupportedLeague): SportKey {

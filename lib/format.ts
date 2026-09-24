@@ -5,6 +5,8 @@ export const LEAGUE_LABEL: Record<LeagueKey, string> = {
   bsa: "Brasileirão",
   ucl: "Champions",
   wc: "Copa do Mundo",
+  lib: "Libertadores",
+  sula: "Sul-Americana",
 };
 
 // Exhaustive map (compile error if a SupportedLeague is left unmapped).
@@ -12,6 +14,8 @@ const LEAGUE_KEY_BY_LEAGUE: Record<SupportedLeague, LeagueKey> = {
   brasileirao_a: "bsa",
   champions_league: "ucl",
   world_cup: "wc",
+  copa_libertadores: "lib",
+  copa_sudamericana: "sula",
 };
 
 export function leagueToKey(league: SupportedLeague): LeagueKey {

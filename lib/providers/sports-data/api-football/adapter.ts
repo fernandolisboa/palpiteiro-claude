@@ -836,6 +836,8 @@ export class ApiFootballAdapter implements SportsDataProvider {
       "brasileirao_a",
       "champions_league",
       "world_cup",
+      "copa_libertadores",
+      "copa_sudamericana",
     ]),
   };
 

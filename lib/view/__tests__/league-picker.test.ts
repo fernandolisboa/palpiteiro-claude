@@ -7,41 +7,64 @@ import { SUPPORTED_LEAGUES } from "@/lib/providers/sports-data/leagues";
 
 const flat = (groups: ReturnType<typeof leaguePickerGroups>) =>
   groups.flatMap((g) => g.options);
+// Só as opções habilitadas: ligas de clube registradas mas fora de ACTIVE_LEAGUES
+// (ex.: Libertadores/Sul-Americana, ADR 0042) aparecem desabilitadas e não entram.
+const activeValues = (groups: ReturnType<typeof leaguePickerGroups>) =>
+  flat(groups)
+    .filter((o) => o.active)
+    .map((o) => o.value);
 
 describe("leaguePickerGroups", () => {
   it("config pós-Copa (bsa+ucl): 'Todas' primeiro, depois Brasil e Europa, sem Copa (#491)", () => {
     const groups = leaguePickerGroups(["bsa", "ucl"]);
-    expect(groups.map((g) => g.label)).toEqual([null, "Brasil", "Europa"]);
-    expect(flat(groups).map((o) => o.value)).toEqual(["all", "bsa", "ucl"]);
-    expect(flat(groups).every((o) => o.active)).toBe(true);
+    expect(groups.map((g) => g.label)).toEqual([
+      null,
+      "Brasil",
+      "América do Sul",
+      "Europa",
+    ]);
+    expect(activeValues(groups)).toEqual(["all", "bsa", "ucl"]);
   });
 
   it("usa a config real por default (ACTIVE_LEAGUE_KEYS)", () => {
-    expect(flat(leaguePickerGroups()).map((o) => o.value)).toEqual([
-      "all",
-      "bsa",
-      "ucl",
-    ]);
+    expect(activeValues(leaguePickerGroups())).toEqual(["all", "bsa", "ucl"]);
   });
 
   it("sem 'Todas' com uma liga ativa; liga de clube inativa fica desabilitada", () => {
     const options = flat(leaguePickerGroups(["bsa"]));
-    expect(options.map((o) => o.value)).toEqual(["bsa", "ucl"]);
+    expect(options.some((o) => o.value === "all")).toBe(false);
+    expect(activeValues(leaguePickerGroups(["bsa"]))).toEqual(["bsa"]);
     expect(options.find((o) => o.value === "ucl")?.active).toBe(false);
   });
 
   it("torneio inativo some; ativo volta com seu grupo", () => {
     expect(flat(leaguePickerGroups(["bsa", "ucl"])).some((o) => o.value === "wc")).toBe(false);
     const groups = leaguePickerGroups(["wc", "bsa"]);
-    expect(groups.map((g) => g.label)).toEqual([null, "Brasil", "Europa", "Seleções"]);
+    expect(groups.map((g) => g.label)).toEqual([
+      null,
+      "Brasil",
+      "América do Sul",
+      "Europa",
+      "Seleções",
+    ]);
     const byValue = Object.fromEntries(flat(groups).map((o) => [o.value, o.active]));
-    expect(byValue).toEqual({ all: true, bsa: true, ucl: false, wc: true });
+    expect(byValue).toMatchObject({ all: true, bsa: true, ucl: false, wc: true });
   });
 
   it("toda liga suportada tem opção (escala com SUPPORTED_LEAGUES)", () => {
     const allKeys = SUPPORTED_LEAGUES.map(leagueToKey);
     const values = flat(leaguePickerGroups(allKeys)).map((o) => o.value);
-    expect(values).toEqual(["all", ...allKeys]);
+    expect(values[0]).toBe("all");
+    expect([...values.slice(1)].sort()).toEqual([...allKeys].sort());
+  });
+
+  it("Libertadores e Sul-Americana ficam em América do Sul (ADR 0042)", () => {
+    const groups = leaguePickerGroups(["bsa", "lib", "sula"]);
+    const southAmerica = groups.find((g) => g.label === "América do Sul");
+    expect(southAmerica?.options).toEqual([
+      { value: "lib", label: "Libertadores", active: true },
+      { value: "sula", label: "Sul-Americana", active: true },
+    ]);
   });
 });
 

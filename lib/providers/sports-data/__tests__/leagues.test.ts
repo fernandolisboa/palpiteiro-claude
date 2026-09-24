@@ -9,11 +9,13 @@ import {
 } from "@/lib/providers/sports-data/leagues";
 
 describe("SUPPORTED_LEAGUES", () => {
-  it("includes brasileirao_a, champions_league and world_cup", () => {
+  it("includes the club leagues, the World Cup and the CONMEBOL cups", () => {
     expect(SUPPORTED_LEAGUES).toEqual([
       "brasileirao_a",
       "champions_league",
       "world_cup",
+      "copa_libertadores",
+      "copa_sudamericana",
     ]);
   });
 });
@@ -25,10 +27,16 @@ describe("provider league maps", () => {
     }
   });
 
-  it("FOOTBALL_DATA_ORG_LEAGUE_CODES covers every SupportedLeague", () => {
+  it("FOOTBALL_DATA_ORG_LEAGUE_CODES covers every league except the CONMEBOL cups", () => {
+    const notServed: SupportedLeague[] = ["copa_libertadores", "copa_sudamericana"];
     for (const l of SUPPORTED_LEAGUES) {
-      expect(FOOTBALL_DATA_ORG_LEAGUE_CODES[l]).toBeTypeOf("string");
-      expect(FOOTBALL_DATA_ORG_LEAGUE_CODES[l].length).toBeGreaterThan(0);
+      const code = FOOTBALL_DATA_ORG_LEAGUE_CODES[l];
+      if (notServed.includes(l)) {
+        expect(code).toBeUndefined();
+      } else {
+        expect(code).toBeTypeOf("string");
+        expect(code?.length).toBeGreaterThan(0);
+      }
     }
   });
 
@@ -36,6 +44,8 @@ describe("provider league maps", () => {
     expect(API_FOOTBALL_LEAGUE_IDS.brasileirao_a).toBe(71);
     expect(API_FOOTBALL_LEAGUE_IDS.champions_league).toBe(2);
     expect(API_FOOTBALL_LEAGUE_IDS.world_cup).toBe(1);
+    expect(API_FOOTBALL_LEAGUE_IDS.copa_libertadores).toBe(13);
+    expect(API_FOOTBALL_LEAGUE_IDS.copa_sudamericana).toBe(11);
   });
 
   it("expected football-data.org codes", () => {
@@ -100,6 +110,22 @@ describe("currentSeason — Champions League (cross-year)", () => {
       currentSeason("champions_league", new Date("2026-12-01T12:00:00Z")),
     ).toBe(2026);
   });
+});
+
+describe("currentSeason — CONMEBOL cups (calendar-year, Feb–Nov)", () => {
+  for (const league of ["copa_libertadores", "copa_sudamericana"] as const) {
+    it(`${league}: January → previous year (new edition not started)`, () => {
+      expect(currentSeason(league, new Date("2027-01-31T23:59:59Z"))).toBe(2026);
+    });
+
+    it(`${league}: February → current year (preliminary rounds)`, () => {
+      expect(currentSeason(league, new Date("2026-02-01T00:00:00Z"))).toBe(2026);
+    });
+
+    it(`${league}: November → current year (final)`, () => {
+      expect(currentSeason(league, new Date("2026-11-28T20:00:00Z"))).toBe(2026);
+    });
+  }
 });
 
 describe("currentSeason — World Cup (single edition)", () => {

@@ -122,6 +122,10 @@ export const CANONICAL_TEAMS: Record<SupportedLeague, readonly string[]> = {
     "Uruguay",
     "Uzbekistan",
   ] as const,
+  copa_libertadores: [
+  ] as const,
+  copa_sudamericana: [
+  ] as const,
 };
 
 export function isCanonicalTeam(name: string, league: SupportedLeague): boolean {

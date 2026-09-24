@@ -453,6 +453,22 @@ function wrapFootballDataOrgError(
   throw err;
 }
 
+// Competition code for a league this provider serves. Leagues without a code (the
+// CONMEBOL cups — ADR 0042) are left out of supportedLeagues, so this only throws
+// if a caller bypasses the FallbackProvider's capability gate.
+function competitionCode(league: SupportedLeague, method: string): string {
+  const code = FOOTBALL_DATA_ORG_LEAGUE_CODES[league];
+  if (!code) {
+    throw new SportsDataUnsupportedError(
+      `football-data.org does not serve ${league}.`,
+      PROVIDER_NAME,
+      method,
+      { league },
+    );
+  }
+  return code;
+}
+
 function resolveTeamId(
   canonicalName: string,
   league: SupportedLeague,
@@ -497,7 +513,7 @@ export class FootballDataOrgAdapter implements SportsDataProvider {
     dateFrom: string,
     dateTo: string,
   ): Promise<FootballDataOrgMatchesList> {
-    const code = FOOTBALL_DATA_ORG_LEAGUE_CODES[league];
+    const code = competitionCode(league, "listCompetitionMatches");
     const endpoint = `/competitions/${code}/matches`;
     return await request({
       endpoint,
@@ -521,7 +537,7 @@ export class FootballDataOrgAdapter implements SportsDataProvider {
     league: SupportedLeague,
     season: number,
   ): Promise<FootballDataOrgMatchesList> {
-    const code = FOOTBALL_DATA_ORG_LEAGUE_CODES[league];
+    const code = competitionCode(league, "getFixturesBySeason");
     const endpoint = `/competitions/${code}/matches`;
     return await request({
       endpoint,
@@ -563,7 +579,7 @@ export class FootballDataOrgAdapter implements SportsDataProvider {
       // api-football: short TTL when any fixture is imminent or live.
       const tighterTtl = pickTtlForFixtureCollection(fixtures);
       if (tighterTtl < FIFTEEN_MINUTES) {
-        const code = FOOTBALL_DATA_ORG_LEAGUE_CODES[league];
+        const code = competitionCode(league, "getFixturesByDate");
         const cacheKey = buildCacheKey(`/competitions/${code}/matches`, {
           dateFrom: date,
           dateTo: date,
@@ -614,7 +630,7 @@ export class FootballDataOrgAdapter implements SportsDataProvider {
         fixture.status,
       );
       if (ttl < FIFTEEN_MINUTES) {
-        const code = FOOTBALL_DATA_ORG_LEAGUE_CODES[ref.league];
+        const code = competitionCode(ref.league, "getFixtureByMatch");
         const cacheKey = buildCacheKey(`/competitions/${code}/matches`, {
           dateFrom: date,
           dateTo: date,
@@ -701,7 +717,7 @@ export class FootballDataOrgAdapter implements SportsDataProvider {
     season?: number,
   ): Promise<NormalizedStanding | undefined> {
     try {
-      const code = FOOTBALL_DATA_ORG_LEAGUE_CODES[league];
+      const code = competitionCode(league, "getStandings");
       const data = await request({
         endpoint: `/competitions/${code}/standings`,
         params: season !== undefined ? { season } : {},

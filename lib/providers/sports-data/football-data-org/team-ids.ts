@@ -116,6 +116,10 @@ export const FOOTBALL_DATA_ORG_TEAM_IDS: Record<SupportedLeague, Readonly<Record
     "Scotland": 8873,
     "Curaçao": 9460,
   },
+  copa_libertadores: {
+  },
+  copa_sudamericana: {
+  },
 };
 
 export function resolveTeamId(name: string, league: SupportedLeague): number | undefined {
