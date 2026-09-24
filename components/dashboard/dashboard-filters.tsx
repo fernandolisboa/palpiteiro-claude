@@ -27,7 +27,7 @@ export function currentDashboardHref(
 
 /**
  * Href preservando as outras dimensões; "all" limpa o param. Função pura
- * (testável sem render), espelha `buildHref` de `league-tabs`.
+ * (testável sem render), espelha `buildLeagueHref` do seletor de liga.
  */
 export function buildDashboardHref(
   current: DashboardFilters,

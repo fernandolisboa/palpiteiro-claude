@@ -4,7 +4,7 @@ import { Inbox } from "lucide-react";
 
 import { Card } from "@/components/ui/card";
 import { DesktopShell } from "@/components/desktop-shell";
-import { LeagueTabs } from "@/components/league-tabs";
+import { LeaguePicker } from "@/components/league-picker";
 import { PageHeader } from "@/components/page-header";
 import { RecentPredCard } from "@/components/recent-pred-card";
 import { SectionLabel } from "@/components/section-label";
@@ -16,7 +16,7 @@ import {
   ACTIVE_LEAGUES,
   resolveHomeLeagueFilter,
 } from "@/lib/config/active-leagues";
-import { LEAGUE_LABEL } from "@/lib/format";
+import { keyToLeague, LEAGUE_LABEL } from "@/lib/format";
 import { getRequestTimeZone } from "@/lib/server/request-timezone";
 import { getMatchIdsWithPredictionsByUser } from "@/lib/db/queries/matches";
 import { loadRangeMatches } from "@/lib/db/queries/load-range-matches";
@@ -69,10 +69,7 @@ type PageProps = {
 // "Todos" = só as ligas ATIVAS (nunca o histórico de uma liga inativa, ex.: a
 // Copa encerrada aparecendo no preset `season`).
 function filterToLeagues(filter: LeagueFilter): readonly SupportedLeague[] {
-  if (filter === "bsa") return ["brasileirao_a"];
-  if (filter === "ucl") return ["champions_league"];
-  if (filter === "wc") return ["world_cup"];
-  return ACTIVE_LEAGUES;
+  return filter === "all" ? ACTIVE_LEAGUES : [keyToLeague(filter)];
 }
 
 export default async function JogosPage({ searchParams }: PageProps) {
@@ -221,7 +218,7 @@ type HomeContentProps = {
   isAdmin: boolean;
 };
 
-// Props compartilhadas pra preservar o range ao trocar de liga nas tabs.
+// Props compartilhadas pra preservar o range ao trocar de liga no seletor.
 function rangeNavProps(range: ResolvedRange) {
   const from = range.from
     ? range.from.toISOString().slice(0, 10)
@@ -261,7 +258,7 @@ function MobileHome({
       </div>
 
       <div className="flex flex-col gap-2 px-5 pb-3">
-        <LeagueTabs value={league} range={navProps} />
+        <LeaguePicker value={league} range={navProps} />
         <DateRangeTabs
           league={league}
           preset={range.preset}
@@ -336,7 +333,7 @@ function DesktopHome({ matches, recents, league, range }: HomeContentProps) {
             </p>
           </div>
           <div className="flex flex-col items-end gap-2">
-            <LeagueTabs value={league} range={navProps} />
+            <LeaguePicker value={league} range={navProps} />
             <DateRangeTabs
               league={league}
               preset={range.preset}

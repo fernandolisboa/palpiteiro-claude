@@ -12,9 +12,9 @@ import { parseLeagueFilter, type LeagueFilter } from "@/lib/view/types";
  * deletar suporte em SUPPORTED_LEAGUES / providers / DB enum / canonical teams —
  * eles devem permanecer 100% intactos (inclusive `world_cup`).
  *
- * Esta constante é a fonte de verdade única que dirige: (a) abas renderizadas em
- * league-tabs, (b) filtro default da home (a PRIMEIRA liga daqui), (c) o que
- * sync-upcoming-fixtures itera, (d) o que prewarm-odds aquece.
+ * Esta constante é a fonte de verdade única que dirige: (a) as opções ativas do
+ * seletor de liga (lib/view/league-picker.ts), (b) filtro default da home, (c) o
+ * que sync-upcoming-fixtures itera, (d) o que prewarm-odds aquece.
  */
 export const ACTIVE_LEAGUES: readonly SupportedLeague[] = [
   "brasileirao_a",
