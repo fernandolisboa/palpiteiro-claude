@@ -30,6 +30,7 @@ em ondas, o placar dos 8 pedidos). Depois mergulhe conforme o interesse:
 | 07 | [Monetização](./07-monetizacao.md) | Caminhos sequenciados + exposição regulatória de cada |
 | 08 | [Concorrente PalpiteiroFC + marca](./08-concorrente-palpiteirofc-e-marca.md) | Benchmark + risco regulatório + nome/INPI |
 | 09 | [O que precisa de você](./09-precisa-de-voce.md) | Estado da execução: PRs a revisar, decisões suas, backlog |
+| 11 | [Revisão legal](./11-revisao-legal.md) | Conformidade do que está no ar (LGPD, Lei 14.790, CDC, Marco Civil) — decidida por delegação, ADRs 0039-0041 |
 
 ## Fios que cruzam vários reports
 
