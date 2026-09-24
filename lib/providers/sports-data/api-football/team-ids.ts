@@ -116,10 +116,13 @@ export const API_FOOTBALL_TEAM_IDS: Record<SupportedLeague, Readonly<Record<stri
     "Canada": 5529,
     "Curaçao": 5530,
   },
-  copa_libertadores: {
-  },
-  copa_sudamericana: {
-  },
+  // Bootstrap vazio: semeado por scripts/generate-team-ids.ts antes de a liga
+  // entrar em ACTIVE_LEAGUES.
+  serie_a: {},
+  bundesliga: {},
+  ligue_1: {},
+  copa_libertadores: {},
+  copa_sudamericana: {},
 };
 
 export function resolveTeamId(name: string, league: SupportedLeague): number | undefined {

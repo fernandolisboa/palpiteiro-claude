@@ -1,7 +1,7 @@
 // Keys curtas de liga usadas em URL (?league=) e na UI. Nova liga = nova key aqui
 // (e os Records exaustivos em lib/format.ts / lib/view/league-picker.ts quebram o
 // build até serem preenchidos).
-export const LEAGUE_KEYS = ["bsa", "ucl", "wc", "lib", "sula"] as const;
+export const LEAGUE_KEYS = ["bsa", "ucl", "wc", "sa", "bl", "l1", "lib", "sula"] as const;
 export type LeagueKey = (typeof LEAGUE_KEYS)[number];
 export type LeagueFilter = LeagueKey | "all";
 // Token de DISPLAY da recomendação na tabela/lista. over/under/pass mantêm os

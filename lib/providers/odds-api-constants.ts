@@ -8,6 +8,11 @@ export const SPORT_KEYS = {
   BRASILEIRAO_A: "soccer_brazil_campeonato",
   CHAMPIONS_LEAGUE: "soccer_uefa_champs_league",
   WORLD_CUP: "soccer_fifa_world_cup",
+  // Chaves do catálogo público de /v4/sports (não validadas ao vivo daqui — o
+  // ambiente de nuvem não alcança a Odds API; checar antes de ativar a liga).
+  SERIE_A: "soccer_italy_serie_a",
+  BUNDESLIGA: "soccer_germany_bundesliga",
+  LIGUE_1: "soccer_france_ligue_one",
   // Listed on the-odds-api.com/sports-odds-data/sports-apis.html (2026-09); not yet
   // confirmed via GET /v4/sports from here (cloud env has no key). ADR 0045.
   COPA_LIBERTADORES: "soccer_conmebol_copa_libertadores",
@@ -26,6 +31,9 @@ export const SPORT_KEY_BY_LEAGUE: Record<SupportedLeague, SportKey> = {
   brasileirao_a: SPORT_KEYS.BRASILEIRAO_A,
   champions_league: SPORT_KEYS.CHAMPIONS_LEAGUE,
   world_cup: SPORT_KEYS.WORLD_CUP,
+  serie_a: SPORT_KEYS.SERIE_A,
+  bundesliga: SPORT_KEYS.BUNDESLIGA,
+  ligue_1: SPORT_KEYS.LIGUE_1,
   copa_libertadores: SPORT_KEYS.COPA_LIBERTADORES,
   copa_sudamericana: SPORT_KEYS.COPA_SUDAMERICANA,
 };

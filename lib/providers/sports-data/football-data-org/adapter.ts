@@ -499,6 +499,9 @@ export class FootballDataOrgAdapter implements SportsDataProvider {
       "brasileirao_a",
       "champions_league",
       "world_cup",
+      "serie_a",
+      "bundesliga",
+      "ligue_1",
     ]),
   };
 

@@ -9,11 +9,14 @@ import {
 } from "@/lib/providers/sports-data/leagues";
 
 describe("SUPPORTED_LEAGUES", () => {
-  it("includes the club leagues, the World Cup and the CONMEBOL cups", () => {
+  it("includes the Brazilian, UEFA, World Cup, European domestic leagues and CONMEBOL cups", () => {
     expect(SUPPORTED_LEAGUES).toEqual([
       "brasileirao_a",
       "champions_league",
       "world_cup",
+      "serie_a",
+      "bundesliga",
+      "ligue_1",
       "copa_libertadores",
       "copa_sudamericana",
     ]);
@@ -44,6 +47,9 @@ describe("provider league maps", () => {
     expect(API_FOOTBALL_LEAGUE_IDS.brasileirao_a).toBe(71);
     expect(API_FOOTBALL_LEAGUE_IDS.champions_league).toBe(2);
     expect(API_FOOTBALL_LEAGUE_IDS.world_cup).toBe(1);
+    expect(API_FOOTBALL_LEAGUE_IDS.serie_a).toBe(135);
+    expect(API_FOOTBALL_LEAGUE_IDS.bundesliga).toBe(78);
+    expect(API_FOOTBALL_LEAGUE_IDS.ligue_1).toBe(61);
     expect(API_FOOTBALL_LEAGUE_IDS.copa_libertadores).toBe(13);
     expect(API_FOOTBALL_LEAGUE_IDS.copa_sudamericana).toBe(11);
   });
@@ -52,6 +58,9 @@ describe("provider league maps", () => {
     expect(FOOTBALL_DATA_ORG_LEAGUE_CODES.brasileirao_a).toBe("BSA");
     expect(FOOTBALL_DATA_ORG_LEAGUE_CODES.champions_league).toBe("CL");
     expect(FOOTBALL_DATA_ORG_LEAGUE_CODES.world_cup).toBe("WC");
+    expect(FOOTBALL_DATA_ORG_LEAGUE_CODES.serie_a).toBe("SA");
+    expect(FOOTBALL_DATA_ORG_LEAGUE_CODES.bundesliga).toBe("BL1");
+    expect(FOOTBALL_DATA_ORG_LEAGUE_CODES.ligue_1).toBe("FL1");
   });
 });
 
@@ -151,5 +160,21 @@ describe("SupportedLeague type", () => {
   it("widens narrow string literals correctly", () => {
     const value: SupportedLeague = "brasileirao_a";
     expect(SUPPORTED_LEAGUES).toContain(value);
+  });
+});
+
+describe("currentSeason — European domestic leagues (cross-year, like UCL)", () => {
+  const leagues: SupportedLeague[] = ["serie_a", "bundesliga", "ligue_1"];
+
+  it("September → current year (2026/27 season)", () => {
+    for (const l of leagues) {
+      expect(currentSeason(l, new Date("2026-09-24T12:00:00Z"))).toBe(2026);
+    }
+  });
+
+  it("May → previous year (season ending)", () => {
+    for (const l of leagues) {
+      expect(currentSeason(l, new Date("2027-05-20T12:00:00Z"))).toBe(2026);
+    }
   });
 });

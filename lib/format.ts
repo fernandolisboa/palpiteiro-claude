@@ -5,6 +5,9 @@ export const LEAGUE_LABEL: Record<LeagueKey, string> = {
   bsa: "Brasileirão",
   ucl: "Champions",
   wc: "Copa do Mundo",
+  sa: "Serie A",
+  bl: "Bundesliga",
+  l1: "Ligue 1",
   lib: "Libertadores",
   sula: "Sul-Americana",
 };
@@ -14,6 +17,9 @@ const LEAGUE_KEY_BY_LEAGUE: Record<SupportedLeague, LeagueKey> = {
   brasileirao_a: "bsa",
   champions_league: "ucl",
   world_cup: "wc",
+  serie_a: "sa",
+  bundesliga: "bl",
+  ligue_1: "l1",
   copa_libertadores: "lib",
   copa_sudamericana: "sula",
 };

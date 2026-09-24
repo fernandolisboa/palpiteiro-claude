@@ -20,6 +20,9 @@ export const leagueEnum = pgEnum("league", [
   "brasileirao_a",
   "champions_league",
   "world_cup",
+  "serie_a",
+  "bundesliga",
+  "ligue_1",
   "copa_libertadores",
   "copa_sudamericana",
 ]);
