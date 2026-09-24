@@ -38,10 +38,20 @@ describe("leaguePickerGroups", () => {
     expect(byValue).toEqual({ all: true, bsa: true, ucl: false, wc: true });
   });
 
+  it("ligas europeias fora do orçamento somem quando inativas; ativas aparecem em Europa", () => {
+    const inactive = flat(leaguePickerGroups(["bsa", "ucl"])).map((o) => o.value);
+    for (const k of ["sa", "bl", "l1"]) expect(inactive).not.toContain(k);
+    const groups = leaguePickerGroups(["bsa", "ucl", "sa"]);
+    const europa = groups.find((g) => g.label === "Europa");
+    expect(europa?.options.map((o) => o.value)).toEqual(["ucl", "sa"]);
+  });
+
   it("toda liga suportada tem opção (escala com SUPPORTED_LEAGUES)", () => {
     const allKeys = SUPPORTED_LEAGUES.map(leagueToKey);
     const values = flat(leaguePickerGroups(allKeys)).map((o) => o.value);
-    expect(values).toEqual(["all", ...allKeys]);
+    // Ordem = grupo de região (Seleções por último), não a de SUPPORTED_LEAGUES.
+    expect(values[0]).toBe("all");
+    expect([...values.slice(1)].sort()).toEqual([...allKeys].sort());
   });
 });
 
@@ -54,6 +64,7 @@ describe("league key round-trip", () => {
 
   it("parseLeagueFilter aceita keys conhecidas e cai pra 'all' no resto", () => {
     expect(parseLeagueFilter("ucl")).toBe("ucl");
+    expect(parseLeagueFilter("l1")).toBe("l1");
     expect(parseLeagueFilter("xyz")).toBe("all");
     expect(parseLeagueFilter(undefined)).toBe("all");
     expect(parseLeagueFilter(null)).toBe("all");
