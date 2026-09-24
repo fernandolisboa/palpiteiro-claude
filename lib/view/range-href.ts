@@ -54,7 +54,7 @@ export function buildRangeHref(
 
 /**
  * Href puro pra home preservando o range atual e trocando só a liga. Espelho
- * de `buildRangeHref` pro outro eixo (league-tabs); garante que os dois filtros
+ * de `buildRangeHref` pro outro eixo (seletor de liga); garante que os dois filtros
  * não se clobberem.
  */
 export function buildLeagueHref(
