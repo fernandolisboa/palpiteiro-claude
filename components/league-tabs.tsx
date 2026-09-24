@@ -6,30 +6,39 @@ import { buildLeagueHref } from "@/lib/view/range-href";
 import type { RangePreset } from "@/lib/view/date-range";
 import type { LeagueFilter } from "@/lib/view/types";
 
-type Item = { value: LeagueFilter; label: string };
-export type LeagueTabItem = Item & { active: boolean };
+type Item = {
+  value: LeagueFilter;
+  label: string;
+  // Liga de CLUBE (temporada anual): fora de temporada vira aba desabilitada
+  // ("volta em agosto"). Torneio (Copa, a cada 4 anos) inativo é ESCONDIDO — uma
+  // aba "volta em agosto" pra Copa seria mentira (#491).
+  hideWhenInactive?: boolean;
+};
+export type LeagueTabItem = { value: LeagueFilter; label: string; active: boolean };
 
 const ITEMS: Item[] = [
   { value: "all", label: "Todos" },
   { value: "bsa", label: "Brasileirão" },
   { value: "ucl", label: "Champions" },
-  { value: "wc", label: "Copa do Mundo" },
+  { value: "wc", label: "Copa do Mundo", hideWhenInactive: true },
 ];
 
 /**
- * Todas as ligas suportadas, anotadas com `active` derivado das ligas ativas.
- * Cada liga (bsa/ucl/wc) sempre aparece; as inativas são renderizadas
- * desabilitadas. A aba "Todos" só aparece quando há mais de uma liga ativa.
- * Função pura (seam de teste sem precisar de @testing-library).
+ * Ligas suportadas, anotadas com `active` derivado das ligas ativas. Ligas de
+ * clube (bsa/ucl) sempre aparecem; inativas são renderizadas desabilitadas. A Copa
+ * só aparece quando ativa. A aba "Todos" só aparece quando há mais de uma liga
+ * ativa. Função pura (seam de teste sem precisar de @testing-library).
  */
 export function visibleLeagueTabs(
   activeKeys: readonly LeagueFilter[] = ACTIVE_LEAGUE_KEYS,
 ): LeagueTabItem[] {
-  return ITEMS.flatMap((item) => {
-    if (item.value === "all") {
-      return activeKeys.length > 1 ? [{ ...item, active: true }] : [];
+  return ITEMS.flatMap(({ value, label, hideWhenInactive }): LeagueTabItem[] => {
+    if (value === "all") {
+      return activeKeys.length > 1 ? [{ value, label, active: true }] : [];
     }
-    return [{ ...item, active: activeKeys.includes(item.value) }];
+    const active = activeKeys.includes(value);
+    if (!active && hideWhenInactive) return [];
+    return [{ value, label, active }];
   });
 }
 
@@ -62,7 +71,7 @@ export function LeagueTabs({ value, range, className }: Props) {
           // sr-only comunicam o estado a leitores de tela. O detalhe "volta em
           // agosto" vive no sr-only (não só no `title`, que é inalcançável no
           // touch/leitor de tela — #448); o `title` fica pro hover do desktop. O
-          // guard em app/page.tsx continua sendo o enforcement real ("?league="
+          // guard em app/jogos/page.tsx continua sendo o enforcement real ("?league="
           // inativa redireciona).
           return (
             <span

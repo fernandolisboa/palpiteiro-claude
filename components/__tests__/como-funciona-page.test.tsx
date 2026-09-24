@@ -73,10 +73,14 @@ describe("ComoFuncionaContent", () => {
     expect(html).toContain("+1,68pp");
   });
 
-  it("sinaliza que BTTS e dupla chance hoje só valem na Copa do Mundo", () => {
+  it("sinaliza que BTTS e dupla chance estão indisponíveis nas ligas ativas (pós-Copa, #491)", () => {
     const html = render();
-    const occurrences = html.split("só em jogos de Copa do Mundo").length - 1;
+    const occurrences =
+      html.split(
+        "Temporariamente indisponível — ainda não cobrimos esse mercado nas ligas em andamento.",
+      ).length - 1;
     expect(occurrences).toBe(2);
+    expect(html).not.toContain("só em jogos de Copa do Mundo");
   });
 
   it("carrega o bloco de jogo responsável (18+, CVV 188, disclaimer)", () => {

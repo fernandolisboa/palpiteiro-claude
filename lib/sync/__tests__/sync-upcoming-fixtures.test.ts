@@ -103,7 +103,7 @@ describe("ensureUpcomingFixturesSynced", () => {
     expect(getFixturesByDate).not.toHaveBeenCalled();
   });
 
-  it("sincroniza só ligas ativas (Copa), nunca ligas de clube", async () => {
+  it("sincroniza só ligas ativas (Brasileirão + Champions), nunca a Copa encerrada (#491)", async () => {
     const getFixturesBySeason = vi.fn().mockResolvedValue([]);
     __setSportsDataProviderForTesting(makeProvider({ getFixturesBySeason }));
 
@@ -112,20 +112,24 @@ describe("ensureUpcomingFixturesSynced", () => {
     const leaguesRequested = getFixturesBySeason.mock.calls.map(
       ([league]) => league,
     );
-    expect(new Set(leaguesRequested)).toEqual(new Set(["world_cup"]));
-    expect(leaguesRequested).not.toContain("brasileirao_a");
-    expect(leaguesRequested).not.toContain("champions_league");
+    expect(new Set(leaguesRequested)).toEqual(
+      new Set(["brasileirao_a", "champions_league"]),
+    );
+    expect(leaguesRequested).not.toContain("world_cup");
   });
 
-  it("upserta as fixtures retornadas pelo provider", async () => {
-    const fixture = { id: "wc-1" } as unknown as NormalizedFixture;
-    const getFixturesBySeason = vi.fn().mockResolvedValue([fixture]);
+  it("upserta as fixtures de todas as ligas ativas num upsert só", async () => {
+    const bsa = { id: "bsa-1" } as unknown as NormalizedFixture;
+    const ucl = { id: "ucl-1" } as unknown as NormalizedFixture;
+    const getFixturesBySeason = vi.fn((league: string) =>
+      Promise.resolve(league === "brasileirao_a" ? [bsa] : [ucl]),
+    );
     __setSportsDataProviderForTesting(makeProvider({ getFixturesBySeason }));
 
     await ensureUpcomingFixturesSynced();
 
     expect(upsertSpy).toHaveBeenCalledTimes(1);
-    expect(upsertSpy).toHaveBeenCalledWith([fixture]);
+    expect(upsertSpy).toHaveBeenCalledWith([bsa, ucl]);
   });
 
   it("não roda (no-op) quando o lock não é adquirido", async () => {

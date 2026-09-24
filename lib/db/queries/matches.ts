@@ -30,6 +30,9 @@ export async function getMatchesInRange(opts: {
   from: Date | null; // null = unbounded past
   to: Date | null; // null = unbounded future
   league?: SupportedLeague;
+  // Conjunto de ligas (ex.: aba "Todos" = ligas ativas). Vazio/ausente = sem filtro,
+  // mesma convenção de `statuses`. Compõe com `league` via AND.
+  leagues?: readonly SupportedLeague[];
   statuses?: DbMatch["status"][]; // default: all statuses (no status filter)
   order?: "asc" | "desc"; // default: "asc"
   limit?: number; // safety cap for unbounded ranges
@@ -38,6 +41,9 @@ export async function getMatchesInRange(opts: {
     opts.from ? gte(matches.kickoffAt, opts.from) : undefined,
     opts.to ? lte(matches.kickoffAt, opts.to) : undefined,
     opts.league ? eq(matches.league, opts.league) : undefined,
+    opts.leagues && opts.leagues.length
+      ? inArray(matches.league, [...opts.leagues])
+      : undefined,
     opts.statuses && opts.statuses.length
       ? inArray(matches.status, opts.statuses)
       : undefined,

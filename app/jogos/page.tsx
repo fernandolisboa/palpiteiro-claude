@@ -13,9 +13,10 @@ import { UpcomingMatchesMobile } from "@/components/upcoming-matches-mobile";
 import { auth } from "@/auth";
 import { HOME_SUBTITLE } from "@/lib/copy";
 import {
-  DEFAULT_LEAGUE_FILTER,
-  isActiveLeagueFilter,
+  ACTIVE_LEAGUES,
+  resolveHomeLeagueFilter,
 } from "@/lib/config/active-leagues";
+import { LEAGUE_LABEL } from "@/lib/format";
 import { getRequestTimeZone } from "@/lib/server/request-timezone";
 import { getMatchIdsWithPredictionsByUser } from "@/lib/db/queries/matches";
 import { loadRangeMatches } from "@/lib/db/queries/load-range-matches";
@@ -38,11 +39,10 @@ import {
 } from "@/lib/view/range-href";
 import { toMatchRowView } from "@/lib/view/match";
 import { toRecentPredictionView } from "@/lib/view/recent-prediction";
-import {
-  parseLeagueFilter,
-  type LeagueFilter,
-  type MatchRowView,
-  type RecentPredictionView,
+import type {
+  LeagueFilter,
+  MatchRowView,
+  RecentPredictionView,
 } from "@/lib/view/types";
 import type { SupportedLeague } from "@/lib/providers/sports-data/leagues";
 
@@ -66,11 +66,13 @@ type PageProps = {
   }>;
 };
 
-function filterToLeague(filter: LeagueFilter): SupportedLeague | undefined {
-  if (filter === "bsa") return "brasileirao_a";
-  if (filter === "ucl") return "champions_league";
-  if (filter === "wc") return "world_cup";
-  return undefined;
+// "Todos" = só as ligas ATIVAS (nunca o histórico de uma liga inativa, ex.: a
+// Copa encerrada aparecendo no preset `season`).
+function filterToLeagues(filter: LeagueFilter): readonly SupportedLeague[] {
+  if (filter === "bsa") return ["brasileirao_a"];
+  if (filter === "ucl") return ["champions_league"];
+  if (filter === "wc") return ["world_cup"];
+  return ACTIVE_LEAGUES;
 }
 
 export default async function JogosPage({ searchParams }: PageProps) {
@@ -80,13 +82,11 @@ export default async function JogosPage({ searchParams }: PageProps) {
     from: fromParam,
     to: toParam,
   } = await searchParams;
-  // "no param" e param inválido caem em "all"; aplicamos o default ANTES de checar
-  // atividade pra evitar loop de redirect (/jogos → /jogos → /jogos). Só keys
-  // válidas-mas-inativas (bsa/ucl enquanto fora de temporada) redirecionam pra
-  // home limpa. Aponta pra /jogos (a home authed), nunca pra `/` (landing pública).
-  const parsed = parseLeagueFilter(leagueParam);
-  const league = parsed === "all" ? DEFAULT_LEAGUE_FILTER : parsed;
-  if (!isActiveLeagueFilter(league)) redirect("/jogos");
+  // Liga inativa (ex.: `?league=wc` bookmarkado da Copa) → redirect pra home limpa,
+  // que resolve pro default (sempre ativo → sem loop). Aponta pra /jogos (a home
+  // authed), nunca pra `/` (landing pública).
+  const league = resolveHomeLeagueFilter(leagueParam);
+  if (league === null) redirect("/jogos");
 
   // Instante ÚNICO do request: alimenta o resolver de range (bound da query) E
   // todo toMatchRowView (elegibilidade da badge). Dois `new Date()` separados
@@ -117,7 +117,7 @@ export default async function JogosPage({ searchParams }: PageProps) {
     // filtro de status. Concern de query — range.from segue intocado.
     from: windowedQueryFrom(range),
     to: range.to,
-    league: filterToLeague(league),
+    leagues: filterToLeagues(league),
     statuses: range.statuses,
     order: range.order,
     limit: RANGE_LIMIT,
@@ -331,7 +331,8 @@ function DesktopHome({ matches, recents, league, range }: HomeContentProps) {
               Próximos jogos
             </h1>
             <p className="text-body text-muted-foreground tracking-tight">
-              {matches.length} partidas · {label} · Copa do Mundo FIFA 2026
+              {matches.length} partidas · {label}
+              {league !== "all" && ` · ${LEAGUE_LABEL[league]}`}
             </p>
           </div>
           <div className="flex flex-col items-end gap-2">

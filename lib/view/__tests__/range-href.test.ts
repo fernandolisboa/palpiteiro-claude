@@ -9,9 +9,9 @@ import {
 } from "@/lib/view/range-href";
 
 describe("buildRangeHref", () => {
-  it("today5 com liga 'all' → /jogos limpo (default não polui URL)", () => {
+  it("today5 com liga 'all' → league=all EXPLÍCITO (sem param = liga default, não Todos — #491)", () => {
     expect(buildRangeHref({ league: "all" }, { preset: "today5" })).toBe(
-      "/jogos",
+      "/jogos?league=all",
     );
   });
 
@@ -33,9 +33,9 @@ describe("buildRangeHref", () => {
     );
   });
 
-  it("season sem liga (all)", () => {
+  it("season com liga 'all'", () => {
     expect(buildRangeHref({ league: "all" }, { preset: "season" })).toBe(
-      "/jogos?preset=season",
+      "/jogos?league=all&preset=season",
     );
   });
 
@@ -48,13 +48,13 @@ describe("buildRangeHref", () => {
     ).toBe("/jogos?league=wc&preset=custom&from=2026-06-10&to=2026-06-20");
   });
 
-  it("custom sem liga (all) omite o param league", () => {
+  it("custom com liga 'all' mantém league=all", () => {
     expect(
       buildRangeHref(
         { league: "all" },
         { preset: "custom", from: "2026-06-10", to: "2026-06-20" },
       ),
-    ).toBe("/jogos?preset=custom&from=2026-06-10&to=2026-06-20");
+    ).toBe("/jogos?league=all&preset=custom&from=2026-06-10&to=2026-06-20");
   });
 });
 
@@ -78,9 +78,9 @@ describe("buildLeagueHref", () => {
     ).toBe("/jogos?league=bsa&preset=custom&from=2026-06-10&to=2026-06-20");
   });
 
-  it("trocar pra 'all' limpa a liga mas mantém o preset", () => {
+  it("trocar pra 'all' escreve league=all e mantém o preset", () => {
     expect(buildLeagueHref({ preset: "season" }, "all")).toBe(
-      "/jogos?preset=season",
+      "/jogos?league=all&preset=season",
     );
   });
 

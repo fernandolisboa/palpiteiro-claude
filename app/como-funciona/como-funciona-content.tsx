@@ -301,7 +301,8 @@ export function ComoFuncionaContent() {
             </ul>
           </div>
           <p className="text-muted-fg-2 mt-3 text-body-sm">
-            Hoje disponível só em jogos de Copa do Mundo.
+            Temporariamente indisponível — ainda não cobrimos esse mercado nas ligas em
+            andamento.
           </p>
         </div>
 
@@ -354,7 +355,8 @@ export function ComoFuncionaContent() {
             </ul>
           </div>
           <p className="text-muted-fg-2 mt-3 text-body-sm">
-            Hoje disponível só em jogos de Copa do Mundo.
+            Temporariamente indisponível — ainda não cobrimos esse mercado nas ligas em
+            andamento.
           </p>
         </div>
       </section>

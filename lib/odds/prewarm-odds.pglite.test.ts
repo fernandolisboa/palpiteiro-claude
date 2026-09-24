@@ -1,7 +1,7 @@
 // @vitest-environment node
 //
 // AC do #371 contra Postgres REAL (pglite): "snapshot fresca → sem chamada ao
-// provider no load". `prewarmOdds` itera ACTIVE_LEAGUES (world_cup hoje), acha jogo
+// provider no load". `prewarmOdds` itera ACTIVE_LEAGUES (mockado p/ world_cup aqui), acha jogo
 // próximo via getMatchesInLeagueWindow e chama `ensureOddsSnapshotsFresh` com
 // PAGE_LIVE_MARKETS (over/under + 1X2, ambos featured). Fetch MOCKADO no seam
 // `@/lib/providers/odds-api` (getOddsForSport) — zero rede, zero quota real. Roda em

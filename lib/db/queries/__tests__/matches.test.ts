@@ -188,6 +188,23 @@ describe("getMatchesInRange — range query flexível", () => {
     expect(cond?.val).toBe("brasileirao_a");
   });
 
+  it("leagues → inArray(league, [...]) (aba 'Todos' = ligas ativas, #491)", async () => {
+    await getMatchesInRange({
+      from: null,
+      to: null,
+      leagues: ["brasileirao_a", "champions_league"],
+    });
+
+    const cond = findCond("inArray");
+    expect(cond?.col).toBe(matches.league);
+    expect(cond?.val).toEqual(["brasileirao_a", "champions_league"]);
+  });
+
+  it("leagues vazio → NÃO aplica filtro de liga", async () => {
+    await getMatchesInRange({ from: null, to: null, leagues: [] });
+    expect(h.state.whereArg).toBeUndefined();
+  });
+
   it("order default → asc(kickoffAt)", async () => {
     await getMatchesInRange({ from: null, to: null });
     const order = h.state.orderByArg as Cond;
