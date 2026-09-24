@@ -45,6 +45,17 @@ describe("SignInMethods — gate de maioridade no estado inicial (#282)", () => 
     expect(markup).toContain("Declaro ter 18 anos ou mais");
   });
 
+  it("o checkbox é clickwrap explícito dos Termos, com links legais ao lado (ADR 0040)", () => {
+    const markup = renderToStaticMarkup(
+      <SignInMethods errorMessage={null} />,
+    );
+    expect(markup).toContain(
+      "Declaro ter 18 anos ou mais e aceito os Termos de Uso.",
+    );
+    expect(markup).toContain('href="/termos"');
+    expect(markup).toContain('href="/privacidade"');
+  });
+
   it("renderiza a mensagem de erro mapeada quando recebida via prop", () => {
     const markup = renderToStaticMarkup(
       <SignInMethods errorMessage="Informe um e-mail." />,

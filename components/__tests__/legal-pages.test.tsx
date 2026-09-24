@@ -30,6 +30,16 @@ describe("/termos", () => {
     expect(html).toContain('href="/privacidade"');
     expect(html).toContain("contato@palpiteiro.live");
   });
+
+  // Report 11 / ADRs 0040-0041: aceite explícito, sem vínculo com casa, limitação de
+  // responsabilidade que não afasta direitos irrenunciáveis, lei/foro.
+  it("registra o aceite, o não-vínculo com casas e os limites legais", () => {
+    expect(html).toContain("aceita estes Termos");
+    expect(html).toContain("Sem vínculo com casas de apostas");
+    expect(html).toContain(".bet.br");
+    expect(html).toContain("Nada nestes Termos afasta direitos");
+    expect(html).toContain("foro do seu domicílio");
+  });
 });
 
 describe("/privacidade", () => {
@@ -54,5 +64,23 @@ describe("/privacidade", () => {
     expect(html).toContain("exclusão");
     expect(html).toContain("contato@palpiteiro.live");
     expect(html).toContain('href="/termos"');
+  });
+
+  // Report 11 / ADRs 0039-0040: art. 9º (finalidade + base legal + direitos do art. 18),
+  // art. 33 (transferência), Res. CD/ANPD 2/2022 art. 11 (canal sem encarregado),
+  // prazo de resposta e o que a exclusão apaga vs. anonimiza.
+  it("traz base legal por finalidade, transferência, encarregado e prazos", () => {
+    expect(html).toContain("art. 7º, V");
+    expect(html).toContain("art. 7º, IX");
+    expect(html).toContain("art. 33, IX");
+    expect(html).toContain("Resolução CD/ANPD nº 2/2022");
+    expect(html).toContain("art. 18");
+    expect(html).toContain("15 dias");
+    expect(html).toContain("anonimizados");
+    expect(html).toContain("ANPD");
+  });
+
+  it("não se apoia em consentimento como base do serviço (ADR 0040)", () => {
+    expect(html).toContain("Não usamos o consentimento como base");
   });
 });
