@@ -18,6 +18,14 @@ export function leagueToKey(league: SupportedLeague): LeagueKey {
   return LEAGUE_KEY_BY_LEAGUE[league];
 }
 
+const LEAGUE_BY_KEY = Object.fromEntries(
+  Object.entries(LEAGUE_KEY_BY_LEAGUE).map(([league, key]) => [key, league]),
+) as Record<LeagueKey, SupportedLeague>;
+
+export function keyToLeague(key: LeagueKey): SupportedLeague {
+  return LEAGUE_BY_KEY[key];
+}
+
 const MONTH_ABBR_PT = [
   "jan", "fev", "mar", "abr", "mai", "jun",
   "jul", "ago", "set", "out", "nov", "dez",

@@ -29,7 +29,7 @@ drawer de navegação sem reinventar overlay/foco/escape.
    `session.user.role === "admin"`, computado no Server Component (`app/page.tsx`)
    e passado como prop (`isAdmin`) até o `PageHeader` → `MobileNav`. Helper puro
    `mobileNavLinks(isAdmin)` deriva a lista (testado direto, no estilo de
-   `visibleLeagueTabs`).
+   `visibleLeagueTabs` (hoje `leaguePickerGroups`)).
 
 3. **`isAdmin` é prop opcional (`false` por padrão).** `app/loading.tsx` e
    `app/error.tsx` também renderizam `PageHeader` e **não têm sessão em escopo**
