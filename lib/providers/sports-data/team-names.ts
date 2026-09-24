@@ -74,6 +74,8 @@ const TEAM_NAME_ALIASES: Partial<
     Botafogo: "Botafogo FR",
     Corinthians: "SC Corinthians Paulista",
     "Atletico-MG": "CA Mineiro",
+    // Resolvia só pelo stopword "atletico" (removido na ADR 0045).
+    "Atletico Paranaense": "CA Paranaense",
   },
   champions_league: {
     Monaco: "AS Monaco FC",

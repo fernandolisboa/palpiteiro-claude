@@ -106,3 +106,19 @@ describe("Premier League + La Liga team names (ADR 0045)", () => {
     expect(teamsMatch("Athletic Bilbao", "Athletic Club")).toBe(true);
   });
 });
+
+describe("stopword change keeps existing leagues resolving (ADR 0045 §4)", () => {
+  it("API-Football Brasileirão/Champions names with atletico/athletic still canonicalize", () => {
+    expect(canonicalizeTeamName("Atletico Paranaense", "brasileirao_a")).toBe("CA Paranaense");
+    expect(canonicalizeTeamName("Atletico-MG", "brasileirao_a")).toBe("CA Mineiro");
+    expect(canonicalizeTeamName("Atletico Madrid", "champions_league")).toBe(
+      "Club Atlético de Madrid",
+    );
+    expect(canonicalizeTeamName("Athletic Club", "champions_league")).toBe("Athletic Club");
+  });
+
+  it("Odds API Brasileirão names still match their canonical team", () => {
+    expect(teamsMatch("Atletico Mineiro", "CA Mineiro")).toBe(true);
+    expect(teamsMatch("Athletico Paranaense", "CA Paranaense")).toBe(true);
+  });
+});
