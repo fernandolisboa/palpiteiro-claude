@@ -70,6 +70,14 @@ export const MODEL_REGISTRY: Record<AIModelId, AIModel> = {
   // uma entrada de registry aqui + adapter no seam, sem ressuscitar código.
 };
 
+// Modelo de JULGAMENTOS (ADR 0041): o JEV da TypeSafe fica FORA do MODEL_REGISTRY
+// de propósito — o registry é de LLMs selecionáveis com tool calling (thinkingMode,
+// temperature, audiência), e o JEV não é escolhível nem gera texto. Pinado na versão
+// (nunca `jev-latest`: o alias move e muda as respostas); upgrade = bump deliberado
+// + re-backtest. Preço oficial por 1M de tokens de input; output é grátis.
+export const JUDGMENT_MODEL_ID = "jev-1.13.0";
+export const TYPESAFE_PRICE_PER_MTOK_INPUT = 0.042;
+
 // Default global de fallback terminal da cascata (predict.ts) e seed do INSERT
 // de ai_config. Sonnet 4.5 (ADR 0021, #203): caminho `temperature` (reproduzível,
 // ~40% mais barato que Opus) e `userSelectable: true` — satisfaz a invariante do
