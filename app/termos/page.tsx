@@ -79,7 +79,7 @@ export default function TermosPage() {
           <section className="flex flex-col gap-3">
             <h2 className="text-label font-medium text-foreground">2. Quem oferece o serviço</h2>
             <p>
-              O Palpiteiro é mantido por {controllerIdentification()}. O serviço é gratuito: não
+              O responsável pelo Palpiteiro é {controllerIdentification()}. O serviço é gratuito: não
               há cobrança, anúncio ou comissão. Contato:{" "}
               <a href={`mailto:${LEGAL_CONTACT_EMAIL}`} className={linkClass}>
                 {LEGAL_CONTACT_EMAIL}
@@ -207,7 +207,7 @@ export default function TermosPage() {
             <h2 className="text-label font-medium text-foreground">12. Alterações</h2>
             <p>
               Estes Termos podem mudar. A versão em vigor é sempre a desta página, com a data de
-              “Última atualização” acima, e mudanças relevantes serão avisadas no app. Se uma
+              “Última atualização” acima, e mudanças relevantes poderão ser avisadas no app. Se uma
               mudança reduzir seus direitos, pediremos um novo aceite antes de você continuar
               usando o serviço.
             </p>

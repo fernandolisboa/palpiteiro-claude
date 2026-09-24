@@ -23,7 +23,7 @@ fica baixo enquanto a vedação do ADR 0048 valer.
 Os problemas reais estavam na **LGPD**, e eram de substância, não de forma:
 
 1. **Exclusão prometida e impossível.** A `/privacidade` prometia excluir, mas o schema
-   bloqueia (`restrict` em `db/schema.ts:259/291/444/641`) e não havia procedimento.
+   bloqueia (`restrict` em `db/schema.ts:265/297/450/647`) e não havia procedimento.
    → ADR 0046 decide e dá o runbook manual (vale já) + spec da feature.
 2. **Base legal errada.** A política dizia que o tratamento se apoia "no seu
    consentimento ao criar a conta" junto com execução do serviço. → Agora é base por
@@ -75,7 +75,7 @@ certo) · **ajustado** (corrigido neste branch) · **ajustar** (pendente, com do
 | L6 | Compartilhamento e operadores | art. 9º, V; art. 18, VII (V) | `/privacidade` §5 (`:152`) | ajustado | Acrescentados Google (login) e o texto livre que vai pra Anthropic/OpenAI |
 | L7 | Direitos do art. 18 com menção explícita | art. 9º, VII; art. 18, I-IX e § 1º (V) | `/privacidade` §9 (`:228`) | ajustado | Lista completa + oposição + petição à ANPD |
 | L8 | Prazo de resposta | art. 19, II (V); Res. 2/2022 art. 14 (V2) | `DATA_REQUEST_RESPONSE_DAYS = 15` (`lib/legal/controller.ts:24`), `/privacidade` §8-§9, `/perfil` | ajustado | 15 dias pra tudo; não usamos o prazo em dobro |
-| L9 | Eliminação ao fim do tratamento | arts. 15, III; 16; 18, VI (V) | Schema bloqueia delete (`db/schema.ts:259/291/444/641`); `/privacidade` §8 descreve o que acontece | ajustar (follow-up) | ADR 0046: tombstone + apagar PII + anonimizar histórico; **runbook SQL manual vale já**; feature self-serve especificada |
+| L9 | Eliminação ao fim do tratamento | arts. 15, III; 16; 18, VI (V) | Schema bloqueia delete (`db/schema.ts:265/297/450/647`); `/privacidade` §8 descreve o que acontece | ajustar (follow-up) | ADR 0046: tombstone + apagar PII + anonimizar histórico; **runbook SQL manual vale já**; feature self-serve especificada |
 | L10 | Anonimização do que fica | arts. 12 e 16, IV (V) | ADR 0046 D4 | risco aceito | Uso só agregado, sem drill-down de conta excluída, sem acesso de terceiro; risco residual (memória do dono em escala de amigos) aceito |
 | L11 | Texto livre do usuário (aposta livre) enviado à IA e logado | art. 6º, III (NV); art. 9º, V (V) | `lib/ai/bet-parse/parse.ts:77`, `cartridge.ts:99`; `/privacidade` §2/§5; Termos §8 | ajustado | Declarado + orientação a não digitar dados pessoais; redigido na exclusão (ADR 0046 D1 #1) |
 | L12 | Transferência internacional | art. 33, IX (V) | `/privacidade` §6 (`:180`) | ajustado + risco aceito | Art. 33, IX c/c art. 7º, V pro serviço; tratamentos de legítimo interesse (Sentry/Upstash) apoiados nas garantias contratuais dos fornecedores — risco aceito (Res. CD/ANPD 19/2024 (NV)) |
@@ -98,7 +98,7 @@ certo) · **ajustado** (corrigido neste branch) · **ajustar** (pendente, com do
 | C4 | Alterações dos Termos | boa-fé; CDC art. 51 (NV) | Termos §12 (`:207`) | ajustado | Mudança que reduza direitos → novo aceite (ADR 0047 D5) |
 | C5 | Identificação do fornecedor no comércio eletrônico | Decreto 7.962/2013 art. 2º (NV) | — | N/A | Só com cobrança; gatilho no ADR 0048 D6 |
 | C6 | Guarda de registros de acesso por 6 meses | Marco Civil art. 15; art. 5º, VIII (V) | Sem access log próprio | N/A | Só pra PJ com fins econômicos; gatilho no ADR 0048 D6 |
-| C7 | Páginas legais acessíveis sem login | — | `middleware.ts:47` (`termos$`, `privacidade$`) | OK | — |
+| C7 | Páginas legais acessíveis sem login | — | `middleware.ts:54` (`termos$`, `privacidade$`) | OK | — |
 
 ## 3. Ações que só o dono pode executar
 
@@ -114,7 +114,7 @@ certo) · **ajustado** (corrigido neste branch) · **ajustar** (pendente, com do
 ## 4. Issues
 
 - **#431** (páginas `/termos` + `/privacidade` + middleware): **atendida pelo que está no ar**
-  desde o #461 — rotas estáticas, `termos$|privacidade$` no matcher (`middleware.ts:47`),
+  desde o #461 — rotas estáticas, `termos$|privacidade$` no matcher (`middleware.ts:54`),
   testes de contrato (`components/__tests__/legal-pages.test.tsx`). **Pode fechar.**
 - **#432** (footer global): **atendida em substância pelo #461** — selo 18+, jogo
   responsável, CVV 188, Jogadores Anônimos, Termos/Privacidade, não-operador, em toda rota

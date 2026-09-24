@@ -107,7 +107,7 @@ export default function PrivacidadePage() {
               </li>
             </ul>
             <p>
-              Coletamos apenas o necessário (art. 6º, III da LGPD). Não tratamos dados sensíveis,
+              Coletamos apenas o necessário (art. 6º, III, da LGPD). Não tratamos dados sensíveis,
               não pedimos documento, CPF, telefone ou dados bancários, e não recebemos dinheiro.
             </p>
           </section>
@@ -171,8 +171,8 @@ export default function PrivacidadePage() {
               <li><Strong>Sentry</Strong> — monitoramento de erros, configurado para não enviar dados pessoais por padrão.</li>
             </ul>
             <p>
-              Dados de partidas, odds e notícias vêm de provedores esportivos; nada seu é enviado
-              a eles.
+              Dados de partidas e odds vêm de provedores esportivos, e as notícias vêm de buscas
+              na web feitas pela Anthropic; nada seu é enviado nessas consultas.
             </p>
           </section>
 
@@ -189,7 +189,7 @@ export default function PrivacidadePage() {
           <section className="flex flex-col gap-3">
             <h2 className="text-label font-medium text-foreground">7. Cookies e armazenamento no navegador</h2>
             <p>
-              Usamos só o essencial: o cookie de sessão do login, um cookie com o seu fuso horário
+              Usamos só o essencial: os cookies de sessão e de segurança do login, um cookie com o seu fuso horário
               (para mostrar os horários dos jogos corretamente) e a preferência de tema claro ou
               escuro guardada no navegador. Nenhum deles serve para rastrear você.
             </p>
@@ -217,7 +217,7 @@ export default function PrivacidadePage() {
               de login (Google e passkeys) e a data de aceite; apagamos as apostas que você
               registrou, inclusive o texto livre; e desativamos os links públicos dos palpites
               que você compartilhou. As análises e palpites gerados pela IA sobre as partidas
-              ficam guardados <Strong>sem qualquer vínculo com você</Strong> (anonimizados),
+              ficam guardados <Strong>sem nenhum dado que identifique você</Strong> (anonimizados),
               só para a estatística agregada de desempenho do modelo, com acesso vedado a
               terceiros (arts. 12 e 16, IV). Depois disso, o mesmo e-mail pode criar uma conta
               nova, do zero.
@@ -308,7 +308,7 @@ export default function PrivacidadePage() {
             <p>
               Esta Política pode mudar para refletir o que o serviço faz. A versão em vigor é
               sempre a desta página, com a data de “Última atualização” acima. Mudanças
-              relevantes também serão avisadas no app.
+              relevantes também poderão ser avisadas no app.
             </p>
           </section>
 

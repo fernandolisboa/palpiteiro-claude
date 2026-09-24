@@ -19,9 +19,9 @@ prometido na `/privacidade` (§8) com prazo de 15 dias.
 
 - A `/privacidade` promete exclusão e diz que o histórico "pode ser mantido de forma
   anônima". Não existe caminho no código: `ai_calls`, `predictions`, `palpite_sets` e
-  `bet_slips` referenciam `users` com `onDelete: "restrict"` (`db/schema.ts:259`, `:291`,
-  `:444`, `:641`), então `DELETE FROM users` falha. Só as tabelas do Auth.js cascateiam
-  (`accounts :171`, `sessions :192`, `authenticators :221`); `verification_tokens` é por
+  `bet_slips` referenciam `users` com `onDelete: "restrict"` (`db/schema.ts:265`, `:297`,
+  `:450`, `:647`), então `DELETE FROM users` falha. Só as tabelas do Auth.js cascateiam
+  (`accounts :177`, `sessions :198`, `authenticators :227`); `verification_tokens` é por
   `identifier` (e-mail), sem FK.
 - **Onde há PII hoje** (auditado no código, não no doc):
   - `users`: `email` (único), `name`, `image` (URL de avatar, pode ser a do Google),
@@ -141,7 +141,8 @@ numa transação:
 
 ```sql
 BEGIN;
--- :uid = users.id do e-mail solicitante (SELECT id FROM users WHERE email = '...')
+-- :uid = users.id do e-mail solicitante (SELECT id FROM users WHERE email = '...').
+-- `:uid` é variável do psql (\set uid '...'); no console do Neon, troque por '<uuid>' literal.
 UPDATE ai_calls SET input_payload = '{"redacted":"account_deleted"}',
                     output_payload = '{"redacted":"account_deleted"}',
                     error_message = NULL
@@ -159,6 +160,11 @@ UPDATE users SET email = 'excluido-' || gen_random_uuid() || '@palpiteiro.invali
  WHERE id = :uid;
 COMMIT;
 ```
+
+Atenção ao cache: `/p/[id]` e a OG image são ISR (`revalidate = 86400`) e só são purgados
+pelo `revalidatePath` do `unshareSet`. Zerar `shared_at` por SQL deixa os links abertos por
+até 24h — ainda dentro dos 15 dias, mas a feature self-serve (D5) deve chamar o
+`unshareSet` (ou `revalidatePath`) em vez de só atualizar a coluna.
 
 Responder ao titular confirmando a execução e a data. Guardar só a data e o fato (sem o
 e-mail) numa nota privada até a coluna `deleted_at` existir.

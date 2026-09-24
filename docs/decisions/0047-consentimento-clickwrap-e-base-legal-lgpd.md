@@ -73,8 +73,10 @@ coluna de versão agora.
 
 **5. Contas antigas e a versão de 2026-09-24.** A revisão desta data **não reduz direitos**
 do usuário (acrescenta foro no domicílio dele, ressalva de direitos irrenunciáveis,
-não-vínculo com casas, prazos de resposta) → **não** exige novo aceite; como o checkbox
-gateia **todo** login (não só o cadastro), quem voltar ao app já clica o texto novo.
+não-vínculo com casas, prazos de resposta) → **não** exige novo aceite. O checkbox gateia
+**todo** login (não só o cadastro), então quem fizer login de novo clica o texto novo; quem
+ainda tem sessão válida (JWT) não passa pelo `/signin` até a sessão expirar — aceitável
+justamente porque esta versão não reduz direitos.
 **Regra pra frente:** mudança que **reduza** direitos do usuário exige novo aceite antes
 de continuar (compromisso escrito nos Termos §12). Quando a primeira acontecer, implementar
 `users.terms_version_accepted` + interstitial no layout autenticado (esforço S-M).

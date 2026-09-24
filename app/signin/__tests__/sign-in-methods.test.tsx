@@ -54,6 +54,10 @@ describe("SignInMethods — gate de maioridade no estado inicial (#282)", () => 
     );
     expect(markup).toContain('href="/termos"');
     expect(markup).toContain('href="/privacidade"');
+    // Links FORA do <label>: abrir os Termos não pode marcar o checkbox.
+    expect(markup.indexOf("</label>")).toBeLessThan(
+      markup.indexOf('href="/termos"'),
+    );
   });
 
   it("renderiza a mensagem de erro mapeada quando recebida via prop", () => {
