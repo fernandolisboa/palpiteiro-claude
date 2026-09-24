@@ -4,6 +4,7 @@ import "./globals.css";
 import { SiteFooter } from "@/components/site-footer";
 import { ThemeProvider } from "@/components/theme-provider";
 import { TimezoneSync } from "@/components/timezone-sync";
+import { THEME_PROVIDER_PROPS } from "@/lib/theme";
 import { VersionChecker } from "@/components/version-checker";
 
 const geistSans = Geist({
@@ -55,12 +56,7 @@ export default function RootLayout({
       <body
         className={`${geistSans.variable} ${geistMono.variable} antialiased`}
       >
-        <ThemeProvider
-          attribute="class"
-          defaultTheme="dark"
-          enableSystem
-          disableTransitionOnChange
-        >
+        <ThemeProvider {...THEME_PROVIDER_PROPS}>
           {children}
           <SiteFooter />
         </ThemeProvider>
