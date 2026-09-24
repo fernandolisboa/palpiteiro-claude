@@ -5,6 +5,9 @@ export const LEAGUE_LABEL: Record<LeagueKey, string> = {
   bsa: "Brasileirão",
   ucl: "Champions",
   wc: "Copa do Mundo",
+  sa: "Serie A",
+  bl: "Bundesliga",
+  l1: "Ligue 1",
 };
 
 // Exhaustive map (compile error if a SupportedLeague is left unmapped).
@@ -12,10 +15,21 @@ const LEAGUE_KEY_BY_LEAGUE: Record<SupportedLeague, LeagueKey> = {
   brasileirao_a: "bsa",
   champions_league: "ucl",
   world_cup: "wc",
+  serie_a: "sa",
+  bundesliga: "bl",
+  ligue_1: "l1",
 };
 
 export function leagueToKey(league: SupportedLeague): LeagueKey {
   return LEAGUE_KEY_BY_LEAGUE[league];
+}
+
+const LEAGUE_BY_KEY = Object.fromEntries(
+  Object.entries(LEAGUE_KEY_BY_LEAGUE).map(([league, key]) => [key, league]),
+) as Record<LeagueKey, SupportedLeague>;
+
+export function keyToLeague(key: LeagueKey): SupportedLeague {
+  return LEAGUE_BY_KEY[key];
 }
 
 const MONTH_ABBR_PT = [

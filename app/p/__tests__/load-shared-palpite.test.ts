@@ -127,6 +127,41 @@ describe("loadSharedPalpite — 3 triggers de 404 (ADR §6)", () => {
   });
 });
 
+describe("loadSharedPalpite — guard de texto público (ADR §2d/§2e / #438)", () => {
+  it("veredito com decimal ('2.10') → null (404, prefer-skip) — página, metadata e OG", async () => {
+    getSharedPalpiteSet.mockResolvedValue({
+      palpiteSetWithLines: makeSet({
+        headline: { ...HEADLINE, verdict: "Palmeiras a 2.10 é presente" },
+      }),
+      match: makeMatch(),
+    });
+    const out = await loadSharedPalpite(freshUuid());
+    expect(out).toBeNull();
+  });
+
+  it("narrativa com '%' → narrativa vazia, resto da view intacto", async () => {
+    getSharedPalpiteSet.mockResolvedValue({
+      palpiteSetWithLines: makeSet({
+        headline: { ...HEADLINE, narrative: "Palmeiras tem 62% de chance." },
+      }),
+      match: makeMatch(),
+    });
+    const out = await loadSharedPalpite(freshUuid());
+    expect(out).not.toBeNull();
+    expect(out!.view.narrative).toBe("");
+    expect(out!.view.verdict).toBe("Vai dar Palmeiras");
+  });
+
+  it("narrativa limpa passa verbatim", async () => {
+    getSharedPalpiteSet.mockResolvedValue({
+      palpiteSetWithLines: makeSet(),
+      match: makeMatch(),
+    });
+    const out = await loadSharedPalpite(freshUuid());
+    expect(out!.view.narrative).toBe("Verdão melhor em casa.");
+  });
+});
+
 describe("loadSharedPalpite — gate de placar por status (BLOCKER final-score)", () => {
   it("status='live' com placar populado → finalScore null (não mostra placar ao vivo)", async () => {
     getSharedPalpiteSet.mockResolvedValue({

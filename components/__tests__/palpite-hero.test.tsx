@@ -1,3 +1,5 @@
+import { act } from "react";
+import { createRoot } from "react-dom/client";
 import { describe, expect, it, vi } from "vitest";
 import { renderToStaticMarkup } from "react-dom/server";
 
@@ -8,12 +10,15 @@ vi.mock("@/app/actions/predictions", () => ({
   analyzeBestBet: vi.fn(),
 }));
 
-// shareSet é "use server" — mock leve pra não puxar o server action no env de teste. O
-// render estático nunca dispara o onClick, então o mock não é chamado (só resolve o import).
+// shareSet/unshareSet são "use server" — mock leve pra não puxar o server action no env de
+// teste. O render estático nunca dispara o onClick; o teste interativo do kill-switch (#438)
+// controla unshareSet.
 vi.mock("@/app/actions/share", () => ({
   shareSet: vi.fn(),
+  unshareSet: vi.fn(),
 }));
 
+import { unshareSet } from "@/app/actions/share";
 import { PalpiteHero } from "@/components/palpites/palpite-hero";
 import { containsValueLanguage } from "@/lib/ai/palpites/value-language-guard";
 import {
@@ -245,5 +250,60 @@ describe("PalpiteHero — estados empty/CTA/kill-switch/encerrado", () => {
   it("populated kicker 'O PALPITE' presente", () => {
     const html = render();
     expect(html.toLowerCase()).toContain("o palpite");
+  });
+});
+
+describe("PalpiteHero — ShareButton + kill-switch (ADR 0035 §3e / #438)", () => {
+  it("não-compartilhado → 'Compartilhar', SEM 'Parar de compartilhar'", () => {
+    const html = render({ sharedAt: null });
+    expect(html).toContain("Compartilhar");
+    expect(html).not.toContain("Parar de compartilhar");
+  });
+
+  it("já compartilhado → 'Copiar link' + 'Parar de compartilhar'", () => {
+    const html = render({ sharedAt: new Date("2026-06-01T00:00:00Z") });
+    expect(html).toContain("Copiar link");
+    expect(html).toContain("Parar de compartilhar");
+  });
+
+  it("clicar 'Parar de compartilhar' chama unshareSet e volta ao estado não-compartilhado", async () => {
+    vi.mocked(unshareSet).mockResolvedValue({ ok: true });
+    // React 19: sinaliza ambiente de act() pro createRoot (senão warning no console).
+    (globalThis as { IS_REACT_ACT_ENVIRONMENT?: boolean }).IS_REACT_ACT_ENVIRONMENT =
+      true;
+    const container = document.createElement("div");
+    document.body.appendChild(container);
+    const root = createRoot(container);
+    await act(async () => {
+      root.render(
+        <PalpiteHero
+          heroPalpite={POPULATED}
+          matchId="11111111-1111-1111-1111-111111111111"
+          analyzable
+          fanOutEnabled
+          finalScore={null}
+          setId="22222222-2222-2222-2222-222222222222"
+          sharedAt={new Date("2026-06-01T00:00:00Z")}
+        />,
+      );
+    });
+
+    const stop = Array.from(container.querySelectorAll("button")).find((b) =>
+      b.textContent?.includes("Parar de compartilhar"),
+    );
+    expect(stop).toBeDefined();
+    await act(async () => {
+      stop!.click();
+    });
+
+    expect(unshareSet).toHaveBeenCalledWith(
+      "22222222-2222-2222-2222-222222222222",
+    );
+    expect(container.textContent).not.toContain("Parar de compartilhar");
+    expect(container.textContent).not.toContain("Copiar link");
+    expect(container.textContent).toContain("Compartilhar");
+
+    await act(async () => root.unmount());
+    container.remove();
   });
 });

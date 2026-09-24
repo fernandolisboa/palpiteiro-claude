@@ -81,6 +81,16 @@ describe("PublicPalpite — privacidade + firewall (ADR §3/§5)", () => {
   });
 });
 
+describe("PublicPalpite — narrativa cortada pelo guard do loader (#438)", () => {
+  it("narrativa vazia → o parágrafo não é renderizado", () => {
+    const withText = render();
+    const empty = render({ narrative: "" });
+    expect(withText).toContain(VIEW.narrative);
+    expect(empty).not.toContain(VIEW.narrative);
+    expect(empty).not.toMatch(/<p[^>]*>\s*<\/p>/);
+  });
+});
+
 describe("PublicPalpite — disclaimers (ADR §10, 3 blocos + 18+ + CVV)", () => {
   it("renderiza os 3 blocos + selo 18+ + CVV 188", () => {
     const html = render();

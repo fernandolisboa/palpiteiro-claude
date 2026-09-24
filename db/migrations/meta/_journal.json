@@ -302,6 +302,13 @@
       "when": 1783304514394,
       "tag": "0042_enable_clv_capture",
       "breakpoints": true
+    },
+    {
+      "idx": 43,
+      "version": "7",
+      "when": 1790264527206,
+      "tag": "0043_european_leagues",
+      "breakpoints": true
     }
   ]
 }

@@ -252,5 +252,11 @@ describe("leagueToKey + LEAGUE_LABEL", () => {
     expect(LEAGUE_LABEL.bsa).toBe("Brasileirão");
     expect(LEAGUE_LABEL.ucl).toBe("Champions");
     expect(LEAGUE_LABEL.wc).toBe("Copa do Mundo");
+    expect(leagueToKey("serie_a")).toBe("sa");
+    expect(leagueToKey("bundesliga")).toBe("bl");
+    expect(leagueToKey("ligue_1")).toBe("l1");
+    expect(LEAGUE_LABEL.sa).toBe("Serie A");
+    expect(LEAGUE_LABEL.bl).toBe("Bundesliga");
+    expect(LEAGUE_LABEL.l1).toBe("Ligue 1");
   });
 });

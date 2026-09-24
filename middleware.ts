@@ -1,11 +1,13 @@
 import NextAuth from "next-auth";
 
 import { authConfig } from "@/auth.config";
+import { gatedResponse } from "@/lib/security/gated-response";
 
 /**
- * Protege o app inteiro via callback `authorized` (sessão obrigatória). Usa só
- * o `authConfig` edge-safe (sem adapter/DB) — JWT é validado a partir do cookie
- * no edge. Rotas não-autenticadas redirecionam pra `/signin` (pages.signIn).
+ * Protege o app inteiro (sessão obrigatória) via `gatedResponse`, que também emite a
+ * CSP com nonce (#467). Usa só o `authConfig` edge-safe (sem adapter/DB) — JWT é
+ * validado a partir do cookie no edge. Rotas não-autenticadas redirecionam pra
+ * `/signin` (pages.signIn).
  *
  * O matcher exclui:
  *  - `/api/*`  → endpoints do Auth.js + cron (este tem proteção própria via
@@ -32,7 +34,12 @@ import { authConfig } from "@/auth.config";
  *  - `/` (raiz exata, âncora `$`) → landing pública estática (#373). A home
  *    autenticada mudou pra `/jogos`, que continua gateada (casa o matcher).
  */
-export const { auth: middleware } = NextAuth(authConfig);
+const { auth } = NextAuth(authConfig);
+
+// O handler refaz o redirect de não-autenticado (com handler, o Auth.js não redireciona
+// sozinho) e adiciona a CSP com nonce das rotas gateadas (#467, ADR 0040). As rotas
+// públicas acima não passam aqui: recebem a CSP estática do next.config.ts.
+export const middleware = auth((req) => gatedResponse(req));
 
 export const config = {
   // Âncoras (`api/`, `signin$`, `como-funciona$`, `monitoring(?:/|$)`) evitam
