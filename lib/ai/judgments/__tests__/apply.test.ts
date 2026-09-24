@@ -24,28 +24,34 @@ function answers(
 }
 
 describe("factorMultiplier", () => {
-  it("noul 0.5 é neutro (m = 1) em todo fator", () => {
-    for (const f of [
-      "attack_weakened",
-      "defense_weakened",
-      "rotation_risk",
-      "high_stakes",
-    ] as const) {
-      expect(factorMultiplier(f, 0.5, 1)).toBe(1);
+  const FACTORS = [
+    "attack_weakened",
+    "defense_weakened",
+    "rotation_risk",
+    "high_stakes",
+  ] as const;
+
+  it('noul ≤ 0.5 é neutro (m = 1): um "não" nunca move λ', () => {
+    for (const f of FACTORS) {
+      expect(factorMultiplier(f, 0.5)).toBe(1);
+      expect(factorMultiplier(f, 0.2)).toBe(1);
+      expect(factorMultiplier(f, 0)).toBe(1);
     }
   });
 
-  it("extremos ficam em [1 − w, 1 + w] com o sinal da tabela", () => {
-    expect(factorMultiplier("attack_weakened", 1, 1)).toBeCloseTo(0.94);
-    expect(factorMultiplier("attack_weakened", 0, 1)).toBeCloseTo(1.06);
-    expect(factorMultiplier("defense_weakened", 1, 1)).toBeCloseTo(1.06);
-    expect(factorMultiplier("rotation_risk", 1, 1)).toBeCloseTo(0.95);
-    expect(factorMultiplier("high_stakes", 1, 1)).toBeCloseTo(1.03);
+  it("noul 1 vai a 1 ± w com o sinal da tabela", () => {
+    expect(factorMultiplier("attack_weakened", 1)).toBeCloseTo(0.94);
+    expect(factorMultiplier("defense_weakened", 1)).toBeCloseTo(1.06);
+    expect(factorMultiplier("rotation_risk", 1)).toBeCloseTo(0.95);
+    expect(factorMultiplier("high_stakes", 1)).toBeCloseTo(1.03);
   });
 
-  it("confidence abaixo de 0.3 → tratado como 0.5 (neutro)", () => {
-    expect(factorMultiplier("attack_weakened", 1, 0.29)).toBe(1);
-    expect(factorMultiplier("attack_weakened", 1, 0.3)).toBeCloseTo(0.94);
+  it("é monotônico e linear acima de 0.5", () => {
+    expect(factorMultiplier("attack_weakened", 0.75)).toBeCloseTo(0.97);
+  });
+
+  it("valor não finito → neutro", () => {
+    expect(factorMultiplier("attack_weakened", Number.NaN)).toBe(1);
   });
 });
 
@@ -100,42 +106,32 @@ describe("applyJudgments", () => {
     expect(r.lambdaAway).toBe(1.0);
   });
 
-  it("clamp no teto: produto 1.06·1.05·1.03·1.06 vira 1.15", () => {
+  it("todos os fatores num time ficam dentro do clamp com os pesos v1", () => {
     const r = applyJudgments(
       LAMBDAS,
       answers({
-        attack_weakened_home: [0, 1],
-        rotation_risk_home: [0, 1],
         high_stakes_home: [1, 1],
         defense_weakened_away: [1, 1],
-      })
-    );
-    expect(r.multipliers?.home.product).toBeGreaterThan(TEAM_MULTIPLIER_MAX);
-    expect(r.multipliers?.home.applied).toBe(TEAM_MULTIPLIER_MAX);
-    expect(r.lambdaHome).toBeCloseTo(1.5 * 1.15);
-  });
-
-  it("clamp no piso: produto 0.94·0.95·0.97·0.94 vira 0.85", () => {
-    const r = applyJudgments(
-      LAMBDAS,
-      answers({
         attack_weakened_away: [1, 1],
         rotation_risk_away: [1, 1],
-        high_stakes_away: [0, 1],
-        defense_weakened_home: [0, 1],
       })
     );
-    expect(r.multipliers?.away.product).toBeLessThan(TEAM_MULTIPLIER_MIN);
-    expect(r.multipliers?.away.applied).toBe(TEAM_MULTIPLIER_MIN);
-    expect(r.lambdaAway).toBeCloseTo(1.0 * 0.85);
+    expect(r.multipliers?.home.applied).toBeCloseTo(1.03 * 1.06);
+    expect(r.multipliers?.away.applied).toBeCloseTo(0.94 * 0.95);
+    expect(r.multipliers?.home.applied).toBeLessThanOrEqual(
+      TEAM_MULTIPLIER_MAX
+    );
+    expect(r.multipliers?.away.applied).toBeGreaterThanOrEqual(
+      TEAM_MULTIPLIER_MIN
+    );
   });
 
-  it("confidence baixa neutraliza o fator no λ", () => {
-    const r = applyJudgments(
-      LAMBDAS,
-      answers({ attack_weakened_home: [1, 0.1] })
-    );
+  it('jogo típico (tudo "não") não enviesa λ', () => {
+    const allNo = Object.fromEntries(
+      JUDGMENT_QUESTION_IDS.map((id) => [id, [0.05, 1] as [number, number]])
+    ) as Partial<Record<JudgmentQuestionId, [number, number]>>;
+    const r = applyJudgments(LAMBDAS, answers(allNo));
     expect(r.lambdaHome).toBe(1.5);
-    expect(r.multipliers?.home.factors.attack_weakened_home).toBe(1);
+    expect(r.lambdaAway).toBe(1.0);
   });
 });

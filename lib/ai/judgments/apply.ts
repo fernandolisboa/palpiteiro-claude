@@ -30,7 +30,6 @@ const FACTOR_EFFECT: Record<
   high_stakes: { sign: 1, target: "own" },
 };
 
-export const JUDGMENT_CONFIDENCE_FLOOR = 0.3;
 export const TEAM_MULTIPLIER_MIN = 0.85;
 export const TEAM_MULTIPLIER_MAX = 1.15;
 
@@ -56,22 +55,20 @@ export type AppliedJudgments = {
   applied: boolean;
 };
 
-function effectiveNoul(value: number, confidence: number): number {
-  if (!Number.isFinite(value) || !Number.isFinite(confidence)) {
-    return NEUTRAL_NOUL;
-  }
-  if (confidence < JUDGMENT_CONFIDENCE_FLOOR) return NEUTRAL_NOUL;
-  return Math.min(1, Math.max(0, value));
-}
-
+// Unilateral: só o "sim" (noul > 0.5) move λ. Um "não" (sem desfalque, sem
+// rotação) deixa λ intacto — com a forma simétrica original, o jogo típico sem
+// desfalques ganhava ~+1.5% de λ por viés. Nouls não trazem `confidence` na
+// API; a margem acima de 0.5 já é a força do sinal, então não há gating.
 export function factorMultiplier(
   factor: JudgmentFactor,
-  value: number,
-  confidence: number
+  value: number
 ): number {
-  const noul = effectiveNoul(value, confidence);
+  if (!Number.isFinite(value)) return 1;
+  const noul = Math.min(1, Math.max(0, value));
   const { sign } = FACTOR_EFFECT[factor];
-  return 1 + sign * JUDGMENT_WEIGHTS[factor] * (noul - NEUTRAL_NOUL) * 2;
+  return (
+    1 + sign * JUDGMENT_WEIGHTS[factor] * Math.max(0, noul - NEUTRAL_NOUL) * 2
+  );
 }
 
 const OTHER_SIDE: Record<TeamSide, TeamSide> = { home: "away", away: "home" };
@@ -86,11 +83,7 @@ function lambdaMultipliers(
     const source =
       FACTOR_EFFECT[factor].target === "own" ? side : OTHER_SIDE[side];
     const id: JudgmentQuestionId = `${factor}_${source}`;
-    const m = factorMultiplier(
-      factor,
-      answers[id].value,
-      answers[id].confidence
-    );
+    const m = factorMultiplier(factor, answers[id].value);
     factors[id] = m;
     product *= m;
   }

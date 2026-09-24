@@ -127,14 +127,14 @@ Cada noul carrega `criteria` com os casos de borda escritos, como pede a jaggedn
 
 ### 3. Conversão em ajuste: limitada, monotônica, no código
 
-- **Cada fator k** vira um multiplicador de λ: `m_k = 1 + w_k · (noul_k − 0.5) · 2`. A saída fica em `[1 − |w_k|, 1 + |w_k|]`.
-  - O ponto neutro é noul = 0.5.
-  - O sinal de `w_k` segue a coluna "Efeito" da tabela.
-- **Clamp por time:** `Π m_k ∈ [0.85, 1.15]`. O JEV **nunca** move um λ mais de ±15%.
+- **Cada fator k** vira um multiplicador **unilateral** de λ: `m_k = 1 + w_k · max(0, noul_k − 0.5) · 2`. A saída fica entre 1 e `1 + w_k`, e `w_k` carrega o sinal da coluna "Efeito" da tabela.
+  - Só o "sim" move λ. Um noul ≤ 0.5 ("não há desfalque", "não há rotação") deixa o multiplicador em 1.
+  - Motivo, visto na implementação (#510): a forma simétrica `(noul − 0.5) · 2` fazia a resposta típica "não" de um jogo sem desfalques subir λ em ~1,5%. Isso é um viés sistemático, não informação.
+- **Clamp por time:** `Π m_k ∈ [0.85, 1.15]`. O JEV **nunca** move um λ mais de ±15%. Com os pesos v1, o pior caso fica em [0,893; 1,092], então o clamp é uma guarda pra quando os pesos forem retunados.
 - **Pesos iniciais:** `|w_k| ∈ {0.06 ataque, 0.06 defesa, 0.05 rotação, 0.03 motivação}`.
   - São priors conservadores, ajustados no backtest (Decisão 7).
   - Os pesos são **código versionado** (`judgment_weights_v1`), nunca aprendidos em runtime.
-- **Confidence gating:** um noul com `confidence` abaixo de um limiar (inicial 0.3, ajustado no backtest) é tratado como 0.5, ou seja, neutro.
+- **Sem gating por confidence.** A API não devolve `confidence` pra noul, e a distância de 0.5 já mede a força do sinal. O `confidence` fica só no log, caso a API passe a mandar.
 - **Fail-open para o estatístico puro.** Se o JEV falhar (erro, timeout de 3 s, 429 ou chave ausente), o fluxo segue com λ_base. O campo `judgmentsApplied=false` é persistido. O JEV nunca bloqueia uma análise.
 
 ### 4. O LLM vira narrador: cartucho `narrator_v1`
