@@ -1,4 +1,4 @@
-# ADR 0041 — Envelope regulatório: ferramenta de análise não-operadora, sem vínculo, link ou publicidade de casa de apostas
+# ADR 0048 — Envelope regulatório: ferramenta de análise não-operadora, sem vínculo, link ou publicidade de casa de apostas
 
 ## Status
 
@@ -97,7 +97,7 @@ III). Reavaliar se o app ficar público em escala.
   desde que o link fique longe de recomendação e nunca vinculado a "picks".
 - **Qualquer vínculo com casa** (Decisão 2): proibido; reabrir só com ADR novo.
 - **Crescer além de amigos / perfilar usuários**: reavaliar alto risco (Res. CD/ANPD 2/2022
-  art. 4º) e a dispensa de encarregado (ADR 0040 Decisão 8).
+  art. 4º) e a dispensa de encarregado (ADR 0047 Decisão 8).
 
 ## Alternativas consideradas e rejeitadas
 

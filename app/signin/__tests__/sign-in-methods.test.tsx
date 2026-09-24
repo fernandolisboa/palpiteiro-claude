@@ -45,7 +45,7 @@ describe("SignInMethods — gate de maioridade no estado inicial (#282)", () => 
     expect(markup).toContain("Declaro ter 18 anos ou mais");
   });
 
-  it("o checkbox é clickwrap explícito dos Termos, com links legais ao lado (ADR 0040)", () => {
+  it("o checkbox é clickwrap explícito dos Termos, com links legais ao lado (ADR 0047)", () => {
     const markup = renderToStaticMarkup(
       <SignInMethods errorMessage={null} />,
     );

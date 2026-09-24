@@ -15,7 +15,7 @@ import { sendMagicLink, signInWithGoogle } from "./actions";
 import { PasskeySignInButton } from "./passkey-signin-button";
 
 /**
- * Wrapper CLIENT do /signin (#282, ADR 0040): detém o estado do checkbox obrigatório
+ * Wrapper CLIENT do /signin (#282, ADR 0047): detém o estado do checkbox obrigatório
  * de maioridade + aceite dos Termos ("Declaro ter 18 anos ou mais e aceito os Termos
  * de Uso.") e GATEIA os três métodos de login
  * — os botões de Google e magic link e o PasskeySignInButton ficam desabilitados
@@ -38,7 +38,7 @@ export function SignInMethods({
 
   return (
     <div className="flex flex-col gap-6">
-      {/* Clickwrap (ADR 0040): UM checkbox obrigatório = declaração 18+ E aceite
+      {/* Clickwrap (ADR 0047): UM checkbox obrigatório = declaração 18+ E aceite
           EXPLÍCITO dos Termos de Uso (contrato). A Política de Privacidade é
           INFORMADA, não "aceita" — a base legal do tratamento é execução de contrato
           (LGPD art. 7º, V), não consentimento; por isso ela aparece como leitura

@@ -1,5 +1,5 @@
 // Identificação do controlador (LGPD art. 9º, III-IV) e do fornecedor nos Termos — fonte
-// única pras páginas legais (/termos, /privacidade), o footer e o /perfil. Ver ADR 0040 e
+// única pras páginas legais (/termos, /privacidade), o footer e o /perfil. Ver ADR 0047 e
 // docs/reports/11-revisao-legal.md.
 //
 // SLOT DO DONO: `CONTROLLER_LEGAL_NAME` fica `null` até o dono decidir publicar o nome

@@ -149,10 +149,10 @@ export const users = pgTable("users", {
   emailVerified: timestamp({ withTimezone: true, mode: "date" }),
   image: text(),
   // Aceite de maioridade (auto-declaração 18+) + dos Termos de Uso (clickwrap, ADR
-  // 0040 — a partir de 2026-09-24; antes era só 18+ com Termos implícitos) carimbado no
+  // 0047 — a partir de 2026-09-24; antes era só 18+ com Termos implícitos) carimbado no
   // PRIMEIRO login via `events.createUser` em auth.ts (#282, ADR/ops 05). A versão
   // aceita é a "Última atualização" de /termos vigente nesse instante (histórico do
-  // repositório = trilha). Na exclusão de conta vira NULL (ADR 0039). Nullable de propósito:
+  // repositório = trilha). Na exclusão de conta vira NULL (ADR 0046). Nullable de propósito:
   // o gate é a UI do /signin (checkbox obrigatório que destrava os 3 métodos),
   // a row só nasce DEPOIS de passar por ela. Rows pré-existentes não passaram
   // pelo gate — ficam null, NÃO reescrever (ADD COLUMN nullable é metadata-only).

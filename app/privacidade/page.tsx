@@ -11,8 +11,8 @@ import {
 
 // Rota PÚBLICA estática (sem auth, sem DB) — lida ANTES do login. Liberada no matcher do
 // middleware (`privacidade$`). Conteúdo aterrado no CÓDIGO (não só na ops-doc): revisão
-// legal em docs/reports/11-revisao-legal.md; bases legais e transparência no ADR 0040;
-// exclusão de conta no ADR 0039. A lista de operadores reflete o que o código usa hoje
+// legal em docs/reports/11-revisao-legal.md; bases legais e transparência no ADR 0047;
+// exclusão de conta no ADR 0046. A lista de operadores reflete o que o código usa hoje
 // (Sentry incluso; OpenAI condicional à key, ADR 0027). Versão forward-only: bump a data
 // ao mudar o texto material.
 export const dynamic = "force-static";
@@ -270,8 +270,8 @@ export default function PrivacidadePage() {
             <p>
               Quando você compartilha um palpite, geramos um link público com o conteúdo do
               palpite e os times do jogo — sem seu nome, e-mail ou foto. O link só existe porque
-              você pediu, e você pode pedir para desativá-lo a qualquer momento pelo canal de
-              contato — ele deixa de abrir para todo mundo.
+              você pediu, e você pode desativá-lo a qualquer momento com o botão &ldquo;Parar de
+              compartilhar&rdquo; no próprio palpite — ele deixa de abrir para todo mundo.
             </p>
           </section>
 

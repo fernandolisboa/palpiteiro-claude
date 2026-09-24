@@ -1,4 +1,4 @@
-# ADR 0039 — Exclusão de conta (LGPD): tombstone do `users` + anonimização do histórico, não cascade duro
+# ADR 0046 — Exclusão de conta (LGPD): tombstone do `users` + anonimização do histórico, não cascade duro
 
 ## Status
 
@@ -50,7 +50,7 @@ prometido na `/privacidade` (§8) com prazo de 15 dias.
 
 - **Art. 18, VI** (eliminação dos dados tratados com consentimento) e **art. 15, III** +
   **art. 16** (término do tratamento por comunicação do titular → eliminação, salvo as
-  exceções do art. 16). Nossa base é execução de contrato (ADR 0040), então o pedido de
+  exceções do art. 16). Nossa base é execução de contrato (ADR 0047), então o pedido de
   exclusão = fim do contrato = término do tratamento (art. 15, III) → eliminação (art. 16,
   caput). *(verificado na fonte)*
 - **Art. 16, IV**: conservação autorizada "para uso exclusivo do controlador, vedado seu

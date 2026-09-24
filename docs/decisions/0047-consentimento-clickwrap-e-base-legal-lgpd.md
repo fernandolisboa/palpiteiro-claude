@@ -1,4 +1,4 @@
-# ADR 0040 — Aceite explícito (clickwrap) dos Termos, Política informada, e base legal por finalidade (LGPD)
+# ADR 0047 — Aceite explícito (clickwrap) dos Termos, Política informada, e base legal por finalidade (LGPD)
 
 ## Status
 

@@ -7,8 +7,8 @@ import { LEGAL_CONTACT_EMAIL, controllerIdentification } from "@/lib/legal/contr
 
 // Rota PÚBLICA estática (sem auth, sem DB) — precisa ser lida ANTES do login (linkada
 // no /signin e no footer). Liberada no matcher do middleware (`termos$`). Conteúdo
-// revisado em docs/reports/11-revisao-legal.md; aceite explícito (clickwrap) no ADR 0040;
-// envelope não-operador / sem vínculo com casa de apostas no ADR 0041. Versão
+// revisado em docs/reports/11-revisao-legal.md; aceite explícito (clickwrap) no ADR 0047;
+// envelope não-operador / sem vínculo com casa de apostas no ADR 0048. Versão
 // forward-only: bump a data ao mudar o texto material.
 export const dynamic = "force-static";
 

@@ -84,7 +84,7 @@ export default async function PerfilPage() {
         </div>
 
         {/* Caminho visível pros direitos do titular (LGPD art. 18) enquanto a exclusão
-            self-serve (ADR 0039) não existe: o pedido sai do e-mail da conta, o que já
+            self-serve (ADR 0046) não existe: o pedido sai do e-mail da conta, o que já
             confirma a titularidade. */}
         <div className="border-border mt-10 border-t pt-8">
           <h2 className="text-display-sm font-medium tracking-tight">

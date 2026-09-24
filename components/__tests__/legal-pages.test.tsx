@@ -31,7 +31,7 @@ describe("/termos", () => {
     expect(html).toContain("contato@palpiteiro.live");
   });
 
-  // Report 11 / ADRs 0040-0041: aceite explícito, sem vínculo com casa, limitação de
+  // Report 11 / ADRs 0047-0048: aceite explícito, sem vínculo com casa, limitação de
   // responsabilidade que não afasta direitos irrenunciáveis, lei/foro.
   it("registra o aceite, o não-vínculo com casas e os limites legais", () => {
     expect(html).toContain("aceita estes Termos");
@@ -66,7 +66,7 @@ describe("/privacidade", () => {
     expect(html).toContain('href="/termos"');
   });
 
-  // Report 11 / ADRs 0039-0040: art. 9º (finalidade + base legal + direitos do art. 18),
+  // Report 11 / ADRs 0046-0047: art. 9º (finalidade + base legal + direitos do art. 18),
   // art. 33 (transferência), Res. CD/ANPD 2/2022 art. 11 (canal sem encarregado),
   // prazo de resposta e o que a exclusão apaga vs. anonimiza.
   it("traz base legal por finalidade, transferência, encarregado e prazos", () => {
@@ -80,7 +80,7 @@ describe("/privacidade", () => {
     expect(html).toContain("ANPD");
   });
 
-  it("não se apoia em consentimento como base do serviço (ADR 0040)", () => {
+  it("não se apoia em consentimento como base do serviço (ADR 0047)", () => {
     expect(html).toContain("Não usamos o consentimento como base");
   });
 });
