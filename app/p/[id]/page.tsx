@@ -9,7 +9,8 @@ import {
   NEUTRAL_DESCRIPTION,
 } from "@/app/p/[id]/load-shared-palpite";
 
-// Snapshot público imutável (ADR 0035 §13): cache longo, revalida a cada 24h. A página é
+// Snapshot público (ADR 0035 §13): cache longo no ISR/CDN, revalida a cada 24h — e o
+// kill-switch (unshareSet, §3e / #438) purga via revalidatePath. A página é
 // pura leitura de DB (sem auth, sem mutação) — o link é resolvível por qualquer um (a
 // privacidade é o opt-in shared_at, gateado na query).
 export const revalidate = 86400;
@@ -19,7 +20,7 @@ export const revalidate = 86400;
 // um `notFound()` posterior fica preso em 200 (soft-404). Sem ele, a página AWAIT a query e
 // o `notFound()` dispara antes de qualquer byte → 404 semântico real (curl -I confirmado).
 // Trade aceito: link a frio (cache-miss) perde o skeleton de Neon cold-start (~1s), mas o
-// snapshot válido é cacheado `immutable` (revalidate 24h + Cache-Control do next.config) — o
+// snapshot válido é cacheado na CDN (revalidate 24h + s-maxage do next.config) — o
 // cache-miss é raro (1ª view por link/24h; o scraper de OG costuma esquentar o cache antes do
 // humano clicar). `generateMetadata` segue intocado → a description NEUTRA (firewall/privacy
 // MAJOR 3) continua valendo no head do dead-link, sem cascatear a root "Recomendações de

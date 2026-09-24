@@ -1,10 +1,18 @@
 "use client";
 
 import { useActionState, useState } from "react";
-import { Check, Info, Link2, Loader2, Sparkles, TriangleAlert } from "lucide-react";
+import {
+  Check,
+  Info,
+  Link2,
+  Link2Off,
+  Loader2,
+  Sparkles,
+  TriangleAlert,
+} from "lucide-react";
 
 import { analyzeBestBet } from "@/app/actions/predictions";
-import { shareSet } from "@/app/actions/share";
+import { shareSet, unshareSet } from "@/app/actions/share";
 import { SettleableBadge } from "@/components/palpites/palpite-badges";
 import { Button } from "@/components/ui/button";
 import { Callout } from "@/components/ui/callout";
@@ -247,10 +255,11 @@ function PopulatedHero({
 }
 
 // Botão de compartilhar (#384): IMPERATIVO (type="button", onClick) — não toca o <form
-// action={analyzeBestBet}>. Ramifica em sharedAt: ainda-não-compartilhado → "Compartilhar"
-// (chama shareSet, que carimba shared_at, depois copia o link); já-compartilhado → "Copiar
-// link" (copia direto SEM re-chamar o action). Confirmação "Link copiado" via useState local.
-// navigator.share é progressive enhancement opcional sobre o copy baseline.
+// action={analyzeBestBet}>. Ramifica em `shared` (semeado de sharedAt, depois local):
+// ainda-não-compartilhado → "Compartilhar" (chama shareSet, que carimba shared_at, depois
+// copia o link); já-compartilhado → "Copiar link" (copia direto SEM re-chamar o action) +
+// "Parar de compartilhar" (kill-switch, ADR 0035 §3e / #438: unshareSet limpa shared_at e
+// volta ao estado não-compartilhado). Confirmação "Link copiado" via useState local.
 function ShareButton({
   setId,
   sharedAt,
@@ -258,10 +267,10 @@ function ShareButton({
   setId: string;
   sharedAt: Date | null;
 }) {
+  const [shared, setShared] = useState(sharedAt !== null);
   const [copied, setCopied] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [busy, setBusy] = useState(false);
-  const alreadyShared = sharedAt !== null;
 
   async function copyLink(path: string) {
     const url = window.location.origin + path;
@@ -276,7 +285,7 @@ function ShareButton({
 
   async function onClick() {
     setError(null);
-    if (alreadyShared) {
+    if (shared) {
       // Já compartilhado: copia o link direto, sem re-chamar o action (skip-not-restamp).
       await copyLink(`/p/${setId}`);
       return;
@@ -285,7 +294,24 @@ function ShareButton({
     try {
       const r = await shareSet(setId);
       if (r.ok) {
+        setShared(true);
         await copyLink(r.path);
+      } else {
+        setError(r.error);
+      }
+    } finally {
+      setBusy(false);
+    }
+  }
+
+  async function onUnshare() {
+    setError(null);
+    setBusy(true);
+    try {
+      const r = await unshareSet(setId);
+      if (r.ok) {
+        setShared(false);
+        setCopied(false);
       } else {
         setError(r.error);
       }
@@ -296,28 +322,42 @@ function ShareButton({
 
   const label = copied
     ? "Link copiado"
-    : alreadyShared
+    : shared
       ? "Copiar link"
       : "Compartilhar";
 
   return (
     <span className="flex flex-col gap-1">
-      <Button
-        type="button"
-        size="sm"
-        variant="ghost"
-        onClick={onClick}
-        disabled={busy}
-        aria-live="polite"
-        className="self-start text-palpite-strong-fg hover:bg-palpite-soft"
-      >
-        {copied ? (
-          <Check className="size-3.5" />
-        ) : (
-          <Link2 className="size-3.5" />
-        )}{" "}
-        {label}
-      </Button>
+      <span className="flex flex-wrap items-center gap-1">
+        <Button
+          type="button"
+          size="sm"
+          variant="ghost"
+          onClick={onClick}
+          disabled={busy}
+          aria-live="polite"
+          className="self-start text-palpite-strong-fg hover:bg-palpite-soft"
+        >
+          {copied ? (
+            <Check className="size-3.5" />
+          ) : (
+            <Link2 className="size-3.5" />
+          )}{" "}
+          {label}
+        </Button>
+        {shared && (
+          <Button
+            type="button"
+            size="sm"
+            variant="ghost"
+            onClick={onUnshare}
+            disabled={busy}
+            className="self-start text-muted-foreground hover:bg-palpite-soft"
+          >
+            <Link2Off className="size-3.5" /> Parar de compartilhar
+          </Button>
+        )}
+      </span>
       {error && (
         <span className="text-eyebrow-xs tracking-tight text-muted-foreground">
           {error}

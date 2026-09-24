@@ -66,27 +66,29 @@ const nextConfig: NextConfig = {
         ],
       },
       {
-        // /p/[id] + /p/[id]/opengraph-image (#384/#416, ADR 0035 §8/§11/§13): snapshot público
-        // imutável (cache longo) + noindex + no-referrer. `:path*` cobre a página E a sub-rota OG.
-        // VERIFICADO via `curl -I` no `next start` num palpite REAL compartilhado (#416 item 2):
-        //   - PÁGINA válida → `Cache-Control: public, max-age=86400, immutable` (header único, este
-        //     daqui). É o escudo de custo: link viral não re-bate no Postgres a cada view (CDN/ISR
-        //     servem o snapshot cacheado; revalida em 24h).
-        //   - ROTA OG → DOIS headers Cache-Control: este (`max-age=86400, immutable`) MAIS o que o
-        //     ImageResponse self-seta (`public, immutable, no-transform, max-age=31536000`). Ambos
-        //     cache-friendly → a imagem é agressivamente cacheada de qualquer jeito; o duplo-header
-        //     é cosmético, não fura o escudo (NÃO é o `max-age=0` que um comentário antigo supunha).
+        // /p/[id] + /p/[id]/opengraph-image (#384/#416/#438, ADR 0035 §3e/§8/§11/§13): snapshot
+        // público + noindex + no-referrer. `:path*` cobre a página E a sub-rota OG.
+        // Cache-Control `public, max-age=0, s-maxage=86400, must-revalidate` (#438): a CDN/ISR
+        // (s-maxage + `revalidate = 86400` da página) segue absorvendo o link viral sem re-bater
+        // no Postgres, mas o BROWSER revalida a cada view. Antes era `max-age=86400, immutable`,
+        // que pinava a página no browser por 24h — o kill-switch (unshareSet limpa shared_at +
+        // revalidatePath purga o ISR) não alcançava quem já tinha aberto o link.
+        //   - ROTA OG → DOIS headers Cache-Control: este MAIS o que o ImageResponse self-seta
+        //     (`public, immutable, no-transform, max-age=31536000`). A imagem segue agressivamente
+        //     cacheada pelo próprio ImageResponse; o duplo-header é cosmético. Unfurls já raspados
+        //     (WhatsApp/X) vivem no cache do scraper e não são revogáveis por nós de qualquer jeito.
         // X-Robots-Tag/Referrer-Policy são aditivos (sem colisão) e alcançam página + OG.
-        // NOTA dead-link (#416, VERIFICADO em prod): no `next start` o notFound herda este header
-        // (headers() aplica literalmente). Em prod — `curl -I https://palpiteiro.live/p/<dead>` — o
-        // caminho notFound retorna `private, no-cache, no-store, max-age=0, must-revalidate` +
-        // `x-vercel-cache: MISS`: o Next força no-store no notFound, sobrescrevendo este header → o
-        // 404 NÃO é cacheado. Reforço: este header é `max-age` (diretiva de BROWSER), SEM `s-maxage`;
-        // a CDN da Vercel só cacheia function-response com `s-maxage`, então nem o caso local
-        // poderia envenenar a CDN compartilhada com um 404. Escudo do caso válido intacto.
+        // NOTA dead-link (#416, VERIFICADO em prod com o header antigo): o caminho notFound
+        // retorna `private, no-cache, no-store, max-age=0, must-revalidate` + `x-vercel-cache:
+        // MISS` — o Next força no-store no notFound, sobrescrevendo este header → o 404 NÃO é
+        // cacheado. Re-verificar com `curl -I https://palpiteiro.live/p/<dead>` agora que este
+        // header carrega `s-maxage` (o override do notFound deve continuar valendo).
         source: "/p/:path*",
         headers: [
-          { key: "Cache-Control", value: "public, max-age=86400, immutable" },
+          {
+            key: "Cache-Control",
+            value: "public, max-age=0, s-maxage=86400, must-revalidate",
+          },
           { key: "X-Robots-Tag", value: "noindex" },
           { key: "Referrer-Policy", value: "no-referrer" },
         ],
