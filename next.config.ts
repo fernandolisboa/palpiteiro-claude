@@ -1,6 +1,8 @@
 import { withSentryConfig } from "@sentry/nextjs";
 import type { NextConfig } from "next";
 
+import { CSP_HEADER, cspForEnv, PUBLIC_HTML_SOURCES } from "./lib/security/csp";
+
 const nextConfig: NextConfig = {
   // Build id determinístico a partir do commit SHA do deploy (ADR 0024). `null`
   // = comportamento default do Next (id aleatório) em dev/local, onde a env não
@@ -15,7 +17,13 @@ const nextConfig: NextConfig = {
       process.env.VERCEL_GIT_COMMIT_SHA ?? "dev",
   },
   async headers() {
+    const publicCsp = cspForEnv();
     return [
+      // Content-Security-Policy (#467, ADR 0040) — fase report-only; ver lib/security/csp.ts.
+      ...PUBLIC_HTML_SOURCES.map((source) => ({
+        source,
+        headers: [{ key: CSP_HEADER, value: publicCsp }],
+      })),
       {
         // Documento HTML → no-cache pra o Safari (iOS) não segurar HTML antigo
         // por dias após deploy (ADR 0024). CRÍTICO: o lookahead negativo exclui
@@ -40,9 +48,7 @@ const nextConfig: NextConfig = {
         // dedicado abaixo. Sem essa exclusão, o crawler re-baixaria as duas a cada hit.
         source:
           "/:path((?!_next/|api/|monitoring(?:/|$)|p/|robots\\.txt|sitemap\\.xml).*)",
-        headers: [
-          { key: "Cache-Control", value: "no-cache, must-revalidate" },
-        ],
+        headers: [{ key: "Cache-Control", value: "no-cache, must-revalidate" }],
       },
       {
         // /robots.txt + /sitemap.xml (#468, ADR 0024): conteúdo estático que só muda
@@ -87,9 +93,8 @@ const nextConfig: NextConfig = {
       },
       {
         // Headers de segurança globais (report 01 achado #2 / #436). Aplicam a TODAS as
-        // rotas (inclui /p, que só ADICIONA os seus). SEM CSP por ora: o app tem scripts
-        // inline do Next + o túnel Sentry (/monitoring), então CSP exige nonce ou
-        // report-only — follow-up cuidadoso, não este PR. Permissions-Policy nomeia só
+        // rotas (inclui /p, que só ADICIONA os seus). A CSP mora no topo desta lista (páginas
+        // públicas) e no middleware (gateadas, com nonce) — #467. Permissions-Policy nomeia só
         // camera/microphone/geolocation (nega): WebAuthn/passkey usa
         // `publickey-credentials-get`, que NÃO é listado → mantém o default (self), intacto.
         // X-Frame-Options DENY: o app não é embutido em iframe (o Sentry usa fetch, não frame).
