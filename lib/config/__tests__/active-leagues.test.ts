@@ -10,7 +10,7 @@ import {
 } from "@/lib/config/active-leagues";
 
 describe("active-leagues config", () => {
-  it("ativa Brasileirão + Champions + Premier League + La Liga (#491, ADR 0045), Brasileirão primeiro", () => {
+  it("ativa Brasileirão + Champions + Premier League + La Liga (#491, ADR 0049), Brasileirão primeiro", () => {
     expect(ACTIVE_LEAGUES).toEqual([
       "brasileirao_a",
       "champions_league",

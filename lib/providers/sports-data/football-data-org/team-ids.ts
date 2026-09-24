@@ -121,6 +121,8 @@ export const FOOTBALL_DATA_ORG_TEAM_IDS: Record<SupportedLeague, Readonly<Record
   serie_a: {},
   bundesliga: {},
   ligue_1: {},
+  copa_libertadores: {},
+  copa_sudamericana: {},
   premier_league: {
     "Arsenal FC": 57,
     "Aston Villa FC": 58,
@@ -144,7 +146,7 @@ export const FOOTBALL_DATA_ORG_TEAM_IDS: Record<SupportedLeague, Readonly<Record
     "Coventry City FC": 1076,
   },
   la_liga: {
-    // Racing Santander (promovido 2026/27) sem id confirmado — ver ADR 0045 §3.
+    // Racing Santander (promovido 2026/27) sem id confirmado — ver ADR 0049 §3.
     "Athletic Club": 77,
     "Club Atlético de Madrid": 78,
     "CA Osasuna": 79,

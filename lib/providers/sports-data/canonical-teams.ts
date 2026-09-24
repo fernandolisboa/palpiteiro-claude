@@ -127,6 +127,8 @@ export const CANONICAL_TEAMS: Record<SupportedLeague, readonly string[]> = {
   serie_a: [],
   bundesliga: [],
   ligue_1: [],
+  copa_libertadores: [],
+  copa_sudamericana: [],
   premier_league: [
     "AFC Bournemouth",
     "Arsenal FC",

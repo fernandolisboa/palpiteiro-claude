@@ -9,15 +9,15 @@
 // O componente NUNCA desestrutura view.sources / view.narrative / view.citedMarkets nem a
 // row crua de match — eles são estruturalmente ausentes da imagem.
 //
-// GUARD DE RENDER (firewall BLOCKER 1): buildOgTextPieces roda um guard MAIS ESTRITO sobre
-// `view.verdict` — containsValueLanguage (denylist de 13 termos) NÃO basta porque não bane
-// "%" nem um preço solto ("2.10"). A imagem vira PNG permanente que nenhum check downstream
+// GUARD DE RENDER (firewall BLOCKER 1): buildOgTextPieces roda `unsafeForPublic`
+// (lib/view/share/public-text-guard.ts) sobre `view.verdict` — containsValueLanguage
+// (denylist de 13 termos) NÃO basta porque não bane "%" nem um preço solto ("2.10"). A imagem vira PNG permanente que nenhum check downstream
 // lê, então um hit degrada pra forma SEM VEREDITO (times + placar + disclaimer), nunca
 // assando um preço no PNG.
 
 import type { PalpiteHeadlineView } from "@/lib/view/palpites-headline";
 import { OG_DISCLAIMER_STRIP } from "@/lib/view/share/disclaimer";
-import { containsValueLanguage } from "@/lib/ai/palpites/value-language-guard";
+import { unsafeForPublic } from "@/lib/view/share/public-text-guard";
 
 // Rótulo qualitativo da confiança — definido LOCAL (não importado do palpite-hero.tsx, que é
 // "use client" e arrasta analyzeBestBet). Firewall-safe: palavra, nunca dígito/%.
@@ -43,20 +43,6 @@ export type OgTextPieces = {
   disclaimer: string;
 };
 
-// Detecta linguagem de valor que o PNG NÃO PODE assar: o denylist de 13 termos +
-// "%" + um preço/decimal solto ("2.10", "1,95"). Mais estrito que o guard de geração
-// porque a imagem é irrevogável.
-function verdictUnsafeForImage(verdict: string): boolean {
-  return (
-    containsValueLanguage(verdict) ||
-    /%/.test(verdict) ||
-    // Qualquer decimal solto (preço/odd): `\d+[.,]\d+` pega 1-2 casas ("2.10") E
-    // 3+ ("1.955") — a imagem é PNG irrevogável, então o guard não pode deixar um
-    // preço de 3+ casas escapar pela fronteira de palavra (`\b...\d{1,2}\b`, review #384).
-    /\d+[.,]\d+/.test(verdict)
-  );
-}
-
 // Iniciais ≤2 de um nome de time — Satori não rasteriza /flags/*.svg, então o chip é
 // iniciais sRGB. Fallback robusto pra string vazia (nunca deve acontecer).
 function initialsOf(short: string): string {
@@ -74,8 +60,9 @@ export function buildOgTextPieces(
     awayShort: string;
   },
 ): OgTextPieces {
-  // GUARD: veredito inseguro → "" (a imagem cai pra forma sem-veredito).
-  const verdict = verdictUnsafeForImage(view.verdict) ? "" : view.verdict;
+  // GUARD (defesa em profundidade — o loader já 404a veredito inseguro): a imagem é PNG
+  // irrevogável, então um hit aqui cai pra forma sem-veredito ("").
+  const verdict = unsafeForPublic(view.verdict) ? "" : view.verdict;
   return {
     verdict,
     // Placar PREVISTO (inteiros) com en-dash — case /^\d{1,2}[–-]\d{1,2}$/, nunca decimal.

@@ -32,6 +32,11 @@ vi.mock("@upstash/ratelimit", () => {
   return { Ratelimit };
 });
 
+const captureMessage = vi.fn();
+vi.mock("@sentry/nextjs", () => ({
+  captureMessage: (...args: unknown[]) => captureMessage(...args),
+}));
+
 // O módulo memoiza o singleton; cada teste re-importa após vi.resetModules().
 async function load() {
   const mod = await import("@/lib/auth/magic-link-rate-limit");
@@ -43,8 +48,14 @@ async function loadIp() {
   return mod.checkMagicLinkIpRateLimit;
 }
 
+async function loadGlobal() {
+  const mod = await import("@/lib/auth/magic-link-rate-limit");
+  return mod.checkMagicLinkGlobalRateLimit;
+}
+
 beforeEach(() => {
   vi.resetModules();
+  captureMessage.mockReset();
   mockLimit.mockReset();
   fixedWindow.mockClear();
   limited.length = 0;
@@ -75,7 +86,9 @@ describe("checkMagicLinkRateLimit", () => {
     const check = await load();
     await check("a@ex.com");
     expect(fixedWindow).toHaveBeenCalledWith(5, "1 h");
-    expect(limited).toEqual([{ prefix: "ratelimit:magic-link", key: "a@ex.com" }]);
+    expect(limited).toEqual([
+      { prefix: "ratelimit:magic-link", key: "a@ex.com" },
+    ]);
   });
 
   it("chaveia pelo e-mail NORMALIZADO (trim+lowercase)", async () => {
@@ -142,5 +155,73 @@ describe("checkMagicLinkIpRateLimit", () => {
     expect(await check("203.0.113.7")).toBe(true);
     expect(mockLimit).not.toHaveBeenCalled();
     warn.mockRestore();
+  });
+});
+
+describe("checkMagicLinkIpRateLimit — override de env", () => {
+  it("respeita RATE_LIMIT_MAGIC_LINK_IP_PER_HOUR", async () => {
+    vi.stubEnv("RATE_LIMIT_MAGIC_LINK_IP_PER_HOUR", "3");
+    mockLimit.mockResolvedValue({ success: true });
+    const check = await loadIp();
+    await check("2001:db8:1:2::/64");
+    expect(fixedWindow).toHaveBeenCalledWith(3, "1 h");
+    expect(limited).toEqual([
+      { prefix: "ratelimit:magic-link-ip", key: "2001:db8:1:2::/64" },
+    ]);
+  });
+});
+
+describe("checkMagicLinkGlobalRateLimit", () => {
+  it("usa bucket próprio ('ratelimit:magic-link-global'), chave fixa e default 80/24h", async () => {
+    mockLimit.mockResolvedValue({ success: true });
+    const check = await loadGlobal();
+    expect(await check()).toBe(true);
+    expect(fixedWindow).toHaveBeenCalledWith(80, "24 h");
+    expect(limited).toEqual([
+      { prefix: "ratelimit:magic-link-global", key: "global" },
+    ]);
+    expect(captureMessage).not.toHaveBeenCalled();
+  });
+
+  it("respeita RATE_LIMIT_MAGIC_LINK_GLOBAL_PER_DAY", async () => {
+    vi.stubEnv("RATE_LIMIT_MAGIC_LINK_GLOBAL_PER_DAY", "40");
+    mockLimit.mockResolvedValue({ success: true });
+    const check = await loadGlobal();
+    await check();
+    expect(fixedWindow).toHaveBeenCalledWith(40, "24 h");
+  });
+
+  it("retorna false ao estourar e avisa o Sentry UMA vez por janela de throttle", async () => {
+    mockLimit.mockResolvedValue({ success: false });
+    const check = await loadGlobal();
+    expect(await check()).toBe(false);
+    expect(await check()).toBe(false);
+    expect(captureMessage).toHaveBeenCalledTimes(1);
+    expect(captureMessage).toHaveBeenCalledWith(
+      "magic-link global rate limit tripped",
+      "warning"
+    );
+  });
+
+  it("fail-OPEN (true) sem KV", async () => {
+    vi.stubEnv("KV_REST_API_URL", "");
+    const warn = vi.spyOn(console, "warn").mockImplementation(() => {});
+    const check = await loadGlobal();
+    expect(await check()).toBe(true);
+    expect(mockLimit).not.toHaveBeenCalled();
+    warn.mockRestore();
+  });
+
+  it("os três limiters são buckets independentes (um prefixo cada)", async () => {
+    mockLimit.mockResolvedValue({ success: true });
+    const mod = await import("@/lib/auth/magic-link-rate-limit");
+    await mod.checkMagicLinkRateLimit("a@ex.com");
+    await mod.checkMagicLinkIpRateLimit("203.0.113.7");
+    await mod.checkMagicLinkGlobalRateLimit();
+    expect(limited.map((l) => l.prefix)).toEqual([
+      "ratelimit:magic-link",
+      "ratelimit:magic-link-ip",
+      "ratelimit:magic-link-global",
+    ]);
   });
 });

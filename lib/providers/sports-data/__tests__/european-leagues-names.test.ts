@@ -5,7 +5,7 @@ import { CANONICAL_TEAMS } from "@/lib/providers/sports-data/canonical-teams";
 import { canonicalizeTeamName } from "@/lib/providers/sports-data/team-names";
 
 // Nomes como a API-Football os devolve (2026/27) → canônico esperado. Pina os
-// aliases de team-names.ts e o fuzzy match (ADR 0045).
+// aliases de team-names.ts e o fuzzy match (ADR 0049).
 const API_FOOTBALL_NAMES = {
   premier_league: {
     Arsenal: "Arsenal FC",
@@ -54,7 +54,7 @@ const API_FOOTBALL_NAMES = {
 } as const;
 
 // Nomes como a The Odds API os escreve (soccer_epl / soccer_spain_la_liga).
-// Não validados ao vivo (sem ODDS_API_KEY no ambiente de CI) — ADR 0045 §4.
+// Não validados ao vivo (sem ODDS_API_KEY no ambiente de CI) — ADR 0049 §4.
 const ODDS_API_NAMES = {
   premier_league: [
     "Arsenal", "Aston Villa", "Bournemouth", "Brentford",
@@ -73,7 +73,7 @@ const ODDS_API_NAMES = {
 
 const LEAGUES = ["premier_league", "la_liga"] as const;
 
-describe("Premier League + La Liga team names (ADR 0045)", () => {
+describe("Premier League + La Liga team names (ADR 0049)", () => {
   for (const league of LEAGUES) {
     it(`${league}: every API-Football name canonicalizes`, () => {
       for (const [provider, canonical] of Object.entries(
@@ -107,7 +107,7 @@ describe("Premier League + La Liga team names (ADR 0045)", () => {
   });
 });
 
-describe("stopword change keeps existing leagues resolving (ADR 0045 §4)", () => {
+describe("stopword change keeps existing leagues resolving (ADR 0049 §4)", () => {
   it("API-Football Brasileirão/Champions names with atletico/athletic still canonicalize", () => {
     expect(canonicalizeTeamName("Atletico Paranaense", "brasileirao_a")).toBe("CA Paranaense");
     expect(canonicalizeTeamName("Atletico-MG", "brasileirao_a")).toBe("CA Mineiro");

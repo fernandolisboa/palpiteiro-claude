@@ -4,7 +4,7 @@ import { parseLeagueFilter, type LeagueFilter } from "@/lib/view/types";
 
 /**
  * Ligas ATIVAS (temporada 2026/27, pós-Copa — #491): Brasileirão Série A,
- * Champions League, Premier League e La Liga (ADR 0045 — as duas europeias juntas
+ * Champions League, Premier League e La Liga (ADR 0049 — as duas europeias juntas
  * ficam no limite dos 500 créditos/mês da The Odds API; ver §5). A Copa do Mundo 2026 acabou e saiu daqui; o histórico dos
  * jogos da Copa segue renderizando normalmente (páginas de jogo, dashboard,
  * predições liquidadas) porque nada disso lê esta constante.

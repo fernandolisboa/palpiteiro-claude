@@ -1,4 +1,4 @@
-# ADR 0045 — Premier League e La Liga como ligas suportadas e ativas
+# ADR 0049 — Premier League e La Liga como ligas suportadas e ativas
 
 ## Status
 

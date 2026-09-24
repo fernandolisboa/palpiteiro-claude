@@ -31,7 +31,7 @@ const TEAM_NAME_STOPWORDS = new Set([
   "clube",
   // "and": The Odds API escreve "Brighton and Hove Albion"; football-data usa "&".
   "and",
-  // "atletico"/"athletic" NÃO são stopwords (ADR 0045): com elas, "Atlético Madrid"
+  // "atletico"/"athletic" NÃO são stopwords (ADR 0049): com elas, "Atlético Madrid"
   // virava "madrid" e casava por inclusão com "Real Madrid" (1X2 invertido no
   // dérbi), e "Athletic Club" virava "" (nunca casava odds de "Athletic Bilbao").
 ]);
@@ -74,7 +74,7 @@ const TEAM_NAME_ALIASES: Partial<
     Botafogo: "Botafogo FR",
     Corinthians: "SC Corinthians Paulista",
     "Atletico-MG": "CA Mineiro",
-    // Resolvia só pelo stopword "atletico" (removido na ADR 0045).
+    // Resolvia só pelo stopword "atletico" (removido na ADR 0049).
     "Atletico Paranaense": "CA Paranaense",
   },
   champions_league: {
@@ -116,7 +116,7 @@ const TEAM_NAME_ALIASES: Partial<
     Levante: "Levante UD",
     "Real Betis": "Real Betis Balompié",
     "Real Sociedad": "Real Sociedad de Fútbol",
-    // Canônicos encurtados de propósito (ADR 0045): o nome completo do
+    // Canônicos encurtados de propósito (ADR 0049): o nome completo do
     // football-data contém "Barcelona"/"Madrid" e casaria por inclusão as odds
     // do rival da mesma cidade.
     "RCD Espanyol de Barcelona": "RCD Espanyol",

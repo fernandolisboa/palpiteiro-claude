@@ -260,7 +260,7 @@ describe("leagueToKey + LEAGUE_LABEL", () => {
     expect(LEAGUE_LABEL.l1).toBe("Ligue 1");
   });
 
-  it("maps Premier League and La Liga (ADR 0045)", () => {
+  it("maps Premier League and La Liga (ADR 0049)", () => {
     expect(leagueToKey("premier_league")).toBe("epl");
     expect(leagueToKey("la_liga")).toBe("laliga");
     expect(LEAGUE_LABEL.epl).toBe("Premier League");

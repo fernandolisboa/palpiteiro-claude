@@ -1,6 +1,6 @@
 {
-  "id": "e7064e2f-9ffe-44e1-aba3-987b38d7121e",
-  "prevId": "19fd1701-8247-4b3e-b259-a056ab820121",
+  "id": "63f2940b-a1c5-4ab0-86c7-d5c42f447d53",
+  "prevId": "e7064e2f-9ffe-44e1-aba3-987b38d7121e",
   "version": "7",
   "dialect": "postgresql",
   "tables": {
@@ -2276,7 +2276,9 @@
         "bundesliga",
         "ligue_1",
         "copa_libertadores",
-        "copa_sudamericana"
+        "copa_sudamericana",
+        "premier_league",
+        "la_liga"
       ]
     },
     "public.match_status": {
