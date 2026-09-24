@@ -223,5 +223,9 @@ describe("MIN_EDGE_PP ↔ SYSTEM_PROMPT sync", () => {
     expect(overUnderCartridge.systemPrompt).toContain(
       `${MIN_EDGE_PP} pontos percentuais`,
     );
+    // Regra 4 (minimum_odd) também deriva de MIN_EDGE_PP, não de um literal.
+    expect(overUnderCartridge.systemPrompt).toContain(
+      `mantém edge >= ${MIN_EDGE_PP}%. Obrigatório quando recommendation ∈ {"over","under"}`,
+    );
   });
 });
