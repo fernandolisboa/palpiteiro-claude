@@ -66,10 +66,64 @@ export function reliabilityBins(
   }));
 }
 
+// Calibration slope (logistic recalibration, Cox 1958): ajusta
+// logit(P(y=1)) = a + b·logit(p) por máxima verossimilhança e devolve b. É o
+// "reliability slope" do gate da Fase C (ADR 0019 / Report 03 rec. 7): b ≈ 1 ⇒
+// bem calibrado; b < 1 ⇒ forecasts extremos demais (overconfident — o caso que faz
+// Kelly super-apostar); b > 1 ⇒ tímidos demais. NaN quando não identificável: < 2
+// pares, y constante (separação — o MLE diverge), p constante (logit sem variância)
+// ou Newton sem convergir.
+export function calibrationSlope(pairs: CalibrationPair[]): number {
+  if (pairs.length < 2) return NaN;
+  const xs = pairs.map(({ p }) => {
+    const c = clampProb(p);
+    return Math.log(c / (1 - c));
+  });
+  const ys = pairs.map(({ y }) => y);
+  const ySum = ys.reduce<number>((a, b) => a + b, 0);
+  if (ySum === 0 || ySum === ys.length) return NaN;
+  const xMean = mean(xs);
+  if (xs.every((x) => Math.abs(x - xMean) < 1e-12)) return NaN;
+
+  // Newton-Raphson em (a, b) com Hessiana 2×2 fechada. Parte da identidade
+  // (a=0, b=1): o forecast tomado como está, que é onde um modelo razoável já cai.
+  let a = 0;
+  let b = 1;
+  for (let iter = 0; iter < 100; iter++) {
+    let g0 = 0;
+    let g1 = 0;
+    let h00 = 0;
+    let h01 = 0;
+    let h11 = 0;
+    for (let i = 0; i < xs.length; i++) {
+      const mu = 1 / (1 + Math.exp(-(a + b * xs[i])));
+      const w = mu * (1 - mu);
+      const r = ys[i] - mu;
+      g0 += r;
+      g1 += r * xs[i];
+      h00 += w;
+      h01 += w * xs[i];
+      h11 += w * xs[i] * xs[i];
+    }
+    const det = h00 * h11 - h01 * h01;
+    if (!(det > 1e-12)) return NaN;
+    const da = (h11 * g0 - h01 * g1) / det;
+    const db = (h00 * g1 - h01 * g0) / det;
+    a += da;
+    b += db;
+    if (!Number.isFinite(a) || !Number.isFinite(b) || Math.abs(b) > 1e3) {
+      return NaN; // separação quase-completa: o MLE foge pro infinito
+    }
+    if (Math.abs(da) < 1e-10 && Math.abs(db) < 1e-10) return b;
+  }
+  return NaN;
+}
+
 export type CalibrationSummary = {
   n: number;
   brier: number;
   logLoss: number;
+  slope: number; // calibrationSlope; NaN quando não identificável
   bins: ReliabilityBin[];
 };
 
@@ -82,6 +136,7 @@ export function computeCalibration(
     n: pairs.length,
     brier: brierScore(pairs),
     logLoss: logLoss(pairs),
+    slope: calibrationSlope(pairs),
     bins: reliabilityBins(pairs, nBins),
   };
 }
