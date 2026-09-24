@@ -6,7 +6,10 @@ import {
   isCanonicalTeam,
 } from "@/lib/providers/sports-data/canonical-teams";
 import { FOOTBALL_DATA_ORG_TEAM_IDS } from "@/lib/providers/sports-data/football-data-org/team-ids";
-import { SUPPORTED_LEAGUES } from "@/lib/providers/sports-data/leagues";
+import {
+  FOOTBALL_DATA_ORG_LEAGUE_CODES,
+  SUPPORTED_LEAGUES,
+} from "@/lib/providers/sports-data/leagues";
 
 describe("CANONICAL_TEAMS", () => {
   it("has 20 Brasileirão teams", () => {
@@ -38,8 +41,11 @@ describe("CANONICAL_TEAMS", () => {
 });
 
 describe("FOOTBALL_DATA_ORG_TEAM_IDS coverage", () => {
-  it("covers every canonical team in every league", () => {
+  // Only leagues football-data.org serves (the CONMEBOL cups aren't on its free
+  // tier — ADR 0045); API-Football covers every league below.
+  it("covers every canonical team in every league it serves", () => {
     for (const league of SUPPORTED_LEAGUES) {
+      if (!FOOTBALL_DATA_ORG_LEAGUE_CODES[league]) continue;
       const map = FOOTBALL_DATA_ORG_TEAM_IDS[league];
       const missing = CANONICAL_TEAMS[league].filter(
         (name) => !(name in map),

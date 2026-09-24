@@ -69,6 +69,10 @@ async function fetchFootballDataOrgTeams(
   league: SupportedLeague,
 ): Promise<TeamEntry[]> {
   const code = FOOTBALL_DATA_ORG_LEAGUE_CODES[league];
+  if (!code) {
+    console.log(`[fd-org] ${league}: not served by football-data.org — skipping.`);
+    return [];
+  }
   const key = process.env.FOOTBALL_DATA_ORG_API_KEY;
   if (!key) throw new Error("FOOTBALL_DATA_ORG_API_KEY not set");
   const url = `https://api.football-data.org/v4/competitions/${code}/teams`;
@@ -309,7 +313,8 @@ async function main() {
   const merged = emptyByLeague<string[]>(() => []);
   const seededLeagues = new Set<SupportedLeague>();
   for (const league of SUPPORTED_LEAGUES) {
-    if (existing[league].length === 0) {
+    // A provider that doesn't serve the league (no teams back) never seeds it.
+    if (existing[league].length === 0 && teamsByLeague[league].length > 0) {
       merged[league] = teamsByLeague[league].map((t) => t.name).sort();
       seededLeagues.add(league);
       console.log(

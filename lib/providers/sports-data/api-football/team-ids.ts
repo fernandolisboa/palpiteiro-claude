@@ -121,6 +121,8 @@ export const API_FOOTBALL_TEAM_IDS: Record<SupportedLeague, Readonly<Record<stri
   serie_a: {},
   bundesliga: {},
   ligue_1: {},
+  copa_libertadores: {},
+  copa_sudamericana: {},
 };
 
 export function resolveTeamId(name: string, league: SupportedLeague): number | undefined {
