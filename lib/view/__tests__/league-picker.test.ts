@@ -18,10 +18,12 @@ describe("leaguePickerGroups", () => {
     const groups = leaguePickerGroups(["bsa", "ucl"]);
     expect(groups.map((g) => g.label)).toEqual([null, "Brasil", "Europa"]);
     expect(activeValues(groups)).toEqual(["all", "bsa", "ucl"]);
+    // Premier League/La Liga fora da lista ativa: aparecem, desabilitadas.
+    expect(flat(groups).find((o) => o.value === "epl")?.active).toBe(false);
   });
 
   it("usa a config real por default (ACTIVE_LEAGUE_KEYS)", () => {
-    expect(activeValues(leaguePickerGroups())).toEqual(["all", "bsa", "ucl"]);
+    expect(activeValues(leaguePickerGroups())).toEqual(["all", "bsa", "ucl", "epl", "laliga"]);
   });
 
   it("sem 'Todas' com uma liga ativa; liga de clube inativa fica desabilitada", () => {
@@ -44,7 +46,17 @@ describe("leaguePickerGroups", () => {
     for (const k of ["sa", "bl", "l1"]) expect(inactive).not.toContain(k);
     const groups = leaguePickerGroups(["bsa", "ucl", "sa"]);
     const europa = groups.find((g) => g.label === "Europa");
-    expect(europa?.options.map((o) => o.value)).toEqual(["ucl", "sa"]);
+    // epl/laliga são ligas de clube registradas e não escondidas: aparecem desabilitadas.
+    expect(europa?.options.map((o) => o.value)).toEqual(["ucl", "sa", "epl", "laliga"]);
+  });
+
+  it("Premier League e La Liga aparecem em Europa (ADR 0049)", () => {
+    const europa = leaguePickerGroups().find((g) => g.label === "Europa");
+    expect(europa?.options.map((o) => [o.value, o.label, o.active])).toEqual([
+      ["ucl", "Champions", true],
+      ["epl", "Premier League", true],
+      ["laliga", "La Liga", true],
+    ]);
   });
 
   it("toda liga suportada tem opção (escala com SUPPORTED_LEAGUES)", () => {

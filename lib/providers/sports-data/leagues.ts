@@ -9,6 +9,8 @@ export const SUPPORTED_LEAGUES = [
   "ligue_1",
   "copa_libertadores",
   "copa_sudamericana",
+  "premier_league",
+  "la_liga",
 ] as const;
 export type SupportedLeague = (typeof SUPPORTED_LEAGUES)[number];
 export const SupportedLeagueSchema = z.enum(SUPPORTED_LEAGUES);
@@ -21,6 +23,8 @@ export const SupportedLeagueSchema = z.enum(SUPPORTED_LEAGUES);
 //   The CONMEBOL cups are NOT on football-data.org's free tier (Libertadores is paid
 //   "CLI"; Sudamericana isn't offered), so they have no code: API-Football is their
 //   only fixtures source (ADR 0045).
+//   Premier League / La Liga: API-Football 39 / 140; football-data.org PL / PD
+//   (IDs 2021 / 2014), also free tier.
 export const API_FOOTBALL_LEAGUE_IDS: Record<SupportedLeague, number> = {
   brasileirao_a: 71,
   champions_league: 2,
@@ -30,6 +34,8 @@ export const API_FOOTBALL_LEAGUE_IDS: Record<SupportedLeague, number> = {
   ligue_1: 61,
   copa_libertadores: 13,
   copa_sudamericana: 11,
+  premier_league: 39,
+  la_liga: 140,
 };
 
 // Partial: a league missing here isn't served by football-data.org (the adapter
@@ -43,6 +49,8 @@ export const FOOTBALL_DATA_ORG_LEAGUE_CODES: Partial<
   serie_a: "SA",
   bundesliga: "BL1",
   ligue_1: "FL1",
+  premier_league: "PL",
+  la_liga: "PD",
 };
 
 /**
@@ -53,7 +61,7 @@ export const FOOTBALL_DATA_ORG_LEAGUE_CODES: Partial<
  *   prior year's label (last season is the most recently completed one — the
  *   current season hasn't kicked off yet).
  * - Champions League and the European domestic leagues (Serie A, Bundesliga,
- *   Ligue 1) are cross-year: August–May. The label is the year the season
+ *   Ligue 1, Premier League, La Liga) are cross-year: August–May. The label is the year the season
  *   starts. January–July uses the prior year's label.
  * - CONMEBOL cups (Libertadores, Sudamericana): calendar-year, preliminary rounds
  *   from early February to the final in November. January uses the prior year's

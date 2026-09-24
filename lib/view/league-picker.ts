@@ -18,6 +18,8 @@ const LEAGUE_REGION: Record<LeagueKey, Region> = {
   l1: "Europa",
   lib: "América do Sul",
   sula: "América do Sul",
+  epl: "Europa",
+  laliga: "Europa",
 };
 
 // Torneio (Copa, a cada 4 anos) inativo é ESCONDIDO — "fora de temporada" pra Copa

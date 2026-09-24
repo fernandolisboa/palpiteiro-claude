@@ -55,10 +55,10 @@ const AWAY_2 = "Spain";
 // soccer_fifa_world_cup = sport key da liga world_cup (odds-api-constants).
 const SPORT_KEY = "soccer_fifa_world_cup";
 
-// Dois jogos da MESMA liga (world_cup) dentro da janela de 48h, pra provar que UMA
+// Dois jogos da MESMA liga (world_cup) dentro da janela de 24h, pra provar que UMA
 // chamada featured (batch) aquece a liga inteira (one-fetch-per-league).
 const KICKOFF_1 = new Date(Date.now() + 6 * 60 * 60 * 1000); // +6h
-const KICKOFF_2 = new Date(Date.now() + 30 * 60 * 60 * 1000); // +30h
+const KICKOFF_2 = new Date(Date.now() + 20 * 60 * 60 * 1000); // +20h
 const matchIds: { id1: string; id2: string } = {} as never;
 
 vi.mock("@/lib/config/active-leagues", () => ({

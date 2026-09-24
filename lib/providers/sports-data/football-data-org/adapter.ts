@@ -502,6 +502,8 @@ export class FootballDataOrgAdapter implements SportsDataProvider {
       "serie_a",
       "bundesliga",
       "ligue_1",
+      "premier_league",
+      "la_liga",
     ]),
   };
 
