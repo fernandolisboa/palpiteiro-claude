@@ -40,9 +40,19 @@ type CspOptions = {
   reportUri?: string | null;
 };
 
+/**
+ * Hash do script inline anti-flash do next-themes (root layout). Ele não recebe o nonce
+ * (passar o nonce exigiria ler headers() na root layout e tornaria TODA página dinâmica,
+ * inclusive `/` e `/p`), então entra por hash na variante com nonce. Só nela: na variante
+ * pública um hash desligaria o 'unsafe-inline'. Derivado de THEME_PROVIDER_PROPS
+ * (lib/theme.ts) + versão do next-themes; lib/security/csp.test.tsx recalcula e acusa drift.
+ */
+export const THEME_SCRIPT_HASH =
+  "'sha256-ajLvBa5Ur+hqZI0uwiHWuQhxljkv0lQHhfrIecjsJQo='";
+
 export function buildCsp({ nonce, isDev = false, reportUri }: CspOptions = {}) {
   const scriptSrc = nonce
-    ? ["'self'", `'nonce-${nonce}'`, "'strict-dynamic'"]
+    ? ["'self'", `'nonce-${nonce}'`, THEME_SCRIPT_HASH, "'strict-dynamic'"]
     : ["'self'", "'unsafe-inline'"];
   // React Refresh / webpack dev usam eval.
   if (isDev) scriptSrc.push("'unsafe-eval'");

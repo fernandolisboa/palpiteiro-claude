@@ -1,4 +1,10 @@
+import { createHash } from "node:crypto";
+
+import { renderToString } from "react-dom/server";
 import { afterEach, describe, expect, it, vi } from "vitest";
+
+import { ThemeProvider } from "@/components/theme-provider";
+import { THEME_PROVIDER_PROPS } from "@/lib/theme";
 
 import {
   buildCsp,
@@ -6,6 +12,7 @@ import {
   CSP_HEADER,
   generateNonce,
   sentryCspReportUri,
+  THEME_SCRIPT_HASH,
 } from "@/lib/security/csp";
 
 function directives(csp: string): Map<string, string[]> {
@@ -27,8 +34,29 @@ describe("buildCsp", () => {
     expect(d.get("script-src")).toEqual([
       "'self'",
       "'nonce-abc123=='",
+      THEME_SCRIPT_HASH,
       "'strict-dynamic'",
     ]);
+  });
+
+  it("THEME_SCRIPT_HASH bate com o script inline que o next-themes renderiza de fato", () => {
+    // Drift aqui (prop nova no ThemeProvider, bump do next-themes) = o script anti-flash
+    // passaria a violar a CSP das rotas gateadas em TODA view. Atualize o hash.
+    const html = renderToString(
+      <ThemeProvider {...THEME_PROVIDER_PROPS}>
+        <div />
+      </ThemeProvider>
+    );
+    const body = /<script[^>]*>([\s\S]*?)<\/script>/.exec(html)?.[1];
+    expect(body).toBeTruthy();
+    const hash = createHash("sha256")
+      .update(body ?? "")
+      .digest("base64");
+    expect(THEME_SCRIPT_HASH).toBe(`'sha256-${hash}'`);
+  });
+
+  it("variante estática NÃO leva o hash (desligaria o unsafe-inline)", () => {
+    expect(buildCsp()).not.toContain("sha256-");
   });
 
   it("variante estática (páginas públicas): unsafe-inline, sem nonce", () => {

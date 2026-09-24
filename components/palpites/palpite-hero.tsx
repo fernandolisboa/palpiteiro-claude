@@ -238,7 +238,7 @@ function PopulatedHero({
           )}
           {/* #384: compartilhar. Só com set persistido (setId). IMPERATIVO (type="button",
               onClick) — NÃO sequestra o <form action={analyzeBestBet}>. */}
-          {setId !== null && <ShareButton setId={setId} sharedAt={sharedAt} />}
+          {setId !== null && <ShareButton key={setId} setId={setId} sharedAt={sharedAt} />}
         </div>
 
         {/* Disclaimer regulatório estático (ADR 0031 §5 / #376): ÚLTIMO filho, footnote

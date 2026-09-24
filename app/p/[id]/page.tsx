@@ -20,7 +20,7 @@ export const revalidate = 86400;
 // um `notFound()` posterior fica preso em 200 (soft-404). Sem ele, a página AWAIT a query e
 // o `notFound()` dispara antes de qualquer byte → 404 semântico real (curl -I confirmado).
 // Trade aceito: link a frio (cache-miss) perde o skeleton de Neon cold-start (~1s), mas o
-// snapshot válido é cacheado na CDN (revalidate 24h + s-maxage do next.config) — o
+// snapshot válido é cacheado via ISR (revalidate 24h, purgado por revalidatePath) — o
 // cache-miss é raro (1ª view por link/24h; o scraper de OG costuma esquentar o cache antes do
 // humano clicar). `generateMetadata` segue intocado → a description NEUTRA (firewall/privacy
 // MAJOR 3) continua valendo no head do dead-link, sem cascatear a root "Recomendações de

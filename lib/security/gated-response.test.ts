@@ -29,7 +29,9 @@ describe("gatedResponse", () => {
     const res = gatedResponse(req("https://palpiteiro.live/jogos", true));
     expect(res.status).toBe(200);
     const csp = res.headers.get(CSP_HEADER) ?? "";
-    expect(csp).toMatch(/'nonce-[A-Za-z0-9+/=]+' 'strict-dynamic'/);
+    expect(csp).toMatch(
+      /'nonce-[A-Za-z0-9+/=]+' 'sha256-[^']+' 'strict-dynamic'/
+    );
     // NextResponse.next({ request: { headers } }) serializa os headers sobrescritos
     // em x-middleware-request-*; é daí que o Next lê o nonce pros scripts inline.
     expect(

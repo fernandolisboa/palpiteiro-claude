@@ -33,7 +33,7 @@ não custa nada.
    - **Públicas** (`/`, `/signin`, `/como-funciona`, `/termos`, `/privacidade`,
      `/p/[id]`): `script-src 'self' 'unsafe-inline'`, estática via `headers()` do
      `next.config.ts`. Não há sessão renderizada nessas páginas nem sink de HTML cru
-     (report 01: zero `dangerouslySetInnerHTML`, React escapa tudo).
+     (React escapa tudo; os únicos `dangerouslySetInnerHTML` são o JSON-LD da landing, que não executa, e o script anti-flash do next-themes).
    - O resto é igual nas duas: `default-src 'self'`, `object-src 'none'`,
      `base-uri 'self'`, `frame-ancestors 'none'`, `connect-src 'self'` (o Sentry vai
      pelo túnel `/monitoring`), `img-src 'self' data: blob: https:` (avatar de perfil é
@@ -43,10 +43,15 @@ não custa nada.
    `report-uri` apontando pro endpoint de security reports do Sentry derivado do DSN
    público (`/api/<project>/security/?sentry_key=…&sentry_environment=…`). Sem DSN, a
    política vai sem `report-uri`.
-3. **Cobertura travada por teste.** `__tests__/csp-coverage.test.ts` varre
+3. **Script do next-themes por hash.** O script inline anti-flash do tema não recebe o
+   nonce (passá-lo exigiria ler `headers()` na root layout, o que tornaria `/` e `/p`
+   dinâmicas). Ele entra por `'sha256-…'` só na variante com nonce (na pública, um hash
+   desligaria o `'unsafe-inline'`). As props do provider moram em `lib/theme.ts` e um
+   teste recalcula o hash do script renderizado, então drift quebra o CI.
+4. **Cobertura travada por teste.** `__tests__/csp-coverage.test.ts` varre
    `app/**/page.tsx` e exige que cada página caia em exatamente uma variante (gateada
    pelo matcher XOR listada em `PUBLIC_HTML_SOURCES`).
-4. **Gate de auth reescrito no handler.** Passar um handler pro `auth()` do Auth.js v5
+5. **Gate de auth reescrito no handler.** Passar um handler pro `auth()` do Auth.js v5
    desliga o redirect default de não-autenticado (o `authorized` só manda quando retorna
    uma `Response`). `gatedResponse` refaz o 307 → `/signin?callbackUrl=<href>` idêntico
    ao do Auth.js, com teste.

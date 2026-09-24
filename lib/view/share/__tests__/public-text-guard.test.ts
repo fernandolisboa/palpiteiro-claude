@@ -26,4 +26,18 @@ describe("unsafeForPublic", () => {
     expect(unsafeForPublic("paga 1,95")).toBe(true);
     expect(unsafeForPublic("cotado em 1.955")).toBe(true);
   });
+
+  it("outras formas de preço/probabilidade (review #499)", () => {
+    for (const t of [
+      "60 por cento de chance",
+      "cotado a .95",
+      "paga 5/2",
+      "odd fracionária 7 / 4",
+      "paga 3 pra 1",
+      "entrada @3",
+      "Palmeiras @ 2.10",
+    ]) {
+      expect(unsafeForPublic(t), t).toBe(true);
+    }
+  });
 });
