@@ -117,7 +117,7 @@ export const API_FOOTBALL_TEAM_IDS: Record<SupportedLeague, Readonly<Record<stri
     "Curaçao": 5530,
   },
   // Bootstrap vazio: semeado por scripts/generate-team-ids.ts antes de a liga
-  // entrar em ACTIVE_LEAGUES.
+  // ser ligada no /admin/leagues (ADR 0050).
   serie_a: {},
   bundesliga: {},
   ligue_1: {},

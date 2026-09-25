@@ -1,6 +1,5 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 
-import { ACTIVE_LEAGUES } from "@/lib/config/active-leagues";
 import type { SupportedLeague } from "@/lib/providers/sports-data/leagues";
 import { __setSportsDataProviderForTesting } from "@/lib/providers/sports-data";
 import type {
@@ -9,6 +8,16 @@ import type {
 } from "@/lib/providers/sports-data/types";
 import { ensureUpcomingFixturesSynced } from "@/lib/sync/sync-upcoming-fixtures";
 import { acquireSyncLock, releaseSyncLock } from "@/lib/sync/lock";
+
+// Ligas ativas vêm do banco (league_settings, ADR 0050) — mockadas aqui com o seed
+// de produção da migration 0047.
+const ACTIVE_LEAGUES = vi.hoisted(
+  () => ["brasileirao_a", "champions_league", "premier_league", "la_liga"] as const,
+);
+const getActiveLeaguesMock = vi.hoisted(() => vi.fn());
+vi.mock("@/lib/db/queries/league-settings", () => ({
+  getActiveLeagues: () => getActiveLeaguesMock(),
+}));
 
 // DB é mockado: o sync só deve persistir, não tocar Postgres real nos testes.
 const upsertSpy = vi.fn();
@@ -80,6 +89,8 @@ describe("ensureUpcomingFixturesSynced", () => {
     acquireMock.mockClear();
     releaseMock.mockClear();
     lockState.held = false;
+    getActiveLeaguesMock.mockReset();
+    getActiveLeaguesMock.mockResolvedValue([...ACTIVE_LEAGUES]);
   });
 
   afterEach(() => {
@@ -119,6 +130,27 @@ describe("ensureUpcomingFixturesSynced", () => {
     );
     expect(leaguesRequested).not.toContain("world_cup");
     expect(leaguesRequested).not.toContain("serie_a");
+  });
+
+  it("lê as ligas ativas do banco a cada run (toggle no admin vale sem deploy)", async () => {
+    const getFixturesBySeason = vi.fn().mockResolvedValue([]);
+    __setSportsDataProviderForTesting(makeProvider({ getFixturesBySeason }));
+    getActiveLeaguesMock.mockResolvedValue(["world_cup"]);
+
+    await ensureUpcomingFixturesSynced();
+
+    expect(getActiveLeaguesMock).toHaveBeenCalledTimes(1);
+    expect(getFixturesBySeason.mock.calls.map(([l]) => l)).toEqual(["world_cup"]);
+  });
+
+  it("opts.leagues injeta a lista e pula a leitura do banco", async () => {
+    const getFixturesBySeason = vi.fn().mockResolvedValue([]);
+    __setSportsDataProviderForTesting(makeProvider({ getFixturesBySeason }));
+
+    await ensureUpcomingFixturesSynced({ leagues: ["la_liga"] });
+
+    expect(getActiveLeaguesMock).not.toHaveBeenCalled();
+    expect(getFixturesBySeason.mock.calls.map(([l]) => l)).toEqual(["la_liga"]);
   });
 
   it("upserta as fixtures de todas as ligas ativas num upsert só", async () => {

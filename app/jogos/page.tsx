@@ -12,11 +12,9 @@ import { UpcomingMatchesDesktop } from "@/components/upcoming-matches-desktop";
 import { UpcomingMatchesMobile } from "@/components/upcoming-matches-mobile";
 import { auth } from "@/auth";
 import { HOME_SUBTITLE } from "@/lib/copy";
-import {
-  ACTIVE_LEAGUES,
-  resolveHomeLeagueFilter,
-} from "@/lib/config/active-leagues";
-import { keyToLeague, LEAGUE_LABEL } from "@/lib/format";
+import { resolveHomeLeagueFilter } from "@/lib/config/active-leagues";
+import { keyToLeague, LEAGUE_LABEL, leagueToKey } from "@/lib/format";
+import { getActiveLeaguesForRequest } from "@/lib/db/queries/league-settings";
 import { getRequestTimeZone } from "@/lib/server/request-timezone";
 import { getMatchIdsWithPredictionsByUser } from "@/lib/db/queries/matches";
 import { loadRangeMatches } from "@/lib/db/queries/load-range-matches";
@@ -41,6 +39,7 @@ import { toMatchRowView } from "@/lib/view/match";
 import { toRecentPredictionView } from "@/lib/view/recent-prediction";
 import type {
   LeagueFilter,
+  LeagueKey,
   MatchRowView,
   RecentPredictionView,
 } from "@/lib/view/types";
@@ -68,8 +67,11 @@ type PageProps = {
 
 // "Todos" = só as ligas ATIVAS (nunca o histórico de uma liga inativa, ex.: a
 // Copa encerrada aparecendo no preset `season`).
-function filterToLeagues(filter: LeagueFilter): readonly SupportedLeague[] {
-  return filter === "all" ? ACTIVE_LEAGUES : [keyToLeague(filter)];
+function filterToLeagues(
+  filter: LeagueFilter,
+  activeLeagues: readonly SupportedLeague[],
+): readonly SupportedLeague[] {
+  return filter === "all" ? activeLeagues : [keyToLeague(filter)];
 }
 
 export default async function JogosPage({ searchParams }: PageProps) {
@@ -79,10 +81,14 @@ export default async function JogosPage({ searchParams }: PageProps) {
     from: fromParam,
     to: toParam,
   } = await searchParams;
+  // Ligas ativas por request (league_settings, ADR 0050 — toggle no admin vale sem
+  // deploy; nunca vazia, cai no fallback em código).
+  const activeLeagues = await getActiveLeaguesForRequest();
+  const activeKeys = activeLeagues.map(leagueToKey);
   // Liga inativa (ex.: `?league=wc` bookmarkado da Copa) → redirect pra home limpa,
   // que resolve pro default (sempre ativo → sem loop). Aponta pra /jogos (a home
   // authed), nunca pra `/` (landing pública).
-  const league = resolveHomeLeagueFilter(leagueParam);
+  const league = resolveHomeLeagueFilter(leagueParam, activeKeys);
   if (league === null) redirect("/jogos");
 
   // Instante ÚNICO do request: alimenta o resolver de range (bound da query) E
@@ -114,7 +120,7 @@ export default async function JogosPage({ searchParams }: PageProps) {
     // filtro de status. Concern de query — range.from segue intocado.
     from: windowedQueryFrom(range),
     to: range.to,
-    leagues: filterToLeagues(league),
+    leagues: filterToLeagues(league, activeLeagues),
     statuses: range.statuses,
     order: range.order,
     limit: RANGE_LIMIT,
@@ -191,6 +197,7 @@ export default async function JogosPage({ searchParams }: PageProps) {
           matches={matches}
           recents={recents}
           league={league}
+          activeKeys={activeKeys}
           range={range}
           isAdmin={isAdmin}
         />
@@ -200,6 +207,7 @@ export default async function JogosPage({ searchParams }: PageProps) {
           matches={matches}
           recents={recents}
           league={league}
+          activeKeys={activeKeys}
           range={range}
           isAdmin={isAdmin}
         />
@@ -212,6 +220,7 @@ type HomeContentProps = {
   matches: MatchRowView[];
   recents: RecentPredictionView[];
   league: LeagueFilter;
+  activeKeys: readonly LeagueKey[];
   range: ResolvedRange;
   // Gateia o link de admin no drawer mobile (mesmo gate da nav desktop).
   // DesktopHome ignora — a nav dele vive no DesktopShell.
@@ -231,6 +240,7 @@ function MobileHome({
   matches,
   recents,
   league,
+  activeKeys,
   range,
   isAdmin,
 }: HomeContentProps) {
@@ -258,7 +268,7 @@ function MobileHome({
       </div>
 
       <div className="flex flex-col gap-2 px-5 pb-3">
-        <LeaguePicker value={league} range={navProps} />
+        <LeaguePicker value={league} activeKeys={activeKeys} range={navProps} />
         <DateRangeTabs
           league={league}
           preset={range.preset}
@@ -311,7 +321,13 @@ function MobileHome({
   );
 }
 
-function DesktopHome({ matches, recents, league, range }: HomeContentProps) {
+function DesktopHome({
+  matches,
+  recents,
+  league,
+  activeKeys,
+  range,
+}: HomeContentProps) {
   const label = rangeLabel(range);
   const empty = rangeEmptyMessage(range);
   const navProps = rangeNavProps(range);
@@ -333,7 +349,7 @@ function DesktopHome({ matches, recents, league, range }: HomeContentProps) {
             </p>
           </div>
           <div className="flex flex-col items-end gap-2">
-            <LeaguePicker value={league} range={navProps} />
+            <LeaguePicker value={league} activeKeys={activeKeys} range={navProps} />
             <DateRangeTabs
               league={league}
               preset={range.preset}

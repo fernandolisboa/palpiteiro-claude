@@ -809,3 +809,14 @@ export const aiConfig = pgTable("ai_config", {
   updatedByUserId: uuid().references(() => users.id, { onDelete: "set null" }),
   updatedAt: timestamp({ withTimezone: true }).notNull().defaultNow(),
 });
+
+// Ligas ATIVAS (ADR 0050, #508): uma row por liga ligada/desligada no /admin/leagues.
+// Fonte de verdade do que o sync de fixtures itera, o prewarm de odds aquece e a home
+// lista — sem deploy. Liga sem row = desligada. Ler SEMPRE via
+// lib/db/queries/league-settings.ts (tem fallback em código se a tabela vier vazia).
+export const leagueSettings = pgTable("league_settings", {
+  league: leagueEnum().primaryKey(),
+  active: boolean().notNull().default(false),
+  updatedByUserId: uuid().references(() => users.id, { onDelete: "set null" }),
+  updatedAt: timestamp({ withTimezone: true }).notNull().defaultNow(),
+});

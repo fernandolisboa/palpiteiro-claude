@@ -1,4 +1,3 @@
-import { ACTIVE_LEAGUE_KEYS } from "@/lib/config/active-leagues";
 import { LEAGUE_LABEL, leagueToKey } from "@/lib/format";
 import { SUPPORTED_LEAGUES } from "@/lib/providers/sports-data/leagues";
 import type { LeagueFilter, LeagueKey } from "@/lib/view/types";
@@ -22,27 +21,14 @@ const LEAGUE_REGION: Record<LeagueKey, Region> = {
   laliga: "Europa",
 };
 
-// Torneio (Copa, a cada 4 anos) inativo é ESCONDIDO — "fora de temporada" pra Copa
-// seria mentira (#491). Liga de clube inativa aparece desabilitada.
-// Serie A/Bundesliga/Ligue 1 ficam fora de ACTIVE_LEAGUES por ORÇAMENTO da Odds API
-// (ADR 0044), não por calendário — "fora de temporada" também seria mentira, então
-// somem até serem ativadas.
-const HIDE_WHEN_INACTIVE: ReadonlySet<LeagueKey> = new Set<LeagueKey>([
-  "wc",
-  "sa",
-  "bl",
-  "l1",
-  // Copas CONMEBOL registradas mas desligadas pelo orçamento da The Odds API (ADR 0045).
-  "lib",
-  "sula",
-]);
-
 export const ALL_LEAGUES_LABEL = "Todas as ligas";
 
+// Só ligas ATIVAS viram opção (ADR 0050): liga desligada no admin some do seletor —
+// sem opção desabilitada ("fora de temporada" seria mentira pra liga desligada por
+// orçamento, e opção morta sem explicação só confunde).
 export type LeaguePickerOption = {
   value: LeagueFilter;
   label: string;
-  active: boolean;
 };
 
 export type LeaguePickerGroup = {
@@ -54,21 +40,20 @@ export type LeaguePickerGroup = {
 /**
  * Opções do seletor de liga, agrupadas por região. Função pura (seam de teste):
  * - "Todas as ligas" só existe com >1 liga ativa e vem primeiro, fora de grupo;
- * - liga de clube inativa vira opção desabilitada; torneio inativo some;
+ * - só ligas ativas aparecem (inativa some);
  * - com um grupo só, os rótulos de grupo somem (optgroup de 1 item é ruído).
  * Escala pra qualquer número de ligas: tudo deriva de SUPPORTED_LEAGUES.
  */
 export function leaguePickerGroups(
-  activeKeys: readonly LeagueFilter[] = ACTIVE_LEAGUE_KEYS,
+  activeKeys: readonly LeagueFilter[],
 ): LeaguePickerGroup[] {
   const byRegion = new Map<Region, LeaguePickerOption[]>();
   for (const league of SUPPORTED_LEAGUES) {
     const key = leagueToKey(league);
-    const active = activeKeys.includes(key);
-    if (!active && HIDE_WHEN_INACTIVE.has(key)) continue;
+    if (!activeKeys.includes(key)) continue;
     const region = LEAGUE_REGION[key];
     const list = byRegion.get(region) ?? [];
-    list.push({ value: key, label: LEAGUE_LABEL[key], active });
+    list.push({ value: key, label: LEAGUE_LABEL[key] });
     byRegion.set(region, list);
   }
 
@@ -83,7 +68,7 @@ export function leaguePickerGroups(
 
   if (activeKeys.length <= 1) return grouped;
   return [
-    { label: null, options: [{ value: "all", label: ALL_LEAGUES_LABEL, active: true }] },
+    { label: null, options: [{ value: "all", label: ALL_LEAGUES_LABEL }] },
     ...grouped,
   ];
 }
