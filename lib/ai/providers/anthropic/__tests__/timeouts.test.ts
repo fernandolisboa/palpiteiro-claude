@@ -59,18 +59,18 @@ describe("requestTiming", () => {
         deadlineAt: now + deadlineMs,
         now,
       });
-    // 245s disponíveis (250 − 5 de margem): 4 tentativas de 60s caberiam, teto de 2 retries.
+    // 245s disponíveis (250 − 5 de margem): 3 × 60 + 2 × 8 = 196 cabe → teto de 2 retries.
     expect(at(250_000)).toEqual({
       kind: "options",
       options: { timeout: CLIENT_TIMEOUT_MS, maxRetries: 2 },
     });
-    // 125s: 2 tentativas → 1 retry.
-    expect(at(130_000)).toEqual({
+    // 135s: 2 × 60 + 8 = 128 cabe → 1 retry.
+    expect(at(140_000)).toEqual({
       kind: "options",
       options: { timeout: 60_000, maxRetries: 1 },
     });
-    // 115s: 1 tentativa só.
-    expect(at(120_000)).toEqual({
+    // 125s: 2 × 60 cabia, mas com o backoff (128s) não → sem retry.
+    expect(at(130_000)).toEqual({
       kind: "options",
       options: { timeout: 60_000, maxRetries: 0 },
     });

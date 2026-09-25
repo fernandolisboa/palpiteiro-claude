@@ -2,13 +2,20 @@
 // client, o adapter e os scripts leem daqui, e os testes calculam sem mock.
 
 import type { Effort } from "@/lib/ai/generation-params";
-import { REQUEST_SAFETY_MARGIN_MS } from "@/lib/ai/deadline";
 import type { AIModel } from "@/lib/ai/models";
 
 // Opções do client (valem pra toda chamada que não passa opções próprias): 60s foi
 // dimensionado pros modelos temperature (Sonnet 4.5 / Haiku, sem thinking).
 export const CLIENT_TIMEOUT_MS = 60_000;
 export const CLIENT_MAX_RETRIES = 2;
+
+// Folga entre o timeout da request e o prazo: o SDK ainda precisa devolver o erro e
+// o predict ainda grava a row de ai_calls antes do prazo.
+export const REQUEST_SAFETY_MARGIN_MS = 5_000;
+
+// Espera do SDK entre tentativas: backoff exponencial com jitter, teto de 8s. Conta
+// o teto por retry (não a média) pra um retry nunca estourar o prazo.
+export const RETRY_BACKOFF_MS = 8_000;
 
 // Estimativa do tempo de uma chamada ADAPTIVE não-streaming. O thinking conta dentro
 // de max_tokens, e o effort decide quanto dele o modelo tende a usar. Vazão
@@ -55,8 +62,10 @@ export type RequestTiming =
  * Timeout + retries de UMA chamada. `timeout` = o do modelo (adaptive: escalado por
  * max_tokens/effort; temperature: o do client), cortado pelo que resta do prazo
  * menos a margem. `maxRetries` só conta retries que ainda cabem inteiros no prazo
- * (o SDK re-tenta timeout/429/5xx, e cada tentativa pode esgotar o timeout):
- * `(retries + 1) × timeout ≤ restante`. Sem prazo: adaptive leva só o timeout
+ * (o SDK re-tenta timeout/429/5xx, e cada tentativa pode esgotar o timeout), com o
+ * backoff entre elas: `(retries + 1) × timeout + retries × backoff ≤ restante`.
+ * Um `retry-after` do servidor maior que o backoff ainda pode passar disso — raro,
+ * e a margem de segurança cobre parte. Sem prazo: adaptive leva só o timeout
  * escalado (retries do client); temperature fica com as opções do client.
  */
 export function requestTiming(args: {
@@ -82,9 +91,12 @@ export function requestTiming(args: {
     args.deadlineAt - (args.now ?? Date.now()) - REQUEST_SAFETY_MARGIN_MS;
   if (available <= 0) return { kind: "no-budget" };
   const timeout = Math.min(base, available);
-  const maxRetries = Math.max(
-    0,
-    Math.min(CLIENT_MAX_RETRIES, Math.floor(available / timeout) - 1),
-  );
+  let maxRetries = 0;
+  while (
+    maxRetries < CLIENT_MAX_RETRIES &&
+    (maxRetries + 2) * timeout + (maxRetries + 1) * RETRY_BACKOFF_MS <= available
+  ) {
+    maxRetries++;
+  }
   return { kind: "options", options: { timeout, maxRetries } };
 }

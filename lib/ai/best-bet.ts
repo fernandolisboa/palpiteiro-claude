@@ -103,9 +103,10 @@ export type FanOutOptions = {
   // se ainda cabe uma chamada; se não, o mercado e os seguintes viram "Tempo
   // esgotado" sem gasto nem slot. predict() re-confere com o modelo resolvido.
   deadlineAt?: number;
-  // Cobra 1 slot de rate-limit. Chamado logo ANTES de cada chamada paga (hook
-  // beforeLlmPath do predict), então slots cobrados == chamadas pagas: mercado
-  // pulado, ou que falha antes do LLM (sem odds), não cobra. Ausente = sem cobrança.
+  // Pede 1 slot de rate-limit. Chamado logo ANTES de cada chamada paga (hook
+  // beforeLlmPath do predict): mercado pulado, ou que falha antes do LLM (sem odds),
+  // não pede slot. O caller pode servir o 1º pedido com um slot já cobrado antes do
+  // run (a trava contra gasto de cota de terceiros sem slot). Ausente = sem cobrança.
   acquireSlot?: () => Promise<SlotGrant>;
 };
 
@@ -256,8 +257,9 @@ class SlotDeniedError extends Error {
  *
  * Rate-limit (#492/#493, #524 review): TODA chamada paga pede o próprio slot via
  * `acquireSlot` logo ANTES do gasto — a narração, cada mercado fora do grupo e cada
- * mercado do grupo que cai no caminho LLM porque o λ faltou. Slots cobrados ==
- * chamadas pagas: mercado pulado (prazo) ou que falha antes do LLM não cobra.
+ * mercado do grupo que cai no caminho LLM porque o λ faltou. Mercado pulado (prazo)
+ * ou que falha antes do LLM não pede slot. (O caller cobra o 1º slot antes do run e
+ * o serve no 1º pedido — ver slotAcquirer em app/actions/predictions.ts.)
  *
  * Ordem (#524 review): o GRUPO code_jev primeiro (decisões em código, baratas), depois
  * a narração, depois os mercados fora do grupo. Assim, se o prazo do run apertar, o
@@ -376,11 +378,14 @@ async function narrateAndPersist(
     // Slot já negado antes (um mercado do grupo caiu no LLM sem slot) → não tenta de novo.
     if (stoppedBefore?.notRun === "rate-limited") throw new SlotDeniedError(false);
     if (stoppedBefore?.notRun === "unavailable") throw new SlotDeniedError(true);
+    // Checagem grossa (piso do modo); a fina, com max_tokens/effort, roda dentro da
+    // narração, ANTES do hook que cobra o slot.
     if (!canFitCall(deadlineAt, chosen.pending.model.thinkingMode)) {
       throw new AnalysisDeadlineError();
     }
-    await takeSlot();
-    narration = await narratePendingPrediction(chosen.pending);
+    narration = await narratePendingPrediction(chosen.pending, {
+      beforeLlmPath: takeSlot,
+    });
   } catch (err) {
     for (const p of pendings) out[p.index] = fail(p.pending.marketKey, err);
     return;

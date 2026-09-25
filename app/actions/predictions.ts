@@ -22,6 +22,7 @@ import {
 import {
   actionDeadline,
   AnalysisDeadlineError,
+  canFitCall,
   DEADLINE_MARKET_MESSAGE,
   SYNTHESIS_RESERVE_MS,
 } from "@/lib/ai/deadline";
@@ -53,10 +54,7 @@ import {
 import { getUserAccessState } from "@/lib/db/queries/users";
 import { getDescriptor } from "@/lib/odds/market-descriptor";
 import { ensureOddsSnapshotsFresh } from "@/lib/odds/fetch-and-snapshot";
-import {
-  checkAnalysisRateLimit,
-  peekAnalysisRateLimit,
-} from "@/lib/rate-limit";
+import { checkAnalysisRateLimit } from "@/lib/rate-limit";
 import { getRequestTimeZone } from "@/lib/server/request-timezone";
 import { toAnalysisView } from "@/lib/view/analysis";
 import { ExactScoreParamsSchema } from "@/lib/ai/palpites/cartridges/cartridge";
@@ -393,13 +391,48 @@ function friendlyMessageFromUnknown(
   return "Falha temporária ao gerar análise. Tente novamente.";
 }
 
-// Cobrança de 1 slot sob demanda (#524, review): o fan-out chama logo antes de cada
-// chamada paga, então slots cobrados == chamadas pagas. `reason` repassado pra o
-// fail-closed virar "indisponível", não "limite atingido".
-function slotAcquirer(userId: string, role: string | undefined) {
-  return async (): Promise<SlotGrant> => {
-    const rl = await checkAnalysisRateLimit(userId, role);
-    return { ok: rl.ok, reason: rl.reason };
+type RunSlotBudget =
+  | { ok: false; error: string }
+  // `units` = quantas unidades de cobrança cabem no dia (a 1ª já paga);
+  // `acquireSlot` = o pedido de slot do fan-out.
+  | { ok: true; units: number; acquireSlot: () => Promise<SlotGrant> };
+
+// Rate-limit dos fan-outs (#524, review e re-review). O 1º slot é cobrado AQUI, de
+// forma atômica (checkAnalysisRateLimit consome), ANTES de qualquer gasto de cota de
+// terceiros (pré-warm de odds, The Odds API / API-Football / JEV dentro do predict):
+// sem isso, N POSTs paralelos com 1 slot restante pré-aqueceriam todos, e um run que
+// falha inteiro antes do LLM seria repetível sem limite. Negado ou fail-closed →
+// aborta o run. Os slots 2..N são cobrados sob demanda, logo antes de cada chamada
+// paga (hook do predict), e a 1ª chamada paga usa o slot já cobrado — o limiter não
+// devolve slot, então mercado pulado por prazo não queima slot além do 1º.
+async function chargeRunBudget(
+  userId: string,
+  role: string | undefined,
+): Promise<RunSlotBudget> {
+  const first = await checkAnalysisRateLimit(userId, role);
+  if (first.reason === "fail-closed") {
+    // KV ausente p/ não-admin: indisponível (não um teto real).
+    return { ok: false, error: ANALYSES_UNAVAILABLE_MESSAGE };
+  }
+  if (!first.ok) {
+    return {
+      ok: false,
+      error: `Você atingiu o limite de ${first.limit} análises por dia. Tente novamente amanhã.`,
+    };
+  }
+  let prepaid = true;
+  return {
+    ok: true,
+    units: 1 + first.remaining,
+    acquireSlot: async () => {
+      if (prepaid) {
+        prepaid = false;
+        return { ok: true };
+      }
+      // `reason` repassado pra o fail-closed virar "indisponível", não "limite atingido".
+      const rl = await checkAnalysisRateLimit(userId, role);
+      return { ok: rl.ok, reason: rl.reason };
+    },
   };
 }
 
@@ -447,7 +480,8 @@ function resolveExtraLines(
  * Ordem dos gates é LOAD-BEARING: TODOS os gates grátis (auth, acesso, flag re-check, jogo,
  * analisabilidade, candidatos-vazios) vêm ANTES do rate-limit, pra um POST flag-off ou um
  * jogo sem mercado NUNCA queimar um slot diário. O rate-limit cobra 1 slot POR chamada paga
- * (#492), sob demanda, logo antes de cada uma (#524 review). Best-of-successful: 1 mercado
+ * (#492): o 1º antes de qualquer gasto, os demais sob demanda, logo antes de cada chamada
+ * (#524 review, chargeRunBudget). Best-of-successful: 1 mercado
  * falho não derruba o run. Prazo do run: ACTION_BUDGET_MS a partir daqui (lib/ai/deadline.ts).
  */
 export async function analyzeBestBet(
@@ -532,12 +566,10 @@ export async function analyzeBestBet(
   // narrado — 1 chamada paga, ADR 0041 §4), na posição do 1º deles; os demais (placar
   // exato/scorer/assist) seguem 1 slot cada.
   //
-  // O limiter (Upstash) não devolve slot, então a COBRANÇA é sob demanda: o fan-out pede
-  // o slot logo ANTES de cada chamada paga (hook do predict). Mercado pulado por prazo ou
-  // que falha antes do LLM (sem odds) não cobra — slots cobrados == chamadas pagas. Aqui
-  // em cima só uma LEITURA (peek, sem consumo): aborta no fail-closed / teto já batido e
-  // corta as unidades no que resta do dia, pra o pré-warm de odds não gastar crédito da
-  // The Odds API num mercado que não teria slot.
+  // O 1º slot é cobrado aqui, ANTES do pré-warm e de qualquer busca (chargeRunBudget); os
+  // demais, sob demanda antes de cada chamada paga. As unidades são cortadas no que resta
+  // do dia, pra o pré-warm de odds não gastar crédito da The Odds API num mercado que não
+  // teria slot.
   //
   // Budget parcial: DEGRADA como o analyzeMarkets (roda os concedidos, a cauda vira
   // "indisponível" na view) em vez de recusar. Seguro pra semântica de "melhor aposta": o
@@ -549,19 +581,10 @@ export async function analyzeBestBet(
     markets,
     engine === "code_jev" ? isCodeJevFanOutMarket : () => false,
   );
-  const peek = await peekAnalysisRateLimit(session.user.id, session.user.role);
-  if (peek.reason === "fail-closed") {
-    // KV ausente p/ não-admin: indisponível (não um teto real). Aborta ANTES de qualquer spend.
-    return { ok: false, error: ANALYSES_UNAVAILABLE_MESSAGE };
-  }
-  if (!peek.ok) {
-    return {
-      ok: false,
-      error: `Você atingiu o limite de ${peek.limit} análises por dia. Tente novamente amanhã.`,
-    };
-  }
+  const budget = await chargeRunBudget(session.user.id, session.user.role);
+  if (!budget.ok) return { ok: false, error: budget.error };
   const grantedKeys = new Set(
-    units.slice(0, peek.remaining).flatMap((unit) => unit.map((m) => m.marketKey)),
+    units.slice(0, budget.units).flatMap((unit) => unit.map((m) => m.marketKey)),
   );
   const rateLimitedErrors = markets
     .filter((m) => !grantedKeys.has(m.marketKey))
@@ -617,7 +640,7 @@ export async function analyzeBestBet(
   // Prazo (#524 review): o fan-out para SYNTHESIS_RESERVE_MS antes do prazo do run, pra a
   // síntese ainda rodar sobre o que terminou; o que não coube vira "Tempo esgotado".
   const fanOutDeadline = runDeadline - SYNTHESIS_RESERVE_MS;
-  const acquireSlot = slotAcquirer(session.user.id, session.user.role);
+  const { acquireSlot } = budget;
   const fanOutBase = { matchId, userId: session.user.id, isAdmin, modelOverride };
   const allOutcomes =
     engine === "code_jev"
@@ -666,6 +689,11 @@ export async function analyzeBestBet(
   // log de ai_call pode falhar sem afundar o produto).
   let palpite: PalpiteHeadlineView | null = null;
   try {
+    // Sem tempo pra uma chamada Haiku antes do prazo do run: pula a síntese limpa (o
+    // gerador nem é chamado → sem row de ai_calls) e o fan-out pago volta sem manchete.
+    if (!canFitCall(runDeadline, "temperature")) {
+      throw new AnalysisDeadlineError();
+    }
     const summaries = summarizeAnalysesForSynthesis(outcomes);
     const result = await generatePalpites({
       matchId,
@@ -736,9 +764,10 @@ export type AnalyzeMarketsResult =
  *
  * DINHEIRO REAL: N mercados = N predict() pagos. Como o analyzeBestBet (#492), o rate-limit é
  * cobrado POR MERCADO (N slots) — o AC do #245 exige que custo/rate-limit reflitam N análises.
- * O limiter não devolve slot, então a cobrança é sob demanda (#524 review): 1 slot logo ANTES
- * de cada chamada paga, parando no 1º negado (degrada com graça: os que rodaram ficam, a cauda
- * vira "rate-limited"). Mercado pulado pelo prazo do run ou que falha antes do LLM não cobra.
+ * O 1º slot é cobrado antes de qualquer gasto de cota de terceiros; os demais, sob demanda
+ * (#524 review): 1 slot logo ANTES de cada chamada paga a partir da 2ª, parando no 1º negado
+ * (degrada com graça: os que rodaram ficam, a cauda vira "rate-limited"). Mercado pulado pelo
+ * prazo do run ou que falha antes do LLM não cobra slot além do 1º.
  * Spend de pior caso = min(remaining, MAX_FANOUT_MARKETS) chamadas pagas.
  *
  * Ordem dos gates é LOAD-BEARING (igual aos irmãos): TODOS os gates grátis (auth, acesso, jogo,
@@ -809,24 +838,15 @@ export async function analyzeMarkets(
   if (chosen.length === 0) {
     return { ok: false, error: "Nenhum mercado válido selecionado." };
   }
-  // Rate-limit POR MERCADO: leitura (peek, sem consumo) antes do spend — aborta no fail-closed
-  // / teto já batido e corta a seleção no que resta do dia (`granted` é um PREFIXO de `chosen`,
-  // `chosen.slice(granted.length)` a cauda rate-limited). A COBRANÇA é sob demanda, no fan-out,
-  // logo antes de cada chamada paga: slots cobrados == chamadas pagas. capCandidates rodou
-  // antes → N-selecionados-mas-capados nunca sobre-cobram.
-  const peek = await peekAnalysisRateLimit(session.user.id, session.user.role);
-  if (peek.reason === "fail-closed") {
-    // KV ausente p/ não-admin: indisponível (não um teto real). Aborta o run inteiro ANTES de
-    // qualquer spend — espelha o single-market analyzeMatch.
-    return { ok: false, error: ANALYSES_UNAVAILABLE_MESSAGE };
-  }
-  if (!peek.ok) {
-    return {
-      ok: false,
-      error: `Você atingiu o limite de ${peek.limit} análises por dia. Tente novamente amanhã.`,
-    };
-  }
-  const granted = chosen.slice(0, peek.remaining);
+  // Rate-limit POR MERCADO: o 1º slot é cobrado AQUI (atômico), antes do pré-warm e de
+  // qualquer busca — negado ou fail-closed aborta o run (chargeRunBudget). A seleção é
+  // cortada no que resta do dia (`granted` é um PREFIXO de `chosen`,
+  // `chosen.slice(granted.length)` a cauda rate-limited); os slots 2..N são cobrados sob
+  // demanda, logo antes de cada chamada paga. capCandidates rodou antes →
+  // N-selecionados-mas-capados nunca sobre-cobram.
+  const budget = await chargeRunBudget(session.user.id, session.user.role);
+  if (!budget.ok) return { ok: false, error: budget.error };
+  const granted = chosen.slice(0, budget.units);
   const rateLimited = chosen.slice(granted.length);
   // FanOut só sobre os CONCEDIDOS. extraLines resolvido 1× por mercado (mesmo valor alimenta o
   // pré-warm e o predict, senão predict resolveria um cartucho diferente do aquecido).
@@ -883,10 +903,7 @@ export async function analyzeMarkets(
     { matchId, userId: session.user.id, isAdmin, modelOverride },
     fanOut,
     (err) => friendlyMessageFromUnknown(err, messageContext),
-    {
-      deadlineAt: runDeadline,
-      acquireSlot: slotAcquirer(session.user.id, session.user.role),
-    },
+    { deadlineAt: runDeadline, acquireSlot: budget.acquireSlot },
   );
   const labelByKey = new Map(chosen.map((c) => [c.key, c.label]));
   const summaries: MarketRunSummaryItem[] = [

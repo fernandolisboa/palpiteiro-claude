@@ -15,6 +15,7 @@ import {
 
 import { persistAiCallError } from "../ai-call-logging";
 import { calculateCost } from "../cost";
+import { AnalysisDeadlineError, canFitCall } from "../deadline";
 import { MODEL_REGISTRY, isAIProvider, type AIModelId } from "../models";
 import { getProviderForModel } from "../providers";
 import type { AnalysisRequest } from "../providers/types";
@@ -236,6 +237,17 @@ export async function generatePalpites({
   let outputPayload: Record<string, unknown>;
 
   for (let attempt = 1; ; attempt += 1) {
+    // Prazo do run (#524): sem tempo pra uma chamada inteira, não chama — nada gasto e
+    // nenhuma row 0/0 de timeout falso em ai_calls. O caller trata como síntese falha.
+    if (
+      !canFitCall(deadlineAt, {
+        thinkingMode: model.thinkingMode,
+        maxTokens: analysisRequest.maxTokens,
+        effort: analysisRequest.effort,
+      })
+    ) {
+      throw new AnalysisDeadlineError();
+    }
     const result = await aiProvider.runAnalysis(analysisRequest);
     latencyMs = result.latencyMs;
 

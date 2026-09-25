@@ -1623,7 +1623,7 @@ describe("predict() — prazo do run (#524 review)", () => {
         userId: "u-1",
         isAdmin: false,
         modelOverride: "claude-opus-5-5",
-        deadlineAt: Date.now() + 100_000,
+        deadlineAt: Date.now() + 150_000,
       },
       { beforeLlmPath },
     );
@@ -1632,9 +1632,27 @@ describe("predict() — prazo do run (#524 review)", () => {
       timeout: number;
       maxRetries: number;
     };
-    expect(opts.timeout).toBeLessThanOrEqual(95_000);
-    expect(opts.timeout).toBeGreaterThan(80_000);
+    // ~145s restantes (150 − 5 de margem), abaixo dos 215s escalados; retry não cabe.
+    expect(opts.timeout).toBeLessThanOrEqual(145_000);
+    expect(opts.timeout).toBeGreaterThan(130_000);
     expect(opts.maxRetries).toBe(0);
+  });
+
+  it("adaptive com menos que o mínimo (120s) → não inicia a chamada: sem slot, sem gasto", async () => {
+    const beforeLlmPath = vi.fn(async () => {});
+    const err = await predict(
+      {
+        matchId: "m-1",
+        userId: "u-1",
+        isAdmin: false,
+        modelOverride: "claude-opus-5-5",
+        deadlineAt: Date.now() + 100_000,
+      },
+      { beforeLlmPath },
+    ).catch((e: unknown) => e);
+    expect(err).toBeInstanceOf(AnalysisDeadlineError);
+    expect(beforeLlmPath).not.toHaveBeenCalled();
+    expect(anthropicCreate).not.toHaveBeenCalled();
   });
 });
 

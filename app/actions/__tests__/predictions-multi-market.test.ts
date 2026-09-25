@@ -30,12 +30,9 @@ vi.mock("@/lib/db/queries/users", () => ({ getUserAccessState: vi.fn() }));
 // Floor do env (#276): isEmailAllowed compõe com o gate de acesso. Default false nos testes →
 // quem tem allowed=false e não está no floor é bloqueado (caso determinístico, não ambiente).
 vi.mock("@/lib/auth/whitelist", () => ({ isEmailAllowed: vi.fn(() => false) }));
-// peek = leitura upfront (sem consumo); checkAnalysisRateLimit = a cobrança sob demanda,
-// feita pelo hook beforeLlmPath que o predict mockado chama (#524 review).
-vi.mock("@/lib/rate-limit", () => ({
-  checkAnalysisRateLimit: vi.fn(),
-  peekAnalysisRateLimit: vi.fn(),
-}));
+// checkAnalysisRateLimit CONSOME: a action cobra o 1º slot antes de qualquer gasto; os
+// demais vêm do hook beforeLlmPath que o predict mockado chama (#524 review).
+vi.mock("@/lib/rate-limit", () => ({ checkAnalysisRateLimit: vi.fn() }));
 // modelsForAudience decide a copy da recusa (sugere outro modelo só se houver outro). Real,
 // ele filtra por chave de provider (vazia nos testes) — então cada teste diz o que há.
 vi.mock("@/lib/ai/models", async (importOriginal) => {
@@ -56,10 +53,7 @@ import { getMatchById } from "@/lib/db/queries/matches";
 import { getUserAccessState } from "@/lib/db/queries/users";
 import { ensureOddsSnapshotsFresh } from "@/lib/odds/fetch-and-snapshot";
 import { MODEL_REGISTRY, modelsForAudience } from "@/lib/ai/models";
-import {
-  checkAnalysisRateLimit,
-  peekAnalysisRateLimit,
-} from "@/lib/rate-limit";
+import { checkAnalysisRateLimit } from "@/lib/rate-limit";
 
 const mockAuth = auth as unknown as Mock<() => Promise<Session | null>>;
 const mockPredict = vi.mocked(predict);
@@ -68,7 +62,6 @@ const mockGetMatchById = vi.mocked(getMatchById);
 const mockEnsureOdds = vi.mocked(ensureOddsSnapshotsFresh);
 const mockGetAccess = vi.mocked(getUserAccessState);
 const mockRateLimit = vi.mocked(checkAnalysisRateLimit);
-const mockPeek = vi.mocked(peekAnalysisRateLimit);
 const mockModelsForAudience = vi.mocked(modelsForAudience);
 const mockExtraLinesFlag = vi.mocked(getEnableOverUnderExtraLines);
 
@@ -130,8 +123,6 @@ beforeEach(() => {
   mockGetAccess.mockResolvedValue(ALLOWED_ADMIN);
   mockRateLimit.mockReset();
   mockRateLimit.mockResolvedValue({ ok: true, limit: 20, remaining: 19, reset: 0 });
-  mockPeek.mockReset();
-  mockPeek.mockResolvedValue({ ok: true, limit: 20, remaining: 20, reset: 0 });
   mockModelsForAudience.mockReset();
   mockModelsForAudience.mockReturnValue([
     MODEL_REGISTRY["claude-sonnet-4-5-20250929"],
@@ -199,7 +190,8 @@ describe("analyzeMarkets — fan-out multi-mercado (custo/rate-limit por N)", ()
       form({ matchId: VALID_MATCH_ID, marketKeys: ["over_under", "match_result"] }),
     );
     expect(mockPredict).toHaveBeenCalledTimes(2);
-    // Sem odds = falha ANTES da chamada paga → não cobra slot (slots == chamadas pagas).
+    // Sem odds = falha ANTES da chamada paga → não pede slot; o único é o do início do run,
+    // que pagou o over_under.
     expect(mockRateLimit).toHaveBeenCalledTimes(1);
     expect(res.ok).toBe(true);
     if (res.ok) {
@@ -216,8 +208,9 @@ describe("analyzeMarkets — fan-out multi-mercado (custo/rate-limit por N)", ()
     }
   });
 
-  it("budget parcial (peek: 2 restantes), 3 escolhidos → 2 rodam, 1 rate-limited; 2 slots", async () => {
-    mockPeek.mockResolvedValue({ ok: true, limit: 20, remaining: 2, reset: 0 });
+  it("budget parcial (2 slots), 3 escolhidos → 2 rodam, 1 rate-limited; 2 slots", async () => {
+    // O 1º slot (cobrado antes do run) deixa 1 restante → 2 mercados no total.
+    mockRateLimit.mockResolvedValueOnce({ ok: true, limit: 20, remaining: 1, reset: 0 });
     const res = await analyzeMarkets(
       null,
       form({
@@ -243,8 +236,9 @@ describe("analyzeMarkets — fan-out multi-mercado (custo/rate-limit por N)", ()
   });
 
   it("cap no MEIO do run (slot negado no 2º) → o 2º e a cauda viram rate-limited, sem spend", async () => {
+    // O 1º (antes do run) ainda via folga; outra aba gasta o resto no meio do run.
     mockRateLimit
-      .mockResolvedValueOnce({ ok: true, limit: 20, remaining: 0, reset: 0 })
+      .mockResolvedValueOnce({ ok: true, limit: 20, remaining: 19, reset: 0 })
       .mockResolvedValue({ ok: false, limit: 20, remaining: 0, reset: 0 });
     const res = await analyzeMarkets(
       null,
@@ -276,8 +270,8 @@ describe("analyzeMarkets — fan-out multi-mercado (custo/rate-limit por N)", ()
     }
   });
 
-  it("zero slots (peek) → ok:false copy de limite; predict 0×; nenhum slot cobrado", async () => {
-    mockPeek.mockResolvedValue({ ok: false, limit: 7, remaining: 0, reset: 0 });
+  it("zero slots (1ª call cap) → ok:false copy de limite; predict 0×; rate-limit 1×", async () => {
+    mockRateLimit.mockResolvedValue({ ok: false, limit: 7, remaining: 0, reset: 0 });
     const res = await analyzeMarkets(
       null,
       form({ matchId: VALID_MATCH_ID, marketKeys: ["over_under", "match_result"] }),
@@ -287,11 +281,11 @@ describe("analyzeMarkets — fan-out multi-mercado (custo/rate-limit por N)", ()
       error: "Você atingiu o limite de 7 análises por dia. Tente novamente amanhã.",
     });
     expect(mockPredict).not.toHaveBeenCalled();
-    expect(mockRateLimit).not.toHaveBeenCalled();
+    expect(mockRateLimit).toHaveBeenCalledTimes(1);
   });
 
-  it("fail-closed (peek) → ok:false copy de indisponível; predict 0×", async () => {
-    mockPeek.mockResolvedValue({
+  it("fail-closed (1ª call) → ok:false copy de indisponível; predict 0×", async () => {
+    mockRateLimit.mockResolvedValue({
       ok: false,
       limit: 0,
       remaining: 0,
@@ -307,7 +301,29 @@ describe("analyzeMarkets — fan-out multi-mercado (custo/rate-limit por N)", ()
       error: "Análises temporariamente indisponíveis. Tente mais tarde.",
     });
     expect(mockPredict).not.toHaveBeenCalled();
-    expect(mockRateLimit).not.toHaveBeenCalled();
+    expect(mockEnsureOdds).not.toHaveBeenCalled();
+  });
+
+  it("N runs concorrentes com 1 slot restante → só UM pré-aquece odds e busca dados (#524 re-review)", async () => {
+    // Limiter atômico de verdade: 1 slot no dia, compartilhado entre os POSTs.
+    let left = 1;
+    mockRateLimit.mockImplementation(async () => {
+      const ok = left > 0;
+      if (ok) left--;
+      return { ok, limit: 20, remaining: Math.max(0, left), reset: 0 };
+    });
+    const results = await Promise.all(
+      Array.from({ length: 5 }, () =>
+        analyzeMarkets(
+          null,
+          form({ matchId: VALID_MATCH_ID, marketKeys: ["btts"] }),
+        ),
+      ),
+    );
+    expect(results.filter((r) => r.ok)).toHaveLength(1);
+    // Um único pré-warm (crédito da The Odds API) e um único predict (busca de dados).
+    expect(mockEnsureOdds).toHaveBeenCalledTimes(1);
+    expect(mockPredict).toHaveBeenCalledTimes(1);
   });
 
   it("prazo do run: provider lento → os restantes viram 'Tempo esgotado' (failed), sem slot", async () => {
@@ -422,8 +438,8 @@ describe("analyzeMarkets — pré-warm de odds *additional* SÓ sobre os concedi
   });
 
   it("btts (additional) RATE-LIMITED → NUNCA pré-aquece (pega regressão chosen-vs-granted que queimaria crédito)", async () => {
-    // 1 slot restante: over_under cabe, btts fica fora do budget → rate-limited, fora do fanOut.
-    mockPeek.mockResolvedValue({ ok: true, limit: 20, remaining: 1, reset: 0 });
+    // Só o slot do início do run: over_under cabe, btts fica fora do budget → rate-limited.
+    mockRateLimit.mockResolvedValueOnce({ ok: true, limit: 20, remaining: 0, reset: 0 });
     const res = await analyzeMarkets(
       null,
       form({ matchId: VALID_MATCH_ID, marketKeys: ["over_under", "btts"] }),
@@ -505,12 +521,6 @@ describe("analyzeMarkets — seleção: dedupe, allowlist, paridade single", () 
 
 describe("analyzeMarkets — admin sem KV + gate order (slots só após gates grátis)", () => {
   it("admin sem KV (fail-open Infinity) → todos os N concedidos; nenhum Infinity em copy", async () => {
-    mockPeek.mockResolvedValue({
-      ok: true,
-      limit: Infinity,
-      remaining: Infinity,
-      reset: 0,
-    });
     mockRateLimit.mockResolvedValue({
       ok: true,
       limit: Infinity,
@@ -569,7 +579,6 @@ describe("analyzeMarkets — admin sem KV + gate order (slots só após gates gr
       ),
     ).toEqual({ ok: false, error: "Este jogo já foi encerrado ou cancelado." });
 
-    expect(mockPeek).not.toHaveBeenCalled();
     expect(mockRateLimit).not.toHaveBeenCalled();
     expect(mockPredict).not.toHaveBeenCalled();
   });

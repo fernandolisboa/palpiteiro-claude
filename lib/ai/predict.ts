@@ -152,7 +152,7 @@ export type PredictArgs = {
 export type PredictOptions = {
   // Chamado logo ANTES de cada chamada paga ao LLM (análise ou narração), depois de
   // todas as falhas pré-gasto e do teste de prazo. Lança pra abortar sem gasto — é
-  // onde o fan-out cobra o slot de rate-limit (slots cobrados == chamadas pagas).
+  // onde o fan-out cobra o slot de rate-limit (o 1º já vem cobrado pela action).
   beforeLlmPath?: () => Promise<void>;
 };
 
@@ -302,11 +302,13 @@ export async function predictForBestBet(
 
 /**
  * A ÚNICA chamada paga do best bet code_jev: narra a decisão escolhida (logada em
- * ai_calls). Nunca bloqueia: falha do narrador → racional templado. Só lança se o
- * insert de ai_calls falhar.
+ * ai_calls). Nunca bloqueia: falha do narrador → racional templado. Lança se o
+ * insert de ai_calls falhar, se o prazo do run não comportar a chamada
+ * (AnalysisDeadlineError, sem gasto) ou se o hook `beforeLlmPath` (slot) lançar.
  */
 export async function narratePendingPrediction(
   pending: PendingCodeJevPrediction,
+  options: PredictOptions = {},
 ): Promise<{ aiCallId: string; output: NarratorOutput }> {
   return narrateDecision({
     model: pending.model,
@@ -315,6 +317,7 @@ export async function narratePendingPrediction(
     decision: pending.narratorDecision,
     context: pending.narratorContext,
     deadlineAt: pending.deadlineAt,
+    beforeLlmPath: options.beforeLlmPath,
   });
 }
 
@@ -989,12 +992,11 @@ async function runPredict(
     // Best bet (#512): o orquestrador decide qual mercado narra (1 chamada paga).
     if (opts.deferNarration) return { kind: "pending", pending };
 
-    // Narração paga fora do best bet: mesmo gate de prazo + hook de slot da análise.
-    if (!canFitCall(deadlineAt, model.thinkingMode)) {
-      throw new AnalysisDeadlineError();
-    }
-    if (opts.beforeLlmPath) await opts.beforeLlmPath();
-    const narration = await narratePendingPrediction(pending);
+    // Narração paga fora do best bet: mesmo gate de prazo + hook de slot da análise
+    // (dentro de narrateDecision, com os parâmetros de geração resolvidos).
+    const narration = await narratePendingPrediction(pending, {
+      beforeLlmPath: opts.beforeLlmPath,
+    });
     return {
       kind: "done",
       result: await persistPendingPrediction(pending, {
@@ -1176,7 +1178,13 @@ async function runPredict(
   // análise avulsa, que cobra o slot na action) é o caminho de hoje.
   // Prazo do run (#524): não inicia uma chamada que o timeout vai cortar — pula sem
   // gasto e sem slot (o hook abaixo cobra o slot).
-  if (!canFitCall(deadlineAt, model.thinkingMode)) {
+  if (
+    !canFitCall(deadlineAt, {
+      thinkingMode: model.thinkingMode,
+      maxTokens: genParams.maxTokens,
+      effort: genParams.effort,
+    })
+  ) {
     throw new AnalysisDeadlineError();
   }
   if (opts.beforeLlmPath) await opts.beforeLlmPath();
@@ -2022,6 +2030,7 @@ async function narrateDecision(args: {
   decision: NarratorDecision;
   context: NarratorContext;
   deadlineAt?: number;
+  beforeLlmPath?: () => Promise<void>;
 }): Promise<{ aiCallId: string; output: NarratorOutput }> {
   const { model, decision } = args;
   const genParams = await getGenerationParams();
@@ -2045,6 +2054,18 @@ async function narrateDecision(args: {
     );
   }
 
+  // Prazo (#524): não inicia uma narração que o timeout vai cortar — lança antes do
+  // gasto e do slot (o hook cobra o slot logo antes da chamada).
+  if (
+    !canFitCall(args.deadlineAt, {
+      thinkingMode: model.thinkingMode,
+      maxTokens: genParams.maxTokens,
+      effort: genParams.effort,
+    })
+  ) {
+    throw new AnalysisDeadlineError();
+  }
+  if (args.beforeLlmPath) await args.beforeLlmPath();
   const outcome = await runNarration(aiProvider, request, decision);
   const cost = calculateCost({
     model: model.id,

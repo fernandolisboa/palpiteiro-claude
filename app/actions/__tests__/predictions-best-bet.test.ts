@@ -39,12 +39,9 @@ vi.mock("@/lib/db/queries/users", () => ({ getUserAccessState: vi.fn() }));
 // Floor do env (#276): isEmailAllowed compõe com o gate de acesso. Default false nos
 // testes → quem tem allowed=false e não está no floor é bloqueado.
 vi.mock("@/lib/auth/whitelist", () => ({ isEmailAllowed: vi.fn(() => false) }));
-// peek = leitura upfront (sem consumo); checkAnalysisRateLimit = a cobrança sob demanda,
-// feita pelo hook beforeLlmPath que o predict mockado chama (#524 review).
-vi.mock("@/lib/rate-limit", () => ({
-  checkAnalysisRateLimit: vi.fn(),
-  peekAnalysisRateLimit: vi.fn(),
-}));
+// checkAnalysisRateLimit CONSOME: a action cobra o 1º slot antes de qualquer gasto; os
+// demais vêm do hook beforeLlmPath que o predict mockado chama (#524 review).
+vi.mock("@/lib/rate-limit", () => ({ checkAnalysisRateLimit: vi.fn() }));
 // toAnalysisView mockado → {} (a corretude da view N-vias é coberta por best-bet.test).
 vi.mock("@/lib/view/analysis", () => ({ toAnalysisView: vi.fn(() => ({})) }));
 vi.mock("@/lib/db/queries/ai-config", () => ({
@@ -81,10 +78,7 @@ import { getMatchById } from "@/lib/db/queries/matches";
 import { getAiCallById } from "@/lib/db/queries/predictions";
 import { getUserAccessState } from "@/lib/db/queries/users";
 import { ensureOddsSnapshotsFresh } from "@/lib/odds/fetch-and-snapshot";
-import {
-  checkAnalysisRateLimit,
-  peekAnalysisRateLimit,
-} from "@/lib/rate-limit";
+import { checkAnalysisRateLimit } from "@/lib/rate-limit";
 
 const mockAuth = auth as unknown as Mock<() => Promise<Session | null>>;
 const mockPredict = vi.mocked(predict);
@@ -94,7 +88,6 @@ const mockEnsureOdds = vi.mocked(ensureOddsSnapshotsFresh);
 const mockGetAccess = vi.mocked(getUserAccessState);
 const mockGetAiCall = vi.mocked(getAiCallById);
 const mockRateLimit = vi.mocked(checkAnalysisRateLimit);
-const mockPeek = vi.mocked(peekAnalysisRateLimit);
 const mockExtraLinesFlag = vi.mocked(getEnableOverUnderExtraLines);
 const mockBestBetFlag = vi.mocked(getEnableBestBetFanOut);
 const mockEngine = vi.mocked(readAnalysisEngine);
@@ -237,8 +230,6 @@ beforeEach(() => {
   mockGetAiCall.mockResolvedValue({ costUsd: "0.01" } as never);
   mockRateLimit.mockReset();
   mockRateLimit.mockResolvedValue({ ok: true, limit: 20, remaining: 19, reset: 0 });
-  mockPeek.mockReset();
-  mockPeek.mockResolvedValue({ ok: true, limit: 20, remaining: 20, reset: 0 });
   mockMarketsForAudience.mockReset();
   mockMarketsForAudience.mockResolvedValue([
     OVER_UNDER_MARKET,
@@ -367,24 +358,24 @@ describe("analyzeBestBet — rate-limit POR MERCADO (#492, Report 01 #3)", () =>
     expect(mockPredict).toHaveBeenCalledTimes(4);
   });
 
-  it("budget esgotado ANTES do início (peek) → {ok:false}, ZERO slot, ZERO spend", async () => {
-    mockPeek.mockResolvedValue(capped);
+  it("budget esgotado ANTES do início → {ok:false}, 1 tentativa de slot, ZERO spend", async () => {
+    mockRateLimit.mockResolvedValue(capped);
     const res = await analyzeBestBet(null, form({ matchId: VALID_MATCH_ID }));
     expect(res).toEqual({
       ok: false,
       error: "Você atingiu o limite de 7 análises por dia. Tente novamente amanhã.",
     });
-    // O peek só LÊ: nenhum slot consumido.
-    expect(mockRateLimit).not.toHaveBeenCalled();
+    expect(mockRateLimit).toHaveBeenCalledTimes(1);
     expect(mockPredict).not.toHaveBeenCalled();
     expect(mockEnsureOdds).not.toHaveBeenCalled();
     expect(mockGeneratePalpites).not.toHaveBeenCalled();
   });
 
-  it("budget PARCIAL (2 restantes) → roda só o prefixo; cauda vira 'indisponível' SEM spend", async () => {
-    mockPeek.mockResolvedValue({ ok: true, limit: 20, remaining: 2, reset: 0 });
+  it("budget PARCIAL (2 slots) → roda só o prefixo; cauda vira 'indisponível' SEM spend", async () => {
+    // O 1º slot (cobrado antes do run) deixa 1 restante → 2 unidades no total.
+    mockRateLimit.mockResolvedValueOnce({ ok: true, limit: 20, remaining: 1, reset: 0 });
     const res = await analyzeBestBet(null, form({ matchId: VALID_MATCH_ID }));
-    // Slots cobrados == chamadas pagas == 2.
+    // 1 slot antes do run + 1 sob demanda == 2 chamadas pagas.
     expect(mockRateLimit).toHaveBeenCalledTimes(2);
     // Prefixo Tier-1 (over/under + 1X2) roda; btts/dc NÃO → sem predict nem crédito de odds.
     expect(mockPredict.mock.calls.map((c) => c[0].marketKey)).toEqual([
@@ -424,7 +415,7 @@ describe("analyzeBestBet — rate-limit POR MERCADO (#492, Report 01 #3)", () =>
       .mockResolvedValueOnce(ok)
       .mockResolvedValue(capped);
     const res = await analyzeBestBet(null, form({ matchId: VALID_MATCH_ID }));
-    // 2 concedidos + 1 negado; o 4º nem tenta (o run parou).
+    // 1º antes do run, 2º sob demanda, 3º negado; o 4º nem tenta (o run parou).
     expect(mockRateLimit).toHaveBeenCalledTimes(3);
     expect(mockPredict).toHaveBeenCalledTimes(3);
     expect(res.ok).toBe(true);
@@ -440,7 +431,7 @@ describe("analyzeBestBet — rate-limit POR MERCADO (#492, Report 01 #3)", () =>
     }
   });
 
-  it("mercado que falha ANTES do LLM não cobra slot (slots == chamadas pagas)", async () => {
+  it("mercado que falha ANTES do LLM não pede slot (o 1º, pré-cobrado, vai pra 1ª chamada paga)", async () => {
     const { PredictError } = await import("@/lib/ai/predict");
     mockPredict.mockImplementation(async (args, opts) => {
       if (args.marketKey === "btts")
@@ -450,17 +441,18 @@ describe("analyzeBestBet — rate-limit POR MERCADO (#492, Report 01 #3)", () =>
     });
     await analyzeBestBet(null, form({ matchId: VALID_MATCH_ID }));
     expect(mockPredict).toHaveBeenCalledTimes(4);
+    // 3 chamadas pagas: a 1ª usa o slot pré-cobrado, as outras 2 cobram o seu.
     expect(mockRateLimit).toHaveBeenCalledTimes(3);
   });
 
   it("budget parcial + TODOS os concedidos falham → errors[0] é a falha real, não o aviso de teto", async () => {
-    mockPeek.mockResolvedValue({ ok: true, limit: 20, remaining: 1, reset: 0 });
+    mockRateLimit.mockResolvedValueOnce({ ok: true, limit: 20, remaining: 0, reset: 0 });
     const { PredictError } = await import("@/lib/ai/predict");
     mockPredict.mockRejectedValue(new PredictError("sem snapshot fresco", {}));
     const res = await analyzeBestBet(null, form({ matchId: VALID_MATCH_ID }));
     expect(mockPredict).toHaveBeenCalledTimes(1);
-    // Falhou antes do LLM → nenhum slot.
-    expect(mockRateLimit).not.toHaveBeenCalled();
+    // Só o slot do início do run (a trava contra repetir runs que falham antes do LLM).
+    expect(mockRateLimit).toHaveBeenCalledTimes(1);
     expect(res).toEqual({
       ok: false,
       error: "Nenhum bookmaker oferece este mercado para o jogo no momento.",
@@ -468,7 +460,7 @@ describe("analyzeBestBet — rate-limit POR MERCADO (#492, Report 01 #3)", () =>
   });
 
   it("fail-closed (KV ausente p/ não-admin) → copy de indisponibilidade, ZERO spend", async () => {
-    mockPeek.mockResolvedValue({
+    mockRateLimit.mockResolvedValue({
       ok: false,
       limit: 0,
       remaining: 0,
@@ -480,7 +472,7 @@ describe("analyzeBestBet — rate-limit POR MERCADO (#492, Report 01 #3)", () =>
       ok: false,
       error: "Análises temporariamente indisponíveis. Tente mais tarde.",
     });
-    expect(mockRateLimit).not.toHaveBeenCalled();
+    expect(mockRateLimit).toHaveBeenCalledTimes(1);
     expect(mockPredict).not.toHaveBeenCalled();
     expect(mockEnsureOdds).not.toHaveBeenCalled();
   });
@@ -502,6 +494,49 @@ describe("analyzeBestBet — rate-limit POR MERCADO (#492, Report 01 #3)", () =>
         new Set(["Análises temporariamente indisponíveis. Tente mais tarde."]),
       );
     }
+  });
+});
+
+describe("analyzeBestBet — cota de terceiros só com slot cobrado (#524 re-review)", () => {
+  it("N runs concorrentes com 1 slot restante → só UM pré-aquece odds e busca dados", async () => {
+    // Limiter atômico de verdade: 1 slot no dia, compartilhado entre os POSTs.
+    let left = 1;
+    mockRateLimit.mockImplementation(async () => {
+      const ok = left > 0;
+      if (ok) left--;
+      return { ok, limit: 20, remaining: Math.max(0, left), reset: 0 };
+    });
+    // 1º mercado additional (btts) → o run concedido pré-aquece a odd dele.
+    mockMarketsForAudience.mockResolvedValue([BTTS_MARKET]);
+
+    const results = await Promise.all(
+      Array.from({ length: 5 }, () =>
+        analyzeBestBet(null, form({ matchId: VALID_MATCH_ID })),
+      ),
+    );
+
+    expect(results.filter((r) => r.ok)).toHaveLength(1);
+    expect(
+      results.filter(
+        (r) =>
+          !r.ok &&
+          r.error ===
+            "Você atingiu o limite de 20 análises por dia. Tente novamente amanhã.",
+      ),
+    ).toHaveLength(4);
+    // Um único pré-warm (crédito da The Odds API) e um único predict (busca de dados).
+    expect(mockEnsureOdds).toHaveBeenCalledTimes(1);
+    expect(mockPredict).toHaveBeenCalledTimes(1);
+    expect(mockRateLimit).toHaveBeenCalledTimes(5);
+  });
+
+  it("run que falha INTEIRO antes do LLM ainda consome o slot do início (não é repetível de graça)", async () => {
+    const { PredictError } = await import("@/lib/ai/predict");
+    mockPredict.mockRejectedValue(new PredictError("sem snapshot fresco", {}));
+    const res = await analyzeBestBet(null, form({ matchId: VALID_MATCH_ID }));
+    expect(res.ok).toBe(false);
+    expect(mockPredict).toHaveBeenCalledTimes(4);
+    expect(mockRateLimit).toHaveBeenCalledTimes(1);
   });
 });
 
@@ -547,6 +582,23 @@ describe("analyzeBestBet — prazo do run (#524 review, maxDuration 300)", () =>
     const synth = mockGeneratePalpites.mock.calls[0][0];
     expect(synth.analyses).toHaveLength(2);
     expect(synth.deadlineAt).toBe(1_000_000 + 270_000);
+  });
+
+  it("sem tempo pra síntese → pula o gerador (sem row falsa em ai_calls), fan-out volta sem manchete", async () => {
+    // 2 chamadas de 127,5s: o fan-out para em t=255 (> 245) e sobram 15s (< 20s) do run.
+    mockPredict.mockImplementation(async (args, opts) => {
+      await opts?.beforeLlmPath?.();
+      clock += 127_500;
+      return resultFor(args.marketKey!);
+    });
+    const res = await analyzeBestBet(null, form({ matchId: VALID_MATCH_ID }));
+    expect(mockPredict).toHaveBeenCalledTimes(2);
+    expect(mockGeneratePalpites).not.toHaveBeenCalled();
+    expect(res.ok).toBe(true);
+    if (res.ok) {
+      expect(res.view.entries).toHaveLength(2);
+      expect(res.palpite).toBeNull();
+    }
   });
 
   it("predict lança o erro de prazo (modelo adaptive não cabe) → 'Tempo esgotado' e o run para", async () => {
@@ -785,10 +837,8 @@ describe("analyzeBestBet — motor code_jev (#512): 1 slot pelo grupo narrado", 
 
   it("WC (4 mercados code_jev) → fan-out code_jev com os 4 e o prazo, custo só no narrado", async () => {
     const res = await analyzeBestBet(null, form({ matchId: VALID_MATCH_ID }));
-    // A cobrança é do fan-out (sob demanda, via acquireSlot) — o mock não cobra; a action
-    // só leu o budget.
-    expect(mockPeek).toHaveBeenCalledTimes(1);
-    expect(mockRateLimit).not.toHaveBeenCalled();
+    // A action cobra só o 1º slot (antes do run); o resto é do fan-out (mockado aqui).
+    expect(mockRateLimit).toHaveBeenCalledTimes(1);
     expect(mockPredict).not.toHaveBeenCalled();
     expect(mockCodeJevFanOut).toHaveBeenCalledTimes(1);
     const [base, markets, , , opts] = mockCodeJevFanOut.mock.calls[0];
@@ -807,10 +857,13 @@ describe("analyzeBestBet — motor code_jev (#512): 1 slot pelo grupo narrado", 
     if (res.ok) expect(res.view.entries).toHaveLength(4);
   });
 
-  it("o acquireSlot do run cobra 1 slot real do mesmo usuário", async () => {
+  it("o acquireSlot do run serve o slot pré-cobrado e depois cobra slots reais do mesmo usuário", async () => {
     await analyzeBestBet(null, form({ matchId: VALID_MATCH_ID }));
     const acquireSlot = mockCodeJevFanOut.mock.calls[0][3];
     mockRateLimit.mockClear();
+    // 1º pedido: o slot já cobrado antes do run (sem nova cobrança).
+    expect(await acquireSlot()).toEqual({ ok: true });
+    expect(mockRateLimit).not.toHaveBeenCalled();
     mockRateLimit.mockResolvedValueOnce(capped);
     expect(await acquireSlot()).toEqual({ ok: false, reason: undefined });
     expect(mockRateLimit).toHaveBeenCalledWith("u1", "admin");
@@ -823,11 +876,11 @@ describe("analyzeBestBet — motor code_jev (#512): 1 slot pelo grupo narrado", 
       CORRECT_SCORE_MARKET,
       MATCH_RESULT_MARKET,
     ]);
-    mockPeek.mockResolvedValue({ ok: true, limit: 20, remaining: 1, reset: 0 });
+    mockRateLimit.mockResolvedValueOnce({ ok: true, limit: 20, remaining: 0, reset: 0 });
 
     const res = await analyzeBestBet(null, form({ matchId: VALID_MATCH_ID }));
 
-    // Unidades: [over_under + match_result] (grupo), [correct_score]; 1 restante → só o grupo.
+    // Unidades: [over_under + match_result] (grupo), [correct_score]; só o 1º slot → só o grupo.
     expect(
       mockCodeJevFanOut.mock.calls[0][1].map((m) => m.marketKey),
     ).toEqual(["over_under", "match_result"]);
@@ -844,7 +897,7 @@ describe("analyzeBestBet — motor code_jev (#512): 1 slot pelo grupo narrado", 
   });
 
   it("budget esgotado → {ok:false}, ZERO spend", async () => {
-    mockPeek.mockResolvedValue(capped);
+    mockRateLimit.mockResolvedValue(capped);
     const res = await analyzeBestBet(null, form({ matchId: VALID_MATCH_ID }));
     expect(res.ok).toBe(false);
     expect(mockCodeJevFanOut).not.toHaveBeenCalled();

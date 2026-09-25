@@ -1,7 +1,6 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 
 const mockLimit = vi.fn();
-const mockGetRemaining = vi.fn();
 const fixedWindow = vi.fn((n: number) => ({ algo: "fixed", n }));
 
 // Registra o prefixo do limiter cuja .limit() rodou de fato, pra que os testes
@@ -31,10 +30,6 @@ vi.mock("@upstash/ratelimit", () => {
       limitedPrefixes.push(this.__opts?.prefix ?? "");
       return mockLimit(...args);
     }
-    getRemaining(...args: unknown[]) {
-      limitedPrefixes.push(this.__opts?.prefix ?? "");
-      return mockGetRemaining(...args);
-    }
     // Fábrica estática usada como Ratelimit.fixedWindow(...).
     static fixedWindow = fixedWindow;
   }
@@ -61,7 +56,6 @@ async function loadBoth() {
 beforeEach(() => {
   vi.resetModules();
   mockLimit.mockReset();
-  mockGetRemaining.mockReset();
   fixedWindow.mockClear();
   limitedPrefixes.length = 0;
   vi.stubEnv("KV_REST_API_URL", "https://kv.example");
@@ -301,37 +295,5 @@ describe("checkPalpitesRateLimit — bucket isolado (#315)", () => {
       await checkPalpitesRateLimit("u1");
       expect(fixedWindow).toHaveBeenCalledWith(50, "1 d");
     }
-  });
-});
-
-describe("peekAnalysisRateLimit — leitura SEM consumo (#524)", () => {
-  it("lê o restante do limiter do role, sem chamar limit()", async () => {
-    mockGetRemaining.mockResolvedValue({ remaining: 3, limit: 20, reset: 9 });
-    const { peekAnalysisRateLimit } = await import("@/lib/rate-limit");
-    await expect(peekAnalysisRateLimit("u1", "user")).resolves.toEqual({
-      ok: true,
-      limit: 20,
-      remaining: 3,
-      reset: 9,
-    });
-    expect(mockLimit).not.toHaveBeenCalled();
-    expect(limitedPrefixes).toEqual(["ratelimit:analyze"]);
-  });
-
-  it("restante 0 → ok:false (teto batido); admin lê o limiter de admin", async () => {
-    mockGetRemaining.mockResolvedValue({ remaining: 0, limit: 200, reset: 9 });
-    const { peekAnalysisRateLimit } = await import("@/lib/rate-limit");
-    const r = await peekAnalysisRateLimit("u1", "admin");
-    expect(r.ok).toBe(false);
-    expect(limitedPrefixes).toEqual(["ratelimit:analyze:admin"]);
-  });
-
-  it("sem KV: admin fail-open, não-admin fail-closed (mesmo fallback do check)", async () => {
-    vi.stubEnv("KV_REST_API_URL", "");
-    const { peekAnalysisRateLimit } = await import("@/lib/rate-limit");
-    expect((await peekAnalysisRateLimit("u1", "admin")).ok).toBe(true);
-    const user = await peekAnalysisRateLimit("u1", "user");
-    expect(user.ok).toBe(false);
-    expect(user.reason).toBe("fail-closed");
   });
 });

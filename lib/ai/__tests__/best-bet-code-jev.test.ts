@@ -117,7 +117,11 @@ beforeEach(() => {
     kind: "pending",
     pending: pendingFor(args.marketKey!),
   }));
-  mockNarrate.mockResolvedValue(NARRATION);
+  // Como a narração real: o hook (slot) roda logo antes da chamada paga.
+  mockNarrate.mockImplementation(async (_pending, opts) => {
+    await opts?.beforeLlmPath?.();
+    return NARRATION;
+  });
   mockPersist.mockImplementation(async (pending, args) =>
     resultFor(pending.marketKey, args.aiCallId)
   );
@@ -329,7 +333,7 @@ describe("runCodeJevFanOut — 1 narração por best bet", () => {
     });
   });
 
-  it("um mercado do grupo no caminho LLM e narração sem slot → pendentes viram não analisados, sem narrar", async () => {
+  it("um mercado do grupo no caminho LLM e narração sem slot → pendentes viram não analisados, sem chamada paga", async () => {
     mockPredictForBestBet.mockImplementationOnce(async (args, opts) => {
       await opts.beforeLlmPath?.();
       return { kind: "done", result: resultFor(args.marketKey!, "ac-llm") };
@@ -346,8 +350,9 @@ describe("runCodeJevFanOut — 1 narração por best bet", () => {
       acquireSlot
     );
 
+    // O slot da narração é negado DENTRO dela, antes da chamada paga (hook).
     expect(acquireSlot).toHaveBeenCalledTimes(2);
-    expect(mockNarrate).not.toHaveBeenCalled();
+    expect(mockNarrate).toHaveBeenCalledTimes(1);
     expect(mockPersist).not.toHaveBeenCalled();
     expect(out).toEqual([
       expect.objectContaining({ marketKey: "over_under", ok: true }),
@@ -450,7 +455,8 @@ describe("runCodeJevFanOut — prazo do run (#524 review)", () => {
       clock += 30_000;
       return { kind: "pending", pending: pendingFor(args.marketKey!) };
     });
-    mockNarrate.mockImplementation(async () => {
+    mockNarrate.mockImplementation(async (_pending, opts) => {
+      await opts?.beforeLlmPath?.();
       clock += 30_000;
       return NARRATION;
     });
