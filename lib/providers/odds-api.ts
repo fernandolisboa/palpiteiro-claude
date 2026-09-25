@@ -20,7 +20,7 @@ import {
 } from "@/lib/providers/http/client";
 import {
   getLastQuota,
-  type ExtractedQuota,
+  type ObservedQuota,
 } from "@/lib/providers/http/quota-logger";
 
 const ONE_MINUTE = 60_000;
@@ -55,7 +55,7 @@ const oddsApiClient = createProviderClient({
  * mensuração de quota é a telemetria por-call do logCall; isto só dá a linha de
  * summary do run.
  */
-export function getLastOddsApiQuota(): ExtractedQuota | null {
+export function getLastOddsApiQuota(): ObservedQuota | null {
   return getLastQuota("odds-api");
 }
 

@@ -1,5 +1,5 @@
 {
-  "id": "7ed09ba0-9108-4249-991d-b3defdbbc645",
+  "id": "e6dc75d8-f729-42f1-bff6-e0d86af2a913",
   "prevId": "aada5c78-9e48-4231-a6d9-b0ab79bad434",
   "version": "7",
   "dialect": "postgresql",
@@ -343,13 +343,6 @@
           "primaryKey": false,
           "notNull": true,
           "default": true
-        },
-        "analysis_engine": {
-          "name": "analysis_engine",
-          "type": "text",
-          "primaryKey": false,
-          "notNull": true,
-          "default": "'llm'"
         },
         "updated_by_user_id": {
           "name": "updated_by_user_id",
@@ -1818,12 +1811,6 @@
           "notNull": true,
           "default": "'1'"
         },
-        "judgments": {
-          "name": "judgments",
-          "type": "jsonb",
-          "primaryKey": false,
-          "notNull": false
-        },
         "model_version": {
           "name": "model_version",
           "type": "text",
@@ -1988,6 +1975,43 @@
           "onUpdate": "no action"
         }
       },
+      "compositePrimaryKeys": {},
+      "uniqueConstraints": {},
+      "policies": {},
+      "checkConstraints": {},
+      "isRLSEnabled": false
+    },
+    "public.provider_quota": {
+      "name": "provider_quota",
+      "schema": "",
+      "columns": {
+        "provider": {
+          "name": "provider",
+          "type": "text",
+          "primaryKey": true,
+          "notNull": true
+        },
+        "monthly_used": {
+          "name": "monthly_used",
+          "type": "integer",
+          "primaryKey": false,
+          "notNull": false
+        },
+        "monthly_remaining": {
+          "name": "monthly_remaining",
+          "type": "integer",
+          "primaryKey": false,
+          "notNull": false
+        },
+        "observed_at": {
+          "name": "observed_at",
+          "type": "timestamp with time zone",
+          "primaryKey": false,
+          "notNull": true
+        }
+      },
+      "indexes": {},
+      "foreignKeys": {},
       "compositePrimaryKeys": {},
       "uniqueConstraints": {},
       "policies": {},

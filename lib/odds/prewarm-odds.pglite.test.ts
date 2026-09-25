@@ -12,6 +12,7 @@ import { migrate } from "drizzle-orm/pglite/migrator";
 import { afterAll, beforeAll, beforeEach, describe, expect, it, vi } from "vitest";
 
 import * as schema from "@/db/schema";
+import type { ObservedQuota } from "@/lib/providers/http/quota-logger";
 import type { OddsApiEventOdds } from "@/lib/providers/odds-api-schemas";
 
 let realDb: PgliteDatabase<typeof schema>;
@@ -36,16 +37,33 @@ vi.mock("@/lib/db", () => ({
 const getOddsForSport = vi.fn<() => Promise<OddsApiEventOdds[]>>();
 const getEventsForSport = vi.fn();
 const getOddsForEvent = vi.fn<() => Promise<OddsApiEventOdds>>();
+// Quota "lida" pelo quota-logger no run (#509). Default null (nenhum fetch real).
+const lastQuota = vi.fn<() => ObservedQuota | null>(() => null);
 vi.mock("@/lib/providers/odds-api", () => ({
   getOddsForSport: (...args: unknown[]) => getOddsForSport(...(args as [])),
   getEventsForSport: (...args: unknown[]) => getEventsForSport(...(args as [])),
   getOddsForEvent: (...args: unknown[]) => getOddsForEvent(...(args as [])),
-  // prewarmOdds importa getLastOddsApiQuota (linha de summary). Sem fetch real, null.
-  getLastOddsApiQuota: () => null,
+  // prewarmOdds importa getLastOddsApiQuota (summary + persistência em provider_quota).
+  getLastOddsApiQuota: () => lastQuota(),
 }));
+
+// Escrita REAL em provider_quota (pglite), com um interruptor pra simular falha.
+let failQuotaWrite = false;
+vi.mock("@/lib/db/queries/provider-quota", async (importOriginal) => {
+  const real =
+    await importOriginal<typeof import("@/lib/db/queries/provider-quota")>();
+  return {
+    ...real,
+    recordProviderQuota: (...args: Parameters<typeof real.recordProviderQuota>) =>
+      failQuotaWrite
+        ? Promise.reject(new Error("db down"))
+        : real.recordProviderQuota(...args),
+  };
+});
 
 import { prewarmOdds } from "@/lib/odds/prewarm-odds";
 import { getLatestSelectionOddsSnapshots } from "@/lib/db/queries/odds-snapshots";
+import { getProviderQuota } from "@/lib/db/queries/provider-quota";
 
 const HOME = "Brazil";
 const AWAY = "Argentina";
@@ -115,7 +133,11 @@ beforeEach(async () => {
   getOddsForSport.mockReset();
   getEventsForSport.mockReset();
   getOddsForEvent.mockReset();
+  lastQuota.mockReset();
+  lastQuota.mockReturnValue(null);
+  failQuotaWrite = false;
   await realDb.delete(schema.selectionOddsSnapshots);
+  await realDb.delete(schema.providerQuota);
 });
 
 // Evento h2h (1X2) pra um par de times no sport key da Copa.
@@ -274,5 +296,69 @@ describe("prewarmOdds — pré-aquecimento de odds das ligas ativas (pglite)", (
     expect(getOddsForSport).toHaveBeenCalledTimes(2);
     expect(summary.consideredMatches).toBe(2);
     expect(summary.warmedLeagues).toBe(1);
+  });
+
+  it("#509: quota lida no run é persistida em provider_quota (com o instante da leitura)", async () => {
+    getOddsForSport.mockImplementation((...args: unknown[]) => {
+      const opts = args[1] as { markets: string[] };
+      return Promise.resolve(batchFor(opts.markets));
+    });
+    const observedAt = new Date("2026-09-20T12:00:00Z");
+    lastQuota.mockReturnValue({
+      monthlyRemaining: 380,
+      monthlyUsed: 120,
+      monthlyLimit: 500,
+      dailyRemaining: null,
+      dailyLimit: null,
+      perMinuteRemaining: null,
+      observedAt,
+    });
+
+    const summary = await prewarmOdds({ now: new Date() });
+
+    expect(summary.quotaMonthlyRemaining).toBe(380);
+    expect(await getProviderQuota("odds-api")).toEqual({
+      provider: "odds-api",
+      monthlyUsed: 120,
+      monthlyRemaining: 380,
+      observedAt,
+    });
+  });
+
+  it("#509: sem quota (nenhum fetch real) → nada persistido", async () => {
+    getOddsForSport.mockImplementation((...args: unknown[]) => {
+      const opts = args[1] as { markets: string[] };
+      return Promise.resolve(batchFor(opts.markets));
+    });
+    await prewarmOdds({ now: new Date() });
+    expect(await getProviderQuota("odds-api")).toBeNull();
+  });
+
+  it("#509: falha ao gravar a quota só gera warn — o run não lança", async () => {
+    getOddsForSport.mockImplementation((...args: unknown[]) => {
+      const opts = args[1] as { markets: string[] };
+      return Promise.resolve(batchFor(opts.markets));
+    });
+    lastQuota.mockReturnValue({
+      monthlyRemaining: 380,
+      monthlyUsed: 120,
+      monthlyLimit: 500,
+      dailyRemaining: null,
+      dailyLimit: null,
+      perMinuteRemaining: null,
+      observedAt: new Date("2026-09-20T12:00:00Z"),
+    });
+    failQuotaWrite = true;
+    const warn = vi.spyOn(console, "warn").mockImplementation(() => {});
+
+    const summary = await prewarmOdds({ now: new Date() });
+
+    expect(summary.warmedLeagues).toBe(1);
+    expect(summary.errors).toBe(0);
+    expect(warn).toHaveBeenCalledWith(
+      expect.stringContaining("quota_persist_failed")
+    );
+    expect(await getProviderQuota("odds-api")).toBeNull();
+    warn.mockRestore();
   });
 });
