@@ -53,11 +53,25 @@ export function selectionAliases(
       if (key === "away") return [`Vitória do ${teams.away}`, teams.away];
       break;
     case "btts":
+      // Nunca "sim"/"não" soltos: casariam com qualquer frase ("palpite não é
+      // garantia") e gerariam falso positivo na fidelidade.
       if (key === "yes") {
-        return ["Ambas marcam: sim", "ambos marcam: sim", "sim"];
+        return [
+          "Ambas marcam: sim",
+          "ambos marcam: sim",
+          "ambas marcam sim",
+          "ambos marcam sim",
+          "as duas equipes marcam",
+        ];
       }
       if (key === "no") {
-        return ["Ambas marcam: não", "ambos marcam: não", "não"];
+        return [
+          "Ambas marcam: não",
+          "ambos marcam: não",
+          "ambas marcam não",
+          "ambos marcam não",
+          "as duas equipes não marcam",
+        ];
       }
       break;
     case "double_chance":

@@ -27,6 +27,16 @@ const matchRow = {
 };
 
 const insertValues = vi.fn();
+// Predições code_jev "persistidas" (id + createdAt), pro fake de
+// findReusableJudgments abaixo. Cada insert devolve um id próprio.
+type StoredPrediction = {
+  id: string;
+  matchId: string;
+  judgments: PredictionJudgments;
+  createdAt: Date;
+};
+let predictionStore: StoredPrediction[] = [];
+let insertSeq = 0;
 vi.mock("@/lib/db", () => {
   const select = vi.fn(() => ({
     from: vi.fn(() => ({
@@ -38,15 +48,56 @@ vi.mock("@/lib/db", () => {
   const insert = vi.fn(() => ({
     values: (...args: unknown[]) => {
       insertValues(...args);
+      const id = `row-${++insertSeq}`;
+      const row = args[0] as Record<string, unknown>;
+      if (!Array.isArray(row) && row.judgments) {
+        predictionStore.push({
+          id,
+          matchId: row.matchId as string,
+          judgments: row.judgments as PredictionJudgments,
+          createdAt: new Date(),
+        });
+      }
       return {
-        returning: vi.fn(() =>
-          Promise.resolve([{ id: "row-1", aiCallId: "row-1" }])
-        ),
+        returning: vi.fn(() => Promise.resolve([{ id, aiCallId: id }])),
       };
     },
   }));
   return { db: { select, insert } };
 });
+
+// Fake com a MESMA semântica da query (coberta contra Postgres real em
+// find-reusable-judgments.pglite.test.ts), sobre o store acima.
+const findReusableJudgments = vi.fn(
+  (args: {
+    matchId: string;
+    judgmentsVersion: string;
+    weightsVersion: string;
+    stateHash: string;
+    since: Date;
+  }) => {
+    const hit = predictionStore
+      .filter(
+        (p) =>
+          p.matchId === args.matchId &&
+          p.judgments.applied &&
+          p.judgments.stateHash === args.stateHash &&
+          p.judgments.versions.judgments === args.judgmentsVersion &&
+          p.judgments.versions.weights === args.weightsVersion &&
+          p.createdAt >= args.since
+      )
+      .sort((a, b) => b.createdAt.getTime() - a.createdAt.getTime())[0];
+    return Promise.resolve(
+      hit ? { predictionId: hit.id, judgments: hit.judgments } : null
+    );
+  }
+);
+vi.mock("@/lib/db/queries/judgments", () => ({
+  findReusableJudgments: (...args: unknown[]) =>
+    findReusableJudgments(
+      ...(args as Parameters<typeof findReusableJudgments>)
+    ),
+}));
 
 const getInjuriesByFixture = vi.fn();
 const getTeamForm = vi.fn();
@@ -130,6 +181,7 @@ vi.mock("@/lib/ai/judgments/provider", () => ({
   }),
 }));
 
+import { resetAnalysisEngineMemo } from "@/lib/ai/engine/analysis-engine-flag";
 import { runCodeJevEngine } from "@/lib/ai/engine/code-jev";
 import { resolveModelScoreline } from "@/lib/ai/engine/model-scoreline";
 import type { PredictionJudgments } from "@/lib/ai/engine/types";
@@ -330,6 +382,9 @@ beforeEach(() => {
   vi.restoreAllMocks();
   vi.useFakeTimers({ toFake: ["Date"] });
   vi.setSystemTime(new Date("2026-05-12T00:00:00.000Z"));
+  resetAnalysisEngineMemo();
+  predictionStore = [];
+  insertSeq = 0;
   setHappyPath();
 });
 
@@ -370,9 +425,14 @@ function expectedEngine(judgments: JudgmentAnswers | null) {
 }
 
 type Row = Record<string, unknown>;
+// Cada row ganha `__id` = o id que o insert mockado devolveu (row-<ordem>).
 const rowsWhere = (pred: (r: Row) => boolean) =>
   insertValues.mock.calls
-    .map((c) => c[0] as Row | Row[])
+    .map((c, i): Row | Row[] =>
+      Array.isArray(c[0])
+        ? (c[0] as Row[])
+        : { ...(c[0] as Row), __id: `row-${i + 1}` }
+    )
     .filter((r): r is Row => !Array.isArray(r) && pred(r));
 
 describe("flag analysis_engine = 'llm' (default)", () => {
@@ -480,6 +540,10 @@ describe("flag analysis_engine = 'code_jev'", () => {
       jevModel: "jev-1.13.0",
     });
     expect(judgments.failure).toBeNull();
+    // A prediction aponta pra row da chamada JEV; state hasheado; sem reuso.
+    expect(judgments.aiCallId).toBe(jevCall.__id);
+    expect(judgments.stateHash).toMatch(/^[0-9a-f]{64}$/);
+    expect(judgments.reusedFromPredictionId).toBeNull();
 
     // PSO + carrier com as probs do código.
     const pso = insertValues.mock.calls.find((c) => Array.isArray(c[0]))![0];
@@ -733,5 +797,169 @@ describe("flag analysis_engine = 'code_jev'", () => {
     expect(engine.recommendation).not.toBe("pass");
     expect(params.line).toBe(engine.line);
     expect(prediction.recommendation).toBe(engine.recommendation);
+  });
+});
+
+describe("JEV uma vez por jogo (reuso entre mercados)", () => {
+  const run = (marketKey: "match_result" | "over_under") =>
+    predict({ matchId: "m-1", userId: "u-1", isAdmin: true, marketKey });
+
+  function switchToOverUnder() {
+    getLatestFreshSelectionOddsSnapshots.mockResolvedValue(
+      freshSnapshot({ over: 1.9, under: 1.95 })
+    );
+    resolveMarketCatalog.mockResolvedValue(catalogFor(["over", "under"]));
+  }
+
+  const predictionRows = () =>
+    rowsWhere((r) => "recommendation" in r).map((r) => ({
+      id: r.__id as string,
+      judgments: r.judgments as PredictionJudgments,
+    }));
+
+  it("2º mercado do mesmo jogo e mesmo state reusa as respostas: sem chamada e sem ai_call nova", async () => {
+    await run("match_result");
+    switchToOverUnder();
+    vi.setSystemTime(new Date("2026-05-12T01:00:00.000Z"));
+    await run("over_under");
+
+    expect(judge).toHaveBeenCalledTimes(1);
+    expect(rowsWhere((r) => r.provider === "typesafe")).toHaveLength(1);
+    const [first, second] = predictionRows();
+    expect(second.judgments.reusedFromPredictionId).toBe(first.id);
+    expect(second.judgments.aiCallId).toBe(first.judgments.aiCallId);
+    expect(second.judgments.answers).toEqual(JEV_ANSWERS);
+    expect(second.judgments.applied).toBe(true);
+    expect(second.judgments.stateHash).toBe(first.judgments.stateHash);
+    expect(second.judgments.versions.jevModel).toBe("jev-1.13.0");
+  });
+
+  it("reuso de reuso aponta pra predição de ORIGEM", async () => {
+    await run("match_result");
+    await run("match_result");
+    await run("match_result");
+    expect(judge).toHaveBeenCalledTimes(1);
+    const [first, , third] = predictionRows();
+    expect(third.judgments.reusedFromPredictionId).toBe(first.id);
+  });
+
+  it("state diferente (desfalque novo) → chama o JEV de novo", async () => {
+    await run("match_result");
+    getInjuriesByFixture.mockResolvedValue({
+      home: [{ player: { name: "Pedro" }, type: "injury", status: "injured" }],
+      away: [],
+    });
+    await run("match_result");
+
+    expect(judge).toHaveBeenCalledTimes(2);
+    const [first, second] = predictionRows();
+    expect(second.judgments.stateHash).not.toBe(first.judgments.stateHash);
+    expect(second.judgments.reusedFromPredictionId).toBeNull();
+  });
+
+  it("predição com julgamentos de mais de 6h → chama o JEV de novo", async () => {
+    await run("match_result");
+    vi.setSystemTime(new Date("2026-05-12T06:00:01.000Z"));
+    await run("match_result");
+
+    expect(judge).toHaveBeenCalledTimes(2);
+    expect(predictionRows()[1].judgments.reusedFromPredictionId).toBeNull();
+  });
+
+  it("JEV que falhou (applied=false) não é reusado", async () => {
+    hasKey.mockReturnValue(false);
+    await run("match_result");
+    hasKey.mockReturnValue(true);
+    await run("match_result");
+    expect(judge).toHaveBeenCalledTimes(1);
+    expect(predictionRows()[1].judgments.applied).toBe(true);
+  });
+});
+
+describe("papel do desfalque pela escalação do jogo ANTERIOR", () => {
+  const PREVIOUS: NormalizedFixture = {
+    ...FIXTURE,
+    id: "prev",
+    kickoffAt: "2026-05-08T19:00:00.000Z",
+    kickoffTimestampMs: Date.parse("2026-05-08T19:00:00.000Z"),
+    homeTeam: "SE Palmeiras",
+    awayTeam: matchRow.awayTeam,
+    status: "finished",
+  };
+
+  it("busca a escalação do último jogo do time desfalcado e deriva o papel dela", async () => {
+    getInjuriesByFixture.mockResolvedValue({
+      home: [],
+      away: [
+        { player: { name: "Germán Cano" }, type: "injury", status: "injured" },
+      ],
+    });
+    getTeamForm.mockImplementation((team: string) =>
+      Promise.resolve(team === matchRow.awayTeam ? [PREVIOUS] : [])
+    );
+    getLineups.mockImplementation((ref: FixtureRef) =>
+      Promise.resolve(
+        ref.kickoffAt === PREVIOUS.kickoffAt
+          ? {
+              fixtureId: "prev",
+              home: { team: "SE Palmeiras", starters: [] },
+              away: {
+                team: matchRow.awayTeam,
+                starters: [{ name: "German Cano", position: "FWD" }],
+              },
+            }
+          : undefined
+      )
+    );
+
+    await predict({
+      matchId: "m-1",
+      userId: "u-1",
+      isAdmin: true,
+      marketKey: "match_result",
+    });
+
+    // Uma chamada pra este jogo + uma pro jogo anterior do visitante (o mandante
+    // não tem desfalque → não busca).
+    expect(getLineups).toHaveBeenCalledTimes(2);
+    expect(getLineups).toHaveBeenCalledWith({
+      league: PREVIOUS.league,
+      kickoffAt: PREVIOUS.kickoffAt,
+      homeTeam: PREVIOUS.homeTeam,
+      awayTeam: PREVIOUS.awayTeam,
+    });
+    const message = JSON.stringify(anthropicCreate.mock.calls[0][0]);
+    expect(message).toContain("atacante titular (lesionado)");
+    expect(message).not.toContain("Cano");
+    expect(JSON.stringify(judge.mock.calls[0][0])).toContain(
+      "starting forward"
+    );
+  });
+
+  it("falha na escalação anterior não derruba a análise (papel desconhecido)", async () => {
+    getInjuriesByFixture.mockResolvedValue({
+      home: [],
+      away: [
+        { player: { name: "Germán Cano" }, type: "injury", status: "injured" },
+      ],
+    });
+    getTeamForm.mockResolvedValue([PREVIOUS]);
+    getLineups.mockImplementation((ref: FixtureRef) =>
+      ref.kickoffAt === PREVIOUS.kickoffAt
+        ? Promise.reject(new Error("boom"))
+        : Promise.resolve(undefined)
+    );
+    const err = vi.spyOn(console, "error").mockImplementation(() => {});
+    const result = await predict({
+      matchId: "m-1",
+      userId: "u-1",
+      isAdmin: true,
+      marketKey: "match_result",
+    });
+    expect(result.prediction).toBeDefined();
+    expect(JSON.stringify(anthropicCreate.mock.calls[0][0])).toContain(
+      "jogador (lesionado)"
+    );
+    err.mockRestore();
   });
 });

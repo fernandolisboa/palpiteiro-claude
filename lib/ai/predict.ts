@@ -33,14 +33,17 @@ import {
   SportsDataTransientError,
   SportsDataUnsupportedError,
   type FixtureRef,
+  type NormalizedFixture,
   type NormalizedInjury,
+  type NormalizedTeamLineup,
+  type SportsDataProvider,
 } from "@/lib/providers/sports-data/types";
 
 import {
-  getAnalysisEngine,
   getDefaultModelId,
   getGenerationParams,
 } from "@/lib/db/queries/ai-config";
+import { findReusableJudgments } from "@/lib/db/queries/judgments";
 import { isKellyStakingActive } from "@/lib/calibration/kelly-live";
 import { getPreferredModelId } from "@/lib/db/queries/users";
 import { MIN_EDGE_PP } from "@/lib/odds/scenario";
@@ -52,13 +55,16 @@ import {
   truncate,
 } from "./ai-call-logging";
 import { calculateCost } from "./cost";
-import type { AnalysisEngine } from "./engine/analysis-engine";
+import { readAnalysisEngine } from "./engine/analysis-engine-flag";
 import {
   isCodeJevMarket,
   runCodeJevEngine,
   type CodeJevDecision,
 } from "./engine/code-jev";
-import { buildMatchJudgmentInput } from "./engine/judgment-input";
+import {
+  buildMatchJudgmentInput,
+  previousFixture,
+} from "./engine/judgment-input";
 import {
   resolveModelScoreline,
   type ModelScoreline,
@@ -68,11 +74,14 @@ import { JUDGMENT_WEIGHTS_VERSION } from "./judgments/apply";
 import {
   judgeMatch,
   type JudgmentFailure,
-  type MatchJudgments,
 } from "./judgments/judge-match";
 import { createTypeSafeJudgmentProvider } from "./judgments/provider";
 import { JUDGMENTS_VERSION } from "./judgments/questions";
-import type { JudgmentStateInput } from "./judgments/state";
+import {
+  buildJudgmentState,
+  type JudgmentStateInput,
+} from "./judgments/state";
+import { judgmentStateHash } from "./judgments/state-hash";
 import type { JudgmentAnswers } from "./judgments/types";
 import { typeSafeErrorToAiCallStatus } from "./providers/typesafe/errors";
 import {
@@ -686,7 +695,10 @@ export async function predict({
           },
         ];
 
-    // JEV: uma chamada por jogo (este predict analisa um jogo), fail-open, logada.
+    // JEV: uma chamada por JOGO (ADR 0041 §1), mas predict() roda por MERCADO (o
+    // fan-out chama N vezes). runJudgments reusa as respostas de uma predição
+    // recente do mesmo jogo com o mesmo state; só chama o JEV (fail-open, logado)
+    // quando não há.
     const judgmentInput = buildMatchJudgmentInput({
       league: match.league,
       kickoffAt: match.kickoffAt,
@@ -694,6 +706,15 @@ export async function predict({
       awayTeam: match.awayTeam,
       injuries: injuries.data,
       lineups,
+      previousLineups: await fetchPreviousLineups({
+        provider,
+        kickoffAt: match.kickoffAt,
+        homeTeam: match.homeTeam,
+        awayTeam: match.awayTeam,
+        homeForm,
+        awayForm,
+        injuries: injuries.data,
+      }),
       homeForm,
       awayForm,
       standings,
@@ -709,7 +730,7 @@ export async function predict({
       dbMarketKey: cartridge.descriptor.dbMarketKey,
       selectionKeys,
       scoreline: engineScoreline,
-      judgments: jev.result?.answers ?? null,
+      judgments: jev.answers,
       candidates,
       minEdgePp,
     });
@@ -759,7 +780,7 @@ export async function predict({
       selectionKeys,
       teams,
       engine,
-      answers: jev.result?.answers ?? null,
+      answers: jev.answers,
       decision,
       line: marketParams?.line ?? null,
       oddByKey,
@@ -1486,35 +1507,62 @@ async function persistPrediction(a: PersistArgs): Promise<PredictResult> {
 
 // ─── Motor code_jev (ADR 0041, #511) ─────────────────────────────────────────
 
-// Flag lido FAIL-SAFE: qualquer erro de leitura → 'llm' (o caminho de hoje). O
-// motor novo nunca liga por acidente.
-async function readAnalysisEngine(): Promise<AnalysisEngine> {
-  try {
-    return await getAnalysisEngine();
-  } catch (err) {
-    console.error(
-      JSON.stringify({
-        scope: "predict",
-        error: "analysis_engine_read_failed",
-        message: err instanceof Error ? err.message : String(err),
-      }),
-    );
-    return "llm";
-  }
-}
-
 type JudgmentRun = {
-  result: MatchJudgments | null;
+  answers: JudgmentAnswers | null;
+  jevModel: string | null;
   failure: JudgmentFailure | null;
+  stateHash: string;
+  aiCallId: string | null;
+  reusedFromPredictionId: string | null;
 };
 
-// Uma chamada JEV (fail-open: judgeMatch nunca lança) + a row de auditoria em
-// ai_calls, sucesso OU falha (ADR 0041 §5: predict é a porta única e loga).
+// Janela de reuso das respostas JEV entre mercados do mesmo jogo: o state (hash)
+// já captura desfalques/tabela/descanso; a janela só limita o quão velho pode ser.
+const JUDGMENT_REUSE_WINDOW_MS = 6 * 60 * 60 * 1000;
+
+// Julgamentos do jogo: reusa os de uma predição recente (mesmo jogo, mesmas
+// versões de perguntas/pesos, mesmo state, aplicados, ≤6h) — sem chamada e sem
+// row nova em ai_calls. Senão, UMA chamada JEV (fail-open: judgeMatch nunca lança)
+// + a row de auditoria em ai_calls, sucesso OU falha (ADR 0041 §5: predict é a
+// porta única e loga).
 async function runJudgments(args: {
   userId: string;
   matchId: string;
   stateInput: JudgmentStateInput;
 }): Promise<JudgmentRun> {
+  const stateHash = judgmentStateHash(buildJudgmentState(args.stateInput));
+
+  const reused = await findReusableJudgments({
+    matchId: args.matchId,
+    judgmentsVersion: JUDGMENTS_VERSION,
+    weightsVersion: JUDGMENT_WEIGHTS_VERSION,
+    stateHash,
+    since: new Date(Date.now() - JUDGMENT_REUSE_WINDOW_MS),
+  }).catch((err: unknown) => {
+    // Falha da busca = só perde o reuso; segue pra chamada JEV normal.
+    console.error(
+      JSON.stringify({
+        scope: "predict",
+        matchId: args.matchId,
+        error: "judgments_reuse_lookup_failed",
+        message: err instanceof Error ? err.message : String(err),
+      }),
+    );
+    return null;
+  });
+  if (reused) {
+    const src = reused.judgments;
+    return {
+      answers: src.answers,
+      jevModel: src.versions.jevModel,
+      failure: null,
+      stateHash,
+      aiCallId: src.aiCallId ?? null,
+      // Aponta pra predição que CHAMOU o JEV (a origem), não pra um reuso de reuso.
+      reusedFromPredictionId: src.reusedFromPredictionId ?? reused.predictionId,
+    };
+  }
+
   const captured: { failure: JudgmentFailure | null } = { failure: null };
   const result = await judgeMatch(
     createTypeSafeJudgmentProvider(),
@@ -1526,8 +1574,9 @@ async function runJudgments(args: {
     },
   );
   const failure = result ? null : captured.failure;
+  let aiCallId: string | null = null;
   if (result) {
-    await persistJudgmentAiCall({
+    aiCallId = await persistJudgmentAiCall({
       userId: args.userId,
       matchId: args.matchId,
       model: result.model,
@@ -1541,7 +1590,7 @@ async function runJudgments(args: {
       errorMessage: null,
     });
   } else if (failure) {
-    await persistJudgmentAiCall({
+    aiCallId = await persistJudgmentAiCall({
       userId: args.userId,
       matchId: args.matchId,
       model: JUDGMENT_MODEL_ID,
@@ -1562,7 +1611,66 @@ async function runJudgments(args: {
       errorMessage: `${failure.kind}: ${failure.message}`,
     });
   }
-  return { result, failure };
+  return {
+    answers: result?.answers ?? null,
+    jevModel: result?.model ?? null,
+    failure,
+    stateHash,
+    aiCallId,
+    reusedFromPredictionId: null,
+  };
+}
+
+// Escalação do ÚLTIMO jogo de cada time (o da forma, antes deste) pra derivar o
+// papel dos desfalques: a escalação DESTE jogo nunca traz quem está fora. Só busca
+// pro time que tem desfalque (zero custo sem desfalques); uma chamada getLineups
+// por time, cacheada no adapter. Falha/ausência → undefined e o input cai na
+// escalação deste jogo (o comportamento anterior).
+async function fetchPreviousLineups(args: {
+  provider: SportsDataProvider;
+  kickoffAt: Date;
+  homeTeam: string;
+  awayTeam: string;
+  homeForm: readonly NormalizedFixture[];
+  awayForm: readonly NormalizedFixture[];
+  injuries: { home: NormalizedInjury[]; away: NormalizedInjury[] };
+}): Promise<{ home?: NormalizedTeamLineup; away?: NormalizedTeamLineup }> {
+  const kickoffMs = args.kickoffAt.getTime();
+  const forTeam = async (
+    team: string,
+    form: readonly NormalizedFixture[],
+    injuries: readonly NormalizedInjury[],
+  ): Promise<NormalizedTeamLineup | undefined> => {
+    if (injuries.length === 0) return undefined;
+    const prev = previousFixture(form, kickoffMs);
+    if (!prev) return undefined;
+    try {
+      const lineup = await args.provider.getLineups({
+        league: prev.league,
+        kickoffAt: prev.kickoffAt,
+        homeTeam: prev.homeTeam,
+        awayTeam: prev.awayTeam,
+      });
+      if (prev.homeTeam === team) return lineup?.home;
+      if (prev.awayTeam === team) return lineup?.away;
+      return undefined;
+    } catch (err) {
+      console.error(
+        JSON.stringify({
+          scope: "predict",
+          error: "previous_lineup_fetch_failed",
+          team,
+          message: err instanceof Error ? err.message : String(err),
+        }),
+      );
+      return undefined;
+    }
+  };
+  const [home, away] = await Promise.all([
+    forTeam(args.homeTeam, args.homeForm, args.injuries.home),
+    forTeam(args.awayTeam, args.awayForm, args.injuries.away),
+  ]);
+  return { home, away };
 }
 
 function codeJevModelVersion(modelId: AIModelId, scoreline: ModelScoreline) {
@@ -1577,7 +1685,7 @@ function toPredictionJudgments(
   return {
     engine: "code_jev",
     applied: engine.judgments.applied,
-    answers: jev.result?.answers ?? null,
+    answers: jev.answers,
     multipliers: engine.judgments.multipliers,
     lambda: {
       source: scoreline.source,
@@ -1593,11 +1701,14 @@ function toPredictionJudgments(
       judgments: JUDGMENTS_VERSION,
       weights: JUDGMENT_WEIGHTS_VERSION,
       narrator: narratorCartridge.version,
-      jevModel: jev.result?.model ?? null,
+      jevModel: jev.jevModel,
     },
     failure: jev.failure
       ? { kind: jev.failure.kind, message: jev.failure.message }
       : null,
+    stateHash: jev.stateHash,
+    aiCallId: jev.aiCallId,
+    reusedFromPredictionId: jev.reusedFromPredictionId,
   };
 }
 

@@ -14,6 +14,7 @@ import {
   TEMPERATURE_MIN,
 } from "@/lib/ai/generation-params";
 import { isAnalysisEngine } from "@/lib/ai/engine/analysis-engine";
+import { resetAnalysisEngineMemo } from "@/lib/ai/engine/analysis-engine-flag";
 import {
   setAnalysisEngine,
   setDefaultModelId,
@@ -107,6 +108,8 @@ export async function updateAnalysisEngine(
   }
 
   await setAnalysisEngine(engine, session.user.id);
+  // Vale já nesta instância; nas outras, em até 60s (TTL do memo do predict).
+  resetAnalysisEngineMemo();
   revalidatePath("/admin/settings");
   return { ok: true };
 }

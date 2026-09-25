@@ -17,35 +17,82 @@ const PERCENT_RE =
   /(\d{1,3}(?:[.,]\d+)?)\s*(?:%|p\.\s?p\.|pp(?![\p{L}\d])|pontos percentuais)/giu;
 
 // Verbos/substantivos de recomendação seguidos (só por palavras de função) do
-// rótulo de uma seleção: "recomendamos o under", "a aposta é no over".
+// rótulo de uma seleção: "recomendamos o under", "a aposta é no over". Sem
+// "do/da" no filler: "a aposta do Bahia" é possessivo, não recomendação.
 const RECOMMEND_VERB =
   "(?:recomend[\\p{L}]*|apost[\\p{L}]*|escolh[\\p{L}]*|entrada|palpite|vamos\\s+de|vai\\s+de)";
 const FILLER =
-  "(?:\\s+(?:o|a|os|as|no|na|nos|nas|em|pelo|pela|um|uma|de|do|da|por|para|pro|pra|é))*";
+  "(?:\\s+(?:o|a|os|as|no|na|nos|nas|em|pelo|pela|um|uma|de|por|para|pro|pra|é))*";
 
-// Negação logo antes do verbo ("não recomendamos o under", "evitar apostar no
-// over") — não é recomendação.
+// Recomendação com o rótulo ANTES: "o under é a melhor escolha", "o over vale a
+// aposta".
+const POSITIVE_AFTER =
+  "\\s+(?:(?:é|seria|parece(?:\\s+ser)?)\\s+(?:a\\s+|o\\s+)?(?:melhor|mais\\s+indicad[ao])\\s+(?:escolha|opç[ãa]o|aposta|entrada|pedida|caminho)|vale\\s+a\\s+(?:aposta|pena))";
+
+// Negação logo antes do verbo/rótulo ("não recomendamos o under", "evitar apostar
+// no over") ou logo depois ("a aposta no over não se paga") — não é
+// recomendação.
 const NEGATION_BEFORE =
   /\b(?:não|nao|nem|sem|evit[\p{L}]*|nenhum[\p{L}]*)\b[^.!?;]*$/iu;
+const NEGATION_AFTER =
+  /^[^.!?;]*?(?:\bn[ãa]o\s+(?:se\s+paga|tem\s+valor|compensa|vale)|\bsem\s+valor)/iu;
 const NEGATION_WINDOW = 30;
 
+// "Sem aposta"/"não há valor": contradiz uma aposta só quando NÃO está amarrado
+// ao rótulo de outra seleção ("não há valor no under" numa aposta no over é
+// coerente).
 const NO_BET_RE =
-  /sem aposta|n[ãa]o (?:h[áa]|existe|vemos|encontramos|tem) valor|passar a vez|ficar de fora|melhor n[ãa]o apostar/iu;
+  /sem aposta|n[ãa]o (?:h[áa]|existe|vemos|encontramos|tem) valor|passar a vez|ficar de fora|melhor n[ãa]o apostar/giu;
+const NO_BET_TIE_WINDOW = 40;
 
 function escapeRegExp(s: string): string {
   return s.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
 }
 
+function aliasRe(alias: string): string {
+  return `(?<![\\p{L}\\d])${escapeRegExp(alias)}(?![\\p{L}\\d])`;
+}
+
+function negatedBefore(text: string, index: number): boolean {
+  const before = text.slice(Math.max(0, index - NEGATION_WINDOW), index);
+  return NEGATION_BEFORE.test(before);
+}
+
+function negatedAfter(text: string, end: number): boolean {
+  return NEGATION_AFTER.test(text.slice(end, end + NEGATION_WINDOW));
+}
+
 function recommends(text: string, alias: string): boolean {
-  const re = new RegExp(
-    `${RECOMMEND_VERB}${FILLER}\\s+["'“”]?${escapeRegExp(alias)}(?![\\p{L}\\d])`,
+  const forward = new RegExp(
+    `${RECOMMEND_VERB}${FILLER}\\s+["'“”]?${aliasRe(alias)}`,
     "giu"
   );
-  for (const m of text.matchAll(re)) {
-    const before = text.slice(Math.max(0, m.index - NEGATION_WINDOW), m.index);
-    if (!NEGATION_BEFORE.test(before)) return true;
+  for (const m of text.matchAll(forward)) {
+    if (negatedBefore(text, m.index)) continue;
+    if (negatedAfter(text, m.index + m[0].length)) continue;
+    return true;
+  }
+  const backward = new RegExp(`${aliasRe(alias)}${POSITIVE_AFTER}`, "giu");
+  for (const m of text.matchAll(backward)) {
+    if (!negatedBefore(text, m.index)) return true;
   }
   return false;
+}
+
+// Trecho da mesma frase em volta de [start, end) cita o rótulo de outra seleção?
+function tiedToAlias(
+  text: string,
+  start: number,
+  end: number,
+  aliases: readonly string[]
+): boolean {
+  const before = text
+    .slice(Math.max(0, start - NO_BET_TIE_WINDOW), start)
+    .split(/[.!?;]/)
+    .pop();
+  const after = text.slice(end, end + NO_BET_TIE_WINDOW).split(/[.!?;]/)[0];
+  const around = `${before ?? ""} ${after}`;
+  return aliases.some((a) => new RegExp(aliasRe(a), "iu").test(around));
 }
 
 function allowedPercents(d: NarratorDecision): number[] {
@@ -79,26 +126,38 @@ export function checkNarrationFidelity(
     }
   }
 
-  // (2) Lado.
+  // (2) Lado. Conservador: na dúvida, passa — os números persistidos mandam; a
+  // checagem só pega contradição clara.
   const { marketKey, side, teams, line } = decision;
-  const keys = decision.selectionKeys;
-  if (side !== "pass" && NO_BET_RE.test(text)) {
-    return {
-      ok: false,
-      reason: `texto diz que não há aposta, mas a decisão é '${side}'`,
-    };
-  }
-  for (const key of keys) {
+  const chosenAliases =
+    side === "pass"
+      ? []
+      : selectionAliases(marketKey, side, teams, line).map((a) =>
+          a.toLowerCase()
+        );
+  // Apelido que também descreve o lado escolhido não é contradição.
+  const otherAliases = new Map<string, string[]>();
+  for (const key of decision.selectionKeys) {
     if (key === side) continue;
-    const chosenAliases =
-      side === "pass"
-        ? []
-        : selectionAliases(marketKey, side, teams, line).map((a) =>
-            a.toLowerCase()
-          );
-    for (const alias of selectionAliases(marketKey, key, teams, line)) {
-      // Apelido que também descreve o lado escolhido não é contradição.
-      if (chosenAliases.includes(alias.toLowerCase())) continue;
+    otherAliases.set(
+      key,
+      selectionAliases(marketKey, key, teams, line).filter(
+        (a) => !chosenAliases.includes(a.toLowerCase())
+      )
+    );
+  }
+  if (side !== "pass") {
+    const allOther = [...otherAliases.values()].flat();
+    for (const m of text.matchAll(NO_BET_RE)) {
+      if (tiedToAlias(text, m.index, m.index + m[0].length, allOther)) continue;
+      return {
+        ok: false,
+        reason: `texto diz que não há aposta, mas a decisão é '${side}'`,
+      };
+    }
+  }
+  for (const [key, aliases] of otherAliases) {
+    for (const alias of aliases) {
       if (recommends(text, alias)) {
         return {
           ok: false,

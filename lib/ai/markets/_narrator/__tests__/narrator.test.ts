@@ -182,6 +182,114 @@ describe("checkNarrationFidelity", () => {
     };
     expect(checkNarrationFidelity(good, decision).ok).toBe(true);
   });
+
+  describe("falsos positivos do code review (conservador: na dúvida, passa)", () => {
+    const withText = (rationale: string) => ({ ...OK, rationale });
+
+    it("pass + 'a aposta no over não se paga' passa (negação depois do rótulo)", () => {
+      expect(
+        checkNarrationFidelity(
+          withText("A aposta no over não se paga com essa odd."),
+          passDecision()
+        ).ok
+      ).toBe(true);
+      for (const tail of ["não tem valor", "não compensa", "fica sem valor"]) {
+        expect(
+          checkNarrationFidelity(
+            withText(`Apostar no under ${tail} aqui.`),
+            passDecision()
+          ).ok
+        ).toBe(true);
+      }
+    });
+
+    it("aposta no over + 'não há valor no under' passa (sem-aposta amarrado a outra seleção)", () => {
+      expect(
+        checkNarrationFidelity(
+          withText("Não há valor no under; o over é o lado certo."),
+          overDecision()
+        ).ok
+      ).toBe(true);
+    });
+
+    it("BTTS sim + 'palpite não é garantia' passa (sem apelido 'não' solto)", () => {
+      const decision = overDecision({
+        marketKey: "btts",
+        marketLabel: "Ambas marcam",
+        line: null,
+        selectionKeys: ["yes", "no"],
+        side: "yes",
+        focus: {
+          key: "yes",
+          label: "Ambas marcam: sim",
+          modelProbPct: 58.4,
+          impliedPct: 50.2,
+          edgePct: 8.2,
+          odd: 1.95,
+        },
+      });
+      expect(
+        checkNarrationFidelity(
+          withText("Palpite não é garantia: os dois ataques marcam muito."),
+          decision
+        ).ok
+      ).toBe(true);
+      expect(
+        checkNarrationFidelity(
+          withText("Recomendamos ambas marcam: não neste jogo."),
+          decision
+        ).ok
+      ).toBe(false);
+    });
+
+    it("1X2 mandante + visitante só mencionado ('a aposta do Bahia fora') passa", () => {
+      const decision: NarratorDecision = overDecision({
+        marketKey: "match_result",
+        marketLabel: "Resultado (1X2)",
+        line: null,
+        teams: { home: "Fortaleza", away: "Bahia" },
+        selectionKeys: ["home", "draw", "away"],
+        side: "home",
+        focus: {
+          key: "home",
+          label: "Vitória do Fortaleza",
+          modelProbPct: 55,
+          impliedPct: 48,
+          edgePct: 7,
+          odd: 2,
+        },
+      });
+      expect(
+        checkNarrationFidelity(
+          withText(
+            "A aposta do Bahia fora de casa tem rendido pouco; o Fortaleza é forte em casa."
+          ),
+          decision
+        ).ok
+      ).toBe(true);
+    });
+
+    it("aposta no over + 'o under é a melhor escolha' reprova (recomendação com o rótulo antes)", () => {
+      expect(
+        checkNarrationFidelity(
+          withText("O under é a melhor escolha neste jogo."),
+          overDecision()
+        ).ok
+      ).toBe(false);
+      expect(
+        checkNarrationFidelity(
+          withText("O under vale a aposta."),
+          overDecision()
+        ).ok
+      ).toBe(false);
+      expect(
+        checkNarrationFidelity(
+          withText("Não achamos que o under é a melhor escolha."),
+          overDecision()
+        ).ok
+      ).toBe(true);
+    });
+  });
 });
 
 describe("templatedNarration", () => {

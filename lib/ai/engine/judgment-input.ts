@@ -10,11 +10,12 @@ import type {
   NormalizedInjury,
   NormalizedLineup,
   NormalizedStanding,
+  NormalizedTeamLineup,
 } from "@/lib/providers/sports-data/types";
 
-// Monta o input do state JEV (ADR 0041 §2) SÓ com o que o predict já buscou — zero
-// chamada nova de provider. O que não temos (próximo jogo, artilheiros) fica
-// ausente e vira "unknown" no state.
+// Monta o input do state JEV (ADR 0041 §2) SÓ com o que o predict já buscou (a
+// única busca extra, a escalação do jogo anterior de cada time, é do predict). O
+// que não temos (próximo jogo, artilheiros) fica ausente e vira "unknown" no state.
 
 // Rótulo em inglês da competição (o state do JEV é em inglês).
 const COMPETITION_LABEL: Record<SupportedLeague, string> = {
@@ -32,16 +33,16 @@ const COMPETITION_LABEL: Record<SupportedLeague, string> = {
 
 // Último jogo do time ANTES deste (a forma recente vem do provider, já ordenada ou
 // não — ordenamos aqui). Comparação de datas no código, nunca no JEV.
-function previousKickoffAt(
+export function previousFixture(
   form: readonly NormalizedFixture[],
   kickoffMs: number
-): string | undefined {
+): NormalizedFixture | undefined {
   let best: NormalizedFixture | undefined;
   for (const f of form) {
     if (f.kickoffTimestampMs >= kickoffMs) continue;
     if (!best || f.kickoffTimestampMs > best.kickoffTimestampMs) best = f;
   }
-  return best?.kickoffAt;
+  return best;
 }
 
 export type MatchJudgmentData = {
@@ -50,7 +51,14 @@ export type MatchJudgmentData = {
   homeTeam: string;
   awayTeam: string;
   injuries: { home: NormalizedInjury[]; away: NormalizedInjury[] };
+  // Escalação DESTE jogo: nunca traz quem está fora, então é só o fallback.
   lineups: NormalizedLineup | undefined;
+  // Escalação de cada time no jogo ANTERIOR (a fonte certa de posição/titular do
+  // desfalcado); ausente quando não buscada ou indisponível.
+  previousLineups?: {
+    home?: NormalizedTeamLineup;
+    away?: NormalizedTeamLineup;
+  };
   homeForm: readonly NormalizedFixture[];
   awayForm: readonly NormalizedFixture[];
   standings: NormalizedStanding | undefined;
@@ -68,10 +76,10 @@ export function buildMatchJudgmentInput(
   const kickoffMs = data.kickoffAt.getTime();
   const absences = {
     home: enrichAbsences(data.injuries.home, {
-      lastLineup: data.lineups?.home,
+      lastLineup: data.previousLineups?.home ?? data.lineups?.home,
     }),
     away: enrichAbsences(data.injuries.away, {
-      lastLineup: data.lineups?.away,
+      lastLineup: data.previousLineups?.away ?? data.lineups?.away,
     }),
   };
   return {
@@ -82,12 +90,12 @@ export function buildMatchJudgmentInput(
       home: {
         name: data.homeTeam,
         absences: absences.home,
-        previousKickoffAt: previousKickoffAt(data.homeForm, kickoffMs),
+        previousKickoffAt: previousFixture(data.homeForm, kickoffMs)?.kickoffAt,
       },
       away: {
         name: data.awayTeam,
         absences: absences.away,
-        previousKickoffAt: previousKickoffAt(data.awayForm, kickoffMs),
+        previousKickoffAt: previousFixture(data.awayForm, kickoffMs)?.kickoffAt,
       },
       table: tableInputForLeague(data.league, data.standings),
     },

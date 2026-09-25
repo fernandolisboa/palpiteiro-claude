@@ -98,26 +98,30 @@ export async function persistJudgmentAiCall(args: {
   costUsd: number;
   status: AiCallStatus;
   errorMessage: string | null;
-}): Promise<void> {
+}): Promise<string | null> {
   try {
-    await db.insert(aiCalls).values({
-      userId: args.userId,
-      matchId: args.matchId,
-      provider: JUDGMENT_PROVIDER_KEY,
-      model: args.model,
-      promptVersion: args.promptVersion,
-      inputPayload: args.inputPayload,
-      outputPayload: args.outputPayload,
-      inputTokens: args.inputTokens,
-      outputTokens: 0,
-      latencyMs: Math.round(args.latencyMs),
-      costUsd: args.costUsd.toFixed(6),
-      status: args.status,
-      errorMessage:
-        args.errorMessage === null
-          ? null
-          : truncate(args.errorMessage, ERROR_MESSAGE_MAX),
-    });
+    const [row] = await db
+      .insert(aiCalls)
+      .values({
+        userId: args.userId,
+        matchId: args.matchId,
+        provider: JUDGMENT_PROVIDER_KEY,
+        model: args.model,
+        promptVersion: args.promptVersion,
+        inputPayload: args.inputPayload,
+        outputPayload: args.outputPayload,
+        inputTokens: args.inputTokens,
+        outputTokens: 0,
+        latencyMs: Math.round(args.latencyMs),
+        costUsd: args.costUsd.toFixed(6),
+        status: args.status,
+        errorMessage:
+          args.errorMessage === null
+            ? null
+            : truncate(args.errorMessage, ERROR_MESSAGE_MAX),
+      })
+      .returning({ id: aiCalls.id });
+    return row?.id ?? null;
   } catch (err) {
     console.error(
       JSON.stringify({
@@ -128,5 +132,6 @@ export async function persistJudgmentAiCall(args: {
         message: err instanceof Error ? err.message : String(err),
       }),
     );
+    return null;
   }
 }

@@ -26,4 +26,13 @@ export type PredictionJudgments = {
   };
   // Por que o JEV não foi aplicado (null quando aplicado).
   failure: { kind: string; message: string } | null;
+  // sha256 do JSON canônico do `state` enviado ao JEV: chave de reuso das
+  // respostas entre mercados do mesmo jogo (ADR 0041 §1).
+  stateHash: string;
+  // Row de ai_calls da chamada JEV que produziu `answers` (null quando o insert de
+  // auditoria falhou). Num reuso, é a chamada da predição de origem.
+  aiCallId: string | null;
+  // Predição de origem cujas respostas foram reusadas (sem chamada JEV nova);
+  // null quando esta predição chamou o JEV.
+  reusedFromPredictionId: string | null;
 };
