@@ -228,8 +228,9 @@ function GateSection({ gate }: { gate: KellyGate }) {
   );
 }
 
-// Backtest offline compartilhado Fase C ↔ ADR 0041 §7 (report 10). Estático: o
-// report é um snapshot versionado; a manchete só muda com um run novo.
+// Backtest offline da Fase C (ADR 0039, report 10): Dixon-Coles vs λ heurístico. O
+// backtest do §7 do ADR 0041 (code+JEV vs estatístico puro / LLM) ainda não rodou.
+// Estático: o report é um snapshot versionado; a manchete só muda com um run novo.
 function BacktestSection() {
   return (
     <section className="pb-8">
@@ -238,8 +239,11 @@ function BacktestSection() {
       </h2>
       <p className="text-meta leading-relaxed text-muted-fg-2 tracking-tight">
         Dixon-Coles vs λ heurístico, 987 jogos do Brasileirão 2023–25 em
-        walk-forward: log-loss −0.011 em over 2.5 e −0.042 em 1X2 (IC 90% abaixo
-        de 0 → GO); no 1X2 o fechamento ainda bate o DC por ~0.02.{" "}
+        walk-forward: log-loss −0.011 em over 2.5 (IC 90% abaixo de 0 → GO) e
+        −0.042 em 1X2; no 1X2 o fechamento ainda bate o DC por ~0.02. No over 2.5
+        nenhum modelo bate a taxa-base: o heurístico, que o code_jev usa hoje, fica
+        pior (+0.013) e o DC só empata. O backtest code+JEV do ADR 0041 §7 ainda não
+        rodou.{" "}
         <a
           href={BACKTEST_REPORT_URL}
           target="_blank"
