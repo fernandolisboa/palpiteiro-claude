@@ -2,7 +2,11 @@ import { aiCalls } from "@/db/schema";
 import { db } from "@/lib/db";
 
 import { calculateCost } from "./cost";
-import type { AIModelId, AIProviderKey } from "./models";
+import {
+  JUDGMENT_PROVIDER_KEY,
+  type AIModelId,
+  type AIProviderKey,
+} from "./models";
 import type { AiCallStatus } from "./providers/types";
 
 // Logging compartilhado de `ai_calls` (extraído de predict.ts, #315). Genérico —
@@ -75,5 +79,59 @@ export async function persistAiCallError(args: {
         message: err instanceof Error ? err.message : String(err),
       }),
     );
+  }
+}
+
+// Loga UMA chamada de julgamentos JEV (ADR 0041 §5) em `ai_calls`, sucesso OU falha:
+// provider 'typesafe', output 0 (grátis), custo já calculado pelo chamador
+// (calculateJudgmentCost). Mesmo SWALLOW do persistAiCallError: o JEV é fail-open, e
+// um insert de auditoria que falha nunca pode derrubar a análise.
+export async function persistJudgmentAiCall(args: {
+  userId: string;
+  matchId: string;
+  model: string;
+  promptVersion: string;
+  inputPayload: Record<string, unknown>;
+  outputPayload: Record<string, unknown>;
+  inputTokens: number;
+  latencyMs: number;
+  costUsd: number;
+  status: AiCallStatus;
+  errorMessage: string | null;
+}): Promise<string | null> {
+  try {
+    const [row] = await db
+      .insert(aiCalls)
+      .values({
+        userId: args.userId,
+        matchId: args.matchId,
+        provider: JUDGMENT_PROVIDER_KEY,
+        model: args.model,
+        promptVersion: args.promptVersion,
+        inputPayload: args.inputPayload,
+        outputPayload: args.outputPayload,
+        inputTokens: args.inputTokens,
+        outputTokens: 0,
+        latencyMs: Math.round(args.latencyMs),
+        costUsd: args.costUsd.toFixed(6),
+        status: args.status,
+        errorMessage:
+          args.errorMessage === null
+            ? null
+            : truncate(args.errorMessage, ERROR_MESSAGE_MAX),
+      })
+      .returning({ id: aiCalls.id });
+    return row?.id ?? null;
+  } catch (err) {
+    console.error(
+      JSON.stringify({
+        scope: "persistJudgmentAiCall",
+        matchId: args.matchId,
+        error: "ai_call_audit_insert_failed",
+        status: args.status,
+        message: err instanceof Error ? err.message : String(err),
+      }),
+    );
+    return null;
   }
 }

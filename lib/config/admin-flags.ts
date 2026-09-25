@@ -1,5 +1,11 @@
 import { z } from "zod";
 
+import {
+  ANALYSIS_ENGINE_LABEL,
+  ANALYSIS_ENGINES,
+  DEFAULT_ANALYSIS_ENGINE,
+} from "@/lib/ai/engine/analysis-engine";
+
 // `import type`: o registry é lido também pela UI; nada de drizzle no bundle.
 import type { aiConfig } from "@/db/schema";
 
@@ -97,6 +103,18 @@ export const ADMIN_FLAGS = [
     description:
       "Permite trocar as bandas de stake (ADR 0019) pelo quarter-Kelly, mas só quando o gate do Kelly em /admin/calibration estiver pronto. Desligada, usa as bandas sempre.",
     default: true,
+  },
+  {
+    key: "analysisEngine",
+    kind: "enum",
+    label: "Motor de análise",
+    description:
+      "LLM (atual): o cartucho de mercado decide a aposta. Código + JEV: a probabilidade sai do modelo de placar ajustado pelos julgamentos JEV, o gate e o stake ficam no código e o LLM só escreve o racional (ADR 0041). Vale pra toda análise nova; voltar é trocar de novo.",
+    values: ANALYSIS_ENGINES,
+    valueLabels: ANALYSIS_ENGINE_LABEL,
+    default: DEFAULT_ANALYSIS_ENGINE,
+    costNote:
+      "Código + JEV: ~US$ 0,0001 de JEV por jogo (reusado por 6h) e 1 chamada de LLM só pro racional.",
   },
 ] as const satisfies readonly AdminFlagDef[];
 

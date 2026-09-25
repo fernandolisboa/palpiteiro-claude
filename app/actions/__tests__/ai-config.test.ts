@@ -3,17 +3,24 @@ import type { Session } from "next-auth";
 
 vi.mock("next/cache", () => ({ revalidatePath: vi.fn() }));
 vi.mock("@/auth", () => ({ auth: vi.fn() }));
+vi.mock("@/lib/ai/engine/analysis-engine-flag", () => ({
+  resetAnalysisEngineMemo: vi.fn(),
+}));
 vi.mock("@/lib/db/queries/ai-config", () => ({
+  setAdminFlag: vi.fn(),
   setDefaultModelId: vi.fn(),
   setGenerationParams: vi.fn(),
 }));
 
 import {
+  updateAdminFlag,
   updateDefaultModel,
   updateGenerationParams,
 } from "@/app/actions/ai-config";
 import { auth } from "@/auth";
+import { resetAnalysisEngineMemo } from "@/lib/ai/engine/analysis-engine-flag";
 import {
+  setAdminFlag,
   setDefaultModelId,
   setGenerationParams,
 } from "@/lib/db/queries/ai-config";
@@ -21,6 +28,8 @@ import {
 const mockAuth = auth as unknown as Mock<() => Promise<Session | null>>;
 const mockSet = vi.mocked(setDefaultModelId);
 const mockSetParams = vi.mocked(setGenerationParams);
+const mockSetFlag = vi.mocked(setAdminFlag);
+const mockResetMemo = vi.mocked(resetAnalysisEngineMemo);
 
 const ADMIN = {
   user: { id: "u1", email: "a@b.com", role: "admin" },
@@ -42,6 +51,8 @@ beforeEach(() => {
   mockAuth.mockReset();
   mockSet.mockReset();
   mockSetParams.mockReset();
+  mockSetFlag.mockReset();
+  mockResetMemo.mockReset();
 });
 
 describe("updateDefaultModel", () => {
@@ -162,5 +173,50 @@ describe("updateGenerationParams", () => {
     );
     expect(res.ok).toBe(false);
     expect(mockSetParams).not.toHaveBeenCalled();
+  });
+});
+
+describe("updateAdminFlag (#514) — analysisEngine (#511)", () => {
+  it("não-admin é rejeitado e o setter não é chamado", async () => {
+    mockAuth.mockResolvedValue(USER);
+    const res = await updateAdminFlag(
+      null,
+      form({ key: "analysisEngine", value: "code_jev" }),
+    );
+    expect(res.ok).toBe(false);
+    expect(mockSetFlag).not.toHaveBeenCalled();
+  });
+
+  it("admin + motor válido → setter chamado e memo do motor zerado", async () => {
+    mockAuth.mockResolvedValue(ADMIN);
+    const res = await updateAdminFlag(
+      null,
+      form({ key: "analysisEngine", value: "code_jev" }),
+    );
+    expect(res).toEqual({ ok: true });
+    expect(mockSetFlag).toHaveBeenCalledWith("analysisEngine", "code_jev", "u1");
+    expect(mockResetMemo).toHaveBeenCalledTimes(1);
+  });
+
+  it("admin + motor inválido → erro, setter não chamado", async () => {
+    mockAuth.mockResolvedValue(ADMIN);
+    const res = await updateAdminFlag(
+      null,
+      form({ key: "analysisEngine", value: "jev_direto" }),
+    );
+    expect(res.ok).toBe(false);
+    expect(mockSetFlag).not.toHaveBeenCalled();
+    expect(mockResetMemo).not.toHaveBeenCalled();
+  });
+
+  it("flag boolean não mexe no memo do motor", async () => {
+    mockAuth.mockResolvedValue(ADMIN);
+    const res = await updateAdminFlag(
+      null,
+      form({ key: "enableClvCapture", value: "true" }),
+    );
+    expect(res).toEqual({ ok: true });
+    expect(mockSetFlag).toHaveBeenCalledWith("enableClvCapture", true, "u1");
+    expect(mockResetMemo).not.toHaveBeenCalled();
   });
 });

@@ -169,6 +169,7 @@ Cada noul carrega `criteria` com os casos de borda escritos, como pede a jaggedn
 - **Flag de motor:** `analysis_engine ∈ {llm, code_jev}` é uma coluna aditiva em `ai_config`, ao lado de `enableClvCapture`, lida e gravada por `lib/db/queries/ai-config.ts`. Começa em `llm` e é **editável na tela de admin**, sem env var e sem deploy: é o padrão pedido pelo Fernando pra chaves desse tipo.
   - `modelVersion` e `promptVersion` das predições passam a carregar o motor. Exemplo: `engine=code_jev;lambda=poisson_v1;judg=jev_judgments_v1;w=v1;narr=narrator_v1`.
   - Com isso, a calibração e o Yield segmentam por motor.
+  - **Implementado (#511):** no `code_jev`, `promptVersion` = `narrator_v1` (a versão do cartucho que escreveu o texto), e o motor e o mercado vivem em `modelVersion` (ex.: `claude-sonnet-4-5-20250929;engine=code_jev;lambda=heuristic;judg=jev_judgments_v1;w=judgment_weights_v1`) + `marketKey`; a calibração segmenta pela tag `engine=` do `modelVersion`.
 
 ### 6. Persistência
 

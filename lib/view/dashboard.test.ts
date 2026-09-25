@@ -147,6 +147,7 @@ function makeDetail(overrides: Partial<DashboardDetail> = {}): DashboardDetail {
     impliedProbPct: "42.89",
     edgePct: "7.30",
     stakeUnits: "2.00",
+    judgments: null,
     modelVersion: "claude-sonnet-4-5-20250929",
     promptVersion: "over_under_v1.2",
     createdAt: new Date("2026-06-08T01:00:00Z"),

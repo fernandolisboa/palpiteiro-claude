@@ -1,4 +1,6 @@
 import type { AdapterAccountType } from "next-auth/adapters";
+
+import type { PredictionJudgments } from "@/lib/ai/engine/types";
 import {
   boolean,
   index,
@@ -333,6 +335,10 @@ export const predictions = pgTable(
     // no contract da Fase 5 (#179) — generalizado por `prediction_selection_odds`
     // (uma row de odd congelada por seleção, N-vias, inclusive em pass).
     stakeUnits: numeric({ precision: 6, scale: 2 }).notNull().default("1"),
+    // Julgamentos JEV + ajuste de λ do motor code_jev (ADR 0041 §6, #511): nouls
+    // recebidos, multiplicadores, λ base/ajustado, fonte do λ e se foram aplicados —
+    // a decisão fica recomputável a partir da row. NULL no motor 'llm'.
+    judgments: jsonb().$type<PredictionJudgments>(),
     modelVersion: text().notNull(),
     promptVersion: text().notNull(),
     createdAt: timestamp({ withTimezone: true }).notNull().defaultNow(),
@@ -798,6 +804,11 @@ export const aiConfig = pgTable("ai_config", {
   // quando o gate do Kelly (/admin/calibration — CLV ≥ 50 apostas com IC > 0 + guarda
   // de skill) está "pronto". Até lá, bandas. SET ... = false → bandas sempre.
   enableKellyStaking: boolean().notNull().default(true),
+  // Motor de análise (ADR 0041 §5, #511): 'llm' = cartucho de mercado decide (caminho
+  // de hoje); 'code_jev' = o código decide (λ + julgamentos JEV) e o LLM só narra.
+  // text validado na app (isAnalysisEngine, lib/ai/engine/analysis-engine.ts), como
+  // defaultModelId. Default 'llm'; editável em /admin/settings, sem deploy.
+  analysisEngine: text().notNull().default("llm"),
   updatedByUserId: uuid().references(() => users.id, { onDelete: "set null" }),
   updatedAt: timestamp({ withTimezone: true }).notNull().defaultNow(),
 });

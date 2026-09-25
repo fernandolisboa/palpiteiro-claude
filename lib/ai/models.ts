@@ -76,6 +76,9 @@ export const MODEL_REGISTRY: Record<AIModelId, AIModel> = {
 // (nunca `jev-latest`: o alias move e muda as respostas); upgrade = bump deliberado
 // + re-backtest. Preço oficial por 1M de tokens de input; output é grátis.
 export const JUDGMENT_MODEL_ID = "jev-1.13.0";
+// Gravado em ai_calls.provider nas chamadas JEV. Fora de AIProviderKey de propósito:
+// o JEV não é um AIProvider (seam próprio, ADR 0041 §5).
+export const JUDGMENT_PROVIDER_KEY = "typesafe";
 export const TYPESAFE_PRICE_PER_MTOK_INPUT = 0.042;
 
 // Default global de fallback terminal da cascata (predict.ts) e seed do INSERT

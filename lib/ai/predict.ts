@@ -33,34 +33,83 @@ import {
   SportsDataTransientError,
   SportsDataUnsupportedError,
   type FixtureRef,
+  type NormalizedFixture,
   type NormalizedInjury,
+  type NormalizedTeamLineup,
+  type SportsDataProvider,
 } from "@/lib/providers/sports-data/types";
 
 import {
   getDefaultModelId,
   getGenerationParams,
 } from "@/lib/db/queries/ai-config";
+import { findReusableJudgments } from "@/lib/db/queries/judgments";
 import { isKellyStakingActive } from "@/lib/calibration/kelly-live";
 import { getPreferredModelId } from "@/lib/db/queries/users";
 import { MIN_EDGE_PP } from "@/lib/odds/scenario";
+import { getMarketPresentation } from "@/lib/view/markets/presentation";
 
-import { persistAiCallError } from "./ai-call-logging";
+import {
+  persistAiCallError,
+  persistJudgmentAiCall,
+  truncate,
+} from "./ai-call-logging";
 import { calculateCost } from "./cost";
+import { readAnalysisEngine } from "./engine/analysis-engine-flag";
+import {
+  isCodeJevMarket,
+  runCodeJevEngine,
+  type CodeJevDecision,
+} from "./engine/code-jev";
+import {
+  buildMatchJudgmentInput,
+  previousFixture,
+} from "./engine/judgment-input";
+import {
+  resolveModelScoreline,
+  type ModelScoreline,
+} from "./engine/model-scoreline";
+import type { PredictionJudgments } from "./engine/types";
+import { JUDGMENT_WEIGHTS_VERSION } from "./judgments/apply";
+import {
+  judgeMatch,
+  type JudgmentFailure,
+} from "./judgments/judge-match";
+import { createTypeSafeJudgmentProvider } from "./judgments/provider";
+import { JUDGMENTS_VERSION } from "./judgments/questions";
+import {
+  buildJudgmentState,
+  type JudgmentStateInput,
+} from "./judgments/state";
+import { judgmentStateHash } from "./judgments/state-hash";
+import type { JudgmentAnswers } from "./judgments/types";
+import { typeSafeErrorToAiCallStatus } from "./providers/typesafe/errors";
 import {
   computeKellyStakeUnits,
   computeStakeUnits,
   isBelowEdgeFloor,
 } from "./staking";
-import { getCartridge } from "./markets/registry";
-import type { BaseMarketOutput } from "./markets/types";
 import {
+  buildNarratorContext,
+  judgmentFactorPhrases,
+  narratorCartridge,
+  selectionLabel,
+  type NarratorContext,
+  type NarratorDecision,
+  type NarratorOutput,
+} from "./markets/_narrator";
+import { getCartridge } from "./markets/registry";
+import type { BaseMarketOutput, MarketCartridge } from "./markets/types";
+import {
+  JUDGMENT_MODEL_ID,
   MODEL_REGISTRY,
   isAIProvider,
   isModelAllowedForAudience,
+  type AIModel,
   type AIModelId,
 } from "./models";
 import { getProviderForModel } from "./providers";
-import type { AnalysisRequest } from "./providers/types";
+import type { AiCallStatus, AnalysisRequest } from "./providers/types";
 
 // Rationale neutro de um pass REBAIXADO pelo gate de edge (ADR 0038) — coerente com a
 // manchete "sem aposta recomendada", em vez da prosa pró-lado do LLM (que fica em
@@ -617,6 +666,174 @@ export async function predict({
         }
       : undefined;
 
+  // 5.6 Motor code_jev (ADR 0041, #511), atrás do flag `analysis_engine`: nos mercados
+  //     partition que o código precifica, a decisão sai do λ (× julgamentos JEV) → matriz
+  //     → max-edge, e o LLM só narra. Precisa da tabela (λ); sem ela, ou com o flag em
+  //     'llm', ou em mercado não precificável → segue o caminho LLM abaixo, intacto.
+  const engineScoreline =
+    isCodeJevMarket(cartridge.descriptor) &&
+    (await readAnalysisEngine()) === "code_jev"
+      ? resolveModelScoreline({
+          standing: standings,
+          homeTeam: match.homeTeam,
+          awayTeam: match.awayTeam,
+          neutral: match.league === "world_cup",
+        })
+      : null;
+  if (engineScoreline) {
+    // Candidatas = a linha única, ou cada linha da escada (multi-linha, #175): a
+    // MESMA implícita de-vigada (deriveImplied) que o caminho LLM usa.
+    const candidates = bundlesByLine
+      ? [...bundlesByLine.entries()].map(([line, bundle]) => ({
+          line,
+          impliedByKey: deriveImplied(bundle).impliedByKey,
+        }))
+      : [
+          {
+            line: cartridge.descriptor.params?.line ?? null,
+            impliedByKey: deriveImplied(oddsBundle).impliedByKey,
+          },
+        ];
+
+    // JEV: uma chamada por JOGO (ADR 0041 §1), mas predict() roda por MERCADO (o
+    // fan-out chama N vezes). runJudgments reusa as respostas de uma predição
+    // recente do mesmo jogo com o mesmo state; só chama o JEV (fail-open, logado)
+    // quando não há.
+    const judgmentInput = buildMatchJudgmentInput({
+      league: match.league,
+      kickoffAt: match.kickoffAt,
+      homeTeam: match.homeTeam,
+      awayTeam: match.awayTeam,
+      injuries: injuries.data,
+      lineups,
+      previousLineups: await fetchPreviousLineups({
+        provider,
+        kickoffAt: match.kickoffAt,
+        homeTeam: match.homeTeam,
+        awayTeam: match.awayTeam,
+        homeForm,
+        awayForm,
+        injuries: injuries.data,
+      }),
+      homeForm,
+      awayForm,
+      standings,
+    });
+    const jev = await runJudgments({
+      userId,
+      matchId,
+      stateInput: judgmentInput.stateInput,
+    });
+
+    const minEdgePp = cartridge.descriptor.minEdgePp ?? MIN_EDGE_PP;
+    const engine = runCodeJevEngine({
+      dbMarketKey: cartridge.descriptor.dbMarketKey,
+      selectionKeys,
+      scoreline: engineScoreline,
+      judgments: jev.answers,
+      candidates,
+      minEdgePp,
+    });
+
+    // Fixa a linha decidida pra todo o downstream (edge/PSO/persist), como o
+    // caminho LLM faz com a linha escolhida pelo modelo.
+    let marketParams: { line: number } | null;
+    if (bundlesByLine) {
+      const chosen =
+        engine.line === null ? undefined : bundlesByLine.get(engine.line);
+      if (!chosen || engine.line === null) {
+        throw new PredictError("code_jev decidiu uma linha fora da escada", {
+          marketKey,
+          line: engine.line,
+        });
+      }
+      oddsBundle = chosen;
+      marketParams = { line: engine.line };
+    } else {
+      marketParams = cartridge.descriptor.params ?? null;
+    }
+    ({ oddByKey, impliedByKey } = deriveImplied(oddsBundle));
+
+    // confidencePct = P(seleção recomendada) (ADR 0041 §6); num pass, P da 1ª
+    // seleção — a mesma convenção dos cartuchos (P(over)/P(yes)/P(home)).
+    const confidencePct =
+      engine.modelProbByKey[
+        engine.recommendation === "pass"
+          ? selectionKeys[0]
+          : engine.recommendation
+      ];
+    const decision = await decideRecommendation({
+      cartridge,
+      marketKey,
+      catalog,
+      selectionKeys,
+      oddByKey,
+      impliedByKey,
+      modelProbByKey: engine.modelProbByKey,
+      recommendation: engine.recommendation,
+      confidencePct,
+    });
+
+    const teams = { home: match.homeTeam, away: match.awayTeam };
+    const narratorDecision = toNarratorDecision({
+      marketKey: cartridge.marketKey,
+      selectionKeys,
+      teams,
+      engine,
+      answers: jev.answers,
+      decision,
+      line: marketParams?.line ?? null,
+      oddByKey,
+      minEdgePp,
+    });
+    const narration = await narrateDecision({
+      model,
+      userId,
+      matchId,
+      decision: narratorDecision,
+      context: buildNarratorContext({
+        league: match.league,
+        kickoffAt: match.kickoffAt,
+        venue: fixture.venue,
+        homeTeam: match.homeTeam,
+        awayTeam: match.awayTeam,
+        standings,
+        homeForm,
+        awayForm,
+        h2h,
+        absencesAvailable: !injuries.unavailable,
+        absences: judgmentInput.absences,
+      }),
+    });
+
+    const recModelProb = decision.recModelProb;
+    return persistPrediction({
+      matchId,
+      userId,
+      aiCallId: narration.aiCallId,
+      cartridge,
+      catalog,
+      selectionKeys,
+      oddByKey,
+      modelProbByKey: engine.modelProbByKey,
+      marketParams,
+      decision,
+      confidencePct,
+      rationale: narration.output.rationale,
+      keyFactors: narration.output.key_factors,
+      // Odd mínima em que o lado ainda tem edge ≥ piso: 100 / (P_modelo − piso).
+      minimumOdd:
+        recModelProb !== null && recModelProb - minEdgePp > 0
+          ? 100 / (recModelProb - minEdgePp)
+          : undefined,
+      bookmaker: oddsBundle.bookmakerTitle,
+      modelVersion: codeJevModelVersion(model.id, engineScoreline),
+      promptVersion: narratorCartridge.version,
+      judgments: toPredictionJudgments(engineScoreline, engine, jev),
+      labelByKey: null,
+    });
+  }
+
   // 6. Monta o input do cartucho. Args comuns (sports-data) idênticos pros dois
   //    caminhos; só odds/implied diferem (single: par binário; multi: escada).
   const commonInputArgs = {
@@ -951,6 +1168,80 @@ export async function predict({
   // abaixo. Computada aqui (antes do edge) porque o edge usa a prob POR SELEÇÃO.
   const modelProbByKey = cartridge.selectionProbs(output);
 
+  const decision = await decideRecommendation({
+    cartridge,
+    marketKey,
+    catalog,
+    selectionKeys,
+    oddByKey,
+    impliedByKey,
+    modelProbByKey,
+    recommendation: output.recommendation,
+    confidencePct: output.confidence_pct,
+  });
+
+  return persistPrediction({
+    matchId,
+    userId,
+    aiCallId: aiCallRow.id,
+    cartridge,
+    catalog,
+    selectionKeys,
+    oddByKey,
+    modelProbByKey,
+    marketParams,
+    decision,
+    confidencePct: output.confidence_pct,
+    rationale: output.rationale,
+    keyFactors: output.key_factors,
+    minimumOdd: output.minimum_odd,
+    bookmaker: bookmakerTitle,
+    modelVersion: model.id,
+    promptVersion: cartridge.version,
+    // `label` (nome do jogador) viaja só pro scorer (#290).
+    labelByKey: isIndependentBinary
+      ? Object.fromEntries(scorerBundle!.players.map((p) => [p.key, p.label]))
+      : null,
+  });
+}
+
+// ─── Decisão + persistência (compartilhadas pelos motores llm e code_jev) ────
+
+type MarketCatalog = { marketId: string; idByKey: Map<string, string> };
+
+type DecisionArgs = {
+  cartridge: MarketCartridge;
+  marketKey: string;
+  catalog: MarketCatalog;
+  selectionKeys: string[];
+  oddByKey: Record<string, number>;
+  impliedByKey: Record<string, number>;
+  modelProbByKey: Record<string, number>;
+  // selectionKey recomendada pelo motor (LLM ou código), ou "pass" — PRÉ-gate.
+  recommendation: string;
+  confidencePct: number;
+};
+
+type GatedDecision = {
+  side: string;
+  gatedToPass: boolean;
+  oddAtRec: number | null;
+  impliedPct: number | null;
+  recModelProb: number | null;
+  edge: number | null;
+  stakeUnits: number;
+  selectionId: string | null;
+  psoRowsToInsert: {
+    selectionId: string;
+    odd: string;
+    modelProbPct: string | null;
+  }[];
+};
+
+// Edge N-vias + gate (ADR 0038, autoridade final pros DOIS motores) + staking +
+// resolução de seleções. Hard-fails de seed acontecem aqui, ANTES do insert da
+// prediction.
+async function decideRecommendation(a: DecisionArgs): Promise<GatedDecision> {
   // Edge N-vias (ADR 0018): cada seleção tem seu próprio edge `modelProb − implied`.
   // NUNCA `100−x` — em N≥3 não há complemento binário. `pass` → sem lado, sem edge.
   // O lado recomendado é uma selectionKey (`oddByKey`/`impliedByKey` indexados por
@@ -963,10 +1254,10 @@ export async function predict({
   // em 1X2 o LLM pode emitir confidence_pct ≠ prob_<recomendado>, e aqui o edge
   // persistido passa a casar com o edge da grade N-vias em vez de divergir.
   // Edge do lado que o LLM recomendou (PRÉ-gate) — necessário pra DECIDIR o gate.
-  const rawSide = output.recommendation;
-  const rawImplied = rawSide === "pass" ? null : (impliedByKey[rawSide] ?? null);
+  const rawSide = a.recommendation;
+  const rawImplied = rawSide === "pass" ? null : (a.impliedByKey[rawSide] ?? null);
   const rawModelProb =
-    rawSide === "pass" ? null : (modelProbByKey[rawSide] ?? null);
+    rawSide === "pass" ? null : (a.modelProbByKey[rawSide] ?? null);
   const rawEdge =
     rawSide !== "pass" && rawImplied !== null && rawModelProb !== null
       ? rawModelProb - rawImplied
@@ -982,7 +1273,7 @@ export async function predict({
   const side = isBelowEdgeFloor(
     rawSide,
     rawEdgeRounded,
-    cartridge.descriptor.minEdgePp ?? MIN_EDGE_PP,
+    a.cartridge.descriptor.minEdgePp ?? MIN_EDGE_PP,
   )
     ? "pass"
     : rawSide;
@@ -991,14 +1282,14 @@ export async function predict({
   // — contradição visível E entraria como sinal pró-lado na síntese). Rationale neutro
   // no lugar; o output cru do LLM fica auditável em ai_calls.outputPayload (via aiCallId).
   const gatedToPass = side === "pass" && rawSide !== "pass";
-  const oddAtRec = side === "pass" ? null : (oddByKey[side] ?? null);
-  const impliedPct = side === "pass" ? null : (impliedByKey[side] ?? null);
+  const oddAtRec = side === "pass" ? null : (a.oddByKey[side] ?? null);
+  const impliedPct = side === "pass" ? null : (a.impliedByKey[side] ?? null);
   // `modelProbByKey[side]` é sempre finito em mercados partition (enum + refine
   // garantem a chave) — `?? null` é no-op lá (byte-idêntico). Em independent_binary
   // o schema scorer já exige a prob do recomendado, mas guardamos como defesa: um
   // cartucho free-form que omitisse a chave faria `undefined − impliedPct = NaN`
   // gravado em numeric + stake 1u silencioso. Aqui vira edge=null (nunca NaN).
-  const recModelProb = side === "pass" ? null : (modelProbByKey[side] ?? null);
+  const recModelProb = side === "pass" ? null : (a.modelProbByKey[side] ?? null);
   const edge =
     side !== "pass" && impliedPct !== null && recModelProb !== null
       ? recModelProb - impliedPct
@@ -1011,7 +1302,7 @@ export async function predict({
   // As colunas persistidas seguem byte-idênticas (toFixed(2) do raw == do
   // arredondado); só a DECISÃO passa a usar a precisão exata gravada.
   const edgePctRounded = edge === null ? null : Number(edge.toFixed(2));
-  const confidencePctRounded = Number(output.confidence_pct.toFixed(2));
+  const confidencePctRounded = Number(a.confidencePct.toFixed(2));
   // Quarter-Kelly (ADR 0039 D3, #503) SÓ com o gate do Kelly pronto + kill-switch
   // ON (isKellyStakingActive, fail-closed, memo 1h). Fora disso — ou sem p/odd
   // mensuráveis — as bandas acima. Pass não consulta o gate (stake irrelevante).
@@ -1030,11 +1321,11 @@ export async function predict({
   // violação de FK opaca pós-paga) se a seleção recomendada não estiver seedada.
   let selectionId: string | null = null;
   if (side !== "pass") {
-    const id = catalog.idByKey.get(side);
+    const id = a.catalog.idByKey.get(side);
     if (!id) {
       throw new PredictError(
-        `seleção '${side}' não seedada pro market '${cartridge.descriptor.dbMarketKey}'`,
-        { marketKey, recommendation: side },
+        `seleção '${side}' não seedada pro market '${a.cartridge.descriptor.dbMarketKey}'`,
+        { marketKey: a.marketKey, recommendation: side },
       );
     }
     selectionId = id;
@@ -1046,38 +1337,77 @@ export async function predict({
   // odds = EXATAMENTE o par do MESMO bundle congelado. Uma row por seleção,
   // INCLUSIVE em pass. `model_prob_pct` vem do cartucho (numeric nullable;
   // toFixed(2) no boundary).
-  const psoRowsToInsert = selectionKeys.map((key) => {
-    const sid = catalog.idByKey.get(key);
+  const psoRowsToInsert = a.selectionKeys.map((key) => {
+    const sid = a.catalog.idByKey.get(key);
     if (!sid) {
       throw new PredictError(
-        `seleção '${key}' não seedada pro market '${cartridge.descriptor.dbMarketKey}'`,
-        { marketKey, key },
+        `seleção '${key}' não seedada pro market '${a.cartridge.descriptor.dbMarketKey}'`,
+        { marketKey: a.marketKey, key },
       );
     }
-    const modelProb = modelProbByKey[key];
+    const modelProb = a.modelProbByKey[key];
     return {
       selectionId: sid,
-      odd: oddByKey[key].toFixed(3),
+      odd: a.oddByKey[key].toFixed(3),
       modelProbPct: modelProb === undefined ? null : modelProb.toFixed(2),
     };
   });
+
+  return {
+    side,
+    gatedToPass,
+    oddAtRec,
+    impliedPct,
+    recModelProb,
+    edge,
+    stakeUnits,
+    selectionId,
+    psoRowsToInsert,
+  };
+}
+
+type PersistArgs = {
+  matchId: string;
+  userId: string;
+  aiCallId: string;
+  cartridge: MarketCartridge;
+  catalog: MarketCatalog;
+  selectionKeys: string[];
+  oddByKey: Record<string, number>;
+  modelProbByKey: Record<string, number>;
+  marketParams: { line: number } | null;
+  decision: GatedDecision;
+  confidencePct: number;
+  rationale: string;
+  keyFactors: string[];
+  minimumOdd: number | undefined;
+  bookmaker: string;
+  modelVersion: string;
+  promptVersion: string;
+  judgments?: PredictionJudgments;
+  labelByKey: Record<string, string> | null;
+};
+
+async function persistPrediction(a: PersistArgs): Promise<PredictResult> {
+  const { side, gatedToPass, oddAtRec, impliedPct, edge, stakeUnits, selectionId } =
+    a.decision;
 
   let predictionRow: Prediction;
   try {
     const [row] = await db
       .insert(predictions)
       .values({
-        matchId,
-        userId,
-        aiCallId: aiCallRow.id,
+        matchId: a.matchId,
+        userId: a.userId,
+        aiCallId: a.aiCallId,
         // Fonte-da-verdade mercado-agnóstica (#165): marketId do catálogo;
         // selectionId resolvido acima (NULL em pass); marketParams = a linha
         // ESCOLHIDA (#175): resolveParams(output) no multi-linha, descriptor.params
         // no single-line (= { line: 2.5 } NUMBER pro over/under v2; null pro 1X2).
         // Settlement lê daqui. O enum legado `market` saiu no contract (Fase 5).
-        marketId: catalog.marketId,
+        marketId: a.catalog.marketId,
         selectionId,
-        marketParams,
+        marketParams: a.marketParams,
         // recommendation = a key da seleção escolhida (over/under/home/draw/away/
         // yes/no/dupla-chance) ou "pass". `side` = a recomendação JÁ GATEADA (ADR
         // 0038): igual a output.recommendation, exceto quando o gate rebaixou pra pass.
@@ -1086,23 +1416,25 @@ export async function predict({
         // Num pass REBAIXADO, rationale/keyFactors viram neutros (a prosa pró-lado do LLM
         // sob "sem aposta" seria contraditória no card E sinal pró-lado na síntese); o cru
         // fica em ai_calls.outputPayload. Pass genuíno e rec real seguem com o do LLM.
-        confidencePct: output.confidence_pct.toFixed(2),
-        rationale: gatedToPass ? GATED_PASS_RATIONALE : output.rationale,
-        keyFactors: gatedToPass ? [] : output.key_factors,
+        confidencePct: a.confidencePct.toFixed(2),
+        rationale: gatedToPass ? GATED_PASS_RATIONALE : a.rationale,
+        keyFactors: gatedToPass ? [] : a.keyFactors,
         // minimum_odd só existe pra recomendação real; num pass (inclusive gateado)
         // é null — casa a row de pass genuína (o LLM omite minimum_odd em pass).
-        minimumOdd: side === "pass" ? null : (output.minimum_odd?.toFixed(3) ?? null),
+        minimumOdd: side === "pass" ? null : (a.minimumOdd?.toFixed(3) ?? null),
         oddAtRecommendation: oddAtRec?.toFixed(3) ?? null,
         // bookmaker = fonte das odds analisadas — persiste também em pass
         // (ADR 0012, decisão 3). scorer: do scorerBundle (ver bookmakerTitle).
-        bookmaker: bookmakerTitle,
+        bookmaker: a.bookmaker,
         impliedProbPct: impliedPct?.toFixed(2) ?? null,
         edgePct: edge?.toFixed(2) ?? null,
         // Stake congelado (ADR 0019): banda determinística sobre edge/confiança;
         // pass → 1u (irrelevante, fora do Yield). numeric(6,2) → string.
         stakeUnits: stakeUnits.toFixed(2),
-        modelVersion: model.id,
-        promptVersion: cartridge.version,
+        modelVersion: a.modelVersion,
+        promptVersion: a.promptVersion,
+        // Só o motor code_jev grava (ADR 0041 §6); o caminho LLM não envia a chave.
+        ...(a.judgments ? { judgments: a.judgments } : {}),
       })
       .returning();
     predictionRow = row;
@@ -1112,9 +1444,9 @@ export async function predict({
     console.error(
       JSON.stringify({
         scope: "predict",
-        matchId,
-        userId,
-        aiCallId: aiCallRow.id,
+        matchId: a.matchId,
+        userId: a.userId,
+        aiCallId: a.aiCallId,
         error: "prediction_insert_failed",
         ...cause,
       }),
@@ -1132,7 +1464,7 @@ export async function predict({
   //     persistAiCallError — não mascarar a prediction válida com um erro de PSO).
   try {
     await db.insert(predictionSelectionOdds).values(
-      psoRowsToInsert.map((r) => ({
+      a.decision.psoRowsToInsert.map((r) => ({
         predictionId: predictionRow.id,
         selectionId: r.selectionId,
         odd: r.odd,
@@ -1144,8 +1476,8 @@ export async function predict({
     console.error(
       JSON.stringify({
         scope: "predict",
-        matchId,
-        userId,
+        matchId: a.matchId,
+        userId: a.userId,
         predictionId: predictionRow.id,
         error: "prediction_selection_odds_insert_failed",
         ...cause,
@@ -1160,17 +1492,435 @@ export async function predict({
   // view SÍNCRONA a partir disto. Tudo já em escopo (selectionKeys/modelProbByKey/
   // oddByKey) — nenhuma re-query. `label` (nome do jogador) viaja só pro scorer:
   // a view o prefere ao presentation.selectionLabel(key) (que devolveria a key crua).
-  const labelByKey: Record<string, string> | null = isIndependentBinary
-    ? Object.fromEntries(scorerBundle!.players.map((p) => [p.key, p.label]))
-    : null;
+  const labelByKey = a.labelByKey;
   return {
     prediction: predictionRow,
-    marketKey: cartridge.marketKey,
-    selections: selectionKeys.map((key) => ({
+    marketKey: a.cartridge.marketKey,
+    selections: a.selectionKeys.map((key) => ({
       key,
-      modelProbPct: modelProbByKey[key],
-      odd: oddByKey[key] ?? null,
+      modelProbPct: a.modelProbByKey[key],
+      odd: a.oddByKey[key] ?? null,
       ...(labelByKey ? { label: labelByKey[key] } : {}),
     })),
   };
+}
+
+// ─── Motor code_jev (ADR 0041, #511) ─────────────────────────────────────────
+
+type JudgmentRun = {
+  answers: JudgmentAnswers | null;
+  jevModel: string | null;
+  failure: JudgmentFailure | null;
+  stateHash: string;
+  aiCallId: string | null;
+  reusedFromPredictionId: string | null;
+};
+
+// Janela de reuso das respostas JEV entre mercados do mesmo jogo: o state (hash)
+// já captura desfalques/tabela/descanso; a janela só limita o quão velho pode ser.
+const JUDGMENT_REUSE_WINDOW_MS = 6 * 60 * 60 * 1000;
+
+// Julgamentos do jogo: reusa os de uma predição recente (mesmo jogo, mesmas
+// versões de perguntas/pesos, mesmo state, aplicados, ≤6h) — sem chamada e sem
+// row nova em ai_calls. Senão, UMA chamada JEV (fail-open: judgeMatch nunca lança)
+// + a row de auditoria em ai_calls, sucesso OU falha (ADR 0041 §5: predict é a
+// porta única e loga).
+async function runJudgments(args: {
+  userId: string;
+  matchId: string;
+  stateInput: JudgmentStateInput;
+}): Promise<JudgmentRun> {
+  const stateHash = judgmentStateHash(buildJudgmentState(args.stateInput));
+
+  const reused = await findReusableJudgments({
+    matchId: args.matchId,
+    judgmentsVersion: JUDGMENTS_VERSION,
+    weightsVersion: JUDGMENT_WEIGHTS_VERSION,
+    stateHash,
+    since: new Date(Date.now() - JUDGMENT_REUSE_WINDOW_MS),
+  }).catch((err: unknown) => {
+    // Falha da busca = só perde o reuso; segue pra chamada JEV normal.
+    console.error(
+      JSON.stringify({
+        scope: "predict",
+        matchId: args.matchId,
+        error: "judgments_reuse_lookup_failed",
+        message: err instanceof Error ? err.message : String(err),
+      }),
+    );
+    return null;
+  });
+  if (reused) {
+    const src = reused.judgments;
+    return {
+      answers: src.answers,
+      jevModel: src.versions.jevModel,
+      failure: null,
+      stateHash,
+      aiCallId: src.aiCallId ?? null,
+      // Aponta pra predição que CHAMOU o JEV (a origem), não pra um reuso de reuso.
+      reusedFromPredictionId: src.reusedFromPredictionId ?? reused.predictionId,
+    };
+  }
+
+  const captured: { failure: JudgmentFailure | null } = { failure: null };
+  const result = await judgeMatch(
+    createTypeSafeJudgmentProvider(),
+    args.stateInput,
+    {
+      onFailure: (failure) => {
+        captured.failure = failure;
+      },
+    },
+  );
+  const failure = result ? null : captured.failure;
+  let aiCallId: string | null = null;
+  if (result) {
+    aiCallId = await persistJudgmentAiCall({
+      userId: args.userId,
+      matchId: args.matchId,
+      model: result.model,
+      promptVersion: JUDGMENTS_VERSION,
+      inputPayload: result.requestPayload,
+      outputPayload: result.responsePayload,
+      inputTokens: result.inputTokens,
+      latencyMs: result.latencyMs,
+      costUsd: result.costUsd,
+      status: "ok",
+      errorMessage: null,
+    });
+  } else if (failure) {
+    aiCallId = await persistJudgmentAiCall({
+      userId: args.userId,
+      matchId: args.matchId,
+      model: JUDGMENT_MODEL_ID,
+      promptVersion: JUDGMENTS_VERSION,
+      inputPayload: failure.requestPayload ?? {},
+      outputPayload: {
+        error: failure.message,
+        kind: failure.kind,
+        responseBody: failure.responseBody ?? null,
+      },
+      inputTokens: failure.inputTokens ?? 0,
+      latencyMs: failure.latencyMs,
+      costUsd: failure.costUsd ?? 0,
+      status:
+        failure.kind === "missing_key" || failure.kind === "unexpected"
+          ? "provider_error"
+          : typeSafeErrorToAiCallStatus(failure.kind),
+      errorMessage: `${failure.kind}: ${failure.message}`,
+    });
+  }
+  return {
+    answers: result?.answers ?? null,
+    jevModel: result?.model ?? null,
+    failure,
+    stateHash,
+    aiCallId,
+    reusedFromPredictionId: null,
+  };
+}
+
+// Escalação do ÚLTIMO jogo de cada time (o da forma, antes deste) pra derivar o
+// papel dos desfalques: a escalação DESTE jogo nunca traz quem está fora. Só busca
+// pro time que tem desfalque (zero custo sem desfalques); uma chamada getLineups
+// por time, cacheada no adapter. Falha/ausência → undefined e o input cai na
+// escalação deste jogo (o comportamento anterior).
+async function fetchPreviousLineups(args: {
+  provider: SportsDataProvider;
+  kickoffAt: Date;
+  homeTeam: string;
+  awayTeam: string;
+  homeForm: readonly NormalizedFixture[];
+  awayForm: readonly NormalizedFixture[];
+  injuries: { home: NormalizedInjury[]; away: NormalizedInjury[] };
+}): Promise<{ home?: NormalizedTeamLineup; away?: NormalizedTeamLineup }> {
+  const kickoffMs = args.kickoffAt.getTime();
+  const forTeam = async (
+    team: string,
+    form: readonly NormalizedFixture[],
+    injuries: readonly NormalizedInjury[],
+  ): Promise<NormalizedTeamLineup | undefined> => {
+    if (injuries.length === 0) return undefined;
+    const prev = previousFixture(form, kickoffMs);
+    if (!prev) return undefined;
+    try {
+      const lineup = await args.provider.getLineups({
+        league: prev.league,
+        kickoffAt: prev.kickoffAt,
+        homeTeam: prev.homeTeam,
+        awayTeam: prev.awayTeam,
+      });
+      if (prev.homeTeam === team) return lineup?.home;
+      if (prev.awayTeam === team) return lineup?.away;
+      return undefined;
+    } catch (err) {
+      console.error(
+        JSON.stringify({
+          scope: "predict",
+          error: "previous_lineup_fetch_failed",
+          team,
+          message: err instanceof Error ? err.message : String(err),
+        }),
+      );
+      return undefined;
+    }
+  };
+  const [home, away] = await Promise.all([
+    forTeam(args.homeTeam, args.homeForm, args.injuries.home),
+    forTeam(args.awayTeam, args.awayForm, args.injuries.away),
+  ]);
+  return { home, away };
+}
+
+function codeJevModelVersion(modelId: AIModelId, scoreline: ModelScoreline) {
+  return `${modelId};engine=code_jev;lambda=${scoreline.source};judg=${JUDGMENTS_VERSION};w=${JUDGMENT_WEIGHTS_VERSION}`;
+}
+
+function toPredictionJudgments(
+  scoreline: ModelScoreline,
+  engine: CodeJevDecision,
+  jev: JudgmentRun,
+): PredictionJudgments {
+  return {
+    engine: "code_jev",
+    applied: engine.judgments.applied,
+    answers: jev.answers,
+    multipliers: engine.judgments.multipliers,
+    lambda: {
+      source: scoreline.source,
+      degraded: scoreline.degraded,
+      rho: scoreline.rho ?? null,
+      base: engine.lambdaBase,
+      adjusted: {
+        home: engine.judgments.lambdaHome,
+        away: engine.judgments.lambdaAway,
+      },
+    },
+    versions: {
+      judgments: JUDGMENTS_VERSION,
+      weights: JUDGMENT_WEIGHTS_VERSION,
+      narrator: narratorCartridge.version,
+      jevModel: jev.jevModel,
+    },
+    failure: jev.failure
+      ? { kind: jev.failure.kind, message: jev.failure.message }
+      : null,
+    stateHash: jev.stateHash,
+    aiCallId: jev.aiCallId,
+    reusedFromPredictionId: jev.reusedFromPredictionId,
+  };
+}
+
+// A decisão JÁ GATEADA em forma de input do narrador. Foco = o lado recomendado;
+// num pass, a melhor candidata do motor (o "por que não há valor").
+function toNarratorDecision(args: {
+  marketKey: string;
+  selectionKeys: readonly string[];
+  teams: { home: string; away: string };
+  engine: CodeJevDecision;
+  answers: JudgmentAnswers | null;
+  decision: GatedDecision;
+  line: number | null;
+  oddByKey: Record<string, number>;
+  minEdgePp: number;
+}): NarratorDecision {
+  const { engine, decision, teams, line } = args;
+  const label = (key: string) =>
+    selectionLabel(args.marketKey, key, teams, line);
+  let focus: NarratorDecision["focus"] = null;
+  if (decision.side !== "pass" && decision.recModelProb !== null) {
+    focus = {
+      key: decision.side,
+      label: label(decision.side),
+      modelProbPct: decision.recModelProb,
+      impliedPct: decision.impliedPct,
+      edgePct: decision.edge === null ? null : Number(decision.edge.toFixed(2)),
+      odd: decision.oddAtRec,
+    };
+  } else if (engine.best) {
+    focus = {
+      key: engine.best.key,
+      label: label(engine.best.key),
+      modelProbPct: engine.best.modelProbPct,
+      impliedPct: engine.best.impliedPct,
+      edgePct: engine.best.edgePct,
+      odd: args.oddByKey[engine.best.key] ?? null,
+    };
+  }
+  return {
+    marketKey: args.marketKey,
+    marketLabel: getMarketPresentation(args.marketKey).marketLabel,
+    line,
+    teams,
+    selectionKeys: args.selectionKeys,
+    side: decision.side,
+    focus,
+    stakeUnits: decision.side === "pass" ? null : decision.stakeUnits,
+    minEdgePp: args.minEdgePp,
+    expectedGoals: {
+      home: engine.judgments.lambdaHome,
+      away: engine.judgments.lambdaAway,
+    },
+    judgmentsApplied: engine.judgments.applied,
+    judgmentFactors: judgmentFactorPhrases(
+      args.answers,
+      engine.judgments.multipliers,
+      teams,
+    ),
+  };
+}
+
+type NarrationOutcome = {
+  status: AiCallStatus;
+  inputPayload: Record<string, unknown>;
+  outputPayload: Record<string, unknown>;
+  inputTokens: number;
+  outputTokens: number;
+  latencyMs: number;
+  errorMessage: string | null;
+  output: NarratorOutput | null;
+};
+
+// Uma chamada narradora (ADR 0041 §4) pelo MESMO seam AIProvider, mesmo modelo
+// resolvido e mesmos genParams. NUNCA bloqueia a análise: sem chave, erro de
+// provider, tool ausente, Zod ou fidelidade → racional templado. A row de ai_calls
+// (qualquer status) é a que a prediction referencia.
+async function narrateDecision(args: {
+  model: AIModel;
+  userId: string;
+  matchId: string;
+  decision: NarratorDecision;
+  context: NarratorContext;
+}): Promise<{ aiCallId: string; output: NarratorOutput }> {
+  const { model, decision } = args;
+  const genParams = await getGenerationParams();
+  const request: AnalysisRequest = {
+    model,
+    system: narratorCartridge.systemPrompt,
+    userMessage: narratorCartridge.buildUserMessage(decision, args.context),
+    tool: narratorCartridge.tool,
+    toolName: narratorCartridge.toolName,
+    maxTokens: genParams.maxTokens,
+    effort: genParams.effort,
+    temperature: genParams.temperature,
+  };
+  const aiProvider = getProviderForModel(model);
+  const providerKey = aiProvider.providerKey;
+  if (!isAIProvider(providerKey)) {
+    throw new PredictError(
+      `unknown AI provider '${providerKey}' for model ${model.id}`,
+      { provider: providerKey, model: model.id },
+    );
+  }
+
+  const outcome = await runNarration(aiProvider, request, decision);
+  const cost = calculateCost({
+    model: model.id,
+    inputTokens: outcome.inputTokens,
+    outputTokens: outcome.outputTokens,
+  });
+  let aiCallId: string;
+  try {
+    const [row] = await db
+      .insert(aiCalls)
+      .values({
+        userId: args.userId,
+        matchId: args.matchId,
+        provider: providerKey,
+        model: model.id,
+        promptVersion: narratorCartridge.version,
+        inputPayload: outcome.inputPayload,
+        outputPayload: outcome.outputPayload,
+        inputTokens: outcome.inputTokens,
+        outputTokens: outcome.outputTokens,
+        latencyMs: outcome.latencyMs,
+        costUsd: cost.toFixed(6),
+        status: outcome.status,
+        errorMessage:
+          outcome.errorMessage === null
+            ? null
+            : truncate(outcome.errorMessage, 2000),
+      })
+      .returning();
+    aiCallId = row.id;
+  } catch (err) {
+    const cause = extractDbCause(err);
+    console.error(
+      JSON.stringify({
+        scope: "predict",
+        matchId: args.matchId,
+        userId: args.userId,
+        error: "ai_call_insert_failed",
+        ...cause,
+      }),
+    );
+    throw new PredictError("failed to persist ai_call", cause);
+  }
+  return {
+    aiCallId,
+    output: outcome.output ?? narratorCartridge.fallback(decision),
+  };
+}
+
+async function runNarration(
+  aiProvider: ReturnType<typeof getProviderForModel>,
+  request: AnalysisRequest,
+  decision: NarratorDecision,
+): Promise<NarrationOutcome> {
+  const failed = (
+    status: AiCallStatus,
+    errorMessage: string,
+    base: Partial<NarrationOutcome> = {},
+  ): NarrationOutcome => ({
+    status,
+    inputPayload:
+      base.inputPayload ?? (request as unknown as Record<string, unknown>),
+    outputPayload: base.outputPayload ?? { error: errorMessage },
+    inputTokens: base.inputTokens ?? 0,
+    outputTokens: base.outputTokens ?? 0,
+    latencyMs: base.latencyMs ?? 0,
+    errorMessage,
+    output: null,
+  });
+
+  if (!aiProvider.hasKey()) {
+    return failed(
+      "provider_error",
+      `${aiProvider.providerKey} provider has no API key configured`,
+    );
+  }
+  let result: Awaited<ReturnType<typeof aiProvider.runAnalysis>>;
+  try {
+    result = await aiProvider.runAnalysis(request);
+  } catch (err) {
+    return failed(
+      "provider_error",
+      err instanceof Error ? err.message : String(err),
+    );
+  }
+  const base = {
+    inputPayload: result.inputPayload,
+    outputPayload: result.outputPayload,
+    inputTokens: result.usage.inputTokens,
+    outputTokens: result.usage.outputTokens,
+    latencyMs: result.latencyMs,
+  };
+  if (!result.ok) return failed(result.status, result.message, base);
+  if (result.toolInput === undefined) {
+    return failed(
+      "tool_missing",
+      `model did not call ${narratorCartridge.toolName}`,
+      base,
+    );
+  }
+  const parsed = narratorCartridge.outputSchema.safeParse(result.toolInput);
+  if (!parsed.success) {
+    return failed("invalid_output", JSON.stringify(parsed.error.issues), base);
+  }
+  const fidelity = narratorCartridge.checkFidelity(parsed.data, decision);
+  if (!fidelity.ok) {
+    return failed("invalid_output", `fidelity: ${fidelity.reason}`, base);
+  }
+  return { ...base, status: "ok", errorMessage: null, output: parsed.data };
 }

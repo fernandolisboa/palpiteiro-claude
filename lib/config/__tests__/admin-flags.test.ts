@@ -14,9 +14,9 @@ import {
   type FlagValueOf,
 } from "@/lib/config/admin-flags";
 
-// Entrada enum FICTÍCIA (não está no registry real): prova que o formato do
-// futuro `analysis_engine` (llm | code_jev) typecheca e valida. Usa a coluna text
-// `effort` só porque `analysis_engine` ainda não existe no schema.
+// Entrada enum FICTÍCIA (não está no registry real): exercita o caminho enum
+// genérico numa coluna text que não é flag (`effort`), independente do
+// analysisEngine real.
 const FAKE_ENUM = {
   key: "effort",
   kind: "enum",
@@ -29,7 +29,7 @@ const FAKE_ENUM = {
 const FAKE_FLAGS = [...ADMIN_FLAGS, FAKE_ENUM] as const satisfies readonly AdminFlagDef[];
 
 describe("ADMIN_FLAGS (registry, #514)", () => {
-  it("tem as 5 flags boolean de ai_config, sem key repetida", () => {
+  it("tem as 5 flags boolean + o motor de análise (enum), sem key repetida", () => {
     const keys = ADMIN_FLAGS.map((f) => f.key);
     expect(keys).toEqual([
       "enableOverUnderExtraLines",
@@ -37,6 +37,7 @@ describe("ADMIN_FLAGS (registry, #514)", () => {
       "enableClvCapture",
       "enableFidelityValidation",
       "enableKellyStaking",
+      "analysisEngine",
     ]);
     expect(new Set(keys).size).toBe(keys.length);
   });
@@ -48,13 +49,14 @@ describe("ADMIN_FLAGS (registry, #514)", () => {
     }
   });
 
-  it("defaults: as 3 flags de custo OFF, fidelidade e Kelly ON (espelham o schema)", () => {
+  it("defaults: as 3 flags de custo OFF, fidelidade e Kelly ON, motor 'llm' (espelham o schema)", () => {
     expect(adminFlagDefaults()).toEqual({
       enableOverUnderExtraLines: false,
       enableBestBetFanOut: false,
       enableClvCapture: false,
       enableFidelityValidation: true,
       enableKellyStaking: true,
+      analysisEngine: "llm",
     });
   });
 
@@ -64,13 +66,14 @@ describe("ADMIN_FLAGS (registry, #514)", () => {
     expect(note).toContain(`até ${MAX_ADDITIONAL_FETCHES} buscas`);
   });
 
-  it("tipos: valores de hoje são todos boolean", () => {
+  it("tipos: boolean nas flags boolean, união dos valores no motor", () => {
     expectTypeOf<AdminFlagValues>().toEqualTypeOf<{
       enableOverUnderExtraLines: boolean;
       enableBestBetFanOut: boolean;
       enableClvCapture: boolean;
       enableFidelityValidation: boolean;
       enableKellyStaking: boolean;
+      analysisEngine: "llm" | "code_jev";
     }>();
   });
 
@@ -100,6 +103,15 @@ describe("ADMIN_FLAGS (registry, #514)", () => {
 });
 
 describe("validateAdminFlagInput", () => {
+  it("analysisEngine: aceita os motores do ADR 0041, recusa o resto", () => {
+    expect(
+      validateAdminFlagInput({ key: "analysisEngine", value: "code_jev" }),
+    ).toEqual({ ok: true, key: "analysisEngine", value: "code_jev" });
+    expect(
+      validateAdminFlagInput({ key: "analysisEngine", value: "jev_direto" }),
+    ).toEqual({ ok: false, error: "Valor inválido pra flag." });
+  });
+
   it("aceita boolean vindo do form como 'true'/'false'", () => {
     expect(
       validateAdminFlagInput({ key: "enableClvCapture", value: "true" }),

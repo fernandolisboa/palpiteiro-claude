@@ -1,0 +1,38 @@
+import type { JudgmentMultipliers } from "@/lib/ai/judgments/apply";
+import type { JudgmentAnswers } from "@/lib/ai/judgments/types";
+
+// Conteúdo de `predictions.judgments` (jsonb, ADR 0041 §6): tudo que a decisão do
+// motor code_jev precisa pra ser recomputada a partir da row.
+export type PredictionJudgments = {
+  engine: "code_jev";
+  // Julgamentos JEV aplicados ao λ? false = JEV falhou/sem chave → λ_base puro.
+  applied: boolean;
+  answers: JudgmentAnswers | null;
+  multipliers: JudgmentMultipliers | null;
+  lambda: {
+    source: "dixon_coles" | "heuristic";
+    degraded: boolean;
+    // ρ da matriz; null = DIXON_COLES_RHO pinado de scorelineMatrix.
+    rho: number | null;
+    base: { home: number; away: number };
+    adjusted: { home: number; away: number };
+  };
+  versions: {
+    judgments: string;
+    weights: string;
+    narrator: string;
+    // Modelo JEV que respondeu (null quando o JEV não respondeu).
+    jevModel: string | null;
+  };
+  // Por que o JEV não foi aplicado (null quando aplicado).
+  failure: { kind: string; message: string } | null;
+  // sha256 do JSON canônico do `state` enviado ao JEV: chave de reuso das
+  // respostas entre mercados do mesmo jogo (ADR 0041 §1).
+  stateHash: string;
+  // Row de ai_calls da chamada JEV que produziu `answers` (null quando o insert de
+  // auditoria falhou). Num reuso, é a chamada da predição de origem.
+  aiCallId: string | null;
+  // Predição de origem cujas respostas foram reusadas (sem chamada JEV nova);
+  // null quando esta predição chamou o JEV.
+  reusedFromPredictionId: string | null;
+};

@@ -34,6 +34,7 @@ import {
 } from "@/lib/config/admin-flags";
 import {
   getAdminFlagValues,
+  getAnalysisEngine,
   getEnableBestBetFanOut,
   getEnableClvCapture,
   getEnableFidelityValidation,
@@ -50,6 +51,7 @@ const GETTERS = {
   enableClvCapture: getEnableClvCapture,
   enableFidelityValidation: getEnableFidelityValidation,
   enableKellyStaking: getEnableKellyStaking,
+  analysisEngine: getAnalysisEngine,
 } satisfies Record<AdminFlagKey, () => Promise<unknown>>;
 
 async function readViaGetters(): Promise<Record<string, unknown>> {
@@ -96,6 +98,14 @@ describe("getAdminFlagValues / setAdminFlag (#514)", () => {
     expect(await getEnableBestBetFanOut()).toBe(!before.enableBestBetFanOut);
     const [row] = await realDb.select().from(schema.aiConfig);
     expect(row.updatedByUserId).toBe(adminId);
+  });
+
+  it("setAdminFlag de enum (analysisEngine) persiste e o getter de runtime lê", async () => {
+    await setAdminFlag("analysisEngine", "code_jev", adminId);
+    expect(await getAnalysisEngine()).toBe("code_jev");
+    expect((await getAdminFlagValues()).analysisEngine).toBe("code_jev");
+    await setAdminFlag("analysisEngine", "llm", adminId);
+    expect(await getAnalysisEngine()).toBe("llm");
   });
 
   it("sem row: registry defaults === fallback `??` de cada getter", async () => {

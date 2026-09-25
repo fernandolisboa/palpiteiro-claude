@@ -13,6 +13,7 @@ import {
   TEMPERATURE_MAX,
   TEMPERATURE_MIN,
 } from "@/lib/ai/generation-params";
+import { resetAnalysisEngineMemo } from "@/lib/ai/engine/analysis-engine-flag";
 import {
   validateAdminFlagInput,
   type AdminFlagValue,
@@ -118,6 +119,9 @@ export async function updateAdminFlag(
     verdict.value as AdminFlagValue,
     session.user.id,
   );
+  // Motor de análise (ADR 0041): vale já nesta instância; nas outras, em até 60s
+  // (TTL do memo lido pelo predict).
+  if (verdict.key === "analysisEngine") resetAnalysisEngineMemo();
   revalidatePath("/admin/settings");
   return { ok: true };
 }
