@@ -8,7 +8,15 @@ import { PGlite } from "@electric-sql/pglite";
 import { drizzle, type PgliteDatabase } from "drizzle-orm/pglite";
 import { migrate } from "drizzle-orm/pglite/migrator";
 import { eq } from "drizzle-orm";
-import { afterAll, beforeAll, beforeEach, describe, expect, it, vi } from "vitest";
+import {
+  afterAll,
+  beforeAll,
+  beforeEach,
+  describe,
+  expect,
+  it,
+  vi,
+} from "vitest";
 
 import * as schema from "@/db/schema";
 
@@ -49,6 +57,7 @@ async function seedOU(args: {
   underOdd: string;
   withOutcome?: boolean;
   result?: "won" | "lost" | "void";
+  recommendation?: "over" | "pass";
 }): Promise<void> {
   const [m] = await realDb
     .insert(schema.matches)
@@ -68,8 +77,8 @@ async function seedOU(args: {
       userId: ids.userId,
       aiCallId: ids.aiCallId,
       marketId: ids.ouMarketId,
-      selectionId: ids.ouOver,
-      recommendation: "over",
+      selectionId: args.recommendation === "pass" ? null : ids.ouOver,
+      recommendation: args.recommendation ?? "over",
       confidencePct: "55.00",
       rationale: "r",
       keyFactors: ["f"],
@@ -121,7 +130,10 @@ beforeAll(async () => {
     .where(eq(schema.markets.key, "over_under"));
   ids.ouMarketId = ou.id;
   const sels = await base
-    .select({ id: schema.marketSelections.id, key: schema.marketSelections.key })
+    .select({
+      id: schema.marketSelections.id,
+      key: schema.marketSelections.key,
+    })
     .from(schema.marketSelections)
     .where(eq(schema.marketSelections.marketId, ou.id));
   ids.ouOver = sels.find((s) => s.key === "over")!.id;
@@ -190,6 +202,7 @@ describe("getOverUnderCalibrationRows", () => {
     expect(rows[0].promptVersion).toBe("over_under_v3.2");
     expect(rows[0].modelPOver).toBeCloseTo(0.6, 9);
     expect(rows[0].overHappened).toBe(1);
+    expect(rows[0].isBet).toBe(true);
     // de-vig(1.90, 1.95): (1/1.9)/((1/1.9)+(1/1.95)) ≈ 0.5065
     expect(rows[0].marketPOver).toBeCloseTo(0.5065, 3);
   });
@@ -219,7 +232,25 @@ describe("getOverUnderCalibrationRows", () => {
     expect(await getOverUnderCalibrationRows()).toEqual([]);
   });
 
-  it("exclui outcome 'void' (jogo abandonado — rótulo sem sentido)", async () => {
+  it("inclui pass (void/0 com placar real) como isBet=false", async () => {
+    await seedOU({
+      promptVersion: "v",
+      line: 2.5,
+      totalGoals: 1,
+      overModelPct: 45,
+      overOdd: "1.900",
+      underOdd: "1.950",
+      result: "void",
+      recommendation: "pass",
+    });
+    const rows = await getOverUnderCalibrationRows();
+    expect(rows).toHaveLength(1);
+    expect(rows[0].isBet).toBe(false);
+    expect(rows[0].overHappened).toBe(0);
+    expect(rows[0].modelPOver).toBeCloseTo(0.45, 9);
+  });
+
+  it("exclui outcome 'void' de aposta (anulado pelo admin — rótulo sem sentido)", async () => {
     await seedOU({
       promptVersion: "v",
       line: 2.5,

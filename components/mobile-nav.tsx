@@ -24,7 +24,7 @@ type NavLinkItem = { href: string; label: string };
  * SEMPRE, ao final: no desktop o perfil é o avatar separado no canto direito
  * (fora da `<nav>`); no mobile ele entra como link de nav pra ficar alcançável
  * no drawer — divergência intencional. Função pura (seam de teste sem precisar
- * de @testing-library), no estilo de `visibleLeagueTabs`.
+ * de @testing-library), no estilo de `leaguePickerGroups`.
  */
 export function mobileNavLinks(isAdmin: boolean): NavLinkItem[] {
   const links: NavLinkItem[] = [

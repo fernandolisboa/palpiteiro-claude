@@ -1,4 +1,4 @@
-import { and, eq, inArray, ne } from "drizzle-orm";
+import { and, eq, inArray, ne, or } from "drizzle-orm";
 
 import {
   marketSelections,
@@ -13,14 +13,17 @@ import { computeMarketImpliedProbabilities } from "@/lib/odds/implied-probabilit
 // Query READ-TIME do harness de calibração (Report 03 rec. 3, ADR 0037) — SEM
 // migration, tudo já persistido. Um par por predição over/under LIQUIDADA com P(over)
 // do modelo: (p_model, p_market no-vig, aconteceu over?), rotulado pela versão de
-// prompt. Só over/under (o mercado do tracer #482); as métricas puras (lib/calibration)
-// estendem pros outros mercados quando ganharem P(seleção) + outcome binário.
+// prompt e por `isBet` (recomendou aposta vs pass). Passes ENTRAM: o forecast e o
+// placar são reais — só o resultado financeiro é void. Só over/under (o mercado do
+// tracer #482); as métricas puras (lib/calibration) estendem pros outros mercados
+// quando ganharem P(seleção) + outcome binário.
 
 export type OverUnderCalibrationRow = {
   promptVersion: string;
   modelPOver: number; // 0-1, P(over) do modelo (LLM ancorado no Poisson)
   marketPOver: number; // 0-1, implícita de-vigada (benchmark)
   overHappened: 0 | 1;
+  isBet: boolean; // false = pass (no-bet); o gate da Fase C conta só apostas
 };
 
 export async function getOverUnderCalibrationRows(): Promise<
@@ -47,6 +50,7 @@ export async function getOverUnderCalibrationRows(): Promise<
     .select({
       id: predictions.id,
       promptVersion: predictions.promptVersion,
+      recommendation: predictions.recommendation,
       marketParams: predictions.marketParams,
       resultData: predictionOutcomes.resultData,
     })
@@ -55,13 +59,19 @@ export async function getOverUnderCalibrationRows(): Promise<
       predictionOutcomes,
       eq(predictionOutcomes.predictionId, predictions.id),
     )
-    // `void` = jogo abandonado → totalGoals sem sentido pra o rótulo. won/lost/push
-    // têm um placar real (em push k+0.5 não ocorre; num inteiro legado, over=total>line
-    // segue determinado). Exclui só o void.
+    // O settle só liquida jogo `finished` com placar 90' — então `void` vem de dois
+    // caminhos: `pass` (computeSettlement curto-circuita pass → void/0 com o placar
+    // REAL no resultData) ou override manual do admin numa aposta (jogo anulado →
+    // rótulo sem sentido). Pass entra; void de aposta sai. won/lost/push têm placar
+    // real (em push k+0.5 não ocorre; num inteiro legado, over=total>line segue
+    // determinado).
     .where(
       and(
         eq(predictions.marketId, ou.id),
-        ne(predictionOutcomes.result, "void"),
+        or(
+          ne(predictionOutcomes.result, "void"),
+          eq(predictions.recommendation, "pass"),
+        ),
       ),
     );
   if (settled.length === 0) return [];
@@ -134,6 +144,7 @@ export async function getOverUnderCalibrationRows(): Promise<
       modelPOver: slot.overModelPct / 100,
       marketPOver,
       overHappened: totalGoals > line ? 1 : 0,
+      isBet: s.recommendation !== "pass",
     });
   }
   return rows;

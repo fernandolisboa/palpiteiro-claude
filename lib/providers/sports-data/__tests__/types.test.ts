@@ -71,7 +71,7 @@ describe("NormalizedFixtureSchema", () => {
   it("rejects an unsupported league", () => {
     const bad = {
       id: "x",
-      league: "premier_league",
+      league: "not_a_league",
       kickoffAt: "2026-05-15T19:00:00Z",
       kickoffTimestampMs: 0,
       homeTeam: "A",

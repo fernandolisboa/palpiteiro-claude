@@ -83,9 +83,12 @@ export function PublicPalpite({
         )}
       </div>
 
-      <p className="max-w-reading text-body leading-relaxed tracking-tight text-muted-foreground">
-        {view.narrative}
-      </p>
+      {/* Narrativa vazia = cortada pelo guard de texto público no loader (#438). */}
+      {view.narrative !== "" && (
+        <p className="max-w-reading text-body leading-relaxed tracking-tight text-muted-foreground">
+          {view.narrative}
+        </p>
+      )}
 
       {categories.length > 0 && (
         <p className="font-mono text-eyebrow-xs uppercase tracking-eyebrow text-muted-fg-2">

@@ -15,6 +15,9 @@ describe("leagueToSportKey", () => {
     expect(leagueToSportKey("world_cup")).toBe(SPORT_KEYS.WORLD_CUP);
     expect(leagueToSportKey("world_cup")).toBe("soccer_fifa_world_cup");
     expect(leagueToSportKey("world_cup")).not.toBe(SPORT_KEYS.CHAMPIONS_LEAGUE);
+    expect(leagueToSportKey("serie_a")).toBe("soccer_italy_serie_a");
+    expect(leagueToSportKey("bundesliga")).toBe("soccer_germany_bundesliga");
+    expect(leagueToSportKey("ligue_1")).toBe("soccer_france_ligue_one");
   });
 
   it("maps the club leagues to their own sport keys", () => {
@@ -22,6 +25,8 @@ describe("leagueToSportKey", () => {
     expect(leagueToSportKey("champions_league")).toBe(
       SPORT_KEYS.CHAMPIONS_LEAGUE,
     );
+    expect(leagueToSportKey("premier_league")).toBe("soccer_epl");
+    expect(leagueToSportKey("la_liga")).toBe("soccer_spain_la_liga");
   });
 
   it("covers every SupportedLeague with a distinct sport key", () => {
