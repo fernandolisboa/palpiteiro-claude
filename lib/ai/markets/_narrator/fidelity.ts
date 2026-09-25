@@ -14,9 +14,10 @@ import type { NarratorDecision } from "./types";
 export const PERCENT_TOLERANCE_PP = 1;
 
 // Borda esquerda + número inteiro: sem ela, "1058,4%" era lido pelo sufixo "058,4%"
-// (= 58,4, um valor permitido) e passava.
+// (= 58,4, um valor permitido) e passava. Só bloqueia dígito (ou dígito+separador)
+// antes: "58%,42%" e "over.58%" seguem checados.
 const PERCENT_RE =
-  /(?<![\d.,])(\d+(?:[.,]\d+)?)\s*(?:%|p\.\s?p\.|pp(?![\p{L}\d])|pontos percentuais)/giu;
+  /(?<!\d)(?<!\d[.,])(\d+(?:[.,]\d+)?)\s*(?:%|p\.\s?p\.|pp(?![\p{L}\d])|pontos percentuais)/giu;
 
 // Verbos/substantivos de recomendação seguidos (só por palavras de função) do
 // rótulo de uma seleção: "recomendamos o under", "a aposta é no over". Sem

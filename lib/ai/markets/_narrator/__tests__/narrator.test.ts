@@ -116,6 +116,19 @@ describe("checkNarrationFidelity", () => {
     expect(checkNarrationFidelity(out, overDecision()).ok).toBe(false);
   });
 
+  it("percentual colado a pontuação (não a dígito) segue checado", () => {
+    // "42%" depois de "58%," e "58%" depois de "over." são citações independentes.
+    const bad = { ...OK, rationale: "Modelo: 58,4%,64% no over." };
+    expect(checkNarrationFidelity(bad, overDecision()).ok).toBe(false);
+    const bad2 = { ...OK, rationale: "Leitura do over.64% de chance." };
+    expect(checkNarrationFidelity(bad2, overDecision()).ok).toBe(false);
+    const good = {
+      ...OK,
+      rationale: "Leitura do over.58,4% contra 50,2%,8,2 pp.",
+    };
+    expect(checkNarrationFidelity(good, overDecision()).ok).toBe(true);
+  });
+
   it("2 vias: o complemento da prob do modelo ou da implícita é citação fiel", () => {
     const out = {
       ...OK,
