@@ -3,9 +3,11 @@
 import Link from "next/link";
 import { usePathname } from "next/navigation";
 
+import { LEGAL_CONTACT_EMAIL } from "@/lib/legal/controller";
+
 /**
  * Footer legal global (docs/ops/05-legal-compliance.md §7): selo 18+, jogo responsável,
- * CVV 188, links legais (Termos/Privacidade), disclaimer "não é casa de apostas".
+ * CVV 188, links legais (Termos/Privacidade/Contato), disclaimer "não é casa de apostas".
  * Renderizado do root layout → herdado por TODA rota (landing, /signin, autenticadas,
  * /termos, /privacidade), inclusive as superfícies de maior intenção de aposta.
  *
@@ -42,6 +44,11 @@ export function SiteFooter() {
           <Link href="/como-funciona" className={linkClass}>
             Como funciona
           </Link>
+          {/* Canal do titular (LGPD art. 9º, IV; Res. CD/ANPD 2/2022 art. 11) a um clique
+              de qualquer página — report 11. */}
+          <a href={`mailto:${LEGAL_CONTACT_EMAIL}`} className={linkClass}>
+            Contato
+          </a>
           <a
             href="https://www.cvv.org.br"
             target="_blank"

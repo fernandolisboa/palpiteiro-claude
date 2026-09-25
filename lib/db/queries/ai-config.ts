@@ -15,6 +15,14 @@ import {
   isValidTemperature,
   type GenerationParams,
 } from "@/lib/ai/generation-params";
+import {
+  ADMIN_FLAGS,
+  adminFlagDefaults,
+  coerceStoredFlagValue,
+  type AdminFlagKey,
+  type AdminFlagValue,
+  type AdminFlagValues,
+} from "@/lib/config/admin-flags";
 
 // Boundary única de leitura/escrita da config global de IA em ai_config (single
 // row, id=1): o default global de modelo E os parâmetros de geração
@@ -224,9 +232,11 @@ export async function getEnableKellyStaking(): Promise<boolean> {
 }
 
 /**
+/**
  * Motor de análise (ADR 0041 §5, #511): 'llm' (cartucho de mercado decide — caminho
  * de hoje) ou 'code_jev' (código + julgamentos JEV decidem, LLM narra). Sem row ou
- * valor persistido inválido → 'llm'.
+ * valor persistido inválido → 'llm'. Editado em /admin/settings via registry
+ * (lib/config/admin-flags.ts, entrada enum `analysisEngine`).
  */
 export async function getAnalysisEngine(): Promise<AnalysisEngine> {
   const rows = await db
@@ -239,27 +249,46 @@ export async function getAnalysisEngine(): Promise<AnalysisEngine> {
 }
 
 /**
- * Upsert do motor de análise (single-row id=1), editado em /admin/settings. Grava
- * quem alterou pra auditoria. O valor já vem validado da server action.
+ * Valores atuais de TODAS as flags do registry (#514) pro /admin/settings. Lê a
+ * row uma vez; sem row → defaults do registry; valor persistido inválido → default
+ * da entrada. Só pra exibição/edição: o runtime continua lendo pelos getters acima.
  */
-export async function setAnalysisEngine(
-  engine: AnalysisEngine,
+export async function getAdminFlagValues(): Promise<AdminFlagValues> {
+  const rows = await db
+    .select()
+    .from(aiConfig)
+    .where(eq(aiConfig.id, 1))
+    .limit(1);
+  const row = rows[0];
+  if (!row) return adminFlagDefaults();
+  return Object.fromEntries(
+    ADMIN_FLAGS.map((f) => [f.key, coerceStoredFlagValue(f, row[f.key])]),
+  ) as AdminFlagValues;
+}
+
+/**
+ * Upsert de UMA flag do registry (single-row id=1). Grava quem alterou pra
+ * auditoria. O valor já vem validado da server action (validateAdminFlagInput).
+ * O insert (DB sem row) precisa do defaultModelId NOT NULL, como setGenerationParams.
+ */
+export async function setAdminFlag(
+  key: AdminFlagKey,
+  value: AdminFlagValue,
   userId: string,
 ): Promise<void> {
+  // Chave computada perde o tipo por coluna no Drizzle; o par key/value já foi
+  // checado contra o registry (validateAdminFlagInput) antes de chegar aqui.
+  const patch = { [key]: value } as Partial<typeof aiConfig.$inferInsert>;
   await db
     .insert(aiConfig)
     .values({
       id: 1,
       defaultModelId: DEFAULT_MODEL_ID,
-      analysisEngine: engine,
+      ...patch,
       updatedByUserId: userId,
     })
     .onConflictDoUpdate({
       target: aiConfig.id,
-      set: {
-        analysisEngine: engine,
-        updatedByUserId: userId,
-        updatedAt: new Date(),
-      },
+      set: { ...patch, updatedByUserId: userId, updatedAt: new Date() },
     });
 }

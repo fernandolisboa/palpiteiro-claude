@@ -308,6 +308,14 @@ custo de dinheiro ≈ R$ 0. O custo é de tempo.
 
 ## Decisões abertas (suas)
 
+> ✅ **Decididas em 2026-09-24** (revisão legal delegada — [Report 11](../reports/11-revisao-legal.md)):
+> gate 18+ = autodeclaração ([ADR 0048](../decisions/0048-envelope-regulatorio-nao-operador-sem-vinculo-com-casas.md) D5);
+> contato = `contato@palpiteiro.live` (confirmar recebimento); aceite **explícito** dos Termos no
+> checkbox do 18+ ([ADR 0047](../decisions/0047-consentimento-clickwrap-e-base-legal-lgpd.md));
+> controlador = pessoa física, nome civil a publicar pelo dono (slot em `lib/legal/controller.ts`).
+> Exclusão de conta: [ADR 0046](../decisions/0046-exclusao-de-conta-lgpd-tombstone-e-anonimizacao.md).
+> O texto abaixo fica como registro histórico.
+
 > 🟦 **DECISÃO — Gate 18+ bloqueante vs. apenas aviso.**
 > Recomendação default: **só aviso** (selo no footer + linha no `/signin`), já que
 > o acesso é por whitelist e você conhece quem entra. Reavalie pra Fase 3, onde

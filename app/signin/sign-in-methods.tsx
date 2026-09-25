@@ -15,8 +15,9 @@ import { sendMagicLink, signInWithGoogle } from "./actions";
 import { PasskeySignInButton } from "./passkey-signin-button";
 
 /**
- * Wrapper CLIENT do /signin (#282): detém o estado do checkbox obrigatório de
- * maioridade ("Declaro ter 18 anos ou mais") e GATEIA os três métodos de login
+ * Wrapper CLIENT do /signin (#282, ADR 0047): detém o estado do checkbox obrigatório
+ * de maioridade + aceite dos Termos ("Declaro ter 18 anos ou mais e aceito os Termos
+ * de Uso.") e GATEIA os três métodos de login
  * — os botões de Google e magic link e o PasskeySignInButton ficam desabilitados
  * até o checkbox ser marcado (`canSubmit(accepted)`). As server actions (Google,
  * magic link) vivem em `./actions` ("use server") pra serem importáveis aqui; o
@@ -37,13 +38,14 @@ export function SignInMethods({
 
   return (
     <div className="flex flex-col gap-6">
-      {/* Gate de maioridade (18+): a auto-declaração destrava os três métodos.
-          O aceite de Termos/Privacidade é IMPLÍCITO no ato de entrar, com links
-          visíveis logo abaixo — o default sancionado da ops 05 (§Decisões abertas:
-          "escala de amigos → implícito + links visíveis"). Os links vivem FORA do
-          <label> que toggla o checkbox de propósito (abrir a página não deve marcar
-          o checkbox) e abrem em nova aba pra não perder o estado do /signin. A
-          auditoria do consentimento segue no accepted_terms_at (events.createUser). */}
+      {/* Clickwrap (ADR 0047): UM checkbox obrigatório = declaração 18+ E aceite
+          EXPLÍCITO dos Termos de Uso (contrato). A Política de Privacidade é
+          INFORMADA, não "aceita" — a base legal do tratamento é execução de contrato
+          (LGPD art. 7º, V), não consentimento; por isso ela aparece como leitura
+          ao lado, não dentro da frase de aceite. Os links vivem FORA do <label> que
+          toggla o checkbox de propósito (abrir a página não deve marcar o checkbox) e
+          abrem em nova aba pra não perder o estado do /signin. A prova do aceite é o
+          accepted_terms_at (events.createUser) + a data forward-only de /termos. */}
       <div className="flex flex-col gap-2">
         <label className="flex cursor-pointer items-start gap-2.5">
           <Checkbox.Root
@@ -60,11 +62,11 @@ export function SignInMethods({
             </Checkbox.Indicator>
           </Checkbox.Root>
           <span className="text-body-sm leading-snug tracking-tight text-muted-foreground">
-            Declaro ter 18 anos ou mais.
+            Declaro ter 18 anos ou mais e aceito os Termos de Uso.
           </span>
         </label>
         <p className="pl-[26px] text-meta leading-snug tracking-tight text-muted-fg-2">
-          Ao entrar, você concorda com os{" "}
+          Leia os{" "}
           <Link
             href="/termos"
             target="_blank"
@@ -82,7 +84,7 @@ export function SignInMethods({
           >
             Política de Privacidade
           </Link>
-          .
+          , que explica como tratamos seus dados.
         </p>
       </div>
 

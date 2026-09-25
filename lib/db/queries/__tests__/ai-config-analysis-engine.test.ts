@@ -1,10 +1,9 @@
 import { beforeEach, describe, expect, it, vi } from "vitest";
 
-// getAnalysisEngine / setAnalysisEngine (#511, ADR 0041 §5). Stub da cadeia do db,
-// como ai-config-fidelity.test.ts — nenhum Postgres real.
+// getAnalysisEngine (#511, ADR 0041 §5). Stub da cadeia do db, como
+// ai-config-fidelity.test.ts — nenhum Postgres real. A escrita passa pelo
+// setAdminFlag do registry (coberto em admin-flags.pglite.test.ts).
 let rows: unknown[] = [];
-const insertValues = vi.fn();
-const onConflictDoUpdate = vi.fn();
 vi.mock("@/lib/db", () => {
   const select = vi.fn(() => ({
     from: vi.fn(() => ({
@@ -13,29 +12,13 @@ vi.mock("@/lib/db", () => {
       })),
     })),
   }));
-  const insert = vi.fn(() => ({
-    values: (v: unknown) => {
-      insertValues(v);
-      return {
-        onConflictDoUpdate: (c: unknown) => {
-          onConflictDoUpdate(c);
-          return Promise.resolve();
-        },
-      };
-    },
-  }));
-  return { db: { select, insert } };
+  return { db: { select } };
 });
 
-import {
-  getAnalysisEngine,
-  setAnalysisEngine,
-} from "@/lib/db/queries/ai-config";
+import { getAnalysisEngine } from "@/lib/db/queries/ai-config";
 
 beforeEach(() => {
   rows = [];
-  insertValues.mockReset();
-  onConflictDoUpdate.mockReset();
 });
 
 describe("getAnalysisEngine — flag analysis_engine (default 'llm')", () => {
@@ -51,25 +34,5 @@ describe("getAnalysisEngine — flag analysis_engine (default 'llm')", () => {
   it("valor persistido inválido → 'llm'", async () => {
     rows = [{ analysisEngine: "jev_direto" }];
     await expect(getAnalysisEngine()).resolves.toBe("llm");
-  });
-});
-
-describe("setAnalysisEngine", () => {
-  it("upsert em id=1 gravando o motor e quem alterou", async () => {
-    await setAnalysisEngine("code_jev", "u1");
-    expect(insertValues).toHaveBeenCalledWith(
-      expect.objectContaining({
-        id: 1,
-        analysisEngine: "code_jev",
-        updatedByUserId: "u1",
-      })
-    );
-    const conflict = onConflictDoUpdate.mock.calls[0][0] as {
-      set: Record<string, unknown>;
-    };
-    expect(conflict.set).toMatchObject({
-      analysisEngine: "code_jev",
-      updatedByUserId: "u1",
-    });
   });
 });

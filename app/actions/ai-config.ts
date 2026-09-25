@@ -13,10 +13,13 @@ import {
   TEMPERATURE_MAX,
   TEMPERATURE_MIN,
 } from "@/lib/ai/generation-params";
-import { isAnalysisEngine } from "@/lib/ai/engine/analysis-engine";
 import { resetAnalysisEngineMemo } from "@/lib/ai/engine/analysis-engine-flag";
 import {
-  setAnalysisEngine,
+  validateAdminFlagInput,
+  type AdminFlagValue,
+} from "@/lib/config/admin-flags";
+import {
+  setAdminFlag,
   setDefaultModelId,
   setGenerationParams,
 } from "@/lib/db/queries/ai-config";
@@ -88,28 +91,37 @@ export async function updateGenerationParams(
   return { ok: true };
 }
 
-export type UpdateAnalysisEngineResult = { ok: boolean; error?: string };
+export type UpdateAdminFlagResult = { ok: boolean; error?: string };
 
-// Motor de análise (ADR 0041 §5, #511): 'llm' (atual) ou 'code_jev' (código + JEV
-// decidem, LLM narra). Vale pra TODA análise nova, sem deploy; voltar é trocar de novo.
-export async function updateAnalysisEngine(
-  _prev: UpdateAnalysisEngineResult | null,
+// Flags de ai_config editáveis pelo /admin/settings (#514), dirigidas pelo registry
+// lib/config/admin-flags.ts. Key fora do registry ou valor que não casa com o kind
+// (boolean / valores do enum) é recusado em validateAdminFlagInput.
+export async function updateAdminFlag(
+  _prev: UpdateAdminFlagResult | null,
   formData: FormData,
-): Promise<UpdateAnalysisEngineResult> {
+): Promise<UpdateAdminFlagResult> {
   const session = await auth();
-  // Defense-in-depth igual às actions acima: role revalidada AQUI.
+  // Defense-in-depth igual ao updateDefaultModel: server actions são POST
+  // chamáveis fora do layout /admin, então a role é revalidada AQUI.
   if (session?.user?.role !== "admin" || !session.user.id) {
     return { ok: false, error: "Acesso negado." };
   }
 
-  const engine = String(formData.get("analysisEngine") ?? "");
-  if (!isAnalysisEngine(engine)) {
-    return { ok: false, error: "Motor de análise inválido." };
-  }
+  const verdict = validateAdminFlagInput({
+    key: formData.get("key"),
+    value: formData.get("value"),
+  });
+  if (!verdict.ok) return { ok: false, error: verdict.error };
 
-  await setAnalysisEngine(engine, session.user.id);
-  // Vale já nesta instância; nas outras, em até 60s (TTL do memo do predict).
-  resetAnalysisEngineMemo();
+  // Cast seguro: validateAdminFlagInput só aprova valor do kind da key.
+  await setAdminFlag(
+    verdict.key,
+    verdict.value as AdminFlagValue,
+    session.user.id,
+  );
+  // Motor de análise (ADR 0041): vale já nesta instância; nas outras, em até 60s
+  // (TTL do memo lido pelo predict).
+  if (verdict.key === "analysisEngine") resetAnalysisEngineMemo();
   revalidatePath("/admin/settings");
   return { ok: true };
 }
