@@ -7,6 +7,11 @@ import {
   predictionSelectionOdds,
   predictions,
 } from "@/db/schema";
+import {
+  engineConfigFromModelVersion,
+  engineFromModelVersion,
+  type AnalysisEngine,
+} from "@/lib/ai/engine/analysis-engine";
 import { db } from "@/lib/db";
 import { computeMarketImpliedProbabilities } from "@/lib/odds/implied-probability";
 
@@ -16,7 +21,8 @@ import { computeMarketImpliedProbabilities } from "@/lib/odds/implied-probabilit
 // prompt e por `isBet` (recomendou aposta vs pass). Passes ENTRAM: o forecast e o
 // placar são reais — só o resultado financeiro é void. Só over/under (o mercado do
 // tracer #482); as métricas puras (lib/calibration) estendem pros outros mercados
-// quando ganharem P(seleção) + outcome binário.
+// quando ganharem P(seleção) + outcome binário. Cada row carrega o MOTOR (ADR 0041
+// §5, #513) lido do `modelVersion`, pra /admin/calibration comparar llm vs code_jev.
 
 export type OverUnderCalibrationRow = {
   promptVersion: string;
@@ -24,6 +30,10 @@ export type OverUnderCalibrationRow = {
   marketPOver: number; // 0-1, implícita de-vigada (benchmark)
   overHappened: 0 | 1;
   isBet: boolean; // false = pass (no-bet); o gate da Fase C conta só apostas
+  // Motor que produziu o número (sem tag → 'llm'; tag desconhecida → null).
+  engine: AnalysisEngine | null;
+  // Tags do motor no modelVersion (ex. "lambda=heuristic;judg=…;w=…"); null no llm.
+  engineConfig: string | null;
 };
 
 export async function getOverUnderCalibrationRows(): Promise<
@@ -50,6 +60,7 @@ export async function getOverUnderCalibrationRows(): Promise<
     .select({
       id: predictions.id,
       promptVersion: predictions.promptVersion,
+      modelVersion: predictions.modelVersion,
       recommendation: predictions.recommendation,
       marketParams: predictions.marketParams,
       resultData: predictionOutcomes.resultData,
@@ -145,6 +156,8 @@ export async function getOverUnderCalibrationRows(): Promise<
       marketPOver,
       overHappened: totalGoals > line ? 1 : 0,
       isBet: s.recommendation !== "pass",
+      engine: engineFromModelVersion(s.modelVersion),
+      engineConfig: engineConfigFromModelVersion(s.modelVersion),
     });
   }
   return rows;

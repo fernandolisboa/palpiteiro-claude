@@ -13,6 +13,8 @@ const row = (
   marketPOver,
   overHappened,
   isBet: false,
+  engine: "llm",
+  engineConfig: null,
 });
 
 // Modelo e mercado idênticos → skill 0 em toda análise → IC [0, 0] alcança 0.
