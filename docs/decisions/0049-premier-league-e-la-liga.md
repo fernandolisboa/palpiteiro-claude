@@ -47,7 +47,7 @@ Brasileirão + Champions + as duas = **~425–535** só de prewarm, antes do uso
 
 **Decisão do dono (2026-09-24): as duas ligadas**, ciente do risco de estouro. Ambas entram em `ACTIVE_LEAGUES`, e nenhuma fica em `HIDE_WHEN_INACTIVE`. Quando o Brasileirão acabar (dezembro), abrem ~200 créditos/mês e a folga volta.
 
-**Recuo se a cota apertar** (acompanhar `quotaMonthlyUsed` no log `prewarm_odds.run_complete`; se passar de ~400 antes do dia 20): tirar `"la_liga"` de `ACTIVE_LEAGUES` (`lib/config/active-leagues.ts`) e pôr `"laliga"` em `HIDE_WHEN_INACTIVE` (`lib/view/league-picker.ts`). É o mesmo mecanismo da ADR 0044.
+**Recuo se a cota apertar** (acompanhar `quotaMonthlyUsed` no log `prewarm_odds.run_complete`; se passar de ~400 antes do dia 20): tirar `"la_liga"` de `ACTIVE_LEAGUES` (`lib/config/active-leagues.ts`) e pôr `"laliga"` em `HIDE_WHEN_INACTIVE` (`lib/view/league-picker.ts`). É o mesmo mecanismo da ADR 0044. **Desde a ADR 0050 o recuo é desligar La Liga no `/admin/leagues`, sem deploy.**
 
 ## Alternativas rejeitadas
 

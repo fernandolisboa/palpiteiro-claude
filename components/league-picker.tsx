@@ -11,7 +11,7 @@ import {
   type LeaguePickerOption,
 } from "@/lib/view/league-picker";
 import { buildLeagueHref } from "@/lib/view/range-href";
-import type { LeagueFilter } from "@/lib/view/types";
+import type { LeagueFilter, LeagueKey } from "@/lib/view/types";
 
 type RangeState = {
   preset: RangePreset;
@@ -21,22 +21,15 @@ type RangeState = {
 
 type Props = {
   value: LeagueFilter;
+  /** Keys das ligas ativas (league_settings), lidas pelo Server Component pai. */
+  activeKeys: readonly LeagueKey[];
   /** Range atual — preservado ao trocar de liga (os dois filtros compõem). */
   range: RangeState;
   className?: string;
 };
 
-// Sufixo no texto da própria opção: `title` de <option> não chega a touch nem a
-// leitor de tela (#448).
-const OFF_SEASON_SUFFIX = " (fora de temporada)";
-
 function OptionItem({ option }: { option: LeaguePickerOption }) {
-  return (
-    <option value={option.value} disabled={!option.active}>
-      {option.label}
-      {option.active ? "" : OFF_SEASON_SUFFIX}
-    </option>
-  );
+  return <option value={option.value}>{option.label}</option>;
 }
 
 /**
@@ -46,9 +39,9 @@ function OptionItem({ option }: { option: LeaguePickerOption }) {
  * O guard em app/jogos/page.tsx segue sendo o enforcement real (liga inativa na
  * URL redireciona).
  */
-export function LeaguePicker({ value, range, className }: Props) {
+export function LeaguePicker({ value, activeKeys, range, className }: Props) {
   const router = useRouter();
-  const groups = leaguePickerGroups();
+  const groups = leaguePickerGroups(activeKeys);
   // Estado local otimista: sem ele o <select> controlado volta pra liga antiga
   // enquanto a navegação (transition) espera o RSC — a escolha parece "desfeita".
   const [selected, setSelected] = useState(value);

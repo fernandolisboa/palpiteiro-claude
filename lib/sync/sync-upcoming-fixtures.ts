@@ -1,6 +1,7 @@
-import { ACTIVE_LEAGUES } from "@/lib/config/active-leagues";
 import { upsertMatchesFromProvider } from "@/lib/db/queries/matches";
+import { getActiveLeagues } from "@/lib/db/queries/league-settings";
 import { getSportsDataProvider } from "@/lib/providers/sports-data";
+import type { SupportedLeague } from "@/lib/providers/sports-data/leagues";
 import type { NormalizedFixture } from "@/lib/providers/sports-data/types";
 import { acquireSyncLock, releaseSyncLock } from "@/lib/sync/lock";
 
@@ -13,7 +14,8 @@ import { acquireSyncLock, releaseSyncLock } from "@/lib/sync/lock";
 const SYNC_LOCK_TTL_MS = 7 * 60 * 60 * 1000; // 7h
 
 /**
- * Sync das fixtures das ligas ativas (ACTIVE_LEAGUES). Para cada liga ativa
+ * Sync das fixtures das ligas ativas (`league_settings`, lidas no início do run —
+ * ADR 0050; `opts.leagues` injeta a lista em teste). Para cada liga ativa
  * busca a competição+temporada INTEIRA numa única chamada de provider
  * (getFixturesBySeason) em vez de iterar dia-a-dia. Idempotente (upsert por
  * composite key). Deduplicado por um lock DURÁVEL em KV (`lib/sync/lock.ts`,
@@ -31,7 +33,7 @@ const SYNC_LOCK_TTL_MS = 7 * 60 * 60 * 1000; // 7h
  * ensureOddsSnapshotsFresh.
  */
 export async function ensureUpcomingFixturesSynced(
-  opts: { force?: boolean } = {},
+  opts: { force?: boolean; leagues?: readonly SupportedLeague[] } = {},
 ): Promise<void> {
   const acquired = await acquireSyncLock({
     force: opts.force,
@@ -40,9 +42,10 @@ export async function ensureUpcomingFixturesSynced(
   if (!acquired) return;
 
   try {
+    const leagues = opts.leagues ?? (await getActiveLeagues());
     const provider = getSportsDataProvider();
     const settled = await Promise.allSettled(
-      ACTIVE_LEAGUES.map((league) => provider.getFixturesBySeason(league)),
+      leagues.map((league) => provider.getFixturesBySeason(league)),
     );
     const fixtures: NormalizedFixture[] = [];
     for (const r of settled) {

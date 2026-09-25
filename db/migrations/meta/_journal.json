@@ -323,6 +323,13 @@
       "when": 1790279112858,
       "tag": "0045_add_premier_league_la_liga",
       "breakpoints": true
+    },
+    {
+      "idx": 46,
+      "version": "7",
+      "when": 1790279610494,
+      "tag": "0046_league_settings",
+      "breakpoints": true
     }
   ]
 }
