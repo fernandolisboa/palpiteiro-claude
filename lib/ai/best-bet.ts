@@ -20,11 +20,12 @@ import type { AIModelId } from "./models";
 // uma pela porta normal `predict()` (logada em ai_calls, criando sua predição). NUNCA
 // chama o Anthropic SDK direto — predict() é a única porta pro LLM.
 
-// Teto de chamadas de LLM por run (custo: cada predict() é dinheiro real). 6 dá
-// folga real sobre a topologia de hoje (4 mercados no world_cup) — não é dead code
-// que encaixa exato, e um 5º mercado graduado no futuro não derruba um Tier-1 sob o
-// cap. Pinado por teste.
-export const MAX_FANOUT_MARKETS = 6;
+// Teto de chamadas de LLM por run (custo: cada predict() é dinheiro real). 7 = o
+// maior conjunto de hoje: admin no Brasileirão (over/under, 1X2, btts, dupla chance,
+// placar exato, artilheiro, assistência). Com 6, `capCandidates` cortava a dupla
+// chance (última na ordem alfabética) em silêncio. Usuário comum vê ≤4 (graduados);
+// um mercado novo acima disso ainda nunca derruba um Tier-1 sob o cap. Pinado por teste.
+export const MAX_FANOUT_MARKETS = 7;
 
 // Teto de buscas de odds *additional* por run (cada uma = 1 getOddsForEvent ≈ 1
 // crédito da The Odds API, ~420/500 restando). Explícito em vez de consequência

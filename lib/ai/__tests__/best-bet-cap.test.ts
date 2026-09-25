@@ -7,8 +7,8 @@ import {
 } from "@/lib/ai/best-bet";
 
 describe("cost ceilings (#178) — pinned constants", () => {
-  it("MAX_FANOUT_MARKETS = 6 (LLM-call ceiling com folga sobre os 4 do WC)", () => {
-    expect(MAX_FANOUT_MARKETS).toBe(6);
+  it("MAX_FANOUT_MARKETS = 7 (LLM-call ceiling = conjunto admin do Brasileirão)", () => {
+    expect(MAX_FANOUT_MARKETS).toBe(7);
   });
   it("MAX_ADDITIONAL_FETCHES = 4 (teto de créditos de odds additional/run)", () => {
     expect(MAX_ADDITIONAL_FETCHES).toBe(4);

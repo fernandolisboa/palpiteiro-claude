@@ -511,7 +511,7 @@ export async function analyzeBestBet(
   // Teto de créditos: nunca pré-aquece mais que MAX_ADDITIONAL_FETCHES. Um mercado
   // cortado aqui CONTINUA no fanOut → runFanOut chama predict() pra ele, mas predict
   // lança "sem snapshot fresco" ANTES da chamada Anthropic (sem gasto de LLM nem
-  // crédito). Hoje inalcançável (WC tem ≤3 additional); move junto com MAX_FANOUT_MARKETS.
+  // crédito). Hoje inalcançável (≤3 additional por liga); move junto com MAX_FANOUT_MARKETS.
   const additionalToFetch =
     additional.length > MAX_ADDITIONAL_FETCHES
       ? additional.slice(0, MAX_ADDITIONAL_FETCHES)
@@ -723,7 +723,7 @@ export async function analyzeMarkets(
   // `chosen` preserva {key,label} do SERVER (não do POST). Ordem = a de `allowed`
   // (`marketsForAudience`: over_under primeiro = base de exibição do sumário); sob o cap
   // `capCandidates` re-particiona Tier-1-first, mas over_under é Tier-1 → segue 1º (e o cap é
-  // inalcançável hoje: só 4 descriptors). Um marketKey forjado fora da audiência/liga é dropado
+  // inalcançável hoje: o maior conjunto, admin no Brasileirão, tem 7 = MAX_FANOUT_MARKETS). Um marketKey forjado fora da audiência/liga é dropado
   // aqui (sem gastar slot); duplicatas colapsam.
   const requested = new Set(formData.getAll("marketKeys").map((v) => String(v)));
   const chosen = capCandidates(
@@ -962,7 +962,7 @@ export async function gradeMyBet(
   }
   // 8. GATE DE LINHA-MODELÁVEL ANTES DE GASTAR: over/under só modela {2.5}(featured)
   // ∪ candidateLines (quando a variante multi-linha resolve p/ a liga). over 3.5 fora
-  // de world_cup NUNCA é modelável (OVER_UNDER_ALT.coveredLeagues=['world_cup']) →
+  // de OVER_UNDER_ALT.coveredLeagues (ou com a flag de linhas extras off) NUNCA é modelável →
   // nao-avalio SEM rate-limit, SEM predict (senão predict só produziria a 2.5 e
   // queimaria slot+ai_call à toa).
   if (marketKey === "over_under") {
