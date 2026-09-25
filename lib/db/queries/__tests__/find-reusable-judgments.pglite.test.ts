@@ -165,6 +165,7 @@ const find = (stateHash = "hash-a") =>
     matchId: ids.matchId,
     judgmentsVersion: "jev_judgments_v1",
     weightsVersion: "judgment_weights_v1",
+    jevModel: "jev-1.13.0",
     stateHash,
     since: SINCE,
   });
@@ -184,7 +185,7 @@ describe("findReusableJudgments", () => {
     expect(out?.judgments.aiCallId).toBe("call-2");
   });
 
-  it("ignora state diferente, versões diferentes, applied=false, sem judgments e outro jogo", async () => {
+  it("ignora state diferente, versões diferentes, outro modelo JEV, applied=false, sem judgments e outro jogo", async () => {
     const at = new Date(NOW.getTime() - 3_600_000);
     await insertPrediction({
       judgments: judgments({ stateHash: "hash-b" }),
@@ -199,6 +200,12 @@ describe("findReusableJudgments", () => {
     await insertPrediction({
       judgments: judgments({
         versions: { ...judgments().versions, judgments: "jev_judgments_v2" },
+      }),
+      createdAt: at,
+    });
+    await insertPrediction({
+      judgments: judgments({
+        versions: { ...judgments().versions, jevModel: "jev-1.14.0" },
       }),
       createdAt: at,
     });

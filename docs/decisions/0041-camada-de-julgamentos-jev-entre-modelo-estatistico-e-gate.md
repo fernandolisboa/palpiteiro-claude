@@ -147,6 +147,7 @@ Cada noul carrega `criteria` com os casos de borda escritos, como pede a jaggedn
 - **Uma chamada narradora por análise**, não por mercado candidato.
   - No best bet, o código avalia todos os mercados de graça e o LLM narra só o escolhido. O fan-out cai de até 6 chamadas pagas pra 1.
   - Isso **resolve o #492 por construção**: um slot de rate-limit por mercado deixa de fazer sentido.
+  - **Implementado (#512):** `runCodeJevFanOut` (`lib/ai/best-bet.ts`) decide cada mercado code_jev via `predictForBestBet` (decisão gateada, narração adiada) e narra só o card do topo do painel (mesma ordenação `sortBestBetEntries`, modo "edge"). Os demais persistem com o racional templado (`judgments.narration = "best_bet_template"`), com `aiCallId` apontando pra row de ai_calls da narração do run (custo zero no card e no detalhe da predição). λ e julgamentos JEV ficam fixados no 1º mercado do run (memo por matchId): exatamente 1 chamada JEV e 1 matriz por run. Rate-limit: 1 slot pelo grupo code_jev + 1 por mercado fora dele (placar exato, scorer, assist); uma chamada paga extra do grupo (λ indisponível → caminho LLM) pede o próprio slot antes do gasto.
 - **Modelo:** começa em Sonnet 4.5. O Haiku 4.5 (~3× mais barato) é candidato, decidido por uma comparação cega de 30 racionais, sem ADR novo. Trocar o modelo do narrador não altera a decisão.
 - **Pass gateado.** Continua com `GATED_PASS_RATIONALE` (ADR 0038). Um pass autorado pelo código ganha racional narrado do "por que não há valor".
 

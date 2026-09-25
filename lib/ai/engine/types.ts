@@ -21,8 +21,12 @@ export type PredictionJudgments = {
     judgments: string;
     weights: string;
     narrator: string;
-    // Modelo JEV que respondeu (null quando o JEV não respondeu).
+    // Modelo JEV PEDIDO (o pin, JUDGMENT_MODEL_ID) quando o JEV respondeu; null
+    // quando não respondeu. É a chave do reuso (findReusableJudgments): um id
+    // canônico/datado ecoado pela API não desliga o reuso.
     jevModel: string | null;
+    // Modelo que a API ecoou na resposta (auditoria). Ausente nas rows anteriores.
+    jevModelServed?: string | null;
   };
   // Por que o JEV não foi aplicado (null quando aplicado).
   failure: { kind: string; message: string } | null;
@@ -33,6 +37,13 @@ export type PredictionJudgments = {
   // auditoria falhou). Num reuso, é a chamada da predição de origem.
   aiCallId: string | null;
   // Predição de origem cujas respostas foram reusadas (sem chamada JEV nova);
-  // null quando esta predição chamou o JEV.
+  // null quando o JEV foi chamado nesta análise (no best bet, pelo run: todas as
+  // predições do run apontam pra mesma `aiCallId`).
   reusedFromPredictionId: string | null;
+  // Quem escreveu o racional (#512). "llm_call": esta predição fez a chamada
+  // narradora (a row de ai_calls é a dela; falha do narrador → texto templado, com
+  // o status da falha na row). "best_bet_template": mercado não escolhido no best
+  // bet — racional templado em código, sem chamada; `aiCallId` da predição aponta
+  // pra narração do mercado escolhido no mesmo run. Ausente nas rows anteriores.
+  narration?: "llm_call" | "best_bet_template";
 };

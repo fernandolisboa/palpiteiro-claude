@@ -110,6 +110,58 @@ describe("checkNarrationFidelity", () => {
     expect(res.ok).toBe(false);
   });
 
+  it("número colado a outro não é lido pelo sufixo (borda esquerda)", () => {
+    // Sem a borda, "1058,4%" casava "058,4%" = 58,4 (a prob persistida) e passava.
+    const out = { ...OK, rationale: "O modelo estima 1058,4% para o over." };
+    expect(checkNarrationFidelity(out, overDecision()).ok).toBe(false);
+  });
+
+  it("percentual colado a pontuação (não a dígito) segue checado", () => {
+    // "42%" depois de "58%," e "58%" depois de "over." são citações independentes.
+    const bad = { ...OK, rationale: "Modelo: 58,4%,64% no over." };
+    expect(checkNarrationFidelity(bad, overDecision()).ok).toBe(false);
+    const bad2 = { ...OK, rationale: "Leitura do over.64% de chance." };
+    expect(checkNarrationFidelity(bad2, overDecision()).ok).toBe(false);
+    const good = {
+      ...OK,
+      rationale: "Leitura do over.58,4% contra 50,2%,8,2 pp.",
+    };
+    expect(checkNarrationFidelity(good, overDecision()).ok).toBe(true);
+  });
+
+  it("2 vias: o complemento da prob do modelo ou da implícita é citação fiel", () => {
+    const out = {
+      ...OK,
+      rationale:
+        "O modelo dá 41,6% ao under, contra 49,8% implícitos nele: o over tem valor.",
+    };
+    expect(checkNarrationFidelity(out, overDecision()).ok).toBe(true);
+  });
+
+  it("3 vias: complemento NÃO é aceito (não há lado único oposto)", () => {
+    const decision: NarratorDecision = {
+      ...overDecision(),
+      marketKey: "match_result",
+      marketLabel: "Resultado (1X2)",
+      line: null,
+      selectionKeys: ["home", "draw", "away"],
+      side: "home",
+      focus: {
+        key: "home",
+        label: "Vitória do CR Flamengo",
+        modelProbPct: 55,
+        impliedPct: 40,
+        edgePct: 15,
+        odd: 2.4,
+      },
+    };
+    const out = {
+      ...OK,
+      rationale: "O CR Flamengo não vence em 45% dos cenários.",
+    };
+    expect(checkNarrationFidelity(out, decision).ok).toBe(false);
+  });
+
   it("edge citado em pp errado reprova", () => {
     const out = { ...OK, rationale: "Edge de 12,5 pp no over." };
     expect(checkNarrationFidelity(out, overDecision()).ok).toBe(false);
