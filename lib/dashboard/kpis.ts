@@ -130,6 +130,22 @@ function impliedSumTargetForMarket(marketKey: string): number {
   return getDescriptor(marketKey)?.impliedSumTarget ?? 1;
 }
 
+// Δ no-vig (pp, + = bateu o fechamento) de cada row non-pass COM closing line. Base
+// do KPI de CLV e do gate do Kelly (ADR 0039, /admin/calibration).
+export function clvNoVigDeltas(rows: DashboardRow[]): number[] {
+  return rows
+    .filter((r) => r.recommendation !== "pass")
+    .map((r) =>
+      clvNoVigDeltaPp(
+        numOrNull(r.impliedProbPct),
+        numOrNull(r.closingOdd),
+        numOrNull(r.closingOverroundPct),
+        impliedSumTargetForMarket(r.marketKey),
+      ),
+    )
+    .filter((v): v is number => v !== null);
+}
+
 // As duas métricas de CLV agregadas sobre as rows non-pass COM closing line.
 function computeClvRates(rows: DashboardRow[]): {
   clvOddsRatio: Rate;
@@ -141,19 +157,9 @@ function computeClvRates(rows: DashboardRow[]): {
       clvOddsRatioPct(numOrNull(r.oddAtRecommendation), numOrNull(r.closingOdd)),
     )
     .filter((v): v is number => v !== null);
-  const noVigVals = nonPass
-    .map((r) =>
-      clvNoVigDeltaPp(
-        numOrNull(r.impliedProbPct),
-        numOrNull(r.closingOdd),
-        numOrNull(r.closingOverroundPct),
-        impliedSumTargetForMarket(r.marketKey),
-      ),
-    )
-    .filter((v): v is number => v !== null);
   return {
     clvOddsRatio: meanRate(oddsRatioVals),
-    clvNoVigDelta: meanRate(noVigVals),
+    clvNoVigDelta: meanRate(clvNoVigDeltas(nonPass)),
   };
 }
 

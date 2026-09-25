@@ -73,18 +73,9 @@ export function toDashboardRow({
   };
 }
 
-/**
- * Todas as predições do usuário (+ outcome, se liquidado) pro dashboard. Lean:
- * só o necessário pra KPIs, gráfico e tabela. SCOPED por `userId` — base de toda
- * a privacidade per-user. Outcome via LEFT JOIN (null = pendente).
- *
- * LEFT JOIN markets (espelha o precedente em predictions.ts:120) resolve a key
- * CANÔNICA do mercado. `markets.key` null (row sem marketId) cai no fallback
- * enum→key, coalescendo pra `over_under` — o caminho PRIMÁRIO de paridade onde
- * o backfill não rodou, não só defensivo (R2).
- */
-export async function getUserDashboardRows(
-  userId: string,
+// Select compartilhado das rows do dashboard; `userId` null = todos (só admin).
+async function selectDashboardRows(
+  userId: string | null,
 ): Promise<DashboardRow[]> {
   const rows = await db
     .select({
@@ -119,10 +110,35 @@ export async function getUserDashboardRows(
       predictionOutcomes,
       eq(predictionOutcomes.predictionId, predictions.id),
     )
-    .where(eq(predictions.userId, userId))
+    .where(userId === null ? undefined : eq(predictions.userId, userId))
     .orderBy(desc(predictions.createdAt));
 
   return rows.map(toDashboardRow);
+}
+
+/**
+ * Todas as predições do usuário (+ outcome, se liquidado) pro dashboard. Lean:
+ * só o necessário pra KPIs, gráfico e tabela. SCOPED por `userId` — base de toda
+ * a privacidade per-user. Outcome via LEFT JOIN (null = pendente).
+ *
+ * LEFT JOIN markets (espelha o precedente em predictions.ts:120) resolve a key
+ * CANÔNICA do mercado. `markets.key` null (row sem marketId) cai no fallback
+ * enum→key, coalescendo pra `over_under` — o caminho PRIMÁRIO de paridade onde
+ * o backfill não rodou, não só defensivo (R2).
+ */
+export async function getUserDashboardRows(
+  userId: string,
+): Promise<DashboardRow[]> {
+  return selectDashboardRows(userId);
+}
+
+/**
+ * Mesmas rows de getUserDashboardRows, de TODOS os usuários. SÓ pra superfícies
+ * admin (gate do Kelly em /admin/calibration, ADR 0039): o CLV mede o modelo, não
+ * o usuário. Nunca usar numa página de usuário (quebra a privacidade per-user).
+ */
+export async function getAllDashboardRows(): Promise<DashboardRow[]> {
+  return selectDashboardRows(null);
 }
 
 export type DashboardDetail = {

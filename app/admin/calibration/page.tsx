@@ -5,7 +5,14 @@ import {
   type CalibrationGroup,
 } from "@/lib/calibration/derive";
 import type { ReliabilityBin } from "@/lib/calibration/metrics";
+import {
+  evaluateKellyGate,
+  type KellyGate,
+} from "@/lib/calibration/phase-c-gate";
+import { enrichDashboardRowsWithClosing } from "@/lib/dashboard/clv-enrich";
+import { clvNoVigDeltas, keepLatestPerMatch } from "@/lib/dashboard/kpis";
 import { getOverUnderCalibrationRows } from "@/lib/db/queries/calibration";
+import { getAllDashboardRows } from "@/lib/db/queries/dashboard";
 
 export const dynamic = "force-dynamic";
 
@@ -23,6 +30,16 @@ const fmtPct = (n: number | null) =>
 export default async function AdminCalibrationPage() {
   const rows = await getOverUnderCalibrationRows();
   const { overall, byVersion } = deriveCalibration(rows);
+  // CLV das recomendações de TODOS os usuários (mede o modelo), deduped por
+  // (jogo, mercado) como o dashboard (ADR 0020).
+  const withClosing = keepLatestPerMatch(
+    await enrichDashboardRowsWithClosing(await getAllDashboardRows()),
+  );
+  const gate = evaluateKellyGate({
+    clvNoVigDeltasPp: clvNoVigDeltas(withClosing),
+    calibrationRows: rows,
+  });
+  const betCount = rows.filter((r) => r.isBet).length;
 
   return (
     <div className="min-h-screen bg-background text-foreground">
@@ -32,6 +49,8 @@ export default async function AdminCalibrationPage() {
           title="Calibração"
           subtitle="over/under · P(over) do modelo vs resultados · benchmark = mercado no-vig"
         />
+
+        <GateSection gate={gate} />
 
         {overall === null ? (
           <EmptyState
@@ -43,15 +62,22 @@ export default async function AdminCalibrationPage() {
             {/* Resumo agregado */}
             <section className="pb-8">
               <h2 className="pb-3 font-mono text-eyebrow uppercase tracking-label text-muted-foreground">
-                resumo · {overall.n} predições
+                resumo · {overall.n} predições · {betCount} apostas ·{" "}
+                {overall.n - betCount} passes
               </h2>
-              <div className="grid grid-cols-2 gap-px overflow-hidden rounded-md border border-border bg-border sm:grid-cols-4">
+              <div className="grid grid-cols-2 gap-px overflow-hidden rounded-md border border-border bg-border sm:grid-cols-3">
                 <Kpi label="log-loss modelo" value={fmt3(overall.model.logLoss)} />
                 <Kpi
                   label="log-loss mercado"
                   value={fmt3(overall.market.logLoss)}
                 />
                 <Kpi label="brier modelo" value={fmt3(overall.model.brier)} />
+                <Kpi label="brier mercado" value={fmt3(overall.market.brier)} />
+                <Kpi
+                  label="slope modelo"
+                  value={fmt3(overall.model.slope)}
+                  hint="1 = calibrado · <1 = overconfident"
+                />
                 <Kpi
                   label="skill (log-loss)"
                   value={fmtSkill(overall.logLossSkill)}
@@ -79,6 +105,7 @@ export default async function AdminCalibrationPage() {
                       <Th align="right">LL mercado</Th>
                       <Th align="right">Brier mod.</Th>
                       <Th align="right">Brier merc.</Th>
+                      <Th align="right">slope</Th>
                       <Th align="right">skill LL</Th>
                     </tr>
                   </thead>
@@ -123,6 +150,45 @@ export default async function AdminCalibrationPage() {
         )}
       </div>
     </div>
+  );
+}
+
+// Gates da Fase C (ADR 0039). O Dixon-Coles é julgado por backtest offline; aqui só
+// o Kelly, que depende do dado ao vivo. "pronto" não liga nada: é o sinal pra abrir
+// o build do Kelly. As bandas do ADR 0019 seguem até lá.
+function GateSection({ gate }: { gate: KellyGate }) {
+  return (
+    <section className="pb-8">
+      <h2 className="pb-3 font-mono text-eyebrow uppercase tracking-label text-muted-foreground">
+        gate do kelly · {gate.ready ? "pronto" : "ainda não"}
+      </h2>
+      <div className="overflow-x-auto rounded-md border border-border">
+        <table className="w-full text-body-sm tabular-nums">
+          <tbody>
+            {gate.checks.map((c) => (
+              <tr key={c.key} className="border-b border-border last:border-b-0">
+                <Td>{c.label}</Td>
+                <Td align="right">{c.detail}</Td>
+                <Td align="right">
+                  <span
+                    className={
+                      c.pass ? "text-foreground" : "text-muted-foreground"
+                    }
+                  >
+                    {c.pass ? "ok" : "falta"}
+                  </span>
+                </Td>
+              </tr>
+            ))}
+          </tbody>
+        </table>
+      </div>
+      <p className="pt-2 text-meta leading-relaxed text-muted-fg-2 tracking-tight">
+        CLV = Δ no-vig contra a linha de fechamento (+ = bateu o mercado). Skill =
+        log-loss do mercado − do modelo por análise de over/under, passes incluídos.
+        O Dixon-Coles é validado por backtest (ADR 0039), não por este gate.
+      </p>
+    </section>
   );
 }
 
@@ -189,6 +255,7 @@ function VersionRow({ g }: { g: CalibrationGroup }) {
       <Td align="right">{fmt3(g.market.logLoss)}</Td>
       <Td align="right">{fmt3(g.model.brier)}</Td>
       <Td align="right">{fmt3(g.market.brier)}</Td>
+      <Td align="right">{fmt3(g.model.slope)}</Td>
       <Td align="right">
         <span
           className={

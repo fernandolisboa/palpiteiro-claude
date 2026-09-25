@@ -13,6 +13,7 @@ const row = (
   modelPOver,
   marketPOver,
   overHappened,
+  isBet: true,
 });
 
 describe("deriveCalibration", () => {
