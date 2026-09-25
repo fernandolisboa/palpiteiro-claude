@@ -21,8 +21,12 @@ export type PredictionJudgments = {
     judgments: string;
     weights: string;
     narrator: string;
-    // Modelo JEV que respondeu (null quando o JEV não respondeu).
+    // Modelo JEV PEDIDO (o pin, JUDGMENT_MODEL_ID) quando o JEV respondeu; null
+    // quando não respondeu. É a chave do reuso (findReusableJudgments): um id
+    // canônico/datado ecoado pela API não desliga o reuso.
     jevModel: string | null;
+    // Modelo que a API ecoou na resposta (auditoria). Ausente nas rows anteriores.
+    jevModelServed?: string | null;
   };
   // Por que o JEV não foi aplicado (null quando aplicado).
   failure: { kind: string; message: string } | null;

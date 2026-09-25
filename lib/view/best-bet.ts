@@ -168,8 +168,8 @@ export function toBestBetView(
   return {
     entries,
     errors,
-    // Análises geradas (uma por mercado). No motor code_jev só a escolhida teve
-    // chamada narradora paga (#512); as demais custam zero.
+    // Análises geradas (uma por mercado), não chamadas pagas: no motor code_jev só a
+    // escolhida teve chamada narradora (#512); as demais custam zero.
     llmCalls: entries.length,
     unavailableMarkets: errors.length,
   };

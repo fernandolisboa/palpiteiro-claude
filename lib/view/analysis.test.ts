@@ -8,6 +8,7 @@ import { computeMarketScenarios } from "@/lib/odds/scenario";
 
 import {
   toAnalysisView,
+  toAnalysisViewFromPrediction,
   toMarketAnalysisSections,
   toOutcomesView,
   toPreviousAnalysisItems,
@@ -1410,5 +1411,44 @@ describe("toAnalysisView — anytime_scorer (independent_binary, #290)", () => {
     // implícita-teto 1/2.5*100 = 40 → "40%"; edge model(52)−40 = +12pp.
     expect(pedro?.marketProb).toBe("40%");
     expect(pedro?.edge).toBe("+12.0pp");
+  });
+});
+
+describe("toAnalysisViewFromPrediction — custo da ai_call (#512)", () => {
+  function mkRow(narration?: "llm_call" | "best_bet_template"): PredictionWithAiCall {
+    return {
+      prediction: {
+        id: "p1",
+        recommendation: "pass",
+        confidencePct: "55.00",
+        rationale: "r",
+        keyFactors: ["a"],
+        minimumOdd: null,
+        oddAtRecommendation: null,
+        bookmaker: null,
+        impliedProbPct: null,
+        edgePct: null,
+        modelVersion: "claude-sonnet-4-5-20250929;engine=code_jev",
+        promptVersion: "narrator_v1",
+        createdAt: baseCreatedAt,
+        marketParams: null,
+        stakeUnits: null,
+        judgments: narration ? { narration } : null,
+      } as unknown as DbPrediction,
+      aiCall: { costUsd: "0.017000" } as PredictionWithAiCall["aiCall"],
+      marketKey: "match_result",
+      selections: [],
+    };
+  }
+
+  it("row templada do best bet mostra custo zero (a ai_call é de outro card)", () => {
+    expect(toAnalysisViewFromPrediction(mkRow("best_bet_template")).costUsd).toBe(
+      "$0.000",
+    );
+  });
+
+  it("row com a própria chamada (ou sem judgments) mostra o custo dela", () => {
+    expect(toAnalysisViewFromPrediction(mkRow("llm_call")).costUsd).toBe("$0.017");
+    expect(toAnalysisViewFromPrediction(mkRow()).costUsd).toBe("$0.017");
   });
 });

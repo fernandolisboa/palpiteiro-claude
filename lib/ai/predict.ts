@@ -64,7 +64,6 @@ import {
 } from "./engine/code-jev";
 import {
   buildMatchJudgmentInput,
-  judgmentInputFingerprint,
   previousFixture,
   type MatchJudgmentData,
   type MatchJudgmentInput,
@@ -225,20 +224,20 @@ export async function predict(args: PredictArgs): Promise<PredictResult> {
 
 // ─── Best bet no motor code_jev (ADR 0041 §4, #512) ──────────────────────────
 
-// Julgamentos JEV já resolvidos NESTE run de best bet, pela impressão digital dos
-// insumos (judgmentInputFingerprint). Um mercado seguinte com os mesmos insumos
-// reusa tudo em memória: sem busca de escalação anterior, sem lookup de reuso, sem
-// chamada JEV.
-export type JudgmentsMemo = Map<
+// λ + julgamentos JEV FIXADOS no run de best bet (keyed por matchId): o 1º mercado
+// code_jev resolve, os seguintes reusam tudo em memória — exatamente UMA chamada JEV
+// e UMA matriz por run, mesmo que desfalques/escalações/tabela mudem no provider
+// entre um mercado e outro (sem busca de escalação anterior, sem lookup de reuso).
+export type CodeJevRunMemo = Map<
   string,
-  { input: MatchJudgmentInput; run: JudgmentRun }
+  { scoreline: ModelScoreline; input: MatchJudgmentInput; run: JudgmentRun }
 >;
 
 export type BestBetPredictOptions = {
   // Motor fixado pelo orquestrador (lido UMA vez por run), pra um flip do flag no
   // meio do fan-out não misturar motores.
   engine: AnalysisEngine;
-  judgmentsMemo: JudgmentsMemo;
+  runMemo: CodeJevRunMemo;
   // Chamado logo ANTES da chamada paga quando o mercado cai no caminho LLM (λ
   // indisponível), depois das falhas pré-gasto. Lança pra abortar sem gasto (slot
   // negado).
@@ -790,15 +789,18 @@ async function runPredict(
   //     partition que o código precifica, a decisão sai do λ (× julgamentos JEV) → matriz
   //     → max-edge, e o LLM só narra. Precisa da tabela (λ); sem ela, ou com o flag em
   //     'llm', ou em mercado não precificável → segue o caminho LLM abaixo, intacto.
+  //     No best bet, o λ e os julgamentos do 1º mercado ficam fixados pro run (#512).
+  const pinned = opts.runMemo?.get(matchId);
   const engineScoreline =
     isCodeJevMarket(cartridge.descriptor) &&
     (opts.engine ?? (await readAnalysisEngine())) === "code_jev"
-      ? resolveModelScoreline({
+      ? (pinned?.scoreline ??
+        resolveModelScoreline({
           standing: standings,
           homeTeam: match.homeTeam,
           awayTeam: match.awayTeam,
           neutral: match.league === "world_cup",
-        })
+        }))
       : null;
   if (engineScoreline) {
     // Candidatas = a linha única, ou cada linha da escada (multi-linha, #175): a
@@ -816,26 +818,34 @@ async function runPredict(
         ];
 
     // JEV: uma chamada por JOGO (ADR 0041 §1), mas predict() roda por MERCADO (o
-    // fan-out chama N vezes). No best bet, o memo do run reusa em memória; senão
-    // runJudgments reusa as respostas de uma predição recente do mesmo jogo com o
-    // mesmo state; só chama o JEV (fail-open, logado) quando não há.
-    const { input: judgmentInput, run: jev } = await resolveMatchJudgments({
-      userId,
-      matchId,
-      provider,
-      memo: opts.judgmentsMemo,
-      data: {
-        league: match.league,
-        kickoffAt: match.kickoffAt,
-        homeTeam: match.homeTeam,
-        awayTeam: match.awayTeam,
-        injuries: injuries.data,
-        lineups,
-        homeForm,
-        awayForm,
-        standings,
-      },
-    });
+    // fan-out chama N vezes). No best bet, o que o 1º mercado resolveu fica fixado
+    // no memo do run; senão runJudgments reusa as respostas de uma predição recente
+    // do mesmo jogo com o mesmo state; só chama o JEV (fail-open, logado) quando não há.
+    const { input: judgmentInput, run: jev } =
+      pinned ??
+      (await resolveMatchJudgments({
+        userId,
+        matchId,
+        provider,
+        data: {
+          league: match.league,
+          kickoffAt: match.kickoffAt,
+          homeTeam: match.homeTeam,
+          awayTeam: match.awayTeam,
+          injuries: injuries.data,
+          lineups,
+          homeForm,
+          awayForm,
+          standings,
+        },
+      }));
+    if (!pinned) {
+      opts.runMemo?.set(matchId, {
+        scoreline: engineScoreline,
+        input: judgmentInput,
+        run: jev,
+      });
+    }
 
     const minEdgePp = cartridge.descriptor.minEdgePp ?? MIN_EDGE_PP;
     const engine = runCodeJevEngine({
@@ -1646,7 +1656,9 @@ async function persistPrediction(a: PersistArgs): Promise<PredictResult> {
 
 type JudgmentRun = {
   answers: JudgmentAnswers | null;
+  // Modelo pedido (pin) e o ecoado pela API; null quando o JEV não respondeu.
   jevModel: string | null;
+  jevModelServed: string | null;
   failure: JudgmentFailure | null;
   stateHash: string;
   aiCallId: string | null;
@@ -1694,6 +1706,7 @@ async function runJudgments(args: {
     return {
       answers: src.answers,
       jevModel: src.versions.jevModel,
+      jevModelServed: src.versions.jevModelServed ?? null,
       failure: null,
       stateHash,
       aiCallId: src.aiCallId ?? null,
@@ -1752,7 +1765,8 @@ async function runJudgments(args: {
   }
   return {
     answers: result?.answers ?? null,
-    jevModel: result?.model ?? null,
+    jevModel: result ? JUDGMENT_MODEL_ID : null,
+    jevModelServed: result?.model ?? null,
     failure,
     stateHash,
     aiCallId,
@@ -1760,23 +1774,16 @@ async function runJudgments(args: {
   };
 }
 
-// Input do state JEV + julgamentos do jogo. Com `memo` (best bet, #512), a impressão
-// digital dos insumos (calculada SEM a escalação anterior) acha o que um mercado
-// anterior do MESMO run já resolveu: sem busca de escalação, sem lookup e sem
-// chamada. O reuso entre runs (runJudgments) segue chaveado pelo stateHash, que
-// depende da escalação anterior (papel do desfalque) — por isso lá a busca vem
-// antes do lookup.
+// Input do state JEV + julgamentos do jogo. O reuso entre análises (runJudgments) é
+// chaveado pelo stateHash, que depende da escalação anterior (papel do desfalque)
+// — por isso a busca vem antes do lookup. Dentro de um best bet, o memo do run
+// (CodeJevRunMemo) evita as duas.
 async function resolveMatchJudgments(args: {
   userId: string;
   matchId: string;
   provider: SportsDataProvider;
-  memo: JudgmentsMemo | undefined;
   data: Omit<MatchJudgmentData, "previousLineups">;
 }): Promise<{ input: MatchJudgmentInput; run: JudgmentRun }> {
-  const key = args.memo ? judgmentInputFingerprint(args.data) : null;
-  const hit = key === null ? undefined : args.memo?.get(key);
-  if (hit) return hit;
-
   const { data } = args;
   const input = buildMatchJudgmentInput({
     ...data,
@@ -1795,9 +1802,7 @@ async function resolveMatchJudgments(args: {
     matchId: args.matchId,
     stateInput: input.stateInput,
   });
-  const resolved = { input, run };
-  if (key !== null) args.memo?.set(key, resolved);
-  return resolved;
+  return { input, run };
 }
 
 // Escalação do ÚLTIMO jogo de cada time (o da forma, antes deste) pra derivar o
@@ -1881,6 +1886,7 @@ function toPredictionJudgments(
       weights: JUDGMENT_WEIGHTS_VERSION,
       narrator: narratorCartridge.version,
       jevModel: jev.jevModel,
+      jevModelServed: jev.jevModelServed,
     },
     failure: jev.failure
       ? { kind: jev.failure.kind, message: jev.failure.message }

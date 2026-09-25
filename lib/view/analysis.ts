@@ -22,6 +22,7 @@ import {
   type ScenarioSide,
 } from "@/lib/odds/scenario";
 import { getDescriptor } from "@/lib/odds/market-descriptor";
+import { ownsAiCall } from "@/lib/view/owns-ai-call";
 import {
   getMarketPresentation,
   type MarketPresentation,
@@ -483,10 +484,9 @@ export function toAnalysisViewFromPrediction(
       stakeUnits: row.prediction.stakeUnits,
       selections: row.selections,
     },
-    // Mercado não escolhido no best bet code_jev (#512): racional templado, sem
-    // chamada própria — a row de ai_calls é a da narração do mercado escolhido, cujo
-    // custo NÃO é deste card.
-    row.aiCall && row.prediction.judgments?.narration !== "best_bet_template"
+    // Mercado não escolhido no best bet code_jev (#512): a ai_call é a narração de
+    // outro card → sem custo aqui.
+    row.aiCall && ownsAiCall(row.prediction)
       ? { costUsd: row.aiCall.costUsd }
       : null,
     now,

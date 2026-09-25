@@ -58,8 +58,15 @@ vi.mock("@/lib/db", () => {
           createdAt: new Date(),
         });
       }
+      // Ecoa a row inserida (como o .returning() real), pra a view rodar sobre ela.
       return {
-        returning: vi.fn(() => Promise.resolve([{ id, aiCallId: id }])),
+        returning: vi.fn(() =>
+          Promise.resolve([
+            Array.isArray(row)
+              ? { id }
+              : { aiCallId: id, ...row, id, createdAt: new Date() },
+          ])
+        ),
       };
     },
   }));
@@ -198,6 +205,7 @@ import { predict } from "@/lib/ai/predict";
 import { runCodeJevFanOut } from "@/lib/ai/best-bet";
 import { computeBestBetRank } from "@/lib/view/best-bet";
 import { sortBestBetEntries } from "@/lib/view/best-bet-sort";
+import { toBestBetView } from "@/lib/view/best-bet";
 
 // ─── Fixtures ────────────────────────────────────────────────────────────────
 
@@ -543,6 +551,7 @@ describe("flag analysis_engine = 'code_jev'", () => {
       weights: "judgment_weights_v1",
       narrator: "narrator_v1",
       jevModel: "jev-1.13.0",
+      jevModelServed: "jev-1.13.0",
     });
     expect(judgments.failure).toBeNull();
     // A prediction aponta pra row da chamada JEV; state hasheado; sem reuso.
@@ -845,6 +854,25 @@ describe("JEV uma vez por jogo (reuso entre mercados)", () => {
     expect(second.judgments.versions.jevModel).toBe("jev-1.13.0");
   });
 
+  it("id datado ecoado pela API não desliga o reuso: grava e filtra pelo modelo PEDIDO", async () => {
+    judge.mockResolvedValue({
+      ...jevResult(JEV_ANSWERS),
+      model: "jev-1.13.0-20260901",
+    });
+    await run("match_result");
+    switchToOverUnder();
+    await run("over_under");
+
+    expect(judge).toHaveBeenCalledTimes(1);
+    const [first, second] = predictionRows();
+    expect(first.judgments.versions.jevModel).toBe("jev-1.13.0");
+    expect(first.judgments.versions.jevModelServed).toBe("jev-1.13.0-20260901");
+    expect(second.judgments.reusedFromPredictionId).toBe(first.id);
+    expect(second.judgments.versions.jevModelServed).toBe(
+      "jev-1.13.0-20260901"
+    );
+  });
+
   it("reuso de reuso aponta pra predição de ORIGEM", async () => {
     await run("match_result");
     await run("match_result");
@@ -1023,7 +1051,7 @@ describe("best bet no motor code_jev (#512): 1 JEV, mercados em código, 1 narra
   });
 
   it("todos os mercados decididos da MESMA matriz; só o do topo é narrado; os outros templados com a narração do run", async () => {
-    const acquireSlot = vi.fn(async () => true);
+    const acquireSlot = vi.fn(async () => ({ ok: true }));
     const out = await runCodeJevFanOut(
       base,
       markets("over_under", "match_result", "btts"),
@@ -1134,7 +1162,7 @@ describe("best bet no motor code_jev (#512): 1 JEV, mercados em código, 1 narra
       rationale: "Sem valor claro.",
       key_factors: ["equilíbrio"],
     };
-    const acquireSlot = vi.fn(async () => false);
+    const acquireSlot = vi.fn(async () => ({ ok: false }));
 
     const out = await runCodeJevFanOut(
       base,
@@ -1154,5 +1182,148 @@ describe("best bet no motor code_jev (#512): 1 JEV, mercados em código, 1 narra
       marketKey: "btts",
       message: "Limite diário atingido — não analisado.",
     });
+  });
+});
+
+describe("best bet code_jev (#512) — JEV/matriz fixados, multi-linha e a view", () => {
+  const base = { matchId: "m-1", userId: "u-1", isAdmin: true };
+  const mapError = (err: unknown) =>
+    err instanceof Error ? err.message : String(err);
+  const OU_BY_LINE: Record<number, Record<string, number>> = {
+    1.5: { over: 1.3, under: 3.5 },
+    2.5: { over: 1.9, under: 1.95 },
+    3.5: { over: 2.2, under: 2.4 },
+  };
+
+  beforeEach(() => {
+    getLatestFreshSelectionOddsSnapshots.mockImplementation(
+      (args: { dbMarketKey: string; params: { line: number } | null }) =>
+        Promise.resolve(
+          freshSnapshot(
+            args.dbMarketKey === "over_under"
+              ? OU_BY_LINE[args.params?.line ?? 2.5]
+              : args.dbMarketKey === "btts"
+                ? { yes: 1.85, no: 1.95 }
+                : ODDS
+          )
+        )
+    );
+    resolveMarketCatalog.mockImplementation((key: string) =>
+      Promise.resolve(
+        catalogFor(
+          key === "over_under"
+            ? ["over", "under"]
+            : key === "btts"
+              ? ["yes", "no"]
+              : ["home", "draw", "away"]
+        )
+      )
+    );
+    narratorOutput = {
+      rationale:
+        "O modelo de placar, com a tabela e a forma recente, sustenta esta decisão.",
+      key_factors: ["Tabela", "Forma recente"],
+    };
+  });
+
+  it("desfalques e tabela mudando entre mercados: 1 chamada JEV e 1 matriz pro run inteiro", async () => {
+    // 2º mercado em diante vê um desfalque novo e outra tabela no provider.
+    getInjuriesByFixture
+      .mockResolvedValueOnce({ home: [], away: [] })
+      .mockResolvedValue({
+        home: [
+          { player: { name: "Pedro" }, type: "injury", status: "injured" },
+        ],
+        away: [],
+      });
+    getStandings.mockResolvedValueOnce(STANDINGS).mockResolvedValue({
+      ...STANDINGS,
+      tables: [
+        {
+          teams: STANDINGS.tables[0].teams.map((t) => ({
+            ...t,
+            goalsFor: t.goalsFor + 10,
+            homeSplit: split(6, 23, 4),
+          })),
+        },
+      ],
+    });
+
+    const out = await runCodeJevFanOut(
+      base,
+      [
+        { marketKey: "match_result", extraLines: false },
+        { marketKey: "btts", extraLines: false },
+        { marketKey: "over_under", extraLines: false },
+      ],
+      mapError,
+      async () => ({ ok: true })
+    );
+
+    expect(out.every((o) => o.ok)).toBe(true);
+    expect(judge).toHaveBeenCalledTimes(1);
+    expect(findReusableJudgments).toHaveBeenCalledTimes(1);
+    const js = rowsWhere((r) => "recommendation" in r).map(
+      (r) => r.judgments as PredictionJudgments
+    );
+    expect(js).toHaveLength(3);
+    for (const j of js) {
+      expect(j.stateHash).toBe(js[0].stateHash);
+      expect(j.aiCallId).toBe(js[0].aiCallId);
+      expect(j.lambda).toEqual(js[0].lambda);
+    }
+  });
+
+  it("over/under com linhas extras entra no grupo: linha da escada decidida em código, 1 narração", async () => {
+    const out = await runCodeJevFanOut(
+      base,
+      [
+        { marketKey: "over_under", extraLines: true },
+        { marketKey: "match_result", extraLines: false },
+      ],
+      mapError,
+      async () => ({ ok: true })
+    );
+
+    expect(out.every((o) => o.ok)).toBe(true);
+    expect(judge).toHaveBeenCalledTimes(1);
+    expect(anthropicCreate).toHaveBeenCalledTimes(1);
+    expect(toolNameOf(anthropicCreate.mock.calls[0])).toBe("submit_narration");
+    const ou = rowsWhere(
+      (r) => "recommendation" in r && r.marketParams !== null
+    );
+    expect(ou).toHaveLength(1);
+    const line = (ou[0].marketParams as { line: number }).line;
+    expect([1.5, 2.5, 3.5]).toContain(line);
+    if (ou[0].recommendation !== "pass") {
+      expect(ou[0].oddAtRecommendation).toBe(
+        OU_BY_LINE[line][ou[0].recommendation as string].toFixed(3)
+      );
+    }
+  });
+
+  it("o topo de toBestBetView (a view real) é o mercado narrado", async () => {
+    const out = await runCodeJevFanOut(
+      base,
+      [
+        { marketKey: "btts", extraLines: false },
+        { marketKey: "over_under", extraLines: true },
+        { marketKey: "match_result", extraLines: false },
+      ],
+      mapError,
+      async () => ({ ok: true })
+    );
+
+    const view = toBestBetView(out, new Map());
+    expect(view.entries).toHaveLength(3);
+    const top = sortBestBetEntries(view.entries, "edge")[0];
+    const narrated = out.find((o) => o.ok && !o.sharesAiCall);
+    expect(narrated?.marketKey).toBe(top.marketKey);
+    // E o card do topo carrega o texto do narrador; os outros, o templado.
+    expect(top.analysis.rationale).toBe(narratorOutput.rationale);
+    for (const e of view.entries) {
+      if (e.marketKey === top.marketKey) continue;
+      expect(e.analysis.rationale).not.toBe(narratorOutput.rationale);
+    }
   });
 });

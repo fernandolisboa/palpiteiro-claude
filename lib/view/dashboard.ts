@@ -24,6 +24,7 @@ import {
   leagueToKey,
 } from "@/lib/format";
 import { getMarketPresentation } from "@/lib/view/markets/presentation";
+import { ownsAiCall } from "@/lib/view/owns-ai-call";
 import type { LeagueKey, Recommendation } from "@/lib/view/types";
 
 // Tokens pinados do over/under (paridade byte-idêntica). pass é market-agnóstico.
@@ -298,7 +299,10 @@ export function toPredictionDetailView(
     timeZone?: string;
   },
 ): PredictionDetailView {
-  const { prediction, match, outcome, aiCall } = detail;
+  const { prediction, match, outcome } = detail;
+  // Row templada do best bet code_jev (#512): a ai_call é a narração de outro
+  // mercado → nem custo/tokens/status nem payloads crus aparecem aqui.
+  const aiCall = ownsAiCall(prediction) ? detail.aiCall : null;
   const now = new Date();
   const score =
     match.homeScore !== null && match.awayScore !== null

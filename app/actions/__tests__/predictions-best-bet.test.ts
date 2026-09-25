@@ -684,7 +684,7 @@ describe("analyzeBestBet — motor code_jev (#512): 1 slot pelo grupo narrado", 
     const acquireSlot = mockCodeJevFanOut.mock.calls[0][3];
     mockRateLimit.mockClear();
     mockRateLimit.mockResolvedValueOnce(capped);
-    expect(await acquireSlot()).toBe(false);
+    expect(await acquireSlot()).toEqual({ ok: false, reason: undefined });
     expect(mockRateLimit).toHaveBeenCalledWith("u1", "admin");
   });
 

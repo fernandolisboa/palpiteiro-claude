@@ -8,6 +8,7 @@ import { auth } from "@/auth";
 import {
   MAX_ADDITIONAL_FETCHES,
   MAX_FANOUT_MARKETS,
+  ANALYSES_UNAVAILABLE_MESSAGE,
   RATE_LIMITED_MARKET_MESSAGE,
   capCandidates,
   groupSlotUnits,
@@ -434,8 +435,10 @@ export async function analyzeBestBet(
   // FanOutMarket — o MESMO valor alimenta o pré-warm e o predict (senão predict
   // resolveria um cartucho diferente do aquecido).
   const extraLinesEnabled = await getEnableOverUnderExtraLines();
-  // Motor (ADR 0041 §5), lido UMA vez por run (leitura grátis → antes do 1º slot) e
-  // fixado pro fan-out inteiro.
+  // Motor (ADR 0041 §5), lido UMA vez por run (leitura grátis → antes do 1º slot):
+  // decide a cobrança de slots e o fan-out. No code_jev ele fica fixado pro fan-out
+  // inteiro (predictForBestBet recebe o motor); no 'llm' cada predict() relê o flag
+  // (caminho de hoje).
   const engine = await readAnalysisEngine();
   const markets: FanOutMarket[] = candidates.map((c) => ({
     marketKey: c.key,
@@ -472,10 +475,7 @@ export async function analyzeBestBet(
     if (rl.reason === "fail-closed") {
       // KV ausente p/ não-admin: indisponível (não um teto real). Aborta o run inteiro
       // ANTES de qualquer spend (fail-closed só ocorre na 1ª call: sem KV não há limiter).
-      return {
-        ok: false,
-        error: "Análises temporariamente indisponíveis. Tente mais tarde.",
-      };
+      return { ok: false, error: ANALYSES_UNAVAILABLE_MESSAGE };
     }
     // Teto real atingido: para de consumir; este + a cauda ficam sem análise.
     capRl = rl;
@@ -549,7 +549,11 @@ export async function analyzeBestBet(
           fanOutBase,
           fanOut,
           friendlyMessageFromUnknown,
-          async () => (await checkAnalysisRateLimit(userId, role)).ok,
+          // Repassa o motivo: fail-closed vira "indisponível", não "limite atingido".
+          async () => {
+            const rl = await checkAnalysisRateLimit(userId, role);
+            return { ok: rl.ok, reason: rl.reason };
+          },
         )
       : await runFanOut(fanOutBase, fanOut, friendlyMessageFromUnknown);
   // Custo por análise bem-sucedida (lê a aiCall pra exibir).

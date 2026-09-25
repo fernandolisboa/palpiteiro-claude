@@ -16,7 +16,9 @@ import {
   groupSlotUnits,
   isCodeJevFanOutMarket,
   runCodeJevFanOut,
+  ANALYSES_UNAVAILABLE_MESSAGE,
   type FanOutMarket,
+  type SlotGrant,
 } from "@/lib/ai/best-bet";
 import {
   narratePendingPrediction,
@@ -157,7 +159,7 @@ describe("isCodeJevFanOutMarket / groupSlotUnits", () => {
 
 describe("runCodeJevFanOut — 1 narração por best bet", () => {
   it("narra SÓ o mercado do topo (maior edge); os demais persistem templados apontando pra narração", async () => {
-    const acquireSlot = vi.fn(async () => true);
+    const acquireSlot = vi.fn(async () => ({ ok: true }));
     const out = await runCodeJevFanOut(
       base,
       markets("over_under", "match_result", "btts"),
@@ -170,9 +172,7 @@ describe("runCodeJevFanOut — 1 narração por best bet", () => {
       expect(call[1].engine).toBe("code_jev");
     }
     // O MESMO memo de julgamentos pro run inteiro (1 JEV por jogo).
-    const memos = mockPredictForBestBet.mock.calls.map(
-      (c) => c[1].judgmentsMemo
-    );
+    const memos = mockPredictForBestBet.mock.calls.map((c) => c[1].runMemo);
     expect(new Set(memos).size).toBe(1);
 
     expect(mockNarrate).toHaveBeenCalledTimes(1);
@@ -207,7 +207,7 @@ describe("runCodeJevFanOut — 1 narração por best bet", () => {
       base,
       markets("btts", "match_result", "over_under"),
       mapError,
-      async () => true
+      async () => ({ ok: true })
     );
     expect(mockNarrate.mock.calls[0][0].marketKey).toBe("over_under");
   });
@@ -217,14 +217,14 @@ describe("runCodeJevFanOut — 1 narração por best bet", () => {
       base,
       markets("double_chance", "btts"),
       mapError,
-      async () => true
+      async () => ({ ok: true })
     );
     expect(mockNarrate).toHaveBeenCalledTimes(1);
     expect(mockNarrate.mock.calls[0][0].marketKey).toBe("btts");
   });
 
   it("mercado fora do code_jev (placar exato) roda o predict de sempre, sem o hook de slot", async () => {
-    const acquireSlot = vi.fn(async () => true);
+    const acquireSlot = vi.fn(async () => ({ ok: true }));
     const out = await runCodeJevFanOut(
       base,
       markets("over_under", "correct_score"),
@@ -244,9 +244,9 @@ describe("runCodeJevFanOut — 1 narração por best bet", () => {
       return { kind: "done", result: resultFor(args.marketKey!, "ac-llm") };
     });
     const acquireSlot = vi
-      .fn<() => Promise<boolean>>()
-      .mockResolvedValueOnce(true)
-      .mockResolvedValue(false);
+      .fn<() => Promise<SlotGrant>>()
+      .mockResolvedValueOnce({ ok: true })
+      .mockResolvedValue({ ok: false });
 
     const out = await runCodeJevFanOut(
       base,
@@ -265,12 +265,30 @@ describe("runCodeJevFanOut — 1 narração por best bet", () => {
     expect(mockNarrate).not.toHaveBeenCalled();
   });
 
+  it("limiter fail-closed no meio do run → 'indisponível', não 'limite atingido'", async () => {
+    mockPredictForBestBet.mockImplementation(async (args, opts) => {
+      await opts.beforeLlmPath?.();
+      return { kind: "done", result: resultFor(args.marketKey!, "ac-llm") };
+    });
+    const out = await runCodeJevFanOut(
+      base,
+      markets("over_under", "match_result"),
+      mapError,
+      async () => ({ ok: false, reason: "fail-closed" })
+    );
+    expect(out[1]).toEqual({
+      ok: false,
+      marketKey: "match_result",
+      message: ANALYSES_UNAVAILABLE_MESSAGE,
+    });
+  });
+
   it("slot do grupo gasto num caminho LLM e narração sem slot → pendentes viram não analisados, sem narrar", async () => {
     mockPredictForBestBet.mockImplementationOnce(async (args, opts) => {
       await opts.beforeLlmPath?.();
       return { kind: "done", result: resultFor(args.marketKey!, "ac-llm") };
     });
-    const acquireSlot = vi.fn(async () => false);
+    const acquireSlot = vi.fn(async () => ({ ok: false }));
 
     const out = await runCodeJevFanOut(
       base,
@@ -298,7 +316,7 @@ describe("runCodeJevFanOut — 1 narração por best bet", () => {
       base,
       markets("over_under", "match_result"),
       mapError,
-      async () => true
+      async () => ({ ok: true })
     );
     expect(mockPersist).not.toHaveBeenCalled();
     expect(out).toEqual([
@@ -328,7 +346,7 @@ describe("runCodeJevFanOut — 1 narração por best bet", () => {
       base,
       markets("over_under", "match_result", "btts"),
       mapError,
-      async () => true
+      async () => ({ ok: true })
     );
     expect(out.map((o) => (o.ok ? "ok" : o.message))).toEqual([
       "ok",

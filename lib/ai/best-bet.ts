@@ -9,7 +9,7 @@ import {
   persistPendingPrediction,
   predict,
   predictForBestBet,
-  type JudgmentsMemo,
+  type CodeJevRunMemo,
   type PendingCodeJevPrediction,
   type PredictResult,
 } from "./predict";
@@ -49,6 +49,14 @@ export type FanOutOutcome =
 // concedida no analyzeBestBet.
 export const RATE_LIMITED_MARKET_MESSAGE =
   "Limite diário atingido — não analisado.";
+
+// Limiter indisponível (KV ausente p/ não-admin, fail-closed): a mesma copy do
+// analyzeBestBet quando isso acontece antes do run.
+export const ANALYSES_UNAVAILABLE_MESSAGE =
+  "Análises temporariamente indisponíveis. Tente mais tarde.";
+
+// Resultado de um pedido de slot no meio do run (o RateLimitResult do caller).
+export type SlotGrant = { ok: boolean; reason?: "fail-closed" };
 
 /**
  * Aplica o cap retendo SEMPRE os mercados Tier-1 (cobertura universal:
@@ -152,12 +160,14 @@ export function groupSlotUnits<T>(
   return units;
 }
 
-// Slot de rate-limit negado no meio do run: o mercado vira "não analisado", sem
-// gasto.
+// Slot de rate-limit negado no meio do run: o mercado vira "não analisado" (ou
+// "indisponível" no fail-closed), sem gasto.
 class SlotDeniedError extends Error {
-  constructor() {
+  readonly failClosed: boolean;
+  constructor(failClosed: boolean) {
     super("daily analysis slot denied");
     this.name = "SlotDeniedError";
+    this.failClosed = failClosed;
   }
 }
 
@@ -181,7 +191,7 @@ export async function runCodeJevFanOut(
   base: FanOutBase,
   markets: FanOutMarket[],
   mapError: (err: unknown) => string,
-  acquireSlot: () => Promise<boolean>,
+  acquireSlot: () => Promise<SlotGrant>,
 ): Promise<FanOutOutcome[]> {
   // Na ordem dos mercados; null = decisão pendente até a fase de narração.
   const out: (FanOutOutcome | null)[] = [];
@@ -190,7 +200,9 @@ export async function runCodeJevFanOut(
     marketKey,
     message:
       err instanceof SlotDeniedError
-        ? RATE_LIMITED_MARKET_MESSAGE
+        ? err.failClosed
+          ? ANALYSES_UNAVAILABLE_MESSAGE
+          : RATE_LIMITED_MARKET_MESSAGE
         : mapError(err),
   });
 
@@ -200,10 +212,12 @@ export async function runCodeJevFanOut(
       groupSlotFree = false;
       return;
     }
-    if (!(await acquireSlot())) throw new SlotDeniedError();
+    const grant = await acquireSlot();
+    if (!grant.ok) throw new SlotDeniedError(grant.reason === "fail-closed");
   };
 
-  const memo: JudgmentsMemo = new Map();
+  // λ + JEV fixados no 1º mercado code_jev: 1 chamada JEV e 1 matriz por run.
+  const runMemo: CodeJevRunMemo = new Map();
   const pendings: { index: number; pending: PendingCodeJevPrediction }[] = [];
   for (const m of markets) {
     const args = { ...base, marketKey: m.marketKey, extraLines: m.extraLines };
@@ -214,7 +228,7 @@ export async function runCodeJevFanOut(
       }
       const outcome = await predictForBestBet(args, {
         engine: "code_jev",
-        judgmentsMemo: memo,
+        runMemo,
         beforeLlmPath: takeSlot,
       });
       if (outcome.kind === "done") {
@@ -254,6 +268,12 @@ export async function runCodeJevFanOut(
     return settled();
   }
 
+  // O escolhido persiste primeiro. Se só ELE falhar, os irmãos ainda persistem como
+  // templados ($0) e a narração paga não aparece em card nenhum — aceito: o custo
+  // segue em ai_calls (relatórios de custo), o mercado escolhido aparece como falha
+  // na view e o caso (insert de prediction falhando logo após o de ai_calls) é raro.
+  // Promover o 2º colocado a "dono" da chamada misturaria o texto de um mercado
+  // com a row de outro.
   for (const p of [chosen, ...others]) {
     const isChosen = p === chosen;
     try {

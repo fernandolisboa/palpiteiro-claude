@@ -185,6 +185,33 @@ function makeDetail(overrides: Partial<DashboardDetail> = {}): DashboardDetail {
 }
 
 describe("toPredictionDetailView", () => {
+  it("row templada do best bet code_jev (#512): sem a ai_call compartilhada (custo/tokens/payloads)", () => {
+    const base = makeDetail();
+    const templated = makeDetail({
+      prediction: {
+        ...base.prediction,
+        judgments: {
+          narration: "best_bet_template",
+        } as DashboardDetail["prediction"]["judgments"],
+      },
+    });
+    const v = toPredictionDetailView(templated, { includeRawPayloads: true });
+    expect(v.aiCall).toBeNull();
+    expect(v.rawPayloads).toBeNull();
+    // A que fez a própria narração segue mostrando a chamada.
+    const own = makeDetail({
+      prediction: {
+        ...base.prediction,
+        judgments: {
+          narration: "llm_call",
+        } as DashboardDetail["prediction"]["judgments"],
+      },
+    });
+    const ov = toPredictionDetailView(own, { includeRawPayloads: true });
+    expect(ov.aiCall?.costUsd).toBe("$0.014");
+    expect(ov.rawPayloads).not.toBeNull();
+  });
+
   it("hides raw payloads (system prompt) from non-admins", () => {
     const v = toPredictionDetailView(makeDetail(), {
       includeRawPayloads: false,
