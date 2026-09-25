@@ -13,7 +13,9 @@ import {
   TEMPERATURE_MAX,
   TEMPERATURE_MIN,
 } from "@/lib/ai/generation-params";
+import { isAnalysisEngine } from "@/lib/ai/engine/analysis-engine";
 import {
+  setAnalysisEngine,
   setDefaultModelId,
   setGenerationParams,
 } from "@/lib/db/queries/ai-config";
@@ -81,6 +83,30 @@ export async function updateGenerationParams(
   }
 
   await setGenerationParams({ maxTokens, effort, temperature }, session.user.id);
+  revalidatePath("/admin/settings");
+  return { ok: true };
+}
+
+export type UpdateAnalysisEngineResult = { ok: boolean; error?: string };
+
+// Motor de análise (ADR 0041 §5, #511): 'llm' (atual) ou 'code_jev' (código + JEV
+// decidem, LLM narra). Vale pra TODA análise nova, sem deploy; voltar é trocar de novo.
+export async function updateAnalysisEngine(
+  _prev: UpdateAnalysisEngineResult | null,
+  formData: FormData,
+): Promise<UpdateAnalysisEngineResult> {
+  const session = await auth();
+  // Defense-in-depth igual às actions acima: role revalidada AQUI.
+  if (session?.user?.role !== "admin" || !session.user.id) {
+    return { ok: false, error: "Acesso negado." };
+  }
+
+  const engine = String(formData.get("analysisEngine") ?? "");
+  if (!isAnalysisEngine(engine)) {
+    return { ok: false, error: "Motor de análise inválido." };
+  }
+
+  await setAnalysisEngine(engine, session.user.id);
   revalidatePath("/admin/settings");
   return { ok: true };
 }

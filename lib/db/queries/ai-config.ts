@@ -4,6 +4,11 @@ import { aiConfig } from "@/db/schema";
 import { db } from "@/lib/db";
 import { DEFAULT_MODEL_ID, isAIModelId, type AIModelId } from "@/lib/ai/models";
 import {
+  DEFAULT_ANALYSIS_ENGINE,
+  isAnalysisEngine,
+  type AnalysisEngine,
+} from "@/lib/ai/engine/analysis-engine";
+import {
   GENERATION_PARAM_DEFAULTS,
   isEffort,
   isValidMaxTokens,
@@ -216,4 +221,45 @@ export async function getEnableKellyStaking(): Promise<boolean> {
     .where(eq(aiConfig.id, 1))
     .limit(1);
   return rows[0]?.enabled ?? true;
+}
+
+/**
+ * Motor de análise (ADR 0041 §5, #511): 'llm' (cartucho de mercado decide — caminho
+ * de hoje) ou 'code_jev' (código + julgamentos JEV decidem, LLM narra). Sem row ou
+ * valor persistido inválido → 'llm'.
+ */
+export async function getAnalysisEngine(): Promise<AnalysisEngine> {
+  const rows = await db
+    .select({ analysisEngine: aiConfig.analysisEngine })
+    .from(aiConfig)
+    .where(eq(aiConfig.id, 1))
+    .limit(1);
+  const stored = rows[0]?.analysisEngine;
+  return isAnalysisEngine(stored) ? stored : DEFAULT_ANALYSIS_ENGINE;
+}
+
+/**
+ * Upsert do motor de análise (single-row id=1), editado em /admin/settings. Grava
+ * quem alterou pra auditoria. O valor já vem validado da server action.
+ */
+export async function setAnalysisEngine(
+  engine: AnalysisEngine,
+  userId: string,
+): Promise<void> {
+  await db
+    .insert(aiConfig)
+    .values({
+      id: 1,
+      defaultModelId: DEFAULT_MODEL_ID,
+      analysisEngine: engine,
+      updatedByUserId: userId,
+    })
+    .onConflictDoUpdate({
+      target: aiConfig.id,
+      set: {
+        analysisEngine: engine,
+        updatedByUserId: userId,
+        updatedAt: new Date(),
+      },
+    });
 }

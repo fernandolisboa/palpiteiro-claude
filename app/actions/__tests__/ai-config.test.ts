@@ -4,16 +4,19 @@ import type { Session } from "next-auth";
 vi.mock("next/cache", () => ({ revalidatePath: vi.fn() }));
 vi.mock("@/auth", () => ({ auth: vi.fn() }));
 vi.mock("@/lib/db/queries/ai-config", () => ({
+  setAnalysisEngine: vi.fn(),
   setDefaultModelId: vi.fn(),
   setGenerationParams: vi.fn(),
 }));
 
 import {
+  updateAnalysisEngine,
   updateDefaultModel,
   updateGenerationParams,
 } from "@/app/actions/ai-config";
 import { auth } from "@/auth";
 import {
+  setAnalysisEngine,
   setDefaultModelId,
   setGenerationParams,
 } from "@/lib/db/queries/ai-config";
@@ -21,6 +24,7 @@ import {
 const mockAuth = auth as unknown as Mock<() => Promise<Session | null>>;
 const mockSet = vi.mocked(setDefaultModelId);
 const mockSetParams = vi.mocked(setGenerationParams);
+const mockSetEngine = vi.mocked(setAnalysisEngine);
 
 const ADMIN = {
   user: { id: "u1", email: "a@b.com", role: "admin" },
@@ -42,6 +46,7 @@ beforeEach(() => {
   mockAuth.mockReset();
   mockSet.mockReset();
   mockSetParams.mockReset();
+  mockSetEngine.mockReset();
 });
 
 describe("updateDefaultModel", () => {
@@ -162,5 +167,37 @@ describe("updateGenerationParams", () => {
     );
     expect(res.ok).toBe(false);
     expect(mockSetParams).not.toHaveBeenCalled();
+  });
+});
+
+describe("updateAnalysisEngine (#511)", () => {
+  it("não-admin é rejeitado e o setter não é chamado", async () => {
+    mockAuth.mockResolvedValue(USER);
+    const res = await updateAnalysisEngine(
+      null,
+      form({ analysisEngine: "code_jev" }),
+    );
+    expect(res.ok).toBe(false);
+    expect(mockSetEngine).not.toHaveBeenCalled();
+  });
+
+  it("admin + motor válido → setter chamado com (engine, userId)", async () => {
+    mockAuth.mockResolvedValue(ADMIN);
+    const res = await updateAnalysisEngine(
+      null,
+      form({ analysisEngine: "code_jev" }),
+    );
+    expect(res).toEqual({ ok: true });
+    expect(mockSetEngine).toHaveBeenCalledWith("code_jev", "u1");
+  });
+
+  it("admin + motor inválido → erro, setter não chamado", async () => {
+    mockAuth.mockResolvedValue(ADMIN);
+    const res = await updateAnalysisEngine(
+      null,
+      form({ analysisEngine: "jev_direto" }),
+    );
+    expect(res.ok).toBe(false);
+    expect(mockSetEngine).not.toHaveBeenCalled();
   });
 });

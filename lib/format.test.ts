@@ -11,6 +11,7 @@ import {
   formatKickoffAbsolute,
   formatKickoffRelative,
   formatModelName,
+  modelIdFromVersion,
   formatOdd,
   formatPct,
   formatRelativeAgo,
@@ -241,6 +242,17 @@ describe("formatModelName", () => {
   });
   it("passes through unknown format", () => {
     expect(formatModelName("custom-model")).toBe("custom-model");
+  });
+  it("ignora o sufixo do motor code_jev (#511)", () => {
+    expect(
+      formatModelName(
+        "claude-sonnet-4-5-20250929;engine=code_jev;lambda=heuristic;judg=jev_judgments_v1;w=judgment_weights_v1",
+      ),
+    ).toBe("claude-sonnet-4.5");
+    expect(
+      modelIdFromVersion("claude-haiku-4-5;engine=code_jev;lambda=heuristic"),
+    ).toBe("claude-haiku-4-5");
+    expect(modelIdFromVersion("claude-haiku-4-5")).toBe("claude-haiku-4-5");
   });
 });
 

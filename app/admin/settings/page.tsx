@@ -2,10 +2,12 @@ import { DefinitionRow } from "@/components/admin/definition-row";
 import { PageHeading } from "@/components/admin/page-heading";
 import { SELECTABLE_MODELS } from "@/lib/ai/models";
 import {
+  getAnalysisEngine,
   getDefaultModelId,
   getGenerationParams,
 } from "@/lib/db/queries/ai-config";
 
+import { AnalysisEngineForm } from "./analysis-engine-form";
 import { DefaultModelForm } from "./default-model-form";
 import { GenerationParamsForm } from "./generation-params-form";
 
@@ -15,6 +17,7 @@ export const dynamic = "force-dynamic";
 export default async function AdminSettingsPage() {
   const current = await getDefaultModelId();
   const genParams = await getGenerationParams();
+  const analysisEngine = await getAnalysisEngine();
 
   return (
     <div className="min-h-screen bg-background text-foreground">
@@ -71,6 +74,13 @@ export default async function AdminSettingsPage() {
             parâmetros de geração
           </h2>
           <GenerationParamsForm current={genParams} />
+        </section>
+
+        <section className="pt-10">
+          <h2 className="pb-4 font-mono text-eyebrow uppercase tracking-label text-muted-foreground">
+            motor de análise
+          </h2>
+          <AnalysisEngineForm current={analysisEngine} />
         </section>
       </div>
     </div>

@@ -10,6 +10,7 @@ import {
   formatPct,
   formatRelativeAgo,
   formatStakeUnits,
+  modelIdFromVersion,
 } from "@/lib/format";
 import {
   computeEvPerUnit,
@@ -523,7 +524,7 @@ export function toMarketAnalysisSections(
       // modelVersion CRU (AIModelId) — semeia o dropdown do footer com o modelo que
       // rodou aquela análise (#244). initialModelOverride cai pro "default" se for um id
       // aposentado/fora-da-audiência (histórica), sem <option> órfã.
-      modelId: row.prediction.modelVersion,
+      modelId: modelIdFromVersion(row.prediction.modelVersion),
       view: toAnalysisViewFromPrediction(row, now, timeZone),
     });
   }

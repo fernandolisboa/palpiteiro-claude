@@ -327,7 +327,15 @@ export function formatRelativeAgo(
  * versão pra exibição mais compacta sem perder a identidade do modelo.
  */
 export function formatModelName(modelVersion: string): string {
-  const match = /^(claude-[a-z]+)-(\d+)-(\d+)(?:-\d+)?$/.exec(modelVersion);
-  if (!match) return modelVersion;
+  // O motor code_jev (ADR 0041, #511) grava "<modelId>;engine=code_jev;…" — exibe só o modelo.
+  const modelId = modelIdFromVersion(modelVersion);
+  const match = /^(claude-[a-z]+)-(\d+)-(\d+)(?:-\d+)?$/.exec(modelId);
+  if (!match) return modelId;
   return `${match[1]}-${match[2]}.${match[3]}`;
+}
+
+// predictions.modelVersion = o AIModelId, seguido de ";chave=valor" do motor quando a
+// análise veio do code_jev (ADR 0041 §5). Devolve só o id do modelo.
+export function modelIdFromVersion(modelVersion: string): string {
+  return modelVersion.split(";")[0];
 }
