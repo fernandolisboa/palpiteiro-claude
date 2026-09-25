@@ -5,14 +5,9 @@ import {
   type CalibrationGroup,
 } from "@/lib/calibration/derive";
 import type { ReliabilityBin } from "@/lib/calibration/metrics";
-import {
-  evaluateKellyGate,
-  type KellyGate,
-} from "@/lib/calibration/phase-c-gate";
-import { enrichDashboardRowsWithClosing } from "@/lib/dashboard/clv-enrich";
-import { clvNoVigDeltas, keepLatestPerMatch } from "@/lib/dashboard/kpis";
+import { loadKellyGate } from "@/lib/calibration/kelly-live";
+import type { KellyGate } from "@/lib/calibration/phase-c-gate";
 import { getOverUnderCalibrationRows } from "@/lib/db/queries/calibration";
-import { getAllDashboardRows } from "@/lib/db/queries/dashboard";
 
 export const dynamic = "force-dynamic";
 
@@ -30,15 +25,7 @@ const fmtPct = (n: number | null) =>
 export default async function AdminCalibrationPage() {
   const rows = await getOverUnderCalibrationRows();
   const { overall, byVersion } = deriveCalibration(rows);
-  // CLV das recomendações de TODOS os usuários (mede o modelo), deduped por
-  // (jogo, mercado) como o dashboard (ADR 0020).
-  const withClosing = keepLatestPerMatch(
-    await enrichDashboardRowsWithClosing(await getAllDashboardRows()),
-  );
-  const gate = evaluateKellyGate({
-    clvNoVigDeltasPp: clvNoVigDeltas(withClosing),
-    calibrationRows: rows,
-  });
+  const gate = await loadKellyGate();
   const betCount = rows.filter((r) => r.isBet).length;
 
   return (

@@ -1,0 +1,1 @@
+ALTER TABLE "ai_config" ADD COLUMN IF NOT EXISTS "enable_kelly_staking" boolean DEFAULT true NOT NULL;
