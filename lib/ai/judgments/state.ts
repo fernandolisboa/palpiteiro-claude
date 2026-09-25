@@ -35,7 +35,7 @@ export type JudgmentAbsenceInput = {
   isTopScorer?: boolean;
 };
 
-function normalizePersonName(name: string): string {
+export function normalizePersonName(name: string): string {
   return name
     .normalize("NFD")
     .replace(/[̀-ͯ]/g, "")

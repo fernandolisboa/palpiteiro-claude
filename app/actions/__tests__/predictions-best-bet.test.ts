@@ -42,8 +42,20 @@ vi.mock("@/lib/db/queries/ai-config", () => ({
 // aqui (a corretude do gerador é coberta por generate-palpites.test). summarize roda
 // REAL (lê os outcomes do fan-out). toPalpiteHeadlineView roda REAL (puro).
 vi.mock("@/lib/ai/palpites", () => ({ generatePalpites: vi.fn() }));
+// Motor (ADR 0041 §5): default 'llm' (o fan-out de hoje). O fan-out code_jev (#512) é
+// mockado aqui — a orquestração real é coberta em best-bet-code-jev.test e
+// predict.code-jev.test; aqui trava a cobrança de slots e o repasse.
+vi.mock("@/lib/ai/engine/analysis-engine-flag", () => ({
+  readAnalysisEngine: vi.fn(),
+}));
+vi.mock("@/lib/ai/best-bet", async (importOriginal) => {
+  const actual = await importOriginal<typeof import("@/lib/ai/best-bet")>();
+  return { ...actual, runCodeJevFanOut: vi.fn() };
+});
 
 import { analyzeBestBet } from "@/app/actions/predictions";
+import { runCodeJevFanOut } from "@/lib/ai/best-bet";
+import { readAnalysisEngine } from "@/lib/ai/engine/analysis-engine-flag";
 import { generatePalpites } from "@/lib/ai/palpites";
 import { auth } from "@/auth";
 import { predict } from "@/lib/ai/predict";
@@ -68,6 +80,8 @@ const mockGetAiCall = vi.mocked(getAiCallById);
 const mockRateLimit = vi.mocked(checkAnalysisRateLimit);
 const mockExtraLinesFlag = vi.mocked(getEnableOverUnderExtraLines);
 const mockBestBetFlag = vi.mocked(getEnableBestBetFanOut);
+const mockEngine = vi.mocked(readAnalysisEngine);
+const mockCodeJevFanOut = vi.mocked(runCodeJevFanOut);
 
 const ALLOWED_ADMIN = { role: "admin" as const, allowed: true };
 
@@ -219,6 +233,9 @@ beforeEach(() => {
   mockBestBetFlag.mockResolvedValue(true);
   mockGeneratePalpites.mockReset();
   mockGeneratePalpites.mockResolvedValue(palpiteResult());
+  mockEngine.mockReset();
+  mockEngine.mockResolvedValue("llm");
+  mockCodeJevFanOut.mockReset();
 });
 
 describe("analyzeBestBet — gate order (rate-limit é o ÚLTIMO antes do spend)", () => {
@@ -621,5 +638,97 @@ describe("analyzeBestBet — passo de síntese (#353, palpite-first)", () => {
     const res = await analyzeBestBet(null, form({ matchId: VALID_MATCH_ID }));
     expect(res.ok).toBe(false);
     expect(mockGeneratePalpites).not.toHaveBeenCalled();
+  });
+});
+
+describe("analyzeBestBet — motor code_jev (#512): 1 slot pelo grupo narrado", () => {
+  const ok = { ok: true, limit: 20, remaining: 19, reset: 0 };
+  const capped = { ok: false, limit: 7, remaining: 0, reset: 0 };
+  const CORRECT_SCORE_MARKET = { key: "correct_score", label: "Placar exato" };
+
+  beforeEach(() => {
+    mockEngine.mockResolvedValue("code_jev");
+    // Só o 1º mercado foi narrado; os demais compartilham a ai_call dele.
+    mockCodeJevFanOut.mockImplementation(async (_base, markets) =>
+      markets.map((m, i) => ({
+        ok: true as const,
+        marketKey: m.marketKey,
+        result: resultFor(m.marketKey),
+        ...(i === 0 ? {} : { sharesAiCall: true as const }),
+      })),
+    );
+  });
+
+  it("WC (4 mercados code_jev) → 1 slot, fan-out code_jev com os 4, custo só no narrado", async () => {
+    const res = await analyzeBestBet(null, form({ matchId: VALID_MATCH_ID }));
+    expect(mockRateLimit).toHaveBeenCalledTimes(1);
+    expect(mockPredict).not.toHaveBeenCalled();
+    expect(mockCodeJevFanOut).toHaveBeenCalledTimes(1);
+    const [base, markets] = mockCodeJevFanOut.mock.calls[0];
+    expect(base).toMatchObject({ matchId: VALID_MATCH_ID, userId: "u1", isAdmin: true });
+    expect(markets.map((m) => m.marketKey)).toEqual([
+      "over_under",
+      "match_result",
+      "btts",
+      "double_chance",
+    ]);
+    // Custo lido só da ai_call do narrado; os outros cards ficam sem custo próprio.
+    expect(mockGetAiCall).toHaveBeenCalledTimes(1);
+    expect(mockGetAiCall).toHaveBeenCalledWith("ac-over_under");
+    expect(res.ok).toBe(true);
+    if (res.ok) expect(res.view.entries).toHaveLength(4);
+  });
+
+  it("o acquireSlot do run cobra 1 slot real do mesmo usuário", async () => {
+    await analyzeBestBet(null, form({ matchId: VALID_MATCH_ID }));
+    const acquireSlot = mockCodeJevFanOut.mock.calls[0][3];
+    mockRateLimit.mockClear();
+    mockRateLimit.mockResolvedValueOnce(capped);
+    expect(await acquireSlot()).toBe(false);
+    expect(mockRateLimit).toHaveBeenCalledWith("u1", "admin");
+  });
+
+  it("mercado fora do code_jev (placar exato) cobra o próprio slot; sem budget → não analisado", async () => {
+    mockGetMatchById.mockResolvedValue(matchInLeague("brasileirao_a"));
+    mockMarketsForAudience.mockResolvedValue([
+      OVER_UNDER_MARKET,
+      CORRECT_SCORE_MARKET,
+      MATCH_RESULT_MARKET,
+    ]);
+    mockRateLimit.mockResolvedValueOnce(ok).mockResolvedValue(capped);
+
+    const res = await analyzeBestBet(null, form({ matchId: VALID_MATCH_ID }));
+
+    // Unidades: [over_under + match_result] (grupo), [correct_score] → 2 tentativas.
+    expect(mockRateLimit).toHaveBeenCalledTimes(2);
+    expect(
+      mockCodeJevFanOut.mock.calls[0][1].map((m) => m.marketKey),
+    ).toEqual(["over_under", "match_result"]);
+    expect(res.ok).toBe(true);
+    if (res.ok) {
+      expect(res.view.errors).toEqual([
+        {
+          marketKey: "correct_score",
+          marketLabel: expect.any(String),
+          message: "Limite diário atingido — não analisado.",
+        },
+      ]);
+    }
+  });
+
+  it("budget esgotado → {ok:false}, ZERO spend", async () => {
+    mockRateLimit.mockResolvedValue(capped);
+    const res = await analyzeBestBet(null, form({ matchId: VALID_MATCH_ID }));
+    expect(res.ok).toBe(false);
+    expect(mockCodeJevFanOut).not.toHaveBeenCalled();
+    expect(mockEnsureOdds).not.toHaveBeenCalled();
+  });
+
+  it("motor 'llm' → fan-out de hoje (1 slot por mercado), code_jev nunca chamado", async () => {
+    mockEngine.mockResolvedValue("llm");
+    await analyzeBestBet(null, form({ matchId: VALID_MATCH_ID }));
+    expect(mockRateLimit).toHaveBeenCalledTimes(4);
+    expect(mockPredict).toHaveBeenCalledTimes(4);
+    expect(mockCodeJevFanOut).not.toHaveBeenCalled();
   });
 });

@@ -15,9 +15,14 @@ function canonicalJson(value: unknown): string {
   return JSON.stringify(value);
 }
 
+// sha256 do JSON canônico de qualquer valor JSON-serializável.
+export function canonicalHash(value: unknown): string {
+  return createHash("sha256").update(canonicalJson(value)).digest("hex");
+}
+
 // Hash estável do `state` enviado ao JEV (sha256 do JSON canônico). Identifica
 // "a mesma pergunta sobre o mesmo jogo": o predict reusa as respostas de uma
 // predição recente com o mesmo hash em vez de chamar o JEV de novo (ADR 0041 §1).
 export function judgmentStateHash(state: JudgmentState): string {
-  return createHash("sha256").update(canonicalJson(state)).digest("hex");
+  return canonicalHash(state);
 }

@@ -55,6 +55,7 @@ import {
   truncate,
 } from "./ai-call-logging";
 import { calculateCost } from "./cost";
+import type { AnalysisEngine } from "./engine/analysis-engine";
 import { readAnalysisEngine } from "./engine/analysis-engine-flag";
 import {
   isCodeJevMarket,
@@ -63,7 +64,10 @@ import {
 } from "./engine/code-jev";
 import {
   buildMatchJudgmentInput,
+  judgmentInputFingerprint,
   previousFixture,
+  type MatchJudgmentData,
+  type MatchJudgmentInput,
 } from "./engine/judgment-input";
 import {
   resolveModelScoreline,
@@ -210,14 +214,130 @@ function findMatchingEvent(
 
 // ─── Public API ──────────────────────────────────────────────────────────────
 
-export async function predict({
-  matchId,
-  userId,
-  isAdmin,
-  modelOverride,
-  marketKey = "over_under",
-  extraLines = false,
-}: PredictArgs): Promise<PredictResult> {
+export async function predict(args: PredictArgs): Promise<PredictResult> {
+  const outcome = await runPredict(args, {});
+  if (outcome.kind !== "done") {
+    // Inalcançável: sem `deferNarration`, o ramo code_jev narra e persiste.
+    throw new PredictError("predict: decisão code_jev pendente sem pedido");
+  }
+  return outcome.result;
+}
+
+// ─── Best bet no motor code_jev (ADR 0041 §4, #512) ──────────────────────────
+
+// Julgamentos JEV já resolvidos NESTE run de best bet, pela impressão digital dos
+// insumos (judgmentInputFingerprint). Um mercado seguinte com os mesmos insumos
+// reusa tudo em memória: sem busca de escalação anterior, sem lookup de reuso, sem
+// chamada JEV.
+export type JudgmentsMemo = Map<
+  string,
+  { input: MatchJudgmentInput; run: JudgmentRun }
+>;
+
+export type BestBetPredictOptions = {
+  // Motor fixado pelo orquestrador (lido UMA vez por run), pra um flip do flag no
+  // meio do fan-out não misturar motores.
+  engine: AnalysisEngine;
+  judgmentsMemo: JudgmentsMemo;
+  // Chamado logo ANTES da chamada paga quando o mercado cai no caminho LLM (λ
+  // indisponível), depois das falhas pré-gasto. Lança pra abortar sem gasto (slot
+  // negado).
+  beforeLlmPath?: () => Promise<void>;
+};
+
+// Decisão code_jev tomada, gateada e com a narração ADIADA (nada persistido ainda).
+// O orquestrador escolhe UM mercado pra narrar (1 chamada paga) e persiste os
+// demais com o racional templado.
+export type PendingCodeJevPrediction = {
+  marketKey: string;
+  // Os MESMOS valores que a row vai gravar (toFixed de persistPrediction) → o rank
+  // calculado daqui é idêntico ao que a view calcula da row persistida.
+  rankInput: {
+    recommendation: string;
+    confidencePct: string;
+    oddAtRecommendation: string | null;
+    selections: PredictResult["selections"];
+  };
+  model: AIModel;
+  userId: string;
+  matchId: string;
+  narratorDecision: NarratorDecision;
+  narratorContext: NarratorContext;
+  persist: Omit<PersistArgs, "aiCallId" | "rationale" | "keyFactors">;
+};
+
+export type PredictOutcome =
+  | { kind: "done"; result: PredictResult }
+  | { kind: "pending"; pending: PendingCodeJevPrediction };
+
+/**
+ * Porta do best bet (#512): igual ao predict, mas no motor code_jev devolve a
+ * decisão PENDENTE (sem narrar nem persistir). Mercado que cai no caminho LLM roda
+ * inteiro (pago, persistido) e volta `done`.
+ */
+export async function predictForBestBet(
+  args: PredictArgs,
+  opts: BestBetPredictOptions,
+): Promise<PredictOutcome> {
+  return runPredict(args, { ...opts, deferNarration: true });
+}
+
+/**
+ * A ÚNICA chamada paga do best bet code_jev: narra a decisão escolhida (logada em
+ * ai_calls). Nunca bloqueia: falha do narrador → racional templado. Só lança se o
+ * insert de ai_calls falhar.
+ */
+export async function narratePendingPrediction(
+  pending: PendingCodeJevPrediction,
+): Promise<{ aiCallId: string; output: NarratorOutput }> {
+  return narrateDecision({
+    model: pending.model,
+    userId: pending.userId,
+    matchId: pending.matchId,
+    decision: pending.narratorDecision,
+    context: pending.narratorContext,
+  });
+}
+
+/**
+ * Persiste uma decisão pendente. `narration` = a saída da chamada narradora DESTE
+ * mercado; ausente = mercado não escolhido → racional templado em código (custo
+ * zero), apontando pra row de ai_calls da narração do run (`aiCallId`).
+ */
+export async function persistPendingPrediction(
+  pending: PendingCodeJevPrediction,
+  args: { aiCallId: string; narration?: NarratorOutput },
+): Promise<PredictResult> {
+  const text =
+    args.narration ?? narratorCartridge.fallback(pending.narratorDecision);
+  const judgments = pending.persist.judgments;
+  return persistPrediction({
+    ...pending.persist,
+    aiCallId: args.aiCallId,
+    rationale: text.rationale,
+    keyFactors: text.key_factors,
+    judgments: judgments && {
+      ...judgments,
+      narration: args.narration ? "llm_call" : "best_bet_template",
+    },
+  });
+}
+
+type RunPredictOptions = Partial<BestBetPredictOptions> & {
+  deferNarration?: boolean;
+};
+
+async function runPredict(
+  {
+    matchId,
+    userId,
+    isAdmin,
+    modelOverride,
+    marketKey = "over_under",
+    extraLines = false,
+  }: PredictArgs,
+  opts: RunPredictOptions,
+): Promise<PredictOutcome> {
   // Cartucho de mercado (ADR 0017): resolve por marketKey (throw em desconhecido).
   // Read puro — roda ANTES de qualquer chamada paga; predict NÃO ramifica por
   // `if (market === X)`, todo o comportamento específico vem do cartucho. `extraLines`
@@ -672,7 +792,7 @@ export async function predict({
   //     'llm', ou em mercado não precificável → segue o caminho LLM abaixo, intacto.
   const engineScoreline =
     isCodeJevMarket(cartridge.descriptor) &&
-    (await readAnalysisEngine()) === "code_jev"
+    (opts.engine ?? (await readAnalysisEngine())) === "code_jev"
       ? resolveModelScoreline({
           standing: standings,
           homeTeam: match.homeTeam,
@@ -696,33 +816,25 @@ export async function predict({
         ];
 
     // JEV: uma chamada por JOGO (ADR 0041 §1), mas predict() roda por MERCADO (o
-    // fan-out chama N vezes). runJudgments reusa as respostas de uma predição
-    // recente do mesmo jogo com o mesmo state; só chama o JEV (fail-open, logado)
-    // quando não há.
-    const judgmentInput = buildMatchJudgmentInput({
-      league: match.league,
-      kickoffAt: match.kickoffAt,
-      homeTeam: match.homeTeam,
-      awayTeam: match.awayTeam,
-      injuries: injuries.data,
-      lineups,
-      previousLineups: await fetchPreviousLineups({
-        provider,
+    // fan-out chama N vezes). No best bet, o memo do run reusa em memória; senão
+    // runJudgments reusa as respostas de uma predição recente do mesmo jogo com o
+    // mesmo state; só chama o JEV (fail-open, logado) quando não há.
+    const { input: judgmentInput, run: jev } = await resolveMatchJudgments({
+      userId,
+      matchId,
+      provider,
+      memo: opts.judgmentsMemo,
+      data: {
+        league: match.league,
         kickoffAt: match.kickoffAt,
         homeTeam: match.homeTeam,
         awayTeam: match.awayTeam,
+        injuries: injuries.data,
+        lineups,
         homeForm,
         awayForm,
-        injuries: injuries.data,
-      }),
-      homeForm,
-      awayForm,
-      standings,
-    });
-    const jev = await runJudgments({
-      userId,
-      matchId,
-      stateInput: judgmentInput.stateInput,
+        standings,
+      },
     });
 
     const minEdgePp = cartridge.descriptor.minEdgePp ?? MIN_EDGE_PP;
@@ -786,52 +898,72 @@ export async function predict({
       oddByKey,
       minEdgePp,
     });
-    const narration = await narrateDecision({
-      model,
-      userId,
-      matchId,
-      decision: narratorDecision,
-      context: buildNarratorContext({
-        league: match.league,
-        kickoffAt: match.kickoffAt,
-        venue: fixture.venue,
-        homeTeam: match.homeTeam,
-        awayTeam: match.awayTeam,
-        standings,
-        homeForm,
-        awayForm,
-        h2h,
-        absencesAvailable: !injuries.unavailable,
-        absences: judgmentInput.absences,
-      }),
+    const narratorContext = buildNarratorContext({
+      league: match.league,
+      kickoffAt: match.kickoffAt,
+      venue: fixture.venue,
+      homeTeam: match.homeTeam,
+      awayTeam: match.awayTeam,
+      standings,
+      homeForm,
+      awayForm,
+      h2h,
+      absencesAvailable: !injuries.unavailable,
+      absences: judgmentInput.absences,
     });
 
     const recModelProb = decision.recModelProb;
-    return persistPrediction({
-      matchId,
+    const pending: PendingCodeJevPrediction = {
+      marketKey: cartridge.marketKey,
+      rankInput: {
+        recommendation: decision.side,
+        confidencePct: confidencePct.toFixed(2),
+        oddAtRecommendation: decision.oddAtRec?.toFixed(3) ?? null,
+        selections: selectionKeys.map((key) => ({
+          key,
+          modelProbPct: engine.modelProbByKey[key],
+          odd: oddByKey[key] ?? null,
+        })),
+      },
+      model,
       userId,
-      aiCallId: narration.aiCallId,
-      cartridge,
-      catalog,
-      selectionKeys,
-      oddByKey,
-      modelProbByKey: engine.modelProbByKey,
-      marketParams,
-      decision,
-      confidencePct,
-      rationale: narration.output.rationale,
-      keyFactors: narration.output.key_factors,
-      // Odd mínima em que o lado ainda tem edge ≥ piso: 100 / (P_modelo − piso).
-      minimumOdd:
-        recModelProb !== null && recModelProb - minEdgePp > 0
-          ? 100 / (recModelProb - minEdgePp)
-          : undefined,
-      bookmaker: oddsBundle.bookmakerTitle,
-      modelVersion: codeJevModelVersion(model.id, engineScoreline),
-      promptVersion: narratorCartridge.version,
-      judgments: toPredictionJudgments(engineScoreline, engine, jev),
-      labelByKey: null,
-    });
+      matchId,
+      narratorDecision,
+      narratorContext,
+      persist: {
+        matchId,
+        userId,
+        cartridge,
+        catalog,
+        selectionKeys,
+        oddByKey,
+        modelProbByKey: engine.modelProbByKey,
+        marketParams,
+        decision,
+        confidencePct,
+        // Odd mínima em que o lado ainda tem edge ≥ piso: 100 / (P_modelo − piso).
+        minimumOdd:
+          recModelProb !== null && recModelProb - minEdgePp > 0
+            ? 100 / (recModelProb - minEdgePp)
+            : undefined,
+        bookmaker: oddsBundle.bookmakerTitle,
+        modelVersion: codeJevModelVersion(model.id, engineScoreline),
+        promptVersion: narratorCartridge.version,
+        judgments: toPredictionJudgments(engineScoreline, engine, jev),
+        labelByKey: null,
+      },
+    };
+    // Best bet (#512): o orquestrador decide qual mercado narra (1 chamada paga).
+    if (opts.deferNarration) return { kind: "pending", pending };
+
+    const narration = await narratePendingPrediction(pending);
+    return {
+      kind: "done",
+      result: await persistPendingPrediction(pending, {
+        aiCallId: narration.aiCallId,
+        narration: narration.output,
+      }),
+    };
   }
 
   // 6. Monta o input do cartucho. Args comuns (sports-data) idênticos pros dois
@@ -1000,6 +1132,10 @@ export async function predict({
     });
     throw new PredictError(noKeyMsg, { provider: providerKey, model: model.id });
   }
+  // Mercado que cai no caminho LLM dentro de um best bet code_jev (λ indisponível):
+  // o orquestrador cobra o slot desta chamada paga logo ANTES dela (#512), depois de
+  // todas as falhas pré-gasto. Fora do best bet o hook não existe (caminho de hoje).
+  if (opts.beforeLlmPath) await opts.beforeLlmPath();
   const result = await aiProvider.runAnalysis(analysisRequest);
   const latencyMs = result.latencyMs;
   if (!result.ok) {
@@ -1180,7 +1316,7 @@ export async function predict({
     confidencePct: output.confidence_pct,
   });
 
-  return persistPrediction({
+  const persisted = await persistPrediction({
     matchId,
     userId,
     aiCallId: aiCallRow.id,
@@ -1203,6 +1339,7 @@ export async function predict({
       ? Object.fromEntries(scorerBundle!.players.map((p) => [p.key, p.label]))
       : null,
   });
+  return { kind: "done", result: persisted };
 }
 
 // ─── Decisão + persistência (compartilhadas pelos motores llm e code_jev) ────
@@ -1536,6 +1673,8 @@ async function runJudgments(args: {
     matchId: args.matchId,
     judgmentsVersion: JUDGMENTS_VERSION,
     weightsVersion: JUDGMENT_WEIGHTS_VERSION,
+    // Respostas de outro modelo JEV (upgrade do pin) nunca são reusadas.
+    jevModel: JUDGMENT_MODEL_ID,
     stateHash,
     since: new Date(Date.now() - JUDGMENT_REUSE_WINDOW_MS),
   }).catch((err: unknown) => {
@@ -1619,6 +1758,46 @@ async function runJudgments(args: {
     aiCallId,
     reusedFromPredictionId: null,
   };
+}
+
+// Input do state JEV + julgamentos do jogo. Com `memo` (best bet, #512), a impressão
+// digital dos insumos (calculada SEM a escalação anterior) acha o que um mercado
+// anterior do MESMO run já resolveu: sem busca de escalação, sem lookup e sem
+// chamada. O reuso entre runs (runJudgments) segue chaveado pelo stateHash, que
+// depende da escalação anterior (papel do desfalque) — por isso lá a busca vem
+// antes do lookup.
+async function resolveMatchJudgments(args: {
+  userId: string;
+  matchId: string;
+  provider: SportsDataProvider;
+  memo: JudgmentsMemo | undefined;
+  data: Omit<MatchJudgmentData, "previousLineups">;
+}): Promise<{ input: MatchJudgmentInput; run: JudgmentRun }> {
+  const key = args.memo ? judgmentInputFingerprint(args.data) : null;
+  const hit = key === null ? undefined : args.memo?.get(key);
+  if (hit) return hit;
+
+  const { data } = args;
+  const input = buildMatchJudgmentInput({
+    ...data,
+    previousLineups: await fetchPreviousLineups({
+      provider: args.provider,
+      kickoffAt: data.kickoffAt,
+      homeTeam: data.homeTeam,
+      awayTeam: data.awayTeam,
+      homeForm: data.homeForm,
+      awayForm: data.awayForm,
+      injuries: data.injuries,
+    }),
+  });
+  const run = await runJudgments({
+    userId: args.userId,
+    matchId: args.matchId,
+    stateInput: input.stateInput,
+  });
+  const resolved = { input, run };
+  if (key !== null) args.memo?.set(key, resolved);
+  return resolved;
 }
 
 // Escalação do ÚLTIMO jogo de cada time (o da forma, antes deste) pra derivar o

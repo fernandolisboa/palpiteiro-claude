@@ -12,7 +12,7 @@ export type ReusableJudgments = {
 /**
  * Julgamentos JEV reaproveitáveis (ADR 0041 §1: uma chamada JEV por jogo, não por
  * mercado). A predição code_jev mais recente do jogo cujo `judgments` foi aplicado
- * com as MESMAS versões (perguntas + pesos) e o MESMO `stateHash`, criada a partir
+ * com as MESMAS versões (perguntas + pesos + modelo JEV) e o MESMO `stateHash`, criada a partir
  * de `since`. Não filtra por usuário: as respostas são sobre o jogo, não sobre quem
  * pediu. null = nenhuma → o chamador chama o JEV.
  */
@@ -20,6 +20,8 @@ export async function findReusableJudgments(args: {
   matchId: string;
   judgmentsVersion: string;
   weightsVersion: string;
+  // Modelo JEV pinado (versions.jevModel): respostas de outro modelo não servem.
+  jevModel: string;
   stateHash: string;
   since: Date;
 }): Promise<ReusableJudgments | null> {
@@ -33,7 +35,8 @@ export async function findReusableJudgments(args: {
         sql`${predictions.judgments}->>'applied' = 'true'`,
         sql`${predictions.judgments}->>'stateHash' = ${args.stateHash}`,
         sql`${predictions.judgments}->'versions'->>'judgments' = ${args.judgmentsVersion}`,
-        sql`${predictions.judgments}->'versions'->>'weights' = ${args.weightsVersion}`
+        sql`${predictions.judgments}->'versions'->>'weights' = ${args.weightsVersion}`,
+        sql`${predictions.judgments}->'versions'->>'jevModel' = ${args.jevModel}`
       )
     )
     .orderBy(desc(predictions.createdAt))

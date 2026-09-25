@@ -483,7 +483,12 @@ export function toAnalysisViewFromPrediction(
       stakeUnits: row.prediction.stakeUnits,
       selections: row.selections,
     },
-    row.aiCall ? { costUsd: row.aiCall.costUsd } : null,
+    // Mercado não escolhido no best bet code_jev (#512): racional templado, sem
+    // chamada própria — a row de ai_calls é a da narração do mercado escolhido, cujo
+    // custo NÃO é deste card.
+    row.aiCall && row.prediction.judgments?.narration !== "best_bet_template"
+      ? { costUsd: row.aiCall.costUsd }
+      : null,
     now,
     timeZone,
   );

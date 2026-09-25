@@ -26,8 +26,13 @@ type AiCallCost = { costUsd: string | number } | null;
 //  - evPerUnit = computeEvPerUnit(confidencePct, oddAtRecommendation) — idêntico ao
 //    expectedReturn que o card renderiza (toAnalysisView).
 // odd CONGELADA (ADR 0012), nunca a live. Em pass, edge/EV = null (sem aposta).
-function computeRank(
-  prediction: Prediction,
+// Exportada pro best bet code_jev (#512) ranquear as decisões ANTES de persistir,
+// com os mesmos valores que a row vai gravar.
+export function computeBestBetRank(
+  prediction: Pick<
+    Prediction,
+    "recommendation" | "confidencePct" | "oddAtRecommendation"
+  >,
   marketKey: string,
   selections: { key: string; modelProbPct: number; odd: number | null }[],
 ): BestBetRank {
@@ -136,7 +141,7 @@ export function toBestBetView(
       marketKey,
       marketLabel,
       analysis,
-      rank: computeRank(prediction, marketKey, selections),
+      rank: computeBestBetRank(prediction, marketKey, selections),
     });
   }
 
@@ -163,6 +168,8 @@ export function toBestBetView(
   return {
     entries,
     errors,
+    // Análises geradas (uma por mercado). No motor code_jev só a escolhida teve
+    // chamada narradora paga (#512); as demais custam zero.
     llmCalls: entries.length,
     unavailableMarkets: errors.length,
   };

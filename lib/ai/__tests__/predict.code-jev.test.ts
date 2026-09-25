@@ -73,6 +73,7 @@ const findReusableJudgments = vi.fn(
     matchId: string;
     judgmentsVersion: string;
     weightsVersion: string;
+    jevModel: string;
     stateHash: string;
     since: Date;
   }) => {
@@ -84,6 +85,7 @@ const findReusableJudgments = vi.fn(
           p.judgments.stateHash === args.stateHash &&
           p.judgments.versions.judgments === args.judgmentsVersion &&
           p.judgments.versions.weights === args.weightsVersion &&
+          p.judgments.versions.jevModel === args.jevModel &&
           p.createdAt >= args.since
       )
       .sort((a, b) => b.createdAt.getTime() - a.createdAt.getTime())[0];
@@ -193,6 +195,9 @@ import { TypeSafeError } from "@/lib/ai/providers/typesafe/errors";
 import { computeMarketImpliedProbabilities } from "@/lib/odds/implied-probability";
 import { CORRECT_SCORE } from "@/lib/odds/market-descriptor";
 import { predict } from "@/lib/ai/predict";
+import { runCodeJevFanOut } from "@/lib/ai/best-bet";
+import { computeBestBetRank } from "@/lib/view/best-bet";
+import { sortBestBetEntries } from "@/lib/view/best-bet-sort";
 
 // ─── Fixtures ────────────────────────────────────────────────────────────────
 
@@ -544,6 +549,12 @@ describe("flag analysis_engine = 'code_jev'", () => {
     expect(judgments.aiCallId).toBe(jevCall.__id);
     expect(judgments.stateHash).toMatch(/^[0-9a-f]{64}$/);
     expect(judgments.reusedFromPredictionId).toBeNull();
+    // Esta predição fez a própria chamada narradora (#512).
+    expect(judgments.narration).toBe("llm_call");
+    // Reuso só com o modelo JEV pinado.
+    expect(findReusableJudgments).toHaveBeenCalledWith(
+      expect.objectContaining({ jevModel: "jev-1.13.0" })
+    );
 
     // PSO + carrier com as probs do código.
     const pso = insertValues.mock.calls.find((c) => Array.isArray(c[0]))![0];
@@ -961,5 +972,187 @@ describe("papel do desfalque pela escalação do jogo ANTERIOR", () => {
       "jogador (lesionado)"
     );
     err.mockRestore();
+  });
+});
+
+describe("best bet no motor code_jev (#512): 1 JEV, mercados em código, 1 narração", () => {
+  const ODDS_BY_MARKET: Record<string, Record<string, number>> = {
+    match_result: ODDS,
+    over_under: { over: 1.9, under: 1.95 },
+    btts: { yes: 1.85, no: 1.95 },
+  };
+  const PREVIOUS: NormalizedFixture = {
+    ...FIXTURE,
+    id: "prev",
+    kickoffAt: "2026-05-08T19:00:00.000Z",
+    kickoffTimestampMs: Date.parse("2026-05-08T19:00:00.000Z"),
+    homeTeam: "SE Palmeiras",
+    awayTeam: matchRow.awayTeam,
+    status: "finished",
+  };
+  const base = { matchId: "m-1", userId: "u-1", isAdmin: true };
+  const markets = (...keys: string[]) =>
+    keys.map((marketKey) => ({ marketKey, extraLines: false }));
+  const mapError = (err: unknown) =>
+    err instanceof Error ? err.message : String(err);
+
+  beforeEach(() => {
+    getLatestFreshSelectionOddsSnapshots.mockImplementation(
+      (args: { dbMarketKey: string }) =>
+        Promise.resolve(freshSnapshot(ODDS_BY_MARKET[args.dbMarketKey]))
+    );
+    resolveMarketCatalog.mockImplementation((key: string) =>
+      Promise.resolve(catalogFor(Object.keys(ODDS_BY_MARKET[key])))
+    );
+    // Neutro pra passar na fidelidade em qualquer mercado escolhido.
+    narratorOutput = {
+      rationale:
+        "O modelo de placar, com a tabela e a forma recente, sustenta esta decisão.",
+      key_factors: ["Tabela", "Forma recente"],
+    };
+    // Visitante desfalcado → a escalação do jogo anterior seria buscada.
+    getInjuriesByFixture.mockResolvedValue({
+      home: [],
+      away: [
+        { player: { name: "Germán Cano" }, type: "injury", status: "injured" },
+      ],
+    });
+    getTeamForm.mockImplementation((team: string) =>
+      Promise.resolve(team === matchRow.awayTeam ? [PREVIOUS] : [])
+    );
+  });
+
+  it("todos os mercados decididos da MESMA matriz; só o do topo é narrado; os outros templados com a narração do run", async () => {
+    const acquireSlot = vi.fn(async () => true);
+    const out = await runCodeJevFanOut(
+      base,
+      markets("over_under", "match_result", "btts"),
+      mapError,
+      acquireSlot
+    );
+
+    expect(out.every((o) => o.ok)).toBe(true);
+    // 1 JEV (e 1 lookup de reuso, 1 busca da escalação anterior) pro jogo inteiro.
+    expect(judge).toHaveBeenCalledTimes(1);
+    expect(findReusableJudgments).toHaveBeenCalledTimes(1);
+    expect(
+      getLineups.mock.calls.filter(
+        ([ref]) => (ref as FixtureRef).kickoffAt === PREVIOUS.kickoffAt
+      )
+    ).toHaveLength(1);
+    // 1 chamada LLM paga: a narração. Nenhum cartucho de mercado.
+    expect(anthropicCreate).toHaveBeenCalledTimes(1);
+    expect(toolNameOf(anthropicCreate.mock.calls[0])).toBe("submit_narration");
+    expect(rowsWhere((r) => r.provider === "typesafe")).toHaveLength(1);
+    const narratorCalls = rowsWhere(
+      (r) => r.promptVersion === "narrator_v1" && "provider" in r
+    );
+    expect(narratorCalls).toHaveLength(1);
+    expect(acquireSlot).not.toHaveBeenCalled();
+
+    const predictions = rowsWhere((r) => "recommendation" in r);
+    expect(predictions).toHaveLength(3);
+    for (const p of predictions) {
+      expect(p.aiCallId).toBe(narratorCalls[0].__id);
+      expect(p.modelVersion).toMatch(/;engine=code_jev;/);
+      const j = p.judgments as PredictionJudgments;
+      // Os três com os MESMOS julgamentos (mesma chamada JEV).
+      expect(j.aiCallId).toBe(
+        rowsWhere((r) => r.provider === "typesafe")[0].__id
+      );
+      expect(j.answers).toEqual(JEV_ANSWERS);
+    }
+    const narrated = predictions.filter(
+      (p) => (p.judgments as PredictionJudgments).narration === "llm_call"
+    );
+    expect(narrated).toHaveLength(1);
+    expect(narrated[0].rationale).toBe(narratorOutput.rationale);
+    const templated = predictions.filter(
+      (p) =>
+        (p.judgments as PredictionJudgments).narration === "best_bet_template"
+    );
+    expect(templated).toHaveLength(2);
+    for (const p of templated) {
+      expect(p.rationale).toMatch(/^(O modelo de placar estima|Sem aposta)/);
+    }
+
+    // O narrado é o card do TOPO do painel (mesma ordenação, modo "edge").
+    const byId = new Map(predictions.map((p) => [p.__id as string, p]));
+    const ranked = sortBestBetEntries(
+      out.map((o) => {
+        if (!o.ok) throw new Error("unreachable");
+        const row = byId.get(o.result.prediction.id)!;
+        return {
+          marketKey: o.marketKey,
+          row,
+          rank: computeBestBetRank(
+            {
+              recommendation: row.recommendation as string,
+              confidencePct: row.confidencePct as string,
+              oddAtRecommendation: row.oddAtRecommendation as string | null,
+            },
+            o.marketKey,
+            o.result.selections
+          ),
+        };
+      }),
+      "edge"
+    );
+    expect(ranked[0].row).toBe(narrated[0]);
+    // Só os não narrados compartilham a ai_call (custo zero no card).
+    for (const o of out) {
+      if (!o.ok) continue;
+      const isNarrated = byId.get(o.result.prediction.id) === narrated[0];
+      expect(o.sharesAiCall).toBe(isNarrated ? undefined : true);
+    }
+  });
+
+  it("λ indisponível (tabela sem gols, início de temporada): cada mercado vai pro caminho LLM e a 2ª chamada paga pede slot", async () => {
+    // Tabela presente (os cartuchos rodam), mas degenerada pro λ (média 0).
+    getStandings.mockResolvedValue({
+      ...STANDINGS,
+      tables: [
+        {
+          teams: STANDINGS.tables[0].teams.map((t) => ({
+            ...t,
+            played: 0,
+            won: 0,
+            draw: 0,
+            lost: 0,
+            goalsFor: 0,
+            goalsAgainst: 0,
+            points: 0,
+            homeSplit: split(0, 0, 0),
+            awaySplit: split(0, 0, 0),
+          })),
+        },
+      ],
+    });
+    marketOutput = {
+      recommendation: "pass",
+      confidence_pct: 50,
+      rationale: "Sem valor claro.",
+      key_factors: ["equilíbrio"],
+    };
+    const acquireSlot = vi.fn(async () => false);
+
+    const out = await runCodeJevFanOut(
+      base,
+      markets("over_under", "btts"),
+      mapError,
+      acquireSlot
+    );
+
+    expect(judge).not.toHaveBeenCalled();
+    // 1ª chamada paga no slot do grupo; a 2ª teve o slot negado ANTES do gasto.
+    expect(anthropicCreate).toHaveBeenCalledTimes(1);
+    expect(toolNameOf(anthropicCreate.mock.calls[0])).toBe("submit_prediction");
+    expect(acquireSlot).toHaveBeenCalledTimes(1);
+    expect(out[0].ok).toBe(true);
+    expect(out[1]).toEqual({
+      ok: false,
+      marketKey: "btts",
+      message: "Limite diário atingido — não analisado.",
+    });
   });
 });

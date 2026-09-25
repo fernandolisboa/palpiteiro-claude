@@ -329,7 +329,7 @@ export type BestBetMarketError = {
 export type BestBetView = {
   entries: BestBetEntry[]; // mercados com sucesso, na ordem-base (o cliente ordena)
   errors: BestBetMarketError[]; // falhas por-mercado (best-of-successful) + degrades de pré-warm
-  llmCalls: number; // = entries.length (chamadas de LLM pagas de fato) — AC#2
+  llmCalls: number; // = entries.length (análises geradas; no code_jev só 1 é narrada por LLM, #512) — AC#2
   unavailableMarkets: number; // = errors.length (inclui rejeições pré-spend que NÃO pagaram)
 };
 

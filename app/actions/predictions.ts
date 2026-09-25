@@ -8,10 +8,15 @@ import { auth } from "@/auth";
 import {
   MAX_ADDITIONAL_FETCHES,
   MAX_FANOUT_MARKETS,
+  RATE_LIMITED_MARKET_MESSAGE,
   capCandidates,
+  groupSlotUnits,
+  isCodeJevFanOutMarket,
+  runCodeJevFanOut,
   runFanOut,
   type FanOutMarket,
 } from "@/lib/ai/best-bet";
+import { readAnalysisEngine } from "@/lib/ai/engine/analysis-engine-flag";
 import { getCartridge } from "@/lib/ai/markets/registry";
 import { isModelAllowedForAudience, type AIModelId } from "@/lib/ai/models";
 import { generatePalpites } from "@/lib/ai/palpites";
@@ -429,13 +434,22 @@ export async function analyzeBestBet(
   // FanOutMarket — o MESMO valor alimenta o pré-warm e o predict (senão predict
   // resolveria um cartucho diferente do aquecido).
   const extraLinesEnabled = await getEnableOverUnderExtraLines();
-  // Rate-limit POR MERCADO (N slots, #492 / Report 01 #3): 1 slot por candidato, em ordem,
+  // Motor (ADR 0041 §5), lido UMA vez por run (leitura grátis → antes do 1º slot) e
+  // fixado pro fan-out inteiro.
+  const engine = await readAnalysisEngine();
+  const markets: FanOutMarket[] = candidates.map((c) => ({
+    marketKey: c.key,
+    extraLines: resolveExtraLines(c.key, match.league, extraLinesEnabled),
+  }));
+  // Rate-limit POR CHAMADA PAGA (#492 / Report 01 #3, #512): 1 slot por unidade, em ordem,
   // ANTES do spend — mesma disciplina do analyzeMarkets. checkAnalysisRateLimit incrementa
-  // 1/call (sem count param), então N chamadas = N slots. Para no 1º não-ok pra não queimar
-  // slots além do teto. `granted` é sempre um PREFIXO de `candidates` → `candidates.slice(
-  // granted.length)` é a cauda exata sem slot. Invariante de spend: slots consumidos ==
-  // granted.length == mercados no runFanOut == predict() pagos. extraLines é resolvido POR
-  // mercado (flag do cartucho), nunca vira mercado extra → não cobra slot a mais.
+  // 1/call (sem count param), então N chamadas = N slots. No motor 'llm' cada mercado é uma
+  // unidade (1 predict() pago cada). No 'code_jev' os mercados decididos em código formam UMA
+  // unidade (só o escolhido é narrado — 1 chamada paga, ADR 0041 §4), na posição do 1º
+  // deles; os demais (placar exato/scorer/assist) seguem 1 slot cada. Para no 1º não-ok pra
+  // não queimar slots além do teto. Chamada paga extra do grupo code_jev (λ indisponível →
+  // caminho LLM) pede o próprio slot no meio do run (runCodeJevFanOut). extraLines é
+  // resolvido POR mercado (flag do cartucho), nunca vira mercado extra → não cobra slot a mais.
   //
   // Budget parcial: DEGRADA como o analyzeMarkets (roda os concedidos, a cauda vira
   // "indisponível" na view) em vez de recusar. Seguro pra semântica de "melhor aposta": o
@@ -443,12 +457,16 @@ export async function analyzeBestBet(
   // mercado não analisado aparece em "Mercados indisponíveis" com o motivo, então o "melhor"
   // fica explicitamente limitado aos analisados. A ordem de `candidates` (marketsForAudience,
   // capCandidates Tier-1-first) faz over/under + 1X2 serem os primeiros concedidos.
-  const granted: typeof candidates = [];
+  const units = groupSlotUnits(
+    markets,
+    engine === "code_jev" ? isCodeJevFanOutMarket : () => false,
+  );
+  const grantedKeys = new Set<string>();
   let capRl: RateLimitResult | null = null;
-  for (const c of candidates) {
+  for (const unit of units) {
     const rl = await checkAnalysisRateLimit(session.user.id, session.user.role);
     if (rl.ok) {
-      granted.push(c);
+      for (const m of unit) grantedKeys.add(m.marketKey);
       continue;
     }
     if (rl.reason === "fail-closed") {
@@ -463,22 +481,22 @@ export async function analyzeBestBet(
     capRl = rl;
     break;
   }
-  if (granted.length === 0) {
+  if (grantedKeys.size === 0) {
     // capRl SEMPRE setado aqui: fail-closed já retornou; granted vazio só por cap na 1ª call.
     return {
       ok: false,
       error: `Você atingiu o limite de ${capRl?.limit ?? 0} análises por dia. Tente novamente amanhã.`,
     };
   }
-  const rateLimitedErrors = candidates.slice(granted.length).map((c) => ({
-    marketKey: c.key,
-    message: "Limite diário atingido — não analisado.",
-  }));
-  // FanOut só sobre os CONCEDIDOS → nenhum predict() nem crédito de odds num mercado sem slot.
-  const fanOut: FanOutMarket[] = granted.map((c) => ({
-    marketKey: c.key,
-    extraLines: resolveExtraLines(c.key, match.league, extraLinesEnabled),
-  }));
+  const rateLimitedErrors = markets
+    .filter((m) => !grantedKeys.has(m.marketKey))
+    .map((m) => ({
+      marketKey: m.marketKey,
+      message: RATE_LIMITED_MARKET_MESSAGE,
+    }));
+  // FanOut só sobre os CONCEDIDOS (na ordem-base) → nenhum predict() nem crédito de odds
+  // num mercado sem slot.
+  const fanOut = markets.filter((m) => grantedKeys.has(m.marketKey));
   // Pré-aquece os mercados *additional* (btts/dupla chance/over_under multi-linha): o
   // descriptor EFETIVO sai do MESMO m.extraLines do FanOutMarket. Cada um numa chamada
   // própria (ensureOddsSnapshotsFresh hard-throws em seed faltante) → a falha de um vira
@@ -502,8 +520,9 @@ export async function analyzeBestBet(
     JSON.stringify({
       scope: "analyzeBestBet",
       matchId,
+      engine,
       candidates: candidates.length,
-      granted: granted.length,
+      granted: fanOut.length,
       rateLimited: rateLimitedErrors.length,
       additionalFetches: additionalToFetch.length,
     }),
@@ -520,18 +539,27 @@ export async function analyzeBestBet(
     }
   }
   // Fan-out SERIAL: predict() por mercado concedido (a única porta pro LLM), best-of-successful.
-  const outcomes = await runFanOut(
-    { matchId, userId: session.user.id, isAdmin, modelOverride },
-    fanOut,
-    friendlyMessageFromUnknown,
-  );
+  // code_jev (#512): decide todos em código e narra só o escolhido (1 chamada paga).
+  const userId = session.user.id;
+  const role = session.user.role;
+  const fanOutBase = { matchId, userId, isAdmin, modelOverride };
+  const outcomes =
+    engine === "code_jev"
+      ? await runCodeJevFanOut(
+          fanOutBase,
+          fanOut,
+          friendlyMessageFromUnknown,
+          async () => (await checkAnalysisRateLimit(userId, role)).ok,
+        )
+      : await runFanOut(fanOutBase, fanOut, friendlyMessageFromUnknown);
   // Custo por análise bem-sucedida (lê a aiCall pra exibir).
   const aiCallByMarketKey = new Map<
     string,
     { costUsd: string | number } | null
   >();
   for (const o of outcomes) {
-    if (o.ok) {
+    // Mercado não narrado (code_jev): a aiCall é a da narração de outro card → sem custo aqui.
+    if (o.ok && !o.sharesAiCall) {
       const aiCall = await getAiCallById(o.result.prediction.aiCallId);
       aiCallByMarketKey.set(
         o.marketKey,

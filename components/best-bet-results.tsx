@@ -7,44 +7,15 @@ import { AnalysisResult } from "@/components/analysis-result";
 import { Button } from "@/components/ui/button";
 import { cn } from "@/lib/utils";
 import { ANALYSIS_RISK_DISCLAIMER } from "@/lib/view/analysis";
+import {
+  sortBestBetEntries,
+  type BestBetSortMode,
+} from "@/lib/view/best-bet-sort";
 import type { BestBetEntry, BestBetView } from "@/lib/view/types";
 
-export type BestBetSortMode = "edge" | "ev" | "edgeConf";
-
-// Ordenação client-side das N análises (#178). PURA + exportada pra teste.
-// Regras (§ranking): passes (sem aposta) afundam por ÚLTIMO em TODO modo; entre os
-// não-pass o primário é a chave ativa (desc); o tiebreak é uma ORDEM TOTAL estável
-// (EV/unidade desc, depois marketKey alfabético) pra o #1 não pular conforme o
-// histórico do toggle. Só o EDGE é normalizado por impliedSumTarget (o edgePct vive na
-// escala Σ=impliedSumTarget do mercado; ÷target o põe numa base Σ=1 por outcome coberto,
-// cross-comparável — ADR 0018). A CONFIANÇA NÃO é normalizada: é a prob do modelo pra a
-// seleção recomendada, já um [0,100] plano e diretamente comparável entre mercados
-// (dividir por impliedSumTarget penalizaria dupla chance em DOBRO — impliedSumTarget²).
-// EV/unidade já é overround-free e cross-comparável. Um não-pass com chave null cai
-// entre os não-pass (acima dos passes), nunca afundado junto deles.
-export function sortBestBetEntries(
-  entries: BestBetEntry[],
-  mode: BestBetSortMode,
-): BestBetEntry[] {
-  const primary = (e: BestBetEntry): number => {
-    const r = e.rank;
-    if (mode === "ev") return r.evPerUnit ?? Number.NEGATIVE_INFINITY;
-    const edge = r.edgePct !== null ? r.edgePct / r.impliedSumTarget : null;
-    if (edge === null) return Number.NEGATIVE_INFINITY;
-    if (mode === "edge") return edge;
-    return edge * r.confidencePct; // edgeConf: edge já normalizado × confiança plana
-  };
-  return [...entries].sort((a, b) => {
-    if (a.rank.isPass !== b.rank.isPass) return a.rank.isPass ? 1 : -1;
-    const pa = primary(a);
-    const pb = primary(b);
-    if (pb !== pa) return pb - pa;
-    const ea = a.rank.evPerUnit ?? Number.NEGATIVE_INFINITY;
-    const eb = b.rank.evPerUnit ?? Number.NEGATIVE_INFINITY;
-    if (eb !== ea) return eb - ea;
-    return a.marketKey.localeCompare(b.marketKey);
-  });
-}
+// Ordenação movida pra lib/view/best-bet-sort.ts (pura; o best bet code_jev a usa
+// no servidor pra escolher o mercado narrado, #512). Re-exportada aqui.
+export { sortBestBetEntries, type BestBetSortMode };
 
 const SORT_MODES: { mode: BestBetSortMode; label: string }[] = [
   { mode: "edge", label: "Edge" },

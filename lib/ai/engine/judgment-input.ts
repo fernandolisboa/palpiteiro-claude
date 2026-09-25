@@ -1,5 +1,8 @@
+import { canonicalHash } from "@/lib/ai/judgments/state-hash";
 import {
+  buildJudgmentState,
   enrichAbsences,
+  normalizePersonName,
   tableInputForLeague,
   type JudgmentAbsenceInput,
   type JudgmentStateInput,
@@ -100,4 +103,32 @@ export function buildMatchJudgmentInput(
       table: tableInputForLeague(data.league, data.standings),
     },
   };
+}
+
+// Impressão digital dos insumos do state JEV SEM a escalação do jogo anterior
+// (#512): o state sem ela + quem está fora (nome normalizado, status, tipo) + o jogo
+// anterior de cada time (de onde a escalação sairia). Mesma impressão ⇒ mesmo
+// state final. Só vive em memória (memo do best bet): o nome entra no hash local,
+// nunca no state enviado ao JEV nem no banco.
+export function judgmentInputFingerprint(
+  data: Omit<MatchJudgmentData, "previousLineups">
+): string {
+  const kickoffMs = data.kickoffAt.getTime();
+  const { stateInput } = buildMatchJudgmentInput(data);
+  const injured = (list: readonly NormalizedInjury[]) =>
+    list
+      .map((i) => `${normalizePersonName(i.player.name)}|${i.status}|${i.type}`)
+      .sort();
+  const previous = (form: readonly NormalizedFixture[]) => {
+    const f = previousFixture(form, kickoffMs);
+    return f ? `${f.league}|${f.kickoffAt}|${f.homeTeam}|${f.awayTeam}` : null;
+  };
+  return canonicalHash({
+    state: buildJudgmentState(stateInput),
+    injured: {
+      home: injured(data.injuries.home),
+      away: injured(data.injuries.away),
+    },
+    previous: { home: previous(data.homeForm), away: previous(data.awayForm) },
+  });
 }
