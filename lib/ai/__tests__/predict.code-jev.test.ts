@@ -1240,6 +1240,40 @@ describe("best bet no motor code_jev (#512): 1 JEV, mercados em código, 1 narra
       expect(p.rationale).toMatch(/^(O modelo de placar estima|Sem aposta)/);
     }
   });
+
+  it("narração sem espaço no prazo (#524) → NÃO chama nem cobra slot; racional templado, row timeout de custo zero, pendentes persistidos", async () => {
+    const acquireSlot = vi.fn(async () => ({ ok: true }));
+
+    // Opus 5.5 (adaptive) precisa de ≥120s pra começar; restam 100s. As decisões em
+    // código ainda cabem (piso de 20s do orquestrador).
+    const out = await runCodeJevFanOut(
+      { ...base, modelOverride: "claude-opus-5-5" },
+      markets("over_under", "match_result", "btts"),
+      mapError,
+      acquireSlot,
+      { deadlineAt: Date.now() + 100_000 }
+    );
+
+    expect(out.every((o) => o.ok)).toBe(true);
+    // Nenhuma chamada paga, nenhum slot.
+    expect(anthropicCreate).not.toHaveBeenCalled();
+    expect(acquireSlot).not.toHaveBeenCalled();
+    // Uma row de narração com status timeout e custo zero, pra os pendentes terem aiCallId.
+    const narratorCalls = rowsWhere(
+      (r) => r.promptVersion === "narrator_v1" && "provider" in r
+    );
+    expect(narratorCalls).toHaveLength(1);
+    expect(narratorCalls[0].status).toBe("timeout");
+    expect(narratorCalls[0].inputTokens).toBe(0);
+    expect(narratorCalls[0].outputTokens).toBe(0);
+    expect(Number(narratorCalls[0].costUsd)).toBe(0);
+    const predictions = rowsWhere((r) => "recommendation" in r);
+    expect(predictions).toHaveLength(3);
+    for (const p of predictions) {
+      expect(p.aiCallId).toBe(narratorCalls[0].__id);
+      expect(p.rationale).toMatch(/^(O modelo de placar estima|Sem aposta)/);
+    }
+  });
 });
 
 describe("best bet code_jev (#512) — JEV/matriz fixados, multi-linha e a view", () => {

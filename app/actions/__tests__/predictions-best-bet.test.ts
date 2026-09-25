@@ -530,6 +530,25 @@ describe("analyzeBestBet — cota de terceiros só com slot cobrado (#524 re-rev
     expect(mockRateLimit).toHaveBeenCalledTimes(5);
   });
 
+  it("Upstash em timeout no 1º slot (fail-open, remaining:0) → libera TODOS os mercados, não 1", async () => {
+    mockRateLimit.mockResolvedValueOnce({
+      ok: true,
+      limit: 20,
+      remaining: 0,
+      reset: 0,
+      reason: "timeout",
+    });
+    const res = await analyzeBestBet(null, form({ matchId: VALID_MATCH_ID }));
+    expect(mockPredict).toHaveBeenCalledTimes(4);
+    // 1º pré-cobrado + 3 cobrados de forma atômica sob demanda.
+    expect(mockRateLimit).toHaveBeenCalledTimes(4);
+    expect(res.ok).toBe(true);
+    if (res.ok) {
+      expect(res.view.entries).toHaveLength(4);
+      expect(res.view.errors).toEqual([]);
+    }
+  });
+
   it("run que falha INTEIRO antes do LLM ainda consome o slot do início (não é repetível de graça)", async () => {
     const { PredictError } = await import("@/lib/ai/predict");
     mockPredict.mockRejectedValue(new PredictError("sem snapshot fresco", {}));

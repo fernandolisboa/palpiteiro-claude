@@ -423,7 +423,10 @@ async function chargeRunBudget(
   let prepaid = true;
   return {
     ok: true,
-    units: 1 + first.remaining,
+    // Upstash em timeout falha ABERTO com `remaining:0` sem significado: libera todas
+    // as unidades (como o fail-open por unidade de antes) — os slots 2..N ainda são
+    // cobrados de forma atômica pelo acquireSlot, que para o run se o teto bater.
+    units: first.reason === "timeout" ? Infinity : 1 + first.remaining,
     acquireSlot: async () => {
       if (prepaid) {
         prepaid = false;
@@ -431,7 +434,10 @@ async function chargeRunBudget(
       }
       // `reason` repassado pra o fail-closed virar "indisponível", não "limite atingido".
       const rl = await checkAnalysisRateLimit(userId, role);
-      return { ok: rl.ok, reason: rl.reason };
+      return {
+        ok: rl.ok,
+        ...(rl.reason === "fail-closed" ? { reason: rl.reason } : {}),
+      };
     },
   };
 }

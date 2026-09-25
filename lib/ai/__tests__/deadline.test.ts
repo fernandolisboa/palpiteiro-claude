@@ -1,6 +1,13 @@
 import { describe, expect, it } from "vitest";
 
-import { canFitCall, minCallBudgetMs } from "@/lib/ai/deadline";
+import {
+  ACTION_BUDGET_MS,
+  actionDeadline,
+  canFitCall,
+  MAX_MIN_CALL_BUDGET_MS,
+  minCallBudgetMs,
+  SYNTHESIS_RESERVE_MS,
+} from "@/lib/ai/deadline";
 
 describe("minCallBudgetMs / canFitCall (#524 re-review)", () => {
   it("temperature: 20s", () => {
@@ -18,6 +25,22 @@ describe("minCallBudgetMs / canFitCall (#524 re-review)", () => {
     expect(
       minCallBudgetMs({ thinkingMode: "adaptive", maxTokens: 16000, effort: "xhigh" }),
     ).toBeCloseTo(140_833, -1);
+  });
+
+  it("piso limitado pelo que um run novo oferece: 32000 em xhigh não fica impossível", () => {
+    // metade de ~548s = 274s > os 270s do run inteiro; o teto é 270 − 25 − 60 = 185s.
+    const call = {
+      thinkingMode: "adaptive" as const,
+      maxTokens: 32000,
+      effort: "xhigh" as const,
+    };
+    expect(MAX_MIN_CALL_BUDGET_MS).toBe(185_000);
+    expect(minCallBudgetMs(call)).toBe(185_000);
+    // Um fan-out recém-iniciado (prazo − reserva da síntese = 245s) ainda começa.
+    const now = 1_000_000;
+    const fanOutDeadline = actionDeadline(now) - SYNTHESIS_RESERVE_MS;
+    expect(canFitCall(fanOutDeadline, call, now)).toBe(true);
+    expect(minCallBudgetMs(call)).toBeLessThan(ACTION_BUDGET_MS);
   });
 
   it("mercado marginal (100s restantes) não inicia adaptive, mas inicia temperature", () => {

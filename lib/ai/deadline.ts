@@ -31,6 +31,13 @@ export const SYNTHESIS_RESERVE_MS = 25_000;
 const MIN_TEMPERATURE_BUDGET_MS = 20_000;
 const MIN_ADAPTIVE_BUDGET_MS = 120_000;
 const ADAPTIVE_BUDGET_SHARE = 0.5;
+// Teto do mínimo: o que o fan-out de um run NOVO oferece (prazo − reserva da síntese)
+// menos 60s de folga pros passos antes da 1ª chamada. Sem ele, um max_tokens alto
+// (32000 em xhigh → metade de ~548s = 274s) exigiria mais que o run inteiro e toda
+// análise adaptive viraria impossível; com ele a chamada começa com o timeout cortado
+// pelo prazo (requestTiming).
+export const MAX_MIN_CALL_BUDGET_MS =
+  ACTION_BUDGET_MS - SYNTHESIS_RESERVE_MS - 60_000;
 
 // O formato da chamada que decide o mínimo. Sem max_tokens (checagem grossa, antes
 // de resolver os parâmetros de geração) vale só o piso do modo.
@@ -43,9 +50,12 @@ export type CallShape = {
 export function minCallBudgetMs(call: CallShape): number {
   if (call.thinkingMode === "temperature") return MIN_TEMPERATURE_BUDGET_MS;
   if (call.maxTokens === undefined) return MIN_ADAPTIVE_BUDGET_MS;
-  return Math.max(
-    MIN_ADAPTIVE_BUDGET_MS,
-    adaptiveTimeoutMs(call.maxTokens, call.effort) * ADAPTIVE_BUDGET_SHARE,
+  return Math.min(
+    MAX_MIN_CALL_BUDGET_MS,
+    Math.max(
+      MIN_ADAPTIVE_BUDGET_MS,
+      adaptiveTimeoutMs(call.maxTokens, call.effort) * ADAPTIVE_BUDGET_SHARE,
+    ),
   );
 }
 

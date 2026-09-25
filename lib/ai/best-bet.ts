@@ -378,11 +378,9 @@ async function narrateAndPersist(
     // Slot já negado antes (um mercado do grupo caiu no LLM sem slot) → não tenta de novo.
     if (stoppedBefore?.notRun === "rate-limited") throw new SlotDeniedError(false);
     if (stoppedBefore?.notRun === "unavailable") throw new SlotDeniedError(true);
-    // Checagem grossa (piso do modo); a fina, com max_tokens/effort, roda dentro da
-    // narração, ANTES do hook que cobra o slot.
-    if (!canFitCall(deadlineAt, chosen.pending.model.thinkingMode)) {
-      throw new AnalysisDeadlineError();
-    }
+    // O prazo é da narração: sem espaço, ela não chama nem cobra slot e devolve o
+    // racional templado com uma row de ai_calls de custo zero — os pendentes (já
+    // decididos) persistem mesmo assim.
     narration = await narratePendingPrediction(chosen.pending, {
       beforeLlmPath: takeSlot,
     });

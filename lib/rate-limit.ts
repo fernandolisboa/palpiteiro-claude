@@ -22,7 +22,10 @@ export type RateLimitResult = {
   // o caller distingue "indisponível" de "teto real atingido" por ESTE campo, não
   // por `limit === 0` — um `limit:0` legítimo (config de Upstash inesperada) nunca
   // dispara a copy de indisponibilidade por engano (ADR 0023).
-  reason?: "fail-closed";
+  // "timeout": o Upstash não respondeu a tempo e o `limit()` falhou ABERTO
+  // (`ok:true`, `remaining:0` sem significado) — o caller não deve ler `remaining`
+  // como budget do dia.
+  reason?: "fail-closed" | "timeout";
 };
 
 const DEFAULT_USER_LIMIT = 20;
@@ -222,8 +225,15 @@ export async function checkAnalysisRateLimit(
     };
   }
   const limiter = role === "admin" ? limiters.admin : limiters.user;
-  const { success, limit, remaining, reset } = await limiter.limit(userId);
-  return { ok: success, limit, remaining, reset };
+  const { success, limit, remaining, reset, reason } =
+    await limiter.limit(userId);
+  return {
+    ok: success,
+    limit,
+    remaining,
+    reset,
+    ...(reason === "timeout" ? { reason: "timeout" as const } : {}),
+  };
 }
 
 /**

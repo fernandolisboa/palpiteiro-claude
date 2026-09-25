@@ -302,9 +302,9 @@ export async function predictForBestBet(
 
 /**
  * A ÚNICA chamada paga do best bet code_jev: narra a decisão escolhida (logada em
- * ai_calls). Nunca bloqueia: falha do narrador → racional templado. Lança se o
- * insert de ai_calls falhar, se o prazo do run não comportar a chamada
- * (AnalysisDeadlineError, sem gasto) ou se o hook `beforeLlmPath` (slot) lançar.
+ * ai_calls). Nunca bloqueia: falha do narrador, ou prazo do run sem espaço pra
+ * chamada (não chamada, sem slot), → racional templado. Lança se o insert de
+ * ai_calls falhar ou se o hook `beforeLlmPath` (slot) lançar.
  */
 export async function narratePendingPrediction(
   pending: PendingCodeJevPrediction,
@@ -992,8 +992,8 @@ async function runPredict(
     // Best bet (#512): o orquestrador decide qual mercado narra (1 chamada paga).
     if (opts.deferNarration) return { kind: "pending", pending };
 
-    // Narração paga fora do best bet: mesmo gate de prazo + hook de slot da análise
-    // (dentro de narrateDecision, com os parâmetros de geração resolvidos).
+    // Narração paga fora do best bet: hook de slot da análise; sem espaço no prazo,
+    // narrateDecision nem chama (templado, sem slot).
     const narration = await narratePendingPrediction(pending, {
       beforeLlmPath: opts.beforeLlmPath,
     });
@@ -2054,19 +2054,19 @@ async function narrateDecision(args: {
     );
   }
 
-  // Prazo (#524): não inicia uma narração que o timeout vai cortar — lança antes do
-  // gasto e do slot (o hook cobra o slot logo antes da chamada).
-  if (
-    !canFitCall(args.deadlineAt, {
-      thinkingMode: model.thinkingMode,
-      maxTokens: genParams.maxTokens,
-      effort: genParams.effort,
-    })
-  ) {
-    throw new AnalysisDeadlineError();
-  }
-  if (args.beforeLlmPath) await args.beforeLlmPath();
-  const outcome = await runNarration(aiProvider, request, decision);
+  // Prazo (#524): uma narração que o timeout cortaria NÃO é iniciada. Mantém o
+  // contrato do narrador (nunca bloqueia → racional templado): sem chamada, sem slot
+  // (o hook só roda antes de uma chamada de verdade), e uma row de ai_calls com
+  // status timeout e custo zero pra prediction ter o aiCallId.
+  const fits = canFitCall(args.deadlineAt, {
+    thinkingMode: model.thinkingMode,
+    maxTokens: genParams.maxTokens,
+    effort: genParams.effort,
+  });
+  if (fits && args.beforeLlmPath) await args.beforeLlmPath();
+  const outcome = fits
+    ? await runNarration(aiProvider, request, decision)
+    : narrationSkippedForDeadline(request);
   const cost = calculateCost({
     model: model.id,
     inputTokens: outcome.inputTokens,
@@ -2112,6 +2112,22 @@ async function narrateDecision(args: {
   return {
     aiCallId,
     output: outcome.output ?? narratorCartridge.fallback(decision),
+  };
+}
+
+function narrationSkippedForDeadline(
+  request: AnalysisRequest,
+): NarrationOutcome {
+  const message = "deadline exceeded before the narration; nothing was sent";
+  return {
+    status: "timeout",
+    inputPayload: request as unknown as Record<string, unknown>,
+    outputPayload: { error: message, skipped: "deadline" },
+    inputTokens: 0,
+    outputTokens: 0,
+    latencyMs: 0,
+    errorMessage: message,
+    output: null,
   };
 }
 

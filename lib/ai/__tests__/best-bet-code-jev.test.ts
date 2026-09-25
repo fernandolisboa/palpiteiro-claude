@@ -484,11 +484,17 @@ describe("runCodeJevFanOut — prazo do run (#524 review)", () => {
     ]);
   });
 
-  it("narração não cabe no prazo → pendentes viram 'Tempo esgotado', sem slot nem chamada", async () => {
+  it("narração fora do prazo NÃO descarta os pendentes: a narração decide (templado) e todos persistem", async () => {
     mockPredictForBestBet.mockImplementation(async (args) => {
       clock += 45_000;
       return { kind: "pending", pending: pendingFor(args.marketKey!) };
     });
+    // Como a narração real sem espaço no prazo: não chama nem cobra slot (o hook não
+    // roda) e devolve a row de custo zero com o racional templado.
+    mockNarrate.mockImplementation(async () => ({
+      aiCallId: "ac-timeout",
+      output: { rationale: "templado", key_factors: ["a", "b"] },
+    }));
     const acquireSlot = vi.fn(async () => ({ ok: true }));
     const out = await runCodeJevFanOut(
       base,
@@ -497,10 +503,10 @@ describe("runCodeJevFanOut — prazo do run (#524 review)", () => {
       acquireSlot,
       { deadlineAt: clock + 100_000 }
     );
-    // t=90s: sobram 10s → a narração não começa.
-    expect(mockNarrate).not.toHaveBeenCalled();
+    // t=90s: sobram 10s — o orquestrador não pula a narração por conta própria.
+    expect(mockNarrate).toHaveBeenCalledTimes(1);
     expect(acquireSlot).not.toHaveBeenCalled();
-    expect(mockPersist).not.toHaveBeenCalled();
-    expect(out.every((o) => !o.ok && o.notRun === "deadline")).toBe(true);
+    expect(mockPersist).toHaveBeenCalledTimes(2);
+    expect(out.every((o) => o.ok)).toBe(true);
   });
 });
