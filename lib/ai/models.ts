@@ -3,19 +3,34 @@
 // (CLAUDE.md). Cada consumidor (predict, cost, UI, server actions) resolve daqui.
 //
 // `thinkingMode` codifica a divergência crítica da API Anthropic: o modo
-// ADAPTIVE THINKING (modelos que REJEITAM 400 em `temperature`/`top_p`/`top_k`)
-// vs. o modo `temperature` (reproduzível). Os dois modelos do registry atual
-// (Sonnet 4.5 + Haiku 4.5) são ambos `temperature`; o ramo `adaptive` do
-// request-builder permanece vivo mas sem modelo de registry que o alcance
-// (#374). A construção da request é model-aware em lib/ai/request-builder.ts a
-// partir deste campo.
+// ADAPTIVE THINKING (modelos que REJEITAM 400 em `temperature`/`top_p`/`top_k`,
+// em `budget_tokens`, e — Opus 5.5 / Fable 5.1 — em thinking desligado e em
+// `tool_choice` forçado) vs. o modo `temperature` (reproduzível). A construção da
+// request é model-aware em lib/ai/providers/anthropic/request-builder.ts a partir
+// deste campo.
+//
+// #524: os adaptive VOLTARAM (Fable 5.1 admin-only; Opus 5.5 e Sonnet 5
+// selecionáveis). No motor "Código + JEV" (ADR 0041) a DECISÃO é código
+// determinístico e o LLM só narra, então o motivo do ADR 0021 pra manter só modelos
+// `temperature` não vale lá; no motor `llm` eles seguem não-reproduzíveis — o admin
+// aceita isso ao escolhê-los. O default global continua Sonnet 4.5 (temperature).
+//
+// O registry segue CURADO à mão: a Models API da Anthropic (GET /v1/models) não
+// devolve pricing, então um modelo novo só entra aqui com o preço oficial. O
+// /admin/settings avisa quando a API lista um id `claude-*` ainda sem cadastro
+// (lib/ai/providers/anthropic/models-catalog.ts).
 
 // Provider de IA que atende um modelo (ADR 0027). União FECHADA: um provider novo
 // é uma edição aqui + um adapter no seam. Validado contra strings não-confiáveis
 // por isAIProvider (espelha isAIModelId).
 export type AIProviderKey = "anthropic" | "openai";
 
-export type AIModelId = "claude-sonnet-4-5-20250929" | "claude-haiku-4-5";
+export type AIModelId =
+  | "claude-fable-5-1"
+  | "claude-opus-5-5"
+  | "claude-sonnet-5"
+  | "claude-sonnet-4-5-20250929"
+  | "claude-haiku-4-5";
 
 export type AIModel = {
   id: AIModelId;
@@ -36,11 +51,49 @@ export type AIModel = {
   userSelectable: boolean;
 };
 
-// ORDEM = capacidade decrescente (Sonnet 4.5 > Haiku). A UI DEPENDE desta ordem:
-// SELECTABLE_MODELS e modelsForAudience preservam a ordem de inserção do objeto,
-// então é ela que rege os dropdowns. Sonnet 4.5 primeiro = default + maior
-// capacidade. Não reordene sem querer mexer no que aparece nos seletores.
+// ORDEM = capacidade decrescente (Fable 5.1 > Opus 5.5 > Sonnet 5 > Sonnet 4.5 >
+// Haiku). A UI DEPENDE desta ordem: SELECTABLE_MODELS e modelsForAudience preservam
+// a ordem de inserção do objeto, então é ela que rege os dropdowns. O default
+// (Sonnet 4.5) NÃO é o primeiro — ele vem de DEFAULT_MODEL_ID / ai_config, não da
+// posição. Não reordene sem querer mexer no que aparece nos seletores.
 export const MODEL_REGISTRY: Record<AIModelId, AIModel> = {
+  // Adaptive (#524). Thinking sempre ligado: omitir ou `adaptive`; `disabled` e
+  // `budget_tokens` dão 400, sampling params dão 400, tool_choice forçado dá 400,
+  // sem prefill. Pode devolver `stop_reason: "refusal"` (tratado no adapter).
+  // ADMIN-ONLY: o mais caro do registry ($10/$50).
+  "claude-fable-5-1": {
+    id: "claude-fable-5-1",
+    provider: "anthropic",
+    label: "Fable 5.1",
+    inputPricePerMTok: 10,
+    outputPricePerMTok: 50,
+    thinkingMode: "adaptive",
+    userSelectable: false,
+  },
+  // Adaptive (#524). Thinking não desliga (disabled/budget_tokens = 400), sem
+  // sampling, tool_choice forçado = 400, sem prefill. Effort default do servidor é
+  // `medium` — mandamos o effort do ai_config explicitamente.
+  "claude-opus-5-5": {
+    id: "claude-opus-5-5",
+    provider: "anthropic",
+    label: "Opus 5.5",
+    inputPricePerMTok: 4,
+    outputPricePerMTok: 20,
+    thinkingMode: "adaptive",
+    userSelectable: true,
+  },
+  // Adaptive (#524). Aceita thinking disabled e tool_choice forçado, mas com
+  // thinking ligado usamos `auto` (o mesmo caminho adaptive dos outros). Sem
+  // sampling nem budget_tokens.
+  "claude-sonnet-5": {
+    id: "claude-sonnet-5",
+    provider: "anthropic",
+    label: "Sonnet 5",
+    inputPricePerMTok: 2,
+    outputPricePerMTok: 10,
+    thinkingMode: "adaptive",
+    userSelectable: true,
+  },
   "claude-sonnet-4-5-20250929": {
     id: "claude-sonnet-4-5-20250929",
     provider: "anthropic",
@@ -49,9 +102,7 @@ export const MODEL_REGISTRY: Record<AIModelId, AIModel> = {
     outputPricePerMTok: 15,
     thinkingMode: "temperature",
     temperature: 0.3,
-    // Default global + selecionável pelo usuário comum (#240/#203). Após o enxugar
-    // do registry (#374 — Opus 4.8, Sonnet 4.6 e o gpt-5-mini de prova removidos),
-    // NENHUM modelo do registry é admin-only (`userSelectable: false`).
+    // Default global + selecionável pelo usuário comum (#240/#203).
     userSelectable: true,
   },
   "claude-haiku-4-5": {

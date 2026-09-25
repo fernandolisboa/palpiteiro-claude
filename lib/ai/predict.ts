@@ -1163,6 +1163,16 @@ async function runPredict(
       errorMessage: result.message,
       promptVersion: cartridge.version,
     });
+    // Recusa do modelo (#524): auditada acima como qualquer falha (tokens cobrados,
+    // resposta crua no outputPayload), sem prediction. Mensagem própria pra a action
+    // dizer "o modelo recusou a análise" em vez de "falha temporária".
+    if (result.refusal) {
+      throw new PredictError("model refused the analysis", {
+        refusal: result.refusal,
+        model: model.id,
+        cause: result.cause,
+      });
+    }
     throw new PredictError(`anthropic call failed: ${result.message}`, {
       cause: result.cause,
     });

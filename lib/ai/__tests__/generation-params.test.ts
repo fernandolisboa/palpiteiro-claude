@@ -13,9 +13,8 @@ import {
 } from "@/lib/ai/generation-params";
 
 describe("generation-params — validação pura (ADR 0008 emenda 2)", () => {
-  it("EFFORT_LEVELS = low/medium/high/max (xhigh omitido — não universal nos adaptive)", () => {
-    expect(EFFORT_LEVELS).toEqual(["low", "medium", "high", "max"]);
-    expect(EFFORT_LEVELS).not.toContain("xhigh");
+  it("EFFORT_LEVELS = low/medium/high/xhigh/max (xhigh aceito por todos os adaptive do registry, #524)", () => {
+    expect(EFFORT_LEVELS).toEqual(["low", "medium", "high", "xhigh", "max"]);
   });
 
   it("defaults espelham o seed da migration (16000 / high / 0.3)", () => {
@@ -28,7 +27,8 @@ describe("generation-params — validação pura (ADR 0008 emenda 2)", () => {
 
   it("isEffort aceita só os níveis do registry", () => {
     for (const e of EFFORT_LEVELS) expect(isEffort(e)).toBe(true);
-    expect(isEffort("xhigh")).toBe(false);
+    expect(isEffort("xhigh")).toBe(true);
+    expect(isEffort("ultra")).toBe(false);
     expect(isEffort("HIGH")).toBe(false);
     expect(isEffort("")).toBe(false);
     expect(isEffort(undefined)).toBe(false);

@@ -1,6 +1,7 @@
 import { describe, expect, it } from "vitest";
 import type Anthropic from "@anthropic-ai/sdk";
 
+import type { Effort } from "@/lib/ai/generation-params";
 import { MODEL_REGISTRY, type AIModel } from "@/lib/ai/models";
 import { buildAnthropicRequest } from "@/lib/ai/request-builder";
 import {
@@ -11,22 +12,15 @@ import { MIN_EDGE_PP } from "@/lib/odds/scenario";
 
 const MAX_TOKENS = 2048;
 
-// Fixture INLINE de um modelo ADAPTIVE. Pós-#374 o registry só tem modelos
-// `temperature` (Sonnet 4.5 + Haiku), mas o ramo `adaptive` do request-builder
-// segue VIVO (dead-but-live — predict.ts/request-builder estão congelados).
-// Este fixture exercita esse ramo direto, preservando a invariante de PRODUÇÃO
-// (thinking + tool_choice forçado = 400 na API Anthropic) sem depender de uma
-// entrada de registry adaptive. O `id` precisa ser um AIModelId válido; o que
-// importa aqui é `thinkingMode: "adaptive"`.
-const ADAPTIVE_MODEL: AIModel = {
-  id: "claude-sonnet-4-5-20250929",
-  provider: "anthropic",
-  label: "Adaptive fixture (#374)",
-  inputPricePerMTok: 3,
-  outputPricePerMTok: 15,
-  thinkingMode: "adaptive",
-  userSelectable: true,
-};
+// Modelo ADAPTIVE real do registry (#524 trouxe Fable 5.1 / Opus 5.5 / Sonnet 5 de
+// volta — o ramo adaptive do builder voltou a ser alcançável). Os testes de shape
+// usam o Opus 5.5; os golden payloads abaixo cobrem os três.
+const ADAPTIVE_MODEL: AIModel = MODEL_REGISTRY["claude-opus-5-5"];
+const ADAPTIVE_IDS = [
+  "claude-fable-5-1",
+  "claude-opus-5-5",
+  "claude-sonnet-5",
+] as const;
 
 function build(model: Parameters<typeof buildAnthropicRequest>[0]["model"]) {
   return buildAnthropicRequest({
@@ -40,7 +34,7 @@ function build(model: Parameters<typeof buildAnthropicRequest>[0]["model"]) {
 }
 
 describe("buildAnthropicRequest — model-aware payload", () => {
-  it("adaptive (fixture #374): adaptive thinking, NO temperature/top_p/top_k", () => {
+  it("adaptive (Opus 5.5): adaptive thinking, NO temperature/top_p/top_k", () => {
     const payload = build(ADAPTIVE_MODEL);
 
     // CRÍTICO: modelos adaptive dão 400 em sampling params; o builder DEVE omiti-los.
@@ -50,12 +44,11 @@ describe("buildAnthropicRequest — model-aware payload", () => {
     expect(payload.thinking).toEqual({ type: "adaptive" });
   });
 
-  it("adaptive (fixture #374): tool_choice is 'auto' and NEVER pairs thinking with forced tool_choice", () => {
+  it("adaptive (Opus 5.5): tool_choice is 'auto' and NEVER pairs thinking with forced tool_choice", () => {
     const payload = build(ADAPTIVE_MODEL);
 
     // CRÍTICO: forced tool_choice + thinking dá 400 no caminho adaptive. O builder
-    // DEVE usar `auto` — predict.ts trata a ausência do tool_use. Guarda de PRODUÇÃO
-    // que sobrevive mesmo sem modelo adaptive no registry (#374).
+    // DEVE usar `auto` — predict.ts trata a ausência do tool_use (tool_missing).
     expect(payload.tool_choice).toEqual({ type: "auto" });
     // Garante a INVARIANTE que o 400 produz: thinking presente ⇒ tool_choice NÃO forçado.
     expect(payload.thinking).toEqual({ type: "adaptive" });
@@ -106,10 +99,49 @@ describe("buildAnthropicRequest — model-aware payload", () => {
   });
 });
 
+describe("buildAnthropicRequest — golden payloads dos adaptive (#524)", () => {
+  // Payload EXATO por modelo: pega qualquer chave a mais (temperature, top_p, top_k,
+  // budget_tokens, thinking disabled, tool_choice forçado, prefill) que daria 400
+  // no Fable 5.1 / Opus 5.5 (e no Sonnet 5 com thinking ligado).
+  function golden(id: (typeof ADAPTIVE_IDS)[number]) {
+    return {
+      model: id,
+      system: "sys",
+      messages: [{ role: "user", content: "msg" }],
+      tools: [SUBMIT_PREDICTION_TOOL],
+      max_tokens: 16000,
+      tool_choice: { type: "auto" },
+      thinking: { type: "adaptive" },
+      output_config: { effort: "xhigh" },
+    };
+  }
+
+  for (const id of ADAPTIVE_IDS) {
+    it(`${id}: payload exato (adaptive, auto, effort em output_config, sem sampling)`, () => {
+      const payload = buildAnthropicRequest({
+        model: MODEL_REGISTRY[id],
+        system: "sys",
+        userMessage: "msg",
+        tools: [SUBMIT_PREDICTION_TOOL as unknown as Anthropic.Tool],
+        toolName: SUBMIT_PREDICTION_TOOL.name,
+        maxTokens: 16000,
+        effort: "xhigh",
+        // temperature calibrada no ai_config NÃO pode vazar pro adaptive (400).
+        temperature: 0.7,
+      });
+      expect(payload).toEqual(golden(id));
+      // Só a mensagem do usuário: nada de prefill do assistant (400 nos adaptive).
+      expect(payload.messages.map((m) => m.role)).toEqual(["user"]);
+      expect(JSON.stringify(payload)).not.toContain("budget_tokens");
+      expect(JSON.stringify(payload)).not.toContain('"disabled"');
+    });
+  }
+});
+
 describe("buildAnthropicRequest — calibração model-aware (effort/temperature)", () => {
   function buildWith(
     model: Parameters<typeof buildAnthropicRequest>[0]["model"],
-    extra: { effort?: "low" | "medium" | "high" | "max"; temperature?: number },
+    extra: { effort?: Effort; temperature?: number },
   ) {
     return buildAnthropicRequest({
       model,
@@ -122,7 +154,7 @@ describe("buildAnthropicRequest — calibração model-aware (effort/temperature
     });
   }
 
-  it("adaptive (fixture #374): effort vai em output_config; segue sem sampling", () => {
+  it("adaptive (Opus 5.5): effort vai em output_config; segue sem sampling", () => {
     const payload = buildWith(ADAPTIVE_MODEL, {
       effort: "medium",
     });
@@ -179,8 +211,8 @@ describe("buildAnthropicRequest — ramo server-tool (web search, ADR 0032 / #37
       tool_choice: unknown;
     };
     const tool = payload.tools[0];
-    // Travado em web_search_20250305: o registry só tem modelos temperature-mode
-    // (Haiku/Sonnet 4.5); a _20260209 exige 4.6+ (fora do registry).
+    // Travado em web_search_20250305: os callers do ramo (notícias, cartões) fixam
+    // Haiku 4.5; a _20260209 exige 4.6+ e puxa code_execution por baixo.
     expect(tool.type).toBe("web_search_20250305");
     expect(tool.name).toBe("web_search");
     expect(tool.allowed_domains).toEqual(["ge.globo.com", "bbc.com"]);
@@ -196,6 +228,15 @@ describe("buildAnthropicRequest — ramo server-tool (web search, ADR 0032 / #37
     const payload = buildWithServerTool(MODEL_REGISTRY["claude-haiku-4-5"]);
     expect(payload.temperature).toBe(0.3);
     expect(payload).not.toHaveProperty("thinking");
+  });
+
+  it("adaptive (se um cair aqui): SEM temperature e SEM thinking explícito (roda adaptive ao omitir)", () => {
+    for (const id of ADAPTIVE_IDS) {
+      const payload = buildWithServerTool(MODEL_REGISTRY[id]);
+      expect(payload).not.toHaveProperty("temperature");
+      expect(payload).not.toHaveProperty("thinking");
+      expect(payload.tool_choice).toEqual({ type: "auto" });
+    }
   });
 
   it("NÃO declara code_execution junto (a básica não usa dynamic filtering)", () => {

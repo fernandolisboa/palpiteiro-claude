@@ -123,6 +123,26 @@ describe("updateDefaultModel", () => {
     expect(res.ok).toBe(false);
     expect(mockSet).not.toHaveBeenCalled();
   });
+
+  it("admin + Fable 5.1 (admin-only, #524) → not ok: o default vale pra todos (ADR 0013)", async () => {
+    mockAuth.mockResolvedValue(ADMIN);
+    const res = await updateDefaultModel(
+      null,
+      form({ modelId: "claude-fable-5-1" }),
+    );
+    expect(res.ok).toBe(false);
+    expect(mockSet).not.toHaveBeenCalled();
+  });
+
+  it("admin + Opus 5.5 (userSelectable, #524) → ok", async () => {
+    mockAuth.mockResolvedValue(ADMIN);
+    const res = await updateDefaultModel(
+      null,
+      form({ modelId: "claude-opus-5-5" }),
+    );
+    expect(res).toEqual({ ok: true });
+    expect(mockSet).toHaveBeenCalledWith("claude-opus-5-5", "u1");
+  });
 });
 
 describe("updateGenerationParams", () => {
@@ -155,11 +175,11 @@ describe("updateGenerationParams", () => {
     expect(mockSetParams).not.toHaveBeenCalled();
   });
 
-  it("admin + effort inválido (xhigh) → not ok, setter not called", async () => {
+  it("admin + effort inválido (ultra) → not ok, setter not called", async () => {
     mockAuth.mockResolvedValue(ADMIN);
     const res = await updateGenerationParams(
       null,
-      form({ ...valid, effort: "xhigh" }),
+      form({ ...valid, effort: "ultra" }),
     );
     expect(res.ok).toBe(false);
     expect(mockSetParams).not.toHaveBeenCalled();

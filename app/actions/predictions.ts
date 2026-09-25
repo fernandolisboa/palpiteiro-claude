@@ -103,6 +103,11 @@ function friendlyMessage(err: PredictError): string {
   if (msg.includes("standings row missing")) {
     return "Dados de classificação indisponíveis pra esta análise.";
   }
+  // Recusa do modelo (#524, `stop_reason: "refusal"` — Fable 5.1 principalmente).
+  // Não é falha temporária: repetir com o mesmo modelo tende a recusar de novo.
+  if (msg.includes("model refused")) {
+    return "O modelo recusou a análise. Tente com outro modelo.";
+  }
   if (msg.includes("zod validation")) {
     return "A resposta do modelo não passou na validação. Nenhum custo cobrado.";
   }

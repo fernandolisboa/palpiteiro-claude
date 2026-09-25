@@ -272,6 +272,25 @@ describe("analyzeMarkets — fan-out multi-mercado (custo/rate-limit por N)", ()
     }
     expect(vi.mocked(revalidatePath)).toHaveBeenCalledWith(`/match/${VALID_MATCH_ID}`);
   });
+
+  it("recusa do modelo (#524) → mensagem própria, não 'falha temporária'", async () => {
+    const { PredictError } = await import("@/lib/ai/predict");
+    mockPredict.mockRejectedValue(
+      new PredictError("model refused the analysis", {
+        refusal: { category: null, explanation: null },
+      }),
+    );
+    const res = await analyzeMarkets(
+      null,
+      form({ matchId: VALID_MATCH_ID, marketKeys: ["over_under"] }),
+    );
+    expect(res.ok).toBe(true);
+    if (res.ok) {
+      expect(res.summaries[0].message).toBe(
+        "O modelo recusou a análise. Tente com outro modelo.",
+      );
+    }
+  });
 });
 
 describe("analyzeMarkets — pré-warm de odds *additional* SÓ sobre os concedidos (crédito The Odds API)", () => {

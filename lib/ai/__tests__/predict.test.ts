@@ -1460,6 +1460,132 @@ describe("predict() — cascata completa: preferência do usuário + filtro de a
 // o backstop de predict — não são equivalentes. Follow-up pos-pivot: reintroduzir
 // quando um provider OpenAI voltar ao registry.
 
+describe("predict() — modelos adaptive de volta ao registry (#524)", () => {
+  it("modelOverride Opus 5.5 → request adaptive: thinking adaptive, tool_choice auto, effort em output_config, SEM temperature", async () => {
+    await expect(
+      predict({
+        matchId: "m-1",
+        userId: "u-1",
+        isAdmin: false,
+        modelOverride: "claude-opus-5-5",
+      }),
+    ).resolves.toBeDefined();
+
+    const arg = anthropicCreate.mock.calls[0]?.[0];
+    expect(arg.model).toBe("claude-opus-5-5");
+    expect(arg.thinking).toEqual({ type: "adaptive" });
+    expect(arg.tool_choice).toEqual({ type: "auto" });
+    expect(arg.output_config).toEqual({ effort: "high" });
+    expect(arg).not.toHaveProperty("temperature");
+    // Adaptive leva o timeout maior por request (ADAPTIVE_REQUEST_OPTIONS).
+    expect(anthropicCreate.mock.calls[0]?.[1]).toMatchObject({
+      timeout: 120_000,
+    });
+
+    const aiCallRow = insertValues.mock.calls[0]?.[0] as {
+      model: string;
+      costUsd: string;
+    };
+    expect(aiCallRow.model).toBe("claude-opus-5-5");
+    // Custo pelo pricing do registry: 1200 × $4 + 300 × $20 por 1M.
+    expect(aiCallRow.costUsd).toBe(((1200 * 4 + 300 * 20) / 1_000_000).toFixed(6));
+  });
+
+  it("preferência Fable 5.1 (admin-only) + isAdmin=false → filtrada pelo gate, cai no default global", async () => {
+    getPreferredModelId.mockResolvedValue("claude-fable-5-1");
+    getDefaultModelId.mockResolvedValue("claude-sonnet-4-5-20250929");
+
+    await expect(
+      predict({ matchId: "m-1", userId: "u-1", isAdmin: false }),
+    ).resolves.toBeDefined();
+
+    expect(anthropicCreate.mock.calls[0]?.[0].model).toBe(
+      "claude-sonnet-4-5-20250929",
+    );
+  });
+
+  it("preferência Fable 5.1 + isAdmin=true → usa o Fable 5.1", async () => {
+    getPreferredModelId.mockResolvedValue("claude-fable-5-1");
+
+    await expect(
+      predict({ matchId: "m-1", userId: "u-1", isAdmin: true }),
+    ).resolves.toBeDefined();
+
+    expect(anthropicCreate.mock.calls[0]?.[0].model).toBe("claude-fable-5-1");
+    expect(getDefaultModelId).not.toHaveBeenCalled();
+  });
+
+  it("tool_choice auto e o modelo responde só texto → tool_missing auditado, sem prediction", async () => {
+    anthropicCreate.mockResolvedValue({
+      ...anthropicMessage(),
+      model: "claude-sonnet-5",
+      stop_reason: "end_turn",
+      content: [{ type: "text", text: "Prefiro não recomendar." }],
+    });
+
+    await expect(
+      predict({
+        matchId: "m-1",
+        userId: "u-1",
+        isAdmin: false,
+        modelOverride: "claude-sonnet-5",
+      }),
+    ).rejects.toThrow("LLM did not call submit_prediction tool");
+
+    expect(insertValues).toHaveBeenCalledTimes(1);
+    const aiCallRow = insertValues.mock.calls[0]?.[0] as { status: string };
+    expect(aiCallRow.status).toBe("tool_missing");
+  });
+
+  it("recusa (stop_reason 'refusal') → 1 ai_call provider_error com tokens, 0 prediction, PredictError 'model refused'", async () => {
+    anthropicCreate.mockResolvedValue({
+      ...anthropicMessage(),
+      model: "claude-fable-5-1",
+      stop_reason: "refusal",
+      stop_details: {
+        type: "refusal",
+        category: null,
+        explanation: "Não posso ajudar com isso.",
+      },
+      content: [],
+      usage: { input_tokens: 1500, output_tokens: 12 },
+    });
+
+    const err = await predict({
+      matchId: "m-1",
+      userId: "u-1",
+      isAdmin: true,
+      modelOverride: "claude-fable-5-1",
+    }).catch((e: unknown) => e);
+
+    expect(err).toBeInstanceOf(PredictError);
+    expect((err as PredictError).message).toBe("model refused the analysis");
+    expect((err as PredictError).context.refusal).toEqual({
+      category: null,
+      explanation: "Não posso ajudar com isso.",
+    });
+
+    // Auditado como as outras falhas: exatamente UM insert (ai_calls), nada de
+    // prediction/PSO — nenhum lixo persistido.
+    expect(anthropicCreate).toHaveBeenCalledTimes(1);
+    expect(insertValues).toHaveBeenCalledTimes(1);
+    const aiCallRow = insertValues.mock.calls[0]?.[0] as {
+      status: string;
+      model: string;
+      inputTokens: number;
+      outputTokens: number;
+      errorMessage: string;
+    };
+    expect(aiCallRow.status).toBe("provider_error");
+    expect(aiCallRow.model).toBe("claude-fable-5-1");
+    expect(aiCallRow.inputTokens).toBe(1500);
+    expect(aiCallRow.outputTokens).toBe(12);
+    expect(aiCallRow.errorMessage).toBe(
+      "o modelo recusou a análise: Não posso ajudar com isso.",
+    );
+  });
+});
+
 describe("predict() — model declines to call the tool", () => {
   it("no submit_prediction tool_use (thinking/text only) → persists tool_missing ai_call, still paid, and throws", async () => {
     // predict() deve registrar o ai_call pago (tokens cobrados) com status

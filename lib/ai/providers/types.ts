@@ -109,6 +109,12 @@ export type AnalysisErr = {
   >;
   message: string;
   cause?: unknown;
+  // Presente quando o MODELO recusou a análise (#524; Anthropic: `stop_reason:
+  // "refusal"` + `stop_details`). A chamada foi paga e respondeu 200, mas sem
+  // conteúdo utilizável — `status` fica `provider_error` (sem valor novo no enum do
+  // DB) e o caller usa este campo pra dar uma mensagem amigável em vez de "falha
+  // temporária". `category`/`explanation` vêm do provider e podem ser null.
+  refusal?: ModelRefusal;
   usage: AnalysisUsage;
   inputPayload: Record<string, unknown>;
   outputPayload: Record<string, unknown>;
@@ -117,6 +123,12 @@ export type AnalysisErr = {
 };
 
 export type AnalysisResult = AnalysisOk | AnalysisErr;
+
+// Recusa do modelo, provider-neutra (#524).
+export type ModelRefusal = {
+  category: string | null;
+  explanation: string | null;
+};
 
 // O contrato do provider (ADR 0027). `providerKey` é escrito verbatim em
 // `ai_calls.provider`. `hasKey()` = padrão SportMonks/#227: `false` ⇒

@@ -1,6 +1,10 @@
 import { DefinitionRow } from "@/components/admin/definition-row";
 import { PageHeading } from "@/components/admin/page-heading";
-import { SELECTABLE_MODELS } from "@/lib/ai/models";
+import { MODEL_REGISTRY, SELECTABLE_MODELS } from "@/lib/ai/models";
+import {
+  listApiModels,
+  unregisteredApiModels,
+} from "@/lib/ai/providers/anthropic/models-catalog";
 import { ADMIN_FLAGS, type AdminFlagDef } from "@/lib/config/admin-flags";
 import {
   getAdminFlagValues,
@@ -16,9 +20,17 @@ export const dynamic = "force-dynamic";
 
 // Gateado por app/admin/layout.tsx (role === "admin" → notFound pra outros).
 export default async function AdminSettingsPage() {
-  const current = await getDefaultModelId();
-  const genParams = await getGenerationParams();
-  const flagValues = await getAdminFlagValues();
+  const [current, genParams, flagValues, apiModels] = await Promise.all([
+    getDefaultModelId(),
+    getGenerationParams(),
+    getAdminFlagValues(),
+    // Falha em silêncio (sem chave/erro → []) e cacheado 1h: nunca derruba a página.
+    listApiModels(),
+  ]);
+  const unregistered = unregisteredApiModels(
+    apiModels,
+    Object.keys(MODEL_REGISTRY),
+  );
 
   return (
     <div className="min-h-screen bg-background text-foreground">
@@ -34,10 +46,11 @@ export default async function AdminSettingsPage() {
             modelos disponíveis
           </h2>
           <div className="rounded-md border border-border">
-            {/* Lista TODO o registry. Hoje todos são userSelectable (após #240 +
-                #241), mas um modelo admin-only ganha um rótulo explícito — assim
-                a lista nunca insinua que um modelo não-salvável é padrão usável
-                (o dropdown de "padrão global" o desabilita em paralelo). */}
+            {/* Lista TODO o registry. Modelo admin-only (Fable 5.1, #524) ganha
+                rótulo explícito — assim a lista nunca insinua que um modelo
+                não-salvável é padrão usável (o dropdown de "padrão global" o
+                desabilita em paralelo). Adaptive = thinking sem temperatura: não
+                reproduzível no motor llm (ADR 0021, emenda de #524). */}
             {SELECTABLE_MODELS.map((m) => (
               <DefinitionRow
                 key={m.id}
@@ -47,6 +60,7 @@ export default async function AdminSettingsPage() {
                     <span className="text-body font-medium">
                       {m.label}
                       {m.userSelectable ? "" : " · admin-only"}
+                      {m.thinkingMode === "adaptive" ? " · adaptive" : ""}
                     </span>
                     <span className="font-mono text-eyebrow text-muted-foreground">
                       {m.id}
@@ -61,6 +75,25 @@ export default async function AdminSettingsPage() {
               />
             ))}
           </div>
+          {unregistered.length > 0 && (
+            <div
+              role="note"
+              className="mt-3 text-body-sm text-muted-foreground"
+            >
+              <p>
+                Modelos disponíveis na API ainda sem cadastro (a API não informa
+                preço; cadastro manual em lib/ai/models.ts):
+              </p>
+              <ul className="mt-1 flex flex-col gap-0.5">
+                {unregistered.map((m) => (
+                  <li key={m.id} className="font-mono text-eyebrow">
+                    {m.id}
+                    {m.displayName ? ` · ${m.displayName}` : ""}
+                  </li>
+                ))}
+              </ul>
+            </div>
+          )}
         </section>
 
         <section>

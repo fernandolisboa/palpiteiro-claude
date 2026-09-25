@@ -65,7 +65,7 @@ describe("getGenerationParams — fallback POR CAMPO (ADR 0008 emenda 2)", () =>
   });
 
   it("cada campo inválido cai no default individualmente", async () => {
-    defaultRows = [{ maxTokens: 999999, effort: "xhigh", temperature: "9.9" }];
+    defaultRows = [{ maxTokens: 999999, effort: "ultra", temperature: "9.9" }];
     await expect(getGenerationParams()).resolves.toEqual(
       GENERATION_PARAM_DEFAULTS,
     );

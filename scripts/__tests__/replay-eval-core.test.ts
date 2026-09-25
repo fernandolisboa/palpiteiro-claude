@@ -31,6 +31,12 @@ describe("classifyThinkingMode — bifurcação por caminho de amostragem", () =
     expect(classifyThinkingMode("claude-haiku-4-5")).toBe("temperature");
   });
 
+  it("Fable 5.1 / Opus 5.5 / Sonnet 5 (#524) → adaptive (flip só conta se reproduzir)", () => {
+    expect(classifyThinkingMode("claude-fable-5-1")).toBe("adaptive");
+    expect(classifyThinkingMode("claude-opus-5-5")).toBe("adaptive");
+    expect(classifyThinkingMode("claude-sonnet-5")).toBe("adaptive");
+  });
+
   it("id fora do registry (legado/removido) → temperature = ESTRITO (conservador)", () => {
     // Um payload de modelo aposentado é avaliado estrito: qualquer flip conta.
     // Nunca tolera flip de um modelo que não conseguimos classificar. Pós-#374 os
