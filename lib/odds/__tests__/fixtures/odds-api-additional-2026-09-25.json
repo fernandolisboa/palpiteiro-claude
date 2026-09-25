@@ -1,0 +1,542 @@
+{
+  "BRASILEIRAO": {
+    "id": "bf5e804636b32bc84559397755275753",
+    "commenceTime": "2026-10-02T23:00:00Z",
+    "homeTeam": "Sao Paulo",
+    "awayTeam": "Santos",
+    "bookmakers": [
+      {
+        "key": "codere_it",
+        "title": "Codere (IT)",
+        "markets": [
+          {
+            "key": "double_chance",
+            "lastUpdate": "2026-09-25T15:58:37Z",
+            "outcomes": [
+              {
+                "name": "Santos or Draw",
+                "price": 1.74
+              },
+              {
+                "name": "Sao Paulo or Draw",
+                "price": 1.24
+              },
+              {
+                "name": "Santos or Sao Paulo",
+                "price": 1.29
+              }
+            ]
+          },
+          {
+            "key": "alternate_totals",
+            "lastUpdate": "2026-09-25T15:58:37Z",
+            "outcomes": [
+              {
+                "name": "Over",
+                "price": 1.31,
+                "point": 1.5
+              },
+              {
+                "name": "Over",
+                "price": 1.98,
+                "point": 2.5
+              },
+              {
+                "name": "Over",
+                "price": 3.35,
+                "point": 3.5
+              },
+              {
+                "name": "Under",
+                "price": 3.05,
+                "point": 1.5
+              },
+              {
+                "name": "Under",
+                "price": 1.71,
+                "point": 2.5
+              },
+              {
+                "name": "Under",
+                "price": 1.26,
+                "point": 3.5
+              }
+            ]
+          }
+        ]
+      },
+      {
+        "key": "coolbet",
+        "title": "Coolbet",
+        "markets": [
+          {
+            "key": "alternate_totals",
+            "lastUpdate": "2026-09-25T15:58:38Z",
+            "outcomes": [
+              {
+                "name": "Over",
+                "price": 3.59,
+                "point": 3.5
+              },
+              {
+                "name": "Over",
+                "price": 1.34,
+                "point": 1.5
+              },
+              {
+                "name": "Over",
+                "price": 2.01,
+                "point": 2.5
+              },
+              {
+                "name": "Under",
+                "price": 1.28,
+                "point": 3.5
+              },
+              {
+                "name": "Under",
+                "price": 3.19,
+                "point": 1.5
+              },
+              {
+                "name": "Under",
+                "price": 1.78,
+                "point": 2.5
+              }
+            ]
+          }
+        ]
+      },
+      {
+        "key": "onexbet",
+        "title": "1xBet",
+        "markets": [
+          {
+            "key": "btts",
+            "lastUpdate": "2026-09-25T15:47:18Z",
+            "outcomes": [
+              {
+                "name": "Yes",
+                "price": 1.81
+              },
+              {
+                "name": "No",
+                "price": 1.9
+              }
+            ]
+          },
+          {
+            "key": "double_chance",
+            "lastUpdate": "2026-09-25T15:47:18Z",
+            "outcomes": [
+              {
+                "name": "Santos or Draw",
+                "price": 1.78
+              },
+              {
+                "name": "Sao Paulo or Draw",
+                "price": 1.28
+              },
+              {
+                "name": "Santos or Sao Paulo",
+                "price": 1.32
+              }
+            ]
+          }
+        ]
+      },
+      {
+        "key": "pinnacle",
+        "title": "Pinnacle",
+        "markets": [
+          {
+            "key": "alternate_totals",
+            "lastUpdate": "2026-09-25T15:59:29Z",
+            "outcomes": [
+              {
+                "name": "Over",
+                "price": 3.63,
+                "point": 3.5
+              },
+              {
+                "name": "Over",
+                "price": 2.06,
+                "point": 2.5
+              },
+              {
+                "name": "Over",
+                "price": 1.33,
+                "point": 1.5
+              },
+              {
+                "name": "Under",
+                "price": 1.29,
+                "point": 3.5
+              },
+              {
+                "name": "Under",
+                "price": 1.78,
+                "point": 2.5
+              },
+              {
+                "name": "Under",
+                "price": 3.32,
+                "point": 1.5
+              }
+            ]
+          }
+        ]
+      },
+      {
+        "key": "williamhill",
+        "title": "William Hill",
+        "markets": [
+          {
+            "key": "btts",
+            "lastUpdate": "2026-09-25T15:59:30Z",
+            "outcomes": [
+              {
+                "name": "Yes",
+                "price": 1.83
+              },
+              {
+                "name": "No",
+                "price": 1.91
+              }
+            ]
+          },
+          {
+            "key": "double_chance",
+            "lastUpdate": "2026-09-25T15:59:30Z",
+            "outcomes": [
+              {
+                "name": "Santos or Draw",
+                "price": 1.75
+              },
+              {
+                "name": "Sao Paulo or Draw",
+                "price": 1.25
+              },
+              {
+                "name": "Santos or Sao Paulo",
+                "price": 1.3
+              }
+            ]
+          },
+          {
+            "key": "alternate_totals",
+            "lastUpdate": "2026-09-25T15:59:30Z",
+            "outcomes": [
+              {
+                "name": "Over",
+                "price": 1.33,
+                "point": 1.5
+              },
+              {
+                "name": "Over",
+                "price": 2.05,
+                "point": 2.5
+              },
+              {
+                "name": "Under",
+                "price": 3.1,
+                "point": 1.5
+              },
+              {
+                "name": "Under",
+                "price": 1.73,
+                "point": 2.5
+              }
+            ]
+          }
+        ]
+      }
+    ]
+  },
+  "CHAMPIONS": {
+    "id": "93177465a42a0fb7802f1c8b06d6ee3a",
+    "commenceTime": "2026-10-13T19:00:00Z",
+    "homeTeam": "Arsenal",
+    "awayTeam": "Lille",
+    "bookmakers": [
+      {
+        "key": "suprabets",
+        "title": "Suprabets",
+        "markets": [
+          {
+            "key": "alternate_totals",
+            "lastUpdate": "2026-09-25T15:57:45Z",
+            "outcomes": [
+              {
+                "name": "Over",
+                "price": 1.6,
+                "point": 2.5
+              },
+              {
+                "name": "Over",
+                "price": 2.5,
+                "point": 3.5
+              },
+              {
+                "name": "Over",
+                "price": 1.19,
+                "point": 1.5
+              },
+              {
+                "name": "Under",
+                "price": 2.22,
+                "point": 2.5
+              },
+              {
+                "name": "Under",
+                "price": 1.48,
+                "point": 3.5
+              },
+              {
+                "name": "Under",
+                "price": 4.25,
+                "point": 1.5
+              }
+            ]
+          }
+        ]
+      },
+      {
+        "key": "onexbet",
+        "title": "1xBet",
+        "markets": [
+          {
+            "key": "btts",
+            "lastUpdate": "2026-09-25T15:50:55Z",
+            "outcomes": [
+              {
+                "name": "Yes",
+                "price": 2.06
+              },
+              {
+                "name": "No",
+                "price": 1.7
+              }
+            ]
+          },
+          {
+            "key": "double_chance",
+            "lastUpdate": "2026-09-25T15:50:55Z",
+            "outcomes": [
+              {
+                "name": "Arsenal or Draw",
+                "price": 1.05
+              },
+              {
+                "name": "Lille or Draw",
+                "price": 3.72
+              },
+              {
+                "name": "Arsenal or Lille",
+                "price": 1.18
+              }
+            ]
+          }
+        ]
+      },
+      {
+        "key": "pinnacle",
+        "title": "Pinnacle",
+        "markets": [
+          {
+            "key": "alternate_totals",
+            "lastUpdate": "2026-09-25T15:59:30Z",
+            "outcomes": [
+              {
+                "name": "Over",
+                "price": 1.56,
+                "point": 2.5
+              },
+              {
+                "name": "Over",
+                "price": 2.42,
+                "point": 3.5
+              },
+              {
+                "name": "Under",
+                "price": 2.15,
+                "point": 2.5
+              },
+              {
+                "name": "Under",
+                "price": 1.44,
+                "point": 3.5
+              }
+            ]
+          }
+        ]
+      },
+      {
+        "key": "codere_it",
+        "title": "Codere (IT)",
+        "markets": [
+          {
+            "key": "double_chance",
+            "lastUpdate": "2026-09-25T15:59:30Z",
+            "outcomes": [
+              {
+                "name": "Arsenal or Draw",
+                "price": 1.05
+              },
+              {
+                "name": "Lille or Draw",
+                "price": 3.67
+              },
+              {
+                "name": "Arsenal or Lille",
+                "price": 1.13
+              }
+            ]
+          },
+          {
+            "key": "alternate_totals",
+            "lastUpdate": "2026-09-25T15:59:30Z",
+            "outcomes": [
+              {
+                "name": "Over",
+                "price": 1.17,
+                "point": 1.5
+              },
+              {
+                "name": "Over",
+                "price": 1.56,
+                "point": 2.5
+              },
+              {
+                "name": "Over",
+                "price": 2.38,
+                "point": 3.5
+              },
+              {
+                "name": "Under",
+                "price": 4.2,
+                "point": 1.5
+              },
+              {
+                "name": "Under",
+                "price": 2.23,
+                "point": 2.5
+              },
+              {
+                "name": "Under",
+                "price": 1.49,
+                "point": 3.5
+              }
+            ]
+          }
+        ]
+      },
+      {
+        "key": "williamhill",
+        "title": "William Hill",
+        "markets": [
+          {
+            "key": "btts",
+            "lastUpdate": "2026-09-25T15:59:12Z",
+            "outcomes": [
+              {
+                "name": "Yes",
+                "price": 2.0
+              },
+              {
+                "name": "No",
+                "price": 1.75
+              }
+            ]
+          },
+          {
+            "key": "double_chance",
+            "lastUpdate": "2026-09-25T15:59:12Z",
+            "outcomes": [
+              {
+                "name": "Arsenal or Draw",
+                "price": 1.05
+              },
+              {
+                "name": "Lille or Draw",
+                "price": 3.6
+              },
+              {
+                "name": "Arsenal or Lille",
+                "price": 1.15
+              }
+            ]
+          },
+          {
+            "key": "alternate_totals",
+            "lastUpdate": "2026-09-25T15:59:12Z",
+            "outcomes": [
+              {
+                "name": "Over",
+                "price": 1.18,
+                "point": 1.5
+              },
+              {
+                "name": "Over",
+                "price": 1.57,
+                "point": 2.5
+              },
+              {
+                "name": "Under",
+                "price": 4.8,
+                "point": 1.5
+              },
+              {
+                "name": "Under",
+                "price": 2.4,
+                "point": 2.5
+              }
+            ]
+          }
+        ]
+      },
+      {
+        "key": "coolbet",
+        "title": "Coolbet",
+        "markets": [
+          {
+            "key": "alternate_totals",
+            "lastUpdate": "2026-09-25T15:59:32Z",
+            "outcomes": [
+              {
+                "name": "Over",
+                "price": 1.19,
+                "point": 1.5
+              },
+              {
+                "name": "Over",
+                "price": 1.59,
+                "point": 2.5
+              },
+              {
+                "name": "Over",
+                "price": 2.5,
+                "point": 3.5
+              },
+              {
+                "name": "Under",
+                "price": 4.8,
+                "point": 1.5
+              },
+              {
+                "name": "Under",
+                "price": 2.37,
+                "point": 2.5
+              },
+              {
+                "name": "Under",
+                "price": 1.54,
+                "point": 3.5
+              }
+            ]
+          }
+        ]
+      }
+    ]
+  }
+}

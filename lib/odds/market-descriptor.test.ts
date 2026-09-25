@@ -63,9 +63,13 @@ describe("DOUBLE_CHANCE.resolveSelectionKey", () => {
     expect(r("South Korea or Korea")).toBe("home_or_away");
   });
 
-  it("descriptor: oddsSource additional, coveredLeagues world_cup, impliedSumTarget 2", () => {
+  it("descriptor: oddsSource additional, coveredLeagues Copa/Brasileirão/Champions, impliedSumTarget 2", () => {
     expect(DOUBLE_CHANCE.oddsSource).toBe("additional");
-    expect(DOUBLE_CHANCE.coveredLeagues).toEqual(["world_cup"]);
+    expect(DOUBLE_CHANCE.coveredLeagues).toEqual([
+      "world_cup",
+      "brasileirao_a",
+      "champions_league",
+    ]);
     expect(DOUBLE_CHANCE.impliedSumTarget).toBe(2);
     expect(DOUBLE_CHANCE.providerMarketKey).toBe("double_chance");
     expect(DOUBLE_CHANCE.selectionKeys).toEqual([
