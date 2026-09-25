@@ -57,10 +57,12 @@ import type {
   PreviousAnalysisItem,
 } from "@/lib/view/types";
 
-// Fan-out "melhor aposta" (#178) roda até ~4 predict() SERIAIS num request — no pior
-// caso (retries do Anthropic) leva minutos. Estende o budget da rota (Vercel max).
-// Uma truncagem por timeout deixa as ≤N predições JÁ persistidas (reais) visíveis no
-// próximo load (keepLatestPerMatch), sem retornar a view deste request.
+// Os fan-outs (melhor aposta #178, multi-mercado #245) rodam até MAX_FANOUT_MARKETS (7)
+// predict() SERIAIS num request, e um modelo adaptive leva 45–90s por chamada. Estende o
+// budget da rota (Vercel max). As actions têm prazo próprio de 270s (ACTION_BUDGET_MS,
+// lib/ai/deadline.ts, #524): o que não cabe vira "Tempo esgotado — não analisado" sem
+// gasto nem slot, e o timeout de cada chamada é cortado pelo que resta — o request
+// responde antes deste teto.
 export const maxDuration = 300;
 
 // Render dinâmico explícito: lê o cookie de fuso (#1) por-request. auth() já a

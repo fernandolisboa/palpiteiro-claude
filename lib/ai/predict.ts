@@ -55,6 +55,7 @@ import {
   truncate,
 } from "./ai-call-logging";
 import { calculateCost } from "./cost";
+import { AnalysisDeadlineError, canFitCall } from "./deadline";
 import type { AnalysisEngine } from "./engine/analysis-engine";
 import { readAnalysisEngine } from "./engine/analysis-engine-flag";
 import {
@@ -140,6 +141,19 @@ export type PredictArgs = {
   // a variante multi-linha (over_under_v3.0) onde existir. Lida na action a partir
   // de ai_config; predict só a repassa pro registry. Default false = caminho de hoje.
   extraLines?: boolean;
+  // Prazo do run (epoch ms, lib/ai/deadline.ts), medido do início da action. Antes
+  // de cada chamada paga predict confere se ainda cabe uma chamada do modelo
+  // resolvido; se não, lança AnalysisDeadlineError SEM gastar (e sem cobrar slot).
+  // O adapter corta timeout/retries pelo restante. Ausente = sem prazo.
+  deadlineAt?: number;
+};
+
+// Opções do caller que não são dados da análise.
+export type PredictOptions = {
+  // Chamado logo ANTES de cada chamada paga ao LLM (análise ou narração), depois de
+  // todas as falhas pré-gasto e do teste de prazo. Lança pra abortar sem gasto — é
+  // onde o fan-out cobra o slot de rate-limit (slots cobrados == chamadas pagas).
+  beforeLlmPath?: () => Promise<void>;
 };
 
 export type Prediction = typeof predictions.$inferSelect;
@@ -213,8 +227,11 @@ function findMatchingEvent(
 
 // ─── Public API ──────────────────────────────────────────────────────────────
 
-export async function predict(args: PredictArgs): Promise<PredictResult> {
-  const outcome = await runPredict(args, {});
+export async function predict(
+  args: PredictArgs,
+  options: PredictOptions = {},
+): Promise<PredictResult> {
+  const outcome = await runPredict(args, options);
   if (outcome.kind !== "done") {
     // Inalcançável: sem `deferNarration`, o ramo code_jev narra e persiste.
     throw new PredictError("predict: decisão code_jev pendente sem pedido");
@@ -262,6 +279,8 @@ export type PendingCodeJevPrediction = {
   matchId: string;
   narratorDecision: NarratorDecision;
   narratorContext: NarratorContext;
+  // Prazo do run (PredictArgs.deadlineAt), repassado à chamada narradora.
+  deadlineAt?: number;
   persist: Omit<PersistArgs, "aiCallId" | "rationale" | "keyFactors">;
 };
 
@@ -295,6 +314,7 @@ export async function narratePendingPrediction(
     matchId: pending.matchId,
     decision: pending.narratorDecision,
     context: pending.narratorContext,
+    deadlineAt: pending.deadlineAt,
   });
 }
 
@@ -322,9 +342,10 @@ export async function persistPendingPrediction(
   });
 }
 
-type RunPredictOptions = Partial<BestBetPredictOptions> & {
-  deferNarration?: boolean;
-};
+type RunPredictOptions = Partial<BestBetPredictOptions> &
+  PredictOptions & {
+    deferNarration?: boolean;
+  };
 
 async function runPredict(
   {
@@ -334,6 +355,7 @@ async function runPredict(
     modelOverride,
     marketKey = "over_under",
     extraLines = false,
+    deadlineAt,
   }: PredictArgs,
   opts: RunPredictOptions,
 ): Promise<PredictOutcome> {
@@ -940,6 +962,7 @@ async function runPredict(
       matchId,
       narratorDecision,
       narratorContext,
+      deadlineAt,
       persist: {
         matchId,
         userId,
@@ -966,6 +989,11 @@ async function runPredict(
     // Best bet (#512): o orquestrador decide qual mercado narra (1 chamada paga).
     if (opts.deferNarration) return { kind: "pending", pending };
 
+    // Narração paga fora do best bet: mesmo gate de prazo + hook de slot da análise.
+    if (!canFitCall(deadlineAt, model.thinkingMode)) {
+      throw new AnalysisDeadlineError();
+    }
+    if (opts.beforeLlmPath) await opts.beforeLlmPath();
     const narration = await narratePendingPrediction(pending);
     return {
       kind: "done",
@@ -1104,6 +1132,7 @@ async function runPredict(
     maxTokens: genParams.maxTokens,
     effort: genParams.effort,
     temperature: genParams.temperature,
+    deadlineAt,
   };
 
   // 8. Chamada paga via o seam AIProvider (o adapter é dono do SDK e do cronômetro
@@ -1142,9 +1171,14 @@ async function runPredict(
     });
     throw new PredictError(noKeyMsg, { provider: providerKey, model: model.id });
   }
-  // Mercado que cai no caminho LLM dentro de um best bet code_jev (λ indisponível):
-  // o orquestrador cobra o slot desta chamada paga logo ANTES dela (#512), depois de
-  // todas as falhas pré-gasto. Fora do best bet o hook não existe (caminho de hoje).
+  // Os fan-outs (best bet, multi-mercado) cobram o slot desta chamada paga logo ANTES
+  // dela (#512, #524 review), depois de todas as falhas pré-gasto. Sem hook (a
+  // análise avulsa, que cobra o slot na action) é o caminho de hoje.
+  // Prazo do run (#524): não inicia uma chamada que o timeout vai cortar — pula sem
+  // gasto e sem slot (o hook abaixo cobra o slot).
+  if (!canFitCall(deadlineAt, model.thinkingMode)) {
+    throw new AnalysisDeadlineError();
+  }
   if (opts.beforeLlmPath) await opts.beforeLlmPath();
   const result = await aiProvider.runAnalysis(analysisRequest);
   const latencyMs = result.latencyMs;
@@ -1987,6 +2021,7 @@ async function narrateDecision(args: {
   matchId: string;
   decision: NarratorDecision;
   context: NarratorContext;
+  deadlineAt?: number;
 }): Promise<{ aiCallId: string; output: NarratorOutput }> {
   const { model, decision } = args;
   const genParams = await getGenerationParams();
@@ -1999,6 +2034,7 @@ async function narrateDecision(args: {
     maxTokens: genParams.maxTokens,
     effort: genParams.effort,
     temperature: genParams.temperature,
+    deadlineAt: args.deadlineAt,
   };
   const aiProvider = getProviderForModel(model);
   const providerKey = aiProvider.providerKey;

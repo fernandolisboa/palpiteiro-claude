@@ -162,6 +162,7 @@ import { buildPredictionInput } from "@/lib/ai/markets/over_under/build-input";
 import { overUnderCartridge } from "@/lib/ai/markets/over_under";
 import { computeMarketImpliedProbabilities } from "@/lib/odds/implied-probability";
 
+import { AnalysisDeadlineError } from "@/lib/ai/deadline";
 import { predict, PredictError } from "@/lib/ai/predict";
 
 // ─── Fixtures for the happy-path mocks ───────────────────────────────────────
@@ -1477,9 +1478,10 @@ describe("predict() — modelos adaptive de volta ao registry (#524)", () => {
     expect(arg.tool_choice).toEqual({ type: "auto" });
     expect(arg.output_config).toEqual({ effort: "high" });
     expect(arg).not.toHaveProperty("temperature");
-    // Adaptive leva o timeout maior por request (ADAPTIVE_REQUEST_OPTIONS).
-    expect(anthropicCreate.mock.calls[0]?.[1]).toMatchObject({
-      timeout: 120_000,
+    // Adaptive leva o timeout escalado por max_tokens/effort (16000 em high → 215s).
+    expect(anthropicCreate.mock.calls[0]?.[1]).toEqual({
+      timeout: 215_000,
+      maxRetries: 2,
     });
 
     const aiCallRow = insertValues.mock.calls[0]?.[0] as {
@@ -1583,6 +1585,56 @@ describe("predict() — modelos adaptive de volta ao registry (#524)", () => {
     expect(aiCallRow.errorMessage).toBe(
       "o modelo recusou a análise: Não posso ajudar com isso.",
     );
+  });
+});
+
+describe("predict() — prazo do run (#524 review)", () => {
+  it("prazo sem espaço pra uma chamada adaptive → AnalysisDeadlineError ANTES do hook de slot e do gasto", async () => {
+    const beforeLlmPath = vi.fn(async () => {});
+    const err = await predict(
+      {
+        matchId: "m-1",
+        userId: "u-1",
+        isAdmin: false,
+        modelOverride: "claude-opus-5-5",
+        deadlineAt: Date.now() + 30_000,
+      },
+      { beforeLlmPath },
+    ).catch((e: unknown) => e);
+
+    expect(err).toBeInstanceOf(AnalysisDeadlineError);
+    expect(beforeLlmPath).not.toHaveBeenCalled();
+    expect(anthropicCreate).not.toHaveBeenCalled();
+    expect(insertValues).not.toHaveBeenCalled();
+  });
+
+  it("com prazo: o hook cobra o slot antes da chamada e o timeout é cortado pelo restante", async () => {
+    const order: string[] = [];
+    const beforeLlmPath = vi.fn(async () => {
+      order.push("slot");
+    });
+    anthropicCreate.mockImplementationOnce(async () => {
+      order.push("create");
+      return anthropicMessage();
+    });
+    await predict(
+      {
+        matchId: "m-1",
+        userId: "u-1",
+        isAdmin: false,
+        modelOverride: "claude-opus-5-5",
+        deadlineAt: Date.now() + 100_000,
+      },
+      { beforeLlmPath },
+    );
+    expect(order).toEqual(["slot", "create"]);
+    const opts = anthropicCreate.mock.calls[0]?.[1] as {
+      timeout: number;
+      maxRetries: number;
+    };
+    expect(opts.timeout).toBeLessThanOrEqual(95_000);
+    expect(opts.timeout).toBeGreaterThan(80_000);
+    expect(opts.maxRetries).toBe(0);
   });
 });
 

@@ -1076,7 +1076,8 @@ describe("best bet no motor code_jev (#512): 1 JEV, mercados em código, 1 narra
       (r) => r.promptVersion === "narrator_v1" && "provider" in r
     );
     expect(narratorCalls).toHaveLength(1);
-    expect(acquireSlot).not.toHaveBeenCalled();
+    // 1 chamada paga (a narração) = 1 slot, cobrado logo antes dela.
+    expect(acquireSlot).toHaveBeenCalledTimes(1);
 
     const predictions = rowsWhere((r) => "recommendation" in r);
     expect(predictions).toHaveLength(3);
@@ -1135,7 +1136,7 @@ describe("best bet no motor code_jev (#512): 1 JEV, mercados em código, 1 narra
     }
   });
 
-  it("λ indisponível (tabela sem gols, início de temporada): cada mercado vai pro caminho LLM e a 2ª chamada paga pede slot", async () => {
+  it("λ indisponível (tabela sem gols, início de temporada): cada mercado vai pro caminho LLM e cada chamada paga pede o próprio slot", async () => {
     // Tabela presente (os cartuchos rodam), mas degenerada pro λ (média 0).
     getStandings.mockResolvedValue({
       ...STANDINGS,
@@ -1162,7 +1163,10 @@ describe("best bet no motor code_jev (#512): 1 JEV, mercados em código, 1 narra
       rationale: "Sem valor claro.",
       key_factors: ["equilíbrio"],
     };
-    const acquireSlot = vi.fn(async () => ({ ok: false }));
+    const acquireSlot = vi
+      .fn<() => Promise<{ ok: boolean }>>()
+      .mockResolvedValueOnce({ ok: true })
+      .mockResolvedValue({ ok: false });
 
     const out = await runCodeJevFanOut(
       base,
@@ -1172,16 +1176,69 @@ describe("best bet no motor code_jev (#512): 1 JEV, mercados em código, 1 narra
     );
 
     expect(judge).not.toHaveBeenCalled();
-    // 1ª chamada paga no slot do grupo; a 2ª teve o slot negado ANTES do gasto.
+    // 1ª chamada paga com o slot concedido; a 2ª teve o slot negado ANTES do gasto.
     expect(anthropicCreate).toHaveBeenCalledTimes(1);
     expect(toolNameOf(anthropicCreate.mock.calls[0])).toBe("submit_prediction");
-    expect(acquireSlot).toHaveBeenCalledTimes(1);
+    expect(acquireSlot).toHaveBeenCalledTimes(2);
     expect(out[0].ok).toBe(true);
     expect(out[1]).toEqual({
       ok: false,
       marketKey: "btts",
       message: "Limite diário atingido — não analisado.",
+      notRun: "rate-limited",
     });
+  });
+
+  it("recusa do narrador (#524) → racional templado, 1 row de ai_calls provider_error COM tokens, pendentes persistidos", async () => {
+    anthropicCreate.mockImplementation((req: { tools: { name: string }[] }) =>
+      Promise.resolve(
+        req.tools[0].name === "submit_narration"
+          ? {
+              ...anthropicMessage("submit_narration", {}),
+              stop_reason: "refusal",
+              stop_details: {
+                type: "refusal",
+                category: null,
+                explanation: "Não posso ajudar com isso.",
+              },
+              content: [],
+              usage: { input_tokens: 1100, output_tokens: 7 },
+            }
+          : anthropicMessage(req.tools[0].name, marketOutput)
+      )
+    );
+    const acquireSlot = vi.fn(async () => ({ ok: true }));
+
+    const out = await runCodeJevFanOut(
+      base,
+      markets("over_under", "match_result", "btts"),
+      mapError,
+      acquireSlot
+    );
+
+    // A recusa NÃO derruba o best bet: todos os mercados saem.
+    expect(out.every((o) => o.ok)).toBe(true);
+    expect(anthropicCreate).toHaveBeenCalledTimes(1);
+    expect(acquireSlot).toHaveBeenCalledTimes(1);
+    // Exatamente UMA row de narração, auditada como falha de provider e com os
+    // tokens cobrados (a recusa é paga).
+    const narratorCalls = rowsWhere(
+      (r) => r.promptVersion === "narrator_v1" && "provider" in r
+    );
+    expect(narratorCalls).toHaveLength(1);
+    expect(narratorCalls[0].status).toBe("provider_error");
+    expect(narratorCalls[0].inputTokens).toBe(1100);
+    expect(narratorCalls[0].outputTokens).toBe(7);
+    expect(narratorCalls[0].errorMessage).toBe(
+      "o modelo recusou a análise: Não posso ajudar com isso."
+    );
+    // Os três persistem com o racional templado, apontando pra row da narração.
+    const predictions = rowsWhere((r) => "recommendation" in r);
+    expect(predictions).toHaveLength(3);
+    for (const p of predictions) {
+      expect(p.aiCallId).toBe(narratorCalls[0].__id);
+      expect(p.rationale).toMatch(/^(O modelo de placar estima|Sem aposta)/);
+    }
   });
 });
 

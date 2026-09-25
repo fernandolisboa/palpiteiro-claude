@@ -63,7 +63,8 @@ import {
   type OverUnderOutput,
 } from "@/lib/ai/markets/over_under";
 import { isAIModelId } from "@/lib/ai/models";
-import { ADAPTIVE_REQUEST_OPTIONS } from "@/lib/ai/providers/anthropic/client";
+import { isEffort } from "@/lib/ai/generation-params";
+import { requestTiming } from "@/lib/ai/providers/anthropic/timeouts";
 import {
   ADAPTIVE_FLIP_REPRO_RUNS,
   classifyThinkingMode,
@@ -187,10 +188,18 @@ async function replayOne(args: {
   let inputTokens = 0;
   let outputTokens = 0;
   for (let attempt = 1; attempt <= MAX_ATTEMPTS_PER_PAYLOAD; attempt++) {
-    // Payload adaptive (tem `thinking`) leva o timeout maior do adapter (#524).
-    const response = request.thinking
-      ? await args.client.messages.create(request, ADAPTIVE_REQUEST_OPTIONS)
-      : await args.client.messages.create(request);
+    // Payload adaptive (tem `thinking`) leva o timeout escalado do adapter (#524).
+    const timing = requestTiming({
+      thinkingMode: request.thinking ? "adaptive" : "temperature",
+      maxTokens: request.max_tokens,
+      effort: isEffort(request.output_config?.effort)
+        ? request.output_config.effort
+        : undefined,
+    });
+    const response =
+      timing.kind === "options"
+        ? await args.client.messages.create(request, timing.options)
+        : await args.client.messages.create(request);
     inputTokens += response.usage.input_tokens;
     outputTokens += response.usage.output_tokens;
     // Recusa (#524): re-tentar tende a recusar de novo e é pago — falha já.

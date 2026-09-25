@@ -8,9 +8,8 @@ import Anthropic from "@anthropic-ai/sdk";
 // caminho pago), então vem direto de `./client` — senão o mock estrito do vitest 4,
 // que só exporta getAnthropicClient, estouraria com "No hasKey export".
 import { getAnthropicClient } from "@/lib/ai/anthropic";
-import { ADAPTIVE_REQUEST_OPTIONS, hasKey } from "./client";
+import { hasKey } from "./client";
 
-import type { AIModel } from "@/lib/ai/models";
 import type {
   AIProvider,
   AnalysisErr,
@@ -25,17 +24,78 @@ import {
   serializeAnthropicError,
 } from "./errors";
 import { buildAnthropicRequest } from "./request-builder";
+import { requestTiming } from "./timeouts";
 
-// A chamada paga. Adaptive leva as opções por request (timeout maior, ver
-// ADAPTIVE_REQUEST_OPTIONS); temperature chama com 1 argumento só, como sempre.
+// Sinal interno: o prazo do run acabou antes da chamada (nada foi enviado).
+class NoBudgetError extends Error {
+  constructor() {
+    super("deadline exceeded before the call; nothing was sent");
+    this.name = "NoBudgetError";
+  }
+}
+
+// A chamada paga, com timeout/retries por request (requestTiming): adaptive escala
+// o timeout por max_tokens/effort; com prazo, os dois são cortados pelo restante.
+// Temperature sem prazo chama com 1 argumento só, como sempre.
+//
+// TOKENS NUM TIMEOUT: a chamada é não-streaming, então um timeout (do SDK ou do
+// prazo) não devolve `usage` nenhum — os tokens NÃO são conhecíveis e a row de
+// ai_calls grava 0/0 com `usageUnknown: true` no outputPayload. A API pode ter
+// cobrado a geração parcial; o custo real só aparece no console da Anthropic.
 function createMessage(
   client: ReturnType<typeof getAnthropicClient>,
   params: Anthropic.MessageCreateParamsNonStreaming,
-  model: AIModel,
+  request: AnalysisRequest,
 ): Promise<Anthropic.Message> {
-  return model.thinkingMode === "adaptive"
-    ? client.messages.create(params, ADAPTIVE_REQUEST_OPTIONS)
+  const timing = requestTiming({
+    thinkingMode: request.model.thinkingMode,
+    maxTokens: request.maxTokens,
+    effort: request.effort,
+    deadlineAt: request.deadlineAt,
+  });
+  if (timing.kind === "no-budget") return Promise.reject(new NoBudgetError());
+  return timing.kind === "options"
+    ? client.messages.create(params, timing.options)
     : client.messages.create(params);
+}
+
+// Falha de uma chamada que não devolveu corpo (erro do SDK, timeout, sem prazo).
+function callFailure(args: {
+  err: unknown;
+  usage: AnalysisUsage;
+  inputPayload: Record<string, unknown>;
+  stopReason: string | null;
+  latencyMs: number;
+}): AnalysisErr {
+  if (args.err instanceof NoBudgetError) {
+    return {
+      ok: false,
+      status: "timeout",
+      message: args.err.message,
+      cause: args.err,
+      usage: args.usage,
+      inputPayload: args.inputPayload,
+      outputPayload: { error: serializeAnthropicError(args.err) },
+      stopReason: args.stopReason,
+      latencyMs: args.latencyMs,
+    };
+  }
+  const classified = classifyAnthropicError(args.err);
+  return {
+    ok: false,
+    status: classified.status,
+    message: classified.message,
+    cause: args.err,
+    usage: args.usage,
+    inputPayload: args.inputPayload,
+    outputPayload: {
+      error: serializeAnthropicError(args.err),
+      // Timeout não traz usage (ver createMessage): tokens desconhecidos, não zero.
+      ...(classified.status === "timeout" ? { usageUnknown: true } : {}),
+    },
+    stopReason: args.stopReason,
+    latencyMs: args.latencyMs,
+  };
 }
 
 // Recusa do modelo (#524) → falha TIPADA, não sucesso sem tool. Checada ANTES de
@@ -119,21 +179,15 @@ async function runAnalysis(
   const start = performance.now();
   let response: Anthropic.Message;
   try {
-    response = await createMessage(client, anthropicRequest, request.model);
+    response = await createMessage(client, anthropicRequest, request);
   } catch (err) {
-    const latencyMs = Math.round(performance.now() - start);
-    const classified = classifyAnthropicError(err);
-    return {
-      ok: false,
-      status: classified.status,
-      message: classified.message,
-      cause: err,
+    return callFailure({
+      err,
       usage: { inputTokens: 0, outputTokens: 0 },
       inputPayload,
-      outputPayload: { error: serializeAnthropicError(err) },
       stopReason: null,
-      latencyMs,
-    };
+      latencyMs: Math.round(performance.now() - start),
+    });
   }
   const latencyMs = Math.round(performance.now() - start);
   const usage = {
@@ -193,21 +247,15 @@ async function runServerToolAnalysis(
   const start = performance.now();
   let response: Anthropic.Message;
   try {
-    response = await createMessage(client, anthropicRequest, request.model);
+    response = await createMessage(client, anthropicRequest, request);
   } catch (err) {
-    const latencyMs = Math.round(performance.now() - start);
-    const classified = classifyAnthropicError(err);
-    return {
-      ok: false,
-      status: classified.status,
-      message: classified.message,
-      cause: err,
+    return callFailure({
+      err,
       usage: { inputTokens: 0, outputTokens: 0 },
       inputPayload,
-      outputPayload: { error: serializeAnthropicError(err) },
       stopReason: null,
-      latencyMs,
-    };
+      latencyMs: Math.round(performance.now() - start),
+    });
   }
 
   // Laço bounded de pause_turn: a server-tool loop pausa quando bate o limite interno;
@@ -232,22 +280,16 @@ async function runServerToolAnalysis(
             { role: "assistant", content: response.content },
           ],
         },
-        request.model,
+        request,
       );
     } catch (err) {
-      const latencyMs = Math.round(performance.now() - start);
-      const classified = classifyAnthropicError(err);
-      return {
-        ok: false,
-        status: classified.status,
-        message: classified.message,
-        cause: err,
+      return callFailure({
+        err,
         usage: { inputTokens, outputTokens },
         inputPayload,
-        outputPayload: { error: serializeAnthropicError(err) },
         stopReason: response.stop_reason ?? null,
-        latencyMs,
-      };
+        latencyMs: Math.round(performance.now() - start),
+      });
     }
     response = next;
     inputTokens += coerceTokens(response.usage.input_tokens);

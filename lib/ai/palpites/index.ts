@@ -67,6 +67,7 @@ export async function generatePalpites({
   userId,
   analyses,
   modelOverride,
+  deadlineAt,
 }: GeneratePalpiteArgs): Promise<PalpiteGenerationResult> {
   // 1. Modelo: SEM cascata de preferência (palpite é universal). Fixo no registry.
   const resolvedModelId: AIModelId = modelOverride ?? "claude-haiku-4-5";
@@ -183,6 +184,7 @@ export async function generatePalpites({
     toolName: cartridge.toolName,
     maxTokens: genParams.maxTokens,
     temperature: model.temperature,
+    deadlineAt,
   };
 
   // 8. Provider via o seam (ADR 0027). Sem chave → provider_error auditado + throw,

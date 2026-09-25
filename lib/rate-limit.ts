@@ -227,6 +227,28 @@ export async function checkAnalysisRateLimit(
 }
 
 /**
+ * LÊ o teto diário de análises SEM consumir (#524, review). Os fan-outs cobram o
+ * slot sob demanda, logo antes de cada chamada paga (slots == chamadas pagas), e
+ * usam esta leitura antes do run pra: abortar sem gasto no fail-closed ou com o teto
+ * já batido, e não pré-aquecer odds (crédito da The Odds API) de mercados que não
+ * teriam slot. O limiter do Upstash não devolve slot, então cobrar adiantado e
+ * pular o mercado depois (prazo esgotado) queimaria o slot sem análise.
+ *
+ * Mesmo fallback sem KV do checkAnalysisRateLimit (admin fail-open, resto
+ * fail-closed). `ok` = ainda resta ≥1 slot agora (pode mudar até a cobrança real).
+ */
+export async function peekAnalysisRateLimit(
+  userId: string,
+  role?: string,
+): Promise<RateLimitResult> {
+  const limiters = getLimiters();
+  if (!limiters) return failClosedByRole(role);
+  const limiter = role === "admin" ? limiters.admin : limiters.user;
+  const { remaining, limit, reset } = await limiter.getRemaining(userId);
+  return { ok: remaining > 0, limit, remaining, reset };
+}
+
+/**
  * Verifica (e incrementa) o teto diário de GERAÇÃO de palpites do usuário (#315,
  * ADR 0028). Bucket próprio (prefixo `ratelimit:palpites`), SEM split de role —
  * palpite é universal e roda em Haiku.

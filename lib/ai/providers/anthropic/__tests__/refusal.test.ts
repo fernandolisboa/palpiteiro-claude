@@ -1,3 +1,4 @@
+import Anthropic from "@anthropic-ai/sdk";
 import { beforeEach, describe, expect, it, vi } from "vitest";
 
 import { MODEL_REGISTRY, type AIModel } from "@/lib/ai/models";
@@ -12,9 +13,9 @@ vi.mock("@/lib/ai/anthropic", () => ({
   }),
 }));
 
-import { ADAPTIVE_REQUEST_OPTIONS } from "../client";
 import { ModelRefusalError, refusalFromMessage } from "../errors";
 import { anthropicProvider } from "../index";
+import { adaptiveTimeoutMs } from "../timeouts";
 
 const FABLE: AIModel = MODEL_REGISTRY["claude-fable-5-1"];
 const HAIKU: AIModel = MODEL_REGISTRY["claude-haiku-4-5"];
@@ -154,16 +155,61 @@ describe("anthropic adapter — recusa do modelo (#524)", () => {
 });
 
 describe("anthropic adapter — opções por request (#524)", () => {
-  it("adaptive: manda ADAPTIVE_REQUEST_OPTIONS (timeout maior) como 2º argumento", async () => {
+  it("adaptive sem prazo: timeout escalado por max_tokens/effort como 2º argumento", async () => {
     messagesCreate.mockResolvedValue(message({}));
     await anthropicProvider.runAnalysis(forcedRequest(FABLE));
     expect(messagesCreate.mock.calls[0]).toHaveLength(2);
-    expect(messagesCreate.mock.calls[0][1]).toEqual(ADAPTIVE_REQUEST_OPTIONS);
+    // 16000 tokens × 0.75 (high) / 60 tok/s + 15s = 215s.
+    expect(adaptiveTimeoutMs(16000, "high")).toBe(215_000);
+    expect(messagesCreate.mock.calls[0][1]).toEqual({
+      timeout: 215_000,
+      maxRetries: 2,
+    });
   });
 
-  it("temperature: chamada com 1 argumento só (opções do client, como antes)", async () => {
+  it("temperature sem prazo: chamada com 1 argumento só (opções do client, como antes)", async () => {
     messagesCreate.mockResolvedValue(message({}));
     await anthropicProvider.runAnalysis(forcedRequest(HAIKU));
     expect(messagesCreate.mock.calls[0]).toHaveLength(1);
+  });
+
+  it("com prazo: timeout cortado pelo restante − margem, sem retry que não caiba", async () => {
+    messagesCreate.mockResolvedValue(message({}));
+    await anthropicProvider.runAnalysis({
+      ...forcedRequest(FABLE),
+      deadlineAt: Date.now() + 100_000,
+    });
+    const opts = messagesCreate.mock.calls[0][1] as {
+      timeout: number;
+      maxRetries: number;
+    };
+    // ~95s restantes (100s − 5s de margem): bem abaixo dos 215s escalados.
+    expect(opts.timeout).toBeLessThanOrEqual(95_000);
+    expect(opts.timeout).toBeGreaterThan(90_000);
+    expect(opts.maxRetries).toBe(0);
+  });
+
+  it("prazo já esgotado: NÃO chama o SDK e devolve timeout sem tokens", async () => {
+    const res = await anthropicProvider.runAnalysis({
+      ...forcedRequest(HAIKU),
+      deadlineAt: Date.now() + 1_000,
+    });
+    expect(messagesCreate).not.toHaveBeenCalled();
+    expect(res.ok).toBe(false);
+    if (res.ok) return;
+    expect(res.status).toBe("timeout");
+    expect(res.usage).toEqual({ inputTokens: 0, outputTokens: 0 });
+  });
+
+  it("timeout do SDK: status timeout, tokens 0/0 marcados como desconhecidos", async () => {
+    messagesCreate.mockRejectedValue(
+      new Anthropic.APIConnectionTimeoutError({ message: "Request timed out." }),
+    );
+    const res = await anthropicProvider.runAnalysis(forcedRequest(FABLE));
+    expect(res.ok).toBe(false);
+    if (res.ok) return;
+    expect(res.status).toBe("timeout");
+    expect(res.usage).toEqual({ inputTokens: 0, outputTokens: 0 });
+    expect(res.outputPayload).toMatchObject({ usageUnknown: true });
   });
 });

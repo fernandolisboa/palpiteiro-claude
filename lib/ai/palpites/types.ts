@@ -41,6 +41,9 @@ export type GeneratePalpiteArgs = {
   // Default Haiku (econômico). NÃO admin-gated; NÃO cascateia preferência do usuário
   // (palpite é universal). Arg só p/ testabilidade — o caller sempre passa "claude-haiku-4-5".
   modelOverride?: AIModelId;
+  // Prazo do run (epoch ms, lib/ai/deadline.ts — #524 review): o timeout da chamada é
+  // cortado por ele. Ausente = timeout do client.
+  deadlineAt?: number;
 };
 
 export type PalpiteGenerationResult = {

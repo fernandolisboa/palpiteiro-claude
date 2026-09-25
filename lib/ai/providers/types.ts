@@ -63,6 +63,10 @@ export type AnalysisRequest = {
   // caller de hoje) ⇒ caminho forçado byte-idêntico. `tool`/`toolName` ainda são
   // REQUIRED no shape — no modo server-tool o adapter os IGNORA (não há submit forçado).
   serverTool?: ServerToolDef;
+  // Prazo do run (epoch ms, lib/ai/deadline.ts). Presente ⇒ o adapter corta o
+  // timeout da chamada e os retries pelo que resta, e não chama se nada resta.
+  // Ausente (scripts, jobs sem prazo) ⇒ timeouts do provider.
+  deadlineAt?: number;
 };
 
 // Uso provider-neutro. Os ÚNICOS dois campos consumidos hoje (→ `calculateCost` +

@@ -1,4 +1,4 @@
-import { beforeEach, describe, expect, it, vi } from "vitest";
+import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 
 // Orquestração do best bet no motor code_jev (#512, ADR 0041 §4): a porta do predict
 // é mockada (a decisão/persistência reais são cobertas em predict.code-jev.test) pra
@@ -11,6 +11,7 @@ vi.mock("@/lib/ai/predict", () => ({
   PredictError: class PredictError extends Error {},
 }));
 
+import { DEADLINE_MARKET_MESSAGE } from "@/lib/ai/deadline";
 import {
   RATE_LIMITED_MARKET_MESSAGE,
   groupSlotUnits,
@@ -82,6 +83,8 @@ function pendingFor(
   const rec = spec.selections.find((s) => s.key === spec.recommendation);
   return {
     marketKey,
+    // O narrador confere o prazo pelo modo de thinking do modelo resolvido.
+    model: { thinkingMode: "temperature" },
     rankInput: {
       recommendation: spec.recommendation,
       confidencePct: (
@@ -118,9 +121,11 @@ beforeEach(() => {
   mockPersist.mockImplementation(async (pending, args) =>
     resultFor(pending.marketKey, args.aiCallId)
   );
-  mockPredict.mockImplementation(async (args) =>
-    resultFor(args.marketKey!, `ac-${args.marketKey}`)
-  );
+  // Como o predict real: cobra o slot (hook) logo antes da chamada paga.
+  mockPredict.mockImplementation(async (args, opts) => {
+    await opts?.beforeLlmPath?.();
+    return resultFor(args.marketKey!, `ac-${args.marketKey}`);
+  });
 });
 
 describe("isCodeJevFanOutMarket / groupSlotUnits", () => {
@@ -197,8 +202,8 @@ describe("runCodeJevFanOut — 1 narração por best bet", () => {
         ["btts", true, true],
       ]
     );
-    // O slot do grupo (cobrado pelo caller) paga a narração: nenhum slot extra.
-    expect(acquireSlot).not.toHaveBeenCalled();
+    // 1 chamada paga (a narração) = 1 slot, cobrado logo antes dela.
+    expect(acquireSlot).toHaveBeenCalledTimes(1);
     expect(mockPredict).not.toHaveBeenCalled();
   });
 
@@ -223,7 +228,7 @@ describe("runCodeJevFanOut — 1 narração por best bet", () => {
     expect(mockNarrate.mock.calls[0][0].marketKey).toBe("btts");
   });
 
-  it("mercado fora do code_jev (placar exato) roda o predict de sempre, sem o hook de slot", async () => {
+  it("mercado fora do code_jev (placar exato) roda o predict de sempre, cobrando o próprio slot", async () => {
     const acquireSlot = vi.fn(async () => ({ ok: true }));
     const out = await runCodeJevFanOut(
       base,
@@ -234,17 +239,52 @@ describe("runCodeJevFanOut — 1 narração por best bet", () => {
     expect(mockPredict).toHaveBeenCalledTimes(1);
     expect(mockPredict.mock.calls[0][0].marketKey).toBe("correct_score");
     expect(mockPredictForBestBet).toHaveBeenCalledTimes(1);
-    expect(acquireSlot).not.toHaveBeenCalled();
+    // Narração + placar exato = 2 chamadas pagas = 2 slots.
+    expect(acquireSlot).toHaveBeenCalledTimes(2);
     expect(out.map((o) => o.ok)).toEqual([true, true]);
   });
 
-  it("λ indisponível (grupo cai no caminho LLM): a 1ª chamada usa o slot do grupo, as demais pedem slot; negado → não analisado", async () => {
+  it("ordem: o grupo e a narração ANTES dos mercados fora do grupo; a saída mantém a ordem-base", async () => {
+    const log: string[] = [];
+    mockPredictForBestBet.mockImplementation(async (args) => {
+      log.push(`decide:${args.marketKey}`);
+      return { kind: "pending", pending: pendingFor(args.marketKey!) };
+    });
+    mockNarrate.mockImplementation(async (pending) => {
+      log.push(`narra:${pending.marketKey}`);
+      return NARRATION;
+    });
+    mockPredict.mockImplementation(async (args) => {
+      log.push(`predict:${args.marketKey}`);
+      return resultFor(args.marketKey!, `ac-${args.marketKey}`);
+    });
+    const out = await runCodeJevFanOut(
+      base,
+      markets("correct_score", "over_under", "match_result"),
+      mapError,
+      async () => ({ ok: true })
+    );
+    expect(log).toEqual([
+      "decide:over_under",
+      "decide:match_result",
+      "narra:over_under",
+      "predict:correct_score",
+    ]);
+    expect(out.map((o) => o.marketKey)).toEqual([
+      "correct_score",
+      "over_under",
+      "match_result",
+    ]);
+  });
+
+  it("λ indisponível (grupo cai no caminho LLM): cada chamada paga pede o próprio slot; negado → não analisado", async () => {
     mockPredictForBestBet.mockImplementation(async (args, opts) => {
       await opts.beforeLlmPath?.();
       return { kind: "done", result: resultFor(args.marketKey!, "ac-llm") };
     });
     const acquireSlot = vi
       .fn<() => Promise<SlotGrant>>()
+      .mockResolvedValueOnce({ ok: true })
       .mockResolvedValueOnce({ ok: true })
       .mockResolvedValue({ ok: false });
 
@@ -255,12 +295,17 @@ describe("runCodeJevFanOut — 1 narração por best bet", () => {
       acquireSlot
     );
 
-    // 1ª: slot do grupo; 2ª: slot novo concedido; 3ª: negado.
-    expect(acquireSlot).toHaveBeenCalledTimes(2);
+    // 1ª e 2ª concedidas; 3ª negada.
+    expect(acquireSlot).toHaveBeenCalledTimes(3);
     expect(out).toEqual([
       expect.objectContaining({ marketKey: "over_under", ok: true }),
       expect.objectContaining({ marketKey: "match_result", ok: true }),
-      { ok: false, marketKey: "btts", message: RATE_LIMITED_MARKET_MESSAGE },
+      {
+        ok: false,
+        marketKey: "btts",
+        message: RATE_LIMITED_MARKET_MESSAGE,
+        notRun: "rate-limited",
+      },
     ]);
     expect(mockNarrate).not.toHaveBeenCalled();
   });
@@ -280,15 +325,19 @@ describe("runCodeJevFanOut — 1 narração por best bet", () => {
       ok: false,
       marketKey: "match_result",
       message: ANALYSES_UNAVAILABLE_MESSAGE,
+      notRun: "unavailable",
     });
   });
 
-  it("slot do grupo gasto num caminho LLM e narração sem slot → pendentes viram não analisados, sem narrar", async () => {
+  it("um mercado do grupo no caminho LLM e narração sem slot → pendentes viram não analisados, sem narrar", async () => {
     mockPredictForBestBet.mockImplementationOnce(async (args, opts) => {
       await opts.beforeLlmPath?.();
       return { kind: "done", result: resultFor(args.marketKey!, "ac-llm") };
     });
-    const acquireSlot = vi.fn(async () => ({ ok: false }));
+    const acquireSlot = vi
+      .fn<() => Promise<SlotGrant>>()
+      .mockResolvedValueOnce({ ok: true })
+      .mockResolvedValue({ ok: false });
 
     const out = await runCodeJevFanOut(
       base,
@@ -297,7 +346,7 @@ describe("runCodeJevFanOut — 1 narração por best bet", () => {
       acquireSlot
     );
 
-    expect(acquireSlot).toHaveBeenCalledTimes(1);
+    expect(acquireSlot).toHaveBeenCalledTimes(2);
     expect(mockNarrate).not.toHaveBeenCalled();
     expect(mockPersist).not.toHaveBeenCalled();
     expect(out).toEqual([
@@ -306,6 +355,7 @@ describe("runCodeJevFanOut — 1 narração por best bet", () => {
         ok: false,
         marketKey: "match_result",
         message: RATE_LIMITED_MARKET_MESSAGE,
+        notRun: "rate-limited",
       },
     ]);
   });
@@ -353,5 +403,98 @@ describe("runCodeJevFanOut — 1 narração por best bet", () => {
       "falhou: insert",
       "falhou: sem snapshot fresco",
     ]);
+  });
+});
+
+describe("runCodeJevFanOut — prazo do run (#524 review)", () => {
+  let clock: number;
+  beforeEach(() => {
+    clock = 1_000_000;
+    vi.spyOn(Date, "now").mockImplementation(() => clock);
+  });
+  afterEach(() => {
+    vi.restoreAllMocks();
+  });
+
+  it("prazo já esgotado → nada roda, nenhum slot, todos 'Tempo esgotado'", async () => {
+    const acquireSlot = vi.fn(async () => ({ ok: true }));
+    const out = await runCodeJevFanOut(
+      base,
+      markets("over_under", "correct_score"),
+      mapError,
+      acquireSlot,
+      { deadlineAt: clock + 10_000 }
+    );
+    expect(mockPredictForBestBet).not.toHaveBeenCalled();
+    expect(mockPredict).not.toHaveBeenCalled();
+    expect(acquireSlot).not.toHaveBeenCalled();
+    expect(out).toEqual([
+      {
+        ok: false,
+        marketKey: "over_under",
+        message: DEADLINE_MARKET_MESSAGE,
+        notRun: "deadline",
+      },
+      {
+        ok: false,
+        marketKey: "correct_score",
+        message: DEADLINE_MARKET_MESSAGE,
+        notRun: "deadline",
+      },
+    ]);
+  });
+
+  it("provider lento: o grupo narra, o mercado avulso que não cabe é pulado SEM slot", async () => {
+    // Decisões levam 30s cada, a narração outros 30s: em t=90s sobram 10s (< 20s do piso).
+    mockPredictForBestBet.mockImplementation(async (args) => {
+      clock += 30_000;
+      return { kind: "pending", pending: pendingFor(args.marketKey!) };
+    });
+    mockNarrate.mockImplementation(async () => {
+      clock += 30_000;
+      return NARRATION;
+    });
+    const acquireSlot = vi.fn(async () => ({ ok: true }));
+    const deadlineAt = clock + 100_000;
+    const out = await runCodeJevFanOut(
+      base,
+      markets("over_under", "correct_score", "match_result"),
+      mapError,
+      acquireSlot,
+      { deadlineAt }
+    );
+    // O prazo chega ao predict de cada mercado.
+    for (const call of mockPredictForBestBet.mock.calls) {
+      expect(call[0].deadlineAt).toBe(deadlineAt);
+    }
+    expect(mockNarrate).toHaveBeenCalledTimes(1);
+    expect(mockPredict).not.toHaveBeenCalled();
+    // Só a narração foi paga → 1 slot.
+    expect(acquireSlot).toHaveBeenCalledTimes(1);
+    expect(out.map((o) => [o.marketKey, o.ok ? "ok" : o.message])).toEqual([
+      ["over_under", "ok"],
+      ["correct_score", DEADLINE_MARKET_MESSAGE],
+      ["match_result", "ok"],
+    ]);
+  });
+
+  it("narração não cabe no prazo → pendentes viram 'Tempo esgotado', sem slot nem chamada", async () => {
+    mockPredictForBestBet.mockImplementation(async (args) => {
+      clock += 45_000;
+      return { kind: "pending", pending: pendingFor(args.marketKey!) };
+    });
+    const acquireSlot = vi.fn(async () => ({ ok: true }));
+    const out = await runCodeJevFanOut(
+      base,
+      markets("over_under", "match_result"),
+      mapError,
+      acquireSlot,
+      { deadlineAt: clock + 100_000 }
+    );
+    // t=90s: sobram 10s → a narração não começa.
+    expect(mockNarrate).not.toHaveBeenCalled();
+    expect(acquireSlot).not.toHaveBeenCalled();
+    expect(mockPersist).not.toHaveBeenCalled();
+    expect(out.every((o) => !o.ok && o.notRun === "deadline")).toBe(true);
   });
 });

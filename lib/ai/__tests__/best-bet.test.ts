@@ -1,4 +1,4 @@
-import { beforeEach, describe, expect, it, vi } from "vitest";
+import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 
 // predict() is the ONLY door to the LLM; runFanOut must call it once per market and
 // never touch the Anthropic SDK. We mock predict so no real LLM/DB is touched and we
@@ -9,7 +9,15 @@ vi.mock("@/lib/ai/predict", () => ({
 }));
 
 import { predict } from "@/lib/ai/predict";
-import { runFanOut, type FanOutMarket } from "@/lib/ai/best-bet";
+import {
+  runFanOut,
+  type FanOutMarket,
+  type SlotGrant,
+} from "@/lib/ai/best-bet";
+import {
+  AnalysisDeadlineError,
+  DEADLINE_MARKET_MESSAGE,
+} from "@/lib/ai/deadline";
 
 const mockPredict = vi.mocked(predict);
 const base = { matchId: "m1", userId: "u1", isAdmin: false };
@@ -107,5 +115,92 @@ describe("runFanOut — serial fan-out, best-of-successful (#178)", () => {
     const out = await runFanOut(base, [], mapError);
     expect(mockPredict).not.toHaveBeenCalled();
     expect(out).toEqual([]);
+  });
+});
+
+describe("runFanOut — prazo do run e slot sob demanda (#524 review)", () => {
+  const three: FanOutMarket[] = [
+    { marketKey: "over_under", extraLines: false },
+    { marketKey: "match_result", extraLines: false },
+    { marketKey: "btts", extraLines: false },
+  ];
+
+  afterEach(() => {
+    vi.restoreAllMocks();
+  });
+
+  it("provider lento: ao estourar o prazo os restantes viram 'Tempo esgotado' sem predict nem slot", async () => {
+    let clock = 1_000_000;
+    vi.spyOn(Date, "now").mockImplementation(() => clock);
+    // Cada chamada paga leva 100s; prazo = +150s. Em t=100 sobram 50s (cabe), em t=200 não.
+    mockPredict.mockImplementation(async (args, opts) => {
+      await opts?.beforeLlmPath?.();
+      clock += 100_000;
+      return okResult(args.marketKey!);
+    });
+    const acquireSlot = vi.fn(async () => ({ ok: true }));
+    const deadlineAt = clock + 150_000;
+
+    const out = await runFanOut(base, three, mapError, {
+      deadlineAt,
+      acquireSlot,
+    });
+
+    expect(mockPredict).toHaveBeenCalledTimes(2);
+    expect(mockPredict.mock.calls[0][0].deadlineAt).toBe(deadlineAt);
+    // Slots cobrados == chamadas pagas.
+    expect(acquireSlot).toHaveBeenCalledTimes(2);
+    expect(out[2]).toEqual({
+      ok: false,
+      marketKey: "btts",
+      message: DEADLINE_MARKET_MESSAGE,
+      notRun: "deadline",
+    });
+  });
+
+  it("predict lança AnalysisDeadlineError → o mercado e os seguintes não rodam", async () => {
+    mockPredict.mockImplementation(async (args, opts) => {
+      if (args.marketKey === "match_result") throw new AnalysisDeadlineError();
+      await opts?.beforeLlmPath?.();
+      return okResult(args.marketKey!);
+    });
+    const acquireSlot = vi.fn(async () => ({ ok: true }));
+    const out = await runFanOut(base, three, mapError, { acquireSlot });
+    expect(mockPredict).toHaveBeenCalledTimes(2);
+    expect(acquireSlot).toHaveBeenCalledTimes(1);
+    expect(out.map((o) => (o.ok ? "ok" : o.notRun))).toEqual([
+      "ok",
+      "deadline",
+      "deadline",
+    ]);
+  });
+
+  it("slot cobrado só antes da chamada paga: falha antes do LLM não cobra; negado para o run", async () => {
+    mockPredict.mockImplementation(async (args, opts) => {
+      if (args.marketKey === "over_under") throw new Error("sem snapshot fresco");
+      await opts?.beforeLlmPath?.();
+      return okResult(args.marketKey!);
+    });
+    const acquireSlot = vi
+      .fn<() => Promise<SlotGrant>>()
+      .mockResolvedValueOnce({ ok: true })
+      .mockResolvedValue({ ok: false });
+
+    const out = await runFanOut(
+      base,
+      [...three, { marketKey: "double_chance", extraLines: false }],
+      mapError,
+      { acquireSlot },
+    );
+
+    // over_under falhou antes (sem slot); match_result pagou 1; btts negado → para.
+    expect(acquireSlot).toHaveBeenCalledTimes(2);
+    expect(mockPredict).toHaveBeenCalledTimes(3);
+    expect(out.map((o) => (o.ok ? "ok" : (o.notRun ?? o.message)))).toEqual([
+      "sem snapshot fresco",
+      "ok",
+      "rate-limited",
+      "rate-limited",
+    ]);
   });
 });

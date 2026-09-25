@@ -78,7 +78,7 @@ import { calculateCost } from "@/lib/ai/cost";
 import { getCartridge } from "@/lib/ai/markets/registry";
 import type { BaseMarketOutput } from "@/lib/ai/markets/types";
 import { MODEL_REGISTRY, isAIModelId, type AIModel } from "@/lib/ai/models";
-import { ADAPTIVE_REQUEST_OPTIONS } from "@/lib/ai/providers/anthropic/client";
+import { requestTiming } from "@/lib/ai/providers/anthropic/timeouts";
 import { buildAnthropicRequest } from "@/lib/ai/request-builder";
 import { getDefaultModelId, getGenerationParams } from "@/lib/db/queries/ai-config";
 import { getLatestSelectionOddsSnapshots } from "@/lib/db/queries/odds-snapshots";
@@ -504,10 +504,16 @@ async function main(): Promise<void> {
     let lastFailure = "";
     for (let attempt = 1; attempt <= MAX_ATTEMPTS_PER_GAME; attempt++) {
       attempts = attempt;
-      // Adaptive leva o timeout maior (mesmas opções do adapter, #524).
+      // Adaptive leva o timeout escalado por max_tokens/effort (o mesmo cálculo do
+      // adapter, #524). Script sem prazo de run: temperature fica com o do client.
+      const timing = requestTiming({
+        thinkingMode: model.thinkingMode,
+        maxTokens: genParams.maxTokens,
+        effort: genParams.effort,
+      });
       const response =
-        model.thinkingMode === "adaptive"
-          ? await client.messages.create(request, ADAPTIVE_REQUEST_OPTIONS)
+        timing.kind === "options"
+          ? await client.messages.create(request, timing.options)
           : await client.messages.create(request);
       inputTokens += response.usage.input_tokens;
       outputTokens += response.usage.output_tokens;

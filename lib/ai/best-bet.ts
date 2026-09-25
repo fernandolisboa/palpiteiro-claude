@@ -2,6 +2,11 @@ import { getDescriptor } from "@/lib/odds/market-descriptor";
 import { computeBestBetRank } from "@/lib/view/best-bet";
 import { sortBestBetEntries } from "@/lib/view/best-bet-sort";
 
+import {
+  AnalysisDeadlineError,
+  canFitCall,
+  DEADLINE_MARKET_MESSAGE,
+} from "./deadline";
 import { isCodeJevMarket } from "./engine/code-jev";
 import { getCartridge } from "./markets/registry";
 import {
@@ -44,7 +49,18 @@ export type FanOutOutcome =
       // card). Ausente = a análise tem a própria chamada.
       sharesAiCall?: true;
     }
-  | { ok: false; marketKey: string; message: string };
+  | {
+      ok: false;
+      marketKey: string;
+      message: string;
+      // Mercado que NÃO rodou (sem gasto nem slot): prazo do run esgotado, slot de
+      // rate-limit negado, ou limiter indisponível. Ausente = rodou e falhou. O
+      // caller usa pra separar "não analisado" de falha real (ordem dos erros na
+      // view, status do sumário multi-mercado).
+      notRun?: NotRunReason;
+    };
+
+export type NotRunReason = "deadline" | "rate-limited" | "unavailable";
 
 // Mensagem de um mercado sem slot de rate-limit (#492) — a mesma da cauda não
 // concedida no analyzeBestBet.
@@ -81,6 +97,41 @@ export function capCandidates<T extends { key: string }>(
   return [...tier1, ...rest].slice(0, max);
 }
 
+// Opções do run (#524, review): prazo e cobrança de slot sob demanda.
+export type FanOutOptions = {
+  // Prazo do fan-out (epoch ms, lib/ai/deadline.ts). Antes de cada mercado confere
+  // se ainda cabe uma chamada; se não, o mercado e os seguintes viram "Tempo
+  // esgotado" sem gasto nem slot. predict() re-confere com o modelo resolvido.
+  deadlineAt?: number;
+  // Cobra 1 slot de rate-limit. Chamado logo ANTES de cada chamada paga (hook
+  // beforeLlmPath do predict), então slots cobrados == chamadas pagas: mercado
+  // pulado, ou que falha antes do LLM (sem odds), não cobra. Ausente = sem cobrança.
+  acquireSlot?: () => Promise<SlotGrant>;
+};
+
+// Slot negado / prazo esgotado → mensagem + motivo do mercado que não rodou.
+function notRunOf(err: unknown): { message: string; notRun: NotRunReason } | null {
+  if (err instanceof AnalysisDeadlineError) {
+    return { message: DEADLINE_MARKET_MESSAGE, notRun: "deadline" };
+  }
+  if (err instanceof SlotDeniedError) {
+    return err.failClosed
+      ? { message: ANALYSES_UNAVAILABLE_MESSAGE, notRun: "unavailable" }
+      : { message: RATE_LIMITED_MARKET_MESSAGE, notRun: "rate-limited" };
+  }
+  return null;
+}
+
+function slotHook(
+  acquireSlot: FanOutOptions["acquireSlot"],
+): (() => Promise<void>) | undefined {
+  if (!acquireSlot) return undefined;
+  return async () => {
+    const grant = await acquireSlot();
+    if (!grant.ok) throw new SlotDeniedError(grant.reason === "fail-closed");
+  };
+}
+
 /**
  * Fan-out SERIAL: um `predict()` por candidato, em ordem, best-of-successful.
  *
@@ -94,6 +145,9 @@ export function capCandidates<T extends { key: string }>(
  * capturado por-mercado, pra um irmão já pago/persistido (mercados 1..k-1) nunca ser
  * descartado por uma falha no mercado k. `mapError` (server-side friendlyMessage) é
  * injetado pra a mensagem amigável não vazar pro bundle do cliente.
+ *
+ * Prazo esgotado ou slot negado PARAM o run: o mercado e todos os seguintes viram
+ * `notRun` sem chamar predict() (nada gasto, nenhum slot cobrado).
  */
 export async function runFanOut(
   base: {
@@ -104,18 +158,39 @@ export async function runFanOut(
   },
   markets: FanOutMarket[],
   mapError: (err: unknown) => string,
+  opts: FanOutOptions = {},
 ): Promise<FanOutOutcome[]> {
   const out: FanOutOutcome[] = [];
+  const beforeLlmPath = slotHook(opts.acquireSlot);
+  let stopped: { message: string; notRun: NotRunReason } | null = null;
   for (const m of markets) {
+    // Piso barato antes de buscar dados: nem o modelo mais rápido caberia.
+    if (!stopped && !canFitCall(opts.deadlineAt, "temperature")) {
+      stopped = { message: DEADLINE_MARKET_MESSAGE, notRun: "deadline" };
+    }
+    if (stopped) {
+      out.push({ ok: false, marketKey: m.marketKey, ...stopped });
+      continue;
+    }
     try {
-      const result = await predict({
-        ...base,
-        marketKey: m.marketKey,
-        extraLines: m.extraLines,
-      });
+      const result = await predict(
+        {
+          ...base,
+          marketKey: m.marketKey,
+          extraLines: m.extraLines,
+          deadlineAt: opts.deadlineAt,
+        },
+        { beforeLlmPath },
+      );
       out.push({ ok: true, marketKey: m.marketKey, result });
     } catch (err) {
-      out.push({ ok: false, marketKey: m.marketKey, message: mapError(err) });
+      const notRun = notRunOf(err);
+      if (notRun) {
+        stopped = notRun;
+        out.push({ ok: false, marketKey: m.marketKey, ...notRun });
+      } else {
+        out.push({ ok: false, marketKey: m.marketKey, message: mapError(err) });
+      }
     }
   }
   return out;
@@ -179,11 +254,15 @@ class SlotDeniedError extends Error {
  * "edge"). Os demais persistem com o racional templado (zero custo), apontando pra
  * row de ai_calls da narração. Mercados fora do code_jev rodam o predict de sempre.
  *
- * Rate-limit (#492/#493): o caller cobra 1 slot pelo GRUPO code_jev (a narração) +
- * 1 por mercado fora dele, antes do run. Toda chamada paga EXTRA do grupo — um
- * mercado que cai no caminho LLM porque o λ faltou — pede o próprio slot via
- * `acquireSlot` ANTES do gasto; o 1º a precisar usa o slot do grupo. Slots cobrados
- * == chamadas pagas: nem 6 slots por 1 chamada, nem chamada sem slot.
+ * Rate-limit (#492/#493, #524 review): TODA chamada paga pede o próprio slot via
+ * `acquireSlot` logo ANTES do gasto — a narração, cada mercado fora do grupo e cada
+ * mercado do grupo que cai no caminho LLM porque o λ faltou. Slots cobrados ==
+ * chamadas pagas: mercado pulado (prazo) ou que falha antes do LLM não cobra.
+ *
+ * Ordem (#524 review): o GRUPO code_jev primeiro (decisões em código, baratas), depois
+ * a narração, depois os mercados fora do grupo. Assim, se o prazo do run apertar, o
+ * que sobra de fora são os mercados LLM avulsos, nunca o grupo inteiro por falta de
+ * narração. A saída mantém a ordem de `markets`.
  *
  * Serial como runFanOut, e o mesmo contrato best-of-successful: erro de um mercado
  * nunca derruba os irmãos.
@@ -193,59 +272,92 @@ export async function runCodeJevFanOut(
   markets: FanOutMarket[],
   mapError: (err: unknown) => string,
   acquireSlot: () => Promise<SlotGrant>,
+  opts: Pick<FanOutOptions, "deadlineAt"> = {},
 ): Promise<FanOutOutcome[]> {
-  // Na ordem dos mercados; null = decisão pendente até a fase de narração.
-  const out: (FanOutOutcome | null)[] = [];
-  const fail = (marketKey: string, err: unknown): FanOutOutcome => ({
-    ok: false,
-    marketKey,
-    message:
-      err instanceof SlotDeniedError
-        ? err.failClosed
-          ? ANALYSES_UNAVAILABLE_MESSAGE
-          : RATE_LIMITED_MARKET_MESSAGE
-        : mapError(err),
-  });
-
-  let groupSlotFree = markets.some(isCodeJevFanOutMarket);
-  const takeSlot = async (): Promise<void> => {
-    if (groupSlotFree) {
-      groupSlotFree = false;
-      return;
+  const { deadlineAt } = opts;
+  // Na ordem dos mercados; null = ainda sem resultado.
+  const out: (FanOutOutcome | null)[] = markets.map(() => null);
+  const takeSlot = slotHook(acquireSlot)!;
+  let stopped: { message: string; notRun: NotRunReason } | null = null;
+  const fail = (marketKey: string, err: unknown): FanOutOutcome => {
+    const notRun = notRunOf(err);
+    if (notRun) stopped = notRun;
+    return notRun
+      ? { ok: false, marketKey, ...notRun }
+      : { ok: false, marketKey, message: mapError(err) };
+  };
+  // Prazo/slot já esgotados: o mercado não roda (sem gasto nem slot).
+  const skipIfStopped = (index: number, marketKey: string): boolean => {
+    if (!stopped && !canFitCall(deadlineAt, "temperature")) {
+      stopped = { message: DEADLINE_MARKET_MESSAGE, notRun: "deadline" };
     }
-    const grant = await acquireSlot();
-    if (!grant.ok) throw new SlotDeniedError(grant.reason === "fail-closed");
+    if (!stopped) return false;
+    out[index] = { ok: false, marketKey, ...stopped };
+    return true;
   };
 
-  // λ + JEV fixados no 1º mercado code_jev: 1 chamada JEV e 1 matriz por run.
+  // 1. Grupo code_jev. λ + JEV fixados no 1º mercado: 1 chamada JEV e 1 matriz por run.
   const runMemo: CodeJevRunMemo = new Map();
   const pendings: { index: number; pending: PendingCodeJevPrediction }[] = [];
-  for (const m of markets) {
-    const args = { ...base, marketKey: m.marketKey, extraLines: m.extraLines };
+  for (const [index, m] of markets.entries()) {
+    if (!isCodeJevFanOutMarket(m) || skipIfStopped(index, m.marketKey)) continue;
+    const args = {
+      ...base,
+      marketKey: m.marketKey,
+      extraLines: m.extraLines,
+      deadlineAt,
+    };
     try {
-      if (!isCodeJevFanOutMarket(m)) {
-        out.push({ ok: true, marketKey: m.marketKey, result: await predict(args) });
-        continue;
-      }
       const outcome = await predictForBestBet(args, {
         engine: "code_jev",
         runMemo,
         beforeLlmPath: takeSlot,
       });
       if (outcome.kind === "done") {
-        out.push({ ok: true, marketKey: m.marketKey, result: outcome.result });
+        out[index] = { ok: true, marketKey: m.marketKey, result: outcome.result };
       } else {
-        pendings.push({ index: out.length, pending: outcome.pending });
-        out.push(null);
+        pendings.push({ index, pending: outcome.pending });
       }
     } catch (err) {
-      out.push(fail(m.marketKey, err));
+      out[index] = fail(m.marketKey, err);
     }
   }
-  const settled = (): FanOutOutcome[] =>
-    out.filter((o): o is FanOutOutcome => o !== null);
-  if (pendings.length === 0) return settled();
 
+  // 2. Narração do escolhido (1 chamada paga) + persistência dos pendentes.
+  if (pendings.length > 0) {
+    await narrateAndPersist(pendings, out, fail, takeSlot, deadlineAt, stopped);
+  }
+
+  // 3. Mercados fora do grupo: o predict de sempre, uma chamada paga cada.
+  for (const [index, m] of markets.entries()) {
+    if (isCodeJevFanOutMarket(m) || skipIfStopped(index, m.marketKey)) continue;
+    try {
+      out[index] = {
+        ok: true,
+        marketKey: m.marketKey,
+        result: await predict(
+          { ...base, marketKey: m.marketKey, extraLines: m.extraLines, deadlineAt },
+          { beforeLlmPath: takeSlot },
+        ),
+      };
+    } catch (err) {
+      out[index] = fail(m.marketKey, err);
+    }
+  }
+  return out.filter((o): o is FanOutOutcome => o !== null);
+}
+
+// Fase de narração do runCodeJevFanOut. Sem a row da narração não há ai_call pra
+// referenciar: se ela não roda (prazo, slot negado, insert falho), nenhum pendente
+// persiste — viram "não analisado"/falha com o motivo.
+async function narrateAndPersist(
+  pendings: { index: number; pending: PendingCodeJevPrediction }[],
+  out: (FanOutOutcome | null)[],
+  fail: (marketKey: string, err: unknown) => FanOutOutcome,
+  takeSlot: () => Promise<void>,
+  deadlineAt: number | undefined,
+  stoppedBefore: { message: string; notRun: NotRunReason } | null,
+): Promise<void> {
   const [chosen, ...others] = sortBestBetEntries(
     pendings.map((p) => ({
       marketKey: p.pending.marketKey,
@@ -261,12 +373,17 @@ export async function runCodeJevFanOut(
 
   let narration: Awaited<ReturnType<typeof narratePendingPrediction>>;
   try {
+    // Slot já negado antes (um mercado do grupo caiu no LLM sem slot) → não tenta de novo.
+    if (stoppedBefore?.notRun === "rate-limited") throw new SlotDeniedError(false);
+    if (stoppedBefore?.notRun === "unavailable") throw new SlotDeniedError(true);
+    if (!canFitCall(deadlineAt, chosen.pending.model.thinkingMode)) {
+      throw new AnalysisDeadlineError();
+    }
     await takeSlot();
     narration = await narratePendingPrediction(chosen.pending);
   } catch (err) {
-    // Sem a row da narração não há ai_call pra referenciar: nenhum pendente persiste.
     for (const p of pendings) out[p.index] = fail(p.pending.marketKey, err);
-    return settled();
+    return;
   }
 
   // O escolhido persiste primeiro. Se só ELE falhar, os irmãos ainda persistem como
@@ -289,5 +406,4 @@ export async function runCodeJevFanOut(
       out[p.index] = fail(p.pending.marketKey, err);
     }
   }
-  return settled();
 }
