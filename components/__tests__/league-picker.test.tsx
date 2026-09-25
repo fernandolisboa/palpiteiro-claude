@@ -8,7 +8,7 @@ import { LeaguePicker } from "@/components/league-picker";
 describe("LeaguePicker rendering", () => {
   it("renderiza um select rotulado com as ligas ativas e 'Todas as ligas'", () => {
     const markup = renderToStaticMarkup(
-      <LeaguePicker value="all" range={{ preset: "today5" }} />,
+      <LeaguePicker value="all" activeKeys={["bsa", "ucl"]} range={{ preset: "today5" }} />,
     );
     expect(markup).toContain('aria-label="Filtro de liga"');
     expect(markup).toContain('<option value="all" selected="">Todas as ligas</option>');
@@ -19,9 +19,18 @@ describe("LeaguePicker rendering", () => {
     expect(markup).not.toContain("Copa do Mundo");
   });
 
+  it("liga inativa não vira opção (nem desabilitada)", () => {
+    const markup = renderToStaticMarkup(
+      <LeaguePicker value="bsa" activeKeys={["bsa", "ucl"]} range={{ preset: "today5" }} />,
+    );
+    expect(markup).not.toContain("Premier League");
+    expect(markup).not.toContain("disabled=\"\"");
+    expect(markup).not.toContain("fora de temporada");
+  });
+
   it("marca a liga atual como selecionada", () => {
     const markup = renderToStaticMarkup(
-      <LeaguePicker value="ucl" range={{ preset: "today14" }} />,
+      <LeaguePicker value="ucl" activeKeys={["bsa", "ucl"]} range={{ preset: "today14" }} />,
     );
     expect(markup).toContain('<option value="ucl" selected="">Champions</option>');
   });

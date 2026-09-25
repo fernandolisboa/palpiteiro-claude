@@ -123,7 +123,8 @@ export const CANONICAL_TEAMS: Record<SupportedLeague, readonly string[]> = {
     "Uzbekistan",
   ] as const,
   // Bootstrap vazio: scripts/generate-team-ids.ts semeia estas listas a partir do
-  // provider primário antes de a liga entrar em ACTIVE_LEAGUES.
+  // provider primário antes de a liga ser ligada no /admin/leagues (ADR 0050; o
+  // toggle recusa liga com lista vazia).
   serie_a: [],
   bundesliga: [],
   ligue_1: [],

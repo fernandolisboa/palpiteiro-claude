@@ -29,6 +29,11 @@ const SECTIONS = [
     title: "Configurações de IA",
     desc: "modelo de análise · default global",
   },
+  {
+    href: "/admin/leagues",
+    title: "Ligas",
+    desc: "ligar/desligar ligas · orçamento da Odds API · sem deploy",
+  },
 ] as const;
 
 export default function AdminIndexPage() {

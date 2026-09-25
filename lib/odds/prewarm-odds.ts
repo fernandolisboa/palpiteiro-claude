@@ -1,8 +1,9 @@
-import { ACTIVE_LEAGUES } from "@/lib/config/active-leagues";
+import { getActiveLeagues } from "@/lib/db/queries/league-settings";
 import { getMatchesInLeagueWindow } from "@/lib/db/queries/matches";
 import { ensureOddsSnapshotsFresh } from "@/lib/odds/fetch-and-snapshot";
 import { PAGE_LIVE_MARKETS } from "@/lib/odds/live-card-markets";
 import { getLastOddsApiQuota } from "@/lib/providers/odds-api";
+import type { SupportedLeague } from "@/lib/providers/sports-data/leagues";
 
 // Pré-aquecimento de odds (#371). Um cron (a cada 6h) chama isto pra manter snapshots
 // frescas dos mercados que a match page lê AO VIVO no load (PAGE_LIVE_MARKETS =
@@ -46,15 +47,17 @@ export type PrewarmOddsSummary = {
  * entre ligas arriscaria bursts; sequencial mantém o gasto previsível.
  */
 export async function prewarmOdds(
-  opts: { now?: Date } = {},
+  opts: { now?: Date; leagues?: readonly SupportedLeague[] } = {},
 ): Promise<PrewarmOddsSummary> {
   const now = opts.now ?? new Date();
+  // Ligas ativas lidas UMA vez no início do run (league_settings, ADR 0050).
+  const leagues = opts.leagues ?? (await getActiveLeagues());
 
   let consideredMatches = 0;
   let warmedLeagues = 0;
   let errors = 0;
 
-  for (const league of ACTIVE_LEAGUES) {
+  for (const league of leagues) {
     const upcoming = await getMatchesInLeagueWindow({
       league,
       fromMs: now.getTime(),
@@ -90,7 +93,7 @@ export async function prewarmOdds(
 
   const quota = getLastOddsApiQuota();
   const summary: PrewarmOddsSummary = {
-    consideredLeagues: ACTIVE_LEAGUES.length,
+    consideredLeagues: leagues.length,
     consideredMatches,
     warmedLeagues,
     errors,

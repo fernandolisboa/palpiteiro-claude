@@ -1,7 +1,7 @@
 // @vitest-environment node
 //
 // AC do #371 contra Postgres REAL (pglite): "snapshot fresca → sem chamada ao
-// provider no load". `prewarmOdds` itera ACTIVE_LEAGUES (mockado p/ world_cup aqui), acha jogo
+// provider no load". `prewarmOdds` itera as ligas ativas (league_settings; mockado p/ world_cup aqui), acha jogo
 // próximo via getMatchesInLeagueWindow e chama `ensureOddsSnapshotsFresh` com
 // PAGE_LIVE_MARKETS (over/under + 1X2, ambos featured). Fetch MOCKADO no seam
 // `@/lib/providers/odds-api` (getOddsForSport) — zero rede, zero quota real. Roda em
@@ -61,8 +61,10 @@ const KICKOFF_1 = new Date(Date.now() + 6 * 60 * 60 * 1000); // +6h
 const KICKOFF_2 = new Date(Date.now() + 20 * 60 * 60 * 1000); // +20h
 const matchIds: { id1: string; id2: string } = {} as never;
 
-vi.mock("@/lib/config/active-leagues", () => ({
-  ACTIVE_LEAGUES: ["world_cup"] as const,
+// Ligas ativas vêm de league_settings (ADR 0050); o seed da migration liga outras
+// ligas, então o teste fixa só a Copa, onde estão os jogos semeados.
+vi.mock("@/lib/db/queries/league-settings", () => ({
+  getActiveLeagues: async () => ["world_cup"],
 }));
 
 beforeAll(async () => {
