@@ -203,3 +203,17 @@ export async function setGenerationParams(
       },
     });
 }
+
+/**
+ * Kill-switch (#503, ADR 0039 D3): o staking quarter-Kelly pode ser usado? Default
+ * ON quando não há row. NÃO liga o Kelly sozinho: o predict também exige o gate do
+ * Kelly "pronto" (isKellyStakingActive). false → bandas do ADR 0019 sempre.
+ */
+export async function getEnableKellyStaking(): Promise<boolean> {
+  const rows = await db
+    .select({ enabled: aiConfig.enableKellyStaking })
+    .from(aiConfig)
+    .where(eq(aiConfig.id, 1))
+    .limit(1);
+  return rows[0]?.enabled ?? true;
+}

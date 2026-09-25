@@ -1,6 +1,6 @@
 {
-  "id": "b9b66535-3cb9-4d28-98cd-2f8792a63d62",
-  "prevId": "63f2940b-a1c5-4ab0-86c7-d5c42f447d53",
+  "id": "aada5c78-9e48-4231-a6d9-b0ab79bad434",
+  "prevId": "b9b66535-3cb9-4d28-98cd-2f8792a63d62",
   "version": "7",
   "dialect": "postgresql",
   "tables": {
@@ -811,6 +811,60 @@
           "tableTo": "ai_calls",
           "columnsFrom": [
             "parse_ai_call_id"
+          ],
+          "columnsTo": [
+            "id"
+          ],
+          "onDelete": "set null",
+          "onUpdate": "no action"
+        }
+      },
+      "compositePrimaryKeys": {},
+      "uniqueConstraints": {},
+      "policies": {},
+      "checkConstraints": {},
+      "isRLSEnabled": false
+    },
+    "public.league_settings": {
+      "name": "league_settings",
+      "schema": "",
+      "columns": {
+        "league": {
+          "name": "league",
+          "type": "league",
+          "typeSchema": "public",
+          "primaryKey": true,
+          "notNull": true
+        },
+        "active": {
+          "name": "active",
+          "type": "boolean",
+          "primaryKey": false,
+          "notNull": true,
+          "default": false
+        },
+        "updated_by_user_id": {
+          "name": "updated_by_user_id",
+          "type": "uuid",
+          "primaryKey": false,
+          "notNull": false
+        },
+        "updated_at": {
+          "name": "updated_at",
+          "type": "timestamp with time zone",
+          "primaryKey": false,
+          "notNull": true,
+          "default": "now()"
+        }
+      },
+      "indexes": {},
+      "foreignKeys": {
+        "league_settings_updated_by_user_id_users_id_fk": {
+          "name": "league_settings_updated_by_user_id_users_id_fk",
+          "tableFrom": "league_settings",
+          "tableTo": "users",
+          "columnsFrom": [
+            "updated_by_user_id"
           ],
           "columnsTo": [
             "id"

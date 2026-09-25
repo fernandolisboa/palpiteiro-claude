@@ -40,12 +40,17 @@ import {
   getDefaultModelId,
   getGenerationParams,
 } from "@/lib/db/queries/ai-config";
+import { isKellyStakingActive } from "@/lib/calibration/kelly-live";
 import { getPreferredModelId } from "@/lib/db/queries/users";
 import { MIN_EDGE_PP } from "@/lib/odds/scenario";
 
 import { persistAiCallError } from "./ai-call-logging";
 import { calculateCost } from "./cost";
-import { computeStakeUnits, isBelowEdgeFloor } from "./staking";
+import {
+  computeKellyStakeUnits,
+  computeStakeUnits,
+  isBelowEdgeFloor,
+} from "./staking";
 import { getCartridge } from "./markets/registry";
 import type { BaseMarketOutput } from "./markets/types";
 import {
@@ -1007,7 +1012,18 @@ export async function predict({
   // arredondado); só a DECISÃO passa a usar a precisão exata gravada.
   const edgePctRounded = edge === null ? null : Number(edge.toFixed(2));
   const confidencePctRounded = Number(output.confidence_pct.toFixed(2));
-  const stakeUnits = computeStakeUnits(edgePctRounded, confidencePctRounded);
+  // Quarter-Kelly (ADR 0039 D3, #503) SÓ com o gate do Kelly pronto + kill-switch
+  // ON (isKellyStakingActive, fail-closed, memo 1h). Fora disso — ou sem p/odd
+  // mensuráveis — as bandas acima. Pass não consulta o gate (stake irrelevante).
+  const kellyUnits =
+    side !== "pass" &&
+    recModelProb !== null &&
+    oddAtRec !== null &&
+    (await isKellyStakingActive())
+      ? computeKellyStakeUnits(recModelProb / 100, oddAtRec)
+      : null;
+  const stakeUnits =
+    kellyUnits ?? computeStakeUnits(edgePctRounded, confidencePctRounded);
 
   // Coluna NOVA `selection_id`: o lado escolhido (NULL em pass — não há seleção).
   // Resolvido em MEMÓRIA pelo catálogo já lido — hard-fail ANTES do insert (não

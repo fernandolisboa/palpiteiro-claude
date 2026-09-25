@@ -10,7 +10,7 @@ Quais ligas estão ativas vivia na constante `ACTIVE_LEAGUES` (`lib/config/activ
 
 ## Decisão
 
-1. **Tabela `league_settings`** (migration 0046): `league` (enum `league`, PK), `active boolean not null default false`, `updated_by_user_id` (FK `users`, set null), `updated_at`. Liga sem row = desligada. A migration semeia as 4 ativas de então (Brasileirão, Champions, Premier League, La Liga) com `ON CONFLICT DO NOTHING` (preview DB compartilhado).
+1. **Tabela `league_settings`** (migration 0047): `league` (enum `league`, PK), `active boolean not null default false`, `updated_by_user_id` (FK `users`, set null), `updated_at`. Liga sem row = desligada. A migration semeia as 4 ativas de então (Brasileirão, Champions, Premier League, La Liga) com `ON CONFLICT DO NOTHING` (preview DB compartilhado).
 2. **Leitura** em `lib/db/queries/league-settings.ts`: `getActiveLeagues()` devolve as ativas na ordem de `SUPPORTED_LEAGUES`. Zero ativas ou erro de leitura → `FALLBACK_ACTIVE_LEAGUES` (Brasileirão + Champions, em código) com `console.warn` — a home nunca fica sem filtro default. Server Components usam `getActiveLeaguesForRequest` (React `cache()`); sync de fixtures e prewarm de odds leem uma vez no início de cada run (com injeção por parâmetro pra teste).
 3. **Funções puras** (`defaultLeagueFilter`, `isActiveLeagueFilter`, `resolveHomeLeagueFilter`, `leaguePickerGroups`) recebem a lista ativa por parâmetro. Sem constantes de módulo.
 4. **Seletor**: liga inativa simplesmente some (acaba o `HIDE_WHEN_INACTIVE` e o estado "fora de temporada" desabilitado).
@@ -29,4 +29,4 @@ Quais ligas estão ativas vivia na constante `ACTIVE_LEAGUES` (`lib/config/activ
 - Uma query a mais por request da home (deduplicada por `cache()`), e uma por run de cron.
 - Se a tabela sumir/falhar, o app degrada pro fallback em vez de quebrar — ao custo de Premier League/La Liga sumirem até o banco voltar.
 - As estimativas de crédito são referência estática; a medição real continua no log do prewarm.
-- Num DB novo em que 0045 e 0046 rodem na mesma transação, o Postgres pode recusar usar os valores de enum recém-criados; a migration pula só esse seed (Premier League/La Liga nascem desligadas) em vez de falhar.
+- Num DB novo em que 0045 e 0047 rodem na mesma transação, o Postgres pode recusar usar os valores de enum recém-criados; a migration pula só esse seed (Premier League/La Liga nascem desligadas) em vez de falhar.

@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vitest";
 
-import { calculateCost } from "@/lib/ai/cost";
+import { calculateCost, calculateJudgmentCost } from "@/lib/ai/cost";
 import { MODEL_REGISTRY, type AIModelId } from "@/lib/ai/models";
 
 describe("calculateCost — derived from MODEL_REGISTRY", () => {
@@ -38,5 +38,13 @@ describe("calculateCost — derived from MODEL_REGISTRY", () => {
         outputTokens: 1_000_000,
       }),
     ).toBe(6);
+  });
+});
+
+describe("calculateJudgmentCost — JEV (ADR 0041)", () => {
+  it("US$ 0,042 por 1M de tokens de input; output grátis", () => {
+    expect(calculateJudgmentCost(1_000_000)).toBeCloseTo(0.042, 12);
+    expect(calculateJudgmentCost(2_000)).toBeCloseTo(0.000084, 12);
+    expect(calculateJudgmentCost(0)).toBe(0);
   });
 });

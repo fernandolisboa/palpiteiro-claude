@@ -1,6 +1,10 @@
 import { describe, expect, it } from "vitest";
 
-import { computeStakeUnits, isBelowEdgeFloor } from "@/lib/ai/staking";
+import {
+  computeKellyStakeUnits,
+  computeStakeUnits,
+  isBelowEdgeFloor,
+} from "@/lib/ai/staking";
 
 describe("computeStakeUnits — mapeamento determinístico (ADR 0019)", () => {
   // ── Tabela de exemplos do ADR 0019 (1:1, é o oráculo) ───────────────────────
@@ -95,5 +99,26 @@ describe("isBelowEdgeFloor — gate de edge (ADR 0038)", () => {
   it("já é pass → nunca rebaixa de novo", () => {
     expect(isBelowEdgeFloor("pass", null, 5)).toBe(false);
     expect(isBelowEdgeFloor("pass", 2, 5)).toBe(false);
+  });
+});
+
+describe("computeKellyStakeUnits — quarter-Kelly (ADR 0039 D3)", () => {
+  it("p 0.55 @ 2.00 → f* 0.10 → ¼·10 = 2.5u", () => {
+    expect(computeKellyStakeUnits(0.55, 2)).toBe(2.5);
+  });
+  it("arredonda a 0.5u: p 0.30 @ 4.00 → f* 0.0667 → 1.67 → 1.5u", () => {
+    expect(computeKellyStakeUnits(0.3, 4)).toBe(1.5);
+  });
+  it("teto 3u: p 0.70 @ 2.00 → f* 0.40 → 10 → 3u", () => {
+    expect(computeKellyStakeUnits(0.7, 2)).toBe(3);
+  });
+  it("piso 0.5u mesmo com f* ≤ 0 (a margem come o edge)", () => {
+    expect(computeKellyStakeUnits(0.5, 1.9)).toBe(0.5);
+  });
+  it("entrada inválida → null (caller cai nas bandas)", () => {
+    expect(computeKellyStakeUnits(NaN, 2)).toBeNull();
+    expect(computeKellyStakeUnits(0, 2)).toBeNull();
+    expect(computeKellyStakeUnits(1, 2)).toBeNull();
+    expect(computeKellyStakeUnits(0.5, 1)).toBeNull();
   });
 });

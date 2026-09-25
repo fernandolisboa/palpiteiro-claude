@@ -1,7 +1,7 @@
 // @vitest-environment node
 //
 // league_settings (ADR 0050, #508) contra Postgres REAL (pglite): seed da migration
-// 0046, ordem por SUPPORTED_LEAGUES, upsert do toggle e fallback quando não há liga ativa.
+// 0047, ordem por SUPPORTED_LEAGUES, upsert do toggle e fallback quando não há liga ativa.
 import { PGlite } from "@electric-sql/pglite";
 import { drizzle, type PgliteDatabase } from "drizzle-orm/pglite";
 import { migrate } from "drizzle-orm/pglite/migrator";
@@ -49,7 +49,7 @@ afterAll(async () => {
 });
 
 describe("league_settings", () => {
-  it("migration 0046 semeia as 4 ligas ativas de antes (ordem de SUPPORTED_LEAGUES)", async () => {
+  it("migration 0047 semeia as 4 ligas ativas de antes (ordem de SUPPORTED_LEAGUES)", async () => {
     expect(await getActiveLeagues()).toEqual([
       "brasileirao_a",
       "champions_league",

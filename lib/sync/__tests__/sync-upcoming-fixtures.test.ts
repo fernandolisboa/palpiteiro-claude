@@ -10,7 +10,7 @@ import { ensureUpcomingFixturesSynced } from "@/lib/sync/sync-upcoming-fixtures"
 import { acquireSyncLock, releaseSyncLock } from "@/lib/sync/lock";
 
 // Ligas ativas vêm do banco (league_settings, ADR 0050) — mockadas aqui com o seed
-// de produção da migration 0046.
+// de produção da migration 0047.
 const ACTIVE_LEAGUES = vi.hoisted(
   () => ["brasileirao_a", "champions_league", "premier_league", "la_liga"] as const,
 );
