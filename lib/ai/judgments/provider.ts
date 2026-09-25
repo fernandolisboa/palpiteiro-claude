@@ -12,19 +12,10 @@ import type {
 } from "./types";
 
 // A API não devolve `confidence` pra Noul (docs.typesafe.ai/confidence: "Noul
-// answers don't carry one" — o noul já descreve a distribuição sim/não). Derivo
-// pela MESMA fórmula que a doc usa pra Choice, `(n·pico − 1)/(n − 1)`, com n = 2:
-// |2·noul − 1|. Assim o gating de confiança (ADR 0041 §3) vira uma zona morta em
-// torno de 0.5 em vez de nunca disparar.
-export function noulConfidence(noul: number): number {
-  return Math.abs(2 * noul - 1);
-}
-
+// answers don't carry one"). Não fabrico uma: fica null, e só é número se a API
+// passar a enviar. O ajuste de λ (apply.ts) usa só o noul.
 function toJudgment(answer: TypeSafeNoulAnswer): Judgment {
-  return {
-    value: answer.noul,
-    confidence: answer.confidence ?? noulConfidence(answer.noul),
-  };
+  return { value: answer.noul, confidence: answer.confidence ?? null };
 }
 
 export function createTypeSafeJudgmentProvider(

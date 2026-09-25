@@ -37,4 +37,36 @@ describe("jev_judgments_v1", () => {
       expect(question).not.toMatch(/\b(not|no|never|without)\b|n't/i);
     }
   });
+
+  it("desfalque de papel desconhecido não basta pra ataque/defesa enfraquecidos", () => {
+    for (const id of [
+      "attack_weakened_home",
+      "defense_weakened_away",
+    ] as const) {
+      expect(JUDGMENT_QUESTIONS[id].criteria.false).toContain(
+        "`player (...)` has an unknown role and does not by itself make the statement true"
+      );
+    }
+  });
+
+  it("high_stakes cita todo bucket de tabela que state.ts emite", () => {
+    const { true: yes, false: no } = JUDGMENT_QUESTIONS.high_stakes_home
+      .criteria as { true: string; false: string };
+    for (const bucket of [
+      "title race",
+      "continental qualification race",
+      "relegation zone",
+      "relegation battle",
+    ]) {
+      expect(yes).toContain(bucket);
+    }
+    for (const bucket of [
+      "safe mid-table",
+      "secure in continental places",
+      "early season (table not settled)",
+      "unknown",
+    ]) {
+      expect(no).toContain(bucket);
+    }
+  });
 });

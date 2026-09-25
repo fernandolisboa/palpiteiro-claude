@@ -3,6 +3,7 @@ import { afterEach, describe, expect, it, vi } from "vitest";
 import {
   callSystemOne,
   TYPESAFE_ENDPOINT,
+  TYPESAFE_TIMEOUT_MS,
   type TypeSafeNoulQuestion,
 } from "../client";
 import { TypeSafeError, typeSafeErrorToAiCallStatus } from "../errors";
@@ -139,6 +140,30 @@ describe("callSystemOne", () => {
     expect(typeSafeErrorToAiCallStatus(err.kind)).toBe("timeout");
   });
 
+  it("200 cujo corpo nunca fecha → timeout (leitura dentro do teto)", async () => {
+    vi.useFakeTimers();
+    try {
+      const fetchImpl = async () =>
+        new Response(new ReadableStream<Uint8Array>({ start() {} }), {
+          status: 200,
+        });
+      const pending = captureError(
+        callSystemOne({
+          state: "x",
+          questions: QUESTIONS,
+          apiKey: "k",
+          fetchImpl,
+        })
+      );
+      await vi.advanceTimersByTimeAsync(TYPESAFE_TIMEOUT_MS);
+      const err = await pending;
+      expect(err.kind).toBe("timeout");
+      expect(err.requestPayload).toMatchObject({ model: "jev-1.13.0" });
+    } finally {
+      vi.useRealTimers();
+    }
+  });
+
   it("falha de rede → provider_error", async () => {
     const err = await captureError(
       callSystemOne({
@@ -165,6 +190,9 @@ describe("callSystemOne", () => {
     );
     expect(err.kind).toBe("bad_response");
     expect(typeSafeErrorToAiCallStatus(err.kind)).toBe("invalid_output");
+    // Sem JSON não há como saber o custo.
+    expect(err.inputTokens).toBeNull();
+    expect(err.requestPayload).toMatchObject({ state: "x" });
   });
 
   it("noul fora de [0,1] → bad_response", async () => {
@@ -181,6 +209,13 @@ describe("callSystemOne", () => {
       })
     );
     expect(err.kind).toBe("bad_response");
+    // 2xx fora do schema também é pago: tokens lidos do JSON cru.
+    expect(err.inputTokens).toBe(300);
+    expect(err.requestPayload).toMatchObject({
+      model: "jev-1.13.0",
+      state: "x",
+      questions: QUESTIONS,
+    });
   });
 
   it("answer faltando pra uma pergunta → bad_response", async () => {
@@ -194,5 +229,7 @@ describe("callSystemOne", () => {
     );
     expect(err.kind).toBe("bad_response");
     expect(err.message).toContain("q2");
+    expect(err.inputTokens).toBe(300);
+    expect(err.requestPayload).not.toBeNull();
   });
 });

@@ -16,6 +16,11 @@ export class TypeSafeError extends Error {
   readonly latencyMs: number;
   // Corpo cru recebido (quando houve), pro outputPayload do ai_calls.
   readonly responseBody: unknown;
+  // Corpo enviado (quando a chamada chegou a sair), pro inputPayload do ai_calls.
+  readonly requestPayload: Record<string, unknown> | null;
+  // Tokens cobrados, best-effort: um 2xx fora do schema também é pago, então o
+  // cliente tenta ler `usage.input_tokens` do JSON cru. null = desconhecido.
+  readonly inputTokens: number | null;
 
   constructor(args: {
     kind: TypeSafeErrorKind;
@@ -23,6 +28,8 @@ export class TypeSafeError extends Error {
     httpStatus?: number | null;
     latencyMs?: number;
     responseBody?: unknown;
+    requestPayload?: Record<string, unknown> | null;
+    inputTokens?: number | null;
     cause?: unknown;
   }) {
     super(args.message, { cause: args.cause });
@@ -31,6 +38,8 @@ export class TypeSafeError extends Error {
     this.httpStatus = args.httpStatus ?? null;
     this.latencyMs = args.latencyMs ?? 0;
     this.responseBody = args.responseBody ?? null;
+    this.requestPayload = args.requestPayload ?? null;
+    this.inputTokens = args.inputTokens ?? null;
   }
 }
 

@@ -63,7 +63,8 @@ export function hasTypeSafeKey(): boolean {
 function classifyHttpError(
   status: number,
   body: unknown,
-  latencyMs: number
+  latencyMs: number,
+  requestPayload: TypeSafeRequestBody
 ): TypeSafeError {
   if (status === 401 || status === 403) {
     return new TypeSafeError({
@@ -72,6 +73,7 @@ function classifyHttpError(
       httpStatus: status,
       latencyMs,
       responseBody: body,
+      requestPayload,
     });
   }
   if (status === 429) {
@@ -81,6 +83,7 @@ function classifyHttpError(
       httpStatus: status,
       latencyMs,
       responseBody: body,
+      requestPayload,
     });
   }
   return new TypeSafeError({
@@ -89,6 +92,7 @@ function classifyHttpError(
     httpStatus: status,
     latencyMs,
     responseBody: body,
+    requestPayload,
   });
 }
 
@@ -99,6 +103,44 @@ async function readJsonOrText(res: Response): Promise<unknown> {
   } catch {
     return text;
   }
+}
+
+// `res.text()` nem sempre respeita o signal do fetch (um Response que não veio
+// do fetch nativo, ou um runtime que não liga o corpo ao signal). Corro a
+// leitura contra o abort pra que um corpo que nunca fecha também vire timeout.
+async function readBodyWithin(
+  res: Response,
+  signal: AbortSignal
+): Promise<unknown> {
+  let onAbort: (() => void) | undefined;
+  const aborted = new Promise<never>((_resolve, reject) => {
+    onAbort = () => {
+      res.body?.cancel().catch(() => undefined);
+      reject(new DOMException("TypeSafe body read aborted", "AbortError"));
+    };
+    if (signal.aborted) onAbort();
+    else signal.addEventListener("abort", onAbort, { once: true });
+  });
+  try {
+    return await Promise.race([readJsonOrText(res), aborted]);
+  } finally {
+    if (onAbort) signal.removeEventListener("abort", onAbort);
+  }
+}
+
+// Best-effort: um 2xx fora do schema ainda foi cobrado. Se o JSON cru trouxer
+// `usage.input_tokens` válido, uso pro custo no ai_calls; senão null.
+function readInputTokens(body: unknown): number | null {
+  if (typeof body !== "object" || body === null || !("usage" in body)) {
+    return null;
+  }
+  const { usage } = body;
+  if (typeof usage !== "object" || usage === null) return null;
+  if (!("input_tokens" in usage)) return null;
+  const tokens = usage.input_tokens;
+  return typeof tokens === "number" && Number.isInteger(tokens) && tokens >= 0
+    ? tokens
+    : null;
 }
 
 function isAbortError(err: unknown): boolean {
@@ -153,13 +195,14 @@ export async function callSystemOne(args: {
     });
     status = res.status;
     // Lido DENTRO do timeout: um corpo que trava também é timeout.
-    body = await readJsonOrText(res);
+    body = await readBodyWithin(res, controller.signal);
   } catch (err) {
     if (isAbortError(err) || controller.signal.aborted) {
       throw new TypeSafeError({
         kind: "timeout",
         message: `TypeSafe timeout após ${args.timeoutMs ?? TYPESAFE_TIMEOUT_MS} ms`,
         latencyMs: elapsed(),
+        requestPayload: requestBody,
         cause: err,
       });
     }
@@ -167,6 +210,7 @@ export async function callSystemOne(args: {
       kind: "provider_error",
       message: `TypeSafe network error: ${err instanceof Error ? err.message : String(err)}`,
       latencyMs: elapsed(),
+      requestPayload: requestBody,
       cause: err,
     });
   } finally {
@@ -175,7 +219,7 @@ export async function callSystemOne(args: {
 
   const latencyMs = elapsed();
   if (status < 200 || status >= 300) {
-    throw classifyHttpError(status, body, latencyMs);
+    throw classifyHttpError(status, body, latencyMs, requestBody);
   }
 
   const parsed = SystemOneResponseSchema.safeParse(body);
@@ -186,6 +230,8 @@ export async function callSystemOne(args: {
       httpStatus: status,
       latencyMs,
       responseBody: body,
+      requestPayload: requestBody,
+      inputTokens: readInputTokens(body),
     });
   }
   const missing = Object.keys(args.questions).filter(
@@ -198,6 +244,8 @@ export async function callSystemOne(args: {
       httpStatus: status,
       latencyMs,
       responseBody: body,
+      requestPayload: requestBody,
+      inputTokens: parsed.data.usage.input_tokens,
     });
   }
 

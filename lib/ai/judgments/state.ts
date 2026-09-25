@@ -192,8 +192,15 @@ export function tableInputForLeague(
 
 // Antes de ~15% da temporada a tabela é ruído (todo mundo "na briga").
 const EARLY_SEASON_SHARE = 0.15;
-// Distância (pontos) que ainda conta como "na briga": duas vitórias.
-const CONTEST_MARGIN_POINTS = 6;
+// Distância (pontos) que ainda conta como "na briga": ~meio ponto por rodada
+// restante, entre uma e duas vitórias. O teto de 6 evita que a tabela comprimida
+// do meio da temporada ponha meio campeonato "na briga" (viés sistemático de
+// high_stakes); o piso de 3 mantém uma vitória de distância viva no fim.
+const CONTEST_POINTS_PER_ROUND = 0.5;
+const CONTEST_MIN_POINTS = 3;
+const CONTEST_MAX_POINTS = 6;
+// Quantas posições fora de cada zona ainda contam como "na briga" por ela.
+const ZONE_WINDOW_POSITIONS = 3;
 const FINAL_ROUNDS = 5;
 
 function findRow(
@@ -210,6 +217,23 @@ function isEarlySeason(played: number, totalRounds: number): boolean {
   return played < Math.ceil(totalRounds * EARLY_SEASON_SHARE);
 }
 
+// Pontos ainda "alcançáveis": cresce com as rodadas restantes, limitado ao
+// intervalo [3, 6] e ao máximo matemático (3 por rodada).
+export function contestMargin(remainingRounds: number): number {
+  const remaining = Math.max(0, remainingRounds);
+  const scaled = Math.min(
+    CONTEST_MAX_POINTS,
+    Math.max(
+      CONTEST_MIN_POINTS,
+      Math.ceil(remaining * CONTEST_POINTS_PER_ROUND)
+    )
+  );
+  return Math.min(3 * remaining, scaled);
+}
+
+// Ordem: rebaixamento (só metade de baixo) → título (só no topo) → vaga
+// continental (só em volta do corte) → default. Cada rótulo de "briga" exige
+// posição perto da zona E distância em pontos alcançável.
 export function tableSituation(
   table: LeagueTableInput | undefined,
   team: string
@@ -222,33 +246,53 @@ export function tableSituation(
   }
   const byPosition = [...table.rows].sort((a, b) => a.position - b.position);
   const teamsCount = byPosition.length;
-  const remaining = Math.max(0, table.totalRounds - row.played);
-  // Não dá pra fechar mais pontos do que os que restam em jogo.
-  const margin = Math.min(CONTEST_MARGIN_POINTS, 3 * remaining);
+  const margin = contestMargin(table.totalRounds - row.played);
+  const pointsAt = (position: number) => byPosition[position - 1]?.points;
+
   const firstRelegatedPos = teamsCount - table.relegationSpots + 1;
-
-  if (table.relegationSpots > 0 && row.position >= firstRelegatedPos) {
-    return "relegation zone";
+  const isBottomHalf = row.position > teamsCount / 2;
+  if (table.relegationSpots > 0 && isBottomHalf) {
+    if (row.position >= firstRelegatedPos) return "relegation zone";
+    const firstRelegatedPoints = pointsAt(firstRelegatedPos);
+    if (
+      firstRelegatedPoints !== undefined &&
+      row.position >= firstRelegatedPos - ZONE_WINDOW_POSITIONS &&
+      row.points - firstRelegatedPoints <= margin
+    ) {
+      return "relegation battle";
+    }
   }
-  const leaderPoints = Math.max(...byPosition.map((r) => r.points));
-  if (leaderPoints - row.points <= margin) return "title race";
 
-  const firstRelegated = byPosition[firstRelegatedPos - 1];
+  const spots = table.continentalSpots;
+  const leaderPoints = pointsAt(1);
   if (
-    table.relegationSpots > 0 &&
-    firstRelegated &&
-    row.points - firstRelegated.points <= margin
+    leaderPoints !== undefined &&
+    row.position <= Math.max(1, spots) &&
+    leaderPoints - row.points <= margin
   ) {
-    return "relegation battle";
+    return "title race";
   }
-  const lastContinental = byPosition[table.continentalSpots - 1];
-  if (
-    table.continentalSpots > 0 &&
-    lastContinental &&
-    (row.position <= table.continentalSpots ||
-      lastContinental.points - row.points <= margin)
-  ) {
-    return "continental qualification race";
+
+  if (spots > 0) {
+    if (row.position <= spots) {
+      const firstOutsidePoints = pointsAt(spots + 1);
+      // Dentro da zona: na briga se quem está logo fora ainda alcança.
+      if (
+        firstOutsidePoints === undefined ||
+        row.points - firstOutsidePoints <= margin
+      ) {
+        return "continental qualification race";
+      }
+      return "secure in continental places";
+    }
+    const lastInsidePoints = pointsAt(spots);
+    if (
+      lastInsidePoints !== undefined &&
+      row.position <= spots + ZONE_WINDOW_POSITIONS &&
+      lastInsidePoints - row.points <= margin
+    ) {
+      return "continental qualification race";
+    }
   }
   return "safe mid-table";
 }

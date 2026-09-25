@@ -30,7 +30,21 @@ export type JudgmentFailure = {
   httpStatus: number | null;
   latencyMs: number;
   responseBody: unknown;
+  // Pro ai_calls de uma falha paga (2xx inválido): o que foi enviado e quanto
+  // custou. null quando a chamada não saiu ou o custo é desconhecido.
+  requestPayload: Record<string, unknown> | null;
+  inputTokens: number | null;
+  costUsd: number | null;
 };
+
+const NO_CALL = {
+  httpStatus: null,
+  latencyMs: 0,
+  responseBody: null,
+  requestPayload: null,
+  inputTokens: null,
+  costUsd: null,
+} as const;
 
 function toFailure(err: unknown): JudgmentFailure {
   if (err instanceof TypeSafeError) {
@@ -40,14 +54,18 @@ function toFailure(err: unknown): JudgmentFailure {
       httpStatus: err.httpStatus,
       latencyMs: err.latencyMs,
       responseBody: err.responseBody,
+      requestPayload: err.requestPayload,
+      inputTokens: err.inputTokens,
+      costUsd:
+        err.inputTokens === null
+          ? null
+          : calculateJudgmentCost(err.inputTokens),
     };
   }
   return {
+    ...NO_CALL,
     kind: "unexpected",
     message: err instanceof Error ? err.message : String(err),
-    httpStatus: null,
-    latencyMs: 0,
-    responseBody: null,
   };
 }
 
@@ -70,11 +88,9 @@ export async function judgeMatch(
   try {
     if (!provider.hasKey()) {
       report({
+        ...NO_CALL,
         kind: "missing_key",
         message: "TYPESAFE_API_KEY ausente",
-        httpStatus: null,
-        latencyMs: 0,
-        responseBody: null,
       });
       return null;
     }
@@ -88,6 +104,8 @@ export async function judgeMatch(
         message: `julgamentos sem resposta para: ${missing.join(", ")}`,
         latencyMs: result.latencyMs,
         responseBody: result.responsePayload,
+        requestPayload: result.requestPayload,
+        inputTokens: result.inputTokens,
       });
     }
     const answers = Object.fromEntries(

@@ -32,12 +32,12 @@ function criteriaFor(
     case "attack_weakened":
       return {
         true: `\`${team}.absences\` includes a starting forward or the team top scorer whose status is injured or suspended. A doubtful starting forward or doubtful top scorer is weaker evidence than an injured or suspended one.`,
-        false: `\`${team}.absences\` is empty, or every listed player is a goalkeeper, a defender, a rotation player, a backup player, or a midfielder without the team top scorer tag.`,
+        false: `\`${team}.absences\` is empty, or every listed player is a goalkeeper, a defender, a rotation player, a backup player, a midfielder without the team top scorer tag, or a player of unknown role without the team top scorer tag. An absence listed only as \`player (...)\` has an unknown role and does not by itself make the statement true.`,
       };
     case "defense_weakened":
       return {
         true: `\`${team}.absences\` includes a starting defender or the first-choice goalkeeper whose status is injured or suspended. A doubtful starting defender or doubtful first-choice goalkeeper is weaker evidence than an injured or suspended one.`,
-        false: `\`${team}.absences\` is empty, or it lists only forwards, midfielders, rotation defenders or backup goalkeepers.`,
+        false: `\`${team}.absences\` is empty, or it lists only forwards, midfielders, rotation defenders, backup goalkeepers or players of unknown role. An absence listed only as \`player (...)\` has an unknown role and does not by itself make the statement true.`,
       };
     case "rotation_risk":
       return {
@@ -47,7 +47,7 @@ function criteriaFor(
     case "high_stakes":
       return {
         true: `\`${team}.league_situation\` is title race, continental qualification race, relegation zone or relegation battle. The stakes are highest when \`match.season_stage\` is final 5 rounds.`,
-        false: `\`${team}.league_situation\` is safe mid-table, early season (table not settled) or unknown.`,
+        false: `\`${team}.league_situation\` is safe mid-table, secure in continental places, early season (table not settled) or unknown.`,
       };
   }
 }

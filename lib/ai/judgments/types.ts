@@ -40,7 +40,8 @@ export type JudgmentState = {
 };
 
 // `value` = noul (probabilidade de a afirmação ser verdadeira, 0..1).
-export type Judgment = { value: number; confidence: number };
+// `confidence` só vem se a API enviar (Noul hoje não traz) — senão null.
+export type Judgment = { value: number; confidence: number | null };
 
 export type JudgmentAnswers = Record<JudgmentQuestionId, Judgment>;
 

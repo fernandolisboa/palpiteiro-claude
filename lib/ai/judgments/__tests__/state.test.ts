@@ -8,6 +8,7 @@ import type {
 
 import {
   buildJudgmentState,
+  contestMargin,
   describeAbsence,
   enrichAbsences,
   nextMatchBucket,
@@ -46,6 +47,18 @@ function row(
     goalsFor: 0,
     goalsAgainst: 0,
     points,
+  };
+}
+
+function tableFromPoints(
+  points: readonly number[],
+  played: number
+): LeagueTableInput {
+  return {
+    rows: points.map((p, i) => row(i + 1, p, played)),
+    totalRounds: 38,
+    continentalSpots: 6,
+    relegationSpots: 4,
   };
 }
 
@@ -136,17 +149,65 @@ describe("calendário → buckets", () => {
 });
 
 describe("tabela → buckets", () => {
-  it("zonas da tabela", () => {
+  it("zonas da tabela (tabela linear, rodada 30: alcance de 4 pts)", () => {
     const t = table();
     expect(tableSituation(t, "Team 1")).toBe("title race");
-    expect(tableSituation(t, "Team 3")).toBe("title race"); // 6 pts atrás
-    expect(tableSituation(t, "Team 5")).toBe("continental qualification race");
-    expect(tableSituation(t, "Team 8")).toBe("continental qualification race"); // 6 pts do G6
+    expect(tableSituation(t, "Team 2")).toBe("title race"); // 3 pts atrás
+    expect(tableSituation(t, "Team 3")).toBe("secure in continental places"); // 6 atrás, 12 à frente do 7º
+    expect(tableSituation(t, "Team 6")).toBe("continental qualification race"); // 3 à frente do 7º
+    expect(tableSituation(t, "Team 7")).toBe("continental qualification race"); // 3 atrás do G6
+    expect(tableSituation(t, "Team 8")).toBe("safe mid-table"); // 6 atrás do G6
     expect(tableSituation(t, "Team 11")).toBe("safe mid-table");
-    expect(tableSituation(t, "Team 15")).toBe("relegation battle"); // 6 pts do Z4
+    expect(tableSituation(t, "Team 15")).toBe("safe mid-table"); // 6 acima do Z4
+    expect(tableSituation(t, "Team 16")).toBe("relegation battle"); // 3 acima do Z4
     expect(tableSituation(t, "Team 18")).toBe("relegation zone");
     expect(tableSituation(t, "Ninguém")).toBe("unknown");
     expect(tableSituation(undefined, "Team 1")).toBe("unknown");
+  });
+
+  it("12º na rodada 8, 6 pts do líder → não é briga pelo título", () => {
+    const t = tableFromPoints(
+      [
+        18, 17, 16, 15, 14, 14, 13, 13, 12, 12, 12, 12, 11, 10, 10, 9, 8, 7, 6,
+        5,
+      ],
+      8
+    );
+    expect(tableSituation(t, "Team 12")).toBe("safe mid-table");
+    // O topo segue na briga.
+    expect(tableSituation(t, "Team 2")).toBe("title race");
+  });
+
+  it("2º a 2 pts do líder na rodada 30 → briga pelo título", () => {
+    const t = tableFromPoints(
+      [
+        62, 60, 55, 53, 50, 48, 47, 45, 44, 42, 40, 39, 38, 36, 35, 33, 30, 28,
+        25, 20,
+      ],
+      30
+    );
+    expect(tableSituation(t, "Team 2")).toBe("title race");
+    expect(tableSituation(t, "Team 17")).toBe("relegation zone");
+  });
+
+  it("15º a 2 pts do Z4 na reta final → briga contra o rebaixamento", () => {
+    const t = tableFromPoints(
+      [
+        75, 70, 66, 62, 60, 58, 55, 52, 50, 48, 46, 44, 43, 41, 40, 39, 38, 35,
+        30, 25,
+      ],
+      35
+    );
+    expect(tableSituation(t, "Team 15")).toBe("relegation battle");
+    expect(tableSituation(t, "Team 17")).toBe("relegation zone");
+  });
+
+  it("alcance em pontos cresce com as rodadas restantes, limitado", () => {
+    expect(contestMargin(30)).toBe(6);
+    expect(contestMargin(8)).toBe(4);
+    expect(contestMargin(3)).toBe(3);
+    expect(contestMargin(1)).toBe(3);
+    expect(contestMargin(0)).toBe(0);
   });
 
   it("começo de temporada → tabela não assentada", () => {
