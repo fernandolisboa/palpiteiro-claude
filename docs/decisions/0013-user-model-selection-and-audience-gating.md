@@ -21,6 +21,12 @@ Accepted (2026-06-11) — **emenda o ADR 0008** (modelo de análise configuráve
 > históricas com os ids removidos renderizam **graciosamente** via `formatModelName`
 > (mesmo padrão do Fable, #241). Higiene/reprodutibilidade, **não** custo.
 
+> **Nota (2026-09-25, #524):** o registry volta a ter um modelo **admin-only** — o
+> **Fable 5.1** (`userSelectable: false`), ao lado do Opus 5.5 e do Sonnet 5
+> (selecionáveis). O gating por audiência volta a filtrar de fato: o Fable 5.1 não
+> aparece pro usuário comum e não pode virar default global. Ver a emenda de #524 no
+> ADR 0021.
+
 ## Contexto
 
 O ADR 0008 deixou a seleção de modelo restrita a admin: default global em
