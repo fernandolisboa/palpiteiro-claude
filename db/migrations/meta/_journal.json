@@ -330,13 +330,6 @@
       "when": 1790295540942,
       "tag": "0046_enable_kelly_staking",
       "breakpoints": true
-    },
-    {
-      "idx": 47,
-      "version": "7",
-      "when": 1790296445843,
-      "tag": "0047_strong_eddie_brock",
-      "breakpoints": true
     }
   ]
 }
