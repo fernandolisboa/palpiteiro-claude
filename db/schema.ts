@@ -777,8 +777,8 @@ export const aiConfig = pgTable("ai_config", {
   // alimenta o CLV — companheira do Yield). Default OFF = zero gasto de quota; a
   // EXIBIÇÃO do CLV no dashboard/detail é sempre on (mostra null até haver dado).
   // Flip data-driven (sem deploy): true → o cron /api/cron/capture-closing-odds
-  // passa a capturar odds perto do KO SÓ pra jogos com predição non-pass. Sem toggle
-  // de UI (consistente com as flags acima — DB-flip only). Reversível (SET = false).
+  // passa a capturar odds perto do KO SÓ pra jogos com predição non-pass. Editável
+  // no /admin/settings (registry lib/config/admin-flags.ts, #514). Reversível.
   enableClvCapture: boolean().notNull().default(false),
   // Feature-flag (#380): liga a VALIDAÇÃO DE FIDELIDADE pós-síntese — um validador
   // DETERMINÍSTICO (regras, sem juiz LLM) que checa se contagens citadas na manchete

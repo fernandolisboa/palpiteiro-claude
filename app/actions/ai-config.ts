@@ -14,6 +14,11 @@ import {
   TEMPERATURE_MIN,
 } from "@/lib/ai/generation-params";
 import {
+  validateAdminFlagInput,
+  type AdminFlagValue,
+} from "@/lib/config/admin-flags";
+import {
+  setAdminFlag,
   setDefaultModelId,
   setGenerationParams,
 } from "@/lib/db/queries/ai-config";
@@ -81,6 +86,38 @@ export async function updateGenerationParams(
   }
 
   await setGenerationParams({ maxTokens, effort, temperature }, session.user.id);
+  revalidatePath("/admin/settings");
+  return { ok: true };
+}
+
+export type UpdateAdminFlagResult = { ok: boolean; error?: string };
+
+// Flags de ai_config editáveis pelo /admin/settings (#514), dirigidas pelo registry
+// lib/config/admin-flags.ts. Key fora do registry ou valor que não casa com o kind
+// (boolean / valores do enum) é recusado em validateAdminFlagInput.
+export async function updateAdminFlag(
+  _prev: UpdateAdminFlagResult | null,
+  formData: FormData,
+): Promise<UpdateAdminFlagResult> {
+  const session = await auth();
+  // Defense-in-depth igual ao updateDefaultModel: server actions são POST
+  // chamáveis fora do layout /admin, então a role é revalidada AQUI.
+  if (session?.user?.role !== "admin" || !session.user.id) {
+    return { ok: false, error: "Acesso negado." };
+  }
+
+  const verdict = validateAdminFlagInput({
+    key: formData.get("key"),
+    value: formData.get("value"),
+  });
+  if (!verdict.ok) return { ok: false, error: verdict.error };
+
+  // Cast seguro: validateAdminFlagInput só aprova valor do kind da key.
+  await setAdminFlag(
+    verdict.key,
+    verdict.value as AdminFlagValue,
+    session.user.id,
+  );
   revalidatePath("/admin/settings");
   return { ok: true };
 }

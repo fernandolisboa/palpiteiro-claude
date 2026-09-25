@@ -10,6 +10,14 @@ import {
   isValidTemperature,
   type GenerationParams,
 } from "@/lib/ai/generation-params";
+import {
+  ADMIN_FLAGS,
+  adminFlagDefaults,
+  coerceStoredFlagValue,
+  type AdminFlagKey,
+  type AdminFlagValue,
+  type AdminFlagValues,
+} from "@/lib/config/admin-flags";
 
 // Boundary única de leitura/escrita da config global de IA em ai_config (single
 // row, id=1): o default global de modelo E os parâmetros de geração
@@ -216,4 +224,49 @@ export async function getEnableKellyStaking(): Promise<boolean> {
     .where(eq(aiConfig.id, 1))
     .limit(1);
   return rows[0]?.enabled ?? true;
+}
+
+/**
+ * Valores atuais de TODAS as flags do registry (#514) pro /admin/settings. Lê a
+ * row uma vez; sem row → defaults do registry; valor persistido inválido → default
+ * da entrada. Só pra exibição/edição: o runtime continua lendo pelos getters acima.
+ */
+export async function getAdminFlagValues(): Promise<AdminFlagValues> {
+  const rows = await db
+    .select()
+    .from(aiConfig)
+    .where(eq(aiConfig.id, 1))
+    .limit(1);
+  const row = rows[0];
+  if (!row) return adminFlagDefaults();
+  return Object.fromEntries(
+    ADMIN_FLAGS.map((f) => [f.key, coerceStoredFlagValue(f, row[f.key])]),
+  ) as AdminFlagValues;
+}
+
+/**
+ * Upsert de UMA flag do registry (single-row id=1). Grava quem alterou pra
+ * auditoria. O valor já vem validado da server action (validateAdminFlagInput).
+ * O insert (DB sem row) precisa do defaultModelId NOT NULL, como setGenerationParams.
+ */
+export async function setAdminFlag(
+  key: AdminFlagKey,
+  value: AdminFlagValue,
+  userId: string,
+): Promise<void> {
+  // Chave computada perde o tipo por coluna no Drizzle; o par key/value já foi
+  // checado contra o registry (validateAdminFlagInput) antes de chegar aqui.
+  const patch = { [key]: value } as Partial<typeof aiConfig.$inferInsert>;
+  await db
+    .insert(aiConfig)
+    .values({
+      id: 1,
+      defaultModelId: DEFAULT_MODEL_ID,
+      ...patch,
+      updatedByUserId: userId,
+    })
+    .onConflictDoUpdate({
+      target: aiConfig.id,
+      set: { ...patch, updatedByUserId: userId, updatedAt: new Date() },
+    });
 }

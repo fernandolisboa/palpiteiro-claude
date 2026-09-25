@@ -1,11 +1,14 @@
 import { DefinitionRow } from "@/components/admin/definition-row";
 import { PageHeading } from "@/components/admin/page-heading";
 import { SELECTABLE_MODELS } from "@/lib/ai/models";
+import { ADMIN_FLAGS, type AdminFlagDef } from "@/lib/config/admin-flags";
 import {
+  getAdminFlagValues,
   getDefaultModelId,
   getGenerationParams,
 } from "@/lib/db/queries/ai-config";
 
+import { AdminFlagControl } from "./admin-flag-control";
 import { DefaultModelForm } from "./default-model-form";
 import { GenerationParamsForm } from "./generation-params-form";
 
@@ -15,6 +18,7 @@ export const dynamic = "force-dynamic";
 export default async function AdminSettingsPage() {
   const current = await getDefaultModelId();
   const genParams = await getGenerationParams();
+  const flagValues = await getAdminFlagValues();
 
   return (
     <div className="min-h-screen bg-background text-foreground">
@@ -72,7 +76,50 @@ export default async function AdminSettingsPage() {
           </h2>
           <GenerationParamsForm current={genParams} />
         </section>
+
+        <section className="pt-10">
+          <h2 className="pb-3 font-mono text-eyebrow uppercase tracking-label text-muted-foreground">
+            flags
+          </h2>
+          <div className="rounded-md border border-border">
+            {/* Renderizado do registry (lib/config/admin-flags.ts): flag nova
+                entra lá, sem mexer aqui. */}
+            {ADMIN_FLAGS.map((flag) => {
+              const current = flagValues[flag.key];
+              return (
+                <DefinitionRow
+                  key={flag.key}
+                  className="items-start gap-4 px-4 py-3 last:border-b-0"
+                  label={
+                    <div className="flex flex-col gap-1">
+                      <span className="text-body font-medium">
+                        {flag.label} · {formatFlagValue(flag, current)}
+                      </span>
+                      <span className="text-body-sm text-muted-foreground">
+                        {flag.description}
+                      </span>
+                      {"costNote" in flag && flag.costNote && (
+                        <span className="font-mono text-eyebrow text-muted-foreground">
+                          custo: {flag.costNote}
+                        </span>
+                      )}
+                    </div>
+                  }
+                  value={<AdminFlagControl flag={flag} current={current} />}
+                />
+              );
+            })}
+          </div>
+          <p className="pt-3 text-body-sm text-muted-foreground">
+            Valem para todos os usuários, sem redeploy.
+          </p>
+        </section>
       </div>
     </div>
   );
+}
+
+function formatFlagValue(flag: AdminFlagDef, value: boolean | string): string {
+  if (flag.kind === "boolean") return value ? "ligada" : "desligada";
+  return flag.valueLabels?.[String(value)] ?? String(value);
 }
