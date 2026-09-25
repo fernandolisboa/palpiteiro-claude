@@ -1,3 +1,5 @@
+import { Suspense } from "react";
+
 import { DefinitionRow } from "@/components/admin/definition-row";
 import { PageHeading } from "@/components/admin/page-heading";
 import { SELECTABLE_MODELS } from "@/lib/ai/models";
@@ -11,14 +13,17 @@ import {
 import { AdminFlagControl } from "./admin-flag-control";
 import { DefaultModelForm } from "./default-model-form";
 import { GenerationParamsForm } from "./generation-params-form";
+import { UnregisteredModelsNote } from "./unregistered-models-note";
 
 export const dynamic = "force-dynamic";
 
 // Gateado por app/admin/layout.tsx (role === "admin" → notFound pra outros).
 export default async function AdminSettingsPage() {
-  const current = await getDefaultModelId();
-  const genParams = await getGenerationParams();
-  const flagValues = await getAdminFlagValues();
+  const [current, genParams, flagValues] = await Promise.all([
+    getDefaultModelId(),
+    getGenerationParams(),
+    getAdminFlagValues(),
+  ]);
 
   return (
     <div className="min-h-screen bg-background text-foreground">
@@ -34,10 +39,11 @@ export default async function AdminSettingsPage() {
             modelos disponíveis
           </h2>
           <div className="rounded-md border border-border">
-            {/* Lista TODO o registry. Hoje todos são userSelectable (após #240 +
-                #241), mas um modelo admin-only ganha um rótulo explícito — assim
-                a lista nunca insinua que um modelo não-salvável é padrão usável
-                (o dropdown de "padrão global" o desabilita em paralelo). */}
+            {/* Lista TODO o registry. Modelo admin-only (Fable 5.1, #524) ganha
+                rótulo explícito — assim a lista nunca insinua que um modelo
+                não-salvável é padrão usável (o dropdown de "padrão global" o
+                desabilita em paralelo). Adaptive = thinking sem temperatura: não
+                reproduzível no motor llm (ADR 0021, emenda de #524). */}
             {SELECTABLE_MODELS.map((m) => (
               <DefinitionRow
                 key={m.id}
@@ -47,6 +53,7 @@ export default async function AdminSettingsPage() {
                     <span className="text-body font-medium">
                       {m.label}
                       {m.userSelectable ? "" : " · admin-only"}
+                      {m.thinkingMode === "adaptive" ? " · adaptive" : ""}
                     </span>
                     <span className="font-mono text-eyebrow text-muted-foreground">
                       {m.id}
@@ -61,6 +68,11 @@ export default async function AdminSettingsPage() {
               />
             ))}
           </div>
+          {/* Fora do caminho crítico: a listagem da API (#524) faz streaming
+              depois, sem segurar o resto da página. */}
+          <Suspense fallback={null}>
+            <UnregisteredModelsNote />
+          </Suspense>
         </section>
 
         <section>

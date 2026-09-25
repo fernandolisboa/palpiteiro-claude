@@ -216,6 +216,24 @@ const baseCall = {
   modelOverride: "claude-haiku-4-5" as const,
 };
 
+describe("generatePalpites (síntese) — prazo do run (#524 re-review)", () => {
+  it("sem tempo pra uma chamada → lança ANTES do provider, sem row em ai_calls", async () => {
+    await expect(
+      generatePalpites({ ...baseCall, deadlineAt: Date.now() + 5_000 }),
+    ).rejects.toThrow("analysis deadline exceeded");
+    expect(runAnalysis).not.toHaveBeenCalled();
+    expect(insertValues).not.toHaveBeenCalled();
+  });
+
+  it("com tempo → segue e repassa o prazo na request", async () => {
+    runAnalysis.mockResolvedValue(okResult(validHeadline));
+    const deadlineAt = Date.now() + 60_000;
+    await generatePalpites({ ...baseCall, deadlineAt });
+    const req = runAnalysis.mock.calls[0][0] as AnalysisRequest;
+    expect(req.deadlineAt).toBe(deadlineAt);
+  });
+});
+
 describe("generatePalpites (síntese) — caminho ok", () => {
   it("loga ai_call(ok) → palpite_set com headline → linhas settleable em BATCH (#354)", async () => {
     runAnalysis.mockResolvedValue(okResult(validHeadline));

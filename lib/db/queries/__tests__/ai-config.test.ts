@@ -45,6 +45,17 @@ describe("getDefaultModelId — registry-validated fallback (ADR 0008)", () => {
       "claude-sonnet-4-5-20250929",
     );
   });
+
+  it("row com id válido mas admin-only (Fable 5.1, #524) → DEFAULT_MODEL_ID", async () => {
+    // O default vale pra todos: um usuário comum nunca roda um modelo que não pode escolher.
+    defaultRows = [{ defaultModelId: "claude-fable-5-1" }];
+    await expect(getDefaultModelId()).resolves.toBe(DEFAULT_MODEL_ID);
+  });
+
+  it("row com id userSelectable adaptive (Opus 5.5) → retorna o id persistido", async () => {
+    defaultRows = [{ defaultModelId: "claude-opus-5-5" }];
+    await expect(getDefaultModelId()).resolves.toBe("claude-opus-5-5");
+  });
 });
 
 describe("getGenerationParams — fallback POR CAMPO (ADR 0008 emenda 2)", () => {
@@ -65,7 +76,7 @@ describe("getGenerationParams — fallback POR CAMPO (ADR 0008 emenda 2)", () =>
   });
 
   it("cada campo inválido cai no default individualmente", async () => {
-    defaultRows = [{ maxTokens: 999999, effort: "xhigh", temperature: "9.9" }];
+    defaultRows = [{ maxTokens: 999999, effort: "ultra", temperature: "9.9" }];
     await expect(getGenerationParams()).resolves.toEqual(
       GENERATION_PARAM_DEFAULTS,
     );

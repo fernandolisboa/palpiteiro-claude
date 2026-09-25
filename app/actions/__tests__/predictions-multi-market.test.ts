@@ -30,7 +30,15 @@ vi.mock("@/lib/db/queries/users", () => ({ getUserAccessState: vi.fn() }));
 // Floor do env (#276): isEmailAllowed compõe com o gate de acesso. Default false nos testes →
 // quem tem allowed=false e não está no floor é bloqueado (caso determinístico, não ambiente).
 vi.mock("@/lib/auth/whitelist", () => ({ isEmailAllowed: vi.fn(() => false) }));
+// checkAnalysisRateLimit CONSOME: a action cobra o 1º slot antes de qualquer gasto; os
+// demais vêm do hook beforeLlmPath que o predict mockado chama (#524 review).
 vi.mock("@/lib/rate-limit", () => ({ checkAnalysisRateLimit: vi.fn() }));
+// modelsForAudience decide a copy da recusa (sugere outro modelo só se houver outro). Real,
+// ele filtra por chave de provider (vazia nos testes) — então cada teste diz o que há.
+vi.mock("@/lib/ai/models", async (importOriginal) => {
+  const actual = await importOriginal<typeof import("@/lib/ai/models")>();
+  return { ...actual, modelsForAudience: vi.fn() };
+});
 vi.mock("@/lib/db/queries/ai-config", () => ({
   getEnableOverUnderExtraLines: vi.fn(),
   getEnableBestBetFanOut: vi.fn(),
@@ -44,6 +52,7 @@ import { marketsForAudience } from "@/lib/db/queries/market-catalog";
 import { getMatchById } from "@/lib/db/queries/matches";
 import { getUserAccessState } from "@/lib/db/queries/users";
 import { ensureOddsSnapshotsFresh } from "@/lib/odds/fetch-and-snapshot";
+import { MODEL_REGISTRY, modelsForAudience } from "@/lib/ai/models";
 import { checkAnalysisRateLimit } from "@/lib/rate-limit";
 
 const mockAuth = auth as unknown as Mock<() => Promise<Session | null>>;
@@ -53,6 +62,7 @@ const mockGetMatchById = vi.mocked(getMatchById);
 const mockEnsureOdds = vi.mocked(ensureOddsSnapshotsFresh);
 const mockGetAccess = vi.mocked(getUserAccessState);
 const mockRateLimit = vi.mocked(checkAnalysisRateLimit);
+const mockModelsForAudience = vi.mocked(modelsForAudience);
 const mockExtraLinesFlag = vi.mocked(getEnableOverUnderExtraLines);
 
 const ALLOWED_ADMIN = { role: "admin" as const, allowed: true };
@@ -104,11 +114,20 @@ beforeEach(() => {
   mockAuth.mockReset();
   mockAuth.mockResolvedValue(SESSION);
   mockPredict.mockReset();
-  mockPredict.mockImplementation(async (args) => resultFor(args.marketKey!));
+  // Como o predict real: cobra o slot (hook) logo antes da chamada paga.
+  mockPredict.mockImplementation(async (args, opts) => {
+    await opts?.beforeLlmPath?.();
+    return resultFor(args.marketKey!);
+  });
   mockGetAccess.mockReset();
   mockGetAccess.mockResolvedValue(ALLOWED_ADMIN);
   mockRateLimit.mockReset();
   mockRateLimit.mockResolvedValue({ ok: true, limit: 20, remaining: 19, reset: 0 });
+  mockModelsForAudience.mockReset();
+  mockModelsForAudience.mockReturnValue([
+    MODEL_REGISTRY["claude-sonnet-4-5-20250929"],
+    MODEL_REGISTRY["claude-haiku-4-5"],
+  ]);
   mockMarketsForAudience.mockReset();
   mockMarketsForAudience.mockResolvedValue([
     OVER_UNDER_MARKET,
@@ -158,11 +177,12 @@ describe("analyzeMarkets — fan-out multi-mercado (custo/rate-limit por N)", ()
     expect(res.ok).toBe(true);
   });
 
-  it("falha parcial: mercado 2 lança PredictError → [ok, failed]; predict 2×; ambos consumidos", async () => {
+  it("falha parcial: mercado 2 lança PredictError antes do LLM → [ok, failed]; predict 2×; só 1 slot", async () => {
     const { PredictError } = await import("@/lib/ai/predict");
-    mockPredict.mockImplementation(async (args) => {
+    mockPredict.mockImplementation(async (args, opts) => {
       if (args.marketKey === "match_result")
         throw new PredictError("no matching odds", {});
+      await opts?.beforeLlmPath?.();
       return resultFor(args.marketKey!);
     });
     const res = await analyzeMarkets(
@@ -170,7 +190,9 @@ describe("analyzeMarkets — fan-out multi-mercado (custo/rate-limit por N)", ()
       form({ matchId: VALID_MATCH_ID, marketKeys: ["over_under", "match_result"] }),
     );
     expect(mockPredict).toHaveBeenCalledTimes(2);
-    expect(mockRateLimit).toHaveBeenCalledTimes(2);
+    // Sem odds = falha ANTES da chamada paga → não pede slot; o único é o do início do run,
+    // que pagou o over_under.
+    expect(mockRateLimit).toHaveBeenCalledTimes(1);
     expect(res.ok).toBe(true);
     if (res.ok) {
       expect(res.summaries[0]).toEqual({
@@ -186,11 +208,9 @@ describe("analyzeMarkets — fan-out multi-mercado (custo/rate-limit por N)", ()
     }
   });
 
-  it("cap no meio: 3 escolhidos, rate-limit ok,ok,!ok(cap) → 2 rodam, 1 rate-limited; rate-limit 3×", async () => {
-    mockRateLimit
-      .mockResolvedValueOnce({ ok: true, limit: 20, remaining: 1, reset: 0 })
-      .mockResolvedValueOnce({ ok: true, limit: 20, remaining: 0, reset: 0 })
-      .mockResolvedValueOnce({ ok: false, limit: 20, remaining: 0, reset: 0 });
+  it("budget parcial (2 slots), 3 escolhidos → 2 rodam, 1 rate-limited; 2 slots", async () => {
+    // O 1º slot (cobrado antes do run) deixa 1 restante → 2 mercados no total.
+    mockRateLimit.mockResolvedValueOnce({ ok: true, limit: 20, remaining: 1, reset: 0 });
     const res = await analyzeMarkets(
       null,
       form({
@@ -198,13 +218,12 @@ describe("analyzeMarkets — fan-out multi-mercado (custo/rate-limit por N)", ()
         marketKeys: ["over_under", "match_result", "btts"],
       }),
     );
-    expect(mockPredict).toHaveBeenCalledTimes(2);
     expect(mockPredict.mock.calls.map((c) => c[0].marketKey)).toEqual([
       "over_under",
       "match_result",
     ]);
-    expect(mockRateLimit).toHaveBeenCalledTimes(3);
-    // btts (additional) foi rate-limited → não entrou no fanOut → NÃO pré-aquece (crédito poupado).
+    expect(mockRateLimit).toHaveBeenCalledTimes(2);
+    // btts (additional) ficou fora do budget → não entrou no fanOut → NÃO pré-aquece.
     expect(mockEnsureOdds).not.toHaveBeenCalled();
     expect(res.ok).toBe(true);
     if (res.ok) {
@@ -212,6 +231,41 @@ describe("analyzeMarkets — fan-out multi-mercado (custo/rate-limit por N)", ()
         ["over_under", "ok"],
         ["match_result", "ok"],
         ["btts", "rate-limited"],
+      ]);
+    }
+  });
+
+  it("cap no MEIO do run (slot negado no 2º) → o 2º e a cauda viram rate-limited, sem spend", async () => {
+    // O 1º (antes do run) ainda via folga; outra aba gasta o resto no meio do run.
+    mockRateLimit
+      .mockResolvedValueOnce({ ok: true, limit: 20, remaining: 19, reset: 0 })
+      .mockResolvedValue({ ok: false, limit: 20, remaining: 0, reset: 0 });
+    const res = await analyzeMarkets(
+      null,
+      form({
+        matchId: VALID_MATCH_ID,
+        marketKeys: ["over_under", "match_result", "btts"],
+      }),
+    );
+    // O 3º nem é tentado: o run parou no slot negado.
+    expect(mockPredict).toHaveBeenCalledTimes(2);
+    expect(mockRateLimit).toHaveBeenCalledTimes(2);
+    expect(res.ok).toBe(true);
+    if (res.ok) {
+      expect(res.summaries).toEqual([
+        { marketKey: "over_under", marketLabel: "Over/Under gols", status: "ok" },
+        {
+          marketKey: "match_result",
+          marketLabel: "Resultado (1X2)",
+          status: "rate-limited",
+          message: "Limite diário atingido — não analisado.",
+        },
+        {
+          marketKey: "btts",
+          marketLabel: "Ambas marcam",
+          status: "rate-limited",
+          message: "Limite diário atingido — não analisado.",
+        },
       ]);
     }
   });
@@ -247,6 +301,63 @@ describe("analyzeMarkets — fan-out multi-mercado (custo/rate-limit por N)", ()
       error: "Análises temporariamente indisponíveis. Tente mais tarde.",
     });
     expect(mockPredict).not.toHaveBeenCalled();
+    expect(mockEnsureOdds).not.toHaveBeenCalled();
+  });
+
+  it("N runs concorrentes com 1 slot restante → só UM pré-aquece odds e busca dados (#524 re-review)", async () => {
+    // Limiter atômico de verdade: 1 slot no dia, compartilhado entre os POSTs.
+    let left = 1;
+    mockRateLimit.mockImplementation(async () => {
+      const ok = left > 0;
+      if (ok) left--;
+      return { ok, limit: 20, remaining: Math.max(0, left), reset: 0 };
+    });
+    const results = await Promise.all(
+      Array.from({ length: 5 }, () =>
+        analyzeMarkets(
+          null,
+          form({ matchId: VALID_MATCH_ID, marketKeys: ["btts"] }),
+        ),
+      ),
+    );
+    expect(results.filter((r) => r.ok)).toHaveLength(1);
+    // Um único pré-warm (crédito da The Odds API) e um único predict (busca de dados).
+    expect(mockEnsureOdds).toHaveBeenCalledTimes(1);
+    expect(mockPredict).toHaveBeenCalledTimes(1);
+  });
+
+  it("prazo do run: provider lento → os restantes viram 'Tempo esgotado' (failed), sem slot", async () => {
+    let clock = 1_000_000;
+    const spy = vi.spyOn(Date, "now").mockImplementation(() => clock);
+    try {
+      // Cada chamada leva 130s; prazo = início + 270s. t=0 e t=130 cabem; em t=260 sobram 10s.
+      mockPredict.mockImplementation(async (args, opts) => {
+        await opts?.beforeLlmPath?.();
+        clock += 130_000;
+        return resultFor(args.marketKey!);
+      });
+      const res = await analyzeMarkets(
+        null,
+        form({
+          matchId: VALID_MATCH_ID,
+          marketKeys: ["over_under", "match_result", "btts"],
+        }),
+      );
+      expect(mockPredict).toHaveBeenCalledTimes(2);
+      expect(mockPredict.mock.calls[0][0].deadlineAt).toBe(1_000_000 + 270_000);
+      expect(mockRateLimit).toHaveBeenCalledTimes(2);
+      expect(res.ok).toBe(true);
+      if (res.ok) {
+        expect(res.summaries[2]).toEqual({
+          marketKey: "btts",
+          marketLabel: "Ambas marcam",
+          status: "failed",
+          message: "Tempo esgotado — não analisado.",
+        });
+      }
+    } finally {
+      spy.mockRestore();
+    }
   });
 
   it("all-fail → ok:true com sumários failed (slots gastos, detalhe por-mercado); revalidate AINDA chamado", async () => {
@@ -272,6 +383,45 @@ describe("analyzeMarkets — fan-out multi-mercado (custo/rate-limit por N)", ()
     }
     expect(vi.mocked(revalidatePath)).toHaveBeenCalledWith(`/match/${VALID_MATCH_ID}`);
   });
+
+  it("recusa do modelo (#524) → copy neutra + sugestão de outro modelo quando há outro", async () => {
+    const { PredictError } = await import("@/lib/ai/predict");
+    mockPredict.mockRejectedValue(
+      new PredictError("model refused the analysis", {
+        refusal: { category: null, explanation: null },
+      }),
+    );
+    const res = await analyzeMarkets(
+      null,
+      form({ matchId: VALID_MATCH_ID, marketKeys: ["over_under"] }),
+    );
+    expect(res.ok).toBe(true);
+    if (res.ok) {
+      expect(res.summaries[0].message).toBe(
+        "O modelo não conseguiu concluir esta análise. Tente com outro modelo.",
+      );
+    }
+  });
+
+  it("recusa do modelo com UM só modelo disponível → copy neutra, sem sugerir troca", async () => {
+    mockModelsForAudience.mockReturnValue([MODEL_REGISTRY["claude-sonnet-4-5-20250929"]]);
+    const { PredictError } = await import("@/lib/ai/predict");
+    mockPredict.mockRejectedValue(
+      new PredictError("model refused the analysis", {
+        refusal: { category: null, explanation: null },
+      }),
+    );
+    const res = await analyzeMarkets(
+      null,
+      form({ matchId: VALID_MATCH_ID, marketKeys: ["over_under"] }),
+    );
+    expect(res.ok).toBe(true);
+    if (res.ok) {
+      expect(res.summaries[0].message).toBe(
+        "O modelo não conseguiu concluir esta análise.",
+      );
+    }
+  });
 });
 
 describe("analyzeMarkets — pré-warm de odds *additional* SÓ sobre os concedidos (crédito The Odds API)", () => {
@@ -288,10 +438,8 @@ describe("analyzeMarkets — pré-warm de odds *additional* SÓ sobre os concedi
   });
 
   it("btts (additional) RATE-LIMITED → NUNCA pré-aquece (pega regressão chosen-vs-granted que queimaria crédito)", async () => {
-    // over_under concedido (1 slot), btts cai no cap → rate-limited, fora do fanOut.
-    mockRateLimit
-      .mockResolvedValueOnce({ ok: true, limit: 20, remaining: 0, reset: 0 })
-      .mockResolvedValueOnce({ ok: false, limit: 20, remaining: 0, reset: 0 });
+    // Só o slot do início do run: over_under cabe, btts fica fora do budget → rate-limited.
+    mockRateLimit.mockResolvedValueOnce({ ok: true, limit: 20, remaining: 0, reset: 0 });
     const res = await analyzeMarkets(
       null,
       form({ matchId: VALID_MATCH_ID, marketKeys: ["over_under", "btts"] }),

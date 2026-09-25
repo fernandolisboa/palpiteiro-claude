@@ -15,6 +15,7 @@ import {
 
 import { persistAiCallError } from "../ai-call-logging";
 import { calculateCost } from "../cost";
+import { AnalysisDeadlineError, canFitCall } from "../deadline";
 import { MODEL_REGISTRY, isAIProvider, type AIModelId } from "../models";
 import { getProviderForModel } from "../providers";
 import type { AnalysisRequest } from "../providers/types";
@@ -67,6 +68,7 @@ export async function generatePalpites({
   userId,
   analyses,
   modelOverride,
+  deadlineAt,
 }: GeneratePalpiteArgs): Promise<PalpiteGenerationResult> {
   // 1. Modelo: SEM cascata de preferência (palpite é universal). Fixo no registry.
   const resolvedModelId: AIModelId = modelOverride ?? "claude-haiku-4-5";
@@ -183,6 +185,7 @@ export async function generatePalpites({
     toolName: cartridge.toolName,
     maxTokens: genParams.maxTokens,
     temperature: model.temperature,
+    deadlineAt,
   };
 
   // 8. Provider via o seam (ADR 0027). Sem chave → provider_error auditado + throw,
@@ -234,6 +237,17 @@ export async function generatePalpites({
   let outputPayload: Record<string, unknown>;
 
   for (let attempt = 1; ; attempt += 1) {
+    // Prazo do run (#524): sem tempo pra uma chamada inteira, não chama — nada gasto e
+    // nenhuma row 0/0 de timeout falso em ai_calls. O caller trata como síntese falha.
+    if (
+      !canFitCall(deadlineAt, {
+        thinkingMode: model.thinkingMode,
+        maxTokens: analysisRequest.maxTokens,
+        effort: analysisRequest.effort,
+      })
+    ) {
+      throw new AnalysisDeadlineError();
+    }
     const result = await aiProvider.runAnalysis(analysisRequest);
     latencyMs = result.latencyMs;
 

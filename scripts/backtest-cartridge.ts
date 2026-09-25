@@ -78,6 +78,7 @@ import { calculateCost } from "@/lib/ai/cost";
 import { getCartridge } from "@/lib/ai/markets/registry";
 import type { BaseMarketOutput } from "@/lib/ai/markets/types";
 import { MODEL_REGISTRY, isAIModelId, type AIModel } from "@/lib/ai/models";
+import { requestTiming } from "@/lib/ai/providers/anthropic/timeouts";
 import { buildAnthropicRequest } from "@/lib/ai/request-builder";
 import { getDefaultModelId, getGenerationParams } from "@/lib/db/queries/ai-config";
 import { getLatestSelectionOddsSnapshots } from "@/lib/db/queries/odds-snapshots";
@@ -343,6 +344,14 @@ async function main(): Promise<void> {
   const model: AIModel = MODEL_REGISTRY[resolvedModelId];
   const genParams = await getGenerationParams();
   console.log(`modelo      : ${model.id} (${model.label})\n`);
+  if (model.thinkingMode === "adaptive") {
+    // ADR 0021 (emenda #524): adaptive não fixa temperatura — a recomendação de um
+    // jogo borderline pode flipar entre rodadas. O backtest do motor llm com esses
+    // modelos NÃO é reproduzível; compare amostras, não jogo a jogo.
+    console.warn(
+      `⚠ ${model.label} é adaptive (sem temperature): resultado NÃO reproduzível entre rodadas.\n`,
+    );
+  }
 
   const provider = getSportsDataProvider();
   const client = getAnthropicClient();
@@ -495,9 +504,25 @@ async function main(): Promise<void> {
     let lastFailure = "";
     for (let attempt = 1; attempt <= MAX_ATTEMPTS_PER_GAME; attempt++) {
       attempts = attempt;
-      const response = await client.messages.create(request);
+      // Adaptive leva o timeout escalado por max_tokens/effort (o mesmo cálculo do
+      // adapter, #524). Script sem prazo de run: temperature fica com o do client.
+      const timing = requestTiming({
+        thinkingMode: model.thinkingMode,
+        maxTokens: genParams.maxTokens,
+        effort: genParams.effort,
+      });
+      const response =
+        timing.kind === "options"
+          ? await client.messages.create(request, timing.options)
+          : await client.messages.create(request);
       inputTokens += response.usage.input_tokens;
       outputTokens += response.usage.output_tokens;
+      // Recusa (#524): re-tentar o mesmo payload tende a recusar de novo e é pago.
+      if (response.stop_reason === "refusal") {
+        lastFailure = `o modelo recusou a análise (category=${response.stop_details?.category ?? "n/a"})`;
+        console.warn(`  ⚠ tentativa ${attempt}: ${lastFailure}`);
+        break;
+      }
       const toolUse = response.content.find(
         (block): block is Anthropic.ToolUseBlock =>
           block.type === "tool_use" && block.name === cartridge.toolName,

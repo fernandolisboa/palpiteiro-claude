@@ -26,5 +26,6 @@ export type {
   AnalysisOk,
   AnalysisErr,
   AnalysisUsage,
+  ModelRefusal,
   ToolDef,
 } from "./types";

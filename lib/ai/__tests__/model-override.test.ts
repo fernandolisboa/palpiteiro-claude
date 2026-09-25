@@ -28,9 +28,7 @@ describe("initialModelOverride — seed do dropdown de modelo (#239)", () => {
 
   it("cai no sentinel quando a preferência não é um AIModelId válido", () => {
     // Inclui ids removidos em #374 (Opus/Sonnet 4.6/gpt-5-mini): após a remoção
-    // eles deixaram de ser AIModelId válidos, então caem aqui — não há mais o caso
-    // "AIModelId válido mas fora da audiência" construível com ids reais (só restam
-    // 2 survivors, ambos selecionáveis).
+    // eles deixaram de ser AIModelId válidos, então caem aqui.
     expect(initialModelOverride("modelo-inexistente", selectable)).toBe(
       "default",
     );
@@ -41,6 +39,12 @@ describe("initialModelOverride — seed do dropdown de modelo (#239)", () => {
     ]) {
       expect(initialModelOverride(removed, selectable)).toBe("default");
     }
+  });
+
+  it("cai no sentinel quando o id é válido mas fora da audiência (Fable 5.1 admin-only, #524)", () => {
+    // `selectable` = lista do usuário comum: o Fable 5.1 é AIModelId válido mas não
+    // está nela — um value órfão sem <option> vira "default".
+    expect(initialModelOverride("claude-fable-5-1", selectable)).toBe("default");
   });
 
   it("cai no sentinel quando a audiência não tem modelos selecionáveis", () => {

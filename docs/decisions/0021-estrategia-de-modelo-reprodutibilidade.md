@@ -21,6 +21,42 @@ Accepted (2026-06-12) — **emenda o ADR 0008** (default global Opus 4.8 → Son
 > request-builder segue **vivo no código mas inalcançável** por qualquer modelo de
 > registry (preservado para um futuro modelo adaptive sem ressuscitar código).
 
+> **Emenda (2026-09-25, #524): os modelos adaptive voltam ao registry.** Pedido do
+> Fernando. Entram **Fable 5.1** (`claude-fable-5-1`, $10/$50, **admin-only**),
+> **Opus 5.5** (`claude-opus-5-5`, $4/$20, selecionável) e **Sonnet 5**
+> (`claude-sonnet-5`, $2/$10, selecionável), todos `thinkingMode: "adaptive"`
+> (sem sampling, sem `budget_tokens`, sem `tool_choice` forçado — `auto` + `tool_missing`
+> quando o modelo não chama o tool). Ordem nos seletores: Fable 5.1, Opus 5.5,
+> Sonnet 5, Sonnet 4.5, Haiku 4.5. **O default global continua o Sonnet 4.5**
+> (`DEFAULT_MODEL_ID` e a row de `ai_config` intocados).
+>
+> - **Por que o argumento deste ADR não barra mais:** no motor **"Código + JEV"**
+>   (`code_jev`, ADR 0041) a **decisão** (mercado, seleção, stake) é código
+>   determinístico sobre o modelo estatístico + julgamentos JEV; o LLM só **narra**.
+>   A reprodutibilidade da decisão vem do motor, não da temperatura do LLM, então um
+>   adaptive ali só varia o texto.
+> - **No motor `llm` (o default do flag `analysis_engine`) os adaptive seguem não
+>   reproduzíveis** (flip de borderline entre rodadas, como no #105) — e isso vale pra
+>   **qualquer usuário**, não só pro admin: **Opus 5.5 e Sonnet 5 são
+>   `userSelectable`**, então um usuário comum pode escolhê-los no override por análise
+>   ou na preferência e rodar análises não reproduzíveis no motor `llm`. Só o Fable 5.1
+>   fica restrito ao admin. **Trade-off aceito** (o gating por audiência NÃO muda):
+>   o ganho de capacidade vale a variância, o default global segue o Sonnet 4.5
+>   (reproduzível) e ninguém cai num adaptive sem escolher. A contabilidade não se
+>   mistura: `predictions.modelVersion` grava o id do modelo (e, no `code_jev`, as tags
+>   do motor), então o **Yield continua segmentável por modelo** e dá pra comparar ou
+>   excluir os adaptive. O gate de replay continua model-aware (flip adaptive só
+>   reprova se reproduzir em N runs).
+> - **O registry continua curado à mão:** a Models API (`GET /v1/models`) não devolve
+>   pricing, e o custo por análise (`lib/ai/cost.ts`) depende dele. Em vez de
+>   auto-cadastro, o `/admin/settings` mostra os ids `claude-*` que a API lista e o
+>   registry ainda não tem (`lib/ai/providers/anthropic/models-catalog.ts`).
+> - `stop_reason: "refusal"` (Fable 5.1, principalmente) vira falha tipada no adapter:
+>   auditada em `ai_calls` como `provider_error`, sem prediction, com mensagem
+>   "o modelo recusou a análise". O beta de fallbacks server-side ficou de fora (follow-up).
+>
+> As notas de 2026-06-14 e 2026-06-19 abaixo descrevem o estado anterior a esta emenda.
+
 ## Contexto
 
 O default global da análise é o **Opus 4.8** (`DEFAULT_MODEL_ID` em `lib/ai/models.ts`),

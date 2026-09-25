@@ -16,10 +16,23 @@ import {
   runCodeJevFanOut,
   runFanOut,
   type FanOutMarket,
+  type FanOutOutcome,
+  type SlotGrant,
 } from "@/lib/ai/best-bet";
+import {
+  actionDeadline,
+  AnalysisDeadlineError,
+  canFitCall,
+  DEADLINE_MARKET_MESSAGE,
+  SYNTHESIS_RESERVE_MS,
+} from "@/lib/ai/deadline";
 import { readAnalysisEngine } from "@/lib/ai/engine/analysis-engine-flag";
 import { getCartridge } from "@/lib/ai/markets/registry";
-import { isModelAllowedForAudience, type AIModelId } from "@/lib/ai/models";
+import {
+  isModelAllowedForAudience,
+  modelsForAudience,
+  type AIModelId,
+} from "@/lib/ai/models";
 import { generatePalpites } from "@/lib/ai/palpites";
 import { summarizeAnalysesForSynthesis } from "@/lib/ai/palpites/synthesis-input";
 import { PredictError, predict } from "@/lib/ai/predict";
@@ -41,7 +54,7 @@ import {
 import { getUserAccessState } from "@/lib/db/queries/users";
 import { getDescriptor } from "@/lib/odds/market-descriptor";
 import { ensureOddsSnapshotsFresh } from "@/lib/odds/fetch-and-snapshot";
-import { checkAnalysisRateLimit, type RateLimitResult } from "@/lib/rate-limit";
+import { checkAnalysisRateLimit } from "@/lib/rate-limit";
 import { getRequestTimeZone } from "@/lib/server/request-timezone";
 import { toAnalysisView } from "@/lib/view/analysis";
 import { ExactScoreParamsSchema } from "@/lib/ai/palpites/cartridges/cartridge";
@@ -59,11 +72,28 @@ import type {
   GradeMyBetView,
 } from "@/lib/view/types";
 
+const REFUSAL_MESSAGE = "O modelo não conseguiu concluir esta análise.";
+
 export type AnalyzeMatchResult =
   | { ok: true; view: AnalysisView }
   | { ok: false; error: string };
 
-function friendlyMessage(err: PredictError): string {
+// Contexto do usuário pra copy que depende dele (#524, review).
+type MessageContext = {
+  // O usuário tem mais de um modelo disponível → vale sugerir trocar de modelo.
+  hasAlternativeModel?: boolean;
+};
+
+function messageContextFor(isAdmin: boolean): MessageContext {
+  return { hasAlternativeModel: modelsForAudience(isAdmin).length > 1 };
+}
+
+// Copy de um run que estourou o prazo (#524, review): single-market, sem o
+// "não analisado" dos fan-outs.
+const DEADLINE_SINGLE_MESSAGE =
+  "A análise demorou mais que o limite. Tente novamente.";
+
+function friendlyMessage(err: PredictError, ctx: MessageContext = {}): string {
   // PredictError.context contém detalhes técnicos; aqui mapeamos mensagens
   // conhecidas pra UI sem vazar implementação.
   const msg = err.message.toLowerCase();
@@ -103,6 +133,14 @@ function friendlyMessage(err: PredictError): string {
   if (msg.includes("standings row missing")) {
     return "Dados de classificação indisponíveis pra esta análise.";
   }
+  // Recusa do modelo (#524, `stop_reason: "refusal"` — Fable 5.1 principalmente).
+  // Copy neutra (não insinua que o usuário pediu algo errado). Repetir com o mesmo
+  // modelo tende a dar o mesmo resultado, então sugere outro — só se houver outro.
+  if (msg.includes("model refused")) {
+    return ctx.hasAlternativeModel
+      ? `${REFUSAL_MESSAGE} Tente com outro modelo.`
+      : REFUSAL_MESSAGE;
+  }
   if (msg.includes("zod validation")) {
     return "A resposta do modelo não passou na validação. Nenhum custo cobrado.";
   }
@@ -113,6 +151,8 @@ export async function analyzeMatch(
   _prev: AnalyzeMatchResult | null,
   formData: FormData,
 ): Promise<AnalyzeMatchResult> {
+  // Prazo do run (#524): medido do início da action, antes de qualquer I/O.
+  const deadlineAt = actionDeadline();
   const matchId = String(formData.get("matchId") ?? "");
   if (!matchId) {
     return { ok: false, error: "matchId ausente" };
@@ -256,6 +296,7 @@ export async function analyzeMatch(
         modelOverride,
         marketKey,
         extraLines,
+        deadlineAt,
       });
     const aiCall = await getAiCallById(prediction.aiCallId);
     // Fuso do usuário (#1) pro "gerado em" da view fresca retornada ao cliente.
@@ -303,7 +344,13 @@ export async function analyzeMatch(
           context: err.context,
         }),
       );
-      return { ok: false, error: friendlyMessage(err) };
+      return {
+        ok: false,
+        error: friendlyMessage(err, messageContextFor(isAdmin)),
+      };
+    }
+    if (err instanceof AnalysisDeadlineError) {
+      return { ok: false, error: DEADLINE_SINGLE_MESSAGE };
     }
     const dbCause = extractDbCause(err);
     console.error(
@@ -335,9 +382,82 @@ export type AnalyzeBestBetResult =
 // Mapeia QUALQUER erro pra mensagem amigável de UI. PredictError reusa o
 // friendlyMessage; o resto (inesperado: DB etc.) cai numa cópia genérica. Fica
 // server-side (passado pro orquestrador e pro pré-warm) — nunca vaza pro cliente.
-function friendlyMessageFromUnknown(err: unknown): string {
-  if (err instanceof PredictError) return friendlyMessage(err);
+function friendlyMessageFromUnknown(
+  err: unknown,
+  ctx: MessageContext = {},
+): string {
+  if (err instanceof PredictError) return friendlyMessage(err, ctx);
+  if (err instanceof AnalysisDeadlineError) return DEADLINE_MARKET_MESSAGE;
   return "Falha temporária ao gerar análise. Tente novamente.";
+}
+
+type RunSlotBudget =
+  | { ok: false; error: string }
+  // `units` = quantas unidades de cobrança cabem no dia (a 1ª já paga);
+  // `acquireSlot` = o pedido de slot do fan-out.
+  | { ok: true; units: number; acquireSlot: () => Promise<SlotGrant> };
+
+// Rate-limit dos fan-outs (#524, review e re-review). O 1º slot é cobrado AQUI, de
+// forma atômica (checkAnalysisRateLimit consome), ANTES de qualquer gasto de cota de
+// terceiros (pré-warm de odds, The Odds API / API-Football / JEV dentro do predict):
+// sem isso, N POSTs paralelos com 1 slot restante pré-aqueceriam todos, e um run que
+// falha inteiro antes do LLM seria repetível sem limite. Negado ou fail-closed →
+// aborta o run. Os slots 2..N são cobrados sob demanda, logo antes de cada chamada
+// paga (hook do predict), e a 1ª chamada paga usa o slot já cobrado — o limiter não
+// devolve slot, então mercado pulado por prazo não queima slot além do 1º.
+async function chargeRunBudget(
+  userId: string,
+  role: string | undefined,
+): Promise<RunSlotBudget> {
+  const first = await checkAnalysisRateLimit(userId, role);
+  if (first.reason === "fail-closed") {
+    // KV ausente p/ não-admin: indisponível (não um teto real).
+    return { ok: false, error: ANALYSES_UNAVAILABLE_MESSAGE };
+  }
+  if (!first.ok) {
+    return {
+      ok: false,
+      error: `Você atingiu o limite de ${first.limit} análises por dia. Tente novamente amanhã.`,
+    };
+  }
+  let prepaid = true;
+  return {
+    ok: true,
+    // Upstash em timeout falha ABERTO com `remaining:0` sem significado: libera todas
+    // as unidades (como o fail-open por unidade de antes) — os slots 2..N ainda são
+    // cobrados de forma atômica pelo acquireSlot, que para o run se o teto bater.
+    units: first.reason === "timeout" ? Infinity : 1 + first.remaining,
+    acquireSlot: async () => {
+      if (prepaid) {
+        prepaid = false;
+        return { ok: true };
+      }
+      // `reason` repassado pra o fail-closed virar "indisponível", não "limite atingido".
+      const rl = await checkAnalysisRateLimit(userId, role);
+      return {
+        ok: rl.ok,
+        ...(rl.reason === "fail-closed" ? { reason: rl.reason } : {}),
+      };
+    },
+  };
+}
+
+// Separa o que rodou (ok ou falha real) do que NÃO rodou (prazo, slot) — este vai
+// pro fim da lista de erros da view, depois das falhas reais.
+function splitNotRun(outcomes: FanOutOutcome[]): {
+  ran: FanOutOutcome[];
+  notRun: { marketKey: string; message: string }[];
+} {
+  const ran: FanOutOutcome[] = [];
+  const notRun: { marketKey: string; message: string }[] = [];
+  for (const o of outcomes) {
+    if (!o.ok && o.notRun) {
+      notRun.push({ marketKey: o.marketKey, message: o.message });
+    } else {
+      ran.push(o);
+    }
+  }
+  return { ran, notRun };
 }
 
 // Resolve extraLines pra UM mercado — port VERBATIM do bloco inline do analyzeMatch
@@ -364,15 +484,17 @@ function resolveExtraLines(
  * uma predição REAL por mercado (cada uma logada em ai_calls), ranqueadas no cliente.
  *
  * Ordem dos gates é LOAD-BEARING: TODOS os gates grátis (auth, acesso, flag re-check, jogo,
- * analisabilidade, candidatos-vazios) vêm ANTES do 1º checkAnalysisRateLimit (que INCREMENTA
- * o contador — é consumo, não leitura), pra um POST flag-off ou um jogo sem mercado NUNCA
- * queimar um slot diário. Rate-limit é o ÚLTIMO gate antes do spend e cobra 1 slot POR
- * mercado (#492), como o analyzeMarkets. Best-of-successful: 1 mercado falho não derruba o run.
+ * analisabilidade, candidatos-vazios) vêm ANTES do rate-limit, pra um POST flag-off ou um
+ * jogo sem mercado NUNCA queimar um slot diário. O rate-limit cobra 1 slot POR chamada paga
+ * (#492): o 1º antes de qualquer gasto, os demais sob demanda, logo antes de cada chamada
+ * (#524 review, chargeRunBudget). Best-of-successful: 1 mercado
+ * falho não derruba o run. Prazo do run: ACTION_BUDGET_MS a partir daqui (lib/ai/deadline.ts).
  */
 export async function analyzeBestBet(
   _prev: AnalyzeBestBetResult | null,
   formData: FormData,
 ): Promise<AnalyzeBestBetResult> {
+  const runDeadline = actionDeadline();
   const matchId = String(formData.get("matchId") ?? "");
   if (!matchId) {
     return { ok: false, error: "matchId ausente" };
@@ -444,15 +566,16 @@ export async function analyzeBestBet(
     marketKey: c.key,
     extraLines: resolveExtraLines(c.key, match.league, extraLinesEnabled),
   }));
-  // Rate-limit POR CHAMADA PAGA (#492 / Report 01 #3, #512): 1 slot por unidade, em ordem,
-  // ANTES do spend — mesma disciplina do analyzeMarkets. checkAnalysisRateLimit incrementa
-  // 1/call (sem count param), então N chamadas = N slots. No motor 'llm' cada mercado é uma
-  // unidade (1 predict() pago cada). No 'code_jev' os mercados decididos em código formam UMA
-  // unidade (só o escolhido é narrado — 1 chamada paga, ADR 0041 §4), na posição do 1º
-  // deles; os demais (placar exato/scorer/assist) seguem 1 slot cada. Para no 1º não-ok pra
-  // não queimar slots além do teto. Chamada paga extra do grupo code_jev (λ indisponível →
-  // caminho LLM) pede o próprio slot no meio do run (runCodeJevFanOut). extraLines é
-  // resolvido POR mercado (flag do cartucho), nunca vira mercado extra → não cobra slot a mais.
+  // Rate-limit POR CHAMADA PAGA (#492 / Report 01 #3, #512, #524 review): 1 slot = 1
+  // chamada paga. No motor 'llm' cada mercado é uma unidade (1 predict() pago cada). No
+  // 'code_jev' os mercados decididos em código formam UMA unidade (só o escolhido é
+  // narrado — 1 chamada paga, ADR 0041 §4), na posição do 1º deles; os demais (placar
+  // exato/scorer/assist) seguem 1 slot cada.
+  //
+  // O 1º slot é cobrado aqui, ANTES do pré-warm e de qualquer busca (chargeRunBudget); os
+  // demais, sob demanda antes de cada chamada paga. As unidades são cortadas no que resta
+  // do dia, pra o pré-warm de odds não gastar crédito da The Odds API num mercado que não
+  // teria slot.
   //
   // Budget parcial: DEGRADA como o analyzeMarkets (roda os concedidos, a cauda vira
   // "indisponível" na view) em vez de recusar. Seguro pra semântica de "melhor aposta": o
@@ -464,38 +587,19 @@ export async function analyzeBestBet(
     markets,
     engine === "code_jev" ? isCodeJevFanOutMarket : () => false,
   );
-  const grantedKeys = new Set<string>();
-  let capRl: RateLimitResult | null = null;
-  for (const unit of units) {
-    const rl = await checkAnalysisRateLimit(session.user.id, session.user.role);
-    if (rl.ok) {
-      for (const m of unit) grantedKeys.add(m.marketKey);
-      continue;
-    }
-    if (rl.reason === "fail-closed") {
-      // KV ausente p/ não-admin: indisponível (não um teto real). Aborta o run inteiro
-      // ANTES de qualquer spend (fail-closed só ocorre na 1ª call: sem KV não há limiter).
-      return { ok: false, error: ANALYSES_UNAVAILABLE_MESSAGE };
-    }
-    // Teto real atingido: para de consumir; este + a cauda ficam sem análise.
-    capRl = rl;
-    break;
-  }
-  if (grantedKeys.size === 0) {
-    // capRl SEMPRE setado aqui: fail-closed já retornou; granted vazio só por cap na 1ª call.
-    return {
-      ok: false,
-      error: `Você atingiu o limite de ${capRl?.limit ?? 0} análises por dia. Tente novamente amanhã.`,
-    };
-  }
+  const budget = await chargeRunBudget(session.user.id, session.user.role);
+  if (!budget.ok) return { ok: false, error: budget.error };
+  const grantedKeys = new Set(
+    units.slice(0, budget.units).flatMap((unit) => unit.map((m) => m.marketKey)),
+  );
   const rateLimitedErrors = markets
     .filter((m) => !grantedKeys.has(m.marketKey))
     .map((m) => ({
       marketKey: m.marketKey,
       message: RATE_LIMITED_MARKET_MESSAGE,
     }));
-  // FanOut só sobre os CONCEDIDOS (na ordem-base) → nenhum predict() nem crédito de odds
-  // num mercado sem slot.
+  // FanOut só sobre os que cabem no que resta do dia (na ordem-base) → nenhum predict() nem
+  // crédito de odds num mercado que já nasce sem slot.
   const fanOut = markets.filter((m) => grantedKeys.has(m.marketKey));
   // Pré-aquece os mercados *additional* (btts/dupla chance/over_under multi-linha): o
   // descriptor EFETIVO sai do MESMO m.extraLines do FanOutMarket. Cada um numa chamada
@@ -510,8 +614,8 @@ export async function analyzeBestBet(
     .filter((x) => x.descriptor.oddsSource === "additional");
   // Teto de créditos: nunca pré-aquece mais que MAX_ADDITIONAL_FETCHES. Um mercado
   // cortado aqui CONTINUA no fanOut → runFanOut chama predict() pra ele, mas predict
-  // lança "sem snapshot fresco" ANTES da chamada Anthropic (sem gasto de LLM nem
-  // crédito). Hoje inalcançável (≤3 additional por liga); move junto com MAX_FANOUT_MARKETS.
+  // lança "sem snapshot fresco" ANTES da chamada Anthropic (sem gasto de LLM, crédito nem
+  // slot). Hoje inalcançável (≤3 additional por liga); move junto com MAX_FANOUT_MARKETS.
   const additionalToFetch =
     additional.length > MAX_ADDITIONAL_FETCHES
       ? additional.slice(0, MAX_ADDITIONAL_FETCHES)
@@ -527,35 +631,35 @@ export async function analyzeBestBet(
       additionalFetches: additionalToFetch.length,
     }),
   );
+  const messageContext = messageContextFor(isAdmin);
+  const mapError = (err: unknown) => friendlyMessageFromUnknown(err, messageContext);
   const preWarmErrors: { marketKey: string; message: string }[] = [];
   for (const { marketKey: mk, descriptor } of additionalToFetch) {
     try {
       await ensureOddsSnapshotsFresh(match, { markets: [descriptor] });
     } catch (err) {
-      preWarmErrors.push({
-        marketKey: mk,
-        message: friendlyMessageFromUnknown(err),
-      });
+      preWarmErrors.push({ marketKey: mk, message: mapError(err) });
     }
   }
   // Fan-out SERIAL: predict() por mercado concedido (a única porta pro LLM), best-of-successful.
   // code_jev (#512): decide todos em código e narra só o escolhido (1 chamada paga).
-  const userId = session.user.id;
-  const role = session.user.role;
-  const fanOutBase = { matchId, userId, isAdmin, modelOverride };
-  const outcomes =
+  // Prazo (#524 review): o fan-out para SYNTHESIS_RESERVE_MS antes do prazo do run, pra a
+  // síntese ainda rodar sobre o que terminou; o que não coube vira "Tempo esgotado".
+  const fanOutDeadline = runDeadline - SYNTHESIS_RESERVE_MS;
+  const { acquireSlot } = budget;
+  const fanOutBase = { matchId, userId: session.user.id, isAdmin, modelOverride };
+  const allOutcomes =
     engine === "code_jev"
-      ? await runCodeJevFanOut(
-          fanOutBase,
-          fanOut,
-          friendlyMessageFromUnknown,
-          // Repassa o motivo: fail-closed vira "indisponível", não "limite atingido".
-          async () => {
-            const rl = await checkAnalysisRateLimit(userId, role);
-            return { ok: rl.ok, reason: rl.reason };
-          },
-        )
-      : await runFanOut(fanOutBase, fanOut, friendlyMessageFromUnknown);
+      ? await runCodeJevFanOut(fanOutBase, fanOut, mapError, acquireSlot, {
+          deadlineAt: fanOutDeadline,
+        })
+      : await runFanOut(fanOutBase, fanOut, mapError, {
+          deadlineAt: fanOutDeadline,
+          acquireSlot,
+        });
+  // Não analisados (prazo / slot negado no meio do run) vão pra lista de indisponíveis,
+  // depois das falhas reais e antes da cauda sem slot.
+  const { ran: outcomes, notRun } = splitNotRun(allOutcomes);
   // Custo por análise bem-sucedida (lê a aiCall pra exibir).
   const aiCallByMarketKey = new Map<
     string,
@@ -571,15 +675,13 @@ export async function analyzeBestBet(
       );
     }
   }
-  const view = toBestBetView(
-    outcomes,
-    aiCallByMarketKey,
-    preWarmErrors,
-    rateLimitedErrors,
-  );
+  const view = toBestBetView(outcomes, aiCallByMarketKey, preWarmErrors, [
+    ...notRun,
+    ...rateLimitedErrors,
+  ]);
   if (view.entries.length === 0) {
     // Todos falharam → estado de erro (espelha o total-failure do analyzeMatch), NÃO um
-    // sucesso vazio. O run pode ter pago ≤N calls pós-Anthropic + N slots — surge como erro.
+    // sucesso vazio. O run pode ter pago ≤N calls (e os mesmos N slots) — surge como erro.
     return {
       ok: false,
       error: view.errors[0]?.message ?? "Nenhum mercado pôde ser analisado.",
@@ -588,17 +690,24 @@ export async function analyzeBestBet(
   // PASSO DE SÍNTESE (ADR 0030 / #353): turna as N análises numa manchete. Roda DENTRO
   // do mesmo run (sem slot próprio — ver Report 01 #3), sobre o FanOutOutcome[] EM MEMÓRIA — sem
   // re-query. Haiku (default do gerador). NULLABLE é LOAD-BEARING: a síntese roda DEPOIS
-  // de até 6 predict() PAGOS; se ela falhar (Haiku throw, value-leak, …), o fan-out pago
+  // de até MAX_FANOUT_MARKETS predict() PAGOS; se ela falhar (Haiku throw, value-leak, …), o fan-out pago
   // NÃO pode ser descartado → log + palpite:null. Espelha a assimetria do generator (o
   // log de ai_call pode falhar sem afundar o produto).
   let palpite: PalpiteHeadlineView | null = null;
   try {
+    // Sem tempo pra uma chamada Haiku antes do prazo do run: pula a síntese limpa (o
+    // gerador nem é chamado → sem row de ai_calls) e o fan-out pago volta sem manchete.
+    if (!canFitCall(runDeadline, "temperature")) {
+      throw new AnalysisDeadlineError();
+    }
     const summaries = summarizeAnalysesForSynthesis(outcomes);
     const result = await generatePalpites({
       matchId,
       userId: session.user.id,
       analyses: summaries,
       modelOverride: "claude-haiku-4-5",
+      // Prazo do run inteiro: a reserva do fan-out é o que sobra pra ela.
+      deadlineAt: runDeadline,
     });
     // As linhas settleable recém-gravadas estão TODAS pendentes (sem outcome) → badge
     // null. NARROW-not-cast (#354 / blocker §3.2): `params` é a union larga do jsonb;
@@ -660,20 +769,22 @@ export type AnalyzeMarketsResult =
  * aterrissa na sua seção colapsável (#243) via revalidatePath → toMarketAnalysisSections.
  *
  * DINHEIRO REAL: N mercados = N predict() pagos. Como o analyzeBestBet (#492), o rate-limit é
- * cobrado POR MERCADO (N slots) — o AC do #245 exige que
- * custo/rate-limit reflitam N análises. checkAnalysisRateLimit incrementa 1/call (sem count
- * param), então creditamos N chamando-o 1× por mercado, ANTES do spend, parando no 1º não-ok
- * (degrada com graça: os concedidos rodam, a cauda vira "rate-limited"). Spend de pior caso =
- * min(remaining, MAX_FANOUT_MARKETS) chamadas pagas.
+ * cobrado POR MERCADO (N slots) — o AC do #245 exige que custo/rate-limit reflitam N análises.
+ * O 1º slot é cobrado antes de qualquer gasto de cota de terceiros; os demais, sob demanda
+ * (#524 review): 1 slot logo ANTES de cada chamada paga a partir da 2ª, parando no 1º negado
+ * (degrada com graça: os que rodaram ficam, a cauda vira "rate-limited"). Mercado pulado pelo
+ * prazo do run ou que falha antes do LLM não cobra slot além do 1º.
+ * Spend de pior caso = min(remaining, MAX_FANOUT_MARKETS) chamadas pagas.
  *
  * Ordem dos gates é LOAD-BEARING (igual aos irmãos): TODOS os gates grátis (auth, acesso, jogo,
- * analisabilidade, allowlist de mercado) vêm ANTES do 1º checkAnalysisRateLimit (que CONSOME
- * slot), pra um POST forjado/vazio NUNCA queimar um slot diário.
+ * analisabilidade, allowlist de mercado) vêm ANTES do rate-limit, pra um POST forjado/vazio
+ * NUNCA queimar um slot diário.
  */
 export async function analyzeMarkets(
   _prev: AnalyzeMarketsResult | null,
   formData: FormData,
 ): Promise<AnalyzeMarketsResult> {
+  const runDeadline = actionDeadline();
   const matchId = String(formData.get("matchId") ?? "");
   if (!matchId) {
     return { ok: false, error: "matchId ausente" };
@@ -733,40 +844,16 @@ export async function analyzeMarkets(
   if (chosen.length === 0) {
     return { ok: false, error: "Nenhum mercado válido selecionado." };
   }
-  // Rate-limit POR MERCADO (N slots): 1 slot por mercado, em ordem, ANTES do spend. Para no 1º
-  // não-ok pra não queimar slots além do teto. `granted` é sempre um PREFIXO de `chosen`
-  // (quebramos no 1º não-ok) → `chosen.slice(granted.length)` é a cauda exata de rate-limited.
-  // Invariante de spend: slots consumidos == granted.length == mercados no runFanOut ==
-  // chamadas predict(). capCandidates rodou ANTES do loop → N-selecionados-mas-capados nunca
-  // sobre-cobram.
-  const granted: { key: string; label: string }[] = [];
-  let capRl: RateLimitResult | null = null;
-  for (const c of chosen) {
-    const rl = await checkAnalysisRateLimit(session.user.id, session.user.role);
-    if (rl.ok) {
-      granted.push(c);
-      continue;
-    }
-    if (rl.reason === "fail-closed") {
-      // KV ausente p/ não-admin: indisponível (não um teto real). Aborta o run inteiro ANTES de
-      // qualquer spend — espelha o single-market analyzeMatch.
-      return {
-        ok: false,
-        error: "Análises temporariamente indisponíveis. Tente mais tarde.",
-      };
-    }
-    // Teto real atingido: para de consumir; este + a cauda viram rate-limited.
-    capRl = rl;
-    break;
-  }
+  // Rate-limit POR MERCADO: o 1º slot é cobrado AQUI (atômico), antes do pré-warm e de
+  // qualquer busca — negado ou fail-closed aborta o run (chargeRunBudget). A seleção é
+  // cortada no que resta do dia (`granted` é um PREFIXO de `chosen`,
+  // `chosen.slice(granted.length)` a cauda rate-limited); os slots 2..N são cobrados sob
+  // demanda, logo antes de cada chamada paga. capCandidates rodou antes →
+  // N-selecionados-mas-capados nunca sobre-cobram.
+  const budget = await chargeRunBudget(session.user.id, session.user.role);
+  if (!budget.ok) return { ok: false, error: budget.error };
+  const granted = chosen.slice(0, budget.units);
   const rateLimited = chosen.slice(granted.length);
-  if (granted.length === 0) {
-    // capRl SEMPRE setado aqui: fail-closed já retornou acima; granted vazio só por cap na 1ª call.
-    return {
-      ok: false,
-      error: `Você atingiu o limite de ${capRl?.limit ?? 0} análises por dia. Tente novamente amanhã.`,
-    };
-  }
   // FanOut só sobre os CONCEDIDOS. extraLines resolvido 1× por mercado (mesmo valor alimenta o
   // pré-warm e o predict, senão predict resolveria um cartucho diferente do aquecido).
   const extraLinesEnabled = await getEnableOverUnderExtraLines();
@@ -815,11 +902,14 @@ export async function analyzeMarkets(
     }
   }
   // Fan-out SERIAL: predict() por mercado concedido (a única porta pro LLM), erro isolado por
-  // mercado — NÃO best-of-successful (#245 mostra TODOS, sem ranking).
+  // mercado — NÃO best-of-successful (#245 mostra TODOS, sem ranking). Sem síntese aqui: o
+  // fan-out usa o prazo do run inteiro; o que não couber vira "Tempo esgotado".
+  const messageContext = messageContextFor(isAdmin);
   const outcomes = await runFanOut(
     { matchId, userId: session.user.id, isAdmin, modelOverride },
     fanOut,
-    friendlyMessageFromUnknown,
+    (err) => friendlyMessageFromUnknown(err, messageContext),
+    { deadlineAt: runDeadline, acquireSlot: budget.acquireSlot },
   );
   const labelByKey = new Map(chosen.map((c) => [c.key, c.label]));
   const summaries: MarketRunSummaryItem[] = [
@@ -833,7 +923,12 @@ export async function analyzeMarkets(
         : {
             marketKey: o.marketKey,
             marketLabel: labelByKey.get(o.marketKey) ?? o.marketKey,
-            status: "failed" as const,
+            // Slot negado no meio do run = a mesma cauda "rate-limited" de sempre;
+            // prazo esgotado / limiter indisponível / falha real = "failed".
+            status:
+              o.notRun === "rate-limited"
+                ? ("rate-limited" as const)
+                : ("failed" as const),
             message: o.message,
           },
     ),
@@ -841,12 +936,12 @@ export async function analyzeMarkets(
       marketKey: c.key,
       marketLabel: c.label,
       status: "rate-limited" as const,
-      message: "Limite diário atingido — não analisado.",
+      message: RATE_LIMITED_MARKET_MESSAGE,
     })),
   ];
-  // ≥1 predict rodou (granted.length>0). Mesmo se TODOS falharem, mantemos ok:true com o detalhe
-  // por-mercado (≠ analyzeBestBet, que vira ok:false em entries vazio): aqui já gastamos N slots
-  // e o banner explica qual falhou — uma string de erro única perderia o detalhe. Nenhuma seção
+  // ≥1 mercado foi tentado (granted.length>0). Mesmo se TODOS falharem, mantemos ok:true com o
+  // detalhe por-mercado (≠ analyzeBestBet, que vira ok:false em entries vazio): o que rodou já
+  // gastou slots e o banner explica qual falhou — uma string de erro única perderia o detalhe. Nenhuma seção
   // nova aparece pros que falharam; revalidate é inócuo nesse caso.
   revalidatePath(`/match/${matchId}`);
   revalidatePath("/jogos");
@@ -881,6 +976,8 @@ export async function gradeMyBet(
   _prev: GradeMyBetResult | null,
   formData: FormData,
 ): Promise<GradeMyBetResult> {
+  // Prazo do run (#524): medido do início da action.
+  const deadlineAt = actionDeadline();
   // 1. matchId.
   const matchId = String(formData.get("matchId") ?? "");
   if (!matchId) {
@@ -1048,6 +1145,7 @@ export async function gradeMyBet(
         isAdmin,
         marketKey,
         extraLines: extraLinesForPredict,
+        deadlineAt,
       });
     } catch (err) {
       if (err instanceof PredictError) {
@@ -1060,7 +1158,13 @@ export async function gradeMyBet(
             context: err.context,
           }),
         );
-        return { ok: false, error: friendlyMessage(err) };
+        return {
+          ok: false,
+          error: friendlyMessage(err, messageContextFor(isAdmin)),
+        };
+      }
+      if (err instanceof AnalysisDeadlineError) {
+        return { ok: false, error: DEADLINE_SINGLE_MESSAGE };
       }
       console.error(
         JSON.stringify({

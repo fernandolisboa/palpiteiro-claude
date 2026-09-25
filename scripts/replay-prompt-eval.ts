@@ -18,7 +18,7 @@
  * MODEL-AWARE (ADR 0021, #203):
  *  - flip de `recommendation` no caminho TEMPERATURE (Sonnet 4.5/Haiku, amostragem
  *    fixa 0.3) — ESTRITO: qualquer flip reprova; OU
- *  - flip no caminho ADAPTIVE (Opus/Sonnet 4.6, sem knob de amostragem) que
+ *  - flip no caminho ADAPTIVE (Fable 5.1/Opus 5.5/Sonnet 5, sem knob de amostragem) que
  *    REPRODUZA na maioria de N re-replays do MESMO payload (ADAPTIVE_FLIP_REPRO_RUNS);
  *    flip esporádico é ruído de amostragem (o modo de falha A/A do #105) — tolerado
  *    e logado, NÃO reprova; OU
@@ -63,6 +63,8 @@ import {
   type OverUnderOutput,
 } from "@/lib/ai/markets/over_under";
 import { isAIModelId } from "@/lib/ai/models";
+import { isEffort } from "@/lib/ai/generation-params";
+import { requestTiming } from "@/lib/ai/providers/anthropic/timeouts";
 import {
   ADAPTIVE_FLIP_REPRO_RUNS,
   classifyThinkingMode,
@@ -186,9 +188,26 @@ async function replayOne(args: {
   let inputTokens = 0;
   let outputTokens = 0;
   for (let attempt = 1; attempt <= MAX_ATTEMPTS_PER_PAYLOAD; attempt++) {
-    const response = await args.client.messages.create(request);
+    // Payload adaptive (tem `thinking`) leva o timeout escalado do adapter (#524).
+    const timing = requestTiming({
+      thinkingMode: request.thinking ? "adaptive" : "temperature",
+      maxTokens: request.max_tokens,
+      effort: isEffort(request.output_config?.effort)
+        ? request.output_config.effort
+        : undefined,
+    });
+    const response =
+      timing.kind === "options"
+        ? await args.client.messages.create(request, timing.options)
+        : await args.client.messages.create(request);
     inputTokens += response.usage.input_tokens;
     outputTokens += response.usage.output_tokens;
+    // Recusa (#524): re-tentar tende a recusar de novo e é pago — falha já.
+    if (response.stop_reason === "refusal") {
+      lastFailure = `o modelo recusou a análise (category=${response.stop_details?.category ?? "n/a"})`;
+      console.warn(`  ⚠ tentativa ${attempt}: ${lastFailure}`);
+      break;
+    }
     const toolUse = response.content.find(
       (block): block is Anthropic.ToolUseBlock =>
         block.type === "tool_use" && block.name === SUBMIT_PREDICTION_TOOL.name,

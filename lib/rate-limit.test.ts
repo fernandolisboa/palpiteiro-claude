@@ -86,6 +86,36 @@ describe("checkAnalysisRateLimit", () => {
     });
   });
 
+  it("Upstash em timeout (fail-open) → ok:true com reason:'timeout' propagado (#524)", async () => {
+    mockLimit.mockResolvedValue({
+      success: true,
+      limit: 20,
+      remaining: 0,
+      reset: 0,
+      reason: "timeout",
+    });
+    const check = await load();
+    expect(await check("u1")).toEqual({
+      ok: true,
+      limit: 20,
+      remaining: 0,
+      reset: 0,
+      reason: "timeout",
+    });
+  });
+
+  it("reason do Upstash que não é timeout (cacheBlock/denyList) não vaza", async () => {
+    mockLimit.mockResolvedValue({
+      success: false,
+      limit: 20,
+      remaining: 0,
+      reset: 0,
+      reason: "cacheBlock",
+    });
+    const check = await load();
+    expect((await check("u1")).reason).toBeUndefined();
+  });
+
   it("returns ok:false when at/over the limit", async () => {
     mockLimit.mockResolvedValue({
       success: false,

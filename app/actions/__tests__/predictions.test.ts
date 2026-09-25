@@ -324,6 +324,32 @@ describe("analyzeMatch", () => {
     expect(mockRateLimit).toHaveBeenCalledWith("u1", "admin");
     expect(mockPredict).toHaveBeenCalled();
   });
+
+  it("passa o prazo do run (início + 270s) pro predict (#524 review, maxDuration 300)", async () => {
+    const spy = vi.spyOn(Date, "now").mockReturnValue(5_000_000);
+    try {
+      mockAuth.mockResolvedValue(SESSION);
+      mockGetAccess.mockResolvedValue(ALLOWED_ADMIN);
+      mockPredict.mockResolvedValue(PREDICTION);
+      mockGetAiCall.mockResolvedValue({ costUsd: "0.01" } as never);
+      await analyzeMatch(null, form({ matchId: VALID_MATCH_ID }));
+      expect(mockPredict.mock.calls[0][0].deadlineAt).toBe(5_000_000 + 270_000);
+    } finally {
+      spy.mockRestore();
+    }
+  });
+
+  it("prazo esgotado antes da chamada paga → copy de tempo, não 'falha temporária'", async () => {
+    const { AnalysisDeadlineError } = await import("@/lib/ai/deadline");
+    mockAuth.mockResolvedValue(SESSION);
+    mockGetAccess.mockResolvedValue(ALLOWED_ADMIN);
+    mockPredict.mockRejectedValue(new AnalysisDeadlineError());
+    const res = await analyzeMatch(null, form({ matchId: VALID_MATCH_ID }));
+    expect(res).toEqual({
+      ok: false,
+      error: "A análise demorou mais que o limite. Tente novamente.",
+    });
+  });
 });
 
 describe("analyzeMatch — model override gating", () => {
@@ -346,6 +372,7 @@ describe("analyzeMatch — model override gating", () => {
       modelOverride: "claude-haiku-4-5",
       marketKey: "over_under",
       extraLines: false,
+      deadlineAt: expect.any(Number),
     });
   });
 
@@ -364,6 +391,7 @@ describe("analyzeMatch — model override gating", () => {
       modelOverride: undefined,
       marketKey: "over_under",
       extraLines: false,
+      deadlineAt: expect.any(Number),
     });
   });
 
@@ -384,6 +412,7 @@ describe("analyzeMatch — model override gating", () => {
       modelOverride: undefined,
       marketKey: "over_under",
       extraLines: false,
+      deadlineAt: expect.any(Number),
     });
   });
 
@@ -403,6 +432,7 @@ describe("analyzeMatch — model override gating", () => {
       modelOverride: "claude-sonnet-4-5-20250929",
       marketKey: "over_under",
       extraLines: false,
+      deadlineAt: expect.any(Number),
     });
   });
 
@@ -424,6 +454,7 @@ describe("analyzeMatch — model override gating", () => {
       modelOverride: "claude-sonnet-4-5-20250929",
       marketKey: "over_under",
       extraLines: false,
+      deadlineAt: expect.any(Number),
     });
   });
 
@@ -440,6 +471,7 @@ describe("analyzeMatch — model override gating", () => {
       modelOverride: undefined,
       marketKey: "over_under",
       extraLines: false,
+      deadlineAt: expect.any(Number),
     });
   });
 
@@ -456,6 +488,7 @@ describe("analyzeMatch — model override gating", () => {
       modelOverride: undefined,
       marketKey: "over_under",
       extraLines: false,
+      deadlineAt: expect.any(Number),
     });
   });
 });
@@ -480,6 +513,7 @@ describe("analyzeMatch — market audience gating", () => {
       modelOverride: undefined,
       marketKey: "match_result",
       extraLines: false,
+      deadlineAt: expect.any(Number),
     });
   });
 
@@ -498,6 +532,7 @@ describe("analyzeMatch — market audience gating", () => {
       modelOverride: undefined,
       marketKey: "match_result",
       extraLines: false,
+      deadlineAt: expect.any(Number),
     });
   });
 
@@ -514,6 +549,7 @@ describe("analyzeMatch — market audience gating", () => {
       modelOverride: undefined,
       marketKey: "over_under",
       extraLines: false,
+      deadlineAt: expect.any(Number),
     });
   });
 });
@@ -542,6 +578,7 @@ describe("analyzeMatch — market league coverage gating (#158)", () => {
       modelOverride: undefined,
       marketKey: "btts",
       extraLines: false,
+      deadlineAt: expect.any(Number),
     });
     // additional market → pre-warm por evento ANTES do predict (1x), e nessa ORDEM
     // (o pre-warm garante o snapshot fresco que o predict reusa). Pina a ordem pra um
@@ -631,6 +668,7 @@ describe("analyzeMatch — market league coverage gating (#158)", () => {
       modelOverride: undefined,
       marketKey: "over_under",
       extraLines: false,
+      deadlineAt: expect.any(Number),
     });
     // over_under é featured → nenhum pre-warm de odds por evento.
     expect(mockEnsureOdds).not.toHaveBeenCalled();
@@ -650,6 +688,7 @@ describe("analyzeMatch — market league coverage gating (#158)", () => {
       modelOverride: undefined,
       marketKey: "match_result",
       extraLines: false,
+      deadlineAt: expect.any(Number),
     });
     expect(mockEnsureOdds).not.toHaveBeenCalled();
   });
@@ -688,6 +727,7 @@ describe("analyzeMatch — double_chance league coverage gating (#176)", () => {
       modelOverride: undefined,
       marketKey: "double_chance",
       extraLines: false,
+      deadlineAt: expect.any(Number),
     });
     // additional market → pre-warm por evento ANTES do predict (1x), nessa ORDEM.
     expect(mockEnsureOdds).toHaveBeenCalledTimes(1);
@@ -725,6 +765,7 @@ describe("analyzeMatch — double_chance league coverage gating (#176)", () => {
       modelOverride: undefined,
       marketKey: "over_under",
       extraLines: false,
+      deadlineAt: expect.any(Number),
     });
     expect(mockEnsureOdds).not.toHaveBeenCalled();
   });
@@ -819,6 +860,7 @@ describe("analyzeMatch — over/under linhas extras (#175)", () => {
       modelOverride: undefined,
       marketKey: "over_under",
       extraLines: true,
+      deadlineAt: expect.any(Number),
     });
     // over_under vira additional sob flag → pre-warm POR EVENTO da escada (1 crédito),
     // ANTES do predict. O descriptor efetivo é o da variante (alternate_totals/escada).
@@ -849,6 +891,7 @@ describe("analyzeMatch — over/under linhas extras (#175)", () => {
       modelOverride: undefined,
       marketKey: "over_under",
       extraLines: false,
+      deadlineAt: expect.any(Number),
     });
     // featured 2.5 → SEM pre-warm additional.
     expect(mockEnsureOdds).not.toHaveBeenCalled();

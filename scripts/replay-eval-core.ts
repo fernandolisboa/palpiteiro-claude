@@ -6,7 +6,7 @@
 //
 // Model-aware (ADR 0021, #203): a regra de FLIP é bifurcada pelo `thinkingMode` do
 // modelo — caminho `temperature` (Sonnet 4.5/Haiku, amostragem fixa em 0.3) é
-// estrito (qualquer flip reprova); caminho `adaptive` (Opus/Sonnet 4.6, sem knob de
+// estrito (qualquer flip reprova); caminho `adaptive` (Fable 5.1/Opus 5.5/Sonnet 5, sem knob de
 // amostragem) só reprova se o flip REPRODUZIR na maioria de N re-replays do MESMO
 // payload (mata o ruído single-shot — o modo de falha A/A observado no #105). Os
 // outros abortos do gate (mediana |Δconf| e errors) NÃO são model-aware.

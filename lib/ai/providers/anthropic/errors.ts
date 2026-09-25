@@ -54,3 +54,38 @@ export function serializeAnthropicError(err: unknown): Record<string, unknown> {
   }
   return { error: String(err) };
 }
+
+// Recusa do modelo (#524). Fable 5.1 (e, em tese, qualquer Claude recente) pode
+// responder HTTP 200 com `stop_reason: "refusal"` e um `stop_details` {category,
+// explanation}: a chamada foi paga, mas o conteúdo não serve. É erro TIPADO (não
+// uma string solta) pra o caller distinguir de falha de provider/rede e mostrar
+// "o modelo recusou a análise" em vez de "tente novamente". Vai em `cause` do
+// AnalysisErr; o `refusal` neutro do seam carrega os mesmos campos.
+export class ModelRefusalError extends Error {
+  readonly category: string | null;
+  readonly explanation: string | null;
+  constructor(category: string | null, explanation: string | null) {
+    super(
+      `o modelo recusou a análise${category ? ` (category=${category})` : ""}${
+        explanation ? `: ${explanation}` : ""
+      }`,
+    );
+    this.name = "ModelRefusalError";
+    this.category = category;
+    this.explanation = explanation;
+  }
+}
+
+// Lê a recusa de uma resposta. `null` = não é recusa. Checado ANTES de ler
+// `content` (o conteúdo de uma recusa pode vir vazio ou parcial). `stop_details`
+// só vem populado em recusa e pode faltar (respostas sem o campo, mocks) — daí o `?.`.
+export function refusalFromMessage(message: {
+  stop_reason: Anthropic.Message["stop_reason"];
+  stop_details?: Anthropic.RefusalStopDetails | null;
+}): ModelRefusalError | null {
+  if (message.stop_reason !== "refusal") return null;
+  return new ModelRefusalError(
+    message.stop_details?.category ?? null,
+    message.stop_details?.explanation ?? null,
+  );
+}

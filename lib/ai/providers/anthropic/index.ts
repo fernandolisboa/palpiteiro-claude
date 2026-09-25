@@ -12,11 +12,119 @@ import { hasKey } from "./client";
 
 import type {
   AIProvider,
+  AnalysisErr,
   AnalysisRequest,
   AnalysisResult,
+  AnalysisUsage,
 } from "../types";
-import { classifyAnthropicError, serializeAnthropicError } from "./errors";
+import {
+  classifyAnthropicError,
+  type ModelRefusalError,
+  refusalFromMessage,
+  serializeAnthropicError,
+} from "./errors";
 import { buildAnthropicRequest } from "./request-builder";
+import { requestTiming } from "./timeouts";
+
+// Sinal interno: o prazo do run acabou antes da chamada (nada foi enviado).
+class NoBudgetError extends Error {
+  constructor() {
+    super("deadline exceeded before the call; nothing was sent");
+    this.name = "NoBudgetError";
+  }
+}
+
+// A chamada paga, com timeout/retries por request (requestTiming): adaptive escala
+// o timeout por max_tokens/effort; com prazo, os dois são cortados pelo restante.
+// Temperature sem prazo chama com 1 argumento só, como sempre.
+//
+// TOKENS NUM TIMEOUT: a chamada é não-streaming, então um timeout (do SDK ou do
+// prazo) não devolve `usage` nenhum — os tokens NÃO são conhecíveis e a row de
+// ai_calls grava 0/0 com `usageUnknown: true` no outputPayload. A API pode ter
+// cobrado a geração parcial; o custo real só aparece no console da Anthropic.
+function createMessage(
+  client: ReturnType<typeof getAnthropicClient>,
+  params: Anthropic.MessageCreateParamsNonStreaming,
+  request: AnalysisRequest,
+): Promise<Anthropic.Message> {
+  const timing = requestTiming({
+    thinkingMode: request.model.thinkingMode,
+    maxTokens: request.maxTokens,
+    effort: request.effort,
+    deadlineAt: request.deadlineAt,
+  });
+  if (timing.kind === "no-budget") return Promise.reject(new NoBudgetError());
+  return timing.kind === "options"
+    ? client.messages.create(params, timing.options)
+    : client.messages.create(params);
+}
+
+// Falha de uma chamada que não devolveu corpo (erro do SDK, timeout, sem prazo).
+function callFailure(args: {
+  err: unknown;
+  usage: AnalysisUsage;
+  inputPayload: Record<string, unknown>;
+  stopReason: string | null;
+  latencyMs: number;
+}): AnalysisErr {
+  if (args.err instanceof NoBudgetError) {
+    return {
+      ok: false,
+      status: "timeout",
+      message: args.err.message,
+      cause: args.err,
+      usage: args.usage,
+      inputPayload: args.inputPayload,
+      outputPayload: { error: serializeAnthropicError(args.err) },
+      stopReason: args.stopReason,
+      latencyMs: args.latencyMs,
+    };
+  }
+  const classified = classifyAnthropicError(args.err);
+  return {
+    ok: false,
+    status: classified.status,
+    message: classified.message,
+    cause: args.err,
+    usage: args.usage,
+    inputPayload: args.inputPayload,
+    outputPayload: {
+      error: serializeAnthropicError(args.err),
+      // Timeout não traz usage (ver createMessage): tokens desconhecidos, não zero.
+      ...(classified.status === "timeout" ? { usageUnknown: true } : {}),
+    },
+    stopReason: args.stopReason,
+    latencyMs: args.latencyMs,
+  };
+}
+
+// Recusa do modelo (#524) → falha TIPADA, não sucesso sem tool. Checada ANTES de
+// ler `content`. `status` fica `provider_error` (o enum de ai_calls não ganha valor
+// novo); `refusal` + `cause: ModelRefusalError` deixam o caller dar a mensagem certa.
+// O outputPayload é a resposta crua (auditoria) e `usage` são os tokens cobrados.
+function refusalResult(args: {
+  refusal: ModelRefusalError;
+  response: Anthropic.Message;
+  usage: AnalysisUsage;
+  inputPayload: Record<string, unknown>;
+  latencyMs: number;
+}): AnalysisErr {
+  return {
+    ok: false,
+    status: "provider_error",
+    message: args.refusal.message,
+    cause: args.refusal,
+    refusal: {
+      category: args.refusal.category,
+      explanation: args.refusal.explanation,
+    },
+    usage: args.usage,
+    inputPayload: args.inputPayload,
+    outputPayload: args.response as unknown as Record<string, unknown>,
+    stopReason: "refusal",
+    latencyMs: args.latencyMs,
+  };
+}
 
 // Coage o uso de tokens a inteiro finito ≥0 (anti-NaN em `calculateCost` →
 // `costUsd` numeric NOT NULL). Identidade pros valores inteiros que a Anthropic
@@ -71,23 +179,25 @@ async function runAnalysis(
   const start = performance.now();
   let response: Anthropic.Message;
   try {
-    response = await client.messages.create(anthropicRequest);
+    response = await createMessage(client, anthropicRequest, request);
   } catch (err) {
-    const latencyMs = Math.round(performance.now() - start);
-    const classified = classifyAnthropicError(err);
-    return {
-      ok: false,
-      status: classified.status,
-      message: classified.message,
-      cause: err,
+    return callFailure({
+      err,
       usage: { inputTokens: 0, outputTokens: 0 },
       inputPayload,
-      outputPayload: { error: serializeAnthropicError(err) },
       stopReason: null,
-      latencyMs,
-    };
+      latencyMs: Math.round(performance.now() - start),
+    });
   }
   const latencyMs = Math.round(performance.now() - start);
+  const usage = {
+    inputTokens: coerceTokens(response.usage.input_tokens),
+    outputTokens: coerceTokens(response.usage.output_tokens),
+  };
+  const refusal = refusalFromMessage(response);
+  if (refusal) {
+    return refusalResult({ refusal, response, usage, inputPayload, latencyMs });
+  }
   // `outputPayload` == o cast pré-seam de predict.ts:817 (byte-idêntico). O
   // tool_missing snippet de predict lê `.content` daqui.
   const outputPayload = response as unknown as Record<string, unknown>;
@@ -102,10 +212,7 @@ async function runAnalysis(
   return {
     ok: true,
     toolInput: toolUse?.input,
-    usage: {
-      inputTokens: coerceTokens(response.usage.input_tokens),
-      outputTokens: coerceTokens(response.usage.output_tokens),
-    },
+    usage,
     inputPayload,
     outputPayload,
     stopReason: response.stop_reason ?? null,
@@ -140,21 +247,15 @@ async function runServerToolAnalysis(
   const start = performance.now();
   let response: Anthropic.Message;
   try {
-    response = await client.messages.create(anthropicRequest);
+    response = await createMessage(client, anthropicRequest, request);
   } catch (err) {
-    const latencyMs = Math.round(performance.now() - start);
-    const classified = classifyAnthropicError(err);
-    return {
-      ok: false,
-      status: classified.status,
-      message: classified.message,
-      cause: err,
+    return callFailure({
+      err,
       usage: { inputTokens: 0, outputTokens: 0 },
       inputPayload,
-      outputPayload: { error: serializeAnthropicError(err) },
       stopReason: null,
-      latencyMs,
-    };
+      latencyMs: Math.round(performance.now() - start),
+    });
   }
 
   // Laço bounded de pause_turn: a server-tool loop pausa quando bate o limite interno;
@@ -170,33 +271,41 @@ async function runServerToolAnalysis(
     continuations += 1;
     let next: Anthropic.Message;
     try {
-      next = await client.messages.create({
-        ...anthropicRequest,
-        messages: [
-          { role: "user", content: request.userMessage },
-          { role: "assistant", content: response.content },
-        ],
-      });
+      next = await createMessage(
+        client,
+        {
+          ...anthropicRequest,
+          messages: [
+            { role: "user", content: request.userMessage },
+            { role: "assistant", content: response.content },
+          ],
+        },
+        request,
+      );
     } catch (err) {
-      const latencyMs = Math.round(performance.now() - start);
-      const classified = classifyAnthropicError(err);
-      return {
-        ok: false,
-        status: classified.status,
-        message: classified.message,
-        cause: err,
+      return callFailure({
+        err,
         usage: { inputTokens, outputTokens },
         inputPayload,
-        outputPayload: { error: serializeAnthropicError(err) },
         stopReason: response.stop_reason ?? null,
-        latencyMs,
-      };
+        latencyMs: Math.round(performance.now() - start),
+      });
     }
     response = next;
     inputTokens += coerceTokens(response.usage.input_tokens);
     outputTokens += coerceTokens(response.usage.output_tokens);
   }
   const latencyMs = Math.round(performance.now() - start);
+  const refusal = refusalFromMessage(response);
+  if (refusal) {
+    return refusalResult({
+      refusal,
+      response,
+      usage: { inputTokens, outputTokens },
+      inputPayload,
+      latencyMs,
+    });
+  }
   const outputPayload = response as unknown as Record<string, unknown>;
 
   return {

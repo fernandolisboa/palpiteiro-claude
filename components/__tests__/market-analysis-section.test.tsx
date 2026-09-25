@@ -114,8 +114,8 @@ const MR = mkItem({
   }),
 });
 
-// Pós-#374: o registry só expõe Sonnet 4.5 (default) + Haiku 4.5. Os modelos
-// selecionáveis da seção espelham esse universo.
+// Fixture de modelos selecionáveis da seção (subconjunto do registry; a seção só
+// renderiza o que recebe).
 const ADMIN_MODELS = [
   { id: "claude-sonnet-4-5-20250929", label: "Sonnet 4.5" },
   { id: "claude-haiku-4-5", label: "Haiku 4.5" },

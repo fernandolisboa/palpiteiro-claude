@@ -159,6 +159,11 @@ header) e já vêm tipados no `MessageCreateParamsNonStreaming` do SDK
 seta direto, sem cast. O nosso `Effort` (low/medium/high/max) é subconjunto do
 union do SDK (que inclui xhigh/null) — atribuível sem fricção.
 
+> **Nota (2026-09-25, #524):** com Fable 5.1 / Opus 5.5 / Sonnet 5 no registry (todos
+> aceitam `xhigh`), o `effort` passa a oferecer **low/medium/high/xhigh/max**. O default
+> segue `high`, sempre enviado explícito (o default do servidor no Opus 5.5 é `medium`).
+> Ver a emenda de #524 no ADR 0021.
+
 ### Consequências (emenda 2)
 
 - (+) Calibrar max_tokens/effort/temperature sem redeploy, model-aware, sem 400.

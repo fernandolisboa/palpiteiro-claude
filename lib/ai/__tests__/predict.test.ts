@@ -162,6 +162,7 @@ import { buildPredictionInput } from "@/lib/ai/markets/over_under/build-input";
 import { overUnderCartridge } from "@/lib/ai/markets/over_under";
 import { computeMarketImpliedProbabilities } from "@/lib/odds/implied-probability";
 
+import { AnalysisDeadlineError } from "@/lib/ai/deadline";
 import { predict, PredictError } from "@/lib/ai/predict";
 
 // ─── Fixtures for the happy-path mocks ───────────────────────────────────────
@@ -1459,6 +1460,201 @@ describe("predict() — cascata completa: preferência do usuário + filtro de a
 // mais. O adapter OpenAI (openai.test.ts) cobre o hasKey() do ADAPTER, que NÃO é
 // o backstop de predict — não são equivalentes. Follow-up pos-pivot: reintroduzir
 // quando um provider OpenAI voltar ao registry.
+
+describe("predict() — modelos adaptive de volta ao registry (#524)", () => {
+  it("modelOverride Opus 5.5 → request adaptive: thinking adaptive, tool_choice auto, effort em output_config, SEM temperature", async () => {
+    await expect(
+      predict({
+        matchId: "m-1",
+        userId: "u-1",
+        isAdmin: false,
+        modelOverride: "claude-opus-5-5",
+      }),
+    ).resolves.toBeDefined();
+
+    const arg = anthropicCreate.mock.calls[0]?.[0];
+    expect(arg.model).toBe("claude-opus-5-5");
+    expect(arg.thinking).toEqual({ type: "adaptive" });
+    expect(arg.tool_choice).toEqual({ type: "auto" });
+    expect(arg.output_config).toEqual({ effort: "high" });
+    expect(arg).not.toHaveProperty("temperature");
+    // Adaptive leva o timeout escalado por max_tokens/effort (16000 em high → 215s).
+    expect(anthropicCreate.mock.calls[0]?.[1]).toEqual({
+      timeout: 215_000,
+      maxRetries: 2,
+    });
+
+    const aiCallRow = insertValues.mock.calls[0]?.[0] as {
+      model: string;
+      costUsd: string;
+    };
+    expect(aiCallRow.model).toBe("claude-opus-5-5");
+    // Custo pelo pricing do registry: 1200 × $4 + 300 × $20 por 1M.
+    expect(aiCallRow.costUsd).toBe(((1200 * 4 + 300 * 20) / 1_000_000).toFixed(6));
+  });
+
+  it("preferência Fable 5.1 (admin-only) + isAdmin=false → filtrada pelo gate, cai no default global", async () => {
+    getPreferredModelId.mockResolvedValue("claude-fable-5-1");
+    getDefaultModelId.mockResolvedValue("claude-sonnet-4-5-20250929");
+
+    await expect(
+      predict({ matchId: "m-1", userId: "u-1", isAdmin: false }),
+    ).resolves.toBeDefined();
+
+    expect(anthropicCreate.mock.calls[0]?.[0].model).toBe(
+      "claude-sonnet-4-5-20250929",
+    );
+  });
+
+  it("preferência Fable 5.1 + isAdmin=true → usa o Fable 5.1", async () => {
+    getPreferredModelId.mockResolvedValue("claude-fable-5-1");
+
+    await expect(
+      predict({ matchId: "m-1", userId: "u-1", isAdmin: true }),
+    ).resolves.toBeDefined();
+
+    expect(anthropicCreate.mock.calls[0]?.[0].model).toBe("claude-fable-5-1");
+    expect(getDefaultModelId).not.toHaveBeenCalled();
+  });
+
+  it("tool_choice auto e o modelo responde só texto → tool_missing auditado, sem prediction", async () => {
+    anthropicCreate.mockResolvedValue({
+      ...anthropicMessage(),
+      model: "claude-sonnet-5",
+      stop_reason: "end_turn",
+      content: [{ type: "text", text: "Prefiro não recomendar." }],
+    });
+
+    await expect(
+      predict({
+        matchId: "m-1",
+        userId: "u-1",
+        isAdmin: false,
+        modelOverride: "claude-sonnet-5",
+      }),
+    ).rejects.toThrow("LLM did not call submit_prediction tool");
+
+    expect(insertValues).toHaveBeenCalledTimes(1);
+    const aiCallRow = insertValues.mock.calls[0]?.[0] as { status: string };
+    expect(aiCallRow.status).toBe("tool_missing");
+  });
+
+  it("recusa (stop_reason 'refusal') → 1 ai_call provider_error com tokens, 0 prediction, PredictError 'model refused'", async () => {
+    anthropicCreate.mockResolvedValue({
+      ...anthropicMessage(),
+      model: "claude-fable-5-1",
+      stop_reason: "refusal",
+      stop_details: {
+        type: "refusal",
+        category: null,
+        explanation: "Não posso ajudar com isso.",
+      },
+      content: [],
+      usage: { input_tokens: 1500, output_tokens: 12 },
+    });
+
+    const err = await predict({
+      matchId: "m-1",
+      userId: "u-1",
+      isAdmin: true,
+      modelOverride: "claude-fable-5-1",
+    }).catch((e: unknown) => e);
+
+    expect(err).toBeInstanceOf(PredictError);
+    expect((err as PredictError).message).toBe("model refused the analysis");
+    expect((err as PredictError).context.refusal).toEqual({
+      category: null,
+      explanation: "Não posso ajudar com isso.",
+    });
+
+    // Auditado como as outras falhas: exatamente UM insert (ai_calls), nada de
+    // prediction/PSO — nenhum lixo persistido.
+    expect(anthropicCreate).toHaveBeenCalledTimes(1);
+    expect(insertValues).toHaveBeenCalledTimes(1);
+    const aiCallRow = insertValues.mock.calls[0]?.[0] as {
+      status: string;
+      model: string;
+      inputTokens: number;
+      outputTokens: number;
+      errorMessage: string;
+    };
+    expect(aiCallRow.status).toBe("provider_error");
+    expect(aiCallRow.model).toBe("claude-fable-5-1");
+    expect(aiCallRow.inputTokens).toBe(1500);
+    expect(aiCallRow.outputTokens).toBe(12);
+    expect(aiCallRow.errorMessage).toBe(
+      "o modelo recusou a análise: Não posso ajudar com isso.",
+    );
+  });
+});
+
+describe("predict() — prazo do run (#524 review)", () => {
+  it("prazo sem espaço pra uma chamada adaptive → AnalysisDeadlineError ANTES do hook de slot e do gasto", async () => {
+    const beforeLlmPath = vi.fn(async () => {});
+    const err = await predict(
+      {
+        matchId: "m-1",
+        userId: "u-1",
+        isAdmin: false,
+        modelOverride: "claude-opus-5-5",
+        deadlineAt: Date.now() + 30_000,
+      },
+      { beforeLlmPath },
+    ).catch((e: unknown) => e);
+
+    expect(err).toBeInstanceOf(AnalysisDeadlineError);
+    expect(beforeLlmPath).not.toHaveBeenCalled();
+    expect(anthropicCreate).not.toHaveBeenCalled();
+    expect(insertValues).not.toHaveBeenCalled();
+  });
+
+  it("com prazo: o hook cobra o slot antes da chamada e o timeout é cortado pelo restante", async () => {
+    const order: string[] = [];
+    const beforeLlmPath = vi.fn(async () => {
+      order.push("slot");
+    });
+    anthropicCreate.mockImplementationOnce(async () => {
+      order.push("create");
+      return anthropicMessage();
+    });
+    await predict(
+      {
+        matchId: "m-1",
+        userId: "u-1",
+        isAdmin: false,
+        modelOverride: "claude-opus-5-5",
+        deadlineAt: Date.now() + 150_000,
+      },
+      { beforeLlmPath },
+    );
+    expect(order).toEqual(["slot", "create"]);
+    const opts = anthropicCreate.mock.calls[0]?.[1] as {
+      timeout: number;
+      maxRetries: number;
+    };
+    // ~145s restantes (150 − 5 de margem), abaixo dos 215s escalados; retry não cabe.
+    expect(opts.timeout).toBeLessThanOrEqual(145_000);
+    expect(opts.timeout).toBeGreaterThan(130_000);
+    expect(opts.maxRetries).toBe(0);
+  });
+
+  it("adaptive com menos que o mínimo (120s) → não inicia a chamada: sem slot, sem gasto", async () => {
+    const beforeLlmPath = vi.fn(async () => {});
+    const err = await predict(
+      {
+        matchId: "m-1",
+        userId: "u-1",
+        isAdmin: false,
+        modelOverride: "claude-opus-5-5",
+        deadlineAt: Date.now() + 100_000,
+      },
+      { beforeLlmPath },
+    ).catch((e: unknown) => e);
+    expect(err).toBeInstanceOf(AnalysisDeadlineError);
+    expect(beforeLlmPath).not.toHaveBeenCalled();
+    expect(anthropicCreate).not.toHaveBeenCalled();
+  });
+});
 
 describe("predict() — model declines to call the tool", () => {
   it("no submit_prediction tool_use (thinking/text only) → persists tool_missing ai_call, still paid, and throws", async () => {

@@ -10,13 +10,30 @@ import {
   providerHasKey,
 } from "@/lib/ai/models";
 
-const ANTHROPIC_IDS = ["claude-sonnet-4-5-20250929", "claude-haiku-4-5"];
+// Ordem = capacidade decrescente (a UI depende dela). #524 trouxe de volta os
+// adaptive: Fable 5.1 (admin-only), Opus 5.5 e Sonnet 5 (selecionáveis).
+const ANTHROPIC_IDS = [
+  "claude-fable-5-1",
+  "claude-opus-5-5",
+  "claude-sonnet-5",
+  "claude-sonnet-4-5-20250929",
+  "claude-haiku-4-5",
+];
+const USER_SELECTABLE_IDS = ANTHROPIC_IDS.filter(
+  (id) => id !== "claude-fable-5-1",
+);
+const ADAPTIVE_IDS = ["claude-fable-5-1", "claude-opus-5-5", "claude-sonnet-5"];
 
 // Ids removidos do registry em #374 (eram Opus 4.8 + Sonnet 4.6 adaptive + o
-// gpt-5-mini de prova OpenAI). Permanecem como strings stale: NÃO estão no
-// registry e NÃO passam o gate de audiência — predições históricas com esses ids
-// renderizam graciosamente via formatModelName (padrão #241).
-const REMOVED_IDS = ["claude-opus-4-8", "claude-sonnet-4-6", "gpt-5-mini"];
+// gpt-5-mini de prova OpenAI) e o Fable 5 (#241). Permanecem como strings stale:
+// NÃO estão no registry e NÃO passam o gate de audiência — predições históricas com
+// esses ids renderizam graciosamente via formatModelName (padrão #241).
+const REMOVED_IDS = [
+  "claude-opus-4-8",
+  "claude-sonnet-4-6",
+  "gpt-5-mini",
+  "claude-fable-5",
+];
 
 // modelsForAudience é KEY-GATED (ADR 0027): um modelo cujo provider não tem chave
 // some da seleção. O seam OpenAI segue RETIDO no código (#374) mas SEM modelo de
@@ -39,29 +56,36 @@ afterEach(() => {
 });
 
 describe("modelsForAudience — gating por audiência (ADR 0013) + key-gate (ADR 0027)", () => {
-  it("admin → os 2 Anthropic (Sonnet 4.5, Haiku), em capacidade decrescente (a UI depende da ordem)", () => {
+  it("admin → os 5 Anthropic, em capacidade decrescente (a UI depende da ordem)", () => {
     const ids = modelsForAudience(true).map((m) => m.id);
     expect(ids).toEqual(ANTHROPIC_IDS);
-    expect(ids).toHaveLength(2);
   });
 
-  it("usuário comum → os 2 userSelectable Anthropic", () => {
+  it("usuário comum → os 4 userSelectable, mesma ordem, SEM o Fable 5.1 (admin-only)", () => {
     const ids = modelsForAudience(false).map((m) => m.id);
-    expect(ids).toEqual(ANTHROPIC_IDS);
-    expect(ids).toHaveLength(2);
+    expect(ids).toEqual(USER_SELECTABLE_IDS);
+    expect(ids).not.toContain("claude-fable-5-1");
   });
 
-  it("Sonnet 4.5 (default) e Haiku aparecem pro usuário comum", () => {
+  it("Opus 5.5, Sonnet 5, Sonnet 4.5 (default) e Haiku aparecem pro usuário comum", () => {
     const ids = modelsForAudience(false).map((m) => m.id);
+    expect(ids).toContain("claude-opus-5-5");
+    expect(ids).toContain("claude-sonnet-5");
     expect(ids).toContain("claude-sonnet-4-5-20250929");
     expect(ids).toContain("claude-haiku-4-5");
   });
 
-  it("ids removidos (#374 + Fable #241) não aparecem pra nenhuma audiência", () => {
-    for (const id of [...REMOVED_IDS, "claude-fable-5"]) {
+  it("ids removidos (#374 + Fable 5 #241) não aparecem pra nenhuma audiência", () => {
+    for (const id of REMOVED_IDS) {
       expect(modelsForAudience(true).map((m) => m.id)).not.toContain(id);
       expect(modelsForAudience(false).map((m) => m.id)).not.toContain(id);
     }
+  });
+
+  it("sem ANTHROPIC_API_KEY nenhum modelo aparece (provider inerte)", () => {
+    delete process.env.ANTHROPIC_API_KEY;
+    expect(modelsForAudience(true)).toEqual([]);
+    expect(modelsForAudience(false)).toEqual([]);
   });
 });
 
@@ -104,24 +128,37 @@ describe("isModelAllowedForAudience — invariante de gating (ADR 0013)", () => 
     expect(isModelAllowedForAudience("claude-haiku-4-5", false)).toBe(true);
   });
 
+  it("Fable 5.1 (#524): admin-only — admin sim, usuário comum NÃO", () => {
+    expect(isModelAllowedForAudience("claude-fable-5-1", true)).toBe(true);
+    expect(isModelAllowedForAudience("claude-fable-5-1", false)).toBe(false);
+  });
+
+  it("Opus 5.5 e Sonnet 5 (#524): permitidos pra ambas as audiências", () => {
+    for (const id of ["claude-opus-5-5", "claude-sonnet-5"]) {
+      expect(isModelAllowedForAudience(id, true)).toBe(true);
+      expect(isModelAllowedForAudience(id, false)).toBe(true);
+    }
+  });
+
   it("id inválido → false mesmo pra admin", () => {
     expect(isModelAllowedForAudience("gpt-4", true)).toBe(false);
   });
 
-  it("ids removidos (#374 + Fable #241) → false (caem graciosamente)", () => {
-    for (const id of [...REMOVED_IDS, "claude-fable-5"]) {
+  it("ids removidos (#374 + Fable 5 #241) → false (caem graciosamente)", () => {
+    for (const id of REMOVED_IDS) {
       expect(isModelAllowedForAudience(id, true)).toBe(false);
       expect(isModelAllowedForAudience(id, false)).toBe(false);
     }
   });
 
-  it("todo modelo do registry passa pro comum (todos userSelectable pós-#374)", () => {
-    // Pós-#374 não há mais modelo admin-only no registry. Se um futuro modelo
-    // voltar a ser admin-only (userSelectable:false), este loop falha e força o
-    // autor a reintroduzir a asserção admin-only específica.
-    expect(SELECTABLE_MODELS.every((m) => m.userSelectable)).toBe(true);
+  it("o ÚNICO admin-only do registry é o Fable 5.1 (#524)", () => {
+    // Se outro modelo virar admin-only (ou o Fable virar selecionável), este teste
+    // força o autor a revisar o gating de audiência de propósito.
+    expect(
+      SELECTABLE_MODELS.filter((m) => !m.userSelectable).map((m) => m.id),
+    ).toEqual(["claude-fable-5-1"]);
     for (const m of SELECTABLE_MODELS) {
-      expect(isModelAllowedForAudience(m.id, false)).toBe(true);
+      expect(isModelAllowedForAudience(m.id, false)).toBe(m.userSelectable);
     }
   });
 });
@@ -146,20 +183,56 @@ describe("registry — sanidade dos modelos", () => {
     expect(m.userSelectable).toBe(true);
   });
 
-  it("todos os modelos do registry carregam provider:'anthropic' (pós-#374)", () => {
-    for (const id of ANTHROPIC_IDS) {
-      expect(MODEL_REGISTRY[id as keyof typeof MODEL_REGISTRY].provider).toBe(
-        "anthropic",
+  it("Fable 5.1 (#524): pricing 10/50, adaptive, sem temperature, admin-only", () => {
+    const m = MODEL_REGISTRY["claude-fable-5-1"];
+    expect(m.provider).toBe("anthropic");
+    expect(m.inputPricePerMTok).toBe(10);
+    expect(m.outputPricePerMTok).toBe(50);
+    expect(m.thinkingMode).toBe("adaptive");
+    expect(m.temperature).toBeUndefined();
+    expect(m.userSelectable).toBe(false);
+  });
+
+  it("Opus 5.5 (#524): pricing 4/20, adaptive, sem temperature, userSelectable", () => {
+    const m = MODEL_REGISTRY["claude-opus-5-5"];
+    expect(m.provider).toBe("anthropic");
+    expect(m.inputPricePerMTok).toBe(4);
+    expect(m.outputPricePerMTok).toBe(20);
+    expect(m.thinkingMode).toBe("adaptive");
+    expect(m.temperature).toBeUndefined();
+    expect(m.userSelectable).toBe(true);
+  });
+
+  it("Sonnet 5 (#524): pricing 2/10, adaptive, sem temperature, userSelectable", () => {
+    const m = MODEL_REGISTRY["claude-sonnet-5"];
+    expect(m.provider).toBe("anthropic");
+    expect(m.inputPricePerMTok).toBe(2);
+    expect(m.outputPricePerMTok).toBe(10);
+    expect(m.thinkingMode).toBe("adaptive");
+    expect(m.temperature).toBeUndefined();
+    expect(m.userSelectable).toBe(true);
+  });
+
+  it("thinkingMode: os 3 novos são adaptive, Sonnet 4.5/Haiku seguem temperature", () => {
+    for (const m of SELECTABLE_MODELS) {
+      expect(m.thinkingMode).toBe(
+        ADAPTIVE_IDS.includes(m.id) ? "adaptive" : "temperature",
       );
     }
   });
 
-  it("o registry tem exatamente 2 modelos (Sonnet 4.5 + Haiku, #374)", () => {
+  it("todos os modelos do registry carregam provider:'anthropic'", () => {
+    for (const m of SELECTABLE_MODELS) {
+      expect(m.provider).toBe("anthropic");
+    }
+  });
+
+  it("o registry tem exatamente os 5 modelos, na ordem de capacidade (#524)", () => {
     expect(Object.keys(MODEL_REGISTRY)).toEqual(ANTHROPIC_IDS);
   });
 
-  it("ids removidos (#374 + Fable #241) não estão mais no registry", () => {
-    for (const id of [...REMOVED_IDS, "claude-fable-5"]) {
+  it("ids removidos (#374 + Fable 5 #241) não estão mais no registry", () => {
+    for (const id of REMOVED_IDS) {
       expect(id in MODEL_REGISTRY).toBe(false);
     }
   });
@@ -168,11 +241,13 @@ describe("registry — sanidade dos modelos", () => {
 describe("DEFAULT_MODEL_ID — default global (ADR 0021, #203)", () => {
   // SENTINEL: o default da análise está TRAVADO no Sonnet 4.5 (caminho temperature,
   // reproduzível — ADR 0021). Mudar exige atualizar este teste + a row de ai_config.
-  // O provider de prova OpenAI (#231) NÃO move o default.
+  // Nem o provider de prova OpenAI (#231) nem a volta dos adaptive (#524) movem o
+  // default — o default NÃO é o primeiro do registry.
   it("é o Sonnet 4.5 (não mais o Opus 4.8 do ADR 0008, nem o OpenAI de prova)", () => {
     expect(DEFAULT_MODEL_ID).toBe("claude-sonnet-4-5-20250929");
     expect(DEFAULT_MODEL_ID).not.toBe("claude-opus-4-8");
     expect(DEFAULT_MODEL_ID).not.toBe("gpt-5-mini");
+    expect(DEFAULT_MODEL_ID).not.toBe(SELECTABLE_MODELS[0].id);
     expect(MODEL_REGISTRY[DEFAULT_MODEL_ID].provider).toBe("anthropic");
   });
 
