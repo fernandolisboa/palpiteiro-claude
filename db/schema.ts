@@ -790,6 +790,11 @@ export const aiConfig = pgTable("ai_config", {
   // compare de inteiros, sem LLM); divergência com MAX_FIDELITY_ATTEMPTS=1 = degrada sem
   // pagar 2ª síntese (custo-neutro). Reversível.
   enableFidelityValidation: boolean().notNull().default(true),
+  // Kill-switch (#503, ADR 0039 D3): staking quarter-Kelly no lugar das bandas do ADR
+  // 0019. Default ON (padrão sem-gates do dono) mas DORMENTE: o predict só usa Kelly
+  // quando o gate do Kelly (/admin/calibration — CLV ≥ 50 apostas com IC > 0 + guarda
+  // de skill) está "pronto". Até lá, bandas. SET ... = false → bandas sempre.
+  enableKellyStaking: boolean().notNull().default(true),
   updatedByUserId: uuid().references(() => users.id, { onDelete: "set null" }),
   updatedAt: timestamp({ withTimezone: true }).notNull().defaultNow(),
 });

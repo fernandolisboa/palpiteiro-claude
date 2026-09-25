@@ -145,6 +145,12 @@ vi.mock("@/lib/db/queries/users", () => ({
   getPreferredModelId: (...args: unknown[]) => getPreferredModelId(...args),
 }));
 
+// Gate do Kelly (ADR 0039 D3, #503): default fechado → bandas do ADR 0019.
+const isKellyStakingActive = vi.fn();
+vi.mock("@/lib/calibration/kelly-live", () => ({
+  isKellyStakingActive: (...args: unknown[]) => isKellyStakingActive(...args),
+}));
+
 // predict.ts agora despacha via `cartridge.buildPredictionInput` (#173): resolve
 // `getCartridge("over_under")` = a MESMA instância `overUnderCartridge`. Espionar a
 // PROPRIEDADE do cartucho (vi.spyOn(overUnderCartridge, "buildPredictionInput"))
@@ -338,6 +344,7 @@ beforeEach(() => {
   // #227: limpa o cache memoizado do getAbsencesProvider entre testes (isolamento)
   // — rebuilda do env e delega ao SportsDataProvider mockado a cada teste.
   __setAbsencesProviderForTesting(undefined);
+  isKellyStakingActive.mockResolvedValue(false);
   setHappyPath();
 });
 
@@ -899,6 +906,58 @@ describe("predict() — stake congelado na row (#167 / ADR 0019)", () => {
     >;
     const impliedOver = impliedPctOf(2.1, 1.74, "over");
     expect(predictionRow.edgePct).toBe((55 - impliedOver).toFixed(2));
+    expect(predictionRow.stakeUnits).toBe("2.00");
+  });
+
+  it("gate do Kelly pronto → quarter-Kelly no lugar da banda (p 0.55 @ 2.10 → 3u)", async () => {
+    // Mesmo cenário do 2u acima; com o gate pronto: f* = (0.55·2.1 − 1)/1.1 ≈ 0.141
+    // → ¼·14.1 ≈ 3.5 → teto 3u.
+    isKellyStakingActive.mockResolvedValue(true);
+    getLatestFreshSelectionOddsSnapshots.mockResolvedValueOnce(
+      freshSnapshotWith("2.100", "1.740"),
+    );
+    anthropicCreate.mockResolvedValue(
+      toolUseMessage({
+        recommendation: "over",
+        confidence_pct: 55,
+        rationale: "Edge sólido no over.",
+        key_factors: ["alto xG"],
+        minimum_odd: 1.8,
+      }),
+    );
+
+    await predict({ matchId: "m-1", userId: "u-1", isAdmin: false });
+
+    const predictionRow = insertValues.mock.calls[1]?.[0] as Record<
+      string,
+      unknown
+    >;
+    expect(isKellyStakingActive).toHaveBeenCalledTimes(1);
+    expect(predictionRow.stakeUnits).toBe("3.00");
+  });
+
+  it("gate do Kelly pronto → edge menor dá stake menor (p 0.52 @ 2.10 → 2u)", async () => {
+    // f* = (0.52·2.1 − 1)/1.1 ≈ 0.0836 → ¼·8.36 ≈ 2.09 → 2.0u
+    isKellyStakingActive.mockResolvedValue(true);
+    getLatestFreshSelectionOddsSnapshots.mockResolvedValueOnce(
+      freshSnapshotWith("2.100", "1.740"),
+    );
+    anthropicCreate.mockResolvedValue(
+      toolUseMessage({
+        recommendation: "over",
+        confidence_pct: 52,
+        rationale: "Edge no over.",
+        key_factors: ["alto xG"],
+        minimum_odd: 1.8,
+      }),
+    );
+
+    await predict({ matchId: "m-1", userId: "u-1", isAdmin: false });
+
+    const predictionRow = insertValues.mock.calls[1]?.[0] as Record<
+      string,
+      unknown
+    >;
     expect(predictionRow.stakeUnits).toBe("2.00");
   });
 

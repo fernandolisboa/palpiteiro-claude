@@ -18,6 +18,33 @@ export function computeStakeUnits(
   return 1;
 }
 
+// Quarter-Kelly (ADR 0039 D3, #503) — substitui as bandas QUANDO o gate do Kelly
+// está pronto (o caller decide; aqui é só a fórmula, pura). f* = (p·o − 1)/(o − 1)
+// sobre uma banca nominal de 100u; stake = ¼·f*·100 arredondado a 0.5u, clamp
+// [0.5, 3] (o teto de 3u do ADR 0019 continua). `pModel` em [0,1], `odd` decimal > 1.
+// Entrada inválida → null (o caller cai nas bandas; nunca stake NaN).
+export const KELLY_FRACTION = 0.25;
+export const KELLY_MIN_UNITS = 0.5;
+export const KELLY_MAX_UNITS = 3;
+
+export function computeKellyStakeUnits(
+  pModel: number,
+  odd: number,
+): number | null {
+  if (
+    !Number.isFinite(pModel) ||
+    !Number.isFinite(odd) ||
+    pModel <= 0 ||
+    pModel >= 1 ||
+    odd <= 1
+  ) {
+    return null;
+  }
+  const fStar = (pModel * odd - 1) / (odd - 1);
+  const units = Math.round(KELLY_FRACTION * fStar * 100 * 2) / 2;
+  return Math.min(KELLY_MAX_UNITS, Math.max(KELLY_MIN_UNITS, units));
+}
+
 // Gate de edge determinístico (ADR 0038): a recomendação do LLM tem edge PERSISTIDO
 // abaixo do piso do mercado? true → o predict rebaixa pra "pass" (a disciplina de
 // `MIN_EDGE_PP` deixa de ser só compliance-de-prompt e vira invariante de código,
