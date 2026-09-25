@@ -3,6 +3,7 @@ import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import {
   evaluateQuotaLevel,
   extractQuota,
+  getLastQuota,
   logCall,
 } from "@/lib/providers/http/quota-logger";
 
@@ -230,5 +231,49 @@ describe("logCall", () => {
     expect(payload.cache_hit).toBe(true);
     expect(payload.quota_daily_remaining).toBeUndefined();
     expect(payload.level).toBe("ok");
+  });
+});
+
+describe("getLastQuota", () => {
+  afterEach(() => {
+    vi.useRealTimers();
+    vi.restoreAllMocks();
+  });
+
+  it("guarda a quota com o instante da leitura (observedAt, #509); cache hit não sobrescreve", () => {
+    vi.spyOn(console, "log").mockImplementation(() => {});
+    vi.useFakeTimers();
+    vi.setSystemTime(new Date("2026-09-20T12:00:00Z"));
+    const quota = {
+      dailyRemaining: null,
+      dailyLimit: null,
+      perMinuteRemaining: null,
+      monthlyRemaining: 400,
+      monthlyUsed: 100,
+      monthlyLimit: 500,
+    };
+    logCall({
+      provider: "test-observed",
+      endpoint: "/x",
+      cache_hit: false,
+      latency_ms: 1,
+      status_code: 200,
+      attempt: 1,
+      quota,
+    });
+    vi.setSystemTime(new Date("2026-09-20T13:00:00Z"));
+    logCall({
+      provider: "test-observed",
+      endpoint: "/x",
+      cache_hit: true,
+      latency_ms: 1,
+      status_code: 200,
+      attempt: 1,
+      quota: { ...quota, monthlyRemaining: 1 },
+    });
+    expect(getLastQuota("test-observed")).toEqual({
+      ...quota,
+      observedAt: new Date("2026-09-20T12:00:00Z"),
+    });
   });
 });

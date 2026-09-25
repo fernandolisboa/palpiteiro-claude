@@ -67,9 +67,14 @@ export function extractQuota(
 // Permite a um caller (ex.: o cron de CLV, #180) ler o crédito mensal restante após
 // seus fetches SEM mudar a assinatura de cada função de provider — a quota já flui
 // por aqui. Process-memory (reseta no cold start); é telemetria de run, não estado.
-const lastQuotaByProvider = new Map<string, ExtractedQuota>();
+// `observedAt` = quando o header foi lido: um run sem fetch real (tudo cache-hit) pode
+// devolver a quota de uma invocação anterior da mesma lambda quente, e quem a persiste
+// (provider_quota, #509) precisa do instante real da leitura, não do fim do run.
+export type ObservedQuota = ExtractedQuota & { observedAt: Date };
 
-export function getLastQuota(provider: string): ExtractedQuota | null {
+const lastQuotaByProvider = new Map<string, ObservedQuota>();
+
+export function getLastQuota(provider: string): ObservedQuota | null {
   return lastQuotaByProvider.get(provider) ?? null;
 }
 
@@ -113,7 +118,10 @@ export function logCall(fields: CallLogFields): void {
 
   // Cache hits never expose quota (the request was not sent).
   if (!fields.cache_hit && quota) {
-    lastQuotaByProvider.set(fields.provider, quota);
+    lastQuotaByProvider.set(fields.provider, {
+      ...quota,
+      observedAt: new Date(),
+    });
     base.quota_daily_remaining = quota.dailyRemaining;
     base.quota_daily_limit = quota.dailyLimit;
     base.quota_perminute_remaining = quota.perMinuteRemaining;

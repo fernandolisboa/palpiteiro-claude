@@ -10,7 +10,7 @@ import {
 } from "@/lib/providers/http/client";
 import {
   getLastQuota,
-  type ExtractedQuota,
+  type ObservedQuota,
 } from "@/lib/providers/http/quota-logger";
 import {
   OddsEnvelopeSchema,
@@ -49,7 +49,7 @@ const apiFootballOddsClient = createProviderClient({
  * se nenhum fetch real rodou (cold start / só cache hits). Espelha
  * `getLastOddsApiQuota` (The Odds API) pro monitoramento de egress do AC #5.
  */
-export function getLastApiFootballOddsQuota(): ExtractedQuota | null {
+export function getLastApiFootballOddsQuota(): ObservedQuota | null {
   return getLastQuota("api-football-odds");
 }
 

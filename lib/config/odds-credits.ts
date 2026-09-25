@@ -39,3 +39,34 @@ export function estimateMonthlyOddsCredits(
     0
   );
 }
+
+/**
+ * Dias do mês corrente em UTC (o reset mensal da The Odds API não é documentado por
+ * fuso; UTC mantém o cálculo determinístico entre Vercel e dev).
+ */
+export function daysInUtcMonth(now: Date): number {
+  return new Date(
+    Date.UTC(now.getUTCFullYear(), now.getUTCMonth() + 1, 0)
+  ).getUTCDate();
+}
+
+/**
+ * Dias restantes no mês em UTC, CONTANDO hoje (o prewarm de hoje ainda pode rodar):
+ * dia 1 → mês inteiro; último dia → 1.
+ */
+export function daysLeftInUtcMonth(now: Date): number {
+  return daysInUtcMonth(now) - now.getUTCDate() + 1;
+}
+
+/**
+ * Gasto projetado de créditos até o fim do mês (#509): soma das estimativas mensais
+ * das ligas ativas × (dias restantes / dias do mês), em UTC, arredondado pra cima
+ * (é comparado com o saldo restante — melhor avisar cedo que tarde).
+ */
+export function projectRemainingMonthOddsCredits(
+  activeLeagues: readonly SupportedLeague[],
+  now: Date
+): number {
+  const monthly = estimateMonthlyOddsCredits(activeLeagues);
+  return Math.ceil((monthly * daysLeftInUtcMonth(now)) / daysInUtcMonth(now));
+}

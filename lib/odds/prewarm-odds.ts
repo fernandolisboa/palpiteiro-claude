@@ -2,6 +2,7 @@ import { getActiveLeagues } from "@/lib/db/queries/league-settings";
 import { getMatchesInLeagueWindow } from "@/lib/db/queries/matches";
 import { ensureOddsSnapshotsFresh } from "@/lib/odds/fetch-and-snapshot";
 import { PAGE_LIVE_MARKETS } from "@/lib/odds/live-card-markets";
+import { persistOddsApiQuota } from "@/lib/odds/persist-odds-api-quota";
 import { getLastOddsApiQuota } from "@/lib/providers/odds-api";
 import type { SupportedLeague } from "@/lib/providers/sports-data/leagues";
 
@@ -107,5 +108,7 @@ export async function prewarmOdds(
       ...summary,
     }),
   );
+  // Saldo real pro /admin/leagues (#509). Best-effort, nunca lança.
+  await persistOddsApiQuota(quota, "prewarm_odds");
   return summary;
 }

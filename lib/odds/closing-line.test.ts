@@ -9,11 +9,15 @@ vi.mock("@/lib/odds/fetch-and-snapshot", () => ({
   ensureOddsSnapshotsFresh: vi.fn(),
 }));
 vi.mock("@/lib/providers/odds-api", () => ({ getLastOddsApiQuota: vi.fn() }));
+vi.mock("@/lib/odds/persist-odds-api-quota", () => ({
+  persistOddsApiQuota: vi.fn(),
+}));
 
 import { getEnableClvCapture } from "@/lib/db/queries/ai-config";
 import { getNonPassPredictionsNearKickoff } from "@/lib/db/queries/predictions";
 import type { DbMatch } from "@/lib/db/queries/predictions";
 import { ensureOddsSnapshotsFresh } from "@/lib/odds/fetch-and-snapshot";
+import { persistOddsApiQuota } from "@/lib/odds/persist-odds-api-quota";
 import { getLastOddsApiQuota } from "@/lib/providers/odds-api";
 import { captureClosingLines } from "@/lib/odds/closing-line";
 
@@ -21,6 +25,7 @@ const enable = vi.mocked(getEnableClvCapture);
 const candidates = vi.mocked(getNonPassPredictionsNearKickoff);
 const ensure = vi.mocked(ensureOddsSnapshotsFresh);
 const quota = vi.mocked(getLastOddsApiQuota);
+const persistQuota = vi.mocked(persistOddsApiQuota);
 
 function match(id: string): DbMatch {
   return {
@@ -69,6 +74,7 @@ describe("captureClosingLines — flag ON", () => {
       dailyRemaining: null,
       dailyLimit: null,
       perMinuteRemaining: null,
+      observedAt: new Date("2026-06-15T18:30:00Z"),
     });
 
     const s = await captureClosingLines();
@@ -78,6 +84,11 @@ describe("captureClosingLines — flag ON", () => {
     expect(ensure).toHaveBeenCalledTimes(2);
     expect(s.quotaMonthlyRemaining).toBe(420);
     expect(s.quotaMonthlyUsed).toBe(80);
+    // #509: a quota lida no run é persistida pro /admin/leagues.
+    expect(persistQuota).toHaveBeenCalledWith(
+      expect.objectContaining({ monthlyRemaining: 420, monthlyUsed: 80 }),
+      "capture_closing_odds",
+    );
   });
 
   it("marketKey sem descriptor → skippedNoDescriptor, sem fetch", async () => {
