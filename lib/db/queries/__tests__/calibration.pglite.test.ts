@@ -58,6 +58,7 @@ async function seedOU(args: {
   withOutcome?: boolean;
   result?: "won" | "lost" | "void";
   recommendation?: "over" | "pass";
+  modelVersion?: string;
 }): Promise<void> {
   const [m] = await realDb
     .insert(schema.matches)
@@ -82,7 +83,7 @@ async function seedOU(args: {
       confidencePct: "55.00",
       rationale: "r",
       keyFactors: ["f"],
-      modelVersion: "claude-sonnet-4-5-20250929",
+      modelVersion: args.modelVersion ?? "claude-sonnet-4-5-20250929",
       promptVersion: args.promptVersion,
       marketParams: { line: args.line },
     })
@@ -205,6 +206,29 @@ describe("getOverUnderCalibrationRows", () => {
     expect(rows[0].isBet).toBe(true);
     // de-vig(1.90, 1.95): (1/1.9)/((1/1.9)+(1/1.95)) ≈ 0.5065
     expect(rows[0].marketPOver).toBeCloseTo(0.5065, 3);
+    // Sem tag de motor no modelVersion → llm (ADR 0041 §5, #513).
+    expect(rows[0].engine).toBe("llm");
+    expect(rows[0].engineConfig).toBeNull();
+  });
+
+  it("lê o motor code_jev + tags do modelVersion", async () => {
+    await seedOU({
+      promptVersion: "narrator_v1",
+      modelVersion:
+        "claude-sonnet-4-5-20250929;engine=code_jev;lambda=heuristic;judg=jev_judgments_v1;w=judgment_weights_v1",
+      line: 2.5,
+      totalGoals: 3,
+      overModelPct: 58,
+      overOdd: "1.900",
+      underOdd: "1.950",
+    });
+    const rows = await getOverUnderCalibrationRows();
+    expect(rows).toHaveLength(1);
+    expect(rows[0].engine).toBe("code_jev");
+    expect(rows[0].engineConfig).toBe(
+      "lambda=heuristic;judg=jev_judgments_v1;w=judgment_weights_v1",
+    );
+    expect(rows[0].promptVersion).toBe("narrator_v1");
   });
 
   it("overHappened = totalGoals > line (total 2, line 2.5 → 0)", async () => {
