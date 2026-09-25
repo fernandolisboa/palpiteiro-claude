@@ -26,7 +26,15 @@ export function AdminFlagControl({ flag, current }: Props) {
   >(updateAdminFlag, null);
 
   return (
-    <form action={action} className="flex shrink-0 flex-col items-end gap-1">
+    // key = valor persistido: o React 19 reseta o <form> depois de uma action e
+    // volta os campos não controlados pro defaultValue da MONTAGEM (o do select não
+    // acompanha o prop). Remontar quando o servidor devolve o valor novo faz o reset
+    // cair no valor salvo em vez do antigo.
+    <form
+      key={String(current)}
+      action={action}
+      className="flex shrink-0 flex-col items-end gap-1"
+    >
       <input type="hidden" name="key" value={flag.key} />
       {flag.kind === "boolean" ? (
         <>
