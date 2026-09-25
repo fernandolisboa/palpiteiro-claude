@@ -11,6 +11,7 @@ vi.mock("@/lib/ai/anthropic", () => ({
 
 import {
   type ApiModelInfo,
+  LIST_REQUEST_OPTIONS,
   listApiModels,
   resetApiModelsCacheForTests,
   unregisteredApiModels,
@@ -146,6 +147,36 @@ describe("listApiModels — cache + falha silenciosa", () => {
     });
     expect(await listApiModels()).toEqual([]);
     expect(await listApiModels()).toEqual([]);
+    expect(modelsList).toHaveBeenCalledTimes(1);
+  });
+
+  it("cada request da listagem vai com timeout de 5s e sem retry (#524 review)", async () => {
+    modelsList.mockImplementation(() => page(["claude-a"]));
+    await listApiModels();
+    expect(modelsList).toHaveBeenCalledWith(
+      { limit: 100 },
+      { timeout: 5_000, maxRetries: 0 },
+    );
+    expect(LIST_REQUEST_OPTIONS).toEqual({ timeout: 5_000, maxRetries: 0 });
+  });
+
+  it("loads concorrentes com o cache frio compartilham UMA listagem em andamento", async () => {
+    let release!: () => void;
+    const gate = new Promise<void>((r) => {
+      release = r;
+    });
+    modelsList.mockImplementation(async function* () {
+      await gate;
+      yield* page(["claude-a"]);
+    });
+    const a = listApiModels();
+    const b = listApiModels();
+    release();
+    const [ra, rb] = await Promise.all([a, b]);
+    expect(modelsList).toHaveBeenCalledTimes(1);
+    expect(ra).toBe(rb);
+    // Terminada, a próxima leitura vem do cache (sem nova chamada).
+    await listApiModels();
     expect(modelsList).toHaveBeenCalledTimes(1);
   });
 });

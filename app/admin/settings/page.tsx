@@ -1,10 +1,8 @@
+import { Suspense } from "react";
+
 import { DefinitionRow } from "@/components/admin/definition-row";
 import { PageHeading } from "@/components/admin/page-heading";
-import { MODEL_REGISTRY, SELECTABLE_MODELS } from "@/lib/ai/models";
-import {
-  listApiModels,
-  unregisteredApiModels,
-} from "@/lib/ai/providers/anthropic/models-catalog";
+import { SELECTABLE_MODELS } from "@/lib/ai/models";
 import { ADMIN_FLAGS, type AdminFlagDef } from "@/lib/config/admin-flags";
 import {
   getAdminFlagValues,
@@ -15,22 +13,17 @@ import {
 import { AdminFlagControl } from "./admin-flag-control";
 import { DefaultModelForm } from "./default-model-form";
 import { GenerationParamsForm } from "./generation-params-form";
+import { UnregisteredModelsNote } from "./unregistered-models-note";
 
 export const dynamic = "force-dynamic";
 
 // Gateado por app/admin/layout.tsx (role === "admin" → notFound pra outros).
 export default async function AdminSettingsPage() {
-  const [current, genParams, flagValues, apiModels] = await Promise.all([
+  const [current, genParams, flagValues] = await Promise.all([
     getDefaultModelId(),
     getGenerationParams(),
     getAdminFlagValues(),
-    // Falha em silêncio (sem chave/erro → []) e cacheado 1h: nunca derruba a página.
-    listApiModels(),
   ]);
-  const unregistered = unregisteredApiModels(
-    apiModels,
-    Object.keys(MODEL_REGISTRY),
-  );
 
   return (
     <div className="min-h-screen bg-background text-foreground">
@@ -75,25 +68,11 @@ export default async function AdminSettingsPage() {
               />
             ))}
           </div>
-          {unregistered.length > 0 && (
-            <div
-              role="note"
-              className="mt-3 text-body-sm text-muted-foreground"
-            >
-              <p>
-                Modelos disponíveis na API ainda sem cadastro (a API não informa
-                preço; cadastro manual em lib/ai/models.ts):
-              </p>
-              <ul className="mt-1 flex flex-col gap-0.5">
-                {unregistered.map((m) => (
-                  <li key={m.id} className="font-mono text-eyebrow">
-                    {m.id}
-                    {m.displayName ? ` · ${m.displayName}` : ""}
-                  </li>
-                ))}
-              </ul>
-            </div>
-          )}
+          {/* Fora do caminho crítico: a listagem da API (#524) faz streaming
+              depois, sem segurar o resto da página. */}
+          <Suspense fallback={null}>
+            <UnregisteredModelsNote />
+          </Suspense>
         </section>
 
         <section>

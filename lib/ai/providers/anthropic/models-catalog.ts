@@ -64,26 +64,43 @@ export function unregisteredApiModels(
 // API a cada load da página quando ela está fora, mas se recupera logo).
 const SUCCESS_TTL_MS = 60 * 60 * 1000;
 const FAILURE_TTL_MS = 5 * 60 * 1000;
+// Opções de CADA request da listagem (#524 review): 5s e sem retry — o aviso é
+// informativo e não pode segurar a página nos 60s × 3 tentativas do client.
+export const LIST_REQUEST_OPTIONS = { timeout: 5_000, maxRetries: 0 } as const;
 let cache: { value: ApiModelInfo[]; expiresAt: number } | undefined;
+// Listagem em andamento: loads concorrentes com o cache frio esperam a MESMA
+// chamada em vez de abrir uma cada.
+let inFlight: Promise<ApiModelInfo[]> | undefined;
 
 // Lista os modelos da API. FALHA EM SILÊNCIO: sem ANTHROPIC_API_KEY ou com erro
-// (rede, 4xx/5xx), devolve [] e o aviso some. É informativo; nunca derruba a página.
+// (rede, timeout, 4xx/5xx), devolve [] e o aviso some. É informativo; nunca derruba
+// a página (que ainda o renderiza dentro de um <Suspense>, fora do caminho crítico).
 export async function listApiModels(): Promise<ApiModelInfo[]> {
-  const now = Date.now();
-  if (cache && cache.expiresAt > now) return cache.value;
+  if (cache && cache.expiresAt > Date.now()) return cache.value;
   if (!hasKey()) return [];
+  if (!inFlight) {
+    inFlight = fetchApiModels().finally(() => {
+      inFlight = undefined;
+    });
+  }
+  return inFlight;
+}
 
+async function fetchApiModels(): Promise<ApiModelInfo[]> {
   try {
     const models: ApiModelInfo[] = [];
-    // O SDK pagina sozinho no for-await.
-    for await (const m of getAnthropicClient().models.list({ limit: 100 })) {
+    // O SDK pagina sozinho no for-await; as páginas seguintes reusam as opções.
+    for await (const m of getAnthropicClient().models.list(
+      { limit: 100 },
+      LIST_REQUEST_OPTIONS,
+    )) {
       models.push({
         id: m.id,
         displayName: m.display_name,
         createdAt: m.created_at,
       });
     }
-    cache = { value: models, expiresAt: now + SUCCESS_TTL_MS };
+    cache = { value: models, expiresAt: Date.now() + SUCCESS_TTL_MS };
     return models;
   } catch (err) {
     console.warn(
@@ -92,7 +109,7 @@ export async function listApiModels(): Promise<ApiModelInfo[]> {
         error: err instanceof Error ? err.message : String(err),
       }),
     );
-    cache = { value: [], expiresAt: now + FAILURE_TTL_MS };
+    cache = { value: [], expiresAt: Date.now() + FAILURE_TTL_MS };
     return [];
   }
 }
@@ -100,4 +117,5 @@ export async function listApiModels(): Promise<ApiModelInfo[]> {
 // Só pros testes: zera o cache do módulo entre casos.
 export function resetApiModelsCacheForTests(): void {
   cache = undefined;
+  inFlight = undefined;
 }
