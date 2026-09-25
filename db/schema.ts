@@ -809,3 +809,15 @@ export const leagueSettings = pgTable("league_settings", {
   updatedByUserId: uuid().references(() => users.id, { onDelete: "set null" }),
   updatedAt: timestamp({ withTimezone: true }).notNull().defaultNow(),
 });
+
+// Último saldo mensal visto de um provider com cota (#509): hoje só a The Odds API
+// (headers x-requests-used / x-requests-remaining). Gravado no fim do prewarm de odds e
+// da captura de closing line, SEM call extra; lido pelo /admin/leagues. Uma row por
+// provider; só sobrescreve com leitura mais nova. Ler/escrever via
+// lib/db/queries/provider-quota.ts.
+export const providerQuota = pgTable("provider_quota", {
+  provider: text().primaryKey(),
+  monthlyUsed: integer(),
+  monthlyRemaining: integer(),
+  observedAt: timestamp({ withTimezone: true }).notNull(),
+});

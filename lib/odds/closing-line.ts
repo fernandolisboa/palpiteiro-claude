@@ -6,6 +6,7 @@ import {
   getDescriptor,
   type MarketDescriptor,
 } from "@/lib/odds/market-descriptor";
+import { persistOddsApiQuota } from "@/lib/odds/persist-odds-api-quota";
 import { getLastOddsApiQuota } from "@/lib/providers/odds-api";
 
 // Forward-capture da closing line (#180). Nenhum provider dá odds históricas de
@@ -109,5 +110,7 @@ export async function captureClosingLines(
       ...summary,
     }),
   );
+  // Saldo real pro /admin/leagues (#509). Best-effort, nunca lança.
+  await persistOddsApiQuota(quota, "capture_closing_odds");
   return summary;
 }
