@@ -12,11 +12,12 @@ INSERT INTO "league_settings" ("league", "active") VALUES
 	('brasileirao_a', true),
 	('champions_league', true)
 ON CONFLICT ("league") DO NOTHING;--> statement-breakpoint
--- premier_league/la_liga entraram no enum na 0045. O Postgres recusa usar um valor de enum
--- adicionado na MESMA transação (SQLSTATE 55P04); se um migrator aplicar 0045+0046 numa
--- transação só num DB novo, o seed dessas duas é pulado (nascem desligadas, liga-se no
--- /admin/leagues) em vez de derrubar a migration. Em produção/preview a 0045 já foi
--- commitada num deploy anterior e o seed entra normalmente.
+-- premier_league/la_liga entraram no enum na 0045. O migrator do Drizzle aplica todas as
+-- migrations pendentes numa transação só, e o Postgres recusa usar um valor de enum adicionado
+-- na mesma transação a um tipo que já existia (SQLSTATE 55P04). Isso só acontece num DB
+-- EXISTENTE com 0045 e 0046 pendentes juntas (num DB novo o tipo nasce na mesma transação e o
+-- seed entra). Aí o seed das duas é pulado (nascem desligadas; liga-se no /admin/leagues) em
+-- vez de derrubar o deploy. Produção aplicou a 0045 no deploy do #507 (35855a2, READY).
 DO $$
 BEGIN
 	INSERT INTO "league_settings" ("league", "active") VALUES
