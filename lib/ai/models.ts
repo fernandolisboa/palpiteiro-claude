@@ -10,10 +10,12 @@
 // deste campo.
 //
 // #524: os adaptive VOLTARAM (Fable 5.1 admin-only; Opus 5.5 e Sonnet 5
-// selecionáveis). No motor "Código + JEV" (ADR 0041) a DECISÃO é código
-// determinístico e o LLM só narra, então o motivo do ADR 0021 pra manter só modelos
-// `temperature` não vale lá; no motor `llm` eles seguem não-reproduzíveis — o admin
-// aceita isso ao escolhê-los. O default global continua Sonnet 4.5 (temperature).
+// selecionáveis por QUALQUER usuário). No motor "Código + JEV" (ADR 0041) a DECISÃO
+// é código determinístico e o LLM só narra, então o motivo do ADR 0021 pra manter só
+// modelos `temperature` não vale lá. No motor `llm` (o default) eles seguem
+// não-reproduzíveis, inclusive pra usuário comum que escolher Opus 5.5 / Sonnet 5 —
+// trade-off aceito na emenda do ADR 0021: o default global continua Sonnet 4.5
+// (temperature) e o Yield segue segmentável por `predictions.modelVersion`.
 //
 // O registry segue CURADO à mão: a Models API da Anthropic (GET /v1/models) não
 // devolve pricing, então um modelo novo só entra aqui com o preço oficial. O
