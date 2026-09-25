@@ -13,8 +13,10 @@ import type { NarratorDecision } from "./types";
 
 export const PERCENT_TOLERANCE_PP = 1;
 
+// Borda esquerda + número inteiro: sem ela, "1058,4%" era lido pelo sufixo "058,4%"
+// (= 58,4, um valor permitido) e passava.
 const PERCENT_RE =
-  /(\d{1,3}(?:[.,]\d+)?)\s*(?:%|p\.\s?p\.|pp(?![\p{L}\d])|pontos percentuais)/giu;
+  /(?<![\d.,])(\d+(?:[.,]\d+)?)\s*(?:%|p\.\s?p\.|pp(?![\p{L}\d])|pontos percentuais)/giu;
 
 // Verbos/substantivos de recomendação seguidos (só por palavras de função) do
 // rótulo de uma seleção: "recomendamos o under", "a aposta é no over". Sem
@@ -102,6 +104,12 @@ function allowedPercents(d: NarratorDecision): number[] {
     out.push(f.modelProbPct);
     if (f.impliedPct !== null) out.push(f.impliedPct);
     if (f.edgePct !== null) out.push(Math.abs(f.edgePct));
+    // Mercado de 2 vias (over/under, ambas marcam): o complemento é a mesma
+    // informação vista do outro lado ("58% over" ⇔ "42% under") — citação fiel.
+    if (d.selectionKeys.length === 2) {
+      out.push(100 - f.modelProbPct);
+      if (f.impliedPct !== null) out.push(100 - f.impliedPct);
+    }
   }
   return out;
 }
