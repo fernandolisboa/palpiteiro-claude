@@ -31,7 +31,11 @@ export function DefaultModelForm({ current }: Props) {
   >(updateDefaultModel, null);
 
   return (
-    <form action={action} className="flex flex-col gap-4">
+    // key = valor persistido: o React 19 reseta o <form> depois de uma action e
+    // volta os campos não controlados pro defaultValue da MONTAGEM (o do select não
+    // acompanha o prop). Remontar quando o servidor devolve o valor novo faz o reset
+    // cair no valor salvo em vez do antigo.
+    <form key={current} action={action} className="flex flex-col gap-4">
       <label className="flex flex-col gap-1">
         <span className="font-mono text-eyebrow uppercase tracking-label text-muted-foreground">
           modelo padrão global

@@ -34,7 +34,15 @@ export function GenerationParamsForm({ current }: Props) {
   const toggleId = useId();
 
   return (
-    <form action={action} className="flex flex-col gap-4">
+    // key = valor persistido: o React 19 reseta o <form> depois de uma action e
+    // volta os campos não controlados pro defaultValue da MONTAGEM (o do select não
+    // acompanha o prop). Remontar quando o servidor devolve o valor novo faz o reset
+    // cair no valor salvo em vez do antigo.
+    <form
+      key={`${current.maxTokens}|${current.effort}|${current.temperature}`}
+      action={action}
+      className="flex flex-col gap-4"
+    >
       <div
         role="note"
         className="rounded-md border border-warn-border bg-warn-soft px-4 py-3 text-body-sm text-warn-fg"

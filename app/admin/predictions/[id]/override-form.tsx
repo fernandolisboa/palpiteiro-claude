@@ -35,7 +35,11 @@ export function OverrideForm({ predictionId, defaultResult }: Props) {
   >(overridePredictionOutcome, null);
 
   return (
-    <form action={action} className="flex flex-col gap-4">
+    // key = valor persistido: o React 19 reseta o <form> depois de uma action e
+    // volta os campos não controlados pro defaultValue da MONTAGEM (o do select não
+    // acompanha o prop). Remontar quando o servidor devolve o valor novo faz o reset
+    // cair no valor salvo em vez do antigo.
+    <form key={defaultResult} action={action} className="flex flex-col gap-4">
       <input type="hidden" name="predictionId" value={predictionId} />
 
       <div className="flex gap-4">
