@@ -1,3 +1,4 @@
+import Link from "next/link";
 import { redirect } from "next/navigation";
 
 import { BackLink } from "@/components/back-link";
@@ -6,6 +7,10 @@ import { MODEL_REGISTRY, modelsForAudience } from "@/lib/ai/models";
 import { getDefaultModelId } from "@/lib/db/queries/ai-config";
 import { listAuthenticatorsByUserId } from "@/lib/db/queries/authenticators";
 import { getUserProfile } from "@/lib/db/queries/users";
+import {
+  DATA_REQUEST_RESPONSE_DAYS,
+  LEGAL_CONTACT_EMAIL,
+} from "@/lib/legal/controller";
 
 import { PasskeysSection } from "./passkeys-section";
 import { PreferredModelForm } from "./preferred-model-form";
@@ -76,6 +81,37 @@ export default async function PerfilPage() {
             login sem senha · biometria ou PIN do dispositivo
           </p>
           <PasskeysSection authenticators={authenticators} />
+        </div>
+
+        {/* Caminho visível pros direitos do titular (LGPD art. 18) enquanto a exclusão
+            self-serve (ADR 0046) não existe: o pedido sai do e-mail da conta, o que já
+            confirma a titularidade. */}
+        <div className="border-border mt-10 border-t pt-8">
+          <h2 className="text-display-sm font-medium tracking-tight">
+            Seus dados
+          </h2>
+          <p className="text-muted-foreground pb-4 font-mono text-meta">
+            cópia · correção · exclusão da conta · LGPD
+          </p>
+          <p className="text-body-sm leading-relaxed tracking-tight text-muted-foreground">
+            Para pedir uma cópia dos seus dados ou excluir sua conta, escreva do e-mail
+            desta conta para{" "}
+            <a
+              href={`mailto:${LEGAL_CONTACT_EMAIL}?subject=${encodeURIComponent("Meus dados no Palpiteiro")}`}
+              className="text-foreground rounded-sm underline underline-offset-4 focus-visible:outline-none focus-visible:ring-[3px] focus-visible:ring-ring/50"
+            >
+              {LEGAL_CONTACT_EMAIL}
+            </a>
+            . Respondemos em até {DATA_REQUEST_RESPONSE_DAYS} dias. O que é apagado e o
+            que fica anonimizado está na{" "}
+            <Link
+              href="/privacidade"
+              className="text-foreground rounded-sm underline underline-offset-4 focus-visible:outline-none focus-visible:ring-[3px] focus-visible:ring-ring/50"
+            >
+              Política de Privacidade
+            </Link>
+            .
+          </p>
         </div>
       </div>
     </div>

@@ -3,13 +3,16 @@ import Link from "next/link";
 
 import { ThemeToggle } from "@/components/theme-toggle";
 import { Wordmark } from "@/components/wordmark";
+import { LEGAL_CONTACT_EMAIL, controllerIdentification } from "@/lib/legal/controller";
 
 // Rota PÚBLICA estática (sem auth, sem DB) — precisa ser lida ANTES do login (linkada
-// no /signin e no footer). Liberada no matcher do middleware (`termos$`). Conteúdo de
-// docs/ops/05-legal-compliance.md §5. Versão forward-only: bump a data ao mudar o texto.
+// no /signin e no footer). Liberada no matcher do middleware (`termos$`). Conteúdo
+// revisado em docs/reports/11-revisao-legal.md; aceite explícito (clickwrap) no ADR 0047;
+// envelope não-operador / sem vínculo com casa de apostas no ADR 0048. Versão
+// forward-only: bump a data ao mudar o texto material.
 export const dynamic = "force-static";
 
-const LAST_UPDATED = "4 de julho de 2026";
+const LAST_UPDATED = "24 de setembro de 2026";
 
 export const metadata: Metadata = {
   title: "Termos de Uso",
@@ -17,6 +20,13 @@ export const metadata: Metadata = {
     "Termos de Uso do Palpiteiro — ferramenta informativa de análise de futebol. Não é casa de apostas, não aceita dinheiro e não garante resultado.",
   alternates: { canonical: "/termos" },
 };
+
+const linkClass =
+  "rounded-sm text-foreground underline underline-offset-4 focus-visible:outline-none focus-visible:ring-[3px] focus-visible:ring-ring/50";
+
+function Strong({ children }: { children: React.ReactNode }) {
+  return <strong className="font-medium text-foreground">{children}</strong>;
+}
 
 export default function TermosPage() {
   return (
@@ -43,14 +53,14 @@ export default function TermosPage() {
           <section className="flex flex-col gap-3">
             <h2 className="text-label font-medium text-foreground">1. O que o Palpiteiro é</h2>
             <p>
-              O Palpiteiro é uma <strong className="font-medium text-foreground">ferramenta
-              informativa e educacional</strong> de análise de partidas de futebol. Usa
-              inteligência artificial e dados públicos (estatísticas, cotações de referência)
-              para gerar palpites e análises por mercado, com o racional por trás de cada um.
+              O Palpiteiro é uma <Strong>ferramenta informativa e educacional</Strong> de análise
+              de partidas de futebol. Usa inteligência artificial e dados públicos (estatísticas,
+              cotações de referência, notícias) para gerar palpites e análises por mercado, com o
+              racional por trás de cada um.
             </p>
             <p>
-              O Palpiteiro <strong className="font-medium text-foreground">não é uma casa de
-              apostas</strong> e não realiza nenhuma das atividades de um operador:
+              O Palpiteiro <Strong>não é uma casa de apostas</Strong> e não realiza nenhuma das
+              atividades de um operador:
             </p>
             <ul className="ml-4 flex list-disc flex-col gap-1.5">
               <li>não aceita depósito, saldo ou dinheiro real;</li>
@@ -59,68 +69,100 @@ export default function TermosPage() {
               <li>não garante resultado, acerto ou lucro.</li>
             </ul>
             <p>
-              Qualquer aposta é feita por você, por sua conta, fora do Palpiteiro, numa casa
-              autorizada. O valor mostrado no app (yield, retorno) é sempre{" "}
-              <strong className="font-medium text-foreground">hipotético</strong>, para fins de
-              acompanhamento.
+              Qualquer aposta é feita por você, por sua conta, fora do Palpiteiro. Se decidir
+              apostar, use apenas casas autorizadas pelo Ministério da Fazenda (sites com final{" "}
+              <Strong>.bet.br</Strong>). O dinheiro mostrado no app (unidades, yield, retorno) é
+              sempre <Strong>hipotético</Strong>, para fins de acompanhamento.
             </p>
           </section>
 
           <section className="flex flex-col gap-3">
-            <h2 className="text-label font-medium text-foreground">2. Sem garantia de resultado</h2>
+            <h2 className="text-label font-medium text-foreground">2. Quem oferece o serviço</h2>
+            <p>
+              O responsável pelo Palpiteiro é {controllerIdentification()}. O serviço é gratuito: não
+              há cobrança, anúncio ou comissão. Contato:{" "}
+              <a href={`mailto:${LEGAL_CONTACT_EMAIL}`} className={linkClass}>
+                {LEGAL_CONTACT_EMAIL}
+              </a>
+              .
+            </p>
+          </section>
+
+          <section className="flex flex-col gap-3">
+            <h2 className="text-label font-medium text-foreground">3. Aceite</h2>
+            <p>
+              Para criar a conta, você marca a caixa em que declara ter 18 anos ou mais e aceita
+              estes Termos. Guardamos a data desse aceite. Se não concordar com estes Termos, não
+              use o Palpiteiro. O tratamento dos seus dados está descrito na{" "}
+              <Link href="/privacidade" className={linkClass}>
+                Política de Privacidade
+              </Link>
+              .
+            </p>
+          </section>
+
+          <section className="flex flex-col gap-3">
+            <h2 className="text-label font-medium text-foreground">4. Sem garantia de resultado</h2>
             <p>
               As análises e palpites são opinião analítica baseada em dados e IA. Podem estar
               erradas. Desempenho passado não garante desempenho futuro. Você é o único
               responsável por qualquer decisão de aposta e assume integralmente o risco.{" "}
-              <strong className="font-medium text-foreground">Aposta não é investimento.</strong>
+              <Strong>Aposta não é investimento</Strong> nem fonte de renda.
             </p>
           </section>
 
           <section className="flex flex-col gap-3">
-            <h2 className="text-label font-medium text-foreground">3. Limitação de responsabilidade</h2>
+            <h2 className="text-label font-medium text-foreground">5. Sem vínculo com casas de apostas</h2>
             <p>
-              O Palpiteiro não se responsabiliza por perdas, danos ou prejuízos decorrentes de
-              apostas feitas por você fora do app, nem por indisponibilidades, erros de dados de
-              terceiros ou falhas dos modelos de IA. O serviço é oferecido “como está”.
+              O Palpiteiro não tem parceria, patrocínio, afiliação nem comissão de nenhuma casa de
+              apostas, não exibe publicidade de apostas e não indica casas. As cotações que
+              aparecem no app são referência de mercado para a análise, não oferta de aposta;
+              quando o nome de uma casa aparece junto de uma cotação, é só a fonte do dado — não
+              é indicação nem convite para apostar nela.
             </p>
           </section>
 
           <section className="flex flex-col gap-3">
-            <h2 className="text-label font-medium text-foreground">4. Maioridade (18+)</h2>
+            <h2 className="text-label font-medium text-foreground">6. Maioridade (18+)</h2>
             <p>
-              O serviço é destinado exclusivamente a maiores de 18 anos. Ao acessar, você declara
-              ter 18 anos ou mais. Conteúdo sobre apostas não é adequado a menores.
+              O serviço é destinado exclusivamente a maiores de 18 anos. Conteúdo sobre apostas
+              não é adequado a menores, e a lei proíbe que menores de 18 anos apostem. Se
+              soubermos que uma conta pertence a um menor, ela será excluída.
             </p>
           </section>
 
           <section className="flex flex-col gap-3">
-            <h2 className="text-label font-medium text-foreground">5. Inteligência artificial</h2>
+            <h2 className="text-label font-medium text-foreground">7. Inteligência artificial</h2>
             <p>
               As análises são geradas por modelos de IA (entre eles o Claude, da Anthropic) e
-              podem conter erros ou imprecisões. Nada aqui é conselho financeiro, de investimento
-              ou recomendação personalizada de aposta.
+              podem conter erros ou imprecisões, inclusive sobre escalações, desfalques e
+              notícias de terceiros. Nada aqui é conselho financeiro, de investimento ou
+              recomendação personalizada de aposta.
             </p>
           </section>
 
           <section className="flex flex-col gap-3">
-            <h2 className="text-label font-medium text-foreground">6. Conduta e acesso</h2>
+            <h2 className="text-label font-medium text-foreground">8. Sua conta e o que você registra</h2>
             <p>
-              O acesso pode exigir cadastro. É proibido abusar do serviço, automatizar acessos ou
-              tentar contornar limites. O Palpiteiro pode suspender ou revogar o acesso a qualquer
-              momento, especialmente em caso de abuso.
+              Você é responsável pelo acesso à sua conta e pelo que registra nela, como as
+              apostas descritas em texto livre — não inclua dados pessoais de outras pessoas. É
+              proibido abusar do serviço, automatizar acessos ou tentar contornar limites. O
+              Palpiteiro pode suspender ou revogar o acesso em caso de abuso ou de violação
+              destes Termos.
             </p>
           </section>
 
           <section className="flex flex-col gap-3">
-            <h2 className="text-label font-medium text-foreground">7. Jogo responsável</h2>
+            <h2 className="text-label font-medium text-foreground">9. Jogo responsável</h2>
             <p>
               Aposte com responsabilidade, apenas o que você pode perder, e nunca para recuperar
-              perdas. Se a aposta deixou de ser diversão, procure ajuda:{" "}
+              perdas. Se você está em autoexclusão numa casa de apostas, ou sente que perdeu o
+              controle, não use o Palpiteiro. Se a aposta deixou de ser diversão, procure ajuda:{" "}
               <a
                 href="https://www.cvv.org.br"
                 target="_blank"
                 rel="noopener noreferrer"
-                className="rounded-sm text-foreground underline underline-offset-4 focus-visible:outline-none focus-visible:ring-[3px] focus-visible:ring-ring/50"
+                className={linkClass}
               >
                 CVV — 188
               </a>{" "}
@@ -129,7 +171,7 @@ export default function TermosPage() {
                 href="https://jogadoresanonimos.com.br"
                 target="_blank"
                 rel="noopener noreferrer"
-                className="rounded-sm text-foreground underline underline-offset-4 focus-visible:outline-none focus-visible:ring-[3px] focus-visible:ring-ring/50"
+                className={linkClass}
               >
                 Jogadores Anônimos
               </a>
@@ -138,29 +180,56 @@ export default function TermosPage() {
           </section>
 
           <section className="flex flex-col gap-3">
-            <h2 className="text-label font-medium text-foreground">8. Alterações</h2>
+            <h2 className="text-label font-medium text-foreground">10. Limitação de responsabilidade</h2>
             <p>
-              O Palpiteiro pode alterar o serviço e estes Termos a qualquer momento. Mudanças
-              materiais serão refletidas na data de “Última atualização” acima. O uso continuado
-              após uma mudança significa concordância com a versão vigente.
+              Na medida permitida pela lei, o Palpiteiro não se responsabiliza por perdas, danos
+              ou prejuízos decorrentes de apostas feitas por você, nem por indisponibilidades,
+              erros de dados de terceiros ou falhas dos modelos de IA. O serviço é oferecido
+              gratuitamente e “como está”. Nada nestes Termos afasta direitos que a lei garante e
+              não permite limitar.
             </p>
           </section>
 
           <section className="flex flex-col gap-3">
-            <h2 className="text-label font-medium text-foreground">9. Contato</h2>
+            <h2 className="text-label font-medium text-foreground">11. Encerramento</h2>
+            <p>
+              Você pode encerrar sua conta a qualquer momento, pedindo a exclusão pelo contato
+              acima; o que acontece com seus dados está na{" "}
+              <Link href="/privacidade" className={linkClass}>
+                Política de Privacidade
+              </Link>
+              . O Palpiteiro pode descontinuar o serviço, avisando no app com antecedência
+              razoável sempre que possível.
+            </p>
+          </section>
+
+          <section className="flex flex-col gap-3">
+            <h2 className="text-label font-medium text-foreground">12. Alterações</h2>
+            <p>
+              Estes Termos podem mudar. A versão em vigor é sempre a desta página, com a data de
+              “Última atualização” acima, e mudanças relevantes poderão ser avisadas no app. Se uma
+              mudança reduzir seus direitos, pediremos um novo aceite antes de você continuar
+              usando o serviço.
+            </p>
+          </section>
+
+          <section className="flex flex-col gap-3">
+            <h2 className="text-label font-medium text-foreground">13. Lei aplicável e foro</h2>
+            <p>
+              Estes Termos seguem as leis brasileiras. Qualquer disputa pode ser levada ao foro do
+              seu domicílio.
+            </p>
+          </section>
+
+          <section className="flex flex-col gap-3">
+            <h2 className="text-label font-medium text-foreground">14. Contato</h2>
             <p>
               Dúvidas sobre estes Termos:{" "}
-              <a
-                href="mailto:contato@palpiteiro.live"
-                className="rounded-sm text-foreground underline underline-offset-4 focus-visible:outline-none focus-visible:ring-[3px] focus-visible:ring-ring/50"
-              >
-                contato@palpiteiro.live
+              <a href={`mailto:${LEGAL_CONTACT_EMAIL}`} className={linkClass}>
+                {LEGAL_CONTACT_EMAIL}
               </a>
               . Veja também a{" "}
-              <Link
-                href="/privacidade"
-                className="rounded-sm text-foreground underline underline-offset-4 focus-visible:outline-none focus-visible:ring-[3px] focus-visible:ring-ring/50"
-              >
+              <Link href="/privacidade" className={linkClass}>
                 Política de Privacidade
               </Link>
               .
