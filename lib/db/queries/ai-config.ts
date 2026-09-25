@@ -2,7 +2,12 @@ import { eq } from "drizzle-orm";
 
 import { aiConfig } from "@/db/schema";
 import { db } from "@/lib/db";
-import { DEFAULT_MODEL_ID, isAIModelId, type AIModelId } from "@/lib/ai/models";
+import {
+  DEFAULT_MODEL_ID,
+  isAIModelId,
+  MODEL_REGISTRY,
+  type AIModelId,
+} from "@/lib/ai/models";
 import {
   DEFAULT_ANALYSIS_ENGINE,
   isAnalysisEngine,
@@ -32,7 +37,10 @@ import {
  * Default global de modelo. Se não houver row (DB vazio em testes) OU o valor
  * persistido falhar a validação contra o registry (registry encolheu / dado
  * ruim), cai no DEFAULT_MODEL_ID — um id stale/inválido nunca chega ao Anthropic
- * como 404 de modelo.
+ * como 404 de modelo. O default vale pra TODOS (ADR 0013): um id admin-only
+ * (`userSelectable: false`, ex. Fable 5.1 — #524) também cai no DEFAULT_MODEL_ID,
+ * pra um usuário comum nunca rodar um modelo que não poderia escolher. O setter
+ * já recusa isso; aqui é a defesa contra dado gravado por fora dele.
  */
 export async function getDefaultModelId(): Promise<AIModelId> {
   const rows = await db
@@ -41,7 +49,9 @@ export async function getDefaultModelId(): Promise<AIModelId> {
     .where(eq(aiConfig.id, 1))
     .limit(1);
   const stored = rows[0]?.defaultModelId;
-  if (stored && isAIModelId(stored)) return stored;
+  if (stored && isAIModelId(stored) && MODEL_REGISTRY[stored].userSelectable) {
+    return stored;
+  }
   return DEFAULT_MODEL_ID;
 }
 
