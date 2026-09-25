@@ -331,7 +331,7 @@ describe("analyzeBestBet — rate-limit POR MERCADO (#492, Report 01 #3)", () =>
   });
 
   it("non-WC (2 mercados) → 2 slots, não 4", async () => {
-    mockGetMatchById.mockResolvedValue(matchInLeague("brasileirao_a"));
+    mockGetMatchById.mockResolvedValue(matchInLeague("premier_league"));
     await analyzeBestBet(null, form({ matchId: VALID_MATCH_ID }));
     expect(mockRateLimit).toHaveBeenCalledTimes(2);
     expect(mockPredict).toHaveBeenCalledTimes(2);
@@ -464,8 +464,8 @@ describe("analyzeBestBet — candidate set por liga (marketsForLeague REAL)", ()
     }
   });
 
-  it("non-WC (brasileirao) → só over_under + match_result (2), SEM pré-warm additional", async () => {
-    mockGetMatchById.mockResolvedValue(matchInLeague("brasileirao_a"));
+  it("non-WC (premier_league) → só over_under + match_result (2), SEM pré-warm additional", async () => {
+    mockGetMatchById.mockResolvedValue(matchInLeague("premier_league"));
     const res = await analyzeBestBet(null, form({ matchId: VALID_MATCH_ID }));
     expect(mockPredict.mock.calls.map((c) => c[0].marketKey)).toEqual([
       "over_under",
@@ -516,9 +516,9 @@ describe("analyzeBestBet — pré-warm additional flag-conditional (#175)", () =
     }
   });
 
-  it("extra-lines ON mas liga SEM cobertura (brasileirao) → over_under extraLines:false (resolveExtraLines parity)", async () => {
+  it("extra-lines ON mas liga SEM cobertura (premier_league) → over_under extraLines:false (resolveExtraLines parity)", async () => {
     mockExtraLinesFlag.mockResolvedValue(true);
-    mockGetMatchById.mockResolvedValue(matchInLeague("brasileirao_a"));
+    mockGetMatchById.mockResolvedValue(matchInLeague("premier_league"));
     await analyzeBestBet(null, form({ matchId: VALID_MATCH_ID }));
     const ouCall = mockPredict.mock.calls.find((c) => c[0].marketKey === "over_under");
     expect(ouCall?.[0].extraLines).toBe(false);

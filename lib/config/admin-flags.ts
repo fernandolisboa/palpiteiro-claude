@@ -75,7 +75,7 @@ export const ADMIN_FLAGS = [
       "Mostra pra todos os usuários a opção \"Analisar todos os mercados\" onde há 2 ou mais mercados candidatos: uma análise por mercado, ranqueadas por edge.",
     default: false,
     costNote:
-      "Cada uso faz até 6 chamadas pagas de LLM (uma por mercado) e até 4 buscas extras de odds.",
+      "Cada uso faz até 7 chamadas pagas de LLM (uma por mercado) e até 4 buscas extras de odds.",
   },
   {
     key: "enableClvCapture",

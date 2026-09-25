@@ -616,14 +616,14 @@ describe("analyzeMatch — market league coverage gating (#158)", () => {
     });
   });
 
-  it("admin + btts numa partida brasileirao (sem cobertura) → COERCIDO a over_under, SEM pre-warm", async () => {
+  it("admin + btts numa partida premier_league (sem cobertura) → COERCIDO a over_under, SEM pre-warm", async () => {
     mockAuth.mockResolvedValue(SESSION);
-    mockGetMatchById.mockResolvedValue(matchInLeague("brasileirao_a"));
+    mockGetMatchById.mockResolvedValue(matchInLeague("premier_league"));
     await analyzeMatch(
       null,
       form({ matchId: VALID_MATCH_ID, marketKey: "btts" }),
     );
-    // btts não tem cobertura no brasileirao → marketsForLeague o dropa → coerce.
+    // btts não tem cobertura na premier_league → marketsForLeague o dropa → coerce.
     expect(mockPredict).toHaveBeenCalledWith({
       matchId: VALID_MATCH_ID,
       userId: "u1",
@@ -711,9 +711,9 @@ describe("analyzeMatch — double_chance league coverage gating (#176)", () => {
     expect(mockPredict).not.toHaveBeenCalled();
   });
 
-  it("admin + double_chance numa partida brasileirao (sem cobertura) → COERCIDO a over_under, SEM pre-warm", async () => {
+  it("admin + double_chance numa partida premier_league (sem cobertura) → COERCIDO a over_under, SEM pre-warm", async () => {
     mockAuth.mockResolvedValue(SESSION);
-    mockGetMatchById.mockResolvedValue(matchInLeague("brasileirao_a"));
+    mockGetMatchById.mockResolvedValue(matchInLeague("premier_league"));
     await analyzeMatch(
       null,
       form({ matchId: VALID_MATCH_ID, marketKey: "double_chance" }),
@@ -832,10 +832,10 @@ describe("analyzeMatch — over/under linhas extras (#175)", () => {
     );
   });
 
-  it("flag ON mas liga SEM cobertura (brasileirao) → extraLines:false (graceful featured 2.5, sem pre-warm)", async () => {
+  it("flag ON mas liga SEM cobertura (premier_league) → extraLines:false (graceful featured 2.5, sem pre-warm)", async () => {
     mockAuth.mockResolvedValue(USER_SESSION);
     mockExtraLinesFlag.mockResolvedValue(true);
-    mockGetMatchById.mockResolvedValue(matchInLeague("brasileirao_a"));
+    mockGetMatchById.mockResolvedValue(matchInLeague("premier_league"));
 
     await analyzeMatch(
       null,

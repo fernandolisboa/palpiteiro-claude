@@ -315,20 +315,20 @@ describe("analyzeMarkets — seleção: dedupe, allowlist, paridade single", () 
     if (res.ok) expect(res.summaries).toHaveLength(1);
   });
 
-  it("allowlist: marketKey forjado fora da cobertura (btts em brasileirao) é dropado; só os válidos rodam", async () => {
-    mockGetMatchById.mockResolvedValue(matchInLeague("brasileirao_a"));
+  it("allowlist: marketKey forjado fora da cobertura (btts em premier_league) é dropado; só os válidos rodam", async () => {
+    mockGetMatchById.mockResolvedValue(matchInLeague("premier_league"));
     const res = await analyzeMarkets(
       null,
       form({ matchId: VALID_MATCH_ID, marketKeys: ["over_under", "btts"] }),
     );
-    // brasileirao cobre over_under + match_result, NÃO btts → btts dropado.
+    // premier_league cobre over_under + match_result, NÃO btts → btts dropado.
     expect(mockPredict.mock.calls.map((c) => c[0].marketKey)).toEqual(["over_under"]);
     expect(res.ok).toBe(true);
     if (res.ok) expect(res.summaries.map((s) => s.marketKey)).toEqual(["over_under"]);
   });
 
   it("NADA válido na seleção → ok:false 'nenhum mercado válido', SEM consumir slot (rate-limit 0×)", async () => {
-    mockGetMatchById.mockResolvedValue(matchInLeague("brasileirao_a"));
+    mockGetMatchById.mockResolvedValue(matchInLeague("premier_league"));
     const res = await analyzeMarkets(
       null,
       form({ matchId: VALID_MATCH_ID, marketKeys: ["btts", "double_chance"] }),

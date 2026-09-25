@@ -126,8 +126,9 @@ export const OVER_UNDER: MarketDescriptor = {
 //     evento (/events/{id}/odds); o featured 'totals' NÃO a entrega (live-validado
 //     2026-06-14: 3.5 ausente do featured; alternate traz a escada completa);
 //   - candidateLines = as meias-linhas avaliadas numa análise;
-//   - coveredLeagues ['world_cup']: cobertura de alternate_totals validada só na
-//     Copa por ora (mesma disciplina de btts/dupla chance) — expandir = 1 linha.
+//   - coveredLeagues: cobertura de alternate_totals validada ao vivo na Copa
+//     (2026-06-14) e no Brasileirão + Champions (2026-09-25, payload em
+//     lib/odds/__tests__/fixtures) — expandir = 1 linha.
 // NÃO entra em ALL_DESCRIPTORS (mesma dbMarketKey de OVER_UNDER): getDescriptor e
 // COVERED_LEAGUES_BY_MARKET continuam resolvendo a variante featured (a view lê
 // impliedSumTarget do OVER_UNDER, idêntico). Referenciada SÓ pelo cartucho v3,
@@ -137,7 +138,7 @@ export const OVER_UNDER_ALT: MarketDescriptor = {
   ...OVER_UNDER,
   providerMarketKey: "alternate_totals",
   oddsSource: "additional",
-  coveredLeagues: ["world_cup"],
+  coveredLeagues: ["world_cup", "brasileirao_a", "champions_league"],
   candidateLines: [1.5, 2.5, 3.5],
 };
 
@@ -159,13 +160,13 @@ export const MATCH_RESULT: MarketDescriptor = {
 
 // BTTS (ambas marcam) — mercado binário (yes/no, N=2, SEM linha, SEM push).
 // Odds *additional*: só por evento (`oddsSource: 'additional'`). Cobertura
-// validada na Copa (2026-06-12, #158); restrito a world_cup até re-checar o
-// Brasileirão. Outcomes 'Yes'/'No' do provider → 'yes'/'no' (sem `point`).
+// validada na Copa (2026-06-12, #158) e no Brasileirão + Champions (2026-09-25;
+// 2 books eu, 1xBet e William Hill). Outcomes 'Yes'/'No' → 'yes'/'no' (sem `point`).
 export const BTTS: MarketDescriptor = {
   dbMarketKey: "btts",
   providerMarketKey: "btts",
   oddsSource: "additional",
-  coveredLeagues: ["world_cup"],
+  coveredLeagues: ["world_cup", "brasileirao_a", "champions_league"],
   resolveSelectionKey(outcome) {
     const name = outcome.name.toLowerCase();
     if (name === "yes") return "yes";
@@ -178,7 +179,7 @@ export const BTTS: MarketDescriptor = {
 // Dupla chance (1X/X2/12) — mercado N=3 de COBERTURA SOBREPOSTA (cada dupla cobre
 // 2 de 3 resultados → impliedSumTarget=2, ver emenda do ADR 0018). Odds *additional*
 // (só por evento, oddsSource:'additional'), cobertura validada na Copa (2026-06-12,
-// #158), restrito a world_cup até re-checar o Brasileirão. O provider nomeia os
+// #158) e no Brasileirão + Champions (2026-09-25). O provider nomeia os
 // outcomes com nomes de time COMPOSTOS, em ordem livre: "{home} or Draw" /
 // "{away} or Draw" / "{teamA} or {teamB}" (validado em payload real 1xBet eu).
 // resolveSelectionKey faz parsing estrutural + casa via teamsMatch, com null
@@ -188,7 +189,7 @@ export const DOUBLE_CHANCE: MarketDescriptor = {
   dbMarketKey: "double_chance",
   providerMarketKey: "double_chance",
   oddsSource: "additional",
-  coveredLeagues: ["world_cup"],
+  coveredLeagues: ["world_cup", "brasileirao_a", "champions_league"],
   impliedSumTarget: 2,
   resolveSelectionKey(outcome, ctx) {
     const parts = outcome.name.split(/\s+or\s+/i).map((p) => p.trim());

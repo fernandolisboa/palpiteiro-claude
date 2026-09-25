@@ -35,10 +35,30 @@ por run é ≈ `Σ_liga (mercados featured com jogo near-KO) + Σ (eventos near-
 Ex.: 1 jogo/dia com predição over/under → ~1 crédito/dia × 30 ≈ **30 créditos/mês**
 (featured, amortizado por liga). Com a flag **OFF (default) o custo é ZERO**.
 
-> Linhas extras de over/under (1.5/3.5, `OVER_UNDER_ALT`/`alternate_totals`, world_cup,
+> Linhas extras de over/under (1.5/3.5, `OVER_UNDER_ALT`/`alternate_totals`,
 > flag `enableOverUnderExtraLines`) NÃO são capturadas pela closing-line v1 (o
 > `getDescriptor('over_under')` resolve só o featured 2.5) → CLV de predições em linha
 > ≠ 2.5 fica `null`. Aceitável: extra-lines é off por default.
+
+### Brasileirão + Champions com mercados additional (PR #522, 2026-09-25)
+
+btts, dupla chance e `alternate_totals` passaram a cobrir `brasileirao_a` e
+`champions_league` (antes só world_cup). Nenhum cron novo busca por evento: o
+`prewarm-odds` e a página do jogo seguem só com os featured. O custo novo vem de
+ações do usuário e da captura de CLV:
+
+- **Análise over/under** nessas ligas, com `enableOverUnderExtraLines` ON (migration
+  0022): usa a escada por evento → **+1 crédito por jogo** a cada janela de frescor
+  (60min fora das últimas 24h, 30min dentro). Antes reaproveitava o snapshot featured
+  do prewarm (0 extra). Kill-switch: desligar "linhas extras" em /admin/settings.
+- **Análise btts / dupla chance**: +1 crédito cada, por jogo, por janela.
+- **Melhor aposta / multi-mercado**: até +3 por jogo (btts + dupla chance + escada).
+- **CLV** (flag ON, migration 0042): cada predição não-pass de btts/dupla chance custa
+  1 crédito por run do cron (30min) nos 90min antes do KO → até ~3 por mercado.
+- **Sem book completo** (btts tem só 2 books eu), nada é gravado e a próxima tentativa
+  paga de novo — não há cache de "miss".
+
+Com o prewarm já em ~425–535/mês (ADR 0049 §5), acompanhe o saldo em /admin/leagues.
 
 ## Como a quota é medida
 

@@ -171,7 +171,7 @@ const COVERED_LEAGUES_BY_MARKET = new Map<
 /**
  * Filtra mercados pela COBERTURA de odds por liga (#158, ADR 0015). Compõe DEPOIS
  * de `marketsForAudience` (não muda a assinatura dela): audiência ∩ liga. Um mercado
- * com `coveredLeagues` (ex.: btts → ['world_cup']) só passa se `league` estiver na
+ * com `coveredLeagues` (ex.: correct_score → ['brasileirao_a']) só passa se `league` estiver na
  * allowlist; mercados SEM allowlist (over_under/match_result) passam em TODA liga
  * (pass-through — paridade). Data-driven pelo descriptor, nunca `if (market==='btts')`.
  *
