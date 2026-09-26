@@ -8,6 +8,14 @@ CREATE TABLE IF NOT EXISTS "team_rating_fits" (
 	"fitted_at" timestamp with time zone NOT NULL
 );
 --> statement-breakpoint
+CREATE TABLE IF NOT EXISTS "team_rating_season_results" (
+	"league" "league" NOT NULL,
+	"season" integer NOT NULL,
+	"matches" jsonb NOT NULL,
+	"fetched_at" timestamp with time zone NOT NULL,
+	CONSTRAINT "team_rating_season_results_league_season_pk" PRIMARY KEY("league","season")
+);
+--> statement-breakpoint
 CREATE TABLE IF NOT EXISTS "team_ratings" (
 	"league" "league" NOT NULL,
 	"team" text NOT NULL,

@@ -46,11 +46,26 @@ describe("pickModelScoreline", () => {
     expect(m.matrix).toEqual(scorelineMatrix(lh, la, { rho: -0.06 }));
   });
 
-  it("mando neutro → sem γ", () => {
+  it("mando neutro → √γ dos dois lados (total não cai pro nível de dois visitantes)", () => {
     const m = pickModelScoreline(input({ neutral: true }))!;
-    expect(m.lambdaHome).toBeCloseTo(1.25 * 1.15, 12);
-    expect(m.lambdaAway).toBeCloseTo(0.9 * 0.85, 12);
+    const g = Math.sqrt(1.3);
+    expect(m.lambdaHome).toBeCloseTo(g * 1.25 * 1.15, 12);
+    expect(m.lambdaAway).toBeCloseTo(g * 0.9 * 0.85, 12);
   });
+
+  it.each([
+    ["γ NaN", { ...FIT, homeAdvantage: NaN }, HOME],
+    ["ρ infinito", { ...FIT, rho: Infinity }, HOME],
+    ["α NaN", FIT, { ...HOME, attack: NaN }],
+    ["β zero", FIT, { ...HOME, defence: 0 }],
+  ])(
+    "rating corrompido (%s) → heurístico com motivo error",
+    (_n, fit, home) => {
+      const m = pickModelScoreline(input({ dc: { fit, home, away: AWAY } }))!;
+      expect(m.source).toBe("heuristic");
+      expect(m.fallbackReason).toBe("error");
+    }
+  );
 
   it("λ absurdo é clampado aos limites do modelo de placar", () => {
     const m = pickModelScoreline(

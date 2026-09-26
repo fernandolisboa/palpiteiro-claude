@@ -1,5 +1,5 @@
 {
-  "id": "8a498766-de07-42b0-a467-df8c209c3984",
+  "id": "ff6df64f-dd02-4bf7-83ec-f845b0ecf0eb",
   "prevId": "13b2967c-36a7-43d4-b320-fe4d1a8af7bf",
   "version": "7",
   "dialect": "postgresql",
@@ -2250,6 +2250,52 @@
       "indexes": {},
       "foreignKeys": {},
       "compositePrimaryKeys": {},
+      "uniqueConstraints": {},
+      "policies": {},
+      "checkConstraints": {},
+      "isRLSEnabled": false
+    },
+    "public.team_rating_season_results": {
+      "name": "team_rating_season_results",
+      "schema": "",
+      "columns": {
+        "league": {
+          "name": "league",
+          "type": "league",
+          "typeSchema": "public",
+          "primaryKey": false,
+          "notNull": true
+        },
+        "season": {
+          "name": "season",
+          "type": "integer",
+          "primaryKey": false,
+          "notNull": true
+        },
+        "matches": {
+          "name": "matches",
+          "type": "jsonb",
+          "primaryKey": false,
+          "notNull": true
+        },
+        "fetched_at": {
+          "name": "fetched_at",
+          "type": "timestamp with time zone",
+          "primaryKey": false,
+          "notNull": true
+        }
+      },
+      "indexes": {},
+      "foreignKeys": {},
+      "compositePrimaryKeys": {
+        "team_rating_season_results_league_season_pk": {
+          "name": "team_rating_season_results_league_season_pk",
+          "columns": [
+            "league",
+            "season"
+          ]
+        }
+      },
       "uniqueConstraints": {},
       "policies": {},
       "checkConstraints": {},

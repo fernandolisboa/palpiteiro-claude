@@ -1,6 +1,9 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 
-vi.mock("@/lib/ratings/refit-team-ratings", () => ({
+vi.mock("@/lib/ratings/refit-team-ratings", async (importOriginal) => ({
+  ...(await importOriginal<
+    typeof import("@/lib/ratings/refit-team-ratings")
+  >()),
   refitTeamRatings: vi.fn(),
 }));
 
@@ -57,6 +60,32 @@ describe("GET /api/cron/refit-team-ratings", () => {
     const res = await GET(req("Bearer s3cret"));
     expect(res.status).toBe(200);
     await expect(res.json()).resolves.toEqual({ ok: true, results });
+  });
+
+  it("500 com o resultado quando alguma liga falhou (poucos jogos não conta)", async () => {
+    const results = [
+      {
+        league: "brasileirao_a" as const,
+        status: "skipped" as const,
+        reason: "too_few_matches" as const,
+        matchCount: 40,
+        failedSeasons: [],
+      },
+      {
+        league: "la_liga" as const,
+        status: "skipped" as const,
+        reason: "all_seasons_failed" as const,
+        matchCount: 0,
+        failedSeasons: [2026, 2025, 2024, 2023],
+      },
+    ];
+    runMock.mockResolvedValue(results);
+    const res = await GET(req("Bearer s3cret"));
+    expect(res.status).toBe(500);
+    await expect(res.json()).resolves.toEqual({ ok: false, results });
+
+    runMock.mockResolvedValue([results[0]]);
+    expect((await GET(req("Bearer s3cret"))).status).toBe(200);
   });
 
   it("500 genérico quando o refit lança", async () => {

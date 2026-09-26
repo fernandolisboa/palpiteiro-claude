@@ -78,6 +78,15 @@ function clampLambda(l: number): number {
   return Math.min(LAMBDA_MAX, Math.max(LAMBDA_MIN, l));
 }
 
+function validRating(r: DcTeamRating): boolean {
+  return (
+    Number.isFinite(r.attack) &&
+    r.attack > 0 &&
+    Number.isFinite(r.defence) &&
+    r.defence > 0
+  );
+}
+
 type UsableDc = { fit: DcFitSnapshot; home: DcTeamRating; away: DcTeamRating };
 
 function resolveDc(
@@ -92,6 +101,16 @@ function resolveDc(
     return { reason: "stale_fit" };
   }
   if (!home || !away) return { reason: "team_missing" };
+  // Row corrompida (NaN/∞/≤0) viraria matriz NaN; o refit já não grava isso.
+  if (
+    !Number.isFinite(fit.homeAdvantage) ||
+    fit.homeAdvantage <= 0 ||
+    !Number.isFinite(fit.rho) ||
+    !validRating(home) ||
+    !validRating(away)
+  ) {
+    return { reason: "error" };
+  }
   if (
     home.matches < DC_MIN_TEAM_MATCHES ||
     away.matches < DC_MIN_TEAM_MATCHES
@@ -105,8 +124,7 @@ function resolveDc(
  * λ + matriz do jogo. DC quando utilizável; senão o heurístico, carregando o motivo.
  * null = nem DC nem tabela (o motor não precifica; o over/under roda sem âncora).
  *
- * Mando neutro: sem γ (λ = α·β dos dois lados), como o heurístico faz com o pool
- * casa+fora.
+ * Mando neutro: √γ nos dois lados, o análogo do pool casa+fora do heurístico.
  */
 export function pickModelScoreline(
   input: PickModelScorelineInput
@@ -114,9 +132,14 @@ export function pickModelScoreline(
   const dc = resolveDc(input.dc, input.now);
   if ("usable" in dc) {
     const { fit, home, away } = dc.usable;
-    const gamma = input.neutral ? 1 : fit.homeAdvantage;
-    const lambdaHome = clampLambda(gamma * home.attack * away.defence);
-    const lambdaAway = clampLambda(away.attack * home.defence);
+    // Neutro: √γ dos dois lados. O visitante é a base da parametrização (γ só no
+    // mandante); γ = 1 poria os dois times "jogando fora" e puxaria o total pra baixo.
+    const homeFactor = input.neutral
+      ? Math.sqrt(fit.homeAdvantage)
+      : fit.homeAdvantage;
+    const awayFactor = input.neutral ? Math.sqrt(fit.homeAdvantage) : 1;
+    const lambdaHome = clampLambda(homeFactor * home.attack * away.defence);
+    const lambdaAway = clampLambda(awayFactor * away.attack * home.defence);
     return {
       source: "dixon_coles",
       degraded: false,

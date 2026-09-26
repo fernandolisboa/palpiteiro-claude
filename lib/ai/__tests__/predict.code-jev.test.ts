@@ -494,6 +494,9 @@ describe("flag analysis_engine = 'llm' (default)", () => {
     expect(prediction.modelVersion).toBe("claude-sonnet-4-5-20250929");
     expect(prediction.promptVersion).toBe("match_result_v1");
     expect(prediction.rationale).toBe(MARKET_OUTPUT.rationale);
+    // Motor llm fora do over/under: ninguém usa o λ, o DC nem é lido.
+    expect(getEnableDixonColes).not.toHaveBeenCalled();
+    expect(getMatchRatings).not.toHaveBeenCalled();
     expect(result.selections.map((s) => s.modelProbPct)).toEqual([58, 25, 17]);
   });
 
@@ -817,6 +820,25 @@ describe("flag analysis_engine = 'code_jev'", () => {
         home: heuristicScoreline().lambdaHome,
         away: heuristicScoreline().lambdaAway,
       });
+    });
+
+    it("erro lendo o flag → heurístico (fail-open), motivo 'error'", async () => {
+      getEnableDixonColes.mockRejectedValue(new Error("neon down"));
+      const err = vi.spyOn(console, "error").mockImplementation(() => {});
+
+      await predict({
+        matchId: "m-1",
+        userId: "u-1",
+        isAdmin: true,
+        marketKey: "match_result",
+      });
+
+      const [prediction] = rowsWhere((r) => "recommendation" in r);
+      const judgments = prediction.judgments as PredictionJudgments;
+      expect(judgments.lambda.source).toBe("heuristic");
+      expect(judgments.lambda.fallbackReason).toBe("error");
+      expect(getMatchRatings).not.toHaveBeenCalled();
+      err.mockRestore();
     });
 
     it("erro lendo os ratings → heurístico (fail-open), motivo 'error'", async () => {
@@ -1468,6 +1490,41 @@ describe("best bet code_jev (#512) — JEV/matriz fixados, multi-linha e a view"
       expect(j.stateHash).toBe(js[0].stateHash);
       expect(j.aiCallId).toBe(js[0].aiCallId);
       expect(j.lambda).toEqual(js[0].lambda);
+    }
+  });
+
+  it("Dixon-Coles ligado: ratings lidos UMA vez pro run, todos os mercados com o mesmo λ do DC", async () => {
+    getEnableDixonColes.mockResolvedValue(true);
+    getMatchRatings.mockResolvedValue({
+      fit: {
+        homeAdvantage: 1.3,
+        rho: -0.08,
+        fittedAt: new Date("2026-05-11T07:00:00.000Z"),
+      },
+      home: { attack: 1.2, defence: 0.9, matches: 60 },
+      away: { attack: 1.0, defence: 1.1, matches: 60 },
+    });
+
+    const out = await runCodeJevFanOut(
+      base,
+      [
+        { marketKey: "match_result", extraLines: false },
+        { marketKey: "btts", extraLines: false },
+        { marketKey: "over_under", extraLines: false },
+      ],
+      mapError,
+      async () => ({ ok: true })
+    );
+
+    expect(out.every((o) => o.ok)).toBe(true);
+    expect(getMatchRatings).toHaveBeenCalledTimes(1);
+    const js = rowsWhere((r) => "recommendation" in r).map(
+      (r) => r.judgments as PredictionJudgments
+    );
+    expect(js).toHaveLength(3);
+    for (const j of js) {
+      expect(j.lambda.source).toBe("dixon_coles");
+      expect(j.lambda.base).toEqual(js[0].lambda.base);
     }
   });
 

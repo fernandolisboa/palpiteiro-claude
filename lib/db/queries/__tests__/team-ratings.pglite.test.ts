@@ -26,9 +26,12 @@ vi.mock("@/lib/db", () => ({
 }));
 
 import {
+  getCachedSeasonResults,
+  getLeagueFitInfo,
   getMatchRatings,
   listLeagueFits,
   replaceLeagueRatings,
+  saveSeasonResults,
 } from "@/lib/db/queries/team-ratings";
 
 const T1 = new Date("2026-09-25T07:00:00Z");
@@ -117,5 +120,41 @@ describe("team ratings", () => {
         usableTeamCount: 1,
       },
     ]);
+  });
+
+  it("getLeagueFitInfo: data e temporadas do fit; null sem fit", async () => {
+    expect(await getLeagueFitInfo("brasileirao_a")).toEqual({
+      fittedAt: T2,
+      seasons: [2026, 2025, 2024],
+    });
+    expect(await getLeagueFitInfo("la_liga")).toBeNull();
+  });
+
+  it("fit sem nenhum dos dois times → fit presente, times null", async () => {
+    expect(await getMatchRatings("brasileirao_a", "X", "Y")).toEqual({
+      fit: { homeAdvantage: 1.25, rho: -0.05, fittedAt: T2 },
+      home: null,
+      away: null,
+    });
+  });
+});
+
+describe("cache de temporadas encerradas", () => {
+  const MATCHES = [
+    { kickoffMs: 1, home: "A", away: "B", homeGoals: 2, awayGoals: 1 },
+  ];
+
+  it("guarda, relê só as pedidas e sobrescreve", async () => {
+    await saveSeasonResults("la_liga", 2024, MATCHES, T1);
+    await saveSeasonResults("la_liga", 2023, [], T1);
+    const cached = await getCachedSeasonResults("la_liga", [2025, 2024]);
+    expect([...cached.keys()]).toEqual([2024]);
+    expect(cached.get(2024)).toEqual(MATCHES);
+
+    await saveSeasonResults("la_liga", 2024, [], T2);
+    expect(
+      (await getCachedSeasonResults("la_liga", [2024])).get(2024)
+    ).toEqual([]);
+    expect((await getCachedSeasonResults("la_liga", [])).size).toBe(0);
   });
 });

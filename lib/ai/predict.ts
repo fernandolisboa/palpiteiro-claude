@@ -774,7 +774,8 @@ async function runPredict(
   let impliedByKey: Record<string, number> = {};
 
   // 5.5 (ADR 0037/0051): λ + matriz do modelo de placar, lidos UMA vez por predict e
-  //    só quando alguém usa (âncora do over/under ou motor code_jev): Dixon-Coles dos
+  //    só quando alguém usa (motor code_jev abaixo, ou a âncora do over/under no
+  //    caminho LLM, antes do buildPredictionInput): Dixon-Coles dos
   //    ratings diários, com o heurístico da tabela como rede. null = nem ratings nem
   //    tabela → escada de degradação, o cartucho roda como antes.
   let modelScorelinePromise: Promise<ModelScoreline | null> | null = null;
@@ -786,28 +787,6 @@ async function runPredict(
       awayTeam: match.awayTeam,
       neutral: match.league === "world_cup",
     }));
-
-  //    Baseline como FATO estruturado pro cartucho over/under; injetado via spread
-  //    condicional pra não virar excess-property nos outros cartuchos (que ignoram o
-  //    campo).
-  const overUnderScoreline =
-    cartridge.descriptor.dbMarketKey === "over_under"
-      ? await modelScoreline()
-      : null;
-  const scorelineModelForLines = (lines: number[]) =>
-    overUnderScoreline
-      ? {
-          source:
-            overUnderScoreline.source === "dixon_coles"
-              ? ("dixon_coles" as const)
-              : ("poisson" as const),
-          degraded: overUnderScoreline.degraded,
-          perLine: lines.map((line) => ({
-            line,
-            overPct: pOverUnder(overUnderScoreline.matrix, line) * 100,
-          })),
-        }
-      : undefined;
 
   // 5.6 Motor code_jev (ADR 0041, #511), atrás do flag `analysis_engine`: nos mercados
   //     partition que o código precifica, a decisão sai do λ (× julgamentos JEV) → matriz
@@ -1024,6 +1003,28 @@ async function runPredict(
     lineups,
     h2h,
   };
+  // Baseline do modelo de placar (5.5) como FATO estruturado pro cartucho over/under,
+  // injetado via spread condicional pra não virar excess-property nos outros cartuchos
+  // (que ignoram o campo). Lido só aqui, no caminho LLM: o code_jev não usa o bloco.
+  const overUnderScoreline =
+    cartridge.descriptor.dbMarketKey === "over_under"
+      ? await modelScoreline()
+      : null;
+  const scorelineModelForLines = (lines: number[]) =>
+    overUnderScoreline
+      ? {
+          source:
+            overUnderScoreline.source === "dixon_coles"
+              ? ("dixon_coles" as const)
+              : ("poisson" as const),
+          degraded: overUnderScoreline.degraded,
+          perLine: lines.map((line) => ({
+            line,
+            overPct: pOverUnder(overUnderScoreline.matrix, line) * 100,
+          })),
+        }
+      : undefined;
+
   let input: ReturnType<typeof cartridge.buildPredictionInput>;
   try {
     if (isIndependentBinary) {

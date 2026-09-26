@@ -871,3 +871,26 @@ export const teamRatings = pgTable(
   },
   (t) => [primaryKey({ columns: [t.league, t.team] })],
 );
+
+// Resultados de temporadas ENCERRADAS usados pelo refit do DC (ADR 0051): temporada
+// passada não muda, então é buscada no provider uma vez e relida daqui todo dia — o
+// refit diário gasta 1 chamada de API-Football por liga (a temporada atual), não 4.
+// `matches` = só jogos finalizados com placar, já no formato do fit.
+export type SeasonResult = {
+  kickoffMs: number;
+  home: string;
+  away: string;
+  homeGoals: number;
+  awayGoals: number;
+};
+
+export const teamRatingSeasonResults = pgTable(
+  "team_rating_season_results",
+  {
+    league: leagueEnum().notNull(),
+    season: integer().notNull(),
+    matches: jsonb().$type<SeasonResult[]>().notNull(),
+    fetchedAt: timestamp({ withTimezone: true }).notNull(),
+  },
+  (t) => [primaryKey({ columns: [t.league, t.season] })],
+);

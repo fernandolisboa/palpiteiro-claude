@@ -1,6 +1,11 @@
 import { and, asc, eq, gte, inArray, sql } from "drizzle-orm";
 
-import { teamRatingFits, teamRatings } from "@/db/schema";
+import {
+  teamRatingFits,
+  teamRatingSeasonResults,
+  teamRatings,
+  type SeasonResult,
+} from "@/db/schema";
 import { db } from "@/lib/db";
 import type { SupportedLeague } from "@/lib/providers/sports-data/leagues";
 import {
@@ -62,49 +67,104 @@ export type MatchRatings = {
   away: DcTeamRating | null;
 };
 
-/** Fit da liga + ratings dos dois times (null onde não há row). */
+/**
+ * Fit da liga + ratings dos dois times (null onde não há row). UMA query (fit LEFT
+ * JOIN times): o refit troca a liga numa transação, e um único statement lê um
+ * snapshot só — nunca γ/ρ novos com α/β velhos.
+ */
 export async function getMatchRatings(
   league: SupportedLeague,
   homeTeam: string,
   awayTeam: string
 ): Promise<MatchRatings> {
-  const [fits, teams] = await Promise.all([
-    db
-      .select({
-        homeAdvantage: teamRatingFits.homeAdvantage,
-        rho: teamRatingFits.rho,
-        fittedAt: teamRatingFits.fittedAt,
-      })
-      .from(teamRatingFits)
-      .where(eq(teamRatingFits.league, league))
-      .limit(1),
-    db
-      .select({
-        team: teamRatings.team,
-        attack: teamRatings.attack,
-        defence: teamRatings.defence,
-        matches: teamRatings.matches,
-      })
-      .from(teamRatings)
-      .where(
-        and(
-          eq(teamRatings.league, league),
-          inArray(teamRatings.team, [homeTeam, awayTeam])
-        )
-      ),
-  ]);
-  const byTeam = new Map(teams.map((t) => [t.team, t]));
+  const rows = await db
+    .select({
+      homeAdvantage: teamRatingFits.homeAdvantage,
+      rho: teamRatingFits.rho,
+      fittedAt: teamRatingFits.fittedAt,
+      team: teamRatings.team,
+      attack: teamRatings.attack,
+      defence: teamRatings.defence,
+      matches: teamRatings.matches,
+    })
+    .from(teamRatingFits)
+    .leftJoin(
+      teamRatings,
+      and(
+        eq(teamRatings.league, teamRatingFits.league),
+        inArray(teamRatings.team, [homeTeam, awayTeam])
+      )
+    )
+    .where(eq(teamRatingFits.league, league));
+  const first = rows[0];
+  if (!first) return { fit: null, home: null, away: null };
   const rating = (team: string): DcTeamRating | null => {
-    const r = byTeam.get(team);
-    return r
+    const r = rows.find((row) => row.team === team);
+    return r && r.attack !== null && r.defence !== null && r.matches !== null
       ? { attack: r.attack, defence: r.defence, matches: r.matches }
       : null;
   };
   return {
-    fit: fits[0] ?? null,
+    fit: {
+      homeAdvantage: first.homeAdvantage,
+      rho: first.rho,
+      fittedAt: first.fittedAt,
+    },
     home: rating(homeTeam),
     away: rating(awayTeam),
   };
+}
+
+/** Quando a liga foi ajustada pela última vez e com quais temporadas (null = nunca). */
+export async function getLeagueFitInfo(
+  league: SupportedLeague
+): Promise<{ fittedAt: Date; seasons: number[] } | null> {
+  const [row] = await db
+    .select({
+      fittedAt: teamRatingFits.fittedAt,
+      seasons: teamRatingFits.seasons,
+    })
+    .from(teamRatingFits)
+    .where(eq(teamRatingFits.league, league))
+    .limit(1);
+  return row ?? null;
+}
+
+/** Temporadas encerradas já guardadas da liga, por temporada. */
+export async function getCachedSeasonResults(
+  league: SupportedLeague,
+  seasons: readonly number[]
+): Promise<Map<number, SeasonResult[]>> {
+  if (seasons.length === 0) return new Map();
+  const rows = await db
+    .select({
+      season: teamRatingSeasonResults.season,
+      matches: teamRatingSeasonResults.matches,
+    })
+    .from(teamRatingSeasonResults)
+    .where(
+      and(
+        eq(teamRatingSeasonResults.league, league),
+        inArray(teamRatingSeasonResults.season, [...seasons])
+      )
+    );
+  return new Map(rows.map((r) => [r.season, r.matches]));
+}
+
+/** Guarda uma temporada ENCERRADA (o caller garante que ela não muda mais). */
+export async function saveSeasonResults(
+  league: SupportedLeague,
+  season: number,
+  matches: SeasonResult[],
+  fetchedAt: Date
+): Promise<void> {
+  await db
+    .insert(teamRatingSeasonResults)
+    .values({ league, season, matches, fetchedAt })
+    .onConflictDoUpdate({
+      target: [teamRatingSeasonResults.league, teamRatingSeasonResults.season],
+      set: { matches, fetchedAt },
+    });
 }
 
 export type LeagueFitSummary = {

@@ -18,7 +18,7 @@ import { UnregisteredModelsNote } from "./unregistered-models-note";
 
 export const dynamic = "force-dynamic";
 // "Reajustar agora" roda o refit do Dixon-Coles na server action desta página.
-export const maxDuration = 120;
+export const maxDuration = 300;
 
 // Gateado por app/admin/layout.tsx (role === "admin" → notFound pra outros).
 export default async function AdminSettingsPage() {
