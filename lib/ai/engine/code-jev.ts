@@ -13,7 +13,7 @@ import {
   type ScorelineMatrix,
 } from "@/lib/quant/scoreline-model";
 
-import type { ModelScoreline } from "./model-scoreline";
+import type { ModelScoreline } from "@/lib/quant/match-model";
 
 // Motor `code_jev` (ADR 0041 §1): λ_base × ajustes JEV → matriz de placar → P(seleção)
 // em todos os mercados partition → a seleção de MAIOR edge contra a implícita

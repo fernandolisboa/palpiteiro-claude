@@ -112,7 +112,10 @@ const MatchSchema = z.object({
 // verdade; o LLM ancora nele, ver prompt). OPCIONAL: ausente quando standings
 // indisponível/degenerado (escada de degradação — o cartucho roda como antes).
 const ScorelineModelSchema = z.object({
-  source: z.literal("poisson"),
+  // "poisson" = heurístico da tabela (ADR 0037); "dixon_coles" = ratings diários (ADR
+  // 0051). Só auditoria no input_payload: a mensagem do usuário não renderiza a fonte
+  // (o rótulo "Poisson" do prompt vale pros dois — o DC também é double-Poisson).
+  source: z.enum(["poisson", "dixon_coles"]),
   // true = λ do prior de liga (splits ausentes/<5 jogos) → "dados limitados".
   degraded: z.boolean(),
   per_line: z

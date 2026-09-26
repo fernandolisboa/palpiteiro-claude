@@ -332,7 +332,7 @@ describe("buildUserMessageV3 — mensagem markdown", () => {
 describe("getCartridge — variante multi-linha por flag", () => {
   it("getCartridge('over_under', { extraLines: true }) devolve o v3", () => {
     const c = getCartridge("over_under", { extraLines: true });
-    expect(c.version).toBe("over_under_v3.2");
+    expect(c.version).toBe("over_under_v3.3");
   });
 
   it("systemPrompt v3: snapshot literal (regra 9 com proveniência — #226, guard anti-drift)", () => {
@@ -378,7 +378,7 @@ describe("getCartridge — variante multi-linha por flag", () => {
 
   it("getCartridge('over_under') (1 arg) continua devolvendo o v2", () => {
     const c = getCartridge("over_under");
-    expect(c.version).toBe("over_under_v2.2");
+    expect(c.version).toBe("over_under_v2.3");
   });
 
   it("flag ligada num mercado sem variante cai no base", () => {

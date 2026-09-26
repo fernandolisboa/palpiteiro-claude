@@ -105,6 +105,16 @@ export const ADMIN_FLAGS = [
     default: true,
   },
   {
+    key: "enableDixonColes",
+    kind: "boolean",
+    label: "Dixon-Coles no modelo de placar",
+    description:
+      "Os gols esperados de cada time saem do Dixon-Coles refitado todo dia com os últimos 3 anos da liga (ADR 0051), no motor Código + JEV e na âncora estatística do over/under. Sem ajuste recente ou com time de pouco histórico, cai no heurístico da tabela sozinho. Desligada, usa sempre o heurístico.",
+    default: true,
+    costNote:
+      "Sem LLM e sem The Odds API; o refit diário faz 3 chamadas de API-Football por liga ativa.",
+  },
+  {
     key: "analysisEngine",
     kind: "enum",
     label: "Motor de análise",

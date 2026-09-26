@@ -3,6 +3,7 @@ import type { AdapterAccountType } from "next-auth/adapters";
 import type { PredictionJudgments } from "@/lib/ai/engine/types";
 import {
   boolean,
+  doublePrecision,
   index,
   integer,
   jsonb,
@@ -809,6 +810,11 @@ export const aiConfig = pgTable("ai_config", {
   // text validado na app (isAnalysisEngine, lib/ai/engine/analysis-engine.ts), como
   // defaultModelId. Default 'llm'; editável em /admin/settings, sem deploy.
   analysisEngine: text().notNull().default("llm"),
+  // Kill-switch (ADR 0051): λ do modelo de placar vem do Dixon-Coles refitado todo dia
+  // (team_ratings) no motor code_jev e na âncora estatística do over/under. Default ON
+  // (padrão sem-gates do dono); sem fit fresco ou time com pouco histórico, cai no
+  // heurístico da tabela sozinho. SET ... = false → heurístico sempre.
+  enableDixonColes: boolean().notNull().default(true),
   updatedByUserId: uuid().references(() => users.id, { onDelete: "set null" }),
   updatedAt: timestamp({ withTimezone: true }).notNull().defaultNow(),
 });
@@ -835,3 +841,56 @@ export const providerQuota = pgTable("provider_quota", {
   monthlyRemaining: integer(),
   observedAt: timestamp({ withTimezone: true }).notNull(),
 });
+
+// Dixon-Coles em produção (ADR 0051): o ajuste diário por liga. Uma row por liga com
+// os parâmetros globais do fit (γ = vantagem de mando, ρ) e o que entrou nele; os
+// ratings por time ficam em team_ratings. Reescritas juntas (db.batch) pelo cron
+// /api/cron/refit-team-ratings. Ler/escrever via lib/db/queries/team-ratings.ts.
+export const teamRatingFits = pgTable("team_rating_fits", {
+  league: leagueEnum().primaryKey(),
+  homeAdvantage: doublePrecision().notNull(),
+  rho: doublePrecision().notNull(),
+  // Jogos finalizados que entraram no ajuste (janela de 3 anos) e as temporadas lidas.
+  matchCount: integer().notNull(),
+  seasons: jsonb().$type<number[]>().notNull(),
+  fittedAt: timestamp({ withTimezone: true }).notNull(),
+});
+
+// α (ataque) e β (defesa, maior = sofre mais) por time do último fit da liga. `matches`
+// = jogos do time na janela: abaixo do mínimo (lib/quant/match-model.ts) o λ cai no
+// heurístico — o prior do fit puxa o time pra média, mas com poucos jogos isso é quase
+// só o prior.
+export const teamRatings = pgTable(
+  "team_ratings",
+  {
+    league: leagueEnum().notNull(),
+    team: text().notNull(),
+    attack: doublePrecision().notNull(),
+    defence: doublePrecision().notNull(),
+    matches: integer().notNull(),
+  },
+  (t) => [primaryKey({ columns: [t.league, t.team] })],
+);
+
+// Resultados de temporadas ENCERRADAS usados pelo refit do DC (ADR 0051): temporada
+// passada não muda, então é buscada no provider uma vez e relida daqui todo dia — o
+// refit diário gasta 1 chamada de API-Football por liga (a temporada atual), não 4.
+// `matches` = só jogos finalizados com placar, já no formato do fit.
+export type SeasonResult = {
+  kickoffMs: number;
+  home: string;
+  away: string;
+  homeGoals: number;
+  awayGoals: number;
+};
+
+export const teamRatingSeasonResults = pgTable(
+  "team_rating_season_results",
+  {
+    league: leagueEnum().notNull(),
+    season: integer().notNull(),
+    matches: jsonb().$type<SeasonResult[]>().notNull(),
+    fetchedAt: timestamp({ withTimezone: true }).notNull(),
+  },
+  (t) => [primaryKey({ columns: [t.league, t.season] })],
+);
