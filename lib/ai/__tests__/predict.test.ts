@@ -1141,14 +1141,14 @@ describe("predict() — stake congelado na row (#167 / ADR 0019)", () => {
   });
 });
 
-describe("predict() — over_under_v2.2: snapshot literal do prompt (guard anti-drift) + baseline Poisson #482", () => {
+describe("predict() — over_under_v2.3: snapshot literal do prompt (guard anti-drift) + baseline Poisson #482", () => {
   it("cartridge.systemPrompt: snapshot literal (regra 6 agora ancora no baseline Poisson — ADR 0037)", () => {
     // v2.1→v2.2 (#482, ADR 0037): a regra 6 passou a mandar ancorar no "Baseline do
     // modelo de placar (Poisson)" e NÃO copiar a implícita. (v2.0→v2.1 #226 = a
     // cláusula de proveniência na regra 8.) Snapshot LITERAL da string INTEIRA — não um
     // toContain de trecho. É o único guard automático contra drift silencioso do prompt:
     // QUALQUER mudança de UM caractere quebra este teste (e exige bump consciente de versão).
-    expect(overUnderCartridge.version).toBe("over_under_v2.2");
+    expect(overUnderCartridge.version).toBe("over_under_v2.3");
     expect(overUnderCartridge.systemPrompt).toMatchInlineSnapshot(`
       "Você é um analista quantitativo de apostas esportivas focado exclusivamente no mercado over/under 2.5 gols.
 
@@ -1911,7 +1911,7 @@ describe("predict() — multi-linha (#175): linha escolhida round-trip pro persi
     const aiCallRow = insertValues.mock.calls[0]?.[0] as {
       promptVersion: string;
     };
-    expect(aiCallRow.promptVersion).toBe("over_under_v3.2");
+    expect(aiCallRow.promptVersion).toBe("over_under_v3.3");
   });
 
   it("LLM escolhe 2.5: odds/edge da 2.5 (PSO da linha escolhida, não 1.5 nem 3.5)", async () => {
