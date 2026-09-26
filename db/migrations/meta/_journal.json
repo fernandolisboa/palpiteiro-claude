@@ -351,6 +351,13 @@
       "when": 1790298545932,
       "tag": "0049_exotic_turbo",
       "breakpoints": true
+    },
+    {
+      "idx": 50,
+      "version": "7",
+      "when": 1790437847351,
+      "tag": "0050_careless_greymalkin",
+      "breakpoints": true
     }
   ]
 }

@@ -104,6 +104,12 @@ vi.mock("@/lib/providers/sports-data", () => ({
   }),
 }));
 
+// Ratings do Dixon-Coles (ADR 0051): só lidos com o flag ligado.
+const getMatchRatings = vi.fn();
+vi.mock("@/lib/db/queries/team-ratings", () => ({
+  getMatchRatings: (...args: unknown[]) => getMatchRatings(...args),
+}));
+
 const getOddsForSport = vi.fn();
 vi.mock("@/lib/providers/odds-api", () => ({
   getOddsForSport: (...args: unknown[]) => getOddsForSport(...args),
@@ -135,9 +141,12 @@ vi.mock("@/lib/ai/anthropic", () => ({
 
 const getDefaultModelId = vi.fn();
 const getGenerationParams = vi.fn();
+// Dixon-Coles (ADR 0051): desligado por default → λ do heurístico da tabela.
+const getEnableDixonColes = vi.fn(() => Promise.resolve(false));
 vi.mock("@/lib/db/queries/ai-config", () => ({
   getDefaultModelId: (...args: unknown[]) => getDefaultModelId(...args),
   getGenerationParams: (...args: unknown[]) => getGenerationParams(...args),
+  getEnableDixonColes: () => getEnableDixonColes(),
 }));
 
 const getPreferredModelId = vi.fn();
@@ -164,6 +173,8 @@ import { computeMarketImpliedProbabilities } from "@/lib/odds/implied-probabilit
 
 import { AnalysisDeadlineError } from "@/lib/ai/deadline";
 import { predict, PredictError } from "@/lib/ai/predict";
+import { resetDixonColesFlagMemo } from "@/lib/ratings/model-scoreline";
+import { pOverUnder, scorelineMatrix } from "@/lib/quant/scoreline-model";
 
 // ─── Fixtures for the happy-path mocks ───────────────────────────────────────
 
@@ -346,11 +357,51 @@ beforeEach(() => {
   // — rebuilda do env e delega ao SportsDataProvider mockado a cada teste.
   __setAbsencesProviderForTesting(undefined);
   isKellyStakingActive.mockResolvedValue(false);
+  resetDixonColesFlagMemo();
+  getEnableDixonColes.mockResolvedValue(false);
   setHappyPath();
 });
 
 afterEach(() => {
   vi.useRealTimers();
+});
+
+describe("predict() — âncora do over/under com Dixon-Coles (ADR 0051)", () => {
+  it("flag ligado + ratings → baseline sai da matriz DC (γ·α·β, ρ do fit) e a fonte é dixon_coles", async () => {
+    getEnableDixonColes.mockResolvedValue(true);
+    getMatchRatings.mockResolvedValue({
+      fit: {
+        homeAdvantage: 1.25,
+        rho: -0.05,
+        fittedAt: new Date("2026-05-11T07:00:00.000Z"),
+      },
+      home: { attack: 1.4, defence: 0.8, matches: 70 },
+      away: { attack: 1.1, defence: 1.2, matches: 70 },
+    });
+    const spy = vi.spyOn(overUnderCartridge, "buildPredictionInput");
+
+    await predict({ matchId: "m-1", userId: "u-1", isAdmin: false });
+
+    const expectedOver =
+      pOverUnder(
+        scorelineMatrix(1.25 * 1.4 * 1.2, 1.1 * 0.8, { rho: -0.05 }),
+        2.5,
+      ) * 100;
+    const model = spy.mock.calls[0]?.[0].scorelineModel;
+    expect(model?.source).toBe("dixon_coles");
+    expect(model?.degraded).toBe(false);
+    expect(model?.perLine[0].line).toBe(2.5);
+    expect(model?.perLine[0].overPct).toBeCloseTo(expectedOver, 10);
+  });
+
+  it("flag desligado → baseline do heurístico da tabela (source poisson), ratings nem lidos", async () => {
+    const spy = vi.spyOn(overUnderCartridge, "buildPredictionInput");
+
+    await predict({ matchId: "m-1", userId: "u-1", isAdmin: false });
+
+    expect(getMatchRatings).not.toHaveBeenCalled();
+    expect(spy.mock.calls[0]?.[0].scorelineModel?.source).toBe("poisson");
+  });
 });
 
 describe("predict() — graceful degrade on transient injuries error", () => {

@@ -13,9 +13,12 @@ import {
 import { AdminFlagControl } from "./admin-flag-control";
 import { DefaultModelForm } from "./default-model-form";
 import { GenerationParamsForm } from "./generation-params-form";
+import { TeamRatingsPanel } from "./team-ratings-panel";
 import { UnregisteredModelsNote } from "./unregistered-models-note";
 
 export const dynamic = "force-dynamic";
+// "Reajustar agora" roda o refit do Dixon-Coles na server action desta página.
+export const maxDuration = 120;
 
 // Gateado por app/admin/layout.tsx (role === "admin" → notFound pra outros).
 export default async function AdminSettingsPage() {
@@ -126,6 +129,8 @@ export default async function AdminSettingsPage() {
             Valem para todos os usuários, sem redeploy.
           </p>
         </section>
+
+        <TeamRatingsPanel />
       </div>
     </div>
   );

@@ -165,10 +165,19 @@ vi.mock("@/lib/ai/anthropic", () => ({
 const getDefaultModelId = vi.fn();
 const getGenerationParams = vi.fn();
 const getAnalysisEngine = vi.fn();
+// Dixon-Coles (ADR 0051): desligado por default → λ do heurístico da tabela.
+const getEnableDixonColes = vi.fn(() => Promise.resolve(false));
 vi.mock("@/lib/db/queries/ai-config", () => ({
   getDefaultModelId: (...args: unknown[]) => getDefaultModelId(...args),
   getGenerationParams: (...args: unknown[]) => getGenerationParams(...args),
   getAnalysisEngine: (...args: unknown[]) => getAnalysisEngine(...args),
+  getEnableDixonColes: () => getEnableDixonColes(),
+}));
+
+// Ratings do Dixon-Coles (ADR 0051): só lidos com o flag ligado.
+const getMatchRatings = vi.fn();
+vi.mock("@/lib/db/queries/team-ratings", () => ({
+  getMatchRatings: (...args: unknown[]) => getMatchRatings(...args),
 }));
 
 const getPreferredModelId = vi.fn();
@@ -191,9 +200,11 @@ vi.mock("@/lib/ai/judgments/provider", () => ({
 }));
 
 import { resetAnalysisEngineMemo } from "@/lib/ai/engine/analysis-engine-flag";
+import { resetDixonColesFlagMemo } from "@/lib/ratings/model-scoreline";
 import { runCodeJevEngine } from "@/lib/ai/engine/code-jev";
-import { resolveModelScoreline } from "@/lib/ai/engine/model-scoreline";
 import type { PredictionJudgments } from "@/lib/ai/engine/types";
+import { computeMatchLambdas } from "@/lib/providers/sports-data/match-lambdas";
+import { pickModelScoreline } from "@/lib/quant/match-model";
 import { JUDGMENT_QUESTION_IDS } from "@/lib/ai/judgments/questions";
 import type { JudgmentAnswers } from "@/lib/ai/judgments/types";
 import { correctScoreCartridge } from "@/lib/ai/markets/correct_score";
@@ -396,6 +407,8 @@ beforeEach(() => {
   vi.useFakeTimers({ toFake: ["Date"] });
   vi.setSystemTime(new Date("2026-05-12T00:00:00.000Z"));
   resetAnalysisEngineMemo();
+  resetDixonColesFlagMemo();
+  getEnableDixonColes.mockResolvedValue(false);
   predictionStore = [];
   insertSeq = 0;
   setHappyPath();
@@ -405,14 +418,24 @@ afterEach(() => {
   vi.useRealTimers();
 });
 
+// λ do heurístico da tabela (flag do DC desligado nestes casos).
+function heuristicScoreline() {
+  return pickModelScoreline({
+    now: new Date(),
+    neutral: false,
+    dc: null,
+    heuristic: computeMatchLambdas({
+      standing: STANDINGS,
+      homeTeam: matchRow.homeTeam,
+      awayTeam: matchRow.awayTeam,
+      neutral: false,
+    }),
+  })!;
+}
+
 // A decisão que o motor deve tomar com estes insumos (mesmas funções puras).
 function expectedEngine(judgments: JudgmentAnswers | null) {
-  const scoreline = resolveModelScoreline({
-    standing: STANDINGS,
-    homeTeam: matchRow.homeTeam,
-    awayTeam: matchRow.awayTeam,
-    neutral: false,
-  })!;
+  const scoreline = heuristicScoreline();
   const { probs } = computeMarketImpliedProbabilities([
     ODDS.home,
     ODDS.draw,
@@ -727,6 +750,94 @@ describe("flag analysis_engine = 'code_jev'", () => {
     expect(judge).not.toHaveBeenCalled();
   });
 
+  describe("Dixon-Coles ligado (ADR 0051)", () => {
+    const FIT = {
+      homeAdvantage: 1.3,
+      rho: -0.08,
+      fittedAt: new Date("2026-05-11T07:00:00.000Z"),
+    };
+    const rating = (attack: number, defence: number, matches = 60) => ({
+      attack,
+      defence,
+      matches,
+    });
+
+    beforeEach(() => {
+      getEnableDixonColes.mockResolvedValue(true);
+    });
+
+    it("λ base sai dos ratings (γ·α·β), com o ρ do fit; source e modelVersion = dixon_coles", async () => {
+      getMatchRatings.mockResolvedValue({
+        fit: FIT,
+        home: rating(1.2, 0.9),
+        away: rating(1.0, 1.1),
+      });
+
+      await predict({
+        matchId: "m-1",
+        userId: "u-1",
+        isAdmin: true,
+        marketKey: "match_result",
+      });
+
+      expect(getMatchRatings).toHaveBeenCalledWith(
+        "brasileirao_a",
+        "CR Flamengo",
+        "Fluminense FC"
+      );
+      const [prediction] = rowsWhere((r) => "recommendation" in r);
+      expect(prediction.modelVersion).toContain(";lambda=dixon_coles;");
+      const judgments = prediction.judgments as PredictionJudgments;
+      expect(judgments.lambda.source).toBe("dixon_coles");
+      expect(judgments.lambda.fallbackReason).toBeUndefined();
+      expect(judgments.lambda.rho).toBe(-0.08);
+      expect(judgments.lambda.base.home).toBeCloseTo(1.3 * 1.2 * 1.1, 10);
+      expect(judgments.lambda.base.away).toBeCloseTo(1.0 * 0.9, 10);
+    });
+
+    it("time com poucos jogos na janela → heurístico, com o motivo gravado", async () => {
+      getMatchRatings.mockResolvedValue({
+        fit: FIT,
+        home: rating(1.2, 0.9),
+        away: rating(1.0, 1.1, 4),
+      });
+
+      await predict({
+        matchId: "m-1",
+        userId: "u-1",
+        isAdmin: true,
+        marketKey: "match_result",
+      });
+
+      const [prediction] = rowsWhere((r) => "recommendation" in r);
+      const judgments = prediction.judgments as PredictionJudgments;
+      expect(judgments.lambda.source).toBe("heuristic");
+      expect(judgments.lambda.fallbackReason).toBe("few_matches");
+      expect(judgments.lambda.base).toEqual({
+        home: heuristicScoreline().lambdaHome,
+        away: heuristicScoreline().lambdaAway,
+      });
+    });
+
+    it("erro lendo os ratings → heurístico (fail-open), motivo 'error'", async () => {
+      getMatchRatings.mockRejectedValue(new Error("neon down"));
+      const err = vi.spyOn(console, "error").mockImplementation(() => {});
+
+      await predict({
+        matchId: "m-1",
+        userId: "u-1",
+        isAdmin: true,
+        marketKey: "match_result",
+      });
+
+      const [prediction] = rowsWhere((r) => "recommendation" in r);
+      const judgments = prediction.judgments as PredictionJudgments;
+      expect(judgments.lambda.source).toBe("heuristic");
+      expect(judgments.lambda.fallbackReason).toBe("error");
+      err.mockRestore();
+    });
+  });
+
   it("mercado não precificável (placar exato) → caminho LLM inalterado", async () => {
     const keys = CORRECT_SCORE.selectionKeys;
     getLatestFreshSelectionOddsSnapshots.mockResolvedValue(
@@ -791,12 +902,7 @@ describe("flag analysis_engine = 'code_jev'", () => {
       );
     }
     // A linha persistida é a de maior edge entre as três.
-    const scoreline = resolveModelScoreline({
-      standing: STANDINGS,
-      homeTeam: matchRow.homeTeam,
-      awayTeam: matchRow.awayTeam,
-      neutral: false,
-    })!;
+    const scoreline = heuristicScoreline();
     const engine = runCodeJevEngine({
       dbMarketKey: "over_under",
       selectionKeys: ["over", "under"],

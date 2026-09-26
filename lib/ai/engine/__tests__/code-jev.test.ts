@@ -5,7 +5,7 @@ import {
   runCodeJevEngine,
   selectionProbsFromMatrix,
 } from "@/lib/ai/engine/code-jev";
-import type { ModelScoreline } from "@/lib/ai/engine/model-scoreline";
+import type { ModelScoreline } from "@/lib/quant/match-model";
 import { JUDGMENT_QUESTION_IDS } from "@/lib/ai/judgments/questions";
 import type {
   JudgmentAnswers,
