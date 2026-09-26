@@ -3,21 +3,25 @@ import { describe, expect, it } from "vitest";
 import {
   deriveCalibration,
   deriveCalibrationByEngine,
+  deriveCalibrationByMarket,
   filterByEngineSegment,
+  filterByMarket,
   parseEngineSegment,
 } from "@/lib/calibration/derive";
-import type { OverUnderCalibrationRow } from "@/lib/db/queries/calibration";
+import { parseMarketSegment } from "@/lib/calibration/markets";
+import { logLoss } from "@/lib/calibration/metrics";
+import type { MarketCalibrationRow } from "@/lib/db/queries/calibration";
 
 const row = (
   promptVersion: string,
   modelPOver: number,
   marketPOver: number,
   overHappened: 0 | 1,
-): OverUnderCalibrationRow => ({
+): MarketCalibrationRow => ({
+  marketKey: "over_under",
   promptVersion,
-  modelPOver,
-  marketPOver,
-  overHappened,
+  model: [{ p: modelPOver, y: overHappened }],
+  market: [{ p: marketPOver, y: overHappened }],
   isBet: true,
   engine: "llm",
   engineConfig: null,
@@ -29,11 +33,11 @@ const jevRow = (
   marketPOver: number,
   overHappened: 0 | 1,
   isBet = true,
-): OverUnderCalibrationRow => ({
+): MarketCalibrationRow => ({
+  marketKey: "over_under",
   promptVersion: "narrator_v1",
-  modelPOver,
-  marketPOver,
-  overHappened,
+  model: [{ p: modelPOver, y: overHappened }],
+  market: [{ p: marketPOver, y: overHappened }],
   isBet,
   engine: "code_jev",
   engineConfig: JEV_CONFIG,
@@ -156,5 +160,78 @@ describe("segmentação por motor", () => {
       overall!.logLossSkill,
       12,
     );
+  });
+});
+
+// 1X2 um-contra-o-resto: 3 pares por predição, na ordem away/draw/home.
+const oneX2 = (
+  model: [number, number, number],
+  market: [number, number, number],
+  winner: "away" | "draw" | "home",
+  isBet = true,
+): MarketCalibrationRow => {
+  const ys = (["away", "draw", "home"] as const).map((k) =>
+    k === winner ? 1 : 0,
+  );
+  return {
+    marketKey: "match_result",
+    promptVersion: "match_result_v1",
+    model: model.map((p, i) => ({ p, y: ys[i] })),
+    market: market.map((p, i) => ({ p, y: ys[i] })),
+    isBet,
+    engine: "llm",
+    engineConfig: null,
+  };
+};
+
+describe("calibração por mercado (#453)", () => {
+  const rows = [
+    row("over_under_v3.2", 0.6, 0.55, 1),
+    oneX2([0.2, 0.3, 0.5], [0.25, 0.3, 0.45], "home"),
+    oneX2([0.4, 0.3, 0.3], [0.35, 0.3, 0.35], "draw", false),
+  ];
+
+  it("filterByMarket recorta pelo marketKey", () => {
+    expect(filterByMarket(rows, "over_under")).toHaveLength(1);
+    expect(filterByMarket(rows, "match_result")).toHaveLength(2);
+    expect(filterByMarket(rows, "btts")).toHaveLength(0);
+  });
+
+  it("deriveCalibrationByMarket: todos os mercados, na ordem, sem amostra → null", () => {
+    const byMarket = deriveCalibrationByMarket(rows);
+    expect(byMarket.map((m) => m.market)).toEqual([
+      "over_under",
+      "match_result",
+      "btts",
+      "double_chance",
+    ]);
+    const mr = byMarket[1];
+    expect(mr.bets).toBe(1);
+    expect(mr.group?.n).toBe(2); // predições
+    expect(mr.group?.model.n).toBe(6); // pares um-contra-o-resto
+    expect(byMarket[2].group).toBeNull();
+    expect(byMarket[3].group).toBeNull();
+  });
+
+  it("N-ário: métricas saem dos pares achatados (um-contra-o-resto)", () => {
+    const mr = filterByMarket(rows, "match_result");
+    const { overall } = deriveCalibration(mr);
+    expect(overall?.model.logLoss).toBeCloseTo(
+      logLoss(mr.flatMap((r) => r.model)),
+      12,
+    );
+    expect(overall?.logLossSkill).toBeCloseTo(
+      logLoss(mr.flatMap((r) => r.market)) -
+        logLoss(mr.flatMap((r) => r.model)),
+      12,
+    );
+  });
+
+  it("parseMarketSegment: fora do enum cai em over/under", () => {
+    expect(parseMarketSegment("btts")).toBe("btts");
+    expect(parseMarketSegment("double_chance")).toBe("double_chance");
+    expect(parseMarketSegment("correct_score")).toBe("over_under");
+    expect(parseMarketSegment(["btts"])).toBe("over_under");
+    expect(parseMarketSegment(undefined)).toBe("over_under");
   });
 });

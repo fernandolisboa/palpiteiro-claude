@@ -9,26 +9,38 @@ import {
 import {
   deriveCalibration,
   deriveCalibrationByEngine,
+  deriveCalibrationByMarket,
   filterByEngineSegment,
+  filterByMarket,
   parseEngineSegment,
   type CalibrationGroup,
   type EngineCalibration,
   type EngineSegment,
+  type MarketCalibration,
 } from "@/lib/calibration/derive";
+import {
+  CALIBRATED_MARKET_LABEL,
+  POSITIVE_SELECTION,
+  parseMarketSegment,
+  type CalibratedMarketKey,
+} from "@/lib/calibration/markets";
 import type { ReliabilityBin } from "@/lib/calibration/metrics";
 import { loadKellyGate } from "@/lib/calibration/kelly-live";
 import type { KellyGate } from "@/lib/calibration/phase-c-gate";
-import { getOverUnderCalibrationRows } from "@/lib/db/queries/calibration";
+import { getMarketCalibrationRows } from "@/lib/db/queries/calibration";
 
 export const dynamic = "force-dynamic";
 
 // Gateado por app/admin/layout.tsx (role === "admin" → notFound pra outros).
-// Harness de calibração (Report 03 rec. 3, ADR 0037): mede o P(over) do modelo (LLM
-// ancorado no Poisson, tracer #482) contra os resultados liquidados, com o mercado
-// no-vig de benchmark. Substituto vivo dos backtests desescopados — enche com o D9.
-// Segmentado por motor (ADR 0041 §5/§7, #513): `?engine=llm|code_jev` recorta o
-// resumo/versões/bins; a tabela "por motor" compara os dois lado a lado. O gate do
-// Kelly NÃO é recortado — é o mesmo número que o predict lê pra decidir o staking.
+// Harness de calibração (Report 03 rec. 3, ADR 0037): mede o P(seleção) do modelo
+// contra os resultados liquidados, com o mercado no-vig de benchmark. Substituto vivo
+// dos backtests desescopados. Recortes na URL:
+//  - `?market=` (#453): over/under (default), 1X2, ambos marcam, dupla chance. A
+//    tabela "por mercado" compara todos; o resto da página é do mercado escolhido.
+//  - `?engine=llm|code_jev` (ADR 0041 §5/§7, #513): recorta resumo/versões/bins; a
+//    tabela "por motor" compara os dois lado a lado (no mercado escolhido).
+// O gate do Kelly NÃO é recortado — é o mesmo número (over/under, todos os motores)
+// que o predict lê pra decidir o staking.
 
 const BACKTEST_REPORT_URL =
   "https://github.com/fernandolisboa/palpiteiro-claude/blob/main/docs/reports/10-backtest-dixon-coles.md";
@@ -40,21 +52,50 @@ const fmtPct = (n: number | null) =>
   n === null ? "—" : `${(n * 100).toFixed(0)}%`;
 
 type PageProps = {
-  searchParams: Promise<{ engine?: string | string[] }>;
+  searchParams: Promise<{
+    engine?: string | string[];
+    market?: string | string[];
+  }>;
+};
+
+// Link do recorte, omitindo os defaults (over/under, todos os motores).
+function calibrationHref(market: CalibratedMarketKey, engine: EngineSegment) {
+  const params = new URLSearchParams();
+  if (market !== "over_under") params.set("market", market);
+  if (engine !== "all") params.set("engine", engine);
+  const qs = params.toString();
+  return qs ? `/admin/calibration?${qs}` : "/admin/calibration";
+}
+
+// Rótulo da faixa de probabilidade dos bins: no binário é o lado positivo; no N-ário
+// os bins misturam as seleções (um-contra-o-resto).
+const BIN_LABEL: Record<CalibratedMarketKey, string> = {
+  over_under: "faixa P(over)",
+  btts: "faixa P(sim)",
+  match_result: "faixa P(seleção)",
+  double_chance: "faixa P(seleção)",
 };
 
 export default async function AdminCalibrationPage({ searchParams }: PageProps) {
-  const segment = parseEngineSegment((await searchParams).engine);
+  const params = await searchParams;
+  const segment = parseEngineSegment(params.engine);
+  const market = parseMarketSegment(params.market);
   const [rows, gate] = await Promise.all([
-    getOverUnderCalibrationRows(),
+    getMarketCalibrationRows(),
     loadKellyGate(),
   ]);
-  const byEngine = deriveCalibrationByEngine(rows);
-  const scoped = filterByEngineSegment(rows, segment);
+  const byMarket = deriveCalibrationByMarket(
+    filterByEngineSegment(rows, segment),
+  );
+  const marketRows = filterByMarket(rows, market);
+  const byEngine = deriveCalibrationByEngine(marketRows);
+  const scoped = filterByEngineSegment(marketRows, segment);
   const { overall, byVersion } = deriveCalibration(scoped);
   const betCount = scoped.filter((r) => r.isBet).length;
   const segmentLabel =
     segment === "all" ? "todos os motores" : ANALYSIS_ENGINE_LABEL[segment];
+  const marketLabel = CALIBRATED_MARKET_LABEL[market];
+  const isNary = POSITIVE_SELECTION[market] === null;
 
   return (
     <div className="min-h-screen bg-background text-foreground">
@@ -62,7 +103,7 @@ export default async function AdminCalibrationPage({ searchParams }: PageProps) 
         <PageHeading
           backLink={{ href: "/admin", label: "admin" }}
           title="Calibração"
-          subtitle="over/under · P(over) do modelo vs resultados · benchmark = mercado no-vig"
+          subtitle="P(seleção) do modelo vs resultados · benchmark = mercado no-vig"
         />
 
         <GateSection gate={gate} />
@@ -70,30 +111,40 @@ export default async function AdminCalibrationPage({ searchParams }: PageProps) 
         <BacktestSection />
 
         {rows.length > 0 && (
+          <MarketSection
+            markets={byMarket}
+            market={market}
+            segment={segment}
+            segmentLabel={segmentLabel}
+          />
+        )}
+
+        {marketRows.length > 0 && (
           <EngineSection
             engines={byEngine.engines}
             unattributed={byEngine.unattributed}
+            market={market}
             segment={segment}
           />
         )}
 
-        {rows.length === 0 ? (
+        {marketRows.length === 0 ? (
           <EmptyState
-            title="Sem predições over/under liquidadas ainda"
-            description="O harness enche conforme as análises de over/under são liquidadas (com P(over) do modelo persistido). Volte depois de alguns jogos."
+            title={`Sem predições de ${marketLabel} liquidadas ainda`}
+            description={`O harness enche conforme as análises de ${marketLabel} são liquidadas (com a probabilidade do modelo persistida). Volte depois de alguns jogos.`}
           />
         ) : overall === null ? (
           <EmptyState
-            title={`Sem predições liquidadas do motor ${segmentLabel} ainda`}
-            description="O recorte enche conforme as análises de over/under desse motor são liquidadas. Os outros motores seguem na tabela acima."
+            title={`Sem predições de ${marketLabel} liquidadas do motor ${segmentLabel} ainda`}
+            description={`O recorte enche conforme as análises de ${marketLabel} desse motor são liquidadas. Os outros motores seguem na tabela acima.`}
           />
         ) : (
           <>
             {/* Resumo agregado (do recorte) */}
             <section className="pb-8">
               <h2 className="pb-3 font-mono text-eyebrow uppercase tracking-label text-muted-foreground">
-                resumo · {segmentLabel} · {overall.n} predições · {betCount}{" "}
-                apostas · {overall.n - betCount} passes
+                resumo · {marketLabel} · {segmentLabel} · {overall.n} predições
+                · {betCount} apostas · {overall.n - betCount} passes
               </h2>
               <div className="grid grid-cols-2 gap-px overflow-hidden rounded-md border border-border bg-border sm:grid-cols-3">
                 <Kpi label="log-loss modelo" value={fmt3(overall.model.logLoss)} />
@@ -123,7 +174,7 @@ export default async function AdminCalibrationPage({ searchParams }: PageProps) 
             {/* Por versão de prompt */}
             <section className="pb-8">
               <h2 className="pb-3 font-mono text-eyebrow uppercase tracking-label text-muted-foreground">
-                por versão · {segmentLabel}
+                por versão · {marketLabel} · {segmentLabel}
               </h2>
               <p className="pb-3 text-meta leading-relaxed text-muted-fg-2 tracking-tight">
                 LLM: versão do prompt do cartucho. Código + JEV: fonte de λ, versão dos
@@ -155,16 +206,19 @@ export default async function AdminCalibrationPage({ searchParams }: PageProps) 
             {/* Confiabilidade agregada (10 bins) */}
             <section className="pb-8">
               <h2 className="pb-3 font-mono text-eyebrow uppercase tracking-label text-muted-foreground">
-                confiabilidade do modelo · {segmentLabel} · 10 bins
+                confiabilidade do modelo · {marketLabel} · {segmentLabel} · 10
+                bins
               </h2>
               <p className="pb-3 text-meta leading-relaxed text-muted-fg-2 tracking-tight">
                 Bem calibrado ⇒ previsto ≈ observado em cada faixa. Faixas vazias omitidas.
+                {isNary &&
+                  ` Em ${marketLabel} cada seleção entra como um evento sim/não (um-contra-o-resto), então a faixa mistura as seleções e o n conta pares, não predições.`}
               </p>
               <div className="overflow-x-auto rounded-md border border-border">
                 <table className="w-full text-body-sm tabular-nums">
                   <thead>
                     <tr className="border-b border-border text-left font-mono text-eyebrow uppercase tracking-label text-muted-foreground">
-                      <Th>faixa P(over)</Th>
+                      <Th>{BIN_LABEL[market]}</Th>
                       <Th align="right">n</Th>
                       <Th align="right">previsto</Th>
                       <Th align="right">observado</Th>
@@ -262,16 +316,18 @@ function BacktestSection() {
 function EngineSection({
   engines,
   unattributed,
+  market,
   segment,
 }: {
   engines: EngineCalibration[];
   unattributed: number;
+  market: CalibratedMarketKey;
   segment: EngineSegment;
 }) {
   return (
     <section className="pb-8">
       <h2 className="pb-3 font-mono text-eyebrow uppercase tracking-label text-muted-foreground">
-        por motor
+        por motor · {CALIBRATED_MARKET_LABEL[market]}
       </h2>
       <div className="overflow-x-auto rounded-md border border-border">
         <table className="w-full text-body-sm tabular-nums">
@@ -300,14 +356,14 @@ function EngineSection({
       >
         <span className="text-muted-fg-2">recorte:</span>
         <SegmentLink
-          href="/admin/calibration"
+          href={calibrationHref(market, "all")}
           label="todos"
           active={segment === "all"}
         />
         {ANALYSIS_ENGINES.map((engine) => (
           <SegmentLink
             key={engine}
-            href={`/admin/calibration?engine=${engine}`}
+            href={calibrationHref(market, engine)}
             label={ANALYSIS_ENGINE_LABEL[engine]}
             active={segment === engine}
           />
@@ -320,6 +376,85 @@ function EngineSection({
         </p>
       )}
     </section>
+  );
+}
+
+// Comparação entre mercados (#453), no recorte de motor atual. Sempre os quatro: o
+// mercado sem amostra mostra "—". O nome do mercado é o seletor do resto da página.
+function MarketSection({
+  markets,
+  market,
+  segment,
+  segmentLabel,
+}: {
+  markets: MarketCalibration[];
+  market: CalibratedMarketKey;
+  segment: EngineSegment;
+  segmentLabel: string;
+}) {
+  return (
+    <section className="pb-8">
+      <h2 className="pb-3 font-mono text-eyebrow uppercase tracking-label text-muted-foreground">
+        por mercado · {segmentLabel}
+      </h2>
+      <div className="overflow-x-auto rounded-md border border-border">
+        <table className="w-full text-body-sm tabular-nums">
+          <thead>
+            <tr className="border-b border-border text-left font-mono text-eyebrow uppercase tracking-label text-muted-foreground">
+              <Th>mercado</Th>
+              <Th align="right">n</Th>
+              <Th align="right">apostas</Th>
+              <Th align="right">LL modelo</Th>
+              <Th align="right">LL mercado</Th>
+              <Th align="right">Brier mod.</Th>
+              <Th align="right">slope</Th>
+              <Th align="right">skill LL</Th>
+            </tr>
+          </thead>
+          <tbody>
+            {markets.map((m) => (
+              <MarketRow
+                key={m.market}
+                m={m}
+                href={calibrationHref(m.market, segment)}
+                active={m.market === market}
+              />
+            ))}
+          </tbody>
+        </table>
+      </div>
+      <p className="pt-2 text-meta leading-relaxed text-muted-fg-2 tracking-tight">
+        n = predições liquidadas, passes incluídos. Over/under e ambos marcam
+        medem o lado positivo (over, sim); 1X2 e dupla chance medem cada seleção
+        como um evento sim/não. Clique no mercado pra abrir o detalhe abaixo.
+      </p>
+    </section>
+  );
+}
+
+function MarketRow({
+  m,
+  href,
+  active,
+}: {
+  m: MarketCalibration;
+  href: string;
+  active: boolean;
+}) {
+  const g = m.group;
+  return (
+    <tr className="border-b border-border last:border-b-0">
+      <Td>
+        <SegmentLink
+          href={href}
+          label={CALIBRATED_MARKET_LABEL[m.market]}
+          active={active}
+        />
+      </Td>
+      <Td align="right">{g?.n ?? 0}</Td>
+      <Td align="right">{m.bets}</Td>
+      <SummaryCells g={g} />
+    </tr>
   );
 }
 
@@ -354,6 +489,15 @@ function EngineRow({ e }: { e: EngineCalibration }) {
       <Td>{ANALYSIS_ENGINE_LABEL[e.engine]}</Td>
       <Td align="right">{g?.n ?? 0}</Td>
       <Td align="right">{e.bets}</Td>
+      <SummaryCells g={g} />
+    </tr>
+  );
+}
+
+// As 5 colunas de métrica das tabelas "por mercado" e "por motor"; "—" sem amostra.
+function SummaryCells({ g }: { g: CalibrationGroup | null }) {
+  return (
+    <>
       <Td align="right">{g ? fmt3(g.model.logLoss) : "—"}</Td>
       <Td align="right">{g ? fmt3(g.market.logLoss) : "—"}</Td>
       <Td align="right">{g ? fmt3(g.model.brier) : "—"}</Td>
@@ -371,7 +515,7 @@ function EngineRow({ e }: { e: EngineCalibration }) {
           "—"
         )}
       </Td>
-    </tr>
+    </>
   );
 }
 
