@@ -9,7 +9,7 @@ import {
   parseEngineSegment,
 } from "@/lib/calibration/derive";
 import { parseMarketSegment } from "@/lib/calibration/markets";
-import { logLoss } from "@/lib/calibration/metrics";
+import { brierScore, logLoss } from "@/lib/calibration/metrics";
 import type { MarketCalibrationRow } from "@/lib/db/queries/calibration";
 
 const row = (
@@ -213,18 +213,47 @@ describe("calibração por mercado (#453)", () => {
     expect(byMarket[3].group).toBeNull();
   });
 
-  it("N-ário: métricas saem dos pares achatados (um-contra-o-resto)", () => {
+  it("1X2: log-loss multiclasse (−ln p do resultado); Brier nos pares", () => {
     const mr = filterByMarket(rows, "match_result");
     const { overall } = deriveCalibration(mr);
+    // Vencedores: home (0.5 modelo / 0.45 mercado) e draw (0.3 / 0.3).
     expect(overall?.model.logLoss).toBeCloseTo(
-      logLoss(mr.flatMap((r) => r.model)),
+      -(Math.log(0.5) + Math.log(0.3)) / 2,
       12,
     );
-    expect(overall?.logLossSkill).toBeCloseTo(
-      logLoss(mr.flatMap((r) => r.market)) -
-        logLoss(mr.flatMap((r) => r.model)),
+    expect(overall?.market.logLoss).toBeCloseTo(
+      -(Math.log(0.45) + Math.log(0.3)) / 2,
       12,
     );
+    expect(overall?.logLossSkill).toBeCloseTo(Math.log(0.5 / 0.45) / 2, 12);
+    expect(overall?.model.brier).toBeCloseTo(
+      brierScore(mr.flatMap((r) => r.model)),
+      12,
+    );
+  });
+
+  it("dupla chance: log-loss dos pares um-contra-o-resto (não é partição)", () => {
+    const dc: MarketCalibrationRow = {
+      marketKey: "double_chance",
+      promptVersion: "double_chance_v1",
+      // Empate: away_or_draw e home_or_draw acontecem.
+      model: [
+        { p: 0.6, y: 1 },
+        { p: 0.7, y: 0 },
+        { p: 0.7, y: 1 },
+      ],
+      market: [
+        { p: 0.55, y: 1 },
+        { p: 0.72, y: 0 },
+        { p: 0.73, y: 1 },
+      ],
+      isBet: true,
+      engine: "llm",
+      engineConfig: null,
+    };
+    const { overall } = deriveCalibration([dc]);
+    expect(overall?.model.logLoss).toBeCloseTo(logLoss(dc.model), 12);
+    expect(overall?.market.logLoss).toBeCloseTo(logLoss(dc.market), 12);
   });
 
   it("parseMarketSegment: fora do enum cai em over/under", () => {

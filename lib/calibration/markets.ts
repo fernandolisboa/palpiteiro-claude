@@ -33,6 +33,15 @@ export const POSITIVE_SELECTION: Record<CalibratedMarketKey, string | null> = {
   double_chance: null,
 };
 
+// Mercados onde o log-loss é o MULTICLASSE (−ln p do resultado real), não a média
+// dos binários um-contra-o-resto: é a métrica padrão do 1X2 e a do report 10
+// (backtest Dixon-Coles), então o número ao vivo fica comparável com ele. Brier,
+// bins e slope seguem nos pares. Dupla chance fica fora: não é partição (2 das 3
+// seleções acontecem), não há "o" resultado.
+export const MULTICLASS_LOG_LOSS: ReadonlySet<CalibratedMarketKey> = new Set([
+  "match_result",
+]);
+
 export function isCalibratedMarket(v: unknown): v is CalibratedMarketKey {
   return (
     typeof v === "string" &&

@@ -5,8 +5,17 @@ import {
 } from "@/lib/ai/engine/analysis-engine";
 import type { MarketCalibrationRow } from "@/lib/db/queries/calibration";
 
-import { CALIBRATED_MARKETS, type CalibratedMarketKey } from "./markets";
-import { computeCalibration, type CalibrationSummary } from "./metrics";
+import {
+  CALIBRATED_MARKETS,
+  MULTICLASS_LOG_LOSS,
+  type CalibratedMarketKey,
+} from "./markets";
+import {
+  computeCalibration,
+  logLoss,
+  type CalibrationPair,
+  type CalibrationSummary,
+} from "./metrics";
 
 // Agrega os pares de calibração por mercado (#453), por versão (Report 03 rec. 3) e
 // por motor (ADR 0041 §5, #513). Puro — recebe as rows da query, devolve modelo vs
@@ -34,12 +43,28 @@ export function calibrationVersionOf(r: MarketCalibrationRow): string {
     : r.promptVersion;
 }
 
+function summarize(
+  rows: MarketCalibrationRow[],
+  side: (r: MarketCalibrationRow) => CalibrationPair[],
+): CalibrationSummary {
+  const summary = computeCalibration(rows.flatMap(side));
+  if (
+    rows.length === 0 ||
+    !rows.every((r) => MULTICLASS_LOG_LOSS.has(r.marketKey))
+  ) {
+    return summary;
+  }
+  // 1X2: −ln p do resultado real (a única seleção com y=1 da partição).
+  const winners = rows.flatMap((r) => side(r).filter((pair) => pair.y === 1));
+  return { ...summary, logLoss: logLoss(winners) };
+}
+
 function groupFor(
   version: string,
   rows: MarketCalibrationRow[],
 ): CalibrationGroup {
-  const model = computeCalibration(rows.flatMap((r) => r.model));
-  const market = computeCalibration(rows.flatMap((r) => r.market));
+  const model = summarize(rows, (r) => r.model);
+  const market = summarize(rows, (r) => r.market);
   return {
     version,
     n: rows.length,

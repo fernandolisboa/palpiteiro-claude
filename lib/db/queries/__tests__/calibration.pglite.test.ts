@@ -128,6 +128,7 @@ async function seedOU(args: {
 // Predição liquidada de um mercado não-O/U, com odd + modelProbPct por seleção.
 async function seedMarket(args: {
   market: "match_result" | "btts" | "double_chance";
+  modelVersion?: string;
   homeScore: number | null;
   awayScore: number | null;
   sels: Record<string, { odd: string; modelPct: number | null }>;
@@ -158,7 +159,7 @@ async function seedMarket(args: {
       confidencePct: "55.00",
       rationale: "r",
       keyFactors: ["f"],
-      modelVersion: "claude-sonnet-4-5-20250929",
+      modelVersion: args.modelVersion ?? "claude-sonnet-4-5-20250929",
       promptVersion: args.promptVersion ?? `${args.market}_v1`,
       marketParams: null,
     })
@@ -384,7 +385,22 @@ describe("getOverUnderCalibrationRows", () => {
   });
 });
 
-describe("getOverUnderCalibrationRows · linha inteira", () => {
+describe("getOverUnderCalibrationRows · outras linhas", () => {
+  it("linha 3.5 (multi-linha #175): usa a linha da predição", async () => {
+    await seedOU({
+      promptVersion: "over_under_v3.2",
+      line: 3.5,
+      totalGoals: 3, // < 3.5 → over NÃO aconteceu (em 2.5 teria acontecido)
+      overModelPct: 35,
+      overOdd: "2.600",
+      underOdd: "1.500",
+    });
+    const rows = await getOverUnderCalibrationRows();
+    expect(rows).toHaveLength(1);
+    expect(rows[0].overHappened).toBe(0);
+    expect(rows[0].modelPOver).toBeCloseTo(0.35, 9);
+  });
+
   it("exclui push (total = linha inteira): o evento não é binário", async () => {
     await seedOU({
       promptVersion: "v",
@@ -464,6 +480,42 @@ describe("getMarketCalibrationRows (#453)", () => {
     expect(r.model.map((x) => x.y)).toEqual([1, 0, 1]);
     const marketSum = r.market.reduce((a, x) => a + x.p, 0);
     expect(marketSum).toBeCloseTo(2, 9);
+  });
+
+  it("1X2 do code_jev: motor + tags lidos do modelVersion", async () => {
+    await seedMarket({
+      market: "match_result",
+      modelVersion:
+        "claude-sonnet-4-5-20250929;engine=code_jev;lambda=heuristic;judg=jev_judgments_v1;w=judgment_weights_v1",
+      promptVersion: "narrator_v1",
+      homeScore: 0,
+      awayScore: 2,
+      sels: {
+        home: { odd: "2.000", modelPct: 48 },
+        draw: { odd: "3.400", modelPct: 28 },
+        away: { odd: "3.800", modelPct: 24 },
+      },
+    });
+    const [r] = await getMarketCalibrationRows();
+    expect(r.engine).toBe("code_jev");
+    expect(r.engineConfig).toBe(
+      "lambda=heuristic;judg=jev_judgments_v1;w=judgment_weights_v1",
+    );
+    expect(r.model.map((x) => x.y)).toEqual([1, 0, 0]); // away venceu
+  });
+
+  it("odd congelada ≤ 1 no N-ário → pula a row", async () => {
+    await seedMarket({
+      market: "match_result",
+      homeScore: 1,
+      awayScore: 0,
+      sels: {
+        home: { odd: "1.000", modelPct: 50 },
+        draw: { odd: "3.400", modelPct: 27 },
+        away: { odd: "3.800", modelPct: 23 },
+      },
+    });
+    expect(await getMarketCalibrationRows()).toEqual([]);
   });
 
   it("N-ário exige modelProb de TODAS as seleções", async () => {

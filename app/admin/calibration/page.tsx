@@ -119,7 +119,7 @@ export default async function AdminCalibrationPage({ searchParams }: PageProps) 
           />
         )}
 
-        {marketRows.length > 0 && (
+        {rows.length > 0 && (
           <EngineSection
             engines={byEngine.engines}
             unattributed={byEngine.unattributed}
@@ -426,7 +426,9 @@ function MarketSection({
       <p className="pt-2 text-meta leading-relaxed text-muted-fg-2 tracking-tight">
         n = predições liquidadas, passes incluídos. Over/under e ambos marcam
         medem o lado positivo (over, sim); 1X2 e dupla chance medem cada seleção
-        como um evento sim/não. Clique no mercado pra abrir o detalhe abaixo.
+        como um evento sim/não. No 1X2 o log-loss é o multiclasse (−ln p do
+        resultado), o mesmo do report 10. Clique no mercado pra abrir o detalhe
+        abaixo.
       </p>
     </section>
   );

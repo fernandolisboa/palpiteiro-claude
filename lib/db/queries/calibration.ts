@@ -101,6 +101,17 @@ export async function getMarketCalibrationRows(
   }
 
   // 2. Predições LIQUIDADAS (outcome presente) desses mercados.
+  // O settle só liquida jogo `finished` com placar 90' — então `void` vem de dois
+  // caminhos: `pass` (computeSettlement curto-circuita pass → void/0 com o placar
+  // REAL no resultData) ou override manual do admin numa aposta (jogo anulado →
+  // rótulo sem sentido). Pass entra; void de aposta sai.
+  const settledFilter = and(
+    inArray(predictions.marketId, [...marketById.keys()]),
+    or(
+      ne(predictionOutcomes.result, "void"),
+      eq(predictions.recommendation, "pass"),
+    ),
+  );
   const settled = await db
     .select({
       id: predictions.id,
@@ -116,22 +127,12 @@ export async function getMarketCalibrationRows(
       predictionOutcomes,
       eq(predictionOutcomes.predictionId, predictions.id),
     )
-    // O settle só liquida jogo `finished` com placar 90' — então `void` vem de dois
-    // caminhos: `pass` (computeSettlement curto-circuita pass → void/0 com o placar
-    // REAL no resultData) ou override manual do admin numa aposta (jogo anulado →
-    // rótulo sem sentido). Pass entra; void de aposta sai.
-    .where(
-      and(
-        inArray(predictions.marketId, [...marketById.keys()]),
-        or(
-          ne(predictionOutcomes.result, "void"),
-          eq(predictions.recommendation, "pass"),
-        ),
-      ),
-    );
+    .where(settledFilter);
   if (settled.length === 0) return [];
 
   // 3. PSO de todas as seleções dessas predições (odd + modelProbPct por seleção).
+  //    Join com o MESMO filtro do passo 2 em vez de inArray(ids): a lista de
+  //    predições cresce com o histórico e o Postgres limita os bind params (65k).
   const pso = await db
     .select({
       predictionId: predictionSelectionOdds.predictionId,
@@ -140,12 +141,15 @@ export async function getMarketCalibrationRows(
       modelProbPct: predictionSelectionOdds.modelProbPct,
     })
     .from(predictionSelectionOdds)
-    .where(
-      inArray(
-        predictionSelectionOdds.predictionId,
-        settled.map((s) => s.id),
-      ),
-    );
+    .innerJoin(
+      predictions,
+      eq(predictions.id, predictionSelectionOdds.predictionId),
+    )
+    .innerJoin(
+      predictionOutcomes,
+      eq(predictionOutcomes.predictionId, predictions.id),
+    )
+    .where(settledFilter);
 
   // predictionId → selectionId → { odd, modelPct }
   const byPred = new Map<
@@ -234,6 +238,8 @@ function buildPairs(
     if (outcome !== "won" && outcome !== "lost") return null; // push/half
     const y = outcome === "won" ? 1 : 0;
     model.push({ p: modelPct / 100, y });
+    // O teto só morde em odds incoerentes de dupla chance (uma dupla com mais da
+    // metade da implícita somada); partição com target=1 já fica em [0,1].
     marketPairs.push({ p: Math.min(1, probs[i] * target), y });
   }
   // Seleção positiva não seedada (seed quebrado): nada a medir.
@@ -255,7 +261,9 @@ export type OverUnderCalibrationRow = {
   engineConfig: string | null;
 };
 
-export function toOverUnderRows(
+// `model[0]`/`market[0]` existem: over/under tem seleção positiva (over), então
+// buildPairs devolve exatamente um par ou pula a predição.
+function toOverUnderRows(
   rows: MarketCalibrationRow[],
 ): OverUnderCalibrationRow[] {
   return rows
