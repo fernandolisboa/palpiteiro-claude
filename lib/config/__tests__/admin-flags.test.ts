@@ -37,6 +37,7 @@ describe("ADMIN_FLAGS (registry, #514)", () => {
       "enableClvCapture",
       "enableFidelityValidation",
       "enableKellyStaking",
+      "enableDixonColes",
       "analysisEngine",
     ]);
     expect(new Set(keys).size).toBe(keys.length);
@@ -56,6 +57,7 @@ describe("ADMIN_FLAGS (registry, #514)", () => {
       enableClvCapture: false,
       enableFidelityValidation: true,
       enableKellyStaking: true,
+      enableDixonColes: true,
       analysisEngine: "llm",
     });
   });
@@ -73,6 +75,7 @@ describe("ADMIN_FLAGS (registry, #514)", () => {
       enableClvCapture: boolean;
       enableFidelityValidation: boolean;
       enableKellyStaking: boolean;
+      enableDixonColes: boolean;
       analysisEngine: "llm" | "code_jev";
     }>();
   });
