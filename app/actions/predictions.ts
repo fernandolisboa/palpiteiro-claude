@@ -34,6 +34,7 @@ import {
   type AIModelId,
 } from "@/lib/ai/models";
 import { generatePalpites } from "@/lib/ai/palpites";
+import { PalpiteError } from "@/lib/ai/palpites/types";
 import { summarizeAnalysesForSynthesis } from "@/lib/ai/palpites/synthesis-input";
 import { PredictError, predict } from "@/lib/ai/predict";
 import { isEmailAllowed } from "@/lib/auth/whitelist";
@@ -376,8 +377,33 @@ export async function analyzeMatch(
 // ─── Modo "melhor aposta do jogo" (#178) ─────────────────────────────────────
 
 export type AnalyzeBestBetResult =
-  | { ok: true; view: BestBetView; palpite: PalpiteHeadlineView | null }
+  | {
+      ok: true;
+      view: BestBetView;
+      palpite: PalpiteHeadlineView | null;
+      // Só quando `palpite` é null: por que a manchete não saiu (as análises por
+      // mercado saíram). O HERO mostra isso em vez de voltar mudo pro estado vazio.
+      palpiteError?: string;
+    }
   | { ok: false; error: string };
+
+// Copy da síntese que não saiu (o fan-out pago sobreviveu). O admin vê o motivo técnico.
+const SYNTHESIS_DEADLINE_MESSAGE =
+  "As análises por mercado ficaram prontas, mas o tempo acabou antes de montar o palpite. Tente de novo.";
+const SYNTHESIS_FAILED_MESSAGE =
+  "As análises por mercado ficaram prontas, mas o palpite não saiu desta vez. Tente de novo.";
+
+function synthesisFailureMessage(err: unknown, isAdmin: boolean): string {
+  if (err instanceof AnalysisDeadlineError) return SYNTHESIS_DEADLINE_MESSAGE;
+  if (!isAdmin) return SYNTHESIS_FAILED_MESSAGE;
+  let detail = err instanceof Error ? err.message : String(err);
+  // Divergência de fidelidade (#380): o motivo concreto vive no context.
+  if (err instanceof PalpiteError && typeof err.context.reason === "string") {
+    detail = `${detail} (${err.context.reason})`;
+  }
+  // Erro de DB traz a query inteira na mensagem: corta pra caber no card.
+  return `${SYNTHESIS_FAILED_MESSAGE} Motivo: ${detail.slice(0, 300)}`;
+}
 
 // Mapeia QUALQUER erro pra mensagem amigável de UI. PredictError reusa o
 // friendlyMessage; o resto (inesperado: DB etc.) cai numa cópia genérica. Fica
@@ -694,6 +720,7 @@ export async function analyzeBestBet(
   // NÃO pode ser descartado → log + palpite:null. Espelha a assimetria do generator (o
   // log de ai_call pode falhar sem afundar o produto).
   let palpite: PalpiteHeadlineView | null = null;
+  let palpiteError: string | undefined;
   try {
     // Sem tempo pra uma chamada Haiku antes do prazo do run: pula a síntese limpa (o
     // gerador nem é chamado → sem row de ai_calls) e o fan-out pago volta sem manchete.
@@ -730,9 +757,22 @@ export async function analyzeBestBet(
         outcome: null,
         dimensions: toDimensionViews(linesWithPendingOutcome),
       });
+    } else {
+      console.error(
+        JSON.stringify({
+          scope: "analyzeBestBet",
+          matchId,
+          error: "synthesis_without_headline",
+        }),
+      );
+      palpiteError = synthesisFailureMessage(
+        new Error("manchete sem placar provável"),
+        isAdmin,
+      );
     }
   } catch (err) {
     // Síntese falhou: o fan-out pago SOBREVIVE (view retorna), só a manchete some.
+    palpiteError = synthesisFailureMessage(err, isAdmin);
     console.error(
       JSON.stringify({
         scope: "analyzeBestBet",
@@ -744,7 +784,9 @@ export async function analyzeBestBet(
   }
   revalidatePath(`/match/${matchId}`);
   revalidatePath("/jogos");
-  return { ok: true, view, palpite };
+  return palpiteError === undefined
+    ? { ok: true, view, palpite }
+    : { ok: true, view, palpite, palpiteError };
 }
 
 // ─── Análise multi-mercado SELECIONADA pelo usuário (#245) ────────────────────

@@ -6,6 +6,8 @@ import {
   canFitCall,
   MAX_MIN_CALL_BUDGET_MS,
   minCallBudgetMs,
+  NEWS_MIN_BUDGET_MS,
+  SYNTHESIS_CALL_RESERVE_MS,
   SYNTHESIS_RESERVE_MS,
 } from "@/lib/ai/deadline";
 
@@ -28,15 +30,15 @@ describe("minCallBudgetMs / canFitCall (#524 re-review)", () => {
   });
 
   it("piso limitado pelo que um run novo oferece: 32000 em xhigh não fica impossível", () => {
-    // metade de ~548s = 274s > os 270s do run inteiro; o teto é 270 − 25 − 60 = 185s.
+    // metade de ~548s = 274s > os 270s do run inteiro; o teto é 270 − 45 − 60 = 165s.
     const call = {
       thinkingMode: "adaptive" as const,
       maxTokens: 32000,
       effort: "xhigh" as const,
     };
-    expect(MAX_MIN_CALL_BUDGET_MS).toBe(185_000);
-    expect(minCallBudgetMs(call)).toBe(185_000);
-    // Um fan-out recém-iniciado (prazo − reserva da síntese = 245s) ainda começa.
+    expect(MAX_MIN_CALL_BUDGET_MS).toBe(165_000);
+    expect(minCallBudgetMs(call)).toBe(165_000);
+    // Um fan-out recém-iniciado (prazo − reserva da síntese = 225s) ainda começa.
     const now = 1_000_000;
     const fanOutDeadline = actionDeadline(now) - SYNTHESIS_RESERVE_MS;
     expect(canFitCall(fanOutDeadline, call, now)).toBe(true);
@@ -49,5 +51,20 @@ describe("minCallBudgetMs / canFitCall (#524 re-review)", () => {
     expect(canFitCall(deadlineAt, "adaptive", now)).toBe(false);
     expect(canFitCall(deadlineAt, "temperature", now)).toBe(true);
     expect(canFitCall(undefined, "adaptive", now)).toBe(true);
+  });
+});
+
+describe("reserva da síntese", () => {
+  it("a parte da manchete comporta uma chamada temperature (Haiku)", () => {
+    const deadlineAt = 1_000_000;
+    expect(
+      canFitCall(deadlineAt, "temperature", deadlineAt - SYNTHESIS_CALL_RESERVE_MS),
+    ).toBe(true);
+  });
+
+  it("a reserva cobre notícias + manchete", () => {
+    expect(SYNTHESIS_RESERVE_MS).toBeGreaterThanOrEqual(
+      NEWS_MIN_BUDGET_MS + SYNTHESIS_CALL_RESERVE_MS,
+    );
   });
 });

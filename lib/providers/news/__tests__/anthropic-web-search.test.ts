@@ -124,6 +124,15 @@ describe("getNewsByMatchViaWebSearch — caminho feliz", () => {
     // O userMessage carrega o contexto da partida.
     expect(req.userMessage).toContain("CR Flamengo");
     expect(req.userMessage).toContain("Fluminense FC");
+    // Sem prazo explícito, a request não leva prazo.
+    expect(req.deadlineAt).toBeUndefined();
+  });
+
+  it("repassa o prazo pra request (a síntese guarda o tempo da manchete)", async () => {
+    runAnalysis.mockResolvedValue(okResult([]));
+    await getNewsByMatchViaWebSearch(CTX, AUDIT, { deadlineAt: 123_456 });
+    const req = runAnalysis.mock.calls[0][0] as AnalysisRequest;
+    expect(req.deadlineAt).toBe(123_456);
   });
 });
 

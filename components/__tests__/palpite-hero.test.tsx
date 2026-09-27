@@ -18,6 +18,7 @@ vi.mock("@/app/actions/share", () => ({
   unshareSet: vi.fn(),
 }));
 
+import { analyzeBestBet } from "@/app/actions/predictions";
 import { unshareSet } from "@/app/actions/share";
 import { PalpiteHero } from "@/components/palpites/palpite-hero";
 import { containsValueLanguage } from "@/lib/ai/palpites/value-language-guard";
@@ -305,5 +306,117 @@ describe("PalpiteHero — ShareButton + kill-switch (ADR 0035 §3e / #438)", () 
 
     await act(async () => root.unmount());
     container.remove();
+  });
+});
+
+describe("PalpiteHero — análises saíram mas o palpite não (regressão)", () => {
+  // Antes: analyzeBestBet voltava {ok:true, palpite:null} quando a síntese falhava, e o
+  // HERO voltava mudo pro "E aí, quem leva esse jogo?" enquanto o detalhe por mercado
+  // aparecia abaixo. Agora o aviso da action aparece no card.
+  async function submitWith(
+    result: Awaited<ReturnType<typeof analyzeBestBet>>,
+    heroPalpite: PalpiteHeadlineView | null,
+    after?: { analyzable?: boolean; setId?: string | null },
+  ) {
+    vi.mocked(analyzeBestBet).mockResolvedValue(result);
+    (globalThis as { IS_REACT_ACT_ENVIRONMENT?: boolean }).IS_REACT_ACT_ENVIRONMENT =
+      true;
+    const container = document.createElement("div");
+    document.body.appendChild(container);
+    const root = createRoot(container);
+    await act(async () => {
+      root.render(
+        <PalpiteHero
+          heroPalpite={heroPalpite}
+          matchId="11111111-1111-1111-1111-111111111111"
+          analyzable
+          fanOutEnabled
+          finalScore={null}
+          setId={null}
+          sharedAt={null}
+        />,
+      );
+    });
+    await act(async () => {
+      container.querySelector("form")!.requestSubmit();
+    });
+    // Re-render como o revalidate faria (props do servidor depois do run).
+    if (after) {
+      await act(async () => {
+        root.render(
+          <PalpiteHero
+            heroPalpite={heroPalpite}
+            matchId="11111111-1111-1111-1111-111111111111"
+            analyzable={after.analyzable ?? true}
+            fanOutEnabled
+            finalScore={null}
+            setId={after.setId ?? null}
+            sharedAt={null}
+          />,
+        );
+      });
+    }
+    const text = container.textContent ?? "";
+    await act(async () => root.unmount());
+    container.remove();
+    return text;
+  }
+
+  const VIEW = {
+    entries: [],
+    errors: [],
+  } as unknown as Extract<
+    Awaited<ReturnType<typeof analyzeBestBet>>,
+    { ok: true }
+  >["view"];
+  const MESSAGE =
+    "As análises por mercado ficaram prontas, mas o palpite não saiu desta vez. Tente de novo.";
+
+  it("sem palpite anterior → aviso no card vazio, com a CTA pra tentar de novo", async () => {
+    const text = await submitWith(
+      { ok: true, view: VIEW, palpite: null, palpiteError: MESSAGE },
+      null,
+    );
+    expect(analyzeBestBet).toHaveBeenCalled();
+    expect(text).toContain("Não rolou dessa vez");
+    expect(text).toContain(MESSAGE);
+    expect(text).toContain("Analisar com IA");
+  });
+
+  it("com palpite anterior → aviso acima da manchete antiga", async () => {
+    const text = await submitWith(
+      { ok: true, view: VIEW, palpite: null, palpiteError: MESSAGE },
+      POPULATED,
+    );
+    expect(text).toContain(MESSAGE);
+    expect(text).toContain(POPULATED.verdict);
+  });
+
+  it("jogo apitou durante o run → o aviso aparece no card de não-analisável", async () => {
+    const text = await submitWith(
+      { ok: true, view: VIEW, palpite: null, palpiteError: MESSAGE },
+      null,
+      { analyzable: false },
+    );
+    expect(text).toContain(MESSAGE);
+    expect(text).not.toContain("Analisar com IA");
+  });
+
+  it("outro set chega depois (outra aba) → o aviso antigo some", async () => {
+    const text = await submitWith(
+      { ok: true, view: VIEW, palpite: null, palpiteError: MESSAGE },
+      POPULATED,
+      { setId: "33333333-3333-3333-3333-333333333333" },
+    );
+    expect(text).not.toContain(MESSAGE);
+    expect(text).toContain(POPULATED.verdict);
+  });
+
+  it("síntese ok → nenhum aviso", async () => {
+    const text = await submitWith(
+      { ok: true, view: VIEW, palpite: POPULATED },
+      POPULATED,
+    );
+    expect(text).not.toContain("Não rolou dessa vez");
   });
 });

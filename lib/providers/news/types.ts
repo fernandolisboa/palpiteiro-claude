@@ -37,12 +37,19 @@ export type NewsAuditContext = {
   matchId: string;
 };
 
+// Opções da busca. `deadlineAt` (epoch ms) corta o timeout da chamada pelo que resta
+// (lib/ai/deadline.ts): a síntese passa um prazo que guarda tempo pra manchete.
+export type NewsFetchOptions = {
+  deadlineAt?: number;
+};
+
 // Interface ESTREITA do provider de notícias (ADR 0032), análoga à AbsencesProvider.
 // Um único método; key-gated/inerte como o fallback SportMonks dos desfalques.
 export interface NewsProvider {
   getNewsByMatch(
     ctx: NewsMatchContext,
     audit: NewsAuditContext,
+    options?: NewsFetchOptions,
   ): Promise<NewsFetchOutcome>;
 }
 
