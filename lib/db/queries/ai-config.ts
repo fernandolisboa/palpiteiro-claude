@@ -242,6 +242,19 @@ export async function getEnableKellyStaking(): Promise<boolean> {
 }
 
 /**
+ * Kill-switch do Dixon-Coles em produção (ADR 0051). Default ON quando não há row.
+ * false → o λ vem sempre do heurístico da tabela (ADR 0037).
+ */
+export async function getEnableDixonColes(): Promise<boolean> {
+  const rows = await db
+    .select({ enabled: aiConfig.enableDixonColes })
+    .from(aiConfig)
+    .where(eq(aiConfig.id, 1))
+    .limit(1);
+  return rows[0]?.enabled ?? true;
+}
+
+/**
 /**
  * Motor de análise (ADR 0041 §5, #511): 'llm' (cartucho de mercado decide — caminho
  * de hoje) ou 'code_jev' (código + julgamentos JEV decidem, LLM narra). Sem row ou

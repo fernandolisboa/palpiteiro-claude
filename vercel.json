@@ -20,6 +20,10 @@
     {
       "path": "/api/cron/prewarm-odds",
       "schedule": "0 */6 * * *"
+    },
+    {
+      "path": "/api/cron/refit-team-ratings",
+      "schedule": "0 7 * * *"
     }
   ]
 }

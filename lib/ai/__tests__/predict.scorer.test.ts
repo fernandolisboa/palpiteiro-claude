@@ -110,9 +110,12 @@ vi.mock("@/lib/ai/anthropic", () => ({
 
 const getDefaultModelId = vi.fn();
 const getGenerationParams = vi.fn();
+// Dixon-Coles (ADR 0051): desligado por default → λ do heurístico da tabela.
+const getEnableDixonColes = vi.fn(() => Promise.resolve(false));
 vi.mock("@/lib/db/queries/ai-config", () => ({
   getDefaultModelId: (...args: unknown[]) => getDefaultModelId(...args),
   getGenerationParams: (...args: unknown[]) => getGenerationParams(...args),
+  getEnableDixonColes: () => getEnableDixonColes(),
 }));
 
 const getPreferredModelId = vi.fn();

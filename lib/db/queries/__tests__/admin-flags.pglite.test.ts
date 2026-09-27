@@ -37,6 +37,7 @@ import {
   getAnalysisEngine,
   getEnableBestBetFanOut,
   getEnableClvCapture,
+  getEnableDixonColes,
   getEnableFidelityValidation,
   getEnableKellyStaking,
   getEnableOverUnderExtraLines,
@@ -51,6 +52,7 @@ const GETTERS = {
   enableClvCapture: getEnableClvCapture,
   enableFidelityValidation: getEnableFidelityValidation,
   enableKellyStaking: getEnableKellyStaking,
+  enableDixonColes: getEnableDixonColes,
   analysisEngine: getAnalysisEngine,
 } satisfies Record<AdminFlagKey, () => Promise<unknown>>;
 
