@@ -26,9 +26,10 @@ import { leagueToSportKey } from "@/lib/providers/odds-api-constants";
 import type { NormalizedOddsEvent } from "@/lib/providers/odds/types";
 import { getSportsDataProvider } from "@/lib/providers/sports-data";
 import { getAbsencesProvider } from "@/lib/providers/absences";
-import { computeMatchLambdas } from "@/lib/providers/sports-data/match-lambdas";
+import type { ModelScoreline } from "@/lib/quant/match-model";
+import { getModelScoreline } from "@/lib/ratings/model-scoreline";
 import { normalizeTeamName } from "@/lib/providers/sports-data/team-names";
-import { pOverUnder, scorelineMatrix } from "@/lib/quant/scoreline-model";
+import { pOverUnder } from "@/lib/quant/scoreline-model";
 import {
   SportsDataTransientError,
   SportsDataUnsupportedError,
@@ -69,10 +70,6 @@ import {
   type MatchJudgmentData,
   type MatchJudgmentInput,
 } from "./engine/judgment-input";
-import {
-  resolveModelScoreline,
-  type ModelScoreline,
-} from "./engine/model-scoreline";
 import type { PredictionJudgments } from "./engine/types";
 import { JUDGMENT_WEIGHTS_VERSION } from "./judgments/apply";
 import {
@@ -776,56 +773,31 @@ async function runPredict(
   let oddByKey: Record<string, number> = {};
   let impliedByKey: Record<string, number> = {};
 
-  // 5.5 (ADR 0037): baseline Poisson do modelo de placar como FATO estruturado pro
-  //    cartucho over/under. Matriz UMA vez da tabela via o adapter promovido
-  //    (lib/providers/sports-data/match-lambdas); ausente (undefined) quando standings
-  //    indisponível/degenerado — escada de degradação, o cartucho roda como antes, zero
-  //    regressão. Só over/under lê o bloco no v1; injetado via spread condicional pra
-  //    não virar excess-property nos outros cartuchos (que ignoram o campo).
-  const scorelineMatrixForMatch =
-    cartridge.descriptor.dbMarketKey === "over_under"
-      ? (() => {
-          const lambdas = computeMatchLambdas({
-            standing: standings,
-            homeTeam: match.homeTeam,
-            awayTeam: match.awayTeam,
-            neutral: match.league === "world_cup",
-          });
-          if (!lambdas) return null;
-          return {
-            matrix: scorelineMatrix(lambdas.lambdaHome, lambdas.lambdaAway),
-            degraded: lambdas.degradedData,
-          };
-        })()
-      : null;
-  const scorelineModelForLines = (lines: number[]) =>
-    scorelineMatrixForMatch
-      ? {
-          source: "poisson" as const,
-          degraded: scorelineMatrixForMatch.degraded,
-          perLine: lines.map((line) => ({
-            line,
-            overPct: pOverUnder(scorelineMatrixForMatch.matrix, line) * 100,
-          })),
-        }
-      : undefined;
+  // 5.5 (ADR 0037/0051): λ + matriz do modelo de placar, lidos UMA vez por predict e
+  //    só quando alguém usa (motor code_jev abaixo, ou a âncora do over/under no
+  //    caminho LLM, antes do buildPredictionInput): Dixon-Coles dos
+  //    ratings diários, com o heurístico da tabela como rede. null = nem ratings nem
+  //    tabela → escada de degradação, o cartucho roda como antes.
+  let modelScorelinePromise: Promise<ModelScoreline | null> | null = null;
+  const modelScoreline = () =>
+    (modelScorelinePromise ??= getModelScoreline({
+      league: match.league,
+      standing: standings,
+      homeTeam: match.homeTeam,
+      awayTeam: match.awayTeam,
+      neutral: match.league === "world_cup",
+    }));
 
   // 5.6 Motor code_jev (ADR 0041, #511), atrás do flag `analysis_engine`: nos mercados
   //     partition que o código precifica, a decisão sai do λ (× julgamentos JEV) → matriz
-  //     → max-edge, e o LLM só narra. Precisa da tabela (λ); sem ela, ou com o flag em
+  //     → max-edge, e o LLM só narra. Precisa de λ (DC ou tabela); sem ele, ou com o flag em
   //     'llm', ou em mercado não precificável → segue o caminho LLM abaixo, intacto.
   //     No best bet, o λ e os julgamentos do 1º mercado ficam fixados pro run (#512).
   const pinned = opts.runMemo?.get(matchId);
   const engineScoreline =
     isCodeJevMarket(cartridge.descriptor) &&
     (opts.engine ?? (await readAnalysisEngine())) === "code_jev"
-      ? (pinned?.scoreline ??
-        resolveModelScoreline({
-          standing: standings,
-          homeTeam: match.homeTeam,
-          awayTeam: match.awayTeam,
-          neutral: match.league === "world_cup",
-        }))
+      ? (pinned?.scoreline ?? (await modelScoreline()))
       : null;
   if (engineScoreline) {
     // Candidatas = a linha única, ou cada linha da escada (multi-linha, #175): a
@@ -1031,6 +1003,28 @@ async function runPredict(
     lineups,
     h2h,
   };
+  // Baseline do modelo de placar (5.5) como FATO estruturado pro cartucho over/under,
+  // injetado via spread condicional pra não virar excess-property nos outros cartuchos
+  // (que ignoram o campo). Lido só aqui, no caminho LLM: o code_jev não usa o bloco.
+  const overUnderScoreline =
+    cartridge.descriptor.dbMarketKey === "over_under"
+      ? await modelScoreline()
+      : null;
+  const scorelineModelForLines = (lines: number[]) =>
+    overUnderScoreline
+      ? {
+          source:
+            overUnderScoreline.source === "dixon_coles"
+              ? ("dixon_coles" as const)
+              : ("poisson" as const),
+          degraded: overUnderScoreline.degraded,
+          perLine: lines.map((line) => ({
+            line,
+            overPct: pOverUnder(overUnderScoreline.matrix, line) * 100,
+          })),
+        }
+      : undefined;
+
   let input: ReturnType<typeof cartridge.buildPredictionInput>;
   try {
     if (isIndependentBinary) {
@@ -1926,6 +1920,9 @@ function toPredictionJudgments(
     lambda: {
       source: scoreline.source,
       degraded: scoreline.degraded,
+      ...(scoreline.fallbackReason
+        ? { fallbackReason: scoreline.fallbackReason }
+        : {}),
       rho: scoreline.rho ?? null,
       base: engine.lambdaBase,
       adjusted: {

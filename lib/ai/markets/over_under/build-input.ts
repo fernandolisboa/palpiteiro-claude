@@ -200,7 +200,8 @@ export type BuildPredictionInputArgs = {
   // aqui em camelCase; mapeamos pro snake_case do schema. Opcional (ausente = escada
   // de degradação: standings indisponível → cartucho roda como antes).
   scorelineModel?: {
-    source: "poisson";
+    // "dixon_coles" = λ dos ratings diários (ADR 0051); "poisson" = heurístico da tabela.
+    source: "poisson" | "dixon_coles";
     degraded: boolean;
     perLine: { line: number; overPct: number }[];
   };

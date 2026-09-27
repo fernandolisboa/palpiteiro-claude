@@ -6,6 +6,15 @@ vi.mock("@/auth", () => ({ auth: vi.fn() }));
 vi.mock("@/lib/ai/engine/analysis-engine-flag", () => ({
   resetAnalysisEngineMemo: vi.fn(),
 }));
+vi.mock("@/lib/ratings/model-scoreline", () => ({
+  resetDixonColesFlagMemo: vi.fn(),
+}));
+vi.mock("@/lib/ratings/refit-team-ratings", async (importOriginal) => ({
+  ...(await importOriginal<
+    typeof import("@/lib/ratings/refit-team-ratings")
+  >()),
+  refitTeamRatings: vi.fn(),
+}));
 vi.mock("@/lib/db/queries/ai-config", () => ({
   setAdminFlag: vi.fn(),
   setDefaultModelId: vi.fn(),
@@ -13,12 +22,15 @@ vi.mock("@/lib/db/queries/ai-config", () => ({
 }));
 
 import {
+  refitTeamRatingsNow,
   updateAdminFlag,
   updateDefaultModel,
   updateGenerationParams,
 } from "@/app/actions/ai-config";
 import { auth } from "@/auth";
 import { resetAnalysisEngineMemo } from "@/lib/ai/engine/analysis-engine-flag";
+import { resetDixonColesFlagMemo } from "@/lib/ratings/model-scoreline";
+import { refitTeamRatings } from "@/lib/ratings/refit-team-ratings";
 import {
   setAdminFlag,
   setDefaultModelId,
@@ -30,6 +42,8 @@ const mockSet = vi.mocked(setDefaultModelId);
 const mockSetParams = vi.mocked(setGenerationParams);
 const mockSetFlag = vi.mocked(setAdminFlag);
 const mockResetMemo = vi.mocked(resetAnalysisEngineMemo);
+const mockResetDcMemo = vi.mocked(resetDixonColesFlagMemo);
+const mockRefit = vi.mocked(refitTeamRatings);
 
 const ADMIN = {
   user: { id: "u1", email: "a@b.com", role: "admin" },
@@ -53,6 +67,8 @@ beforeEach(() => {
   mockSetParams.mockReset();
   mockSetFlag.mockReset();
   mockResetMemo.mockReset();
+  mockResetDcMemo.mockReset();
+  mockRefit.mockReset();
 });
 
 describe("updateDefaultModel", () => {
@@ -238,5 +254,77 @@ describe("updateAdminFlag (#514) — analysisEngine (#511)", () => {
     expect(res).toEqual({ ok: true });
     expect(mockSetFlag).toHaveBeenCalledWith("enableClvCapture", true, "u1");
     expect(mockResetMemo).not.toHaveBeenCalled();
+  });
+
+  it("enableDixonColes zera o memo do flag do DC (ADR 0051), não o do motor", async () => {
+    mockAuth.mockResolvedValue(ADMIN);
+    const res = await updateAdminFlag(
+      null,
+      form({ key: "enableDixonColes", value: "false" }),
+    );
+    expect(res).toEqual({ ok: true });
+    expect(mockSetFlag).toHaveBeenCalledWith("enableDixonColes", false, "u1");
+    expect(mockResetDcMemo).toHaveBeenCalledTimes(1);
+    expect(mockResetMemo).not.toHaveBeenCalled();
+  });
+});
+
+describe("refitTeamRatingsNow (ADR 0051)", () => {
+  it("non-admin → acesso negado, refit não roda", async () => {
+    mockAuth.mockResolvedValue(USER);
+    const res = await refitTeamRatingsNow(null, form({}));
+    expect(res).toEqual({ ok: false, error: "Acesso negado." });
+    expect(mockRefit).not.toHaveBeenCalled();
+  });
+
+  it("separa ajustadas, poucos jogos e falhas", async () => {
+    mockAuth.mockResolvedValue(ADMIN);
+    mockRefit.mockResolvedValue([
+      {
+        league: "brasileirao_a",
+        status: "fitted",
+        matchCount: 1000,
+        teamCount: 28,
+        seasons: [2026, 2025, 2024, 2023],
+        failedSeasons: [],
+      },
+      {
+        league: "premier_league",
+        status: "skipped",
+        reason: "too_few_matches",
+        matchCount: 40,
+        failedSeasons: [],
+      },
+      {
+        league: "la_liga",
+        status: "skipped",
+        reason: "current_season_failed",
+        matchCount: 0,
+        failedSeasons: [2026],
+      },
+      {
+        league: "champions_league",
+        status: "skipped",
+        reason: "partial_fetch_kept_previous",
+        matchCount: 300,
+        failedSeasons: [2024],
+      },
+    ]);
+    const res = await refitTeamRatingsNow(null, form({}));
+    expect(res).toEqual({
+      ok: true,
+      fitted: 1,
+      tooFew: 1,
+      failed: ["la_liga", "champions_league"],
+    });
+  });
+
+  it("refit que lança → erro genérico", async () => {
+    mockAuth.mockResolvedValue(ADMIN);
+    mockRefit.mockRejectedValue(new Error("boom"));
+    const spy = vi.spyOn(console, "error").mockImplementation(() => {});
+    const res = await refitTeamRatingsNow(null, form({}));
+    expect(res).toEqual({ ok: false, error: "O refit falhou. Veja os logs." });
+    spy.mockRestore();
   });
 });

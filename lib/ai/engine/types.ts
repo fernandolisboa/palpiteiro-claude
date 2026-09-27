@@ -1,5 +1,6 @@
 import type { JudgmentMultipliers } from "@/lib/ai/judgments/apply";
 import type { JudgmentAnswers } from "@/lib/ai/judgments/types";
+import type { DixonColesFallbackReason } from "@/lib/quant/match-model";
 
 // Conteúdo de `predictions.judgments` (jsonb, ADR 0041 §6): tudo que a decisão do
 // motor code_jev precisa pra ser recomputada a partir da row.
@@ -12,6 +13,9 @@ export type PredictionJudgments = {
   lambda: {
     source: "dixon_coles" | "heuristic";
     degraded: boolean;
+    // Por que o Dixon-Coles não foi usado (ADR 0051). Ausente quando foi, e nas rows
+    // anteriores ao DC em produção.
+    fallbackReason?: DixonColesFallbackReason;
     // ρ da matriz; null = DIXON_COLES_RHO pinado de scorelineMatrix.
     rho: number | null;
     base: { home: number; away: number };

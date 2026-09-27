@@ -14,6 +14,12 @@ import {
   TEMPERATURE_MIN,
 } from "@/lib/ai/generation-params";
 import { resetAnalysisEngineMemo } from "@/lib/ai/engine/analysis-engine-flag";
+import type { SupportedLeague } from "@/lib/providers/sports-data/leagues";
+import { resetDixonColesFlagMemo } from "@/lib/ratings/model-scoreline";
+import {
+  isRefitFailure,
+  refitTeamRatings,
+} from "@/lib/ratings/refit-team-ratings";
 import {
   validateAdminFlagInput,
   type AdminFlagValue,
@@ -122,6 +128,53 @@ export async function updateAdminFlag(
   // Motor de análise (ADR 0041): vale já nesta instância; nas outras, em até 60s
   // (TTL do memo lido pelo predict).
   if (verdict.key === "analysisEngine") resetAnalysisEngineMemo();
+  if (verdict.key === "enableDixonColes") resetDixonColesFlagMemo();
   revalidatePath("/admin/settings");
   return { ok: true };
+}
+
+export type RefitTeamRatingsResult =
+  | {
+      ok: true;
+      fitted: number;
+      // Sem jogos suficientes pra ajustar (liga nova, começo de temporada): não é erro.
+      tooFew: number;
+      // Ligas que ficaram sem ajuste novo por erro (o cron responderia 500).
+      failed: SupportedLeague[];
+    }
+  | { ok: false; error: string };
+
+/**
+ * Refit do Dixon-Coles sob demanda (ADR 0051): o mesmo job do cron diário, pra não
+ * esperar o próximo disparo depois de um deploy ou de ligar uma liga.
+ */
+export async function refitTeamRatingsNow(
+  _prev: RefitTeamRatingsResult | null,
+  _formData: FormData,
+): Promise<RefitTeamRatingsResult> {
+  const session = await auth();
+  if (session?.user?.role !== "admin" || !session.user.id) {
+    return { ok: false, error: "Acesso negado." };
+  }
+  try {
+    const results = await refitTeamRatings();
+    revalidatePath("/admin/settings");
+    const fitted = results.filter((r) => r.status === "fitted").length;
+    const failed = results.filter(isRefitFailure).map((r) => r.league);
+    return {
+      ok: true,
+      fitted,
+      tooFew: results.length - fitted - failed.length,
+      failed,
+    };
+  } catch (err) {
+    console.error(
+      JSON.stringify({
+        scope: "refit_team_ratings",
+        event: "manual_refit_failed",
+        message: err instanceof Error ? err.message : String(err),
+      }),
+    );
+    return { ok: false, error: "O refit falhou. Veja os logs." };
+  }
 }

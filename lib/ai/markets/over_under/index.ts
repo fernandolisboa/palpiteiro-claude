@@ -20,7 +20,11 @@ import { buildUserMessage } from "./user-message";
 // cartucho (ADR 0017). BUMP MINOR v2.0 → v2.1 (#226, ADR 0026): proveniência de
 // desfalques (`fonte` no user-message + regra de ponderação por source no prompt).
 // O payload MUDOU (campo `source` opcional nas absences) — rodar o replay-eval.
-export const OVER_UNDER_VERSION = "over_under_v2.2" as const;
+// BUMP MINOR v2.2 → v2.3 (ADR 0051, cumpre o ADR 0039 D2): o baseline do modelo de
+// placar passa a vir do Dixon-Coles refitado todo dia, com o heurístico da tabela como
+// rede. Prompt e mensagem byte-idênticos; mudam os NÚMEROS da âncora e o `source` do
+// scoreline_model no payload. O bump separa as duas âncoras na calibração.
+export const OVER_UNDER_VERSION = "over_under_v2.3" as const;
 
 // Re-exports nomeados: predict.ts importa `buildPredictionInput`/`BuildInputError`
 // como BINDINGS DE MÓDULO (não via o objeto do cartucho) pra que os spies do

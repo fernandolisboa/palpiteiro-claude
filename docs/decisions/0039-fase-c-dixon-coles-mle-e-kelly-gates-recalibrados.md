@@ -2,7 +2,7 @@
 
 ## Status
 
-Accepted (2026-09-24; o dono escolheu dividir a Fase C) — Report 03 rec. 6 (Dixon-Coles MLE) + rec. 7 (Kelly fracionário, emenda ao ADR 0019). **Substitui o gate de dados** que o Report 03 e o `HANDOFF-audit-continuation.md` fixaram para a Fase C (≥150 apostas liquidadas + reliability slope ∈ [0.8, 1.2] + Brier ≤ no-vig). Esse gate é **estatisticamente inalcançável** no volume real do app (um usuário) e **reprova um modelo bem calibrado** mesmo em volume alto (Contexto). Este ADR troca o gate por dois critérios, **um por entrega**, cada um medível com o dado que o app consegue ter.
+Accepted (2026-09-24; o dono escolheu dividir a Fase C) — **emendado pelo ADR 0051**: o DC entrou em produção com refit diário (não semanal) e ajuste pelo ponto fixo de Maher + ρ por seção áurea — Report 03 rec. 6 (Dixon-Coles MLE) + rec. 7 (Kelly fracionário, emenda ao ADR 0019). **Substitui o gate de dados** que o Report 03 e o `HANDOFF-audit-continuation.md` fixaram para a Fase C (≥150 apostas liquidadas + reliability slope ∈ [0.8, 1.2] + Brier ≤ no-vig). Esse gate é **estatisticamente inalcançável** no volume real do app (um usuário) e **reprova um modelo bem calibrado** mesmo em volume alto (Contexto). Este ADR troca o gate por dois critérios, **um por entrega**, cada um medível com o dado que o app consegue ter.
 
 > **Escopo:** IA + quant. Decide **o quê** e **com que evidência** cada metade da Fase C entra. **Não** implementa: o build de cada metade é uma issue downstream (DC primeiro). **Fora de escopo:** blend computado `p = w·P_poisson + (1−w)·P_LLM` (rec. 8), `/fixtures/statistics` (rec. 9), estender o baseline estatístico a BTTS/1X2 no prompt (segue a disciplina do ADR 0037 D5: um mercado por vez, com bump).
 
