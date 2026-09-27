@@ -4,7 +4,10 @@ import {
   type LeagueFitSummary,
 } from "@/lib/db/queries/team-ratings";
 import { LEAGUE_LABEL, formatRelativeAgo, leagueToKey } from "@/lib/format";
-import { DC_MAX_FIT_AGE_MS } from "@/lib/quant/match-model";
+import {
+  DC_MAX_FIT_AGE_MS,
+  DC_MIN_TEAM_MATCHES,
+} from "@/lib/quant/match-model";
 
 import { RefitRatingsButton } from "./refit-ratings-button";
 
@@ -25,7 +28,7 @@ async function readFits(): Promise<LeagueFitSummary[] | null> {
 }
 
 /** Último ajuste do Dixon-Coles por liga (ADR 0051) + refit sob demanda. */
-export async function TeamRatingsPanel() {
+export async function TeamRatingsPanel({ enabled }: { enabled: boolean }) {
   const fits = await readFits();
   const now = new Date();
 
@@ -38,8 +41,15 @@ export async function TeamRatingsPanel() {
           </h2>
           <p className="text-body-sm text-muted-foreground">
             Refit diário às 07:00 UTC. Ajuste com mais de 72h, ou time com menos
-            jogos que o mínimo, cai no heurístico da tabela.
+            de {DC_MIN_TEAM_MATCHES} jogos na janela, cai no heurístico da
+            tabela.
           </p>
+          {!enabled && (
+            <p className="text-body-sm text-destructive">
+              Flag desligada: as análises usam sempre o heurístico, mesmo com
+              ajuste fresco.
+            </p>
+          )}
         </div>
         <RefitRatingsButton />
       </div>
@@ -57,6 +67,7 @@ export async function TeamRatingsPanel() {
         {fits?.map((f) => {
           const stale =
             now.getTime() - f.fittedAt.getTime() > DC_MAX_FIT_AGE_MS;
+          const ago = formatRelativeAgo(f.fittedAt, now);
           return (
             <DefinitionRow
               key={f.league}
@@ -81,7 +92,7 @@ export async function TeamRatingsPanel() {
                         : "text-meta text-muted-foreground font-mono"
                     }
                   >
-                    há {formatRelativeAgo(f.fittedAt, now)}
+                    {ago === "agora" ? "agora" : `há ${ago}`}
                     {stale ? " · velho, usando heurístico" : ""}
                   </span>
                   <span className="text-eyebrow text-muted-foreground font-mono tabular-nums">

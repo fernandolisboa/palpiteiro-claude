@@ -4,12 +4,13 @@ import type { SupportedLeague } from "@/lib/providers/sports-data/leagues";
 import type { NormalizedFixture } from "@/lib/providers/sports-data/types";
 
 const getFixturesBySeason = vi.fn();
+const getSportsDataProvider = vi.fn();
 vi.mock("@/lib/providers/sports-data", async (importOriginal) => {
   const actual =
     await importOriginal<typeof import("@/lib/providers/sports-data")>();
   return {
     ...actual,
-    getSportsDataProvider: () => ({ getFixturesBySeason }),
+    getSportsDataProvider: () => getSportsDataProvider(),
   };
 });
 
@@ -34,6 +35,7 @@ import {
   isRefitFailure,
   MIN_FIT_MATCHES,
   refitTeamRatings,
+  RUN_DEADLINE_MS,
 } from "@/lib/ratings/refit-team-ratings";
 
 const NOW = new Date("2026-09-26T07:00:00Z");
@@ -75,7 +77,9 @@ function season(
 }
 
 beforeEach(() => {
+  vi.restoreAllMocks();
   vi.clearAllMocks();
+  getSportsDataProvider.mockReturnValue({ getFixturesBySeason });
   vi.spyOn(console, "log").mockImplementation(() => {});
   vi.spyOn(console, "error").mockImplementation(() => {});
   replaceLeagueRatings.mockResolvedValue(undefined);
@@ -217,6 +221,8 @@ describe("refitTeamRatings", () => {
       failedSeasons: [2025],
     });
     expect(replaceLeagueRatings).not.toHaveBeenCalled();
+    // Acusa no cron: se persistir, o fit envelhece e o DC sai do ar.
+    expect(isRefitFailure(result)).toBe(true);
   });
 
   it("temporada que nunca respondeu não trava o refit (o fit atual também não a tinha)", async () => {
@@ -279,6 +285,9 @@ describe("refitTeamRatings", () => {
     });
     expect(30).toBeLessThan(MIN_FIT_MATCHES);
     expect(replaceLeagueRatings).not.toHaveBeenCalled();
+    // Temporada passada vazia (200 sem jogos) não vai pro cache: busca de novo amanhã.
+    expect(saveSeasonResults).not.toHaveBeenCalled();
+    expect(isRefitFailure(result)).toBe(false);
   });
 
   it("todas as temporadas falham → skipped, sem escrita", async () => {
@@ -351,6 +360,103 @@ describe("refitTeamRatings", () => {
     });
 
     expect(result).toMatchObject({ status: "fitted", matchCount: 120 });
+  });
+
+  it("temporada atual falha → não grava um fit só com o passado", async () => {
+    getFixturesBySeason.mockImplementation(
+      (league: SupportedLeague, s: number) =>
+        s === 2026
+          ? Promise.reject(new Error("timeout"))
+          : Promise.resolve(season(league, s, 2))
+    );
+
+    const [result] = await refitTeamRatings({
+      leagues: ["brasileirao_a"],
+      now: NOW,
+    });
+
+    expect(result).toMatchObject({
+      status: "skipped",
+      reason: "current_season_failed",
+      failedSeasons: [2026],
+    });
+    expect(replaceLeagueRatings).not.toHaveBeenCalled();
+    expect(isRefitFailure(result)).toBe(true);
+    // As encerradas que vieram ficam guardadas pra próxima rodada.
+    expect(saveSeasonResults.mock.calls.map((c) => c[1])).toEqual([
+      2025, 2024, 2023,
+    ]);
+  });
+
+  it("temporada passada com jogo ainda agendado não vai pro cache", async () => {
+    getFixturesBySeason.mockImplementation(
+      (league: SupportedLeague, s: number) =>
+        Promise.resolve(
+          s === 2025
+            ? [...season(league, s, 2), ...season(league, s, 1, "scheduled")]
+            : season(league, s, 2)
+        )
+    );
+
+    const [result] = await refitTeamRatings({
+      leagues: ["brasileirao_a"],
+      now: NOW,
+    });
+
+    expect(saveSeasonResults.mock.calls.map((c) => c[1])).toEqual([2024, 2023]);
+    expect(result).toMatchObject({ status: "fitted", matchCount: 180 });
+  });
+
+  it("liga que lança não derruba as outras", async () => {
+    getSportsDataProvider
+      .mockImplementationOnce(() => {
+        throw new Error("provider misconfigured");
+      })
+      .mockReturnValue({ getFixturesBySeason });
+    getFixturesBySeason.mockImplementation(
+      (league: SupportedLeague, s: number) =>
+        Promise.resolve(season(league, s, 2))
+    );
+
+    const results = await refitTeamRatings({
+      leagues: ["brasileirao_a", "la_liga"],
+      now: NOW,
+    });
+
+    expect(results[0]).toMatchObject({
+      league: "brasileirao_a",
+      status: "skipped",
+      reason: "error",
+    });
+    expect(results[1]).toMatchObject({ league: "la_liga", status: "fitted" });
+    expect(isRefitFailure(results[0])).toBe(true);
+  });
+
+  it("depois do prazo do run não começa liga nova", async () => {
+    let t = 0;
+    vi.spyOn(Date, "now").mockImplementation(() => t);
+    getFixturesBySeason.mockImplementation(
+      (league: SupportedLeague, s: number) => {
+        t = RUN_DEADLINE_MS + 1;
+        return Promise.resolve(season(league, s, 2));
+      }
+    );
+
+    const results = await refitTeamRatings({
+      leagues: ["brasileirao_a", "la_liga"],
+      now: NOW,
+    });
+
+    expect(results[0]).toMatchObject({ status: "fitted" });
+    expect(results[1]).toMatchObject({
+      league: "la_liga",
+      status: "skipped",
+      reason: "deadline",
+    });
+    expect(isRefitFailure(results[1])).toBe(true);
+    expect(
+      getFixturesBySeason.mock.calls.every((c) => c[0] === "brasileirao_a")
+    ).toBe(true);
   });
 
   it("sem opts.leagues usa as ligas ativas, menos a Copa do Mundo", async () => {

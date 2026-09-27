@@ -14,8 +14,12 @@ import {
   TEMPERATURE_MIN,
 } from "@/lib/ai/generation-params";
 import { resetAnalysisEngineMemo } from "@/lib/ai/engine/analysis-engine-flag";
+import type { SupportedLeague } from "@/lib/providers/sports-data/leagues";
 import { resetDixonColesFlagMemo } from "@/lib/ratings/model-scoreline";
-import { refitTeamRatings } from "@/lib/ratings/refit-team-ratings";
+import {
+  isRefitFailure,
+  refitTeamRatings,
+} from "@/lib/ratings/refit-team-ratings";
 import {
   validateAdminFlagInput,
   type AdminFlagValue,
@@ -130,7 +134,14 @@ export async function updateAdminFlag(
 }
 
 export type RefitTeamRatingsResult =
-  | { ok: true; fitted: number; skipped: number }
+  | {
+      ok: true;
+      fitted: number;
+      // Sem jogos suficientes pra ajustar (liga nova, começo de temporada): não é erro.
+      tooFew: number;
+      // Ligas que ficaram sem ajuste novo por erro (o cron responderia 500).
+      failed: SupportedLeague[];
+    }
   | { ok: false; error: string };
 
 /**
@@ -149,7 +160,13 @@ export async function refitTeamRatingsNow(
     const results = await refitTeamRatings();
     revalidatePath("/admin/settings");
     const fitted = results.filter((r) => r.status === "fitted").length;
-    return { ok: true, fitted, skipped: results.length - fitted };
+    const failed = results.filter(isRefitFailure).map((r) => r.league);
+    return {
+      ok: true,
+      fitted,
+      tooFew: results.length - fitted - failed.length,
+      failed,
+    };
   } catch (err) {
     console.error(
       JSON.stringify({

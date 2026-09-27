@@ -130,7 +130,7 @@ export default async function AdminSettingsPage() {
           </p>
         </section>
 
-        <TeamRatingsPanel />
+        <TeamRatingsPanel enabled={flagValues.enableDixonColes === true} />
       </div>
     </div>
   );

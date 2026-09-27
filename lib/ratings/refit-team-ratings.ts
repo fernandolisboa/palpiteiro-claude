@@ -23,16 +23,20 @@ import { DC_MAX_FIT_AGE_MS } from "@/lib/quant/match-model";
 // três anteriores (cobrem a janela de 3 anos do fit inteira, como no backtest) →
 // fitDixonColes com os hiperparâmetros do backtest (DC_DEFAULTS) → troca atômica dos
 // ratings da liga. Temporada encerrada não muda: é buscada no provider uma vez e
-// guardada (team_rating_season_results), então o dia a dia custa 1 chamada de
-// API-Football por liga (a temporada atual, que o sync de fixtures já deixa no cache
-// de 1h) e zero crédito da The Odds API.
+// guardada (team_rating_season_results) quando o provider a devolve completa, então
+// o dia a dia custa 1 chamada de API-Football por liga (a temporada atual) e zero
+// crédito da The Odds API.
 // Liga que falha mantém o fit anterior; o predict larga o DC sozinho quando ele fica
-// velho (DC_MAX_FIT_AGE_MS).
+// velho (DC_MAX_FIT_AGE_MS). Sem a temporada atual nunca grava: um fit "fresco" feito
+// só com temporadas passadas congelaria a forma no fim da temporada anterior.
 
 const SEASONS_BACK = 3;
 // Abaixo disso o ajuste é quase só o prior; não sobrescreve um fit bom com um ruim
 // (ex.: só a temporada atual respondeu, no começo dela).
 export const MIN_FIT_MATCHES = 100;
+// Não começa liga nova depois disso: o cron e a server action têm 300s, e o throttle
+// da API-Football (8/min) enfileira a 1ª rodada (4 chamadas por liga).
+export const RUN_DEADLINE_MS = 240_000;
 // Seleções nacionais: uma Copa a cada 4 anos não forma histórico de liga.
 const EXCLUDED: ReadonlySet<SupportedLeague> = new Set(["world_cup"]);
 
@@ -51,23 +55,25 @@ export type LeagueRefitResult =
       reason:
         | "too_few_matches"
         | "all_seasons_failed"
+        | "current_season_failed"
         // Temporada que o fit atual (ainda válido) tinha falhou agora: não troca
         // 3 anos de histórico por um ajuste mais magro.
         | "partial_fetch_kept_previous"
         | "invalid_fit"
-        | "write_failed";
+        | "write_failed"
+        // Prazo do run estourou antes desta liga; as temporadas já guardadas ficam.
+        | "deadline"
+        | "error";
       matchCount: number;
       failedSeasons: number[];
     };
 
-/** Falha que o cron deve acusar (a liga ficou sem ajuste novo por erro, não por dado). */
+/**
+ * Falha que o cron deve acusar: a liga ficou sem ajuste novo por erro, não por falta
+ * de dado ("poucos jogos"). Temporada passada que nunca respondeu não conta.
+ */
 export function isRefitFailure(r: LeagueRefitResult): boolean {
-  return (
-    r.status === "skipped" &&
-    (r.reason === "all_seasons_failed" ||
-      r.reason === "write_failed" ||
-      r.reason === "invalid_fit")
-  );
+  return r.status === "skipped" && r.reason !== "too_few_matches";
 }
 
 function logError(event: string, fields: Record<string, unknown>): void {
@@ -138,6 +144,7 @@ async function loadSeasons(
   results: SeasonResult[];
   okSeasons: number[];
   failedSeasons: number[];
+  currentFailed: boolean;
 }> {
   const current = currentSeason(league, now);
   const seasons = Array.from(
@@ -148,42 +155,57 @@ async function loadSeasons(
   const toFetch = seasons.filter((s) => !cached.has(s));
 
   const provider = getSportsDataProvider();
-  const settled = await Promise.allSettled(
-    toFetch.map((s) => provider.getFixturesBySeason(league, s))
-  );
   const bySeason = new Map(cached);
   const failedSeasons: number[] = [];
-  for (const [i, r] of settled.entries()) {
-    const season = toFetch[i];
-    if (r.status === "rejected") {
-      failedSeasons.push(season);
-      logError("season_fetch_failed", {
-        league,
-        season,
-        message: errorMessage(r.reason),
-      });
-      continue;
-    }
-    const results = toSeasonResults(r.value);
-    bySeason.set(season, results);
-    if (season === current) continue;
-    try {
-      await saveSeasonResults(league, season, results, now);
-    } catch (err) {
-      logError("season_cache_write_failed", {
-        league,
-        season,
-        message: errorMessage(err),
-      });
-    }
-  }
+  // Cada temporada é guardada assim que chega (não depois de todas): um timeout no
+  // meio da 1ª rodada não perde o que já veio.
+  await Promise.all(
+    toFetch.map(async (season) => {
+      let fixtures: NormalizedFixture[];
+      try {
+        fixtures = await provider.getFixturesBySeason(league, season);
+      } catch (err) {
+        failedSeasons.push(season);
+        logError("season_fetch_failed", {
+          league,
+          season,
+          message: errorMessage(err),
+        });
+        return;
+      }
+      const results = toSeasonResults(fixtures);
+      bySeason.set(season, results);
+      if (season === current || !isCompleteSeason(fixtures)) return;
+      try {
+        await saveSeasonResults(league, season, results, now);
+      } catch (err) {
+        logError("season_cache_write_failed", {
+          league,
+          season,
+          message: errorMessage(err),
+        });
+      }
+    })
+  );
+  failedSeasons.sort((a, b) => b - a);
 
   const okSeasons = seasons.filter((s) => bySeason.has(s));
   return {
     results: okSeasons.flatMap((s) => bySeason.get(s)!),
     okSeasons,
     failedSeasons,
+    currentFailed: failedSeasons.includes(current),
   };
+}
+
+// Só guarda temporada que o provider devolveu inteira e terminada: lista vazia
+// (resposta 200 sem jogos) ou jogo ainda agendado/adiado (calendário atípico, como a
+// Champions 2019/20 terminando em agosto) fica fora do cache e é buscada de novo.
+function isCompleteSeason(fixtures: readonly NormalizedFixture[]): boolean {
+  return (
+    fixtures.length > 0 &&
+    fixtures.every((f) => f.status === "finished" || f.status === "cancelled")
+  );
 }
 
 function isValidRating(x: number): boolean {
@@ -214,12 +236,22 @@ async function refitLeague(
   league: SupportedLeague,
   now: Date
 ): Promise<LeagueRefitResult> {
-  const { results, okSeasons, failedSeasons } = await loadSeasons(league, now);
+  const { results, okSeasons, failedSeasons, currentFailed } =
+    await loadSeasons(league, now);
   if (okSeasons.length === 0) {
     return {
       league,
       status: "skipped",
       reason: "all_seasons_failed",
+      matchCount: 0,
+      failedSeasons,
+    };
+  }
+  if (currentFailed) {
+    return {
+      league,
+      status: "skipped",
+      reason: "current_season_failed",
       matchCount: 0,
       failedSeasons,
     };
@@ -321,19 +353,43 @@ async function refitLeague(
 /**
  * Refita todas as ligas ativas (ou `opts.leagues`). Liga a liga em série: o fit é de
  * milissegundos e o throttle do provider serializa as chamadas de qualquer jeito. A
- * 1ª rodada de uma liga busca as 4 temporadas; as encerradas ficam guardadas mesmo
- * se o run estourar o tempo no meio, então a rodada seguinte continua de onde parou.
+ * 1ª rodada de uma liga busca as 4 temporadas; cada encerrada fica guardada assim que
+ * chega, então um run que estoura o tempo não perde o que já veio. Passado
+ * RUN_DEADLINE_MS, as ligas restantes saem como "deadline" (falha, acusa no cron).
  */
 export async function refitTeamRatings(
   opts: { leagues?: readonly SupportedLeague[]; now?: Date } = {}
 ): Promise<LeagueRefitResult[]> {
   const now = opts.now ?? new Date();
+  const startedMs = Date.now();
   const leagues = (opts.leagues ?? (await getActiveLeagues())).filter(
     (l) => !EXCLUDED.has(l)
   );
   const results: LeagueRefitResult[] = [];
   for (const league of leagues) {
-    results.push(await refitLeague(league, now));
+    if (Date.now() - startedMs > RUN_DEADLINE_MS) {
+      results.push({
+        league,
+        status: "skipped",
+        reason: "deadline",
+        matchCount: 0,
+        failedSeasons: [],
+      });
+      continue;
+    }
+    try {
+      results.push(await refitLeague(league, now));
+    } catch (err) {
+      // Uma liga que lança não derruba as outras.
+      logError("league_failed", { league, message: errorMessage(err) });
+      results.push({
+        league,
+        status: "skipped",
+        reason: "error",
+        matchCount: 0,
+        failedSeasons: [],
+      });
+    }
   }
   console.log(
     JSON.stringify({

@@ -88,6 +88,25 @@ describe("GET /api/cron/refit-team-ratings", () => {
     expect((await GET(req("Bearer s3cret"))).status).toBe(200);
   });
 
+  it("500 quando mantém o fit anterior por temporada que falhou, ou estoura o prazo", async () => {
+    for (const reason of [
+      "partial_fetch_kept_previous",
+      "current_season_failed",
+      "deadline",
+    ] as const) {
+      runMock.mockResolvedValue([
+        {
+          league: "brasileirao_a",
+          status: "skipped",
+          reason,
+          matchCount: 0,
+          failedSeasons: [],
+        },
+      ]);
+      expect((await GET(req("Bearer s3cret"))).status).toBe(500);
+    }
+  });
+
   it("500 genérico quando o refit lança", async () => {
     runMock.mockRejectedValue(new Error("boom"));
     const error = vi.spyOn(console, "error").mockImplementation(() => {});
