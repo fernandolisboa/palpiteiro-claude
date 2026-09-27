@@ -6,6 +6,8 @@ import {
   canFitCall,
   MAX_MIN_CALL_BUDGET_MS,
   minCallBudgetMs,
+  NEWS_MIN_BUDGET_MS,
+  SYNTHESIS_CALL_RESERVE_MS,
   SYNTHESIS_RESERVE_MS,
 } from "@/lib/ai/deadline";
 
@@ -49,5 +51,20 @@ describe("minCallBudgetMs / canFitCall (#524 re-review)", () => {
     expect(canFitCall(deadlineAt, "adaptive", now)).toBe(false);
     expect(canFitCall(deadlineAt, "temperature", now)).toBe(true);
     expect(canFitCall(undefined, "adaptive", now)).toBe(true);
+  });
+});
+
+describe("reserva da síntese", () => {
+  it("a parte da manchete comporta uma chamada temperature (Haiku)", () => {
+    const deadlineAt = 1_000_000;
+    expect(
+      canFitCall(deadlineAt, "temperature", deadlineAt - SYNTHESIS_CALL_RESERVE_MS),
+    ).toBe(true);
+  });
+
+  it("a reserva cobre notícias + manchete", () => {
+    expect(SYNTHESIS_RESERVE_MS).toBeGreaterThanOrEqual(
+      NEWS_MIN_BUDGET_MS + SYNTHESIS_CALL_RESERVE_MS,
+    );
   });
 });

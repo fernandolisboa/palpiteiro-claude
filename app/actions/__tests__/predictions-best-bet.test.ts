@@ -624,10 +624,11 @@ describe("analyzeBestBet — prazo do run (#524 review, maxDuration 300)", () =>
 
   it("fan-out que usa o prazo todo ainda deixa tempo pra síntese (notícias + manchete)", async () => {
     // Regressão: com 25s de reserva, a busca de notícias comia o resto e a manchete não
-    // cabia. Chamadas de 110s: t=0 e t=110 cabem, t=220 não (< 20s até 225s).
+    // cabia. Pior caso: chamadas de 112,5s, a 2ª termina EXATAMENTE no prazo do fan-out
+    // (225s); a 3ª não começa.
     mockPredict.mockImplementation(async (args, opts) => {
       await opts?.beforeLlmPath?.();
-      clock += 110_000;
+      clock += 112_500;
       return resultFor(args.marketKey!);
     });
     await analyzeBestBet(null, form({ matchId: VALID_MATCH_ID }));

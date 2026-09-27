@@ -316,6 +316,7 @@ describe("PalpiteHero — análises saíram mas o palpite não (regressão)", ()
   async function submitWith(
     result: Awaited<ReturnType<typeof analyzeBestBet>>,
     heroPalpite: PalpiteHeadlineView | null,
+    after?: { analyzable?: boolean; setId?: string | null },
   ) {
     vi.mocked(analyzeBestBet).mockResolvedValue(result);
     (globalThis as { IS_REACT_ACT_ENVIRONMENT?: boolean }).IS_REACT_ACT_ENVIRONMENT =
@@ -339,6 +340,22 @@ describe("PalpiteHero — análises saíram mas o palpite não (regressão)", ()
     await act(async () => {
       container.querySelector("form")!.requestSubmit();
     });
+    // Re-render como o revalidate faria (props do servidor depois do run).
+    if (after) {
+      await act(async () => {
+        root.render(
+          <PalpiteHero
+            heroPalpite={heroPalpite}
+            matchId="11111111-1111-1111-1111-111111111111"
+            analyzable={after.analyzable ?? true}
+            fanOutEnabled
+            finalScore={null}
+            setId={after.setId ?? null}
+            sharedAt={null}
+          />,
+        );
+      });
+    }
     const text = container.textContent ?? "";
     await act(async () => root.unmount());
     container.remove();
@@ -372,6 +389,26 @@ describe("PalpiteHero — análises saíram mas o palpite não (regressão)", ()
       POPULATED,
     );
     expect(text).toContain(MESSAGE);
+    expect(text).toContain(POPULATED.verdict);
+  });
+
+  it("jogo apitou durante o run → o aviso aparece no card de não-analisável", async () => {
+    const text = await submitWith(
+      { ok: true, view: VIEW, palpite: null, palpiteError: MESSAGE },
+      null,
+      { analyzable: false },
+    );
+    expect(text).toContain(MESSAGE);
+    expect(text).not.toContain("Analisar com IA");
+  });
+
+  it("outro set chega depois (outra aba) → o aviso antigo some", async () => {
+    const text = await submitWith(
+      { ok: true, view: VIEW, palpite: null, palpiteError: MESSAGE },
+      POPULATED,
+      { setId: "33333333-3333-3333-3333-333333333333" },
+    );
+    expect(text).not.toContain(MESSAGE);
     expect(text).toContain(POPULATED.verdict);
   });
 

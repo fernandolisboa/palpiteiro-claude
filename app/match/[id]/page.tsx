@@ -611,7 +611,7 @@ function DesktopMatch({
 //
 // O `view` retornado por analyzeBestBet é IGNORADO de propósito: o detalhe vem do
 // `sections` revalidado (não-stale), e o contrato #353 do action não pode ser tocado
-// (predictions-best-bet.test.ts o pina). O HERO usa só `palpite`/`ok`/`error` do action.
+// (predictions-best-bet.test.ts o pina). O HERO usa só `ok`/`error`/`palpiteError` do action.
 function NeutralAnalysisDetail({
   sections,
   previousAnalyses,

@@ -57,7 +57,7 @@ type Props = {
  * abaixo. O dado vem do `analyzeBestBet.palpite` (já persistido, server-rendered) — o
  * botão "Analisar com IA" dispara o fan-out → síntese → revalidatePath, e o set novo
  * re-renderiza esta casca via prop (server-fed). O estado client (`useActionState`) só
- * carrega pending + o caminho de erro (`state.ok === false`).
+ * carrega pending + os avisos: run falhou (`ok:false`) ou manchete não saiu (`palpiteError`).
  *
  * FIREWALL (ADR 0030 §3, regulatório — inviolável): este componente renderiza ZERO
  * número de valor — sem edge/EV/stake/odd/%/R$/lucro/retorno. A confiança é palavra-chip
@@ -86,6 +86,9 @@ export function PalpiteHero({
   sharedAt,
 }: Props) {
   const [state, formAction, pending] = useActionState(analyzeBestBet, null);
+  // Set exibido quando este form foi enviado: se outro set chegar depois (outra aba, outro
+  // run), o aviso de manchete que não saiu deixa de valer.
+  const [setIdAtSubmit, setSetIdAtSubmit] = useState<string | null>(null);
   // Em sucesso, o revalidate re-alimenta `heroPalpite` server-side → o componente cliente
   // ignora a view. Dois caminhos de aviso: o run falhou (ok:false) OU as análises saíram
   // mas a síntese não (ok:true + palpiteError). Sem o 2º, o HERO voltava mudo pro vazio
@@ -93,11 +96,17 @@ export function PalpiteHero({
   const error = !state
     ? null
     : state.ok
-      ? (state.palpiteError ?? null)
+      ? setId === setIdAtSubmit
+        ? (state.palpiteError ?? null)
+        : null
       : state.error;
 
   return (
-    <form action={formAction} aria-busy={pending}>
+    <form
+      action={formAction}
+      onSubmit={() => setSetIdAtSubmit(setId)}
+      aria-busy={pending}
+    >
       <input type="hidden" name="matchId" value={matchId} />
       <HeroBody
         heroPalpite={heroPalpite}
@@ -377,11 +386,13 @@ function EmptyHero({
   fanOutEnabled: boolean;
   error: string | null;
 }) {
-  // Jogo encerrado/cancelado sem palpite: predict() rejeitaria — sem CTA.
+  // Jogo encerrado/cancelado sem palpite: predict() rejeitaria — sem CTA. O aviso ainda
+  // aparece: um run iniciado antes do apito pode terminar depois dele, sem manchete.
   if (!analyzable) {
     return (
       <WarmShell tone="quiet">
         <div className="flex flex-col gap-2">
+          {error && <InlineError error={error} />}
           <Kicker />
           <p className="text-body tracking-tight text-muted-foreground">
             Jogo encerrado, sem palpite por aqui.

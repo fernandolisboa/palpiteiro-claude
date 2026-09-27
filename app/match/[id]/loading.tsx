@@ -87,13 +87,14 @@ export default function MatchLoading() {
       <div className="hidden lg:block">
         <DesktopShell>
           <div className="mx-auto w-full max-w-content px-8 pt-8 pb-16">
-            {/* Casa o layout carregado: identidade full-width + grid [1fr_320px]
-                {palpite | odds} + detalhe full-width abaixo (anti-CLS). */}
+            {/* Casa o layout carregado: identidade full-width + palpite full-width +
+                odds lado a lado + detalhe full-width abaixo (anti-CLS). */}
             <div className="pb-6">
               <HeroSkeleton />
             </div>
-            <div className="grid grid-cols-[1fr_320px] items-start gap-8 pb-6">
-              <Skeleton className="h-80 w-full rounded-xl" />
+            <Skeleton className="mb-4 h-56 w-full rounded-xl" />
+            <div className="grid grid-cols-2 gap-3 pb-6">
+              <OddsSkeleton />
               <OddsSkeleton />
             </div>
             <Skeleton className="mb-6 h-12 w-full rounded-md" />

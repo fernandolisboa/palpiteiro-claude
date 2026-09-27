@@ -401,7 +401,8 @@ function synthesisFailureMessage(err: unknown, isAdmin: boolean): string {
   if (err instanceof PalpiteError && typeof err.context.reason === "string") {
     detail = `${detail} (${err.context.reason})`;
   }
-  return `${SYNTHESIS_FAILED_MESSAGE} Motivo: ${detail}`;
+  // Erro de DB traz a query inteira na mensagem: corta pra caber no card.
+  return `${SYNTHESIS_FAILED_MESSAGE} Motivo: ${detail.slice(0, 300)}`;
 }
 
 // Mapeia QUALQUER erro pra mensagem amigável de UI. PredictError reusa o
@@ -757,6 +758,13 @@ export async function analyzeBestBet(
         dimensions: toDimensionViews(linesWithPendingOutcome),
       });
     } else {
+      console.error(
+        JSON.stringify({
+          scope: "analyzeBestBet",
+          matchId,
+          error: "synthesis_without_headline",
+        }),
+      );
       palpiteError = synthesisFailureMessage(
         new Error("manchete sem placar provável"),
         isAdmin,

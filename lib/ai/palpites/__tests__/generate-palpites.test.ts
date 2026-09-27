@@ -247,6 +247,29 @@ describe("generatePalpites (síntese) — prazo do run (#524 re-review)", () => 
     });
   });
 
+  it("busca que usa o prazo inteiro ainda deixa a manchete caber", async () => {
+    const start = 1_000_000;
+    let clock = start;
+    const spy = vi.spyOn(Date, "now").mockImplementation(() => clock);
+    try {
+      const deadlineAt = start + SYNTHESIS_CALL_RESERVE_MS + NEWS_MIN_BUDGET_MS;
+      getNewsByMatch.mockImplementation(async (_ctx, _audit, opts) => {
+        // A busca roda até o próprio prazo (o timeout da request corta aqui).
+        clock = opts.deadlineAt;
+        return { results: [], aiCall: null, unavailable: false };
+      });
+      runAnalysis.mockResolvedValue(okResult(validHeadline));
+      const res = await generatePalpites({ ...baseCall, deadlineAt });
+      expect(runAnalysis).toHaveBeenCalledTimes(1);
+      expect((runAnalysis.mock.calls[0][0] as AnalysisRequest).deadlineAt).toBe(
+        deadlineAt,
+      );
+      expect(res.palpiteSet).toBeDefined();
+    } finally {
+      spy.mockRestore();
+    }
+  });
+
   it("notícia lenta não mata a manchete: sem tempo pra busca, pula e o palpite sai", async () => {
     // Regressão: a busca rodava sem prazo e, num run apertado, comia a reserva inteira;
     // a manchete lançava AnalysisDeadlineError e o HERO voltava vazio.

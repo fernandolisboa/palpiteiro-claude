@@ -23,7 +23,12 @@ export const ACTION_BUDGET_MS = 270_000;
 // a busca de notícias (Haiku + web search, ADR 0032) e a manchete (Haiku). Com 25s,
 // um fan-out que ia até o prazo deixava a busca comer a reserva inteira e a manchete
 // não cabia mais: o run voltava ok sem palpite. Agora: folga + notícias + manchete.
+// Custo aceito: o fan-out perde 20s (um mercado a menos num run de modelo adaptive que
+// ia até o prazo), porque sem manchete o HERO fica vazio.
 export const SYNTHESIS_CALL_RESERVE_MS = 25_000;
+// Janela mínima pra valer a pena iniciar a busca de notícias. Inclui a margem de
+// segurança da request (REQUEST_SAFETY_MARGIN_MS, 5s): a chamada leva ≥10s de timeout,
+// o suficiente pro Haiku com uma busca. Abaixo disso a busca é pulada.
 export const NEWS_MIN_BUDGET_MS = 15_000;
 export const SYNTHESIS_RESERVE_MS =
   5_000 + NEWS_MIN_BUDGET_MS + SYNTHESIS_CALL_RESERVE_MS;
