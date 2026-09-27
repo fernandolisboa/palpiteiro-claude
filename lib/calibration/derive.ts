@@ -54,8 +54,18 @@ function summarize(
   ) {
     return summary;
   }
-  // 1X2: −ln p do resultado real (a única seleção com y=1 da partição).
-  const winners = rows.flatMap((r) => side(r).filter((pair) => pair.y === 1));
+  // 1X2: −ln p do resultado real (a única seleção com y=1 da partição), com as
+  // probabilidades da row normalizadas pra Σ=1. O cartucho LLM não força Σ=100
+  // (prompt: "idealmente somam ~100") e o −ln p_vencedor, ao contrário dos pares
+  // um-contra-o-resto, não pune inflar as três: 60/40/40 bateria o mercado sempre.
+  // Recorte com mercados misturados nunca chega aqui (cai no um-contra-o-resto).
+  const winners = rows.flatMap((r) => {
+    const pairs = side(r);
+    const sum = pairs.reduce((acc, pair) => acc + pair.p, 0);
+    return pairs
+      .filter((pair) => pair.y === 1)
+      .map((pair) => ({ p: sum > 0 ? pair.p / sum : pair.p, y: pair.y }));
+  });
   return { ...summary, logLoss: logLoss(winners) };
 }
 

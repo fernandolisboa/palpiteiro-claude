@@ -232,6 +232,14 @@ describe("calibração por mercado (#453)", () => {
     );
   });
 
+  it("1X2: normaliza o modelo pra Σ=1 (inflar as três não compra log-loss)", () => {
+    // 60/40/40 (Σ=1.4), empate: sem normalizar daria −ln 0.4; normalizado, −ln(0.4/1.4).
+    const inflated = oneX2([0.4, 0.4, 0.6], [0.3, 0.3, 0.4], "draw");
+    const { overall } = deriveCalibration([inflated]);
+    expect(overall?.model.logLoss).toBeCloseTo(-Math.log(0.4 / 1.4), 12);
+    expect(overall?.market.logLoss).toBeCloseTo(-Math.log(0.3), 12);
+  });
+
   it("dupla chance: log-loss dos pares um-contra-o-resto (não é partição)", () => {
     const dc: MarketCalibrationRow = {
       marketKey: "double_chance",
