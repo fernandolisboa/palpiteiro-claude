@@ -18,9 +18,15 @@ import { adaptiveTimeoutMs } from "./providers/anthropic/timeouts";
 // folga pra persistir, revalidar e responder depois da última chamada.
 export const ACTION_BUDGET_MS = 270_000;
 
-// Reserva do fim do run pra síntese (Haiku, ADR 0030) no best bet: o fan-out para
-// antes, pra a manchete ainda rodar sobre o que terminou.
-export const SYNTHESIS_RESERVE_MS = 25_000;
+// Reserva do fim do run pra síntese (ADR 0030) no best bet: o fan-out para antes, pra
+// a manchete ainda rodar sobre o que terminou. A síntese faz DUAS chamadas em série:
+// a busca de notícias (Haiku + web search, ADR 0032) e a manchete (Haiku). Com 25s,
+// um fan-out que ia até o prazo deixava a busca comer a reserva inteira e a manchete
+// não cabia mais: o run voltava ok sem palpite. Agora: folga + notícias + manchete.
+export const SYNTHESIS_CALL_RESERVE_MS = 25_000;
+export const NEWS_MIN_BUDGET_MS = 15_000;
+export const SYNTHESIS_RESERVE_MS =
+  5_000 + NEWS_MIN_BUDGET_MS + SYNTHESIS_CALL_RESERVE_MS;
 
 // Tempo mínimo pra valer a pena INICIAR uma chamada paga. Abaixo disso o mercado é
 // pulado sem gasto nem slot: começar uma chamada que o timeout vai cortar paga

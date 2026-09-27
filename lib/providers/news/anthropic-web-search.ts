@@ -12,6 +12,7 @@ import { NewsUnavailableError } from "./types";
 import { ALLOWED_DOMAINS } from "./allowed-domains";
 import type {
   NewsAuditContext,
+  NewsFetchOptions,
   NewsFetchOutcome,
   NewsMatchContext,
   NewsResult,
@@ -103,6 +104,7 @@ export async function getNewsByMatchViaWebSearch(
   ctx: NewsMatchContext,
   // userId/matchId só pra logar o ai_call de auditoria (mesma fronteira do generatePalpites).
   audit: NewsAuditContext,
+  options: NewsFetchOptions = {},
 ): Promise<NewsFetchOutcome> {
   const model = MODEL_REGISTRY[NEWS_MODEL_ID];
   const provider = getProviderForModel(model);
@@ -133,6 +135,7 @@ export async function getNewsByMatchViaWebSearch(
       allowedDomains: [...ALLOWED_DOMAINS],
       maxUses: NEWS_MAX_SEARCH_USES,
     },
+    deadlineAt: options.deadlineAt,
   };
 
   if (!provider.hasKey()) {

@@ -570,19 +570,19 @@ describe("analyzeBestBet — prazo do run (#524 review, maxDuration 300)", () =>
   });
 
   it("provider lento estoura o prazo: os mercados restantes são pulados SEM slot, e a síntese roda com o que terminou", async () => {
-    // Cada chamada leva 120s. Prazo do fan-out = início + 270s − 25s de reserva = +245s.
+    // Cada chamada leva 120s. Prazo do fan-out = início + 270s − 45s de reserva = +225s.
     mockPredict.mockImplementation(async (args, opts) => {
       await opts?.beforeLlmPath?.();
       clock += 120_000;
       return resultFor(args.marketKey!);
     });
     const res = await analyzeBestBet(null, form({ matchId: VALID_MATCH_ID }));
-    // t=0 e t=120 cabem; em t=240 sobram 5s (< 20s do piso) → para.
+    // t=0 e t=120 cabem; em t=240 o prazo do fan-out (225s) já passou → para.
     expect(mockPredict.mock.calls.map((c) => c[0].marketKey)).toEqual([
       "over_under",
       "match_result",
     ]);
-    expect(mockPredict.mock.calls[0][0].deadlineAt).toBe(1_000_000 + 245_000);
+    expect(mockPredict.mock.calls[0][0].deadlineAt).toBe(1_000_000 + 225_000);
     // Slots == chamadas pagas: os pulados não cobram.
     expect(mockRateLimit).toHaveBeenCalledTimes(2);
     expect(res.ok).toBe(true);
@@ -604,7 +604,7 @@ describe("analyzeBestBet — prazo do run (#524 review, maxDuration 300)", () =>
   });
 
   it("sem tempo pra síntese → pula o gerador (sem row falsa em ai_calls), fan-out volta sem manchete", async () => {
-    // 2 chamadas de 127,5s: o fan-out para em t=255 (> 245) e sobram 15s (< 20s) do run.
+    // 2 chamadas de 127,5s: o fan-out para em t=255 (> 225) e sobram 15s (< 20s) do run.
     mockPredict.mockImplementation(async (args, opts) => {
       await opts?.beforeLlmPath?.();
       clock += 127_500;
@@ -617,7 +617,30 @@ describe("analyzeBestBet — prazo do run (#524 review, maxDuration 300)", () =>
     if (res.ok) {
       expect(res.view.entries).toHaveLength(2);
       expect(res.palpite).toBeNull();
+      // O HERO não volta mudo pro vazio: diz que o tempo acabou antes do palpite.
+      expect(res.palpiteError).toMatch(/tempo acabou antes de montar o palpite/);
     }
+  });
+
+  it("fan-out que usa o prazo todo ainda deixa tempo pra síntese (notícias + manchete)", async () => {
+    // Regressão: com 25s de reserva, a busca de notícias comia o resto e a manchete não
+    // cabia. Chamadas de 110s: t=0 e t=110 cabem, t=220 não (< 20s até 225s).
+    mockPredict.mockImplementation(async (args, opts) => {
+      await opts?.beforeLlmPath?.();
+      clock += 110_000;
+      return resultFor(args.marketKey!);
+    });
+    await analyzeBestBet(null, form({ matchId: VALID_MATCH_ID }));
+    expect(mockPredict).toHaveBeenCalledTimes(2);
+    expect(mockGeneratePalpites).toHaveBeenCalledTimes(1);
+    const { NEWS_MIN_BUDGET_MS, SYNTHESIS_CALL_RESERVE_MS } = await import(
+      "@/lib/ai/deadline"
+    );
+    // A síntese começa com espaço pra uma busca útil E pra a chamada da manchete.
+    const synth = mockGeneratePalpites.mock.calls[0][0];
+    expect(synth.deadlineAt! - clock).toBeGreaterThanOrEqual(
+      NEWS_MIN_BUDGET_MS + SYNTHESIS_CALL_RESERVE_MS,
+    );
   });
 
   it("predict lança o erro de prazo (modelo adaptive não cabe) → 'Tempo esgotado' e o run para", async () => {
@@ -825,6 +848,51 @@ describe("analyzeBestBet — passo de síntese (#353, palpite-first)", () => {
     if (res.ok) {
       expect(res.view.entries).toHaveLength(4); // fan-out intacto
       expect(res.palpite).toBeNull();
+      // Admin vê o motivo técnico junto do aviso.
+      expect(res.palpiteError).toBe(
+        "As análises por mercado ficaram prontas, mas o palpite não saiu desta vez. Tente de novo. Motivo: haiku timeout",
+      );
+    }
+  });
+
+  it("síntese THROWA pra não-admin → aviso sem o motivo técnico", async () => {
+    mockAuth.mockResolvedValue({
+      ...SESSION,
+      user: { ...SESSION.user, role: "user" },
+    } as Session);
+    mockGeneratePalpites.mockRejectedValue(new Error("haiku timeout"));
+    const res = await analyzeBestBet(null, form({ matchId: VALID_MATCH_ID }));
+    expect(res.ok).toBe(true);
+    if (res.ok) {
+      expect(res.palpite).toBeNull();
+      expect(res.palpiteError).toBe(
+        "As análises por mercado ficaram prontas, mas o palpite não saiu desta vez. Tente de novo.",
+      );
+    }
+  });
+
+  it("divergência de fidelidade → admin vê o motivo concreto", async () => {
+    const { PalpiteError } = await import("@/lib/ai/palpites/types");
+    mockGeneratePalpites.mockRejectedValue(
+      new PalpiteError("fidelity validation failed after bounded retries", {
+        reason: "vitórias do mandante: citou 4, fato 3",
+      }),
+    );
+    const res = await analyzeBestBet(null, form({ matchId: VALID_MATCH_ID }));
+    expect(res.ok).toBe(true);
+    if (res.ok) {
+      expect(res.palpiteError).toContain(
+        "Motivo: fidelity validation failed after bounded retries (vitórias do mandante: citou 4, fato 3)",
+      );
+    }
+  });
+
+  it("síntese ok → sem palpiteError (contrato #353 intacto)", async () => {
+    const res = await analyzeBestBet(null, form({ matchId: VALID_MATCH_ID }));
+    expect(res.ok).toBe(true);
+    if (res.ok) {
+      expect(res.palpite).not.toBeNull();
+      expect("palpiteError" in res).toBe(false);
     }
   });
 

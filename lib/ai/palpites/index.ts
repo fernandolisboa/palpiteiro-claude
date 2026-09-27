@@ -7,7 +7,10 @@ import type { DbPalpiteSet } from "@/lib/db/queries/palpites";
 import { getSportsDataProvider } from "@/lib/providers/sports-data";
 import type { FixtureRef } from "@/lib/providers/sports-data/types";
 import { getNewsProvider } from "@/lib/providers/news";
-import type { NewsResult } from "@/lib/providers/news/types";
+import type {
+  NewsFetchOutcome,
+  NewsResult,
+} from "@/lib/providers/news/types";
 import {
   getGenerationParams,
   getEnableFidelityValidation,
@@ -15,7 +18,13 @@ import {
 
 import { persistAiCallError } from "../ai-call-logging";
 import { calculateCost } from "../cost";
-import { AnalysisDeadlineError, canFitCall } from "../deadline";
+import {
+  AnalysisDeadlineError,
+  NEWS_MIN_BUDGET_MS,
+  SYNTHESIS_CALL_RESERVE_MS,
+  canFitCall,
+  remainingMs,
+} from "../deadline";
 import { MODEL_REGISTRY, isAIProvider, type AIModelId } from "../models";
 import { getProviderForModel } from "../providers";
 import type { AnalysisRequest } from "../providers/types";
@@ -118,17 +127,32 @@ export async function generatePalpites({
   // ao fetch de suporte. Degrada GRACIOSO (mirror absences): QUALQUER falha → results:[]
   // e o palpite ainda embarca — NUNCA bloqueia a manchete por notícia. O provider já loga
   // seu próprio ai_call (predict.ts é a única porta); aqui só capturamos o resultado.
-  const newsFetch = getNewsProvider()
-    .getNewsByMatch(
-      {
-        league: match.league,
-        homeTeam: match.homeTeam,
-        awayTeam: match.awayTeam,
-        kickoffAt: match.kickoffAt.toISOString(),
-      },
-      { userId, matchId },
-    )
-    .catch((err) => {
+  //
+  // Prazo: a busca termina SYNTHESIS_CALL_RESERVE_MS antes do prazo do run, pra nunca
+  // comer o tempo da manchete (que é o produto; notícia é cor). Sem tempo pra uma busca
+  // útil, nem chama: o palpite sai sem fontes em vez de não sair.
+  const newsDeadline =
+    deadlineAt === undefined ? undefined : deadlineAt - SYNTHESIS_CALL_RESERVE_MS;
+  const newsFits =
+    newsDeadline === undefined || remainingMs(newsDeadline) >= NEWS_MIN_BUDGET_MS;
+  const newsFetch = (
+    newsFits
+      ? getNewsProvider().getNewsByMatch(
+          {
+            league: match.league,
+            homeTeam: match.homeTeam,
+            awayTeam: match.awayTeam,
+            kickoffAt: match.kickoffAt.toISOString(),
+          },
+          { userId, matchId },
+          { deadlineAt: newsDeadline },
+        )
+      : Promise.resolve<NewsFetchOutcome>({
+          results: [],
+          aiCall: null,
+          unavailable: true,
+        })
+  ).catch((err) => {
       console.error(
         JSON.stringify({
           scope: "generatePalpites",

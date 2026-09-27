@@ -117,6 +117,10 @@ vi.mock("@/lib/providers/news", () => ({
 }));
 
 import { generatePalpites, PalpiteError } from "@/lib/ai/palpites";
+import {
+  NEWS_MIN_BUDGET_MS,
+  SYNTHESIS_CALL_RESERVE_MS,
+} from "@/lib/ai/deadline";
 
 function fixture(home: string, away: string, sh: number, sa: number): NormalizedFixture {
   return {
@@ -231,6 +235,29 @@ describe("generatePalpites (síntese) — prazo do run (#524 re-review)", () => 
     await generatePalpites({ ...baseCall, deadlineAt });
     const req = runAnalysis.mock.calls[0][0] as AnalysisRequest;
     expect(req.deadlineAt).toBe(deadlineAt);
+  });
+
+  it("a busca de notícias termina antes, guardando o tempo da manchete", async () => {
+    runAnalysis.mockResolvedValue(okResult(validHeadline));
+    const deadlineAt = Date.now() + 60_000;
+    await generatePalpites({ ...baseCall, deadlineAt });
+    expect(getNewsByMatch).toHaveBeenCalledTimes(1);
+    expect(getNewsByMatch.mock.calls[0][2]).toEqual({
+      deadlineAt: deadlineAt - SYNTHESIS_CALL_RESERVE_MS,
+    });
+  });
+
+  it("notícia lenta não mata a manchete: sem tempo pra busca, pula e o palpite sai", async () => {
+    // Regressão: a busca rodava sem prazo e, num run apertado, comia a reserva inteira;
+    // a manchete lançava AnalysisDeadlineError e o HERO voltava vazio.
+    runAnalysis.mockResolvedValue(okResult(validHeadline));
+    const res = await generatePalpites({
+      ...baseCall,
+      deadlineAt: Date.now() + SYNTHESIS_CALL_RESERVE_MS + NEWS_MIN_BUDGET_MS - 1_000,
+    });
+    expect(getNewsByMatch).not.toHaveBeenCalled();
+    expect(runAnalysis).toHaveBeenCalledTimes(1);
+    expect(res.palpiteSet).toBeDefined();
   });
 });
 

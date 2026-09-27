@@ -32,5 +32,6 @@ export type {
   NewsFetchOutcome,
   NewsMatchContext,
   NewsAuditContext,
+  NewsFetchOptions,
 } from "./types";
 export { NewsUnavailableError } from "./types";

@@ -28,15 +28,15 @@ describe("minCallBudgetMs / canFitCall (#524 re-review)", () => {
   });
 
   it("piso limitado pelo que um run novo oferece: 32000 em xhigh não fica impossível", () => {
-    // metade de ~548s = 274s > os 270s do run inteiro; o teto é 270 − 25 − 60 = 185s.
+    // metade de ~548s = 274s > os 270s do run inteiro; o teto é 270 − 45 − 60 = 165s.
     const call = {
       thinkingMode: "adaptive" as const,
       maxTokens: 32000,
       effort: "xhigh" as const,
     };
-    expect(MAX_MIN_CALL_BUDGET_MS).toBe(185_000);
-    expect(minCallBudgetMs(call)).toBe(185_000);
-    // Um fan-out recém-iniciado (prazo − reserva da síntese = 245s) ainda começa.
+    expect(MAX_MIN_CALL_BUDGET_MS).toBe(165_000);
+    expect(minCallBudgetMs(call)).toBe(165_000);
+    // Um fan-out recém-iniciado (prazo − reserva da síntese = 225s) ainda começa.
     const now = 1_000_000;
     const fanOutDeadline = actionDeadline(now) - SYNTHESIS_RESERVE_MS;
     expect(canFitCall(fanOutDeadline, call, now)).toBe(true);

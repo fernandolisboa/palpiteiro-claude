@@ -540,12 +540,10 @@ function DesktopMatch({
           />
         </div>
 
-        {/* Grid [1fr_320px]: à ESQUERDA o palpite (a manchete), à DIREITA as odds (preços
-            de referência). SEM items-start → stretch padrão: o card do palpite acompanha a
-            altura da coluna de odds (altura mínima = odds). Se o palpite for MAIOR, ele cresce
-            naturalmente e a coluna de odds NÃO estica (`self-start`). Nada de truncar/scroll/
-            colapsar — só min-height casada. */}
-        <div className="grid grid-cols-[1fr_320px] gap-8 pb-6">
+        {/* Palpite FULL-WIDTH, com a própria altura. Antes ficava num grid [1fr_320px]
+            esticado até a altura das odds empilhadas à direita: no estado vazio o card era
+            quase todo espaço em branco. */}
+        <div className="pb-4">
           <PalpiteHero
             heroPalpite={heroPalpite}
             matchId={matchId}
@@ -555,15 +553,17 @@ function DesktopMatch({
             setId={heroSetId}
             sharedAt={heroSharedAt}
           />
-          <div className="flex flex-col gap-3 self-start">
-            <OddsCard view={oddsView} matchStatus={matchStatus} />
-            {matchResultOddsView && <OddsCard view={matchResultOddsView} />}
-          </div>
         </div>
 
-        {/* Detalhe por mercado FULL-WIDTH abaixo do grid: collapsed por padrão, ocupa a
-            largura toda ao expandir (não fica preso na coluna do palpite). Fica logo abaixo
-            da manchete (o palpite é o elemento alto do grid). Firewall ADR 0030 intacto: é
+        {/* Odds (preços de referência) LADO A LADO logo abaixo: over/under e 1X2 na mesma
+            linha, mesma altura (stretch do grid). Sem o 1X2, o over/under ocupa metade. */}
+        <div className="grid grid-cols-2 gap-3 pb-6">
+          <OddsCard view={oddsView} matchStatus={matchStatus} />
+          {matchResultOddsView && <OddsCard view={matchResultOddsView} />}
+        </div>
+
+        {/* Detalhe por mercado FULL-WIDTH abaixo das odds: collapsed por padrão, ocupa a
+            largura toda ao expandir. Firewall ADR 0030 intacto: é
             disclosure collapsed; edge/EV/stake vivem DENTRO dele, nada de valor no HERO. Em
             jogo analisável, a aba [ Análise | Minha aposta ] (#412) embrulha o detalhe. */}
         <div className="flex flex-col gap-3 pb-6">
