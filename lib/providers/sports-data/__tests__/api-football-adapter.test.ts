@@ -752,14 +752,19 @@ function teamsEnvelope(teams: Array<{ id: number; name: string }>): unknown {
 
 describe("resolveApiFootballTeamId — runtime /teams (copas)", () => {
   const ORIGINAL_KEY = process.env.API_FOOTBALL_KEY;
-  // Libertadores 2026: currentSeason → 2026 em outubro.
+  // Libertadores 2026: currentSeason → 2026 a partir de fevereiro. Relógio em
+  // março e avançando 2 min por teste: o throttle do client (8 req/min) é de
+  // módulo e lê Date.now, então timestamps congelados — ou no futuro dos testes
+  // seguintes (maio) — travariam as requests do resto do arquivo.
   const cacheKey = "sports-data:api-football:teams:league:13:season:2026";
+  let clock = Date.parse("2026-03-10T12:00:00.000Z");
 
   beforeEach(async () => {
     process.env.API_FOOTBALL_KEY = "test-key";
     await inMemoryCache.delete(cacheKey);
     vi.useFakeTimers();
-    vi.setSystemTime(new Date("2026-10-10T12:00:00.000Z"));
+    clock += 2 * 60 * 1000;
+    vi.setSystemTime(new Date(clock));
   });
 
   afterEach(async () => {
@@ -836,6 +841,60 @@ describe("resolveApiFootballTeamId — runtime /teams (copas)", () => {
       resolveApiFootballTeamId("Unmapped Test FC", "brasileirao_a", "getH2H")
     ).rejects.toThrow(SportsDataTransientError);
     expect(fetchSpy).not.toHaveBeenCalled();
+  });
+
+  it("chamadas paralelas numa instância fria compartilham UM /teams", async () => {
+    const fetchSpy = vi.spyOn(globalThis, "fetch").mockResolvedValue(
+      jsonResponse(
+        teamsEnvelope([
+          { id: 124, name: "Fluminense" },
+          { id: 121, name: "Palmeiras" },
+        ])
+      )
+    );
+    await expect(
+      Promise.all([
+        resolveApiFootballTeamId(
+          "Fluminense",
+          "copa_libertadores",
+          "getTeamForm"
+        ),
+        resolveApiFootballTeamId(
+          "Palmeiras",
+          "copa_libertadores",
+          "getTeamForm"
+        ),
+        resolveApiFootballTeamId("Palmeiras", "copa_libertadores", "getH2H"),
+      ])
+    ).resolves.toEqual([124, 121, 121]);
+    expect(fetchSpy).toHaveBeenCalledTimes(1);
+  });
+
+  it("4xx no /teams chega como Transient pelo método público (cascade)", async () => {
+    vi.spyOn(globalThis, "fetch").mockResolvedValue(
+      new Response("forbidden", { status: 403 })
+    );
+    const a = new ApiFootballAdapter();
+    await expect(
+      a.getTeamForm("Flamengo", "copa_libertadores", 5)
+    ).rejects.toThrow(SportsDataTransientError);
+  });
+
+  it("erro de envelope no /teams chega como Transient", async () => {
+    vi.spyOn(globalThis, "fetch").mockResolvedValue(
+      jsonResponse({
+        get: "teams",
+        parameters: {},
+        errors: { token: "Error/Missing application key." },
+        results: 0,
+        paging: { current: 1, total: 1 },
+        response: [],
+      })
+    );
+    const a = new ApiFootballAdapter();
+    await expect(
+      a.getInjuriesByTeam("Flamengo", "copa_libertadores")
+    ).rejects.toThrow(SportsDataTransientError);
   });
 
   it("getH2H das copas usa os ids resolvidos em runtime", async () => {

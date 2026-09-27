@@ -809,6 +809,27 @@ function wrapApiFootballError(
   throw err;
 }
 
+// Dedupe de /teams em voo: predict.ts dispara getTeamForm ×2 + getH2H em
+// paralelo, e numa instância fria cada um erraria o cache e faria sua própria
+// request. A promise compartilhada sai do mapa ao assentar (o cache de 1 dia
+// cobre as chamadas seguintes).
+const teamsInFlight = new Map<string, Promise<ApiFootballTeamItem[]>>();
+
+function getTeamsByLeagueShared(
+  leagueId: number,
+  season: number
+): Promise<ApiFootballTeamItem[]> {
+  const key = `${leagueId}:${season}`;
+  let pending = teamsInFlight.get(key);
+  if (!pending) {
+    pending = getTeamsByLeague(leagueId, season).finally(() => {
+      teamsInFlight.delete(key);
+    });
+    teamsInFlight.set(key, pending);
+  }
+  return pending;
+}
+
 async function resolveApiFootballTeamId(
   canonicalName: string,
   league: SupportedLeague,
@@ -817,32 +838,53 @@ async function resolveApiFootballTeamId(
   const id = API_FOOTBALL_TEAM_IDS[league][canonicalName];
   if (id !== undefined) return id;
 
+  const context = { canonicalName, league };
+  if (!RUNTIME_TEAM_ID_LEAGUES.has(league)) {
+    // Map is empty (account-suspension stub) or the canonical name isn't
+    // covered. Treat as transient so FallbackProvider tries the next
+    // adapter; an unmapped canonical team is functionally equivalent to an
+    // outage from the caller's perspective.
+    throw new SportsDataTransientError(
+      `No API-Football team ID mapped for "${canonicalName}" in ${league}. ` +
+        `Populate via scripts/generate-team-ids.ts --provider=api-football.`,
+      PROVIDER_NAME,
+      method,
+      undefined,
+      context
+    );
+  }
+
   // Copas (ADR 0045, emenda 2026-09-27): sem mapa estático, casa o nome contra
   // /teams da temporada passando cada nome pelo mesmo canonicalize do sync de
   // fixtures — assim alias e passthrough resolvem igual ao nome gravado no match.
-  if (RUNTIME_TEAM_ID_LEAGUES.has(league)) {
-    const teams = await getTeamsByLeague(
+  // Qualquer falha do /teams vira Transient, como o time não mapeado acima (um
+  // 4xx não pode virar NotFound e mascarar o cascade).
+  let teams: ApiFootballTeamItem[];
+  try {
+    teams = await getTeamsByLeagueShared(
       API_FOOTBALL_LEAGUE_IDS[league],
       currentSeasonByLeague(league)
     );
-    const hits = teams.filter(
-      (t) => canonicalizeOrPassthrough(t.team.name, league) === canonicalName
+  } catch (err) {
+    throw new SportsDataTransientError(
+      `API-Football /teams failed while resolving "${canonicalName}" in ${league}.`,
+      PROVIDER_NAME,
+      method,
+      err,
+      context
     );
-    const [hit] = hits;
-    if (hit && hits.length === 1) return hit.team.id;
   }
-
-  // Map is empty (account-suspension stub), the canonical name isn't covered,
-  // or the runtime lookup found zero/ambiguous matches. Treat as transient so
-  // FallbackProvider tries the next adapter; an unmapped canonical team is
-  // functionally equivalent to an outage from the caller's perspective.
+  const hits = teams.filter(
+    (t) => canonicalizeOrPassthrough(t.team.name, league) === canonicalName
+  );
+  const [hit] = hits;
+  if (hit && hits.length === 1) return hit.team.id;
   throw new SportsDataTransientError(
-    `No API-Football team ID mapped for "${canonicalName}" in ${league}. ` +
-      `Populate via scripts/generate-team-ids.ts --provider=api-football.`,
+    `API-Football /teams returned ${hits.length} matches for "${canonicalName}" in ${league}.`,
     PROVIDER_NAME,
     method,
     undefined,
-    { canonicalName, league }
+    context
   );
 }
 

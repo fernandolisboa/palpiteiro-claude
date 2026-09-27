@@ -37,6 +37,7 @@ import {
   API_FOOTBALL_LEAGUE_IDS,
   SUPPORTED_LEAGUES,
   currentSeason,
+  RUNTIME_TEAM_ID_LEAGUES,
   type SupportedLeague,
 } from "@/lib/providers/sports-data/leagues";
 import { canonicalizeTeamName } from "@/lib/providers/sports-data/team-names";
@@ -314,7 +315,14 @@ async function main() {
   const seededLeagues = new Set<SupportedLeague>();
   for (const league of SUPPORTED_LEAGUES) {
     // A provider that doesn't serve the league (no teams back) never seeds it.
-    if (existing[league].length === 0 && teamsByLeague[league].length > 0) {
+    // Copas (RUNTIME_TEAM_ID_LEAGUES) também não: a lista delas só fixa a grafia
+    // conferida contra a The Odds API, e semeá-la destravaria o toggle do admin
+    // com nomes não conferidos (ADR 0045, emenda 2026-09-27).
+    if (
+      existing[league].length === 0 &&
+      teamsByLeague[league].length > 0 &&
+      !RUNTIME_TEAM_ID_LEAGUES.has(league)
+    ) {
       merged[league] = teamsByLeague[league].map((t) => t.name).sort();
       seededLeagues.add(league);
       console.log(
