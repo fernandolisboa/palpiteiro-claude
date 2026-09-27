@@ -35,17 +35,20 @@ import {
   LineupEnvelopeSchema,
   StandingsEnvelopeSchema,
   StatusResponseSchema,
+  TeamEnvelopeSchema,
   type ApiFootballFixture,
   type ApiFootballFixtureEvent,
   type ApiFootballInjury,
   type ApiFootballLineup,
   type ApiFootballStandings,
   type ApiFootballStatus,
+  type ApiFootballTeamItem,
 } from "@/lib/providers/sports-data/api-football/schemas";
 import { API_FOOTBALL_TEAM_IDS } from "@/lib/providers/sports-data/api-football/team-ids";
 import {
   API_FOOTBALL_LEAGUE_IDS,
   currentSeason as currentSeasonByLeague,
+  RUNTIME_TEAM_ID_LEAGUES,
   type SupportedLeague,
 } from "@/lib/providers/sports-data/leagues";
 import {
@@ -104,7 +107,7 @@ function stripUndefined(params: Params): Record<string, string | number> {
 
 function buildCacheKey(
   endpoint: string,
-  params: Record<string, string | number>,
+  params: Record<string, string | number>
 ): string {
   // Endpoint like "/fixtures/headtohead" -> "fixtures:headtohead"
   const endpointSegment = endpoint.replace(/^\//, "").replace(/\//g, ":");
@@ -117,7 +120,7 @@ function buildCacheKey(
 
 function buildUrl(
   endpoint: string,
-  params: Record<string, string | number>,
+  params: Record<string, string | number>
 ): string {
   const url = new URL(API_FOOTBALL_BASE_URL + endpoint);
   for (const [k, v] of Object.entries(params)) {
@@ -130,7 +133,7 @@ function requireApiKey(): string {
   const key = process.env.API_FOOTBALL_KEY;
   if (!key) {
     throw new Error(
-      "API_FOOTBALL_KEY is not set. Define it in .env.local (see .env.example).",
+      "API_FOOTBALL_KEY is not set. Define it in .env.local (see .env.example)."
     );
   }
   return key;
@@ -148,10 +151,11 @@ type RequestOptions<S extends z.ZodTypeAny> = {
 };
 
 async function request<S extends z.ZodTypeAny>(
-  opts: RequestOptions<S>,
+  opts: RequestOptions<S>
 ): Promise<z.infer<S>> {
   const params = stripUndefined(opts.params);
-  const cacheKey = opts.cacheKeyOverride ?? buildCacheKey(opts.endpoint, params);
+  const cacheKey =
+    opts.cacheKeyOverride ?? buildCacheKey(opts.endpoint, params);
   const cache = opts.cache ?? inMemoryCache;
 
   const cacheStart = Date.now();
@@ -182,7 +186,7 @@ async function request<S extends z.ZodTypeAny>(
         opts.endpoint,
         params,
         err.statusCode,
-        err.body,
+        err.body
       );
     }
     if (err instanceof HttpClientError) {
@@ -191,7 +195,7 @@ async function request<S extends z.ZodTypeAny>(
         opts.endpoint,
         params,
         err.statusCode,
-        err.body,
+        err.body
       );
     }
     if (err instanceof HttpClientTimeoutError) {
@@ -211,7 +215,7 @@ async function request<S extends z.ZodTypeAny>(
       opts.endpoint,
       params,
       response.status,
-      text.slice(0, 2048),
+      text.slice(0, 2048)
     );
   }
 
@@ -223,7 +227,7 @@ async function request<S extends z.ZodTypeAny>(
         `API-Football returned errors for ${opts.endpoint}`,
         opts.endpoint,
         params,
-        errs,
+        errs
       );
     }
   }
@@ -238,13 +242,13 @@ async function request<S extends z.ZodTypeAny>(
         error: "schema_validation_failed",
         payload_preview: text.slice(0, 2048),
         zod_issues: parsed.error.issues.slice(0, 10),
-      }),
+      })
     );
     throw new ApiFootballSchemaError(
       `Schema validation failed for ${opts.endpoint}`,
       opts.endpoint,
       params,
-      parsed.error,
+      parsed.error
     );
   }
 
@@ -261,19 +265,19 @@ async function request<S extends z.ZodTypeAny>(
 const SUPPORTED_LEAGUE_BY_API_FOOTBALL_ID: Record<number, SupportedLeague> =
   Object.fromEntries(
     Object.entries(API_FOOTBALL_LEAGUE_IDS).map(
-      ([league, id]) => [id, league as SupportedLeague] as const,
-    ),
+      ([league, id]) => [id, league as SupportedLeague] as const
+    )
   );
 
 function seasonForApiFootballLeagueId(
   leagueId: number,
-  now: Date = new Date(),
+  now: Date = new Date()
 ): number {
   const league = SUPPORTED_LEAGUE_BY_API_FOOTBALL_ID[leagueId];
   if (!league) {
     throw new Error(
       `No SupportedLeague mapped for API-Football league id ${leagueId}. ` +
-        `Pass seasonOverride explicitly or extend API_FOOTBALL_LEAGUE_IDS.`,
+        `Pass seasonOverride explicitly or extend API_FOOTBALL_LEAGUE_IDS.`
     );
   }
   return currentSeasonByLeague(league, now);
@@ -284,7 +288,7 @@ function seasonForApiFootballLeagueId(
 export async function getFixturesByDate(
   date: string,
   leagueId?: number,
-  seasonOverride?: number,
+  seasonOverride?: number
 ): Promise<ApiFootballFixture[]> {
   // API-Football requires `season` whenever `league` is supplied on /fixtures.
   const season =
@@ -294,7 +298,7 @@ export async function getFixturesByDate(
   const params = { date, league: leagueId, season, timezone: "UTC" };
   const cacheKey = buildCacheKey(
     "/fixtures",
-    stripUndefined({ date, league: leagueId, season }),
+    stripUndefined({ date, league: leagueId, season })
   );
   const envelope = await request({
     endpoint: "/fixtures",
@@ -312,14 +316,14 @@ export async function getFixturesByDate(
 function fixturesByDateCacheKey(
   date: string,
   leagueId: number,
-  season: number,
+  season: number
 ): string {
   return buildCacheKey("/fixtures", { date, league: leagueId, season });
 }
 
 export async function getFixturesByLeague(
   leagueId: number,
-  season: number,
+  season: number
 ): Promise<ApiFootballFixture[]> {
   const envelope = await request({
     endpoint: "/fixtures",
@@ -331,7 +335,7 @@ export async function getFixturesByLeague(
 }
 
 export async function getFixtureById(
-  id: number,
+  id: number
 ): Promise<ApiFootballFixture | undefined> {
   const envelope = await request({
     endpoint: "/fixtures",
@@ -346,7 +350,7 @@ export async function getFixtureById(
 // jogador. Cache 15min (settlement roda no cron, não em loop). Cada item é um
 // gol/cartão/substituição/VAR — o normalizer filtra gols/assists de 90'.
 export async function getFixtureEvents(
-  fixtureId: number,
+  fixtureId: number
 ): Promise<ApiFootballFixtureEvent[]> {
   const envelope = await request({
     endpoint: "/fixtures/events",
@@ -360,7 +364,7 @@ export async function getFixtureEvents(
 export async function getH2H(
   team1: number,
   team2: number,
-  last?: number,
+  last?: number
 ): Promise<ApiFootballFixture[]> {
   const [a, b] = team1 < team2 ? [team1, team2] : [team2, team1];
   const params = { h2h: `${a}-${b}`, last };
@@ -375,7 +379,7 @@ export async function getH2H(
 
 export async function getStandings(
   leagueId: number,
-  season: number,
+  season: number
 ): Promise<ApiFootballStandings | undefined> {
   const envelope = await request({
     endpoint: "/standings",
@@ -407,7 +411,7 @@ export async function getInjuries(args: {
 }
 
 export async function getLineups(
-  fixtureId: number,
+  fixtureId: number
 ): Promise<ApiFootballLineup[]> {
   const cacheKey = buildCacheKey("/fixtures/lineups", { fixture: fixtureId });
   const envelope = await request({
@@ -420,9 +424,24 @@ export async function getLineups(
   return envelope.response;
 }
 
+// 1 request por liga/temporada por dia (por instância). Usado só na resolução de
+// team id em runtime das copas (RUNTIME_TEAM_ID_LEAGUES).
+export async function getTeamsByLeague(
+  leagueId: number,
+  season: number
+): Promise<ApiFootballTeamItem[]> {
+  const envelope = await request({
+    endpoint: "/teams",
+    params: { league: leagueId, season },
+    schema: TeamEnvelopeSchema,
+    ttlMs: ONE_DAY,
+  });
+  return envelope.response;
+}
+
 export async function getTeamForm(
   teamId: number,
-  last: number,
+  last: number
 ): Promise<ApiFootballFixture[]> {
   if (last < 1 || last > 99) {
     throw new Error("getTeamForm `last` must be between 1 and 99");
@@ -469,7 +488,7 @@ function mapStatusToNormalized(short: string): NormalizedFixtureStatus {
 
 function toNormalizedFixture(
   f: ApiFootballFixture,
-  league: SupportedLeague,
+  league: SupportedLeague
 ): NormalizedFixture {
   const home = canonicalizeOrPassthrough(f.teams.home.name, league);
   const away = canonicalizeOrPassthrough(f.teams.away.name, league);
@@ -497,7 +516,7 @@ function toNormalizedFixture(
 // until the 90' result exists, so regulationScore is null for not-yet-played
 // matches.
 function toNormalizedFixtureResult(
-  f: ApiFootballFixture,
+  f: ApiFootballFixture
 ): NormalizedFixtureResult {
   const ft = f.score.fulltime;
   const regulationScore =
@@ -538,7 +557,7 @@ function isRegulationMinute(elapsed: number | null): boolean {
 
 function toNormalizedFixtureEvents(
   f: ApiFootballFixture,
-  rawEvents: ApiFootballFixtureEvent[],
+  rawEvents: ApiFootballFixtureEvent[]
 ): NormalizedFixtureEvents {
   const status = mapStatusToNormalized(f.fixture.status.short);
   const homeTeamId = f.teams.home.id;
@@ -599,7 +618,7 @@ type ApiFootballStandingSplit =
 // World Cup (neutral venues / pre-tournament). homeSplit/awaySplit are optional
 // in the normalized shape, so omit them rather than emit nulls.
 function toNormalizedSplit(
-  split: ApiFootballStandingSplit,
+  split: ApiFootballStandingSplit
 ): NormalizedStandingSplit | undefined {
   if (!split) return undefined;
   const { played, win, draw, lose, goals } = split;
@@ -625,7 +644,7 @@ function toNormalizedSplit(
 
 function toNormalizedStanding(
   s: ApiFootballStandings,
-  league: SupportedLeague,
+  league: SupportedLeague
 ): NormalizedStanding {
   const tables = s.league.standings.map((group) => {
     const teams: NormalizedStandingTeam[] = group.map((row) => {
@@ -655,7 +674,7 @@ function toNormalizedStanding(
 }
 
 function mapApiFootballPositionToLabel(
-  pos: string | null | undefined,
+  pos: string | null | undefined
 ): string | undefined {
   switch (pos) {
     case "G":
@@ -672,7 +691,7 @@ function mapApiFootballPositionToLabel(
 }
 
 function mapApiFootballAbsenceStatus(
-  injury: ApiFootballInjury,
+  injury: ApiFootballInjury
 ): NormalizedInjury["status"] {
   const type = (injury.player.type ?? "").toLowerCase();
   const reason = (injury.player.reason ?? "").toLowerCase();
@@ -698,7 +717,7 @@ function toNormalizedInjury(injury: ApiFootballInjury): NormalizedInjury {
 
 function toNormalizedTeamLineup(
   lineup: ApiFootballLineup,
-  league: SupportedLeague,
+  league: SupportedLeague
 ): NormalizedTeamLineup {
   const starters: NormalizedLineupPlayer[] = lineup.startXI.map((entry) => ({
     name: entry.player.name,
@@ -721,7 +740,7 @@ function toNormalizedTeamLineup(
 function wrapApiFootballError(
   err: unknown,
   method: string,
-  context: Record<string, unknown>,
+  context: Record<string, unknown>
 ): never {
   // Schema mismatches indicate provider response drift — retry on fallback
   // is the safer bet than failing the whole prediction (which would happen
@@ -732,7 +751,7 @@ function wrapApiFootballError(
       PROVIDER_NAME,
       method,
       err,
-      context,
+      context
     );
   }
   if (err instanceof ApiFootballTimeoutError) {
@@ -741,7 +760,7 @@ function wrapApiFootballError(
       PROVIDER_NAME,
       method,
       err,
-      context,
+      context
     );
   }
   if (err instanceof ApiFootballHttpError) {
@@ -752,7 +771,7 @@ function wrapApiFootballError(
         PROVIDER_NAME,
         method,
         err,
-        context,
+        context
       );
     }
     // 4xx (except 429) — endpoint-specific not-found / bad-request. Not
@@ -761,7 +780,7 @@ function wrapApiFootballError(
       `HTTP ${err.status} on ${err.endpoint}: ${err.body.slice(0, 200)}`,
       PROVIDER_NAME,
       method,
-      context,
+      context
     );
   }
   if (err instanceof ApiFootballApiError) {
@@ -774,7 +793,7 @@ function wrapApiFootballError(
       PROVIDER_NAME,
       method,
       err,
-      context,
+      context
     );
   }
   if (err instanceof ApiFootballError) {
@@ -783,20 +802,44 @@ function wrapApiFootballError(
       PROVIDER_NAME,
       method,
       err,
-      context,
+      context
     );
   }
   // Programmer error (TypeError, etc.) — surface unchanged.
   throw err;
 }
 
-function resolveApiFootballTeamId(
+// Dedupe de /teams em voo: predict.ts dispara getTeamForm ×2 + getH2H em
+// paralelo, e numa instância fria cada um erraria o cache e faria sua própria
+// request. A promise compartilhada sai do mapa ao assentar (o cache de 1 dia
+// cobre as chamadas seguintes).
+const teamsInFlight = new Map<string, Promise<ApiFootballTeamItem[]>>();
+
+function getTeamsByLeagueShared(
+  leagueId: number,
+  season: number
+): Promise<ApiFootballTeamItem[]> {
+  const key = `${leagueId}:${season}`;
+  let pending = teamsInFlight.get(key);
+  if (!pending) {
+    pending = getTeamsByLeague(leagueId, season).finally(() => {
+      teamsInFlight.delete(key);
+    });
+    teamsInFlight.set(key, pending);
+  }
+  return pending;
+}
+
+async function resolveApiFootballTeamId(
   canonicalName: string,
   league: SupportedLeague,
-  method: string,
-): number {
+  method: string
+): Promise<number> {
   const id = API_FOOTBALL_TEAM_IDS[league][canonicalName];
-  if (id === undefined) {
+  if (id !== undefined) return id;
+
+  const context = { canonicalName, league };
+  if (!RUNTIME_TEAM_ID_LEAGUES.has(league)) {
     // Map is empty (account-suspension stub) or the canonical name isn't
     // covered. Treat as transient so FallbackProvider tries the next
     // adapter; an unmapped canonical team is functionally equivalent to an
@@ -807,10 +850,42 @@ function resolveApiFootballTeamId(
       PROVIDER_NAME,
       method,
       undefined,
-      { canonicalName, league },
+      context
     );
   }
-  return id;
+
+  // Copas (ADR 0045, emenda 2026-09-27): sem mapa estático, casa o nome contra
+  // /teams da temporada passando cada nome pelo mesmo canonicalize do sync de
+  // fixtures — assim alias e passthrough resolvem igual ao nome gravado no match.
+  // Qualquer falha do /teams vira Transient, como o time não mapeado acima (um
+  // 4xx não pode virar NotFound e mascarar o cascade).
+  let teams: ApiFootballTeamItem[];
+  try {
+    teams = await getTeamsByLeagueShared(
+      API_FOOTBALL_LEAGUE_IDS[league],
+      currentSeasonByLeague(league)
+    );
+  } catch (err) {
+    throw new SportsDataTransientError(
+      `API-Football /teams failed while resolving "${canonicalName}" in ${league}.`,
+      PROVIDER_NAME,
+      method,
+      err,
+      context
+    );
+  }
+  const hits = teams.filter(
+    (t) => canonicalizeOrPassthrough(t.team.name, league) === canonicalName
+  );
+  const [hit] = hits;
+  if (hit && hits.length === 1) return hit.team.id;
+  throw new SportsDataTransientError(
+    `API-Football /teams returned ${hits.length} matches for "${canonicalName}" in ${league}.`,
+    PROVIDER_NAME,
+    method,
+    undefined,
+    context
+  );
 }
 
 // API-Football reports injuries=false in /leagues coverage for EVERY World Cup
@@ -848,7 +923,7 @@ export class ApiFootballAdapter implements SportsDataProvider {
 
   async getFixturesByDate(
     date: string,
-    league: SupportedLeague,
+    league: SupportedLeague
   ): Promise<NormalizedFixture[]> {
     try {
       const leagueId = API_FOOTBALL_LEAGUE_IDS[league];
@@ -874,7 +949,7 @@ export class ApiFootballAdapter implements SportsDataProvider {
 
   async getFixturesBySeason(
     league: SupportedLeague,
-    season?: number,
+    season?: number
   ): Promise<NormalizedFixture[]> {
     try {
       const leagueId = API_FOOTBALL_LEAGUE_IDS[league];
@@ -890,7 +965,7 @@ export class ApiFootballAdapter implements SportsDataProvider {
   }
 
   async getFixtureByMatch(
-    ref: FixtureRef,
+    ref: FixtureRef
   ): Promise<NormalizedFixture | undefined> {
     try {
       const date = ref.kickoffAt.slice(0, 10);
@@ -901,7 +976,7 @@ export class ApiFootballAdapter implements SportsDataProvider {
           f.awayTeam === ref.awayTeam &&
           // Same calendar day already filtered above; allow same-day kickoffs
           // even if the exact hour drifts between providers.
-          f.kickoffAt.slice(0, 10) === date,
+          f.kickoffAt.slice(0, 10) === date
       );
     } catch (err) {
       // getFixturesByDate already wraps; this layer just adds ref context.
@@ -911,7 +986,7 @@ export class ApiFootballAdapter implements SportsDataProvider {
           PROVIDER_NAME,
           "getFixtureByMatch",
           err.originalError,
-          { ref },
+          { ref }
         );
       }
       throw err;
@@ -919,7 +994,7 @@ export class ApiFootballAdapter implements SportsDataProvider {
   }
 
   async getFixtureResult(
-    ref: FixtureRef,
+    ref: FixtureRef
   ): Promise<NormalizedFixtureResult | undefined> {
     try {
       // Pull the raw fixture (carries score.fulltime, dropped by normalization)
@@ -930,14 +1005,14 @@ export class ApiFootballAdapter implements SportsDataProvider {
       const native = await getFixturesByDate(
         ref.kickoffAt.slice(0, 10),
         leagueId,
-        season,
+        season
       );
       const match = native.find(
         (f) =>
           canonicalizeOrPassthrough(f.teams.home.name, ref.league) ===
             ref.homeTeam &&
           canonicalizeOrPassthrough(f.teams.away.name, ref.league) ===
-            ref.awayTeam,
+            ref.awayTeam
       );
       if (!match) return undefined;
       return toNormalizedFixtureResult(match);
@@ -948,7 +1023,7 @@ export class ApiFootballAdapter implements SportsDataProvider {
   }
 
   async getFixtureEvents(
-    ref: FixtureRef,
+    ref: FixtureRef
   ): Promise<NormalizedFixtureEvents | undefined> {
     try {
       // Resolve o fixture EXATAMENTE como getFixtureResult (date+nome canônico),
@@ -960,14 +1035,14 @@ export class ApiFootballAdapter implements SportsDataProvider {
       const native = await getFixturesByDate(
         ref.kickoffAt.slice(0, 10),
         leagueId,
-        season,
+        season
       );
       const match = native.find(
         (f) =>
           canonicalizeOrPassthrough(f.teams.home.name, ref.league) ===
             ref.homeTeam &&
           canonicalizeOrPassthrough(f.teams.away.name, ref.league) ===
-            ref.awayTeam,
+            ref.awayTeam
       );
       if (!match) return undefined;
       const rawEvents = await getFixtureEvents(match.fixture.id);
@@ -982,11 +1057,11 @@ export class ApiFootballAdapter implements SportsDataProvider {
     homeTeam: string,
     awayTeam: string,
     league: SupportedLeague,
-    last = 5,
+    last = 5
   ): Promise<NormalizedH2H[]> {
     try {
-      const homeId = resolveApiFootballTeamId(homeTeam, league, "getH2H");
-      const awayId = resolveApiFootballTeamId(awayTeam, league, "getH2H");
+      const homeId = await resolveApiFootballTeamId(homeTeam, league, "getH2H");
+      const awayId = await resolveApiFootballTeamId(awayTeam, league, "getH2H");
       const fixtures = await getH2H(homeId, awayId, last);
       return fixtures.map((f) => toNormalizedFixture(f, league));
     } catch (err) {
@@ -1002,7 +1077,7 @@ export class ApiFootballAdapter implements SportsDataProvider {
 
   async getStandings(
     league: SupportedLeague,
-    season?: number,
+    season?: number
   ): Promise<NormalizedStanding | undefined> {
     try {
       const leagueId = API_FOOTBALL_LEAGUE_IDS[league];
@@ -1016,13 +1091,13 @@ export class ApiFootballAdapter implements SportsDataProvider {
   }
 
   async getInjuriesByFixture(
-    ref: FixtureRef,
+    ref: FixtureRef
   ): Promise<{ home: NormalizedInjury[]; away: NormalizedInjury[] }> {
     if (ref.league === "world_cup") {
       throw new SportsDataUnsupportedError(
         WORLD_CUP_NO_INJURIES,
         PROVIDER_NAME,
-        "getInjuriesByFixture",
+        "getInjuriesByFixture"
       );
     }
     try {
@@ -1035,7 +1110,7 @@ export class ApiFootballAdapter implements SportsDataProvider {
             kickoffAt: ref.kickoffAt,
             homeTeam: ref.homeTeam,
             awayTeam: ref.awayTeam,
-          }),
+          })
         );
         return { home: [], away: [] };
       }
@@ -1047,14 +1122,14 @@ export class ApiFootballAdapter implements SportsDataProvider {
       const native = await getFixturesByDate(
         ref.kickoffAt.slice(0, 10),
         leagueId,
-        season,
+        season
       );
       const match = native.find(
         (f) =>
           canonicalizeOrPassthrough(f.teams.home.name, ref.league) ===
             ref.homeTeam &&
           canonicalizeOrPassthrough(f.teams.away.name, ref.league) ===
-            ref.awayTeam,
+            ref.awayTeam
       );
       if (!match) {
         console.warn(
@@ -1064,7 +1139,7 @@ export class ApiFootballAdapter implements SportsDataProvider {
             kickoffAt: ref.kickoffAt,
             homeTeam: ref.homeTeam,
             awayTeam: ref.awayTeam,
-          }),
+          })
         );
         return { home: [], away: [] };
       }
@@ -1072,10 +1147,7 @@ export class ApiFootballAdapter implements SportsDataProvider {
       const home: NormalizedInjury[] = [];
       const away: NormalizedInjury[] = [];
       for (const inj of injuries) {
-        const teamCanon = canonicalizeOrPassthrough(
-          inj.team.name,
-          ref.league,
-        );
+        const teamCanon = canonicalizeOrPassthrough(inj.team.name, ref.league);
         const normalized = toNormalizedInjury(inj);
         if (teamCanon === ref.homeTeam) home.push(normalized);
         else if (teamCanon === ref.awayTeam) away.push(normalized);
@@ -1090,17 +1162,21 @@ export class ApiFootballAdapter implements SportsDataProvider {
 
   async getInjuriesByTeam(
     team: string,
-    league: SupportedLeague,
+    league: SupportedLeague
   ): Promise<NormalizedInjury[]> {
     if (league === "world_cup") {
       throw new SportsDataUnsupportedError(
         WORLD_CUP_NO_INJURIES,
         PROVIDER_NAME,
-        "getInjuriesByTeam",
+        "getInjuriesByTeam"
       );
     }
     try {
-      const teamId = resolveApiFootballTeamId(team, league, "getInjuriesByTeam");
+      const teamId = await resolveApiFootballTeamId(
+        team,
+        league,
+        "getInjuriesByTeam"
+      );
       const injuries = await getInjuries({ teamId });
       return injuries.map(toNormalizedInjury);
     } catch (err) {
@@ -1116,24 +1192,24 @@ export class ApiFootballAdapter implements SportsDataProvider {
       const candidates = await getFixturesByDate(
         ref.kickoffAt.slice(0, 10),
         leagueId,
-        season,
+        season
       );
       const match = candidates.find(
         (f) =>
           canonicalizeOrPassthrough(f.teams.home.name, ref.league) ===
             ref.homeTeam &&
           canonicalizeOrPassthrough(f.teams.away.name, ref.league) ===
-            ref.awayTeam,
+            ref.awayTeam
       );
       if (!match) return undefined;
       const lineups = await getLineups(match.fixture.id);
       const homeLineup = lineups.find(
         (l) =>
-          canonicalizeOrPassthrough(l.team.name, ref.league) === ref.homeTeam,
+          canonicalizeOrPassthrough(l.team.name, ref.league) === ref.homeTeam
       );
       const awayLineup = lineups.find(
         (l) =>
-          canonicalizeOrPassthrough(l.team.name, ref.league) === ref.awayTeam,
+          canonicalizeOrPassthrough(l.team.name, ref.league) === ref.awayTeam
       );
       if (!homeLineup || !awayLineup) return undefined;
       return {
@@ -1149,10 +1225,14 @@ export class ApiFootballAdapter implements SportsDataProvider {
   async getTeamForm(
     team: string,
     league: SupportedLeague,
-    last: number,
+    last: number
   ): Promise<NormalizedFixture[]> {
     try {
-      const teamId = resolveApiFootballTeamId(team, league, "getTeamForm");
+      const teamId = await resolveApiFootballTeamId(
+        team,
+        league,
+        "getTeamForm"
+      );
       const fixtures = await getTeamForm(teamId, last);
       // Map to normalized; keep only finished games (form analysis).
       return fixtures

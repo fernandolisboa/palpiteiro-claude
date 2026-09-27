@@ -1,7 +1,10 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 
 import { inMemoryCache } from "@/lib/cache/in-memory";
-import { ApiFootballAdapter, __testing } from "@/lib/providers/sports-data/api-football/adapter";
+import {
+  ApiFootballAdapter,
+  __testing,
+} from "@/lib/providers/sports-data/api-football/adapter";
 import {
   ApiFootballHttpError,
   ApiFootballSchemaError,
@@ -38,7 +41,9 @@ const {
 
 // ─── Synthetic API-Football payloads ────────────────────────────────────────
 
-function makeFixture(overrides: Partial<ApiFootballFixture> = {}): ApiFootballFixture {
+function makeFixture(
+  overrides: Partial<ApiFootballFixture> = {}
+): ApiFootballFixture {
   const defaults: ApiFootballFixture = {
     fixture: {
       id: 12345,
@@ -98,7 +103,7 @@ describe("toNormalizedFixture", () => {
     const f = makeFixture();
     const n = toNormalizedFixture(f, "brasileirao_a");
     expect(n.id).toBe(
-      "brasileirao_a:2026-05-15T19:00:00.000Z:CR Flamengo:Fluminense FC",
+      "brasileirao_a:2026-05-15T19:00:00.000Z:CR Flamengo:Fluminense FC"
     );
     expect(n.league).toBe("brasileirao_a");
     expect(n.homeTeam).toBe("CR Flamengo");
@@ -106,15 +111,17 @@ describe("toNormalizedFixture", () => {
     expect(n.status).toBe("scheduled");
     expect(n.venue).toBe("Maracanã");
     expect(n.score).toEqual({ home: null, away: null });
-    expect(n.kickoffTimestampMs).toBe(
-      Date.parse("2026-05-15T19:00:00Z"),
-    );
+    expect(n.kickoffTimestampMs).toBe(Date.parse("2026-05-15T19:00:00Z"));
   });
 
   it("passes through provider team name when no canonical match exists", () => {
     const f = makeFixture({
       teams: {
-        home: { id: 99, name: "MysteryTeamThatDoesNotMatchAnyCanonical", winner: null },
+        home: {
+          id: 99,
+          name: "MysteryTeamThatDoesNotMatchAnyCanonical",
+          winner: null,
+        },
         away: { id: 124, name: "Fluminense", winner: null },
       },
     });
@@ -134,7 +141,11 @@ describe("toNormalizedFixtureResult", () => {
         date: "2026-07-10T19:00:00+00:00",
         timestamp: Math.floor(Date.parse("2026-07-10T19:00:00Z") / 1000),
         timezone: "UTC",
-        status: { long: "Match Finished After Extra Time", short: "AET", elapsed: 120 },
+        status: {
+          long: "Match Finished After Extra Time",
+          short: "AET",
+          elapsed: 120,
+        },
         venue: { id: 1, name: "Stadium", city: "City" },
       },
       goals: { home: 3, away: 2 },
@@ -159,7 +170,9 @@ describe("toNormalizedFixtureResult", () => {
 
 // ─── Fixture events normalization (#290 scorer/assist) ───────────────────────
 
-function ev(overrides: Partial<ApiFootballFixtureEvent>): ApiFootballFixtureEvent {
+function ev(
+  overrides: Partial<ApiFootballFixtureEvent>
+): ApiFootballFixtureEvent {
   return {
     time: { elapsed: 23, extra: null },
     team: { id: 127, name: "Flamengo" },
@@ -185,7 +198,10 @@ describe("toNormalizedFixtureEvents", () => {
 
   it("credits a normal regulation goal to the scorer", () => {
     const r = toNormalizedFixtureEvents(finished, [
-      ev({ player: { id: 10, name: "Pedro" }, time: { elapsed: 33, extra: null } }),
+      ev({
+        player: { id: 10, name: "Pedro" },
+        time: { elapsed: 33, extra: null },
+      }),
     ]);
     expect(r.eventsAvailable).toBe(true);
     expect(r.goals).toHaveLength(1);
@@ -291,9 +307,27 @@ function makeStandings(): ApiFootballStandings {
             form: "WWDWW",
             status: "same",
             description: null,
-            all: { played: 12, win: 9, draw: 3, lose: 0, goals: { for: 25, against: 10 } },
-            home: { played: 6, win: 5, draw: 1, lose: 0, goals: { for: 15, against: 5 } },
-            away: { played: 6, win: 4, draw: 2, lose: 0, goals: { for: 10, against: 5 } },
+            all: {
+              played: 12,
+              win: 9,
+              draw: 3,
+              lose: 0,
+              goals: { for: 25, against: 10 },
+            },
+            home: {
+              played: 6,
+              win: 5,
+              draw: 1,
+              lose: 0,
+              goals: { for: 15, against: 5 },
+            },
+            away: {
+              played: 6,
+              win: 4,
+              draw: 2,
+              lose: 0,
+              goals: { for: 10, against: 5 },
+            },
             update: "2026-05-13T00:00:00+00:00",
           },
         ],
@@ -449,7 +483,9 @@ describe("toNormalizedStanding — World Cup groups", () => {
 
 // ─── Injury normalization ───────────────────────────────────────────────────
 
-function makeInjury(overrides: Partial<ApiFootballInjury["player"]> = {}): ApiFootballInjury {
+function makeInjury(
+  overrides: Partial<ApiFootballInjury["player"]> = {}
+): ApiFootballInjury {
   return {
     player: {
       id: 1,
@@ -479,14 +515,14 @@ describe("toNormalizedInjury", () => {
   });
   it("maps Questionable -> doubtful", () => {
     const n = toNormalizedInjury(
-      makeInjury({ type: "Questionable", reason: "Doubtful" }),
+      makeInjury({ type: "Questionable", reason: "Doubtful" })
     );
     expect(n.status).toBe("doubtful");
     expect(n.type).toBe("injury");
   });
   it("maps Card -> suspended (type=suspension)", () => {
     const n = toNormalizedInjury(
-      makeInjury({ type: "Missing Fixture", reason: "Red card" }),
+      makeInjury({ type: "Missing Fixture", reason: "Red card" })
     );
     expect(n.status).toBe("suspended");
     expect(n.type).toBe("suspension");
@@ -518,10 +554,26 @@ describe("toNormalizedTeamLineup", () => {
     expect(t.team).toBe("CR Flamengo");
     expect(t.formation).toBe("4-3-3");
     expect(t.starters).toHaveLength(4);
-    expect(t.starters[0]).toEqual({ name: "GK", shirtNumber: 1, position: "GK" });
-    expect(t.starters[1]).toEqual({ name: "RB", shirtNumber: 2, position: "DEF" });
-    expect(t.starters[2]).toEqual({ name: "CM", shirtNumber: 8, position: "MID" });
-    expect(t.starters[3]).toEqual({ name: "ST", shirtNumber: 9, position: "FWD" });
+    expect(t.starters[0]).toEqual({
+      name: "GK",
+      shirtNumber: 1,
+      position: "GK",
+    });
+    expect(t.starters[1]).toEqual({
+      name: "RB",
+      shirtNumber: 2,
+      position: "DEF",
+    });
+    expect(t.starters[2]).toEqual({
+      name: "CM",
+      shirtNumber: 8,
+      position: "MID",
+    });
+    expect(t.starters[3]).toEqual({
+      name: "ST",
+      shirtNumber: 9,
+      position: "FWD",
+    });
     expect(t.bench).toHaveLength(1);
     expect(t.bench?.[0]?.position).toBeUndefined();
   });
@@ -538,10 +590,10 @@ describe("wrapApiFootballError", () => {
       "/fixtures",
       { date: "2026-05-15" },
       503,
-      "Service Unavailable",
+      "Service Unavailable"
     );
     expect(() => wrapApiFootballError(err, "getFixturesByDate", ctx)).toThrow(
-      SportsDataTransientError,
+      SportsDataTransientError
     );
   });
 
@@ -551,10 +603,10 @@ describe("wrapApiFootballError", () => {
       "/fixtures",
       { id: 1 },
       404,
-      "Not Found",
+      "Not Found"
     );
     expect(() => wrapApiFootballError(err, "getFixtureByMatch", ctx)).toThrow(
-      SportsDataNotFoundError,
+      SportsDataNotFoundError
     );
   });
 
@@ -564,17 +616,17 @@ describe("wrapApiFootballError", () => {
       "/fixtures",
       {},
       429,
-      "",
+      ""
     );
     expect(() => wrapApiFootballError(err, "getH2H", ctx)).toThrow(
-      SportsDataTransientError,
+      SportsDataTransientError
     );
   });
 
   it("maps timeout -> SportsDataTransientError", () => {
     const err = new ApiFootballTimeoutError("/fixtures", {});
     expect(() => wrapApiFootballError(err, "getFixtureByMatch", ctx)).toThrow(
-      SportsDataTransientError,
+      SportsDataTransientError
     );
   });
 
@@ -589,17 +641,17 @@ describe("wrapApiFootballError", () => {
       "Schema fail",
       "/fixtures",
       {},
-      zodErr,
+      zodErr
     );
     expect(() => wrapApiFootballError(err, "getStandings", ctx)).toThrow(
-      SportsDataTransientError,
+      SportsDataTransientError
     );
   });
 
   it("rethrows non-API-Football errors unchanged", () => {
     const original = new TypeError("Network down");
     expect(() => wrapApiFootballError(original, "getH2H", ctx)).toThrow(
-      TypeError,
+      TypeError
     );
   });
 });
@@ -615,19 +667,19 @@ describe("wrapApiFootballError", () => {
 describe("seasonForApiFootballLeagueId — Brasileirão (id 71)", () => {
   it("January → previous year (off-season)", () => {
     expect(
-      seasonForApiFootballLeagueId(71, new Date("2026-01-15T12:00:00Z")),
+      seasonForApiFootballLeagueId(71, new Date("2026-01-15T12:00:00Z"))
     ).toBe(2025);
   });
 
   it("March → previous year (final off-season month)", () => {
     expect(
-      seasonForApiFootballLeagueId(71, new Date("2026-03-31T23:59:59Z")),
+      seasonForApiFootballLeagueId(71, new Date("2026-03-31T23:59:59Z"))
     ).toBe(2025);
   });
 
   it("April → current year (season kicks off)", () => {
     expect(
-      seasonForApiFootballLeagueId(71, new Date("2026-04-15T12:00:00Z")),
+      seasonForApiFootballLeagueId(71, new Date("2026-04-15T12:00:00Z"))
     ).toBe(2026);
   });
 });
@@ -635,19 +687,19 @@ describe("seasonForApiFootballLeagueId — Brasileirão (id 71)", () => {
 describe("seasonForApiFootballLeagueId — Champions League (id 2)", () => {
   it("July → previous year (final off-season month)", () => {
     expect(
-      seasonForApiFootballLeagueId(2, new Date("2026-07-15T12:00:00Z")),
+      seasonForApiFootballLeagueId(2, new Date("2026-07-15T12:00:00Z"))
     ).toBe(2025);
   });
 
   it("August → current year (new season starts)", () => {
     expect(
-      seasonForApiFootballLeagueId(2, new Date("2026-08-15T12:00:00Z")),
+      seasonForApiFootballLeagueId(2, new Date("2026-08-15T12:00:00Z"))
     ).toBe(2026);
   });
 
   it("January → previous year (season started prior August)", () => {
     expect(
-      seasonForApiFootballLeagueId(2, new Date("2026-01-15T12:00:00Z")),
+      seasonForApiFootballLeagueId(2, new Date("2026-01-15T12:00:00Z"))
     ).toBe(2025);
   });
 });
@@ -655,7 +707,7 @@ describe("seasonForApiFootballLeagueId — Champions League (id 2)", () => {
 describe("seasonForApiFootballLeagueId — unmapped id", () => {
   it("throws so callers can't silently use a wrong season", () => {
     expect(() =>
-      seasonForApiFootballLeagueId(999999, new Date("2026-05-15T12:00:00Z")),
+      seasonForApiFootballLeagueId(999999, new Date("2026-05-15T12:00:00Z"))
     ).toThrow(/No SupportedLeague mapped/);
   });
 });
@@ -663,25 +715,209 @@ describe("seasonForApiFootballLeagueId — unmapped id", () => {
 // ─── Team-ID resolution ──────────────────────────────────────────────────────
 
 describe("resolveApiFootballTeamId", () => {
-  it("throws SportsDataTransientError for an unmapped name (cascade signal)", () => {
-    expect(() =>
-      resolveApiFootballTeamId("Unmapped Test FC", "brasileirao_a", "getH2H"),
-    ).toThrow(SportsDataTransientError);
+  it("throws SportsDataTransientError for an unmapped name (cascade signal)", async () => {
+    await expect(
+      resolveApiFootballTeamId("Unmapped Test FC", "brasileirao_a", "getH2H")
+    ).rejects.toThrow(SportsDataTransientError);
   });
 
-  it("returns the mapped id for a canonical team", () => {
-    expect(
-      resolveApiFootballTeamId("CR Flamengo", "brasileirao_a", "getH2H"),
-    ).toBe(API_FOOTBALL_TEAM_IDS.brasileirao_a["CR Flamengo"]);
+  it("returns the mapped id for a canonical team", async () => {
+    await expect(
+      resolveApiFootballTeamId("CR Flamengo", "brasileirao_a", "getH2H")
+    ).resolves.toBe(API_FOOTBALL_TEAM_IDS.brasileirao_a["CR Flamengo"]);
   });
 
-  it("throws when the canonical name isn't in the populated map", () => {
+  it("throws when the canonical name isn't in the populated map", async () => {
     (API_FOOTBALL_TEAM_IDS.brasileirao_a as Record<string, number>)[
       "CR Flamengo"
     ] = 127;
-    expect(() =>
-      resolveApiFootballTeamId("Unknown FC", "brasileirao_a", "getH2H"),
-    ).toThrow(SportsDataTransientError);
+    await expect(
+      resolveApiFootballTeamId("Unknown FC", "brasileirao_a", "getH2H")
+    ).rejects.toThrow(SportsDataTransientError);
+  });
+});
+
+// ─── Team-ID resolution em runtime (copas, ADR 0045 emenda 2026-09-27) ──────
+
+function teamsEnvelope(teams: Array<{ id: number; name: string }>): unknown {
+  return {
+    get: "teams",
+    parameters: {},
+    errors: [],
+    results: teams.length,
+    paging: { current: 1, total: 1 },
+    response: teams.map((team) => ({ team, venue: {} })),
+  };
+}
+
+describe("resolveApiFootballTeamId — runtime /teams (copas)", () => {
+  const ORIGINAL_KEY = process.env.API_FOOTBALL_KEY;
+  // Libertadores 2026: currentSeason → 2026 a partir de fevereiro. Relógio em
+  // março e avançando 2 min por teste: o throttle do client (8 req/min) é de
+  // módulo e lê Date.now, então timestamps congelados — ou no futuro dos testes
+  // seguintes (maio) — travariam as requests do resto do arquivo.
+  const cacheKey = "sports-data:api-football:teams:league:13:season:2026";
+  let clock = Date.parse("2026-03-10T12:00:00.000Z");
+
+  beforeEach(async () => {
+    process.env.API_FOOTBALL_KEY = "test-key";
+    await inMemoryCache.delete(cacheKey);
+    vi.useFakeTimers();
+    clock += 2 * 60 * 1000;
+    vi.setSystemTime(new Date(clock));
+  });
+
+  afterEach(async () => {
+    vi.useRealTimers();
+    vi.restoreAllMocks();
+    await inMemoryCache.delete(cacheKey);
+    if (ORIGINAL_KEY === undefined) delete process.env.API_FOOTBALL_KEY;
+    else process.env.API_FOOTBALL_KEY = ORIGINAL_KEY;
+  });
+
+  it("resolve pelo nome canonicalizado (alias incluso) com UMA chamada cacheada", async () => {
+    const fetchSpy = vi.spyOn(globalThis, "fetch").mockResolvedValue(
+      jsonResponse(
+        teamsEnvelope([
+          { id: 127, name: "Flamengo" },
+          { id: 450, name: "Estudiantes L.P." },
+          { id: 435, name: "River Plate" },
+        ])
+      )
+    );
+
+    await expect(
+      resolveApiFootballTeamId("Flamengo", "copa_libertadores", "getH2H")
+    ).resolves.toBe(127);
+    await expect(
+      resolveApiFootballTeamId(
+        "Estudiantes de La Plata",
+        "copa_libertadores",
+        "getH2H"
+      )
+    ).resolves.toBe(450);
+    // Fora da lista canônica: passthrough com o nome da API-Football.
+    await expect(
+      resolveApiFootballTeamId("River Plate", "copa_libertadores", "getH2H")
+    ).resolves.toBe(435);
+
+    expect(fetchSpy).toHaveBeenCalledTimes(1);
+    const url = String(fetchSpy.mock.calls[0]![0]);
+    expect(url).toContain("/teams");
+    expect(url).toContain("league=13");
+    expect(url).toContain("season=2026");
+  });
+
+  it("time ausente em /teams → Transient (cascade)", async () => {
+    vi.spyOn(globalThis, "fetch").mockResolvedValue(
+      jsonResponse(teamsEnvelope([{ id: 127, name: "Flamengo" }]))
+    );
+    await expect(
+      resolveApiFootballTeamId("Palmeiras", "copa_libertadores", "getTeamForm")
+    ).rejects.toThrow(SportsDataTransientError);
+  });
+
+  it("nome ambíguo (2 times canonicalizam igual) → Transient, não chuta", async () => {
+    vi.spyOn(globalThis, "fetch").mockResolvedValue(
+      jsonResponse(
+        teamsEnvelope([
+          { id: 450, name: "Estudiantes L.P." },
+          { id: 9999, name: "Estudiantes de La Plata" },
+        ])
+      )
+    );
+    await expect(
+      resolveApiFootballTeamId(
+        "Estudiantes de La Plata",
+        "copa_libertadores",
+        "getH2H"
+      )
+    ).rejects.toThrow(SportsDataTransientError);
+  });
+
+  it("liga fora de RUNTIME_TEAM_ID_LEAGUES nunca chama /teams", async () => {
+    const fetchSpy = vi.spyOn(globalThis, "fetch");
+    await expect(
+      resolveApiFootballTeamId("Unmapped Test FC", "brasileirao_a", "getH2H")
+    ).rejects.toThrow(SportsDataTransientError);
+    expect(fetchSpy).not.toHaveBeenCalled();
+  });
+
+  it("chamadas paralelas numa instância fria compartilham UM /teams", async () => {
+    const fetchSpy = vi.spyOn(globalThis, "fetch").mockResolvedValue(
+      jsonResponse(
+        teamsEnvelope([
+          { id: 124, name: "Fluminense" },
+          { id: 121, name: "Palmeiras" },
+        ])
+      )
+    );
+    await expect(
+      Promise.all([
+        resolveApiFootballTeamId(
+          "Fluminense",
+          "copa_libertadores",
+          "getTeamForm"
+        ),
+        resolveApiFootballTeamId(
+          "Palmeiras",
+          "copa_libertadores",
+          "getTeamForm"
+        ),
+        resolveApiFootballTeamId("Palmeiras", "copa_libertadores", "getH2H"),
+      ])
+    ).resolves.toEqual([124, 121, 121]);
+    expect(fetchSpy).toHaveBeenCalledTimes(1);
+  });
+
+  it("4xx no /teams chega como Transient pelo método público (cascade)", async () => {
+    vi.spyOn(globalThis, "fetch").mockResolvedValue(
+      new Response("forbidden", { status: 403 })
+    );
+    const a = new ApiFootballAdapter();
+    await expect(
+      a.getTeamForm("Flamengo", "copa_libertadores", 5)
+    ).rejects.toThrow(SportsDataTransientError);
+  });
+
+  it("erro de envelope no /teams chega como Transient", async () => {
+    vi.spyOn(globalThis, "fetch").mockResolvedValue(
+      jsonResponse({
+        get: "teams",
+        parameters: {},
+        errors: { token: "Error/Missing application key." },
+        results: 0,
+        paging: { current: 1, total: 1 },
+        response: [],
+      })
+    );
+    const a = new ApiFootballAdapter();
+    await expect(
+      a.getInjuriesByTeam("Flamengo", "copa_libertadores")
+    ).rejects.toThrow(SportsDataTransientError);
+  });
+
+  it("getH2H das copas usa os ids resolvidos em runtime", async () => {
+    const fetchSpy = vi
+      .spyOn(globalThis, "fetch")
+      .mockImplementation(async (input) => {
+        const url = String(input);
+        if (url.includes("/teams")) {
+          return jsonResponse(
+            teamsEnvelope([
+              { id: 124, name: "Fluminense" },
+              { id: 121, name: "Palmeiras" },
+            ])
+          );
+        }
+        return jsonResponse(fixtureEnvelope([]));
+      });
+    const a = new ApiFootballAdapter();
+    await a.getH2H("Fluminense", "Palmeiras", "copa_libertadores", 5);
+    const h2hUrl = fetchSpy.mock.calls
+      .map((c) => String(c[0]))
+      .find((u) => u.includes("headtohead"));
+    expect(h2hUrl).toContain("h2h=121-124");
   });
 });
 
@@ -701,18 +937,21 @@ describe("ApiFootballAdapter capabilities", () => {
 
 // ─── Adapter methods — mocked via the underlying free functions ─────────────
 
-vi.mock("@/lib/providers/sports-data/api-football/adapter", async (importOriginal) => {
-  // Pass-through mock that lets us spy on the free fns from outside while
-  // preserving the class definition.
-  return await importOriginal();
-});
+vi.mock(
+  "@/lib/providers/sports-data/api-football/adapter",
+  async (importOriginal) => {
+    // Pass-through mock that lets us spy on the free fns from outside while
+    // preserving the class definition.
+    return await importOriginal();
+  }
+);
 
 describe("ApiFootballAdapter.getH2H throws when team isn't mapped", () => {
   it("transient error (so FallbackProvider cascades)", async () => {
     const a = new ApiFootballAdapter();
     // Unknown canonical name → resolveTeamId throws Transient (cascade signal).
     await expect(
-      a.getH2H("Unmapped Test FC", "Fluminense FC", "brasileirao_a", 5),
+      a.getH2H("Unmapped Test FC", "Fluminense FC", "brasileirao_a", 5)
     ).rejects.toThrow(SportsDataTransientError);
   });
 });
@@ -721,7 +960,7 @@ describe("ApiFootballAdapter.getTeamForm throws when team isn't mapped", () => {
   it("transient error", async () => {
     const a = new ApiFootballAdapter();
     await expect(
-      a.getTeamForm("Unmapped Test FC", "brasileirao_a", 5),
+      a.getTeamForm("Unmapped Test FC", "brasileirao_a", 5)
     ).rejects.toThrow(SportsDataTransientError);
   });
 });
@@ -730,7 +969,7 @@ describe("ApiFootballAdapter.getInjuriesByTeam throws when team isn't mapped", (
   it("transient error", async () => {
     const a = new ApiFootballAdapter();
     await expect(
-      a.getInjuriesByTeam("Unmapped Test FC", "brasileirao_a"),
+      a.getInjuriesByTeam("Unmapped Test FC", "brasileirao_a")
     ).rejects.toThrow(SportsDataTransientError);
   });
 });
@@ -749,13 +988,13 @@ describe("ApiFootballAdapter — World Cup injuries are Unsupported", () => {
 
   it("getInjuriesByFixture throws SportsDataUnsupportedError", async () => {
     await expect(a.getInjuriesByFixture(ref)).rejects.toThrow(
-      SportsDataUnsupportedError,
+      SportsDataUnsupportedError
     );
   });
 
   it("getInjuriesByTeam throws SportsDataUnsupportedError", async () => {
     await expect(a.getInjuriesByTeam("Brazil", "world_cup")).rejects.toThrow(
-      SportsDataUnsupportedError,
+      SportsDataUnsupportedError
     );
   });
 });
@@ -826,12 +1065,13 @@ describe("ApiFootballAdapter.getFixturesBySeason", () => {
     // Output is normalized through the same toNormalizedFixture path.
     expect(fixtures).toHaveLength(1);
     expect(fixtures[0]).toEqual(
-      toNormalizedFixture(makeFixture(), "brasileirao_a"),
+      toNormalizedFixture(makeFixture(), "brasileirao_a")
     );
   });
 
   it("honors an explicit season override on the query", async () => {
-    const overrideKey = "sports-data:api-football:fixtures:league:71:season:2024";
+    const overrideKey =
+      "sports-data:api-football:fixtures:league:71:season:2024";
     await inMemoryCache.delete(overrideKey);
     const fetchSpy = vi
       .spyOn(globalThis, "fetch")
@@ -905,7 +1145,7 @@ describe("ApiFootballAdapter.getInjuriesByFixture — logs WARN when fixture not
 
     const a = new ApiFootballAdapter();
     vi.spyOn(a, "getFixtureByMatch").mockResolvedValue(
-      toNormalizedFixture(makeFixture(), "brasileirao_a"),
+      toNormalizedFixture(makeFixture(), "brasileirao_a")
     );
     const warnSpy = vi.spyOn(console, "warn").mockImplementation(() => {});
 

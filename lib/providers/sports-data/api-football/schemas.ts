@@ -31,7 +31,7 @@ export type ApiFootballEnvelope<T> = {
 };
 
 export function envelopeErrorsAreEmpty(
-  errors: string[] | Record<string, string>,
+  errors: string[] | Record<string, string>
 ): boolean {
   if (Array.isArray(errors)) return errors.length === 0;
   return Object.keys(errors).length === 0;
@@ -281,7 +281,17 @@ export const StatusResponseSchema = z.object({
 
 export type ApiFootballStatus = z.infer<typeof StatusResponseSchema>;
 
+// /teams?league&season — só id e nome importam (resolução de team id em runtime).
+const TeamItemSchema = z.object({
+  team: z.object({
+    id: z.number().int().positive(),
+    name: z.string(),
+  }),
+});
+export type ApiFootballTeamItem = z.infer<typeof TeamItemSchema>;
+
 export const FixtureEnvelopeSchema = envelope(FixtureItemSchema);
+export const TeamEnvelopeSchema = envelope(TeamItemSchema);
 export const LineupEnvelopeSchema = envelope(LineupItemSchema);
 export const StandingsEnvelopeSchema = envelope(StandingsItemSchema);
 export const InjuryEnvelopeSchema = envelope(InjuryItemSchema);
