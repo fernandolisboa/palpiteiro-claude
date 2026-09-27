@@ -44,10 +44,7 @@ const TEAM_NAME_STOPWORDS = new Set([
  * sports-data adapters share it.
  */
 export function normalizeTeamName(name: string): string {
-  const folded = name
-    .normalize("NFD")
-    .replace(/[̀-ͯ]/g, "")
-    .toLowerCase();
+  const folded = name.normalize("NFD").replace(/[̀-ͯ]/g, "").toLowerCase();
   const tokens = folded
     .replace(/[^a-z0-9\s]/g, " ")
     .split(/\s+/)
@@ -100,6 +97,10 @@ const TEAM_NAME_ALIASES: Partial<
     Turkey: "Türkiye",
     "United States": "USA",
   },
+  copa_libertadores: {
+    // Grafia da API-Football pro Estudiantes (não normaliza igual à da The Odds API).
+    "Estudiantes L.P.": "Estudiantes de La Plata",
+  },
   premier_league: {
     Brighton: "Brighton & Hove Albion FC",
     Coventry: "Coventry City FC",
@@ -139,7 +140,7 @@ const TEAM_NAME_ALIASES: Partial<
  */
 export function canonicalizeTeamName(
   providerName: string,
-  league: SupportedLeague,
+  league: SupportedLeague
 ): string | undefined {
   const canonical = CANONICAL_TEAMS[league];
   if (canonical.includes(providerName)) return providerName;
@@ -161,7 +162,7 @@ export function canonicalizeTeamName(
  */
 export function canonicalizeOrPassthrough(
   providerName: string,
-  league: SupportedLeague,
+  league: SupportedLeague
 ): string {
   return canonicalizeTeamName(providerName, league) ?? providerName;
 }

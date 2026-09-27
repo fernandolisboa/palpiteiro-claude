@@ -17,10 +17,21 @@ import {
 import { LEAGUE_LABEL, formatRelativeAgo, leagueToKey } from "@/lib/format";
 import { ODDS_API_PROVIDER } from "@/lib/odds/persist-odds-api-quota";
 import { CANONICAL_TEAMS } from "@/lib/providers/sports-data/canonical-teams";
+import {
+  RUNTIME_TEAM_ID_LEAGUES,
+  type SupportedLeague,
+} from "@/lib/providers/sports-data/leagues";
 
 import { LeagueToggle } from "./league-toggle";
 
 export const dynamic = "force-dynamic";
+
+function teamsLabel(league: SupportedLeague, count: number): string {
+  if (count === 0) return "times não semeados";
+  return RUNTIME_TEAM_ID_LEAGUES.has(league)
+    ? `${count} nomes · ids via API-Football`
+    : `${count} times`;
+}
 
 // Saldo real é telemetria: falha de leitura não pode derrubar a página dos toggles.
 async function readOddsApiQuota(): Promise<ProviderQuotaRow | null> {
@@ -167,7 +178,6 @@ export default async function AdminLeaguesPage() {
           <div className="border-border rounded-md border">
             {settings.map((s) => {
               const label = LEAGUE_LABEL[leagueToKey(s.league)];
-              const teams = CANONICAL_TEAMS[s.league].length;
               return (
                 <DefinitionRow
                   key={s.league}
@@ -181,7 +191,7 @@ export default async function AdminLeaguesPage() {
                       <span className="text-eyebrow text-muted-foreground font-mono">
                         ~{ODDS_CREDITS_PER_MONTH_ESTIMATE[s.league]}{" "}
                         créditos/mês ·{" "}
-                        {teams > 0 ? `${teams} times` : "times não semeados"}
+                        {teamsLabel(s.league, CANONICAL_TEAMS[s.league].length)}
                       </span>
                     </div>
                   }
@@ -198,7 +208,8 @@ export default async function AdminLeaguesPage() {
           </div>
           <p className="text-body-sm text-muted-foreground pt-3">
             Liga sem times precisa ser semeada com scripts/generate-team-ids.ts
-            (e deploy) antes de ser ligada.
+            (e deploy) antes de ser ligada. Nas copas os ids vêm da API-Football
+            na hora; a lista só fixa a grafia dos clubes ainda vivos.
           </p>
         </section>
       </div>

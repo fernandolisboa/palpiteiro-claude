@@ -128,7 +128,18 @@ export const CANONICAL_TEAMS: Record<SupportedLeague, readonly string[]> = {
   serie_a: [],
   bundesliga: [],
   ligue_1: [],
-  copa_libertadores: [],
+  // Copas (ADR 0045, emenda 2026-09-27): os ids vêm da API-Football em runtime
+  // (RUNTIME_TEAM_ID_LEAGUES); esta lista só fixa a grafia dos clubes vivos no
+  // mata-mata pra casar com a The Odds API ("Palmeiras-SP", "Flamengo-RJ",
+  // "Estudiantes La Plata"). Por isso os brasileiros usam o nome curto da
+  // API-Football, não o do Brasileirão ("SE Palmeiras" não casa "Palmeiras-SP").
+  // Clube fora da lista passa direto com o nome da API-Football.
+  copa_libertadores: [
+    "Estudiantes de La Plata",
+    "Flamengo",
+    "Fluminense",
+    "Palmeiras",
+  ],
   copa_sudamericana: [],
   premier_league: [
     "AFC Bournemouth",
@@ -176,6 +187,9 @@ export const CANONICAL_TEAMS: Record<SupportedLeague, readonly string[]> = {
   ] as const,
 };
 
-export function isCanonicalTeam(name: string, league: SupportedLeague): boolean {
+export function isCanonicalTeam(
+  name: string,
+  league: SupportedLeague
+): boolean {
   return CANONICAL_TEAMS[league].includes(name);
 }

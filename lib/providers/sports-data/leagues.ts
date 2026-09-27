@@ -38,6 +38,13 @@ export const API_FOOTBALL_LEAGUE_IDS: Record<SupportedLeague, number> = {
   la_liga: 140,
 };
 
+// Ligas cujos ids de time na API-Football podem ser resolvidos em runtime via
+// `/teams?league&season` quando o mapa estático (team-ids.ts) não tem o time
+// (ADR 0045, emenda de 2026-09-27). Nas copas o elenco de clubes muda a cada fase
+// e a key da API-Football só existe no deploy, então o script de ids não serve.
+export const RUNTIME_TEAM_ID_LEAGUES: ReadonlySet<SupportedLeague> =
+  new Set<SupportedLeague>(["copa_libertadores", "copa_sudamericana"]);
+
 // Partial: a league missing here isn't served by football-data.org (the adapter
 // leaves it out of supportedLeagues, so the FallbackProvider never routes it there).
 export const FOOTBALL_DATA_ORG_LEAGUE_CODES: Partial<
@@ -72,7 +79,7 @@ export const FOOTBALL_DATA_ORG_LEAGUE_CODES: Partial<
  */
 export function currentSeason(
   league: SupportedLeague,
-  now: Date = new Date(),
+  now: Date = new Date()
 ): number {
   if (league === "world_cup") {
     return 2026;
