@@ -3,13 +3,20 @@ import { createRoot } from "react-dom/client";
 import { describe, expect, it, vi } from "vitest";
 import { renderToStaticMarkup } from "react-dom/server";
 
-// PalpiteHero usa useActionState(analyzeBestBet) — mock leve pra não puxar o server
-// action server-only no env de teste. O render estático congela pending=false/state=null,
-// então o mock nunca é chamado; serve só pra resolver o import.
-vi.mock("@/app/actions/predictions", () => ({
-  analyzeBestBet: vi.fn(),
-  generatePalpiteFromAnalyses: vi.fn(),
-}));
+// PalpiteHero usa useActionState(runPalpiteHero) — mock leve pra não puxar o server
+// action server-only no env de teste. O runPalpiteHero mockado reproduz o roteamento
+// por `intent` do real, então os testes interativos provam qual botão manda o quê.
+vi.mock("@/app/actions/predictions", () => {
+  const analyzeBestBet = vi.fn();
+  const generatePalpiteFromAnalyses = vi.fn();
+  const runPalpiteHero = vi.fn((_prev: unknown, formData: FormData) => {
+    const intent = formData.get("intent");
+    if (intent === "palpite") return generatePalpiteFromAnalyses(null, formData);
+    if (intent === "analysis") return analyzeBestBet(null, formData);
+    return Promise.resolve({ ok: false, error: "Ação inválida." });
+  });
+  return { analyzeBestBet, generatePalpiteFromAnalyses, runPalpiteHero };
+});
 
 // shareSet/unshareSet são "use server" — mock leve pra não puxar o server action no env de
 // teste. O render estático nunca dispara o onClick; o teste interativo do kill-switch (#438)
@@ -344,8 +351,11 @@ describe("PalpiteHero — análises saíram mas o palpite não (regressão)", ()
         />,
       );
     });
+    const analyze = container.querySelector<HTMLButtonElement>(
+      'button[name="intent"][value="analysis"]',
+    )!;
     await act(async () => {
-      container.querySelector("form")!.requestSubmit();
+      container.querySelector("form")!.requestSubmit(analyze);
     });
     // Re-render como o revalidate faria (props do servidor depois do run).
     if (after) {
@@ -386,6 +396,9 @@ describe("PalpiteHero — análises saíram mas o palpite não (regressão)", ()
       null,
     );
     expect(analyzeBestBet).toHaveBeenCalled();
+    expect(vi.mocked(analyzeBestBet).mock.calls.at(-1)![1].get("intent")).toBe(
+      "analysis",
+    );
     expect(text).toContain("Não rolou dessa vez");
     expect(text).toContain(MESSAGE);
     expect(text).toContain("Analisar com IA");

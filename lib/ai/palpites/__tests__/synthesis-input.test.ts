@@ -205,6 +205,29 @@ describe("summarizeSavedAnalysesForSynthesis (gerar só o palpite)", () => {
     expect(out.map((a) => a.predictionId).sort()).toEqual(["new-1x2", "ou"]);
   });
 
+  it("marketKey null (histórica) e 'over_under' são o mesmo mercado: fica só a mais recente", () => {
+    const out = summarizeSavedAnalysesForSynthesis([
+      row("over_under", prediction({ id: "new-ou", recommendation: "under" }), [
+        { key: "under", modelProbPct: 52, odd: 1.9 },
+      ]),
+      row(null, prediction({ id: "old-ou", recommendation: "over" }), [
+        { key: "over", modelProbPct: 55, odd: 2 },
+      ]),
+    ]);
+    expect(out.map((a) => a.predictionId)).toEqual(["new-ou"]);
+  });
+
+  it("rótulo do recomendado carrega a linha gravada (Over 3.5, não 'Over' 2.5 implícito)", () => {
+    const [a] = summarizeSavedAnalysesForSynthesis([
+      row(
+        "over_under",
+        prediction({ recommendation: "over", marketParams: { line: 3.5 } }),
+        [{ key: "over", modelProbPct: 40, odd: 2.4 }],
+      ),
+    ]);
+    expect(a.recommendedLabel).toBe("Over 3.5");
+  });
+
   it("prob não gravada (coalesce 0 no DB) vira ausente, não 0%", () => {
     const [a] = summarizeSavedAnalysesForSynthesis([
       row("anytime_scorer", prediction({ recommendation: "p1" }), [

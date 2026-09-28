@@ -12,12 +12,7 @@ import {
   TriangleAlert,
 } from "lucide-react";
 
-import {
-  analyzeBestBet,
-  generatePalpiteFromAnalyses,
-  type AnalyzeBestBetResult,
-  type GeneratePalpiteResult,
-} from "@/app/actions/predictions";
+import { runPalpiteHero } from "@/app/actions/predictions";
 import { shareSet, unshareSet } from "@/app/actions/share";
 import { SettleableBadge } from "@/components/palpites/palpite-badges";
 import { Button } from "@/components/ui/button";
@@ -60,19 +55,9 @@ type Props = {
   hasAnalyses: boolean;
 };
 
+// Um form, duas ações (runPalpiteHero): o botão clicado manda `intent`. "palpite"
+// refaz só a síntese sobre as análises salvas; "analysis" é o run completo.
 type HeroIntent = "analysis" | "palpite";
-type HeroActionResult = AnalyzeBestBetResult | GeneratePalpiteResult;
-
-// Um form, duas ações: o botão clicado manda `intent`. "palpite" refaz só a síntese
-// sobre as análises salvas; o resto é o run completo (fan-out + síntese).
-async function runHeroAction(
-  _prev: HeroActionResult | null,
-  formData: FormData,
-): Promise<HeroActionResult> {
-  return formData.get("intent") === "palpite"
-    ? generatePalpiteFromAnalyses(null, formData)
-    : analyzeBestBet(null, formData);
-}
 
 /**
  * <PalpiteHero/> — o HERO palpite-first (ADR 0030 / #351). A manchete sintetizada é a
@@ -109,7 +94,7 @@ export function PalpiteHero({
   sharedAt,
   hasAnalyses,
 }: Props) {
-  const [state, formAction, pending] = useActionState(runHeroAction, null);
+  const [state, formAction, pending] = useActionState(runPalpiteHero, null);
   // Set exibido quando este form foi enviado: se outro set chegar depois (outra aba, outro
   // run), o aviso de manchete que não saiu deixa de valer.
   const [setIdAtSubmit, setSetIdAtSubmit] = useState<string | null>(null);
@@ -289,7 +274,7 @@ function PopulatedHero({
           )}
           {canRegenerate && <PalpiteOnlyButton label="Refazer só o palpite" />}
           {/* #384: compartilhar. Só com set persistido (setId). IMPERATIVO (type="button",
-              onClick) — NÃO sequestra o <form action={analyzeBestBet}>. */}
+              onClick) — NÃO sequestra o <form action={runPalpiteHero}>. */}
           {setId !== null && <ShareButton key={setId} setId={setId} sharedAt={sharedAt} />}
         </div>
 
@@ -307,7 +292,7 @@ function PopulatedHero({
 }
 
 // Botão de compartilhar (#384): IMPERATIVO (type="button", onClick) — não toca o <form
-// action={analyzeBestBet}>. Ramifica em `shared` (semeado de sharedAt, depois local):
+// action={runPalpiteHero}>. Ramifica em `shared` (semeado de sharedAt, depois local):
 // ainda-não-compartilhado → "Compartilhar" (chama shareSet, que carimba shared_at, depois
 // copia o link); já-compartilhado → "Copiar link" (copia direto SEM re-chamar o action) +
 // "Parar de compartilhar" (kill-switch, ADR 0035 §3e / #438: unshareSet limpa shared_at e

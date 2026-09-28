@@ -310,6 +310,29 @@ describe("checkPalpitesRateLimit — bucket isolado (#315)", () => {
     warn.mockRestore();
   });
 
+  it("failClosed (botão 'Gerar só o palpite', não-admin) sem KV → fail-closed, sem Redis", async () => {
+    vi.stubEnv("KV_REST_API_URL", "");
+    const warn = vi.spyOn(console, "warn").mockImplementation(() => {});
+    const { checkPalpitesRateLimit } = await loadBoth();
+    expect(await checkPalpitesRateLimit("u1", { failClosed: true })).toEqual({
+      ok: false,
+      limit: 0,
+      remaining: 0,
+      reset: 0,
+      reason: "fail-closed",
+    });
+    expect(mockLimit).not.toHaveBeenCalled();
+    warn.mockRestore();
+  });
+
+  it("failClosed com KV presente → mesmo bucket palpites de sempre", async () => {
+    mockLimit.mockResolvedValue({ success: true, limit: 50, remaining: 10, reset: 0 });
+    const { checkPalpitesRateLimit } = await loadBoth();
+    const res = await checkPalpitesRateLimit("u1", { failClosed: true });
+    expect(res).toEqual({ ok: true, limit: 50, remaining: 10, reset: 0 });
+    expect(limitedPrefixes).toEqual(["ratelimit:palpites"]);
+  });
+
   it("default 50/dia em env NaN/zero/negativo", async () => {
     for (const bad of ["not-a-number", "0", "-1"]) {
       vi.resetModules();

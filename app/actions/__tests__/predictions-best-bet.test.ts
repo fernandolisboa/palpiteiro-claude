@@ -72,6 +72,7 @@ vi.mock("@/lib/ai/best-bet", async (importOriginal) => {
 import {
   analyzeBestBet,
   generatePalpiteFromAnalyses,
+  runPalpiteHero,
 } from "@/app/actions/predictions";
 import { runCodeJevFanOut } from "@/lib/ai/best-bet";
 import { readAnalysisEngine } from "@/lib/ai/engine/analysis-engine-flag";
@@ -1107,6 +1108,64 @@ describe("generatePalpiteFromAnalyses — só a síntese, sobre as análises sal
     }
   });
 
+  it("não-autenticado → erro sem ler histórico nem cobrar palpite", async () => {
+    mockAuth.mockResolvedValue(null);
+    const res = await generatePalpiteFromAnalyses(
+      null,
+      form({ matchId: VALID_MATCH_ID }),
+    );
+    expect(res.ok).toBe(false);
+    expect(mockHistory).not.toHaveBeenCalled();
+    expect(mockPalpitesRl).not.toHaveBeenCalled();
+    expect(mockGeneratePalpites).not.toHaveBeenCalled();
+  });
+
+  it("acesso bloqueado → erro sem ler histórico nem cobrar palpite", async () => {
+    mockGetAccess.mockResolvedValue({ role: "user", allowed: false });
+    const res = await generatePalpiteFromAnalyses(
+      null,
+      form({ matchId: VALID_MATCH_ID }),
+    );
+    expect(res).toEqual({
+      ok: false,
+      error: "Seu acesso está bloqueado. Fale com o administrador.",
+    });
+    expect(mockHistory).not.toHaveBeenCalled();
+    expect(mockPalpitesRl).not.toHaveBeenCalled();
+  });
+
+  it("admin → limite com failClosed:false; não-admin → failClosed:true", async () => {
+    await generatePalpiteFromAnalyses(null, form({ matchId: VALID_MATCH_ID }));
+    expect(mockPalpitesRl).toHaveBeenLastCalledWith("u1", { failClosed: false });
+
+    mockAuth.mockResolvedValue({
+      ...SESSION,
+      user: { ...SESSION.user, role: "user" },
+    } as unknown as Session);
+    mockGetAccess.mockResolvedValue({ role: "user", allowed: true });
+    await generatePalpiteFromAnalyses(null, form({ matchId: VALID_MATCH_ID }));
+    expect(mockPalpitesRl).toHaveBeenLastCalledWith("u1", { failClosed: true });
+  });
+
+  it("fail-closed (KV ausente p/ não-admin) → copy de indisponibilidade, sem síntese", async () => {
+    mockPalpitesRl.mockResolvedValue({
+      ok: false,
+      limit: 0,
+      remaining: 0,
+      reset: 0,
+      reason: "fail-closed",
+    });
+    const res = await generatePalpiteFromAnalyses(
+      null,
+      form({ matchId: VALID_MATCH_ID }),
+    );
+    expect(res).toEqual({
+      ok: false,
+      error: "Análises temporariamente indisponíveis. Tente mais tarde.",
+    });
+    expect(mockGeneratePalpites).not.toHaveBeenCalled();
+  });
+
   it("jogo não analisável → erro antes de qualquer gasto", async () => {
     mockGetMatchById.mockResolvedValue(matchInLeague("world_cup", "finished"));
     const res = await generatePalpiteFromAnalyses(
@@ -1129,8 +1188,50 @@ describe("analyzeBestBet — erro de schema da síntese vira motivo legível pro
     const res = await analyzeBestBet(null, form({ matchId: VALID_MATCH_ID }));
     expect(res.ok).toBe(true);
     if (res.ok) {
-      expect(res.palpiteError).toMatch(/entrada inválida da síntese: analyses\.0\.p: /);
+      expect(res.palpiteError).toMatch(/erro de schema: analyses\.0\.p: /);
       expect(res.palpiteError).not.toContain('"code"');
     }
+  });
+});
+
+describe("runPalpiteHero — roteia pelo botão (intent) do formulário", () => {
+  function withIntent(intent?: string) {
+    const fd = form({ matchId: VALID_MATCH_ID });
+    if (intent !== undefined) fd.set("intent", intent);
+    return fd;
+  }
+
+  beforeEach(() => {
+    vi.mocked(getPredictionHistoryForMatch).mockReset();
+    vi.mocked(getPredictionHistoryForMatch).mockResolvedValue([]);
+    vi.mocked(checkPalpitesRateLimit).mockReset();
+  });
+
+  it("intent desconhecido/ausente → erro, ZERO spend", async () => {
+    for (const intent of [undefined, "", "x"]) {
+      expect(await runPalpiteHero(null, withIntent(intent))).toEqual({
+        ok: false,
+        error: "Ação inválida.",
+      });
+    }
+    expect(mockRateLimit).not.toHaveBeenCalled();
+    expect(mockPredict).not.toHaveBeenCalled();
+    expect(getPredictionHistoryForMatch).not.toHaveBeenCalled();
+    expect(mockGeneratePalpites).not.toHaveBeenCalled();
+  });
+
+  it("intent=palpite → só a síntese sobre o histórico (sem fan-out)", async () => {
+    await runPalpiteHero(null, withIntent("palpite"));
+    expect(getPredictionHistoryForMatch).toHaveBeenCalledWith(VALID_MATCH_ID, "u1");
+    expect(mockRateLimit).not.toHaveBeenCalled();
+    expect(mockPredict).not.toHaveBeenCalled();
+  });
+
+  it("intent=analysis → run completo", async () => {
+    const res = await runPalpiteHero(null, withIntent("analysis"));
+    expect(mockRateLimit).toHaveBeenCalled();
+    expect(mockPredict).toHaveBeenCalled();
+    expect(getPredictionHistoryForMatch).not.toHaveBeenCalled();
+    expect(res.ok).toBe(true);
   });
 });

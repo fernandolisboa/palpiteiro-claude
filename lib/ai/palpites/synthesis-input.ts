@@ -111,9 +111,12 @@ function summarizeSources(sources: AnalysisSource[]): MarketAnalysisSummary[] {
     const recSel = isPass
       ? undefined
       : selections.find((s) => s.key === recommendation);
+    // Com a linha (over/under): uma análise salva pode ser de outra linha (1.5, 3.5);
+    // "Over" sozinho faria a síntese assumir 2.5.
+    const line = finiteOrNull(prediction.marketParams?.line) ?? presentation.defaultLine;
     const recommendedLabel = isPass
       ? null
-      : (recSel?.label ?? presentation.selectionLabel(recommendation));
+      : (recSel?.label ?? presentation.outcomeLabel(recommendation, line));
 
     summaries.push({
       marketKey,

@@ -248,9 +248,15 @@ export async function checkAnalysisRateLimit(
  */
 export async function checkPalpitesRateLimit(
   userId: string,
+  // "Gerar só o palpite" é um botão que o usuário pode repetir e cada clique paga uma
+  // busca web (ADR 0032 §4): lá, sem KV, não-admin fica FECHADO como a análise paga.
+  options: { failClosed?: boolean } = {},
 ): Promise<RateLimitResult> {
   const limiters = getLimiters();
   if (!limiters) {
+    if (options.failClosed) {
+      return { ok: false, limit: 0, remaining: 0, reset: 0, reason: "fail-closed" };
+    }
     return { ok: true, limit: Infinity, remaining: Infinity, reset: 0 };
   }
   const { success, limit, remaining, reset } =

@@ -404,7 +404,7 @@ function synthesisFailureMessage(err: unknown, isAdmin: boolean): string {
   let detail = err instanceof Error ? err.message : String(err);
   // Input da síntese fora do schema: lista caminho + motivo em vez do JSON cru do Zod.
   if (err instanceof z.ZodError) {
-    detail = `entrada inválida da síntese: ${err.issues
+    detail = `erro de schema: ${err.issues
       .map((i) => `${i.path.join(".")}: ${i.message}`)
       .join("; ")}`;
   }
@@ -830,7 +830,8 @@ export type GeneratePalpiteResult =
 /**
  * Refaz SÓ a síntese (manchete) sobre a análise mais recente de cada mercado já salva,
  * sem re-rodar o fan-out pago. Custo: a busca de notícias + a manchete (Haiku). Conta
- * no teto diário de palpites (checkPalpitesRateLimit), não no de análises. Mesmos gates
+ * no teto diário de palpites (checkPalpitesRateLimit, fechado sem KV pra não-admin),
+ * não no de análises (ADR 0032 §4, adendo). Mesmos gates
  * grátis do analyzeBestBet (auth, acesso, flag, jogo, pré-jogo) antes de qualquer gasto.
  */
 export async function generatePalpiteFromAnalyses(
@@ -876,7 +877,13 @@ export async function generatePalpiteFromAnalyses(
       error: 'Ainda não há análises por mercado deste jogo. Use "Analisar com IA".',
     };
   }
-  const rl = await checkPalpitesRateLimit(session.user.id);
+  const isAdmin = session.user.role === "admin";
+  const rl = await checkPalpitesRateLimit(session.user.id, {
+    failClosed: !isAdmin,
+  });
+  if (rl.reason === "fail-closed") {
+    return { ok: false, error: ANALYSES_UNAVAILABLE_MESSAGE };
+  }
   if (!rl.ok) {
     return {
       ok: false,
@@ -887,7 +894,7 @@ export async function generatePalpiteFromAnalyses(
     scope: "generatePalpiteFromAnalyses",
     matchId,
     userId: session.user.id,
-    isAdmin: session.user.role === "admin",
+    isAdmin,
     analyses,
     deadlineAt,
   });
@@ -896,6 +903,23 @@ export async function generatePalpiteFromAnalyses(
   return palpiteError === undefined
     ? { ok: true, palpite }
     : { ok: true, palpite, palpiteError };
+}
+
+export type PalpiteHeroResult = AnalyzeBestBetResult | GeneratePalpiteResult;
+
+/**
+ * Ação do form do HERO: o botão clicado manda `intent`. Server action (não um
+ * dispatcher no cliente) pra o form funcionar antes do JS carregar — o submitter é
+ * postado nativamente. Intent ausente/desconhecido NÃO cai no run pago.
+ */
+export async function runPalpiteHero(
+  _prev: PalpiteHeroResult | null,
+  formData: FormData,
+): Promise<PalpiteHeroResult> {
+  const intent = formData.get("intent");
+  if (intent === "palpite") return generatePalpiteFromAnalyses(null, formData);
+  if (intent === "analysis") return analyzeBestBet(null, formData);
+  return { ok: false, error: "Ação inválida." };
 }
 
 // ─── Análise multi-mercado SELECIONADA pelo usuário (#245) ────────────────────
