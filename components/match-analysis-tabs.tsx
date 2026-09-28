@@ -39,7 +39,7 @@ export function MatchAnalysisTabs({ analysisSlot, gradeProps }: Props) {
   const [tab, setTab] = useState<Tab>("analise");
 
   return (
-    <div className="flex flex-col gap-3">
+    <div className="flex flex-col gap-3" data-tour="analysis-tabs">
       <div
         role="group"
         aria-label="modo de análise"

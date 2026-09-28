@@ -14,6 +14,7 @@ describe("mobileNavLinks", () => {
       "/jogos",
       "/apostas",
       "/dashboard",
+      "/como-usar",
       "/como-funciona",
       "/admin",
       "/perfil",

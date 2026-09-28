@@ -11,6 +11,7 @@ import { DesktopStatusCell } from "@/components/desktop-status-cell";
 import { TeamAvatar } from "@/components/team-avatar";
 import { appendBackParam } from "@/lib/view/back-href";
 import { LEAGUE_LABEL } from "@/lib/format";
+import { tourMatchIndex } from "@/lib/tour/steps";
 import type { MatchRowView } from "@/lib/view/types";
 
 const INITIAL_BATCH = 15;
@@ -35,6 +36,7 @@ export function UpcomingMatchesDesktop({
 }) {
   const [visible, setVisible] = useState(INITIAL_BATCH);
   const slice = matches.slice(0, visible);
+  const tourIndex = tourMatchIndex(slice);
   return (
     <Card className="gap-0 overflow-hidden p-0">
       <div className={`grid ${UPCOMING_GRID} gap-4 border-b border-border px-5 py-3 font-mono text-eyebrow uppercase tracking-label text-muted-foreground`}>
@@ -48,6 +50,7 @@ export function UpcomingMatchesDesktop({
         <Link
           key={m.id}
           href={appendBackParam(`/match/${m.id}`, listHref, "/jogos")}
+          data-tour={i === tourIndex ? "match-row" : undefined}
           className={`grid ${UPCOMING_GRID} items-center gap-4 px-5 py-4 transition-colors hover:bg-surface-2 focus-visible:outline-none focus-visible:ring-[3px] focus-visible:ring-ring/50 focus-visible:ring-inset ${
             i === arr.length - 1 ? "" : "border-b border-border-subtle"
           }`}
