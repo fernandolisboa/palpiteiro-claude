@@ -33,6 +33,7 @@ import {
 import { unshareSet } from "@/app/actions/share";
 import { PalpiteHero } from "@/components/palpites/palpite-hero";
 import { containsValueLanguage } from "@/lib/ai/palpites/value-language-guard";
+import type { MatchUnavailableReason } from "@/lib/view/match-availability";
 import {
   PALPITE_DISCLAIMER,
   type PalpiteHeadlineView,
@@ -66,7 +67,7 @@ function render(props: Partial<Parameters<typeof PalpiteHero>[0]> = {}): string 
     <PalpiteHero
       heroPalpite={POPULATED}
       matchId="11111111-1111-1111-1111-111111111111"
-      analyzable
+      unavailable={null}
       fanOutEnabled
       finalScore={null}
       setId="22222222-2222-2222-2222-222222222222"
@@ -249,11 +250,28 @@ describe("PalpiteHero — estados empty/CTA/kill-switch/encerrado", () => {
     expect(html).not.toContain("Analisar com IA");
   });
 
-  it("sem palpite + NÃO analyzable (encerrado) → aviso de jogo encerrado, sem CTA", () => {
-    const html = render({ heroPalpite: null, analyzable: false });
-    expect(html).toContain("encerrado");
-    expect(html).not.toContain("Analisar com IA");
-  });
+  it.each([
+    ["finished", "Jogo encerrado, sem palpite por aqui."],
+    ["cancelled", "Jogo cancelado, sem palpite por aqui."],
+    ["live", "Jogo em andamento, sem palpite por aqui."],
+    ["postponed", "Jogo adiado, sem palpite por enquanto."],
+  ] as const)(
+    "sem palpite + não analisável (%s) → aviso do motivo, sem CTA",
+    (reason, copy) => {
+      const html = render({ heroPalpite: null, unavailable: reason });
+      expect(html).toContain(copy);
+      expect(html).not.toContain("Analisar com IA");
+    },
+  );
+
+  it.each(["live", "postponed"] as const)(
+    "jogo %s nunca diz 'encerrado'",
+    (reason) => {
+      expect(render({ heroPalpite: null, unavailable: reason })).not.toContain(
+        "encerrado",
+      );
+    },
+  );
 
   it("populated + analyzable → botão ghost 'Analisar de novo'", () => {
     const html = render();
@@ -292,7 +310,7 @@ describe("PalpiteHero — ShareButton + kill-switch (ADR 0035 §3e / #438)", () 
         <PalpiteHero
           heroPalpite={POPULATED}
           matchId="11111111-1111-1111-1111-111111111111"
-          analyzable
+          unavailable={null}
           fanOutEnabled
           finalScore={null}
           setId="22222222-2222-2222-2222-222222222222"
@@ -329,7 +347,7 @@ describe("PalpiteHero — análises saíram mas o palpite não (regressão)", ()
   async function submitWith(
     result: Awaited<ReturnType<typeof analyzeBestBet>>,
     heroPalpite: PalpiteHeadlineView | null,
-    after?: { analyzable?: boolean; setId?: string | null },
+    after?: { unavailable?: MatchUnavailableReason | null; setId?: string | null },
   ) {
     vi.mocked(analyzeBestBet).mockResolvedValue(result);
     (globalThis as { IS_REACT_ACT_ENVIRONMENT?: boolean }).IS_REACT_ACT_ENVIRONMENT =
@@ -342,7 +360,7 @@ describe("PalpiteHero — análises saíram mas o palpite não (regressão)", ()
         <PalpiteHero
           heroPalpite={heroPalpite}
           matchId="11111111-1111-1111-1111-111111111111"
-          analyzable
+          unavailable={null}
           fanOutEnabled
           finalScore={null}
           setId={null}
@@ -364,7 +382,7 @@ describe("PalpiteHero — análises saíram mas o palpite não (regressão)", ()
           <PalpiteHero
             heroPalpite={heroPalpite}
             matchId="11111111-1111-1111-1111-111111111111"
-            analyzable={after.analyzable ?? true}
+            unavailable={after.unavailable ?? null}
             fanOutEnabled
             finalScore={null}
             setId={after.setId ?? null}
@@ -417,7 +435,7 @@ describe("PalpiteHero — análises saíram mas o palpite não (regressão)", ()
     const text = await submitWith(
       { ok: true, view: VIEW, palpite: null, palpiteError: MESSAGE },
       null,
-      { analyzable: false },
+      { unavailable: "live" },
     );
     expect(text).toContain(MESSAGE);
     expect(text).not.toContain("Analisar com IA");
@@ -465,7 +483,7 @@ describe("PalpiteHero — gerar só o palpite (síntese sobre as análises salva
     expect(
       render({ heroPalpite: null, hasAnalyses: true, fanOutEnabled: false }),
     ).not.toContain("Gerar só o palpite");
-    expect(render({ hasAnalyses: true, analyzable: false })).not.toContain(
+    expect(render({ hasAnalyses: true, unavailable: "finished" })).not.toContain(
       "Refazer só o palpite",
     );
   });
@@ -487,7 +505,7 @@ describe("PalpiteHero — gerar só o palpite (síntese sobre as análises salva
         <PalpiteHero
           heroPalpite={null}
           matchId="11111111-1111-1111-1111-111111111111"
-          analyzable
+          unavailable={null}
           fanOutEnabled
           finalScore={null}
           setId={null}

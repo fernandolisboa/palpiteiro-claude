@@ -19,6 +19,10 @@ import { Button } from "@/components/ui/button";
 import { Callout } from "@/components/ui/callout";
 import { cn } from "@/lib/utils";
 import {
+  EMPTY_HERO_UNAVAILABLE_COPY,
+  type MatchUnavailableReason,
+} from "@/lib/view/match-availability";
+import {
   PALPITE_DISCLAIMER,
   type PalpiteDimensionView,
   type PalpiteHeadlineView,
@@ -36,8 +40,9 @@ type Props = {
   // null = sem palpite persistido ainda (estado empty/CTA) OU set antigo sem manchete.
   heroPalpite: PalpiteHeadlineView | null;
   matchId: string;
-  // false em jogos encerrados/cancelados (predict() os rejeita) → sem CTA.
-  analyzable: boolean;
+  // Por que o jogo não aceita análise (ao vivo/adiado/cancelado/encerrado; predict()
+  // os rejeita) → sem CTA, copy do motivo. null = pré-jogo, analisável.
+  unavailable: MatchUnavailableReason | null;
   // Kill-switch de spend (enable_best_bet_fan_out). false → aviso suave, sem botão que erra.
   fanOutEnabled: boolean;
   // Placar real do jogo encerrado (fato do mundo, NÃO número de valor) — só pro recibo
@@ -87,7 +92,7 @@ type HeroIntent = "analysis" | "palpite";
 export function PalpiteHero({
   heroPalpite,
   matchId,
-  analyzable,
+  unavailable,
   fanOutEnabled,
   finalScore,
   setId,
@@ -127,7 +132,7 @@ export function PalpiteHero({
       <input type="hidden" name="matchId" value={matchId} />
       <HeroBody
         heroPalpite={heroPalpite}
-        analyzable={analyzable}
+        unavailable={unavailable}
         fanOutEnabled={fanOutEnabled}
         finalScore={finalScore}
         setId={setId}
@@ -135,7 +140,7 @@ export function PalpiteHero({
         pending={pending}
         pendingIntent={intent}
         error={error}
-        canRegenerate={analyzable && fanOutEnabled && hasAnalyses}
+        canRegenerate={unavailable === null && fanOutEnabled && hasAnalyses}
       />
     </form>
   );
@@ -143,7 +148,7 @@ export function PalpiteHero({
 
 function HeroBody({
   heroPalpite,
-  analyzable,
+  unavailable,
   fanOutEnabled,
   finalScore,
   setId,
@@ -154,7 +159,7 @@ function HeroBody({
   canRegenerate,
 }: {
   heroPalpite: PalpiteHeadlineView | null;
-  analyzable: boolean;
+  unavailable: MatchUnavailableReason | null;
   fanOutEnabled: boolean;
   finalScore: { home: number; away: number } | null;
   setId: string | null;
@@ -174,7 +179,7 @@ function HeroBody({
     return (
       <PopulatedHero
         view={heroPalpite}
-        analyzable={analyzable}
+        analyzable={unavailable === null}
         finalScore={finalScore}
         setId={setId}
         sharedAt={sharedAt}
@@ -187,7 +192,7 @@ function HeroBody({
   // Sem palpite: empty + CTA / kill-switch / encerrado. Erro inline quando houver.
   return (
     <EmptyHero
-      analyzable={analyzable}
+      unavailable={unavailable}
       fanOutEnabled={fanOutEnabled}
       error={error}
       canRegenerate={canRegenerate}
@@ -405,29 +410,29 @@ function ShareButton({
   );
 }
 
-// Empty: casca quente MAIS QUIETA + teaser + CTA quente (analyzable+flag) | aviso suave
-// (kill-switch) | aviso encerrado.
+// Empty: casca quente MAIS QUIETA + teaser + CTA quente (analisável+flag) | aviso suave
+// (kill-switch) | aviso do motivo (ao vivo/adiado/cancelado/encerrado).
 function EmptyHero({
-  analyzable,
+  unavailable,
   fanOutEnabled,
   error,
   canRegenerate,
 }: {
-  analyzable: boolean;
+  unavailable: MatchUnavailableReason | null;
   fanOutEnabled: boolean;
   error: string | null;
   canRegenerate: boolean;
 }) {
-  // Jogo encerrado/cancelado sem palpite: predict() rejeitaria — sem CTA. O aviso ainda
+  // Jogo não analisável sem palpite: predict() rejeitaria — sem CTA. O aviso ainda
   // aparece: um run iniciado antes do apito pode terminar depois dele, sem manchete.
-  if (!analyzable) {
+  if (unavailable !== null) {
     return (
       <WarmShell tone="quiet">
         <div className="flex flex-col gap-2">
           {error && <InlineError error={error} />}
           <Kicker />
           <p className="text-body tracking-tight text-muted-foreground">
-            Jogo encerrado, sem palpite por aqui.
+            {EMPTY_HERO_UNAVAILABLE_COPY[unavailable]}
           </p>
         </div>
       </WarmShell>
