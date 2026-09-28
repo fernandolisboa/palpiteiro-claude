@@ -166,6 +166,12 @@ export const users = pgTable("users", {
   // Não é controle de segurança/enforcement server-side: é o registro de
   // auditoria do consentimento.
   acceptedTermsAt: timestamp({ withTimezone: true, mode: "date" }),
+  // Progresso do tour guiado (lib/tour/steps.ts): null = nunca viu; "jogos" = viu a
+  // parte da lista, falta a da página do jogo; "done" = concluiu; "dismissed" = pulou.
+  // Text validado contra o enum na action (isTourState), como preferredModelId — sem
+  // pgEnum pra não pedir migration a cada capítulo novo. Nunca volta sozinho depois de "done"/"dismissed";
+  // o "rever o tour" do /como-usar força a partida sem olhar este campo.
+  tourState: text(),
   createdAt: timestamp({ withTimezone: true }).notNull().defaultNow(),
 });
 

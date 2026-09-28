@@ -87,6 +87,8 @@ export function toMatchRowView({
     hasPrediction,
     status: match.status,
     isInProgress: inProgress,
+    // Mesma regra do gate da página do jogo (status agendado + kickoff no futuro).
+    analyzable: match.status === "scheduled" && kickoffMs > nowMs,
     // Só expõe placar em jogos encerrados. Um provider pode carregar gols
     // parciais num `live`/em-andamento ou deixá-los preenchidos num
     // `postponed`/`cancelled`; só `finished` deve mostrar placar final — os

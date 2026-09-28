@@ -3,6 +3,7 @@ import { asc, count, eq, ilike } from "drizzle-orm";
 import { users } from "@/db/schema";
 import { db } from "@/lib/db";
 import { isAIModelId, type AIModelId } from "@/lib/ai/models";
+import { parseTourState, type TourState } from "@/lib/tour/steps";
 
 type UserSummary = { id: string; email: string; role: "admin" | "user" };
 
@@ -158,6 +159,26 @@ export async function setPreferredModelId(
     .update(users)
     .set({ preferredModelId: modelId })
     .where(eq(users.id, userId));
+}
+
+/**
+ * Progresso do tour guiado (lib/tour/steps.ts). Valor fora do enum (dado ruim) vira
+ * null, que no pior caso reabre o tour uma vez — nunca quebra a página.
+ */
+export async function getTourState(userId: string): Promise<TourState | null> {
+  const rows = await db
+    .select({ tourState: users.tourState })
+    .from(users)
+    .where(eq(users.id, userId))
+    .limit(1);
+  return parseTourState(rows[0]?.tourState ?? null);
+}
+
+export async function setTourState(
+  userId: string,
+  state: TourState,
+): Promise<void> {
+  await db.update(users).set({ tourState: state }).where(eq(users.id, userId));
 }
 
 /**

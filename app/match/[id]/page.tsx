@@ -13,6 +13,7 @@ import { MatchSections } from "@/components/match-sections";
 import { OddsCard } from "@/components/odds-card";
 import { PalpiteHero } from "@/components/palpites/palpite-hero";
 import { ThemeToggle } from "@/components/theme-toggle";
+import { GuidedTour } from "@/components/tour/guided-tour";
 import {
   MatchAuxiliarySkeleton,
   MatchSectionsSkeleton,
@@ -32,6 +33,7 @@ import {
 import { getDescriptor } from "@/lib/odds/market-descriptor";
 import { getMarketPresentation } from "@/lib/view/markets/presentation";
 import { getMatchById } from "@/lib/db/queries/matches";
+import { getTourState } from "@/lib/db/queries/users";
 import { getPalpiteSetsForMatch } from "@/lib/db/queries/palpites";
 import { getPredictionHistoryForMatch } from "@/lib/db/queries/predictions";
 import { getLatestSelectionOddsSnapshotsForMatches } from "@/lib/db/queries/odds-snapshots";
@@ -106,8 +108,14 @@ export default async function MatchPage({ params, searchParams }: PageProps) {
   );
   // Odds e predição existente em paralelo. Ambas são pré-requisito pro
   // render síncrono do hero + odds + panel (não vão pra Suspense).
-  const [snapshot, matchResultMap, history, palpiteSets, bestBetEnabled] =
-    await Promise.all([
+  const [
+    snapshot,
+    matchResultMap,
+    history,
+    palpiteSets,
+    bestBetEnabled,
+    tourState,
+  ] = await Promise.all([
       ensureP,
       matchResultP,
       // Histórico COMPLETO: agrupado por mercado em toMarketAnalysisSections (#243, a
@@ -119,6 +127,7 @@ export default async function MatchPage({ params, searchParams }: PageProps) {
       // uma query "latest-only" seria follow-up se virar gargalo (PLAN §3.1 nota).
       getPalpiteSetsForMatch(match.id, session.user.id),
       getEnableBestBetFanOut(),
+      getTourState(session.user.id),
     ]);
   const latestPred = history[0] ?? null;
 
@@ -287,6 +296,14 @@ export default async function MatchPage({ params, searchParams }: PageProps) {
           flag de apresentação) — o botão "Analisar com IA" do HERO dispara o fan-out →
           síntese → revalidatePath. `analyzeBestBet` segue gated por enable_best_bet_fan_out
           como kill-switch de spend (go-live = o dono flipa a flag). */}
+      {/* 2ª parte do tour guiado: abre sozinha no 1º jogo aberto depois da parte da
+          lista (/jogos). */}
+      <GuidedTour
+        chapter="jogo"
+        userId={session.user.id}
+        serverState={tourState}
+        forceStart={false}
+      />
       <div className="lg:hidden">
         <MobileMatch
           heroView={heroView}
@@ -479,15 +496,19 @@ function MobileMatch({
 
         {/* Odds (preços de referência) DEPOIS do detalhe — em tela estreita ficam abaixo do
             palpite+análise, sem empurrar a análise pra longe da manchete. */}
-        <OddsCard view={oddsView} matchStatus={matchStatus} />
-        {matchResultOddsView && <OddsCard view={matchResultOddsView} />}
+        <div className="flex flex-col gap-3" data-tour="odds">
+          <OddsCard view={oddsView} matchStatus={matchStatus} />
+          {matchResultOddsView && <OddsCard view={matchResultOddsView} />}
+        </div>
 
-        <Suspense fallback={<MatchSectionsSkeleton />}>
-          <MatchSections fixtureRef={fixtureRef} leagueKey={leagueKey} />
-        </Suspense>
-        <Suspense fallback={<MatchAuxiliarySkeleton />}>
-          <MatchAuxiliarySections fixtureRef={fixtureRef} />
-        </Suspense>
+        <div className="flex flex-col gap-3" data-tour="match-stats">
+          <Suspense fallback={<MatchSectionsSkeleton />}>
+            <MatchSections fixtureRef={fixtureRef} leagueKey={leagueKey} />
+          </Suspense>
+          <Suspense fallback={<MatchAuxiliarySkeleton />}>
+            <MatchAuxiliarySections fixtureRef={fixtureRef} />
+          </Suspense>
+        </div>
       </div>
     </div>
   );
@@ -559,7 +580,7 @@ function DesktopMatch({
 
         {/* Odds (preços de referência) LADO A LADO logo abaixo: over/under e 1X2 na mesma
             linha, mesma altura (stretch do grid). Sem o 1X2, o over/under ocupa metade. */}
-        <div className="grid grid-cols-2 gap-3 pb-6">
+        <div className="mb-6 grid grid-cols-2 gap-3" data-tour="odds">
           <OddsCard view={oddsView} matchStatus={matchStatus} />
           {matchResultOddsView && <OddsCard view={matchResultOddsView} />}
         </div>
@@ -594,12 +615,14 @@ function DesktopMatch({
           )}
         </div>
 
-        <Suspense fallback={<MatchSectionsSkeleton />}>
-          <MatchSections fixtureRef={fixtureRef} leagueKey={leagueKey} />
-        </Suspense>
-        <Suspense fallback={<MatchAuxiliarySkeleton />}>
-          <MatchAuxiliarySections fixtureRef={fixtureRef} />
-        </Suspense>
+        <div data-tour="match-stats">
+          <Suspense fallback={<MatchSectionsSkeleton />}>
+            <MatchSections fixtureRef={fixtureRef} leagueKey={leagueKey} />
+          </Suspense>
+          <Suspense fallback={<MatchAuxiliarySkeleton />}>
+            <MatchAuxiliarySections fixtureRef={fixtureRef} />
+          </Suspense>
+        </div>
       </div>
     </DesktopShell>
   );

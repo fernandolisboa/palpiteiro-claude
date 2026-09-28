@@ -5,6 +5,7 @@ import { useState } from "react";
 import { Button } from "@/components/ui/button";
 import { Card } from "@/components/ui/card";
 import { MatchRow } from "@/components/match-row";
+import { tourMatchIndex } from "@/lib/tour/steps";
 import type { MatchRowView } from "@/lib/view/types";
 
 // Lote inicial e incremento do reveal client-side. Exportado pra que o teste
@@ -23,11 +24,18 @@ export function UpcomingMatchesMobile({
 }) {
   const [visible, setVisible] = useState(INITIAL_BATCH);
   const slice = matches.slice(0, visible);
+  const tourIndex = tourMatchIndex(slice);
   return (
     <>
       <Card className="mx-5 gap-0 overflow-hidden p-0">
         {slice.map((m, i, arr) => (
-          <MatchRow key={m.id} m={m} last={i === arr.length - 1} listHref={listHref} />
+          <MatchRow
+            key={m.id}
+            m={m}
+            last={i === arr.length - 1}
+            listHref={listHref}
+            tourTarget={i === tourIndex}
+          />
         ))}
       </Card>
       {visible < matches.length && (

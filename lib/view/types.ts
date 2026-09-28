@@ -56,6 +56,9 @@ export type MatchRowView = {
   // analisabilidade (essa é status+kickoff). Obrigatório — um false é decisão
   // deliberada do call site, não default acidental.
   isInProgress: boolean;
+  // true = a página do jogo oferece "Analisar com IA" (agendado e antes do apito).
+  // Opcional pra não obrigar fixtures antigas; ausente = não analisável.
+  analyzable?: boolean;
   // Placar final. Não-null só em jogos cujo provider já reportou gols
   // (tipicamente `finished`). null em scheduled/live/postponed/cancelled — e
   // mesmo num finished sem placar (dado faltando) — então a UI nunca inventa

@@ -60,8 +60,7 @@ export function PreferredModelForm({
           defaultModelLabel={defaultModelLabel}
         />
         <span className="text-muted-foreground text-meta">
-          Escolha o modelo usado nas suas análises. Você ainda pode trocar o
-          modelo numa análise específica.
+          Escolha o modelo usado nas suas análises.
         </span>
       </label>
 

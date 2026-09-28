@@ -25,6 +25,9 @@ import {
 import { getRecentPredictionsByUser } from "@/lib/db/queries/predictions";
 import { DateRangeTabs } from "@/components/date-range-tabs";
 import { EmptyState } from "@/components/empty-state";
+import { GuidedTour } from "@/components/tour/guided-tour";
+import { getTourState } from "@/lib/db/queries/users";
+import { TOUR_FORCE_PARAM } from "@/lib/tour/steps";
 import {
   parseRangeParams,
   windowedQueryFrom,
@@ -62,6 +65,8 @@ type PageProps = {
     preset?: string;
     from?: string;
     to?: string;
+    // "rever o tour" (/como-usar) — força o tour guiado mesmo já concluído/pulado.
+    [TOUR_FORCE_PARAM]?: string;
   }>;
 };
 
@@ -80,6 +85,7 @@ export default async function JogosPage({ searchParams }: PageProps) {
     preset: presetParam,
     from: fromParam,
     to: toParam,
+    [TOUR_FORCE_PARAM]: tourParam,
   } = await searchParams;
   // Ligas ativas por request (league_settings, ADR 0050 — toggle no admin vale sem
   // deploy; nunca vazia, cai no fallback em código).
@@ -133,8 +139,13 @@ export default async function JogosPage({ searchParams }: PageProps) {
   // genérica (best-effort, batch). A home NÃO busca odds (só lê) → 1X2 só aparece
   // de visitas anteriores à match page que aqueceram a janela da liga (mesma
   // semântica latest-not-fresh do chip over/under). Ambos batch, sem N+1.
-  const [snapshotByMatch, matchResultByMatch, predictedMatchIds, recentRaw] =
-    await Promise.all([
+  const [
+    snapshotByMatch,
+    matchResultByMatch,
+    predictedMatchIds,
+    recentRaw,
+    tourState,
+  ] = await Promise.all([
       getLatestOverUnderSnapshotsForMatches(matchIds),
       getLatestSelectionOddsSnapshotsForMatches(matchIds, "match_result"),
       getMatchIdsWithPredictionsByUser({
@@ -142,6 +153,7 @@ export default async function JogosPage({ searchParams }: PageProps) {
         userId,
       }),
       getRecentPredictionsByUser(userId, RECENT_LIMIT),
+      getTourState(userId),
     ]);
 
   // Fuso de exibição do usuário (#1) — formata kickoff/datas no fuso do navegador.
@@ -192,6 +204,12 @@ export default async function JogosPage({ searchParams }: PageProps) {
 
   return (
     <>
+      <GuidedTour
+        chapter="jogos"
+        userId={userId}
+        serverState={tourState}
+        forceStart={tourParam === "1"}
+      />
       <div className="lg:hidden">
         <MobileHome
           matches={matches}
@@ -268,13 +286,17 @@ function MobileHome({
       </div>
 
       <div className="flex flex-col gap-2 px-5 pb-3">
-        <LeaguePicker value={league} activeKeys={activeKeys} range={navProps} />
-        <DateRangeTabs
-          league={league}
-          preset={range.preset}
-          from={navProps.from}
-          to={navProps.to}
-        />
+        <div data-tour="league-picker">
+          <LeaguePicker value={league} activeKeys={activeKeys} range={navProps} />
+        </div>
+        <div data-tour="date-range">
+          <DateRangeTabs
+            league={league}
+            preset={range.preset}
+            from={navProps.from}
+            to={navProps.to}
+          />
+        </div>
       </div>
 
       <SectionLabel>{label}</SectionLabel>
@@ -292,30 +314,32 @@ function MobileHome({
       )}
 
       <div className="pt-7" />
-      <SectionLabel
-        action={
-          <Link
-            href="/dashboard"
-            className="font-mono text-eyebrow uppercase tracking-eyebrow text-muted-foreground transition-colors hover:text-foreground focus-visible:outline-none focus-visible:ring-[3px] focus-visible:ring-ring/50 rounded-sm"
-          >
-            ver todas →
-          </Link>
-        }
-      >
-        Suas predições recentes
-      </SectionLabel>
-      <div className="overflow-x-auto px-5 pb-6">
-        {recents.length === 0 ? (
-          <div className="text-body-sm text-muted-foreground tracking-tight">
-            Nenhuma predição ainda.
-          </div>
-        ) : (
-          <div className="flex gap-2">
-            {recents.map((p) => (
-              <RecentPredCard key={p.id} p={p} listHref={listHref} />
-            ))}
-          </div>
-        )}
+      <div data-tour="recent-predictions">
+        <SectionLabel
+          action={
+            <Link
+              href="/dashboard"
+              className="font-mono text-eyebrow uppercase tracking-eyebrow text-muted-foreground transition-colors hover:text-foreground focus-visible:outline-none focus-visible:ring-[3px] focus-visible:ring-ring/50 rounded-sm"
+            >
+              ver todas →
+            </Link>
+          }
+        >
+          Suas predições recentes
+        </SectionLabel>
+        <div className="overflow-x-auto px-5 pb-6">
+          {recents.length === 0 ? (
+            <div className="text-body-sm text-muted-foreground tracking-tight">
+              Nenhuma predição ainda.
+            </div>
+          ) : (
+            <div className="flex gap-2">
+              {recents.map((p) => (
+                <RecentPredCard key={p.id} p={p} listHref={listHref} />
+              ))}
+            </div>
+          )}
+        </div>
       </div>
     </div>
   );
@@ -349,13 +373,17 @@ function DesktopHome({
             </p>
           </div>
           <div className="flex flex-col items-end gap-2">
-            <LeaguePicker value={league} activeKeys={activeKeys} range={navProps} />
-            <DateRangeTabs
-              league={league}
-              preset={range.preset}
-              from={navProps.from}
-              to={navProps.to}
-            />
+            <div data-tour="league-picker">
+              <LeaguePicker value={league} activeKeys={activeKeys} range={navProps} />
+            </div>
+            <div data-tour="date-range">
+              <DateRangeTabs
+                league={league}
+                preset={range.preset}
+                from={navProps.from}
+                to={navProps.to}
+              />
+            </div>
           </div>
         </div>
 
@@ -372,7 +400,7 @@ function DesktopHome({
           <UpcomingMatchesDesktop key={listKey} matches={matches} listHref={listHref} />
         )}
 
-        <div className="pt-12">
+        <div className="mt-12" data-tour="recent-predictions">
           <SectionLabel
             action={
               <Link

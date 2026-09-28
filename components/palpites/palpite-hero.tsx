@@ -113,6 +113,7 @@ export function PalpiteHero({
 
   return (
     <form
+      data-tour="palpite"
       action={formAction}
       onSubmit={(e) => {
         setSetIdAtSubmit(setId);

@@ -20,6 +20,8 @@ type Props = {
   // /time/[team], #408). Quando presente, é anexado como ?back= verbatim (tem
   // precedência sobre listHref). Mantém os call sites de /jogos byte-idênticos.
   backHref?: string;
+  // Alvo do passo "abra um jogo" do tour guiado (components/tour/guided-tour.tsx).
+  tourTarget?: boolean;
 };
 
 const STATUS_LABEL: Record<"postponed" | "cancelled", string> = {
@@ -27,7 +29,7 @@ const STATUS_LABEL: Record<"postponed" | "cancelled", string> = {
   cancelled: "Cancelado",
 };
 
-export function MatchRow({ m, last, listHref, backHref }: Props) {
+export function MatchRow({ m, last, listHref, backHref, tourTarget }: Props) {
   // /time/[team] (#408) passa o backHref pronto; /jogos passa listHref e deriva o
   // back via appendBackParam (base /jogos). Mutuamente exclusivos na prática.
   const href = backHref
@@ -43,6 +45,7 @@ export function MatchRow({ m, last, listHref, backHref }: Props) {
   return (
     <Link
       href={href}
+      data-tour={tourTarget ? "match-row" : undefined}
       className={cn(
         "block px-5 py-4 transition-colors hover:bg-surface-2 focus-visible:outline-none focus-visible:ring-[3px] focus-visible:ring-ring/50 focus-visible:ring-inset",
         !last && "border-b border-border-subtle",

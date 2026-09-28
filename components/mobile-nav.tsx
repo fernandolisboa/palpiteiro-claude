@@ -31,6 +31,7 @@ export function mobileNavLinks(isAdmin: boolean): NavLinkItem[] {
     { href: "/jogos", label: "jogos" },
     { href: "/apostas", label: "apostas" },
     { href: "/dashboard", label: "dashboard" },
+    { href: "/como-usar", label: "como usar" },
     { href: "/como-funciona", label: "como funciona" },
   ];
   if (isAdmin) {
@@ -46,7 +47,12 @@ export function MobileNav({ isAdmin }: { isAdmin: boolean }) {
   return (
     <Sheet>
       <SheetTrigger asChild>
-        <Button variant="ghost" size="icon-sm" aria-label="Abrir menu">
+        <Button
+          variant="ghost"
+          size="icon-sm"
+          aria-label="Abrir menu"
+          data-tour="menu"
+        >
           <Menu className="size-5" />
         </Button>
       </SheetTrigger>
