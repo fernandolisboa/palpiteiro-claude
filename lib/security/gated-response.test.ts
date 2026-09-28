@@ -3,7 +3,7 @@ import { NextRequest } from "next/server";
 import { describe, expect, it } from "vitest";
 
 import { CSP_HEADER } from "@/lib/security/csp";
-import { gatedResponse } from "@/lib/security/gated-response";
+import { gatedResponse, landingResponse } from "@/lib/security/gated-response";
 
 function req(url: string, authed: boolean): NextAuthRequest {
   const r = new NextRequest(url) as NextAuthRequest;
@@ -43,5 +43,26 @@ describe("gatedResponse", () => {
     const a = gatedResponse(req("https://palpiteiro.live/jogos", true));
     const b = gatedResponse(req("https://palpiteiro.live/jogos", true));
     expect(a.headers.get(CSP_HEADER)).not.toBe(b.headers.get(CSP_HEADER));
+  });
+});
+
+describe("landingResponse", () => {
+  it('com sessão → 307 pra /jogos (logado nunca vê a landing de "Entrar")', () => {
+    const res = landingResponse(req("https://palpiteiro.live/?utm=x", true));
+    expect(res.status).toBe(307);
+    const loc = new URL(res.headers.get("location") ?? "");
+    expect(loc.pathname).toBe("/jogos");
+    expect(loc.search).toBe("");
+    expect(res.headers.get(CSP_HEADER)).toBeNull();
+  });
+
+  it("sem sessão → segue pra landing, sem CSP de nonce (a estática vem do next.config)", () => {
+    const res = landingResponse(req("https://palpiteiro.live/", false));
+    expect(res.status).toBe(200);
+    expect(res.headers.get("location")).toBeNull();
+    expect(res.headers.get(CSP_HEADER)).toBeNull();
+    expect(
+      res.headers.get(`x-middleware-request-${CSP_HEADER.toLowerCase()}`)
+    ).toBeNull();
   });
 });

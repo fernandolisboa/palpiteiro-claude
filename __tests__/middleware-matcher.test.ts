@@ -71,3 +71,16 @@ describe("middleware matcher — superfícies públicas seguem liberadas", () =>
     },
   );
 });
+
+describe("middleware matcher — raiz redireciona quem está logado", () => {
+  // A landing `/` fica FORA do gate (1ª entrada), mas volta ao middleware por uma 2ª
+  // entrada exata `"/"` pra que o usuário logado vá pra /jogos em vez de ver "Entrar".
+  it("tem a entrada exata \"/\" no matcher", () => {
+    // A 1ª entrada contém `[^/]` (um `]`), então casamos a linha `"/"` fechando o array.
+    expect(source).toMatch(/\n\s*"\/",?\n\s*\],/);
+  });
+
+  it("o handler desvia a raiz pro landingResponse", () => {
+    expect(source).toMatch(/pathname === "\/" \? landingResponse\(req\) : gatedResponse\(req\)/);
+  });
+});

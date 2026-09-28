@@ -1,7 +1,7 @@
 import NextAuth from "next-auth";
 
 import { authConfig } from "@/auth.config";
-import { gatedResponse } from "@/lib/security/gated-response";
+import { gatedResponse, landingResponse } from "@/lib/security/gated-response";
 
 /**
  * Protege o app inteiro (sessão obrigatória) via `gatedResponse`, que também emite a
@@ -33,13 +33,20 @@ import { gatedResponse } from "@/lib/security/gated-response";
  *    UM segmento de id + a sub-rota OG; siblings/paths mais profundos seguem gateados.
  *  - `/` (raiz exata, âncora `$`) → landing pública estática (#373). A home
  *    autenticada mudou pra `/jogos`, que continua gateada (casa o matcher).
+ *
+ * A raiz `/` volta a passar pelo middleware por uma SEGUNDA entrada do matcher, só pra
+ * mandar quem está logado pra `/jogos` (`landingResponse`); deslogado segue pra landing.
+ * Sem isso, qualquer link pra `/` jogava o usuário logado na tela de "Entrar".
  */
 const { auth } = NextAuth(authConfig);
 
 // O handler refaz o redirect de não-autenticado (com handler, o Auth.js não redireciona
 // sozinho) e adiciona a CSP com nonce das rotas gateadas (#467, ADR 0040). As rotas
-// públicas acima não passam aqui: recebem a CSP estática do next.config.ts.
-export const middleware = auth((req) => gatedResponse(req));
+// públicas acima não passam aqui (exceto a raiz, só pro redirect de quem está logado):
+// recebem a CSP estática do next.config.ts.
+export const middleware = auth((req) =>
+  req.nextUrl.pathname === "/" ? landingResponse(req) : gatedResponse(req)
+);
 
 export const config = {
   // Âncoras (`api/`, `signin$`, `como-funciona$`, `monitoring(?:/|$)`) evitam
@@ -50,7 +57,11 @@ export const config = {
   // `$` no fim do grupo libera APENAS a raiz exata `/` (landing pública, #373):
   // o caminho após o `/` inicial é vazio só pra raiz, então `$` casa só ela —
   // `/jogos`, `/dashboard`, `/perfil`, `/match/123`, `/admin` seguem gateados.
+  //
+  // A segunda entrada (`"/"`) é a raiz exata: o middleware roda nela só pra redirecionar
+  // o usuário logado (ver `landingResponse`), sem gatear nem emitir CSP de nonce.
   matcher: [
     "/((?!api/|monitoring(?:/|$)|_next/static|_next/image|favicon.ico|robots\\.txt$|sitemap\\.xml$|signin$|como-funciona$|termos$|privacidade$|p/[^/]+(?:/opengraph-image[^/]*)?$|$).*)",
+    "/",
   ],
 };
