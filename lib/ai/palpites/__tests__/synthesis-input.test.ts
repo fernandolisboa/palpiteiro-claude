@@ -2,7 +2,12 @@ import { describe, expect, it } from "vitest";
 
 import type { FanOutOutcome } from "@/lib/ai/best-bet";
 import type { Prediction } from "@/lib/ai/predict";
-import { summarizeAnalysesForSynthesis } from "@/lib/ai/palpites/synthesis-input";
+import { MarketAnalysisSchema } from "@/lib/ai/palpites/cartridges/cartridge";
+import {
+  summarizeAnalysesForSynthesis,
+  summarizeSavedAnalysesForSynthesis,
+} from "@/lib/ai/palpites/synthesis-input";
+import type { PredictionWithAiCall } from "@/lib/db/queries/predictions";
 
 // Prediction stub mínima: só os campos lidos pela projeção (Drizzle numeric → STRING).
 function prediction(over: Partial<Prediction> = {}): Prediction {
@@ -128,5 +133,111 @@ describe("summarizeAnalysesForSynthesis", () => {
 
   it("vazio → []", () => {
     expect(summarizeAnalysesForSynthesis([])).toEqual([]);
+  });
+});
+
+describe("seleções sem probabilidade (regressão: derrubavam a síntese inteira)", () => {
+  // Artilheiro/assistência só trazem prob pros jogadores que o modelo estimou; o resto
+  // chegava com modelProbPct undefined e o schema da síntese rejeitava TODO o input.
+  const scorer = okOutcome(
+    "anytime_scorer",
+    prediction({ id: "pred-scorer", recommendation: "p1" }),
+    [
+      { key: "p1", label: "Calleri", modelProbPct: 41, odd: 2.6 },
+      {
+        key: "p2",
+        label: "Lucas",
+        modelProbPct: undefined as unknown as number,
+        odd: 3.1,
+      },
+    ],
+  );
+
+  it("descarta a seleção sem prob e mantém as outras", () => {
+    const [a] = summarizeAnalysesForSynthesis([scorer]);
+    expect(a.selections).toEqual([
+      { key: "p1", label: "Calleri", modelProbPct: 41 },
+    ]);
+    expect(a.modelProbPct).toBe(41);
+  });
+
+  it("o resumo passa no schema de entrada da síntese", () => {
+    const out = summarizeAnalysesForSynthesis([scorer]);
+    for (const a of out) {
+      expect(MarketAnalysisSchema.safeParse(a).success).toBe(true);
+    }
+  });
+
+  it("recomendado sem prob → modelProbPct null (não undefined)", () => {
+    const [a] = summarizeAnalysesForSynthesis([
+      okOutcome("anytime_scorer", prediction({ recommendation: "p2" }), [
+        { key: "p2", label: "Lucas", modelProbPct: Number.NaN, odd: 3.1 },
+      ]),
+    ]);
+    expect(a.modelProbPct).toBeNull();
+    expect(a.selections).toEqual([]);
+    expect(MarketAnalysisSchema.safeParse(a).success).toBe(true);
+  });
+});
+
+describe("summarizeSavedAnalysesForSynthesis (gerar só o palpite)", () => {
+  function row(
+    marketKey: string | null,
+    pred: Prediction,
+    selections: PredictionWithAiCall["selections"],
+  ): PredictionWithAiCall {
+    return { prediction: pred, aiCall: null, marketKey, selections };
+  }
+
+  it("usa só a análise mais recente de cada mercado (histórico em ordem desc)", () => {
+    const out = summarizeSavedAnalysesForSynthesis([
+      row("match_result", prediction({ id: "new-1x2" }), [
+        { key: "home", modelProbPct: 58, odd: 1.85 },
+      ]),
+      row("match_result", prediction({ id: "old-1x2" }), [
+        { key: "home", modelProbPct: 50, odd: 1.9 },
+      ]),
+      // marketKey null (histórica) → over/under
+      row(null, prediction({ id: "ou", recommendation: "over" }), [
+        { key: "over", modelProbPct: 55, odd: 2 },
+      ]),
+    ]);
+    expect(out.map((a) => a.predictionId).sort()).toEqual(["new-1x2", "ou"]);
+  });
+
+  it("marketKey null (histórica) e 'over_under' são o mesmo mercado: fica só a mais recente", () => {
+    const out = summarizeSavedAnalysesForSynthesis([
+      row("over_under", prediction({ id: "new-ou", recommendation: "under" }), [
+        { key: "under", modelProbPct: 52, odd: 1.9 },
+      ]),
+      row(null, prediction({ id: "old-ou", recommendation: "over" }), [
+        { key: "over", modelProbPct: 55, odd: 2 },
+      ]),
+    ]);
+    expect(out.map((a) => a.predictionId)).toEqual(["new-ou"]);
+  });
+
+  it("rótulo do recomendado carrega a linha gravada (Over 3.5, não 'Over' 2.5 implícito)", () => {
+    const [a] = summarizeSavedAnalysesForSynthesis([
+      row(
+        "over_under",
+        prediction({ recommendation: "over", marketParams: { line: 3.5 } }),
+        [{ key: "over", modelProbPct: 40, odd: 2.4 }],
+      ),
+    ]);
+    expect(a.recommendedLabel).toBe("Over 3.5");
+  });
+
+  it("prob não gravada (coalesce 0 no DB) vira ausente, não 0%", () => {
+    const [a] = summarizeSavedAnalysesForSynthesis([
+      row("anytime_scorer", prediction({ recommendation: "p1" }), [
+        { key: "p1", label: "Calleri", modelProbPct: 41, modelProbKnown: true, odd: 2.6 },
+        { key: "p2", label: "Lucas", modelProbPct: 0, modelProbKnown: false, odd: 3.1 },
+      ]),
+    ]);
+    expect(a.selections).toEqual([
+      { key: "p1", label: "Calleri", modelProbPct: 41 },
+    ]);
+    expect(MarketAnalysisSchema.safeParse(a).success).toBe(true);
   });
 });

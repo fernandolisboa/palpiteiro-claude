@@ -7,11 +7,12 @@ import {
   Link2,
   Link2Off,
   Loader2,
+  RefreshCw,
   Sparkles,
   TriangleAlert,
 } from "lucide-react";
 
-import { analyzeBestBet } from "@/app/actions/predictions";
+import { runPalpiteHero } from "@/app/actions/predictions";
 import { shareSet, unshareSet } from "@/app/actions/share";
 import { SettleableBadge } from "@/components/palpites/palpite-badges";
 import { Button } from "@/components/ui/button";
@@ -49,7 +50,14 @@ type Props = {
   // #384: shared_at do set (null = ainda não compartilhado). Ramifica o botão: não-compartilhado
   // → "Compartilhar" (chama shareSet); já-compartilhado → "Copiar link" (copia direto).
   sharedAt: Date | null;
+  // Há análises por mercado salvas → oferece "gerar só o palpite" (síntese sem re-rodar
+  // o fan-out pago).
+  hasAnalyses: boolean;
 };
+
+// Um form, duas ações (runPalpiteHero): o botão clicado manda `intent`. "palpite"
+// refaz só a síntese sobre as análises salvas; "analysis" é o run completo.
+type HeroIntent = "analysis" | "palpite";
 
 /**
  * <PalpiteHero/> — o HERO palpite-first (ADR 0030 / #351). A manchete sintetizada é a
@@ -84,11 +92,13 @@ export function PalpiteHero({
   finalScore,
   setId,
   sharedAt,
+  hasAnalyses,
 }: Props) {
-  const [state, formAction, pending] = useActionState(analyzeBestBet, null);
+  const [state, formAction, pending] = useActionState(runPalpiteHero, null);
   // Set exibido quando este form foi enviado: se outro set chegar depois (outra aba, outro
   // run), o aviso de manchete que não saiu deixa de valer.
   const [setIdAtSubmit, setSetIdAtSubmit] = useState<string | null>(null);
+  const [intent, setIntent] = useState<HeroIntent>("analysis");
   // Em sucesso, o revalidate re-alimenta `heroPalpite` server-side → o componente cliente
   // ignora a view. Dois caminhos de aviso: o run falhou (ok:false) OU as análises saíram
   // mas a síntese não (ok:true + palpiteError). Sem o 2º, o HERO voltava mudo pro vazio
@@ -104,7 +114,13 @@ export function PalpiteHero({
   return (
     <form
       action={formAction}
-      onSubmit={() => setSetIdAtSubmit(setId)}
+      onSubmit={(e) => {
+        setSetIdAtSubmit(setId);
+        const submitter = (e.nativeEvent as SubmitEvent).submitter;
+        setIntent(
+          submitter?.getAttribute("value") === "palpite" ? "palpite" : "analysis",
+        );
+      }}
       aria-busy={pending}
     >
       <input type="hidden" name="matchId" value={matchId} />
@@ -116,7 +132,9 @@ export function PalpiteHero({
         setId={setId}
         sharedAt={sharedAt}
         pending={pending}
+        pendingIntent={intent}
         error={error}
+        canRegenerate={analyzable && fanOutEnabled && hasAnalyses}
       />
     </form>
   );
@@ -130,7 +148,9 @@ function HeroBody({
   setId,
   sharedAt,
   pending,
+  pendingIntent,
   error,
+  canRegenerate,
 }: {
   heroPalpite: PalpiteHeadlineView | null;
   analyzable: boolean;
@@ -139,11 +159,13 @@ function HeroBody({
   setId: string | null;
   sharedAt: Date | null;
   pending: boolean;
+  pendingIntent: HeroIntent;
   error: string | null;
+  canRegenerate: boolean;
 }) {
   // Pending: skeleton que espelha o populated (sem reflow) — status em PALAVRAS, sem
   // dígito de tempo. Tem precedência sobre tudo (o run está em voo agora).
-  if (pending) return <PendingHero />;
+  if (pending) return <PendingHero intent={pendingIntent} />;
 
   // Palpite presente (pendente OU settled): a manchete sobrevive a um erro de re-análise
   // (Callout inline acima dela). Settled ganha o badge + recibo.
@@ -156,6 +178,7 @@ function HeroBody({
         setId={setId}
         sharedAt={sharedAt}
         error={error}
+        canRegenerate={canRegenerate}
       />
     );
   }
@@ -166,6 +189,7 @@ function HeroBody({
       analyzable={analyzable}
       fanOutEnabled={fanOutEnabled}
       error={error}
+      canRegenerate={canRegenerate}
     />
   );
 }
@@ -179,6 +203,7 @@ function PopulatedHero({
   setId,
   sharedAt,
   error,
+  canRegenerate,
 }: {
   view: PalpiteHeadlineView;
   analyzable: boolean;
@@ -186,6 +211,7 @@ function PopulatedHero({
   setId: string | null;
   sharedAt: Date | null;
   error: string | null;
+  canRegenerate: boolean;
 }) {
   const settled = view.badge !== null;
   return (
@@ -237,6 +263,8 @@ function PopulatedHero({
           {analyzable && (
             <Button
               type="submit"
+              name="intent"
+              value="analysis"
               size="sm"
               variant="ghost"
               className="self-start text-palpite-strong-fg hover:bg-palpite-soft"
@@ -244,8 +272,9 @@ function PopulatedHero({
               <Sparkles className="size-3.5" /> Analisar de novo
             </Button>
           )}
+          {canRegenerate && <PalpiteOnlyButton label="Refazer só o palpite" />}
           {/* #384: compartilhar. Só com set persistido (setId). IMPERATIVO (type="button",
-              onClick) — NÃO sequestra o <form action={analyzeBestBet}>. */}
+              onClick) — NÃO sequestra o <form action={runPalpiteHero}>. */}
           {setId !== null && <ShareButton key={setId} setId={setId} sharedAt={sharedAt} />}
         </div>
 
@@ -263,7 +292,7 @@ function PopulatedHero({
 }
 
 // Botão de compartilhar (#384): IMPERATIVO (type="button", onClick) — não toca o <form
-// action={analyzeBestBet}>. Ramifica em `shared` (semeado de sharedAt, depois local):
+// action={runPalpiteHero}>. Ramifica em `shared` (semeado de sharedAt, depois local):
 // ainda-não-compartilhado → "Compartilhar" (chama shareSet, que carimba shared_at, depois
 // copia o link); já-compartilhado → "Copiar link" (copia direto SEM re-chamar o action) +
 // "Parar de compartilhar" (kill-switch, ADR 0035 §3e / #438: unshareSet limpa shared_at e
@@ -381,10 +410,12 @@ function EmptyHero({
   analyzable,
   fanOutEnabled,
   error,
+  canRegenerate,
 }: {
   analyzable: boolean;
   fanOutEnabled: boolean;
   error: string | null;
+  canRegenerate: boolean;
 }) {
   // Jogo encerrado/cancelado sem palpite: predict() rejeitaria — sem CTA. O aviso ainda
   // aparece: um run iniciado antes do apito pode terminar depois dele, sem manchete.
@@ -416,13 +447,24 @@ function EmptyHero({
               A IA lê os dois times, os números e o mercado e crava um palpite —
               quem ganha, o placar provável e o porquê.
             </p>
-            <Button
-              type="submit"
-              size="sm"
-              className="self-start bg-palpite-fg text-background hover:bg-palpite-strong-fg"
-            >
-              <Sparkles className="size-4" /> Analisar com IA
-            </Button>
+            <div className="flex flex-wrap items-center gap-2">
+              <Button
+                type="submit"
+                name="intent"
+                value="analysis"
+                size="sm"
+                className="bg-palpite-fg text-background hover:bg-palpite-strong-fg"
+              >
+                <Sparkles className="size-4" /> Analisar com IA
+              </Button>
+              {canRegenerate && <PalpiteOnlyButton label="Gerar só o palpite" />}
+            </div>
+            {canRegenerate && (
+              <p className="max-w-reading text-body-sm tracking-tight text-muted-fg-2">
+                &quot;Gerar só o palpite&quot; usa as análises por mercado que já estão
+                abaixo, sem refazê-las.
+              </p>
+            )}
           </>
         ) : (
           // Kill-switch (flag off): aviso suave, SEM botão (o action retornaria
@@ -436,9 +478,25 @@ function EmptyHero({
   );
 }
 
+// Refaz só a síntese sobre as análises salvas (intent="palpite"), sem o fan-out pago.
+function PalpiteOnlyButton({ label }: { label: string }) {
+  return (
+    <Button
+      type="submit"
+      name="intent"
+      value="palpite"
+      size="sm"
+      variant="ghost"
+      className="text-palpite-strong-fg hover:bg-palpite-soft"
+    >
+      <RefreshCw className="size-3.5" /> {label}
+    </Button>
+  );
+}
+
 // Skeleton que espelha o populated (mesma casca quente, mesmos blocos) — sem reflow ao
 // trocar pelo conteúdo. Status em PALAVRAS, sem dígito de tempo. aria-busy no <form>.
-function PendingHero() {
+function PendingHero({ intent }: { intent: HeroIntent }) {
   return (
     <WarmShell tone="full">
       <div className="flex flex-col gap-4">
@@ -454,7 +512,11 @@ function PendingHero() {
         </div>
         <div className="flex items-center gap-2 text-body-sm tracking-tight text-muted-foreground">
           <Loader2 className="size-4 animate-spin motion-reduce:animate-none" />
-          <span>lendo os mercados e montando o palpite… (pode levar um minuto)</span>
+          <span>
+            {intent === "palpite"
+              ? "montando o palpite a partir das análises…"
+              : "lendo os mercados e montando o palpite… (pode levar um minuto)"}
+          </span>
         </div>
       </div>
     </WarmShell>

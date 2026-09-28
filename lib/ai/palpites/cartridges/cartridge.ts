@@ -145,7 +145,7 @@ const StandingLineSchema = z.object({
 
 // Uma análise de mercado já paga (projeção de MarketAnalysisSummary). Carrega edge/EV
 // como DADO (informa o veredito) — o firewall garante que não vaza pra manchete.
-const MarketAnalysisSchema = z.object({
+export const MarketAnalysisSchema = z.object({
   marketKey: z.string().min(1),
   marketLabel: z.string().min(1),
   recommendation: z.string().min(1),

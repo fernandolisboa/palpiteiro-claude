@@ -3,12 +3,20 @@ import { createRoot } from "react-dom/client";
 import { describe, expect, it, vi } from "vitest";
 import { renderToStaticMarkup } from "react-dom/server";
 
-// PalpiteHero usa useActionState(analyzeBestBet) — mock leve pra não puxar o server
-// action server-only no env de teste. O render estático congela pending=false/state=null,
-// então o mock nunca é chamado; serve só pra resolver o import.
-vi.mock("@/app/actions/predictions", () => ({
-  analyzeBestBet: vi.fn(),
-}));
+// PalpiteHero usa useActionState(runPalpiteHero) — mock leve pra não puxar o server
+// action server-only no env de teste. O runPalpiteHero mockado reproduz o roteamento
+// por `intent` do real, então os testes interativos provam qual botão manda o quê.
+vi.mock("@/app/actions/predictions", () => {
+  const analyzeBestBet = vi.fn();
+  const generatePalpiteFromAnalyses = vi.fn();
+  const runPalpiteHero = vi.fn((_prev: unknown, formData: FormData) => {
+    const intent = formData.get("intent");
+    if (intent === "palpite") return generatePalpiteFromAnalyses(null, formData);
+    if (intent === "analysis") return analyzeBestBet(null, formData);
+    return Promise.resolve({ ok: false, error: "Ação inválida." });
+  });
+  return { analyzeBestBet, generatePalpiteFromAnalyses, runPalpiteHero };
+});
 
 // shareSet/unshareSet são "use server" — mock leve pra não puxar o server action no env de
 // teste. O render estático nunca dispara o onClick; o teste interativo do kill-switch (#438)
@@ -18,7 +26,10 @@ vi.mock("@/app/actions/share", () => ({
   unshareSet: vi.fn(),
 }));
 
-import { analyzeBestBet } from "@/app/actions/predictions";
+import {
+  analyzeBestBet,
+  generatePalpiteFromAnalyses,
+} from "@/app/actions/predictions";
 import { unshareSet } from "@/app/actions/share";
 import { PalpiteHero } from "@/components/palpites/palpite-hero";
 import { containsValueLanguage } from "@/lib/ai/palpites/value-language-guard";
@@ -60,6 +71,7 @@ function render(props: Partial<Parameters<typeof PalpiteHero>[0]> = {}): string 
       finalScore={null}
       setId="22222222-2222-2222-2222-222222222222"
       sharedAt={null}
+      hasAnalyses={false}
       {...props}
     />,
   );
@@ -285,6 +297,7 @@ describe("PalpiteHero — ShareButton + kill-switch (ADR 0035 §3e / #438)", () 
           finalScore={null}
           setId="22222222-2222-2222-2222-222222222222"
           sharedAt={new Date("2026-06-01T00:00:00Z")}
+          hasAnalyses={false}
         />,
       );
     });
@@ -334,11 +347,15 @@ describe("PalpiteHero — análises saíram mas o palpite não (regressão)", ()
           finalScore={null}
           setId={null}
           sharedAt={null}
+          hasAnalyses={false}
         />,
       );
     });
+    const analyze = container.querySelector<HTMLButtonElement>(
+      'button[name="intent"][value="analysis"]',
+    )!;
     await act(async () => {
-      container.querySelector("form")!.requestSubmit();
+      container.querySelector("form")!.requestSubmit(analyze);
     });
     // Re-render como o revalidate faria (props do servidor depois do run).
     if (after) {
@@ -352,6 +369,7 @@ describe("PalpiteHero — análises saíram mas o palpite não (regressão)", ()
             finalScore={null}
             setId={after.setId ?? null}
             sharedAt={null}
+            hasAnalyses={false}
           />,
         );
       });
@@ -378,6 +396,9 @@ describe("PalpiteHero — análises saíram mas o palpite não (regressão)", ()
       null,
     );
     expect(analyzeBestBet).toHaveBeenCalled();
+    expect(vi.mocked(analyzeBestBet).mock.calls.at(-1)![1].get("intent")).toBe(
+      "analysis",
+    );
     expect(text).toContain("Não rolou dessa vez");
     expect(text).toContain(MESSAGE);
     expect(text).toContain("Analisar com IA");
@@ -418,5 +439,75 @@ describe("PalpiteHero — análises saíram mas o palpite não (regressão)", ()
       POPULATED,
     );
     expect(text).not.toContain("Não rolou dessa vez");
+  });
+});
+
+describe("PalpiteHero — gerar só o palpite (síntese sobre as análises salvas)", () => {
+  it("sem análises salvas → só 'Analisar com IA'", () => {
+    const html = render({ heroPalpite: null, hasAnalyses: false });
+    expect(html).toContain("Analisar com IA");
+    expect(html).not.toContain("Gerar só o palpite");
+  });
+
+  it("com análises salvas → 'Analisar com IA' + 'Gerar só o palpite'", () => {
+    const html = render({ heroPalpite: null, hasAnalyses: true });
+    expect(html).toContain("Analisar com IA");
+    expect(html).toContain("Gerar só o palpite");
+  });
+
+  it("com palpite + análises → 'Analisar de novo' + 'Refazer só o palpite'", () => {
+    const html = render({ hasAnalyses: true });
+    expect(html).toContain("Analisar de novo");
+    expect(html).toContain("Refazer só o palpite");
+  });
+
+  it("flag off ou jogo não analisável → sem o botão", () => {
+    expect(
+      render({ heroPalpite: null, hasAnalyses: true, fanOutEnabled: false }),
+    ).not.toContain("Gerar só o palpite");
+    expect(render({ hasAnalyses: true, analyzable: false })).not.toContain(
+      "Refazer só o palpite",
+    );
+  });
+
+  it("clicar 'Gerar só o palpite' chama só a síntese, não o run completo", async () => {
+    vi.mocked(analyzeBestBet).mockClear();
+    vi.mocked(generatePalpiteFromAnalyses).mockResolvedValue({
+      ok: true,
+      palpite: null,
+      palpiteError: "O palpite não saiu.",
+    });
+    (globalThis as { IS_REACT_ACT_ENVIRONMENT?: boolean }).IS_REACT_ACT_ENVIRONMENT =
+      true;
+    const container = document.createElement("div");
+    document.body.appendChild(container);
+    const root = createRoot(container);
+    await act(async () => {
+      root.render(
+        <PalpiteHero
+          heroPalpite={null}
+          matchId="11111111-1111-1111-1111-111111111111"
+          analyzable
+          fanOutEnabled
+          finalScore={null}
+          setId={null}
+          sharedAt={null}
+          hasAnalyses
+        />,
+      );
+    });
+    const button = Array.from(container.querySelectorAll("button")).find((b) =>
+      b.textContent?.includes("Gerar só o palpite"),
+    )!;
+    await act(async () => {
+      container.querySelector("form")!.requestSubmit(button);
+    });
+    expect(generatePalpiteFromAnalyses).toHaveBeenCalledTimes(1);
+    const fd = vi.mocked(generatePalpiteFromAnalyses).mock.calls[0][1];
+    expect(fd.get("matchId")).toBe("11111111-1111-1111-1111-111111111111");
+    expect(analyzeBestBet).not.toHaveBeenCalled();
+    expect(container.textContent).toContain("O palpite não saiu.");
+    await act(async () => root.unmount());
+    container.remove();
   });
 });

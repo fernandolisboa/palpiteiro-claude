@@ -308,6 +308,7 @@ describe("getPredictionHistoryForMatch — marketKey + candidate set batcheado",
     expect(out[0].selections.map((s) => s.key)).toEqual(["home", "draw", "away"]);
     expect(out[0].selections.map((s) => s.odd)).toEqual([2.1, 3.4, 3.9]);
     expect(out[0].selections.map((s) => s.modelProbPct)).toEqual([52, 27, 21]);
+    expect(out[0].selections.every((s) => s.modelProbKnown === true)).toBe(true);
 
     // ou (oldest): over_under, 2 selections na ordem over,under — prova que o batch
     // NÃO mistura as selections entre predições.
@@ -337,6 +338,8 @@ describe("getPredictionHistoryForMatch — marketKey + candidate set batcheado",
 
     const out = await getPredictionHistoryForMatch(ids.matchId, ids.userId);
     expect(out[0].selections.map((s) => s.modelProbPct)).toEqual([0, 0]);
+    // …mas marcado como não-gravado, pra síntese não ler o 0 como 0%.
+    expect(out[0].selections.map((s) => s.modelProbKnown)).toEqual([false, false]);
     // odd segue derivando mesmo sem modelProbPct.
     expect(out[0].selections.map((s) => s.odd)).toEqual([1.9, 1.95]);
   });
