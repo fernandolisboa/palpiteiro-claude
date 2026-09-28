@@ -107,6 +107,7 @@ describe("toAnalysisView", () => {
       generatedAt: "19 mai · 14:22",
       promptVersion: "over_under_v1.1",
       model: "claude-sonnet-4.5",
+      engine: "LLM",
       costUsd: "$0.014",
     });
   });
@@ -194,6 +195,7 @@ describe("toAnalysisView", () => {
       generatedAt: "19 mai · 14:22",
       promptVersion: "over_under_v1.1",
       model: "claude-sonnet-4.5",
+      engine: "LLM",
       costUsd: "$0.000",
     });
   });
@@ -274,6 +276,7 @@ describe("toAnalysisView", () => {
       generatedAt: "19 mai · 14:22",
       promptVersion: "over_under_v1.1",
       model: "claude-sonnet-4.5",
+      engine: "LLM",
       costUsd: "$0.011",
     });
   });
@@ -357,6 +360,7 @@ describe("toAnalysisView", () => {
       generatedAt: "19 mai · 14:22",
       promptVersion: "over_under_v1.0",
       model: "claude-sonnet-4.5",
+      engine: "LLM",
       costUsd: "$0.000",
     });
   });
@@ -1450,5 +1454,20 @@ describe("toAnalysisViewFromPrediction — custo da ai_call (#512)", () => {
   it("row com a própria chamada (ou sem judgments) mostra o custo dela", () => {
     expect(toAnalysisViewFromPrediction(mkRow("llm_call")).costUsd).toBe("$0.017");
     expect(toAnalysisViewFromPrediction(mkRow()).costUsd).toBe("$0.017");
+  });
+
+  it("rodapé mostra o motor que produziu a análise (lê o judgments da row)", () => {
+    const row = mkRow();
+    row.prediction.judgments = {
+      applied: false,
+      lambda: { source: "dixon_coles" },
+      failure: { kind: "timeout", message: "x" },
+    } as unknown as DbPrediction["judgments"];
+    expect(toAnalysisViewFromPrediction(row).engine).toBe(
+      "Código + JEV · Dixon-Coles · JEV falhou (timeout)",
+    );
+    row.prediction.modelVersion = "claude-sonnet-4-5-20250929";
+    row.prediction.judgments = null;
+    expect(toAnalysisViewFromPrediction(row).engine).toBe("LLM");
   });
 });

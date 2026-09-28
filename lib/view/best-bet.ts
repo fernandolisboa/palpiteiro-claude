@@ -130,6 +130,7 @@ export function toBestBetView(
         modelVersion: prediction.modelVersion,
         promptVersion: prediction.promptVersion,
         createdAt: prediction.createdAt,
+        judgments: prediction.judgments,
         marketKey,
         line: prediction.marketParams?.line ?? null,
         stakeUnits: prediction.stakeUnits,

@@ -1,6 +1,9 @@
 import { describe, expect, it } from "vitest";
 
+import type { PredictionJudgments } from "@/lib/ai/engine/types";
+
 import {
+  formatAnalysisEngine,
   formatCostUsd,
   formatCostUsdTotal,
   formatCountdown,
@@ -253,6 +256,78 @@ describe("formatModelName", () => {
       modelIdFromVersion("claude-haiku-4-5;engine=code_jev;lambda=heuristic"),
     ).toBe("claude-haiku-4-5");
     expect(modelIdFromVersion("claude-haiku-4-5")).toBe("claude-haiku-4-5");
+  });
+});
+
+describe("formatAnalysisEngine", () => {
+  const CODE_JEV =
+    "claude-sonnet-4-5-20250929;engine=code_jev;lambda=dixon_coles;judg=jev_judgments_v1;w=judgment_weights_v1";
+  const judgments = (
+    over: Partial<PredictionJudgments> & {
+      source?: "dixon_coles" | "heuristic";
+    } = {},
+  ): PredictionJudgments => ({
+    engine: "code_jev",
+    applied: true,
+    answers: null,
+    multipliers: null,
+    lambda: {
+      source: over.source ?? "dixon_coles",
+      degraded: false,
+      rho: null,
+      base: { home: 1.4, away: 1.1 },
+      adjusted: { home: 1.4, away: 1.1 },
+    },
+    versions: {
+      judgments: "jev_judgments_v1",
+      weights: "judgment_weights_v1",
+      narrator: "narrator_v1",
+      jevModel: null,
+    },
+    failure: null,
+    stateHash: "h",
+    aiCallId: null,
+    reusedFromPredictionId: null,
+    ...over,
+  });
+
+  it("caminho de cartucho → LLM", () => {
+    expect(formatAnalysisEngine("claude-sonnet-4-5-20250929", null)).toBe("LLM");
+  });
+  it("code_jev com JEV aplicado mostra a fonte do λ", () => {
+    expect(formatAnalysisEngine(CODE_JEV, judgments())).toBe(
+      "Código + JEV · Dixon-Coles",
+    );
+    expect(
+      formatAnalysisEngine(CODE_JEV, judgments({ source: "heuristic" })),
+    ).toBe("Código + JEV · heurístico");
+  });
+  it("code_jev com JEV em fail-open mostra o motivo", () => {
+    expect(
+      formatAnalysisEngine(
+        CODE_JEV,
+        judgments({
+          applied: false,
+          failure: { kind: "missing_key", message: "x" },
+        }),
+      ),
+    ).toBe("Código + JEV · Dixon-Coles · JEV falhou (missing_key)");
+    expect(formatAnalysisEngine(CODE_JEV, judgments({ applied: false }))).toBe(
+      "Código + JEV · Dixon-Coles · sem JEV",
+    );
+  });
+  it("code_jev sem rastro (ou rastro parcial) → não quebra", () => {
+    expect(formatAnalysisEngine(CODE_JEV, undefined)).toBe("Código + JEV");
+    expect(
+      formatAnalysisEngine(CODE_JEV, {
+        engine: "code_jev",
+      } as unknown as PredictionJudgments),
+    ).toBe("Código + JEV");
+  });
+  it("tag de motor desconhecida", () => {
+    expect(formatAnalysisEngine("claude-x;engine=outro", null)).toBe(
+      "motor desconhecido",
+    );
   });
 });
 

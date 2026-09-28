@@ -226,7 +226,7 @@ type FooterProps = {
   showRiskDisclaimer: boolean;
 };
 
-// Rodapé técnico do resultado: versão do prompt · modelo que rodou · custo. O gatilho de
+// Rodapé técnico do resultado: versão do prompt · modelo que rodou · motor · custo. O gatilho de
 // reanálise NÃO vive mais aqui (#244 moveu pro rodapé da seção, SectionFooterDispatch).
 // Acima da meta técnica vai o aviso de risco (#434) — footnote muda espelhando o disclaimer
 // do HERO palpite (Info + text-meta), quando showRiskDisclaimer (default; o fan-out desliga
@@ -243,7 +243,7 @@ function AnalysisFooter({ view, showRiskDisclaimer }: FooterProps) {
       )}
       <div className="flex items-center justify-between px-4 py-2.5 font-mono text-eyebrow-xs text-muted-fg-2 tabular-nums">
         <span>
-          {view.promptVersion} · {view.model}
+          {view.promptVersion} · {view.model} · {view.engine}
         </span>
         <span>{view.costUsd}</span>
       </div>

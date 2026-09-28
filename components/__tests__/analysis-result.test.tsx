@@ -62,6 +62,7 @@ const baseView: AnalysisView = {
   generatedAt: "19 mai · 14:22",
   promptVersion: "over_under_v1.2",
   model: "claude-sonnet-4.5",
+  engine: "LLM",
   costUsd: "$0.014",
 };
 
