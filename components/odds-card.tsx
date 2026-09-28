@@ -5,14 +5,15 @@ import { Badge } from "@/components/ui/badge";
 import { Callout } from "@/components/ui/callout";
 import { Card } from "@/components/ui/card";
 import { Separator } from "@/components/ui/separator";
-import type { MatchStatus, OddsView } from "@/lib/view/types";
+import type { MatchUnavailableReason } from "@/lib/view/match-availability";
+import type { OddsView } from "@/lib/view/types";
 
 type Props = {
   view: OddsView | null;
-  // Status do jogo pra a copy do empty-state: pré-jogo ("até que o mercado abra")
-  // vs ao vivo/encerrado (onde não há cotação pré-jogo a publicar). Opcional —
-  // ausente cai na copy pré-jogo (default histórico).
-  matchStatus?: MatchStatus;
+  // Por que o jogo não aceita análise, pra a copy do empty-state: pré-jogo (null,
+  // "até que o mercado abra") vs já começou/ao vivo/adiado/encerrado (onde não há
+  // cotação pré-jogo a publicar). Opcional — ausente cai na copy pré-jogo.
+  unavailable?: MatchUnavailableReason | null;
 };
 
 // Classe de grid estática por nº de seleções — Tailwind não interpola classes
@@ -22,17 +23,15 @@ const GRID_COLS: Record<number, string> = {
   3: "grid-cols-3",
 };
 
-export function OddsCard({ view, matchStatus }: Props) {
+export function OddsCard({ view, unavailable }: Props) {
   if (!view) {
     // Estado sem-cotação esperado (não é erro) → Callout info (calmo). Copy por
     // status: pré-jogo aguarda o mercado abrir; ao vivo/encerrado não tem cotação
     // pré-jogo a publicar (dizer "até que o mercado abra" ali seria enganoso).
     const body =
-      matchStatus === "live"
+      unavailable === "live"
         ? "Jogo em andamento — sem cotação pré-jogo publicada."
-        : matchStatus === "finished" ||
-            matchStatus === "cancelled" ||
-            matchStatus === "postponed"
+        : unavailable
           ? "Sem cotação de referência para este jogo."
           : "Sem cotação publicada para este jogo. Análise indisponível até que o mercado abra.";
     return (

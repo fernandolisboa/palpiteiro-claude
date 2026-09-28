@@ -9,6 +9,7 @@ import {
 // dessincronizam (jogo na lista mas isInProgress=false → cai no branch de odds =
 // parece apostável).
 import { IN_PROGRESS_WINDOW_MS } from "@/lib/view/date-range";
+import { matchUnavailableReason } from "@/lib/view/match-availability";
 import type { SupportedLeague } from "@/lib/providers/sports-data/leagues";
 import { teamToTeam } from "@/lib/view/team";
 import {
@@ -87,8 +88,8 @@ export function toMatchRowView({
     hasPrediction,
     status: match.status,
     isInProgress: inProgress,
-    // Mesma regra do gate da página do jogo (status agendado + kickoff no futuro).
-    analyzable: match.status === "scheduled" && kickoffMs > nowMs,
+    // Mesmo gate da página do jogo e das actions (status agendado + kickoff no futuro).
+    analyzable: matchUnavailableReason(match.status, match.kickoffAt, now) === null,
     // Só expõe placar em jogos encerrados. Um provider pode carregar gols
     // parciais num `live`/em-andamento ou deixá-los preenchidos num
     // `postponed`/`cancelled`; só `finished` deve mostrar placar final — os

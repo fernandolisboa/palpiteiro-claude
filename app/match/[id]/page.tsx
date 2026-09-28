@@ -46,6 +46,11 @@ import {
 } from "@/lib/view/analysis";
 import { toMatchRowView } from "@/lib/view/match";
 import {
+  matchUnavailableReason,
+  unavailableNoticeCopy,
+  type MatchUnavailableReason,
+} from "@/lib/view/match-availability";
+import {
   toPalpiteHeadlineViewFromSet,
   type PalpiteHeadlineView,
 } from "@/lib/view/palpites-headline";
@@ -54,7 +59,6 @@ import { resolveBackHref } from "@/lib/view/back-href";
 import { toNwayOddsView, toOddsView } from "@/lib/view/odds";
 import type {
   MarketAnalysisSectionItem,
-  MatchStatus,
   OddsView,
   PreviousAnalysisItem,
 } from "@/lib/view/types";
@@ -215,8 +219,13 @@ export default async function MatchPage({ params, searchParams }: PageProps) {
   // andamento gastaria numa análise. `live`/`postponed`/encerrado também NÃO são
   // analisáveis. A CTA do HERO fica escondida nesses casos pra não submeter um
   // form que o server rejeitaria; predições/palpites já existentes seguem visíveis.
-  const analyzable =
-    match.status === "scheduled" && match.kickoffAt.getTime() > now.getTime();
+  // O motivo (ao vivo/adiado/cancelado/encerrado) escolhe a copy do HERO e do aviso.
+  const unavailableReason = matchUnavailableReason(
+    match.status,
+    match.kickoffAt,
+    now,
+  );
+  const analyzable = unavailableReason === null;
 
   // "Analise minha aposta" (#412, ADR 0034): a aba só é montada quando analisável
   // (a action rejeitaria o resto). Mercados = audiência ∩ cobertura de liga (a MESMA
@@ -315,7 +324,7 @@ export default async function MatchPage({ params, searchParams }: PageProps) {
           fixtureRef={fixtureRef}
           leagueKey={leagueKey}
           analyzable={analyzable}
-          matchStatus={match.status}
+          unavailableReason={unavailableReason}
           backHref={backHref}
           finalScore={finalScore}
           bestBetEnabled={bestBetEnabled}
@@ -339,7 +348,7 @@ export default async function MatchPage({ params, searchParams }: PageProps) {
           fixtureRef={fixtureRef}
           leagueKey={leagueKey}
           analyzable={analyzable}
-          matchStatus={match.status}
+          unavailableReason={unavailableReason}
           backHref={backHref}
           finalScore={finalScore}
           bestBetEnabled={bestBetEnabled}
@@ -373,12 +382,11 @@ type Common = {
   matchId: string;
   fixtureRef: FixtureRef;
   leagueKey: ReturnType<typeof leagueToKey>;
-  // false em jogos não-`scheduled` (live/postponed/finished/cancelled — predict()
-  // os rejeita). Esconde a CTA.
+  // true só no pré-jogo (unavailableReason === null). Esconde a CTA quando false.
   analyzable: boolean;
-  // Status cru do jogo: escolhe a copy do empty-state (OddsCard) e do aviso de
-  // não-analisável (live vs adiado vs encerrado).
-  matchStatus: MatchStatus;
+  // Por que o jogo não aceita análise (null = pré-jogo): escolhe a copy do HERO, do
+  // aviso de não-analisável e do empty-state do OddsCard.
+  unavailableReason: MatchUnavailableReason | null;
   // Href de "voltar" — recompõe a lista filtrada (/jogos?…) de origem; /jogos
   // como fallback (deep-link / sem `back`).
   backHref: string;
@@ -414,7 +422,7 @@ function MobileMatch({
   fixtureRef,
   leagueKey,
   analyzable,
-  matchStatus,
+  unavailableReason,
   backHref,
   finalScore,
   bestBetEnabled,
@@ -462,7 +470,7 @@ function MobileMatch({
         <PalpiteHero
           heroPalpite={heroPalpite}
           matchId={matchId}
-          analyzable={analyzable}
+          unavailable={unavailableReason}
           fanOutEnabled={bestBetEnabled}
           finalScore={finalScore}
           setId={heroSetId}
@@ -490,14 +498,14 @@ function MobileMatch({
             previousAnalyses={previousAnalyses}
           />
         )}
-        {!analyzable && sections.length === 0 && (
-          <NotAnalyzableNotice status={matchStatus} score={finalScore} />
+        {unavailableReason !== null && sections.length === 0 && (
+          <NotAnalyzableNotice reason={unavailableReason} score={finalScore} />
         )}
 
         {/* Odds (preços de referência) DEPOIS do detalhe — em tela estreita ficam abaixo do
             palpite+análise, sem empurrar a análise pra longe da manchete. */}
         <div className="flex flex-col gap-3" data-tour="odds">
-          <OddsCard view={oddsView} matchStatus={matchStatus} />
+          <OddsCard view={oddsView} unavailable={unavailableReason} />
           {matchResultOddsView && <OddsCard view={matchResultOddsView} />}
         </div>
 
@@ -524,7 +532,7 @@ function DesktopMatch({
   fixtureRef,
   leagueKey,
   analyzable,
-  matchStatus,
+  unavailableReason,
   backHref,
   finalScore,
   bestBetEnabled,
@@ -569,7 +577,7 @@ function DesktopMatch({
           <PalpiteHero
             heroPalpite={heroPalpite}
             matchId={matchId}
-            analyzable={analyzable}
+            unavailable={unavailableReason}
             fanOutEnabled={bestBetEnabled}
             finalScore={finalScore}
             setId={heroSetId}
@@ -581,7 +589,7 @@ function DesktopMatch({
         {/* Odds (preços de referência) LADO A LADO logo abaixo: over/under e 1X2 na mesma
             linha, mesma altura (stretch do grid). Sem o 1X2, o over/under ocupa metade. */}
         <div className="mb-6 grid grid-cols-2 gap-3" data-tour="odds">
-          <OddsCard view={oddsView} matchStatus={matchStatus} />
+          <OddsCard view={oddsView} unavailable={unavailableReason} />
           {matchResultOddsView && <OddsCard view={matchResultOddsView} />}
         </div>
 
@@ -610,8 +618,8 @@ function DesktopMatch({
               previousAnalyses={previousAnalyses}
             />
           )}
-          {!analyzable && sections.length === 0 && (
-            <NotAnalyzableNotice status={matchStatus} score={finalScore} />
+          {unavailableReason !== null && sections.length === 0 && (
+            <NotAnalyzableNotice reason={unavailableReason} score={finalScore} />
           )}
         </div>
 
@@ -655,45 +663,17 @@ function NeutralAnalysisDetail({
   );
 }
 
-// Copy do aviso de não-analisável POR status — mesma informação/tom de
-// notAnalyzableMessage das actions (aqui em label+detail pra o card; lá numa
-// string só). live → "antes do apito"; postponed → "até ser remarcado"; o resto
-// (finished/cancelled) → encerrado, com placar quando há.
-function notAnalyzableNoticeCopy(
-  status: MatchStatus,
-  score: { home: number; away: number } | null,
-): { label: string; detail: string } {
-  if (status === "live") {
-    return {
-      label: "jogo em andamento",
-      detail: "A análise fica disponível só antes do apito inicial.",
-    };
-  }
-  if (status === "postponed") {
-    return {
-      label: "jogo adiado",
-      detail: "Análise indisponível até o jogo ser remarcado.",
-    };
-  }
-  return {
-    label: "jogo encerrado",
-    detail: score
-      ? `Placar final ${score.home}–${score.away}. Análise indisponível para jogos já encerrados.`
-      : "Análise indisponível para jogos já encerrados ou cancelados.",
-  };
-}
-
-// Mostrado em vez da CTA de análise quando o jogo não é analisável (não-`scheduled`)
-// e não há predição prévia: predict()/actions rejeitam esses jogos, então não há o
-// que analisar. A copy varia por status (ao vivo / adiado / encerrado).
+// Mostrado em vez da CTA de análise quando o jogo não é analisável e não há análise
+// salva: predict()/actions rejeitam esses jogos, então não há o que analisar. A copy
+// varia pelo motivo (ao vivo / adiado / cancelado / encerrado).
 function NotAnalyzableNotice({
-  status,
+  reason,
   score,
 }: {
-  status: MatchStatus;
+  reason: MatchUnavailableReason;
   score: { home: number; away: number } | null;
 }) {
-  const { label, detail } = notAnalyzableNoticeCopy(status, score);
+  const { label, detail } = unavailableNoticeCopy(reason, score);
   return (
     <div className="flex flex-col gap-1.5 rounded-md border border-dashed border-border px-4 py-3.5">
       <span className="font-mono text-eyebrow uppercase tracking-label text-muted-foreground">

@@ -67,7 +67,7 @@ export default async function DashboardPage({ searchParams }: PageProps) {
             Dashboard
           </h1>
           <p className="text-body tracking-tight text-muted-foreground">
-            Seu tracking de over/under 2.5 — yield, racional e resultados.
+            Suas análises por mercado — yield, racional e resultados.
           </p>
         </div>
 

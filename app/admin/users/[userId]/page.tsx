@@ -82,7 +82,7 @@ export default async function AdminUserTrackingPage({
             Tracking
           </h1>
           <p className="text-body tracking-tight text-muted-foreground">
-            {targetUser.email} — over/under 2.5, yield, racional e resultados.
+            {targetUser.email} — análises por mercado: yield, racional e resultados.
           </p>
         </div>
 

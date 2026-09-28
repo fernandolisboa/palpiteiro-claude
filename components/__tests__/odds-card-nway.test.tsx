@@ -45,26 +45,29 @@ describe("OddsCard empty-state (view=null) — copy por status", () => {
     expect(html).toContain("até que o mercado abra");
   });
 
-  it("scheduled → mesma copy pré-jogo", () => {
+  it("analisável (null) → mesma copy pré-jogo", () => {
     const html = renderToStaticMarkup(
-      <OddsCard view={null} matchStatus="scheduled" />,
+      <OddsCard view={null} unavailable={null} />,
     );
     expect(html).toContain("até que o mercado abra");
   });
 
   it("live → copy 'em andamento' SEM 'até que o mercado abra' (enganoso ao vivo)", () => {
     const html = renderToStaticMarkup(
-      <OddsCard view={null} matchStatus="live" />,
+      <OddsCard view={null} unavailable="live" />,
     );
     expect(html).toContain("Jogo em andamento");
     expect(html).not.toContain("até que o mercado abra");
   });
 
-  it("finished → copy neutra de referência, sem 'até que o mercado abra'", () => {
-    const html = renderToStaticMarkup(
-      <OddsCard view={null} matchStatus="finished" />,
-    );
-    expect(html).toContain("Sem cotação de referência");
-    expect(html).not.toContain("até que o mercado abra");
-  });
+  it.each(["started", "postponed", "cancelled", "finished"] as const)(
+    "%s → copy neutra de referência, sem 'até que o mercado abra'",
+    (reason) => {
+      const html = renderToStaticMarkup(
+        <OddsCard view={null} unavailable={reason} />,
+      );
+      expect(html).toContain("Sem cotação de referência");
+      expect(html).not.toContain("até que o mercado abra");
+    },
+  );
 });
