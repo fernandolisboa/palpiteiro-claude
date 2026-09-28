@@ -119,7 +119,7 @@ export const ADMIN_FLAGS = [
     kind: "enum",
     label: "Motor de análise",
     description:
-      "LLM (atual): o cartucho de mercado decide a aposta. Código + JEV: a probabilidade sai do modelo de placar ajustado pelos julgamentos JEV, o gate e o stake ficam no código e o LLM só escreve o racional (ADR 0041). Vale pra toda análise nova; voltar é trocar de novo.",
+      "LLM: o cartucho de mercado decide a aposta. Código + JEV: a probabilidade sai do modelo de placar ajustado pelos julgamentos JEV, o gate e o stake ficam no código e o LLM só escreve o racional (ADR 0041). Vale pra toda análise nova; voltar é trocar de novo.",
     values: ANALYSIS_ENGINES,
     valueLabels: ANALYSIS_ENGINE_LABEL,
     default: DEFAULT_ANALYSIS_ENGINE,

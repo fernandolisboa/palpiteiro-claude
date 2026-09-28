@@ -7,7 +7,7 @@ export type AnalysisEngine = (typeof ANALYSIS_ENGINES)[number];
 export const DEFAULT_ANALYSIS_ENGINE: AnalysisEngine = "llm";
 
 export const ANALYSIS_ENGINE_LABEL: Record<AnalysisEngine, string> = {
-  llm: "LLM (atual)",
+  llm: "LLM",
   code_jev: "Código + JEV",
 };
 

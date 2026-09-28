@@ -325,6 +325,7 @@ export async function analyzeMatch(
           modelVersion: prediction.modelVersion,
           promptVersion: prediction.promptVersion,
           createdAt: prediction.createdAt,
+          judgments: prediction.judgments,
           // Fiação multi-mercado (#170/#173): marketKey RESOLVIDO por predict()
           // (não o literal 'over_under'); `line` da forma do mercado salva (null em
           // 1X2); stake da row recém-gravada; candidate set N-vias retornado por

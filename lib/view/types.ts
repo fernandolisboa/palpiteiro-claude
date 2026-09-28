@@ -174,6 +174,8 @@ export type AnalysisView = {
   generatedAt: string;
   promptVersion: string;
   model: string;
+  // Motor que produziu a análise ("LLM", "Código + JEV · Dixon-Coles", …). ADR 0041.
+  engine: string;
   costUsd: string;
 };
 

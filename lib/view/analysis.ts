@@ -1,5 +1,7 @@
+import type { PredictionJudgments } from "@/lib/ai/engine/types";
 import type { PredictionWithAiCall } from "@/lib/db/queries/predictions";
 import {
+  formatAnalysisEngine,
   formatCostUsd,
   formatEdge,
   formatEvPct,
@@ -62,6 +64,9 @@ type PredictionInput = {
   modelVersion: string;
   promptVersion: string;
   createdAt: Date;
+  // Rastro do motor code_jev (predictions.judgments, ADR 0041 §6): fonte do λ e falha
+  // do JEV pro rodapé técnico. null/ausente no caminho LLM.
+  judgments?: PredictionJudgments | null;
   // Identidade de mercado (#169, additive/opcional). O page/action ainda NÃO
   // passa (passa só o shape over/under) — default `over_under` mantém a paridade
   // até o #170 ligar a fiação. `line` cai pra defaultLine da apresentação.
@@ -451,6 +456,7 @@ export function toAnalysisView(
     generatedAt: formatGeneratedAt(prediction.createdAt, timeZone),
     promptVersion: prediction.promptVersion,
     model: formatModelName(prediction.modelVersion),
+    engine: formatAnalysisEngine(prediction.modelVersion, prediction.judgments),
     costUsd: formatCostUsd(aiCall?.costUsd ?? null),
   };
 }
@@ -479,6 +485,7 @@ export function toAnalysisViewFromPrediction(
       modelVersion: row.prediction.modelVersion,
       promptVersion: row.prediction.promptVersion,
       createdAt: row.prediction.createdAt,
+      judgments: row.prediction.judgments,
       marketKey: row.marketKey ?? "over_under",
       line: row.prediction.marketParams?.line ?? null,
       stakeUnits: row.prediction.stakeUnits,

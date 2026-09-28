@@ -1,3 +1,8 @@
+import {
+  ANALYSIS_ENGINE_LABEL,
+  engineFromModelVersion,
+} from "@/lib/ai/engine/analysis-engine";
+import type { PredictionJudgments } from "@/lib/ai/engine/types";
 import type { SupportedLeague } from "@/lib/providers/sports-data/leagues";
 import type { LeagueKey } from "@/lib/view/types";
 
@@ -338,4 +343,35 @@ export function formatModelName(modelVersion: string): string {
 // análise veio do code_jev (ADR 0041 §5). Devolve só o id do modelo.
 export function modelIdFromVersion(modelVersion: string): string {
   return modelVersion.split(";")[0];
+}
+
+/**
+ * Motor que produziu a análise, pro rodapé técnico (prova de qual motor rodou sem
+ * abrir o banco). "LLM" no caminho de cartucho; no code_jev, a fonte do λ e, quando o
+ * JEV não entrou (fail-open), o motivo. Mercado que o code_jev não precifica (placar
+ * exato, scorer, assist) ou sem λ cai no LLM e aparece como "LLM".
+ */
+export function formatAnalysisEngine(
+  modelVersion: string,
+  judgments: PredictionJudgments | null | undefined,
+): string {
+  const engine = engineFromModelVersion(modelVersion);
+  if (engine === null) return "motor desconhecido";
+  if (engine === "llm") return ANALYSIS_ENGINE_LABEL.llm;
+  const parts = [ANALYSIS_ENGINE_LABEL.code_jev];
+  // jsonb lido do banco sem validação: row antiga ou parcial não pode derrubar a view.
+  if (judgments) {
+    const source = judgments.lambda?.source;
+    if (source) {
+      parts.push(source === "dixon_coles" ? "Dixon-Coles" : "heurístico");
+    }
+    if (judgments.applied === false) {
+      parts.push(
+        judgments.failure?.kind
+          ? `JEV falhou (${judgments.failure.kind})`
+          : "sem JEV",
+      );
+    }
+  }
+  return parts.join(" · ");
 }

@@ -67,6 +67,7 @@ function mkView(o: {
     generatedAt: "19 mai · 14:22",
     promptVersion: "v1",
     model: o.model ?? "claude-sonnet-4.5",
+    engine: "LLM",
     costUsd: "$0.01",
   };
 }
