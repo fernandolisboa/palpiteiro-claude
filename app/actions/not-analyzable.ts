@@ -9,6 +9,9 @@ import {
 } from "@/lib/view/match-availability";
 
 const MESSAGE: Record<MatchUnavailableReason, string> = {
+  // `started` (scheduled já apitado) mantém a copy histórica do live nas actions.
+  started:
+    "Jogo em andamento — a análise fica disponível só antes do apito inicial.",
   live: "Jogo em andamento — a análise fica disponível só antes do apito inicial.",
   postponed: "Jogo adiado — análise indisponível até o jogo ser remarcado.",
   cancelled: "Este jogo já foi encerrado ou cancelado.",

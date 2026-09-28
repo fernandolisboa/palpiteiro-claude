@@ -253,6 +253,7 @@ describe("PalpiteHero — estados empty/CTA/kill-switch/encerrado", () => {
   it.each([
     ["finished", "Jogo encerrado, sem palpite por aqui."],
     ["cancelled", "Jogo cancelado, sem palpite por aqui."],
+    ["started", "Jogo já começou, sem palpite por aqui."],
     ["live", "Jogo em andamento, sem palpite por aqui."],
     ["postponed", "Jogo adiado, sem palpite por enquanto."],
   ] as const)(
@@ -264,7 +265,7 @@ describe("PalpiteHero — estados empty/CTA/kill-switch/encerrado", () => {
     },
   );
 
-  it.each(["live", "postponed"] as const)(
+  it.each(["started", "live", "postponed"] as const)(
     "jogo %s nunca diz 'encerrado'",
     (reason) => {
       expect(render({ heroPalpite: null, unavailable: reason })).not.toContain(

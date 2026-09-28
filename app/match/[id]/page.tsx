@@ -59,7 +59,6 @@ import { resolveBackHref } from "@/lib/view/back-href";
 import { toNwayOddsView, toOddsView } from "@/lib/view/odds";
 import type {
   MarketAnalysisSectionItem,
-  MatchStatus,
   OddsView,
   PreviousAnalysisItem,
 } from "@/lib/view/types";
@@ -326,7 +325,6 @@ export default async function MatchPage({ params, searchParams }: PageProps) {
           leagueKey={leagueKey}
           analyzable={analyzable}
           unavailableReason={unavailableReason}
-          matchStatus={match.status}
           backHref={backHref}
           finalScore={finalScore}
           bestBetEnabled={bestBetEnabled}
@@ -351,7 +349,6 @@ export default async function MatchPage({ params, searchParams }: PageProps) {
           leagueKey={leagueKey}
           analyzable={analyzable}
           unavailableReason={unavailableReason}
-          matchStatus={match.status}
           backHref={backHref}
           finalScore={finalScore}
           bestBetEnabled={bestBetEnabled}
@@ -385,13 +382,11 @@ type Common = {
   matchId: string;
   fixtureRef: FixtureRef;
   leagueKey: ReturnType<typeof leagueToKey>;
-  // false em jogos não-`scheduled` (live/postponed/finished/cancelled — predict()
-  // os rejeita). Esconde a CTA.
+  // true só no pré-jogo (unavailableReason === null). Esconde a CTA quando false.
   analyzable: boolean;
-  // Status cru do jogo: escolhe a copy do empty-state (OddsCard) e do aviso de
-  // não-analisável (live vs adiado vs encerrado).
+  // Por que o jogo não aceita análise (null = pré-jogo): escolhe a copy do HERO, do
+  // aviso de não-analisável e do empty-state do OddsCard.
   unavailableReason: MatchUnavailableReason | null;
-  matchStatus: MatchStatus;
   // Href de "voltar" — recompõe a lista filtrada (/jogos?…) de origem; /jogos
   // como fallback (deep-link / sem `back`).
   backHref: string;
@@ -428,7 +423,6 @@ function MobileMatch({
   leagueKey,
   analyzable,
   unavailableReason,
-  matchStatus,
   backHref,
   finalScore,
   bestBetEnabled,
@@ -511,7 +505,7 @@ function MobileMatch({
         {/* Odds (preços de referência) DEPOIS do detalhe — em tela estreita ficam abaixo do
             palpite+análise, sem empurrar a análise pra longe da manchete. */}
         <div className="flex flex-col gap-3" data-tour="odds">
-          <OddsCard view={oddsView} matchStatus={matchStatus} />
+          <OddsCard view={oddsView} unavailable={unavailableReason} />
           {matchResultOddsView && <OddsCard view={matchResultOddsView} />}
         </div>
 
@@ -539,7 +533,6 @@ function DesktopMatch({
   leagueKey,
   analyzable,
   unavailableReason,
-  matchStatus,
   backHref,
   finalScore,
   bestBetEnabled,
@@ -596,7 +589,7 @@ function DesktopMatch({
         {/* Odds (preços de referência) LADO A LADO logo abaixo: over/under e 1X2 na mesma
             linha, mesma altura (stretch do grid). Sem o 1X2, o over/under ocupa metade. */}
         <div className="mb-6 grid grid-cols-2 gap-3" data-tour="odds">
-          <OddsCard view={oddsView} matchStatus={matchStatus} />
+          <OddsCard view={oddsView} unavailable={unavailableReason} />
           {matchResultOddsView && <OddsCard view={matchResultOddsView} />}
         </div>
 

@@ -15,9 +15,9 @@ describe("matchUnavailableReason", () => {
     expect(matchUnavailableReason("scheduled", FUTURE, NOW)).toBeNull();
   });
 
-  it("scheduled já apitado (enum stale até o cron virar) → ao vivo, não encerrado", () => {
-    expect(matchUnavailableReason("scheduled", PAST, NOW)).toBe("live");
-    expect(matchUnavailableReason("scheduled", NOW, NOW)).toBe("live");
+  it("scheduled já apitado (enum stale até o cron virar) → já começou, não encerrado", () => {
+    expect(matchUnavailableReason("scheduled", PAST, NOW)).toBe("started");
+    expect(matchUnavailableReason("scheduled", NOW, NOW)).toBe("started");
   });
 
   it("scheduled sem kickoff (caminho de race) → decide só pelo status", () => {
@@ -46,7 +46,8 @@ describe("copy por motivo", () => {
     expect(EMPTY_HERO_UNAVAILABLE_COPY.cancelled).toContain("cancelado");
     expect(EMPTY_HERO_UNAVAILABLE_COPY.live).toContain("em andamento");
     expect(EMPTY_HERO_UNAVAILABLE_COPY.postponed).toContain("adiado");
-    for (const reason of ["live", "postponed"] as const) {
+    expect(EMPTY_HERO_UNAVAILABLE_COPY.started).toContain("já começou");
+    for (const reason of ["started", "live", "postponed"] as const) {
       expect(EMPTY_HERO_UNAVAILABLE_COPY[reason]).not.toMatch(
         /encerrado|cancelado/
       );

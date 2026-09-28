@@ -932,6 +932,19 @@ describe("notAnalyzableMessage — gate hardening (#385)", () => {
     expect(notAnalyzableMessage("cancelled", FUTURE)).not.toBeNull();
   });
 
+  // As strings das actions não mudaram quando o gate foi pra lib/view/match-availability.
+  it.each([
+    ["scheduled", PAST, "Jogo em andamento — a análise fica disponível só antes do apito inicial."],
+    ["live", undefined, "Jogo em andamento — a análise fica disponível só antes do apito inicial."],
+    ["postponed", FUTURE, "Jogo adiado — análise indisponível até o jogo ser remarcado."],
+    ["finished", FUTURE, "Este jogo já foi encerrado ou cancelado."],
+    ["cancelled", FUTURE, "Este jogo já foi encerrado ou cancelado."],
+    ["", undefined, "Este jogo já foi encerrado ou cancelado."],
+    ["abandoned", FUTURE, "Este jogo já foi encerrado ou cancelado."],
+  ] as const)("%s → copy exata", (status, kickoffAt, expected) => {
+    expect(notAnalyzableMessage(status, kickoffAt)).toBe(expected);
+  });
+
   it("usa o `now` injetado pra decidir a borda do kickoff", () => {
     const now = new Date("2026-06-11T12:00:00.000Z");
     // kickoff 1min no futuro relativo ao now injetado → analisável.

@@ -67,7 +67,7 @@ export default async function DashboardPage({ searchParams }: PageProps) {
             Dashboard
           </h1>
           <p className="text-body tracking-tight text-muted-foreground">
-            Suas análises em todos os mercados — yield por mercado, racional e resultados.
+            Suas análises por mercado — yield, racional e resultados.
           </p>
         </div>
 
