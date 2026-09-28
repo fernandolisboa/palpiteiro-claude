@@ -34,6 +34,15 @@ export function gatedResponse(req: NextAuthRequest): NextResponse {
 }
 
 /**
+ * A entrada `"/"` do matcher também casa as formas de transporte da raiz (`/index`,
+ * `/index.rsc`, que o adapter do Next normaliza pra `/index`) — tratá-las como raiz
+ * evita que caiam no `gatedResponse` e recebam a landing com CSP de nonce.
+ */
+export function isLandingPath(pathname: string): boolean {
+  return pathname === "/" || pathname === "/index";
+}
+
+/**
  * Resposta do middleware pra raiz `/` (landing pública, #373). A landing é estática e
  * não lê sessão, então quem está logado e cai em `/` (link de volta, logo, URL digitada)
  * caía na tela de "Entrar" como se estivesse deslogado. Aqui: logado → 307 pra `/jogos`;

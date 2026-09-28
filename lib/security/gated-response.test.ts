@@ -3,7 +3,11 @@ import { NextRequest } from "next/server";
 import { describe, expect, it } from "vitest";
 
 import { CSP_HEADER } from "@/lib/security/csp";
-import { gatedResponse, landingResponse } from "@/lib/security/gated-response";
+import {
+  gatedResponse,
+  isLandingPath,
+  landingResponse,
+} from "@/lib/security/gated-response";
 
 function req(url: string, authed: boolean): NextAuthRequest {
   const r = new NextRequest(url) as NextAuthRequest;
@@ -65,4 +69,17 @@ describe("landingResponse", () => {
       res.headers.get(`x-middleware-request-${CSP_HEADER.toLowerCase()}`)
     ).toBeNull();
   });
+});
+
+describe("isLandingPath", () => {
+  it.each(["/", "/index"])("%s é a raiz", (path) => {
+    expect(isLandingPath(path)).toBe(true);
+  });
+
+  it.each(["/jogos", "/admin", "/indexfoo", "/index/x"])(
+    "%s não é a raiz",
+    (path) => {
+      expect(isLandingPath(path)).toBe(false);
+    }
+  );
 });

@@ -1,7 +1,11 @@
 import NextAuth from "next-auth";
 
 import { authConfig } from "@/auth.config";
-import { gatedResponse, landingResponse } from "@/lib/security/gated-response";
+import {
+  gatedResponse,
+  isLandingPath,
+  landingResponse,
+} from "@/lib/security/gated-response";
 
 /**
  * Protege o app inteiro (sessão obrigatória) via `gatedResponse`, que também emite a
@@ -45,7 +49,9 @@ const { auth } = NextAuth(authConfig);
 // públicas acima não passam aqui (exceto a raiz, só pro redirect de quem está logado):
 // recebem a CSP estática do next.config.ts.
 export const middleware = auth((req) =>
-  req.nextUrl.pathname === "/" ? landingResponse(req) : gatedResponse(req)
+  isLandingPath(req.nextUrl.pathname)
+    ? landingResponse(req)
+    : gatedResponse(req)
 );
 
 export const config = {
