@@ -41,7 +41,7 @@ export default function AdminIndexPage() {
     <div className="bg-background text-foreground min-h-screen">
       <div className="mx-auto w-full max-w-reading px-6 py-8">
         <PageHeading
-          backLink={{ href: "/", label: "jogos" }}
+          backLink={{ href: "/jogos", label: "jogos" }}
           title="Admin"
           subtitle="painel · acesso restrito a administradores"
         />

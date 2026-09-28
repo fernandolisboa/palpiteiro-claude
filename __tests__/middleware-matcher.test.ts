@@ -1,6 +1,7 @@
 import { readFileSync } from "node:fs";
 import { join } from "node:path";
 
+import * as pageStaticInfo from "next/dist/build/analysis/get-page-static-info";
 import { describe, expect, it } from "vitest";
 
 /**
@@ -26,6 +27,12 @@ if (!matcherMatch) {
 // O capture vem dos BYTES do source: um `\.` escrito na string TS aparece aqui
 // como `\\.`. Desfaz o escape de string (como o TS faria) antes de compilar,
 // senão o `\\` viraria backslash literal na regex.
+// `getMiddlewareMatchers` é o compilador de matcher do próprio Next (usado no build), mas
+// não sai no .d.ts público — tipamos só a parte que o teste usa.
+const { getMiddlewareMatchers } = pageStaticInfo as unknown as {
+  getMiddlewareMatchers: (matcher: string[], config: object) => { regexp: string }[];
+};
+
 const matcher = matcherMatch[1].replace(/\\\\/g, "\\");
 const matcherRe = new RegExp(`^${matcher}$`);
 
@@ -68,6 +75,37 @@ describe("middleware matcher — superfícies públicas seguem liberadas", () =>
     "libera %s",
     (path) => {
       expect(isGated(path)).toBe(false);
+    },
+  );
+});
+
+describe("middleware matcher — raiz redireciona quem está logado", () => {
+  // A landing `/` fica FORA do gate (1ª entrada), mas volta ao middleware por uma 2ª
+  // entrada exata `"/"` pra que o usuário logado vá pra /jogos em vez de ver "Entrar".
+  // Compila TODAS as entradas com o próprio Next (mesma função do build), então o teste
+  // é comportamental: não depende da formatação do source.
+  const block = source.match(/matcher:\s*\[([\s\S]*?)\n\s*\],/)?.[1] ?? "";
+  const entries = [...block.matchAll(/"((?:[^"\\]|\\.)*)"/g)].map((m) =>
+    m[1].replace(/\\\\/g, "\\"),
+  );
+  const compiled = getMiddlewareMatchers(entries, {}).map(
+    (m) => new RegExp(m.regexp),
+  );
+  const runsMiddleware = (path: string) => compiled.some((re) => re.test(path));
+
+  it("tem duas entradas (gate + raiz exata)", () => {
+    expect(entries).toHaveLength(2);
+    expect(entries[1]).toBe("/");
+  });
+
+  it.each(["/", "/?_rsc=abc"])("o middleware roda em %s", (path) => {
+    expect(runsMiddleware(path)).toBe(true);
+  });
+
+  it.each(["/como-funciona", "/termos", "/privacidade", "/p/abc", "/signin"])(
+    "a raiz não abre o middleware pra outra página pública (%s)",
+    (path) => {
+      expect(runsMiddleware(path)).toBe(false);
     },
   );
 });
