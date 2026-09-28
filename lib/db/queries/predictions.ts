@@ -48,6 +48,9 @@ export type PredictionWithAiCall = {
   selections: {
     key: string;
     modelProbPct: number;
+    // false = a row não gravou prob (coalesce 0 acima). A síntese precisa distinguir
+    // "0%" de "sem estimativa". Ausente = conhecida.
+    modelProbKnown?: boolean;
     odd: number | null;
     label?: string;
   }[];
@@ -65,11 +68,18 @@ function mapSelectionRow(s: {
   label: string;
   odd: string | null;
   modelProbPct: string | null;
-}): { key: string; modelProbPct: number; odd: number | null; label: string } {
+}): {
+  key: string;
+  modelProbPct: number;
+  modelProbKnown: boolean;
+  odd: number | null;
+  label: string;
+} {
   return {
     key: s.key,
     label: s.label,
     modelProbPct: Number(s.modelProbPct ?? 0),
+    modelProbKnown: s.modelProbPct !== null,
     odd: s.odd === null ? null : Number(s.odd),
   };
 }
@@ -152,7 +162,7 @@ export async function getPredictionHistoryForMatch(
   // Agrupa por predictionId; cada grupo já vem em sortOrder asc (orderBy acima).
   const selByPrediction = new Map<
     string,
-    { key: string; modelProbPct: number; odd: number | null; label: string }[]
+    ReturnType<typeof mapSelectionRow>[]
   >();
   for (const s of selRows) {
     const list = selByPrediction.get(s.predictionId) ?? [];

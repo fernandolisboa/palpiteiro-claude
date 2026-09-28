@@ -35,7 +35,11 @@ import {
 } from "@/lib/ai/models";
 import { generatePalpites } from "@/lib/ai/palpites";
 import { PalpiteError } from "@/lib/ai/palpites/types";
-import { summarizeAnalysesForSynthesis } from "@/lib/ai/palpites/synthesis-input";
+import {
+  summarizeAnalysesForSynthesis,
+  summarizeSavedAnalysesForSynthesis,
+  type MarketAnalysisSummary,
+} from "@/lib/ai/palpites/synthesis-input";
 import { PredictError, predict } from "@/lib/ai/predict";
 import { isEmailAllowed } from "@/lib/auth/whitelist";
 import {
@@ -51,11 +55,12 @@ import { getMatchById } from "@/lib/db/queries/matches";
 import {
   getAiCallById,
   getLatestPredictionForPin,
+  getPredictionHistoryForMatch,
 } from "@/lib/db/queries/predictions";
 import { getUserAccessState } from "@/lib/db/queries/users";
 import { getDescriptor } from "@/lib/odds/market-descriptor";
 import { ensureOddsSnapshotsFresh } from "@/lib/odds/fetch-and-snapshot";
-import { checkAnalysisRateLimit } from "@/lib/rate-limit";
+import { checkAnalysisRateLimit, checkPalpitesRateLimit } from "@/lib/rate-limit";
 import { getRequestTimeZone } from "@/lib/server/request-timezone";
 import { toAnalysisView } from "@/lib/view/analysis";
 import { ExactScoreParamsSchema } from "@/lib/ai/palpites/cartridges/cartridge";
@@ -397,6 +402,12 @@ function synthesisFailureMessage(err: unknown, isAdmin: boolean): string {
   if (err instanceof AnalysisDeadlineError) return SYNTHESIS_DEADLINE_MESSAGE;
   if (!isAdmin) return SYNTHESIS_FAILED_MESSAGE;
   let detail = err instanceof Error ? err.message : String(err);
+  // Input da síntese fora do schema: lista caminho + motivo em vez do JSON cru do Zod.
+  if (err instanceof z.ZodError) {
+    detail = `entrada inválida da síntese: ${err.issues
+      .map((i) => `${i.path.join(".")}: ${i.message}`)
+      .join("; ")}`;
+  }
   // Divergência de fidelidade (#380): o motivo concreto vive no context.
   if (err instanceof PalpiteError && typeof err.context.reason === "string") {
     detail = `${detail} (${err.context.reason})`;
@@ -715,26 +726,53 @@ export async function analyzeBestBet(
   }
   // PASSO DE SÍNTESE (ADR 0030 / #353): turna as N análises numa manchete. Roda DENTRO
   // do mesmo run (sem slot próprio — ver Report 01 #3), sobre o FanOutOutcome[] EM MEMÓRIA — sem
-  // re-query. Haiku (default do gerador). NULLABLE é LOAD-BEARING: a síntese roda DEPOIS
-  // de até MAX_FANOUT_MARKETS predict() PAGOS; se ela falhar (Haiku throw, value-leak, …), o fan-out pago
-  // NÃO pode ser descartado → log + palpite:null. Espelha a assimetria do generator (o
-  // log de ai_call pode falhar sem afundar o produto).
-  let palpite: PalpiteHeadlineView | null = null;
-  let palpiteError: string | undefined;
+  // re-query. NULLABLE é LOAD-BEARING: a síntese roda DEPOIS de até MAX_FANOUT_MARKETS
+  // predict() PAGOS; se ela falhar, o fan-out pago NÃO pode ser descartado.
+  const { palpite, palpiteError } = await synthesizeHeadline({
+    scope: "analyzeBestBet",
+    matchId,
+    userId: session.user.id,
+    isAdmin,
+    analyses: summarizeAnalysesForSynthesis(outcomes),
+    // Prazo do run inteiro: a reserva do fan-out é o que sobra pra ela.
+    deadlineAt: runDeadline,
+  });
+  revalidatePath(`/match/${matchId}`);
+  revalidatePath("/jogos");
+  return palpiteError === undefined
+    ? { ok: true, view, palpite }
+    : { ok: true, view, palpite, palpiteError };
+}
+
+type HeadlineOutcome = {
+  palpite: PalpiteHeadlineView | null;
+  // Só quando `palpite` é null.
+  palpiteError?: string;
+};
+
+// Síntese → manchete, compartilhada pelo run completo e pelo "gerar só o palpite". Nunca
+// lança: falha vira palpite:null + palpiteError (log no servidor). Haiku (default do gerador).
+async function synthesizeHeadline(args: {
+  scope: string;
+  matchId: string;
+  userId: string;
+  isAdmin: boolean;
+  analyses: MarketAnalysisSummary[];
+  deadlineAt: number;
+}): Promise<HeadlineOutcome> {
+  const { scope, matchId, isAdmin } = args;
   try {
     // Sem tempo pra uma chamada Haiku antes do prazo do run: pula a síntese limpa (o
-    // gerador nem é chamado → sem row de ai_calls) e o fan-out pago volta sem manchete.
-    if (!canFitCall(runDeadline, "temperature")) {
+    // gerador nem é chamado → sem row de ai_calls).
+    if (!canFitCall(args.deadlineAt, "temperature")) {
       throw new AnalysisDeadlineError();
     }
-    const summaries = summarizeAnalysesForSynthesis(outcomes);
     const result = await generatePalpites({
       matchId,
-      userId: session.user.id,
-      analyses: summaries,
+      userId: args.userId,
+      analyses: args.analyses,
       modelOverride: "claude-haiku-4-5",
-      // Prazo do run inteiro: a reserva do fan-out é o que sobra pra ela.
-      deadlineAt: runDeadline,
+      deadlineAt: args.deadlineAt,
     });
     // As linhas settleable recém-gravadas estão TODAS pendentes (sem outcome) → badge
     // null. NARROW-not-cast (#354 / blocker §3.2): `params` é a union larga do jsonb;
@@ -751,42 +789,113 @@ export async function analyzeBestBet(
         ...p,
         outcome: null,
       }));
-      palpite = toPalpiteHeadlineView({
-        headline: result.palpiteSet.headline,
-        probableScore: ps.data,
-        outcome: null,
-        dimensions: toDimensionViews(linesWithPendingOutcome),
-      });
-    } else {
-      console.error(
-        JSON.stringify({
-          scope: "analyzeBestBet",
-          matchId,
-          error: "synthesis_without_headline",
+      return {
+        palpite: toPalpiteHeadlineView({
+          headline: result.palpiteSet.headline,
+          probableScore: ps.data,
+          outcome: null,
+          dimensions: toDimensionViews(linesWithPendingOutcome),
         }),
-      );
-      palpiteError = synthesisFailureMessage(
+      };
+    }
+    console.error(
+      JSON.stringify({ scope, matchId, error: "synthesis_without_headline" }),
+    );
+    return {
+      palpite: null,
+      palpiteError: synthesisFailureMessage(
         new Error("manchete sem placar provável"),
         isAdmin,
-      );
-    }
+      ),
+    };
   } catch (err) {
-    // Síntese falhou: o fan-out pago SOBREVIVE (view retorna), só a manchete some.
-    palpiteError = synthesisFailureMessage(err, isAdmin);
     console.error(
       JSON.stringify({
-        scope: "analyzeBestBet",
+        scope,
         matchId,
         error: "synthesis_failed",
         message: err instanceof Error ? err.message : String(err),
       }),
     );
+    return { palpite: null, palpiteError: synthesisFailureMessage(err, isAdmin) };
   }
+}
+
+// ─── Só o palpite, a partir das análises salvas ──────────────────────────────
+
+export type GeneratePalpiteResult =
+  | { ok: true; palpite: PalpiteHeadlineView | null; palpiteError?: string }
+  | { ok: false; error: string };
+
+/**
+ * Refaz SÓ a síntese (manchete) sobre a análise mais recente de cada mercado já salva,
+ * sem re-rodar o fan-out pago. Custo: a busca de notícias + a manchete (Haiku). Conta
+ * no teto diário de palpites (checkPalpitesRateLimit), não no de análises. Mesmos gates
+ * grátis do analyzeBestBet (auth, acesso, flag, jogo, pré-jogo) antes de qualquer gasto.
+ */
+export async function generatePalpiteFromAnalyses(
+  _prev: GeneratePalpiteResult | null,
+  formData: FormData,
+): Promise<GeneratePalpiteResult> {
+  const deadlineAt = actionDeadline();
+  const matchId = String(formData.get("matchId") ?? "");
+  if (!z.uuid().safeParse(matchId).success) {
+    return { ok: false, error: "Identificador de jogo inválido." };
+  }
+  const session = await auth();
+  if (!session?.user?.id) {
+    return { ok: false, error: "Faça login para analisar." };
+  }
+  const access = await getUserAccessState(session.user.id);
+  if (!access) {
+    return { ok: false, error: "Sua sessão expirou. Faça login novamente." };
+  }
+  if (!access.allowed && !isEmailAllowed(session.user.email)) {
+    return {
+      ok: false,
+      error: "Seu acesso está bloqueado. Fale com o administrador.",
+    };
+  }
+  if (!(await getEnableBestBetFanOut())) {
+    return { ok: false, error: "Recurso indisponível." };
+  }
+  const match = await getMatchById(matchId);
+  if (!match) {
+    return { ok: false, error: "Jogo não encontrado." };
+  }
+  const notAnalyzable = notAnalyzableMessage(match.status, match.kickoffAt);
+  if (notAnalyzable) {
+    return { ok: false, error: notAnalyzable };
+  }
+  const analyses = summarizeSavedAnalysesForSynthesis(
+    await getPredictionHistoryForMatch(matchId, session.user.id),
+  );
+  if (analyses.length === 0) {
+    return {
+      ok: false,
+      error: 'Ainda não há análises por mercado deste jogo. Use "Analisar com IA".',
+    };
+  }
+  const rl = await checkPalpitesRateLimit(session.user.id);
+  if (!rl.ok) {
+    return {
+      ok: false,
+      error: `Você atingiu o limite de ${rl.limit} palpites por dia. Tente novamente amanhã.`,
+    };
+  }
+  const { palpite, palpiteError } = await synthesizeHeadline({
+    scope: "generatePalpiteFromAnalyses",
+    matchId,
+    userId: session.user.id,
+    isAdmin: session.user.role === "admin",
+    analyses,
+    deadlineAt,
+  });
   revalidatePath(`/match/${matchId}`);
   revalidatePath("/jogos");
   return palpiteError === undefined
-    ? { ok: true, view, palpite }
-    : { ok: true, view, palpite, palpiteError };
+    ? { ok: true, palpite }
+    : { ok: true, palpite, palpiteError };
 }
 
 // ─── Análise multi-mercado SELECIONADA pelo usuário (#245) ────────────────────

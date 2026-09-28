@@ -450,6 +450,7 @@ function MobileMatch({
           finalScore={finalScore}
           setId={heroSetId}
           sharedAt={heroSharedAt}
+          hasAnalyses={sections.length > 0}
         />
 
         {/* Detalhe por mercado LOGO ABAIXO do palpite: é o "quero ver mais" imediato da
@@ -552,6 +553,7 @@ function DesktopMatch({
             finalScore={finalScore}
             setId={heroSetId}
             sharedAt={heroSharedAt}
+            hasAnalyses={sections.length > 0}
           />
         </div>
 

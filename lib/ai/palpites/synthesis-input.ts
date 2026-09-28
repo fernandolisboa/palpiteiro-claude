@@ -1,6 +1,9 @@
 import { getMarketPresentation } from "@/lib/view/markets/presentation";
 
+import type { PredictionWithAiCall } from "@/lib/db/queries/predictions";
+
 import type { FanOutOutcome } from "../best-bet";
+import type { PredictResult } from "../predict";
 
 // Projeção de UMA análise de mercado pro passo de síntese (#353, Fork A / ADR 0030).
 // Camada `lib/ai`: lê os campos JÁ PERSISTIDOS da prediction (edge/confiança/odd) —
@@ -28,6 +31,23 @@ export type MarketAnalysisSummary = {
   selections: { key: string; label?: string; modelProbPct: number }[];
 };
 
+// Uma análise já persistida, venha ela do fan-out em memória (PredictResult) ou do
+// histórico do DB. `modelProbPct` pode faltar: mercados de seleção dinâmica (artilheiro,
+// assistência) só trazem prob pros jogadores que o modelo estimou.
+type AnalysisSource = {
+  marketKey: string;
+  prediction: PredictResult["prediction"];
+  selections: {
+    key: string;
+    label?: string;
+    modelProbPct?: number | null;
+  }[];
+};
+
+function finiteOrNull(n: number | null | undefined): number | null {
+  return typeof n === "number" && Number.isFinite(n) ? n : null;
+}
+
 /**
  * Resume o `FanOutOutcome[]` (em memória, pós-fan-out) numa lista de
  * `MarketAnalysisSummary` pro cartucho de síntese. Filtra os outcomes `ok` (falhas
@@ -39,10 +59,40 @@ export type MarketAnalysisSummary = {
 export function summarizeAnalysesForSynthesis(
   outcomes: FanOutOutcome[],
 ): MarketAnalysisSummary[] {
+  return summarizeSources(
+    outcomes.flatMap((o) => (o.ok ? [o.result] : [])),
+  );
+}
+
+/**
+ * Mesma projeção, a partir do histórico salvo (botão "gerar só o palpite"): a análise
+ * MAIS RECENTE de cada mercado, a mesma que a seção "ver análise por mercado" mostra.
+ * O histórico vem em ordem desc de criação. Seleção sem prob gravada (`modelProbKnown`
+ * false) vira prob ausente, nunca 0%.
+ */
+export function summarizeSavedAnalysesForSynthesis(
+  history: PredictionWithAiCall[],
+): MarketAnalysisSummary[] {
+  const latestByMarket = new Map<string, AnalysisSource>();
+  for (const row of history) {
+    const marketKey = row.marketKey ?? "over_under";
+    if (latestByMarket.has(marketKey)) continue;
+    latestByMarket.set(marketKey, {
+      marketKey,
+      prediction: row.prediction,
+      selections: row.selections.map((s) => ({
+        key: s.key,
+        ...(s.label !== undefined ? { label: s.label } : {}),
+        modelProbPct: s.modelProbKnown === false ? null : s.modelProbPct,
+      })),
+    });
+  }
+  return summarizeSources([...latestByMarket.values()]);
+}
+
+function summarizeSources(sources: AnalysisSource[]): MarketAnalysisSummary[] {
   const summaries: MarketAnalysisSummary[] = [];
-  for (const o of outcomes) {
-    if (!o.ok) continue;
-    const { prediction, marketKey, selections } = o.result;
+  for (const { prediction, marketKey, selections } of sources) {
     // getMarketPresentation THROWA em marketKey desconhecido. Pula este mercado em vez
     // de anular a manchete inteira (espelha a tolerância de toBestBetView) — defesa
     // contra um mercado novo sem rótulo de presentation; os mercados vivos têm todos.
@@ -71,7 +121,7 @@ export function summarizeAnalysesForSynthesis(
       recommendation,
       recommendedLabel,
       isPass,
-      modelProbPct: recSel ? recSel.modelProbPct : null,
+      modelProbPct: finiteOrNull(recSel?.modelProbPct),
       edgePct: prediction.edgePct !== null ? Number(prediction.edgePct) : null,
       confidencePct:
         prediction.confidencePct !== null
@@ -83,11 +133,19 @@ export function summarizeAnalysesForSynthesis(
           : null,
       rationale: prediction.rationale,
       predictionId: prediction.id,
-      selections: selections.map((s) => ({
-        key: s.key,
-        ...(s.label !== undefined ? { label: s.label } : {}),
-        modelProbPct: s.modelProbPct,
-      })),
+      // Só as seleções COM prob: sem isso o schema da síntese rejeitava o input inteiro
+      // (um jogador sem estimativa derrubava a manchete de todos os mercados).
+      selections: selections.flatMap((s) => {
+        const modelProbPct = finiteOrNull(s.modelProbPct);
+        if (modelProbPct === null) return [];
+        return [
+          {
+            key: s.key,
+            ...(s.label !== undefined ? { label: s.label } : {}),
+            modelProbPct,
+          },
+        ];
+      }),
     });
   }
   // Edge desc só como contexto (pass = sem edge → fim da lista). NÃO é o "pick".
