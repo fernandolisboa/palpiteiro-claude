@@ -56,6 +56,11 @@ export function availableMarketKeys(rows: DashboardRow[]): string[] {
   return [...new Set(deduped.map((r) => r.marketKey))];
 }
 
+/** Ligas COM histórico (deduped), espelhando `availableMarketKeys`. */
+export function availableLeagueKeys(rows: DashboardRow[]): LeagueKey[] {
+  return [...new Set(keepLatestPerMatch(rows).map((r) => leagueToKey(r.league)))];
+}
+
 export function parseDashboardFilters(
   sp: {
     status?: string;
@@ -63,10 +68,18 @@ export function parseDashboardFilters(
     market?: string;
   },
   availableMarkets: string[] = [],
+  // Opcional: quando passado, liga sem histórico do usuário degrada pra "all"
+  // (#539) — com a liga recortando os KPIs, um link velho pra outra liga zeraria
+  // a página inteira sem pill pra limpar.
+  availableLeagues?: LeagueKey[],
 ): DashboardFilters {
+  const league = parseLeagueFilter(sp.league);
   return {
     status: parseStatus(sp.status),
-    league: parseLeagueFilter(sp.league),
+    league:
+      availableLeagues && league !== "all" && !availableLeagues.includes(league)
+        ? "all"
+        : league,
     market: parseMarket(sp.market, availableMarkets),
   };
 }

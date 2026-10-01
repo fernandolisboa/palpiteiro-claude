@@ -89,6 +89,13 @@ describe("parseDashboardFilters", () => {
     expect(parseDashboardFilters({}, ["over_under"]).market).toBe("all");
   });
 
+  it("liga fora do histórico do usuário degrada pra 'all' (#539)", () => {
+    expect(parseDashboardFilters({ league: "ucl" }, [], ["bsa"]).league).toBe("all");
+    expect(parseDashboardFilters({ league: "bsa" }, [], ["bsa"]).league).toBe("bsa");
+    // sem a lista (chamadas antigas), só valida contra as ligas suportadas
+    expect(parseDashboardFilters({ league: "ucl" }).league).toBe("ucl");
+  });
+
   it("delegates league to parseLeagueFilter", () => {
     expect(parseDashboardFilters({ league: "ucl" }).league).toBe("ucl");
     expect(parseDashboardFilters({ league: "nope" }).league).toBe("all");

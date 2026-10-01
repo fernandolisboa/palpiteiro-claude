@@ -46,8 +46,8 @@ const STATUS_OPTIONS: Option[] = [
   { value: "won", label: "Green" },
   { value: "lost", label: "Red" },
   { value: "void", label: "Anuladas" },
-  // push = no-action (devolve stake, ADR 0016). Selecionável quando o settlement
-  // plugável começar a emitir; com zero rows push o PillGroup nem aparece à parte.
+  // push = no-action (devolve stake, ADR 0016). Opção fixa; fica vazia enquanto o
+  // settlement plugável não emitir push.
   { value: "push", label: "Push" },
 ];
 
@@ -131,8 +131,11 @@ export function DashboardFiltersBar({
     league: { label: "liga", options: leagueOptions },
     market: { label: "mercado", options: marketOptions },
   };
-  // > 2 = "Todas" + pelo menos duas opções reais.
-  const visible = dimensions.filter((d) => groups[d].options.length > 2);
+  // > 2 = "Todas" + pelo menos duas opções reais. Filtro ativo fica visível mesmo
+  // assim, senão não haveria pill pra voltar a "Todas".
+  const visible = dimensions.filter(
+    (d) => groups[d].options.length > 2 || filters[d] !== "all",
+  );
   if (visible.length === 0) return null;
   return (
     <div className="flex flex-wrap items-center gap-x-5 gap-y-3">

@@ -1,6 +1,6 @@
 import { formatEdge, leagueToKey } from "@/lib/format";
 import type { SupportedLeague } from "@/lib/providers/sports-data/leagues";
-import { getMarketPresentation } from "@/lib/view/markets/presentation";
+import { findMarketPresentation } from "@/lib/view/markets/presentation";
 import {
   marketContextLabel,
   recommendationLabel,
@@ -65,7 +65,9 @@ export function toRecentPredictionView(
       row.selectionLabel,
     ),
     market: marketContextLabel(
-      row.marketLabel ?? getMarketPresentation(marketKey).marketLabel,
+      row.marketLabel ??
+        findMarketPresentation(marketKey)?.marketLabel ??
+        marketKey,
       row.marketParams,
     ),
     edge: formatEdge(row.edgePct),

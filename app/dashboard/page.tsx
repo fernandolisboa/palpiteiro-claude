@@ -15,6 +15,7 @@ import { EmptyState } from "@/components/empty-state";
 import { DesktopShell } from "@/components/desktop-shell";
 import { auth } from "@/auth";
 import {
+  availableLeagueKeys,
   availableMarketKeys,
   deriveDashboardView,
   parseDashboardFilters,
@@ -48,6 +49,7 @@ export default async function DashboardPage({ searchParams }: PageProps) {
   const filters = parseDashboardFilters(
     { status, league, market },
     availableMarketKeys(rows),
+    availableLeagueKeys(rows),
   );
   // Fuso de exibição do usuário (#1) — coluna "data" da tabela no fuso do navegador.
   const timeZone = await getRequestTimeZone();

@@ -275,9 +275,9 @@ export function ComoUsarContent() {
               Dashboard
             </Link>
             : as análises da IA que você pediu, com yield, taxa de acerto, pass rate,
-            lucro hipotético em unidades, o gráfico da banca e a tabela jogo a jogo
-            (filtre por status, liga e mercado). Tocar numa linha abre o detalhe da
-            análise.
+            lucro hipotético em unidades, o gráfico da banca e a tabela jogo a jogo.
+            Os filtros de liga e mercado no topo valem pra página toda; o de status
+            filtra só a tabela. Tocar numa linha abre o detalhe da análise.
           </li>
           <li>
             <Link href="/apostas" className={LINK}>

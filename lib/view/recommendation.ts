@@ -1,4 +1,4 @@
-import { getMarketPresentation } from "@/lib/view/markets/presentation";
+import { findMarketPresentation } from "@/lib/view/markets/presentation";
 import type { Recommendation } from "@/lib/view/types";
 
 // Tokens pinados do over/under (paridade byte-idêntica). pass é market-agnóstico.
@@ -16,6 +16,8 @@ const PINNED_TOKENS: Record<string, Recommendation> = {
  *  3. senão o `market_selections.label` do DB (artilheiro/assistência: nome do
  *     jogador, materializado no predict — a apresentação só conhece a key);
  *  4. em último caso a key crua (row degradada, sem seleção).
+ * Não lança pra mercado sem apresentação: o feed de recentes roda na home, e um
+ * mercado novo sem entry no REGISTRY não pode derrubar /jogos.
  */
 export function recommendationLabel(
   recommendation: string,
@@ -24,8 +26,10 @@ export function recommendationLabel(
 ): Recommendation {
   if (recommendation in PINNED_TOKENS) return PINNED_TOKENS[recommendation];
   const fromPresentation =
-    getMarketPresentation(marketKey).selectionLabel(recommendation);
-  if (fromPresentation !== recommendation) return fromPresentation;
+    findMarketPresentation(marketKey)?.selectionLabel(recommendation);
+  if (fromPresentation !== undefined && fromPresentation !== recommendation) {
+    return fromPresentation;
+  }
   return selectionLabel ?? recommendation;
 }
 

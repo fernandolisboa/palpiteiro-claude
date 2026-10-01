@@ -18,7 +18,7 @@ describe("DashboardFiltersBar — dimensions (#539)", () => {
         leagues={["bsa", "ucl"]}
         markets={MARKETS}
         dimensions={["league", "market"]}
-      />,
+      />
     );
     expect(html).toContain(">liga<");
     expect(html).toContain(">mercado<");
@@ -32,17 +32,34 @@ describe("DashboardFiltersBar — dimensions (#539)", () => {
         leagues={["bsa"]}
         markets={[MARKETS[0]]}
         dimensions={["league", "market"]}
-      />,
+      />
     );
     expect(html).toBe("");
   });
 
   it("default mantém os três grupos", () => {
     const html = renderToStaticMarkup(
-      <DashboardFiltersBar filters={ALL} leagues={["bsa", "ucl"]} markets={MARKETS} />,
+      <DashboardFiltersBar
+        filters={ALL}
+        leagues={["bsa", "ucl"]}
+        markets={MARKETS}
+      />
     );
     expect(html).toContain(">status<");
     expect(html).toContain(">liga<");
     expect(html).toContain(">mercado<");
+  });
+
+  it("filtro ativo segue visível mesmo com uma opção real só", () => {
+    const html = renderToStaticMarkup(
+      <DashboardFiltersBar
+        filters={{ ...ALL, league: "bsa" }}
+        leagues={["bsa"]}
+        markets={[MARKETS[0]]}
+        dimensions={["league", "market"]}
+      />
+    );
+    expect(html).toContain(">liga<");
+    expect(html).not.toContain(">mercado<");
   });
 });

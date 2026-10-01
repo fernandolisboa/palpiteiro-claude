@@ -36,6 +36,11 @@ describe("recommendationLabel (#539)", () => {
     ).toBe("Arrascaeta");
   });
 
+  it("mercado sem apresentação não lança: usa o label do DB ou a key", () => {
+    expect(recommendationLabel("x", "mercado_novo", "Rótulo")).toBe("Rótulo");
+    expect(recommendationLabel("x", "mercado_novo")).toBe("x");
+  });
+
   it("sem label nenhum devolve a key crua (row degradada)", () => {
     expect(recommendationLabel("scorer_pedro", "anytime_scorer", null)).toBe(
       "scorer_pedro"

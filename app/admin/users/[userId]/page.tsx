@@ -13,6 +13,7 @@ import { Card } from "@/components/ui/card";
 import { DesktopShell } from "@/components/desktop-shell";
 import { auth } from "@/auth";
 import {
+  availableLeagueKeys,
   availableMarketKeys,
   deriveDashboardView,
   parseDashboardFilters,
@@ -63,6 +64,7 @@ export default async function AdminUserTrackingPage({
   const filters = parseDashboardFilters(
     { status, league, market },
     availableMarketKeys(rows),
+    availableLeagueKeys(rows),
   );
   // Fuso de exibição do ADMIN (viewer) — coluna "data" da tabela + tick do gráfico.
   const timeZone = await getRequestTimeZone();
