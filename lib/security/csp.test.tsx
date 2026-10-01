@@ -4,6 +4,7 @@ import { renderToString } from "react-dom/server";
 import { afterEach, describe, expect, it, vi } from "vitest";
 
 import { ThemeProvider } from "@/components/theme-provider";
+import { ThemeScript } from "@/components/theme-script";
 import { THEME_PROVIDER_PROPS } from "@/lib/theme";
 
 import {
@@ -39,20 +40,29 @@ describe("buildCsp", () => {
     ]);
   });
 
-  it("THEME_SCRIPT_HASH bate com o script inline que o next-themes renderiza de fato", () => {
-    // Drift aqui (prop nova no ThemeProvider, bump do next-themes) = o script anti-flash
-    // passaria a violar a CSP das rotas gateadas em TODA view. Atualize o hash.
-    const html = renderToString(
-      <ThemeProvider {...THEME_PROVIDER_PROPS}>
-        <div />
-      </ThemeProvider>
-    );
+  it("THEME_SCRIPT_HASH bate com o script de tema que a root layout renderiza", () => {
+    // Drift aqui = o anti-flash do tema passaria a violar a CSP das rotas gateadas em
+    // TODA view (tema errado até a hidratação). Atualize o hash.
+    const html = renderToString(<ThemeScript />);
     const body = /<script[^>]*>([\s\S]*?)<\/script>/.exec(html)?.[1];
     expect(body).toBeTruthy();
     const hash = createHash("sha256")
       .update(body ?? "")
       .digest("base64");
     expect(THEME_SCRIPT_HASH).toBe(`'sha256-${hash}'`);
+  });
+
+  it("o script do próprio next-themes não executa (bloco de dados)", () => {
+    // O next-themes monta o script por Function.toString(), que o build re-minifica:
+    // o hash dele em prod não bate com o de teste. Por isso ele vai como text/plain.
+    const html = renderToString(
+      <ThemeProvider {...THEME_PROVIDER_PROPS}>
+        <div />
+      </ThemeProvider>
+    );
+    const tags = html.match(/<script[^>]*>/g) ?? [];
+    expect(tags).toHaveLength(1);
+    expect(tags[0]).toContain('type="text/plain"');
   });
 
   it("variante estática NÃO leva o hash (desligaria o unsafe-inline)", () => {
@@ -94,8 +104,8 @@ describe("buildCsp", () => {
     ).toEqual(["https://r.example/x"]);
   });
 
-  it("fase 1 é report-only", () => {
-    expect(CSP_HEADER).toBe("Content-Security-Policy-Report-Only");
+  it("fase 2 é enforce", () => {
+    expect(CSP_HEADER).toBe("Content-Security-Policy");
   });
 });
 

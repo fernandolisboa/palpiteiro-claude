@@ -3,6 +3,7 @@
 ## Status
 
 Accepted (2026-09-24) — fecha a Fase 1 do #467 (report 01 achado #2, CSP deferida no PR #462).
+Fase 2 (enforce) em 2026-10-01 — ver §Promoção executada.
 
 ## Contexto
 
@@ -69,6 +70,32 @@ Depois de pelo menos uma semana de tráfego real sem violações inesperadas no 
 Violações esperadas durante o report-only, que não pedem mudança: extensões de browser
 (`chrome-extension://`, `moz-extension://`) e a toolbar da Vercel (`vercel.live`) em
 deploys de preview.
+
+## Promoção executada (2026-10-01)
+
+`CSP_HEADER` virou `Content-Security-Policy`. Não houve leitura dos reports do Sentry (o
+ambiente de agente não tem acesso); a checagem foi um `next build` local com a CSP em
+enforce, rodando no Chromium as páginas que abrem sem banco. Ela achou três problemas
+que o report-only escondia, corrigidos junto:
+
+1. **Página gateada estática fica sem JS.** O Next só carimba o nonce em HTML renderizado
+   por request; `/como-usar` (#537) saía pré-renderizada, e com `'strict-dynamic'` o
+   browser bloqueava TODOS os scripts dela, chunks incluídos. Virou `force-dynamic`, e o
+   `pnpm build` agora roda `scripts/check-csp-prerender.ts`, que derruba o build se o
+   `prerender-manifest` tiver rota casada pelo matcher. Exceção: `/_not-found` (404
+   default do Next pra URL desconhecida de quem está logado), que funciona sem JS.
+2. **O hash do script de tema não batia em prod.** O next-themes monta o script com
+   `Function.toString()` e o `next build` re-minifica a função, então o texto em prod
+   difere do que o teste renderizava; o anti-flash era bloqueado em toda página gateada.
+   O script do next-themes foi desligado (`scriptProps.type = "text/plain"`, bloco de
+   dados) e a root layout renderiza `THEME_SCRIPT` (lib/theme.ts), string literal que o
+   build não altera. `lib/theme.test.ts` compara o comportamento com o original do
+   next-themes; `lib/security/csp.test.tsx` recalcula o hash.
+3. **Zod 4 sonda `eval`.** Na primeira validação de objeto no browser o Zod testa
+   `Function("")` pra decidir o JIT; a falha é silenciosa, mas vira report de violação a
+   cada carga de página. `instrumentation-client.ts` liga `jitless`.
+
+Rollback: voltar `CSP_HEADER` pra `Content-Security-Policy-Report-Only` (uma linha).
 
 ## Consequências
 

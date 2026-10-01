@@ -6,6 +6,11 @@ import { Wordmark } from "@/components/wordmark";
 
 import { ComoUsarContent } from "./como-usar-content";
 
+// Página gateada: recebe a CSP com nonce do middleware, e o Next só carimba o nonce em
+// HTML renderizado por request. Estática, ela sairia do build sem nonce e, com a CSP em
+// enforce, sem JS nenhum (#467; scripts/check-csp-prerender.ts trava isso no build).
+export const dynamic = "force-dynamic";
+
 export const metadata: Metadata = {
   title: "Como usar",
   description:

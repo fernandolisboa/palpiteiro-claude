@@ -1,15 +1,18 @@
 /**
  * Content-Security-Policy do app (#467, report 01 achado #2, ADR 0040).
  *
- * Fase 1 = REPORT-ONLY: o browser avalia a política e reporta violações pro Sentry,
- * mas não bloqueia nada. Promover a enforce = trocar `CSP_HEADER` depois que os
- * reports de prod estiverem limpos (ADR 0040 §Promoção).
+ * ENFORCE desde 2026-10-01 (fase 2): o browser bloqueia o que a política não libera e
+ * reporta a violação pro Sentry (`report-uri`). A fase 1 (report-only) rodou de
+ * 2026-09-24 a 2026-10-01 (ADR 0040 §Promoção). Rollback = voltar `CSP_HEADER` pra
+ * `Content-Security-Policy-Report-Only` (uma linha; o Next lê o nonce dos dois).
  *
  * Duas variantes, mesma política exceto `script-src`:
  *  - rotas GATEADAS (middleware): nonce por request + `'strict-dynamic'`. Essas rotas
  *    já são dinâmicas (leem a sessão), então o nonce não custa cache. O Next lê o nonce
  *    do header de CSP da REQUEST (inclusive `-report-only`) e o aplica nos próprios
- *    scripts inline.
+ *    scripts inline. Página gateada PRÉ-RENDERIZADA (estática) não ganha o nonce no HTML
+ *    e, com `'strict-dynamic'`, fica sem JS nenhum; `scripts/check-csp-prerender.ts`
+ *    derruba o build se uma aparecer (ver `findStaticGatedRoutes`).
  *  - rotas PÚBLICAS (next.config headers): estática com `'unsafe-inline'`. Nonce exige
  *    render dinâmico por request, o que mataria o cache de CDN do snapshot `/p/[id]`
  *    (escudo de custo do ADR 0035) e a landing estática. Nessas páginas não há sessão
@@ -29,8 +32,8 @@ export const PUBLIC_HTML_SOURCES = [
   "/p/:id",
 ] as const;
 
-// Fase 1. Trocar por "Content-Security-Policy" pra enforce (o Next lê os dois).
-export const CSP_HEADER = "Content-Security-Policy-Report-Only";
+// Fase 2 (enforce). Rollback: "Content-Security-Policy-Report-Only".
+export const CSP_HEADER = "Content-Security-Policy";
 
 type CspOptions = {
   /** Nonce base64 por request (rotas gateadas). Sem nonce → variante estática. */
@@ -41,14 +44,15 @@ type CspOptions = {
 };
 
 /**
- * Hash do script inline anti-flash do next-themes (root layout). Ele não recebe o nonce
- * (passar o nonce exigiria ler headers() na root layout e tornaria TODA página dinâmica,
- * inclusive `/` e `/p`), então entra por hash na variante com nonce. Só nela: na variante
- * pública um hash desligaria o 'unsafe-inline'. Derivado de THEME_PROVIDER_PROPS
- * (lib/theme.ts) + versão do next-themes; lib/security/csp.test.tsx recalcula e acusa drift.
+ * Hash do script inline anti-flash do tema (`THEME_SCRIPT` em lib/theme.ts, renderizado
+ * na root layout). Ele não recebe o nonce (passar o nonce exigiria ler headers() na root
+ * layout e tornaria TODA página dinâmica, inclusive `/` e as legais), então entra por
+ * hash na variante com nonce. Só nela: na variante pública um hash desligaria o
+ * 'unsafe-inline'. O script é string literal (o build não o altera, ao contrário do
+ * script do próprio next-themes, desligado); lib/security/csp.test.tsx recalcula o hash.
  */
 export const THEME_SCRIPT_HASH =
-  "'sha256-ajLvBa5Ur+hqZI0uwiHWuQhxljkv0lQHhfrIecjsJQo='";
+  "'sha256-kPeE+QYKJeI7bYNoUML2yPDeVyi/anpwErC98RJAes0='";
 
 export function buildCsp({ nonce, isDev = false, reportUri }: CspOptions = {}) {
   const scriptSrc = nonce
