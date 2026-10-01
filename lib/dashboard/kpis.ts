@@ -420,20 +420,27 @@ export function computeBankrollSeries(rows: DashboardRow[]): BankrollPoint[] {
   });
 }
 
+/**
+ * Recorte do dashboard (liga + mercado): define o universo de KPIs, segmentos,
+ * gráfico E tabela. Status fica de fora de propósito — é filtro de linha, não de
+ * recorte (aplicado aos KPIs, "green" daria yield positivo por construção).
+ */
+export function applyScopeFilters(
+  rows: DashboardRow[],
+  filters: Pick<DashboardFilters, "league" | "market">,
+): DashboardRow[] {
+  return rows.filter(
+    (r) =>
+      (filters.league === "all" || leagueToKey(r.league) === filters.league) &&
+      (filters.market === "all" || r.marketKey === filters.market),
+  );
+}
+
 export function applyTableFilters(
   rows: DashboardRow[],
   filters: DashboardFilters,
 ): DashboardRow[] {
-  return rows.filter((r) => {
-    if (filters.status !== "all" && rowStatus(r) !== filters.status) {
-      return false;
-    }
-    if (filters.league !== "all" && leagueToKey(r.league) !== filters.league) {
-      return false;
-    }
-    if (filters.market !== "all" && r.marketKey !== filters.market) {
-      return false;
-    }
-    return true;
-  });
+  return applyScopeFilters(rows, filters).filter(
+    (r) => filters.status === "all" || rowStatus(r) === filters.status,
+  );
 }

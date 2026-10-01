@@ -66,7 +66,6 @@ function PillGroup({
   filters: DashboardFilters;
   basePath: string;
 }) {
-  if (options.length <= 1) return null;
   return (
     <div className="flex items-center gap-2">
       <span className="font-mono text-eyebrow-xs uppercase tracking-label text-muted-foreground">
@@ -96,53 +95,58 @@ function PillGroup({
   );
 }
 
+const ALL_DIMENSIONS: readonly FilterDimension[] = ["status", "league", "market"];
+
+/**
+ * Barra de filtros. `dimensions` escolhe quais grupos renderizar: o dashboard põe
+ * liga+mercado no topo (recortam KPIs, gráfico e tabela) e status junto da tabela
+ * (só ela) — #539. Grupo com uma opção real só ("Todas" + 1 liga) não filtra
+ * nada e some; sem nenhum grupo visível, não renderiza nem o wrapper (evita um
+ * gap vazio no layout).
+ */
 export function DashboardFiltersBar({
   filters,
   leagues,
   markets,
   basePath = "/dashboard",
+  dimensions = ALL_DIMENSIONS,
 }: {
   filters: DashboardFilters;
   leagues: LeagueKey[];
   markets: AvailableMarket[];
   basePath?: string;
+  dimensions?: readonly FilterDimension[];
 }) {
   const leagueOptions: Option[] = [
     { value: "all", label: "Todas" },
     ...leagues.map((k) => ({ value: k, label: LEAGUE_LABEL[k] })),
   ];
-  // Dinâmico de availableMarkets (label de markets.label via join). PillGroup
-  // some quando há ≤1 mercado (≤1 opção real → options.length 1 com só "all").
+  // Dinâmico de availableMarkets (label de markets.label via join).
   const marketOptions: Option[] = [
     { value: "all", label: "Todos" },
     ...markets.map((m) => ({ value: m.key, label: m.label })),
   ];
+  const groups: Record<FilterDimension, { label: string; options: Option[] }> = {
+    status: { label: "status", options: STATUS_OPTIONS },
+    league: { label: "liga", options: leagueOptions },
+    market: { label: "mercado", options: marketOptions },
+  };
+  // > 2 = "Todas" + pelo menos duas opções reais.
+  const visible = dimensions.filter((d) => groups[d].options.length > 2);
+  if (visible.length === 0) return null;
   return (
     <div className="flex flex-wrap items-center gap-x-5 gap-y-3">
-      <PillGroup
-        label="status"
-        options={STATUS_OPTIONS}
-        current={filters.status}
-        dimension="status"
-        filters={filters}
-        basePath={basePath}
-      />
-      <PillGroup
-        label="liga"
-        options={leagueOptions}
-        current={filters.league}
-        dimension="league"
-        filters={filters}
-        basePath={basePath}
-      />
-      <PillGroup
-        label="mercado"
-        options={marketOptions}
-        current={filters.market}
-        dimension="market"
-        filters={filters}
-        basePath={basePath}
-      />
+      {visible.map((d) => (
+        <PillGroup
+          key={d}
+          label={groups[d].label}
+          options={groups[d].options}
+          current={filters[d]}
+          dimension={d}
+          filters={filters}
+          basePath={basePath}
+        />
+      ))}
     </div>
   );
 }

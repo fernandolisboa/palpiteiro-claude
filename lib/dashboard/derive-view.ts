@@ -1,4 +1,5 @@
 import {
+  applyScopeFilters,
   applyTableFilters,
   computeBankrollSeries,
   computeGraduation,
@@ -91,30 +92,38 @@ export function deriveDashboardView(
   // inflar nada. Multi-mercado: cada mercado sobrevive ao dedup (R1).
   const deduped = keepLatestPerMatch(rows);
 
+  // #539: liga e mercado recortam TUDO (KPIs, segmentos, gráfico e tabela); o
+  // status só estreita a tabela (ver applyScopeFilters). Dedup antes do recorte:
+  // a reanálise mais recente vence independente do filtro.
+  const scoped = applyScopeFilters(deduped, filters);
+
   // Segmentação reusa a conta do agregado por grupo de marketKey → paridade.
-  const segmented = computeSegmentedKpis(deduped);
+  const segmented = computeSegmentedKpis(scoped);
   const segments = segmented.segments.map((segment) =>
     toMarketSegmentView(
       segment,
       computeGraduation(segment.kpis),
       computeYieldByStakeBand(
-        deduped.filter((r) => r.marketKey === segment.marketKey),
+        scoped.filter((r) => r.marketKey === segment.marketKey),
       ),
     ),
   );
 
-  // availableMarkets das rows-com-histórico (deduped), espelhando availableLeagues
-  // (R7). Ordem estável = primeira aparição; label de markets.label via join.
-  const availableMarkets: AvailableMarket[] = segmented.segments.map((s) => ({
-    key: s.marketKey,
-    label: s.marketLabel,
-  }));
+  // Opções dos filtros vêm do histórico INTEIRO (deduped), não do recorte — senão
+  // escolher um mercado sumiria com os outros da barra. Ordem = primeira aparição,
+  // label de markets.label via join (mesma ordem dos segmentos sem filtro).
+  const availableMarkets: AvailableMarket[] = [];
+  const seenMarkets = new Set<string>();
+  for (const r of deduped) {
+    if (seenMarkets.has(r.marketKey)) continue;
+    seenMarkets.add(r.marketKey);
+    availableMarkets.push({ key: r.marketKey, label: r.marketLabel });
+  }
 
-  // KPIs agregados e gráfico sobre as linhas deduplicadas; a tabela filtra à parte.
   return {
     kpis: toDashboardKpiView(segmented.aggregate),
     segments,
-    series: computeBankrollSeries(deduped),
+    series: computeBankrollSeries(scoped),
     tableRows: applyTableFilters(deduped, filters).map((r) =>
       toPredictionRowView(r, timeZone),
     ),

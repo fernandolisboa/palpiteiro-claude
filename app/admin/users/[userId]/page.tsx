@@ -104,6 +104,16 @@ export default async function AdminUserTrackingPage({
           </Card>
         ) : (
           <div className="flex flex-col gap-8">
+            {/* Liga e mercado recortam tudo abaixo (KPIs, segmentos, gráfico e
+                tabela); o status, junto da tabela, filtra só ela (#539). */}
+            <DashboardFiltersBar
+              filters={filters}
+              leagues={availableLeagues}
+              markets={availableMarkets}
+              basePath={basePath}
+              dimensions={["league", "market"]}
+            />
+
             <KpiCards view={kpis} />
 
             <MarketSegments segments={segments} />
@@ -126,6 +136,7 @@ export default async function AdminUserTrackingPage({
                 leagues={availableLeagues}
                 markets={availableMarkets}
                 basePath={basePath}
+                dimensions={["status"]}
               />
               <PredictionsTable rows={tableRows} basePath={basePath} />
             </section>
