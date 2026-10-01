@@ -76,6 +76,19 @@ describe("toNormalizedFixture (football-data-org)", () => {
     expect(n.awayTeam).toBe("São Paulo FC");
   });
 
+  it("carrega o stage como round (detecção de final neutra, #529)", () => {
+    expect(toNormalizedFixture(makeMatch(), "brasileirao_a").round).toBe(
+      "REGULAR_SEASON",
+    );
+    expect(
+      toNormalizedFixture(makeMatch({ stage: "FINAL" }), "champions_league")
+        .round,
+    ).toBe("FINAL");
+    expect(
+      toNormalizedFixture(makeMatch({ stage: null }), "brasileirao_a").round,
+    ).toBeUndefined();
+  });
+
   it("maps FINISHED match with score", () => {
     const n = toNormalizedFixture(
       makeMatch({

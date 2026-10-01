@@ -260,6 +260,10 @@ export const matches = pgTable(
     status: matchStatusEnum().notNull().default("scheduled"),
     homeScore: integer(),
     awayScore: integer(),
+    // Final em jogo único com sede neutra (#529): gravado pelo sync de fixtures a
+    // partir da fase do provider (isNeutralFinalFixture). A Copa do Mundo é neutra
+    // por liga e não depende disto (isNeutralVenue).
+    neutralVenue: boolean().notNull().default(false),
     updatedAt: timestamp({ withTimezone: true }).notNull().defaultNow(),
   },
   (t) => [index("matches_kickoff_at_idx").on(t.kickoffAt)],

@@ -35,6 +35,10 @@ export const NormalizedFixtureSchema = z.object({
     away: z.number().int().nullable(),
   }),
   venue: z.string().min(1).optional(),
+  // Fase do torneio, crua do provider ("Final", "Semi-finals", "Regular Season -
+  // 12"; football-data.org: "FINAL", "REGULAR_SEASON"). Hoje só alimenta a
+  // detecção de final em campo neutro (#529, neutral-venue.ts).
+  round: z.string().min(1).optional(),
 });
 export type NormalizedFixture = z.infer<typeof NormalizedFixtureSchema>;
 

@@ -51,3 +51,12 @@ Pedido do dono: "adicionar a Libertadores e a Copa do Brasil na lista". Com o AD
 5. **Final em jogo único:** continua analisada com mando do time listado como mandante (item de Consequências acima). Issue própria; resolver antes de 28/11.
 
 **Copa do Brasil, reconferida:** `GET /v4/sports?all=true` (grátis, 179 esportes, 2026-09-27) não lista Copa do Brasil (só Brasileirão A e B, Libertadores, Sul-Americana e Copa América). Segue fora (§2 acima).
+
+## Emenda (2026-10-01) — final em jogo único como campo neutro (#529)
+
+Fecha o item "Final em jogo único e campo neutro" das Consequências e o item 5 da emenda anterior.
+
+1. **Detecção pela fase do fixture, não por data.** `NormalizedFixture` ganha `round` (cru do provider: `league.round` da API-Football, `stage` do football-data.org). `isNeutralFinalFixture` (`lib/providers/sports-data/neutral-venue.ts`) marca como neutra a fixture cuja fase é exatamente "final" (sem caixa/espaço) numa copa de final em jogo único: Libertadores, Sul-Americana e Champions League (a final da Champions tem o mesmo problema, e a liga está ligada). Semifinal, "3rd Place Final" e fase de grupos não casam.
+2. **Coluna `matches.neutral_venue`** (boolean, default false, migration com `IF NOT EXISTS`), gravada e atualizada no upsert do sync de fixtures a cada 6h. `isNeutralVenue(match)` = `world_cup` OU `neutral_venue`; substitui os dois `match.league === "world_cup"` em `lib/ai/predict.ts` e `app/actions/bets.ts`. O modelo de placar (Dixon-Coles e heurístico) já aceitava o flag `neutral`.
+3. **Sem override manual.** Afeta um jogo por copa por ano, e o rótulo "Final" é estável na API-Football. Se um dia o provider mudar o rótulo, o sintoma é a final analisada com mando; o conserto é no helper, não num toggle. Rejeitado também: comparar o estádio da fixture com o do mandante (não temos o estádio de cada clube) e data fixa (exigiria manutenção a cada edição).
+4. **Fora do escopo:** os prompts LLM não recebem um aviso de campo neutro (continuam vendo só o nome do estádio em "Local"); no motor `code_jev`, que decide 1X2, over/under, BTTS e dupla chance, o λ já sai neutro. O ajuste de ratings (Dixon-Coles) continua tratando finais passadas como jogo com mando; efeito desprezível (um jogo por temporada).

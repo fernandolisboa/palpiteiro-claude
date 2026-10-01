@@ -38,6 +38,7 @@ function match(id: string): DbMatch {
     status: "scheduled",
     homeScore: null,
     awayScore: null,
+    neutralVenue: false,
     updatedAt: new Date("2026-06-15T18:00:00Z"),
   };
 }

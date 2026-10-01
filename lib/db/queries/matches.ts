@@ -4,6 +4,7 @@ import { matches } from "@/db/schema";
 import { db } from "@/lib/db";
 import { IN_PROGRESS_WINDOW_MS } from "@/lib/view/date-range";
 import { compositeFixtureKey } from "@/lib/providers/sports-data/types";
+import { isNeutralFinalFixture } from "@/lib/providers/sports-data/neutral-venue";
 import type {
   NormalizedFixture,
   NormalizedFixtureStatus,
@@ -204,6 +205,7 @@ export async function upsertMatchesFromProvider(
     status: STATUS_MAP[f.status],
     homeScore: f.score.home,
     awayScore: f.score.away,
+    neutralVenue: isNeutralFinalFixture(f),
     updatedAt: new Date(),
   }));
   await db
@@ -219,6 +221,7 @@ export async function upsertMatchesFromProvider(
         status: sql`excluded.status`,
         homeScore: sql`excluded.home_score`,
         awayScore: sql`excluded.away_score`,
+        neutralVenue: sql`excluded.neutral_venue`,
         updatedAt: sql`excluded.updated_at`,
       },
     });

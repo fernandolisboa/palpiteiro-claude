@@ -21,6 +21,9 @@ const h = vi.hoisted(() => {
     // future) — calls[0]/calls[1]. whereArg/orderByArg/limitArg apontam pro ÚLTIMO
     // (compat: os testes de 1 select leem o singleton).
     calls: [] as Call[],
+    // insert().values().onConflictDoUpdate() de upsertMatchesFromProvider.
+    insertedRows: undefined as unknown,
+    conflictSet: undefined as unknown,
   };
   return { state };
 });
@@ -92,7 +95,18 @@ vi.mock("@/lib/db", () => {
     };
   };
   const select = vi.fn(() => ({ from: vi.fn(() => makeChain()) }));
-  return { db: { select } };
+  const insert = vi.fn(() => ({
+    values: vi.fn((rows: unknown) => {
+      h.state.insertedRows = rows;
+      return {
+        onConflictDoUpdate: vi.fn((cfg: { set: unknown }) => {
+          h.state.conflictSet = cfg.set;
+          return Promise.resolve();
+        }),
+      };
+    }),
+  }));
+  return { db: { select, insert } };
 });
 
 import { matches } from "@/db/schema";
@@ -101,7 +115,9 @@ import {
   getMatchesByTeam,
   getMatchesInRange,
   getUpcomingMatches,
+  upsertMatchesFromProvider,
 } from "@/lib/db/queries/matches";
+import type { NormalizedFixture } from "@/lib/providers/sports-data/types";
 
 type Cond = { op?: string; col?: unknown; val?: unknown; conds?: Cond[] };
 
@@ -125,6 +141,8 @@ beforeEach(() => {
   h.state.limitCalled = false;
   h.state.rows = [];
   h.state.calls = [];
+  h.state.insertedRows = undefined;
+  h.state.conflictSet = undefined;
 });
 
 describe("getMatchesInRange — range query flexível", () => {
@@ -386,5 +404,36 @@ describe("getMatchesByTeam — histórico do time (2 fatias)", () => {
       past: rows,
       future: rows,
     });
+  });
+});
+
+describe("upsertMatchesFromProvider — campo neutro (#529)", () => {
+  function fixture(over: Partial<NormalizedFixture>): NormalizedFixture {
+    return {
+      id: "x",
+      league: "copa_libertadores",
+      kickoffAt: "2026-11-28T20:00:00.000Z",
+      kickoffTimestampMs: Date.parse("2026-11-28T20:00:00.000Z"),
+      homeTeam: "Flamengo",
+      awayTeam: "Palmeiras",
+      status: "scheduled",
+      score: { home: null, away: null },
+      ...over,
+    };
+  }
+
+  it("grava neutralVenue=true só na final em jogo único", async () => {
+    await upsertMatchesFromProvider([
+      fixture({ round: "Final" }),
+      fixture({ round: "Semi-finals", homeTeam: "Estudiantes" }),
+      fixture({ round: undefined, homeTeam: "Fluminense" }),
+    ]);
+    const rows = h.state.insertedRows as { neutralVenue: boolean }[];
+    expect(rows.map((r) => r.neutralVenue)).toEqual([true, false, false]);
+  });
+
+  it("o conflito atualiza neutral_venue (a fase pode mudar entre syncs)", async () => {
+    await upsertMatchesFromProvider([fixture({ round: "Final" })]);
+    expect(h.state.conflictSet).toHaveProperty("neutralVenue");
   });
 });

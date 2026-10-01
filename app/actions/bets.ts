@@ -33,6 +33,7 @@ import {
   type NewBetLeg,
 } from "@/lib/db/queries/user-bets";
 import { getSportsDataProvider } from "@/lib/providers/sports-data";
+import { isNeutralVenue } from "@/lib/providers/sports-data/neutral-venue";
 import type { NormalizedStanding } from "@/lib/providers/sports-data/types";
 import {
   checkBetParseRateLimit,
@@ -594,7 +595,7 @@ export async function confirmBet(
     league: match.league,
     homeTeam: match.homeTeam,
     awayTeam: match.awayTeam,
-    neutral: match.league === "world_cup",
+    neutral: isNeutralVenue(match),
     standing,
     allowedMarketKeys,
   };
