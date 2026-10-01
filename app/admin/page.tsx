@@ -22,12 +22,12 @@ const SECTIONS = [
   {
     href: "/admin/calibration",
     title: "Calibração",
-    desc: "over/under · P(over) do modelo vs resultados · benchmark de mercado",
+    desc: "1X2, over/under, ambos marcam, dupla chance · modelo vs resultados · por motor",
   },
   {
     href: "/admin/settings",
     title: "Configurações de IA",
-    desc: "modelo de análise · default global",
+    desc: "modelo e motor de análise · flags · Dixon-Coles",
   },
   {
     href: "/admin/leagues",
