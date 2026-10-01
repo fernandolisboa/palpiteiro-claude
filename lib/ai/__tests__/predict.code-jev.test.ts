@@ -23,6 +23,7 @@ const matchRow = {
   status: "scheduled" as const,
   homeScore: null,
   awayScore: null,
+  neutralVenue: false,
   updatedAt: new Date("2026-05-01T00:00:00.000Z"),
 };
 
@@ -419,23 +420,23 @@ afterEach(() => {
 });
 
 // λ do heurístico da tabela (flag do DC desligado nestes casos).
-function heuristicScoreline() {
+function heuristicScoreline(neutral = false) {
   return pickModelScoreline({
     now: new Date(),
-    neutral: false,
+    neutral,
     dc: null,
     heuristic: computeMatchLambdas({
       standing: STANDINGS,
       homeTeam: matchRow.homeTeam,
       awayTeam: matchRow.awayTeam,
-      neutral: false,
+      neutral,
     }),
   })!;
 }
 
 // A decisão que o motor deve tomar com estes insumos (mesmas funções puras).
-function expectedEngine(judgments: JudgmentAnswers | null) {
-  const scoreline = heuristicScoreline();
+function expectedEngine(judgments: JudgmentAnswers | null, neutral = false) {
+  const scoreline = heuristicScoreline(neutral);
   const { probs } = computeMarketImpliedProbabilities([
     ODDS.home,
     ODDS.draw,
@@ -612,6 +613,32 @@ describe("flag analysis_engine = 'code_jev'", () => {
       expected.modelProbByKey.draw,
       expected.modelProbByKey.away,
     ]);
+  });
+
+  it("final em campo neutro (#529): o λ sai sem vantagem de casa", async () => {
+    matchRow.neutralVenue = true;
+    try {
+      const neutral = expectedEngine(JEV_ANSWERS, true);
+      const homeAdvantage = expectedEngine(JEV_ANSWERS, false);
+      expect(neutral.modelProbByKey.home).toBeLessThan(
+        homeAdvantage.modelProbByKey.home
+      );
+
+      await predict({
+        matchId: "m-1",
+        userId: "u-1",
+        isAdmin: true,
+        marketKey: "match_result",
+      });
+
+      const [prediction] = rowsWhere((r) => "recommendation" in r);
+      const pick = prediction.recommendation as "home" | "draw" | "away";
+      expect(prediction.confidencePct).toBe(
+        neutral.modelProbByKey[pick].toFixed(2)
+      );
+    } finally {
+      matchRow.neutralVenue = false;
+    }
   });
 
   it("o narrador recebe a decisão fixa e desfalques por função, sem nome", async () => {

@@ -25,6 +25,7 @@ import { getOddsProvider } from "@/lib/providers/odds";
 import { leagueToSportKey } from "@/lib/providers/odds-api-constants";
 import type { NormalizedOddsEvent } from "@/lib/providers/odds/types";
 import { getSportsDataProvider } from "@/lib/providers/sports-data";
+import { isNeutralVenue } from "@/lib/providers/sports-data/neutral-venue";
 import { getAbsencesProvider } from "@/lib/providers/absences";
 import type { ModelScoreline } from "@/lib/quant/match-model";
 import { getModelScoreline } from "@/lib/ratings/model-scoreline";
@@ -785,7 +786,7 @@ async function runPredict(
       standing: standings,
       homeTeam: match.homeTeam,
       awayTeam: match.awayTeam,
-      neutral: match.league === "world_cup",
+      neutral: isNeutralVenue(match),
     }));
 
   // 5.6 Motor code_jev (ADR 0041, #511), atrás do flag `analysis_engine`: nos mercados

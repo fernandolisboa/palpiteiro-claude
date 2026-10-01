@@ -110,8 +110,18 @@ describe("toNormalizedFixture", () => {
     expect(n.awayTeam).toBe("Fluminense FC");
     expect(n.status).toBe("scheduled");
     expect(n.venue).toBe("Maracanã");
+    expect(n.round).toBe("Regular Season - 5");
     expect(n.score).toEqual({ home: null, away: null });
     expect(n.kickoffTimestampMs).toBe(Date.parse("2026-05-15T19:00:00Z"));
+  });
+
+  it("round ausente/nulo no payload → undefined (#529)", () => {
+    const f = makeFixture();
+    const n = toNormalizedFixture(
+      { ...f, league: { ...f.league, round: null } },
+      "copa_libertadores"
+    );
+    expect(n.round).toBeUndefined();
   });
 
   it("passes through provider team name when no canonical match exists", () => {

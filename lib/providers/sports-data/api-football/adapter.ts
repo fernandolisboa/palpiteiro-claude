@@ -508,6 +508,7 @@ function toNormalizedFixture(
     status: mapStatusToNormalized(f.fixture.status.short),
     score: { home: f.goals.home, away: f.goals.away },
     venue: f.fixture.venue?.name ?? undefined,
+    round: f.league.round || undefined,
   };
 }
 

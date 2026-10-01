@@ -245,6 +245,7 @@ function toNormalizedFixture(
     status: mapFootballDataOrgStatus(m.status),
     score: { home: m.score.fullTime.home, away: m.score.fullTime.away },
     venue: m.venue ?? undefined,
+    round: m.stage || undefined,
   };
 }
 
