@@ -31,8 +31,7 @@ const calloutIconColor: Record<
 /**
  * Callout/Alert único (ADR 0029): ícone opcional + título + corpo, com variante
  * semântica (info/warn/destructive) mapeada pros tokens de cor. Substitui as
- * cópias divergentes (analysis-error-card, error.tsx, market-run-summary, odds).
- * Nesta fatia só `error.tsx` o adota; os de conteúdo migram nos heirs.
+ * cópias divergentes de alerta espalhadas pelos componentes.
  */
 function Callout({
   className,

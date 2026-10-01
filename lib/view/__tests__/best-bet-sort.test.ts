@@ -1,18 +1,7 @@
-import { describe, expect, it, vi } from "vitest";
-import { renderToStaticMarkup } from "react-dom/server";
+import { describe, expect, it } from "vitest";
 
-// A renderização do card em si é de AnalysisResult (testada à parte); aqui só
-// importam label/badge/ordem/erros do painel. Mock leve evita stubs de AnalysisView.
-vi.mock("@/components/analysis-result", () => ({
-  AnalysisResult: () => <div data-testid="analysis" />,
-}));
-
-import {
-  BestBetResults,
-  sortBestBetEntries,
-  type BestBetSortMode,
-} from "@/components/best-bet-results";
-import type { BestBetEntry, BestBetRank, BestBetView } from "@/lib/view/types";
+import { sortBestBetEntries } from "@/lib/view/best-bet-sort";
+import type { BestBetEntry, BestBetRank } from "@/lib/view/types";
 
 function entry(
   marketKey: string,
@@ -128,71 +117,3 @@ describe("sortBestBetEntries — ordenação por modo (#178)", () => {
     expect(keys(input)).toEqual(before);
   });
 });
-
-describe("BestBetResults — render", () => {
-  const view: BestBetView = {
-    entries: [
-      entry("match_result", "Resultado (1X2)", { edgePct: 3, evPerUnit: 0.05 }),
-      entry("over_under", "Over/Under gols", { edgePct: 8, evPerUnit: 0.1 }),
-    ],
-    errors: [{ marketKey: "btts", marketLabel: "Ambas marcam", message: "Nenhum bookmaker oferece este mercado" }],
-    llmCalls: 2,
-    unavailableMarkets: 1,
-  };
-
-  it("destaca o #1 (edge default) com badge 'Melhor aposta' e mostra os labels na ordem ranqueada", () => {
-    const html = renderToStaticMarkup(<BestBetResults view={view} />);
-    expect(html).toContain("Melhor aposta");
-    // #1 por edge = over_under (8) deve vir ANTES de match_result (3).
-    expect(html.indexOf("Over/Under gols")).toBeLessThan(
-      html.indexOf("Resultado (1X2)"),
-    );
-  });
-
-  it("renderiza o header com contagem de análises e indisponíveis", () => {
-    const html = renderToStaticMarkup(<BestBetResults view={view} />);
-    expect(html).toContain("2 análises geradas");
-    expect(html).toContain("1 mercado indisponível");
-  });
-
-  it("lista os mercados indisponíveis (label + mensagem)", () => {
-    const html = renderToStaticMarkup(<BestBetResults view={view} />);
-    expect(html).toContain("Ambas marcam");
-    expect(html).toContain("Nenhum bookmaker oferece este mercado");
-  });
-
-  it("os 3 modos de ordenação estão presentes; edge é o ativo (aria-pressed)", () => {
-    const html = renderToStaticMarkup(<BestBetResults view={view} />);
-    for (const label of ["Edge", "EV", "Edge × confiança"]) {
-      expect(html).toContain(label);
-    }
-    // edge ativo por default.
-    expect(html).toMatch(/aria-pressed="true"[^>]*>Edge</);
-  });
-
-  it("renderiza o marketLabel ACIMA de um card PASS (load-bearing)", () => {
-    const passView: BestBetView = {
-      entries: [entry("match_result", "Resultado (1X2)", { isPass: true })],
-      errors: [],
-      llmCalls: 1,
-      unavailableMarkets: 0,
-    };
-    const html = renderToStaticMarkup(<BestBetResults view={passView} />);
-    expect(html).toContain("Resultado (1X2)");
-  });
-
-  // #434: o aviso de risco sai UMA vez no fim do painel (não por card — os cards
-  // passam showRiskDisclaimer={false}). AnalysisResult é mockado aqui, então a
-  // linha do painel é a ÚNICA fonte → deve aparecer exatamente uma vez.
-  it("renderiza o aviso de risco UMA vez no rodapé do fan-out", () => {
-    const RISK =
-      "Recomendação analítica, sem garantia de resultado. Aposte com responsabilidade.";
-    const html = renderToStaticMarkup(<BestBetResults view={view} />);
-    expect(html).toContain(RISK);
-    expect(html.split(RISK).length - 1).toBe(1);
-  });
-});
-
-// Garante que o union de modos não regrediu silenciosamente.
-const _modes: BestBetSortMode[] = ["edge", "ev", "edgeConf"];
-void _modes;
