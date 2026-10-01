@@ -29,8 +29,8 @@ const STATUS_META: Record<
   push: { label: "push", className: "text-muted-fg-2" },
 };
 
-// Cor por token de recomendação. over/under/pass têm cor pinada; tokens de
-// mercado novo (1X2, #173 — ex.: "Casa"/"HOME") caem no neutro via recClass().
+// Cor por token de recomendação. over/under/pass têm cor pinada; seleções de
+// outros mercados ("Casa", "Sim", nome do jogador) caem no neutro via recClass().
 const REC_CLASS: Record<string, string> = {
   OVER: "text-edge-fg",
   UNDER: "text-accent-fg",
@@ -110,10 +110,15 @@ export function PredictionsTable({
                 <TableCell className="font-mono text-meta tabular-nums text-muted-foreground">
                   {r.when}
                 </TableCell>
-                <TableCell
-                  className={cn("font-mono text-meta font-medium", recClass(r.rec))}
-                >
-                  {r.rec}
+                <TableCell>
+                  <div
+                    className={cn("font-mono text-meta font-medium", recClass(r.rec))}
+                  >
+                    {r.rec}
+                  </div>
+                  <div className="text-eyebrow text-muted-foreground">
+                    {r.market}
+                  </div>
                 </TableCell>
                 <TableCell className="text-right font-mono text-body-sm tabular-nums">
                   {r.odd}

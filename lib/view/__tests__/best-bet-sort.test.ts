@@ -6,7 +6,7 @@ import type { BestBetEntry, BestBetRank } from "@/lib/view/types";
 function entry(
   marketKey: string,
   marketLabel: string,
-  rank: Partial<BestBetRank>,
+  rank: Partial<BestBetRank>
 ): BestBetEntry {
   return {
     marketKey,
@@ -27,10 +27,26 @@ function entry(
 const keys = (es: BestBetEntry[]) => es.map((e) => e.marketKey);
 
 describe("sortBestBetEntries — ordenação por modo (#178)", () => {
-  const A = entry("over_under", "O/U", { edgePct: 8, evPerUnit: 0.1, confidencePct: 60 });
-  const B = entry("btts", "BTTS", { edgePct: 5, evPerUnit: 0.2, confidencePct: 70 });
-  const C = entry("match_result", "1X2", { edgePct: 3, evPerUnit: 0.05, confidencePct: 52 });
-  const P = entry("double_chance", "DC", { edgePct: 12, evPerUnit: 0.3, isPass: true });
+  const A = entry("over_under", "O/U", {
+    edgePct: 8,
+    evPerUnit: 0.1,
+    confidencePct: 60,
+  });
+  const B = entry("btts", "BTTS", {
+    edgePct: 5,
+    evPerUnit: 0.2,
+    confidencePct: 70,
+  });
+  const C = entry("match_result", "1X2", {
+    edgePct: 3,
+    evPerUnit: 0.05,
+    confidencePct: 52,
+  });
+  const P = entry("double_chance", "DC", {
+    edgePct: 12,
+    evPerUnit: 0.3,
+    isPass: true,
+  });
 
   it("edge (default): desc por edge normalizado; pass por último", () => {
     expect(keys(sortBestBetEntries([C, P, A, B], "edge"))).toEqual([
@@ -80,7 +96,10 @@ describe("sortBestBetEntries — ordenação por modo (#178)", () => {
 
   it("normaliza edge por impliedSumTarget: dupla chance Σ2 não domina cru", () => {
     const ou = entry("over_under", "O/U", { edgePct: 6, impliedSumTarget: 1 });
-    const dc = entry("double_chance", "DC", { edgePct: 10, impliedSumTarget: 2 }); // 10/2=5 < 6
+    const dc = entry("double_chance", "DC", {
+      edgePct: 10,
+      impliedSumTarget: 2,
+    }); // 10/2=5 < 6
     expect(keys(sortBestBetEntries([dc, ou], "edge"))).toEqual([
       "over_under",
       "double_chance",
@@ -102,8 +121,14 @@ describe("sortBestBetEntries — ordenação por modo (#178)", () => {
     // edges iguais; ev iguais → desempata por marketKey alfabético.
     const x = entry("zebra", "Z", { edgePct: 5, evPerUnit: 0.1 });
     const y = entry("alpha", "A", { edgePct: 5, evPerUnit: 0.1 });
-    for (const input of [[x, y], [y, x]] as BestBetEntry[][]) {
-      expect(keys(sortBestBetEntries(input, "edge"))).toEqual(["alpha", "zebra"]);
+    for (const input of [
+      [x, y],
+      [y, x],
+    ] as BestBetEntry[][]) {
+      expect(keys(sortBestBetEntries(input, "edge"))).toEqual([
+        "alpha",
+        "zebra",
+      ]);
     }
     // ev diferente desempata antes do marketKey.
     const hi = entry("zebra", "Z", { edgePct: 5, evPerUnit: 0.3 });
@@ -111,7 +136,10 @@ describe("sortBestBetEntries — ordenação por modo (#178)", () => {
   });
 
   it("não muta o array de entrada", () => {
-    const input = [entry("a", "A", { edgePct: 1 }), entry("b", "B", { edgePct: 2 })];
+    const input = [
+      entry("a", "A", { edgePct: 1 }),
+      entry("b", "B", { edgePct: 2 }),
+    ];
     const before = keys(input);
     sortBestBetEntries(input, "edge");
     expect(keys(input)).toEqual(before);

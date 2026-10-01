@@ -81,6 +81,7 @@ export function PredictionDetail({
       </p>
 
       <SectionLabel>predição</SectionLabel>
+      <Row label="mercado" value={prediction.market} />
       <Row label="recomendação" value={prediction.rec} />
       <Row label="confiança" value={prediction.confidence} />
       <Row

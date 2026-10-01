@@ -24,29 +24,12 @@ import {
   leagueToKey,
 } from "@/lib/format";
 import { getMarketPresentation } from "@/lib/view/markets/presentation";
+import {
+  marketContextLabel,
+  recommendationLabel,
+} from "@/lib/view/recommendation";
 import { ownsAiCall } from "@/lib/view/owns-ai-call";
 import type { LeagueKey, Recommendation } from "@/lib/view/types";
-
-// Tokens pinados do over/under (paridade byte-idêntica). pass é market-agnóstico.
-const REC_TOKEN_OVER_UNDER: Record<string, Recommendation> = {
-  over: "OVER",
-  under: "UNDER",
-  pass: "PASS",
-};
-
-// Display da recomendação TOTAL p/ qualquer mercado (#173). over/under/pass usam o
-// token pinado; mercados novos derivam o label da seleção da apresentação (via
-// marketKey da row) — ex.: 1X2 → "Casa"/"Empate"/"Fora". `pass` nunca é uma
-// seleção de mercado, então cai no token pinado independentemente do marketKey.
-function recToken(
-  recommendation: DashboardRow["recommendation"],
-  marketKey: string,
-): Recommendation {
-  if (recommendation in REC_TOKEN_OVER_UNDER) {
-    return REC_TOKEN_OVER_UNDER[recommendation];
-  }
-  return getMarketPresentation(marketKey).selectionLabel(recommendation);
-}
 
 // Unidades COM sinal — convenção única, centralizada em lib/format (#170).
 const unitsLabel = formatUnitsSigned;
@@ -186,6 +169,8 @@ export type PredictionRowView = {
   league: LeagueKey;
   when: string;
   rec: Recommendation;
+  // Mercado (+ linha) da recomendação — "Sim" ou "OVER" sozinhos são ambíguos.
+  market: string;
   odd: string;
   edge: string | null;
   confidence: string;
@@ -204,7 +189,12 @@ export function toPredictionRowView(
     away: row.awayTeam,
     league: leagueToKey(row.league),
     when: formatKickoffAbsolute(row.createdAt, new Date(), timeZone),
-    rec: recToken(row.recommendation, row.marketKey),
+    rec: recommendationLabel(
+      row.recommendation,
+      row.marketKey,
+      row.selectionLabel,
+    ),
+    market: marketContextLabel(row.marketLabel, row.marketParams),
     odd: formatOdd(row.oddAtRecommendation),
     edge: formatEdge(row.edgePct),
     confidence: formatPct(row.confidencePct),
@@ -243,6 +233,7 @@ export type PredictionDetailView = {
   };
   prediction: {
     rec: Recommendation;
+    market: string;
     confidence: string;
     edge: string | null;
     implied: string;
@@ -338,10 +329,17 @@ export function toPredictionDetailView(
       score,
     },
     prediction: {
-      // marketKey resolvido pela query (LEFT JOIN markets); over/under/pass usam o
-      // token pinado (não consultam marketKey → byte-idêntico), mercados novos (1X2)
-      // derivam o display da seleção da apresentação ("Casa"/"Empate"/"Fora").
-      rec: recToken(prediction.recommendation, marketKey),
+      // marketKey resolvido pela query (LEFT JOIN markets); seleção sem rótulo na
+      // apresentação (artilheiro/assistência) cai no label do DB (nome do jogador).
+      rec: recommendationLabel(
+        prediction.recommendation,
+        marketKey,
+        detail.selectionLabel,
+      ),
+      market: marketContextLabel(
+        detail.marketLabel ?? presentation.marketLabel,
+        prediction.marketParams,
+      ),
       confidence: formatPct(prediction.confidencePct),
       edge: formatEdge(prediction.edgePct),
       implied: formatPct(prediction.impliedProbPct),

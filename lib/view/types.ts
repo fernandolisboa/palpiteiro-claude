@@ -220,6 +220,8 @@ export type RecentPredictionView = {
   home: string;
   away: string;
   rec: Recommendation;
+  // Mercado (+ linha) da recomendação, ex.: "Ambas marcam", "Over/Under gols 2.5".
+  market: string;
   edge: string | null;
   when: string;
   league: LeagueKey;

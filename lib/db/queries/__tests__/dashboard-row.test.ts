@@ -31,6 +31,7 @@ function rawRow(
     profitUnits: "0.92",
     settledAt: new Date("2026-06-02T12:00:00Z"),
     selectionId: null,
+    selectionLabel: null,
     marketId: null,
     marketParams: null,
     kickoffAt: new Date("2026-06-01T20:00:00Z"),

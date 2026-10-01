@@ -39,6 +39,9 @@ export type DashboardRow = {
   // selectionId NULL em pass; marketParams.line indexa a closing line por linha
   // (over/under). impliedProbPct = prob no-vig da recomendação (já ×impliedSumTarget).
   selectionId: string | null;
+  // market_selections.label da seleção (LEFT JOIN por selectionId; null em pass).
+  // Só display: artilheiro/assistência guardam o nome do jogador aqui (#539).
+  selectionLabel: string | null;
   marketId: string | null;
   marketParams: { line: number } | null;
   kickoffAt: Date;
