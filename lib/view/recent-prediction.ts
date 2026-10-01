@@ -1,10 +1,12 @@
 import { formatEdge, leagueToKey } from "@/lib/format";
 import type { SupportedLeague } from "@/lib/providers/sports-data/leagues";
+import { findMarketPresentation } from "@/lib/view/markets/presentation";
+import {
+  marketContextLabel,
+  recommendationLabel,
+} from "@/lib/view/recommendation";
 import { teamToTeam } from "@/lib/view/team";
-import type {
-  Recommendation,
-  RecentPredictionView,
-} from "@/lib/view/types";
+import type { RecentPredictionView } from "@/lib/view/types";
 
 const MONTH_ABBR_PT = [
   "jan", "fev", "mar", "abr", "mai", "jun",
@@ -32,35 +34,24 @@ type RecentInput = {
   league: SupportedLeague;
   homeTeam: string;
   awayTeam: string;
-  // = key da seleção escolhida (qualquer mercado) ou "pass". `string` agnóstico
-  // desde o contract (#179); REC_TOKEN é total, com fallback toUpperCase.
+  // = key da seleção escolhida (qualquer mercado) ou "pass".
   recommendation: string;
+  // null = row sem marketId (histórica pré-backfill) → over/under, como no
+  // dashboard (marketEnumToKey).
+  marketKey: string | null;
+  marketLabel: string | null;
+  marketParams: { line: number } | null;
+  selectionLabel: string | null;
   edgePct: string | number | null;
   createdAt: Date;
 };
-
-// Tokens pinados do over/under/pass (paridade byte-idêntica). O feed recente NÃO
-// junta `markets`, então não há marketKey aqui pra derivar o selectionLabel da
-// apresentação (#173, PR-1 escopo "fallback mínimo"): seleções de mercado novo
-// (1X2) caem num token neutro em MAIÚSCULAS (ex.: "HOME") — célula sã, não quebrada.
-// O display 1X2 polido (Casa/Empate/Fora) é PR-2, quando a query passar a juntar markets.
-const REC_TOKEN: Record<string, Recommendation> = {
-  over: "OVER",
-  under: "UNDER",
-  pass: "PASS",
-};
-
-function recToken(recommendation: RecentInput["recommendation"]): Recommendation {
-  return recommendation in REC_TOKEN
-    ? REC_TOKEN[recommendation]
-    : recommendation.toUpperCase();
-}
 
 export function toRecentPredictionView(
   row: RecentInput,
   timeZone?: string,
 ): RecentPredictionView {
   const league = leagueToKey(row.league);
+  const marketKey = row.marketKey ?? "over_under";
   return {
     id: row.predictionId,
     matchId: row.matchId,
@@ -68,7 +59,17 @@ export function toRecentPredictionView(
     // pra manter a assinatura uniforme do seam — a tradução de `.name` é descartada.
     home: teamToTeam(row.homeTeam, league).short,
     away: teamToTeam(row.awayTeam, league).short,
-    rec: recToken(row.recommendation),
+    rec: recommendationLabel(
+      row.recommendation,
+      marketKey,
+      row.selectionLabel,
+    ),
+    market: marketContextLabel(
+      row.marketLabel ??
+        findMarketPresentation(marketKey)?.marketLabel ??
+        marketKey,
+      row.marketParams,
+    ),
     edge: formatEdge(row.edgePct),
     when: formatRecentWhen(row.createdAt, timeZone),
     league,

@@ -2,6 +2,7 @@ import { and, desc, eq } from "drizzle-orm";
 
 import {
   aiCalls,
+  marketSelections,
   markets,
   matches,
   predictionOutcomes,
@@ -98,6 +99,7 @@ async function selectDashboardRows(
       settledAt: predictionOutcomes.settledAt,
       // CLV (#180): identidade da seleção/linha + insumos do CLV no-vig.
       selectionId: predictions.selectionId,
+      selectionLabel: marketSelections.label,
       marketId: predictions.marketId,
       marketParams: predictions.marketParams,
       kickoffAt: matches.kickoffAt,
@@ -106,6 +108,7 @@ async function selectDashboardRows(
     .from(predictions)
     .innerJoin(matches, eq(predictions.matchId, matches.id))
     .leftJoin(markets, eq(predictions.marketId, markets.id))
+    .leftJoin(marketSelections, eq(predictions.selectionId, marketSelections.id))
     .leftJoin(
       predictionOutcomes,
       eq(predictionOutcomes.predictionId, predictions.id),
@@ -151,6 +154,10 @@ export type DashboardDetail = {
   // (1X2 → "Casa"/label do mercado, não o default over_under). Nullable em rows sem
   // marketId (históricas pré-backfill) → o chamador faz coalesce 'over_under'.
   marketKey: string | null;
+  marketLabel: string | null;
+  // market_selections.label (null em pass / sem selectionId). Display do
+  // artilheiro/assistência, cuja key a apresentação não sabe rotular (#539).
+  selectionLabel: string | null;
 };
 
 /**
@@ -173,6 +180,8 @@ export async function getPredictionDetailForUser(
       outcome: predictionOutcomes,
       aiCall: aiCalls,
       marketKey: markets.key,
+      marketLabel: markets.label,
+      selectionLabel: marketSelections.label,
     })
     .from(predictions)
     .innerJoin(matches, eq(predictions.matchId, matches.id))
@@ -182,6 +191,7 @@ export async function getPredictionDetailForUser(
     )
     .leftJoin(aiCalls, eq(predictions.aiCallId, aiCalls.id))
     .leftJoin(markets, eq(predictions.marketId, markets.id))
+    .leftJoin(marketSelections, eq(predictions.selectionId, marketSelections.id))
     .where(and(eq(predictions.id, predictionId), eq(predictions.userId, userId)))
     .limit(1);
   return rows[0] ?? null;

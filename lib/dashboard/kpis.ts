@@ -39,6 +39,9 @@ export type DashboardRow = {
   // selectionId NULL em pass; marketParams.line indexa a closing line por linha
   // (over/under). impliedProbPct = prob no-vig da recomendação (já ×impliedSumTarget).
   selectionId: string | null;
+  // market_selections.label da seleção (LEFT JOIN por selectionId; null em pass).
+  // Só display: artilheiro/assistência guardam o nome do jogador aqui (#539).
+  selectionLabel: string | null;
   marketId: string | null;
   marketParams: { line: number } | null;
   kickoffAt: Date;
@@ -420,20 +423,27 @@ export function computeBankrollSeries(rows: DashboardRow[]): BankrollPoint[] {
   });
 }
 
+/**
+ * Recorte do dashboard (liga + mercado): define o universo de KPIs, segmentos,
+ * gráfico E tabela. Status fica de fora de propósito — é filtro de linha, não de
+ * recorte (aplicado aos KPIs, "green" daria yield positivo por construção).
+ */
+export function applyScopeFilters(
+  rows: DashboardRow[],
+  filters: Pick<DashboardFilters, "league" | "market">,
+): DashboardRow[] {
+  return rows.filter(
+    (r) =>
+      (filters.league === "all" || leagueToKey(r.league) === filters.league) &&
+      (filters.market === "all" || r.marketKey === filters.market),
+  );
+}
+
 export function applyTableFilters(
   rows: DashboardRow[],
   filters: DashboardFilters,
 ): DashboardRow[] {
-  return rows.filter((r) => {
-    if (filters.status !== "all" && rowStatus(r) !== filters.status) {
-      return false;
-    }
-    if (filters.league !== "all" && leagueToKey(r.league) !== filters.league) {
-      return false;
-    }
-    if (filters.market !== "all" && r.marketKey !== filters.market) {
-      return false;
-    }
-    return true;
-  });
+  return applyScopeFilters(rows, filters).filter(
+    (r) => filters.status === "all" || rowStatus(r) === filters.status,
+  );
 }

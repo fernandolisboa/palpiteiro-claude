@@ -26,6 +26,7 @@ function row(overrides: Partial<DashboardRow> = {}): DashboardRow {
     profitUnits: null,
     settledAt: null,
     selectionId: null,
+    selectionLabel: null,
     marketId: null,
     marketParams: null,
     kickoffAt: new Date("2026-06-10T20:00:00Z"),
@@ -86,6 +87,13 @@ describe("parseDashboardFilters", () => {
     // Sem lista de disponíveis → nada passa
     expect(parseDashboardFilters({ market: "over_under" }).market).toBe("all");
     expect(parseDashboardFilters({}, ["over_under"]).market).toBe("all");
+  });
+
+  it("liga fora do histórico do usuário degrada pra 'all' (#539)", () => {
+    expect(parseDashboardFilters({ league: "ucl" }, [], ["bsa"]).league).toBe("all");
+    expect(parseDashboardFilters({ league: "bsa" }, [], ["bsa"]).league).toBe("bsa");
+    // sem a lista (chamadas antigas), só valida contra as ligas suportadas
+    expect(parseDashboardFilters({ league: "ucl" }).league).toBe("ucl");
   });
 
   it("delegates league to parseLeagueFilter", () => {
@@ -177,5 +185,80 @@ describe("deriveDashboardView", () => {
     expect(segments[0].graduation.resolved).toBe(0);
     expect(segments[0].graduation.graduated).toBe(false);
     expect(segments[0].kpis.yieldPct.value).toBe("—");
+  });
+
+  // #539: liga e mercado recortam KPIs, segmentos e gráfico; status só a tabela.
+  describe("recorte por filtro (#539)", () => {
+    const multi: DashboardRow[] = [
+      settled("won", "1", { predictionId: "wc-ou", league: "world_cup" }),
+      settled("lost", "-1", {
+        predictionId: "ucl-ou",
+        league: "champions_league",
+      }),
+      settled("won", "0.8", {
+        predictionId: "ucl-btts",
+        matchId: "match-ucl-ou",
+        league: "champions_league",
+        marketKey: "btts",
+        marketLabel: "Ambas marcam",
+        recommendation: "yes",
+      }),
+      row({ predictionId: "wc-pend", league: "world_cup" }),
+    ];
+
+    it("liga recorta KPIs, segmentos e gráfico, não só a tabela", () => {
+      const view = deriveDashboardView(
+        multi,
+        parseDashboardFilters({ league: "ucl" }),
+      );
+      expect(view.kpis.counts.total).toBe(2);
+      expect(view.series.map((p) => p.profit)).toEqual([-1, 0.8]);
+      expect(view.segments.map((s) => s.marketKey)).toEqual([
+        "over_under",
+        "btts",
+      ]);
+      expect(view.tableRows.map((r) => r.id)).toEqual(["ucl-ou", "ucl-btts"]);
+    });
+
+    it("mercado recorta KPIs e gráfico mas mantém todas as opções de mercado", () => {
+      const view = deriveDashboardView(
+        multi,
+        parseDashboardFilters({ market: "btts" }, ["over_under", "btts"]),
+      );
+      expect(view.kpis.counts.total).toBe(1);
+      expect(view.series).toHaveLength(1);
+      expect(view.segments.map((s) => s.marketKey)).toEqual(["btts"]);
+      expect(view.availableMarkets.map((m) => m.key)).toEqual([
+        "over_under",
+        "btts",
+      ]);
+      expect(view.availableLeagues).toEqual(["wc", "ucl"]);
+    });
+
+    it("status estreita só a tabela; KPIs e gráfico seguem o recorte inteiro", () => {
+      const all = deriveDashboardView(multi, parseDashboardFilters({}));
+      const won = deriveDashboardView(
+        multi,
+        parseDashboardFilters({ status: "won" }),
+      );
+      expect(won.kpis).toEqual(all.kpis);
+      expect(won.series).toEqual(all.series);
+      expect(won.segments).toEqual(all.segments);
+      expect(won.tableRows.map((r) => r.id)).toEqual(["wc-ou", "ucl-btts"]);
+    });
+
+    it("recorte sem linhas zera KPIs e gráfico sem quebrar", () => {
+      const view = deriveDashboardView(
+        multi,
+        parseDashboardFilters({ league: "wc", market: "btts" }, [
+          "over_under",
+          "btts",
+        ]),
+      );
+      expect(view.kpis.counts.total).toBe(0);
+      expect(view.series).toEqual([]);
+      expect(view.segments).toEqual([]);
+      expect(view.tableRows).toEqual([]);
+    });
   });
 });

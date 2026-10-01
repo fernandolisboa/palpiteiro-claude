@@ -28,7 +28,7 @@ Light and dark, both first-class. Neutral-forward product surface (chroma-0 gray
 
 ## Components (shadcn primitives — `components/ui/`)
 
-`Badge` (size axis incl. `xs`/`sm` from the de-slop), `Button` (variants default/secondary/ghost/link/outline; sizes incl. `sm`/`xs`), `Callout` (info/warn — discreet inline notices), `Card` family, `Separator`. Exemplars to mirror: **highlighted region** → `components/best-bet-results.tsx` `BestBetCard` (soft accent fill + `ring-2 ring-accent-fg/40` + mono eyebrow chip + lucide icon — the sanctioned "stand out without breaking hierarchy"); **settled state** → `components/form-dot.tsx`; **collapsible history** → `components/match-collapsible.tsx` (used by `PreviousAnalyses`/#204). Interactive elements carry `focus-visible:ring-[3px] ring-ring/50` (baked in).
+`Badge` (size axis incl. `xs`/`sm` from the de-slop), `Button` (variants default/secondary/ghost/link/outline; sizes incl. `sm`/`xs`), `Callout` (info/warn — discreet inline notices), `Card` family, `Separator`. Exemplars to mirror: **highlighted region** → soft accent fill + `ring-2 ring-accent-fg/40` + mono eyebrow chip + lucide icon (the sanctioned "stand out without breaking hierarchy"); **settled state** → `components/form-dot.tsx`; **collapsible history** → `components/match-collapsible.tsx` (used by `PreviousAnalyses`/#204). Interactive elements carry `focus-visible:ring-[3px] ring-ring/50` (baked in).
 
 ## Layout & motion
 

@@ -28,6 +28,7 @@ function row(o: Partial<DashboardRow> = {}): DashboardRow {
     profitUnits: null,
     settledAt: null,
     selectionId: "sel",
+    selectionLabel: null,
     marketId: "mkt",
     marketParams: { line: 2.5 },
     kickoffAt: new Date("2026-06-10T20:00:00Z"),

@@ -10,8 +10,8 @@ import type { AnalysisView } from "@/lib/view/types";
 
 type Props = {
   view: AnalysisView;
-  // Aviso de risco no rodapé (#434). Default true → todo card sóbrio o carrega. O fan-out
-  // (BestBetResults) passa false: ele mostra UMA linha no fim do painel, não uma por card.
+  // Aviso de risco no rodapé (#434). Default true → todo card sóbrio o carrega; false
+  // quando o container já mostra UMA linha no fim, em vez de uma por card.
   showRiskDisclaimer?: boolean;
 };
 

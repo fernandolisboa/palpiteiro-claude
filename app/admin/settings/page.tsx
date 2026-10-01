@@ -34,7 +34,7 @@ export default async function AdminSettingsPage() {
         <PageHeading
           backLink={{ href: "/admin", label: "admin" }}
           title="Configurações de IA"
-          subtitle="modelo de análise · default global"
+          subtitle="modelo e motor de análise · flags · Dixon-Coles"
         />
 
         <section className="pb-8">

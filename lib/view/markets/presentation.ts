@@ -382,6 +382,13 @@ export const MARKET_CATEGORY_LABELS: readonly string[] = Object.values(
  * mercado sem apresentação é bug de chamada, não algo a degradar (espelha
  * `getCartridge`). Roda em render server-side; nunca toca DB nem prompt.
  */
+/** Variante que não lança: null pra key sem apresentação (mercado novo sem entry). */
+export function findMarketPresentation(
+  marketKey: string,
+): MarketPresentation | null {
+  return REGISTRY[marketKey] ?? null;
+}
+
 export function getMarketPresentation(marketKey: string): MarketPresentation {
   const presentation = REGISTRY[marketKey];
   if (!presentation) {

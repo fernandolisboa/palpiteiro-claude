@@ -295,9 +295,11 @@ function BacktestSection() {
         Dixon-Coles vs λ heurístico, 987 jogos do Brasileirão 2023–25 em
         walk-forward: log-loss −0.011 em over 2.5 (IC 90% abaixo de 0 → GO) e
         −0.042 em 1X2; no 1X2 o fechamento ainda bate o DC por ~0.02. No over 2.5
-        nenhum modelo bate a taxa-base: o heurístico, que o code_jev usa hoje, fica
-        pior (+0.013) e o DC só empata. O backtest code+JEV do ADR 0041 §7 ainda não
-        rodou.{" "}
+        nenhum modelo bate a taxa-base: o heurístico fica pior (+0.013) e o DC só
+        empata. Por isso o code_jev usa o Dixon-Coles desde o ADR 0051 e cai no
+        heurístico quando falta ajuste recente da liga, quando um dos times tem
+        pouco histórico ou com a flag desligada. O backtest code+JEV do ADR 0041
+        §7 ainda não rodou.{" "}
         <a
           href={BACKTEST_REPORT_URL}
           target="_blank"

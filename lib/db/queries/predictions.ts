@@ -381,6 +381,12 @@ export type RecentPredictionRow = {
   awayTeam: string;
   league: DbMatch["league"];
   recommendation: DbPrediction["recommendation"];
+  // Mercado/seleção pro display (#539): sem eles o card mostrava "HOME" cru e não
+  // dizia de qual mercado era. null = row sem marketId/selectionId (legado/pass).
+  marketKey: string | null;
+  marketLabel: string | null;
+  marketParams: DbPrediction["marketParams"];
+  selectionLabel: string | null;
   edgePct: DbPrediction["edgePct"];
   createdAt: Date;
 };
@@ -403,11 +409,17 @@ export async function getRecentPredictionsByUser(
       awayTeam: matches.awayTeam,
       league: matches.league,
       recommendation: predictions.recommendation,
+      marketKey: markets.key,
+      marketLabel: markets.label,
+      marketParams: predictions.marketParams,
+      selectionLabel: marketSelections.label,
       edgePct: predictions.edgePct,
       createdAt: predictions.createdAt,
     })
     .from(predictions)
     .innerJoin(matches, eq(predictions.matchId, matches.id))
+    .leftJoin(markets, eq(predictions.marketId, markets.id))
+    .leftJoin(marketSelections, eq(predictions.selectionId, marketSelections.id))
     .where(eq(predictions.userId, userId))
     .orderBy(desc(predictions.createdAt))
     .limit(limit);

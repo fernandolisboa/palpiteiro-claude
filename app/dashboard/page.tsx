@@ -15,6 +15,7 @@ import { EmptyState } from "@/components/empty-state";
 import { DesktopShell } from "@/components/desktop-shell";
 import { auth } from "@/auth";
 import {
+  availableLeagueKeys,
   availableMarketKeys,
   deriveDashboardView,
   parseDashboardFilters,
@@ -48,6 +49,7 @@ export default async function DashboardPage({ searchParams }: PageProps) {
   const filters = parseDashboardFilters(
     { status, league, market },
     availableMarketKeys(rows),
+    availableLeagueKeys(rows),
   );
   // Fuso de exibição do usuário (#1) — coluna "data" da tabela no fuso do navegador.
   const timeZone = await getRequestTimeZone();
@@ -90,6 +92,15 @@ export default async function DashboardPage({ searchParams }: PageProps) {
           </Card>
         ) : (
           <div className="flex flex-col gap-8">
+            {/* Liga e mercado recortam tudo abaixo (KPIs, segmentos, gráfico e
+                tabela); o status, junto da tabela, filtra só ela (#539). */}
+            <DashboardFiltersBar
+              filters={filters}
+              leagues={availableLeagues}
+              markets={availableMarkets}
+              dimensions={["league", "market"]}
+            />
+
             <KpiCards view={kpis} />
 
             <MarketSegments segments={segments} />
@@ -111,6 +122,7 @@ export default async function DashboardPage({ searchParams }: PageProps) {
                 filters={filters}
                 leagues={availableLeagues}
                 markets={availableMarkets}
+                dimensions={["status"]}
               />
               <PredictionsTable rows={tableRows} listHref={listHref} />
             </section>

@@ -15,9 +15,8 @@ type Props = {
  * (`max-w-aside`), NUNCA via `className` no Select — que cairia no `<select>`
  * interno e descolaria a chevron `absolute` do `<div relative>` do primitivo.
  *
- * Consumido pelo perfil (`preferred-model-form`). É o seam pronto pra a análise
- * (`model-override-select` + `market-select`) migrar junto numa fatia de match
- * futura (manter a linha do AnalysisPanel coerente).
+ * Consumido pelo perfil (`preferred-model-form`) e pelo `model-override-select`
+ * da página do jogo.
  *
  * `bg-popover text-popover-foreground` em cada `<option>` é obrigatório: o
  * Chromium não herda a cor do `<select>` pro popup nativo (texto escuro no dark).

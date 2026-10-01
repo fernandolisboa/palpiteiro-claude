@@ -28,6 +28,7 @@ function row(overrides: Partial<DashboardRow> = {}): DashboardRow {
     profitUnits: null,
     settledAt: null,
     selectionId: null,
+    selectionLabel: null,
     marketId: null,
     marketParams: null,
     kickoffAt: new Date("2026-06-08T20:00:00Z"),
@@ -66,6 +67,32 @@ describe("toPredictionRowView", () => {
     );
     expect(v.rec).toBe("PASS");
     expect(v.odd).toBe("—");
+  });
+
+  // #539: a tabela não tem coluna de mercado, então a recomendação leva o
+  // contexto junto e seleções de jogador usam o nome do DB, não a key crua.
+  it("carrega o mercado (+ linha) ao lado da recomendação", () => {
+    expect(
+      toPredictionRowView(row({ marketParams: { line: 3.5 } })).market,
+    ).toBe("Over/Under gols 3.5");
+    const btts = toPredictionRowView(
+      row({ marketKey: "btts", marketLabel: "Ambas marcam", recommendation: "yes" }),
+    );
+    expect(btts.rec).toBe("Sim");
+    expect(btts.market).toBe("Ambas marcam");
+  });
+
+  it("artilheiro mostra o nome do jogador do DB, não a key", () => {
+    const v = toPredictionRowView(
+      row({
+        marketKey: "anytime_scorer",
+        marketLabel: "Artilheiro",
+        recommendation: "scorer_pedro",
+        selectionLabel: "Pedro",
+      }),
+    );
+    expect(v.rec).toBe("Pedro");
+    expect(v.market).toBe("Artilheiro");
   });
 });
 
@@ -182,7 +209,16 @@ function makeDetail(overrides: Partial<DashboardDetail> = {}): DashboardDetail {
   // marketKey null por padrão (row sem marketId → LEFT JOIN markets devolve null),
   // exatamente o caso histórico over/under: o view-mapper coalesce null→"over_under",
   // então a saída fica byte-idêntica à anterior (sem o join).
-  return { prediction, match, outcome, aiCall, marketKey: null, ...overrides };
+  return {
+    prediction,
+    match,
+    outcome,
+    aiCall,
+    marketKey: null,
+    marketLabel: null,
+    selectionLabel: null,
+    ...overrides,
+  };
 }
 
 describe("toPredictionDetailView", () => {
@@ -311,6 +347,8 @@ describe("toPredictionDetailView", () => {
       { includeRawPayloads: false },
     );
     expect(v.prediction.rec).toBe("Casa");
+    // Sem markets.label no detalhe, cai no label da apresentação.
+    expect(v.prediction.market).toBe("Resultado (1X2)");
     expect(v.outcome?.settlementMetric.label).toBe("resultado (90')");
     // settlementMetricValue registry-driven: 1X2 mostra o placar (antes mostrava
     // o escalar de gols "3" — bug latente corrigido junto com o deriver do #174).
@@ -350,6 +388,27 @@ describe("toPredictionDetailView", () => {
     // 2-0: só um lado marcou → "Não". 0-0: ninguém marcou → "Não".
     expect(mkBtts(2, 0).outcome?.settlementMetric.value).toBe("Não");
     expect(mkBtts(0, 0).outcome?.settlementMetric.value).toBe("Não");
+  });
+
+  it("assistência: rec usa o label da seleção do DB (#539)", () => {
+    const base = makeDetail();
+    const v = toPredictionDetailView(
+      {
+        ...base,
+        marketKey: "assist",
+        marketLabel: "Assistência",
+        selectionLabel: "Arrascaeta",
+        prediction: {
+          ...base.prediction,
+          market: null,
+          recommendation: "assist_arrascaeta",
+          marketParams: null,
+        },
+      },
+      { includeRawPayloads: false },
+    );
+    expect(v.prediction.rec).toBe("Arrascaeta");
+    expect(v.prediction.market).toBe("Assistência");
   });
 
   it("marketKey null (histórica sem marketId): coalesce over_under → saída byte-idêntica", () => {
