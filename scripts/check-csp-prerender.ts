@@ -6,7 +6,8 @@
  * JS. Corrigir tornando a página dinâmica (`export const dynamic = "force-dynamic"` ou
  * lendo a sessão), não liberando aqui.
  *
- * Roda no `pnpm build` (o build da Vercel), depois do `next build`.
+ * Roda no `pnpm build` (o build da Vercel), depois do `next build`. O CI do GitHub não
+ * builda, então quem acusa é o deploy de preview falhando.
  */
 import { readFileSync } from "node:fs";
 import { join } from "node:path";

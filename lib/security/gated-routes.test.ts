@@ -35,9 +35,12 @@ describe("findStaticGatedRoutes", () => {
   });
 
   it("segmento dinâmico vira valor de exemplo (rota com fallback do ISR)", () => {
-    expect(findStaticGatedRoutes(["/p/[id]", "/match/[id]"], isGated)).toEqual([
-      "/match/[id]",
-    ]);
+    expect(
+      findStaticGatedRoutes(
+        ["/p/[id]", "/match/[id]", "/docs/[[...slug]]"],
+        isGated
+      )
+    ).toEqual(["/match/[id]", "/docs/[[...slug]]"]);
   });
 
   it("o 404 default fica liberado de propósito", () => {

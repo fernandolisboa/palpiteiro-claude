@@ -26,7 +26,7 @@ export function gatedMatcherRegex(cwd: string = process.cwd()): RegExp {
  */
 export const STATIC_GATED_ALLOWLIST = ["/_not-found"] as const;
 
-// Segmento dinâmico (`[id]`, `[...slug]`) vira um valor de exemplo pra testar o matcher.
+// Segmento dinâmico (`[id]`, `[...slug]`, `[[...slug]]`) vira um valor de exemplo pra testar o matcher.
 const SAMPLE_SEGMENT = "3f2b8a4e-1c2d-4e5f-8a9b-0c1d2e3f4a5b";
 
 export function findStaticGatedRoutes(
@@ -37,6 +37,6 @@ export function findStaticGatedRoutes(
   return prerenderedRoutes.filter(
     (route) =>
       !allow.has(route) &&
-      isGated(route.replace(/\[[^/\]]+\]/g, SAMPLE_SEGMENT))
+      isGated(route.replace(/\[\[?[^/\]]+\]?\]/g, SAMPLE_SEGMENT))
   );
 }
