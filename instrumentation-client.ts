@@ -1,4 +1,12 @@
 import * as Sentry from "@sentry/nextjs";
+import { config as zodConfig } from "zod/v4/core";
+
+// A CSP não libera eval (#467, ADR 0040). Sem isto, o Zod 4 testa `Function("")` ao
+// construir o primeiro `z.object` pra decidir se compila schemas (JIT); o teste falha em
+// silêncio, mas o browser reporta a violação ao Sentry a cada carga de página. Com
+// `jitless` ele pula o teste e valida do mesmo jeito, sem JIT. Este arquivo roda antes
+// de qualquer módulo do app no cliente, então nenhum schema é construído antes.
+zodConfig({ jitless: true });
 
 Sentry.init({
   dsn: process.env.NEXT_PUBLIC_SENTRY_DSN,

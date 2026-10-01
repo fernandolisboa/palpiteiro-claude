@@ -3,6 +3,7 @@ import { Geist, Geist_Mono } from "next/font/google";
 import "./globals.css";
 import { SiteFooter } from "@/components/site-footer";
 import { ThemeProvider } from "@/components/theme-provider";
+import { ThemeScript } from "@/components/theme-script";
 import { TimezoneSync } from "@/components/timezone-sync";
 import { THEME_PROVIDER_PROPS } from "@/lib/theme";
 import { VersionChecker } from "@/components/version-checker";
@@ -56,6 +57,7 @@ export default function RootLayout({
       <body
         className={`${geistSans.variable} ${geistMono.variable} antialiased`}
       >
+        <ThemeScript />
         <ThemeProvider {...THEME_PROVIDER_PROPS}>
           {children}
           <SiteFooter />

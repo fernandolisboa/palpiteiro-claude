@@ -1,10 +1,11 @@
-import { readdirSync, readFileSync, statSync } from "node:fs";
+import { readdirSync, statSync } from "node:fs";
 import { createRequire } from "node:module";
 import { join, relative, sep } from "node:path";
 
 import { describe, expect, it } from "vitest";
 
 import { PUBLIC_HTML_SOURCES } from "@/lib/security/csp";
+import { gatedMatcherRegex } from "@/lib/security/gated-routes";
 
 // Mesmo compilador de path que o Next usa pros `source` de headers() no next.config.
 // Via require porque o build compilado do Next não publica tipos pra esse módulo.
@@ -27,10 +28,7 @@ const { pathToRegexp } = createRequire(import.meta.url)(
  * então página nova entra no teste sozinha.
  */
 
-const source = readFileSync(join(process.cwd(), "middleware.ts"), "utf8");
-const matcherMatch = source.match(/matcher:\s*\[\s*"([^"]+)"/);
-if (!matcherMatch?.[1]) throw new Error("não achei o matcher em middleware.ts");
-const matcherRe = new RegExp(`^${matcherMatch[1].replace(/\\\\/g, "\\")}$`);
+const matcherRe = gatedMatcherRegex();
 
 const publicRes = PUBLIC_HTML_SOURCES.map((s) =>
   pathToRegexp(s, [], { strict: true, sensitive: false, delimiter: "/" })

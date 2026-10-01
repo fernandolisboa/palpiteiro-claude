@@ -19,7 +19,7 @@ const nextConfig: NextConfig = {
   async headers() {
     const publicCsp = cspForEnv();
     return [
-      // Content-Security-Policy (#467, ADR 0040) — fase report-only; ver lib/security/csp.ts.
+      // Content-Security-Policy (#467, ADR 0040) — enforce; ver lib/security/csp.ts.
       ...PUBLIC_HTML_SOURCES.map((source) => ({
         source,
         headers: [{ key: CSP_HEADER, value: publicCsp }],
