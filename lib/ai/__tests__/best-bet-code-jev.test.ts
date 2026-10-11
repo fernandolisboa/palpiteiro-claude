@@ -596,3 +596,25 @@ describe("runCodeJevFanOut — paralelo (flag enable_parallel_fan_out)", () => {
     expect(mockNarrate).toHaveBeenCalledTimes(1);
   });
 });
+
+describe("runCodeJevFanOut — erro inesperado fora do try por mercado", () => {
+  it("vira falha nos mercados do grupo sem resultado; o avulso pago é mantido", async () => {
+    // rankInput ausente quebra o ranking da narração, fora do try por mercado.
+    mockPredictForBestBet.mockImplementation(async (args) => ({
+      kind: "pending",
+      pending: { marketKey: args.marketKey } as unknown as PendingCodeJevPrediction,
+    }));
+    const out = await runCodeJevFanOut(
+      base,
+      markets("over_under", "correct_score"),
+      mapError,
+      async () => ({ ok: true }),
+      { parallel: true },
+    );
+    expect(out).toEqual([
+      { ok: false, marketKey: "over_under", message: expect.stringMatching(/^falhou: /) },
+      expect.objectContaining({ marketKey: "correct_score", ok: true }),
+    ]);
+    expect(mockNarrate).not.toHaveBeenCalled();
+  });
+});

@@ -66,6 +66,8 @@ vi.mock("@/lib/ai/palpites", () => ({
 // Motor (ADR 0041 §5): default 'llm' (o fan-out de hoje). O fan-out code_jev (#512) é
 // mockado aqui — a orquestração real é coberta em best-bet-code-jev.test e
 // predict.code-jev.test; aqui trava a cobrança de slots e o repasse.
+// after() só existe dentro de um request do Next: mockado, o teste inspeciona o callback.
+vi.mock("next/server", () => ({ after: vi.fn() }));
 vi.mock("@/lib/ai/engine/analysis-engine-flag", () => ({
   readAnalysisEngine: vi.fn(),
 }));
@@ -79,6 +81,7 @@ import {
   generatePalpiteFromAnalyses,
   runPalpiteHero,
 } from "@/app/actions/predictions";
+import { after } from "next/server";
 import { runCodeJevFanOut } from "@/lib/ai/best-bet";
 import { readAnalysisEngine } from "@/lib/ai/engine/analysis-engine-flag";
 import { generatePalpites, startNewsFetch } from "@/lib/ai/palpites";
@@ -1281,6 +1284,16 @@ describe("analyzeBestBet — fan-out paralelo (flag enable_parallel_fan_out)", (
     expect(mockGeneratePalpites.mock.calls[0][0].news).toBe(NEWS);
     // Todos os mercados rodaram (em paralelo no runFanOut real).
     expect(mockPredict).toHaveBeenCalledTimes(4);
+  });
+
+  it("a busca fica registrada em after() pra terminar em qualquer saída, sem segurar a resposta", async () => {
+    vi.mocked(after).mockClear();
+    mockPredict.mockRejectedValue(new Error("sem odds"));
+    const res = await analyzeBestBet(null, form({ matchId: VALID_MATCH_ID }));
+    expect(res.ok).toBe(false);
+    expect(vi.mocked(after)).toHaveBeenCalledTimes(1);
+    const task = vi.mocked(after).mock.calls[0][0] as () => unknown;
+    expect(task()).toBe(NEWS);
   });
 
   it("motor code_jev recebe parallel:true", async () => {

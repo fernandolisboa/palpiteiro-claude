@@ -398,7 +398,18 @@ export async function runCodeJevFanOut(
 
   const tasks: (() => Promise<void>)[] = [];
   const groupLane = laneFor();
-  tasks.push(() => runGroup(groupLane));
+  // Erro inesperado fora do try por mercado (ex.: no ranking da narração): os mercados
+  // do grupo ainda sem resultado viram falha, em vez de derrubar o run e descartar os
+  // irmãos já pagos que correm junto.
+  tasks.push(() =>
+    runGroup(groupLane).catch((err: unknown) => {
+      for (const [index, m] of markets.entries()) {
+        if (isCodeJevFanOutMarket(m) && out[index] === null) {
+          out[index] = { ok: false, marketKey: m.marketKey, message: mapError(err) };
+        }
+      }
+    }),
+  );
   for (const [index, m] of markets.entries()) {
     if (isCodeJevFanOutMarket(m)) continue;
     const lane = laneFor();

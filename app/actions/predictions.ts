@@ -1,6 +1,7 @@
 "use server";
 
 import { revalidatePath } from "next/cache";
+import { after } from "next/server";
 import { z } from "zod";
 
 import { notAnalyzableMessage } from "./not-analyzable";
@@ -679,6 +680,10 @@ export async function analyzeBestBet(
   const news = parallel
     ? startNewsFetch(match, { userId: session.user.id, matchId }, runDeadline)
     : undefined;
+  // Em qualquer saída do run (todos os mercados falharam, síntese pulada por prazo, erro
+  // inesperado), a busca paga termina depois da resposta e a row de ai_calls dela é
+  // gravada, sem segurar a resposta.
+  if (news) after(() => news);
   const messageContext = messageContextFor(isAdmin);
   const mapError = (err: unknown) => friendlyMessageFromUnknown(err, messageContext);
   const preWarmErrors: { marketKey: string; message: string }[] = [];
@@ -733,9 +738,6 @@ export async function analyzeBestBet(
   if (view.entries.length === 0) {
     // Todos falharam → estado de erro (espelha o total-failure do analyzeMatch), NÃO um
     // sucesso vazio. O run pode ter pago ≤N calls (e os mesmos N slots) — surge como erro.
-    // A busca de notícias já disparada termina antes da resposta, pra a row de ai_calls
-    // dela não se perder com a função congelada.
-    await news;
     return {
       ok: false,
       error: view.errors[0]?.message ?? "Nenhum mercado pôde ser analisado.",
@@ -1040,8 +1042,13 @@ export async function analyzeMarkets(
   if (chosen.length === 0) {
     return { ok: false, error: "Nenhum mercado válido selecionado." };
   }
-  // Kill-switch do fan-out paralelo (leitura grátis → antes do 1º slot).
-  const parallel = await getEnableParallelFanOut();
+  // Kill-switch do fan-out paralelo (leitura grátis → antes do 1º slot). No motor
+  // code_jev fica serial: aqui cada predict() resolve os julgamentos JEV sozinho, e só o
+  // serial deixa o 2º mercado reusar os do 1º (findReusableJudgments) — em paralelo
+  // seriam N chamadas JEV. (O analyzeBestBet compartilha o memo do run e não tem isso.)
+  const parallel =
+    (await readAnalysisEngine()) !== "code_jev" &&
+    (await getEnableParallelFanOut());
   // Rate-limit POR MERCADO: o 1º slot é cobrado AQUI (atômico), antes do pré-warm e de
   // qualquer busca — negado ou fail-closed aborta o run (chargeRunBudget). A seleção é
   // cortada no que resta do dia (`granted` é um PREFIXO de `chosen`,

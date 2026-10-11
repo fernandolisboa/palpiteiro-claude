@@ -39,6 +39,10 @@ vi.mock("@/lib/ai/models", async (importOriginal) => {
   const actual = await importOriginal<typeof import("@/lib/ai/models")>();
   return { ...actual, modelsForAudience: vi.fn() };
 });
+// Motor: 'llm' por padrão (o code_jev força o fan-out serial aqui).
+vi.mock("@/lib/ai/engine/analysis-engine-flag", () => ({
+  readAnalysisEngine: vi.fn(async () => "llm"),
+}));
 vi.mock("@/lib/db/queries/ai-config", () => ({
   getEnableOverUnderExtraLines: vi.fn(),
   // Fan-out paralelo: mockado OFF (undefined) por padrão → caminho serial.
@@ -49,7 +53,11 @@ vi.mock("@/lib/db/queries/ai-config", () => ({
 import { analyzeMarkets } from "@/app/actions/predictions";
 import { auth } from "@/auth";
 import { predict } from "@/lib/ai/predict";
-import { getEnableOverUnderExtraLines } from "@/lib/db/queries/ai-config";
+import { readAnalysisEngine } from "@/lib/ai/engine/analysis-engine-flag";
+import {
+  getEnableOverUnderExtraLines,
+  getEnableParallelFanOut,
+} from "@/lib/db/queries/ai-config";
 import { marketsForAudience } from "@/lib/db/queries/market-catalog";
 import { getMatchById } from "@/lib/db/queries/matches";
 import { getUserAccessState } from "@/lib/db/queries/users";
@@ -583,5 +591,48 @@ describe("analyzeMarkets — admin sem KV + gate order (slots só após gates gr
 
     expect(mockRateLimit).not.toHaveBeenCalled();
     expect(mockPredict).not.toHaveBeenCalled();
+  });
+});
+
+describe("analyzeMarkets — fan-out paralelo (flag) e motor code_jev", () => {
+  // Registra início/fim de cada predict: serial = início,fim,início,fim; paralelo = os
+  // inícios antes dos fins.
+  function recordOrder(): string[] {
+    const log: string[] = [];
+    mockPredict.mockImplementation(async (args, opts) => {
+      log.push(`start:${args.marketKey}`);
+      await opts?.beforeLlmPath?.();
+      await new Promise((r) => setTimeout(r, 0));
+      log.push(`end:${args.marketKey}`);
+      return resultFor(args.marketKey!);
+    });
+    return log;
+  }
+  const twoMarkets = () =>
+    form({ matchId: VALID_MATCH_ID, marketKeys: ["over_under", "match_result"] });
+
+  beforeEach(() => {
+    vi.mocked(getEnableParallelFanOut).mockReset();
+    vi.mocked(getEnableParallelFanOut).mockResolvedValue(true);
+    vi.mocked(readAnalysisEngine).mockReset();
+    vi.mocked(readAnalysisEngine).mockResolvedValue("llm");
+  });
+
+  it("motor llm + flag ON → os mercados correm juntos", async () => {
+    const log = recordOrder();
+    await analyzeMarkets(null, twoMarkets());
+    expect(log.slice(0, 2)).toEqual(["start:over_under", "start:match_result"]);
+  });
+
+  it("motor code_jev → serial mesmo com a flag ON (o 2º mercado reusa o JEV do 1º)", async () => {
+    vi.mocked(readAnalysisEngine).mockResolvedValue("code_jev");
+    const log = recordOrder();
+    await analyzeMarkets(null, twoMarkets());
+    expect(log).toEqual([
+      "start:over_under",
+      "end:over_under",
+      "start:match_result",
+      "end:match_result",
+    ]);
   });
 });
