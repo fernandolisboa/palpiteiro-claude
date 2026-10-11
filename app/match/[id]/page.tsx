@@ -10,12 +10,16 @@ import { DesktopShell } from "@/components/desktop-shell";
 import { MatchAuxiliarySections } from "@/components/match-sections-auxiliary";
 import { MatchHero } from "@/components/match-hero";
 import { MatchSections } from "@/components/match-sections";
-import { OddsCard } from "@/components/odds-card";
+import {
+  MatchOddsCards,
+  type MatchOddsViews,
+} from "@/components/match-odds-cards";
 import { PalpiteHero } from "@/components/palpites/palpite-hero";
 import { ThemeToggle } from "@/components/theme-toggle";
 import { GuidedTour } from "@/components/tour/guided-tour";
 import {
   MatchAuxiliarySkeleton,
+  MatchOddsSkeleton,
   MatchSectionsSkeleton,
 } from "@/components/skeletons/match-sections-skeleton";
 import { MatchAnalysisTabs } from "@/components/match-analysis-tabs";
@@ -59,12 +63,12 @@ import { resolveBackHref } from "@/lib/view/back-href";
 import { toNwayOddsView, toOddsView } from "@/lib/view/odds";
 import type {
   MarketAnalysisSectionItem,
-  OddsView,
   PreviousAnalysisItem,
 } from "@/lib/view/types";
 
 // Os fan-outs (melhor aposta #178, multi-mercado #245) rodam até MAX_FANOUT_MARKETS (7)
-// predict() SERIAIS num request, e um modelo adaptive leva 45–90s por chamada. Estende o
+// predict() num request (em paralelo com a flag enable_parallel_fan_out, em série sem
+// ela), e um modelo adaptive leva 45–90s por chamada. Estende o
 // budget da rota (Vercel max). As actions têm prazo próprio de 270s (ACTION_BUDGET_MS,
 // lib/ai/deadline.ts, #524): o que não cabe vira "Tempo esgotado — não analisado" sem
 // gasto nem slot, e o timeout de cada chamada é cortado pelo que resta — o request
@@ -106,23 +110,47 @@ export default async function MatchPage({ params, searchParams }: PageProps) {
   // liga por refresh stale (h2h é market separado de totals). Retorna a snapshot
   // over/under LEGADA (contrato inalterado). O card 1X2 lê selection_odds_snapshots
   // DEPOIS do warm — encadeado no ensure (a leitura não pode correr antes da escrita).
-  const ensureP = ensureOddsSnapshotsFresh(match, { markets: PAGE_LIVE_MARKETS });
-  const matchResultP = ensureP.then(() =>
-    getLatestSelectionOddsSnapshotsForMatches([match.id], "match_result"),
-  );
-  // Odds e predição existente em paralelo. Ambas são pré-requisito pro
-  // render síncrono do hero + odds + panel (não vão pra Suspense).
+  //
+  // FORA do caminho crítico: com o snapshot vencido o refresh espera a The Odds API, e
+  // só os cards de odds dependem dele (o hero não mostra odd). A página renderiza sem
+  // esperar e os cards chegam por streaming (MatchOddsCards em Suspense). Criada UMA vez
+  // aqui e compartilhada pelas árvores mobile e desktop: um refresh só.
+  const oddsP: Promise<MatchOddsViews> = ensureOddsSnapshotsFresh(match, {
+    markets: PAGE_LIVE_MARKETS,
+  }).then(async (snapshot) => {
+    const matchResultMap = await getLatestSelectionOddsSnapshotsForMatches(
+      [match.id],
+      "match_result",
+    );
+    // Card 1X2 ao vivo (#173): best-effort — captura ausente/incompleta vira null
+    // (o reader OMITE, nunca throw) → card simplesmente não é empilhado.
+    const matchResultSnapshot = matchResultMap.get(match.id);
+    return {
+      oddsView: snapshot
+        ? toOddsView({
+            bookmaker: snapshot.bookmaker,
+            overOdd: snapshot.overOdd,
+            underOdd: snapshot.underOdd,
+            capturedAt: snapshot.capturedAt,
+          })
+        : null,
+      matchResultOddsView: matchResultSnapshot
+        ? toNwayOddsView(matchResultSnapshot, "match_result")
+        : null,
+    };
+  });
+  // Os dois MatchOddsCards aguardam esta promise; se a página falhar antes de montá-los,
+  // a rejeição não fica sem handler.
+  oddsP.catch(() => {});
+  // Predição existente e demais leituras em paralelo: pré-requisito pro render
+  // síncrono do hero + panel.
   const [
-    snapshot,
-    matchResultMap,
     history,
     palpiteSets,
     bestBetEnabled,
     tourState,
     audienceMarkets,
   ] = await Promise.all([
-      ensureP,
-      matchResultP,
       // Histórico COMPLETO: agrupado por mercado em toMarketAnalysisSections (#243, a
       // última de cada mercado = uma seção) e em toPreviousAnalysisItems (as reanálises
       // mais antigas, #204). Scoped por userId (sem leak, AC2).
@@ -161,34 +189,12 @@ export default async function MatchPage({ params, searchParams }: PageProps) {
       homeScore: match.homeScore,
       awayScore: match.awayScore,
     },
-    odds: snapshot
-      ? {
-          bookmaker: snapshot.bookmaker,
-          overOdd: snapshot.overOdd,
-          underOdd: snapshot.underOdd,
-          capturedAt: snapshot.capturedAt,
-        }
-      : null,
+    // O hero não mostra odd (os cards de odds chegam por streaming, oddsP acima).
+    odds: null,
     hasPrediction: latestPred !== null,
     now,
     timeZone,
   });
-
-  const oddsView: OddsView | null = snapshot
-    ? toOddsView({
-        bookmaker: snapshot.bookmaker,
-        overOdd: snapshot.overOdd,
-        underOdd: snapshot.underOdd,
-        capturedAt: snapshot.capturedAt,
-      })
-    : null;
-
-  // Card 1X2 ao vivo (#173): best-effort — captura ausente/incompleta vira null
-  // (o reader OMITE, nunca throw) → card simplesmente não é empilhado.
-  const matchResultSnapshot = matchResultMap.get(match.id);
-  const matchResultOddsView: OddsView | null = matchResultSnapshot
-    ? toNwayOddsView(matchResultSnapshot, "match_result")
-    : null;
 
   // Última análise por MERCADO (#243): uma seção colapsável por mercado (≥2) ou o
   // resultado cru (≤1, idêntico ao atual). ANTERIORES (#204) = as reanálises mais
@@ -316,8 +322,7 @@ export default async function MatchPage({ params, searchParams }: PageProps) {
       <div className="lg:hidden">
         <MobileMatch
           heroView={heroView}
-          oddsView={oddsView}
-          matchResultOddsView={matchResultOddsView}
+          odds={oddsP}
           sections={sections}
           previousAnalyses={previousAnalyses}
           matchId={match.id}
@@ -340,8 +345,7 @@ export default async function MatchPage({ params, searchParams }: PageProps) {
       <div className="hidden lg:block">
         <DesktopMatch
           heroView={heroView}
-          oddsView={oddsView}
-          matchResultOddsView={matchResultOddsView}
+          odds={oddsP}
           sections={sections}
           previousAnalyses={previousAnalyses}
           matchId={match.id}
@@ -367,10 +371,9 @@ export default async function MatchPage({ params, searchParams }: PageProps) {
 
 type Common = {
   heroView: ReturnType<typeof toMatchRowView>;
-  oddsView: OddsView | null;
-  // Card 1X2 ao vivo empilhado abaixo do over/under (#173). null = sem captura
-  // h2h pra este match (best-effort) → não renderiza o 2º card.
-  matchResultOddsView: OddsView | null;
+  // Cards de odds (over/under + 1X2 ao vivo, #173), resolvidos fora do caminho crítico
+  // e renderizados por streaming. A MESMA promise nas duas árvores.
+  odds: Promise<MatchOddsViews>;
   // Última análise por mercado (#243): ≤1 → resultado cru (idêntico ao atual); ≥2 →
   // uma seção colapsável por mercado. Vazio → nenhuma análise ainda.
   sections: MarketAnalysisSectionItem[];
@@ -414,8 +417,7 @@ type Common = {
 
 function MobileMatch({
   heroView,
-  oddsView,
-  matchResultOddsView,
+  odds,
   sections,
   previousAnalyses,
   matchId,
@@ -505,8 +507,9 @@ function MobileMatch({
         {/* Odds (preços de referência) DEPOIS do detalhe — em tela estreita ficam abaixo do
             palpite+análise, sem empurrar a análise pra longe da manchete. */}
         <div className="flex flex-col gap-3" data-tour="odds">
-          <OddsCard view={oddsView} unavailable={unavailableReason} />
-          {matchResultOddsView && <OddsCard view={matchResultOddsView} />}
+          <Suspense fallback={<MatchOddsSkeleton />}>
+            <MatchOddsCards odds={odds} unavailable={unavailableReason} />
+          </Suspense>
         </div>
 
         <div className="flex flex-col gap-3" data-tour="match-stats">
@@ -524,8 +527,7 @@ function MobileMatch({
 
 function DesktopMatch({
   heroView,
-  oddsView,
-  matchResultOddsView,
+  odds,
   sections,
   previousAnalyses,
   matchId,
@@ -589,8 +591,9 @@ function DesktopMatch({
         {/* Odds (preços de referência) LADO A LADO logo abaixo: over/under e 1X2 na mesma
             linha, mesma altura (stretch do grid). Sem o 1X2, o over/under ocupa metade. */}
         <div className="mb-6 grid grid-cols-2 gap-3" data-tour="odds">
-          <OddsCard view={oddsView} unavailable={unavailableReason} />
-          {matchResultOddsView && <OddsCard view={matchResultOddsView} />}
+          <Suspense fallback={<MatchOddsSkeleton />}>
+            <MatchOddsCards odds={odds} unavailable={unavailableReason} />
+          </Suspense>
         </div>
 
         {/* Detalhe por mercado FULL-WIDTH abaixo das odds: collapsed por padrão, ocupa a
