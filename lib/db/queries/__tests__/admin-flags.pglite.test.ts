@@ -41,6 +41,7 @@ import {
   getEnableFidelityValidation,
   getEnableKellyStaking,
   getEnableOverUnderExtraLines,
+  getEnableParallelFanOut,
   setAdminFlag,
 } from "@/lib/db/queries/ai-config";
 
@@ -53,6 +54,7 @@ const GETTERS = {
   enableFidelityValidation: getEnableFidelityValidation,
   enableKellyStaking: getEnableKellyStaking,
   enableDixonColes: getEnableDixonColes,
+  enableParallelFanOut: getEnableParallelFanOut,
   analysisEngine: getAnalysisEngine,
 } satisfies Record<AdminFlagKey, () => Promise<unknown>>;
 

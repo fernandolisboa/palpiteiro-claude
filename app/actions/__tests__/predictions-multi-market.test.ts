@@ -41,6 +41,8 @@ vi.mock("@/lib/ai/models", async (importOriginal) => {
 });
 vi.mock("@/lib/db/queries/ai-config", () => ({
   getEnableOverUnderExtraLines: vi.fn(),
+  // Fan-out paralelo: mockado OFF (undefined) por padrão → caminho serial.
+  getEnableParallelFanOut: vi.fn(),
   getEnableBestBetFanOut: vi.fn(),
 }));
 

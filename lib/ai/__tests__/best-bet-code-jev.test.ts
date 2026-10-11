@@ -510,3 +510,89 @@ describe("runCodeJevFanOut — prazo do run (#524 review)", () => {
     expect(out.every((o) => o.ok)).toBe(true);
   });
 });
+
+describe("runCodeJevFanOut — paralelo (flag enable_parallel_fan_out)", () => {
+  function deferred<T>() {
+    let resolve!: (v: T) => void;
+    const promise = new Promise<T>((r) => {
+      resolve = r;
+    });
+    return { promise, resolve };
+  }
+
+  it("o mercado avulso parte junto do grupo, sem esperar a narração", async () => {
+    const narrationGate = deferred<void>();
+    const log: string[] = [];
+    mockNarrate.mockImplementation(async (pending) => {
+      log.push(`narra:${pending.marketKey}`);
+      await narrationGate.promise;
+      return NARRATION;
+    });
+    mockPredict.mockImplementation(async (args) => {
+      log.push(`predict:${args.marketKey}`);
+      return resultFor(args.marketKey!, `ac-${args.marketKey}`);
+    });
+
+    const run = runCodeJevFanOut(
+      base,
+      markets("correct_score", "over_under", "match_result"),
+      mapError,
+      async () => ({ ok: true }),
+      { parallel: true },
+    );
+    // O placar exato roda enquanto a narração ainda não voltou.
+    await vi.waitFor(() => expect(log).toContain("predict:correct_score"));
+    await vi.waitFor(() => expect(log).toContain("narra:over_under"));
+    narrationGate.resolve();
+    const out = await run;
+
+    expect(out.map((o) => o.marketKey)).toEqual([
+      "correct_score",
+      "over_under",
+      "match_result",
+    ]);
+    expect(out.every((o) => o.ok)).toBe(true);
+    expect(mockNarrate).toHaveBeenCalledTimes(1);
+  });
+
+  it("slot negado no mercado avulso NÃO pula a narração do grupo", async () => {
+    // Placar exato pede slot primeiro e é negado; a narração pede depois e é concedida.
+    const acquireSlot = vi
+      .fn<() => Promise<SlotGrant>>()
+      .mockResolvedValueOnce({ ok: false })
+      .mockResolvedValue({ ok: true });
+    mockPredict.mockImplementation(async (args, opts) => {
+      await opts?.beforeLlmPath?.();
+      return resultFor(args.marketKey!, `ac-${args.marketKey}`);
+    });
+    const narrationGate = deferred<void>();
+    mockNarrate.mockImplementation(async (_pending, opts) => {
+      await narrationGate.promise;
+      await opts?.beforeLlmPath?.();
+      return NARRATION;
+    });
+
+    const run = runCodeJevFanOut(
+      base,
+      markets("over_under", "correct_score", "match_result"),
+      mapError,
+      acquireSlot,
+      { parallel: true },
+    );
+    await vi.waitFor(() => expect(acquireSlot).toHaveBeenCalledTimes(1));
+    narrationGate.resolve();
+    const out = await run;
+
+    expect(out).toEqual([
+      expect.objectContaining({ marketKey: "over_under", ok: true }),
+      {
+        ok: false,
+        marketKey: "correct_score",
+        message: RATE_LIMITED_MARKET_MESSAGE,
+        notRun: "rate-limited",
+      },
+      expect.objectContaining({ marketKey: "match_result", ok: true }),
+    ]);
+    expect(mockNarrate).toHaveBeenCalledTimes(1);
+  });
+});

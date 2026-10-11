@@ -1,9 +1,9 @@
 // Orçamento de tempo (wall-clock) das actions de análise (#524, review).
 //
 // A página do jogo roda as actions com `maxDuration = 300` (Vercel mata o request
-// depois disso). Os fan-outs (melhor aposta, multi-mercado) chamam predict() em
-// SÉRIE, e um modelo adaptive (Opus 5.5 / Sonnet 5 / Fable 5.1) leva 45–90s por
-// chamada. Sem teto, o request morre no meio: mercados sem análise, síntese que
+// depois disso). Os fan-outs (melhor aposta, multi-mercado) chamam predict() por
+// mercado (em paralelo com a flag enable_parallel_fan_out, em série sem ela), e um
+// modelo adaptive (Opus 5.5 / Sonnet 5 / Fable 5.1) leva 45–90s por chamada. Sem teto, o request morre no meio: mercados sem análise, síntese que
 // nunca roda. Aqui mora o prazo do run inteiro, medido do início da action, e as
 // regras puras de "ainda cabe uma chamada?". Módulo PURO (sem SDK/DB) de propósito:
 // predict, o orquestrador do fan-out e a síntese o importam sem ciclo (a estimativa

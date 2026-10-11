@@ -255,6 +255,19 @@ export async function getEnableDixonColes(): Promise<boolean> {
 }
 
 /**
+ * Kill-switch do fan-out paralelo do "Analisar com IA". Default ON quando não há row.
+ * false → os mercados rodam em série, como antes (lib/ai/best-bet.ts).
+ */
+export async function getEnableParallelFanOut(): Promise<boolean> {
+  const rows = await db
+    .select({ enabled: aiConfig.enableParallelFanOut })
+    .from(aiConfig)
+    .where(eq(aiConfig.id, 1))
+    .limit(1);
+  return rows[0]?.enabled ?? true;
+}
+
+/**
 /**
  * Motor de análise (ADR 0041 §5, #511): 'llm' (cartucho de mercado decide — caminho
  * de hoje) ou 'code_jev' (código + julgamentos JEV decidem, LLM narra). Sem row ou

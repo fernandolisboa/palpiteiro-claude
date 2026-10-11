@@ -116,7 +116,11 @@ vi.mock("@/lib/providers/news", () => ({
   getNewsProvider: vi.fn(() => ({ getNewsByMatch })),
 }));
 
-import { generatePalpites, PalpiteError } from "@/lib/ai/palpites";
+import {
+  generatePalpites,
+  PalpiteError,
+  startNewsFetch,
+} from "@/lib/ai/palpites";
 import {
   NEWS_MIN_BUDGET_MS,
   SYNTHESIS_CALL_RESERVE_MS,
@@ -281,6 +285,41 @@ describe("generatePalpites (síntese) — prazo do run (#524 re-review)", () => 
     expect(getNewsByMatch).not.toHaveBeenCalled();
     expect(runAnalysis).toHaveBeenCalledTimes(1);
     expect(res.palpiteSet).toBeDefined();
+  });
+});
+
+describe("generatePalpites (síntese) — notícias já disparadas pelo run", () => {
+  it("usa a busca recebida e não busca de novo", async () => {
+    runAnalysis.mockResolvedValue(okResult(validHeadline));
+    const news = Promise.resolve({
+      results: [],
+      aiCall: { id: "ac-news" },
+      unavailable: false,
+    });
+    const res = await generatePalpites({ ...baseCall, news });
+    expect(getNewsByMatch).not.toHaveBeenCalled();
+    expect(res.palpiteSet).toBeDefined();
+  });
+
+  it("startNewsFetch nunca rejeita: falha do provider vira 'sem notícias'", async () => {
+    getNewsByMatch.mockRejectedValue(new Error("web search caiu"));
+    const errSpy = vi.spyOn(console, "error").mockImplementation(() => {});
+    try {
+      await expect(
+        startNewsFetch(
+          {
+            league: "brasileirao_a",
+            homeTeam: "A",
+            awayTeam: "B",
+            kickoffAt: new Date("2099-01-01T00:00:00Z"),
+          },
+          { userId: "u-1", matchId: "m-1" },
+          undefined,
+        ),
+      ).resolves.toEqual({ results: [], aiCall: null, unavailable: true });
+    } finally {
+      errSpy.mockRestore();
+    }
   });
 });
 

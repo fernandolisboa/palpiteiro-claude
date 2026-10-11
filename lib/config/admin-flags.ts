@@ -115,6 +115,16 @@ export const ADMIN_FLAGS = [
       "Sem LLM e sem The Odds API; o refit diário faz 1 chamada de API-Football por liga ativa (4 na 1ª rodada da liga).",
   },
   {
+    key: "enableParallelFanOut",
+    kind: "boolean",
+    label: "Análise em paralelo",
+    description:
+      "No \"Analisar com IA\", os mercados independentes e a busca de notícias rodam ao mesmo tempo: a análise leva o tempo do mercado mais lento, não a soma. Desligada, roda um mercado de cada vez, como antes.",
+    default: true,
+    costNote:
+      "Mesmo número de chamadas pagas; só muda a ordem. Se a busca de notícias rodar e todos os mercados falharem, ela é paga sem virar palpite.",
+  },
+  {
     key: "analysisEngine",
     kind: "enum",
     label: "Motor de análise",

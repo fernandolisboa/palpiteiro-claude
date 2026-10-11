@@ -9,6 +9,7 @@ import type { MarketAnalysisSummary } from "./synthesis-input";
 // Re-export pra os tipos do cartucho resolverem sem ciclo cross-layer (lib/ai/palpites
 // já importa lib/providers/sports-data; lib/providers/news é a mesma direção). ADR 0032.
 export type { NewsResult } from "@/lib/providers/news/types";
+import type { NewsFetchOutcome } from "@/lib/providers/news/types";
 
 // ─── Cartridge contract (disjunto do MarketCartridge) ─────────────────────────
 //
@@ -44,6 +45,9 @@ export type GeneratePalpiteArgs = {
   // Prazo do run (epoch ms, lib/ai/deadline.ts — #524 review): o timeout da chamada é
   // cortado por ele. Ausente = timeout do client.
   deadlineAt?: number;
+  // Busca de notícias já em andamento (startNewsFetch), disparada pelo caller em paralelo
+  // ao fan-out. Ausente = a síntese busca agora, como antes.
+  news?: Promise<NewsFetchOutcome>;
 };
 
 export type PalpiteGenerationResult = {

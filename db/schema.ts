@@ -825,6 +825,10 @@ export const aiConfig = pgTable("ai_config", {
   // (padrão sem-gates do dono); sem fit fresco ou time com pouco histórico, cai no
   // heurístico da tabela sozinho. SET ... = false → heurístico sempre.
   enableDixonColes: boolean().notNull().default(true),
+  // Kill-switch: no "Analisar com IA", os mercados independentes (e a busca de notícias
+  // da síntese) correm em PARALELO — o run leva o tempo do mercado mais lento em vez da
+  // soma. Default ON (padrão sem-gates do dono). SET ... = false → fan-out serial de antes.
+  enableParallelFanOut: boolean().notNull().default(true),
   updatedByUserId: uuid().references(() => users.id, { onDelete: "set null" }),
   updatedAt: timestamp({ withTimezone: true }).notNull().defaultNow(),
 });

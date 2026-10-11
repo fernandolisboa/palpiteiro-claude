@@ -29,7 +29,7 @@ const FAKE_ENUM = {
 const FAKE_FLAGS = [...ADMIN_FLAGS, FAKE_ENUM] as const satisfies readonly AdminFlagDef[];
 
 describe("ADMIN_FLAGS (registry, #514)", () => {
-  it("tem as 5 flags boolean + o motor de análise (enum), sem key repetida", () => {
+  it("tem as 7 flags boolean + o motor de análise (enum), sem key repetida", () => {
     const keys = ADMIN_FLAGS.map((f) => f.key);
     expect(keys).toEqual([
       "enableOverUnderExtraLines",
@@ -38,6 +38,7 @@ describe("ADMIN_FLAGS (registry, #514)", () => {
       "enableFidelityValidation",
       "enableKellyStaking",
       "enableDixonColes",
+      "enableParallelFanOut",
       "analysisEngine",
     ]);
     expect(new Set(keys).size).toBe(keys.length);
@@ -58,6 +59,7 @@ describe("ADMIN_FLAGS (registry, #514)", () => {
       enableFidelityValidation: true,
       enableKellyStaking: true,
       enableDixonColes: true,
+      enableParallelFanOut: true,
       analysisEngine: "llm",
     });
   });
@@ -76,6 +78,7 @@ describe("ADMIN_FLAGS (registry, #514)", () => {
       enableFidelityValidation: boolean;
       enableKellyStaking: boolean;
       enableDixonColes: boolean;
+      enableParallelFanOut: boolean;
       analysisEngine: "llm" | "code_jev";
     }>();
   });
