@@ -204,3 +204,79 @@ describe("runFanOut — prazo do run e slot sob demanda (#524 review)", () => {
     ]);
   });
 });
+
+describe("runFanOut — paralelo (flag enable_parallel_fan_out)", () => {
+  const three: FanOutMarket[] = [
+    { marketKey: "over_under", extraLines: false },
+    { marketKey: "match_result", extraLines: false },
+    { marketKey: "btts", extraLines: false },
+  ];
+
+  // Promise controlável: o teste decide quando cada predict "volta".
+  function deferred<T>() {
+    let resolve!: (v: T) => void;
+    const promise = new Promise<T>((r) => {
+      resolve = r;
+    });
+    return { promise, resolve };
+  }
+
+  it("todos os mercados partem antes de qualquer um terminar; a saída mantém a ordem", async () => {
+    const gates = new Map(three.map((m) => [m.marketKey, deferred<void>()]));
+    const started: string[] = [];
+    mockPredict.mockImplementation(async (args) => {
+      started.push(args.marketKey!);
+      await gates.get(args.marketKey!)!.promise;
+      return okResult(args.marketKey!);
+    });
+
+    const run = runFanOut(base, three, mapError, { parallel: true });
+    await vi.waitFor(() => expect(started).toHaveLength(3));
+    // Terminam fora de ordem.
+    gates.get("btts")!.resolve();
+    gates.get("over_under")!.resolve();
+    gates.get("match_result")!.resolve();
+    const out = await run;
+
+    expect(out.map((o) => o.marketKey)).toEqual([
+      "over_under",
+      "match_result",
+      "btts",
+    ]);
+    expect(out.every((o) => o.ok)).toBe(true);
+  });
+
+  it("slot negado afeta só aquele mercado; erro de um não derruba os irmãos", async () => {
+    mockPredict.mockImplementation(async (args, opts) => {
+      if (args.marketKey === "over_under") throw new Error("sem snapshot fresco");
+      await opts?.beforeLlmPath?.();
+      return okResult(args.marketKey!);
+    });
+    const acquireSlot = vi
+      .fn<() => Promise<SlotGrant>>()
+      .mockResolvedValueOnce({ ok: true })
+      .mockResolvedValue({ ok: false });
+
+    const out = await runFanOut(base, three, mapError, {
+      acquireSlot,
+      parallel: true,
+    });
+
+    expect(mockPredict).toHaveBeenCalledTimes(3);
+    expect(acquireSlot).toHaveBeenCalledTimes(2);
+    expect(out.map((o) => (o.ok ? "ok" : (o.notRun ?? o.message)))).toEqual([
+      "sem snapshot fresco",
+      "ok",
+      "rate-limited",
+    ]);
+  });
+
+  it("prazo já esgotado → nenhum predict, todos 'Tempo esgotado'", async () => {
+    const out = await runFanOut(base, three, mapError, {
+      deadlineAt: Date.now() - 1,
+      parallel: true,
+    });
+    expect(mockPredict).not.toHaveBeenCalled();
+    expect(out.every((o) => !o.ok && o.notRun === "deadline")).toBe(true);
+  });
+});

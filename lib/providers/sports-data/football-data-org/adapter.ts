@@ -1,6 +1,7 @@
 import type { z } from "zod";
 
 import { inMemoryCache } from "@/lib/cache/in-memory";
+import { coalesceInFlight } from "@/lib/cache/in-flight";
 import type { CacheStore } from "@/lib/cache/types";
 import {
   createProviderClient,
@@ -129,7 +130,18 @@ type RequestOptions<S extends z.ZodTypeAny> = {
   cache?: CacheStore;
 };
 
-async function request<S extends z.ZodTypeAny>(
+// Chamadas concorrentes pra mesma chave dividem UMA request (lib/cache/in-flight.ts).
+function request<S extends z.ZodTypeAny>(
+  opts: RequestOptions<S>,
+): Promise<z.infer<S>> {
+  return coalesceInFlight(
+    opts.cache ?? inMemoryCache,
+    opts.cacheKeyOverride ?? buildCacheKey(opts.endpoint, stripUndefined(opts.params)),
+    () => requestUncoalesced(opts),
+  );
+}
+
+async function requestUncoalesced<S extends z.ZodTypeAny>(
   opts: RequestOptions<S>,
 ): Promise<z.infer<S>> {
   const params = stripUndefined(opts.params);

@@ -108,7 +108,27 @@ export type FanOutOptions = {
   // não pede slot. O caller pode servir o 1º pedido com um slot já cobrado antes do
   // run (a trava contra gasto de cota de terceiros sem slot). Ausente = sem cobrança.
   acquireSlot?: () => Promise<SlotGrant>;
+  // Mercados independentes em PARALELO (flag enable_parallel_fan_out, admin). Ligado,
+  // o run leva o tempo do mercado mais lento em vez da soma; desligado (ou ausente),
+  // o caminho serial de sempre. Ver runFanOut.
+  parallel?: boolean;
 };
+
+type StopState = { message: string; notRun: NotRunReason } | null;
+
+/**
+ * Executa as tarefas em série (uma após a outra, na ordem) ou todas de uma vez. A saída
+ * segue a ordem de `tasks` nos dois modos.
+ */
+async function runTasks<T>(
+  tasks: (() => Promise<T>)[],
+  parallel: boolean,
+): Promise<T[]> {
+  if (parallel) return Promise.all(tasks.map((t) => t()));
+  const out: T[] = [];
+  for (const t of tasks) out.push(await t());
+  return out;
+}
 
 // Slot negado / prazo esgotado → mensagem + motivo do mercado que não rodou.
 function notRunOf(err: unknown): { message: string; notRun: NotRunReason } | null {
@@ -134,21 +154,26 @@ function slotHook(
 }
 
 /**
- * Fan-out SERIAL: um `predict()` por candidato, em ordem, best-of-successful.
+ * Fan-out: um `predict()` por candidato, best-of-successful.
  *
- * Serial (NÃO Promise.all) é deliberado: neon-http não tem `db.transaction` e o
- * `db.batch` não carrega um id de `.returning()` — predict() roda ~10 statements
- * sequenciais; N predict() em paralelo só multiplica round-trips HTTP sem ganho de
- * atomicidade e arrisca contenção de cold-start. Serial também faz o cap virar teto
- * real de spend concorrente, e o cache in-memory de odds (featured da liga) só ajuda.
+ * Paralelo (flag `enable_parallel_fan_out`, default ON): as chamadas de LLM dominam o
+ * tempo (15–90s cada) e são independentes entre mercados, então o run leva o tempo do
+ * mais lento em vez da soma. O que o serial protegia segue valendo: o cap
+ * (MAX_FANOUT_MARKETS) continua sendo o teto de chamadas pagas do run; cada predict()
+ * faz seus ~10 statements no neon-http sem transação (nada compartilhado entre
+ * mercados); e os providers coalescem requests iguais em voo (lib/cache/in-flight.ts),
+ * então N mercados concorrentes não multiplicam chamadas de API-Football/odds.
+ * Serial (flag off) é o caminho de antes, mantido como kill-switch.
  *
  * NUNCA propaga erro de um mercado: TODO erro (PredictError OU inesperado) é
- * capturado por-mercado, pra um irmão já pago/persistido (mercados 1..k-1) nunca ser
- * descartado por uma falha no mercado k. `mapError` (server-side friendlyMessage) é
- * injetado pra a mensagem amigável não vazar pro bundle do cliente.
+ * capturado por-mercado, pra um irmão já pago/persistido nunca ser descartado por uma
+ * falha em outro. `mapError` (server-side friendlyMessage) é injetado pra a mensagem
+ * amigável não vazar pro bundle do cliente.
  *
- * Prazo esgotado ou slot negado PARAM o run: o mercado e todos os seguintes viram
- * `notRun` sem chamar predict() (nada gasto, nenhum slot cobrado).
+ * Prazo esgotado ou slot negado PARAM o run serial: o mercado e todos os seguintes
+ * viram `notRun` sem chamar predict() (nada gasto, nenhum slot cobrado). No paralelo
+ * todos partem juntos: cada mercado confere o prazo ao partir e pede o próprio slot
+ * antes do gasto; um slot negado vira `notRun` só naquele mercado.
  */
 export async function runFanOut(
   base: {
@@ -161,18 +186,14 @@ export async function runFanOut(
   mapError: (err: unknown) => string,
   opts: FanOutOptions = {},
 ): Promise<FanOutOutcome[]> {
-  const out: FanOutOutcome[] = [];
   const beforeLlmPath = slotHook(opts.acquireSlot);
-  let stopped: { message: string; notRun: NotRunReason } | null = null;
-  for (const m of markets) {
+  let stopped: StopState = null;
+  const runOne = async (m: FanOutMarket): Promise<FanOutOutcome> => {
     // Piso barato antes de buscar dados: nem o modelo mais rápido caberia.
     if (!stopped && !canFitCall(opts.deadlineAt, "temperature")) {
       stopped = { message: DEADLINE_MARKET_MESSAGE, notRun: "deadline" };
     }
-    if (stopped) {
-      out.push({ ok: false, marketKey: m.marketKey, ...stopped });
-      continue;
-    }
+    if (stopped) return { ok: false, marketKey: m.marketKey, ...stopped };
     try {
       const result = await predict(
         {
@@ -183,18 +204,20 @@ export async function runFanOut(
         },
         { beforeLlmPath },
       );
-      out.push({ ok: true, marketKey: m.marketKey, result });
+      return { ok: true, marketKey: m.marketKey, result };
     } catch (err) {
       const notRun = notRunOf(err);
       if (notRun) {
         stopped = notRun;
-        out.push({ ok: false, marketKey: m.marketKey, ...notRun });
-      } else {
-        out.push({ ok: false, marketKey: m.marketKey, message: mapError(err) });
+        return { ok: false, marketKey: m.marketKey, ...notRun };
       }
+      return { ok: false, marketKey: m.marketKey, message: mapError(err) };
     }
-  }
-  return out;
+  };
+  return runTasks(
+    markets.map((m) => () => runOne(m)),
+    opts.parallel ?? false,
+  );
 }
 
 // ─── Motor code_jev (ADR 0041 §4, #512) ──────────────────────────────────────
@@ -266,73 +289,99 @@ class SlotDeniedError extends Error {
  * que sobra de fora são os mercados LLM avulsos, nunca o grupo inteiro por falta de
  * narração. A saída mantém a ordem de `markets`.
  *
- * Serial como runFanOut, e o mesmo contrato best-of-successful: erro de um mercado
- * nunca derruba os irmãos.
+ * Paralelo (`opts.parallel`, como o runFanOut): o grupo (decisões + narração) e cada
+ * mercado fora dele correm ao mesmo tempo, cada um com o próprio estado de parada, e o
+ * run leva o tempo do caminho mais lento. Serial (flag off): o grupo, depois os de fora,
+ * com um estado de parada só. O mesmo contrato best-of-successful nos dois: erro de um
+ * mercado nunca derruba os irmãos.
  */
 export async function runCodeJevFanOut(
   base: FanOutBase,
   markets: FanOutMarket[],
   mapError: (err: unknown) => string,
   acquireSlot: () => Promise<SlotGrant>,
-  opts: Pick<FanOutOptions, "deadlineAt"> = {},
+  opts: Pick<FanOutOptions, "deadlineAt" | "parallel"> = {},
 ): Promise<FanOutOutcome[]> {
   const { deadlineAt } = opts;
+  const parallel = opts.parallel ?? false;
   // Na ordem dos mercados; null = ainda sem resultado.
   const out: (FanOutOutcome | null)[] = markets.map(() => null);
   const takeSlot = slotHook(acquireSlot)!;
-  let stopped: { message: string; notRun: NotRunReason } | null = null;
-  const fail = (marketKey: string, err: unknown): FanOutOutcome => {
-    const notRun = notRunOf(err);
-    if (notRun) stopped = notRun;
-    return notRun
-      ? { ok: false, marketKey, ...notRun }
-      : { ok: false, marketKey, message: mapError(err) };
-  };
-  // Prazo/slot já esgotados: o mercado não roda (sem gasto nem slot).
-  const skipIfStopped = (index: number, marketKey: string): boolean => {
-    if (!stopped && !canFitCall(deadlineAt, "temperature")) {
-      stopped = { message: DEADLINE_MARKET_MESSAGE, notRun: "deadline" };
-    }
-    if (!stopped) return false;
-    out[index] = { ok: false, marketKey, ...stopped };
-    return true;
-  };
-
-  // 1. Grupo code_jev. λ + JEV fixados no 1º mercado: 1 chamada JEV e 1 matriz por run.
-  const runMemo: CodeJevRunMemo = new Map();
-  const pendings: { index: number; pending: PendingCodeJevPrediction }[] = [];
-  for (const [index, m] of markets.entries()) {
-    if (!isCodeJevFanOutMarket(m) || skipIfStopped(index, m.marketKey)) continue;
-    const args = {
-      ...base,
-      marketKey: m.marketKey,
-      extraLines: m.extraLines,
-      deadlineAt,
+  // Estado de parada (prazo/slot) de um trecho do run. Serial: um só pro run inteiro
+  // (o 1º que para, para os seguintes). Paralelo: um do grupo e um por mercado de fora,
+  // pra o slot negado de um mercado avulso não pular os do grupo que correm junto.
+  const newLane = () => {
+    let stopped: StopState = null;
+    return {
+      stopped: () => stopped,
+      fail: (marketKey: string, err: unknown): FanOutOutcome => {
+        const notRun = notRunOf(err);
+        if (notRun) stopped = notRun;
+        return notRun
+          ? { ok: false, marketKey, ...notRun }
+          : { ok: false, marketKey, message: mapError(err) };
+      },
+      // Prazo/slot já esgotados: o mercado não roda (sem gasto nem slot).
+      skipIfStopped: (index: number, marketKey: string): boolean => {
+        if (!stopped && !canFitCall(deadlineAt, "temperature")) {
+          stopped = { message: DEADLINE_MARKET_MESSAGE, notRun: "deadline" };
+        }
+        if (!stopped) return false;
+        out[index] = { ok: false, marketKey, ...stopped };
+        return true;
+      },
     };
-    try {
-      const outcome = await predictForBestBet(args, {
-        engine: "code_jev",
-        runMemo,
-        beforeLlmPath: takeSlot,
-      });
-      if (outcome.kind === "done") {
-        out[index] = { ok: true, marketKey: m.marketKey, result: outcome.result };
-      } else {
-        pendings.push({ index, pending: outcome.pending });
+  };
+  type Lane = ReturnType<typeof newLane>;
+  const sharedLane = parallel ? null : newLane();
+  const laneFor = (): Lane => sharedLane ?? newLane();
+
+  // 1–2. Grupo code_jev: decisões em código, depois a narração do escolhido.
+  const runGroup = async (lane: Lane): Promise<void> => {
+    // λ + JEV fixados no 1º mercado: 1 chamada JEV e 1 matriz por run.
+    const runMemo: CodeJevRunMemo = new Map();
+    const pendings: { index: number; pending: PendingCodeJevPrediction }[] = [];
+    for (const [index, m] of markets.entries()) {
+      if (!isCodeJevFanOutMarket(m) || lane.skipIfStopped(index, m.marketKey)) {
+        continue;
       }
-    } catch (err) {
-      out[index] = fail(m.marketKey, err);
+      const args = {
+        ...base,
+        marketKey: m.marketKey,
+        extraLines: m.extraLines,
+        deadlineAt,
+      };
+      try {
+        const outcome = await predictForBestBet(args, {
+          engine: "code_jev",
+          runMemo,
+          beforeLlmPath: takeSlot,
+        });
+        if (outcome.kind === "done") {
+          out[index] = { ok: true, marketKey: m.marketKey, result: outcome.result };
+        } else {
+          pendings.push({ index, pending: outcome.pending });
+        }
+      } catch (err) {
+        out[index] = lane.fail(m.marketKey, err);
+      }
     }
-  }
+    // Narração do escolhido (1 chamada paga) + persistência dos pendentes.
+    if (pendings.length > 0) {
+      await narrateAndPersist(
+        pendings,
+        out,
+        lane.fail,
+        takeSlot,
+        deadlineAt,
+        lane.stopped(),
+      );
+    }
+  };
 
-  // 2. Narração do escolhido (1 chamada paga) + persistência dos pendentes.
-  if (pendings.length > 0) {
-    await narrateAndPersist(pendings, out, fail, takeSlot, deadlineAt, stopped);
-  }
-
-  // 3. Mercados fora do grupo: o predict de sempre, uma chamada paga cada.
-  for (const [index, m] of markets.entries()) {
-    if (isCodeJevFanOutMarket(m) || skipIfStopped(index, m.marketKey)) continue;
+  // 3. Mercado fora do grupo: o predict de sempre, uma chamada paga.
+  const runOther = async (index: number, m: FanOutMarket, lane: Lane) => {
+    if (lane.skipIfStopped(index, m.marketKey)) return;
     try {
       out[index] = {
         ok: true,
@@ -343,9 +392,30 @@ export async function runCodeJevFanOut(
         ),
       };
     } catch (err) {
-      out[index] = fail(m.marketKey, err);
+      out[index] = lane.fail(m.marketKey, err);
     }
+  };
+
+  const tasks: (() => Promise<void>)[] = [];
+  const groupLane = laneFor();
+  // Erro inesperado fora do try por mercado (ex.: no ranking da narração): os mercados
+  // do grupo ainda sem resultado viram falha, em vez de derrubar o run e descartar os
+  // irmãos já pagos que correm junto.
+  tasks.push(() =>
+    runGroup(groupLane).catch((err: unknown) => {
+      for (const [index, m] of markets.entries()) {
+        if (isCodeJevFanOutMarket(m) && out[index] === null) {
+          out[index] = { ok: false, marketKey: m.marketKey, message: mapError(err) };
+        }
+      }
+    }),
+  );
+  for (const [index, m] of markets.entries()) {
+    if (isCodeJevFanOutMarket(m)) continue;
+    const lane = laneFor();
+    tasks.push(() => runOther(index, m, lane));
   }
+  await runTasks(tasks, parallel);
   return out.filter((o): o is FanOutOutcome => o !== null);
 }
 

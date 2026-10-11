@@ -52,15 +52,22 @@ vi.mock("@/lib/rate-limit", () => ({
 vi.mock("@/lib/view/analysis", () => ({ toAnalysisView: vi.fn(() => ({})) }));
 vi.mock("@/lib/db/queries/ai-config", () => ({
   getEnableOverUnderExtraLines: vi.fn(),
+  // Fan-out paralelo: mockado OFF (undefined) por padrão → caminho serial.
+  getEnableParallelFanOut: vi.fn(),
   getEnableBestBetFanOut: vi.fn(),
 }));
 // Passo de síntese (#353): generatePalpites é a porta da síntese (Haiku) — mockada
 // aqui (a corretude do gerador é coberta por generate-palpites.test). summarize roda
 // REAL (lê os outcomes do fan-out). toPalpiteHeadlineView roda REAL (puro).
-vi.mock("@/lib/ai/palpites", () => ({ generatePalpites: vi.fn() }));
+vi.mock("@/lib/ai/palpites", () => ({
+  generatePalpites: vi.fn(),
+  startNewsFetch: vi.fn(),
+}));
 // Motor (ADR 0041 §5): default 'llm' (o fan-out de hoje). O fan-out code_jev (#512) é
 // mockado aqui — a orquestração real é coberta em best-bet-code-jev.test e
 // predict.code-jev.test; aqui trava a cobrança de slots e o repasse.
+// after() só existe dentro de um request do Next: mockado, o teste inspeciona o callback.
+vi.mock("next/server", () => ({ after: vi.fn() }));
 vi.mock("@/lib/ai/engine/analysis-engine-flag", () => ({
   readAnalysisEngine: vi.fn(),
 }));
@@ -74,14 +81,16 @@ import {
   generatePalpiteFromAnalyses,
   runPalpiteHero,
 } from "@/app/actions/predictions";
+import { after } from "next/server";
 import { runCodeJevFanOut } from "@/lib/ai/best-bet";
 import { readAnalysisEngine } from "@/lib/ai/engine/analysis-engine-flag";
-import { generatePalpites } from "@/lib/ai/palpites";
+import { generatePalpites, startNewsFetch } from "@/lib/ai/palpites";
 import { auth } from "@/auth";
 import { predict } from "@/lib/ai/predict";
 import {
   getEnableBestBetFanOut,
   getEnableOverUnderExtraLines,
+  getEnableParallelFanOut,
 } from "@/lib/db/queries/ai-config";
 import { marketsForAudience } from "@/lib/db/queries/market-catalog";
 import { getMatchById } from "@/lib/db/queries/matches";
@@ -108,6 +117,8 @@ const mockExtraLinesFlag = vi.mocked(getEnableOverUnderExtraLines);
 const mockBestBetFlag = vi.mocked(getEnableBestBetFanOut);
 const mockEngine = vi.mocked(readAnalysisEngine);
 const mockCodeJevFanOut = vi.mocked(runCodeJevFanOut);
+const mockParallelFlag = vi.mocked(getEnableParallelFanOut);
+const mockStartNewsFetch = vi.mocked(startNewsFetch);
 
 const ALLOWED_ADMIN = { role: "admin" as const, allowed: true };
 
@@ -266,6 +277,9 @@ beforeEach(() => {
   mockEngine.mockReset();
   mockEngine.mockResolvedValue("llm");
   mockCodeJevFanOut.mockReset();
+  mockParallelFlag.mockReset();
+  mockParallelFlag.mockResolvedValue(false);
+  mockStartNewsFetch.mockReset();
 });
 
 describe("analyzeBestBet — gate order (rate-limit é o ÚLTIMO antes do spend)", () => {
@@ -946,7 +960,7 @@ describe("analyzeBestBet — motor code_jev (#512): 1 slot pelo grupo narrado", 
     expect(mockPredict).not.toHaveBeenCalled();
     expect(mockCodeJevFanOut).toHaveBeenCalledTimes(1);
     const [base, markets, , , opts] = mockCodeJevFanOut.mock.calls[0];
-    expect(opts).toEqual({ deadlineAt: expect.any(Number) });
+    expect(opts).toEqual({ deadlineAt: expect.any(Number), parallel: false });
     expect(base).toMatchObject({ matchId: VALID_MATCH_ID, userId: "u1", isAdmin: true });
     expect(markets.map((m) => m.marketKey)).toEqual([
       "over_under",
@@ -1233,5 +1247,82 @@ describe("runPalpiteHero — roteia pelo botão (intent) do formulário", () => 
     expect(mockPredict).toHaveBeenCalled();
     expect(getPredictionHistoryForMatch).not.toHaveBeenCalled();
     expect(res.ok).toBe(true);
+  });
+});
+
+describe("analyzeBestBet — fan-out paralelo (flag enable_parallel_fan_out)", () => {
+  const NEWS = Promise.resolve({ results: [], aiCall: null, unavailable: true });
+
+  beforeEach(() => {
+    mockParallelFlag.mockResolvedValue(true);
+    mockStartNewsFetch.mockReturnValue(NEWS);
+  });
+
+  it("dispara a busca de notícias junto do fan-out e repassa a MESMA promise pra síntese", async () => {
+    const order: string[] = [];
+    mockStartNewsFetch.mockImplementation(() => {
+      order.push("news");
+      return NEWS;
+    });
+    mockPredict.mockImplementation(async (args, opts) => {
+      order.push(`predict:${args.marketKey}`);
+      await opts?.beforeLlmPath?.();
+      return resultFor(args.marketKey!);
+    });
+
+    const res = await analyzeBestBet(null, form({ matchId: VALID_MATCH_ID }));
+
+    expect(res.ok).toBe(true);
+    expect(mockStartNewsFetch).toHaveBeenCalledTimes(1);
+    expect(mockStartNewsFetch).toHaveBeenCalledWith(
+      expect.objectContaining({ id: VALID_MATCH_ID }),
+      { userId: "u1", matchId: VALID_MATCH_ID },
+      expect.any(Number),
+    );
+    // A busca parte ANTES do 1º mercado (não espera o fan-out terminar).
+    expect(order[0]).toBe("news");
+    expect(mockGeneratePalpites.mock.calls[0][0].news).toBe(NEWS);
+    // Todos os mercados rodaram (em paralelo no runFanOut real).
+    expect(mockPredict).toHaveBeenCalledTimes(4);
+  });
+
+  it("a busca fica registrada em after() pra terminar em qualquer saída, sem segurar a resposta", async () => {
+    vi.mocked(after).mockClear();
+    mockPredict.mockRejectedValue(new Error("sem odds"));
+    const res = await analyzeBestBet(null, form({ matchId: VALID_MATCH_ID }));
+    expect(res.ok).toBe(false);
+    expect(vi.mocked(after)).toHaveBeenCalledTimes(1);
+    const task = vi.mocked(after).mock.calls[0][0] as () => unknown;
+    expect(task()).toBe(NEWS);
+  });
+
+  it("motor code_jev recebe parallel:true", async () => {
+    mockEngine.mockResolvedValue("code_jev");
+    mockCodeJevFanOut.mockImplementation(async (_base, markets) =>
+      markets.map((m) => ({
+        ok: true as const,
+        marketKey: m.marketKey,
+        result: resultFor(m.marketKey),
+      })),
+    );
+    await analyzeBestBet(null, form({ matchId: VALID_MATCH_ID }));
+    expect(mockCodeJevFanOut.mock.calls[0][4]).toEqual({
+      deadlineAt: expect.any(Number),
+      parallel: true,
+    });
+  });
+
+  it("budget esgotado → nem a busca de notícias parte (todo gasto vem depois do 1º slot)", async () => {
+    mockRateLimit.mockResolvedValue({ ok: false, limit: 20, remaining: 0, reset: 0 });
+    const res = await analyzeBestBet(null, form({ matchId: VALID_MATCH_ID }));
+    expect(res.ok).toBe(false);
+    expect(mockStartNewsFetch).not.toHaveBeenCalled();
+  });
+
+  it("flag OFF → caminho de antes: a síntese busca as notícias sozinha", async () => {
+    mockParallelFlag.mockResolvedValue(false);
+    await analyzeBestBet(null, form({ matchId: VALID_MATCH_ID }));
+    expect(mockStartNewsFetch).not.toHaveBeenCalled();
+    expect(mockGeneratePalpites.mock.calls[0][0].news).toBeUndefined();
   });
 });

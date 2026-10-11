@@ -58,6 +58,56 @@ const H2H_LAST = 5;
 const MAX_FIDELITY_ATTEMPTS = 1;
 
 /**
+ * Busca de notícias da síntese (ADR 0032 / #377): provider DEDICADO via web search da
+ * Claude. Degrada GRACIOSO (mirror absences): QUALQUER falha → results:[] e o palpite
+ * ainda embarca — NUNCA bloqueia a manchete por notícia, e a promise nunca rejeita (o
+ * caller pode dispará-la cedo e só aguardar depois). O provider já loga seu próprio
+ * ai_call (predict.ts é a única porta).
+ *
+ * Prazo: a busca termina SYNTHESIS_CALL_RESERVE_MS antes do prazo do run, pra nunca
+ * comer o tempo da manchete (que é o produto; notícia é cor). Sem tempo pra uma busca
+ * útil, nem chama: o palpite sai sem fontes em vez de não sair.
+ *
+ * Depende só do jogo (não das análises), então o analyzeBestBet a dispara junto do
+ * fan-out e a síntese não espera mais por ela no fim do run.
+ */
+export function startNewsFetch(
+  match: { league: string; homeTeam: string; awayTeam: string; kickoffAt: Date },
+  audit: { userId: string; matchId: string },
+  deadlineAt: number | undefined,
+): Promise<NewsFetchOutcome> {
+  const newsDeadline =
+    deadlineAt === undefined ? undefined : deadlineAt - SYNTHESIS_CALL_RESERVE_MS;
+  const newsFits =
+    newsDeadline === undefined || remainingMs(newsDeadline) >= NEWS_MIN_BUDGET_MS;
+  if (!newsFits) {
+    return Promise.resolve({ results: [], aiCall: null, unavailable: true });
+  }
+  return getNewsProvider()
+    .getNewsByMatch(
+      {
+        league: match.league,
+        homeTeam: match.homeTeam,
+        awayTeam: match.awayTeam,
+        kickoffAt: match.kickoffAt.toISOString(),
+      },
+      audit,
+      { deadlineAt: newsDeadline },
+    )
+    .catch((err: unknown): NewsFetchOutcome => {
+      console.error(
+        JSON.stringify({
+          scope: "generatePalpites",
+          matchId: audit.matchId,
+          error: "news_fetch_failed",
+          message: err instanceof Error ? err.message : String(err),
+        }),
+      );
+      return { results: [] as NewsResult[], aiCall: null, unavailable: true };
+    });
+}
+
+/**
  * Passo de SÍNTESE do palpite-first (ADR 0030 / #353): turna as N análises
  * multi-mercado já pagas pelo fan-out (`analyses`) numa única MANCHETE — veredito de
  * quem ganha + placar provável + confiança qualitativa + narrativa + mercados citados.
@@ -78,6 +128,7 @@ export async function generatePalpites({
   analyses,
   modelOverride,
   deadlineAt,
+  news,
 }: GeneratePalpiteArgs): Promise<PalpiteGenerationResult> {
   // 1. Modelo: SEM cascata de preferência (palpite é universal). Fixo no registry.
   const resolvedModelId: AIModelId = modelOverride ?? "claude-haiku-4-5";
@@ -123,46 +174,20 @@ export async function generatePalpites({
     homeTeam: match.homeTeam,
     awayTeam: match.awayTeam,
   };
-  // Notícias (ADR 0032 / #377): provider DEDICADO via web search da Claude, em paralelo
-  // ao fetch de suporte. Degrada GRACIOSO (mirror absences): QUALQUER falha → results:[]
-  // e o palpite ainda embarca — NUNCA bloqueia a manchete por notícia. O provider já loga
-  // seu próprio ai_call (predict.ts é a única porta); aqui só capturamos o resultado.
-  //
-  // Prazo: a busca termina SYNTHESIS_CALL_RESERVE_MS antes do prazo do run, pra nunca
-  // comer o tempo da manchete (que é o produto; notícia é cor). Sem tempo pra uma busca
-  // útil, nem chama: o palpite sai sem fontes em vez de não sair.
-  const newsDeadline =
-    deadlineAt === undefined ? undefined : deadlineAt - SYNTHESIS_CALL_RESERVE_MS;
-  const newsFits =
-    newsDeadline === undefined || remainingMs(newsDeadline) >= NEWS_MIN_BUDGET_MS;
-  const newsFetch = (
-    newsFits
-      ? getNewsProvider().getNewsByMatch(
-          {
-            league: match.league,
-            homeTeam: match.homeTeam,
-            awayTeam: match.awayTeam,
-            kickoffAt: match.kickoffAt.toISOString(),
-          },
-          { userId, matchId },
-          { deadlineAt: newsDeadline },
-        )
-      : Promise.resolve<NewsFetchOutcome>({
-          results: [],
-          aiCall: null,
-          unavailable: true,
-        })
-  ).catch((err) => {
-      console.error(
-        JSON.stringify({
-          scope: "generatePalpites",
-          matchId,
-          error: "news_fetch_failed",
-          message: err instanceof Error ? err.message : String(err),
-        }),
-      );
-      return { results: [] as NewsResult[], aiCall: null, unavailable: true };
-    });
+  // Notícias (ADR 0032 / #377): a busca que o caller já disparou junto do fan-out, ou
+  // uma agora, em paralelo ao fetch de suporte. Nunca rejeita (ver startNewsFetch).
+  const newsFetch =
+    news ??
+    startNewsFetch(
+      {
+        league: match.league,
+        homeTeam: match.homeTeam,
+        awayTeam: match.awayTeam,
+        kickoffAt: match.kickoffAt,
+      },
+      { userId, matchId },
+      deadlineAt,
+    );
 
   const [fixture, homeForm, awayForm, h2h, standings, newsOutcome] =
     await Promise.all([

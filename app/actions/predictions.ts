@@ -1,6 +1,7 @@
 "use server";
 
 import { revalidatePath } from "next/cache";
+import { after } from "next/server";
 import { z } from "zod";
 
 import { notAnalyzableMessage } from "./not-analyzable";
@@ -33,7 +34,7 @@ import {
   modelsForAudience,
   type AIModelId,
 } from "@/lib/ai/models";
-import { generatePalpites } from "@/lib/ai/palpites";
+import { generatePalpites, startNewsFetch } from "@/lib/ai/palpites";
 import { PalpiteError } from "@/lib/ai/palpites/types";
 import {
   summarizeAnalysesForSynthesis,
@@ -45,6 +46,7 @@ import { isEmailAllowed } from "@/lib/auth/whitelist";
 import {
   getEnableBestBetFanOut,
   getEnableOverUnderExtraLines,
+  getEnableParallelFanOut,
 } from "@/lib/db/queries/ai-config";
 import { extractDbCause } from "@/lib/db/pg-error";
 import {
@@ -600,6 +602,8 @@ export async function analyzeBestBet(
   // inteiro (predictForBestBet recebe o motor); no 'llm' cada predict() relê o flag
   // (caminho de hoje).
   const engine = await readAnalysisEngine();
+  // Kill-switch do fan-out paralelo (leitura grátis → antes do 1º slot).
+  const parallel = await getEnableParallelFanOut();
   const markets: FanOutMarket[] = candidates.map((c) => ({
     marketKey: c.key,
     extraLines: resolveExtraLines(c.key, match.league, extraLinesEnabled),
@@ -667,8 +671,19 @@ export async function analyzeBestBet(
       granted: fanOut.length,
       rateLimited: rateLimitedErrors.length,
       additionalFetches: additionalToFetch.length,
+      parallel,
     }),
   );
+  // Notícias da síntese: dependem só do jogo, então no modo paralelo a busca parte
+  // agora (depois do 1º slot, como todo gasto) e corre junto do fan-out, em vez de
+  // atrasar a manchete no fim do run. Nunca rejeita (startNewsFetch).
+  const news = parallel
+    ? startNewsFetch(match, { userId: session.user.id, matchId }, runDeadline)
+    : undefined;
+  // Em qualquer saída do run (todos os mercados falharam, síntese pulada por prazo, erro
+  // inesperado), a busca paga termina depois da resposta e a row de ai_calls dela é
+  // gravada, sem segurar a resposta.
+  if (news) after(() => news);
   const messageContext = messageContextFor(isAdmin);
   const mapError = (err: unknown) => friendlyMessageFromUnknown(err, messageContext);
   const preWarmErrors: { marketKey: string; message: string }[] = [];
@@ -679,7 +694,8 @@ export async function analyzeBestBet(
       preWarmErrors.push({ marketKey: mk, message: mapError(err) });
     }
   }
-  // Fan-out SERIAL: predict() por mercado concedido (a única porta pro LLM), best-of-successful.
+  // Fan-out (paralelo ou serial, flag): predict() por mercado concedido (a única porta pro
+  // LLM), best-of-successful.
   // code_jev (#512): decide todos em código e narra só o escolhido (1 chamada paga).
   // Prazo (#524 review): o fan-out para SYNTHESIS_RESERVE_MS antes do prazo do run, pra a
   // síntese ainda rodar sobre o que terminou; o que não coube vira "Tempo esgotado".
@@ -690,10 +706,12 @@ export async function analyzeBestBet(
     engine === "code_jev"
       ? await runCodeJevFanOut(fanOutBase, fanOut, mapError, acquireSlot, {
           deadlineAt: fanOutDeadline,
+          parallel,
         })
       : await runFanOut(fanOutBase, fanOut, mapError, {
           deadlineAt: fanOutDeadline,
           acquireSlot,
+          parallel,
         });
   // Não analisados (prazo / slot negado no meio do run) vão pra lista de indisponíveis,
   // depois das falhas reais e antes da cauda sem slot.
@@ -737,6 +755,7 @@ export async function analyzeBestBet(
     analyses: summarizeAnalysesForSynthesis(outcomes),
     // Prazo do run inteiro: a reserva do fan-out é o que sobra pra ela.
     deadlineAt: runDeadline,
+    news,
   });
   revalidatePath(`/match/${matchId}`);
   revalidatePath("/jogos");
@@ -760,6 +779,8 @@ async function synthesizeHeadline(args: {
   isAdmin: boolean;
   analyses: MarketAnalysisSummary[];
   deadlineAt: number;
+  // Busca de notícias já disparada pelo run (modo paralelo); ausente = a síntese busca.
+  news?: ReturnType<typeof startNewsFetch>;
 }): Promise<HeadlineOutcome> {
   const { scope, matchId, isAdmin } = args;
   try {
@@ -774,6 +795,7 @@ async function synthesizeHeadline(args: {
       analyses: args.analyses,
       modelOverride: "claude-haiku-4-5",
       deadlineAt: args.deadlineAt,
+      news: args.news,
     });
     // As linhas settleable recém-gravadas estão TODAS pendentes (sem outcome) → badge
     // null. NARROW-not-cast (#354 / blocker §3.2): `params` é a union larga do jsonb;
@@ -1020,6 +1042,13 @@ export async function analyzeMarkets(
   if (chosen.length === 0) {
     return { ok: false, error: "Nenhum mercado válido selecionado." };
   }
+  // Kill-switch do fan-out paralelo (leitura grátis → antes do 1º slot). No motor
+  // code_jev fica serial: aqui cada predict() resolve os julgamentos JEV sozinho, e só o
+  // serial deixa o 2º mercado reusar os do 1º (findReusableJudgments) — em paralelo
+  // seriam N chamadas JEV. (O analyzeBestBet compartilha o memo do run e não tem isso.)
+  const parallel =
+    (await readAnalysisEngine()) !== "code_jev" &&
+    (await getEnableParallelFanOut());
   // Rate-limit POR MERCADO: o 1º slot é cobrado AQUI (atômico), antes do pré-warm e de
   // qualquer busca — negado ou fail-closed aborta o run (chargeRunBudget). A seleção é
   // cortada no que resta do dia (`granted` é um PREFIXO de `chosen`,
@@ -1077,15 +1106,15 @@ export async function analyzeMarkets(
       );
     }
   }
-  // Fan-out SERIAL: predict() por mercado concedido (a única porta pro LLM), erro isolado por
-  // mercado — NÃO best-of-successful (#245 mostra TODOS, sem ranking). Sem síntese aqui: o
+  // Fan-out (paralelo ou serial, flag): predict() por mercado concedido (a única porta pro
+  // LLM), erro isolado por mercado — NÃO best-of-successful (#245 mostra TODOS, sem ranking). Sem síntese aqui: o
   // fan-out usa o prazo do run inteiro; o que não couber vira "Tempo esgotado".
   const messageContext = messageContextFor(isAdmin);
   const outcomes = await runFanOut(
     { matchId, userId: session.user.id, isAdmin, modelOverride },
     fanOut,
     (err) => friendlyMessageFromUnknown(err, messageContext),
-    { deadlineAt: runDeadline, acquireSlot: budget.acquireSlot },
+    { deadlineAt: runDeadline, acquireSlot: budget.acquireSlot, parallel },
   );
   const labelByKey = new Map(chosen.map((c) => [c.key, c.label]));
   const summaries: MarketRunSummaryItem[] = [
