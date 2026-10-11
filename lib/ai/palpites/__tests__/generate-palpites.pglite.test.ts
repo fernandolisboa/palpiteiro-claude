@@ -272,7 +272,7 @@ describe("generatePalpites (síntese) — write path real (pglite)", () => {
     const sets = await getPalpiteSetsForMatch(ids.matchId, ids.userId);
     expect(sets).toHaveLength(1);
     expect(sets[0].aiCall).not.toBeNull();
-    expect(sets[0].aiCall?.status).toBe("ok");
+    expect(sets[0].aiCall?.costUsd).toEqual(expect.any(String));
     // headline jsonb persistido (round-trip via Postgres real).
     expect(sets[0].palpiteSet.headline).toEqual({
       verdict: "Vai dar Flamengo",

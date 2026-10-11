@@ -30,7 +30,10 @@ export type DbPredictionOutcome = typeof predictionOutcomes.$inferSelect;
 
 export type PredictionWithAiCall = {
   prediction: DbPrediction;
-  aiCall: DbAiCall | null;
+  // Só o custo: é o único campo que as views leem. Selecionar a row inteira trazia os
+  // payloads jsonb (prompt + resposta, dezenas de KB por análise) a cada render da
+  // página do jogo, pra todas as (re)análises do histórico.
+  aiCall: Pick<DbAiCall, "costUsd"> | null;
   // Identidade de mercado da predição, resolvida por LEFT JOIN (#170): a row só
   // carrega marketId nullable, não a key. `marketKey` alimenta o registry de
   // apresentação na view (labels/scenarioLabel); a seleção recomendada vem de
@@ -136,7 +139,7 @@ export async function getPredictionHistoryForMatch(
   const rows = await db
     .select({
       prediction: predictions,
-      aiCall: aiCalls,
+      aiCall: { costUsd: aiCalls.costUsd },
       // LEFT (não INNER): uma row sem mercado (histórica não backfillada) ainda
       // volta — key null, a view coalesce pra 'over_under'.
       marketKey: markets.key,

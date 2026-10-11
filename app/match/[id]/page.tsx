@@ -87,12 +87,12 @@ export default async function MatchPage({ params, searchParams }: PageProps) {
   // aberto da lista /jogos OU do histórico de um time (/time/[team], #408) — ambas
   // as bases são aceitas; fallback = /jogos (origem default).
   const backHref = resolveBackHref((await searchParams).back, ["/jogos", "/time"]);
-  // Middleware garante sessão; redirect defensivo caso o matcher mude.
-  const session = await auth();
+  // Middleware garante sessão; redirect defensivo caso o matcher mude. Sessão e jogo
+  // são independentes: buscados juntos (cada um é um round trip ao banco).
+  const [session, match] = await Promise.all([auth(), getMatchById(id)]);
   if (!session?.user?.id) redirect("/signin");
-
-  const match = await getMatchById(id);
   if (!match) notFound();
+  const isAdmin = session.user.role === "admin";
 
   // Instante ÚNICO do request: alimenta o gate de analisabilidade (kickoff>now) E
   // o heroView (isInProgress p/ a badge "ao vivo"). Um único `now` garante que o
@@ -119,6 +119,7 @@ export default async function MatchPage({ params, searchParams }: PageProps) {
     palpiteSets,
     bestBetEnabled,
     tourState,
+    audienceMarkets,
   ] = await Promise.all([
       ensureP,
       matchResultP,
@@ -132,6 +133,9 @@ export default async function MatchPage({ params, searchParams }: PageProps) {
       getPalpiteSetsForMatch(match.id, session.user.id),
       getEnableBestBetFanOut(),
       getTourState(session.user.id),
+      // Mercados da audiência (aba "Analise minha aposta", abaixo): leitura barata, junto
+      // das demais em vez de depois delas.
+      marketsForAudience(isAdmin),
     ]);
   const latestPred = history[0] ?? null;
 
@@ -233,7 +237,6 @@ export default async function MatchPage({ params, searchParams }: PageProps) {
   // em dynamicSelections → mercado inerte, dropado) + os labels do registry. O prefill
   // vem da última predição (mercado resolvido + recommendation non-pass + linha), com
   // fallback over_under/over/2.5.
-  const isAdmin = session.user.role === "admin";
   let gradeMarkets: GradeMarketOption[] = [];
   let gradePrefill: GradeMyBetPrefill = {
     marketKey: "over_under",
@@ -241,10 +244,7 @@ export default async function MatchPage({ params, searchParams }: PageProps) {
     line: 2.5,
   };
   if (analyzable) {
-    const allowedMarkets = marketsForLeague(
-      await marketsForAudience(isAdmin),
-      match.league,
-    );
+    const allowedMarkets = marketsForLeague(audienceMarkets, match.league);
     gradeMarkets = allowedMarkets
       .map((m): GradeMarketOption | null => {
         const descriptor = getDescriptor(m.key);
