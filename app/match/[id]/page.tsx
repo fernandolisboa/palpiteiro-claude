@@ -138,10 +138,19 @@ export default async function MatchPage({ params, searchParams }: PageProps) {
         ? toNwayOddsView(matchResultSnapshot, "match_result")
         : null,
     };
+  }).catch((err: unknown): MatchOddsViews => {
+    // Provider/rede já viram null dentro do ensure; aqui sobra erro de DB. Com a página já
+    // na tela, deixar rejeitar trocaria tudo pelo error.tsx na hidratação: degrada pro
+    // empty-state "Odds indisponíveis", como as outras seções em streaming.
+    console.error(
+      JSON.stringify({
+        scope: "match-page",
+        error: "odds_refresh_failed",
+        message: err instanceof Error ? err.message : String(err),
+      }),
+    );
+    return { oddsView: null, matchResultOddsView: null };
   });
-  // Os dois MatchOddsCards aguardam esta promise; se a página falhar antes de montá-los,
-  // a rejeição não fica sem handler.
-  oddsP.catch(() => {});
   // Predição existente e demais leituras em paralelo: pré-requisito pro render
   // síncrono do hero + panel.
   const [
