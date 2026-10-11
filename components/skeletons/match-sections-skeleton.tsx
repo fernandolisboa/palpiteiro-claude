@@ -52,3 +52,20 @@ export function MatchAuxiliarySkeleton() {
     </>
   );
 }
+
+// Card de odds enquanto o refresh da The Odds API não volta (cabeçalho + 2 cotações).
+export function MatchOddsSkeleton() {
+  return (
+    <Card className="gap-0 overflow-hidden p-0">
+      <div className="flex items-center justify-between px-4 py-3.5">
+        <Skeleton className="h-[14px] w-32" />
+        <Skeleton className="h-[12px] w-16" />
+      </div>
+      <Separator />
+      <div className="grid grid-cols-2 gap-3 px-4 py-4">
+        <Skeleton className="h-[40px] w-full" />
+        <Skeleton className="h-[40px] w-full" />
+      </div>
+    </Card>
+  );
+}
