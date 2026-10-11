@@ -57,7 +57,9 @@ export type PalpiteSetWithLines = {
   // Nullable: aiCallId é NULLABLE em palpite_sets (divergência deliberada vs
   // predictions.aiCallId notNull — o log do ai_call da síntese (#353) pode falhar e
   // ainda produzir um set válido). LEFT join → null quando não há ai_call. A UI trata.
-  aiCall: DbAiCall | null;
+  // Só o custo: os payloads jsonb (prompt + resposta) não são lidos por nenhuma view e
+  // pesavam em cada render da página do jogo.
+  aiCall: Pick<DbAiCall, "costUsd"> | null;
   // Linhas do set + outcome estreito. `outcome` é null quando a linha não é
   // settleable (red_card/corners) OU ainda não foi liquidada (exact_score
   // pendente). O literal "won" | "lost" é a forma ESTREITA (PLAN §1.4) — void/push
@@ -108,7 +110,7 @@ export async function getPalpiteSetsForMatch(
 ): Promise<PalpiteSetWithLines[]> {
   // Query 1: sets + aiCall. LEFT join — aiCallId nullable → aiCall pode ser null.
   const sets = await db
-    .select({ palpiteSet: palpiteSets, aiCall: aiCalls })
+    .select({ palpiteSet: palpiteSets, aiCall: { costUsd: aiCalls.costUsd } })
     .from(palpiteSets)
     .leftJoin(aiCalls, eq(palpiteSets.aiCallId, aiCalls.id))
     .where(
@@ -167,7 +169,11 @@ export async function getSharedPalpiteSet(
   // Query 1: o set + aiCall (LEFT, nullable) + a row de matches (INNER — todo set tem
   // jogo). GATE: shared_at IS NOT NULL (opt-in). Sem row → null (set inexistente OU privado).
   const [row] = await db
-    .select({ palpiteSet: palpiteSets, aiCall: aiCalls, match: matches })
+    .select({
+      palpiteSet: palpiteSets,
+      aiCall: { costUsd: aiCalls.costUsd },
+      match: matches,
+    })
     .from(palpiteSets)
     .leftJoin(aiCalls, eq(palpiteSets.aiCallId, aiCalls.id))
     .innerJoin(matches, eq(palpiteSets.matchId, matches.id))
