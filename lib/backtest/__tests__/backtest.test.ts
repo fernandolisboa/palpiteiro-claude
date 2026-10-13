@@ -46,6 +46,29 @@ describe("parseFootballDataCsv", () => {
     ].join("\n");
     expect(parseFootballDataCsv(csv)).toEqual([]);
   });
+
+  it("lê as odds de fechamento de over/under 2.5 quando o snapshot tem", () => {
+    const csv = [
+      "Country,League,Season,Date,Time,Home,Away,HG,AG,Res,PSCH,PSCD,PSCA,AvgCH,AvgCD,AvgCA,PC>2.5,PC<2.5,AvgC>2.5,AvgC<2.5",
+      "England,Premier League,2024,16/08/2024,20:00,Man United,Fulham,1,0,H,1.60,4.20,5.50,1.58,4.10,5.30,1.80,2.10,1.78,2.05",
+      "England,Premier League,2025,15/08/2025,20:00,Liverpool,Bournemouth,4,2,H,,,,1.30,6.00,9.00,,,1.50,2.60",
+    ].join("\n");
+    const [a, b] = parseFootballDataCsv(csv);
+    expect(a.closingOu25Pinnacle).toEqual({ over: 1.8, under: 2.1 });
+    expect(a.closingOu25Avg).toEqual({ over: 1.78, under: 2.05 });
+    expect(b.closingOu25Pinnacle).toBeNull();
+    expect(b.closingOu25Avg).toEqual({ over: 1.5, under: 2.6 });
+  });
+
+  it("snapshot sem colunas de over/under (Brasileirão) não inventa odds", () => {
+    const csv = [
+      HEADER,
+      "Brazil,Serie A,2024,14/04/2024,21:00,Palmeiras,Vitoria,2,1,H,1.40,4.80,8.50,,,,1.38,4.60,8.00,,,,,,",
+    ].join("\n");
+    const [m] = parseFootballDataCsv(csv);
+    expect(m.closingOu25Pinnacle).toBeNull();
+    expect(m.closingOu25Avg).toBeNull();
+  });
 });
 
 const d = (iso: string) => new Date(`${iso}T00:00:00Z`);
@@ -110,6 +133,36 @@ describe("runner", () => {
     const p = devig1x2({ home: 2, draw: 3.4, away: 3.8 });
     expect(p.home + p.draw + p.away).toBeCloseTo(1, 12);
     expect(p.home).toBeGreaterThan(p.away);
+  });
+
+  it("mercado de-vigia o over 2.5 (Pinnacle, senão média) e mantém o 1X2", () => {
+    const base = match("2024-04-01", "A", "B", 2, 1);
+    const withOu = closingMarketStrategy.predict(
+      {
+        ...base,
+        closingOu25Pinnacle: null,
+        closingOu25Avg: { over: 1.8, under: 2.1 },
+      },
+      [],
+    );
+    expect(withOu?.pOver25).toBeCloseTo(1 / 1.8 / (1 / 1.8 + 1 / 2.1), 12);
+    expect(withOu?.p1x2).toEqual(devig1x2(base.closingAvg!));
+
+    const pinnacleFirst = closingMarketStrategy.predict(
+      {
+        ...base,
+        closingOu25Pinnacle: { over: 2, under: 2 },
+        closingOu25Avg: { over: 1.8, under: 2.1 },
+      },
+      [],
+    );
+    expect(pinnacleFirst?.pOver25).toBeCloseTo(0.5, 12);
+
+    // Sem odds de over/under: só 1X2, como no snapshot do Brasileirão.
+    expect(closingMarketStrategy.predict(base, [])?.pOver25).toBeUndefined();
+    expect(
+      closingMarketStrategy.predict({ ...base, closingAvg: null }, []),
+    ).toBeNull();
   });
 
   it("walk-forward: a estratégia nunca vê jogos do mesmo dia nem futuros", () => {

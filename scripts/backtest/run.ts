@@ -5,6 +5,12 @@
  *
  *   npx tsx scripts/backtest/run.ts [--csv data/backtest/BRA-2026-09-24.csv]
  *                                   [--seasons 2023,2024,2025] [--out report.md]
+ *                                   [--league "Premier League"]
+ *
+ * Outras ligas: monte o snapshot com build-football-data-snapshot.ts (ex.:
+ * data/backtest/E0-2026-10-13.csv; temporada = ano de início, 2023 = 2023/24).
+ * Quando o snapshot tem odds de fechamento de over/under 2.5, o mercado entra
+ * também como benchmark do over 2.5.
  *
  * Imprime (e opcionalmente grava) um relatório markdown: log-loss/Brier por
  * estratégia e temporada, e as diferenças PAREADAS com IC 90% bootstrap. Critério
@@ -35,6 +41,7 @@ function arg(name: string, fallback: string): string {
 const csvPath = arg("csv", "data/backtest/BRA-2026-09-24.csv");
 const seasons = arg("seasons", "2023,2024,2025").split(",").map(Number);
 const outPath = process.argv.includes("--out") ? arg("out", "") : null;
+const leagueLabel = arg("league", "");
 const MIN_SEASON_GAMES = 5;
 
 const matches = parseFootballDataCsv(readFileSync(csvPath, "utf8"));
@@ -54,6 +61,9 @@ const evaluated = runBacktest(matches, strategies, {
 });
 const elapsed = ((Date.now() - t0) / 1000).toFixed(1);
 
+const hasOverUnderMarket =
+  summarize(evaluated, closingMarketStrategy.name, "over25").n > 0;
+
 const f3 = (n: number) => (Number.isFinite(n) ? n.toFixed(4) : "—");
 const ci = (d: ReturnType<typeof pairedLogLossDiff>) =>
   d.ci ? `[${f3(d.ci.lo)}, ${f3(d.ci.hi)}]` : "—";
@@ -62,10 +72,15 @@ function metricsTable(
   rows: readonly EvaluatedMatch[],
   market: "1x2" | "over25",
 ): string[] {
-  const names =
-    market === "over25"
-      ? [base.name, heuristicStrategy.name, dc.name]
-      : strategies.map((s) => s.name);
+  // O mercado só entra no over 2.5 quando o snapshot tem as odds (Brasileirão não).
+  const names = strategies
+    .map((s) => s.name)
+    .filter(
+      (name) =>
+        market === "1x2" ||
+        name !== closingMarketStrategy.name ||
+        hasOverUnderMarket,
+    );
   const lines = [
     "| estratégia | n | log-loss | Brier |",
     "| --- | --- | --- | --- |",
@@ -89,13 +104,19 @@ function diffLine(
 
 const report: string[] = [];
 report.push(
-  `# Backtest: Dixon-Coles MLE vs λ heurístico (ADR 0039, #502)`,
+  leagueLabel
+    ? `# Backtest ${leagueLabel}: Dixon-Coles MLE vs λ heurístico vs mercado`
+    : `# Backtest: Dixon-Coles MLE vs λ heurístico (ADR 0039, #502)`,
   "",
   `Snapshot: \`${csvPath}\` · temporadas avaliadas: ${seasons.join(", ")} · aquecimento: os dois times com ≥ ${MIN_SEASON_GAMES} jogos na temporada · ${evaluated.length} jogos avaliados · ${elapsed}s.`,
   "",
-  "Walk-forward: cada jogo só vê jogos de dias anteriores. DC refitado a cada dia de jogo (ξ = 0.0019/dia, janela 3 anos, prior de 2 gols). Heurístico = `computeMatchLambdas` de produção sobre a tabela reconstruída da temporada. Mercado = fechamento 1X2 de-vigado (Pinnacle, senão média).",
+  `Walk-forward: cada jogo só vê jogos de dias anteriores. DC refitado a cada dia de jogo (ξ = 0.0019/dia, janela 3 anos, prior de 2 gols). Heurístico = \`computeMatchLambdas\` de produção sobre a tabela reconstruída da temporada. Mercado = fechamento ${hasOverUnderMarket ? "1X2 e over/under 2.5" : "1X2"} de-vigado (Pinnacle, senão média).`,
   "",
-  "## Critério de GO (over 2.5)",
+  // O gate GO/NO-GO do ADR 0039 foi decidido no Brasileirão; nas outras ligas o
+  // mesmo quadro é só a comparação pareada.
+  leagueLabel
+    ? "## Diferenças pareadas (log-loss)"
+    : "## Critério de GO (over 2.5)",
   "",
   "| diferença (a − b) | mercado | n | média | IC 90% |",
   "| --- | --- | --- | --- | --- |",
@@ -110,6 +131,17 @@ report.push(
   ),
   diffLine(evaluated, dc.name, base.name, "over25"),
   diffLine(evaluated, heuristicStrategy.name, base.name, "over25"),
+  ...(hasOverUnderMarket
+    ? [
+        diffLine(evaluated, dc.name, closingMarketStrategy.name, "over25"),
+        diffLine(
+          evaluated,
+          heuristicStrategy.name,
+          closingMarketStrategy.name,
+          "over25",
+        ),
+      ]
+    : []),
   "",
 );
 const go = pairedLogLossDiff(
@@ -119,7 +151,9 @@ const go = pairedLogLossDiff(
   "over25",
 );
 report.push(
-  `**Veredito:** ${go.ci && go.ci.hi < 0 ? "GO — o DC bate o heurístico em over 2.5 com o IC inteiro abaixo de 0." : "NO-GO — o IC da diferença em over 2.5 não fica inteiro abaixo de 0."}`,
+  leagueLabel
+    ? `**DC vs heurístico em over 2.5:** ${go.ci && go.ci.hi < 0 ? "IC 90% inteiro abaixo de 0 — o DC é melhor." : "o IC 90% inclui 0 — sem diferença significativa."}`
+    : `**Veredito:** ${go.ci && go.ci.hi < 0 ? "GO — o DC bate o heurístico em over 2.5 com o IC inteiro abaixo de 0." : "NO-GO — o IC da diferença em over 2.5 não fica inteiro abaixo de 0."}`,
   "",
   "## Todas as temporadas",
   "",
