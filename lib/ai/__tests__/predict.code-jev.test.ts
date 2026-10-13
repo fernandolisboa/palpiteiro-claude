@@ -256,6 +256,7 @@ import { JUDGMENT_QUESTION_IDS } from "@/lib/ai/judgments/questions";
 import type { JudgmentAnswers } from "@/lib/ai/judgments/types";
 import { correctScoreCartridge } from "@/lib/ai/markets/correct_score";
 import { matchResultCartridge } from "@/lib/ai/markets/match_result";
+import { NARRATOR_VERSION } from "@/lib/ai/markets/_narrator";
 import { TypeSafeError } from "@/lib/ai/providers/typesafe/errors";
 import { computeMarketImpliedProbabilities } from "@/lib/odds/implied-probability";
 import { CORRECT_SCORE } from "@/lib/odds/market-descriptor";
@@ -590,7 +591,7 @@ describe("flag analysis_engine = 'code_jev'", () => {
       outputTokens: 0,
       status: "ok",
     });
-    const [narratorCall] = rowsWhere((r) => r.promptVersion === "narrator_v1");
+    const [narratorCall] = rowsWhere((r) => r.promptVersion === NARRATOR_VERSION);
     expect(narratorCall).toMatchObject({
       provider: "anthropic",
       status: "ok",
@@ -605,7 +606,7 @@ describe("flag analysis_engine = 'code_jev'", () => {
     expect(prediction.edgePct).toBe(expected.best!.edgePct!.toFixed(2));
     expect(prediction.rationale).toBe(NARRATION.rationale);
     expect(prediction.keyFactors).toEqual(NARRATION.key_factors);
-    expect(prediction.promptVersion).toBe("narrator_v1");
+    expect(prediction.promptVersion).toBe(NARRATOR_VERSION);
     expect(prediction.modelVersion).toBe(
       "claude-sonnet-4-5-20250929;engine=code_jev;lambda=heuristic;judg=jev_judgments_v1;w=judgment_weights_v1"
     );
@@ -623,7 +624,7 @@ describe("flag analysis_engine = 'code_jev'", () => {
     expect(judgments.versions).toEqual({
       judgments: "jev_judgments_v1",
       weights: "judgment_weights_v1",
-      narrator: "narrator_v1",
+      narrator: NARRATOR_VERSION,
       jevModel: "jev-1.13.0",
       jevModelServed: "jev-1.13.0",
     });
@@ -773,7 +774,7 @@ describe("flag analysis_engine = 'code_jev'", () => {
       isAdmin: true,
       marketKey: "match_result",
     });
-    const [narratorCall] = rowsWhere((r) => r.promptVersion === "narrator_v1");
+    const [narratorCall] = rowsWhere((r) => r.promptVersion === NARRATOR_VERSION);
     expect(narratorCall.status).toBe("invalid_output");
     const [prediction] = rowsWhere((r) => "recommendation" in r);
     expect(prediction.recommendation).toBe("home");
@@ -791,7 +792,7 @@ describe("flag analysis_engine = 'code_jev'", () => {
       isAdmin: true,
       marketKey: "match_result",
     });
-    const [narratorCall] = rowsWhere((r) => r.promptVersion === "narrator_v1");
+    const [narratorCall] = rowsWhere((r) => r.promptVersion === NARRATOR_VERSION);
     expect(narratorCall.status).toBe("invalid_output");
     expect(narratorCall.errorMessage).toMatch(/^fidelity:/);
     const [prediction] = rowsWhere((r) => "recommendation" in r);
@@ -807,7 +808,7 @@ describe("flag analysis_engine = 'code_jev'", () => {
       marketKey: "match_result",
     });
     expect(result.prediction).toBeDefined();
-    const [narratorCall] = rowsWhere((r) => r.promptVersion === "narrator_v1");
+    const [narratorCall] = rowsWhere((r) => r.promptVersion === NARRATOR_VERSION);
     expect(narratorCall.status).not.toBe("ok");
     const [prediction] = rowsWhere((r) => "recommendation" in r);
     expect(prediction.rationale).toMatch(/^O modelo de placar estima/);
@@ -1384,7 +1385,7 @@ describe("best bet no motor code_jev (#512): 1 JEV, mercados em código, 1 narra
     expect(toolNameOf(anthropicCreate.mock.calls[0])).toBe("submit_narration");
     expect(rowsWhere((r) => r.provider === "typesafe")).toHaveLength(1);
     const narratorCalls = rowsWhere(
-      (r) => r.promptVersion === "narrator_v1" && "provider" in r
+      (r) => r.promptVersion === NARRATOR_VERSION && "provider" in r
     );
     expect(narratorCalls).toHaveLength(1);
     // 1 chamada paga (a narração) = 1 slot, cobrado logo antes dela.
@@ -1534,7 +1535,7 @@ describe("best bet no motor code_jev (#512): 1 JEV, mercados em código, 1 narra
     // Exatamente UMA row de narração, auditada como falha de provider e com os
     // tokens cobrados (a recusa é paga).
     const narratorCalls = rowsWhere(
-      (r) => r.promptVersion === "narrator_v1" && "provider" in r
+      (r) => r.promptVersion === NARRATOR_VERSION && "provider" in r
     );
     expect(narratorCalls).toHaveLength(1);
     expect(narratorCalls[0].status).toBe("provider_error");
@@ -1571,7 +1572,7 @@ describe("best bet no motor code_jev (#512): 1 JEV, mercados em código, 1 narra
     expect(acquireSlot).not.toHaveBeenCalled();
     // Uma row de narração com status timeout e custo zero, pra os pendentes terem aiCallId.
     const narratorCalls = rowsWhere(
-      (r) => r.promptVersion === "narrator_v1" && "provider" in r
+      (r) => r.promptVersion === NARRATOR_VERSION && "provider" in r
     );
     expect(narratorCalls).toHaveLength(1);
     expect(narratorCalls[0].status).toBe("timeout");

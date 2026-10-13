@@ -7,7 +7,7 @@ import type {
   TeamSide,
 } from "@/lib/ai/judgments/types";
 
-import type { NarratorTeams } from "./types";
+import type { NarratorTeams, UserFactorOrigins } from "./types";
 
 // Número em PT-BR (vírgula decimal).
 export function fmtNumber(n: number, digits = 1): string {
@@ -126,11 +126,22 @@ const FACTORS: readonly JudgmentFactor[] = [
 ];
 const SIDES: readonly TeamSide[] = ["home", "away"];
 
-// Só os fatores que de fato moveram λ (multiplicador ≠ 1, ou seja noul > 0.5).
+const STRONG_SIGNAL = 0.8;
+
+const USER_ORIGIN_LABEL: Record<"confirmed" | "unverified", string> = {
+  confirmed: "(informado por você)",
+  unverified: "(informado por você, não conferido)",
+};
+
+// Só os fatores que de fato moveram λ (multiplicador ≠ 1, ou seja noul > 0.5). Com o
+// contexto extra (#565), `user.origins` diz quais fatores o usuário moveu: a frase
+// ganha a origem e a força ("sinal forte/moderado") vem SÓ do valor do JEV, nunca do
+// noul do usuário (sem JEV acima do neutro, a frase sai sem força).
 export function judgmentFactorPhrases(
   answers: JudgmentAnswers | null,
   multipliers: JudgmentMultipliers | null,
-  teams: NarratorTeams
+  teams: NarratorTeams,
+  user?: { jev: JudgmentAnswers | null; origins: UserFactorOrigins }
 ): string[] {
   if (!answers || !multipliers) return [];
   const moved = new Map<JudgmentQuestionId, number>();
@@ -139,6 +150,8 @@ export function judgmentFactorPhrases(
       if (m !== undefined && m !== 1) moved.set(id as JudgmentQuestionId, m);
     }
   }
+  const strengthOf = (value: number) =>
+    value >= STRONG_SIGNAL ? "sinal forte" : "sinal moderado";
   const phrases: string[] = [];
   for (const factor of FACTORS) {
     for (const side of SIDES) {
@@ -146,9 +159,15 @@ export function judgmentFactorPhrases(
       if (!moved.has(id)) continue;
       const team = side === "home" ? teams.home : teams.away;
       const opponent = side === "home" ? teams.away : teams.home;
-      const strength =
-        answers[id].value >= 0.8 ? "sinal forte" : "sinal moderado";
-      phrases.push(`${FACTOR_PHRASE[factor](team, opponent)} — ${strength}`);
+      const phrase = FACTOR_PHRASE[factor](team, opponent);
+      const origin = user?.origins[id];
+      if (!origin) {
+        phrases.push(`${phrase} — ${strengthOf(answers[id].value)}`);
+        continue;
+      }
+      const jevValue = user?.jev?.[id]?.value ?? 0;
+      const strength = jevValue > 0.5 ? ` — ${strengthOf(jevValue)}` : "";
+      phrases.push(`${phrase}${strength} ${USER_ORIGIN_LABEL[origin]}`);
     }
   }
   return phrases;
