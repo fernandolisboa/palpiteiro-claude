@@ -108,7 +108,7 @@ export function buildScorerUserMessage(
   lines.push("");
   lines.push(`# ${copy.oddsHeading}`);
   lines.push(
-    `- Bookmaker: ${input.bookmaker} (capturado em ${input.captured_at})`,
+    `- Odds capturadas em ${input.captured_at}`,
   );
   lines.push(
     "- Cada linha: jogador → odd (sim) → implícita (TETO, já embute a margem da casa). key = identificador a usar na recomendação.",

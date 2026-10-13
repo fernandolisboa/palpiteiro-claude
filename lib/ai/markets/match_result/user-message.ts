@@ -109,7 +109,7 @@ export function buildUserMessage(
   lines.push("");
   lines.push("# Odds e probabilidades implícitas");
   lines.push(
-    `- Bookmaker: ${input.odds.bookmaker} (capturado em ${input.odds.captured_at})`,
+    `- Odds capturadas em ${input.odds.captured_at}`,
   );
   lines.push(
     `- Resultado final: Casa / Empate / Fora (1X2)`,

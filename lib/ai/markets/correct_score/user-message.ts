@@ -111,7 +111,7 @@ export function buildUserMessage(
   lines.push("");
   lines.push("# Odds e probabilidades implícitas (placar exato)");
   lines.push(
-    `- Bookmaker: ${input.odds.bookmaker} (capturado em ${input.odds.captured_at})`,
+    `- Odds capturadas em ${input.odds.captured_at}`,
   );
   lines.push(
     `- Grid de placares (linhas = gols do ${input.match.home_team.name}, colunas = gols do ${input.match.away_team.name}); cada célula: odd → implícita normalizada sobre as 16 células`,

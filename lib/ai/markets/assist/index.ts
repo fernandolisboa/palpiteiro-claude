@@ -19,8 +19,9 @@ import {
 } from "../_scorer_shared/schemas";
 import { buildScorerUserMessage } from "../_scorer_shared/user-message";
 
-// Versão do cartucho de assistência. 1ª versão (ADR 0017), bare _v1.
-export const ASSIST_VERSION = "assist_v1" as const;
+// Versão do cartucho de assistência. ADR 0017. v1 → v1.1: sem o nome da casa na mensagem (o app não mostra casa nenhuma; o LLM podia citá-la
+// no racional).
+export const ASSIST_VERSION = "assist_v1.1" as const;
 
 const COPY = {
   marketNoun: "assistência (dar uma assistência a qualquer momento)",

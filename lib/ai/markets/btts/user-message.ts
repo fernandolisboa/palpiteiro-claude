@@ -104,7 +104,7 @@ export function buildUserMessage(
   lines.push("");
   lines.push("# Odds e probabilidades implícitas");
   lines.push(
-    `- Bookmaker: ${input.odds.bookmaker} (capturado em ${input.odds.captured_at})`,
+    `- Odds capturadas em ${input.odds.captured_at}`,
   );
   lines.push(
     `- Ambos marcam — Sim: odd ${fmtNum(input.odds.yes_decimal)} → implícita normalizada ${fmtNum(input.implied.yes_pct)}%`,

@@ -16,9 +16,9 @@ import {
 } from "./schemas";
 import { buildUserMessage } from "./user-message";
 
-// Versão do cartucho btts (ADR 0017: versionamento por cartucho). Bare `_v1`
-// (sem .0), espelhando match_result_v1.
-export const BTTS_VERSION = "btts_v1" as const;
+// Versão do cartucho btts (ADR 0017: versionamento por cartucho). v1 → v1.1: sem o nome da casa na mensagem (o app não mostra casa nenhuma; o LLM podia citá-la
+// no racional).
+export const BTTS_VERSION = "btts_v1.1" as const;
 
 // Re-exports nomeados: predict.ts importa `buildPredictionInput`/`BuildInputError`
 // como BINDINGS DE MÓDULO (não via o objeto do cartucho) pra que os spies do

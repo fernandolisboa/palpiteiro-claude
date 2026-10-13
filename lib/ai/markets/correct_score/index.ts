@@ -17,8 +17,9 @@ import {
 import { buildUserMessage } from "./user-message";
 
 // Versão do cartucho de placar exato (correct_score). Primeira versão do mercado
-// (ADR 0017), bare _v1 — espelha match_result_v1.
-export const CORRECT_SCORE_VERSION = "correct_score_v1" as const;
+// (ADR 0017). v1 → v1.1: sem o nome da casa na mensagem (o app não mostra casa nenhuma; o LLM podia citá-la
+// no racional).
+export const CORRECT_SCORE_VERSION = "correct_score_v1.1" as const;
 
 // Re-exports nomeados: espelha match_result pra paridade de spy nos testes
 // (vi.spyOn deste módulo intercepta a chamada real do binding). LOAD-BEARING —
