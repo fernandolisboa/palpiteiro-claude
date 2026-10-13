@@ -37,6 +37,28 @@ type StoredPrediction = {
   createdAt: Date;
 };
 let predictionStore: StoredPrediction[] = [];
+// Bases do modelo por jogo "persistidas" (#555): a origem snapshot do reuso. Só os
+// campos que o fake de findReusableJudgments lê.
+type StoredSnapshot = {
+  id: string;
+  matchId: string;
+  judgments: Pick<
+    PredictionJudgments,
+    | "applied"
+    | "answers"
+    | "stateHash"
+    | "aiCallId"
+    | "reusedFromPredictionId"
+    | "reusedFromModelSnapshotId"
+  > & {
+    versions: Pick<
+      PredictionJudgments["versions"],
+      "judgments" | "weights" | "jevModel" | "jevModelServed"
+    >;
+  };
+  checkedAt: Date;
+};
+let snapshotStore: StoredSnapshot[] = [];
 let insertSeq = 0;
 vi.mock("@/lib/db", () => {
   const select = vi.fn(() => ({
@@ -84,6 +106,7 @@ const findReusableJudgments = vi.fn(
     jevModel: string;
     stateHash: string;
     since: Date;
+    snapshotSince?: Date;
   }) => {
     const hit = predictionStore
       .filter(
@@ -97,8 +120,31 @@ const findReusableJudgments = vi.fn(
           p.createdAt >= args.since
       )
       .sort((a, b) => b.createdAt.getTime() - a.createdAt.getTime())[0];
+    if (hit) {
+      return Promise.resolve({ predictionId: hit.id, judgments: hit.judgments });
+    }
+    // Sem predição → a base do modelo (checked_at ≥ snapshotSince ?? since).
+    const snap = snapshotStore
+      .filter(
+        (s) =>
+          s.matchId === args.matchId &&
+          s.judgments.applied &&
+          s.judgments.answers !== null &&
+          s.judgments.stateHash === args.stateHash &&
+          s.judgments.versions.judgments === args.judgmentsVersion &&
+          s.judgments.versions.weights === args.weightsVersion &&
+          s.judgments.versions.jevModel === args.jevModel &&
+          s.checkedAt >= (args.snapshotSince ?? args.since)
+      )
+      .sort((a, b) => b.checkedAt.getTime() - a.checkedAt.getTime())[0];
     return Promise.resolve(
-      hit ? { predictionId: hit.id, judgments: hit.judgments } : null
+      snap
+        ? {
+            predictionId: null,
+            modelSnapshotId: snap.id,
+            judgments: snap.judgments,
+          }
+        : null
     );
   }
 );
@@ -411,6 +457,7 @@ beforeEach(() => {
   resetDixonColesFlagMemo();
   getEnableDixonColes.mockResolvedValue(false);
   predictionStore = [];
+  snapshotStore = [];
   insertSeq = 0;
   setHappyPath();
 });
@@ -1067,6 +1114,115 @@ describe("JEV uma vez por jogo (reuso entre mercados)", () => {
     await run("match_result");
     expect(judge).toHaveBeenCalledTimes(1);
     expect(predictionRows()[1].judgments.applied).toBe(true);
+  });
+});
+
+describe("reuso com origem na base do modelo (#555)", () => {
+  const run = () =>
+    predict({
+      matchId: "m-1",
+      userId: "u-1",
+      isAdmin: true,
+      marketKey: "match_result",
+    });
+
+  // O stateHash que o predict calcula pra este jogo: roda uma vez, lê da row e limpa.
+  async function currentStateHash(): Promise<string> {
+    await run();
+    const hash = predictionStore[0].judgments.stateHash;
+    predictionStore = [];
+    judge.mockClear();
+    insertValues.mockClear();
+    return hash;
+  }
+
+  function snapshot(
+    stateHash: string,
+    overrides: Partial<StoredSnapshot["judgments"]> = {},
+    checkedAt = new Date()
+  ): StoredSnapshot {
+    return {
+      id: "snap-1",
+      matchId: "m-1",
+      checkedAt,
+      judgments: {
+        applied: true,
+        answers: JEV_ANSWERS,
+        stateHash,
+        aiCallId: "call-cron",
+        reusedFromPredictionId: null,
+        reusedFromModelSnapshotId: null,
+        versions: {
+          judgments: "jev_judgments_v1",
+          weights: "judgment_weights_v1",
+          jevModel: "jev-1.13.0",
+          jevModelServed: "jev-1.13.0",
+        },
+        ...overrides,
+      },
+    };
+  }
+
+  const predictionJudgments = () =>
+    rowsWhere((r) => "recommendation" in r).map(
+      (r) => r.judgments as PredictionJudgments
+    );
+
+  it("sem predição, reusa a base: JEV não é chamado, aponta pro snapshot e herda o aiCallId", async () => {
+    const hash = await currentStateHash();
+    snapshotStore = [snapshot(hash)];
+    await run();
+
+    expect(judge).not.toHaveBeenCalled();
+    expect(rowsWhere((r) => r.provider === "typesafe")).toHaveLength(0);
+    const [j] = predictionJudgments();
+    expect(j.reusedFromModelSnapshotId).toBe("snap-1");
+    expect(j.reusedFromPredictionId).toBeNull();
+    expect(j.aiCallId).toBe("call-cron");
+    expect(j.answers).toEqual(JEV_ANSWERS);
+    expect(j.applied).toBe(true);
+  });
+
+  it("snapshot que já era reuso de uma predição → aponta pra predição de origem", async () => {
+    const hash = await currentStateHash();
+    snapshotStore = [
+      snapshot(hash, { reusedFromPredictionId: "pred-origem" }),
+    ];
+    await run();
+
+    expect(judge).not.toHaveBeenCalled();
+    const [j] = predictionJudgments();
+    expect(j.reusedFromPredictionId).toBe("pred-origem");
+    expect(j.reusedFromModelSnapshotId).toBeNull();
+  });
+
+  it("base checada há 9h (fora das 6h da predição, dentro das 12h da base) → reusa", async () => {
+    const hash = await currentStateHash();
+    snapshotStore = [
+      snapshot(hash, {}, new Date(Date.now() - 9 * 3_600_000)),
+    ];
+    findReusableJudgments.mockClear();
+    await run();
+
+    expect(judge).not.toHaveBeenCalled();
+    expect(predictionJudgments()[0].reusedFromModelSnapshotId).toBe("snap-1");
+    // A janela da base é 12h sobre checked_at; a da predição segue 6h sobre created_at.
+    expect(findReusableJudgments).toHaveBeenCalledWith(
+      expect.objectContaining({
+        since: new Date(Date.now() - 6 * 3_600_000),
+        snapshotSince: new Date(Date.now() - 12 * 3_600_000),
+      })
+    );
+  });
+
+  it("base com checked_at fora da janela de 12h → chama o JEV", async () => {
+    const hash = await currentStateHash();
+    snapshotStore = [
+      snapshot(hash, {}, new Date(Date.now() - 12 * 3_600_000 - 60_000)),
+    ];
+    await run();
+    expect(judge).toHaveBeenCalledTimes(1);
+    expect(predictionJudgments()[0].reusedFromModelSnapshotId).toBeNull();
   });
 });
 

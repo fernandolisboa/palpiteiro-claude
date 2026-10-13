@@ -67,9 +67,40 @@ export type MatchRowView = {
   awayScore: number | null;
   venue?: string;
   countdown?: string;
+  // Linha "Modelo · Casa 52% · Under 2.5 55%" do /jogos (#555, ADR 0052): só em jogo
+  // analisável com base do modelo calculada. Só probabilidade: sem odd, edge ou valor.
+  model?: MatchModelLineView;
 };
 
-export type MatchHeroView = MatchRowView;
+// Firewall do ADR 0030 no TIPO: o hero nunca recebe a leitura do modelo (toMatchHeroView
+// remove o campo mesmo se alguém passar a base).
+export type MatchHeroView = Omit<MatchRowView, "model">;
+
+// Linha compacta da base do modelo no /jogos (#555). `label` vem da apresentação do
+// mercado ("Casa", "Under 2.5"); `pct` inteiro ("52%").
+export type MatchModelLineView = {
+  favorite: { label: string; pct: string };
+  goals25: { label: string; pct: string };
+};
+
+// Bloco "Leitura do modelo" da página do jogo (#555). Probabilidade e odd justa (100/p)
+// por seleção, placares mais prováveis e de onde veio o λ. SEM odd da casa e sem edge:
+// a base não expõe valor (backtest de calibração, PR #558); o edge fica na análise.
+export type MatchModelReadingView = {
+  markets: {
+    key: string;
+    label: string; // "Resultado (1X2)" | "Over/Under gols · 2.5"
+    selections: {
+      label: string; // "Casa" | "Over 2.5"
+      pct: string; // "52.3%"
+      fairOdd: string; // "1.91" | "—"
+    }[];
+  }[];
+  topScorelines: { score: string; pct: string }[]; // { "1–0", "12.4%" }
+  source: string; // "Dixon-Coles" | "heurístico da tabela (liga sem ajuste) · dados limitados"
+  jev: string | null; // "+ JEV" | "JEV falhou" | null
+  computedAgo: string; // "há 3h" / "há menos de 1min" (formatRelativeAgoLabel do checked_at)
+};
 
 // Uma seleção do card de odds ao vivo, 100% strings prontas pra render. Forma
 // N-vias canônica (#173 PR-2): over/under expõe 2 outcomes, 1X2 expõe 3, na

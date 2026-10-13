@@ -85,9 +85,11 @@ export async function persistAiCallError(args: {
 // Loga UMA chamada de julgamentos JEV (ADR 0041 §5) em `ai_calls`, sucesso OU falha:
 // provider 'typesafe', output 0 (grátis), custo já calculado pelo chamador
 // (calculateJudgmentCost). Mesmo SWALLOW do persistAiCallError: o JEV é fail-open, e
-// um insert de auditoria que falha nunca pode derrubar a análise.
+// um insert de auditoria que falha nunca pode derrubar a análise. `userId` null = chamada
+// de SISTEMA (JEV do cron da base do modelo, #555): o CHECK ai_calls_user_id_system_only
+// só aceita isso com provider TypeSafe, que é o que esta função grava.
 export async function persistJudgmentAiCall(args: {
-  userId: string;
+  userId: string | null;
   matchId: string;
   model: string;
   promptVersion: string;

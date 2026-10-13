@@ -4,6 +4,7 @@ import { Check, ChevronRight } from "lucide-react";
 import { Badge } from "@/components/ui/badge";
 import { Skeleton } from "@/components/ui/skeleton";
 import { LiveBadge } from "@/components/live-badge";
+import { MatchModelLine } from "@/components/match-model-line";
 import { TeamAvatar } from "@/components/team-avatar";
 import { appendBackParam } from "@/lib/view/back-href";
 import { cn } from "@/lib/utils";
@@ -145,6 +146,9 @@ export function MatchRow({ m, last, listHref, backHref, tourTarget }: Props) {
           </span>
         </div>
       </div>
+      {/* Base do modelo (#555): só em jogo analisável com base calculada. Linha extra
+          condicional → as linhas sem `model` (e os goldens) ficam byte-idênticas. */}
+      {m.model && <MatchModelLine model={m.model} className="block pt-2.5" />}
     </Link>
   );
 }

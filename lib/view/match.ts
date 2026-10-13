@@ -12,6 +12,9 @@ import { IN_PROGRESS_WINDOW_MS } from "@/lib/view/date-range";
 import { matchUnavailableReason } from "@/lib/view/match-availability";
 import type { SupportedLeague } from "@/lib/providers/sports-data/leagues";
 import { teamToTeam } from "@/lib/view/team";
+import type { MatchModelSnapshot } from "@/lib/model-base/types";
+import { MATCH_MODEL_MAX_AGE_MS } from "@/lib/model-base/version";
+import { toMatchModelLineView } from "@/lib/view/match-model";
 import {
   toMatchRowOdds,
   toMatchRowResultOdds,
@@ -46,6 +49,9 @@ export type ToMatchRowArgs = {
   now?: Date;
   // Fuso de exibição do usuário (#1). Undefined = fuso do runtime (legado/testes).
   timeZone?: string;
+  // Base do modelo do jogo (#555): vira a linha "Modelo · …" do /jogos, só em jogo
+  // analisável. Opcional — o hero e os call sites antigos não passam.
+  modelSnapshot?: MatchModelSnapshot | null;
 };
 
 export function toMatchRowView({
@@ -55,6 +61,7 @@ export function toMatchRowView({
   hasPrediction,
   now = new Date(),
   timeZone,
+  modelSnapshot,
 }: ToMatchRowArgs): MatchRowView {
   const league = leagueToKey(match.league);
   // "Em andamento" derivado de kickoff+now+status (NÃO de um status DB novo, que
@@ -65,6 +72,8 @@ export function toMatchRowView({
   // um adiado cujo kickoff original passou NÃO vira "em andamento".
   const nowMs = now.getTime();
   const kickoffMs = match.kickoffAt.getTime();
+  const analyzable =
+    matchUnavailableReason(match.status, match.kickoffAt, now) === null;
   const inProgress =
     kickoffMs <= nowMs &&
     nowMs < kickoffMs + IN_PROGRESS_WINDOW_MS &&
@@ -89,7 +98,7 @@ export function toMatchRowView({
     status: match.status,
     isInProgress: inProgress,
     // Mesmo gate da página do jogo e das actions (status agendado + kickoff no futuro).
-    analyzable: matchUnavailableReason(match.status, match.kickoffAt, now) === null,
+    analyzable,
     // Só expõe placar em jogos encerrados. Um provider pode carregar gols
     // parciais num `live`/em-andamento ou deixá-los preenchidos num
     // `postponed`/`cancelled`; só `finished` deve mostrar placar final — os
@@ -98,9 +107,19 @@ export function toMatchRowView({
     awayScore: match.status === "finished" ? match.awayScore : null,
     venue: match.venue,
     countdown: formatCountdown(match.kickoffAt, now, timeZone),
+    // Chave ausente (não `model: undefined`) sem base ou com base velha (mesmo limite
+    // do seam do cupom): goldens do MatchRow intactos.
+    ...(analyzable &&
+    modelSnapshot &&
+    nowMs - modelSnapshot.checkedAt.getTime() <= MATCH_MODEL_MAX_AGE_MS
+      ? { model: toMatchModelLineView(modelSnapshot) }
+      : {}),
   };
 }
 
+// Firewall do ADR 0030: o hero nunca carrega a leitura do modelo, mesmo que o caller
+// passe a base (o tipo MatchHeroView também não tem o campo).
 export function toMatchHeroView(args: ToMatchRowArgs): MatchHeroView {
-  return toMatchRowView(args);
+  const { model: _model, ...hero } = toMatchRowView(args);
+  return hero;
 }

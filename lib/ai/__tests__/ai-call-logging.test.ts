@@ -12,7 +12,11 @@ vi.mock("@/lib/db", () => ({
   },
 }));
 
-import { persistAiCallError, truncate } from "@/lib/ai/ai-call-logging";
+import {
+  persistAiCallError,
+  persistJudgmentAiCall,
+  truncate,
+} from "@/lib/ai/ai-call-logging";
 
 afterEach(() => {
   vi.restoreAllMocks();
@@ -74,6 +78,34 @@ describe("persistAiCallError — swallow preservado", () => {
     const row = values.mock.calls[0][0];
     expect(row.errorMessage.length).toBe(2000);
     expect(row.errorMessage.endsWith("…")).toBe(true);
+  });
+});
+
+describe("persistJudgmentAiCall — chamada de sistema (#555)", () => {
+  it("userId null grava user_id null, provider typesafe, e devolve o id", async () => {
+    const returning = vi.fn(() => Promise.resolve([{ id: "call-1" }]));
+    const values = vi.fn((_row: Record<string, unknown>) => ({ returning }));
+    insert.mockReturnValue({ values });
+
+    const id = await persistJudgmentAiCall({
+      userId: null,
+      matchId: "m-1",
+      model: "jev-1.13.0",
+      promptVersion: "jev_judgments_v1",
+      inputPayload: {},
+      outputPayload: {},
+      inputTokens: 1500,
+      latencyMs: 110.4,
+      costUsd: 0.000063,
+      status: "ok",
+      errorMessage: null,
+    });
+
+    expect(id).toBe("call-1");
+    const row = values.mock.calls[0][0];
+    expect(row.userId).toBeNull();
+    expect(row.provider).toBe("typesafe");
+    expect(row.latencyMs).toBe(110);
   });
 });
 

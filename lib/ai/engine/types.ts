@@ -44,6 +44,10 @@ export type PredictionJudgments = {
   // null quando o JEV foi chamado nesta análise (no best bet, pelo run: todas as
   // predições do run apontam pra mesma `aiCallId`).
   reusedFromPredictionId: string | null;
+  // Base do modelo por jogo de origem (#555, ADR 0052) quando as respostas vieram do
+  // JEV do cron (match_model_snapshots), não de uma predição. null/ausente quando o
+  // JEV foi chamado nesta análise, quando a origem é uma predição, e nas rows anteriores.
+  reusedFromModelSnapshotId?: string | null;
   // Quem escreveu o racional (#512). "llm_call": esta predição fez a chamada
   // narradora (a row de ai_calls é a dela; falha do narrador → texto templado, com
   // o status da falha na row). "best_bet_template": mercado não escolhido no best

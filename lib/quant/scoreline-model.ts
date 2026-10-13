@@ -284,6 +284,26 @@ export function p1X2(matrix: ScorelineMatrix): {
   };
 }
 
+// Os n placares mais prováveis da matriz, desc por p; empate de p → menos gols totais,
+// depois mandante com menos gols (determinístico). n ≤ 0 → []. p = célula renormalizada.
+export function topScorelines(
+  matrix: ScorelineMatrix,
+  n: number,
+): { home: number; away: number; p: number }[] {
+  if (n <= 0) return [];
+  const cells: { home: number; away: number; p: number }[] = [];
+  for (let h = 0; h <= matrix.maxGoals; h++) {
+    for (let a = 0; a <= matrix.maxGoals; a++) {
+      cells.push({ home: h, away: a, p: matrix.cells[h][a] });
+    }
+  }
+  cells.sort(
+    (x, y) =>
+      y.p - x.p || x.home + x.away - (y.home + y.away) || x.home - y.home,
+  );
+  return cells.slice(0, n);
+}
+
 // Grade de placar exato 0-3 × 0-3 (16 células) — a grade clássica de correct-score
 // (o `cs16` da Decisão 9). `other` = a massa fora da grade (renormaliza a 1 com as 16).
 export function cs16(matrix: ScorelineMatrix): {

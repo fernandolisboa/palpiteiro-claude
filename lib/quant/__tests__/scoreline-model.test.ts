@@ -19,6 +19,7 @@ import {
   poolSplitRates,
   pScoreline,
   scorelineMatrix,
+  topScorelines,
   type SplitGoalRates,
 } from "@/lib/quant/scoreline-model";
 
@@ -282,5 +283,49 @@ describe("readers sobre a matriz (Fase 2)", () => {
 
   it("firstToScoreProbs: λ total 0 → none=1", () => {
     expect(firstToScoreProbs(0, 0)).toEqual({ home: 0, away: 0, none: 1 });
+  });
+});
+
+describe("topScorelines (#555)", () => {
+  const m = scorelineMatrix(1.6, 1.1);
+
+  it("ordena desc por p e respeita n", () => {
+    const top = topScorelines(m, 5);
+    expect(top).toHaveLength(5);
+    for (let i = 1; i < top.length; i++) {
+      expect(top[i - 1].p).toBeGreaterThanOrEqual(top[i].p);
+    }
+    expect(top[0].p).toBe(m.cells[top[0].home][top[0].away]);
+  });
+
+  it("n ≤ 0 → []; n maior que as células → todas", () => {
+    expect(topScorelines(m, 0)).toEqual([]);
+    expect(topScorelines(m, -3)).toEqual([]);
+    const small = scorelineMatrix(1.2, 1.0, { maxGoals: 2 });
+    expect(topScorelines(small, 100)).toHaveLength(9);
+  });
+
+  it("desempate determinístico: menos gols totais, depois mandante menor", () => {
+    const flat = {
+      maxGoals: 1,
+      cells: [
+        [0.25, 0.25],
+        [0.25, 0.25],
+      ],
+    };
+    expect(topScorelines(flat, 4).map((c) => `${c.home}-${c.away}`)).toEqual([
+      "0-0",
+      "0-1",
+      "1-0",
+      "1-1",
+    ]);
+  });
+
+  it("λ simétricos e baixos: 1-1 / 0-0 / 1-0 / 0-1 no topo", () => {
+    const sym = scorelineMatrix(1.1, 1.1);
+    const top2 = topScorelines(sym, 2).map((c) => `${c.home}-${c.away}`);
+    expect(["1-1", "0-0", "1-0", "0-1"]).toEqual(
+      expect.arrayContaining(top2),
+    );
   });
 });

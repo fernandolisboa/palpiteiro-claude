@@ -8,6 +8,7 @@ import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Card } from "@/components/ui/card";
 import { DesktopStatusCell } from "@/components/desktop-status-cell";
+import { MatchModelLine } from "@/components/match-model-line";
 import { TeamAvatar } from "@/components/team-avatar";
 import { appendBackParam } from "@/lib/view/back-href";
 import { LEAGUE_LABEL } from "@/lib/format";
@@ -76,6 +77,8 @@ export function UpcomingMatchesDesktop({
               <TeamAvatar initials={m.away.short.slice(0, 2)} hue={m.away.hue} size={22} flagCode={m.away.flagCode} />
               <span className="text-label font-medium tracking-tight">{m.away.name}</span>
             </div>
+            {/* Base do modelo (#555): só probabilidade, abaixo dos nomes. */}
+            {m.model && <MatchModelLine model={m.model} />}
           </div>
           <div className="flex flex-col items-end gap-1 font-mono text-body tabular-nums">
             {m.status === "live" || m.isInProgress ? (
