@@ -60,6 +60,19 @@ describe("parseFootballDataCsv", () => {
     expect(b.closingOu25Avg).toEqual({ over: 1.5, under: 2.6 });
   });
 
+  it("lê as odds de pré-fechamento quando o snapshot tem", () => {
+    const csv = [
+      "Country,League,Season,Date,Time,Home,Away,HG,AG,Res,PSCH,PSCD,PSCA,AvgCH,AvgCD,AvgCA,PC>2.5,PC<2.5,AvgC>2.5,AvgC<2.5,PSH,PSD,PSA,AvgH,AvgD,AvgA,P>2.5,P<2.5,Avg>2.5,Avg<2.5",
+      "England,Premier League,2024,16/08/2024,20:00,Man United,Fulham,1,0,H,1.60,4.20,5.50,1.58,4.10,5.30,1.80,2.10,1.78,2.05,1.65,4.00,5.20,1.62,3.90,5.00,1.85,2.05,1.82,2.00",
+    ].join("\n");
+    const [m] = parseFootballDataCsv(csv);
+    expect(m.preClosingPinnacle).toEqual({ home: 1.65, draw: 4, away: 5.2 });
+    expect(m.preClosingAvg).toEqual({ home: 1.62, draw: 3.9, away: 5 });
+    expect(m.preClosingOu25Pinnacle).toEqual({ over: 1.85, under: 2.05 });
+    expect(m.preClosingOu25Avg).toEqual({ over: 1.82, under: 2 });
+    expect(m.closingPinnacle).toEqual({ home: 1.6, draw: 4.2, away: 5.5 });
+  });
+
   it("snapshot sem colunas de over/under (Brasileirão) não inventa odds", () => {
     const csv = [
       HEADER,
@@ -68,6 +81,8 @@ describe("parseFootballDataCsv", () => {
     const [m] = parseFootballDataCsv(csv);
     expect(m.closingOu25Pinnacle).toBeNull();
     expect(m.closingOu25Avg).toBeNull();
+    expect(m.preClosingPinnacle).toBeNull();
+    expect(m.preClosingOu25Avg).toBeNull();
   });
 });
 
