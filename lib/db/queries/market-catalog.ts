@@ -24,7 +24,9 @@ export type MarketCatalog = {
 /**
  * O catálogo de mercados estáticos só muda por migration (que roda no deploy, numa
  * instância nova). O TTL é só uma rede de segurança pra instância que sobrevive a
- * uma migration aplicada por fora (ex.: o banco compartilhado das previews).
+ * uma migration aplicada por fora (ex.: o banco compartilhado das previews). Um seed
+ * corrigido à mão por SQL, fora de deploy, leva até esse TTL pra valer nas
+ * instâncias já quentes.
  */
 const CATALOG_TTL_MS = 10 * 60 * 1000;
 
@@ -106,7 +108,7 @@ async function loadMarketCatalog(dbMarketKey: string): Promise<MarketCatalog> {
  * Resolve SÓ a row `markets` de um dbMarketKey (sem ler market_selections) — pra
  * mercados `dynamicSelections` (#290), cujas seleções não existem até crescerem
  * lazily. SEPARADO de `resolveMarketCatalog` de PROPÓSITO: o reader genérico
- * hard-falha em ZERO seleções (market-catalog:48-50), o que é correto pra mercados
+ * hard-falha em ZERO seleções (`loadMarketCatalog`), o que é correto pra mercados
  * estáticos (seed incompleto = bug) mas FATAL pra um mercado scorer recém-seedado
  * (0 jogadores até a 1ª análise). Hard-fail só no mercado ausente.
  */
