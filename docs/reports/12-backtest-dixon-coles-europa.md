@@ -12,7 +12,7 @@ Champions e Libertadores ficaram de fora: o football-data.co.uk não tem CSV del
 
 ## Resposta curta
 
-**O achado do Brasileirão se mantém nas duas ligas.** O Dixon-Coles bate o heurístico no 1X2 com folga e com a mesma magnitude (≈ −0.04 de log-loss nas três ligas, IC inteiro abaixo de 0 nos dois períodos). No over 2.5 o DC também é melhor nos quatro recortes, mas a vantagem é pequena (−0.006 a −0.017) e só é significativa em dois deles, exatamente o "GO por pouco" do Brasileirão. O mercado de fechamento continua à frente do DC nos dois mercados.
+**O achado do Brasileirão se mantém nas duas ligas.** O Dixon-Coles bate o heurístico no 1X2 com folga: ≈ −0.04 de log-loss nas três ligas no período principal (−0.017 a −0.041 no controle), com IC inteiro abaixo de 0 nos dois períodos. No over 2.5 o DC também é melhor nos quatro recortes, mas a vantagem é pequena (−0.006 a −0.017) e só é significativa em dois deles, exatamente o "GO por pouco" do Brasileirão. O mercado de fechamento continua à frente do DC nos dois mercados; a única exceção é o over 2.5 da Premier League no controle, onde os dois empatam.
 
 ## Diferenças pareadas, período principal (2023/24 a 2025/26)
 
@@ -52,16 +52,16 @@ Em negrito: o modelo da esquerda é melhor com o IC 90% inteiro abaixo de 0.
 
 ## Leitura (2026-10-13)
 
-- **1X2: o resultado mais robusto do backtest.** DC − heurístico ≈ −0.04 nas três ligas, com IC inteiro abaixo de 0 nos seis recortes (três ligas × dois períodos), e o DC tem log-loss menor que o heurístico em cada temporada do período principal das duas ligas novas (tabelas no apêndice). É uma diferença grande pra log-loss: nas ligas europeias o heurístico fica a meio caminho entre a taxa-base e o DC (no Brasileirão ele empatava com a taxa-base).
+- **1X2: o resultado mais robusto do backtest.** DC − heurístico ≈ −0.04 nas três ligas no período principal (no controle, −0.025 na Premier League, −0.041 em La Liga e −0.017 no Brasileirão), com IC inteiro abaixo de 0 nos seis recortes (três ligas × dois períodos), e o DC tem log-loss menor que o heurístico em cada temporada do período principal das duas ligas novas (tabelas no apêndice). É uma diferença grande pra log-loss: nas ligas europeias o heurístico fica a meio caminho entre a taxa-base e o DC (no Brasileirão ele empatava com a taxa-base).
 - **Over 2.5: mesmo sinal em todo lugar, magnitude pequena.** O DC ganha do heurístico nos quatro recortes europeus, mas o IC só fica inteiro abaixo de 0 em dois (La Liga principal e Premier League controle). Na Premier League principal o limite superior é +0.0005, o mesmo "por pouco" do Brasileirão. Por temporada o resultado oscila: na Premier League 2023/24 (64.7% de overs, ano atípico) o DC perde do heurístico e da taxa-base, porque a janela de 3 anos demora a acompanhar um salto no nível de gols.
-- **Taxa-base no over 2.5: a Premier League repete o Brasileirão, La Liga não.** Na Premier League o heurístico é pior que a taxa-base (+0.0155, IC acima de 0) e o DC empata com ela, igual ao Brasileirão. Em La Liga o DC bate a taxa-base com folga (−0.0192, IC inteiro abaixo de 0): a leitura provável (não testada aqui) é que lá a diferença de estilo entre times carrega informação sobre o total de gols, e o DC a captura pelos parâmetros de ataque e defesa. O achado do report 10 de que "nenhum modelo de força de time bate a taxa-base no over 2.5" vale pro Brasileirão e pra Premier League, não é geral.
-- **O mercado de fechamento ganha do DC nos dois mercados.** No 1X2 a distância é a mesma das três ligas (+0.020 a +0.022). No over 2.5, medido pela primeira vez, é +0.012 a +0.014 no período principal. O DC sozinho não tem edge contra o fechamento: qualquer valor real depende do que entra por cima dele (JEV, notícias, desfalques) e de apostar antes de a linha fechar. É o que o gate de CLV do Kelly (ADR 0039 D3) mede ao vivo.
+- **Taxa-base no over 2.5: a Premier League repete o Brasileirão, La Liga não.** Na Premier League o heurístico é pior que a taxa-base (+0.0155, IC acima de 0) e o DC empata com ela, igual ao Brasileirão. Em La Liga o DC bate a taxa-base com folga no período principal (−0.0192, IC inteiro abaixo de 0), mas não no controle (−0.0059, IC [−0.0183, +0.0070], parecido com a Premier League). Uma leitura possível (não testada aqui) é que em La Liga a diferença de estilo entre times carrega informação sobre o total de gols; com um só período significativo, isso é um indício, não um achado. O achado do report 10 de que "nenhum modelo de força de time bate a taxa-base no over 2.5" continua valendo como regra, com La Liga 2023/24–2025/26 como a exceção a acompanhar.
+- **O mercado de fechamento ganha do DC nos dois mercados.** No 1X2 a distância é a mesma das três ligas (+0.020 a +0.022). No over 2.5, medido pela primeira vez, é +0.012 a +0.014 no período principal; no controle é +0.0115 em La Liga e empate na Premier League (+0.0044, IC [−0.0051, +0.0137]). O DC sozinho não tem edge contra o fechamento: qualquer valor real depende do que entra por cima dele (JEV, notícias, desfalques) e de apostar antes de a linha fechar. É o que o gate de CLV do Kelly (ADR 0039 D3) mede ao vivo.
 - **Pra produção: nada muda.** O DC já é o motor de probabilidade do `code_jev` (ADR 0051) e este backtest confirma a escolha fora do Brasileirão. O que custa caro é cair no fallback heurístico (≈ +0.04 de log-loss no 1X2): vale manter o refit diário saudável nas ligas europeias.
 
 ### Ressalvas
 
 - **Pinnacle parou de aparecer no meio de 2025/26** (210 de 380 jogos na Premier League, 188 em La Liga). No resto o benchmark usa a média do mercado de-vigada, que tem margem maior; o mercado de 2025/26 é um benchmark um pouco mais fraco.
-- **Pandemia no histórico.** 2019/20 (final) e 2020/21 tiveram estádios vazios e vantagem de mando perto de zero; esses jogos estão na janela de 3 anos do período de controle. É o mesmo que um ajuste real teria visto na época.
+- **Pandemia no histórico.** 2019/20 (final) e 2020/21 tiveram estádios vazios e vantagem de mando perto de zero; esses jogos estão na janela de 3 anos de todo o período de controle e, com peso já baixo (≈ 0.15), do começo de 2023/24. É o mesmo que um ajuste real teria visto na época.
 - **Promovidos.** O snapshot só tem a primeira divisão, como o ajuste de produção (API-Football por liga): um promovido começa no prior (α = β = 1). O backtest deixa o DC opinar a partir do 6º jogo; produção cai no heurístico até o time ter 10 jogos na janela (`DC_MIN_TEAM_MATCHES`). Os primeiros jogos de promovidos em produção são, portanto, o caso do fallback, não o do DC medido aqui.
 - **Só 1X2 e over 2.5.** Os CSVs não têm BTTS nem dupla chance; a dupla chance sai da mesma matriz do 1X2.
 
@@ -85,7 +85,7 @@ npx tsx scripts/backtest/run.ts --csv data/backtest/SP1-2026-10-13.csv --seasons
 # controle: --seasons 2021,2022
 ```
 
-Os snapshots estão versionados, então o passo 3 sozinho reproduz este report. O `run.ts` sem argumentos continua gerando o report 10 idêntico.
+Os snapshots estão versionados, então o passo 3 sozinho reproduz este report. O `run.ts` sem argumentos continua gerando a parte do report 10 que sai do script idêntica (a Leitura é escrita à mão).
 
 ## Apêndice: saída do script por liga (período principal)
 

@@ -88,7 +88,8 @@ for (const code of seasons) {
   const startYear = 2000 + Number(code.slice(0, 2));
   const text = readFileSync(join(dir, `${div}_${code}.csv`), "latin1");
   const lines = text
-    .replace(/^﻿/, "")
+    // BOM UTF-8 lido como latin1 vira "ï»¿".
+    .replace(/^(\uFEFF|\u00EF\u00BB\u00BF)/, "")
     .split(/\r?\n/)
     .filter((l) => l.trim().length > 0);
   const cols = lines[0].split(",").map((c) => c.trim());
