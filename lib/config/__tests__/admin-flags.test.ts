@@ -29,7 +29,7 @@ const FAKE_ENUM = {
 const FAKE_FLAGS = [...ADMIN_FLAGS, FAKE_ENUM] as const satisfies readonly AdminFlagDef[];
 
 describe("ADMIN_FLAGS (registry, #514)", () => {
-  it("tem as 7 flags boolean + o motor de análise (enum), sem key repetida", () => {
+  it("tem as 8 flags boolean + o motor de análise (enum), sem key repetida", () => {
     const keys = ADMIN_FLAGS.map((f) => f.key);
     expect(keys).toEqual([
       "enableOverUnderExtraLines",
@@ -39,6 +39,7 @@ describe("ADMIN_FLAGS (registry, #514)", () => {
       "enableKellyStaking",
       "enableDixonColes",
       "enableParallelFanOut",
+      "enableMatchModelJev",
       "analysisEngine",
     ]);
     expect(new Set(keys).size).toBe(keys.length);
@@ -60,8 +61,18 @@ describe("ADMIN_FLAGS (registry, #514)", () => {
       enableKellyStaking: true,
       enableDixonColes: true,
       enableParallelFanOut: true,
+      enableMatchModelJev: true,
       analysisEngine: "llm",
     });
+  });
+
+  it("pré-previsão com JEV (#555): deixa claro que não chama Claude nem a The Odds API", () => {
+    const def = getAdminFlagDef("enableMatchModelJev");
+    expect(def.default).toBe(true);
+    expect(def.description).toContain("sem Claude");
+    // "IA" só como nome do botão ("Analisar com IA"), nunca solto (o JEV não é Claude).
+    expect(def.description.replace('"Analisar com IA"', "")).not.toMatch(/\bIA\b/);
+    expect(def.costNote).toContain("Sem The Odds API e sem Claude");
   });
 
   it("nota de custo do fan-out casa com os tetos pinados em best-bet", () => {
@@ -79,6 +90,7 @@ describe("ADMIN_FLAGS (registry, #514)", () => {
       enableKellyStaking: boolean;
       enableDixonColes: boolean;
       enableParallelFanOut: boolean;
+      enableMatchModelJev: boolean;
       analysisEngine: "llm" | "code_jev";
     }>();
   });

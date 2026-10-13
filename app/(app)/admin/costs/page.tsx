@@ -97,11 +97,12 @@ export default async function AdminCostsPage() {
             <div className="rounded-md border border-border">
               {byUser.map((u) => (
                 <DefinitionRow
-                  key={u.userId}
+                  key={u.userId ?? "system"}
                   className="gap-4 px-4 py-3 last:border-b-0"
                   label={
+                    // userId null = chamadas de sistema (JEV da base do modelo, #555).
                     <span className="truncate text-body font-medium">
-                      {u.email}
+                      {u.email ?? "sistema"}
                     </span>
                   }
                   value={

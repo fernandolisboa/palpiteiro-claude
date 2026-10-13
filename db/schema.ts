@@ -1,8 +1,22 @@
 import type { AdapterAccountType } from "next-auth/adapters";
 
+import { sql } from "drizzle-orm";
+
 import type { PredictionJudgments } from "@/lib/ai/engine/types";
+import { JUDGMENT_PROVIDER_KEY } from "@/lib/ai/models";
+import type {
+  MatchModelJevStatus,
+  MatchModelJudgments,
+  MatchModelProbabilities,
+  TopScoreline,
+} from "@/lib/model-base/types";
+import type {
+  DixonColesFallbackReason,
+  ModelScorelineSource,
+} from "@/lib/quant/match-model";
 import {
   boolean,
+  check,
   doublePrecision,
   index,
   integer,
@@ -277,9 +291,10 @@ export const aiCalls = pgTable(
   "ai_calls",
   {
     id: uuid().primaryKey().defaultRandom(),
-    userId: uuid()
-      .notNull()
-      .references(() => users.id, { onDelete: "restrict" }),
+    // Nullable SÓ pras chamadas de sistema (#555, ADR 0052): o JEV do cron da base do
+    // modelo não tem usuário. O CHECK abaixo trava no banco que só provider TypeSafe
+    // pode ficar sem usuário — um insert Claude/narração sem user_id é bug e falha.
+    userId: uuid().references(() => users.id, { onDelete: "restrict" }),
     matchId: uuid()
       .notNull()
       .references(() => matches.id, { onDelete: "restrict" }),
@@ -299,6 +314,10 @@ export const aiCalls = pgTable(
   (t) => [
     index("ai_calls_created_at_idx").on(t.createdAt),
     index("ai_calls_user_id_idx").on(t.userId),
+    check(
+      "ai_calls_user_id_system_only",
+      sql`${t.userId} IS NOT NULL OR ${t.provider} = ${sql.raw(`'${JUDGMENT_PROVIDER_KEY}'`)}`,
+    ),
   ],
 );
 
@@ -830,6 +849,11 @@ export const aiConfig = pgTable("ai_config", {
   // da síntese) correm em PARALELO — o run leva o tempo do mercado mais lento em vez da
   // soma. Default ON (padrão sem-gates do dono). SET ... = false → fan-out serial de antes.
   enableParallelFanOut: boolean().notNull().default(true),
+  // Kill-switch (#555, ADR 0052): a base do modelo por jogo (cron compute-match-models)
+  // ajusta o λ com os julgamentos JEV nos jogos a até 48h do início, e o "Analisar com
+  // IA" reusa essas respostas. Default ON. SET ... = false → a base usa só o
+  // Dixon-Coles (ou o heurístico da tabela), sem chamada JEV no cron.
+  enableMatchModelJev: boolean().notNull().default(true),
   updatedByUserId: uuid().references(() => users.id, { onDelete: "set null" }),
   updatedAt: timestamp({ withTimezone: true }).notNull().defaultNow(),
 });
@@ -908,4 +932,53 @@ export const teamRatingSeasonResults = pgTable(
     fetchedAt: timestamp({ withTimezone: true }).notNull(),
   },
   (t) => [primaryKey({ columns: [t.league, t.season] })],
+);
+
+// Base do modelo por jogo (#555, ADR 0052): o λ (Dixon-Coles ou heurístico da tabela,
+// ADR 0051), o ajuste JEV (ADR 0041, só a ≤48h) e as probabilidades dos mercados que
+// saem da matriz, calculados em código pelo cron /api/cron/compute-match-models, sem
+// Claude e sem The Odds API. Uma row por RESULTADO distinto (fingerprint): run com o
+// mesmo fingerprint só avança `checked_at` (heartbeat monotônico via GREATEST, o único
+// UPDATE da tabela). Sem unique em (match_id, fingerprint): A→B→A é legítimo. O edge
+// NÃO é gravado: a leitura calcula contra a odd mais recente. Ler/escrever via
+// lib/db/queries/match-model-snapshots.ts (Zod na leitura dos jsonb).
+export const matchModelSnapshots = pgTable(
+  "match_model_snapshots",
+  {
+    id: uuid().primaryKey().defaultRandom(),
+    matchId: uuid()
+      .notNull()
+      .references(() => matches.id, { onDelete: "restrict" }),
+    // Quando ESTE resultado foi calculado.
+    computedAt: timestamp({ withTimezone: true }).notNull().defaultNow(),
+    // Último run que recalculou e achou o mesmo fingerprint.
+    checkedAt: timestamp({ withTimezone: true }).notNull().defaultNow(),
+    modelVersion: text().notNull(),
+    // sha256 hex do que define o resultado (lib/model-base/build-snapshot.ts).
+    fingerprint: text().notNull(),
+    lambdaSource: text().$type<ModelScorelineSource>().notNull(),
+    lambdaDegraded: boolean().notNull(),
+    // Por que o Dixon-Coles não foi usado; null quando foi.
+    lambdaFallbackReason: text().$type<DixonColesFallbackReason>(),
+    // ρ da matriz; null = DIXON_COLES_RHO pinado (mesma semântica de ModelScoreline.rho).
+    rho: doublePrecision(),
+    neutral: boolean().notNull(),
+    // λ de getModelScoreline e o λ pós-JEV (= base quando o JEV não foi aplicado).
+    lambdaHomeBase: doublePrecision().notNull(),
+    lambdaAwayBase: doublePrecision().notNull(),
+    lambdaHome: doublePrecision().notNull(),
+    lambdaAway: doublePrecision().notNull(),
+    jevStatus: text().$type<MatchModelJevStatus>().notNull(),
+    // null quando o JEV não foi tentado. Nunca guarda o state nem os desfalques (o
+    // state vai pro ai_calls.input_payload, como no predict; minimização LGPD).
+    judgments: jsonb().$type<MatchModelJudgments>(),
+    probabilities: jsonb().$type<MatchModelProbabilities>().notNull(),
+    topScorelines: jsonb().$type<TopScoreline[]>().notNull(),
+  },
+  (t) => [
+    index("match_model_snapshots_match_computed_idx").on(
+      t.matchId,
+      t.computedAt.desc(),
+    ),
+  ],
 );

@@ -10,7 +10,7 @@ const h = vi.hoisted(() => {
     rows: [] as unknown[],
     selectCols: undefined as unknown,
     whereArg: undefined as unknown,
-    innerJoinArgs: [] as unknown[],
+    leftJoinArgs: [] as unknown[],
     groupByArgs: [] as unknown[],
     orderByArg: undefined as unknown,
   };
@@ -49,8 +49,8 @@ vi.mock("@/lib/db", () => {
   };
   chain.from = vi.fn(() => chain);
   chain.where = vi.fn((arg: unknown) => record("whereArg", arg));
-  chain.innerJoin = vi.fn((table: unknown, cond: unknown) => {
-    h.state.innerJoinArgs.push(table, cond);
+  chain.leftJoin = vi.fn((table: unknown, cond: unknown) => {
+    h.state.leftJoinArgs.push(table, cond);
     return chain;
   });
   chain.groupBy = vi.fn((...args: unknown[]) => {
@@ -81,7 +81,7 @@ beforeEach(() => {
   h.state.rows = [];
   h.state.selectCols = undefined;
   h.state.whereArg = undefined;
-  h.state.innerJoinArgs = [];
+  h.state.leftJoinArgs = [];
   h.state.groupByArgs = [];
   h.state.orderByArg = undefined;
 });
@@ -215,15 +215,15 @@ describe("getCostByDay — agrupado por dia UTC, recente primeiro", () => {
 });
 
 describe("getCostByUser — join users, ordenado por gasto desc", () => {
-  it("innerJoin users on aiCalls.userId=users.id, groupBy userId, orderBy desc(sum)", async () => {
+  it("leftJoin users on aiCalls.userId=users.id, groupBy userId, orderBy desc(sum)", async () => {
     h.state.rows = [
       { userId: "u1", email: "a@b.com", totalUsd: "5.0", calls: 10 },
     ];
     const out = await getCostByUser();
 
-    // innerJoin com a tabela users e a condição de FK.
-    expect(h.state.innerJoinArgs[0]).toBe(users);
-    const joinEqs = collectEqs(h.state.innerJoinArgs[1]);
+    // leftJoin (não inner: rows de sistema sem usuário, #555) com users e a FK.
+    expect(h.state.leftJoinArgs[0]).toBe(users);
+    const joinEqs = collectEqs(h.state.leftJoinArgs[1]);
     const fkJoin = joinEqs.some(
       (e) =>
         (e.a === aiCalls.userId && e.b === users.id) ||
@@ -247,6 +247,22 @@ describe("getCostByUser — join users, ordenado por gasto desc", () => {
     expect(out[0]!.email).toBe("a@b.com");
     expect(out[0]!.totalUsd).toBe(5);
     expect(out[0]!.userId).toBe("u1");
+  });
+});
+
+describe("getCostByUser — chamadas de sistema (#555)", () => {
+  it("mapeia a linha sem usuário (JEV do cron da base) com userId/email null", async () => {
+    h.state.rows = [
+      { userId: "u1", email: "a@b.com", totalUsd: "5.0", calls: 10 },
+      { userId: null, email: null, totalUsd: "0.0004", calls: 4 },
+    ];
+    const out = await getCostByUser();
+    expect(out[1]).toEqual({
+      userId: null,
+      email: null,
+      totalUsd: 0.0004,
+      calls: 4,
+    });
   });
 });
 
