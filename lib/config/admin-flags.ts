@@ -135,6 +135,16 @@ export const ADMIN_FLAGS = [
       "~US$ 0,0001 de JEV por jogo quando desfalques/tabela mudam; 4–7 chamadas de API-Football por jogo na janela de 48h. Sem The Odds API e sem Claude.",
   },
   {
+    key: "enableUserContext",
+    kind: "boolean",
+    label: "Contexto do usuário",
+    description:
+      "Libera o \"Analisar meu palpite\": a IA lê o motivo que o usuário escreveu, o código confere cada afirmação com os nossos dados e o modelo recalcula dentro do teto do JEV. Desligada, o bloco \"Seu palpite\" mostra só a leitura pelos botões, sem IA.",
+    default: true,
+    costNote:
+      "Cada uso: 1 chamada Haiku (leitura do motivo) e 1 do modelo de análise do usuário (narração, até 2.000 tokens), contando 1 do limite diário de palpites. Sem The Odds API; API-Football só para o que o motivo cita (desfalques, últimos jogos, tabela), até 4 chamadas e em geral do cache.",
+  },
+  {
     key: "analysisEngine",
     kind: "enum",
     label: "Motor de análise",

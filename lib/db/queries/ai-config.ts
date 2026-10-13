@@ -282,6 +282,19 @@ export async function getEnableMatchModelJev(): Promise<boolean> {
 }
 
 /**
+ * Kill-switch do LLM do "Seu palpite" (#564, ADR 0054) e do contexto extra da análise
+ * (#565). Default ON quando não há row. false → o bloco mostra só a leitura pelos
+ * botões (grátis, sem IA), que nunca é gateada.
+ */
+export async function getEnableUserContext(): Promise<boolean> {
+  const rows = await db
+    .select({ enabled: aiConfig.enableUserContext })
+    .from(aiConfig)
+    .where(eq(aiConfig.id, 1))
+    .limit(1);
+  return rows[0]?.enabled ?? true;
+}
+
 /**
  * Motor de análise (ADR 0041 §5, #511): 'llm' (cartucho de mercado decide — caminho
  * de hoje) ou 'code_jev' (código + julgamentos JEV decidem, LLM narra). Sem row ou

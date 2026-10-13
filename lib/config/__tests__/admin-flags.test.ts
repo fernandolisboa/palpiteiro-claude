@@ -40,6 +40,7 @@ describe("ADMIN_FLAGS (registry, #514)", () => {
       "enableDixonColes",
       "enableParallelFanOut",
       "enableMatchModelJev",
+      "enableUserContext",
       "analysisEngine",
     ]);
     expect(new Set(keys).size).toBe(keys.length);
@@ -62,6 +63,7 @@ describe("ADMIN_FLAGS (registry, #514)", () => {
       enableDixonColes: true,
       enableParallelFanOut: true,
       enableMatchModelJev: true,
+      enableUserContext: true,
       analysisEngine: "llm",
     });
   });
@@ -73,6 +75,14 @@ describe("ADMIN_FLAGS (registry, #514)", () => {
     // "IA" só como nome do botão ("Analisar com IA"), nunca solto (o JEV não é Claude).
     expect(def.description.replace('"Analisar com IA"', "")).not.toMatch(/\bIA\b/);
     expect(def.costNote).toContain("Sem The Odds API e sem Claude");
+  });
+
+  it("contexto do usuário (#564): cita o botão, o limite de palpites e que não usa a The Odds API", () => {
+    const def = getAdminFlagDef("enableUserContext");
+    expect(def.default).toBe(true);
+    expect(def.description).toContain("Analisar meu palpite");
+    expect(def.costNote).toContain("limite diário de palpites");
+    expect(def.costNote).toContain("Sem The Odds API");
   });
 
   it("nota de custo do fan-out casa com os tetos pinados em best-bet", () => {
@@ -91,6 +101,7 @@ describe("ADMIN_FLAGS (registry, #514)", () => {
       enableDixonColes: boolean;
       enableParallelFanOut: boolean;
       enableMatchModelJev: boolean;
+      enableUserContext: boolean;
       analysisEngine: "llm" | "code_jev";
     }>();
   });
