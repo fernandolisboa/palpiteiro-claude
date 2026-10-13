@@ -5,6 +5,7 @@ import {
   INITIAL_BATCH,
   UpcomingMatchesMobile,
 } from "@/components/upcoming-matches-mobile";
+import { MatchModelLine } from "@/components/match-model-line";
 import { UpcomingMatchesDesktop } from "@/components/upcoming-matches-desktop";
 import type { MatchRowView } from "@/lib/view/types";
 
@@ -114,6 +115,17 @@ describe("linha da base do modelo (#555)", () => {
     ]) {
       expect(html).not.toContain("Modelo ·");
     }
+  });
+
+  it("MatchModelLine junta a className extra às classes base (cn)", () => {
+    expect(
+      renderToStaticMarkup(<MatchModelLine model={model} className="mt-1" />),
+    ).toContain(
+      'class="font-mono text-eyebrow tabular-nums text-muted-fg-2 mt-1"',
+    );
+    expect(renderToStaticMarkup(<MatchModelLine model={model} />)).toContain(
+      'class="font-mono text-eyebrow tabular-nums text-muted-fg-2"',
+    );
   });
 
   it("só probabilidade: sem edge, valor ou odd na linha", () => {

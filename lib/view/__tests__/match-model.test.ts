@@ -137,8 +137,16 @@ describe("toMatchModelReadingView", () => {
       { score: "1–1", pct: "12.4%" },
       { score: "1–0", pct: "11.9%" },
     ]);
-    expect(view.computedAgo).toBe("3h");
+    expect(view.computedAgo).toBe("há 3h");
     expect(JSON.stringify(view)).not.toMatch(/edge|valor|"odd"/i);
+  });
+
+  it("checado há menos de 1 minuto → 'há menos de 1min', nunca 'há agora'", () => {
+    const view = toMatchModelReadingView(
+      snapshot({ checkedAt: new Date(NOW.getTime() - 20_000) }),
+      NOW,
+    );
+    expect(view.computedAgo).toBe("há menos de 1min");
   });
 
   it("rótulo da fonte por motivo do fallback, dados limitados e JEV", () => {

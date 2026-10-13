@@ -1,4 +1,4 @@
-import { formatOdd, formatPct, formatRelativeAgo } from "@/lib/format";
+import { formatOdd, formatPct, formatRelativeAgoLabel } from "@/lib/format";
 import type { MatchModelSnapshot } from "@/lib/model-base/types";
 import type { DixonColesFallbackReason } from "@/lib/quant/match-model";
 import { getMarketPresentation } from "@/lib/view/markets/presentation";
@@ -120,6 +120,6 @@ export function toMatchModelReadingView(
         : snapshot.jevStatus === "failed"
           ? "JEV falhou"
           : null,
-    computedAgo: formatRelativeAgo(snapshot.checkedAt, now),
+    computedAgo: formatRelativeAgoLabel(snapshot.checkedAt, now),
   };
 }

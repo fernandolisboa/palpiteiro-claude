@@ -328,6 +328,16 @@ export function formatRelativeAgo(
 }
 
 /**
+ * "há 3h" (formatRelativeAgo devolve "3h"); caso-limite <1min vira "há menos de
+ * 1min": copy de valor congelado/calculado nunca diz "agora"/"hoje" (ADR 0012,
+ * decisão 2), senão todo valor recém-gerado afirmaria uma atualidade que não tem.
+ */
+export function formatRelativeAgoLabel(past: Date, now: Date = new Date()): string {
+  const ago = formatRelativeAgo(past, now);
+  return ago === "agora" ? "há menos de 1min" : `há ${ago}`;
+}
+
+/**
  * "claude-sonnet-4-5-20250929" → "claude-sonnet-4.5". Encurta o sufixo de
  * versão pra exibição mais compacta sem perder a identidade do modelo.
  */

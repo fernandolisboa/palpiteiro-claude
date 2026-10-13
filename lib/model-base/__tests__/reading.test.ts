@@ -72,7 +72,7 @@ describe("loadMatchModelReading", () => {
       "over_under:2.5",
       "over_under:3.5",
     ]);
-    expect(view?.computedAgo).toBe("2h");
+    expect(view?.computedAgo).toBe("há 2h");
     expect(ensureOddsSnapshotsFresh).not.toHaveBeenCalled();
     expect(getOddsProvider).not.toHaveBeenCalled();
     expect(getLatestSelectionOddsSnapshotsForMatches).not.toHaveBeenCalled();

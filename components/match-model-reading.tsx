@@ -37,14 +37,14 @@ export function MatchModelReadingCard({
         <span className="flex items-center gap-1.5 text-body font-medium tracking-tight">
           Leitura do modelo
           <HelpHint
-            anchor="prob-modelo"
+            anchor="leitura-modelo"
             label="leitura do modelo"
             blurb="Chance de cada resultado pelo modelo de placar do jogo, calculada sem olhar as odds. A odd justa é 100 ÷ probabilidade."
           />
         </span>
         {view && (
           <span className="font-mono text-eyebrow text-muted-foreground">
-            calculado há {view.computedAgo}
+            calculado {view.computedAgo}
           </span>
         )}
       </div>

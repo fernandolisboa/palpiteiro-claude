@@ -1,3 +1,4 @@
+import { cn } from "@/lib/utils";
 import type { MatchModelLineView } from "@/lib/view/types";
 
 // Linha compacta da base do modelo no /jogos (#555, ADR 0052): "Modelo · Casa 52% ·
@@ -13,7 +14,10 @@ export function MatchModelLine({
 }) {
   return (
     <span
-      className={`font-mono text-eyebrow tabular-nums text-muted-fg-2${className ? ` ${className}` : ""}`}
+      className={cn(
+        "font-mono text-eyebrow tabular-nums text-muted-fg-2",
+        className,
+      )}
     >
       Modelo · {model.favorite.label} {model.favorite.pct} · {model.goals25.label}{" "}
       {model.goals25.pct}

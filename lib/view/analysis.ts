@@ -10,7 +10,7 @@ import {
   formatModelName,
   formatOdd,
   formatPct,
-  formatRelativeAgo,
+  formatRelativeAgoLabel,
   formatStakeUnits,
   modelIdFromVersion,
 } from "@/lib/format";
@@ -100,15 +100,6 @@ function toFiniteNumber(value: string | number | null): number | null {
   if (value === null) return null;
   const n = typeof value === "string" ? Number(value) : value;
   return Number.isFinite(n) ? n : null;
-}
-
-// "há 3h" (formatRelativeAgo devolve "3h"); caso-limite <1min vira "há menos
-// de 1min" — copy de valor congelado nunca diz "agora"/"hoje" (ADR 0012,
-// decisão 2), senão toda análise recém-gerada afirmaria atualidade de uma odd
-// que já congelou.
-function relativeAgoLabel(createdAt: Date, now: Date): string {
-  const ago = formatRelativeAgo(createdAt, now);
-  return ago === "agora" ? "há menos de 1min" : `há ${ago}`;
 }
 
 // Odd congelada fora do domínio do módulo puro (≤ 1, defensivo) degrada pra
@@ -441,7 +432,7 @@ export function toAnalysisView(
     framing: framingNote.framing,
     note: framingNote.note,
     oddAtRec: isPass ? null : formatOdd(prediction.oddAtRecommendation),
-    oddAtRecAgo: isPass ? null : relativeAgoLabel(prediction.createdAt, now),
+    oddAtRecAgo: isPass ? null : formatRelativeAgoLabel(prediction.createdAt, now),
     bookmaker: isPass ? null : prediction.bookmaker,
     expectedReturn: isPass ? null : formatEvPct(evPerUnit),
     expectedReturnTone,

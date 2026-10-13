@@ -13,6 +13,7 @@ import { matchUnavailableReason } from "@/lib/view/match-availability";
 import type { SupportedLeague } from "@/lib/providers/sports-data/leagues";
 import { teamToTeam } from "@/lib/view/team";
 import type { MatchModelSnapshot } from "@/lib/model-base/types";
+import { MATCH_MODEL_MAX_AGE_MS } from "@/lib/model-base/version";
 import { toMatchModelLineView } from "@/lib/view/match-model";
 import {
   toMatchRowOdds,
@@ -106,8 +107,11 @@ export function toMatchRowView({
     awayScore: match.status === "finished" ? match.awayScore : null,
     venue: match.venue,
     countdown: formatCountdown(match.kickoffAt, now, timeZone),
-    // Chave ausente (não `model: undefined`) sem base: goldens do MatchRow intactos.
-    ...(analyzable && modelSnapshot
+    // Chave ausente (não `model: undefined`) sem base ou com base velha (mesmo limite
+    // do seam do cupom): goldens do MatchRow intactos.
+    ...(analyzable &&
+    modelSnapshot &&
+    nowMs - modelSnapshot.checkedAt.getTime() <= MATCH_MODEL_MAX_AGE_MS
       ? { model: toMatchModelLineView(modelSnapshot) }
       : {}),
   };

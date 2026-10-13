@@ -99,7 +99,7 @@ export type MatchModelReadingView = {
   topScorelines: { score: string; pct: string }[]; // { "1–0", "12.4%" }
   source: string; // "Dixon-Coles" | "heurístico da tabela (liga sem ajuste) · dados limitados"
   jev: string | null; // "+ JEV" | "JEV falhou" | null
-  computedAgo: string; // "3h" (formatRelativeAgo do checked_at)
+  computedAgo: string; // "há 3h" / "há menos de 1min" (formatRelativeAgoLabel do checked_at)
 };
 
 // Uma seleção do card de odds ao vivo, 100% strings prontas pra render. Forma

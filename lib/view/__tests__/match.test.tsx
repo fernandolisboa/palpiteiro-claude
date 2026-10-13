@@ -5,6 +5,7 @@ import { MatchRow } from "@/components/match-row";
 import type { MatchInput } from "@/lib/view/match";
 import { toMatchHeroView, toMatchRowView } from "@/lib/view/match";
 import type { MatchModelSnapshot } from "@/lib/model-base/types";
+import { MATCH_MODEL_MAX_AGE_MS } from "@/lib/model-base/version";
 import { IN_PROGRESS_WINDOW_MS } from "@/lib/view/date-range";
 import type { MatchStatus } from "@/lib/view/types";
 
@@ -365,6 +366,7 @@ describe("toMatchRowView — nomes da Copa em PT-BR (fiação do caller)", () =>
 describe("base do modelo na linha e firewall do hero (#555)", () => {
   // Base mínima com as probabilidades que a linha lê.
   const modelSnapshot = {
+    checkedAt: new Date(NOW.getTime() - 3 * 3_600_000),
     probabilities: {
       match_result: { home: 52.4, draw: 25.1, away: 22.5 },
       double_chance: { home_or_draw: 77.5, away_or_draw: 47.6, home_or_away: 74.9 },
@@ -415,6 +417,23 @@ describe("base do modelo na linha e firewall do hero (#555)", () => {
         modelSnapshot,
       }).model,
     ).toBeUndefined();
+  });
+
+  it("base com checked_at há mais de 24h → sem linha (mesmo limite do seam do cupom)", () => {
+    const at = (ageMs: number) =>
+      toMatchRowView({
+        match: makeMatch(),
+        odds: null,
+        hasPrediction: false,
+        now: NOW,
+        modelSnapshot: {
+          ...modelSnapshot,
+          checkedAt: new Date(NOW.getTime() - ageMs),
+        },
+      }).model;
+    expect(at(MATCH_MODEL_MAX_AGE_MS)).toBeDefined();
+    expect(at(MATCH_MODEL_MAX_AGE_MS + 1)).toBeUndefined();
+    expect(at(25 * 3_600_000)).toBeUndefined();
   });
 
   it("toMatchHeroView com a base → sem a chave `model`", () => {

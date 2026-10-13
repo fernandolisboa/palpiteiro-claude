@@ -1,5 +1,12 @@
-import { describe, expect, it } from "vitest";
+import { describe, expect, it, vi } from "vitest";
 import { renderToStaticMarkup } from "react-dom/server";
+
+// O Popover do HelpHint não renderiza no SSR estático: o stub expõe o anchor.
+vi.mock("@/components/help-hint", () => ({
+  HelpHint: ({ anchor }: { anchor: string }) => (
+    <span data-help-anchor={anchor} />
+  ),
+}));
 
 import {
   MatchModelReading,
@@ -33,7 +40,7 @@ const VIEW: MatchModelReadingView = {
   ],
   source: "Dixon-Coles",
   jev: "+ JEV",
-  computedAgo: "3h",
+  computedAgo: "há 3h",
 };
 
 const text = (html: string) => html.replace(/<[^>]+>/g, " ").replace(/\s+/g, " ");
@@ -50,6 +57,21 @@ describe("MatchModelReading (#555)", () => {
     expect(t).toContain("1–1 · 12.4%");
     expect(t).toContain("modelo · Dixon-Coles + JEV");
     expect(t).toContain("calculado há 3h");
+  });
+
+  it("cálculo recém-feito lê 'calculado há menos de 1min', nunca 'há agora'", () => {
+    const t = text(
+      renderToStaticMarkup(
+        <MatchModelReadingCard view={{ ...VIEW, computedAgo: "há menos de 1min" }} />,
+      ),
+    );
+    expect(t).toContain("calculado há menos de 1min");
+    expect(t).not.toContain("há agora");
+  });
+
+  it("a dica aponta pra entrada própria do glossário (#leitura-modelo)", () => {
+    const html = renderToStaticMarkup(<MatchModelReadingCard view={VIEW} />);
+    expect(html).toContain('data-help-anchor="leitura-modelo"');
   });
 
   it("sem linguagem de valor", () => {

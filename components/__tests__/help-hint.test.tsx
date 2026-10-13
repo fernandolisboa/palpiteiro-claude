@@ -53,6 +53,7 @@ describe("HelpHint — contrato dos anchors", () => {
     "pass rate": "pass-rate",
     "lucro total": "lucro-total",
     "prob. do modelo": "prob-modelo",
+    "leitura do modelo": "leitura-modelo",
     "prob. do mercado": "prob-implicita",
     edge: "edge",
     "retorno esperado": "retorno-esperado",
