@@ -15,11 +15,14 @@ import { parsePtBrOdd } from "@/lib/view/grade-my-bet-input";
 // stake opcional em unidades.
 
 export const MAX_STAKE_UNITS = 100;
+// Teto das colunas numeric(6,3) de bet_slips.combo_user_odd e bet_legs.user_odd: acima
+// disso o insert estoura (numeric field overflow).
+export const MAX_SLIP_ODD = 999.999;
 
 const PtBrOddSchema = z
   .string()
   .transform(parsePtBrOdd)
-  .pipe(z.number().finite().gt(1).lt(1000));
+  .pipe(z.number().finite().gt(1).lte(MAX_SLIP_ODD));
 
 const PtBrStakeSchema = z
   .string()
@@ -73,6 +76,9 @@ export function parseSlipPayload(
     const { stakeUnits, ...rest } = rawLeg;
     const leg = ConfirmBetLegSchema.safeParse(rest);
     if (!leg.success) return { ok: false, error: "perna" };
+    if (leg.data.userOdd !== undefined && leg.data.userOdd > MAX_SLIP_ODD) {
+      return { ok: false, error: "perna" };
+    }
     legs.push({ ...leg.data, stakeUnits: stakeUnits ?? null });
   }
 

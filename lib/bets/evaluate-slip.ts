@@ -266,7 +266,11 @@ export function evaluateSlip(input: {
       (pin ? getDescriptor(pin.dbMarketKey)?.minEdgePp : undefined) ?? MIN_EDGE_PP;
     const evPerUnit =
       leg.userOdd === null ? null : computeEvPerUnit(modelProbPct, leg.userOdd);
-    const stake = singleStake(modelProbPct, leg.userOdd, reference?.edgePct ?? null);
+    // Na combinada o stake é da combinada inteira: perna não ganha stake sugerido.
+    const stake =
+      input.mode === "simples"
+        ? singleStake(modelProbPct, leg.userOdd, reference?.edgePct ?? null)
+        : { suggested: null, info: null };
     return {
       status: "graded",
       ...base,
@@ -305,7 +309,9 @@ export function evaluateSlip(input: {
       mode: "simples",
       legs,
       combo: null,
-      cappedAtMatchLimit: suggested.capped || info.capped,
+      // A nota fala do stake sugerido (bandas); o Kelly informativo também é
+      // limitado, sem aviso próprio.
+      cappedAtMatchLimit: suggested.capped,
     };
   }
   return {

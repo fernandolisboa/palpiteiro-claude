@@ -40,7 +40,7 @@ export type RegisterBetSlipResult =
   | {
       ok: false;
       error: string;
-      kind?: "slip-invalido" | "nao-analisavel" | "limite-de-slips";
+      kind?: "slip-invalido" | "nao-analisavel" | "limite-de-slips" | "falha-ao-salvar";
     };
 
 const INVALID_COPY: Record<SlipValidationError, string> = {
@@ -146,7 +146,9 @@ export async function registerBetSlip(
       error:
         rl.reason === "fail-closed"
           ? "Registro de apostas indisponível no momento. Tente mais tarde."
-          : "Você atingiu o limite diário de apostas registradas. Tente amanhã.",
+          : rl.remaining > 0
+            ? `Hoje você ainda pode registrar ${rl.remaining} ${rl.remaining === 1 ? "aposta" : "apostas"}. Tire algumas da lista ou use a combinada.`
+            : "Você atingiu o limite diário de apostas registradas. Tente amanhã.",
       kind: "limite-de-slips",
     };
   }
@@ -203,7 +205,16 @@ export async function registerBetSlip(
             legs: evaluation.legs.map(toNewLeg),
           },
         ];
-  await insertBetSlipsBatch(newSlips);
+  try {
+    await insertBetSlipsBatch(newSlips);
+  } catch (err) {
+    console.error("[registerBetSlip] insert falhou", err);
+    return {
+      ok: false,
+      error: "Não consegui salvar suas apostas. Tente de novo.",
+      kind: "falha-ao-salvar",
+    };
+  }
 
   revalidatePath(`/match/${match.id}`);
   revalidatePath("/apostas");

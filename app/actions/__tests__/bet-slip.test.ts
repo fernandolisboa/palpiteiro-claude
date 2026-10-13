@@ -230,6 +230,20 @@ describe("registerBetSlip — rate limit conta slips criados", () => {
     expect(mockInsert).not.toHaveBeenCalled();
   });
 
+  it("pedido maior que o saldo → diz quantas ainda cabem hoje", async () => {
+    mockRateLimit.mockResolvedValue({
+      ok: false,
+      limit: 30,
+      remaining: 2,
+      reset: 0,
+    } as unknown as Awaited<ReturnType<typeof checkBetSlipsRateLimit>>);
+    const res = await registerBetSlip(null, form(slip()));
+    expect(res).toMatchObject({ ok: false, kind: "limite-de-slips" });
+    if (res.ok) return;
+    expect(res.error).toContain("ainda pode registrar 2 apostas");
+    expect(mockInsert).not.toHaveBeenCalled();
+  });
+
   it("rate limit fail-closed → copy de indisponível", async () => {
     mockRateLimit.mockResolvedValue({
       ok: false,
@@ -243,6 +257,14 @@ describe("registerBetSlip — rate limit conta slips criados", () => {
 });
 
 describe("registerBetSlip — persistência", () => {
+  it("insert que falha → erro amigável, sem lançar", async () => {
+    mockInsert.mockRejectedValueOnce(new Error("numeric field overflow"));
+    const spy = vi.spyOn(console, "error").mockImplementation(() => {});
+    const res = await registerBetSlip(null, form(slip()));
+    expect(res).toMatchObject({ ok: false, kind: "falha-ao-salvar" });
+    spy.mockRestore();
+  });
+
   it("simples → um slip por perna, cada um com 1 perna", async () => {
     const res = await registerBetSlip(
       null,

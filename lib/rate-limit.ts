@@ -190,6 +190,14 @@ export async function checkBetSlipsRateLimit(
 ): Promise<RateLimitResult> {
   const limiters = getLimiters();
   if (!limiters) return failClosedByRole(role);
+  if (count > 1) {
+    // O fixedWindow incrementa mesmo quando recusa: um registro de N apostas maior que
+    // o saldo queimaria o que ainda restava. Confere antes, sem consumir.
+    const before = await limiters.betSlips.getRemaining(userId);
+    if (before.remaining < count) {
+      return { ok: false, limit: before.limit, remaining: before.remaining, reset: before.reset };
+    }
+  }
   const { success, limit, remaining, reset } =
     count > 1
       ? await limiters.betSlips.limit(userId, { rate: count })

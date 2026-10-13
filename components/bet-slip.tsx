@@ -61,6 +61,9 @@ type Mode = "simples" | "combinada";
 type ParseMeta = { rawInput: string; parseAiCallId: string | null };
 
 const ptOdd = (n: number) => n.toFixed(2).replace(".", ",");
+// Odd que o usuário digitou: mantém as casas que ele deu (1.925 não vira 1,93).
+const ptUserOdd = (n: number) =>
+  (Number.isInteger(n * 100) ? n.toFixed(2) : String(n)).replace(".", ",");
 
 function legFromSelection(s: GridSelectionView): SlipLeg {
   return {
@@ -173,7 +176,7 @@ export function BetSlip({
           l.selectionLabel
             .replace("Mandante", grid.teams.home)
             .replace("Visitante", grid.teams.away),
-        oddInput: l.userOdd === null ? "" : ptOdd(l.userOdd),
+        oddInput: l.userOdd === null ? "" : ptUserOdd(l.userOdd),
         oddFromReference: false,
         stakeInput: "",
         fairOdd: fromGrid?.fairOdd ?? null,
@@ -184,7 +187,7 @@ export function BetSlip({
     setParseMeta({ rawInput: parseState.rawInput, parseAiCallId: parseState.parseAiCallId });
     if (parseState.comboUserOdd !== null && parsedLegs.length >= 2) {
       setMode("combinada");
-      setComboOddInput(ptOdd(parseState.comboUserOdd));
+      setComboOddInput(ptUserOdd(parseState.comboUserOdd));
     }
     // addLegs/byId são estáveis o bastante pra este efeito de borda (dispara 1x por parse).
     // eslint-disable-next-line react-hooks/exhaustive-deps
@@ -204,7 +207,10 @@ export function BetSlip({
     legs: legs.map((l) => ({
       kind: l.kind,
       params: l.params,
-      ...(l.oddInput.trim() ? { userOdd: l.oddInput.trim() } : {}),
+      // Na combinada vale só a odd da combinada: a odd por perna não vai.
+      ...(effectiveMode === "simples" && l.oddInput.trim()
+        ? { userOdd: l.oddInput.trim() }
+        : {}),
       ...(effectiveMode === "simples" && l.stakeInput.trim()
         ? { stakeUnits: l.stakeInput.trim() }
         : {}),
@@ -298,7 +304,7 @@ export function BetSlip({
         {RISK_DISCLAIMER_PT_BR}
       </p>
       {(count > 0 || registerState) && (
-        <div className="fixed inset-x-0 bottom-0 z-40 border-t border-border bg-background/95 px-5 py-3 backdrop-blur supports-[backdrop-filter]:bg-background/80">
+        <div className="fixed inset-x-0 bottom-0 z-40 border-t border-border bg-background/95 px-5 pt-3 pb-[max(0.75rem,env(safe-area-inset-bottom))] backdrop-blur supports-[backdrop-filter]:bg-background/80">
           <Button className="w-full" onClick={() => setSheetOpen(true)}>
             <Ticket className="size-4" aria-hidden />
             {count > 0 ? `Suas apostas (${count})` : "Ver avaliação"}
@@ -627,42 +633,42 @@ function SlipPanel(props: {
                   {leg.fairOdd !== null ? ` · odd justa ${ptOdd(leg.fairOdd)}` : ""}
                 </span>
               )}
-              <div className="grid grid-cols-2 gap-2">
-                <label className="flex flex-col gap-1">
-                  <span className="font-mono text-eyebrow-xs uppercase tracking-label text-muted-foreground">
-                    {leg.oddFromReference ? "odd (referência)" : "odd que você pegou"}
-                  </span>
-                  <input
-                    type="text"
-                    inputMode="decimal"
-                    value={leg.oddInput}
-                    placeholder="ex.: 2,10"
-                    onChange={(e) =>
-                      props.onUpdate(leg.id, {
-                        oddInput: e.target.value,
-                        oddFromReference: false,
-                      })
-                    }
-                    className={INPUT}
-                  />
-                </label>
-                {mode === "simples" && (
+              {mode === "simples" && (
+                <div className="grid grid-cols-2 gap-2">
                   <label className="flex flex-col gap-1">
                     <span className="font-mono text-eyebrow-xs uppercase tracking-label text-muted-foreground">
-                      stake (u, opcional)
+                      {leg.oddFromReference ? "odd (referência)" : "odd que você pegou"}
                     </span>
                     <input
                       type="text"
                       inputMode="decimal"
-                      value={leg.stakeInput}
-                      placeholder="1"
-                      onChange={(e) => props.onUpdate(leg.id, { stakeInput: e.target.value })}
+                      value={leg.oddInput}
+                      placeholder="ex.: 2,10"
+                      onChange={(e) =>
+                        props.onUpdate(leg.id, {
+                          oddInput: e.target.value,
+                          oddFromReference: false,
+                        })
+                      }
                       className={INPUT}
                     />
                   </label>
-                )}
-              </div>
-              {leg.oddFromReference && (
+                    <label className="flex flex-col gap-1">
+                      <span className="font-mono text-eyebrow-xs uppercase tracking-label text-muted-foreground">
+                        stake (u, opcional)
+                      </span>
+                      <input
+                        type="text"
+                        inputMode="decimal"
+                        value={leg.stakeInput}
+                        placeholder="1"
+                        onChange={(e) => props.onUpdate(leg.id, { stakeInput: e.target.value })}
+                        className={INPUT}
+                      />
+                    </label>
+                </div>
+              )}
+              {mode === "simples" && leg.oddFromReference && (
                 <span className="text-meta leading-relaxed text-muted-fg-2 tracking-tight">
                   Preenchida com a odd de referência. Troque pela que você pegou.
                 </span>

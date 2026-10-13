@@ -226,9 +226,8 @@ export function ComoUsarContent() {
 
       <Section id="minha-aposta">
         <p>
-          Na página do jogo, a parte <Ui>registrar apostas</Ui> funciona como o
-          cupom de uma casa: todos os mercados ficam à vista e você só toca no que
-          apostou (ou pensa em apostar). O Palpiteiro não aceita dinheiro: aqui é só
+          Na página do jogo, a parte <Ui>registrar apostas</Ui> deixa todos os
+          mercados à vista: você só toca no que apostou (ou pensa em apostar). O Palpiteiro não aceita dinheiro: aqui é só
           registro e avaliação, sem gastar análises do seu limite.
         </p>
         <Steps>

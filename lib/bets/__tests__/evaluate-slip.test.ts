@@ -403,7 +403,36 @@ describe("evaluateSlip — stake sugerido", () => {
   });
 });
 
+describe("evaluateSlip — teto por jogo com muitas pernas", () => {
+  it("7 pernas de 1u → nenhuma some: soma exatamente 3u em degraus de 0.5u", () => {
+    const scores = ["1-0", "2-0", "2-1", "1-1", "0-0", "3-1", "0-1"].map((s) => {
+      const [home, away] = s.split("-").map(Number);
+      return leg("exact_score", { home, away } as BetLegParams, 60);
+    });
+    const res = evaluate({ legs: scores });
+    const legs = res.legs.map(graded);
+    for (const l of legs) expect(l.evPerUnit!).toBeGreaterThan(0);
+    expect(res.cappedAtMatchLimit).toBe(true);
+    const units = legs.map((l) => l.suggestedStake?.units ?? 0);
+    expect(units.reduce((a, b) => a + b, 0)).toBe(MATCH_STAKE_CAP_UNITS);
+    for (const u of units) expect(Number.isInteger(u * 2)).toBe(true);
+    expect(units.filter((u) => u > 0).length).toBeGreaterThanOrEqual(6);
+  });
+});
+
 describe("evaluateSlip — combinada", () => {
+  it("perna da combinada não ganha stake sugerido nem Kelly (o stake é da combinada)", () => {
+    const res = evaluate({
+      mode: "combinada",
+      legs: [leg("match_result", HOME, 3.0), leg("over_under", OVER_25, 3.0)],
+      comboUserOdd: 9,
+    });
+    for (const l of res.legs.map(graded)) {
+      expect(l.suggestedStake).toBeNull();
+      expect(l.kellyInfo).toBeNull();
+    }
+  });
+
   it("conjunta sai da matriz (não do produto das marginais)", () => {
     const res = evaluate({
       mode: "combinada",

@@ -159,6 +159,22 @@ describe("parseSlipPayload — envelope fail-closed", () => {
     );
   });
 
+  it("odd da perna acima do teto da coluna (999,999) → perna", () => {
+    expect(err(payload({ legs: [{ ...HOME, userOdd: "1001" }] }))).toBe(
+      "perna"
+    );
+    expect(ok(payload({ legs: [{ ...HOME, userOdd: "999,999" }] })).legs[0]
+      .userOdd).toBe(999.999);
+  });
+
+  it("odd combinada acima de 999,999 → payload", () => {
+    expect(
+      err(
+        payload({ mode: "combinada", legs: [HOME, OVER], comboUserOdd: "1000" })
+      )
+    ).toBe("payload");
+  });
+
   it("odd combinada ≤ 1 → payload", () => {
     expect(
       err(
