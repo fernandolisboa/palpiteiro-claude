@@ -14,6 +14,7 @@ import {
   type UserBetLegRow,
 } from "@/lib/db/queries/user-bets";
 import { getRequestTimeZone } from "@/lib/server/request-timezone";
+import { historyLegSummary } from "@/lib/view/bet-slip";
 import { betLegLabel } from "@/lib/view/free-bet";
 
 export const dynamic = "force-dynamic";
@@ -77,7 +78,7 @@ export default async function ApostasPage({ searchParams }: PageProps) {
           <EmptyState
             icon={<Ticket className="size-6" aria-hidden />}
             title="Você ainda não registrou apostas"
-            description="Abra um jogo, escreva sua aposta e confirme — ela aparece aqui."
+            description="Abra um jogo, toque nas seleções que você apostou e registre — elas aparecem aqui."
           />
         ) : (
           <div className="flex flex-col gap-4">
@@ -153,6 +154,17 @@ function SlipCard({
         ))}
       </div>
 
+      {slip.mode === "combinada" && slip.stakeUnits !== null && (
+        <div className="flex items-center justify-between border-t border-border px-4 py-2.5">
+          <span className="font-mono text-eyebrow uppercase tracking-label text-muted-foreground">
+            seu stake na combinada
+          </span>
+          <span className="font-mono text-body font-medium tabular-nums tracking-tight text-foreground">
+            {Number(slip.stakeUnits).toFixed(2).replace(/\.?0+$/, "")}u
+          </span>
+        </div>
+      )}
+
       {slip.legs.length >= 2 && slip.comboUserOdd !== null && (
         <div className="flex items-center justify-between border-t border-border px-4 py-2.5">
           <span className="font-mono text-eyebrow uppercase tracking-label text-muted-foreground">
@@ -186,14 +198,22 @@ function LegRow({ leg }: { leg: UserBetLegRow }) {
       : result === "lost"
         ? "destructive"
         : "outline";
+  const summary = historyLegSummary(leg);
   return (
-    <div className="flex items-center justify-between gap-2">
-      <span className="text-body-sm tracking-tight text-foreground">
-        {label}
-      </span>
-      <Badge variant={legVariant} size="xs">
-        {legLabel}
-      </Badge>
+    <div className="flex flex-col gap-0.5">
+      <div className="flex items-center justify-between gap-2">
+        <span className="text-body-sm tracking-tight text-foreground">
+          {label}
+        </span>
+        <Badge variant={legVariant} size="xs">
+          {legLabel}
+        </Badge>
+      </div>
+      {summary.length > 0 && (
+        <span className="font-mono text-eyebrow-xs tabular-nums text-muted-fg-2">
+          {summary.join(" · ")}
+        </span>
+      )}
     </div>
   );
 }

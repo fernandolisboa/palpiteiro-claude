@@ -379,6 +379,13 @@
       "when": 1791723098749,
       "tag": "0053_enable_parallel_fan_out",
       "breakpoints": true
+    },
+    {
+      "idx": 54,
+      "version": "7",
+      "when": 1791897884739,
+      "tag": "0054_bet_slip_cupom",
+      "breakpoints": true
     }
   ]
 }

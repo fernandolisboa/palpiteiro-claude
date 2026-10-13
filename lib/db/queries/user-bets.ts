@@ -35,6 +35,12 @@ export type NewBetLeg = {
   gradeStatus: GradeStatus;
   settleable: boolean;
   pinnedPredictionId: string | null;
+  // Cupom (#556). Opcionais: a aposta em texto antiga não os tinha.
+  modelSource?: "dixon_coles" | "heuristic" | null;
+  referenceOdd?: number | null;
+  marketImpliedPct?: number | null;
+  stakeUnits?: number | null;
+  suggestedStakeUnits?: number | null;
 };
 
 export type NewBetSlip = {
@@ -47,51 +53,59 @@ export type NewBetSlip = {
   // o slip é de perna única OU a combinada não é avaliável (perna fora da matriz/sem
   // grade/standings indisponível). numeric → string no insert.
   jointProbPct: number | null;
+  mode?: "simples" | "combinada" | null;
+  stakeUnits?: number | null;
   legs: NewBetLeg[];
 };
 
+const fixed = (n: number | null | undefined, digits: number): string | null =>
+  n === null || n === undefined ? null : n.toFixed(digits);
+
 /**
- * Persiste um slip + suas pernas (no confirm — Decisão 5). Insert sequencial (neon-http
- * não tem transação real): slip primeiro (pra o id), pernas depois. O slip só nasce no
- * confirm (parse abandonado não deixa órfão) e é IMUTÁVEL depois — corrigir = novo slip.
+ * Persiste VÁRIOS slips (o registro do cupom, #556: em "Simples" cada perna é um slip)
+ * numa ida só. Os ids são gerados aqui pra que slips e pernas entrem no MESMO
+ * `db.batch` — no neon-http é uma transação: ou o registro inteiro entra, ou nada.
  */
-export async function insertBetSlipWithLegs(
-  slip: NewBetSlip,
-): Promise<{ slipId: string; legIds: string[] }> {
-  const [slipRow] = await db
-    .insert(betSlips)
-    .values({
+export async function insertBetSlipsBatch(
+  slips: NewBetSlip[],
+): Promise<{ slipIds: string[] }> {
+  if (slips.length === 0) return { slipIds: [] };
+  const slipIds = slips.map(() => crypto.randomUUID());
+  const slipInsert = db.insert(betSlips).values(
+    slips.map((slip, i) => ({
+      id: slipIds[i],
       matchId: slip.matchId,
       userId: slip.userId,
       rawInput: slip.rawInput,
       parseAiCallId: slip.parseAiCallId,
-      comboUserOdd:
-        slip.comboUserOdd === null ? null : slip.comboUserOdd.toFixed(3),
-      jointProbPct:
-        slip.jointProbPct === null ? null : slip.jointProbPct.toFixed(2),
-    })
-    .returning({ id: betSlips.id });
-  const slipId = slipRow.id;
-
-  const legRows = await db
-    .insert(betLegs)
-    .values(
+      comboUserOdd: fixed(slip.comboUserOdd, 3),
+      jointProbPct: fixed(slip.jointProbPct, 2),
+      mode: slip.mode ?? null,
+      stakeUnits: fixed(slip.stakeUnits, 2),
+    })),
+  );
+  const legInsert = db.insert(betLegs).values(
+    slips.flatMap((slip, i) =>
       slip.legs.map((l) => ({
-        slipId,
+        slipId: slipIds[i],
         kind: l.kind,
         params: l.params,
-        userOdd: l.userOdd === null ? null : l.userOdd.toFixed(3),
-        modelProbPct:
-          l.modelProbPct === null ? null : l.modelProbPct.toFixed(2),
+        userOdd: fixed(l.userOdd, 3),
+        modelProbPct: fixed(l.modelProbPct, 2),
         gradeSource: l.gradeSource,
         gradeStatus: l.gradeStatus,
         settleable: l.settleable,
         pinnedPredictionId: l.pinnedPredictionId,
+        modelSource: l.modelSource ?? null,
+        referenceOdd: fixed(l.referenceOdd, 3),
+        marketImpliedPct: fixed(l.marketImpliedPct, 2),
+        stakeUnits: fixed(l.stakeUnits, 2),
+        suggestedStakeUnits: fixed(l.suggestedStakeUnits, 2),
       })),
-    )
-    .returning({ id: betLegs.id });
-
-  return { slipId, legIds: legRows.map((r) => r.id) };
+    ),
+  );
+  await db.batch([slipInsert, legInsert]);
+  return { slipIds };
 }
 
 export type InsertBetLegOutcomeArgs = {

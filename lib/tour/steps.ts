@@ -76,12 +76,12 @@ export const TOUR_CHAPTERS: Record<TourChapter, readonly TourStep[]> = {
     {
       target: "palpite",
       title: "O Palpite",
-      body: "Aqui fica o palpite da IA: quem leva, o placar provável e o porquê. Toque em \"Analisar com IA\" pra gerar. Pode levar alguns minutos, e cada mercado analisado usa uma das suas análises do dia.",
+      body: "Aqui fica o palpite da IA: quem leva, o placar provável e o porquê. Toque em \"Analisar com IA\" pra gerar. Pode levar alguns minutos, e cada mercado analisado usa uma das suas análises do dia. Depois, \"ver análise por mercado\" abre o detalhe de cada mercado (odd, edge, stake ou PASS).",
     },
     {
-      target: "analysis-tabs",
-      title: "Análise e Minha aposta",
-      body: "Em \"Análise\", \"ver análise por mercado\" abre o detalhe de cada mercado (odd, edge, stake ou PASS). Em \"Minha aposta\" você escreve uma aposta sua pra avaliar e, se confirmar, ela vai pra Apostas.",
+      target: "bet-slip",
+      title: "Registrar apostas",
+      body: "Fez uma aposta na sua casa? Toque nas seleções aqui (ou digite a aposta), confira a odd que você pegou e toque em \"Registrar apostas\". A avaliação sai na hora, sem gastar análise, e a aposta vai pra Apostas.",
     },
     {
       target: "odds",
@@ -95,7 +95,7 @@ export const TOUR_CHAPTERS: Record<TourChapter, readonly TourStep[]> = {
     },
     {
       title: "Pronto",
-      body: "Depois do jogo o resultado é apurado sozinho: as análises aparecem em desempenho e as apostas que você confirmou, em apostas. Em \"ajuda\", no menu do topo, o guia \"como usar\" explica cada tela e dá pra rever este tour.",
+      body: "Depois do jogo o resultado é apurado sozinho: as análises aparecem em desempenho e as apostas que você registrou, em apostas. Em \"ajuda\", no menu do topo, o guia \"como usar\" explica cada tela e dá pra rever este tour.",
     },
   ],
 };
