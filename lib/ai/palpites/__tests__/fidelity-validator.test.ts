@@ -153,6 +153,85 @@ describe("checkFidelity — totais de gols (marcados / sofridos)", () => {
   });
 });
 
+describe("checkFidelity — médias e totais de outra fonte não são contradição", () => {
+  // Caso de produção: totais [7, 4] e a média do visitante (4/5) no input como
+  // "0.8 sofridos por jogo". A manchete repetiu a média e o "8" da casa decimal
+  // reprovava o palpite.
+  it("'0,8 gols sofridos por jogo' (média) não é lido como total 8 → ok", () => {
+    const r = checkFidelity(
+      output({ narrative: "O Flu sofre pouco: 0,8 gols sofridos por jogo." }),
+      input(),
+    );
+    expect(r.ok).toBe(true);
+  });
+
+  it("média com ponto ('1.6 gols marcados') também é ignorada → ok", () => {
+    const r = checkFidelity(
+      output({ narrative: "O Fla tem 1.6 gols marcados de média recente." }),
+      input(),
+    );
+    expect(r.ok).toBe(true);
+  });
+
+  it("média inteira ('média de 2 gols sofridos', '3 gols marcados por jogo') → ok", () => {
+    const r = checkFidelity(
+      output({
+        narrative:
+          "Média de 2 gols sofridos e o rival com 3 gols marcados por jogo.",
+      }),
+      input(),
+    );
+    expect(r.ok).toBe(true);
+  });
+
+  it("total que o racional de uma análise já trazia (temporada) → ok", () => {
+    const r = checkFidelity(
+      output({ narrative: "A defesa do Flu já tem 18 gols sofridos no campeonato." }),
+      input({
+        analyses: [
+          {
+            marketKey: "match_result",
+            marketLabel: "Resultado (1X2)",
+            recommendation: "home",
+            recommendedLabel: "Casa",
+            isPass: false,
+            modelProbPct: 55,
+            edgePct: 3,
+            confidencePct: null,
+            oddAtRecommendation: 1.9,
+            rationale: "Fluminense FC: 9º, 20 pts, 15 gols marcados e 18 sofridos.",
+            predictionId: "pred-1",
+            selections: [],
+          },
+        ],
+      }),
+    );
+    expect(r.ok).toBe(true);
+  });
+
+  it("total inventado continua reprovando mesmo com média fiel antes → contradição", () => {
+    const r = checkFidelity(
+      output({
+        narrative: "0,8 gols sofridos por jogo, mas 9 gols sofridos no total.",
+      }),
+      input(),
+    );
+    expect(r.ok).toBe(false);
+    if (!r.ok) expect(r.reason).toContain("9 gol(s) sofridos");
+  });
+
+  it("checa TODAS as citações, não só a 1ª → contradição na 2ª", () => {
+    const r = checkFidelity(
+      output({
+        narrative: "O Flu tem 7 gols sofridos e o Fla, 11 gols sofridos.",
+      }),
+      input(),
+    );
+    expect(r.ok).toBe(false);
+    if (!r.ok) expect(r.reason).toContain("11");
+  });
+});
+
 describe("checkFidelity — omissão e ausência de fato (postura inegociável)", () => {
   it("manchete SEM nenhuma contagem citada → ok (omissão ≠ contradição)", () => {
     const r = checkFidelity(

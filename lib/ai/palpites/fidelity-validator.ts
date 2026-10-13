@@ -84,32 +84,71 @@ export function checkFidelity(
   // específico de forma parseável). CONTRADIÇÃO = o número citado não bate com NENHUM
   // dos lados que temos — isso mantém a postura contradiction-only (se casa um lado, é
   // um fato verdadeiro restituído, não uma contradição). Lados ausentes são ignorados.
+  // Toda citação é checada (não só a 1ª), e o mesmo total também vale quando vem do
+  // racional de uma análise que demos ao modelo (ex.: total da temporada na tabela).
   const goalsFor = collectTotals(input, "goalsFor");
   const goalsAgainst = collectTotals(input, "goalsAgainst");
+  const rationales = input.analyses.map((a) => a.rationale).join(" ");
 
-  const marcadosClaim = toInt(prose.match(/(\d+)\s+gols?\s+marcados/i)?.[1]);
-  if (marcadosClaim !== null && goalsFor.length > 0 && !goalsFor.includes(marcadosClaim)) {
+  const marcados = checkGoalClaims(prose, rationales, "marcados", goalsFor);
+  if (marcados !== null) {
     return {
       ok: false,
-      reason: `recentScores.goalsFor: manchete cita ${marcadosClaim} gol(s) marcados, totais pré-contados = [${goalsFor.join(", ")}]`,
+      reason: `recentScores.goalsFor: manchete cita ${marcados} gol(s) marcados, totais pré-contados = [${goalsFor.join(", ")}]`,
     };
   }
 
-  const sofridosClaim = toInt(
-    prose.match(/(\d+)\s+(?:gols?\s+)?sofridos/i)?.[1],
-  );
-  if (
-    sofridosClaim !== null &&
-    goalsAgainst.length > 0 &&
-    !goalsAgainst.includes(sofridosClaim)
-  ) {
+  const sofridos = checkGoalClaims(prose, rationales, "sofridos", goalsAgainst);
+  if (sofridos !== null) {
     return {
       ok: false,
-      reason: `recentScores.goalsAgainst: manchete cita ${sofridosClaim} gol(s) sofridos, totais pré-contados = [${goalsAgainst.join(", ")}]`,
+      reason: `recentScores.goalsAgainst: manchete cita ${sofridos} gol(s) sofridos, totais pré-contados = [${goalsAgainst.join(", ")}]`,
     };
   }
 
   return { ok: true };
+}
+
+// "N gols marcados" / "N (gols) sofridos" como INTEIRO. A borda esquerda impede ler a
+// casa decimal de uma média como total: sem ela, "0,8 gols sofridos por jogo" virava
+// "8 gols sofridos" e reprovava um palpite fiel (o input traz a média "0.8 sofridos por
+// jogo" ao lado do total). Mesma borda do PERCENT_RE do narrador.
+function goalClaimRe(word: "marcados" | "sofridos"): RegExp {
+  return new RegExp(`(?<!\\d)(?<!\\d[.,])(\\d+)\\s+(?:gols?\\s+)?${word}`, "giu");
+}
+
+// Média citada como inteiro ("média de 2 gols sofridos", "2 gols sofridos por jogo")
+// não é um total: fica fora da checagem (não é contradição com o total da janela).
+const AVERAGE_BEFORE = /m[ée]dia\s+(?:de\s+)?$/iu;
+const AVERAGE_AFTER = /^\s*(?:por|a\s+cada)\s+(?:jogo|partida|rodada)/iu;
+const AVERAGE_WINDOW = 20;
+
+// Inteiros "N <word>" de um texto, sem as médias.
+function goalClaims(text: string, word: "marcados" | "sofridos"): number[] {
+  const claims: number[] = [];
+  for (const m of text.matchAll(goalClaimRe(word))) {
+    const before = text.slice(Math.max(0, m.index - AVERAGE_WINDOW), m.index);
+    const end = m.index + m[0].length;
+    const after = text.slice(end, end + AVERAGE_WINDOW);
+    if (AVERAGE_BEFORE.test(before) || AVERAGE_AFTER.test(after)) continue;
+    const n = toInt(m[1]);
+    if (n !== null) claims.push(n);
+  }
+  return claims;
+}
+
+// 1º total citado na manchete que não bate com nenhum total pré-contado nem com um
+// total que o racional das análises já trazia; null = sem contradição. Sem totais
+// pré-contados (fato ausente) → null: nunca fabricar falha.
+function checkGoalClaims(
+  prose: string,
+  rationales: string,
+  word: "marcados" | "sofridos",
+  totals: number[],
+): number | null {
+  if (totals.length === 0) return null;
+  const allowed = new Set([...totals, ...goalClaims(rationales, word)]);
+  return goalClaims(prose, word).find((n) => !allowed.has(n)) ?? null;
 }
 
 // Junta os totais pré-contados de AMBOS os lados (home/away) que existem no input.

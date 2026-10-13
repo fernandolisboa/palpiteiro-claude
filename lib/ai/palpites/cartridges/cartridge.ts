@@ -58,8 +58,11 @@ import type { PalpiteCartridge } from "../types";
 // obedecer instruções dentro deles. SÓ defesa na ENTRADA: zero mudança de schema e dos
 // 4 campos guardados; o firewall de SAÍDA (output .strict() + guard de conteúdo) segue
 // intacto como rede final. O conteúdo por-item (- title (url)) é idêntico ao v8.
+// v10 = + regra de TOTAL DE GOLS: citar o total exato da linha "Últimos N jogos" com a
+// janela, nunca somar/recalcular, e média por jogo só como média. Acompanha o ajuste do
+// validador de fidelidade (#380), que lia "0,8 gols sofridos por jogo" como total 8.
 // BUMP MANUAL (commit `prompt:`) em QUALQUER mudança de prompt/schema.
-export const PALPITES_VERSION = "palpites_v9" as const;
+export const PALPITES_VERSION = "palpites_v10" as const;
 
 const TEXT_MAX = 280;
 // Narrativa: prosa um pouco mais longa que uma linha de palpite. Truncada (não
@@ -249,6 +252,7 @@ REGRAS INVIOLÁVEIS:
 - Os números internos das análises (edge, valor esperado/EV, stake/unidades, Yield, lucro, odd/cotação, R$) são SÓ pra você decidir. É TERMINANTEMENTE PROIBIDO mencioná-los — como número OU como palavra — em verdict ou narrative. Escreva como um torcedor empolgado dando seu palpite, NUNCA como um analista de valor. (PROIBIDO: "tem edge no over", "odd boa no Palmeiras", "vale a stake". OK: "o Palmeiras vem voando e marca fácil em casa".)
 - Use o sinal das análises (incl. o edge/EV/odd internos) como insumo legítimo da SUA previsão — pra você decidir, não pra mencionar. Quando esse sinal, somado a forma/histórico/tabela, aponta o azarão, crave o azarão. Mas mesmo que NENHUM mercado tenha valor (todas as análises deem "pass"/sem recomendação), DÊ MESMO ASSIM seu palpite honesto de quem ganha + placar provável, derivado da forma, do histórico e da tabela. Nunca recuse o palpite por falta de valor.
 - Use SÓ os dados fornecidos. NÃO invente jogadores, lesões ou números.
+- Total de gols: se citar gols marcados/sofridos de um time, copie o total exato da linha "Últimos N jogos (placares contados)" desse time, dizendo a janela (ex.: "7 gols sofridos nos últimos 5 jogos"). NUNCA some, recalcule ou arredonde; a média por jogo, se citada, vai como média (ex.: "0,8 gol sofrido por jogo"), nunca como total.
 - Cartões/árbitro: a temperatura de cartões vai EXCLUSIVAMENTE no campo estruturado cardsTemperature ("pegado"/"muito_pegado" ou omitido). É TERMINANTEMENTE PROIBIDO mencionar cartões, árbitro, faltas ou QUALQUER contagem de cartões em verdict ou narrative — nem como número, nem como palavra. O input não traz dado de cartão; inventar um número de cartões na prosa é proibido.
 - O placar provável é o ÚNICO ponto conferido depois (acertou/errou). Trate como palpite divertido, nunca como "acerto garantido".
 - Responda EXCLUSIVAMENTE chamando a ferramenta submit_palpite. Não escreva texto livre fora da chamada.

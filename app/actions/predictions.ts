@@ -397,9 +397,9 @@ export type AnalyzeBestBetResult =
 
 // Copy da síntese que não saiu (o fan-out pago sobreviveu). O admin vê o motivo técnico.
 const SYNTHESIS_DEADLINE_MESSAGE =
-  "As análises por mercado ficaram prontas, mas o tempo acabou antes de montar o palpite. Tente de novo.";
+  "As análises por mercado ficaram prontas, mas o tempo acabou antes de montar o palpite. Tente de novo pelo botão “só o palpite”, que usa as análises já salvas sem refazê-las.";
 const SYNTHESIS_FAILED_MESSAGE =
-  "As análises por mercado ficaram prontas, mas o palpite não saiu desta vez. Tente de novo.";
+  "As análises por mercado ficaram prontas, mas o palpite não saiu desta vez. Tente de novo pelo botão “só o palpite”, que usa as análises já salvas sem refazê-las.";
 
 function synthesisFailureMessage(err: unknown, isAdmin: boolean): string {
   if (err instanceof AnalysisDeadlineError) return SYNTHESIS_DEADLINE_MESSAGE;

@@ -234,9 +234,9 @@ describe("SUBMIT_PALPITE_TOOL", () => {
       SUBMIT_PALPITE_TOOL.input_schema,
     );
   });
-  it("a versão é palpites_v9 (#466 — delimitadores anti-injection nas notícias)", () => {
-    expect(PALPITES_VERSION).toBe("palpites_v9");
-    expect(palpitesCartridge.version).toBe("palpites_v9");
+  it("a versão é palpites_v10 (regra de total de gols)", () => {
+    expect(PALPITES_VERSION).toBe("palpites_v10");
+    expect(palpitesCartridge.version).toBe("palpites_v10");
   });
   it("o tool NÃO declara campos de valor (firewall estrutural); declara firstHalfScore + firstToScore (#354) + cardsTemperature (#419)", () => {
     const props = SUBMIT_PALPITE_TOOL.input_schema.properties as Record<
