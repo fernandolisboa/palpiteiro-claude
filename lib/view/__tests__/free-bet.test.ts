@@ -18,6 +18,7 @@ describe("toFreeBetLegView (mapper CAMINHO B)", () => {
       selectionLabel: "Placar exato: 2 a 0",
       modelProbPct,
       degradedData: false,
+      source: "heuristic",
       userOdd,
     });
     expect(view.kind).toBe("grade-modelo-simplificado");
@@ -42,6 +43,7 @@ describe("toFreeBetLegView (mapper CAMINHO B)", () => {
       selectionLabel: "Placar exato: 1 a 1",
       modelProbPct: 8,
       degradedData: false,
+      source: "heuristic",
       userOdd: null,
     });
     if (view.kind !== "grade-modelo-simplificado") throw new Error("kind");
@@ -55,10 +57,25 @@ describe("toFreeBetLegView (mapper CAMINHO B)", () => {
       selectionLabel: "Placar exato: 0 a 0",
       modelProbPct: 9,
       degradedData: true,
+      source: "heuristic",
       userOdd: 12,
     });
     if (view.kind !== "grade-modelo-simplificado") throw new Error("kind");
     expect(view.sourceLabel).toBe("modelo simplificado (dados limitados)");
+  });
+
+  it("Dixon-Coles → rótulo 'modelo Dixon-Coles' (#547)", () => {
+    const view = toFreeBetLegView({
+      status: "graded",
+      selectionLabel: "Placar exato: 1 a 0",
+      modelProbPct: 11,
+      degradedData: false,
+      source: "dixon_coles",
+      userOdd: 7,
+    });
+    if (view.kind !== "grade-modelo-simplificado") throw new Error("kind");
+    expect(view.sourceLabel).toBe("modelo Dixon-Coles");
+    expect(view.value?.valueReading).toMatch(/^Pelo modelo de placar, nessa odd/);
   });
 
   it("no_data → nao-avalio com motivo", () => {
@@ -82,6 +99,7 @@ describe("toFreeBetLegView (mapper CAMINHO B)", () => {
         selectionLabel: "x",
         modelProbPct: prob,
         degradedData: false,
+        source: "heuristic",
         userOdd: odd,
       });
       if (v.kind === "grade-modelo-simplificado" && v.value) {
@@ -121,6 +139,7 @@ describe("toFreeBetComboView (mapper da combinada same-game)", () => {
       status: "combinada",
       jointProbPct,
       degradedData: false,
+      source: "heuristic",
       legs,
       comboUserOdd,
     });
@@ -150,6 +169,7 @@ describe("toFreeBetComboView (mapper da combinada same-game)", () => {
       status: "combinada",
       jointProbPct: 30,
       degradedData: false,
+      source: "heuristic",
       legs,
       comboUserOdd: null,
     });
@@ -163,11 +183,25 @@ describe("toFreeBetComboView (mapper da combinada same-game)", () => {
       status: "combinada",
       jointProbPct: 30,
       degradedData: true,
+      source: "heuristic",
       legs,
       comboUserOdd: null,
     });
     if (view.kind !== "combinada") throw new Error("kind");
     expect(view.sourceLabel).toBe("modelo simplificado (dados limitados)");
+  });
+
+  it("Dixon-Coles → rótulo 'modelo Dixon-Coles' (#547)", () => {
+    const view = toFreeBetComboView({
+      status: "combinada",
+      jointProbPct: 30,
+      degradedData: false,
+      source: "dixon_coles",
+      legs,
+      comboUserOdd: null,
+    });
+    if (view.kind !== "combinada") throw new Error("kind");
+    expect(view.sourceLabel).toBe("modelo Dixon-Coles");
   });
 
   it("nao-avaliada → kind combinada-nao-avaliada com motivo", () => {

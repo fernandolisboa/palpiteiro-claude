@@ -376,8 +376,8 @@ function ModelResult({ view }: { view: FreeBetLegView }) {
 }
 
 // Combinada same-game (Decisão 4). INVARIANTE DE COERÊNCIA DE TELA: o joint SEMPRE
-// aparece com as marginais Poisson das pernas participantes na MESMA tela (joint ≤ min
-// garantido pela matriz única). Rótulo "modelo simplificado" onipresente; sem edge.
+// aparece com as marginais do modelo das pernas participantes na MESMA tela (joint ≤ min
+// garantido pela matriz única). Rótulo do modelo (Dixon-Coles/simplificado) onipresente; sem edge.
 function ComboResult({ combo }: { combo: FreeBetComboView }) {
   if (combo.kind === "combinada-nao-avaliada") {
     return <Notice label="combinada não avaliada" body={combo.reason} />;
@@ -407,7 +407,7 @@ function ComboResult({ combo }: { combo: FreeBetComboView }) {
         </p>
       )}
       <Separator />
-      {/* Marginais Poisson por perna — a mesma matriz do joint (invariante de coerência). */}
+      {/* Marginais do modelo por perna — a mesma matriz do joint (invariante de coerência). */}
       <div className="flex flex-col gap-2 px-4 py-4">
         {combo.legs.map((l, i) => (
           <Row

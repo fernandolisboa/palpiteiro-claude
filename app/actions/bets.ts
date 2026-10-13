@@ -35,10 +35,12 @@ import {
 import { getSportsDataProvider } from "@/lib/providers/sports-data";
 import { isNeutralVenue } from "@/lib/providers/sports-data/neutral-venue";
 import type { NormalizedStanding } from "@/lib/providers/sports-data/types";
+import type { ModelScoreline } from "@/lib/quant/match-model";
 import {
   checkBetParseRateLimit,
   checkBetSlipsRateLimit,
 } from "@/lib/rate-limit";
+import { getModelScoreline } from "@/lib/ratings/model-scoreline";
 import { deriveBetLegSettleable } from "@/lib/settlement/rules/user-bet-dispatch";
 import {
   betLegLabel,
@@ -269,10 +271,9 @@ export type ConfirmBetResult =
 type LegContext = {
   matchId: string;
   league: string;
-  homeTeam: string;
-  awayTeam: string;
-  neutral: boolean;
-  standing: NormalizedStanding | undefined;
+  // Modelo de placar do CAMINHO B (getModelScoreline, ADR 0051: DC → heurístico),
+  // memoizado: só lê tabela e ratings se alguma perna ou a combinada precisar.
+  model: () => Promise<ModelScoreline | null>;
   allowedMarketKeys: ReadonlySet<string>;
 };
 
@@ -388,10 +389,7 @@ async function processLeg(
 
   // CAMINHO B: modelo de placar (props sempre; mercado fora do gate; line fora da escada).
   const grade = gradeScorelineLeg({
-    standing: ctx.standing,
-    homeTeam: ctx.homeTeam,
-    awayTeam: ctx.awayTeam,
-    neutral: ctx.neutral,
+    model: await ctx.model(),
     kind: leg.kind as ScorelineKind,
     params: leg.params as BetLegParams,
   });
@@ -409,7 +407,7 @@ async function processLeg(
           status: "no_data",
           selectionLabel: label,
           reason:
-            "Não avalio essa aposta agora — sem tabela de classificação pra estimar o placar.",
+            "Não avalio essa aposta agora — sem dados pra estimar o placar.",
         }),
       },
     };
@@ -428,6 +426,7 @@ async function processLeg(
         selectionLabel: label,
         modelProbPct: grade.modelProbPct,
         degradedData: grade.degradedData,
+        source: grade.source,
         userOdd,
       }),
     },
@@ -437,16 +436,16 @@ async function processLeg(
 // ── Combinada same-game via joint-sum (Decisão 4) ────────────────────────────
 // Só computa quando o slip tem ≥2 pernas E TODAS mapeiam predicado de placar (fora
 // da matriz = 1º tempo/first_to_score/cards/corners → null) E TODAS foram gradeadas
-// (número real). Qualquer perna fora/sem-grade OU standings indisponível → "combinada
+// (número real). Qualquer perna fora/sem-grade OU modelo indisponível → "combinada
 // não avaliada" (NUNCA precifica um combo diferente do apostado). Devolve a view +
 // jointProbPct pra persistir (congelado). O joint e as marginais saem da MESMA matriz
-// (computeSlipJoint) — coerência de tela garantida (joint ≤ min das marginais Poisson).
-function buildCombo(
+// (computeSlipJoint) — coerência de tela garantida (joint ≤ min das marginais do modelo).
+async function buildCombo(
   legs: ConfirmBetLeg[],
   processed: NewBetLeg[],
   ctx: LegContext,
   comboUserOdd: number | null,
-): { view: FreeBetComboView | null; jointProbPct: number | null } {
+): Promise<{ view: FreeBetComboView | null; jointProbPct: number | null }> {
   if (legs.length < 2) return { view: null, jointProbPct: null };
 
   const naoAvaliada = (reason: string) => ({
@@ -468,10 +467,7 @@ function buildCombo(
   }
 
   const joint = computeSlipJoint({
-    standing: ctx.standing,
-    homeTeam: ctx.homeTeam,
-    awayTeam: ctx.awayTeam,
-    neutral: ctx.neutral,
+    model: await ctx.model(),
     legs: legs.map((l) => ({
       kind: l.kind,
       params: l.params as BetLegParams,
@@ -479,7 +475,7 @@ function buildCombo(
   });
   if (joint === null) {
     return naoAvaliada(
-      "Não consegui avaliar a combinada agora — sem tabela de classificação pra estimar o placar.",
+      "Não consegui avaliar a combinada agora — sem dados pra estimar o placar.",
     );
   }
 
@@ -488,6 +484,7 @@ function buildCombo(
       status: "combinada",
       jointProbPct: joint.jointProbPct,
       degradedData: joint.degradedData,
+      source: joint.source,
       legs: legs.map((l, i) => ({
         selectionLabel: betLegLabel(l.kind, l.params as Record<string, unknown>),
         marginalPct: joint.marginalsPct[i],
@@ -583,20 +580,30 @@ export async function confirmBet(
     ),
   );
 
-  // 7. Standings UMA vez pro CAMINHO B (novo 3º call-site). Falha → undefined → no_data.
-  let standing: NormalizedStanding | undefined;
-  try {
-    standing = await getSportsDataProvider().getStandings(match.league);
-  } catch {
-    standing = undefined;
-  }
+  // 7. Modelo de placar UMA vez pro CAMINHO B, sob demanda: o MESMO da análise do jogo
+  //    (getModelScoreline: DC com o heurístico da tabela como rede, #547). Tabela que
+  //    falha → undefined → só o DC; sem os dois → null → no_data. Nunca lança.
+  let modelPromise: Promise<ModelScoreline | null> | null = null;
+  const model = () =>
+    (modelPromise ??= (async () => {
+      let standing: NormalizedStanding | undefined;
+      try {
+        standing = await getSportsDataProvider().getStandings(match.league);
+      } catch {
+        standing = undefined;
+      }
+      return getModelScoreline({
+        league: match.league,
+        standing,
+        homeTeam: match.homeTeam,
+        awayTeam: match.awayTeam,
+        neutral: isNeutralVenue(match),
+      });
+    })());
   const ctx: LegContext = {
     matchId: slip.matchId,
     league: match.league,
-    homeTeam: match.homeTeam,
-    awayTeam: match.awayTeam,
-    neutral: isNeutralVenue(match),
-    standing,
+    model,
     allowedMarketKeys,
   };
 
@@ -607,7 +614,7 @@ export async function confirmBet(
   }
 
   // 9. Combinada same-game (Decisão 4): joint sobre a matriz do slip, congelado.
-  const combo = buildCombo(
+  const combo = await buildCombo(
     slip.legs,
     processed.map((p) => p.newLeg),
     ctx,

@@ -616,9 +616,10 @@ export const betLegKindEnum = pgEnum("bet_leg_kind", [
 ]);
 
 // Fonte do número da perna (Decisão 3): cartridge = core cache-first do #412;
-// scoreline_model = double-Poisson determinístico (lib/quant); none = sem número
-// (cards/corners aceitas-não-gradeadas, ou grade que faltou). Rótulo "modelo
-// simplificado" na UI/dado ⟺ scoreline_model.
+// scoreline_model = modelo de placar determinístico (lib/quant; Dixon-Coles ou
+// heurístico desde #547); none = sem número (cards/corners aceitas-não-gradeadas, ou
+// grade que faltou). Rótulo "modelo Dixon-Coles"/"modelo simplificado" na UI ⟺
+// scoreline_model.
 export const gradeSourceEnum = pgEnum("grade_source", [
   "cartridge",
   "scoreline_model",

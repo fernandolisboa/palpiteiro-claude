@@ -28,7 +28,7 @@ O λ do modelo de placar em produção vinha do heurístico da tabela (`computeM
 - **(−)** Champions ajusta só com jogos da própria Champions: força entre ligas não entra. Mata-mata usa o placar com prorrogação (`goals` do provider), um punhado de jogos por temporada.
 - **(−)** Depois do deploy, até o primeiro refit (cron ou botão) tudo segue no heurístico (`no_fit`).
 - **(−)** Mais uma chamada diária de API-Football por liga ativa (4 na 1ª rodada), na mesma cota do sync de fixtures e das análises.
-- O modelo de placar da "análise minha aposta" (`lib/bets/grade-scoreline.ts`, ADR 0036) segue no heurístico; migrar é trocar a chamada por `getModelScoreline`.
+- O modelo de placar da "análise minha aposta" (`lib/bets/grade-scoreline.ts`, ADR 0036) migrou pro `getModelScoreline` em #547: pernas do Caminho B e combinada same-game usam o mesmo λ/matriz (e o mesmo fallback) da análise do jogo, com rótulo "modelo Dixon-Coles" ou "modelo simplificado".
 
 ## Referências
 

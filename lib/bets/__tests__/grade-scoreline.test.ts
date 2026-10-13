@@ -8,6 +8,15 @@ import {
   legToScorePredicate,
   type ScorelineKind,
 } from "@/lib/bets/grade-scoreline";
+import {
+  pickModelScoreline,
+  type ModelScoreline,
+} from "@/lib/quant/match-model";
+import {
+  firstHalfScorelineMatrix,
+  pOverUnder,
+  pScoreline,
+} from "@/lib/quant/scoreline-model";
 import type {
   NormalizedStanding,
   NormalizedStandingSplit,
@@ -68,15 +77,52 @@ const TABLE: NormalizedStanding = {
   ],
 };
 
-function grade(kind: ScorelineKind, params: BetLegParams) {
-  return gradeScorelineLeg({
+const NOW = new Date("2026-10-13T12:00:00Z");
+
+// Modelo do jogo como o getModelScoreline entrega: heurístico da TABLE (flag DC off)…
+function heuristicModel(standing: NormalizedStanding | undefined) {
+  return pickModelScoreline({
+    now: NOW,
+    neutral: false,
+    dc: null,
+    heuristic: computeMatchLambdas({
+      standing,
+      homeTeam: "Forte",
+      awayTeam: "Fraco",
+      neutral: false,
+    }),
+  });
+}
+
+const MODEL = heuristicModel(TABLE)!;
+
+// …ou Dixon-Coles com fit fresco e os dois times com histórico (ρ ≠ pinado -0.1).
+const DC_MODEL = pickModelScoreline({
+  now: NOW,
+  neutral: false,
+  dc: {
+    fit: {
+      homeAdvantage: 1.3,
+      rho: -0.04,
+      fittedAt: new Date(NOW.getTime() - 60 * 60 * 1000),
+    },
+    home: { attack: 1.4, defence: 0.7, matches: 30 },
+    away: { attack: 0.8, defence: 1.2, matches: 30 },
+  },
+  heuristic: computeMatchLambdas({
     standing: TABLE,
     homeTeam: "Forte",
     awayTeam: "Fraco",
     neutral: false,
-    kind,
-    params,
-  });
+  }),
+})!;
+
+function grade(
+  kind: ScorelineKind,
+  params: BetLegParams,
+  model: ModelScoreline = MODEL,
+) {
+  return gradeScorelineLeg({ model, kind, params });
 }
 
 describe("computeMatchLambdas", () => {
@@ -120,16 +166,21 @@ describe("computeMatchLambdas", () => {
 });
 
 describe("gradeScorelineLeg — todos os kinds do Caminho B", () => {
-  it("standings ausente → no_data em qualquer kind", () => {
+  it("sem modelo (sem DC e sem tabela) → no_data em qualquer kind", () => {
+    expect(heuristicModel(undefined)).toBeNull();
     const g = gradeScorelineLeg({
-      standing: undefined,
-      homeTeam: "Forte",
-      awayTeam: "Fraco",
-      neutral: false,
+      model: null,
       kind: "match_result",
       params: { selection: "home" },
     });
     expect(g.status).toBe("no_data");
+  });
+
+  it("heurístico → source heuristic, sem dados limitados na tabela cheia", () => {
+    const g = grade("exact_score", { home: 2, away: 0 });
+    if (g.status !== "graded") throw new Error("graded");
+    expect(g.source).toBe("heuristic");
+    expect(g.degradedData).toBe(false);
   });
 
   it("exact_score: prob em (0,100)", () => {
@@ -244,13 +295,7 @@ describe("legToScorePredicate", () => {
     ];
     for (const [kind, params] of cases) {
       const g = grade(kind, params);
-      const joint = computeSlipJoint({
-        standing: TABLE,
-        homeTeam: "Forte",
-        awayTeam: "Fraco",
-        neutral: false,
-        legs: [{ kind, params }],
-      });
+      const joint = computeSlipJoint({ model: MODEL, legs: [{ kind, params }] });
       if (g.status !== "graded" || joint === null)
         throw new Error(`graded/joint ${kind}`);
       expect(joint.jointProbPct).toBeCloseTo(g.modelProbPct, 6);
@@ -261,21 +306,12 @@ describe("legToScorePredicate", () => {
 
 describe("computeSlipJoint (combinada same-game)", () => {
   const slipJoint = (legs: Array<{ kind: string; params: BetLegParams }>) =>
-    computeSlipJoint({
-      standing: TABLE,
-      homeTeam: "Forte",
-      awayTeam: "Fraco",
-      neutral: false,
-      legs,
-    });
+    computeSlipJoint({ model: MODEL, legs });
 
-  it("standings ausente → null (combinada não avaliada)", () => {
+  it("sem modelo → null (combinada não avaliada)", () => {
     expect(
       computeSlipJoint({
-        standing: undefined,
-        homeTeam: "Forte",
-        awayTeam: "Fraco",
-        neutral: false,
+        model: null,
         legs: [{ kind: "match_result", params: { selection: "home" } }],
       }),
     ).toBeNull();
@@ -325,5 +361,58 @@ describe("computeSlipJoint (combinada same-game)", () => {
     expect(j.jointProbPct).not.toBeCloseTo(product, 2);
     // Correlação positiva ⇒ joint estritamente acima do produto (independência).
     expect(j.jointProbPct).toBeGreaterThan(product);
+  });
+});
+
+// #547: o Caminho B usa o MESMO modelo da análise do jogo (getModelScoreline). Com DC
+// utilizável, a perna e a combinada saem da matriz do DC (ρ do fit), não da tabela.
+describe("modelo Dixon-Coles (#547)", () => {
+  it("fixture é DC de verdade (senão o resto testaria o heurístico)", () => {
+    expect(DC_MODEL.source).toBe("dixon_coles");
+    expect(DC_MODEL.rho).toBe(-0.04);
+  });
+
+  it("perna precifica sobre model.matrix, com source dixon_coles e sem dados limitados", () => {
+    const g = grade("exact_score", { home: 1, away: 1 }, DC_MODEL);
+    if (g.status !== "graded") throw new Error("graded");
+    expect(g.source).toBe("dixon_coles");
+    expect(g.degradedData).toBe(false);
+    expect(g.modelProbPct).toBeCloseTo(pScoreline(DC_MODEL.matrix, 1, 1) * 100, 9);
+  });
+
+  it("DC e heurístico dão números diferentes pro mesmo jogo", () => {
+    const dc = grade("match_result", { selection: "home" }, DC_MODEL);
+    const heur = grade("match_result", { selection: "home" }, MODEL);
+    if (dc.status !== "graded" || heur.status !== "graded") throw new Error("graded");
+    expect(dc.modelProbPct).not.toBeCloseTo(heur.modelProbPct, 2);
+  });
+
+  it("1º tempo usa os λ do DC com o ρ do fit", () => {
+    const g = grade(
+      "first_half_over_under",
+      { selection: "under", line: 0.5 },
+      DC_MODEL,
+    );
+    if (g.status !== "graded") throw new Error("graded");
+    const fh = firstHalfScorelineMatrix(DC_MODEL.lambdaHome, DC_MODEL.lambdaAway, {
+      rho: -0.04,
+    });
+    expect(g.modelProbPct).toBeCloseTo((1 - pOverUnder(fh, 0.5)) * 100, 9);
+  });
+
+  it("combinada: joint e marginais da MESMA matriz DC que as pernas", () => {
+    const legs: Array<{ kind: ScorelineKind; params: BetLegParams }> = [
+      { kind: "match_result", params: { selection: "home" } },
+      { kind: "over_under", params: { selection: "over", line: 2.5 } },
+    ];
+    const j = computeSlipJoint({ model: DC_MODEL, legs });
+    if (j === null) throw new Error("joint");
+    expect(j.source).toBe("dixon_coles");
+    legs.forEach((l, i) => {
+      const g = grade(l.kind, l.params, DC_MODEL);
+      if (g.status !== "graded") throw new Error("graded");
+      expect(j.marginalsPct[i]).toBeCloseTo(g.modelProbPct, 9);
+    });
+    expect(j.jointProbPct).toBeLessThanOrEqual(Math.min(...j.marginalsPct) + 1e-9);
   });
 });
