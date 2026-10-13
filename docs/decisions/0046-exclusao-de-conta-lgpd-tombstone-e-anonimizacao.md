@@ -16,10 +16,12 @@ prometido na `/privacidade` (§8) com prazo de 15 dias.
 > das análises do titular (linha 2b); o runbook e a spec 5.e acompanham.
 
 > **Emenda (#565, ADR 0055, 2026-10-13):** o contexto extra da análise com IA não cria
-> lugar novo de PII: o texto vai só à extração (`user_palpite_extract_v1`, já coberta
-> pela linha 1) e não é gravado; `predictions.judgments.userContext` e os prompts de
-> análise (narrador) levam só afirmações tipadas montadas pelo código, sem texto livre nem
-> nome de jogador. "Onde NÃO há PII" continua valendo.
+> lugar novo de PII. O texto vai só à extração (`user_palpite_extract_v1`): fica no
+> `ai_calls.input_payload` dela (e as paráfrases e os nomes de jogador no
+> `output_payload`), o mesmo lugar do motivo do "Seu palpite", que a linha 1 já redige
+> (`LIKE 'user_palpite%'`). Não há tabela nova com o texto: `predictions.judgments.userContext`
+> e os prompts de análise (narrador) levam só afirmações tipadas montadas pelo código, sem
+> texto livre nem nome de jogador, então "Onde NÃO há PII" continua valendo pra eles.
 
 > **Escopo:** estratégia de eliminação/anonimização quando o titular pede pra excluir a
 > conta; o que é apagado, o que é anonimizado e por quê; spec da feature (`/perfil` +

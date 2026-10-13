@@ -56,7 +56,10 @@ Plano: `docs/plans/PLAN-565.md` (o §13 vale sobre o resto).
   (placar exato, artilheiro, assistência) e a síntese do palpite **não** veem o contexto:
   ali "peso pequeno" seria uma instrução sem limite pra um modelo que define
   probabilidade, e uma afirmação não verificável não pode virar fato numa manchete
-  compartilhável.
+  compartilhável. Como o racional do narrador cita o que a pessoa informou, a síntese
+  (no run e em "Refazer só o palpite") não o recebe quando o contexto moveu algum fator:
+  recebe um racional montado em código só com os fatores do JEV que o usuário não moveu
+  (ou nenhum), com as probabilidades e a seleção da row (`synthesis-input.ts`).
 - **Caminho até o número.** A action dispara a extração depois da cobrança do 1º slot e
   passa a Promise ao fan-out (teto de 10 s; falha ou teto = run sem contexto). O `predict`
   a espera **uma vez por run**, depois do JEV, e confere as afirmações com `checkClaims`
@@ -76,7 +79,10 @@ Plano: `docs/plans/PLAN-565.md` (o §13 vale sobre o resto).
 - **Narrador.** Não há bloco de texto do usuário no prompt. Os fatores que o usuário moveu
   levam a origem na própria frase de fator, "(informado por você, não conferido)" ou
   "(informado por você)", com a força ("sinal forte/moderado") vinda só do valor do JEV; vale
-  pro narrador LLM e pro racional templado (`narrator_v1.1`).
+  pro narrador LLM e pro racional templado (`narrator_v1.1`). A origem segue o **sinal**
+  que moveu o fator, não o status da afirmação: "(informado por você)" só quando foi um
+  sinal confirmado pelos nossos dados (fato e papel); um desfalque que está na nossa lista
+  sem posição ou como meio-campista, com o papel dito pelo usuário, sai "não conferido".
 - **Teto.** O mesmo do §5: cada fator de ataque/defesa move no máximo 4,2% e uma afirmação
   falsa e não verificável move até 2,4% por fator de ataque/defesa.
 - **§6 deixa de valer pra este caminho.** As **regras** de gate de edge, stake, Kelly,
