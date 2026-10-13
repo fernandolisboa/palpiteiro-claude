@@ -3,7 +3,11 @@
 import { useActionState, useEffect, useMemo, useRef, useState } from "react";
 import { Ticket, X } from "lucide-react";
 
-import { useBetSlipBridge } from "@/components/bet-slip-bridge";
+import {
+  slipFullNotice,
+  useBetSlipBridge,
+  type BridgeAddOutcome,
+} from "@/components/bet-slip-bridge";
 import { Button } from "@/components/ui/button";
 import { Card } from "@/components/ui/card";
 import { Separator } from "@/components/ui/separator";
@@ -120,11 +124,18 @@ export function BetSlip({
   const canCombine = legs.length >= 2 && legs.length <= MAX_LEGS;
   const effectiveMode: Mode = mode === "combinada" && canCombine ? "combinada" : "simples";
 
-  function addLegs(next: SlipLeg[]) {
+  // Devolve quantas entraram, quantas já estavam e se a lista encheu (a ponte com o
+  // "Seu palpite" usa isso pra não dizer "adicionado" à toa).
+  function addLegs(next: SlipLeg[]): { added: number; duplicates: number; full: boolean } {
     let out = [...legs];
     let full = false;
+    let added = 0;
+    let duplicates = 0;
     for (const leg of next) {
-      if (out.some((l) => l.id === leg.id)) continue;
+      if (out.some((l) => l.id === leg.id)) {
+        duplicates++;
+        continue;
+      }
       // Uma seleção por mercado (como nas casas); placar exato aceita vários.
       if (leg.kind !== "exact_score") {
         out = out.filter((l) => l.groupKey !== leg.groupKey);
@@ -134,9 +145,11 @@ export function BetSlip({
         break;
       }
       out.push(leg);
+      added++;
     }
     setLegs(out);
-    setNotice(full ? `No máximo ${MAX_SLIP_SELECTIONS} seleções por vez.` : null);
+    setNotice(full ? slipFullNotice : null);
+    return { added, duplicates, full };
   }
 
   // Perna a partir de (kind, params): a da grade quando existe (traz a odd de referência
@@ -183,12 +196,13 @@ export function BetSlip({
   // efeito), então o handler sempre vê a lista atual.
   const bridge = useBetSlipBridge();
   const sectionRef = useRef<HTMLElement>(null);
-  const fromBridge = useRef<(leg: BridgeLeg) => void>(() => {});
+  const fromBridge = useRef<(leg: BridgeLeg) => BridgeAddOutcome>(() => "duplicate");
   useEffect(() => {
     fromBridge.current = (leg) => {
-      addLegs([legFromKindParams(leg.kind, leg.params)]);
+      const r = addLegs([legFromKindParams(leg.kind, leg.params)]);
       if (variant === "mobile") setSheetOpen(true);
       else sectionRef.current?.scrollIntoView?.({ behavior: "smooth", block: "start" });
+      return r.added > 0 ? "added" : r.full ? "full" : "duplicate";
     };
   });
   useEffect(() => bridge?.register((leg) => fromBridge.current(leg)), [bridge]);

@@ -41,7 +41,10 @@ import {
 } from "@/lib/user-palpite/evidence";
 import { fetchPalpiteFacts } from "@/lib/user-palpite/facts";
 import { modelLabel } from "@/lib/user-palpite/labels";
-import { resolvePalpiteModelBase } from "@/lib/user-palpite/model-base";
+import {
+  resolvePalpiteModelBase,
+  type PalpiteModelBase,
+} from "@/lib/user-palpite/model-base";
 import {
   codeVerdict,
   palpiteLabel,
@@ -51,12 +54,14 @@ import {
   AnalyzeUserPalpiteInputSchema,
   MAX_REASON_CHARS,
   MIN_REASON_CHARS,
+  normalizeReasonText,
   UserPalpiteSchema,
   type CheckedClaim,
   type Claim,
   type NarrationSource,
   type PalpiteNarration,
   type StoredPalpiteModel,
+  type UserPalpite,
 } from "@/lib/user-palpite/types";
 import {
   toUserPalpiteAnalysisView,
@@ -67,7 +72,8 @@ import {
 // acesso, flag, jogo, analisável, TEM MODELO) vêm antes da cobrança, como em
 // generatePalpiteFromAnalyses; depois da cobrança o request nunca falha: extração que
 // falha vira leitura sem o texto, narração que falha vira template, insert que falha
-// devolve a análise com aviso. Sem revalidatePath: o cliente mostra o retorno e um
+// devolve a análise com aviso, e qualquer exceção inesperada cai na leitura sem o texto
+// (a base já está em mãos) ou, no limite, numa mensagem amigável. Sem revalidatePath: o cliente mostra o retorno e um
 // reload lê a última gravada.
 
 export type AnalyzeUserPalpiteResult =
@@ -81,6 +87,10 @@ export type AnalyzeUserPalpiteResult =
 const EXTRACTION_FAILED_WARNING =
   "Não consegui ler o seu motivo agora; a leitura abaixo não considera o texto.";
 const INSERT_FAILED_WARNING = "Não consegui salvar esta análise; ela some ao recarregar.";
+const PIPELINE_FAILED_WARNING =
+  "Não consegui analisar o seu motivo agora; a leitura abaixo não considera o texto.";
+const PIPELINE_FAILED_MESSAGE =
+  "Não consegui analisar o seu palpite agora. A leitura pelos botões continua valendo.";
 
 function parseInput(formData: FormData) {
   const rawPalpite = formData.get("palpite");
@@ -118,7 +128,7 @@ function invalidMessage(formData: FormData): string {
   if (typeof reason !== "string" || reason.trim().length < MIN_REASON_CHARS) {
     return "Escreva o motivo do seu palpite. A leitura pelos botões é grátis e não precisa dele.";
   }
-  if (reason.trim().length > MAX_REASON_CHARS) {
+  if (String(normalizeReasonText(reason)).trim().length > MAX_REASON_CHARS) {
     return `O motivo passou de ${MAX_REASON_CHARS} caracteres.`;
   }
   return "Pedido inválido.";
@@ -175,7 +185,137 @@ export async function analyzeUserPalpite(
     };
   }
 
-  // ─── Depois da cobrança: nada daqui pra baixo devolve erro ───
+  // ─── Depois da cobrança: nada daqui pra baixo lança ───
+  const ctx: ChargedContext = {
+    match,
+    base,
+    palpite,
+    reason,
+    userId,
+    isAdmin,
+    now,
+    deadlineAt,
+  };
+  try {
+    return await analyzeAfterCharge(ctx);
+  } catch (err) {
+    logPostChargeError("pipeline_failed", matchId, err);
+  }
+  // A unidade já foi cobrada: com a base em mãos, ainda dá a leitura sem o texto.
+  try {
+    return degradedAnalysis(ctx);
+  } catch (err) {
+    logPostChargeError("degraded_failed", matchId, err);
+    return { ok: false, error: PIPELINE_FAILED_MESSAGE };
+  }
+}
+
+type ChargedContext = {
+  match: NonNullable<Awaited<ReturnType<typeof getMatchById>>>;
+  base: PalpiteModelBase;
+  palpite: UserPalpite;
+  reason: string;
+  userId: string;
+  isAdmin: boolean;
+  now: Date;
+  deadlineAt: number | undefined;
+};
+
+function logPostChargeError(error: string, matchId: string, err: unknown): void {
+  console.error(
+    JSON.stringify({
+      scope: "analyzeUserPalpite",
+      error,
+      matchId,
+      message: err instanceof Error ? err.message : String(err),
+    }),
+  );
+}
+
+/** Leitura "sem o seu contexto" e narração em template, sem chamada nem insert. */
+function degradedAnalysis(ctx: ChargedContext): AnalyzeUserPalpiteResult {
+  const { match, base, palpite, now } = ctx;
+  const teams = { home: match.homeTeam, away: match.awayTeam };
+  const readings = computeReadings(base, {}, palpite);
+  const verdict = codeVerdict(readings.with, palpite, []);
+  const jevApplied = base.jevAnswers !== null;
+  const label = modelLabel({ ...base, jevApplied });
+  const narration = templatedPalpiteNarration({
+    teams,
+    competition: LEAGUE_LABEL[leagueToKey(match.league)],
+    kickoffLabel: formatKickoffAbsolute(match.kickoffAt, now),
+    palpite,
+    palpiteLabel: palpiteLabel(palpite, teams),
+    modelLabel: label,
+    jevApplied,
+    without: readings.without,
+    with: readings.with,
+    codeVerdict: verdict,
+    claims: [],
+    facts: [],
+  });
+  const record: UserPalpiteAnalysisRecord = {
+    id: crypto.randomUUID(),
+    createdAt: new Date(),
+    palpite,
+    palpiteSource: "buttons",
+    claims: [],
+    model: storedModel(base, readings, {}, label),
+    reading: { without: readings.without, with: readings.with },
+    narration: {
+      ...narration,
+      codeVerdict: verdict,
+      warnings: [PIPELINE_FAILED_WARNING, INSERT_FAILED_WARNING],
+    },
+    narrationSource: "template",
+  };
+  return { ok: true, analysis: toUserPalpiteAnalysisView(record, teams, new Date()) };
+}
+
+function storedModel(
+  base: PalpiteModelBase,
+  readings: ReturnType<typeof computeReadings>,
+  ev: StoredPalpiteModel["userEvidence"],
+  label: string,
+): StoredPalpiteModel {
+  return {
+    origin: base.origin,
+    snapshotId: base.snapshotId,
+    source: base.source,
+    degraded: base.degraded,
+    staleBase: base.staleBase,
+    rho: base.rho,
+    lambdaBase: { home: base.lambdaHomeBase, away: base.lambdaAwayBase },
+    lambdaWithout: {
+      home: readings.lambdaWithout.lambdaHome,
+      away: readings.lambdaWithout.lambdaAway,
+    },
+    lambdaWith: {
+      home: readings.lambdaWith.lambdaHome,
+      away: readings.lambdaWith.lambdaAway,
+    },
+    jevApplied: base.jevAnswers !== null,
+    jevAnswers: base.jevAnswers,
+    userEvidence: ev,
+    combinedAnswers: readings.combined,
+    multipliersWith: readings.lambdaWith.multipliers,
+    modelLabel: label,
+    versions: {
+      matchModel: base.modelVersion,
+      judgments: JUDGMENTS_VERSION,
+      weights: JUDGMENT_WEIGHTS_VERSION,
+      snapshotWeights: base.snapshotWeightsVersion,
+      userEvidence: USER_EVIDENCE_VERSION,
+      verdict: PALPITE_VERDICT_VERSION,
+      extract: USER_PALPITE_EXTRACT_VERSION,
+      narrate: USER_PALPITE_NARRATE_VERSION,
+    },
+  };
+}
+
+async function analyzeAfterCharge(ctx: ChargedContext): Promise<AnalyzeUserPalpiteResult> {
+  const { match, base, palpite, reason, userId, isAdmin, now, deadlineAt } = ctx;
+  const matchId = match.id;
   const teams = { home: match.homeTeam, away: match.awayTeam };
   const warnings: string[] = [];
   const extraction = await extractPalpiteClaims({
@@ -215,7 +355,7 @@ export async function analyzeUserPalpite(
     without: readings.without,
     with: readings.with,
     codeVerdict: verdict,
-    claims: toNarrationClaims(checked, ev, base.jevAnswers, teams),
+    claims: toNarrationClaims(checked, base.jevAnswers, teams),
     facts: summarizeFacts(factInput),
   };
 
@@ -239,39 +379,7 @@ export async function analyzeUserPalpite(
     narrationSource = "template";
   }
 
-  const model: StoredPalpiteModel = {
-    origin: base.origin,
-    snapshotId: base.snapshotId,
-    source: base.source,
-    degraded: base.degraded,
-    staleBase: base.staleBase,
-    rho: base.rho,
-    lambdaBase: { home: base.lambdaHomeBase, away: base.lambdaAwayBase },
-    lambdaWithout: {
-      home: readings.lambdaWithout.lambdaHome,
-      away: readings.lambdaWithout.lambdaAway,
-    },
-    lambdaWith: {
-      home: readings.lambdaWith.lambdaHome,
-      away: readings.lambdaWith.lambdaAway,
-    },
-    jevApplied,
-    jevAnswers: base.jevAnswers,
-    userEvidence: ev,
-    combinedAnswers: readings.combined,
-    multipliersWith: readings.lambdaWith.multipliers,
-    modelLabel: label,
-    versions: {
-      matchModel: base.modelVersion,
-      judgments: JUDGMENTS_VERSION,
-      weights: JUDGMENT_WEIGHTS_VERSION,
-      snapshotWeights: base.snapshotWeightsVersion,
-      userEvidence: USER_EVIDENCE_VERSION,
-      verdict: PALPITE_VERDICT_VERSION,
-      extract: USER_PALPITE_EXTRACT_VERSION,
-      narrate: USER_PALPITE_NARRATE_VERSION,
-    },
-  };
+  const model = storedModel(base, readings, ev, label);
   const reading = { without: readings.without, with: readings.with };
   const createdAt = new Date();
 

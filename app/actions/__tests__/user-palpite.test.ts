@@ -180,6 +180,22 @@ describe("analyzeUserPalpite — input", () => {
     expectNothingCalled();
   });
 
+  it("CRLF do navegador conta como 1 caractere, como o contador do cliente (#564 review)", async () => {
+    // 1000 caracteres com LF (o que o contador mostra), 1333 com CRLF (o que o form manda).
+    const reason = "ab\r\n".repeat(333) + "a";
+    const res = await analyzeUserPalpite(null, form({ reason }));
+    expect(res.ok).toBe(true);
+    expect(inserted().reasonText).toBe("ab\n".repeat(333) + "a");
+    // Passando de 1000 mesmo com LF: inválido, com a copy de tamanho.
+    mockInsert.mockClear();
+    const long = await analyzeUserPalpite(null, form({ reason: "ab\r\n".repeat(333) + "abc" }));
+    expect(long).toEqual({
+      ok: false,
+      error: "O motivo passou de 1000 caracteres.",
+      kind: "invalido",
+    });
+  });
+
   it("JSON de palpite inválido → Palpite inválido.", async () => {
     const res = await analyzeUserPalpite(null, form({ palpite: "{nope" }));
     expect(res).toEqual({ ok: false, error: "Palpite inválido.", kind: "invalido" });
@@ -349,6 +365,28 @@ describe("analyzeUserPalpite — depois da cobrança", () => {
     expect(JSON.stringify(input)).not.toContain("Flaco");
   });
 
+  it("desfalque sem nome (o placeholder) entra a 0.7 na função, não verificável (#564 review)", async () => {
+    mockExtract.mockResolvedValue({
+      ok: true,
+      claims: [
+        { team: "away", topic: "absence", text: "o Palmeiras está sem o artilheiro", role: "attack" },
+      ],
+      warnings: [],
+      aiCallId: EXTRACT_CALL,
+    });
+    const res = await analyzeUserPalpite(
+      null,
+      form({ reason: "o Palmeiras está sem o artilheiro" }),
+    );
+    const row = inserted();
+    expect(row.model!.userEvidence).toEqual({ attack_weakened_away: 0.7 });
+    expect(row.claims![0]).toMatchObject({
+      status: "unverifiable",
+      evidence: "Não conseguimos conferir qual jogador; entrou com peso menor.",
+    });
+    expect(res).toMatchObject({ ok: true, analysis: { changed: true } });
+  });
+
   it("zero afirmações → zero chamadas de fatos", async () => {
     mockExtract.mockResolvedValue({ ok: true, claims: [], warnings: [], aiCallId: null });
     await analyzeUserPalpite(null, form());
@@ -391,6 +429,57 @@ describe("analyzeUserPalpite — depois da cobrança", () => {
       scope: "analyzeUserPalpite",
       error: "insert_failed",
     });
+    consoleError.mockRestore();
+  });
+
+  it("exceção inesperada depois da cobrança → leitura sem o texto, com aviso e log, sem lançar (#564 review)", async () => {
+    const consoleError = vi.spyOn(console, "error").mockImplementation(() => {});
+    mockExtract.mockRejectedValue(new Error("extract explodiu"));
+    const res = await analyzeUserPalpite(null, form());
+    expect(res).toMatchObject({
+      ok: true,
+      analysis: { narrationSource: "template", changed: false, claims: [] },
+    });
+    if (res.ok) {
+      expect(res.analysis.warnings).toEqual([
+        "Não consegui analisar o seu motivo agora; a leitura abaixo não considera o texto.",
+        "Não consegui salvar esta análise; ela some ao recarregar.",
+      ]);
+    }
+    expect(mockNarrate).not.toHaveBeenCalled();
+    expect(JSON.parse(consoleError.mock.calls[0][0] as string)).toMatchObject({
+      scope: "analyzeUserPalpite",
+      error: "pipeline_failed",
+      message: "extract explodiu",
+    });
+    consoleError.mockRestore();
+  });
+
+  it("fatos lançam depois da extração → também cai na leitura sem o texto", async () => {
+    const consoleError = vi.spyOn(console, "error").mockImplementation(() => {});
+    mockFacts.mockRejectedValue(new Error("api-football fora"));
+    const res = await analyzeUserPalpite(null, form());
+    expect(res).toMatchObject({ ok: true, analysis: { narrationSource: "template" } });
+    consoleError.mockRestore();
+  });
+
+  it("nem a leitura sem o texto sai → ok:false amigável e logado, nunca rejeita", async () => {
+    const consoleError = vi.spyOn(console, "error").mockImplementation(() => {});
+    const broken = new Proxy(
+      {},
+      {
+        get() {
+          throw new Error("jev corrompido");
+        },
+      },
+    ) as PalpiteModelBase["jevAnswers"];
+    mockBase.mockResolvedValue({ ...BASE, jevAnswers: broken });
+    await expect(analyzeUserPalpite(null, form())).resolves.toEqual({
+      ok: false,
+      error: "Não consegui analisar o seu palpite agora. A leitura pelos botões continua valendo.",
+    });
+    const errors = consoleError.mock.calls.map((c) => JSON.parse(c[0] as string).error);
+    expect(errors).toEqual(["pipeline_failed", "degraded_failed"]);
     consoleError.mockRestore();
   });
 

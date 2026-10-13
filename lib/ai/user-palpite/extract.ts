@@ -7,7 +7,7 @@ import { MODEL_REGISTRY, isAIProvider } from "@/lib/ai/models";
 import { getProviderForModel } from "@/lib/ai/providers";
 import type { AiCallStatus, AnalysisRequest } from "@/lib/ai/providers/types";
 import { db } from "@/lib/db";
-import { stripPlayerNames } from "@/lib/user-palpite/check-claims";
+import { roleFromPlayerWord, stripPlayerNames } from "@/lib/user-palpite/check-claims";
 import type { TeamNames } from "@/lib/user-palpite/reading";
 import { ClaimSchema, MAX_CLAIMS, type Claim } from "@/lib/user-palpite/types";
 
@@ -31,17 +31,89 @@ const EXTRACT_MAX_TOKENS = 1500;
 // código (o excedente é cortado com aviso).
 export const ExtractEnvelopeSchema = z.object({ claims: z.array(z.unknown()) }).strict();
 
+const OPTIONAL_FIELDS = ["players", "role", "direction", "scope"] as const;
+
+/**
+ * Limpa o item antes do Zod estrito: a Haiku às vezes manda `players: []`, `null` ou ""
+ * nos campos que não se aplicam (vira ausente), e às vezes põe uma função
+ * ("artilheiro") em players (sai de players e, sem role, vira o role).
+ */
+export function normalizeClaimInput(item: unknown): unknown {
+  if (typeof item !== "object" || item === null || Array.isArray(item)) return item;
+  const out: Record<string, unknown> = { ...(item as Record<string, unknown>) };
+  for (const k of OPTIONAL_FIELDS) {
+    const v = out[k];
+    if (v === null || v === "" || (Array.isArray(v) && v.length === 0)) delete out[k];
+  }
+  if (Array.isArray(out.players)) {
+    const names: unknown[] = [];
+    let inferred: ReturnType<typeof roleFromPlayerWord> = null;
+    for (const p of out.players) {
+      const role = typeof p === "string" ? roleFromPlayerWord(p) : null;
+      if (role === null) names.push(p);
+      else if (inferred === null || inferred === "unknown") inferred = role;
+    }
+    if (names.length > 0) out.players = names;
+    else delete out.players;
+    if (inferred !== null && out.role === undefined) out.role = inferred;
+  }
+  return out;
+}
+
 export type ExtractResult =
   | { ok: true; claims: Claim[]; warnings: string[]; aiCallId: string | null }
   | { ok: false; message: string; aiCallId: string | null };
 
-export async function extractPalpiteClaims(args: {
+type ExtractArgs = {
   reason: string;
   teams: TeamNames;
   matchId: string;
   userId: string;
   deadlineAt?: number;
-}): Promise<ExtractResult> {
+};
+
+/**
+ * Nunca lança: roda depois da cobrança, então qualquer exceção (montar o request,
+ * achar o provider, o adapter) vira ok:false com uma row provider_error em `ai_calls`
+ * quando der pra gravar.
+ */
+export async function extractPalpiteClaims(args: ExtractArgs): Promise<ExtractResult> {
+  try {
+    return await runExtraction(args);
+  } catch (err) {
+    const message = err instanceof Error ? err.message : String(err);
+    console.error(
+      JSON.stringify({
+        scope: "extractPalpiteClaims",
+        matchId: args.matchId,
+        error: "unexpected_throw",
+        message,
+      }),
+    );
+    let aiCallId: string | null = null;
+    try {
+      aiCallId = await persistAiCallError({
+        userId: args.userId,
+        matchId: args.matchId,
+        provider: EXTRACT_MODEL.provider,
+        model: EXTRACT_MODEL.id,
+        inputPayload: { reasonChars: args.reason.length },
+        outputPayload: { error: message },
+        inputTokens: 0,
+        outputTokens: 0,
+        latencyMs: 0,
+        status: "provider_error",
+        errorMessage: message,
+        promptVersion: USER_PALPITE_EXTRACT_VERSION,
+      });
+    } catch {
+      // Log best-effort: o request segue sem a row.
+    }
+    return { ok: false, message, aiCallId };
+  }
+}
+
+async function runExtraction(args: ExtractArgs): Promise<ExtractResult> {
   const { userId, matchId } = args;
   const model = EXTRACT_MODEL;
   const request: AnalysisRequest = {
@@ -112,25 +184,30 @@ export async function extractPalpiteClaims(args: {
     return fail("invalid_output", JSON.stringify(envelope.error.issues), payload);
   }
 
-  const claims: Claim[] = [];
+  const parsedClaims: Claim[] = [];
   const warnings: string[] = [];
   let dropped = 0;
   for (const item of envelope.data.claims) {
-    const parsed = ClaimSchema.safeParse(item);
+    const parsed = ClaimSchema.safeParse(normalizeClaimInput(item));
     if (!parsed.success) {
       dropped++;
       continue;
     }
-    if (claims.length >= MAX_CLAIMS) {
+    if (parsedClaims.length >= MAX_CLAIMS) {
       warnings.push(
         `Considerei só as ${MAX_CLAIMS} primeiras afirmações do seu motivo.`,
       );
       break;
     }
-    const c = parsed.data;
-    // Nome de jogador não fica na paráfrase (LGPD): ela vai ao narrador e à tela.
-    claims.push(c.players ? { ...c, text: stripPlayerNames(c.text, c.players) } : c);
+    parsedClaims.push(parsed.data);
   }
+  // Nome de jogador não fica na paráfrase (LGPD): ela vai ao narrador e à tela. Tira de
+  // TODAS as paráfrases os nomes que o extrator identificou em qualquer afirmação.
+  const allPlayers = parsedClaims.flatMap((c) => c.players ?? []);
+  const claims: Claim[] = parsedClaims.map((c) => {
+    const text = stripPlayerNames(c.text, allPlayers, args.teams);
+    return text === c.text ? c : { ...c, text };
+  });
   if (dropped > 0) {
     warnings.push(
       dropped === 1

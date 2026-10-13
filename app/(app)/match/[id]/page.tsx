@@ -51,8 +51,7 @@ import { getLatestUserPalpiteAnalysis } from "@/lib/db/queries/user-palpite-anal
 import type { ModelScoreline } from "@/lib/quant/match-model";
 import { resolvePalpiteModelBase } from "@/lib/user-palpite/model-base";
 import {
-  toSeuPalpiteModelView,
-  toUserPalpiteAnalysisView,
+  loadSeuPalpiteData,
   type SeuPalpiteData,
 } from "@/lib/view/user-palpite";
 import { getLatestSelectionOddsSnapshotsForMatches } from "@/lib/db/queries/odds-snapshots";
@@ -309,24 +308,20 @@ export default async function MatchPage({ params, searchParams }: PageProps) {
   // do usuário, por streaming. Só em jogo analisável; falha vira o estado vazio.
   const userId = session.user.id;
   const seuPalpiteP: Promise<SeuPalpiteData> | null = analyzable
-    ? Promise.all([
-        resolvePalpiteModelBase(match, { now, liveModel: slipModel }),
-        getLatestUserPalpiteAnalysis(match.id, userId),
-      ])
-        .then(([base, latest]) => ({
-          model: base ? toSeuPalpiteModelView(base) : null,
-          latest: latest ? toUserPalpiteAnalysisView(latest, teams, now) : null,
-        }))
-        .catch((err: unknown): SeuPalpiteData => {
+    ? loadSeuPalpiteData({
+        base: () => resolvePalpiteModelBase(match, { now, liveModel: slipModel }),
+        latest: () => getLatestUserPalpiteAnalysis(match.id, userId),
+        teams,
+        now,
+        onError: (error, err) =>
           console.error(
             JSON.stringify({
               scope: "match-page",
-              error: "seu_palpite_failed",
+              error,
               message: err instanceof Error ? err.message : String(err),
             }),
-          );
-          return { model: null, latest: null };
-        })
+          ),
+      })
     : null;
 
   // Placar final só pra jogos encerrados com gols reportados (heroView já

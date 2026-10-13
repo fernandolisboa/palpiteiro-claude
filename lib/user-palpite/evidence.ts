@@ -102,26 +102,30 @@ export function computeReadings(
 }
 
 export type ClaimEffect = {
-  // Fatores que a afirmação de fato moveu (o noul dela passou o do JEV e o neutro).
+  // Fatores que os sinais DESTA afirmação moveram (o noul dela passou o do JEV e o neutro).
   moved: JudgmentQuestionId[];
-  // Tinha sinal, mas o modelo já tinha esse fato (JEV igual ou mais forte).
+  // Tinha sinal, mas o modelo já tinha esse fato (JEV igual ou mais forte, ou confirmada
+  // com JEV presente).
   alreadyConsidered: boolean;
 };
 
+/**
+ * Efeito de UMA afirmação, pelos sinais dela (a mesma regra de evidenceFromClaims): uma
+ * confirmada com JEV presente é "já considerada pelo modelo" mesmo que outra afirmação
+ * tenha posto 0.7 na mesma pergunta. jev null = JEV não rodou.
+ */
 export function claimEffect(
   c: Pick<CheckedClaim, "signals">,
-  ev: UserEvidence,
   jev: JudgmentAnswers | null,
 ): ClaimEffect {
   const moved = [
     ...new Set(
       c.signals
-        .map((s) => s.questionId)
-        .filter((q) => {
-          const user = ev[q];
-          if (user === undefined) return false;
-          return user > Math.max(NEUTRAL.value, jev?.[q]?.value ?? 0);
-        }),
+        .filter((s) => !(s.strength === "confirmed" && jev !== null))
+        .filter(
+          (s) => USER_NOUL[s.strength] > Math.max(NEUTRAL.value, jev?.[s.questionId]?.value ?? 0),
+        )
+        .map((s) => s.questionId),
     ),
   ];
   return { moved, alreadyConsidered: c.signals.length > 0 && moved.length === 0 };

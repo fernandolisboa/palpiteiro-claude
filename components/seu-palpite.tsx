@@ -2,7 +2,11 @@
 
 import { useActionState, useId, useMemo, useState } from "react";
 
-import { useBetSlipBridge } from "@/components/bet-slip-bridge";
+import {
+  slipFullNotice,
+  useBetSlipBridge,
+  type BridgeAddOutcome,
+} from "@/components/bet-slip-bridge";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Card } from "@/components/ui/card";
@@ -58,6 +62,13 @@ const STATUS_BADGE: Record<ClaimStatus, "secondary" | "destructive" | "outline">
   unverifiable: "outline",
 };
 
+const ADD_MESSAGE: Record<BridgeAddOutcome | "unavailable", string> = {
+  added: "Adicionado em Suas apostas.",
+  duplicate: "Já está em Suas apostas.",
+  full: slipFullNotice,
+  unavailable: "A lista de apostas ainda está carregando. Tente de novo em instantes.",
+};
+
 const CHIP_GOALS = [0, 1, 2, 3, 4, 5];
 const ALL_GOALS = Array.from({ length: MAX_PALPITE_GOALS + 1 }, (_, i) => i);
 
@@ -107,12 +118,8 @@ export function SeuPalpite({
   const bridge = useBetSlipBridge();
   function addToSlip() {
     if (!palpite) return;
-    const added = bridge?.add(palpiteToLeg(palpite)) ?? false;
-    setAddMessage(
-      added
-        ? "Adicionado em Suas apostas."
-        : "A lista de apostas ainda está carregando. Tente de novo em instantes.",
-    );
+    const outcome = bridge?.add(palpiteToLeg(palpite)) ?? "unavailable";
+    setAddMessage(ADD_MESSAGE[outcome]);
   }
 
   function pickScore(side: "home" | "away", n: number) {

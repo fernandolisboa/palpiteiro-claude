@@ -57,6 +57,36 @@ export function toSeuPalpiteModelView(base: PalpiteModelBase): SeuPalpiteModelVi
   };
 }
 
+/**
+ * Dados do bloco na página, cada metade com a sua falha: a última análise gravada que
+ * não carrega (query, row) NÃO esconde a leitura grátis pelos botões, e vice-versa.
+ */
+export async function loadSeuPalpiteData(input: {
+  base: () => Promise<PalpiteModelBase | null>;
+  latest: () => Promise<UserPalpiteAnalysisRecord | null>;
+  teams: TeamNames;
+  now: Date;
+  onError: (error: "seu_palpite_failed" | "seu_palpite_latest_failed", err: unknown) => void;
+}): Promise<SeuPalpiteData> {
+  const [model, latest] = await Promise.all([
+    Promise.resolve()
+      .then(input.base)
+      .then((b) => (b ? toSeuPalpiteModelView(b) : null))
+      .catch((err: unknown) => {
+        input.onError("seu_palpite_failed", err);
+        return null;
+      }),
+    Promise.resolve()
+      .then(input.latest)
+      .then((r) => (r ? toUserPalpiteAnalysisView(r, input.teams, input.now) : null))
+      .catch((err: unknown) => {
+        input.onError("seu_palpite_latest_failed", err);
+        return null;
+      }),
+  ]);
+  return { model, latest };
+}
+
 // ─── Linhas de uma leitura ──────────────────────────────────────────────────
 
 export type ReadingRowsView = {
@@ -189,7 +219,7 @@ export function toUserPalpiteAnalysisView(
 ): UserPalpiteAnalysisView {
   const { model, reading, narration } = r;
   const claims: PalpiteClaimView[] = r.claims.map((c) => {
-    const eff = claimEffect(c, model.userEvidence, model.jevAnswers);
+    const eff = claimEffect(c, model.jevAnswers);
     return {
       index: c.index,
       text: c.text,
@@ -238,7 +268,7 @@ export function toUserPalpiteAnalysisView(
     showUnverifiedNote: r.claims.some(
       (c) =>
         c.status === "unverifiable" &&
-        claimEffect(c, model.userEvidence, model.jevAnswers).moved.length > 0,
+        claimEffect(c, model.jevAnswers).moved.length > 0,
     ),
     warnings: narration.warnings,
   };

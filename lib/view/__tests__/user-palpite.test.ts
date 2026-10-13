@@ -10,6 +10,7 @@ import type { PalpiteModelBase } from "@/lib/user-palpite/model-base";
 import { readingMatrix, readPalpite } from "@/lib/user-palpite/reading";
 import type { CheckedClaim, UserPalpite } from "@/lib/user-palpite/types";
 import {
+  loadSeuPalpiteData,
   toReadingRowsView,
   toSeuPalpiteModelView,
   toUserPalpiteAnalysisView,
@@ -234,6 +235,24 @@ describe("toUserPalpiteAnalysisView", () => {
     expect(v.showUnverifiedNote).toBe(false);
   });
 
+  it("efeito por afirmação: confirmada com JEV segue 'já considerado' mesmo com outra a 0.7 na mesma pergunta (#564 review)", () => {
+    const confirmed = claim({
+      status: "confirmed",
+      signals: [{ questionId: "attack_weakened_away", strength: "confirmed" }],
+    });
+    const unverified = claim({ index: 1, players: undefined, playerChecks: [] });
+    const v = toUserPalpiteAnalysisView(
+      record(base(answers()), [confirmed, unverified]),
+      TEAMS,
+      NOW,
+    );
+    expect(v.claims[0].effect).toBe("já considerado pelo modelo");
+    expect(v.claims[1].effect).toBe(
+      "efeito no modelo: ataque do Palmeiras ajustado para baixo",
+    );
+    expect(v.changed).toBe(true);
+  });
+
   it("time completo e afirmação sem sinal: nota do time completo e 'sem efeito no modelo'", () => {
     const c = claim({
       topic: "full_squad",
@@ -275,5 +294,49 @@ describe("toUserPalpiteAnalysisView", () => {
     for (const s of views.flatMap(allStrings)) {
       expect(containsValueLanguage(s), s).toBe(false);
     }
+  });
+});
+
+describe("loadSeuPalpiteData", () => {
+  it("a última análise que falha não esconde a leitura pelos botões (#564 review)", async () => {
+    const errors: string[] = [];
+    const data = await loadSeuPalpiteData({
+      base: async () => base(null),
+      latest: async () => {
+        throw new Error("db down");
+      },
+      teams: TEAMS,
+      now: NOW,
+      onError: (e) => errors.push(e),
+    });
+    expect(data.model).toEqual(toSeuPalpiteModelView(base(null)));
+    expect(data.latest).toBeNull();
+    expect(errors).toEqual(["seu_palpite_latest_failed"]);
+  });
+
+  it("o modelo que falha zera só o modelo; sem falha, os dois vêm", async () => {
+    const errors: string[] = [];
+    const rec = record(base(null), [claim()]);
+    const failed = await loadSeuPalpiteData({
+      base: () => Promise.reject(new Error("x")),
+      latest: async () => rec,
+      teams: TEAMS,
+      now: NOW,
+      onError: (e) => errors.push(e),
+    });
+    expect(failed.model).toBeNull();
+    expect(failed.latest?.id).toBe("a1");
+    expect(errors).toEqual(["seu_palpite_failed"]);
+    const both = await loadSeuPalpiteData({
+      base: async () => base(null),
+      latest: async () => null,
+      teams: TEAMS,
+      now: NOW,
+      onError: () => {
+        throw new Error("não devia logar");
+      },
+    });
+    expect(both.model).not.toBeNull();
+    expect(both.latest).toBeNull();
   });
 });

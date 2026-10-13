@@ -62,8 +62,19 @@ export function normalizePlayerName(s: string): string {
 
 const MIN_TOKEN = 3;
 
+// Partículas que podem ficar entre os tokens de um nome ("G. de Arrascaeta").
+const NAME_PARTICLES = new Set(["de", "da", "do", "dos", "das", "del", "van", "von"]);
+
 function tokens(s: string): string[] {
   return normalizePlayerName(s).split(" ").filter(Boolean);
+}
+
+// "G" casa com "giorgian" (inicial); senão o primeiro nome tem que ser o mesmo.
+function firstNamesCompatible(a: string, b: string): boolean {
+  if (a === b) return true;
+  if (a.length === 1) return b.startsWith(a);
+  if (b.length === 1) return a.startsWith(b);
+  return false;
 }
 
 function namesMatch(a: string, b: string): boolean {
@@ -75,10 +86,16 @@ function namesMatch(a: string, b: string): boolean {
   const tb = tokens(b);
   const lastA = ta[ta.length - 1];
   const lastB = tb[tb.length - 1];
-  return (
+  const surname =
     (lastA.length >= MIN_TOKEN && tb.includes(lastA)) ||
-    (lastB.length >= MIN_TOKEN && ta.includes(lastB))
-  );
+    (lastB.length >= MIN_TOKEN && ta.includes(lastB));
+  if (!surname) return false;
+  // Sobrenome igual não basta quando os dois nomes têm prenome: "Gabriel Silva" não é
+  // "Lucas Silva". Um nome só ("Arrascaeta") segue casando pelo sobrenome.
+  const ca = ta.filter((t) => !NAME_PARTICLES.has(t));
+  const cb = tb.filter((t) => !NAME_PARTICLES.has(t));
+  if (ca.length >= 2 && cb.length >= 2) return firstNamesCompatible(ca[0], cb[0]);
+  return true;
 }
 
 export function matchPlayer(
@@ -93,49 +110,171 @@ export function matchPlayer(
   return hits.length > 1 ? { kind: "ambiguous" } : { kind: "none" };
 }
 
-// Partículas que podem ficar entre os tokens de um nome ("G. de Arrascaeta").
-const NAME_PARTICLES = new Set(["de", "da", "do", "dos", "das", "del", "van", "von"]);
+// ─── Função no lugar de nome ("o artilheiro") ────────────────────────────────
+
+const ROLE_NOUNS: Record<string, NonNullable<Claim["role"]>> = {
+  artilheiro: "attack",
+  atacante: "attack",
+  centroavante: "attack",
+  avante: "attack",
+  ponta: "attack",
+  goleador: "attack",
+  matador: "attack",
+  camisa: "unknown",
+  meia: "unknown",
+  zagueiro: "defense",
+  zaga: "defense",
+  beque: "defense",
+  lateral: "defense",
+  volante: "defense",
+  defensor: "defense",
+  goleiro: "goalkeeper",
+  arqueiro: "goalkeeper",
+  craque: "unknown",
+  capitao: "unknown",
+  titular: "unknown",
+  jogador: "unknown",
+  estrela: "unknown",
+  principal: "unknown",
+};
+
+// Palavras que acompanham a função sem virar nome ("o seu camisa 9 titular").
+const ROLE_FILLERS = new Set([
+  "o", "a", "os", "as", "seu", "sua", "nosso", "nossa", "dele", "deles", "do", "da",
+  "time", "melhor", "grande", "citado", "centro", "ofensivo", "defensivo", "direito",
+  "esquerdo", "esquerda", "direita", "9", "10", "nove", "dez", "1", "um",
+]);
 
 /**
- * Tira de `text` os nomes de jogador que o usuário citou (LGPD: a paráfrase vai ao
- * narrador e à tela sem nome). Cada sequência de tokens de nome vira "o jogador citado".
+ * Função de jogador escrita no lugar de um nome ("artilheiro", "o camisa 9") → o papel
+ * que ela indica; null quando é (ou pode ser) um nome. Meia ofensivo conta como ataque.
  */
-export function stripPlayerNames(text: string, players: readonly string[]): string {
-  const nameTokens = new Set(
-    players.flatMap((p) => tokens(p)).filter((t) => t.length >= MIN_TOKEN),
-  );
-  if (nameTokens.size === 0) return text;
-  // Palavras nas posições ímpares, separadores nas pares.
-  const parts = text.split(/([\p{L}\p{N}][\p{L}\p{N}'’-]*)/u);
-  const isNameWord = (w: string) =>
-    normalizePlayerName(w)
-      .split(" ")
-      .some((t) => nameTokens.has(t));
-  // Inicial ("G") ou partícula ("de") colada antes de uma palavra de nome.
-  const isJoiner = (w: string) =>
-    NAME_PARTICLES.has(normalizePlayerName(w)) || /^\p{Lu}$/u.test(w);
-  const isGlue = (sep: string) => /^[\s.]+$/.test(sep);
-
-  const inName = parts.map((p, i) => i % 2 === 1 && isNameWord(p));
-  for (let i = 1; i < parts.length; i += 2) {
-    if (!inName[i]) continue;
-    for (let j = i - 2; j >= 1 && !inName[j]; j -= 2) {
-      if (!isGlue(parts[j + 1]) || !isJoiner(parts[j])) break;
-      inName[j] = true;
+export function roleFromPlayerWord(s: string): NonNullable<Claim["role"]> | null {
+  const ts = tokens(s);
+  if (ts.length === 0) return null;
+  let role: NonNullable<Claim["role"]> | null = null;
+  for (const t of ts) {
+    const r = ROLE_NOUNS[t];
+    if (r) {
+      if (role === null || role === "unknown") role = r;
+    } else if (!ROLE_FILLERS.has(t)) {
+      return null;
     }
   }
+  if (role === "unknown" && ts.includes("meia") && ts.includes("ofensivo")) return "attack";
+  if (role === "unknown" && ts.includes("camisa") && (ts.includes("9") || ts.includes("nove"))) {
+    return "attack";
+  }
+  return role;
+}
 
-  const out: string[] = [];
-  for (let i = 0; i < parts.length; i++) {
-    const glued = (k: number) => k >= 1 && inName[k] && isGlue(parts[k + 1] ?? "");
-    if (i % 2 === 1) {
-      if (!inName[i]) out.push(parts[i]);
-      else if (!glued(i - 2)) out.push("o jogador citado");
-    } else if (!(inName[i - 1] && inName[i + 1] && isGlue(parts[i]))) {
-      out.push(parts[i]);
+// ─── Nome fora da paráfrase (LGPD) ───────────────────────────────────────────
+
+// Artigo/contração colado antes do nome: "sem o X" vira "sem o jogador citado" (e não
+// "sem o o jogador citado"); "lesão do X" vira "lesão do jogador citado".
+const ARTICLE_BEFORE_NAME: Record<string, string> = {
+  o: "o",
+  a: "o",
+  de: "do",
+  do: "do",
+  da: "do",
+  no: "no",
+  na: "no",
+  ao: "ao",
+  pelo: "pelo",
+  pela: "pelo",
+};
+const REPLACEMENT = "jogador citado";
+
+type Word = { start: number; end: number; raw: string; norm: string };
+
+/**
+ * Tira de `text` os nomes de jogador que o extrator identificou (LGPD: a paráfrase vai
+ * ao narrador e à tela sem nome). Casa o nome inteiro e cada pedaço dele (sem acento,
+ * sem caixa, palavra inteira, o mais longo primeiro), inclusive nomes curtos ("Zé");
+ * nunca tira palavra que faz parte do nome de um dos times ("o Santos sem Lucas Santos"
+ * → "o Santos sem o jogador citado").
+ */
+export function stripPlayerNames(
+  text: string,
+  players: readonly string[],
+  teams?: TeamNames,
+): string {
+  const teamTokens = new Set(teams ? [...tokens(teams.home), ...tokens(teams.away)] : []);
+  const seen = new Set<string>();
+  const candidates: string[][] = [];
+  const add = (c: string[]) => {
+    const key = c.join(" ");
+    if (c.length === 0 || seen.has(key) || c.every((t) => teamTokens.has(t))) return;
+    seen.add(key);
+    candidates.push(c);
+  };
+  for (const p of players) {
+    const full = tokens(p);
+    add(full);
+    for (const t of full) {
+      if (t.length >= 2 && !NAME_PARTICLES.has(t) && !teamTokens.has(t)) add([t]);
     }
   }
-  return out.join("").replace(/\s{2,}/g, " ").trim();
+  if (candidates.length === 0) return text;
+  candidates.sort((a, b) => b.length - a.length || b.join(" ").length - a.join(" ").length);
+
+  const words: Word[] = [...text.matchAll(/[\p{L}\p{N}]+/gu)].map((m) => ({
+    start: m.index,
+    end: m.index + m[0].length,
+    raw: m[0],
+    norm: normalizePlayerName(m[0]),
+  }));
+  const sep = (i: number) => text.slice(words[i].end, words[i + 1].start);
+  const glued = (i: number) => /^[\s.'’-]*$/.test(sep(i));
+  // Inicial com ponto ("G. de Arrascaeta"): faz parte do nome.
+  const isInitial = (i: number) => /^\p{Lu}$/u.test(words[i].raw) && sep(i).startsWith(".");
+
+  const spans: { start: number; end: number; repl: string; wordEnd: number }[] = [];
+  let i = 0;
+  while (i < words.length) {
+    const hit = candidates.find((c) =>
+      c.every(
+        (t, k) => i + k < words.length && words[i + k].norm === t && (k === 0 || glued(i + k - 1)),
+      ),
+    );
+    if (!hit) {
+      i++;
+      continue;
+    }
+    const last = i + hit.length - 1;
+    let first = i;
+    const floor = spans.length > 0 ? spans[spans.length - 1].wordEnd + 1 : 0;
+    if (
+      first - 2 >= floor &&
+      NAME_PARTICLES.has(words[first - 1].norm) &&
+      glued(first - 1) &&
+      isInitial(first - 2)
+    ) {
+      first -= 2;
+    } else if (first - 1 >= floor && isInitial(first - 1)) {
+      first -= 1;
+    }
+    let repl = `o ${REPLACEMENT}`;
+    const prev = first - 1;
+    if (prev >= floor && /^\s+$/.test(sep(prev)) && ARTICLE_BEFORE_NAME[words[prev].norm]) {
+      const article = ARTICLE_BEFORE_NAME[words[prev].norm];
+      const cap = /^\p{Lu}/u.test(words[prev].raw);
+      repl = `${cap ? article[0].toUpperCase() + article.slice(1) : article} ${REPLACEMENT}`;
+      first = prev;
+    }
+    spans.push({ start: words[first].start, end: words[last].end, repl, wordEnd: last });
+    i = last + 1;
+  }
+
+  let out = "";
+  let cursor = 0;
+  for (const s of spans) {
+    out += text.slice(cursor, s.start) + s.repl;
+    cursor = s.end;
+  }
+  out += text.slice(cursor);
+  return out.replace(/\s{2,}/g, " ").trim();
 }
 
 // ─── Regras por tópico ─────────────────────────────────────────────────────
@@ -241,23 +380,51 @@ function fullSquadSide(
     };
   }
   const scope = claim.scope ?? "all";
-  const out = list.filter(
-    (a) =>
-      (scope !== "suspensions" && a.injury.status === "injured") ||
-      (scope !== "injuries" && a.injury.status === "suspended"),
-  );
-  if (out.length === 0) {
+  const inScope = (a: JudgmentAbsenceInput) =>
+    (scope !== "suspensions" && a.injury.status === "injured") ||
+    (scope !== "injuries" && a.injury.status === "suspended");
+  const out = list.filter(inScope);
+  if (out.length > 0) {
+    return {
+      status: "contradicted",
+      evidence: `A nossa lista tem ${countPt(out.length, SCOPE_NOUN[scope])} no ${team}: ${out.map(describeAbsencePt).join(", ")}.`,
+      signal: null,
+    };
+  }
+  if (scope === "all") {
     return {
       status: "confirmed",
       evidence: `Na nossa lista o ${team} só tem dúvidas, ninguém fora.`,
       signal: null,
     };
   }
+  // Escopo parcial: diz o que a lista tem fora do escopo, pra "sem lesionados" não soar
+  // como "ninguém fora" quando há suspenso.
+  const rest = (["injured", "suspended", "doubtful"] as const)
+    .map((st) => [st, list.filter((a) => a.injury.status === st).length] as const)
+    .filter(([, n]) => n > 0)
+    .map(([st, n]) => countPt(n, STATUS_NOUN[st]));
   return {
-    status: "contradicted",
-    evidence: `A nossa lista tem ${out.length} fora no ${team}: ${out.map(describeAbsencePt).join(", ")}.`,
+    status: "confirmed",
+    evidence: `Nenhum ${SCOPE_NOUN[scope][0]} do ${team} na nossa lista (${rest.join(", ")}).`,
     signal: null,
   };
+}
+
+// [singular, plural]
+const SCOPE_NOUN: Record<NonNullable<Claim["scope"]>, [string, string]> = {
+  injuries: ["lesionado", "lesionados"],
+  suspensions: ["suspenso", "suspensos"],
+  all: ["fora", "fora"],
+};
+const STATUS_NOUN: Record<"injured" | "suspended" | "doubtful", [string, string]> = {
+  injured: ["lesionado", "lesionados"],
+  suspended: ["suspenso", "suspensos"],
+  doubtful: ["dúvida", "dúvidas"],
+};
+
+function countPt(n: number, [one, many]: [string, string]): string {
+  return `${n} ${n === 1 ? one : many}`;
 }
 
 const MIN_FORM_GAMES = 3;
@@ -415,6 +582,20 @@ function checkOne(
   if (claim.topic === "absence") {
     const side = sidesOf(claim)[0];
     const players = claim.players ?? [];
+    if (players.length === 0) {
+      // Desfalque sem nome ("sem o artilheiro"): não dá pra saber qual jogador da nossa
+      // lista é, então fica não verificável e a função dita entra com o peso menor.
+      const questionId = roleQuestion(claim.role, side);
+      return {
+        ...base,
+        status: "unverifiable",
+        evidence: questionId
+          ? "Não conseguimos conferir qual jogador; entrou com peso menor."
+          : "Não conseguimos conferir qual jogador nem a função dele; sem efeito no modelo.",
+        sides: [{ side, status: "unverifiable" }],
+        signals: questionId ? [{ questionId, strength: "unverified" }] : [],
+      };
+    }
     const results = players.map((name) => absenceCheck(name, claim, side, facts, teams));
     // Desfalque nunca é "contradito": não estar na nossa lista não prova que joga.
     const status: ClaimStatus = results.every((r) => r.check.status === "confirmed")

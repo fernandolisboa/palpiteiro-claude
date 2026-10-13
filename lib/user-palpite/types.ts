@@ -75,8 +75,10 @@ export const ClaimSchema = z
   })
   .strict()
   .superRefine((c, ctx) => {
-    if (c.topic === "absence" && !c.players?.length) {
-      ctx.addIssue({ code: "custom", message: "absence sem players" });
+    // Desfalque sem nome ("o Palmeiras está sem o artilheiro") vale se a função vier:
+    // fica não verificável, com o peso de não verificável (check-claims.ts).
+    if (c.topic === "absence" && !c.players?.length && !c.role) {
+      ctx.addIssue({ code: "custom", message: "absence sem players nem role" });
     }
     if ((c.topic === "form" || c.topic === "stakes") && !c.direction) {
       ctx.addIssue({ code: "custom", message: "sem direction" });
@@ -302,12 +304,23 @@ export type NarrationSource = (typeof NARRATION_SOURCES)[number];
 
 // ─── Input da server action ─────────────────────────────────────────────────
 
+/**
+ * O navegador manda o textarea com CRLF, mas o contador do cliente conta LF (o `value`
+ * do DOM): normaliza antes de medir, pra os dois lados contarem igual.
+ */
+export function normalizeReasonText(v: unknown): unknown {
+  return typeof v === "string" ? v.replace(/\r\n?/g, "\n") : v;
+}
+
 // O palpite vem SEMPRE dos botões (o form só habilita o envio com palpite escolhido).
 export const AnalyzeUserPalpiteInputSchema = z
   .object({
     matchId: z.uuid(),
     palpite: UserPalpiteSchema,
-    reason: z.string().trim().min(MIN_REASON_CHARS).max(MAX_REASON_CHARS),
+    reason: z.preprocess(
+      normalizeReasonText,
+      z.string().trim().min(MIN_REASON_CHARS).max(MAX_REASON_CHARS),
+    ),
   })
   .strict();
 export type AnalyzeUserPalpiteInput = z.infer<typeof AnalyzeUserPalpiteInputSchema>;

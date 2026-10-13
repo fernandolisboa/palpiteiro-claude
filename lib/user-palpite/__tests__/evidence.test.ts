@@ -8,6 +8,7 @@ import type {
   JudgmentQuestionId,
 } from "@/lib/ai/judgments/types";
 import {
+  claimEffect,
   combineAnswers,
   computeReadings,
   evidenceFromClaims,
@@ -114,7 +115,10 @@ describe("computeReadings", () => {
     expect(r.with.palpitePct).toBeLessThan(r.without.palpitePct);
   });
 
-  it("cada fator com evidência do usuário fica entre 1 e o fator com noul 1 (teto real)", () => {
+  // Teto real (ADR 0054 Decisão 5): a resposta combinada nunca passa de max(JEV, 0.85) e
+  // o fator não se afasta de 1 mais do que o fator desse teto. Um "somar" no lugar de
+  // "máximo" reprova (jev 0.3 + usuário 0.85 passaria de 0.85).
+  it("teto real: combinado ≤ max(JEV, 0.85) e |fator − 1| ≤ |factorMultiplier(f, max(JEV, 0.85)) − 1|", () => {
     const factorOf = (id: JudgmentQuestionId) =>
       id.replace(/_(home|away)$/, "") as JudgmentFactor;
     let seed = 42;
@@ -122,6 +126,7 @@ describe("computeReadings", () => {
       seed = (seed * 1103515245 + 12345) % 2 ** 31;
       return seed / 2 ** 31;
     };
+    let checked = 0;
     for (let i = 0; i < 200; i++) {
       const jev = rand() < 0.3 ? null : answers(rand());
       const ev: Partial<Record<JudgmentQuestionId, number>> = {};
@@ -132,11 +137,56 @@ describe("computeReadings", () => {
       for (const side of ["home", "away"] as const) {
         const factors = r.lambdaWith.multipliers?.[side].factors ?? {};
         for (const [id, m] of Object.entries(factors) as [JudgmentQuestionId, number][]) {
-          const cap = factorMultiplier(factorOf(id), 1);
-          expect(m).toBeGreaterThanOrEqual(Math.min(1, cap) - 1e-12);
-          expect(m).toBeLessThanOrEqual(Math.max(1, cap) + 1e-12);
+          if (ev[id] === undefined) continue;
+          const cap = Math.max(jev?.[id].value ?? 0, USER_NOUL.confirmed);
+          expect(r.combined![id].value).toBeLessThanOrEqual(cap + 1e-12);
+          const capFactor = factorMultiplier(factorOf(id), cap);
+          expect(Math.abs(m - 1)).toBeLessThanOrEqual(Math.abs(capFactor - 1) + 1e-12);
+          checked++;
         }
       }
     }
+    // A propriedade foi de fato exercitada (não é vazia).
+    expect(checked).toBeGreaterThan(100);
+  });
+
+  it("máximo, não soma: JEV 0.8 + usuário 0.7 → 0.8 e o fator do JEV, sem passar dele", () => {
+    const jev = answers(0.5);
+    jev[ATTACK_HOME] = { value: 0.8, confidence: 0.6 };
+    const r = computeReadings(base(jev), { [ATTACK_HOME]: USER_NOUL.unverified }, P);
+    expect(r.combined![ATTACK_HOME]).toEqual({ value: 0.8, confidence: 0.6 });
+    const f = r.lambdaWith.multipliers!.home.factors[ATTACK_HOME]!;
+    expect(f).toBe(factorMultiplier("attack_weakened", 0.8));
+    expect(r.lambdaWith.lambdaHome).toBe(r.lambdaWithout.lambdaHome);
+    // Uma implementação por soma (0.8 + 0.7, ou 0.8 + (0.7 − 0.5)) daria um fator maior.
+    const summed = factorMultiplier("attack_weakened", Math.min(1, 0.8 + (0.7 - 0.5)));
+    expect(Math.abs(f - 1)).toBeLessThan(Math.abs(summed - 1));
+  });
+});
+
+describe("claimEffect", () => {
+  const confirmed: ClaimSignal = { questionId: ATTACK_HOME, strength: "confirmed" };
+  const unverified: ClaimSignal = { questionId: ATTACK_HOME, strength: "unverified" };
+
+  it("usa os sinais da PRÓPRIA afirmação: confirmada com JEV é 'já considerada'", () => {
+    const jev = answers(0.5);
+    expect(claimEffect(claim([confirmed]), jev)).toEqual({
+      moved: [],
+      alreadyConsidered: true,
+    });
+    // A não verificável da outra afirmação move a mesma pergunta.
+    expect(claimEffect(claim([unverified]), jev)).toEqual({
+      moved: [ATTACK_HOME],
+      alreadyConsidered: false,
+    });
+  });
+
+  it("sem JEV a confirmada move; JEV mais forte que o noul segura; sem sinal = sem efeito", () => {
+    expect(claimEffect(claim([confirmed]), null).moved).toEqual([ATTACK_HOME]);
+    expect(claimEffect(claim([unverified]), answers(0.75))).toEqual({
+      moved: [],
+      alreadyConsidered: true,
+    });
+    expect(claimEffect(claim([]), null)).toEqual({ moved: [], alreadyConsidered: false });
   });
 });

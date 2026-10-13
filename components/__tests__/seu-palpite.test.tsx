@@ -12,6 +12,7 @@ import { analyzeUserPalpite } from "@/app/actions/user-palpite";
 import { BetSlip } from "@/components/bet-slip";
 import { BetSlipBridgeProvider } from "@/components/bet-slip-bridge";
 import { SeuPalpite } from "@/components/seu-palpite";
+import { MAX_SLIP_SELECTIONS } from "@/lib/bets/slip-markets";
 import { scorelineMatrix } from "@/lib/quant/scoreline-model";
 import { ptPct, readingMatrix, readPalpite } from "@/lib/user-palpite/reading";
 import { toBetGridView } from "@/lib/view/bet-slip";
@@ -246,6 +247,47 @@ describe("SeuPalpite — ponte com Suas apostas", () => {
     expect(text).toContain("Adicionado em Suas apostas.");
     expect(text).toContain("suas apostas (1)");
     expect(text).toContain("Placar exato: Flamengo 2 × 0 Palmeiras");
+  });
+
+  it("adicionar de novo não diz 'adicionado': avisa que já está (#564 review)", async () => {
+    await mount(
+      <BetSlipBridgeProvider>
+        <SeuPalpite {...props()} />
+        <BetSlip matchId={MATCH_ID} grid={grid} variant="desktop" />
+      </BetSlipBridgeProvider>,
+    );
+    await click(button("2 gols do Flamengo"));
+    await click(button("0 gols do Palmeiras"));
+    await click(button("Adicionar às suas apostas"));
+    await click(button("Adicionar às suas apostas"));
+    const text = container.textContent ?? "";
+    expect(text).toContain("Já está em Suas apostas.");
+    expect(text).not.toContain("Adicionado em Suas apostas.");
+    expect(text).toContain("suas apostas (1)");
+  });
+
+  it("lista cheia: avisa o limite em vez de 'adicionado' (#564 review)", async () => {
+    await mount(
+      <BetSlipBridgeProvider>
+        <SeuPalpite {...props()} />
+        <BetSlip matchId={MATCH_ID} grid={grid} variant="desktop" />
+      </BetSlipBridgeProvider>,
+    );
+    const scores = [0, 1, 2, 3, 4].flatMap((h) => [0, 1].map((a) => [h, a] as const));
+    for (const [h, a] of scores.slice(0, MAX_SLIP_SELECTIONS)) {
+      await click(button(`${h} gols do Flamengo`));
+      await click(button(`${a} gols do Palmeiras`));
+      await click(button("Adicionar às suas apostas"));
+      expect(container.textContent).toContain("Adicionado em Suas apostas.");
+    }
+    const [h, a] = scores[MAX_SLIP_SELECTIONS];
+    await click(button(`${h} gols do Flamengo`));
+    await click(button(`${a} gols do Palmeiras`));
+    await click(button("Adicionar às suas apostas"));
+    const text = container.textContent ?? "";
+    expect(text).not.toContain("Adicionado em Suas apostas.");
+    expect(text).toContain(`No máximo ${MAX_SLIP_SELECTIONS} seleções por vez.`);
+    expect(text).toContain(`suas apostas (${MAX_SLIP_SELECTIONS})`);
   });
 
   it("resultado vira a perna 1X2 da grade", async () => {

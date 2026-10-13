@@ -23,14 +23,18 @@ const fakeProvider = {
   hasKey: vi.fn(() => true),
   runAnalysis: vi.fn(async (_r: AnalysisRequest): Promise<AnalysisResult> => ok({ claims: [] })),
 };
-vi.mock("@/lib/ai/providers", () => ({ getProviderForModel: vi.fn(() => fakeProvider) }));
+const getProviderForModel = vi.fn((..._args: unknown[]) => fakeProvider);
+vi.mock("@/lib/ai/providers", () => ({
+  getProviderForModel: (...args: unknown[]) => getProviderForModel(...args),
+}));
 
 import {
   USER_PALPITE_EXTRACT_VERSION,
   buildExtractUserMessage,
+  extractTool,
   fenceSafe,
 } from "@/lib/ai/user-palpite/extract-cartridge";
-import { extractPalpiteClaims } from "@/lib/ai/user-palpite/extract";
+import { extractPalpiteClaims, normalizeClaimInput } from "@/lib/ai/user-palpite/extract";
 
 function ok(toolInput: unknown): AnalysisResult {
   return {
@@ -54,6 +58,7 @@ const ARGS = {
 beforeEach(() => {
   vi.clearAllMocks();
   fakeProvider.hasKey.mockReturnValue(true);
+  getProviderForModel.mockImplementation(() => fakeProvider);
 });
 
 describe("extractPalpiteClaims", () => {
@@ -136,6 +141,117 @@ describe("extractPalpiteClaims", () => {
     expect(req.model.id).toBe("claude-haiku-4-5");
     expect(req.deadlineAt).toBe(123);
     expect(JSON.stringify(req.tool.inputSchema)).not.toContain("palpite");
+  });
+});
+
+describe("extractPalpiteClaims — correções do review (#564)", () => {
+  it("exceção fora do adapter (getProviderForModel) → ok:false com row provider_error, sem lançar", async () => {
+    const consoleError = vi.spyOn(console, "error").mockImplementation(() => {});
+    getProviderForModel.mockImplementation(() => {
+      throw new Error("registry quebrado");
+    });
+    const r = await extractPalpiteClaims(ARGS);
+    expect(r).toEqual({ ok: false, message: "registry quebrado", aiCallId: "extract-err-1" });
+    expect(persistAiCallError.mock.calls[0][0]).toMatchObject({
+      status: "provider_error",
+      provider: "anthropic",
+      model: "claude-haiku-4-5",
+      promptVersion: USER_PALPITE_EXTRACT_VERSION,
+    });
+    // O motivo cru não vai pra row de erro.
+    expect(JSON.stringify(persistAiCallError.mock.calls[0][0])).not.toContain("Flaco");
+    consoleError.mockRestore();
+  });
+
+  it("o adapter lança e o log também falha → ainda ok:false, sem lançar", async () => {
+    const consoleError = vi.spyOn(console, "error").mockImplementation(() => {});
+    fakeProvider.runAnalysis.mockRejectedValueOnce(new Error("boom"));
+    persistAiCallError.mockRejectedValueOnce(new Error("db down"));
+    await expect(extractPalpiteClaims(ARGS)).resolves.toEqual({
+      ok: false,
+      message: "boom",
+      aiCallId: null,
+    });
+    consoleError.mockRestore();
+  });
+
+  it("[] e null nos campos opcionais não derrubam a afirmação", async () => {
+    fakeProvider.runAnalysis.mockResolvedValueOnce(
+      ok({
+        claims: [
+          {
+            team: "home",
+            topic: "form",
+            text: "vem de vitórias",
+            direction: "good",
+            players: [],
+            role: null,
+            scope: null,
+          },
+          { team: "both", topic: "other", text: "é clássico", players: null, direction: "" },
+        ],
+      }),
+    );
+    const r = await extractPalpiteClaims(ARGS);
+    expect(r.ok).toBe(true);
+    if (!r.ok) return;
+    expect(r.claims).toEqual([
+      { team: "home", topic: "form", text: "vem de vitórias", direction: "good" },
+      { team: "both", topic: "other", text: "é clássico" },
+    ]);
+    expect(r.warnings).toEqual([]);
+  });
+
+  it("desfalque sem nome (o placeholder do textarea) entra com a função; função em players não vira nome", async () => {
+    fakeProvider.runAnalysis.mockResolvedValueOnce(
+      ok({
+        claims: [
+          { team: "away", topic: "absence", text: "o Palmeiras está sem o artilheiro", role: "attack" },
+          { team: "away", topic: "absence", text: "sem o goleiro", players: ["goleiro"] },
+          { team: "away", topic: "absence", text: "sem o artilheiro", players: ["artilheiro"], role: "attack" },
+          { team: "away", topic: "absence", text: "desfalque", players: [] },
+        ],
+      }),
+    );
+    const r = await extractPalpiteClaims(ARGS);
+    expect(r.ok).toBe(true);
+    if (!r.ok) return;
+    expect(r.claims).toEqual([
+      { team: "away", topic: "absence", text: "o Palmeiras está sem o artilheiro", role: "attack" },
+      { team: "away", topic: "absence", text: "sem o goleiro", role: "goalkeeper" },
+      { team: "away", topic: "absence", text: "sem o artilheiro", role: "attack" },
+    ]);
+    // Sem nome e sem função não dá pra conferir nada: sai com aviso.
+    expect(r.warnings).toEqual(["Não entendi uma das suas afirmações; ela ficou de fora."]);
+  });
+
+  it("nome identificado numa afirmação sai também das outras paráfrases; palavra do time fica", async () => {
+    fakeProvider.runAnalysis.mockResolvedValueOnce(
+      ok({
+        claims: [
+          { team: "away", topic: "absence", text: "o atacante está fora", players: ["Flaco López"], role: "attack" },
+          { team: "home", topic: "other", text: "o Flamengo marca bem o López" },
+        ],
+      }),
+    );
+    const r = await extractPalpiteClaims(ARGS);
+    expect(r.ok).toBe(true);
+    if (!r.ok) return;
+    expect(r.claims[1].text).toBe("o Flamengo marca bem o jogador citado");
+  });
+
+  it("normalizeClaimInput mantém o nome e guarda o role do modelo", () => {
+    expect(
+      normalizeClaimInput({ topic: "absence", players: ["Pedro", "o artilheiro"], role: "defense" }),
+    ).toEqual({ topic: "absence", players: ["Pedro"], role: "defense" });
+    expect(normalizeClaimInput("x")).toBe("x");
+  });
+
+  it("o tool pede players com pelo menos 1 item", () => {
+    const schema = extractTool.inputSchema as {
+      properties: { claims: { items: { properties: { players: { minItems: number } } } } };
+    };
+    expect(schema.properties.claims.items.properties.players.minItems).toBe(1);
   });
 });
 

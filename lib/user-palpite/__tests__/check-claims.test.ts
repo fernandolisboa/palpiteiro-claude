@@ -11,6 +11,7 @@ import {
   factsNeeded,
   matchPlayer,
   normalizePlayerName,
+  roleFromPlayerWord,
   stripPlayerNames,
   type PalpiteFacts,
 } from "@/lib/user-palpite/check-claims";
@@ -108,8 +109,35 @@ describe("nomes", () => {
     expect(matchPlayer("pedro", list).kind).toBe("match");
     const dup = enrichAbsences([inj("Bruno Henrique", "injured"), inj("Bruno Fuchs", "injured")]);
     expect(matchPlayer("Bruno", dup).kind).toBe("ambiguous");
-    expect(matchPlayer("Henrique Fuchs", dup).kind).toBe("ambiguous");
     expect(matchPlayer("Gabigol", list).kind).toBe("none");
+  });
+
+  it("sobrenome igual com prenomes diferentes não confirma (#564 review)", () => {
+    const silva = enrichAbsences([inj("Lucas Silva", "injured")]);
+    expect(matchPlayer("Gabriel Silva", silva).kind).toBe("none");
+    const henrique = enrichAbsences([inj("Pablo Henrique", "injured")]);
+    expect(matchPlayer("Bruno Henrique", henrique).kind).toBe("none");
+    const dup = enrichAbsences([inj("Bruno Henrique", "injured"), inj("Bruno Fuchs", "injured")]);
+    expect(matchPlayer("Henrique Fuchs", dup).kind).toBe("none");
+    // Inicial casa com o prenome; um nome só segue casando pelo sobrenome.
+    const arrasca = enrichAbsences([inj("G. de Arrascaeta", "injured")]);
+    expect(matchPlayer("Giorgian de Arrascaeta", arrasca).kind).toBe("match");
+    expect(matchPlayer("Arrascaeta", arrasca).kind).toBe("match");
+    expect(matchPlayer("de Arrascaeta", arrasca).kind).toBe("match");
+    expect(matchPlayer("Lucas Silva", silva).kind).toBe("match");
+    expect(matchPlayer("L. Silva", silva).kind).toBe("match");
+  });
+
+  it("roleFromPlayerWord: função no lugar de nome", () => {
+    expect(roleFromPlayerWord("artilheiro")).toBe("attack");
+    expect(roleFromPlayerWord("o artilheiro")).toBe("attack");
+    expect(roleFromPlayerWord("camisa 9")).toBe("attack");
+    expect(roleFromPlayerWord("meia ofensivo")).toBe("attack");
+    expect(roleFromPlayerWord("zagueiro titular")).toBe("defense");
+    expect(roleFromPlayerWord("Goleiro")).toBe("goalkeeper");
+    expect(roleFromPlayerWord("o craque do time")).toBe("unknown");
+    expect(roleFromPlayerWord("Arrascaeta")).toBeNull();
+    expect(roleFromPlayerWord("Zé Rafael")).toBeNull();
   });
 
   it("stripPlayerNames tira os nomes citados da paráfrase", () => {
@@ -129,6 +157,43 @@ describe("nomes", () => {
       "sem o jogador citado.",
     );
     expect(stripPlayerNames("time completo", [])).toBe("time completo");
+  });
+
+  it("stripPlayerNames: artigo, nome curto, time homônimo, acento e caixa (#564 review)", () => {
+    // "sem o X" não vira "sem o o jogador citado".
+    expect(stripPlayerNames("o Palmeiras está sem o Flaco López", ["Flaco López"])).toBe(
+      "o Palmeiras está sem o jogador citado",
+    );
+    expect(stripPlayerNames("O Pedro voltou", ["Pedro"])).toBe("O jogador citado voltou");
+    expect(stripPlayerNames("a lesão do Pedro pesa", ["Pedro"])).toBe(
+      "a lesão do jogador citado pesa",
+    );
+    // Nome curto (< 3 letras) também sai.
+    expect(stripPlayerNames("sem Zé Rafael no meio", ["Zé Rafael"])).toBe(
+      "sem o jogador citado no meio",
+    );
+    expect(stripPlayerNames("o Zé não joga", ["Zé Rafael"])).toBe("o jogador citado não joga");
+    // Palavra do nome do time nunca sai; o nome inteiro do jogador sai.
+    expect(
+      stripPlayerNames("o Santos sem Lucas Santos", ["Lucas Santos"], {
+        home: "Santos",
+        away: "Flamengo",
+      }),
+    ).toBe("o Santos sem o jogador citado");
+    expect(
+      stripPlayerNames("o Santos perde força", ["Lucas Santos"], {
+        home: "Santos",
+        away: "Flamengo",
+      }),
+    ).toBe("o Santos perde força");
+    // Sem acento e sem caixa; palavra inteira (não corta "Pedrosa").
+    expect(stripPlayerNames("sem LOPEZ e com Pedrosa", ["Flaco López", "Pedro"])).toBe(
+      "sem o jogador citado e com Pedrosa",
+    );
+    // O mais longo primeiro: o nome inteiro vira UM "jogador citado".
+    expect(stripPlayerNames("sem Bruno Henrique", ["Bruno Henrique", "Bruno"])).toBe(
+      "sem o jogador citado",
+    );
   });
 });
 
@@ -202,6 +267,27 @@ describe("absence", () => {
     expect(c.signals).toEqual([]);
   });
 
+  it("sem nome, com a função → não verificável, sinal de não verificável na função (#564 review)", () => {
+    const noName: Claim = {
+      team: "away",
+      topic: "absence",
+      text: "o Palmeiras está sem o artilheiro",
+      role: "attack",
+    };
+    const [c] = check([noName], {
+      absences: absences([], enrichAbsences([inj("Flaco López", "injured")])),
+    });
+    expect(c.status).toBe("unverifiable");
+    expect(c.evidence).toBe("Não conseguimos conferir qual jogador; entrou com peso menor.");
+    expect(c.signals).toEqual([{ questionId: "attack_weakened_away", strength: "unverified" }]);
+    expect(c.playerChecks).toEqual([]);
+    expect(c.sides).toEqual([{ side: "away", status: "unverifiable" }]);
+    const [u] = check([{ ...noName, role: "unknown" }], {});
+    expect(u.status).toBe("unverifiable");
+    expect(u.signals).toEqual([]);
+    expect(u.evidence).toContain("sem efeito no modelo");
+  });
+
   it("a evidência nunca traz nome vindo do provider nem o citado", () => {
     const list = enrichAbsences([
       inj("Giorgian De Arrascaeta", "injured"),
@@ -237,12 +323,43 @@ describe("full_squad", () => {
       absences: absences(enrichAbsences([inj("Pedro", "injured")])),
     });
     expect(bad.status).toBe("contradicted");
-    expect(bad.evidence).toContain("A nossa lista tem 1 fora no Flamengo");
+    expect(bad.evidence).toContain("A nossa lista tem 1 lesionado no Flamengo");
     expect(bad.signals).toEqual([]);
     const [susp] = check([squad("injuries")], {
       absences: absences(enrichAbsences([inj("Pedro", "suspended")])),
     });
     expect(susp.status).toBe("confirmed");
+  });
+
+  it("evidência pelo escopo, citando o que está fora do escopo (#564 review)", () => {
+    const [susp] = check([squad("injuries")], {
+      absences: absences(enrichAbsences([inj("Pedro", "suspended")])),
+    });
+    expect(susp.status).toBe("confirmed");
+    expect(susp.evidence).toBe("Nenhum lesionado do Flamengo na nossa lista (1 suspenso).");
+    expect(susp.evidence).not.toContain("ninguém fora");
+    const [inj2] = check([squad("suspensions")], {
+      absences: absences(
+        enrichAbsences([inj("A", "injured"), inj("B", "injured"), inj("C", "doubtful")]),
+      ),
+    });
+    expect(inj2.evidence).toBe(
+      "Nenhum suspenso do Flamengo na nossa lista (2 lesionados, 1 dúvida).",
+    );
+    const [all] = check([squad("all")], {
+      absences: absences(enrichAbsences([inj("A", "suspended"), inj("B", "injured")])),
+    });
+    expect(all.evidence).toContain("A nossa lista tem 2 fora no Flamengo");
+    const [suspOut] = check([squad("suspensions")], {
+      absences: absences(enrichAbsences([inj("A", "suspended")])),
+    });
+    expect(suspOut.evidence).toContain("A nossa lista tem 1 suspenso no Flamengo");
+    // Lista vazia segue sem confirmar, em qualquer escopo.
+    for (const scope of ["injuries", "suspensions", "all"] as const) {
+      expect(check([squad(scope)], { absences: absences([], []) })[0].status).toBe(
+        "unverifiable",
+      );
+    }
   });
 
   it("lista vazia (jogo não casou / sem cobertura) → não verificável, nunca confirma", () => {
