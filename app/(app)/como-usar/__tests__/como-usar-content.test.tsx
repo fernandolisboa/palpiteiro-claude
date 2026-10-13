@@ -40,9 +40,13 @@ describe("/como-usar", () => {
       "Analisar com IA",
       "Refazer só o palpite",
       "ver análise por mercado",
-      "Ler minha aposta",
-      "Confirmar aposta",
-      "Avaliar valor",
+      "registrar apostas",
+      "Registrar apostas",
+      "Suas apostas",
+      "Simples",
+      "Combinada",
+      "Adicionar placar",
+      "Preencher com o texto",
       "Pular tour",
     ]) {
       expect(html).toContain(label);

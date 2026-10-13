@@ -205,7 +205,7 @@ export function ComoUsarContent() {
           <Ui>errou</Ui> e o placar real.
         </p>
         <p>
-          Na aba <Ui>Análise</Ui>, toque em <Ui>ver análise por mercado</Ui> pra
+          Logo abaixo, toque em <Ui>ver análise por mercado</Ui> pra
           abrir o detalhe de cada mercado: a seleção sugerida com odd, stake e
           retorno esperado, os cenários comparados e os fatores-chave. Quando nenhum
           lado tem vantagem suficiente, o mercado sai como <Strong>PASS</Strong> (não
@@ -226,33 +226,45 @@ export function ComoUsarContent() {
 
       <Section id="minha-aposta">
         <p>
-          A aba <Ui>Minha aposta</Ui>, na página do jogo, é pra aposta que{" "}
-          <Strong>você</Strong> fez (ou pensa em fazer) na casa. O Palpiteiro não
-          aceita dinheiro: aqui é só registro e avaliação.
+          Na página do jogo, a parte <Ui>registrar apostas</Ui> funciona como o
+          cupom de uma casa: todos os mercados ficam à vista e você só toca no que
+          apostou (ou pensa em apostar). O Palpiteiro não aceita dinheiro: aqui é só
+          registro e avaliação, sem gastar análises do seu limite.
         </p>
         <Steps>
           <li>
-            Escreva a aposta do seu jeito, por exemplo{" "}
-            <em>&quot;Palmeiras vence, mais de 2.5 gols, odd 3.20&quot;</em>, e toque
-            em <Ui>Ler minha aposta</Ui>.
+            Toque nas seleções: resultado, dupla chance, ambas marcam, mais ou menos
+            gols (1.5, 2.5, 3.5) e placar exato (pra um placar fora da lista, use{" "}
+            <Ui>outro placar</Ui> e <Ui>Adicionar placar</Ui>). Cada uma entra em{" "}
+            <Ui>Suas apostas</Ui>, ao lado no computador ou na barra de baixo no
+            celular.
           </li>
           <li>
-            Confira as partes que o app entendeu, ajuste a <Ui>odd que você pegou</Ui>{" "}
-            e remova o que estiver errado.
+            Confira a odd de cada uma. Ela vem preenchida com a odd de referência
+            quando o app tem uma; troque pela que você pegou. Stake é opcional.
           </li>
           <li>
-            Toque em <Ui>Confirmar aposta</Ui>. Ela fica salva em{" "}
-            <Link href="/apostas" className={LINK}>
-              Apostas
-            </Link>{" "}
-            e é conferida sozinha depois do jogo.
+            Escolha <Ui>Simples</Ui> (cada seleção é uma aposta) ou{" "}
+            <Ui>Combinada</Ui> (todas juntas, com a odd total) e toque em{" "}
+            <Ui>Registrar apostas</Ui>.
           </li>
         </Steps>
         <p>
-          Só quer saber se uma odd vale a pena, sem salvar nada? Use a parte de
-          baixo da aba: escolha mercado, seleção e odd e toque em{" "}
-          <Ui>Avaliar valor</Ui>.
+          Logo depois aparece a avaliação de cada aposta: a probabilidade do modelo,
+          a odd justa, o retorno esperado na sua odd e uma sugestão de stake. Elas
+          ficam salvas em{" "}
+          <Link href="/apostas" className={LINK}>
+            Apostas
+          </Link>{" "}
+          e são conferidas sozinhas depois do jogo.
         </p>
+        <Tip>
+          <Strong>Prefere escrever?</Strong> Em <Ui>ou digite sua aposta</Ui>,
+          escreva do seu jeito, por exemplo{" "}
+          <em>&quot;Palmeiras vence, mais de 2.5 gols, odd 3.20&quot;</em>, e toque em{" "}
+          <Ui>Preencher com o texto</Ui>. O app monta a lista pra você conferir antes
+          de registrar.
+        </Tip>
       </Section>
 
       <Section id="compartilhar">
@@ -284,7 +296,7 @@ export function ComoUsarContent() {
             <Link href="/apostas" className={LINK}>
               Apostas
             </Link>
-            : as apostas que você confirmou em <Ui>Minha aposta</Ui>, cada uma
+            : as apostas que você registrou na página do jogo, cada uma
             marcada como <Ui>Acertou</Ui>, <Ui>Errou</Ui> ou <Ui>Pendente</Ui>. Só
             você vê.
           </li>

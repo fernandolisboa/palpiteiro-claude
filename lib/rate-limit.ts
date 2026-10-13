@@ -184,11 +184,16 @@ export async function checkBetParseRateLimit(
 export async function checkBetSlipsRateLimit(
   userId: string,
   role?: string,
+  // Slips criados nesta chamada (o cupom em "Simples" cria um por perna): o teto
+  // diário conta apostas registradas, não cliques.
+  count = 1,
 ): Promise<RateLimitResult> {
   const limiters = getLimiters();
   if (!limiters) return failClosedByRole(role);
   const { success, limit, remaining, reset } =
-    await limiters.betSlips.limit(userId);
+    count > 1
+      ? await limiters.betSlips.limit(userId, { rate: count })
+      : await limiters.betSlips.limit(userId);
   return { ok: success, limit, remaining, reset };
 }
 
