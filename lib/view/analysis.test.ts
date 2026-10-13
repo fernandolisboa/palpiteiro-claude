@@ -1479,3 +1479,49 @@ describe("toAnalysisViewFromPrediction — custo da ai_call (#512)", () => {
     expect(toAnalysisViewFromPrediction(row).engine).toBe("LLM");
   });
 });
+
+describe("toAnalysisView — quarter-Kelly informativo", () => {
+  const base = {
+    recommendation: "over",
+    confidencePct: "70.00",
+    rationale: "r",
+    keyFactors: ["a"],
+    minimumOdd: "1.900",
+    oddAtRecommendation: "1.950",
+    bookmaker: "bet365",
+    impliedProbPct: "50.00",
+    edgePct: "5.00",
+    stakeUnits: "1.00",
+    selections: [
+      { key: "over", modelProbPct: 55, odd: 1.95 },
+      { key: "under", modelProbPct: 45, odd: 1.95 },
+    ],
+    modelVersion: "claude-sonnet-4-5-20250929",
+    promptVersion: "over_under_v1.1",
+    createdAt: baseCreatedAt,
+  };
+  type Input = Parameters<typeof toAnalysisView>[0];
+  const view = (over: Partial<Input>) =>
+    toAnalysisView({ ...base, ...over } as Input, null, threeHoursLater);
+
+  it("usa implícita + edge (a p do Kelly oficial), não a confiança", () => {
+    // p = 0.55, odd 1.95: f* = 0.0725/0.95 = 0.0763 → ¼ = 1.9% → 2u. Com a confiança
+    // (0.70) daria 3u.
+    expect(view({}).kellyInfoUnits).toBe("2.00 u");
+  });
+
+  it("mostra o piso de 0.5u quando o Kelly arredonda pra zero com retorno positivo", () => {
+    // p = 0.52, odd 1.95: p·odd = 1.014 > 1, f* ≈ 0.0147 → ¼ ≈ 0.37% → piso 0.5u.
+    expect(view({ impliedProbPct: "47.00" }).kellyInfoUnits).toBe("0.50 u");
+  });
+
+  it("some quando repete o stake oficial (gate do Kelly ativo)", () => {
+    expect(view({ stakeUnits: "2.00" }).kellyInfoUnits).toBeNull();
+  });
+
+  it("null sem odd, sem implícita ou sem edge", () => {
+    expect(view({ oddAtRecommendation: null }).kellyInfoUnits).toBeNull();
+    expect(view({ impliedProbPct: null }).kellyInfoUnits).toBeNull();
+    expect(view({ edgePct: null }).kellyInfoUnits).toBeNull();
+  });
+});

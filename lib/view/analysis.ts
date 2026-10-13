@@ -404,6 +404,22 @@ export function toAnalysisView(
     descriptor?.dynamicSelections && !isPass
       ? prediction.selections?.find((s) => s.key === recommendation)?.label
       : undefined;
+  const stakeUnits = isPass ? null : formatStakeUnits(prediction.stakeUnits ?? null);
+  // Mesma p do Kelly oficial do predict (recModelProb = implícita + edge, as duas
+  // gravadas), não a confiança: no motor llm a confiança pode divergir do prob_<rec>.
+  // Só com p·odd > 1, porque computeKellyStakeUnits faz clamp no piso de 0.5u e um
+  // f* ≤ 0 apareceria como sugestão de aposta. Some quando repete o stake oficial
+  // (gate do Kelly ativo: o oficial já é o quarter-Kelly).
+  const impliedNum = toFiniteNumber(prediction.impliedProbPct);
+  const edgeNum = toFiniteNumber(prediction.edgePct);
+  const kellyProb =
+    isPass || impliedNum === null || edgeNum === null ? null : (impliedNum + edgeNum) / 100;
+  const kellyRaw =
+    kellyProb !== null && oddAtRecNum !== null && kellyProb * oddAtRecNum > 1
+      ? formatStakeUnits(computeKellyStakeUnits(kellyProb, oddAtRecNum))
+      : null;
+  const kellyInfoUnits = kellyRaw !== stakeUnits ? kellyRaw : null;
+
   return {
     recommendation: isPass
       ? null
@@ -427,15 +443,8 @@ export function toAnalysisView(
       outcomesNway ??
       (computed === null ? [] : toBinaryOutcomes(computed, presentation, line)),
     minOdd: prediction.minimumOdd !== null ? formatOdd(prediction.minimumOdd) : null,
-    stakeUnits: isPass
-      ? null
-      : formatStakeUnits(prediction.stakeUnits ?? null),
-    // Só com retorno esperado positivo: computeKellyStakeUnits faz clamp no piso de
-    // 0.5u, e um f* ≤ 0 apareceria como sugestão de aposta.
-    kellyInfoUnits:
-      evPerUnit !== null && evPerUnit > 0 && confidenceNum !== null && oddAtRecNum !== null
-        ? formatStakeUnits(computeKellyStakeUnits(confidenceNum / 100, oddAtRecNum))
-        : null,
+    stakeUnits,
+    kellyInfoUnits,
     framing: framingNote.framing,
     note: framingNote.note,
     oddAtRec: isPass ? null : formatOdd(prediction.oddAtRecommendation),

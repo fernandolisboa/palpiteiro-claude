@@ -197,9 +197,10 @@ export type AnalysisView = {
   // Stake da recomendação no formato do dashboard ("1.00 u", sem sinal). null
   // em pass (não há aposta). #170 liga as duas call sites de toAnalysisView.
   stakeUnits: string | null;
-  // Quarter-Kelly INFORMATIVO na odd da análise ("1.5u"), ao lado do stake oficial: o
+  // Quarter-Kelly INFORMATIVO na odd da análise ("1.50 u"), ao lado do stake oficial: o
   // gate do Kelly (ADR 0039) continua decidindo qual dos dois vira `stakeUnits`. null em
-  // pass, sem odd/prob ou com retorno esperado ≤ 0. Opcional: views antigas não têm.
+  // pass, sem odd/prob, com retorno esperado ≤ 0 ou igual ao stake oficial. Opcional:
+  // views antigas não têm.
   kellyInfoUnits?: string | null;
   // Frase full-width abaixo do grid de cenários (subida de `scenarios` pro topo
   // — R4). over/under: break-even da zebra ou copy de margem de erro no pass.
