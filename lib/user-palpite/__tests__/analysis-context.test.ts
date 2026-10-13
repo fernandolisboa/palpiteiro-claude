@@ -143,6 +143,29 @@ describe("applyUserClaims", () => {
     expect(noJev.origins).toEqual({ attack_weakened_home: "confirmed" });
   });
 
+  it("desfalque confirmado na lista como meio-campista: o papel é do usuário, origem 'unverified'", () => {
+    const facts = factsFromAnalysisData({
+      absences: {
+        home: enrichAbsences([
+          { player: { name: "Pedro Guilherme" }, type: "injury", status: "injured" },
+        ]).map((a) => ({ ...a, position: "midfielder" as const, isRegularStarter: true })),
+        away: [],
+      },
+      homeForm: [],
+      awayForm: [],
+      standings: undefined,
+    });
+    for (const jev of [answers(), null]) {
+      const r = apply([ATTACK_HOME], jev, facts);
+      expect(r.stored.claims[0].status).toBe("confirmed");
+      expect(r.stored.claims[0].signals).toEqual([
+        { questionId: "attack_weakened_home", strength: "unverified" },
+      ]);
+      expect(r.evidence).toEqual({ attack_weakened_home: 0.7 });
+      expect(r.origins).toEqual({ attack_weakened_home: "unverified" });
+    }
+  });
+
   it("'outra informação' não gera sinal", () => {
     const r = apply([{ team: "both", topic: "other", text: "clássico" }], answers());
     expect(r.evidence).toEqual({});

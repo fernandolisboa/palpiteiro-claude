@@ -62,7 +62,8 @@ export type AppliedUserContext = {
   // JEV ∨ usuário: o que TODO mercado do run aplica.
   answers: JudgmentAnswers | null;
   evidence: UserEvidence;
-  // Fatores que o usuário moveu, com o status da afirmação (origem nas frases do narrador).
+  // Fatores que o usuário moveu e a força do sinal que os moveu (origem nas frases do
+  // narrador).
   origins: UserFactorOrigins;
   // Alguma afirmação moveu um fator (tag `user=` no modelVersion).
   moved: boolean;
@@ -88,11 +89,18 @@ export function applyUserClaims(args: {
     kickoffAt: args.kickoffAt,
   });
   const evidence = evidenceFromClaims(checked, { jevApplied: args.jev !== null });
+  // Origem por SINAL, não pelo status da afirmação: "confirmado" só quando foi um sinal
+  // de força "confirmed" (posição nossa) que moveu o fator. Desfalque confirmado na
+  // nossa lista como meio-campista, com o papel dito pelo usuário, move pelo sinal
+  // "unverified" e sai "não conferido".
   const origins: UserFactorOrigins = {};
   for (const c of checked) {
+    const byConfirmed = new Set(
+      claimEffect({ signals: c.signals.filter((s) => s.strength === "confirmed") }, args.jev)
+        .moved,
+    );
     for (const q of claimEffect(c, args.jev).moved) {
-      origins[q] =
-        origins[q] === "confirmed" || c.status === "confirmed" ? "confirmed" : "unverified";
+      origins[q] = origins[q] === "confirmed" || byConfirmed.has(q) ? "confirmed" : "unverified";
     }
   }
   return {

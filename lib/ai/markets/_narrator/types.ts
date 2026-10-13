@@ -5,9 +5,10 @@ import type { JudgmentQuestionId } from "@/lib/ai/judgments/types";
 
 export type NarratorTeams = { home: string; away: string };
 
-// Fatores do JEV que o contexto extra do usuário moveu (#565), com o status da
-// afirmação que moveu: "confirmed" = conferida com os nossos dados; "unverified" = o
-// dado é do usuário. Só a origem: a força da frase continua vindo do valor do JEV.
+// Fatores do JEV que o contexto extra do usuário moveu (#565), com a força do sinal que
+// moveu: "confirmed" = o fato e o papel vêm dos nossos dados; "unverified" = algo do que
+// moveu o fator é só do usuário (inclusive o papel de um desfalque que a nossa lista
+// confirma sem posição). Só a origem: a força da frase continua vindo do valor do JEV.
 export type UserFactorOrigins = Partial<
   Record<JudgmentQuestionId, "confirmed" | "unverified">
 >;
