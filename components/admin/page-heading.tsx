@@ -11,9 +11,9 @@ type Props = {
 /**
  * Cabeçalho das páginas bare do admin (ADR 0029 / #324): BackLink opcional +
  * título `display-md` + subtítulo mono-`meta`. Consolida o bloco título+subtítulo
- * copy-paste das 5 páginas simples. NÃO confundir com a `PageHeader` de
- * `components/page-header.tsx` (chrome de shell mobile); o idioma DesktopShell
- * (`users/[userId]`) tem cabeçalho próprio inline (escala/largura distintas).
+ * copy-paste das 5 páginas simples. O menu do app vem do `AppShell` (layout do
+ * grupo `(app)`); `users/[userId]` tem cabeçalho próprio inline (escala/largura
+ * distintas).
  */
 export function PageHeading({ backLink, title, subtitle }: Props) {
   return (

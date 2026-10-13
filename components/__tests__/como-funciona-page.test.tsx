@@ -22,7 +22,7 @@ describe("ComoFuncionaContent", () => {
     expect(html).toContain("O que é over/under 2.5 (do zero)");
     expect(html).toContain("Como o app decide: edge, confiança e PASS");
     expect(html).toContain("Os outros mercados");
-    expect(html).toContain("Como ler os números (análise + dashboard)");
+    expect(html).toContain("Como ler os números (análise + desempenho)");
     expect(html).toContain("Glossário");
     expect(html).toContain("Jogo responsável");
   });

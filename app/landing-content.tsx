@@ -12,7 +12,7 @@ import { Button } from "@/components/ui/button";
  *
  * Firewall regulatório: a manchete posiciona o produto ("motor de seleção de
  * edge multi-mercado que emite UM palpite com racional") — "edge multi-mercado"
- * é o framing sancionado que já circula público no signin/desktop-shell. O que
+ * é o framing sancionado que já circula público no signin e no header do app. O que
  * NÃO pode aparecer aqui é linguagem de odds/EV/stake/promessa-de-retorno
  * ("ganhe", "lucro garantido"). O rodapé 18+ fecha o disclaimer.
  */

@@ -1,17 +1,9 @@
-"use client";
-
-import Link from "next/link";
-import { usePathname } from "next/navigation";
-import { type ComponentProps } from "react";
-import { cva, type VariantProps } from "class-variance-authority";
-
-import { cn } from "@/lib/utils";
+import { cva } from "class-variance-authority";
 
 /**
  * Estilo compartilhado de link de nav (ADR 0029): foco visível + estado ativo
- * via `aria-[current=page]`. Duas formas: `inline` (nav do desktop-shell) e
- * `row` (linhas do drawer mobile). O `mobile-nav` reusa só `navLinkVariants`
- * (pra não brigar com o `SheetClose asChild`); o desktop usa o `NavLink`.
+ * via `aria-[current=page]`. Duas formas: `inline` (barra do computador,
+ * `components/nav/desktop-nav.tsx`) e `row` (linhas do drawer do celular).
  */
 const navLinkVariants = cva(
   "transition-colors focus-visible:rounded-sm focus-visible:outline-none focus-visible:ring-[3px] focus-visible:ring-ring/50",
@@ -28,32 +20,5 @@ const navLinkVariants = cva(
     },
   }
 );
-
-/**
- * True se `href` é a rota ativa: raiz casa exata; o resto casa exato OU como
- * prefixo delimitado por "/" (ex.: "/dashboard" ativa "/dashboard/123", mas NÃO
- * "/dashboard-foo" — sem o boundary, startsWith daria falso-positivo).
- */
-export function isActivePath(pathname: string, href: string): boolean {
-  if (href === "/") return pathname === "/";
-  return pathname === href || pathname.startsWith(href + "/");
-}
-
-type Props = ComponentProps<typeof Link> & VariantProps<typeof navLinkVariants>;
-
-export function NavLink({ href, variant, className, children, ...props }: Props) {
-  const pathname = usePathname();
-  const active = isActivePath(pathname, String(href));
-  return (
-    <Link
-      href={href}
-      aria-current={active ? "page" : undefined}
-      className={cn(navLinkVariants({ variant }), className)}
-      {...props}
-    >
-      {children}
-    </Link>
-  );
-}
 
 export { navLinkVariants };

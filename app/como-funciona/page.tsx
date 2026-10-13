@@ -1,8 +1,6 @@
 import type { Metadata } from "next";
 
-import { BackLink } from "@/components/back-link";
-import { ThemeToggle } from "@/components/theme-toggle";
-import { Wordmark } from "@/components/wordmark";
+import { AppShell } from "@/components/app-shell";
 
 import { ComoFuncionaContent } from "./como-funciona-content";
 
@@ -16,26 +14,21 @@ export const metadata: Metadata = {
 };
 
 /**
- * Página pública `/como-funciona` (sem login). Server Component que **NÃO**
- * chama `auth()` — o conteúdo é idêntico pra todos e a rota é liberada no
- * middleware. Não usa `DesktopShell`/`PageHeader` (ambos gateiam por sessão):
- * monta um header próprio enxuto (wordmark + ThemeToggle) + `BackLink`.
+ * Página pública `/como-funciona` (sem login; fora do matcher do middleware). O
+ * conteúdo é idêntico pra todos; só o header muda: o `AppShell` lê a sessão e mostra
+ * o menu completo pra quem está logado (a página é item do menu "ajuda", #553) ou só
+ * marca + tema + "entrar" pra quem não está. Ler a sessão torna a página dinâmica; a
+ * CSP pública (`'unsafe-inline'`, sem nonce) não depende disso.
  *
  * O corpo vive em `ComoFuncionaContent` (síncrono) pra que o teste de contrato
  * consiga `renderToStaticMarkup` sem aguardar Server Component async.
  */
 export default function ComoFuncionaPage() {
   return (
-    <div className="min-h-screen bg-background text-foreground">
-      <header className="flex h-14 items-center justify-between border-b border-border-subtle px-6">
-        <Wordmark suffix="como funciona" suffixClassName="hidden sm:inline" />
-        <ThemeToggle />
-      </header>
-
+    <AppShell>
       <div className="mx-auto w-full max-w-reading px-6 py-8">
-        <BackLink href="/jogos" label="jogos" />
         <ComoFuncionaContent />
       </div>
-    </div>
+    </AppShell>
   );
 }

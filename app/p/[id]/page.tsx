@@ -71,7 +71,7 @@ export default async function PublicPalpitePage({ params }: PageProps) {
 
   return (
     <main className="min-h-screen bg-background text-foreground">
-      {/* Chrome público mínimo e auto-contido: só a marca, sem nav/back/DesktopShell (que
+      {/* Chrome público mínimo e auto-contido: só a marca, sem nav/back/AppShell (que
           puxam contexto autenticado). A marca linka pra landing `/` (on-ramp de crescimento,
           #444) — firewall-safe: `/` é pública/estática, sem linguagem de valor. */}
       <header className="border-b border-border/60 px-5 py-4">

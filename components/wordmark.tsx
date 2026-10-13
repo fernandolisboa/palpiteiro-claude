@@ -12,7 +12,7 @@ type Props = {
 /**
  * Marca única "palpiteiro" + sufixo mono opcional (ADR 0029). Unifica os 3
  * tamanhos (17/18/20px → display-sm) e formas de sufixo divergentes do shell
- * (desktop-shell, page-header, signin). O TEXTO de cada sufixo segue verbatim
+ * (header do app, signin, landing). O TEXTO de cada sufixo segue verbatim
  * (o tagline obsoleto do signin é copy — fica pro #323).
  */
 export function Wordmark({ suffix, className, suffixClassName }: Props) {
