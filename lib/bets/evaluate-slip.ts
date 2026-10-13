@@ -185,8 +185,10 @@ function singleStake(
   };
 }
 
-// Leva a soma ao teto por jogo, reduzindo proporcionalmente em degraus de 0.5u. Um
-// stake que cai a 0 vira null (o motor não apostaria nessa perna dentro do teto).
+// Leva a soma ao teto por jogo: reduz proporcionalmente em degraus de 0.5u e devolve o
+// que o arredondamento pra baixo tirou às pernas com a maior sobra (maiores restos), sem
+// passar do stake original nem do teto. Um stake que fica em 0 vira null (o motor não
+// apostaria nessa perna dentro do teto).
 function capTotal(stakes: Array<StakeSuggestion | null>): {
   stakes: Array<StakeSuggestion | null>;
   capped: boolean;
@@ -194,13 +196,24 @@ function capTotal(stakes: Array<StakeSuggestion | null>): {
   const total = stakes.reduce((s, x) => s + (x?.units ?? 0), 0);
   if (total <= MATCH_STAKE_CAP_UNITS) return { stakes, capped: false };
   const factor = MATCH_STAKE_CAP_UNITS / total;
+  const scaled = stakes.map((s) => (s === null ? 0 : s.units * factor));
+  const units = scaled.map((x) => Math.floor(x * 2) / 2);
+  let left = MATCH_STAKE_CAP_UNITS - units.reduce((a, b) => a + b, 0);
+  const byRemainder = scaled
+    .map((x, i) => ({ i, rest: x - units[i] }))
+    .filter(({ i }) => stakes[i] !== null)
+    .sort((a, b) => b.rest - a.rest || a.i - b.i);
+  for (const { i } of byRemainder) {
+    if (left < 0.5) break;
+    if (units[i] + 0.5 > stakes[i]!.units) continue;
+    units[i] += 0.5;
+    left -= 0.5;
+  }
   return {
     capped: true,
-    stakes: stakes.map((s) => {
-      if (s === null) return null;
-      const units = Math.floor(s.units * factor * 2) / 2;
-      return units > 0 ? { ...s, units } : null;
-    }),
+    stakes: stakes.map((s, i) =>
+      s === null || units[i] <= 0 ? null : { ...s, units: units[i] },
+    ),
   };
 }
 

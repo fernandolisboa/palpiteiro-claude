@@ -292,6 +292,11 @@ export function BetSlip({
     <section className="flex flex-col gap-3" data-tour="bet-slip">
       <SectionHeading modelLabel={grid.modelLabel} />
       {grid_}
+      {/* No celular o painel (com o aviso) fica na folha; o aviso §3 também fica à
+          vista junto da grade (ADR 0036 §12: em todo render). */}
+      <p className="text-meta leading-relaxed text-muted-fg-2 tracking-tight">
+        {RISK_DISCLAIMER_PT_BR}
+      </p>
       {(count > 0 || registerState) && (
         <div className="fixed inset-x-0 bottom-0 z-40 border-t border-border bg-background/95 px-5 py-3 backdrop-blur supports-[backdrop-filter]:bg-background/80">
           <Button className="w-full" onClick={() => setSheetOpen(true)}>

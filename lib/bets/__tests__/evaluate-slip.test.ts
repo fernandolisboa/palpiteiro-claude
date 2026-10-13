@@ -375,7 +375,7 @@ describe("evaluateSlip — stake sugerido", () => {
     expect(kellyTotal).toBeLessThanOrEqual(MATCH_STAKE_CAP_UNITS);
   });
 
-  it("4 pernas de 1u → reduz em degraus de 0.5u e nunca passa do teto", () => {
+  it("4 pernas de 1u → reduz em degraus de 0.5u e preenche o teto sem passar", () => {
     const analysis = new Map([
       ["match_result", analysisMarket({ home: 60 })],
       ["over_under:2.5", analysisMarket({ over: 60 })],
@@ -394,10 +394,11 @@ describe("evaluateSlip — stake sugerido", () => {
     expect(res.cappedAtMatchLimit).toBe(true);
     const legs = res.legs.map(graded);
     const total = legs.reduce((s, l) => s + (l.suggestedStake?.units ?? 0), 0);
-    expect(total).toBeLessThanOrEqual(MATCH_STAKE_CAP_UNITS);
+    expect(total).toBe(MATCH_STAKE_CAP_UNITS);
     for (const l of legs) {
       const u = l.suggestedStake?.units ?? 0;
       expect(Number.isInteger(u * 2)).toBe(true);
+      expect(u).toBeLessThanOrEqual(1);
     }
   });
 });
