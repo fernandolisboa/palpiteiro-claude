@@ -36,6 +36,12 @@ describe("OddsCard N-vias (1X2, N=3) — #173 PR-2", () => {
     ).toBe(1);
     expect(html).toContain('aria-label="Ajuda: overround"');
   });
+
+  it("não mostra o nome da casa (fica só no banco, para rastreio)", () => {
+    const html = renderToStaticMarkup(<OddsCard view={NWAY} />);
+    expect(html).not.toContain("Pinnacle");
+    expect(html).toContain("odd de mercado");
+  });
 });
 
 describe("OddsCard empty-state (view=null) — copy por status", () => {

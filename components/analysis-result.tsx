@@ -147,7 +147,6 @@ export function AnalysisResult({ view, showRiskDisclaimer = true }: Props) {
             </span>
             <span className="font-mono text-body font-medium tabular-nums tracking-tight text-foreground">
               {view.oddAtRec}
-              {view.bookmaker ? ` · ${view.bookmaker}` : ""}
             </span>
           </div>
           <div className="flex flex-col gap-1">

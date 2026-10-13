@@ -92,7 +92,6 @@ export function PredictionDetail({
       <Row label="odd de entrada" value={prediction.odd} />
       <Row label="odd mínima" value={prediction.minOdd} />
       <Row label="stake" value={prediction.stake} />
-      <Row label="bookmaker" value={prediction.bookmaker} />
       <Row label="gerada em" value={prediction.createdAt} />
 
       <SectionLabel>CLV (linha de fechamento)</SectionLabel>

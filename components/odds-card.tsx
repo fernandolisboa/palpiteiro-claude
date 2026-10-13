@@ -109,7 +109,7 @@ export function OddsCard({ view, unavailable }: Props) {
       </div>
       <Separator />
       <div className="flex items-center justify-between px-4 py-2.5 font-mono text-eyebrow text-muted-fg-2">
-        <span>bookmaker · {view.bookmaker}</span>
+        <span>odd de mercado</span>
         <span className="flex items-center gap-1 tabular-nums">
           overround {view.overround}
           <HelpHint
