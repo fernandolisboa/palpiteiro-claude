@@ -2,9 +2,13 @@
 // football-data.co.uk (`data/backtest/BRA-<data>.csv`). Sem fs, sem fetch: o script
 // lê o arquivo e entrega o texto; o resultado é reproduzível pelo snapshot.
 // Colunas usadas: Season, Date (dd/mm/yyyy), Home, Away, HG, AG e as odds de
-// FECHAMENTO 1X2 — PSC* (Pinnacle) e AvgC* (média do mercado).
+// FECHAMENTO 1X2 — PSC* (Pinnacle) e AvgC* (média do mercado). Opcionais: as de
+// fechamento de over/under 2.5 (PC>2.5/PC<2.5 e AvgC>2.5/AvgC<2.5), presentes nos
+// snapshots das ligas europeias (scripts/backtest/build-football-data-snapshot.ts)
+// e ausentes no do Brasileirão.
 
 export type Odds1x2 = { home: number; draw: number; away: number };
+export type OddsOverUnder = { over: number; under: number };
 
 export type HistoricalMatch = {
   season: number;
@@ -15,6 +19,8 @@ export type HistoricalMatch = {
   awayGoals: number;
   closingPinnacle: Odds1x2 | null;
   closingAvg: Odds1x2 | null;
+  closingOu25Pinnacle?: OddsOverUnder | null;
+  closingOu25Avg?: OddsOverUnder | null;
 };
 
 // Split simples por vírgula: o CSV do football-data não tem campos entre aspas.
@@ -38,6 +44,15 @@ function odds1x2(row: Record<string, string>, prefix: string): Odds1x2 | null {
   const draw = odd(row[`${prefix}D`]);
   const away = odd(row[`${prefix}A`]);
   return home && draw && away ? { home, draw, away } : null;
+}
+
+function oddsOu25(
+  row: Record<string, string>,
+  prefix: string,
+): OddsOverUnder | null {
+  const over = odd(row[`${prefix}>2.5`]);
+  const under = odd(row[`${prefix}<2.5`]);
+  return over && under ? { over, under } : null;
 }
 
 /**
@@ -84,6 +99,8 @@ export function parseFootballDataCsv(text: string): HistoricalMatch[] {
       awayGoals,
       closingPinnacle: odds1x2(row, "PSC"),
       closingAvg: odds1x2(row, "AvgC"),
+      closingOu25Pinnacle: oddsOu25(row, "PC"),
+      closingOu25Avg: oddsOu25(row, "AvgC"),
     });
   }
   // sort estável: preserva a ordem do CSV dentro do mesmo dia.

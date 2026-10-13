@@ -2,7 +2,7 @@ import { bootstrapMeanCi } from "@/lib/calibration/metrics";
 import { computeMarketImpliedProbabilities } from "@/lib/odds/implied-probability";
 
 import { seasonGamesPlayed } from "./features";
-import type { HistoricalMatch, Odds1x2 } from "./matches";
+import type { HistoricalMatch, Odds1x2, OddsOverUnder } from "./matches";
 
 // Runner do backtest walk-forward (ADR 0039 D2, #502). Puro e síncrono: recebe os
 // jogos já parseados e as estratégias, devolve métricas por estratégia e as
@@ -96,12 +96,25 @@ export function devig1x2(odds: Odds1x2): Probs1x2 {
   return { home, draw, away };
 }
 
-/** Estratégia de benchmark: fechamento de-vigado (Pinnacle, senão média). */
+/** P(over) de-vigada (proporcional, mercado completo de 2 seleções). */
+export function devigOver(odds: OddsOverUnder): number {
+  return computeMarketImpliedProbabilities([odds.over, odds.under]).probs[0];
+}
+
+/**
+ * Estratégia de benchmark: fechamento de-vigado (Pinnacle, senão média), por
+ * mercado — 1X2 e, quando o snapshot tem as odds, over/under 2.5.
+ */
 export const closingMarketStrategy: Strategy = {
   name: "mercado (fechamento)",
   predict(match) {
     const odds = match.closingPinnacle ?? match.closingAvg;
-    return odds ? { p1x2: devig1x2(odds) } : null;
+    const ou = match.closingOu25Pinnacle ?? match.closingOu25Avg ?? null;
+    if (!odds && !ou) return null;
+    return {
+      ...(odds ? { p1x2: devig1x2(odds) } : {}),
+      ...(ou ? { pOver25: devigOver(ou) } : {}),
+    };
   },
 };
 
