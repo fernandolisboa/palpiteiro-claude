@@ -3,7 +3,7 @@ import type { ClaimStatus } from "@/lib/user-palpite/types";
 import type { AnalysisUserContextView } from "@/lib/view/analysis-user-context";
 
 // "O que você acrescentou" (#565): o contexto extra conferido da análise com IA, no topo
-// de "ver análise por mercado". Só leitura; o texto do usuário não fica salvo.
+// de "ver análise por mercado". Só leitura; o texto do usuário não vai pra análise.
 
 const STATUS_BADGE: Record<ClaimStatus, "secondary" | "destructive" | "outline"> = {
   confirmed: "secondary",
@@ -43,7 +43,7 @@ export function AnalysisUserContext({ view }: { view: AnalysisUserContextView })
         </p>
       )}
       <p className="text-meta leading-relaxed tracking-tight text-muted-fg-2">
-        O texto que você escreveu não fica salvo: guardamos só as afirmações conferidas.
+        O texto que você escreveu não vai pra análise; ela guarda só as afirmações conferidas.
       </p>
     </section>
   );

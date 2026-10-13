@@ -65,8 +65,14 @@ type Props = {
 };
 
 // Campo do contexto extra, controlado pelo PalpiteHero (o estado sobrevive ao
-// PendingHero, que desmonta o corpo). null = campo escondido.
-type ContextField = { value: string; onChange: (v: string) => void } | null;
+// PendingHero, que desmonta o corpo). `open` tem estado próprio: apagar o texto não
+// fecha o painel no meio da edição. null = campo escondido.
+type ContextField = {
+  value: string;
+  onChange: (v: string) => void;
+  open: boolean;
+  onOpenChange: (open: boolean) => void;
+} | null;
 
 // Um form, duas ações (runPalpiteHero): o botão clicado manda `intent`. "palpite"
 // refaz só a síntese sobre as análises salvas; "analysis" é o run completo.
@@ -110,18 +116,27 @@ export function PalpiteHero({
 }: Props) {
   const [state, formAction, pending] = useActionState(runPalpiteHero, null);
   const [context, setContext] = useState("");
-  // Análise completa que deu certo limpa o campo: "Analisar de novo" não reenvia o
-  // mesmo contexto sem querer. Ajuste no render (não em efeito) quando o resultado muda.
+  const [contextOpen, setContextOpen] = useState(false);
+  // Análise completa que deu certo limpa e fecha o campo: "Analisar de novo" não reenvia
+  // o mesmo contexto sem querer. Ajuste no render (não em efeito) quando o resultado muda.
   const [seenState, setSeenState] = useState(state);
   if (state !== seenState) {
     setSeenState(state);
-    if (state?.ok && "view" in state) setContext("");
+    if (state?.ok && "view" in state) {
+      setContext("");
+      setContextOpen(false);
+    }
   }
   const contextNotice =
     state?.ok && "contextNotice" in state ? (state.contextNotice ?? null) : null;
   const contextField: ContextField =
     contextEnabled && unavailable === null && fanOutEnabled
-      ? { value: context, onChange: setContext }
+      ? {
+          value: context,
+          onChange: setContext,
+          open: contextOpen,
+          onOpenChange: setContextOpen,
+        }
       : null;
   // Set exibido quando este form foi enviado: se outro set chegar depois (outra aba, outro
   // run), o aviso de manchete que não saiu deixa de valer.
@@ -153,6 +168,11 @@ export function PalpiteHero({
       aria-busy={pending}
     >
       <input type="hidden" name="matchId" value={matchId} />
+      {/* Região viva sempre montada (o corpo desmonta no pending): o leitor de tela anuncia
+          quando o texto troca. Vazia durante o envio, pra repetir o mesmo aviso. */}
+      <p role="status" className="sr-only">
+        {pending ? "" : (contextNotice ?? "")}
+      </p>
       <HeroBody
         heroPalpite={heroPalpite}
         unavailable={unavailable}
@@ -536,13 +556,16 @@ function EmptyHero({
 function UserContextField({
   value,
   onChange,
-}: {
-  value: string;
-  onChange: (v: string) => void;
-}) {
+  open,
+  onOpenChange,
+}: NonNullable<ContextField>) {
   const id = useId();
   return (
-    <details open={value !== ""} className="group max-w-reading">
+    <details
+      open={open}
+      onToggle={(e) => onOpenChange(e.currentTarget.open)}
+      className="group max-w-reading"
+    >
       <summary className="w-fit cursor-pointer rounded-sm text-body-sm tracking-tight text-palpite-strong-fg focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-palpite-border">
         Contexto extra (opcional)
       </summary>
@@ -577,11 +600,11 @@ function UserContextField({
 }
 
 // O que aconteceu com o contexto extra no último run (#565): linha discreta, some num
-// novo envio.
+// novo envio. Só visual: o leitor de tela recebe o mesmo texto pela região viva do form.
 function ContextNotice({ notice }: { notice: string }) {
   return (
     <p
-      role="status"
+      aria-hidden="true"
       className="flex items-start gap-1.5 text-body-sm leading-relaxed tracking-tight text-muted-fg-2"
     >
       <Info className="mt-0.5 size-3.5 shrink-0" aria-hidden="true" />

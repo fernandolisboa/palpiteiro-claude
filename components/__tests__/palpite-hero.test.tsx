@@ -632,6 +632,52 @@ describe("PalpiteHero — Contexto extra (#565)", () => {
     await h.cleanup();
   });
 
+  it("apagar o texto na edição não fecha o painel", async () => {
+    const h = await mount();
+    const details = () => h.container.querySelector("details")!;
+    await act(async () => {
+      details().querySelector("summary")!.click();
+      await new Promise((r) => setTimeout(r, 0));
+    });
+    expect(details().open).toBe(true);
+    await act(async () => {
+      const setter = Object.getOwnPropertyDescriptor(
+        HTMLTextAreaElement.prototype,
+        "value",
+      )!.set!;
+      setter.call(h.textarea(), "");
+      h.textarea().dispatchEvent(new Event("input", { bubbles: true }));
+      await new Promise((r) => setTimeout(r, 0));
+    });
+    expect(h.textarea().value).toBe("");
+    expect(details().open).toBe(true);
+    await h.cleanup();
+  });
+
+  it("envio ok fecha o painel; o aviso vai pela região viva sempre montada", async () => {
+    const NOTICE = "Conferimos o seu contexto extra, mas ele não mudou a análise.";
+    vi.mocked(analyzeBestBet).mockResolvedValue({
+      ok: true,
+      view: { entries: [], errors: [] } as never,
+      palpite: POPULATED,
+      contextNotice: NOTICE,
+    });
+    const h = await mount();
+    const live = h.container.querySelector('[role="status"]');
+    expect(live?.textContent).toBe("");
+    await act(async () => {
+      h.container.querySelector("summary")!.click();
+      await new Promise((r) => setTimeout(r, 0));
+    });
+    expect(h.container.querySelector("details")!.open).toBe(true);
+    await h.submit();
+    // O MESMO nó (não remontado) com o texto novo.
+    expect(h.container.querySelector('[role="status"]')).toBe(live);
+    expect(live?.textContent).toBe(NOTICE);
+    expect(h.container.querySelector("details")!.open).toBe(false);
+    await h.cleanup();
+  });
+
   it("run que falha: o texto sobrevive ao pending pra tentar de novo", async () => {
     vi.mocked(analyzeBestBet).mockResolvedValue({ ok: false, error: "Falhou." });
     const h = await mount();

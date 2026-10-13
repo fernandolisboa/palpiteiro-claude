@@ -28,7 +28,7 @@ describe("<AnalysisUserContext/>", () => {
     expect(html).toContain("desfalque no ataque do Flamengo");
     expect(html).toContain("ajustado para baixo");
     expect(html).toContain("Não verificável: não temos esse dado; entrou com peso menor.");
-    expect(html).toContain("O texto que você escreveu não fica salvo");
+    expect(html).toContain("O texto que você escreveu não vai pra análise");
   });
 
   it("sem afirmação não verificável que moveu → sem a nota", () => {
