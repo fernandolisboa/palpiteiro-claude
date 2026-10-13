@@ -115,12 +115,16 @@ export async function addFriendPoolEntry(
   return { ok: true };
 }
 
+// Tirar aposta só com as apostas abertas: depois do apito, tirar quem perdeu mudaria o
+// pote e a parte de cada ganhador.
 export async function removeFriendPoolEntry(formData: FormData): Promise<void> {
   const poolId = IdSchema.safeParse(field(formData, "poolId"));
   const entryId = IdSchema.safeParse(field(formData, "entryId"));
   if (!poolId.success || !entryId.success) return;
   const userId = await requireUserId();
   if (typeof userId !== "string") return;
+  const pool = await getFriendPool(poolId.data, userId);
+  if (!pool || !poolBetsOpen(pool.match)) return;
   await deleteFriendPoolEntry({ entryId: entryId.data, poolId: poolId.data, userId });
   revalidatePath(`/bolao/${poolId.data}`);
 }

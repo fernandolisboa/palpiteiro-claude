@@ -7,9 +7,11 @@ import type { SupportedLeague } from "@/lib/providers/sports-data/leagues";
 export const POOL_MONEY_NOTE =
   "O Palpiteiro só anota as apostas e faz a conta. Não recebe, não guarda e não repassa dinheiro: o acerto é entre vocês.";
 
-// Aviso de risco (ADR 0048 §4), mesma redação das outras telas de aposta.
+// Aviso de risco (ADR 0048 §4), VERBATIM o das outras telas de aposta
+// (lib/view/bet-slip.ts, app/(app)/apostas/page.tsx). Constante local de propósito: a
+// tela do bolão não arrasta o grafo de import do cupom.
 export const POOL_RISK_NOTE =
-  "Aposta não é investimento. Jogue só por diversão, com o que você pode perder, e nunca para recuperar perdas. Se deixou de ser diversão, procure ajuda.";
+  "Aposta não é investimento. As recomendações do Palpiteiro são análises e não garantem resultado. Aposte com responsabilidade, só o que você pode perder, e nunca para recuperar perdas. Se a aposta deixou de ser diversão, procure ajuda.";
 
 type TeamNames = { home: string; away: string };
 

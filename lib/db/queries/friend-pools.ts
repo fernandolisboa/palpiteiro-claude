@@ -28,6 +28,8 @@ export async function listFriendPools(userId: string): Promise<FriendPoolListRow
   const entryCount = db
     .select({ poolId: friendPoolEntries.poolId, n: count().as("n") })
     .from(friendPoolEntries)
+    .innerJoin(friendPools, eq(friendPools.id, friendPoolEntries.poolId))
+    .where(eq(friendPools.userId, userId))
     .groupBy(friendPoolEntries.poolId)
     .as("entry_count");
   const rows = await db

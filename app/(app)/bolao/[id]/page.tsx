@@ -81,7 +81,7 @@ export default async function BolaoDetailPage({ params }: PageProps) {
         </p>
 
         {outcome.settled && (
-          <Card className="mb-6 gap-2 px-5 py-5" aria-live="polite">
+          <Card className="mb-6 gap-2 px-5 py-5">
             <p className="text-muted-foreground font-mono text-eyebrow uppercase tracking-label">
               resultado · {outcome.score.source === "manual" ? "placar lançado por você" : "placar do jogo"}
             </p>
@@ -138,9 +138,19 @@ export default async function BolaoDetailPage({ params }: PageProps) {
                 const hit = outcome.settled ? outcome.hitIds.has(e.id) : null;
                 return (
                   <li key={e.id} className="flex items-center gap-3 px-4 py-3">
-                    <span className="w-5 shrink-0" aria-hidden={hit === null}>
-                      {hit === true && <Check className="size-4 text-accent-fg" aria-label="acertou" />}
-                      {hit === false && <X className="size-4 text-muted-fg-2" aria-label="errou" />}
+                    <span className="w-5 shrink-0">
+                      {hit === true && (
+                        <>
+                          <Check className="size-4 text-accent-fg" aria-hidden />
+                          <span className="sr-only">acertou</span>
+                        </>
+                      )}
+                      {hit === false && (
+                        <>
+                          <X className="size-4 text-muted-fg-2" aria-hidden />
+                          <span className="sr-only">errou</span>
+                        </>
+                      )}
                     </span>
                     <span className="min-w-0 flex-1 truncate text-body font-medium tracking-tight">
                       {e.bettorName}
@@ -151,19 +161,21 @@ export default async function BolaoDetailPage({ params }: PageProps) {
                       </span>
                       {poolBetLabel(e.kind, e.params, teams)}
                     </span>
-                    <form action={removeFriendPoolEntry}>
-                      <input type="hidden" name="poolId" value={pool.id} />
-                      <input type="hidden" name="entryId" value={e.id} />
-                      <Button
-                        type="submit"
-                        size="sm"
-                        variant="ghost"
-                        aria-label={`Tirar a aposta de ${e.bettorName}`}
-                        className="text-muted-fg-2"
-                      >
-                        <X className="size-3.5" />
-                      </Button>
-                    </form>
+                    {open && (
+                      <form action={removeFriendPoolEntry}>
+                        <input type="hidden" name="poolId" value={pool.id} />
+                        <input type="hidden" name="entryId" value={e.id} />
+                        <Button
+                          type="submit"
+                          size="sm"
+                          variant="ghost"
+                          aria-label={`Tirar a aposta de ${e.bettorName}`}
+                          className="text-muted-fg-2"
+                        >
+                          <X className="size-3.5" />
+                        </Button>
+                      </form>
+                    )}
                   </li>
                 );
               })}

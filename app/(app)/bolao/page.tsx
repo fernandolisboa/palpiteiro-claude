@@ -13,7 +13,7 @@ import { getMatchesInRange } from "@/lib/db/queries/matches";
 import { poolPotCents, formatBrl, resolvePoolScore } from "@/lib/pools/winners";
 import { poolBetsOpen } from "@/lib/pools/pool-state";
 import { getRequestTimeZone } from "@/lib/server/request-timezone";
-import { POOL_MONEY_NOTE, poolMatchLabel } from "@/lib/view/friend-pool";
+import { POOL_MONEY_NOTE, POOL_RISK_NOTE, poolMatchLabel } from "@/lib/view/friend-pool";
 
 export const dynamic = "force-dynamic";
 
@@ -54,7 +54,7 @@ export default async function BolaoPage({ searchParams }: PageProps) {
       <div className="mx-auto w-full max-w-reading px-6 py-8">
         <h1 className="text-display-md font-medium tracking-tight">Bolão</h1>
         <p className="text-muted-foreground pb-6 font-mono text-meta">
-          aposta em casa entre amigos · cada um com seu palpite
+          bolão entre amigos · cada um com seu palpite
         </p>
 
         <Card className="mb-8 gap-4 px-5 py-5">
@@ -80,7 +80,7 @@ export default async function BolaoPage({ searchParams }: PageProps) {
         )}
 
         <p className="mt-10 text-meta leading-relaxed text-muted-fg-2 tracking-tight">
-          {POOL_MONEY_NOTE}
+          {POOL_MONEY_NOTE} {POOL_RISK_NOTE}
         </p>
       </div>
     </div>

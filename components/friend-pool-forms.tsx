@@ -1,6 +1,13 @@
 "use client";
 
-import { useActionState, useEffect, useRef, useState } from "react";
+import {
+  startTransition,
+  useActionState,
+  useEffect,
+  useRef,
+  useState,
+  type FormEvent,
+} from "react";
 
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -27,6 +34,43 @@ function ErrorLine({ state }: { state: PoolActionResult | null }) {
   );
 }
 
+/**
+ * Envio pelo `onSubmit` em vez de `<form action>`: com `action`, o React 19 reseta o
+ * form depois de QUALQUER resposta, e um erro apagaria o que a pessoa digitou. Aqui o
+ * reset é explícito e só no sucesso (`onSuccess` roda junto).
+ */
+function usePoolAction(
+  fn: (prev: PoolActionResult | null, formData: FormData) => Promise<PoolActionResult>,
+  onSuccess?: () => void,
+) {
+  const formRef = useRef<HTMLFormElement>(null);
+  const onSuccessRef = useRef(onSuccess);
+  onSuccessRef.current = onSuccess;
+  const [state, action, pending] = useActionState<PoolActionResult | null, FormData>(
+    fn,
+    null,
+  );
+
+  useEffect(() => {
+    if (!state?.ok) return;
+    formRef.current?.reset();
+    onSuccessRef.current?.();
+  }, [state]);
+
+  const onSubmit = (e: FormEvent<HTMLFormElement>) => {
+    e.preventDefault();
+    const formData = new FormData(e.currentTarget);
+    // O botão clicado (ex.: intent=clear) não entra no FormData montado à mão.
+    const submitter = (e.nativeEvent as SubmitEvent).submitter;
+    if (submitter instanceof HTMLButtonElement && submitter.name) {
+      formData.set(submitter.name, submitter.value);
+    }
+    startTransition(() => action(formData));
+  };
+
+  return { state, pending, formProps: { ref: formRef, onSubmit } };
+}
+
 export type PoolMatchOption = { id: string; label: string };
 
 export function NewPoolForm({
@@ -36,10 +80,7 @@ export function NewPoolForm({
   options: readonly PoolMatchOption[];
   defaultMatchId: string | null;
 }) {
-  const [state, action, pending] = useActionState<PoolActionResult | null, FormData>(
-    createFriendPool,
-    null,
-  );
+  const { state, pending, formProps } = usePoolAction(createFriendPool);
 
   if (options.length === 0) {
     return (
@@ -51,7 +92,7 @@ export function NewPoolForm({
   }
 
   return (
-    <form action={action} className="flex flex-col gap-4">
+    <form {...formProps} className="flex flex-col gap-4">
       <label className="flex flex-col gap-1">
         <span className={LABEL}>jogo</span>
         <Select
@@ -137,11 +178,12 @@ export function AddEntryForm({
   homeTeam: string;
   awayTeam: string;
 }) {
-  const [state, action, pending] = useActionState<PoolActionResult | null, FormData>(
-    addFriendPoolEntry,
-    null,
-  );
   const [kind, setKind] = useState<PoolBetKind>("exact_score");
+  // O select de tipo é não-controlado (o reset do form volta ele pro padrão); o estado
+  // só decide quais campos aparecem e volta junto no sucesso.
+  const { state, pending, formProps } = usePoolAction(addFriendPoolEntry, () =>
+    setKind("exact_score"),
+  );
   const nameRef = useRef<HTMLInputElement>(null);
 
   // Depois de gravar, o React reseta o form; o foco volta pro nome pro próximo amigo.
@@ -152,9 +194,8 @@ export function AddEntryForm({
   const picks = pickOptions(kind, homeTeam, awayTeam);
 
   return (
-    <form action={action} className="flex flex-col gap-4">
+    <form {...formProps} className="flex flex-col gap-4">
       <input type="hidden" name="poolId" value={poolId} />
-      <input type="hidden" name="kind" value={kind} />
       <div className="grid gap-4 sm:grid-cols-2">
         <label className="flex flex-col gap-1">
           <span className={LABEL}>apostador</span>
@@ -170,7 +211,8 @@ export function AddEntryForm({
         <label className="flex flex-col gap-1">
           <span className={LABEL}>tipo de aposta</span>
           <Select
-            value={kind}
+            name="kind"
+            defaultValue="exact_score"
             onChange={(e) => setKind(e.target.value as PoolBetKind)}
             aria-label="Tipo de aposta"
           >
@@ -245,14 +287,11 @@ export function ManualScoreForm({
   awayTeam: string;
   manual: { home: number; away: number } | null;
 }) {
-  const [state, action, pending] = useActionState<PoolActionResult | null, FormData>(
-    setFriendPoolScore,
-    null,
-  );
+  const { state, pending, formProps } = usePoolAction(setFriendPoolScore);
   return (
     <form
       key={manual ? `${manual.home}-${manual.away}` : "none"}
-      action={action}
+      {...formProps}
       className="flex flex-col gap-3"
     >
       <input type="hidden" name="poolId" value={poolId} />
