@@ -1,5 +1,5 @@
 import { bootstrapMeanCi } from "@/lib/calibration/metrics";
-import { computeMarketImpliedProbabilities } from "@/lib/odds/implied-probability";
+import { devigMarket, type DevigMethod } from "@/lib/odds/implied-probability";
 
 import { seasonGamesPlayed } from "./features";
 import type { HistoricalMatch, Odds1x2, OddsOverUnder } from "./matches";
@@ -86,19 +86,24 @@ export function logLossBinary(p: number, y: 0 | 1): number {
   return -(y * Math.log(c) + (1 - y) * Math.log(1 - c));
 }
 
-/** Probabilidades de-vigadas (proporcional, ADR 0018) de uma trinca de odds. */
-export function devig1x2(odds: Odds1x2): Probs1x2 {
-  const [home, draw, away] = computeMarketImpliedProbabilities([
-    odds.home,
-    odds.draw,
-    odds.away,
-  ]).probs;
+/** Probabilidades de-vigadas (proporcional por padrão, ADR 0018) de uma trinca de odds. */
+export function devig1x2(
+  odds: Odds1x2,
+  method: DevigMethod = "proportional",
+): Probs1x2 {
+  const [home, draw, away] = devigMarket(
+    [odds.home, odds.draw, odds.away],
+    method,
+  ).probs;
   return { home, draw, away };
 }
 
-/** P(over) de-vigada (proporcional, mercado completo de 2 seleções). */
-export function devigOver(odds: OddsOverUnder): number {
-  return computeMarketImpliedProbabilities([odds.over, odds.under]).probs[0];
+/** P(over) de-vigada (proporcional por padrão, mercado completo de 2 seleções). */
+export function devigOver(
+  odds: OddsOverUnder,
+  method: DevigMethod = "proportional",
+): number {
+  return devigMarket([odds.over, odds.under], method).probs[0];
 }
 
 /**
@@ -117,6 +122,48 @@ export const closingMarketStrategy: Strategy = {
     };
   },
 };
+
+export type MarketOddsSource = "closing" | "preClosing";
+
+/**
+ * Mercado de-vigado com fonte (fechamento ou pré-fechamento), casa (Pinnacle ou
+ * média, SEM cair de uma pra outra: o de-vig depende da margem de cada uma) e
+ * método de de-vig escolhidos (report 13).
+ */
+export function marketStrategy(opts: {
+  source: MarketOddsSource;
+  book: "pinnacle" | "avg";
+  method: DevigMethod;
+  name?: string;
+}): Strategy {
+  const { source, book, method } = opts;
+  return {
+    name: opts.name ?? `mercado ${source} ${book} ${method}`,
+    predict(match) {
+      const odds =
+        source === "closing"
+          ? book === "pinnacle"
+            ? match.closingPinnacle
+            : match.closingAvg
+          : book === "pinnacle"
+            ? match.preClosingPinnacle
+            : match.preClosingAvg;
+      const ou =
+        source === "closing"
+          ? book === "pinnacle"
+            ? match.closingOu25Pinnacle
+            : match.closingOu25Avg
+          : book === "pinnacle"
+            ? match.preClosingOu25Pinnacle
+            : match.preClosingOu25Avg;
+      if (!odds && !ou) return null;
+      return {
+        ...(odds ? { p1x2: devig1x2(odds, method) } : {}),
+        ...(ou ? { pOver25: devigOver(ou, method) } : {}),
+      };
+    },
+  };
+}
 
 /**
  * Roda o walk-forward. Os jogos são avaliados em ordem de data; cada estratégia

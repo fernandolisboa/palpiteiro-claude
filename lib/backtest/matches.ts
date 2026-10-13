@@ -5,7 +5,10 @@
 // FECHAMENTO 1X2 — PSC* (Pinnacle) e AvgC* (média do mercado). Opcionais: as de
 // fechamento de over/under 2.5 (PC>2.5/PC<2.5 e AvgC>2.5/AvgC<2.5), presentes nos
 // snapshots das ligas europeias (scripts/backtest/build-football-data-snapshot.ts)
-// e ausentes no do Brasileirão.
+// e ausentes no do Brasileirão. Também opcionais: as odds PRÉ-fechamento (PS*/Avg*
+// e P>2.5/Avg>2.5), que o football-data coleta dias antes do jogo (sexta pra jogos
+// de fim de semana, terça pros de meio de semana): o análogo do snapshot de odds que
+// a produção usa ao analisar (report 13). Também ausentes no Brasileirão.
 
 export type Odds1x2 = { home: number; draw: number; away: number };
 export type OddsOverUnder = { over: number; under: number };
@@ -21,6 +24,10 @@ export type HistoricalMatch = {
   closingAvg: Odds1x2 | null;
   closingOu25Pinnacle?: OddsOverUnder | null;
   closingOu25Avg?: OddsOverUnder | null;
+  preClosingPinnacle?: Odds1x2 | null;
+  preClosingAvg?: Odds1x2 | null;
+  preClosingOu25Pinnacle?: OddsOverUnder | null;
+  preClosingOu25Avg?: OddsOverUnder | null;
 };
 
 // Split simples por vírgula: o CSV do football-data não tem campos entre aspas.
@@ -101,6 +108,10 @@ export function parseFootballDataCsv(text: string): HistoricalMatch[] {
       closingAvg: odds1x2(row, "AvgC"),
       closingOu25Pinnacle: oddsOu25(row, "PC"),
       closingOu25Avg: oddsOu25(row, "AvgC"),
+      preClosingPinnacle: odds1x2(row, "PS"),
+      preClosingAvg: odds1x2(row, "Avg"),
+      preClosingOu25Pinnacle: oddsOu25(row, "P"),
+      preClosingOu25Avg: oddsOu25(row, "Avg"),
     });
   }
   // sort estável: preserva a ordem do CSV dentro do mesmo dia.

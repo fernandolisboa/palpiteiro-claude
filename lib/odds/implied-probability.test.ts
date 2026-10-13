@@ -1,6 +1,9 @@
 import { describe, it, expect } from "vitest";
 
-import { computeMarketImpliedProbabilities } from "@/lib/odds/implied-probability";
+import {
+  computeMarketImpliedProbabilities,
+  devigMarket,
+} from "@/lib/odds/implied-probability";
 
 // over/under (N=2) é só o caso particular do core N-ário — o wrapper binário
 // `computeImpliedProbabilities` saiu na Fase 5; os callers passam [over, under].
@@ -88,5 +91,68 @@ describe("computeMarketImpliedProbabilities", () => {
     expect(() =>
       computeMarketImpliedProbabilities([Infinity, 3.4, 3.6]),
     ).toThrow();
+  });
+});
+
+describe("devigMarket (report 13)", () => {
+  const odds = [1.5, 4.5, 7.0];
+
+  it("proportional is byte-identical to the core", () => {
+    expect(devigMarket(odds, "proportional")).toEqual(
+      computeMarketImpliedProbabilities(odds),
+    );
+  });
+
+  it("Shin matches an independent solve (z ≈ 0.016017)", () => {
+    // Goldens from a 200-step bisection in Python on the Shin closed form.
+    const { probs, overround } = devigMarket(odds, "shin");
+    expect(probs[0]).toBeCloseTo(0.65356159, 6);
+    expect(probs[1]).toBeCloseTo(0.2125615, 6);
+    expect(probs[2]).toBeCloseTo(0.1338769, 6);
+    expect(probs.reduce((a, b) => a + b, 0)).toBeCloseTo(1, 10);
+    expect(overround).toBeCloseTo(
+      computeMarketImpliedProbabilities(odds).overround,
+      12,
+    );
+  });
+
+  it("power matches an independent solve (k ≈ 1.036841)", () => {
+    const { probs } = devigMarket(odds, "power");
+    expect(probs[0]).toBeCloseTo(0.6567822, 6);
+    expect(probs[1]).toBeCloseTo(0.21024348, 6);
+    expect(probs[2]).toBeCloseTo(0.13297432, 6);
+    expect(probs.reduce((a, b) => a + b, 0)).toBeCloseTo(1, 10);
+  });
+
+  it("moves probability from the longshot to the favourite vs proportional", () => {
+    const prop = devigMarket(odds, "proportional").probs;
+    for (const method of ["shin", "power"] as const) {
+      const p = devigMarket(odds, method).probs;
+      expect(p[0]).toBeGreaterThan(prop[0]);
+      expect(p[2]).toBeLessThan(prop[2]);
+    }
+  });
+
+  it("falls back to proportional for Shin when the book has no margin", () => {
+    // Σ 1/odd < 1 (e.g. best price across books): no z ≥ 0 exists.
+    const noMargin = [2.1, 2.1];
+    expect(devigMarket(noMargin, "shin")).toEqual(
+      computeMarketImpliedProbabilities(noMargin),
+    );
+    expect(devigMarket([2, 2], "power").probs[0]).toBeCloseTo(0.5, 10);
+  });
+
+  it("never returns an unsolved endpoint on extreme odds", () => {
+    // Favorito quase certo: sem raiz no intervalo da bisseção → proporcional.
+    for (const method of ["shin", "power"] as const) {
+      const { probs } = devigMarket([1.001, 30], method);
+      expect(probs.every(Number.isFinite)).toBe(true);
+      expect(probs[0] + probs[1]).toBeCloseTo(1, 10);
+    }
+  });
+
+  it("keeps the core's validation", () => {
+    expect(() => devigMarket([2.1, 1, 3.6], "shin")).toThrow();
+    expect(() => devigMarket([], "power")).toThrow();
   });
 });

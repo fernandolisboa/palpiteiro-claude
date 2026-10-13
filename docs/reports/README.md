@@ -33,6 +33,7 @@ em ondas, o placar dos 8 pedidos). Depois mergulhe conforme o interesse:
 | 10 | [Backtest Dixon-Coles](./10-backtest-dixon-coles.md) | DC vs λ heurístico vs mercado no Brasileirão (ADR 0039, #502) |
 | 11 | [Revisão legal](./11-revisao-legal.md) | Conformidade do que está no ar (LGPD, Lei 14.790, CDC, Marco Civil) — decidida por delegação, ADRs 0046-0048 |
 | 12 | [Backtest Dixon-Coles na Europa](./12-backtest-dixon-coles-europa.md) | O mesmo backtest na Premier League e em La Liga, com o mercado também no over 2.5 |
+| 13 | [Calibração: Shin e mistura com o mercado](./13-calibracao-shin-e-mistura-mercado.md) | De-vig de Shin/potência vs proporcional e mistura DC + mercado em walk-forward; apostas de valor do DC puro perdem em CLV |
 
 ## Fios que cruzam vários reports
 

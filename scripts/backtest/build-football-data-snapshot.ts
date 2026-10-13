@@ -18,7 +18,8 @@
  * Season = ano de INÍCIO (2023 = 2023/24), pra a temporada ser um inteiro como no
  * Brasileirão. Além das odds de fechamento 1X2 (PSC*, AvgC*), copia as de
  * fechamento de over/under 2.5 (PC>2.5, PC<2.5, AvgC>2.5, AvgC<2.5), que o arquivo
- * do Brasileirão não tem — é o benchmark de mercado do over 2.5. Temporadas antigas
+ * do Brasileirão não tem — é o benchmark de mercado do over 2.5 — e as de
+ * PRÉ-fechamento dos dois mercados (PS*, Avg*, P>2.5, Avg>2.5). Temporadas antigas
  * sem alguma coluna (ex.: 2018/19 não tem AvgC*) saem com a célula vazia; servem só
  * de histórico pro ajuste.
  */
@@ -45,6 +46,18 @@ const ODDS_COLUMNS = [
   "PC<2.5",
   "AvgC>2.5",
   "AvgC<2.5",
+  // Pré-fechamento (coletadas dias antes do jogo): o análogo das odds que a
+  // produção vê ao analisar (report 13).
+  "PSH",
+  "PSD",
+  "PSA",
+  "AvgH",
+  "AvgD",
+  "AvgA",
+  "P>2.5",
+  "P<2.5",
+  "Avg>2.5",
+  "Avg<2.5",
 ] as const;
 
 function arg(name: string): string {
