@@ -5,7 +5,7 @@ import { describe, expect, it } from "vitest";
 
 import { RISK_DISCLAIMER } from "@/lib/view/share/disclaimer";
 
-// Guards de fonte do bloco "Seu palpite" (#564, ADR 0054 Decisão 8): leitura de
+// Guards de fonte do bloco "Seu palpite" (#564, ADR 0055 Decisão 8): leitura de
 // probabilidade, não dica. Aviso de risco §3 verbatim, nada de "apostar"/"cupom" e
 // nenhum termo de preço de casa ou vantagem no código da UI (fora de comentários).
 

@@ -1,4 +1,4 @@
-# ADR 0054 — Contexto do usuário como afirmações a conferir ("Seu palpite")
+# ADR 0055 — Contexto do usuário como afirmações a conferir ("Seu palpite")
 
 ## Status
 
@@ -20,7 +20,7 @@ O usuário quer dar o próprio palpite e explicar o porquê ("o Palmeiras está 
 8. **Chamadas pelo seam `AIProvider`, fora do `predict.ts`** (precedente do ADR 0036 / `bet-parse`), com log em `ai_calls` (`user_palpite_extract_v1` na Haiku 4.5 pinada; `user_palpite_narrate_v1` no modelo de análise do usuário, até 2.000 tokens, `effort: "low"` em modelo adaptive). Custa 1 do limite diário de palpites (`checkPalpitesRateLimit`, fail-closed pra não-admin), cobrado só depois de todos os gates grátis, inclusive "tem modelo". Depois da cobrança o request não falha.
 9. **Kill-switch `ai_config.enable_user_context`** (default ON, no `/admin/settings`). Desligado, o bloco mostra só a leitura pelos botões. A leitura pelos botões nunca é gateada.
 10. **Envelope legal** (ADR 0048/0053): leitura de probabilidade, sem odd, edge, stake ou valor no bloco, aviso de risco §3 verbatim e nenhum "apostar"/"cupom". "Adicionar às suas apostas" só preenche a lista de registro do ADR 0053, por uma ponte de contexto no cliente.
-11. **Persistência append-only** em `user_palpite_analyses` (migration 0056): palpite, motivo cru, afirmações conferidas, modelo (λ base/sem/com, respostas JEV, evidência, multiplicadores e todas as versões), leituras e narração; FKs `restrict` em usuário e jogo, `set null` nas `ai_calls`. Coberta pela exclusão de conta (emenda ao ADR 0046: DELETE por usuário e redação de `ai_calls` com `prompt_version LIKE 'user_palpite%'`).
+11. **Persistência append-only** em `user_palpite_analyses` (migration 0057): palpite, motivo cru, afirmações conferidas, modelo (λ base/sem/com, respostas JEV, evidência, multiplicadores e todas as versões), leituras e narração; FKs `restrict` em usuário e jogo, `set null` nas `ai_calls`. Coberta pela exclusão de conta (emenda ao ADR 0046: DELETE por usuário e redação de `ai_calls` com `prompt_version LIKE 'user_palpite%'`).
 
 ## Alternativas rejeitadas
 

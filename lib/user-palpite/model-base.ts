@@ -12,7 +12,7 @@ import type {
 } from "@/lib/quant/match-model";
 
 
-// Seam do modelo do "Seu palpite" (#564, ADR 0054). Server-only (lê o banco e, no
+// Seam do modelo do "Seu palpite" (#564, ADR 0055). Server-only (lê o banco e, no
 // fallback, o provider), mas sem `import "server-only"`: o pacote não está nas deps e o
 // cliente só faz `import type` daqui.
 //

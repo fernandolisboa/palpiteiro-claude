@@ -115,7 +115,7 @@ describe("computeReadings", () => {
     expect(r.with.palpitePct).toBeLessThan(r.without.palpitePct);
   });
 
-  // Teto real (ADR 0054 Decisão 5): a resposta combinada nunca passa de max(JEV, 0.85) e
+  // Teto real (ADR 0055 Decisão 5): a resposta combinada nunca passa de max(JEV, 0.85) e
   // o fator não se afasta de 1 mais do que o fator desse teto. Um "somar" no lugar de
   // "máximo" reprova (jev 0.3 + usuário 0.85 passaria de 0.85).
   it("teto real: combinado ≤ max(JEV, 0.85) e |fator − 1| ≤ |factorMultiplier(f, max(JEV, 0.85)) − 1|", () => {

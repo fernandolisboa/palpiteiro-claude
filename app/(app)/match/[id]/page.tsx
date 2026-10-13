@@ -1,7 +1,7 @@
 import Link from "next/link";
 import { notFound, redirect } from "next/navigation";
 import { Suspense } from "react";
-import { ChevronLeft } from "lucide-react";
+import { ChevronLeft, Users } from "lucide-react";
 
 import { MarketAnalysisSections } from "@/components/market-analysis-section";
 import { MatchCollapsible } from "@/components/match-collapsible";
@@ -482,7 +482,8 @@ function MobileMatch({
           <ChevronLeft className="size-3.5" />
           <span className="text-body-sm tracking-tight">jogos</span>
         </Link>
-        <div className="flex items-center gap-2">
+        <div className="flex items-center gap-3">
+          {unavailableReason === null && <PoolLink matchId={matchId} />}
           <span className="font-mono text-eyebrow-xs uppercase tracking-eyebrow text-muted-fg-2">
             match · {matchId.slice(0, 8)}
           </span>
@@ -604,13 +605,16 @@ function DesktopMatch({
   return (
     <>
       <div className="mx-auto w-full max-w-content px-8 pt-8 pb-16">
-        <Link
-          href={backHref}
-          className="mb-6 inline-flex items-center gap-2 rounded-sm text-muted-foreground hover:text-foreground focus-visible:outline-none focus-visible:ring-[3px] focus-visible:ring-ring/50"
-        >
-          <ChevronLeft className="size-3.5" />
-          <span className="text-body-sm tracking-tight">jogos</span>
-        </Link>
+        <div className="mb-6 flex items-center justify-between">
+          <Link
+            href={backHref}
+            className="inline-flex items-center gap-2 rounded-sm text-muted-foreground hover:text-foreground focus-visible:outline-none focus-visible:ring-[3px] focus-visible:ring-ring/50"
+          >
+            <ChevronLeft className="size-3.5" />
+            <span className="text-body-sm tracking-tight">jogos</span>
+          </Link>
+          {unavailableReason === null && <PoolLink matchId={matchId} />}
+        </div>
 
         {/* Identidade do jogo FULL-WIDTH no topo. */}
         <div className="pb-6">
@@ -755,5 +759,19 @@ function NotAnalyzableNotice({
       </span>
       <p className="text-body-sm text-muted-foreground tracking-tight">{detail}</p>
     </div>
+  );
+}
+
+// Atalho pro bolão entre amigos (#567) com o jogo já escolhido. Só antes do apito: as
+// apostas do bolão fecham no início do jogo.
+function PoolLink({ matchId }: { matchId: string }) {
+  return (
+    <Link
+      href={`/bolao?jogo=${matchId}`}
+      className="inline-flex items-center gap-1.5 rounded-sm text-body-sm tracking-tight text-muted-foreground hover:text-foreground focus-visible:outline-none focus-visible:ring-[3px] focus-visible:ring-ring/50"
+    >
+      <Users className="size-3.5" aria-hidden />
+      criar bolão
+    </Link>
   );
 }

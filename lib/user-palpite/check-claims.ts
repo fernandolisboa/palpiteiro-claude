@@ -25,7 +25,7 @@ import type {
   PlayerCheck,
 } from "./types";
 
-// Conferência das afirmações do usuário com os NOSSOS dados (#564, ADR 0054 Decisão 2).
+// Conferência das afirmações do usuário com os NOSSOS dados (#564, ADR 0055 Decisão 2).
 // PURO: os fatos chegam prontos (lib/user-palpite/facts.ts). Cada afirmação sai
 // confirmada, contradita ou não verificável, com a evidência em PT-BR citando o dado e
 // os sinais que ela manda aos fatores do JEV (lib/user-palpite/evidence.ts). A evidência

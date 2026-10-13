@@ -397,8 +397,15 @@
     {
       "idx": 56,
       "version": "7",
-      "when": 1791902737069,
-      "tag": "0056_user_palpite_analyses",
+      "when": 1791908522534,
+      "tag": "0056_friend_pools",
+      "breakpoints": true
+    },
+    {
+      "idx": 57,
+      "version": "7",
+      "when": 1791913247731,
+      "tag": "0057_user_palpite_analyses",
       "breakpoints": true
     }
   ]

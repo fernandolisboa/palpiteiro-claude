@@ -876,7 +876,7 @@ export const aiConfig = pgTable("ai_config", {
   // IA" reusa essas respostas. Default ON. SET ... = false → a base usa só o
   // Dixon-Coles (ou o heurístico da tabela), sem chamada JEV no cron.
   enableMatchModelJev: boolean().notNull().default(true),
-  // Kill-switch do LLM do "Seu palpite" (#564, ADR 0054) e, depois, do contexto extra da
+  // Kill-switch do LLM do "Seu palpite" (#564, ADR 0055) e, depois, do contexto extra da
   // análise (#565). Default ON. SET ... = false → o bloco mostra só a leitura pelos
   // botões (grátis, sem IA), que nunca é gateada.
   enableUserContext: boolean().notNull().default(true),
@@ -1009,7 +1009,63 @@ export const matchModelSnapshots = pgTable(
   ],
 );
 
-// Análises do palpite do usuário (#564, ADR 0054): o palpite escolhido nos botões, o
+// Bolão entre amigos (#567, ADR 0054): o usuário logado cadastra a aposta de cada
+// amigo num jogo, e os ganhadores saem em código do placar final (regras puras de
+// USER_BET_SETTLEMENT_RULES). Nada aqui é do modelo: sem probabilidade, sem odd, sem
+// LLM. O app não recebe nem guarda dinheiro; `entryAmountCents` só alimenta a conta
+// da divisão. Nomes dos amigos são dado de terceiro: a exclusão de conta apaga os
+// bolões do titular (passo próprio no runbook do ADR 0046; o `users` vira lápide, não
+// é deletado, por isso o FK é restrict como o de bet_slips). Placar manual (os dois ou
+// nenhum) sobrepõe o do jogo.
+export const friendPools = pgTable(
+  "friend_pools",
+  {
+    id: uuid().primaryKey().defaultRandom(),
+    userId: uuid()
+      .notNull()
+      .references(() => users.id, { onDelete: "restrict" }),
+    matchId: uuid()
+      .notNull()
+      .references(() => matches.id, { onDelete: "restrict" }),
+    title: text(),
+    entryAmountCents: integer(),
+    manualHomeScore: integer(),
+    manualAwayScore: integer(),
+    createdAt: timestamp({ withTimezone: true }).notNull().defaultNow(),
+    updatedAt: timestamp({ withTimezone: true }).notNull().defaultNow(),
+  },
+  (t) => [
+    index("friend_pools_user_id_created_at_idx").on(t.userId, t.createdAt),
+    index("friend_pools_match_id_idx").on(t.matchId),
+    check(
+      "friend_pools_manual_score_check",
+      sql`(${t.manualHomeScore} IS NULL AND ${t.manualAwayScore} IS NULL) OR (${t.manualHomeScore} IS NOT NULL AND ${t.manualAwayScore} IS NOT NULL AND ${t.manualHomeScore} >= 0 AND ${t.manualAwayScore} >= 0)`,
+    ),
+    check(
+      "friend_pools_entry_amount_check",
+      sql`${t.entryAmountCents} IS NULL OR ${t.entryAmountCents} > 0`,
+    ),
+  ],
+);
+
+// Um apostador e a aposta dele. `kind`/`params` são os mesmos da perna de aposta
+// (BetLegParams, validados pelos schemas das regras de settlement no boundary).
+export const friendPoolEntries = pgTable(
+  "friend_pool_entries",
+  {
+    id: uuid().primaryKey().defaultRandom(),
+    poolId: uuid()
+      .notNull()
+      .references(() => friendPools.id, { onDelete: "cascade" }),
+    bettorName: text().notNull(),
+    kind: betLegKindEnum().notNull(),
+    params: jsonb().$type<BetLegParams>().notNull(),
+    createdAt: timestamp({ withTimezone: true }).notNull().defaultNow(),
+  },
+  (t) => [index("friend_pool_entries_pool_id_idx").on(t.poolId, t.createdAt)],
+);
+
+// Análises do palpite do usuário (#564, ADR 0055): o palpite escolhido nos botões, o
 // motivo que ele escreveu, as afirmações conferidas em código, as leituras do modelo
 // sem e com o contexto dele e a narração. Append-only (uma row por "Analisar meu
 // palpite"; a página lê a mais recente). Ler/escrever via

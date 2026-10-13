@@ -100,7 +100,9 @@ export default function PrivacidadePage() {
                 registrar no app (inclusive o texto livre que você digitar para descrevê-las),
                 e o motivo que você escrever para um palpite seu (em &quot;Analisar meu
                 palpite&quot;), com a análise que sai dele. Não escreva nesses campos dados
-                pessoais seus ou de outras pessoas.
+                pessoais seus ou de outras pessoas. No <Strong>bolão</Strong>, os nomes dos
+                amigos que você anota junto com a aposta de cada um: use só o primeiro nome ou
+                um apelido, e só de quem topou participar.
               </li>
               <li>
                 <Strong>Técnicos e de segurança:</Strong> endereço IP e e-mail usados nos
@@ -217,8 +219,9 @@ export default function PrivacidadePage() {
               (a partir do e-mail da conta, para confirmarmos que é você). Em até{" "}
               {DATA_REQUEST_RESPONSE_DAYS} dias nós: apagamos seu e-mail, nome, imagem, vínculos
               de login (Google e passkeys) e a data de aceite; apagamos as apostas que você
-              registrou, inclusive o texto livre; apagamos os motivos que você escreveu para
-              os seus palpites e as análises deles; e desativamos os links públicos dos palpites
+              registrou, inclusive o texto livre, e os seus bolões com os nomes e apostas dos
+              amigos; apagamos os motivos que você escreveu para os seus palpites e as análises
+              deles; e desativamos os links públicos dos palpites
               que você compartilhou. As análises e palpites gerados pela IA sobre as partidas
               ficam guardados <Strong>sem nenhum dado que identifique você</Strong> (anonimizados),
               só para a estatística agregada de desempenho do modelo, com acesso vedado a

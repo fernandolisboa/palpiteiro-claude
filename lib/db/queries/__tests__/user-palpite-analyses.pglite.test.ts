@@ -1,6 +1,6 @@
 // @vitest-environment node
 //
-// Análises do "Seu palpite" (#564, ADR 0054) contra Postgres REAL via pglite, com as
+// Análises do "Seu palpite" (#564, ADR 0055) contra Postgres REAL via pglite, com as
 // migrations reais: insert + a mais recente por (usuário, jogo), row inválida vira null,
 // FK `set null` ao apagar a ai_call e o DELETE por usuário da exclusão de conta (emenda
 // ao ADR 0046) passando pelas FKs.

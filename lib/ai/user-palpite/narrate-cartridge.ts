@@ -23,7 +23,7 @@ import {
 
 import { fenceSafe } from "./extract-cartridge";
 
-// Cartucho da NARRAÇÃO do "Seu palpite" (#564, ADR 0054). O modelo de placar e o código
+// Cartucho da NARRAÇÃO do "Seu palpite" (#564, ADR 0055). O modelo de placar e o código
 // já decidiram tudo (leituras, status de cada afirmação, veredito); o LLM só escreve em
 // PT-BR, citando os números da "Leitura". O motivo cru do usuário NUNCA entra aqui: só as
 // paráfrases validadas (sem nome de jogador), cercadas. Mudou prompt ou tool → bump +

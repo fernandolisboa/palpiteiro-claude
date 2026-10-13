@@ -1,4 +1,4 @@
--- Seu palpite (#564, ADR 0054). IF NOT EXISTS / DO block: o DB de preview da Vercel é compartilhado entre branches.
+-- Seu palpite (#564, ADR 0055). IF NOT EXISTS / DO block: o DB de preview da Vercel é compartilhado entre branches.
 CREATE TABLE IF NOT EXISTS "user_palpite_analyses" (
 	"id" uuid PRIMARY KEY DEFAULT gen_random_uuid() NOT NULL,
 	"user_id" uuid NOT NULL,

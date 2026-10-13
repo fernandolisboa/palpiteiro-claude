@@ -5,7 +5,7 @@ import type { PalpiteNarration } from "@/lib/user-palpite/types";
 
 import { allowedPercents, type NarrationInput } from "./narrate-cartridge";
 
-// Guardas da narração do "Seu palpite" (#564, ADR 0054 Decisão 5). Puras, nunca lançam,
+// Guardas da narração do "Seu palpite" (#564, ADR 0055 Decisão 5). Puras, nunca lançam,
 // e rodam SÓ nos campos que o LLM escreveu (o template usa texto do código). Reprovou →
 // a narração vira o template e a row de ai_calls fica `invalid_output`.
 

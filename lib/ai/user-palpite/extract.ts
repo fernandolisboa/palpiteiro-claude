@@ -19,7 +19,7 @@ import {
   extractTool,
 } from "./extract-cartridge";
 
-// Extração Haiku do motivo do "Seu palpite" (#564, ADR 0054) pelo seam AIProvider, com
+// Extração Haiku do motivo do "Seu palpite" (#564, ADR 0055) pelo seam AIProvider, com
 // log em `ai_calls` — mesma disciplina de lib/ai/bet-parse/parse.ts: nunca SDK direto,
 // nunca por predict.ts. Sem `canFitCall`: a action começa agora e a extração é a 1ª
 // chamada (cabe sempre); o `deadlineAt` ainda vai pro adapter cortar o timeout.

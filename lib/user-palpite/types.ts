@@ -7,7 +7,7 @@ import type {
   TeamSide,
 } from "@/lib/ai/judgments/types";
 
-// Tipos e schemas do "Seu palpite" (#564, ADR 0054). Módulo seguro no cliente: só Zod
+// Tipos e schemas do "Seu palpite" (#564, ADR 0055). Módulo seguro no cliente: só Zod
 // e tipos (o componente importa os schemas e o BridgeLeg daqui). Toda leitura das
 // colunas jsonb de `user_palpite_analyses` passa pelos schemas Stored* (padrão de
 // lib/model-base/types.ts): o Postgres não garante a forma.

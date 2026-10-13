@@ -1160,3 +1160,5 @@ Review adversarial do plano feito antes da implementação. Onde este bloco e o 
 26. Sem o pglite que executa o runbook do ADR 0046 como string. Fica a emenda do ADR (incluindo a lista "Onde há PII hoje") e um teste de que o `DELETE` por usuário funciona com as FKs.
 27. Índice sem `DESC`. Sem `warn` por versão de pesos (gravar as duas versões basta).
 28. Migration `0056`, ADR `0054` (a Fase 1 ficou com `0055_match_model_snapshots.sql` e ADR 0052).
+
+> **Nota pós-merge (2026-10-13):** o bolão (#568) chegou antes ao main com a migration `0056_friend_pools.sql` e o ADR 0054, então este trabalho ficou com a migration `0057_user_palpite_analyses.sql` e o ADR 0055.

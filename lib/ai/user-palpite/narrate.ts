@@ -34,7 +34,7 @@ import {
   type NarrationInput,
 } from "./narrate-cartridge";
 
-// Narração do "Seu palpite" (#564, ADR 0054) com o modelo de análise do usuário (a
+// Narração do "Seu palpite" (#564, ADR 0055) com o modelo de análise do usuário (a
 // cascata do predict: preferência filtrada pela audiência, senão o default global), pelo
 // seam AIProvider e com log em `ai_calls`. Orçamento pequeno de propósito: o texto é
 // curto e o veredito/números já vêm do código. NUNCA lança: qualquer falha (sem chave,

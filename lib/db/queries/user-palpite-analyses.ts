@@ -20,7 +20,7 @@ import {
 } from "@/lib/user-palpite/types";
 import { z } from "zod";
 
-// Fronteira ÚNICA de `user_palpite_analyses` (#564, ADR 0054). Append-only: só insert e
+// Fronteira ÚNICA de `user_palpite_analyses` (#564, ADR 0055). Append-only: só insert e
 // leitura da mais recente. Toda leitura passa pelo Zod; row inválida → null com log,
 // nunca derruba a página. O `reason_text` não volta na leitura: a página não reexibe o
 // texto cru.

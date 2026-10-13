@@ -13,7 +13,7 @@ import type {
   UserPalpite,
 } from "./types";
 
-// Evidência do usuário nos fatores do JEV (#564, ADR 0054 Decisão 3). É o ÚNICO caminho
+// Evidência do usuário nos fatores do JEV (#564, ADR 0055 Decisão 3). É o ÚNICO caminho
 // de uma afirmação até o número: noul por pergunta, combinado com o JEV por MÁXIMO e
 // passando pelo mesmo applyJudgments (unilateral, com o clamp sobre o λ base).
 //

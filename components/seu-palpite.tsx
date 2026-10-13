@@ -37,7 +37,7 @@ import {
   type UserPalpiteAnalysisView,
 } from "@/lib/view/user-palpite";
 
-// Bloco "Seu palpite" da página do jogo (#564, ADR 0054). Duas camadas:
+// Bloco "Seu palpite" da página do jogo (#564, ADR 0055). Duas camadas:
 // 1. leitura GRÁTIS pelos botões: o cliente refaz a matriz com o λ/ρ que o servidor
 //    serializou e lê na hora, sem round-trip e sem IA;
 // 2. "Analisar meu palpite" (opcional, conta 1 do limite diário de palpites): a IA lê

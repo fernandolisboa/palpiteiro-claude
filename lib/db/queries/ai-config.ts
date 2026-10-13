@@ -282,7 +282,7 @@ export async function getEnableMatchModelJev(): Promise<boolean> {
 }
 
 /**
- * Kill-switch do LLM do "Seu palpite" (#564, ADR 0054) e do contexto extra da análise
+ * Kill-switch do LLM do "Seu palpite" (#564, ADR 0055) e do contexto extra da análise
  * (#565). Default ON quando não há row. false → o bloco mostra só a leitura pelos
  * botões (grátis, sem IA), que nunca é gateada.
  */

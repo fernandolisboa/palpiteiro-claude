@@ -68,7 +68,7 @@ import {
   type UserPalpiteAnalysisView,
 } from "@/lib/view/user-palpite";
 
-// "Analisar meu palpite" (#564, ADR 0054). Todos os gates grátis (input, sessão,
+// "Analisar meu palpite" (#564, ADR 0055). Todos os gates grátis (input, sessão,
 // acesso, flag, jogo, analisável, TEM MODELO) vêm antes da cobrança, como em
 // generatePalpiteFromAnalyses; depois da cobrança o request nunca falha: extração que
 // falha vira leitura sem o texto, narração que falha vira template, insert que falha

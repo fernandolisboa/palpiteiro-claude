@@ -6,7 +6,7 @@ import type { FixtureRef } from "@/lib/providers/sports-data/types";
 
 import type { Availability, PalpiteFacts } from "./check-claims";
 
-// Fatos pra conferir as afirmações do "Seu palpite" (#564, ADR 0054). Só o que as
+// Fatos pra conferir as afirmações do "Seu palpite" (#564, ADR 0055). Só o que as
 // afirmações citam (factsNeeded): zero afirmações = zero chamadas. Cada busca tem o seu
 // teto de tempo e falha sozinha (allSettled). Qualquer erro vira "indisponível", nunca
 // lista vazia: aqui um vazio confirmaria "time completo" em falso. Isso difere de

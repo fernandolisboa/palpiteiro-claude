@@ -1,5 +1,5 @@
 {
-  "id": "1c646430-668d-415b-89ea-91490818ad43",
+  "id": "ba8e9394-c01c-4922-9493-c2b5cb758f12",
   "prevId": "3831441d-4b44-416e-9636-741e20086883",
   "version": "7",
   "dialect": "postgresql",
@@ -372,13 +372,6 @@
         },
         "enable_match_model_jev": {
           "name": "enable_match_model_jev",
-          "type": "boolean",
-          "primaryKey": false,
-          "notNull": true,
-          "default": true
-        },
-        "enable_user_context": {
-          "name": "enable_user_context",
           "type": "boolean",
           "primaryKey": false,
           "notNull": true,
@@ -905,6 +898,237 @@
       "uniqueConstraints": {},
       "policies": {},
       "checkConstraints": {},
+      "isRLSEnabled": false
+    },
+    "public.friend_pool_entries": {
+      "name": "friend_pool_entries",
+      "schema": "",
+      "columns": {
+        "id": {
+          "name": "id",
+          "type": "uuid",
+          "primaryKey": true,
+          "notNull": true,
+          "default": "gen_random_uuid()"
+        },
+        "pool_id": {
+          "name": "pool_id",
+          "type": "uuid",
+          "primaryKey": false,
+          "notNull": true
+        },
+        "bettor_name": {
+          "name": "bettor_name",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": true
+        },
+        "kind": {
+          "name": "kind",
+          "type": "bet_leg_kind",
+          "typeSchema": "public",
+          "primaryKey": false,
+          "notNull": true
+        },
+        "params": {
+          "name": "params",
+          "type": "jsonb",
+          "primaryKey": false,
+          "notNull": true
+        },
+        "created_at": {
+          "name": "created_at",
+          "type": "timestamp with time zone",
+          "primaryKey": false,
+          "notNull": true,
+          "default": "now()"
+        }
+      },
+      "indexes": {
+        "friend_pool_entries_pool_id_idx": {
+          "name": "friend_pool_entries_pool_id_idx",
+          "columns": [
+            {
+              "expression": "pool_id",
+              "isExpression": false,
+              "asc": true,
+              "nulls": "last"
+            },
+            {
+              "expression": "created_at",
+              "isExpression": false,
+              "asc": true,
+              "nulls": "last"
+            }
+          ],
+          "isUnique": false,
+          "concurrently": false,
+          "method": "btree",
+          "with": {}
+        }
+      },
+      "foreignKeys": {
+        "friend_pool_entries_pool_id_friend_pools_id_fk": {
+          "name": "friend_pool_entries_pool_id_friend_pools_id_fk",
+          "tableFrom": "friend_pool_entries",
+          "tableTo": "friend_pools",
+          "columnsFrom": [
+            "pool_id"
+          ],
+          "columnsTo": [
+            "id"
+          ],
+          "onDelete": "cascade",
+          "onUpdate": "no action"
+        }
+      },
+      "compositePrimaryKeys": {},
+      "uniqueConstraints": {},
+      "policies": {},
+      "checkConstraints": {},
+      "isRLSEnabled": false
+    },
+    "public.friend_pools": {
+      "name": "friend_pools",
+      "schema": "",
+      "columns": {
+        "id": {
+          "name": "id",
+          "type": "uuid",
+          "primaryKey": true,
+          "notNull": true,
+          "default": "gen_random_uuid()"
+        },
+        "user_id": {
+          "name": "user_id",
+          "type": "uuid",
+          "primaryKey": false,
+          "notNull": true
+        },
+        "match_id": {
+          "name": "match_id",
+          "type": "uuid",
+          "primaryKey": false,
+          "notNull": true
+        },
+        "title": {
+          "name": "title",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": false
+        },
+        "entry_amount_cents": {
+          "name": "entry_amount_cents",
+          "type": "integer",
+          "primaryKey": false,
+          "notNull": false
+        },
+        "manual_home_score": {
+          "name": "manual_home_score",
+          "type": "integer",
+          "primaryKey": false,
+          "notNull": false
+        },
+        "manual_away_score": {
+          "name": "manual_away_score",
+          "type": "integer",
+          "primaryKey": false,
+          "notNull": false
+        },
+        "created_at": {
+          "name": "created_at",
+          "type": "timestamp with time zone",
+          "primaryKey": false,
+          "notNull": true,
+          "default": "now()"
+        },
+        "updated_at": {
+          "name": "updated_at",
+          "type": "timestamp with time zone",
+          "primaryKey": false,
+          "notNull": true,
+          "default": "now()"
+        }
+      },
+      "indexes": {
+        "friend_pools_user_id_created_at_idx": {
+          "name": "friend_pools_user_id_created_at_idx",
+          "columns": [
+            {
+              "expression": "user_id",
+              "isExpression": false,
+              "asc": true,
+              "nulls": "last"
+            },
+            {
+              "expression": "created_at",
+              "isExpression": false,
+              "asc": true,
+              "nulls": "last"
+            }
+          ],
+          "isUnique": false,
+          "concurrently": false,
+          "method": "btree",
+          "with": {}
+        },
+        "friend_pools_match_id_idx": {
+          "name": "friend_pools_match_id_idx",
+          "columns": [
+            {
+              "expression": "match_id",
+              "isExpression": false,
+              "asc": true,
+              "nulls": "last"
+            }
+          ],
+          "isUnique": false,
+          "concurrently": false,
+          "method": "btree",
+          "with": {}
+        }
+      },
+      "foreignKeys": {
+        "friend_pools_user_id_users_id_fk": {
+          "name": "friend_pools_user_id_users_id_fk",
+          "tableFrom": "friend_pools",
+          "tableTo": "users",
+          "columnsFrom": [
+            "user_id"
+          ],
+          "columnsTo": [
+            "id"
+          ],
+          "onDelete": "restrict",
+          "onUpdate": "no action"
+        },
+        "friend_pools_match_id_matches_id_fk": {
+          "name": "friend_pools_match_id_matches_id_fk",
+          "tableFrom": "friend_pools",
+          "tableTo": "matches",
+          "columnsFrom": [
+            "match_id"
+          ],
+          "columnsTo": [
+            "id"
+          ],
+          "onDelete": "restrict",
+          "onUpdate": "no action"
+        }
+      },
+      "compositePrimaryKeys": {},
+      "uniqueConstraints": {},
+      "policies": {},
+      "checkConstraints": {
+        "friend_pools_manual_score_check": {
+          "name": "friend_pools_manual_score_check",
+          "value": "(\"friend_pools\".\"manual_home_score\" IS NULL AND \"friend_pools\".\"manual_away_score\" IS NULL) OR (\"friend_pools\".\"manual_home_score\" IS NOT NULL AND \"friend_pools\".\"manual_away_score\" IS NOT NULL AND \"friend_pools\".\"manual_home_score\" >= 0 AND \"friend_pools\".\"manual_away_score\" >= 0)"
+        },
+        "friend_pools_entry_amount_check": {
+          "name": "friend_pools_entry_amount_check",
+          "value": "\"friend_pools\".\"entry_amount_cents\" IS NULL OR \"friend_pools\".\"entry_amount_cents\" > 0"
+        }
+      },
       "isRLSEnabled": false
     },
     "public.league_settings": {
@@ -2589,186 +2813,6 @@
           ]
         }
       },
-      "uniqueConstraints": {},
-      "policies": {},
-      "checkConstraints": {},
-      "isRLSEnabled": false
-    },
-    "public.user_palpite_analyses": {
-      "name": "user_palpite_analyses",
-      "schema": "",
-      "columns": {
-        "id": {
-          "name": "id",
-          "type": "uuid",
-          "primaryKey": true,
-          "notNull": true,
-          "default": "gen_random_uuid()"
-        },
-        "user_id": {
-          "name": "user_id",
-          "type": "uuid",
-          "primaryKey": false,
-          "notNull": true
-        },
-        "match_id": {
-          "name": "match_id",
-          "type": "uuid",
-          "primaryKey": false,
-          "notNull": true
-        },
-        "palpite": {
-          "name": "palpite",
-          "type": "jsonb",
-          "primaryKey": false,
-          "notNull": true
-        },
-        "palpite_source": {
-          "name": "palpite_source",
-          "type": "text",
-          "primaryKey": false,
-          "notNull": true
-        },
-        "reason_text": {
-          "name": "reason_text",
-          "type": "text",
-          "primaryKey": false,
-          "notNull": true
-        },
-        "claims": {
-          "name": "claims",
-          "type": "jsonb",
-          "primaryKey": false,
-          "notNull": true
-        },
-        "model": {
-          "name": "model",
-          "type": "jsonb",
-          "primaryKey": false,
-          "notNull": true
-        },
-        "reading": {
-          "name": "reading",
-          "type": "jsonb",
-          "primaryKey": false,
-          "notNull": true
-        },
-        "narration": {
-          "name": "narration",
-          "type": "jsonb",
-          "primaryKey": false,
-          "notNull": true
-        },
-        "narration_source": {
-          "name": "narration_source",
-          "type": "text",
-          "primaryKey": false,
-          "notNull": true
-        },
-        "extraction_ai_call_id": {
-          "name": "extraction_ai_call_id",
-          "type": "uuid",
-          "primaryKey": false,
-          "notNull": false
-        },
-        "narration_ai_call_id": {
-          "name": "narration_ai_call_id",
-          "type": "uuid",
-          "primaryKey": false,
-          "notNull": false
-        },
-        "created_at": {
-          "name": "created_at",
-          "type": "timestamp with time zone",
-          "primaryKey": false,
-          "notNull": true,
-          "default": "now()"
-        }
-      },
-      "indexes": {
-        "user_palpite_analyses_user_match_created_idx": {
-          "name": "user_palpite_analyses_user_match_created_idx",
-          "columns": [
-            {
-              "expression": "user_id",
-              "isExpression": false,
-              "asc": true,
-              "nulls": "last"
-            },
-            {
-              "expression": "match_id",
-              "isExpression": false,
-              "asc": true,
-              "nulls": "last"
-            },
-            {
-              "expression": "created_at",
-              "isExpression": false,
-              "asc": true,
-              "nulls": "last"
-            }
-          ],
-          "isUnique": false,
-          "concurrently": false,
-          "method": "btree",
-          "with": {}
-        }
-      },
-      "foreignKeys": {
-        "user_palpite_analyses_user_id_users_id_fk": {
-          "name": "user_palpite_analyses_user_id_users_id_fk",
-          "tableFrom": "user_palpite_analyses",
-          "tableTo": "users",
-          "columnsFrom": [
-            "user_id"
-          ],
-          "columnsTo": [
-            "id"
-          ],
-          "onDelete": "restrict",
-          "onUpdate": "no action"
-        },
-        "user_palpite_analyses_match_id_matches_id_fk": {
-          "name": "user_palpite_analyses_match_id_matches_id_fk",
-          "tableFrom": "user_palpite_analyses",
-          "tableTo": "matches",
-          "columnsFrom": [
-            "match_id"
-          ],
-          "columnsTo": [
-            "id"
-          ],
-          "onDelete": "restrict",
-          "onUpdate": "no action"
-        },
-        "user_palpite_analyses_extraction_ai_call_id_ai_calls_id_fk": {
-          "name": "user_palpite_analyses_extraction_ai_call_id_ai_calls_id_fk",
-          "tableFrom": "user_palpite_analyses",
-          "tableTo": "ai_calls",
-          "columnsFrom": [
-            "extraction_ai_call_id"
-          ],
-          "columnsTo": [
-            "id"
-          ],
-          "onDelete": "set null",
-          "onUpdate": "no action"
-        },
-        "user_palpite_analyses_narration_ai_call_id_ai_calls_id_fk": {
-          "name": "user_palpite_analyses_narration_ai_call_id_ai_calls_id_fk",
-          "tableFrom": "user_palpite_analyses",
-          "tableTo": "ai_calls",
-          "columnsFrom": [
-            "narration_ai_call_id"
-          ],
-          "columnsTo": [
-            "id"
-          ],
-          "onDelete": "set null",
-          "onUpdate": "no action"
-        }
-      },
-      "compositePrimaryKeys": {},
       "uniqueConstraints": {},
       "policies": {},
       "checkConstraints": {},

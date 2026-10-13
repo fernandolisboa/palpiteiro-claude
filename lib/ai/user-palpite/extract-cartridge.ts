@@ -9,7 +9,7 @@ import {
   MAX_CLAIMS,
 } from "@/lib/user-palpite/types";
 
-// Cartucho de EXTRAÇÃO do motivo do "Seu palpite" (#564, ADR 0054). Mesma forma do
+// Cartucho de EXTRAÇÃO do motivo do "Seu palpite" (#564, ADR 0055). Mesma forma do
 // parse da aposta livre (lib/ai/bet-parse/cartridge.ts): system prompt versionado +
 // ToolDef neutro; a validação dura é o Zod item a item em extract.ts. O palpite NÃO é
 // extraído: vem sempre dos botões. Mudou prompt ou tool → bump + commit `prompt:`.
