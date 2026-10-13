@@ -16,23 +16,70 @@ import type { SupportedLeague } from "@/lib/providers/sports-data/leagues";
  */
 export type MarketCatalog = {
   marketId: string;
-  idByKey: Map<string, string>;
-  keyById: Map<string, string>;
+  // Readonly: o objeto é memoizado e compartilhado entre chamadas.
+  idByKey: ReadonlyMap<string, string>;
+  keyById: ReadonlyMap<string, string>;
 };
 
 /**
+ * O catálogo de mercados estáticos só muda por migration (que roda no deploy, numa
+ * instância nova). O TTL é só uma rede de segurança pra instância que sobrevive a
+ * uma migration aplicada por fora (ex.: o banco compartilhado das previews).
+ */
+const CATALOG_TTL_MS = 10 * 60 * 1000;
+
+const catalogMemo = new Map<
+  string,
+  { promise: Promise<MarketCatalog>; expiresAt: number }
+>();
+
+const DYNAMIC_SELECTION_MARKETS = new Set(
+  ALL_DESCRIPTORS.filter((d) => d.dynamicSelections).map((d) => d.dbMarketKey),
+);
+
+/**
  * Resolver canônico do catálogo de um `dbMarketKey` (`'over_under'`,
- * `'match_result'`). UMA query de `markets` + UMA de `market_selections`; cache
- * por chamada (cada caller invoca uma vez no bloco de reads).
+ * `'match_result'`). UMA query de `markets` + UMA de `market_selections`.
  *
  * Hard-fail se o catálogo não tiver o mercado ou nenhuma seleção (estilo `selIdOf`
  * do backfill) — um catálogo incompleto é bug de seed, não algo a degradar. Roda
  * SEMPRE antes de qualquer escrita/chamada paga, então a falha não queima spend
  * nem viola FK opaca pós-fato.
+ *
+ * Memoizado por instância (ver `CATALOG_TTL_MS`): a página do jogo resolvia o
+ * mesmo catálogo várias vezes por abertura (cada checagem de frescor de odds), duas
+ * idas seriais ao Neon cada.
  */
-export async function resolveMarketCatalog(
+export function resolveMarketCatalog(
   dbMarketKey: string,
 ): Promise<MarketCatalog> {
+  // Mercados dynamicSelections (#290) crescem a cada análise: nunca memoizar.
+  if (DYNAMIC_SELECTION_MARKETS.has(dbMarketKey)) {
+    return loadMarketCatalog(dbMarketKey);
+  }
+  const now = Date.now();
+  const hit = catalogMemo.get(dbMarketKey);
+  if (hit && hit.expiresAt > now) return hit.promise;
+
+  // Guarda a PROMISE (não o valor): chamadas concorrentes no mesmo render (cards de
+  // odds, chips da home) compartilham uma leitura só.
+  const promise = loadMarketCatalog(dbMarketKey);
+  catalogMemo.set(dbMarketKey, { promise, expiresAt: now + CATALOG_TTL_MS });
+  // Falha não fica em cache: a próxima chamada tenta de novo.
+  promise.catch(() => {
+    if (catalogMemo.get(dbMarketKey)?.promise === promise) {
+      catalogMemo.delete(dbMarketKey);
+    }
+  });
+  return promise;
+}
+
+/** Só pra testes que re-seedam o catálogo dentro do mesmo arquivo. */
+export function clearMarketCatalogMemo(): void {
+  catalogMemo.clear();
+}
+
+async function loadMarketCatalog(dbMarketKey: string): Promise<MarketCatalog> {
   const [mkt] = await db
     .select({ id: markets.id })
     .from(markets)
