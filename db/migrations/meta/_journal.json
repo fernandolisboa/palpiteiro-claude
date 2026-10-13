@@ -393,6 +393,13 @@
       "when": 1791900975280,
       "tag": "0055_match_model_snapshots",
       "breakpoints": true
+    },
+    {
+      "idx": 56,
+      "version": "7",
+      "when": 1791908522534,
+      "tag": "0056_friend_pools",
+      "breakpoints": true
     }
   ]
 }

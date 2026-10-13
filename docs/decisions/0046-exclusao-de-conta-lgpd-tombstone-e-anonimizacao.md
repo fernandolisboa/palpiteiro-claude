@@ -74,6 +74,7 @@ Num único `db.batch` (atômico), na ordem:
 |---|---|---|
 | 1 | `UPDATE ai_calls SET input_payload='{"redacted":"account_deleted"}', output_payload='{"redacted":"account_deleted"}', error_message=NULL WHERE user_id=$1 AND prompt_version LIKE 'bet_parse%'` | apaga o texto livre logado (PII potencial) sem quebrar FKs nem o custo agregado (tokens/custo/latência ficam) |
 | 2 | `DELETE FROM bet_slips WHERE user_id=$1` (cascata: `bet_legs`, `bet_leg_outcomes`) | apostas registradas são **comportamento de aposta do titular**, não saída do modelo — não há finalidade que justifique manter (art. 16) |
+| 2b | `DELETE FROM friend_pools WHERE user_id=$1` (cascata: `friend_pool_entries`) | bolões entre amigos (ADR 0054): guardam **nomes de terceiros** digitados pelo titular, sem finalidade fora da conta dele |
 | 3 | `UPDATE palpite_sets SET shared_at=NULL WHERE user_id=$1` | derruba os links públicos `/p/[id]` (kill-switch do ADR 0035 §7) |
 | 4 | `DELETE FROM accounts / authenticators / sessions WHERE user_id=$1` | vínculos de login (IDs do Google, passkeys) — como a row `users` fica, a cascata do Auth.js não dispara sozinha |
 | 5 | `DELETE FROM verification_tokens WHERE identifier=<e-mail>` | magic links pendentes carregam o e-mail |
@@ -148,6 +149,7 @@ UPDATE ai_calls SET input_payload = '{"redacted":"account_deleted"}',
                     error_message = NULL
  WHERE user_id = :uid AND prompt_version LIKE 'bet_parse%';
 DELETE FROM bet_slips WHERE user_id = :uid;
+DELETE FROM friend_pools WHERE user_id = :uid;  -- ADR 0054: nomes dos amigos
 UPDATE palpite_sets SET shared_at = NULL WHERE user_id = :uid;
 DELETE FROM accounts WHERE user_id = :uid;
 DELETE FROM authenticators WHERE user_id = :uid;

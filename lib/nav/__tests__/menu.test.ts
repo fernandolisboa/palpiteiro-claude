@@ -11,10 +11,11 @@ import {
 } from "@/lib/nav/menu";
 
 describe("menu do app", () => {
-  it("telas de uso na barra: jogos, apostas, desempenho", () => {
+  it("telas de uso na barra: jogos, apostas, bolão, desempenho", () => {
     expect(PRIMARY_NAV.map((i) => [i.label, i.href])).toEqual([
       ["jogos", "/jogos"],
       ["apostas", "/apostas"],
+      ["bolão", "/bolao"],
       ["desempenho", "/dashboard"],
     ]);
   });
