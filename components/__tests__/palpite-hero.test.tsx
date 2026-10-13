@@ -73,6 +73,7 @@ function render(props: Partial<Parameters<typeof PalpiteHero>[0]> = {}): string 
       setId="22222222-2222-2222-2222-222222222222"
       sharedAt={null}
       hasAnalyses={false}
+      contextEnabled={false}
       {...props}
     />,
   );
@@ -309,6 +310,7 @@ describe("PalpiteHero — ShareButton + kill-switch (ADR 0035 §3e / #438)", () 
     await act(async () => {
       root.render(
         <PalpiteHero
+          contextEnabled={false}
           heroPalpite={POPULATED}
           matchId="11111111-1111-1111-1111-111111111111"
           unavailable={null}
@@ -359,6 +361,7 @@ describe("PalpiteHero — análises saíram mas o palpite não (regressão)", ()
     await act(async () => {
       root.render(
         <PalpiteHero
+          contextEnabled={false}
           heroPalpite={heroPalpite}
           matchId="11111111-1111-1111-1111-111111111111"
           unavailable={null}
@@ -381,6 +384,7 @@ describe("PalpiteHero — análises saíram mas o palpite não (regressão)", ()
       await act(async () => {
         root.render(
           <PalpiteHero
+            contextEnabled={false}
             heroPalpite={heroPalpite}
             matchId="11111111-1111-1111-1111-111111111111"
             unavailable={after.unavailable ?? null}
@@ -504,6 +508,7 @@ describe("PalpiteHero — gerar só o palpite (síntese sobre as análises salva
     await act(async () => {
       root.render(
         <PalpiteHero
+          contextEnabled={false}
           heroPalpite={null}
           matchId="11111111-1111-1111-1111-111111111111"
           unavailable={null}
@@ -528,5 +533,111 @@ describe("PalpiteHero — gerar só o palpite (síntese sobre as análises salva
     expect(container.textContent).toContain("O palpite não saiu.");
     await act(async () => root.unmount());
     container.remove();
+  });
+});
+
+describe("PalpiteHero — Contexto extra (#565)", () => {
+  const TEXT = "O mandante está sem o centroavante titular.";
+
+  it("o campo só aparece com o contexto ligado, jogo analisável e o fan-out ligado", () => {
+    for (const heroPalpite of [null, POPULATED]) {
+      expect(render({ heroPalpite, contextEnabled: true })).toContain(
+        "Contexto extra (opcional)",
+      );
+      expect(render({ heroPalpite, contextEnabled: false })).not.toContain(
+        "Contexto extra",
+      );
+      expect(
+        render({ heroPalpite, contextEnabled: true, fanOutEnabled: false }),
+      ).not.toContain("Contexto extra");
+      expect(
+        render({ heroPalpite, contextEnabled: true, unavailable: "live" }),
+      ).not.toContain("Contexto extra");
+    }
+  });
+
+  it("textarea userContext com teto de 1.000, contador e a dica; firewall limpo", () => {
+    const html = render({ heroPalpite: null, contextEnabled: true });
+    expect(html).toMatch(/<textarea[^>]*name="userContext"/);
+    expect(html).toMatch(/<textarea[^>]*maxLength="1000"/i);
+    expect(html).toContain("0/1000");
+    expect(html).toContain("Não escreva dados pessoais.");
+    expect(leaksValue(render({ contextEnabled: true }))).toBe(false);
+    expect(leaksValue(html)).toBe(false);
+  });
+
+  async function mount() {
+    (globalThis as { IS_REACT_ACT_ENVIRONMENT?: boolean }).IS_REACT_ACT_ENVIRONMENT =
+      true;
+    const container = document.createElement("div");
+    document.body.appendChild(container);
+    const root = createRoot(container);
+    await act(async () => {
+      root.render(
+        <PalpiteHero
+          contextEnabled
+          heroPalpite={POPULATED}
+          matchId="11111111-1111-1111-1111-111111111111"
+          unavailable={null}
+          fanOutEnabled
+          finalScore={null}
+          setId={null}
+          sharedAt={null}
+          hasAnalyses={false}
+        />,
+      );
+    });
+    const textarea = () =>
+      container.querySelector<HTMLTextAreaElement>('textarea[name="userContext"]')!;
+    await act(async () => {
+      const setter = Object.getOwnPropertyDescriptor(
+        HTMLTextAreaElement.prototype,
+        "value",
+      )!.set!;
+      setter.call(textarea(), TEXT);
+      textarea().dispatchEvent(new Event("input", { bubbles: true }));
+    });
+    const submit = async () => {
+      const analyze = container.querySelector<HTMLButtonElement>(
+        'button[name="intent"][value="analysis"]',
+      )!;
+      await act(async () => {
+        container.querySelector("form")!.requestSubmit(analyze);
+      });
+    };
+    const cleanup = async () => {
+      await act(async () => root.unmount());
+      container.remove();
+    };
+    return { container, textarea, submit, cleanup };
+  }
+
+  it("envio ok: o texto vai no form, o aviso aparece e o campo é limpo", async () => {
+    const NOTICE =
+      'Conferimos o seu contexto extra e ele entrou na análise. Veja o que entrou em "ver análise por mercado".';
+    vi.mocked(analyzeBestBet).mockResolvedValue({
+      ok: true,
+      view: { entries: [], errors: [] } as never,
+      palpite: POPULATED,
+      contextNotice: NOTICE,
+    });
+    const h = await mount();
+    expect(h.container.textContent).toContain(`${TEXT.length}/1000`);
+    await h.submit();
+    const fd = vi.mocked(analyzeBestBet).mock.calls.at(-1)![1];
+    expect(fd.get("userContext")).toBe(TEXT);
+    expect(h.container.textContent).toContain(NOTICE);
+    expect(h.textarea().value).toBe("");
+    expect(leaksValue(h.container.innerHTML)).toBe(false);
+    await h.cleanup();
+  });
+
+  it("run que falha: o texto sobrevive ao pending pra tentar de novo", async () => {
+    vi.mocked(analyzeBestBet).mockResolvedValue({ ok: false, error: "Falhou." });
+    const h = await mount();
+    await h.submit();
+    expect(h.container.textContent).toContain("Falhou.");
+    expect(h.textarea().value).toBe(TEXT);
+    await h.cleanup();
   });
 });

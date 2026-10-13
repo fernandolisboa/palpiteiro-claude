@@ -316,6 +316,21 @@ describe("formatAnalysisEngine", () => {
       "Código + JEV · Dixon-Coles · sem JEV",
     );
   });
+  it("code_jev com contexto extra (#565) → \"com seu contexto\"", () => {
+    const userContext = {
+      claims: [],
+      evidence: {},
+      extractionAiCallId: null,
+      warnings: [],
+      versions: { userEvidence: "user_evidence_v1", extract: "user_palpite_extract_v1" },
+    };
+    expect(
+      formatAnalysisEngine(`${CODE_JEV};user=user_evidence_v1`, judgments({ userContext })),
+    ).toBe("Código + JEV · Dixon-Coles · com seu contexto");
+    expect(
+      formatAnalysisEngine(CODE_JEV, judgments({ applied: false, userContext })),
+    ).toBe("Código + JEV · Dixon-Coles · sem JEV · com seu contexto");
+  });
   it("code_jev sem rastro (ou rastro parcial) → não quebra", () => {
     expect(formatAnalysisEngine(CODE_JEV, undefined)).toBe("Código + JEV");
     expect(
