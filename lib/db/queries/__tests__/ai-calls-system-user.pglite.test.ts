@@ -52,9 +52,17 @@ const row = (provider: string) => ({
 
 describe("ai_calls.user_id (CHECK ai_calls_user_id_system_only)", () => {
   it("sem usuário e provider anthropic → o banco recusa", async () => {
+    // O drizzle embrulha o erro do Postgres ("Failed query: ...") e guarda o
+    // original em `cause`, que traz o nome do constraint (na mensagem e em `constraint`).
     await expect(
       db.insert(schema.aiCalls).values(row("anthropic")),
-    ).rejects.toThrow();
+    ).rejects.toMatchObject({
+      cause: {
+        code: "23514",
+        constraint: "ai_calls_user_id_system_only",
+        message: expect.stringMatching(/ai_calls_user_id_system_only/),
+      },
+    });
   });
 
   it("sem usuário e provider TypeSafe (JEV de sistema) → passa", async () => {

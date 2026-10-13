@@ -18,13 +18,13 @@ function latest(
 }
 
 describe("orderJevQueue (puro)", () => {
-  it("sem base / not_attempted / JEV velho vêm antes do JEV fresco, mesmo com kickoff posterior", () => {
+  it("sem base / not_attempted / failed / JEV velho vêm antes do JEV fresco, mesmo com kickoff posterior", () => {
     const items = [
       { matchId: "fresh", kickoffAt: at(2) },
       { matchId: "none", kickoffAt: at(40) },
       { matchId: "not-attempted", kickoffAt: at(30) },
       { matchId: "stale", kickoffAt: at(20) },
-      { matchId: "failed-fresh", kickoffAt: at(1) },
+      { matchId: "failed-fresh", kickoffAt: at(50) },
     ];
     const byMatch = new Map<string, MatchModelSnapshot>([
       ["fresh", latest("fresh", "applied", at(-1))],
@@ -40,6 +40,7 @@ describe("orderJevQueue (puro)", () => {
       ["failed-fresh", latest("failed-fresh", "failed", at(-1))],
     ]);
     expect(orderJevQueue(items, byMatch, NOW).map((i) => i.matchId)).toEqual([
+      // `failed` recente tenta de novo antes do `applied` fresco (kickoff mais perto).
       "stale",
       "not-attempted",
       "none",

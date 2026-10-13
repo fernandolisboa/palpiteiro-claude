@@ -547,6 +547,44 @@ describe("JEV da base", () => {
     expect(after[0]).toEqual(before);
   });
 
+  it("/standings falhou → sem JEV (dado indisponível); base sem JEV pro jogo novo, a com JEV fica intocada", async () => {
+    const withJev = await insertMatch("brasileirao_a", BR[2], BR[3], inHours(20));
+    await computeMatchModels({ now: NOW, leagues: ["brasileirao_a"] });
+    const [before] = await snapshotsOf(withJev);
+    expect(before.jevStatus).toBe("applied");
+    const fresh = await insertMatch("brasileirao_a", BR[0], BR[1], inHours(10));
+    judge.mockClear();
+    provider.getStandings.mockReset();
+    provider.getStandings.mockRejectedValue(new Error("503"));
+
+    const summary = await computeMatchModels({
+      now: NOW,
+      leagues: ["brasileirao_a"],
+    });
+
+    // Uma chamada só por liga (memo), mesmo com dois jogos na fila.
+    expect(provider.getStandings).toHaveBeenCalledTimes(1);
+    expect(summary.jev).toMatchObject({ queued: 2, dataUnavailable: 2 });
+    expect(judge).not.toHaveBeenCalled();
+    const [freshRow] = await snapshotsOf(fresh);
+    expect(freshRow.jevStatus).toBe("not_attempted");
+    expect(freshRow.lambdaSource).toBe("dixon_coles");
+    expect(await snapshotsOf(withJev)).toEqual([before]);
+  });
+
+  it("provider responde sem tabela (undefined) → o JEV roda mesmo assim", async () => {
+    const id = await insertMatch("brasileirao_a", BR[0], BR[1], inHours(10));
+    provider.getStandings.mockResolvedValue(undefined);
+    const summary = await computeMatchModels({
+      now: NOW,
+      leagues: ["brasileirao_a"],
+    });
+    expect(summary.jev).toMatchObject({ applied: 1, dataUnavailable: 0 });
+    expect(judge).toHaveBeenCalledTimes(1);
+    const [row] = await snapshotsOf(id);
+    expect(row.jevStatus).toBe("applied");
+  });
+
   it("lock ocupado → skipped: locked, sem tocar provider nem DB", async () => {
     await insertMatch("brasileirao_a", BR[0], BR[1], inHours(10));
     expect(await acquireKvLock(COMPUTE_MATCH_MODELS_LOCK_KEY)).toBe(true);

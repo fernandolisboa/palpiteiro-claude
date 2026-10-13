@@ -175,6 +175,50 @@ describe("insert / latest / batch", () => {
     err.mockRestore();
   });
 
+  it("judgments de outro conjunto de perguntas não derruba a row na exibição (judgments → null); o reuso segue estrito", async () => {
+    const warn = vi.spyOn(console, "warn").mockImplementation(() => {});
+    const err = vi.spyOn(console, "error").mockImplementation(() => {});
+    const [dropped, ...rest] = JUDGMENT_QUESTION_IDS;
+    const oldAnswers = {
+      ...Object.fromEntries(rest.map((id) => [id, ANSWERS[id]])),
+      question_removed_in_v2: { value: 0.5, confidence: null },
+    };
+    expect(dropped).toBeDefined();
+    const id = await insertMatchModelSnapshot(
+      row(ids.m1, {
+        jevStatus: "applied",
+        judgments: judgments({
+          answers: oldAnswers as unknown as JudgmentAnswers,
+        }),
+      }),
+    );
+
+    const latest = await getLatestMatchModelSnapshot(ids.m1);
+    expect(latest?.id).toBe(id);
+    expect(latest?.jevStatus).toBe("applied");
+    expect(latest?.judgments).toBeNull();
+    expect(
+      (await getLatestMatchModelSnapshotsForMatches([ids.m1])).get(ids.m1)?.id,
+    ).toBe(id);
+    expect((await getLatestMatchModelSnapshotWithKickoff(ids.m1))?.snapshot.id).toBe(
+      id,
+    );
+    expect(warn).toHaveBeenCalled();
+
+    expect(
+      await findReusableSnapshotJudgments({
+        matchId: ids.m1,
+        judgmentsVersion: "jev_judgments_v1",
+        weightsVersion: "judgment_weights_v1",
+        jevModel: "jev-1.13.0",
+        stateHash: "hash-a",
+        since: hoursAgo(12),
+      }),
+    ).toBeNull();
+    warn.mockRestore();
+    err.mockRestore();
+  });
+
   it("getLatestMatchModelSnapshotWithKickoff traz o kickoff do jogo", async () => {
     const id = await insertMatchModelSnapshot(row(ids.m1));
     const out = await getLatestMatchModelSnapshotWithKickoff(ids.m1);

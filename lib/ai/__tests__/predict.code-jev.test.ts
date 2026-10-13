@@ -1196,6 +1196,25 @@ describe("reuso com origem na base do modelo (#555)", () => {
     expect(j.reusedFromModelSnapshotId).toBeNull();
   });
 
+  it("base checada há 9h (fora das 6h da predição, dentro das 12h da base) → reusa", async () => {
+    const hash = await currentStateHash();
+    snapshotStore = [
+      snapshot(hash, {}, new Date(Date.now() - 9 * 3_600_000)),
+    ];
+    findReusableJudgments.mockClear();
+    await run();
+
+    expect(judge).not.toHaveBeenCalled();
+    expect(predictionJudgments()[0].reusedFromModelSnapshotId).toBe("snap-1");
+    // A janela da base é 12h sobre checked_at; a da predição segue 6h sobre created_at.
+    expect(findReusableJudgments).toHaveBeenCalledWith(
+      expect.objectContaining({
+        since: new Date(Date.now() - 6 * 3_600_000),
+        snapshotSince: new Date(Date.now() - 12 * 3_600_000),
+      })
+    );
+  });
+
   it("base com checked_at fora da janela de 12h → chama o JEV", async () => {
     const hash = await currentStateHash();
     snapshotStore = [

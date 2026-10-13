@@ -12,7 +12,10 @@ import {
 // Fronteira ÚNICA de `match_model_snapshots` (#555, ADR 0052). Escrita: insert de row
 // nova (fingerprint mudou) ou heartbeat de `checked_at` (mesmo fingerprint). Leitura:
 // toda row passa pelo Zod (jsonb e enums em text); inválida → omitida com log, nunca
-// derruba a página nem o cron.
+// derruba a página nem o cron. Exceção: `judgments` que não bate com o conjunto ATUAL
+// de perguntas (mudança de versão do JEV) não derruba a row nas leituras de exibição
+// (/jogos, "Leitura do modelo", seam do cupom, fila do cron): vem como null. O reuso
+// JEV (`findReusableSnapshotJudgments`) segue estrito.
 
 export type NewMatchModelSnapshot = typeof matchModelSnapshots.$inferInsert;
 
@@ -21,6 +24,26 @@ type SnapshotRow = typeof matchModelSnapshots.$inferSelect;
 function parseSnapshot(row: SnapshotRow): MatchModelSnapshot | null {
   const parsed = matchModelSnapshotSchema.safeParse(row);
   if (parsed.success) return parsed.data;
+  const onlyJudgments = parsed.error.issues.every(
+    (i) => i.path[0] === "judgments",
+  );
+  if (onlyJudgments) {
+    const lenient = matchModelSnapshotSchema.safeParse({
+      ...row,
+      judgments: null,
+    });
+    if (lenient.success) {
+      console.warn(
+        JSON.stringify({
+          scope: "match_model_snapshots",
+          event: "snapshot_judgments_unparsed",
+          snapshotId: row.id,
+          matchId: row.matchId,
+        }),
+      );
+      return lenient.data;
+    }
+  }
   console.error(
     JSON.stringify({
       scope: "match_model_snapshots",

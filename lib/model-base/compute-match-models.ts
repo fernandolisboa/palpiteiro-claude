@@ -82,8 +82,9 @@ function emptySummary(): ComputeMatchModelsSummary {
 }
 
 /**
- * Ordem da fila JEV (puro). Bucket 0: jogo sem base, base sem JEV (`not_attempted`) ou
- * base com `checked_at` mais velho que JEV_STALE_MS; bucket 1: o resto (JEV fresco).
+ * Ordem da fila JEV (puro). Bucket 0: jogo sem base, base sem JEV (`not_attempted`),
+ * JEV que falhou (`failed`, tenta de novo antes de uma base `applied` fresca) ou base
+ * com `checked_at` mais velho que JEV_STALE_MS; bucket 1: o resto (JEV fresco).
  * Dentro do bucket, kickoff mais próximo primeiro. O que não cabe no prazo do run
  * entra no próximo.
  */
@@ -94,7 +95,7 @@ export function orderJevQueue<T extends { matchId: string; kickoffAt: Date }>(
 ): T[] {
   const bucket = (item: T): number => {
     const latest = latestByMatch.get(item.matchId);
-    if (!latest || latest.jevStatus === "not_attempted") return 0;
+    if (!latest || latest.jevStatus !== "applied") return 0;
     return now.getTime() - latest.checkedAt.getTime() > JEV_STALE_MS ? 0 : 1;
   };
   return [...items].sort(
@@ -109,6 +110,15 @@ function logError(event: string, fields: Record<string, unknown>): void {
 
 const errMessage = (err: unknown) =>
   err instanceof Error ? err.message : String(err);
+
+// Resultado memoizado da busca da tabela: `ok: false` = a chamada falhou;
+// `standing: undefined` = o provider respondeu sem tabela.
+type StandingsFetch =
+  | { ok: true; standing: NormalizedStanding | undefined }
+  | { ok: false };
+
+const standingOrUndefined = (r: StandingsFetch) =>
+  r.ok ? r.standing : undefined;
 
 type JevQueueItem = {
   matchId: string;
@@ -158,18 +168,20 @@ async function runComputeMatchModels(opts: {
   const startedMs = Date.now();
 
   // Tabela só sob demanda (heurístico ou state do JEV) e uma vez por liga: com DC
-  // fresco o run não gasta essa chamada. Falha → undefined (o λ cai no que der).
-  const standingsMemo = new Map<
-    SupportedLeague,
-    Promise<NormalizedStanding | undefined>
-  >();
+  // fresco o run não gasta essa chamada. A falha da busca fica distinta do provider
+  // devolver undefined: o λ cai no que der com os dois, mas o JEV não roda sobre uma
+  // falha transitória (o state sem tabela nunca bateria com o do predict).
+  const standingsMemo = new Map<SupportedLeague, Promise<StandingsFetch>>();
   const standingsFor = (league: SupportedLeague) => {
     let p = standingsMemo.get(league);
     if (!p) {
-      p = provider.getStandings(league).catch((err: unknown) => {
-        logError("standings_failed", { league, message: errMessage(err) });
-        return undefined;
-      });
+      p = provider.getStandings(league).then(
+        (standing): StandingsFetch => ({ ok: true, standing }),
+        (err: unknown): StandingsFetch => {
+          logError("standings_failed", { league, message: errMessage(err) });
+          return { ok: false };
+        },
+      );
       standingsMemo.set(league, p);
     }
     return p;
@@ -252,7 +264,10 @@ async function runComputeMatchModels(opts: {
       );
       if (!scoreline || scoreline.source !== "dixon_coles") {
         scoreline = await getModelScoreline(
-          { ...args, standing: await standingsFor(match.league) },
+          {
+            ...args,
+            standing: standingOrUndefined(await standingsFor(match.league)),
+          },
           now,
         );
       }
@@ -292,12 +307,24 @@ async function runComputeMatchModels(opts: {
         await writeBaseUnlessJev(item);
         continue;
       }
+      // Tabela que falhou = dado indisponível: sem JEV (um state sem tabela grudaria
+      // numa row `applied` que o predict nunca reusaria).
+      const standings = await standingsFor(item.match.league);
+      if (!standings.ok) {
+        summary.jev.dataUnavailable++;
+        logError("jev_data_unavailable", {
+          matchId: item.matchId,
+          message: "standings_failed",
+        });
+        await writeBaseUnlessJev(item);
+        continue;
+      }
       let data: Awaited<ReturnType<typeof fetchMatchJudgmentData>>;
       try {
         data = await fetchMatchJudgmentData({
           match: item.match,
           provider,
-          standings: await standingsFor(item.match.league),
+          standings: standings.standing,
         });
       } catch (err) {
         summary.jev.dataUnavailable++;

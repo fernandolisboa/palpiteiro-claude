@@ -940,7 +940,7 @@ export const teamRatingSeasonResults = pgTable(
 // Claude e sem The Odds API. Uma row por RESULTADO distinto (fingerprint): run com o
 // mesmo fingerprint só avança `checked_at` (heartbeat monotônico via GREATEST, o único
 // UPDATE da tabela). Sem unique em (match_id, fingerprint): A→B→A é legítimo. O edge
-// NÃO é gravado: a leitura calcula contra a odd mais recente. Ler/escrever via
+// não é gravado nem calculado na leitura (ADR 0052 §5). Ler/escrever via
 // lib/db/queries/match-model-snapshots.ts (Zod na leitura dos jsonb).
 export const matchModelSnapshots = pgTable(
   "match_model_snapshots",
