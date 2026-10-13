@@ -70,6 +70,9 @@ type ExtractArgs = {
   matchId: string;
   userId: string;
   deadlineAt?: number;
+  // De onde veio o texto, só pra o aviso de corte: o motivo do "Seu palpite" (#564) ou o
+  // contexto extra da análise com IA (#565). O prompt é o mesmo.
+  subject?: "motivo" | "contexto";
 };
 
 /**
@@ -195,7 +198,7 @@ async function runExtraction(args: ExtractArgs): Promise<ExtractResult> {
     }
     if (parsedClaims.length >= MAX_CLAIMS) {
       warnings.push(
-        `Considerei só as ${MAX_CLAIMS} primeiras afirmações do seu motivo.`,
+        `Considerei só as ${MAX_CLAIMS} primeiras afirmações do seu ${args.subject ?? "motivo"}.`,
       );
       break;
     }

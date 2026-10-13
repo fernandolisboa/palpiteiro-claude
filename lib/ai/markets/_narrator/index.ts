@@ -17,6 +17,7 @@ import type {
   NarratorContext,
   NarratorDecision,
   NarratorSelection,
+  UserFactorOrigins,
 } from "./types";
 import { buildNarratorMessage } from "./user-message";
 
@@ -52,4 +53,5 @@ export type {
   NarratorDecision,
   NarratorOutput,
   NarratorSelection,
+  UserFactorOrigins,
 };

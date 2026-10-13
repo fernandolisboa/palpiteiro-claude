@@ -2,7 +2,7 @@ import type { JudgmentQuestionId, TeamSide } from "@/lib/ai/judgments/types";
 import type { DixonColesFallbackReason, ModelScorelineSource } from "@/lib/quant/match-model";
 
 import type { TeamNames } from "./reading";
-import type { ClaimStatus, ClaimTopic } from "./types";
+import type { ClaimStatus, ClaimTopic, StoredContextClaim } from "./types";
 
 // Rótulos em PT-BR do "Seu palpite" (#564). PURO e seguro no cliente: a tela, o
 // narrador e o template usam os MESMOS textos.
@@ -21,6 +21,46 @@ export const TOPIC_LABEL: Record<ClaimTopic, string> = {
   stakes: "peso do jogo",
   other: "outro",
 };
+
+const ROLE_PT: Record<NonNullable<StoredContextClaim["role"]>, string> = {
+  attack: "no ataque",
+  defense: "na defesa",
+  goalkeeper: "no gol",
+  unknown: "no elenco",
+};
+
+/**
+ * A afirmação descrita SÓ pelos campos tipados (#565): nunca a paráfrase nem nome de
+ * jogador. É o texto que a tela mostra no "o que você acrescentou".
+ */
+export function claimDescription(
+  c: Pick<StoredContextClaim, "team" | "topic" | "role" | "direction" | "scope" | "playersCount">,
+  teams: TeamNames,
+): string {
+  const team =
+    c.team === "both" ? "os dois times" : c.team === "home" ? teams.home : teams.away;
+  const of = c.team === "both" ? "dos dois times" : `do ${team}`;
+  const forTeam = c.team === "both" ? "pros dois times" : `pro ${team}`;
+  switch (c.topic) {
+    case "absence": {
+      const n = c.playersCount ?? 0;
+      return `desfalque ${ROLE_PT[c.role ?? "unknown"]} ${of}${n > 1 ? ` (${n} jogadores citados)` : ""}`;
+    }
+    case "full_squad": {
+      const scope =
+        c.scope === "injuries" ? " (lesões)" : c.scope === "suspensions" ? " (suspensões)" : "";
+      return `${team} sem desfalques${scope}`;
+    }
+    case "form":
+      return `${team} em ${c.direction === "bad" ? "má" : "boa"} fase`;
+    case "rotation":
+      return `${team} deve poupar titulares`;
+    case "stakes":
+      return `jogo ${c.direction === "bad" ? "sem peso" : "decisivo"} ${forTeam}`;
+    case "other":
+      return c.team === "both" ? "outra informação sobre o jogo" : `outra informação sobre o ${team}`;
+  }
+}
 
 function sideOf(id: JudgmentQuestionId): TeamSide {
   return id.endsWith("_home") ? "home" : "away";
