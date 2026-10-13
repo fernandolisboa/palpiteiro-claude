@@ -186,7 +186,9 @@ export class PredictError extends Error {
 
 // ─── Constants ───────────────────────────────────────────────────────────────
 
-const FORM_LAST = 5;
+// Exportado pra base do modelo por jogo (#555): o cron monta o MESMO state JEV (e o
+// mesmo stateHash) que o predict, então a forma tem que vir do mesmo tamanho.
+export const FORM_LAST = 5;
 const H2H_LAST = 5;
 const ODDS_WINDOW_MS = 6 * 60 * 60 * 1000;
 
@@ -1701,7 +1703,7 @@ async function persistPrediction(a: PersistArgs): Promise<PredictResult> {
 
 // ─── Motor code_jev (ADR 0041, #511) ─────────────────────────────────────────
 
-type JudgmentRun = {
+export type JudgmentRun = {
   answers: JudgmentAnswers | null;
   // Modelo pedido (pin) e o ecoado pela API; null quando o JEV não respondeu.
   jevModel: string | null;
@@ -1709,20 +1711,29 @@ type JudgmentRun = {
   failure: JudgmentFailure | null;
   stateHash: string;
   aiCallId: string | null;
+  // Origem das respostas num reuso: a predição OU a base do modelo (#555) que CHAMOU o
+  // JEV. As duas null = o JEV foi chamado neste run.
   reusedFromPredictionId: string | null;
+  reusedFromModelSnapshotId: string | null;
 };
 
 // Janela de reuso das respostas JEV entre mercados do mesmo jogo: o state (hash)
 // já captura desfalques/tabela/descanso; a janela só limita o quão velho pode ser.
-const JUDGMENT_REUSE_WINDOW_MS = 6 * 60 * 60 * 1000;
+export const JUDGMENT_REUSE_WINDOW_MS = 6 * 60 * 60 * 1000;
+// Janela do reuso com origem na base do modelo (#555, ADR 0052), sobre o `checked_at`:
+// o cron roda a cada 6h e só avança o heartbeat quando nada muda, então 12h cobrem um
+// run perdido sem deixar o "Analisar com IA" pagar o JEV de novo.
+export const MODEL_BASE_JEV_REUSE_WINDOW_MS = 12 * 60 * 60 * 1000;
 
 // Julgamentos do jogo: reusa os de uma predição recente (mesmo jogo, mesmas
-// versões de perguntas/pesos, mesmo state, aplicados, ≤6h) — sem chamada e sem
+// versões de perguntas/pesos, mesmo state, aplicados, ≤6h) ou, sem predição, os da
+// base do modelo do jogo (#555, ≤12h sobre checked_at) — sem chamada e sem
 // row nova em ai_calls. Senão, UMA chamada JEV (fail-open: judgeMatch nunca lança)
 // + a row de auditoria em ai_calls, sucesso OU falha (ADR 0041 §5: predict é a
 // porta única e loga).
 async function runJudgments(args: {
-  userId: string;
+  // null = chamada de sistema (JEV do cron da base do modelo, #555).
+  userId: string | null;
   matchId: string;
   stateInput: JudgmentStateInput;
 }): Promise<JudgmentRun> {
@@ -1736,6 +1747,7 @@ async function runJudgments(args: {
     jevModel: JUDGMENT_MODEL_ID,
     stateHash,
     since: new Date(Date.now() - JUDGMENT_REUSE_WINDOW_MS),
+    snapshotSince: new Date(Date.now() - MODEL_BASE_JEV_REUSE_WINDOW_MS),
   }).catch((err: unknown) => {
     // Falha da busca = só perde o reuso; segue pra chamada JEV normal.
     console.error(
@@ -1750,6 +1762,18 @@ async function runJudgments(args: {
   });
   if (reused) {
     const src = reused.judgments;
+    // Aponta pra quem CHAMOU o JEV (a origem), não pra um reuso de reuso: a origem
+    // que o registro achado já carrega, senão o próprio registro.
+    const origin = src.reusedFromPredictionId
+      ? { predictionId: src.reusedFromPredictionId, snapshotId: null }
+      : src.reusedFromModelSnapshotId
+        ? { predictionId: null, snapshotId: src.reusedFromModelSnapshotId }
+        : {
+            predictionId: reused.predictionId,
+            snapshotId: reused.predictionId
+              ? null
+              : (reused.modelSnapshotId ?? null),
+          };
     return {
       answers: src.answers,
       jevModel: src.versions.jevModel,
@@ -1757,8 +1781,8 @@ async function runJudgments(args: {
       failure: null,
       stateHash,
       aiCallId: src.aiCallId ?? null,
-      // Aponta pra predição que CHAMOU o JEV (a origem), não pra um reuso de reuso.
-      reusedFromPredictionId: src.reusedFromPredictionId ?? reused.predictionId,
+      reusedFromPredictionId: origin.predictionId,
+      reusedFromModelSnapshotId: origin.snapshotId,
     };
   }
 
@@ -1818,6 +1842,7 @@ async function runJudgments(args: {
     stateHash,
     aiCallId,
     reusedFromPredictionId: null,
+    reusedFromModelSnapshotId: null,
   };
 }
 
@@ -1826,7 +1851,7 @@ async function runJudgments(args: {
 // — por isso a busca vem antes do lookup. Dentro de um best bet, o memo do run
 // (CodeJevRunMemo) evita as duas.
 async function resolveMatchJudgments(args: {
-  userId: string;
+  userId: string | null;
   matchId: string;
   provider: SportsDataProvider;
   data: Omit<MatchJudgmentData, "previousLineups">;
@@ -1850,6 +1875,33 @@ async function resolveMatchJudgments(args: {
     stateInput: input.stateInput,
   });
   return { input, run };
+}
+
+/**
+ * JEV da base do modelo por jogo (#555, ADR 0052): mesmo state, reuso e log do predict,
+ * sem usuário (ai_calls.user_id null, permitido só pro provider TypeSafe). A porta do
+ * JEV continua sendo este módulo (ADR 0041 §5). Guarda defensiva: sem TYPESAFE_API_KEY
+ * → null sem chamar nem logar (o cron já checa antes). Nunca lança: erro → log + null.
+ */
+export async function resolveModelBaseJudgments(args: {
+  matchId: string;
+  provider: SportsDataProvider;
+  data: Omit<MatchJudgmentData, "previousLineups">;
+}): Promise<{ input: MatchJudgmentInput; run: JudgmentRun } | null> {
+  try {
+    if (!createTypeSafeJudgmentProvider().hasKey()) return null;
+    return await resolveMatchJudgments({ ...args, userId: null });
+  } catch (err) {
+    console.error(
+      JSON.stringify({
+        scope: "predict",
+        matchId: args.matchId,
+        error: "model_base_judgments_failed",
+        message: err instanceof Error ? err.message : String(err),
+      }),
+    );
+    return null;
+  }
 }
 
 // Escalação do ÚLTIMO jogo de cada time (o da forma, antes deste) pra derivar o
@@ -1944,6 +1996,7 @@ function toPredictionJudgments(
     stateHash: jev.stateHash,
     aiCallId: jev.aiCallId,
     reusedFromPredictionId: jev.reusedFromPredictionId,
+    reusedFromModelSnapshotId: jev.reusedFromModelSnapshotId,
   };
 }
 
