@@ -240,6 +240,7 @@ export type PredictionDetailView = {
     minOdd: string;
     odd: string;
     stake: string;
+    // Só rastreio, nunca renderizado (o app não aponta casa de apostas).
     bookmaker: string;
     rationale: string;
     factors: string[];

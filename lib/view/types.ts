@@ -117,6 +117,8 @@ export type OddsView = {
   // over/under (N=2) é byte-idêntico ao binário pré-#173 (golden pina o DOM).
   marketLabel: string;
   outcomes: OddsOutcomeView[];
+  // Casa de onde veio a odd: só rastreio, NUNCA renderizado (o app é para apostas
+  // entre amigos e não aponta casa nenhuma).
   bookmaker: string;
   overround: string;
   updatedAgo: string;
@@ -185,6 +187,8 @@ export type AnalysisView = {
   minOdd: string | null;
   oddAtRec: string | null;
   oddAtRecAgo: string | null;
+  // Casa de onde veio a odd: só rastreio, NUNCA renderizado (o app é para apostas
+  // entre amigos e não aponta casa nenhuma).
   bookmaker: string | null;
   expectedReturn: string | null;
   expectedReturnTone: "positive" | "neutral";

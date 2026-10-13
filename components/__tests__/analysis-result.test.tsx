@@ -179,7 +179,9 @@ describe("AnalysisResult — bloco 'Aposta recomendada' (#103/#170)", () => {
     expect(markup).toContain("stake");
     expect(markup).toContain("1.00 u");
     expect(markup).toContain("odd na análise (há 3h)");
-    expect(markup).toContain("1.92 · bet365");
+    expect(markup).toContain("1.92");
+    // O app não aponta casa de apostas: o nome fica só no banco, nunca na tela.
+    expect(markup).not.toContain("bet365");
     expect(markup).toContain("retorno esperado");
     expect(markup).toContain("+11.4%");
     // copy obrigatória da legenda: sem "médio"/"longo prazo" o número induz a
@@ -277,7 +279,7 @@ describe("AnalysisResult — bloco 'Aposta recomendada' (#103/#170)", () => {
     expect(markup).not.toMatch(/text-edge-fg[^>]*>-0\.9%/);
   });
 
-  it("historical prediction without frozen odd renders em-dash and omits the bookmaker separator", () => {
+  it("historical prediction without frozen odd renders em-dash", () => {
     const markup = renderToStaticMarkup(
       <AnalysisResult
         view={{
