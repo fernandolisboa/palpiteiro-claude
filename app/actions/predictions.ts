@@ -43,10 +43,12 @@ import {
 } from "@/lib/ai/palpites/synthesis-input";
 import { PredictError, predict } from "@/lib/ai/predict";
 import { isEmailAllowed } from "@/lib/auth/whitelist";
+import { startAnalysisContextExtraction } from "@/lib/ai/user-palpite/analysis-context";
 import {
   getEnableBestBetFanOut,
   getEnableOverUnderExtraLines,
   getEnableParallelFanOut,
+  getEnableUserContext,
 } from "@/lib/db/queries/ai-config";
 import { extractDbCause } from "@/lib/db/pg-error";
 import {
@@ -71,6 +73,16 @@ import {
   type PalpiteHeadlineView,
 } from "@/lib/view/palpites-headline";
 import type { AnalysisView, BestBetView } from "@/lib/view/types";
+import {
+  CONTEXT_NOT_USED_NOTICE,
+  CONTEXT_UNAVAILABLE_NOTICE,
+  analysisContextNotice,
+} from "@/lib/user-palpite/analysis-context";
+import {
+  MAX_CONTEXT_CHARS,
+  MIN_CONTEXT_CHARS,
+  normalizeReasonText,
+} from "@/lib/user-palpite/types";
 
 const REFUSAL_MESSAGE = "O modelo não conseguiu concluir esta análise.";
 
@@ -384,6 +396,8 @@ export type AnalyzeBestBetResult =
       // Só quando `palpite` é null: por que a manchete não saiu (as análises por
       // mercado saíram). O HERO mostra isso em vez de voltar mudo pro estado vazio.
       palpiteError?: string;
+      // Só quando o usuário mandou "Contexto extra" (#565): o que aconteceu com ele.
+      contextNotice?: string;
     }
   | { ok: false; error: string };
 
@@ -534,6 +548,14 @@ export async function analyzeBestBet(
   if (!z.uuid().safeParse(matchId).success) {
     return { ok: false, error: "Identificador de jogo inválido." };
   }
+  // Contexto extra (#565): gate grátis, antes do auth. CRLF vira LF antes de medir (o
+  // contador do cliente conta LF). Curto demais = sem contexto.
+  const contextRaw = normalizeReasonText(formData.get("userContext"));
+  const contextText = typeof contextRaw === "string" ? contextRaw.trim() : "";
+  if (contextText.length > MAX_CONTEXT_CHARS) {
+    return { ok: false, error: "O contexto extra passou de 1.000 caracteres." };
+  }
+  const userText = contextText.length >= MIN_CONTEXT_CHARS ? contextText : "";
   const session = await auth();
   if (!session?.user?.id) {
     return { ok: false, error: "Faça login para analisar." };
@@ -596,6 +618,10 @@ export async function analyzeBestBet(
   const engine = await readAnalysisEngine();
   // Kill-switch do fan-out paralelo (leitura grátis → antes do 1º slot).
   const parallel = await getEnableParallelFanOut();
+  // Contexto extra (#565): só no motor code_jev e com o kill-switch ligado. Sem texto, a
+  // flag nem é lida. Leitura grátis → antes do 1º slot.
+  const contextAllowed =
+    userText !== "" && engine === "code_jev" && (await getEnableUserContext());
   const markets: FanOutMarket[] = candidates.map((c) => ({
     marketKey: c.key,
     extraLines: resolveExtraLines(c.key, match.league, extraLinesEnabled),
@@ -635,6 +661,23 @@ export async function analyzeBestBet(
   // FanOut só sobre os que cabem no que resta do dia (na ordem-base) → nenhum predict() nem
   // crédito de odds num mercado que já nasce sem slot.
   const fanOut = markets.filter((m) => grantedKeys.has(m.marketKey));
+  // Prazo (#524 review): o fan-out para SYNTHESIS_RESERVE_MS antes do prazo do run, pra a
+  // síntese ainda rodar sobre o que terminou; o que não coube vira "Tempo esgotado".
+  const fanOutDeadline = runDeadline - SYNTHESIS_RESERVE_MS;
+  // Contexto extra (#565): a extração (1 Haiku, logada em ai_calls, sem unidade extra no
+  // limite do dia) parte agora, depois da cobrança, só se algum mercado concedido é
+  // decidido em código, e corre junto do pré-aquecimento e do JEV. O predict a espera
+  // depois do JEV. Nunca rejeita; tem teto próprio.
+  const userContextP =
+    contextAllowed && fanOut.some(isCodeJevFanOutMarket)
+      ? startAnalysisContextExtraction({
+          text: userText,
+          teams: { home: match.homeTeam, away: match.awayTeam },
+          matchId,
+          userId: session.user.id,
+          fanOutDeadline,
+        })
+      : undefined;
   // Pré-aquece os mercados *additional* (btts/dupla chance/over_under multi-linha): o
   // descriptor EFETIVO sai do MESMO m.extraLines do FanOutMarket. Cada um numa chamada
   // própria (ensureOddsSnapshotsFresh hard-throws em seed faltante) → a falha de um vira
@@ -689,11 +732,14 @@ export async function analyzeBestBet(
   // Fan-out (paralelo ou serial, flag): predict() por mercado concedido (a única porta pro
   // LLM), best-of-successful.
   // code_jev (#512): decide todos em código e narra só o escolhido (1 chamada paga).
-  // Prazo (#524 review): o fan-out para SYNTHESIS_RESERVE_MS antes do prazo do run, pra a
-  // síntese ainda rodar sobre o que terminou; o que não coube vira "Tempo esgotado".
-  const fanOutDeadline = runDeadline - SYNTHESIS_RESERVE_MS;
   const { acquireSlot } = budget;
-  const fanOutBase = { matchId, userId: session.user.id, isAdmin, modelOverride };
+  const fanOutBase = {
+    matchId,
+    userId: session.user.id,
+    isAdmin,
+    modelOverride,
+    ...(userContextP ? { userContextP } : {}),
+  };
   const allOutcomes =
     engine === "code_jev"
       ? await runCodeJevFanOut(fanOutBase, fanOut, mapError, acquireSlot, {
@@ -708,6 +754,18 @@ export async function analyzeBestBet(
   // Não analisados (prazo / slot negado no meio do run) vão pra lista de indisponíveis,
   // depois das falhas reais e antes da cauda sem slot.
   const { ran: outcomes, notRun } = splitNotRun(allOutcomes);
+  // Aviso do contexto extra a partir do que de fato aconteceu no run (a extração já
+  // terminou: o predict a esperou, ou o teto venceu).
+  const contextNotice = !userText
+    ? undefined
+    : !contextAllowed
+      ? CONTEXT_UNAVAILABLE_NOTICE
+      : !userContextP
+        ? CONTEXT_NOT_USED_NOTICE
+        : analysisContextNotice(
+            await userContextP,
+            outcomes.flatMap((o) => (o.ok ? [o.result.prediction.judgments] : [])),
+          );
   // Custo por análise bem-sucedida (lê a aiCall pra exibir).
   const aiCallByMarketKey = new Map<
     string,
@@ -751,9 +809,13 @@ export async function analyzeBestBet(
   });
   revalidatePath(`/match/${matchId}`);
   revalidatePath("/jogos");
-  return palpiteError === undefined
-    ? { ok: true, view, palpite }
-    : { ok: true, view, palpite, palpiteError };
+  return {
+    ok: true,
+    view,
+    palpite,
+    ...(palpiteError === undefined ? {} : { palpiteError }),
+    ...(contextNotice === undefined ? {} : { contextNotice }),
+  };
 }
 
 type HeadlineOutcome = {

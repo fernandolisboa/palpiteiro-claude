@@ -16,7 +16,9 @@ import {
   resultOf,
   type TeamNames,
 } from "@/lib/user-palpite/reading";
+import type { JudgmentAnswers } from "@/lib/ai/judgments/types";
 import type {
+  CheckedClaim,
   ClaimStatus,
   NarrationSource,
   PalpiteReading,
@@ -212,6 +214,23 @@ function sameReading(a: PalpiteReading, b: PalpiteReading): boolean {
   );
 }
 
+/**
+ * O que a afirmação fez no modelo, em PT-BR. O mesmo texto no "Seu palpite" (#564) e no
+ * "o que você acrescentou" da análise com IA (#565). `jev` null = o JEV não rodou.
+ */
+export function claimEffectText(
+  c: Pick<CheckedClaim, "signals">,
+  jev: JudgmentAnswers | null,
+  teams: TeamNames,
+): string {
+  const eff = claimEffect(c, jev);
+  return eff.moved.length > 0
+    ? `efeito no modelo: ${eff.moved.map((q) => effectLabel(q, teams)).join("; ")}`
+    : eff.alreadyConsidered
+      ? "já considerado pelo modelo"
+      : "sem efeito no modelo";
+}
+
 export function toUserPalpiteAnalysisView(
   r: UserPalpiteAnalysisRecord,
   teams: TeamNames,
@@ -219,7 +238,6 @@ export function toUserPalpiteAnalysisView(
 ): UserPalpiteAnalysisView {
   const { model, reading, narration } = r;
   const claims: PalpiteClaimView[] = r.claims.map((c) => {
-    const eff = claimEffect(c, model.jevAnswers);
     return {
       index: c.index,
       text: c.text,
@@ -227,12 +245,7 @@ export function toUserPalpiteAnalysisView(
       status: c.status,
       statusLabel: STATUS_LABEL[c.status],
       evidence: c.evidence,
-      effect:
-        eff.moved.length > 0
-          ? `efeito no modelo: ${eff.moved.map((q) => effectLabel(q, teams)).join("; ")}`
-          : eff.alreadyConsidered
-            ? "já considerado pelo modelo"
-            : "sem efeito no modelo",
+      effect: claimEffectText(c, model.jevAnswers, teams),
       players:
         c.playerChecks.length > 1
           ? c.playerChecks.map((pc) => ({

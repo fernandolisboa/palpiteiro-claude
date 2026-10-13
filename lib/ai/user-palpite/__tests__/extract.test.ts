@@ -122,6 +122,17 @@ describe("extractPalpiteClaims", () => {
     expect(r.aiCallId).toBe("extract-ok-1");
   });
 
+  it("contexto extra da análise (#565): o aviso de corte fala do contexto, não do motivo", async () => {
+    const good = { team: "home", topic: "form", text: "vem de vitórias", direction: "good" };
+    fakeProvider.runAnalysis.mockResolvedValueOnce(
+      ok({ claims: Array.from({ length: 9 }, () => good) }),
+    );
+    const r = await extractPalpiteClaims({ ...ARGS, subject: "contexto" });
+    expect(r.ok && r.warnings).toEqual([
+      "Considerei só as 8 primeiras afirmações do seu contexto.",
+    ]);
+  });
+
   it("zero afirmações não é erro; sucesso grava ok com a versão do prompt", async () => {
     const r = await extractPalpiteClaims(ARGS);
     expect(r).toEqual({ ok: true, claims: [], warnings: [], aiCallId: "extract-ok-1" });

@@ -5,7 +5,9 @@ import {
   buildNarratorMessage,
   checkNarrationFidelity,
   judgmentFactorPhrases,
+  NARRATOR_VERSION,
   NarratorOutputSchema,
+  SYSTEM_PROMPT,
   templatedNarration,
   type NarratorDecision,
 } from "@/lib/ai/markets/_narrator";
@@ -381,6 +383,78 @@ describe("judgmentFactorPhrases", () => {
 
   it("JEV ausente → nenhum fator", () => {
     expect(judgmentFactorPhrases(null, null, TEAMS)).toEqual([]);
+  });
+
+  describe("contexto extra do usuário (#565)", () => {
+    it("fator movido só pelo usuário: origem na frase, sem força (o JEV não o moveu)", () => {
+      const jev = answers({ attack_weakened_away: 0.9 });
+      // JEV ∨ usuário: o usuário pôs 0,7 (não verificável) no ataque do mandante.
+      const combined = { ...jev, attack_weakened_home: { value: 0.7, confidence: null } };
+      const applied = applyJudgments({ lambdaHome: 1.5, lambdaAway: 1.1 }, combined);
+      const phrases = judgmentFactorPhrases(combined, applied.multipliers, TEAMS, {
+        jev,
+        origins: { attack_weakened_home: "unverified" },
+      });
+      expect(phrases).toEqual([
+        "Desfalques tiram do CR Flamengo uma peça ofensiva central (ataque do CR Flamengo ajustado para baixo) (informado por você, não conferido)",
+        "Desfalques tiram do Fluminense FC uma peça ofensiva central (ataque do Fluminense FC ajustado para baixo) — sinal forte",
+      ]);
+    });
+
+    it("a força vem do JEV, nunca do noul do usuário; confirmada vira \"(informado por você)\"", () => {
+      const jev = answers({ rotation_risk_home: 0.6 });
+      const combined = { ...jev, rotation_risk_home: { value: 0.85, confidence: null } };
+      const applied = applyJudgments({ lambdaHome: 1.5, lambdaAway: 1.1 }, combined);
+      const [phrase] = judgmentFactorPhrases(combined, applied.multipliers, TEAMS, {
+        jev,
+        origins: { rotation_risk_home: "confirmed" },
+      });
+      expect(phrase).toContain("— sinal moderado (informado por você)");
+      expect(phrase).not.toContain("sinal forte");
+      expect(phrase).not.toMatch(/\d/);
+    });
+
+    it("JEV que falhou (null): a frase do usuário sai sem força", () => {
+      const combined = answers({ attack_weakened_home: 0.7 });
+      const applied = applyJudgments({ lambdaHome: 1.5, lambdaAway: 1.1 }, combined);
+      const phrases = judgmentFactorPhrases(combined, applied.multipliers, TEAMS, {
+        jev: null,
+        origins: { attack_weakened_home: "unverified" },
+      });
+      expect(phrases).toHaveLength(1);
+      expect(phrases[0]).toMatch(/ajustado para baixo\) \(informado por você, não conferido\)$/);
+    });
+
+    it("narrator_v1.1: a regra 4 explica as duas origens", () => {
+      expect(NARRATOR_VERSION).toBe("narrator_v1.1");
+      expect(SYSTEM_PROMPT).toContain('"(informado por você, não conferido)"');
+      expect(SYSTEM_PROMPT).toContain("nunca como fato confirmado");
+    });
+
+    it("a fidelidade aceita a narração que cita a origem", () => {
+      const d = overDecision({
+        judgmentFactors: [
+          "Desfalques tiram do CR Flamengo uma peça ofensiva central (ataque do CR Flamengo ajustado para baixo) (informado por você, não conferido)",
+        ],
+      });
+      const out = {
+        rationale:
+          "Segundo o que você informou, o CR Flamengo perde uma peça no ataque, e o modelo estima 58,4% para mais de 2,5 gols.",
+        key_factors: ["Desfalque no ataque do CR Flamengo (informado por você, não conferido)", "Edge de 8,2 pp"],
+      };
+      expect(checkNarrationFidelity(out, d).ok).toBe(true);
+    });
+
+    it("templatedNarration leva a origem pros key_factors", () => {
+      const out = templatedNarration(
+        overDecision({
+          judgmentFactors: [
+            "Desfalques tiram do CR Flamengo uma peça ofensiva central (ataque do CR Flamengo ajustado para baixo) (informado por você, não conferido)",
+          ],
+        })
+      );
+      expect(out.key_factors.join(" ")).toContain("(informado por você, não conferido)");
+    });
   });
 });
 

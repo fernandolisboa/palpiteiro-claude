@@ -4,6 +4,10 @@
 
 Accepted (2026-10-13). Fase 3 da proposta "pré-previsão, bet slip e análise do seu palpite" (#564). Lê a base do jogo do ADR 0052 e o JEV do ADR 0041 sem mudar nenhum dos dois; não toca `lib/ai/predict.ts`, `lib/model-base/` nem `lib/bets/slip-model.ts`. Plano: `docs/plans/PLAN-564.md` (o §15 vale sobre o resto).
 
+> **Emenda (#565, 2026-10-13):** o contexto extra da análise com IA passa a alimentar o
+> `predict` no motor `code_jev`. Ver a seção "Emenda (#565)" no fim: ela muda o §6 e a
+> frase "não toca `lib/ai/predict.ts`" do Status para esse caminho.
+
 ## Contexto
 
 O usuário quer dar o próprio palpite e explicar o porquê ("o Palmeiras está sem o artilheiro", "o Flamengo vem de três vitórias"). Duas coisas não podem acontecer: o texto livre virar instrução pro modelo de linguagem, e esse texto mover a probabilidade sem limite (ou contando duas vezes o que o JEV já viu). Ao mesmo tempo, a pergunta "qual a chance do meu palpite?" não precisa de IA nenhuma: é uma leitura da matriz de placares que o modelo já tem.
@@ -37,3 +41,58 @@ O usuário quer dar o próprio palpite e explicar o porquê ("o Palmeiras está 
 - **(−)** Até 2 chamadas de LLM por uso (centavos mesmo no Opus) e até 4 de API-Football, em geral do cache.
 - **(−)** "Peso do jogo" só é verificável no Brasileirão (`LEAGUE_TABLE_CONFIG`); nas demais ligas entra como não verificável.
 - **(−)** O bloco só aparece em jogo analisável: a análise gravada some da página depois do apito.
+
+## Emenda (#565): contexto extra na análise com IA
+
+Plano: `docs/plans/PLAN-565.md` (o §13 vale sobre o resto).
+
+- **O que é.** Campo "Contexto extra (opcional)" (até 1.000 caracteres, CRLF contado como
+  1) no HERO, junto de "Analisar com IA"/"Analisar de novo". A mesma extração
+  (`user_palpite_extract_v1`, sem mudança de prompt) roda pelo seam `AIProvider`, logada em
+  `ai_calls`.
+- **Só no motor `code_jev`.** No motor `llm` (o kill-switch do motor), com
+  `enable_user_context` desligado ou sem nenhum mercado concedido decidido em código, o
+  servidor descarta o texto sem chamar a Haiku e avisa. Os cartuchos que decidem por LLM
+  (placar exato, artilheiro, assistência) e a síntese do palpite **não** veem o contexto:
+  ali "peso pequeno" seria uma instrução sem limite pra um modelo que define
+  probabilidade, e uma afirmação não verificável não pode virar fato numa manchete
+  compartilhável. Como o racional do narrador cita o que a pessoa informou, a síntese
+  (no run e em "Refazer só o palpite") não o recebe quando o contexto moveu algum fator:
+  recebe um racional montado em código só com os fatores do JEV que o usuário não moveu
+  (ou nenhum), com as probabilidades e a seleção da row (`synthesis-input.ts`).
+- **Caminho até o número.** A action dispara a extração depois da cobrança do 1º slot e
+  passa a Promise ao fan-out (teto de 10 s; falha ou teto = run sem contexto). O `predict`
+  a espera **uma vez por run**, depois do JEV, e confere as afirmações com `checkClaims`
+  sobre os dados que **ele** buscou (desfalques com o papel da escalação anterior, o mesmo
+  que o JEV viu; forma; tabela) em vez de `fetchPalpiteFacts`. A evidência sai de
+  `evidenceFromClaims` e entra por `combineAnswers` (máximo, pergunta a pergunta) antes do
+  mesmo `applyJudgments`, com o mesmo clamp. O memo do run guarda JEV ∨ usuário, então todo
+  mercado `code_jev` do run aplica a mesma coisa.
+- **O que é gravado.** `predictions.judgments.answers` continua **só o JEV** (chave do reuso
+  em `findReusableJudgments`: outra análise nunca herda o contexto de alguém) e `applied`
+  quer dizer "o JEV entrou". `multipliers` e `lambda.adjusted` são o que gerou a decisão. As
+  afirmações conferidas (sem texto livre, sem paráfrase, sem nome de jogador: só os campos
+  tipados, a contagem de jogadores, os status e a evidência em código), a evidência, o id
+  da extração, os avisos e as versões ficam em `judgments.userContext`, sem coluna nova. O
+  `modelVersion` ganha `;user=user_evidence_v1` só quando o contexto moveu um fator, o que
+  separa essas predições num grupo próprio de calibração.
+- **Narrador.** Não há bloco de texto do usuário no prompt. Os fatores que o usuário moveu
+  levam a origem na própria frase de fator, "(informado por você, não conferido)" ou
+  "(informado por você)", com a força ("sinal forte/moderado") vinda só do valor do JEV; vale
+  pro narrador LLM e pro racional templado (`narrator_v1.1`). A origem segue o **sinal**
+  que moveu o fator, não o status da afirmação: "(informado por você)" só quando foi um
+  sinal confirmado pelos nossos dados (fato e papel); um desfalque que está na nossa lista
+  sem posição ou como meio-campista, com o papel dito pelo usuário, sai "não conferido".
+- **Teto.** O mesmo do §5: cada fator de ataque/defesa move no máximo 4,2% e uma afirmação
+  falsa e não verificável move até 2,4% por fator de ataque/defesa.
+- **§6 deixa de valer pra este caminho.** As **regras** de gate de edge, stake, Kelly,
+  modelo e odd de referência não mudam, mas os **números** podem mudar dentro do teto por
+  fator: o edge pode cruzar o piso, o stake e o ranking do best bet podem mudar. Por isso a
+  tag `user=` e o "· com seu contexto" no rodapé do motor.
+- **Custo.** A análise de sempre mais 1 Haiku. Nenhuma unidade a mais no limite diário,
+  nenhuma chamada à Odds API e nenhuma chamada extra à API-Football (a conferência usa os
+  dados do `predict`).
+- **Limitações aceitas.** "Outra informação" continua sem conteúdo (só "não conferimos esse
+  tipo"); subtipos tipados ficam pro #569. Se o grupo `code_jev` inteiro cair no caminho
+  LLM (sem λ), o contexto não entra e a página não mostra "o que você acrescentou".
+

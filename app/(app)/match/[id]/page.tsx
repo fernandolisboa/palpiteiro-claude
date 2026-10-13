@@ -18,6 +18,12 @@ import {
   type MatchOddsViews,
 } from "@/components/match-odds-cards";
 import { PalpiteHero } from "@/components/palpites/palpite-hero";
+import { AnalysisUserContext } from "@/components/analysis-user-context";
+import { readAnalysisEngine } from "@/lib/ai/engine/analysis-engine-flag";
+import {
+  toAnalysisUserContextView,
+  type AnalysisUserContextView,
+} from "@/lib/view/analysis-user-context";
 import { GuidedTour } from "@/components/tour/guided-tour";
 import {
   MatchAuxiliarySkeleton,
@@ -169,8 +175,14 @@ export default async function MatchPage({ params, searchParams }: PageProps) {
   });
   // Predição existente e demais leituras em paralelo: pré-requisito pro render
   // síncrono do hero + panel.
-  const [history, palpiteSets, bestBetEnabled, tourState, userContextEnabled] =
-    await Promise.all([
+  const [
+    history,
+    palpiteSets,
+    bestBetEnabled,
+    tourState,
+    userContextEnabled,
+    analysisEngine,
+  ] = await Promise.all([
       // Histórico COMPLETO: agrupado por mercado em toMarketAnalysisSections (#243, a
       // última de cada mercado = uma seção) e em toPreviousAnalysisItems (as reanálises
       // mais antigas, #204). Scoped por userId (sem leak, AC2).
@@ -182,6 +194,8 @@ export default async function MatchPage({ params, searchParams }: PageProps) {
       getEnableBestBetFanOut(),
       getTourState(session.user.id),
       getEnableUserContext(),
+      // Motor (#565): o "Contexto extra" do HERO só vale no code_jev.
+      readAnalysisEngine(),
     ]);
   const latestPred = history[0] ?? null;
 
@@ -229,6 +243,15 @@ export default async function MatchPage({ params, searchParams }: PageProps) {
     history,
     new Date(),
     timeZone,
+  );
+
+  // "Contexto extra (opcional)" no HERO (#565): kill-switch E motor code_jev (a action
+  // confere de novo). "O que você acrescentou" vem da análise visível.
+  const contextEnabled = userContextEnabled && analysisEngine === "code_jev";
+  const userContextView = toAnalysisUserContextView(
+    history,
+    { home: match.homeTeam, away: match.awayTeam },
+    now,
   );
 
   const fixtureRef: FixtureRef = {
@@ -368,6 +391,8 @@ export default async function MatchPage({ params, searchParams }: PageProps) {
           betGrid={betGridP}
           seuPalpite={seuPalpiteP}
           userContextEnabled={userContextEnabled}
+          contextEnabled={contextEnabled}
+          userContextView={userContextView}
           teams={teams}
         />
       </div>
@@ -393,6 +418,8 @@ export default async function MatchPage({ params, searchParams }: PageProps) {
           betGrid={betGridP}
           seuPalpite={seuPalpiteP}
           userContextEnabled={userContextEnabled}
+          contextEnabled={contextEnabled}
+          userContextView={userContextView}
           teams={teams}
         />
       </div>
@@ -446,6 +473,9 @@ type Common = {
   // analisável. `userContextEnabled` = kill-switch do "Analisar meu palpite".
   seuPalpite: Promise<SeuPalpiteData> | null;
   userContextEnabled: boolean;
+  // #565: campo "Contexto extra" no HERO e o "o que você acrescentou" no detalhe.
+  contextEnabled: boolean;
+  userContextView: AnalysisUserContextView | null;
   teams: { home: string; away: string };
 };
 
@@ -470,6 +500,8 @@ function MobileMatch({
   betGrid,
   seuPalpite,
   userContextEnabled,
+  contextEnabled,
+  userContextView,
   teams,
 }: Common) {
   return (
@@ -514,6 +546,7 @@ function MobileMatch({
           setId={heroSetId}
           sharedAt={heroSharedAt}
           hasAnalyses={sections.length > 0}
+          contextEnabled={contextEnabled}
         />
 
         {/* Detalhe por mercado LOGO ABAIXO do palpite: é o "quero ver mais" imediato da
@@ -522,6 +555,7 @@ function MobileMatch({
         <NeutralAnalysisDetail
           sections={sections}
           previousAnalyses={previousAnalyses}
+          userContext={userContextView}
         />
         {unavailableReason !== null && sections.length === 0 && (
           <NotAnalyzableNotice reason={unavailableReason} score={finalScore} />
@@ -600,6 +634,8 @@ function DesktopMatch({
   betGrid,
   seuPalpite,
   userContextEnabled,
+  contextEnabled,
+  userContextView,
   teams,
 }: Common) {
   return (
@@ -644,6 +680,7 @@ function DesktopMatch({
             setId={heroSetId}
             sharedAt={heroSharedAt}
             hasAnalyses={sections.length > 0}
+            contextEnabled={contextEnabled}
           />
         </div>
 
@@ -672,6 +709,7 @@ function DesktopMatch({
           <NeutralAnalysisDetail
             sections={sections}
             previousAnalyses={previousAnalyses}
+            userContext={userContextView}
           />
           {unavailableReason !== null && sections.length === 0 && (
             <NotAnalyzableNotice reason={unavailableReason} score={finalScore} />
@@ -726,14 +764,18 @@ function DesktopMatch({
 function NeutralAnalysisDetail({
   sections,
   previousAnalyses,
+  userContext,
 }: {
   sections: MarketAnalysisSectionItem[];
   previousAnalyses: PreviousAnalysisItem[];
+  // "O que você acrescentou" (#565): o contexto extra da análise visível.
+  userContext: AnalysisUserContextView | null;
 }) {
   if (sections.length === 0) return null;
   return (
     <MatchCollapsible title="ver análise por mercado">
       <div className="flex flex-col gap-3">
+        {userContext && <AnalysisUserContext view={userContext} />}
         <MarketAnalysisSections sections={sections} />
         <PreviousAnalyses items={previousAnalyses} />
       </div>

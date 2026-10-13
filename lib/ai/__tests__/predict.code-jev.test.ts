@@ -246,6 +246,14 @@ vi.mock("@/lib/ai/judgments/provider", () => ({
   }),
 }));
 
+// Extração do contexto extra (#565): a Haiku é a fronteira paga. Só o teste do teto a
+// usa; os demais passam a Promise pronta em `userContextP`.
+const extractPalpiteClaims = vi.fn();
+vi.mock("@/lib/ai/user-palpite/extract", async (importOriginal) => ({
+  ...(await importOriginal<typeof import("@/lib/ai/user-palpite/extract")>()),
+  extractPalpiteClaims: (...args: unknown[]) => extractPalpiteClaims(...args),
+}));
+
 import { resetAnalysisEngineMemo } from "@/lib/ai/engine/analysis-engine-flag";
 import { resetDixonColesFlagMemo } from "@/lib/ratings/model-scoreline";
 import { runCodeJevEngine } from "@/lib/ai/engine/code-jev";
@@ -256,6 +264,7 @@ import { JUDGMENT_QUESTION_IDS } from "@/lib/ai/judgments/questions";
 import type { JudgmentAnswers } from "@/lib/ai/judgments/types";
 import { correctScoreCartridge } from "@/lib/ai/markets/correct_score";
 import { matchResultCartridge } from "@/lib/ai/markets/match_result";
+import { NARRATOR_VERSION } from "@/lib/ai/markets/_narrator";
 import { TypeSafeError } from "@/lib/ai/providers/typesafe/errors";
 import { computeMarketImpliedProbabilities } from "@/lib/odds/implied-probability";
 import { CORRECT_SCORE } from "@/lib/odds/market-descriptor";
@@ -264,6 +273,13 @@ import { runCodeJevFanOut } from "@/lib/ai/best-bet";
 import { computeBestBetRank } from "@/lib/view/best-bet";
 import { sortBestBetEntries } from "@/lib/view/best-bet-sort";
 import { toBestBetView } from "@/lib/view/best-bet";
+import {
+  CONTEXT_EXTRACT_CAP_MS,
+  startAnalysisContextExtraction,
+} from "@/lib/ai/user-palpite/analysis-context";
+import type { ExtractResult } from "@/lib/ai/user-palpite/extract";
+import { combineAnswers } from "@/lib/user-palpite/evidence";
+import type { Claim } from "@/lib/user-palpite/types";
 
 // ─── Fixtures ────────────────────────────────────────────────────────────────
 
@@ -590,7 +606,7 @@ describe("flag analysis_engine = 'code_jev'", () => {
       outputTokens: 0,
       status: "ok",
     });
-    const [narratorCall] = rowsWhere((r) => r.promptVersion === "narrator_v1");
+    const [narratorCall] = rowsWhere((r) => r.promptVersion === NARRATOR_VERSION);
     expect(narratorCall).toMatchObject({
       provider: "anthropic",
       status: "ok",
@@ -605,7 +621,7 @@ describe("flag analysis_engine = 'code_jev'", () => {
     expect(prediction.edgePct).toBe(expected.best!.edgePct!.toFixed(2));
     expect(prediction.rationale).toBe(NARRATION.rationale);
     expect(prediction.keyFactors).toEqual(NARRATION.key_factors);
-    expect(prediction.promptVersion).toBe("narrator_v1");
+    expect(prediction.promptVersion).toBe(NARRATOR_VERSION);
     expect(prediction.modelVersion).toBe(
       "claude-sonnet-4-5-20250929;engine=code_jev;lambda=heuristic;judg=jev_judgments_v1;w=judgment_weights_v1"
     );
@@ -623,7 +639,7 @@ describe("flag analysis_engine = 'code_jev'", () => {
     expect(judgments.versions).toEqual({
       judgments: "jev_judgments_v1",
       weights: "judgment_weights_v1",
-      narrator: "narrator_v1",
+      narrator: NARRATOR_VERSION,
       jevModel: "jev-1.13.0",
       jevModelServed: "jev-1.13.0",
     });
@@ -773,7 +789,7 @@ describe("flag analysis_engine = 'code_jev'", () => {
       isAdmin: true,
       marketKey: "match_result",
     });
-    const [narratorCall] = rowsWhere((r) => r.promptVersion === "narrator_v1");
+    const [narratorCall] = rowsWhere((r) => r.promptVersion === NARRATOR_VERSION);
     expect(narratorCall.status).toBe("invalid_output");
     const [prediction] = rowsWhere((r) => "recommendation" in r);
     expect(prediction.recommendation).toBe("home");
@@ -791,7 +807,7 @@ describe("flag analysis_engine = 'code_jev'", () => {
       isAdmin: true,
       marketKey: "match_result",
     });
-    const [narratorCall] = rowsWhere((r) => r.promptVersion === "narrator_v1");
+    const [narratorCall] = rowsWhere((r) => r.promptVersion === NARRATOR_VERSION);
     expect(narratorCall.status).toBe("invalid_output");
     expect(narratorCall.errorMessage).toMatch(/^fidelity:/);
     const [prediction] = rowsWhere((r) => "recommendation" in r);
@@ -807,7 +823,7 @@ describe("flag analysis_engine = 'code_jev'", () => {
       marketKey: "match_result",
     });
     expect(result.prediction).toBeDefined();
-    const [narratorCall] = rowsWhere((r) => r.promptVersion === "narrator_v1");
+    const [narratorCall] = rowsWhere((r) => r.promptVersion === NARRATOR_VERSION);
     expect(narratorCall.status).not.toBe("ok");
     const [prediction] = rowsWhere((r) => "recommendation" in r);
     expect(prediction.rationale).toMatch(/^O modelo de placar estima/);
@@ -1384,7 +1400,7 @@ describe("best bet no motor code_jev (#512): 1 JEV, mercados em código, 1 narra
     expect(toolNameOf(anthropicCreate.mock.calls[0])).toBe("submit_narration");
     expect(rowsWhere((r) => r.provider === "typesafe")).toHaveLength(1);
     const narratorCalls = rowsWhere(
-      (r) => r.promptVersion === "narrator_v1" && "provider" in r
+      (r) => r.promptVersion === NARRATOR_VERSION && "provider" in r
     );
     expect(narratorCalls).toHaveLength(1);
     // 1 chamada paga (a narração) = 1 slot, cobrado logo antes dela.
@@ -1534,7 +1550,7 @@ describe("best bet no motor code_jev (#512): 1 JEV, mercados em código, 1 narra
     // Exatamente UMA row de narração, auditada como falha de provider e com os
     // tokens cobrados (a recusa é paga).
     const narratorCalls = rowsWhere(
-      (r) => r.promptVersion === "narrator_v1" && "provider" in r
+      (r) => r.promptVersion === NARRATOR_VERSION && "provider" in r
     );
     expect(narratorCalls).toHaveLength(1);
     expect(narratorCalls[0].status).toBe("provider_error");
@@ -1571,7 +1587,7 @@ describe("best bet no motor code_jev (#512): 1 JEV, mercados em código, 1 narra
     expect(acquireSlot).not.toHaveBeenCalled();
     // Uma row de narração com status timeout e custo zero, pra os pendentes terem aiCallId.
     const narratorCalls = rowsWhere(
-      (r) => r.promptVersion === "narrator_v1" && "provider" in r
+      (r) => r.promptVersion === NARRATOR_VERSION && "provider" in r
     );
     expect(narratorCalls).toHaveLength(1);
     expect(narratorCalls[0].status).toBe("timeout");
@@ -1762,5 +1778,358 @@ describe("best bet code_jev (#512) — JEV/matriz fixados, multi-linha e a view"
       if (e.marketKey === top.marketKey) continue;
       expect(e.analysis.rationale).not.toBe(narratorOutput.rationale);
     }
+  });
+});
+
+// ─── Contexto extra da análise (#565) ─────────────────────────────────────────
+
+describe("contexto do usuário (#565)", () => {
+  // Desfalque no ataque do mandante, com nome: não está na nossa lista (vazia) →
+  // não verificável, papel dito pelo usuário (noul 0,7).
+  const ATTACK_HOME: Claim = {
+    team: "home",
+    topic: "absence",
+    text: "o mandante está sem o atacante citado",
+    players: ["Pedro Guilherme"],
+    role: "attack",
+  };
+
+  const extraction = (claims: Claim[], warnings: string[] = []) =>
+    Promise.resolve<ExtractResult>({
+      ok: true,
+      claims,
+      warnings,
+      aiCallId: "ai-extract",
+    });
+
+  const run = (userContextP?: Promise<ExtractResult | null>) =>
+    predict({
+      matchId: "m-1",
+      userId: "u-1",
+      isAdmin: true,
+      marketKey: "match_result",
+      ...(userContextP ? { userContextP } : {}),
+    });
+
+  const onlyPrediction = () => {
+    const [prediction] = rowsWhere((r) => "recommendation" in r);
+    return prediction;
+  };
+
+  it("(a) não verificável move o λ do mandante; answers só do JEV; tag user=; origem no narrador, sem nome", async () => {
+    await run(extraction([ATTACK_HOME]));
+
+    const prediction = onlyPrediction();
+    const j = prediction.judgments as PredictionJudgments;
+    const withUser = expectedEngine(
+      combineAnswers(JEV_ANSWERS, { attack_weakened_home: 0.7 })
+    );
+    const without = expectedEngine(JEV_ANSWERS);
+    expect(j.lambda.adjusted.home).toBeLessThan(without.judgments.lambdaHome);
+    expect(j.lambda.adjusted.home).toBeCloseTo(withUser.judgments.lambdaHome, 10);
+    expect(prediction.confidencePct).toBe(
+      withUser.modelProbByKey[
+        withUser.recommendation === "pass" ? "home" : withUser.recommendation
+      ].toFixed(2)
+    );
+    expect(j.applied).toBe(true);
+    expect(j.answers).toEqual(JEV_ANSWERS);
+    expect(j.multipliers?.home.factors.attack_weakened_home).toBeLessThan(1);
+    expect(j.userContext).toMatchObject({
+      evidence: { attack_weakened_home: 0.7 },
+      extractionAiCallId: "ai-extract",
+      versions: {
+        userEvidence: "user_evidence_v1",
+        extract: "user_palpite_extract_v1",
+      },
+    });
+    expect(j.userContext?.claims).toHaveLength(1);
+    expect(j.userContext?.claims[0]).toMatchObject({
+      topic: "absence",
+      status: "unverifiable",
+      playersCount: 1,
+    });
+    const stored = JSON.stringify(j.userContext);
+    expect(stored).not.toContain("Pedro");
+    expect(stored).not.toContain("está sem");
+    expect(prediction.modelVersion).toBe(
+      "claude-sonnet-4-5-20250929;engine=code_jev;lambda=heuristic;judg=jev_judgments_v1;w=judgment_weights_v1;user=user_evidence_v1"
+    );
+    expect(prediction.promptVersion).toBe(NARRATOR_VERSION);
+
+    const message = JSON.stringify(
+      (anthropicCreate.mock.calls[0][0] as { messages: unknown }).messages
+    );
+    expect(message).toContain(
+      "ataque do CR Flamengo ajustado para baixo) (informado por você, não conferido)"
+    );
+    expect(message).not.toContain("Pedro");
+    expect(message).not.toContain("está sem");
+  });
+
+  it("(b) confirmada com JEV presente: mesmos números, sem tag, contexto gravado", async () => {
+    // O mandante jogou há 2 dias → rodízio confirmado pelos nossos dados; com o JEV
+    // presente, "já considerado" (não sobe o fator).
+    const recent: NormalizedFixture = {
+      ...FIXTURE,
+      id: "recent",
+      kickoffAt: "2026-05-13T19:00:00.000Z",
+      kickoffTimestampMs: Date.parse("2026-05-13T19:00:00.000Z"),
+      awayTeam: "Outro FC",
+      status: "finished",
+      score: { home: 1, away: 0 },
+    };
+    getTeamForm.mockImplementation((team: string) =>
+      Promise.resolve(team === matchRow.homeTeam ? [recent] : [])
+    );
+    await run(
+      extraction([{ team: "home", topic: "rotation", text: "vai poupar" }])
+    );
+
+    const prediction = onlyPrediction();
+    const j = prediction.judgments as PredictionJudgments;
+    const without = expectedEngine(JEV_ANSWERS);
+    expect(j.lambda.adjusted).toEqual({
+      home: without.judgments.lambdaHome,
+      away: without.judgments.lambdaAway,
+    });
+    expect(prediction.modelVersion).not.toContain(";user=");
+    expect(j.userContext?.claims[0].status).toBe("confirmed");
+    expect(j.userContext?.evidence).toEqual({});
+    const message = JSON.stringify(
+      (anthropicCreate.mock.calls[0][0] as { messages: unknown }).messages
+    );
+    expect(message).not.toContain("informado por você");
+  });
+
+  it("(c) JEV falhou + não verificável: applied=false, answers=null, λ movido pelo usuário, falha gravada", async () => {
+    judge.mockRejectedValue(
+      new TypeSafeError({
+        kind: "rate_limited",
+        message: "429",
+        httpStatus: 429,
+        latencyMs: 40,
+      })
+    );
+    await run(extraction([ATTACK_HOME]));
+
+    const prediction = onlyPrediction();
+    const j = prediction.judgments as PredictionJudgments;
+    expect(j.applied).toBe(false);
+    expect(j.answers).toBeNull();
+    expect(j.failure).toEqual({ kind: "rate_limited", message: "429" });
+    expect(j.multipliers).not.toBeNull();
+    expect(j.lambda.adjusted.home).toBeLessThan(j.lambda.base.home);
+    expect(j.lambda.adjusted.away).toBe(j.lambda.base.away);
+    expect(prediction.modelVersion).toMatch(/;user=user_evidence_v1$/);
+  });
+
+  it("(d) só contradita: números idênticos a sem contexto e sem tag", async () => {
+    getInjuriesByFixture.mockResolvedValue({
+      home: [
+        { player: { name: "Fulano de Tal" }, type: "injury", status: "injured" },
+      ],
+      away: [],
+    });
+    await run(
+      extraction([{ team: "home", topic: "full_squad", text: "time completo" }])
+    );
+    const prediction = onlyPrediction();
+    const j = prediction.judgments as PredictionJudgments;
+    const without = expectedEngine(JEV_ANSWERS);
+    expect(j.lambda.adjusted).toEqual({
+      home: without.judgments.lambdaHome,
+      away: without.judgments.lambdaAway,
+    });
+    expect(j.userContext?.claims[0].status).toBe("contradicted");
+    expect(prediction.modelVersion).not.toContain(";user=");
+    expect(JSON.stringify(j.userContext)).not.toContain("Fulano");
+  });
+
+  it("(e) extração vazia, que falhou ou que rejeita → run idêntico ao sem contexto", async () => {
+    const rejected = Promise.reject(new Error("boom"));
+    rejected.catch(() => {});
+    const err = vi.spyOn(console, "error").mockImplementation(() => {});
+    for (const p of [
+      extraction([]),
+      Promise.resolve<ExtractResult>({ ok: false, message: "x", aiCallId: null }),
+      Promise.resolve(null),
+      rejected,
+    ]) {
+      insertValues.mockClear();
+      await run(p);
+      const prediction = onlyPrediction();
+      const j = prediction.judgments as PredictionJudgments;
+      expect(j).not.toHaveProperty("userContext");
+      expect(prediction.modelVersion).not.toContain(";user=");
+    }
+    err.mockRestore();
+  });
+
+  it("(f) best bet: 1 JEV, a mesma evidência e o mesmo contexto em todas as rows code_jev", async () => {
+    getLatestFreshSelectionOddsSnapshots.mockImplementation(
+      (args: { dbMarketKey: string }) =>
+        Promise.resolve(
+          freshSnapshot(
+            args.dbMarketKey === "over_under"
+              ? { over: 1.9, under: 1.95 }
+              : args.dbMarketKey === "btts"
+                ? { yes: 1.85, no: 1.95 }
+                : ODDS
+          )
+        )
+    );
+    resolveMarketCatalog.mockImplementation((key: string) =>
+      Promise.resolve(
+        catalogFor(
+          key === "over_under"
+            ? ["over", "under"]
+            : key === "btts"
+              ? ["yes", "no"]
+              : ["home", "draw", "away"]
+        )
+      )
+    );
+    narratorOutput = {
+      rationale:
+        "O modelo de placar, com a tabela e a forma recente, sustenta esta decisão.",
+      key_factors: ["Tabela", "Forma recente"],
+    };
+    const userContextP = extraction([ATTACK_HOME]);
+    const out = await runCodeJevFanOut(
+      { matchId: "m-1", userId: "u-1", isAdmin: true, userContextP },
+      ["over_under", "match_result", "btts"].map((marketKey) => ({
+        marketKey,
+        extraLines: false,
+      })),
+      (e) => String(e),
+      async () => ({ ok: true })
+    );
+    expect(out.every((o) => o.ok)).toBe(true);
+    expect(judge).toHaveBeenCalledTimes(1);
+    const predictions = rowsWhere((r) => "recommendation" in r);
+    expect(predictions).toHaveLength(3);
+    const js = predictions.map((p) => p.judgments as PredictionJudgments);
+    for (const j of js) {
+      expect(j.multipliers).toEqual(js[0].multipliers);
+      expect(j.userContext).toEqual(js[0].userContext);
+      expect(j.answers).toEqual(JEV_ANSWERS);
+    }
+    for (const p of predictions) {
+      expect(p.modelVersion).toMatch(/;user=user_evidence_v1$/);
+    }
+  });
+
+  it("(g) placar exato no mesmo run: caminho LLM intocado, sem contexto e sem judgments", async () => {
+    const keys = CORRECT_SCORE.selectionKeys;
+    getLatestFreshSelectionOddsSnapshots.mockResolvedValue(
+      freshSnapshot(Object.fromEntries(keys.map((k) => [k, 12])))
+    );
+    resolveMarketCatalog.mockResolvedValue(catalogFor(keys));
+    marketOutput = {
+      recommendation: "pass",
+      confidence_pct: 12,
+      cell_probs: Object.fromEntries(keys.map((k) => [k, 100 / 16])),
+      rationale: "Sem valor claro em nenhum placar.",
+      key_factors: ["mercado equilibrado"],
+    };
+    await predict({
+      matchId: "m-1",
+      userId: "u-1",
+      isAdmin: true,
+      marketKey: "correct_score",
+      userContextP: extraction([ATTACK_HOME]),
+    });
+    expect(toolNameOf(anthropicCreate.mock.calls[0])).toBe("submit_prediction");
+    const message = JSON.stringify(anthropicCreate.mock.calls[0][0]);
+    expect(message).not.toContain("Pedro");
+    expect(message).not.toContain("informado por você");
+    const prediction = onlyPrediction();
+    expect(prediction).not.toHaveProperty("judgments");
+    expect(prediction.modelVersion).toBe("claude-sonnet-4-5-20250929");
+  });
+
+  it("(h) reuso: predição com contexto, reusada por uma análise SEM contexto, dá só o JEV", async () => {
+    await run(extraction([ATTACK_HOME]));
+    insertValues.mockClear();
+    await run();
+
+    expect(judge).toHaveBeenCalledTimes(1);
+    const prediction = onlyPrediction();
+    const j = prediction.judgments as PredictionJudgments;
+    const without = expectedEngine(JEV_ANSWERS);
+    expect(j.answers).toEqual(JEV_ANSWERS);
+    expect(j.reusedFromPredictionId).not.toBeNull();
+    expect(j).not.toHaveProperty("userContext");
+    expect(j.lambda.adjusted).toEqual({
+      home: without.judgments.lambdaHome,
+      away: without.judgments.lambdaAway,
+    });
+    expect(prediction.modelVersion).not.toContain(";user=");
+  });
+
+  it("(i) extração lenta: o teto de 10 s corta a espera e o narrador fica com o resto do prazo", async () => {
+    // Timers falsos de verdade (setTimeout também): o teto é um setTimeout.
+    vi.useRealTimers();
+    vi.useFakeTimers();
+    vi.setSystemTime(new Date("2026-05-12T00:00:00.000Z"));
+    const start = Date.now();
+    // Só responderia em 30 s. Sem o teto, o predict esperaria até lá e o narrador
+    // (Sonnet 4.5, piso de 20 s) não caberia nos 5 s que sobram.
+    const deadlineAt = start + 35_000;
+    extractPalpiteClaims.mockImplementation(
+      () =>
+        new Promise((resolve) =>
+          setTimeout(
+            () =>
+              resolve({ ok: true, claims: [ATTACK_HOME], warnings: [], aiCallId: "late" }),
+            30_000
+          )
+        )
+    );
+    const info = vi.spyOn(console, "info").mockImplementation(() => {});
+    const userContextP = startAnalysisContextExtraction({
+      text: "O mandante está sem o atacante.",
+      teams: { home: matchRow.homeTeam, away: matchRow.awayTeam },
+      matchId: "m-1",
+      userId: "u-1",
+      fanOutDeadline: deadlineAt,
+    });
+    let narratorAt: number | null = null;
+    anthropicCreate.mockImplementation((req: { tools: { name: string }[] }) => {
+      if (req.tools[0].name === "submit_narration") narratorAt = Date.now();
+      return Promise.resolve(anthropicMessage(req.tools[0].name, narratorOutput));
+    });
+
+    const p = predict({
+      matchId: "m-1",
+      userId: "u-1",
+      isAdmin: true,
+      marketKey: "match_result",
+      userContextP,
+      deadlineAt,
+    });
+    // Até a resposta tardia: sem o teto, o predict só seguiria aqui.
+    await vi.advanceTimersByTimeAsync(30_000);
+    await p;
+
+    // O narrador começou no teto, nem um ms depois, com o prazo do run intacto.
+    expect(narratorAt).toBe(start + CONTEXT_EXTRACT_CAP_MS);
+    const narration = anthropicCreate.mock.calls.find(
+      (c) => (c[0] as { tools: { name: string }[] }).tools[0].name === "submit_narration"
+    )!;
+    // Restam 25 s − 5 s de margem = 20 s de timeout.
+    expect((narration[1] as { timeout: number }).timeout).toBe(20_000);
+    const [narratorRow] = rowsWhere(
+      (r) => r.promptVersion === NARRATOR_VERSION && "provider" in r
+    );
+    expect(narratorRow.status).toBe("ok");
+    // O run seguiu sem o contexto.
+    const j = onlyPrediction().judgments as PredictionJudgments;
+    expect(j).not.toHaveProperty("userContext");
+    expect(info.mock.calls.map((c) => JSON.parse(String(c[0])))).toContainEqual(
+      expect.objectContaining({ event: "user_context", outcome: "timeout", latencyMs: 10_000 })
+    );
+    info.mockRestore();
   });
 });

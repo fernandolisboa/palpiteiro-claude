@@ -99,7 +99,8 @@ export default function PrivacidadePage() {
                 resultados, os palpites que você decidir compartilhar e as apostas que você
                 registrar no app (inclusive o texto livre que você digitar para descrevê-las),
                 e o motivo que você escrever para um palpite seu (em &quot;Analisar meu
-                palpite&quot;), com a análise que sai dele. Não escreva nesses campos dados
+                palpite&quot;), com a análise que sai dele, e o contexto extra que você
+                escrever ao pedir uma análise (em &quot;Contexto extra&quot;). Não escreva nesses campos dados
                 pessoais seus ou de outras pessoas. No <Strong>bolão</Strong>, os nomes dos
                 amigos que você anota junto com a aposta de cada um: use só o primeiro nome ou
                 um apelido, e só de quem topou participar.
@@ -164,8 +165,9 @@ export default function PrivacidadePage() {
               </li>
               <li>
                 <Strong>Anthropic</Strong> — geração das análises e palpites; recebe dados das
-                partidas e, quando você registra uma aposta em texto livre ou escreve o motivo
-                de um palpite seu, esse texto (nunca seu e-mail ou nome);
+                partidas e, quando você registra uma aposta em texto livre, escreve o motivo
+                de um palpite seu ou o contexto extra que você escrever ao pedir uma análise,
+                esse texto (nunca seu e-mail ou nome);
               </li>
               <li>
                 <Strong>OpenAI</Strong> — geração de texto, uso condicional e só quando habilitado,
@@ -224,6 +226,8 @@ export default function PrivacidadePage() {
               deles; e desativamos os links públicos dos palpites
               que você compartilhou. As análises e palpites gerados pela IA sobre as partidas
               ficam guardados <Strong>sem nenhum dado que identifique você</Strong> (anonimizados),
+              inclusive as afirmações conferidas do contexto extra (sem o texto que você
+              escreveu, que também é apagado),
               só para a estatística agregada de desempenho do modelo, com acesso vedado a
               terceiros (arts. 12 e 16, IV). Depois disso, o mesmo e-mail pode criar uma conta
               nova, do zero.

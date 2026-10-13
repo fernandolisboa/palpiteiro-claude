@@ -59,6 +59,8 @@ describe("/como-usar", () => {
       "sem o seu contexto",
       "com o seu contexto",
       "Adicionar às suas apostas",
+      "Contexto extra (opcional)",
+      "o que você acrescentou",
     ]) {
       expect(html).toContain(label);
       expect(ui).toContain(label);

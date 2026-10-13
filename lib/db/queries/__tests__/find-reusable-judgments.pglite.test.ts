@@ -279,6 +279,42 @@ describe("findReusableJudgments", () => {
     expect(await find()).toBeNull();
   });
 
+  describe("contexto extra (#565)", () => {
+    const userContext = {
+      claims: [],
+      evidence: { attack_weakened_home: 0.7 },
+      extractionAiCallId: null,
+      warnings: [],
+      versions: { userEvidence: "user_evidence_v1", extract: "user_palpite_extract_v1" },
+    };
+
+    it("row com contexto e JEV aplicado é reusada; answers é só o JEV", async () => {
+      const jevOnly = { attack_weakened_home: { value: 0.2, confidence: null } };
+      const id = await insertPrediction({
+        judgments: judgments({
+          answers: jevOnly as unknown as PredictionJudgments["answers"],
+          userContext,
+        }),
+        createdAt: new Date(NOW.getTime() - 3_600_000),
+      });
+      const out = await find();
+      expect(out?.predictionId).toBe(id);
+      expect(out?.judgments.answers).toEqual(jevOnly);
+    });
+
+    it("JEV que falhou + contexto (applied=false) é ignorada; a válida mais antiga segue achada", async () => {
+      const older = await insertPrediction({
+        judgments: judgments(),
+        createdAt: new Date(NOW.getTime() - 2 * 3_600_000),
+      });
+      await insertPrediction({
+        judgments: judgments({ applied: false, answers: null, userContext }),
+        createdAt: new Date(NOW.getTime() - 3_600_000),
+      });
+      expect((await find())?.predictionId).toBe(older);
+    });
+  });
+
   it("ignora a que é mais velha que a janela", async () => {
     await insertPrediction({
       judgments: judgments(),

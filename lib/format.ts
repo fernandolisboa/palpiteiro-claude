@@ -399,6 +399,8 @@ export function formatAnalysisEngine(
           : "sem JEV",
       );
     }
+    // Contexto extra do usuário conferido nesta análise (#565).
+    if (judgments.userContext) parts.push("com seu contexto");
   }
   return parts.join(" · ");
 }

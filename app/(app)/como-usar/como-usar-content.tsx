@@ -184,6 +184,17 @@ export function ComoUsarContent() {
           <Ui>Refazer só o palpite</Ui> reescreve só o texto do palpite a partir das
           análises que já existem, bem mais rápido.
         </p>
+        <p>
+          Sabe de algo que os dados podem não ter, como quem está fora ou como os
+          times vêm? Quando aparecer <Ui>Contexto extra (opcional)</Ui> logo acima
+          do botão, abra e escreva antes de analisar. A IA separa as afirmações e a
+          gente confere cada uma com os nossos dados: a confirmada em geral o modelo
+          já considerava, a não verificável entra com peso menor e a contradita não
+          entra. O contexto não
+          conta a mais no seu limite do dia. Não escreva dados pessoais. Pra ver o
+          que entrou, abra <Ui>ver análise por mercado</Ui>: lá em cima fica{" "}
+          <Ui>o que você acrescentou</Ui>, com o status de cada afirmação.
+        </p>
         <Tip>
           <Strong>Limite diário.</Strong> Cada mercado analisado conta como uma
           análise do seu limite do dia, então um <Ui>Analisar com IA</Ui> gasta

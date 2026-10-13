@@ -1,14 +1,19 @@
 import type { JudgmentMultipliers } from "@/lib/ai/judgments/apply";
 import type { JudgmentAnswers } from "@/lib/ai/judgments/types";
 import type { DixonColesFallbackReason } from "@/lib/quant/match-model";
+import type { PredictionUserContext } from "@/lib/user-palpite/types";
 
 // Conteúdo de `predictions.judgments` (jsonb, ADR 0041 §6): tudo que a decisão do
 // motor code_jev precisa pra ser recomputada a partir da row.
 export type PredictionJudgments = {
   engine: "code_jev";
-  // Julgamentos JEV aplicados ao λ? false = JEV falhou/sem chave → λ_base puro.
+  // O JEV entrou no λ? false = JEV falhou/sem chave. Só o JEV: a evidência do contexto
+  // extra (#565) fica em `userContext` e nunca liga este campo.
   applied: boolean;
+  // SEMPRE só as respostas do JEV (chave do reuso, findReusableJudgments): nunca a
+  // evidência do usuário, pra outra análise nunca herdar o contexto de alguém.
   answers: JudgmentAnswers | null;
+  // `multipliers` e `lambda.adjusted`: o que gerou a decisão (JEV ∨ userContext.evidence).
   multipliers: JudgmentMultipliers | null;
   lambda: {
     source: "dixon_coles" | "heuristic";
@@ -54,4 +59,8 @@ export type PredictionJudgments = {
   // bet — racional templado em código, sem chamada; `aiCallId` da predição aponta
   // pra narração do mercado escolhido no mesmo run. Ausente nas rows anteriores.
   narration?: "llm_call" | "best_bet_template";
+  // Contexto extra da análise (#565): afirmações conferidas, sem texto livre nem nome de
+  // jogador, e a evidência que entrou no combine. Ausente nas rows sem contexto e nas
+  // anteriores.
+  userContext?: PredictionUserContext;
 };

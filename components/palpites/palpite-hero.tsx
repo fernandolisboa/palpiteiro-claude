@@ -1,6 +1,6 @@
 "use client";
 
-import { useActionState, useState } from "react";
+import { useActionState, useId, useState } from "react";
 import {
   Check,
   Info,
@@ -17,6 +17,7 @@ import { shareSet, unshareSet } from "@/app/actions/share";
 import { SettleableBadge } from "@/components/palpites/palpite-badges";
 import { Button } from "@/components/ui/button";
 import { Callout } from "@/components/ui/callout";
+import { MAX_CONTEXT_CHARS } from "@/lib/user-palpite/types";
 import { cn } from "@/lib/utils";
 import {
   EMPTY_HERO_UNAVAILABLE_COPY,
@@ -58,7 +59,20 @@ type Props = {
   // Há análises por mercado salvas → oferece "gerar só o palpite" (síntese sem re-rodar
   // o fan-out pago).
   hasAnalyses: boolean;
+  // Campo "Contexto extra (opcional)" (#565): kill-switch enable_user_context ligado E
+  // motor code_jev. O servidor confere de novo.
+  contextEnabled: boolean;
 };
+
+// Campo do contexto extra, controlado pelo PalpiteHero (o estado sobrevive ao
+// PendingHero, que desmonta o corpo). `open` tem estado próprio: apagar o texto não
+// fecha o painel no meio da edição. null = campo escondido.
+type ContextField = {
+  value: string;
+  onChange: (v: string) => void;
+  open: boolean;
+  onOpenChange: (open: boolean) => void;
+} | null;
 
 // Um form, duas ações (runPalpiteHero): o botão clicado manda `intent`. "palpite"
 // refaz só a síntese sobre as análises salvas; "analysis" é o run completo.
@@ -98,8 +112,32 @@ export function PalpiteHero({
   setId,
   sharedAt,
   hasAnalyses,
+  contextEnabled,
 }: Props) {
   const [state, formAction, pending] = useActionState(runPalpiteHero, null);
+  const [context, setContext] = useState("");
+  const [contextOpen, setContextOpen] = useState(false);
+  // Análise completa que deu certo limpa e fecha o campo: "Analisar de novo" não reenvia
+  // o mesmo contexto sem querer. Ajuste no render (não em efeito) quando o resultado muda.
+  const [seenState, setSeenState] = useState(state);
+  if (state !== seenState) {
+    setSeenState(state);
+    if (state?.ok && "view" in state) {
+      setContext("");
+      setContextOpen(false);
+    }
+  }
+  const contextNotice =
+    state?.ok && "contextNotice" in state ? (state.contextNotice ?? null) : null;
+  const contextField: ContextField =
+    contextEnabled && unavailable === null && fanOutEnabled
+      ? {
+          value: context,
+          onChange: setContext,
+          open: contextOpen,
+          onOpenChange: setContextOpen,
+        }
+      : null;
   // Set exibido quando este form foi enviado: se outro set chegar depois (outra aba, outro
   // run), o aviso de manchete que não saiu deixa de valer.
   const [setIdAtSubmit, setSetIdAtSubmit] = useState<string | null>(null);
@@ -130,6 +168,11 @@ export function PalpiteHero({
       aria-busy={pending}
     >
       <input type="hidden" name="matchId" value={matchId} />
+      {/* Região viva sempre montada (o corpo desmonta no pending): o leitor de tela anuncia
+          quando o texto troca. Vazia durante o envio, pra repetir o mesmo aviso. */}
+      <p role="status" className="sr-only">
+        {pending ? "" : (contextNotice ?? "")}
+      </p>
       <HeroBody
         heroPalpite={heroPalpite}
         unavailable={unavailable}
@@ -141,6 +184,8 @@ export function PalpiteHero({
         pendingIntent={intent}
         error={error}
         canRegenerate={unavailable === null && fanOutEnabled && hasAnalyses}
+        contextField={contextField}
+        contextNotice={contextNotice}
       />
     </form>
   );
@@ -157,6 +202,8 @@ function HeroBody({
   pendingIntent,
   error,
   canRegenerate,
+  contextField,
+  contextNotice,
 }: {
   heroPalpite: PalpiteHeadlineView | null;
   unavailable: MatchUnavailableReason | null;
@@ -168,6 +215,8 @@ function HeroBody({
   pendingIntent: HeroIntent;
   error: string | null;
   canRegenerate: boolean;
+  contextField: ContextField;
+  contextNotice: string | null;
 }) {
   // Pending: skeleton que espelha o populated (sem reflow) — status em PALAVRAS, sem
   // dígito de tempo. Tem precedência sobre tudo (o run está em voo agora).
@@ -185,6 +234,8 @@ function HeroBody({
         sharedAt={sharedAt}
         error={error}
         canRegenerate={canRegenerate}
+        contextField={contextField}
+        contextNotice={contextNotice}
       />
     );
   }
@@ -196,6 +247,8 @@ function HeroBody({
       fanOutEnabled={fanOutEnabled}
       error={error}
       canRegenerate={canRegenerate}
+      contextField={contextField}
+      contextNotice={contextNotice}
     />
   );
 }
@@ -210,6 +263,8 @@ function PopulatedHero({
   sharedAt,
   error,
   canRegenerate,
+  contextField,
+  contextNotice,
 }: {
   view: PalpiteHeadlineView;
   analyzable: boolean;
@@ -218,12 +273,15 @@ function PopulatedHero({
   sharedAt: Date | null;
   error: string | null;
   canRegenerate: boolean;
+  contextField: ContextField;
+  contextNotice: string | null;
 }) {
   const settled = view.badge !== null;
   return (
     <WarmShell tone="full">
       <div className="flex animate-in fade-in duration-200 flex-col gap-4 motion-reduce:animate-none">
         {error && <InlineError error={error} />}
+        {contextNotice && <ContextNotice notice={contextNotice} />}
 
         <div className="flex flex-wrap items-center gap-2">
           <Kicker />
@@ -264,6 +322,8 @@ function PopulatedHero({
         <DimensionScorecard dimensions={view.dimensions} />
 
         <CitedSources sources={view.sources} />
+
+        {analyzable && contextField && <UserContextField {...contextField} />}
 
         <div className="flex flex-wrap items-center gap-2">
           {analyzable && (
@@ -417,11 +477,15 @@ function EmptyHero({
   fanOutEnabled,
   error,
   canRegenerate,
+  contextField,
+  contextNotice,
 }: {
   unavailable: MatchUnavailableReason | null;
   fanOutEnabled: boolean;
   error: string | null;
   canRegenerate: boolean;
+  contextField: ContextField;
+  contextNotice: string | null;
 }) {
   // Jogo não analisável sem palpite: predict() rejeitaria — sem CTA. O aviso ainda
   // aparece: um run iniciado antes do apito pode terminar depois dele, sem manchete.
@@ -443,6 +507,7 @@ function EmptyHero({
     <WarmShell tone="quiet">
       <div className="flex animate-in fade-in duration-200 flex-col gap-4 motion-reduce:animate-none">
         {error && <InlineError error={error} />}
+        {contextNotice && <ContextNotice notice={contextNotice} />}
         <Kicker />
         <p className="max-w-reading text-balance text-display-md font-medium leading-tight tracking-tight text-foreground">
           E aí, quem leva esse jogo?
@@ -453,6 +518,7 @@ function EmptyHero({
               A IA lê os dois times, os números e o mercado e crava um palpite —
               quem ganha, o placar provável e o porquê.
             </p>
+            {contextField && <UserContextField {...contextField} />}
             <div className="flex flex-wrap items-center gap-2">
               <Button
                 type="submit"
@@ -481,6 +547,69 @@ function EmptyHero({
         )}
       </div>
     </WarmShell>
+  );
+}
+
+// "Contexto extra (opcional)" (#565): o que o usuário sabe e o modelo não sabe. <details>
+// nativo funciona sem JS, e o textarea de um <details> fechado continua sendo postado.
+// Vai junto de "Analisar com IA"/"Analisar de novo"; "só o palpite" ignora no servidor.
+function UserContextField({
+  value,
+  onChange,
+  open,
+  onOpenChange,
+}: NonNullable<ContextField>) {
+  const id = useId();
+  return (
+    <details
+      open={open}
+      onToggle={(e) => onOpenChange(e.currentTarget.open)}
+      className="group max-w-reading"
+    >
+      <summary className="w-fit cursor-pointer rounded-sm text-body-sm tracking-tight text-palpite-strong-fg focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-palpite-border">
+        Contexto extra (opcional)
+      </summary>
+      <div className="mt-2 flex flex-col gap-1.5">
+        <label htmlFor={id} className="sr-only">
+          Contexto extra
+        </label>
+        <textarea
+          id={id}
+          name="userContext"
+          rows={3}
+          maxLength={MAX_CONTEXT_CHARS}
+          value={value}
+          onChange={(e) => onChange(e.target.value)}
+          aria-describedby={`${id}-hint`}
+          placeholder="Ex.: o time da casa está sem o centroavante titular e vem de três derrotas."
+          className="w-full rounded-md border border-palpite-border/60 bg-background px-3 py-2 text-body-sm tracking-tight text-foreground placeholder:text-muted-fg-2 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-palpite-border"
+        />
+        <div className="flex items-start justify-between gap-3">
+          <p id={`${id}-hint`} className="text-eyebrow-xs leading-relaxed tracking-tight text-muted-fg-2">
+            A IA lê o que você escrever e a gente confere cada afirmação com os nossos dados
+            antes de usar. Só entra o que passa, com peso limitado. Não conta a mais no seu
+            limite do dia. Não escreva dados pessoais.
+          </p>
+          <span className="shrink-0 font-mono text-eyebrow-xs tabular-nums text-muted-fg-2">
+            {value.length}/{MAX_CONTEXT_CHARS}
+          </span>
+        </div>
+      </div>
+    </details>
+  );
+}
+
+// O que aconteceu com o contexto extra no último run (#565): linha discreta, some num
+// novo envio. Só visual: o leitor de tela recebe o mesmo texto pela região viva do form.
+function ContextNotice({ notice }: { notice: string }) {
+  return (
+    <p
+      aria-hidden="true"
+      className="flex items-start gap-1.5 text-body-sm leading-relaxed tracking-tight text-muted-fg-2"
+    >
+      <Info className="mt-0.5 size-3.5 shrink-0" aria-hidden="true" />
+      {notice}
+    </p>
   );
 }
 

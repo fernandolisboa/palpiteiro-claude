@@ -17,6 +17,9 @@ export const MIN_REASON_CHARS = 3;
 // = MAX_EXACT_SCORE_GOALS (lib/bets/slip-markets.ts): a matriz vai até 10.
 export const MAX_PALPITE_GOALS = 9;
 export const MAX_CLAIMS = 8;
+// Contexto extra da análise com IA (#565): mesmo teto e piso do motivo do palpite.
+export const MAX_CONTEXT_CHARS = MAX_REASON_CHARS;
+export const MIN_CONTEXT_CHARS = MIN_REASON_CHARS;
 
 // ─── Palpite ────────────────────────────────────────────────────────────────
 
@@ -301,6 +304,53 @@ export const PALPITE_SOURCES = ["buttons"] as const;
 export type PalpiteSource = (typeof PALPITE_SOURCES)[number];
 export const NARRATION_SOURCES = ["llm", "template"] as const;
 export type NarrationSource = (typeof NARRATION_SOURCES)[number];
+
+// ─── Contexto extra da análise com IA (#565) ─────────────────────────────────
+
+// Afirmação conferida SEM texto livre e SEM nome de jogador: é o que vai pra
+// `predictions.judgments.userContext`, que fica depois da exclusão de conta (ADR 0046).
+// A tela descreve a afirmação pelos campos tipados (claimDescription).
+export type StoredContextClaim = Omit<CheckedClaim, "text" | "players" | "playerChecks"> & {
+  playersCount?: number;
+  playerChecks: { status: ClaimStatus; questionId: JudgmentQuestionId | null }[];
+};
+
+export type PredictionUserContext = {
+  claims: StoredContextClaim[];
+  // Nouls por pergunta que entraram no combine (evidenceFromClaims). JEV ∨ isto = o
+  // que o motor aplicou; as respostas do JEV seguem sozinhas em `judgments.answers`.
+  evidence: UserEvidence;
+  extractionAiCallId: string | null;
+  warnings: string[];
+  versions: { userEvidence: string; extract: string };
+};
+
+export const StoredContextClaimSchema: z.ZodType<StoredContextClaim> = z.object({
+  team: z.enum(CLAIM_TEAMS),
+  topic: z.enum(CLAIM_TOPICS),
+  role: z.enum(CLAIM_ROLES).optional(),
+  direction: z.enum(CLAIM_DIRECTIONS).optional(),
+  scope: z.enum(CLAIM_SCOPES).optional(),
+  playersCount: z.number().int().nonnegative().optional(),
+  index: z.number().int().nonnegative(),
+  status: z.enum(CLAIM_STATUSES),
+  evidence: z.string(),
+  sides: z.array(z.object({ side: sideSchema, status: z.enum(CLAIM_STATUSES) })),
+  playerChecks: z.array(
+    z.object({ status: z.enum(CLAIM_STATUSES), questionId: questionIdSchema.nullable() }),
+  ),
+  signals: z.array(
+    z.object({ questionId: questionIdSchema, strength: z.enum(SIGNAL_STRENGTHS) }),
+  ),
+});
+
+export const PredictionUserContextSchema: z.ZodType<PredictionUserContext> = z.object({
+  claims: z.array(StoredContextClaimSchema).max(MAX_CLAIMS),
+  evidence: z.partialRecord(questionIdSchema, z.number()),
+  extractionAiCallId: z.string().nullable(),
+  warnings: z.array(z.string()),
+  versions: z.object({ userEvidence: z.string(), extract: z.string() }),
+});
 
 // ─── Input da server action ─────────────────────────────────────────────────
 

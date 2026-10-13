@@ -55,6 +55,12 @@ vi.mock("@/lib/db/queries/ai-config", () => ({
   // Fan-out paralelo: mockado OFF (undefined) por padrão → caminho serial.
   getEnableParallelFanOut: vi.fn(),
   getEnableBestBetFanOut: vi.fn(),
+  getEnableUserContext: vi.fn(),
+}));
+// Contexto extra (#565): a extração Haiku é a fronteira paga; mockada aqui (coberta em
+// lib/ai/user-palpite/__tests__/analysis-context.test.ts).
+vi.mock("@/lib/ai/user-palpite/analysis-context", () => ({
+  startAnalysisContextExtraction: vi.fn(),
 }));
 // Passo de síntese (#353): generatePalpites é a porta da síntese (Haiku) — mockada
 // aqui (a corretude do gerador é coberta por generate-palpites.test). summarize roda
@@ -91,7 +97,15 @@ import {
   getEnableBestBetFanOut,
   getEnableOverUnderExtraLines,
   getEnableParallelFanOut,
+  getEnableUserContext,
 } from "@/lib/db/queries/ai-config";
+import { startAnalysisContextExtraction } from "@/lib/ai/user-palpite/analysis-context";
+import {
+  CONTEXT_APPLIED_NOTICE,
+  CONTEXT_FAILED_NOTICE,
+  CONTEXT_NOT_USED_NOTICE,
+  CONTEXT_UNAVAILABLE_NOTICE,
+} from "@/lib/user-palpite/analysis-context";
 import { marketsForAudience } from "@/lib/db/queries/market-catalog";
 import { getMatchById } from "@/lib/db/queries/matches";
 import {
@@ -1324,5 +1338,227 @@ describe("analyzeBestBet — fan-out paralelo (flag enable_parallel_fan_out)", (
     await analyzeBestBet(null, form({ matchId: VALID_MATCH_ID }));
     expect(mockStartNewsFetch).not.toHaveBeenCalled();
     expect(mockGeneratePalpites.mock.calls[0][0].news).toBeUndefined();
+  });
+});
+
+describe("analyzeBestBet — contexto extra (#565)", () => {
+  const mockContextFlag = vi.mocked(getEnableUserContext);
+  const mockStart = vi.mocked(startAnalysisContextExtraction);
+  const mockPalpitesRl = vi.mocked(checkPalpitesRateLimit);
+  const CONTEXT = "O Flamengo está sem o centroavante titular.";
+  const CLAIM = {
+    team: "home" as const,
+    topic: "absence" as const,
+    text: "o mandante está sem o centroavante",
+    role: "attack" as const,
+  };
+  const STORED = {
+    claims: [
+      {
+        team: "home" as const,
+        topic: "absence" as const,
+        role: "attack" as const,
+        index: 0,
+        status: "unverifiable" as const,
+        evidence: "Não conseguimos conferir qual jogador; entrou com peso menor.",
+        sides: [{ side: "home" as const, status: "unverifiable" as const }],
+        playerChecks: [],
+        signals: [
+          { questionId: "attack_weakened_home" as const, strength: "unverified" as const },
+        ],
+      },
+    ],
+    evidence: { attack_weakened_home: 0.7 },
+    extractionAiCallId: "ac-extract",
+    warnings: [],
+    versions: { userEvidence: "user_evidence_v1", extract: "user_palpite_extract_v1" },
+  };
+
+  // Rows do fan-out code_jev: com contexto gravado (JEV nulo → a evidência moveu) ou sem.
+  function fanOutWith(userContext: typeof STORED | undefined) {
+    mockCodeJevFanOut.mockImplementation(async (_base, markets) =>
+      markets.map((m, i) => {
+        const r = resultFor(m.marketKey);
+        return {
+          ok: true as const,
+          marketKey: m.marketKey,
+          result: {
+            ...r,
+            prediction: {
+              ...r.prediction,
+              judgments: {
+                engine: "code_jev",
+                applied: false,
+                answers: null,
+                ...(userContext ? { userContext } : {}),
+              },
+            },
+          } as unknown as typeof r,
+          ...(i === 0 ? {} : { sharesAiCall: true as const }),
+        };
+      }),
+    );
+  }
+
+  beforeEach(() => {
+    mockEngine.mockResolvedValue("code_jev");
+    mockContextFlag.mockReset();
+    mockContextFlag.mockResolvedValue(true);
+    mockStart.mockReset();
+    mockStart.mockResolvedValue({
+      ok: true,
+      claims: [CLAIM],
+      warnings: [],
+      aiCallId: "ac-extract",
+    });
+    mockPalpitesRl.mockReset();
+    fanOutWith(STORED);
+  });
+
+  it("sem o campo: flag não lida, sem extração, base sem userContextP, sem aviso", async () => {
+    const res = await analyzeBestBet(null, form({ matchId: VALID_MATCH_ID }));
+    expect(mockContextFlag).not.toHaveBeenCalled();
+    expect(mockStart).not.toHaveBeenCalled();
+    expect(mockCodeJevFanOut.mock.calls[0][0]).not.toHaveProperty("userContextP");
+    expect(res).not.toHaveProperty("contextNotice");
+  });
+
+  it("mais de 1.000 caracteres → {ok:false} antes do auth, do limite e da extração", async () => {
+    const res = await analyzeBestBet(
+      null,
+      form({ matchId: VALID_MATCH_ID, userContext: "a".repeat(1001) }),
+    );
+    expect(res).toEqual({
+      ok: false,
+      error: "O contexto extra passou de 1.000 caracteres.",
+    });
+    expect(mockAuth).not.toHaveBeenCalled();
+    expect(mockRateLimit).not.toHaveBeenCalled();
+    expect(mockStart).not.toHaveBeenCalled();
+  });
+
+  it("CRLF conta como 1 caractere (como o contador do cliente) e chega como LF", async () => {
+    const text = `${"a".repeat(495)}${"\r\n".repeat(10)}${"b".repeat(495)}`;
+    const res = await analyzeBestBet(
+      null,
+      form({ matchId: VALID_MATCH_ID, userContext: text }),
+    );
+    expect(res.ok).toBe(true);
+    const sent = mockStart.mock.calls[0][0].text;
+    expect(sent).toHaveLength(1000);
+    expect(sent).not.toContain("\r");
+  });
+
+  it("curto demais (< 3) vale como vazio", async () => {
+    await analyzeBestBet(null, form({ matchId: VALID_MATCH_ID, userContext: " ok " }));
+    expect(mockContextFlag).not.toHaveBeenCalled();
+    expect(mockStart).not.toHaveBeenCalled();
+  });
+
+  it("kill-switch desligado → sem extração, a análise segue com o aviso de indisponível", async () => {
+    mockContextFlag.mockResolvedValue(false);
+    const res = await analyzeBestBet(
+      null,
+      form({ matchId: VALID_MATCH_ID, userContext: CONTEXT }),
+    );
+    expect(mockStart).not.toHaveBeenCalled();
+    expect(mockCodeJevFanOut.mock.calls[0][0]).not.toHaveProperty("userContextP");
+    expect(res).toMatchObject({ ok: true, contextNotice: CONTEXT_UNAVAILABLE_NOTICE });
+  });
+
+  it("motor 'llm' → sem extração (a flag nem é lida), aviso de indisponível", async () => {
+    mockEngine.mockResolvedValue("llm");
+    const res = await analyzeBestBet(
+      null,
+      form({ matchId: VALID_MATCH_ID, userContext: CONTEXT }),
+    );
+    expect(mockContextFlag).not.toHaveBeenCalled();
+    expect(mockStart).not.toHaveBeenCalled();
+    for (const call of mockPredict.mock.calls) {
+      expect(call[0]).not.toHaveProperty("userContextP");
+    }
+    expect(res).toMatchObject({ ok: true, contextNotice: CONTEXT_UNAVAILABLE_NOTICE });
+  });
+
+  it("limite do dia negado → nenhuma extração (zero gasto)", async () => {
+    mockRateLimit.mockResolvedValue({ ok: false, limit: 7, remaining: 0, reset: 0 });
+    const res = await analyzeBestBet(
+      null,
+      form({ matchId: VALID_MATCH_ID, userContext: CONTEXT }),
+    );
+    expect(res.ok).toBe(false);
+    expect(mockStart).not.toHaveBeenCalled();
+  });
+
+  it("nenhum mercado concedido é decidido em código → sem extração, seguiu sem ele", async () => {
+    mockGetMatchById.mockResolvedValue(matchInLeague("brasileirao_a"));
+    mockMarketsForAudience.mockResolvedValue([
+      { key: "correct_score", label: "Placar exato" },
+    ]);
+    mockCodeJevFanOut.mockImplementation(async (_base, markets) =>
+      markets.map((m) => ({
+        ok: true as const,
+        marketKey: m.marketKey,
+        result: resultFor("match_result"),
+      })),
+    );
+    const res = await analyzeBestBet(
+      null,
+      form({ matchId: VALID_MATCH_ID, userContext: CONTEXT }),
+    );
+    expect(mockStart).not.toHaveBeenCalled();
+    expect(res).toMatchObject({ ok: true, contextNotice: CONTEXT_NOT_USED_NOTICE });
+  });
+
+  it("extração parte depois da cobrança e antes do fan-out; a Promise vai na base; aviso de que entrou", async () => {
+    const res = await analyzeBestBet(
+      null,
+      form({ matchId: VALID_MATCH_ID, userContext: CONTEXT }),
+    );
+    expect(mockStart).toHaveBeenCalledTimes(1);
+    expect(mockStart.mock.calls[0][0]).toMatchObject({
+      text: CONTEXT,
+      teams: { home: "Mexico", away: "South Africa" },
+      matchId: VALID_MATCH_ID,
+      userId: "u1",
+      fanOutDeadline: mockCodeJevFanOut.mock.calls[0][4]?.deadlineAt,
+    });
+    expect(mockRateLimit.mock.invocationCallOrder[0]).toBeLessThan(
+      mockStart.mock.invocationCallOrder[0],
+    );
+    expect(mockStart.mock.invocationCallOrder[0]).toBeLessThan(
+      mockCodeJevFanOut.mock.invocationCallOrder[0],
+    );
+    expect(mockCodeJevFanOut.mock.calls[0][0].userContextP).toBe(
+      mockStart.mock.results[0].value,
+    );
+    expect(res).toMatchObject({ ok: true, contextNotice: CONTEXT_APPLIED_NOTICE });
+  });
+
+  it("não cobra unidade a mais: 1 slot de análise como sem contexto, nenhum de palpites", async () => {
+    await analyzeBestBet(null, form({ matchId: VALID_MATCH_ID, userContext: CONTEXT }));
+    expect(mockRateLimit).toHaveBeenCalledTimes(1);
+    expect(mockPalpitesRl).not.toHaveBeenCalled();
+  });
+
+  it("extração falhou → a análise segue igual, com o aviso de falha", async () => {
+    mockStart.mockResolvedValue({ ok: false, message: "x", aiCallId: null });
+    fanOutWith(undefined);
+    const res = await analyzeBestBet(
+      null,
+      form({ matchId: VALID_MATCH_ID, userContext: CONTEXT }),
+    );
+    expect(res).toMatchObject({ ok: true, contextNotice: CONTEXT_FAILED_NOTICE });
+    if (res.ok) expect(res.view.entries).toHaveLength(4);
+  });
+
+  it("\"Refazer só o palpite\" posta o campo, mas nunca extrai", async () => {
+    vi.mocked(getPredictionHistoryForMatch).mockResolvedValue([]);
+    await runPalpiteHero(
+      null,
+      form({ matchId: VALID_MATCH_ID, intent: "palpite", userContext: CONTEXT }),
+    );
+    expect(mockStart).not.toHaveBeenCalled();
+    expect(mockContextFlag).not.toHaveBeenCalled();
   });
 });

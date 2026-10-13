@@ -16,6 +16,7 @@ import {
   predictForBestBet,
   type CodeJevRunMemo,
   type PendingCodeJevPrediction,
+  type PredictArgs,
   type PredictResult,
 } from "./predict";
 import type { AIModelId } from "./models";
@@ -181,6 +182,9 @@ export async function runFanOut(
     userId: string;
     isAdmin: boolean;
     modelOverride?: AIModelId;
+    // Contexto extra da análise (#565): chega a todo predict() por `...base`; só o
+    // motor code_jev o usa.
+    userContextP?: PredictArgs["userContextP"];
   },
   markets: FanOutMarket[],
   mapError: (err: unknown) => string,

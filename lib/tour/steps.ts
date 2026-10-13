@@ -76,7 +76,7 @@ export const TOUR_CHAPTERS: Record<TourChapter, readonly TourStep[]> = {
     {
       target: "palpite",
       title: "O Palpite",
-      body: "Aqui fica o palpite da IA: quem leva, o placar provável e o porquê. Toque em \"Analisar com IA\" pra gerar. Pode levar alguns minutos, e cada mercado analisado usa uma das suas análises do dia. Depois, \"ver análise por mercado\" abre o detalhe de cada mercado (odd, edge, stake ou PASS).",
+      body: "Aqui fica o palpite da IA: quem leva, o placar provável e o porquê. Toque em \"Analisar com IA\" pra gerar. Pode levar alguns minutos, e cada mercado analisado usa uma das suas análises do dia. Depois, \"ver análise por mercado\" abre o detalhe de cada mercado (odd, edge, stake ou PASS). Quer contar algo que você sabe (quem está fora, como os times vêm)? Quando aparecer, abra \"Contexto extra (opcional)\": a gente confere com os nossos dados antes de usar, e não conta a mais no limite.",
     },
     {
       target: "seu-palpite",
