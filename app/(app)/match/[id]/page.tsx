@@ -28,9 +28,17 @@ import {
   BetSlipSection,
   BetSlipSkeleton,
 } from "@/components/bet-slip-section";
+import { BetSlipBridgeProvider } from "@/components/bet-slip-bridge";
+import {
+  SeuPalpiteSection,
+  SeuPalpiteSkeleton,
+} from "@/components/seu-palpite-section";
 import { auth } from "@/auth";
 import { leagueToKey } from "@/lib/format";
-import { getEnableBestBetFanOut } from "@/lib/db/queries/ai-config";
+import {
+  getEnableBestBetFanOut,
+  getEnableUserContext,
+} from "@/lib/db/queries/ai-config";
 import { latestAnalysisByMarket } from "@/lib/bets/analysis-probs";
 import { resolveSlipModel } from "@/lib/bets/slip-model";
 import { getReferenceOddsForMatch } from "@/lib/db/queries/reference-odds";
@@ -39,6 +47,14 @@ import { getMatchById } from "@/lib/db/queries/matches";
 import { getTourState } from "@/lib/db/queries/users";
 import { getPalpiteSetsForMatch } from "@/lib/db/queries/palpites";
 import { getPredictionHistoryForMatch } from "@/lib/db/queries/predictions";
+import { getLatestUserPalpiteAnalysis } from "@/lib/db/queries/user-palpite-analyses";
+import type { ModelScoreline } from "@/lib/quant/match-model";
+import { resolvePalpiteModelBase } from "@/lib/user-palpite/model-base";
+import {
+  toSeuPalpiteModelView,
+  toUserPalpiteAnalysisView,
+  type SeuPalpiteData,
+} from "@/lib/view/user-palpite";
 import { getLatestSelectionOddsSnapshotsForMatches } from "@/lib/db/queries/odds-snapshots";
 import { ensureOddsSnapshotsFresh } from "@/lib/odds/fetch-and-snapshot";
 import { PAGE_LIVE_MARKETS } from "@/lib/odds/live-card-markets";
@@ -154,7 +170,8 @@ export default async function MatchPage({ params, searchParams }: PageProps) {
   });
   // Predição existente e demais leituras em paralelo: pré-requisito pro render
   // síncrono do hero + panel.
-  const [history, palpiteSets, bestBetEnabled, tourState] = await Promise.all([
+  const [history, palpiteSets, bestBetEnabled, tourState, userContextEnabled] =
+    await Promise.all([
       // Histórico COMPLETO: agrupado por mercado em toMarketAnalysisSections (#243, a
       // última de cada mercado = uma seção) e em toPreviousAnalysisItems (as reanálises
       // mais antigas, #204). Scoped por userId (sem leak, AC2).
@@ -165,6 +182,7 @@ export default async function MatchPage({ params, searchParams }: PageProps) {
       getPalpiteSetsForMatch(match.id, session.user.id),
       getEnableBestBetFanOut(),
       getTourState(session.user.id),
+      getEnableUserContext(),
     ]);
   const latestPred = history[0] ?? null;
 
@@ -253,9 +271,13 @@ export default async function MatchPage({ params, searchParams }: PageProps) {
   // são lidas do banco DEPOIS do refresh que a página já faz (oddsP) — nenhuma chamada
   // nova à Odds API. Falha vira grade sem odds/sem modelo (os botões ainda registram).
   const teams = { home: match.homeTeam, away: match.awayTeam };
+  // O modelo ao vivo é calculado UMA vez e compartilhado pela grade e pelo "Seu palpite"
+  // (que só cai nele quando não há base fresca do jogo).
+  let slipModelP: Promise<ModelScoreline | null> | null = null;
+  const slipModel = () => (slipModelP ??= resolveSlipModel(match));
   const betGridP: Promise<BetGridView> | null = analyzable
     ? Promise.all([
-        resolveSlipModel(match),
+        slipModel(),
         oddsP.then(() => getReferenceOddsForMatch(match.id)),
       ])
         .then(([model, references]) =>
@@ -280,6 +302,30 @@ export default async function MatchPage({ params, searchParams }: PageProps) {
             references: new Map(),
             analysis: new Map(),
           });
+        })
+    : null;
+
+  // "Seu palpite" (#564): o modelo (base do jogo ou cálculo ao vivo) e a última análise
+  // do usuário, por streaming. Só em jogo analisável; falha vira o estado vazio.
+  const userId = session.user.id;
+  const seuPalpiteP: Promise<SeuPalpiteData> | null = analyzable
+    ? Promise.all([
+        resolvePalpiteModelBase(match, { now, liveModel: slipModel }),
+        getLatestUserPalpiteAnalysis(match.id, userId),
+      ])
+        .then(([base, latest]) => ({
+          model: base ? toSeuPalpiteModelView(base) : null,
+          latest: latest ? toUserPalpiteAnalysisView(latest, teams, now) : null,
+        }))
+        .catch((err: unknown): SeuPalpiteData => {
+          console.error(
+            JSON.stringify({
+              scope: "match-page",
+              error: "seu_palpite_failed",
+              message: err instanceof Error ? err.message : String(err),
+            }),
+          );
+          return { model: null, latest: null };
         })
     : null;
 
@@ -325,6 +371,9 @@ export default async function MatchPage({ params, searchParams }: PageProps) {
           homeTeamHref={homeTeamHref}
           awayTeamHref={awayTeamHref}
           betGrid={betGridP}
+          seuPalpite={seuPalpiteP}
+          userContextEnabled={userContextEnabled}
+          teams={teams}
         />
       </div>
       <div className="hidden lg:block">
@@ -347,6 +396,9 @@ export default async function MatchPage({ params, searchParams }: PageProps) {
           homeTeamHref={homeTeamHref}
           awayTeamHref={awayTeamHref}
           betGrid={betGridP}
+          seuPalpite={seuPalpiteP}
+          userContextEnabled={userContextEnabled}
+          teams={teams}
         />
       </div>
     </>
@@ -395,6 +447,11 @@ type Common = {
   // #556: grade de "Registrar apostas" (streaming). null = jogo não analisável (a
   // seção não aparece).
   betGrid: Promise<BetGridView> | null;
+  // #564: bloco "Seu palpite" (streaming), na mesma ponte da grade. null = jogo não
+  // analisável. `userContextEnabled` = kill-switch do "Analisar meu palpite".
+  seuPalpite: Promise<SeuPalpiteData> | null;
+  userContextEnabled: boolean;
+  teams: { home: string; away: string };
 };
 
 function MobileMatch({
@@ -416,6 +473,9 @@ function MobileMatch({
   homeTeamHref,
   awayTeamHref,
   betGrid,
+  seuPalpite,
+  userContextEnabled,
+  teams,
 }: Common) {
   return (
     <div className="bg-background text-foreground">
@@ -489,11 +549,25 @@ function MobileMatch({
           </div>
         )}
 
-        {/* Registrar apostas (#556): seção própria, separada da análise. */}
+        {/* Seu palpite (#564) + Registrar apostas (#556): a ponte deixa o "Seu palpite"
+            mandar o palpite pra lista "Suas apostas" desta árvore. */}
         {betGrid && (
-          <Suspense fallback={<BetSlipSkeleton />}>
-            <BetSlipSection matchId={matchId} grid={betGrid} variant="mobile" />
-          </Suspense>
+          <BetSlipBridgeProvider>
+            {seuPalpite && (
+              <Suspense fallback={<SeuPalpiteSkeleton />}>
+                <SeuPalpiteSection
+                  matchId={matchId}
+                  teams={teams}
+                  data={seuPalpite}
+                  aiEnabled={userContextEnabled}
+                  variant="mobile"
+                />
+              </Suspense>
+            )}
+            <Suspense fallback={<BetSlipSkeleton />}>
+              <BetSlipSection matchId={matchId} grid={betGrid} variant="mobile" />
+            </Suspense>
+          </BetSlipBridgeProvider>
         )}
 
         <div className="flex flex-col gap-3" data-tour="match-stats">
@@ -528,6 +602,9 @@ function DesktopMatch({
   homeTeamHref,
   awayTeamHref,
   betGrid,
+  seuPalpite,
+  userContextEnabled,
+  teams,
 }: Common) {
   return (
     <>
@@ -605,10 +682,23 @@ function DesktopMatch({
         {/* Registrar apostas (#556): seção própria, separada da análise, com a lista
             "Suas apostas" fixa à direita. */}
         {betGrid && (
-          <div className="pb-8">
-            <Suspense fallback={<BetSlipSkeleton />}>
-              <BetSlipSection matchId={matchId} grid={betGrid} variant="desktop" />
-            </Suspense>
+          <div className="flex flex-col gap-6 pb-8">
+            <BetSlipBridgeProvider>
+              {seuPalpite && (
+                <Suspense fallback={<SeuPalpiteSkeleton />}>
+                  <SeuPalpiteSection
+                    matchId={matchId}
+                    teams={teams}
+                    data={seuPalpite}
+                    aiEnabled={userContextEnabled}
+                    variant="desktop"
+                  />
+                </Suspense>
+              )}
+              <Suspense fallback={<BetSlipSkeleton />}>
+                <BetSlipSection matchId={matchId} grid={betGrid} variant="desktop" />
+              </Suspense>
+            </BetSlipBridgeProvider>
           </div>
         )}
 

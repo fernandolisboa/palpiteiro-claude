@@ -48,6 +48,17 @@ describe("/como-usar", () => {
       "Adicionar placar",
       "Preencher com o texto",
       "Pular tour",
+      "seu palpite",
+      "Placar",
+      "Resultado",
+      "Usar placar",
+      "Analisar meu palpite",
+      "confirmada",
+      "contradita",
+      "não verificável",
+      "sem o seu contexto",
+      "com o seu contexto",
+      "Adicionar às suas apostas",
     ]) {
       expect(html).toContain(label);
       expect(ui).toContain(label);

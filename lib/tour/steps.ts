@@ -79,6 +79,11 @@ export const TOUR_CHAPTERS: Record<TourChapter, readonly TourStep[]> = {
       body: "Aqui fica o palpite da IA: quem leva, o placar provável e o porquê. Toque em \"Analisar com IA\" pra gerar. Pode levar alguns minutos, e cada mercado analisado usa uma das suas análises do dia. Depois, \"ver análise por mercado\" abre o detalhe de cada mercado (odd, edge, stake ou PASS).",
     },
     {
+      target: "seu-palpite",
+      title: "Seu palpite",
+      body: "Tem um palpite seu? Escolha o placar ou o resultado e veja na hora a chance que o modelo dá, de graça. Se quiser, escreva o motivo e toque em \"Analisar meu palpite\": a IA lê, a gente confere com os nossos dados e o modelo recalcula (conta 1 do seu limite diário de palpites). \"Adicionar às suas apostas\" leva o palpite pra lista.",
+    },
+    {
       target: "bet-slip",
       title: "Registrar apostas",
       body: "Fez uma aposta na sua casa? Toque nas seleções aqui (ou digite a aposta), confira a odd que você pegou e toque em \"Registrar apostas\". A avaliação sai na hora, sem gastar análise, e a aposta vai pra Apostas.",

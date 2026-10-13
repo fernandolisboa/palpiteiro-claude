@@ -3,6 +3,7 @@
 import { useActionState, useEffect, useMemo, useRef, useState } from "react";
 import { Ticket, X } from "lucide-react";
 
+import { useBetSlipBridge } from "@/components/bet-slip-bridge";
 import { Button } from "@/components/ui/button";
 import { Card } from "@/components/ui/card";
 import { Separator } from "@/components/ui/separator";
@@ -23,6 +24,7 @@ import {
   MAX_EXACT_SCORE_GOALS,
   MAX_SLIP_SELECTIONS,
 } from "@/lib/bets/slip-markets";
+import type { BridgeLeg } from "@/lib/user-palpite/types";
 import { cn } from "@/lib/utils";
 import type {
   BetGridView,
@@ -136,6 +138,60 @@ export function BetSlip({
     setLegs(out);
     setNotice(full ? `No máximo ${MAX_SLIP_SELECTIONS} seleções por vez.` : null);
   }
+
+  // Perna a partir de (kind, params): a da grade quando existe (traz a odd de referência
+  // e a chance); senão (placar fora da grade) montada com a chance da matriz.
+  function legFromKindParams(kind: BridgeLeg["kind"], params: BridgeLeg["params"]): SlipLeg {
+    const id = legSelectionId(kind, params);
+    const fromGrid = byId.get(id);
+    if (fromGrid) return legFromSelection(fromGrid);
+    if ("selection" in params) {
+      const { selection } = params;
+      return {
+        id,
+        groupKey: legGroupKey(kind, params),
+        kind,
+        params,
+        label:
+          selection === "draw"
+            ? "Empate"
+            : `Vitória do ${selection === "home" ? grid.teams.home : grid.teams.away}`,
+        oddInput: "",
+        oddFromReference: false,
+        stakeInput: "",
+        fairOdd: null,
+        modelProbPct: null,
+      };
+    }
+    const { home, away } = params;
+    const prob = grid.exactScoreProbPct?.[home]?.[away] ?? null;
+    return {
+      id,
+      groupKey: "exact_score",
+      kind: "exact_score",
+      params: { home, away },
+      label: `Placar exato: ${grid.teams.home} ${home} × ${away} ${grid.teams.away}`,
+      oddInput: "",
+      oddFromReference: false,
+      stakeInput: "",
+      fairOdd: prob !== null && prob > 0 ? Math.round((100 / prob) * 100) / 100 : null,
+      modelProbPct: prob,
+    };
+  }
+
+  // Ponte com o "Seu palpite" (#564). O ref é reatribuído depois de cada render (no
+  // efeito), então o handler sempre vê a lista atual.
+  const bridge = useBetSlipBridge();
+  const sectionRef = useRef<HTMLElement>(null);
+  const fromBridge = useRef<(leg: BridgeLeg) => void>(() => {});
+  useEffect(() => {
+    fromBridge.current = (leg) => {
+      addLegs([legFromKindParams(leg.kind, leg.params)]);
+      if (variant === "mobile") setSheetOpen(true);
+      else sectionRef.current?.scrollIntoView?.({ behavior: "smooth", block: "start" });
+    };
+  });
+  useEffect(() => bridge?.register((leg) => fromBridge.current(leg)), [bridge]);
 
   function toggle(s: GridSelectionView) {
     if (legs.some((l) => l.id === s.id)) {
@@ -256,22 +312,7 @@ export function BetSlip({
       selectedIds={selectedIds}
       onToggle={toggle}
       onAddScore={(home, away) => {
-        const id = legSelectionId("exact_score", { home, away });
-        const prob = grid.exactScoreProbPct?.[home]?.[away] ?? null;
-        addLegs([
-          {
-            id,
-            groupKey: "exact_score",
-            kind: "exact_score",
-            params: { home, away },
-            label: `Placar exato: ${grid.teams.home} ${home} × ${away} ${grid.teams.away}`,
-            oddInput: "",
-            oddFromReference: false,
-            stakeInput: "",
-            fairOdd: prob !== null && prob > 0 ? Math.round((100 / prob) * 100) / 100 : null,
-            modelProbPct: prob,
-          },
-        ]);
+        addLegs([legFromKindParams("exact_score", { home, away })]);
       }}
       parseAction={parseAction}
       parsing={parsing}
@@ -284,7 +325,7 @@ export function BetSlip({
 
   if (variant === "desktop") {
     return (
-      <section className="flex flex-col gap-3" data-tour="bet-slip">
+      <section ref={sectionRef} className="flex flex-col gap-3" data-tour="bet-slip">
         <SectionHeading modelLabel={grid.modelLabel} />
         <div className="grid grid-cols-[1fr_340px] items-start gap-4">
           {grid_}
@@ -295,7 +336,7 @@ export function BetSlip({
   }
 
   return (
-    <section className="flex flex-col gap-3" data-tour="bet-slip">
+    <section ref={sectionRef} className="flex flex-col gap-3" data-tour="bet-slip">
       <SectionHeading modelLabel={grid.modelLabel} />
       {grid_}
       {/* No celular o painel (com o aviso) fica na folha; o aviso §3 também fica à

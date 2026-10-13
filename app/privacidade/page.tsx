@@ -17,7 +17,7 @@ import {
 // ao mudar o texto material.
 export const dynamic = "force-static";
 
-const LAST_UPDATED = "24 de setembro de 2026";
+const LAST_UPDATED = "13 de outubro de 2026";
 
 export const metadata: Metadata = {
   title: "Política de Privacidade",
@@ -97,8 +97,10 @@ export default function PrivacidadePage() {
               <li>
                 <Strong>Uso:</Strong> as análises e palpites que você pede, seu histórico e
                 resultados, os palpites que você decidir compartilhar e as apostas que você
-                registrar no app — inclusive o texto livre que você digitar para descrevê-las.
-                Não escreva nesse campo dados pessoais seus ou de outras pessoas.
+                registrar no app (inclusive o texto livre que você digitar para descrevê-las),
+                e o motivo que você escrever para um palpite seu (em &quot;Analisar meu
+                palpite&quot;), com a análise que sai dele. Não escreva nesses campos dados
+                pessoais seus ou de outras pessoas.
               </li>
               <li>
                 <Strong>Técnicos e de segurança:</Strong> endereço IP e e-mail usados nos
@@ -160,8 +162,8 @@ export default function PrivacidadePage() {
               </li>
               <li>
                 <Strong>Anthropic</Strong> — geração das análises e palpites; recebe dados das
-                partidas e, quando você registra uma aposta em texto livre, esse texto (nunca seu
-                e-mail ou nome);
+                partidas e, quando você registra uma aposta em texto livre ou escreve o motivo
+                de um palpite seu, esse texto (nunca seu e-mail ou nome);
               </li>
               <li>
                 <Strong>OpenAI</Strong> — geração de texto, uso condicional e só quando habilitado,
@@ -215,7 +217,8 @@ export default function PrivacidadePage() {
               (a partir do e-mail da conta, para confirmarmos que é você). Em até{" "}
               {DATA_REQUEST_RESPONSE_DAYS} dias nós: apagamos seu e-mail, nome, imagem, vínculos
               de login (Google e passkeys) e a data de aceite; apagamos as apostas que você
-              registrou, inclusive o texto livre; e desativamos os links públicos dos palpites
+              registrou, inclusive o texto livre; apagamos os motivos que você escreveu para
+              os seus palpites e as análises deles; e desativamos os links públicos dos palpites
               que você compartilhou. As análises e palpites gerados pela IA sobre as partidas
               ficam guardados <Strong>sem nenhum dado que identifique você</Strong> (anonimizados),
               só para a estatística agregada de desempenho do modelo, com acesso vedado a
