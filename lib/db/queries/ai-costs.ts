@@ -30,9 +30,11 @@ export type CostSummary = {
 
 export type CostByDay = { day: string; totalUsd: number; calls: number };
 
+// userId/email null = chamadas de SISTEMA (JEV do cron da base do modelo, #555): o
+// CHECK ai_calls_user_id_system_only só deixa provider TypeSafe sem usuário.
 export type CostByUser = {
-  userId: string;
-  email: string;
+  userId: string | null;
+  email: string | null;
   totalUsd: number;
   calls: number;
 };
@@ -117,9 +119,11 @@ export async function getCostByDay(
 }
 
 /**
- * Gasto por usuário (com e-mail), maiores gastos primeiro. innerJoin é seguro:
- * `aiCalls.userId` é notNull com onDelete restrict (db/schema.ts), então toda
- * row de ai_call tem um usuário correspondente.
+ * Gasto por usuário (com e-mail), maiores gastos primeiro. leftJoin, NÃO innerJoin:
+ * desde #555 (ADR 0052) `aiCalls.userId` é nullable pras chamadas de sistema (JEV do
+ * cron da base do modelo); um innerJoin as perderia em silêncio e o gasto por usuário
+ * deixaria de fechar com o total. Essas rows voltam agrupadas numa linha com
+ * userId/email null ("sistema" no /admin/costs).
  */
 export async function getCostByUser(): Promise<CostByUser[]> {
   const rows = await db
@@ -130,7 +134,7 @@ export async function getCostByUser(): Promise<CostByUser[]> {
       calls: count(),
     })
     .from(aiCalls)
-    .innerJoin(users, eq(aiCalls.userId, users.id))
+    .leftJoin(users, eq(aiCalls.userId, users.id))
     .groupBy(aiCalls.userId, users.email)
     .orderBy(desc(sum(aiCalls.costUsd)));
 

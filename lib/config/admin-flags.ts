@@ -125,6 +125,16 @@ export const ADMIN_FLAGS = [
       "Mesmo número de chamadas pagas; só muda a ordem. Se a busca de notícias rodar e todos os mercados falharem, ela é paga sem virar palpite.",
   },
   {
+    key: "enableMatchModelJev",
+    kind: "boolean",
+    label: "Pré-previsão com JEV",
+    description:
+      "A base do modelo de cada jogo (recalculada a cada 6h, sem Claude) ajusta os gols esperados com os julgamentos JEV nos jogos a até 48h do início, e o \"Analisar com IA\" reaproveita essas respostas. Desligada, a base usa só o Dixon-Coles (ou o heurístico da tabela).",
+    default: true,
+    costNote:
+      "~US$ 0,0001 de JEV por jogo quando desfalques/tabela mudam; 4–7 chamadas de API-Football por jogo na janela de 48h. Sem The Odds API e sem Claude.",
+  },
+  {
     key: "analysisEngine",
     kind: "enum",
     label: "Motor de análise",

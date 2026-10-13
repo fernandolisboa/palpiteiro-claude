@@ -8,6 +8,10 @@ import { MatchCollapsible } from "@/components/match-collapsible";
 import { PreviousAnalyses } from "@/components/previous-analyses";
 import { MatchAuxiliarySections } from "@/components/match-sections-auxiliary";
 import { MatchHero } from "@/components/match-hero";
+import {
+  MatchModelReading,
+  MatchModelReadingSkeleton,
+} from "@/components/match-model-reading";
 import { MatchSections } from "@/components/match-sections";
 import {
   MatchOddsCards,
@@ -43,7 +47,8 @@ import {
   toMarketAnalysisSections,
   toPreviousAnalysisItems,
 } from "@/lib/view/analysis";
-import { toMatchRowView } from "@/lib/view/match";
+import { loadMatchModelReading } from "@/lib/model-base/reading";
+import { toMatchHeroView } from "@/lib/view/match";
 import {
   matchUnavailableReason,
   unavailableNoticeCopy,
@@ -58,6 +63,8 @@ import { resolveBackHref } from "@/lib/view/back-href";
 import { toNwayOddsView, toOddsView } from "@/lib/view/odds";
 import type {
   MarketAnalysisSectionItem,
+  MatchHeroView,
+  MatchModelReadingView,
   PreviousAnalysisItem,
 } from "@/lib/view/types";
 
@@ -172,7 +179,9 @@ export default async function MatchPage({ params, searchParams }: PageProps) {
   const heroSetId = palpiteSets[0]?.palpiteSet.id ?? null;
   const heroSharedAt = palpiteSets[0]?.palpiteSet.sharedAt ?? null;
 
-  const heroView = toMatchRowView({
+  // toMatchHeroView (não toMatchRowView): o tipo do hero não tem a leitura do modelo
+  // (firewall ADR 0030).
+  const heroView = toMatchHeroView({
     match: {
       id: match.id,
       league: match.league,
@@ -230,6 +239,13 @@ export default async function MatchPage({ params, searchParams }: PageProps) {
     now,
   );
   const analyzable = unavailableReason === null;
+
+  // Leitura do modelo (#555, ADR 0052): a base do jogo, lida do banco (sem odd, sem
+  // chamada externa) e entregue por streaming. Só em jogo analisável: ao vivo e
+  // encerrado ficam fora. Criada UMA vez e compartilhada pelas árvores mobile/desktop.
+  const modelReading = analyzable
+    ? loadMatchModelReading({ matchId: match.id, now })
+    : null;
 
   // "Registrar apostas" (#556): grade de mercados + lista, só antes do apito (a action
   // rejeitaria o resto). FORA do caminho crítico, UMA promise pras duas árvores: o
@@ -293,6 +309,7 @@ export default async function MatchPage({ params, searchParams }: PageProps) {
         <MobileMatch
           heroView={heroView}
           odds={oddsP}
+          modelReading={modelReading}
           sections={sections}
           previousAnalyses={previousAnalyses}
           matchId={match.id}
@@ -314,6 +331,7 @@ export default async function MatchPage({ params, searchParams }: PageProps) {
         <DesktopMatch
           heroView={heroView}
           odds={oddsP}
+          modelReading={modelReading}
           sections={sections}
           previousAnalyses={previousAnalyses}
           matchId={match.id}
@@ -336,10 +354,12 @@ export default async function MatchPage({ params, searchParams }: PageProps) {
 }
 
 type Common = {
-  heroView: ReturnType<typeof toMatchRowView>;
+  heroView: MatchHeroView;
   // Cards de odds (over/under + 1X2 ao vivo, #173), resolvidos fora do caminho crítico
   // e renderizados por streaming. A MESMA promise nas duas árvores.
   odds: Promise<MatchOddsViews>;
+  // Leitura do modelo (#555): só em jogo analisável (null nos demais → não renderiza).
+  modelReading: Promise<MatchModelReadingView | null> | null;
   // Última análise por mercado (#243): ≤1 → resultado cru (idêntico ao atual); ≥2 →
   // uma seção colapsável por mercado. Vazio → nenhuma análise ainda.
   sections: MarketAnalysisSectionItem[];
@@ -380,6 +400,7 @@ type Common = {
 function MobileMatch({
   heroView,
   odds,
+  modelReading,
   sections,
   previousAnalyses,
   matchId,
@@ -458,6 +479,16 @@ function MobileMatch({
           </Suspense>
         </div>
 
+        {/* Leitura do modelo (#555): probabilidade e odd justa, sem valor. Fora do
+            MatchHero/PalpiteHero (firewall ADR 0030). */}
+        {modelReading && (
+          <div className="flex flex-col gap-3">
+            <Suspense fallback={<MatchModelReadingSkeleton />}>
+              <MatchModelReading reading={modelReading} />
+            </Suspense>
+          </div>
+        )}
+
         {/* Registrar apostas (#556): seção própria, separada da análise. */}
         {betGrid && (
           <Suspense fallback={<BetSlipSkeleton />}>
@@ -481,6 +512,7 @@ function MobileMatch({
 function DesktopMatch({
   heroView,
   odds,
+  modelReading,
   sections,
   previousAnalyses,
   matchId,
@@ -546,6 +578,16 @@ function DesktopMatch({
             <MatchOddsCards odds={odds} unavailable={unavailableReason} />
           </Suspense>
         </div>
+
+        {/* Leitura do modelo (#555) FULL-WIDTH abaixo das odds: probabilidade e odd
+            justa, sem valor. Fora do MatchHero/PalpiteHero (firewall ADR 0030). */}
+        {modelReading && (
+          <div className="mb-6">
+            <Suspense fallback={<MatchModelReadingSkeleton />}>
+              <MatchModelReading reading={modelReading} />
+            </Suspense>
+          </div>
+        )}
 
         {/* Detalhe por mercado FULL-WIDTH abaixo das odds: collapsed por padrão, ocupa a
             largura toda ao expandir. Firewall ADR 0030 intacto: é

@@ -15,7 +15,9 @@ import { keyToLeague, LEAGUE_LABEL, leagueToKey } from "@/lib/format";
 import { getActiveLeaguesForRequest } from "@/lib/db/queries/league-settings";
 import { getRequestTimeZone } from "@/lib/server/request-timezone";
 import { getMatchIdsWithPredictionsByUser } from "@/lib/db/queries/matches";
+import { getLatestMatchModelSnapshotsForMatches } from "@/lib/db/queries/match-model-snapshots";
 import { loadRangeMatches } from "@/lib/db/queries/load-range-matches";
+import type { MatchModelSnapshot } from "@/lib/model-base/types";
 import {
   getLatestOverUnderSnapshotsForMatches,
   getLatestSelectionOddsSnapshotsForMatches,
@@ -145,13 +147,25 @@ export default async function JogosPage({ searchParams }: PageProps) {
   // genérica (best-effort, batch). A home NÃO busca odds (só lê) → 1X2 só aparece
   // de visitas anteriores à match page que aqueceram a janela da liga (mesma
   // semântica latest-not-fresh do chip over/under). Ambos batch, sem N+1.
-  const [snapshotByMatch, matchResultByMatch, predictedMatchIds] =
+  // Base do modelo por jogo (#555): uma leitura batch, sem chamada externa. Opcional:
+  // falha de leitura só tira a linha "Modelo" da lista, nunca derruba a página.
+  const [snapshotByMatch, matchResultByMatch, predictedMatchIds, modelByMatch] =
     await Promise.all([
       getLatestOverUnderSnapshotsForMatches(matchIds),
       getLatestSelectionOddsSnapshotsForMatches(matchIds, "match_result"),
       getMatchIdsWithPredictionsByUser({
         matchIds,
         userId,
+      }),
+      getLatestMatchModelSnapshotsForMatches(matchIds).catch((err: unknown) => {
+        console.error(
+          JSON.stringify({
+            scope: "jogos-page",
+            error: "model_snapshots_read_failed",
+            message: err instanceof Error ? err.message : String(err),
+          }),
+        );
+        return new Map<string, MatchModelSnapshot>();
       }),
     ]);
 
@@ -185,6 +199,7 @@ export default async function JogosPage({ searchParams }: PageProps) {
       hasPrediction: predictedMatchIds.has(m.id),
       now,
       timeZone,
+      modelSnapshot: modelByMatch.get(m.id) ?? null,
     });
   });
 

@@ -5,6 +5,7 @@ import {
   INITIAL_BATCH,
   UpcomingMatchesMobile,
 } from "@/components/upcoming-matches-mobile";
+import { MatchModelLine } from "@/components/match-model-line";
 import { UpcomingMatchesDesktop } from "@/components/upcoming-matches-desktop";
 import type { MatchRowView } from "@/lib/view/types";
 
@@ -89,5 +90,52 @@ describe("UpcomingMatchesDesktop chip N-vias (1X2) — #173 PR-2", () => {
     expect(html).toContain("Fora");
     expect(html).toContain("2.10");
     expect(html).toContain("3.90");
+  });
+});
+
+describe("linha da base do modelo (#555)", () => {
+  const model = {
+    favorite: { label: "Casa", pct: "52%" },
+    goals25: { label: "Under 2.5", pct: "55%" },
+  };
+  // Texto visível (sem tags/atributos), pra checar a linguagem da linha.
+  const text = (html: string) => html.replace(/<[^>]+>/g, " ");
+
+  it("aparece no mobile e no desktop só quando há `model`", () => {
+    const withModel: MatchRowView = { ...fakeMatch(0), model };
+    for (const html of [
+      renderToStaticMarkup(<UpcomingMatchesMobile matches={[withModel]} />),
+      renderToStaticMarkup(<UpcomingMatchesDesktop matches={[withModel]} />),
+    ]) {
+      expect(text(html)).toContain("Modelo · Casa 52% · Under 2.5 55%");
+    }
+    for (const html of [
+      renderToStaticMarkup(<UpcomingMatchesMobile matches={[fakeMatch(0)]} />),
+      renderToStaticMarkup(<UpcomingMatchesDesktop matches={[fakeMatch(0)]} />),
+    ]) {
+      expect(html).not.toContain("Modelo ·");
+    }
+  });
+
+  it("MatchModelLine junta a className extra às classes base (cn)", () => {
+    expect(
+      renderToStaticMarkup(<MatchModelLine model={model} className="mt-1" />),
+    ).toContain(
+      'class="font-mono text-eyebrow tabular-nums text-muted-fg-2 mt-1"',
+    );
+    expect(renderToStaticMarkup(<MatchModelLine model={model} />)).toContain(
+      'class="font-mono text-eyebrow tabular-nums text-muted-fg-2"',
+    );
+  });
+
+  it("só probabilidade: sem edge, valor ou odd na linha", () => {
+    const html = renderToStaticMarkup(
+      <UpcomingMatchesMobile
+        matches={[{ ...fakeMatch(0), odds: null, model }]}
+      />,
+    );
+    const line = text(html).match(/Modelo ·[^]*?55%/)?.[0] ?? "";
+    expect(line).not.toBe("");
+    expect(line).not.toMatch(/edge|valor|odd/i);
   });
 });

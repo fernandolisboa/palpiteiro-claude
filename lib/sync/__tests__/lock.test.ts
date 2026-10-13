@@ -135,3 +135,49 @@ describe("acquireSyncLock / releaseSyncLock — in-memory fail-open", () => {
     await releaseSyncLock();
   });
 });
+
+describe("acquireKvLock / releaseKvLock — por chave (#555)", () => {
+  beforeEach(() => {
+    vi.stubEnv("KV_REST_API_URL", "");
+    vi.stubEnv("KV_REST_API_TOKEN", "");
+  });
+
+  it("chaves diferentes não colidem; a mesma chave → false até o release", async () => {
+    vi.spyOn(console, "warn").mockImplementation(() => {});
+    const { acquireKvLock, releaseKvLock, acquireSyncLock, releaseSyncLock } =
+      await load();
+    await releaseKvLock("a:lock");
+    await releaseKvLock("b:lock");
+    await releaseSyncLock();
+
+    expect(await acquireKvLock("a:lock")).toBe(true);
+    expect(await acquireKvLock("b:lock")).toBe(true);
+    expect(await acquireKvLock("a:lock")).toBe(false);
+    // O lock do sync segue independente.
+    expect(await acquireSyncLock()).toBe(true);
+
+    await releaseKvLock("a:lock");
+    expect(await acquireKvLock("a:lock")).toBe(true);
+
+    await releaseKvLock("a:lock");
+    await releaseKvLock("b:lock");
+    await releaseSyncLock();
+  });
+
+  it("KV: SET NX EX na chave pedida e DEL na mesma chave", async () => {
+    vi.stubEnv("KV_REST_API_URL", "https://kv.example");
+    vi.stubEnv("KV_REST_API_TOKEN", "tok");
+    mockSet.mockResolvedValue("OK");
+    const { acquireKvLock, releaseKvLock } = await load();
+
+    expect(await acquireKvLock("model-base:compute:lock", { ttlMs: 300_000 })).toBe(
+      true,
+    );
+    const [key, , opts] = mockSet.mock.calls[0];
+    expect(key).toBe("model-base:compute:lock");
+    expect(opts).toMatchObject({ nx: true, ex: 300 });
+
+    await releaseKvLock("model-base:compute:lock");
+    expect(mockDel).toHaveBeenCalledWith("model-base:compute:lock");
+  });
+});

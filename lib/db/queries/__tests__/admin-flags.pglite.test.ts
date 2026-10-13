@@ -40,6 +40,7 @@ import {
   getEnableDixonColes,
   getEnableFidelityValidation,
   getEnableKellyStaking,
+  getEnableMatchModelJev,
   getEnableOverUnderExtraLines,
   getEnableParallelFanOut,
   setAdminFlag,
@@ -55,6 +56,7 @@ const GETTERS = {
   enableKellyStaking: getEnableKellyStaking,
   enableDixonColes: getEnableDixonColes,
   enableParallelFanOut: getEnableParallelFanOut,
+  enableMatchModelJev: getEnableMatchModelJev,
   analysisEngine: getAnalysisEngine,
 } satisfies Record<AdminFlagKey, () => Promise<unknown>>;
 

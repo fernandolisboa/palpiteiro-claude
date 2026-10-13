@@ -18,6 +18,8 @@ import {
 
 import * as schema from "@/db/schema";
 import type { PredictionJudgments } from "@/lib/ai/engine/types";
+import { JUDGMENT_QUESTION_IDS } from "@/lib/ai/judgments/questions";
+import type { JudgmentAnswers } from "@/lib/ai/judgments/types";
 
 let realDb: PgliteDatabase<typeof schema>;
 let client: PGlite;
@@ -134,7 +136,62 @@ afterAll(async () => {
 
 beforeEach(async () => {
   await realDb.delete(schema.predictions);
+  await realDb.delete(schema.matchModelSnapshots);
 });
+
+// Base do modelo do jogo (#555) com JEV aplicado e o checked_at pedido.
+async function insertSnapshot(checkedAt: Date, stateHash = "hash-a") {
+  const [s] = await realDb
+    .insert(schema.matchModelSnapshots)
+    .values({
+      matchId: ids.matchId,
+      computedAt: checkedAt,
+      checkedAt,
+      modelVersion: "match_model_v1",
+      fingerprint: "fp",
+      lambdaSource: "heuristic",
+      lambdaDegraded: false,
+      lambdaFallbackReason: "no_fit",
+      rho: null,
+      neutral: false,
+      lambdaHomeBase: 1.5,
+      lambdaAwayBase: 1.1,
+      lambdaHome: 1.5,
+      lambdaAway: 1.1,
+      jevStatus: "applied",
+      judgments: {
+        applied: true,
+        answers: Object.fromEntries(
+          JUDGMENT_QUESTION_IDS.map((id) => [id, { value: 0.2, confidence: null }]),
+        ) as JudgmentAnswers,
+        multipliers: null,
+        versions: {
+          judgments: "jev_judgments_v1",
+          weights: "judgment_weights_v1",
+          jevModel: "jev-1.13.0",
+          jevModelServed: "jev-1.13.0",
+        },
+        failure: null,
+        stateHash,
+        aiCallId: "call-cron",
+        reusedFromPredictionId: null,
+        reusedFromModelSnapshotId: null,
+      },
+      probabilities: {
+        match_result: { home: 45, draw: 27, away: 28 },
+        double_chance: { home_or_draw: 72, away_or_draw: 55, home_or_away: 73 },
+        btts: { yes: 50, no: 50 },
+        over_under: {
+          "1.5": { over: 75, under: 25 },
+          "2.5": { over: 48, under: 52 },
+          "3.5": { over: 25, under: 75 },
+        },
+      },
+      topScorelines: [{ home: 1, away: 1, pct: 12 }],
+    })
+    .returning({ id: schema.matchModelSnapshots.id });
+  return s.id;
+}
 
 async function insertPrediction(values: {
   judgments: PredictionJudgments | null;
@@ -228,5 +285,41 @@ describe("findReusableJudgments", () => {
       createdAt: new Date(SINCE.getTime() - 60_000),
     });
     expect(await find()).toBeNull();
+  });
+});
+
+describe("findReusableJudgments — origem base do modelo (#555)", () => {
+  it("sem predição → acha a base (predictionId null, modelSnapshotId)", async () => {
+    const snapId = await insertSnapshot(new Date(NOW.getTime() - 3_600_000));
+    const out = await find();
+    expect(out?.predictionId).toBeNull();
+    expect(out?.modelSnapshotId).toBe(snapId);
+    expect(out?.judgments.aiCallId).toBe("call-cron");
+  });
+
+  it("com as duas → a predição vence", async () => {
+    await insertSnapshot(new Date(NOW.getTime() - 3_600_000));
+    const predId = await insertPrediction({
+      judgments: judgments(),
+      createdAt: new Date(NOW.getTime() - 2 * 3_600_000),
+    });
+    const out = await find();
+    expect(out?.predictionId).toBe(predId);
+    expect(out?.modelSnapshotId).toBeUndefined();
+  });
+
+  it("snapshotSince: base de 10h vale com janela de 12h, não com a de 6h", async () => {
+    await insertSnapshot(new Date(NOW.getTime() - 10 * 3_600_000));
+    expect(await find()).toBeNull();
+    const out = await findReusableJudgments({
+      matchId: ids.matchId,
+      judgmentsVersion: "jev_judgments_v1",
+      weightsVersion: "judgment_weights_v1",
+      jevModel: "jev-1.13.0",
+      stateHash: "hash-a",
+      since: SINCE,
+      snapshotSince: new Date(NOW.getTime() - 12 * 3_600_000),
+    });
+    expect(out?.modelSnapshotId).toBeTruthy();
   });
 });

@@ -191,6 +191,13 @@ export const GLOSSARY: readonly GlossaryEntry[] = [
     group: "decisao",
   },
   {
+    term: "leitura do modelo",
+    anchor: "leitura-modelo",
+    meaning:
+      "A chance de cada resultado do jogo calculada em código pelo modelo de placar (Dixon-Coles, ou o heurístico da tabela quando falta histórico), ajustada pelos julgamentos do JEV perto do jogo. Sem Claude e sem olhar as odds: não é recomendação nem mede edge. A odd justa é 100 ÷ probabilidade — compare com a odd da sua casa.",
+    group: "numeros",
+  },
+  {
     term: "edge",
     anchor: "edge",
     meaning: `Quanto a prob. do modelo supera a prob. do mercado, em PONTOS percentuais (prob. do modelo − prob. do mercado normalizada). O app só recomenda com edge de pelo menos ${MIN_EDGE_PP}pp.`,
