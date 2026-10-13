@@ -36,7 +36,7 @@ function OptionItem({ option }: { option: LeaguePickerOption }) {
  * Seletor de liga da home: <select> nativo (primitivo do ADR 0029) agrupado por
  * região. Substitui as abas, que não escalam além de 3–4 ligas; o picker nativo
  * também é o melhor controle no mobile. Trocar de liga navega preservando o range.
- * O guard em app/jogos/page.tsx segue sendo o enforcement real (liga inativa na
+ * O guard em app/(app)/jogos/page.tsx segue sendo o enforcement real (liga inativa na
  * URL redireciona).
  */
 export function LeaguePicker({ value, activeKeys, range, className }: Props) {

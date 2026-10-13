@@ -32,7 +32,6 @@ export function AccountMenu({ viewer }: { viewer: Viewer }) {
   return (
     <DropdownMenu modal={false}>
       <DropdownMenuTrigger
-        aria-label="Conta"
         className="flex items-center gap-2 rounded-sm text-muted-foreground transition-colors hover:text-foreground focus-visible:outline-none focus-visible:ring-[3px] focus-visible:ring-ring/50 data-[state=open]:text-foreground"
       >
         <UserAvatar
@@ -41,15 +40,16 @@ export function AccountMenu({ viewer }: { viewer: Viewer }) {
           size={26}
           src={viewer.image}
         />
-        <span className="hidden max-w-48 truncate text-body-sm tracking-tight text-foreground lg:inline">
-          {viewer.label}
+        {/* Nome visível no computador é o nome acessível; no celular só há o avatar. */}
+        <span className="sr-only lg:not-sr-only lg:inline-block lg:max-w-48 lg:truncate lg:text-body-sm lg:tracking-tight lg:text-foreground">
+          {viewer.label || "conta"}
         </span>
         <ChevronDown aria-hidden="true" className="hidden size-3.5 lg:block" />
       </DropdownMenuTrigger>
       <DropdownMenuContent align="end">
         <DropdownMenuLabel className="flex flex-col">
           <span className="truncate text-body-sm font-medium tracking-tight">
-            {viewer.label}
+            {viewer.label || "conta"}
           </span>
           {viewer.email && viewer.email !== viewer.label && (
             <span className="truncate font-mono text-eyebrow text-muted-foreground">

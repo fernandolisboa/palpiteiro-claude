@@ -3,6 +3,7 @@ import { describe, expect, it } from "vitest";
 import {
   activeItemHref,
   ADMIN_NAV,
+  ariaCurrentFor,
   HELP_NAV,
   isActivePath,
   navGroups,
@@ -55,5 +56,12 @@ describe("activeItemHref", () => {
 
   it("fora do grupo, nada ativo", () => {
     expect(activeItemHref("/perfil", HELP_NAV.items)).toBeNull();
+  });
+});
+
+describe("ariaCurrentFor", () => {
+  it("page na própria tela, true na sub-tela da seção", () => {
+    expect(ariaCurrentFor("/admin/users", "/admin/users")).toBe("page");
+    expect(ariaCurrentFor("/admin/users/abc", "/admin/users")).toBe("true");
   });
 });

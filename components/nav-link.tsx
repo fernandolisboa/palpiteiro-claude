@@ -11,8 +11,8 @@ const navLinkVariants = cva(
     variants: {
       variant: {
         inline:
-          "text-body-sm tracking-tight text-muted-foreground hover:text-foreground aria-[current=page]:text-foreground",
-        row: "flex min-h-11 items-center rounded-md px-3 py-3 text-label tracking-tight text-muted-foreground hover:bg-accent hover:text-foreground aria-[current=page]:bg-accent aria-[current=page]:text-foreground",
+          "text-body-sm tracking-tight text-muted-foreground hover:text-foreground aria-[current=page]:text-foreground aria-[current=true]:text-foreground",
+        row: "flex min-h-11 items-center rounded-md px-3 py-3 text-label tracking-tight text-muted-foreground hover:bg-accent hover:text-foreground aria-[current=page]:bg-accent aria-[current=page]:text-foreground aria-[current=true]:bg-accent aria-[current=true]:text-foreground",
       },
     },
     defaultVariants: {

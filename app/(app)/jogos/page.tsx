@@ -208,10 +208,6 @@ export default async function JogosPage({ searchParams }: PageProps) {
   return (
     <>
       <GuidedTour
-        // O "rever o tour" do menu pode ser clicado já em /jogos: sem remontar, a partida
-        // (que roda só na montagem) não veria o `?tour=1`. A chave muda a cada request
-        // forçado, então até o segundo clique seguido reabre o tour.
-        key={tourParam === "1" ? `forced-${now.getTime()}` : "auto"}
         chapter="jogos"
         userId={userId}
         serverState={tourState}

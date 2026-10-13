@@ -13,6 +13,7 @@ import {
 import { navLinkVariants } from "@/components/nav-link";
 import {
   activeItemHref,
+  ariaCurrentFor,
   isActivePath,
   navGroups,
   PRIMARY_NAV,
@@ -40,7 +41,9 @@ export function DesktopNav({
         <Link
           key={href}
           href={href}
-          aria-current={isActivePath(pathname, href) ? "page" : undefined}
+          aria-current={
+            isActivePath(pathname, href) ? ariaCurrentFor(pathname, href) : undefined
+          }
           className={navLinkVariants({ variant: "inline" })}
         >
           {label}
@@ -80,7 +83,9 @@ function NavGroupMenu({
           <DropdownMenuItem key={href} asChild>
             <Link
               href={href}
-              aria-current={href === active ? "page" : undefined}
+              aria-current={
+                href === active ? ariaCurrentFor(pathname, href) : undefined
+              }
             >
               {label}
             </Link>

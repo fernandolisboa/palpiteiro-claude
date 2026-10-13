@@ -104,3 +104,14 @@ export function activeItemHref(
   if (matches.length === 0) return null;
   return matches.reduce((a, b) => (b.href.length > a.href.length ? b : a)).href;
 }
+
+/**
+ * `aria-current` de um item ativo: "page" quando é a própria tela, "true" quando é a
+ * seção de uma sub-tela (ex.: "usuários" em `/admin/users/abc`).
+ */
+export function ariaCurrentFor(
+  pathname: string,
+  href: string
+): "page" | "true" {
+  return pathname === (href.split("?")[0] ?? href) ? "page" : "true";
+}

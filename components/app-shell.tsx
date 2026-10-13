@@ -1,7 +1,7 @@
 import * as Sentry from "@sentry/nextjs";
 import Link from "next/link";
 import { unstable_rethrow } from "next/navigation";
-import type { ReactNode } from "react";
+import { Suspense, type ReactNode } from "react";
 
 import { getSession } from "@/lib/auth/session";
 import { MobileNav } from "@/components/mobile-nav";
@@ -17,13 +17,21 @@ import { Wordmark } from "@/components/wordmark";
  * entre navegações. `/como-funciona` (pública) usa o mesmo casco: logado vê o menu,
  * anônimo vê só a marca, o tema e "entrar".
  */
-export async function AppShell({ children }: { children: ReactNode }) {
+export function AppShell({ children }: { children: ReactNode }) {
   return (
     <div className="flex min-h-screen w-full flex-col bg-background text-foreground">
-      <AppHeader viewer={await readViewer()} />
+      {/* A sessão revalida o token no DB (cold start do Neon ~1s). Em Suspense, o
+          conteúdo e os `loading.tsx` das rotas não esperam o header. */}
+      <Suspense fallback={<AppHeader viewer="pending" />}>
+        <SessionHeader />
+      </Suspense>
       <div className="flex-1">{children}</div>
     </div>
   );
+}
+
+async function SessionHeader() {
+  return <AppHeader viewer={await readViewer()} />;
 }
 
 /**
@@ -49,13 +57,17 @@ async function readViewer(): Promise<Viewer | null> {
   }
 }
 
-export function AppHeader({ viewer }: { viewer: Viewer | null }) {
+/** `null` = anônimo; `"pending"` = sessão ainda carregando (só marca e tema). */
+export function AppHeader({ viewer: state }: { viewer: Viewer | null | "pending" }) {
+  const pending = state === "pending";
+  const viewer = pending ? null : state;
   return (
     <header className="sticky top-0 z-40 border-b border-border-subtle bg-background/90 backdrop-blur-sm">
       <div className="flex h-14 items-center justify-between gap-3 px-4 lg:px-8">
         <div className="flex min-w-0 items-center gap-1.5 lg:gap-7">
           {viewer && <MobileNav isAdmin={viewer.isAdmin} className="lg:hidden" />}
           <Link
+            // "/" leva o logado pra /jogos (middleware) e o anônimo pra landing.
             href={viewer ? "/jogos" : "/"}
             aria-label={viewer ? "palpiteiro, ir para jogos" : "palpiteiro, página inicial"}
             className="rounded-sm focus-visible:outline-none focus-visible:ring-[3px] focus-visible:ring-ring/50"
@@ -69,8 +81,8 @@ export function AppHeader({ viewer }: { viewer: Viewer | null }) {
         </div>
         <div className="flex shrink-0 items-center gap-2 lg:gap-3">
           <ThemeToggle />
-          {viewer ? (
-            viewer.label && <AccountMenu viewer={viewer} />
+          {pending ? null : viewer ? (
+            <AccountMenu viewer={viewer} />
           ) : (
             <Link
               href="/signin"

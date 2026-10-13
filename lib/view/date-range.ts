@@ -25,7 +25,7 @@ const HOUR_MS = 60 * 60 * 1000;
 // Janela em que um jogo que JÁ apitou ainda conta como "em andamento": ~90' +
 // acréscimos + intervalo (mata-mata com prorrogação/pênaltis ≈ teto de 3h). É o
 // ÚNICO dono deste limite — consumido por (a) o bound inferior da QUERY em
-// app/jogos/page.tsx (admite a cauda de 3h de jogos já apitados nas presets de
+// app/(app)/jogos/page.tsx (admite a cauda de 3h de jogos já apitados nas presets de
 // janela), (b) a derivação de `isInProgress` em lib/view/match.ts (a badge "ao
 // vivo") E (c) o bound inferior de getUpcomingMatches em lib/db/queries/matches.ts
 // (#418, mesmo concern de query). Todos DEVEM ler esta constante (nunca um

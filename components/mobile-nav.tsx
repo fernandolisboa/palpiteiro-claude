@@ -17,6 +17,7 @@ import {
 import {
   ACCOUNT_NAV,
   activeItemHref,
+  ariaCurrentFor,
   navGroups,
   PRIMARY_NAV,
   type NavItem,
@@ -83,7 +84,9 @@ export function MobileNav({
                 <SheetClose asChild key={href}>
                   <Link
                     href={href}
-                    aria-current={href === active ? "page" : undefined}
+                    aria-current={
+                      href === active ? ariaCurrentFor(pathname, href) : undefined
+                    }
                     className={navLinkVariants({ variant: "row" })}
                   >
                     {label}
