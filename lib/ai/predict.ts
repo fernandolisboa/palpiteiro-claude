@@ -691,7 +691,7 @@ async function runPredict(
   //     o hard-fail de zero-seleção) + materializa LAZY as seleções por jogador
   //     (ensureScorerSelections, pré-paid — falha de DB nunca queima spend), NUNCA
   //     re-entrando em resolveMarketCatalog. idByKey vem do upsert+re-read.
-  let catalog: { marketId: string; idByKey: Map<string, string> };
+  let catalog: { marketId: string; idByKey: ReadonlyMap<string, string> };
   if (isIndependentBinary) {
     const row = await resolveMarketRow(cartridge.descriptor.dbMarketKey);
     const { idByKey } = await ensureScorerSelections(
@@ -1401,7 +1401,7 @@ async function runPredict(
 
 // ─── Decisão + persistência (compartilhadas pelos motores llm e code_jev) ────
 
-type MarketCatalog = { marketId: string; idByKey: Map<string, string> };
+type MarketCatalog = { marketId: string; idByKey: ReadonlyMap<string, string> };
 
 type DecisionArgs = {
   cartridge: MarketCartridge;

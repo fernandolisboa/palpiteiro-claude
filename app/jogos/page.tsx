@@ -88,8 +88,12 @@ export default async function JogosPage({ searchParams }: PageProps) {
     [TOUR_FORCE_PARAM]: tourParam,
   } = await searchParams;
   // Ligas ativas por request (league_settings, ADR 0050 — toggle no admin vale sem
-  // deploy; nunca vazia, cai no fallback em código).
-  const activeLeagues = await getActiveLeaguesForRequest();
+  // deploy; nunca vazia, cai no fallback em código) e sessão em paralelo: as duas
+  // são idas ao banco independentes. A ordem dos redirects abaixo não muda.
+  const [activeLeagues, session] = await Promise.all([
+    getActiveLeaguesForRequest(),
+    auth(),
+  ]);
   const activeKeys = activeLeagues.map(leagueToKey);
   // Liga inativa (ex.: `?league=wc` bookmarkado da Copa) → redirect pra home limpa,
   // que resolve pro default (sempre ativo → sem loop). Aponta pra /jogos (a home
@@ -115,7 +119,6 @@ export default async function JogosPage({ searchParams }: PageProps) {
   );
 
   // Middleware garante sessão; redirect defensivo caso o matcher mude.
-  const session = await auth();
   if (!session?.user?.id) redirect("/signin");
   const userId = session.user.id;
   const isAdmin = session.user.role === "admin";
@@ -132,28 +135,27 @@ export default async function JogosPage({ searchParams }: PageProps) {
     limit: RANGE_LIMIT,
   };
 
-  const dbMatches = await loadRangeMatches(matchesQuery);
+  // Predições recentes e estado do tour só dependem do usuário: correm junto da
+  // query de jogos em vez de esperar por ela.
+  const [dbMatches, recentRaw, tourState] = await Promise.all([
+    loadRangeMatches(matchesQuery),
+    getRecentPredictionsByUser(userId, RECENT_LIMIT),
+    getTourState(userId),
+  ]);
 
   const matchIds = dbMatches.map((m) => m.id);
   // Chip N-vias (#173): além do over/under legado (tabela velha), lê 1X2 da tabela
   // genérica (best-effort, batch). A home NÃO busca odds (só lê) → 1X2 só aparece
   // de visitas anteriores à match page que aqueceram a janela da liga (mesma
   // semântica latest-not-fresh do chip over/under). Ambos batch, sem N+1.
-  const [
-    snapshotByMatch,
-    matchResultByMatch,
-    predictedMatchIds,
-    recentRaw,
-    tourState,
-  ] = await Promise.all([
+  const [snapshotByMatch, matchResultByMatch, predictedMatchIds] =
+    await Promise.all([
       getLatestOverUnderSnapshotsForMatches(matchIds),
       getLatestSelectionOddsSnapshotsForMatches(matchIds, "match_result"),
       getMatchIdsWithPredictionsByUser({
         matchIds,
         userId,
       }),
-      getRecentPredictionsByUser(userId, RECENT_LIMIT),
-      getTourState(userId),
     ]);
 
   // Fuso de exibição do usuário (#1) — formata kickoff/datas no fuso do navegador.
