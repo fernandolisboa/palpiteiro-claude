@@ -246,6 +246,14 @@ vi.mock("@/lib/ai/judgments/provider", () => ({
   }),
 }));
 
+// Extração do contexto extra (#565): a Haiku é a fronteira paga. Só o teste do teto a
+// usa; os demais passam a Promise pronta em `userContextP`.
+const extractPalpiteClaims = vi.fn();
+vi.mock("@/lib/ai/user-palpite/extract", async (importOriginal) => ({
+  ...(await importOriginal<typeof import("@/lib/ai/user-palpite/extract")>()),
+  extractPalpiteClaims: (...args: unknown[]) => extractPalpiteClaims(...args),
+}));
+
 import { resetAnalysisEngineMemo } from "@/lib/ai/engine/analysis-engine-flag";
 import { resetDixonColesFlagMemo } from "@/lib/ratings/model-scoreline";
 import { runCodeJevEngine } from "@/lib/ai/engine/code-jev";
@@ -265,6 +273,10 @@ import { runCodeJevFanOut } from "@/lib/ai/best-bet";
 import { computeBestBetRank } from "@/lib/view/best-bet";
 import { sortBestBetEntries } from "@/lib/view/best-bet-sort";
 import { toBestBetView } from "@/lib/view/best-bet";
+import {
+  CONTEXT_EXTRACT_CAP_MS,
+  startAnalysisContextExtraction,
+} from "@/lib/ai/user-palpite/analysis-context";
 import type { ExtractResult } from "@/lib/ai/user-palpite/extract";
 import { combineAnswers } from "@/lib/user-palpite/evidence";
 import type { Claim } from "@/lib/user-palpite/types";
@@ -2054,5 +2066,70 @@ describe("contexto do usuário (#565)", () => {
       away: without.judgments.lambdaAway,
     });
     expect(prediction.modelVersion).not.toContain(";user=");
+  });
+
+  it("(i) extração lenta: o teto de 10 s corta a espera e o narrador fica com o resto do prazo", async () => {
+    // Timers falsos de verdade (setTimeout também): o teto é um setTimeout.
+    vi.useRealTimers();
+    vi.useFakeTimers();
+    vi.setSystemTime(new Date("2026-05-12T00:00:00.000Z"));
+    const start = Date.now();
+    // Só responderia em 30 s. Sem o teto, o predict esperaria até lá e o narrador
+    // (Sonnet 4.5, piso de 20 s) não caberia nos 5 s que sobram.
+    const deadlineAt = start + 35_000;
+    extractPalpiteClaims.mockImplementation(
+      () =>
+        new Promise((resolve) =>
+          setTimeout(
+            () =>
+              resolve({ ok: true, claims: [ATTACK_HOME], warnings: [], aiCallId: "late" }),
+            30_000
+          )
+        )
+    );
+    const info = vi.spyOn(console, "info").mockImplementation(() => {});
+    const userContextP = startAnalysisContextExtraction({
+      text: "O mandante está sem o atacante.",
+      teams: { home: matchRow.homeTeam, away: matchRow.awayTeam },
+      matchId: "m-1",
+      userId: "u-1",
+      fanOutDeadline: deadlineAt,
+    });
+    let narratorAt: number | null = null;
+    anthropicCreate.mockImplementation((req: { tools: { name: string }[] }) => {
+      if (req.tools[0].name === "submit_narration") narratorAt = Date.now();
+      return Promise.resolve(anthropicMessage(req.tools[0].name, narratorOutput));
+    });
+
+    const p = predict({
+      matchId: "m-1",
+      userId: "u-1",
+      isAdmin: true,
+      marketKey: "match_result",
+      userContextP,
+      deadlineAt,
+    });
+    // Até a resposta tardia: sem o teto, o predict só seguiria aqui.
+    await vi.advanceTimersByTimeAsync(30_000);
+    await p;
+
+    // O narrador começou no teto, nem um ms depois, com o prazo do run intacto.
+    expect(narratorAt).toBe(start + CONTEXT_EXTRACT_CAP_MS);
+    const narration = anthropicCreate.mock.calls.find(
+      (c) => (c[0] as { tools: { name: string }[] }).tools[0].name === "submit_narration"
+    )!;
+    // Restam 25 s − 5 s de margem = 20 s de timeout.
+    expect((narration[1] as { timeout: number }).timeout).toBe(20_000);
+    const [narratorRow] = rowsWhere(
+      (r) => r.promptVersion === NARRATOR_VERSION && "provider" in r
+    );
+    expect(narratorRow.status).toBe("ok");
+    // O run seguiu sem o contexto.
+    const j = onlyPrediction().judgments as PredictionJudgments;
+    expect(j).not.toHaveProperty("userContext");
+    expect(info.mock.calls.map((c) => JSON.parse(String(c[0])))).toContainEqual(
+      expect.objectContaining({ event: "user_context", outcome: "timeout", latencyMs: 10_000 })
+    );
+    info.mockRestore();
   });
 });
