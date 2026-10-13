@@ -407,7 +407,7 @@ describe("PalpiteHero — análises saíram mas o palpite não (regressão)", ()
     { ok: true }
   >["view"];
   const MESSAGE =
-    "As análises por mercado ficaram prontas, mas o palpite não saiu desta vez. Tente de novo.";
+    "As análises por mercado ficaram prontas, mas o palpite não saiu desta vez. Tente de novo pelo botão de gerar só o palpite, que usa as análises já salvas sem refazê-las.";
 
   it("sem palpite anterior → aviso no card vazio, com a CTA pra tentar de novo", async () => {
     const text = await submitWith(
