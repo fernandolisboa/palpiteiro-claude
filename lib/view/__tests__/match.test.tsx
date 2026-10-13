@@ -3,7 +3,8 @@ import { renderToStaticMarkup } from "react-dom/server";
 
 import { MatchRow } from "@/components/match-row";
 import type { MatchInput } from "@/lib/view/match";
-import { toMatchRowView } from "@/lib/view/match";
+import { toMatchHeroView, toMatchRowView } from "@/lib/view/match";
+import type { MatchModelSnapshot } from "@/lib/model-base/types";
 import { IN_PROGRESS_WINDOW_MS } from "@/lib/view/date-range";
 import type { MatchStatus } from "@/lib/view/types";
 
@@ -358,5 +359,72 @@ describe("toMatchRowView — nomes da Copa em PT-BR (fiação do caller)", () =>
     });
     expect(view.league).toBe("bsa");
     expect(view.home.name).toBe("Mexico");
+  });
+});
+
+describe("base do modelo na linha e firewall do hero (#555)", () => {
+  // Base mínima com as probabilidades que a linha lê.
+  const modelSnapshot = {
+    probabilities: {
+      match_result: { home: 52.4, draw: 25.1, away: 22.5 },
+      double_chance: { home_or_draw: 77.5, away_or_draw: 47.6, home_or_away: 74.9 },
+      btts: { yes: 50, no: 50 },
+      over_under: {
+        "1.5": { over: 74, under: 26 },
+        "2.5": { over: 45, under: 55 },
+        "3.5": { over: 22, under: 78 },
+      },
+    },
+  } as unknown as MatchModelSnapshot;
+
+  it("analisável com base → model; sem base ou não analisável → undefined", () => {
+    const withModel = toMatchRowView({
+      match: makeMatch(),
+      odds: null,
+      hasPrediction: false,
+      now: NOW,
+      modelSnapshot,
+    });
+    expect(withModel.model).toEqual({
+      favorite: { label: "Casa", pct: "52%" },
+      goals25: { label: "Under 2.5", pct: "55%" },
+    });
+
+    expect(
+      toMatchRowView({ match: makeMatch(), odds: null, hasPrediction: false, now: NOW })
+        .model,
+    ).toBeUndefined();
+    for (const status of ["live", "finished", "postponed"] as MatchStatus[]) {
+      expect(
+        toMatchRowView({
+          match: makeMatch({ status }),
+          odds: null,
+          hasPrediction: false,
+          now: NOW,
+          modelSnapshot,
+        }).model,
+      ).toBeUndefined();
+    }
+    // Já apitou (kickoff no passado) mesmo com status scheduled.
+    expect(
+      toMatchRowView({
+        match: makeMatch({ kickoffAt: new Date(NOW.getTime() - 60_000) }),
+        odds: null,
+        hasPrediction: false,
+        now: NOW,
+        modelSnapshot,
+      }).model,
+    ).toBeUndefined();
+  });
+
+  it("toMatchHeroView com a base → sem a chave `model`", () => {
+    const hero = toMatchHeroView({
+      match: makeMatch(),
+      odds: null,
+      hasPrediction: false,
+      now: NOW,
+      modelSnapshot,
+    });
+    expect("model" in hero).toBe(false);
   });
 });
