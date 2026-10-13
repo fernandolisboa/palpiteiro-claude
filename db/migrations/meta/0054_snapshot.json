@@ -1,5 +1,5 @@
 {
-  "id": "d46ada1b-e7d7-4ab4-97b8-e7ea737d0330",
+  "id": "8fa27d0e-c2ff-4f2f-98c9-dff1d9091952",
   "prevId": "b1b36faf-19e8-430d-a5d3-1665e1d1a986",
   "version": "7",
   "dialect": "postgresql",
@@ -120,7 +120,7 @@
           "name": "user_id",
           "type": "uuid",
           "primaryKey": false,
-          "notNull": false
+          "notNull": true
         },
         "match_id": {
           "name": "match_id",
@@ -268,12 +268,7 @@
       "compositePrimaryKeys": {},
       "uniqueConstraints": {},
       "policies": {},
-      "checkConstraints": {
-        "ai_calls_user_id_system_only": {
-          "name": "ai_calls_user_id_system_only",
-          "value": "\"ai_calls\".\"user_id\" IS NOT NULL OR \"ai_calls\".\"provider\" = 'typesafe'"
-        }
-      },
+      "checkConstraints": {},
       "isRLSEnabled": false
     },
     "public.ai_config": {
@@ -365,13 +360,6 @@
         },
         "enable_parallel_fan_out": {
           "name": "enable_parallel_fan_out",
-          "type": "boolean",
-          "primaryKey": false,
-          "notNull": true,
-          "default": true
-        },
-        "enable_match_model_jev": {
-          "name": "enable_match_model_jev",
           "type": "boolean",
           "primaryKey": false,
           "notNull": true,
@@ -659,6 +647,36 @@
           "primaryKey": false,
           "notNull": true
         },
+        "model_source": {
+          "name": "model_source",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": false
+        },
+        "reference_odd": {
+          "name": "reference_odd",
+          "type": "numeric(6, 3)",
+          "primaryKey": false,
+          "notNull": false
+        },
+        "market_implied_pct": {
+          "name": "market_implied_pct",
+          "type": "numeric(5, 2)",
+          "primaryKey": false,
+          "notNull": false
+        },
+        "stake_units": {
+          "name": "stake_units",
+          "type": "numeric(5, 2)",
+          "primaryKey": false,
+          "notNull": false
+        },
+        "suggested_stake_units": {
+          "name": "suggested_stake_units",
+          "type": "numeric(4, 2)",
+          "primaryKey": false,
+          "notNull": false
+        },
         "created_at": {
           "name": "created_at",
           "type": "timestamp with time zone",
@@ -761,6 +779,18 @@
         },
         "joint_prob_pct": {
           "name": "joint_prob_pct",
+          "type": "numeric(5, 2)",
+          "primaryKey": false,
+          "notNull": false
+        },
+        "mode": {
+          "name": "mode",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": false
+        },
+        "stake_units": {
+          "name": "stake_units",
           "type": "numeric(5, 2)",
           "primaryKey": false,
           "notNull": false
@@ -1043,172 +1073,6 @@
           ]
         }
       },
-      "policies": {},
-      "checkConstraints": {},
-      "isRLSEnabled": false
-    },
-    "public.match_model_snapshots": {
-      "name": "match_model_snapshots",
-      "schema": "",
-      "columns": {
-        "id": {
-          "name": "id",
-          "type": "uuid",
-          "primaryKey": true,
-          "notNull": true,
-          "default": "gen_random_uuid()"
-        },
-        "match_id": {
-          "name": "match_id",
-          "type": "uuid",
-          "primaryKey": false,
-          "notNull": true
-        },
-        "computed_at": {
-          "name": "computed_at",
-          "type": "timestamp with time zone",
-          "primaryKey": false,
-          "notNull": true,
-          "default": "now()"
-        },
-        "checked_at": {
-          "name": "checked_at",
-          "type": "timestamp with time zone",
-          "primaryKey": false,
-          "notNull": true,
-          "default": "now()"
-        },
-        "model_version": {
-          "name": "model_version",
-          "type": "text",
-          "primaryKey": false,
-          "notNull": true
-        },
-        "fingerprint": {
-          "name": "fingerprint",
-          "type": "text",
-          "primaryKey": false,
-          "notNull": true
-        },
-        "lambda_source": {
-          "name": "lambda_source",
-          "type": "text",
-          "primaryKey": false,
-          "notNull": true
-        },
-        "lambda_degraded": {
-          "name": "lambda_degraded",
-          "type": "boolean",
-          "primaryKey": false,
-          "notNull": true
-        },
-        "lambda_fallback_reason": {
-          "name": "lambda_fallback_reason",
-          "type": "text",
-          "primaryKey": false,
-          "notNull": false
-        },
-        "rho": {
-          "name": "rho",
-          "type": "double precision",
-          "primaryKey": false,
-          "notNull": false
-        },
-        "neutral": {
-          "name": "neutral",
-          "type": "boolean",
-          "primaryKey": false,
-          "notNull": true
-        },
-        "lambda_home_base": {
-          "name": "lambda_home_base",
-          "type": "double precision",
-          "primaryKey": false,
-          "notNull": true
-        },
-        "lambda_away_base": {
-          "name": "lambda_away_base",
-          "type": "double precision",
-          "primaryKey": false,
-          "notNull": true
-        },
-        "lambda_home": {
-          "name": "lambda_home",
-          "type": "double precision",
-          "primaryKey": false,
-          "notNull": true
-        },
-        "lambda_away": {
-          "name": "lambda_away",
-          "type": "double precision",
-          "primaryKey": false,
-          "notNull": true
-        },
-        "jev_status": {
-          "name": "jev_status",
-          "type": "text",
-          "primaryKey": false,
-          "notNull": true
-        },
-        "judgments": {
-          "name": "judgments",
-          "type": "jsonb",
-          "primaryKey": false,
-          "notNull": false
-        },
-        "probabilities": {
-          "name": "probabilities",
-          "type": "jsonb",
-          "primaryKey": false,
-          "notNull": true
-        },
-        "top_scorelines": {
-          "name": "top_scorelines",
-          "type": "jsonb",
-          "primaryKey": false,
-          "notNull": true
-        }
-      },
-      "indexes": {
-        "match_model_snapshots_match_computed_idx": {
-          "name": "match_model_snapshots_match_computed_idx",
-          "columns": [
-            {
-              "expression": "match_id",
-              "isExpression": false,
-              "asc": true,
-              "nulls": "last"
-            },
-            {
-              "expression": "computed_at",
-              "isExpression": false,
-              "asc": false,
-              "nulls": "last"
-            }
-          ],
-          "isUnique": false,
-          "concurrently": false,
-          "method": "btree",
-          "with": {}
-        }
-      },
-      "foreignKeys": {
-        "match_model_snapshots_match_id_matches_id_fk": {
-          "name": "match_model_snapshots_match_id_matches_id_fk",
-          "tableFrom": "match_model_snapshots",
-          "tableTo": "matches",
-          "columnsFrom": [
-            "match_id"
-          ],
-          "columnsTo": [
-            "id"
-          ],
-          "onDelete": "restrict",
-          "onUpdate": "no action"
-        }
-      },
-      "compositePrimaryKeys": {},
-      "uniqueConstraints": {},
       "policies": {},
       "checkConstraints": {},
       "isRLSEnabled": false

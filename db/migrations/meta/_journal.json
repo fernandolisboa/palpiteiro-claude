@@ -383,8 +383,15 @@
     {
       "idx": 54,
       "version": "7",
-      "when": 1791898266051,
-      "tag": "0054_match_model_snapshots",
+      "when": 1791897884739,
+      "tag": "0054_bet_slip_cupom",
+      "breakpoints": true
+    },
+    {
+      "idx": 55,
+      "version": "7",
+      "when": 1791900975280,
+      "tag": "0055_match_model_snapshots",
       "breakpoints": true
     }
   ]

@@ -690,6 +690,10 @@ export const betSlips = pgTable(
     parseAiCallId: uuid().references(() => aiCalls.id, { onDelete: "set null" }),
     comboUserOdd: numeric({ precision: 6, scale: 3 }),
     jointProbPct: numeric({ precision: 5, scale: 2 }),
+    // Cupom (#556): 'simples' (slip de 1 perna) ou 'combinada'; null em slips da
+    // aposta em texto anteriores ao cupom. stakeUnits = stake informado da combinada.
+    mode: text().$type<"simples" | "combinada">(),
+    stakeUnits: numeric({ precision: 5, scale: 2 }),
     createdAt: timestamp({ withTimezone: true }).notNull().defaultNow(),
   },
   (t) => [
@@ -722,6 +726,15 @@ export const betLegs = pgTable(
       onDelete: "set null",
     }),
     settleable: boolean().notNull(),
+    // Cupom (#556), todos congelados no registro e nullable (pernas antigas não têm):
+    // motor que gerou modelProbPct (fecha a pendência de calibração do #549), odd de
+    // referência + implícita de-vigada do mercado COMPLETO naquele momento (edge =
+    // modelProbPct − marketImpliedPct), stake informado e stake sugerido pelo motor.
+    modelSource: text().$type<"dixon_coles" | "heuristic">(),
+    referenceOdd: numeric({ precision: 6, scale: 3 }),
+    marketImpliedPct: numeric({ precision: 5, scale: 2 }),
+    stakeUnits: numeric({ precision: 5, scale: 2 }),
+    suggestedStakeUnits: numeric({ precision: 4, scale: 2 }),
     createdAt: timestamp({ withTimezone: true }).notNull().defaultNow(),
   },
   (t) => [index("bet_legs_slip_id_idx").on(t.slipId)],

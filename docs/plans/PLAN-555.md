@@ -33,7 +33,7 @@ chamada, só ≤48h do jogo) e chamadas de API-Football (sem The Odds API, sem C
 
 ### Criar
 - `docs/decisions/0052-base-do-modelo-por-jogo.md` — ADR.
-- `db/migrations/0054_match_model_snapshots.sql` (+ `meta/0054_snapshot.json`, `_journal.json`) — via `pnpm db:generate --name match_model_snapshots`, editado à mão com `IF NOT EXISTS`/DO block.
+- `db/migrations/0055_match_model_snapshots.sql` (+ `meta/0055_snapshot.json`, `_journal.json`) — via `pnpm db:generate --name match_model_snapshots`, editado à mão com `IF NOT EXISTS`/DO block.
 - `lib/model-base/version.ts` — `MATCH_MODEL_VERSION = "match_model_v1"`.
 - `lib/model-base/types.ts` — schemas Zod + tipos (`MatchModelProbabilities`, `TopScoreline`, `MatchModelJudgments`, `MatchModelSnapshot`).
 - `lib/model-base/build-snapshot.ts` — puro: probabilidades, top placares, fingerprint, montagem da row.
@@ -69,7 +69,7 @@ chamada, só ≤48h do jogo) e chamadas de API-Football (sem The Odds API, sem C
 - ~~`app/actions/bets.ts`~~ — **deixado pra fase do cupom (Fase 2)**: outra thread está reescrevendo o bet slip nesse arquivo. Este PR só entrega e testa o seam `getMatchModelScoreline` (§4), sem ligá-lo ao `confirmBet`.
 - `vercel.json` — cron novo.
 
-## 3. Modelo de dados (migration 0054, uma só)
+## 3. Modelo de dados (migration 0055, uma só; renumerada de 0054 após o merge do cupom #559)
 
 ### 3.1 Tabela `match_model_snapshots`
 

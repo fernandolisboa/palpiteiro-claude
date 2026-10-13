@@ -24,20 +24,17 @@ import {
   MatchOddsSkeleton,
   MatchSectionsSkeleton,
 } from "@/components/skeletons/match-sections-skeleton";
-import { MatchAnalysisTabs } from "@/components/match-analysis-tabs";
-import type {
-  GradeMarketOption,
-  GradeMyBetPrefill,
-} from "@/components/grade-my-bet";
+import {
+  BetSlipSection,
+  BetSlipSkeleton,
+} from "@/components/bet-slip-section";
 import { auth } from "@/auth";
 import { leagueToKey } from "@/lib/format";
 import { getEnableBestBetFanOut } from "@/lib/db/queries/ai-config";
-import {
-  marketsForAudience,
-  marketsForLeague,
-} from "@/lib/db/queries/market-catalog";
-import { getDescriptor } from "@/lib/odds/market-descriptor";
-import { getMarketPresentation } from "@/lib/view/markets/presentation";
+import { latestAnalysisByMarket } from "@/lib/bets/analysis-probs";
+import { resolveSlipModel } from "@/lib/bets/slip-model";
+import { getReferenceOddsForMatch } from "@/lib/db/queries/reference-odds";
+import { toBetGridView, type BetGridView } from "@/lib/view/bet-slip";
 import { getMatchById } from "@/lib/db/queries/matches";
 import { getTourState } from "@/lib/db/queries/users";
 import { getPalpiteSetsForMatch } from "@/lib/db/queries/palpites";
@@ -101,7 +98,6 @@ export default async function MatchPage({ params, searchParams }: PageProps) {
   const [session, match] = await Promise.all([auth(), getMatchById(id)]);
   if (!session?.user?.id) redirect("/signin");
   if (!match) notFound();
-  const isAdmin = session.user.role === "admin";
 
   // Instante ÚNICO do request: alimenta o gate de analisabilidade (kickoff>now) E
   // o heroView (isInProgress p/ a badge "ao vivo"). Um único `now` garante que o
@@ -158,13 +154,7 @@ export default async function MatchPage({ params, searchParams }: PageProps) {
   });
   // Predição existente e demais leituras em paralelo: pré-requisito pro render
   // síncrono do hero + panel.
-  const [
-    history,
-    palpiteSets,
-    bestBetEnabled,
-    tourState,
-    audienceMarkets,
-  ] = await Promise.all([
+  const [history, palpiteSets, bestBetEnabled, tourState] = await Promise.all([
       // Histórico COMPLETO: agrupado por mercado em toMarketAnalysisSections (#243, a
       // última de cada mercado = uma seção) e em toPreviousAnalysisItems (as reanálises
       // mais antigas, #204). Scoped por userId (sem leak, AC2).
@@ -175,9 +165,6 @@ export default async function MatchPage({ params, searchParams }: PageProps) {
       getPalpiteSetsForMatch(match.id, session.user.id),
       getEnableBestBetFanOut(),
       getTourState(session.user.id),
-      // Mercados da audiência (aba "Analise minha aposta", abaixo): leitura barata, junto
-      // das demais em vez de depois delas.
-      marketsForAudience(isAdmin),
     ]);
   const latestPred = history[0] ?? null;
 
@@ -260,65 +247,41 @@ export default async function MatchPage({ params, searchParams }: PageProps) {
     ? loadMatchModelReading({ matchId: match.id, now })
     : null;
 
-  // "Analise minha aposta" (#412, ADR 0034): a aba só é montada quando analisável
-  // (a action rejeitaria o resto). Mercados = audiência ∩ cobertura de liga (a MESMA
-  // expressão da action/analyzeMatch). Para cada um: selectionKeys ESTÁTICAS (vazio
-  // em dynamicSelections → mercado inerte, dropado) + os labels do registry. O prefill
-  // vem da última predição (mercado resolvido + recommendation non-pass + linha), com
-  // fallback over_under/over/2.5.
-  let gradeMarkets: GradeMarketOption[] = [];
-  let gradePrefill: GradeMyBetPrefill = {
-    marketKey: "over_under",
-    selectionKey: "over",
-    line: 2.5,
-  };
-  if (analyzable) {
-    const allowedMarkets = marketsForLeague(audienceMarkets, match.league);
-    gradeMarkets = allowedMarkets
-      .map((m): GradeMarketOption | null => {
-        const descriptor = getDescriptor(m.key);
-        if (!descriptor || descriptor.selectionKeys.length === 0) return null;
-        const presentation = getMarketPresentation(m.key);
-        const hasLine = m.key === "over_under";
-        const line = hasLine ? presentation.defaultLine : null;
-        return {
-          key: m.key,
-          label: presentation.marketLabel,
-          hasLine,
-          selections: descriptor.selectionKeys.map((sk) => ({
-            key: sk,
-            label: presentation.outcomeLabel(sk, line),
-          })),
-        };
-      })
-      .filter((m): m is GradeMarketOption => m !== null);
-    // Prefill da última predição: mercado resolvido + recommendation non-pass; cai no
-    // fallback quando não há predição OU o mercado/seleção saíram da cobertura atual.
-    const predMarketKey = latestPred?.marketKey ?? null;
-    const predRec = latestPred?.prediction.recommendation ?? null;
-    const predLine = latestPred?.prediction.marketParams?.line ?? null;
-    const prefillMarket =
-      predMarketKey && gradeMarkets.some((m) => m.key === predMarketKey)
-        ? gradeMarkets.find((m) => m.key === predMarketKey)!
-        : gradeMarkets[0] ?? null;
-    if (prefillMarket) {
-      const recValid =
-        predRec !== null &&
-        predRec !== "pass" &&
-        prefillMarket.selections.some((s) => s.key === predRec);
-      gradePrefill = {
-        marketKey: prefillMarket.key,
-        selectionKey: recValid
-          ? (predRec as string)
-          : prefillMarket.selections[0]?.key ?? "",
-        line: prefillMarket.hasLine
-          ? predMarketKey === prefillMarket.key && predLine !== null
-            ? predLine
-            : getMarketPresentation(prefillMarket.key).defaultLine
-          : null,
-      };
-    }
-  }
+  // "Registrar apostas" (#556): grade de mercados + lista, só antes do apito (a action
+  // rejeitaria o resto). FORA do caminho crítico, UMA promise pras duas árvores: o
+  // modelo do jogo (porta única, lib/bets/slip-model) começa já; as odds de referência
+  // são lidas do banco DEPOIS do refresh que a página já faz (oddsP) — nenhuma chamada
+  // nova à Odds API. Falha vira grade sem odds/sem modelo (os botões ainda registram).
+  const teams = { home: match.homeTeam, away: match.awayTeam };
+  const betGridP: Promise<BetGridView> | null = analyzable
+    ? Promise.all([
+        resolveSlipModel(match),
+        oddsP.then(() => getReferenceOddsForMatch(match.id)),
+      ])
+        .then(([model, references]) =>
+          toBetGridView({
+            teams,
+            model,
+            references,
+            analysis: latestAnalysisByMarket(history),
+          }),
+        )
+        .catch((err: unknown): BetGridView => {
+          console.error(
+            JSON.stringify({
+              scope: "match-page",
+              error: "bet_grid_failed",
+              message: err instanceof Error ? err.message : String(err),
+            }),
+          );
+          return toBetGridView({
+            teams,
+            model: null,
+            references: new Map(),
+            analysis: new Map(),
+          });
+        })
+    : null;
 
   // Placar final só pra jogos encerrados com gols reportados (heroView já
   // anulou scores fora de `finished`). Alimenta o recibo settled do HERO + FinishedNotice.
@@ -352,7 +315,6 @@ export default async function MatchPage({ params, searchParams }: PageProps) {
           matchId={match.id}
           fixtureRef={fixtureRef}
           leagueKey={leagueKey}
-          analyzable={analyzable}
           unavailableReason={unavailableReason}
           backHref={backHref}
           finalScore={finalScore}
@@ -362,8 +324,7 @@ export default async function MatchPage({ params, searchParams }: PageProps) {
           heroSharedAt={heroSharedAt}
           homeTeamHref={homeTeamHref}
           awayTeamHref={awayTeamHref}
-          gradeMarkets={gradeMarkets}
-          gradePrefill={gradePrefill}
+          betGrid={betGridP}
         />
       </div>
       <div className="hidden lg:block">
@@ -376,7 +337,6 @@ export default async function MatchPage({ params, searchParams }: PageProps) {
           matchId={match.id}
           fixtureRef={fixtureRef}
           leagueKey={leagueKey}
-          analyzable={analyzable}
           unavailableReason={unavailableReason}
           backHref={backHref}
           finalScore={finalScore}
@@ -386,8 +346,7 @@ export default async function MatchPage({ params, searchParams }: PageProps) {
           heroSharedAt={heroSharedAt}
           homeTeamHref={homeTeamHref}
           awayTeamHref={awayTeamHref}
-          gradeMarkets={gradeMarkets}
-          gradePrefill={gradePrefill}
+          betGrid={betGridP}
         />
       </div>
     </>
@@ -412,8 +371,6 @@ type Common = {
   matchId: string;
   fixtureRef: FixtureRef;
   leagueKey: ReturnType<typeof leagueToKey>;
-  // true só no pré-jogo (unavailableReason === null). Esconde a CTA quando false.
-  analyzable: boolean;
   // Por que o jogo não aceita análise (null = pré-jogo): escolhe a copy do HERO, do
   // aviso de não-analisável e do empty-state do OddsCard.
   unavailableReason: MatchUnavailableReason | null;
@@ -435,11 +392,9 @@ type Common = {
   // passados aos nomes do MatchHero (imunes a mismatch por construção).
   homeTeamHref: string;
   awayTeamHref: string;
-  // #412 (ADR 0034): mercados elegíveis (audiência∩liga, com selectionKeys estáticas)
-  // + prefill da última predição, pro form "Minha aposta" da aba de análise. Vazio
-  // quando o jogo não é analisável (a aba não é montada).
-  gradeMarkets: GradeMarketOption[];
-  gradePrefill: GradeMyBetPrefill;
+  // #556: grade de "Registrar apostas" (streaming). null = jogo não analisável (a
+  // seção não aparece).
+  betGrid: Promise<BetGridView> | null;
 };
 
 function MobileMatch({
@@ -451,7 +406,6 @@ function MobileMatch({
   matchId,
   fixtureRef,
   leagueKey,
-  analyzable,
   unavailableReason,
   backHref,
   finalScore,
@@ -461,8 +415,7 @@ function MobileMatch({
   heroSharedAt,
   homeTeamHref,
   awayTeamHref,
-  gradeMarkets,
-  gradePrefill,
+  betGrid,
 }: Common) {
   return (
     <div className="bg-background text-foreground">
@@ -509,24 +462,11 @@ function MobileMatch({
 
         {/* Detalhe por mercado LOGO ABAIXO do palpite: é o "quero ver mais" imediato da
             manchete. Collapsed por padrão → nenhum número de valor vaza pro topo (firewall
-            ADR 0030 intacto: edge/EV/stake/odd vivem DENTRO do disclosure). Em jogo
-            analisável, a aba [ Análise | Minha aposta ] (#412) embrulha o detalhe. */}
-        {analyzable ? (
-          <MatchAnalysisTabs
-            analysisSlot={
-              <NeutralAnalysisDetail
-                sections={sections}
-                previousAnalyses={previousAnalyses}
-              />
-            }
-            gradeProps={{ matchId, markets: gradeMarkets, prefill: gradePrefill }}
-          />
-        ) : (
-          <NeutralAnalysisDetail
-            sections={sections}
-            previousAnalyses={previousAnalyses}
-          />
-        )}
+            ADR 0030 intacto: edge/EV/stake/odd vivem DENTRO do disclosure). */}
+        <NeutralAnalysisDetail
+          sections={sections}
+          previousAnalyses={previousAnalyses}
+        />
         {unavailableReason !== null && sections.length === 0 && (
           <NotAnalyzableNotice reason={unavailableReason} score={finalScore} />
         )}
@@ -547,6 +487,13 @@ function MobileMatch({
               <MatchModelReading reading={modelReading} />
             </Suspense>
           </div>
+        )}
+
+        {/* Registrar apostas (#556): seção própria, separada da análise. */}
+        {betGrid && (
+          <Suspense fallback={<BetSlipSkeleton />}>
+            <BetSlipSection matchId={matchId} grid={betGrid} variant="mobile" />
+          </Suspense>
         )}
 
         <div className="flex flex-col gap-3" data-tour="match-stats">
@@ -571,7 +518,6 @@ function DesktopMatch({
   matchId,
   fixtureRef,
   leagueKey,
-  analyzable,
   unavailableReason,
   backHref,
   finalScore,
@@ -581,8 +527,7 @@ function DesktopMatch({
   heroSharedAt,
   homeTeamHref,
   awayTeamHref,
-  gradeMarkets,
-  gradePrefill,
+  betGrid,
 }: Common) {
   return (
     <>
@@ -646,33 +591,26 @@ function DesktopMatch({
 
         {/* Detalhe por mercado FULL-WIDTH abaixo das odds: collapsed por padrão, ocupa a
             largura toda ao expandir. Firewall ADR 0030 intacto: é
-            disclosure collapsed; edge/EV/stake vivem DENTRO dele, nada de valor no HERO. Em
-            jogo analisável, a aba [ Análise | Minha aposta ] (#412) embrulha o detalhe. */}
+            disclosure collapsed; edge/EV/stake vivem DENTRO dele, nada de valor no HERO. */}
         <div className="flex flex-col gap-3 pb-6">
-          {analyzable ? (
-            <MatchAnalysisTabs
-              analysisSlot={
-                <NeutralAnalysisDetail
-                  sections={sections}
-                  previousAnalyses={previousAnalyses}
-                />
-              }
-              gradeProps={{
-                matchId,
-                markets: gradeMarkets,
-                prefill: gradePrefill,
-              }}
-            />
-          ) : (
-            <NeutralAnalysisDetail
-              sections={sections}
-              previousAnalyses={previousAnalyses}
-            />
-          )}
+          <NeutralAnalysisDetail
+            sections={sections}
+            previousAnalyses={previousAnalyses}
+          />
           {unavailableReason !== null && sections.length === 0 && (
             <NotAnalyzableNotice reason={unavailableReason} score={finalScore} />
           )}
         </div>
+
+        {/* Registrar apostas (#556): seção própria, separada da análise, com a lista
+            "Suas apostas" fixa à direita. */}
+        {betGrid && (
+          <div className="pb-8">
+            <Suspense fallback={<BetSlipSkeleton />}>
+              <BetSlipSection matchId={matchId} grid={betGrid} variant="desktop" />
+            </Suspense>
+          </div>
+        )}
 
         <div data-tour="match-stats">
           <Suspense fallback={<MatchSectionsSkeleton />}>

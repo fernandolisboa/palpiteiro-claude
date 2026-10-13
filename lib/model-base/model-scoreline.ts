@@ -4,9 +4,8 @@ import { scorelineMatrix } from "@/lib/quant/scoreline-model";
 
 import { MATCH_MODEL_MAX_AGE_MS, MATCH_MODEL_VERSION } from "./version";
 
-// Seam da Fase 2 (cupom, #555/ADR 0052): o modelo de placar do jogo lido da base, sem
-// buscar tabela nem ratings. A ligação ao confirmBet (app/actions/bets.ts) fica pra fase
-// do cupom; até lá ninguém em produção chama isto.
+// Modelo de placar do jogo lido da base (#555/ADR 0052), sem buscar tabela nem ratings.
+// Consumido pela porta única das apostas, resolveSlipModel (lib/bets/slip-model.ts, #560).
 
 export const MODEL_SCORELINE_MAX_AGE_MS = MATCH_MODEL_MAX_AGE_MS;
 

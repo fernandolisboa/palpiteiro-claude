@@ -10,7 +10,7 @@ Hoje a probabilidade do modelo só existe depois de "Analisar com IA": por usuá
 
 ## Decisão
 
-1. **Base compartilhada por jogo** em `match_model_snapshots` (migration 0054), calculada em código por um cron, **sem Claude e sem The Odds API**. Uma row por resultado distinto; a tabela é append-only no conteúdo.
+1. **Base compartilhada por jogo** em `match_model_snapshots` (migration 0055), calculada em código por um cron, **sem Claude e sem The Odds API**. Uma row por resultado distinto; a tabela é append-only no conteúdo.
 2. **λ** de `getModelScoreline` (Dixon-Coles com fallback no heurístico da tabela, ADR 0051). A tabela de classificação só é buscada quando o DC não serve (ou quando o jogo vai pro JEV, que usa a tabela no state): com DC fresco o cron não gasta essa chamada.
 3. **JEV só a ≤ 48h do jogo**, atrás do flag novo `ai_config.enable_match_model_jev` (default ON, no `/admin/settings`). Mesma porta e mesmo log do predict (`lib/ai/predict.ts`, `ai_calls` com `provider = 'typesafe'`), mesmo state (`FORM_LAST`, degradação de desfalques), fail-open. O reuso por `stateHash` vale nos dois sentidos: o cron reusa respostas de uma predição recente e o "Analisar com IA" reusa as respostas da base (12h sobre `checked_at`; as predições seguem com 6h sobre `created_at`). Sem `TYPESAFE_API_KEY` o cron não busca dados nem tenta o JEV (um `warn` por run).
 4. **Probabilidades** de 1X2, dupla chance, BTTS e gols 1.5/2.5/3.5, mais os 5 placares mais prováveis, em pontos percentuais (2 casas), lidas da MESMA matriz que o motor `code_jev` usaria (λ pós-JEV, ρ do fit).
