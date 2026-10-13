@@ -1,9 +1,12 @@
 import type { BetLegParams } from "@/db/schema";
-import type { NormalizedStanding } from "@/lib/providers/sports-data/types";
 import {
   computeMatchLambdas,
   type MatchLambdas,
 } from "@/lib/providers/sports-data/match-lambdas";
+import type {
+  ModelScoreline,
+  ModelScorelineSource,
+} from "@/lib/quant/match-model";
 import {
   firstHalfScorelineMatrix,
   firstToScoreProbs,
@@ -14,8 +17,6 @@ import {
   pMarginAtLeast,
   pOverUnder,
   pScoreline,
-  scorelineMatrix,
-  type ScorelineMatrix,
 } from "@/lib/quant/scoreline-model";
 
 // `computeMatchLambdas` (adapter NormalizedStanding→λ) foi PROMOVIDO pra
@@ -25,9 +26,9 @@ export { computeMatchLambdas };
 export type { MatchLambdas };
 
 // Engine do CAMINHO B (ADR 0036, Decisão 3): precifica QUALQUER predicado de placar
-// pelo modelo double-Poisson. Vive na fronteira do CONSUMIDOR (lib/quant é puro):
-// mapeia a tabela do provider pros tipos do modelo, guarda o caso degenerado (B1), e
-// roteia o kind pro reader certo. Determinístico e testável (recebe a standing pronta).
+// sobre o modelo de placar do jogo. Recebe o `ModelScoreline` já resolvido pelo caller
+// (getModelScoreline, ADR 0051: Dixon-Coles com o heurístico da tabela como rede, o
+// MESMO da análise do jogo, #547) e roteia o kind pro reader certo. Puro e testável.
 
 // Kinds que o CAMINHO B precifica (props sempre + kinds de mercado quando falham o
 // gate). cards/corners NÃO entram (Decisão 3: none).
@@ -44,19 +45,29 @@ export type ScorelineKind =
   | "double_chance";
 
 export type ScorelineGrade =
-  | { status: "graded"; modelProbPct: number; degradedData: boolean }
+  | {
+      status: "graded";
+      modelProbPct: number;
+      degradedData: boolean;
+      source: ModelScorelineSource;
+    }
   | { status: "no_data" };
 
 
-// Preço (0-1) de um kind sobre os λ do jogo. Full matrix + (lazy) matriz de 1º tempo
-// via time-share κ. Params já validado pelo boundary (defense-in-depth: switch fechado).
+// Preço (0-1) de um kind sobre o modelo do jogo. Matriz cheia do modelo (ρ do fit no
+// DC) + (lazy) matriz de 1º tempo via time-share κ com o MESMO ρ (ausente no heurístico
+// → ρ pinado, como antes). Params já validado pelo boundary (switch fechado).
 function priceLeg(
-  lambdas: MatchLambdas,
+  model: ModelScoreline,
   kind: ScorelineKind,
   params: BetLegParams,
-  fullMatrix: ScorelineMatrix,
 ): number {
   const p = params as Record<string, unknown>;
+  const fullMatrix = model.matrix;
+  const firstHalf = () =>
+    firstHalfScorelineMatrix(model.lambdaHome, model.lambdaAway, {
+      rho: model.rho,
+    });
   switch (kind) {
     case "exact_score":
       return pScoreline(fullMatrix, Number(p.home), Number(p.away));
@@ -88,38 +99,34 @@ function priceLeg(
       return r.draw + r.away;
     }
     case "first_half_score": {
-      const fh = firstHalfScorelineMatrix(lambdas.lambdaHome, lambdas.lambdaAway);
-      return pScoreline(fh, Number(p.home), Number(p.away));
+      return pScoreline(firstHalf(), Number(p.home), Number(p.away));
     }
     case "first_half_over_under": {
-      const fh = firstHalfScorelineMatrix(lambdas.lambdaHome, lambdas.lambdaAway);
-      const over = pOverUnder(fh, Number(p.line));
+      const over = pOverUnder(firstHalf(), Number(p.line));
       return p.selection === "over" ? over : 1 - over;
     }
     case "first_to_score": {
-      const fts = firstToScoreProbs(lambdas.lambdaHome, lambdas.lambdaAway);
+      const fts = firstToScoreProbs(model.lambdaHome, model.lambdaAway);
       return fts[p.firstToScore as "home" | "away" | "none"];
     }
   }
 }
 
+// `model` null = nem DC utilizável nem tabela → sem número (no_data).
 export function gradeScorelineLeg(args: {
-  standing: NormalizedStanding | undefined;
-  homeTeam: string;
-  awayTeam: string;
-  neutral: boolean;
+  model: ModelScoreline | null;
   kind: ScorelineKind;
   params: BetLegParams;
 }): ScorelineGrade {
-  const lambdas = computeMatchLambdas(args);
-  if (lambdas === null) return { status: "no_data" };
+  const { model } = args;
+  if (model === null) return { status: "no_data" };
 
-  const fullMatrix = scorelineMatrix(lambdas.lambdaHome, lambdas.lambdaAway);
-  const prob = priceLeg(lambdas, args.kind, args.params, fullMatrix);
+  const prob = priceLeg(model, args.kind, args.params);
   return {
     status: "graded",
     modelProbPct: prob * 100,
-    degradedData: lambdas.degradedData,
+    degradedData: model.degraded,
+    source: model.source,
   };
 }
 
@@ -195,33 +202,32 @@ export function legToScorePredicate(
 
 export type SlipJoint = {
   jointProbPct: number; // P(todas as pernas) × 100, da matriz do slip
-  marginalsPct: number[]; // marginal Poisson de CADA perna, MESMA matriz (joint ≤ min)
+  marginalsPct: number[]; // marginal de CADA perna, MESMA matriz (joint ≤ min)
   degradedData: boolean;
+  source: ModelScorelineSource;
 };
 
 // Computa a conjunta do slip sobre a matriz do jogo. Recebe as pernas JÁ sabidas com
-// predicado não-null (o caller gateia); retorna null quando a matriz é incomputável
-// (standings indisponível/degenerado) OU alguma perna mapeia null (defesa em
+// predicado não-null (o caller gateia); retorna null quando não há modelo (sem DC
+// utilizável e tabela indisponível/degenerada) OU alguma perna mapeia null (defesa em
 // profundidade). As marginais saem da MESMA matriz (nunca do modelProbPct persistido,
 // que pra Caminho A é o número do cartucho — fonte diferente) → joint ≤ min garantido.
 export function computeSlipJoint(args: {
-  standing: NormalizedStanding | undefined;
-  homeTeam: string;
-  awayTeam: string;
-  neutral: boolean;
+  model: ModelScoreline | null;
   legs: Array<{ kind: string; params: BetLegParams }>;
 }): SlipJoint | null {
-  const lambdas = computeMatchLambdas(args);
-  if (lambdas === null) return null;
+  const { model } = args;
+  if (model === null) return null;
 
   const preds = args.legs.map((l) => legToScorePredicate(l.kind, l.params));
   if (preds.some((pr) => pr === null)) return null;
   const predicates = preds as ScorePredicate[];
 
-  const matrix = scorelineMatrix(lambdas.lambdaHome, lambdas.lambdaAway);
+  const matrix = model.matrix;
   return {
     jointProbPct: jointProbability(matrix, predicates) * 100,
     marginalsPct: predicates.map((pr) => jointProbability(matrix, [pr]) * 100),
-    degradedData: lambdas.degradedData,
+    degradedData: model.degraded,
+    source: model.source,
   };
 }

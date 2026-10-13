@@ -405,7 +405,7 @@ export type GradeMyBetView =
   | { kind: "nao-avalio"; reason: string };
 
 // ─── "Aposta livre" — perna do CAMINHO B (modelo de placar) (#471, ADR 0036) ─────
-// View do mapper PURO (lib/view/free-bet.ts) da perna gradeada pelo double-Poisson
+// View do mapper PURO (lib/view/free-bet.ts) da perna gradeada pelo modelo de placar (DC ou heurístico)
 // determinístico. Espelha a disciplina de GradeMyBetView (registro Análise, números
 // de valor legítimos), mas SEM edge/implícita: perna B não tem board completo → sem
 // de-vig (ADR 0018) → `edgeLabel` é SEMPRE "—" e NUNCA se deriva pseudo-implícita de
@@ -417,7 +417,7 @@ export type FreeBetLegView =
   | {
       kind: "grade-modelo-simplificado";
       selectionLabel: string; // "Placar exato: 2 a 0"
-      sourceLabel: string; // "modelo simplificado" | "modelo simplificado (dados limitados)"
+      sourceLabel: string; // "modelo Dixon-Coles" | "modelo simplificado" | "modelo simplificado (dados limitados)"
       modelProbPct: number; // 0-100, congelado no write
       edgeLabel: "—"; // SEMPRE — perna B não tem canal de edge
       settleBadge: string; // "conferimos após o jogo"
@@ -430,20 +430,21 @@ export type FreeBetLegView =
         profitIfWon: number; // profitForOutcome('won', userOdd, 1)
       } | null;
     }
-  // Standings indisponível/degenerado no grade → não avalio (prefer-skip, NUNCA λ fabricado).
+  // Sem modelo de placar (sem DC utilizável e tabela indisponível/degenerada) → não
+  // avalio (prefer-skip, NUNCA λ fabricado).
   | { kind: "nao-avalio"; selectionLabel: string; reason: string };
 
 // ─── "Aposta livre" — combinada same-game via joint-sum (#473, ADR 0036 Dec. 4) ──
-// A conjunta vem SEMPRE de UMA matriz coerente (modelo simplificado). INVARIANTE DE
-// COERÊNCIA DE TELA (PINADO): o card exibe o joint E as marginais Poisson das pernas
+// A conjunta vem SEMPRE de UMA matriz coerente (o modelo de placar do jogo, DC ou
+// heurístico). INVARIANTE DE COERÊNCIA DE TELA (PINADO): o card exibe o joint E as marginais das pernas
 // participantes — TODAS da MESMA matriz → `joint ≤ min(marginais)`. EV só com odd
 // combinada E joint computável (nunca EV parcial — Decisão 4c). Sem edge (perna B).
 export type FreeBetComboView =
   | {
       kind: "combinada";
       jointProbPct: number; // 0-100, congelado no write
-      sourceLabel: string; // "modelo simplificado" | "... (dados limitados)"
-      // As marginais Poisson das pernas participantes, MESMA matriz do joint. O card
+      sourceLabel: string; // "modelo Dixon-Coles" | "modelo simplificado" | "... (dados limitados)"
+      // As marginais do modelo das pernas participantes, MESMA matriz do joint. O card
       // as renderiza JUNTO do joint (a forma-dura é joint sem elas na mesma tela).
       legs: { selectionLabel: string; marginalPct: number }[];
       // Canal odd-combinada (price-only). null = usuário não deu odd → só a conjunta.

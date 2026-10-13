@@ -2,6 +2,7 @@ import {
   computeBreakEvenProbPct,
   computeEvPerUnit,
 } from "@/lib/odds/scenario";
+import type { ModelScorelineSource } from "@/lib/quant/match-model";
 import { profitForOutcome } from "@/lib/settlement/money";
 import type { FreeBetComboView, FreeBetLegView } from "@/lib/view/types";
 
@@ -22,15 +23,28 @@ export const SETTLE_BADGE_PT_BR = "conferimos após o jogo";
 
 // Veredito TEMPLATE-DERIVADO de sign(EV@userOdd) SÓ (nunca sign de edge — não há
 // edge). Descritivo/backward-looking, NUNCA imperativo. Conjunto FINITO (golden test
-// pina o render). Espelha VALUE_READING de grade-my-bet.ts, adaptado ao "modelo
-// simplificado".
+// pina o render). Espelha VALUE_READING de grade-my-bet.ts, adaptado ao modelo de
+// placar (Dixon-Coles ou heurístico, #547 — o texto vale pros dois).
 const VALUE_READING = {
   positive:
-    "Pelo modelo simplificado, nessa odd, essa aposta tem valor — a probabilidade que estimamos supera o que a odd paga.",
-  zero: "Pelo modelo simplificado, nessa odd, essa aposta fica no limite — sem vantagem nem desvantagem clara.",
+    "Pelo modelo de placar, nessa odd, essa aposta tem valor — a probabilidade que estimamos supera o que a odd paga.",
+  zero: "Pelo modelo de placar, nessa odd, essa aposta fica no limite — sem vantagem nem desvantagem clara.",
   negative:
-    "Pelo modelo simplificado, nessa odd, essa aposta não tem valor — a odd paga menos do que a probabilidade que estimamos.",
+    "Pelo modelo de placar, nessa odd, essa aposta não tem valor — a odd paga menos do que a probabilidade que estimamos.",
 } as const;
+
+// Rótulo da fonte do número: o motor que produziu a matriz (o mesmo da análise do
+// jogo). "Dados limitados" só existe no heurístico (λ do prior da liga); o DC nunca
+// é degradado (time com pouco histórico cai no heurístico).
+function sourceLabelFor(
+  source: ModelScorelineSource,
+  degradedData: boolean,
+): string {
+  if (source === "dixon_coles") return "modelo Dixon-Coles";
+  return degradedData
+    ? "modelo simplificado (dados limitados)"
+    : "modelo simplificado";
+}
 
 function valueReadingForSign(evSign: number): string {
   if (evSign > 0) return VALUE_READING.positive;
@@ -54,6 +68,7 @@ export type FreeBetLegMapperInput =
       modelProbPct: number;
       // meta.source === "prior" → rótulo "dados limitados" (degrau ii da escada).
       degradedData: boolean;
+      source: ModelScorelineSource;
       // A odd que o usuário pegou na casa (já validada > 1), ou null se não deu odd.
       userOdd: number | null;
     }
@@ -68,9 +83,7 @@ export function toFreeBetLegView(input: FreeBetLegMapperInput): FreeBetLegView {
     };
   }
 
-  const sourceLabel = input.degradedData
-    ? "modelo simplificado (dados limitados)"
-    : "modelo simplificado";
+  const sourceLabel = sourceLabelFor(input.source, input.degradedData);
 
   // Canal odd-do-usuário (price-only). EV e break-even saem de chamadas DIRETAS na
   // odd do usuário. NÃO há canal de edge/implícita (perna B) — edgeLabel="—" sempre.
@@ -107,6 +120,7 @@ export type FreeBetComboMapperInput =
       status: "combinada";
       jointProbPct: number;
       degradedData: boolean;
+      source: ModelScorelineSource;
       legs: { selectionLabel: string; marginalPct: number }[];
       comboUserOdd: number | null;
     }
@@ -119,9 +133,7 @@ export function toFreeBetComboView(
     return { kind: "combinada-nao-avaliada", reason: input.reason };
   }
 
-  const sourceLabel = input.degradedData
-    ? "modelo simplificado (dados limitados)"
-    : "modelo simplificado";
+  const sourceLabel = sourceLabelFor(input.source, input.degradedData);
 
   // EV/break-even/lucro SÓ quando o usuário deu a odd combinada E o joint é computável
   // (este ramo). Sem odd → só a conjunta + marginais (nunca EV parcial — Decisão 4c).
