@@ -15,6 +15,12 @@ prometido na `/privacidade` (§8) com prazo de 15 dias.
 > `user_palpite_*`. A Decisão 1 ganha a redação desses `ai_calls` (linha 1) e o `DELETE`
 > das análises do titular (linha 2b); o runbook e a spec 5.e acompanham.
 
+> **Emenda (#565, ADR 0055, 2026-10-13):** o contexto extra da análise com IA não cria
+> lugar novo de PII: o texto vai só à extração (`user_palpite_extract_v1`, já coberta
+> pela linha 1) e não é gravado; `predictions.judgments.userContext` e os prompts de
+> análise (narrador) levam só afirmações tipadas montadas pelo código, sem texto livre nem
+> nome de jogador. "Onde NÃO há PII" continua valendo.
+
 > **Escopo:** estratégia de eliminação/anonimização quando o titular pede pra excluir a
 > conta; o que é apagado, o que é anonimizado e por quê; spec da feature (`/perfil` +
 > admin) e dos testes. **Fora de escopo:** exportação (portabilidade, art. 18, V — atendida
@@ -43,7 +49,8 @@ prometido na `/privacidade` (§8) com prazo de 15 dias.
     escreve pro próprio palpite (até 1.000 chars); `claims` guarda as paráfrases e os nomes
     de jogador que ele digitou.
   - `ai_calls.input_payload`/`output_payload` das chamadas `user_palpite_extract_*` (o
-    motivo cercado no user message) e `user_palpite_narrate_*` (as paráfrases).
+    motivo cercado no user message; inclui o contexto extra da análise, #565) e
+    `user_palpite_narrate_*` (as paráfrases).
   - `palpite_sets.shared_at`: um palpite público em `/p/[id]` não carrega PII (ADR 0035
     §5/§7), mas é conteúdo que o titular publicou.
   - Fora do banco: contadores do Upstash (e-mail/IP, janela ≤ 24h — `lib/rate-limit.ts`,
