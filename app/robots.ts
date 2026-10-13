@@ -27,6 +27,8 @@ export default function robots(): MetadataRoute.Robots {
       allow: ["/", "/como-funciona", "/termos", "/privacidade"],
       disallow: [
         "/jogos",
+        "/apostas",
+        "/bolao",
         "/dashboard",
         "/match",
         "/perfil",

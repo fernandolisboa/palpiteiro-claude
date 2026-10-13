@@ -172,6 +172,23 @@ export function formatKickoffAbsolute(
 }
 
 /**
+ * "hoje, 21:30" / "amanhã, 16:00" / "sáb, 18 out, 16:00": data E hora, pra listas de
+ * escolha de jogo (bolão, #567). Formata no `timeZone` do usuário.
+ */
+export function formatKickoffDateTime(
+  kickoff: Date,
+  now: Date = new Date(),
+  timeZone?: string,
+): string {
+  const k = partsOf(kickoff, timeZone);
+  const n = partsOf(now, timeZone);
+  if (isSameDay(k, n) || isNextDay(k, n)) {
+    return formatKickoffAbsolute(kickoff, now, timeZone);
+  }
+  return `${formatKickoffAbsolute(kickoff, now, timeZone)}, ${hhmm(k)}`;
+}
+
+/**
  * "em 3h 24min" se < 24h; null caso contrário. Aparece como `countdown` no hero
  * apenas em jogos iminentes.
  */

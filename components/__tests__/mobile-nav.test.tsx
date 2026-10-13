@@ -14,7 +14,7 @@ function hrefs(isAdmin: boolean) {
 describe("mobileNavSections", () => {
   it("mostra principal, ajuda, admin e conta pro admin, nessa ordem", () => {
     expect(hrefs(true)).toEqual([
-      ["principal", ["/jogos", "/apostas", "/dashboard"]],
+      ["principal", ["/jogos", "/apostas", "/bolao", "/dashboard"]],
       ["ajuda", ["/como-usar", "/como-funciona", "/jogos?tour=1"]],
       [
         "admin",

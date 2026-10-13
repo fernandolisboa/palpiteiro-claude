@@ -13,3 +13,5 @@ Glossário do domínio do Palpiteiro: o vocabulário compartilhado do produto. S
 - **Fonte de notícia:** uma fonte real e verificável (título + URL) que informou o palpite, exibida como link clicável; nunca inventada pela LLM.
 
 - **Palpite compartilhado (snapshot público):** a versão pública, read-only e imutável de um palpite — manchete-only (veredito + placar provável + confiança + narrativa + times + mercados citados + fontes), SEM odds/EV/edge/stake nem proveniência; a imagem que circula no zap/redes quando o usuário escolhe compartilhar. Opt-in por palpite, anônima, com disclaimer e firewall de linguagem de valor herdados da manchete. Primeira superfície pública de conteúdo além da landing estática.
+
+- **Bolão (entre amigos):** um jogo, um grupo de amigos em casa, cada **apostador** (só um nome, sem conta) com a sua aposta ao lado; quem tem conta anota todo mundo. No fim, o app confere cada aposta contra o placar final e diz quem ganhou e quanto cada ganhador leva do pote (valor por pessoa × apostas, dividido igualmente). O app só anota e faz a conta: não recebe, não guarda e não repassa dinheiro, e não tem vínculo com casa de apostas.

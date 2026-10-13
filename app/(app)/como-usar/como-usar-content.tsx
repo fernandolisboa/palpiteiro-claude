@@ -125,8 +125,9 @@ export function ComoUsarContent() {
         <p>
           Depois do login você cai em <Strong>Próximos jogos</Strong>, a tela
           principal. O menu fica sempre no topo da tela (no celular, no ícone ☰):{" "}
-          <Ui>jogos</Ui>, <Ui>apostas</Ui> e <Ui>desempenho</Ui> são as telas do dia
-          a dia; <Ui>ajuda</Ui> reúne <Ui>como usar</Ui>, <Ui>como funciona</Ui> e{" "}
+          <Ui>jogos</Ui>, <Ui>apostas</Ui>, <Ui>bolão</Ui> e <Ui>desempenho</Ui> são
+          as telas do dia a dia (no <Ui>bolão</Ui> você anota a aposta de cada amigo
+          num jogo e o app diz quem ganhou); <Ui>ajuda</Ui> reúne <Ui>como usar</Ui>, <Ui>como funciona</Ui> e{" "}
           <Ui>rever o tour</Ui>. O <Ui>perfil</Ui> e o <Ui>sair</Ui> ficam no seu
           avatar, no canto direito.
         </p>
