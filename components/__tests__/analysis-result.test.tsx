@@ -406,3 +406,20 @@ describe("AnalysisResult — recomendação N-vias (1X2, AC2)", () => {
     expect(markup).not.toContain("↓");
   });
 });
+
+describe("AnalysisResult — quarter-Kelly informativo", () => {
+  it("mostra a linha ao lado do stake quando a view traz o valor", () => {
+    const html = renderToStaticMarkup(
+      <AnalysisResult view={{ ...baseView, kellyInfoUnits: "2.50 u" }} />,
+    );
+    expect(html).toContain("quarter-Kelly (informativo)");
+    expect(html).toContain("2.50 u");
+  });
+
+  it("some sem valor (pass, sem odd ou retorno ≤ 0)", () => {
+    const html = renderToStaticMarkup(
+      <AnalysisResult view={{ ...baseView, kellyInfoUnits: null }} />,
+    );
+    expect(html).not.toContain("quarter-Kelly");
+  });
+});

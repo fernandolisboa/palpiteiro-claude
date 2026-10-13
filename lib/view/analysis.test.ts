@@ -88,6 +88,8 @@ describe("toAnalysisView", () => {
       minOdd: "1.75",
       // input sem stakeUnits → null (a page/action ligam as call sites).
       stakeUnits: null,
+      // quarter-Kelly informativo na odd da análise (ADR 0039; o gate decide o oficial).
+      kellyInfoUnits: "3.00 u",
       // framing/note no topo (R4): break-even da zebra (100/1.95 = 51.3%) —
       // string idêntica à pré-relocação.
       framing:
@@ -177,6 +179,8 @@ describe("toAnalysisView", () => {
       ],
       minOdd: "1.80",
       stakeUnits: null,
+      // quarter-Kelly informativo na odd da análise (ADR 0039; o gate decide o oficial).
+      kellyInfoUnits: "1.00 u",
       // Break-even da zebra (over): 100/1.98 = 50.5%.
       framing:
         "a aposta em pelo menos 3 gols só sai do zero se a chance real for maior que 50.5% — na análise o modelo estimou 44%",
@@ -259,6 +263,7 @@ describe("toAnalysisView", () => {
       ],
       minOdd: null,
       stakeUnits: null,
+      kellyInfoUnits: null,
       // pass: copy de margem de erro (cobre EV positivo sob veredito de não apostar).
       framing:
         "vantagens pequenas (abaixo de 5pp) ficam dentro da margem de erro do modelo — por isso não há recomendação",
@@ -343,6 +348,7 @@ describe("toAnalysisView", () => {
       ],
       minOdd: "1.75",
       stakeUnits: null,
+      kellyInfoUnits: null,
       // Zebra sem odd registrada: framing não-derivável → null; nota de degradação.
       framing: null,
       note: "odds do outro lado não registradas nesta análise",
@@ -666,6 +672,8 @@ describe("toAnalysisView", () => {
 
     expect(view.expectedReturn).toBe("-0.9%");
     expect(view.expectedReturnTone).toBe("neutral");
+    // f* ≤ 0: o clamp de 0.5u do Kelly viraria sugestão de aposta — nada informativo.
+    expect(view.kellyInfoUnits).toBeNull();
     expect(view.evLegend).toBe(
       "na odd registrada na análise, o retorno esperado é negativo — só vale a pena com odd ≥ 1.80",
     );

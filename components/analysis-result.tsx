@@ -131,6 +131,16 @@ export function AnalysisResult({ view, showRiskDisclaimer = true }: Props) {
               </span>
             </div>
           )}
+          {view.kellyInfoUnits && (
+            <div className="flex items-baseline justify-between gap-2">
+              <span className="font-mono text-eyebrow uppercase tracking-label text-muted-foreground">
+                quarter-Kelly (informativo)
+              </span>
+              <span className="font-mono text-body tabular-nums tracking-tight text-muted-foreground">
+                {view.kellyInfoUnits}
+              </span>
+            </div>
+          )}
           <div className="flex items-baseline justify-between gap-2">
             <span className="font-mono text-eyebrow uppercase tracking-label text-muted-foreground">
               odd na análise{view.oddAtRecAgo ? ` (${view.oddAtRecAgo})` : ""}

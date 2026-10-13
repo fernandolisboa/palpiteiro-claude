@@ -1,4 +1,5 @@
 import type { PredictionJudgments } from "@/lib/ai/engine/types";
+import { computeKellyStakeUnits } from "@/lib/ai/staking";
 import type { PredictionWithAiCall } from "@/lib/db/queries/predictions";
 import {
   formatAnalysisEngine,
@@ -429,6 +430,12 @@ export function toAnalysisView(
     stakeUnits: isPass
       ? null
       : formatStakeUnits(prediction.stakeUnits ?? null),
+    // Só com retorno esperado positivo: computeKellyStakeUnits faz clamp no piso de
+    // 0.5u, e um f* ≤ 0 apareceria como sugestão de aposta.
+    kellyInfoUnits:
+      evPerUnit !== null && evPerUnit > 0 && confidenceNum !== null && oddAtRecNum !== null
+        ? formatStakeUnits(computeKellyStakeUnits(confidenceNum / 100, oddAtRecNum))
+        : null,
     framing: framingNote.framing,
     note: framingNote.note,
     oddAtRec: isPass ? null : formatOdd(prediction.oddAtRecommendation),
