@@ -1,11 +1,19 @@
 import { describe, expect, it } from "vitest";
 
 import type { FanOutOutcome } from "@/lib/ai/best-bet";
+import type { PredictionJudgments } from "@/lib/ai/engine/types";
+import { JUDGMENT_QUESTION_IDS } from "@/lib/ai/judgments/questions";
+import type { JudgmentAnswers, JudgmentQuestionId } from "@/lib/ai/judgments/types";
 import type { Prediction } from "@/lib/ai/predict";
-import { MarketAnalysisSchema } from "@/lib/ai/palpites/cartridges/cartridge";
+import {
+  MarketAnalysisSchema,
+  buildUserMessage,
+  type PalpitesInput,
+} from "@/lib/ai/palpites/cartridges/cartridge";
 import {
   summarizeAnalysesForSynthesis,
   summarizeSavedAnalysesForSynthesis,
+  type MarketAnalysisSummary,
 } from "@/lib/ai/palpites/synthesis-input";
 import type { PredictionWithAiCall } from "@/lib/db/queries/predictions";
 
@@ -239,5 +247,170 @@ describe("summarizeSavedAnalysesForSynthesis (gerar só o palpite)", () => {
       { key: "p1", label: "Calleri", modelProbPct: 41 },
     ]);
     expect(MarketAnalysisSchema.safeParse(a).success).toBe(true);
+  });
+});
+
+// ─── Contexto extra (#565): nada do usuário chega à síntese ─────────────────
+
+describe("contexto extra fora da síntese (PLAN-565 §13.2)", () => {
+  const USER_RATIONALE =
+    "Segundo o que você informou, o Pedro está fora: desfalques tiram do Flamengo uma peça ofensiva central (informado por você, não conferido). O Palmeiras perde o zagueiro titular.";
+
+  function answers(over: Partial<Record<JudgmentQuestionId, number>> = {}): JudgmentAnswers {
+    return Object.fromEntries(
+      JUDGMENT_QUESTION_IDS.map((id) => [id, { value: over[id] ?? 0.2, confidence: null }]),
+    ) as JudgmentAnswers;
+  }
+
+  // JEV: defesa do visitante (0,9). Usuário: ataque do mandante, não conferido (0,7).
+  function judgments(over: Partial<PredictionJudgments> = {}): PredictionJudgments {
+    return {
+      engine: "code_jev",
+      applied: true,
+      answers: answers({ defense_weakened_away: 0.9 }),
+      multipliers: {
+        home: {
+          factors: { attack_weakened_home: 0.92, defense_weakened_away: 1.1 },
+          product: 1.012,
+          applied: 1.012,
+        },
+        away: { factors: {}, product: 1, applied: 1 },
+      },
+      lambda: {
+        source: "heuristic",
+        degraded: false,
+        rho: null,
+        base: { home: 1.5, away: 1.1 },
+        adjusted: { home: 1.52, away: 1.1 },
+      },
+      versions: {
+        judgments: "jev_judgments_v1",
+        weights: "judgment_weights_v1",
+        narrator: "narrator_v1.1",
+        jevModel: "jev",
+      },
+      failure: null,
+      stateHash: "h",
+      aiCallId: null,
+      reusedFromPredictionId: null,
+      userContext: {
+        claims: [
+          {
+            team: "home",
+            topic: "absence",
+            role: "attack",
+            playersCount: 1,
+            index: 0,
+            status: "unverifiable",
+            evidence: "Não está na nossa lista de desfalques do Flamengo.",
+            sides: [{ side: "home", status: "unverifiable" }],
+            playerChecks: [{ status: "unverifiable", questionId: "attack_weakened_home" }],
+            signals: [{ questionId: "attack_weakened_home", strength: "unverified" }],
+          },
+        ],
+        evidence: { attack_weakened_home: 0.7 },
+        extractionAiCallId: "ai-x",
+        warnings: [],
+        versions: { userEvidence: "user_evidence_v1", extract: "user_palpite_extract_v1" },
+      },
+      ...over,
+    };
+  }
+
+  const withUser = (j: PredictionJudgments | null = judgments()) =>
+    prediction({ id: "p-ctx", rationale: USER_RATIONALE, judgments: j } as Partial<Prediction>);
+
+  const SELECTIONS = [
+    { key: "home", modelProbPct: 58, odd: 1.85 },
+    { key: "draw", modelProbPct: 24, odd: 3.4 },
+    { key: "away", modelProbPct: 18, odd: 4.2 },
+  ];
+
+  function expectNoUserText(summaries: MarketAnalysisSummary[]) {
+    const prompt = buildUserMessage(
+      {
+        match: {
+          league: "brasileirao_a",
+          homeTeam: "Flamengo",
+          awayTeam: "Palmeiras",
+          kickoffAt: "2026-05-20T19:00:00.000Z",
+        },
+        analyses: summaries,
+        homeForm: { team: "Flamengo", gamesConsidered: 0, avgGoalsFor: 0, avgGoalsAgainst: 0, results: [] },
+        awayForm: { team: "Palmeiras", gamesConsidered: 0, avgGoalsFor: 0, avgGoalsAgainst: 0, results: [] },
+        h2h: [],
+        news: [],
+      } as unknown as PalpitesInput,
+      { daysToKickoff: 2 },
+    );
+    for (const text of [JSON.stringify(summaries), prompt]) {
+      expect(text).not.toContain("informado por você");
+      expect(text).not.toContain("você informou");
+      expect(text).not.toContain("Pedro");
+      // A frase do fator que o usuário moveu (ataque do mandante).
+      expect(text).not.toContain("peça ofensiva central");
+    }
+    return prompt;
+  }
+
+  it("fan-out: com fator movido pelo usuário, o racional do narrador não vai; ficam só os fatores do JEV", () => {
+    const out = summarizeAnalysesForSynthesis([
+      okOutcome("match_result", withUser(), SELECTIONS),
+    ]);
+    const [a] = out;
+    expect(a.rationale).toBe(
+      "Fatores do modelo: Desfalques atingem a defesa ou o goleiro titular do visitante (gols esperados do mandante ajustados para cima) — sinal forte.",
+    );
+    // Probs, seleção e edge seguem os da row.
+    expect(a.recommendation).toBe("home");
+    expect(a.modelProbPct).toBe(58);
+    expect(a.edgePct).toBe(9);
+    expect(a.selections).toHaveLength(3);
+    expect(MarketAnalysisSchema.safeParse(a).success).toBe(true);
+    expect(expectNoUserText(out)).toContain("Racional: Fatores do modelo:");
+  });
+
+  it("refazer só o palpite (histórico salvo): mesma regra", () => {
+    const out = summarizeSavedAnalysesForSynthesis([
+      { prediction: withUser(), aiCall: null, marketKey: "match_result", selections: SELECTIONS },
+    ]);
+    expect(out[0].rationale).toContain("Fatores do modelo:");
+    expectNoUserText(out);
+  });
+
+  it("sem outro fator do JEV: racional vazio, a linha 'Racional' some", () => {
+    const j = judgments({ answers: answers() });
+    j.multipliers!.home.factors = { attack_weakened_home: 0.92 };
+    const out = summarizeAnalysesForSynthesis([okOutcome("match_result", withUser(j), SELECTIONS)]);
+    expect(out[0].rationale).toBe("");
+    expect(expectNoUserText(out)).not.toContain("Racional:");
+  });
+
+  it("JEV não rodou (answers null) e o usuário moveu: racional vazio", () => {
+    const out = summarizeAnalysesForSynthesis([
+      okOutcome("match_result", withUser(judgments({ answers: null, applied: false })), SELECTIONS),
+    ]);
+    expect(out[0].rationale).toBe("");
+    expectNoUserText(out);
+  });
+
+  it("contexto ilegível: na dúvida, o racional do narrador não vai", () => {
+    const j = judgments();
+    (j as { userContext: unknown }).userContext = { claims: "x" };
+    const out = summarizeAnalysesForSynthesis([okOutcome("match_result", withUser(j), SELECTIONS)]);
+    expect(out[0].rationale).toBe("");
+  });
+
+  it("contexto sem efeito (JEV já mais forte) ou sem contexto: racional do narrador intacto", () => {
+    const strongJev = judgments({ answers: answers({ attack_weakened_home: 0.9 }) });
+    const noEffect = prediction({ rationale: "Mandante superior.", judgments: strongJev } as Partial<Prediction>);
+    expect(
+      summarizeAnalysesForSynthesis([okOutcome("match_result", noEffect, SELECTIONS)])[0].rationale,
+    ).toBe("Mandante superior.");
+    const { userContext: _u, ...noContext } = judgments();
+    const plain = prediction({ rationale: "Mandante superior.", judgments: noContext } as Partial<Prediction>);
+    expect(
+      summarizeAnalysesForSynthesis([okOutcome("match_result", plain, SELECTIONS)])[0].rationale,
+    ).toBe("Mandante superior.");
   });
 });

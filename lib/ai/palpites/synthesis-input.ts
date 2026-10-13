@@ -1,6 +1,10 @@
-import { getMarketPresentation } from "@/lib/view/markets/presentation";
-
+import type { JudgmentMultipliers } from "@/lib/ai/judgments/apply";
+import type { JudgmentQuestionId } from "@/lib/ai/judgments/types";
+import { judgmentFactorPhrases } from "@/lib/ai/markets/_narrator/labels";
 import type { PredictionWithAiCall } from "@/lib/db/queries/predictions";
+import { claimEffect } from "@/lib/user-palpite/evidence";
+import { PredictionUserContextSchema } from "@/lib/user-palpite/types";
+import { getMarketPresentation } from "@/lib/view/markets/presentation";
 
 import type { FanOutOutcome } from "../best-bet";
 import type { PredictResult } from "../predict";
@@ -26,7 +30,7 @@ export type MarketAnalysisSummary = {
   edgePct: number | null; // prediction.edgePct PERSISTIDO, Number()'d (null em pass) — DADO, não vai p/ manchete
   confidencePct: number | null; // prediction.confidencePct, Number()'d
   oddAtRecommendation: number | null;
-  rationale: string; // prediction.rationale (sinal p/ a narrativa)
+  rationale: string; // prediction.rationale (sinal p/ a narrativa); ver synthesisRationale
   predictionId: string; // proveniência → headline.sourcePredictionIds
   selections: { key: string; label?: string; modelProbPct: number }[];
 };
@@ -134,7 +138,7 @@ function summarizeSources(sources: AnalysisSource[]): MarketAnalysisSummary[] {
         prediction.oddAtRecommendation !== null
           ? Number(prediction.oddAtRecommendation)
           : null,
-      rationale: prediction.rationale,
+      rationale: synthesisRationale(prediction),
       predictionId: prediction.id,
       // Só as seleções COM prob: sem isso o schema da síntese rejeitava o input inteiro
       // (um jogador sem estimativa derrubava a manchete de todos os mercados).
@@ -154,4 +158,52 @@ function summarizeSources(sources: AnalysisSource[]): MarketAnalysisSummary[] {
   // Edge desc só como contexto (pass = sem edge → fim da lista). NÃO é o "pick".
   summaries.sort((a, b) => (b.edgePct ?? -Infinity) - (a.edgePct ?? -Infinity));
   return summaries;
+}
+
+// ─── Contexto extra (#565) fora da síntese ───────────────────────────────────
+
+// Times genéricos nas frases de fator: a síntese já recebe os nomes no cabeçalho.
+const GENERIC_TEAMS = { home: "mandante", away: "visitante" };
+
+/**
+ * O racional que a síntese vê. A manchete pode ser compartilhada (/p) e a síntese não
+ * sabe de onde veio cada fator: quando o contexto extra do usuário moveu algum fator
+ * (PLAN-565 §13.2, emenda do ADR 0055), o racional do narrador (que cita o que a pessoa
+ * informou) NÃO vai. No lugar, um racional montado em código só com os fatores do JEV
+ * que o usuário não moveu; sem nenhum, vazio (a linha "Racional" some). As probs e a
+ * seleção seguem as da row.
+ */
+function synthesisRationale(prediction: PredictResult["prediction"]): string {
+  const judgments = prediction.judgments;
+  if (judgments?.engine !== "code_jev" || judgments.userContext === undefined) {
+    return prediction.rationale;
+  }
+  const parsed = PredictionUserContextSchema.safeParse(judgments.userContext);
+  // Contexto ilegível: na dúvida, trata como movido.
+  const userMoved = parsed.success
+    ? new Set(
+        parsed.data.claims.flatMap((c) => claimEffect(c, judgments.answers ?? null).moved),
+      )
+    : null;
+  if (userMoved?.size === 0) return prediction.rationale;
+  if (!userMoved || !judgments.answers || !judgments.multipliers) return "";
+  const phrases = judgmentFactorPhrases(
+    judgments.answers,
+    withoutFactors(judgments.multipliers, userMoved),
+    GENERIC_TEAMS,
+  );
+  return phrases.length > 0 ? `Fatores do modelo: ${phrases.join("; ")}.` : "";
+}
+
+function withoutFactors(
+  m: JudgmentMultipliers,
+  drop: ReadonlySet<JudgmentQuestionId>,
+): JudgmentMultipliers {
+  const strip = (side: JudgmentMultipliers["home"]) => ({
+    ...side,
+    factors: Object.fromEntries(
+      Object.entries(side.factors).filter(([id]) => !drop.has(id as JudgmentQuestionId)),
+    ),
+  });
+  return { home: strip(m.home), away: strip(m.away) };
 }
