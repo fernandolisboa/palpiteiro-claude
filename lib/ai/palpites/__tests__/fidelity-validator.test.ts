@@ -184,6 +184,36 @@ describe("checkFidelity — médias e totais de outra fonte não são contradiç
     expect(r.ok).toBe(true);
   });
 
+  it.each([
+    "O Flu tem 2 gols sofridos em média.",
+    "O Flu tem 2 gols sofridos de média.",
+    "Média: 3 gols marcados pelo Fla.",
+    "O Flu leva 2 gols sofridos fora por jogo.",
+    "O Fla tem média de apenas 2 gols sofridos.",
+    "São 2 gols sofridos por partida.",
+    "São 2 gols sofridos a cada rodada.",
+    "São 2 gols sofridos/jogo.",
+  ])("média inteira em outras formas ('%s') → ok", (narrative) => {
+    expect(checkFidelity(output({ narrative }), input()).ok).toBe(true);
+  });
+
+  it("'N sofridos' sem 'gols', número no início e total de 2 dígitos são checados", () => {
+    expect(checkFidelity(output({ narrative: "7 sofridos no período." }), input()).ok).toBe(true);
+    expect(checkFidelity(output({ narrative: "9 sofridos no período." }), input()).ok).toBe(false);
+    expect(
+      checkFidelity(output({ narrative: "O Fla fez 10 gols marcados." }), input()).ok,
+    ).toBe(false);
+  });
+
+  it("2ª citação de gols marcados errada → contradição", () => {
+    const r = checkFidelity(
+      output({ narrative: "O Fla tem 8 gols marcados e o Flu, 6 gols marcados." }),
+      input(),
+    );
+    expect(r.ok).toBe(false);
+    if (!r.ok) expect(r.reason).toContain("6 gol(s) marcados");
+  });
+
   it("total que o racional de uma análise já trazia (temporada) → ok", () => {
     const r = checkFidelity(
       output({ narrative: "A defesa do Flu já tem 18 gols sofridos no campeonato." }),
@@ -207,6 +237,32 @@ describe("checkFidelity — médias e totais de outra fonte não são contradiç
       }),
     );
     expect(r.ok).toBe(true);
+  });
+
+  it("racional só libera o total que ele traz: 19 com racional citando 18 → contradição", () => {
+    const r = checkFidelity(
+      output({ narrative: "A defesa do Flu já tem 19 gols sofridos no campeonato." }),
+      input({
+        analyses: [
+          {
+            marketKey: "match_result",
+            marketLabel: "Resultado (1X2)",
+            recommendation: "home",
+            recommendedLabel: "Casa",
+            isPass: false,
+            modelProbPct: 55,
+            edgePct: 3,
+            confidencePct: null,
+            oddAtRecommendation: 1.9,
+            rationale: "Fluminense FC: 9º, 20 pts, 15 gols marcados e 18 sofridos.",
+            predictionId: "pred-1",
+            selections: [],
+          },
+        ],
+      }),
+    );
+    expect(r.ok).toBe(false);
+    if (!r.ok) expect(r.reason).toContain("19");
   });
 
   it("total inventado continua reprovando mesmo com média fiel antes → contradição", () => {

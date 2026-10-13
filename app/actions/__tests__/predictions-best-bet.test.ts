@@ -881,7 +881,7 @@ describe("analyzeBestBet — passo de síntese (#353, palpite-first)", () => {
       expect(res.palpite).toBeNull();
       // Admin vê o motivo técnico junto do aviso.
       expect(res.palpiteError).toBe(
-        "As análises por mercado ficaram prontas, mas o palpite não saiu desta vez. Tente de novo pelo botão “só o palpite”, que usa as análises já salvas sem refazê-las. Motivo: haiku timeout",
+        "As análises por mercado ficaram prontas, mas o palpite não saiu desta vez. Tente de novo pelo botão de gerar só o palpite, que usa as análises já salvas sem refazê-las. Motivo: haiku timeout",
       );
     }
   });
@@ -897,7 +897,7 @@ describe("analyzeBestBet — passo de síntese (#353, palpite-first)", () => {
     if (res.ok) {
       expect(res.palpite).toBeNull();
       expect(res.palpiteError).toBe(
-        "As análises por mercado ficaram prontas, mas o palpite não saiu desta vez. Tente de novo pelo botão “só o palpite”, que usa as análises já salvas sem refazê-las.",
+        "As análises por mercado ficaram prontas, mas o palpite não saiu desta vez. Tente de novo pelo botão de gerar só o palpite, que usa as análises já salvas sem refazê-las.",
       );
     }
   });

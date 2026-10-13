@@ -117,11 +117,14 @@ function goalClaimRe(word: "marcados" | "sofridos"): RegExp {
   return new RegExp(`(?<!\\d)(?<!\\d[.,])(\\d+)\\s+(?:gols?\\s+)?${word}`, "giu");
 }
 
-// Média citada como inteiro ("média de 2 gols sofridos", "2 gols sofridos por jogo")
-// não é um total: fica fora da checagem (não é contradição com o total da janela).
-const AVERAGE_BEFORE = /m[ée]dia\s+(?:de\s+)?$/iu;
-const AVERAGE_AFTER = /^\s*(?:por|a\s+cada)\s+(?:jogo|partida|rodada)/iu;
-const AVERAGE_WINDOW = 20;
+// Média citada como inteiro ("média de 2 gols sofridos", "2 gols sofridos em média",
+// "2 gols sofridos fora por jogo") não é um total: fica fora da checagem (não é
+// contradição com o total da janela). O input dá médias inteiras como "2.0".
+const AVERAGE_BEFORE =
+  /m[ée]dia\s*[:,]?\s+(?:de\s+)?(?:apenas\s+|s[óo]\s+|quase\s+|cerca\s+de\s+)?$/iu;
+const AVERAGE_AFTER =
+  /^\s*(?:(?:em|de)\s+m[ée]dia|\/\s*jogo|(?:(?:em\s+casa|fora(?:\s+de\s+casa)?)\s+)?(?:por|a\s+cada)\s+(?:jogo|partida|rodada))/iu;
+const AVERAGE_WINDOW = 30;
 
 // Inteiros "N <word>" de um texto, sem as médias.
 function goalClaims(text: string, word: "marcados" | "sofridos"): number[] {
