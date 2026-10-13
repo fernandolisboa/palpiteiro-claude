@@ -42,10 +42,12 @@ describe("persistAiCallError — swallow preservado", () => {
   it("engole a falha do insert (não re-throw) e loga em console.error", async () => {
     const consoleError = vi.spyOn(console, "error").mockImplementation(() => {});
     insert.mockReturnValue({
-      values: vi.fn(() => Promise.reject(new Error("db down"))),
+      values: vi.fn(() => ({
+        returning: () => Promise.reject(new Error("db down")),
+      })),
     });
 
-    await expect(persistAiCallError(baseArgs)).resolves.toBeUndefined();
+    await expect(persistAiCallError(baseArgs)).resolves.toBeNull();
     expect(consoleError).toHaveBeenCalledTimes(1);
     const logged = JSON.parse(consoleError.mock.calls[0][0] as string);
     expect(logged.scope).toBe("persistAiCallError");
@@ -53,14 +55,14 @@ describe("persistAiCallError — swallow preservado", () => {
     expect(logged.originalStatus).toBe("invalid_output");
   });
 
-  it("caminho ok: insere a row de erro sem logar", async () => {
+  it("caminho ok: insere a row de erro sem logar e devolve o id", async () => {
     const consoleError = vi.spyOn(console, "error").mockImplementation(() => {});
-    const values = vi.fn((_row: Record<string, unknown>) =>
-      Promise.resolve(undefined),
-    );
+    const values = vi.fn((_row: Record<string, unknown>) => ({
+      returning: () => Promise.resolve([{ id: "err-1" }]),
+    }));
     insert.mockReturnValue({ values });
 
-    await persistAiCallError(baseArgs);
+    await expect(persistAiCallError(baseArgs)).resolves.toBe("err-1");
     expect(values).toHaveBeenCalledTimes(1);
     const row = values.mock.calls[0][0];
     expect(row.status).toBe("invalid_output");
@@ -70,9 +72,9 @@ describe("persistAiCallError — swallow preservado", () => {
   });
 
   it("trunca o errorMessage no teto (2000 chars)", async () => {
-    const values = vi.fn((_row: { errorMessage: string }) =>
-      Promise.resolve(undefined),
-    );
+    const values = vi.fn((_row: { errorMessage: string }) => ({
+      returning: () => Promise.resolve([{ id: "err-2" }]),
+    }));
     insert.mockReturnValue({ values });
     await persistAiCallError({ ...baseArgs, errorMessage: "x".repeat(5000) });
     const row = values.mock.calls[0][0];

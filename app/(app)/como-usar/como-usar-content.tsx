@@ -20,6 +20,7 @@ export const COMO_USAR_SECTIONS = [
   { id: "escolher-jogo", title: "Escolher um jogo" },
   { id: "gerar-palpite", title: "Gerar o palpite" },
   { id: "ler-analise", title: "Ler o palpite e a análise" },
+  { id: "seu-palpite", title: "Analisar o seu palpite" },
   { id: "minha-aposta", title: "Registrar e avaliar sua aposta" },
   { id: "compartilhar", title: "Compartilhar um palpite" },
   { id: "resultados", title: "Acompanhar os resultados" },
@@ -223,6 +224,47 @@ export function ComoUsarContent() {
           confronto direto, a classificação, os desfalques e as escalações. Tocar no
           nome de um time abre o histórico dele.
         </p>
+      </Section>
+
+      <Section id="seu-palpite">
+        <p>
+          Tem um palpite seu pro jogo? Na página do jogo, a parte{" "}
+          <Ui>seu palpite</Ui> mostra o que o modelo acha dele. Escolha{" "}
+          <Ui>Placar</Ui> (toque nos gols de cada time, ou use <Ui>outro placar</Ui>{" "}
+          e <Ui>Usar placar</Ui> pra 6 gols ou mais) ou <Ui>Resultado</Ui> (vitória
+          de um dos times ou empate). A leitura sai na hora e é grátis: a chance do
+          seu palpite, a posição do placar entre os mais prováveis e a chance de
+          cada resultado.
+        </p>
+        <Steps>
+          <li>Escolha o placar ou o resultado nos botões.</li>
+          <li>
+            Se quiser, escreva em poucas linhas por que você acha isso (quem está
+            fora, como os times vêm, o que o jogo vale) e toque em{" "}
+            <Ui>Analisar meu palpite</Ui>. Conta 1 do seu limite diário de palpites.
+          </li>
+          <li>
+            A IA lê o seu motivo e separa as afirmações. Cada uma é conferida com os
+            nossos dados e ganha uma etiqueta: <Ui>confirmada</Ui>,{" "}
+            <Ui>contradita</Ui> ou <Ui>não verificável</Ui>.
+          </li>
+        </Steps>
+        <p>
+          A análise mostra a leitura <Ui>sem o seu contexto</Ui> e{" "}
+          <Ui>com o seu contexto</Ui>, lado a lado. O que você contou só mexe no
+          modelo por um caminho limitado: desfalques e rodízio descontam gols
+          esperados e o peso do jogo soma um pouco. Uma afirmação contradita não
+          entra, e uma não verificável entra com peso menor. Dizer que o time está
+          completo não sobe a chance, porque o modelo não premia ausência de
+          desfalque. Quando o modelo discorda de você, ele diz por quê, citando o
+          dado.
+        </p>
+        <Tip>
+          <Strong>Gostou do palpite?</Strong> <Ui>Adicionar às suas apostas</Ui>{" "}
+          leva o placar ou o resultado pra lista de <Ui>Suas apostas</Ui>, logo
+          abaixo, pra você registrar. Não escreva dados pessoais no motivo: ele fica
+          salvo com a sua análise.
+        </Tip>
       </Section>
 
       <Section id="minha-aposta">

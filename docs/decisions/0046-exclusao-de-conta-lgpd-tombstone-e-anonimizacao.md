@@ -9,6 +9,12 @@ estratégia e especifica a feature; a implementação self-serve fica pra um PR 
 follow-up.** Até lá, o caminho é o procedimento manual da seção "Runbook manual", já
 prometido na `/privacidade` (§8) com prazo de 15 dias.
 
+> **Emenda (#564, ADR 0055, 2026-10-13):** o "Seu palpite" grava o motivo que o usuário
+> escreve em `user_palpite_analyses.reason_text` e o manda (cercado) à extração Haiku; as
+> paráfrases sem nome vão à narração. As duas chamadas são logadas com `prompt_version`
+> `user_palpite_*`. A Decisão 1 ganha a redação desses `ai_calls` (linha 1) e o `DELETE`
+> das análises do titular (linha 2b); o runbook e a spec 5.e acompanham.
+
 > **Escopo:** estratégia de eliminação/anonimização quando o titular pede pra excluir a
 > conta; o que é apagado, o que é anonimizado e por quê; spec da feature (`/perfil` +
 > admin) e dos testes. **Fora de escopo:** exportação (portabilidade, art. 18, V — atendida
@@ -33,6 +39,11 @@ prometido na `/privacidade` (§8) com prazo de 15 dias.
   - `ai_calls.input_payload` das chamadas `bet_parse_*` (`lib/ai/bet-parse/parse.ts:77`,
     `cartridge.ts:99-103`): **o mesmo texto livre** vai no user message e é logado.
     `output_payload`/`error_message` dessas chamadas podem ecoá-lo.
+  - `user_palpite_analyses.reason_text` (emenda #564): **o motivo livre** que o usuário
+    escreve pro próprio palpite (até 1.000 chars); `claims` guarda as paráfrases e os nomes
+    de jogador que ele digitou.
+  - `ai_calls.input_payload`/`output_payload` das chamadas `user_palpite_extract_*` (o
+    motivo cercado no user message) e `user_palpite_narrate_*` (as paráfrases).
   - `palpite_sets.shared_at`: um palpite público em `/p/[id]` não carrega PII (ADR 0035
     §5/§7), mas é conteúdo que o titular publicou.
   - Fora do banco: contadores do Upstash (e-mail/IP, janela ≤ 24h — `lib/rate-limit.ts`,
@@ -72,9 +83,10 @@ Num único `db.batch` (atômico), na ordem:
 
 | # | Statement | Por quê |
 |---|---|---|
-| 1 | `UPDATE ai_calls SET input_payload='{"redacted":"account_deleted"}', output_payload='{"redacted":"account_deleted"}', error_message=NULL WHERE user_id=$1 AND prompt_version LIKE 'bet_parse%'` | apaga o texto livre logado (PII potencial) sem quebrar FKs nem o custo agregado (tokens/custo/latência ficam) |
+| 1 | `UPDATE ai_calls SET input_payload='{"redacted":"account_deleted"}', output_payload='{"redacted":"account_deleted"}', error_message=NULL WHERE user_id=$1 AND (prompt_version LIKE 'bet_parse%' OR prompt_version LIKE 'user_palpite%')` | apaga o texto livre logado (PII potencial) sem quebrar FKs nem o custo agregado (tokens/custo/latência ficam). Emenda #564: inclui as chamadas do "Seu palpite" (motivo e paráfrases) |
 | 2 | `DELETE FROM bet_slips WHERE user_id=$1` (cascata: `bet_legs`, `bet_leg_outcomes`) | apostas registradas são **comportamento de aposta do titular**, não saída do modelo — não há finalidade que justifique manter (art. 16) |
 | 2b | `DELETE FROM friend_pools WHERE user_id=$1` (cascata: `friend_pool_entries`) | bolões entre amigos (ADR 0054): guardam **nomes de terceiros** digitados pelo titular, sem finalidade fora da conta dele |
+| 2c | `DELETE FROM user_palpite_analyses WHERE user_id=$1` (emenda #564) | o motivo livre e o palpite do titular: mesmo racional do `bet_slips` (apagar, não anular `reason_text`; Alternativa 4) |
 | 3 | `UPDATE palpite_sets SET shared_at=NULL WHERE user_id=$1` | derruba os links públicos `/p/[id]` (kill-switch do ADR 0035 §7) |
 | 4 | `DELETE FROM accounts / authenticators / sessions WHERE user_id=$1` | vínculos de login (IDs do Google, passkeys) — como a row `users` fica, a cascata do Auth.js não dispara sozinha |
 | 5 | `DELETE FROM verification_tokens WHERE identifier=<e-mail>` | magic links pendentes carregam o e-mail |
@@ -125,8 +137,8 @@ fica (NOT NULL, não identifica sozinho).
   abrem drill-down de conta excluída — só entram em agregados.
 - e. **Testes** (pglite, com as migrations reais): após `anonymizeUser` — nenhuma row com o
   e-mail original em `users`/`verification_tokens`; zero rows em `accounts`/
-  `authenticators`/`sessions`/`bet_slips` do id; `ai_calls` bet_parse redigidos e os de
-  análise intactos; `palpite_sets.shared_at` nulo e `/p` do set retorna 404
+  `authenticators`/`sessions`/`bet_slips`/`user_palpite_analyses` do id; `ai_calls`
+  bet_parse e user_palpite redigidos e os de análise intactos; `palpite_sets.shared_at` nulo e `/p` do set retorna 404
   (`getSharedPalpiteSet`); `predictions` intactas; outro usuário intocado; 2ª execução
   no-op; o mesmo e-mail consegue criar conta nova.
 - f. `/privacidade` §8 passa a citar o botão (bump de data).
@@ -147,9 +159,11 @@ BEGIN;
 UPDATE ai_calls SET input_payload = '{"redacted":"account_deleted"}',
                     output_payload = '{"redacted":"account_deleted"}',
                     error_message = NULL
- WHERE user_id = :uid AND prompt_version LIKE 'bet_parse%';
+ WHERE user_id = :uid
+   AND (prompt_version LIKE 'bet_parse%' OR prompt_version LIKE 'user_palpite%');
 DELETE FROM bet_slips WHERE user_id = :uid;
 DELETE FROM friend_pools WHERE user_id = :uid;  -- ADR 0054: nomes dos amigos
+DELETE FROM user_palpite_analyses WHERE user_id = :uid;
 UPDATE palpite_sets SET shared_at = NULL WHERE user_id = :uid;
 DELETE FROM accounts WHERE user_id = :uid;
 DELETE FROM authenticators WHERE user_id = :uid;
@@ -190,8 +204,8 @@ e-mail) numa nota privada até a coluna `deleted_at` existir.
   desempenho do modelo.
 - Rows-lápide aparecem em `users`; queries de admin precisam filtrar `deleted_at` quando a
   coluna existir.
-- A regra "não mutar predições" segue intacta — só `users`, `ai_calls` bet_parse
-  (redação), `palpite_sets.shared_at` e tabelas do titular mudam.
+- A regra "não mutar predições" segue intacta — só `users`, `ai_calls` bet_parse e
+  user_palpite (redação), `palpite_sets.shared_at` e tabelas do titular mudam.
 
 ## Citações não verificadas nesta sessão
 

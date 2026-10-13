@@ -14,6 +14,15 @@ import type {
   DixonColesFallbackReason,
   ModelScorelineSource,
 } from "@/lib/quant/match-model";
+import type {
+  CheckedClaim,
+  NarrationSource,
+  PalpiteSource,
+  StoredNarration,
+  StoredPalpiteModel,
+  StoredReading,
+  UserPalpite,
+} from "@/lib/user-palpite/types";
 import {
   boolean,
   check,
@@ -867,6 +876,10 @@ export const aiConfig = pgTable("ai_config", {
   // IA" reusa essas respostas. Default ON. SET ... = false → a base usa só o
   // Dixon-Coles (ou o heurístico da tabela), sem chamada JEV no cron.
   enableMatchModelJev: boolean().notNull().default(true),
+  // Kill-switch do LLM do "Seu palpite" (#564, ADR 0055) e, depois, do contexto extra da
+  // análise (#565). Default ON. SET ... = false → o bloco mostra só a leitura pelos
+  // botões (grátis, sem IA), que nunca é gateada.
+  enableUserContext: boolean().notNull().default(true),
   updatedByUserId: uuid().references(() => users.id, { onDelete: "set null" }),
   updatedAt: timestamp({ withTimezone: true }).notNull().defaultNow(),
 });
@@ -1050,4 +1063,45 @@ export const friendPoolEntries = pgTable(
     createdAt: timestamp({ withTimezone: true }).notNull().defaultNow(),
   },
   (t) => [index("friend_pool_entries_pool_id_idx").on(t.poolId, t.createdAt)],
+);
+
+// Análises do palpite do usuário (#564, ADR 0055): o palpite escolhido nos botões, o
+// motivo que ele escreveu, as afirmações conferidas em código, as leituras do modelo
+// sem e com o contexto dele e a narração. Append-only (uma row por "Analisar meu
+// palpite"; a página lê a mais recente). Ler/escrever via
+// lib/db/queries/user-palpite-analyses.ts (Zod na leitura dos jsonb).
+export const userPalpiteAnalyses = pgTable(
+  "user_palpite_analyses",
+  {
+    id: uuid().primaryKey().defaultRandom(),
+    userId: uuid()
+      .notNull()
+      .references(() => users.id, { onDelete: "restrict" }),
+    matchId: uuid()
+      .notNull()
+      .references(() => matches.id, { onDelete: "restrict" }),
+    palpite: jsonb().$type<UserPalpite>().notNull(),
+    palpiteSource: text().$type<PalpiteSource>().notNull(),
+    // Texto livre do usuário (PII potencial): a exclusão de conta apaga a row (ADR 0046).
+    reasonText: text().notNull(),
+    claims: jsonb().$type<CheckedClaim[]>().notNull(),
+    model: jsonb().$type<StoredPalpiteModel>().notNull(),
+    reading: jsonb().$type<StoredReading>().notNull(),
+    narration: jsonb().$type<StoredNarration>().notNull(),
+    narrationSource: text().$type<NarrationSource>().notNull(),
+    extractionAiCallId: uuid().references(() => aiCalls.id, {
+      onDelete: "set null",
+    }),
+    narrationAiCallId: uuid().references(() => aiCalls.id, {
+      onDelete: "set null",
+    }),
+    createdAt: timestamp({ withTimezone: true }).notNull().defaultNow(),
+  },
+  (t) => [
+    index("user_palpite_analyses_user_match_created_idx").on(
+      t.userId,
+      t.matchId,
+      t.createdAt,
+    ),
+  ],
 );
