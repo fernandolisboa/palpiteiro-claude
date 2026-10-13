@@ -364,7 +364,7 @@ export function ComoFuncionaContent() {
       {/* Seção 4 — como ler os números */}
       <section className="border-border border-t pt-8 mt-8">
         <h2 className="text-display-sm font-medium tracking-tight">
-          Como ler os números (análise + dashboard)
+          Como ler os números (análise + desempenho)
         </h2>
         <div className="flex flex-col gap-3 pt-3 text-body leading-relaxed text-muted-foreground tracking-tight">
           <p>
@@ -392,7 +392,7 @@ export function ComoFuncionaContent() {
             que a IA usou.
           </p>
           <p>
-            No <strong className="font-medium text-foreground">dashboard</strong>, cada aposta
+            Em <strong className="font-medium text-foreground">desempenho</strong>, cada aposta
             usa uma{" "}
             <a href="#stake-unidade" className="text-foreground underline underline-offset-2 decoration-border-strong hover:decoration-foreground focus-visible:rounded-sm focus-visible:outline-none focus-visible:ring-[3px] focus-visible:ring-ring/50">
               unidade

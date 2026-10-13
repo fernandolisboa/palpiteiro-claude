@@ -2,36 +2,40 @@ import { describe, expect, it, vi } from "vitest";
 
 // `mobile-nav.tsx` importa `signOutAction` (-> `@/auth` -> next-auth), que não
 // é carregável no ambiente de teste. Mockamos `@/auth` só pra permitir importar
-// a função pura `mobileNavLinks`; este suite não exercita o logout.
+// a função pura `mobileNavSections`; este suite não exercita o logout.
 vi.mock("@/auth", () => ({ signOut: vi.fn() }));
 
-import { mobileNavLinks } from "@/components/mobile-nav";
+import { mobileNavSections } from "@/components/mobile-nav";
 
-describe("mobileNavLinks", () => {
-  it("inclui o link de admin quando isAdmin é true", () => {
-    const links = mobileNavLinks(true);
-    expect(links.map((l) => l.href)).toEqual([
-      "/jogos",
-      "/apostas",
-      "/dashboard",
-      "/como-usar",
-      "/como-funciona",
-      "/admin",
-      "/perfil",
+function hrefs(isAdmin: boolean) {
+  return mobileNavSections(isAdmin).map((s) => [s.id, s.items.map((i) => i.href)]);
+}
+
+describe("mobileNavSections", () => {
+  it("mostra principal, ajuda, admin e conta pro admin, nessa ordem", () => {
+    expect(hrefs(true)).toEqual([
+      ["principal", ["/jogos", "/apostas", "/dashboard"]],
+      ["ajuda", ["/como-usar", "/como-funciona", "/jogos?tour=1"]],
+      [
+        "admin",
+        [
+          "/admin",
+          "/admin/users",
+          "/admin/costs",
+          "/admin/calibration",
+          "/admin/settings",
+          "/admin/leagues",
+        ],
+      ],
+      ["conta", ["/perfil"]],
     ]);
-    expect(links.some((l) => l.href === "/admin")).toBe(true);
-    expect(links.some((l) => l.href === "/como-funciona")).toBe(true);
-    expect(links.some((l) => l.href === "/perfil")).toBe(true);
   });
 
-  it("não inclui o link de admin quando isAdmin é false", () => {
-    const links = mobileNavLinks(false);
-    expect(links.some((l) => l.href === "/admin")).toBe(false);
-    // Jogos, dashboard e como-funciona sempre presentes (mesma nav do desktop).
-    expect(links.some((l) => l.href === "/jogos")).toBe(true);
-    expect(links.some((l) => l.href === "/dashboard")).toBe(true);
-    expect(links.some((l) => l.href === "/como-funciona")).toBe(true);
-    // Perfil sempre presente, independente de admin.
-    expect(links.some((l) => l.href === "/perfil")).toBe(true);
+  it("esconde a seção de admin de quem não é admin", () => {
+    const sections = mobileNavSections(false);
+    expect(sections.map((s) => s.id)).toEqual(["principal", "ajuda", "conta"]);
+    expect(
+      sections.flatMap((s) => s.items).some((i) => i.href.startsWith("/admin"))
+    ).toBe(false);
   });
 });

@@ -2,7 +2,11 @@
 import { readFileSync } from "node:fs";
 import { join } from "node:path";
 
-import { describe, expect, it } from "vitest";
+import { describe, expect, it, vi } from "vitest";
+
+// /como-funciona renderiza o AppShell, que lê a sessão (`@/auth` → next-auth, que não
+// carrega no vitest). Só o `metadata` interessa aqui.
+vi.mock("@/auth", () => ({ auth: vi.fn(), signOut: vi.fn() }));
 
 import { metadata as comoFuncionaMetadata } from "@/app/como-funciona/page";
 import { metadata as landingMetadata } from "@/app/page";

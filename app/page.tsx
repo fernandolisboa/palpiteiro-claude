@@ -44,9 +44,9 @@ const JSON_LD = {
 /**
  * Landing pública estática na raiz `/` (#373). Server Component que **NÃO**
  * chama `auth()` nem toca DB/Odds-API/IA — a rota é liberada no middleware via
- * exclusão de matcher (`$`). Não usa `DesktopShell`/`PageHeader` (ambos gateiam
- * por sessão): monta o mesmo header enxuto público de `/como-funciona`
- * (wordmark + ThemeToggle). A home autenticada vive em `/jogos`.
+ * exclusão de matcher (`$`). Não usa o `AppShell` (que lê a sessão e tornaria a
+ * landing dinâmica): monta um header enxuto público (wordmark + ThemeToggle). A
+ * home autenticada vive em `/jogos`.
  *
  * O corpo vive em `LandingContent` (síncrono) pra que o teste de contrato
  * consiga `renderToStaticMarkup` sem aguardar Server Component async.

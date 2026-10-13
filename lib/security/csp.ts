@@ -15,8 +15,10 @@
  *    derruba o build se uma aparecer (ver `findStaticGatedRoutes`).
  *  - rotas PÚBLICAS (next.config headers): estática com `'unsafe-inline'`. Nonce exige
  *    render dinâmico por request, o que mataria o cache de CDN do snapshot `/p/[id]`
- *    (escudo de custo do ADR 0035) e a landing estática. Nessas páginas não há sessão
- *    renderizada nem sink de HTML cru (report 01: zero `dangerouslySetInnerHTML`).
+ *    (escudo de custo do ADR 0035) e a landing estática. Nessas páginas não há sink de
+ *    HTML cru (report 01: zero `dangerouslySetInnerHTML`); a única sessão renderizada
+ *    é o header do `/como-funciona` pra quem está logado (nome e avatar, como texto e
+ *    `<img>`, #553).
  */
 
 /**

@@ -31,7 +31,7 @@ const VALID_RESULTS: ReadonlySet<string> = new Set<OutcomeResult>([
  *
  * Acesso restrito a admin: muta outcomes passados (integridade de Yield), então
  * exige sessão com role "admin". Defense-in-depth com o gate em
- * app/admin/layout.tsx.
+ * app/(app)/admin/layout.tsx.
  */
 export async function overridePredictionOutcome(
   _prev: OverrideResult | null,
@@ -142,7 +142,7 @@ const VALID_PALPITE_RESULTS: ReadonlySet<string> = new Set<"won" | "lost">([
  * pura contra `line` (o admin é a autoridade, igual ao override de predição).
  *
  * Acesso restrito a admin (muta outcome passado): defense-in-depth com o gate de
- * app/admin/layout.tsx.
+ * app/(app)/admin/layout.tsx.
  */
 export async function overridePalpiteOutcome(
   _prev: OverrideResult | null,

@@ -48,7 +48,7 @@ export const TOUR_CHAPTERS: Record<TourChapter, readonly TourStep[]> = {
     {
       target: "menu",
       title: "Menu",
-      body: "Daqui você vai pra jogos, apostas, dashboard e pro guia \"como usar\", que explica cada tela com calma e deixa rever este tour. O perfil fica no menu do celular ou no seu nome, no computador.",
+      body: "O menu fica sempre aqui em cima: jogos, apostas e desempenho. Em \"ajuda\" ficam o guia \"como usar\", que explica cada tela com calma, e o atalho pra rever este tour. Perfil e sair ficam no seu avatar, à direita.",
     },
     {
       target: "league-picker",
@@ -63,7 +63,7 @@ export const TOUR_CHAPTERS: Record<TourChapter, readonly TourStep[]> = {
     {
       target: "recent-predictions",
       title: "Suas predições recentes",
-      body: "Os últimos jogos que você analisou aparecem aqui. \"ver todas\" leva pro dashboard, com o histórico completo e o resultado de cada análise.",
+      body: "Os últimos jogos que você analisou aparecem aqui. \"ver todas\" leva pro desempenho, com o histórico completo e o resultado de cada análise.",
     },
     {
       target: "match-row",
@@ -95,7 +95,7 @@ export const TOUR_CHAPTERS: Record<TourChapter, readonly TourStep[]> = {
     },
     {
       title: "Pronto",
-      body: "Depois do jogo o resultado é apurado sozinho: as análises aparecem no dashboard e as apostas que você confirmou, em Apostas. O guia \"como usar\", no menu da lista de jogos, explica cada tela e deixa rever este tour.",
+      body: "Depois do jogo o resultado é apurado sozinho: as análises aparecem em desempenho e as apostas que você confirmou, em apostas. Em \"ajuda\", no menu do topo, o guia \"como usar\" explica cada tela e dá pra rever este tour.",
     },
   ],
 };

@@ -5,7 +5,7 @@ import {
   leagueToKey,
 } from "@/lib/format";
 // Bound compartilhado da janela "em andamento" — DEVE casar com o bound da query
-// em app/jogos/page.tsx, senão pertinência-na-lista e elegibilidade-da-badge
+// em app/(app)/jogos/page.tsx, senão pertinência-na-lista e elegibilidade-da-badge
 // dessincronizam (jogo na lista mas isInProgress=false → cai no branch de odds =
 // parece apostável).
 import { IN_PROGRESS_WINDOW_MS } from "@/lib/view/date-range";

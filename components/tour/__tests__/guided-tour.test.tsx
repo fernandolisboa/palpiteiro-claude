@@ -2,6 +2,11 @@ import { act } from "react";
 import { createRoot, type Root } from "react-dom/client";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 
+// O tour lê o `?tour=1` por `useSearchParams`; fora do Next, vem da URL do jsdom.
+vi.mock("next/navigation", () => ({
+  useSearchParams: () => new URLSearchParams(window.location.search),
+}));
+
 vi.mock("@/app/actions/tour", () => ({
   saveTourState: vi.fn(async () => ({ ok: true })),
 }));
@@ -172,6 +177,25 @@ describe("GuidedTour", () => {
     window.history.replaceState(null, "", "/jogos");
     mount({ serverState: "done", forceStart: true });
     expect(dialog()).toBeNull();
+  });
+
+  it("\"rever o tour\" clicado já na página abre sem remontar", () => {
+    window.history.replaceState(null, "", "/jogos");
+    mount({ serverState: "done" });
+    expect(dialog()).toBeNull();
+    window.history.replaceState(null, "", "/jogos?tour=1");
+    mount({ serverState: "done", forceStart: true });
+    expect(dialog()?.textContent).toContain("Bem-vindo ao Palpiteiro");
+    expect(window.location.search).toBe("");
+  });
+
+  it("re-render no meio do tour forçado (URL já limpa) não fecha nem reinicia", () => {
+    window.history.replaceState(null, "", "/jogos?tour=1");
+    mount({ serverState: "done", forceStart: true });
+    act(() => button("Próximo").click());
+    const step = dialog()?.textContent;
+    mount({ serverState: "done", forceStart: false });
+    expect(dialog()?.textContent).toBe(step);
   });
 
   it("a página do jogo só abre depois da parte da lista", () => {

@@ -9,6 +9,7 @@ import {
   useState,
 } from "react";
 import { createPortal } from "react-dom";
+import { useSearchParams } from "next/navigation";
 import { X } from "lucide-react";
 
 import { saveTourState } from "@/app/actions/tour";
@@ -144,30 +145,53 @@ export function GuidedTour({ chapter, userId, serverState, forceStart }: Props) 
     [persist],
   );
 
-  // Partida: automática (primeira vez) ou forçada pelo link "rever o tour".
+  // Partida: automática (primeira vez) ou forçada pelo link "rever o tour". O link
+  // vive no menu do topo (#553), então pode ser clicado já nesta página: o efeito
+  // reage ao `?tour=1` aparecendo na URL, sem precisar remontar o componente.
+  const forcedParam = useSearchParams().get(TOUR_FORCE_PARAM);
+  const startCheckedRef = useRef(false);
+  const startTimerRef = useRef<number | null>(null);
+  useEffect(
+    () => () => {
+      if (startTimerRef.current !== null) window.clearTimeout(startTimerRef.current);
+    },
+    [],
+  );
   useEffect(() => {
+    const firstRun = !startCheckedRef.current;
+    startCheckedRef.current = true;
     // O `?tour=1` vale só enquanto está na URL: o Back pode restaurar este render do
     // cache do router com a prop antiga, depois de a URL já ter sido limpa.
     const url = new URL(window.location.href);
-    const forced = forceStart && url.searchParams.get(TOUR_FORCE_PARAM) === "1";
-    const effective = mergeTourState(serverState, readLocalState(userId));
-    if (!forced && !shouldAutoStart(chapter, effective)) return;
+    const forced =
+      forceStart &&
+      forcedParam === "1" &&
+      url.searchParams.get(TOUR_FORCE_PARAM) === "1";
     if (forced) {
       // Tira o param (um refresh não reabre). Estado null = o router do Next
-      // sincroniza a URL nova.
+      // sincroniza a URL nova (e este efeito roda de novo, sem forçar nada).
       url.searchParams.delete(TOUR_FORCE_PARAM);
       window.history.replaceState(null, "", url);
+    } else {
+      // Fora do "rever o tour", só a montagem decide: o estado do servidor é o do
+      // render inicial, e um re-render no meio do tour não pode reabri-lo.
+      if (!firstRun) return;
+      const effective = mergeTourState(serverState, readLocalState(userId));
+      if (!shouldAutoStart(chapter, effective)) return;
     }
-    const timer = window.setTimeout(() => {
+    // O timer não é limpo quando o param sai da URL (re-execução logo acima); só na
+    // desmontagem.
+    if (startTimerRef.current !== null) window.clearTimeout(startTimerRef.current);
+    startTimerRef.current = window.setTimeout(() => {
+      startTimerRef.current = null;
       const first = availableSteps(steps)[0];
       if (first === undefined) return;
       returnFocusRef.current = document.activeElement as HTMLElement | null;
       setIndex(first);
     }, AUTO_START_DELAY_MS);
-    return () => window.clearTimeout(timer);
-    // Só na montagem: o estado do servidor é o do render inicial.
+    // Reage só ao param e à prop de força; capítulo, usuário e estado são do render inicial.
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, []);
+  }, [forcedParam, forceStart]);
 
   // Troca de passo: acha o alvo, rola até ele e grava o fim do capítulo no último passo
   // (antes do clique — no capítulo da lista, o clique num jogo já navega).

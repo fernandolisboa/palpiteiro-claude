@@ -6,7 +6,7 @@ import { Menu } from "lucide-react";
 
 import { signOutAction } from "@/app/actions/auth";
 import { Button } from "@/components/ui/button";
-import { isActivePath, navLinkVariants } from "@/components/nav-link";
+import { navLinkVariants } from "@/components/nav-link";
 import {
   Sheet,
   SheetClose,
@@ -14,35 +14,46 @@ import {
   SheetTitle,
   SheetTrigger,
 } from "@/components/ui/sheet";
+import {
+  ACCOUNT_NAV,
+  activeItemHref,
+  ariaCurrentFor,
+  navGroups,
+  PRIMARY_NAV,
+  type NavItem,
+} from "@/lib/nav/menu";
+import { cn } from "@/lib/utils";
 
-type NavLinkItem = { href: string; label: string };
+type NavSection = { id: string; label: string | null; items: readonly NavItem[] };
 
 /**
- * Links de navegação do drawer mobile. As entradas de jogos/dashboard/como
- * funciona/admin espelham a nav do `DesktopShell` (mesmos labels/casing, mesmo
- * gate de admin via `session.user.role === "admin"`). O link de perfil aparece
- * SEMPRE, ao final: no desktop o perfil é o avatar separado no canto direito
- * (fora da `<nav>`); no mobile ele entra como link de nav pra ficar alcançável
- * no drawer — divergência intencional. Função pura (seam de teste sem precisar
- * de @testing-library), no estilo de `leaguePickerGroups`.
+ * Seções do drawer do celular: o mesmo modelo da barra do computador
+ * (`lib/nav/menu.ts`), com a conta no fim. No computador a conta mora no avatar;
+ * aqui ela entra no drawer também, pra o mapa do app ficar num lugar só. Função
+ * pura (seam de teste sem @testing-library).
  */
-export function mobileNavLinks(isAdmin: boolean): NavLinkItem[] {
-  const links: NavLinkItem[] = [
-    { href: "/jogos", label: "jogos" },
-    { href: "/apostas", label: "apostas" },
-    { href: "/dashboard", label: "dashboard" },
-    { href: "/como-usar", label: "como usar" },
-    { href: "/como-funciona", label: "como funciona" },
+export function mobileNavSections(isAdmin: boolean): NavSection[] {
+  return [
+    { id: "principal", label: null, items: PRIMARY_NAV },
+    ...navGroups(isAdmin).map((g) => ({ id: g.id, label: g.label, items: g.items })),
+    { id: "conta", label: "conta", items: ACCOUNT_NAV },
   ];
-  if (isAdmin) {
-    links.push({ href: "/admin", label: "admin" });
-  }
-  links.push({ href: "/perfil", label: "perfil" });
-  return links;
 }
 
-export function MobileNav({ isAdmin }: { isAdmin: boolean }) {
+export function MobileNav({
+  isAdmin,
+  className,
+}: {
+  isAdmin: boolean;
+  className?: string;
+}) {
   const pathname = usePathname();
+  const sections = mobileNavSections(isAdmin);
+  // Um único item ativo no drawer inteiro (o mais específico), igual à barra.
+  const active = activeItemHref(
+    pathname,
+    sections.flatMap((s) => s.items)
+  );
 
   return (
     <Sheet>
@@ -52,45 +63,53 @@ export function MobileNav({ isAdmin }: { isAdmin: boolean }) {
           size="icon-sm"
           aria-label="Abrir menu"
           data-tour="menu"
+          className={className}
         >
           <Menu className="size-5" />
         </Button>
       </SheetTrigger>
       {/* O primitivo SheetContent não tem padding interno — adicionamos aqui. */}
-      <SheetContent side="left" className="w-64 p-4">
+      <SheetContent side="left" className="w-72 overflow-y-auto p-4">
         {/* Radix Dialog exige um título pra a11y; não queremos exibi-lo. */}
         <SheetTitle className="sr-only">Navegação</SheetTitle>
-        <nav
-          aria-label="Navegação principal"
-          className="flex flex-col gap-1 pt-2"
-        >
-          {mobileNavLinks(isAdmin).map(({ href, label }) => (
-            <SheetClose asChild key={href}>
-              <Link
-                href={href}
-                aria-current={isActivePath(pathname, href) ? "page" : undefined}
-                className={navLinkVariants({ variant: "row" })}
-              >
-                {label}
-              </Link>
-            </SheetClose>
+        <nav aria-label="Navegação principal" className="flex flex-col gap-4 pt-2">
+          {sections.map((section) => (
+            <div key={section.id} className="flex flex-col gap-1">
+              {section.label && (
+                <span className="px-3 pb-1 font-mono text-eyebrow uppercase tracking-eyebrow text-muted-fg-2">
+                  {section.label}
+                </span>
+              )}
+              {section.items.map(({ href, label }) => (
+                <SheetClose asChild key={href}>
+                  <Link
+                    href={href}
+                    aria-current={
+                      href === active ? ariaCurrentFor(pathname, href) : undefined
+                    }
+                    className={navLinkVariants({ variant: "row" })}
+                  >
+                    {label}
+                  </Link>
+                </SheetClose>
+              ))}
+              {/*
+                "sair" é action, não link: renderiza como <form>. Sem `SheetClose`: o
+                signOut redireciona pra "/signin" e desmonta o Sheet; envolver
+                arriscaria o close do Radix desmontar antes do dispatch da action.
+              */}
+              {section.id === "conta" && (
+                <form action={signOutAction}>
+                  <button
+                    type="submit"
+                    className={cn(navLinkVariants({ variant: "row" }), "w-full text-left")}
+                  >
+                    sair
+                  </button>
+                </form>
+              )}
+            </div>
           ))}
-          {/*
-            "sair" é uma action, não um link de navegação — fica fora do array
-            puro `mobileNavLinks` e renderiza como <form>. NÃO envolvemos em
-            `SheetClose`: um `signOut` bem-sucedido redireciona pra "/signin",
-            desmontando a árvore inteira (incl. o Sheet), então fechar é
-            automático no sucesso. Envolver arriscaria o close do Radix
-            (onOpenChange(false)) desmontar antes do dispatch da action.
-          */}
-          <form action={signOutAction}>
-            <button
-              type="submit"
-              className={`${navLinkVariants({ variant: "row" })} w-full text-left`}
-            >
-              sair
-            </button>
-          </form>
         </nav>
       </SheetContent>
     </Sheet>

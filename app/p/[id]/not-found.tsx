@@ -20,7 +20,7 @@ export const metadata: Metadata = {
 
 // 404 público mínimo do /p (ADR 0035 §6 / #384): cobre o kill-switch (set sem shared_at →
 // getSharedPalpiteSet null → notFound) E os 3 triggers de 404, pousando numa casca pública
-// limpa (sem nav/DesktopShell autenticados). Não é o 404 da raiz autenticada/landing.
+// limpa (sem nav/AppShell autenticados). Não é o 404 da raiz autenticada/landing.
 export default function PublicPalpiteNotFound() {
   return (
     <main className="min-h-screen bg-background text-foreground">

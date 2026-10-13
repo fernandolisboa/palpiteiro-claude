@@ -1,0 +1,149 @@
+import { notFound } from "next/navigation";
+import { Inbox } from "lucide-react";
+import { z } from "zod";
+
+import { BackLink } from "@/components/back-link";
+import { EmptyState } from "@/components/empty-state";
+import { BankrollChart } from "@/components/dashboard/bankroll-chart";
+import { DashboardFiltersBar } from "@/components/dashboard/dashboard-filters";
+import { KpiCards } from "@/components/dashboard/kpi-cards";
+import { MarketSegments } from "@/components/dashboard/market-segments";
+import { PredictionsTable } from "@/components/dashboard/predictions-table";
+import { Card } from "@/components/ui/card";
+import { auth } from "@/auth";
+import {
+  availableLeagueKeys,
+  availableMarketKeys,
+  deriveDashboardView,
+  parseDashboardFilters,
+} from "@/lib/dashboard/derive-view";
+import { getUserDashboardRows } from "@/lib/db/queries/dashboard";
+import { getUserManagement } from "@/lib/db/queries/users";
+import { getRequestTimeZone } from "@/lib/server/request-timezone";
+
+import { UserAdminControls } from "./user-admin-controls";
+
+export const dynamic = "force-dynamic";
+
+type PageProps = {
+  params: Promise<{ userId: string }>;
+  searchParams: Promise<{
+    status?: string;
+    league?: string;
+    market?: string;
+  }>;
+};
+
+// Gateado por app/admin/layout.tsx (role === "admin" → notFound pra outros).
+export default async function AdminUserTrackingPage({
+  params,
+  searchParams,
+}: PageProps) {
+  const { userId } = await params;
+  const { status, league, market } = await searchParams;
+
+  // Re-check defensivo: lê predições de OUTRO usuário (cross-user). Defense-in-depth
+  // — NÃO confiar só no gate do layout. Espelha costs.
+  const session = await auth();
+  if (session?.user?.role !== "admin") notFound();
+
+  // userId é coluna uuid: um param não-UUID estouraria "invalid input syntax
+  // for type uuid" (500) no eq — guarda pra notFound limpo (precedente #66).
+  if (!z.uuid().safeParse(userId).success) notFound();
+
+  // O alvo precisa existir (header com o e-mail + 404 se id inválido/inexistente).
+  // getUserManagement traz role+allowed pros controles de admin (superset).
+  const targetUser = await getUserManagement(userId);
+  if (!targetUser) notFound();
+
+  // Reusa a query do #10 escopada por userId, passando o userId ALVO — só aqui,
+  // dentro do caminho gateado por admin. Assinatura segue userId-OBRIGATÓRIO.
+  const rows = await getUserDashboardRows(userId);
+
+  const filters = parseDashboardFilters(
+    { status, league, market },
+    availableMarketKeys(rows),
+    availableLeagueKeys(rows),
+  );
+  // Fuso de exibição do ADMIN (viewer) — coluna "data" da tabela + tick do gráfico.
+  const timeZone = await getRequestTimeZone();
+  const { kpis, segments, series, tableRows, availableLeagues, availableMarkets } =
+    deriveDashboardView(rows, filters, timeZone);
+
+  const basePath = `/admin/users/${userId}`;
+
+  return (
+    <>
+      <div className="mx-auto w-full max-w-content px-5 pb-16 pt-8 lg:px-8 lg:pt-10">
+        <BackLink href="/admin/users" label="usuários" />
+
+        <div className="flex flex-col gap-1 pb-7">
+          {/* text-[28px]: heroic display sem degrau 26→32 (outlier consciente, espelha dashboard) */}
+          <h1 className="text-[28px] font-medium leading-none tracking-tight lg:text-display-lg">
+            Tracking
+          </h1>
+          <p className="text-body tracking-tight text-muted-foreground">
+            {targetUser.email} — análises por mercado: yield, racional e resultados.
+          </p>
+        </div>
+
+        <UserAdminControls
+          userId={targetUser.id}
+          role={targetUser.role}
+          allowed={targetUser.allowed}
+          isSelf={session.user.id === targetUser.id}
+        />
+
+        {rows.length === 0 ? (
+          <Card className="px-8 py-16 text-center">
+            <EmptyState
+              className="max-w-form py-6"
+              icon={<Inbox className="size-10" strokeWidth={1.25} />}
+              title="Este usuário ainda não tem predições"
+              description="Nada pra trackear ainda."
+            />
+          </Card>
+        ) : (
+          <div className="flex flex-col gap-8">
+            {/* Liga e mercado recortam tudo abaixo (KPIs, segmentos, gráfico e
+                tabela); o status, junto da tabela, filtra só ela (#539). */}
+            <DashboardFiltersBar
+              filters={filters}
+              leagues={availableLeagues}
+              markets={availableMarkets}
+              basePath={basePath}
+              dimensions={["league", "market"]}
+            />
+
+            <KpiCards view={kpis} />
+
+            <MarketSegments segments={segments} />
+
+            <section className="flex flex-col gap-3">
+              <div className="flex items-baseline justify-between">
+                <span className="font-mono text-eyebrow uppercase tracking-eyebrow text-muted-foreground">
+                  bankroll hipotético (u)
+                </span>
+                <span className="font-mono text-eyebrow tabular-nums text-muted-foreground">
+                  {series.length} liquidada{series.length === 1 ? "" : "s"}
+                </span>
+              </div>
+              <BankrollChart data={series} timeZone={timeZone} />
+            </section>
+
+            <section className="flex flex-col gap-4">
+              <DashboardFiltersBar
+                filters={filters}
+                leagues={availableLeagues}
+                markets={availableMarkets}
+                basePath={basePath}
+                dimensions={["status"]}
+              />
+              <PredictionsTable rows={tableRows} basePath={basePath} />
+            </section>
+          </div>
+        )}
+      </div>
+    </>
+  );
+}

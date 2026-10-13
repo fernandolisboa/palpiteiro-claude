@@ -15,7 +15,7 @@ type UserListItem = UserSummary & { allowed: boolean };
  * ILIKE já é case-insensitive, então só fazemos trim, sem lowercase. `allowed`
  * é trazido pra a lista renderizar o estado de bloqueio (#258) sem abrir cada
  * usuário. NÃO é escopado por usuário: é listagem admin-only. As páginas
- * chamadoras (`app/admin/users/*`) são gateadas pelo `app/admin/layout.tsx`
+ * chamadoras (`app/(app)/admin/users/*`) são gateadas pelo `app/(app)/admin/layout.tsx`
  * (role === "admin" → notFound) + um re-check defensivo de role na própria
  * página.
  */
@@ -58,7 +58,7 @@ export async function getUserAllowedByEmail(
 
 /**
  * Lookup tipado de UM usuário por id (id, email, role) ou null. Usado pelo
- * header da página de tracking de admin (`app/admin/users/[userId]`) pro e-mail
+ * header da página de tracking de admin (`app/(app)/admin/users/[userId]`) pro e-mail
  * do alvo e pra existência (notFound se não existir). Distinto do
  * `getUserAccessState`, que devolve role+allowed (sem email) pro fluxo de auth.
  */
@@ -219,7 +219,7 @@ type UserManagement = {
 
 /**
  * Lê id/email/role/allowed de UM usuário pra UI de gestão de admin
- * (`app/admin/users/[userId]`). Superset do `getUserById`, que não traz
+ * (`app/(app)/admin/users/[userId]`). Superset do `getUserById`, que não traz
  * `allowed`.
  */
 export async function getUserManagement(
