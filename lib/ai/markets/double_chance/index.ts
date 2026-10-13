@@ -16,7 +16,8 @@ import {
 } from "./schemas";
 import { buildUserMessage } from "./user-message";
 
-// Versão do cartucho dupla chance (double_chance). Primeira versão (ADR 0017).
+// Versão do cartucho dupla chance (double_chance). ADR 0017. v1 → v1.1: sem o nome da casa na mensagem (o app não mostra casa nenhuma; o LLM podia citá-la
+// no racional).
 export const DOUBLE_CHANCE_VERSION = "double_chance_v1.1" as const;
 
 // Re-exports nomeados: espelha match_result pra paridade de spy nos testes

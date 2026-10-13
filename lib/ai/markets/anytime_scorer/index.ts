@@ -19,7 +19,8 @@ import {
 } from "../_scorer_shared/schemas";
 import { buildScorerUserMessage } from "../_scorer_shared/user-message";
 
-// Versão do cartucho de artilheiro (anytime scorer). 1ª versão (ADR 0017), bare _v1.
+// Versão do cartucho de artilheiro (anytime scorer). ADR 0017. v1 → v1.1: sem o nome da casa na mensagem (o app não mostra casa nenhuma; o LLM podia citá-la
+// no racional).
 export const ANYTIME_SCORER_VERSION = "anytime_scorer_v1.1" as const;
 
 const COPY = {
