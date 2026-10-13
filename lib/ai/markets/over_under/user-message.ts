@@ -135,7 +135,7 @@ export function buildUserMessage(
   lines.push("");
   lines.push("# Odds e probabilidades implícitas");
   lines.push(
-    `- Bookmaker: ${input.odds.bookmaker} (capturado em ${input.odds.captured_at})`,
+    `- Odds capturadas em ${input.odds.captured_at}`,
   );
   lines.push(
     `- Over 2.5: odd ${fmtNum(input.odds.over_2_5_decimal)} → implícita normalizada ${fmtNum(input.implied.over_pct)}%`,

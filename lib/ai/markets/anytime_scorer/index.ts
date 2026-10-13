@@ -20,7 +20,7 @@ import {
 import { buildScorerUserMessage } from "../_scorer_shared/user-message";
 
 // Versão do cartucho de artilheiro (anytime scorer). 1ª versão (ADR 0017), bare _v1.
-export const ANYTIME_SCORER_VERSION = "anytime_scorer_v1" as const;
+export const ANYTIME_SCORER_VERSION = "anytime_scorer_v1.1" as const;
 
 const COPY = {
   marketNoun: "artilheiro (marcar a qualquer momento)",

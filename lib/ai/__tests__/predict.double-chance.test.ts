@@ -319,7 +319,7 @@ describe("predict(double_chance) — N=3 happy path pelo caminho additional", ()
       marketKey: "double_chance",
     });
     const aiCallRow = insertValues.mock.calls[0]?.[0] as Record<string, unknown>;
-    expect(aiCallRow.promptVersion).toBe("double_chance_v1");
+    expect(aiCallRow.promptVersion).toBe("double_chance_v1.1");
   });
 
   it("legacy-write pulado: market/over-under cols NULL; marketId/selectionId set; sem linha", async () => {

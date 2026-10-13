@@ -24,7 +24,7 @@ import { buildUserMessageV3 } from "./user-message-v3";
 // user-message compartilhado + regra de ponderação por source no prompt-v3).
 // BUMP MINOR v3.2 → v3.3 (ADR 0051): baseline por linha vindo do Dixon-Coles, como o
 // v2.3. Prompt e mensagem byte-idênticos.
-export const OVER_UNDER_V3_VERSION = "over_under_v3.3" as const;
+export const OVER_UNDER_V3_VERSION = "over_under_v3.4" as const;
 
 export {
   buildPredictionInputV3,

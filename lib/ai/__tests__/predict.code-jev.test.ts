@@ -540,7 +540,7 @@ describe("flag analysis_engine = 'llm' (default)", () => {
     const prediction = insertValues.mock.calls[1][0] as Row;
     expect(prediction).not.toHaveProperty("judgments");
     expect(prediction.modelVersion).toBe("claude-sonnet-4-5-20250929");
-    expect(prediction.promptVersion).toBe("match_result_v1");
+    expect(prediction.promptVersion).toBe("match_result_v1.1");
     expect(prediction.rationale).toBe(MARKET_OUTPUT.rationale);
     // Motor llm fora do over/under: ninguém usa o λ, o DC nem é lido.
     expect(getEnableDixonColes).not.toHaveBeenCalled();
@@ -962,7 +962,7 @@ describe("flag analysis_engine = 'code_jev'", () => {
     expect(toolNameOf(anthropicCreate.mock.calls[0])).toBe("submit_prediction");
     const [prediction] = rowsWhere((r) => "recommendation" in r);
     expect(prediction).not.toHaveProperty("judgments");
-    expect(prediction.promptVersion).toBe("correct_score_v1");
+    expect(prediction.promptVersion).toBe("correct_score_v1.1");
   });
 
   it("over/under multi-linha: o motor fixa a linha de maior edge", async () => {

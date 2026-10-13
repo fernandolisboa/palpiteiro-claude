@@ -268,15 +268,15 @@ describe("buildUserMessageV3 — mensagem markdown", () => {
 
       # Odds e probabilidades implícitas por linha
 
-      ## Linha 1.5 — Pinnacle (capturado em 2026-05-15T12:00:00.000Z)
+      ## Linha 1.5 (odds capturadas em 2026-05-15T12:00:00.000Z)
       - Over 1.5: odd 1.30 → implícita normalizada 72.34%
       - Under 1.5: odd 3.40 → implícita normalizada 27.66%
 
-      ## Linha 2.5 — Pinnacle (capturado em 2026-05-15T12:00:00.000Z)
+      ## Linha 2.5 (odds capturadas em 2026-05-15T12:00:00.000Z)
       - Over 2.5: odd 1.90 → implícita normalizada 51.28%
       - Under 2.5: odd 1.95 → implícita normalizada 48.72%
 
-      ## Linha 3.5 — Pinnacle (capturado em 2026-05-15T12:00:00.000Z)
+      ## Linha 3.5 (odds capturadas em 2026-05-15T12:00:00.000Z)
       - Over 3.5: odd 3.60 → implícita normalizada 26.23%
       - Under 3.5: odd 1.28 → implícita normalizada 73.77%
 
@@ -332,7 +332,7 @@ describe("buildUserMessageV3 — mensagem markdown", () => {
 describe("getCartridge — variante multi-linha por flag", () => {
   it("getCartridge('over_under', { extraLines: true }) devolve o v3", () => {
     const c = getCartridge("over_under", { extraLines: true });
-    expect(c.version).toBe("over_under_v3.3");
+    expect(c.version).toBe("over_under_v3.4");
   });
 
   it("systemPrompt v3: snapshot literal (regra 9 com proveniência — #226, guard anti-drift)", () => {
@@ -378,7 +378,7 @@ describe("getCartridge — variante multi-linha por flag", () => {
 
   it("getCartridge('over_under') (1 arg) continua devolvendo o v2", () => {
     const c = getCartridge("over_under");
-    expect(c.version).toBe("over_under_v2.3");
+    expect(c.version).toBe("over_under_v2.4");
   });
 
   it("flag ligada num mercado sem variante cai no base", () => {

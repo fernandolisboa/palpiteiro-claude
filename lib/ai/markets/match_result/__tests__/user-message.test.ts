@@ -99,7 +99,7 @@ describe("match_result buildUserMessage — 1X2 framing snapshot", () => {
       - (sem histórico fornecido)
 
       # Odds e probabilidades implícitas
-      - Bookmaker: Pinnacle (capturado em 2026-05-15T12:00:00.000Z)
+      - Odds capturadas em 2026-05-15T12:00:00.000Z
       - Resultado final: Casa / Empate / Fora (1X2)
       - Casa (CR Flamengo): odd 1.85 → implícita normalizada 52.70%
       - Empate: odd 3.50 → implícita normalizada 27.90%

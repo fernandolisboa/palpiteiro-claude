@@ -33,7 +33,7 @@ export function buildUserMessageV3(
   for (const ln of input.lines) {
     lines.push("");
     lines.push(
-      `## Linha ${fmtNum(ln.line, 1)} — ${ln.bookmaker} (capturado em ${ln.captured_at})`,
+      `## Linha ${fmtNum(ln.line, 1)} (odds capturadas em ${ln.captured_at})`,
     );
     lines.push(
       `- Over ${fmtNum(ln.line, 1)}: odd ${fmtNum(ln.over_decimal)} → implícita normalizada ${fmtNum(ln.over_pct)}%`,

@@ -24,7 +24,7 @@ import { buildUserMessage } from "./user-message";
 // placar passa a vir do Dixon-Coles refitado todo dia, com o heurístico da tabela como
 // rede. Prompt e mensagem byte-idênticos; mudam os NÚMEROS da âncora e o `source` do
 // scoreline_model no payload. O bump separa as duas âncoras na calibração.
-export const OVER_UNDER_VERSION = "over_under_v2.3" as const;
+export const OVER_UNDER_VERSION = "over_under_v2.4" as const;
 
 // Re-exports nomeados: predict.ts importa `buildPredictionInput`/`BuildInputError`
 // como BINDINGS DE MÓDULO (não via o objeto do cartucho) pra que os spies do

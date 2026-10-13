@@ -17,7 +17,7 @@ import {
 import { buildUserMessage } from "./user-message";
 
 // Versão do cartucho dupla chance (double_chance). Primeira versão (ADR 0017).
-export const DOUBLE_CHANCE_VERSION = "double_chance_v1" as const;
+export const DOUBLE_CHANCE_VERSION = "double_chance_v1.1" as const;
 
 // Re-exports nomeados: espelha match_result pra paridade de spy nos testes
 // (vi.spyOn deste módulo intercepta a chamada real do binding).

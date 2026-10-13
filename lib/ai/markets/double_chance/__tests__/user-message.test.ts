@@ -101,7 +101,7 @@ describe("double_chance buildUserMessage — dupla chance framing snapshot", () 
       - (sem histórico fornecido)
 
       # Odds e probabilidades implícitas
-      - Bookmaker: Pinnacle (capturado em 2026-06-14T12:00:00.000Z)
+      - Odds capturadas em 2026-06-14T12:00:00.000Z
       - Dupla chance: Casa ou empate (1X) / Empate ou fora (X2) / Casa ou fora (12)
       - As duplas se sobrepõem: as implícitas normalizadas somam ~200% (cada dupla cobre dois resultados), não 100%.
       - Casa ou empate (1X): odd 1.05 → implícita normalizada 94.50%
