@@ -166,6 +166,24 @@ describe("isCodeJevFanOutMarket / groupSlotUnits", () => {
   });
 });
 
+describe("runCodeJevFanOut — contexto extra (#565)", () => {
+  it("base.userContextP chega a todo predictForBestBet e ao predict dos mercados de fora", async () => {
+    const userContextP = Promise.resolve(null);
+    await runCodeJevFanOut(
+      { ...base, userContextP },
+      markets("over_under", "correct_score", "match_result"),
+      mapError,
+      vi.fn(async () => ({ ok: true }))
+    );
+    expect(mockPredictForBestBet).toHaveBeenCalledTimes(2);
+    for (const call of mockPredictForBestBet.mock.calls) {
+      expect(call[0].userContextP).toBe(userContextP);
+    }
+    expect(mockPredict).toHaveBeenCalledTimes(1);
+    expect(mockPredict.mock.calls[0][0].userContextP).toBe(userContextP);
+  });
+});
+
 describe("runCodeJevFanOut — 1 narração por best bet", () => {
   it("narra SÓ o mercado do topo (maior edge); os demais persistem templados apontando pra narração", async () => {
     const acquireSlot = vi.fn(async () => ({ ok: true }));

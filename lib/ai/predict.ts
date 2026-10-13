@@ -37,9 +37,11 @@ import {
   type FixtureRef,
   type NormalizedFixture,
   type NormalizedInjury,
+  type NormalizedStanding,
   type NormalizedTeamLineup,
   type SportsDataProvider,
 } from "@/lib/providers/sports-data/types";
+import type { SupportedLeague } from "@/lib/providers/sports-data/leagues";
 
 import {
   getDefaultModelId,
@@ -50,6 +52,13 @@ import { isKellyStakingActive } from "@/lib/calibration/kelly-live";
 import { getPreferredModelId } from "@/lib/db/queries/users";
 import { MIN_EDGE_PP } from "@/lib/odds/scenario";
 import { getMarketPresentation } from "@/lib/view/markets/presentation";
+import {
+  applyUserClaims,
+  factsFromAnalysisData,
+  type AppliedUserContext,
+} from "@/lib/user-palpite/analysis-context";
+import { USER_EVIDENCE_VERSION } from "@/lib/user-palpite/evidence";
+import type { PredictionUserContext } from "@/lib/user-palpite/types";
 
 import {
   persistAiCallError,
@@ -99,6 +108,7 @@ import {
   type NarratorContext,
   type NarratorDecision,
   type NarratorOutput,
+  type UserFactorOrigins,
 } from "./markets/_narrator";
 import { getCartridge } from "./markets/registry";
 import type { BaseMarketOutput, MarketCartridge } from "./markets/types";
@@ -112,6 +122,8 @@ import {
 } from "./models";
 import { getProviderForModel } from "./providers";
 import type { AiCallStatus, AnalysisRequest } from "./providers/types";
+import type { ExtractResult } from "./user-palpite/extract";
+import { USER_PALPITE_EXTRACT_VERSION } from "./user-palpite/extract-cartridge";
 
 // Rationale neutro de um pass REBAIXADO pelo gate de edge (ADR 0038) — coerente com a
 // manchete "sem aposta recomendada", em vez da prosa pró-lado do LLM (que fica em
@@ -144,6 +156,11 @@ export type PredictArgs = {
   // resolvido; se não, lança AnalysisDeadlineError SEM gastar (e sem cobrar slot).
   // O adapter corta timeout/retries pelo restante. Ausente = sem prazo.
   deadlineAt?: number;
+  // Contexto extra da análise com IA (#565): a extração Haiku que a action disparou
+  // antes do fan-out (nunca rejeita; null = falhou ou estourou o teto). Só o motor
+  // code_jev usa: confere as afirmações com os dados DESTE predict e aplica a evidência
+  // nos fatores do JEV, uma vez por run. O caminho LLM ignora.
+  userContextP?: Promise<ExtractResult | null>;
 };
 
 // Opções do caller que não são dados da análise.
@@ -245,10 +262,18 @@ export async function predict(
 // code_jev resolve, os seguintes reusam tudo em memória — exatamente UMA chamada JEV
 // e UMA matriz por run, mesmo que desfalques/escalações/tabela mudem no provider
 // entre um mercado e outro (sem busca de escalação anterior, sem lookup de reuso).
-export type CodeJevRunMemo = Map<
-  string,
-  { scoreline: ModelScoreline; input: MatchJudgmentInput; run: JudgmentRun }
->;
+export type CodeJevRunMemo = Map<string, ResolvedCodeJevJudgments>;
+
+// O que o 1º mercado code_jev resolve e o run inteiro aplica.
+type ResolvedCodeJevJudgments = {
+  scoreline: ModelScoreline;
+  input: MatchJudgmentInput;
+  run: JudgmentRun;
+  // JEV ∨ contexto extra do usuário (#565): o que TODO mercado do run aplica. Sem
+  // contexto, a mesma referência de `run.answers`.
+  answers: JudgmentAnswers | null;
+  user: AppliedUserContext | null;
+};
 
 export type BestBetPredictOptions = {
   // Motor fixado pelo orquestrador (lido UMA vez por run), pra um flip do flag no
@@ -359,6 +384,7 @@ async function runPredict(
     marketKey = "over_under",
     extraLines = false,
     deadlineAt,
+    userContextP,
   }: PredictArgs,
   opts: RunPredictOptions,
 ): Promise<PredictOutcome> {
@@ -821,9 +847,13 @@ async function runPredict(
     // fan-out chama N vezes). No best bet, o que o 1º mercado resolveu fica fixado
     // no memo do run; senão runJudgments reusa as respostas de uma predição recente
     // do mesmo jogo com o mesmo state; só chama o JEV (fail-open, logado) quando não há.
-    const { input: judgmentInput, run: jev } =
-      pinned ??
-      (await resolveMatchJudgments({
+    // O contexto extra (#565) é conferido e aplicado aqui, uma vez por run, DEPOIS do
+    // JEV (a extração correu em paralelo com ele).
+    let resolved: ResolvedCodeJevJudgments;
+    if (pinned) {
+      resolved = pinned;
+    } else {
+      const { input, run } = await resolveMatchJudgments({
         userId,
         matchId,
         provider,
@@ -838,21 +868,36 @@ async function runPredict(
           awayForm,
           standings,
         },
-      }));
-    if (!pinned) {
-      opts.runMemo?.set(matchId, {
-        scoreline: engineScoreline,
-        input: judgmentInput,
-        run: jev,
       });
+      const user = await resolveUserContext({
+        userContextP,
+        matchId,
+        jev: run.answers,
+        teams: { home: match.homeTeam, away: match.awayTeam },
+        league: match.league,
+        kickoffAt: match.kickoffAt,
+        absences: injuries.unavailable ? null : input.absences,
+        homeForm,
+        awayForm,
+        standings,
+      });
+      resolved = {
+        scoreline: engineScoreline,
+        input,
+        run,
+        answers: user ? user.answers : run.answers,
+        user,
+      };
+      opts.runMemo?.set(matchId, resolved);
     }
+    const { input: judgmentInput, run: jev, user } = resolved;
 
     const minEdgePp = cartridge.descriptor.minEdgePp ?? MIN_EDGE_PP;
     const engine = runCodeJevEngine({
       dbMarketKey: cartridge.descriptor.dbMarketKey,
       selectionKeys,
       scoreline: engineScoreline,
-      judgments: jev.answers,
+      judgments: resolved.answers,
       candidates,
       minEdgePp,
     });
@@ -902,7 +947,8 @@ async function runPredict(
       selectionKeys,
       teams,
       engine,
-      answers: jev.answers,
+      answers: resolved.answers,
+      user: user ? { jev: jev.answers, origins: user.origins } : undefined,
       decision,
       line: marketParams?.line ?? null,
       oddByKey,
@@ -958,9 +1004,15 @@ async function runPredict(
             ? 100 / (recModelProb - minEdgePp)
             : undefined,
         bookmaker: oddsBundle.bookmakerTitle,
-        modelVersion: codeJevModelVersion(model.id, engineScoreline),
+        // Tag `user=` só quando o contexto extra moveu um fator: a calibração separa
+        // esses números (afirmação não verificável) do motor puro.
+        modelVersion: codeJevModelVersion(
+          model.id,
+          engineScoreline,
+          user?.moved ? USER_EVIDENCE_VERSION : null,
+        ),
         promptVersion: narratorCartridge.version,
-        judgments: toPredictionJudgments(engineScoreline, engine, jev),
+        judgments: toPredictionJudgments(engineScoreline, engine, jev, user?.stored),
         labelByKey: null,
       },
     };
@@ -1956,18 +2008,75 @@ async function fetchPreviousLineups(args: {
   return { home, away };
 }
 
-function codeJevModelVersion(modelId: AIModelId, scoreline: ModelScoreline) {
-  return `${modelId};engine=code_jev;lambda=${scoreline.source};judg=${JUDGMENTS_VERSION};w=${JUDGMENT_WEIGHTS_VERSION}`;
+function codeJevModelVersion(
+  modelId: AIModelId,
+  scoreline: ModelScoreline,
+  userTag: string | null = null,
+) {
+  return `${modelId};engine=code_jev;lambda=${scoreline.source};judg=${JUDGMENTS_VERSION};w=${JUDGMENT_WEIGHTS_VERSION}${userTag ? `;user=${userTag}` : ""}`;
+}
+
+// Contexto extra da análise (#565): espera a extração (já com teto na action), confere
+// as afirmações com os dados que ESTE predict buscou (desfalques com o papel da
+// escalação anterior, o mesmo que o JEV viu) e combina a evidência com o JEV. Os nomes
+// de jogador ficam só em memória: o que segue adiante é StoredContextClaim.
+async function resolveUserContext(args: {
+  userContextP: Promise<ExtractResult | null> | undefined;
+  matchId: string;
+  jev: JudgmentAnswers | null;
+  teams: { home: string; away: string };
+  league: SupportedLeague;
+  kickoffAt: Date;
+  absences: MatchJudgmentInput["absences"] | null;
+  homeForm: readonly NormalizedFixture[];
+  awayForm: readonly NormalizedFixture[];
+  standings: NormalizedStanding | undefined;
+}): Promise<AppliedUserContext | null> {
+  if (!args.userContextP) return null;
+  try {
+    const extraction = await args.userContextP;
+    if (!extraction?.ok || extraction.claims.length === 0) return null;
+    return applyUserClaims({
+      claims: extraction.claims,
+      facts: factsFromAnalysisData({
+        absences: args.absences,
+        homeForm: args.homeForm,
+        awayForm: args.awayForm,
+        standings: args.standings,
+      }),
+      teams: args.teams,
+      league: args.league,
+      kickoffAt: args.kickoffAt,
+      jev: args.jev,
+      extractionAiCallId: extraction.aiCallId,
+      warnings: extraction.warnings,
+      extractVersion: USER_PALPITE_EXTRACT_VERSION,
+    });
+  } catch (err) {
+    // Contexto que não deu pra aplicar nunca derruba a análise: segue sem ele.
+    console.error(
+      JSON.stringify({
+        scope: "predict",
+        matchId: args.matchId,
+        error: "user_context_failed",
+        message: err instanceof Error ? err.message : String(err),
+      }),
+    );
+    return null;
+  }
 }
 
 function toPredictionJudgments(
   scoreline: ModelScoreline,
   engine: CodeJevDecision,
   jev: JudgmentRun,
+  userContext?: PredictionUserContext,
 ): PredictionJudgments {
   return {
     engine: "code_jev",
-    applied: engine.judgments.applied,
+    // Só o JEV (#565): a evidência do usuário fica em userContext. Sem contexto é o
+    // mesmo que engine.judgments.applied (applyJudgments só aplica respostas não nulas).
+    applied: jev.answers !== null,
     answers: jev.answers,
     multipliers: engine.judgments.multipliers,
     lambda: {
@@ -1997,6 +2106,7 @@ function toPredictionJudgments(
     aiCallId: jev.aiCallId,
     reusedFromPredictionId: jev.reusedFromPredictionId,
     reusedFromModelSnapshotId: jev.reusedFromModelSnapshotId,
+    ...(userContext ? { userContext } : {}),
   };
 }
 
@@ -2007,7 +2117,11 @@ function toNarratorDecision(args: {
   selectionKeys: readonly string[];
   teams: { home: string; away: string };
   engine: CodeJevDecision;
+  // JEV ∨ usuário (o que gerou o λ).
   answers: JudgmentAnswers | null;
+  // Contexto extra (#565): respostas só do JEV (a força das frases) e os fatores movidos
+  // pelo usuário (a origem).
+  user?: { jev: JudgmentAnswers | null; origins: UserFactorOrigins };
   decision: GatedDecision;
   line: number | null;
   oddByKey: Record<string, number>;
@@ -2055,6 +2169,7 @@ function toNarratorDecision(args: {
       args.answers,
       engine.judgments.multipliers,
       teams,
+      args.user,
     ),
   };
 }
