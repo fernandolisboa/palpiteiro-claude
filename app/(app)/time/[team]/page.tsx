@@ -8,6 +8,12 @@ import { MatchRow } from "@/components/match-row";
 import { SectionLabel } from "@/components/section-label";
 import { auth } from "@/auth";
 import { getMatchesByTeam, type DbMatch } from "@/lib/db/queries/matches";
+import {
+  getLatestOverUnderSnapshotsForMatches,
+  getLatestSelectionOddsSnapshotsForMatches,
+  type OrderedSelectionSnapshot,
+  type OverUnderSnapshot,
+} from "@/lib/db/queries/odds-snapshots";
 import { getRequestTimeZone } from "@/lib/server/request-timezone";
 import { leagueToKey } from "@/lib/format";
 import { displayTeamName } from "@/lib/view/team-labels";
@@ -55,8 +61,26 @@ export default async function TeamHistoryPage({ params }: PageProps) {
   // voltar retorna ao histórico do time (resolveBackHref aceita a base /time).
   const teamHref = `/time/${encodeURIComponent(canonical)}`;
 
-  const toRow = (m: DbMatch): MatchRowView =>
-    toMatchRowView({
+  // Odds dos próximos jogos (#574 linha 10), como em /jogos: over/under e 1X2 em lote,
+  // só leitura do banco (sem chamada externa). Os passados estão encerrados e não
+  // mostram odd. Falha de leitura vira "sem odd", nunca derruba a página.
+  const futureIds = future.map((m) => m.id);
+  const [snapshotByMatch, matchResultByMatch] = await Promise.all([
+    getLatestOverUnderSnapshotsForMatches(futureIds).catch((err: unknown) => {
+      logOddsReadError(err);
+      return new Map<string, OverUnderSnapshot>();
+    }),
+    getLatestSelectionOddsSnapshotsForMatches(futureIds, "match_result").catch(
+      (err: unknown) => {
+        logOddsReadError(err);
+        return new Map<string, OrderedSelectionSnapshot>();
+      },
+    ),
+  ]);
+
+  const toRow = (m: DbMatch): MatchRowView => {
+    const snapshot = snapshotByMatch.get(m.id);
+    return toMatchRowView({
       match: {
         id: m.id,
         league: m.league,
@@ -68,11 +92,20 @@ export default async function TeamHistoryPage({ params }: PageProps) {
         awayScore: m.awayScore,
         updatedAt: m.updatedAt,
       },
-      odds: null,
+      odds: snapshot
+        ? {
+            bookmaker: snapshot.bookmaker,
+            overOdd: snapshot.overOdd,
+            underOdd: snapshot.underOdd,
+            capturedAt: snapshot.capturedAt,
+          }
+        : null,
+      matchResultOdds: matchResultByMatch.get(m.id) ?? null,
       hasPrediction: false,
       now,
       timeZone,
     });
+  };
 
   const futureRows = future.map(toRow);
   const pastRows = past.map(toRow);
@@ -96,6 +129,16 @@ export default async function TeamHistoryPage({ params }: PageProps) {
         />
       </div>
     </>
+  );
+}
+
+function logOddsReadError(err: unknown) {
+  console.error(
+    JSON.stringify({
+      scope: "team-page",
+      error: "odds_read_failed",
+      message: err instanceof Error ? err.message : String(err),
+    }),
   );
 }
 
