@@ -124,3 +124,65 @@ export function readLiveStamp(raw: unknown): LiveStamp | null {
   const parsed = LiveStampSchema.safeParse(raw);
   return parsed.success ? parsed.data : null;
 }
+
+/** O estado lido no servidor que vira carimbo (o InPlayState satisfaz). */
+export type StampableState = {
+  statusShort: string;
+  elapsed: number | null;
+  extra: number | null;
+  minuteLabel: string | null;
+  score: { home: number; away: number } | null;
+  red: { home: number; away: number } | null;
+  fetchedAt: Date;
+};
+
+/** As entradas do modelo em jogo que tornam a leitura recomputável (InPlayMeta cabe). */
+export type StampableInPlay = {
+  liveModelVersion: string;
+  r: number;
+  muHome: number;
+  muAway: number;
+  multipliers: { home: number; away: number };
+  preMatch: {
+    source: string;
+    lambdaHome: number;
+    lambdaAway: number;
+    rho: number;
+    baseCheckedAt: Date | null;
+  };
+};
+
+/**
+ * Carimbo de um registro feito com o estado do provider (`source: "api_football"`),
+ * validado. `inPlay` = as entradas do modelo em jogo quando houve avaliação; sem modelo,
+ * o carimbo leva só o momento. Lança em entrada inválida (como `buildLiveStamp`).
+ */
+export function liveStampFromState(
+  state: StampableState,
+  recordedAt: Date,
+  inPlay: StampableInPlay | null = null
+): LiveStamp {
+  return buildLiveStamp({
+    source: "api_football",
+    status: state.statusShort,
+    elapsed: state.elapsed,
+    extra: state.extra,
+    minuteLabel: state.minuteLabel,
+    score: state.score,
+    red: state.red,
+    fetchedAt: state.fetchedAt,
+    recordedAt,
+    ...(inPlay
+      ? {
+          inPlay: {
+            liveModelVersion: inPlay.liveModelVersion,
+            r: inPlay.r,
+            muHome: inPlay.muHome,
+            muAway: inPlay.muAway,
+            multipliers: { ...inPlay.multipliers },
+            preMatch: { ...inPlay.preMatch },
+          },
+        }
+      : {}),
+  });
+}

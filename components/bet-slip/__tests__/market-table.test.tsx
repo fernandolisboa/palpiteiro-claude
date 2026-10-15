@@ -8,6 +8,8 @@ vi.mock("@/app/actions/bets", () => ({ parseBet: vi.fn() }));
 
 import { BetSlipProvider } from "@/components/bet-slip/bet-slip-provider";
 import { MarketTable } from "@/components/bet-slip/market-table";
+import { SlipPanel } from "@/components/bet-slip/slip-panel";
+import { inPlayScoreline } from "@/lib/quant/in-play";
 import type { ReferenceMarket } from "@/lib/bets/evaluate-slip";
 import { scorelineMatrix } from "@/lib/quant/scoreline-model";
 import { toBetGridView, type BetGridView } from "@/lib/view/bet-slip";
@@ -50,6 +52,26 @@ function grid(over: Partial<Parameters<typeof toBetGridView>[0]> = {}): BetGridV
     ...over,
   });
 }
+
+// Ao vivo (#580): 2–0 aos 63', modelo em jogo, odd de antes do jogo.
+const LIVE_SCORE = { home: 2, away: 0 };
+const LIVE_MODEL = inPlayScoreline(MODEL, {
+  statusShort: "2H",
+  elapsed: 63,
+  extra: null,
+  score: LIVE_SCORE,
+  red: null,
+})!;
+const liveGrid = () =>
+  grid({
+    model: LIVE_MODEL,
+    references: new Map([
+      ["match_result", ref({ home: 2.1, draw: 3.3, away: 3.6 })],
+      ["over_under:1.5", ref({ over: 1.3, under: 3.4 })],
+    ]),
+    unavailable: "live",
+    live: { score: LIVE_SCORE, minuteLabel: "63'" },
+  });
 
 const html = (g: BetGridView) =>
   renderToStaticMarkup(
@@ -143,7 +165,33 @@ const ALL_MODES: [string, BetGridView][] = [
   ["registro sem odd", grid({ references: new Map() })],
   ["só leitura", grid({ mode: "readOnly", unavailable: "finished" })],
   ["só leitura sem odd", grid({ mode: "readOnly", unavailable: "live", references: new Map() })],
+  ["registro ao vivo", liveGrid()],
 ];
+
+describe("MarketTable — ao vivo (#580)", () => {
+  it("cabeçalho, legenda pré-jogo × ao vivo e rodapé do momento", () => {
+    const t = text(html(liveGrid()));
+    expect(t).toContain("Odds antes do jogo");
+    expect(t).toContain("odd pré-jogo · chance ao vivo · odd justa");
+    expect(t).toContain("chances pelo modelo ao vivo · 63&#x27; · 2–0");
+    expect(t).toContain("digite a odd que pegou");
+    expect(t).toContain("odd antes do jogo 2,10 chance do modelo ao vivo");
+    // A análise salva (que recomendaria a casa) não aparece ao vivo.
+    expect(t).not.toContain("pela sua análise");
+    expect(html(liveGrid())).not.toContain("recomendada pela análise da IA");
+  });
+
+  it("seleção decidida: 'decidido', sem botão nem número", () => {
+    const h = html(liveGrid());
+    const t = text(h);
+    expect(t).toContain("Mais de 1,5 decidido");
+    expect(t).toContain("Menos de 1,5 decidido");
+    expect(t).not.toContain("1,30");
+    // Os botões de Mais/Menos de 1,5 não existem; os de 2,5 sim.
+    expect(h).not.toMatch(/<button[^>]*>(?:(?!<\/button>).)*Mais de 1,5/s);
+    expect(h).toMatch(/<button[^>]*>(?:(?!<\/button>).)*Mais de 2,5/s);
+  });
+});
 
 describe("MarketTable — guardas", () => {
   it.each(ALL_MODES)("%s: sem linguagem de valor (a tabela não mede vantagem)", (_, g) => {
@@ -186,5 +234,42 @@ describe("MarketTable — interação", () => {
     expect(cell.getAttribute("aria-pressed")).toBe("true");
     await act(async () => cell.click());
     expect(cell.getAttribute("aria-pressed")).toBe("false");
+  });
+
+  it("ao vivo, tocar numa célula NÃO pré-preenche a odd de antes do jogo", async () => {
+    const odds = () =>
+      Array.from(container.querySelectorAll<HTMLInputElement>('input[inputmode="decimal"]')).map(
+        (i) => i.value,
+      );
+    const homeCell = () =>
+      Array.from(container.querySelectorAll<HTMLButtonElement>("button[aria-pressed]")).find((b) =>
+        /^Flamengo(?! ou)/.test(b.textContent ?? ""),
+      )!;
+    // Pré-jogo: a referência entra pré-preenchida.
+    await act(async () =>
+      root.render(
+        <BetSlipProvider matchId={MATCH_ID}>
+          <MarketTable grid={grid()} />
+          <SlipPanel />
+        </BetSlipProvider>,
+      ),
+    );
+    await act(async () => homeCell().click());
+    expect(odds()[0]).toBe("2,10");
+    await act(async () => root.unmount());
+    root = createRoot(container);
+    // Ao vivo: o campo fica vazio, a pessoa digita a odd que pegou.
+    await act(async () =>
+      root.render(
+        <BetSlipProvider matchId={MATCH_ID}>
+          <MarketTable grid={liveGrid()} />
+          <SlipPanel />
+        </BetSlipProvider>,
+      ),
+    );
+    await act(async () => homeCell().click());
+    expect(homeCell().getAttribute("aria-pressed")).toBe("true");
+    expect(odds()[0]).toBe("");
+    expect(container.textContent).toContain("odd que você pegou");
   });
 });

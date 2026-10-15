@@ -18,6 +18,7 @@ import type { BetLegParams } from "@/db/schema";
 import { MAX_LEGS } from "@/lib/ai/bet-parse/schema";
 import { legGroupKey, legSelectionId, MAX_SLIP_SELECTIONS } from "@/lib/bets/slip-markets";
 import { formatOdd } from "@/lib/format-number";
+import { isDecided } from "@/lib/quant/in-play";
 import type { BridgeLeg } from "@/lib/user-palpite/types";
 import type { BetGridView, GridSelectionView } from "@/lib/view/bet-slip";
 
@@ -90,15 +91,19 @@ const BetSlipContext = createContext<BetSlipContextValue | null>(null);
 const ptUserOdd = (n: number) =>
   (Number.isInteger(n * 100) ? n.toFixed(2) : String(n)).replace(".", ",");
 
-function legFromSelection(s: GridSelectionView): SlipLeg {
+// Ao vivo (#580) a odd NÃO é pré-preenchida (`prefillOdd: false`): a de referência é de
+// antes do jogo e não é a odd que a pessoa pegou. O campo fica vazio e a avaliação diz
+// "sem a odd que você pegou…" até ela digitar.
+function legFromSelection(s: GridSelectionView, prefillOdd = true): SlipLeg {
+  const prefill = prefillOdd && s.referenceOdd !== null;
   return {
     id: s.id,
     groupKey: s.groupKey,
     kind: s.kind,
     params: s.params,
     label: s.legLabel,
-    oddInput: s.referenceOdd === null ? "" : formatOdd(s.referenceOdd),
-    oddFromReference: s.referenceOdd !== null,
+    oddInput: prefill && s.referenceOdd !== null ? formatOdd(s.referenceOdd) : "",
+    oddFromReference: prefill,
     stakeInput: "",
     fairOdd: s.fairOdd,
     modelProbPct: s.modelProbPct,
@@ -115,7 +120,7 @@ function legFromKindParams(
 ): SlipLeg {
   const id = legSelectionId(kind, params);
   const fromGrid = byId.get(id);
-  if (fromGrid) return legFromSelection(fromGrid);
+  if (fromGrid) return legFromSelection(fromGrid, grid.prefillOdd);
   if ("selection" in params) {
     const { selection } = params;
     return {
@@ -324,10 +329,17 @@ export function BetSlipProvider({
         setLegs((prev) => prev.filter((l) => l.id !== s.id));
         return;
       }
-      addLegs([legFromSelection(s)]);
+      // Célula decidida não é botão; a guarda repete a regra do servidor.
+      if (s.decided) return;
+      addLegs([legFromSelection(s, grid?.prefillOdd ?? true)]);
     },
     addScore(home, away) {
       if (!grid) return;
+      // Ao vivo, placar abaixo do atual já perdeu (o servidor também recusa).
+      if (grid.live && isDecided("exact_score", { home, away }, grid.live.score)) {
+        setNotice("Esse placar já ficou para trás.");
+        return;
+      }
       addLegs([legFromKindParams(grid, byId, "exact_score", { home, away })]);
     },
     add(leg) {

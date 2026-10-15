@@ -3,6 +3,7 @@ import { describe, expect, it } from "vitest";
 import {
   buildLiveStamp,
   liveColumns,
+  liveStampFromState,
   readLiveStamp,
   type LiveStampInput,
 } from "@/lib/live/stamp";
@@ -104,5 +105,42 @@ describe("liveColumns", () => {
     expect(liveColumns(null)).toEqual({ isLive: false, liveState: null });
     const s = buildLiveStamp(INPUT);
     expect(liveColumns(s)).toEqual({ isLive: true, liveState: s });
+  });
+});
+
+describe("liveStampFromState (registro ao vivo, #592)", () => {
+  const state = {
+    statusShort: "2H",
+    elapsed: 63,
+    extra: null,
+    minuteLabel: "63'",
+    score: { home: 1, away: 0 },
+    red: { home: 0, away: 1 },
+    fetchedAt: new Date("2026-10-15T20:10:00Z"),
+  };
+  const recordedAt = new Date("2026-10-15T20:10:20Z");
+
+  it("sem modelo: só o momento, fonte do provider", () => {
+    expect(liveStampFromState(state, recordedAt)).toEqual(buildLiveStamp(INPUT));
+  });
+
+  it("com modelo: leva as entradas do modelo em jogo", () => {
+    const stamp = liveStampFromState(state, recordedAt, {
+      liveModelVersion: "inplay_v1",
+      r: 0.3,
+      muHome: 0.4,
+      muAway: 0.3,
+      multipliers: { home: 1.1, away: 0.8 },
+      preMatch: {
+        source: "base",
+        lambdaHome: 1.4,
+        lambdaAway: 1.1,
+        rho: -0.05,
+        baseCheckedAt: null,
+      },
+    });
+    expect(stamp.inPlay?.liveModelVersion).toBe("inplay_v1");
+    expect(stamp.inPlay?.muHome).toBe(0.4);
+    expect(readLiveStamp(stamp)).toEqual(stamp);
   });
 });

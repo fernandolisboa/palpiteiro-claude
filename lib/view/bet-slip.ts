@@ -30,6 +30,7 @@ import { computeMarketMargin } from "@/lib/odds/implied-probability";
 import { getDescriptor } from "@/lib/odds/market-descriptor";
 import { computeMarketScenarios } from "@/lib/odds/scenario";
 import type { ModelScoreline, ModelScorelineSource } from "@/lib/quant/match-model";
+import { isDecided } from "@/lib/quant/in-play";
 import { pScoreline } from "@/lib/quant/scoreline-model";
 import { betLegLabel } from "@/lib/view/free-bet";
 import type { MatchUnavailableReason } from "@/lib/view/match-availability";
@@ -123,6 +124,9 @@ export type GridSelectionView = {
   modelProbPct: number | null;
   // A última análise deste mercado (e linha) recomendou esta seleção: a marca "IA".
   aiPick: boolean;
+  // Ao vivo (#580): o placar atual já decidiu esta seleção (isDecided, predicado sobre o
+  // placar, nunca P ∈ {0, 1}). A célula diz "decidido" e não vira botão.
+  decided: boolean;
 };
 
 // A captura do mercado COMPLETO: idade, margem e a chance sem a margem, na ordem das
@@ -146,10 +150,23 @@ export type GridGroupView = {
 // começou, adiado, cancelado ou encerrado (só a última captura, sem botões).
 export type BetGridMode = "register" | "readOnly";
 
+// Jogo rolando com registro aberto (#580): a chance é do modelo em jogo, a odd é a
+// última de antes do apito e o rodapé carrega o momento ("63' · 1–0").
+export type GridLiveView = {
+  score: { home: number; away: number };
+  // "chances pelo modelo ao vivo · 63' · 1–0" (ou "sem a chance do modelo ao vivo…").
+  footer: string;
+};
+
 export type BetGridView = {
   teams: TeamNames;
   mode: BetGridMode;
   oddsHeading: "Odds de mercado" | "Odds antes do jogo";
+  // null = pré-jogo ou só leitura.
+  live: GridLiveView | null;
+  // A odd de referência entra pré-preenchida na lista (só antes do apito: ao vivo ela é
+  // de antes do jogo e não vale como a odd que a pessoa pegou).
+  prefillOdd: boolean;
   groups: GridGroupView[];
   // Placares mais prováveis (botões) + o "outro placar" livre no cliente.
   topScores: GridSelectionView[];
@@ -181,6 +198,7 @@ function selectionView(
   model: ModelScoreline | null,
   references: ReferenceOdds,
   analysis: ReadonlyMap<string, AnalysisMarket>,
+  liveScore: { home: number; away: number } | null = null,
 ): GridSelectionView {
   const pin = legMarketPin(kind, params);
   const market = pin ? analysis.get(referenceKey(pin)) : undefined;
@@ -207,6 +225,9 @@ function selectionView(
       pin !== null &&
       market?.recommendation != null &&
       market.recommendation === pin.selectionKey,
+    decided:
+      liveScore !== null &&
+      isDecided(kind, params as Record<string, unknown>, liveScore),
   };
 }
 
@@ -267,6 +288,20 @@ function modelLine(
   return { label: modelSourceLabel(model.source, model.degraded), computedAgo: null };
 }
 
+// "chances pelo modelo ao vivo · 63' · 1–0". Sem modelo (base e cálculo na hora
+// falharam), o registro segue sem avaliação e o rodapé diz.
+function liveFooter(
+  live: { score: { home: number; away: number }; minuteLabel: string | null },
+  hasModel: boolean,
+): string {
+  const moment = [live.minuteLabel, `${live.score.home}–${live.score.away}`]
+    .filter((x): x is string => x !== null)
+    .join(" · ");
+  return hasModel
+    ? `chances pelo modelo ao vivo · ${moment}`
+    : `sem a chance do modelo ao vivo agora · ${moment}`;
+}
+
 export function toBetGridView(input: {
   teams: TeamNames;
   model: ModelScoreline | null;
@@ -277,15 +312,23 @@ export function toBetGridView(input: {
   // Por que o jogo não aceita análise (null = pré-jogo): a copy de "Odds indisponíveis".
   unavailable?: MatchUnavailableReason | null;
   now?: Date;
+  // Jogo rolando com registro aberto (#580): placar e minuto do estado lido no servidor.
+  // `model` é então o modelo em jogo; `references`, as capturas de antes do apito.
+  live?: { score: { home: number; away: number }; minuteLabel: string | null } | null;
 }): BetGridView {
-  const { teams, references, analysis } = input;
+  const { teams, references } = input;
   const mode = input.mode ?? "register";
   const now = input.now ?? new Date();
+  const live = mode === "register" ? (input.live ?? null) : null;
+  // Ao vivo a chance é SEMPRE a do modelo em jogo calculado agora (PLAN-580 achado 4):
+  // uma análise salva (de antes do jogo ou de minutos atrás) já está obsoleta.
+  const analysis: ReadonlyMap<string, AnalysisMarket> = live ? new Map() : input.analysis;
+  const liveScore = live?.score ?? null;
   // Só leitura não tem modelo (o jogo já começou ou acabou): sem chance nem placar.
   const model = mode === "readOnly" ? null : input.model;
   const groups = GRID_FIXED_GROUPS.map((g): GridGroupView => {
     const selections = g.selections.map((s) =>
-      selectionView(s.kind, s.params, g.key, teams, model, references, analysis),
+      selectionView(s.kind, s.params, g.key, teams, model, references, analysis, liveScore),
     );
     const analyzed = g.selections.some((s) => {
       const p = legMarketPin(s.kind, s.params);
@@ -324,6 +367,7 @@ export function toBetGridView(input: {
           model,
           references,
           analysis,
+          liveScore,
         ),
       );
   }
@@ -332,7 +376,9 @@ export function toBetGridView(input: {
   return {
     teams,
     mode,
-    oddsHeading: mode === "readOnly" ? "Odds antes do jogo" : "Odds de mercado",
+    oddsHeading: mode === "readOnly" || live ? "Odds antes do jogo" : "Odds de mercado",
+    live: live ? { score: live.score, footer: liveFooter(live, model !== null) } : null,
+    prefillOdd: live === null,
     groups,
     topScores,
     model: modelLine(model, input.modelReading ?? null, now),
@@ -424,9 +470,21 @@ export type SlipEvaluationView = {
 export const MODEL_CAVEAT_PT_BR =
   "No nosso backtest, o Dixon-Coles sozinho não bateu as odds de fechamento: leia o edge e o retorno esperado como a opinião do modelo, não como vantagem garantida.";
 
+// Ao vivo (#580, ADR 0060): o modelo em jogo não tem backtest nem calibração, e a odd de
+// referência é de antes do jogo (sem "vantagem do modelo" nem stake sugerido).
+export const LIVE_MODEL_CAVEAT_PT_BR =
+  "A chance ao vivo sai do modelo em jogo (placar e minuto do momento), que ainda não tem backtest: leia o retorno esperado como a opinião do modelo, não como vantagem garantida.";
+export const LIVE_STAKE_NOTE_PT_BR =
+  "Com o jogo rolando, não sugerimos stake nem comparamos com a odd de antes do jogo.";
+const LIVE_SOURCE_LABEL = "modelo ao vivo";
+
 const units = (n: number | null) => (n === null ? null : formatUnitsCompact(n));
 
-function legView(leg: EvaluatedLeg, teams: TeamNames): EvaluatedLegView {
+function legView(
+  leg: EvaluatedLeg,
+  teams: TeamNames,
+  inPlay = false,
+): EvaluatedLegView {
   const label = slipLegLabel(leg.kind, leg.params, teams);
   const userOdd = leg.userOdd === null ? null : formatOdd(leg.userOdd);
   if (leg.status !== "graded") {
@@ -459,17 +517,21 @@ function legView(leg: EvaluatedLeg, teams: TeamNames): EvaluatedLegView {
     sourceLabel:
       leg.origin === "analysis" || leg.source === null
         ? "sua análise deste mercado"
-        : modelSourceLabel(leg.source, leg.degradedData),
+        : inPlay
+          ? LIVE_SOURCE_LABEL
+          : modelSourceLabel(leg.source, leg.degradedData),
     userOdd,
     ev: leg.evPerUnit === null ? null : formatEvPct(leg.evPerUnit),
     breakEven:
       leg.breakEvenProbPct === null ? null : formatPct(leg.breakEvenProbPct, { decimals: 1 }),
     edge,
-    edgeNote: leg.reference
-      ? leg.belowEdgeFloor
-        ? `contra o mercado (odd ${formatOdd(leg.reference.odd)}, sem a margem): abaixo do piso de vantagem do motor`
-        : `contra o mercado (odd ${formatOdd(leg.reference.odd)}, sem a margem)`
-      : "sem odd de referência recente e completa deste mercado",
+    edgeNote: inPlay
+      ? null
+      : leg.reference
+        ? leg.belowEdgeFloor
+          ? `contra o mercado (odd ${formatOdd(leg.reference.odd)}, sem a margem): abaixo do piso de vantagem do motor`
+          : `contra o mercado (odd ${formatOdd(leg.reference.odd)}, sem a margem)`
+        : "sem odd de referência recente e completa deste mercado",
     reading: leg.coherenceWarning
       ? `${valueReading(leg.evPerUnit)} A odd de referência conta outra história; o veredito segue a sua odd.`
       : valueReading(leg.evPerUnit),
@@ -489,6 +551,7 @@ function comboView(
   combo: EvaluatedCombo,
   legs: EvaluatedLeg[],
   teams: TeamNames,
+  inPlay = false,
 ): EvaluatedComboView {
   if (combo.status === "not_evaluated") {
     return { status: "not_evaluated", reason: COMBO_REASON[combo.reason] };
@@ -497,7 +560,9 @@ function comboView(
     status: "graded",
     jointProb: formatPct(combo.jointProbPct, { decimals: 1 }),
     fairOdd: combo.fairOdd === null ? null : formatOdd(combo.fairOdd),
-    sourceLabel: modelSourceLabel(combo.source, combo.degradedData),
+    sourceLabel: inPlay
+      ? LIVE_SOURCE_LABEL
+      : modelSourceLabel(combo.source, combo.degradedData),
     userOdd: combo.comboUserOdd === null ? null : formatOdd(combo.comboUserOdd),
     ev: combo.evPerUnit === null ? null : formatEvPct(combo.evPerUnit),
     breakEven:
@@ -517,13 +582,18 @@ export function toSlipEvaluationView(
   evaluation: SlipEvaluation,
   teams: TeamNames,
 ): SlipEvaluationView {
+  const inPlay = evaluation.inPlay;
   return {
-    modelCaveat: MODEL_CAVEAT_PT_BR,
+    modelCaveat: inPlay ? LIVE_MODEL_CAVEAT_PT_BR : MODEL_CAVEAT_PT_BR,
     mode: evaluation.mode,
-    legs: evaluation.legs.map((l) => legView(l, teams)),
+    legs: evaluation.legs.map((l) => legView(l, teams, inPlay)),
     combo:
-      evaluation.combo === null ? null : comboView(evaluation.combo, evaluation.legs, teams),
-    stakeRuleNote: evaluation.cappedAtMatchLimit
+      evaluation.combo === null
+        ? null
+        : comboView(evaluation.combo, evaluation.legs, teams, inPlay),
+    stakeRuleNote: !evaluation.suggestStake
+      ? LIVE_STAKE_NOTE_PT_BR
+      : evaluation.cappedAtMatchLimit
       ? `Stake sugerido pelas bandas do motor (1 a 3u), só com retorno esperado positivo, e somado no máximo ${MATCH_STAKE_CAP_UNITS}u por jogo: reduzimos as pernas pra caber. O quarter-Kelly é informativo.`
       : `Stake sugerido pelas bandas do motor (1 a 3u), só com retorno esperado positivo e no máximo ${MATCH_STAKE_CAP_UNITS}u por jogo. O quarter-Kelly é informativo.`,
   };

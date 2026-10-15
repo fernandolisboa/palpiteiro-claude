@@ -167,6 +167,35 @@ describe("getLatestSelectionOddsSnapshotsForMatches — batch best-effort (pglit
     expect(a.selections.map((s) => s.odd)).toEqual(["2.100", "3.400", "3.900"]);
   });
 
+  it("capturedBefore (#580): ignora capturas depois do instante (odd antes do jogo)", async () => {
+    const pre = new Date("2026-05-15T10:00:00Z");
+    const kickoff = new Date("2026-05-15T11:00:00Z");
+    const after = new Date("2026-05-15T11:30:00Z");
+    await insertSelectionOddsSnapshotsBatch([
+      mrRow(ids.matchA, ids.mrHome, "2.100", pre),
+      mrRow(ids.matchA, ids.mrDraw, "3.400", pre),
+      mrRow(ids.matchA, ids.mrAway, "3.900", pre),
+    ]);
+    await insertSelectionOddsSnapshotsBatch([
+      mrRow(ids.matchA, ids.mrHome, "1.300", after),
+      mrRow(ids.matchA, ids.mrDraw, "5.000", after),
+      mrRow(ids.matchA, ids.mrAway, "9.000", after),
+    ]);
+    const latest = await getLatestSelectionOddsSnapshotsForMatches(
+      [ids.matchA],
+      "match_result",
+    );
+    expect(latest.get(ids.matchA)!.capturedAt.getTime()).toBe(after.getTime());
+    const beforeKickoff = await getLatestSelectionOddsSnapshotsForMatches(
+      [ids.matchA],
+      "match_result",
+      { capturedBefore: kickoff },
+    );
+    const a = beforeKickoff.get(ids.matchA)!;
+    expect(a.capturedAt.getTime()).toBe(pre.getTime());
+    expect(a.selections.map((s) => s.odd)).toEqual(["2.100", "3.400", "3.900"]);
+  });
+
   it("OMITE (best-effort, sem throw) match incompleto e match incoerente; multi-match", async () => {
     const t = new Date("2026-05-15T10:00:00Z");
     const t2 = new Date("2026-05-15T11:00:00Z");

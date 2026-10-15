@@ -44,7 +44,7 @@ import {
 import { getInPlayState, type InPlayState } from "@/lib/live/in-play-state";
 import { isTerminalStatusShort } from "@/lib/live/phase";
 import { latestAnalysisByMarket } from "@/lib/bets/analysis-probs";
-import { resolveSlipModel } from "@/lib/bets/slip-model";
+import { resolveInPlaySlipModel, resolveSlipModel } from "@/lib/bets/slip-model";
 import { getReferenceOddsForMatch } from "@/lib/db/queries/reference-odds";
 import { toBetGridView, type BetGridView } from "@/lib/view/bet-slip";
 import { getMatchById } from "@/lib/db/queries/matches";
@@ -324,8 +324,18 @@ export default async function MatchPage({ params, searchParams }: PageProps) {
   // deles (predictInPlay, user_palpite ao vivo) é o PR D do #580. Antes do apito não
   // muda nada (o pré-jogo libera tudo). O bolão ao vivo é o PR C (sem poolWindowOpen).
   const rawCaps = matchCapabilities(phase, { liveMode, modelReady: false });
-  // Até o commit da tabela de mercados ao vivo, o registro também fica no pré-jogo.
-  const caps = { ...rawCaps, registerBets: rawCaps.registerBets && phase.kind === "pre" };
+  // Registro ao vivo (#580, §9.2): só com o placar do estado (a tabela precisa dele pra
+  // condicionar o modelo e marcar o que já está decidido; a action recusa sem ele).
+  const liveScore =
+    phase.kind !== "pre" && inPlayState?.score ? inPlayState.score : null;
+  const caps = {
+    ...rawCaps,
+    registerBets: rawCaps.registerBets && (phase.kind === "pre" || liveScore !== null),
+  };
+  const liveGrid =
+    caps.registerBets && liveScore !== null && inPlayState
+      ? { score: liveScore, minuteLabel: inPlayState.minuteLabel }
+      : null;
 
   // Fonte e JEV da base do modelo (#555, ADR 0052), lidos do banco (sem odd, sem chamada
   // externa): o rodapé da tabela de mercados. Só em jogo analisável.
@@ -335,25 +345,35 @@ export default async function MatchPage({ params, searchParams }: PageProps) {
 
   // Tabela de mercados (#556/#576), por streaming. Antes do apito: odd de referência,
   // chance (a da sua análise do mercado, senão o modelo do jogo, pela porta única
-  // lib/bets/slip-model) e os botões de registro. Depois do apito: só leitura, com a
-  // última captura de antes do jogo (sem o corte de idade do cupom). As capturas são lidas
-  // DEPOIS do refresh que a página já faz (refreshP): nenhuma chamada nova à Odds API.
+  // lib/bets/slip-model) e os botões de registro. Ao vivo (#580): "Odds antes do jogo"
+  // (última captura até o apito), a chance do modelo em jogo calculado agora (nunca a de
+  // uma análise salva) e os botões, menos nas seleções já decididas. Fora disso: só
+  // leitura, com a última captura de antes do jogo (sem o corte de idade do cupom). As
+  // capturas são lidas DEPOIS do refresh que a página já faz (refreshP, que só existe no
+  // pré-jogo): nenhuma chamada à Odds API depois do apito.
   // Falha vira tabela sem odds/sem modelo (os botões ainda registram).
   // Rótulos de tela (#578): nome curto. Nada aqui vai ao modelo (as actions releem o
   // canonical do banco), então a tabela e o "Seu palpite" usam os mesmos displayTeams.
   const teams = displayTeams;
   const gridMode = caps.registerBets ? "register" : "readOnly";
   // O modelo ao vivo é calculado UMA vez e compartilhado pela tabela e pelo "Seu palpite"
-  // (que só cai nele quando não há base fresca do jogo).
+  // (que só cai nele quando não há base fresca do jogo). Em jogo, é o modelo em jogo: a
+  // base do apito condicionada ao placar e ao minuto do estado.
   let slipModelP: Promise<ModelScoreline | null> | null = null;
-  const slipModel = () => (slipModelP ??= resolveSlipModel(match));
+  const slipModel = () =>
+    (slipModelP ??=
+      liveGrid && inPlayState
+        ? resolveInPlaySlipModel(match, inPlayState)
+        : resolveSlipModel(match));
   const betGridP: Promise<BetGridView> = Promise.all([
     caps.registerBets ? slipModel() : Promise.resolve(null),
     refreshP.then(() =>
       getReferenceOddsForMatch(
         match.id,
         now,
-        caps.registerBets ? {} : { maxAgeMs: null }
+        phase.kind === "pre"
+          ? {}
+          : { maxAgeMs: null, capturedBefore: match.kickoffAt }
       )
     ),
     modelReading ?? Promise.resolve(null),
@@ -363,11 +383,12 @@ export default async function MatchPage({ params, searchParams }: PageProps) {
         teams,
         model,
         references,
-        analysis: latestAnalysisByMarket(history),
+        analysis: liveGrid ? new Map() : latestAnalysisByMarket(history),
         mode: gridMode,
         modelReading: reading ? { source: reading.source, jev: reading.jev } : null,
         unavailable: unavailableReason,
         now,
+        live: liveGrid,
       })
     )
     .catch((err: unknown): BetGridView => {
@@ -386,6 +407,7 @@ export default async function MatchPage({ params, searchParams }: PageProps) {
         mode: gridMode,
         unavailable: unavailableReason,
         now,
+        live: liveGrid,
       });
     });
 

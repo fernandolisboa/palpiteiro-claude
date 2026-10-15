@@ -25,19 +25,26 @@ export const REFERENCE_MAX_AGE_MS = 48 * 60 * 60 * 1000;
 
 // `maxAgeMs: null` tira o corte (a tabela de mercados de um jogo que já começou mostra a
 // última captura de antes do jogo, de qualquer idade, #576). O cupom usa o default.
+// `capturedBefore` (#580): só capturas até esse instante; ao vivo a página passa o
+// kickoff ("Odds antes do jogo" nunca é uma odd ao vivo).
 export async function getReferenceOddsForMatch(
   matchId: string,
   now: Date = new Date(),
-  opts: { maxAgeMs?: number | null } = {},
+  opts: { maxAgeMs?: number | null; capturedBefore?: Date } = {},
 ): Promise<Map<string, ReferenceMarket>> {
   const maxAgeMs = opts.maxAgeMs === undefined ? REFERENCE_MAX_AGE_MS : opts.maxAgeMs;
+  const capturedBefore = opts.capturedBefore;
   const results = await Promise.all(
     READS.map(async (r) => {
       try {
         const map = await getLatestSelectionOddsSnapshotsForMatches(
           [matchId],
           r.dbMarketKey,
-          r.line === null ? undefined : { line: r.line },
+          r.line === null
+            ? capturedBefore
+              ? { capturedBefore }
+              : undefined
+            : { line: r.line, ...(capturedBefore ? { capturedBefore } : {}) },
         );
         const snap = map.get(matchId);
         if (!snap) return null;

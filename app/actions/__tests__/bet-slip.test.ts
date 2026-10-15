@@ -13,7 +13,18 @@ vi.mock("@/lib/db/queries/reference-odds", () => ({
 }));
 vi.mock("@/lib/db/queries/user-bets", () => ({ insertBetSlipsBatch: vi.fn() }));
 vi.mock("@/lib/rate-limit", () => ({ checkBetSlipsRateLimit: vi.fn() }));
-vi.mock("@/lib/bets/slip-model", () => ({ resolveSlipModel: vi.fn() }));
+vi.mock("@/lib/bets/slip-model", () => ({
+  resolveSlipModel: vi.fn(),
+  resolveInPlaySlipModel: vi.fn(),
+}));
+// Modo ao vivo (#580): a flag e o estado lido no servidor. A lógica de
+// loadActionLiveContext/matchPhase roda de verdade em cima destes dois.
+vi.mock("@/lib/db/queries/ai-config", () => ({ getEnableLiveMode: vi.fn() }));
+vi.mock("@/lib/live/in-play-state", () => ({ getInPlayState: vi.fn() }));
+// Guarda: nenhum caminho do registro (pré-jogo ou ao vivo) toca a The Odds API.
+vi.mock("@/lib/providers/odds-api", () => {
+  throw new Error("registerBetSlip não pode importar a The Odds API");
+});
 // Lookup do parseAiCallId (db.select().from().where().limit()): as linhas que a query
 // devolve são controladas por `aiCallRows`.
 const aiCallRows: { id: string }[] = [];
@@ -31,7 +42,11 @@ vi.mock("@/lib/db", () => ({
 import { registerBetSlip } from "@/app/actions/bet-slip";
 import { auth } from "@/auth";
 import { revalidatePath } from "next/cache";
-import { resolveSlipModel } from "@/lib/bets/slip-model";
+import { resolveInPlaySlipModel, resolveSlipModel } from "@/lib/bets/slip-model";
+import { getEnableLiveMode } from "@/lib/db/queries/ai-config";
+import { getInPlayState, type InPlayState } from "@/lib/live/in-play-state";
+import { readLiveStamp } from "@/lib/live/stamp";
+import { inPlayScoreline } from "@/lib/quant/in-play";
 import { db } from "@/lib/db";
 import { getMatchById } from "@/lib/db/queries/matches";
 import { getPredictionHistoryForMatch } from "@/lib/db/queries/predictions";
@@ -53,6 +68,9 @@ const mockRefs = vi.mocked(getReferenceOddsForMatch);
 const mockInsert = vi.mocked(insertBetSlipsBatch);
 const mockRateLimit = vi.mocked(checkBetSlipsRateLimit);
 const mockModel = vi.mocked(resolveSlipModel);
+const mockInPlayModel = vi.mocked(resolveInPlaySlipModel);
+const mockLiveMode = vi.mocked(getEnableLiveMode);
+const mockInPlayState = vi.mocked(getInPlayState);
 
 const MATCH_ID = "550e8400-e29b-41d4-a716-446655440000";
 const AI_CALL_ID = "6ba7b810-9dad-41d1-80b4-00c04fd430c8";
@@ -121,6 +139,9 @@ beforeEach(() => {
   mockRefs.mockResolvedValue(new Map());
   mockHistory.mockResolvedValue([]);
   mockInsert.mockResolvedValue({ slipIds: [] });
+  mockLiveMode.mockResolvedValue(true);
+  mockInPlayState.mockResolvedValue(null);
+  mockInPlayModel.mockResolvedValue(null);
 });
 
 describe("registerBetSlip — contrato e gates", () => {
@@ -477,5 +498,172 @@ describe("registerBetSlip — parseAiCallId", () => {
     await registerBetSlip(null, form(slip()));
     expect(db.select).not.toHaveBeenCalled();
     expect(inserted()[0].parseAiCallId).toBeNull();
+  });
+});
+
+// ── Ao vivo (#580, PLAN-580 §9.2) ────────────────────────────────────────────
+
+const LIVE_KICKOFF = () => new Date(Date.now() - 60 * 60 * 1000);
+
+function liveState(over: Partial<InPlayState> = {}): InPlayState {
+  return {
+    matchId: MATCH_ID,
+    statusShort: "2H",
+    elapsed: 63,
+    extra: null,
+    fetchedAt: new Date(Date.now() - 30_000),
+    minuteLabel: "63'",
+    score: { home: 1, away: 0 },
+    red: { home: 0, away: 0 },
+    ageMs: 30_000,
+    ...over,
+  };
+}
+
+function liveModel() {
+  return inPlayScoreline(MODEL, {
+    statusShort: "2H",
+    elapsed: 63,
+    extra: null,
+    score: { home: 1, away: 0 },
+    red: { home: 0, away: 0 },
+  })!;
+}
+
+describe("registerBetSlip — ao vivo", () => {
+  beforeEach(() => {
+    mockGetMatchById.mockResolvedValue(match("live", LIVE_KICKOFF()));
+    mockInPlayState.mockResolvedValue(liveState());
+    mockInPlayModel.mockResolvedValue(liveModel());
+  });
+
+  it("estado fresco: registra com o carimbo do SERVIDOR e o modelo em jogo", async () => {
+    // O cliente tenta mandar minuto e placar: o payload só aceita as chaves do contrato.
+    const res = await registerBetSlip(
+      null,
+      form(slip({ legs: [{ ...HOME, userOdd: "1.50" }, OVER] }))
+    );
+    expect(res.ok).toBe(true);
+    // Relê o estado com a idade máxima de registro (2 min).
+    expect(mockInPlayState).toHaveBeenCalledWith(
+      expect.objectContaining({ id: MATCH_ID }),
+      expect.objectContaining({ maxAgeMs: 120_000 })
+    );
+    // Sem referência (odd de antes do jogo), sem análise salva, sem modelo de pré-jogo.
+    expect(mockRefs).not.toHaveBeenCalled();
+    expect(mockHistory).not.toHaveBeenCalled();
+    expect(mockModel).not.toHaveBeenCalled();
+    const slips = inserted();
+    expect(slips).toHaveLength(2);
+    for (const s of slips) {
+      expect(s.isLive).toBe(true);
+      const stamp = readLiveStamp(s.liveState);
+      expect(stamp).toMatchObject({
+        source: "api_football",
+        status: "2H",
+        elapsed: 63,
+        minuteLabel: "63'",
+        score: { home: 1, away: 0 },
+      });
+      expect(stamp?.inPlay?.liveModelVersion).toBe("live_model_v1");
+      // Sem stake sugerido ao vivo.
+      expect(s.legs[0].suggestedStakeUnits ?? null).toBeNull();
+      expect(s.legs[0].referenceOdd ?? null).toBeNull();
+    }
+    if (!res.ok) return;
+    expect(res.evaluation.legs[0].suggestedStake).toBeNull();
+    expect(res.evaluation.legs[0].sourceLabel).toBe("modelo ao vivo");
+    expect(res.evaluation.legs[0].edgeNote).toBeNull();
+  });
+
+  it("sem modelo em jogo: registra sem avaliação, ainda carimbado", async () => {
+    mockInPlayModel.mockResolvedValue(null);
+    const res = await registerBetSlip(null, form(slip()));
+    expect(res.ok).toBe(true);
+    const [s] = inserted();
+    expect(s.isLive).toBe(true);
+    expect(s.legs[0]).toMatchObject({ gradeSource: "none", gradeStatus: "no_data" });
+    expect(readLiveStamp(s.liveState)?.inPlay).toBeUndefined();
+  });
+
+  it("estado velho (> 2 min) que a busca não renovou → recusa com a copy do plano", async () => {
+    mockInPlayState.mockResolvedValue(
+      liveState({ fetchedAt: new Date(Date.now() - 3 * 60_000) })
+    );
+    const res = await registerBetSlip(null, form(slip()));
+    expect(res).toEqual({
+      ok: false,
+      error: "Placar ao vivo indisponível agora. Tente em um minuto.",
+      kind: "nao-analisavel",
+    });
+    expect(mockInsert).not.toHaveBeenCalled();
+  });
+
+  it("sem estado nenhum → mesma recusa", async () => {
+    mockInPlayState.mockResolvedValue(null);
+    const res = await registerBetSlip(null, form(slip()));
+    expect(res).toMatchObject({
+      ok: false,
+      error: "Placar ao vivo indisponível agora. Tente em um minuto.",
+    });
+  });
+
+  it("estado sem placar → recusa", async () => {
+    mockInPlayState.mockResolvedValue(liveState({ score: null }));
+    const res = await registerBetSlip(null, form(slip()));
+    expect(res).toMatchObject({ ok: false, kind: "nao-analisavel" });
+    expect(mockInsert).not.toHaveBeenCalled();
+  });
+
+  it("seleção já decidida pelo placar → 'Esse mercado já está decidido.'", async () => {
+    mockInPlayState.mockResolvedValue(liveState({ score: { home: 2, away: 1 } }));
+    const res = await registerBetSlip(null, form(slip({ legs: [OVER] })));
+    expect(res).toEqual({
+      ok: false,
+      error: "Esse mercado já está decidido.",
+      kind: "mercado-ao-vivo",
+    });
+    expect(mockInsert).not.toHaveBeenCalled();
+  });
+
+  it("tipo fora da tabela ao vivo (1º tempo, quem marca primeiro) → recusa", async () => {
+    for (const leg of [
+      { kind: "first_to_score", params: { firstToScore: "home" } },
+      { kind: "first_half_over_under", params: { selection: "over", line: 0.5 } },
+    ]) {
+      mockInsert.mockClear();
+      const res = await registerBetSlip(null, form(slip({ legs: [leg] })));
+      expect(res).toMatchObject({ ok: false, kind: "mercado-ao-vivo" });
+      if (res.ok) continue;
+      expect(res.error).toContain("Com o jogo rolando");
+      expect(mockInsert).not.toHaveBeenCalled();
+    }
+  });
+
+  it("prorrogação → recusa pelo motivo (mercados de 90' decididos)", async () => {
+    mockInPlayState.mockResolvedValue(liveState({ statusShort: "ET", elapsed: 95 }));
+    const res = await registerBetSlip(null, form(slip()));
+    expect(res).toMatchObject({ ok: false, kind: "nao-analisavel" });
+    if (res.ok) return;
+    expect(res.error).toContain("prorrogação");
+  });
+
+  it("flag desligada → o gate de hoje, sem ler o estado", async () => {
+    mockLiveMode.mockResolvedValue(false);
+    const res = await registerBetSlip(null, form(slip()));
+    expect(res).toMatchObject({ ok: false, kind: "nao-analisavel" });
+    if (res.ok) return;
+    expect(res.error).toContain("só antes do apito inicial");
+    expect(mockInPlayState).not.toHaveBeenCalled();
+  });
+
+  it("pré-jogo não lê a flag nem o estado, e o slip sai sem carimbo", async () => {
+    mockGetMatchById.mockResolvedValue(match());
+    await registerBetSlip(null, form(slip()));
+    expect(mockLiveMode).not.toHaveBeenCalled();
+    expect(mockInPlayState).not.toHaveBeenCalled();
+    const [s] = inserted();
+    expect(s.isLive).toBe(false);
+    expect(s.liveState).toBeNull();
   });
 });

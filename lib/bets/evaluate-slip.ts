@@ -15,6 +15,7 @@ import {
   computeMarketScenarios,
   MIN_EDGE_PP,
 } from "@/lib/odds/scenario";
+import { isInPlayScoreline } from "@/lib/quant/in-play";
 import type { ModelScoreline, ModelScorelineSource } from "@/lib/quant/match-model";
 import {
   outcomesFromScoreMatrix,
@@ -123,6 +124,11 @@ export type SlipEvaluation = {
   combo: EvaluatedCombo | null;
   // A soma dos stakes sugeridos passou do teto por jogo e foi reduzida.
   cappedAtMatchLimit: boolean;
+  // false = nenhum stake sugerido nem Kelly informativo (ao vivo: o modelo em jogo não
+  // tem calibração, ADR 0060 emenda à 0053 §5-6).
+  suggestStake: boolean;
+  // A chance veio do modelo em jogo (InPlayScoreline): a tela diz "modelo ao vivo".
+  inPlay: boolean;
 };
 
 const NONE_KINDS = new Set(["cards", "corners"]);
@@ -225,7 +231,29 @@ export function evaluateSlip(input: {
   analysis: ReadonlyMap<string, AnalysisMarket>;
   comboUserOdd: number | null;
   comboStakeUnits: number | null;
+  // Default true. false (ao vivo): sem banda nem Kelly, só chance, odd justa e EV.
+  suggestStake?: boolean;
 }): SlipEvaluation {
+  const { model } = input;
+  const suggestStake = input.suggestStake ?? true;
+  const inPlay = model !== null && isInPlayScoreline(model);
+  const evaluation = evaluateWithStakes(input);
+  if (suggestStake) return { ...evaluation, suggestStake, inPlay };
+  for (const leg of evaluation.legs) {
+    if (leg.status !== "graded") continue;
+    leg.suggestedStake = null;
+    leg.kellyInfo = null;
+  }
+  const combo =
+    evaluation.combo?.status === "graded"
+      ? { ...evaluation.combo, suggestedStake: null, kellyInfo: null }
+      : evaluation.combo;
+  return { ...evaluation, combo, cappedAtMatchLimit: false, suggestStake, inPlay };
+}
+
+function evaluateWithStakes(
+  input: Parameters<typeof evaluateSlip>[0],
+): Omit<SlipEvaluation, "suggestStake" | "inPlay"> {
   const { model, references, analysis } = input;
 
   const legs: EvaluatedLeg[] = input.legs.map((leg): EvaluatedLeg => {

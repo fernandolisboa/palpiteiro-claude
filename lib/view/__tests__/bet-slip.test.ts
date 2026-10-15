@@ -15,8 +15,11 @@ import { formatPct } from "@/lib/format";
 import { modelProbabilities } from "@/lib/model-base/build-snapshot";
 import { computeMarketImpliedProbabilities } from "@/lib/odds/implied-probability";
 import { RISK_DISCLAIMER } from "@/lib/view/share/disclaimer";
+import { inPlayScoreline } from "@/lib/quant/in-play";
 import {
   historyLegView,
+  LIVE_MODEL_CAVEAT_PT_BR,
+  LIVE_STAKE_NOTE_PT_BR,
   MODEL_CAVEAT_PT_BR,
   RISK_DISCLAIMER_PT_BR,
   toBetGridView,
@@ -485,6 +488,149 @@ describe("toSlipEvaluationView", () => {
         "Não deu pra estimar o placar deste jogo agora, então a combinada ficou sem número.",
     });
     expect(v.legs.map((l) => l.status)).toEqual(["no_data", "no_data"]);
+  });
+});
+
+// ── Ao vivo (#580, PLAN-580 §9.2/§13) ───────────────────────────────────────
+
+const LIVE_SCORE = { home: 2, away: 0 };
+const LIVE_MODEL = inPlayScoreline(MODEL, {
+  statusShort: "2H",
+  elapsed: 63,
+  extra: null,
+  score: LIVE_SCORE,
+  red: { home: 0, away: 0 },
+})!;
+
+describe("toBetGridView — ao vivo", () => {
+  const grid = toBetGridView({
+    teams: TEAMS,
+    model: LIVE_MODEL,
+    references: new Map([
+      ["match_result", ref({ home: 2.1, draw: 3.3, away: 3.6 })],
+      ["over_under:1.5", ref({ over: 1.3, under: 3.4 })],
+    ]),
+    // Uma análise salva que recomendaria "home": ao vivo ela é ignorada.
+    analysis: new Map([["match_result", { ...analysisMarket({ home: 40 }), recommendation: "home" }]]),
+    mode: "register",
+    unavailable: "live",
+    live: { score: LIVE_SCORE, minuteLabel: "63'" },
+  });
+  const sel = (group: string, id: string) =>
+    grid.groups.find((g) => g.key === group)!.selections.find((s) => s.id === id)!;
+
+  it("cabeçalho 'Odds antes do jogo', rodapé do momento e sem pré-preencher a odd", () => {
+    expect(grid.mode).toBe("register");
+    expect(grid.oddsHeading).toBe("Odds antes do jogo");
+    expect(grid.live).toEqual({
+      score: LIVE_SCORE,
+      footer: "chances pelo modelo ao vivo · 63' · 2–0",
+    });
+    expect(grid.prefillOdd).toBe(false);
+  });
+
+  it("chance do modelo em jogo, nunca da análise salva; sem marca IA", () => {
+    const home = sel("match_result", "match_result:home");
+    expect(home.aiPick).toBe(false);
+    expect(home.modelProbPct).toBeGreaterThan(80);
+    expect(grid.groups[0].probSource).toBe("model");
+    // A odd mostrada é a de antes do jogo (rotulada assim pelo cabeçalho).
+    expect(home.referenceOdd).toBe(2.1);
+  });
+
+  it("seleções decididas pelo placar (2–0): over 1,5 e under 1,5; 1X2 nunca", () => {
+    expect(sel("over_under:1.5", "over_under:1.5:over").decided).toBe(true);
+    expect(sel("over_under:1.5", "over_under:1.5:under").decided).toBe(true);
+    expect(sel("over_under:2.5", "over_under:2.5:over").decided).toBe(false);
+    expect(sel("btts", "btts:yes").decided).toBe(false);
+    expect(grid.groups[0].selections.every((s) => !s.decided)).toBe(true);
+  });
+
+  it("placares mais prováveis nunca abaixo do atual", () => {
+    expect(grid.topScores.length).toBeGreaterThan(0);
+    for (const s of grid.topScores) {
+      const p = s.params as { home: number; away: number };
+      expect(p.home).toBeGreaterThanOrEqual(2);
+      expect(s.decided).toBe(false);
+    }
+    expect(grid.exactScoreProbPct?.[0][0]).toBe(0);
+  });
+
+  it("sem modelo em jogo: rodapé diz e registra sem chance", () => {
+    const g = toBetGridView({
+      teams: TEAMS,
+      model: null,
+      references: new Map(),
+      analysis: new Map(),
+      mode: "register",
+      unavailable: "live",
+      live: { score: LIVE_SCORE, minuteLabel: "intervalo" },
+    });
+    expect(g.live?.footer).toBe("sem a chance do modelo ao vivo agora · intervalo · 2–0");
+    expect(g.noOdds).toBe("Jogo em andamento, sem cotação pré-jogo publicada.");
+  });
+
+  it("pré-jogo e só leitura não têm live e pré-preenchem (pré-jogo)", () => {
+    const pre = toBetGridView({ teams: TEAMS, model: MODEL, references: new Map(), analysis: new Map() });
+    expect(pre.live).toBeNull();
+    expect(pre.prefillOdd).toBe(true);
+    expect(pre.groups.flatMap((g) => g.selections).every((s) => !s.decided)).toBe(true);
+    const ro = toBetGridView({
+      teams: TEAMS,
+      model: MODEL,
+      references: new Map(),
+      analysis: new Map(),
+      mode: "readOnly",
+      live: { score: LIVE_SCORE, minuteLabel: "63'" },
+    });
+    expect(ro.live).toBeNull();
+  });
+});
+
+describe("evaluateSlip / toSlipEvaluationView — ao vivo", () => {
+  const legs: SlipLegInput[] = [
+    { kind: "match_result", params: { selection: "home" }, userOdd: 1.5, stakeUnits: 1 },
+    { kind: "btts", params: { selection: "yes" }, userOdd: 3.5, stakeUnits: null },
+  ];
+
+  it("suggestStake: false zera banda e Kelly; inPlay vem do modelo", () => {
+    const pre = evaluate("simples", legs);
+    expect(pre.suggestStake).toBe(true);
+    expect(pre.inPlay).toBe(false);
+    const live = evaluate("simples", legs, { model: LIVE_MODEL, suggestStake: false });
+    expect(live.suggestStake).toBe(false);
+    expect(live.inPlay).toBe(true);
+    expect(live.cappedAtMatchLimit).toBe(false);
+    for (const l of live.legs) {
+      if (l.status !== "graded") throw new Error("esperava graded");
+      expect(l.suggestedStake).toBeNull();
+      expect(l.kellyInfo).toBeNull();
+      expect(l.evPerUnit).not.toBeNull();
+    }
+  });
+
+  it("combinada ao vivo: conjunta da matriz em jogo, sem stake", () => {
+    const live = evaluate("combinada", legs, {
+      model: LIVE_MODEL,
+      suggestStake: false,
+      comboUserOdd: 4,
+    });
+    expect(live.combo?.status).toBe("graded");
+    if (live.combo?.status !== "graded") return;
+    expect(live.combo.suggestedStake).toBeNull();
+    expect(live.combo.kellyInfo).toBeNull();
+  });
+
+  it("view: 'modelo ao vivo', sem nota de vantagem, notas próprias", () => {
+    const v = toSlipEvaluationView(
+      evaluate("simples", legs, { model: LIVE_MODEL, suggestStake: false }),
+      TEAMS
+    );
+    expect(v.legs[0].sourceLabel).toBe("modelo ao vivo");
+    expect(v.legs[0].edgeNote).toBeNull();
+    expect(v.legs[0].suggestedStake).toBeNull();
+    expect(v.stakeRuleNote).toBe(LIVE_STAKE_NOTE_PT_BR);
+    expect(v.modelCaveat).toBe(LIVE_MODEL_CAVEAT_PT_BR);
   });
 });
 

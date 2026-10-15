@@ -20,8 +20,10 @@ import type { BetGridView, GridGroupView, GridSelectionView } from "@/lib/view/b
 // seleção. Por célula, a odd de mercado, a chance (a da sua análise do mercado, senão o
 // modelo do jogo) e a odd justa; por mercado, a chance sem a margem, a margem e a idade
 // da captura. Antes do apito as células são botões que mandam a seleção pra "Suas
-// apostas" (BetSlipProvider); depois, só leitura. O app REGISTRA a aposta feita em outro
-// lugar: nunca "Apostar", nunca nome ou link de casa (ADR 0034 §12, ADR 0048).
+// apostas" (BetSlipProvider); depois, só leitura. Ao vivo (#580, `grid.live`): a odd é a
+// última de antes do apito, a chance é do modelo em jogo e a seleção que o placar já
+// decidiu diz "decidido", sem botão. O app REGISTRA a aposta feita em outro lugar: nunca
+// "Apostar", nunca nome ou link de casa (ADR 0034 §12, ADR 0048).
 
 export function MarketTable({ grid }: { grid: BetGridView }) {
   const slip = useBetSlip();
@@ -39,14 +41,16 @@ export function MarketTable({ grid }: { grid: BetGridView }) {
   // A legenda nomeia a fonte da chance que está na tela: sem modelo (só leitura, ou a base
   // ainda não rodou), toda chance mostrada é a da sua análise.
   const modelChance = grid.model !== null;
+  const live = grid.live !== null;
   const firstWithOdds = grid.groups.find((g) => g.odds !== null)?.key ?? null;
 
   return (
     <div className="flex flex-col gap-3">
       {register && (
         <p className="text-body-sm text-muted-foreground tracking-tight">
-          Toque nas seleções que você apostou, confira a odd que pegou e registre. A
-          avaliação sai na hora, sem gastar análise do dia.
+          {live
+            ? "Toque nas seleções que você apostou, digite a odd que pegou e registre. A avaliação sai na hora, pela chance do modelo ao vivo."
+            : "Toque nas seleções que você apostou, confira a odd que pegou e registre. A avaliação sai na hora, sem gastar análise do dia."}
         </p>
       )}
       {!hasOdds && grid.noOdds && <NoOddsNotice body={grid.noOdds} />}
@@ -55,12 +59,16 @@ export function MarketTable({ grid }: { grid: BetGridView }) {
           <div className="flex flex-col gap-1 px-4 pt-3.5 pb-3">
             <span className="text-body font-medium tracking-tight">{grid.oddsHeading}</span>
             <span className="flex flex-wrap items-center gap-x-1.5 gap-y-1 text-meta text-muted-foreground">
-              {!hasChance
-                ? "odd de mercado"
-                : modelChance
-                  ? "odd de mercado · chance do modelo · odd justa"
-                  : "odd de mercado · chance pela sua análise · odd justa"}
-              {hasChance && modelChance && (
+              {live
+                ? hasChance
+                  ? "odd pré-jogo · chance ao vivo · odd justa"
+                  : "odd pré-jogo"
+                : !hasChance
+                  ? "odd de mercado"
+                  : modelChance
+                    ? "odd de mercado · chance do modelo · odd justa"
+                    : "odd de mercado · chance pela sua análise · odd justa"}
+              {hasChance && modelChance && !live && (
                 <HelpHint
                   anchor="leitura-modelo"
                   label="chance do modelo e odd justa"
@@ -81,6 +89,7 @@ export function MarketTable({ grid }: { grid: BetGridView }) {
                 group={g}
                 slip={register ? slip : null}
                 marginHint={g.key === firstWithOdds}
+                live={live}
               />
             </div>
           ))}
@@ -110,7 +119,9 @@ function NoOddsNotice({ body }: { body: string }) {
 }
 
 function TableFooter({ grid }: { grid: BetGridView }) {
-  const text = grid.model
+  const text = grid.live
+    ? grid.live.footer
+    : grid.model
     ? `chances pelo ${grid.model.label}${grid.model.computedAgo ? ` · calculado ${grid.model.computedAgo}` : ""}`
     : grid.mode === "register"
       ? "A chance do modelo aparece quando o cálculo do jogo rodar (a cada 6h, até 7 dias antes)."
@@ -126,10 +137,12 @@ function MarketRow({
   group,
   slip,
   marginHint,
+  live,
 }: {
   group: GridGroupView;
   slip: BetSlipContextValue | null;
   marginHint: boolean;
+  live: boolean;
 }) {
   return (
     <div className="flex flex-col gap-2 px-4 py-3">
@@ -148,6 +161,7 @@ function MarketRow({
             s={s}
             byAnalysis={group.probSource === "analysis"}
             slip={slip}
+            live={live}
           />
         ))}
       </div>
@@ -175,19 +189,39 @@ function MarketRow({
 }
 
 // Uma célula: rótulo, odd de mercado e "chance · justa". Cada número leva um rótulo pro
-// leitor de tela (três números soltos não dizem nada). Botão antes do apito, div depois.
+// leitor de tela (três números soltos não dizem nada). Botão quando registra, div no
+// resto. Ao vivo, a seleção que o placar já decidiu vira "decidido", sem botão nem
+// número (a chance seria 0% ou 100% e a odd de antes do jogo não diz mais nada).
 function SelectionCell({
   s,
   byAnalysis,
   slip,
+  live = false,
 }: {
   s: GridSelectionView;
   byAnalysis: boolean;
   slip: BetSlipContextValue | null;
+  live?: boolean;
 }) {
   const selected = slip?.selectedIds.has(s.id) ?? false;
   const muted = selected ? "text-background/70" : "text-muted-foreground";
-  const chanceLabel = byAnalysis ? "chance pela sua análise " : "chance do modelo ";
+  const chanceLabel = byAnalysis
+    ? "chance pela sua análise "
+    : live
+      ? "chance do modelo ao vivo "
+      : "chance do modelo ";
+  const base =
+    "relative flex min-h-11 flex-col items-center justify-center gap-0.5 rounded-md border px-2 py-1.5 text-center";
+  if (s.decided) {
+    return (
+      <div className={cn(base, "border-dashed border-border")}>
+        <span className="line-clamp-1 text-body-sm tracking-tight text-muted-foreground" title={s.label}>
+          {s.label}
+        </span>
+        <span className="text-meta text-muted-foreground">decidido</span>
+      </div>
+    );
+  }
   const content = (
     <>
       <span className="line-clamp-1 text-body-sm tracking-tight" title={s.label}>
@@ -195,7 +229,7 @@ function SelectionCell({
       </span>
       {s.referenceOdd !== null ? (
         <span className="font-mono text-body-sm font-medium tabular-nums">
-          <span className="sr-only">odd de mercado </span>
+          <span className="sr-only">{live ? "odd antes do jogo " : "odd de mercado "}</span>
           {formatOdd(s.referenceOdd)}
         </span>
       ) : s.fairOdd !== null ? (
@@ -237,8 +271,6 @@ function SelectionCell({
       )}
     </>
   );
-  const base =
-    "relative flex min-h-11 flex-col items-center justify-center gap-0.5 rounded-md border px-2 py-1.5 text-center";
   if (!slip) {
     return (
       <div className={cn(base, s.aiPick ? "border-edge-border" : "border-border")}>{content}</div>
@@ -274,7 +306,13 @@ function ExactScoreRow({ grid, slip }: { grid: BetGridView; slip: BetSlipContext
       {grid.topScores.length > 0 && (
         <div className="grid grid-cols-3 gap-2">
           {grid.topScores.map((s) => (
-            <SelectionCell key={s.id} s={s} byAnalysis={false} slip={slip} />
+            <SelectionCell
+              key={s.id}
+              s={s}
+              byAnalysis={false}
+              slip={slip}
+              live={grid.live !== null}
+            />
           ))}
         </div>
       )}

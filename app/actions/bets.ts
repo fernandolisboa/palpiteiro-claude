@@ -7,8 +7,16 @@ import type { BetLegParams } from "@/db/schema";
 import { parseBetText } from "@/lib/ai/bet-parse/parse";
 import { MAX_RAW_INPUT } from "@/lib/ai/bet-parse/schema";
 import { isEmailAllowed } from "@/lib/auth/whitelist";
+import {
+  isLiveSlipKind,
+  LIVE_DECIDED_COPY,
+  LIVE_KIND_COPY,
+} from "@/lib/bets/live-slip";
 import { getMatchById } from "@/lib/db/queries/matches";
 import { getUserAccessState } from "@/lib/db/queries/users";
+import { loadActionLiveContext } from "@/lib/live/action-state";
+import { matchPhase } from "@/lib/live/phase";
+import { isDecided } from "@/lib/quant/in-play";
 import { checkBetParseRateLimit } from "@/lib/rate-limit";
 import { deriveBetLegSettleable } from "@/lib/settlement/rules/user-bet-dispatch";
 import { betLegLabel, SETTLE_BADGE_PT_BR } from "@/lib/view/free-bet";
@@ -19,6 +27,10 @@ import { capabilityGateMessage } from "./not-analyzable";
 // e devolve pernas tipadas que PREENCHEM a lista do cupom (#556). Nada é registrado
 // aqui: o que entra no motor de valor é EXCLUSIVAMENTE o payload re-validado por
 // registerBetSlip (app/actions/bet-slip.ts).
+//
+// Ao vivo (#580, PLAN-580 §9.2): liberado com o mesmo gate do registro (estado relido no
+// servidor). Pernas fora da tabela ao vivo ou já decididas pelo placar não preenchem a
+// lista: viram aviso (o registro recusaria de qualquer jeito).
 
 // ── parseBet ─────────────────────────────────────────────────────────────────
 
@@ -81,10 +93,20 @@ export async function parseBet(
   if (!match) {
     return { ok: false, error: "Jogo não encontrado." };
   }
-  const notAnalyzable = capabilityGateMessage("registerBets", match);
+  const live = await loadActionLiveContext(match);
+  const notAnalyzable = capabilityGateMessage("registerBets", match, {
+    now: live.now,
+    state: live.state,
+    liveMode: live.liveMode,
+  });
   if (notAnalyzable) {
     return { ok: false, error: notAnalyzable, kind: "nao-analisavel" };
   }
+  const liveScore =
+    matchPhase(match, live.state, live.now, { liveMode: live.liveMode }).kind ===
+    "pre"
+      ? null
+      : (live.state?.score ?? null);
 
   const raw = RawInputSchema.safeParse(formData.get("text") ?? "");
   if (!raw.success) {
@@ -121,7 +143,7 @@ export async function parseBet(
     };
   }
 
-  const legs: ParsedLegChip[] = parsed.legs.map((l) => {
+  const all: ParsedLegChip[] = parsed.legs.map((l) => {
     const settleable = deriveBetLegSettleable(l.kind);
     return {
       kind: l.kind,
@@ -132,11 +154,27 @@ export async function parseBet(
       settleBadge: settleBadgeFor(l.kind, settleable),
     };
   });
+  // Ao vivo: só os tipos da tabela ao vivo e ainda em aberto pelo placar atual.
+  const liveWarnings: string[] = [];
+  const legs =
+    liveScore === null
+      ? all
+      : all.filter((l) => {
+          if (!isLiveSlipKind(l.kind, l.params)) {
+            liveWarnings.push(`${l.selectionLabel}: ${LIVE_KIND_COPY}`);
+            return false;
+          }
+          if (isDecided(l.kind, l.params as Record<string, unknown>, liveScore)) {
+            liveWarnings.push(`${l.selectionLabel}: ${LIVE_DECIDED_COPY}`);
+            return false;
+          }
+          return true;
+        });
 
   return {
     ok: true,
     legs,
-    warnings: parsed.warnings.map((w) => w.message),
+    warnings: [...parsed.warnings.map((w) => w.message), ...liveWarnings],
     rawInput: raw.data,
     parseAiCallId: parsed.aiCallId,
     comboUserOdd: parsed.comboUserOdd ?? null,

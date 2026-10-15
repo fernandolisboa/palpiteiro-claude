@@ -9,6 +9,7 @@ import {
   type PalpiteResultData,
 } from "@/db/schema";
 import { db } from "@/lib/db";
+import type { LiveStamp } from "@/lib/live/stamp";
 import { SETTLEMENT_MIN_ELAPSED_MS, type DbMatch } from "@/lib/db/queries/predictions";
 import {
   deriveSlipStatus,
@@ -60,6 +61,10 @@ export type NewBetSlip = {
   jointProbPct: number | null;
   mode?: "simples" | "combinada" | null;
   stakeUnits?: number | null;
+  // Registro feito com o jogo rolando (#580, ADR 0060 §6): o carimbo validado
+  // (`liveColumns`, lib/live/stamp.ts). Ausente = pré-jogo (CHECK no banco).
+  isLive?: boolean;
+  liveState?: LiveStamp | null;
   legs: NewBetLeg[];
 };
 
@@ -87,6 +92,8 @@ export async function insertBetSlipsBatch(
       jointProbPct: fixed(slip.jointProbPct, 2),
       mode: slip.mode ?? null,
       stakeUnits: fixed(slip.stakeUnits, 2),
+      isLive: slip.isLive ?? false,
+      liveState: slip.liveState ?? null,
     })),
   );
   const legInsert = db.insert(betLegs).values(

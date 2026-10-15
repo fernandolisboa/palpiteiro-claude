@@ -1,4 +1,4 @@
-import { and, desc, eq, inArray, sql } from "drizzle-orm";
+import { and, desc, eq, inArray, lte, sql } from "drizzle-orm";
 
 import { marketSelections, selectionOddsSnapshots } from "@/db/schema";
 import { db } from "@/lib/db";
@@ -215,11 +215,15 @@ type BatchReaderRow = {
  *
  * `sortOrder` é COLUNA do SELECT, ordenada em JS após agrupar — NUNCA no leading
  * ORDER BY (Postgres exige que o leading ORDER BY case com as colunas do DISTINCT ON).
+ *
+ * `capturedBefore` (#580, PLAN-580 achado 6): só capturas com `captured_at <=` esse
+ * instante. A tabela de mercados ao vivo passa o kickoff: a "odd antes do jogo" nunca
+ * pode ser uma odd ao vivo, mesmo que um escritor futuro grave uma depois do apito.
  */
 export async function getLatestSelectionOddsSnapshotsForMatches(
   matchIds: string[],
   dbMarketKey: string,
-  params?: { line: number },
+  params?: { line?: number; capturedBefore?: Date },
 ): Promise<Map<string, OrderedSelectionSnapshot>> {
   if (matchIds.length === 0) return new Map();
   const { marketId, keyById } = await resolveMarketCatalog(dbMarketKey);
@@ -247,10 +251,13 @@ export async function getLatestSelectionOddsSnapshotsForMatches(
       and(
         eq(selectionOddsSnapshots.marketId, marketId),
         inArray(selectionOddsSnapshots.matchId, matchIds),
-        ...(params
+        ...(params?.line !== undefined
           ? [
               sql`${selectionOddsSnapshots.marketParams}->>'line' = ${String(params.line)}`,
             ]
+          : []),
+        ...(params?.capturedBefore
+          ? [lte(selectionOddsSnapshots.capturedAt, params.capturedBefore)]
           : []),
       ),
     )
