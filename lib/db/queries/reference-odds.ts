@@ -23,10 +23,14 @@ const READS: ReadonlyArray<{
 // (janela por tempo até o jogo); o resto envelhece até a próxima análise.
 export const REFERENCE_MAX_AGE_MS = 48 * 60 * 60 * 1000;
 
+// `maxAgeMs: null` tira o corte (a tabela de mercados de um jogo que já começou mostra a
+// última captura de antes do jogo, de qualquer idade, #576). O cupom usa o default.
 export async function getReferenceOddsForMatch(
   matchId: string,
   now: Date = new Date(),
+  opts: { maxAgeMs?: number | null } = {},
 ): Promise<Map<string, ReferenceMarket>> {
+  const maxAgeMs = opts.maxAgeMs === undefined ? REFERENCE_MAX_AGE_MS : opts.maxAgeMs;
   const results = await Promise.all(
     READS.map(async (r) => {
       try {
@@ -37,7 +41,7 @@ export async function getReferenceOddsForMatch(
         );
         const snap = map.get(matchId);
         if (!snap) return null;
-        if (now.getTime() - snap.capturedAt.getTime() > REFERENCE_MAX_AGE_MS) {
+        if (maxAgeMs !== null && now.getTime() - snap.capturedAt.getTime() > maxAgeMs) {
           return null;
         }
         const odds: Record<string, number> = {};

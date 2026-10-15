@@ -338,7 +338,7 @@ export function BetSlip({ matchId, grid }: { matchId: string; grid: BetGridView 
   // aparece duas vezes no DOM só com a folha aberta no celular.
   return (
     <section ref={sectionRef} className="flex flex-col gap-3" data-tour="bet-slip">
-      <SectionHeading modelLabel={grid.modelLabel} />
+      <SectionHeading modelLabel={grid.model?.label ?? null} />
       <div className="flex flex-col gap-3 lg:grid lg:grid-cols-[minmax(0,1fr)_340px] lg:items-start lg:gap-4">
         {grid_}
         <div className="hidden lg:sticky lg:top-20 lg:block">{panel}</div>
