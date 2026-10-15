@@ -86,13 +86,13 @@ export function MatchRow({ m, last, listHref, backHref, tourTarget }: Props) {
       <div className="flex items-center justify-between gap-3">
         <div className="flex min-w-0 flex-col gap-1">
           <div className="flex items-center gap-2">
-            <TeamAvatar initials={m.home.short.slice(0, 2)} hue={m.home.hue} size={22} flagCode={m.home.flagCode} />
+            <TeamAvatar initials={m.home.short} hue={m.home.hue} size={22} flagCode={m.home.flagCode} />
             <span className="truncate text-label font-medium tracking-tight">
               {m.home.name}
             </span>
           </div>
           <div className="flex items-center gap-2">
-            <TeamAvatar initials={m.away.short.slice(0, 2)} hue={m.away.hue} size={22} flagCode={m.away.flagCode} />
+            <TeamAvatar initials={m.away.short} hue={m.away.hue} size={22} flagCode={m.away.flagCode} />
             <span className="truncate text-label font-medium tracking-tight">
               {m.away.name}
             </span>

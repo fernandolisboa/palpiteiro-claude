@@ -50,6 +50,19 @@ const LEAK_VIEW: PalpiteHeadlineView = {
   ],
 };
 
+describe("OgPalpiteImage — chip com a sigla inteira (#578)", () => {
+  it("usa as 3 letras (ATM × ATH não vira AT × AT)", () => {
+    const pieces = buildOgTextPieces(LEAK_VIEW, {
+      ...MATCH,
+      homeShort: "ATM",
+      awayShort: "ATH",
+    });
+    expect(pieces.homeInitials).toBe("ATM");
+    expect(pieces.awayInitials).toBe("ATH");
+    expect(buildOgTextPieces(LEAK_VIEW, MATCH).homeInitials).toBe("PAL");
+  });
+});
+
 describe("OgPalpiteImage — privacidade (ADR §3, render do artefato REAL)", () => {
   it("não vaza narrative, sources (título/url) nem é injetável por interpolação", () => {
     const pieces = buildOgTextPieces(LEAK_VIEW, MATCH);

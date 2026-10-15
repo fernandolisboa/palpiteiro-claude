@@ -70,11 +70,11 @@ export function UpcomingMatchesDesktop({
           </div>
           <div className="flex flex-col gap-1.5">
             <div className="flex items-center gap-2">
-              <TeamAvatar initials={m.home.short.slice(0, 2)} hue={m.home.hue} size={22} flagCode={m.home.flagCode} />
+              <TeamAvatar initials={m.home.short} hue={m.home.hue} size={22} flagCode={m.home.flagCode} />
               <span className="text-label font-medium tracking-tight">{m.home.name}</span>
             </div>
             <div className="flex items-center gap-2">
-              <TeamAvatar initials={m.away.short.slice(0, 2)} hue={m.away.hue} size={22} flagCode={m.away.flagCode} />
+              <TeamAvatar initials={m.away.short} hue={m.away.hue} size={22} flagCode={m.away.flagCode} />
               <span className="text-label font-medium tracking-tight">{m.away.name}</span>
             </div>
             {/* Base do modelo (#555): só probabilidade, abaixo dos nomes. */}

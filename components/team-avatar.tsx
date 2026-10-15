@@ -10,6 +10,17 @@ type Props = {
   flagCode?: string;
 };
 
+// Piso de 11px (ADR 0056, #578): a fonte do monograma nunca fica abaixo de 11px.
+// Se a sigla não cabe no círculo a 11px, devolve null e o círculo sai só com a cor
+// (é aria-hidden; o nome do time está ao lado). 0,75em é a largura de maiúscula do
+// Geist Sans médio com folga (M/W largos de "MUN", "NEW"); 6px de respiro na borda.
+export const MONOGRAM_MIN_FONT_PX = 11;
+
+export function monogramFontPx(size: number, chars: number): number | null {
+  const font = Math.max(MONOGRAM_MIN_FONT_PX, Math.round(size * 0.36));
+  return chars * font * 0.75 <= size - 6 ? font : null;
+}
+
 export function TeamAvatar({
   initials,
   hue,
@@ -37,6 +48,7 @@ export function TeamAvatar({
       />
     );
   }
+  const fontPx = monogramFontPx(size, initials.length);
   return (
     <div
       aria-hidden="true"
@@ -51,11 +63,10 @@ export function TeamAvatar({
         // (identidade estável). Light = 0.32/0.88 (paridade); só o dark é novo.
         background: `oklch(var(--ta-bg-l) 0.04 ${hue})`,
         color: `oklch(var(--ta-fg-l) 0.04 ${hue})`,
-        fontSize: size * 0.36,
-        letterSpacing: "-0.02em",
+        ...(fontPx === null ? {} : { fontSize: fontPx, letterSpacing: "-0.02em" }),
       }}
     >
-      {initials}
+      {fontPx === null ? null : initials}
     </div>
   );
 }

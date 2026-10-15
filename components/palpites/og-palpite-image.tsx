@@ -36,17 +36,18 @@ export type OgTextPieces = {
   confidence: string;
   // "Mandante x Visitante".
   teams: string;
-  // Iniciais (≤2) de cada time pro chip (flags não rasterizam no Satori).
+  // Sigla (3 letras, #578) de cada time pro chip (flags não rasterizam no Satori).
   homeInitials: string;
   awayInitials: string;
   // A tira de disclaimer comprimida (18+ · …).
   disclaimer: string;
 };
 
-// Iniciais ≤2 de um nome de time — Satori não rasteriza /flags/*.svg, então o chip é
-// iniciais sRGB. Fallback robusto pra string vazia (nunca deve acontecer).
+// Sigla inteira do time (até 3 letras, #578: "AT" juntava Atlético e Athletic) —
+// Satori não rasteriza /flags/*.svg, então o chip é texto sRGB (cabe no chip de 96px
+// com fonte 40). Fallback robusto pra string vazia (nunca deve acontecer).
 function initialsOf(short: string): string {
-  return short.replace(/[^A-Za-z0-9]/g, "").slice(0, 2).toUpperCase() || "··";
+  return short.replace(/[^A-Za-z0-9]/g, "").slice(0, 3).toUpperCase() || "··";
 }
 
 // Monta as peças de texto da imagem a partir da view + nomes/short de time já resolvidos.
