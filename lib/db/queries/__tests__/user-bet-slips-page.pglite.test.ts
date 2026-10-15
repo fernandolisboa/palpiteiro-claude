@@ -12,6 +12,7 @@ import { afterAll, beforeAll, beforeEach, describe, expect, it, vi } from "vites
 
 import * as schema from "@/db/schema";
 import { slipBucket } from "@/lib/bets/slip-ledger";
+import { buildLiveStamp, readLiveStamp } from "@/lib/live/stamp";
 
 let realDb: PgliteDatabase<typeof schema>;
 let client: PGlite;
@@ -67,6 +68,7 @@ async function seedSlip(args: {
   jointProbPct?: string | null;
   mode?: "simples" | "combinada" | null;
   stakeUnits?: string | null;
+  isLive?: boolean;
 }): Promise<string> {
   const [s] = await realDb
     .insert(schema.betSlips)
@@ -79,6 +81,22 @@ async function seedSlip(args: {
       jointProbPct: args.jointProbPct ?? null,
       mode: args.mode ?? null,
       stakeUnits: args.stakeUnits ?? null,
+      ...(args.isLive
+        ? {
+            isLive: true,
+            liveState: buildLiveStamp({
+              source: "api_football",
+              status: "2H",
+              elapsed: 63,
+              extra: null,
+              minuteLabel: "63'",
+              score: { home: 1, away: 0 },
+              red: null,
+              fetchedAt: new Date("2026-05-20T11:00:00Z"),
+              recordedAt: new Date("2026-05-20T11:00:20Z"),
+            }),
+          }
+        : {}),
       ...(args.createdAt ? { createdAt: args.createdAt } : {}),
     })
     .returning({ id: schema.betSlips.id });
@@ -418,6 +436,24 @@ describe("getUserBetSlipLedger (#577)", () => {
     expect(over.get(stale)).toBe(true);
     expect(over.get(recent)).toBe(false);
     expect(rows.every((r) => Number(r.legs[0].stakeUnits) === 1)).toBe(true);
+  });
+
+  it("isLive do slip (#580): o resumo separa as ao vivo", async () => {
+    const matchId = await seedMatch("ext-l-live", {
+      kickoffAt: new Date("2026-05-20T10:00:00Z"),
+    });
+    const pre = await seedSlip({ matchId, userId: ids.userId });
+    await seedLeg({ slipId: pre, params: { selection: "home" } });
+    const live = await seedSlip({ matchId, userId: ids.userId, isLive: true });
+    await seedLeg({ slipId: live, params: { selection: "home" } });
+    const rows = await getUserBetSlipLedger(ids.userId, NOW);
+    const byId = new Map(rows.map((r) => [r.id, r.isLive]));
+    expect(byId.get(pre)).toBe(false);
+    expect(byId.get(live)).toBe(true);
+    const page = await getUserBetSlipsPage({ userId: ids.userId });
+    const liveRow = page.slips.find((sl) => sl.id === live);
+    expect(liveRow?.isLive).toBe(true);
+    expect(readLiveStamp(liveRow?.liveState)?.minuteLabel).toBe("63'");
   });
 
   it("jogo adiado não acaba por tempo: não conferida segue em aberto", async () => {

@@ -1,8 +1,11 @@
 import { describe, expect, it } from "vitest";
 
+import { buildLiveStamp } from "@/lib/live/stamp";
+
 import {
   formatLiveAge,
   liveMomentLabel,
+  liveStampLabel,
   toLiveScoreView,
   type LiveScoreInput,
 } from "@/lib/view/live-score";
@@ -98,5 +101,41 @@ describe("toLiveScoreView", () => {
     );
     expect(v?.ended).toBe(true);
     expect(v?.caption).toBe("fim de jogo · atualizado há 20 s");
+  });
+});
+
+describe("liveStampLabel (selo do registro ao vivo)", () => {
+  const base = {
+    source: "api_football" as const,
+    status: "2H",
+    elapsed: 63,
+    extra: null,
+    minuteLabel: "63'",
+    score: { home: 1, away: 0 },
+    red: null,
+    fetchedAt: NOW,
+    recordedAt: NOW,
+  };
+
+  it("minuto e placar do momento do registro", () => {
+    expect(liveStampLabel(buildLiveStamp(base))).toBe("ao vivo · 63' · 1–0");
+  });
+
+  it("intervalo; carimbo de relógio sem placar", () => {
+    expect(
+      liveStampLabel(buildLiveStamp({ ...base, status: "HT", minuteLabel: null }))
+    ).toBe("ao vivo · intervalo · 1–0");
+    expect(
+      liveStampLabel(
+        buildLiveStamp({
+          ...base,
+          source: "clock",
+          status: null,
+          minuteLabel: null,
+          score: null,
+          fetchedAt: null,
+        })
+      )
+    ).toBe("ao vivo");
   });
 });

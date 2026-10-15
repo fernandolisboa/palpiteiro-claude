@@ -190,6 +190,32 @@ describe("SlipCard (/apostas, #577)", () => {
   });
 });
 
+describe("SlipCard ao vivo (#580)", () => {
+  const stamp = {
+    v: 1,
+    source: "api_football",
+    status: "2H",
+    elapsed: 63,
+    extra: null,
+    minuteLabel: "63'",
+    score: { home: 1, away: 0 },
+    red: null,
+    fetchedAt: "2026-10-15T22:50:00.000Z",
+    recordedAt: "2026-10-15T22:50:20.000Z",
+  };
+
+  it("selo com o minuto e o placar do registro", () => {
+    const html = render(slip([leg()], { isLive: true, liveState: stamp }));
+    expect(html).toContain("ao vivo · 63&#x27; · 1–0");
+  });
+
+  it("carimbo ilegível: só 'ao vivo'; pré-jogo: sem selo", () => {
+    const bad = render(slip([leg()], { isLive: true, liveState: { v: 9 } }));
+    expect(bad).toContain(">ao vivo<");
+    expect(render(slip([leg()]))).not.toContain("ao vivo");
+  });
+});
+
 function wonOutcome(): UserBetLegRow["outcome"] {
   return {
     id: "o1",

@@ -40,6 +40,8 @@ export type SlipLedgerRow = {
   // cobre o jogo cujo status o cron ainda não virou (ou nunca vira). Adiado nunca
   // acaba por tempo.
   matchOver: boolean;
+  // Registrada com o jogo rolando (#580): fora do resumo de pré-jogo (PLAN-580 §11).
+  isLive: boolean;
   legs: SlipLedgerLeg[];
 };
 
@@ -93,50 +95,84 @@ export function resolveSlipFilter(raw: string | undefined, hasOpen: boolean): Sl
   return hasOpen ? "abertas" : "encerradas";
 }
 
-export type SlipLedgerSummary = {
-  open: number;
-  closed: number;
+// Acertos e saldo de um recorte (pré-jogo ou ao vivo).
+export type SlipReturnSummary = {
   won: number;
   lost: number;
   settledWithStake: number;
   settledWithoutStake: number;
   balanceUnits: number;
+};
+
+export type SlipLedgerSummary = SlipReturnSummary & {
+  // Em aberto / Encerradas contam TODAS (as listas mostram as ao vivo com selo).
+  open: number;
+  closed: number;
   openIds: string[];
   closedIds: string[];
+  // Retorno das ao vivo, em linha SEPARADA (#580, PLAN-580 §11): os números de cima
+  // (acertos, saldo) são só de pré-jogo. null sem nenhuma aposta ao vivo.
+  live: (SlipReturnSummary & { total: number }) | null;
 };
+
+type ReturnAcc = {
+  won: number;
+  lost: number;
+  settledWithStake: number;
+  settledWithoutStake: number;
+  balance: number;
+};
+
+const emptyAcc = (): ReturnAcc => ({
+  won: 0,
+  lost: 0,
+  settledWithStake: 0,
+  settledWithoutStake: 0,
+  balance: 0,
+});
+
+function addReturn(acc: ReturnAcc, row: SlipLedgerRow): void {
+  const status = deriveSlipStatus(row.legs);
+  if (status !== "acertou" && status !== "errou") return;
+  if (status === "acertou") acc.won += 1;
+  else acc.lost += 1;
+  const profit = slipProfitUnits(row);
+  if (profit === null) {
+    acc.settledWithoutStake += 1;
+  } else {
+    acc.settledWithStake += 1;
+    acc.balance += profit;
+  }
+}
+
+function toReturn(acc: ReturnAcc): SlipReturnSummary {
+  return {
+    won: acc.won,
+    lost: acc.lost,
+    settledWithStake: acc.settledWithStake,
+    settledWithoutStake: acc.settledWithoutStake,
+    // Arredonda a soma no fim, não por slip (o `+ 0` tira o -0 de um saldo ~zero).
+    balanceUnits: Math.round(acc.balance * 100) / 100 + 0,
+  };
+}
 
 export function summarizeSlipLedger(rows: readonly SlipLedgerRow[]): SlipLedgerSummary {
   const openIds: string[] = [];
   const closedIds: string[] = [];
-  let won = 0;
-  let lost = 0;
-  let settledWithStake = 0;
-  let settledWithoutStake = 0;
-  let balance = 0;
+  const pre = emptyAcc();
+  const live = emptyAcc();
+  let liveTotal = 0;
   for (const row of rows) {
     (slipBucket(row) === "open" ? openIds : closedIds).push(row.id);
-    const status = deriveSlipStatus(row.legs);
-    if (status !== "acertou" && status !== "errou") continue;
-    if (status === "acertou") won += 1;
-    else lost += 1;
-    const profit = slipProfitUnits(row);
-    if (profit === null) {
-      settledWithoutStake += 1;
-    } else {
-      settledWithStake += 1;
-      balance += profit;
-    }
+    if (row.isLive) liveTotal += 1;
+    addReturn(row.isLive ? live : pre, row);
   }
   return {
     open: openIds.length,
     closed: closedIds.length,
-    won,
-    lost,
-    settledWithStake,
-    settledWithoutStake,
-    // Arredonda a soma no fim, não por slip (o `+ 0` tira o -0 de um saldo ~zero).
-    balanceUnits: Math.round(balance * 100) / 100 + 0,
+    ...toReturn(pre),
     openIds,
     closedIds,
+    live: liveTotal === 0 ? null : { total: liveTotal, ...toReturn(live) },
   };
 }

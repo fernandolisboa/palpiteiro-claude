@@ -1,5 +1,6 @@
 import { isLiveStateShowable, liveStateAgeMs } from "@/lib/live/freshness";
 import { classifyStatusShort, type LiveStateInput } from "@/lib/live/phase";
+import type { LiveStamp } from "@/lib/live/stamp";
 
 // Placar ao vivo de tela (#580, PLAN-580 §13), a partir do estado lido em
 // `match_live_states` (o InPlayState da página ou a row das listas). PURO: a idade é
@@ -84,4 +85,19 @@ export function toLiveScoreView(
     red,
     ended: classifyStatusShort(state.statusShort) === "finished",
   };
+}
+
+/**
+ * Selo de um registro ao vivo (#580): "ao vivo · 63' · 1–0", o momento CONGELADO no
+ * carimbo (nunca o estado de agora). Sem minuto ou placar no carimbo, a parte some.
+ */
+export function liveStampLabel(stamp: LiveStamp): string {
+  const moment =
+    stamp.status === null
+      ? stamp.minuteLabel
+      : liveMomentLabel({ statusShort: stamp.status, minuteLabel: stamp.minuteLabel });
+  const parts = ["ao vivo"];
+  if (moment) parts.push(moment);
+  if (stamp.score) parts.push(`${stamp.score.home}–${stamp.score.away}`);
+  return parts.join(" · ");
 }

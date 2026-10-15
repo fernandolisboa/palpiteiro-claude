@@ -15,6 +15,7 @@ function summary(over: Partial<SlipLedgerSummary> = {}): SlipLedgerSummary {
     balanceUnits: 2.35,
     openIds: [],
     closedIds: [],
+    live: null,
     ...over,
   };
 }
@@ -64,5 +65,40 @@ describe("SlipsSummary (/apostas, #577)", () => {
     expect(render(summary({ settledWithoutStake: 2 }))).toContain(
       "apostas sem stake não entram no saldo",
     );
+  });
+
+  it("sem ao vivo: nenhuma linha ao vivo", () => {
+    expect(render(summary())).not.toContain("ao vivo");
+  });
+
+  it("ao vivo (#580): linha separada, com acertos e saldo próprios", () => {
+    const live = {
+      total: 3,
+      won: 1,
+      lost: 1,
+      settledWithStake: 2,
+      settledWithoutStake: 0,
+      balanceUnits: -0.4,
+    };
+    const html = render(summary({ live }));
+    expect(html).toContain("ao vivo, fora dos números acima:");
+    expect(html).toMatch(/>1<\/span> de <span[^>]*>2<\/span> acertos/);
+    expect(html).toContain("-0,40 u");
+    // O saldo de cima continua o de pré-jogo.
+    expect(balanceCell(html)).toContain("+2,35 u");
+  });
+
+  it("ao vivo sem liquidadas: só a contagem", () => {
+    const live = {
+      total: 1,
+      won: 0,
+      lost: 0,
+      settledWithStake: 0,
+      settledWithoutStake: 0,
+      balanceUnits: 0,
+    };
+    const html = render(summary({ live }));
+    expect(html).toMatch(/>1<\/span> aposta, sem resultado ainda/);
+    expect(html).not.toContain("+0,00 u");
   });
 });

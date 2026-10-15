@@ -265,6 +265,7 @@ export async function getUserBetSlipLedger(
       mode: betSlips.mode,
       slipStake: betSlips.stakeUnits,
       comboUserOdd: betSlips.comboUserOdd,
+      isLive: betSlips.isLive,
       matchStatus: matches.status,
       kickoffAt: matches.kickoffAt,
       legId: betLegs.id,
@@ -295,6 +296,7 @@ export async function getUserBetSlipLedger(
           r.matchStatus === "finished" ||
           r.matchStatus === "cancelled" ||
           (r.matchStatus !== "postponed" && r.kickoffAt.getTime() < cutoff),
+        isLive: r.isLive,
         legs: [],
       };
       bySlip.set(r.slipId, slip);
