@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect } from "react";
+import { useEffect, useState } from "react";
 import { createPortal } from "react-dom";
 import { Ticket } from "lucide-react";
 
@@ -32,6 +32,9 @@ export function SlipMobileBar() {
   const slip = useBetSlip();
   const sheetOpen = slip?.sheetOpen ?? false;
   const setSheetOpen = slip?.setSheetOpen;
+  // O portal do espaçador só depois de montar: no servidor não existe `document`.
+  const [mounted, setMounted] = useState(false);
+  useEffect(() => setMounted(true), []);
 
   // A folha é só do celular: se a tela cruza pro desktop com ela aberta (girou o
   // tablet, esticou a janela), fecha; o painel já está na coluna.
@@ -65,9 +68,10 @@ export function SlipMobileBar() {
         </div>
       )}
       {/* Espaço pra barra não cobrir o fim da página: no fim do <body> (depois do
-          rodapé), com a altura exata da barra. Só existe no cliente, depois de a lista
-          ganhar uma seleção (no SSR a barra nunca aparece). */}
+          rodapé), com a altura exata da barra. Só existe no cliente montado, depois de a
+          lista ganhar uma seleção. */}
       {visible &&
+        mounted &&
         createPortal(<div aria-hidden className={BAR_CLEARANCE} />, document.body)}
       <Sheet open={slip.sheetOpen} onOpenChange={slip.setSheetOpen}>
         <SheetContent side="bottom" className="max-h-[88vh] overflow-y-auto p-0">

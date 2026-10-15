@@ -253,6 +253,10 @@ describe("SeuPalpite — ponte com Suas apostas", () => {
     expect(text).toContain("Adicionado em Suas apostas.");
     expect(text).toContain("suas apostas (1)");
     expect(text).toContain("Placar exato: Flamengo 2 × 0 Palmeiras");
+    // A barra do celular aparece e, já montada, põe o espaçador no fim do <body>.
+    expect(
+      document.body.querySelector('div[aria-hidden="true"][class^="h-[calc(3.0625rem"]'),
+    ).not.toBeNull();
   });
 
   it("adicionar de novo não diz 'adicionado': avisa que já está (#564 review)", async () => {
