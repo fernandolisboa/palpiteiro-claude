@@ -114,7 +114,8 @@ export type PoolLiveViewOptions = {
 
 /**
  * Prazo das apostas ABERTAS, para o selo e o cabeçalho do detalhe (#580, PLAN-580 §10):
- * "estendido até 17:40" (extensão do admin), "fecham aos 15'" (ao vivo com minuto, ou
+ * "estendidas até 17:40" (extensão do admin; concorda com "apostas" no cabeçalho do
+ * detalhe, "apostas estendidas até 17:40"), "fecham aos 15'" (ao vivo com minuto, ou
  * nas últimas 3h antes do apito com o modo ao vivo), "fecham em 8 min" (ao vivo pelo
  * relógio), "fecham em 2h 10min" (flag desligada, últimas 3h antes do apito, como
  * antes). undefined = aberto sem prazo próximo. Só faz sentido com `poolBetsOpen`.
@@ -127,7 +128,7 @@ export function poolBetsDeadlineLabel(
 ): string | undefined {
   const live = { liveMode };
   if (pool.betsExtendedUntil && poolExtensionActive(pool, match, state, now, live)) {
-    return `estendido até ${formatTimeOfDay(pool.betsExtendedUntil, timeZone)}`;
+    return `estendidas até ${formatTimeOfDay(pool.betsExtendedUntil, timeZone)}`;
   }
   const window = poolWindow(match, state, now, live);
   switch (window.kind) {
@@ -150,8 +151,8 @@ export function poolBetsDeadlineLabel(
 /**
  * Selo do bolão na lista (#577). Aberto em destaque; com prazo perto (últimas 3h antes
  * do apito, ou ao vivo), âmbar com o prazo. Sem a data no selo: a linha do bolão já
- * mostra data e hora do jogo. Placar, adiado, cancelado, "fechadas pelo dono" e
- * "esperando o placar" ficam neutros.
+ * mostra data e hora do jogo. Placar, adiado, cancelado, "fechadas por você" (a lista
+ * é só do dono) e "esperando o placar" ficam neutros.
  */
 export function poolStatusView(
   row: PoolStatusRow,
@@ -162,7 +163,7 @@ export function poolStatusView(
   if (score) return { label: `placar ${score.home} × ${score.away}`, tone: "neutral" };
   if (row.match.status === "postponed") return { label: "jogo adiado", tone: "neutral" };
   if (row.match.status === "cancelled") return { label: "jogo cancelado", tone: "neutral" };
-  if (poolClosedByOwner(row.pool, now)) return { label: "fechadas pelo dono", tone: "neutral" };
+  if (poolClosedByOwner(row.pool, now)) return { label: "fechadas por você", tone: "neutral" };
   const live = { liveMode: opts.liveMode ?? false };
   if (poolBetsOpen(row.pool, row.match, opts.state ?? null, now, live)) {
     const deadline = poolBetsDeadlineLabel(row.pool, row.match, now, opts);

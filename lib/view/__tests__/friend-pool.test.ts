@@ -207,18 +207,18 @@ describe("selos do bolão ao vivo (#580)", () => {
     ).toBe("fecham em 1 min");
   });
 
-  it("dono fechou: 'fechadas pelo dono', neutro (antes ou depois do apito)", () => {
+  it("dono fechou: 'fechadas por você', neutro (antes ou depois do apito)", () => {
     const pool = { ...noManual, betsClosedAt: at(-20) };
     expect(poolStatusView({ pool, match: scheduled }, at(-10), { liveMode: true })).toEqual({
-      label: "fechadas pelo dono",
+      label: "fechadas por você",
       tone: "neutral",
     });
     expect(poolStatusView({ pool, match: scheduled }, at(30), { liveMode: true }).label).toBe(
-      "fechadas pelo dono",
+      "fechadas por você",
     );
   });
 
-  it("admin estendeu: 'estendido até 17:40' no fuso do usuário", () => {
+  it("admin estendeu: 'estendidas até 17:40' no fuso do usuário", () => {
     const pool = { ...noManual, betsExtendedUntil: new Date("2026-10-18T20:40:00Z") };
     expect(
       poolStatusView({ pool, match: scheduled }, at(60), {
@@ -226,7 +226,7 @@ describe("selos do bolão ao vivo (#580)", () => {
         state: live("2H", 58, at(60)),
         timeZone: TZ,
       }),
-    ).toEqual({ label: "estendido até 17:40", tone: "soon" });
+    ).toEqual({ label: "estendidas até 17:40", tone: "soon" });
   });
 
   it("estendido mas o jogo acabou: esperando o placar", () => {

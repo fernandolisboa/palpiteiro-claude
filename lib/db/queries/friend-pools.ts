@@ -105,8 +105,8 @@ export async function insertFriendPoolEntry(input: {
 }
 
 /**
- * "Fechar apostas" do dono (#580): grava `bets_closed_at` e limpa a extensão. Só
- * fecha; reabrir é só pela extensão do admin.
+ * "Fechar apostas" do dono (#580): grava `bets_closed_at` e limpa a extensão (prazo e
+ * quem estendeu). Só fecha; reabrir é só pela extensão do admin.
  */
 export async function setFriendPoolBetsClosed(input: {
   poolId: string;
@@ -115,7 +115,12 @@ export async function setFriendPoolBetsClosed(input: {
 }): Promise<boolean> {
   const rows = await db
     .update(friendPools)
-    .set({ betsClosedAt: input.now, betsExtendedUntil: null, updatedAt: input.now })
+    .set({
+      betsClosedAt: input.now,
+      betsExtendedUntil: null,
+      betsExtendedByUserId: null,
+      updatedAt: input.now,
+    })
     .where(and(eq(friendPools.id, input.poolId), eq(friendPools.userId, input.userId)))
     .returning({ id: friendPools.id });
   return rows.length > 0;

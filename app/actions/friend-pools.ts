@@ -36,7 +36,9 @@ import {
   poolEntriesRemovable,
   poolExtendable,
   poolExtensionUntil,
+  poolHasResult,
   poolManualScoreAllowed,
+  poolOwnerClosable,
   poolWindowOpen,
   type PoolExtendPreset,
 } from "@/lib/pools/pool-state";
@@ -206,9 +208,11 @@ export async function addFriendPoolEntry(
   if (!poolBetsOpen(pool.pool, pool.match, ctx.state, now, { liveMode: ctx.liveMode })) {
     return {
       ok: false,
-      error: ctx.liveMode
-        ? "As apostas deste bolão fecharam."
-        : "O jogo já começou: as apostas deste bolão fecharam.",
+      error: poolHasResult(pool.pool, pool.match)
+        ? "Este bolão já tem resultado: não entram mais apostas."
+        : ctx.liveMode
+          ? "As apostas deste bolão fecharam."
+          : "O jogo já começou: as apostas deste bolão fecharam.",
     };
   }
   if (pool.entries.length >= MAX_ENTRIES_PER_POOL) {
@@ -273,7 +277,8 @@ export async function setFriendPoolScore(
 }
 
 // "Fechar apostas" do dono (#580, ADR 0060 §7): só fecha, nunca reabre. Só o dono
-// chega aqui (getFriendPool filtra por userId) e só com as apostas abertas.
+// chega aqui (getFriendPool filtra por userId), só com as apostas abertas e só com o
+// modo ao vivo (flag desligada = como antes, sem o controle).
 export async function closeFriendPoolBets(formData: FormData): Promise<void> {
   const poolId = IdSchema.safeParse(field(formData, "poolId"));
   if (!poolId.success) return;
@@ -283,7 +288,9 @@ export async function closeFriendPoolBets(formData: FormData): Promise<void> {
   if (!pool) return;
   const now = new Date();
   const ctx = await readPoolLiveContext(pool.match, now);
-  if (!poolBetsOpen(pool.pool, pool.match, ctx.state, now, { liveMode: ctx.liveMode })) return;
+  if (!poolOwnerClosable(pool.pool, pool.match, ctx.state, now, { liveMode: ctx.liveMode })) {
+    return;
+  }
   await setFriendPoolBetsClosed({ poolId: poolId.data, userId, now });
   revalidatePath(`/bolao/${poolId.data}`);
   revalidatePath("/bolao");
@@ -296,7 +303,8 @@ const ExtendMinutesSchema = z.coerce
 
 // "Estender prazo" do admin (#580, ADR 0060 §7): +15/+30/+60 min a partir de agora,
 // teto apito + 3h. Só nos bolões do PRÓPRIO admin: getFriendPool filtra pelo userId da
-// sessão, e não existe tela de admin de bolões alheios. Limpa o "fechar" do dono.
+// sessão, e não existe tela de admin de bolões alheios. Limpa o "fechar" do dono. Só
+// depois do apito e sem resultado no bolão (`poolExtendable`).
 export async function extendFriendPoolBets(formData: FormData): Promise<void> {
   const poolId = IdSchema.safeParse(field(formData, "poolId"));
   const minutes = ExtendMinutesSchema.safeParse(field(formData, "minutes"));
@@ -307,7 +315,7 @@ export async function extendFriendPoolBets(formData: FormData): Promise<void> {
   if (!pool) return;
   const now = new Date();
   const ctx = await readPoolLiveContext(pool.match, now);
-  if (!poolExtendable(pool.match, ctx.state, now, { liveMode: ctx.liveMode })) return;
+  if (!poolExtendable(pool.pool, pool.match, ctx.state, now, { liveMode: ctx.liveMode })) return;
   const until = poolExtensionUntil(pool.match, now, minutes.data as PoolExtendPreset);
   if (!until) return;
   await setFriendPoolBetsExtended({ poolId: poolId.data, userId: user.id, until, now });

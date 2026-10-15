@@ -202,9 +202,10 @@ describe("friend_pools (pglite)", () => {
     expect(pool.betsExtendedUntil).toEqual(until);
     expect(pool.betsExtendedByUserId).toBe(owner);
 
-    // Fechar depois de estender limpa a extensão.
+    // Fechar depois de estender limpa a extensão (prazo e quem estendeu).
     await setFriendPoolBetsClosed({ poolId, userId: owner, now: later });
     pool = (await getFriendPool(poolId, owner))!.pool;
     expect(pool.betsExtendedUntil).toBeNull();
+    expect(pool.betsExtendedByUserId).toBeNull();
   });
 });

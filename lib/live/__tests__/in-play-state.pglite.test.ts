@@ -36,9 +36,16 @@ vi.mock("@/lib/db", () => ({
   ),
 }));
 
-const flag = vi.hoisted(() => ({ liveMode: true }));
+const flag = vi.hoisted(() => ({ liveMode: true, throwOnce: false, calls: 0 }));
 vi.mock("@/lib/db/queries/ai-config", () => ({
-  getEnableLiveMode: vi.fn(async () => flag.liveMode),
+  getEnableLiveMode: vi.fn(async () => {
+    flag.calls++;
+    if (flag.throwOnce) {
+      flag.throwOnce = false;
+      throw new Error("db down");
+    }
+    return flag.liveMode;
+  }),
 }));
 
 // Guarda (§5.3): nenhum caminho ao vivo toca a The Odds API.
@@ -176,6 +183,8 @@ afterAll(async () => {
 
 beforeEach(() => {
   flag.liveMode = true;
+  flag.throwOnce = false;
+  flag.calls = 0;
   fake = installProvider();
   warn = vi.spyOn(console, "warn").mockImplementation(() => {});
   fetchSpy = vi.spyOn(globalThis, "fetch");
@@ -463,6 +472,24 @@ describe("getInPlayState: busca", () => {
     expect(fake.getLiveState).toHaveBeenCalledTimes(1);
     expect(a).toEqual(b);
     expect(a?.elapsed).toBe(30);
+  });
+
+  it("leitura em voo que falha: sai do mapa e a chamada seguinte busca de novo", async () => {
+    const m = await newMatch();
+    const now = at(30 * MIN);
+    flag.throwOnce = true;
+    const first = getInPlayState(m, { now });
+    const joined = getInPlayState(m, { now });
+    await expect(first).rejects.toThrow("db down");
+    await expect(joined).rejects.toThrow("db down");
+    // As duas dividiram a mesma leitura (coalescência), que falhou antes da busca.
+    expect(flag.calls).toBe(1);
+    expect(fake.getLiveState).not.toHaveBeenCalled();
+
+    const later = await getInPlayState(m, { now });
+    expect(flag.calls).toBe(2);
+    expect(fake.getLiveState).toHaveBeenCalledTimes(1);
+    expect(later?.elapsed).toBe(30);
   });
 });
 

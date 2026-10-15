@@ -35,6 +35,7 @@ import {
   poolExtendable,
   poolLiveStateWanted,
   poolManualScoreAllowed,
+  poolOwnerClosable,
 } from "@/lib/pools/pool-state";
 import { computePoolOutcome, formatBrl, resolvePoolScore } from "@/lib/pools/winners";
 import { getRequestTimeZone } from "@/lib/server/request-timezone";
@@ -62,7 +63,7 @@ type PageProps = { params: Promise<{ id: string }> };
  * Estado ao vivo do jogo do bolão (#580, PLAN-580 §10). Antes do apito, ou com a flag
  * desligada, nenhum. Depois, lê a row (sem buscar) e só chama `getInPlayState` (que
  * pode ir à API-Football, cache de 1 min) enquanto o bolão ainda pode estar aberto.
- * Falha não derruba a página: as regras caem no relógio.
+ * Falha não derruba a página: sem a busca, fica a row; sem row, as regras caem no relógio.
  */
 async function poolInPlayState(
   detail: FriendPoolDetail,
@@ -73,12 +74,18 @@ async function poolInPlayState(
   if (!liveMode || matchUnavailableReason(match.status, match.kickoffAt, now) === null) {
     return null;
   }
+  let row: InPlayState | null;
   try {
-    const row = (await getInPlayStatesForMatches([match.id], { now })).get(match.id) ?? null;
-    if (!poolLiveStateWanted(pool, match, row, now, { liveMode })) return row;
-    return (await getInPlayState(match, { now })) ?? row;
+    row = (await getInPlayStatesForMatches([match.id], { now })).get(match.id) ?? null;
   } catch {
     return null;
+  }
+  if (!poolLiveStateWanted(pool, match, row, now, { liveMode })) return row;
+  try {
+    return (await getInPlayState(match, { now })) ?? row;
+  } catch {
+    // A busca falhou: fica a row que já foi lida (as regras extrapolam a idade dela).
+    return row;
   }
 }
 
@@ -109,7 +116,7 @@ export default async function BolaoDetailPage({ params }: PageProps) {
   const removable = poolEntriesRemovable(match, now);
   const scoreAllowed = poolManualScoreAllowed(pool, match, state, now, live);
   const closedByOwner = poolClosedByOwner(pool, now);
-  // Prazo das apostas abertas: "fecham aos 15'", "fecham em 8 min", "estendido até 17:40".
+  // Prazo das apostas abertas: "fecham aos 15'", "fecham em 8 min", "estendidas até 17:40".
   const deadline = open
     ? poolBetsDeadlineLabel(pool, match, now, { liveMode, state, timeZone })
     : undefined;
@@ -130,13 +137,11 @@ export default async function BolaoDetailPage({ params }: PageProps) {
     const label = poolWinnerStampLabel(e, match.kickoffAt);
     return label ? [{ id: e.id, name: e.bettorName, label }] : [];
   });
+  // "Fechar apostas" (dono): só com o modo ao vivo; flag desligada = como antes.
+  const canClose = poolOwnerClosable(pool, match, state, now, live);
   // "Estender prazo" (ADR 0060 §7): admin, no próprio bolão (só o dono abre esta
-  // página), depois do apito, jogo não terminado e antes do teto de apito + 3h.
-  const canExtend =
-    session.user.role === "admin" &&
-    !removable &&
-    !outcome.settled &&
-    poolExtendable(match, state, now, live);
+  // página), depois do apito, sem resultado, jogo não terminado e antes do apito + 3h.
+  const canExtend = session.user.role === "admin" && poolExtendable(pool, match, state, now, live);
 
   return (
     <div className="bg-background text-foreground">
@@ -211,7 +216,7 @@ export default async function BolaoDetailPage({ params }: PageProps) {
               ? "Jogo adiado. As apostas ficam guardadas; quando ele for jogado, lance o placar aqui."
               : match.status === "cancelled"
                 ? "Jogo cancelado. Não há resultado pra conferir."
-                : `${closedByOwner ? "Apostas fechadas pelo dono." : "Apostas fechadas."} Quando o jogo acabar, o placar aparece aqui sozinho (a atualização roda a cada poucas horas)${scoreAllowed ? ", ou lance o placar abaixo" : ""}.`}
+                : `${closedByOwner ? "Você fechou as apostas." : "Apostas fechadas."} Quando o jogo acabar, o placar aparece aqui sozinho (a atualização roda a cada poucas horas)${scoreAllowed ? ", ou lance o placar abaixo" : ""}.`}
           </p>
         )}
 
@@ -288,7 +293,7 @@ export default async function BolaoDetailPage({ params }: PageProps) {
           </Card>
         )}
 
-        {open && !outcome.settled && (
+        {canClose && (
           <details className="mb-8">
             <summary className="text-muted-foreground cursor-pointer text-meta uppercase tracking-label hover:text-foreground">
               fechar apostas

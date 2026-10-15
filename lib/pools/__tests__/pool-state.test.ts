@@ -7,9 +7,11 @@ import {
   poolEntriesRemovable,
   poolExtendable,
   poolExtensionUntil,
+  poolHasResult,
   poolLiveStateWanted,
   poolManualScoreAllowed,
   poolMatchEnded,
+  poolOwnerClosable,
   poolWindow,
   poolWindowOpen,
 } from "@/lib/pools/pool-state";
@@ -206,10 +208,39 @@ describe("extensão do admin: prazo e teto", () => {
   });
 
   it("poolExtendable: flag ligada, jogo não terminado, antes do teto", () => {
-    expect(poolExtendable(match(), state("2H", 60, at(60)), at(60), LIVE)).toBe(true);
-    expect(poolExtendable(match(), state("FT", 90, at(110)), at(110), LIVE)).toBe(false);
-    expect(poolExtendable(match(), null, at(180), LIVE)).toBe(false);
-    expect(poolExtendable(match(), null, at(30), OFF)).toBe(false);
+    expect(poolExtendable(noControls, match(), state("2H", 60, at(60)), at(60), LIVE)).toBe(true);
+    expect(poolExtendable(noControls, match(), state("FT", 90, at(110)), at(110), LIVE)).toBe(
+      false,
+    );
+    expect(poolExtendable(noControls, match(), null, at(180), LIVE)).toBe(false);
+    expect(poolExtendable(noControls, match(), null, at(30), OFF)).toBe(false);
+  });
+
+  it("poolExtendable: antes do apito não estende (as apostas já estão abertas)", () => {
+    expect(poolExtendable(noControls, match(), null, at(-10), LIVE)).toBe(false);
+    expect(poolExtendable({ betsClosedAt: at(-30) }, match(), null, at(-10), LIVE)).toBe(false);
+    expect(poolExtendable(noControls, match(), null, KICKOFF, LIVE)).toBe(true);
+  });
+
+  it("dono fechou e lançou 2-1: estender recusado e anotar recusado", () => {
+    const pool = { betsClosedAt: at(5), manualHomeScore: 2, manualAwayScore: 1 };
+    const now = at(30);
+    expect(poolHasResult(pool, match())).toBe(true);
+    expect(poolExtendable(pool, match(), null, now, LIVE)).toBe(false);
+    // Mesmo com uma extensão valendo (gravada antes do placar), anotar fica fechado.
+    const extended = { ...pool, betsClosedAt: null, betsExtendedUntil: at(60) };
+    expect(poolBetsOpen(extended, match(), null, now, LIVE)).toBe(false);
+    // O placar manual continua editável.
+    expect(poolManualScoreAllowed(extended, match(), null, now, LIVE)).toBe(true);
+  });
+
+  it("poolHasResult: manual vence; jogo encerrado com placar; sem nada, não", () => {
+    expect(poolHasResult(noControls, match())).toBe(false);
+    expect(poolHasResult({ manualHomeScore: 1, manualAwayScore: null }, match())).toBe(false);
+    expect(
+      poolHasResult(noControls, { ...match("finished"), homeScore: 0, awayScore: 0 }),
+    ).toBe(true);
+    expect(poolHasResult(noControls, match("finished"))).toBe(false);
   });
 
   it("poolMatchEnded: DB ou estado terminal", () => {
@@ -248,5 +279,22 @@ describe("poolLiveStateWanted (detalhe do bolão)", () => {
     expect(poolLiveStateWanted(noControls, match(), state("NS", null, at(1)), at(30), LIVE)).toBe(
       true,
     );
+  });
+});
+
+describe("poolOwnerClosable (fechar apostas do dono)", () => {
+  it("modo ao vivo e apostas abertas: pode fechar (antes ou depois do apito)", () => {
+    expect(poolOwnerClosable(noControls, match(), null, at(-10), LIVE)).toBe(true);
+    expect(poolOwnerClosable(noControls, match(), state("1H", 5, at(5)), at(5), LIVE)).toBe(true);
+  });
+
+  it("flag OFF: sem o controle, mesmo antes do apito (como antes)", () => {
+    expect(poolOwnerClosable(noControls, match(), null, at(-10), OFF)).toBe(false);
+    expect(poolOwnerClosable(noControls, match(), null, at(-10))).toBe(false);
+  });
+
+  it("já fechadas ou com resultado: não", () => {
+    expect(poolOwnerClosable({ betsClosedAt: at(-20) }, match(), null, at(-10), LIVE)).toBe(false);
+    expect(poolOwnerClosable(noControls, match(), null, at(20), LIVE)).toBe(false);
   });
 });

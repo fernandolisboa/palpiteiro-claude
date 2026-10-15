@@ -319,6 +319,13 @@ describe("closeFriendPoolBets (dono)", () => {
     await closeFriendPoolBets(fd());
     expect(m.setFriendPoolBetsClosed).not.toHaveBeenCalled();
   });
+
+  it("flag OFF: sem o controle, nem antes do apito (como antes)", async () => {
+    vi.setSystemTime(at(-30));
+    m.getEnableLiveMode.mockResolvedValue(false);
+    await closeFriendPoolBets(fd());
+    expect(m.setFriendPoolBetsClosed).not.toHaveBeenCalled();
+  });
 });
 
 describe("extendFriendPoolBets (admin)", () => {
@@ -363,6 +370,37 @@ describe("extendFriendPoolBets (admin)", () => {
     await extendFriendPoolBets(fd());
     expect(m.getFriendPool).toHaveBeenCalledWith(POOL_ID, OWNER);
     expect(m.setFriendPoolBetsExtended).not.toHaveBeenCalled();
+  });
+
+  it("antes do apito (kickoff − 10 min): recusa", async () => {
+    asAdmin();
+    vi.setSystemTime(at(-10));
+    await extendFriendPoolBets(fd());
+    expect(m.setFriendPoolBetsExtended).not.toHaveBeenCalled();
+  });
+
+  it("admin fechou e lançou 2-1: estender recusado e anotar recusado", async () => {
+    asAdmin();
+    vi.setSystemTime(at(30));
+    m.getFriendPool.mockResolvedValue(
+      pool({ betsClosedAt: at(10), manualHomeScore: 2, manualAwayScore: 1 }),
+    );
+    await extendFriendPoolBets(fd());
+    expect(m.setFriendPoolBetsExtended).not.toHaveBeenCalled();
+    expect(await addFriendPoolEntry(null, entryForm())).toEqual({
+      ok: false,
+      error: "Este bolão já tem resultado: não entram mais apostas.",
+    });
+    expect(m.insertFriendPoolEntry).not.toHaveBeenCalled();
+  });
+
+  it("extensão gravada antes do placar manual: anotar recusado", async () => {
+    vi.setSystemTime(at(30));
+    m.getFriendPool.mockResolvedValue(
+      pool({ betsExtendedUntil: at(60), manualHomeScore: 2, manualAwayScore: 1 }),
+    );
+    expect((await addFriendPoolEntry(null, entryForm())).ok).toBe(false);
+    expect(m.insertFriendPoolEntry).not.toHaveBeenCalled();
   });
 
   it("preset fora da lista, jogo terminado ou flag OFF: recusa", async () => {

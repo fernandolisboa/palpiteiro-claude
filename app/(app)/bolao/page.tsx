@@ -50,21 +50,24 @@ export default async function BolaoPage({ searchParams }: PageProps) {
 
   const { jogo } = await searchParams;
   const now = new Date();
-  const leagues = await getActiveLeaguesForRequest();
-  const [pools, upcoming, timeZone, liveMode] = await Promise.all([
+  const [leagues, liveMode] = await Promise.all([
+    getActiveLeaguesForRequest(),
+    getEnableLiveMode(),
+  ]);
+  const [pools, upcoming, timeZone] = await Promise.all([
     listFriendPools(userId),
-    // Desde 4h atrás (a janela do estado ao vivo, #580): os jogos já apitados só entram
-    // no seletor se ainda estão na janela do bolão (filtro abaixo).
+    // Modo ao vivo (#580): desde 4h atrás (a janela do estado ao vivo); os jogos já
+    // apitados só entram no seletor se ainda estão na janela do bolão (filtro abaixo).
+    // Flag desligada: como antes, só os jogos agendados daqui pra frente.
     getMatchesInRange({
-      from: new Date(now.getTime() - IN_PLAY_WINDOW_AFTER_MS),
+      from: liveMode ? new Date(now.getTime() - IN_PLAY_WINDOW_AFTER_MS) : now,
       to: new Date(now.getTime() + PICKER_DAYS * 24 * 60 * 60 * 1000),
       leagues,
-      statuses: ["scheduled", "live"],
+      statuses: liveMode ? ["scheduled", "live"] : ["scheduled"],
       order: "asc",
       limit: PICKER_LIMIT,
     }),
     getRequestTimeZone(),
-    getEnableLiveMode(),
   ]);
   // Estado ao vivo dos jogos apitados (#580): só as rows, nunca busca no provider.
   const liveIds = liveMode
