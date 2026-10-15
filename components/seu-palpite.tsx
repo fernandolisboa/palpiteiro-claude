@@ -43,11 +43,8 @@ import {
 // 2. "Analisar meu palpite" (opcional, conta 1 do limite diário de palpites): a IA lê
 //    o motivo, o código confere cada afirmação e o modelo recalcula.
 // É leitura de probabilidade, não dica: nada de preço de casa, vantagem ou valor por
-// aqui (envelope legal, ADR 0048/0053), e o aviso de risco fica à vista.
-
-// Aviso de risco completo (ADR 0034 §12, docs/ops/05-legal-compliance.md §3), VERBATIM.
-const RISK_DISCLAIMER_PT_BR =
-  "Aposta não é investimento. As recomendações do Palpiteiro são análises e não garantem resultado. Aposte com responsabilidade, só o que você pode perder, e nunca para recuperar perdas. Se a aposta deixou de ser diversão, procure ajuda.";
+// aqui (envelope legal, ADR 0048/0053). Sem aviso de risco próprio (ADR 0057, emenda a
+// 0055 D10): o §3 completo fica no registro de apostas, na mesma tela.
 
 // Rótulos literais aqui de propósito: o guia /como-usar confere que eles existem na UI.
 const STATUS_CHIP: Record<ClaimStatus, string> = {
@@ -267,9 +264,6 @@ export function SeuPalpite({
         )}
       </Card>
       {analysis && <AnalysisCard analysis={analysis} teams={teams} />}
-      <p className="text-meta leading-relaxed text-muted-foreground tracking-tight">
-        {RISK_DISCLAIMER_PT_BR}
-      </p>
     </section>
   );
 }
