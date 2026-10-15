@@ -3,6 +3,7 @@ import {
   computeMatchLambdas,
   type MatchLambdas,
 } from "@/lib/providers/sports-data/match-lambdas";
+import { isInPlayScoreline } from "@/lib/quant/in-play";
 import type {
   ModelScoreline,
   ModelScorelineSource,
@@ -54,14 +55,25 @@ export type ScorelineGrade =
   | { status: "no_data" };
 
 
+// Kinds que recalculam do λ em vez de ler a matriz: com o modelo em jogo (a matriz
+// condicionada ao placar, λ = gols esperados no fim) os dois sairiam errados, então
+// ficam fora do ao vivo (#591, PLAN-580 §6.5/R3).
+const LAMBDA_READER_KINDS: ReadonlySet<ScorelineKind> = new Set([
+  "first_half_score",
+  "first_half_over_under",
+  "first_to_score",
+]);
+
 // Preço (0-1) de um kind sobre o modelo do jogo. Matriz cheia do modelo (ρ do fit no
 // DC) + (lazy) matriz de 1º tempo via time-share κ com o MESMO ρ (ausente no heurístico
-// → ρ pinado, como antes). Params já validado pelo boundary (switch fechado).
+// → ρ pinado, como antes). Params já validado pelo boundary (switch fechado). null =
+// não precifica (leitor do λ sobre o modelo em jogo).
 function priceLeg(
   model: ModelScoreline,
   kind: ScorelineKind,
   params: BetLegParams,
-): number {
+): number | null {
+  if (isInPlayScoreline(model) && LAMBDA_READER_KINDS.has(kind)) return null;
   const p = params as Record<string, unknown>;
   const fullMatrix = model.matrix;
   const firstHalf = () =>
@@ -122,6 +134,7 @@ export function gradeScorelineLeg(args: {
   if (model === null) return { status: "no_data" };
 
   const prob = priceLeg(model, args.kind, args.params);
+  if (prob === null) return { status: "no_data" };
   return {
     status: "graded",
     modelProbPct: prob * 100,

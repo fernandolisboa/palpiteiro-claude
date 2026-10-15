@@ -185,6 +185,37 @@ describe("resolvePalpiteModelBase", () => {
   });
 });
 
+describe("resolvePalpiteModelBase com asOf (#591: a base do apito)", () => {
+  const AFTER_KICKOFF = new Date(KICKOFF.getTime() + 63 * 60_000);
+
+  it("depois do apito, asOf = kickoff devolve a base que valia no apito", async () => {
+    getLatest.mockResolvedValue({
+      snapshot: snapshot(true, { checkedAt: new Date(KICKOFF.getTime() - 5 * 3_600_000) }),
+      kickoffAt: KICKOFF,
+    });
+    // Sem asOf, o jogo já começou: cai no fallback.
+    expect((await resolvePalpiteModelBase(MATCH, { now: AFTER_KICKOFF }))?.origin).toBe("live");
+    const base = await resolvePalpiteModelBase(MATCH, {
+      now: AFTER_KICKOFF,
+      asOf: KICKOFF,
+    });
+    expect(base).toMatchObject({ origin: "snapshot", snapshotId: "snap-1", rho: -0.07 });
+    expect(base?.jevAnswers).toEqual(ANSWERS);
+  });
+
+  it("sem base usável no apito, o fallback pede o mesmo asOf a resolveSlipModel", async () => {
+    getLatest.mockResolvedValue({
+      snapshot: snapshot(true, {
+        checkedAt: new Date(KICKOFF.getTime() - MODEL_SCORELINE_MAX_AGE_MS - 3_600_000),
+      }),
+      kickoffAt: KICKOFF,
+    });
+    const base = await resolvePalpiteModelBase(MATCH, { asOf: KICKOFF });
+    expect(resolveSlipModel).toHaveBeenCalledWith(MATCH, { asOf: KICKOFF });
+    expect(base).toMatchObject({ origin: "live", staleBase: true });
+  });
+});
+
 describe("isSnapshotUsable ⇔ getMatchModelScoreline (mesmas regras)", () => {
   const cases: [string, Partial<MatchModelSnapshot>, Date][] = [
     ["fresca", {}, KICKOFF],

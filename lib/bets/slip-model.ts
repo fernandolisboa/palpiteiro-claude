@@ -20,14 +20,25 @@ export type SlipModelMatch = {
   neutralVenue: boolean;
 };
 
+export type ResolveSlipModelOptions = {
+  // Ler a base "no apito" (#591, PLAN-580 §6.1/R10): o modelo em jogo parte do MESMO
+  // modelo que a página mostrava antes do apito. Passar o kickoff; a base é lida com
+  // `now = asOf − 1 ms`, então a idade de 24h é medida no apito e o corte "jogo já
+  // começou" não dispara. O fallback (cálculo na hora) segue com o fit de hoje.
+  asOf?: Date;
+};
+
 /**
  * λ + matriz do jogo: a base quando há (nunca lança), senão o cálculo na hora. Tabela que falha → só o DC; sem os dois → null (a perna fica
  * sem número). Nunca lança.
  */
 export async function resolveSlipModel(
   match: SlipModelMatch,
+  opts: ResolveSlipModelOptions = {},
 ): Promise<ModelScoreline | null> {
-  const fromBase = await getMatchModelScoreline(match.id);
+  const fromBase = opts.asOf
+    ? await getMatchModelScoreline(match.id, new Date(opts.asOf.getTime() - 1))
+    : await getMatchModelScoreline(match.id);
   if (fromBase) return fromBase;
   let standing: NormalizedStanding | undefined;
   try {
