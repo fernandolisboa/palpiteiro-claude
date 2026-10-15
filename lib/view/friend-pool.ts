@@ -1,6 +1,7 @@
 import type { BetLegParams } from "@/db/schema";
 import { LEAGUE_LABEL, formatKickoffDateTime, formatLine, leagueToKey } from "@/lib/format";
 import type { SupportedLeague } from "@/lib/providers/sports-data/leagues";
+import { displayMatchTeams } from "@/lib/view/team";
 
 // Rótulos do bolão entre amigos (#567). Puros e serializáveis.
 
@@ -61,9 +62,11 @@ export function poolMatchLabel(
   now: Date,
   timeZone?: string,
 ): string {
+  const league = leagueToKey(match.league);
+  const teams = displayMatchTeams(match.homeTeam, match.awayTeam, league);
   return [
-    `${match.homeTeam} × ${match.awayTeam}`,
-    LEAGUE_LABEL[leagueToKey(match.league)],
+    `${teams.home} × ${teams.away}`,
+    LEAGUE_LABEL[league],
     formatKickoffDateTime(match.kickoffAt, now, timeZone),
   ].join(" · ");
 }

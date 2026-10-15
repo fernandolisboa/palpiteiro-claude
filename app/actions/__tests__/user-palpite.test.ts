@@ -359,6 +359,22 @@ describe("analyzeUserPalpite — depois da cobrança", () => {
     }
   });
 
+  it("a view devolvida usa o nome curto; extração e narração recebem o canonical (#578)", async () => {
+    mockMatch.mockResolvedValue({
+      ...match(),
+      homeTeam: "CR Flamengo",
+      awayTeam: "SE Palmeiras",
+    } as unknown as Awaited<ReturnType<typeof getMatchById>>);
+    const res = await analyzeUserPalpite(null, form());
+    expect(res.ok).toBe(true);
+    if (res.ok) expect(res.analysis.palpiteLabel).toBe("Flamengo 2 × 0 Palmeiras");
+    const canonical = { home: "CR Flamengo", away: "SE Palmeiras" };
+    expect(mockExtract).toHaveBeenCalledWith(expect.objectContaining({ teams: canonical }));
+    const input = mockNarrate.mock.calls[0][0].input;
+    expect(input.teams).toEqual(canonical);
+    expect(input.palpiteLabel).toBe("CR Flamengo 2 × 0 SE Palmeiras");
+  });
+
   it("o narrador não recebe o motivo cru nem o nome do jogador", async () => {
     await analyzeUserPalpite(null, form());
     const input = mockNarrate.mock.calls[0][0].input;

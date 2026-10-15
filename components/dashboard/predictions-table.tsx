@@ -79,7 +79,7 @@ export function PredictionsTable({
                       nome do jogo vaza por cima do selo da liga (#574 linha 8). */}
                   <Link
                     href={appendBackParam(`${basePath}/${r.id}`, listHref, basePath)}
-                    title={`${r.home} × ${r.away}`}
+                    title={r.title}
                     className="block max-w-[220px] truncate rounded-sm font-medium tracking-tight hover:underline focus-visible:outline-none focus-visible:ring-[3px] focus-visible:ring-ring/50"
                   >
                     {r.home} × {r.away}

@@ -12,10 +12,12 @@ import { Card } from "@/components/ui/card";
 import { listFriendPools, type FriendPoolListRow } from "@/lib/db/queries/friend-pools";
 import { getActiveLeaguesForRequest } from "@/lib/db/queries/league-settings";
 import { getMatchesInRange } from "@/lib/db/queries/matches";
+import { leagueToKey } from "@/lib/format";
 import { poolPotCents, formatBrl, resolvePoolScore } from "@/lib/pools/winners";
 import { poolBetsOpen } from "@/lib/pools/pool-state";
 import { getRequestTimeZone } from "@/lib/server/request-timezone";
 import { POOL_MONEY_NOTE, POOL_RISK_NOTE, poolMatchLabel } from "@/lib/view/friend-pool";
+import { displayMatchTeams } from "@/lib/view/team";
 
 export const dynamic = "force-dynamic";
 
@@ -106,7 +108,12 @@ function PoolRow({
 }) {
   const status = statusOf(row, now);
   const pot = poolPotCents(row.pool.entryAmountCents, row.entryCount);
-  const title = row.pool.title ?? `${row.match.homeTeam} × ${row.match.awayTeam}`;
+  const teams = displayMatchTeams(
+    row.match.homeTeam,
+    row.match.awayTeam,
+    leagueToKey(row.match.league),
+  );
+  const title = row.pool.title ?? `${teams.home} × ${teams.away}`;
   return (
     <Link
       href={`/bolao/${row.pool.id}`}

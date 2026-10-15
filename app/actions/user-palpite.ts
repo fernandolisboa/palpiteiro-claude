@@ -67,6 +67,7 @@ import {
   toUserPalpiteAnalysisView,
   type UserPalpiteAnalysisView,
 } from "@/lib/view/user-palpite";
+import { displayMatchTeams } from "@/lib/view/team";
 
 // "Analisar meu palpite" (#564, ADR 0055). Todos os gates grátis (input, sessão,
 // acesso, flag, jogo, analisável, TEM MODELO) vêm antes da cobrança, como em
@@ -269,7 +270,15 @@ function degradedAnalysis(ctx: ChargedContext): AnalyzeUserPalpiteResult {
     },
     narrationSource: "template",
   };
-  return { ok: true, analysis: toUserPalpiteAnalysisView(record, teams, new Date()) };
+  // Só a view devolvida usa o nome curto (#578); `teams` (canonical) foi ao modelo.
+  return {
+    ok: true,
+    analysis: toUserPalpiteAnalysisView(
+      record,
+      displayMatchTeams(match.homeTeam, match.awayTeam, leagueToKey(match.league)),
+      new Date(),
+    ),
+  };
 }
 
 function storedModel(
@@ -424,5 +433,13 @@ async function analyzeAfterCharge(ctx: ChargedContext): Promise<AnalyzeUserPalpi
     narration: { ...narration, codeVerdict: verdict, warnings },
     narrationSource,
   };
-  return { ok: true, analysis: toUserPalpiteAnalysisView(record, teams, new Date()) };
+  // Só a view devolvida usa o nome curto (#578); `teams` (canonical) foi ao modelo.
+  return {
+    ok: true,
+    analysis: toUserPalpiteAnalysisView(
+      record,
+      displayMatchTeams(match.homeTeam, match.awayTeam, leagueToKey(match.league)),
+      new Date(),
+    ),
+  };
 }

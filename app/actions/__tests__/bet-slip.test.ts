@@ -265,6 +265,21 @@ describe("registerBetSlip — persistência", () => {
     spy.mockRestore();
   });
 
+  it("a avaliação devolvida usa o nome curto do time (#578)", async () => {
+    mockGetMatchById.mockResolvedValue({
+      ...match(),
+      homeTeam: "CR Flamengo",
+      awayTeam: "SE Palmeiras",
+    } as unknown as Awaited<ReturnType<typeof getMatchById>>);
+    const res = await registerBetSlip(
+      null,
+      form(slip({ legs: [{ ...HOME, userOdd: "2,10", stakeUnits: "1" }] })),
+    );
+    expect(res.ok).toBe(true);
+    if (!res.ok) return;
+    expect(res.evaluation.legs[0].label).toBe("Vitória do Flamengo");
+  });
+
   it("simples → um slip por perna, cada um com 1 perna", async () => {
     const res = await registerBetSlip(
       null,

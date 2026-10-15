@@ -2,6 +2,8 @@ import Link from "next/link";
 import { Info } from "lucide-react";
 
 import { SettleableBadge } from "@/components/palpites/palpite-badges";
+import { leagueToKey } from "@/lib/format";
+import type { SupportedLeague } from "@/lib/providers/sports-data/leagues";
 import { cn } from "@/lib/utils";
 import type {
   PalpiteDimensionView,
@@ -10,6 +12,7 @@ import type {
 import { displayCategoryLabel } from "@/lib/view/markets/display";
 import { toPublicMarketCategories } from "@/lib/view/markets/public-category";
 import { hardenSources } from "@/lib/view/share/source-hardening";
+import { displayMatchTeams } from "@/lib/view/team";
 import {
   CVV_HELP,
   NON_OPERATOR_DISCLAIMER,
@@ -47,6 +50,11 @@ export function PublicPalpite({
   match: MatchPublicView;
 }) {
   const settled = view.badge !== null;
+  const teams = displayMatchTeams(
+    match.homeTeam,
+    match.awayTeam,
+    leagueToKey(match.league as SupportedLeague),
+  );
   const categories = toPublicMarketCategories(view.citedMarkets);
   const sources = hardenSources(view.sources);
 
@@ -57,7 +65,7 @@ export function PublicPalpite({
     >
       <div className="flex flex-col gap-1.5">
         <span className="text-meta uppercase tracking-eyebrow text-muted-foreground">
-          {match.homeTeam} x {match.awayTeam}
+          {teams.home} x {teams.away}
         </span>
         <div className="flex flex-wrap items-center gap-2">
           <Kicker />

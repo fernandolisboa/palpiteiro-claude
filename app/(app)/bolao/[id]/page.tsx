@@ -12,6 +12,7 @@ import { ResultBadge } from "@/components/result-badge";
 import { Button } from "@/components/ui/button";
 import { Card } from "@/components/ui/card";
 import { getFriendPool } from "@/lib/db/queries/friend-pools";
+import { leagueToKey } from "@/lib/format";
 import { MAX_ENTRIES_PER_POOL } from "@/lib/pools/pool-schema";
 import { poolBetsOpen } from "@/lib/pools/pool-state";
 import { computePoolOutcome, formatBrl, resolvePoolScore } from "@/lib/pools/winners";
@@ -24,6 +25,7 @@ import {
   poolBetLabel,
   poolMatchLabel,
 } from "@/lib/view/friend-pool";
+import { displayMatchTeams } from "@/lib/view/team";
 
 export const dynamic = "force-dynamic";
 
@@ -46,7 +48,8 @@ export default async function BolaoDetailPage({ params }: PageProps) {
 
   const { pool, match, entries } = detail;
   const now = new Date();
-  const teams = { home: match.homeTeam, away: match.awayTeam };
+  // Nomes curtos de exibição (#578). Os picks guardam chaves (home/draw/away), nunca o nome.
+  const teams = displayMatchTeams(match.homeTeam, match.awayTeam, leagueToKey(match.league));
   const open = poolBetsOpen(match, now);
   const score = resolvePoolScore(pool, match);
   const outcome = computePoolOutcome({
@@ -67,7 +70,7 @@ export default async function BolaoDetailPage({ params }: PageProps) {
       <PageContainer width="reading">
         <PageHeader
           back={{ href: "/bolao", label: "bolão" }}
-          title={pool.title ?? `${match.homeTeam} × ${match.awayTeam}`}
+          title={pool.title ?? `${teams.home} × ${teams.away}`}
           description={
             <>
               {poolMatchLabel(match, now, timeZone)} ·{" "}
@@ -91,7 +94,7 @@ export default async function BolaoDetailPage({ params }: PageProps) {
               resultado · {outcome.score.source === "manual" ? "placar lançado por você" : "placar do jogo"}
             </p>
             <p className="text-body font-medium tracking-tight">
-              {match.homeTeam} {outcome.score.home} × {outcome.score.away} {match.awayTeam}
+              {teams.home} {outcome.score.home} × {outcome.score.away} {teams.away}
             </p>
             {winners.length > 0 ? (
               <>
@@ -178,7 +181,7 @@ export default async function BolaoDetailPage({ params }: PageProps) {
         {open && entries.length < MAX_ENTRIES_PER_POOL && (
           <Card className="mb-8 gap-4 px-5 py-5">
             <h2 className="text-body font-medium tracking-tight">Anotar aposta</h2>
-            <AddEntryForm poolId={pool.id} homeTeam={match.homeTeam} awayTeam={match.awayTeam} />
+            <AddEntryForm poolId={pool.id} homeTeam={teams.home} awayTeam={teams.away} />
           </Card>
         )}
 
@@ -191,8 +194,8 @@ export default async function BolaoDetailPage({ params }: PageProps) {
             </p>
             <ManualScoreForm
               poolId={pool.id}
-              homeTeam={match.homeTeam}
-              awayTeam={match.awayTeam}
+              homeTeam={teams.home}
+              awayTeam={teams.away}
               manual={manual}
             />
           </Card>

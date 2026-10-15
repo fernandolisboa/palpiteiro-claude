@@ -114,3 +114,18 @@ export function teamPair(
   }
   return { home: { ...home, short: alternateCode(homeCanonical, away.short) }, away };
 }
+
+/**
+ * Nomes curtos de exibição dos dois times de um jogo (#578), para telas que só
+ * mostram o nome (sem sigla): "Palmeiras × Corinthians". Display-only.
+ */
+export function displayMatchTeams(
+  homeCanonical: string,
+  awayCanonical: string,
+  league: LeagueKey,
+): { home: string; away: string } {
+  return {
+    home: displayTeamName(homeCanonical, league),
+    away: displayTeamName(awayCanonical, league),
+  };
+}
