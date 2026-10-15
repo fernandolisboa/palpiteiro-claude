@@ -107,8 +107,8 @@ function RangeForm({
  * Chip "Escolher datas" da lista de jogos (#577): abre os campos De e Até numa folha
  * (celular) ou num popover (desktop). "Aplicar" navega para o intervalo
  * (`preset=custom`, os mesmos parâmetros de URL de antes); "Limpar" (só com o
- * intervalo ativo) volta para 5 dias. Com o intervalo ativo, o chip mostra as datas e fica selecionado: é o único
- * lugar onde o período aparece.
+ * intervalo ativo) volta para 5 dias. Com o intervalo ativo, o chip mostra as datas
+ * e fica selecionado: é o único lugar onde o período aparece.
  */
 export function DateRangeSheet({ league, from, to, active, label, surface }: Props) {
   const [open, setOpen] = useState(false);
