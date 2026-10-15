@@ -328,14 +328,23 @@ describe("getUserBetSlipsPage — recorte por slipIds (#577)", () => {
     expect(p2.nextCursor).toBeNull();
   });
 
-  it("recorte vazio → página vazia", async () => {
+  it("recorte vazio → página vazia sem ir ao banco", async () => {
     const matchId = await seedMatch("ext-empty-slice");
     const slip = await seedSlip({ matchId, userId: ids.userId });
     await seedLeg({ slipId: slip, params: { selection: "home" } });
-    expect(await getUserBetSlipsPage({ userId: ids.userId, slipIds: [] })).toEqual({
-      slips: [],
-      nextCursor: null,
-    });
+    const select = vi.spyOn(realDb, "select");
+    try {
+      expect(await getUserBetSlipsPage({ userId: ids.userId, slipIds: [] })).toEqual({
+        slips: [],
+        nextCursor: null,
+      });
+      expect(select).not.toHaveBeenCalled();
+      // O espião enxerga o caminho normal (senão o "not called" acima não prova nada).
+      await getUserBetSlipsPage({ userId: ids.userId, slipIds: [slip] });
+      expect(select).toHaveBeenCalled();
+    } finally {
+      select.mockRestore();
+    }
   });
 
   it("recorte não vaza slip de outro usuário", async () => {
