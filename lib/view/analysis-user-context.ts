@@ -13,7 +13,7 @@ import type { ClaimStatus } from "@/lib/user-palpite/types";
 import { claimEffectText } from "./user-palpite";
 
 // "O que você acrescentou" (#565): o contexto extra conferido da análise visível, dentro
-// de "ver análise por mercado". PURO. A afirmação aparece pelo texto que o código monta
+// de "Ler análise completa". PURO. A afirmação aparece pelo texto que o código monta
 // dos campos tipados (o mesmo que o modelo usou), nunca a paráfrase nem nome de jogador.
 
 export type AnalysisUserContextClaimView = {

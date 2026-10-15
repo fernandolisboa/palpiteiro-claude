@@ -2,7 +2,7 @@ import { referenceKey, SLIP_TOTAL_LINES } from "@/lib/bets/slip-markets";
 
 // "Um número por linha" (#556): quando o usuário já tem uma análise daquele mercado
 // (e linha) neste jogo, a probabilidade da perna é a da análise — a mesma que a página
-// mostra em "ver análise por mercado", com o JEV aplicado pelo motor code_jev —, não o
+// mostra em "Ler análise completa", com o JEV aplicado pelo motor code_jev —, não o
 // Dixon-Coles cru. Sem análise, a perna usa o modelo de placar (lib/bets/slip-model).
 // Leitura do histórico que a página/ação já buscam; nada de LLM.
 

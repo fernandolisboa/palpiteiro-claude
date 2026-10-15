@@ -70,7 +70,7 @@ export function summarizeAnalysesForSynthesis(
 
 /**
  * Mesma projeção, a partir do histórico salvo (botão "gerar só o palpite"): a análise
- * MAIS RECENTE de cada mercado, a mesma que a seção "ver análise por mercado" mostra.
+ * MAIS RECENTE de cada mercado, a mesma que "Ler análise completa" mostra na página do jogo.
  * O histórico vem em ordem desc de criação. Seleção sem prob gravada (`modelProbKnown`
  * false) vira prob ausente, nunca 0%.
  */
