@@ -5,8 +5,9 @@ import { z } from "zod";
 
 import { auth } from "@/auth";
 import { removeFriendPool, removeFriendPoolEntry } from "@/app/actions/friend-pools";
-import { BackLink } from "@/components/back-link";
 import { AddEntryForm, ManualScoreForm } from "@/components/friend-pool-forms";
+import { PageContainer } from "@/components/page-container";
+import { PageHeader } from "@/components/page-header";
 import { Button } from "@/components/ui/button";
 import { Card } from "@/components/ui/card";
 import { getFriendPool } from "@/lib/db/queries/friend-pools";
@@ -62,23 +63,26 @@ export default async function BolaoDetailPage({ params }: PageProps) {
 
   return (
     <div className="bg-background text-foreground">
-      <div className="mx-auto w-full max-w-reading px-6 py-8">
-        <BackLink href="/bolao" label="bolão" />
-
-        <h1 className="text-display-md font-medium tracking-tight">
-          {pool.title ?? `${match.homeTeam} × ${match.awayTeam}`}
-        </h1>
-        <p className="text-muted-foreground pt-1 text-body-sm tracking-tight">
-          {poolMatchLabel(match, now, timeZone)} ·{" "}
-          <Link href={`/match/${match.id}`} className="underline underline-offset-2 hover:text-foreground">
-            ver jogo
-          </Link>
-        </p>
-        <p className="text-muted-foreground pb-6 pt-1 font-mono text-meta">
-          {entries.length} {entries.length === 1 ? "aposta" : "apostas"}
-          {pool.entryAmountCents !== null &&
-            ` · ${formatBrl(pool.entryAmountCents)} por pessoa · pote ${formatBrl(outcome.potCents ?? 0)}`}
-        </p>
+      <PageContainer width="reading">
+        <PageHeader
+          back={{ href: "/bolao", label: "bolão" }}
+          title={pool.title ?? `${match.homeTeam} × ${match.awayTeam}`}
+          description={
+            <>
+              {poolMatchLabel(match, now, timeZone)} ·{" "}
+              <Link href={`/match/${match.id}`} className="underline underline-offset-2 hover:text-foreground">
+                ver jogo
+              </Link>
+            </>
+          }
+          meta={
+            <>
+              {entries.length} {entries.length === 1 ? "aposta" : "apostas"}
+              {pool.entryAmountCents !== null &&
+                ` · ${formatBrl(pool.entryAmountCents)} por pessoa · pote ${formatBrl(outcome.potCents ?? 0)}`}
+            </>
+          }
+        />
 
         {outcome.settled && (
           <Card className="mb-6 gap-2 px-5 py-5">
@@ -224,7 +228,7 @@ export default async function BolaoDetailPage({ params }: PageProps) {
         <p className="text-meta leading-relaxed text-muted-foreground tracking-tight">
           {POOL_MONEY_NOTE} {POOL_RISK_NOTE}
         </p>
-      </div>
+      </PageContainer>
     </div>
   );
 }

@@ -5,6 +5,8 @@ import { Ticket } from "lucide-react";
 import { Badge } from "@/components/ui/badge";
 import { Card } from "@/components/ui/card";
 import { EmptyState } from "@/components/empty-state";
+import { PageContainer } from "@/components/page-container";
+import { PageHeader } from "@/components/page-header";
 import { auth } from "@/auth";
 import {
   LEAGUE_LABEL,
@@ -72,13 +74,11 @@ export default async function ApostasPage({ searchParams }: PageProps) {
 
   return (
     <div className="bg-background text-foreground">
-      <div className="mx-auto w-full max-w-reading px-6 py-8">
-        <h1 className="text-display-md font-medium tracking-tight">
-          Minhas apostas
-        </h1>
-        <p className="text-muted-foreground pb-6 font-mono text-meta">
-          suas apostas registradas · privado, só você vê
-        </p>
+      <PageContainer width="reading">
+        <PageHeader
+          title="Minhas apostas"
+          description="suas apostas registradas · privado, só você vê"
+        />
 
         {page.slips.length === 0 ? (
           <EmptyState
@@ -123,7 +123,7 @@ export default async function ApostasPage({ searchParams }: PageProps) {
         <p className="mt-10 text-meta leading-relaxed text-muted-foreground tracking-tight">
           {RISK_DISCLAIMER_PT_BR}
         </p>
-      </div>
+      </PageContainer>
     </div>
   );
 }

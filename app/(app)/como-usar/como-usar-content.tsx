@@ -2,6 +2,7 @@ import Link from "next/link";
 import type { ReactNode } from "react";
 import { Compass } from "lucide-react";
 
+import { PageHeader } from "@/components/page-header";
 import { Button } from "@/components/ui/button";
 import { TOUR_RESTART_HREF } from "@/lib/tour/steps";
 
@@ -75,16 +76,20 @@ function Tip({ children }: { children: ReactNode }) {
 export function ComoUsarContent() {
   return (
     <>
-      <h1 className="text-display-md font-medium tracking-tight">Como usar</h1>
-      <p className="pb-6 pt-2 text-body leading-relaxed text-muted-foreground tracking-tight">
-        O caminho do app, tela por tela: achar um jogo, pedir o palpite da IA, ler a
-        análise, registrar sua aposta e acompanhar o resultado. O que os números
-        querem dizer (edge, PASS, odd, stake) está em{" "}
-        <Link href="/como-funciona" className={LINK}>
-          Como funciona
-        </Link>
-        .
-      </p>
+      <PageHeader
+        title="Como usar"
+        description={
+          <>
+            O caminho do app, tela por tela: achar um jogo, pedir o palpite da IA, ler a
+            análise, registrar sua aposta e acompanhar o resultado. O que os números
+            querem dizer (edge, PASS, odd, stake) está em{" "}
+            <Link href="/como-funciona" className={LINK}>
+              Como funciona
+            </Link>
+            .
+          </>
+        }
+      />
 
       <div className="border-accent-border bg-accent-soft flex flex-col gap-3 rounded-xl border p-4 sm:flex-row sm:items-center sm:justify-between">
         <div className="flex items-start gap-3">

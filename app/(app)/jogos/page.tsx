@@ -9,7 +9,6 @@ import { SectionLabel } from "@/components/section-label";
 import { UpcomingMatchesDesktop } from "@/components/upcoming-matches-desktop";
 import { UpcomingMatchesMobile } from "@/components/upcoming-matches-mobile";
 import { auth } from "@/auth";
-import { HOME_SUBTITLE } from "@/lib/copy";
 import { resolveHomeLeagueFilter } from "@/lib/config/active-leagues";
 import { keyToLeague, LEAGUE_LABEL, leagueToKey } from "@/lib/format";
 import { getActiveLeaguesForRequest } from "@/lib/db/queries/league-settings";
@@ -25,6 +24,8 @@ import {
 import { getRecentPredictionsByUser } from "@/lib/db/queries/predictions";
 import { DateRangeTabs } from "@/components/date-range-tabs";
 import { EmptyState } from "@/components/empty-state";
+import { PageContainer } from "@/components/page-container";
+import { PageHeader } from "@/components/page-header";
 import { GuidedTour } from "@/components/tour/guided-tour";
 import { getTourState } from "@/lib/db/queries/users";
 import { TOUR_FORCE_PARAM } from "@/lib/tour/steps";
@@ -285,16 +286,12 @@ function MobileHome({
   const listKey = `${league}-${range.preset}-${navProps.from ?? ""}-${navProps.to ?? ""}`;
   return (
     <div className="overflow-x-clip bg-background text-foreground">
-      <div className="px-5 pb-5 pt-6">
-        <h1 className="text-display-md font-medium leading-none tracking-tight">
-          Próximos jogos
-        </h1>
-        <p className="pt-1.5 text-body text-muted-foreground tracking-tight">
-          {HOME_SUBTITLE}
-        </p>
-        <p className="pt-1 font-mono text-meta text-muted-foreground">
-          {matches.length} jogos · {label.toLowerCase()}
-        </p>
+      <div className="px-5 pt-6">
+        <PageHeader
+          title="Próximos jogos"
+          meta={<>{matches.length} partidas · {label}</>}
+          className="pb-5"
+        />
       </div>
 
       <div className="flex flex-col gap-2 px-5 pb-3">
@@ -373,31 +370,31 @@ function DesktopHome({
   const listKey = `${league}-${range.preset}-${navProps.from ?? ""}-${navProps.to ?? ""}`;
   return (
     <>
-      <div className="mx-auto w-full max-w-content px-8 pt-10 pb-16">
-        <div className="flex items-end justify-between pb-6">
-          <div className="flex flex-col gap-2">
-            <h1 className="text-display-lg font-medium leading-none tracking-tight">
-              Próximos jogos
-            </h1>
-            <p className="text-body text-muted-foreground tracking-tight">
+      <PageContainer width="content">
+        <PageHeader
+          title="Próximos jogos"
+          meta={
+            <>
               {matches.length} partidas · {label}
               {league !== "all" && ` · ${LEAGUE_LABEL[league]}`}
-            </p>
-          </div>
-          <div className="flex flex-col items-end gap-2">
-            <div data-tour="league-picker">
-              <LeaguePicker value={league} activeKeys={activeKeys} range={navProps} />
-            </div>
-            <div data-tour="date-range">
-              <DateRangeTabs
-                league={league}
-                preset={range.preset}
-                from={navProps.from}
-                to={navProps.to}
-              />
-            </div>
-          </div>
-        </div>
+            </>
+          }
+          actions={
+            <>
+              <div data-tour="league-picker">
+                <LeaguePicker value={league} activeKeys={activeKeys} range={navProps} />
+              </div>
+              <div data-tour="date-range">
+                <DateRangeTabs
+                  league={league}
+                  preset={range.preset}
+                  from={navProps.from}
+                  to={navProps.to}
+                />
+              </div>
+            </>
+          }
+        />
 
         {matches.length === 0 ? (
           <Card className="px-8 py-16 text-center">
@@ -437,7 +434,7 @@ function DesktopHome({
             </div>
           )}
         </div>
-      </div>
+      </PageContainer>
     </>
   );
 }

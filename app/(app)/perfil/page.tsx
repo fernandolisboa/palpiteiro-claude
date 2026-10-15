@@ -2,6 +2,8 @@ import Link from "next/link";
 import { redirect } from "next/navigation";
 
 import { auth } from "@/auth";
+import { PageContainer } from "@/components/page-container";
+import { PageHeader } from "@/components/page-header";
 import { MODEL_REGISTRY, modelsForAudience } from "@/lib/ai/models";
 import { getDefaultModelId } from "@/lib/db/queries/ai-config";
 import { listAuthenticatorsByUserId } from "@/lib/db/queries/authenticators";
@@ -44,11 +46,8 @@ export default async function PerfilPage() {
 
   return (
     <div className="bg-background text-foreground">
-      <div className="mx-auto w-full max-w-reading px-6 py-8">
-        <h1 className="text-display-md font-medium tracking-tight">Perfil</h1>
-        <p className="text-muted-foreground pb-6 font-mono text-meta">
-          seu nome e avatar · visíveis no app
-        </p>
+      <PageContainer width="reading">
+        <PageHeader title="Perfil" description="seu nome e avatar · visíveis no app" />
 
         <ProfileForm
           email={profile.email}
@@ -110,7 +109,7 @@ export default async function PerfilPage() {
             .
           </p>
         </div>
-      </div>
+      </PageContainer>
     </div>
   );
 }

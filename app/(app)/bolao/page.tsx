@@ -5,6 +5,8 @@ import { Users } from "lucide-react";
 import { auth } from "@/auth";
 import { EmptyState } from "@/components/empty-state";
 import { NewPoolForm } from "@/components/friend-pool-forms";
+import { PageContainer } from "@/components/page-container";
+import { PageHeader } from "@/components/page-header";
 import { Badge } from "@/components/ui/badge";
 import { Card } from "@/components/ui/card";
 import { listFriendPools, type FriendPoolListRow } from "@/lib/db/queries/friend-pools";
@@ -51,11 +53,8 @@ export default async function BolaoPage({ searchParams }: PageProps) {
 
   return (
     <div className="bg-background text-foreground">
-      <div className="mx-auto w-full max-w-reading px-6 py-8">
-        <h1 className="text-display-md font-medium tracking-tight">Bolão</h1>
-        <p className="text-muted-foreground pb-6 font-mono text-meta">
-          bolão entre amigos · cada um com seu palpite
-        </p>
+      <PageContainer width="reading">
+        <PageHeader title="Bolão" description="bolão entre amigos · cada um com seu palpite" />
 
         <Card className="mb-8 gap-4 px-5 py-5">
           <h2 className="text-body font-medium tracking-tight">Novo bolão</h2>
@@ -82,7 +81,7 @@ export default async function BolaoPage({ searchParams }: PageProps) {
         <p className="mt-10 text-meta leading-relaxed text-muted-foreground tracking-tight">
           {POOL_MONEY_NOTE} {POOL_RISK_NOTE}
         </p>
-      </div>
+      </PageContainer>
     </div>
   );
 }

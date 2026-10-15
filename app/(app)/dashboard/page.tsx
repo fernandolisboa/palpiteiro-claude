@@ -12,6 +12,8 @@ import { MarketSegments } from "@/components/dashboard/market-segments";
 import { PredictionsTable } from "@/components/dashboard/predictions-table";
 import { Card } from "@/components/ui/card";
 import { EmptyState } from "@/components/empty-state";
+import { PageContainer } from "@/components/page-container";
+import { PageHeader } from "@/components/page-header";
 import { auth } from "@/auth";
 import {
   availableLeagueKeys,
@@ -61,16 +63,11 @@ export default async function DashboardPage({ searchParams }: PageProps) {
 
   return (
     <>
-      <div className="mx-auto w-full max-w-content px-5 pb-16 pt-8 lg:px-8 lg:pt-10">
-        <div className="flex flex-col gap-1 pb-7">
-          {/* 28px sem degrau na escala (gap display-md 26 → display-lg 32) — mantido como outlier heroic-display (espelha #246), sem cunhar token; lg sobe pro degrau exato */}
-          <h1 className="text-[28px] font-medium leading-none tracking-tight lg:text-display-lg">
-            Desempenho
-          </h1>
-          <p className="text-body tracking-tight text-muted-foreground">
-            Suas análises por mercado — yield, racional e resultados.
-          </p>
-        </div>
+      <PageContainer width="content">
+        <PageHeader
+          title="Desempenho"
+          description="Suas análises por mercado — yield, racional e resultados."
+        />
 
         {rows.length === 0 ? (
           <Card className="px-8 py-16 text-center">
@@ -127,7 +124,7 @@ export default async function DashboardPage({ searchParams }: PageProps) {
             </section>
           </div>
         )}
-      </div>
+      </PageContainer>
     </>
   );
 }

@@ -1,4 +1,5 @@
-import { BackLink } from "@/components/back-link";
+import { PageContainer } from "@/components/page-container";
+import { PageHeader } from "@/components/page-header";
 import { LEAGUE_LABEL } from "@/lib/format";
 import { cn } from "@/lib/utils";
 import type { PredictionDetailView } from "@/lib/view/dashboard";
@@ -68,17 +69,13 @@ export function PredictionDetail({
         : "text-muted-foreground";
 
   return (
-    <div className="mx-auto w-full max-w-reading px-6 py-8">
-      <BackLink href={backHref} label={backLabel} />
-
-      {/* text-[22px]: heroic-display outlier (sem degrau na escala; gap display-sm 18 → display-md 26), sancionado pela ADR 0029 espelhando a match page (#246) — NÃO tokenizar. */}
-      <h1 className="text-[22px] font-medium tracking-tight">
-        {match.home} × {match.away}
-      </h1>
-      <p className="pb-2 font-mono text-meta text-muted-foreground">
-        {LEAGUE_LABEL[match.league]} · {match.kickoff} · prediction{" "}
-        {view.id.slice(0, 8)}
-      </p>
+    <PageContainer width="reading">
+      <PageHeader
+        back={{ href: backHref, label: backLabel }}
+        title={`${match.home} × ${match.away}`}
+        meta={`${LEAGUE_LABEL[match.league]} · ${match.kickoff}`}
+        className="pb-2 lg:pb-2"
+      />
 
       <SectionLabel>predição</SectionLabel>
       <Row label="mercado" value={prediction.market} />
@@ -189,6 +186,6 @@ export function PredictionDetail({
           </>
         )
       )}
-    </div>
+    </PageContainer>
   );
 }

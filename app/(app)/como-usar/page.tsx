@@ -1,5 +1,7 @@
 import type { Metadata } from "next";
 
+import { PageContainer } from "@/components/page-container";
+
 import { ComoUsarContent } from "./como-usar-content";
 
 // Página gateada: recebe a CSP com nonce do middleware, e o Next só carimba o nonce em
@@ -19,8 +21,8 @@ export const metadata: Metadata = {
  */
 export default function ComoUsarPage() {
   return (
-    <div className="mx-auto w-full max-w-reading px-6 py-8">
+    <PageContainer width="reading">
       <ComoUsarContent />
-    </div>
+    </PageContainer>
   );
 }
