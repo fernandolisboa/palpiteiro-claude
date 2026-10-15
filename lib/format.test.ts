@@ -3,7 +3,12 @@ import { describe, expect, it } from "vitest";
 import type { PredictionJudgments } from "@/lib/ai/engine/types";
 
 import {
+  COUNTDOWN_WINDOW_MS,
+  dayKeyOf,
   formatAnalysisEngine,
+  formatDayHeading,
+  formatStartsIn,
+  formatTimeOfDay,
   formatCostUsd,
   formatCostUsdTotal,
   formatCountdown,
@@ -233,6 +238,69 @@ describe("formatKickoff* com timeZone (fuso do usuário, #1)", () => {
   it("countdown em BRT: <24h mesmo dia BRT → 'em 1h 30min'", () => {
     expect(formatCountdown(kickoff, now, "America/Sao_Paulo")).toBe(
       "em 1h 30min",
+    );
+  });
+});
+
+describe("formatadores de lista por dia (#577)", () => {
+  const SP = "America/Sao_Paulo";
+  // 23:30 de 18/10 em São Paulo = 02:30 UTC de 19/10.
+  const lateSp = new Date("2026-10-19T02:30:00Z");
+
+  it("formatTimeOfDay: hora no fuso do usuário", () => {
+    expect(formatTimeOfDay(lateSp, SP)).toBe("23:30");
+    expect(formatTimeOfDay(lateSp, "UTC")).toBe("02:30");
+  });
+
+  it("dayKeyOf: a data civil do fuso, não a do UTC", () => {
+    expect(dayKeyOf(lateSp, SP)).toBe("2026-10-18");
+    expect(dayKeyOf(lateSp, "UTC")).toBe("2026-10-19");
+  });
+
+  it("formatDayHeading: Hoje/Amanhã/Ontem pela data civil no fuso", () => {
+    const now = new Date("2026-10-18T15:00:00Z"); // 12:00 de 18/10 em SP
+    expect(formatDayHeading(lateSp, now, SP)).toBe("Hoje");
+    // No UTC o mesmo instante já é 19/10.
+    expect(formatDayHeading(lateSp, now, "UTC")).toBe("Amanhã");
+    expect(formatDayHeading(new Date("2026-10-19T15:00:00Z"), now, SP)).toBe("Amanhã");
+    expect(formatDayHeading(new Date("2026-10-17T15:00:00Z"), now, SP)).toBe("Ontem");
+  });
+
+  it("formatDayHeading: dia da semana por extenso sem '-feira', ano só se difere", () => {
+    const now = new Date("2026-10-14T15:00:00Z"); // quarta
+    expect(formatDayHeading(new Date("2026-10-17T19:00:00Z"), now, SP)).toBe("Sábado 17/10");
+    expect(formatDayHeading(new Date("2026-10-18T19:00:00Z"), now, SP)).toBe("Domingo 18/10");
+    expect(formatDayHeading(new Date("2026-10-19T19:00:00Z"), now, SP)).toBe("Segunda 19/10");
+    expect(formatDayHeading(new Date("2025-10-18T19:00:00Z"), now, SP)).toBe("Sábado 18/10/2025");
+  });
+
+  it("volta do horário de verão (Europe/London, 25/10/2026): o dia de 25h não quebra", () => {
+    const LON = "Europe/London";
+    const now = new Date("2026-10-24T22:00:00Z"); // 23:00 BST de 24/10
+    const early = new Date("2026-10-24T23:30:00Z"); // 00:30 BST de 25/10
+    const late = new Date("2026-10-25T23:30:00Z"); // 23:30 GMT de 25/10
+    expect(formatDayHeading(early, now, LON)).toBe("Amanhã");
+    expect(formatDayHeading(late, now, LON)).toBe("Amanhã");
+    expect(dayKeyOf(early, LON)).toBe("2026-10-25");
+    expect(dayKeyOf(late, LON)).toBe(dayKeyOf(early, LON));
+  });
+
+  it("formatStartsIn: só com 0 < delta <= 3h", () => {
+    const now = new Date("2026-10-18T15:00:00Z");
+    const at = (ms: number) => new Date(now.getTime() + ms);
+    expect(COUNTDOWN_WINDOW_MS).toBe(3 * 60 * 60 * 1000);
+    expect(formatStartsIn(at(COUNTDOWN_WINDOW_MS), now)).toBe("em 3h 00min");
+    expect(formatStartsIn(at(COUNTDOWN_WINDOW_MS + 60_000), now)).toBeUndefined();
+    expect(formatStartsIn(at(2 * 3_600_000 + 15 * 60_000), now)).toBe("em 2h 15min");
+    expect(formatStartsIn(at(40 * 60_000), now)).toBe("em 40min");
+    expect(formatStartsIn(now, now)).toBeUndefined();
+    expect(formatStartsIn(at(-60_000), now)).toBeUndefined();
+  });
+
+  it("formatStartsIn: janela própria", () => {
+    const now = new Date("2026-10-18T15:00:00Z");
+    expect(formatStartsIn(new Date(now.getTime() + 5 * 3_600_000), now, 6 * 3_600_000)).toBe(
+      "em 5h 00min",
     );
   });
 });
