@@ -46,6 +46,10 @@ const FixtureStatusSchema = z.object({
   long: z.string(),
   short: z.string(),
   elapsed: z.number().nullable(),
+  // Acréscimos do tempo em andamento (`elapsed 45, extra 2` = 45+2'). INFERIDO da
+  // documentação da API-Football (#580/#591), não visto em payload real: opcional e
+  // nullable, chave ausente não derruba o parse. Validar com a chave num jogo ao vivo.
+  extra: z.number().int().nullable().optional(),
 });
 
 const TeamRefSchema = z.object({
@@ -64,38 +68,6 @@ const LeagueRefSchema = z.object({
   season: z.number().int(),
   round: z.string().nullable().optional(),
 });
-
-export const FixtureItemSchema = z.object({
-  fixture: z.object({
-    id: z.number().int(),
-    date: z.string(),
-    timestamp: z.number().int(),
-    timezone: z.string().optional(),
-    status: FixtureStatusSchema,
-    venue: z
-      .object({
-        id: z.number().int().nullable(),
-        name: z.string().nullable(),
-        city: z.string().nullable(),
-      })
-      .partial()
-      .optional(),
-  }),
-  league: LeagueRefSchema,
-  teams: z.object({
-    home: TeamRefSchema,
-    away: TeamRefSchema,
-  }),
-  goals: ScoreLineSchema,
-  score: z.object({
-    halftime: ScoreLineSchema,
-    fulltime: ScoreLineSchema,
-    extratime: ScoreLineSchema.nullable(),
-    penalty: ScoreLineSchema.nullable(),
-  }),
-});
-
-export type ApiFootballFixture = z.infer<typeof FixtureItemSchema>;
 
 // Item de /fixtures/events?fixture={id} (#290): cada evento do jogo (gol,
 // cartão, substituição, VAR). Tolerante (Zod descarta chaves extras): só
@@ -130,6 +102,44 @@ export const FixtureEventItemSchema = z.object({
   type: z.string(),
   detail: z.string().nullable().optional(),
 });
+
+export const FixtureItemSchema = z.object({
+  fixture: z.object({
+    id: z.number().int(),
+    date: z.string(),
+    timestamp: z.number().int(),
+    timezone: z.string().optional(),
+    status: FixtureStatusSchema,
+    venue: z
+      .object({
+        id: z.number().int().nullable(),
+        name: z.string().nullable(),
+        city: z.string().nullable(),
+      })
+      .partial()
+      .optional(),
+  }),
+  league: LeagueRefSchema,
+  teams: z.object({
+    home: TeamRefSchema,
+    away: TeamRefSchema,
+  }),
+  goals: ScoreLineSchema,
+  score: z.object({
+    halftime: ScoreLineSchema,
+    fulltime: ScoreLineSchema,
+    extratime: ScoreLineSchema.nullable(),
+    penalty: ScoreLineSchema.nullable(),
+  }),
+  // Eventos do jogo. Só a busca por id (`/fixtures?id=`) os traz junto, segundo a
+  // documentação (INFERIDO, #591: validar com payload real); a busca por data/liga
+  // não. Tolerante em dobro: chave ausente → undefined, e um evento malformado também
+  // vira undefined (`.catch`) em vez de derrubar o fixture inteiro: quem lê trata
+  // undefined como "sem dados de eventos" (expulsões desconhecidas).
+  events: z.array(FixtureEventItemSchema).optional().catch(undefined),
+});
+
+export type ApiFootballFixture = z.infer<typeof FixtureItemSchema>;
 
 export type ApiFootballFixtureEvent = z.infer<typeof FixtureEventItemSchema>;
 export const FixtureEventEnvelopeSchema = envelope(FixtureEventItemSchema);
