@@ -186,6 +186,8 @@ export default async function JogosPage({ searchParams }: PageProps) {
         homeScore: m.homeScore,
         awayScore: m.awayScore,
         updatedAt: m.updatedAt,
+        homeTeamCrestUrl: m.homeTeamCrestUrl,
+        awayTeamCrestUrl: m.awayTeamCrestUrl,
       },
       odds: snapshot
         ? {

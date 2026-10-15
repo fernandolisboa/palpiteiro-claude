@@ -78,7 +78,12 @@ function hashHue(name: string): number {
   return Math.abs(hash) % 360;
 }
 
-export function teamToTeam(canonicalName: string, league: LeagueKey): Team {
+export function teamToTeam(
+  canonicalName: string,
+  league: LeagueKey,
+  crestUrl?: string | null,
+): Team {
+  const flagCode = flagCodeForTeam(canonicalName, league);
   return {
     // Nome curto de exibição (#578; Copa em PT-BR, #340) e nome oficial pro
     // `title`. O canonical segue intocado em short/hue e em todo o matching
@@ -89,7 +94,9 @@ export function teamToTeam(canonicalName: string, league: LeagueKey): Team {
     short: teamCode(canonicalName),
     hue: HUE_BY_CANONICAL[canonicalName] ?? hashHue(canonicalName),
     // Bandeira só na Copa (#341); undefined em clubes → avatar cai nas iniciais.
-    flagCode: flagCodeForTeam(canonicalName, league),
+    flagCode,
+    // Escudo do provider (#578), só fora da Copa: a bandeira tem prioridade.
+    ...(crestUrl && !flagCode ? { crestUrl } : {}),
   };
 }
 
@@ -103,9 +110,10 @@ export function teamPair(
   homeCanonical: string,
   awayCanonical: string,
   league: LeagueKey,
+  crests?: { home?: string | null; away?: string | null },
 ): { home: Team; away: Team } {
-  const home = teamToTeam(homeCanonical, league);
-  const away = teamToTeam(awayCanonical, league);
+  const home = teamToTeam(homeCanonical, league, crests?.home);
+  const away = teamToTeam(awayCanonical, league, crests?.away);
   if (home.short !== away.short) return { home, away };
   const homeCurated = hasCuratedCode(homeCanonical);
   const awayCurated = hasCuratedCode(awayCanonical);

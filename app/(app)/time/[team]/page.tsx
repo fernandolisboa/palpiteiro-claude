@@ -91,6 +91,8 @@ export default async function TeamHistoryPage({ params }: PageProps) {
         homeScore: m.homeScore,
         awayScore: m.awayScore,
         updatedAt: m.updatedAt,
+        homeTeamCrestUrl: m.homeTeamCrestUrl,
+        awayTeamCrestUrl: m.awayTeamCrestUrl,
       },
       odds: snapshot
         ? {

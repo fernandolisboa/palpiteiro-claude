@@ -56,6 +56,31 @@ describe("teamToTeam", () => {
   });
 });
 
+describe("teamToTeam — escudo (#578)", () => {
+  const CREST = "https://media.api-sports.io/football/teams/121.png";
+
+  it("crestUrl passa em clube", () => {
+    expect(teamToTeam("SE Palmeiras", "bsa", CREST).crestUrl).toBe(CREST);
+  });
+
+  it("sem escudo (null/undefined) não cria a chave", () => {
+    expect("crestUrl" in teamToTeam("SE Palmeiras", "bsa", null)).toBe(false);
+    expect("crestUrl" in teamToTeam("SE Palmeiras", "bsa")).toBe(false);
+  });
+
+  it("na Copa a bandeira vence o escudo", () => {
+    const t = teamToTeam("Mexico", "wc", CREST);
+    expect(t.flagCode).toBe("mx");
+    expect(t.crestUrl).toBeUndefined();
+  });
+
+  it("teamPair repassa o escudo de cada lado", () => {
+    const { home, away } = teamPair("SE Palmeiras", "CR Flamengo", "bsa", { home: CREST, away: null });
+    expect(home.crestUrl).toBe(CREST);
+    expect(away.crestUrl).toBeUndefined();
+  });
+});
+
 describe("teamPair", () => {
   it("sem colisão não mexe em nada", () => {
     const { home, away } = teamPair("Club Atlético de Madrid", "Athletic Club", "laliga");

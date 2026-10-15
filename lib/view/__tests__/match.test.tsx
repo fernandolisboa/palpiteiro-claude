@@ -387,6 +387,55 @@ describe("toMatchRowView — nomes da Copa em PT-BR (fiação do caller)", () =>
   });
 });
 
+describe("toMatchRowView — nome curto, sigla e escudo (#578)", () => {
+  const CREST = "https://media.api-sports.io/football/teams/121.png";
+
+  it("clube com escudo: nome curto, nome oficial, sigla e crestUrl", () => {
+    const view = toMatchRowView({
+      match: makeMatch({
+        league: "brasileirao_a",
+        homeTeam: "SE Palmeiras",
+        awayTeam: "SC Corinthians Paulista",
+        homeTeamCrestUrl: CREST,
+        awayTeamCrestUrl: null,
+      }),
+      odds: null,
+      hasPrediction: false,
+      now: NOW,
+    });
+    expect(view.home).toMatchObject({
+      name: "Palmeiras",
+      fullName: "SE Palmeiras",
+      short: "PAL",
+      crestUrl: CREST,
+    });
+    expect(view.away.name).toBe("Corinthians");
+    expect(view.away.crestUrl).toBeUndefined();
+  });
+
+  it("sem escudo: sem crestUrl (a UI mostra as iniciais)", () => {
+    const view = toMatchRowView({
+      match: makeMatch({ league: "la_liga", homeTeam: "Club Atlético de Madrid", awayTeam: "Athletic Club" }),
+      odds: null,
+      hasPrediction: false,
+      now: NOW,
+    });
+    expect(view.home.crestUrl).toBeUndefined();
+    expect([view.home.short, view.away.short]).toEqual(["ATM", "ATH"]);
+  });
+
+  it("Copa: a bandeira vence o escudo", () => {
+    const view = toMatchRowView({
+      match: makeMatch({ homeTeam: "Mexico", awayTeam: "Brazil", homeTeamCrestUrl: CREST }),
+      odds: null,
+      hasPrediction: false,
+      now: NOW,
+    });
+    expect(view.home.flagCode).toBe("mx");
+    expect(view.home.crestUrl).toBeUndefined();
+  });
+});
+
 describe("base do modelo na linha e firewall do hero (#555)", () => {
   // Base mínima com as probabilidades que a linha lê.
   const modelSnapshot = {

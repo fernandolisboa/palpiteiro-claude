@@ -31,6 +31,15 @@ afterEach(() => {
 });
 
 describe("buildCsp", () => {
+  // Escudo de time (#578) vem do CDN do provider esportivo (media.api-sports.io,
+  // crests.football-data.org). Quem um dia apertar img-src para lista de hosts vê
+  // este teste quebrar e lembra dos escudos (e do avatar de perfil).
+  it("img-src libera escudo de time (https:) nas variantes com e sem nonce", () => {
+    for (const csp of [buildCsp({ nonce: "abc123==" }), buildCsp()]) {
+      expect(directives(csp).get("img-src")).toContain("https:");
+    }
+  });
+
   it("variante com nonce: nonce + strict-dynamic, SEM unsafe-inline em script-src", () => {
     const d = directives(buildCsp({ nonce: "abc123==" }));
     expect(d.get("script-src")).toEqual([

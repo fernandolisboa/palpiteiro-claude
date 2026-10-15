@@ -60,6 +60,11 @@ describe("/privacidade", () => {
     }
   });
 
+  it("explica que o navegador carrega o escudo do provedor (#578)", () => {
+    expect(html).toContain("escudos dos times");
+    expect(html).toContain("recebe o endereço IP do seu navegador");
+  });
+
   it("cobre o direito de exclusão, o contato e o cross-link pros Termos", () => {
     expect(html).toContain("exclusão");
     expect(html).toContain("contato@palpiteiro.live");

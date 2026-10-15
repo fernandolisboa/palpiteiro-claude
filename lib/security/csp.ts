@@ -69,7 +69,10 @@ export function buildCsp({ nonce, isDev = false, reportUri }: CspOptions = {}) {
     // Atributos `style={}` do React e os <style> do next/font são inline — nonce em
     // style-src desligaria o 'unsafe-inline' e quebraria os atributos.
     ["style-src", ["'self'", "'unsafe-inline'"]],
-    // Avatar de perfil é URL https arbitrária (components/user-avatar.tsx); o resto é local.
+    // Avatar de perfil é URL https arbitrária (components/user-avatar.tsx) e o escudo de
+    // time vem do CDN do provider esportivo (components/team-crest.tsx, #578:
+    // media.api-sports.io e crests.football-data.org, filtrados por safeCrestUrl). Por
+    // isso `https:` e não uma lista de hosts; o resto é local.
     ["img-src", ["'self'", "data:", "blob:", "https:"]],
     ["font-src", ["'self'", "data:"]],
     // Sentry passa pelo túnel same-origin `/monitoring`; nada de fetch cross-origin.

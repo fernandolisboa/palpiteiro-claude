@@ -39,6 +39,9 @@ export type Team = {
   // Código de bandeira (ISO/subdivisão) p/ seleções da Copa (#341). Undefined em
   // clubes — o avatar cai nas iniciais. Display-only, resolve public/flags/wc/.
   flagCode?: string;
+  // Escudo do time (#578): URL do CDN do provider (já filtrada por safeCrestUrl no
+  // sync). Undefined na Copa (a bandeira vence) e quando não há escudo gravado.
+  crestUrl?: string;
 };
 
 export type MatchRowView = {

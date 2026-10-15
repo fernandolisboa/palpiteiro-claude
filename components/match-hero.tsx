@@ -2,7 +2,7 @@ import Link from "next/link";
 
 import { Badge } from "@/components/ui/badge";
 import { LiveBadge } from "@/components/live-badge";
-import { TeamAvatar } from "@/components/team-avatar";
+import { TeamCrest } from "@/components/team-crest";
 import { LEAGUE_LABEL } from "@/lib/format";
 import type { MatchHeroView } from "@/lib/view/types";
 
@@ -43,7 +43,7 @@ function TeamBlock({
   );
   return (
     <div className="flex flex-col items-center gap-2.5 lg:flex-row lg:items-center lg:gap-3">
-      <TeamAvatar initials={team.short} hue={team.hue} size={56} flagCode={team.flagCode} />
+      <TeamCrest team={team} size={56} priority />
       <div className="flex flex-col items-center lg:items-start">
         <span className="text-center text-body font-medium leading-tight tracking-tight lg:text-left lg:text-display-xs lg:tracking-[-0.02em]">
           {name}

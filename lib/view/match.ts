@@ -41,6 +41,10 @@ export type MatchInput = {
   // data do placar parcial de um jogo `live` (#574). Opcional — sem ela a legenda
   // fica só "parcial".
   updatedAt?: Date;
+  // Escudo de cada time (#578, matches.*_team_crest_url). Opcional: sem ele a UI
+  // mostra as iniciais.
+  homeTeamCrestUrl?: string | null;
+  awayTeamCrestUrl?: string | null;
 };
 
 export type ToMatchRowArgs = {
@@ -75,7 +79,10 @@ export function toMatchRowView({
   // perde a badge — não fica pendurado pra sempre) e cujo status não é terminal.
   // Exclusão EXPLÍCITA de finished/cancelled/postponed (não denylist de `live`):
   // um adiado cujo kickoff original passou NÃO vira "em andamento".
-  const { home, away } = teamPair(match.homeTeam, match.awayTeam, league);
+  const { home, away } = teamPair(match.homeTeam, match.awayTeam, league, {
+    home: match.homeTeamCrestUrl,
+    away: match.awayTeamCrestUrl,
+  });
   // Sigla de 3 letras nos rótulos de 1X2 (coluna estreita da lista): "PAL 2,67 ·
   // Empate 2,87 · FLA 3,06" e "Modelo · PAL 42%" (#574 linha 4b).
   const shortTeams = { home: home.short, away: away.short };

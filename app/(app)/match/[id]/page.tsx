@@ -232,6 +232,8 @@ export default async function MatchPage({ params, searchParams }: PageProps) {
       homeScore: match.homeScore,
       awayScore: match.awayScore,
       updatedAt: match.updatedAt,
+      homeTeamCrestUrl: match.homeTeamCrestUrl,
+      awayTeamCrestUrl: match.awayTeamCrestUrl,
     },
     // O hero não mostra odd (os cards de odds chegam por streaming, oddsP acima).
     odds: null,

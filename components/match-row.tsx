@@ -5,7 +5,7 @@ import { Badge } from "@/components/ui/badge";
 import { Skeleton } from "@/components/ui/skeleton";
 import { LiveBadge } from "@/components/live-badge";
 import { MatchModelLine } from "@/components/match-model-line";
-import { TeamAvatar } from "@/components/team-avatar";
+import { TeamCrest } from "@/components/team-crest";
 import { appendBackParam } from "@/lib/view/back-href";
 import { cn } from "@/lib/utils";
 import { LEAGUE_LABEL } from "@/lib/format";
@@ -86,14 +86,14 @@ export function MatchRow({ m, last, listHref, backHref, tourTarget }: Props) {
       <div className="flex items-center justify-between gap-3">
         <div className="flex min-w-0 flex-col gap-1">
           <div className="flex items-center gap-2">
-            <TeamAvatar initials={m.home.short} hue={m.home.hue} size={22} flagCode={m.home.flagCode} />
-            <span className="truncate text-label font-medium tracking-tight">
+            <TeamCrest team={m.home} size={22} />
+            <span className="truncate text-label font-medium tracking-tight" title={m.home.fullName}>
               {m.home.name}
             </span>
           </div>
           <div className="flex items-center gap-2">
-            <TeamAvatar initials={m.away.short} hue={m.away.hue} size={22} flagCode={m.away.flagCode} />
-            <span className="truncate text-label font-medium tracking-tight">
+            <TeamCrest team={m.away} size={22} />
+            <span className="truncate text-label font-medium tracking-tight" title={m.away.fullName}>
               {m.away.name}
             </span>
           </div>
