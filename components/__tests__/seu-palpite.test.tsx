@@ -9,8 +9,10 @@ vi.mock("@/app/actions/bet-slip", () => ({ registerBetSlip: vi.fn() }));
 vi.mock("@/app/actions/bets", () => ({ parseBet: vi.fn() }));
 
 import { analyzeUserPalpite } from "@/app/actions/user-palpite";
-import { BetSlip } from "@/components/bet-slip";
-import { BetSlipBridgeProvider } from "@/components/bet-slip-bridge";
+import { BetSlipProvider } from "@/components/bet-slip/bet-slip-provider";
+import { MarketTable } from "@/components/bet-slip/market-table";
+import { SlipMobileBar } from "@/components/bet-slip/slip-mobile-bar";
+import { SlipPanel } from "@/components/bet-slip/slip-panel";
 import { SeuPalpite } from "@/components/seu-palpite";
 import { MAX_SLIP_SELECTIONS } from "@/lib/bets/slip-markets";
 import { scorelineMatrix } from "@/lib/quant/scoreline-model";
@@ -232,13 +234,18 @@ describe("SeuPalpite — ponte com Suas apostas", () => {
     analysis: new Map(),
   });
 
-  it("Adicionar às suas apostas põe a perna na lista do BetSlip da mesma árvore", async () => {
-    await mount(
-      <BetSlipBridgeProvider>
-        <SeuPalpite {...props()} />
-        <BetSlip matchId={MATCH_ID} grid={grid} />
-      </BetSlipBridgeProvider>,
-    );
+  // A página: um provider envolve a tabela, o painel e o "Seu palpite" (#576).
+  const page = (withTable = true) => (
+    <BetSlipProvider matchId={MATCH_ID}>
+      <SeuPalpite {...props()} />
+      {withTable && <MarketTable grid={grid} />}
+      <SlipPanel />
+      <SlipMobileBar />
+    </BetSlipProvider>
+  );
+
+  it("Adicionar às suas apostas põe a perna na lista de Suas apostas", async () => {
+    await mount(page());
     await click(button("2 gols do Flamengo"));
     await click(button("0 gols do Palmeiras"));
     await click(button("Adicionar às suas apostas"));
@@ -249,12 +256,7 @@ describe("SeuPalpite — ponte com Suas apostas", () => {
   });
 
   it("adicionar de novo não diz 'adicionado': avisa que já está (#564 review)", async () => {
-    await mount(
-      <BetSlipBridgeProvider>
-        <SeuPalpite {...props()} />
-        <BetSlip matchId={MATCH_ID} grid={grid} />
-      </BetSlipBridgeProvider>,
-    );
+    await mount(page());
     await click(button("2 gols do Flamengo"));
     await click(button("0 gols do Palmeiras"));
     await click(button("Adicionar às suas apostas"));
@@ -266,12 +268,7 @@ describe("SeuPalpite — ponte com Suas apostas", () => {
   });
 
   it("lista cheia: avisa o limite em vez de 'adicionado' (#564 review)", async () => {
-    await mount(
-      <BetSlipBridgeProvider>
-        <SeuPalpite {...props()} />
-        <BetSlip matchId={MATCH_ID} grid={grid} />
-      </BetSlipBridgeProvider>,
-    );
+    await mount(page());
     const scores = [0, 1, 2, 3, 4].flatMap((h) => [0, 1].map((a) => [h, a] as const));
     for (const [h, a] of scores.slice(0, MAX_SLIP_SELECTIONS)) {
       await click(button(`${h} gols do Flamengo`));
@@ -290,24 +287,15 @@ describe("SeuPalpite — ponte com Suas apostas", () => {
   });
 
   it("resultado vira a perna 1X2 da grade", async () => {
-    await mount(
-      <BetSlipBridgeProvider>
-        <SeuPalpite {...props()} />
-        <BetSlip matchId={MATCH_ID} grid={grid} />
-      </BetSlipBridgeProvider>,
-    );
+    await mount(page());
     await click(button("Resultado"));
     await click(button("Empate"));
     await click(button("Adicionar às suas apostas"));
     expect(container.textContent).toContain("suas apostas (1)");
   });
 
-  it("sem BetSlip registrado: avisa que a lista ainda está carregando", async () => {
-    await mount(
-      <BetSlipBridgeProvider>
-        <SeuPalpite {...props()} />
-      </BetSlipBridgeProvider>,
-    );
+  it("sem a tabela registrada: avisa que a lista ainda está carregando", async () => {
+    await mount(page(false));
     await click(button("Resultado"));
     await click(button("Vitória do Palmeiras"));
     await click(button("Adicionar às suas apostas"));
@@ -316,49 +304,34 @@ describe("SeuPalpite — ponte com Suas apostas", () => {
     );
   });
 
-  it("uma instância (#576): no celular abre a folha; no desktop rola até a lista", async () => {
+  it("no celular abre a folha; no desktop só a mensagem (o painel está à vista)", async () => {
     // Celular (jsdom não tem matchMedia → ramo da folha): o painel aparece na folha.
-    await mount(
-      <BetSlipBridgeProvider>
-        <SeuPalpite {...props()} />
-        <BetSlip matchId={MATCH_ID} grid={grid} />
-      </BetSlipBridgeProvider>,
-    );
+    await mount(page());
     await click(button("Resultado"));
     await click(button("Empate"));
     await click(button("Adicionar às suas apostas"));
     expect(document.querySelector('[role="dialog"]')).not.toBeNull();
     await act(async () => root.unmount());
 
-    // Desktop (lg): nada de folha, a seção rola até a vista.
+    // Desktop (lg): nada de folha nem de rolagem; a mensagem fica onde o usuário clicou.
     const scroll = vi.fn();
     const original = Element.prototype.scrollIntoView;
     Element.prototype.scrollIntoView = scroll;
     vi.stubGlobal("matchMedia", (q: string) => ({ matches: q === "(min-width: 1024px)" }));
     try {
       root = createRoot(container);
-      await mount(
-        <BetSlipBridgeProvider>
-          <SeuPalpite {...props()} />
-          <BetSlip matchId={MATCH_ID} grid={grid} />
-        </BetSlipBridgeProvider>,
-      );
+      await mount(page());
       await click(button("Resultado"));
       await click(button("Empate"));
       await click(button("Adicionar às suas apostas"));
       expect(document.querySelector('[role="dialog"]')).toBeNull();
-      expect(scroll).toHaveBeenCalled();
+      expect(scroll).not.toHaveBeenCalled();
+      expect(container.textContent).toContain("Adicionado em Suas apostas.");
       expect(container.textContent).toContain("suas apostas (1)");
     } finally {
       vi.unstubAllGlobals();
       Element.prototype.scrollIntoView = original;
     }
-  });
-
-  it("fora do provider o BetSlip funciona como antes", async () => {
-    await mount(<BetSlip matchId={MATCH_ID} grid={grid} />);
-    await click(button(/^Flamengo/));
-    expect(container.textContent).toContain("suas apostas (1)");
   });
 });
 

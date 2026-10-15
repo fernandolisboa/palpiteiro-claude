@@ -30,7 +30,7 @@ import {
   MatchSectionsSkeleton,
 } from "@/components/skeletons/match-sections-skeleton";
 import { BetSlipSection, BetSlipSkeleton } from "@/components/bet-slip-section";
-import { BetSlipBridgeProvider } from "@/components/bet-slip-bridge";
+import { BetSlipProvider } from "@/components/bet-slip/bet-slip-provider";
 import {
   SeuPalpiteSection,
   SeuPalpiteSkeleton,
@@ -568,9 +568,9 @@ function MatchLayout({
         {/* Registrar apostas (#556) + Seu palpite (#564): UMA ponte envolve os dois, pra
             o "Seu palpite" mandar o palpite pra lista "Suas apostas". */}
         {betGrid && (
-          <BetSlipBridgeProvider>
+          <BetSlipProvider matchId={matchId}>
             <Suspense fallback={<BetSlipSkeleton />}>
-              <BetSlipSection matchId={matchId} grid={betGrid} />
+              <BetSlipSection grid={betGrid} />
             </Suspense>
             {seuPalpite && (
               <Suspense fallback={<SeuPalpiteSkeleton />}>
@@ -582,7 +582,7 @@ function MatchLayout({
                 />
               </Suspense>
             )}
-          </BetSlipBridgeProvider>
+          </BetSlipProvider>
         )}
 
         <div className="flex flex-col gap-3" data-tour="match-stats">

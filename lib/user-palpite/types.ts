@@ -44,7 +44,7 @@ export const UserPalpiteSchema = z.discriminatedUnion("kind", [
 export type UserPalpite = z.infer<typeof UserPalpiteSchema>;
 
 // Perna que o "Seu palpite" manda pra lista "Suas apostas" (ponte de contexto,
-// components/bet-slip-bridge.tsx).
+// components/bet-slip/bet-slip-provider.tsx).
 export type BridgeLeg =
   | { kind: "exact_score"; params: { home: number; away: number } }
   | { kind: "match_result"; params: { selection: PalpiteResult } };

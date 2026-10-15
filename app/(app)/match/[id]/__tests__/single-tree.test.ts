@@ -45,6 +45,6 @@ describe("app/(app)/match/[id]/page.tsx", () => {
 
   it("tem o h1 do jogo (sr-only) e uma ponte só envolvendo grade e Seu palpite", () => {
     expect(src).toMatch(/<h1 className="sr-only">/);
-    expect(src.split("<BetSlipBridgeProvider>").length - 1).toBe(1);
+    expect(src.split("<BetSlipProvider").length - 1).toBe(1);
   });
 });

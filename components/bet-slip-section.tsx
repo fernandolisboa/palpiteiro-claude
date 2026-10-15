@@ -1,4 +1,7 @@
-import { BetSlip } from "@/components/bet-slip";
+import { MarketTable } from "@/components/bet-slip/market-table";
+import { SlipMobileRiskNotice } from "@/components/bet-slip/risk-notice";
+import { SlipMobileBar } from "@/components/bet-slip/slip-mobile-bar";
+import { SlipAside } from "@/components/bet-slip/slip-panel";
 import { Card } from "@/components/ui/card";
 import { Skeleton } from "@/components/ui/skeleton";
 import type { BetGridView } from "@/lib/view/bet-slip";
@@ -6,15 +9,18 @@ import type { BetGridView } from "@/lib/view/bet-slip";
 // "Registrar apostas" fora do caminho crítico: a grade precisa do modelo do jogo
 // (tabela + ratings) e das odds de referência (lidas DEPOIS do refresh que a página já
 // faz), então chega por streaming como os cards de odds. Renderizada uma vez por página
-// (#576: uma árvore responsiva).
-export async function BetSlipSection({
-  matchId,
-  grid,
-}: {
-  matchId: string;
-  grid: Promise<BetGridView>;
-}) {
-  return <BetSlip matchId={matchId} grid={await grid} />;
+// (#576: uma árvore responsiva). O estado da lista mora no BetSlipProvider da página.
+export async function BetSlipSection({ grid }: { grid: Promise<BetGridView> }) {
+  return (
+    <div className="flex flex-col gap-3">
+      <div className="flex flex-col gap-3 lg:grid lg:grid-cols-[minmax(0,1fr)_340px] lg:items-start lg:gap-4">
+        <MarketTable grid={await grid} />
+        <SlipAside />
+      </div>
+      <SlipMobileRiskNotice />
+      <SlipMobileBar />
+    </div>
+  );
 }
 
 export function BetSlipSkeleton() {

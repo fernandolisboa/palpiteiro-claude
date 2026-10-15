@@ -6,7 +6,7 @@ import {
   slipFullNotice,
   useBetSlipBridge,
   type BridgeAddOutcome,
-} from "@/components/bet-slip-bridge";
+} from "@/components/bet-slip/bet-slip-provider";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Card } from "@/components/ui/card";

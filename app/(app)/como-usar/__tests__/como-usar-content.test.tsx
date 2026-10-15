@@ -68,10 +68,10 @@ describe("/como-usar", () => {
   });
 
   // "mercados" aparece em dezenas de arquivos; o guia cita o título da grade de apostas
-  // da página do jogo (SectionHeading em components/bet-slip.tsx), então a checagem é
+  // da página do jogo (SectionHeading em components/bet-slip/market-table.tsx), então a checagem é
   // nesse título e no destaque <Ui> do guia, não na palavra solta.
   it("cita o título da grade de apostas (mercados) como ele aparece no bet-slip", () => {
-    const betSlip = readFileSync(path.join(root, "components", "bet-slip.tsx"), "utf8");
+    const betSlip = readFileSync(path.join(root, "components", "bet-slip", "market-table.tsx"), "utf8");
     const heading = betSlip.match(/function SectionHeading[\s\S]*?<span[^>]*>\s*([^<]+?)\s*<\/span>/);
     expect(heading?.[1]).toBe("mercados");
     expect(html).toMatch(/<span[^>]*>mercados<\/span>/);
