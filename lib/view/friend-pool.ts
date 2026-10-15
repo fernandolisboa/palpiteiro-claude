@@ -1,5 +1,14 @@
 import type { BetLegParams } from "@/db/schema";
-import { LEAGUE_LABEL, formatKickoffDateTime, formatLine, leagueToKey } from "@/lib/format";
+import {
+  COUNTDOWN_WINDOW_MS,
+  LEAGUE_LABEL,
+  formatKickoffDateTime,
+  formatLine,
+  formatStartsIn,
+  leagueToKey,
+} from "@/lib/format";
+import { poolBetsOpen } from "@/lib/pools/pool-state";
+import { resolvePoolScore } from "@/lib/pools/winners";
 import type { SupportedLeague } from "@/lib/providers/sports-data/leagues";
 import { displayMatchTeams } from "@/lib/view/team";
 
@@ -45,6 +54,63 @@ export function poolBetLabel(kind: string, params: BetLegParams, teams: TeamName
     default:
       return kind;
   }
+}
+
+/**
+ * A aposta na lista de apostadores (#577): o placar com as siglas ("PAL 2 × 1 FLA",
+ * de `teamPair`, que desempata siglas iguais) pra caber numa linha com o tipo; os
+ * outros tipos ficam com o rótulo de `poolBetLabel` e o nome curto.
+ */
+export function poolBetShortLabel(
+  kind: string,
+  params: BetLegParams,
+  teams: TeamNames,
+  codes: TeamNames,
+): string {
+  if (kind === "exact_score") {
+    const p = params as Record<string, unknown>;
+    return `${codes.home} ${p.home} × ${p.away} ${codes.away}`;
+  }
+  return poolBetLabel(kind, params, teams);
+}
+
+export type PoolStatusTone = "open" | "soon" | "neutral";
+export type PoolStatusView = { label: string; tone: PoolStatusTone };
+
+/**
+ * Selo do bolão na lista (#577). Aberto em destaque; nas últimas 3h antes do apito
+ * (a trava), âmbar com quanto falta. Sem a hora no selo: a linha do bolão já mostra
+ * data e hora do jogo. Placar, adiado, cancelado e "esperando o placar" ficam
+ * neutros. Delta puro: não depende de fuso.
+ */
+export function poolStatusView(
+  row: {
+    pool: { manualHomeScore: number | null; manualAwayScore: number | null };
+    match: {
+      status: string;
+      kickoffAt: Date;
+      homeScore: number | null;
+      awayScore: number | null;
+    };
+  },
+  now: Date,
+): PoolStatusView {
+  const score = resolvePoolScore(row.pool, row.match);
+  if (score) return { label: `placar ${score.home} × ${score.away}`, tone: "neutral" };
+  if (row.match.status === "postponed") return { label: "jogo adiado", tone: "neutral" };
+  if (row.match.status === "cancelled") return { label: "jogo cancelado", tone: "neutral" };
+  if (poolBetsOpen(row.match, now)) {
+    const closesIn = poolClosesIn(row.match.kickoffAt, now);
+    return closesIn
+      ? { label: `fecham ${closesIn}`, tone: "soon" }
+      : { label: "apostas abertas", tone: "open" };
+  }
+  return { label: "esperando o placar", tone: "neutral" };
+}
+
+/** "em 2h 10min" só nas últimas 3h antes do apito (a trava do bolão); senão undefined. */
+export function poolClosesIn(kickoffAt: Date, now: Date): string | undefined {
+  return formatStartsIn(kickoffAt, now, COUNTDOWN_WINDOW_MS);
 }
 
 /** Tipo da aposta, pra coluna curta da tabela. */

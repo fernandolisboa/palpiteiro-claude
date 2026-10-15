@@ -9,9 +9,12 @@ import {
 } from "@/components/dashboard/dashboard-filters";
 import { KpiCards } from "@/components/dashboard/kpi-cards";
 import { MarketSegments } from "@/components/dashboard/market-segments";
+import { SummaryCards } from "@/components/dashboard/summary-cards";
 import { PredictionsTable } from "@/components/dashboard/predictions-table";
+import { TablePagination } from "@/components/dashboard/table-pagination";
 import { Card } from "@/components/ui/card";
 import { EmptyState } from "@/components/empty-state";
+import { MatchCollapsible } from "@/components/match-collapsible";
 import { PageContainer } from "@/components/page-container";
 import { PageHeader } from "@/components/page-header";
 import { auth } from "@/auth";
@@ -24,6 +27,10 @@ import {
 import { enrichDashboardRowsWithClosing } from "@/lib/dashboard/clv-enrich";
 import { getRequestTimeZone } from "@/lib/server/request-timezone";
 import { getUserDashboardRows } from "@/lib/db/queries/dashboard";
+import { paginate } from "@/lib/view/paginate";
+
+// Análises por página na tabela (#577). Só na página do usuário: o admin vê tudo.
+const TABLE_PAGE_SIZE = 25;
 
 export const dynamic = "force-dynamic";
 
@@ -32,11 +39,12 @@ type PageProps = {
     status?: string;
     league?: string;
     market?: string;
+    page?: string;
   }>;
 };
 
 export default async function DashboardPage({ searchParams }: PageProps) {
-  const { status, league, market } = await searchParams;
+  const { status, league, market, page: rawPage } = await searchParams;
 
   // Middleware garante sessão; redirect defensivo caso o matcher mude.
   const session = await auth();
@@ -57,9 +65,11 @@ export default async function DashboardPage({ searchParams }: PageProps) {
   const { kpis, segments, series, tableRows, availableLeagues, availableMarkets } =
     deriveDashboardView(rows, filters, timeZone);
 
-  // URL filtrada atual — propagada aos links da tabela pra preservar a busca ao
-  // abrir uma predição e voltar.
-  const listHref = currentDashboardHref(filters);
+  // A página corta o recorte DEPOIS do filtro de status: "Página N de M" é do recorte.
+  const table = paginate(tableRows, rawPage, TABLE_PAGE_SIZE);
+  // URL filtrada atual (com a página) — propagada aos links da tabela pra preservar a
+  // busca ao abrir uma predição e voltar.
+  const listHref = currentDashboardHref(filters, "/dashboard", table.page);
 
   return (
     <>
@@ -88,8 +98,8 @@ export default async function DashboardPage({ searchParams }: PageProps) {
           </Card>
         ) : (
           <div className="flex flex-col gap-8">
-            {/* Liga e mercado recortam tudo abaixo (KPIs, segmentos, gráfico e
-                tabela); o status, junto da tabela, filtra só ela (#539). */}
+            {/* Liga e mercado recortam tudo abaixo (resumo, gráfico, detalhe técnico
+                e tabela); o status, junto da tabela, filtra só ela (#539). */}
             <DashboardFiltersBar
               filters={filters}
               leagues={availableLeagues}
@@ -97,21 +107,27 @@ export default async function DashboardPage({ searchParams }: PageProps) {
               dimensions={["league", "market"]}
             />
 
-            <KpiCards view={kpis} />
-
-            <MarketSegments segments={segments} />
+            {/* Resumo e gráfico antes de qualquer número por mercado (#577). */}
+            <SummaryCards view={kpis} />
 
             <section className="flex flex-col gap-3">
-              <div className="flex items-baseline justify-between">
-                <span className="text-meta uppercase tracking-eyebrow text-muted-foreground">
-                  bankroll hipotético (u)
-                </span>
-                <span className="font-mono text-meta tabular-nums text-muted-foreground">
-                  {series.length} liquidada{series.length === 1 ? "" : "s"}
-                </span>
-              </div>
+              <span className="text-meta uppercase tracking-eyebrow text-muted-foreground">
+                saldo hipotético (u)
+              </span>
               <BankrollChart data={series} timeZone={timeZone} />
             </section>
+
+            {/* CLV, amostra e graduação por mercado, recolhidos. Sem `meta` no
+                MatchCollapsible: ele é mono e o texto aqui é palavra (ADR 0056). */}
+            <MatchCollapsible title="Detalhe técnico">
+              <div className="flex flex-col gap-6">
+                <p className="text-body-sm tracking-tight text-muted-foreground">
+                  CLV, amostra e graduação por mercado.
+                </p>
+                <KpiCards view={kpis} variant="technical" />
+                <MarketSegments segments={segments} />
+              </div>
+            </MatchCollapsible>
 
             <section className="flex flex-col gap-4">
               <DashboardFiltersBar
@@ -120,7 +136,17 @@ export default async function DashboardPage({ searchParams }: PageProps) {
                 markets={availableMarkets}
                 dimensions={["status"]}
               />
-              <PredictionsTable rows={tableRows} listHref={listHref} />
+              {table.total > 0 && (
+                <span className="text-meta tabular-nums text-muted-foreground">
+                  {table.total} {table.total === 1 ? "análise" : "análises"}
+                </span>
+              )}
+              <PredictionsTable rows={table.items} listHref={listHref} />
+              <TablePagination
+                page={table.page}
+                pageCount={table.pageCount}
+                hrefFor={(n) => currentDashboardHref(filters, "/dashboard", n)}
+              />
             </section>
           </div>
         )}

@@ -16,7 +16,7 @@ import { modelProbabilities } from "@/lib/model-base/build-snapshot";
 import { computeMarketImpliedProbabilities } from "@/lib/odds/implied-probability";
 import { RISK_DISCLAIMER } from "@/lib/view/share/disclaimer";
 import {
-  historyLegSummary,
+  historyLegView,
   MODEL_CAVEAT_PT_BR,
   RISK_DISCLAIMER_PT_BR,
   toBetGridView,
@@ -505,70 +505,62 @@ describe("valueReading", () => {
   });
 });
 
-describe("historyLegSummary", () => {
-  it("perna gravada com campos do modelo", () => {
-    expect(
-      historyLegSummary({
-        userOdd: "2.100",
-        modelProbPct: "52.30",
-        gradeSource: "scoreline_model",
-        modelSource: "dixon_coles",
-        marketImpliedPct: "47.80",
-        stakeUnits: "1.00",
-        suggestedStakeUnits: "1.50",
-      })
-    ).toEqual([
-      "chance 52,3%",
-      "odd 2,10",
-      "retorno esperado +9,8%",
-      "vantagem do modelo +4,5 pontos",
-      "seu stake 1u",
-      "sugerido 1,5u",
-      "Dixon-Coles",
-    ]);
+describe("historyLegView (/apostas, #577)", () => {
+  const base = {
+    userOdd: "1.850",
+    modelProbPct: "47.80",
+    gradeSource: "scoreline_model" as const,
+    modelSource: "dixon_coles" as const,
+    marketImpliedPct: "45.00",
+    stakeUnits: "0.50",
+    suggestedStakeUnits: "1.00",
+  };
+
+  it("simples: odd, stake e chance à vista; o resto em detalhes", () => {
+    expect(historyLegView(base)).toEqual({
+      visible: ["odd 1,85", "stake 0,5u", "chance 47,8%"],
+      details: [
+        "retorno esperado -11,6%",
+        "vantagem do modelo +2,8 pontos",
+        "sugerido 1u",
+        "Dixon-Coles",
+      ],
+    });
   });
 
-  it("perna da análise mostra 'sua análise'", () => {
-    const parts = historyLegSummary({
-      userOdd: null,
-      modelProbPct: "60.00",
-      gradeSource: "cartridge",
+  it("perna de combinada (stake no slip): sem stake na linha", () => {
+    const view = historyLegView({ ...base, stakeUnits: null, suggestedStakeUnits: null });
+    expect(view.visible).toEqual(["odd 1,85", "chance 47,8%"]);
+    expect(view.visible.join(" ")).not.toContain("vantagem");
+  });
+
+  it("perna sem chance do modelo: sem detalhes, nem com sugerido gravado", () => {
+    const noChance = {
+      ...base,
+      modelProbPct: null,
+      gradeSource: "none" as const,
       modelSource: null,
       marketImpliedPct: null,
-      stakeUnits: null,
-      suggestedStakeUnits: null,
-    });
-    expect(parts).toEqual(["chance 60,0%", "sua análise"]);
-  });
-
-  it("perna sem campos do modelo (antiga ou não gradeada)", () => {
-    expect(
-      historyLegSummary({
-        userOdd: "1.900",
-        modelProbPct: null,
-        gradeSource: "none",
-        modelSource: null,
-        marketImpliedPct: null,
-        stakeUnits: "2.00",
-        suggestedStakeUnits: null,
-      })
-    ).toEqual(["odd 1,90", "seu stake 2u"]);
-  });
-
-  it("heurístico e modelo desconhecido", () => {
-    const base = {
-      userOdd: null,
-      modelProbPct: "40.00",
-      gradeSource: "scoreline_model" as const,
-      marketImpliedPct: null,
-      stakeUnits: null,
-      suggestedStakeUnits: null,
     };
+    expect(historyLegView({ ...noChance, suggestedStakeUnits: null })).toEqual({
+      visible: ["odd 1,85", "stake 0,5u"],
+      details: [],
+    });
+    expect(historyLegView(noChance)).toEqual({
+      visible: ["odd 1,85", "stake 0,5u"],
+      details: [],
+    });
+  });
+
+  it("fonte da análise do usuário", () => {
     expect(
-      historyLegSummary({ ...base, modelSource: "heuristic" }).at(-1)
-    ).toBe("modelo simplificado");
-    expect(historyLegSummary({ ...base, modelSource: null }).at(-1)).toBe(
-      "modelo de placar"
+      historyLegView({ ...base, gradeSource: "cartridge", modelSource: null }).details.at(-1),
+    ).toBe("sua análise");
+    expect(historyLegView({ ...base, modelSource: "heuristic" }).details.at(-1)).toBe(
+      "modelo simplificado",
+    );
+    expect(historyLegView({ ...base, modelSource: null }).details.at(-1)).toBe(
+      "modelo de placar",
     );
   });
 });

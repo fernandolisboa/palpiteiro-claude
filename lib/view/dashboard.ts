@@ -14,6 +14,7 @@ import { computeClv } from "@/lib/odds/clv";
 import { getDescriptor } from "@/lib/odds/market-descriptor";
 import {
   formatCostUsd,
+  formatDecimal,
   formatEdge,
   formatEdgePoints,
   formatKickoffAbsolute,
@@ -42,6 +43,28 @@ const unitsLabel = formatUnitsSigned;
 
 export type RateView = { value: string; n: number; lowSample: boolean };
 
+// Cor por sinal no resumo do Desempenho (#577): vem do número, nunca do texto.
+// "zero" = neutro (zero na precisão de exibição, ou sem amostra).
+export type SignTone = "positive" | "negative" | "zero";
+
+function signTone(value: number | null, decimals: number): SignTone {
+  if (value === null || !Number.isFinite(value)) return "zero";
+  const shown = Number(value.toFixed(decimals));
+  if (shown > 0) return "positive";
+  if (shown < 0) return "negative";
+  return "zero";
+}
+
+// Texto com sinal a partir do MESMO arredondamento do tom: o que arredonda a zero
+// sai sem sinal ("0,0%", "0,00 u"), como o EV_ZERO_LABEL de lib/format-number, nunca
+// "+0,0%" neutro. "—" sem valor.
+function signedRounded(value: number | null, decimals: number, unit: string): string {
+  if (value === null || !Number.isFinite(value)) return "—";
+  const tone = signTone(value, decimals);
+  if (tone === "zero") return `${formatDecimal(0, decimals)}${unit}`;
+  return `${tone === "positive" ? "+" : ""}${formatDecimal(value, decimals)}${unit}`;
+}
+
 export type DashboardKpiView = {
   yieldPct: RateView;
   winRate: RateView;
@@ -50,8 +73,13 @@ export type DashboardKpiView = {
   // ou "—" sem amostra. + = bateu o fechamento (bom).
   clvOddsRatio: RateView;
   clvNoVigDelta: RateView;
+  // Retorno COM sinal ("+5,2%"; "—" sem amostra), só pro resumo do topo: o `yieldPct`
+  // (formatPct, sem "+") segue no KpiCards do admin e nos segmentos.
+  yieldSigned: string;
+  yieldTone: SignTone;
   totalProfit: string;
   profitPositive: boolean;
+  profitTone: SignTone;
   counts: {
     total: number;
     bets: number;
@@ -90,8 +118,11 @@ export function toDashboardKpiView(kpis: DashboardKpis): DashboardKpiView {
     passRate: toRateView(kpis.passRate),
     clvOddsRatio: toClvRateView(kpis.clvOddsRatio, "%"),
     clvNoVigDelta: toClvRateView(kpis.clvNoVigDelta, " pp"),
-    totalProfit: unitsLabel(kpis.totalProfitUnits),
+    yieldSigned: signedRounded(kpis.yield.value, 1, "%"),
+    yieldTone: signTone(kpis.yield.value, 1),
+    totalProfit: signedRounded(kpis.totalProfitUnits, 2, " u"),
     profitPositive: kpis.totalProfitUnits >= 0,
+    profitTone: signTone(kpis.totalProfitUnits, 2),
     counts: {
       total: kpis.totalPredictions,
       bets: kpis.bets,
@@ -199,7 +230,9 @@ export function toPredictionRowView(
     away: pair.away.name,
     title: `${pair.home.fullName ?? pair.home.name} × ${pair.away.fullName ?? pair.away.name}`,
     league,
-    when: formatKickoffAbsolute(row.createdAt, new Date(), timeZone),
+    // Data do JOGO (#577), não da análise: a tabela ordena por jogo.
+    // Com o ano quando é de outro ano (a tabela mistura temporadas).
+    when: formatKickoffAbsolute(row.kickoffAt, new Date(), timeZone, { withOtherYear: true }),
     // Tabela apertada: sigla de 3 letras no lugar de "Casa"/"Fora" (#574).
     rec: recommendationLabel(
       row.recommendation,

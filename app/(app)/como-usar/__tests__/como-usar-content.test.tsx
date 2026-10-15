@@ -65,6 +65,9 @@ describe("/como-usar", () => {
       "Adicionar às suas apostas",
       "Contexto extra (opcional)",
       "o que você acrescentou",
+      "Em aberto",
+      "Encerradas",
+      "Detalhe técnico",
     ]) {
       expect(html).toContain(label);
       expect(ui).toContain(label);

@@ -356,18 +356,23 @@ export function ComoUsarContent() {
             <Link href="/dashboard" className={LINK}>
               Desempenho
             </Link>
-            : as análises da IA que você pediu, com retorno, taxa de acerto, jogos sem aposta,
-            lucro hipotético em unidades, o gráfico da banca e a tabela jogo a jogo.
-            Os filtros de liga e mercado no topo valem pra página toda; o de status
-            filtra só a tabela. Tocar numa linha abre o detalhe da análise.
+            : as análises da IA que você pediu. No topo, o retorno, a taxa de acerto e
+            o saldo em unidades; logo abaixo, o gráfico do saldo. Em{" "}
+            <Ui>Detalhe técnico</Ui> ficam os números por mercado (CLV, amostra,
+            graduação) e os jogos sem aposta. A tabela, jogo a jogo pela data do jogo,
+            mostra 25 análises por página. Os filtros de liga e mercado no topo valem
+            pra página toda; o de status filtra só a tabela. Tocar numa linha abre o
+            detalhe da análise.
           </li>
           <li>
             <Link href="/apostas" className={LINK}>
               Suas apostas
             </Link>
-            : as apostas que você registrou na página do jogo, cada uma
-            marcada como <Ui>Acertou</Ui>, <Ui>Errou</Ui> ou <Ui>Em aberto</Ui>. Só
-            você vê.
+            : as apostas que você registrou na página do jogo. No topo, quantas estão
+            em aberto, quantas você acertou e o saldo em unidades; o filtro separa{" "}
+            <Ui>Em aberto</Ui> e <Ui>Encerradas</Ui>. Cada aposta vem marcada como{" "}
+            <Ui>Acertou</Ui>, <Ui>Errou</Ui> ou <Ui>Em aberto</Ui>, e a combinada traz
+            o selo de cada seleção. Só você vê.
           </li>
         </ul>
         <p>

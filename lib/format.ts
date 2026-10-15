@@ -123,6 +123,78 @@ function hhmm(p: DateParts): string {
     .padStart(2, "0")}`;
 }
 
+// "em 3h 24min" / "em 40min": a contagem de um delta positivo (minutos inteiros).
+// No último minuto, "em menos de 1min" (nunca "em 0min").
+function startsInLabel(deltaMs: number): string {
+  const totalMin = Math.floor(deltaMs / 60_000);
+  const h = Math.floor(totalMin / 60);
+  const m = totalMin % 60;
+  if (totalMin === 0) return "em menos de 1min";
+  if (h === 0) return `em ${m}min`;
+  return `em ${h}h ${m.toString().padStart(2, "0")}min`;
+}
+
+const WEEKDAY_FULL_PT = [
+  "Domingo",
+  "Segunda",
+  "Terça",
+  "Quarta",
+  "Quinta",
+  "Sexta",
+  "Sábado",
+];
+
+/**
+ * Janela da contagem regressiva nas listas (#577): só nas últimas 3h antes do apito.
+ * Não é o `IN_PROGRESS_WINDOW_MS` de `lib/view/date-range.ts` (cauda de jogo apitado);
+ * coincidir em 3h é acaso.
+ */
+export const COUNTDOWN_WINDOW_MS = 3 * 60 * 60 * 1000;
+
+/** "19:00": só a hora, no `timeZone` do usuário (undefined = fuso do runtime). */
+export function formatTimeOfDay(d: Date, timeZone?: string): string {
+  return hhmm(partsOf(d, timeZone));
+}
+
+/** "2026-10-18": a data civil no `timeZone` do usuário, chave de agrupamento por dia. */
+export function dayKeyOf(d: Date, timeZone?: string): string {
+  const p = partsOf(d, timeZone);
+  return `${p.year}-${p.month.toString().padStart(2, "0")}-${p.day
+    .toString()
+    .padStart(2, "0")}`;
+}
+
+/**
+ * "Hoje" / "Amanhã" / "Ontem" / "Sábado 18/10" (ano só quando difere do de `now`:
+ * "Sábado 18/10/2025"). Compara a data CIVIL no fuso, nunca `now ± 24h`: dia de 23h
+ * ou 25h na troca de horário não quebra.
+ */
+export function formatDayHeading(d: Date, now: Date, timeZone?: string): string {
+  const k = partsOf(d, timeZone);
+  const n = partsOf(now, timeZone);
+  if (isSameDay(k, n)) return "Hoje";
+  if (isNextDay(k, n)) return "Amanhã";
+  if (isNextDay(n, k)) return "Ontem";
+  const dd = k.day.toString().padStart(2, "0");
+  const mm = k.month.toString().padStart(2, "0");
+  const year = k.year === n.year ? "" : `/${k.year}`;
+  return `${WEEKDAY_FULL_PT[weekdayOf(k)]} ${dd}/${mm}${year}`;
+}
+
+/**
+ * "em 2h 15min" / "em 40min" só quando faltam até `windowMs` (padrão 3h, inclusive)
+ * para `d`; senão (passado, agora ou mais longe) undefined. Delta puro, sem fuso.
+ */
+export function formatStartsIn(
+  d: Date,
+  now: Date,
+  windowMs: number = COUNTDOWN_WINDOW_MS,
+): string | undefined {
+  const deltaMs = d.getTime() - now.getTime();
+  if (deltaMs <= 0 || deltaMs > windowMs) return undefined;
+  return startsInLabel(deltaMs);
+}
+
 /**
  * "em 3h 24min" para kickoffs em <24h; "amanhã, 16:00" pro próximo dia;
  * "qui, 21:00" pra esta semana; "DD mmm" pra mais distante. Formata no `timeZone`
@@ -137,11 +209,7 @@ export function formatKickoffRelative(
   const k = partsOf(kickoff, timeZone);
   const n = partsOf(now, timeZone);
   if (deltaMs > 0 && deltaMs < 24 * 60 * 60 * 1000 && isSameDay(k, n)) {
-    const totalMin = Math.floor(deltaMs / 60_000);
-    const h = Math.floor(totalMin / 60);
-    const m = totalMin % 60;
-    if (h === 0) return `em ${m}min`;
-    return `em ${h}h ${m.toString().padStart(2, "0")}min`;
+    return startsInLabel(deltaMs);
   }
   if (isNextDay(k, n)) {
     return `amanhã, ${hhmm(k)}`;
@@ -155,12 +223,15 @@ export function formatKickoffRelative(
 
 /**
  * "hoje, 21:30" / "amanhã, 16:00" / "qua, 23 mai". Usado no MatchHero. Formata no
- * `timeZone` do usuário (undefined = fuso do runtime, legado).
+ * `timeZone` do usuário (undefined = fuso do runtime, legado). Com `withOtherYear`,
+ * o ano entra quando difere do de `now` no mesmo fuso ("sáb, 18 out 2025"): tabela
+ * do Desempenho, que mistura temporadas (#577).
  */
 export function formatKickoffAbsolute(
   kickoff: Date,
   now: Date = new Date(),
   timeZone?: string,
+  opts: { withOtherYear?: boolean } = {},
 ): string {
   const k = partsOf(kickoff, timeZone);
   const n = partsOf(now, timeZone);
@@ -169,7 +240,8 @@ export function formatKickoffAbsolute(
   const wk = WEEKDAY_ABBR_PT[weekdayOf(k)];
   const day = k.day.toString().padStart(2, "0");
   const mon = MONTH_ABBR_PT[k.month - 1];
-  return `${wk}, ${day} ${mon}`;
+  const year = opts.withOtherYear && k.year !== n.year ? ` ${k.year}` : "";
+  return `${wk}, ${day} ${mon}${year}`;
 }
 
 /**

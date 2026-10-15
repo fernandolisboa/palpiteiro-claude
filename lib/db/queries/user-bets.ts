@@ -11,6 +11,11 @@ import {
 import { db } from "@/lib/db";
 import { SETTLEMENT_MIN_ELAPSED_MS, type DbMatch } from "@/lib/db/queries/predictions";
 import {
+  deriveSlipStatus,
+  type SlipLedgerRow,
+  type SlipStatus,
+} from "@/lib/bets/slip-ledger";
+import {
   SETTLEABLE_USER_BET_KINDS,
   type BetLegKind,
   type SettleableUserBetKind,
@@ -229,22 +234,74 @@ export async function getUserBetSlipsForMatch(
 }
 
 // ── Histórico "Minhas apostas" (#473, ADR 0036) ──────────────────────────────
-// Status do slip DERIVADO EM LEITURA (nunca coluna denormalizada). PRECEDÊNCIA PINADA
-// (Decisão 5, lost domina): (1) alguma perna com outcome `lost` → errou; (2) senão
-// alguma perna `settleable=false` → nao_conferida; (3) senão TODA perna com outcome
-// `won` → acertou; (4) senão pendente. Perna pendente/não-liquidada tem outcome=null →
-// não conta como `won` → nunca falso-acertou (a armadilha do `bool_and` sobre o NULL do
-// LEFT JOIN). Função PURA — pglite-testável, sem drift com o render.
-export type SlipStatus = "acertou" | "errou" | "pendente" | "nao_conferida";
+// Status do slip DERIVADO EM LEITURA: a função pura mora em lib/bets/slip-ledger (a
+// mesma derivação alimenta o recorte Em aberto/Encerradas e o saldo, #577).
+export { deriveSlipStatus, type SlipStatus };
 
-export function deriveSlipStatus(
-  legs: Array<{ settleable: boolean; outcome: { result: string } | null }>,
-): SlipStatus {
-  if (legs.some((l) => l.outcome?.result === "lost")) return "errou";
-  if (legs.some((l) => !l.settleable)) return "nao_conferida";
-  if (legs.length > 0 && legs.every((l) => l.outcome?.result === "won"))
-    return "acertou";
-  return "pendente";
+/**
+ * Todos os slips do usuário, com as colunas enxutas do resumo de /apostas (#577):
+ * modo, stake/odd do slip e das pernas, resultado de cada perna e se o jogo acabou.
+ * Uma query (`bet_slips ⨝ matches ⟕ bet_legs ⟕ bet_leg_outcomes`), agrupada em
+ * memória. `userId` vem SEMPRE do `auth()` (anti-IDOR). `matchOver` = jogo
+ * finished/cancelled OU apitado há mais de SETTLEMENT_MIN_ELAPSED_MS (a mesma janela
+ * da liquidação): sem o tempo, uma aposta não conferida ficaria em aberto pra sempre
+ * se o cron não virasse o status. Adiado (`postponed`) nunca acaba por tempo.
+ */
+export async function getUserBetSlipLedger(
+  userId: string,
+  now: Date = new Date(),
+): Promise<SlipLedgerRow[]> {
+  const cutoff = now.getTime() - SETTLEMENT_MIN_ELAPSED_MS;
+  const rows = await db
+    .select({
+      slipId: betSlips.id,
+      mode: betSlips.mode,
+      slipStake: betSlips.stakeUnits,
+      comboUserOdd: betSlips.comboUserOdd,
+      matchStatus: matches.status,
+      kickoffAt: matches.kickoffAt,
+      legId: betLegs.id,
+      settleable: betLegs.settleable,
+      userOdd: betLegs.userOdd,
+      legStake: betLegs.stakeUnits,
+      result: betLegOutcomes.result,
+    })
+    .from(betSlips)
+    .innerJoin(matches, eq(betSlips.matchId, matches.id))
+    .leftJoin(betLegs, eq(betLegs.slipId, betSlips.id))
+    .leftJoin(betLegOutcomes, eq(betLegOutcomes.legId, betLegs.id))
+    .where(eq(betSlips.userId, userId))
+    .orderBy(desc(betSlips.createdAt), desc(betSlips.id), betLegs.createdAt);
+
+  const bySlip = new Map<string, SlipLedgerRow>();
+  for (const r of rows) {
+    let slip = bySlip.get(r.slipId);
+    if (!slip) {
+      slip = {
+        id: r.slipId,
+        mode: r.mode,
+        stakeUnits: r.slipStake,
+        comboUserOdd: r.comboUserOdd,
+        matchStatus: r.matchStatus,
+        // Adiado não acaba por tempo: o jogo ainda pode ser jogado (fica em aberto).
+        matchOver:
+          r.matchStatus === "finished" ||
+          r.matchStatus === "cancelled" ||
+          (r.matchStatus !== "postponed" && r.kickoffAt.getTime() < cutoff),
+        legs: [],
+      };
+      bySlip.set(r.slipId, slip);
+    }
+    if (r.legId !== null && r.settleable !== null) {
+      slip.legs.push({
+        settleable: r.settleable,
+        userOdd: r.userOdd,
+        stakeUnits: r.legStake,
+        outcome: r.result === null ? null : { result: r.result },
+      });
+    }
+  }
+  return [...bySlip.values()];
 }
 
 export type BetSlipMatch = {
@@ -252,6 +309,7 @@ export type BetSlipMatch = {
   awayTeam: string;
   league: DbMatch["league"];
   kickoffAt: Date;
+  status: DbMatch["status"];
 };
 export type BetSlipHistoryRow = DbBetSlip & {
   match: BetSlipMatch;
@@ -292,7 +350,15 @@ export async function getUserBetSlipsPage(args: {
   userId: string;
   cursor?: string;
   limit?: number;
+  // Recorte (#577, Em aberto/Encerradas): só estes slips. O keyset não muda, então o
+  // cursor vale dentro do recorte. Lista vazia → página vazia sem ir ao banco. Um
+  // parâmetro por id: ok pra centenas/poucos milhares de slips por usuário (teto do
+  // Postgres: 65.535). Acima disso, trocar por EXISTS espelhando `slipBucket`.
+  slipIds?: readonly string[];
 }): Promise<BetSlipsPage> {
+  if (args.slipIds && args.slipIds.length === 0) {
+    return { slips: [], nextCursor: null };
+  }
   const limit = args.limit ?? 20;
   const cur = args.cursor ? decodeSlipCursor(args.cursor) : null;
 
@@ -304,6 +370,7 @@ export async function getUserBetSlipsPage(args: {
         awayTeam: matches.awayTeam,
         league: matches.league,
         kickoffAt: matches.kickoffAt,
+        status: matches.status,
       },
     })
     .from(betSlips)
@@ -311,6 +378,7 @@ export async function getUserBetSlipsPage(args: {
     .where(
       and(
         eq(betSlips.userId, args.userId),
+        args.slipIds ? inArray(betSlips.id, [...args.slipIds]) : undefined,
         cur
           ? or(
               lt(betSlips.createdAt, cur.createdAt),

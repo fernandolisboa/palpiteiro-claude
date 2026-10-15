@@ -11,6 +11,7 @@ import { migrate } from "drizzle-orm/pglite/migrator";
 import { afterAll, beforeAll, beforeEach, describe, expect, it, vi } from "vitest";
 
 import * as schema from "@/db/schema";
+import { slipBucket } from "@/lib/bets/slip-ledger";
 
 let realDb: PgliteDatabase<typeof schema>;
 let client: PGlite;
@@ -30,13 +31,20 @@ vi.mock("@/lib/db", () => ({
 
 import {
   deriveSlipStatus,
+  getUserBetSlipLedger,
   getUserBetSlipsPage,
 } from "@/lib/db/queries/user-bets";
 
 const ids: { userId: string; otherUserId: string } = {} as never;
 const KICKOFF = new Date("2026-05-15T19:00:00Z");
 
-async function seedMatch(externalId: string): Promise<string> {
+async function seedMatch(
+  externalId: string,
+  opts: {
+    status?: (typeof schema.matchStatusEnum.enumValues)[number];
+    kickoffAt?: Date;
+  } = {},
+): Promise<string> {
   const [m] = await realDb
     .insert(schema.matches)
     .values({
@@ -44,7 +52,8 @@ async function seedMatch(externalId: string): Promise<string> {
       league: "brasileirao_a",
       homeTeam: "CR Flamengo",
       awayTeam: "Fluminense FC",
-      kickoffAt: KICKOFF,
+      kickoffAt: opts.kickoffAt ?? KICKOFF,
+      status: opts.status ?? "scheduled",
     })
     .returning({ id: schema.matches.id });
   return m.id;
@@ -56,6 +65,8 @@ async function seedSlip(args: {
   createdAt?: Date;
   comboUserOdd?: string | null;
   jointProbPct?: string | null;
+  mode?: "simples" | "combinada" | null;
+  stakeUnits?: string | null;
 }): Promise<string> {
   const [s] = await realDb
     .insert(schema.betSlips)
@@ -66,6 +77,8 @@ async function seedSlip(args: {
       parseAiCallId: null,
       comboUserOdd: args.comboUserOdd ?? null,
       jointProbPct: args.jointProbPct ?? null,
+      mode: args.mode ?? null,
+      stakeUnits: args.stakeUnits ?? null,
       ...(args.createdAt ? { createdAt: args.createdAt } : {}),
     })
     .returning({ id: schema.betSlips.id });
@@ -78,6 +91,7 @@ async function seedLeg(args: {
   params: schema.BetLegParams;
   settleable?: boolean;
   result?: "won" | "lost";
+  stakeUnits?: string | null;
 }): Promise<string> {
   const [l] = await realDb
     .insert(schema.betLegs)
@@ -90,6 +104,7 @@ async function seedLeg(args: {
       gradeSource: "scoreline_model",
       gradeStatus: "graded",
       settleable: args.settleable ?? true,
+      stakeUnits: args.stakeUnits ?? null,
     })
     .returning({ id: schema.betLegs.id });
   if (args.result) {
@@ -283,5 +298,154 @@ describe("getUserBetSlipsPage — histórico paginado", () => {
     expect(row.match.awayTeam).toBe("Fluminense FC");
     expect(row.legs).toHaveLength(2);
     expect(Number(row.comboUserOdd)).toBeCloseTo(2.1, 9);
+  });
+});
+
+describe("getUserBetSlipsPage — recorte por slipIds (#577)", () => {
+  it("só os slips do recorte, com o cursor valendo dentro dele", async () => {
+    const matchId = await seedMatch("ext-slice");
+    const created: string[] = [];
+    for (let i = 0; i < 5; i++) {
+      const slip = await seedSlip({
+        matchId,
+        userId: ids.userId,
+        createdAt: new Date(Date.UTC(2026, 0, 1, 0, 0, i)),
+      });
+      await seedLeg({ slipId: slip, params: { selection: "home" } });
+      created.push(slip);
+    }
+    // Recorte: 0, 2 e 4 → desc: 4, 2, 0.
+    const slice = [created[0], created[2], created[4]];
+    const p1 = await getUserBetSlipsPage({ userId: ids.userId, limit: 2, slipIds: slice });
+    expect(p1.slips.map((s) => s.id)).toEqual([created[4], created[2]]);
+    expect(p1.nextCursor).not.toBeNull();
+    const p2 = await getUserBetSlipsPage({
+      userId: ids.userId,
+      limit: 2,
+      slipIds: slice,
+      cursor: p1.nextCursor ?? undefined,
+    });
+    expect(p2.slips.map((s) => s.id)).toEqual([created[0]]);
+    expect(p2.nextCursor).toBeNull();
+  });
+
+  it("recorte vazio → página vazia sem ir ao banco", async () => {
+    const matchId = await seedMatch("ext-empty-slice");
+    const slip = await seedSlip({ matchId, userId: ids.userId });
+    await seedLeg({ slipId: slip, params: { selection: "home" } });
+    const select = vi.spyOn(realDb, "select");
+    try {
+      expect(await getUserBetSlipsPage({ userId: ids.userId, slipIds: [] })).toEqual({
+        slips: [],
+        nextCursor: null,
+      });
+      expect(select).not.toHaveBeenCalled();
+      // O espião enxerga o caminho normal (senão o "not called" acima não prova nada).
+      await getUserBetSlipsPage({ userId: ids.userId, slipIds: [slip] });
+      expect(select).toHaveBeenCalled();
+    } finally {
+      select.mockRestore();
+    }
+  });
+
+  it("recorte não vaza slip de outro usuário", async () => {
+    const matchId = await seedMatch("ext-slice-idor");
+    const theirs = await seedSlip({ matchId, userId: ids.otherUserId });
+    await seedLeg({ slipId: theirs, params: { selection: "home" } });
+    const page = await getUserBetSlipsPage({ userId: ids.userId, slipIds: [theirs] });
+    expect(page.slips).toEqual([]);
+  });
+
+  it("traz o status do jogo", async () => {
+    const matchId = await seedMatch("ext-status-match", { status: "cancelled" });
+    const slip = await seedSlip({ matchId, userId: ids.userId });
+    await seedLeg({ slipId: slip, params: { selection: "home" } });
+    const page = await getUserBetSlipsPage({ userId: ids.userId });
+    expect(page.slips[0].match.status).toBe("cancelled");
+  });
+});
+
+describe("getUserBetSlipLedger (#577)", () => {
+  const NOW = new Date("2026-05-20T12:00:00Z");
+
+  it("perna sem outcome vem com outcome null; stake/odd/modo do slip e da perna", async () => {
+    const matchId = await seedMatch("ext-ledger-shape", {
+      kickoffAt: new Date("2026-05-21T19:00:00Z"),
+    });
+    const combo = await seedSlip({
+      matchId,
+      userId: ids.userId,
+      mode: "combinada",
+      stakeUnits: "0.50",
+      comboUserOdd: "4.260",
+    });
+    await seedLeg({ slipId: combo, params: { selection: "home" }, result: "won" });
+    await seedLeg({ slipId: combo, kind: "btts", params: { selection: "yes" } });
+
+    const [row] = await getUserBetSlipLedger(ids.userId, NOW);
+    expect(row.id).toBe(combo);
+    expect(row.mode).toBe("combinada");
+    expect(Number(row.stakeUnits)).toBe(0.5);
+    expect(Number(row.comboUserOdd)).toBeCloseTo(4.26, 9);
+    expect(row.matchStatus).toBe("scheduled");
+    expect(row.matchOver).toBe(false);
+    expect(row.legs.map((l) => l.outcome)).toEqual([{ result: "won" }, null]);
+    expect(row.legs.every((l) => l.settleable)).toBe(true);
+  });
+
+  it("matchOver por status (finished/cancelled) e por kickoff antigo com status scheduled", async () => {
+    const finished = await seedMatch("ext-l-fin", {
+      status: "finished",
+      kickoffAt: new Date("2026-05-20T11:00:00Z"),
+    });
+    const cancelled = await seedMatch("ext-l-can", {
+      status: "cancelled",
+      kickoffAt: new Date("2026-05-21T19:00:00Z"),
+    });
+    const stale = await seedMatch("ext-l-stale", { kickoffAt: new Date("2026-05-20T09:00:00Z") });
+    const recent = await seedMatch("ext-l-recent", { kickoffAt: new Date("2026-05-20T10:00:00Z") });
+    const matchBySlip = new Map<string, string>();
+    for (const m of [finished, cancelled, stale, recent]) {
+      const slip = await seedSlip({ matchId: m, userId: ids.userId });
+      await seedLeg({ slipId: slip, params: { selection: "home" }, stakeUnits: "1.00" });
+      matchBySlip.set(slip, m);
+    }
+    const rows = await getUserBetSlipLedger(ids.userId, NOW);
+    const over = new Map(rows.map((r) => [matchBySlip.get(r.id), r.matchOver]));
+    expect(over.get(finished)).toBe(true);
+    expect(over.get(cancelled)).toBe(true);
+    // 3h antes de NOW (> 150 min) → acabou; 2h antes (< 150 min) → ainda não.
+    expect(over.get(stale)).toBe(true);
+    expect(over.get(recent)).toBe(false);
+    expect(rows.every((r) => Number(r.legs[0].stakeUnits) === 1)).toBe(true);
+  });
+
+  it("jogo adiado não acaba por tempo: não conferida segue em aberto", async () => {
+    const postponed = await seedMatch("ext-l-post", {
+      status: "postponed",
+      kickoffAt: new Date("2026-05-20T09:00:00Z"),
+    });
+    const slip = await seedSlip({ matchId: postponed, userId: ids.userId });
+    await seedLeg({
+      slipId: slip,
+      kind: "corners",
+      params: { selection: "over", line: 8.5 },
+      settleable: false,
+    });
+    const [row] = await getUserBetSlipLedger(ids.userId, NOW);
+    expect(row.matchStatus).toBe("postponed");
+    // Kickoff 3h antes de NOW (> 150 min), mas adiado: não acabou.
+    expect(row.matchOver).toBe(false);
+    expect(slipBucket(row)).toBe("open");
+  });
+
+  it("não vaza slip de outro usuário", async () => {
+    const matchId = await seedMatch("ext-l-idor");
+    const mine = await seedSlip({ matchId, userId: ids.userId });
+    await seedLeg({ slipId: mine, params: { selection: "home" } });
+    const theirs = await seedSlip({ matchId, userId: ids.otherUserId });
+    await seedLeg({ slipId: theirs, params: { selection: "away" } });
+    const rows = await getUserBetSlipLedger(ids.userId, NOW);
+    expect(rows.map((r) => r.id)).toEqual([mine]);
   });
 });

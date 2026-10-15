@@ -1,4 +1,4 @@
-import { describe, expect, it } from "vitest";
+import { afterEach, describe, expect, it, vi } from "vitest";
 
 import { computeDashboardKpis, type DashboardRow } from "@/lib/dashboard/kpis";
 import type { DashboardDetail } from "@/lib/db/queries/dashboard";
@@ -41,6 +41,10 @@ function row(overrides: Partial<DashboardRow> = {}): DashboardRow {
 }
 
 describe("toPredictionRowView", () => {
+  afterEach(() => {
+    vi.useRealTimers();
+  });
+
   it("nome curto na linha e oficial no title (#578)", () => {
     const v = toPredictionRowView(
       row({
@@ -111,6 +115,30 @@ describe("toPredictionRowView", () => {
     expect(btts.market).toBe("Ambas marcam");
   });
 
+  it("coluna data mostra a data do JOGO, não a da análise (#577)", () => {
+    vi.useFakeTimers();
+    vi.setSystemTime(new Date("2026-06-10T12:00:00Z"));
+    const v = toPredictionRowView(
+      row({
+        createdAt: new Date("2026-06-01T12:00:00Z"),
+        kickoffAt: new Date("2026-06-13T19:00:00Z"),
+      }),
+      "America/Sao_Paulo",
+    );
+    // 13/06/2026 é sábado; a análise (01/06, segunda) não aparece.
+    expect(v.when).toBe("sáb, 13 jun");
+  });
+
+  it("coluna data leva o ano quando o jogo é de outro ano (#577)", () => {
+    vi.useFakeTimers();
+    vi.setSystemTime(new Date("2026-06-10T12:00:00Z"));
+    const v = toPredictionRowView(
+      row({ kickoffAt: new Date("2025-10-18T19:00:00Z") }),
+      "America/Sao_Paulo",
+    );
+    expect(v.when).toBe("sáb, 18 out 2025");
+  });
+
   it("artilheiro mostra o nome do jogador do DB, não a key", () => {
     const v = toPredictionRowView(
       row({
@@ -130,7 +158,7 @@ describe("toDashboardKpiView", () => {
     const v = toDashboardKpiView(computeDashboardKpis([]));
     expect(v.yieldPct.value).toBe("—");
     expect(v.yieldPct.n).toBe(0);
-    expect(v.totalProfit).toBe("+0,00 u");
+    expect(v.totalProfit).toBe("0,00 u");
     expect(v.profitPositive).toBe(true);
   });
 
@@ -147,6 +175,67 @@ describe("toDashboardKpiView", () => {
     expect(v.winRate.value).toBe("100%");
     expect(v.winRate.n).toBe(1);
     expect(v.winRate.lowSample).toBe(true);
+  });
+
+  it("tons por sinal e retorno com '+' pro resumo (#577)", () => {
+    const empty = toDashboardKpiView(computeDashboardKpis([]));
+    expect(empty.yieldSigned).toBe("—");
+    expect(empty.yieldTone).toBe("zero");
+    expect(empty.profitTone).toBe("zero");
+
+    const settledAt = new Date("2026-06-12T20:00:00Z");
+    const win = toDashboardKpiView(
+      computeDashboardKpis([
+        row({ result: "won", profitUnits: "0.92", stakeUnits: "1.00", settledAt }),
+      ]),
+    );
+    expect(win.yieldSigned).toBe("+92,0%");
+    expect(win.yieldTone).toBe("positive");
+    expect(win.profitTone).toBe("positive");
+    // O yieldPct (KpiCards do admin, segmentos) continua sem "+".
+    expect(win.yieldPct.value).toBe("92%");
+
+    const loss = toDashboardKpiView(
+      computeDashboardKpis([
+        row({ result: "lost", profitUnits: "-1.00", stakeUnits: "1.00", settledAt }),
+      ]),
+    );
+    expect(loss.yieldSigned).toBe("-100,0%");
+    expect(loss.yieldTone).toBe("negative");
+    expect(loss.profitTone).toBe("negative");
+  });
+
+  it("perto de zero: texto e tom do mesmo número arredondado, sem sinal (#577)", () => {
+    const settledAt = new Date("2026-06-12T20:00:00Z");
+    // +0,01 u em 25 u apostadas = +0,04% de retorno: arredonda a zero na tela.
+    const up = toDashboardKpiView(
+      computeDashboardKpis([
+        row({ result: "won", profitUnits: "0.01", stakeUnits: "25.00", settledAt }),
+      ]),
+    );
+    expect(up.yieldSigned).toBe("0,0%");
+    expect(up.yieldTone).toBe("zero");
+    expect(up.totalProfit).toBe("+0,01 u");
+    expect(up.profitTone).toBe("positive");
+
+    const down = toDashboardKpiView(
+      computeDashboardKpis([
+        row({ result: "lost", profitUnits: "-0.01", stakeUnits: "25.00", settledAt }),
+      ]),
+    );
+    expect(down.yieldSigned).toBe("0,0%");
+    expect(down.yieldTone).toBe("zero");
+    expect(down.totalProfit).toBe("-0,01 u");
+    expect(down.profitTone).toBe("negative");
+
+    // Logo acima da precisão de exibição, o sinal volta junto com a cor.
+    const small = toDashboardKpiView(
+      computeDashboardKpis([
+        row({ result: "won", profitUnits: "0.02", stakeUnits: "4.00", settledAt }),
+      ]),
+    );
+    expect(small.yieldSigned).toBe("+0,5%");
+    expect(small.yieldTone).toBe("positive");
   });
 
   it("formata CLV sinalizado + unidade; '—' sem amostra (#180)", () => {

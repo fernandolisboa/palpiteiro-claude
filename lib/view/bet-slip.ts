@@ -546,38 +546,46 @@ type PersistedLeg = {
 
 const num = (v: string | null) => (v === null ? null : Number(v));
 
+function legSourceLabel(leg: PersistedLeg): string {
+  if (leg.gradeSource === "cartridge") return "sua análise";
+  if (leg.modelSource === "dixon_coles") return "Dixon-Coles";
+  if (leg.modelSource === "heuristic") return "modelo simplificado";
+  return "modelo de placar";
+}
+
+export type HistoryLegView = {
+  // A linha de sempre: "odd 1,85", "stake 0,5u" (na combinada o stake é do slip, e a
+  // perna não tem), "chance 47,8%".
+  visible: string[];
+  // Atrás de "detalhes": retorno esperado, vantagem do modelo, sugerido e a fonte.
+  // Vazio quando a perna não tem chance do modelo.
+  details: string[];
+};
+
 /**
- * Pedaços curtos da avaliação congelada de uma perna ("chance 52.3%", "odd 2.10",
- * "retorno esperado +9,9%", "vantagem do modelo +4,5 pontos", "stake 1u", "sugerido 1u", fonte).
- * Nunca recalcula com dado novo: só re-deriva EV/edge dos números gravados.
+ * A perna gravada em /apostas (#577): odd, stake e chance à vista; o resto em
+ * "detalhes". Nunca recalcula com dado novo: só re-deriva EV/edge dos números gravados.
  */
-export function historyLegSummary(leg: PersistedLeg): string[] {
+export function historyLegView(leg: PersistedLeg): HistoryLegView {
   const prob = num(leg.modelProbPct);
   const odd = num(leg.userOdd);
   const implied = num(leg.marketImpliedPct);
-  const parts: string[] = [];
-  if (prob !== null) parts.push(`chance ${formatPct(prob, { decimals: 1 })}`);
-  if (odd !== null) parts.push(`odd ${formatOdd(odd)}`);
-  if (prob !== null && odd !== null && odd > 1) {
-    parts.push(`retorno esperado ${formatEvPct((prob / 100) * odd - 1)}`);
-  }
-  if (prob !== null && implied !== null) {
-    parts.push(`vantagem do modelo ${formatEdgePoints(prob - implied)}`);
-  }
   const stake = num(leg.stakeUnits);
-  if (stake !== null) parts.push(`seu stake ${units(stake)}`);
   const suggested = num(leg.suggestedStakeUnits);
-  if (suggested !== null) parts.push(`sugerido ${units(suggested)}`);
-  if (prob !== null) {
-    parts.push(
-      leg.gradeSource === "cartridge"
-        ? "sua análise"
-        : leg.modelSource === "dixon_coles"
-          ? "Dixon-Coles"
-          : leg.modelSource === "heuristic"
-            ? "modelo simplificado"
-            : "modelo de placar",
-    );
+  const visible: string[] = [];
+  if (odd !== null) visible.push(`odd ${formatOdd(odd)}`);
+  if (stake !== null) visible.push(`stake ${units(stake)}`);
+  // Perna sem chance do modelo: sem "detalhes" (PLAN-577), nem só pro sugerido.
+  if (prob === null) return { visible, details: [] };
+  visible.push(`chance ${formatPct(prob, { decimals: 1 })}`);
+  const details: string[] = [];
+  if (odd !== null && odd > 1) {
+    details.push(`retorno esperado ${formatEvPct((prob / 100) * odd - 1)}`);
   }
-  return parts;
+  if (implied !== null) {
+    details.push(`vantagem do modelo ${formatEdgePoints(prob - implied)}`);
+  }
+  if (suggested !== null) details.push(`sugerido ${units(suggested)}`);
+  details.push(legSourceLabel(leg));
+  return { visible, details };
 }
