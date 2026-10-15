@@ -103,7 +103,7 @@ export default async function ApostasPage({ searchParams }: PageProps) {
           <div className="pt-6">
             <Link
               href={`/apostas?cursor=${encodeURIComponent(page.nextCursor)}`}
-              className="font-mono text-meta uppercase tracking-label text-muted-foreground hover:text-foreground"
+              className="text-meta uppercase tracking-label text-muted-foreground hover:text-foreground"
             >
               apostas mais antigas →
             </Link>
@@ -113,7 +113,7 @@ export default async function ApostasPage({ searchParams }: PageProps) {
           <div className="pt-3">
             <Link
               href="/apostas"
-              className="font-mono text-meta uppercase tracking-label text-muted-foreground hover:text-foreground"
+              className="text-meta uppercase tracking-label text-muted-foreground hover:text-foreground"
             >
               ← voltar ao topo
             </Link>
@@ -144,7 +144,7 @@ function SlipCard({
           <span className="font-mono text-body font-medium tracking-tight text-foreground">
             {slip.match.homeTeam} × {slip.match.awayTeam}
           </span>
-          <span className="font-mono text-meta uppercase tracking-label text-muted-foreground">
+          <span className="text-meta uppercase tracking-label text-muted-foreground">
             {LEAGUE_LABEL[leagueToKey(slip.match.league)]} ·{" "}
             {formatKickoffAbsolute(slip.match.kickoffAt, now, timeZone)}
           </span>
@@ -162,7 +162,7 @@ function SlipCard({
 
       {slip.mode === "combinada" && slip.stakeUnits !== null && (
         <div className="flex items-center justify-between border-t border-border px-4 py-2.5">
-          <span className="font-mono text-meta uppercase tracking-label text-muted-foreground">
+          <span className="text-meta uppercase tracking-label text-muted-foreground">
             seu stake na combinada
           </span>
           <span className="font-mono text-body font-medium tabular-nums tracking-tight text-foreground">
@@ -173,7 +173,7 @@ function SlipCard({
 
       {slip.legs.length >= 2 && slip.comboUserOdd !== null && (
         <div className="flex items-center justify-between border-t border-border px-4 py-2.5">
-          <span className="font-mono text-meta uppercase tracking-label text-muted-foreground">
+          <span className="text-meta uppercase tracking-label text-muted-foreground">
             odd da combinada
           </span>
           <span className="font-mono text-body font-medium tabular-nums tracking-tight text-foreground">

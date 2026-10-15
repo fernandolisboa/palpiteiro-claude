@@ -100,7 +100,7 @@ export function AnalysisScenarios({
   const alternatives = columns.filter((o) => !o.isRecommended);
   return (
     <div className="mx-4 mb-4 flex flex-col gap-2">
-      <span className="font-mono text-meta uppercase tracking-label text-muted-foreground">
+      <span className="text-meta uppercase tracking-label text-muted-foreground">
         cenários
       </span>
       {hasRecommendation ? (
@@ -120,7 +120,7 @@ export function AnalysisScenarios({
           ))}
           {alternatives.length > 0 && (
             <details className="group">
-              <summary className="flex cursor-pointer list-none select-none items-center gap-1.5 rounded-md py-1.5 font-mono text-meta uppercase tracking-label text-muted-foreground transition-colors hover:text-foreground focus-visible:outline-none focus-visible:ring-[3px] focus-visible:ring-ring/50 [&::-webkit-details-marker]:hidden">
+              <summary className="flex cursor-pointer list-none select-none items-center gap-1.5 rounded-md py-1.5 text-meta uppercase tracking-label text-muted-foreground transition-colors hover:text-foreground focus-visible:outline-none focus-visible:ring-[3px] focus-visible:ring-ring/50 [&::-webkit-details-marker]:hidden">
                 <ChevronRight className="size-3 shrink-0 transition-transform group-open:rotate-90" />
                 {alternativesSummaryLabel(alternatives)}
               </summary>
@@ -214,14 +214,14 @@ function ScenarioColumn({
       <div className="flex items-baseline justify-between gap-2 pb-0.5">
         <span
           className={cn(
-            "font-mono text-meta uppercase tracking-label",
+            "text-meta uppercase tracking-label",
             isRecommended ? "text-accent-fg" : "text-muted-foreground",
           )}
         >
           {outcome.scenarioLabel}
         </span>
         {isRecommended && (
-          <span className="font-mono text-meta uppercase tracking-label text-accent-fg">
+          <span className="text-meta uppercase tracking-label text-accent-fg">
             recomendada
           </span>
         )}
@@ -304,7 +304,7 @@ type RowProps = {
 function ScenarioRow({ label, value, emphasis = false, hint }: RowProps) {
   return (
     <div className="flex items-baseline justify-between gap-2">
-      <span className="flex items-center gap-1 font-mono text-meta uppercase tracking-label text-muted-foreground">
+      <span className="flex items-center gap-1 text-meta uppercase tracking-label text-muted-foreground">
         {label}
         {hint && (
           <HelpHint anchor={hint.anchor} label={label} blurb={hint.blurb} />

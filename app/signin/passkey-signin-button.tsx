@@ -65,7 +65,7 @@ export function PasskeySignInButton({ enabled = true }: { enabled?: boolean }) {
   return (
     <div className="flex flex-col gap-3">
       <label className="flex flex-col gap-1.5">
-        <span className="text-muted-foreground font-mono text-meta tracking-label uppercase">
+        <span className="text-muted-foreground text-meta tracking-label uppercase">
           e-mail (passkey)
         </span>
         <Input

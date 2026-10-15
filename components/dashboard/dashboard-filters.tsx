@@ -70,7 +70,7 @@ function PillGroup({
     // Muitas opções (status, ligas) rolam DENTRO do grupo no celular, sem estourar a
     // largura da página (#574 linha 5).
     <div className="flex min-w-0 max-w-full items-center gap-2">
-      <span className="shrink-0 font-mono text-meta uppercase tracking-label text-muted-foreground">
+      <span className="shrink-0 text-meta uppercase tracking-label text-muted-foreground">
         {label}
       </span>
       <nav className="inline-flex h-8 max-w-full items-center overflow-x-auto rounded-md border border-border bg-surface-2 p-1 [scrollbar-width:none]">

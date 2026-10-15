@@ -8,7 +8,7 @@ type Props = {
 export function SectionLabel({ children, action }: Props) {
   return (
     <div className="flex items-baseline justify-between px-5 pt-1 pb-2">
-      <span className="font-mono text-meta tracking-eyebrow text-muted-foreground uppercase">
+      <span className="text-meta tracking-eyebrow text-muted-foreground uppercase">
         {children}
       </span>
       {action}

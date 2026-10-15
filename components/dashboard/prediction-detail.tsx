@@ -15,7 +15,7 @@ function Row({
 }) {
   return (
     <div className="flex items-center justify-between border-b border-border-subtle py-2">
-      <span className="font-mono text-meta uppercase tracking-label text-muted-foreground">
+      <span className="text-meta uppercase tracking-label text-muted-foreground">
         {label}
       </span>
       <span className={cn("text-body tabular-nums", className)}>{value}</span>
@@ -25,7 +25,7 @@ function Row({
 
 function SectionLabel({ children }: { children: string }) {
   return (
-    <h2 className="pb-2 pt-7 font-mono text-meta uppercase tracking-label text-muted-foreground">
+    <h2 className="pb-2 pt-7 text-meta uppercase tracking-label text-muted-foreground">
       {children}
     </h2>
   );
@@ -34,7 +34,7 @@ function SectionLabel({ children }: { children: string }) {
 function RawPayload({ label, json }: { label: string; json: string }) {
   return (
     <details className="rounded-lg border border-border bg-surface-2">
-      <summary className="cursor-pointer select-none rounded-md px-4 py-2.5 font-mono text-meta uppercase tracking-label text-muted-foreground focus-visible:outline-none focus-visible:ring-[3px] focus-visible:ring-ring/50">
+      <summary className="cursor-pointer select-none rounded-md px-4 py-2.5 text-meta uppercase tracking-label text-muted-foreground focus-visible:outline-none focus-visible:ring-[3px] focus-visible:ring-ring/50">
         {label}
       </summary>
       <pre className="max-h-[420px] overflow-auto border-t border-border px-4 py-3 font-mono text-meta leading-relaxed">

@@ -40,7 +40,7 @@ export function UpcomingMatchesDesktop({
   const tourIndex = tourMatchIndex(slice);
   return (
     <Card className="gap-0 overflow-hidden p-0">
-      <div className={`grid ${UPCOMING_GRID} gap-4 border-b border-border px-5 py-3 font-mono text-meta uppercase tracking-label text-muted-foreground`}>
+      <div className={`grid ${UPCOMING_GRID} gap-4 border-b border-border px-5 py-3 text-meta uppercase tracking-label text-muted-foreground`}>
         <span>liga · kickoff</span>
         <span>jogo</span>
         <span className="text-right">odds</span>

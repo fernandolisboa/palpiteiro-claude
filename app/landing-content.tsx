@@ -19,7 +19,7 @@ import { Button } from "@/components/ui/button";
 export function LandingContent() {
   return (
     <section className="flex flex-col items-start gap-6 py-16 sm:py-24 lg:py-32">
-      <span className="font-mono text-meta uppercase tracking-eyebrow text-muted-foreground">
+      <span className="text-meta uppercase tracking-eyebrow text-muted-foreground">
         palpite-first · IA + odds
       </span>
 

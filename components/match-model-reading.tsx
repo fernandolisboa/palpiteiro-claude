@@ -57,7 +57,7 @@ export function MatchModelReadingCard({
           <div className="flex flex-col gap-4 px-4 py-3.5">
             {view.markets.map((m) => (
               <div key={m.key} className="flex flex-col gap-1.5">
-                <span className="font-mono text-meta uppercase tracking-label text-muted-foreground">
+                <span className="text-meta uppercase tracking-label text-muted-foreground">
                   {m.label}
                 </span>
                 <div
@@ -84,7 +84,7 @@ export function MatchModelReadingCard({
             ))}
             {view.topScorelines.length > 0 && (
               <div className="flex flex-col gap-1.5">
-                <span className="font-mono text-meta uppercase tracking-label text-muted-foreground">
+                <span className="text-meta uppercase tracking-label text-muted-foreground">
                   placares mais prováveis
                 </span>
                 <div className="flex flex-wrap gap-x-4 gap-y-1 font-mono text-body-sm tabular-nums">

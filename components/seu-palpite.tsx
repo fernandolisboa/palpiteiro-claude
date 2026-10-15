@@ -172,7 +172,7 @@ export function SeuPalpite({
             );
           })}
           <div className="flex flex-wrap items-center gap-2 pt-1">
-            <span className="font-mono text-meta uppercase tracking-label text-muted-foreground">
+            <span className="text-meta uppercase tracking-label text-muted-foreground">
               outro placar
             </span>
             <GoalsSelect label={teams.home} value={otherHome} onChange={setOtherHome} />
@@ -224,7 +224,7 @@ export function SeuPalpite({
   return (
     <section className="flex flex-col gap-3" data-tour="seu-palpite">
       <div className="flex flex-col gap-1">
-        <span className="font-mono text-meta uppercase tracking-eyebrow text-muted-foreground">
+        <span className="text-meta uppercase tracking-eyebrow text-muted-foreground">
           seu palpite
         </span>
         <p className="text-body-sm tracking-tight text-muted-foreground">
@@ -364,7 +364,7 @@ function ReadingRows({ rows, teams }: { rows: ReadingRowsView; teams: TeamNames 
       </p>
       {rows.top.length > 0 && (
         <div className="flex flex-col gap-1">
-          <span className="font-mono text-meta uppercase tracking-label text-muted-foreground">
+          <span className="text-meta uppercase tracking-label text-muted-foreground">
             {rows.topTitle}
           </span>
           <div className="flex flex-wrap gap-x-4 gap-y-1 font-mono text-body-sm tabular-nums">
@@ -403,7 +403,7 @@ function AnalyzeForm({
       <input type="hidden" name="palpite" value={palpite ? JSON.stringify(palpite) : ""} />
       <label
         htmlFor={reasonId}
-        className="font-mono text-meta uppercase tracking-label text-muted-foreground"
+        className="text-meta uppercase tracking-label text-muted-foreground"
       >
         por que você acha isso?
       </label>
@@ -456,7 +456,7 @@ function AnalysisCard({
   return (
     <Card className="gap-0 overflow-hidden p-0" data-testid="seu-palpite-analysis">
       <div className="flex flex-col gap-1 px-4 pt-3.5 pb-3">
-        <span className="font-mono text-meta uppercase tracking-eyebrow text-muted-foreground">
+        <span className="text-meta uppercase tracking-eyebrow text-muted-foreground">
           sua última análise · {a.createdAgo}
         </span>
         <span className="text-body font-medium tracking-tight">{a.palpiteLabel}</span>
@@ -473,7 +473,7 @@ function AnalysisCard({
 
         {a.claims.length > 0 && (
           <div className="flex flex-col gap-2">
-            <span className="font-mono text-meta uppercase tracking-label text-muted-foreground">
+            <span className="text-meta uppercase tracking-label text-muted-foreground">
               o que você disse
             </span>
             <ul className="flex flex-col gap-2.5">
@@ -507,13 +507,13 @@ function AnalysisCard({
           )}
         >
           <div className="flex flex-col gap-1.5 rounded-md border border-border-subtle px-3 py-2.5">
-            <span className="font-mono text-meta uppercase tracking-label text-muted-foreground">
+            <span className="text-meta uppercase tracking-label text-muted-foreground">
               sem o seu contexto
             </span>
             <ReadingRows rows={a.without} teams={teams} />
           </div>
           <div className="flex flex-col gap-1.5 rounded-md border border-border-subtle px-3 py-2.5">
-            <span className="font-mono text-meta uppercase tracking-label text-muted-foreground">
+            <span className="text-meta uppercase tracking-label text-muted-foreground">
               com o seu contexto
             </span>
             {a.changed ? (
@@ -535,7 +535,7 @@ function AnalysisCard({
         )}
         {a.discordancias.length > 0 && (
           <div className="flex flex-col gap-1.5">
-            <span className="font-mono text-meta uppercase tracking-label text-muted-foreground">
+            <span className="text-meta uppercase tracking-label text-muted-foreground">
               onde o modelo discorda de você
             </span>
             {a.discordancias.map((d, i) => (

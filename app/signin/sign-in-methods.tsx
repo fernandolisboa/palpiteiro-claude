@@ -103,7 +103,7 @@ export function SignInMethods({
 
       <div className="flex items-center gap-3">
         <span className="h-px flex-1 bg-border" />
-        <span className="font-mono text-meta uppercase tracking-label text-muted-foreground">
+        <span className="text-meta uppercase tracking-label text-muted-foreground">
           ou
         </span>
         <span className="h-px flex-1 bg-border" />
@@ -112,7 +112,7 @@ export function SignInMethods({
       <Card className="p-5">
         <form action={sendMagicLink} className="flex flex-col gap-3">
           <label className="flex flex-col gap-1.5">
-            <span className="font-mono text-meta uppercase tracking-label text-muted-foreground">
+            <span className="text-meta uppercase tracking-label text-muted-foreground">
               e-mail
             </span>
             <Input

@@ -386,7 +386,7 @@ export function BetSlip({
 function SectionHeading({ modelLabel }: { modelLabel: string | null }) {
   return (
     <div className="flex flex-col gap-1">
-      <span className="font-mono text-meta uppercase tracking-eyebrow text-muted-foreground">
+      <span className="text-meta uppercase tracking-eyebrow text-muted-foreground">
         registrar apostas
       </span>
       <p className="text-body-sm text-muted-foreground tracking-tight">
@@ -463,7 +463,7 @@ function MarketGrid({
           </div>
         )}
         <div className="flex flex-wrap items-center gap-2 pt-2">
-          <span className="font-mono text-meta uppercase tracking-label text-muted-foreground">
+          <span className="text-meta uppercase tracking-label text-muted-foreground">
             outro placar
           </span>
           <ScoreSelect label={grid.teams.home} value={home} onChange={setHome} options={goals} />
@@ -484,7 +484,7 @@ function MarketGrid({
         <form action={parseAction} className="flex flex-col gap-2">
           <input type="hidden" name="matchId" value={matchId} />
           <label className="flex flex-col gap-1">
-            <span className="font-mono text-meta uppercase tracking-label text-muted-foreground">
+            <span className="text-meta uppercase tracking-label text-muted-foreground">
               ou digite sua aposta
             </span>
             <textarea
@@ -522,7 +522,7 @@ function MarketGrid({
 function MarketRow({ title, children }: { title: string; children: React.ReactNode }) {
   return (
     <div className="flex flex-col gap-2 px-4 py-3">
-      <span className="font-mono text-meta uppercase tracking-label text-muted-foreground">
+      <span className="text-meta uppercase tracking-label text-muted-foreground">
         {title}
       </span>
       {children}
@@ -625,14 +625,14 @@ function SlipPanel(props: {
   return (
     <Card className="gap-0 overflow-hidden p-0">
       <div className="flex items-center justify-between px-4 pt-3 pb-2">
-        <span className="font-mono text-meta uppercase tracking-eyebrow text-muted-foreground">
+        <span className="text-meta uppercase tracking-eyebrow text-muted-foreground">
           suas apostas{legs.length > 0 ? ` (${legs.length})` : ""}
         </span>
         {legs.length > 0 && (
           <button
             type="button"
             onClick={props.onClear}
-            className="font-mono text-meta uppercase tracking-label text-muted-foreground hover:text-foreground"
+            className="text-meta uppercase tracking-label text-muted-foreground hover:text-foreground"
           >
             limpar
           </button>
@@ -691,7 +691,7 @@ function SlipPanel(props: {
               {mode === "simples" && (
                 <div className="grid grid-cols-2 gap-2">
                   <label className="flex flex-col gap-1">
-                    <span className="font-mono text-meta uppercase tracking-label text-muted-foreground">
+                    <span className="text-meta uppercase tracking-label text-muted-foreground">
                       {leg.oddFromReference ? "odd (referência)" : "odd que você pegou"}
                     </span>
                     <input
@@ -709,7 +709,7 @@ function SlipPanel(props: {
                     />
                   </label>
                     <label className="flex flex-col gap-1">
-                      <span className="font-mono text-meta uppercase tracking-label text-muted-foreground">
+                      <span className="text-meta uppercase tracking-label text-muted-foreground">
                         stake (u, opcional)
                       </span>
                       <input
@@ -734,7 +734,7 @@ function SlipPanel(props: {
           {mode === "combinada" && (
             <div className="grid grid-cols-2 gap-2 rounded-md border border-dashed border-border px-3 py-2.5">
               <label className="flex flex-col gap-1">
-                <span className="font-mono text-meta uppercase tracking-label text-muted-foreground">
+                <span className="text-meta uppercase tracking-label text-muted-foreground">
                   odd da combinada
                 </span>
                 <input
@@ -747,7 +747,7 @@ function SlipPanel(props: {
                 />
               </label>
               <label className="flex flex-col gap-1">
-                <span className="font-mono text-meta uppercase tracking-label text-muted-foreground">
+                <span className="text-meta uppercase tracking-label text-muted-foreground">
                   stake (u, opcional)
                 </span>
                 <input
@@ -823,7 +823,7 @@ function ModeButton({
       disabled={disabled}
       onClick={onClick}
       className={cn(
-        "rounded-sm px-3 py-1 font-mono text-meta uppercase tracking-label transition-colors focus-visible:outline-none focus-visible:ring-[3px] focus-visible:ring-ring/50 disabled:opacity-40",
+        "rounded-sm px-3 py-1 text-meta uppercase tracking-label transition-colors focus-visible:outline-none focus-visible:ring-[3px] focus-visible:ring-ring/50 disabled:opacity-40",
         active ? "bg-foreground text-background" : "text-muted-foreground hover:text-foreground",
       )}
     >
@@ -837,7 +837,7 @@ function ModeButton({
 function Evaluation({ view, registered }: { view: SlipEvaluationView; registered: number }) {
   return (
     <div className="flex flex-col gap-3 px-4 py-3" aria-live="polite">
-      <span className="font-mono text-meta uppercase tracking-eyebrow text-muted-foreground">
+      <span className="text-meta uppercase tracking-eyebrow text-muted-foreground">
         {registered === 1 ? "aposta registrada" : `${registered} apostas registradas`} ·
         nossa avaliação
       </span>
@@ -857,7 +857,7 @@ function Row({ label, value }: { label: string; value: string | null }) {
   if (value === null) return null;
   return (
     <div className="flex items-baseline justify-between gap-2">
-      <span className="font-mono text-meta uppercase tracking-label text-muted-foreground">
+      <span className="text-meta uppercase tracking-label text-muted-foreground">
         {label}
       </span>
       <span className="font-mono text-body-sm font-medium tabular-nums tracking-tight text-foreground">

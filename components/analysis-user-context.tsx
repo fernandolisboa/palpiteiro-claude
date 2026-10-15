@@ -18,7 +18,7 @@ export function AnalysisUserContext({ view }: { view: AnalysisUserContextView })
       data-testid="analysis-user-context"
       className="flex flex-col gap-2.5 rounded-md border border-border px-4 py-3.5"
     >
-      <span className="font-mono text-meta uppercase tracking-label text-muted-foreground">
+      <span className="text-meta uppercase tracking-label text-muted-foreground">
         o que você acrescentou · {view.createdAgo}
       </span>
       <ul className="flex flex-col gap-2.5">

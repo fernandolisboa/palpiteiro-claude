@@ -20,7 +20,7 @@ export function DesktopStatusCell({ m }: { m: MatchRowView }) {
         // Encerrado ainda surfaça "analisado" se o usuário já analisou: o
         // resultado read-only segue acessível na página de detalhe.
         <>
-          <span className="font-mono text-meta uppercase tracking-label text-muted-foreground">
+          <span className="text-meta uppercase tracking-label text-muted-foreground">
             encerrado
           </span>
           {m.hasPrediction && (

@@ -12,7 +12,7 @@ export function NotFoundContent() {
       <div className="mx-auto w-full max-w-narrow px-5 pt-16">
         <Card className="px-6 py-10 text-center">
           <div className="flex flex-col items-center gap-4">
-            <span className="font-mono text-meta uppercase tracking-eyebrow text-muted-foreground">
+            <span className="text-meta uppercase tracking-eyebrow text-muted-foreground">
               404
             </span>
             <h1 className="text-display-sm font-medium tracking-tight">

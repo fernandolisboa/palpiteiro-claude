@@ -48,7 +48,7 @@ function TeamBlock({
         <span className="text-center text-body font-medium leading-tight tracking-tight lg:text-left lg:text-[22px] lg:tracking-[-0.02em]">
           {name}
         </span>
-        <span className="hidden font-mono text-meta uppercase tracking-label text-muted-foreground lg:inline">
+        <span className="hidden text-meta uppercase tracking-label text-muted-foreground lg:inline">
           {role}
         </span>
       </div>
@@ -112,7 +112,7 @@ export function MatchHero({
             </span>
           )}
           {score ? (
-            <span className="font-mono text-meta uppercase tracking-label text-muted-foreground">
+            <span className="text-meta uppercase tracking-label text-muted-foreground">
               encerrado
             </span>
           ) : liveScore ? (
@@ -130,7 +130,7 @@ export function MatchHero({
       </div>
 
       {venue && (
-        <div className="flex items-center justify-center gap-1.5 pt-4 font-mono text-meta uppercase tracking-label text-muted-foreground lg:justify-start lg:gap-4 lg:pt-5">
+        <div className="flex items-center justify-center gap-1.5 pt-4 text-meta uppercase tracking-label text-muted-foreground lg:justify-start lg:gap-4 lg:pt-5">
           <span>{venue}</span>
         </div>
       )}

@@ -86,7 +86,7 @@ export default async function BolaoDetailPage({ params }: PageProps) {
 
         {outcome.settled && (
           <Card className="mb-6 gap-2 px-5 py-5">
-            <p className="text-muted-foreground font-mono text-meta uppercase tracking-label">
+            <p className="text-muted-foreground text-meta uppercase tracking-label">
               resultado · {outcome.score.source === "manual" ? "placar lançado por você" : "placar do jogo"}
             </p>
             <p className="text-body font-medium tracking-tight">
@@ -211,7 +211,7 @@ export default async function BolaoDetailPage({ params }: PageProps) {
         )}
 
         <details className="mb-8">
-          <summary className="text-muted-foreground cursor-pointer font-mono text-meta uppercase tracking-label hover:text-foreground">
+          <summary className="text-muted-foreground cursor-pointer text-meta uppercase tracking-label hover:text-foreground">
             excluir bolão
           </summary>
           <form action={removeFriendPool} className="flex flex-col gap-2 pt-3">

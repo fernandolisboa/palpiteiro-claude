@@ -109,7 +109,7 @@ export function ComoUsarContent() {
       </div>
 
       <nav aria-label="Seções do guia" className="pt-8">
-        <p className="font-mono text-meta uppercase tracking-label text-muted-foreground">
+        <p className="text-meta uppercase tracking-label text-muted-foreground">
           nesta página
         </p>
         <ol className="flex flex-col gap-1.5 pt-3 text-body tracking-tight">

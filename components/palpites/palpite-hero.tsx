@@ -314,7 +314,7 @@ function PopulatedHero({
         </p>
 
         {view.citedMarkets.length > 0 && (
-          <p className="font-mono text-meta uppercase tracking-eyebrow text-muted-foreground">
+          <p className="text-meta uppercase tracking-eyebrow text-muted-foreground">
             a partir de: {view.citedMarkets.join(" · ")}
           </p>
         )}
@@ -685,7 +685,7 @@ function WarmShell({
 // Kicker "O PALPITE" — chip mono quente, a identidade do registro.
 function Kicker() {
   return (
-    <span className="inline-flex w-fit items-center rounded-full bg-palpite-soft px-2.5 py-0.5 font-mono text-meta uppercase tracking-eyebrow text-palpite-strong-fg">
+    <span className="inline-flex w-fit items-center rounded-full bg-palpite-soft px-2.5 py-0.5 text-meta uppercase tracking-eyebrow text-palpite-strong-fg">
       O Palpite
     </span>
   );
@@ -701,7 +701,7 @@ function ConfidenceChip({
   return (
     <span
       aria-label={label}
-      className="inline-flex items-center rounded-full border border-palpite-border/70 px-2.5 py-0.5 font-mono text-meta uppercase tracking-label text-palpite-fg"
+      className="inline-flex items-center rounded-full border border-palpite-border/70 px-2.5 py-0.5 text-meta uppercase tracking-label text-palpite-fg"
     >
       {label}
     </span>

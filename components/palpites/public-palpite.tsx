@@ -55,7 +55,7 @@ export function PublicPalpite({
       className="flex flex-col gap-4 rounded-xl border border-palpite-border bg-palpite-soft/40 p-5 ring-1 ring-palpite-border/40 lg:p-6"
     >
       <div className="flex flex-col gap-1.5">
-        <span className="font-mono text-meta uppercase tracking-eyebrow text-muted-foreground">
+        <span className="text-meta uppercase tracking-eyebrow text-muted-foreground">
           {match.homeTeam} x {match.awayTeam}
         </span>
         <div className="flex flex-wrap items-center gap-2">
@@ -91,7 +91,7 @@ export function PublicPalpite({
       )}
 
       {categories.length > 0 && (
-        <p className="font-mono text-meta uppercase tracking-eyebrow text-muted-foreground">
+        <p className="text-meta uppercase tracking-eyebrow text-muted-foreground">
           a partir de: {categories.join(" · ")}
         </p>
       )}
@@ -113,7 +113,7 @@ export function PublicPalpite({
           {NON_OPERATOR_DISCLAIMER}
         </p>
         <p className="flex flex-wrap items-center gap-2 text-meta tracking-tight text-muted-foreground">
-          <span className="inline-flex items-center rounded-full border border-border px-2 py-0.5 font-mono uppercase tracking-label">
+          <span className="inline-flex items-center rounded-full border border-border px-2 py-0.5 uppercase tracking-label">
             18+
           </span>
           <a
@@ -143,7 +143,7 @@ export function PublicPalpite({
 
 function Kicker() {
   return (
-    <span className="inline-flex w-fit items-center rounded-full bg-palpite-soft px-2.5 py-0.5 font-mono text-meta uppercase tracking-eyebrow text-palpite-strong-fg">
+    <span className="inline-flex w-fit items-center rounded-full bg-palpite-soft px-2.5 py-0.5 text-meta uppercase tracking-eyebrow text-palpite-strong-fg">
       O Palpite
     </span>
   );
@@ -158,7 +158,7 @@ function ConfidenceChip({
   return (
     <span
       aria-label={label}
-      className="inline-flex items-center rounded-full border border-palpite-border/70 px-2.5 py-0.5 font-mono text-meta uppercase tracking-label text-palpite-fg"
+      className="inline-flex items-center rounded-full border border-palpite-border/70 px-2.5 py-0.5 text-meta uppercase tracking-label text-palpite-fg"
     >
       {label}
     </span>

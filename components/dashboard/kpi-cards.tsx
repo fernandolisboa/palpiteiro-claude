@@ -41,7 +41,7 @@ function RateCard({
 }) {
   return (
     <Card className="gap-2 p-5">
-      <span className="flex items-center gap-1 font-mono text-meta uppercase tracking-label text-muted-foreground">
+      <span className="flex items-center gap-1 text-meta uppercase tracking-label text-muted-foreground">
         {label}
         {hint && (
           <HelpHint anchor={hint.anchor} label={label} blurb={hint.blurb} />
@@ -93,7 +93,7 @@ export function KpiCards({ view }: { view: DashboardKpiView }) {
           }}
         />
         <Card className="gap-2 p-5">
-          <span className="flex items-center gap-1 font-mono text-meta uppercase tracking-label text-muted-foreground">
+          <span className="flex items-center gap-1 text-meta uppercase tracking-label text-muted-foreground">
             lucro total
             <HelpHint
               anchor="lucro-total"

@@ -76,7 +76,7 @@ export function PredictionsTable({
               <TableHead
                 key={h || `c${i}`}
                 className={cn(
-                  "font-mono text-meta uppercase tracking-label text-muted-foreground",
+                  "text-meta uppercase tracking-label text-muted-foreground",
                   ["odd", "edge", "conf", "lucro"].includes(h) && "text-right",
                 )}
               >

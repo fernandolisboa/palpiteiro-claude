@@ -103,7 +103,7 @@ export default async function DashboardPage({ searchParams }: PageProps) {
 
             <section className="flex flex-col gap-3">
               <div className="flex items-baseline justify-between">
-                <span className="font-mono text-meta uppercase tracking-eyebrow text-muted-foreground">
+                <span className="text-meta uppercase tracking-eyebrow text-muted-foreground">
                   bankroll hipotético (u)
                 </span>
                 <span className="font-mono text-meta tabular-nums text-muted-foreground">

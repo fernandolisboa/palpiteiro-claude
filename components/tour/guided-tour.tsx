@@ -383,7 +383,7 @@ export function GuidedTour({ chapter, userId, serverState, forceStart }: Props) 
         style={{ top: cardAt?.top ?? 0, left: cardAt?.left ?? 0 }}
       >
         <div className="flex items-start justify-between gap-3">
-          <p className="font-mono text-meta uppercase tracking-label text-muted-foreground">
+          <p className="text-meta uppercase tracking-label text-muted-foreground">
             tour · {position + 1} de {available.length}
           </p>
           <button
