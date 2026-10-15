@@ -356,7 +356,7 @@ function EngineSection({
         aria-label="Recorte por motor"
         className="flex flex-wrap items-center gap-x-4 gap-y-1 pt-3 font-mono text-meta uppercase tracking-label"
       >
-        <span className="text-muted-fg-2">recorte:</span>
+        <span className="text-muted-foreground">recorte:</span>
         <SegmentLink
           href={calibrationHref(market, "all")}
           label="todos"

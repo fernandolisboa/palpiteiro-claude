@@ -560,7 +560,7 @@ function SelectionButton({
         <span
           className={cn(
             "font-mono text-meta tabular-nums",
-            selected ? "text-background/70" : "text-muted-fg-2",
+            selected ? "text-background/70" : "text-muted-foreground",
           )}
           title="odd justa pelo modelo (sem margem)"
         >
