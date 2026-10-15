@@ -17,6 +17,7 @@ import { computeMarketImpliedProbabilities } from "@/lib/odds/implied-probabilit
 import { RISK_DISCLAIMER } from "@/lib/view/share/disclaimer";
 import {
   historyLegSummary,
+  historyLegView,
   MODEL_CAVEAT_PT_BR,
   RISK_DISCLAIMER_PT_BR,
   toBetGridView,
@@ -570,6 +571,55 @@ describe("historyLegSummary", () => {
     expect(historyLegSummary({ ...base, modelSource: null }).at(-1)).toBe(
       "modelo de placar"
     );
+  });
+});
+
+describe("historyLegView (/apostas, #577)", () => {
+  const base = {
+    userOdd: "1.850",
+    modelProbPct: "47.80",
+    gradeSource: "scoreline_model" as const,
+    modelSource: "dixon_coles" as const,
+    marketImpliedPct: "45.00",
+    stakeUnits: "0.50",
+    suggestedStakeUnits: "1.00",
+  };
+
+  it("simples: odd, stake e chance à vista; o resto em detalhes", () => {
+    expect(historyLegView(base)).toEqual({
+      visible: ["odd 1,85", "stake 0,5u", "chance 47,8%"],
+      details: [
+        "retorno esperado -11,6%",
+        "vantagem do modelo +2,8 pontos",
+        "sugerido 1u",
+        "Dixon-Coles",
+      ],
+    });
+  });
+
+  it("perna de combinada (stake no slip): sem stake na linha", () => {
+    const view = historyLegView({ ...base, stakeUnits: null, suggestedStakeUnits: null });
+    expect(view.visible).toEqual(["odd 1,85", "chance 47,8%"]);
+    expect(view.visible.join(" ")).not.toContain("vantagem");
+  });
+
+  it("perna sem chance do modelo: sem detalhes", () => {
+    expect(
+      historyLegView({
+        ...base,
+        modelProbPct: null,
+        gradeSource: "none",
+        modelSource: null,
+        marketImpliedPct: null,
+        suggestedStakeUnits: null,
+      }),
+    ).toEqual({ visible: ["odd 1,85", "stake 0,5u"], details: [] });
+  });
+
+  it("fonte da análise do usuário", () => {
+    expect(
+      historyLegView({ ...base, gradeSource: "cartridge", modelSource: null }).details.at(-1),
+    ).toBe("sua análise");
   });
 });
 
