@@ -50,7 +50,7 @@ export function PreferredModelForm({
     // cair no valor salvo em vez do antigo.
     <form key={initial} action={action} className="flex flex-col gap-4">
       <label className="flex flex-col gap-1">
-        <span className="text-muted-foreground font-mono text-eyebrow tracking-label uppercase">
+        <span className="text-muted-foreground font-mono text-meta tracking-label uppercase">
           modelo preferido
         </span>
         <ModelSelect

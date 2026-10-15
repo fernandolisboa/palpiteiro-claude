@@ -30,7 +30,7 @@ export default function AdminIndexPage() {
             >
               <div className="flex flex-col">
                 <span className="text-body font-medium">{capitalize(section.label)}</span>
-                <span className="text-muted-foreground font-mono text-eyebrow">
+                <span className="text-muted-foreground font-mono text-meta">
                   {section.description}
                 </span>
               </div>

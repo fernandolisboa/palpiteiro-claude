@@ -52,7 +52,7 @@ export function UserAdminControls({ userId, role, allowed, isSelf }: Props) {
   return (
     <section className="border-border mb-8 rounded-md border">
       <div className="border-border border-b px-4 py-3">
-        <h2 className="text-muted-foreground font-mono text-eyebrow tracking-label uppercase">
+        <h2 className="text-muted-foreground font-mono text-meta tracking-label uppercase">
           controle de acesso
         </h2>
         {isSelf && (
@@ -66,7 +66,7 @@ export function UserAdminControls({ userId, role, allowed, isSelf }: Props) {
       <div className="border-border flex items-center justify-between gap-4 border-b px-4 py-3">
         <div className="flex flex-col">
           <span className="text-body font-medium">Role</span>
-          <span className="text-muted-foreground font-mono text-eyebrow uppercase">
+          <span className="text-muted-foreground font-mono text-meta uppercase">
             {role}
           </span>
         </div>
@@ -90,7 +90,7 @@ export function UserAdminControls({ userId, role, allowed, isSelf }: Props) {
       <div className="flex items-center justify-between gap-4 px-4 py-3">
         <div className="flex flex-col">
           <span className="text-body font-medium">Acesso</span>
-          <span className="text-muted-foreground font-mono text-eyebrow uppercase">
+          <span className="text-muted-foreground font-mono text-meta uppercase">
             {allowed ? "permitido" : "revogado"}
           </span>
         </div>

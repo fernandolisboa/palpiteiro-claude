@@ -76,7 +76,7 @@ export function PredictionsTable({
               <TableHead
                 key={h || `c${i}`}
                 className={cn(
-                  "font-mono text-eyebrow-xs uppercase tracking-label text-muted-foreground",
+                  "font-mono text-meta uppercase tracking-label text-muted-foreground",
                   ["odd", "edge", "conf", "lucro"].includes(h) && "text-right",
                 )}
               >
@@ -119,7 +119,7 @@ export function PredictionsTable({
                   >
                     {r.rec}
                   </div>
-                  <div className="text-eyebrow text-muted-foreground">
+                  <div className="text-meta text-muted-foreground">
                     {r.market}
                   </div>
                 </TableCell>

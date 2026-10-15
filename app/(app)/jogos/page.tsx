@@ -292,7 +292,7 @@ function MobileHome({
         <p className="pt-1.5 text-body text-muted-foreground tracking-tight">
           {HOME_SUBTITLE}
         </p>
-        <p className="pt-1 font-mono text-eyebrow text-muted-foreground">
+        <p className="pt-1 font-mono text-meta text-muted-foreground">
           {matches.length} jogos · {label.toLowerCase()}
         </p>
       </div>
@@ -331,7 +331,7 @@ function MobileHome({
           action={
             <Link
               href="/dashboard"
-              className="font-mono text-eyebrow uppercase tracking-eyebrow text-muted-foreground transition-colors hover:text-foreground focus-visible:outline-none focus-visible:ring-[3px] focus-visible:ring-ring/50 rounded-sm"
+              className="font-mono text-meta uppercase tracking-eyebrow text-muted-foreground transition-colors hover:text-foreground focus-visible:outline-none focus-visible:ring-[3px] focus-visible:ring-ring/50 rounded-sm"
             >
               ver todas →
             </Link>
@@ -417,7 +417,7 @@ function DesktopHome({
             action={
               <Link
                 href="/dashboard"
-                className="font-mono text-eyebrow uppercase tracking-eyebrow text-muted-foreground transition-colors hover:text-foreground focus-visible:outline-none focus-visible:ring-[3px] focus-visible:ring-ring/50 rounded-sm"
+                className="font-mono text-meta uppercase tracking-eyebrow text-muted-foreground transition-colors hover:text-foreground focus-visible:outline-none focus-visible:ring-[3px] focus-visible:ring-ring/50 rounded-sm"
               >
                 ver todas →
               </Link>

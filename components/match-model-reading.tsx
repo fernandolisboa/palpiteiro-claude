@@ -43,7 +43,7 @@ export function MatchModelReadingCard({
           />
         </span>
         {view && (
-          <span className="font-mono text-eyebrow text-muted-foreground">
+          <span className="font-mono text-meta text-muted-foreground">
             calculado {view.computedAgo}
           </span>
         )}
@@ -57,7 +57,7 @@ export function MatchModelReadingCard({
           <div className="flex flex-col gap-4 px-4 py-3.5">
             {view.markets.map((m) => (
               <div key={m.key} className="flex flex-col gap-1.5">
-                <span className="font-mono text-eyebrow uppercase tracking-label text-muted-foreground">
+                <span className="font-mono text-meta uppercase tracking-label text-muted-foreground">
                   {m.label}
                 </span>
                 <div
@@ -74,7 +74,7 @@ export function MatchModelReadingCard({
                       <span className="font-mono text-label font-medium tabular-nums">
                         {s.pct}
                       </span>
-                      <span className="font-mono text-eyebrow tabular-nums text-muted-fg-2">
+                      <span className="font-mono text-meta tabular-nums text-muted-fg-2">
                         odd justa {s.fairOdd}
                       </span>
                     </div>
@@ -84,7 +84,7 @@ export function MatchModelReadingCard({
             ))}
             {view.topScorelines.length > 0 && (
               <div className="flex flex-col gap-1.5">
-                <span className="font-mono text-eyebrow uppercase tracking-label text-muted-foreground">
+                <span className="font-mono text-meta uppercase tracking-label text-muted-foreground">
                   placares mais prováveis
                 </span>
                 <div className="flex flex-wrap gap-x-4 gap-y-1 font-mono text-body-sm tabular-nums">
@@ -99,7 +99,7 @@ export function MatchModelReadingCard({
             )}
           </div>
           <Separator />
-          <div className="flex items-center justify-between gap-3 px-4 py-2.5 font-mono text-eyebrow text-muted-fg-2">
+          <div className="flex items-center justify-between gap-3 px-4 py-2.5 font-mono text-meta text-muted-fg-2">
             <span>
               modelo · {view.source}
               {view.jev ? ` ${view.jev}` : ""}

@@ -26,7 +26,7 @@ export function H2HSection({ view }: Props) {
             i !== view.rows.length - 1 && "border-b border-border-subtle",
           )}
         >
-          <span className="font-mono text-eyebrow tabular-nums text-muted-foreground">
+          <span className="font-mono text-meta tabular-nums text-muted-foreground">
             {r.date}
           </span>
           <div className="flex-1 px-3 text-body-sm tracking-tight">
@@ -38,15 +38,15 @@ export function H2HSection({ view }: Props) {
             variant="outline"
             className={
               r.tag === "over"
-                ? "h-[18px] rounded-full border-border bg-secondary px-2 text-eyebrow-xs text-secondary-foreground"
-                : "h-[18px] rounded-full border-border bg-transparent px-2 text-eyebrow-xs text-muted-foreground"
+                ? "h-[18px] rounded-full border-border bg-secondary px-2 text-meta text-secondary-foreground"
+                : "h-[18px] rounded-full border-border bg-transparent px-2 text-meta text-muted-foreground"
             }
           >
             {r.tag === "over" ? "3+ gols" : "< 3"}
           </Badge>
         </div>
       ))}
-      <div className="flex items-center justify-between pt-3 font-mono text-eyebrow text-muted-foreground">
+      <div className="flex items-center justify-between pt-3 font-mono text-meta text-muted-foreground">
         <span>últimos {view.rows.length} confrontos</span>
         <span className="tabular-nums">{view.summary}</span>
       </div>

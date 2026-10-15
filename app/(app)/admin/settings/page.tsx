@@ -38,7 +38,7 @@ export default async function AdminSettingsPage() {
         />
 
         <section className="pb-8">
-          <h2 className="pb-3 font-mono text-eyebrow uppercase tracking-label text-muted-foreground">
+          <h2 className="pb-3 font-mono text-meta uppercase tracking-label text-muted-foreground">
             modelos disponíveis
           </h2>
           <div className="rounded-md border border-border">
@@ -58,7 +58,7 @@ export default async function AdminSettingsPage() {
                       {m.userSelectable ? "" : " · admin-only"}
                       {m.thinkingMode === "adaptive" ? " · adaptive" : ""}
                     </span>
-                    <span className="font-mono text-eyebrow text-muted-foreground">
+                    <span className="font-mono text-meta text-muted-foreground">
                       {m.id}
                     </span>
                   </div>
@@ -79,21 +79,21 @@ export default async function AdminSettingsPage() {
         </section>
 
         <section>
-          <h2 className="pb-4 font-mono text-eyebrow uppercase tracking-label text-muted-foreground">
+          <h2 className="pb-4 font-mono text-meta uppercase tracking-label text-muted-foreground">
             padrão global
           </h2>
           <DefaultModelForm current={current} />
         </section>
 
         <section className="pt-10">
-          <h2 className="pb-4 font-mono text-eyebrow uppercase tracking-label text-muted-foreground">
+          <h2 className="pb-4 font-mono text-meta uppercase tracking-label text-muted-foreground">
             parâmetros de geração
           </h2>
           <GenerationParamsForm current={genParams} />
         </section>
 
         <section className="pt-10">
-          <h2 className="pb-3 font-mono text-eyebrow uppercase tracking-label text-muted-foreground">
+          <h2 className="pb-3 font-mono text-meta uppercase tracking-label text-muted-foreground">
             flags
           </h2>
           <div className="rounded-md border border-border">
@@ -114,7 +114,7 @@ export default async function AdminSettingsPage() {
                         {flag.description}
                       </span>
                       {"costNote" in flag && flag.costNote && (
-                        <span className="font-mono text-eyebrow text-muted-foreground">
+                        <span className="font-mono text-meta text-muted-foreground">
                           custo: {flag.costNote}
                         </span>
                       )}

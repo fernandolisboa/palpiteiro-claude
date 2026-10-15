@@ -17,7 +17,7 @@ function Row({ label, value }: { label: string; value: string }) {
   return (
     <DefinitionRow
       label={
-        <span className="font-mono text-eyebrow uppercase tracking-label text-muted-foreground">
+        <span className="font-mono text-meta uppercase tracking-label text-muted-foreground">
           {label}
         </span>
       }
@@ -70,7 +70,7 @@ export default async function AdminPredictionPage({ params }: PageProps) {
         </section>
 
         <section className="pb-8">
-          <h2 className="pb-2 font-mono text-eyebrow uppercase tracking-label text-muted-foreground">
+          <h2 className="pb-2 font-mono text-meta uppercase tracking-label text-muted-foreground">
             outcome atual
           </h2>
           {outcome ? (
@@ -98,7 +98,7 @@ export default async function AdminPredictionPage({ params }: PageProps) {
         </section>
 
         <section>
-          <h2 className="pb-4 font-mono text-eyebrow uppercase tracking-label text-muted-foreground">
+          <h2 className="pb-4 font-mono text-meta uppercase tracking-label text-muted-foreground">
             novo override
           </h2>
           <OverrideForm

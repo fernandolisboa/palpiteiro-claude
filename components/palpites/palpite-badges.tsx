@@ -51,7 +51,7 @@ export function SettleableBadge({
 // diversão". Honestidade de settleable (PLAN §0.4): fun nunca vira acertou/errou.
 export function NonSettleableTag() {
   return (
-    <span className="text-eyebrow tracking-tight text-muted-fg-2">
+    <span className="text-meta tracking-tight text-muted-fg-2">
       só por diversão
     </span>
   );

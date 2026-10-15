@@ -48,7 +48,7 @@ export function AccountMenu({ viewer }: { viewer: Viewer }) {
             {viewer.label || "conta"}
           </span>
           {viewer.email && viewer.email !== viewer.label && (
-            <span className="truncate font-mono text-eyebrow text-muted-foreground">
+            <span className="truncate font-mono text-meta text-muted-foreground">
               {viewer.email}
             </span>
           )}

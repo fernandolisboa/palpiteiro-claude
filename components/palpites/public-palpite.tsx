@@ -55,7 +55,7 @@ export function PublicPalpite({
       className="flex flex-col gap-4 rounded-xl border border-palpite-border bg-palpite-soft/40 p-5 ring-1 ring-palpite-border/40 lg:p-6"
     >
       <div className="flex flex-col gap-1.5">
-        <span className="font-mono text-eyebrow-xs uppercase tracking-eyebrow text-muted-fg-2">
+        <span className="font-mono text-meta uppercase tracking-eyebrow text-muted-fg-2">
           {match.homeTeam} x {match.awayTeam}
         </span>
         <div className="flex flex-wrap items-center gap-2">
@@ -91,7 +91,7 @@ export function PublicPalpite({
       )}
 
       {categories.length > 0 && (
-        <p className="font-mono text-eyebrow-xs uppercase tracking-eyebrow text-muted-fg-2">
+        <p className="font-mono text-meta uppercase tracking-eyebrow text-muted-fg-2">
           a partir de: {categories.join(" · ")}
         </p>
       )}
@@ -102,7 +102,7 @@ export function PublicPalpite({
 
       {/* Disclaimers públicos (ADR 0035 §10): 3 blocos + selo 18+ + CVV. Single-sourced. */}
       <div className="mt-1 flex flex-col gap-2 border-t border-palpite-border/40 pt-3">
-        <p className="flex items-center gap-1.5 text-eyebrow-xs tracking-tight text-muted-fg-2">
+        <p className="flex items-center gap-1.5 text-meta tracking-tight text-muted-fg-2">
           <Info className="size-3 shrink-0" aria-hidden="true" />
           {PALPITE_DISCLAIMER}
         </p>
@@ -112,7 +112,7 @@ export function PublicPalpite({
         <p className="text-body-sm leading-relaxed tracking-tight text-muted-foreground">
           {NON_OPERATOR_DISCLAIMER}
         </p>
-        <p className="flex flex-wrap items-center gap-2 text-eyebrow-xs tracking-tight text-muted-fg-2">
+        <p className="flex flex-wrap items-center gap-2 text-meta tracking-tight text-muted-fg-2">
           <span className="inline-flex items-center rounded-full border border-border px-2 py-0.5 font-mono uppercase tracking-label">
             18+
           </span>
@@ -143,7 +143,7 @@ export function PublicPalpite({
 
 function Kicker() {
   return (
-    <span className="inline-flex w-fit items-center rounded-full bg-palpite-soft px-2.5 py-0.5 font-mono text-eyebrow uppercase tracking-eyebrow text-palpite-strong-fg">
+    <span className="inline-flex w-fit items-center rounded-full bg-palpite-soft px-2.5 py-0.5 font-mono text-meta uppercase tracking-eyebrow text-palpite-strong-fg">
       O Palpite
     </span>
   );
@@ -158,7 +158,7 @@ function ConfidenceChip({
   return (
     <span
       aria-label={label}
-      className="inline-flex items-center rounded-full border border-palpite-border/70 px-2.5 py-0.5 font-mono text-eyebrow uppercase tracking-label text-palpite-fg"
+      className="inline-flex items-center rounded-full border border-palpite-border/70 px-2.5 py-0.5 font-mono text-meta uppercase tracking-label text-palpite-fg"
     >
       {label}
     </span>

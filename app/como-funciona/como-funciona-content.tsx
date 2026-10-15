@@ -116,7 +116,7 @@ export function ComoFuncionaContent() {
 
         {/* Box do exemplo numérico ponta-a-ponta — números EXATOS do spec */}
         <div className="border-border bg-surface-2 mt-5 rounded-xl border p-4">
-          <p className="font-mono text-eyebrow uppercase tracking-label text-muted-foreground">
+          <p className="font-mono text-meta uppercase tracking-label text-muted-foreground">
             um jogo de exemplo, ponta a ponta
           </p>
           <ul className="mt-3 flex flex-col gap-2 text-body leading-relaxed text-muted-foreground tracking-tight">
@@ -208,7 +208,7 @@ export function ComoFuncionaContent() {
           </div>
 
           <div className="border-border bg-surface-2 mt-5 rounded-xl border p-4">
-            <p className="font-mono text-eyebrow uppercase tracking-label text-muted-foreground">
+            <p className="font-mono text-meta uppercase tracking-label text-muted-foreground">
               1x2 — um jogo de exemplo, ponta a ponta
             </p>
             <ul className="mt-3 flex flex-col gap-2 text-body leading-relaxed text-muted-foreground tracking-tight">
@@ -274,7 +274,7 @@ export function ComoFuncionaContent() {
           </div>
 
           <div className="border-border bg-surface-2 mt-5 rounded-xl border p-4">
-            <p className="font-mono text-eyebrow uppercase tracking-label text-muted-foreground">
+            <p className="font-mono text-meta uppercase tracking-label text-muted-foreground">
               btts — um jogo de exemplo
             </p>
             <ul className="mt-3 flex flex-col gap-2 text-body leading-relaxed text-muted-foreground tracking-tight">
@@ -328,7 +328,7 @@ export function ComoFuncionaContent() {
           </div>
 
           <div className="border-border bg-surface-2 mt-5 rounded-xl border p-4">
-            <p className="font-mono text-eyebrow uppercase tracking-label text-muted-foreground">
+            <p className="font-mono text-meta uppercase tracking-label text-muted-foreground">
               dupla chance — um jogo de exemplo
             </p>
             <ul className="mt-3 flex flex-col gap-2 text-body leading-relaxed text-muted-foreground tracking-tight">

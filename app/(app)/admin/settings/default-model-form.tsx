@@ -35,7 +35,7 @@ export function DefaultModelForm({ current }: Props) {
     // cair no valor salvo em vez do antigo.
     <form key={current} action={action} className="flex flex-col gap-4">
       <label className="flex flex-col gap-1">
-        <span className="font-mono text-eyebrow uppercase tracking-label text-muted-foreground">
+        <span className="font-mono text-meta uppercase tracking-label text-muted-foreground">
           modelo padrão global
         </span>
         <div className="max-w-aside">

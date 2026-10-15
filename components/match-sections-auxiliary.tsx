@@ -135,7 +135,7 @@ function InjuriesBody({
         if (items.length === 0) return null;
         return (
           <div key={side} className="flex flex-col gap-1">
-            <span className="font-mono text-eyebrow uppercase tracking-label text-muted-foreground">
+            <span className="font-mono text-meta uppercase tracking-label text-muted-foreground">
               {side === "home" ? "mandante" : "visitante"}
             </span>
             {items.map((p) => (
@@ -144,7 +144,7 @@ function InjuriesBody({
                 className="flex items-center justify-between text-body-sm tracking-tight"
               >
                 <span className="text-foreground">{p.name}</span>
-                <span className="font-mono text-eyebrow text-muted-foreground">
+                <span className="font-mono text-meta text-muted-foreground">
                   {p.status}
                 </span>
               </div>
@@ -175,7 +175,7 @@ function LineupBody({
                 {side === "home" ? "mandante" : "visitante"}
               </span>
               {lineup.formation && (
-                <span className="font-mono text-eyebrow tabular-nums text-muted-foreground">
+                <span className="font-mono text-meta tabular-nums text-muted-foreground">
                   {lineup.formation}
                 </span>
               )}

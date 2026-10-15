@@ -48,7 +48,7 @@ function TeamBlock({
         <span className="text-center text-body font-medium leading-tight tracking-tight lg:text-left lg:text-[22px] lg:tracking-[-0.02em]">
           {name}
         </span>
-        <span className="hidden font-mono text-eyebrow uppercase tracking-label text-muted-foreground lg:inline">
+        <span className="hidden font-mono text-meta uppercase tracking-label text-muted-foreground lg:inline">
           {role}
         </span>
       </div>
@@ -74,11 +74,11 @@ export function MatchHero({
       <div className="flex items-center justify-between pb-4 lg:justify-start lg:gap-3 lg:pb-5">
         <Badge
           variant="outline"
-          className="h-5 rounded-full px-2 text-eyebrow uppercase tracking-label text-muted-foreground"
+          className="h-5 rounded-full px-2 text-meta uppercase tracking-label text-muted-foreground"
         >
           {LEAGUE_LABEL[league]}
         </Badge>
-        <div className="flex items-center gap-2 font-mono text-eyebrow tabular-nums text-muted-foreground lg:text-meta">
+        <div className="flex items-center gap-2 font-mono text-meta tabular-nums text-muted-foreground lg:text-meta">
           {status === "live" && <LiveBadge />}
           {when}
         </div>
@@ -112,11 +112,11 @@ export function MatchHero({
             </span>
           )}
           {score ? (
-            <span className="font-mono text-eyebrow-xs uppercase tracking-label text-muted-fg-2">
+            <span className="font-mono text-meta uppercase tracking-label text-muted-fg-2">
               encerrado
             </span>
           ) : liveScore ? (
-            <span className="text-center font-mono text-eyebrow-xs text-muted-fg-2">
+            <span className="text-center font-mono text-meta text-muted-fg-2">
               {liveScore.caption}
             </span>
           ) : null}
@@ -130,7 +130,7 @@ export function MatchHero({
       </div>
 
       {venue && (
-        <div className="flex items-center justify-center gap-1.5 pt-4 font-mono text-eyebrow uppercase tracking-label text-muted-fg-2 lg:justify-start lg:gap-4 lg:pt-5">
+        <div className="flex items-center justify-center gap-1.5 pt-4 font-mono text-meta uppercase tracking-label text-muted-fg-2 lg:justify-start lg:gap-4 lg:pt-5">
           <span>{venue}</span>
         </div>
       )}

@@ -142,7 +142,7 @@ export default async function AdminCalibrationPage({ searchParams }: PageProps) 
           <>
             {/* Resumo agregado (do recorte) */}
             <section className="pb-8">
-              <h2 className="pb-3 font-mono text-eyebrow uppercase tracking-label text-muted-foreground">
+              <h2 className="pb-3 font-mono text-meta uppercase tracking-label text-muted-foreground">
                 resumo · {marketLabel} · {segmentLabel} · {overall.n} predições
                 · {betCount} apostas · {overall.n - betCount} passes
               </h2>
@@ -173,7 +173,7 @@ export default async function AdminCalibrationPage({ searchParams }: PageProps) 
 
             {/* Por versão de prompt */}
             <section className="pb-8">
-              <h2 className="pb-3 font-mono text-eyebrow uppercase tracking-label text-muted-foreground">
+              <h2 className="pb-3 font-mono text-meta uppercase tracking-label text-muted-foreground">
                 por versão · {marketLabel} · {segmentLabel}
               </h2>
               <p className="pb-3 text-meta leading-relaxed text-muted-fg-2 tracking-tight">
@@ -183,7 +183,7 @@ export default async function AdminCalibrationPage({ searchParams }: PageProps) 
               <div className="overflow-x-auto rounded-md border border-border">
                 <table className="w-full text-body-sm tabular-nums">
                   <thead>
-                    <tr className="border-b border-border text-left font-mono text-eyebrow uppercase tracking-label text-muted-foreground">
+                    <tr className="border-b border-border text-left font-mono text-meta uppercase tracking-label text-muted-foreground">
                       <Th>versão</Th>
                       <Th align="right">n</Th>
                       <Th align="right">LL modelo</Th>
@@ -205,7 +205,7 @@ export default async function AdminCalibrationPage({ searchParams }: PageProps) 
 
             {/* Confiabilidade agregada (10 bins) */}
             <section className="pb-8">
-              <h2 className="pb-3 font-mono text-eyebrow uppercase tracking-label text-muted-foreground">
+              <h2 className="pb-3 font-mono text-meta uppercase tracking-label text-muted-foreground">
                 confiabilidade do modelo · {marketLabel} · {segmentLabel} · 10
                 bins
               </h2>
@@ -217,7 +217,7 @@ export default async function AdminCalibrationPage({ searchParams }: PageProps) 
               <div className="overflow-x-auto rounded-md border border-border">
                 <table className="w-full text-body-sm tabular-nums">
                   <thead>
-                    <tr className="border-b border-border text-left font-mono text-eyebrow uppercase tracking-label text-muted-foreground">
+                    <tr className="border-b border-border text-left font-mono text-meta uppercase tracking-label text-muted-foreground">
                       <Th>{BIN_LABEL[market]}</Th>
                       <Th align="right">n</Th>
                       <Th align="right">previsto</Th>
@@ -247,7 +247,7 @@ export default async function AdminCalibrationPage({ searchParams }: PageProps) 
 function GateSection({ gate }: { gate: KellyGate }) {
   return (
     <section className="pb-8">
-      <h2 className="pb-3 font-mono text-eyebrow uppercase tracking-label text-muted-foreground">
+      <h2 className="pb-3 font-mono text-meta uppercase tracking-label text-muted-foreground">
         gate do kelly · {gate.ready ? "pronto" : "ainda não"}
       </h2>
       <div className="overflow-x-auto rounded-md border border-border">
@@ -288,7 +288,7 @@ function GateSection({ gate }: { gate: KellyGate }) {
 function BacktestSection() {
   return (
     <section className="pb-8">
-      <h2 className="pb-3 font-mono text-eyebrow uppercase tracking-label text-muted-foreground">
+      <h2 className="pb-3 font-mono text-meta uppercase tracking-label text-muted-foreground">
         backtest offline · fase c
       </h2>
       <p className="text-meta leading-relaxed text-muted-fg-2 tracking-tight">
@@ -328,13 +328,13 @@ function EngineSection({
 }) {
   return (
     <section className="pb-8">
-      <h2 className="pb-3 font-mono text-eyebrow uppercase tracking-label text-muted-foreground">
+      <h2 className="pb-3 font-mono text-meta uppercase tracking-label text-muted-foreground">
         por motor · {CALIBRATED_MARKET_LABEL[market]}
       </h2>
       <div className="overflow-x-auto rounded-md border border-border">
         <table className="w-full text-body-sm tabular-nums">
           <thead>
-            <tr className="border-b border-border text-left font-mono text-eyebrow uppercase tracking-label text-muted-foreground">
+            <tr className="border-b border-border text-left font-mono text-meta uppercase tracking-label text-muted-foreground">
               <Th>motor</Th>
               <Th align="right">n</Th>
               <Th align="right">apostas</Th>
@@ -354,7 +354,7 @@ function EngineSection({
       </div>
       <nav
         aria-label="Recorte por motor"
-        className="flex flex-wrap items-center gap-x-4 gap-y-1 pt-3 font-mono text-eyebrow uppercase tracking-label"
+        className="flex flex-wrap items-center gap-x-4 gap-y-1 pt-3 font-mono text-meta uppercase tracking-label"
       >
         <span className="text-muted-fg-2">recorte:</span>
         <SegmentLink
@@ -396,13 +396,13 @@ function MarketSection({
 }) {
   return (
     <section className="pb-8">
-      <h2 className="pb-3 font-mono text-eyebrow uppercase tracking-label text-muted-foreground">
+      <h2 className="pb-3 font-mono text-meta uppercase tracking-label text-muted-foreground">
         por mercado · {segmentLabel}
       </h2>
       <div className="overflow-x-auto rounded-md border border-border">
         <table className="w-full text-body-sm tabular-nums">
           <thead>
-            <tr className="border-b border-border text-left font-mono text-eyebrow uppercase tracking-label text-muted-foreground">
+            <tr className="border-b border-border text-left font-mono text-meta uppercase tracking-label text-muted-foreground">
               <Th>mercado</Th>
               <Th align="right">n</Th>
               <Th align="right">apostas</Th>
@@ -534,12 +534,12 @@ function Kpi({
 }) {
   return (
     <div className="flex flex-col gap-1 bg-background px-4 py-3">
-      <span className="font-mono text-eyebrow uppercase tracking-label text-muted-foreground">
+      <span className="font-mono text-meta uppercase tracking-label text-muted-foreground">
         {label}
       </span>
       <span className="text-body font-medium tabular-nums">{value}</span>
       {hint && (
-        <span className="font-mono text-eyebrow-xs text-muted-fg-2">{hint}</span>
+        <span className="font-mono text-meta text-muted-fg-2">{hint}</span>
       )}
     </div>
   );

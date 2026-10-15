@@ -20,7 +20,7 @@ export function StandingsSection({ view }: Props) {
     <div className="flex flex-col gap-1">
       <div
         className={cn(
-          "grid gap-2 pb-2 font-mono text-eyebrow-xs uppercase tracking-label text-muted-foreground",
+          "grid gap-2 pb-2 font-mono text-meta uppercase tracking-label text-muted-foreground",
           STANDINGS_GRID,
         )}
       >

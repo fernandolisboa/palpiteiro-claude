@@ -30,7 +30,7 @@ export function ProfileForm({ email, initialName, initialImage }: Props) {
       className="flex flex-col gap-4"
     >
       <label className="flex flex-col gap-1">
-        <span className="text-muted-foreground text-eyebrow font-mono tracking-label uppercase">
+        <span className="text-muted-foreground text-meta font-mono tracking-label uppercase">
           e-mail
         </span>
         <Input
@@ -46,7 +46,7 @@ export function ProfileForm({ email, initialName, initialImage }: Props) {
       </label>
 
       <label className="flex flex-col gap-1">
-        <span className="text-muted-foreground text-eyebrow font-mono tracking-label uppercase">
+        <span className="text-muted-foreground text-meta font-mono tracking-label uppercase">
           nome
         </span>
         <Input
@@ -61,7 +61,7 @@ export function ProfileForm({ email, initialName, initialImage }: Props) {
       </label>
 
       <label className="flex flex-col gap-1">
-        <span className="text-muted-foreground text-eyebrow font-mono tracking-label uppercase">
+        <span className="text-muted-foreground text-meta font-mono tracking-label uppercase">
           avatar (URL)
         </span>
         <Input

@@ -9,7 +9,7 @@ function SampleNote({ rate }: { rate: RateView }) {
   return (
     <span
       className={cn(
-        "inline-flex items-center gap-1 font-mono text-eyebrow tabular-nums",
+        "inline-flex items-center gap-1 font-mono text-meta tabular-nums",
         rate.lowSample ? "text-warn-fg" : "text-muted-foreground",
       )}
     >
@@ -41,7 +41,7 @@ function RateCard({
 }) {
   return (
     <Card className="gap-2 p-5">
-      <span className="flex items-center gap-1 font-mono text-eyebrow uppercase tracking-label text-muted-foreground">
+      <span className="flex items-center gap-1 font-mono text-meta uppercase tracking-label text-muted-foreground">
         {label}
         {hint && (
           <HelpHint anchor={hint.anchor} label={label} blurb={hint.blurb} />
@@ -93,7 +93,7 @@ export function KpiCards({ view }: { view: DashboardKpiView }) {
           }}
         />
         <Card className="gap-2 p-5">
-          <span className="flex items-center gap-1 font-mono text-eyebrow uppercase tracking-label text-muted-foreground">
+          <span className="flex items-center gap-1 font-mono text-meta uppercase tracking-label text-muted-foreground">
             lucro total
             <HelpHint
               anchor="lucro-total"
@@ -109,7 +109,7 @@ export function KpiCards({ view }: { view: DashboardKpiView }) {
           >
             {view.totalProfit}
           </span>
-          <span className="font-mono text-eyebrow tabular-nums text-muted-foreground">
+          <span className="font-mono text-meta tabular-nums text-muted-foreground">
             {counts.settled} liquidada{counts.settled === 1 ? "" : "s"}
           </span>
         </Card>

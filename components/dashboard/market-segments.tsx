@@ -20,7 +20,7 @@ function GraduationRuler({
   return (
     <div className="flex flex-col gap-2">
       <div className="flex items-center justify-between">
-        <span className="font-mono text-eyebrow uppercase tracking-label text-muted-foreground">
+        <span className="font-mono text-meta uppercase tracking-label text-muted-foreground">
           graduação D9
         </span>
         {graduation.graduated ? (
@@ -32,7 +32,7 @@ function GraduationRuler({
             graduado
           </Badge>
         ) : (
-          <span className="font-mono text-eyebrow tabular-nums text-muted-foreground">
+          <span className="font-mono text-meta tabular-nums text-muted-foreground">
             graduando
           </span>
         )}
@@ -79,7 +79,7 @@ function ClvMetric({
       >
         {view.value}
       </span>
-      <span className="font-mono text-eyebrow-xs uppercase tracking-label text-muted-foreground">
+      <span className="font-mono text-meta uppercase tracking-label text-muted-foreground">
         {label} · n={view.n}
       </span>
     </div>
@@ -94,7 +94,7 @@ function ClvLine({ segment }: { segment: MarketSegmentView }) {
   if (clvOddsRatio.n === 0) return null;
   return (
     <div className="flex flex-col gap-2 rounded-md border border-border bg-surface-2 px-3 py-2.5">
-      <span className="font-mono text-eyebrow uppercase tracking-label text-muted-foreground">
+      <span className="font-mono text-meta uppercase tracking-label text-muted-foreground">
         CLV vs fechamento
       </span>
       <div className="flex items-baseline gap-5">
@@ -108,7 +108,7 @@ function ClvLine({ segment }: { segment: MarketSegmentView }) {
 function StakeBands({ segment }: { segment: MarketSegmentView }) {
   return (
     <div className="flex flex-col gap-2">
-      <span className="font-mono text-eyebrow uppercase tracking-label text-muted-foreground">
+      <span className="font-mono text-meta uppercase tracking-label text-muted-foreground">
         yield por banda de stake
       </span>
       <div className="grid grid-cols-3 gap-2">
@@ -117,7 +117,7 @@ function StakeBands({ segment }: { segment: MarketSegmentView }) {
             key={band.band}
             className="flex flex-col gap-1 rounded-md border border-border bg-surface-2 px-3 py-2"
           >
-            <span className="font-mono text-eyebrow uppercase tracking-label text-muted-foreground">
+            <span className="font-mono text-meta uppercase tracking-label text-muted-foreground">
               {band.band}
             </span>
             <span
@@ -130,7 +130,7 @@ function StakeBands({ segment }: { segment: MarketSegmentView }) {
             >
               {band.yieldPct.value}
             </span>
-            <span className="font-mono text-eyebrow tabular-nums text-muted-foreground">
+            <span className="font-mono text-meta tabular-nums text-muted-foreground">
               n={band.yieldPct.n}
             </span>
           </div>
@@ -147,7 +147,7 @@ function MarketSegmentCard({ segment }: { segment: MarketSegmentView }) {
         <span className="text-label font-medium tracking-tight">
           {segment.marketLabel}
         </span>
-        <span className="font-mono text-eyebrow tabular-nums text-muted-foreground">
+        <span className="font-mono text-meta tabular-nums text-muted-foreground">
           {segment.kpis.counts.bets} apostas
         </span>
       </div>
@@ -175,7 +175,7 @@ export function MarketSegments({
   if (segments.length === 0) return null;
   return (
     <section className="flex flex-col gap-3">
-      <span className="font-mono text-eyebrow uppercase tracking-eyebrow text-muted-foreground">
+      <span className="font-mono text-meta uppercase tracking-eyebrow text-muted-foreground">
         por mercado — régua D9 + banda de stake
       </span>
       <div className="grid grid-cols-1 gap-3 lg:grid-cols-2">

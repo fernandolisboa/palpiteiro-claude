@@ -9,8 +9,8 @@ import { cn } from "@/lib/utils";
 // badges renderizarem `text-xs` 12px em vez do tamanho pretendido). Manter em sincronia
 // com os `--text-*` do @theme em app/globals.css.
 const FONT_SIZE_TOKENS = [
-  "text-eyebrow-xs",
-  "text-eyebrow",
+  "text-meta",
+  "text-meta",
   "text-meta",
   "text-body-sm",
   "text-body",
@@ -30,9 +30,9 @@ describe("cn — tokens custom de font-size (extendTailwindMerge, #333)", () => 
     },
   );
 
-  it("eixo size do Badge: text-eyebrow vence o text-xs da base + cor do consumer (10px, não 12px)", () => {
-    const out = cn("text-xs text-eyebrow", "text-muted-foreground").split(" ");
-    expect(out).toContain("text-eyebrow");
+  it("eixo size do Badge: text-meta vence o text-xs da base + cor do consumer (10px, não 12px)", () => {
+    const out = cn("text-xs text-meta", "text-muted-foreground").split(" ");
+    expect(out).toContain("text-meta");
     expect(out).not.toContain("text-xs");
   });
 

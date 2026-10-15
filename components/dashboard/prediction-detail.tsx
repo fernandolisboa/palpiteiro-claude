@@ -14,7 +14,7 @@ function Row({
 }) {
   return (
     <div className="flex items-center justify-between border-b border-border-subtle py-2">
-      <span className="font-mono text-eyebrow uppercase tracking-label text-muted-foreground">
+      <span className="font-mono text-meta uppercase tracking-label text-muted-foreground">
         {label}
       </span>
       <span className={cn("text-body tabular-nums", className)}>{value}</span>
@@ -24,7 +24,7 @@ function Row({
 
 function SectionLabel({ children }: { children: string }) {
   return (
-    <h2 className="pb-2 pt-7 font-mono text-eyebrow uppercase tracking-label text-muted-foreground">
+    <h2 className="pb-2 pt-7 font-mono text-meta uppercase tracking-label text-muted-foreground">
       {children}
     </h2>
   );

@@ -37,7 +37,7 @@ export function HelpHint({ anchor, label, blurb }: HelpHintProps) {
         <button
           type="button"
           aria-label={`Ajuda: ${label}`}
-          className="inline-flex size-[15px] shrink-0 items-center justify-center rounded-full border border-border-subtle font-mono text-eyebrow-xs leading-none text-muted-foreground transition-colors hover:text-foreground focus-visible:ring-[3px] focus-visible:ring-ring/50 focus-visible:outline-none"
+          className="inline-flex size-[15px] shrink-0 items-center justify-center rounded-full border border-border-subtle font-mono text-meta leading-none text-muted-foreground transition-colors hover:text-foreground focus-visible:ring-[3px] focus-visible:ring-ring/50 focus-visible:outline-none"
         >
           ?
         </button>

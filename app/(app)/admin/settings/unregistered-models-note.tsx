@@ -22,7 +22,7 @@ export async function UnregisteredModelsNote() {
       </p>
       <ul className="mt-1 flex flex-col gap-0.5">
         {unregistered.map((m) => (
-          <li key={m.id} className="font-mono text-eyebrow">
+          <li key={m.id} className="font-mono text-meta">
             {m.id}
             {m.displayName ? ` · ${m.displayName}` : ""}
           </li>

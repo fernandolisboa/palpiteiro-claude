@@ -28,7 +28,7 @@ export function SiteFooter() {
     <footer className="border-t border-border-subtle px-6 py-8 text-muted-fg-2">
       <div className="mx-auto flex w-full max-w-content flex-col gap-3">
         <div className="flex flex-wrap items-center gap-x-3 gap-y-1.5 text-meta tracking-tight">
-          <span className="rounded-sm border border-border px-1.5 py-0.5 font-mono text-eyebrow-xs uppercase tracking-eyebrow">
+          <span className="rounded-sm border border-border px-1.5 py-0.5 font-mono text-meta uppercase tracking-eyebrow">
             18+
           </span>
           <span>Aposte com responsabilidade. Aposta não é investimento.</span>

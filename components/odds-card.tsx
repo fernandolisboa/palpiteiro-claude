@@ -43,7 +43,7 @@ export function OddsCard({ view, unavailable }: Props) {
         <span className="text-body-sm text-muted-foreground tracking-tight">
           {body}
         </span>
-        <span className="pt-1 font-mono text-eyebrow text-muted-fg-2">
+        <span className="pt-1 font-mono text-meta text-muted-fg-2">
           fonte: the-odds-api
         </span>
       </Callout>
@@ -61,12 +61,12 @@ export function OddsCard({ view, unavailable }: Props) {
           </span>
           <Badge
             variant="outline"
-            className="h-[18px] rounded-full px-2 text-eyebrow-xs text-muted-foreground"
+            className="h-[18px] rounded-full px-2 text-meta text-muted-foreground"
           >
             {view.marketLabel}
           </Badge>
         </div>
-        <span className="font-mono text-eyebrow text-muted-foreground">
+        <span className="font-mono text-meta text-muted-foreground">
           atualizado há {view.updatedAgo}
         </span>
       </div>
@@ -100,8 +100,8 @@ export function OddsCard({ view, unavailable }: Props) {
               <span
                 className={
                   isFirst
-                    ? "flex items-center gap-1 font-mono text-eyebrow tabular-nums text-muted-foreground"
-                    : "font-mono text-eyebrow tabular-nums text-muted-foreground"
+                    ? "flex items-center gap-1 font-mono text-meta tabular-nums text-muted-foreground"
+                    : "font-mono text-meta tabular-nums text-muted-foreground"
                 }
               >
                 {o.pct} normalizada
@@ -118,7 +118,7 @@ export function OddsCard({ view, unavailable }: Props) {
         })}
       </div>
       <Separator />
-      <div className="flex items-center justify-between px-4 py-2.5 font-mono text-eyebrow text-muted-fg-2">
+      <div className="flex items-center justify-between px-4 py-2.5 font-mono text-meta text-muted-fg-2">
         <span>odd de mercado</span>
         <span className="flex items-center gap-1 tabular-nums">
           overround {view.overround}

@@ -197,7 +197,7 @@ function MobileTeam({
         <h1 className="text-display-sm font-medium tracking-tight">
           {displayName}
         </h1>
-        <span className="font-mono text-eyebrow uppercase tracking-label text-muted-foreground">
+        <span className="font-mono text-meta uppercase tracking-label text-muted-foreground">
           histórico do time
         </span>
       </div>
@@ -247,7 +247,7 @@ function DesktopTeam({
           <h1 className="text-display-md font-medium tracking-tight">
             {displayName}
           </h1>
-          <span className="font-mono text-eyebrow uppercase tracking-label text-muted-foreground">
+          <span className="font-mono text-meta uppercase tracking-label text-muted-foreground">
             histórico do time
           </span>
         </div>

@@ -62,7 +62,7 @@ export function MatchRow({ m, last, listHref, backHref, tourTarget }: Props) {
             {LEAGUE_LABEL[m.league]}
           </Badge>
           {m.hasPrediction && (
-            <span className="inline-flex items-center gap-1 font-mono text-eyebrow text-accent-fg">
+            <span className="inline-flex items-center gap-1 font-mono text-meta text-accent-fg">
               <Check className="size-3" />
               analisado
             </span>
@@ -112,12 +112,12 @@ export function MatchRow({ m, last, listHref, backHref, tourTarget }: Props) {
                   <span className="px-1 text-muted-foreground">–</span>
                   {m.liveScore.away}
                 </span>
-                <span className="font-mono text-eyebrow-xs text-muted-fg-2">
+                <span className="font-mono text-meta text-muted-fg-2">
                   {m.liveScore.caption}
                 </span>
               </div>
             ) : (
-              <span className="font-mono text-eyebrow text-muted-fg-2">—</span>
+              <span className="font-mono text-meta text-muted-fg-2">—</span>
             )
           ) : isFinished && hasScore ? (
             <div className="flex flex-col items-end gap-0.5">
@@ -126,18 +126,18 @@ export function MatchRow({ m, last, listHref, backHref, tourTarget }: Props) {
                 <span className="px-1 text-muted-foreground">–</span>
                 {m.awayScore}
               </span>
-              <span className="font-mono text-eyebrow-xs uppercase tracking-label text-muted-fg-2">
+              <span className="font-mono text-meta uppercase tracking-label text-muted-fg-2">
                 encerrado
               </span>
             </div>
           ) : isFinished ? (
             // Encerrado sem placar reportado: marca o estado sem inventar 0–0
             // nem cair no "sem odd" (que sugeriria um jogo ainda apostável).
-            <span className="font-mono text-eyebrow uppercase tracking-label text-muted-fg-2">
+            <span className="font-mono text-meta uppercase tracking-label text-muted-fg-2">
               encerrado
             </span>
           ) : m.status === "postponed" || m.status === "cancelled" ? (
-            <span className="font-mono text-eyebrow uppercase tracking-label text-muted-fg-2">
+            <span className="font-mono text-meta uppercase tracking-label text-muted-fg-2">
               {STATUS_LABEL[m.status]}
             </span>
           ) : m.odds ? (
@@ -150,7 +150,7 @@ export function MatchRow({ m, last, listHref, backHref, tourTarget }: Props) {
               ))}
             </div>
           ) : (
-            <span className="font-mono text-eyebrow text-muted-fg-2">
+            <span className="font-mono text-meta text-muted-fg-2">
               sem odd
             </span>
           )}

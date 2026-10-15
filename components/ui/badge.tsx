@@ -24,8 +24,8 @@ const badgeVariants = cva(
       // e golden snapshots intocados; consumidores de conteúdo adotam nos heirs.
       size: {
         default: "",
-        sm: "h-5 px-2 text-eyebrow",
-        xs: "h-[18px] px-2 text-eyebrow",
+        sm: "h-5 px-2 text-meta",
+        xs: "h-[18px] px-2 text-meta",
       },
     },
     defaultVariants: {

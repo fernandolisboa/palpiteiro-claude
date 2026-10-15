@@ -15,7 +15,7 @@ export function MatchModelLine({
   return (
     <span
       className={cn(
-        "font-mono text-eyebrow tabular-nums text-muted-fg-2",
+        "font-mono text-meta tabular-nums text-muted-fg-2",
         className,
       )}
     >

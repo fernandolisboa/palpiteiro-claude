@@ -26,7 +26,7 @@ export function ModelOverrideSelect({
 }: Props) {
   return (
     <label className="flex flex-col gap-1">
-      <span className="font-mono text-eyebrow-xs uppercase tracking-label text-muted-foreground">
+      <span className="font-mono text-meta uppercase tracking-label text-muted-foreground">
         modelo
       </span>
       <ModelSelect
