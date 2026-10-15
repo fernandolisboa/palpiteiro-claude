@@ -1,12 +1,8 @@
 import { ChevronLeft } from "lucide-react";
 
+import { MarketTableSkeleton } from "@/components/bet-slip/market-table-section";
 import { PageContainer } from "@/components/page-container";
-import { Card } from "@/components/ui/card";
 import { Skeleton } from "@/components/ui/skeleton";
-import {
-  MatchAuxiliarySkeleton,
-  MatchSectionsSkeleton,
-} from "@/components/skeletons/match-sections-skeleton";
 
 function HeaderBar() {
   return (
@@ -45,45 +41,34 @@ function HeroSkeleton() {
   );
 }
 
-function OddsSkeleton() {
+// Barra de abas (Mercados / Seu palpite / Dados) no lugar e na altura da tablist.
+function TabsSkeleton() {
   return (
-    <Card className="gap-0 overflow-hidden p-0">
-      <div className="flex items-center justify-between px-4 py-3.5">
-        <Skeleton className="h-[14px] w-32" />
-        <Skeleton className="h-[12px] w-20" />
+    <div className="py-2">
+      <div className="grid grid-cols-3 gap-1 rounded-lg bg-surface-2 p-1">
+        <Skeleton className="h-9 w-full rounded-md" />
+        <div className="h-9" />
+        <div className="h-9" />
       </div>
-      <div className="grid grid-cols-2 border-t border-border-subtle">
-        <div className="flex flex-col gap-2 border-r border-border-subtle px-4 py-3.5">
-          <Skeleton className="h-[12px] w-16" />
-          <Skeleton className="h-[22px] w-12" />
-          <Skeleton className="h-[11px] w-20" />
-        </div>
-        <div className="flex flex-col gap-2 px-4 py-3.5">
-          <Skeleton className="h-[12px] w-16" />
-          <Skeleton className="h-[22px] w-12" />
-          <Skeleton className="h-[11px] w-20" />
-        </div>
-      </div>
-    </Card>
+    </div>
   );
 }
 
-// Um esqueleto só (#576), na ordem da página: barra, hero, palpite, odds e dados. Sem
-// árvores por largura: o `lg:` fica dentro de cada bloco, como na página.
+// Um esqueleto só (#576), na ordem da página: barra, hero, palpite, abas e a tabela de
+// mercados (a aba padrão). Sem árvores por largura: no `lg:` a grade já reserva a coluna
+// de 340px do painel Suas apostas, então a coluna principal nasce na largura final.
 export default function MatchLoading() {
   return (
     <PageContainer width="content">
       <HeaderBar />
       <HeroSkeleton />
-      <div className="flex flex-col gap-4 pt-4 lg:gap-6">
-        <Skeleton className="h-72 w-full rounded-xl lg:h-56" />
-        <div className="grid gap-3 lg:grid-cols-2">
-          <OddsSkeleton />
-          <OddsSkeleton />
-        </div>
-        <div className="flex flex-col gap-3">
-          <MatchSectionsSkeleton />
-          <MatchAuxiliarySkeleton />
+      <div className="pt-4 lg:grid lg:grid-cols-[minmax(0,1fr)_340px] lg:items-start lg:gap-6">
+        <div className="flex min-w-0 flex-col gap-4 lg:gap-6">
+          <Skeleton className="h-72 w-full rounded-xl lg:h-56" />
+          <div className="flex flex-col gap-4">
+            <TabsSkeleton />
+            <MarketTableSkeleton />
+          </div>
         </div>
       </div>
     </PageContainer>
