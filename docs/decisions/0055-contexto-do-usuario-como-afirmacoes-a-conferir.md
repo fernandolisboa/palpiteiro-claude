@@ -7,6 +7,10 @@ Accepted (2026-10-13). Fase 3 da proposta "pré-previsão, bet slip e análise d
 > **Emenda (#565, 2026-10-13):** o contexto extra da análise com IA passa a alimentar o
 > `predict` no motor `code_jev`. Ver a seção "Emenda (#565)" no fim: ela muda o §6 e a
 > frase "não toca `lib/ai/predict.ts`" do Status para esse caminho.
+>
+> **Emenda (ADR 0060, 2026-10-15):** o bloco existe durante o jogo. A leitura pelos botões
+> refaz a matriz em jogo no cliente; "Analisar meu palpite" usa a base do apito e aplica a
+> transformação em jogo depois da evidência do usuário. Ver [ADR 0060](./0060-modo-ao-vivo-estado-do-jogo-modelo-em-jogo-registros-marcados.md).
 
 ## Contexto
 
@@ -40,7 +44,7 @@ O usuário quer dar o próprio palpite e explicar o porquê ("o Palmeiras está 
 - **(+)** O que o usuário sabe e o modelo não sabia entra, limitado e auditável (cada análise grava as versões e a evidência).
 - **(−)** Até 2 chamadas de LLM por uso (centavos mesmo no Opus) e até 4 de API-Football, em geral do cache.
 - **(−)** "Peso do jogo" só é verificável no Brasileirão (`LEAGUE_TABLE_CONFIG`); nas demais ligas entra como não verificável.
-- **(−)** O bloco só aparece em jogo analisável: a análise gravada some da página depois do apito.
+- **(−)** O bloco só aparece em jogo analisável: a análise gravada some da página depois do apito. *(Emendado pela ADR 0060: com o modo ao vivo ligado, o bloco fica aberto no 1º e no 2º tempo e no intervalo.)*
 
 ## Emenda (#565): contexto extra na análise com IA
 
