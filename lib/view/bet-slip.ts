@@ -616,8 +616,11 @@ type PersistedLeg = {
 
 const num = (v: string | null) => (v === null ? null : Number(v));
 
-function legSourceLabel(leg: PersistedLeg): string {
+function legSourceLabel(leg: PersistedLeg, isLive: boolean): string {
   if (leg.gradeSource === "cartridge") return "sua análise";
+  // Ao vivo (#580): o motor gravado é o do pré-jogo que o modelo em jogo condicionou;
+  // a chance é do modelo ao vivo, não do Dixon-Coles de antes do apito.
+  if (isLive && leg.gradeSource === "scoreline_model") return "modelo ao vivo";
   if (leg.modelSource === "dixon_coles") return "Dixon-Coles";
   if (leg.modelSource === "heuristic") return "modelo simplificado";
   return "modelo de placar";
@@ -636,7 +639,10 @@ export type HistoryLegView = {
  * A perna gravada em /apostas (#577): odd, stake e chance à vista; o resto em
  * "detalhes". Nunca recalcula com dado novo: só re-deriva EV/edge dos números gravados.
  */
-export function historyLegView(leg: PersistedLeg): HistoryLegView {
+export function historyLegView(
+  leg: PersistedLeg,
+  { isLive = false }: { isLive?: boolean } = {},
+): HistoryLegView {
   const prob = num(leg.modelProbPct);
   const odd = num(leg.userOdd);
   const implied = num(leg.marketImpliedPct);
@@ -656,6 +662,6 @@ export function historyLegView(leg: PersistedLeg): HistoryLegView {
     details.push(`vantagem do modelo ${formatEdgePoints(prob - implied)}`);
   }
   if (suggested !== null) details.push(`sugerido ${units(suggested)}`);
-  details.push(legSourceLabel(leg));
+  details.push(legSourceLabel(leg, isLive));
   return { visible, details };
 }

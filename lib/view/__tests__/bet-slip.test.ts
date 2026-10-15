@@ -709,6 +709,21 @@ describe("historyLegView (/apostas, #577)", () => {
       "modelo de placar",
     );
   });
+
+  it("slip ao vivo: a fonte é o modelo ao vivo, não o motor de pré-jogo gravado", () => {
+    expect(historyLegView(base, { isLive: true }).details.at(-1)).toBe("modelo ao vivo");
+    expect(
+      historyLegView({ ...base, modelSource: "heuristic" }, { isLive: true }).details.at(-1),
+    ).toBe("modelo ao vivo");
+    expect(historyLegView(base, { isLive: true }).details).not.toContain("Dixon-Coles");
+    // A análise do usuário segue com o rótulo dela (não há análise ao vivo no cupom).
+    expect(
+      historyLegView(
+        { ...base, gradeSource: "cartridge", modelSource: null },
+        { isLive: true },
+      ).details.at(-1),
+    ).toBe("sua análise");
+  });
 });
 
 describe("RISK_DISCLAIMER_PT_BR", () => {

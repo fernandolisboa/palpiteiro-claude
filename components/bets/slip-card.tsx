@@ -65,14 +65,16 @@ function LegRow({
   teams,
   showBadge,
   closed,
+  isLive,
 }: {
   leg: UserBetLegRow;
   teams: TeamNames;
   showBadge: boolean;
   closed: boolean;
+  isLive: boolean;
 }) {
   const label = slipLegLabel(leg.kind, leg.params, teams);
-  const view = historyLegView(leg);
+  const view = historyLegView(leg, { isLive });
   const result = legResult(leg);
   // Encerrada sem resultado (jogo cancelado, ou não conferida fechada por tempo): a
   // perna pendente fica sem selo; o cabeçalho já diz o porquê. Nunca "Em aberto" lá.
@@ -190,6 +192,7 @@ export function SlipCard({
             teams={teams}
             showBadge={combo}
             closed={closed || matchCancelled}
+            isLive={slip.isLive}
           />
         ))}
       </div>
