@@ -1,12 +1,266 @@
-import { matchUnavailableReason } from "@/lib/view/match-availability";
+import {
+  classifyStatusShort,
+  matchUnavailableReason,
+  type LiveStateInput,
+} from "@/lib/live/phase";
+import { resolvePoolScore } from "@/lib/pools/winners";
 
-// Estado do bolão derivado do jogo (#567). Mesmo gate de "pré-jogo" da análise e do
-// registro de apostas: `scheduled` e kickoff no futuro.
+// Estado do bolão derivado do jogo (#567), puro e com `now` injetável. Com o modo ao
+// vivo (#580, ADR 0060 §7, emenda a ADR 0054 §3) são três perguntas separadas:
+// - tirar aposta (`poolEntriesRemovable`): só antes do apito, com ou sem modo ao vivo;
+// - a janela do jogo (`poolWindowOpen`, criar bolão e o atalho da página do jogo): até
+//   os 15' de jogo, ou apito + 15 min de relógio sem minuto do provider;
+// - anotar (`poolBetsOpen`): a janela, mais o "fechar" do dono e o "estender" do admin;
+//   com resultado (placar manual ou do jogo encerrado) nunca.
+// Com `enable_live_mode` desligado tudo fecha no apito, como antes, e os controles do
+// dono e do admin somem (`poolOwnerClosable`, `poolExtendable`).
 
-/** Apostas abertas = o jogo ainda não começou. */
-export function poolBetsOpen(
-  match: { status: string; kickoffAt: Date },
+/** Minuto jogado em que o bolão fecha sozinho. */
+export const POOL_LIVE_CUTOFF_MINUTE = 15;
+/** Sem minuto do provider: o bolão fecha no apito + isto, pelo relógio. */
+export const POOL_CLOCK_CUTOFF_MS = POOL_LIVE_CUTOFF_MINUTE * 60_000;
+/** "Estender prazo" do admin: minutos a partir de agora. */
+export const POOL_EXTEND_PRESETS_MIN = [15, 30, 60] as const;
+export type PoolExtendPreset = (typeof POOL_EXTEND_PRESETS_MIN)[number];
+/** Teto da extensão: apito + 3h. */
+export const POOL_EXTEND_CAP_MS = 3 * 60 * 60_000;
+
+/** Placar do jogo opcional: só entra na pergunta "o bolão já tem resultado?". */
+export type PoolMatch = {
+  status: string;
+  kickoffAt: Date;
+  homeScore?: number | null;
+  awayScore?: number | null;
+};
+/** Os controles do dono e do admin e o placar manual (colunas de `friend_pools`). */
+export type PoolControls = {
+  betsClosedAt?: Date | null;
+  betsExtendedUntil?: Date | null;
+  manualHomeScore?: number | null;
+  manualAwayScore?: number | null;
+};
+export type PoolLiveOptions = { liveMode: boolean };
+
+/** Tirar aposta = o jogo ainda não começou. Não muda com o modo ao vivo. */
+export function poolEntriesRemovable(match: PoolMatch, now: Date = new Date()): boolean {
+  return matchUnavailableReason(match.status, match.kickoffAt, now) === null;
+}
+
+/**
+ * Onde o jogo está em relação à janela do bolão:
+ * - `pre`: antes do apito;
+ * - `minute`: ao vivo com minuto do provider (1º tempo, ou o atraso `NS` depois do
+ *   horário), aberto enquanto o minuto estimado < 15;
+ * - `clock`: ao vivo sem minuto do provider, aberto até `closesAt` (apito + 15 min);
+ * - `closed`.
+ */
+export type PoolWindow =
+  | { kind: "pre" }
+  | { kind: "minute"; estimatedMinute: number }
+  | { kind: "clock"; closesAt: Date }
+  | { kind: "closed" };
+
+function clockWindow(match: PoolMatch, now: Date): PoolWindow {
+  const closesAt = new Date(match.kickoffAt.getTime() + POOL_CLOCK_CUTOFF_MS);
+  return now.getTime() < closesAt.getTime() ? { kind: "clock", closesAt } : { kind: "closed" };
+}
+
+function minuteWindow(estimatedMinute: number): PoolWindow {
+  return estimatedMinute < POOL_LIVE_CUTOFF_MINUTE
+    ? { kind: "minute", estimatedMinute }
+    : { kind: "closed" };
+}
+
+export function poolWindow(
+  match: PoolMatch,
+  state: LiveStateInput | null,
+  now: Date = new Date(),
+  { liveMode }: PoolLiveOptions = { liveMode: false },
+): PoolWindow {
+  const legacy = matchUnavailableReason(match.status, match.kickoffAt, now);
+  if (legacy === null) return { kind: "pre" };
+  if (!liveMode) return { kind: "closed" };
+  // Adiado, cancelado, encerrado no DB: fechado (o DB terminal vence o estado).
+  if (legacy !== "started" && legacy !== "live") return { kind: "closed" };
+  if (state === null || state.fetchedAt === null) return clockWindow(match, now);
+
+  // O minuto é extrapolado pela idade do estado: um estado velho não deixa o bolão
+  // aberto além do corte. No atraso (`NS` depois do horário) a extrapolação supõe que a
+  // bola rolou no instante da leitura, o que só pode adiantar o corte, nunca atrasar.
+  const ageMin = Math.max(0, now.getTime() - state.fetchedAt.getTime()) / 60_000;
+  switch (classifyStatusShort(state.statusShort)) {
+    case "pre_match":
+      return minuteWindow(ageMin);
+    case "in_play":
+      if (state.statusShort === "1H" && state.elapsed !== null) {
+        // No 1º tempo `extra` só existe depois do 45', irrelevante para o corte.
+        return minuteWindow(state.elapsed + ageMin);
+      }
+      // `2H`: já passou dos 15'. `LIVE` ou `1H` sem `elapsed`: sem minuto, relógio.
+      return state.statusShort === "2H" ? { kind: "closed" } : clockWindow(match, now);
+    case "half_time":
+    case "extra_time":
+    case "interrupted":
+    case "finished":
+    case "postponed":
+    case "cancelled":
+      return { kind: "closed" };
+    case "unknown":
+      return clockWindow(match, now);
+  }
+}
+
+/** A janela do jogo está aberta (criar bolão, atalho "criar bolão" da página do jogo). */
+export function poolWindowOpen(
+  match: PoolMatch,
+  state: LiveStateInput | null,
+  now: Date = new Date(),
+  opts: PoolLiveOptions = { liveMode: false },
+): boolean {
+  return poolWindow(match, state, now, opts).kind !== "closed";
+}
+
+/** O bolão já tem resultado (`resolvePoolScore`: placar manual > jogo encerrado). */
+export function poolHasResult(pool: PoolControls, match: PoolMatch): boolean {
+  return (
+    resolvePoolScore(
+      {
+        manualHomeScore: pool.manualHomeScore ?? null,
+        manualAwayScore: pool.manualAwayScore ?? null,
+      },
+      {
+        status: match.status,
+        homeScore: match.homeScore ?? null,
+        awayScore: match.awayScore ?? null,
+      },
+    ) !== null
+  );
+}
+
+/** O dono fechou as apostas (só fecha, nunca reabre). */
+export function poolClosedByOwner(pool: PoolControls, now: Date = new Date()): boolean {
+  return pool.betsClosedAt != null && pool.betsClosedAt.getTime() <= now.getTime();
+}
+
+/** Jogo terminado (ou que não vai ser jogado): pelo DB ou pelo estado ao vivo. */
+export function poolMatchEnded(
+  match: PoolMatch,
+  state: LiveStateInput | null,
   now: Date = new Date(),
 ): boolean {
-  return matchUnavailableReason(match.status, match.kickoffAt, now) === null;
+  const legacy = matchUnavailableReason(match.status, match.kickoffAt, now);
+  if (legacy === "finished" || legacy === "postponed" || legacy === "cancelled") return true;
+  if (state === null || state.fetchedAt === null) return false;
+  const cls = classifyStatusShort(state.statusShort);
+  return cls === "finished" || cls === "postponed" || cls === "cancelled";
+}
+
+/**
+ * Extensão do admin valendo agora: prazo no futuro e jogo não terminado. Com o modo ao
+ * vivo desligado não vale (kill-switch: tudo fecha no apito).
+ */
+export function poolExtensionActive(
+  pool: PoolControls,
+  match: PoolMatch,
+  state: LiveStateInput | null,
+  now: Date = new Date(),
+  { liveMode }: PoolLiveOptions = { liveMode: false },
+): boolean {
+  if (!liveMode || pool.betsExtendedUntil == null) return false;
+  if (pool.betsExtendedUntil.getTime() <= now.getTime()) return false;
+  return !poolMatchEnded(match, state, now);
+}
+
+/**
+ * Anotar aposta: com resultado → fechado (o placar lançado não muda com aposta nova);
+ * o dono fechou → fechado; extensão valendo → aberto; senão a janela do jogo. A
+ * extensão só alonga: quando ela vence, volta a valer a janela.
+ */
+export function poolBetsOpen(
+  pool: PoolControls,
+  match: PoolMatch,
+  state: LiveStateInput | null,
+  now: Date = new Date(),
+  opts: PoolLiveOptions = { liveMode: false },
+): boolean {
+  if (poolHasResult(pool, match)) return false;
+  if (poolClosedByOwner(pool, now)) return false;
+  if (poolExtensionActive(pool, match, state, now, opts)) return true;
+  return poolWindowOpen(match, state, now, opts);
+}
+
+/** Placar manual: só depois do apito e com as apostas fechadas. */
+export function poolManualScoreAllowed(
+  pool: PoolControls,
+  match: PoolMatch,
+  state: LiveStateInput | null,
+  now: Date = new Date(),
+  opts: PoolLiveOptions = { liveMode: false },
+): boolean {
+  return !poolEntriesRemovable(match, now) && !poolBetsOpen(pool, match, state, now, opts);
+}
+
+/**
+ * Até quando a extensão vai: `now + minutos`, com teto no apito + 3h. `null` quando o
+ * teto já passou (não há o que estender).
+ */
+export function poolExtensionUntil(
+  match: PoolMatch,
+  now: Date,
+  minutes: PoolExtendPreset,
+): Date | null {
+  const cap = match.kickoffAt.getTime() + POOL_EXTEND_CAP_MS;
+  if (now.getTime() >= cap) return null;
+  return new Date(Math.min(now.getTime() + minutes * 60_000, cap));
+}
+
+/**
+ * "Fechar apostas" do dono: só com o modo ao vivo (flag desligada = como antes, sem o
+ * controle) e com as apostas abertas.
+ */
+export function poolOwnerClosable(
+  pool: PoolControls,
+  match: PoolMatch,
+  state: LiveStateInput | null,
+  now: Date = new Date(),
+  opts: PoolLiveOptions = { liveMode: false },
+): boolean {
+  return opts.liveMode && poolBetsOpen(pool, match, state, now, opts);
+}
+
+/**
+ * O admin pode estender agora: modo ao vivo ligado, depois do apito (antes dele as
+ * apostas já estão abertas), sem resultado no bolão, jogo não terminado e antes do teto.
+ */
+export function poolExtendable(
+  pool: PoolControls,
+  match: PoolMatch,
+  state: LiveStateInput | null,
+  now: Date = new Date(),
+  { liveMode }: PoolLiveOptions = { liveMode: false },
+): boolean {
+  if (!liveMode || poolEntriesRemovable(match, now)) return false;
+  if (poolHasResult(pool, match) || poolMatchEnded(match, state, now)) return false;
+  return now.getTime() < match.kickoffAt.getTime() + POOL_EXTEND_CAP_MS;
+}
+
+/**
+ * O detalhe do bolão deve buscar o estado ao vivo (`getInPlayState`) agora? Só depois
+ * do apito, com o modo ao vivo ligado e enquanto o bolão ainda pode estar aberto pela
+ * row que já existe (do apito até o corte ou o fim da extensão; PLAN-580 §10). O atraso
+ * (`NS`) sempre busca: a extrapolação de uma row velha pode ter fechado cedo demais.
+ */
+export function poolLiveStateWanted(
+  pool: PoolControls,
+  match: PoolMatch,
+  row: LiveStateInput | null,
+  now: Date = new Date(),
+  opts: PoolLiveOptions = { liveMode: false },
+): boolean {
+  if (!opts.liveMode) return false;
+  const legacy = matchUnavailableReason(match.status, match.kickoffAt, now);
+  if (legacy !== "started" && legacy !== "live") return false;
+  if (poolClosedByOwner(pool, now)) return false;
+  if (poolBetsOpen(pool, match, row, now, opts)) return true;
+  return row !== null && row.fetchedAt !== null && classifyStatusShort(row.statusShort) === "pre_match";
 }

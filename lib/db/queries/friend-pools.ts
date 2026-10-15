@@ -7,6 +7,7 @@ import {
   type BetLegParams,
 } from "@/db/schema";
 import { db } from "@/lib/db";
+import type { LiveStamp } from "@/lib/live/stamp";
 import type { PoolBetKind } from "@/lib/pools/pool-schema";
 
 // Bolão entre amigos (#567). Toda leitura e escrita filtra pelo `userId` da sessão
@@ -88,15 +89,64 @@ export async function insertFriendPool(input: {
 
 /**
  * Grava a aposta de um apostador. O chamador já carregou o bolão com
- * `getFriendPool(poolId, userId)` (dono conferido, jogo não começou, teto de apostas).
+ * `getFriendPool(poolId, userId)` (dono conferido, apostas abertas, teto de apostas).
+ * Anotada ao vivo (#580): `isLive` + `liveState` vêm juntos de `liveColumns(stamp)`
+ * (CHECK `is_live = false OR live_state IS NOT NULL`).
  */
 export async function insertFriendPoolEntry(input: {
   poolId: string;
   bettorName: string;
   kind: PoolBetKind;
   params: BetLegParams;
+  isLive?: boolean;
+  liveState?: LiveStamp | null;
 }): Promise<void> {
   await db.insert(friendPoolEntries).values(input);
+}
+
+/**
+ * "Fechar apostas" do dono (#580): grava `bets_closed_at` e limpa a extensão (prazo e
+ * quem estendeu). Só fecha; reabrir é só pela extensão do admin.
+ */
+export async function setFriendPoolBetsClosed(input: {
+  poolId: string;
+  userId: string;
+  now: Date;
+}): Promise<boolean> {
+  const rows = await db
+    .update(friendPools)
+    .set({
+      betsClosedAt: input.now,
+      betsExtendedUntil: null,
+      betsExtendedByUserId: null,
+      updatedAt: input.now,
+    })
+    .where(and(eq(friendPools.id, input.poolId), eq(friendPools.userId, input.userId)))
+    .returning({ id: friendPools.id });
+  return rows.length > 0;
+}
+
+/**
+ * "Estender prazo" do admin (#580), só nos próprios bolões (`userId` = dono): limpa o
+ * fechamento do dono, grava até quando e quem estendeu.
+ */
+export async function setFriendPoolBetsExtended(input: {
+  poolId: string;
+  userId: string;
+  until: Date;
+  now: Date;
+}): Promise<boolean> {
+  const rows = await db
+    .update(friendPools)
+    .set({
+      betsClosedAt: null,
+      betsExtendedUntil: input.until,
+      betsExtendedByUserId: input.userId,
+      updatedAt: input.now,
+    })
+    .where(and(eq(friendPools.id, input.poolId), eq(friendPools.userId, input.userId)))
+    .returning({ id: friendPools.id });
+  return rows.length > 0;
 }
 
 export async function deleteFriendPoolEntry(input: {

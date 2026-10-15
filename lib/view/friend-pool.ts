@@ -5,9 +5,19 @@ import {
   formatKickoffDateTime,
   formatLine,
   formatStartsIn,
+  formatTimeOfDay,
   leagueToKey,
 } from "@/lib/format";
-import { poolBetsOpen } from "@/lib/pools/pool-state";
+import type { LiveStateInput } from "@/lib/live/phase";
+import { readLiveStamp, type LiveStamp } from "@/lib/live/stamp";
+import {
+  POOL_LIVE_CUTOFF_MINUTE,
+  poolBetsOpen,
+  poolClosedByOwner,
+  poolExtensionActive,
+  poolWindow,
+  type PoolControls,
+} from "@/lib/pools/pool-state";
 import { resolvePoolScore } from "@/lib/pools/winners";
 import type { SupportedLeague } from "@/lib/providers/sports-data/leagues";
 import { displayMatchTeams } from "@/lib/view/team";
@@ -77,35 +87,148 @@ export function poolBetShortLabel(
 export type PoolStatusTone = "open" | "soon" | "neutral";
 export type PoolStatusView = { label: string; tone: PoolStatusTone };
 
+type PoolStatusRow = {
+  pool: {
+    manualHomeScore: number | null;
+    manualAwayScore: number | null;
+    betsClosedAt?: Date | null;
+    betsExtendedUntil?: Date | null;
+  };
+  match: {
+    status: string;
+    kickoffAt: Date;
+    homeScore: number | null;
+    awayScore: number | null;
+  };
+};
+
 /**
- * Selo do bolão na lista (#577). Aberto em destaque; nas últimas 3h antes do apito
- * (a trava), âmbar com quanto falta. Sem a hora no selo: a linha do bolão já mostra
- * data e hora do jogo. Placar, adiado, cancelado e "esperando o placar" ficam
- * neutros. Delta puro: não depende de fuso.
+ * O que a tela sabe do jogo ao vivo (#580): a flag, o estado (na lista, só a row; no
+ * detalhe, o relido) e o fuso para a hora da extensão. Sem nada = flag desligada.
+ */
+export type PoolLiveViewOptions = {
+  liveMode?: boolean;
+  state?: LiveStateInput | null;
+  timeZone?: string;
+};
+
+/**
+ * Prazo das apostas ABERTAS, para o selo e o cabeçalho do detalhe (#580, PLAN-580 §10):
+ * "estendidas até 17:40" (extensão do admin; concorda com "apostas" no cabeçalho do
+ * detalhe, "apostas estendidas até 17:40"), "fecham aos 15'" (ao vivo com minuto, ou
+ * nas últimas 3h antes do apito com o modo ao vivo), "fecham em 8 min" (ao vivo pelo
+ * relógio), "fecham em 2h 10min" (flag desligada, últimas 3h antes do apito, como
+ * antes). undefined = aberto sem prazo próximo. Só faz sentido com `poolBetsOpen`.
+ */
+export function poolBetsDeadlineLabel(
+  pool: PoolControls,
+  match: { status: string; kickoffAt: Date },
+  now: Date,
+  { liveMode = false, state = null, timeZone }: PoolLiveViewOptions = {},
+): string | undefined {
+  const live = { liveMode };
+  if (pool.betsExtendedUntil && poolExtensionActive(pool, match, state, now, live)) {
+    return `estendidas até ${formatTimeOfDay(pool.betsExtendedUntil, timeZone)}`;
+  }
+  const window = poolWindow(match, state, now, live);
+  switch (window.kind) {
+    case "pre": {
+      const closesIn = poolClosesIn(match.kickoffAt, now);
+      if (!closesIn) return undefined;
+      return liveMode ? `fecham aos ${POOL_LIVE_CUTOFF_MINUTE}'` : `fecham ${closesIn}`;
+    }
+    case "minute":
+      return `fecham aos ${POOL_LIVE_CUTOFF_MINUTE}'`;
+    case "clock": {
+      const left = Math.max(1, Math.ceil((window.closesAt.getTime() - now.getTime()) / 60_000));
+      return `fecham em ${left} min`;
+    }
+    case "closed":
+      return undefined;
+  }
+}
+
+/**
+ * Selo do bolão na lista (#577). Aberto em destaque; com prazo perto (últimas 3h antes
+ * do apito, ou ao vivo), âmbar com o prazo. Sem a data no selo: a linha do bolão já
+ * mostra data e hora do jogo. Placar, adiado, cancelado, "fechadas por você" (a lista
+ * é só do dono) e "esperando o placar" ficam neutros.
  */
 export function poolStatusView(
-  row: {
-    pool: { manualHomeScore: number | null; manualAwayScore: number | null };
-    match: {
-      status: string;
-      kickoffAt: Date;
-      homeScore: number | null;
-      awayScore: number | null;
-    };
-  },
+  row: PoolStatusRow,
   now: Date,
+  opts: PoolLiveViewOptions = {},
 ): PoolStatusView {
   const score = resolvePoolScore(row.pool, row.match);
   if (score) return { label: `placar ${score.home} × ${score.away}`, tone: "neutral" };
   if (row.match.status === "postponed") return { label: "jogo adiado", tone: "neutral" };
   if (row.match.status === "cancelled") return { label: "jogo cancelado", tone: "neutral" };
-  if (poolBetsOpen(row.match, now)) {
-    const closesIn = poolClosesIn(row.match.kickoffAt, now);
-    return closesIn
-      ? { label: `fecham ${closesIn}`, tone: "soon" }
+  if (poolClosedByOwner(row.pool, now)) return { label: "fechadas por você", tone: "neutral" };
+  const live = { liveMode: opts.liveMode ?? false };
+  if (poolBetsOpen(row.pool, row.match, opts.state ?? null, now, live)) {
+    const deadline = poolBetsDeadlineLabel(row.pool, row.match, now, opts);
+    return deadline
+      ? { label: deadline, tone: "soon" }
       : { label: "apostas abertas", tone: "open" };
   }
   return { label: "esperando o placar", tone: "neutral" };
+}
+
+type StampedEntry = { isLive: boolean; liveState: unknown };
+
+function stampMoment(stamp: LiveStamp, kickoffAt: Date): string | null {
+  if (stamp.source === "clock") {
+    const min = Math.max(
+      0,
+      Math.floor((new Date(stamp.recordedAt).getTime() - kickoffAt.getTime()) / 60_000),
+    );
+    return `${min} min após o apito`;
+  }
+  if (stamp.minuteLabel === null) return null;
+  return stamp.minuteLabel === "intervalo" ? "no intervalo" : `aos ${stamp.minuteLabel}`;
+}
+
+function stampScore(stamp: LiveStamp): string | null {
+  return stamp.score ? `${stamp.score.home}–${stamp.score.away}` : null;
+}
+
+/**
+ * Carimbo da aposta anotada com o jogo rolando, na lista de apostadores (#580, ADR
+ * 0060 §7): "aos 12' · 0–0", "no intervalo · 1–0", "12 min após o apito" (relógio,
+ * sem placar). Carimbo ilegível: "ao vivo". Aposta de antes do apito: null.
+ */
+export function poolEntryStampLabel(entry: StampedEntry, kickoffAt: Date): string | null {
+  if (!entry.isLive) return null;
+  const stamp = readLiveStamp(entry.liveState);
+  if (!stamp) return "ao vivo";
+  const parts = [stampMoment(stamp, kickoffAt), stampScore(stamp)].filter(
+    (p): p is string => p !== null,
+  );
+  return parts.length > 0 ? parts.join(" · ") : "ao vivo";
+}
+
+/**
+ * A mesma transparência na linha do ganhador: "acertou · anotada aos 12', 1–0". A
+ * pontuação não muda com o minuto (decisão do dono); o carimbo deixa à vista. Aposta
+ * de antes do apito: null.
+ */
+export function poolWinnerStampLabel(entry: StampedEntry, kickoffAt: Date): string | null {
+  if (!entry.isLive) return null;
+  const stamp = readLiveStamp(entry.liveState);
+  if (!stamp) return "acertou · anotada ao vivo";
+  const moment = stampMoment(stamp, kickoffAt) ?? "ao vivo";
+  const score = stampScore(stamp);
+  return `acertou · anotada ${moment}${score ? `, ${score}` : ""}`;
+}
+
+/** Opção do seletor do "Novo bolão": o rótulo do jogo, com "ao vivo" depois do apito. */
+export function poolPickerLabel(
+  match: { homeTeam: string; awayTeam: string; league: SupportedLeague; kickoffAt: Date },
+  now: Date,
+  timeZone?: string,
+): string {
+  const label = poolMatchLabel(match, now, timeZone);
+  return match.kickoffAt.getTime() <= now.getTime() ? `${label} · ao vivo` : label;
 }
 
 /** "em 2h 10min" só nas últimas 3h antes do apito (a trava do bolão); senão undefined. */
