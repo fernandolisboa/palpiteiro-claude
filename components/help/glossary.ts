@@ -269,7 +269,7 @@ export const GLOSSARY: readonly GlossaryEntry[] = [
     term: "taxa de acerto (win rate)",
     anchor: "win-rate",
     meaning:
-      "% de apostas ganhas entre as liquidadas: acertos ÷ (acertos + erros). Exclui jogos sem aposta e anuladas. Taxa de acerto alta não garante lucro — o que paga é o retorno.",
+      "Parcela das apostas liquidadas que acertaram: acertos ÷ (acertos + erros). Exclui jogos sem aposta e anuladas. Taxa de acerto alta não garante lucro — o que paga é o retorno.",
     group: "numeros",
   },
   {

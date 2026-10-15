@@ -33,7 +33,7 @@ A revisão de design apontou que o texto pequeno (9 e 10px, ~240 usos) é difíc
    | edge +5.6pp | vantagem +5,6 pontos |
    | Over/Under gols · Over 2.5 | Total de gols · Mais de 2,5 · Menos de 2,5 |
 
-   A cor de uma recomendação nunca é lida pelo texto: vem de `recommendationKind`, derivado do valor cru. "Taxa de acerto" só aparece no desempenho privado (ADR 0048, Decisão 4).
+   A cor de uma recomendação nunca é lida pelo texto: vem de `recommendationKind`, derivado do valor cru. Número de "taxa de acerto" (e de retorno) só aparece no desempenho privado. Em página pública vale a ADR 0048, Decisão 4: nenhuma alegação de acerto em %, nenhum número de desempenho. A definição neutra do termo no glossário compartilhado (`components/help/glossary.ts`, renderizado também em `/como-funciona`) pode aparecer em página pública, desde que siga só definição, sem número nem promessa.
 5. **Selo único de resultado:** `components/result-badge.tsx` (`ResultBadge`) com as cores `form-*` e sempre com a palavra (`lib/view/result-state.ts`). Vale para `/apostas`, palpite (inclusive `/p`), bolão e desempenho.
 6. **Cabeçalho e larguras:** `PageHeader` (h1 `display-md`/`lg:display-lg`, descrição sans, meta sans com `tabular-nums`, volta e ações) e `PageContainer` (`content` 1040 ou `reading` 640, gutter `px-5`/`lg:px-8`) nas telas logadas de usuário. A árvore celular de `/jogos` e `/time` (lista sangrada) usa só o `PageHeader`. A página do jogo fica para o PR 3.
 7. **Escopo do admin:** recebe só as regras de token (piso de 11px, contraste do `muted-fg-2`, zero `text-[Npx]`); mantém mono, termos técnicos e o próprio `PageHeading`. Componentes compartilhados com o admin (`PredictionDetail`, `PredictionsTable`, `KpiCards`) seguem a regra de usuário.

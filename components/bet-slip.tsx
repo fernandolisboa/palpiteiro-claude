@@ -846,7 +846,7 @@ function Evaluation({ view, registered }: { view: SlipEvaluationView; registered
       ))}
       {view.combo && <ComboEvaluation combo={view.combo} />}
       <p className="text-meta leading-relaxed text-muted-foreground tracking-tight">
-        {view.stakeRuleNote} {view.modelCaveat} Ficam salvas em Apostas e são conferidas
+        {view.stakeRuleNote} {view.modelCaveat} Ficam salvas em Suas apostas e são conferidas
         sozinhas depois do jogo.
       </p>
     </div>
