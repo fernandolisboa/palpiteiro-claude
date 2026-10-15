@@ -86,6 +86,16 @@ export type MatchRowView = {
   model?: MatchModelLineView;
 };
 
+// Linha da lista de jogos agrupada por dia (/jogos, #577): a MatchRowView + o dia
+// (chave e rótulo no fuso do usuário) e a hora simples. `startsIn` ("em 2h 15min")
+// só nas últimas 3h antes do apito de um jogo agendado; chave ausente fora disso.
+// MatchRowView e MatchHeroView não mudam (o /time e o hero seguem com `kickoff`).
+export type MatchListRowView = MatchRowView & {
+  day: { key: string; label: string }; // "2026-10-18", "Hoje" | "Amanhã" | "Sábado 18/10"
+  time: string; // "19:00"
+  startsIn?: string;
+};
+
 // Firewall do ADR 0030 no TIPO: o hero nunca recebe a leitura do modelo (toMatchHeroView
 // remove o campo mesmo se alguém passar a base).
 export type MatchHeroView = Omit<MatchRowView, "model">;

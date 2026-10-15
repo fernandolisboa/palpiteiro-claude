@@ -3,7 +3,11 @@ import { renderToStaticMarkup } from "react-dom/server";
 
 import { MatchRow } from "@/components/match-row";
 import type { MatchInput } from "@/lib/view/match";
-import { toMatchHeroView, toMatchRowView } from "@/lib/view/match";
+import {
+  toMatchHeroView,
+  toMatchListRowView,
+  toMatchRowView,
+} from "@/lib/view/match";
 import type { MatchModelSnapshot } from "@/lib/model-base/types";
 import { MATCH_MODEL_MAX_AGE_MS } from "@/lib/model-base/version";
 import { IN_PROGRESS_WINDOW_MS } from "@/lib/view/date-range";
@@ -566,5 +570,49 @@ describe("toMatchRowView — placar parcial ao vivo (#574)", () => {
     const finished = live({ status: "finished" });
     expect("liveScore" in finished).toBe(false);
     expect(finished.homeScore).toBe(2);
+  });
+});
+
+describe("toMatchListRowView — dia, hora e contagem (#577)", () => {
+  const SP = "America/Sao_Paulo";
+  function listRow(kickoffAt: Date, status: MatchStatus = "scheduled") {
+    return toMatchListRowView({
+      match: makeMatch({ kickoffAt, status }),
+      odds: null,
+      hasPrediction: false,
+      now: NOW,
+      timeZone: SP,
+    });
+  }
+
+  it("estende a MatchRowView sem mudar nenhum campo dela", () => {
+    const args = {
+      match: makeMatch(),
+      odds: null,
+      hasPrediction: true,
+      now: NOW,
+      timeZone: SP,
+    };
+    const { day, time, startsIn, ...rest } = toMatchListRowView(args);
+    expect(rest).toEqual(toMatchRowView(args));
+    // KICKOFF 18:00 UTC = 15:00 em São Paulo, no mesmo dia do NOW (09:00 local).
+    expect(day).toEqual({ key: "2026-06-11", label: "Hoje" });
+    expect(time).toBe("15:00");
+    expect(startsIn).toBeUndefined();
+  });
+
+  it("contagem só nas últimas 3h (3h exatas entra, 3h01 não, passado não)", () => {
+    const at = (min: number) => new Date(NOW.getTime() + min * 60 * 1000);
+    expect(listRow(at(135)).startsIn).toBe("em 2h 15min");
+    expect(listRow(at(40)).startsIn).toBe("em 40min");
+    expect(listRow(at(180)).startsIn).toBe("em 3h 00min");
+    expect("startsIn" in listRow(at(181))).toBe(false);
+    expect("startsIn" in listRow(at(-5))).toBe(false);
+  });
+
+  it("adiado ou cancelado com o horário antigo nas próximas 3h não ganha contagem", () => {
+    const soon = new Date(NOW.getTime() + 60 * 60 * 1000);
+    expect("startsIn" in listRow(soon, "postponed")).toBe(false);
+    expect("startsIn" in listRow(soon, "cancelled")).toBe(false);
   });
 });

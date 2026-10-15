@@ -1,8 +1,12 @@
 import {
+  dayKeyOf,
   formatCountdown,
+  formatDayHeading,
   formatKickoffAbsolute,
   formatKickoffRelative,
   formatRelativeAgoLabel,
+  formatStartsIn,
+  formatTimeOfDay,
   leagueToKey,
 } from "@/lib/format";
 // Bound compartilhado da janela "em andamento" — DEVE casar com o bound da query
@@ -23,6 +27,7 @@ import {
 } from "@/lib/view/odds";
 import type {
   MatchHeroView,
+  MatchListRowView,
   MatchRowView,
   MatchStatus,
 } from "@/lib/view/types";
@@ -145,6 +150,31 @@ export function toMatchRowView({
     nowMs - modelSnapshot.checkedAt.getTime() <= MATCH_MODEL_MAX_AGE_MS
       ? { model: toMatchModelLineView(modelSnapshot, shortTeams) }
       : {}),
+  };
+}
+
+/**
+ * Linha da lista de jogos agrupada por dia (#577): a mesma `MatchRowView` mais o dia
+ * e a hora no fuso do usuário. `now` e `timeZone` obrigatórios: sem fuso o grupo
+ * cairia no dia do runtime (UTC na Vercel, o bug do #409). A contagem "em 2h 15min"
+ * só vale pra jogo agendado: um adiado com o horário antigo nas próximas 3h não
+ * ganha contagem.
+ */
+export function toMatchListRowView(
+  args: ToMatchRowArgs & { now: Date; timeZone: string },
+): MatchListRowView {
+  const row = toMatchRowView(args);
+  const { kickoffAt, status } = args.match;
+  const startsIn =
+    status === "scheduled" ? formatStartsIn(kickoffAt, args.now) : undefined;
+  return {
+    ...row,
+    day: {
+      key: dayKeyOf(kickoffAt, args.timeZone),
+      label: formatDayHeading(kickoffAt, args.now, args.timeZone),
+    },
+    time: formatTimeOfDay(kickoffAt, args.timeZone),
+    ...(startsIn ? { startsIn } : {}),
   };
 }
 
