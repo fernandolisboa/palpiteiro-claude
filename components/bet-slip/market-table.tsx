@@ -36,6 +36,9 @@ export function MarketTable({ grid }: { grid: BetGridView }) {
   const hasOdds = grid.noOdds === null;
   const hasChance = grid.groups.some((g) => g.probSource !== null);
   const analyzed = grid.groups.some((g) => g.probSource === "analysis");
+  // A legenda nomeia a fonte da chance que está na tela: sem modelo (só leitura, ou a base
+  // ainda não rodou), toda chance mostrada é a da sua análise.
+  const modelChance = grid.model !== null;
   const firstWithOdds = grid.groups.find((g) => g.odds !== null)?.key ?? null;
 
   return (
@@ -52,14 +55,20 @@ export function MarketTable({ grid }: { grid: BetGridView }) {
           <div className="flex flex-col gap-1 px-4 pt-3.5 pb-3">
             <span className="text-body font-medium tracking-tight">{grid.oddsHeading}</span>
             <span className="flex flex-wrap items-center gap-x-1.5 gap-y-1 text-meta text-muted-foreground">
-              {hasChance ? "odd de mercado · chance do modelo · odd justa" : "odd de mercado"}
-              <HelpHint
-                anchor="leitura-modelo"
-                label="chance do modelo e odd justa"
-                blurb="Chance de cada resultado pelo modelo de placar do jogo, calculada sem olhar as odds. A odd justa é 100 ÷ chance; compare com a odd de mercado."
-              />
+              {!hasChance
+                ? "odd de mercado"
+                : modelChance
+                  ? "odd de mercado · chance do modelo · odd justa"
+                  : "odd de mercado · chance pela sua análise · odd justa"}
+              {hasChance && modelChance && (
+                <HelpHint
+                  anchor="leitura-modelo"
+                  label="chance do modelo e odd justa"
+                  blurb="Chance de cada resultado pelo modelo de placar do jogo, calculada sem olhar as odds. A odd justa é 100 ÷ chance."
+                />
+              )}
             </span>
-            {analyzed && (
+            {analyzed && modelChance && (
               <span className="text-meta text-muted-foreground">
                 Nos mercados que você analisou, a chance é a da análise da IA.
               </span>

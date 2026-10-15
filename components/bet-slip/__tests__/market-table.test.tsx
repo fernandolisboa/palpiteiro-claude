@@ -108,6 +108,33 @@ describe("MarketTable — células", () => {
   });
 });
 
+describe("MarketTable — legenda da chance", () => {
+  it("com o modelo: chance do modelo, com a dica", () => {
+    const h = html(grid());
+    expect(text(h)).toContain("odd de mercado · chance do modelo · odd justa");
+    expect(h).toContain('aria-label="Ajuda: chance do modelo e odd justa"');
+  });
+
+  it("só leitura com análise: a chance é a da análise, sem a dica do modelo", () => {
+    const h = html(grid({ mode: "readOnly", unavailable: "finished" }));
+    const t = text(h);
+    expect(t).toContain("odd de mercado · chance pela sua análise · odd justa");
+    expect(t).not.toContain("chance do modelo");
+    expect(h).not.toContain("Ajuda: chance do modelo");
+    // A legenda já diz a fonte: sem a nota de "nos mercados que você analisou".
+    expect(t).not.toContain("Nos mercados que você analisou");
+  });
+
+  it("só leitura sem análise: só a odd, sem dica", () => {
+    const h = html(grid({ mode: "readOnly", unavailable: "finished", analysis: new Map() }));
+    const t = text(h);
+    expect(t).toContain("odd de mercado");
+    // ("Dupla chance" é o título do mercado.)
+    expect(t).not.toMatch(/chance (do modelo|pela sua análise)|odd justa/);
+    expect(h).not.toContain("Ajuda: chance do modelo");
+  });
+});
+
 describe("MarketTable — interação", () => {
   let container: HTMLDivElement;
   let root: Root;
