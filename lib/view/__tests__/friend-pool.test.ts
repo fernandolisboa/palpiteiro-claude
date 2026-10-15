@@ -1,6 +1,13 @@
 import { describe, expect, it } from "vitest";
 
-import { joinNames, poolBetLabel, poolMatchLabel } from "@/lib/view/friend-pool";
+import {
+  joinNames,
+  poolBetLabel,
+  poolBetShortLabel,
+  poolMatchLabel,
+  poolStatusView,
+} from "@/lib/view/friend-pool";
+import { teamPair } from "@/lib/view/team";
 
 const teams = { home: "Flamengo", away: "Palmeiras" };
 
@@ -45,6 +52,98 @@ describe("poolMatchLabel", () => {
       "America/Sao_Paulo",
     );
     expect(label.startsWith("Palmeiras × Corinthians · ")).toBe(true);
+  });
+});
+
+describe("poolBetShortLabel (#577)", () => {
+  const codes = { home: "FLA", away: "PAL" };
+
+  it("placar com as siglas", () => {
+    expect(poolBetShortLabel("exact_score", { home: 2, away: 1 }, teams, codes)).toBe(
+      "FLA 2 × 1 PAL",
+    );
+  });
+
+  it("sigla repetida sai desempatada pelo teamPair", () => {
+    // Palmeiras × Palestino: as duas derivariam "PAL".
+    const pair = teamPair("Palmeiras", "Palestino", "lib");
+    const tied = { home: pair.home.short, away: pair.away.short };
+    const label = poolBetShortLabel("exact_score", { home: 0, away: 0 }, teams, tied);
+    expect(label).toBe("PAL 0 × 0 PLS");
+  });
+
+  it.each([
+    ["match_result", { selection: "away" }],
+    ["double_chance", { selection: "home_draw" }],
+    ["btts", { selection: "no" }],
+    ["over_under", { selection: "over", line: 2.5 }],
+  ] as const)("%s igual ao poolBetLabel", (kind, params) => {
+    expect(poolBetShortLabel(kind, params, teams, codes)).toBe(poolBetLabel(kind, params, teams));
+  });
+});
+
+describe("poolStatusView (#577)", () => {
+  const NOW = new Date("2026-10-18T15:00:00Z");
+  const noManual = { manualHomeScore: null, manualAwayScore: null };
+  const match = (over: Partial<{ status: string; kickoffAt: Date; homeScore: number | null; awayScore: number | null }> = {}) => ({
+    status: "scheduled",
+    kickoffAt: new Date(NOW.getTime() + 24 * 3_600_000),
+    homeScore: null,
+    awayScore: null,
+    ...over,
+  });
+
+  it("aberto e longe da trava: destaque, sem hora", () => {
+    expect(poolStatusView({ pool: noManual, match: match() }, NOW)).toEqual({
+      label: "apostas abertas",
+      tone: "open",
+    });
+  });
+
+  it("aberto nas últimas 3h: âmbar com quanto falta", () => {
+    const kickoffAt = new Date(NOW.getTime() + 2 * 3_600_000 + 10 * 60_000);
+    expect(poolStatusView({ pool: noManual, match: match({ kickoffAt }) }, NOW)).toEqual({
+      label: "fecham em 2h 10min",
+      tone: "soon",
+    });
+  });
+
+  it("3h exatas já conta; 3h01 ainda não", () => {
+    const at = (ms: number) => match({ kickoffAt: new Date(NOW.getTime() + ms) });
+    expect(poolStatusView({ pool: noManual, match: at(3 * 3_600_000) }, NOW).tone).toBe("soon");
+    expect(poolStatusView({ pool: noManual, match: at(3 * 3_600_000 + 60_000) }, NOW).tone).toBe(
+      "open",
+    );
+  });
+
+  it("placar conhecido (do jogo ou lançado): neutro", () => {
+    expect(
+      poolStatusView(
+        { pool: noManual, match: match({ status: "finished", homeScore: 3, awayScore: 1 }) },
+        NOW,
+      ),
+    ).toEqual({ label: "placar 3 × 1", tone: "neutral" });
+    expect(
+      poolStatusView({ pool: { manualHomeScore: 0, manualAwayScore: 2 }, match: match() }, NOW),
+    ).toEqual({ label: "placar 0 × 2", tone: "neutral" });
+  });
+
+  it.each([
+    ["postponed", "jogo adiado"],
+    ["cancelled", "jogo cancelado"],
+  ])("%s: neutro", (status, label) => {
+    expect(poolStatusView({ pool: noManual, match: match({ status }) }, NOW)).toEqual({
+      label,
+      tone: "neutral",
+    });
+  });
+
+  it("apitado sem placar: esperando o placar", () => {
+    const kickoffAt = new Date(NOW.getTime() - 3_600_000);
+    expect(poolStatusView({ pool: noManual, match: match({ kickoffAt }) }, NOW)).toEqual({
+      label: "esperando o placar",
+      tone: "neutral",
+    });
   });
 });
 

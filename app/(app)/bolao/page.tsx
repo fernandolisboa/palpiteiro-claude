@@ -13,10 +13,16 @@ import { listFriendPools, type FriendPoolListRow } from "@/lib/db/queries/friend
 import { getActiveLeaguesForRequest } from "@/lib/db/queries/league-settings";
 import { getMatchesInRange } from "@/lib/db/queries/matches";
 import { leagueToKey } from "@/lib/format";
-import { poolPotCents, formatBrl, resolvePoolScore } from "@/lib/pools/winners";
-import { poolBetsOpen } from "@/lib/pools/pool-state";
+import { poolPotCents, formatBrl } from "@/lib/pools/winners";
 import { getRequestTimeZone } from "@/lib/server/request-timezone";
-import { POOL_MONEY_NOTE, POOL_RISK_NOTE, poolMatchLabel } from "@/lib/view/friend-pool";
+import {
+  POOL_MONEY_NOTE,
+  POOL_RISK_NOTE,
+  poolMatchLabel,
+  poolStatusView,
+  type PoolStatusTone,
+} from "@/lib/view/friend-pool";
+import { cn } from "@/lib/utils";
 import { displayMatchTeams } from "@/lib/view/team";
 
 export const dynamic = "force-dynamic";
@@ -68,7 +74,11 @@ export default async function BolaoPage({ searchParams }: PageProps) {
           <EmptyState
             icon={<Users className="size-6" aria-hidden />}
             title="Nenhum bolão ainda"
-            description="Escolha um jogo acima, crie o bolão e anote a aposta de cada amigo."
+            description={
+              options.length > 0
+                ? "Escolha um jogo acima, crie o bolão e anote a aposta de cada amigo."
+                : `Quando houver jogo nos próximos ${PICKER_DAYS} dias, crie o bolão aqui em cima e anote a aposta de cada amigo.`
+            }
           />
         ) : (
           <ul className="flex flex-col gap-3">
@@ -88,14 +98,13 @@ export default async function BolaoPage({ searchParams }: PageProps) {
   );
 }
 
-function statusOf(row: FriendPoolListRow, now: Date): { label: string; tone: "default" | "secondary" | "outline" } {
-  const score = resolvePoolScore(row.pool, row.match);
-  if (score) return { label: `placar ${score.home} × ${score.away}`, tone: "default" };
-  if (row.match.status === "postponed") return { label: "jogo adiado", tone: "outline" };
-  if (row.match.status === "cancelled") return { label: "jogo cancelado", tone: "outline" };
-  if (poolBetsOpen(row.match, now)) return { label: "apostas abertas", tone: "secondary" };
-  return { label: "esperando o placar", tone: "outline" };
-}
+// Aberto em destaque (DESIGN.md), âmbar nas últimas 3h antes da trava, o resto em
+// contorno neutro (#577).
+const STATUS_TONE: Record<PoolStatusTone, string> = {
+  open: "border-accent-border bg-accent-soft text-accent-fg",
+  soon: "border-warn-border bg-warn-soft text-warn-fg",
+  neutral: "border-border bg-transparent text-muted-foreground",
+};
 
 function PoolRow({
   row,
@@ -106,7 +115,7 @@ function PoolRow({
   now: Date;
   timeZone: string | undefined;
 }) {
-  const status = statusOf(row, now);
+  const status = poolStatusView(row, now);
   const pot = poolPotCents(row.pool.entryAmountCents, row.entryCount);
   const teams = displayMatchTeams(
     row.match.homeTeam,
@@ -130,7 +139,11 @@ function PoolRow({
             {pot !== null && pot > 0 ? ` · pote ${formatBrl(pot)}` : ""}
           </p>
         </div>
-        <Badge variant={status.tone} className="shrink-0">
+        <Badge
+          variant="outline"
+          size="sm"
+          className={cn("shrink-0 tabular-nums tracking-tight", STATUS_TONE[status.tone])}
+        >
           {status.label}
         </Badge>
       </div>

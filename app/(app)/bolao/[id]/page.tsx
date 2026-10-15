@@ -22,10 +22,11 @@ import {
   POOL_MONEY_NOTE,
   POOL_RISK_NOTE,
   joinNames,
-  poolBetLabel,
+  poolBetShortLabel,
+  poolClosesIn,
   poolMatchLabel,
 } from "@/lib/view/friend-pool";
-import { displayMatchTeams } from "@/lib/view/team";
+import { displayMatchTeams, teamPair } from "@/lib/view/team";
 
 export const dynamic = "force-dynamic";
 
@@ -50,7 +51,12 @@ export default async function BolaoDetailPage({ params }: PageProps) {
   const now = new Date();
   // Nomes curtos de exibição (#578). Os picks guardam chaves (home/draw/away), nunca o nome.
   const teams = displayMatchTeams(match.homeTeam, match.awayTeam, leagueToKey(match.league));
+  // Siglas (desempatadas) pro placar na lista de apostadores (#577).
+  const pair = teamPair(match.homeTeam, match.awayTeam, leagueToKey(match.league));
+  const codes = { home: pair.home.short, away: pair.away.short };
   const open = poolBetsOpen(match, now);
+  // Só nas últimas 3h antes do apito (a trava): quanto falta.
+  const closesIn = open ? poolClosesIn(match.kickoffAt, now) : undefined;
   const score = resolvePoolScore(pool, match);
   const outcome = computePoolOutcome({
     entries,
@@ -84,6 +90,9 @@ export default async function BolaoDetailPage({ params }: PageProps) {
               {entries.length} {entries.length === 1 ? "aposta" : "apostas"}
               {pool.entryAmountCents !== null &&
                 ` · ${formatBrl(pool.entryAmountCents)} por pessoa · pote ${formatBrl(outcome.potCents ?? 0)}`}
+              {closesIn && (
+                <span className="text-warn-fg"> · apostas fecham {closesIn}</span>
+              )}
             </>
           }
         />
@@ -144,16 +153,20 @@ export default async function BolaoDetailPage({ params }: PageProps) {
             <ul className="divide-y divide-border rounded-xl border border-border">
               {entries.map((e) => {
                 const hit = outcome.settled ? outcome.hitIds.has(e.id) : null;
+                const kindLabel = POOL_KIND_LABEL[e.kind] ?? e.kind;
+                const bet = poolBetShortLabel(e.kind, e.params, teams, codes);
                 return (
                   <li key={e.id} className="flex items-center gap-3 px-4 py-3">
-                    <span className="min-w-0 flex-1 truncate text-body font-medium tracking-tight">
+                    <span className="min-w-16 flex-1 truncate text-body font-medium tracking-tight">
                       {e.bettorName}
                     </span>
-                    <span className="min-w-0 flex-[2] text-right text-body-sm tracking-tight">
-                      <span className="text-muted-foreground text-meta">
-                        {POOL_KIND_LABEL[e.kind] ?? e.kind} ·{" "}
-                      </span>
-                      {poolBetLabel(e.kind, e.params, teams)}
+                    {/* Tipo e aposta numa linha só (#577): o placar vai com as siglas. */}
+                    <span
+                      className="min-w-0 truncate text-right text-body-sm tabular-nums tracking-tight"
+                      title={`${kindLabel} · ${bet}`}
+                    >
+                      <span className="text-muted-foreground text-meta">{kindLabel} · </span>
+                      {bet}
                     </span>
                     {hit !== null && <ResultBadge result={hit ? "won" : "lost"} />}
                     {open && (
