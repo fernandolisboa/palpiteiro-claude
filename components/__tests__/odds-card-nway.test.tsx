@@ -50,9 +50,9 @@ describe("OddsCard N-vias (1X2, N=3) — #173 PR-2", () => {
     expect(html).toContain("Casa");
     expect(html).toContain("Empate");
     expect(html).toContain("Fora");
-    // 3 células de pct ("X% normalizada") — "% normalizada" evita casar o
-    // aria-label do HelpHint ("prob. do mercado (normalizada)").
-    expect(html.split("% normalizada").length - 1).toBe(3);
+    // 3 células de pct ("X%" em mono + " normalizada" em sans) — o fecho do span
+    // evita casar o aria-label do HelpHint ("prob. do mercado (normalizada)").
+    expect(html.split("%</span> normalizada").length - 1).toBe(3);
   });
 
   it("HelpHint da implícita só na 1ª célula; HelpHint do overround no footer", () => {

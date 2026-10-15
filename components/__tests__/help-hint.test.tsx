@@ -48,18 +48,18 @@ describe("HelpHint — contrato dos anchors", () => {
   // Mapa SEMÂNTICO por placement (não só "existe"): um typo OU um mapeamento
   // pro conjunto errado (ex.: lucro total → #yield) falha aqui.
   const PLACEMENT_ANCHORS: Record<string, string> = {
-    yield: "yield",
-    "win rate": "win-rate",
-    "pass rate": "pass-rate",
+    retorno: "yield",
+    "taxa de acerto": "win-rate",
+    "jogos sem aposta": "pass-rate",
     "lucro total": "lucro-total",
     "prob. do modelo": "prob-modelo",
     "leitura do modelo": "leitura-modelo",
     "prob. do mercado": "prob-implicita",
-    edge: "edge",
+    vantagem: "edge",
     "retorno esperado": "retorno-esperado",
     overround: "overround",
     normalizada: "prob-implicita",
-    PASS: "recomendacao",
+    "Sem aposta": "recomendacao",
     "odd mínima": "odd-minima",
     "amostra pequena": "amostra-pequena",
   };
@@ -75,9 +75,9 @@ describe("HelpHint — contrato dos anchors", () => {
 
   it("os anchors de conjuntos distintos não colidem (lucro-total ≠ yield)", () => {
     expect(PLACEMENT_ANCHORS["lucro total"]).toBe("lucro-total");
-    expect(PLACEMENT_ANCHORS["yield"]).toBe("yield");
+    expect(PLACEMENT_ANCHORS["retorno"]).toBe("yield");
     expect(PLACEMENT_ANCHORS["lucro total"]).not.toBe(
-      PLACEMENT_ANCHORS["yield"],
+      PLACEMENT_ANCHORS["retorno"],
     );
   });
 });

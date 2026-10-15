@@ -76,7 +76,7 @@ export function MobileNav({
           {sections.map((section) => (
             <div key={section.id} className="flex flex-col gap-1">
               {section.label && (
-                <span className="px-3 pb-1 font-mono text-eyebrow uppercase tracking-eyebrow text-muted-fg-2">
+                <span className="px-3 pb-1 text-meta uppercase tracking-eyebrow text-muted-foreground">
                   {section.label}
                 </span>
               )}

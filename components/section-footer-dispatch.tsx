@@ -109,7 +109,7 @@ export function SectionFooterDispatch({
       {/* Rodapé: label do modelo que rodou + (admin) dropdown inline + refresh à direita. */}
       <div className="mt-3 flex flex-wrap items-end justify-between gap-3 border-t border-border pt-3">
         <div className="flex flex-wrap items-end gap-3">
-          <span className="font-mono text-eyebrow text-muted-foreground tracking-tight">
+          <span className="text-meta text-muted-foreground tracking-tight">
             análise feita com modelo {shownView.model}
           </span>
           {hasModelChoice && (

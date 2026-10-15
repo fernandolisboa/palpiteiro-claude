@@ -89,7 +89,7 @@ export default async function AdminLeaguesPage() {
         />
 
         <section className="pb-8">
-          <h2 className="text-eyebrow tracking-label text-muted-foreground pb-3 font-mono uppercase">
+          <h2 className="text-meta tracking-label text-muted-foreground pb-3 font-mono uppercase">
             orçamento da odds api
           </h2>
           <DefinitionRow
@@ -172,7 +172,7 @@ export default async function AdminLeaguesPage() {
         </section>
 
         <section>
-          <h2 className="text-eyebrow tracking-label text-muted-foreground pb-3 font-mono uppercase">
+          <h2 className="text-meta tracking-label text-muted-foreground pb-3 font-mono uppercase">
             ligas suportadas
           </h2>
           <div className="border-border rounded-md border">
@@ -188,7 +188,7 @@ export default async function AdminLeaguesPage() {
                         {label}
                         {s.active ? " · ativa" : ""}
                       </span>
-                      <span className="text-eyebrow text-muted-foreground font-mono">
+                      <span className="text-meta text-muted-foreground font-mono">
                         ~{ODDS_CREDITS_PER_MONTH_ESTIMATE[s.league]}{" "}
                         créditos/mês ·{" "}
                         {teamsLabel(s.league, CANONICAL_TEAMS[s.league].length)}

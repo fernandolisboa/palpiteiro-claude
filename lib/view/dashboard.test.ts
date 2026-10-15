@@ -45,9 +45,10 @@ describe("toPredictionRowView", () => {
     const v = toPredictionRowView(
       row({ result: "won", profitUnits: "1.85" }),
     );
-    expect(v.rec).toBe("OVER");
+    expect(v.rec).toBe("Mais de 2,5");
+    expect(v.recKind).toBe("over");
     expect(v.odd).toBe("1,92");
-    expect(v.edge).toBe("+7,3");
+    expect(v.edge).toBe("+7,3 pontos");
     expect(v.confidence).toBe("58%");
     expect(v.status).toBe("won");
     expect(v.profit).toBe("+1,85 u");
@@ -74,7 +75,8 @@ describe("toPredictionRowView", () => {
     const v = toPredictionRowView(
       row({ recommendation: "pass", oddAtRecommendation: null }),
     );
-    expect(v.rec).toBe("PASS");
+    expect(v.rec).toBe("Sem aposta");
+    expect(v.recKind).toBe("pass");
     expect(v.odd).toBe("—");
   });
 
@@ -83,7 +85,12 @@ describe("toPredictionRowView", () => {
   it("carrega o mercado (+ linha) ao lado da recomendação", () => {
     expect(
       toPredictionRowView(row({ marketParams: { line: 3.5 } })).market,
-    ).toBe("Over/Under gols 3,5");
+    ).toBe("Total de gols");
+    // A linha vai no rótulo da recomendação; em "Sem aposta" ela fica no contexto.
+    expect(toPredictionRowView(row({ marketParams: { line: 3.5 } })).rec).toBe("Mais de 3,5");
+    expect(
+      toPredictionRowView(row({ recommendation: "pass", marketParams: { line: 3.5 } })).market,
+    ).toBe("Total de gols 3,5");
     const btts = toPredictionRowView(
       row({ marketKey: "btts", marketLabel: "Ambas marcam", recommendation: "yes" }),
     );
@@ -427,7 +434,7 @@ describe("toPredictionDetailView", () => {
     const v = toPredictionDetailView(makeDetail({ marketKey: null }), {
       includeRawPayloads: false,
     });
-    expect(v.prediction.rec).toBe("OVER");
+    expect(v.prediction.rec).toBe("Mais de 2,5");
     expect(v.outcome?.settlementMetric.label).toBe("gols (90')");
   });
 
@@ -450,7 +457,7 @@ describe("toPredictionDetailView", () => {
       },
       { includeRawPayloads: false },
     );
-    expect(v.prediction.rec).toBe("PASS");
+    expect(v.prediction.rec).toBe("Sem aposta");
     expect(v.prediction.bookmaker).toBe("BetX");
     expect(v.prediction.odd).toBe("—");
 

@@ -44,7 +44,7 @@ export function OverrideForm({ predictionId, defaultResult }: Props) {
 
       <div className="flex gap-4">
         <label className="flex flex-col gap-1">
-          <span className="font-mono text-eyebrow uppercase tracking-label text-muted-foreground">
+          <span className="font-mono text-meta uppercase tracking-label text-muted-foreground">
             gols mandante (90&apos;)
           </span>
           <input
@@ -56,7 +56,7 @@ export function OverrideForm({ predictionId, defaultResult }: Props) {
           />
         </label>
         <label className="flex flex-col gap-1">
-          <span className="font-mono text-eyebrow uppercase tracking-label text-muted-foreground">
+          <span className="font-mono text-meta uppercase tracking-label text-muted-foreground">
             gols visit. (90&apos;)
           </span>
           <input
@@ -70,7 +70,7 @@ export function OverrideForm({ predictionId, defaultResult }: Props) {
       </div>
 
       <label className="flex flex-col gap-1">
-        <span className="font-mono text-eyebrow uppercase tracking-label text-muted-foreground">
+        <span className="font-mono text-meta uppercase tracking-label text-muted-foreground">
           resultado
         </span>
         <div className="max-w-aside">

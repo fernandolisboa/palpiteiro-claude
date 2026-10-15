@@ -121,10 +121,10 @@ describe("linha da base do modelo (#555)", () => {
     expect(
       renderToStaticMarkup(<MatchModelLine model={model} className="mt-1" />),
     ).toContain(
-      'class="font-mono text-eyebrow tabular-nums text-muted-fg-2 mt-1"',
+      'class="font-mono text-meta tabular-nums text-muted-foreground mt-1"',
     );
     expect(renderToStaticMarkup(<MatchModelLine model={model} />)).toContain(
-      'class="font-mono text-eyebrow tabular-nums text-muted-fg-2"',
+      'class="font-mono text-meta tabular-nums text-muted-foreground"',
     );
   });
 

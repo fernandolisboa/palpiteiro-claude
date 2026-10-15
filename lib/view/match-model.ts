@@ -1,8 +1,8 @@
 import { formatLine, formatOdd, formatPct, formatRelativeAgoLabel } from "@/lib/format";
 import type { MatchModelSnapshot } from "@/lib/model-base/types";
 import type { DixonColesFallbackReason } from "@/lib/quant/match-model";
-import { getMarketPresentation } from "@/lib/view/markets/presentation";
-import { withTeamLabels, type TeamLabels } from "@/lib/view/markets/with-team-labels";
+import { getDisplayPresentation } from "@/lib/view/markets/display";
+import type { TeamLabels } from "@/lib/view/markets/with-team-labels";
 import type {
   MatchModelLineView,
   MatchModelReadingView,
@@ -20,14 +20,14 @@ export function toMatchModelLineView(
   teams?: TeamLabels,
 ): MatchModelLineView {
   const mr = snapshot.probabilities.match_result;
-  const mrLabels = withTeamLabels(getMarketPresentation("match_result"), teams);
+  const mrLabels = getDisplayPresentation("match_result", teams);
   let favorite: "home" | "draw" | "away" = "home";
   if (mr.draw > mr[favorite]) favorite = "draw";
   if (mr.away > mr[favorite]) favorite = "away";
 
   const ou = snapshot.probabilities.over_under["2.5"];
   const side = ou.under > ou.over ? "under" : "over";
-  const ouLabels = getMarketPresentation("over_under");
+  const ouLabels = getDisplayPresentation("over_under");
   return {
     favorite: {
       label: mrLabels.outcomeLabel(favorite, null),
@@ -74,10 +74,10 @@ export function toMatchModelReadingView(
   teams?: TeamLabels,
 ): MatchModelReadingView {
   const p = snapshot.probabilities;
-  const mr = withTeamLabels(getMarketPresentation("match_result"), teams);
-  const dc = withTeamLabels(getMarketPresentation("double_chance"), teams);
-  const btts = getMarketPresentation("btts");
-  const ou = getMarketPresentation("over_under");
+  const mr = getDisplayPresentation("match_result", teams);
+  const dc = getDisplayPresentation("double_chance", teams);
+  const btts = getDisplayPresentation("btts");
+  const ou = getDisplayPresentation("over_under");
 
   const markets: MatchModelReadingView["markets"] = [
     {

@@ -1,12 +1,14 @@
 import Link from "next/link";
 import { notFound, redirect } from "next/navigation";
-import { Check, Trophy, X } from "lucide-react";
+import { Trophy, X } from "lucide-react";
 import { z } from "zod";
 
 import { auth } from "@/auth";
 import { removeFriendPool, removeFriendPoolEntry } from "@/app/actions/friend-pools";
-import { BackLink } from "@/components/back-link";
 import { AddEntryForm, ManualScoreForm } from "@/components/friend-pool-forms";
+import { PageContainer } from "@/components/page-container";
+import { PageHeader } from "@/components/page-header";
+import { ResultBadge } from "@/components/result-badge";
 import { Button } from "@/components/ui/button";
 import { Card } from "@/components/ui/card";
 import { getFriendPool } from "@/lib/db/queries/friend-pools";
@@ -62,27 +64,30 @@ export default async function BolaoDetailPage({ params }: PageProps) {
 
   return (
     <div className="bg-background text-foreground">
-      <div className="mx-auto w-full max-w-reading px-6 py-8">
-        <BackLink href="/bolao" label="bolão" />
-
-        <h1 className="text-display-md font-medium tracking-tight">
-          {pool.title ?? `${match.homeTeam} × ${match.awayTeam}`}
-        </h1>
-        <p className="text-muted-foreground pt-1 text-body-sm tracking-tight">
-          {poolMatchLabel(match, now, timeZone)} ·{" "}
-          <Link href={`/match/${match.id}`} className="underline underline-offset-2 hover:text-foreground">
-            ver jogo
-          </Link>
-        </p>
-        <p className="text-muted-fg-2 pb-6 pt-1 font-mono text-meta">
-          {entries.length} {entries.length === 1 ? "aposta" : "apostas"}
-          {pool.entryAmountCents !== null &&
-            ` · ${formatBrl(pool.entryAmountCents)} por pessoa · pote ${formatBrl(outcome.potCents ?? 0)}`}
-        </p>
+      <PageContainer width="reading">
+        <PageHeader
+          back={{ href: "/bolao", label: "bolão" }}
+          title={pool.title ?? `${match.homeTeam} × ${match.awayTeam}`}
+          description={
+            <>
+              {poolMatchLabel(match, now, timeZone)} ·{" "}
+              <Link href={`/match/${match.id}`} className="underline underline-offset-2 hover:text-foreground">
+                ver jogo
+              </Link>
+            </>
+          }
+          meta={
+            <>
+              {entries.length} {entries.length === 1 ? "aposta" : "apostas"}
+              {pool.entryAmountCents !== null &&
+                ` · ${formatBrl(pool.entryAmountCents)} por pessoa · pote ${formatBrl(outcome.potCents ?? 0)}`}
+            </>
+          }
+        />
 
         {outcome.settled && (
           <Card className="mb-6 gap-2 px-5 py-5">
-            <p className="text-muted-foreground font-mono text-eyebrow uppercase tracking-label">
+            <p className="text-muted-foreground text-meta uppercase tracking-label">
               resultado · {outcome.score.source === "manual" ? "placar lançado por você" : "placar do jogo"}
             </p>
             <p className="text-body font-medium tracking-tight">
@@ -138,29 +143,16 @@ export default async function BolaoDetailPage({ params }: PageProps) {
                 const hit = outcome.settled ? outcome.hitIds.has(e.id) : null;
                 return (
                   <li key={e.id} className="flex items-center gap-3 px-4 py-3">
-                    <span className="w-5 shrink-0">
-                      {hit === true && (
-                        <>
-                          <Check className="size-4 text-accent-fg" aria-hidden />
-                          <span className="sr-only">acertou</span>
-                        </>
-                      )}
-                      {hit === false && (
-                        <>
-                          <X className="size-4 text-muted-fg-2" aria-hidden />
-                          <span className="sr-only">errou</span>
-                        </>
-                      )}
-                    </span>
                     <span className="min-w-0 flex-1 truncate text-body font-medium tracking-tight">
                       {e.bettorName}
                     </span>
                     <span className="min-w-0 flex-[2] text-right text-body-sm tracking-tight">
-                      <span className="text-muted-fg-2 font-mono text-meta">
+                      <span className="text-muted-foreground text-meta">
                         {POOL_KIND_LABEL[e.kind] ?? e.kind} ·{" "}
                       </span>
                       {poolBetLabel(e.kind, e.params, teams)}
                     </span>
+                    {hit !== null && <ResultBadge result={hit ? "won" : "lost"} />}
                     {open && (
                       <form action={removeFriendPoolEntry}>
                         <input type="hidden" name="poolId" value={pool.id} />
@@ -207,7 +199,7 @@ export default async function BolaoDetailPage({ params }: PageProps) {
         )}
 
         <details className="mb-8">
-          <summary className="text-muted-fg-2 cursor-pointer font-mono text-eyebrow uppercase tracking-label hover:text-foreground">
+          <summary className="text-muted-foreground cursor-pointer text-meta uppercase tracking-label hover:text-foreground">
             excluir bolão
           </summary>
           <form action={removeFriendPool} className="flex flex-col gap-2 pt-3">
@@ -221,10 +213,10 @@ export default async function BolaoDetailPage({ params }: PageProps) {
           </form>
         </details>
 
-        <p className="text-meta leading-relaxed text-muted-fg-2 tracking-tight">
+        <p className="text-meta leading-relaxed text-muted-foreground tracking-tight">
           {POOL_MONEY_NOTE} {POOL_RISK_NOTE}
         </p>
-      </div>
+      </PageContainer>
     </div>
   );
 }

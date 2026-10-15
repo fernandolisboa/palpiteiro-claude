@@ -296,7 +296,7 @@ function PopulatedHero({
             ("Vai dar Palmeiras / provável 2–1"), o registro D-leaning que o dono
             escolheu — não veredito + stat-row separado. */}
         <div className="flex flex-col gap-2">
-          <p className="max-w-reading text-balance text-display-lg font-medium leading-[1.08] tracking-tight text-foreground lg:text-[40px]">
+          <p className="max-w-reading text-balance text-display-lg font-medium leading-[1.08] tracking-tight text-foreground lg:text-display-xl">
             {view.verdict}
           </p>
           {settled ? (
@@ -314,7 +314,7 @@ function PopulatedHero({
         </p>
 
         {view.citedMarkets.length > 0 && (
-          <p className="font-mono text-eyebrow-xs uppercase tracking-eyebrow text-muted-fg-2">
+          <p className="text-meta uppercase tracking-eyebrow text-muted-foreground">
             a partir de: {view.citedMarkets.join(" · ")}
           </p>
         )}
@@ -348,7 +348,7 @@ function PopulatedHero({
             mudo — deliberadamente separado do placar/recibo pra não ler como aviso de
             liquidação. #378 deu a polish: border-top quente sutil + ícone Info mudo, pra
             ler como nota de rodapé regulatória (não disclaimer de liquidação). */}
-        <p className="mt-1 flex items-center gap-1.5 border-t border-palpite-border/40 pt-3 text-eyebrow-xs tracking-tight text-muted-fg-2">
+        <p className="mt-1 flex items-center gap-1.5 border-t border-palpite-border/40 pt-3 text-meta tracking-tight text-muted-foreground">
           <Info className="size-3 shrink-0" aria-hidden="true" />
           {PALPITE_DISCLAIMER}
         </p>
@@ -462,7 +462,7 @@ function ShareButton({
         )}
       </span>
       {error && (
-        <span className="text-eyebrow-xs tracking-tight text-muted-foreground">
+        <span className="text-meta tracking-tight text-muted-foreground">
           {error}
         </span>
       )}
@@ -585,12 +585,12 @@ function UserContextField({
           className="w-full rounded-md border border-palpite-border/60 bg-background px-3 py-2 text-body-sm tracking-tight text-foreground placeholder:text-muted-fg-2 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-palpite-border"
         />
         <div className="flex items-start justify-between gap-3">
-          <p id={`${id}-hint`} className="text-eyebrow-xs leading-relaxed tracking-tight text-muted-fg-2">
+          <p id={`${id}-hint`} className="text-meta leading-relaxed tracking-tight text-muted-foreground">
             A IA lê o que você escrever e a gente confere cada afirmação com os nossos dados
             antes de usar. Só entra o que passa, com peso limitado. Não conta a mais no seu
             limite do dia. Não escreva dados pessoais.
           </p>
-          <span className="shrink-0 font-mono text-eyebrow-xs tabular-nums text-muted-fg-2">
+          <span className="shrink-0 font-mono text-meta tabular-nums text-muted-foreground">
             {value.length}/{MAX_CONTEXT_CHARS}
           </span>
         </div>
@@ -682,11 +682,11 @@ function WarmShell({
   );
 }
 
-// Kicker "O PALPITE" — chip mono quente, a identidade do registro.
+// Kicker "PALPITE DA IA" — chip mono quente, a identidade do registro.
 function Kicker() {
   return (
-    <span className="inline-flex w-fit items-center rounded-full bg-palpite-soft px-2.5 py-0.5 font-mono text-eyebrow uppercase tracking-eyebrow text-palpite-strong-fg">
-      O Palpite
+    <span className="inline-flex w-fit items-center rounded-full bg-palpite-soft px-2.5 py-0.5 text-meta uppercase tracking-eyebrow text-palpite-strong-fg">
+      Palpite da IA
     </span>
   );
 }
@@ -701,7 +701,7 @@ function ConfidenceChip({
   return (
     <span
       aria-label={label}
-      className="inline-flex items-center rounded-full border border-palpite-border/70 px-2.5 py-0.5 font-mono text-eyebrow uppercase tracking-label text-palpite-fg"
+      className="inline-flex items-center rounded-full border border-palpite-border/70 px-2.5 py-0.5 text-meta uppercase tracking-label text-palpite-fg"
     >
       {label}
     </span>

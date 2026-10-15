@@ -34,7 +34,7 @@ const overOutcomes: OutcomeView[] = [
     modelProb: "58%",
     marketProb: "50.7%",
     odd: "1.92",
-    edge: "+7.3pp",
+    edge: "+7,3 pontos",
     expectedReturn: "+11.4%",
     breakEven: "1.72",
     isRecommended: true,
@@ -46,7 +46,7 @@ const overOutcomes: OutcomeView[] = [
     modelProb: "42%",
     marketProb: "49.3%",
     odd: "1.95",
-    edge: "-7.3pp",
+    edge: "-7,3 pontos",
     expectedReturn: "-18.1%",
     breakEven: "2.38",
     isRecommended: false,
@@ -65,7 +65,7 @@ const underOutcomes: OutcomeView[] = [
     modelProb: "44%",
     marketProb: "50.7%",
     odd: "1.98",
-    edge: "-6.7pp",
+    edge: "-6,7 pontos",
     expectedReturn: "-12.9%",
     breakEven: "2.27",
     isRecommended: false,
@@ -77,7 +77,7 @@ const underOutcomes: OutcomeView[] = [
     modelProb: "56%",
     marketProb: "49.3%",
     odd: "1.85",
-    edge: "+6.7pp",
+    edge: "+6,7 pontos",
     expectedReturn: "+3.6%",
     breakEven: "1.79",
     isRecommended: true,
@@ -94,7 +94,7 @@ const passOutcomes: OutcomeView[] = [
     modelProb: "53%",
     marketProb: "50%",
     odd: "1.92",
-    edge: "+3.0pp",
+    edge: "+3,0 pontos",
     expectedReturn: "+1.8%",
     breakEven: "1.89",
     isRecommended: false,
@@ -106,13 +106,13 @@ const passOutcomes: OutcomeView[] = [
     modelProb: "47%",
     marketProb: "50%",
     odd: "1.92",
-    edge: "-3.0pp",
+    edge: "-3,0 pontos",
     expectedReturn: "-9.8%",
     breakEven: "2.13",
     isRecommended: false,
   },
 ];
-const passFraming = `vantagens pequenas (abaixo de ${MIN_EDGE_PP}pp) ficam dentro da margem de erro do modelo — por isso não há recomendação`;
+const passFraming = `vantagens pequenas (abaixo de ${MIN_EDGE_PP} pontos) ficam dentro da margem de erro do modelo — por isso não há recomendação`;
 
 // 1X2 (match_result): 3 outcomes → 3 colunas (AC2). Labels/valores de fixture
 // mock — sem DB. home recomendado.
@@ -124,7 +124,7 @@ const matchResultOutcomes: OutcomeView[] = [
     modelProb: "50%",
     marketProb: "45.4%",
     odd: "2.10",
-    edge: "+4.6pp",
+    edge: "+4,6 pontos",
     expectedReturn: "+5.0%",
     breakEven: "2.00",
     isRecommended: true,
@@ -136,7 +136,7 @@ const matchResultOutcomes: OutcomeView[] = [
     modelProb: "27%",
     marketProb: "28.1%",
     odd: "3.40",
-    edge: "-1.1pp",
+    edge: "-1,1 pontos",
     expectedReturn: "-8.2%",
     breakEven: "3.70",
     isRecommended: false,
@@ -148,7 +148,7 @@ const matchResultOutcomes: OutcomeView[] = [
     modelProb: "23%",
     marketProb: "26.5%",
     odd: "3.60",
-    edge: "-3.5pp",
+    edge: "-3,5 pontos",
     expectedReturn: "-17.2%",
     breakEven: "4.35",
     isRecommended: false,
@@ -185,7 +185,7 @@ describe("AnalysisScenarios — bloco 'Cenários' (#104)", () => {
       "prob. do modelo",
       "prob. do mercado",
       "odd na análise",
-      "edge",
+      "vantagem",
       "retorno esperado",
     ]) {
       expect(countOccurrences(markup, label)).toBeGreaterThanOrEqual(2);
@@ -328,7 +328,7 @@ describe("AnalysisScenarios — bloco 'Cenários' (#104)", () => {
       />,
     );
     expect(markup).toContain(
-      `o app só recomenda com vantagem ≥ ${MIN_EDGE_PP}pp sobre o mercado`,
+      `o app só recomenda com vantagem de pelo menos ${MIN_EDGE_PP} pontos sobre o mercado`,
     );
     expect(markup).toContain("os números acima são informativos");
     expect(markup).toContain(
@@ -499,7 +499,7 @@ describe("AnalysisScenarios — colapso do alternativo (#242)", () => {
         returnTone="positive"
       />,
     );
-    expect(markup).toContain("ver cenário alternativo · menos de 2.5 gols -7.3pp");
+    expect(markup).toContain("ver cenário alternativo · menos de 2.5 gols -7,3 pontos");
   });
 
   it("pluralização: 1 alternativo = singular; ≥2 (1X2) = 'ver N cenários alternativos'", () => {
@@ -547,7 +547,7 @@ describe("AnalysisScenarios — colapso do alternativo (#242)", () => {
       />,
     );
     // showHints só na recomendada (sempre visível) → cada âncora de ajuda 1x.
-    expect(countOccurrences(markup, "Ajuda: edge")).toBe(1);
+    expect(countOccurrences(markup, "Ajuda: vantagem")).toBe(1);
     expect(countOccurrences(markup, "Ajuda: prob. do modelo")).toBe(1);
   });
 });

@@ -48,7 +48,7 @@ export const TOUR_CHAPTERS: Record<TourChapter, readonly TourStep[]> = {
     {
       target: "menu",
       title: "Menu",
-      body: "O menu fica sempre aqui em cima: jogos, apostas, bolão e desempenho. Em \"ajuda\" ficam o guia \"como usar\", que explica cada tela com calma, e o atalho pra rever este tour. Perfil e sair ficam no seu avatar, à direita.",
+      body: "O menu fica sempre aqui em cima: jogos, suas apostas, bolão e desempenho. Em \"ajuda\" ficam o guia \"como usar\", que explica cada tela com calma, e o atalho pra rever este tour. Perfil e sair ficam no seu avatar, à direita.",
     },
     {
       target: "league-picker",
@@ -75,8 +75,8 @@ export const TOUR_CHAPTERS: Record<TourChapter, readonly TourStep[]> = {
   jogo: [
     {
       target: "palpite",
-      title: "O Palpite",
-      body: "Aqui fica o palpite da IA: quem leva, o placar provável e o porquê. Toque em \"Analisar com IA\" pra gerar. Pode levar alguns minutos, e cada mercado analisado usa uma das suas análises do dia. Depois, \"ver análise por mercado\" abre o detalhe de cada mercado (odd, edge, stake ou PASS). Quer contar algo que você sabe (quem está fora, como os times vêm)? Quando aparecer, abra \"Contexto extra (opcional)\": a gente confere com os nossos dados antes de usar, e não conta a mais no limite.",
+      title: "Palpite da IA",
+      body: "Aqui fica o palpite da IA: quem leva, o placar provável e o porquê. Toque em \"Analisar com IA\" pra gerar. Pode levar alguns minutos, e cada mercado analisado usa uma das suas análises do dia. Depois, \"ver análise por mercado\" abre o detalhe de cada mercado (odd, vantagem, stake ou sem aposta). Quer contar algo que você sabe (quem está fora, como os times vêm)? Quando aparecer, abra \"Contexto extra (opcional)\": a gente confere com os nossos dados antes de usar, e não conta a mais no limite.",
     },
     {
       target: "seu-palpite",
@@ -85,8 +85,8 @@ export const TOUR_CHAPTERS: Record<TourChapter, readonly TourStep[]> = {
     },
     {
       target: "bet-slip",
-      title: "Registrar apostas",
-      body: "Fez uma aposta com os amigos? Toque nas seleções aqui (ou digite a aposta), confira a odd que você pegou e toque em \"Registrar apostas\". A avaliação sai na hora, sem gastar análise, e a aposta vai pra Apostas.",
+      title: "Suas apostas",
+      body: "Fez uma aposta com os amigos? Toque nas seleções aqui (ou digite a aposta), confira a odd que você pegou e toque em \"Registrar apostas\". A avaliação sai na hora, sem gastar análise, e a aposta vai pra Suas apostas.",
     },
     {
       target: "odds",
@@ -100,7 +100,7 @@ export const TOUR_CHAPTERS: Record<TourChapter, readonly TourStep[]> = {
     },
     {
       title: "Pronto",
-      body: "Depois do jogo o resultado é apurado sozinho: as análises aparecem em desempenho e as apostas que você registrou, em apostas. Em \"ajuda\", no menu do topo, o guia \"como usar\" explica cada tela e dá pra rever este tour.",
+      body: "Depois do jogo o resultado é apurado sozinho: as análises aparecem em desempenho e as apostas que você registrou, em suas apostas. Em \"ajuda\", no menu do topo, o guia \"como usar\" explica cada tela e dá pra rever este tour.",
     },
   ],
 };

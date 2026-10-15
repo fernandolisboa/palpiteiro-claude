@@ -24,7 +24,7 @@ import type { PoolBetKind } from "@/lib/pools/pool-schema";
 // Formulários do bolão entre amigos (#567). A regra mora nas actions e em lib/pools;
 // aqui só estado de campo e mensagem de erro.
 
-const LABEL = "text-muted-foreground text-eyebrow font-mono tracking-label uppercase";
+const LABEL = "text-muted-foreground text-meta tracking-label uppercase";
 
 function ErrorLine({ state }: { state: PoolActionResult | null }) {
   if (!state || state.ok) return null;

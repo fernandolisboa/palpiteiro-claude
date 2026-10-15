@@ -22,15 +22,15 @@ export function AnalysisResult({ view, showRiskDisclaimer = true }: Props) {
     return (
       <div className="flex flex-col rounded-lg border border-dashed border-border-strong bg-card">
         <div className="flex items-center justify-between px-4 pt-3 pb-2">
-          <span className="flex items-center gap-1 font-mono text-eyebrow uppercase tracking-eyebrow text-muted-foreground">
-            sem edge claro
+          <span className="flex items-center gap-1 text-meta uppercase tracking-eyebrow text-muted-foreground">
+            sem vantagem clara
             <HelpHint
               anchor="recomendacao"
-              label="PASS — sem edge claro"
-              blurb="PASS = sem edge claro = não apostar; isso é disciplina, não erro. Pass rate alto (30–60%) é bom."
+              label="Sem aposta"
+              blurb="Sem aposta = nenhuma seleção com vantagem suficiente; é disciplina, não erro. Ter muitos jogos sem aposta (30–60%) é bom."
             />
           </span>
-          <span className="font-mono text-eyebrow-xs text-muted-fg-2">
+          <span className="font-mono tabular-nums text-meta text-muted-foreground">
             {view.generatedAt}
           </span>
         </div>
@@ -40,10 +40,10 @@ export function AnalysisResult({ view, showRiskDisclaimer = true }: Props) {
             — "confidence" exibia P(over) em pass sem dizer isso. */}
         <div className="flex items-start gap-4 px-4 py-4">
           <div className="flex flex-col items-start gap-1">
-            <span className="font-mono text-display-sm font-medium tabular-nums leading-none tracking-tight text-muted-foreground">
-              PASS
+            <span className="text-display-sm font-medium leading-none tracking-tight text-muted-foreground">
+              Sem aposta
             </span>
-            <span className="font-mono text-eyebrow uppercase tracking-label text-muted-foreground">
+            <span className="text-meta uppercase tracking-label text-muted-foreground">
               não apostar
             </span>
           </div>
@@ -77,10 +77,10 @@ export function AnalysisResult({ view, showRiskDisclaimer = true }: Props) {
   return (
     <Card className="gap-0 overflow-hidden p-0">
       <div className="flex items-center justify-between px-4 pt-3 pb-2">
-        <span className="font-mono text-eyebrow uppercase tracking-eyebrow text-accent-fg">
+        <span className="text-meta uppercase tracking-eyebrow text-accent-fg">
           recomendação · gerada com claude
         </span>
-        <span className="font-mono text-eyebrow-xs text-muted-fg-2">
+        <span className="font-mono tabular-nums text-meta text-muted-foreground">
           {view.generatedAt}
         </span>
       </div>
@@ -92,18 +92,18 @@ export function AnalysisResult({ view, showRiskDisclaimer = true }: Props) {
           view) — sem setas nem "2.5" hardcoded (data-driven, AC3). */}
       <div className="flex items-start gap-3 px-4 py-4">
         <div className="flex flex-col items-start gap-1">
-          <span className="font-mono text-display-md font-medium leading-none tracking-tight text-accent-strong-fg">
+          <span className="text-display-md font-medium leading-none tracking-tight text-accent-strong-fg">
             {rec.selectionLabel}
             {rec.line !== null ? ` ${formatLine(rec.line)}` : ""}
           </span>
-          <span className="font-mono text-eyebrow uppercase tracking-label text-accent-fg">
+          <span className="text-meta uppercase tracking-label text-accent-fg">
             {rec.marketLabel}
           </span>
         </div>
       </div>
       {rec && (
         <div className="mx-4 mb-4 flex flex-col gap-2 rounded-md border border-border-subtle bg-surface-2 px-3 py-2.5">
-          <span className="font-mono text-eyebrow uppercase tracking-label text-muted-foreground">
+          <span className="text-meta uppercase tracking-label text-muted-foreground">
             aposta recomendada
           </span>
           {/* Frase estruturada data-driven (AC3): mercado + seleção + linha,
@@ -124,7 +124,7 @@ export function AnalysisResult({ view, showRiskDisclaimer = true }: Props) {
           )}
           {view.stakeUnits && (
             <div className="flex items-baseline justify-between gap-2">
-              <span className="font-mono text-eyebrow uppercase tracking-label text-muted-foreground">
+              <span className="text-meta uppercase tracking-label text-muted-foreground">
                 stake
               </span>
               <span className="font-mono text-body font-medium tabular-nums tracking-tight text-foreground">
@@ -134,7 +134,7 @@ export function AnalysisResult({ view, showRiskDisclaimer = true }: Props) {
           )}
           {view.kellyInfoUnits && (
             <div className="flex items-baseline justify-between gap-2">
-              <span className="font-mono text-eyebrow uppercase tracking-label text-muted-foreground">
+              <span className="text-meta uppercase tracking-label text-muted-foreground">
                 quarter-Kelly (informativo)
               </span>
               <span className="font-mono text-body tabular-nums tracking-tight text-muted-foreground">
@@ -143,7 +143,7 @@ export function AnalysisResult({ view, showRiskDisclaimer = true }: Props) {
             </div>
           )}
           <div className="flex items-baseline justify-between gap-2">
-            <span className="font-mono text-eyebrow uppercase tracking-label text-muted-foreground">
+            <span className="text-meta uppercase tracking-label text-muted-foreground">
               odd na análise{view.oddAtRecAgo ? ` (${view.oddAtRecAgo})` : ""}
             </span>
             <span className="font-mono text-body font-medium tabular-nums tracking-tight text-foreground">
@@ -152,7 +152,7 @@ export function AnalysisResult({ view, showRiskDisclaimer = true }: Props) {
           </div>
           <div className="flex flex-col gap-1">
             <div className="flex items-baseline justify-between gap-2">
-              <span className="font-mono text-eyebrow uppercase tracking-label text-muted-foreground">
+              <span className="text-meta uppercase tracking-label text-muted-foreground">
                 retorno esperado
               </span>
               <span
@@ -169,14 +169,14 @@ export function AnalysisResult({ view, showRiskDisclaimer = true }: Props) {
               </span>
             </div>
             {view.evLegend && (
-              <p className="text-meta leading-snug tracking-tight text-muted-fg-2">
+              <p className="text-meta leading-snug tracking-tight text-muted-foreground">
                 {view.evLegend}
               </p>
             )}
           </div>
           {view.minOdd && (
             <div className="flex items-baseline justify-between gap-2 border-t border-border-subtle pt-2">
-              <span className="flex items-center gap-1 font-mono text-eyebrow uppercase tracking-label text-muted-foreground">
+              <span className="flex items-center gap-1 text-meta uppercase tracking-label text-muted-foreground">
                 vale a pena se odd ≥
                 <HelpHint
                   anchor="odd-minima"
@@ -215,7 +215,7 @@ export function AnalysisResult({ view, showRiskDisclaimer = true }: Props) {
 function KeyFactors({ items }: { items: string[] }) {
   return (
     <ul className="flex flex-col gap-2 pt-4">
-      <span className="font-mono text-eyebrow-xs uppercase tracking-label text-muted-foreground">
+      <span className="text-meta uppercase tracking-label text-muted-foreground">
         fatores-chave
       </span>
       {items.map((f, i) => (
@@ -246,12 +246,12 @@ function AnalysisFooter({ view, showRiskDisclaimer }: FooterProps) {
     <>
       <Separator />
       {showRiskDisclaimer && (
-        <p className="flex items-center gap-1.5 px-4 pt-2.5 text-meta leading-snug tracking-tight text-muted-fg-2">
+        <p className="flex items-center gap-1.5 px-4 pt-2.5 text-meta leading-snug tracking-tight text-muted-foreground">
           <Info className="size-3 shrink-0" aria-hidden="true" />
           {ANALYSIS_RISK_DISCLAIMER}
         </p>
       )}
-      <div className="flex items-center justify-between px-4 py-2.5 font-mono text-eyebrow-xs text-muted-fg-2 tabular-nums">
+      <div className="flex items-center justify-between px-4 py-2.5 font-mono text-meta text-muted-foreground tabular-nums">
         <span>
           {view.promptVersion} · {view.model} · {view.engine}
         </span>

@@ -129,9 +129,9 @@ describe("PalpiteHero — settled honesty (palavra, nunca só cor; a11y)", () =>
       heroPalpite: { ...POPULATED, badge: "won" },
       finalScore: { home: 2, away: 1 },
     });
-    expect(html).toContain("acertou");
+    expect(html).toContain("Acertou");
     expect(html).toContain("form-win");
-    expect(html).not.toContain("errou");
+    expect(html).not.toContain("Errou");
   });
 
   it("lost → 'errou' + token form-loss, SEM 'acertou'", () => {
@@ -139,9 +139,9 @@ describe("PalpiteHero — settled honesty (palavra, nunca só cor; a11y)", () =>
       heroPalpite: { ...POPULATED, badge: "lost" },
       finalScore: { home: 0, away: 3 },
     });
-    expect(html).toContain("errou");
+    expect(html).toContain("Errou");
     expect(html).toContain("form-loss");
-    expect(html).not.toContain("acertou");
+    expect(html).not.toContain("Acertou");
   });
 
   it("settled mostra o recibo: placar provável + placar real", () => {
@@ -173,8 +173,8 @@ describe("PalpiteHero — ficha de dimensões (#354, major D)", () => {
     expect(html).toContain("e ainda");
     expect(html).toContain("Mandante ganha por 2+");
     expect(html).toContain("1º tempo: 1–0");
-    expect(html).toContain("aguardando placar"); // pending badge
-    expect(html).toContain("acertou"); // won badge
+    expect(html).toContain("Em aberto"); // pending badge
+    expect(html).toContain("Acertou"); // won badge
     expect(leaksValue(html)).toBe(false);
     expect(html).not.toContain("edge-");
   });
@@ -193,9 +193,9 @@ describe("PalpiteHero — ficha de dimensões (#354, major D)", () => {
     });
     expect(html).toContain("Mandante não sofre gol");
     expect(html).toContain("Mandante marca primeiro");
-    expect(html).toContain("acertou");
-    expect(html).toContain("errou");
-    expect(html).toContain("aguardando placar");
+    expect(html).toContain("Acertou");
+    expect(html).toContain("Errou");
+    expect(html).toContain("Em aberto");
     expect(leaksValue(html)).toBe(false);
     expect(html).not.toContain("edge-");
   });
@@ -280,9 +280,9 @@ describe("PalpiteHero — estados empty/CTA/kill-switch/encerrado", () => {
     expect(html).toContain("Analisar de novo");
   });
 
-  it("populated kicker 'O PALPITE' presente", () => {
+  it("populated kicker 'Palpite da IA' presente", () => {
     const html = render();
-    expect(html.toLowerCase()).toContain("o palpite");
+    expect(html).toContain("Palpite da IA");
   });
 });
 

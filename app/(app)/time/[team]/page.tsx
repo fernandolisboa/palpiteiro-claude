@@ -1,10 +1,10 @@
-import Link from "next/link";
 import { notFound, redirect } from "next/navigation";
-import { ChevronLeft } from "lucide-react";
 
 import { Card } from "@/components/ui/card";
 import { EmptyState } from "@/components/empty-state";
 import { MatchRow } from "@/components/match-row";
+import { PageContainer } from "@/components/page-container";
+import { PageHeader } from "@/components/page-header";
 import { SectionLabel } from "@/components/section-label";
 import { auth } from "@/auth";
 import { getMatchesByTeam, type DbMatch } from "@/lib/db/queries/matches";
@@ -183,23 +183,13 @@ function MobileTeam({
 }: ViewProps) {
   return (
     <div className="bg-background text-foreground">
-      <div className="flex items-center justify-between px-5 pt-5 pb-2">
-        <Link
-          href="/jogos"
-          className="flex items-center gap-2 rounded-sm text-muted-foreground hover:text-foreground focus-visible:outline-none focus-visible:ring-[3px] focus-visible:ring-ring/50"
-        >
-          <ChevronLeft className="size-3.5" />
-          <span className="text-body-sm tracking-tight">jogos</span>
-        </Link>
-      </div>
-
-      <div className="px-5 pt-3 pb-2">
-        <h1 className="text-display-sm font-medium tracking-tight">
-          {displayName}
-        </h1>
-        <span className="font-mono text-eyebrow uppercase tracking-label text-muted-foreground">
-          histórico do time
-        </span>
+      <div className="px-5 pt-6">
+        <PageHeader
+          title={displayName}
+          meta="histórico do time"
+          back={{ href: "/jogos", label: "jogos" }}
+          className="pb-2"
+        />
       </div>
 
       <div className="flex flex-col gap-2 pb-8">
@@ -234,23 +224,12 @@ function DesktopTeam({
 }: ViewProps) {
   return (
     <>
-      <div className="mx-auto w-full max-w-content px-8 pt-8 pb-16">
-        <Link
-          href="/jogos"
-          className="mb-6 inline-flex items-center gap-2 rounded-sm text-muted-foreground hover:text-foreground focus-visible:outline-none focus-visible:ring-[3px] focus-visible:ring-ring/50"
-        >
-          <ChevronLeft className="size-3.5" />
-          <span className="text-body-sm tracking-tight">jogos</span>
-        </Link>
-
-        <div className="pb-6">
-          <h1 className="text-display-md font-medium tracking-tight">
-            {displayName}
-          </h1>
-          <span className="font-mono text-eyebrow uppercase tracking-label text-muted-foreground">
-            histórico do time
-          </span>
-        </div>
+      <PageContainer width="content">
+        <PageHeader
+          title={displayName}
+          meta="histórico do time"
+          back={{ href: "/jogos", label: "jogos" }}
+        />
 
         <div className="grid grid-cols-2 gap-8">
           <section className="flex flex-col gap-2">
@@ -270,7 +249,7 @@ function DesktopTeam({
             />
           </section>
         </div>
-      </div>
+      </PageContainer>
     </>
   );
 }

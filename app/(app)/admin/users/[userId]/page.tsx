@@ -78,8 +78,7 @@ export default async function AdminUserTrackingPage({
         <BackLink href="/admin/users" label="usuários" />
 
         <div className="flex flex-col gap-1 pb-7">
-          {/* text-[28px]: heroic display sem degrau 26→32 (outlier consciente, espelha dashboard) */}
-          <h1 className="text-[28px] font-medium leading-none tracking-tight lg:text-display-lg">
+          <h1 className="text-display-md font-medium leading-none tracking-tight lg:text-display-lg">
             Tracking
           </h1>
           <p className="text-body tracking-tight text-muted-foreground">
@@ -121,10 +120,10 @@ export default async function AdminUserTrackingPage({
 
             <section className="flex flex-col gap-3">
               <div className="flex items-baseline justify-between">
-                <span className="font-mono text-eyebrow uppercase tracking-eyebrow text-muted-foreground">
+                <span className="font-mono text-meta uppercase tracking-eyebrow text-muted-foreground">
                   bankroll hipotético (u)
                 </span>
-                <span className="font-mono text-eyebrow tabular-nums text-muted-foreground">
+                <span className="font-mono text-meta tabular-nums text-muted-foreground">
                   {series.length} liquidada{series.length === 1 ? "" : "s"}
                 </span>
               </div>

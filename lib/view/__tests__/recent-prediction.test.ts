@@ -37,8 +37,9 @@ describe("toRecentPredictionView — rótulo e mercado (#539)", () => {
       },
       "UTC"
     );
-    expect(v.rec).toBe("OVER");
-    expect(v.market).toBe("Over/Under gols 2,5");
+    expect(v.rec).toBe("Mais de 2,5");
+    expect(v.recKind).toBe("over");
+    expect(v.market).toBe("Total de gols");
   });
 
   it("row legada sem marketId cai em over/under", () => {
@@ -52,8 +53,9 @@ describe("toRecentPredictionView — rótulo e mercado (#539)", () => {
       },
       "UTC"
     );
-    expect(v.rec).toBe("UNDER");
-    expect(v.market).toBe("Over/Under gols");
+    expect(v.rec).toBe("Menos de 2,5");
+    expect(v.recKind).toBe("under");
+    expect(v.market).toBe("Total de gols");
   });
 
   it("artilheiro usa o nome do jogador", () => {

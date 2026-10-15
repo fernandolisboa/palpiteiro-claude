@@ -40,9 +40,9 @@ export default function TeamHistoryError({
             {error.message || "Erro inesperado."}
           </span>
           {error.digest && (
-            <span className="font-mono text-eyebrow text-muted-fg-2">
+            <code className="font-mono text-meta text-muted-foreground">
               trace · {error.digest}
-            </span>
+            </code>
           )}
           <div className="flex gap-2 pt-2">
             <Button size="sm" onClick={() => reset()}>

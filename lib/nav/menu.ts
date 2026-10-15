@@ -22,7 +22,7 @@ export type NavGroup = {
 
 export const PRIMARY_NAV: readonly NavItem[] = [
   { href: "/jogos", label: "jogos" },
-  { href: "/apostas", label: "apostas" },
+  { href: "/apostas", label: "suas apostas" },
   { href: "/bolao", label: "bolão" },
   { href: "/dashboard", label: "desempenho" },
 ];

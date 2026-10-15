@@ -802,7 +802,7 @@ function NotAnalyzableNotice({
   const { label, detail } = unavailableNoticeCopy(reason, score);
   return (
     <div className="flex flex-col gap-1.5 rounded-md border border-dashed border-border px-4 py-3.5">
-      <span className="font-mono text-eyebrow uppercase tracking-label text-muted-foreground">
+      <span className="text-meta uppercase tracking-label text-muted-foreground">
         {label}
       </span>
       <p className="text-body-sm text-muted-foreground tracking-tight">{detail}</p>

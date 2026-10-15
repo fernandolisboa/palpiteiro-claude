@@ -1,3 +1,5 @@
+import type { RecommendationKind } from "@/lib/view/recommendation";
+
 // Keys curtas de liga usadas em URL (?league=) e na UI. Nova liga = nova key aqui
 // (e os Records exaustivos em lib/format.ts / lib/view/league-picker.ts quebram o
 // build até serem preenchidos).
@@ -6,11 +8,9 @@ export const LEAGUE_KEYS = [
 ] as const;
 export type LeagueKey = (typeof LEAGUE_KEYS)[number];
 export type LeagueFilter = LeagueKey | "all";
-// Token de DISPLAY da recomendação na tabela/lista. over/under/pass mantêm os
-// tokens curtos pinados ("OVER"/"UNDER"/"PASS"); mercados novos (1X2, #173) derivam
-// o display do selectionLabel da apresentação ("Casa"/"Empate"/"Fora"). Alargado
-// p/ `string` pra cobrir qualquer mercado — REC_MAP fica total (sem TS2741) e o
-// REC_CLASS de cor cai num default neutro pra tokens fora de over/under/pass.
+// Rótulo de DISPLAY da recomendação na tabela/lista (ADR 0056): "Mais de 2,5",
+// "Sem aposta", "Casa"/nome do time, "Sim". A cor NÃO lê este texto: vem do
+// `recKind` (recommendationKind, derivado do valor cru) em lib/view/recommendation.
 export type Recommendation = string;
 
 // Espelha matchStatusEnum (db/schema.ts). A view carrega o status pra decidir
@@ -82,7 +82,7 @@ export type MatchRowView = {
 export type MatchHeroView = Omit<MatchRowView, "model">;
 
 // Linha compacta da base do modelo no /jogos (#555). `label` vem da apresentação do
-// mercado ("Casa", "Under 2.5"); `pct` inteiro ("52%").
+// mercado de tela ("Casa", "Menos de 2,5"); `pct` inteiro ("52%").
 export type MatchModelLineView = {
   favorite: { label: string; pct: string };
   goals25: { label: string; pct: string };
@@ -94,9 +94,9 @@ export type MatchModelLineView = {
 export type MatchModelReadingView = {
   markets: {
     key: string;
-    label: string; // "Resultado (1X2)" | "Over/Under gols · 2.5"
+    label: string; // "Resultado (1X2)" | "Total de gols · 2,5"
     selections: {
-      label: string; // "Casa" | "Over 2.5"
+      label: string; // "Casa" | "Mais de 2,5"
       pct: string; // "52.3%"
       fairOdd: string; // "1.91" | "—"
     }[];
@@ -111,13 +111,13 @@ export type MatchModelReadingView = {
 // N-vias canônica (#173 PR-2): over/under expõe 2 outcomes, 1X2 expõe 3, na
 // ordem canônica do mercado (market_selections.sortOrder, resolvida no reader).
 export type OddsOutcomeView = {
-  label: string; // "Over 2.5" | "Casa" — outcomeLabel da apresentação (seed + linha)
+  label: string; // "Mais de 2,5" | "Casa" — outcomeLabel de tela (lib/view/markets/display)
   odd: string; // "1.92"
   pct: string; // "50.7%" — implícita normalizada (Σ=1) do mercado completo
 };
 
 export type OddsView = {
-  // `marketLabel` alimenta a badge do card ("Over/Under gols"/"Resultado (1X2)").
+  // `marketLabel` alimenta a badge do card ("Total de gols"/"Resultado (1X2)").
   // `outcomes` é a forma N-vias: o card renderiza grid-cols-{outcomes.length}.
   // over/under (N=2) é byte-idêntico ao binário pré-#173 (golden pina o DOM).
   marketLabel: string;
@@ -130,17 +130,17 @@ export type OddsView = {
 };
 
 // Referência estruturada da aposta recomendada (multi-mercado). Labels vêm da
-// apresentação de mercado (lib/view/markets/presentation.ts), que espelha o seed
-// `markets.label`/`market_selections.label`. null em pass. Os componentes leem
+// apresentação de TELA (lib/view/markets/display.ts, sobre o presentation.ts que
+// espelha o seed). null em pass. Os componentes leem
 // daqui (mercado + seleção + linha) — substituiu `kind`/`betSummary` no contract
 // da view (#170).
 export type BetReference = {
   marketKey: string; // "over_under" | "match_result" | …
-  marketLabel: string; // "Over/Under gols" (seed markets.label)
+  marketLabel: string; // "Total de gols" (rótulo de tela)
   selectionKey: string; // "over" | "under" | "home" | …
-  selectionLabel: string; // "Over" (seed market_selections.label)
+  selectionLabel: string; // "Mais de" (rótulo de tela)
   line: number | null; // 2.5 (over/under) | null (mercado sem linha)
-  // Tradução LEIGA da aposta (lay-friendly): {market:"Mais de 2.5 gols",
+  // Tradução LEIGA da aposta (lay-friendly): {market:"Mais de 2,5 gols",
   // plain:"pelo menos 3 gols no jogo"} — over/under; {market:selectionLabel,
   // plain:""} — 1X2 (sem frase leiga). Vem de presentation.betSummary; o
   // componente renderiza a sub-linha quando `plain` é não-vazio.
@@ -154,15 +154,15 @@ export type BetReference = {
 // equilíbrio pelo modelo (modelBreakEvenOdd), nunca a probabilidade.
 export type OutcomeView = {
   id: string; // selectionKey
-  label: string; // "Over 2.5" — label da apresentação (seed + linha)
-  // Rótulo LEIGO da COLUNA de cenário ("mais de 2.5 gols" — over/under; "Casa"
-  // — 1X2). Distinto de `label` ("Over 2.5"): preserva a frase do header de
+  label: string; // "Mais de 2,5" — label de tela (com a linha)
+  // Rótulo LEIGO da COLUNA de cenário ("mais de 2,5 gols" — over/under; "Casa"
+  // — 1X2). Distinto de `label` ("Mais de 2,5"): preserva a frase do header de
   // coluna pré-pivot (paridade VISUAL). Vem de presentation.scenarioLabel.
   scenarioLabel: string;
   modelProb: string; // "58%"
   marketProb: string; // "50.7%" | "—"
   odd: string; // "1.92" | "—"
-  edge: string; // "+7.3pp" | "—"
+  edge: string; // "+7,3 pontos" | "—"
   expectedReturn: string; // "+11.4%" | "—"
   breakEven: string; // "1.72" — modelBreakEvenOdd; "—" quando modelProb ≤ 0
   isRecommended: boolean;
@@ -176,7 +176,7 @@ export type ScenarioSideView = {
   modelProb: string; // "58%" — prob. do modelo (label unificado; nunca "confidence")
   marketProb: string; // "50.7%" ou "—" — implied normalizada
   odd: string; // "1.92" ou "—" — odd congelada na análise
-  edge: string; // "+7.3pp" ou "—"
+  edge: string; // "+7,3 pontos" ou "—"
   expectedReturn: string; // "+11.4%" ou "—"
   modelBreakEvenOdd: string; // "2.38" — odd de equilíbrio pelo modelo
 };
@@ -265,7 +265,9 @@ export type RecentPredictionView = {
   home: string;
   away: string;
   rec: Recommendation;
-  // Mercado (+ linha) da recomendação, ex.: "Ambas marcam", "Over/Under gols 2.5".
+  // Tipo derivado do valor cru (estado visual do selo), nunca do rótulo.
+  recKind: RecommendationKind;
+  // Mercado da recomendação, ex.: "Ambas marcam", "Total de gols".
   market: string;
   edge: string | null;
   when: string;

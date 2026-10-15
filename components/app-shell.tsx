@@ -86,7 +86,7 @@ export function AppHeader({ viewer: state }: { viewer: Viewer | null | "pending"
           ) : (
             <Link
               href="/signin"
-              className="rounded-sm font-mono text-meta uppercase tracking-label text-muted-foreground transition-colors hover:text-foreground focus-visible:outline-none focus-visible:ring-[3px] focus-visible:ring-ring/50"
+              className="rounded-sm text-meta uppercase tracking-label text-muted-foreground transition-colors hover:text-foreground focus-visible:outline-none focus-visible:ring-[3px] focus-visible:ring-ring/50"
             >
               entrar
             </Link>

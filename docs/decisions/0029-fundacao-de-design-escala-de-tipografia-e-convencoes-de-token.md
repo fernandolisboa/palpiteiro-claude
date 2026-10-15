@@ -2,6 +2,8 @@
 
 ## Status
 
+> **Emendada pela ADR 0056** (escala tipográfica com piso de 11px e exceções 22/30).
+
 Accepted (2026-06-18) — **fatia 1 (fonte da verdade) do épico de de-slop visual #320** (issue
 #321). Vive na **camada de apresentação**: não emenda nenhum ADR de produto/dados. É
 **apresentação-only** (zero mudança funcional, paridade de dados preservada) e **shell-only**

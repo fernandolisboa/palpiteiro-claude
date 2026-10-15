@@ -2,12 +2,13 @@ import Link from "next/link";
 import type { ReactNode } from "react";
 import { Compass } from "lucide-react";
 
+import { PageHeader } from "@/components/page-header";
 import { Button } from "@/components/ui/button";
 import { TOUR_RESTART_HREF } from "@/lib/tour/steps";
 
 /**
  * Corpo síncrono de `/como-usar`: o passo a passo de USO do app (onde clicar, o que
- * cada tela faz). Complementa `/como-funciona`, que explica os CONCEITOS (edge, PASS,
+ * cada tela faz). Complementa `/como-funciona`, que explica os CONCEITOS (vantagem, sem aposta,
  * odds, mercados) — aqui só linkamos pra lá, sem repetir. Síncrono pelo mesmo motivo
  * do `ComoFuncionaContent`: o teste renderiza com `renderToStaticMarkup`.
  *
@@ -75,16 +76,20 @@ function Tip({ children }: { children: ReactNode }) {
 export function ComoUsarContent() {
   return (
     <>
-      <h1 className="text-display-md font-medium tracking-tight">Como usar</h1>
-      <p className="pb-6 pt-2 text-body leading-relaxed text-muted-foreground tracking-tight">
-        O caminho do app, tela por tela: achar um jogo, pedir o palpite da IA, ler a
-        análise, registrar sua aposta e acompanhar o resultado. O que os números
-        querem dizer (edge, PASS, odd, stake) está em{" "}
-        <Link href="/como-funciona" className={LINK}>
-          Como funciona
-        </Link>
-        .
-      </p>
+      <PageHeader
+        title="Como usar"
+        description={
+          <>
+            O caminho do app, tela por tela: achar um jogo, pedir o palpite da IA, ler a
+            análise, registrar sua aposta e acompanhar o resultado. O que os números
+            querem dizer (vantagem, sem aposta, odd, stake) está em{" "}
+            <Link href="/como-funciona" className={LINK}>
+              Como funciona
+            </Link>
+            .
+          </>
+        }
+      />
 
       <div className="border-accent-border bg-accent-soft flex flex-col gap-3 rounded-xl border p-4 sm:flex-row sm:items-center sm:justify-between">
         <div className="flex items-start gap-3">
@@ -104,7 +109,7 @@ export function ComoUsarContent() {
       </div>
 
       <nav aria-label="Seções do guia" className="pt-8">
-        <p className="font-mono text-eyebrow uppercase tracking-label text-muted-foreground">
+        <p className="text-meta uppercase tracking-label text-muted-foreground">
           nesta página
         </p>
         <ol className="flex flex-col gap-1.5 pt-3 text-body tracking-tight">
@@ -126,7 +131,7 @@ export function ComoUsarContent() {
         <p>
           Depois do login você cai em <Strong>Próximos jogos</Strong>, a tela
           principal. O menu fica sempre no topo da tela (no celular, no ícone ☰):{" "}
-          <Ui>jogos</Ui>, <Ui>apostas</Ui>, <Ui>bolão</Ui> e <Ui>desempenho</Ui> são
+          <Ui>jogos</Ui>, <Ui>suas apostas</Ui>, <Ui>bolão</Ui> e <Ui>desempenho</Ui> são
           as telas do dia a dia (no <Ui>bolão</Ui> você anota a aposta de cada amigo
           num jogo e o app diz quem ganhou); <Ui>ajuda</Ui> reúne <Ui>como usar</Ui>, <Ui>como funciona</Ui> e{" "}
           <Ui>rever o tour</Ui>. O <Ui>perfil</Ui> e o <Ui>sair</Ui> ficam no seu
@@ -169,7 +174,7 @@ export function ComoUsarContent() {
         <Steps>
           <li>
             Na página do jogo, toque em <Ui>Analisar com IA</Ui>, no quadro{" "}
-            <Strong>O Palpite</Strong>.
+            <Strong>Palpite da IA</Strong>.
           </li>
           <li>
             Espere: a IA analisa cada mercado disponível pro jogo (resultado, gols,
@@ -213,17 +218,17 @@ export function ComoUsarContent() {
 
       <Section id="ler-analise">
         <p>
-          <Strong>O Palpite</Strong> é a manchete: quem leva, o placar provável, a
+          O <Strong>Palpite da IA</Strong> é a manchete: quem leva, o placar provável, a
           confiança (baixa, média ou alta) e um parágrafo com o porquê. Embaixo
           aparecem os mercados que ele usou e, quando a IA leu notícias, os links das
-          fontes. Depois do jogo, o quadro mostra se <Ui>acertou</Ui> ou{" "}
-          <Ui>errou</Ui> e o placar real.
+          fontes. Depois do jogo, o quadro mostra se <Ui>Acertou</Ui> ou{" "}
+          <Ui>Errou</Ui> e o placar real.
         </p>
         <p>
           Logo abaixo, toque em <Ui>ver análise por mercado</Ui> pra
           abrir o detalhe de cada mercado: a seleção sugerida com odd, stake e
           retorno esperado, os cenários comparados e os fatores-chave. Quando nenhum
-          lado tem vantagem suficiente, o mercado sai como <Strong>PASS</Strong> (não
+          lado tem vantagem suficiente, o mercado sai como <Strong>Sem aposta</Strong> (não
           apostar), e isso é esperado. <Ui>análises anteriores</Ui> guarda as versões
           antigas.
         </p>
@@ -283,7 +288,7 @@ export function ComoUsarContent() {
 
       <Section id="minha-aposta">
         <p>
-          Na página do jogo, a parte <Ui>registrar apostas</Ui> deixa todos os
+          Na página do jogo, a parte <Ui>mercados</Ui> deixa todos os
           mercados à vista: você só toca no que apostou (ou pensa em apostar). O Palpiteiro não aceita dinheiro: aqui é só
           registro e avaliação, sem gastar análises do seu limite.
         </p>
@@ -310,7 +315,7 @@ export function ComoUsarContent() {
           a odd justa, o retorno esperado na sua odd e uma sugestão de stake. Elas
           ficam salvas em{" "}
           <Link href="/apostas" className={LINK}>
-            Apostas
+            Suas apostas
           </Link>{" "}
           e são conferidas sozinhas depois do jogo.
         </p>
@@ -343,17 +348,17 @@ export function ComoUsarContent() {
             <Link href="/dashboard" className={LINK}>
               Desempenho
             </Link>
-            : as análises da IA que você pediu, com yield, taxa de acerto, pass rate,
+            : as análises da IA que você pediu, com retorno, taxa de acerto, jogos sem aposta,
             lucro hipotético em unidades, o gráfico da banca e a tabela jogo a jogo.
             Os filtros de liga e mercado no topo valem pra página toda; o de status
             filtra só a tabela. Tocar numa linha abre o detalhe da análise.
           </li>
           <li>
             <Link href="/apostas" className={LINK}>
-              Apostas
+              Suas apostas
             </Link>
             : as apostas que você registrou na página do jogo, cada uma
-            marcada como <Ui>Acertou</Ui>, <Ui>Errou</Ui> ou <Ui>Pendente</Ui>. Só
+            marcada como <Ui>Acertou</Ui>, <Ui>Errou</Ui> ou <Ui>Em aberto</Ui>. Só
             você vê.
           </li>
         </ul>

@@ -40,7 +40,7 @@ export function UpcomingMatchesDesktop({
   const tourIndex = tourMatchIndex(slice);
   return (
     <Card className="gap-0 overflow-hidden p-0">
-      <div className={`grid ${UPCOMING_GRID} gap-4 border-b border-border px-5 py-3 font-mono text-eyebrow uppercase tracking-label text-muted-foreground`}>
+      <div className={`grid ${UPCOMING_GRID} gap-4 border-b border-border px-5 py-3 text-meta uppercase tracking-label text-muted-foreground`}>
         <span>liga · kickoff</span>
         <span>jogo</span>
         <span className="text-right">odds</span>
@@ -80,38 +80,38 @@ export function UpcomingMatchesDesktop({
             {/* Base do modelo (#555): só probabilidade, abaixo dos nomes. */}
             {m.model && <MatchModelLine model={m.model} />}
           </div>
-          <div className="flex flex-col items-end gap-1 font-mono text-body tabular-nums">
+          <div className="flex flex-col items-end gap-1 text-body">
             {m.status === "live" || m.isInProgress ? (
               // Em andamento (#385): sem odds pré-jogo (não-apostável). Mesmo gate OR.
               // O selo AO VIVO fica só na célula de status (#574): aqui vai o placar
               // parcial com a legenda, ou "—". Chevron mantido abaixo → clicável.
               m.liveScore ? (
                 <>
-                  <span className="text-label font-medium">
+                  <span className="font-mono text-label font-medium tabular-nums">
                     {m.liveScore.home}
                     <span className="px-1 text-muted-foreground">–</span>
                     {m.liveScore.away}
                   </span>
-                  <span className="text-eyebrow-xs text-muted-fg-2">{m.liveScore.caption}</span>
+                  <span className="text-meta text-muted-foreground">{m.liveScore.caption}</span>
                 </>
               ) : (
-                <span className="text-eyebrow text-muted-fg-2">—</span>
+                <span className="text-meta text-muted-foreground">—</span>
               )
             ) : m.status === "finished" &&
               m.homeScore !== null &&
               m.awayScore !== null ? (
-              <span className="text-label font-medium">
+              <span className="font-mono text-label font-medium tabular-nums">
                 {m.homeScore}
                 <span className="px-1 text-muted-foreground">–</span>
                 {m.awayScore}
               </span>
             ) : m.status === "finished" ? (
               // Encerrado sem placar reportado: não cai no "sem odd".
-              <span className="text-eyebrow uppercase tracking-label text-muted-fg-2">
+              <span className="text-meta uppercase tracking-label text-muted-foreground">
                 —
               </span>
             ) : m.status === "postponed" || m.status === "cancelled" ? (
-              <span className="text-eyebrow uppercase tracking-label text-muted-fg-2">
+              <span className="text-meta uppercase tracking-label text-muted-foreground">
                 {STATUS_LABEL[m.status]}
               </span>
             ) : m.odds ? (
@@ -119,7 +119,7 @@ export function UpcomingMatchesDesktop({
                 {m.odds.outcomes.map((o, i) => (
                   <span key={i}>
                     <span className="text-muted-foreground">{o.label}</span>{" "}
-                    {o.odd}
+                    <span className="font-mono tabular-nums">{o.odd}</span>
                   </span>
                 ))}
               </>

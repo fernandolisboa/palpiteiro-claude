@@ -45,10 +45,10 @@ function TeamBlock({
     <div className="flex flex-col items-center gap-2.5 lg:flex-row lg:items-center lg:gap-3">
       <TeamAvatar initials={team.short.slice(0, 2)} hue={team.hue} size={56} flagCode={team.flagCode} />
       <div className="flex flex-col items-center lg:items-start">
-        <span className="text-center text-body font-medium leading-tight tracking-tight lg:text-left lg:text-[22px] lg:tracking-[-0.02em]">
+        <span className="text-center text-body font-medium leading-tight tracking-tight lg:text-left lg:text-display-xs lg:tracking-[-0.02em]">
           {name}
         </span>
-        <span className="hidden font-mono text-eyebrow uppercase tracking-label text-muted-foreground lg:inline">
+        <span className="hidden text-meta uppercase tracking-label text-muted-foreground lg:inline">
           {role}
         </span>
       </div>
@@ -74,13 +74,13 @@ export function MatchHero({
       <div className="flex items-center justify-between pb-4 lg:justify-start lg:gap-3 lg:pb-5">
         <Badge
           variant="outline"
-          className="h-5 rounded-full px-2 text-eyebrow uppercase tracking-label text-muted-foreground"
+          className="h-5 rounded-full px-2 text-meta uppercase tracking-label text-muted-foreground"
         >
           {LEAGUE_LABEL[league]}
         </Badge>
-        <div className="flex items-center gap-2 font-mono text-eyebrow tabular-nums text-muted-foreground lg:text-meta">
+        <div className="flex items-center gap-2 text-meta text-muted-foreground">
           {status === "live" && <LiveBadge />}
-          {when}
+          <span className="font-mono tabular-nums">{when}</span>
         </div>
         {countdown && (
           <span className="hidden font-mono text-meta tabular-nums text-accent-fg lg:inline">
@@ -93,7 +93,7 @@ export function MatchHero({
         <TeamBlock team={home} role="mandante" href={homeHref} />
         <div className="flex flex-col items-center gap-0.5">
           {score ? (
-            <span className="font-mono text-display-md font-medium leading-none tabular-nums tracking-tight lg:text-[30px]">
+            <span className="font-mono text-display-md font-medium leading-none tabular-nums tracking-tight lg:text-display-lg">
               {score.home}
               <span className="px-1.5 text-muted-foreground lg:px-2">–</span>
               {score.away}
@@ -101,22 +101,22 @@ export function MatchHero({
           ) : liveScore ? (
             // Placar PARCIAL de jogo ao vivo (#574): nunca vira `score` (que é o
             // final e alimenta o recibo/liquidação).
-            <span className="font-mono text-display-md font-medium leading-none tabular-nums tracking-tight lg:text-[30px]">
+            <span className="font-mono text-display-md font-medium leading-none tabular-nums tracking-tight lg:text-display-lg">
               {liveScore.home}
               <span className="px-1.5 text-muted-foreground lg:px-2">–</span>
               {liveScore.away}
             </span>
           ) : (
-            <span className="text-display-sm font-medium text-muted-foreground tracking-tight lg:text-[22px]">
+            <span className="text-display-sm font-medium text-muted-foreground tracking-tight lg:text-display-xs">
               vs
             </span>
           )}
           {score ? (
-            <span className="font-mono text-eyebrow-xs uppercase tracking-label text-muted-fg-2">
+            <span className="text-meta uppercase tracking-label text-muted-foreground">
               encerrado
             </span>
           ) : liveScore ? (
-            <span className="text-center font-mono text-eyebrow-xs text-muted-fg-2">
+            <span className="text-center text-meta text-muted-foreground">
               {liveScore.caption}
             </span>
           ) : null}
@@ -130,7 +130,7 @@ export function MatchHero({
       </div>
 
       {venue && (
-        <div className="flex items-center justify-center gap-1.5 pt-4 font-mono text-eyebrow uppercase tracking-label text-muted-fg-2 lg:justify-start lg:gap-4 lg:pt-5">
+        <div className="flex items-center justify-center gap-1.5 pt-4 text-meta uppercase tracking-label text-muted-foreground lg:justify-start lg:gap-4 lg:pt-5">
           <span>{venue}</span>
         </div>
       )}

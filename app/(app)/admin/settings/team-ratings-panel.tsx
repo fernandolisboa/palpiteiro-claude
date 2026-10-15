@@ -36,7 +36,7 @@ export async function TeamRatingsPanel({ enabled }: { enabled: boolean }) {
     <section className="pt-10">
       <div className="flex items-start justify-between gap-4 pb-3">
         <div className="flex flex-col gap-1">
-          <h2 className="text-eyebrow tracking-label text-muted-foreground font-mono uppercase">
+          <h2 className="text-meta tracking-label text-muted-foreground font-mono uppercase">
             modelo de placar · dixon-coles
           </h2>
           <p className="text-body-sm text-muted-foreground">
@@ -77,7 +77,7 @@ export async function TeamRatingsPanel({ enabled }: { enabled: boolean }) {
                   <span className="text-body font-medium">
                     {LEAGUE_LABEL[leagueToKey(f.league)]}
                   </span>
-                  <span className="text-eyebrow text-muted-foreground font-mono">
+                  <span className="text-meta text-muted-foreground font-mono">
                     {f.matchCount} jogos · temporadas {f.seasons.join(", ")} ·{" "}
                     {f.usableTeamCount}/{f.teamCount} times com histórico
                   </span>
@@ -95,7 +95,7 @@ export async function TeamRatingsPanel({ enabled }: { enabled: boolean }) {
                     {ago === "agora" ? "agora" : `há ${ago}`}
                     {stale ? " · velho, usando heurístico" : ""}
                   </span>
-                  <span className="text-eyebrow text-muted-foreground font-mono tabular-nums">
+                  <span className="text-meta text-muted-foreground font-mono tabular-nums">
                     mando {f.homeAdvantage.toFixed(2)} · ρ {f.rho.toFixed(3)}
                   </span>
                 </div>

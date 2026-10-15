@@ -18,7 +18,7 @@ export function AnalysisUserContext({ view }: { view: AnalysisUserContextView })
       data-testid="analysis-user-context"
       className="flex flex-col gap-2.5 rounded-md border border-border px-4 py-3.5"
     >
-      <span className="font-mono text-eyebrow uppercase tracking-label text-muted-foreground">
+      <span className="text-meta uppercase tracking-label text-muted-foreground">
         o que você acrescentou · {view.createdAgo}
       </span>
       <ul className="flex flex-col gap-2.5">
@@ -33,7 +33,7 @@ export function AnalysisUserContext({ view }: { view: AnalysisUserContextView })
             <span className="text-meta tracking-tight text-muted-foreground">
               {c.evidence}
             </span>
-            <span className="font-mono text-eyebrow text-muted-fg-2">{c.effect}</span>
+            <span className="text-meta text-muted-foreground">{c.effect}</span>
           </li>
         ))}
       </ul>
@@ -42,7 +42,7 @@ export function AnalysisUserContext({ view }: { view: AnalysisUserContextView })
           Não verificável: não temos esse dado; entrou com peso menor.
         </p>
       )}
-      <p className="text-meta leading-relaxed tracking-tight text-muted-fg-2">
+      <p className="text-meta leading-relaxed tracking-tight text-muted-foreground">
         O texto que você escreveu não vai pra análise; ela guarda só as afirmações conferidas.
       </p>
     </section>

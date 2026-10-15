@@ -1,15 +1,22 @@
 import { describe, expect, it } from "vitest";
 
 import {
+  PASS_LABEL,
   marketContextLabel,
+  recommendationKind,
   recommendationLabel,
 } from "@/lib/view/recommendation";
 
 describe("recommendationLabel (#539)", () => {
-  it("over/under/pass mantêm o token pinado", () => {
-    expect(recommendationLabel("over", "over_under")).toBe("OVER");
-    expect(recommendationLabel("under", "over_under")).toBe("UNDER");
-    expect(recommendationLabel("pass", "match_result")).toBe("PASS");
+  it("over/under com a linha e pass como 'Sem aposta' (ADR 0056)", () => {
+    expect(recommendationLabel("over", "over_under", null, undefined, 2.5)).toBe("Mais de 2,5");
+    expect(recommendationLabel("under", "over_under", null, undefined, 3.5)).toBe(
+      "Menos de 3,5",
+    );
+    // Sem linha gravada: a linha padrão do mercado.
+    expect(recommendationLabel("over", "over_under")).toBe("Mais de 2,5");
+    expect(recommendationLabel("pass", "match_result")).toBe("Sem aposta");
+    expect(PASS_LABEL).toBe("Sem aposta");
   });
 
   it("1X2, ambas marcam, dupla chance e placar usam o rótulo da apresentação", () => {
@@ -39,7 +46,7 @@ describe("recommendationLabel (#539)", () => {
       }),
     ).toBe("Palmeiras ou empate");
     expect(recommendationLabel("yes", "btts", "Sim", teams)).toBe("Sim");
-    expect(recommendationLabel("over", "over_under", null, teams)).toBe("OVER");
+    expect(recommendationLabel("over", "over_under", null, teams, 2.5)).toBe("Mais de 2,5");
   });
 
   it("artilheiro/assistência caem no label do DB (nome do jogador)", () => {
@@ -63,10 +70,27 @@ describe("recommendationLabel (#539)", () => {
   });
 });
 
+describe("recommendationKind", () => {
+  it("deriva do valor cru, nunca do rótulo", () => {
+    expect(recommendationKind("over")).toBe("over");
+    expect(recommendationKind("under")).toBe("under");
+    expect(recommendationKind("pass")).toBe("pass");
+    expect(recommendationKind("home")).toBe("other");
+    expect(recommendationKind("Sem aposta")).toBe("other");
+  });
+});
+
 describe("marketContextLabel", () => {
   it("anexa a linha quando o mercado tem uma", () => {
-    expect(marketContextLabel("Over/Under gols", { line: 3.5 })).toBe(
-      "Over/Under gols 3,5"
+    expect(marketContextLabel("Total de gols", { line: 3.5 })).toBe(
+      "Total de gols 3,5"
+    );
+  });
+
+  it("não repete a linha que já está no rótulo da recomendação; mantém em 'Sem aposta'", () => {
+    expect(marketContextLabel("Total de gols", { line: 2.5 }, "over")).toBe("Total de gols");
+    expect(marketContextLabel("Total de gols", { line: 2.5 }, "pass")).toBe(
+      "Total de gols 2,5",
     );
   });
 

@@ -3,6 +3,7 @@ import { ChevronRight } from "lucide-react";
 
 import { Badge } from "@/components/ui/badge";
 import { EmptyState } from "@/components/empty-state";
+import { ResultBadge } from "@/components/result-badge";
 import {
   Table,
   TableBody,
@@ -16,30 +17,14 @@ import { LEAGUE_LABEL } from "@/lib/format";
 import { cn } from "@/lib/utils";
 import type { PredictionRowView } from "@/lib/view/dashboard";
 
-const STATUS_META: Record<
-  PredictionRowView["status"],
-  { label: string; className: string }
-> = {
-  pending: { label: "pendente", className: "text-muted-foreground" },
-  won: { label: "green", className: "text-edge-fg" },
-  lost: { label: "red", className: "text-destructive" },
-  void: { label: "anulada", className: "text-muted-fg-2" },
-  // push só aparece quando o settlement plugável (Fase 2 #166) o emitir; em Phase 1
-  // nenhuma row é push. Estilo neutro como void (no-action, stake devolvido — ADR 0016).
-  push: { label: "push", className: "text-muted-fg-2" },
+// Cor pelo TIPO da recomendação (recKind, derivado do valor cru), nunca pelo rótulo
+// de tela. Seleções de outros mercados ("Casa", "Sim", nome do jogador) ficam neutras.
+const REC_CLASS: Record<PredictionRowView["recKind"], string> = {
+  over: "text-edge-fg",
+  under: "text-accent-fg",
+  pass: "text-muted-foreground",
+  other: "text-foreground",
 };
-
-// Cor por token de recomendação. over/under/pass têm cor pinada; seleções de
-// outros mercados ("Casa", "Sim", nome do jogador) caem no neutro via recClass().
-const REC_CLASS: Record<string, string> = {
-  OVER: "text-edge-fg",
-  UNDER: "text-accent-fg",
-  PASS: "text-muted-foreground",
-};
-
-function recClass(rec: PredictionRowView["rec"]): string {
-  return REC_CLASS[rec] ?? "text-foreground";
-}
 
 export function PredictionsTable({
   rows,
@@ -67,7 +52,7 @@ export function PredictionsTable({
               "data",
               "rec",
               "odd",
-              "edge",
+              "vantagem",
               "conf",
               "status",
               "lucro",
@@ -76,8 +61,8 @@ export function PredictionsTable({
               <TableHead
                 key={h || `c${i}`}
                 className={cn(
-                  "font-mono text-eyebrow-xs uppercase tracking-label text-muted-foreground",
-                  ["odd", "edge", "conf", "lucro"].includes(h) && "text-right",
+                  "text-meta uppercase tracking-label text-muted-foreground",
+                  ["odd", "vantagem", "conf", "lucro"].includes(h) && "text-right",
                 )}
               >
                 {h}
@@ -87,7 +72,6 @@ export function PredictionsTable({
         </TableHeader>
         <TableBody>
           {rows.map((r) => {
-            const status = STATUS_META[r.status];
             return (
               <TableRow key={r.id} className="border-border-subtle">
                 <TableCell className="max-w-[220px]">
@@ -115,11 +99,11 @@ export function PredictionsTable({
                 </TableCell>
                 <TableCell>
                   <div
-                    className={cn("font-mono text-meta font-medium", recClass(r.rec))}
+                    className={cn("text-meta font-medium", REC_CLASS[r.recKind])}
                   >
                     {r.rec}
                   </div>
-                  <div className="text-eyebrow text-muted-foreground">
+                  <div className="text-meta text-muted-foreground">
                     {r.market}
                   </div>
                 </TableCell>
@@ -127,13 +111,19 @@ export function PredictionsTable({
                   {r.odd}
                 </TableCell>
                 <TableCell className="text-right font-mono text-body-sm tabular-nums text-muted-foreground">
-                  {r.edge ? `${r.edge}pp` : "—"}
+                  {r.edge ?? "—"}
                 </TableCell>
                 <TableCell className="text-right font-mono text-body-sm tabular-nums text-muted-foreground">
                   {r.confidence}
                 </TableCell>
-                <TableCell className={cn("text-meta", status.className)}>
-                  {status.label}
+                <TableCell>
+                  {/* Sem aposta não tem resultado: a liquidação grava void, mas "Anulada"
+                      leria como aposta cancelada. Traço neutro no lugar do selo. */}
+                  {r.recKind === "pass" ? (
+                    <span className="text-meta text-muted-foreground">—</span>
+                  ) : (
+                    <ResultBadge result={r.status} />
+                  )}
                 </TableCell>
                 <TableCell
                   className={cn(

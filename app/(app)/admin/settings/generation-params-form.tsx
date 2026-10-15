@@ -71,7 +71,7 @@ export function GenerationParamsForm({ current }: Props) {
       </label>
 
       <label className="flex flex-col gap-1">
-        <span className="font-mono text-eyebrow uppercase tracking-label text-muted-foreground">
+        <span className="font-mono text-meta uppercase tracking-label text-muted-foreground">
           max_tokens (todos os modelos)
         </span>
         <input
@@ -91,7 +91,7 @@ export function GenerationParamsForm({ current }: Props) {
       </label>
 
       <label className="flex flex-col gap-1">
-        <span className="font-mono text-eyebrow uppercase tracking-label text-muted-foreground">
+        <span className="font-mono text-meta uppercase tracking-label text-muted-foreground">
           effort (só modelos adaptive)
         </span>
         <div className="max-w-aside">
@@ -114,7 +114,7 @@ export function GenerationParamsForm({ current }: Props) {
       </label>
 
       <label className="flex flex-col gap-1">
-        <span className="font-mono text-eyebrow uppercase tracking-label text-muted-foreground">
+        <span className="font-mono text-meta uppercase tracking-label text-muted-foreground">
           temperature (só modelos temperature)
         </span>
         <input

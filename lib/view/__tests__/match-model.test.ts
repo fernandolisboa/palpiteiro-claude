@@ -63,7 +63,7 @@ describe("toMatchModelLineView", () => {
   it("favorito = argmax do 1X2; gols = o lado mais provável do 2.5 (Under quando under > over)", () => {
     expect(toMatchModelLineView(snapshot())).toEqual({
       favorite: { label: "Casa", pct: "52%" },
-      goals25: { label: "Under 2.5", pct: "52%" },
+      goals25: { label: "Menos de 2,5", pct: "52%" },
     });
     expect(
       toMatchModelLineView(
@@ -71,7 +71,7 @@ describe("toMatchModelLineView", () => {
       ),
     ).toEqual({
       favorite: { label: "Fora", pct: "55%" },
-      goals25: { label: "Over 2.5", pct: "61%" },
+      goals25: { label: "Mais de 2,5", pct: "61%" },
     });
   });
 
@@ -82,7 +82,7 @@ describe("toMatchModelLineView", () => {
       ),
     ).toEqual({
       favorite: { label: "Empate", pct: "40%" },
-      goals25: { label: "Over 2.5", pct: "50%" },
+      goals25: { label: "Mais de 2,5", pct: "50%" },
     });
     expect(
       toMatchModelLineView(
@@ -99,9 +99,9 @@ describe("toMatchModelReadingView", () => {
       "Resultado (1X2)",
       "Dupla chance",
       "Ambas marcam",
-      "Over/Under gols · 1,5",
-      "Over/Under gols · 2,5",
-      "Over/Under gols · 3,5",
+      "Total de gols · 1,5",
+      "Total de gols · 2,5",
+      "Total de gols · 3,5",
     ]);
     expect(view.markets[0].selections[0]).toEqual({
       label: "Casa",
@@ -114,7 +114,7 @@ describe("toMatchModelReadingView", () => {
       "Casa ou fora",
     ]);
     expect(view.markets[4].selections[1]).toEqual({
-      label: "Under 2.5",
+      label: "Menos de 2,5",
       pct: "51,6%",
       fairOdd: (100 / 51.6).toFixed(2).replace(".", ","),
     });

@@ -1,4 +1,6 @@
-import { BackLink } from "@/components/back-link";
+import { PageContainer } from "@/components/page-container";
+import { PageHeader } from "@/components/page-header";
+import { ResultBadge } from "@/components/result-badge";
 import { LEAGUE_LABEL } from "@/lib/format";
 import { cn } from "@/lib/utils";
 import type { PredictionDetailView } from "@/lib/view/dashboard";
@@ -14,7 +16,7 @@ function Row({
 }) {
   return (
     <div className="flex items-center justify-between border-b border-border-subtle py-2">
-      <span className="font-mono text-eyebrow uppercase tracking-label text-muted-foreground">
+      <span className="text-meta uppercase tracking-label text-muted-foreground">
         {label}
       </span>
       <span className={cn("text-body tabular-nums", className)}>{value}</span>
@@ -24,7 +26,7 @@ function Row({
 
 function SectionLabel({ children }: { children: string }) {
   return (
-    <h2 className="pb-2 pt-7 font-mono text-eyebrow uppercase tracking-label text-muted-foreground">
+    <h2 className="pb-2 pt-7 text-meta uppercase tracking-label text-muted-foreground">
       {children}
     </h2>
   );
@@ -33,7 +35,7 @@ function SectionLabel({ children }: { children: string }) {
 function RawPayload({ label, json }: { label: string; json: string }) {
   return (
     <details className="rounded-lg border border-border bg-surface-2">
-      <summary className="cursor-pointer select-none rounded-md px-4 py-2.5 font-mono text-meta uppercase tracking-label text-muted-foreground focus-visible:outline-none focus-visible:ring-[3px] focus-visible:ring-ring/50">
+      <summary className="cursor-pointer select-none rounded-md px-4 py-2.5 text-meta uppercase tracking-label text-muted-foreground focus-visible:outline-none focus-visible:ring-[3px] focus-visible:ring-ring/50">
         {label}
       </summary>
       <pre className="max-h-[420px] overflow-auto border-t border-border px-4 py-3 font-mono text-meta leading-relaxed">
@@ -60,34 +62,21 @@ export function PredictionDetail({
       : value.startsWith("-")
         ? "text-destructive"
         : "text-muted-foreground";
-  const resultClass =
-    outcome?.result === "won"
-      ? "text-edge-fg"
-      : outcome?.result === "lost"
-        ? "text-destructive"
-        : "text-muted-foreground";
 
   return (
-    <div className="mx-auto w-full max-w-reading px-6 py-8">
-      <BackLink href={backHref} label={backLabel} />
-
-      {/* text-[22px]: heroic-display outlier (sem degrau na escala; gap display-sm 18 → display-md 26), sancionado pela ADR 0029 espelhando a match page (#246) — NÃO tokenizar. */}
-      <h1 className="text-[22px] font-medium tracking-tight">
-        {match.home} × {match.away}
-      </h1>
-      <p className="pb-2 font-mono text-meta text-muted-foreground">
-        {LEAGUE_LABEL[match.league]} · {match.kickoff} · prediction{" "}
-        {view.id.slice(0, 8)}
-      </p>
+    <PageContainer width="reading">
+      <PageHeader
+        back={{ href: backHref, label: backLabel }}
+        title={`${match.home} × ${match.away}`}
+        meta={`${LEAGUE_LABEL[match.league]} · ${match.kickoff}`}
+        className="pb-2 lg:pb-2"
+      />
 
       <SectionLabel>predição</SectionLabel>
       <Row label="mercado" value={prediction.market} />
       <Row label="recomendação" value={prediction.rec} />
       <Row label="confiança" value={prediction.confidence} />
-      <Row
-        label="edge"
-        value={prediction.edge ? `${prediction.edge}pp` : "—"}
-      />
+      <Row label="vantagem" value={prediction.edge ?? "—"} />
       <Row label="prob. implícita" value={prediction.implied} />
       <Row label="odd de entrada" value={prediction.odd} />
       <Row label="odd mínima" value={prediction.minOdd} />
@@ -129,7 +118,12 @@ export function PredictionDetail({
       <SectionLabel>resultado</SectionLabel>
       {outcome ? (
         <>
-          <Row label="resultado" value={outcome.result} className={resultClass} />
+          <div className="flex items-center justify-between border-b border-border-subtle py-2">
+            <span className="text-meta uppercase tracking-label text-muted-foreground">
+              resultado
+            </span>
+            <ResultBadge result={outcome.result} />
+          </div>
           <Row
             label="lucro"
             value={outcome.profit}
@@ -152,7 +146,7 @@ export function PredictionDetail({
         </>
       ) : (
         <p className="text-body text-muted-foreground">
-          Ainda pendente — o resultado aparece após o jogo ser liquidado.
+          Em aberto: o resultado aparece depois que o jogo for apurado.
         </p>
       )}
 
@@ -189,6 +183,6 @@ export function PredictionDetail({
           </>
         )
       )}
-    </div>
+    </PageContainer>
   );
 }

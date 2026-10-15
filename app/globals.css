@@ -67,18 +67,18 @@
   --radius-lg: var(--radius);
   --radius-xl: calc(var(--radius) + 4px);
 
-  /* Typography scale — ADR 0029. font-size ONLY (no --text-*--line-height
-     companion ⇒ line-height inherits, byte-identical to the text-[Npx] it
-     replaces). Whole-px; half-pixels collapsed to the nearest step. */
-  --text-eyebrow-xs: 9px;
-  --text-eyebrow: 10px;
+  /* Typography scale — ADR 0029, amended by ADR 0056 (floor 11px). font-size
+     ONLY (no --text-*--line-height companion ⇒ line-height inherits).
+     Whole-px; nothing below text-meta. */
   --text-meta: 11px;
   --text-body-sm: 12px;
   --text-body: 13px;
   --text-label: 14px;
   --text-display-sm: 18px;
+  --text-display-xs: 22px;
   --text-display-md: 26px;
   --text-display-lg: 32px;
+  --text-display-xl: 40px;
 
   /* Letter-spacing — eyebrow/label scale (the negative band keeps Tailwind's
      default `tracking-tight`; these two are net-new, non-colliding names). */
@@ -132,7 +132,8 @@
   --surface-3: oklch(0.94 0 0);
   --border-subtle: oklch(0.94 0 0);
   --border-strong: oklch(0.78 0 0);
-  --muted-fg-2: oklch(0.55 0 0);
+  /* ADR 0056: 5,5:1 sobre branco, 5,05:1 sobre surface-2. Só texto ≥12px. */
+  --muted-fg-2: oklch(0.52 0 0);
 
   /* Cobalt family */
   --accent-fg: oklch(0.42 0.13 258);
@@ -211,7 +212,8 @@
   --surface-3: oklch(0.265 0 0);
   --border-subtle: oklch(0.225 0 0);
   --border-strong: oklch(0.36 0 0);
-  --muted-fg-2: oklch(0.48 0 0);
+  /* ADR 0056: 5,4:1 sobre o fundo, 5,0:1 sobre o card. Só texto ≥12px. */
+  --muted-fg-2: oklch(0.62 0 0);
 
   /* Cobalt family */
   --accent-fg: oklch(0.74 0.12 258);

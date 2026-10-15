@@ -67,11 +67,11 @@ export default async function AdminUsersPage({ searchParams }: PageProps) {
                 </span>
                 <div className="flex shrink-0 items-center gap-3">
                   {!u.allowed && (
-                    <span className="rounded-sm bg-destructive/10 px-1.5 py-0.5 font-mono text-eyebrow uppercase tracking-label text-destructive">
+                    <span className="rounded-sm bg-destructive/10 px-1.5 py-0.5 font-mono text-meta uppercase tracking-label text-destructive">
                       bloqueado
                     </span>
                   )}
-                  <span className="font-mono text-eyebrow uppercase tracking-label text-muted-foreground">
+                  <span className="font-mono text-meta uppercase tracking-label text-muted-foreground">
                     {u.role}
                   </span>
                   <ChevronRight className="size-3.5 text-muted-fg-2" />

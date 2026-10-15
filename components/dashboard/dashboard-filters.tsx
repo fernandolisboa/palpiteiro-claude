@@ -4,6 +4,7 @@ import type { DashboardFilters } from "@/lib/dashboard/kpis";
 import type { AvailableMarket } from "@/lib/dashboard/derive-view";
 import { LEAGUE_LABEL } from "@/lib/format";
 import { cn } from "@/lib/utils";
+import { RESULT_LABEL } from "@/lib/view/result-state";
 import type { LeagueKey } from "@/lib/view/types";
 
 export type FilterDimension = "status" | "league" | "market";
@@ -42,13 +43,15 @@ type Option = { value: string; label: string };
 
 const STATUS_OPTIONS: Option[] = [
   { value: "all", label: "Todas" },
-  { value: "pending", label: "Pendentes" },
-  { value: "won", label: "Green" },
-  { value: "lost", label: "Red" },
-  { value: "void", label: "Anuladas" },
+  // As palavras são as do selo de resultado (ResultBadge, ADR 0056); os valores da
+  // URL (pending/won/lost/void/push) não mudam.
+  { value: "pending", label: RESULT_LABEL.pending },
+  { value: "won", label: RESULT_LABEL.won },
+  { value: "lost", label: RESULT_LABEL.lost },
+  { value: "void", label: RESULT_LABEL.void },
   // push = no-action (devolve stake, ADR 0016). Opção fixa; fica vazia enquanto o
   // settlement plugável não emitir push.
-  { value: "push", label: "Push" },
+  { value: "push", label: RESULT_LABEL.push },
 ];
 
 function PillGroup({
@@ -70,7 +73,7 @@ function PillGroup({
     // Muitas opções (status, ligas) rolam DENTRO do grupo no celular, sem estourar a
     // largura da página (#574 linha 5).
     <div className="flex min-w-0 max-w-full items-center gap-2">
-      <span className="shrink-0 font-mono text-eyebrow-xs uppercase tracking-label text-muted-foreground">
+      <span className="shrink-0 text-meta uppercase tracking-label text-muted-foreground">
         {label}
       </span>
       <nav className="inline-flex h-8 max-w-full items-center overflow-x-auto rounded-md border border-border bg-surface-2 p-1 [scrollbar-width:none]">

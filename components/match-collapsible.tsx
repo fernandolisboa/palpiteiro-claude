@@ -34,7 +34,7 @@ export function MatchCollapsible({ title, meta, defaultOpen = false, children }:
             {title}
           </span>
           {meta && (
-            <span className="font-mono text-eyebrow tabular-nums text-muted-foreground">
+            <span className="font-mono text-meta tabular-nums text-muted-foreground">
               {meta}
             </span>
           )}

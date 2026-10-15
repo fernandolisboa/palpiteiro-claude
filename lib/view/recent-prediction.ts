@@ -1,8 +1,9 @@
-import { formatEdge, leagueToKey } from "@/lib/format";
+import { formatEdgePoints, leagueToKey } from "@/lib/format";
 import type { SupportedLeague } from "@/lib/providers/sports-data/leagues";
-import { findMarketPresentation } from "@/lib/view/markets/presentation";
+import { displayMarketLabel, findDisplayPresentation } from "@/lib/view/markets/display";
 import {
   marketContextLabel,
+  recommendationKind,
   recommendationLabel,
 } from "@/lib/view/recommendation";
 import { teamToTeam } from "@/lib/view/team";
@@ -66,14 +67,17 @@ export function toRecentPredictionView(
       marketKey,
       row.selectionLabel,
       { home, away },
+      row.marketParams?.line ?? null,
     ),
+    recKind: recommendationKind(row.recommendation),
     market: marketContextLabel(
-      row.marketLabel ??
-        findMarketPresentation(marketKey)?.marketLabel ??
-        marketKey,
+      row.marketLabel
+        ? displayMarketLabel(marketKey, row.marketLabel)
+        : (findDisplayPresentation(marketKey)?.marketLabel ?? marketKey),
       row.marketParams,
+      row.recommendation,
     ),
-    edge: formatEdge(row.edgePct),
+    edge: formatEdgePoints(row.edgePct),
     when: formatRecentWhen(row.createdAt, timeZone),
     league,
   };

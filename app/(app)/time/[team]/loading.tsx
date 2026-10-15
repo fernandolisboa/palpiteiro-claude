@@ -1,20 +1,8 @@
-import { ChevronLeft } from "lucide-react";
-
 import { Card } from "@/components/ui/card";
+import { PageContainer } from "@/components/page-container";
+import { PageHeaderSkeleton } from "@/components/page-header";
 import { Skeleton } from "@/components/ui/skeleton";
 import { SectionLabel } from "@/components/section-label";
-
-function HeaderBar() {
-  return (
-    <div className="flex items-center justify-between px-5 pt-5 pb-2">
-      <span className="flex items-center gap-2 text-muted-foreground">
-        <ChevronLeft className="size-3.5" />
-        <span className="text-body-sm tracking-tight">jogos</span>
-      </span>
-      <Skeleton className="size-7 rounded-md" />
-    </div>
-  );
-}
 
 // Casa a forma de cada MatchRow (anti-CLS): badge + kickoff em cima, dois times,
 // odd/placar à direita.
@@ -60,10 +48,8 @@ export default function TeamHistoryLoading() {
     <>
       <div className="lg:hidden">
         <div className="bg-background text-foreground">
-          <HeaderBar />
-          <div className="px-5 pt-3 pb-2">
-            <Skeleton className="h-7 w-40" />
-            <Skeleton className="mt-2 h-[12px] w-24" />
+          <div className="px-5 pt-6">
+            <PageHeaderSkeleton back meta className="pb-2" />
           </div>
           <div className="flex flex-col gap-2 pb-8">
             <SectionLabel>próximos jogos</SectionLabel>
@@ -81,15 +67,8 @@ export default function TeamHistoryLoading() {
       </div>
       <div className="hidden lg:block">
         <>
-          <div className="mx-auto w-full max-w-content px-8 pt-8 pb-16">
-            <span className="mb-6 inline-flex items-center gap-2 text-muted-foreground">
-              <ChevronLeft className="size-3.5" />
-              <span className="text-body-sm tracking-tight">jogos</span>
-            </span>
-            <div className="pb-6">
-              <Skeleton className="h-9 w-56" />
-              <Skeleton className="mt-2 h-[12px] w-24" />
-            </div>
+          <PageContainer width="content">
+            <PageHeaderSkeleton back meta />
             <div className="grid grid-cols-2 gap-8">
               <section className="flex flex-col gap-2">
                 <SectionLabel>próximos jogos</SectionLabel>
@@ -100,7 +79,7 @@ export default function TeamHistoryLoading() {
                 <ListSkeleton />
               </section>
             </div>
-          </div>
+          </PageContainer>
         </>
       </div>
     </>

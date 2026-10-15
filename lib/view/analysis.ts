@@ -5,7 +5,7 @@ import {
   EV_ZERO_LABEL,
   formatAnalysisEngine,
   formatCostUsd,
-  formatEdge,
+  formatEdgePoints,
   formatEvPct,
   formatGeneratedAt,
   formatGeneratedAtSeconds,
@@ -28,11 +28,9 @@ import {
 } from "@/lib/odds/scenario";
 import { getDescriptor } from "@/lib/odds/market-descriptor";
 import { ownsAiCall } from "@/lib/view/owns-ai-call";
-import {
-  getMarketPresentation,
-  type MarketPresentation,
-} from "@/lib/view/markets/presentation";
-import { withTeamLabels, type TeamLabels } from "@/lib/view/markets/with-team-labels";
+import { getDisplayPresentation } from "@/lib/view/markets/display";
+import type { MarketPresentation } from "@/lib/view/markets/presentation";
+import type { TeamLabels } from "@/lib/view/markets/with-team-labels";
 import type {
   AnalysisView,
   MarketAnalysisSectionItem,
@@ -115,13 +113,13 @@ function toValidOdd(value: string | number | null): number | null {
 }
 
 function toScenarioSideView(side: ScenarioSide): ScenarioSideView {
-  const edge = formatEdge(side.edgePct);
+  const edge = formatEdgePoints(side.edgePct);
   return {
     modelProb: formatPct(side.modelProbPct),
     marketProb:
       side.impliedProbPct !== null ? formatPct(side.impliedProbPct) : "—",
     odd: side.odd !== null ? formatOdd(side.odd) : "—",
-    edge: edge !== null ? `${edge}pp` : "—",
+    edge: edge ?? "—",
     expectedReturn: formatEvPct(side.evPerUnit),
     modelBreakEvenOdd: formatOdd(side.modelBreakEvenOdd),
   };
@@ -196,7 +194,7 @@ function computeBinaryFramingNote(
 
   let framing: string | null = null;
   if (isPass) {
-    framing = `vantagens pequenas (abaixo de ${MIN_EDGE_PP}pp) ficam dentro da margem de erro do modelo — por isso não há recomendação`;
+    framing = `vantagens pequenas (abaixo de ${MIN_EDGE_PP} pontos) ficam dentro da margem de erro do modelo — por isso não há recomendação`;
   } else if (altSide.breakEvenProbPct !== null) {
     framing = `a aposta em ${presentation.framingLabel(altKey, line)} só sai do zero se a chance real for maior que ${formatPct(altSide.breakEvenProbPct)} — na análise o modelo estimou ${formatPct(altSide.modelProbPct)}`;
   }
@@ -308,10 +306,7 @@ export function toAnalysisView(
 
   // Apresentação do mercado (labels/frases). Default over_under: o page/action
   // ainda não passa marketKey (#170 liga). `line` cai pra defaultLine do mercado.
-  const presentation = withTeamLabels(
-    getMarketPresentation(prediction.marketKey ?? "over_under"),
-    teams,
-  );
+  const presentation = getDisplayPresentation(prediction.marketKey ?? "over_under", teams);
   const line = prediction.line ?? presentation.defaultLine;
 
   // Ramificação por IDENTIDADE (#174): over_under fica no caminho binário
@@ -465,7 +460,7 @@ export function toAnalysisView(
     // #290: piso de edge do MERCADO (descriptor.minEdgePp) — scorer mostra 8pp, não
     // a constante 5 hardcoded. Default 5 (partition) mantém over_under/correct_score
     // byte-idênticos. A view nunca "mente" o piso por mercado.
-    minEdgeLabel: `${minEdgePp}pp`,
+    minEdgeLabel: `${minEdgePp} pontos`,
     minEdgePp,
     rationale: prediction.rationale,
     factors: prediction.keyFactors,
@@ -551,7 +546,7 @@ export function toMarketAnalysisSections(
       // marketLabel SIBLING da view (espelha PreviousAnalysisItem/BestBetEntry): o
       // branch pass do AnalysisResult não imprime mercado, então o título da seção o
       // identifica. Mesmo coalesce 'over_under' do bucket acima.
-      marketLabel: getMarketPresentation(marketKey).marketLabel,
+      marketLabel: getDisplayPresentation(marketKey).marketLabel,
       // modelVersion CRU (AIModelId) — semeia o dropdown do footer com o modelo que
       // rodou aquela análise (#244). initialModelOverride cai pro "default" se for um id
       // aposentado/fora-da-audiência (histórica), sem <option> órfã.
@@ -587,7 +582,7 @@ export function toPreviousAnalysisItems(
       id: row.prediction.id,
       // marketLabel SEPARADO da view: o branch pass do AnalysisResult não imprime
       // mercado, então o header o identifica (AC3). Mesmo coalesce 'over_under'.
-      marketLabel: getMarketPresentation(marketKey).marketLabel,
+      marketLabel: getDisplayPresentation(marketKey).marketLabel,
       generatedAt: formatGeneratedAtSeconds(row.prediction.createdAt, timeZone),
       view: toAnalysisViewFromPrediction(row, now, timeZone, teams),
     });

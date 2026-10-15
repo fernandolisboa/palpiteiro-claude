@@ -198,8 +198,8 @@ describe("MatchRow rendering by status", () => {
     expect(markup.toLowerCase()).toContain("encerrado");
     // Odds chip / "sem odd" must NOT render for a finished match (score branch).
     expect(markup).not.toContain("sem odd");
-    expect(markup).not.toContain("Over");
-    expect(markup).not.toContain("Under");
+    expect(markup).not.toContain("Mais de");
+    expect(markup).not.toContain("Menos de");
   });
 
   it("renders postponed/cancelled sanely (label, not a 0–0)", () => {
@@ -322,8 +322,8 @@ describe("toMatchRowView — prioridade de mercado no chip (#173 PR-2)", () => {
       now: NOW,
     });
     expect(view.odds?.outcomes).toEqual([
-      { label: "Over", odd: "1,85" },
-      { label: "Under", odd: "1,95" },
+      { label: "Mais de 2,5", odd: "1,85" },
+      { label: "Menos de 2,5", odd: "1,95" },
     ]);
   });
 
@@ -347,9 +347,9 @@ describe("toMatchRowView — prioridade de mercado no chip (#173 PR-2)", () => {
       now: NOW,
     });
     const markup = renderToStaticMarkup(<MatchRow m={view} />);
-    expect(markup).toContain(">BAR</span> 2,10");
-    expect(markup).toContain(">Empate</span> 3,40");
-    expect(markup).toContain(">RMA</span> 3,90");
+    expect(markup).toContain('>BAR</span> <span class="font-mono tabular-nums">2,10</span>');
+    expect(markup).toContain('>Empate</span> <span class="font-mono tabular-nums">3,40</span>');
+    expect(markup).toContain('>RMA</span> <span class="font-mono tabular-nums">3,90</span>');
     expect(markup).not.toContain(">Casa<");
     expect(markup).not.toContain(">Fora<");
     expect(markup).toContain("2,10");
@@ -413,7 +413,7 @@ describe("base do modelo na linha e firewall do hero (#555)", () => {
     });
     expect(withModel.model).toEqual({
       favorite: { label: "BAR", pct: "52%" },
-      goals25: { label: "Under 2.5", pct: "55%" },
+      goals25: { label: "Menos de 2,5", pct: "55%" },
     });
 
     expect(

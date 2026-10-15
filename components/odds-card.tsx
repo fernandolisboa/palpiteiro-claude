@@ -43,7 +43,7 @@ export function OddsCard({ view, unavailable }: Props) {
         <span className="text-body-sm text-muted-foreground tracking-tight">
           {body}
         </span>
-        <span className="pt-1 font-mono text-eyebrow text-muted-fg-2">
+        <span className="pt-1 text-meta text-muted-foreground">
           fonte: the-odds-api
         </span>
       </Callout>
@@ -61,12 +61,12 @@ export function OddsCard({ view, unavailable }: Props) {
           </span>
           <Badge
             variant="outline"
-            className="h-[17px] rounded-full px-2 text-eyebrow-xs text-muted-foreground"
+            className="h-[18px] rounded-full px-2 text-meta text-muted-foreground"
           >
             {view.marketLabel}
           </Badge>
         </div>
-        <span className="font-mono text-eyebrow text-muted-foreground">
+        <span className="text-meta text-muted-foreground">
           atualizado há {view.updatedAgo}
         </span>
       </div>
@@ -93,18 +93,18 @@ export function OddsCard({ view, unavailable }: Props) {
               >
                 {wide ? <span className="min-w-0 truncate">{o.label}</span> : o.label}
               </span>
-              {/* 22px: outlier heroic da odd — sem degrau na escala (ADR 0029) */}
-              <span className="font-mono text-[22px] font-medium tabular-nums tracking-tight">
+              {/* Odd em destaque: degrau display-xs (22px) da escala (ADR 0056). */}
+              <span className="font-mono text-display-xs font-medium tabular-nums tracking-tight">
                 {o.odd}
               </span>
               <span
                 className={
                   isFirst
-                    ? "flex items-center gap-1 font-mono text-eyebrow tabular-nums text-muted-foreground"
-                    : "font-mono text-eyebrow tabular-nums text-muted-foreground"
+                    ? "flex items-center gap-1 text-meta text-muted-foreground"
+                    : "text-meta text-muted-foreground"
                 }
               >
-                {o.pct} normalizada
+                <span className="font-mono tabular-nums">{o.pct}</span> normalizada
                 {isFirst && (
                   <HelpHint
                     anchor="prob-implicita"
@@ -118,10 +118,10 @@ export function OddsCard({ view, unavailable }: Props) {
         })}
       </div>
       <Separator />
-      <div className="flex items-center justify-between px-4 py-2.5 font-mono text-eyebrow text-muted-fg-2">
+      <div className="flex items-center justify-between px-4 py-2.5 text-meta text-muted-foreground">
         <span>odd de mercado</span>
-        <span className="flex items-center gap-1 tabular-nums">
-          overround {view.overround}
+        <span className="flex items-center gap-1">
+          overround <span className="font-mono tabular-nums">{view.overround}</span>
           <HelpHint
             anchor="overround"
             label="overround"

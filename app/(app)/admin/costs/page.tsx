@@ -33,7 +33,7 @@ export default async function AdminCostsPage() {
         />
 
         <section className="pb-8">
-          <h2 className="pb-3 font-mono text-eyebrow uppercase tracking-label text-muted-foreground">
+          <h2 className="pb-3 font-mono text-meta uppercase tracking-label text-muted-foreground">
             resumo
           </h2>
           <div className="grid grid-cols-2 gap-px overflow-hidden rounded-md border border-border bg-border sm:grid-cols-4">
@@ -51,7 +51,7 @@ export default async function AdminCostsPage() {
         </section>
 
         <section className="pb-8">
-          <h2 className="pb-3 font-mono text-eyebrow uppercase tracking-label text-muted-foreground">
+          <h2 className="pb-3 font-mono text-meta uppercase tracking-label text-muted-foreground">
             por dia
           </h2>
           {byDay.length === 0 ? (
@@ -86,7 +86,7 @@ export default async function AdminCostsPage() {
         </section>
 
         <section className="pb-8">
-          <h2 className="pb-3 font-mono text-eyebrow uppercase tracking-label text-muted-foreground">
+          <h2 className="pb-3 font-mono text-meta uppercase tracking-label text-muted-foreground">
             por usuário
           </h2>
           {byUser.length === 0 ? (
@@ -122,7 +122,7 @@ export default async function AdminCostsPage() {
         </section>
 
         <section>
-          <h2 className="pb-3 font-mono text-eyebrow uppercase tracking-label text-muted-foreground">
+          <h2 className="pb-3 font-mono text-meta uppercase tracking-label text-muted-foreground">
             por modelo
           </h2>
           {byModel.length === 0 ? (
@@ -140,7 +140,7 @@ export default async function AdminCostsPage() {
                       <span className="truncate text-body font-medium">
                         {formatModelName(m.model)}
                       </span>
-                      <span className="truncate font-mono text-eyebrow text-muted-foreground">
+                      <span className="truncate font-mono text-meta text-muted-foreground">
                         {m.model}
                       </span>
                     </div>
@@ -168,11 +168,11 @@ export default async function AdminCostsPage() {
 function Kpi({ label, value }: { label: string; value: string }) {
   return (
     <div className="flex flex-col gap-1 bg-background px-4 py-3">
-      <span className="font-mono text-eyebrow uppercase tracking-label text-muted-foreground">
+      <span className="font-mono text-meta uppercase tracking-label text-muted-foreground">
         {label}
       </span>
       {/* outlier de escala: 16px não tem degrau (sem 14↔18); mantido literal, ADR 0029 §A.1 */}
-      <span className="font-mono text-[16px] tabular-nums">{value}</span>
+      <span className="font-mono text-display-sm tabular-nums">{value}</span>
     </div>
   );
 }

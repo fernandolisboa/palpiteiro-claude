@@ -30,9 +30,9 @@ export default function DashboardError({
         <p className="text-body text-muted-foreground">
           Tente novamente em instantes.
           {error.digest ? (
-            <span className="block pt-1 font-mono text-meta text-muted-fg-2">
+            <code className="block pt-1 font-mono text-meta text-muted-foreground">
               {error.digest}
-            </span>
+            </code>
           ) : null}
         </p>
         <div className="flex items-center gap-3 pt-2">

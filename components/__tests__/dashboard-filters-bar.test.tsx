@@ -86,6 +86,6 @@ describe("DashboardFiltersBar — largura no celular (#574)", () => {
       expect(link).toContain("whitespace-nowrap");
     }
     // Rótulos sem mudança.
-    expect(html).toContain(">Green<");
+    expect(html).toContain(">Acertou<");
   });
 });

@@ -355,7 +355,7 @@ export function BetSlip({
       {grid_}
       {/* No celular o painel (com o aviso) fica na folha; o aviso §3 também fica à
           vista junto da grade (ADR 0036 §12: em todo render). */}
-      <p className="text-meta leading-relaxed text-muted-fg-2 tracking-tight">
+      <p className="text-meta leading-relaxed text-muted-foreground tracking-tight">
         {RISK_DISCLAIMER_PT_BR}
       </p>
       {(count > 0 || registerState) && (
@@ -386,8 +386,8 @@ export function BetSlip({
 function SectionHeading({ modelLabel }: { modelLabel: string | null }) {
   return (
     <div className="flex flex-col gap-1">
-      <span className="font-mono text-eyebrow uppercase tracking-eyebrow text-muted-foreground">
-        registrar apostas
+      <span className="text-meta uppercase tracking-eyebrow text-muted-foreground">
+        mercados
       </span>
       <p className="text-body-sm text-muted-foreground tracking-tight">
         Toque nas seleções que você apostou, confira a odd que pegou e registre. A
@@ -463,7 +463,7 @@ function MarketGrid({
           </div>
         )}
         <div className="flex flex-wrap items-center gap-2 pt-2">
-          <span className="font-mono text-eyebrow-xs uppercase tracking-label text-muted-fg-2">
+          <span className="text-meta uppercase tracking-label text-muted-foreground">
             outro placar
           </span>
           <ScoreSelect label={grid.teams.home} value={home} onChange={setHome} options={goals} />
@@ -484,7 +484,7 @@ function MarketGrid({
         <form action={parseAction} className="flex flex-col gap-2">
           <input type="hidden" name="matchId" value={matchId} />
           <label className="flex flex-col gap-1">
-            <span className="font-mono text-eyebrow uppercase tracking-label text-muted-foreground">
+            <span className="text-meta uppercase tracking-label text-muted-foreground">
               ou digite sua aposta
             </span>
             <textarea
@@ -506,11 +506,11 @@ function MarketGrid({
           </p>
         )}
         {parseWarnings.map((w, i) => (
-          <p key={i} className="text-meta leading-relaxed text-muted-fg-2 tracking-tight">
+          <p key={i} className="text-meta leading-relaxed text-muted-foreground tracking-tight">
             {w}
           </p>
         ))}
-        <p className="text-meta leading-relaxed text-muted-fg-2 tracking-tight">
+        <p className="text-meta leading-relaxed text-muted-foreground tracking-tight">
           O texto é lido pela IA (conta no limite de leituras de aposta) e só preenche a
           lista: nada é registrado até você confirmar.
         </p>
@@ -522,7 +522,7 @@ function MarketGrid({
 function MarketRow({ title, children }: { title: string; children: React.ReactNode }) {
   return (
     <div className="flex flex-col gap-2 px-4 py-3">
-      <span className="font-mono text-eyebrow uppercase tracking-label text-muted-foreground">
+      <span className="text-meta uppercase tracking-label text-muted-foreground">
         {title}
       </span>
       {children}
@@ -559,8 +559,8 @@ function SelectionButton({
       ) : s.fairOdd !== null ? (
         <span
           className={cn(
-            "font-mono text-eyebrow-xs tabular-nums",
-            selected ? "text-background/70" : "text-muted-fg-2",
+            "font-mono text-meta tabular-nums",
+            selected ? "text-background/70" : "text-muted-foreground",
           )}
           title="odd justa pelo modelo (sem margem)"
         >
@@ -625,14 +625,14 @@ function SlipPanel(props: {
   return (
     <Card className="gap-0 overflow-hidden p-0">
       <div className="flex items-center justify-between px-4 pt-3 pb-2">
-        <span className="font-mono text-eyebrow uppercase tracking-eyebrow text-muted-foreground">
+        <span className="text-meta uppercase tracking-eyebrow text-muted-foreground">
           suas apostas{legs.length > 0 ? ` (${legs.length})` : ""}
         </span>
         {legs.length > 0 && (
           <button
             type="button"
             onClick={props.onClear}
-            className="font-mono text-eyebrow-xs uppercase tracking-label text-muted-fg-2 hover:text-foreground"
+            className="text-meta uppercase tracking-label text-muted-foreground hover:text-foreground"
           >
             limpar
           </button>
@@ -683,7 +683,7 @@ function SlipPanel(props: {
                 </button>
               </div>
               {leg.modelProbPct !== null && (
-                <span className="font-mono text-eyebrow-xs text-muted-fg-2">
+                <span className="font-mono tabular-nums text-meta text-muted-foreground">
                   chance {formatPct(leg.modelProbPct, { decimals: 1 })}
                   {leg.fairOdd !== null ? ` · odd justa ${formatOdd(leg.fairOdd)}` : ""}
                 </span>
@@ -691,7 +691,7 @@ function SlipPanel(props: {
               {mode === "simples" && (
                 <div className="grid grid-cols-2 gap-2">
                   <label className="flex flex-col gap-1">
-                    <span className="font-mono text-eyebrow-xs uppercase tracking-label text-muted-foreground">
+                    <span className="text-meta uppercase tracking-label text-muted-foreground">
                       {leg.oddFromReference ? "odd (referência)" : "odd que você pegou"}
                     </span>
                     <input
@@ -709,7 +709,7 @@ function SlipPanel(props: {
                     />
                   </label>
                     <label className="flex flex-col gap-1">
-                      <span className="font-mono text-eyebrow-xs uppercase tracking-label text-muted-foreground">
+                      <span className="text-meta uppercase tracking-label text-muted-foreground">
                         stake (u, opcional)
                       </span>
                       <input
@@ -724,7 +724,7 @@ function SlipPanel(props: {
                 </div>
               )}
               {mode === "simples" && leg.oddFromReference && (
-                <span className="text-meta leading-relaxed text-muted-fg-2 tracking-tight">
+                <span className="text-meta leading-relaxed text-muted-foreground tracking-tight">
                   Preenchida com a odd de referência. Troque pela que você pegou.
                 </span>
               )}
@@ -734,7 +734,7 @@ function SlipPanel(props: {
           {mode === "combinada" && (
             <div className="grid grid-cols-2 gap-2 rounded-md border border-dashed border-border px-3 py-2.5">
               <label className="flex flex-col gap-1">
-                <span className="font-mono text-eyebrow-xs uppercase tracking-label text-muted-foreground">
+                <span className="text-meta uppercase tracking-label text-muted-foreground">
                   odd da combinada
                 </span>
                 <input
@@ -747,7 +747,7 @@ function SlipPanel(props: {
                 />
               </label>
               <label className="flex flex-col gap-1">
-                <span className="font-mono text-eyebrow-xs uppercase tracking-label text-muted-foreground">
+                <span className="text-meta uppercase tracking-label text-muted-foreground">
                   stake (u, opcional)
                 </span>
                 <input
@@ -759,7 +759,7 @@ function SlipPanel(props: {
                   className={INPUT}
                 />
               </label>
-              <span className="col-span-2 text-meta leading-relaxed text-muted-fg-2 tracking-tight">
+              <span className="col-span-2 text-meta leading-relaxed text-muted-foreground tracking-tight">
                 A odd única da combinada, pras {legs.length} seleções juntas. As
                 seleções do mesmo jogo andam juntas, então a chance vem do placar, não
                 da multiplicação.
@@ -798,7 +798,7 @@ function SlipPanel(props: {
       )}
 
       <Separator />
-      <p className="px-4 py-3 text-meta leading-relaxed text-muted-fg-2 tracking-tight">
+      <p className="px-4 py-3 text-meta leading-relaxed text-muted-foreground tracking-tight">
         {RISK_DISCLAIMER_PT_BR}
       </p>
     </Card>
@@ -823,7 +823,7 @@ function ModeButton({
       disabled={disabled}
       onClick={onClick}
       className={cn(
-        "rounded-sm px-3 py-1 font-mono text-eyebrow uppercase tracking-label transition-colors focus-visible:outline-none focus-visible:ring-[3px] focus-visible:ring-ring/50 disabled:opacity-40",
+        "rounded-sm px-3 py-1 text-meta uppercase tracking-label transition-colors focus-visible:outline-none focus-visible:ring-[3px] focus-visible:ring-ring/50 disabled:opacity-40",
         active ? "bg-foreground text-background" : "text-muted-foreground hover:text-foreground",
       )}
     >
@@ -837,7 +837,7 @@ function ModeButton({
 function Evaluation({ view, registered }: { view: SlipEvaluationView; registered: number }) {
   return (
     <div className="flex flex-col gap-3 px-4 py-3" aria-live="polite">
-      <span className="font-mono text-eyebrow uppercase tracking-eyebrow text-muted-foreground">
+      <span className="text-meta uppercase tracking-eyebrow text-muted-foreground">
         {registered === 1 ? "aposta registrada" : `${registered} apostas registradas`} ·
         nossa avaliação
       </span>
@@ -845,8 +845,8 @@ function Evaluation({ view, registered }: { view: SlipEvaluationView; registered
         <LegEvaluation key={i} leg={leg} />
       ))}
       {view.combo && <ComboEvaluation combo={view.combo} />}
-      <p className="text-meta leading-relaxed text-muted-fg-2 tracking-tight">
-        {view.stakeRuleNote} {view.modelCaveat} Ficam salvas em Apostas e são conferidas
+      <p className="text-meta leading-relaxed text-muted-foreground tracking-tight">
+        {view.stakeRuleNote} {view.modelCaveat} Ficam salvas em Suas apostas e são conferidas
         sozinhas depois do jogo.
       </p>
     </div>
@@ -857,7 +857,7 @@ function Row({ label, value }: { label: string; value: string | null }) {
   if (value === null) return null;
   return (
     <div className="flex items-baseline justify-between gap-2">
-      <span className="font-mono text-eyebrow-xs uppercase tracking-label text-muted-foreground">
+      <span className="text-meta uppercase tracking-label text-muted-foreground">
         {label}
       </span>
       <span className="font-mono text-body-sm font-medium tabular-nums tracking-tight text-foreground">
@@ -875,7 +875,7 @@ function LegEvaluation({ leg }: { leg: EvaluatedLegView }) {
           {leg.label}
         </span>
         {leg.sourceLabel && (
-          <span className="shrink-0 font-mono text-eyebrow-xs text-muted-fg-2">
+          <span className="shrink-0 text-meta text-muted-foreground">
             {leg.sourceLabel}
           </span>
         )}
@@ -888,10 +888,10 @@ function LegEvaluation({ leg }: { leg: EvaluatedLegView }) {
       <Row label="sua odd" value={leg.userOdd} />
       <Row label="retorno esperado" value={leg.ev} />
       <Row label="break-even" value={leg.breakEven} />
-      <Row label="edge do modelo" value={leg.edge} />
+      <Row label="vantagem do modelo" value={leg.edge} />
       {leg.edgeNote && leg.status === "graded" && (
-        <span className="text-meta leading-relaxed text-muted-fg-2 tracking-tight">
-          edge: {leg.edgeNote}
+        <span className="text-meta leading-relaxed text-muted-foreground tracking-tight">
+          vantagem: {leg.edgeNote}
         </span>
       )}
       <Row label="stake sugerido" value={leg.suggestedStake} />
@@ -915,7 +915,7 @@ function ComboEvaluation({ combo }: { combo: EvaluatedComboView }) {
         <span className="text-body-sm font-medium tracking-tight text-foreground">
           Combinada (todas juntas)
         </span>
-        <span className="shrink-0 font-mono text-eyebrow-xs text-muted-fg-2">
+        <span className="shrink-0 text-meta text-muted-foreground">
           {combo.sourceLabel}
         </span>
       </div>
