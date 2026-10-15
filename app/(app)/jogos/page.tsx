@@ -111,6 +111,10 @@ export default async function JogosPage({ searchParams }: PageProps) {
   // exibição (#1) é separado — só formata strings, não decide instantes.
   const now = new Date();
 
+  // Fuso de exibição do usuário (#1): formata kickoff/datas e define os dias civis
+  // do intervalo `custom`, os mesmos dos títulos da lista agrupada por dia.
+  const timeZone = await getRequestTimeZone();
+
   // Range escolhido pelo usuário (5/14 dias, competição ou custom). Nunca lança
   // — input inválido cai pro default today5.
   const range = parseRangeParams(
@@ -120,6 +124,7 @@ export default async function JogosPage({ searchParams }: PageProps) {
       to: toParam,
     },
     now,
+    timeZone,
   );
 
   // Middleware garante sessão; redirect defensivo caso o matcher mude.
@@ -173,8 +178,6 @@ export default async function JogosPage({ searchParams }: PageProps) {
       }),
     ]);
 
-  // Fuso de exibição do usuário (#1) — formata kickoff/datas no fuso do navegador.
-  const timeZone = await getRequestTimeZone();
   // Linha com o dia e a hora no fuso do usuário (#577): a lista agrupa por dia.
   const matches: MatchListRowView[] = dbMatches.map((m) => {
     const snapshot = snapshotByMatch.get(m.id);
@@ -253,6 +256,11 @@ type HomeContentProps = {
 
 // Props compartilhadas pra preservar o range ao trocar de liga no seletor.
 function rangeNavProps(range: ResolvedRange) {
+  // custom: os dias da URL. `from`/`to` são instantes no fuso do usuário e o
+  // toISOString deles daria o dia UTC (ex.: 26/10 para o fim de 25/10 em BRT).
+  if (range.days) {
+    return { preset: range.preset, from: range.days.from, to: range.days.to };
+  }
   const from = range.from
     ? range.from.toISOString().slice(0, 10)
     : undefined;

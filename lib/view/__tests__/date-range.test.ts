@@ -166,6 +166,99 @@ describe("parseRangeParams", () => {
   });
 });
 
+describe("parseRangeParams custom no fuso do usuário (#577)", () => {
+  const SP = "America/Sao_Paulo";
+  const LONDON = "Europe/London";
+
+  it("São Paulo: 18/10–25/10 cobre [18/10 00:00, 26/10 00:00) BRT", () => {
+    const r = parseRangeParams(
+      { preset: "custom", from: "2026-10-18", to: "2026-10-25" },
+      NOW,
+      SP,
+    );
+    expect(r.from?.toISOString()).toBe("2026-10-18T03:00:00.000Z");
+    expect(r.to?.toISOString()).toBe("2026-10-26T02:59:59.999Z");
+    expect(r.days).toEqual({ from: "2026-10-18", to: "2026-10-25" });
+  });
+
+  it("São Paulo: o jogo de 17/10 21:30 fica fora e o de 25/10 21:00 entra", () => {
+    const r = parseRangeParams(
+      { preset: "custom", from: "2026-10-18", to: "2026-10-25" },
+      NOW,
+      SP,
+    );
+    const inRange = (iso: string) => {
+      const t = new Date(iso).getTime();
+      return t >= r.from!.getTime() && t <= r.to!.getTime();
+    };
+    expect(inRange("2026-10-18T00:30:00.000Z")).toBe(false); // 17/10 21:30 BRT
+    expect(inRange("2026-10-18T03:00:00.000Z")).toBe(true); // 18/10 00:00 BRT
+    expect(inRange("2026-10-26T00:00:00.000Z")).toBe(true); // 25/10 21:00 BRT
+    expect(inRange("2026-10-26T03:00:00.000Z")).toBe(false); // 26/10 00:00 BRT
+  });
+
+  it("dia invertido troca as pontas também no fuso", () => {
+    const r = parseRangeParams(
+      { preset: "custom", from: "2026-10-25", to: "2026-10-18" },
+      NOW,
+      SP,
+    );
+    expect(r.from?.toISOString()).toBe("2026-10-18T03:00:00.000Z");
+    expect(r.days).toEqual({ from: "2026-10-18", to: "2026-10-25" });
+  });
+
+  it("Londres, volta do horário (25/10/2026): o dia tem 25h", () => {
+    const r = parseRangeParams(
+      { preset: "custom", from: "2026-10-25", to: "2026-10-25" },
+      NOW,
+      LONDON,
+    );
+    expect(r.from?.toISOString()).toBe("2026-10-24T23:00:00.000Z"); // 00:00 BST
+    expect(r.to?.toISOString()).toBe("2026-10-25T23:59:59.999Z"); // 23:59:59 GMT
+    expect(r.to!.getTime() + 1 - r.from!.getTime()).toBe(25 * HOUR_MS);
+  });
+
+  it("Londres, ida do horário (29/03/2026): o dia tem 23h", () => {
+    const r = parseRangeParams(
+      { preset: "custom", from: "2026-03-29", to: "2026-03-29" },
+      NOW,
+      LONDON,
+    );
+    expect(r.from?.toISOString()).toBe("2026-03-29T00:00:00.000Z"); // 00:00 GMT
+    expect(r.to?.toISOString()).toBe("2026-03-29T22:59:59.999Z"); // 23:59:59 BST
+    expect(r.to!.getTime() + 1 - r.from!.getTime()).toBe(23 * HOUR_MS);
+  });
+
+  it("troca de horário na meia-noite (São Paulo, 04/11/2018): começa às 01:00 local", () => {
+    // 00:00 não existiu nesse dia (o relógio pulou de 23:59:59 para 01:00).
+    const r = parseRangeParams(
+      { preset: "custom", from: "2018-11-04", to: "2018-11-04" },
+      NOW,
+      SP,
+    );
+    expect(r.from?.toISOString()).toBe("2018-11-04T03:00:00.000Z");
+    expect(r.to?.toISOString()).toBe("2018-11-05T01:59:59.999Z");
+  });
+
+  it("fuso adiante do UTC (Tóquio): o dia começa na véspera em UTC", () => {
+    const r = parseRangeParams(
+      { preset: "custom", from: "2026-10-18", to: "2026-10-18" },
+      NOW,
+      "Asia/Tokyo",
+    );
+    expect(r.from?.toISOString()).toBe("2026-10-17T15:00:00.000Z");
+    expect(r.to?.toISOString()).toBe("2026-10-18T14:59:59.999Z");
+  });
+
+  it("as presets não mudam com o fuso", () => {
+    for (const preset of ["today5", "today14", "season"]) {
+      expect(parseRangeParams({ preset }, NOW, SP)).toEqual(
+        parseRangeParams({ preset }, NOW),
+      );
+    }
+  });
+});
+
 describe("IN_PROGRESS_WINDOW_MS (#385)", () => {
   it("is exported and equals 3 hours in ms", () => {
     expect(IN_PROGRESS_WINDOW_MS).toBe(3 * 60 * 60 * 1000);
