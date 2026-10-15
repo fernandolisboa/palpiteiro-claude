@@ -408,5 +408,6 @@ export async function getRecentPredictedMatchesByUser(
         )
       )
     )
-    .orderBy(desc(predictions.createdAt), desc(predictions.id));
+    // Mesmo desempate da primeira query (matchId desc), depois a própria predição.
+    .orderBy(desc(predictions.createdAt), desc(predictions.matchId), desc(predictions.id));
 }
