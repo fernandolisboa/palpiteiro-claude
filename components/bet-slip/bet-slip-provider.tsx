@@ -307,6 +307,9 @@ export function BetSlipProvider({
     ...(parseMeta
       ? { rawInput: parseMeta.rawInput, parseAiCallId: parseMeta.parseAiCallId }
       : {}),
+    // A tabela desta página está no modo ao vivo? A action recusa registro ao vivo de
+    // uma página aberta antes do apito (odd de pré-jogo pré-preenchida).
+    gridLive: grid?.live != null,
   });
 
   const value: BetSlipContextValue = {

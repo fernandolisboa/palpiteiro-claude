@@ -112,8 +112,10 @@ function form(slip: unknown): FormData {
   return fd;
 }
 
+// A tabela ao vivo manda `gridLive: true`; a de pré-jogo, false (bet-slip-provider).
+let gridLive = false;
 function slip(over: Record<string, unknown> = {}) {
-  return { matchId: MATCH_ID, mode: "simples", legs: [HOME], ...over };
+  return { matchId: MATCH_ID, mode: "simples", legs: [HOME], gridLive, ...over };
 }
 
 function inserted(): NewBetSlip[] {
@@ -123,6 +125,7 @@ function inserted(): NewBetSlip[] {
 
 beforeEach(() => {
   vi.clearAllMocks();
+  gridLive = false;
   aiCallRows.length = 0;
   mockAuth.mockResolvedValue(USER_SESSION);
   mockGetAccess.mockResolvedValue({ role: "user", allowed: true } as Awaited<
@@ -532,6 +535,7 @@ function liveModel() {
 
 describe("registerBetSlip — ao vivo", () => {
   beforeEach(() => {
+    gridLive = true;
     mockGetMatchById.mockResolvedValue(match("live", LIVE_KICKOFF()));
     mockInPlayState.mockResolvedValue(liveState());
     mockInPlayModel.mockResolvedValue(liveModel());
@@ -679,6 +683,31 @@ describe("registerBetSlip — ao vivo", () => {
     expect(res).toMatchObject({ ok: false, kind: "nao-analisavel" });
     if (res.ok) return;
     expect(res.error).toContain("só antes do apito inicial");
+    expect(mockInPlayState).not.toHaveBeenCalled();
+  });
+
+  it("página aberta antes do apito (tabela de pré-jogo) → recusa, pede pra atualizar", async () => {
+    for (const payload of [slip({ gridLive: false }), slip({ gridLive: undefined })]) {
+      mockInsert.mockClear();
+      const res = await registerBetSlip(
+        null,
+        form({ ...payload, legs: [{ ...HOME, userOdd: "1.80" }] })
+      );
+      expect(res).toEqual({
+        ok: false,
+        error: "O jogo começou. Atualize a página para registrar ao vivo.",
+        kind: "nao-analisavel",
+      });
+      expect(mockInsert).not.toHaveBeenCalled();
+    }
+  });
+
+  it("tabela ao vivo e jogo ainda antes do apito no servidor: registra como pré-jogo", async () => {
+    mockGetMatchById.mockResolvedValue(match());
+    const res = await registerBetSlip(null, form(slip({ gridLive: true })));
+    expect(res.ok).toBe(true);
+    const [s] = inserted();
+    expect(s.isLive).toBe(false);
     expect(mockInPlayState).not.toHaveBeenCalled();
   });
 

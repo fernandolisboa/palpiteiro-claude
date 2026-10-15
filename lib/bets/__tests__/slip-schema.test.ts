@@ -57,6 +57,7 @@ describe("parseSlipPayload — payloads válidos", () => {
       comboStakeUnits: null,
       rawInput: null,
       parseAiCallId: null,
+      gridLive: false,
     });
   });
 
@@ -173,6 +174,13 @@ describe("parseSlipPayload — envelope fail-closed", () => {
         payload({ mode: "combinada", legs: [HOME, OVER], comboUserOdd: "1000" })
       )
     ).toBe("payload");
+  });
+
+  it("gridLive: booleano opcional (ausente = false); outro tipo → payload", () => {
+    expect(ok(payload()).gridLive).toBe(false);
+    expect(ok(payload({ gridLive: true })).gridLive).toBe(true);
+    expect(ok(payload({ gridLive: false })).gridLive).toBe(false);
+    expect(err(payload({ gridLive: "true" }))).toBe("payload");
   });
 
   it("odd combinada ≤ 1 → payload", () => {

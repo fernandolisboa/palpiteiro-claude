@@ -55,6 +55,11 @@ import { capabilityGateMessage } from "./not-analyzable";
 const LIVE_UNAVAILABLE_COPY =
   "Placar ao vivo indisponível agora. Tente em um minuto.";
 
+// Página aberta antes do apito: a tabela pré-preencheu a odd de pré-jogo e não sabe o
+// placar. Registrar ao vivo dali gravaria a odd de antes do jogo como a que a pessoa pegou.
+const STALE_GRID_COPY =
+  "O jogo começou. Atualize a página para registrar ao vivo.";
+
 export type RegisterBetSlipResult =
   | { ok: true; registered: number; evaluation: SlipEvaluationView }
   | {
@@ -162,6 +167,11 @@ export async function registerBetSlip(
   const liveState = phase.kind === "pre" ? null : live.state;
   if (phase.kind !== "pre" && (liveState === null || liveState.score === null)) {
     return { ok: false, error: LIVE_UNAVAILABLE_COPY, kind: "nao-analisavel" };
+  }
+  // O contrário (tabela ao vivo, jogo de volta ao pré-jogo no servidor) é inofensivo: o
+  // caminho de pré-jogo segue igual.
+  if (liveState !== null && !slip.gridLive) {
+    return { ok: false, error: STALE_GRID_COPY, kind: "nao-analisavel" };
   }
   if (liveState?.score) {
     const refusal = liveSlipRefusal(slip.legs, liveState.score);
