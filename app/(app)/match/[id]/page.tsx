@@ -43,6 +43,7 @@ import {
 } from "@/lib/db/queries/ai-config";
 import { getInPlayState, type InPlayState } from "@/lib/live/in-play-state";
 import { isTerminalStatusShort } from "@/lib/live/phase";
+import { poolWindowOpen } from "@/lib/pools/pool-state";
 import { latestAnalysisByMarket } from "@/lib/bets/analysis-probs";
 import { resolveInPlaySlipModel, resolveSlipModel } from "@/lib/bets/slip-model";
 import { getReferenceOddsForMatch } from "@/lib/db/queries/reference-odds";
@@ -322,8 +323,13 @@ export default async function MatchPage({ params, searchParams }: PageProps) {
   // O que a página libera agora, num lugar só (#576), por capacidade (ADR 0060).
   // `modelReady: false` fecha a análise e o "Seu palpite" EM JOGO: o backend ao vivo
   // deles (predictInPlay, user_palpite ao vivo) é o PR D do #580. Antes do apito não
-  // muda nada (o pré-jogo libera tudo). O bolão ao vivo é o PR C (sem poolWindowOpen).
-  const rawCaps = matchCapabilities(phase, { liveMode, modelReady: false });
+  // muda nada (o pré-jogo libera tudo). O atalho do bolão segue a janela do bolão ao vivo
+  // (até os 15', `poolWindowOpen`), a mesma regra de /bolao e de createFriendPool.
+  const rawCaps = matchCapabilities(phase, {
+    liveMode,
+    modelReady: false,
+    poolWindowOpen: poolWindowOpen(match, inPlayState, now, { liveMode }),
+  });
   // Registro ao vivo (#580, §9.2): só com o placar do estado (a tabela precisa dele pra
   // condicionar o modelo e marcar o que já está decidido; a action recusa sem ele).
   const liveScore =
@@ -720,8 +726,8 @@ function NotAnalyzableNotice({
   );
 }
 
-// Atalho pro bolão entre amigos (#567) com o jogo já escolhido. Só antes do apito: as
-// apostas do bolão fecham no início do jogo.
+// Atalho pro bolão entre amigos (#567) com o jogo já escolhido. Aparece enquanto a janela
+// do bolão estiver aberta: antes do apito e, no modo ao vivo, até os 15' de jogo.
 function PoolLink({ matchId }: { matchId: string }) {
   return (
     <Link
