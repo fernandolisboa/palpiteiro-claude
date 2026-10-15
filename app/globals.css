@@ -132,7 +132,8 @@
   --surface-3: oklch(0.94 0 0);
   --border-subtle: oklch(0.94 0 0);
   --border-strong: oklch(0.78 0 0);
-  --muted-fg-2: oklch(0.55 0 0);
+  /* ADR 0056: 5,5:1 sobre branco, 5,05:1 sobre surface-2. Só texto ≥12px. */
+  --muted-fg-2: oklch(0.52 0 0);
 
   /* Cobalt family */
   --accent-fg: oklch(0.42 0.13 258);
@@ -211,7 +212,8 @@
   --surface-3: oklch(0.265 0 0);
   --border-subtle: oklch(0.225 0 0);
   --border-strong: oklch(0.36 0 0);
-  --muted-fg-2: oklch(0.48 0 0);
+  /* ADR 0056: 5,4:1 sobre o fundo, 5,0:1 sobre o card. Só texto ≥12px. */
+  --muted-fg-2: oklch(0.62 0 0);
 
   /* Cobalt family */
   --accent-fg: oklch(0.74 0.12 258);
