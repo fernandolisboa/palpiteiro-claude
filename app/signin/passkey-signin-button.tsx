@@ -4,7 +4,6 @@ import { useState } from "react";
 import { signIn } from "next-auth/webauthn";
 
 import { Button } from "@/components/ui/button";
-import { Input } from "@/components/ui/input";
 
 /**
  * Botão de login por passkey (#263). A cerimônia WebAuthn roda no BROWSER —
@@ -13,20 +12,35 @@ import { Input } from "@/components/ui/input";
  * Por isso é client component: a server action `signIn("passkey")` de `@/auth`
  * NÃO dispara a cerimônia (passo load-bearing do plano).
  *
- * O `getUserInfo` default do provider localiza o usuário pelo param `email`, então
- * o campo de e-mail é o caminho sólido sem depender de conditional UI/autofill.
+ * O `getUserInfo` default do provider localiza o usuário pelo param `email`: e-mail
+ * com passkey → authenticate; e-mail novo → register. O campo é o mesmo do link por
+ * e-mail (#579): o wrapper detém o estado e passa `email`. O clique normaliza igual ao
+ * `sendMagicLink` (trim + minúsculas): o adapter compara o e-mail sensível a caixa e
+ * grava em minúsculas, então "Fulano@x.com" sem normalizar cairia no `register` e
+ * criaria uma segunda conta.
+ *
  * `redirect: false` é o que permite mostrar erro inline (whitelist, e-mail sem
  * passkey, cerimônia abortada) sem sair da página — com `redirect: true` o helper
  * faz `window.location.href` e não devolve o erro.
- */
-/**
+ *
+ * `type="button"`: vive dentro do `<form>` do link e não pode submetê-lo. O Enter no
+ * campo usa o primeiro submit do form ("Enviar link de acesso"), que vem antes deste
+ * botão e fica desabilitado enquanto o 18+ não está marcado.
+ *
  * `enabled` (#282): gate de maioridade do /signin. O wrapper passa
  * `canSubmit(accepted)`; enquanto o checkbox 18+ não estiver marcado, o botão
  * fica desabilitado junto das outras condições (`pending || !email`). Default
  * `true` pra não regredir um call-site sem o gate (defensivo — hoje só há um).
  */
-export function PasskeySignInButton({ enabled = true }: { enabled?: boolean }) {
-  const [email, setEmail] = useState("");
+export function PasskeySignInButton({
+  email,
+  enabled = true,
+  describedBy,
+}: {
+  email: string;
+  enabled?: boolean;
+  describedBy?: string;
+}) {
   const [pending, setPending] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
@@ -35,7 +49,7 @@ export function PasskeySignInButton({ enabled = true }: { enabled?: boolean }) {
     setError(null);
     try {
       const res = await signIn("passkey", {
-        email,
+        email: email.trim().toLowerCase(),
         redirect: false,
         redirectTo: "/jogos",
       });
@@ -63,24 +77,13 @@ export function PasskeySignInButton({ enabled = true }: { enabled?: boolean }) {
   }
 
   return (
-    <div className="flex flex-col gap-3">
-      <label className="flex flex-col gap-1.5">
-        <span className="text-muted-foreground text-meta tracking-label uppercase">
-          e-mail (passkey)
-        </span>
-        <Input
-          type="email"
-          value={email}
-          onChange={(e) => setEmail(e.target.value)}
-          autoComplete="username webauthn"
-          placeholder="voce@exemplo.com"
-        />
-      </label>
+    <>
       <Button
         type="button"
         variant="outline"
         className="w-full"
-        disabled={pending || !email || !enabled}
+        disabled={pending || !email.trim() || !enabled}
+        aria-describedby={describedBy}
         onClick={onClick}
       >
         {pending ? "Verificando…" : "Entrar com passkey"}
@@ -88,6 +91,6 @@ export function PasskeySignInButton({ enabled = true }: { enabled?: boolean }) {
       {error && (
         <p className="text-destructive text-body-sm tracking-tight">{error}</p>
       )}
-    </div>
+    </>
   );
 }
