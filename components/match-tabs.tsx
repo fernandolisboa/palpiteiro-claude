@@ -70,13 +70,14 @@ export function MatchTabs({ initialTab, registerBets, mercados, seuPalpite, dado
     return () => window.removeEventListener(TOUR_TAB_EVENT, onTourTab);
   }, []);
 
-  // Painel com scroll-mt-28: o scrollIntoView (tour, "Ler análise completa") não para
-  // com o topo debaixo do cabeçalho (h-14) + a barra de abas fixa.
-  const panel = "scroll-mt-28";
+  // O scrollIntoView (tour, "Ler análise completa") não para com o topo debaixo do
+  // cabeçalho (h-14 + borda = 57px) + a barra de abas fixa (py-2 + lista p-1 com abas
+  // h-9 = 60px): 117px, e a margem de 120px folga 3px.
+  const panel = "scroll-mt-[7.5rem]";
 
   return (
     <Tabs value={tab} onValueChange={select} activationMode="automatic" className="gap-4">
-      <div className="sticky top-14 z-30 -mx-5 bg-background/95 px-5 py-2 backdrop-blur supports-[backdrop-filter]:bg-background/80 lg:mx-0 lg:px-0">
+      <div className="sticky top-[57px] z-30 -mx-5 bg-background/95 px-5 py-2 backdrop-blur supports-[backdrop-filter]:bg-background/80 lg:mx-0 lg:px-0">
         <TabsList aria-label="Seções do jogo" className="grid w-full grid-cols-3">
           {MATCH_TAB_IDS.map((id) => (
             <TabsTrigger key={id} value={id}>
