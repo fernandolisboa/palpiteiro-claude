@@ -8,6 +8,7 @@ import { TOUR_TAB_EVENT } from "@/lib/tour/steps";
 import type { MatchTab } from "@/lib/view/match-tabs";
 
 const slots = {
+  registerBets: true,
   mercados: <p>tabela</p>,
   seuPalpite: <p>seu palpite aqui</p>,
   dados: <p>forma e h2h</p>,
@@ -36,6 +37,20 @@ describe("MatchTabs — SSR", () => {
     expect(selected?.textContent).toBe(
       { mercados: "Mercados", "seu-palpite": "Seu palpite", dados: "Dados" }[tab],
     );
+  });
+});
+
+describe("MatchTabs — jogo só leitura", () => {
+  it("sem registro de apostas: Mercados e Seu palpite sem alvo do tour; Dados mantém", () => {
+    const div = document.createElement("div");
+    div.innerHTML = renderToStaticMarkup(
+      <MatchTabs {...slots} registerBets={false} initialTab="mercados" />,
+    );
+    expect(div.querySelector('[data-tour="mercados"]')).toBeNull();
+    expect(div.querySelector('[data-tour="seu-palpite"]')).toBeNull();
+    expect(div.querySelector('[data-tour="match-stats"]')).not.toBeNull();
+    // As três abas seguem lá.
+    expect(div.querySelectorAll('[role="tabpanel"]')).toHaveLength(3);
   });
 });
 

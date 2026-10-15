@@ -23,6 +23,9 @@ import {
 // dinâmica e refaria auth, banco e o refresh de odds; o Voltar sai do jogo).
 // O tour troca de aba pelo evento TOUR_TAB_EVENT, disparado num clique ou timer (fora de
 // efeito): o flushSync deixa o painel visível antes de o tour procurar o alvo.
+// Os alvos do tour de Mercados e Seu palpite só existem com o registro de apostas
+// (`registerBets`): os dois passos falam dos botões e do "Seu palpite" interativo, e num
+// jogo só leitura (começou, adiado, encerrado) são pulados, como antes das abas.
 
 function writeTabToUrl(tab: MatchTab) {
   const url = new URL(window.location.href);
@@ -40,12 +43,14 @@ const TAB_LABEL: Record<MatchTab, string> = {
 
 type Props = {
   initialTab: MatchTab;
+  /** matchCapabilities.registerBets: a tabela tem botões e o "Seu palpite" está aberto. */
+  registerBets: boolean;
   mercados: ReactNode;
   seuPalpite: ReactNode;
   dados: ReactNode;
 };
 
-export function MatchTabs({ initialTab, mercados, seuPalpite, dados }: Props) {
+export function MatchTabs({ initialTab, registerBets, mercados, seuPalpite, dados }: Props) {
   const [tab, setTab] = useState<MatchTab>(initialTab);
 
   const select = useCallback((value: string) => {
@@ -84,7 +89,7 @@ export function MatchTabs({ initialTab, mercados, seuPalpite, dados }: Props) {
         value="mercados"
         forceMount
         hidden={tab !== "mercados"}
-        data-tour="mercados"
+        data-tour={registerBets ? "mercados" : undefined}
         className={panel}
       >
         {mercados}
@@ -93,7 +98,7 @@ export function MatchTabs({ initialTab, mercados, seuPalpite, dados }: Props) {
         value="seu-palpite"
         forceMount
         hidden={tab !== "seu-palpite"}
-        data-tour="seu-palpite"
+        data-tour={registerBets ? "seu-palpite" : undefined}
         className={panel}
       >
         {seuPalpite}

@@ -281,22 +281,37 @@ describe("GuidedTour", () => {
       expect(panel("match-stats").hidden).toBe(true);
     });
 
-    it("com o MatchTabs de verdade: troca a aba sem aviso de flushSync", () => {
-      const errors = vi.spyOn(console, "error").mockImplementation(() => {});
-      document.body.insertAdjacentHTML("afterbegin", '<form data-tour="palpite"></form>');
+    // MatchTabs de verdade num root próprio, desmontado no afterEach (mesmo se o teste
+    // falhar no meio).
+    const tabsCleanups: (() => void)[] = [];
+    afterEach(() => {
+      for (const cleanup of tabsCleanups.splice(0)) cleanup();
+    });
+    function mountMatchTabs(registerBets: boolean) {
       const tabsHost = document.createElement("div");
       document.body.appendChild(tabsHost);
       const tabsRoot = createRoot(tabsHost);
+      tabsCleanups.push(() => {
+        act(() => tabsRoot.unmount());
+        tabsHost.remove();
+      });
       act(() =>
         tabsRoot.render(
           <MatchTabs
             initialTab="mercados"
+            registerBets={registerBets}
             mercados={<p>tabela</p>}
             seuPalpite={<p>seu palpite</p>}
             dados={<p>dados</p>}
           />,
         ),
       );
+    }
+
+    it("com o MatchTabs de verdade: troca a aba sem aviso de flushSync", () => {
+      const errors = vi.spyOn(console, "error").mockImplementation(() => {});
+      document.body.insertAdjacentHTML("afterbegin", '<form data-tour="palpite"></form>');
+      mountMatchTabs(true);
       mount({ chapter: "jogo", serverState: "jogos" });
       for (let i = 0; i < 3; i++) act(() => button("Próximo").click());
       expect(dialog()?.textContent).toContain("Números do jogo");
@@ -310,8 +325,24 @@ describe("GuidedTour", () => {
         String(args[0]).includes("flushSync"),
       );
       expect(flushWarnings).toEqual([]);
-      act(() => tabsRoot.unmount());
-      tabsHost.remove();
+    });
+
+    it("jogo só leitura: pula Mercados e Seu palpite (falam de registrar), mantém Dados", () => {
+      document.body.insertAdjacentHTML("afterbegin", '<form data-tour="palpite"></form>');
+      mountMatchTabs(false);
+      mount({ chapter: "jogo", serverState: "jogos" });
+      expect(dialog()?.textContent).toContain("Palpite da IA");
+      // palpite, dados, Pronto.
+      expect(dialog()?.textContent).toContain("1 de 3");
+      act(() => button("Próximo").click());
+      expect(dialog()?.textContent).toContain("Números do jogo");
+      expect(dialog()?.textContent).toContain("2 de 3");
+      expect(panel("match-stats").hidden).toBe(false);
+      act(() => button("Próximo").click());
+      expect(dialog()?.textContent).toContain("Pronto");
+      expect(saveTourState).toHaveBeenCalledWith("done");
+      // Nenhum passo falou de registrar aposta.
+      expect(document.body.textContent).not.toContain("Registrar apostas");
     });
 
     it("passo sem aba não dispara o evento", () => {

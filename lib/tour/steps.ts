@@ -49,7 +49,8 @@ export type TourStep = {
   /**
    * Aba da página do jogo onde o alvo mora (#576). O tour abre a aba (TOUR_TAB_EVENT)
    * antes do spotlight; o alvo conta como disponível se existe no DOM, mesmo escondido
-   * na aba inativa.
+   * na aba inativa. Num jogo só leitura o MatchTabs não põe os alvos de Mercados e Seu
+   * palpite (os passos falam de registrar), e esses passos são pulados.
    */
   tab?: MatchTab;
 };

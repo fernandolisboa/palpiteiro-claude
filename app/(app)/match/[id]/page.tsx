@@ -547,6 +547,7 @@ function MatchLayout({
                 Suspense. */}
             <MatchTabs
               initialTab={initialTab}
+              registerBets={registerBets}
               mercados={
                 <Suspense fallback={<MarketTableSkeleton />}>
                   <MarketTableSection grid={betGrid} />
