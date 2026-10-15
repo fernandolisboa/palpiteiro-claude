@@ -37,9 +37,8 @@ export function FullAnalysis({
   if (sections.length === 0) return null;
   return (
     <div className="flex flex-col gap-4">
-      <h2 className="sr-only">Análise completa</h2>
       {userContext && <AnalysisUserContext view={userContext} />}
-      <p className="flex items-center gap-1.5 text-meta leading-snug tracking-tight text-muted-foreground">
+      <p className="text-meta text-muted-foreground flex items-center gap-1.5 leading-snug tracking-tight">
         <Info className="size-3 shrink-0" aria-hidden="true" />
         {ANALYSIS_RISK_DISCLAIMER}
       </p>

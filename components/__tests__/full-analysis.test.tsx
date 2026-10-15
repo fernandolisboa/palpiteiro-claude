@@ -41,7 +41,11 @@ function view(selectionLabel: string, rationale: string): AnalysisView {
   } as AnalysisView;
 }
 
-const item = (marketKey: string, marketLabel: string, rationale: string): MarketAnalysisSectionItem => ({
+const item = (
+  marketKey: string,
+  marketLabel: string,
+  rationale: string
+): MarketAnalysisSectionItem => ({
   id: `${marketKey}-id`,
   marketKey,
   marketLabel,
@@ -58,8 +62,8 @@ describe("FullAnalysis (#576, ADR 0057)", () => {
   it("sem análise não renderiza nada", () => {
     expect(
       renderToStaticMarkup(
-        <FullAnalysis sections={[]} previousAnalyses={[]} userContext={null} />,
-      ),
+        <FullAnalysis sections={[]} previousAnalyses={[]} userContext={null} />
+      )
     ).toBe("");
   });
 
@@ -76,13 +80,14 @@ describe("FullAnalysis (#576, ADR 0057)", () => {
           },
         ]}
         userContext={null}
-      />,
+      />
     );
     expect(html.split(ANALYSIS_RISK_DISCLAIMER).length - 1).toBe(1);
-    expect(html.indexOf(ANALYSIS_RISK_DISCLAIMER)).toBeLessThan(html.indexOf("<h3"));
+    expect(html.indexOf(ANALYSIS_RISK_DISCLAIMER)).toBeLessThan(
+      html.indexOf("<h3")
+    );
     expect(html).toContain("RACIONAL_1");
     expect(html).toContain("RACIONAL_2");
-    expect(html).toContain('<h2 class="sr-only">Análise completa</h2>');
     // Análises anteriores: a única divulgação, no fim.
     expect(html).toContain("análises anteriores");
   });

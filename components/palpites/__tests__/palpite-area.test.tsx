@@ -4,7 +4,10 @@ import { renderToStaticMarkup } from "react-dom/server";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 
 vi.mock("@/app/actions/predictions", () => ({ runPalpiteHero: vi.fn() }));
-vi.mock("@/app/actions/share", () => ({ shareSet: vi.fn(), unshareSet: vi.fn() }));
+vi.mock("@/app/actions/share", () => ({
+  shareSet: vi.fn(),
+  unshareSet: vi.fn(),
+}));
 
 import { PalpiteArea } from "@/components/palpites/palpite-area";
 import type { PalpiteHeadlineView } from "@/lib/view/palpites-headline";
@@ -35,7 +38,6 @@ function props(over: Partial<Props> = {}): Props {
     sharedAt: null,
     hasAnalyses: true,
     contextEnabled: false,
-    hasAnalysis: true,
     analysis: SLOT,
     ...over,
   };
@@ -44,7 +46,9 @@ function props(over: Partial<Props> = {}): Props {
 let container: HTMLDivElement;
 let root: Root;
 beforeEach(() => {
-  (globalThis as { IS_REACT_ACT_ENVIRONMENT?: boolean }).IS_REACT_ACT_ENVIRONMENT = true;
+  (
+    globalThis as { IS_REACT_ACT_ENVIRONMENT?: boolean }
+  ).IS_REACT_ACT_ENVIRONMENT = true;
   container = document.createElement("div");
   document.body.appendChild(container);
   root = createRoot(container);
@@ -56,21 +60,21 @@ afterEach(async () => {
 
 const toggle = () =>
   Array.from(container.querySelectorAll("button")).find((b) =>
-    /análise completa/.test(b.textContent ?? ""),
+    /análise completa/.test(b.textContent ?? "")
   ) ?? null;
 
 describe("PalpiteArea — Ler análise completa (#576)", () => {
   it("botão só com palpite ou análise", () => {
     const none = renderToStaticMarkup(
-      <PalpiteArea {...props({ heroPalpite: null, hasAnalysis: false })} />,
+      <PalpiteArea {...props({ heroPalpite: null, hasAnalyses: false })} />
     );
     expect(none).not.toContain("Ler análise completa");
     expect(none).not.toContain('data-testid="slot"');
     expect(
-      renderToStaticMarkup(<PalpiteArea {...props({ hasAnalysis: false })} />),
+      renderToStaticMarkup(<PalpiteArea {...props({ hasAnalyses: false })} />)
     ).toContain("Ler análise completa");
     expect(
-      renderToStaticMarkup(<PalpiteArea {...props({ heroPalpite: null })} />),
+      renderToStaticMarkup(<PalpiteArea {...props({ heroPalpite: null })} />)
     ).toContain("Ler análise completa");
   });
 
@@ -82,6 +86,11 @@ describe("PalpiteArea — Ler análise completa (#576)", () => {
     expect(button.getAttribute("aria-controls")).toBe("analise-completa");
     expect(region.hidden).toBe(true);
     expect(region.getAttribute("role")).toBe("region");
+    // O nome da região vem do h2 dentro dela (sempre presente, mesmo sem análise).
+    const titleId = region.getAttribute("aria-labelledby")!;
+    expect(region.querySelector(`h2#${titleId}`)?.textContent).toBe(
+      "Análise completa"
+    );
     // O slot fica no DOM mesmo fechado (busca, leitor de tela ao abrir).
     expect(region.querySelector('[data-testid="slot"]')).not.toBeNull();
     expect(container.textContent).not.toContain("a partir de:");
@@ -102,6 +111,8 @@ describe("PalpiteArea — Ler análise completa (#576)", () => {
     expect(shell).not.toBeNull();
     expect(shell.querySelector('[data-testid="slot"]')).toBeNull();
     expect(container.querySelector("form")!.contains(toggle())).toBe(false);
-    expect(container.querySelector("form")!.querySelector('[data-testid="slot"]')).toBeNull();
+    expect(
+      container.querySelector("form")!.querySelector('[data-testid="slot"]')
+    ).toBeNull();
   });
 });

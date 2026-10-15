@@ -29,10 +29,7 @@ import {
   MatchOddsSkeleton,
   MatchSectionsSkeleton,
 } from "@/components/skeletons/match-sections-skeleton";
-import {
-  BetSlipSection,
-  BetSlipSkeleton,
-} from "@/components/bet-slip-section";
+import { BetSlipSection, BetSlipSkeleton } from "@/components/bet-slip-section";
 import { BetSlipBridgeProvider } from "@/components/bet-slip-bridge";
 import {
   SeuPalpiteSection,
@@ -114,7 +111,10 @@ export default async function MatchPage({ params, searchParams }: PageProps) {
   // param `back` (validado anti open-redirect; fallback /jogos). Um jogo pode ser
   // aberto da lista /jogos OU do histórico de um time (/time/[team], #408) — ambas
   // as bases são aceitas; fallback = /jogos (origem default).
-  const backHref = resolveBackHref((await searchParams).back, ["/jogos", "/time"]);
+  const backHref = resolveBackHref((await searchParams).back, [
+    "/jogos",
+    "/time",
+  ]);
   // Middleware garante sessão; redirect defensivo caso o matcher mude. Sessão e jogo
   // são independentes: buscados juntos (cada um é um round trip ao banco).
   const [session, match] = await Promise.all([auth(), getMatchById(id)]);
@@ -148,40 +148,47 @@ export default async function MatchPage({ params, searchParams }: PageProps) {
   // aqui: a grade de apostas espera o mesmo refresh.
   const oddsP: Promise<MatchOddsViews> = ensureOddsSnapshotsFresh(match, {
     markets: PAGE_LIVE_MARKETS,
-  }).then(async (snapshot) => {
-    const matchResultMap = await getLatestSelectionOddsSnapshotsForMatches(
-      [match.id],
-      "match_result",
-    );
-    // Card 1X2 ao vivo (#173): best-effort — captura ausente/incompleta vira null
-    // (o reader OMITE, nunca throw) → card simplesmente não é empilhado.
-    const matchResultSnapshot = matchResultMap.get(match.id);
-    return {
-      oddsView: snapshot
-        ? toOddsView({
-            bookmaker: snapshot.bookmaker,
-            overOdd: snapshot.overOdd,
-            underOdd: snapshot.underOdd,
-            capturedAt: snapshot.capturedAt,
-          })
-        : null,
-      matchResultOddsView: matchResultSnapshot
-        ? toNwayOddsView(matchResultSnapshot, "match_result", undefined, displayTeams)
-        : null,
-    };
-  }).catch((err: unknown): MatchOddsViews => {
-    // Provider/rede já viram null dentro do ensure; aqui sobra erro de DB. Com a página já
-    // na tela, deixar rejeitar trocaria tudo pelo error.tsx na hidratação: degrada pro
-    // empty-state "Odds indisponíveis", como as outras seções em streaming.
-    console.error(
-      JSON.stringify({
-        scope: "match-page",
-        error: "odds_refresh_failed",
-        message: err instanceof Error ? err.message : String(err),
-      }),
-    );
-    return { oddsView: null, matchResultOddsView: null };
-  });
+  })
+    .then(async (snapshot) => {
+      const matchResultMap = await getLatestSelectionOddsSnapshotsForMatches(
+        [match.id],
+        "match_result"
+      );
+      // Card 1X2 ao vivo (#173): best-effort — captura ausente/incompleta vira null
+      // (o reader OMITE, nunca throw) → card simplesmente não é empilhado.
+      const matchResultSnapshot = matchResultMap.get(match.id);
+      return {
+        oddsView: snapshot
+          ? toOddsView({
+              bookmaker: snapshot.bookmaker,
+              overOdd: snapshot.overOdd,
+              underOdd: snapshot.underOdd,
+              capturedAt: snapshot.capturedAt,
+            })
+          : null,
+        matchResultOddsView: matchResultSnapshot
+          ? toNwayOddsView(
+              matchResultSnapshot,
+              "match_result",
+              undefined,
+              displayTeams
+            )
+          : null,
+      };
+    })
+    .catch((err: unknown): MatchOddsViews => {
+      // Provider/rede já viram null dentro do ensure; aqui sobra erro de DB. Com a página já
+      // na tela, deixar rejeitar trocaria tudo pelo error.tsx na hidratação: degrada pro
+      // empty-state "Odds indisponíveis", como as outras seções em streaming.
+      console.error(
+        JSON.stringify({
+          scope: "match-page",
+          error: "odds_refresh_failed",
+          message: err instanceof Error ? err.message : String(err),
+        })
+      );
+      return { oddsView: null, matchResultOddsView: null };
+    });
   // Predição existente e demais leituras em paralelo: pré-requisito pro render
   // síncrono do hero + panel.
   const [
@@ -192,20 +199,20 @@ export default async function MatchPage({ params, searchParams }: PageProps) {
     userContextEnabled,
     analysisEngine,
   ] = await Promise.all([
-      // Histórico COMPLETO: agrupado por mercado em toMarketAnalysisSections (#243, a
-      // última de cada mercado = uma seção) e em toPreviousAnalysisItems (as reanálises
-      // mais antigas, #204). Scoped por userId (sem leak, AC2).
-      getPredictionHistoryForMatch(match.id, session.user.id),
-      // Sets de palpite persistidos (#351): só `sets[0]` (o mais recente) alimenta o HERO.
-      // A query traz o histórico completo (espelha o painel interim); overhead mínimo —
-      // uma query "latest-only" seria follow-up se virar gargalo (PLAN §3.1 nota).
-      getPalpiteSetsForMatch(match.id, session.user.id),
-      getEnableBestBetFanOut(),
-      getTourState(session.user.id),
-      getEnableUserContext(),
-      // Motor (#565): o "Contexto extra" do HERO só vale no code_jev.
-      readAnalysisEngine(),
-    ]);
+    // Histórico COMPLETO: agrupado por mercado em toMarketAnalysisSections (#243, a
+    // última de cada mercado = uma seção) e em toPreviousAnalysisItems (as reanálises
+    // mais antigas, #204). Scoped por userId (sem leak, AC2).
+    getPredictionHistoryForMatch(match.id, session.user.id),
+    // Sets de palpite persistidos (#351): só `sets[0]` (o mais recente) alimenta o HERO.
+    // A query traz o histórico completo (espelha o painel interim); overhead mínimo —
+    // uma query "latest-only" seria follow-up se virar gargalo (PLAN §3.1 nota).
+    getPalpiteSetsForMatch(match.id, session.user.id),
+    getEnableBestBetFanOut(),
+    getTourState(session.user.id),
+    getEnableUserContext(),
+    // Motor (#565): o "Contexto extra" do HERO só vale no code_jev.
+    readAnalysisEngine(),
+  ]);
   const latestPred = history[0] ?? null;
 
   // Manchete palpite-first (ADR 0030 / #351): o HERO server-rendered lê o set mais
@@ -250,13 +257,13 @@ export default async function MatchPage({ params, searchParams }: PageProps) {
     history,
     new Date(),
     timeZone,
-    displayTeams,
+    displayTeams
   );
   const previousAnalyses: PreviousAnalysisItem[] = toPreviousAnalysisItems(
     history,
     new Date(),
     timeZone,
-    displayTeams,
+    displayTeams
   );
 
   // "Contexto extra (opcional)" no HERO (#565): kill-switch E motor code_jev (a action
@@ -265,7 +272,7 @@ export default async function MatchPage({ params, searchParams }: PageProps) {
   const userContextView = toAnalysisUserContextView(
     history,
     { home: match.homeTeam, away: match.awayTeam },
-    now,
+    now
   );
 
   const fixtureRef: FixtureRef = {
@@ -289,7 +296,7 @@ export default async function MatchPage({ params, searchParams }: PageProps) {
   const unavailableReason = matchUnavailableReason(
     match.status,
     match.kickoffAt,
-    now,
+    now
   );
   // O que a página libera agora, num lugar só (#576; o ao vivo, #580, muda a função).
   const caps = matchCapabilities(unavailableReason);
@@ -324,7 +331,7 @@ export default async function MatchPage({ params, searchParams }: PageProps) {
             model,
             references,
             analysis: latestAnalysisByMarket(history),
-          }),
+          })
         )
         .catch((err: unknown): BetGridView => {
           console.error(
@@ -332,7 +339,7 @@ export default async function MatchPage({ params, searchParams }: PageProps) {
               scope: "match-page",
               error: "bet_grid_failed",
               message: err instanceof Error ? err.message : String(err),
-            }),
+            })
           );
           return toBetGridView({
             teams,
@@ -348,7 +355,8 @@ export default async function MatchPage({ params, searchParams }: PageProps) {
   const userId = session.user.id;
   const seuPalpiteP: Promise<SeuPalpiteData> | null = caps.seuPalpite
     ? loadSeuPalpiteData({
-        base: () => resolvePalpiteModelBase(match, { now, liveModel: slipModel }),
+        base: () =>
+          resolvePalpiteModelBase(match, { now, liveModel: slipModel }),
         latest: () => getLatestUserPalpiteAnalysis(match.id, userId),
         teams,
         now,
@@ -358,7 +366,7 @@ export default async function MatchPage({ params, searchParams }: PageProps) {
               scope: "match-page",
               error,
               message: err instanceof Error ? err.message : String(err),
-            }),
+            })
           ),
       })
     : null;
@@ -529,7 +537,6 @@ function MatchLayout({
           sharedAt={heroSharedAt}
           hasAnalyses={sections.length > 0}
           contextEnabled={contextEnabled}
-          hasAnalysis={sections.length > 0}
           analysis={
             <FullAnalysis
               sections={sections}
@@ -560,13 +567,11 @@ function MatchLayout({
 
         {/* Registrar apostas (#556) + Seu palpite (#564): UMA ponte envolve os dois, pra
             o "Seu palpite" mandar o palpite pra lista "Suas apostas". */}
-        {(betGrid || seuPalpite) && (
+        {betGrid && (
           <BetSlipBridgeProvider>
-            {betGrid && (
-              <Suspense fallback={<BetSlipSkeleton />}>
-                <BetSlipSection matchId={matchId} grid={betGrid} />
-              </Suspense>
-            )}
+            <Suspense fallback={<BetSlipSkeleton />}>
+              <BetSlipSection matchId={matchId} grid={betGrid} />
+            </Suspense>
             {seuPalpite && (
               <Suspense fallback={<SeuPalpiteSkeleton />}>
                 <SeuPalpiteSection
@@ -621,11 +626,13 @@ function NotAnalyzableNotice({
 }) {
   const { label, detail } = unavailableNoticeCopy(reason, score);
   return (
-    <div className="flex flex-col gap-1.5 rounded-md border border-dashed border-border px-4 py-3.5">
-      <span className="text-meta uppercase tracking-label text-muted-foreground">
+    <div className="border-border flex flex-col gap-1.5 rounded-md border border-dashed px-4 py-3.5">
+      <span className="text-meta tracking-label text-muted-foreground uppercase">
         {label}
       </span>
-      <p className="text-body-sm text-muted-foreground tracking-tight">{detail}</p>
+      <p className="text-body-sm text-muted-foreground tracking-tight">
+        {detail}
+      </p>
     </div>
   );
 }
@@ -636,7 +643,7 @@ function PoolLink({ matchId }: { matchId: string }) {
   return (
     <Link
       href={`/bolao?jogo=${matchId}`}
-      className="inline-flex items-center gap-1.5 rounded-sm text-body-sm tracking-tight text-muted-foreground hover:text-foreground focus-visible:outline-none focus-visible:ring-[3px] focus-visible:ring-ring/50"
+      className="text-body-sm text-muted-foreground hover:text-foreground focus-visible:ring-ring/50 inline-flex items-center gap-1.5 rounded-sm tracking-tight focus-visible:ring-[3px] focus-visible:outline-none"
     >
       <Users className="size-3.5" aria-hidden />
       criar bolão

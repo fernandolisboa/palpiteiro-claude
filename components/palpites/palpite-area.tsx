@@ -8,14 +8,13 @@ import { Button } from "@/components/ui/button";
 import { cn } from "@/lib/utils";
 
 export const FULL_ANALYSIS_ID = "analise-completa";
+export const FULL_ANALYSIS_TITLE_ID = "analise-completa-titulo";
 
 type Props = Omit<ComponentProps<typeof PalpiteHero>, "expanded"> & {
   // A análise por mercado, montada no servidor (FullAnalysis). Fica num bloco IRMÃO do
   // HERO, nunca dentro do `section[aria-label=palpite]` (firewall da ADR 0030: a casca
   // quente não ganha número de valor).
   analysis: ReactNode;
-  // Há algo para abrir: um palpite (narrativa inteira, ficha, fontes) ou uma análise.
-  hasAnalysis: boolean;
 };
 
 /**
@@ -24,9 +23,10 @@ type Props = Omit<ComponentProps<typeof PalpiteHero>, "expanded"> & {
  * volta inteiro e a análise por mercado aparece logo abaixo, num nível só (sem acordeão
  * de acordeões). `hidden` em vez de desmontar: o texto fica no DOM e o estado não se perde.
  */
-export function PalpiteArea({ analysis, hasAnalysis, ...hero }: Props) {
+export function PalpiteArea({ analysis, ...hero }: Props) {
   const [open, setOpen] = useState(false);
-  const canOpen = hero.heroPalpite !== null || hasAnalysis;
+  // Há algo para abrir: um palpite (narrativa inteira, ficha, fontes) ou uma análise.
+  const canOpen = hero.heroPalpite !== null || hero.hasAnalyses;
   return (
     <div className="flex flex-col gap-3">
       <PalpiteHero {...hero} expanded={open} />
@@ -36,13 +36,16 @@ export function PalpiteArea({ analysis, hasAnalysis, ...hero }: Props) {
             type="button"
             variant="ghost"
             size="sm"
-            className="self-start text-muted-foreground"
+            className="text-muted-foreground self-start"
             aria-expanded={open}
             aria-controls={FULL_ANALYSIS_ID}
             onClick={() => setOpen((v) => !v)}
           >
             <ChevronDown
-              className={cn("size-3.5 transition-transform", open && "rotate-180")}
+              className={cn(
+                "size-3.5 transition-transform",
+                open && "rotate-180"
+              )}
               aria-hidden
             />
             {open ? "Fechar análise completa" : "Ler análise completa"}
@@ -50,9 +53,12 @@ export function PalpiteArea({ analysis, hasAnalysis, ...hero }: Props) {
           <div
             id={FULL_ANALYSIS_ID}
             role="region"
-            aria-label="Análise completa"
+            aria-labelledby={FULL_ANALYSIS_TITLE_ID}
             hidden={!open}
           >
+            <h2 id={FULL_ANALYSIS_TITLE_ID} className="sr-only">
+              Análise completa
+            </h2>
             {analysis}
           </div>
         </>
