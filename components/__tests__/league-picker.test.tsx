@@ -34,4 +34,16 @@ describe("LeaguePicker rendering", () => {
     );
     expect(markup).toContain('<option value="ucl" selected="">Champions</option>');
   });
+
+  it("tem aparência de chip (#577): altura e raio dos chips, destaque com liga escolhida", () => {
+    const all = renderToStaticMarkup(
+      <LeaguePicker value="all" activeKeys={["bsa", "ucl"]} range={{ preset: "today5" }} />,
+    );
+    expect(all).toMatch(/<select[^>]*class="[^"]*\bh-8\b[^"]*\brounded-full\b/);
+    expect(all).not.toContain("bg-accent-soft");
+    const one = renderToStaticMarkup(
+      <LeaguePicker value="bsa" activeKeys={["bsa", "ucl"]} range={{ preset: "today5" }} />,
+    );
+    expect(one).toContain("bg-accent-soft");
+  });
 });

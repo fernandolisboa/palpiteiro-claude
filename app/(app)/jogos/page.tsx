@@ -10,9 +10,10 @@ import { UpcomingMatchesDesktop } from "@/components/upcoming-matches-desktop";
 import { UpcomingMatchesMobile } from "@/components/upcoming-matches-mobile";
 import { auth } from "@/auth";
 import { resolveHomeLeagueFilter } from "@/lib/config/active-leagues";
-import { keyToLeague, LEAGUE_LABEL, leagueToKey } from "@/lib/format";
+import { keyToLeague, leagueToKey } from "@/lib/format";
 import { getActiveLeaguesForRequest } from "@/lib/db/queries/league-settings";
 import { getRequestTimeZone } from "@/lib/server/request-timezone";
+import { cn } from "@/lib/utils";
 import { getMatchIdsWithPredictionsByUser } from "@/lib/db/queries/matches";
 import { getLatestMatchModelSnapshotsForMatches } from "@/lib/db/queries/match-model-snapshots";
 import { loadRangeMatches } from "@/lib/db/queries/load-range-matches";
@@ -259,6 +260,53 @@ function rangeNavProps(range: ResolvedRange) {
   return { preset: range.preset, from, to };
 }
 
+// "{n} jogos": a liga e o período ficam nos chips, não no meta (#577).
+function matchCountLabel(n: number): string {
+  return n === 1 ? "1 jogo" : `${n} jogos`;
+}
+
+// Linha única de filtros (#577): liga (select em chip) | 5 dias · 14 dias ·
+// Competição · Escolher datas. Rolável na horizontal quando não cabe; os alvos do
+// tour ficam dentro dela (o scrollIntoView do tour rola o contêiner até o alvo).
+function FilterRow({
+  league,
+  activeKeys,
+  range,
+  surface,
+  className,
+}: {
+  league: LeagueFilter;
+  activeKeys: readonly LeagueKey[];
+  range: ResolvedRange;
+  surface: "sheet" | "popover";
+  className?: string;
+}) {
+  const navProps = rangeNavProps(range);
+  return (
+    <div
+      className={cn(
+        "flex items-center gap-2 overflow-x-auto py-1 [scrollbar-width:none] [&::-webkit-scrollbar]:hidden",
+        className,
+      )}
+    >
+      <div data-tour="league-picker" className="shrink-0">
+        <LeaguePicker value={league} activeKeys={activeKeys} range={navProps} />
+      </div>
+      <span aria-hidden="true" className="h-5 w-px shrink-0 bg-border" />
+      <div data-tour="date-range" className="shrink-0">
+        <DateRangeTabs
+          league={league}
+          preset={range.preset}
+          from={navProps.from}
+          to={navProps.to}
+          customLabel={range.preset === "custom" ? rangeLabel(range) : undefined}
+          surface={surface}
+        />
+      </div>
+    </div>
+  );
+}
+
 function MobileHome({
   matches,
   recents,
@@ -266,7 +314,6 @@ function MobileHome({
   activeKeys,
   range,
 }: HomeContentProps) {
-  const label = rangeLabel(range);
   const empty = rangeEmptyMessage(range);
   const navProps = rangeNavProps(range);
   // URL filtrada atual da lista — propagada aos links de jogo pra preservar o
@@ -279,31 +326,19 @@ function MobileHome({
       <div className="px-5 pt-6">
         <PageHeader
           title="Próximos jogos"
-          meta={
-            <>
-              {matches.length} partidas · {label}
-              {league !== "all" && ` · ${LEAGUE_LABEL[league]}`}
-            </>
-          }
-          className="pb-5"
+          meta={matchCountLabel(matches.length)}
+          className="pb-4"
         />
       </div>
 
-      <div className="flex flex-col gap-2 px-5 pb-3">
-        <div data-tour="league-picker">
-          <LeaguePicker value={league} activeKeys={activeKeys} range={navProps} />
-        </div>
-        <div data-tour="date-range">
-          <DateRangeTabs
-            league={league}
-            preset={range.preset}
-            from={navProps.from}
-            to={navProps.to}
-          />
-        </div>
-      </div>
+      <FilterRow
+        league={league}
+        activeKeys={activeKeys}
+        range={range}
+        surface="sheet"
+        className="px-5 pb-3"
+      />
 
-      <SectionLabel>{label}</SectionLabel>
       {matches.length === 0 ? (
         <Card className="mx-5">
           <EmptyState
@@ -356,7 +391,6 @@ function DesktopHome({
   activeKeys,
   range,
 }: HomeContentProps) {
-  const label = rangeLabel(range);
   const empty = rangeEmptyMessage(range);
   const navProps = rangeNavProps(range);
   // URL filtrada atual da lista — propagada aos links de jogo (preserva busca ao voltar).
@@ -368,27 +402,16 @@ function DesktopHome({
       <PageContainer width="content">
         <PageHeader
           title="Próximos jogos"
-          meta={
-            <>
-              {matches.length} partidas · {label}
-              {league !== "all" && ` · ${LEAGUE_LABEL[league]}`}
-            </>
-          }
-          actions={
-            <>
-              <div data-tour="league-picker">
-                <LeaguePicker value={league} activeKeys={activeKeys} range={navProps} />
-              </div>
-              <div data-tour="date-range">
-                <DateRangeTabs
-                  league={league}
-                  preset={range.preset}
-                  from={navProps.from}
-                  to={navProps.to}
-                />
-              </div>
-            </>
-          }
+          meta={matchCountLabel(matches.length)}
+          className="lg:pb-5"
+        />
+        {/* Os chips numa linha própria abaixo do título: a linha não cabe à direita. */}
+        <FilterRow
+          league={league}
+          activeKeys={activeKeys}
+          range={range}
+          surface="popover"
+          className="pb-5"
         />
 
         {matches.length === 0 ? (

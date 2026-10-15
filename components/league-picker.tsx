@@ -34,7 +34,7 @@ function OptionItem({ option }: { option: LeaguePickerOption }) {
 
 /**
  * Seletor de liga da home: <select> nativo (primitivo do ADR 0029) agrupado por
- * região. Substitui as abas, que não escalam além de 3–4 ligas; o picker nativo
+ * região, com aparência de chip, o primeiro da linha de filtros (#577). Substitui as abas, que não escalam além de 3–4 ligas; o picker nativo
  * também é o melhor controle no mobile. Trocar de liga navega preservando o range.
  * O guard em app/(app)/jogos/page.tsx segue sendo o enforcement real (liga inativa na
  * URL redireciona).
@@ -49,7 +49,7 @@ export function LeaguePicker({ value, activeKeys, range, className }: Props) {
   useEffect(() => setSelected(value), [value]);
 
   return (
-    <div className={cn("w-full sm:w-56", className)}>
+    <div className={cn("w-auto shrink-0", className)}>
       <Select
         aria-label="Filtro de liga"
         value={selected}
@@ -59,7 +59,15 @@ export function LeaguePicker({ value, activeKeys, range, className }: Props) {
           setSelected(next);
           startTransition(() => router.push(buildLeagueHref(range, next)));
         }}
-        className={cn("bg-surface-2 font-medium", pending && "opacity-70")}
+        // Chip (#577): altura e raio dos chips de período, largura pelo conteúdo; uma
+        // liga escolhida fica em destaque como o chip de período selecionado.
+        className={cn(
+          "h-8 w-auto rounded-full py-0 pl-3 pr-8 font-medium tracking-tight shadow-none",
+          selected === "all"
+            ? "border-border bg-transparent text-foreground"
+            : "border-accent-border bg-accent-soft text-accent-fg",
+          pending && "opacity-70",
+        )}
       >
         {groups.map((group) =>
           group.label === null ? (
