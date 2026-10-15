@@ -65,8 +65,9 @@ function writeLocalState(userId: string, state: TourState) {
   }
 }
 
-/** Primeiro elemento VISÍVEL com o `data-tour` — a página do jogo e a home renderizam
- * as árvores mobile e desktop juntas (uma escondida por CSS). */
+/** Primeiro elemento VISÍVEL com o `data-tour` — a lista de jogos (/jogos) renderiza as
+ * árvores mobile e desktop juntas (uma escondida por CSS). A página do jogo tem uma
+ * árvore só (#576), mas a regra vale igual. */
 function findTarget(name: string): HTMLElement | null {
   const nodes = document.querySelectorAll<HTMLElement>(`[data-tour="${name}"]`);
   for (const node of nodes) {

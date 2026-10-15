@@ -7,8 +7,8 @@ import type { BridgeLeg } from "@/lib/user-palpite/types";
 
 // Ponte entre o "Seu palpite" e a lista "Suas apostas" (#564): o BetSlip registra um
 // handler e o "Seu palpite" manda uma perna por ele, sem mexer no estado do BetSlip.
-// Um provider por árvore (a página monta celular e desktop), então cada bloco fala com
-// o próprio BetSlip. Fora do provider o hook devolve null e o BetSlip segue como antes.
+// Um provider por página (#576: uma árvore só), envolvendo a grade e o "Seu palpite".
+// Fora do provider o hook devolve null e o BetSlip segue como antes.
 
 // Aviso de lista cheia: o mesmo texto no BetSlip e no "Seu palpite".
 export const slipFullNotice = `No máximo ${MAX_SLIP_SELECTIONS} seleções por vez.`;

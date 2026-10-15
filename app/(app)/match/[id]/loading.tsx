@@ -1,5 +1,6 @@
 import { ChevronLeft } from "lucide-react";
 
+import { PageContainer } from "@/components/page-container";
 import { Card } from "@/components/ui/card";
 import { Skeleton } from "@/components/ui/skeleton";
 import {
@@ -9,7 +10,7 @@ import {
 
 function HeaderBar() {
   return (
-    <div className="flex items-center justify-between px-5 pt-5 pb-2">
+    <div className="flex items-center justify-between gap-3">
       <span className="flex items-center gap-2 text-muted-foreground">
         <ChevronLeft className="size-3.5" />
         <span className="text-body-sm tracking-tight">jogos</span>
@@ -20,10 +21,11 @@ function HeaderBar() {
 }
 
 // Responsivo igual ao MatchHero unificado (#246): mobile grid 3-col, desktop flex —
-// pra o skeleton casar com o conteúdo nos dois viewports (anti-CLS).
+// pra o skeleton casar com o conteúdo nos dois viewports (anti-CLS). O gutter é do
+// PageContainer (#576).
 function HeroSkeleton() {
   return (
-    <div className="px-5 pt-5 pb-5 lg:px-0 lg:pt-0 lg:pb-0">
+    <div className="pt-4 pb-2 lg:pt-6">
       <div className="flex items-center justify-between pb-4 lg:justify-start lg:gap-3 lg:pb-5">
         <Skeleton className="h-5 w-20 rounded-full" />
         <Skeleton className="h-[14px] w-24" />
@@ -66,42 +68,24 @@ function OddsSkeleton() {
   );
 }
 
+// Um esqueleto só (#576), na ordem da página: barra, hero, palpite, odds e dados. Sem
+// árvores por largura: o `lg:` fica dentro de cada bloco, como na página.
 export default function MatchLoading() {
   return (
-    <>
-      <div className="lg:hidden">
-        <div className="bg-background text-foreground">
-          <HeaderBar />
-          <HeroSkeleton />
-          {/* Casa o layout carregado: palpite → detalhe → odds (anti-CLS). */}
-          <div className="flex flex-col gap-3 px-5 pb-6">
-            <Skeleton className="h-80 w-full rounded-xl" />
-            <Skeleton className="h-12 w-full rounded-md" />
-            <OddsSkeleton />
-            <MatchSectionsSkeleton />
-            <MatchAuxiliarySkeleton />
-          </div>
+    <PageContainer width="content">
+      <HeaderBar />
+      <HeroSkeleton />
+      <div className="flex flex-col gap-4 pt-4 lg:gap-6">
+        <Skeleton className="h-72 w-full rounded-xl lg:h-56" />
+        <div className="grid gap-3 lg:grid-cols-2">
+          <OddsSkeleton />
+          <OddsSkeleton />
+        </div>
+        <div className="flex flex-col gap-3">
+          <MatchSectionsSkeleton />
+          <MatchAuxiliarySkeleton />
         </div>
       </div>
-      <div className="hidden lg:block">
-        <>
-          <div className="mx-auto w-full max-w-content px-8 pt-8 pb-16">
-            {/* Casa o layout carregado: identidade full-width + palpite full-width +
-                odds lado a lado + detalhe full-width abaixo (anti-CLS). */}
-            <div className="pb-6">
-              <HeroSkeleton />
-            </div>
-            <Skeleton className="mb-4 h-56 w-full rounded-xl" />
-            <div className="grid grid-cols-2 gap-3 pb-6">
-              <OddsSkeleton />
-              <OddsSkeleton />
-            </div>
-            <Skeleton className="mb-6 h-12 w-full rounded-md" />
-            <MatchSectionsSkeleton />
-            <MatchAuxiliarySkeleton />
-          </div>
-        </>
-      </div>
-    </>
+    </PageContainer>
   );
 }

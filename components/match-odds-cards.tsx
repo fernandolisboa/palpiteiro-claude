@@ -10,8 +10,8 @@ export type MatchOddsViews = {
 };
 
 type Props = {
-  // Promise criada UMA vez pela página (o refresh de odds pode chamar a The Odds API) e
-  // compartilhada pelas árvores mobile e desktop: as duas aguardam o mesmo refresh.
+  // Promise criada UMA vez pela página (o refresh de odds pode chamar a The Odds API);
+  // a grade de apostas espera o mesmo refresh.
   odds: Promise<MatchOddsViews>;
   unavailable: MatchUnavailableReason | null;
 };

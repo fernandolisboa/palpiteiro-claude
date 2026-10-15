@@ -40,6 +40,33 @@ export function matchUnavailableReason(
   }
 }
 
+/**
+ * O que a página do jogo libera agora, num lugar só (#576). Hoje tudo segue o gate de
+ * pré-jogo (`reason === null`); o jogo ao vivo (#580) muda esta função, não a página.
+ * - `analyze`: "Analisar com IA" / Leitura do modelo;
+ * - `seuPalpite`: o bloco "Seu palpite";
+ * - `registerBets`: a grade e o painel Suas apostas (com o §3, ADR 0057);
+ * - `pool`: o atalho "criar bolão" (as apostas do bolão fecham no apito).
+ */
+export type MatchCapabilities = {
+  analyze: boolean;
+  seuPalpite: boolean;
+  registerBets: boolean;
+  pool: boolean;
+};
+
+export function matchCapabilities(
+  reason: MatchUnavailableReason | null
+): MatchCapabilities {
+  const preMatch = reason === null;
+  return {
+    analyze: preMatch,
+    seuPalpite: preMatch,
+    registerBets: preMatch,
+    pool: preMatch,
+  };
+}
+
 // Linha do HERO sem palpite quando não dá mais pra analisar.
 export const EMPTY_HERO_UNAVAILABLE_COPY: Record<
   MatchUnavailableReason,

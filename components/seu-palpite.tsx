@@ -80,15 +80,12 @@ export function SeuPalpite({
   model,
   latest,
   aiEnabled,
-  variant,
 }: {
   matchId: string;
   teams: TeamNames;
   model: SeuPalpiteModelView | null;
   latest: UserPalpiteAnalysisView | null;
   aiEnabled: boolean;
-  // A página monta duas árvores (celular e desktop); cada uma tem a sua instância.
-  variant: "mobile" | "desktop";
 }) {
   const [mode, setMode] = useState<Mode>("score");
   const [homeGoals, setHomeGoals] = useState<number | null>(null);
@@ -234,12 +231,7 @@ export function SeuPalpite({
       </div>
       <Card className="gap-0 overflow-hidden p-0">
         {model ? (
-          <div
-            className={cn(
-              "grid gap-4 px-4 py-3.5",
-              variant === "desktop" && "grid-cols-2 items-start",
-            )}
-          >
+          <div className="grid gap-4 px-4 py-3.5 lg:grid-cols-2 lg:items-start">
             {picker}
             {readingCard ?? (
               <p className="text-body-sm tracking-tight text-muted-foreground">
@@ -274,7 +266,7 @@ export function SeuPalpite({
           </>
         )}
       </Card>
-      {analysis && <AnalysisCard analysis={analysis} teams={teams} variant={variant} />}
+      {analysis && <AnalysisCard analysis={analysis} teams={teams} />}
       <p className="text-meta leading-relaxed text-muted-foreground tracking-tight">
         {RISK_DISCLAIMER_PT_BR}
       </p>
@@ -446,11 +438,9 @@ function AnalyzeForm({
 function AnalysisCard({
   analysis,
   teams,
-  variant,
 }: {
   analysis: UserPalpiteAnalysisView;
   teams: TeamNames;
-  variant: "mobile" | "desktop";
 }) {
   const a = analysis;
   return (
@@ -500,12 +490,7 @@ function AnalysisCard({
           </div>
         )}
 
-        <div
-          className={cn(
-            "grid gap-3",
-            variant === "desktop" ? "grid-cols-2" : "grid-cols-1 sm:grid-cols-2",
-          )}
-        >
+        <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
           <div className="flex flex-col gap-1.5 rounded-md border border-border-subtle px-3 py-2.5">
             <span className="text-meta uppercase tracking-label text-muted-foreground">
               sem o seu contexto

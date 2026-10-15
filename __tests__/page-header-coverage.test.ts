@@ -6,9 +6,10 @@ import { describe, expect, it } from "vitest";
 
 /**
  * Um cabeçalho por página (ADR 0056): as telas logadas de usuário usam o
- * `PageHeader` em vez de montar o próprio `<h1>`. Fora: a página do jogo (PR 3 da
- * revisão de design), o admin (tem o `PageHeading` próprio), testes e os estados de
- * erro/404/loading (cartão de estado, não cabeçalho de página).
+ * `PageHeader` em vez de montar o próprio `<h1>`. Fora: a página do jogo (o
+ * cabeçalho é o MatchHero, com um `<h1>` sr-only em `page.tsx`, #576), o admin (tem o
+ * `PageHeading` próprio), testes e os estados de erro/404/loading (cartão de estado,
+ * não cabeçalho de página).
  */
 
 function tsxFiles(dir: string): string[] {

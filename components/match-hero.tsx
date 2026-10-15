@@ -70,7 +70,8 @@ export function MatchHero({
 }: Props) {
   const { home, away, league, when, countdown, venue, liveScore } = view;
   return (
-    <div className="px-5 pt-5 pb-5 lg:px-0 lg:pt-0 lg:pb-0">
+    // Sem gutter próprio: o PageContainer da página dá o `px-5`/`lg:px-8` (#576).
+    <div className="pt-4 pb-2 lg:pt-6">
       <div className="flex items-center justify-between pb-4 lg:justify-start lg:gap-3 lg:pb-5">
         <Badge
           variant="outline"

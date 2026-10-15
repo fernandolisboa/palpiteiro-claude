@@ -2,6 +2,7 @@ import { describe, expect, it } from "vitest";
 
 import {
   EMPTY_HERO_UNAVAILABLE_COPY,
+  matchCapabilities,
   matchUnavailableReason,
   unavailableNoticeCopy,
 } from "@/lib/view/match-availability";
@@ -73,4 +74,27 @@ describe("copy por motivo", () => {
       detail: "Análise indisponível para jogos cancelados.",
     });
   });
+});
+
+describe("matchCapabilities", () => {
+  it("pré-jogo libera análise, Seu palpite, registro de apostas e bolão", () => {
+    expect(matchCapabilities(null)).toEqual({
+      analyze: true,
+      seuPalpite: true,
+      registerBets: true,
+      pool: true,
+    });
+  });
+
+  it.each(["started", "live", "postponed", "cancelled", "finished"] as const)(
+    "%s → nada liberado (o ao vivo, #580, muda esta função)",
+    (reason) => {
+      expect(matchCapabilities(reason)).toEqual({
+        analyze: false,
+        seuPalpite: false,
+        registerBets: false,
+        pool: false,
+      });
+    },
+  );
 });
