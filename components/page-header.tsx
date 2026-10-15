@@ -6,7 +6,8 @@ import { cn } from "@/lib/utils";
 
 type Back = { href: string; label: string };
 
-const TITLE = "text-display-md font-medium leading-none tracking-tight lg:text-display-lg";
+const TITLE =
+  "text-display-md font-medium leading-[1.1] tracking-tight text-balance lg:text-display-lg";
 
 /**
  * Cabeçalho único das telas logadas de usuário (ADR 0056): volta opcional, h1,
@@ -35,7 +36,8 @@ export function PageHeader({
         className,
       )}
     >
-      <div className="flex min-w-0 flex-col">
+      {/* items-start: a volta fica do tamanho do texto, sem esticar a linha toda. */}
+      <div className="flex min-w-0 flex-col items-start">
         {back && <BackLink href={back.href} label={back.label} />}
         <h1 className={TITLE}>{title}</h1>
         {description && (
@@ -76,12 +78,12 @@ export function PageHeaderSkeleton({
         className,
       )}
     >
-      <div className="flex min-w-0 flex-col">
+      <div className="flex min-w-0 flex-col items-start">
         {back && <Skeleton className="mb-6 h-[18px] w-16" />}
         {title ? (
           <h1 className={TITLE}>{title}</h1>
         ) : (
-          <Skeleton className="h-[26px] w-48 lg:h-8" />
+          <Skeleton className="h-[29px] w-48 lg:h-[35px]" />
         )}
         {description && (
           <div className="pt-2">

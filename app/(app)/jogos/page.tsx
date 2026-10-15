@@ -289,7 +289,12 @@ function MobileHome({
       <div className="px-5 pt-6">
         <PageHeader
           title="Próximos jogos"
-          meta={<>{matches.length} partidas · {label}</>}
+          meta={
+            <>
+              {matches.length} partidas · {label}
+              {league !== "all" && ` · ${LEAGUE_LABEL[league]}`}
+            </>
+          }
           className="pb-5"
         />
       </div>

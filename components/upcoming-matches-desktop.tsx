@@ -80,14 +80,14 @@ export function UpcomingMatchesDesktop({
             {/* Base do modelo (#555): só probabilidade, abaixo dos nomes. */}
             {m.model && <MatchModelLine model={m.model} />}
           </div>
-          <div className="flex flex-col items-end gap-1 font-mono text-body tabular-nums">
+          <div className="flex flex-col items-end gap-1 text-body">
             {m.status === "live" || m.isInProgress ? (
               // Em andamento (#385): sem odds pré-jogo (não-apostável). Mesmo gate OR.
               // O selo AO VIVO fica só na célula de status (#574): aqui vai o placar
               // parcial com a legenda, ou "—". Chevron mantido abaixo → clicável.
               m.liveScore ? (
                 <>
-                  <span className="text-label font-medium">
+                  <span className="font-mono text-label font-medium tabular-nums">
                     {m.liveScore.home}
                     <span className="px-1 text-muted-foreground">–</span>
                     {m.liveScore.away}
@@ -100,7 +100,7 @@ export function UpcomingMatchesDesktop({
             ) : m.status === "finished" &&
               m.homeScore !== null &&
               m.awayScore !== null ? (
-              <span className="text-label font-medium">
+              <span className="font-mono text-label font-medium tabular-nums">
                 {m.homeScore}
                 <span className="px-1 text-muted-foreground">–</span>
                 {m.awayScore}
@@ -119,7 +119,7 @@ export function UpcomingMatchesDesktop({
                 {m.odds.outcomes.map((o, i) => (
                   <span key={i}>
                     <span className="text-muted-foreground">{o.label}</span>{" "}
-                    {o.odd}
+                    <span className="font-mono tabular-nums">{o.odd}</span>
                   </span>
                 ))}
               </>

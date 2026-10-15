@@ -78,9 +78,9 @@ export function MatchHero({
         >
           {LEAGUE_LABEL[league]}
         </Badge>
-        <div className="flex items-center gap-2 font-mono text-meta tabular-nums text-muted-foreground">
+        <div className="flex items-center gap-2 text-meta text-muted-foreground">
           {status === "live" && <LiveBadge />}
-          {when}
+          <span className="font-mono tabular-nums">{when}</span>
         </div>
         {countdown && (
           <span className="hidden font-mono text-meta tabular-nums text-accent-fg lg:inline">

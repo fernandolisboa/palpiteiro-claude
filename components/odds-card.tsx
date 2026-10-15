@@ -93,18 +93,18 @@ export function OddsCard({ view, unavailable }: Props) {
               >
                 {wide ? <span className="min-w-0 truncate">{o.label}</span> : o.label}
               </span>
-              {/* 22px: outlier heroic da odd — sem degrau na escala (ADR 0029) */}
+              {/* Odd em destaque: degrau display-xs (22px) da escala (ADR 0056). */}
               <span className="font-mono text-display-xs font-medium tabular-nums tracking-tight">
                 {o.odd}
               </span>
               <span
                 className={
                   isFirst
-                    ? "flex items-center gap-1 font-mono text-meta tabular-nums text-muted-foreground"
-                    : "font-mono text-meta tabular-nums text-muted-foreground"
+                    ? "flex items-center gap-1 text-meta text-muted-foreground"
+                    : "text-meta text-muted-foreground"
                 }
               >
-                {o.pct} normalizada
+                <span className="font-mono tabular-nums">{o.pct}</span> normalizada
                 {isFirst && (
                   <HelpHint
                     anchor="prob-implicita"
@@ -120,8 +120,8 @@ export function OddsCard({ view, unavailable }: Props) {
       <Separator />
       <div className="flex items-center justify-between px-4 py-2.5 text-meta text-muted-foreground">
         <span>odd de mercado</span>
-        <span className="flex items-center gap-1 font-mono tabular-nums">
-          overround {view.overround}
+        <span className="flex items-center gap-1">
+          overround <span className="font-mono tabular-nums">{view.overround}</span>
           <HelpHint
             anchor="overround"
             label="overround"

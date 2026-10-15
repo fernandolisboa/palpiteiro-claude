@@ -141,11 +141,11 @@ export function MatchRow({ m, last, listHref, backHref, tourTarget }: Props) {
               {STATUS_LABEL[m.status]}
             </span>
           ) : m.odds ? (
-            <div className="flex flex-col items-end gap-1 font-mono text-body-sm tabular-nums">
+            <div className="flex flex-col items-end gap-1 text-body-sm">
               {m.odds.outcomes.map((o, i) => (
                 <span key={i}>
                   <span className="text-muted-foreground">{o.label}</span>{" "}
-                  {o.odd}
+                  <span className="font-mono tabular-nums">{o.odd}</span>
                 </span>
               ))}
             </div>

@@ -117,7 +117,13 @@ export function PredictionsTable({
                   {r.confidence}
                 </TableCell>
                 <TableCell>
-                  <ResultBadge result={r.status} />
+                  {/* Sem aposta não tem resultado: a liquidação grava void, mas "Anulada"
+                      leria como aposta cancelada. Traço neutro no lugar do selo. */}
+                  {r.recKind === "pass" ? (
+                    <span className="text-meta text-muted-foreground">—</span>
+                  ) : (
+                    <ResultBadge result={r.status} />
+                  )}
                 </TableCell>
                 <TableCell
                   className={cn(

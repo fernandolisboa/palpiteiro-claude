@@ -347,9 +347,9 @@ describe("toMatchRowView — prioridade de mercado no chip (#173 PR-2)", () => {
       now: NOW,
     });
     const markup = renderToStaticMarkup(<MatchRow m={view} />);
-    expect(markup).toContain(">BAR</span> 2,10");
-    expect(markup).toContain(">Empate</span> 3,40");
-    expect(markup).toContain(">RMA</span> 3,90");
+    expect(markup).toContain('>BAR</span> <span class="font-mono tabular-nums">2,10</span>');
+    expect(markup).toContain('>Empate</span> <span class="font-mono tabular-nums">3,40</span>');
+    expect(markup).toContain('>RMA</span> <span class="font-mono tabular-nums">3,90</span>');
     expect(markup).not.toContain(">Casa<");
     expect(markup).not.toContain(">Fora<");
     expect(markup).toContain("2,10");
