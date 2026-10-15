@@ -24,9 +24,9 @@ import {
 
 describe("formatOdd", () => {
   it("formats numbers with 2 decimals", () => {
-    expect(formatOdd(1.92)).toBe("1.92");
-    expect(formatOdd(2)).toBe("2.00");
-    expect(formatOdd("1.871")).toBe("1.87");
+    expect(formatOdd(1.92)).toBe("1,92");
+    expect(formatOdd(2)).toBe("2,00");
+    expect(formatOdd("1.871")).toBe("1,87");
   });
   it("returns em-dash for null/undefined/NaN", () => {
     expect(formatOdd(null)).toBe("—");
@@ -41,21 +41,21 @@ describe("formatPct", () => {
     expect(formatPct(58.02)).toBe("58%");
   });
   it("uses 1 decimal when meaningfully fractional", () => {
-    expect(formatPct(50.7)).toBe("50.7%");
+    expect(formatPct(50.7)).toBe("50,7%");
   });
   it("supports forced decimals option", () => {
-    expect(formatPct(58, { decimals: 1 })).toBe("58.0%");
-    expect(formatPct(58, { decimals: 2 })).toBe("58.00%");
+    expect(formatPct(58, { decimals: 1 })).toBe("58,0%");
+    expect(formatPct(58, { decimals: 2 })).toBe("58,00%");
   });
 });
 
 describe("formatEdge", () => {
   it("prefixes positive with +", () => {
-    expect(formatEdge(7.3)).toBe("+7.3");
-    expect(formatEdge("7.3")).toBe("+7.3");
+    expect(formatEdge(7.3)).toBe("+7,3");
+    expect(formatEdge("7.3")).toBe("+7,3");
   });
   it("keeps negative as-is", () => {
-    expect(formatEdge(-2.1)).toBe("-2.1");
+    expect(formatEdge(-2.1)).toBe("-2,1");
   });
   it("returns null when null/undefined", () => {
     expect(formatEdge(null)).toBeNull();
@@ -65,17 +65,17 @@ describe("formatEdge", () => {
 
 describe("formatEvPct", () => {
   it("multiplies the raw fraction by 100 and prefixes positive with +", () => {
-    expect(formatEvPct(0.1136)).toBe("+11.4%");
+    expect(formatEvPct(0.1136)).toBe("+11,4%");
   });
   it("keeps the ASCII hyphen from toFixed for negatives", () => {
-    expect(formatEvPct(-0.04)).toBe("-4.0%");
+    expect(formatEvPct(-0.04)).toBe("-4,0%");
   });
   it("renders exact zero without sign", () => {
-    expect(formatEvPct(0)).toBe("0.0%");
+    expect(formatEvPct(0)).toBe("0,0%");
   });
   it("normalizes values that round to zero — never '+0.0%' nor '-0.0%'", () => {
-    expect(formatEvPct(0.0004)).toBe("0.0%");
-    expect(formatEvPct(-0.0004)).toBe("0.0%");
+    expect(formatEvPct(0.0004)).toBe("0,0%");
+    expect(formatEvPct(-0.0004)).toBe("0,0%");
   });
   it("returns em-dash for null/NaN", () => {
     expect(formatEvPct(null)).toBe("—");

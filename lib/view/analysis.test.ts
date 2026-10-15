@@ -65,11 +65,11 @@ describe("toAnalysisView", () => {
           label: "Over 2.5",
           scenarioLabel: "mais de 2.5 gols",
           modelProb: "58%",
-          marketProb: "50.7%",
-          odd: "1.92",
-          edge: "+7.3pp",
-          expectedReturn: "+11.4%",
-          breakEven: "1.72",
+          marketProb: "50,7%",
+          odd: "1,92",
+          edge: "+7,3pp",
+          expectedReturn: "+11,4%",
+          breakEven: "1,72",
           isRecommended: true,
         },
         {
@@ -77,28 +77,28 @@ describe("toAnalysisView", () => {
           label: "Under 2.5",
           scenarioLabel: "menos de 2.5 gols",
           modelProb: "42%",
-          marketProb: "49.3%",
-          odd: "1.95",
-          edge: "-7.3pp",
-          expectedReturn: "-18.1%",
-          breakEven: "2.38",
+          marketProb: "49,3%",
+          odd: "1,95",
+          edge: "-7,3pp",
+          expectedReturn: "-18,1%",
+          breakEven: "2,38",
           isRecommended: false,
         },
       ],
-      minOdd: "1.75",
+      minOdd: "1,75",
       // input sem stakeUnits → null (a page/action ligam as call sites).
       stakeUnits: null,
       // quarter-Kelly informativo na odd da análise (ADR 0039; o gate decide o oficial).
-      kellyInfoUnits: "3.00 u",
+      kellyInfoUnits: "3,00 u",
       // framing/note no topo (R4): break-even da zebra (100/1.95 = 51.3%) —
       // string idêntica à pré-relocação.
       framing:
-        "a aposta em menos de 3 gols só sai do zero se a chance real for maior que 51.3% — na análise o modelo estimou 42%",
+        "a aposta em menos de 3 gols só sai do zero se a chance real for maior que 51,3% — na análise o modelo estimou 42%",
       note: null,
-      oddAtRec: "1.92",
+      oddAtRec: "1,92",
       oddAtRecAgo: "há 3h",
       bookmaker: "bet365",
-      expectedReturn: "+11.4%",
+      expectedReturn: "+11,4%",
       expectedReturnTone: "positive",
       evLegend:
         "ganho médio por aposta, no longo prazo, se a estimativa de 58% do modelo estiver certa",
@@ -157,11 +157,11 @@ describe("toAnalysisView", () => {
           label: "Over 2.5",
           scenarioLabel: "mais de 2.5 gols",
           modelProb: "44%",
-          marketProb: "50.7%",
-          odd: "1.98",
-          edge: "-6.7pp",
-          expectedReturn: "-12.9%",
-          breakEven: "2.27",
+          marketProb: "50,7%",
+          odd: "1,98",
+          edge: "-6,7pp",
+          expectedReturn: "-12,9%",
+          breakEven: "2,27",
           isRecommended: false,
         },
         {
@@ -169,26 +169,26 @@ describe("toAnalysisView", () => {
           label: "Under 2.5",
           scenarioLabel: "menos de 2.5 gols",
           modelProb: "56%",
-          marketProb: "49.3%",
-          odd: "1.85",
-          edge: "+6.7pp",
-          expectedReturn: "+3.6%",
-          breakEven: "1.79",
+          marketProb: "49,3%",
+          odd: "1,85",
+          edge: "+6,7pp",
+          expectedReturn: "+3,6%",
+          breakEven: "1,79",
           isRecommended: true,
         },
       ],
-      minOdd: "1.80",
+      minOdd: "1,80",
       stakeUnits: null,
       // quarter-Kelly informativo na odd da análise (ADR 0039; o gate decide o oficial).
-      kellyInfoUnits: "1.00 u",
+      kellyInfoUnits: "1,00 u",
       // Break-even da zebra (over): 100/1.98 = 50.5%.
       framing:
-        "a aposta em pelo menos 3 gols só sai do zero se a chance real for maior que 50.5% — na análise o modelo estimou 44%",
+        "a aposta em pelo menos 3 gols só sai do zero se a chance real for maior que 50,5% — na análise o modelo estimou 44%",
       note: null,
-      oddAtRec: "1.85",
+      oddAtRec: "1,85",
       oddAtRecAgo: "há 2h",
       bookmaker: "pinnacle",
-      expectedReturn: "+3.6%",
+      expectedReturn: "+3,6%",
       expectedReturnTone: "positive",
       evLegend:
         "ganho médio por aposta, no longo prazo, se a estimativa de 56% do modelo estiver certa",
@@ -242,10 +242,10 @@ describe("toAnalysisView", () => {
           scenarioLabel: "mais de 2.5 gols",
           modelProb: "53%",
           marketProb: "50%",
-          odd: "1.92",
-          edge: "+3.0pp",
-          expectedReturn: "+1.8%",
-          breakEven: "1.89",
+          odd: "1,92",
+          edge: "+3,0pp",
+          expectedReturn: "+1,8%",
+          breakEven: "1,89",
           isRecommended: false,
         },
         {
@@ -254,10 +254,10 @@ describe("toAnalysisView", () => {
           scenarioLabel: "menos de 2.5 gols",
           modelProb: "47%",
           marketProb: "50%",
-          odd: "1.92",
-          edge: "-3.0pp",
-          expectedReturn: "-9.8%",
-          breakEven: "2.13",
+          odd: "1,92",
+          edge: "-3,0pp",
+          expectedReturn: "-9,8%",
+          breakEven: "2,13",
           isRecommended: false,
         },
       ],
@@ -326,11 +326,11 @@ describe("toAnalysisView", () => {
           label: "Over 2.5",
           scenarioLabel: "mais de 2.5 gols",
           modelProb: "58%",
-          marketProb: "50.7%",
+          marketProb: "50,7%",
           odd: "—",
-          edge: "+7.3pp",
+          edge: "+7,3pp",
           expectedReturn: "—",
-          breakEven: "1.72",
+          breakEven: "1,72",
           isRecommended: true,
         },
         {
@@ -338,15 +338,15 @@ describe("toAnalysisView", () => {
           label: "Under 2.5",
           scenarioLabel: "menos de 2.5 gols",
           modelProb: "42%",
-          marketProb: "49.3%",
+          marketProb: "49,3%",
           odd: "—",
-          edge: "-7.3pp",
+          edge: "-7,3pp",
           expectedReturn: "—",
-          breakEven: "2.38",
+          breakEven: "2,38",
           isRecommended: false,
         },
       ],
-      minOdd: "1.75",
+      minOdd: "1,75",
       stakeUnits: null,
       kellyInfoUnits: null,
       // Zebra sem odd registrada: framing não-derivável → null; nota de degradação.
@@ -400,11 +400,11 @@ describe("toAnalysisView", () => {
         label: "Over 2.5",
         scenarioLabel: "mais de 2.5 gols",
         modelProb: "58%",
-        marketProb: "50.7%",
-        odd: "1.92",
-        edge: "+7.3pp",
-        expectedReturn: "+11.4%",
-        breakEven: "1.72",
+        marketProb: "50,7%",
+        odd: "1,92",
+        edge: "+7,3pp",
+        expectedReturn: "+11,4%",
+        breakEven: "1,72",
         isRecommended: true,
       },
       {
@@ -412,11 +412,11 @@ describe("toAnalysisView", () => {
         label: "Under 2.5",
         scenarioLabel: "menos de 2.5 gols",
         modelProb: "42%",
-        marketProb: "49.3%",
+        marketProb: "49,3%",
         odd: "—",
-        edge: "-7.3pp",
+        edge: "-7,3pp",
         expectedReturn: "—",
-        breakEven: "2.38",
+        breakEven: "2,38",
         isRecommended: false,
       },
     ]);
@@ -454,7 +454,7 @@ describe("toAnalysisView", () => {
         odd: "—",
         edge: "—",
         expectedReturn: "—",
-        breakEven: "1.96",
+        breakEven: "1,96",
         isRecommended: false,
       },
       {
@@ -466,7 +466,7 @@ describe("toAnalysisView", () => {
         odd: "—",
         edge: "—",
         expectedReturn: "—",
-        breakEven: "2.04",
+        breakEven: "2,04",
         isRecommended: false,
       },
     ]);
@@ -501,10 +501,10 @@ describe("toAnalysisView", () => {
     );
 
     // Valor honesto, mas tom neutro + aviso no lugar da legenda padrão.
-    expect(view.expectedReturn).toBe("+11.4%");
+    expect(view.expectedReturn).toBe("+11,4%");
     expect(view.expectedReturnTone).toBe("neutral");
     expect(view.evLegend).toBe(
-      "a odd registrada na análise (1.92) estava abaixo da mínima sugerida (2.05) — só vale a pena se a odd subir para ≥ 2.05",
+      "a odd registrada na análise (1,92) estava abaixo da mínima sugerida (2,05) — só vale a pena se a odd subir para ≥ 2,05",
     );
   });
 
@@ -531,7 +531,7 @@ describe("toAnalysisView", () => {
     );
     expect(warned.expectedReturnTone).toBe("neutral");
     expect(warned.evLegend).toBe(
-      "a odd registrada na análise (9.00) estava abaixo da mínima sugerida (10.00) — só vale a pena se a odd subir para ≥ 10.00",
+      "a odd registrada na análise (9,00) estava abaixo da mínima sugerida (10,00) — só vale a pena se a odd subir para ≥ 10,00",
     );
 
     // Inverso: "9.000" > "10.000" lexicograficamente, mas 9 < 10 → SEM aviso.
@@ -580,7 +580,7 @@ describe("toAnalysisView", () => {
       null,
       threeHoursLater,
     );
-    expect(view.expectedReturn).toBe("+11.4%");
+    expect(view.expectedReturn).toBe("+11,4%");
     expect(view.expectedReturnTone).toBe("positive");
     expect(view.evLegend).toBe(
       "ganho médio por aposta, no longo prazo, se a estimativa de 58% do modelo estiver certa",
@@ -608,7 +608,7 @@ describe("toAnalysisView", () => {
       null,
       threeHoursLater,
     );
-    expect(view.expectedReturn).toBe("0.0%");
+    expect(view.expectedReturn).toBe("0,0%");
     expect(view.expectedReturnTone).toBe("neutral");
     expect(view.evLegend).toBe(
       "ganho médio por aposta, no longo prazo, se a estimativa de 61% do modelo estiver certa",
@@ -670,12 +670,12 @@ describe("toAnalysisView", () => {
       threeHoursLater,
     );
 
-    expect(view.expectedReturn).toBe("-0.9%");
+    expect(view.expectedReturn).toBe("-0,9%");
     expect(view.expectedReturnTone).toBe("neutral");
     // f* ≤ 0: o clamp de 0.5u do Kelly viraria sugestão de aposta — nada informativo.
     expect(view.kellyInfoUnits).toBeNull();
     expect(view.evLegend).toBe(
-      "na odd registrada na análise, o retorno esperado é negativo — só vale a pena com odd ≥ 1.80",
+      "na odd registrada na análise, o retorno esperado é negativo — só vale a pena com odd ≥ 1,80",
     );
   });
 
@@ -735,7 +735,7 @@ describe("toAnalysisView", () => {
       threeHoursLater,
     );
     // SEM sinal (convenção do drill-down do dashboard), 2 casas.
-    expect(view.stakeUnits).toBe("1.00 u");
+    expect(view.stakeUnits).toBe("1,00 u");
 
     // pass não tem aposta → stakeUnits null mesmo com input.
     const pass = toAnalysisView(
@@ -795,14 +795,14 @@ describe("toOutcomesView (N-vias)", () => {
     // home: implícita 0.47619/1.04809 = 45.4%; edge 50−45.4 = +4.6pp;
     // EV 0.50×2.10−1 = +5.0%; breakEven = 100/50 = 2.00.
     expect(outcomes[0].modelProb).toBe("50%");
-    expect(outcomes[0].odd).toBe("2.10");
-    expect(outcomes[0].marketProb).toBe("45.4%");
-    expect(outcomes[0].edge).toBe("+4.6pp");
-    expect(outcomes[0].expectedReturn).toBe("+5.0%");
-    expect(outcomes[0].breakEven).toBe("2.00");
+    expect(outcomes[0].odd).toBe("2,10");
+    expect(outcomes[0].marketProb).toBe("45,4%");
+    expect(outcomes[0].edge).toBe("+4,6pp");
+    expect(outcomes[0].expectedReturn).toBe("+5,0%");
+    expect(outcomes[0].breakEven).toBe("2,00");
     // draw/away (não recomendados): fecha a normalização do overround (Σ = 100%).
-    expect(outcomes[1].marketProb).toBe("28.1%");
-    expect(outcomes[2].marketProb).toBe("26.5%");
+    expect(outcomes[1].marketProb).toBe("28,1%");
+    expect(outcomes[2].marketProb).toBe("26,5%");
   });
 });
 
@@ -852,8 +852,8 @@ describe("toAnalysisView (N-vias / 1X2)", () => {
     ]);
     // Valores N-vias pinados (mesma fórmula do toOutcomesView): home edge +4.6pp.
     expect(view.outcomes[0].modelProb).toBe("50%");
-    expect(view.outcomes[0].marketProb).toBe("45.4%");
-    expect(view.outcomes[0].edge).toBe("+4.6pp");
+    expect(view.outcomes[0].marketProb).toBe("45,4%");
+    expect(view.outcomes[0].edge).toBe("+4,6pp");
 
     // Bloco de recomendação usa a apresentação 1X2 (sem linha).
     expect(view.recommendation).not.toBeNull();
@@ -1012,7 +1012,7 @@ describe("toAnalysisView (N-vias / btts)", () => {
     // Valores N-vias pinados: yes modelProb 60, implícita 50, edge +10.0pp.
     expect(view.outcomes[0].modelProb).toBe("60%");
     expect(view.outcomes[0].marketProb).toBe("50%");
-    expect(view.outcomes[0].edge).toBe("+10.0pp");
+    expect(view.outcomes[0].edge).toBe("+10,0pp");
     expect(view.outcomes[1].modelProb).toBe("40%");
 
     // Bloco de recomendação usa a apresentação btts (sem linha) + sub-linha leiga.
@@ -1157,7 +1157,7 @@ describe("toAnalysisView (N-vias / dupla chance) — edge da grade == edge persi
     ]);
     // de-vig Σ=2: implícita ~75% (NÃO ~37.5% de Σ=1) → edge +9.0pp (== persistido).
     expect(view.outcomes[0].marketProb).toBe("75%");
-    expect(view.outcomes[0].edge).toBe("+9.0pp");
+    expect(view.outcomes[0].edge).toBe("+9,0pp");
     expect(view.outcomes[0].isRecommended).toBe(true);
     expect(view.recommendation?.marketKey).toBe("double_chance");
     expect(view.recommendation?.selectionLabel).toBe("Casa ou empate");
@@ -1422,7 +1422,7 @@ describe("toAnalysisView — anytime_scorer (independent_binary, #290)", () => {
     const pedro = view.outcomes.find((o) => o.label === "Pedro");
     // implícita-teto 1/2.5*100 = 40 → "40%"; edge model(52)−40 = +12pp.
     expect(pedro?.marketProb).toBe("40%");
-    expect(pedro?.edge).toBe("+12.0pp");
+    expect(pedro?.edge).toBe("+12,0pp");
   });
 });
 
@@ -1507,12 +1507,12 @@ describe("toAnalysisView — quarter-Kelly informativo", () => {
   it("usa implícita + edge (a p do Kelly oficial), não a confiança", () => {
     // p = 0.55, odd 1.95: f* = 0.0725/0.95 = 0.0763 → ¼ = 1.9% → 2u. Com a confiança
     // (0.70) daria 3u.
-    expect(view({}).kellyInfoUnits).toBe("2.00 u");
+    expect(view({}).kellyInfoUnits).toBe("2,00 u");
   });
 
   it("mostra o piso de 0.5u quando o Kelly arredonda pra zero com retorno positivo", () => {
     // p = 0.52, odd 1.95: p·odd = 1.014 > 1, f* ≈ 0.0147 → ¼ ≈ 0.37% → piso 0.5u.
-    expect(view({ impliedProbPct: "47.00" }).kellyInfoUnits).toBe("0.50 u");
+    expect(view({ impliedProbPct: "47.00" }).kellyInfoUnits).toBe("0,50 u");
   });
 
   it("some quando repete o stake oficial (gate do Kelly ativo)", () => {

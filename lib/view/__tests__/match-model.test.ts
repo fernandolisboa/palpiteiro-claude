@@ -99,14 +99,14 @@ describe("toMatchModelReadingView", () => {
       "Resultado (1X2)",
       "Dupla chance",
       "Ambas marcam",
-      "Over/Under gols · 1.5",
-      "Over/Under gols · 2.5",
-      "Over/Under gols · 3.5",
+      "Over/Under gols · 1,5",
+      "Over/Under gols · 2,5",
+      "Over/Under gols · 3,5",
     ]);
     expect(view.markets[0].selections[0]).toEqual({
       label: "Casa",
-      pct: "52.3%",
-      fairOdd: (100 / 52.3).toFixed(2),
+      pct: "52,3%",
+      fairOdd: (100 / 52.3).toFixed(2).replace(".", ","),
     });
     expect(view.markets[1].selections.map((s) => s.label)).toEqual([
       "Casa ou empate",
@@ -115,8 +115,8 @@ describe("toMatchModelReadingView", () => {
     ]);
     expect(view.markets[4].selections[1]).toEqual({
       label: "Under 2.5",
-      pct: "51.6%",
-      fairOdd: (100 / 51.6).toFixed(2),
+      pct: "51,6%",
+      fairOdd: (100 / 51.6).toFixed(2).replace(".", ","),
     });
   });
 
@@ -134,8 +134,8 @@ describe("toMatchModelReadingView", () => {
   it("placares, 'calculado há' e nenhum campo de valor", () => {
     const view = toMatchModelReadingView(snapshot(), NOW);
     expect(view.topScorelines).toEqual([
-      { score: "1–1", pct: "12.4%" },
-      { score: "1–0", pct: "11.9%" },
+      { score: "1–1", pct: "12,4%" },
+      { score: "1–0", pct: "11,9%" },
     ]);
     expect(view.computedAgo).toBe("há 3h");
     expect(JSON.stringify(view)).not.toMatch(/edge|valor|"odd"/i);

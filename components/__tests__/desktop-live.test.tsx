@@ -74,8 +74,8 @@ describe("UpcomingMatchesDesktop — em andamento (#385)", () => {
     expect(html).toContain("animate-pulse");
     expect(html.toLowerCase()).toContain("ao vivo");
     // (b) odds pré-jogo NÃO renderizadas pra a linha ao vivo
-    expect(html).not.toContain("1.85");
-    expect(html).not.toContain("1.95");
+    expect(html).not.toContain("1,85");
+    expect(html).not.toContain("1,95");
     // (c) chevron mantido → linha segue clicável
     expect(html).toContain("lucide-chevron-right");
   });

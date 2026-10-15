@@ -37,7 +37,7 @@ describe("toRecentPredictionView — rótulo e mercado (#539)", () => {
       "UTC"
     );
     expect(v.rec).toBe("OVER");
-    expect(v.market).toBe("Over/Under gols 2.5");
+    expect(v.market).toBe("Over/Under gols 2,5");
   });
 
   it("row legada sem marketId cai em over/under", () => {

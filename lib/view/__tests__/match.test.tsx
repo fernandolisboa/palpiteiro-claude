@@ -214,8 +214,8 @@ describe("MatchRow rendering by status", () => {
 
   it("keeps odds rendering unchanged for a scheduled match", () => {
     const markup = render(makeMatch({ status: "scheduled" }), true);
-    expect(markup).toContain("1.85");
-    expect(markup).toContain("1.95");
+    expect(markup).toContain("1,85");
+    expect(markup).toContain("1,95");
     expect(markup.toLowerCase()).not.toContain("encerrado");
   });
 
@@ -235,7 +235,7 @@ describe("MatchRow rendering by status", () => {
     );
     expect(markup).toContain("ao vivo");
     expect(markup).not.toContain("sem odd");
-    expect(markup).not.toContain("1.85");
+    expect(markup).not.toContain("1,85");
     expect(markup.toLowerCase()).not.toContain("encerrado");
   });
 
@@ -250,12 +250,12 @@ describe("MatchRow rendering by status", () => {
       true,
     );
     expect(markup).toContain("ao vivo");
-    expect(markup).not.toContain("1.85");
+    expect(markup).not.toContain("1,85");
   });
 
   it("scheduled futuro (isInProgress false): kickoff+odds, SEM badge ao vivo", () => {
     const markup = render(makeMatch({ status: "scheduled" }), true);
-    expect(markup).toContain("1.85");
+    expect(markup).toContain("1,85");
     expect(markup).not.toContain("ao vivo");
     expect(markup).not.toContain("AO VIVO");
   });
@@ -285,9 +285,9 @@ describe("toMatchRowView — prioridade de mercado no chip (#173 PR-2)", () => {
       now: NOW,
     });
     expect(view.odds?.outcomes).toEqual([
-      { label: "Casa", odd: "2.10" },
-      { label: "Empate", odd: "3.40" },
-      { label: "Fora", odd: "3.90" },
+      { label: "Casa", odd: "2,10" },
+      { label: "Empate", odd: "3,40" },
+      { label: "Fora", odd: "3,90" },
     ]);
   });
 
@@ -300,8 +300,8 @@ describe("toMatchRowView — prioridade de mercado no chip (#173 PR-2)", () => {
       now: NOW,
     });
     expect(view.odds?.outcomes).toEqual([
-      { label: "Over", odd: "1.85" },
-      { label: "Under", odd: "1.95" },
+      { label: "Over", odd: "1,85" },
+      { label: "Under", odd: "1,95" },
     ]);
   });
 
@@ -328,8 +328,8 @@ describe("toMatchRowView — prioridade de mercado no chip (#173 PR-2)", () => {
     expect(markup).toContain("Casa");
     expect(markup).toContain("Empate");
     expect(markup).toContain("Fora");
-    expect(markup).toContain("2.10");
-    expect(markup).toContain("3.90");
+    expect(markup).toContain("2,10");
+    expect(markup).toContain("3,90");
   });
 });
 

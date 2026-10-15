@@ -51,7 +51,7 @@ describe("recommendationLabel (#539)", () => {
 describe("marketContextLabel", () => {
   it("anexa a linha quando o mercado tem uma", () => {
     expect(marketContextLabel("Over/Under gols", { line: 3.5 })).toBe(
-      "Over/Under gols 3.5"
+      "Over/Under gols 3,5"
     );
   });
 

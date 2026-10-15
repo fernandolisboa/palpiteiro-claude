@@ -19,13 +19,13 @@ describe("toNwayOddsView — card N-vias (1X2) (#173 PR-2)", () => {
     );
     expect(v.marketLabel).toBe("Resultado (1X2)");
     expect(v.outcomes).toEqual([
-      { label: "Casa", odd: "2.10", pct: "44.0%" },
-      { label: "Empate", odd: "3.40", pct: "27.2%" },
-      { label: "Fora", odd: "3.20", pct: "28.9%" },
+      { label: "Casa", odd: "2,10", pct: "44,0%" },
+      { label: "Empate", odd: "3,40", pct: "27,2%" },
+      { label: "Fora", odd: "3,20", pct: "28,9%" },
     ]);
     // SCALING pin (#173 blocker): overround vem RE-DERIVADO das odds (~8.3%),
     // NUNCA do overroundPct armazenado (string em percent) nem inflado 100x.
-    expect(v.overround).toBe("8.3%");
+    expect(v.overround).toBe("8,3%");
     expect(v.bookmaker).toBe("Pinnacle");
     expect(typeof v.updatedAgo).toBe("string");
   });
@@ -45,7 +45,7 @@ describe("toNwayOddsView — card N-vias (1X2) (#173 PR-2)", () => {
     );
     // 1/1.5 domina → implícita do favorito > 55% (só certo com Number() aplicado;
     // string-math daria NaN/lixo). As 3 implícitas somam ~100% (Σ=1, partição).
-    const pcts = v.outcomes.map((o) => Number(o.pct.replace("%", "")));
+    const pcts = v.outcomes.map((o) => Number(o.pct.replace("%", "").replace(",", ".")));
     expect(pcts[0]).toBeGreaterThan(55);
     expect(pcts.reduce((a, b) => a + b, 0)).toBeCloseTo(100, 0);
     expect(v.outcomes.map((o) => o.label)).toEqual(["Casa", "Empate", "Fora"]);

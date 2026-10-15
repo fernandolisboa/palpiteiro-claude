@@ -45,16 +45,16 @@ describe("toPredictionRowView", () => {
       row({ result: "won", profitUnits: "1.85" }),
     );
     expect(v.rec).toBe("OVER");
-    expect(v.odd).toBe("1.92");
-    expect(v.edge).toBe("+7.3");
+    expect(v.odd).toBe("1,92");
+    expect(v.edge).toBe("+7,3");
     expect(v.confidence).toBe("58%");
     expect(v.status).toBe("won");
-    expect(v.profit).toBe("+1.85 u");
+    expect(v.profit).toBe("+1,85 u");
   });
 
   it("renders a negative profit and a pending row", () => {
     expect(toPredictionRowView(row({ result: "lost", profitUnits: "-1.00" })).profit).toBe(
-      "-1.00 u",
+      "-1,00 u",
     );
     const pending = toPredictionRowView(row());
     expect(pending.status).toBe("pending");
@@ -74,7 +74,7 @@ describe("toPredictionRowView", () => {
   it("carrega o mercado (+ linha) ao lado da recomendação", () => {
     expect(
       toPredictionRowView(row({ marketParams: { line: 3.5 } })).market,
-    ).toBe("Over/Under gols 3.5");
+    ).toBe("Over/Under gols 3,5");
     const btts = toPredictionRowView(
       row({ marketKey: "btts", marketLabel: "Ambas marcam", recommendation: "yes" }),
     );
@@ -101,7 +101,7 @@ describe("toDashboardKpiView", () => {
     const v = toDashboardKpiView(computeDashboardKpis([]));
     expect(v.yieldPct.value).toBe("—");
     expect(v.yieldPct.n).toBe(0);
-    expect(v.totalProfit).toBe("+0.00 u");
+    expect(v.totalProfit).toBe("+0,00 u");
     expect(v.profitPositive).toBe(true);
   });
 
@@ -272,8 +272,8 @@ describe("toPredictionDetailView", () => {
     const v = toPredictionDetailView(makeDetail(), {
       includeRawPayloads: false,
     });
-    expect(v.prediction.stake).toBe("2.00 u");
-    expect(v.outcome?.profit).toBe("+1.84 u");
+    expect(v.prediction.stake).toBe("2,00 u");
+    expect(v.outcome?.profit).toBe("+1,84 u");
     expect(v.match.score).toBe("2-1");
     // Fase 5: o dashboard parou de ler a coluna legada total_goals. Uma row
     // histórica pré-backfill (resultData null) degrada honestamente pra "—" no
@@ -474,7 +474,7 @@ describe("toPredictionDetailView", () => {
       },
     });
     expect(v.clv.available).toBe(true);
-    expect(v.clv.closingOdd).toBe("1.85");
+    expect(v.clv.closingOdd).toBe("1,85");
     // oddRec 1.92 > close 1.85 → bati o fechamento → +
     expect(v.clv.oddsRatioPct.startsWith("+")).toBe(true);
     expect(v.clv.oddsRatioPct.endsWith("%")).toBe(true);
