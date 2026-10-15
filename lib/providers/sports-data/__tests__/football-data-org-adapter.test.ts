@@ -76,6 +76,19 @@ describe("toNormalizedFixture (football-data-org)", () => {
     expect(n.awayTeam).toBe("São Paulo FC");
   });
 
+  it("crest do time vira homeCrestUrl/awayCrestUrl (#578)", () => {
+    const n = toNormalizedFixture(
+      makeMatch({
+        homeTeam: { id: 1765, name: "Fluminense FC", crest: "https://crests.football-data.org/1765.png" },
+        awayTeam: { id: 1776, name: "São Paulo FC", crest: "https://crests.football-data.org/1776.svg" },
+      }),
+      "brasileirao_a",
+    );
+    expect(n.homeCrestUrl).toBe("https://crests.football-data.org/1765.png");
+    expect(n.awayCrestUrl).toBe("https://crests.football-data.org/1776.svg");
+    expect("homeCrestUrl" in toNormalizedFixture(makeMatch(), "brasileirao_a")).toBe(false);
+  });
+
   it("carrega o stage como round (detecção de final neutra, #529)", () => {
     expect(toNormalizedFixture(makeMatch(), "brasileirao_a").round).toBe(
       "REGULAR_SEASON",

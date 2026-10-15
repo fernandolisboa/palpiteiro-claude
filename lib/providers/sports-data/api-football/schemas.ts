@@ -52,6 +52,9 @@ const TeamRefSchema = z.object({
   id: z.number().int(),
   name: z.string(),
   winner: z.boolean().nullable().optional(),
+  // Escudo (#578). Tolerante de propósito: um logo malformado não pode derrubar o
+  // parse do fixture inteiro; a validação fica no safeCrestUrl.
+  logo: z.string().nullable().optional(),
 });
 
 const LeagueRefSchema = z.object({

@@ -183,6 +183,8 @@ function makeDetail(overrides: Partial<DashboardDetail> = {}): DashboardDetail {
     homeScore: 2,
     awayScore: 1,
     neutralVenue: false,
+    homeTeamCrestUrl: null,
+    awayTeamCrestUrl: null,
     updatedAt: new Date("2026-06-12T05:00:00Z"),
   };
   const prediction: DashboardDetail["prediction"] = {

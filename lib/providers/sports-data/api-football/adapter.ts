@@ -79,6 +79,7 @@ import {
   SportsDataTransientError,
   SportsDataUnsupportedError,
 } from "@/lib/providers/sports-data/types";
+import { safeCrestUrl } from "@/lib/providers/sports-data/crest-url";
 
 // API-Football free tier is 10 req/min and 100 req/day. We throttle at 8/min
 // (20% under the per-minute cap) to avoid the burst-detection auto-ban that
@@ -505,6 +506,9 @@ function toNormalizedFixture(
   const home = canonicalizeOrPassthrough(f.teams.home.name, league);
   const away = canonicalizeOrPassthrough(f.teams.away.name, league);
   const kickoffAt = new Date(f.fixture.timestamp * 1000).toISOString();
+  // Escudo (#578): só a chave quando há valor, pra não mexer em toStrictEqual de H2H/forma.
+  const homeCrestUrl = safeCrestUrl(f.teams.home.logo);
+  const awayCrestUrl = safeCrestUrl(f.teams.away.logo);
   return {
     id: compositeFixtureKey({
       league,
@@ -521,6 +525,8 @@ function toNormalizedFixture(
     score: { home: f.goals.home, away: f.goals.away },
     venue: f.fixture.venue?.name ?? undefined,
     round: f.league.round || undefined,
+    ...(homeCrestUrl ? { homeCrestUrl } : {}),
+    ...(awayCrestUrl ? { awayCrestUrl } : {}),
   };
 }
 

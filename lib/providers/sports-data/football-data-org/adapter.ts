@@ -63,6 +63,7 @@ import {
   type ProviderCapabilities,
   type SportsDataProvider,
 } from "@/lib/providers/sports-data/types";
+import { safeCrestUrl } from "@/lib/providers/sports-data/crest-url";
 
 // ─── HTTP client config ─────────────────────────────────────────────────────
 // Free tier: 10 req/min via X-Auth-Token. We throttle 10% below (9/min) to
@@ -242,6 +243,9 @@ function toNormalizedFixture(
   const home = canonicalizeOrPassthrough(m.homeTeam.name, league);
   const away = canonicalizeOrPassthrough(m.awayTeam.name, league);
   const kickoffAt = new Date(m.utcDate).toISOString();
+  // Escudo (#578): só a chave quando há valor, como no adapter da API-Football.
+  const homeCrestUrl = safeCrestUrl(m.homeTeam.crest);
+  const awayCrestUrl = safeCrestUrl(m.awayTeam.crest);
   return {
     id: compositeFixtureKey({
       league,
@@ -258,6 +262,8 @@ function toNormalizedFixture(
     score: { home: m.score.fullTime.home, away: m.score.fullTime.away },
     venue: m.venue ?? undefined,
     round: m.stage || undefined,
+    ...(homeCrestUrl ? { homeCrestUrl } : {}),
+    ...(awayCrestUrl ? { awayCrestUrl } : {}),
   };
 }
 

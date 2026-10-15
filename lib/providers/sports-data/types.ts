@@ -39,6 +39,11 @@ export const NormalizedFixtureSchema = z.object({
   // 12"; football-data.org: "FINAL", "REGULAR_SEASON"). Hoje só alimenta a
   // detecção de final em campo neutro (#529, neutral-venue.ts).
   round: z.string().min(1).optional(),
+  // Escudo de cada time (#578), já filtrado por safeCrestUrl (só CDN de time do
+  // provider). Só exibição: nunca entra em chave (compositeFixtureKey) nem em prompt.
+  // Opcional/aditivo: o cache de fixtures antigo continua válido.
+  homeCrestUrl: z.url().optional(),
+  awayCrestUrl: z.url().optional(),
 });
 export type NormalizedFixture = z.infer<typeof NormalizedFixtureSchema>;
 

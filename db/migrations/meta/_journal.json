@@ -407,6 +407,13 @@
       "when": 1791913247731,
       "tag": "0057_user_palpite_analyses",
       "breakpoints": true
+    },
+    {
+      "idx": 58,
+      "version": "7",
+      "when": 1792085295002,
+      "tag": "0058_match_team_crests",
+      "breakpoints": true
     }
   ]
 }

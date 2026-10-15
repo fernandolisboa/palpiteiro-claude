@@ -17,7 +17,10 @@ import type {
   ApiFootballLineup,
   ApiFootballStandings,
 } from "@/lib/providers/sports-data/api-football/schemas";
-import { StandingsItemSchema } from "@/lib/providers/sports-data/api-football/schemas";
+import {
+  FixtureItemSchema,
+  StandingsItemSchema,
+} from "@/lib/providers/sports-data/api-football/schemas";
 import { API_FOOTBALL_TEAM_IDS } from "@/lib/providers/sports-data/api-football/team-ids";
 import {
   SportsDataNotFoundError,
@@ -122,6 +125,40 @@ describe("toNormalizedFixture", () => {
       "copa_libertadores"
     );
     expect(n.round).toBeUndefined();
+  });
+
+  it("logo do time vira homeCrestUrl/awayCrestUrl (#578)", () => {
+    const f = makeFixture();
+    const n = toNormalizedFixture(
+      {
+        ...f,
+        teams: {
+          home: { ...f.teams.home, logo: "https://media.api-sports.io/football/teams/127.png" },
+          away: { ...f.teams.away, logo: "https://media-4.api-sports.io/football/teams/124.png" },
+        },
+      },
+      "brasileirao_a",
+    );
+    expect(n.homeCrestUrl).toBe("https://media.api-sports.io/football/teams/127.png");
+    expect(n.awayCrestUrl).toBe("https://media-4.api-sports.io/football/teams/124.png");
+    // O escudo nunca entra na chave.
+    expect(n.id).toBe("brasileirao_a:2026-05-15T19:00:00.000Z:CR Flamengo:Fluminense FC");
+  });
+
+  it("logo ausente ou inválido não quebra o parse e não cria a chave (#578)", () => {
+    const f = makeFixture();
+    const parsed = FixtureItemSchema.safeParse({
+      ...f,
+      teams: {
+        home: { ...f.teams.home, logo: "https://media.api-sports.io/football/bookmakers/8.png" },
+        away: { ...f.teams.away, logo: null },
+      },
+    });
+    expect(parsed.success).toBe(true);
+    const n = toNormalizedFixture(parsed.data!, "brasileirao_a");
+    expect("homeCrestUrl" in n).toBe(false);
+    expect("awayCrestUrl" in n).toBe(false);
+    expect("homeCrestUrl" in toNormalizedFixture(makeFixture(), "brasileirao_a")).toBe(false);
   });
 
   it("passes through provider team name when no canonical match exists", () => {
