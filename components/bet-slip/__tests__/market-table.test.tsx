@@ -135,6 +135,26 @@ describe("MarketTable — legenda da chance", () => {
   });
 });
 
+// Todos os modos da tabela: registro com e sem modelo, sem nenhuma odd, só leitura com e
+// sem odd.
+const ALL_MODES: [string, BetGridView][] = [
+  ["registro", grid()],
+  ["registro sem modelo", grid({ model: null })],
+  ["registro sem odd", grid({ references: new Map() })],
+  ["só leitura", grid({ mode: "readOnly", unavailable: "finished" })],
+  ["só leitura sem odd", grid({ mode: "readOnly", unavailable: "live", references: new Map() })],
+];
+
+describe("MarketTable — guardas", () => {
+  it.each(ALL_MODES)("%s: sem linguagem de valor (a tabela não mede vantagem)", (_, g) => {
+    expect(text(html(g))).not.toMatch(/edge|valor|\bEV\b|stake/i);
+  });
+
+  it.each(ALL_MODES)("%s: nunca o nome da casa (a captura é da pinnacle)", (_, g) => {
+    expect(html(g)).not.toMatch(/pinnacle/i);
+  });
+});
+
 describe("MarketTable — interação", () => {
   let container: HTMLDivElement;
   let root: Root;
