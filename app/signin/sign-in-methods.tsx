@@ -153,7 +153,7 @@ export function SignInMethods({
         </Button>
         <PasskeySignInButton email={email} enabled={enabled} describedBy={describedBy} />
         {errorMessage && (
-          <p className="text-body-sm text-destructive tracking-tight">
+          <p role="alert" className="text-body-sm text-destructive tracking-tight">
             {errorMessage}
           </p>
         )}

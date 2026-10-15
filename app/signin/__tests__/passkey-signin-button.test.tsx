@@ -1,10 +1,14 @@
 import { readFileSync } from "node:fs";
 import { join } from "node:path";
 
+import { act } from "react";
+import { createRoot } from "react-dom/client";
 import { renderToStaticMarkup } from "react-dom/server";
 import { describe, expect, it, vi } from "vitest";
 
 vi.mock("next-auth/webauthn", () => ({ signIn: vi.fn() }));
+
+import { signIn } from "next-auth/webauthn";
 
 import { PasskeySignInButton } from "../passkey-signin-button";
 
@@ -40,5 +44,49 @@ describe("PasskeySignInButton (#579)", () => {
       "utf8",
     );
     expect(src).toContain("email: email.trim().toLowerCase()");
+  });
+
+  it("valida o form antes da cerimônia: e-mail mal formado não chama o signIn", async () => {
+    (
+      globalThis as { IS_REACT_ACT_ENVIRONMENT?: boolean }
+    ).IS_REACT_ACT_ENVIRONMENT = true;
+    const mocked = vi.mocked(signIn);
+    mocked.mockResolvedValue({ ok: false, error: "x", code: undefined, status: 401, url: null });
+    const container = document.createElement("div");
+    document.body.appendChild(container);
+    const root = createRoot(container);
+    const mount = (email: string) =>
+      act(async () =>
+        root.render(
+          <form>
+            <input type="email" required defaultValue={email} />
+            <PasskeySignInButton email={email} />
+          </form>,
+        ),
+      );
+    const click = () =>
+      act(async () => container.querySelector("button")!.click());
+
+    await mount("abc");
+    await click();
+    expect(mocked).not.toHaveBeenCalled();
+
+    await act(async () => root.unmount());
+    const root2 = createRoot(container);
+    await act(async () =>
+      root2.render(
+        <form>
+          <input type="email" required defaultValue="Fulano@X.com" />
+          <PasskeySignInButton email="Fulano@X.com" />
+        </form>,
+      ),
+    );
+    await click();
+    expect(mocked).toHaveBeenCalledWith(
+      "passkey",
+      expect.objectContaining({ email: "fulano@x.com" }),
+    );
+    await act(async () => root2.unmount());
+    container.remove();
   });
 });

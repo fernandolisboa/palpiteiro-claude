@@ -1,6 +1,6 @@
 "use client";
 
-import { useState } from "react";
+import { useState, type MouseEvent } from "react";
 import { signIn } from "next-auth/webauthn";
 
 import { Button } from "@/components/ui/button";
@@ -44,7 +44,11 @@ export function PasskeySignInButton({
   const [pending, setPending] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
-  async function onClick() {
+  async function onClick(event: MouseEvent<HTMLButtonElement>) {
+    // `type="button"` pula a validação nativa: confere o form (e-mail bem formado)
+    // antes de abrir a cerimônia, senão "abc" iniciaria um cadastro.
+    const form = event.currentTarget.form;
+    if (form && !form.reportValidity()) return;
     setPending(true);
     setError(null);
     try {
@@ -89,7 +93,9 @@ export function PasskeySignInButton({
         {pending ? "Verificando…" : "Entrar com passkey"}
       </Button>
       {error && (
-        <p className="text-destructive text-body-sm tracking-tight">{error}</p>
+        <p role="alert" className="text-destructive text-body-sm tracking-tight">
+          {error}
+        </p>
       )}
     </>
   );

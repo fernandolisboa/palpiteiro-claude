@@ -69,7 +69,7 @@ describe("LandingContent", () => {
     expect(html).not.toContain("Aposta não é investimento");
   });
 
-  it("firewall: sem odd, vantagem, stake, R$, %, unidades nem promessa", () => {
+  it("firewall: sem odd, vantagem, stake, R$, %, valor em u (\"2u\") nem promessa", () => {
     expect(text(render())).not.toMatch(
       /\bodds?\b|vantagem|\bedge\b|stake|R\$|%|\b\d+(,\d+)?u\b|lucro|garant|ganhe/i,
     );

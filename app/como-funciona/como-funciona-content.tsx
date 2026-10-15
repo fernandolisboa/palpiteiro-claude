@@ -115,7 +115,7 @@ function VerAConta({ label, children }: { label: string; children: ReactNode }) 
           aria-hidden="true"
           className="size-3.5 shrink-0 text-muted-foreground transition-transform group-open:rotate-90"
         />
-        ver a conta
+        ver a conta<span className="sr-only"> · {label}</span>
       </summary>
       <div className="px-4 pb-4">
         <p className="text-meta uppercase tracking-label text-muted-foreground">{label}</p>
