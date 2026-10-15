@@ -43,9 +43,9 @@ describe("findStaticGatedRoutes", () => {
     ).toEqual(["/match/[id]", "/docs/[[...slug]]"]);
   });
 
-  it("o 404 default fica liberado de propósito", () => {
-    expect(STATIC_GATED_ALLOWLIST).toEqual(["/_not-found"]);
+  it("o 404 não tem exceção: se sair estático, o check acusa (#574)", () => {
+    expect(STATIC_GATED_ALLOWLIST).toEqual([]);
     expect(isGated("/_not-found")).toBe(true);
-    expect(findStaticGatedRoutes(["/_not-found"], isGated)).toEqual([]);
+    expect(findStaticGatedRoutes(["/_not-found"], isGated)).toEqual(["/_not-found"]);
   });
 });
