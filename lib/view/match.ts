@@ -63,7 +63,7 @@ export type ToMatchRowArgs = {
   now?: Date;
   // Fuso de exibição do usuário (#1). Undefined = fuso do runtime (legado/testes).
   timeZone?: string;
-  // Base do modelo do jogo (#555): vira a linha "Modelo · …" do /jogos, só em jogo
+  // Base do modelo do jogo (#555): vira a linha "Modelo: …" do /jogos, só em jogo
   // analisável. Opcional — o hero e os call sites antigos não passam.
   modelSnapshot?: MatchModelSnapshot | null;
 };
@@ -89,7 +89,7 @@ export function toMatchRowView({
     away: match.awayTeamCrestUrl,
   });
   // Sigla de 3 letras nos rótulos de 1X2 (coluna estreita da lista): "PAL 2,67 ·
-  // Empate 2,87 · FLA 3,06" e "Modelo · PAL 42%" (#574 linha 4b).
+  // Empate 2,87 · FLA 3,06" e "Modelo: PAL 42%" (#574 linha 4b).
   const shortTeams = { home: home.short, away: away.short };
   const nowMs = now.getTime();
   const kickoffMs = match.kickoffAt.getTime();

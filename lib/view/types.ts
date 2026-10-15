@@ -1,4 +1,3 @@
-
 // Keys curtas de liga usadas em URL (?league=) e na UI. Nova liga = nova key aqui
 // (e os Records exaustivos em lib/format.ts / lib/view/league-picker.ts quebram o
 // build até serem preenchidos).
@@ -80,7 +79,7 @@ export type MatchRowView = {
   liveScore?: { home: number; away: number; caption: string };
   venue?: string;
   countdown?: string;
-  // Linha "Modelo · Casa 52% · Under 2.5 55%" do /jogos (#555, ADR 0052): só em jogo
+  // Linha "Modelo: PAL 42% · Menos de 2,5 59%" do /jogos (#555, ADR 0052): só em jogo
   // analisável com base do modelo calculada. Só probabilidade: sem odd, edge ou valor.
   model?: MatchModelLineView;
 };
