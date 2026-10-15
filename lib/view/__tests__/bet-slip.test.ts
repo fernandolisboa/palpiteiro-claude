@@ -244,7 +244,7 @@ describe("toSlipEvaluationView", () => {
     expect(l.userOdd).toBe("2,50");
     expect(l.ev).toBe("+50,0%");
     expect(l.breakEven).toBe("40,0%");
-    expect(l.edge).toMatch(/^\+\d+,\dpp$/);
+    expect(l.edge).toMatch(/^\+\d+,\d pontos$/);
     expect(l.edgeNote).toContain("contra o mercado (odd 2,50, sem a margem)");
     expect(l.reading).toBe(valueReading(0.5));
     expect(l.suggestedStake).toMatch(/u \(bandas\)$/);
@@ -353,8 +353,8 @@ describe("historyLegSummary", () => {
     ).toEqual([
       "chance 52,3%",
       "odd 2,10",
-      "retorno +9,8%",
-      "edge do modelo +4,5pp",
+      "retorno esperado +9,8%",
+      "vantagem do modelo +4,5 pontos",
       "seu stake 1u",
       "sugerido 1,5u",
       "Dixon-Coles",

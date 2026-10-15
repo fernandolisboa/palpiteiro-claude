@@ -15,6 +15,7 @@ import { getDescriptor } from "@/lib/odds/market-descriptor";
 import {
   formatCostUsd,
   formatEdge,
+  formatEdgePoints,
   formatKickoffAbsolute,
   formatModelName,
   formatOdd,
@@ -23,10 +24,12 @@ import {
   formatUnitsSigned,
   leagueToKey,
 } from "@/lib/format";
-import { getMarketPresentation } from "@/lib/view/markets/presentation";
+import { displayMarketLabel, getDisplayPresentation } from "@/lib/view/markets/display";
 import {
   marketContextLabel,
+  recommendationKind,
   recommendationLabel,
+  type RecommendationKind,
 } from "@/lib/view/recommendation";
 import { ownsAiCall } from "@/lib/view/owns-ai-call";
 import { teamToTeam } from "@/lib/view/team";
@@ -153,7 +156,7 @@ export function toMarketSegmentView(
 ): MarketSegmentView {
   return {
     marketKey: segment.marketKey,
-    marketLabel: segment.marketLabel,
+    marketLabel: displayMarketLabel(segment.marketKey, segment.marketLabel),
     kpis: toDashboardKpiView(segment.kpis),
     graduation: toGraduationView(graduation),
     stakeBands: stakeBands.map(toStakeBandView),
@@ -170,7 +173,9 @@ export type PredictionRowView = {
   league: LeagueKey;
   when: string;
   rec: Recommendation;
-  // Mercado (+ linha) da recomendação — "Sim" ou "OVER" sozinhos são ambíguos.
+  // Tipo derivado do valor cru (cor da recomendação), nunca do rótulo de tela.
+  recKind: RecommendationKind;
+  // Mercado da recomendação ("Total de gols", "Ambas marcam") — "Sim" sozinho é ambíguo.
   market: string;
   odd: string;
   edge: string | null;
@@ -192,13 +197,24 @@ export function toPredictionRowView(
     league,
     when: formatKickoffAbsolute(row.createdAt, new Date(), timeZone),
     // Tabela apertada: sigla de 3 letras no lugar de "Casa"/"Fora" (#574).
-    rec: recommendationLabel(row.recommendation, row.marketKey, row.selectionLabel, {
-      home: teamToTeam(row.homeTeam, league).short,
-      away: teamToTeam(row.awayTeam, league).short,
-    }),
-    market: marketContextLabel(row.marketLabel, row.marketParams),
+    rec: recommendationLabel(
+      row.recommendation,
+      row.marketKey,
+      row.selectionLabel,
+      {
+        home: teamToTeam(row.homeTeam, league).short,
+        away: teamToTeam(row.awayTeam, league).short,
+      },
+      row.marketParams?.line ?? null,
+    ),
+    recKind: recommendationKind(row.recommendation),
+    market: marketContextLabel(
+      displayMarketLabel(row.marketKey, row.marketLabel),
+      row.marketParams,
+      row.recommendation,
+    ),
     odd: formatOdd(row.oddAtRecommendation),
-    edge: formatEdge(row.edgePct),
+    edge: formatEdgePoints(row.edgePct),
     confidence: formatPct(row.confidencePct),
     status: rowStatus(row),
     profit:
@@ -308,7 +324,7 @@ export function toPredictionDetailView(
   // getUserDashboardRows. Alimenta recToken (display da seleção) E o label da
   // métrica de settlement.
   const marketKey = detail.marketKey ?? "over_under";
-  const presentation = getMarketPresentation(marketKey);
+  const presentation = getDisplayPresentation(marketKey);
 
   // CLV (#180): odd de entrada vs odd de fechamento da seleção escolhida. impliedSumTarget
   // do descriptor mantém o no-vig na MESMA escala de impliedProbPct. Sem closing → tudo "—".
@@ -342,13 +358,17 @@ export function toPredictionDetailView(
           home: teamToTeam(match.homeTeam, leagueToKey(match.league)).name,
           away: teamToTeam(match.awayTeam, leagueToKey(match.league)).name,
         },
+        prediction.marketParams?.line ?? null,
       ),
       market: marketContextLabel(
-        detail.marketLabel ?? presentation.marketLabel,
+        detail.marketLabel
+          ? displayMarketLabel(marketKey, detail.marketLabel)
+          : presentation.marketLabel,
         prediction.marketParams,
+        prediction.recommendation,
       ),
       confidence: formatPct(prediction.confidencePct),
-      edge: formatEdge(prediction.edgePct),
+      edge: formatEdgePoints(prediction.edgePct),
       implied: formatPct(prediction.impliedProbPct),
       minOdd: formatOdd(prediction.minimumOdd),
       odd: formatOdd(prediction.oddAtRecommendation),

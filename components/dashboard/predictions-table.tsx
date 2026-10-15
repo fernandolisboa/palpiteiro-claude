@@ -17,17 +17,14 @@ import { LEAGUE_LABEL } from "@/lib/format";
 import { cn } from "@/lib/utils";
 import type { PredictionRowView } from "@/lib/view/dashboard";
 
-// Cor por token de recomendação. over/under/pass têm cor pinada; seleções de
-// outros mercados ("Casa", "Sim", nome do jogador) caem no neutro via recClass().
-const REC_CLASS: Record<string, string> = {
-  OVER: "text-edge-fg",
-  UNDER: "text-accent-fg",
-  PASS: "text-muted-foreground",
+// Cor pelo TIPO da recomendação (recKind, derivado do valor cru), nunca pelo rótulo
+// de tela. Seleções de outros mercados ("Casa", "Sim", nome do jogador) ficam neutras.
+const REC_CLASS: Record<PredictionRowView["recKind"], string> = {
+  over: "text-edge-fg",
+  under: "text-accent-fg",
+  pass: "text-muted-foreground",
+  other: "text-foreground",
 };
-
-function recClass(rec: PredictionRowView["rec"]): string {
-  return REC_CLASS[rec] ?? "text-foreground";
-}
 
 export function PredictionsTable({
   rows,
@@ -55,7 +52,7 @@ export function PredictionsTable({
               "data",
               "rec",
               "odd",
-              "edge",
+              "vantagem",
               "conf",
               "status",
               "lucro",
@@ -65,7 +62,7 @@ export function PredictionsTable({
                 key={h || `c${i}`}
                 className={cn(
                   "text-meta uppercase tracking-label text-muted-foreground",
-                  ["odd", "edge", "conf", "lucro"].includes(h) && "text-right",
+                  ["odd", "vantagem", "conf", "lucro"].includes(h) && "text-right",
                 )}
               >
                 {h}
@@ -102,7 +99,7 @@ export function PredictionsTable({
                 </TableCell>
                 <TableCell>
                   <div
-                    className={cn("text-meta font-medium", recClass(r.rec))}
+                    className={cn("text-meta font-medium", REC_CLASS[r.recKind])}
                   >
                     {r.rec}
                   </div>
@@ -114,7 +111,7 @@ export function PredictionsTable({
                   {r.odd}
                 </TableCell>
                 <TableCell className="text-right font-mono text-body-sm tabular-nums text-muted-foreground">
-                  {r.edge ? `${r.edge}pp` : "—"}
+                  {r.edge ?? "—"}
                 </TableCell>
                 <TableCell className="text-right font-mono text-body-sm tabular-nums text-muted-foreground">
                   {r.confidence}

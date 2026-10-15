@@ -75,8 +75,9 @@ describe("PublicPalpite — privacidade + firewall (ADR §3/§5)", () => {
 
   it("citedMarkets são NORMALIZADOS pra categoria — nenhuma linha crua ('Mais de 2.5')", () => {
     const html = render({ citedMarkets: ["Mais de 2.5 gols", "Resultado"] });
-    expect(html).toContain("Over/Under gols");
-    expect(html).toContain("Resultado (1X2)");
+    // A categoria canônica sai com o rótulo de tela (ADR 0056), sem dígito de linha.
+    expect(html).toContain("a partir de: Total de gols · Resultado (1X2)");
+    expect(html).not.toContain("Over/Under gols");
     expect(html).not.toContain("Mais de 2.5 gols");
   });
 });

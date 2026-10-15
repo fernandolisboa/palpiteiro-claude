@@ -888,10 +888,10 @@ function LegEvaluation({ leg }: { leg: EvaluatedLegView }) {
       <Row label="sua odd" value={leg.userOdd} />
       <Row label="retorno esperado" value={leg.ev} />
       <Row label="break-even" value={leg.breakEven} />
-      <Row label="edge do modelo" value={leg.edge} />
+      <Row label="vantagem do modelo" value={leg.edge} />
       {leg.edgeNote && leg.status === "graded" && (
         <span className="text-meta leading-relaxed text-muted-foreground tracking-tight">
-          edge: {leg.edgeNote}
+          vantagem: {leg.edgeNote}
         </span>
       )}
       <Row label="stake sugerido" value={leg.suggestedStake} />

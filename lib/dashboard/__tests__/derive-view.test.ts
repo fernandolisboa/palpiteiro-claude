@@ -154,7 +154,7 @@ describe("deriveDashboardView", () => {
       parseDashboardFilters({}),
     );
     expect(availableMarkets).toEqual([
-      { key: "over_under", label: "Over/Under gols" },
+      { key: "over_under", label: "Total de gols" },
     ]);
   });
 
@@ -165,7 +165,7 @@ describe("deriveDashboardView", () => {
     );
     expect(segments).toHaveLength(1);
     expect(segments[0].marketKey).toBe("over_under");
-    expect(segments[0].marketLabel).toBe("Over/Under gols");
+    expect(segments[0].marketLabel).toBe("Total de gols");
     // single-market history → segment KPI view === aggregate KPI view
     expect(segments[0].kpis).toEqual(kpis);
   });

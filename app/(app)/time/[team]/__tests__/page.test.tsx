@@ -102,7 +102,7 @@ describe("página do time — odds dos próximos jogos (#574)", () => {
       "match_result",
     );
     expect(html).toContain(">Empate</span> 2,87");
-    expect(html).toContain(">Over</span> 1,85");
+    expect(html).toContain(">Mais de 2,5</span> 1,85");
     expect(html).not.toContain("sem odd");
   });
 

@@ -29,13 +29,13 @@ describe("GLOSSARY (contrato de dados)", () => {
   it("cita MIN_EDGE_PP no significado de #edge (sem hardcode que pode driftar)", () => {
     const edge = GLOSSARY.find((e) => e.anchor === "edge");
     expect(edge).toBeDefined();
-    expect(edge?.meaning).toContain(`${MIN_EDGE_PP}pp`);
+    expect(edge?.meaning).toContain(`${MIN_EDGE_PP} pontos`);
   });
 
   it("cita MIN_EDGE_PP no significado de #odd-minima (interpola, não hardcode)", () => {
     const oddMinima = GLOSSARY.find((e) => e.anchor === "odd-minima");
     expect(oddMinima).toBeDefined();
-    expect(oddMinima?.meaning).toContain(`${MIN_EDGE_PP}pp`);
+    expect(oddMinima?.meaning).toContain(`${MIN_EDGE_PP} pontos`);
   });
 
   it("preserva o conteúdo over/under em markets.over_under das entradas reescritas genéricas", () => {

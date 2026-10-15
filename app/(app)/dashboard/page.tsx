@@ -66,7 +66,7 @@ export default async function DashboardPage({ searchParams }: PageProps) {
       <PageContainer width="content">
         <PageHeader
           title="Desempenho"
-          description="Suas análises por mercado — yield, racional e resultados."
+          description="Suas análises por mercado: retorno, racional e resultados."
         />
 
         {rows.length === 0 ? (
@@ -75,7 +75,7 @@ export default async function DashboardPage({ searchParams }: PageProps) {
               className="max-w-form py-6"
               icon={<Inbox className="size-10" strokeWidth={1.25} />}
               title="Você ainda não tem predições"
-              description="Gere uma análise num jogo pra começar a trackear seu yield."
+              description="Gere uma análise num jogo pra começar a acompanhar seu retorno."
               action={
                 <Link
                   href="/jogos"

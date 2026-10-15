@@ -38,11 +38,20 @@ export function formatPct(
   return `${formatDecimal(n, decimals)}%`;
 }
 
-/** "+7,3" / "-2,1" / null se input null. Componente concatena "pp" no render. */
+/** "+7,3" / "-2,1" / null se input null. Com unidade: formatEdgePoints. */
 export function formatEdge(value: number | string | null | undefined): string | null {
   const n = toFinite(value);
   if (n === null) return null;
   return `${n > 0 ? "+" : ""}${formatDecimal(n, 1)}`;
+}
+
+/**
+ * "+5,6 pontos" / "-2,1 pontos" / null se input null: a vantagem (edge) em pontos
+ * percentuais com a unidade por extenso (ADR 0056). Sinal ASCII, como formatEdge.
+ */
+export function formatEdgePoints(value: number | string | null | undefined): string | null {
+  const edge = formatEdge(value);
+  return edge === null ? null : `${edge} pontos`;
 }
 
 /** Saída de formatEvPct quando o retorno arredonda a zero na exibição. */

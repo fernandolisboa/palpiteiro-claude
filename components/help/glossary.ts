@@ -12,7 +12,7 @@ import { MIN_EDGE_PP } from "@/lib/odds/scenario";
  *  - `anchor` único e em kebab-case (vira `id` + alvo de `#hash`);
  *  - `term` lidera com o texto que aparece na tela do app;
  *  - `meaning` em PT-BR claro pra iniciante total, nunca vazio;
- *  - o significado de `edge` cita `${MIN_EDGE_PP}pp` (não hardcode) pra não
+ *  - o significado de `edge` cita `${MIN_EDGE_PP} pontos` (não hardcode) pra não
  *    driftar do threshold real do prompt (lib/odds/scenario.ts).
  */
 export type GlossaryGroup = "conceitos" | "decisao" | "numeros";
@@ -37,21 +37,21 @@ export type GlossaryEntry = {
 
 export const GLOSSARY: readonly GlossaryEntry[] = [
   {
-    term: "over/under 2.5 gols",
+    term: "total de gols (mais de / menos de 2,5)",
     anchor: "over-under-2-5",
     meaning:
-      "Mercado de over/under: a aposta é se o TOTAL de uma métrica do jogo fica ACIMA (over) ou ABAIXO (under) de uma linha. A linha define o corte.",
+      "Mercado de total (over/under): a aposta é se o TOTAL de uma métrica do jogo fica ACIMA (mais de) ou ABAIXO (menos de) de uma linha. A linha define o corte.",
     markets: {
       over_under:
-        "Aposta no TOTAL de gols do jogo (os dois times somados). Over = 3 gols ou mais. Under = 0, 1 ou 2 gols. A linha 2.5 nunca empata — sempre dá Over ou Under.",
+        "Aposta no TOTAL de gols do jogo (os dois times somados). Mais de 2,5 = 3 gols ou mais. Menos de 2,5 = 0, 1 ou 2 gols. A linha 2,5 nunca empata — sempre dá um dos dois.",
     },
     group: "conceitos",
   },
   {
-    term: "O Palpite (a manchete)",
+    term: "Palpite da IA (a manchete)",
     anchor: "palpite",
     meaning:
-      "A previsão do jogo no topo da página, escrita como um amigo daria: quem leva, o placar provável e o porquê. É o registro brincalhão do app, sintetizado das análises de mercado — mas SEM nenhum número de valor (odd, edge, stake, %). É previsão informada e diversão, NÃO recomendação de aposta.",
+      "A previsão do jogo no topo da página, escrita como um amigo daria: quem leva, o placar provável e o porquê. É o registro brincalhão do app, sintetizado das análises de mercado — mas SEM nenhum número de valor (odd, vantagem, stake, %). É previsão informada e diversão, NÃO recomendação de aposta.",
     group: "conceitos",
   },
   {
@@ -65,7 +65,7 @@ export const GLOSSARY: readonly GlossaryEntry[] = [
     term: "placar provável",
     anchor: "placar-provavel",
     meaning:
-      "O palpite de placar do jogo (ex.: 2–1). É um palpite de resultado, NÃO uma odd — um placar não é uma cotação. Quando o jogo acaba, vira o selo acertou/errou da manchete.",
+      "O palpite de placar do jogo (ex.: 2–1). É um palpite de resultado, NÃO uma odd — um placar não é uma cotação. Quando o jogo acaba, vira o selo Acertou/Errou da manchete.",
     group: "conceitos",
   },
   {
@@ -79,7 +79,7 @@ export const GLOSSARY: readonly GlossaryEntry[] = [
     term: "acertou / errou / só por diversão",
     anchor: "acertou-errou",
     meaning:
-      "Como o palpite presta contas depois do jogo. Acertou/errou = a previsão dava pra conferir no placar final (fica “aguardando placar” até o apito). “Só por diversão” = não dá pra cravar de forma justa (ex.: cartão vermelho, escanteios) — nunca vira acertou/errou. O palpite não mente sobre o próprio retrospecto.",
+      "Como o palpite presta contas depois do jogo. Acertou/errou = a previsão dava pra conferir no placar final (fica “em aberto” até o apito). “Só por diversão” = não dá pra cravar de forma justa (ex.: cartão vermelho, escanteios) — nunca vira acertou/errou. O palpite não mente sobre o próprio retrospecto.",
     group: "conceitos",
   },
   {
@@ -100,16 +100,16 @@ export const GLOSSARY: readonly GlossaryEntry[] = [
     term: "mercado",
     anchor: "mercado",
     meaning:
-      "O tipo de aposta. Tier 1: over/under (total de gols) e 1X2 (resultado final); Tier 2: BTTS (ambos marcam) e dupla chance. Cada mercado tem suas seleções e, às vezes, uma linha. O app recomenda UM mercado por análise.",
+      "O tipo de aposta. Tier 1: total de gols (over/under) e 1X2 (resultado final); Tier 2: BTTS (ambos marcam) e dupla chance. Cada mercado tem suas seleções e, às vezes, uma linha. O app recomenda UM mercado por análise.",
     group: "conceitos",
   },
   {
     term: "seleção",
     anchor: "selecao",
     meaning:
-      "Uma opção dentro de um mercado. O número de seleções muda por mercado. O app recomenda UMA seleção por análise — ou PASS.",
+      "Uma opção dentro de um mercado. O número de seleções muda por mercado. O app recomenda UMA seleção por análise — ou nenhuma (sem aposta).",
     markets: {
-      over_under: "Over/under tem 2: over e under.",
+      over_under: "O total de gols tem 2: mais de e menos de.",
       match_result: "1X2 tem 3: mandante, empate e visitante.",
       btts: "BTTS tem 2: sim e não.",
       double_chance:
@@ -121,7 +121,7 @@ export const GLOSSARY: readonly GlossaryEntry[] = [
     term: "linha",
     anchor: "linha",
     meaning:
-      "O corte numérico de um mercado, quando ele tem um (ex.: 2.5 no over/under de gols). Linhas inteiras podem dar push (devolução) se o resultado bater exatamente nelas; a 2.5 nunca empata.",
+      "O corte numérico de um mercado, quando ele tem um (ex.: 2,5 no total de gols). Linhas inteiras podem dar devolução (push) se o resultado bater exatamente nelas; a 2,5 nunca empata.",
     group: "conceitos",
   },
   {
@@ -132,12 +132,12 @@ export const GLOSSARY: readonly GlossaryEntry[] = [
     group: "conceitos",
   },
   {
-    term: "over / under / PASS",
+    term: "mais de / menos de / sem aposta",
     anchor: "recomendacao",
     meaning:
-      "O app sugere UMA seleção do mercado, ou PASS. PASS = não apostar, porque não há vantagem suficiente. PASS NÃO é erro — é disciplina; pass rate alto (30–60%) é BOM.",
+      "O app sugere UMA seleção do mercado, ou sem aposta. Sem aposta = não apostar, porque não há vantagem suficiente. Não é erro — é disciplina; ter muitos jogos sem aposta (30–60%) é BOM.",
     markets: {
-      over_under: "As seleções do over/under são over e under.",
+      over_under: "As seleções do total de gols são mais de e menos de.",
       match_result: "No 1X2, são mandante, empate e visitante.",
       btts: "No BTTS, são sim e não.",
       double_chance:
@@ -159,7 +159,7 @@ export const GLOSSARY: readonly GlossaryEntry[] = [
       "A chance que a odd embute, JÁ descontada a margem embutida na odd. Normaliza TODAS as seleções: (1/odd da seleção) ÷ Σ(1/odd de todas as seleções). NUNCA é 1/odd cru — isso ignoraria a margem.",
     markets: {
       over_under:
-        "No over/under (2 seleções): (1/odd do lado) ÷ (1/odd_over + 1/odd_under).",
+        "No total de gols (2 seleções): (1/odd do lado) ÷ (1/odd de mais de + 1/odd de menos de).",
       match_result:
         "No 1X2 (3 seleções): (1/odd da seleção) ÷ (soma dos três 1/odd).",
       btts: "No BTTS (2 seleções): (1/odd do lado) ÷ (1/odd_sim + 1/odd_não).",
@@ -175,7 +175,7 @@ export const GLOSSARY: readonly GlossaryEntry[] = [
       "A margem embutida na odd. Por isso, no cru, as probabilidades de todas as seleções somam mais de 100% — o excedente é a margem. Fórmula: Σ(1/odd) − 1.",
     markets: {
       over_under:
-        "No over/under: over% + under% somam mais de 100%; (1/odd_over + 1/odd_under) − 1.",
+        "No total de gols: mais de % + menos de % somam mais de 100%; (1/odd de mais de + 1/odd de menos de) − 1.",
       match_result: "No 1X2: a soma dos três (1/odd) − 1.",
       btts: "No BTTS: (1/odd_sim + 1/odd_não) − 1.",
       double_chance:
@@ -187,20 +187,20 @@ export const GLOSSARY: readonly GlossaryEntry[] = [
     term: "prob. do modelo (confiança)",
     anchor: "prob-modelo",
     meaning:
-      "A chance que a IA dá ao lado recomendado. É a estimativa do modelo, comparada com a prob. do mercado pra medir o edge.",
+      "A chance que a IA dá ao lado recomendado. É a estimativa do modelo, comparada com a prob. do mercado pra medir a vantagem.",
     group: "decisao",
   },
   {
     term: "leitura do modelo",
     anchor: "leitura-modelo",
     meaning:
-      "A chance de cada resultado do jogo calculada em código pelo modelo de placar (Dixon-Coles, ou o heurístico da tabela quando falta histórico), ajustada pelos julgamentos do JEV perto do jogo. Sem Claude e sem olhar as odds: não é recomendação nem mede edge. A odd justa é 100 ÷ probabilidade — compare com a odd de mercado.",
+      "A chance de cada resultado do jogo calculada em código pelo modelo de placar (Dixon-Coles, ou o heurístico da tabela quando falta histórico), ajustada pelos julgamentos do JEV perto do jogo. Sem Claude e sem olhar as odds: não é recomendação nem mede vantagem. A odd justa é 100 ÷ probabilidade — compare com a odd de mercado.",
     group: "numeros",
   },
   {
-    term: "edge",
+    term: "vantagem (edge)",
     anchor: "edge",
-    meaning: `Quanto a prob. do modelo supera a prob. do mercado, em PONTOS percentuais (prob. do modelo − prob. do mercado normalizada). O app só recomenda com edge de pelo menos ${MIN_EDGE_PP}pp.`,
+    meaning: `Quanto a prob. do modelo supera a prob. do mercado, em PONTOS percentuais (prob. do modelo − prob. do mercado normalizada). O app só recomenda com vantagem de pelo menos ${MIN_EDGE_PP} pontos.`,
     group: "decisao",
   },
   {
@@ -213,7 +213,7 @@ export const GLOSSARY: readonly GlossaryEntry[] = [
   {
     term: 'odd mínima ("vale a pena se odd ≥")',
     anchor: "odd-minima",
-    meaning: `A menor odd em que a aposta ainda mantém edge de pelo menos ${MIN_EDGE_PP}pp — definida pela IA na análise. Se a odd de mercado cair abaixo disso, a vantagem some.`,
+    meaning: `A menor odd em que a aposta ainda mantém vantagem de pelo menos ${MIN_EDGE_PP} pontos — definida pela IA na análise. Se a odd de mercado cair abaixo disso, a vantagem some.`,
     group: "numeros",
   },
   {
@@ -234,56 +234,56 @@ export const GLOSSARY: readonly GlossaryEntry[] = [
     term: "stake por confiança (1–3u)",
     anchor: "stake-confianca",
     meaning:
-      "O tamanho da aposta varia com a força do sinal (edge × confiança): 1u, 2u ou 3u. Mais vantagem → mais unidades. As bandas são determinísticas (ADR 0019); o histórico antigo permanece tudo 1u.",
+      "O tamanho da aposta varia com a força do sinal (vantagem × confiança): 1u, 2u ou 3u. Mais vantagem → mais unidades. As bandas são determinísticas (ADR 0019); o histórico antigo permanece tudo 1u.",
     group: "numeros",
   },
   {
     term: "liquidação / settlement",
     anchor: "liquidacao",
     meaning:
-      "A resolução da aposta depois do jogo: won (ganhou), lost (perdeu) ou void (anulada). Não é instantâneo — roda via cron depois do apito final.",
+      "A resolução da aposta depois do jogo: Acertou (won), Errou (lost) ou Anulada (void). Não é instantâneo — roda via cron depois do apito final.",
     group: "numeros",
   },
   {
-    term: "push / devolução",
+    term: "devolvida (push)",
     anchor: "push",
     meaning:
-      "Resultado nulo: a aposta é devolvida (lucro 0), sem ganho nem perda. Acontece em linhas inteiras quando o placar bate exatamente nelas — raro no over/under 2.5, que nunca empata. Como o void, fica FORA do yield e do win rate.",
+      "Resultado nulo: a aposta é devolvida (lucro 0), sem ganho nem perda. Acontece em linhas inteiras quando o placar bate exatamente nelas — não acontece no total de gols 2,5, que nunca empata. Como a anulada, fica FORA do retorno e da taxa de acerto.",
     group: "numeros",
   },
   {
-    term: "pendente vs liquidada",
+    term: "em aberto vs liquidada (pendente)",
     anchor: "pendente-liquidada",
     meaning:
-      "Pendente = jogo não terminou ou resultado não processado ainda. Liquidada = já resolvida (won/lost/void) e contando nas métricas.",
+      "Em aberto = jogo não terminou ou resultado não processado ainda. Liquidada = já resolvida (Acertou/Errou/Anulada) e contando nas métricas.",
     group: "numeros",
   },
   {
-    term: "yield",
+    term: "retorno (yield)",
     anchor: "yield",
     meaning:
-      "A métrica-mãe: lucro ÷ total apostado × 100. Conta só apostas liquidadas com won/lost (exclui pass e void). Mede eficiência, não tamanho.",
+      "A métrica-mãe: lucro ÷ total apostado × 100. Conta só apostas liquidadas que acertaram ou erraram (exclui jogos sem aposta e anuladas). Mede eficiência, não tamanho.",
     group: "numeros",
   },
   {
-    term: "win rate",
+    term: "taxa de acerto (win rate)",
     anchor: "win-rate",
     meaning:
-      "% de apostas ganhas entre as liquidadas: won ÷ (won + lost). Exclui pass e void. Win rate alto não garante lucro — o que paga é o yield.",
+      "% de apostas ganhas entre as liquidadas: acertos ÷ (acertos + erros). Exclui jogos sem aposta e anuladas. Taxa de acerto alta não garante lucro — o que paga é o retorno.",
     group: "numeros",
   },
   {
-    term: "pass rate",
+    term: "jogos sem aposta (pass rate)",
     anchor: "pass-rate",
     meaning:
-      "% de jogos em que o app deu PASS, sobre TODAS as predições. Alvo saudável: 30–60%. Pass rate alto é disciplina, não fraqueza.",
+      "% de jogos em que o app não recomendou aposta, sobre TODAS as predições. Alvo saudável: 30–60%. Muitos jogos sem aposta é disciplina, não fraqueza.",
     group: "numeros",
   },
   {
     term: "lucro total",
     anchor: "lucro-total",
     meaning:
-      "Soma de lucro/prejuízo acumulado em unidades das apostas já liquidadas (won/lost), em dinheiro hipotético. Diferente do bankroll (que é a trajetória no tempo) e do yield (que é eficiência em %).",
+      "Soma de lucro/prejuízo acumulado em unidades das apostas já liquidadas (acertos e erros), em dinheiro hipotético. Diferente do bankroll (que é a trajetória no tempo) e do retorno (que é eficiência em %).",
     group: "numeros",
   },
   {
@@ -297,7 +297,7 @@ export const GLOSSARY: readonly GlossaryEntry[] = [
     term: "amostra pequena",
     anchor: "amostra-pequena",
     meaning:
-      "Menos de 20 apostas liquidadas. Com tão poucas, os números (yield, win rate) são ruído de sorte, não habilidade. O app sinaliza pra você não concluir cedo demais.",
+      "Menos de 20 apostas liquidadas. Com tão poucas, os números (retorno, taxa de acerto) são ruído de sorte, não habilidade. O app sinaliza pra você não concluir cedo demais.",
     group: "numeros",
   },
   {
@@ -307,7 +307,7 @@ export const GLOSSARY: readonly GlossaryEntry[] = [
       'As seleções do mercado com os números congelados da análise. A seleção recomendada é a aposta; as demais são só informativas, NUNCA segundas recomendações. A frase "só sai do zero com odd ≥" é o break-even daquela seleção.',
     markets: {
       over_under:
-        'No over/under, são os dois lados (over e under); o lado não-recomendado aparece como "cenário alternativo".',
+        'No total de gols, são os dois lados (mais de e menos de); o lado não-recomendado aparece como "cenário alternativo".',
       match_result:
         "No 1X2, são as três seleções (mandante, empate, visitante); as não-recomendadas aparecem como cenário alternativo.",
       btts: "No BTTS, são sim e não.",
@@ -319,7 +319,7 @@ export const GLOSSARY: readonly GlossaryEntry[] = [
     term: "inputs da análise",
     anchor: "inputs-analise",
     meaning:
-      "Os dados que a IA usa: forma recente (últimos 5 jogos), confrontos diretos (H2H), classificação, desfalques (lesão/suspensão) e escalação provável. Dado faltante reduz a confiança e empurra pro PASS.",
+      "Os dados que a IA usa: forma recente (últimos 5 jogos), confrontos diretos (H2H), classificação, desfalques (lesão/suspensão) e escalação provável. Dado faltante reduz a confiança e empurra pro sem aposta.",
     group: "numeros",
   },
 ];

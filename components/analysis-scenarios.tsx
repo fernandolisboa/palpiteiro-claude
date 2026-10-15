@@ -170,7 +170,7 @@ export function AnalysisScenarios({
         </p>
       )}
       <p className="text-meta leading-snug tracking-tight text-muted-foreground">
-        {`o app só recomenda com vantagem ≥ ${minEdgePp}pp sobre o mercado; os números acima são informativos · odds do momento da análise — as atuais estão no card acima`}
+        {`o app só recomenda com vantagem de pelo menos ${minEdgePp} pontos sobre o mercado; os números acima são informativos · odds do momento da análise — as atuais estão no card acima`}
       </p>
     </div>
   );
@@ -234,7 +234,7 @@ function ScenarioColumn({
             ? {
                 anchor: "prob-modelo",
                 blurb:
-                  "A chance que a IA dá ao lado recomendado, comparada com a do mercado pra medir o edge.",
+                  "A chance que a IA dá ao lado recomendado, comparada com a do mercado pra medir a vantagem.",
               }
             : undefined
         }
@@ -257,14 +257,14 @@ function ScenarioColumn({
           nunca na coluna alternativa/neutra, e no retorno só quando o tom do
           view-mapper é "positive". */}
       <ScenarioRow
-        label="edge"
+        label="vantagem"
         value={outcome.edge}
         emphasis={isRecommended && outcome.edge.startsWith("+")}
         hint={
           showHints
             ? {
                 anchor: "edge",
-                blurb: `Quanto a prob. do modelo supera a do mercado, em pontos percentuais. O app só recomenda com pelo menos ${minEdgePp}pp.`,
+                blurb: `Quanto a prob. do modelo supera a do mercado, em pontos. O app só recomenda com pelo menos ${minEdgePp} pontos.`,
               }
             : undefined
         }

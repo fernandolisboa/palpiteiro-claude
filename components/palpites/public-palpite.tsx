@@ -7,6 +7,7 @@ import type {
   PalpiteDimensionView,
   PalpiteHeadlineView,
 } from "@/lib/view/palpites-headline";
+import { displayCategoryLabel } from "@/lib/view/markets/display";
 import { toPublicMarketCategories } from "@/lib/view/markets/public-category";
 import { hardenSources } from "@/lib/view/share/source-hardening";
 import {
@@ -92,7 +93,7 @@ export function PublicPalpite({
 
       {categories.length > 0 && (
         <p className="text-meta uppercase tracking-eyebrow text-muted-foreground">
-          a partir de: {categories.join(" · ")}
+          a partir de: {categories.map(displayCategoryLabel).join(" · ")}
         </p>
       )}
 

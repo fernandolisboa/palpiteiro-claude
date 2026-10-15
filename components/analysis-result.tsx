@@ -23,11 +23,11 @@ export function AnalysisResult({ view, showRiskDisclaimer = true }: Props) {
       <div className="flex flex-col rounded-lg border border-dashed border-border-strong bg-card">
         <div className="flex items-center justify-between px-4 pt-3 pb-2">
           <span className="flex items-center gap-1 text-meta uppercase tracking-eyebrow text-muted-foreground">
-            sem edge claro
+            sem vantagem clara
             <HelpHint
               anchor="recomendacao"
-              label="PASS — sem edge claro"
-              blurb="PASS = sem edge claro = não apostar; isso é disciplina, não erro. Pass rate alto (30–60%) é bom."
+              label="Sem aposta"
+              blurb="Sem aposta = nenhuma seleção com vantagem suficiente; é disciplina, não erro. Ter muitos jogos sem aposta (30–60%) é bom."
             />
           </span>
           <span className="font-mono tabular-nums text-meta text-muted-foreground">
@@ -41,7 +41,7 @@ export function AnalysisResult({ view, showRiskDisclaimer = true }: Props) {
         <div className="flex items-start gap-4 px-4 py-4">
           <div className="flex flex-col items-start gap-1">
             <span className="text-display-sm font-medium leading-none tracking-tight text-muted-foreground">
-              PASS
+              Sem aposta
             </span>
             <span className="text-meta uppercase tracking-label text-muted-foreground">
               não apostar

@@ -35,7 +35,7 @@ describe("toH2HView", () => {
     const view = toH2HView(h2h);
     expect(view.rows.map((r) => r.tag)).toEqual(["over", "over", "under"]);
     // over 2/3 = 67%; média (3+4+1)/3 = 2.7.
-    expect(view.summary).toBe("over 67% · média 2,7 gols");
+    expect(view.summary).toBe("mais de 2,5 em 67% · média 2,7 gols");
   });
 
   it("classify do registry over_under bate com o default", () => {

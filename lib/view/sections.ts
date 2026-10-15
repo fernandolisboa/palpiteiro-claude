@@ -74,7 +74,7 @@ const overUnderClassify = (homeGoals: number, awayGoals: number): string =>
 
 // `classify` parametriza a lente de H2H por mercado (#169): mapeia os gols do
 // confronto numa key de seleção. `null` = mercado não baseado em gols → tags
-// neutras ("") e summary só com a média (sem "over X%"). O #170 passa
+// neutras ("") e summary só com a média (sem "mais de 2,5 em X%"). O #170 passa
 // `getMarketPresentation(marketKey).classifyH2H`; o caller atual (match-sections)
 // não muda e cai no default over/under.
 export function toH2HView(
@@ -112,7 +112,7 @@ export function toH2HView(
       ? "sem histórico recente"
       : classify === null
         ? `média ${formatDecimal(avgGoals, 1)} gols`
-        : `over ${Math.round((overCount / counted) * 100)}% · média ${formatDecimal(avgGoals, 1)} gols`;
+        : `mais de 2,5 em ${Math.round((overCount / counted) * 100)}% · média ${formatDecimal(avgGoals, 1)} gols`;
   return { rows, summary };
 }
 

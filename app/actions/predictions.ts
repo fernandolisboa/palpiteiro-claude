@@ -145,7 +145,7 @@ function friendlyMessage(err: PredictError, ctx: MessageContext = {}): string {
     return "Sem odds publicadas para este jogo no momento.";
   }
   if (msg.includes("no over/under 2.5 odds")) {
-    return "Nenhum bookmaker oferece over/under 2.5 para este jogo.";
+    return "Nenhuma odd de mais/menos de 2,5 gols para este jogo.";
   }
   // Mercado *additional* (btts) sem snapshot fresco = o pre-warm por evento não
   // achou book ofertando o mercado pra este jogo (degradou sem escrever).

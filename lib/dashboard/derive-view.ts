@@ -13,6 +13,7 @@ import {
   type StatusFilter,
 } from "@/lib/dashboard/kpis";
 import { leagueToKey } from "@/lib/format";
+import { displayMarketLabel } from "@/lib/view/markets/display";
 import {
   toDashboardKpiView,
   toMarketSegmentView,
@@ -130,7 +131,7 @@ export function deriveDashboardView(
   for (const r of deduped) {
     if (seenMarkets.has(r.marketKey)) continue;
     seenMarkets.add(r.marketKey);
-    availableMarkets.push({ key: r.marketKey, label: r.marketLabel });
+    availableMarkets.push({ key: r.marketKey, label: displayMarketLabel(r.marketKey, r.marketLabel) });
   }
 
   return {

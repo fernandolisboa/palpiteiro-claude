@@ -8,7 +8,7 @@ import { TOUR_RESTART_HREF } from "@/lib/tour/steps";
 
 /**
  * Corpo síncrono de `/como-usar`: o passo a passo de USO do app (onde clicar, o que
- * cada tela faz). Complementa `/como-funciona`, que explica os CONCEITOS (edge, PASS,
+ * cada tela faz). Complementa `/como-funciona`, que explica os CONCEITOS (vantagem, sem aposta,
  * odds, mercados) — aqui só linkamos pra lá, sem repetir. Síncrono pelo mesmo motivo
  * do `ComoFuncionaContent`: o teste renderiza com `renderToStaticMarkup`.
  *
@@ -82,7 +82,7 @@ export function ComoUsarContent() {
           <>
             O caminho do app, tela por tela: achar um jogo, pedir o palpite da IA, ler a
             análise, registrar sua aposta e acompanhar o resultado. O que os números
-            querem dizer (edge, PASS, odd, stake) está em{" "}
+            querem dizer (vantagem, sem aposta, odd, stake) está em{" "}
             <Link href="/como-funciona" className={LINK}>
               Como funciona
             </Link>
@@ -221,14 +221,14 @@ export function ComoUsarContent() {
           <Strong>O Palpite</Strong> é a manchete: quem leva, o placar provável, a
           confiança (baixa, média ou alta) e um parágrafo com o porquê. Embaixo
           aparecem os mercados que ele usou e, quando a IA leu notícias, os links das
-          fontes. Depois do jogo, o quadro mostra se <Ui>acertou</Ui> ou{" "}
-          <Ui>errou</Ui> e o placar real.
+          fontes. Depois do jogo, o quadro mostra se <Ui>Acertou</Ui> ou{" "}
+          <Ui>Errou</Ui> e o placar real.
         </p>
         <p>
           Logo abaixo, toque em <Ui>ver análise por mercado</Ui> pra
           abrir o detalhe de cada mercado: a seleção sugerida com odd, stake e
           retorno esperado, os cenários comparados e os fatores-chave. Quando nenhum
-          lado tem vantagem suficiente, o mercado sai como <Strong>PASS</Strong> (não
+          lado tem vantagem suficiente, o mercado sai como <Strong>Sem aposta</Strong> (não
           apostar), e isso é esperado. <Ui>análises anteriores</Ui> guarda as versões
           antigas.
         </p>
@@ -348,7 +348,7 @@ export function ComoUsarContent() {
             <Link href="/dashboard" className={LINK}>
               Desempenho
             </Link>
-            : as análises da IA que você pediu, com yield, taxa de acerto, pass rate,
+            : as análises da IA que você pediu, com retorno, taxa de acerto, jogos sem aposta,
             lucro hipotético em unidades, o gráfico da banca e a tabela jogo a jogo.
             Os filtros de liga e mercado no topo valem pra página toda; o de status
             filtra só a tabela. Tocar numa linha abre o detalhe da análise.
@@ -358,7 +358,7 @@ export function ComoUsarContent() {
               Apostas
             </Link>
             : as apostas que você registrou na página do jogo, cada uma
-            marcada como <Ui>Acertou</Ui>, <Ui>Errou</Ui> ou <Ui>Pendente</Ui>. Só
+            marcada como <Ui>Acertou</Ui>, <Ui>Errou</Ui> ou <Ui>Em aberto</Ui>. Só
             você vê.
           </li>
         </ul>

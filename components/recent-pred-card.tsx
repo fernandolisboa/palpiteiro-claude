@@ -14,7 +14,7 @@ export function RecentPredCard({
   // URL filtrada da lista (/jogos?…) → preserva o estado de busca ao voltar.
   listHref?: string;
 }) {
-  const isPass = p.rec === "PASS";
+  const isPass = p.recKind === "pass";
   return (
     <Link
       href={appendBackParam(`/match/${p.matchId}`, listHref, "/jogos")}
@@ -47,7 +47,7 @@ export function RecentPredCard({
         </Badge>
         {p.edge && (
           <span className="shrink-0 font-mono text-meta tabular-nums text-edge-fg">
-            {p.edge}pp
+            {p.edge}
           </span>
         )}
       </div>

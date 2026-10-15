@@ -66,30 +66,30 @@ export function KpiCards({ view }: { view: DashboardKpiView }) {
     <div className="flex flex-col gap-4">
       <div className="grid grid-cols-2 gap-3 lg:grid-cols-4">
         <RateCard
-          label="yield"
+          label="retorno"
           rate={view.yieldPct}
           hint={{
             anchor: "yield",
             blurb:
-              "Lucro ÷ total apostado × 100. Conta só apostas liquidadas (exclui pass e void). Mede eficiência, não tamanho.",
+              "Lucro ÷ total apostado × 100. Conta só apostas liquidadas (exclui jogos sem aposta e anuladas). Mede eficiência, não tamanho.",
           }}
         />
         <RateCard
-          label="win rate"
+          label="taxa de acerto"
           rate={view.winRate}
           hint={{
             anchor: "win-rate",
             blurb:
-              "% de apostas ganhas entre as liquidadas. Win rate alto não garante lucro — o que paga é o yield.",
+              "% de apostas ganhas entre as liquidadas. Taxa de acerto alta não garante lucro — o que paga é o retorno.",
           }}
         />
         <RateCard
-          label="pass rate"
+          label="jogos sem aposta"
           rate={view.passRate}
           hint={{
             anchor: "pass-rate",
             blurb:
-              "% de jogos em que o app não apostou. Alvo saudável: 30–60%. Pass rate alto é disciplina, não fraqueza.",
+              "% de jogos em que o app não apostou. Alvo saudável: 30–60%. Muitos jogos sem aposta é disciplina, não fraqueza.",
           }}
         />
         <Card className="gap-2 p-5">
@@ -117,8 +117,8 @@ export function KpiCards({ view }: { view: DashboardKpiView }) {
       <div className="flex flex-wrap gap-x-4 gap-y-1 font-mono text-meta tabular-nums text-muted-foreground">
         <span>{counts.total} predições</span>
         <span>· {counts.bets} apostas</span>
-        <span>· {counts.passes} pass</span>
-        <span>· {counts.pending} pendentes</span>
+        <span>· {counts.passes} sem aposta</span>
+        <span>· {counts.pending} em aberto</span>
         <span>· {counts.won}V/{counts.lost}D/{counts.void}A</span>
       </div>
     </div>

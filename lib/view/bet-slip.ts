@@ -18,7 +18,7 @@ import {
 } from "@/lib/bets/slip-markets";
 import { gradeScorelineLeg, type ScorelineKind } from "@/lib/bets/grade-scoreline";
 import {
-  formatEdge,
+  formatEdgePoints,
   formatEvPct,
   formatLine,
   formatOdd,
@@ -317,7 +317,7 @@ function legView(leg: EvaluatedLeg, teams: TeamNames): EvaluatedLegView {
       userStake: units(leg.stakeUnits),
     };
   }
-  const edge = leg.reference ? formatEdge(leg.reference.edgePct) : null;
+  const edge = leg.reference ? formatEdgePoints(leg.reference.edgePct) : null;
   return {
     label,
     status: "graded",
@@ -331,10 +331,10 @@ function legView(leg: EvaluatedLeg, teams: TeamNames): EvaluatedLegView {
     ev: leg.evPerUnit === null ? null : formatEvPct(leg.evPerUnit),
     breakEven:
       leg.breakEvenProbPct === null ? null : formatPct(leg.breakEvenProbPct, { decimals: 1 }),
-    edge: edge === null ? null : `${edge}pp`,
+    edge,
     edgeNote: leg.reference
       ? leg.belowEdgeFloor
-        ? `contra o mercado (odd ${formatOdd(leg.reference.odd)}, sem a margem): abaixo do piso de edge do motor`
+        ? `contra o mercado (odd ${formatOdd(leg.reference.odd)}, sem a margem): abaixo do piso de vantagem do motor`
         : `contra o mercado (odd ${formatOdd(leg.reference.odd)}, sem a margem)`
       : "sem odd de referência recente e completa deste mercado",
     reading: leg.coherenceWarning
@@ -415,7 +415,7 @@ const num = (v: string | null) => (v === null ? null : Number(v));
 
 /**
  * Pedaços curtos da avaliação congelada de uma perna ("chance 52.3%", "odd 2.10",
- * "retorno +9.9%", "edge do modelo +4.5pp", "stake 1u", "sugerido 1u", fonte).
+ * "retorno esperado +9,9%", "vantagem do modelo +4,5 pontos", "stake 1u", "sugerido 1u", fonte).
  * Nunca recalcula com dado novo: só re-deriva EV/edge dos números gravados.
  */
 export function historyLegSummary(leg: PersistedLeg): string[] {
@@ -426,10 +426,10 @@ export function historyLegSummary(leg: PersistedLeg): string[] {
   if (prob !== null) parts.push(`chance ${formatPct(prob, { decimals: 1 })}`);
   if (odd !== null) parts.push(`odd ${formatOdd(odd)}`);
   if (prob !== null && odd !== null && odd > 1) {
-    parts.push(`retorno ${formatEvPct((prob / 100) * odd - 1)}`);
+    parts.push(`retorno esperado ${formatEvPct((prob / 100) * odd - 1)}`);
   }
   if (prob !== null && implied !== null) {
-    parts.push(`edge do modelo ${formatEdge(prob - implied)}pp`);
+    parts.push(`vantagem do modelo ${formatEdgePoints(prob - implied)}`);
   }
   const stake = num(leg.stakeUnits);
   if (stake !== null) parts.push(`seu stake ${units(stake)}`);

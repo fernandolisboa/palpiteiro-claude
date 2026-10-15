@@ -10,10 +10,11 @@ const ROW: PredictionRowView = {
   away: "Esporte Clube Juventude",
   league: "bsa",
   when: "hoje, 16:00",
-  rec: "OVER",
-  market: "Over/Under gols 2,5",
+  rec: "Mais de 2,5",
+  recKind: "over",
+  market: "Total de gols",
   odd: "1,92",
-  edge: "+7,3",
+  edge: "+7,3 pontos",
   confidence: "58%",
   status: "pending",
   profit: null,
@@ -40,5 +41,24 @@ describe("PredictionsTable — selo de status (ADR 0056)", () => {
     );
     expect(html).toContain(`data-result="${status}"`);
     expect(html).toContain(`>${word}</span>`);
+  });
+});
+
+describe("PredictionsTable — cor da recomendação pelo recKind (ADR 0056)", () => {
+  it.each([
+    ["over", "Mais de 2,5", "text-edge-fg"],
+    ["under", "Menos de 2,5", "text-accent-fg"],
+    ["pass", "Sem aposta", "text-muted-foreground"],
+    ["other", "Casa", "text-foreground"],
+  ] as const)("%s → %s com %s", (recKind, rec, cls) => {
+    const html = renderToStaticMarkup(<PredictionsTable rows={[{ ...ROW, rec, recKind }]} />);
+    expect(html).toMatch(new RegExp(`class="text-meta font-medium ${cls}">${rec}<`));
+  });
+
+  it("cabeçalho 'vantagem' alinhado à direita e a célula sem 'pp'", () => {
+    const html = renderToStaticMarkup(<PredictionsTable rows={[ROW]} />);
+    expect(html).toMatch(/<th[^>]*text-right[^>]*>vantagem<\/th>/);
+    expect(html).toContain(">+7,3 pontos<");
+    expect(html).not.toContain("pp<");
   });
 });

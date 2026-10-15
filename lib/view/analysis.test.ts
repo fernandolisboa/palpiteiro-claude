@@ -13,6 +13,7 @@ import {
   toOutcomesView,
   toPreviousAnalysisItems,
 } from "./analysis";
+import { getDisplayPresentation } from "./markets/display";
 import { getMarketPresentation } from "./markets/presentation";
 
 const baseCreatedAt = new Date(2026, 4, 19, 14, 22);
@@ -47,12 +48,12 @@ describe("toAnalysisView", () => {
     expect(view).toEqual({
       recommendation: {
         marketKey: "over_under",
-        marketLabel: "Over/Under gols",
+        marketLabel: "Total de gols",
         selectionKey: "over",
-        selectionLabel: "Over",
+        selectionLabel: "Mais de",
         line: 2.5,
         betSummary: {
-          market: "Mais de 2.5 gols",
+          market: "Mais de 2,5 gols",
           plain: "pelo menos 3 gols no jogo",
         },
       },
@@ -62,24 +63,24 @@ describe("toAnalysisView", () => {
       outcomes: [
         {
           id: "over",
-          label: "Over 2.5",
-          scenarioLabel: "mais de 2.5 gols",
+          label: "Mais de 2,5",
+          scenarioLabel: "mais de 2,5 gols",
           modelProb: "58%",
           marketProb: "50,7%",
           odd: "1,92",
-          edge: "+7,3pp",
+          edge: "+7,3 pontos",
           expectedReturn: "+11,4%",
           breakEven: "1,72",
           isRecommended: true,
         },
         {
           id: "under",
-          label: "Under 2.5",
-          scenarioLabel: "menos de 2.5 gols",
+          label: "Menos de 2,5",
+          scenarioLabel: "menos de 2,5 gols",
           modelProb: "42%",
           marketProb: "49,3%",
           odd: "1,95",
-          edge: "-7,3pp",
+          edge: "-7,3 pontos",
           expectedReturn: "-18,1%",
           breakEven: "2,38",
           isRecommended: false,
@@ -102,7 +103,7 @@ describe("toAnalysisView", () => {
       expectedReturnTone: "positive",
       evLegend:
         "ganho médio por aposta, no longo prazo, se a estimativa de 58% do modelo estiver certa",
-      minEdgeLabel: "5pp",
+      minEdgeLabel: "5 pontos",
       minEdgePp: 5,
       rationale: "blah",
       factors: ["a", "b"],
@@ -142,36 +143,36 @@ describe("toAnalysisView", () => {
     expect(view).toEqual({
       recommendation: {
         marketKey: "over_under",
-        marketLabel: "Over/Under gols",
+        marketLabel: "Total de gols",
         selectionKey: "under",
-        selectionLabel: "Under",
+        selectionLabel: "Menos de",
         line: 2.5,
         betSummary: {
-          market: "Menos de 2.5 gols",
+          market: "Menos de 2,5 gols",
           plain: "no máximo 2 gols no jogo",
         },
       },
       outcomes: [
         {
           id: "over",
-          label: "Over 2.5",
-          scenarioLabel: "mais de 2.5 gols",
+          label: "Mais de 2,5",
+          scenarioLabel: "mais de 2,5 gols",
           modelProb: "44%",
           marketProb: "50,7%",
           odd: "1,98",
-          edge: "-6,7pp",
+          edge: "-6,7 pontos",
           expectedReturn: "-12,9%",
           breakEven: "2,27",
           isRecommended: false,
         },
         {
           id: "under",
-          label: "Under 2.5",
-          scenarioLabel: "menos de 2.5 gols",
+          label: "Menos de 2,5",
+          scenarioLabel: "menos de 2,5 gols",
           modelProb: "56%",
           marketProb: "49,3%",
           odd: "1,85",
-          edge: "+6,7pp",
+          edge: "+6,7 pontos",
           expectedReturn: "+3,6%",
           breakEven: "1,79",
           isRecommended: true,
@@ -192,7 +193,7 @@ describe("toAnalysisView", () => {
       expectedReturnTone: "positive",
       evLegend:
         "ganho médio por aposta, no longo prazo, se a estimativa de 56% do modelo estiver certa",
-      minEdgeLabel: "5pp",
+      minEdgeLabel: "5 pontos",
       minEdgePp: 5,
       rationale: "x",
       factors: ["a", "b"],
@@ -238,24 +239,24 @@ describe("toAnalysisView", () => {
       outcomes: [
         {
           id: "over",
-          label: "Over 2.5",
-          scenarioLabel: "mais de 2.5 gols",
+          label: "Mais de 2,5",
+          scenarioLabel: "mais de 2,5 gols",
           modelProb: "53%",
           marketProb: "50%",
           odd: "1,92",
-          edge: "+3,0pp",
+          edge: "+3,0 pontos",
           expectedReturn: "+1,8%",
           breakEven: "1,89",
           isRecommended: false,
         },
         {
           id: "under",
-          label: "Under 2.5",
-          scenarioLabel: "menos de 2.5 gols",
+          label: "Menos de 2,5",
+          scenarioLabel: "menos de 2,5 gols",
           modelProb: "47%",
           marketProb: "50%",
           odd: "1,92",
-          edge: "-3,0pp",
+          edge: "-3,0 pontos",
           expectedReturn: "-9,8%",
           breakEven: "2,13",
           isRecommended: false,
@@ -266,7 +267,7 @@ describe("toAnalysisView", () => {
       kellyInfoUnits: null,
       // pass: copy de margem de erro (cobre EV positivo sob veredito de não apostar).
       framing:
-        "vantagens pequenas (abaixo de 5pp) ficam dentro da margem de erro do modelo — por isso não há recomendação",
+        "vantagens pequenas (abaixo de 5 pontos) ficam dentro da margem de erro do modelo — por isso não há recomendação",
       note: null,
       oddAtRec: null,
       oddAtRecAgo: null,
@@ -274,7 +275,7 @@ describe("toAnalysisView", () => {
       expectedReturn: null,
       expectedReturnTone: "neutral",
       evLegend: null,
-      minEdgeLabel: "5pp",
+      minEdgeLabel: "5 pontos",
       minEdgePp: 5,
       rationale: "no edge",
       factors: ["a", "b"],
@@ -309,12 +310,12 @@ describe("toAnalysisView", () => {
     expect(view).toEqual({
       recommendation: {
         marketKey: "over_under",
-        marketLabel: "Over/Under gols",
+        marketLabel: "Total de gols",
         selectionKey: "over",
-        selectionLabel: "Over",
+        selectionLabel: "Mais de",
         line: 2.5,
         betSummary: {
-          market: "Mais de 2.5 gols",
+          market: "Mais de 2,5 gols",
           plain: "pelo menos 3 gols no jogo",
         },
       },
@@ -323,24 +324,24 @@ describe("toAnalysisView", () => {
       outcomes: [
         {
           id: "over",
-          label: "Over 2.5",
-          scenarioLabel: "mais de 2.5 gols",
+          label: "Mais de 2,5",
+          scenarioLabel: "mais de 2,5 gols",
           modelProb: "58%",
           marketProb: "50,7%",
           odd: "—",
-          edge: "+7,3pp",
+          edge: "+7,3 pontos",
           expectedReturn: "—",
           breakEven: "1,72",
           isRecommended: true,
         },
         {
           id: "under",
-          label: "Under 2.5",
-          scenarioLabel: "menos de 2.5 gols",
+          label: "Menos de 2,5",
+          scenarioLabel: "menos de 2,5 gols",
           modelProb: "42%",
           marketProb: "49,3%",
           odd: "—",
-          edge: "-7,3pp",
+          edge: "-7,3 pontos",
           expectedReturn: "—",
           breakEven: "2,38",
           isRecommended: false,
@@ -359,7 +360,7 @@ describe("toAnalysisView", () => {
       expectedReturnTone: "neutral",
       // retorno "—" não ganha legenda — não explicar número que não existe.
       evLegend: null,
-      minEdgeLabel: "5pp",
+      minEdgeLabel: "5 pontos",
       minEdgePp: 5,
       rationale: "old",
       factors: ["a"],
@@ -397,24 +398,24 @@ describe("toAnalysisView", () => {
     expect(view.outcomes).toEqual([
       {
         id: "over",
-        label: "Over 2.5",
-        scenarioLabel: "mais de 2.5 gols",
+        label: "Mais de 2,5",
+        scenarioLabel: "mais de 2,5 gols",
         modelProb: "58%",
         marketProb: "50,7%",
         odd: "1,92",
-        edge: "+7,3pp",
+        edge: "+7,3 pontos",
         expectedReturn: "+11,4%",
         breakEven: "1,72",
         isRecommended: true,
       },
       {
         id: "under",
-        label: "Under 2.5",
-        scenarioLabel: "menos de 2.5 gols",
+        label: "Menos de 2,5",
+        scenarioLabel: "menos de 2,5 gols",
         modelProb: "42%",
         marketProb: "49,3%",
         odd: "—",
-        edge: "-7,3pp",
+        edge: "-7,3 pontos",
         expectedReturn: "—",
         breakEven: "2,38",
         isRecommended: false,
@@ -447,8 +448,8 @@ describe("toAnalysisView", () => {
     expect(view.outcomes).toEqual([
       {
         id: "over",
-        label: "Over 2.5",
-        scenarioLabel: "mais de 2.5 gols",
+        label: "Mais de 2,5",
+        scenarioLabel: "mais de 2,5 gols",
         modelProb: "51%",
         marketProb: "—",
         odd: "—",
@@ -459,8 +460,8 @@ describe("toAnalysisView", () => {
       },
       {
         id: "under",
-        label: "Under 2.5",
-        scenarioLabel: "menos de 2.5 gols",
+        label: "Menos de 2,5",
+        scenarioLabel: "menos de 2,5 gols",
         modelProb: "49%",
         marketProb: "—",
         odd: "—",
@@ -471,7 +472,7 @@ describe("toAnalysisView", () => {
       },
     ]);
     expect(view.framing).toBe(
-      "vantagens pequenas (abaixo de 5pp) ficam dentro da margem de erro do modelo — por isso não há recomendação",
+      "vantagens pequenas (abaixo de 5 pontos) ficam dentro da margem de erro do modelo — por isso não há recomendação",
     );
     expect(view.note).toBeNull();
   });
@@ -821,7 +822,7 @@ describe("toOutcomesView (N-vias)", () => {
     expect(outcomes[0].modelProb).toBe("50%");
     expect(outcomes[0].odd).toBe("2,10");
     expect(outcomes[0].marketProb).toBe("45,4%");
-    expect(outcomes[0].edge).toBe("+4,6pp");
+    expect(outcomes[0].edge).toBe("+4,6 pontos");
     expect(outcomes[0].expectedReturn).toBe("+5,0%");
     expect(outcomes[0].breakEven).toBe("2,00");
     // draw/away (não recomendados): fecha a normalização do overround (Σ = 100%).
@@ -877,7 +878,7 @@ describe("toAnalysisView (N-vias / 1X2)", () => {
     // Valores N-vias pinados (mesma fórmula do toOutcomesView): home edge +4.6pp.
     expect(view.outcomes[0].modelProb).toBe("50%");
     expect(view.outcomes[0].marketProb).toBe("45,4%");
-    expect(view.outcomes[0].edge).toBe("+4,6pp");
+    expect(view.outcomes[0].edge).toBe("+4,6 pontos");
 
     // Bloco de recomendação usa a apresentação 1X2 (sem linha).
     expect(view.recommendation).not.toBeNull();
@@ -1070,7 +1071,7 @@ describe("toAnalysisView (N-vias / btts)", () => {
     // Valores N-vias pinados: yes modelProb 60, implícita 50, edge +10.0pp.
     expect(view.outcomes[0].modelProb).toBe("60%");
     expect(view.outcomes[0].marketProb).toBe("50%");
-    expect(view.outcomes[0].edge).toBe("+10,0pp");
+    expect(view.outcomes[0].edge).toBe("+10,0 pontos");
     expect(view.outcomes[1].modelProb).toBe("40%");
 
     // Bloco de recomendação usa a apresentação btts (sem linha) + sub-linha leiga.
@@ -1161,8 +1162,8 @@ describe("toAnalysisView — over_under stays frozen by identity (not length)", 
     // Outcomes over/under (caminho binário congelado), com a linha 2.5 no label —
     // NÃO os ids/labels do caminho N-vias.
     expect(view.outcomes.map((o) => o.id)).toEqual(["over", "under"]);
-    expect(view.outcomes.map((o) => o.label)).toEqual(["Over 2.5", "Under 2.5"]);
-    expect(view.outcomes[0].scenarioLabel).toBe("mais de 2.5 gols");
+    expect(view.outcomes.map((o) => o.label)).toEqual(["Mais de 2,5", "Menos de 2,5"]);
+    expect(view.outcomes[0].scenarioLabel).toBe("mais de 2,5 gols");
     // framing binário da zebra presente (exclusivo do caminho congelado).
     expect(view.framing).not.toBeNull();
   });
@@ -1215,7 +1216,7 @@ describe("toAnalysisView (N-vias / dupla chance) — edge da grade == edge persi
     ]);
     // de-vig Σ=2: implícita ~75% (NÃO ~37.5% de Σ=1) → edge +9.0pp (== persistido).
     expect(view.outcomes[0].marketProb).toBe("75%");
-    expect(view.outcomes[0].edge).toBe("+9,0pp");
+    expect(view.outcomes[0].edge).toBe("+9,0 pontos");
     expect(view.outcomes[0].isRecommended).toBe(true);
     expect(view.recommendation?.marketKey).toBe("double_chance");
     expect(view.recommendation?.selectionLabel).toBe("Casa ou empate");
@@ -1279,10 +1280,10 @@ describe("toPreviousAnalysisItems", () => {
     ]);
     expect(items.map((i) => i.id)).toEqual(["old_mr", "old_ou", "hist"]);
     expect(items.map((i) => i.marketLabel)).toEqual([
-      getMarketPresentation("match_result").marketLabel,
-      getMarketPresentation("over_under").marketLabel,
+      getDisplayPresentation("match_result").marketLabel,
+      getDisplayPresentation("over_under").marketLabel,
       // marketKey null (histórica) coalesce 'over_under' — espelha toAnalysisView.
-      getMarketPresentation("over_under").marketLabel,
+      getDisplayPresentation("over_under").marketLabel,
     ]);
   });
 
@@ -1348,8 +1349,8 @@ describe("toMarketAnalysisSections", () => {
     // 1 seção por mercado; a última de cada (ou2 vence ou1, mr1 vence mr0).
     expect(sections.map((s) => s.id)).toEqual(["ou2", "mr1"]);
     expect(sections.map((s) => s.marketLabel)).toEqual([
-      getMarketPresentation("over_under").marketLabel,
-      getMarketPresentation("match_result").marketLabel,
+      getDisplayPresentation("over_under").marketLabel,
+      getDisplayPresentation("match_result").marketLabel,
     ]);
   });
 
@@ -1386,7 +1387,7 @@ describe("toMarketAnalysisSections", () => {
     expect(merged).toHaveLength(1);
     expect(merged[0].id).toBe("ou_real");
     expect(merged[0].marketLabel).toBe(
-      getMarketPresentation("over_under").marketLabel,
+      getDisplayPresentation("over_under").marketLabel,
     );
 
     // Ordem inversa: a histórica null é a mais recente → ela vence dentro do bucket.
@@ -1471,7 +1472,7 @@ describe("toAnalysisView — anytime_scorer (independent_binary, #290)", () => {
 
   it("mostra o piso de edge do mercado = 8pp (não a constante 5)", () => {
     const view = scorerView("scorer_pedro");
-    expect(view.minEdgeLabel).toBe("8pp");
+    expect(view.minEdgeLabel).toBe("8 pontos");
     expect(view.minEdgePp).toBe(8);
   });
 
@@ -1480,7 +1481,7 @@ describe("toAnalysisView — anytime_scorer (independent_binary, #290)", () => {
     const pedro = view.outcomes.find((o) => o.label === "Pedro");
     // implícita-teto 1/2.5*100 = 40 → "40%"; edge model(52)−40 = +12pp.
     expect(pedro?.marketProb).toBe("40%");
-    expect(pedro?.edge).toBe("+12,0pp");
+    expect(pedro?.edge).toBe("+12,0 pontos");
   });
 });
 

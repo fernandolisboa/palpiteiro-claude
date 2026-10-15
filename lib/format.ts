@@ -212,6 +212,7 @@ export {
   EV_ZERO_LABEL,
   formatDecimal,
   formatEdge,
+  formatEdgePoints,
   formatEvPct,
   formatLine,
   formatOdd,

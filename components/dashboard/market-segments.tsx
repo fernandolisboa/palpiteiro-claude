@@ -49,7 +49,7 @@ function GraduationRuler({
       <span className="font-mono text-meta tabular-nums text-muted-foreground">
         {graduation.label}
         {" · "}
-        yield {segment.kpis.yieldPct.value}
+        retorno {segment.kpis.yieldPct.value}
       </span>
     </div>
   );
@@ -109,7 +109,7 @@ function StakeBands({ segment }: { segment: MarketSegmentView }) {
   return (
     <div className="flex flex-col gap-2">
       <span className="text-meta uppercase tracking-label text-muted-foreground">
-        yield por banda de stake
+        retorno por banda de stake
       </span>
       <div className="grid grid-cols-3 gap-2">
         {segment.stakeBands.map((band) => (
@@ -154,7 +154,7 @@ function MarketSegmentCard({ segment }: { segment: MarketSegmentView }) {
       <ClvLine segment={segment} />
       {segment.empty ? (
         <p className="text-body-sm tracking-tight text-muted-foreground">
-          Sem apostas resolvidas ainda — a régua D9 e o yield por banda aparecem
+          Sem apostas resolvidas ainda — a régua D9 e o retorno por banda aparecem
           quando começarem a liquidar.
         </p>
       ) : (

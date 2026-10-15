@@ -76,10 +76,7 @@ export function PredictionDetail({
       <Row label="mercado" value={prediction.market} />
       <Row label="recomendação" value={prediction.rec} />
       <Row label="confiança" value={prediction.confidence} />
-      <Row
-        label="edge"
-        value={prediction.edge ? `${prediction.edge}pp` : "—"}
-      />
+      <Row label="vantagem" value={prediction.edge ?? "—"} />
       <Row label="prob. implícita" value={prediction.implied} />
       <Row label="odd de entrada" value={prediction.odd} />
       <Row label="odd mínima" value={prediction.minOdd} />

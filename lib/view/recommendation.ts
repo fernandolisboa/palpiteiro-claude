@@ -1,21 +1,30 @@
 import { formatLine } from "@/lib/format-number";
-import { findMarketPresentation } from "@/lib/view/markets/presentation";
-import { withTeamLabels, type TeamLabels } from "@/lib/view/markets/with-team-labels";
+import { findDisplayPresentation } from "@/lib/view/markets/display";
+import type { TeamLabels } from "@/lib/view/markets/with-team-labels";
 import type { Recommendation } from "@/lib/view/types";
 
-// Tokens pinados do over/under (paridade byte-idêntica). pass é market-agnóstico.
-const PINNED_TOKENS: Record<string, Recommendation> = {
-  over: "OVER",
-  under: "UNDER",
-  pass: "PASS",
-};
+/** Rótulo de tela de "pass" (ADR 0056): o motor diz PASS, a tela diz "Sem aposta". */
+export const PASS_LABEL = "Sem aposta";
 
 /**
- * Display da recomendação pra QUALQUER mercado (#173, #539), compartilhado pela
- * tabela/detalhe do dashboard e pelo feed de análises recentes:
- *  1. over/under/pass → token pinado ("OVER"/"UNDER"/"PASS");
- *  2. seleção com rótulo na apresentação → ele ("home" → "Casa", ou o nome do
- *     time quando `teams` vem; "yes" → "Sim");
+ * Tipo da recomendação, derivado do valor CRU (`predictions.recommendation`), nunca do
+ * rótulo: a cor na tabela do desempenho e no feed de recentes lê daqui, então trocar
+ * o texto de tela não quebra a cor em silêncio.
+ */
+export type RecommendationKind = "over" | "under" | "pass" | "other";
+
+export function recommendationKind(recommendation: string): RecommendationKind {
+  return recommendation === "over" || recommendation === "under" || recommendation === "pass"
+    ? recommendation
+    : "other";
+}
+
+/**
+ * Display da recomendação pra QUALQUER mercado (#173, #539, ADR 0056), compartilhado
+ * pela tabela/detalhe do dashboard e pelo feed de análises recentes:
+ *  1. pass → "Sem aposta";
+ *  2. seleção com rótulo na apresentação de tela → ele (over com a linha → "Mais de
+ *     2,5"; "home" → "Casa", ou o nome do time quando `teams` vem; "yes" → "Sim");
  *  3. senão o `market_selections.label` do DB (artilheiro/assistência: nome do
  *     jogador, materializado no predict — a apresentação só conhece a key);
  *  4. em último caso a key crua (row degradada, sem seleção).
@@ -27,13 +36,17 @@ export function recommendationLabel(
   marketKey: string,
   selectionLabel: string | null = null,
   // Nome (ou sigla) dos times no 1X2/dupla chance (#574): "Palmeiras" em vez de "Casa".
-  teams?: TeamLabels
+  teams?: TeamLabels,
+  // Linha do mercado (over/under): entra no rótulo ("Mais de 2,5"). null → linha padrão.
+  line: number | null = null,
 ): Recommendation {
-  if (recommendation in PINNED_TOKENS) return PINNED_TOKENS[recommendation];
-  const registry = findMarketPresentation(marketKey);
-  const fromPresentation = registry
-    ? withTeamLabels(registry, teams).selectionLabel(recommendation)
-    : undefined;
+  if (recommendation === "pass") return PASS_LABEL;
+  const presentation = findDisplayPresentation(marketKey, teams);
+  // Sem linha gravada (row legada), cai na linha padrão do mercado (over/under: 2,5).
+  const fromPresentation = presentation?.outcomeLabel(
+    recommendation,
+    line ?? presentation.defaultLine,
+  );
   if (fromPresentation !== undefined && fromPresentation !== recommendation) {
     return fromPresentation;
   }
@@ -41,12 +54,18 @@ export function recommendationLabel(
 }
 
 /**
- * Contexto do mercado ao lado da recomendação ("Ambas marcam", "Over/Under gols
- * 3,5"): sem ele, "Sim" ou "OVER" sozinhos não dizem qual aposta foi.
+ * Contexto do mercado ao lado da recomendação ("Ambas marcam", "Total de gols"): sem
+ * ele, "Sim" sozinho não diz qual aposta foi. Quando a linha já está no rótulo da
+ * recomendação ("Mais de 2,5"), o contexto não a repete; em "Sem aposta" a linha fica
+ * ("Total de gols 2,5").
  */
 export function marketContextLabel(
   marketLabel: string,
-  marketParams: { line: number } | null
+  marketParams: { line: number } | null,
+  recommendation?: string,
 ): string {
-  return marketParams ? `${marketLabel} ${formatLine(marketParams.line)}` : marketLabel;
+  const lineInRec = recommendation !== undefined && recommendation !== "pass";
+  return marketParams && !lineInRec
+    ? `${marketLabel} ${formatLine(marketParams.line)}`
+    : marketLabel;
 }

@@ -1,7 +1,7 @@
 import { formatOdd, formatPct, formatRelativeAgo } from "@/lib/format";
 import { computeMarketImpliedProbabilities } from "@/lib/odds/implied-probability";
-import { getMarketPresentation } from "@/lib/view/markets/presentation";
-import { withTeamLabels, type TeamLabels } from "@/lib/view/markets/with-team-labels";
+import { getDisplayPresentation } from "@/lib/view/markets/display";
+import type { TeamLabels } from "@/lib/view/markets/with-team-labels";
 import type { MatchRowView, OddsView } from "@/lib/view/types";
 
 export type OddsSnapshotInput = {
@@ -14,8 +14,8 @@ export type OddsSnapshotInput = {
 // O snapshot vivo é binário over/under (the-odds-api) — o único mercado com
 // reader de snapshot hoje. Resolve os rótulos por lado via registry pra
 // de-hardcodar "Over 2.5"/"O"/badge dos componentes (AC3); live N-vias = Fase 4.
-const LIVE_ODDS_PRESENTATION = getMarketPresentation("over_under");
-// Label COMPLETO ("Over 2.5"/"Under 2.5") — só os headers do OddsCard (toOddsView).
+const LIVE_ODDS_PRESENTATION = getDisplayPresentation("over_under");
+// Label COMPLETO ("Mais de 2,5"/"Menos de 2,5") — headers do OddsCard (toOddsView).
 const LIVE_OVER_LABEL = LIVE_ODDS_PRESENTATION.outcomeLabel(
   "over",
   LIVE_ODDS_PRESENTATION.defaultLine,
@@ -24,10 +24,10 @@ const LIVE_UNDER_LABEL = LIVE_ODDS_PRESENTATION.outcomeLabel(
   "under",
   LIVE_ODDS_PRESENTATION.defaultLine,
 );
-// Label CURTO ("Over"/"Under") — chips densos da match-list (coluna ~160px).
-// Mantém a compactação pré-pivot ("O"/"U") sem o "2.5" verboso na lista.
-const LIVE_OVER_SHORT = LIVE_ODDS_PRESENTATION.selectionLabel("over");
-const LIVE_UNDER_SHORT = LIVE_ODDS_PRESENTATION.selectionLabel("under");
+// Chips densos da match-list (coluna ~160px): também com a linha ("Mais de 2,5"),
+// porque "Mais de 1,85" sem a linha seria ambíguo (ADR 0056).
+const LIVE_OVER_SHORT = LIVE_OVER_LABEL;
+const LIVE_UNDER_SHORT = LIVE_UNDER_LABEL;
 
 export function toOddsView(
   snapshot: OddsSnapshotInput,
@@ -77,7 +77,7 @@ export type NwayOddsInput = {
  * View genérica N-vias pra mercados Σ=1 featured (1X2 hoje). RE-DERIVA probs +
  * overround do mercado COMPLETO via `computeMarketImpliedProbabilities` (nunca
  * `1/odd` cru; nunca o overroundPct armazenado — paridade com toOddsView). Labels
- * vêm do registry puro (`getMarketPresentation`) — este módulo NÃO importa
+ * vêm do registry puro com os rótulos de tela (`getDisplayPresentation`) — NÃO importa
  * market-descriptor (pureza de bundle; match_result é Σ=1, não precisa de
  * impliedSumTarget). numeric do Drizzle = string → `Number()` no boundary.
  */
@@ -87,7 +87,7 @@ export function toNwayOddsView(
   now: Date = new Date(),
   teams?: TeamLabels,
 ): OddsView {
-  const presentation = withTeamLabels(getMarketPresentation(marketKey), teams);
+  const presentation = getDisplayPresentation(marketKey, teams);
   const odds = snapshot.selections.map((s) => Number(s.odd));
   const { probs, overround } = computeMarketImpliedProbabilities(odds);
   return {
@@ -126,7 +126,7 @@ export function toMatchRowResultOdds(
   marketKey: string,
   teams?: TeamLabels,
 ): NonNullable<MatchRowView["odds"]> {
-  const presentation = withTeamLabels(getMarketPresentation(marketKey), teams);
+  const presentation = getDisplayPresentation(marketKey, teams);
   return {
     outcomes: snapshot.selections.map((s) => ({
       label: presentation.selectionLabel(s.key),

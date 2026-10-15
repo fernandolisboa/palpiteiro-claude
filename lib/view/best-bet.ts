@@ -1,6 +1,6 @@
 import { computeEvPerUnit, computeMarketScenarios } from "@/lib/odds/scenario";
 import { getDescriptor } from "@/lib/odds/market-descriptor";
-import { getMarketPresentation } from "@/lib/view/markets/presentation";
+import { getDisplayPresentation } from "@/lib/view/markets/display";
 import type { TeamLabels } from "@/lib/view/markets/with-team-labels";
 import { toAnalysisView } from "@/lib/view/analysis";
 import type {
@@ -107,12 +107,12 @@ export function toBestBetView(
   const entries: BestBetEntry[] = [];
   const rawErrors: BestBetMarketError[] = preWarmErrors.map((e) => ({
     marketKey: e.marketKey,
-    marketLabel: getMarketPresentation(e.marketKey).marketLabel,
+    marketLabel: getDisplayPresentation(e.marketKey).marketLabel,
     message: e.message,
   }));
 
   for (const o of outcomes) {
-    const marketLabel = getMarketPresentation(o.marketKey).marketLabel;
+    const marketLabel = getDisplayPresentation(o.marketKey).marketLabel;
     if (!o.ok) {
       rawErrors.push({ marketKey: o.marketKey, marketLabel, message: o.message });
       continue;
@@ -155,7 +155,7 @@ export function toBestBetView(
   for (const e of notRunErrors) {
     rawErrors.push({
       marketKey: e.marketKey,
-      marketLabel: getMarketPresentation(e.marketKey).marketLabel,
+      marketLabel: getDisplayPresentation(e.marketKey).marketLabel,
       message: e.message,
     });
   }
