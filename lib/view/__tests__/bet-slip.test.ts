@@ -296,9 +296,8 @@ describe("toBetGridView — tabela de mercados (#576)", () => {
     const at = (unavailable: "live" | "finished" | null) =>
       toBetGridView({ teams: TEAMS, model: null, references: new Map(), analysis: new Map(), unavailable })
         .noOdds;
-    expect(at(null)).toBe(
-      "Sem cotação publicada para este jogo. Análise indisponível até que o mercado abra.",
-    );
+    // Pré-jogo cobre o mercado que não abriu e a captura velha (> 48h): não diz qual.
+    expect(at(null)).toBe("Sem cotação recente para este jogo.");
     expect(at("live")).toBe("Jogo em andamento, sem cotação pré-jogo publicada.");
     expect(at("finished")).toBe("Sem cotação de referência para este jogo.");
   });

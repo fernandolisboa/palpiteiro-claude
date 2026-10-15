@@ -165,8 +165,10 @@ export type BetGridView = {
 // Fonte e JEV da Leitura do modelo (lib/view/match-model.ts), da MESMA linha da base.
 export type GridModelReading = { source: string; jev: string | null };
 
+// Antes do apito, "sem odd" é mercado que não abriu OU captura de mais de 48h (o corte do
+// cupom, REFERENCE_MAX_AGE_MS): a copy não afirma qual dos dois.
 const NO_ODDS_COPY = {
-  preMatch: "Sem cotação publicada para este jogo. Análise indisponível até que o mercado abra.",
+  preMatch: "Sem cotação recente para este jogo.",
   live: "Jogo em andamento, sem cotação pré-jogo publicada.",
   other: "Sem cotação de referência para este jogo.",
 } as const;
