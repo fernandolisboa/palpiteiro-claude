@@ -260,6 +260,26 @@ body {
   color: var(--foreground);
 }
 
+/* Rodapé alinhado à coluna da página (#579, ADR 0059): a página marca a largura no
+   contêiner (PageContainer ou data-page-width à mão). Sem marca, ou sem suporte a :has(),
+   fica content (max-w-content do próprio rodapé). Fora de @layer de propósito: CSS sem
+   camada vence as utilities do Tailwind. Fallback literal: o @theme é `inline`, então
+   --container-reading/--container-form não existem no :root em runtime. Ordem importa:
+   form por último (vence o mais estreito). */
+body:has([data-page-width="reading"]) [data-footer-column] {
+  max-width: var(--container-reading, 640px);
+}
+/* Login: o gutter px-5 fica FORA da coluna de 380px; o rodapé tem o gutter dentro
+   (border-box), então a largura máxima é a coluna + os dois gutters. */
+body:has([data-page-width="form"]) [data-footer-column] {
+  max-width: calc(var(--container-form, 380px) + 2.5rem);
+}
+@media (width >= 64rem) {
+  body:has([data-page-width="form"]) [data-footer-column] {
+    max-width: calc(var(--container-form, 380px) + 4rem); /* lg:px-8 */
+  }
+}
+
 /* O tour rola alvos altos até o topo (`block: "start"`): a folga mantém o topo do
    alvo fora do header fixo de 56px (#553). */
 [data-tour] {

@@ -27,7 +27,8 @@ export default async function SignInPage({ searchParams }: PageProps) {
 
   return (
     <div className="flex min-h-screen items-center justify-center bg-background px-5 text-foreground">
-      <div className="flex w-full max-w-form flex-col gap-6">
+      {/* data-page-width: o rodapé global segue esta coluna (ADR 0059, globals.css). */}
+      <div className="flex w-full max-w-form flex-col gap-6" data-page-width="form">
         <div className="flex flex-col gap-1.5">
           <Wordmark />
           <p className="text-body text-muted-foreground tracking-tight">

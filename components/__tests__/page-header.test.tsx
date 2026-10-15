@@ -58,4 +58,11 @@ describe("PageContainer", () => {
       expect(html).toContain("lg:px-8");
     }
   });
+
+  it("marca a largura no markup, pro rodapé seguir a coluna (ADR 0059)", () => {
+    const content = renderToStaticMarkup(<PageContainer width="content">x</PageContainer>);
+    const reading = renderToStaticMarkup(<PageContainer width="reading">x</PageContainer>);
+    expect(content).toContain('data-page-width="content"');
+    expect(reading).toContain('data-page-width="reading"');
+  });
 });

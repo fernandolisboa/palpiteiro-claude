@@ -1,6 +1,7 @@
 import type { Metadata } from "next";
 
 import { AppShell } from "@/components/app-shell";
+import { PageContainer } from "@/components/page-container";
 
 import { ComoFuncionaContent } from "./como-funciona-content";
 
@@ -26,9 +27,9 @@ export const metadata: Metadata = {
 export default function ComoFuncionaPage() {
   return (
     <AppShell>
-      <div className="mx-auto w-full max-w-reading px-6 py-8">
+      <PageContainer width="reading">
         <ComoFuncionaContent />
-      </div>
+      </PageContainer>
     </AppShell>
   );
 }
