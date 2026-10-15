@@ -76,8 +76,8 @@ describe("SummaryCards (/dashboard, #577)", () => {
     expect(valueClass(html, "-3,0%")).toContain("text-destructive");
     expect(valueClass(html, "-1,20 u")).toContain("text-destructive");
 
-    html = render(view({ totalProfit: "+0,00 u", profitTone: "zero" }));
-    expect(valueClass(html, "+0,00 u")).not.toMatch(/text-edge-fg|text-destructive/);
+    html = render(view({ totalProfit: "0,00 u", profitTone: "zero" }));
+    expect(valueClass(html, "0,00 u")).not.toMatch(/text-edge-fg|text-destructive/);
   });
 
   it("sem amostra: retorno '—' neutro", () => {

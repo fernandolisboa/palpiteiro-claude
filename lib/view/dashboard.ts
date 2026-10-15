@@ -14,6 +14,7 @@ import { computeClv } from "@/lib/odds/clv";
 import { getDescriptor } from "@/lib/odds/market-descriptor";
 import {
   formatCostUsd,
+  formatDecimal,
   formatEdge,
   formatEdgePoints,
   formatKickoffAbsolute,
@@ -52,6 +53,16 @@ function signTone(value: number | null, decimals: number): SignTone {
   if (shown > 0) return "positive";
   if (shown < 0) return "negative";
   return "zero";
+}
+
+// Texto com sinal a partir do MESMO arredondamento do tom: o que arredonda a zero
+// sai sem sinal ("0,0%", "0,00 u"), como o EV_ZERO_LABEL de lib/format-number, nunca
+// "+0,0%" neutro. "—" sem valor.
+function signedRounded(value: number | null, decimals: number, unit: string): string {
+  if (value === null || !Number.isFinite(value)) return "—";
+  const tone = signTone(value, decimals);
+  if (tone === "zero") return `${formatDecimal(0, decimals)}${unit}`;
+  return `${tone === "positive" ? "+" : ""}${formatDecimal(value, decimals)}${unit}`;
 }
 
 export type DashboardKpiView = {
@@ -107,9 +118,9 @@ export function toDashboardKpiView(kpis: DashboardKpis): DashboardKpiView {
     passRate: toRateView(kpis.passRate),
     clvOddsRatio: toClvRateView(kpis.clvOddsRatio, "%"),
     clvNoVigDelta: toClvRateView(kpis.clvNoVigDelta, " pp"),
-    yieldSigned: formatClvValue(kpis.yield.value, "%"),
+    yieldSigned: signedRounded(kpis.yield.value, 1, "%"),
     yieldTone: signTone(kpis.yield.value, 1),
-    totalProfit: unitsLabel(kpis.totalProfitUnits),
+    totalProfit: signedRounded(kpis.totalProfitUnits, 2, " u"),
     profitPositive: kpis.totalProfitUnits >= 0,
     profitTone: signTone(kpis.totalProfitUnits, 2),
     counts: {
