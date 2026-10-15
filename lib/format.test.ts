@@ -195,6 +195,40 @@ describe("formatKickoffAbsolute", () => {
   });
 });
 
+describe("formatKickoffAbsolute com withOtherYear (#577)", () => {
+  const TZ = "America/Sao_Paulo";
+  const now = new Date("2026-10-15T15:00:00Z");
+
+  it("ano só quando difere do de now", () => {
+    const lastSeason = new Date("2025-10-18T19:00:00Z");
+    expect(formatKickoffAbsolute(lastSeason, now, TZ, { withOtherYear: true })).toBe(
+      "sáb, 18 out 2025",
+    );
+    const sameYear = new Date("2026-10-03T19:00:00Z");
+    expect(formatKickoffAbsolute(sameYear, now, TZ, { withOtherYear: true })).toBe(
+      "sáb, 03 out",
+    );
+  });
+
+  it("sem a opção, o formato de sempre (outras telas)", () => {
+    expect(formatKickoffAbsolute(new Date("2025-10-18T19:00:00Z"), now, TZ)).toBe(
+      "sáb, 18 out",
+    );
+  });
+
+  it("o ano é o do fuso do usuário, não o do runtime", () => {
+    // 01/01/2027 01:00 UTC = 31/12/2026 22:00 em São Paulo: mesmo ano de now.
+    const newYearUtc = new Date("2027-01-01T01:00:00Z");
+    const dec = new Date("2026-12-20T12:00:00Z");
+    expect(formatKickoffAbsolute(newYearUtc, dec, TZ, { withOtherYear: true })).toBe(
+      "qui, 31 dez",
+    );
+    expect(formatKickoffAbsolute(newYearUtc, dec, "UTC", { withOtherYear: true })).toBe(
+      "sex, 01 jan 2027",
+    );
+  });
+});
+
 describe("formatCountdown", () => {
   it("returns countdown only when <24h same day", () => {
     const now = new Date(2026, 4, 22, 18, 0);

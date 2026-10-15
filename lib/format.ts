@@ -223,12 +223,15 @@ export function formatKickoffRelative(
 
 /**
  * "hoje, 21:30" / "amanhã, 16:00" / "qua, 23 mai". Usado no MatchHero. Formata no
- * `timeZone` do usuário (undefined = fuso do runtime, legado).
+ * `timeZone` do usuário (undefined = fuso do runtime, legado). Com `withOtherYear`,
+ * o ano entra quando difere do de `now` no mesmo fuso ("sáb, 18 out 2025"): tabela
+ * do Desempenho, que mistura temporadas (#577).
  */
 export function formatKickoffAbsolute(
   kickoff: Date,
   now: Date = new Date(),
   timeZone?: string,
+  opts: { withOtherYear?: boolean } = {},
 ): string {
   const k = partsOf(kickoff, timeZone);
   const n = partsOf(now, timeZone);
@@ -237,7 +240,8 @@ export function formatKickoffAbsolute(
   const wk = WEEKDAY_ABBR_PT[weekdayOf(k)];
   const day = k.day.toString().padStart(2, "0");
   const mon = MONTH_ABBR_PT[k.month - 1];
-  return `${wk}, ${day} ${mon}`;
+  const year = opts.withOtherYear && k.year !== n.year ? ` ${k.year}` : "";
+  return `${wk}, ${day} ${mon}${year}`;
 }
 
 /**

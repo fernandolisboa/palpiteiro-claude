@@ -129,6 +129,16 @@ describe("toPredictionRowView", () => {
     expect(v.when).toBe("sáb, 13 jun");
   });
 
+  it("coluna data leva o ano quando o jogo é de outro ano (#577)", () => {
+    vi.useFakeTimers();
+    vi.setSystemTime(new Date("2026-06-10T12:00:00Z"));
+    const v = toPredictionRowView(
+      row({ kickoffAt: new Date("2025-10-18T19:00:00Z") }),
+      "America/Sao_Paulo",
+    );
+    expect(v.when).toBe("sáb, 18 out 2025");
+  });
+
   it("artilheiro mostra o nome do jogador do DB, não a key", () => {
     const v = toPredictionRowView(
       row({

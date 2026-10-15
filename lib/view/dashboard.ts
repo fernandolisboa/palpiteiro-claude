@@ -231,7 +231,8 @@ export function toPredictionRowView(
     title: `${pair.home.fullName ?? pair.home.name} × ${pair.away.fullName ?? pair.away.name}`,
     league,
     // Data do JOGO (#577), não da análise: a tabela ordena por jogo.
-    when: formatKickoffAbsolute(row.kickoffAt, new Date(), timeZone),
+    // Com o ano quando é de outro ano (a tabela mistura temporadas).
+    when: formatKickoffAbsolute(row.kickoffAt, new Date(), timeZone, { withOtherYear: true }),
     // Tabela apertada: sigla de 3 letras no lugar de "Casa"/"Fora" (#574).
     rec: recommendationLabel(
       row.recommendation,
