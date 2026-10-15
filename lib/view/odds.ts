@@ -1,6 +1,7 @@
 import { formatOdd, formatPct, formatRelativeAgo } from "@/lib/format";
 import { computeMarketImpliedProbabilities } from "@/lib/odds/implied-probability";
 import { getMarketPresentation } from "@/lib/view/markets/presentation";
+import { withTeamLabels, type TeamLabels } from "@/lib/view/markets/with-team-labels";
 import type { MatchRowView, OddsView } from "@/lib/view/types";
 
 export type OddsSnapshotInput = {
@@ -84,8 +85,9 @@ export function toNwayOddsView(
   snapshot: NwayOddsInput,
   marketKey: string,
   now: Date = new Date(),
+  teams?: TeamLabels,
 ): OddsView {
-  const presentation = getMarketPresentation(marketKey);
+  const presentation = withTeamLabels(getMarketPresentation(marketKey), teams);
   const odds = snapshot.selections.map((s) => Number(s.odd));
   const { probs, overround } = computeMarketImpliedProbabilities(odds);
   return {
@@ -122,8 +124,9 @@ export function toMatchRowOdds(
 export function toMatchRowResultOdds(
   snapshot: { selections: { key: string; odd: string }[] },
   marketKey: string,
+  teams?: TeamLabels,
 ): NonNullable<MatchRowView["odds"]> {
-  const presentation = getMarketPresentation(marketKey);
+  const presentation = withTeamLabels(getMarketPresentation(marketKey), teams);
   return {
     outcomes: snapshot.selections.map((s) => ({
       label: presentation.selectionLabel(s.key),

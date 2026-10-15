@@ -7,6 +7,7 @@ import {
   toPredictionDetailView,
   toPredictionRowView,
 } from "@/lib/view/dashboard";
+import { teamToTeam } from "@/lib/view/team";
 
 function row(overrides: Partial<DashboardRow> = {}): DashboardRow {
   const predictionId = overrides.predictionId ?? "p1";
@@ -59,6 +60,14 @@ describe("toPredictionRowView", () => {
     const pending = toPredictionRowView(row());
     expect(pending.status).toBe("pending");
     expect(pending.profit).toBeNull();
+  });
+
+  it("1X2 na tabela usa a sigla do time no lugar de 'Casa' (#574)", () => {
+    const v = toPredictionRowView(
+      row({ recommendation: "away", marketKey: "match_result", selectionLabel: "Fora" }),
+    );
+    expect(v.rec).toBe(teamToTeam("Czech Republic", "wc").short);
+    expect(v.rec).not.toBe("Fora");
   });
 
   it("maps a pass with no entry odd", () => {
@@ -317,7 +326,7 @@ describe("toPredictionDetailView", () => {
     expect(v.outcome).toBeNull();
   });
 
-  it("1X2 (match_result): rec mostra 'Casa' (não 'home') e settlementMetric usa o label do mercado", () => {
+  it("1X2 (match_result): rec mostra o nome do time (não 'home'/'Casa') e settlementMetric usa o label do mercado", () => {
     // Antes do join de markets a detail view hardcodava "over_under": uma row 1X2
     // renderizava o token cru "home" e o label de gols. Com o marketKey resolvido,
     // recToken deriva o label da seleção da apresentação e o settlementMetric o do
@@ -346,7 +355,8 @@ describe("toPredictionDetailView", () => {
       },
       { includeRawPayloads: false },
     );
-    expect(v.prediction.rec).toBe("Casa");
+    // Nome de EXIBIÇÃO do mandante (#574): "South Korea" da Copa vira "Coreia do Sul".
+    expect(v.prediction.rec).toBe("Coreia do Sul");
     // Sem markets.label no detalhe, cai no label da apresentação.
     expect(v.prediction.market).toBe("Resultado (1X2)");
     expect(v.outcome?.settlementMetric.label).toBe("resultado (90')");

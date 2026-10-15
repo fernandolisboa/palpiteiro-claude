@@ -562,7 +562,7 @@ function SelectionButton({
             "font-mono text-eyebrow-xs tabular-nums",
             selected ? "text-background/70" : "text-muted-fg-2",
           )}
-          title="odd justa pelo modelo (sem margem de casa)"
+          title="odd justa pelo modelo (sem margem)"
         >
           justa {formatOdd(s.fairOdd)}
         </span>
@@ -760,7 +760,7 @@ function SlipPanel(props: {
                 />
               </label>
               <span className="col-span-2 text-meta leading-relaxed text-muted-fg-2 tracking-tight">
-                A odd única que a casa paga pelas {legs.length} seleções juntas. As
+                A odd única da combinada, pras {legs.length} seleções juntas. As
                 seleções do mesmo jogo andam juntas, então a chance vem do placar, não
                 da multiplicação.
               </span>

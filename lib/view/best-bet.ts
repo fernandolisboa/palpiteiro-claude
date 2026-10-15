@@ -1,6 +1,7 @@
 import { computeEvPerUnit, computeMarketScenarios } from "@/lib/odds/scenario";
 import { getDescriptor } from "@/lib/odds/market-descriptor";
 import { getMarketPresentation } from "@/lib/view/markets/presentation";
+import type { TeamLabels } from "@/lib/view/markets/with-team-labels";
 import { toAnalysisView } from "@/lib/view/analysis";
 import type {
   BestBetEntry,
@@ -100,6 +101,8 @@ export function toBestBetView(
   aiCallByMarketKey: ReadonlyMap<string, AiCallCost>,
   preWarmErrors: { marketKey: string; message: string }[] = [],
   notRunErrors: { marketKey: string; message: string }[] = [],
+  // Nome dos times nos rótulos do 1X2/dupla chance (#574).
+  teams?: TeamLabels,
 ): BestBetView {
   const entries: BestBetEntry[] = [];
   const rawErrors: BestBetMarketError[] = preWarmErrors.map((e) => ({
@@ -137,6 +140,9 @@ export function toBestBetView(
         selections,
       },
       aiCall ? { costUsd: aiCall.costUsd } : null,
+      undefined,
+      undefined,
+      teams,
     );
     entries.push({
       marketKey,

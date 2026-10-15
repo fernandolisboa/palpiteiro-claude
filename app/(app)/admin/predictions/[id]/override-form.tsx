@@ -45,7 +45,7 @@ export function OverrideForm({ predictionId, defaultResult }: Props) {
       <div className="flex gap-4">
         <label className="flex flex-col gap-1">
           <span className="font-mono text-eyebrow uppercase tracking-label text-muted-foreground">
-            gols casa (90&apos;)
+            gols mandante (90&apos;)
           </span>
           <input
             type="number"

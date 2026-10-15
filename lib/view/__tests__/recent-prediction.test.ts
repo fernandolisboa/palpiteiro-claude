@@ -18,9 +18,10 @@ const base = {
 };
 
 describe("toRecentPredictionView — rótulo e mercado (#539)", () => {
-  it("1X2 mostra 'Casa' em vez de 'HOME', com o mercado ao lado", () => {
+  it("1X2 mostra a sigla do time (não 'Casa' nem 'HOME'), com o mercado ao lado", () => {
     const v = toRecentPredictionView(base, "UTC");
-    expect(v.rec).toBe("Casa");
+    expect(v.rec).toBe(v.home);
+    expect(v.rec).toBe("FLA");
     expect(v.market).toBe("Resultado (1X2)");
   });
 

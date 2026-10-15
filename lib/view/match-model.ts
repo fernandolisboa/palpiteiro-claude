@@ -2,6 +2,7 @@ import { formatLine, formatOdd, formatPct, formatRelativeAgoLabel } from "@/lib/
 import type { MatchModelSnapshot } from "@/lib/model-base/types";
 import type { DixonColesFallbackReason } from "@/lib/quant/match-model";
 import { getMarketPresentation } from "@/lib/view/markets/presentation";
+import { withTeamLabels, type TeamLabels } from "@/lib/view/markets/with-team-labels";
 import type {
   MatchModelLineView,
   MatchModelReadingView,
@@ -16,9 +17,10 @@ const intPct = (pp: number) => `${Math.round(pp)}%`;
 /** Favorito do 1X2 (empate de pp → casa, empate, fora) e o lado mais provável do 2.5. */
 export function toMatchModelLineView(
   snapshot: MatchModelSnapshot,
+  teams?: TeamLabels,
 ): MatchModelLineView {
   const mr = snapshot.probabilities.match_result;
-  const mrLabels = getMarketPresentation("match_result");
+  const mrLabels = withTeamLabels(getMarketPresentation("match_result"), teams);
   let favorite: "home" | "draw" | "away" = "home";
   if (mr.draw > mr[favorite]) favorite = "draw";
   if (mr.away > mr[favorite]) favorite = "away";
@@ -69,10 +71,11 @@ function selection(label: string, pp: number) {
 export function toMatchModelReadingView(
   snapshot: MatchModelSnapshot,
   now: Date,
+  teams?: TeamLabels,
 ): MatchModelReadingView {
   const p = snapshot.probabilities;
-  const mr = getMarketPresentation("match_result");
-  const dc = getMarketPresentation("double_chance");
+  const mr = withTeamLabels(getMarketPresentation("match_result"), teams);
+  const dc = withTeamLabels(getMarketPresentation("double_chance"), teams);
   const btts = getMarketPresentation("btts");
   const ou = getMarketPresentation("over_under");
 

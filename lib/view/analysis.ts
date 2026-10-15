@@ -31,6 +31,7 @@ import {
   getMarketPresentation,
   type MarketPresentation,
 } from "@/lib/view/markets/presentation";
+import { withTeamLabels, type TeamLabels } from "@/lib/view/markets/with-team-labels";
 import type {
   AnalysisView,
   MarketAnalysisSectionItem,
@@ -295,6 +296,8 @@ export function toAnalysisView(
   now: Date = new Date(),
   // Fuso de exibição do usuário (#1) p/ o "gerado em". Undefined = runtime (legado).
   timeZone?: string,
+  // Nome dos times nos rótulos do 1X2/dupla chance (#574). Ausente = "Casa"/"Fora".
+  teams?: TeamLabels,
 ): AnalysisView {
   const recommendation = prediction.recommendation;
   const isPass = recommendation === "pass";
@@ -304,7 +307,10 @@ export function toAnalysisView(
 
   // Apresentação do mercado (labels/frases). Default over_under: o page/action
   // ainda não passa marketKey (#170 liga). `line` cai pra defaultLine do mercado.
-  const presentation = getMarketPresentation(prediction.marketKey ?? "over_under");
+  const presentation = withTeamLabels(
+    getMarketPresentation(prediction.marketKey ?? "over_under"),
+    teams,
+  );
   const line = prediction.line ?? presentation.defaultLine;
 
   // Ramificação por IDENTIDADE (#174): over_under fica no caminho binário
@@ -479,6 +485,7 @@ export function toAnalysisViewFromPrediction(
   row: PredictionWithAiCall,
   now: Date = new Date(),
   timeZone?: string,
+  teams?: TeamLabels,
 ): AnalysisView {
   return toAnalysisView(
     {
@@ -507,6 +514,7 @@ export function toAnalysisViewFromPrediction(
       : null,
     now,
     timeZone,
+    teams,
   );
 }
 
@@ -525,6 +533,7 @@ export function toMarketAnalysisSections(
   history: PredictionWithAiCall[],
   now: Date = new Date(),
   timeZone?: string,
+  teams?: TeamLabels,
 ): MarketAnalysisSectionItem[] {
   const seen = new Set<string>();
   const sections: MarketAnalysisSectionItem[] = [];
@@ -546,7 +555,7 @@ export function toMarketAnalysisSections(
       // rodou aquela análise (#244). initialModelOverride cai pro "default" se for um id
       // aposentado/fora-da-audiência (histórica), sem <option> órfã.
       modelId: modelIdFromVersion(row.prediction.modelVersion),
-      view: toAnalysisViewFromPrediction(row, now, timeZone),
+      view: toAnalysisViewFromPrediction(row, now, timeZone, teams),
     });
   }
   return sections;
@@ -561,6 +570,7 @@ export function toPreviousAnalysisItems(
   history: PredictionWithAiCall[],
   now: Date = new Date(),
   timeZone?: string,
+  teams?: TeamLabels,
 ): PreviousAnalysisItem[] {
   const seen = new Set<string>();
   const items: PreviousAnalysisItem[] = [];
@@ -578,7 +588,7 @@ export function toPreviousAnalysisItems(
       // mercado, então o header o identifica (AC3). Mesmo coalesce 'over_under'.
       marketLabel: getMarketPresentation(marketKey).marketLabel,
       generatedAt: formatGeneratedAtSeconds(row.prediction.createdAt, timeZone),
-      view: toAnalysisViewFromPrediction(row, now, timeZone),
+      view: toAnalysisViewFromPrediction(row, now, timeZone, teams),
     });
   }
   return items;

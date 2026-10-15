@@ -29,6 +29,7 @@ import {
   recommendationLabel,
 } from "@/lib/view/recommendation";
 import { ownsAiCall } from "@/lib/view/owns-ai-call";
+import { teamToTeam } from "@/lib/view/team";
 import type { LeagueKey, Recommendation } from "@/lib/view/types";
 
 // Unidades COM sinal — convenção única, centralizada em lib/format (#170).
@@ -183,17 +184,18 @@ export function toPredictionRowView(
   timeZone?: string,
 ): PredictionRowView {
   const profitNum = row.profitUnits === null ? null : Number(row.profitUnits);
+  const league = leagueToKey(row.league);
   return {
     id: row.predictionId,
     home: row.homeTeam,
     away: row.awayTeam,
-    league: leagueToKey(row.league),
+    league,
     when: formatKickoffAbsolute(row.createdAt, new Date(), timeZone),
-    rec: recommendationLabel(
-      row.recommendation,
-      row.marketKey,
-      row.selectionLabel,
-    ),
+    // Tabela apertada: sigla de 3 letras no lugar de "Casa"/"Fora" (#574).
+    rec: recommendationLabel(row.recommendation, row.marketKey, row.selectionLabel, {
+      home: teamToTeam(row.homeTeam, league).short,
+      away: teamToTeam(row.awayTeam, league).short,
+    }),
     market: marketContextLabel(row.marketLabel, row.marketParams),
     odd: formatOdd(row.oddAtRecommendation),
     edge: formatEdge(row.edgePct),
@@ -336,6 +338,10 @@ export function toPredictionDetailView(
         prediction.recommendation,
         marketKey,
         detail.selectionLabel,
+        {
+          home: teamToTeam(match.homeTeam, leagueToKey(match.league)).name,
+          away: teamToTeam(match.awayTeam, leagueToKey(match.league)).name,
+        },
       ),
       market: marketContextLabel(
         detail.marketLabel ?? presentation.marketLabel,

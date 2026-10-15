@@ -1,5 +1,6 @@
 import { formatLine } from "@/lib/format-number";
 import { findMarketPresentation } from "@/lib/view/markets/presentation";
+import { withTeamLabels, type TeamLabels } from "@/lib/view/markets/with-team-labels";
 import type { Recommendation } from "@/lib/view/types";
 
 // Tokens pinados do over/under (paridade byte-idêntica). pass é market-agnóstico.
@@ -13,7 +14,8 @@ const PINNED_TOKENS: Record<string, Recommendation> = {
  * Display da recomendação pra QUALQUER mercado (#173, #539), compartilhado pela
  * tabela/detalhe do dashboard e pelo feed de análises recentes:
  *  1. over/under/pass → token pinado ("OVER"/"UNDER"/"PASS");
- *  2. seleção com rótulo na apresentação → ele ("home" → "Casa", "yes" → "Sim");
+ *  2. seleção com rótulo na apresentação → ele ("home" → "Casa", ou o nome do
+ *     time quando `teams` vem; "yes" → "Sim");
  *  3. senão o `market_selections.label` do DB (artilheiro/assistência: nome do
  *     jogador, materializado no predict — a apresentação só conhece a key);
  *  4. em último caso a key crua (row degradada, sem seleção).
@@ -23,11 +25,15 @@ const PINNED_TOKENS: Record<string, Recommendation> = {
 export function recommendationLabel(
   recommendation: string,
   marketKey: string,
-  selectionLabel: string | null = null
+  selectionLabel: string | null = null,
+  // Nome (ou sigla) dos times no 1X2/dupla chance (#574): "Palmeiras" em vez de "Casa".
+  teams?: TeamLabels
 ): Recommendation {
   if (recommendation in PINNED_TOKENS) return PINNED_TOKENS[recommendation];
-  const fromPresentation =
-    findMarketPresentation(marketKey)?.selectionLabel(recommendation);
+  const registry = findMarketPresentation(marketKey);
+  const fromPresentation = registry
+    ? withTeamLabels(registry, teams).selectionLabel(recommendation)
+    : undefined;
   if (fromPresentation !== undefined && fromPresentation !== recommendation) {
     return fromPresentation;
   }

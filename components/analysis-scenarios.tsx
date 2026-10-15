@@ -247,7 +247,7 @@ function ScenarioColumn({
             ? {
                 anchor: "prob-implicita",
                 blurb:
-                  "A chance que a odd embute, já descontada a margem da casa. Nunca é 1/odd cru.",
+                  "A chance que a odd embute, já descontada a margem embutida na odd. Nunca é 1/odd cru.",
               }
             : undefined
         }

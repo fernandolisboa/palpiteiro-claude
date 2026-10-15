@@ -17,13 +17,13 @@ export function ComoFuncionaContent() {
         O Palpiteiro <strong className="font-medium text-foreground">recomenda</strong> e{" "}
         <strong className="font-medium text-foreground">acompanha</strong> apostas em
         vários mercados de futebol — over/under (total de gols), resultado final
-        (1X2), ambas marcam e dupla chance. Pra cada jogo ele compara as odds da casa
+        (1X2), ambas marcam e dupla chance. Pra cada jogo ele compara as odds de mercado
         com a estimativa da IA, mede onde há vantagem (o{" "}
         <strong className="font-medium text-foreground">edge</strong>) e devolve{" "}
         <strong className="font-medium text-foreground">uma recomendação só</strong> —
         mercado, seleção, linha e tamanho da aposta — ou{" "}
         <strong className="font-medium text-foreground">PASS</strong>, quando não
-        compensa apostar. Você aposta por fora, na casa, com seu próprio dinheiro; o
+        compensa apostar. As apostas são entre vocês; o app só anota e faz a conta. O
         dinheiro que aparece aqui dentro é hipotético, serve só pra você medir se as
         recomendações estão valendo a pena. E, no topo de cada jogo, tem ainda{" "}
         <a href="#o-palpite" className="text-foreground underline underline-offset-2 decoration-border-strong hover:decoration-foreground focus-visible:rounded-sm focus-visible:outline-none focus-visible:ring-[3px] focus-visible:ring-ring/50">
@@ -82,7 +82,7 @@ export function ComoFuncionaContent() {
             </a>{" "}
             (a chance que a odd embute, já descontada a{" "}
             <a href="#overround" className="text-foreground underline underline-offset-2 decoration-border-strong hover:decoration-foreground focus-visible:rounded-sm focus-visible:outline-none focus-visible:ring-[3px] focus-visible:ring-ring/50">
-              margem da casa
+              margem embutida na odd
             </a>
             ). A diferença entre as duas é o{" "}
             <a href="#edge" className="text-foreground underline underline-offset-2 decoration-border-strong hover:decoration-foreground focus-visible:rounded-sm focus-visible:outline-none focus-visible:ring-[3px] focus-visible:ring-ring/50">
@@ -121,7 +121,7 @@ export function ComoFuncionaContent() {
           </p>
           <ul className="mt-3 flex flex-col gap-2 text-body leading-relaxed text-muted-foreground tracking-tight">
             <li>
-              Odds da casa:{" "}
+              Odds de mercado:{" "}
               <strong className="font-medium text-foreground">over 1.92 / under 1.92</strong>.
             </li>
             <li>
@@ -132,8 +132,8 @@ export function ComoFuncionaContent() {
             </li>
             <li>
               Essa sobra de 4,17% é o{" "}
-              <strong className="font-medium text-foreground">overround</strong> (margem da
-              casa). Normalizando: 0.5208 ÷ 1.0417 ={" "}
+              <strong className="font-medium text-foreground">overround</strong> (margem
+              embutida na odd). Normalizando: 0.5208 ÷ 1.0417 ={" "}
               <strong className="font-medium text-foreground">50%</strong> pra cada lado → essa é
               a <strong className="font-medium text-foreground">prob. do mercado</strong>.
             </li>
@@ -186,11 +186,11 @@ export function ComoFuncionaContent() {
               <a href="#selecao" className="text-foreground underline underline-offset-2 decoration-border-strong hover:decoration-foreground focus-visible:rounded-sm focus-visible:outline-none focus-visible:ring-[3px] focus-visible:ring-ring/50">
                 seleções
               </a>
-              : <strong className="font-medium text-foreground">casa</strong> (o
-              mandante ganha),{" "}
+              : <strong className="font-medium text-foreground">mandante</strong> (vitória
+              de quem joga em casa),{" "}
               <strong className="font-medium text-foreground">empate</strong> e{" "}
-              <strong className="font-medium text-foreground">fora</strong> (o
-              visitante ganha). Não tem linha — e, como são três caminhos, a chance
+              <strong className="font-medium text-foreground">visitante</strong> (vitória
+              de quem joga fora). Não tem linha — e, como são três caminhos, a chance
               de um não dá pra deduzir a partir do outro.
             </p>
             <p>
@@ -213,42 +213,42 @@ export function ComoFuncionaContent() {
             </p>
             <ul className="mt-3 flex flex-col gap-2 text-body leading-relaxed text-muted-foreground tracking-tight">
               <li>
-                Odds da casa:{" "}
-                <strong className="font-medium text-foreground">casa 2.10 / empate 3.40 / fora 3.60</strong>.
+                Odds de mercado:{" "}
+                <strong className="font-medium text-foreground">mandante 2.10 / empate 3.40 / visitante 3.60</strong>.
               </li>
               <li>
-                Prob. crua (1 ÷ odd): casa{" "}
+                Prob. crua (1 ÷ odd): mandante{" "}
                 <strong className="font-medium text-foreground">0.4762</strong>, empate{" "}
-                <strong className="font-medium text-foreground">0.2941</strong>, fora{" "}
+                <strong className="font-medium text-foreground">0.2941</strong>, visitante{" "}
                 <strong className="font-medium text-foreground">0.2778</strong>. Soma das
                 três: <strong className="font-medium text-foreground">1.0481</strong>.
               </li>
               <li>
                 A sobra de 4,81% é o{" "}
                 <strong className="font-medium text-foreground">overround</strong>.
-                Normalizando cada uma (÷ 1.0481): casa{" "}
+                Normalizando cada uma (÷ 1.0481): mandante{" "}
                 <strong className="font-medium text-foreground">45,43%</strong>, empate{" "}
-                <strong className="font-medium text-foreground">28,06%</strong>, fora{" "}
+                <strong className="font-medium text-foreground">28,06%</strong>, visitante{" "}
                 <strong className="font-medium text-foreground">26,50%</strong> → a prob.
                 do mercado de cada lado.
               </li>
               <li>
                 O <strong className="font-medium text-foreground">modelo</strong> diz:
-                casa <strong className="font-medium text-foreground">52%</strong>, empate{" "}
-                <strong className="font-medium text-foreground">27%</strong>, fora{" "}
+                mandante <strong className="font-medium text-foreground">52%</strong>, empate{" "}
+                <strong className="font-medium text-foreground">27%</strong>, visitante{" "}
                 <strong className="font-medium text-foreground">21%</strong>.
               </li>
               <li>
                 Cada seleção tem o seu{" "}
-                <strong className="font-medium text-foreground">edge</strong>: casa 52% −
+                <strong className="font-medium text-foreground">edge</strong>: mandante 52% −
                 45,43% = <strong className="font-medium text-edge-fg">+6,57pp</strong>;
-                empate −1,06pp; fora −5,50pp. Só a casa passa do mínimo de{" "}
+                empate −1,06pp; visitante −5,50pp. Só o mandante passa do mínimo de{" "}
                 {MIN_EDGE_PP}pp → o app{" "}
-                <strong className="font-medium text-foreground">recomenda casa</strong>.
+                <strong className="font-medium text-foreground">recomenda mandante</strong>.
               </li>
               <li>
                 <strong className="font-medium text-foreground">Retorno esperado</strong>{" "}
-                da casa (se os 52% estiverem certos, na odd crua): (52 ÷ 100) × 2.10 − 1
+                do mandante (se os 52% estiverem certos, na odd crua): (52 ÷ 100) × 2.10 − 1
                 = <strong className="font-medium text-edge-fg">+0.092 ≈ +9%</strong> por
                 unidade.
               </li>
@@ -317,9 +317,9 @@ export function ComoFuncionaContent() {
               <strong className="font-medium text-foreground">dois dos três</strong>{" "}
               resultados do 1X2 numa aposta só, em troca de uma odd menor. As
               seleções:{" "}
-              <strong className="font-medium text-foreground">casa ou empate</strong>,{" "}
-              <strong className="font-medium text-foreground">empate ou fora</strong> e{" "}
-              <strong className="font-medium text-foreground">casa ou fora</strong>. Como
+              <strong className="font-medium text-foreground">mandante ou empate</strong>,{" "}
+              <strong className="font-medium text-foreground">empate ou visitante</strong> e{" "}
+              <strong className="font-medium text-foreground">mandante ou visitante</strong>. Como
               cada opção abrange dois resultados, as probabilidades das três somam cerca
               de <strong className="font-medium text-foreground">200%</strong> (não 100%)
               — então a normalização tem 200% como alvo. É um mercado conservador: o
@@ -334,16 +334,16 @@ export function ComoFuncionaContent() {
             <ul className="mt-3 flex flex-col gap-2 text-body leading-relaxed text-muted-foreground tracking-tight">
               <li>
                 Odds:{" "}
-                <strong className="font-medium text-foreground">casa ou empate 1.25 / empate ou fora 2.00 / casa ou fora 1.30</strong>.
+                <strong className="font-medium text-foreground">mandante ou empate 1.25 / empate ou visitante 2.00 / mandante ou visitante 1.30</strong>.
               </li>
               <li>
                 Crua (1 ÷ odd), na mesma ordem: 0.8000, 0.5000, 0.7692. Soma{" "}
                 <strong className="font-medium text-foreground">2.0692</strong>. Como o
-                alvo é 200%, normaliza pra somar 2 (cada crua ÷ 2.0692 × 2): casa ou
+                alvo é 200%, normaliza pra somar 2 (cada crua ÷ 2.0692 × 2): mandante ou
                 empate <strong className="font-medium text-foreground">77,32%</strong>,
-                empate ou fora{" "}
-                <strong className="font-medium text-foreground">48,33%</strong>, casa ou
-                fora <strong className="font-medium text-foreground">74,35%</strong>.
+                empate ou visitante{" "}
+                <strong className="font-medium text-foreground">48,33%</strong>, mandante ou
+                visitante <strong className="font-medium text-foreground">74,35%</strong>.
               </li>
               <li>
                 O modelo diz 79% / 48% / 73%. Edges:{" "}
@@ -554,7 +554,7 @@ export function ComoFuncionaContent() {
       <section className="border-border border-t pt-8 mt-8">
         <h2 className="text-display-sm font-medium tracking-tight">Glossário</h2>
         <p className="pb-4 pt-1 font-mono text-meta text-muted-foreground">
-          toque pra expandir · casa de cada termo do app
+          toque pra expandir · o significado de cada termo do app
         </p>
         <GlossarySection />
       </section>

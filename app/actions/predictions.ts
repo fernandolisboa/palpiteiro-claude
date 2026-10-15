@@ -64,7 +64,10 @@ import { getUserAccessState } from "@/lib/db/queries/users";
 import { ensureOddsSnapshotsFresh } from "@/lib/odds/fetch-and-snapshot";
 import { checkAnalysisRateLimit, checkPalpitesRateLimit } from "@/lib/rate-limit";
 import { getRequestTimeZone } from "@/lib/server/request-timezone";
+import { leagueToKey } from "@/lib/format";
+import type { SupportedLeague } from "@/lib/providers/sports-data/leagues";
 import { toAnalysisView } from "@/lib/view/analysis";
+import { teamToTeam } from "@/lib/view/team";
 import { ExactScoreParamsSchema } from "@/lib/ai/palpites/cartridges/cartridge";
 import { toBestBetView } from "@/lib/view/best-bet";
 import {
@@ -85,6 +88,16 @@ import {
 } from "@/lib/user-palpite/types";
 
 const REFUSAL_MESSAGE = "O modelo não conseguiu concluir esta análise.";
+
+// Nome de exibição dos times pros rótulos do 1X2/dupla chance da análise recém-feita
+// (#574): sem isso o resultado aparece com "Casa"/"Fora" até recarregar a página.
+function displayTeams(match: { homeTeam: string; awayTeam: string; league: SupportedLeague }) {
+  const league = leagueToKey(match.league);
+  return {
+    home: teamToTeam(match.homeTeam, league).name,
+    away: teamToTeam(match.awayTeam, league).name,
+  };
+}
 
 export type AnalyzeMatchResult =
   | { ok: true; view: AnalysisView }
@@ -344,6 +357,7 @@ export async function analyzeMatch(
         aiCall ? { costUsd: aiCall.costUsd } : null,
         new Date(),
         timeZone,
+        displayTeams(match),
       ),
     };
   } catch (err) {
@@ -781,10 +795,13 @@ export async function analyzeBestBet(
       );
     }
   }
-  const view = toBestBetView(outcomes, aiCallByMarketKey, preWarmErrors, [
-    ...notRun,
-    ...rateLimitedErrors,
-  ]);
+  const view = toBestBetView(
+    outcomes,
+    aiCallByMarketKey,
+    preWarmErrors,
+    [...notRun, ...rateLimitedErrors],
+    displayTeams(match),
+  );
   if (view.entries.length === 0) {
     // Todos falharam → estado de erro (espelha o total-failure do analyzeMatch), NÃO um
     // sucesso vazio. O run pode ter pago ≤N calls (e os mesmos N slots) — surge como erro.

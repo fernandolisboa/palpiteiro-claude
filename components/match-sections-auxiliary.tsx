@@ -136,7 +136,7 @@ function InjuriesBody({
         return (
           <div key={side} className="flex flex-col gap-1">
             <span className="font-mono text-eyebrow uppercase tracking-label text-muted-foreground">
-              {side === "home" ? "casa" : "visitante"}
+              {side === "home" ? "mandante" : "visitante"}
             </span>
             {items.map((p) => (
               <div
@@ -172,7 +172,7 @@ function LineupBody({
             {i > 0 && <Separator />}
             <div className="flex items-center justify-between pt-1">
               <span className="font-mono text-[10.5px] uppercase tracking-[0.14em] text-muted-foreground">
-                {side === "home" ? "casa" : "visitante"}
+                {side === "home" ? "mandante" : "visitante"}
               </span>
               {lineup.formation && (
                 <span className="font-mono text-eyebrow tabular-nums text-muted-foreground">

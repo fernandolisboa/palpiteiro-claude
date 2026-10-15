@@ -73,6 +73,7 @@ export function OddsCard({ view, unavailable }: Props) {
           em toda cell menos a última. n=2 = byte-idêntico ao binário (golden). */}
       <div className={`grid ${GRID_COLS[view.outcomes.length]}`}>
         {view.outcomes.map((o, i) => {
+          const wide = view.outcomes.length > 2;
           const isFirst = i === 0;
           const isLast = i === view.outcomes.length - 1;
           return (
@@ -80,8 +81,13 @@ export function OddsCard({ view, unavailable }: Props) {
               key={i}
               className={`flex flex-col gap-1 ${isLast ? "" : "border-r border-border-subtle "}px-4 py-3.5`}
             >
-              <span className="flex items-center gap-1.5 text-meta uppercase tracking-label text-muted-foreground">
-                {o.label}
+              {/* 3+ colunas (1X2 com nome de time, #574): nome longo trunca, com
+                  o nome inteiro no title. n=2 fica byte-idêntico (golden). */}
+              <span
+                className="flex items-center gap-1.5 text-meta uppercase tracking-label text-muted-foreground"
+                title={wide ? o.label : undefined}
+              >
+                {wide ? <span className="min-w-0 truncate">{o.label}</span> : o.label}
               </span>
               {/* 22px: outlier heroic da odd — sem degrau na escala (ADR 0029) */}
               <span className="font-mono text-[22px] font-medium tabular-nums tracking-tight">
@@ -99,7 +105,7 @@ export function OddsCard({ view, unavailable }: Props) {
                   <HelpHint
                     anchor="prob-implicita"
                     label="prob. do mercado (normalizada)"
-                    blurb="A chance que a odd embute, já descontada a margem da casa. Normaliza os dois lados; nunca é 1/odd cru."
+                    blurb="A chance que a odd embute, já descontada a margem embutida na odd. Normaliza os dois lados; nunca é 1/odd cru."
                   />
                 )}
               </span>
@@ -115,7 +121,7 @@ export function OddsCard({ view, unavailable }: Props) {
           <HelpHint
             anchor="overround"
             label="overround"
-            blurb="A margem embutida pela casa. Por isso, no cru, over% + under% somam mais de 100% — o excedente é a margem."
+            blurb="A margem embutida na odd. Por isso, no cru, over% + under% somam mais de 100% — o excedente é a margem."
           />
         </span>
       </div>

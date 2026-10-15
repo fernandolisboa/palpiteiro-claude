@@ -90,7 +90,7 @@ export function MatchHero({
       </div>
 
       <div className="grid grid-cols-[1fr_auto_1fr] items-center gap-3 lg:flex lg:items-center lg:gap-8">
-        <TeamBlock team={home} role="casa" href={homeHref} />
+        <TeamBlock team={home} role="mandante" href={homeHref} />
         <div className="flex flex-col items-center gap-0.5">
           {score ? (
             <span className="font-mono text-display-md font-medium leading-none tabular-nums tracking-tight lg:text-[30px]">

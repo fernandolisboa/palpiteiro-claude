@@ -190,3 +190,29 @@ describe("toMatchModelReadingView", () => {
     ).toBe("JEV falhou");
   });
 });
+
+describe("rótulos com o nome dos times (#574)", () => {
+  const TEAMS = { home: "Palmeiras", away: "Flamengo" };
+
+  it("linha do /jogos: favorito com a sigla", () => {
+    const line = toMatchModelLineView(snapshot(), { home: "PAL", away: "FLA" });
+    expect(line.favorite).toEqual({ label: "PAL", pct: "52%" });
+    // Sem teams: igual a antes.
+    expect(toMatchModelLineView(snapshot()).favorite.label).toBe("Casa");
+  });
+
+  it("leitura do modelo: 1X2 e dupla chance com o nome; gols sem mudança", () => {
+    const view = toMatchModelReadingView(snapshot(), NOW, TEAMS);
+    expect(view.markets[0].selections.map((s) => s.label)).toEqual([
+      "Palmeiras",
+      "Empate",
+      "Flamengo",
+    ]);
+    expect(view.markets[1].selections.map((s) => s.label)).toEqual([
+      "Palmeiras ou empate",
+      "Empate ou Flamengo",
+      "Palmeiras ou Flamengo",
+    ]);
+    expect(view.markets[2].selections.map((s) => s.label)).toEqual(["Sim", "Não"]);
+  });
+});

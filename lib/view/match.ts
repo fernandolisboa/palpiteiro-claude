@@ -70,6 +70,11 @@ export function toMatchRowView({
   // perde a badge — não fica pendurado pra sempre) e cujo status não é terminal.
   // Exclusão EXPLÍCITA de finished/cancelled/postponed (não denylist de `live`):
   // um adiado cujo kickoff original passou NÃO vira "em andamento".
+  const home = teamToTeam(match.homeTeam, league);
+  const away = teamToTeam(match.awayTeam, league);
+  // Sigla de 3 letras nos rótulos de 1X2 (coluna estreita da lista): "PAL 2,67 ·
+  // Empate 2,87 · FLA 3,06" e "Modelo · PAL 42%" (#574 linha 4b).
+  const shortTeams = { home: home.short, away: away.short };
   const nowMs = now.getTime();
   const kickoffMs = match.kickoffAt.getTime();
   const analyzable =
@@ -82,8 +87,8 @@ export function toMatchRowView({
     match.status !== "postponed";
   return {
     id: match.id,
-    home: teamToTeam(match.homeTeam, league),
-    away: teamToTeam(match.awayTeam, league),
+    home,
+    away,
     league,
     kickoff: formatKickoffRelative(match.kickoffAt, now, timeZone),
     when: formatKickoffAbsolute(match.kickoffAt, now, timeZone),
@@ -92,7 +97,7 @@ export function toMatchRowView({
     // FONTE (tabelas distintas), não dispatch de normalização. Um 3º mercado ao
     // vivo revisita esta ordem.
     odds: matchResultOdds
-      ? toMatchRowResultOdds(matchResultOdds, "match_result")
+      ? toMatchRowResultOdds(matchResultOdds, "match_result", shortTeams)
       : toMatchRowOdds(odds),
     hasPrediction,
     status: match.status,
@@ -112,7 +117,7 @@ export function toMatchRowView({
     ...(analyzable &&
     modelSnapshot &&
     nowMs - modelSnapshot.checkedAt.getTime() <= MATCH_MODEL_MAX_AGE_MS
-      ? { model: toMatchModelLineView(modelSnapshot) }
+      ? { model: toMatchModelLineView(modelSnapshot, shortTeams) }
       : {}),
   };
 }

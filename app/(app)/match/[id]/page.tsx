@@ -41,6 +41,7 @@ import {
 } from "@/components/seu-palpite-section";
 import { auth } from "@/auth";
 import { leagueToKey } from "@/lib/format";
+import { teamToTeam } from "@/lib/view/team";
 import {
   getEnableBestBetFanOut,
   getEnableUserContext,
@@ -128,6 +129,14 @@ export default async function MatchPage({ params, searchParams }: PageProps) {
   // Fuso de exibição do usuário (#1) — kickoff/countdown do hero no fuso do navegador.
   const timeZone = await getRequestTimeZone();
 
+  // Nome de EXIBIÇÃO dos times nos rótulos de 1X2/dupla chance (#574): cards de odds,
+  // análises e leitura do modelo. Não confundir com `teams` (canônico) mais abaixo.
+  const leagueKey = leagueToKey(match.league);
+  const displayTeams = {
+    home: teamToTeam(match.homeTeam, leagueKey).name,
+    away: teamToTeam(match.awayTeam, leagueKey).name,
+  };
+
   // Pré-aquece over/under + 1X2 ao vivo (#173): featured/batch, +1 crédito de
   // liga por refresh stale (h2h é market separado de totals). Retorna a snapshot
   // over/under LEGADA (contrato inalterado). O card 1X2 lê selection_odds_snapshots
@@ -157,7 +166,7 @@ export default async function MatchPage({ params, searchParams }: PageProps) {
           })
         : null,
       matchResultOddsView: matchResultSnapshot
-        ? toNwayOddsView(matchResultSnapshot, "match_result")
+        ? toNwayOddsView(matchResultSnapshot, "match_result", undefined, displayTeams)
         : null,
     };
   }).catch((err: unknown): MatchOddsViews => {
@@ -238,11 +247,13 @@ export default async function MatchPage({ params, searchParams }: PageProps) {
     history,
     new Date(),
     timeZone,
+    displayTeams,
   );
   const previousAnalyses: PreviousAnalysisItem[] = toPreviousAnalysisItems(
     history,
     new Date(),
     timeZone,
+    displayTeams,
   );
 
   // "Contexto extra (opcional)" no HERO (#565): kill-switch E motor code_jev (a action
@@ -260,7 +271,6 @@ export default async function MatchPage({ params, searchParams }: PageProps) {
     homeTeam: match.homeTeam,
     awayTeam: match.awayTeam,
   };
-  const leagueKey = leagueToKey(match.league);
   // Histórico do time (#408): o nome de cada time no hero linka pra /time/[team].
   // A chave É o canonical PERSISTIDO (match.homeTeam/awayTeam) — a MESMA string do
   // WHERE em getMatchesByTeam → imune a mismatch por construção. URL-encoded (#407).
@@ -284,7 +294,7 @@ export default async function MatchPage({ params, searchParams }: PageProps) {
   // chamada externa) e entregue por streaming. Só em jogo analisável: ao vivo e
   // encerrado ficam fora. Criada UMA vez e compartilhada pelas árvores mobile/desktop.
   const modelReading = analyzable
-    ? loadMatchModelReading({ matchId: match.id, now })
+    ? loadMatchModelReading({ matchId: match.id, now, teams: displayTeams })
     : null;
 
   // "Registrar apostas" (#556): grade de mercados + lista, só antes do apito (a action

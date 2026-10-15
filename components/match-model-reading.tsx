@@ -52,7 +52,7 @@ export function MatchModelReadingCard({
       {view ? (
         <>
           <p className="px-4 pt-3 text-body-sm tracking-tight text-muted-foreground">
-            Probabilidade do modelo, sem odds: compare com a odd da sua casa.
+            Probabilidade do modelo, sem odds: compare com a odd de mercado.
           </p>
           <div className="flex flex-col gap-4 px-4 py-3.5">
             {view.markets.map((m) => (

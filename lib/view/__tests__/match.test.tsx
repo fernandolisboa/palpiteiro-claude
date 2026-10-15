@@ -276,7 +276,7 @@ describe("toMatchRowView — prioridade de mercado no chip (#173 PR-2)", () => {
     capturedAt: NOW,
   };
 
-  it("PREFERE 1X2 quando há captura h2h (3 outcomes Casa/Empate/Fora, ordem canônica)", () => {
+  it("PREFERE 1X2 quando há captura h2h (3 outcomes sigla/Empate/sigla, ordem canônica)", () => {
     const view = toMatchRowView({
       match: makeMatch(),
       odds: OU,
@@ -284,10 +284,11 @@ describe("toMatchRowView — prioridade de mercado no chip (#173 PR-2)", () => {
       hasPrediction: false,
       now: NOW,
     });
+    // Coluna estreita: a sigla de 3 letras do time no lugar de "Casa"/"Fora" (#574).
     expect(view.odds?.outcomes).toEqual([
-      { label: "Casa", odd: "2,10" },
+      { label: "BAR", odd: "2,10" },
       { label: "Empate", odd: "3,40" },
-      { label: "Fora", odd: "3,90" },
+      { label: "RMA", odd: "3,90" },
     ]);
   });
 
@@ -316,7 +317,7 @@ describe("toMatchRowView — prioridade de mercado no chip (#173 PR-2)", () => {
     expect(view.odds).toBeNull();
   });
 
-  it("MatchRow renderiza o chip 1X2 (Casa/Empate/Fora + odds)", () => {
+  it("MatchRow renderiza o chip 1X2 (siglas/Empate + odds)", () => {
     const view = toMatchRowView({
       match: makeMatch(),
       odds: OU,
@@ -325,9 +326,11 @@ describe("toMatchRowView — prioridade de mercado no chip (#173 PR-2)", () => {
       now: NOW,
     });
     const markup = renderToStaticMarkup(<MatchRow m={view} />);
-    expect(markup).toContain("Casa");
-    expect(markup).toContain("Empate");
-    expect(markup).toContain("Fora");
+    expect(markup).toContain(">BAR</span> 2,10");
+    expect(markup).toContain(">Empate</span> 3,40");
+    expect(markup).toContain(">RMA</span> 3,90");
+    expect(markup).not.toContain(">Casa<");
+    expect(markup).not.toContain(">Fora<");
     expect(markup).toContain("2,10");
     expect(markup).toContain("3,90");
   });
@@ -388,7 +391,7 @@ describe("base do modelo na linha e firewall do hero (#555)", () => {
       modelSnapshot,
     });
     expect(withModel.model).toEqual({
-      favorite: { label: "Casa", pct: "52%" },
+      favorite: { label: "BAR", pct: "52%" },
       goals25: { label: "Under 2.5", pct: "55%" },
     });
 

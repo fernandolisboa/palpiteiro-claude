@@ -152,7 +152,8 @@ export function ComoUsarContent() {
         </Steps>
         <p>
           Cada linha traz o campeonato, o horário, os times e as odds de referência
-          (casa / empate / fora, ou over / under) quando a casa já publicou. Aparece{" "}
+          (mandante / empate / visitante, ou mais / menos gols) quando o mercado já tem
+          odd. Aparece{" "}
           <Ui>✓ analisado</Ui> nos jogos que você já analisou, <Ui>AO VIVO</Ui> nos
           que estão rolando e o placar nos encerrados. <Strong>sem odd</Strong>{" "}
           significa que ainda não há cotação; sem ela a análise não roda.

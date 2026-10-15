@@ -86,12 +86,12 @@ export const TOUR_CHAPTERS: Record<TourChapter, readonly TourStep[]> = {
     {
       target: "bet-slip",
       title: "Registrar apostas",
-      body: "Fez uma aposta na sua casa? Toque nas seleções aqui (ou digite a aposta), confira a odd que você pegou e toque em \"Registrar apostas\". A avaliação sai na hora, sem gastar análise, e a aposta vai pra Apostas.",
+      body: "Fez uma aposta com os amigos? Toque nas seleções aqui (ou digite a aposta), confira a odd que você pegou e toque em \"Registrar apostas\". A avaliação sai na hora, sem gastar análise, e a aposta vai pra Apostas.",
     },
     {
       target: "odds",
-      title: "Odds da casa",
-      body: "As odds de referência das casas pra este jogo. É contra elas que a análise mede se há vantagem. Os \"?\" explicam os números num toque.",
+      title: "Odds de mercado",
+      body: "As odds de mercado pra este jogo. É contra elas que a análise mede se há vantagem. Os \"?\" explicam os números num toque.",
     },
     {
       target: "match-stats",

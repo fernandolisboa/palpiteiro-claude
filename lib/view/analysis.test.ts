@@ -867,6 +867,40 @@ describe("toAnalysisView (N-vias / 1X2)", () => {
     expect(view.note).toBeNull();
   });
 
+  it("com teams (#574): rótulos e recomendação com o nome do time", () => {
+    const view = toAnalysisView(
+      {
+        recommendation: "home",
+        confidencePct: "50.00",
+        rationale: "mandante forte",
+        keyFactors: ["a"],
+        minimumOdd: "2.000",
+        oddAtRecommendation: "2.100",
+        bookmaker: null,
+        impliedProbPct: "45.40",
+        edgePct: "4.60",
+        modelVersion: "claude-opus-4-8",
+        promptVersion: "match_result_v1",
+        createdAt: baseCreatedAt,
+        marketKey: "match_result",
+        line: null,
+        stakeUnits: "1",
+        selections: [
+          { key: "home", modelProbPct: 50, odd: 2.1 },
+          { key: "draw", modelProbPct: 27, odd: 3.4 },
+          { key: "away", modelProbPct: 23, odd: 3.6 },
+        ],
+      },
+      null,
+      threeHoursLater,
+      undefined,
+      { home: "Palmeiras", away: "Flamengo" },
+    );
+    expect(view.outcomes.map((o) => o.label)).toEqual(["Palmeiras", "Empate", "Flamengo"]);
+    expect(view.recommendation?.selectionLabel).toBe("Palmeiras");
+    expect(view.recommendation?.betSummary?.market).toBe("Palmeiras");
+  });
+
   it("pass em 1X2 (3 seleções) → outcomes sem coluna recomendada", () => {
     const view = toAnalysisView(
       {

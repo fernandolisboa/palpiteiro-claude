@@ -33,7 +33,7 @@ export function LandingContent() {
           edge multi-mercado
         </strong>{" "}
         — resultado final, total de gols, ambas marcam e dupla chance. Pra cada
-        jogo ele compara a IA com a casa, escolhe o mercado certo e emite{" "}
+        jogo ele compara a IA com as odds de mercado, escolhe o mercado certo e emite{" "}
         <strong className="font-medium text-foreground">um palpite só</strong>,
         com o porquê na frente. Sem listão de números: a leitura vem pronta, a
         análise fica como detalhe.
