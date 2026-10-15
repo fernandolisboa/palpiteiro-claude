@@ -29,7 +29,7 @@ import { leagueToKey } from "@/lib/format";
 import { toSlipEvaluationView, type SlipEvaluationView } from "@/lib/view/bet-slip";
 import { displayMatchTeams } from "@/lib/view/team";
 
-import { notAnalyzableMessage } from "./not-analyzable";
+import { capabilityGateMessage } from "./not-analyzable";
 
 // Registro das apostas do usuário (Fase 2, #556). O cupom manda as pernas que ele
 // escolheu na grade (ou que o atalho "digite sua aposta" preencheu); aqui elas são
@@ -122,7 +122,7 @@ export async function registerBetSlip(
   // 3. Jogo existe e ainda não começou (mesmo gate da análise).
   const match = await getMatchById(slip.matchId);
   if (!match) return { ok: false, error: "Jogo não encontrado." };
-  const notAnalyzable = notAnalyzableMessage(match.status, match.kickoffAt);
+  const notAnalyzable = capabilityGateMessage("registerBets", match);
   if (notAnalyzable) {
     return { ok: false, error: notAnalyzable, kind: "nao-analisavel" };
   }

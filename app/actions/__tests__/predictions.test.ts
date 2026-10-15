@@ -40,7 +40,11 @@ vi.mock("@/lib/db/queries/ai-config", () => ({
 }));
 
 import { analyzeMatch } from "@/app/actions/predictions";
-import { notAnalyzableMessage } from "@/app/actions/not-analyzable";
+import {
+  capabilityBlockedMessage,
+  capabilityGateMessage,
+} from "@/app/actions/not-analyzable";
+import { matchUnavailableReason } from "@/lib/view/match-availability";
 import { auth } from "@/auth";
 import { predict } from "@/lib/ai/predict";
 import { getEnableOverUnderExtraLines } from "@/lib/db/queries/ai-config";
@@ -902,34 +906,48 @@ describe("analyzeMatch — over/under linhas extras (#175)", () => {
 // DB-`scheduled` cujo kickoff JÁ passou (enum stale até o cron 6h virar). O teste
 // 'live'-only antigo provava o invariante ERRADO: o vazamento é o scheduled-apitado,
 // não o live (que já era barrado).
-describe("notAnalyzableMessage — gate hardening (#385)", () => {
+// O gate das actions por capacidade (ADR 0060). Com kickoff, `capabilityGateMessage`;
+// sem kickoff (caminho de race do friendlyMessage), só o status decide.
+function analyzeGate(
+  status: string,
+  kickoffAt?: Date,
+  now: Date = new Date(),
+): string | null {
+  if (kickoffAt !== undefined) {
+    return capabilityGateMessage("analyze", { status, kickoffAt }, { now });
+  }
+  const reason = matchUnavailableReason(status, undefined, now);
+  return reason === null ? null : capabilityBlockedMessage("analyze", reason);
+}
+
+describe("capabilityGateMessage — gate hardening (#385)", () => {
   const PAST = new Date("2020-01-01T00:00:00.000Z");
   const FUTURE = new Date("2099-01-01T00:00:00.000Z");
 
   it("scheduled + kickoff no PASSADO → mensagem NÃO-null (em andamento) — o caso que vazava", () => {
-    const msg = notAnalyzableMessage("scheduled", PAST);
+    const msg = analyzeGate("scheduled", PAST);
     expect(msg).not.toBeNull();
     expect(msg).toContain("andamento");
   });
 
   it("scheduled + kickoff no FUTURO → null (segue analisável pré-jogo)", () => {
-    expect(notAnalyzableMessage("scheduled", FUTURE)).toBeNull();
+    expect(analyzeGate("scheduled", FUTURE)).toBeNull();
   });
 
   it("scheduled SEM kickoffAt (caminho de race) → null (cai no switch por status)", () => {
-    expect(notAnalyzableMessage("scheduled")).toBeNull();
+    expect(analyzeGate("scheduled")).toBeNull();
   });
 
   it("'live' (qualquer kickoff) → continua NÃO-null", () => {
-    expect(notAnalyzableMessage("live", FUTURE)).not.toBeNull();
-    expect(notAnalyzableMessage("live", PAST)).not.toBeNull();
-    expect(notAnalyzableMessage("live")).not.toBeNull();
+    expect(analyzeGate("live", FUTURE)).not.toBeNull();
+    expect(analyzeGate("live", PAST)).not.toBeNull();
+    expect(analyzeGate("live")).not.toBeNull();
   });
 
   it("postponed/finished/cancelled → NÃO-null (fail-closed)", () => {
-    expect(notAnalyzableMessage("postponed", FUTURE)).not.toBeNull();
-    expect(notAnalyzableMessage("finished", FUTURE)).not.toBeNull();
-    expect(notAnalyzableMessage("cancelled", FUTURE)).not.toBeNull();
+    expect(analyzeGate("postponed", FUTURE)).not.toBeNull();
+    expect(analyzeGate("finished", FUTURE)).not.toBeNull();
+    expect(analyzeGate("cancelled", FUTURE)).not.toBeNull();
   });
 
   // As strings das actions não mudaram quando o gate foi pra lib/view/match-availability.
@@ -942,14 +960,38 @@ describe("notAnalyzableMessage — gate hardening (#385)", () => {
     ["", undefined, "Este jogo já foi encerrado ou cancelado."],
     ["abandoned", FUTURE, "Este jogo já foi encerrado ou cancelado."],
   ] as const)("%s → copy exata", (status, kickoffAt, expected) => {
-    expect(notAnalyzableMessage(status, kickoffAt)).toBe(expected);
+    expect(analyzeGate(status, kickoffAt)).toBe(expected);
   });
+
+  // Sem estado ao vivo, toda capacidade responde como antes do #580 (mesma copy).
+  it.each(["analyze", "seuPalpite", "registerBets", "analyzeMarkets"] as const)(
+    "%s: mesma copy e mesmo gate de hoje sem estado ao vivo",
+    (capability) => {
+      expect(
+        capabilityGateMessage(capability, { status: "scheduled", kickoffAt: FUTURE }),
+      ).toBeNull();
+      expect(
+        capabilityGateMessage(capability, { status: "scheduled", kickoffAt: PAST }),
+      ).toBe(
+        "Jogo em andamento — a análise fica disponível só antes do apito inicial.",
+      );
+      expect(
+        capabilityGateMessage(
+          capability,
+          { status: "live", kickoffAt: PAST },
+          { liveMode: true, modelReady: true, state: null },
+        ),
+      ).toBe(
+        "Jogo em andamento — a análise fica disponível só antes do apito inicial.",
+      );
+    },
+  );
 
   it("usa o `now` injetado pra decidir a borda do kickoff", () => {
     const now = new Date("2026-06-11T12:00:00.000Z");
     // kickoff 1min no futuro relativo ao now injetado → analisável.
     expect(
-      notAnalyzableMessage(
+      analyzeGate(
         "scheduled",
         new Date(now.getTime() + 60 * 1000),
         now,
@@ -957,7 +999,7 @@ describe("notAnalyzableMessage — gate hardening (#385)", () => {
     ).toBeNull();
     // kickoff 1min no passado → em andamento.
     expect(
-      notAnalyzableMessage(
+      analyzeGate(
         "scheduled",
         new Date(now.getTime() - 60 * 1000),
         now,

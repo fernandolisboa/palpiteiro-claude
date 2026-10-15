@@ -2,6 +2,54 @@
 // API-Football é a mesma do sync (`lib/providers/sports-data/api-football/constants.ts`),
 // só que com granularidade de jogo em andamento: o que importa aqui é se dá pra ler o
 // jogo (1º/2º tempo, intervalo) ou não (prorrogação, interrupção, terminal).
+//
+// O gate de pré-jogo (`matchUnavailableReason`, #385) mora aqui também, para a fase
+// não depender da camada de view: `lib/view/match-availability.ts` reexporta os dois e
+// segue sendo a porta da página, das listas e das actions.
+
+import { isLiveStateActionable } from "@/lib/live/freshness";
+
+// `null` = analisável (pré-jogo). `started` = DB ainda `scheduled` mas o kickoff já
+// passou: pode estar rolando ou já ter acabado (o enum fica stale por até ~6h e a badge
+// "ao vivo" só cobre 3h), então a copy é neutra, sem afirmar "em andamento".
+// Ao vivo (#580, ADR 0060): `extra_time` (prorrogação/pênaltis, os mercados de 90' já
+// estão decididos), `interrupted` e `live_unavailable` (o apito passou e o estado ao
+// vivo está velho demais ou sem minuto). Só `matchPhase` com estado devolve esses três.
+export type MatchUnavailableReason =
+  | "started"
+  | "live"
+  | "postponed"
+  | "cancelled"
+  | "finished"
+  | "extra_time"
+  | "interrupted"
+  | "live_unavailable";
+
+/**
+ * Pré-jogo = `scheduled` E kickoff no FUTURO (#385): o enum DB fica stale
+ * `scheduled` por até ~6h depois do apito (cron de 6 em 6h), então um
+ * `scheduled` já apitado vira `started`. `kickoffAt` é opcional: o caminho
+ * de race das actions só tem o status; sem ele, decide só pelo status.
+ * Status desconhecido → `finished` (fail-closed). Não olha o estado ao vivo.
+ */
+export function matchUnavailableReason(
+  status: string,
+  kickoffAt?: Date,
+  now: Date = new Date()
+): MatchUnavailableReason | null {
+  switch (status) {
+    case "scheduled":
+      return kickoffAt !== undefined && kickoffAt.getTime() <= now.getTime()
+        ? "started"
+        : null;
+    case "live":
+    case "postponed":
+    case "cancelled":
+      return status;
+    default:
+      return "finished";
+  }
+}
 
 /** As colunas de `match_live_states` que decidem a fase (a row satisfaz este tipo). */
 export type LiveStateInput = {
@@ -99,4 +147,86 @@ export function liveMinuteLabel(
   }
   if (elapsed > regulation) return `${regulation}+${elapsed - regulation}'`;
   return `${elapsed}'`;
+}
+
+export type MatchPhaseKind =
+  | "pre"
+  | "in_play" // 1º/2º tempo, ou NS/TBD depois do horário (atraso, minuto 0)
+  | "half_time"
+  | "extra_time"
+  | "interrupted"
+  | "finished"
+  | "postponed"
+  | "cancelled"
+  | "started_unknown"; // apito passou e não há estado ao vivo utilizável
+
+export type MatchPhase = {
+  kind: MatchPhaseKind;
+  /** Por que não é pré-jogo; null só em `pre`. Sem estado é o motivo de hoje. */
+  reason: MatchUnavailableReason | null;
+  /**
+   * `in_play`/`half_time` com estado de no máximo 2 min (IN_PLAY_ACT_MAX_AGE_MS) e
+   * minuto conhecido: dá pra registrar e ler o jogo ao vivo.
+   */
+  actionable: boolean;
+};
+
+function phaseFromReason(reason: MatchUnavailableReason): MatchPhase {
+  switch (reason) {
+    case "postponed":
+    case "cancelled":
+    case "finished":
+    case "extra_time":
+    case "interrupted":
+      return { kind: reason, reason, actionable: false };
+    case "started":
+    case "live":
+    case "live_unavailable":
+      return { kind: "started_unknown", reason, actionable: false };
+  }
+}
+
+/**
+ * Fase do jogo agora. Com `liveMode` desligado, sem estado ou sem nenhuma busca
+ * bem-sucedida (`fetchedAt` null), é exatamente o gate de hoje
+ * (`matchUnavailableReason`): pré-jogo, ou bloqueado pelo mesmo motivo. Com estado, o
+ * status do provider decide a fase depois do apito; um terminal no DB (o sync só grava
+ * depois do fim) vence o estado. O estado nunca reabre um jogo que o DB diz ser
+ * pré-jogo: antes do apito, a fase é `pre`.
+ */
+export function matchPhase(
+  match: { status: string; kickoffAt: Date },
+  state: LiveStateInput | null,
+  now: Date = new Date(),
+  { liveMode }: { liveMode: boolean } = { liveMode: false }
+): MatchPhase {
+  const legacy = matchUnavailableReason(match.status, match.kickoffAt, now);
+  if (legacy === null) return { kind: "pre", reason: null, actionable: false };
+  if (!liveMode || state === null || state.fetchedAt === null) {
+    return phaseFromReason(legacy);
+  }
+  if (legacy !== "started" && legacy !== "live") return phaseFromReason(legacy);
+
+  const cls = classifyStatusShort(state.statusShort);
+  switch (cls) {
+    case "pre_match":
+    case "in_play":
+    case "half_time": {
+      const actionable =
+        isLiveStateActionable(state.fetchedAt, now) && isMinuteKnown(state);
+      return {
+        kind: cls === "half_time" ? "half_time" : "in_play",
+        reason: actionable ? "live" : "live_unavailable",
+        actionable,
+      };
+    }
+    case "extra_time":
+    case "interrupted":
+    case "finished":
+    case "postponed":
+    case "cancelled":
+      return phaseFromReason(cls);
+    case "unknown":
+      return phaseFromReason("live_unavailable");
+  }
 }

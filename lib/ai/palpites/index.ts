@@ -138,7 +138,7 @@ export async function generatePalpites({
   //    TERMINAIS (finished/cancelled → throw). NÃO espelha o gate de pré-jogo do
   //    predict (#385: scheduled E kickoff no futuro): a síntese roda DEPOIS das
   //    análises (que já passaram pelo gate endurecido em predict.ts + o
-  //    notAnalyzableMessage da action), então re-rejeitar por kickoff aqui
+  //    capabilityGateMessage da action), então re-rejeitar por kickoff aqui
   //    descartaria o palpite de um jogo que apitou DURANTE uma análise longa.
   //    Defense-in-depth: o único caller (analyzeBestBet) já está a jusante do gate
   //    da action E de cada predict() — este throw é a última rede contra um set de

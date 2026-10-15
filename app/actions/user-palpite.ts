@@ -2,7 +2,7 @@
 
 import { z } from "zod";
 
-import { notAnalyzableMessage } from "./not-analyzable";
+import { capabilityGateMessage } from "./not-analyzable";
 import { auth } from "@/auth";
 import { ANALYSES_UNAVAILABLE_MESSAGE } from "@/lib/ai/best-bet";
 import { actionDeadline } from "@/lib/ai/deadline";
@@ -164,7 +164,7 @@ export async function analyzeUserPalpite(
   }
   const match = await getMatchById(matchId);
   if (!match) return { ok: false, error: "Jogo não encontrado." };
-  const notAnalyzable = notAnalyzableMessage(match.status, match.kickoffAt);
+  const notAnalyzable = capabilityGateMessage("seuPalpite", match);
   if (notAnalyzable) return { ok: false, error: notAnalyzable, kind: "nao-analisavel" };
 
   const now = new Date();

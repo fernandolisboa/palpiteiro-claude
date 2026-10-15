@@ -67,7 +67,7 @@ import { loadMatchModelReading } from "@/lib/model-base/reading";
 import { toMatchHeroView } from "@/lib/view/match";
 import {
   matchCapabilities,
-  matchUnavailableReason,
+  matchPhase,
   unavailableNoticeCopy,
   type MatchUnavailableReason,
 } from "@/lib/view/match-availability";
@@ -266,13 +266,11 @@ export default async function MatchPage({ params, searchParams }: PageProps) {
   // analisáveis. A CTA do HERO fica escondida nesses casos pra não submeter um
   // form que o server rejeitaria; predições/palpites já existentes seguem visíveis.
   // O motivo (ao vivo/adiado/cancelado/encerrado) escolhe a copy do HERO e do aviso.
-  const unavailableReason = matchUnavailableReason(
-    match.status,
-    match.kickoffAt,
-    now
-  );
-  // O que a página libera agora, num lugar só (#576; o ao vivo, #580, muda a função).
-  const caps = matchCapabilities(unavailableReason);
+  // Sem estado ao vivo (ainda não ligado na página, #580), a fase é o gate de hoje.
+  const phase = matchPhase(match, null, now);
+  const unavailableReason = phase.reason;
+  // O que a página libera agora, num lugar só (#576), por capacidade (ADR 0060).
+  const caps = matchCapabilities(phase);
 
   // Fonte e JEV da base do modelo (#555, ADR 0052), lidos do banco (sem odd, sem chamada
   // externa): o rodapé da tabela de mercados. Só em jogo analisável.
