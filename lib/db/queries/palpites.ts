@@ -286,9 +286,11 @@ function rowHasSettleableType<T extends { type: DbPalpite["type"] }>(
  *
  * LATEST-ONLY (ADR 0030 / #353, blocker #2): cada run do palpite-first grava um
  * `palpite_set` novo (semântica de regen, sets imutáveis newest-first), então um jogo
- * pode ter N sets/usuário. SÓ a ÚLTIMA geração por (matchId,userId) liquida —
- * `notExists` de um set mais novo do mesmo (match,user). Mantém paridade com o display,
- * que já mostra `sets[0]`. Sem isso, N badges/jogo apareceriam.
+ * pode ter N sets/usuário. SÓ a ÚLTIMA geração por (matchId,userId,isLive) liquida —
+ * `notExists` de um set mais novo do mesmo (match,user,isLive). Mantém paridade com o
+ * display, que já mostra `sets[0]`. Sem isso, N badges/jogo apareceriam. O palpite ao
+ * vivo (#580/#594) NÃO apaga o de pré-jogo: são dois palpites diferentes e os dois
+ * liquidam (o mais novo de cada lado).
  */
 export async function getPendingPalpiteSettlements(
   now: Date = new Date()
@@ -317,8 +319,8 @@ export async function getPendingPalpiteSettlements(
         eq(palpites.settleable, true),
         isNull(palpiteOutcomes.id),
         lt(matches.kickoffAt, cutoff),
-        // Só a última geração por (matchId,userId): não existe um set mais novo do
-        // MESMO match+user. "Mais novo" = createdAt maior, OU createdAt igual e id
+        // Só a última geração por (matchId,userId,isLive): não existe um set mais novo
+        // do MESMO match+user+lado. "Mais novo" = createdAt maior, OU createdAt igual e id
         // maior — espelha EXATAMENTE o desc(createdAt), desc(id) do display, então o
         // mesmo set único vence nos dois caminhos mesmo num empate de instante (writes
         // sequenciais quase nunca empatam, mas o tiebreak determinístico fecha a
@@ -331,6 +333,9 @@ export async function getPendingPalpiteSettlements(
               and(
                 eq(newerSet.matchId, palpiteSets.matchId),
                 eq(newerSet.userId, palpiteSets.userId),
+                // #594: o set ao vivo e o de pré-jogo são leituras distintas e AMBOS
+                // liquidam — "mais novo" só compete dentro do mesmo lado (isLive).
+                eq(newerSet.isLive, palpiteSets.isLive),
                 or(
                   gt(newerSet.createdAt, palpiteSets.createdAt),
                   and(
