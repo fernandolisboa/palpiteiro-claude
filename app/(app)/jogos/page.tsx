@@ -3,6 +3,7 @@ import { redirect } from "next/navigation";
 import { Inbox } from "lucide-react";
 
 import { Card } from "@/components/ui/card";
+import { FilterScrollRow } from "@/components/filter-scroll-row";
 import { LeaguePicker } from "@/components/league-picker";
 import { RecentPredCard } from "@/components/recent-pred-card";
 import { SectionLabel } from "@/components/section-label";
@@ -13,7 +14,6 @@ import { resolveHomeLeagueFilter } from "@/lib/config/active-leagues";
 import { keyToLeague, leagueToKey } from "@/lib/format";
 import { getActiveLeaguesForRequest } from "@/lib/db/queries/league-settings";
 import { getRequestTimeZone } from "@/lib/server/request-timezone";
-import { cn } from "@/lib/utils";
 import { getMatchIdsWithPredictionsByUser } from "@/lib/db/queries/matches";
 import { getLatestMatchModelSnapshotsForMatches } from "@/lib/db/queries/match-model-snapshots";
 import { loadRangeMatches } from "@/lib/db/queries/load-range-matches";
@@ -274,8 +274,9 @@ function matchCountLabel(n: number): string {
 }
 
 // Linha única de filtros (#577): liga (select em chip) | 5 dias · 14 dias ·
-// Competição · Escolher datas. Rolável na horizontal quando não cabe; os alvos do
-// tour ficam dentro dela (o scrollIntoView do tour rola o contêiner até o alvo).
+// Competição · Escolher datas. Rolável na horizontal quando não cabe, e rola sozinha
+// até o chip selecionado (FilterScrollRow); os alvos do tour ficam dentro dela (o
+// scrollIntoView do tour rola o contêiner até o alvo).
 function FilterRow({
   league,
   activeKeys,
@@ -291,11 +292,9 @@ function FilterRow({
 }) {
   const navProps = rangeNavProps(range);
   return (
-    <div
-      className={cn(
-        "flex items-center gap-2 overflow-x-auto py-1 [scrollbar-width:none] [&::-webkit-scrollbar]:hidden",
-        className,
-      )}
+    <FilterScrollRow
+      activeKey={`${league}-${range.preset}-${navProps.from ?? ""}-${navProps.to ?? ""}`}
+      className={className}
     >
       <div data-tour="league-picker" className="shrink-0">
         <LeaguePicker value={league} activeKeys={activeKeys} range={navProps} />
@@ -311,7 +310,7 @@ function FilterRow({
           surface={surface}
         />
       </div>
-    </div>
+    </FilterScrollRow>
   );
 }
 
