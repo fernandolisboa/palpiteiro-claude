@@ -115,9 +115,14 @@ function startOfZonedDay(day: string, timeZone: string): Date {
   return new Date(inDay.length > 0 ? Math.min(...inDay) : second);
 }
 
+const LAST_QUERY_INSTANT = Date.UTC(9999, 11, 31, 23, 59, 59, 999);
+
+// Sem toISOString: em 9999-12-31 ele daria "+010000-01-01" e o split quebraria.
 function nextDay(day: string): string {
   const [y, m, d] = day.split("-").map(Number);
-  return new Date(Date.UTC(y, m - 1, d + 1)).toISOString().slice(0, 10);
+  const next = new Date(Date.UTC(y, m - 1, d + 1));
+  const pad = (n: number) => n.toString().padStart(2, "0");
+  return `${next.getUTCFullYear()}-${pad(next.getUTCMonth() + 1)}-${pad(next.getUTCDate())}`;
 }
 
 function today5(now: Date): ResolvedRange {
@@ -191,9 +196,12 @@ export function parseRangeParams(
       // [De 00:00, Até 24:00) no fuso; `to` inclusivo (a query usa lte), então o
       // último milissegundo antes da meia-noite seguinte. Dia de 23h ou 25h na troca
       // de horário sai certo porque cada ponta é calculada no próprio dia.
+      const end = startOfZonedDay(nextDay(toDay), timeZone).getTime() - 1;
       return {
         from: startOfZonedDay(fromDay, timeZone),
-        to: new Date(startOfZonedDay(nextDay(toDay), timeZone).getTime() - 1),
+        // Teto no fim de 9999 (UTC): o fim de 31/12/9999 a oeste do UTC cairia no ano
+        // 10000, que o toISOString escreve "+010000-…" na query.
+        to: new Date(Math.min(end, LAST_QUERY_INSTANT)),
         preset: "custom",
         statuses: [...ALL_STATUSES],
         order: "asc",

@@ -250,6 +250,16 @@ describe("parseRangeParams custom no fuso do usuário (#577)", () => {
     expect(r.to?.toISOString()).toBe("2026-10-18T14:59:59.999Z");
   });
 
+  it("último dia do formato (9999-12-31): data válida, com teto no fim de 9999 UTC", () => {
+    const r = parseRangeParams(
+      { preset: "custom", from: "9999-12-30", to: "9999-12-31" },
+      NOW,
+      SP,
+    );
+    expect(r.preset).toBe("custom");
+    expect(r.to?.toISOString()).toBe("9999-12-31T23:59:59.999Z");
+  });
+
   it("as presets não mudam com o fuso", () => {
     for (const preset of ["today5", "today14", "season"]) {
       expect(parseRangeParams({ preset }, NOW, SP)).toEqual(
