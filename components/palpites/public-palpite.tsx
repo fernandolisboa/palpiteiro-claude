@@ -150,7 +150,10 @@ export function PublicPalpite({
   );
 }
 
-function Kicker() {
+// Kicker, ConfidenceChip e ProbableScore também compõem a ilustração da landing
+// (components/landing/palpite-preview.tsx, ADR 0059): palavra e placar, nunca número
+// de valor, então seguem firewall-safe lá.
+export function Kicker() {
   return (
     <span className="inline-flex w-fit items-center rounded-full bg-palpite-soft px-2.5 py-0.5 text-meta uppercase tracking-eyebrow text-palpite-strong-fg">
       Palpite da IA
@@ -158,7 +161,7 @@ function Kicker() {
   );
 }
 
-function ConfidenceChip({
+export function ConfidenceChip({
   confidence,
 }: {
   confidence: PalpiteHeadlineView["confidence"];
@@ -174,7 +177,7 @@ function ConfidenceChip({
   );
 }
 
-function ProbableScore({ score }: { score: { home: number; away: number } }) {
+export function ProbableScore({ score }: { score: { home: number; away: number } }) {
   return (
     <p className="flex items-baseline gap-2">
       <ScoreLabel>provável</ScoreLabel>
