@@ -3,6 +3,7 @@ import { ChevronRight } from "lucide-react";
 
 import { Badge } from "@/components/ui/badge";
 import { EmptyState } from "@/components/empty-state";
+import { ResultBadge } from "@/components/result-badge";
 import {
   Table,
   TableBody,
@@ -15,19 +16,6 @@ import { appendBackParam } from "@/lib/view/back-href";
 import { LEAGUE_LABEL } from "@/lib/format";
 import { cn } from "@/lib/utils";
 import type { PredictionRowView } from "@/lib/view/dashboard";
-
-const STATUS_META: Record<
-  PredictionRowView["status"],
-  { label: string; className: string }
-> = {
-  pending: { label: "pendente", className: "text-muted-foreground" },
-  won: { label: "green", className: "text-edge-fg" },
-  lost: { label: "red", className: "text-destructive" },
-  void: { label: "anulada", className: "text-muted-fg-2" },
-  // push só aparece quando o settlement plugável (Fase 2 #166) o emitir; em Phase 1
-  // nenhuma row é push. Estilo neutro como void (no-action, stake devolvido — ADR 0016).
-  push: { label: "push", className: "text-muted-fg-2" },
-};
 
 // Cor por token de recomendação. over/under/pass têm cor pinada; seleções de
 // outros mercados ("Casa", "Sim", nome do jogador) caem no neutro via recClass().
@@ -87,7 +75,6 @@ export function PredictionsTable({
         </TableHeader>
         <TableBody>
           {rows.map((r) => {
-            const status = STATUS_META[r.status];
             return (
               <TableRow key={r.id} className="border-border-subtle">
                 <TableCell className="max-w-[220px]">
@@ -132,8 +119,8 @@ export function PredictionsTable({
                 <TableCell className="text-right font-mono text-body-sm tabular-nums text-muted-foreground">
                   {r.confidence}
                 </TableCell>
-                <TableCell className={cn("text-meta", status.className)}>
-                  {status.label}
+                <TableCell>
+                  <ResultBadge result={r.status} />
                 </TableCell>
                 <TableCell
                   className={cn(

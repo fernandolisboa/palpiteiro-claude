@@ -1,5 +1,6 @@
 import { PageContainer } from "@/components/page-container";
 import { PageHeader } from "@/components/page-header";
+import { ResultBadge } from "@/components/result-badge";
 import { LEAGUE_LABEL } from "@/lib/format";
 import { cn } from "@/lib/utils";
 import type { PredictionDetailView } from "@/lib/view/dashboard";
@@ -61,12 +62,6 @@ export function PredictionDetail({
       : value.startsWith("-")
         ? "text-destructive"
         : "text-muted-foreground";
-  const resultClass =
-    outcome?.result === "won"
-      ? "text-edge-fg"
-      : outcome?.result === "lost"
-        ? "text-destructive"
-        : "text-muted-foreground";
 
   return (
     <PageContainer width="reading">
@@ -126,7 +121,12 @@ export function PredictionDetail({
       <SectionLabel>resultado</SectionLabel>
       {outcome ? (
         <>
-          <Row label="resultado" value={outcome.result} className={resultClass} />
+          <div className="flex items-center justify-between border-b border-border-subtle py-2">
+            <span className="text-meta uppercase tracking-label text-muted-foreground">
+              resultado
+            </span>
+            <ResultBadge result={outcome.result} />
+          </div>
           <Row
             label="lucro"
             value={outcome.profit}
@@ -149,7 +149,7 @@ export function PredictionDetail({
         </>
       ) : (
         <p className="text-body text-muted-foreground">
-          Ainda pendente — o resultado aparece após o jogo ser liquidado.
+          Em aberto: o resultado aparece depois que o jogo for apurado.
         </p>
       )}
 

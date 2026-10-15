@@ -28,3 +28,17 @@ describe("PredictionsTable — nome do jogo (#574 linha 8)", () => {
     expect(link).toContain('title="Club Atlético Mineiro × Esporte Clube Juventude"');
   });
 });
+
+describe("PredictionsTable — selo de status (ADR 0056)", () => {
+  it.each([
+    ["pending", "Em aberto"],
+    ["won", "Acertou"],
+    ["lost", "Errou"],
+  ] as const)("%s → ResultBadge com %s", (status, word) => {
+    const html = renderToStaticMarkup(
+      <PredictionsTable rows={[{ ...ROW, status, profit: status === "pending" ? null : "+0,92 u" }]} />,
+    );
+    expect(html).toContain(`data-result="${status}"`);
+    expect(html).toContain(`>${word}</span>`);
+  });
+});

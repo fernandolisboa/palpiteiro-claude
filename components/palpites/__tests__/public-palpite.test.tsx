@@ -121,13 +121,13 @@ describe("PublicPalpite — placar gateado por settled (ADR §5)", () => {
       { finalScore: { home: 2, away: 1 } },
     );
     expect(html).toContain("placar real");
-    expect(html).toContain("acertou");
+    expect(html).toContain("Acertou");
     expect(leaksValue(html)).toBe(false);
   });
 
   it("settled SEM finalScore (não gateado) → sem recibo de placar real", () => {
     const html = render({ badge: "lost" }, { finalScore: null });
-    expect(html).toContain("errou");
+    expect(html).toContain("Errou");
     expect(html).not.toContain("placar real");
   });
 });

@@ -7,6 +7,7 @@ import { Card } from "@/components/ui/card";
 import { EmptyState } from "@/components/empty-state";
 import { PageContainer } from "@/components/page-container";
 import { PageHeader } from "@/components/page-header";
+import { ResultBadge } from "@/components/result-badge";
 import { auth } from "@/auth";
 import {
   LEAGUE_LABEL,
@@ -24,6 +25,7 @@ import {
 import { getRequestTimeZone } from "@/lib/server/request-timezone";
 import { historyLegSummary } from "@/lib/view/bet-slip";
 import { betLegLabel } from "@/lib/view/free-bet";
+import type { ResultState } from "@/lib/view/result-state";
 
 export const dynamic = "force-dynamic";
 
@@ -40,21 +42,13 @@ export const dynamic = "force-dynamic";
 const RISK_DISCLAIMER_PT_BR =
   "Aposta não é investimento. As recomendações do Palpiteiro são análises e não garantem resultado. Aposte com responsabilidade, só o que você pode perder, e nunca para recuperar perdas. Se a aposta deixou de ser diversão, procure ajuda.";
 
-const STATUS_LABEL: Record<SlipStatus, string> = {
-  acertou: "Acertou",
-  errou: "Errou",
-  pendente: "Pendente",
-  nao_conferida: "Não conferida",
+// Status do slip → selo único de resultado (ADR 0056). "Não conferida" não é
+// resultado: fica num selo neutro com a palavra.
+const SLIP_RESULT: Partial<Record<SlipStatus, ResultState>> = {
+  acertou: "won",
+  errou: "lost",
+  pendente: "pending",
 };
-
-function statusVariant(
-  status: SlipStatus,
-): "default" | "destructive" | "secondary" | "outline" {
-  if (status === "acertou") return "default";
-  if (status === "errou") return "destructive";
-  if (status === "pendente") return "secondary";
-  return "outline";
-}
 
 type PageProps = {
   searchParams: Promise<{ cursor?: string }>;
@@ -149,9 +143,7 @@ function SlipCard({
             {formatKickoffAbsolute(slip.match.kickoffAt, now, timeZone)}
           </span>
         </div>
-        <Badge variant={statusVariant(slip.status)} size="sm">
-          {STATUS_LABEL[slip.status]}
-        </Badge>
+        <SlipStatusBadge status={slip.status} />
       </div>
 
       <div className="flex flex-col gap-2 border-t border-border px-4 py-3">
@@ -185,25 +177,23 @@ function SlipCard({
   );
 }
 
+function SlipStatusBadge({ status }: { status: SlipStatus }) {
+  const result = SLIP_RESULT[status];
+  if (result) return <ResultBadge result={result} size="sm" />;
+  return (
+    <Badge variant="outline" size="sm" className="tracking-tight text-muted-foreground">
+      Não conferida
+    </Badge>
+  );
+}
+
 // Outcome por perna re-renderizado do persistido (nunca recomputado). null = pendente
 // ou não-liquidável (o badge da perna distingue via settleable).
 function LegRow({ leg }: { leg: UserBetLegRow }) {
   const label = betLegLabel(leg.kind, leg.params as Record<string, unknown>);
   const result = leg.outcome?.result ?? null;
-  const legLabel =
-    result === "won"
-      ? "acertou"
-      : result === "lost"
-        ? "errou"
-        : leg.settleable
-          ? "pendente"
-          : "não conferimos";
-  const legVariant =
-    result === "won"
-      ? "default"
-      : result === "lost"
-        ? "destructive"
-        : "outline";
+  const legResult: ResultState | null =
+    result === "won" ? "won" : result === "lost" ? "lost" : leg.settleable ? "pending" : null;
   const summary = historyLegSummary(leg);
   return (
     <div className="flex flex-col gap-0.5">
@@ -211,9 +201,13 @@ function LegRow({ leg }: { leg: UserBetLegRow }) {
         <span className="text-body-sm tracking-tight text-foreground">
           {label}
         </span>
-        <Badge variant={legVariant} size="xs">
-          {legLabel}
-        </Badge>
+        {legResult ? (
+          <ResultBadge result={legResult} />
+        ) : (
+          <Badge variant="outline" size="xs" className="tracking-tight text-muted-foreground">
+            não conferimos
+          </Badge>
+        )}
       </div>
       {summary.length > 0 && (
         <span className="font-mono text-meta tabular-nums text-muted-foreground">

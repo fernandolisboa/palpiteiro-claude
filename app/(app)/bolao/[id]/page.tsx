@@ -1,6 +1,6 @@
 import Link from "next/link";
 import { notFound, redirect } from "next/navigation";
-import { Check, Trophy, X } from "lucide-react";
+import { Trophy, X } from "lucide-react";
 import { z } from "zod";
 
 import { auth } from "@/auth";
@@ -8,6 +8,7 @@ import { removeFriendPool, removeFriendPoolEntry } from "@/app/actions/friend-po
 import { AddEntryForm, ManualScoreForm } from "@/components/friend-pool-forms";
 import { PageContainer } from "@/components/page-container";
 import { PageHeader } from "@/components/page-header";
+import { ResultBadge } from "@/components/result-badge";
 import { Button } from "@/components/ui/button";
 import { Card } from "@/components/ui/card";
 import { getFriendPool } from "@/lib/db/queries/friend-pools";
@@ -142,20 +143,6 @@ export default async function BolaoDetailPage({ params }: PageProps) {
                 const hit = outcome.settled ? outcome.hitIds.has(e.id) : null;
                 return (
                   <li key={e.id} className="flex items-center gap-3 px-4 py-3">
-                    <span className="w-5 shrink-0">
-                      {hit === true && (
-                        <>
-                          <Check className="size-4 text-accent-fg" aria-hidden />
-                          <span className="sr-only">acertou</span>
-                        </>
-                      )}
-                      {hit === false && (
-                        <>
-                          <X className="size-4 text-muted-fg-2" aria-hidden />
-                          <span className="sr-only">errou</span>
-                        </>
-                      )}
-                    </span>
                     <span className="min-w-0 flex-1 truncate text-body font-medium tracking-tight">
                       {e.bettorName}
                     </span>
@@ -165,6 +152,7 @@ export default async function BolaoDetailPage({ params }: PageProps) {
                       </span>
                       {poolBetLabel(e.kind, e.params, teams)}
                     </span>
+                    {hit !== null && <ResultBadge result={hit ? "won" : "lost"} />}
                     {open && (
                       <form action={removeFriendPoolEntry}>
                         <input type="hidden" name="poolId" value={pool.id} />
