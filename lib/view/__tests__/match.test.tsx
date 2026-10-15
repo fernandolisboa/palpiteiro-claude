@@ -640,6 +640,20 @@ describe("toMatchRowView — placar ao vivo do estado (#580)", () => {
     expect(hero.liveScore?.caption).toBe("63' · atualizado há 20 s");
     expect("model" in hero).toBe(false);
   });
+
+  it("a linha das listas mostra minuto e placar, nunca odd", () => {
+    const listRow = toMatchListRowView({
+      match: makeMatch({ kickoffAt: STARTED, status: "live" }),
+      odds: { bookmaker: "x", overOdd: "1.900", underOdd: "1.950", capturedAt: NOW },
+      hasPrediction: false,
+      now: NOW,
+      timeZone: "America/Sao_Paulo",
+      inPlay: fresh,
+    });
+    const html = renderToStaticMarkup(<MatchRow m={listRow} />);
+    expect(html).toContain("63&#x27; · atualizado há 20 s");
+    expect(html).not.toContain("1,90");
+  });
 });
 
 describe("toMatchListRowView — dia, hora e contagem (#577)", () => {
