@@ -39,7 +39,7 @@ describe("/como-usar", () => {
     for (const label of [
       "Analisar com IA",
       "Refazer só o palpite",
-      "ver análise por mercado",
+      "Ler análise completa",
       "Palpite da IA",
       "Registrar apostas",
       "Suas apostas",

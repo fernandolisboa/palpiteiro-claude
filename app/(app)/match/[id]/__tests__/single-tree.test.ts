@@ -36,7 +36,7 @@ describe("app/(app)/match/[id]/page.tsx", () => {
       "<SeuPalpiteSection",
       "<MatchSections ",
       "<MatchAuxiliarySections",
-      "<PalpiteHero",
+      "<PalpiteArea",
       "<MatchHero",
     ]) {
       expect(src.split(tag).length - 1, tag).toBe(1);

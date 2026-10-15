@@ -5,9 +5,7 @@ import { Users } from "lucide-react";
 
 import { BackLink } from "@/components/back-link";
 import { PageContainer } from "@/components/page-container";
-import { MarketAnalysisSections } from "@/components/market-analysis-section";
-import { MatchCollapsible } from "@/components/match-collapsible";
-import { PreviousAnalyses } from "@/components/previous-analyses";
+import { FullAnalysis } from "@/components/full-analysis";
 import { MatchAuxiliarySections } from "@/components/match-sections-auxiliary";
 import { MatchHero } from "@/components/match-hero";
 import {
@@ -19,8 +17,7 @@ import {
   MatchOddsCards,
   type MatchOddsViews,
 } from "@/components/match-odds-cards";
-import { PalpiteHero } from "@/components/palpites/palpite-hero";
-import { AnalysisUserContext } from "@/components/analysis-user-context";
+import { PalpiteArea } from "@/components/palpites/palpite-area";
 import { readAnalysisEngine } from "@/lib/ai/engine/analysis-engine-flag";
 import {
   toAnalysisUserContextView,
@@ -518,9 +515,11 @@ function MatchLayout({
       />
 
       <div className="flex flex-col gap-4 pt-4 lg:gap-6">
-        {/* HERO palpite-first (#351): a manchete sintetizada é a PROEMINÊNCIA, logo
-            abaixo da identidade do jogo. O botão dispara o fan-out → síntese. */}
-        <PalpiteHero
+        {/* HERO palpite-first (#351), compacto (#576): a manchete sintetizada é a
+            PROEMINÊNCIA, logo abaixo da identidade do jogo. "Ler análise completa" abre o
+            HERO inteiro e a análise por mercado num bloco IRMÃO, fechado por padrão →
+            nenhum número de valor vaza pro HERO (firewall ADR 0030). */}
+        <PalpiteArea
           heroPalpite={heroPalpite}
           matchId={matchId}
           unavailable={unavailableReason}
@@ -530,15 +529,14 @@ function MatchLayout({
           sharedAt={heroSharedAt}
           hasAnalyses={sections.length > 0}
           contextEnabled={contextEnabled}
-        />
-
-        {/* Detalhe por mercado LOGO ABAIXO do palpite: é o "quero ver mais" imediato da
-            manchete. Collapsed por padrão → nenhum número de valor vaza pro topo (firewall
-            ADR 0030 intacto: edge/EV/stake/odd vivem DENTRO do disclosure). */}
-        <NeutralAnalysisDetail
-          sections={sections}
-          previousAnalyses={previousAnalyses}
-          userContext={userContextView}
+          hasAnalysis={sections.length > 0}
+          analysis={
+            <FullAnalysis
+              sections={sections}
+              previousAnalyses={previousAnalyses}
+              userContext={userContextView}
+            />
+          }
         />
         {unavailableReason !== null && sections.length === 0 && (
           <NotAnalyzableNotice reason={unavailableReason} score={finalScore} />
@@ -608,37 +606,6 @@ function MatchTopBar({
       <BackLink href={backHref} label="jogos" className="mb-0" />
       {poolMatchId !== null && <PoolLink matchId={poolMatchId} />}
     </div>
-  );
-}
-
-// Detalhe NEUTRO por mercado (#351, §3.3): o MatchCollapsible (chrome neutro — a costura
-// cromática) envolve o MarketAnalysisSections em modo READ-ONLY (sem analyzable/matchId →
-// sem footer de reanálise; o botão do HERO re-roda tudo). PreviousAnalyses (#204) dentro
-// do mesmo detalhe. Os números de valor (edge/EV/stake/odd) são conteúdo LEGÍTIMO aqui —
-// o firewall só barra o HERO. Renderiza só quando há análise (sections.length > 0).
-//
-// O `view` retornado por analyzeBestBet é IGNORADO de propósito: o detalhe vem do
-// `sections` revalidado (não-stale), e o contrato #353 do action não pode ser tocado
-// (predictions-best-bet.test.ts o pina). O HERO usa só `ok`/`error`/`palpiteError` do action.
-function NeutralAnalysisDetail({
-  sections,
-  previousAnalyses,
-  userContext,
-}: {
-  sections: MarketAnalysisSectionItem[];
-  previousAnalyses: PreviousAnalysisItem[];
-  // "O que você acrescentou" (#565): o contexto extra da análise visível.
-  userContext: AnalysisUserContextView | null;
-}) {
-  if (sections.length === 0) return null;
-  return (
-    <MatchCollapsible title="ver análise por mercado">
-      <div className="flex flex-col gap-3">
-        {userContext && <AnalysisUserContext view={userContext} />}
-        <MarketAnalysisSections sections={sections} />
-        <PreviousAnalyses items={previousAnalyses} />
-      </div>
-    </MatchCollapsible>
   );
 }
 

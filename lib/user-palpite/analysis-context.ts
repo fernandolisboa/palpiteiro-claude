@@ -155,9 +155,9 @@ export function pickUserContext(
 // ─── Aviso do HERO (depois do fan-out) ───────────────────────────────────────
 
 export const CONTEXT_APPLIED_NOTICE =
-  'Conferimos o seu contexto extra e ele entrou na análise. Veja o que entrou em "ver análise por mercado".';
+  'Conferimos o seu contexto extra e ele entrou na análise. Veja o que entrou em "Ler análise completa".';
 export const CONTEXT_NO_EFFECT_NOTICE =
-  'Conferimos o seu contexto extra, mas ele não mudou a análise: o que você contou foi contradito pelos nossos dados, o modelo já considerava, ou não é um tipo que a gente confere. Veja em "ver análise por mercado".';
+  'Conferimos o seu contexto extra, mas ele não mudou a análise: o que você contou foi contradito pelos nossos dados, o modelo já considerava, ou não é um tipo que a gente confere. Veja em "Ler análise completa".';
 export const CONTEXT_EMPTY_NOTICE =
   "Não achamos no seu contexto extra nenhuma afirmação de fato pra conferir; a análise seguiu sem ele.";
 export const CONTEXT_FAILED_NOTICE =

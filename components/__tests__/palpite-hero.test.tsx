@@ -614,7 +614,7 @@ describe("PalpiteHero — Contexto extra (#565)", () => {
 
   it("envio ok: o texto vai no form, o aviso aparece e o campo é limpo", async () => {
     const NOTICE =
-      'Conferimos o seu contexto extra e ele entrou na análise. Veja o que entrou em "ver análise por mercado".';
+      'Conferimos o seu contexto extra e ele entrou na análise. Veja o que entrou em "Ler análise completa".';
     vi.mocked(analyzeBestBet).mockResolvedValue({
       ok: true,
       view: { entries: [], errors: [] } as never,
@@ -685,5 +685,48 @@ describe("PalpiteHero — Contexto extra (#565)", () => {
     expect(h.container.textContent).toContain("Falhou.");
     expect(h.textarea().value).toBe(TEXT);
     await h.cleanup();
+  });
+});
+
+describe("PalpiteHero — compacto (#576, expanded=false)", () => {
+  const FULL: PalpiteHeadlineView = {
+    ...POPULATED,
+    dimensions: [{ label: "Mandante ganha por 2+", badge: null }],
+    sources: [{ title: "Palmeiras confirma escalação titular", url: "https://ge.globo.com/a" }],
+  };
+
+  it("narrativa em 2 linhas (texto inteiro no DOM), sem 'a partir de:', ficha e fontes", () => {
+    const html = render({ heroPalpite: FULL, expanded: false });
+    expect(html).toContain("line-clamp-2");
+    expect(html).toContain(POPULATED.narrative);
+    expect(html).not.toContain("a partir de:");
+    expect(html).not.toContain("e ainda");
+    expect(html).not.toContain("o palpite leu");
+  });
+
+  it("veredito, placar, confiança, ações e o disclaimer continuam", () => {
+    const html = render({ heroPalpite: FULL, expanded: false, hasAnalyses: true });
+    expect(html).toContain(POPULATED.verdict);
+    expect(html).toContain("confiança média");
+    expect(html).toContain("Analisar de novo");
+    expect(html).toContain("Refazer só o palpite");
+    expect(html).toContain("Compartilhar");
+    expect(html).toContain(PALPITE_DISCLAIMER);
+  });
+
+  it("expanded (default) mostra tudo e não corta a narrativa", () => {
+    const html = render({ heroPalpite: FULL });
+    expect(html).not.toContain("line-clamp-2");
+    expect(html).toContain("a partir de:");
+    expect(html).toContain("e ainda");
+    expect(html).toContain("o palpite leu");
+  });
+
+  it("firewall limpo nos dois modos", () => {
+    for (const expanded of [true, false]) {
+      const html = render({ heroPalpite: FULL, expanded });
+      expect(leaksValue(html)).toBe(false);
+      expect(html).not.toContain("edge-");
+    }
   });
 });

@@ -10,7 +10,16 @@ import type { PreviousAnalysisItem } from "@/lib/view/types";
 // encerrados com histórico). Market-agnostic: o header vem de marketLabel (registry),
 // nunca de strings de mercado hardcoded — o branch pass do AnalysisResult não imprime
 // o mercado, então sem o header um pass anterior ficaria sem identificação.
-export function PreviousAnalyses({ items }: { items: PreviousAnalysisItem[] }) {
+//
+// `showRiskDisclaimer` vai a cada AnalysisResult (false quando o container já mostra UMA
+// linha de risco, como o "Ler análise completa" da página do jogo, ADR 0057).
+export function PreviousAnalyses({
+  items,
+  showRiskDisclaimer = true,
+}: {
+  items: PreviousAnalysisItem[];
+  showRiskDisclaimer?: boolean;
+}) {
   if (items.length === 0) return null;
   return (
     <MatchCollapsible title="análises anteriores" meta={String(items.length)}>
@@ -26,7 +35,7 @@ export function PreviousAnalyses({ items }: { items: PreviousAnalysisItem[] }) {
                 {item.generatedAt}
               </span>
             </div>
-            <AnalysisResult view={item.view} />
+            <AnalysisResult view={item.view} showRiskDisclaimer={showRiskDisclaimer} />
           </div>
         ))}
       </div>

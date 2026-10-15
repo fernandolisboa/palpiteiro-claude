@@ -12,6 +12,7 @@ import {
   MarketAnalysisSections,
 } from "@/components/market-analysis-section";
 import { initialModelOverride } from "@/lib/ai/model-override";
+import { ANALYSIS_RISK_DISCLAIMER } from "@/lib/view/analysis";
 import type {
   AnalysisView,
   MarketAnalysisSectionItem,
@@ -251,5 +252,40 @@ describe("seed do dropdown da seção = modelo que rodou (#244)", () => {
     expect(initialModelOverride("claude-sonnet-4-6", ADMIN_MODELS)).toBe(
       "default",
     );
+  });
+});
+
+describe("MarketAnalysisSections — layout flat (#576, Ler análise completa)", () => {
+  it("todo mercado aberto num nível só: h3 + meta, sem acordeão", () => {
+    const markup = renderToStaticMarkup(
+      <MarketAnalysisSections sections={[OU, MR]} layout="flat" />,
+    );
+    // Nenhum MatchCollapsible (acordeão) dentro da análise aberta.
+    expect(markup).not.toContain('data-slot="collapsible');
+    expect(occurrences(markup, "<h3")).toBe(2);
+    expect(markup).toContain("Over/Under gols");
+    expect(markup).toContain("Casa · 2.10");
+    // Os dois racionais à vista (aberto), não colapsados.
+    expect(markup).toContain("RACIONAL_OU");
+    expect(markup).toContain("RACIONAL_MR");
+  });
+
+  it("um mercado só também ganha o cabeçalho", () => {
+    const markup = renderToStaticMarkup(
+      <MarketAnalysisSections sections={[MR]} layout="flat" />,
+    );
+    expect(occurrences(markup, "<h3")).toBe(1);
+    expect(markup).toContain("Resultado (1X2)");
+  });
+
+  it("repassa showRiskDisclaimer a cada resultado", () => {
+    const withLine = renderToStaticMarkup(
+      <MarketAnalysisSections sections={[OU, MR]} layout="flat" />,
+    );
+    const without = renderToStaticMarkup(
+      <MarketAnalysisSections sections={[OU, MR]} layout="flat" showRiskDisclaimer={false} />,
+    );
+    expect(occurrences(withLine, ANALYSIS_RISK_DISCLAIMER)).toBe(2);
+    expect(occurrences(without, ANALYSIS_RISK_DISCLAIMER)).toBe(0);
   });
 });

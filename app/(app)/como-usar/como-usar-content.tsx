@@ -199,7 +199,7 @@ export function ComoUsarContent() {
           já considerava, a não verificável entra com peso menor e a contradita não
           entra. O contexto não
           conta a mais no seu limite do dia. Não escreva dados pessoais. Pra ver o
-          que entrou, abra <Ui>ver análise por mercado</Ui>: lá em cima fica{" "}
+          que entrou, abra <Ui>Ler análise completa</Ui>: lá em cima fica{" "}
           <Ui>o que você acrescentou</Ui>, com o status de cada afirmação.
         </p>
         <Tip>
@@ -225,7 +225,7 @@ export function ComoUsarContent() {
           <Ui>Errou</Ui> e o placar real.
         </p>
         <p>
-          Logo abaixo, toque em <Ui>ver análise por mercado</Ui> pra
+          Logo abaixo, toque em <Ui>Ler análise completa</Ui> pra
           abrir o detalhe de cada mercado: a seleção sugerida com odd, stake e
           retorno esperado, os cenários comparados e os fatores-chave. Quando nenhum
           lado tem vantagem suficiente, o mercado sai como <Strong>Sem aposta</Strong> (não
