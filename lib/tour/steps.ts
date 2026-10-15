@@ -79,7 +79,7 @@ export const TOUR_CHAPTERS: Record<TourChapter, readonly TourStep[]> = {
       body: 'Aqui fica o palpite da IA: quem leva, o placar provável e o porquê. Toque em "Analisar com IA" pra gerar. Pode levar alguns minutos, e cada mercado analisado usa uma das suas análises do dia. Depois, "Ler análise completa" abre o porquê inteiro e o detalhe de cada mercado (odd, vantagem, stake ou sem aposta). Quer contar algo que você sabe (quem está fora, como os times vêm)? Quando aparecer, abra "Contexto extra (opcional)": a gente confere com os nossos dados antes de usar, e não conta a mais no limite.',
     },
     {
-      target: "bet-slip",
+      target: "mercados",
       title: "Mercados",
       body: 'Aqui ficam a odd de mercado, a chance do modelo e a odd justa de cada seleção; a marca IA mostra o que a análise recomenda. Os "?" explicam os números num toque. Fez uma aposta com os amigos? Toque no que você apostou (ou digite a aposta): entra em Suas apostas (ao lado no computador, na barra de baixo no celular). Confira a odd que pegou e toque em "Registrar apostas". A avaliação sai na hora, sem gastar análise.',
     },

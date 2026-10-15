@@ -40,7 +40,6 @@ export function MarketTable({ grid }: { grid: BetGridView }) {
 
   return (
     <div className="flex flex-col gap-3">
-      <SectionHeading />
       {register && (
         <p className="text-body-sm text-muted-foreground tracking-tight">
           Toque nas seleções que você apostou, confira a odd que pegou e registre. A
@@ -89,14 +88,6 @@ export function MarketTable({ grid }: { grid: BetGridView }) {
         </Card>
       )}
     </div>
-  );
-}
-
-function SectionHeading() {
-  return (
-    <span className="text-meta uppercase tracking-eyebrow text-muted-foreground">
-      mercados
-    </span>
   );
 }
 

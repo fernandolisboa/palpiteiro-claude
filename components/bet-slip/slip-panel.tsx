@@ -58,7 +58,7 @@ export function SlipPanel() {
 
       {legs.length === 0 ? (
         <p className="px-4 py-4 text-body-sm text-muted-foreground tracking-tight">
-          Toque numa seleção da grade pra começar.
+          Toque numa seleção na aba Mercados pra começar.
         </p>
       ) : (
         <form action={slip.registerAction} className="flex flex-col gap-3 px-4 py-3">

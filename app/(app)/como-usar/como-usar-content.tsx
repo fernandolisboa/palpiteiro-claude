@@ -240,17 +240,18 @@ export function ComoUsarContent() {
           <Link href="/como-funciona" className={LINK}>
             Como funciona
           </Link>
-          . Mais abaixo na página ficam as odds (as de antes do jogo, quando ele já
-          começou), as partidas recentes, o
-          confronto direto, a classificação, os desfalques e as escalações. Tocar no
-          nome de um time abre o histórico dele.
+          . Logo abaixo do palpite ficam três abas. Em <Ui>Mercados</Ui>, as odds de
+          mercado (as de antes do jogo, quando ele já começou) com a chance do modelo e
+          a odd justa de cada seleção. Em <Ui>Seu palpite</Ui>, o seu palpite. Em{" "}
+          <Ui>Dados</Ui>, as partidas recentes, o confronto direto, a classificação, os
+          desfalques e as escalações. Tocar no nome de um time abre o histórico dele.
         </p>
       </Section>
 
       <Section id="seu-palpite">
         <p>
-          Tem um palpite seu pro jogo? Na página do jogo, a parte{" "}
-          <Ui>seu palpite</Ui> mostra o que o modelo acha dele. Escolha{" "}
+          Tem um palpite seu pro jogo? Na página do jogo, a aba{" "}
+          <Ui>Seu palpite</Ui> mostra o que o modelo acha dele. Escolha{" "}
           <Ui>Placar</Ui> (toque nos gols de cada time, ou use <Ui>outro placar</Ui>{" "}
           e <Ui>Usar placar</Ui> pra 6 gols ou mais) ou <Ui>Resultado</Ui> (vitória
           de um dos times ou empate). A leitura sai na hora e é grátis: a chance do
@@ -282,8 +283,8 @@ export function ComoUsarContent() {
         </p>
         <Tip>
           <Strong>Gostou do palpite?</Strong> <Ui>Adicionar às suas apostas</Ui>{" "}
-          leva o placar ou o resultado pra lista de <Ui>Suas apostas</Ui> (ao lado da
-          grade de mercados no computador, na barra de baixo no celular), pra você
+          leva o placar ou o resultado pra lista de <Ui>Suas apostas</Ui> (no painel
+          ao lado das abas no computador, na barra de baixo no celular), pra você
           registrar. Não escreva dados pessoais no motivo: ele fica
           salvo com a sua análise.
         </Tip>
@@ -291,9 +292,13 @@ export function ComoUsarContent() {
 
       <Section id="minha-aposta">
         <p>
-          Na página do jogo, a parte <Ui>mercados</Ui> deixa todos os
-          mercados à vista: você só toca no que apostou (ou pensa em apostar). O Palpiteiro não aceita dinheiro: aqui é só
-          registro e avaliação, sem gastar análises do seu limite.
+          Na página do jogo, a aba <Ui>Mercados</Ui> deixa todos os mercados à vista:
+          a odd de mercado, a chance do modelo e a odd justa de cada seleção (nos
+          mercados que você analisou, a chance é a da análise), e embaixo de cada
+          mercado a chance sem a margem. A marca <Ui>IA</Ui> mostra a seleção
+          que a análise recomendou. Você só toca no que apostou (ou pensa em apostar).
+          O Palpiteiro não aceita dinheiro: aqui é só registro e avaliação, sem gastar
+          análises do seu limite.
         </p>
         <Steps>
           <li>

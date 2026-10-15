@@ -5,6 +5,7 @@ import { describe, expect, it } from "vitest";
 
 import { COMO_USAR_SECTIONS, ComoUsarContent } from "../como-usar-content";
 import { TOUR_RESTART_HREF } from "@/lib/tour/steps";
+import { MATCH_TAB_IDS } from "@/lib/view/match-tabs";
 
 const html = renderToStaticMarkup(<ComoUsarContent />);
 
@@ -48,7 +49,10 @@ describe("/como-usar", () => {
       "Adicionar placar",
       "Preencher com o texto",
       "Pular tour",
-      "seu palpite",
+      "Seu palpite",
+      "Mercados",
+      "Dados",
+      "IA",
       "Placar",
       "Resultado",
       "Usar placar",
@@ -67,13 +71,17 @@ describe("/como-usar", () => {
     }
   });
 
-  // "mercados" aparece em dezenas de arquivos; o guia cita o título da grade de apostas
-  // da página do jogo (SectionHeading em components/bet-slip/market-table.tsx), então a checagem é
-  // nesse título e no destaque <Ui> do guia, não na palavra solta.
-  it("cita o título da grade de apostas (mercados) como ele aparece no bet-slip", () => {
-    const betSlip = readFileSync(path.join(root, "components", "bet-slip", "market-table.tsx"), "utf8");
-    const heading = betSlip.match(/function SectionHeading[\s\S]*?<span[^>]*>\s*([^<]+?)\s*<\/span>/);
-    expect(heading?.[1]).toBe("mercados");
-    expect(html).toMatch(/<span[^>]*>mercados<\/span>/);
+  // As abas da página do jogo (#576): o guia cita os rótulos como eles aparecem nas
+  // abas (literais em components/match-tabs.tsx, um por id de MATCH_TAB_IDS).
+  it("cita as abas da página do jogo pelo rótulo da tela", () => {
+    const tabs = readFileSync(path.join(root, "components", "match-tabs.tsx"), "utf8");
+    const labels = MATCH_TAB_IDS.map((id) => {
+      const m = new RegExp(`"?${id}"?:\\s*"([^"]+)"`).exec(tabs);
+      return m?.[1];
+    });
+    expect(labels).toEqual(["Mercados", "Seu palpite", "Dados"]);
+    for (const label of labels) {
+      expect(html).toMatch(new RegExp(`<span[^>]*>${label}</span>`));
+    }
   });
 });

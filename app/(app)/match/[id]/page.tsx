@@ -16,6 +16,7 @@ import {
   type AnalysisUserContextView,
 } from "@/lib/view/analysis-user-context";
 import { GuidedTour } from "@/components/tour/guided-tour";
+import { MatchTabs } from "@/components/match-tabs";
 import {
   MatchAuxiliarySkeleton,
   MatchSectionsSkeleton,
@@ -75,6 +76,7 @@ import {
 } from "@/lib/view/palpites-headline";
 import { getRequestTimeZone } from "@/lib/server/request-timezone";
 import { resolveBackHref } from "@/lib/view/back-href";
+import { parseMatchTab, type MatchTab } from "@/lib/view/match-tabs";
 import type {
   MarketAnalysisSectionItem,
   MatchHeroView,
@@ -97,7 +99,7 @@ export const dynamic = "force-dynamic";
 
 type PageProps = {
   params: Promise<{ id: string }>;
-  searchParams: Promise<{ back?: string }>;
+  searchParams: Promise<{ back?: string; aba?: string | string[] }>;
 };
 
 export default async function MatchPage({ params, searchParams }: PageProps) {
@@ -106,10 +108,10 @@ export default async function MatchPage({ params, searchParams }: PageProps) {
   // param `back` (validado anti open-redirect; fallback /jogos). Um jogo pode ser
   // aberto da lista /jogos OU do histórico de um time (/time/[team], #408) — ambas
   // as bases são aceitas; fallback = /jogos (origem default).
-  const backHref = resolveBackHref((await searchParams).back, [
-    "/jogos",
-    "/time",
-  ]);
+  const query = await searchParams;
+  const backHref = resolveBackHref(query.back, ["/jogos", "/time"]);
+  // Aba aberta (#576): o SSR já sai com ela visível (sem pulo); depois a troca é local.
+  const initialTab = parseMatchTab(query.aba);
   // Middleware garante sessão; redirect defensivo caso o matcher mude. Sessão e jogo
   // são independentes: buscados juntos (cada um é um round trip ao banco).
   const [session, match] = await Promise.all([auth(), getMatchById(id)]);
@@ -371,6 +373,7 @@ export default async function MatchPage({ params, searchParams }: PageProps) {
       />
       <MatchLayout
         heroView={heroView}
+        initialTab={initialTab}
         sections={sections}
         previousAnalyses={previousAnalyses}
         matchId={match.id}
@@ -400,6 +403,8 @@ export default async function MatchPage({ params, searchParams }: PageProps) {
 
 type MatchLayoutProps = {
   heroView: MatchHeroView;
+  // Aba aberta no SSR (`?aba=`, padrão Mercados).
+  initialTab: MatchTab;
   // Última análise por mercado (#243): ≤1 → resultado cru (idêntico ao atual); ≥2 →
   // uma seção colapsável por mercado. Vazio → nenhuma análise ainda.
   sections: MarketAnalysisSectionItem[];
@@ -453,6 +458,7 @@ type MatchLayoutProps = {
 // que esconde uma árvore inteira por largura (single-tree.test.ts trava a volta).
 function MatchLayout({
   heroView,
+  initialTab,
   sections,
   previousAnalyses,
   matchId,
@@ -535,33 +541,44 @@ function MatchLayout({
               <NotAnalyzableNotice reason={unavailableReason} score={finalScore} />
             )}
 
-            {/* Tabela de mercados (#576): odd de mercado, chance e odd justa num lugar
-                só. Fora do MatchHero/PalpiteHero (firewall ADR 0030). */}
-            <div data-tour="bet-slip">
-              <Suspense fallback={<MarketTableSkeleton />}>
-                <MarketTableSection grid={betGrid} />
-              </Suspense>
-            </div>
-
-            {seuPalpite && (
-              <Suspense fallback={<SeuPalpiteSkeleton />}>
-                <SeuPalpiteSection
-                  matchId={matchId}
-                  teams={teams}
-                  data={seuPalpite}
-                  aiEnabled={userContextEnabled}
-                />
-              </Suspense>
-            )}
-
-            <div className="flex flex-col gap-3" data-tour="match-stats">
-              <Suspense fallback={<MatchSectionsSkeleton />}>
-                <MatchSections fixtureRef={fixtureRef} leagueKey={leagueKey} />
-              </Suspense>
-              <Suspense fallback={<MatchAuxiliarySkeleton />}>
-                <MatchAuxiliarySections fixtureRef={fixtureRef} />
-              </Suspense>
-            </div>
+            {/* Abas (#576): Mercados (a tabela: odd de mercado, chance e odd justa num
+                lugar só, fora do MatchHero/PalpiteHero pela firewall da ADR 0030), Seu
+                palpite e Dados. Os três painéis ficam montados; cada slot tem o próprio
+                Suspense. */}
+            <MatchTabs
+              initialTab={initialTab}
+              mercados={
+                <Suspense fallback={<MarketTableSkeleton />}>
+                  <MarketTableSection grid={betGrid} />
+                </Suspense>
+              }
+              seuPalpite={
+                seuPalpite ? (
+                  <Suspense fallback={<SeuPalpiteSkeleton />}>
+                    <SeuPalpiteSection
+                      matchId={matchId}
+                      teams={teams}
+                      data={seuPalpite}
+                      aiEnabled={userContextEnabled}
+                    />
+                  </Suspense>
+                ) : (
+                  <p className="text-body-sm text-muted-foreground tracking-tight">
+                    O Seu palpite fica aberto até o apito inicial.
+                  </p>
+                )
+              }
+              dados={
+                <div className="flex flex-col gap-3">
+                  <Suspense fallback={<MatchSectionsSkeleton />}>
+                    <MatchSections fixtureRef={fixtureRef} leagueKey={leagueKey} />
+                  </Suspense>
+                  <Suspense fallback={<MatchAuxiliarySkeleton />}>
+                    <MatchAuxiliarySections fixtureRef={fixtureRef} />
+                  </Suspense>
+                </div>
+              }
+            />
             {registerBets && <SlipMobileRiskNotice />}
           </div>
           {registerBets && <SlipAside />}

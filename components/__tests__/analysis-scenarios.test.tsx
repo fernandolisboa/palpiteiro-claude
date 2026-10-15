@@ -318,7 +318,7 @@ describe("AnalysisScenarios — bloco 'Cenários' (#104)", () => {
     expect(markup).toMatch(/odd na análise<\/span><span[^>]*>—</);
   });
 
-  it("rodapé: threshold via MIN_EDGE_PP e remissão ao OddsCard", () => {
+  it("rodapé: threshold via MIN_EDGE_PP e remissão à aba Mercados", () => {
     const markup = renderToStaticMarkup(
       <AnalysisScenarios
         outcomes={overOutcomes}
@@ -332,7 +332,7 @@ describe("AnalysisScenarios — bloco 'Cenários' (#104)", () => {
     );
     expect(markup).toContain("os números acima são informativos");
     expect(markup).toContain(
-      "odds do momento da análise — as atuais estão no card acima",
+      "odds do momento da análise — as atuais estão na aba Mercados",
     );
   });
 
