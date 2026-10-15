@@ -67,11 +67,9 @@
   --radius-lg: var(--radius);
   --radius-xl: calc(var(--radius) + 4px);
 
-  /* Typography scale — ADR 0029. font-size ONLY (no --text-*--line-height
-     companion ⇒ line-height inherits, byte-identical to the text-[Npx] it
-     replaces). Whole-px; half-pixels collapsed to the nearest step. */
-  --text-eyebrow-xs: 11px;
-  --text-eyebrow: 11px;
+  /* Typography scale — ADR 0029, amended by ADR 0056 (floor 11px). font-size
+     ONLY (no --text-*--line-height companion ⇒ line-height inherits).
+     Whole-px; nothing below text-meta. */
   --text-meta: 11px;
   --text-body-sm: 12px;
   --text-body: 13px;

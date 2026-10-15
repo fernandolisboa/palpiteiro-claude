@@ -19,9 +19,9 @@ const badgeVariants = cva(
         ghost: "[a&]:hover:bg-accent [a&]:hover:text-accent-foreground",
         link: "text-primary underline-offset-4 [a&]:hover:underline",
       },
-      // Eixo de TAMANHO aditivo (ADR 0029) p/ absorver os badges hand-rolled
-      // (`h-[17..20px]`+`text-[9.5..10px]`). `default` é no-op ⇒ rendering atual
-      // e golden snapshots intocados; consumidores de conteúdo adotam nos heirs.
+      // Eixo de TAMANHO aditivo (ADR 0029) p/ absorver os badges hand-rolled.
+      // Os dois tamanhos usam o piso de 11px (`text-meta`, ADR 0056). `default`
+      // é no-op ⇒ rendering atual e golden snapshots intocados.
       size: {
         default: "",
         sm: "h-5 px-2 text-meta",

@@ -10,8 +10,6 @@ import { cn } from "@/lib/utils";
 // com os `--text-*` do @theme em app/globals.css.
 const FONT_SIZE_TOKENS = [
   "text-meta",
-  "text-meta",
-  "text-meta",
   "text-body-sm",
   "text-body",
   "text-label",
@@ -30,7 +28,7 @@ describe("cn — tokens custom de font-size (extendTailwindMerge, #333)", () => 
     },
   );
 
-  it("eixo size do Badge: text-meta vence o text-xs da base + cor do consumer (10px, não 12px)", () => {
+  it("eixo size do Badge: text-meta vence o text-xs da base + cor do consumer (11px, não 12px)", () => {
     const out = cn("text-xs text-meta", "text-muted-foreground").split(" ");
     expect(out).toContain("text-meta");
     expect(out).not.toContain("text-xs");
