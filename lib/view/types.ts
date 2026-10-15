@@ -176,7 +176,7 @@ export type ScenarioSideView = {
   modelProb: string; // "58%" — prob. do modelo (label unificado; nunca "confidence")
   marketProb: string; // "50.7%" ou "—" — implied normalizada
   odd: string; // "1.92" ou "—" — odd congelada na análise
-  edge: string; // "+7.3pp" ou "—"
+  edge: string; // "+7,3 pontos" ou "—"
   expectedReturn: string; // "+11.4%" ou "—"
   modelBreakEvenOdd: string; // "2.38" — odd de equilíbrio pelo modelo
 };
