@@ -975,13 +975,25 @@ describe("capabilityGateMessage — gate hardening (#385)", () => {
       ).toBe(
         "Jogo em andamento — a análise fica disponível só antes do apito inicial.",
       );
+      // Dentro da janela de busca (kickoff + 4h), flag ligada e sem estado: "indisponível".
+      expect(
+        capabilityGateMessage(
+          capability,
+          { status: "live", kickoffAt: new Date(Date.now() - 30 * 60_000) },
+          { liveMode: true, modelReady: true, state: null },
+        ),
+      ).toBe("Placar ao vivo indisponível agora. Tente em um minuto.");
+      // Passada a janela, o estado não vai mais chegar: a copy de hoje, nunca "tente em
+      // um minuto" para sempre.
       expect(
         capabilityGateMessage(
           capability,
           { status: "live", kickoffAt: PAST },
           { liveMode: true, modelReady: true, state: null },
         ),
-      ).toBe("Placar ao vivo indisponível agora. Tente em um minuto.");
+      ).toBe(
+        "Jogo em andamento — a análise fica disponível só antes do apito inicial.",
+      );
     },
   );
 

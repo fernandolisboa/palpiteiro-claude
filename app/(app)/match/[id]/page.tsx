@@ -42,7 +42,6 @@ import {
   getEnableUserContext,
 } from "@/lib/db/queries/ai-config";
 import { getInPlayState, type InPlayState } from "@/lib/live/in-play-state";
-import { isTerminalStatusShort } from "@/lib/live/phase";
 import { poolWindowOpen } from "@/lib/pools/pool-state";
 import { latestAnalysisByMarket } from "@/lib/bets/analysis-probs";
 import { resolveInPlaySlipModel, resolveSlipModel } from "@/lib/bets/slip-model";
@@ -69,6 +68,7 @@ import {
 } from "@/lib/view/analysis";
 import { loadMatchModelReading } from "@/lib/model-base/reading";
 import { toMatchHeroView } from "@/lib/view/match";
+import { heroLiveFollow } from "@/lib/view/live-score";
 import {
   matchCapabilities,
   matchPhase,
@@ -171,6 +171,9 @@ export default async function MatchPage({ params, searchParams }: PageProps) {
   // nem lê o estado, a página é a de antes. `getInPlayState` respeita o cache de 1 min
   // na row (≤ 1 chamada de API-Football por minuto por jogo) e nunca toca a The Odds
   // API; falha não derruba a página (sem estado = "placar ao vivo indisponível").
+  // Depois da janela de busca (kickoff + 4h) `getInPlayState` só lê a row terminal, sem
+  // buscar: o fim dado pelo provider ainda aparece; sem ele, a fase volta ao "já
+  // começou" (matchPhase) e o cabeçalho não acompanha mais (heroLiveFollow).
   const mayBeLive =
     (match.status === "scheduled" || match.status === "live") &&
     match.kickoffAt.getTime() <= now.getTime();
@@ -261,16 +264,15 @@ export default async function MatchPage({ params, searchParams }: PageProps) {
   // Cabeçalho acompanhando o jogo: "Atualizar placar" (+ refresh ao voltar pra aba) e,
   // sem placar ao vivo utilizável, "placar ao vivo indisponível". Some quando o
   // provider já deu o fim.
-  const heroLive =
-    liveMode &&
-    mayBeLive &&
-    !(inPlayState && isTerminalStatusShort(inPlayState.statusShort))
-      ? {
-          note: heroView.liveScore?.live
-            ? null
-            : "placar ao vivo indisponível",
-        }
-      : null;
+  // Só dentro da janela de busca (kickoff + 4h): depois dela o botão nunca acharia
+  // placar novo, e a fase volta ao "já começou" (matchPhase).
+  const heroLive = heroLiveFollow({
+    liveMode,
+    match,
+    state: inPlayState,
+    liveScoreShown: heroView.liveScore?.live === true,
+    now,
+  });
 
   // Última análise por MERCADO (#243): uma seção colapsável por mercado (≥2) ou o
   // resultado cru (≤1, idêntico ao atual). ANTERIORES (#204) = as reanálises mais

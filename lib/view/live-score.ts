@@ -1,5 +1,13 @@
-import { isLiveStateShowable, liveStateAgeMs } from "@/lib/live/freshness";
-import { classifyStatusShort, type LiveStateInput } from "@/lib/live/phase";
+import {
+  isLiveStateShowable,
+  isPastInPlayWindow,
+  liveStateAgeMs,
+} from "@/lib/live/freshness";
+import {
+  classifyStatusShort,
+  isTerminalStatusShort,
+  type LiveStateInput,
+} from "@/lib/live/phase";
 import type { LiveStamp } from "@/lib/live/stamp";
 
 // Placar ao vivo de tela (#580, PLAN-580 §13), a partir do estado lido em
@@ -85,6 +93,34 @@ export function toLiveScoreView(
     red,
     ended: classifyStatusShort(state.statusShort) === "finished",
   };
+}
+
+export type HeroLiveFollow = {
+  // "placar ao vivo indisponível" quando não há placar ao vivo para mostrar; null com ele.
+  note: string | null;
+};
+
+/**
+ * O cabeçalho acompanha o jogo ("Atualizar placar", refresh ao voltar pra aba e, sem
+ * placar, "placar ao vivo indisponível")? Só com a flag ligada, depois do apito, com o
+ * banco ainda sem fim e DENTRO da janela de busca (kickoff + 4h): depois dela nada é
+ * buscado, e o botão e o "indisponível" nunca se resolveriam (volta o "já começou"). Some
+ * quando o provider já deu o fim.
+ */
+export function heroLiveFollow(input: {
+  liveMode: boolean;
+  match: { status: string; kickoffAt: Date };
+  state: Pick<LiveScoreInput, "statusShort"> | null;
+  liveScoreShown: boolean;
+  now: Date;
+}): HeroLiveFollow | null {
+  const { liveMode, match, state, now } = input;
+  if (!liveMode) return null;
+  if (match.status !== "scheduled" && match.status !== "live") return null;
+  if (match.kickoffAt.getTime() > now.getTime()) return null;
+  if (isPastInPlayWindow(match.kickoffAt, now)) return null;
+  if (state && isTerminalStatusShort(state.statusShort)) return null;
+  return { note: input.liveScoreShown ? null : "placar ao vivo indisponível" };
 }
 
 /**

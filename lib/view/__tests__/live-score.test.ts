@@ -4,6 +4,7 @@ import { buildLiveStamp } from "@/lib/live/stamp";
 
 import {
   formatLiveAge,
+  heroLiveFollow,
   liveMomentLabel,
   liveStampLabel,
   toLiveScoreView,
@@ -156,5 +157,52 @@ describe("liveStampLabel (selo do registro ao vivo)", () => {
         })
       )
     ).toBe("ao vivo");
+  });
+});
+
+describe("heroLiveFollow (cabeçalho acompanhando o jogo)", () => {
+  const KICKOFF = new Date(NOW.getTime() - 63 * 60_000);
+  const base = {
+    liveMode: true,
+    match: { status: "scheduled", kickoffAt: KICKOFF },
+    state: { statusShort: "2H" },
+    liveScoreShown: true,
+    now: NOW,
+  };
+  const H = 60 * 60_000;
+
+  it("jogo rolando com placar: acompanha, sem nota", () => {
+    expect(heroLiveFollow(base)).toEqual({ note: null });
+  });
+
+  it("sem placar ao vivo dentro da janela: 'placar ao vivo indisponível'", () => {
+    expect(heroLiveFollow({ ...base, state: null, liveScoreShown: false })).toEqual({
+      note: "placar ao vivo indisponível",
+    });
+  });
+
+  it("até kickoff + 4h acompanha; depois, null (nada mais é buscado)", () => {
+    const at = (ms: number) => ({
+      ...base,
+      state: null,
+      liveScoreShown: false,
+      now: new Date(KICKOFF.getTime() + ms),
+    });
+    expect(heroLiveFollow(at(4 * H))).not.toBeNull();
+    expect(heroLiveFollow(at(4 * H + 1))).toBeNull();
+  });
+
+  it("flag desligada, antes do apito, banco encerrado ou fim do provider: null", () => {
+    expect(heroLiveFollow({ ...base, liveMode: false })).toBeNull();
+    expect(
+      heroLiveFollow({
+        ...base,
+        match: { status: "scheduled", kickoffAt: new Date(NOW.getTime() + 60_000) },
+      })
+    ).toBeNull();
+    expect(
+      heroLiveFollow({ ...base, match: { status: "finished", kickoffAt: KICKOFF } })
+    ).toBeNull();
+    expect(heroLiveFollow({ ...base, state: { statusShort: "FT" } })).toBeNull();
   });
 });

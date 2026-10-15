@@ -7,7 +7,12 @@ import {
   type MatchLiveState,
 } from "@/lib/db/queries/match-live-states";
 import type { DbMatch } from "@/lib/db/queries/matches";
-import { IN_PLAY_FRESH_MS, liveStateAgeMs } from "@/lib/live/freshness";
+import {
+  IN_PLAY_FRESH_MS,
+  IN_PLAY_WINDOW_AFTER_MS,
+  IN_PLAY_WINDOW_BEFORE_MS,
+  liveStateAgeMs,
+} from "@/lib/live/freshness";
 import {
   classifyStatusShort,
   isTerminalStatusShort,
@@ -25,8 +30,7 @@ import {
 // sem buscar (`getInPlayStatesForMatches`). Nenhum caminho daqui toca a The Odds API.
 
 /** A busca só acontece em `[kickoff − 5 min, kickoff + 4h]` (§5.2 passo 1). */
-export const IN_PLAY_WINDOW_BEFORE_MS = 5 * 60_000;
-export const IN_PLAY_WINDOW_AFTER_MS = 4 * 60 * 60_000;
+export { IN_PLAY_WINDOW_AFTER_MS, IN_PLAY_WINDOW_BEFORE_MS };
 
 export type InPlayMatch = Pick<
   DbMatch,

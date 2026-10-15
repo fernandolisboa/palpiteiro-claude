@@ -7,7 +7,10 @@
 // não depender da camada de view: `lib/view/match-availability.ts` reexporta os dois e
 // segue sendo a porta da página, das listas e das actions.
 
-import { isLiveStateActionable } from "@/lib/live/freshness";
+import {
+  isLiveStateActionable,
+  isPastInPlayWindow,
+} from "@/lib/live/freshness";
 
 // `null` = analisável (pré-jogo). `started` = DB ainda `scheduled` mas o kickoff já
 // passou: pode estar rolando ou já ter acabado (o enum fica stale por até ~6h e a badge
@@ -193,7 +196,9 @@ function phaseFromReason(reason: MatchUnavailableReason): MatchPhase {
  * `started_unknown` com motivo `live_unavailable`. Com estado, o
  * status do provider decide a fase depois do apito; um terminal no DB (o sync só grava
  * depois do fim) vence o estado. O estado nunca reabre um jogo que o DB diz ser
- * pré-jogo: antes do apito, a fase é `pre`.
+ * pré-jogo: antes do apito, a fase é `pre`. Passada a janela de busca (kickoff + 4h)
+ * sem um terminal lido, o estado não vai mais chegar: volta o motivo de hoje
+ * (`started`), não um "placar indisponível" que nunca se resolve.
  */
 export function matchPhase(
   match: { status: string; kickoffAt: Date },
@@ -205,6 +210,12 @@ export function matchPhase(
   if (legacy === null) return { kind: "pre", reason: null, actionable: false };
   if (!liveMode) return phaseFromReason(legacy);
   if (legacy !== "started" && legacy !== "live") return phaseFromReason(legacy);
+  if (
+    isPastInPlayWindow(match.kickoffAt, now) &&
+    !isTerminalStatusShort(state?.statusShort ?? null)
+  ) {
+    return phaseFromReason(legacy);
+  }
   // Modo ao vivo ligado, apito passado e nenhum estado lido (provider fora, sem row):
   // "placar indisponível", não a copy de antes do modo ao vivo ("só antes do apito").
   if (state === null || state.fetchedAt === null) {
