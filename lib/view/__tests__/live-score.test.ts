@@ -1,0 +1,102 @@
+import { describe, expect, it } from "vitest";
+
+import {
+  formatLiveAge,
+  liveMomentLabel,
+  toLiveScoreView,
+  type LiveScoreInput,
+} from "@/lib/view/live-score";
+
+const NOW = new Date("2026-10-15T20:03:00.000Z");
+
+function state(over: Partial<LiveScoreInput> = {}): LiveScoreInput {
+  return {
+    statusShort: "2H",
+    elapsed: 63,
+    extra: null,
+    fetchedAt: new Date(NOW.getTime() - 20_000),
+    minuteLabel: "63'",
+    score: { home: 1, away: 0 },
+    red: { home: 0, away: 0 },
+    ...over,
+  };
+}
+
+describe("formatLiveAge", () => {
+  it("segundos abaixo de 1 min, minutos depois", () => {
+    expect(formatLiveAge(0)).toBe("há 0 s");
+    expect(formatLiveAge(20_000)).toBe("há 20 s");
+    expect(formatLiveAge(59_400)).toBe("há 59 s");
+    expect(formatLiveAge(60_000)).toBe("há 1 min");
+    expect(formatLiveAge(9 * 60_000 + 59_000)).toBe("há 9 min");
+    expect(formatLiveAge(-5)).toBe("há 0 s");
+  });
+});
+
+describe("liveMomentLabel", () => {
+  it.each([
+    ["2H", "63'", "63'"],
+    ["1H", "45+2'", "45+2'"],
+    ["LIVE", null, "em andamento"],
+    ["HT", "intervalo", "intervalo"],
+    ["NS", "0'", "aguardando o apito"],
+    ["ET", null, "prorrogação"],
+    ["BT", null, "prorrogação"],
+    ["P", null, "pênaltis"],
+    ["INT", null, "jogo interrompido"],
+    ["SUSP", null, "jogo interrompido"],
+    ["FT", null, "fim de jogo"],
+    ["PEN", null, "fim de jogo"],
+  ])("%s → %s", (statusShort, minuteLabel, expected) => {
+    expect(liveMomentLabel({ statusShort, minuteLabel })).toBe(expected);
+  });
+
+  it("adiado, cancelado e código desconhecido não mostram nada", () => {
+    for (const statusShort of ["PST", "CANC", "ABD", "XYZ"]) {
+      expect(liveMomentLabel({ statusShort, minuteLabel: null })).toBeNull();
+    }
+  });
+});
+
+describe("toLiveScoreView", () => {
+  it("estado fresco: placar, '63' · atualizado há 20 s' e a marca de ao vivo", () => {
+    expect(toLiveScoreView(state(), NOW)).toEqual({
+      home: 1,
+      away: 0,
+      caption: "63' · atualizado há 20 s",
+      live: true,
+      red: null,
+      ended: false,
+    });
+  });
+
+  it("expulsões só quando há alguma", () => {
+    expect(
+      toLiveScoreView(state({ red: { home: 1, away: 0 } }), NOW)?.red
+    ).toEqual({ home: 1, away: 0 });
+    expect(toLiveScoreView(state({ red: null }), NOW)?.red).toBeNull();
+  });
+
+  it("até 10 min mostra; depois, null", () => {
+    const at = (ms: number) =>
+      state({ fetchedAt: new Date(NOW.getTime() - ms) });
+    expect(toLiveScoreView(at(10 * 60_000), NOW)?.caption).toBe(
+      "63' · atualizado há 10 min"
+    );
+    expect(toLiveScoreView(at(10 * 60_000 + 1), NOW)).toBeNull();
+  });
+
+  it("sem placar ou com status sem rótulo → null", () => {
+    expect(toLiveScoreView(state({ score: null }), NOW)).toBeNull();
+    expect(toLiveScoreView(state({ statusShort: "PST" }), NOW)).toBeNull();
+  });
+
+  it("fim de jogo pelo provider marca `ended`", () => {
+    const v = toLiveScoreView(
+      state({ statusShort: "FT", minuteLabel: null }),
+      NOW
+    );
+    expect(v?.ended).toBe(true);
+    expect(v?.caption).toBe("fim de jogo · atualizado há 20 s");
+  });
+});

@@ -40,6 +40,8 @@ function props(over: Partial<Props> = {}): Props {
     contextEnabled: false,
     analysis: SLOT,
     ...over,
+    // Capacidade (ADR 0060): nos testes de antes, analisável = pré-jogo.
+    analyzable: over.analyzable ?? (over.unavailable ?? null) === null,
   };
 }
 

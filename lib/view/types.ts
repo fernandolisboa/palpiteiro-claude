@@ -75,8 +75,17 @@ export type MatchRowView = {
   // Placar PARCIAL de um jogo `live` (#574 linha 6), separado do placar final: o
   // final alimenta recibo/liquidação, e usar o parcial ali o liquidaria como final.
   // `caption` = "parcial · atualizado há 2h" (o placar vem da última sincronização,
-  // que pode ter horas; placar ao vivo de verdade é o #580). Chave ausente sem placar.
-  liveScore?: { home: number; away: number; caption: string };
+  // que pode ter horas). Ao vivo (#580), com o estado da API-Football de no máximo 10
+  // min: `caption` = "63' · atualizado há 20 s", `live: true`, expulsões em `red` e
+  // `ended` quando o provider já deu o fim. Chave ausente sem placar.
+  liveScore?: {
+    home: number;
+    away: number;
+    caption: string;
+    live?: true;
+    red?: { home: number; away: number } | null;
+    ended?: boolean;
+  };
   venue?: string;
   countdown?: string;
   // Linha "Modelo: PAL 42% · Menos de 2,5 59%" do /jogos (#555, ADR 0052): só em jogo

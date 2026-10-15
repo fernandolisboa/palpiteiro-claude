@@ -14,6 +14,7 @@ import {
 // dessincronizam (jogo na lista mas isInProgress=false → cai no branch de odds =
 // parece apostável).
 import { IN_PROGRESS_WINDOW_MS } from "@/lib/view/date-range";
+import { toLiveScoreView, type LiveScoreInput } from "@/lib/view/live-score";
 import { matchUnavailableReason } from "@/lib/view/match-availability";
 import type { SupportedLeague } from "@/lib/providers/sports-data/leagues";
 import { teamPair } from "@/lib/view/team";
@@ -66,6 +67,10 @@ export type ToMatchRowArgs = {
   // Base do modelo do jogo (#555): vira a linha "Modelo: …" do /jogos, só em jogo
   // analisável. Opcional — o hero e os call sites antigos não passam.
   modelSnapshot?: MatchModelSnapshot | null;
+  // Estado ao vivo do jogo (#580): a row de `match_live_states` (listas) ou o estado
+  // lido pela página. Só quem tem o modo ao vivo ligado passa. Com até 10 min, o placar
+  // e o minuto vêm daqui; senão, do sync como antes.
+  inPlay?: LiveScoreInput | null;
 };
 
 export function toMatchRowView({
@@ -76,6 +81,7 @@ export function toMatchRowView({
   now = new Date(),
   timeZone,
   modelSnapshot,
+  inPlay,
 }: ToMatchRowArgs): MatchRowView {
   const league = leagueToKey(match.league);
   // "Em andamento" derivado de kickoff+now+status (NÃO de um status DB novo, que
@@ -101,6 +107,14 @@ export function toMatchRowView({
     match.status !== "finished" &&
     match.status !== "cancelled" &&
     match.status !== "postponed";
+  // Placar ao vivo (#580): só de jogo que já apitou e que o banco ainda não deu como
+  // encerrado/adiado/cancelado (o sync vence o estado, como em matchPhase).
+  const liveFromState =
+    inPlay &&
+    kickoffMs <= nowMs &&
+    (match.status === "scheduled" || match.status === "live")
+      ? toLiveScoreView(inPlay, now)
+      : null;
   return {
     id: match.id,
     home,
@@ -127,20 +141,22 @@ export function toMatchRowView({
     homeScore: match.status === "finished" ? match.homeScore : null,
     awayScore: match.status === "finished" ? match.awayScore : null,
     // Placar parcial só em `live` com os dois gols (#574): chave ausente no resto,
-    // como `model`, pra não mexer nos goldens.
-    ...(match.status === "live" &&
-    match.homeScore !== null &&
-    match.awayScore !== null
-      ? {
-          liveScore: {
-            home: match.homeScore,
-            away: match.awayScore,
-            caption: match.updatedAt
-              ? `parcial · atualizado ${formatRelativeAgoLabel(match.updatedAt, now)}`
-              : "parcial",
-          },
-        }
-      : {}),
+    // como `model`, pra não mexer nos goldens. O estado ao vivo fresco vence (#580).
+    ...(liveFromState
+      ? { liveScore: liveFromState }
+      : match.status === "live" &&
+          match.homeScore !== null &&
+          match.awayScore !== null
+        ? {
+            liveScore: {
+              home: match.homeScore,
+              away: match.awayScore,
+              caption: match.updatedAt
+                ? `parcial · atualizado ${formatRelativeAgoLabel(match.updatedAt, now)}`
+                : "parcial",
+            },
+          }
+        : {}),
     venue: match.venue,
     countdown: formatCountdown(match.kickoffAt, now, timeZone),
     // Chave ausente (não `model: undefined`) sem base ou com base velha (mesmo limite

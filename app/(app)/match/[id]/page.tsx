@@ -38,8 +38,11 @@ import { leagueToKey } from "@/lib/format";
 import { teamToTeam } from "@/lib/view/team";
 import {
   getEnableBestBetFanOut,
+  getEnableLiveMode,
   getEnableUserContext,
 } from "@/lib/db/queries/ai-config";
+import { getInPlayState, type InPlayState } from "@/lib/live/in-play-state";
+import { isTerminalStatusShort } from "@/lib/live/phase";
 import { latestAnalysisByMarket } from "@/lib/bets/analysis-probs";
 import { resolveSlipModel } from "@/lib/bets/slip-model";
 import { getReferenceOddsForMatch } from "@/lib/db/queries/reference-odds";
@@ -162,6 +165,33 @@ export default async function MatchPage({ params, searchParams }: PageProps) {
         })
       );
     });
+  // Estado ao vivo (#580, ADR 0060): só depois do apito e de jogo que o banco ainda não
+  // deu como encerrado/adiado/cancelado (antes do apito nada busca). Flag desligada:
+  // nem lê o estado, a página é a de antes. `getInPlayState` respeita o cache de 1 min
+  // na row (≤ 1 chamada de API-Football por minuto por jogo) e nunca toca a The Odds
+  // API; falha não derruba a página (sem estado = "placar ao vivo indisponível").
+  const mayBeLive =
+    (match.status === "scheduled" || match.status === "live") &&
+    match.kickoffAt.getTime() <= now.getTime();
+  const liveP: Promise<{ liveMode: boolean; state: InPlayState | null }> =
+    mayBeLive
+      ? getEnableLiveMode()
+          .then(async (liveMode) => ({
+            liveMode,
+            state: liveMode ? await getInPlayState(match, { now }) : null,
+          }))
+          .catch((err: unknown) => {
+            console.error(
+              JSON.stringify({
+                scope: "match-page",
+                error: "in_play_state_failed",
+                message: err instanceof Error ? err.message : String(err),
+              })
+            );
+            return { liveMode: false, state: null };
+          })
+      : Promise.resolve({ liveMode: false, state: null });
+
   // Predição existente e demais leituras em paralelo: pré-requisito pro render
   // síncrono do hero + panel.
   const [
@@ -171,6 +201,7 @@ export default async function MatchPage({ params, searchParams }: PageProps) {
     tourState,
     userContextEnabled,
     analysisEngine,
+    live,
   ] = await Promise.all([
     // Histórico COMPLETO: agrupado por mercado em toMarketAnalysisSections (#243, a
     // última de cada mercado = uma seção) e em toPreviousAnalysisItems (as reanálises
@@ -185,7 +216,9 @@ export default async function MatchPage({ params, searchParams }: PageProps) {
     getEnableUserContext(),
     // Motor (#565): o "Contexto extra" do HERO só vale no code_jev.
     readAnalysisEngine(),
+    liveP,
   ]);
+  const { liveMode, state: inPlayState } = live;
   const latestPred = history[0] ?? null;
 
   // Manchete palpite-first (ADR 0030 / #351): o HERO server-rendered lê o set mais
@@ -220,7 +253,23 @@ export default async function MatchPage({ params, searchParams }: PageProps) {
     hasPrediction: latestPred !== null,
     now,
     timeZone,
+    // Placar, minuto e expulsões do estado ao vivo quando fresco (≤ 10 min); senão o
+    // parcial do sync, como antes. Nunca odd nem modelo (firewall ADR 0030).
+    inPlay: inPlayState,
   });
+  // Cabeçalho acompanhando o jogo: "Atualizar placar" (+ refresh ao voltar pra aba) e,
+  // sem placar ao vivo utilizável, "placar ao vivo indisponível". Some quando o
+  // provider já deu o fim.
+  const heroLive =
+    liveMode &&
+    mayBeLive &&
+    !(inPlayState && isTerminalStatusShort(inPlayState.statusShort))
+      ? {
+          note: heroView.liveScore?.live
+            ? null
+            : "placar ao vivo indisponível",
+        }
+      : null;
 
   // Última análise por MERCADO (#243): uma seção colapsável por mercado (≥2) ou o
   // resultado cru (≤1, idêntico ao atual). ANTERIORES (#204) = as reanálises mais
@@ -266,11 +315,17 @@ export default async function MatchPage({ params, searchParams }: PageProps) {
   // analisáveis. A CTA do HERO fica escondida nesses casos pra não submeter um
   // form que o server rejeitaria; predições/palpites já existentes seguem visíveis.
   // O motivo (ao vivo/adiado/cancelado/encerrado) escolhe a copy do HERO e do aviso.
-  // Sem estado ao vivo (ainda não ligado na página, #580), a fase é o gate de hoje.
-  const phase = matchPhase(match, null, now);
+  // Ao vivo (#580): com a flag ligada, a fase vem do estado lido acima; desligada, é o
+  // gate de hoje (fecha no apito).
+  const phase = matchPhase(match, inPlayState, now, { liveMode });
   const unavailableReason = phase.reason;
   // O que a página libera agora, num lugar só (#576), por capacidade (ADR 0060).
-  const caps = matchCapabilities(phase);
+  // `modelReady: false` fecha a análise e o "Seu palpite" EM JOGO: o backend ao vivo
+  // deles (predictInPlay, user_palpite ao vivo) é o PR D do #580. Antes do apito não
+  // muda nada (o pré-jogo libera tudo). O bolão ao vivo é o PR C (sem poolWindowOpen).
+  const rawCaps = matchCapabilities(phase, { liveMode, modelReady: false });
+  // Até o commit da tabela de mercados ao vivo, o registro também fica no pré-jogo.
+  const caps = { ...rawCaps, registerBets: rawCaps.registerBets && phase.kind === "pre" };
 
   // Fonte e JEV da base do modelo (#555, ADR 0052), lidos do banco (sem odd, sem chamada
   // externa): o rodapé da tabela de mercados. Só em jogo analisável.
@@ -385,6 +440,8 @@ export default async function MatchPage({ params, searchParams }: PageProps) {
         unavailableReason={unavailableReason}
         pool={caps.pool}
         registerBets={caps.registerBets}
+        analyze={caps.analyze}
+        heroLive={heroLive}
         backHref={backHref}
         finalScore={finalScore}
         bestBetEnabled={bestBetEnabled}
@@ -423,6 +480,11 @@ type MatchLayoutProps = {
   unavailableReason: MatchUnavailableReason | null;
   // Atalho "criar bolão" (matchCapabilities.pool).
   pool: boolean;
+  // "Analisar com IA" / "Gerar só o palpite" liberados (matchCapabilities.analyze).
+  analyze: boolean;
+  // Cabeçalho acompanhando o jogo ao vivo (#580): "Atualizar placar" e a nota sem
+  // placar. null = cabeçalho de antes.
+  heroLive: { note: string | null } | null;
   // Painel Suas apostas, a barra do celular e o §3 (matchCapabilities.registerBets).
   registerBets: boolean;
   // Href de "voltar" — recompõe a lista filtrada (/jogos?…) de origem; /jogos
@@ -470,6 +532,8 @@ function MatchLayout({
   unavailableReason,
   pool,
   registerBets,
+  analyze,
+  heroLive,
   backHref,
   finalScore,
   bestBetEnabled,
@@ -504,6 +568,7 @@ function MatchLayout({
         score={finalScore ?? undefined}
         homeHref={homeTeamHref}
         awayHref={awayTeamHref}
+        live={heroLive}
       />
 
       {/* Suas apostas (#556/#576): UM provider envolve a tabela, o painel e o "Seu
@@ -526,6 +591,7 @@ function MatchLayout({
               heroPalpite={heroPalpite}
               matchId={matchId}
               unavailable={unavailableReason}
+              analyzable={analyze}
               fanOutEnabled={bestBetEnabled}
               finalScore={finalScore}
               setId={heroSetId}
@@ -540,7 +606,7 @@ function MatchLayout({
                 />
               }
             />
-            {unavailableReason !== null && sections.length === 0 && (
+            {!analyze && unavailableReason !== null && sections.length === 0 && (
               <NotAnalyzableNotice reason={unavailableReason} score={finalScore} />
             )}
 
