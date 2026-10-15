@@ -13,7 +13,7 @@ import type {
 // sem o par binário, AC4); lê só de `recommendation`/`oddAtRec`, sempre presentes.
 function sectionMeta(view: AnalysisView): string {
   const rec = view.recommendation;
-  if (rec === null) return "sem aposta";
+  if (rec === null) return view.liveLabel ? "leitura ao vivo" : "sem aposta";
   const line = rec.line !== null ? ` ${formatLine(rec.line)}` : "";
   const odd = view.oddAtRec ? ` · ${view.oddAtRec}` : "";
   return `${rec.selectionLabel}${line}${odd}`;

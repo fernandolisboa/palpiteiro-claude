@@ -290,6 +290,15 @@ export default async function MatchPage({ params, searchParams }: PageProps) {
     timeZone,
     displayTeams
   );
+  // "Leituras ao vivo" (#594, PLAN-580 §11): a última leitura ao vivo de cada mercado,
+  // separada da análise de pré-jogo (que segue sendo a última de antes do apito).
+  const liveSections: MarketAnalysisSectionItem[] = toMarketAnalysisSections(
+    history,
+    new Date(),
+    timeZone,
+    displayTeams,
+    { live: true }
+  );
 
   // "Contexto extra (opcional)" no HERO (#565): kill-switch E motor code_jev (a action
   // confere de novo). "O que você acrescentou" vem da análise visível.
@@ -463,6 +472,7 @@ export default async function MatchPage({ params, searchParams }: PageProps) {
         heroView={heroView}
         initialTab={initialTab}
         sections={sections}
+        liveSections={liveSections}
         previousAnalyses={previousAnalyses}
         matchId={match.id}
         fixtureRef={fixtureRef}
@@ -498,6 +508,8 @@ type MatchLayoutProps = {
   // Última análise por mercado (#243): ≤1 → resultado cru (idêntico ao atual); ≥2 →
   // uma seção colapsável por mercado. Vazio → nenhuma análise ainda.
   sections: MarketAnalysisSectionItem[];
+  // Leituras ao vivo (#594): a última de cada mercado, numa seção própria.
+  liveSections: MarketAnalysisSectionItem[];
   // Análises anteriores deste jogo (#204): as reanálises mais antigas (não-latest de
   // cada mercado). Renderizadas numa seção colapsável abaixo das seções por-mercado.
   // Vazio → a seção não renderiza.
@@ -555,6 +567,7 @@ function MatchLayout({
   heroView,
   initialTab,
   sections,
+  liveSections,
   previousAnalyses,
   matchId,
   fixtureRef,
@@ -626,17 +639,20 @@ function MatchLayout({
               finalScore={finalScore}
               setId={heroSetId}
               sharedAt={heroSharedAt}
-              hasAnalyses={sections.length > 0}
+              hasAnalyses={sections.length + liveSections.length > 0}
               contextEnabled={contextEnabled}
               analysis={
                 <FullAnalysis
                   sections={sections}
+                  liveSections={liveSections}
                   previousAnalyses={previousAnalyses}
                   userContext={userContextView}
                 />
               }
             />
-            {!analyze && unavailableReason !== null && sections.length === 0 && (
+            {!analyze &&
+              unavailableReason !== null &&
+              sections.length + liveSections.length === 0 && (
               <NotAnalyzableNotice reason={unavailableReason} score={finalScore} />
             )}
 

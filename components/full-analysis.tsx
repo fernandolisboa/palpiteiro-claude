@@ -26,15 +26,21 @@ import type {
  */
 export function FullAnalysis({
   sections,
+  liveSections = [],
   previousAnalyses,
   userContext,
 }: {
   sections: MarketAnalysisSectionItem[];
+  // "Leituras ao vivo" (#594, PLAN-580 §11): a última leitura ao vivo de cada mercado,
+  // com o selo do momento. Ficam ACIMA e separadas da análise de pré-jogo, que segue
+  // sendo a última de antes do apito.
+  liveSections?: MarketAnalysisSectionItem[];
   previousAnalyses: PreviousAnalysisItem[];
   // "O que você acrescentou" (#565): o contexto extra da análise visível.
   userContext: AnalysisUserContextView | null;
 }) {
-  if (sections.length === 0) return null;
+  if (sections.length === 0 && liveSections.length === 0) return null;
+  const both = sections.length > 0 && liveSections.length > 0;
   return (
     <div className="flex flex-col gap-4">
       {userContext && <AnalysisUserContext view={userContext} />}
@@ -42,11 +48,32 @@ export function FullAnalysis({
         <Info className="size-3 shrink-0" aria-hidden="true" />
         {ANALYSIS_RISK_DISCLAIMER}
       </p>
-      <MarketAnalysisSections
-        sections={sections}
-        layout="flat"
-        showRiskDisclaimer={false}
-      />
+      {liveSections.length > 0 && (
+        <section className="flex flex-col gap-3">
+          <h3 className="text-meta font-medium uppercase tracking-eyebrow text-foreground">
+            Leituras ao vivo
+          </h3>
+          <MarketAnalysisSections
+            sections={liveSections}
+            layout="flat"
+            showRiskDisclaimer={false}
+          />
+        </section>
+      )}
+      {sections.length > 0 && (
+        <section className="flex flex-col gap-3">
+          {both && (
+            <h3 className="text-meta font-medium uppercase tracking-eyebrow text-foreground">
+              Antes do apito
+            </h3>
+          )}
+          <MarketAnalysisSections
+            sections={sections}
+            layout="flat"
+            showRiskDisclaimer={false}
+          />
+        </section>
+      )}
       <PreviousAnalyses items={previousAnalyses} showRiskDisclaimer={false} />
     </div>
   );

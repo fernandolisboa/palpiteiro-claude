@@ -172,6 +172,8 @@ export type OutcomeView = {
   expectedReturn: string; // "+11.4%" | "—"
   breakEven: string; // "1.72" — modelBreakEvenOdd; "—" quando modelProb ≤ 0
   isRecommended: boolean;
+  // Leitura ao vivo (#594): o placar já decide a seleção (0% ou 100%, exatos).
+  decided?: boolean;
 };
 
 // Forma interna do bloco de cenários — 100% strings prontas pra render (célula
@@ -231,6 +233,9 @@ export type AnalysisView = {
   // Motor que produziu a análise ("LLM", "Código + JEV · Dixon-Coles", …). ADR 0041.
   engine: string;
   costUsd: string;
+  // Leitura ao vivo (#594): o selo do momento congelado no carimbo ("ao vivo · 63' ·
+  // 1–0"). Sempre `pass` (sem odd ao vivo). null/ausente = análise de pré-jogo.
+  liveLabel?: string | null;
 };
 
 // Item da seção colapsável "análises anteriores" (#204): uma predição passada

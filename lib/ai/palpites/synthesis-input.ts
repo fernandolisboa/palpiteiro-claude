@@ -74,11 +74,18 @@ export function summarizeAnalysesForSynthesis(
  * O histórico vem em ordem desc de criação. Seleção sem prob gravada (`modelProbKnown`
  * false) vira prob ausente, nunca 0%.
  */
+//
+// Pré-jogo e ao vivo não se misturam (#594): `live: false` (default) lê só as análises
+// de pré-jogo (uma leitura ao vivo nunca entra no palpite de antes do apito);
+// `live: true`, só as leituras ao vivo (o chamador já filtrou as do momento atual).
 export function summarizeSavedAnalysesForSynthesis(
   history: PredictionWithAiCall[],
+  opts: { live?: boolean } = {},
 ): MarketAnalysisSummary[] {
+  const wantLive = opts.live === true;
   const latestByMarket = new Map<string, AnalysisSource>();
   for (const row of history) {
+    if ((row.prediction.isLive === true) !== wantLive) continue;
     const marketKey = row.marketKey ?? "over_under";
     if (latestByMarket.has(marketKey)) continue;
     latestByMarket.set(marketKey, {

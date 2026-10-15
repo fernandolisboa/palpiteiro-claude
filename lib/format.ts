@@ -1,6 +1,7 @@
 import {
   ANALYSIS_ENGINE_LABEL,
   engineFromModelVersion,
+  liveModelFromVersion,
 } from "@/lib/ai/engine/analysis-engine";
 import type { PredictionJudgments } from "@/lib/ai/engine/types";
 import type { SupportedLeague } from "@/lib/providers/sports-data/leagues";
@@ -433,6 +434,9 @@ export function formatAnalysisEngine(
   const engine = engineFromModelVersion(modelVersion);
   if (engine === null) return "motor desconhecido";
   if (engine === "llm") return ANALYSIS_ENGINE_LABEL.llm;
+  // Leitura ao vivo (#594): o código lê a partir do placar e do tempo que falta, sem
+  // JEV nem odd. O λ de base vem do pré-jogo.
+  if (liveModelFromVersion(modelVersion) !== null) return "Código · modelo ao vivo";
   const parts = [ANALYSIS_ENGINE_LABEL.code_jev];
   // jsonb lido do banco sem validação: row antiga ou parcial não pode derrubar a view.
   if (judgments) {

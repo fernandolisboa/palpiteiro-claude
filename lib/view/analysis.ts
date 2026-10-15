@@ -26,7 +26,9 @@ import {
   type Scenarios,
   type ScenarioSide,
 } from "@/lib/odds/scenario";
+import { readLiveStamp } from "@/lib/live/stamp";
 import { getDescriptor } from "@/lib/odds/market-descriptor";
+import { liveStampLabel } from "@/lib/view/live-score";
 import { ownsAiCall } from "@/lib/view/owns-ai-call";
 import { getDisplayPresentation } from "@/lib/view/markets/display";
 import type { MarketPresentation } from "@/lib/view/markets/presentation";
@@ -90,6 +92,10 @@ type PredictionInput = {
     odd: number | null;
     label?: string;
   }[];
+  // Leitura ao vivo (#594, ADR 0060): row com `is_live` e o carimbo cru (`live_state`,
+  // lido por safeParse). Ausente = pré-jogo (byte-idêntico).
+  isLive?: boolean;
+  liveState?: unknown;
 };
 
 type AiCallInput = {
@@ -319,8 +325,17 @@ export function toAnalysisView(
   // único branch de identidade permitido na view (espelha o guard de legacy-write
   // por OVER_UNDER em predict.ts). `recommendedKey` = a selectionKey escolhida ou
   // null em pass. N-vias não tem o framing de break-even binário (R4) → framing/note null.
+  // Leitura ao vivo (#594): sem odd, então sem o caminho binário congelado (que existe
+  // pela paridade das rows antigas e cai fora quando um lado já está decidido, P=100).
+  // Vai pro N-vias, que mostra só a prob. do modelo por seleção.
+  const liveLabel = prediction.isLive
+    ? (() => {
+        const stamp = readLiveStamp(prediction.liveState);
+        return stamp ? liveStampLabel(stamp) : "ao vivo";
+      })()
+    : null;
   const isBinaryFrozen =
-    (prediction.marketKey ?? "over_under") === "over_under";
+    liveLabel === null && (prediction.marketKey ?? "over_under") === "over_under";
   const isNway = !isBinaryFrozen && (prediction.selections?.length ?? 0) >= 2;
 
   // impliedSumTarget/marketKind vêm do descriptor (data-driven): 2 p/ dupla chance
@@ -443,9 +458,11 @@ export function toAnalysisView(
             ? { market: recommendedDynamicLabel, plain: "" }
             : presentation.betSummary(recommendation, line),
         },
-    outcomes:
+    outcomes: markDecided(
       outcomesNway ??
-      (computed === null ? [] : toBinaryOutcomes(computed, presentation, line)),
+        (computed === null ? [] : toBinaryOutcomes(computed, presentation, line)),
+      liveLabel !== null ? prediction.selections : undefined,
+    ),
     minOdd: prediction.minimumOdd !== null ? formatOdd(prediction.minimumOdd) : null,
     stakeUnits,
     kellyInfoUnits,
@@ -469,7 +486,22 @@ export function toAnalysisView(
     model: formatModelName(prediction.modelVersion),
     engine: formatAnalysisEngine(prediction.modelVersion, prediction.judgments),
     costUsd: formatCostUsd(aiCall?.costUsd ?? null),
+    ...(liveLabel !== null ? { liveLabel } : {}),
   };
+}
+
+// Leitura ao vivo (#594): marca a seleção que o placar já decidiu (prob. exata 0 ou
+// 100, gravada assim pelo predictInPlay). Fora do ao vivo, os outcomes passam intactos.
+function markDecided(
+  outcomes: OutcomeView[],
+  liveSelections: PredictionInput["selections"],
+): OutcomeView[] {
+  if (!liveSelections) return outcomes;
+  const probByKey = new Map(liveSelections.map((s) => [s.key, s.modelProbPct]));
+  return outcomes.map((o) => {
+    const p = probByKey.get(o.id);
+    return p === 0 || p === 100 ? { ...o, decided: true } : o;
+  });
 }
 
 // Adapta uma row do DB (PredictionWithAiCall — de getPredictionHistoryForMatch) pra
@@ -502,6 +534,8 @@ export function toAnalysisViewFromPrediction(
       line: row.prediction.marketParams?.line ?? null,
       stakeUnits: row.prediction.stakeUnits,
       selections: row.selections,
+      isLive: row.prediction.isLive === true,
+      liveState: row.prediction.liveState,
     },
     // Mercado não escolhido no best bet code_jev (#512): a ai_call é a narração de
     // outro card → sem custo aqui.
@@ -525,15 +559,22 @@ export function toAnalysisViewFromPrediction(
 //
 // INVARIANTE p/ #243/#244: `sections.length` é a ÚNICA fonte de single-vs-multi —
 // `<= 1` DEVE renderizar o AnalysisResult cru byte-idêntico ao atual (AC3).
+//
+// Pré-jogo e ao vivo NÃO se misturam (#594, PLAN-580 §11): `live: false` (default) =
+// a última análise de PRÉ-JOGO de cada mercado (uma leitura ao vivo nunca a esconde);
+// `live: true` = a última LEITURA AO VIVO de cada mercado, a seção "Leituras ao vivo".
 export function toMarketAnalysisSections(
   history: PredictionWithAiCall[],
   now: Date = new Date(),
   timeZone?: string,
   teams?: TeamLabels,
+  opts: { live?: boolean } = {},
 ): MarketAnalysisSectionItem[] {
+  const wantLive = opts.live === true;
   const seen = new Set<string>();
   const sections: MarketAnalysisSectionItem[] = [];
   for (const row of history) {
+    if ((row.prediction.isLive === true) !== wantLive) continue;
     const marketKey = row.marketKey ?? "over_under";
     if (seen.has(marketKey)) continue;
     seen.add(marketKey);
@@ -573,9 +614,11 @@ export function toPreviousAnalysisItems(
   for (const row of history) {
     const marketKey = row.marketKey ?? "over_under";
     // 1ª aparição do mercado = a última análise dele (vira seção, #243) → não é
-    // "anterior". As demais (reanálises mais antigas) entram aqui.
-    if (!seen.has(marketKey)) {
-      seen.add(marketKey);
+    // "anterior". As demais (reanálises mais antigas) entram aqui. O bucket separa
+    // pré-jogo de ao vivo (#594): cada lado tem a sua seção.
+    const bucket = `${row.prediction.isLive === true ? "live" : "pre"}:${marketKey}`;
+    if (!seen.has(bucket)) {
+      seen.add(bucket);
       continue;
     }
     items.push({

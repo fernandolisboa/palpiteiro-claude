@@ -23,6 +23,9 @@ type HistoryRow = {
     createdAt: Date;
     marketParams: { line?: number | null } | null;
     recommendation?: string | null;
+    // Leitura ao vivo (#594): nunca semeia a chance de uma perna (essa é a de pré-jogo
+    // ou o modelo em jogo calculado agora).
+    isLive?: boolean;
   };
   selections: { key: string; modelProbPct: number; modelProbKnown?: boolean }[];
 };
@@ -35,6 +38,7 @@ export function latestAnalysisByMarket(
 ): Map<string, AnalysisMarket> {
   const out = new Map<string, AnalysisMarket>();
   for (const row of history) {
+    if (row.prediction.isLive === true) continue;
     const marketKey = row.marketKey ?? "over_under";
     if (!SLIP_MARKETS.has(marketKey)) continue;
     let line: number | null = null;

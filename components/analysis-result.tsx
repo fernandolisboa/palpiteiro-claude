@@ -18,6 +18,9 @@ type Props = {
 
 export function AnalysisResult({ view, showRiskDisclaimer = true }: Props) {
   // pass = sem recomendação (recommendation null) — data-driven, não mais via kind.
+  if (view.recommendation === null && view.liveLabel) {
+    return <LiveReading view={view} showRiskDisclaimer={showRiskDisclaimer} />;
+  }
   if (view.recommendation === null) {
     return (
       <div className="flex flex-col rounded-lg border border-dashed border-border-strong bg-card">
@@ -258,5 +261,64 @@ function AnalysisFooter({ view, showRiskDisclaimer }: FooterProps) {
         <span>{view.costUsd}</span>
       </div>
     </>
+  );
+}
+
+// Leitura ao vivo (#594, ADR 0060): sempre sem aposta, porque não há odd ao vivo. O
+// card diz o momento congelado no carimbo e que os números são as chances do modelo
+// para o resultado final, com o placar e o tempo que faltam.
+function LiveReading({
+  view,
+  showRiskDisclaimer,
+}: {
+  view: AnalysisView;
+  showRiskDisclaimer: boolean;
+}) {
+  return (
+    <div className="flex flex-col rounded-lg border border-dashed border-border-strong bg-card">
+      <div className="flex items-center justify-between gap-2 px-4 pt-3 pb-2">
+        <span className="text-meta uppercase tracking-eyebrow text-muted-foreground">
+          leitura ao vivo
+        </span>
+        <span className="font-mono tabular-nums text-meta text-muted-foreground">
+          {view.liveLabel}
+        </span>
+      </div>
+      <Separator />
+      <p className="px-4 py-3 text-body-sm leading-relaxed tracking-tight text-muted-foreground">
+        Sem odd ao vivo, o app não recomenda aposta. As chances abaixo são do modelo
+        para o resultado final, com o placar e o tempo que faltam.
+      </p>
+      {view.outcomes.length > 0 && (
+        <ul className="mx-4 mb-4 grid grid-cols-2 gap-2 sm:grid-cols-3">
+          {view.outcomes.map((o) => (
+            <li
+              key={o.id}
+              className="flex flex-col gap-0.5 rounded-md border border-border-subtle bg-surface-2 px-3 py-2"
+            >
+              <span className="text-meta uppercase tracking-label text-muted-foreground">
+                {o.scenarioLabel}
+              </span>
+              <span className="font-mono text-body-sm font-medium tabular-nums tracking-tight text-foreground">
+                {o.modelProb}
+                {o.decided && (
+                  <span className="pl-1.5 font-sans text-meta font-normal text-muted-foreground">
+                    já decidido
+                  </span>
+                )}
+              </span>
+            </li>
+          ))}
+        </ul>
+      )}
+      <Separator />
+      <div className="px-4 py-3">
+        <p className="text-body-sm leading-relaxed text-foreground tracking-tight">
+          {view.rationale}
+        </p>
+        <KeyFactors items={view.factors} />
+      </div>
+      <AnalysisFooter view={view} showRiskDisclaimer={showRiskDisclaimer} />
+    </div>
   );
 }

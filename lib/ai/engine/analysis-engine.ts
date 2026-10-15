@@ -43,6 +43,17 @@ export function engineFromModelVersion(
 }
 
 /**
+ * Versão do modelo em jogo de uma leitura ao vivo (#594): a tag `live=` que o
+ * predictInPlay grava ("…;engine=code_jev;lambda=…;live=live_model_v1"). null em toda
+ * análise de pré-jogo.
+ */
+export function liveModelFromVersion(modelVersion: string): string | null {
+  const tag = versionTags(modelVersion).find((t) => t.startsWith("live="));
+  const v = tag?.slice("live=".length) ?? "";
+  return v.length > 0 ? v : null;
+}
+
+/**
  * Configuração do motor sem o id do modelo nem a própria tag `engine=` — ex.
  * "lambda=heuristic;judg=jev_judgments_v1;w=judgment_weights_v1". É o que versiona o
  * NÚMERO no code_jev (lá o promptVersion é o do narrador, que só escreve o texto).
