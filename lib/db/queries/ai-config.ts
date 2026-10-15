@@ -296,6 +296,19 @@ export async function getEnableUserContext(): Promise<boolean> {
 }
 
 /**
+ * Kill-switch do modo ao vivo (#580, ADR 0060). Default ON quando não há row. false →
+ * tudo fecha no apito como antes e nada busca o estado ao vivo na API-Football.
+ */
+export async function getEnableLiveMode(): Promise<boolean> {
+  const rows = await db
+    .select({ enabled: aiConfig.enableLiveMode })
+    .from(aiConfig)
+    .where(eq(aiConfig.id, 1))
+    .limit(1);
+  return rows[0]?.enabled ?? true;
+}
+
+/**
  * Motor de análise (ADR 0041 §5, #511): 'llm' (cartucho de mercado decide — caminho
  * de hoje) ou 'code_jev' (código + julgamentos JEV decidem, LLM narra). Sem row ou
  * valor persistido inválido → 'llm'. Editado em /admin/settings via registry

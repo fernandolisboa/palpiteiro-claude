@@ -34,6 +34,7 @@ import {
   pgEnum,
   pgTable,
   primaryKey,
+  smallint,
   text,
   timestamp,
   unique,
@@ -384,6 +385,12 @@ export const predictions = pgTable(
     judgments: jsonb().$type<PredictionJudgments>(),
     modelVersion: text().notNull(),
     promptVersion: text().notNull(),
+    // Leitura ao vivo (#580, ADR 0060): feita com o jogo rolando, sempre `pass`. Fica
+    // FORA da calibração, do dashboard e do CLV (filtro na query, antes do dedup).
+    // `liveState` = o carimbo (minuto, placar, idade do estado), gravado e lido via
+    // lib/live/stamp.ts (Zod na escrita, safeParse na leitura).
+    isLive: boolean().notNull().default(false),
+    liveState: jsonb(),
     createdAt: timestamp({ withTimezone: true }).notNull().defaultNow(),
   },
   (t) => [
@@ -392,6 +399,10 @@ export const predictions = pgTable(
     index("predictions_created_at_idx").on(t.createdAt),
     index("predictions_market_id_idx").on(t.marketId),
     index("predictions_selection_id_idx").on(t.selectionId),
+    check(
+      "predictions_live_state_check",
+      sql`${t.isLive} = false OR ${t.liveState} IS NOT NULL`,
+    ),
   ],
 );
 
@@ -413,7 +424,9 @@ export const predictionSelectionOdds = pgTable(
     selectionId: uuid()
       .notNull()
       .references(() => marketSelections.id, { onDelete: "restrict" }),
-    odd: numeric({ precision: 6, scale: 3 }).notNull(),
+    // NULL só nas leituras ao vivo (#580, ADR 0060): sem odd ao vivo, a row guarda só
+    // a probabilidade do modelo em jogo. Os leitores tratam null de propósito.
+    odd: numeric({ precision: 6, scale: 3 }),
     // Probabilidade do MODELO (LLM) pra esta seleção, 0–100 (#173, decisão B).
     // Alimenta a grade N-vias (edge por seleção) ao reabrir uma predição passada.
     // NULLABLE: o backfill histórico (#162) e o over/under pré-#173 não a gravam;
@@ -510,12 +523,19 @@ export const palpiteSets = pgTable(
     // ADR 0035 §7 (#383): gesto opt-in de compartilhar (LGPD). NULL = privado (default,
     // sem backfill); set = snapshot público resolvível em /p/[id]; clear = kill-switch.
     sharedAt: timestamp({ withTimezone: true }),
+    // Palpite gerado com o jogo rolando (#580, ADR 0060); carimbo via lib/live/stamp.ts.
+    isLive: boolean().notNull().default(false),
+    liveState: jsonb(),
     createdAt: timestamp({ withTimezone: true }).notNull().defaultNow(),
   },
   (t) => [
     index("palpite_sets_match_id_idx").on(t.matchId),
     index("palpite_sets_user_id_idx").on(t.userId),
     index("palpite_sets_created_at_idx").on(t.createdAt),
+    check(
+      "palpite_sets_live_state_check",
+      sql`${t.isLive} = false OR ${t.liveState} IS NOT NULL`,
+    ),
   ],
 );
 
@@ -707,6 +727,10 @@ export const betSlips = pgTable(
     // aposta em texto anteriores ao cupom. stakeUnits = stake informado da combinada.
     mode: text().$type<"simples" | "combinada">(),
     stakeUnits: numeric({ precision: 5, scale: 2 }),
+    // Registro feito com o jogo rolando (#580, ADR 0060): fora do resumo de retorno de
+    // pré-jogo. Carimbo lido no servidor, via lib/live/stamp.ts.
+    isLive: boolean().notNull().default(false),
+    liveState: jsonb(),
     createdAt: timestamp({ withTimezone: true }).notNull().defaultNow(),
   },
   (t) => [
@@ -714,6 +738,10 @@ export const betSlips = pgTable(
     // desc — postgres varre pra trás). E o (matchId) pro read pós-confirm.
     index("bet_slips_user_id_created_at_idx").on(t.userId, t.createdAt),
     index("bet_slips_match_id_idx").on(t.matchId),
+    check(
+      "bet_slips_live_state_check",
+      sql`${t.isLive} = false OR ${t.liveState} IS NOT NULL`,
+    ),
   ],
 );
 
@@ -884,6 +912,10 @@ export const aiConfig = pgTable("ai_config", {
   // análise (#565). Default ON. SET ... = false → o bloco mostra só a leitura pelos
   // botões (grátis, sem IA), que nunca é gateada.
   enableUserContext: boolean().notNull().default(true),
+  // Kill-switch do modo ao vivo (#580, ADR 0060). Default ON. SET ... = false → tudo
+  // fecha no apito como antes (análise, Seu palpite, registro e bolão) e nada busca o
+  // estado ao vivo na API-Football.
+  enableLiveMode: boolean().notNull().default(true),
   updatedByUserId: uuid().references(() => users.id, { onDelete: "set null" }),
   updatedAt: timestamp({ withTimezone: true }).notNull().defaultNow(),
 });
@@ -1035,6 +1067,13 @@ export const friendPools = pgTable(
     entryAmountCents: integer(),
     manualHomeScore: integer(),
     manualAwayScore: integer(),
+    // Janela das apostas ao vivo (#580, ADR 0060): o dono fecha antes
+    // (`betsClosedAt`); o admin estende os próprios bolões (`betsExtendedUntil` e quem).
+    betsClosedAt: timestamp({ withTimezone: true }),
+    betsExtendedUntil: timestamp({ withTimezone: true }),
+    betsExtendedByUserId: uuid().references(() => users.id, {
+      onDelete: "set null",
+    }),
     createdAt: timestamp({ withTimezone: true }).notNull().defaultNow(),
     updatedAt: timestamp({ withTimezone: true }).notNull().defaultNow(),
   },
@@ -1064,9 +1103,19 @@ export const friendPoolEntries = pgTable(
     bettorName: text().notNull(),
     kind: betLegKindEnum().notNull(),
     params: jsonb().$type<BetLegParams>().notNull(),
+    // Aposta anotada com o jogo rolando (#580, ADR 0060): carimbo com minuto e placar
+    // (ou `source: "clock"` sem minuto do provider), via lib/live/stamp.ts.
+    isLive: boolean().notNull().default(false),
+    liveState: jsonb(),
     createdAt: timestamp({ withTimezone: true }).notNull().defaultNow(),
   },
-  (t) => [index("friend_pool_entries_pool_id_idx").on(t.poolId, t.createdAt)],
+  (t) => [
+    index("friend_pool_entries_pool_id_idx").on(t.poolId, t.createdAt),
+    check(
+      "friend_pool_entries_live_state_check",
+      sql`${t.isLive} = false OR ${t.liveState} IS NOT NULL`,
+    ),
+  ],
 );
 
 // Análises do palpite do usuário (#564, ADR 0055): o palpite escolhido nos botões, o
@@ -1099,6 +1148,9 @@ export const userPalpiteAnalyses = pgTable(
     narrationAiCallId: uuid().references(() => aiCalls.id, {
       onDelete: "set null",
     }),
+    // Análise feita com o jogo rolando (#580, ADR 0060); carimbo via lib/live/stamp.ts.
+    isLive: boolean().notNull().default(false),
+    liveState: jsonb(),
     createdAt: timestamp({ withTimezone: true }).notNull().defaultNow(),
   },
   (t) => [
@@ -1107,5 +1159,33 @@ export const userPalpiteAnalyses = pgTable(
       t.matchId,
       t.createdAt,
     ),
+    check(
+      "user_palpite_analyses_live_state_check",
+      sql`${t.isLive} = false OR ${t.liveState} IS NOT NULL`,
+    ),
   ],
 );
+
+// Estado ao vivo do jogo (#580, ADR 0060): placar, minuto e expulsões da API-Football,
+// buscados quando a página do jogo abre. É CACHE entre instâncias (TTL 60 s) com lease
+// na própria row (`claimed_at`, 20 s), não histórico: FK em cascata. Nunca alimenta
+// settlement nem escreve em `matches`. Ler/escrever via lib/db/queries/match-live-states.ts.
+// `fetched_at` = instante da resposta do provider (null antes da 1ª busca bem-sucedida);
+// vermelhos null = sem dado de expulsão.
+export const matchLiveStates = pgTable("match_live_states", {
+  matchId: uuid()
+    .primaryKey()
+    .references(() => matches.id, { onDelete: "cascade" }),
+  provider: text().notNull().default("api_football"),
+  providerFixtureId: integer(),
+  statusShort: text(),
+  elapsed: smallint(),
+  extra: smallint(),
+  homeGoals: smallint(),
+  awayGoals: smallint(),
+  homeRed: smallint(),
+  awayRed: smallint(),
+  fetchedAt: timestamp({ withTimezone: true }),
+  claimedAt: timestamp({ withTimezone: true }),
+  updatedAt: timestamp({ withTimezone: true }).notNull().defaultNow(),
+});

@@ -43,6 +43,7 @@ import {
   getEnableMatchModelJev,
   getEnableOverUnderExtraLines,
   getEnableParallelFanOut,
+  getEnableLiveMode,
   getEnableUserContext,
   setAdminFlag,
 } from "@/lib/db/queries/ai-config";
@@ -59,6 +60,7 @@ const GETTERS = {
   enableParallelFanOut: getEnableParallelFanOut,
   enableMatchModelJev: getEnableMatchModelJev,
   enableUserContext: getEnableUserContext,
+  enableLiveMode: getEnableLiveMode,
   analysisEngine: getAnalysisEngine,
 } satisfies Record<AdminFlagKey, () => Promise<unknown>>;
 

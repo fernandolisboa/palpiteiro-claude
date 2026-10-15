@@ -56,6 +56,8 @@ function set(
       promptVersion: "palpites_v2",
       headline: null,
       sharedAt: null,
+      isLive: false,
+      liveState: null,
       createdAt: new Date(createdAt),
     },
     aiCall,

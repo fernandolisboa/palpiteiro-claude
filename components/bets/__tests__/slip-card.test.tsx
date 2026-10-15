@@ -47,6 +47,8 @@ function slip(
     jointProbPct: null,
     mode: legs.length >= 2 ? "combinada" : "simples",
     stakeUnits: null,
+    isLive: false,
+    liveState: null,
     createdAt: NOW,
     match: {
       homeTeam: "SE Palmeiras",
