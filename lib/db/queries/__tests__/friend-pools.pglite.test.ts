@@ -34,6 +34,8 @@ import {
   insertFriendPool,
   insertFriendPoolEntry,
   listFriendPools,
+  setFriendPoolBetsClosed,
+  setFriendPoolBetsExtended,
   setFriendPoolManualScore,
 } from "@/lib/db/queries/friend-pools";
 import { buildLiveStamp, liveColumns, readLiveStamp } from "@/lib/live/stamp";
@@ -181,5 +183,28 @@ describe("friend_pools (pglite)", () => {
         liveState: null,
       }),
     ).rejects.toThrow();
+  });
+
+  it("fechar (dono) e estender (admin) só no próprio bolão (#580)", async () => {
+    const poolId = await insertFriendPool({ userId: owner, matchId, title: null, entryAmountCents: null });
+    const now = new Date("2026-10-18T19:05:00Z");
+    expect(await setFriendPoolBetsClosed({ poolId, userId: other, now })).toBe(false);
+    expect(await setFriendPoolBetsClosed({ poolId, userId: owner, now })).toBe(true);
+    let pool = (await getFriendPool(poolId, owner))!.pool;
+    expect(pool.betsClosedAt).toEqual(now);
+
+    const until = new Date("2026-10-18T19:50:00Z");
+    const later = new Date("2026-10-18T19:20:00Z");
+    expect(await setFriendPoolBetsExtended({ poolId, userId: other, until, now: later })).toBe(false);
+    expect(await setFriendPoolBetsExtended({ poolId, userId: owner, until, now: later })).toBe(true);
+    pool = (await getFriendPool(poolId, owner))!.pool;
+    expect(pool.betsClosedAt).toBeNull();
+    expect(pool.betsExtendedUntil).toEqual(until);
+    expect(pool.betsExtendedByUserId).toBe(owner);
+
+    // Fechar depois de estender limpa a extensão.
+    await setFriendPoolBetsClosed({ poolId, userId: owner, now: later });
+    pool = (await getFriendPool(poolId, owner))!.pool;
+    expect(pool.betsExtendedUntil).toBeNull();
   });
 });

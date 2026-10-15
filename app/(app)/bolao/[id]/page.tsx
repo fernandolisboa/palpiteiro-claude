@@ -4,7 +4,12 @@ import { Trophy, X } from "lucide-react";
 import { z } from "zod";
 
 import { auth } from "@/auth";
-import { removeFriendPool, removeFriendPoolEntry } from "@/app/actions/friend-pools";
+import {
+  closeFriendPoolBets,
+  extendFriendPoolBets,
+  removeFriendPool,
+  removeFriendPoolEntry,
+} from "@/app/actions/friend-pools";
 import { AddEntryForm, ManualScoreForm } from "@/components/friend-pool-forms";
 import { PageContainer } from "@/components/page-container";
 import { PageHeader } from "@/components/page-header";
@@ -22,8 +27,12 @@ import {
 import { matchUnavailableReason } from "@/lib/live/phase";
 import { MAX_ENTRIES_PER_POOL } from "@/lib/pools/pool-schema";
 import {
+  POOL_EXTEND_PRESETS_MIN,
+  POOL_LIVE_CUTOFF_MINUTE,
   poolBetsOpen,
+  poolClosedByOwner,
   poolEntriesRemovable,
+  poolExtendable,
   poolLiveStateWanted,
   poolManualScoreAllowed,
 } from "@/lib/pools/pool-state";
@@ -35,7 +44,7 @@ import {
   POOL_RISK_NOTE,
   joinNames,
   poolBetShortLabel,
-  poolClosesIn,
+  poolBetsDeadlineLabel,
   poolMatchLabel,
 } from "@/lib/view/friend-pool";
 import { displayMatchTeams, teamPair } from "@/lib/view/team";
@@ -97,8 +106,11 @@ export default async function BolaoDetailPage({ params }: PageProps) {
   // Tirar aposta: só antes do apito, mesmo com as apostas ainda abertas ao vivo.
   const removable = poolEntriesRemovable(match, now);
   const scoreAllowed = poolManualScoreAllowed(pool, match, state, now, live);
-  // Só nas últimas 3h antes do apito (a trava): quanto falta.
-  const closesIn = open ? poolClosesIn(match.kickoffAt, now) : undefined;
+  const closedByOwner = poolClosedByOwner(pool, now);
+  // Prazo das apostas abertas: "fecham aos 15'", "fecham em 8 min", "estendido até 17:40".
+  const deadline = open
+    ? poolBetsDeadlineLabel(pool, match, now, { liveMode, state, timeZone })
+    : undefined;
   const score = resolvePoolScore(pool, match);
   const outcome = computePoolOutcome({
     entries,
@@ -112,6 +124,13 @@ export default async function BolaoDetailPage({ params }: PageProps) {
   const winners = outcome.settled
     ? entries.filter((e) => outcome.hitIds.has(e.id)).map((e) => e.bettorName)
     : [];
+  // "Estender prazo" (ADR 0060 §7): admin, no próprio bolão (só o dono abre esta
+  // página), depois do apito, jogo não terminado e antes do teto de apito + 3h.
+  const canExtend =
+    session.user.role === "admin" &&
+    !removable &&
+    !outcome.settled &&
+    poolExtendable(match, state, now, live);
 
   return (
     <div className="bg-background text-foreground">
@@ -132,9 +151,7 @@ export default async function BolaoDetailPage({ params }: PageProps) {
               {entries.length} {entries.length === 1 ? "aposta" : "apostas"}
               {pool.entryAmountCents !== null &&
                 ` · ${formatBrl(pool.entryAmountCents)} por pessoa · pote ${formatBrl(outcome.potCents ?? 0)}`}
-              {closesIn && (
-                <span className="text-warn-fg"> · apostas fecham {closesIn}</span>
-              )}
+              {deadline && <span className="text-warn-fg"> · apostas {deadline}</span>}
             </>
           }
         />
@@ -179,7 +196,7 @@ export default async function BolaoDetailPage({ params }: PageProps) {
               ? "Jogo adiado. As apostas ficam guardadas; quando ele for jogado, lance o placar aqui."
               : match.status === "cancelled"
                 ? "Jogo cancelado. Não há resultado pra conferir."
-                : "Apostas fechadas. Quando o jogo acabar, o placar aparece aqui sozinho (a atualização roda a cada poucas horas), ou lance o placar abaixo."}
+                : `${closedByOwner ? "Apostas fechadas pelo dono." : "Apostas fechadas."} Quando o jogo acabar, o placar aparece aqui sozinho (a atualização roda a cada poucas horas)${scoreAllowed ? ", ou lance o placar abaixo" : ""}.`}
           </p>
         )}
 
@@ -236,7 +253,52 @@ export default async function BolaoDetailPage({ params }: PageProps) {
         {open && entries.length < MAX_ENTRIES_PER_POOL && (
           <Card className="mb-8 gap-4 px-5 py-5">
             <h2 className="text-body font-medium tracking-tight">Anotar aposta</h2>
+            {liveMode && (
+              <p className="text-muted-foreground text-body-sm tracking-tight">
+                {removable
+                  ? `Depois do apito ainda dá pra anotar até os ${POOL_LIVE_CUTOFF_MINUTE} minutos de jogo, mas tirar aposta, só até o apito.`
+                  : "Com o jogo rolando, cada aposta fica com o minuto e o placar da hora em que foi anotada."}
+              </p>
+            )}
             <AddEntryForm poolId={pool.id} homeTeam={teams.home} awayTeam={teams.away} />
+          </Card>
+        )}
+
+        {open && !outcome.settled && (
+          <details className="mb-8">
+            <summary className="text-muted-foreground cursor-pointer text-meta uppercase tracking-label hover:text-foreground">
+              fechar apostas
+            </summary>
+            <form action={closeFriendPoolBets} className="flex flex-col gap-2 pt-3">
+              <input type="hidden" name="poolId" value={pool.id} />
+              <p className="text-body-sm tracking-tight">
+                Fecha as apostas agora: ninguém mais entra no bolão. Não dá pra reabrir.
+              </p>
+              <Button type="submit" variant="outline" size="sm" className="w-fit">
+                Fechar apostas
+              </Button>
+            </form>
+          </details>
+        )}
+
+        {canExtend && (
+          <Card className="mb-8 gap-3 px-5 py-5">
+            <h2 className="text-body font-medium tracking-tight">Estender prazo</h2>
+            <p className="text-muted-foreground text-body-sm tracking-tight">
+              Deixa anotar aposta por mais um tempo a partir de agora, até 3h depois do
+              apito. Vale também se as apostas já fecharam.
+            </p>
+            <div className="flex flex-wrap gap-2">
+              {POOL_EXTEND_PRESETS_MIN.map((minutes) => (
+                <form key={minutes} action={extendFriendPoolBets}>
+                  <input type="hidden" name="poolId" value={pool.id} />
+                  <input type="hidden" name="minutes" value={minutes} />
+                  <Button type="submit" variant="outline" size="sm" className="tabular-nums">
+                    +{minutes} min
+                  </Button>
+                </form>
+              ))}
+            </div>
           </Card>
         )}
 

@@ -18,6 +18,8 @@ const m = vi.hoisted(() => ({
   deleteFriendPoolEntry: vi.fn(),
   deleteFriendPool: vi.fn(),
   setFriendPoolManualScore: vi.fn(),
+  setFriendPoolBetsClosed: vi.fn(),
+  setFriendPoolBetsExtended: vi.fn(),
 }));
 vi.mock("@/auth", () => ({ auth: m.auth }));
 vi.mock("next/cache", () => ({ revalidatePath: m.revalidatePath }));
@@ -34,11 +36,15 @@ vi.mock("@/lib/db/queries/friend-pools", () => ({
   deleteFriendPoolEntry: m.deleteFriendPoolEntry,
   deleteFriendPool: m.deleteFriendPool,
   setFriendPoolManualScore: m.setFriendPoolManualScore,
+  setFriendPoolBetsClosed: m.setFriendPoolBetsClosed,
+  setFriendPoolBetsExtended: m.setFriendPoolBetsExtended,
 }));
 
 import {
   addFriendPoolEntry,
+  closeFriendPoolBets,
   createFriendPool,
+  extendFriendPoolBets,
   removeFriendPoolEntry,
   setFriendPoolScore,
 } from "@/app/actions/friend-pools";
@@ -283,5 +289,90 @@ describe("setFriendPoolScore", () => {
       userId: OWNER,
       score: { home: 2, away: 1 },
     });
+  });
+});
+
+describe("closeFriendPoolBets (dono)", () => {
+  const fd = () => form({ poolId: POOL_ID });
+
+  it("apostas abertas: grava o fechamento com o dono da sessão", async () => {
+    vi.setSystemTime(at(5));
+    m.getInPlayState.mockResolvedValue(inPlay({ elapsed: 5 }));
+    await closeFriendPoolBets(fd());
+    expect(m.getFriendPool).toHaveBeenCalledWith(POOL_ID, OWNER);
+    expect(m.setFriendPoolBetsClosed).toHaveBeenCalledWith({
+      poolId: POOL_ID,
+      userId: OWNER,
+      now: at(5),
+    });
+  });
+
+  it("já fechadas: não grava de novo", async () => {
+    vi.setSystemTime(at(30));
+    await closeFriendPoolBets(fd());
+    expect(m.setFriendPoolBetsClosed).not.toHaveBeenCalled();
+  });
+
+  it("bolão de outra pessoa: getFriendPool não acha, nada muda", async () => {
+    vi.setSystemTime(at(5));
+    m.getFriendPool.mockResolvedValue(null);
+    await closeFriendPoolBets(fd());
+    expect(m.setFriendPoolBetsClosed).not.toHaveBeenCalled();
+  });
+});
+
+describe("extendFriendPoolBets (admin)", () => {
+  const fd = (minutes = "30") => form({ poolId: POOL_ID, minutes });
+  const asAdmin = () =>
+    m.auth.mockResolvedValue({ user: { id: OWNER, email: "dono@example.com", role: "admin" } });
+
+  it("admin no próprio bolão: estende a partir de agora", async () => {
+    asAdmin();
+    vi.setSystemTime(at(20));
+    m.getInPlayState.mockResolvedValue(inPlay({ elapsed: 20, minuteLabel: "20'" }));
+    await extendFriendPoolBets(fd());
+    expect(m.getFriendPool).toHaveBeenCalledWith(POOL_ID, OWNER);
+    expect(m.setFriendPoolBetsExtended).toHaveBeenCalledWith({
+      poolId: POOL_ID,
+      userId: OWNER,
+      until: at(50),
+      now: at(20),
+    });
+  });
+
+  it("teto: apito + 3h", async () => {
+    asAdmin();
+    vi.setSystemTime(at(170));
+    await extendFriendPoolBets(fd("60"));
+    expect(m.setFriendPoolBetsExtended.mock.calls[0]![0].until).toEqual(at(180));
+  });
+
+  it("não-admin não estende", async () => {
+    vi.setSystemTime(at(20));
+    await extendFriendPoolBets(fd());
+    expect(m.getFriendPool).not.toHaveBeenCalled();
+    expect(m.setFriendPoolBetsExtended).not.toHaveBeenCalled();
+  });
+
+  it("admin não estende o bolão de outra pessoa (getFriendPool filtra pelo dono)", async () => {
+    asAdmin();
+    vi.setSystemTime(at(20));
+    m.getFriendPool.mockImplementation(async (_id: string, userId: string) =>
+      userId === "someone-else" ? pool() : null,
+    );
+    await extendFriendPoolBets(fd());
+    expect(m.getFriendPool).toHaveBeenCalledWith(POOL_ID, OWNER);
+    expect(m.setFriendPoolBetsExtended).not.toHaveBeenCalled();
+  });
+
+  it("preset fora da lista, jogo terminado ou flag OFF: recusa", async () => {
+    asAdmin();
+    vi.setSystemTime(at(20));
+    await extendFriendPoolBets(fd("45"));
+    m.getInPlayState.mockResolvedValue(inPlay({ statusShort: "FT", elapsed: 90 }));
+    await extendFriendPoolBets(fd());
+    m.getEnableLiveMode.mockResolvedValue(false);
+    await extendFriendPoolBets(fd());
+    expect(m.setFriendPoolBetsExtended).not.toHaveBeenCalled();
   });
 });

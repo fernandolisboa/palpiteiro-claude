@@ -9,10 +9,16 @@ import { PageContainer } from "@/components/page-container";
 import { PageHeader } from "@/components/page-header";
 import { Badge } from "@/components/ui/badge";
 import { Card } from "@/components/ui/card";
+import { getEnableLiveMode } from "@/lib/db/queries/ai-config";
 import { listFriendPools, type FriendPoolListRow } from "@/lib/db/queries/friend-pools";
 import { getActiveLeaguesForRequest } from "@/lib/db/queries/league-settings";
 import { getMatchesInRange } from "@/lib/db/queries/matches";
 import { leagueToKey } from "@/lib/format";
+import {
+  IN_PLAY_WINDOW_AFTER_MS,
+  getInPlayStatesForMatches,
+  type InPlayState,
+} from "@/lib/live/in-play-state";
 import { poolPotCents, formatBrl } from "@/lib/pools/winners";
 import { getRequestTimeZone } from "@/lib/server/request-timezone";
 import {
@@ -43,7 +49,7 @@ export default async function BolaoPage({ searchParams }: PageProps) {
   const { jogo } = await searchParams;
   const now = new Date();
   const leagues = await getActiveLeaguesForRequest();
-  const [pools, upcoming, timeZone] = await Promise.all([
+  const [pools, upcoming, timeZone, liveMode] = await Promise.all([
     listFriendPools(userId),
     getMatchesInRange({
       from: now,
@@ -54,7 +60,18 @@ export default async function BolaoPage({ searchParams }: PageProps) {
       limit: PICKER_LIMIT,
     }),
     getRequestTimeZone(),
+    getEnableLiveMode(),
   ]);
+  // Estado ao vivo dos jogos apitados (#580): só as rows, nunca busca no provider.
+  const liveIds = liveMode
+    ? pools.map((r) => r.match).filter((m) => isInLiveWindow(m.kickoffAt, now)).map((m) => m.id)
+    : [];
+  const liveStates =
+    liveIds.length > 0
+      ? await getInPlayStatesForMatches([...new Set(liveIds)], { now }).catch(
+          () => new Map<string, InPlayState>(),
+        )
+      : new Map<string, InPlayState>();
 
   const options = upcoming.map((m) => ({ id: m.id, label: poolMatchLabel(m, now, timeZone) }));
   const defaultMatchId = options.some((o) => o.id === jogo) ? (jogo ?? null) : null;
@@ -84,7 +101,13 @@ export default async function BolaoPage({ searchParams }: PageProps) {
           <ul className="flex flex-col gap-3">
             {pools.map((row) => (
               <li key={row.pool.id}>
-                <PoolRow row={row} now={now} timeZone={timeZone} />
+                <PoolRow
+                  row={row}
+                  now={now}
+                  timeZone={timeZone}
+                  liveMode={liveMode}
+                  state={liveStates.get(row.match.id) ?? null}
+                />
               </li>
             ))}
           </ul>
@@ -106,16 +129,26 @@ const STATUS_TONE: Record<PoolStatusTone, string> = {
   neutral: "border-border bg-transparent text-muted-foreground",
 };
 
+/** Apito já passou e o jogo ainda pode ter estado ao vivo (a janela de busca, 4h). */
+function isInLiveWindow(kickoffAt: Date, now: Date): boolean {
+  const t = now.getTime() - kickoffAt.getTime();
+  return t >= 0 && t <= IN_PLAY_WINDOW_AFTER_MS;
+}
+
 function PoolRow({
   row,
   now,
   timeZone,
+  liveMode,
+  state,
 }: {
   row: FriendPoolListRow;
   now: Date;
   timeZone: string | undefined;
+  liveMode: boolean;
+  state: InPlayState | null;
 }) {
-  const status = poolStatusView(row, now);
+  const status = poolStatusView(row, now, { liveMode, state, timeZone });
   const pot = poolPotCents(row.pool.entryAmountCents, row.entryCount);
   const teams = displayMatchTeams(
     row.match.homeTeam,

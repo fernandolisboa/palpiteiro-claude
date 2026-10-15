@@ -104,6 +104,46 @@ export async function insertFriendPoolEntry(input: {
   await db.insert(friendPoolEntries).values(input);
 }
 
+/**
+ * "Fechar apostas" do dono (#580): grava `bets_closed_at` e limpa a extensão. Só
+ * fecha; reabrir é só pela extensão do admin.
+ */
+export async function setFriendPoolBetsClosed(input: {
+  poolId: string;
+  userId: string;
+  now: Date;
+}): Promise<boolean> {
+  const rows = await db
+    .update(friendPools)
+    .set({ betsClosedAt: input.now, betsExtendedUntil: null, updatedAt: input.now })
+    .where(and(eq(friendPools.id, input.poolId), eq(friendPools.userId, input.userId)))
+    .returning({ id: friendPools.id });
+  return rows.length > 0;
+}
+
+/**
+ * "Estender prazo" do admin (#580), só nos próprios bolões (`userId` = dono): limpa o
+ * fechamento do dono, grava até quando e quem estendeu.
+ */
+export async function setFriendPoolBetsExtended(input: {
+  poolId: string;
+  userId: string;
+  until: Date;
+  now: Date;
+}): Promise<boolean> {
+  const rows = await db
+    .update(friendPools)
+    .set({
+      betsClosedAt: null,
+      betsExtendedUntil: input.until,
+      betsExtendedByUserId: input.userId,
+      updatedAt: input.now,
+    })
+    .where(and(eq(friendPools.id, input.poolId), eq(friendPools.userId, input.userId)))
+    .returning({ id: friendPools.id });
+  return rows.length > 0;
+}
+
 export async function deleteFriendPoolEntry(input: {
   entryId: string;
   poolId: string;

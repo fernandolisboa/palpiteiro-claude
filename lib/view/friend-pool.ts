@@ -5,9 +5,18 @@ import {
   formatKickoffDateTime,
   formatLine,
   formatStartsIn,
+  formatTimeOfDay,
   leagueToKey,
 } from "@/lib/format";
-import { poolBetsOpen } from "@/lib/pools/pool-state";
+import type { LiveStateInput } from "@/lib/live/phase";
+import {
+  POOL_LIVE_CUTOFF_MINUTE,
+  poolBetsOpen,
+  poolClosedByOwner,
+  poolExtensionActive,
+  poolWindow,
+  type PoolControls,
+} from "@/lib/pools/pool-state";
 import { resolvePoolScore } from "@/lib/pools/winners";
 import type { SupportedLeague } from "@/lib/providers/sports-data/leagues";
 import { displayMatchTeams } from "@/lib/view/team";
@@ -77,37 +86,87 @@ export function poolBetShortLabel(
 export type PoolStatusTone = "open" | "soon" | "neutral";
 export type PoolStatusView = { label: string; tone: PoolStatusTone };
 
+type PoolStatusRow = {
+  pool: {
+    manualHomeScore: number | null;
+    manualAwayScore: number | null;
+    betsClosedAt?: Date | null;
+    betsExtendedUntil?: Date | null;
+  };
+  match: {
+    status: string;
+    kickoffAt: Date;
+    homeScore: number | null;
+    awayScore: number | null;
+  };
+};
+
 /**
- * Selo do bolão na lista (#577). Aberto em destaque; nas últimas 3h antes do apito
- * (a trava), âmbar com quanto falta. Sem a hora no selo: a linha do bolão já mostra
- * data e hora do jogo. Placar, adiado, cancelado e "esperando o placar" ficam
- * neutros. Delta puro: não depende de fuso.
+ * O que a tela sabe do jogo ao vivo (#580): a flag, o estado (na lista, só a row; no
+ * detalhe, o relido) e o fuso para a hora da extensão. Sem nada = flag desligada.
+ */
+export type PoolLiveViewOptions = {
+  liveMode?: boolean;
+  state?: LiveStateInput | null;
+  timeZone?: string;
+};
+
+/**
+ * Prazo das apostas ABERTAS, para o selo e o cabeçalho do detalhe (#580, PLAN-580 §10):
+ * "estendido até 17:40" (extensão do admin), "fecham aos 15'" (ao vivo com minuto, ou
+ * nas últimas 3h antes do apito com o modo ao vivo), "fecham em 8 min" (ao vivo pelo
+ * relógio), "fecham em 2h 10min" (flag desligada, últimas 3h antes do apito, como
+ * antes). undefined = aberto sem prazo próximo. Só faz sentido com `poolBetsOpen`.
+ */
+export function poolBetsDeadlineLabel(
+  pool: PoolControls,
+  match: { status: string; kickoffAt: Date },
+  now: Date,
+  { liveMode = false, state = null, timeZone }: PoolLiveViewOptions = {},
+): string | undefined {
+  const live = { liveMode };
+  if (pool.betsExtendedUntil && poolExtensionActive(pool, match, state, now, live)) {
+    return `estendido até ${formatTimeOfDay(pool.betsExtendedUntil, timeZone)}`;
+  }
+  const window = poolWindow(match, state, now, live);
+  switch (window.kind) {
+    case "pre": {
+      const closesIn = poolClosesIn(match.kickoffAt, now);
+      if (!closesIn) return undefined;
+      return liveMode ? `fecham aos ${POOL_LIVE_CUTOFF_MINUTE}'` : `fecham ${closesIn}`;
+    }
+    case "minute":
+      return `fecham aos ${POOL_LIVE_CUTOFF_MINUTE}'`;
+    case "clock": {
+      const left = Math.max(1, Math.ceil((window.closesAt.getTime() - now.getTime()) / 60_000));
+      return `fecham em ${left} min`;
+    }
+    case "closed":
+      return undefined;
+  }
+}
+
+/**
+ * Selo do bolão na lista (#577). Aberto em destaque; com prazo perto (últimas 3h antes
+ * do apito, ou ao vivo), âmbar com o prazo. Sem a data no selo: a linha do bolão já
+ * mostra data e hora do jogo. Placar, adiado, cancelado, "fechadas pelo dono" e
+ * "esperando o placar" ficam neutros.
  */
 export function poolStatusView(
-  row: {
-    pool: {
-      manualHomeScore: number | null;
-      manualAwayScore: number | null;
-      betsClosedAt?: Date | null;
-      betsExtendedUntil?: Date | null;
-    };
-    match: {
-      status: string;
-      kickoffAt: Date;
-      homeScore: number | null;
-      awayScore: number | null;
-    };
-  },
+  row: PoolStatusRow,
   now: Date,
+  opts: PoolLiveViewOptions = {},
 ): PoolStatusView {
   const score = resolvePoolScore(row.pool, row.match);
   if (score) return { label: `placar ${score.home} × ${score.away}`, tone: "neutral" };
   if (row.match.status === "postponed") return { label: "jogo adiado", tone: "neutral" };
   if (row.match.status === "cancelled") return { label: "jogo cancelado", tone: "neutral" };
-  if (poolBetsOpen(row.pool, row.match, null, now)) {
-    const closesIn = poolClosesIn(row.match.kickoffAt, now);
-    return closesIn
-      ? { label: `fecham ${closesIn}`, tone: "soon" }
+  if (poolClosedByOwner(row.pool, now)) return { label: "fechadas pelo dono", tone: "neutral" };
+  const live = { liveMode: opts.liveMode ?? false };
+  if (poolBetsOpen(row.pool, row.match, opts.state ?? null, now, live)) {
+    const deadline = poolBetsDeadlineLabel(row.pool, row.match, now, opts);
+    return deadline
+      ? { label: deadline, tone: "soon" }
       : { label: "apostas abertas", tone: "open" };
   }
   return { label: "esperando o placar", tone: "neutral" };
