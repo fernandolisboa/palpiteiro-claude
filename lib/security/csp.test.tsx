@@ -27,6 +27,7 @@ function directives(csp: string): Map<string, string[]> {
 
 afterEach(() => {
   vi.unstubAllEnvs();
+  vi.unstubAllGlobals();
 });
 
 describe("buildCsp", () => {
@@ -55,6 +56,9 @@ describe("buildCsp", () => {
   it("o script do próprio next-themes não executa (bloco de dados)", () => {
     // O next-themes monta o script por Function.toString(), que o build re-minifica:
     // o hash dele em prod não bate com o de teste. Por isso ele vai como text/plain.
+    // defaultTheme "system": no jsdom (window sem matchMedia) o next-themes consulta o
+    // matchMedia ao renderizar; no servidor de verdade não há window.
+    vi.stubGlobal("matchMedia", () => ({ matches: false }));
     const html = renderToString(
       <ThemeProvider {...THEME_PROVIDER_PROPS}>
         <div />

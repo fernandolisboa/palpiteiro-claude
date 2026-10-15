@@ -14,6 +14,7 @@ import {
   DropdownMenuTrigger,
 } from "@/components/ui/dropdown-menu";
 import { ACCOUNT_NAV } from "@/lib/nav/menu";
+import { userInitials } from "@/lib/view/initials";
 
 export type Viewer = {
   label: string;
@@ -21,11 +22,6 @@ export type Viewer = {
   image: string | null;
   isAdmin: boolean;
 };
-
-export function initialsFrom(value: string): string {
-  const cleaned = value.split("@")[0]?.replace(/[^a-zA-Z]/g, "") ?? "";
-  return (cleaned.slice(0, 2) || "??").toUpperCase();
-}
 
 /** Menu da conta no avatar: perfil e sair. O nome só aparece por extenso no computador. */
 export function AccountMenu({ viewer }: { viewer: Viewer }) {
@@ -35,7 +31,7 @@ export function AccountMenu({ viewer }: { viewer: Viewer }) {
         className="flex items-center gap-2 rounded-sm text-muted-foreground transition-colors hover:text-foreground focus-visible:outline-none focus-visible:ring-[3px] focus-visible:ring-ring/50 data-[state=open]:text-foreground"
       >
         <UserAvatar
-          initials={initialsFrom(viewer.label)}
+          initials={userInitials(viewer.label)}
           hue={258}
           size={26}
           src={viewer.image}

@@ -54,7 +54,7 @@ type CspOptions = {
  * script do próprio next-themes, desligado); lib/security/csp.test.tsx recalcula o hash.
  */
 export const THEME_SCRIPT_HASH =
-  "'sha256-kPeE+QYKJeI7bYNoUML2yPDeVyi/anpwErC98RJAes0='";
+  "'sha256-2XyezJQI49K91vUbtSyi+ib0h96JmrwGl6Q2TcQ61Rc='";
 
 export function buildCsp({ nonce, isDev = false, reportUri }: CspOptions = {}) {
   const scriptSrc = nonce

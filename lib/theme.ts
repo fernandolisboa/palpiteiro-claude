@@ -10,7 +10,8 @@
  */
 export const THEME_PROVIDER_PROPS = {
   attribute: "class",
-  defaultTheme: "dark",
+  // Segue o sistema até o usuário escolher no toggle (#574 linha 28b).
+  defaultTheme: "system",
   enableSystem: true,
   disableTransitionOnChange: true,
   scriptProps: { type: "text/plain" },
@@ -25,4 +26,4 @@ export const THEME_PROVIDER_PROPS = {
  * hash. Mudar uma prop acima pode exigir mudar este script.
  */
 export const THEME_SCRIPT =
-  '(function(){try{var d=document.documentElement,t=localStorage.getItem("theme")||"dark";if(t==="system")t=window.matchMedia("(prefers-color-scheme: dark)").matches?"dark":"light";d.classList.remove("light","dark");d.classList.add(t);if(t==="light"||t==="dark")d.style.colorScheme=t}catch(e){}})()';
+  '(function(){try{var d=document.documentElement,t=localStorage.getItem("theme")||"system";if(t==="system")t=window.matchMedia("(prefers-color-scheme: dark)").matches?"dark":"light";d.classList.remove("light","dark");d.classList.add(t);if(t==="light"||t==="dark")d.style.colorScheme=t}catch(e){}})()';
