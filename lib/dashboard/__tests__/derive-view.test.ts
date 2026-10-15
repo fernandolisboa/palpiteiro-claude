@@ -33,6 +33,7 @@ function row(overrides: Partial<DashboardRow> = {}): DashboardRow {
     impliedProbPct: null,
     closingOdd: null,
     closingOverroundPct: null,
+    isLive: false,
     ...overrides,
   };
 }

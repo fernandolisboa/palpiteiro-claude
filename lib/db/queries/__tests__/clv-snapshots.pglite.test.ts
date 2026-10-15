@@ -220,6 +220,7 @@ describe("getClosingSnapshotForDetail — guarda do drill-down", () => {
       selectionId: ids.ouOver,
       recommendation: "over",
       marketParams: { line: 2.5 },
+      isLive: false,
     });
     expect(c?.oddClose).toBe("1.900");
   });
@@ -232,6 +233,7 @@ describe("getClosingSnapshotForDetail — guarda do drill-down", () => {
       selectionId: ids.ouOver, // mesmo com selectionId, pass não tem CLV
       recommendation: "pass",
       marketParams: { line: 2.5 },
+      isLive: false,
     });
     expect(c).toBeNull();
   });
@@ -245,6 +247,21 @@ describe("getClosingSnapshotForDetail — guarda do drill-down", () => {
         selectionId: ids.ouOver,
         recommendation: "over",
         marketParams: { line: 2.5 },
+        isLive: false,
+      }),
+    ).toBeNull();
+  });
+
+  it("leitura ao vivo (ADR 0060) → null mesmo com seleção e snapshot (guarda)", async () => {
+    expect(
+      await getClosingSnapshotForDetail({
+        id: "p",
+        matchId: ids.matchId,
+        marketId: ids.ouMarketId,
+        selectionId: ids.ouOver,
+        recommendation: "over",
+        marketParams: { line: 2.5 },
+        isLive: true,
       }),
     ).toBeNull();
   });

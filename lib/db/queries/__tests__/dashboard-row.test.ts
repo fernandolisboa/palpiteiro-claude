@@ -36,6 +36,7 @@ function rawRow(
     marketParams: null,
     kickoffAt: new Date("2026-06-01T20:00:00Z"),
     impliedProbPct: "52.00",
+    isLive: false,
     ...overrides,
   };
 }

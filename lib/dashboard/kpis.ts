@@ -47,6 +47,9 @@ export type DashboardRow = {
   marketParams: { line: number } | null;
   kickoffAt: Date;
   impliedProbPct: string | null;
+  // Leitura ao vivo (#580, ADR 0060). As queries do dashboard já filtram por padrão;
+  // o CLV ainda confere (guarda explícita em enrichDashboardRowsWithClosing).
+  isLive: boolean;
   // ENRIQUECIDOS pós-dedup (null na query; preenchidos por
   // enrichDashboardRowsWithClosing). null = sem closing line capturada perto do KO
   // → CLV null (honesto). overroundPct é do MERCADO COMPLETO (alimenta o CLV no-vig).

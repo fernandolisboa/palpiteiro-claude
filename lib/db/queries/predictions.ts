@@ -354,6 +354,8 @@ export type RecentPredictionRow = {
   marketParams: DbPrediction["marketParams"];
   selectionLabel: string | null;
   edgePct: DbPrediction["edgePct"];
+  // Leitura ao vivo (#580, ADR 0060): o cartão mostra o selo. Sem filtro aqui.
+  isLive: boolean;
   createdAt: Date;
 };
 
@@ -393,6 +395,7 @@ export async function getRecentPredictedMatchesByUser(
       marketParams: predictions.marketParams,
       selectionLabel: marketSelections.label,
       edgePct: predictions.edgePct,
+      isLive: predictions.isLive,
       createdAt: predictions.createdAt,
     })
     .from(predictions)

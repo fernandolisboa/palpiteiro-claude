@@ -1,4 +1,4 @@
-import { and, desc, eq } from "drizzle-orm";
+import { and, desc, eq, type SQL } from "drizzle-orm";
 
 import {
   aiCalls,
@@ -74,10 +74,22 @@ export function toDashboardRow({
   };
 }
 
+export type DashboardRowsOptions = {
+  /**
+   * Leituras ao vivo (#580, ADR 0060)? Default `false`: só pré-jogo. O filtro fica NA
+   * QUERY, antes do `keepLatestPerMatch`: uma leitura ao vivo (`pass`) do mesmo jogo e
+   * mercado, mais nova, apagaria a aposta pré-jogo no dedup (KPIs, CLV, gate do Kelly).
+   */
+  live?: boolean;
+};
+
 // Select compartilhado das rows do dashboard; `userId` null = todos (só admin).
 async function selectDashboardRows(
   userId: string | null,
+  { live = false }: DashboardRowsOptions = {},
 ): Promise<DashboardRow[]> {
+  const filters: SQL[] = [eq(predictions.isLive, live)];
+  if (userId !== null) filters.push(eq(predictions.userId, userId));
   const rows = await db
     .select({
       predictionId: predictions.id,
@@ -104,6 +116,7 @@ async function selectDashboardRows(
       marketParams: predictions.marketParams,
       kickoffAt: matches.kickoffAt,
       impliedProbPct: predictions.impliedProbPct,
+      isLive: predictions.isLive,
     })
     .from(predictions)
     .innerJoin(matches, eq(predictions.matchId, matches.id))
@@ -113,7 +126,7 @@ async function selectDashboardRows(
       predictionOutcomes,
       eq(predictionOutcomes.predictionId, predictions.id),
     )
-    .where(userId === null ? undefined : eq(predictions.userId, userId))
+    .where(and(...filters))
     .orderBy(desc(predictions.createdAt));
 
   return rows.map(toDashboardRow);
@@ -131,8 +144,9 @@ async function selectDashboardRows(
  */
 export async function getUserDashboardRows(
   userId: string,
+  options: DashboardRowsOptions = {},
 ): Promise<DashboardRow[]> {
-  return selectDashboardRows(userId);
+  return selectDashboardRows(userId, options);
 }
 
 /**
@@ -140,8 +154,10 @@ export async function getUserDashboardRows(
  * admin (gate do Kelly em /admin/calibration, ADR 0039): o CLV mede o modelo, não
  * o usuário. Nunca usar numa página de usuário (quebra a privacidade per-user).
  */
-export async function getAllDashboardRows(): Promise<DashboardRow[]> {
-  return selectDashboardRows(null);
+export async function getAllDashboardRows(
+  options: DashboardRowsOptions = {},
+): Promise<DashboardRow[]> {
+  return selectDashboardRows(null, options);
 }
 
 export type DashboardDetail = {

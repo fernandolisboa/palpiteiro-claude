@@ -6,9 +6,9 @@ import {
 
 /**
  * Anexa a closing line (CLV, #180) às rows do dashboard. Busca SÓ pras rows que o
- * dashboard de fato conta — deduped por (jogo, mercado) (ADR 0020) e non-pass — numa
- * única query. As rows do conjunto cheio recebem closingOdd/closingOverroundPct
- * quando há captura na janela [KO−40min, KO]; o resto fica null (CLV null = honesto,
+ * dashboard de fato conta — deduped por (jogo, mercado) (ADR 0020), non-pass e de
+ * pré-jogo (uma leitura ao vivo nunca entra no CLV, ADR 0060) — numa única query. As
+ * rows do conjunto cheio recebem closingOdd/closingOverroundPct quando há captura na janela [KO−40min, KO]; o resto fica null (CLV null = honesto,
  * sem closing genuíno perto do KO). `deriveDashboardView` re-deduplica idempotente.
  *
  * Async + fora do `deriveDashboardView` (que é puro/sync): o enrich roda na page,
@@ -22,6 +22,7 @@ export async function enrichDashboardRowsWithClosing(
     .filter(
       (r): r is DashboardRow & { marketId: string; selectionId: string } =>
         r.recommendation !== "pass" &&
+        !r.isLive &&
         r.selectionId !== null &&
         r.marketId !== null,
     )
