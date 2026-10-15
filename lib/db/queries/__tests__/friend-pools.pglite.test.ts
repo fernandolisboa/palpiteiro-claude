@@ -36,6 +36,7 @@ import {
   listFriendPools,
   setFriendPoolManualScore,
 } from "@/lib/db/queries/friend-pools";
+import { buildLiveStamp, liveColumns, readLiveStamp } from "@/lib/live/stamp";
 
 let owner = "";
 let other = "";
@@ -144,5 +145,41 @@ describe("friend_pools (pglite)", () => {
       sql`select count(*)::int as n from friend_pool_entries where pool_id = ${poolId}`,
     );
     expect((left.rows[0] as { n: number }).n).toBe(0);
+  });
+
+  it("aposta ao vivo grava o carimbo (#580) e o CHECK veta is_live sem carimbo", async () => {
+    const poolId = await insertFriendPool({ userId: owner, matchId, title: null, entryAmountCents: null });
+    const stamp = buildLiveStamp({
+      source: "api_football",
+      status: "1H",
+      elapsed: 12,
+      extra: null,
+      minuteLabel: "12'",
+      score: { home: 1, away: 0 },
+      red: null,
+      fetchedAt: new Date("2026-10-18T19:12:00Z"),
+      recordedAt: new Date("2026-10-18T19:12:30Z"),
+    });
+    await insertFriendPoolEntry({
+      poolId,
+      bettorName: "Eva",
+      kind: "exact_score",
+      params: { home: 2, away: 1 },
+      ...liveColumns(stamp),
+    });
+    const [entry] = (await getFriendPool(poolId, owner))!.entries;
+    expect(entry!.isLive).toBe(true);
+    expect(readLiveStamp(entry!.liveState)).toEqual(stamp);
+
+    await expect(
+      realDb.insert(schema.friendPoolEntries).values({
+        poolId,
+        bettorName: "Fábio",
+        kind: "btts",
+        params: { selection: "yes" },
+        isLive: true,
+        liveState: null,
+      }),
+    ).rejects.toThrow();
   });
 });

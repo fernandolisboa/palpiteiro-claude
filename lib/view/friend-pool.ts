@@ -85,7 +85,12 @@ export type PoolStatusView = { label: string; tone: PoolStatusTone };
  */
 export function poolStatusView(
   row: {
-    pool: { manualHomeScore: number | null; manualAwayScore: number | null };
+    pool: {
+      manualHomeScore: number | null;
+      manualAwayScore: number | null;
+      betsClosedAt?: Date | null;
+      betsExtendedUntil?: Date | null;
+    };
     match: {
       status: string;
       kickoffAt: Date;
@@ -99,7 +104,7 @@ export function poolStatusView(
   if (score) return { label: `placar ${score.home} × ${score.away}`, tone: "neutral" };
   if (row.match.status === "postponed") return { label: "jogo adiado", tone: "neutral" };
   if (row.match.status === "cancelled") return { label: "jogo cancelado", tone: "neutral" };
-  if (poolBetsOpen(row.match, now)) {
+  if (poolBetsOpen(row.pool, row.match, null, now)) {
     const closesIn = poolClosesIn(row.match.kickoffAt, now);
     return closesIn
       ? { label: `fecham ${closesIn}`, tone: "soon" }

@@ -6,6 +6,7 @@ import { z } from "zod";
 
 import { auth } from "@/auth";
 import { isEmailAllowed } from "@/lib/auth/whitelist";
+import { getEnableLiveMode } from "@/lib/db/queries/ai-config";
 import {
   deleteFriendPool,
   deleteFriendPoolEntry,
@@ -14,8 +15,12 @@ import {
   insertFriendPoolEntry,
   setFriendPoolManualScore,
 } from "@/lib/db/queries/friend-pools";
-import { getMatchById } from "@/lib/db/queries/matches";
+import { getMatchById, type DbMatch } from "@/lib/db/queries/matches";
 import { getUserAccessState } from "@/lib/db/queries/users";
+import { isLiveStateActionable, IN_PLAY_ACT_MAX_AGE_MS } from "@/lib/live/freshness";
+import { getInPlayState, type InPlayState } from "@/lib/live/in-play-state";
+import { matchUnavailableReason } from "@/lib/live/phase";
+import { buildLiveStamp, liveColumns, type LiveStamp } from "@/lib/live/stamp";
 import {
   CreatePoolSchema,
   MAX_ENTRIES_PER_POOL,
@@ -23,17 +28,24 @@ import {
   parseManualScore,
   parsePoolBet,
 } from "@/lib/pools/pool-schema";
-import { poolBetsOpen } from "@/lib/pools/pool-state";
+import {
+  poolBetsOpen,
+  poolEntriesRemovable,
+  poolManualScoreAllowed,
+  poolWindowOpen,
+} from "@/lib/pools/pool-state";
 
-// Bolão entre amigos (#567). Só escrita no nosso DB: sem LLM, sem Odds API, sem
-// provider. O dono vem SEMPRE do auth(); ids do form só endereçam, as queries filtram
-// por userId.
+// Bolão entre amigos (#567). Escrita só no nosso DB: sem LLM, sem Odds API. O dono vem
+// SEMPRE do auth(); ids do form só endereçam, as queries filtram por userId. Com o
+// modo ao vivo (#580, ADR 0060 §7), depois do apito o estado do jogo é relido AQUI no
+// servidor (`getInPlayState`, que pode buscar na API-Football); nada de minuto ou
+// placar vem do cliente.
 
 export type PoolActionResult = { ok: true } | { ok: false; error: string };
 
 const IdSchema = z.uuid();
 
-async function requireUserId(): Promise<string | { error: string }> {
+async function requireUser(): Promise<{ id: string; role: "admin" | "user" } | { error: string }> {
   const session = await auth();
   if (!session?.user?.id) return { error: "Faça login para usar o bolão." };
   const access = await getUserAccessState(session.user.id);
@@ -41,7 +53,80 @@ async function requireUserId(): Promise<string | { error: string }> {
   if (!access.allowed && !isEmailAllowed(session.user.email)) {
     return { error: "Seu acesso está bloqueado. Fale com o administrador." };
   }
-  return session.user.id;
+  return { id: session.user.id, role: session.user.role === "admin" ? "admin" : "user" };
+}
+
+async function requireUserId(): Promise<string | { error: string }> {
+  const user = await requireUser();
+  return "error" in user ? user : user.id;
+}
+
+type PoolLiveContext = { liveMode: boolean; state: InPlayState | null };
+
+/**
+ * Flag e estado ao vivo para as regras do bolão. Antes do apito (ou com a flag
+ * desligada) não lê estado nenhum. Depois, relê no servidor aceitando uma row de até
+ * 2 min; mais velha, `getInPlayState` tenta buscar. Falha nunca bloqueia: sem estado,
+ * as regras caem no relógio (apito + 15 min).
+ */
+async function readPoolLiveContext(match: DbMatch, now: Date): Promise<PoolLiveContext> {
+  const liveMode = await getEnableLiveMode();
+  if (!liveMode || matchUnavailableReason(match.status, match.kickoffAt, now) === null) {
+    return { liveMode, state: null };
+  }
+  try {
+    const state = await getInPlayState(match, { now, maxAgeMs: IN_PLAY_ACT_MAX_AGE_MS });
+    return { liveMode, state };
+  } catch (err) {
+    console.warn(
+      JSON.stringify({
+        scope: "friend-pools",
+        event: "in_play_state_failed",
+        matchId: match.id,
+        message: err instanceof Error ? err.message : String(err),
+      }),
+    );
+    return { liveMode, state: null };
+  }
+}
+
+/**
+ * Carimbo da aposta anotada depois do apito (ADR 0060 §7): minuto e placar do estado
+ * lido no servidor quando ele tem no máximo 2 min; senão o carimbo de relógio, sem
+ * placar (o bolão não depende do modelo, então não recusa). Antes do apito: `null`.
+ */
+function poolEntryStamp(match: DbMatch, ctx: PoolLiveContext, now: Date): LiveStamp | null {
+  if (matchUnavailableReason(match.status, match.kickoffAt, now) === null) return null;
+  const clock = (): LiveStamp =>
+    buildLiveStamp({
+      source: "clock",
+      status: null,
+      elapsed: null,
+      extra: null,
+      minuteLabel: null,
+      score: null,
+      red: null,
+      fetchedAt: null,
+      recordedAt: now,
+    });
+  const s = ctx.state;
+  if (s === null || !isLiveStateActionable(s.fetchedAt, now)) return clock();
+  try {
+    return buildLiveStamp({
+      source: "api_football",
+      status: s.statusShort,
+      elapsed: s.elapsed,
+      extra: s.extra,
+      minuteLabel: s.minuteLabel,
+      score: s.score,
+      red: s.red,
+      fetchedAt: s.fetchedAt,
+      recordedAt: now,
+    });
+  } catch {
+    // Payload do provider fora dos limites do carimbo: anota pelo relógio, sem travar.
+    return clock();
+  }
 }
 
 function field(formData: FormData, name: string): string {
@@ -73,8 +158,15 @@ export async function createFriendPool(
 
   const match = await getMatchById(parsed.data.matchId);
   if (!match) return { ok: false, error: "Jogo não encontrado." };
-  if (!poolBetsOpen(match)) {
-    return { ok: false, error: "Esse jogo já começou. Escolha um que ainda não começou." };
+  const now = new Date();
+  const ctx = await readPoolLiveContext(match, now);
+  if (!poolWindowOpen(match, ctx.state, now, { liveMode: ctx.liveMode })) {
+    return {
+      ok: false,
+      error: ctx.liveMode
+        ? "As apostas desse jogo já fecharam (o bolão aceita apostas até os 15 minutos de jogo). Escolha outro jogo."
+        : "Esse jogo já começou. Escolha um que ainda não começou.",
+    };
   }
 
   const id = await insertFriendPool({ userId, ...parsed.data });
@@ -103,20 +195,32 @@ export async function addFriendPoolEntry(
 
   const pool = await getFriendPool(poolId.data, userId);
   if (!pool) return { ok: false, error: "Bolão não encontrado." };
-  if (!poolBetsOpen(pool.match)) {
-    return { ok: false, error: "O jogo já começou: as apostas deste bolão fecharam." };
+  const now = new Date();
+  const ctx = await readPoolLiveContext(pool.match, now);
+  if (!poolBetsOpen(pool.pool, pool.match, ctx.state, now, { liveMode: ctx.liveMode })) {
+    return {
+      ok: false,
+      error: ctx.liveMode
+        ? "As apostas deste bolão fecharam."
+        : "O jogo já começou: as apostas deste bolão fecharam.",
+    };
   }
   if (pool.entries.length >= MAX_ENTRIES_PER_POOL) {
     return { ok: false, error: `O bolão aceita até ${MAX_ENTRIES_PER_POOL} apostas.` };
   }
 
-  await insertFriendPoolEntry({ poolId: poolId.data, bettorName, ...bet });
+  await insertFriendPoolEntry({
+    poolId: poolId.data,
+    bettorName,
+    ...bet,
+    ...liveColumns(poolEntryStamp(pool.match, ctx, now)),
+  });
   revalidatePath(`/bolao/${poolId.data}`);
   return { ok: true };
 }
 
-// Tirar aposta só com as apostas abertas: depois do apito, tirar quem perdeu mudaria o
-// pote e a parte de cada ganhador.
+// Tirar aposta só antes do apito, com ou sem modo ao vivo (ADR 0060 §7): depois dele,
+// tirar quem está perdendo mudaria o pote e a parte de cada ganhador.
 export async function removeFriendPoolEntry(formData: FormData): Promise<void> {
   const poolId = IdSchema.safeParse(field(formData, "poolId"));
   const entryId = IdSchema.safeParse(field(formData, "entryId"));
@@ -124,7 +228,7 @@ export async function removeFriendPoolEntry(formData: FormData): Promise<void> {
   const userId = await requireUserId();
   if (typeof userId !== "string") return;
   const pool = await getFriendPool(poolId.data, userId);
-  if (!pool || !poolBetsOpen(pool.match)) return;
+  if (!pool || !poolEntriesRemovable(pool.match)) return;
   await deleteFriendPoolEntry({ entryId: entryId.data, poolId: poolId.data, userId });
   revalidatePath(`/bolao/${poolId.data}`);
 }
@@ -148,8 +252,12 @@ export async function setFriendPoolScore(
 
   const pool = await getFriendPool(poolId.data, userId);
   if (!pool) return { ok: false, error: "Bolão não encontrado." };
-  if (!clear && poolBetsOpen(pool.match)) {
-    return { ok: false, error: "O placar só pode ser lançado depois que o jogo começa." };
+  if (!clear) {
+    const now = new Date();
+    const ctx = await readPoolLiveContext(pool.match, now);
+    if (!poolManualScoreAllowed(pool.pool, pool.match, ctx.state, now, { liveMode: ctx.liveMode })) {
+      return { ok: false, error: "O placar só pode ser lançado depois que as apostas fecham." };
+    }
   }
 
   await setFriendPoolManualScore({ poolId: poolId.data, userId, score });

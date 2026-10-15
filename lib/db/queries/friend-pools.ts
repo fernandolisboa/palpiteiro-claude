@@ -7,6 +7,7 @@ import {
   type BetLegParams,
 } from "@/db/schema";
 import { db } from "@/lib/db";
+import type { LiveStamp } from "@/lib/live/stamp";
 import type { PoolBetKind } from "@/lib/pools/pool-schema";
 
 // Bolão entre amigos (#567). Toda leitura e escrita filtra pelo `userId` da sessão
@@ -88,13 +89,17 @@ export async function insertFriendPool(input: {
 
 /**
  * Grava a aposta de um apostador. O chamador já carregou o bolão com
- * `getFriendPool(poolId, userId)` (dono conferido, jogo não começou, teto de apostas).
+ * `getFriendPool(poolId, userId)` (dono conferido, apostas abertas, teto de apostas).
+ * Anotada ao vivo (#580): `isLive` + `liveState` vêm juntos de `liveColumns(stamp)`
+ * (CHECK `is_live = false OR live_state IS NOT NULL`).
  */
 export async function insertFriendPoolEntry(input: {
   poolId: string;
   bettorName: string;
   kind: PoolBetKind;
   params: BetLegParams;
+  isLive?: boolean;
+  liveState?: LiveStamp | null;
 }): Promise<void> {
   await db.insert(friendPoolEntries).values(input);
 }

@@ -11,10 +11,22 @@ import { PageHeader } from "@/components/page-header";
 import { ResultBadge } from "@/components/result-badge";
 import { Button } from "@/components/ui/button";
 import { Card } from "@/components/ui/card";
-import { getFriendPool } from "@/lib/db/queries/friend-pools";
+import { getEnableLiveMode } from "@/lib/db/queries/ai-config";
+import { getFriendPool, type FriendPoolDetail } from "@/lib/db/queries/friend-pools";
 import { leagueToKey } from "@/lib/format";
+import {
+  getInPlayState,
+  getInPlayStatesForMatches,
+  type InPlayState,
+} from "@/lib/live/in-play-state";
+import { matchUnavailableReason } from "@/lib/live/phase";
 import { MAX_ENTRIES_PER_POOL } from "@/lib/pools/pool-schema";
-import { poolBetsOpen } from "@/lib/pools/pool-state";
+import {
+  poolBetsOpen,
+  poolEntriesRemovable,
+  poolLiveStateWanted,
+  poolManualScoreAllowed,
+} from "@/lib/pools/pool-state";
 import { computePoolOutcome, formatBrl, resolvePoolScore } from "@/lib/pools/winners";
 import { getRequestTimeZone } from "@/lib/server/request-timezone";
 import {
@@ -35,26 +47,56 @@ export const dynamic = "force-dynamic";
 
 type PageProps = { params: Promise<{ id: string }> };
 
+/**
+ * Estado ao vivo do jogo do bolão (#580, PLAN-580 §10). Antes do apito, ou com a flag
+ * desligada, nenhum. Depois, lê a row (sem buscar) e só chama `getInPlayState` (que
+ * pode ir à API-Football, cache de 1 min) enquanto o bolão ainda pode estar aberto.
+ * Falha não derruba a página: as regras caem no relógio.
+ */
+async function poolInPlayState(
+  detail: FriendPoolDetail,
+  liveMode: boolean,
+  now: Date,
+): Promise<InPlayState | null> {
+  const { pool, match } = detail;
+  if (!liveMode || matchUnavailableReason(match.status, match.kickoffAt, now) === null) {
+    return null;
+  }
+  try {
+    const row = (await getInPlayStatesForMatches([match.id], { now })).get(match.id) ?? null;
+    if (!poolLiveStateWanted(pool, match, row, now, { liveMode })) return row;
+    return (await getInPlayState(match, { now })) ?? row;
+  } catch {
+    return null;
+  }
+}
+
 export default async function BolaoDetailPage({ params }: PageProps) {
   const session = await auth();
   if (!session?.user?.id) redirect("/signin");
 
   const { id } = await params;
   if (!z.uuid().safeParse(id).success) notFound();
-  const [detail, timeZone] = await Promise.all([
+  const [detail, timeZone, liveMode] = await Promise.all([
     getFriendPool(id, session.user.id),
     getRequestTimeZone(),
+    getEnableLiveMode(),
   ]);
   if (!detail) notFound();
 
   const { pool, match, entries } = detail;
   const now = new Date();
+  const state = await poolInPlayState(detail, liveMode, now);
+  const live = { liveMode };
   // Nomes curtos de exibição (#578). Os picks guardam chaves (home/draw/away), nunca o nome.
   const teams = displayMatchTeams(match.homeTeam, match.awayTeam, leagueToKey(match.league));
   // Siglas (desempatadas) pro placar na lista de apostadores (#577).
   const pair = teamPair(match.homeTeam, match.awayTeam, leagueToKey(match.league));
   const codes = { home: pair.home.short, away: pair.away.short };
-  const open = poolBetsOpen(match, now);
+  const open = poolBetsOpen(pool, match, state, now, live);
+  // Tirar aposta: só antes do apito, mesmo com as apostas ainda abertas ao vivo.
+  const removable = poolEntriesRemovable(match, now);
+  const scoreAllowed = poolManualScoreAllowed(pool, match, state, now, live);
   // Só nas últimas 3h antes do apito (a trava): quanto falta.
   const closesIn = open ? poolClosesIn(match.kickoffAt, now) : undefined;
   const score = resolvePoolScore(pool, match);
@@ -169,7 +211,7 @@ export default async function BolaoDetailPage({ params }: PageProps) {
                       {bet}
                     </span>
                     {hit !== null && <ResultBadge result={hit ? "won" : "lost"} />}
-                    {open && (
+                    {removable && (
                       <form action={removeFriendPoolEntry}>
                         <input type="hidden" name="poolId" value={pool.id} />
                         <input type="hidden" name="entryId" value={e.id} />
@@ -198,7 +240,7 @@ export default async function BolaoDetailPage({ params }: PageProps) {
           </Card>
         )}
 
-        {!open && match.status !== "cancelled" && (
+        {scoreAllowed && match.status !== "cancelled" && (
           <Card className="mb-8 gap-3 px-5 py-5">
             <h2 className="text-body font-medium tracking-tight">Placar final</h2>
             <p className="text-muted-foreground text-body-sm tracking-tight">
