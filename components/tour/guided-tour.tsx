@@ -29,6 +29,7 @@ import {
   stateAfterChapter,
   TOUR_CHAPTERS,
   TOUR_FORCE_PARAM,
+  TOUR_TAB_EVENT,
   type TourChapter,
   type TourState,
   type TourStep,
@@ -76,11 +77,18 @@ function findTarget(name: string): HTMLElement | null {
   return null;
 }
 
-/** Índices dos passos que dá pra mostrar agora (sem alvo = centralizado, sempre). */
+/** O passo dá pra mostrar agora? Sem alvo = centralizado, sempre. Passo com aba (página
+ * do jogo, #576): basta o alvo existir no DOM — está na aba inativa, escondido, e o tour
+ * abre a aba antes do spotlight. */
+function stepAvailable(step: TourStep): boolean {
+  if (!step.target) return true;
+  if (step.tab) return document.querySelector(`[data-tour="${step.target}"]`) !== null;
+  return findTarget(step.target) !== null;
+}
+
+/** Índices dos passos que dá pra mostrar agora. */
 function availableSteps(steps: readonly TourStep[]): number[] {
-  return steps.flatMap((step, i) =>
-    !step.target || findTarget(step.target) ? [i] : [],
-  );
+  return steps.flatMap((step, i) => (stepAvailable(step) ? [i] : []));
 }
 
 function prefersReducedMotion(): boolean {
@@ -146,6 +154,19 @@ export function GuidedTour({ chapter, userId, serverState, forceStart }: Props) 
     [persist],
   );
 
+  // Muda de passo. Passo com aba: primeiro pede a aba (o MatchTabs troca com flushSync,
+  // então o painel já está visível quando o efeito de troca de passo procura o alvo).
+  // Chamado só de clique e timer, nunca de dentro de um efeito: lá o flushSync do
+  // ouvinte não é garantido.
+  const goTo = useCallback(
+    (i: number) => {
+      const tab = steps[i]?.tab;
+      if (tab) window.dispatchEvent(new CustomEvent(TOUR_TAB_EVENT, { detail: tab }));
+      setIndex(i);
+    },
+    [steps],
+  );
+
   // Partida: automática (primeira vez) ou forçada pelo link "rever o tour". O link
   // vive no menu do topo (#553), então pode ser clicado já nesta página: o efeito
   // reage ao `?tour=1` aparecendo na URL, sem precisar remontar o componente.
@@ -188,7 +209,7 @@ export function GuidedTour({ chapter, userId, serverState, forceStart }: Props) 
       const first = availableSteps(steps)[0];
       if (first === undefined) return;
       returnFocusRef.current = document.activeElement as HTMLElement | null;
-      setIndex(first);
+      goTo(first);
     }, AUTO_START_DELAY_MS);
     // Reage só ao param e à prop de força; capítulo, usuário e estado são do render inicial.
     // eslint-disable-next-line react-hooks/exhaustive-deps
@@ -323,7 +344,7 @@ export function GuidedTour({ chapter, userId, serverState, forceStart }: Props) 
     // Recalcula: o alvo do próximo passo pode ter aparecido/sumido desde a última troca.
     const nextIndex = availableSteps(steps).find((i) => i > index);
     if (nextIndex === undefined) close(stateAfterChapter(chapter));
-    else setIndex(nextIndex);
+    else goTo(nextIndex);
   };
 
   // Passo interativo (abrir um jogo): o botão principal faz o clique por quem usa
@@ -421,7 +442,7 @@ export function GuidedTour({ chapter, userId, serverState, forceStart }: Props) 
                 type="button"
                 variant="outline"
                 size="sm"
-                onClick={() => setIndex(prevIndex)}
+                onClick={() => goTo(prevIndex)}
               >
                 Voltar
               </Button>

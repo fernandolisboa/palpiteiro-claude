@@ -4,6 +4,7 @@ import { renderToStaticMarkup } from "react-dom/server";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 
 import { MatchTabs } from "@/components/match-tabs";
+import { TOUR_TAB_EVENT } from "@/lib/tour/steps";
 import type { MatchTab } from "@/lib/view/match-tabs";
 
 const slots = {
@@ -95,5 +96,26 @@ describe("MatchTabs — troca", () => {
     // Só a aba ativa entra no Tab (foco itinerante).
     expect(tab("Seu palpite").tabIndex).toBe(0);
     expect(tab("Mercados").tabIndex).toBe(-1);
+  });
+
+  it("evento do tour troca a aba já no dispatch (flushSync) e grava na URL", async () => {
+    await act(async () => root.render(<MatchTabs initialTab="mercados" {...slots} />));
+    let visibleRightAfter: boolean | null = null;
+    await act(async () => {
+      window.dispatchEvent(new CustomEvent(TOUR_TAB_EVENT, { detail: "dados" }));
+      // O tour procura o alvo logo depois do dispatch: o painel já tem de estar visível.
+      visibleRightAfter = !panel(container, "match-stats").hidden;
+    });
+    expect(visibleRightAfter).toBe(true);
+    expect(panel(container, "mercados").hidden).toBe(true);
+    expect(new URL(window.location.href).searchParams.get("aba")).toBe("dados");
+  });
+
+  it("evento do tour com aba desconhecida é ignorado", async () => {
+    await act(async () => root.render(<MatchTabs initialTab="seu-palpite" {...slots} />));
+    await act(async () => {
+      window.dispatchEvent(new CustomEvent(TOUR_TAB_EVENT, { detail: "lixo" }));
+    });
+    expect(panel(container, "seu-palpite").hidden).toBe(false);
   });
 });

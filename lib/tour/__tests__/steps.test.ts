@@ -10,6 +10,7 @@ import {
   TOUR_CHAPTERS,
   tourMatchIndex,
 } from "@/lib/tour/steps";
+import { MATCH_TAB_IDS } from "@/lib/view/match-tabs";
 
 describe("shouldAutoStart", () => {
   it("abre a lista só pra quem nunca viu", () => {
@@ -91,5 +92,32 @@ describe("alvos do tour", () => {
   it.each(targets)("data-tour=%s existe no código", (target) => {
     const pattern = new RegExp(`data-tour=[^\\n]*"${target}"`);
     expect(source).toMatch(pattern);
+  });
+});
+
+describe("abas do tour (#576)", () => {
+  const steps = Object.values(TOUR_CHAPTERS).flat();
+
+  it("todo step.tab é uma aba da página do jogo", () => {
+    const tabs = steps.flatMap((step) => (step.tab ? [step.tab] : []));
+    expect(tabs.length).toBeGreaterThan(0);
+    for (const tab of tabs) expect(MATCH_TAB_IDS).toContain(tab);
+  });
+
+  it("passo com aba tem alvo (a aba sozinha não destaca nada)", () => {
+    for (const step of steps) if (step.tab) expect(step.target).toBeTruthy();
+  });
+
+  it("capítulo do jogo: Mercados, Seu palpite e Dados abrem a própria aba", () => {
+    const byTarget = Object.fromEntries(
+      TOUR_CHAPTERS.jogo.map((step) => [step.target ?? step.title, step.tab]),
+    );
+    expect(byTarget).toMatchObject({
+      palpite: undefined,
+      mercados: "mercados",
+      "seu-palpite": "seu-palpite",
+      "match-stats": "dados",
+      Pronto: undefined,
+    });
   });
 });

@@ -13,6 +13,8 @@
  * volta junto — é o que quem pediu pra rever espera.
  */
 // Sem Zod de propósito: este módulo vai pro bundle do cliente (tour, lista de jogos).
+import type { MatchTab } from "@/lib/view/match-tabs";
+
 export const TOUR_STATES = ["jogos", "done", "dismissed"] as const;
 export type TourState = (typeof TOUR_STATES)[number];
 
@@ -26,6 +28,13 @@ export type TourChapter = "jogos" | "jogo";
 export const TOUR_FORCE_PARAM = "tour";
 export const TOUR_RESTART_HREF = `/jogos?${TOUR_FORCE_PARAM}=1`;
 
+/**
+ * Evento (no `window`) que pede pra página do jogo abrir uma aba antes de o tour
+ * destacar o alvo dela; `detail` é o id da aba. O `MatchTabs` escuta; em outra página
+ * ninguém escuta e o passo segue a regra de sempre.
+ */
+export const TOUR_TAB_EVENT = "palpiteiro:tour-tab";
+
 export type TourStep = {
   /** Valor de `data-tour` do alvo. Sem alvo = passo centralizado, sem spotlight. */
   target?: string;
@@ -37,6 +46,12 @@ export type TourStep = {
    * do jogo.
    */
   interactive?: boolean;
+  /**
+   * Aba da página do jogo onde o alvo mora (#576). O tour abre a aba (TOUR_TAB_EVENT)
+   * antes do spotlight; o alvo conta como disponível se existe no DOM, mesmo escondido
+   * na aba inativa.
+   */
+  tab?: MatchTab;
 };
 
 export const TOUR_CHAPTERS: Record<TourChapter, readonly TourStep[]> = {
@@ -80,18 +95,21 @@ export const TOUR_CHAPTERS: Record<TourChapter, readonly TourStep[]> = {
     },
     {
       target: "mercados",
+      tab: "mercados",
       title: "Mercados",
-      body: 'Aqui ficam a odd de mercado, a chance do modelo e a odd justa de cada seleção; a marca IA mostra o que a análise recomenda. Os "?" explicam os números num toque. Fez uma aposta com os amigos? Toque no que você apostou (ou digite a aposta): entra em Suas apostas (ao lado no computador, na barra de baixo no celular). Confira a odd que pegou e toque em "Registrar apostas". A avaliação sai na hora, sem gastar análise.',
+      body: 'Na aba Mercados ficam a odd de mercado, a chance do modelo e a odd justa de cada seleção; a marca IA mostra o que a análise recomenda. Os "?" explicam os números num toque. Fez uma aposta com os amigos? Toque no que você apostou (ou digite a aposta): entra em Suas apostas (ao lado no computador, na barra de baixo no celular). Confira a odd que pegou e toque em "Registrar apostas". A avaliação sai na hora, sem gastar análise.',
     },
     {
       target: "seu-palpite",
+      tab: "seu-palpite",
       title: "Seu palpite",
-      body: 'Tem um palpite seu? Escolha o placar ou o resultado e veja na hora a chance que o modelo dá, de graça. Se quiser, escreva o motivo e toque em "Analisar meu palpite": a IA lê, a gente confere com os nossos dados e o modelo recalcula (conta 1 do seu limite diário de palpites). "Adicionar às suas apostas" leva o palpite pra lista.',
+      body: 'Tem um palpite seu? Na aba Seu palpite, escolha o placar ou o resultado e veja na hora a chance que o modelo dá, de graça. Se quiser, escreva o motivo e toque em "Analisar meu palpite": a IA lê, a gente confere com os nossos dados e o modelo recalcula (conta 1 do seu limite diário de palpites). "Adicionar às suas apostas" leva o palpite pra lista.',
     },
     {
       target: "match-stats",
+      tab: "dados",
       title: "Números do jogo",
-      body: "Partidas recentes, confronto direto, classificação, desfalques e escalações: o mesmo contexto que a IA usa. O nome de um time, no topo do jogo ou na classificação, abre o histórico dele.",
+      body: "Na aba Dados ficam partidas recentes, confronto direto, classificação, desfalques e escalações: o mesmo contexto que a IA usa. O nome de um time, no topo do jogo ou na classificação, abre o histórico dele.",
     },
     {
       title: "Pronto",
