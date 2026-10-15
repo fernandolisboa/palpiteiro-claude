@@ -10,7 +10,12 @@ import type {
   NormalizedH2H,
   NormalizedStanding,
 } from "@/lib/providers/sports-data/types";
-import { toFormView, toH2HView, toStandingsView } from "@/lib/view/sections";
+import {
+  toFormView,
+  toH2HView,
+  toStandingsView,
+  withDisplayTeamNames,
+} from "@/lib/view/sections";
 import type { LeagueKey } from "@/lib/view/types";
 
 const FORM_LAST = 5;
@@ -87,14 +92,18 @@ export async function MatchSections({ fixtureRef, leagueKey }: Props) {
     safeStandings(() => provider.getStandings(fixtureRef.league)),
   ]);
 
-  const formView = toFormView({
-    homeTeam: fixtureRef.homeTeam,
-    awayTeam: fixtureRef.awayTeam,
-    homeForm,
-    awayForm,
-    limit: FORM_LAST,
-  });
-  const h2hView = toH2HView(h2h, H2H_LAST);
+  // Nome curto só na borda da tela; as views seguem canônicas (#578).
+  const { form: formView, h2h: h2hView } = withDisplayTeamNames(
+    toFormView({
+      homeTeam: fixtureRef.homeTeam,
+      awayTeam: fixtureRef.awayTeam,
+      homeForm,
+      awayForm,
+      limit: FORM_LAST,
+    }),
+    toH2HView(h2h, H2H_LAST),
+    leagueKey,
+  );
   const standingsView = toStandingsView({
     standing,
     homeTeam: fixtureRef.homeTeam,

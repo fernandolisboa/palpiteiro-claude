@@ -25,7 +25,9 @@ import {
   deriveBetLegSettleable,
   type BetLegKind,
 } from "@/lib/settlement/rules/user-bet-dispatch";
+import { leagueToKey } from "@/lib/format";
 import { toSlipEvaluationView, type SlipEvaluationView } from "@/lib/view/bet-slip";
+import { displayMatchTeams } from "@/lib/view/team";
 
 import { notAnalyzableMessage } from "./not-analyzable";
 
@@ -221,9 +223,10 @@ export async function registerBetSlip(
   return {
     ok: true,
     registered: newSlips.length,
-    evaluation: toSlipEvaluationView(evaluation, {
-      home: match.homeTeam,
-      away: match.awayTeam,
-    }),
+    // Rótulo de tela (#578): nome curto. A avaliação já foi calculada com o canonical.
+    evaluation: toSlipEvaluationView(
+      evaluation,
+      displayMatchTeams(match.homeTeam, match.awayTeam, leagueToKey(match.league)),
+    ),
   };
 }

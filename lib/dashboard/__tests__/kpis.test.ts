@@ -267,6 +267,21 @@ describe("computeBankrollSeries", () => {
     const series = computeBankrollSeries(rows);
     expect(series.map((p) => p.cumulative)).toEqual([1, 0.5, 2.5]);
   });
+
+  it("rótulo do tooltip com o nome curto dos times (#578)", () => {
+    const series = computeBankrollSeries([
+      settled("won", "1.00", {
+        league: "brasileirao_a",
+        homeTeam: "SE Palmeiras",
+        awayTeam: "SC Corinthians Paulista",
+      }),
+      settled("won", "1.00", { homeTeam: "South Korea", awayTeam: "Mexico" }),
+    ]);
+    expect(series.map((p) => p.label)).toEqual([
+      "Palmeiras × Corinthians",
+      "Coreia do Sul × México",
+    ]);
+  });
 });
 
 describe("applyTableFilters", () => {

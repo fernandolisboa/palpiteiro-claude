@@ -39,6 +39,8 @@ function match(id: string): DbMatch {
     homeScore: null,
     awayScore: null,
     neutralVenue: false,
+    homeTeamCrestUrl: null,
+    awayTeamCrestUrl: null,
     updatedAt: new Date("2026-06-15T18:00:00Z"),
   };
 }

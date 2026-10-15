@@ -130,7 +130,7 @@ export default async function MatchPage({ params, searchParams }: PageProps) {
   const timeZone = await getRequestTimeZone();
 
   // Nome de EXIBIÇÃO dos times nos rótulos de 1X2/dupla chance (#574): cards de odds,
-  // análises e leitura do modelo. Não confundir com `teams` (canônico) mais abaixo.
+  // análises, leitura do modelo, grade de apostas e "Seu palpite" (nome curto, #578).
   const leagueKey = leagueToKey(match.league);
   const displayTeams = {
     home: teamToTeam(match.homeTeam, leagueKey).name,
@@ -232,6 +232,8 @@ export default async function MatchPage({ params, searchParams }: PageProps) {
       homeScore: match.homeScore,
       awayScore: match.awayScore,
       updatedAt: match.updatedAt,
+      homeTeamCrestUrl: match.homeTeamCrestUrl,
+      awayTeamCrestUrl: match.awayTeamCrestUrl,
     },
     // O hero não mostra odd (os cards de odds chegam por streaming, oddsP acima).
     odds: null,
@@ -303,7 +305,9 @@ export default async function MatchPage({ params, searchParams }: PageProps) {
   // modelo do jogo (porta única, lib/bets/slip-model) começa já; as odds de referência
   // são lidas do banco DEPOIS do refresh que a página já faz (oddsP) — nenhuma chamada
   // nova à Odds API. Falha vira grade sem odds/sem modelo (os botões ainda registram).
-  const teams = { home: match.homeTeam, away: match.awayTeam };
+  // Rótulos de tela (#578): nome curto. Nada aqui vai ao modelo (as actions releem o
+  // canonical do banco), então a grade e o "Seu palpite" usam os mesmos displayTeams.
+  const teams = displayTeams;
   // O modelo ao vivo é calculado UMA vez e compartilhado pela grade e pelo "Seu palpite"
   // (que só cai nele quando não há base fresca do jogo).
   let slipModelP: Promise<ModelScoreline | null> | null = null;

@@ -206,6 +206,8 @@ export async function upsertMatchesFromProvider(
     homeScore: f.score.home,
     awayScore: f.score.away,
     neutralVenue: isNeutralFinalFixture(f),
+    homeTeamCrestUrl: f.homeCrestUrl ?? null,
+    awayTeamCrestUrl: f.awayCrestUrl ?? null,
     updatedAt: new Date(),
   }));
   await db
@@ -222,6 +224,10 @@ export async function upsertMatchesFromProvider(
         homeScore: sql`excluded.home_score`,
         awayScore: sql`excluded.away_score`,
         neutralVenue: sql`excluded.neutral_venue`,
+        // Escudo (#578): nunca apaga o que já existe quando o provider da vez não
+        // mandou (fallback sem crest, cache antigo). Sem `excluded.` = linha existente.
+        homeTeamCrestUrl: sql`coalesce(excluded.home_team_crest_url, ${matches.homeTeamCrestUrl})`,
+        awayTeamCrestUrl: sql`coalesce(excluded.away_team_crest_url, ${matches.awayTeamCrestUrl})`,
         updatedAt: sql`excluded.updated_at`,
       },
     });

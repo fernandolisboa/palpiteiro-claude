@@ -41,6 +41,19 @@ function row(overrides: Partial<DashboardRow> = {}): DashboardRow {
 }
 
 describe("toPredictionRowView", () => {
+  it("nome curto na linha e oficial no title (#578)", () => {
+    const v = toPredictionRowView(
+      row({
+        league: "champions_league",
+        homeTeam: "FC Bayern München",
+        awayTeam: "Paris Saint-Germain FC",
+      }),
+    );
+    expect(v.home).toBe("Bayern");
+    expect(v.away).toBe("PSG");
+    expect(v.title).toBe("FC Bayern München × Paris Saint-Germain FC");
+  });
+
   it("parses numeric strings and maps a settled win", () => {
     const v = toPredictionRowView(
       row({ result: "won", profitUnits: "1.85" }),
@@ -170,6 +183,8 @@ function makeDetail(overrides: Partial<DashboardDetail> = {}): DashboardDetail {
     homeScore: 2,
     awayScore: 1,
     neutralVenue: false,
+    homeTeamCrestUrl: null,
+    awayTeamCrestUrl: null,
     updatedAt: new Date("2026-06-12T05:00:00Z"),
   };
   const prediction: DashboardDetail["prediction"] = {
@@ -282,6 +297,23 @@ describe("toPredictionDetailView", () => {
     });
     expect(v.rawPayloads).not.toBeNull();
     expect(v.rawPayloads?.input).toContain(SYSTEM_PROMPT_MARKER);
+  });
+
+  it("título do detalhe com o nome curto (#578)", () => {
+    const base = makeDetail();
+    const v = toPredictionDetailView(
+      makeDetail({
+        match: {
+          ...base.match,
+          league: "brasileirao_a",
+          homeTeam: "SE Palmeiras",
+          awayTeam: "CR Flamengo",
+        },
+      }),
+      { includeRawPayloads: false },
+    );
+    expect(v.match.home).toBe("Palmeiras");
+    expect(v.match.away).toBe("Flamengo");
   });
 
   it("parses numeric stake/profit at the view boundary", () => {

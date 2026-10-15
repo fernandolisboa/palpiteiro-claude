@@ -6,8 +6,9 @@ import type { PredictionRowView } from "@/lib/view/dashboard";
 
 const ROW: PredictionRowView = {
   id: "p-1",
-  home: "Club Atlético Mineiro",
-  away: "Esporte Clube Juventude",
+  home: "Atlético-MG",
+  away: "Juventude",
+  title: "Club Atlético Mineiro × Esporte Clube Juventude",
   league: "bsa",
   when: "hoje, 16:00",
   rec: "Mais de 2,5",
@@ -21,12 +22,13 @@ const ROW: PredictionRowView = {
 };
 
 describe("PredictionsTable — nome do jogo (#574 linha 8)", () => {
-  it("o link do jogo trunca e leva o nome inteiro no title", () => {
+  it("o link do jogo trunca, mostra o nome curto e leva o oficial no title (#578)", () => {
     const html = renderToStaticMarkup(<PredictionsTable rows={[ROW]} />);
     const link = html.match(/<a [^>]*href="\/dashboard\/p-1"[^>]*>/)?.[0] ?? "";
     expect(link).toContain("truncate");
     expect(link).toContain("block");
     expect(link).toContain('title="Club Atlético Mineiro × Esporte Clube Juventude"');
+    expect(html).toContain("Atlético-MG × Juventude");
   });
 });
 

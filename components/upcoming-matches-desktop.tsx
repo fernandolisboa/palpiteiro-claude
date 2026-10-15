@@ -9,7 +9,7 @@ import { Button } from "@/components/ui/button";
 import { Card } from "@/components/ui/card";
 import { DesktopStatusCell } from "@/components/desktop-status-cell";
 import { MatchModelLine } from "@/components/match-model-line";
-import { TeamAvatar } from "@/components/team-avatar";
+import { TeamCrest } from "@/components/team-crest";
 import { appendBackParam } from "@/lib/view/back-href";
 import { LEAGUE_LABEL } from "@/lib/format";
 import { tourMatchIndex } from "@/lib/tour/steps";
@@ -70,11 +70,11 @@ export function UpcomingMatchesDesktop({
           </div>
           <div className="flex flex-col gap-1.5">
             <div className="flex items-center gap-2">
-              <TeamAvatar initials={m.home.short.slice(0, 2)} hue={m.home.hue} size={22} flagCode={m.home.flagCode} />
+              <TeamCrest team={m.home} size={22} />
               <span className="text-label font-medium tracking-tight">{m.home.name}</span>
             </div>
             <div className="flex items-center gap-2">
-              <TeamAvatar initials={m.away.short.slice(0, 2)} hue={m.away.hue} size={22} flagCode={m.away.flagCode} />
+              <TeamCrest team={m.away} size={22} />
               <span className="text-label font-medium tracking-tight">{m.away.name}</span>
             </div>
             {/* Base do modelo (#555): só probabilidade, abaixo dos nomes. */}

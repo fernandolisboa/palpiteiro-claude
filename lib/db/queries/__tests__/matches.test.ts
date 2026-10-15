@@ -432,6 +432,23 @@ describe("upsertMatchesFromProvider — campo neutro (#529)", () => {
     expect(rows.map((r) => r.neutralVenue)).toEqual([true, false, false]);
   });
 
+  it("grava o escudo dos times quando o fixture traz (#578)", async () => {
+    await upsertMatchesFromProvider([
+      fixture({ homeCrestUrl: "https://media.api-sports.io/football/teams/127.png" }),
+      fixture({ homeTeam: "Fluminense" }),
+    ]);
+    const rows = h.state.insertedRows as {
+      homeTeamCrestUrl: string | null;
+      awayTeamCrestUrl: string | null;
+    }[];
+    expect(rows.map((r) => [r.homeTeamCrestUrl, r.awayTeamCrestUrl])).toEqual([
+      ["https://media.api-sports.io/football/teams/127.png", null],
+      [null, null],
+    ]);
+    expect(h.state.conflictSet).toHaveProperty("homeTeamCrestUrl");
+    expect(h.state.conflictSet).toHaveProperty("awayTeamCrestUrl");
+  });
+
   it("o conflito atualiza neutral_venue (a fase pode mudar entre syncs)", async () => {
     await upsertMatchesFromProvider([fixture({ round: "Final" })]);
     expect(h.state.conflictSet).toHaveProperty("neutralVenue");

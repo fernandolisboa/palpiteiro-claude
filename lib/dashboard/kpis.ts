@@ -1,6 +1,7 @@
 import { clvNoVigDeltaPp, clvOddsRatioPct } from "@/lib/odds/clv";
 import { getDescriptor } from "@/lib/odds/market-descriptor";
 import { leagueToKey } from "@/lib/format";
+import { displayTeamName } from "@/lib/view/team-labels";
 import type { SupportedLeague } from "@/lib/providers/sports-data/leagues";
 import type { LeagueFilter } from "@/lib/view/types";
 
@@ -418,7 +419,8 @@ export function computeBankrollSeries(rows: DashboardRow[]): BankrollPoint[] {
       t: r.settledAt.toISOString(),
       cumulative,
       profit,
-      label: `${r.homeTeam} × ${r.awayTeam}`,
+      // Nomes curtos só pro tooltip do gráfico (#578); o canonical segue na linha.
+      label: `${displayTeamName(r.homeTeam, leagueToKey(r.league))} × ${displayTeamName(r.awayTeam, leagueToKey(r.league))}`,
     };
   });
 }

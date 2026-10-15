@@ -32,6 +32,20 @@ describe("poolMatchLabel", () => {
     );
     expect(label).toBe("Flamengo × Palmeiras · Brasileirão · dom, 18 out, 16:00");
   });
+
+  it("usa o nome curto, não o canonical (#578)", () => {
+    const label = poolMatchLabel(
+      {
+        homeTeam: "SE Palmeiras",
+        awayTeam: "SC Corinthians Paulista",
+        league: "brasileirao_a",
+        kickoffAt: new Date("2026-10-18T19:00:00Z"),
+      },
+      new Date("2026-10-13T12:00:00Z"),
+      "America/Sao_Paulo",
+    );
+    expect(label.startsWith("Palmeiras × Corinthians · ")).toBe(true);
+  });
 });
 
 describe("joinNames", () => {

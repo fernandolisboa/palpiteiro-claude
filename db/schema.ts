@@ -287,6 +287,10 @@ export const matches = pgTable(
     // partir da fase do provider (isNeutralFinalFixture). A Copa do Mundo é neutra
     // por liga e não depende disto (isNeutralVenue).
     neutralVenue: boolean().notNull().default(false),
+    // Escudo de cada time (#578): URL do CDN do provider, gravada pelo sync de fixtures
+    // (upsertMatchesFromProvider). Só exibição; null = sem escudo (a UI mostra as iniciais).
+    homeTeamCrestUrl: text(),
+    awayTeamCrestUrl: text(),
     updatedAt: timestamp({ withTimezone: true }).notNull().defaultNow(),
   },
   (t) => [index("matches_kickoff_at_idx").on(t.kickoffAt)],

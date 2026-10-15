@@ -17,7 +17,7 @@ import {
 // ao mudar o texto material.
 export const dynamic = "force-static";
 
-const LAST_UPDATED = "13 de outubro de 2026";
+const LAST_UPDATED = "15 de outubro de 2026";
 
 export const metadata: Metadata = {
   title: "Política de Privacidade",
@@ -178,7 +178,10 @@ export default function PrivacidadePage() {
             </ul>
             <p>
               Dados de partidas e odds vêm de provedores esportivos, e as notícias vêm de buscas
-              na web feitas pela Anthropic; nada seu é enviado nessas consultas.
+              na web feitas pela Anthropic; nada seu é enviado nessas consultas. A exceção são
+              os escudos dos times: seu navegador os carrega direto do servidor de imagens do
+              provedor de dados esportivos, que recebe o endereço IP do seu navegador, mas não a
+              página que você está vendo.
             </p>
           </section>
 

@@ -1,5 +1,11 @@
 import { flagCodeForTeam } from "@/lib/view/country-codes";
-import { displayTeamName } from "@/lib/view/team-labels";
+import {
+  alternateCode,
+  displayTeamName,
+  hasCuratedCode,
+  officialTeamName,
+  teamCode,
+} from "@/lib/view/team-labels";
 import type { LeagueKey, Team } from "@/lib/view/types";
 
 const HUE_BY_CANONICAL: Record<string, number> = {
@@ -64,66 +70,6 @@ const HUE_BY_CANONICAL: Record<string, number> = {
   "Villarreal CF": 50,
 };
 
-const SHORT_BY_CANONICAL: Record<string, string> = {
-  "Botafogo FR": "BOT",
-  "CA Mineiro": "CAM",
-  "CA Paranaense": "CAP",
-  "CR Flamengo": "FLA",
-  "CR Vasco da Gama": "VAS",
-  "Chapecoense AF": "CHA",
-  "Clube do Remo": "REM",
-  "Coritiba FBC": "CFC",
-  "Cruzeiro EC": "CRU",
-  "EC Bahia": "BAH",
-  "EC Vitória": "VIT",
-  "Fluminense FC": "FLU",
-  "Grêmio FBPA": "GRE",
-  "Mirassol FC": "MIR",
-  "RB Bragantino": "BRA",
-  "SC Corinthians Paulista": "COR",
-  "SC Internacional": "INT",
-  "SE Palmeiras": "PAL",
-  "Santos FC": "SAN",
-  "São Paulo FC": "SAO",
-
-  "AFC Ajax": "AJA",
-  "AS Monaco FC": "MON",
-  "Arsenal FC": "ARS",
-  "Atalanta BC": "ATA",
-  "Athletic Club": "ATH",
-  "Bayer 04 Leverkusen": "LEV",
-  "Borussia Dortmund": "BVB",
-  "Chelsea FC": "CHE",
-  "Club Atlético de Madrid": "ATM",
-  "Club Brugge KV": "BRU",
-  "Eintracht Frankfurt": "EIN",
-  "FC Barcelona": "BAR",
-  "FC Bayern München": "BAY",
-  "FC Internazionale Milano": "INT",
-  "FC København": "KOP",
-  "FK Bodø/Glimt": "BOD",
-  "FK Kairat": "KAI",
-  "Galatasaray SK": "GAL",
-  "Juventus FC": "JUV",
-  "Liverpool FC": "LIV",
-  "Manchester City FC": "MCI",
-  "Newcastle United FC": "NEW",
-  "Olympique de Marseille": "MAR",
-  "PAE Olympiakos SFP": "OLY",
-  "PSV": "PSV",
-  "Paphos FC": "PAP",
-  "Paris Saint-Germain FC": "PSG",
-  "Qarabağ Ağdam FK": "QAR",
-  "Real Madrid CF": "RMA",
-  "Royale Union Saint-Gilloise": "USG",
-  "SK Slavia Praha": "SLA",
-  "SSC Napoli": "NAP",
-  "Sport Lisboa e Benfica": "BEN",
-  "Sporting Clube de Portugal": "SCP",
-  "Tottenham Hotspur FC": "TOT",
-  "Villarreal CF": "VIL",
-};
-
 function hashHue(name: string): number {
   let hash = 0;
   for (let i = 0; i < name.length; i++) {
@@ -132,34 +78,62 @@ function hashHue(name: string): number {
   return Math.abs(hash) % 360;
 }
 
-function deriveShort(name: string): string {
-  const tokens = name
-    .normalize("NFD")
-    .replace(/[̀-ͯ]/g, "")
-    .toUpperCase()
-    .split(/[\s\-/]+/)
-    .filter((t) => t.length > 0 && !/^(FC|CF|AC|SC|CR|CA|EC|FK|SE|KV|BC|RB|SSC|PAE|PFC|FBPA|FBC|SFP|AF|AFC|CLUBE|CLUB)$/.test(t));
-  if (tokens.length === 0) {
-    return name.replace(/[^A-Za-z0-9]/g, "").slice(0, 3).toUpperCase();
-  }
-  if (tokens.length === 1) {
-    return tokens[0].replace(/[^A-Z0-9]/g, "").slice(0, 3);
-  }
-  return tokens
-    .map((t) => t.replace(/[^A-Z0-9]/g, "")[0])
-    .filter(Boolean)
-    .slice(0, 3)
-    .join("");
-}
-
-export function teamToTeam(canonicalName: string, league: LeagueKey): Team {
+export function teamToTeam(
+  canonicalName: string,
+  league: LeagueKey,
+  crestUrl?: string | null,
+): Team {
+  const flagCode = flagCodeForTeam(canonicalName, league);
   return {
-    // Tradução display-only por liga (#340): só a Copa ('wc') vira PT-BR; o
-    // canonical EN segue intocado em short/hue e em todo o matching downstream.
+    // Nome curto de exibição (#578; Copa em PT-BR, #340) e nome oficial pro
+    // `title`. O canonical segue intocado em short/hue e em todo o matching
+    // downstream: isto é só a borda de view.
     name: displayTeamName(canonicalName, league),
-    short: SHORT_BY_CANONICAL[canonicalName] ?? deriveShort(canonicalName),
+    fullName: officialTeamName(canonicalName, league),
+    // Sigla de 3 letras (curada ou derivada), igual em qualquer liga.
+    short: teamCode(canonicalName),
     hue: HUE_BY_CANONICAL[canonicalName] ?? hashHue(canonicalName),
     // Bandeira só na Copa (#341); undefined em clubes → avatar cai nas iniciais.
-    flagCode: flagCodeForTeam(canonicalName, league),
+    flagCode,
+    // Escudo do provider (#578), só fora da Copa: a bandeira tem prioridade.
+    ...(crestUrl && !flagCode ? { crestUrl } : {}),
+  };
+}
+
+/**
+ * Os dois times de um jogo, com siglas distintas (#578). Use onde as siglas
+ * aparecem lado a lado (chip de odds, linha do modelo, tabela, recentes, OG).
+ * Se empatarem, troca a do lado DERIVADO (fora do mapa curado); se os dois forem
+ * do mesmo tipo, a do visitante. A sigla curada nunca muda.
+ */
+export function teamPair(
+  homeCanonical: string,
+  awayCanonical: string,
+  league: LeagueKey,
+  crests?: { home?: string | null; away?: string | null },
+): { home: Team; away: Team } {
+  const home = teamToTeam(homeCanonical, league, crests?.home);
+  const away = teamToTeam(awayCanonical, league, crests?.away);
+  if (home.short !== away.short) return { home, away };
+  const homeCurated = hasCuratedCode(homeCanonical);
+  const awayCurated = hasCuratedCode(awayCanonical);
+  if (homeCurated === awayCurated || homeCurated) {
+    return { home, away: { ...away, short: alternateCode(awayCanonical, home.short) } };
+  }
+  return { home: { ...home, short: alternateCode(homeCanonical, away.short) }, away };
+}
+
+/**
+ * Nomes curtos de exibição dos dois times de um jogo (#578), para telas que só
+ * mostram o nome (sem sigla): "Palmeiras × Corinthians". Display-only.
+ */
+export function displayMatchTeams(
+  homeCanonical: string,
+  awayCanonical: string,
+  league: LeagueKey,
+): { home: string; away: string } {
+  return {
+    home: displayTeamName(homeCanonical, league),
+    away: displayTeamName(awayCanonical, league),
   };
 }

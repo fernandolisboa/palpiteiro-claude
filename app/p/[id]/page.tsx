@@ -4,6 +4,9 @@ import Link from "next/link";
 
 import { Wordmark } from "@/components/wordmark";
 import { PublicPalpite } from "@/components/palpites/public-palpite";
+import { leagueToKey } from "@/lib/format";
+import type { SupportedLeague } from "@/lib/providers/sports-data/leagues";
+import { displayMatchTeams } from "@/lib/view/team";
 import {
   loadSharedPalpite,
   NEUTRAL_DESCRIPTION,
@@ -50,8 +53,9 @@ export async function generateMetadata({
     };
   }
 
-  const { homeTeam, awayTeam } = shared.match;
-  const title = `${homeTeam} x ${awayTeam}`;
+  const { homeTeam, awayTeam, league } = shared.match;
+  const teams = displayMatchTeams(homeTeam, awayTeam, leagueToKey(league as SupportedLeague));
+  const title = `${teams.home} x ${teams.away}`;
   return {
     robots: { index: false, follow: false },
     description: NEUTRAL_DESCRIPTION,

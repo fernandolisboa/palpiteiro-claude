@@ -32,7 +32,7 @@ import {
   type RecommendationKind,
 } from "@/lib/view/recommendation";
 import { ownsAiCall } from "@/lib/view/owns-ai-call";
-import { teamToTeam } from "@/lib/view/team";
+import { teamPair, teamToTeam } from "@/lib/view/team";
 import type { LeagueKey, Recommendation } from "@/lib/view/types";
 
 // Unidades COM sinal — convenção única, centralizada em lib/format (#170).
@@ -168,8 +168,10 @@ export function toMarketSegmentView(
 
 export type PredictionRowView = {
   id: string;
+  // Nomes curtos de exibição (#578); `title` leva os oficiais, pro tooltip.
   home: string;
   away: string;
+  title: string;
   league: LeagueKey;
   when: string;
   rec: Recommendation;
@@ -190,10 +192,12 @@ export function toPredictionRowView(
 ): PredictionRowView {
   const profitNum = row.profitUnits === null ? null : Number(row.profitUnits);
   const league = leagueToKey(row.league);
+  const pair = teamPair(row.homeTeam, row.awayTeam, league);
   return {
     id: row.predictionId,
-    home: row.homeTeam,
-    away: row.awayTeam,
+    home: pair.home.name,
+    away: pair.away.name,
+    title: `${pair.home.fullName ?? pair.home.name} × ${pair.away.fullName ?? pair.away.name}`,
     league,
     when: formatKickoffAbsolute(row.createdAt, new Date(), timeZone),
     // Tabela apertada: sigla de 3 letras no lugar de "Casa"/"Fora" (#574).
@@ -201,10 +205,7 @@ export function toPredictionRowView(
       row.recommendation,
       row.marketKey,
       row.selectionLabel,
-      {
-        home: teamToTeam(row.homeTeam, league).short,
-        away: teamToTeam(row.awayTeam, league).short,
-      },
+      { home: pair.home.short, away: pair.away.short },
       row.marketParams?.line ?? null,
     ),
     recKind: recommendationKind(row.recommendation),
@@ -337,11 +338,16 @@ export function toPredictionDetailView(
     impliedSumTarget: getDescriptor(marketKey)?.impliedSumTarget ?? 1,
   });
 
+  const detailTeams = {
+    home: teamToTeam(match.homeTeam, leagueToKey(match.league)).name,
+    away: teamToTeam(match.awayTeam, leagueToKey(match.league)).name,
+  };
   return {
     id: prediction.id,
     match: {
-      home: match.homeTeam,
-      away: match.awayTeam,
+      // Nomes curtos de exibição (#578), título do detalhe.
+      home: detailTeams.home,
+      away: detailTeams.away,
       league: leagueToKey(match.league),
       kickoff: formatKickoffAbsolute(match.kickoffAt, now, opts.timeZone),
       status: match.status,
@@ -354,10 +360,7 @@ export function toPredictionDetailView(
         prediction.recommendation,
         marketKey,
         detail.selectionLabel,
-        {
-          home: teamToTeam(match.homeTeam, leagueToKey(match.league)).name,
-          away: teamToTeam(match.awayTeam, leagueToKey(match.league)).name,
-        },
+        detailTeams,
         prediction.marketParams?.line ?? null,
       ),
       market: marketContextLabel(

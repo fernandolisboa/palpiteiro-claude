@@ -7,7 +7,7 @@ import type {
 } from "@/lib/providers/sports-data/types";
 
 import { getMarketPresentation } from "./markets/presentation";
-import { toH2HView, toStandingsView } from "./sections";
+import { toH2HView, toStandingsView, withDisplayTeamNames } from "./sections";
 
 // Confronto mínimo (toH2HView só lê score + kickoffTimestampMs + times).
 function fx(homeGoals: number, awayGoals: number, ms: number): NormalizedH2H {
@@ -233,5 +233,25 @@ describe("toStandingsView (janela)", () => {
     ]);
     // Foco continua casando pelo canonical EN, não pelo label traduzido.
     expect(view.rows.filter((r) => r.focus).map((r) => r.pos)).toEqual([3, 4]);
+  });
+});
+
+describe("withDisplayTeamNames", () => {
+  it("troca só o nome exibido de Partidas recentes e H2H, mantendo o resto", () => {
+    const form = {
+      home: { name: "SE Palmeiras", results: ["W" as const] },
+      away: { name: "SC Corinthians Paulista", results: ["L" as const] },
+    };
+    const h2h = {
+      rows: [{ date: "01/10", h: "SE Palmeiras", a: "SC Corinthians Paulista", s: "2-1", tag: "over" }],
+      summary: "resumo",
+    };
+    const out = withDisplayTeamNames(form, h2h, "bsa");
+    expect(out.form.home).toEqual({ name: "Palmeiras", results: ["W"] });
+    expect(out.form.away.name).toBe("Corinthians");
+    expect(out.h2h.rows[0]).toMatchObject({ h: "Palmeiras", a: "Corinthians", s: "2-1", tag: "over" });
+    expect(out.h2h.summary).toBe("resumo");
+    // entrada canônica intacta (W/D/L e o check de afirmações dependem dela)
+    expect(form.home.name).toBe("SE Palmeiras");
   });
 });
