@@ -28,13 +28,16 @@ const MATCH_RESULT: OddsView = {
 };
 
 // Server Component async: resolve a promise das odds e devolve os mesmos cards de antes.
-async function render(views: {
-  oddsView: OddsView | null;
-  matchResultOddsView: OddsView | null;
-}) {
+async function render(
+  views: {
+    oddsView: OddsView | null;
+    matchResultOddsView: OddsView | null;
+  },
+  unavailable: "live" | "finished" | null = null,
+) {
   const el = await MatchOddsCards({
     odds: Promise.resolve(views),
-    unavailable: null,
+    unavailable,
   });
   return renderToStaticMarkup(el);
 }
@@ -59,4 +62,23 @@ describe("MatchOddsCards — cards de odds por streaming", () => {
     const html = await render({ oddsView: null, matchResultOddsView: null });
     expect(html).toContain("Odds indisponíveis");
   });
+});
+
+describe("MatchOddsCards — título por estado do jogo (#574 linha 7)", () => {
+  const both = { oddsView: OVER_UNDER, matchResultOddsView: MATCH_RESULT };
+
+  it("pré-jogo: 'Odds atuais' nos dois cards", async () => {
+    const html = await render(both);
+    expect(html.split("Odds atuais")).toHaveLength(3);
+    expect(html).not.toContain("Odds antes do jogo");
+  });
+
+  it.each(["live", "finished"] as const)(
+    "%s: 'Odds antes do jogo' nos dois cards (o 1X2 também recebe o estado)",
+    async (reason) => {
+      const html = await render(both, reason);
+      expect(html.split("Odds antes do jogo")).toHaveLength(3);
+      expect(html).not.toContain("Odds atuais");
+    },
+  );
 });

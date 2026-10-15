@@ -233,7 +233,8 @@ export function ComoUsarContent() {
           <Link href="/como-funciona" className={LINK}>
             Como funciona
           </Link>
-          . Mais abaixo na página ficam as odds atuais, as partidas recentes, o
+          . Mais abaixo na página ficam as odds (as de antes do jogo, quando ele já
+          começou), as partidas recentes, o
           confronto direto, a classificação, os desfalques e as escalações. Tocar no
           nome de um time abre o histórico dele.
         </p>

@@ -54,7 +54,11 @@ export function OddsCard({ view, unavailable }: Props) {
     <Card className="gap-0 overflow-hidden p-0">
       <div className="flex items-center justify-between px-4 pt-3.5 pb-3">
         <div className="flex items-center gap-2">
-          <span className="text-body font-medium tracking-tight">Odds atuais</span>
+          {/* Jogo que já começou (ou adiado/encerrado): a cotação é a última de
+              antes do jogo, não "atual" (#574 linha 7). */}
+          <span className="text-body font-medium tracking-tight">
+            {unavailable ? "Odds antes do jogo" : "Odds atuais"}
+          </span>
           <Badge
             variant="outline"
             className="h-[17px] rounded-full px-2 text-eyebrow-xs text-muted-foreground"
