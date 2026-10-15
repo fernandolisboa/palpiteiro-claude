@@ -74,7 +74,7 @@ export default async function BolaoDetailPage({ params }: PageProps) {
             ver jogo
           </Link>
         </p>
-        <p className="text-muted-fg-2 pb-6 pt-1 font-mono text-meta">
+        <p className="text-muted-foreground pb-6 pt-1 font-mono text-meta">
           {entries.length} {entries.length === 1 ? "aposta" : "apostas"}
           {pool.entryAmountCents !== null &&
             ` · ${formatBrl(pool.entryAmountCents)} por pessoa · pote ${formatBrl(outcome.potCents ?? 0)}`}
@@ -156,7 +156,7 @@ export default async function BolaoDetailPage({ params }: PageProps) {
                       {e.bettorName}
                     </span>
                     <span className="min-w-0 flex-[2] text-right text-body-sm tracking-tight">
-                      <span className="text-muted-fg-2 font-mono text-meta">
+                      <span className="text-muted-foreground font-mono text-meta">
                         {POOL_KIND_LABEL[e.kind] ?? e.kind} ·{" "}
                       </span>
                       {poolBetLabel(e.kind, e.params, teams)}
@@ -207,7 +207,7 @@ export default async function BolaoDetailPage({ params }: PageProps) {
         )}
 
         <details className="mb-8">
-          <summary className="text-muted-fg-2 cursor-pointer font-mono text-meta uppercase tracking-label hover:text-foreground">
+          <summary className="text-muted-foreground cursor-pointer font-mono text-meta uppercase tracking-label hover:text-foreground">
             excluir bolão
           </summary>
           <form action={removeFriendPool} className="flex flex-col gap-2 pt-3">
@@ -221,7 +221,7 @@ export default async function BolaoDetailPage({ params }: PageProps) {
           </form>
         </details>
 
-        <p className="text-meta leading-relaxed text-muted-fg-2 tracking-tight">
+        <p className="text-meta leading-relaxed text-muted-foreground tracking-tight">
           {POOL_MONEY_NOTE} {POOL_RISK_NOTE}
         </p>
       </div>

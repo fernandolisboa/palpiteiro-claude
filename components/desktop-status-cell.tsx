@@ -20,7 +20,7 @@ export function DesktopStatusCell({ m }: { m: MatchRowView }) {
         // Encerrado ainda surfaça "analisado" se o usuário já analisou: o
         // resultado read-only segue acessível na página de detalhe.
         <>
-          <span className="font-mono text-meta uppercase tracking-label text-muted-fg-2">
+          <span className="font-mono text-meta uppercase tracking-label text-muted-foreground">
             encerrado
           </span>
           {m.hasPrediction && (
@@ -30,7 +30,7 @@ export function DesktopStatusCell({ m }: { m: MatchRowView }) {
           )}
         </>
       ) : m.status === "postponed" || m.status === "cancelled" ? (
-        <span className="font-mono text-meta text-muted-fg-2">—</span>
+        <span className="font-mono text-meta text-muted-foreground">—</span>
       ) : m.hasPrediction ? (
         <Badge
           variant="outline"
@@ -40,7 +40,7 @@ export function DesktopStatusCell({ m }: { m: MatchRowView }) {
           <Check className="size-3" /> analisado
         </Badge>
       ) : (
-        <span className="font-mono text-meta text-muted-fg-2">—</span>
+        <span className="font-mono text-meta text-muted-foreground">—</span>
       )}
     </div>
   );

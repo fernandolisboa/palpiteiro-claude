@@ -65,7 +65,7 @@ export function SignInMethods({
             Declaro ter 18 anos ou mais e aceito os Termos de Uso.
           </span>
         </label>
-        <p className="pl-[26px] text-meta leading-snug tracking-tight text-muted-fg-2">
+        <p className="pl-[26px] text-meta leading-snug tracking-tight text-muted-foreground">
           Leia os{" "}
           <Link
             href="/termos"
@@ -103,7 +103,7 @@ export function SignInMethods({
 
       <div className="flex items-center gap-3">
         <span className="h-px flex-1 bg-border" />
-        <span className="font-mono text-meta uppercase tracking-label text-muted-fg-2">
+        <span className="font-mono text-meta uppercase tracking-label text-muted-foreground">
           ou
         </span>
         <span className="h-px flex-1 bg-border" />
@@ -134,7 +134,7 @@ export function SignInMethods({
         </form>
       </Card>
 
-      <p className="text-meta text-muted-fg-2 tracking-tight">
+      <p className="text-meta text-muted-foreground tracking-tight">
         Qualquer e-mail pode entrar. O link pode cair na pasta de spam no
         primeiro envio.
       </p>

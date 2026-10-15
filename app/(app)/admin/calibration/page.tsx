@@ -176,7 +176,7 @@ export default async function AdminCalibrationPage({ searchParams }: PageProps) 
               <h2 className="pb-3 font-mono text-meta uppercase tracking-label text-muted-foreground">
                 por versão · {marketLabel} · {segmentLabel}
               </h2>
-              <p className="pb-3 text-meta leading-relaxed text-muted-fg-2 tracking-tight">
+              <p className="pb-3 text-meta leading-relaxed text-muted-foreground tracking-tight">
                 LLM: versão do prompt do cartucho. Código + JEV: fonte de λ, versão dos
                 julgamentos e dos pesos (o narrador não mexe no número).
               </p>
@@ -209,7 +209,7 @@ export default async function AdminCalibrationPage({ searchParams }: PageProps) 
                 confiabilidade do modelo · {marketLabel} · {segmentLabel} · 10
                 bins
               </h2>
-              <p className="pb-3 text-meta leading-relaxed text-muted-fg-2 tracking-tight">
+              <p className="pb-3 text-meta leading-relaxed text-muted-foreground tracking-tight">
                 Bem calibrado ⇒ previsto ≈ observado em cada faixa. Faixas vazias omitidas.
                 {isNary &&
                   ` Em ${marketLabel} cada seleção entra como um evento sim/não (um-contra-o-resto), então a faixa mistura as seleções e o n conta pares, não predições.`}
@@ -271,7 +271,7 @@ function GateSection({ gate }: { gate: KellyGate }) {
           </tbody>
         </table>
       </div>
-      <p className="pt-2 text-meta leading-relaxed text-muted-fg-2 tracking-tight">
+      <p className="pt-2 text-meta leading-relaxed text-muted-foreground tracking-tight">
         CLV = Δ no-vig contra a linha de fechamento (+ = bateu o mercado). Skill =
         log-loss do mercado − do modelo por análise de over/under, passes incluídos.
         Todos os motores juntos, sem recorte: é o mesmo gate que o predict lê pra
@@ -291,7 +291,7 @@ function BacktestSection() {
       <h2 className="pb-3 font-mono text-meta uppercase tracking-label text-muted-foreground">
         backtest offline · fase c
       </h2>
-      <p className="text-meta leading-relaxed text-muted-fg-2 tracking-tight">
+      <p className="text-meta leading-relaxed text-muted-foreground tracking-tight">
         Dixon-Coles vs λ heurístico, 987 jogos do Brasileirão 2023–25 em
         walk-forward: log-loss −0.011 em over 2.5 (IC 90% abaixo de 0 → GO) e
         −0.042 em 1X2; no 1X2 o fechamento ainda bate o DC por ~0.02. No over 2.5
@@ -372,7 +372,7 @@ function EngineSection({
         ))}
       </nav>
       {unattributed > 0 && (
-        <p className="pt-2 text-meta leading-relaxed text-muted-fg-2 tracking-tight">
+        <p className="pt-2 text-meta leading-relaxed text-muted-foreground tracking-tight">
           {unattributed} predição(ões) com motor desconhecido no modelVersion:
           entram em todos, fora dos recortes.
         </p>
@@ -425,7 +425,7 @@ function MarketSection({
           </tbody>
         </table>
       </div>
-      <p className="pt-2 text-meta leading-relaxed text-muted-fg-2 tracking-tight">
+      <p className="pt-2 text-meta leading-relaxed text-muted-foreground tracking-tight">
         n = predições liquidadas, passes incluídos. Over/under e ambos marcam
         medem o lado positivo (over, sim); 1X2 e dupla chance medem cada seleção
         como um evento sim/não. No 1X2 o log-loss é o multiclasse (−ln p do
@@ -539,7 +539,7 @@ function Kpi({
       </span>
       <span className="text-body font-medium tabular-nums">{value}</span>
       {hint && (
-        <span className="font-mono text-meta text-muted-fg-2">{hint}</span>
+        <span className="font-mono text-meta text-muted-foreground">{hint}</span>
       )}
     </div>
   );

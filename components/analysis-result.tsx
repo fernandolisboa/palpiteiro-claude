@@ -30,7 +30,7 @@ export function AnalysisResult({ view, showRiskDisclaimer = true }: Props) {
               blurb="PASS = sem edge claro = não apostar; isso é disciplina, não erro. Pass rate alto (30–60%) é bom."
             />
           </span>
-          <span className="font-mono text-meta text-muted-fg-2">
+          <span className="font-mono text-meta text-muted-foreground">
             {view.generatedAt}
           </span>
         </div>
@@ -80,7 +80,7 @@ export function AnalysisResult({ view, showRiskDisclaimer = true }: Props) {
         <span className="font-mono text-meta uppercase tracking-eyebrow text-accent-fg">
           recomendação · gerada com claude
         </span>
-        <span className="font-mono text-meta text-muted-fg-2">
+        <span className="font-mono text-meta text-muted-foreground">
           {view.generatedAt}
         </span>
       </div>
@@ -169,7 +169,7 @@ export function AnalysisResult({ view, showRiskDisclaimer = true }: Props) {
               </span>
             </div>
             {view.evLegend && (
-              <p className="text-meta leading-snug tracking-tight text-muted-fg-2">
+              <p className="text-meta leading-snug tracking-tight text-muted-foreground">
                 {view.evLegend}
               </p>
             )}
@@ -246,12 +246,12 @@ function AnalysisFooter({ view, showRiskDisclaimer }: FooterProps) {
     <>
       <Separator />
       {showRiskDisclaimer && (
-        <p className="flex items-center gap-1.5 px-4 pt-2.5 text-meta leading-snug tracking-tight text-muted-fg-2">
+        <p className="flex items-center gap-1.5 px-4 pt-2.5 text-meta leading-snug tracking-tight text-muted-foreground">
           <Info className="size-3 shrink-0" aria-hidden="true" />
           {ANALYSIS_RISK_DISCLAIMER}
         </p>
       )}
-      <div className="flex items-center justify-between px-4 py-2.5 font-mono text-meta text-muted-fg-2 tabular-nums">
+      <div className="flex items-center justify-between px-4 py-2.5 font-mono text-meta text-muted-foreground tabular-nums">
         <span>
           {view.promptVersion} · {view.model} · {view.engine}
         </span>

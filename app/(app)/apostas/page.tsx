@@ -113,14 +113,14 @@ export default async function ApostasPage({ searchParams }: PageProps) {
           <div className="pt-3">
             <Link
               href="/apostas"
-              className="font-mono text-meta uppercase tracking-label text-muted-fg-2 hover:text-foreground"
+              className="font-mono text-meta uppercase tracking-label text-muted-foreground hover:text-foreground"
             >
               ← voltar ao topo
             </Link>
           </div>
         )}
 
-        <p className="mt-10 text-meta leading-relaxed text-muted-fg-2 tracking-tight">
+        <p className="mt-10 text-meta leading-relaxed text-muted-foreground tracking-tight">
           {RISK_DISCLAIMER_PT_BR}
         </p>
       </div>
@@ -144,7 +144,7 @@ function SlipCard({
           <span className="font-mono text-body font-medium tracking-tight text-foreground">
             {slip.match.homeTeam} × {slip.match.awayTeam}
           </span>
-          <span className="font-mono text-meta uppercase tracking-label text-muted-fg-2">
+          <span className="font-mono text-meta uppercase tracking-label text-muted-foreground">
             {LEAGUE_LABEL[leagueToKey(slip.match.league)]} ·{" "}
             {formatKickoffAbsolute(slip.match.kickoffAt, now, timeZone)}
           </span>
@@ -216,7 +216,7 @@ function LegRow({ leg }: { leg: UserBetLegRow }) {
         </Badge>
       </div>
       {summary.length > 0 && (
-        <span className="font-mono text-meta tabular-nums text-muted-fg-2">
+        <span className="font-mono text-meta tabular-nums text-muted-foreground">
           {summary.join(" · ")}
         </span>
       )}

@@ -74,7 +74,7 @@ export function MatchModelReadingCard({
                       <span className="font-mono text-label font-medium tabular-nums">
                         {s.pct}
                       </span>
-                      <span className="font-mono text-meta tabular-nums text-muted-fg-2">
+                      <span className="font-mono text-meta tabular-nums text-muted-foreground">
                         odd justa {s.fairOdd}
                       </span>
                     </div>
@@ -99,7 +99,7 @@ export function MatchModelReadingCard({
             )}
           </div>
           <Separator />
-          <div className="flex items-center justify-between gap-3 px-4 py-2.5 font-mono text-meta text-muted-fg-2">
+          <div className="flex items-center justify-between gap-3 px-4 py-2.5 font-mono text-meta text-muted-foreground">
             <span>
               modelo · {view.source}
               {view.jev ? ` ${view.jev}` : ""}

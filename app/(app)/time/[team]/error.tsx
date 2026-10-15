@@ -40,7 +40,7 @@ export default function TeamHistoryError({
             {error.message || "Erro inesperado."}
           </span>
           {error.digest && (
-            <span className="font-mono text-meta text-muted-fg-2">
+            <span className="font-mono text-meta text-muted-foreground">
               trace · {error.digest}
             </span>
           )}

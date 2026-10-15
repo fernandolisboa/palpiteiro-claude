@@ -112,11 +112,11 @@ export function MatchHero({
             </span>
           )}
           {score ? (
-            <span className="font-mono text-meta uppercase tracking-label text-muted-fg-2">
+            <span className="font-mono text-meta uppercase tracking-label text-muted-foreground">
               encerrado
             </span>
           ) : liveScore ? (
-            <span className="text-center font-mono text-meta text-muted-fg-2">
+            <span className="text-center font-mono text-meta text-muted-foreground">
               {liveScore.caption}
             </span>
           ) : null}
@@ -130,7 +130,7 @@ export function MatchHero({
       </div>
 
       {venue && (
-        <div className="flex items-center justify-center gap-1.5 pt-4 font-mono text-meta uppercase tracking-label text-muted-fg-2 lg:justify-start lg:gap-4 lg:pt-5">
+        <div className="flex items-center justify-center gap-1.5 pt-4 font-mono text-meta uppercase tracking-label text-muted-foreground lg:justify-start lg:gap-4 lg:pt-5">
           <span>{venue}</span>
         </div>
       )}

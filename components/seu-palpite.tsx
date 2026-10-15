@@ -172,7 +172,7 @@ export function SeuPalpite({
             );
           })}
           <div className="flex flex-wrap items-center gap-2 pt-1">
-            <span className="font-mono text-meta uppercase tracking-label text-muted-fg-2">
+            <span className="font-mono text-meta uppercase tracking-label text-muted-foreground">
               outro placar
             </span>
             <GoalsSelect label={teams.home} value={otherHome} onChange={setOtherHome} />
@@ -207,7 +207,7 @@ export function SeuPalpite({
     <div className="flex flex-col gap-3" data-testid="seu-palpite-reading">
       <ReadingRows rows={rows} teams={teams} />
       <p className="text-body-sm tracking-tight">{rows.sentence}</p>
-      <span className="font-mono text-meta text-muted-fg-2">modelo {model.modelLabel}</span>
+      <span className="font-mono text-meta text-muted-foreground">modelo {model.modelLabel}</span>
       <div className="flex flex-col gap-1.5">
         <Button type="button" size="sm" variant="outline" className="w-fit" onClick={addToSlip}>
           Adicionar às suas apostas
@@ -275,7 +275,7 @@ export function SeuPalpite({
         )}
       </Card>
       {analysis && <AnalysisCard analysis={analysis} teams={teams} variant={variant} />}
-      <p className="text-meta leading-relaxed text-muted-fg-2 tracking-tight">
+      <p className="text-meta leading-relaxed text-muted-foreground tracking-tight">
         {RISK_DISCLAIMER_PT_BR}
       </p>
     </section>
@@ -418,10 +418,10 @@ function AnalyzeForm({
         placeholder="Ex.: o Flamengo vem de três vitórias e o Palmeiras está sem o artilheiro"
         className="rounded-md border border-border bg-transparent px-3 py-2 text-body-sm tracking-tight focus-visible:outline-none focus-visible:ring-[3px] focus-visible:ring-ring/50"
       />
-      <span className="self-end font-mono text-meta tabular-nums text-muted-fg-2">
+      <span className="self-end font-mono text-meta tabular-nums text-muted-foreground">
         {reason.length}/{MAX_REASON_CHARS}
       </span>
-      <p id={hintId} className="text-meta leading-relaxed text-muted-fg-2 tracking-tight">
+      <p id={hintId} className="text-meta leading-relaxed text-muted-foreground tracking-tight">
         A IA lê o seu motivo, a gente confere cada afirmação com os nossos dados e o
         modelo recalcula. Conta 1 do seu limite diário de palpites. Não escreva dados
         pessoais.
@@ -493,7 +493,7 @@ function AnalysisCard({
                       {c.players.map((p) => `${p.name}: ${p.statusLabel}`).join(" · ")}
                     </span>
                   )}
-                  <span className="font-mono text-meta text-muted-fg-2">{c.effect}</span>
+                  <span className="font-mono text-meta text-muted-foreground">{c.effect}</span>
                 </li>
               ))}
             </ul>
@@ -558,13 +558,13 @@ function AnalysisCard({
           </p>
         )}
         {a.warnings.map((w, i) => (
-          <p key={i} className="text-meta leading-relaxed tracking-tight text-muted-fg-2">
+          <p key={i} className="text-meta leading-relaxed tracking-tight text-muted-foreground">
             {w}
           </p>
         ))}
       </div>
       <Separator />
-      <div className="px-4 py-2.5 font-mono text-meta text-muted-fg-2">
+      <div className="px-4 py-2.5 font-mono text-meta text-muted-foreground">
         modelo {a.modelLabel} ·{" "}
         {a.narrationSource === "llm" ? "texto por IA" : "texto automático"}
       </div>

@@ -22,7 +22,7 @@ export function PreviousAnalyses({ items }: { items: PreviousAnalysisItem[] }) {
               <span className="font-mono text-meta uppercase tracking-label text-muted-foreground">
                 {item.marketLabel}
               </span>
-              <span className="font-mono text-meta tabular-nums text-muted-fg-2">
+              <span className="font-mono text-meta tabular-nums text-muted-foreground">
                 {item.generatedAt}
               </span>
             </div>

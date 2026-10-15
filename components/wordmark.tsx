@@ -24,7 +24,7 @@ export function Wordmark({ suffix, className, suffixClassName }: Props) {
       {suffix != null && (
         <span
           className={cn(
-            "font-mono text-meta tracking-eyebrow text-muted-fg-2 uppercase",
+            "font-mono text-meta tracking-eyebrow text-muted-foreground uppercase",
             suffixClassName
           )}
         >

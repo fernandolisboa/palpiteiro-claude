@@ -112,12 +112,12 @@ export function MatchRow({ m, last, listHref, backHref, tourTarget }: Props) {
                   <span className="px-1 text-muted-foreground">–</span>
                   {m.liveScore.away}
                 </span>
-                <span className="font-mono text-meta text-muted-fg-2">
+                <span className="font-mono text-meta text-muted-foreground">
                   {m.liveScore.caption}
                 </span>
               </div>
             ) : (
-              <span className="font-mono text-meta text-muted-fg-2">—</span>
+              <span className="font-mono text-meta text-muted-foreground">—</span>
             )
           ) : isFinished && hasScore ? (
             <div className="flex flex-col items-end gap-0.5">
@@ -126,18 +126,18 @@ export function MatchRow({ m, last, listHref, backHref, tourTarget }: Props) {
                 <span className="px-1 text-muted-foreground">–</span>
                 {m.awayScore}
               </span>
-              <span className="font-mono text-meta uppercase tracking-label text-muted-fg-2">
+              <span className="font-mono text-meta uppercase tracking-label text-muted-foreground">
                 encerrado
               </span>
             </div>
           ) : isFinished ? (
             // Encerrado sem placar reportado: marca o estado sem inventar 0–0
             // nem cair no "sem odd" (que sugeriria um jogo ainda apostável).
-            <span className="font-mono text-meta uppercase tracking-label text-muted-fg-2">
+            <span className="font-mono text-meta uppercase tracking-label text-muted-foreground">
               encerrado
             </span>
           ) : m.status === "postponed" || m.status === "cancelled" ? (
-            <span className="font-mono text-meta uppercase tracking-label text-muted-fg-2">
+            <span className="font-mono text-meta uppercase tracking-label text-muted-foreground">
               {STATUS_LABEL[m.status]}
             </span>
           ) : m.odds ? (
@@ -150,7 +150,7 @@ export function MatchRow({ m, last, listHref, backHref, tourTarget }: Props) {
               ))}
             </div>
           ) : (
-            <span className="font-mono text-meta text-muted-fg-2">
+            <span className="font-mono text-meta text-muted-foreground">
               sem odd
             </span>
           )}

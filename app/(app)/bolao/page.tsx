@@ -79,7 +79,7 @@ export default async function BolaoPage({ searchParams }: PageProps) {
           </ul>
         )}
 
-        <p className="mt-10 text-meta leading-relaxed text-muted-fg-2 tracking-tight">
+        <p className="mt-10 text-meta leading-relaxed text-muted-foreground tracking-tight">
           {POOL_MONEY_NOTE} {POOL_RISK_NOTE}
         </p>
       </div>
@@ -119,7 +119,7 @@ function PoolRow({
           <p className="text-muted-foreground text-meta">
             {poolMatchLabel(row.match, now, timeZone)}
           </p>
-          <p className="text-muted-fg-2 pt-1 font-mono text-meta">
+          <p className="text-muted-foreground pt-1 font-mono text-meta">
             {row.entryCount} {row.entryCount === 1 ? "aposta" : "apostas"}
             {pot !== null && pot > 0 ? ` · pote ${formatBrl(pot)}` : ""}
           </p>

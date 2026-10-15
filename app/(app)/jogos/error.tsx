@@ -31,7 +31,7 @@ export default function GlobalError({
             {error.message || "Erro inesperado ao buscar dados."}
           </span>
           {error.digest && (
-            <span className="font-mono text-meta text-muted-fg-2">
+            <span className="font-mono text-meta text-muted-foreground">
               trace · {error.digest}
             </span>
           )}

@@ -39,7 +39,7 @@ export default function TermosPage() {
       </header>
 
       <main className="mx-auto w-full max-w-reading px-6 py-12 sm:py-16">
-        <p className="font-mono text-meta uppercase tracking-eyebrow text-muted-fg-2">
+        <p className="font-mono text-meta uppercase tracking-eyebrow text-muted-foreground">
           Documento legal
         </p>
         <h1 className="mt-3 text-display-md font-medium tracking-tight sm:text-display-lg">

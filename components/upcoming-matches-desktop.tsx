@@ -92,10 +92,10 @@ export function UpcomingMatchesDesktop({
                     <span className="px-1 text-muted-foreground">–</span>
                     {m.liveScore.away}
                   </span>
-                  <span className="text-meta text-muted-fg-2">{m.liveScore.caption}</span>
+                  <span className="text-meta text-muted-foreground">{m.liveScore.caption}</span>
                 </>
               ) : (
-                <span className="text-meta text-muted-fg-2">—</span>
+                <span className="text-meta text-muted-foreground">—</span>
               )
             ) : m.status === "finished" &&
               m.homeScore !== null &&
@@ -107,11 +107,11 @@ export function UpcomingMatchesDesktop({
               </span>
             ) : m.status === "finished" ? (
               // Encerrado sem placar reportado: não cai no "sem odd".
-              <span className="text-meta uppercase tracking-label text-muted-fg-2">
+              <span className="text-meta uppercase tracking-label text-muted-foreground">
                 —
               </span>
             ) : m.status === "postponed" || m.status === "cancelled" ? (
-              <span className="text-meta uppercase tracking-label text-muted-fg-2">
+              <span className="text-meta uppercase tracking-label text-muted-foreground">
                 {STATUS_LABEL[m.status]}
               </span>
             ) : m.odds ? (
