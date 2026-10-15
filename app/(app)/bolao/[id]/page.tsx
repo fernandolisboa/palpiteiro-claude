@@ -160,7 +160,7 @@ export default async function BolaoDetailPage({ params }: PageProps) {
                       {e.bettorName}
                     </span>
                     <span className="min-w-0 flex-[2] text-right text-body-sm tracking-tight">
-                      <span className="text-muted-foreground font-mono text-meta">
+                      <span className="text-muted-foreground text-meta">
                         {POOL_KIND_LABEL[e.kind] ?? e.kind} ·{" "}
                       </span>
                       {poolBetLabel(e.kind, e.params, teams)}

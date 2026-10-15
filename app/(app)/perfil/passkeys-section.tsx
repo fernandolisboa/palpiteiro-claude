@@ -107,7 +107,7 @@ export function PasskeysSection({ authenticators }: Props) {
             >
               <div className="flex flex-col">
                 <span className="text-body">{deviceLabel(a)}</span>
-                <span className="text-muted-foreground font-mono text-meta">
+                <span className="text-muted-foreground font-mono tabular-nums text-meta">
                   {a.credentialID.slice(0, 12)}…
                 </span>
               </div>

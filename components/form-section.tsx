@@ -23,7 +23,7 @@ export function FormSection({ view }: Props) {
           </span>
           <div className="flex items-center gap-1.5">
             {r.results.length === 0 ? (
-              <span className="font-mono text-meta text-muted-foreground">
+              <span className="text-meta text-muted-foreground">
                 sem histórico
               </span>
             ) : (

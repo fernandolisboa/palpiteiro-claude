@@ -683,7 +683,7 @@ function SlipPanel(props: {
                 </button>
               </div>
               {leg.modelProbPct !== null && (
-                <span className="font-mono text-meta text-muted-foreground">
+                <span className="font-mono tabular-nums text-meta text-muted-foreground">
                   chance {formatPct(leg.modelProbPct, { decimals: 1 })}
                   {leg.fairOdd !== null ? ` · odd justa ${formatOdd(leg.fairOdd)}` : ""}
                 </span>
@@ -875,7 +875,7 @@ function LegEvaluation({ leg }: { leg: EvaluatedLegView }) {
           {leg.label}
         </span>
         {leg.sourceLabel && (
-          <span className="shrink-0 font-mono text-meta text-muted-foreground">
+          <span className="shrink-0 text-meta text-muted-foreground">
             {leg.sourceLabel}
           </span>
         )}
@@ -915,7 +915,7 @@ function ComboEvaluation({ combo }: { combo: EvaluatedComboView }) {
         <span className="text-body-sm font-medium tracking-tight text-foreground">
           Combinada (todas juntas)
         </span>
-        <span className="shrink-0 font-mono text-meta text-muted-foreground">
+        <span className="shrink-0 text-meta text-muted-foreground">
           {combo.sourceLabel}
         </span>
       </div>

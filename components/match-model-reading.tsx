@@ -43,7 +43,7 @@ export function MatchModelReadingCard({
           />
         </span>
         {view && (
-          <span className="font-mono text-meta text-muted-foreground">
+          <span className="text-meta text-muted-foreground">
             calculado {view.computedAgo}
           </span>
         )}
@@ -99,7 +99,7 @@ export function MatchModelReadingCard({
             )}
           </div>
           <Separator />
-          <div className="flex items-center justify-between gap-3 px-4 py-2.5 font-mono text-meta text-muted-foreground">
+          <div className="flex items-center justify-between gap-3 px-4 py-2.5 text-meta text-muted-foreground">
             <span>
               modelo · {view.source}
               {view.jev ? ` ${view.jev}` : ""}

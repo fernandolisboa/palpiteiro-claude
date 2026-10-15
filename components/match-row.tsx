@@ -62,7 +62,7 @@ export function MatchRow({ m, last, listHref, backHref, tourTarget }: Props) {
             {LEAGUE_LABEL[m.league]}
           </Badge>
           {m.hasPrediction && (
-            <span className="inline-flex items-center gap-1 font-mono text-meta text-accent-fg">
+            <span className="inline-flex items-center gap-1 text-meta text-accent-fg">
               <Check className="size-3" />
               analisado
             </span>
@@ -112,12 +112,12 @@ export function MatchRow({ m, last, listHref, backHref, tourTarget }: Props) {
                   <span className="px-1 text-muted-foreground">–</span>
                   {m.liveScore.away}
                 </span>
-                <span className="font-mono text-meta text-muted-foreground">
+                <span className="text-meta text-muted-foreground">
                   {m.liveScore.caption}
                 </span>
               </div>
             ) : (
-              <span className="font-mono text-meta text-muted-foreground">—</span>
+              <span className="text-meta text-muted-foreground">—</span>
             )
           ) : isFinished && hasScore ? (
             <div className="flex flex-col items-end gap-0.5">
@@ -150,7 +150,7 @@ export function MatchRow({ m, last, listHref, backHref, tourTarget }: Props) {
               ))}
             </div>
           ) : (
-            <span className="font-mono text-meta text-muted-foreground">
+            <span className="text-meta text-muted-foreground">
               sem odd
             </span>
           )}

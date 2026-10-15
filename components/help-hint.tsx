@@ -37,7 +37,7 @@ export function HelpHint({ anchor, label, blurb }: HelpHintProps) {
         <button
           type="button"
           aria-label={`Ajuda: ${label}`}
-          className="inline-flex size-[15px] shrink-0 items-center justify-center rounded-full border border-border-subtle font-mono text-meta leading-none text-muted-foreground transition-colors hover:text-foreground focus-visible:ring-[3px] focus-visible:ring-ring/50 focus-visible:outline-none"
+          className="inline-flex size-[15px] shrink-0 items-center justify-center rounded-full border border-border-subtle text-meta leading-none text-muted-foreground transition-colors hover:text-foreground focus-visible:ring-[3px] focus-visible:ring-ring/50 focus-visible:outline-none"
         >
           ?
         </button>
@@ -48,7 +48,7 @@ export function HelpHint({ anchor, label, blurb }: HelpHintProps) {
         </p>
         <Link
           href={`/como-funciona#${anchor}`}
-          className="font-mono text-meta tracking-tight text-muted-foreground underline-offset-2 hover:text-foreground hover:underline focus-visible:rounded-sm focus-visible:outline-none focus-visible:ring-[3px] focus-visible:ring-ring/50"
+          className="text-meta tracking-tight text-muted-foreground underline-offset-2 hover:text-foreground hover:underline focus-visible:rounded-sm focus-visible:outline-none focus-visible:ring-[3px] focus-visible:ring-ring/50"
         >
           saiba mais
         </Link>

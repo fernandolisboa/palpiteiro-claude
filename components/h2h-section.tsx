@@ -46,9 +46,9 @@ export function H2HSection({ view }: Props) {
           </Badge>
         </div>
       ))}
-      <div className="flex items-center justify-between pt-3 font-mono text-meta text-muted-foreground">
+      <div className="flex items-center justify-between pt-3 text-meta text-muted-foreground">
         <span>últimos {view.rows.length} confrontos</span>
-        <span className="tabular-nums">{view.summary}</span>
+        <span className="font-mono tabular-nums">{view.summary}</span>
       </div>
     </div>
   );

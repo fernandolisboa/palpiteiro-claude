@@ -116,7 +116,7 @@ export function MatchHero({
               encerrado
             </span>
           ) : liveScore ? (
-            <span className="text-center font-mono text-meta text-muted-foreground">
+            <span className="text-center text-meta text-muted-foreground">
               {liveScore.caption}
             </span>
           ) : null}

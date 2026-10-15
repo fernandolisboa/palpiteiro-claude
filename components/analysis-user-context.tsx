@@ -33,7 +33,7 @@ export function AnalysisUserContext({ view }: { view: AnalysisUserContextView })
             <span className="text-meta tracking-tight text-muted-foreground">
               {c.evidence}
             </span>
-            <span className="font-mono text-meta text-muted-foreground">{c.effect}</span>
+            <span className="text-meta text-muted-foreground">{c.effect}</span>
           </li>
         ))}
       </ul>

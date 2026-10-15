@@ -30,7 +30,7 @@ export function AnalysisResult({ view, showRiskDisclaimer = true }: Props) {
               blurb="PASS = sem edge claro = não apostar; isso é disciplina, não erro. Pass rate alto (30–60%) é bom."
             />
           </span>
-          <span className="font-mono text-meta text-muted-foreground">
+          <span className="font-mono tabular-nums text-meta text-muted-foreground">
             {view.generatedAt}
           </span>
         </div>
@@ -40,7 +40,7 @@ export function AnalysisResult({ view, showRiskDisclaimer = true }: Props) {
             — "confidence" exibia P(over) em pass sem dizer isso. */}
         <div className="flex items-start gap-4 px-4 py-4">
           <div className="flex flex-col items-start gap-1">
-            <span className="font-mono text-display-sm font-medium tabular-nums leading-none tracking-tight text-muted-foreground">
+            <span className="text-display-sm font-medium leading-none tracking-tight text-muted-foreground">
               PASS
             </span>
             <span className="text-meta uppercase tracking-label text-muted-foreground">
@@ -80,7 +80,7 @@ export function AnalysisResult({ view, showRiskDisclaimer = true }: Props) {
         <span className="text-meta uppercase tracking-eyebrow text-accent-fg">
           recomendação · gerada com claude
         </span>
-        <span className="font-mono text-meta text-muted-foreground">
+        <span className="font-mono tabular-nums text-meta text-muted-foreground">
           {view.generatedAt}
         </span>
       </div>
@@ -92,7 +92,7 @@ export function AnalysisResult({ view, showRiskDisclaimer = true }: Props) {
           view) — sem setas nem "2.5" hardcoded (data-driven, AC3). */}
       <div className="flex items-start gap-3 px-4 py-4">
         <div className="flex flex-col items-start gap-1">
-          <span className="font-mono text-display-md font-medium leading-none tracking-tight text-accent-strong-fg">
+          <span className="text-display-md font-medium leading-none tracking-tight text-accent-strong-fg">
             {rec.selectionLabel}
             {rec.line !== null ? ` ${formatLine(rec.line)}` : ""}
           </span>

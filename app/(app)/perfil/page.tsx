@@ -59,7 +59,7 @@ export default async function PerfilPage() {
           <h2 className="text-display-sm font-medium tracking-tight">
             Modelo de análise
           </h2>
-          <p className="text-muted-foreground pb-6 font-mono text-meta">
+          <p className="text-muted-foreground pb-6 text-meta">
             usado nas suas análises · sobrescreve o padrão global
           </p>
           <PreferredModelForm
@@ -73,7 +73,7 @@ export default async function PerfilPage() {
           <h2 className="text-display-sm font-medium tracking-tight">
             Passkeys
           </h2>
-          <p className="text-muted-foreground pb-6 font-mono text-meta">
+          <p className="text-muted-foreground pb-6 text-meta">
             login sem senha · biometria ou PIN do dispositivo
           </p>
           <PasskeysSection authenticators={authenticators} />
@@ -86,7 +86,7 @@ export default async function PerfilPage() {
           <h2 className="text-display-sm font-medium tracking-tight">
             Seus dados
           </h2>
-          <p className="text-muted-foreground pb-4 font-mono text-meta">
+          <p className="text-muted-foreground pb-4 text-meta">
             cópia · correção · exclusão da conta · LGPD
           </p>
           <p className="text-body-sm leading-relaxed tracking-tight text-muted-foreground">

@@ -115,7 +115,7 @@ export function PredictionsTable({
                 </TableCell>
                 <TableCell>
                   <div
-                    className={cn("font-mono text-meta font-medium", recClass(r.rec))}
+                    className={cn("text-meta font-medium", recClass(r.rec))}
                   >
                     {r.rec}
                   </div>

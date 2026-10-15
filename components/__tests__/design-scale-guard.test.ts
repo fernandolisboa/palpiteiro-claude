@@ -52,4 +52,16 @@ describe("escala visual (ADR 0056)", () => {
     );
     expect(hits).toEqual([]);
   });
+
+  it("mono só em número: toda classe font-mono vem com tabular-nums (fora admin e <pre>/<code>)", () => {
+    const hits = scan(
+      (line, rel) =>
+        !rel.startsWith("app/(app)/admin/") &&
+        !rel.startsWith("components/admin/") &&
+        !/<(pre|code)\b/.test(line) &&
+        /(?<![\w:-])font-mono\b/.test(line) &&
+        !/\btabular-nums\b/.test(line),
+    );
+    expect(hits).toEqual([]);
+  });
 });

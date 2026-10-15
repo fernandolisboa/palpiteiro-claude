@@ -141,7 +141,7 @@ function SlipCard({
     <Card className="gap-0 overflow-hidden p-0">
       <div className="flex items-start justify-between gap-2 px-4 pt-3 pb-3">
         <div className="flex flex-col gap-0.5">
-          <span className="font-mono text-body font-medium tracking-tight text-foreground">
+          <span className="text-body font-medium tracking-tight text-foreground">
             {slip.match.homeTeam} × {slip.match.awayTeam}
           </span>
           <span className="text-meta uppercase tracking-label text-muted-foreground">

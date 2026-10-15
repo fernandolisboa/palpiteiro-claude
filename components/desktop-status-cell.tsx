@@ -24,13 +24,13 @@ export function DesktopStatusCell({ m }: { m: MatchRowView }) {
             encerrado
           </span>
           {m.hasPrediction && (
-            <span className="inline-flex items-center gap-1 font-mono text-meta text-accent-fg">
+            <span className="inline-flex items-center gap-1 text-meta text-accent-fg">
               <Check className="size-3" /> analisado
             </span>
           )}
         </>
       ) : m.status === "postponed" || m.status === "cancelled" ? (
-        <span className="font-mono text-meta text-muted-foreground">—</span>
+        <span className="text-meta text-muted-foreground">—</span>
       ) : m.hasPrediction ? (
         <Badge
           variant="outline"
@@ -40,7 +40,7 @@ export function DesktopStatusCell({ m }: { m: MatchRowView }) {
           <Check className="size-3" /> analisado
         </Badge>
       ) : (
-        <span className="font-mono text-meta text-muted-foreground">—</span>
+        <span className="text-meta text-muted-foreground">—</span>
       )}
     </div>
   );

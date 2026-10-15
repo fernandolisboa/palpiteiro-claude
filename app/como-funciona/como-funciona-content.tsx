@@ -553,7 +553,7 @@ export function ComoFuncionaContent() {
       {/* Seção 5 — glossário expansível */}
       <section className="border-border border-t pt-8 mt-8">
         <h2 className="text-display-sm font-medium tracking-tight">Glossário</h2>
-        <p className="pb-4 pt-1 font-mono text-meta text-muted-foreground">
+        <p className="pb-4 pt-1 text-meta text-muted-foreground">
           toque pra expandir · o significado de cada termo do app
         </p>
         <GlossarySection />
@@ -565,7 +565,7 @@ export function ComoFuncionaContent() {
           <h2 className="text-display-sm font-medium tracking-tight">
             Jogo responsável
           </h2>
-          <span className="border-warn-border bg-warn-soft text-warn-fg rounded-md border px-1.5 py-0.5 font-mono text-meta font-medium tracking-label">
+          <span className="border-warn-border bg-warn-soft text-warn-fg rounded-md border px-1.5 py-0.5 text-meta font-medium tracking-label">
             18+
           </span>
         </div>

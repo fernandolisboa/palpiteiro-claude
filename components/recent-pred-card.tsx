@@ -28,7 +28,7 @@ export function RecentPredCard({
           {p.when}
         </span>
       </div>
-      <div className="font-mono text-body-sm tabular-nums tracking-tight">
+      <div className="text-body-sm tracking-tight">
         {p.home} <span className="text-muted-foreground">vs</span> {p.away}
       </div>
       <div className="truncate text-meta text-muted-foreground">{p.market}</div>

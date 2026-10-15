@@ -32,7 +32,7 @@ function GraduationRuler({
             graduado
           </Badge>
         ) : (
-          <span className="font-mono text-meta tabular-nums text-muted-foreground">
+          <span className="text-meta text-muted-foreground">
             graduando
           </span>
         )}

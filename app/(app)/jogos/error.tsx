@@ -31,9 +31,9 @@ export default function GlobalError({
             {error.message || "Erro inesperado ao buscar dados."}
           </span>
           {error.digest && (
-            <span className="font-mono text-meta text-muted-foreground">
+            <code className="font-mono text-meta text-muted-foreground">
               trace · {error.digest}
-            </span>
+            </code>
           )}
           <div className="flex gap-2 pt-2">
             <Button size="sm" onClick={() => reset()}>

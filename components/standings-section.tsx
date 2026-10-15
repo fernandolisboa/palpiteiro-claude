@@ -43,7 +43,7 @@ export function StandingsSection({ view }: Props) {
               r.focus && "bg-accent-soft text-accent-fg",
             )}
           >
-            <span className="font-mono text-meta text-muted-foreground">{r.pos}</span>
+            <span className="font-mono tabular-nums text-meta text-muted-foreground">{r.pos}</span>
             {/* Nome clicável (#408) → histórico do time. Linka pelo canonical cru
                 (r.teamKey), EXIBE o nome traduzido (r.team, PT-BR p/ Copa). */}
             <Link
@@ -52,9 +52,9 @@ export function StandingsSection({ view }: Props) {
             >
               {r.team}
             </Link>
-            <span className="text-right font-mono">{r.p}</span>
-            <span className="text-right font-mono">{r.gf}</span>
-            <span className="text-right font-mono">
+            <span className="text-right font-mono tabular-nums">{r.p}</span>
+            <span className="text-right font-mono tabular-nums">{r.gf}</span>
+            <span className="text-right font-mono tabular-nums">
               {sg > 0 ? "+" : ""}
               {sg}
             </span>

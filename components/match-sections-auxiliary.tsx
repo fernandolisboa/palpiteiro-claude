@@ -144,7 +144,7 @@ function InjuriesBody({
                 className="flex items-center justify-between text-body-sm tracking-tight"
               >
                 <span className="text-foreground">{p.name}</span>
-                <span className="font-mono text-meta text-muted-foreground">
+                <span className="text-meta text-muted-foreground">
                   {p.status}
                 </span>
               </div>

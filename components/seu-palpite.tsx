@@ -207,7 +207,7 @@ export function SeuPalpite({
     <div className="flex flex-col gap-3" data-testid="seu-palpite-reading">
       <ReadingRows rows={rows} teams={teams} />
       <p className="text-body-sm tracking-tight">{rows.sentence}</p>
-      <span className="font-mono text-meta text-muted-foreground">modelo {model.modelLabel}</span>
+      <span className="text-meta text-muted-foreground">modelo {model.modelLabel}</span>
       <div className="flex flex-col gap-1.5">
         <Button type="button" size="sm" variant="outline" className="w-fit" onClick={addToSlip}>
           Adicionar às suas apostas
@@ -347,7 +347,7 @@ function ReadingRows({ rows, teams }: { rows: ReadingRowsView; teams: TeamNames 
         </span>
         <span className="font-mono text-label font-medium tabular-nums">{rows.palpitePct}</span>
         {rows.rank && (
-          <span className="font-mono text-meta text-muted-foreground">{rows.rank}</span>
+          <span className="text-meta text-muted-foreground">{rows.rank}</span>
         )}
       </div>
       {rows.result && (
@@ -493,7 +493,7 @@ function AnalysisCard({
                       {c.players.map((p) => `${p.name}: ${p.statusLabel}`).join(" · ")}
                     </span>
                   )}
-                  <span className="font-mono text-meta text-muted-foreground">{c.effect}</span>
+                  <span className="text-meta text-muted-foreground">{c.effect}</span>
                 </li>
               ))}
             </ul>
@@ -564,7 +564,7 @@ function AnalysisCard({
         ))}
       </div>
       <Separator />
-      <div className="px-4 py-2.5 font-mono text-meta text-muted-foreground">
+      <div className="px-4 py-2.5 text-meta text-muted-foreground">
         modelo {a.modelLabel} ·{" "}
         {a.narrationSource === "llm" ? "texto por IA" : "texto automático"}
       </div>

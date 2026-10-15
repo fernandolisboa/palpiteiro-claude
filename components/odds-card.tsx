@@ -43,7 +43,7 @@ export function OddsCard({ view, unavailable }: Props) {
         <span className="text-body-sm text-muted-foreground tracking-tight">
           {body}
         </span>
-        <span className="pt-1 font-mono text-meta text-muted-foreground">
+        <span className="pt-1 text-meta text-muted-foreground">
           fonte: the-odds-api
         </span>
       </Callout>
@@ -66,7 +66,7 @@ export function OddsCard({ view, unavailable }: Props) {
             {view.marketLabel}
           </Badge>
         </div>
-        <span className="font-mono text-meta text-muted-foreground">
+        <span className="text-meta text-muted-foreground">
           atualizado há {view.updatedAgo}
         </span>
       </div>
@@ -118,9 +118,9 @@ export function OddsCard({ view, unavailable }: Props) {
         })}
       </div>
       <Separator />
-      <div className="flex items-center justify-between px-4 py-2.5 font-mono text-meta text-muted-foreground">
+      <div className="flex items-center justify-between px-4 py-2.5 text-meta text-muted-foreground">
         <span>odd de mercado</span>
-        <span className="flex items-center gap-1 tabular-nums">
+        <span className="flex items-center gap-1 font-mono tabular-nums">
           overround {view.overround}
           <HelpHint
             anchor="overround"

@@ -5,7 +5,7 @@ import type { PalpiteLineView } from "@/lib/view/palpites";
 // Badge outline size=xs, neutro — identifica a categoria sem competir com o estado.
 export function TypeBadge({ label }: { label: string }) {
   return (
-    <Badge variant="outline" size="xs" className="font-mono tracking-tight">
+    <Badge variant="outline" size="xs" className="tracking-tight">
       {label}
     </Badge>
   );

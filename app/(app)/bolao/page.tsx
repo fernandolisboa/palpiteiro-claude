@@ -118,7 +118,7 @@ function PoolRow({
           <p className="text-muted-foreground text-meta">
             {poolMatchLabel(row.match, now, timeZone)}
           </p>
-          <p className="text-muted-foreground pt-1 font-mono text-meta">
+          <p className="text-muted-foreground pt-1 text-meta tabular-nums">
             {row.entryCount} {row.entryCount === 1 ? "aposta" : "apostas"}
             {pot !== null && pot > 0 ? ` · pote ${formatBrl(pot)}` : ""}
           </p>

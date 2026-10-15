@@ -155,7 +155,7 @@ export function AnalysisScenarios({
         </div>
       )}
       {hiddenCount > 0 && (
-        <p className="font-mono text-meta leading-snug tracking-tight text-muted-foreground">
+        <p className="text-meta leading-snug tracking-tight text-muted-foreground">
           {`+${hiddenCount} outras seleções não exibidas`}
         </p>
       )}
@@ -165,11 +165,11 @@ export function AnalysisScenarios({
         </p>
       )}
       {note && (
-        <p className="font-mono text-meta leading-snug tracking-tight text-muted-foreground">
+        <p className="text-meta leading-snug tracking-tight text-muted-foreground">
           {note}
         </p>
       )}
-      <p className="font-mono text-meta leading-snug tracking-tight text-muted-foreground">
+      <p className="text-meta leading-snug tracking-tight text-muted-foreground">
         {`o app só recomenda com vantagem ≥ ${minEdgePp}pp sobre o mercado; os números acima são informativos · odds do momento da análise — as atuais estão no card acima`}
       </p>
     </div>
