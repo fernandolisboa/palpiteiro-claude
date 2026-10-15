@@ -9,6 +9,7 @@ import {
   formatDayHeading,
   formatStartsIn,
   formatTimeOfDay,
+  formatWeekdayDate,
   formatCostUsd,
   formatCostUsdTotal,
   formatCountdown,
@@ -473,5 +474,17 @@ describe("leagueToKey + LEAGUE_LABEL", () => {
     expect(leagueToKey("la_liga")).toBe("laliga");
     expect(LEAGUE_LABEL.epl).toBe("Premier League");
     expect(LEAGUE_LABEL.laliga).toBe("La Liga");
+  });
+});
+
+describe("formatWeekdayDate (#577)", () => {
+  const SP = "America/Sao_Paulo";
+  it("formatWeekdayDate: 'sáb 18/10' no fuso, ano só se difere", () => {
+    const now = new Date("2026-10-14T15:00:00Z");
+    expect(formatWeekdayDate(new Date("2026-10-17T19:00:00Z"), now, SP)).toBe("sáb 17/10");
+    // 23:30 de sábado em SP ainda é sábado, embora já seja domingo em UTC.
+    expect(formatWeekdayDate(new Date("2026-10-18T02:30:00Z"), now, SP)).toBe("sáb 17/10");
+    expect(formatWeekdayDate(new Date("2026-10-18T02:30:00Z"), now, "UTC")).toBe("dom 18/10");
+    expect(formatWeekdayDate(new Date("2025-10-18T19:00:00Z"), now, SP)).toBe("sáb 18/10/2025");
   });
 });

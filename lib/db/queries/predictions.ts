@@ -9,6 +9,7 @@ import {
   isNull,
   lte,
   lt,
+  max,
   ne,
 } from "drizzle-orm";
 
@@ -343,6 +344,8 @@ export type RecentPredictionRow = {
   homeTeam: string;
   awayTeam: string;
   league: DbMatch["league"];
+  // Data do jogo: o cartão de "Suas predições recentes" mostra quando é o jogo (#577).
+  kickoffAt: Date;
   recommendation: DbPrediction["recommendation"];
   // Mercado/seleção pro display (#539): sem eles o card mostrava "HOME" cru e não
   // dizia de qual mercado era. null = row sem marketId/selectionId (legado/pass).
@@ -355,22 +358,35 @@ export type RecentPredictionRow = {
 };
 
 /**
- * Feed de "análises recentes" do usuário. NÃO deduplica por jogo — lista cada
- * reanálise — por decisão de produto (ADR 0020): é um feed de atividade ("o que
- * analisei recentemente"), não um resumo de performance. Diverge de propósito
- * dos KPIs do dashboard, que contam só a predição mais recente por jogo (#116).
+ * "Suas predições recentes" (/jogos), um cartão por jogo (ADR 0058, emenda a ADR 0020
+ * D4): os `matchLimit` jogos que o usuário analisou por último (pela predição mais
+ * recente de cada um) e TODAS as predições dele nesses jogos, mais novas primeiro. A
+ * dedup por mercado (a mais recente vence, a chave dos KPIs) fica na view
+ * (`toRecentMatchViews`), que também ordena os jogos. Duas idas ao banco: os jogos,
+ * depois as predições deles; sem jogo analisado, a segunda nem acontece.
  */
-export async function getRecentPredictionsByUser(
+export async function getRecentPredictedMatchesByUser(
   userId: string,
-  limit = 5
+  matchLimit = 5
 ): Promise<RecentPredictionRow[]> {
-  const rows = await db
+  const lastAnalysis = max(predictions.createdAt);
+  const recentMatches = await db
+    .select({ matchId: predictions.matchId })
+    .from(predictions)
+    .where(eq(predictions.userId, userId))
+    .groupBy(predictions.matchId)
+    // Desempate por jogo: com o mesmo max(createdAt), o corte do limit não varia.
+    .orderBy(desc(lastAnalysis), desc(predictions.matchId))
+    .limit(matchLimit);
+  if (recentMatches.length === 0) return [];
+  return db
     .select({
       predictionId: predictions.id,
       matchId: predictions.matchId,
       homeTeam: matches.homeTeam,
       awayTeam: matches.awayTeam,
       league: matches.league,
+      kickoffAt: matches.kickoffAt,
       recommendation: predictions.recommendation,
       marketKey: markets.key,
       marketLabel: markets.label,
@@ -383,8 +399,15 @@ export async function getRecentPredictionsByUser(
     .innerJoin(matches, eq(predictions.matchId, matches.id))
     .leftJoin(markets, eq(predictions.marketId, markets.id))
     .leftJoin(marketSelections, eq(predictions.selectionId, marketSelections.id))
-    .where(eq(predictions.userId, userId))
-    .orderBy(desc(predictions.createdAt))
-    .limit(limit);
-  return rows;
+    .where(
+      and(
+        eq(predictions.userId, userId),
+        inArray(
+          predictions.matchId,
+          recentMatches.map((m) => m.matchId)
+        )
+      )
+    )
+    // Mesmo desempate da primeira query (matchId desc), depois a própria predição.
+    .orderBy(desc(predictions.createdAt), desc(predictions.matchId), desc(predictions.id));
 }

@@ -2,7 +2,7 @@
 
 ## Status
 
-Accepted (2026-06-12)
+Accepted (2026-06-12). **Decisão 4 emendada pela [ADR 0058](./0058-predicoes-recentes-um-cartao-por-jogo.md)** (2026-10-15): "Suas predições recentes" passa a ser um cartão por jogo, com a análise mais recente de cada mercado.
 
 ## Contexto
 
@@ -47,6 +47,8 @@ Não há decisão de produto ou técnica registrada pra nenhuma das duas — da�
    o filtro `IS NULL` de `getPendingSettlementPredictions` (settlement do #47).
 
 4. **A lista de "recentes" do dashboard lista cada reanálise — exceção documentada.**
+   *(Emendada pela ADR 0058: a lista virou um cartão por jogo, com a predição mais
+   recente de cada mercado. O texto abaixo fica como registro da decisão original.)*
    `getRecentPredictionsByUser` **não** deduplica por jogo: ela é um **feed de
    atividade** (o que o usuário analisou recentemente), não um resumo de performance
    por partida. Mostrar cada reanálise reflete a atividade real. Os KPIs deduplicam

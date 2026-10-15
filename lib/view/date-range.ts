@@ -2,6 +2,7 @@ import { z } from "zod";
 
 import { matchStatusEnum } from "@/db/schema";
 import type { DbMatch } from "@/lib/db/queries/matches";
+import { dayKeyOf } from "@/lib/format";
 
 export type RangePreset = "today5" | "today14" | "season" | "custom";
 
@@ -11,6 +12,10 @@ export type ResolvedRange = {
   preset: RangePreset;
   statuses: DbMatch["status"][];
   order: "asc" | "desc";
+  // Só no `custom`: os dias civis escolhidos ("2026-10-18"), como vieram da URL (já em
+  // ordem). `from`/`to` são instantes no fuso do usuário; o dia deles em UTC pode ser
+  // outro, então rótulo e links leem daqui.
+  days?: { from: string; to: string };
 };
 
 // Reuse the schema enum as the single source of truth for "all statuses"
@@ -69,12 +74,55 @@ const isoDateSchema = z
     );
   });
 
-function startOfUtcDay(value: string): Date {
-  return new Date(`${value}T00:00:00.000Z`);
+// Relógio de parede em `timeZone` menos o UTC, no instante `t` (ms).
+function zoneOffsetMs(t: number, timeZone: string): number {
+  const parts = new Intl.DateTimeFormat("en-US", {
+    timeZone,
+    year: "numeric",
+    month: "2-digit",
+    day: "2-digit",
+    hour: "2-digit",
+    minute: "2-digit",
+    second: "2-digit",
+    hourCycle: "h23",
+  }).formatToParts(new Date(t));
+  const pick = (type: string) => Number(parts.find((p) => p.type === type)?.value);
+  const wall = Date.UTC(
+    pick("year"),
+    pick("month") - 1,
+    pick("day"),
+    pick("hour"),
+    pick("minute"),
+    pick("second"),
+  );
+  return wall - Math.floor(t / 1000) * 1000;
 }
 
-function endOfUtcDay(value: string): Date {
-  return new Date(`${value}T23:59:59.999Z`);
+/**
+ * Primeiro instante do dia civil `day` ("2026-10-18") em `timeZone`: a meia-noite
+ * local, ou o fim do salto quando a troca de horário pula a meia-noite (São Paulo
+ * até 2018: 00:00 → 01:00). Tenta o offset de antes e o de depois e fica com o mais
+ * cedo que cai no dia.
+ */
+function startOfZonedDay(day: string, timeZone: string): Date {
+  const [y, m, d] = day.split("-").map(Number);
+  const wallMidnight = Date.UTC(y, m - 1, d);
+  const first = wallMidnight - zoneOffsetMs(wallMidnight, timeZone);
+  const second = wallMidnight - zoneOffsetMs(first, timeZone);
+  const inDay = [first, second].filter(
+    (t) => dayKeyOf(new Date(t), timeZone) === day,
+  );
+  return new Date(inDay.length > 0 ? Math.min(...inDay) : second);
+}
+
+const LAST_QUERY_INSTANT = Date.UTC(9999, 11, 31, 23, 59, 59, 999);
+
+// Sem toISOString: em 9999-12-31 ele daria "+010000-01-01" e o split quebraria.
+function nextDay(day: string): string {
+  const [y, m, d] = day.split("-").map(Number);
+  const next = new Date(Date.UTC(y, m - 1, d + 1));
+  const pad = (n: number) => n.toString().padStart(2, "0");
+  return `${next.getUTCFullYear()}-${pad(next.getUTCMonth() + 1)}-${pad(next.getUTCDate())}`;
 }
 
 function today5(now: Date): ResolvedRange {
@@ -94,10 +142,16 @@ function today5(now: Date): ResolvedRange {
  *
  * `now` is injectable for deterministic tests. `new Date()` is only ever called
  * inside this function (default param), never at module top-level.
+ *
+ * `timeZone` (o do request, `getRequestTimeZone`) só vale no `custom`: o intervalo
+ * cobre os dias civis De 00:00 até o fim de Até naquele fuso, os mesmos dias dos
+ * títulos da lista. As presets são janelas a partir de `now` e não dependem de fuso.
+ * Default UTC só para os testes antigos; a página sempre passa o fuso.
  */
 export function parseRangeParams(
   sp: { preset?: string; from?: string; to?: string },
   now: Date = new Date(),
+  timeZone = "UTC",
 ): ResolvedRange {
   const preset = presetSchema.safeParse(sp.preset);
 
@@ -139,12 +193,19 @@ export function parseRangeParams(
         [fromDay, toDay] = [toDay, fromDay];
       }
 
+      // [De 00:00, Até 24:00) no fuso; `to` inclusivo (a query usa lte), então o
+      // último milissegundo antes da meia-noite seguinte. Dia de 23h ou 25h na troca
+      // de horário sai certo porque cada ponta é calculada no próprio dia.
+      const end = startOfZonedDay(nextDay(toDay), timeZone).getTime() - 1;
       return {
-        from: startOfUtcDay(fromDay),
-        to: endOfUtcDay(toDay),
+        from: startOfZonedDay(fromDay, timeZone),
+        // Teto no fim de 9999 (UTC): o fim de 31/12/9999 a oeste do UTC cairia no ano
+        // 10000, que o toISOString escreve "+010000-…" na query.
+        to: new Date(Math.min(end, LAST_QUERY_INSTANT)),
         preset: "custom",
         statuses: [...ALL_STATUSES],
         order: "asc",
+        days: { from: fromDay, to: toDay },
       };
     }
   }

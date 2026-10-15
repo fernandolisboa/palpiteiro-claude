@@ -74,7 +74,7 @@ export const TOUR_CHAPTERS: Record<TourChapter, readonly TourStep[]> = {
     {
       target: "date-range",
       title: "Período",
-      body: "Escolha a janela: 5 dias, 14 dias, a competição inteira ou um intervalo de datas seu.",
+      body: 'Escolha a janela: 5 dias, 14 dias, a competição inteira ou, em "Escolher datas", um intervalo seu.',
     },
     {
       target: "recent-predictions",

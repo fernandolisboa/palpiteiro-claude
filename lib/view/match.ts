@@ -1,8 +1,12 @@
 import {
+  dayKeyOf,
   formatCountdown,
+  formatDayHeading,
   formatKickoffAbsolute,
   formatKickoffRelative,
   formatRelativeAgoLabel,
+  formatStartsIn,
+  formatTimeOfDay,
   leagueToKey,
 } from "@/lib/format";
 // Bound compartilhado da janela "em andamento" — DEVE casar com o bound da query
@@ -23,6 +27,7 @@ import {
 } from "@/lib/view/odds";
 import type {
   MatchHeroView,
+  MatchListRowView,
   MatchRowView,
   MatchStatus,
 } from "@/lib/view/types";
@@ -58,7 +63,7 @@ export type ToMatchRowArgs = {
   now?: Date;
   // Fuso de exibição do usuário (#1). Undefined = fuso do runtime (legado/testes).
   timeZone?: string;
-  // Base do modelo do jogo (#555): vira a linha "Modelo · …" do /jogos, só em jogo
+  // Base do modelo do jogo (#555): vira a linha "Modelo: …" do /jogos, só em jogo
   // analisável. Opcional — o hero e os call sites antigos não passam.
   modelSnapshot?: MatchModelSnapshot | null;
 };
@@ -84,7 +89,7 @@ export function toMatchRowView({
     away: match.awayTeamCrestUrl,
   });
   // Sigla de 3 letras nos rótulos de 1X2 (coluna estreita da lista): "PAL 2,67 ·
-  // Empate 2,87 · FLA 3,06" e "Modelo · PAL 42%" (#574 linha 4b).
+  // Empate 2,87 · FLA 3,06" e "Modelo: PAL 42%" (#574 linha 4b).
   const shortTeams = { home: home.short, away: away.short };
   const nowMs = now.getTime();
   const kickoffMs = match.kickoffAt.getTime();
@@ -145,6 +150,31 @@ export function toMatchRowView({
     nowMs - modelSnapshot.checkedAt.getTime() <= MATCH_MODEL_MAX_AGE_MS
       ? { model: toMatchModelLineView(modelSnapshot, shortTeams) }
       : {}),
+  };
+}
+
+/**
+ * Linha da lista de jogos agrupada por dia (#577): a mesma `MatchRowView` mais o dia
+ * e a hora no fuso do usuário. `now` e `timeZone` obrigatórios: sem fuso o grupo
+ * cairia no dia do runtime (UTC na Vercel, o bug do #409). A contagem "em 2h 15min"
+ * só vale pra jogo agendado: um adiado com o horário antigo nas próximas 3h não
+ * ganha contagem.
+ */
+export function toMatchListRowView(
+  args: ToMatchRowArgs & { now: Date; timeZone: string },
+): MatchListRowView {
+  const row = toMatchRowView(args);
+  const { kickoffAt, status } = args.match;
+  const startsIn =
+    status === "scheduled" ? formatStartsIn(kickoffAt, args.now) : undefined;
+  return {
+    ...row,
+    day: {
+      key: dayKeyOf(kickoffAt, args.timeZone),
+      label: formatDayHeading(kickoffAt, args.now, args.timeZone),
+    },
+    time: formatTimeOfDay(kickoffAt, args.timeZone),
+    ...(startsIn ? { startsIn } : {}),
   };
 }
 

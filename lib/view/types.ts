@@ -1,5 +1,3 @@
-import type { RecommendationKind } from "@/lib/view/recommendation";
-
 // Keys curtas de liga usadas em URL (?league=) e na UI. Nova liga = nova key aqui
 // (e os Records exaustivos em lib/format.ts / lib/view/league-picker.ts quebram o
 // build até serem preenchidos).
@@ -81,9 +79,19 @@ export type MatchRowView = {
   liveScore?: { home: number; away: number; caption: string };
   venue?: string;
   countdown?: string;
-  // Linha "Modelo · Casa 52% · Under 2.5 55%" do /jogos (#555, ADR 0052): só em jogo
+  // Linha "Modelo: PAL 42% · Menos de 2,5 59%" do /jogos (#555, ADR 0052): só em jogo
   // analisável com base do modelo calculada. Só probabilidade: sem odd, edge ou valor.
   model?: MatchModelLineView;
+};
+
+// Linha da lista de jogos agrupada por dia (/jogos, #577): a MatchRowView + o dia
+// (chave e rótulo no fuso do usuário) e a hora simples. `startsIn` ("em 2h 15min")
+// só nas últimas 3h antes do apito de um jogo agendado; chave ausente fora disso.
+// MatchRowView e MatchHeroView não mudam (o /time e o hero seguem com `kickoff`).
+export type MatchListRowView = MatchRowView & {
+  day: { key: string; label: string }; // "2026-10-18", "Hoje" | "Amanhã" | "Sábado 18/10"
+  time: string; // "19:00"
+  startsIn?: string;
 };
 
 // Firewall do ADR 0030 no TIPO: o hero nunca recebe a leitura do modelo (toMatchHeroView
@@ -248,19 +256,24 @@ export type MarketAnalysisSectionItem = {
   view: AnalysisView;
 };
 
-export type RecentPredictionView = {
-  id: string;
+// "Suas predições recentes" (/jogos), um cartão por jogo (ADR 0058): a análise mais
+// recente de cada mercado. `bets` já vem cortado nas visíveis; `moreBets` conta as
+// apostas além delas e `passCount` os mercados sem aposta.
+export type RecentMatchBetView = {
+  market: string; // "Ambas marcam", "Total de gols"
+  rec: Recommendation; // "Não", "Mais de 2,5", "PAL"
+  edge: string | null; // "+5,6 pontos" (formatEdgePoints, ADR 0056); null sem edge
+};
+
+export type RecentMatchView = {
   matchId: string;
-  home: string;
-  away: string;
-  rec: Recommendation;
-  // Tipo derivado do valor cru (estado visual do selo), nunca do rótulo.
-  recKind: RecommendationKind;
-  // Mercado da recomendação, ex.: "Ambas marcam", "Total de gols".
-  market: string;
-  edge: string | null;
-  when: string;
   league: LeagueKey;
+  home: string; // sigla
+  away: string; // sigla
+  when: string; // data do jogo: "sáb 17/10"
+  bets: RecentMatchBetView[];
+  moreBets: number;
+  passCount: number;
 };
 
 export type FormResult = "W" | "D" | "L";

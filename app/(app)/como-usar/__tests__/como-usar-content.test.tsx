@@ -68,6 +68,8 @@ describe("/como-usar", () => {
       "Em aberto",
       "Encerradas",
       "Detalhe técnico",
+      "Escolher datas",
+      "Aplicar",
     ]) {
       expect(html).toContain(label);
       expect(ui).toContain(label);

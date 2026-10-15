@@ -40,7 +40,7 @@ import {
   getPredictionDetailForUser,
   getUserDashboardRows,
 } from "@/lib/db/queries/dashboard";
-import { getRecentPredictionsByUser } from "@/lib/db/queries/predictions";
+import { getRecentPredictedMatchesByUser } from "@/lib/db/queries/predictions";
 
 const ids: {
   userId: string;
@@ -196,9 +196,9 @@ describe("selectionLabel via LEFT JOIN market_selections (#539)", () => {
     ]);
   });
 
-  it("getRecentPredictionsByUser traz mercado e seleção (null na row legada)", async () => {
+  it("getRecentPredictedMatchesByUser traz mercado e seleção (null na row legada)", async () => {
     await seedThree();
-    const rows = await getRecentPredictionsByUser(ids.userId, 5);
+    const rows = await getRecentPredictedMatchesByUser(ids.userId, 5);
     expect(
       rows.map((r) => [r.marketKey, r.marketLabel, r.selectionLabel])
     ).toEqual([

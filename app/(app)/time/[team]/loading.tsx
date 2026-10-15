@@ -1,44 +1,16 @@
 import { Card } from "@/components/ui/card";
 import { PageContainer } from "@/components/page-container";
 import { PageHeaderSkeleton } from "@/components/page-header";
-import { Skeleton } from "@/components/ui/skeleton";
+import { MatchRowSkeleton } from "@/components/match-row";
 import { SectionLabel } from "@/components/section-label";
 
-// Casa a forma de cada MatchRow (anti-CLS): badge + kickoff em cima, dois times,
-// odd/placar à direita.
-function RowSkeleton({ last }: { last?: boolean }) {
-  return (
-    <div className={last ? "px-5 py-4" : "border-b border-border-subtle px-5 py-4"}>
-      <div className="flex items-center justify-between pb-2.5">
-        <Skeleton className="h-[18px] w-20" />
-        <Skeleton className="h-[12px] w-16" />
-      </div>
-      <div className="flex items-center justify-between">
-        <div className="flex flex-col gap-2">
-          <div className="flex items-center gap-2">
-            <Skeleton className="size-[22px] rounded-full" />
-            <Skeleton className="h-[14px] w-28" />
-          </div>
-          <div className="flex items-center gap-2">
-            <Skeleton className="size-[22px] rounded-full" />
-            <Skeleton className="h-[14px] w-32" />
-          </div>
-        </div>
-        <div className="flex flex-col items-end gap-2">
-          <Skeleton className="h-[13px] w-14" />
-          <Skeleton className="h-[13px] w-14" />
-        </div>
-      </div>
-    </div>
-  );
-}
-
+// Casa a forma de cada MatchRow (anti-CLS): o mesmo esqueleto da linha da lista.
 function ListSkeleton() {
   return (
     <Card className="gap-0 overflow-hidden p-0">
-      <RowSkeleton />
-      <RowSkeleton />
-      <RowSkeleton last />
+      <MatchRowSkeleton />
+      <MatchRowSkeleton />
+      <MatchRowSkeleton last />
     </Card>
   );
 }

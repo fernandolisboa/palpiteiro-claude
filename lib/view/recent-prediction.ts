@@ -1,40 +1,20 @@
-import { formatEdgePoints, leagueToKey } from "@/lib/format";
+import { formatEdgePoints, formatWeekdayDate, leagueToKey } from "@/lib/format";
 import type { SupportedLeague } from "@/lib/providers/sports-data/leagues";
 import { displayMarketLabel, findDisplayPresentation } from "@/lib/view/markets/display";
-import {
-  marketContextLabel,
-  recommendationKind,
-  recommendationLabel,
-} from "@/lib/view/recommendation";
+import { marketContextLabel, recommendationLabel } from "@/lib/view/recommendation";
 import { teamPair } from "@/lib/view/team";
-import type { RecentPredictionView } from "@/lib/view/types";
+import type { RecentMatchBetView, RecentMatchView } from "@/lib/view/types";
 
-const MONTH_ABBR_PT = [
-  "jan", "fev", "mar", "abr", "mai", "jun",
-  "jul", "ago", "set", "out", "nov", "dez",
-];
+/** Apostas visíveis por cartão; as demais viram "+N". */
+export const RECENT_VISIBLE_BETS = 2;
 
-// "DD mmm" no fuso do usuário (#1). Undefined = fuso do runtime (legado/testes).
-function formatRecentWhen(date: Date, timeZone?: string): string {
-  if (timeZone) {
-    const parts = new Intl.DateTimeFormat("en-US", {
-      timeZone,
-      month: "2-digit",
-      day: "2-digit",
-    }).formatToParts(date);
-    const pick = (t: string) => Number(parts.find((p) => p.type === t)?.value);
-    return `${pick("day").toString().padStart(2, "0")} ${MONTH_ABBR_PT[pick("month") - 1]}`;
-  }
-  const day = date.getDate().toString().padStart(2, "0");
-  return `${day} ${MONTH_ABBR_PT[date.getMonth()]}`;
-}
-
-type RecentInput = {
+export type RecentPredictionInput = {
   predictionId: string;
   matchId: string;
   league: SupportedLeague;
   homeTeam: string;
   awayTeam: string;
+  kickoffAt: Date;
   // = key da seleção escolhida (qualquer mercado) ou "pass".
   recommendation: string;
   // null = row sem marketId (histórica pré-backfill) → over/under, como no
@@ -47,39 +27,86 @@ type RecentInput = {
   createdAt: Date;
 };
 
-export function toRecentPredictionView(
-  row: RecentInput,
-  timeZone?: string,
-): RecentPredictionView {
-  const league = leagueToKey(row.league);
-  const marketKey = row.marketKey ?? "over_under";
-  // Siglas do par (#578): `.short` deriva do canonical; o teamPair desempata
-  // quando as duas siglas do jogo coincidem.
-  const pair = teamPair(row.homeTeam, row.awayTeam, league);
-  const home = pair.home.short;
-  const away = pair.away.short;
-  return {
-    id: row.predictionId,
-    matchId: row.matchId,
-    home,
-    away,
-    rec: recommendationLabel(
-      row.recommendation,
-      marketKey,
-      row.selectionLabel,
-      { home, away },
-      row.marketParams?.line ?? null,
-    ),
-    recKind: recommendationKind(row.recommendation),
-    market: marketContextLabel(
-      row.marketLabel
-        ? displayMarketLabel(marketKey, row.marketLabel)
-        : (findDisplayPresentation(marketKey)?.marketLabel ?? marketKey),
-      row.marketParams,
-      row.recommendation,
-    ),
-    edge: formatEdgePoints(row.edgePct),
-    when: formatRecentWhen(row.createdAt, timeZone),
-    league,
-  };
+function edgeValue(edgePct: string | number | null): number {
+  const n = edgePct === null ? Number.NaN : Number(edgePct);
+  return Number.isFinite(n) ? n : Number.NEGATIVE_INFINITY;
+}
+
+/**
+ * "Suas predições recentes", um cartão por jogo (ADR 0058). Agrupa as predições por
+ * jogo, mantém a mais recente de cada mercado (a mesma chave da dedup dos KPIs,
+ * `keepLatestPerMatch`: `marketKey`, sem a linha) e ordena os jogos pela análise mais
+ * recente. No cartão: as apostas antes (maior vantagem primeiro), no máximo
+ * `RECENT_VISIBLE_BETS` visíveis, com a vantagem em pontos ("+5,6 pontos", ADR 0056),
+ * e a contagem dos mercados sem aposta. Datas no fuso do usuário.
+ */
+export function toRecentMatchViews(
+  rows: readonly RecentPredictionInput[],
+  now: Date,
+  timeZone: string,
+): RecentMatchView[] {
+  const byMatch = new Map<string, Map<string, RecentPredictionInput>>();
+  for (const row of rows) {
+    const marketKey = row.marketKey ?? "over_under";
+    const markets = byMatch.get(row.matchId) ?? new Map<string, RecentPredictionInput>();
+    const current = markets.get(marketKey);
+    if (!current || row.createdAt > current.createdAt) markets.set(marketKey, row);
+    byMatch.set(row.matchId, markets);
+  }
+
+  const lastAnalysis = (latest: RecentPredictionInput[]) =>
+    Math.max(...latest.map((r) => r.createdAt.getTime()));
+
+  return [...byMatch.values()]
+    .map((markets) => [...markets.values()])
+    // Mesmo desempate da query (matchId desc) quando a última análise coincide.
+    .sort(
+      (a, b) =>
+        lastAnalysis(b) - lastAnalysis(a) ||
+        (a[0].matchId < b[0].matchId ? 1 : a[0].matchId > b[0].matchId ? -1 : 0),
+    )
+    .map((latest) => {
+      const first = latest[0];
+      const league = leagueToKey(first.league);
+      // Siglas do par (#578): o teamPair desempata quando as duas coincidem.
+      const pair = teamPair(first.homeTeam, first.awayTeam, league);
+      const teams = { home: pair.home.short, away: pair.away.short };
+      const bets: RecentMatchBetView[] = latest
+        .filter((r) => r.recommendation !== "pass")
+        .sort(
+          (a, b) =>
+            edgeValue(b.edgePct) - edgeValue(a.edgePct) ||
+            b.createdAt.getTime() - a.createdAt.getTime(),
+        )
+        .map((r) => {
+          const marketKey = r.marketKey ?? "over_under";
+          return {
+            market: marketContextLabel(
+              r.marketLabel
+                ? displayMarketLabel(marketKey, r.marketLabel)
+                : (findDisplayPresentation(marketKey)?.marketLabel ?? marketKey),
+              r.marketParams,
+              r.recommendation,
+            ),
+            rec: recommendationLabel(
+              r.recommendation,
+              marketKey,
+              r.selectionLabel,
+              teams,
+              r.marketParams?.line ?? null,
+            ),
+            edge: formatEdgePoints(r.edgePct),
+          };
+        });
+      return {
+        matchId: first.matchId,
+        league,
+        home: teams.home,
+        away: teams.away,
+        when: formatWeekdayDate(first.kickoffAt, now, timeZone),
+        bets: bets.slice(0, RECENT_VISIBLE_BETS),
+        moreBets: Math.max(0, bets.length - RECENT_VISIBLE_BETS),
+        passCount: latest.length - bets.length,
+      };
+    });
 }

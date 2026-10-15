@@ -117,6 +117,17 @@ describe("rangeLabel", () => {
     );
     expect(rangeLabel(range)).toBe("10/06 – 20/06");
   });
+
+  it("custom no fuso do usuário: os dias escolhidos, não os do UTC", () => {
+    for (const tz of ["America/Sao_Paulo", "Asia/Tokyo"]) {
+      const range = parseRangeParams(
+        { preset: "custom", from: "2026-10-18", to: "2026-10-25" },
+        now,
+        tz,
+      );
+      expect(rangeLabel(range)).toBe("18/10 – 25/10");
+    }
+  });
 });
 
 describe("rangeEmptyMessage", () => {

@@ -3,6 +3,7 @@ import { redirect } from "next/navigation";
 import { Inbox } from "lucide-react";
 
 import { Card } from "@/components/ui/card";
+import { FilterScrollRow } from "@/components/filter-scroll-row";
 import { LeaguePicker } from "@/components/league-picker";
 import { RecentPredCard } from "@/components/recent-pred-card";
 import { SectionLabel } from "@/components/section-label";
@@ -10,7 +11,7 @@ import { UpcomingMatchesDesktop } from "@/components/upcoming-matches-desktop";
 import { UpcomingMatchesMobile } from "@/components/upcoming-matches-mobile";
 import { auth } from "@/auth";
 import { resolveHomeLeagueFilter } from "@/lib/config/active-leagues";
-import { keyToLeague, LEAGUE_LABEL, leagueToKey } from "@/lib/format";
+import { keyToLeague, leagueToKey } from "@/lib/format";
 import { getActiveLeaguesForRequest } from "@/lib/db/queries/league-settings";
 import { getRequestTimeZone } from "@/lib/server/request-timezone";
 import { getMatchIdsWithPredictionsByUser } from "@/lib/db/queries/matches";
@@ -21,7 +22,7 @@ import {
   getLatestOverUnderSnapshotsForMatches,
   getLatestSelectionOddsSnapshotsForMatches,
 } from "@/lib/db/queries/odds-snapshots";
-import { getRecentPredictionsByUser } from "@/lib/db/queries/predictions";
+import { getRecentPredictedMatchesByUser } from "@/lib/db/queries/predictions";
 import { DateRangeTabs } from "@/components/date-range-tabs";
 import { EmptyState } from "@/components/empty-state";
 import { PageContainer } from "@/components/page-container";
@@ -39,13 +40,13 @@ import {
   rangeEmptyMessage,
   rangeLabel,
 } from "@/lib/view/range-href";
-import { toMatchRowView } from "@/lib/view/match";
-import { toRecentPredictionView } from "@/lib/view/recent-prediction";
+import { toMatchListRowView } from "@/lib/view/match";
+import { toRecentMatchViews } from "@/lib/view/recent-prediction";
 import type {
   LeagueFilter,
   LeagueKey,
-  MatchRowView,
-  RecentPredictionView,
+  MatchListRowView,
+  RecentMatchView,
 } from "@/lib/view/types";
 import type { SupportedLeague } from "@/lib/providers/sports-data/leagues";
 
@@ -54,7 +55,9 @@ import type { SupportedLeague } from "@/lib/providers/sports-data/leagues";
 // correção de fuso de um eventual passe estático (PPR/Cache Components futuros).
 export const dynamic = "force-dynamic";
 
-const RECENT_LIMIT = 5;
+// "Suas predições recentes": os últimos 5 jogos analisados, um cartão por jogo
+// (ADR 0058).
+const RECENT_MATCH_LIMIT = 5;
 
 // Cap pra ranges ilimitados (season): evita varrer a competição inteira numa
 // query só. Presets de janela já são limitados pelo `to`.
@@ -103,10 +106,14 @@ export default async function JogosPage({ searchParams }: PageProps) {
   if (league === null) redirect("/jogos");
 
   // Instante ÚNICO do request: alimenta o resolver de range (bound da query) E
-  // todo toMatchRowView (elegibilidade da badge). Dois `new Date()` separados
+  // todo toMatchListRowView (elegibilidade da badge). Dois `new Date()` separados
   // dessincronizariam pertinência-na-lista × badge na borda de 3h (race). Fuso de
   // exibição (#1) é separado — só formata strings, não decide instantes.
   const now = new Date();
+
+  // Fuso de exibição do usuário (#1): formata kickoff/datas e define os dias civis
+  // do intervalo `custom`, os mesmos dos títulos da lista agrupada por dia.
+  const timeZone = await getRequestTimeZone();
 
   // Range escolhido pelo usuário (5/14 dias, competição ou custom). Nunca lança
   // — input inválido cai pro default today5.
@@ -117,6 +124,7 @@ export default async function JogosPage({ searchParams }: PageProps) {
       to: toParam,
     },
     now,
+    timeZone,
   );
 
   // Middleware garante sessão; redirect defensivo caso o matcher mude.
@@ -139,7 +147,7 @@ export default async function JogosPage({ searchParams }: PageProps) {
   // query de jogos em vez de esperar por ela.
   const [dbMatches, recentRaw, tourState] = await Promise.all([
     loadRangeMatches(matchesQuery),
-    getRecentPredictionsByUser(userId, RECENT_LIMIT),
+    getRecentPredictedMatchesByUser(userId, RECENT_MATCH_LIMIT),
     getTourState(userId),
   ]);
 
@@ -170,12 +178,11 @@ export default async function JogosPage({ searchParams }: PageProps) {
       }),
     ]);
 
-  // Fuso de exibição do usuário (#1) — formata kickoff/datas no fuso do navegador.
-  const timeZone = await getRequestTimeZone();
-  const matches: MatchRowView[] = dbMatches.map((m) => {
+  // Linha com o dia e a hora no fuso do usuário (#577): a lista agrupa por dia.
+  const matches: MatchListRowView[] = dbMatches.map((m) => {
     const snapshot = snapshotByMatch.get(m.id);
     const matchResult = matchResultByMatch.get(m.id);
-    return toMatchRowView({
+    return toMatchListRowView({
       match: {
         id: m.id,
         league: m.league,
@@ -207,22 +214,7 @@ export default async function JogosPage({ searchParams }: PageProps) {
     });
   });
 
-  const recents: RecentPredictionView[] = recentRaw.map((r) =>
-    toRecentPredictionView({
-      predictionId: r.predictionId,
-      matchId: r.matchId,
-      league: r.league,
-      homeTeam: r.homeTeam,
-      awayTeam: r.awayTeam,
-      recommendation: r.recommendation,
-      marketKey: r.marketKey,
-      marketLabel: r.marketLabel,
-      marketParams: r.marketParams,
-      selectionLabel: r.selectionLabel,
-      edgePct: r.edgePct,
-      createdAt: r.createdAt,
-    }, timeZone),
-  );
+  const recents: RecentMatchView[] = toRecentMatchViews(recentRaw, now, timeZone);
 
   return (
     <>
@@ -255,8 +247,8 @@ export default async function JogosPage({ searchParams }: PageProps) {
 }
 
 type HomeContentProps = {
-  matches: MatchRowView[];
-  recents: RecentPredictionView[];
+  matches: MatchListRowView[];
+  recents: RecentMatchView[];
   league: LeagueFilter;
   activeKeys: readonly LeagueKey[];
   range: ResolvedRange;
@@ -264,11 +256,62 @@ type HomeContentProps = {
 
 // Props compartilhadas pra preservar o range ao trocar de liga no seletor.
 function rangeNavProps(range: ResolvedRange) {
+  // custom: os dias da URL. `from`/`to` são instantes no fuso do usuário e o
+  // toISOString deles daria o dia UTC (ex.: 26/10 para o fim de 25/10 em BRT).
+  if (range.days) {
+    return { preset: range.preset, from: range.days.from, to: range.days.to };
+  }
   const from = range.from
     ? range.from.toISOString().slice(0, 10)
     : undefined;
   const to = range.to ? range.to.toISOString().slice(0, 10) : undefined;
   return { preset: range.preset, from, to };
+}
+
+// "{n} jogos": a liga e o período ficam nos chips, não no meta (#577).
+function matchCountLabel(n: number): string {
+  return n === 1 ? "1 jogo" : `${n} jogos`;
+}
+
+// Linha única de filtros (#577): liga (select em chip) | 5 dias · 14 dias ·
+// Competição · Escolher datas. Rolável na horizontal quando não cabe, e rola sozinha
+// até o chip selecionado (FilterScrollRow); os alvos do tour ficam dentro dela (o
+// scrollIntoView do tour rola o contêiner até o alvo).
+function FilterRow({
+  league,
+  activeKeys,
+  range,
+  surface,
+  className,
+}: {
+  league: LeagueFilter;
+  activeKeys: readonly LeagueKey[];
+  range: ResolvedRange;
+  surface: "sheet" | "popover";
+  className?: string;
+}) {
+  const navProps = rangeNavProps(range);
+  return (
+    <FilterScrollRow
+      activeKey={`${league}-${range.preset}-${navProps.from ?? ""}-${navProps.to ?? ""}`}
+      className={className}
+    >
+      <div data-tour="league-picker" className="shrink-0">
+        <LeaguePicker value={league} activeKeys={activeKeys} range={navProps} />
+      </div>
+      <span aria-hidden="true" className="h-5 w-px shrink-0 bg-border" />
+      <div data-tour="date-range" className="shrink-0">
+        <DateRangeTabs
+          league={league}
+          preset={range.preset}
+          from={navProps.from}
+          to={navProps.to}
+          customLabel={range.preset === "custom" ? rangeLabel(range) : undefined}
+          surface={surface}
+        />
+      </div>
+    </FilterScrollRow>
+  );
 }
 
 function MobileHome({
@@ -278,7 +321,6 @@ function MobileHome({
   activeKeys,
   range,
 }: HomeContentProps) {
-  const label = rangeLabel(range);
   const empty = rangeEmptyMessage(range);
   const navProps = rangeNavProps(range);
   // URL filtrada atual da lista — propagada aos links de jogo pra preservar o
@@ -291,31 +333,19 @@ function MobileHome({
       <div className="px-5 pt-6">
         <PageHeader
           title="Próximos jogos"
-          meta={
-            <>
-              {matches.length} partidas · {label}
-              {league !== "all" && ` · ${LEAGUE_LABEL[league]}`}
-            </>
-          }
-          className="pb-5"
+          meta={matchCountLabel(matches.length)}
+          className="pb-4"
         />
       </div>
 
-      <div className="flex flex-col gap-2 px-5 pb-3">
-        <div data-tour="league-picker">
-          <LeaguePicker value={league} activeKeys={activeKeys} range={navProps} />
-        </div>
-        <div data-tour="date-range">
-          <DateRangeTabs
-            league={league}
-            preset={range.preset}
-            from={navProps.from}
-            to={navProps.to}
-          />
-        </div>
-      </div>
+      <FilterRow
+        league={league}
+        activeKeys={activeKeys}
+        range={range}
+        surface="sheet"
+        className="px-5 pb-3"
+      />
 
-      <SectionLabel>{label}</SectionLabel>
       {matches.length === 0 ? (
         <Card className="mx-5">
           <EmptyState
@@ -351,7 +381,7 @@ function MobileHome({
           ) : (
             <div className="flex gap-2">
               {recents.map((p) => (
-                <RecentPredCard key={p.id} p={p} listHref={listHref} />
+                <RecentPredCard key={p.matchId} p={p} listHref={listHref} />
               ))}
             </div>
           )}
@@ -368,7 +398,6 @@ function DesktopHome({
   activeKeys,
   range,
 }: HomeContentProps) {
-  const label = rangeLabel(range);
   const empty = rangeEmptyMessage(range);
   const navProps = rangeNavProps(range);
   // URL filtrada atual da lista — propagada aos links de jogo (preserva busca ao voltar).
@@ -380,27 +409,16 @@ function DesktopHome({
       <PageContainer width="content">
         <PageHeader
           title="Próximos jogos"
-          meta={
-            <>
-              {matches.length} partidas · {label}
-              {league !== "all" && ` · ${LEAGUE_LABEL[league]}`}
-            </>
-          }
-          actions={
-            <>
-              <div data-tour="league-picker">
-                <LeaguePicker value={league} activeKeys={activeKeys} range={navProps} />
-              </div>
-              <div data-tour="date-range">
-                <DateRangeTabs
-                  league={league}
-                  preset={range.preset}
-                  from={navProps.from}
-                  to={navProps.to}
-                />
-              </div>
-            </>
-          }
+          meta={matchCountLabel(matches.length)}
+          className="lg:pb-5"
+        />
+        {/* Os chips numa linha própria abaixo do título: a linha não cabe à direita. */}
+        <FilterRow
+          league={league}
+          activeKeys={activeKeys}
+          range={range}
+          surface="popover"
+          className="pb-5"
         />
 
         {matches.length === 0 ? (
@@ -436,7 +454,7 @@ function DesktopHome({
           ) : (
             <div className="grid grid-cols-5 gap-3">
               {recents.map((p) => (
-                <RecentPredCard key={p.id} p={p} listHref={listHref} />
+                <RecentPredCard key={p.matchId} p={p} listHref={listHref} />
               ))}
             </div>
           )}

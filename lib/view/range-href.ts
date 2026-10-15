@@ -76,10 +76,10 @@ const DAY_LABEL: Record<"today5" | "today14", string> = {
   today14: "Próximos 14 dias",
 };
 
-function formatDayLabel(date: Date): string {
-  const day = date.getUTCDate().toString().padStart(2, "0");
-  const month = (date.getUTCMonth() + 1).toString().padStart(2, "0");
-  return `${day}/${month}`;
+// "2026-10-18" → "18/10": o dia civil escolhido, sem passar por Date (sem fuso).
+function formatDayLabel(day: string): string {
+  const [, month, date] = day.split("-");
+  return `${date}/${month}`;
 }
 
 /**
@@ -89,8 +89,8 @@ function formatDayLabel(date: Date): string {
 export function rangeLabel(range: ResolvedRange): string {
   if (range.preset === "season") return "Competição";
   if (range.preset === "custom") {
-    if (range.from && range.to) {
-      return `${formatDayLabel(range.from)} – ${formatDayLabel(range.to)}`;
+    if (range.days) {
+      return `${formatDayLabel(range.days.from)} – ${formatDayLabel(range.days.to)}`;
     }
     // custom que caiu no fallback today5 (datas inválidas) — usa rótulo de 5 dias.
     return DAY_LABEL.today5;

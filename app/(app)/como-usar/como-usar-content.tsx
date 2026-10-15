@@ -142,13 +142,15 @@ export function ComoUsarContent() {
       <Section id="escolher-jogo">
         <Steps>
           <li>
-            Escolha o campeonato no seletor (<Ui>Todas as ligas</Ui> junta todos os
-            que o app acompanha).
+            Escolha o campeonato no primeiro botão da linha de filtros{" "}
+            (<Ui>Todas as ligas</Ui> junta todos os que o app acompanha). No
+            celular, a linha rola pro lado.
           </li>
           <li>
             Escolha o período: <Ui>5 dias</Ui>, <Ui>14 dias</Ui>,{" "}
-            <Ui>Competição</Ui> (a temporada inteira) ou um intervalo seu nos campos
-            de data <Ui>De</Ui> e <Ui>Até</Ui>.
+            <Ui>Competição</Ui> (a temporada inteira) ou um intervalo seu em{" "}
+            <Ui>Escolher datas</Ui> (campos <Ui>De</Ui> e <Ui>Até</Ui>, depois{" "}
+            <Ui>Aplicar</Ui>). Com um intervalo escolhido, o botão mostra as datas.
           </li>
           <li>
             Toque no jogo pra abrir. A lista mostra 15 jogos por vez;{" "}
@@ -156,17 +158,23 @@ export function ComoUsarContent() {
           </li>
         </Steps>
         <p>
-          Cada linha traz o campeonato, o horário, os times e as odds de referência
-          (mandante / empate / visitante, ou mais / menos gols) quando o mercado já tem
-          odd. Aparece{" "}
-          <Ui>✓ analisado</Ui> nos jogos que você já analisou, <Ui>AO VIVO</Ui> e o
-          placar parcial (quando já temos) nos que estão rolando, e o placar nos
-          encerrados. <Strong>sem odd</Strong>{" "}
-          significa que ainda não há cotação; sem ela a análise não roda.
+          Os jogos vêm separados por dia (Hoje, Amanhã, e depois o dia da semana com
+          a data), no seu fuso. Cada linha traz o horário (nas últimas 3 horas antes
+          do jogo, quanto falta), o campeonato, os times e as odds de referência lado
+          a lado (mandante / empate / visitante, ou mais / menos gols) quando o
+          mercado já tem odd. Embaixo, quando já calculada, a linha do{" "}
+          <Strong>Modelo</Strong> dá a chance do favorito e de menos de 2,5 gols.
+          Aparece <Ui>✓ analisado</Ui> nos jogos que você já analisou,{" "}
+          <Ui>AO VIVO</Ui> no lugar do horário e o placar parcial (quando já temos)
+          nos que estão rolando, e o placar nos encerrados.{" "}
+          <Strong>sem odd</Strong> significa que ainda não há cotação; sem ela a
+          análise não roda.
         </p>
         <p>
           Abaixo da lista, <Strong>Suas predições recentes</Strong> mostra os últimos
-          jogos que você analisou. <Ui>ver todas →</Ui> abre o desempenho.
+          jogos que você analisou, um cartão por jogo com o que a IA recomendou em
+          cada mercado (e quantos ficaram sem aposta). <Ui>ver todas →</Ui> abre o
+          desempenho.
         </p>
       </Section>
 

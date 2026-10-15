@@ -7,9 +7,9 @@ import {
 } from "@/components/upcoming-matches-mobile";
 import { MatchModelLine } from "@/components/match-model-line";
 import { UpcomingMatchesDesktop } from "@/components/upcoming-matches-desktop";
-import type { MatchRowView } from "@/lib/view/types";
+import type { MatchListRowView } from "@/lib/view/types";
 
-function fakeMatch(i: number): MatchRowView {
+function fakeMatch(i: number): MatchListRowView {
   return {
     id: `m${i}`,
     home: { name: `Casa ${i}`, short: "CAS", hue: 120 },
@@ -30,10 +30,12 @@ function fakeMatch(i: number): MatchRowView {
     isInProgress: false,
     homeScore: null,
     awayScore: null,
+    day: { key: "2026-06-10", label: "Hoje" },
+    time: "16:00",
   };
 }
 
-function fakeMatches(n: number): MatchRowView[] {
+function fakeMatches(n: number): MatchListRowView[] {
   return Array.from({ length: n }, (_, i) => fakeMatch(i));
 }
 
@@ -74,7 +76,7 @@ describe("UpcomingMatchesDesktop reveal (#134)", () => {
 
 describe("UpcomingMatchesDesktop chip N-vias (1X2) — #173 PR-2", () => {
   it("renderiza os 3 outcomes 1X2 no chip desktop (bloco byte-distinto do mobile)", () => {
-    const m: MatchRowView = {
+    const m: MatchListRowView = {
       ...fakeMatch(0),
       odds: {
         outcomes: [
@@ -93,38 +95,116 @@ describe("UpcomingMatchesDesktop chip N-vias (1X2) — #173 PR-2", () => {
   });
 });
 
+describe("lista agrupada por dia, odds numa linha (#577)", () => {
+  const oneX2 = {
+    outcomes: [
+      { label: "CAS", odd: "2,10" },
+      { label: "Empate", odd: "3,40" },
+      { label: "FOR", odd: "3,90" },
+    ],
+  };
+  function dayRows(): MatchListRowView[] {
+    return [
+      { ...fakeMatch(0), time: "19:00" },
+      { ...fakeMatch(1), time: "21:30", startsIn: "em 2h 15min" },
+      { ...fakeMatch(2), day: { key: "2026-06-11", label: "Amanhã" }, time: "16:00" },
+      { ...fakeMatch(3), day: { key: "2026-06-13", label: "Sábado 13/06" }, time: "11:00" },
+    ];
+  }
+  const both = (matches: MatchListRowView[]) => [
+    renderToStaticMarkup(<UpcomingMatchesMobile matches={matches} />),
+    renderToStaticMarkup(<UpcomingMatchesDesktop matches={matches} />),
+  ];
+
+  it("um cabeçalho por dia, na ordem, e todas as linhas", () => {
+    for (const html of both(dayRows())) {
+      const headings = [...html.matchAll(/<h2[^>]*>([^<]*)<\/h2>/g)].map((x) => x[1]);
+      expect(headings).toEqual(["Hoje", "Amanhã", "Sábado 13/06"]);
+      expect(countRows(html)).toBe(4);
+    }
+  });
+
+  it("a hora simples na linha, a contagem só quando existe, sem a data", () => {
+    for (const html of both(dayRows())) {
+      expect(html).toContain(">19:00<");
+      expect(html).toContain(">em 2h 15min<");
+      expect(html).not.toContain(">21:30<");
+      // O `kickoff` com data ("10 jun, 16:00") é do /time; aqui não aparece.
+      expect(html).not.toContain("10 jun, 16:00");
+    }
+  });
+
+  it("odds lado a lado: um grid de 3 células no 1X2 e de 2 no total de gols", () => {
+    for (const html of both([{ ...fakeMatch(0), odds: oneX2 }])) {
+      const grid = html.match(/<div class="grid gap-x-3 text-right grid-cols-3">(.*?)<\/div>/)?.[1];
+      expect(grid).toBeDefined();
+      expect(grid?.match(/flex min-w-10 flex-col/g)).toHaveLength(3);
+      expect(grid).toContain(">Empate<");
+      expect(grid).toContain(">3,40<");
+    }
+    for (const html of both([fakeMatch(0)])) {
+      expect(html).toContain('class="grid gap-x-3 text-right grid-cols-2"');
+    }
+  });
+
+  it("o alvo do tour é o primeiro analisável da lista plana, mesmo em outro dia", () => {
+    const rows = dayRows().map((m, i) => ({ ...m, analyzable: i === 2 }));
+    for (const html of both(rows)) {
+      expect(html.match(/data-tour="match-row"/g)).toHaveLength(1);
+      expect(html).toMatch(/data-tour="match-row"[^>]*href="\/match\/m2"|href="\/match\/m2"[^>]*data-tour="match-row"/);
+    }
+  });
+
+  it("'analisado' como selo, com a palavra, nas duas árvores", () => {
+    for (const html of both([{ ...fakeMatch(0), hasPrediction: true }])) {
+      expect(html).toContain("border-accent-border bg-accent-soft text-accent-fg");
+      expect(html).toContain("analisado");
+    }
+  });
+
+  it("desktop sem coluna de status nem cabeçalho de grade", () => {
+    const html = renderToStaticMarkup(<UpcomingMatchesDesktop matches={dayRows()} />);
+    expect(html).not.toContain("liga · kickoff");
+    expect(html).not.toContain(">status<");
+    expect(html).toContain("grid-cols-[132px_1fr_auto_24px]");
+  });
+});
+
 describe("linha da base do modelo (#555)", () => {
   const model = {
     favorite: { label: "Casa", pct: "52%" },
     goals25: { label: "Under 2.5", pct: "55%" },
   };
   // Texto visível (sem tags/atributos), pra checar a linguagem da linha.
-  const text = (html: string) => html.replace(/<[^>]+>/g, " ");
+  const text = (html: string) => html.replace(/<[^>]+>/g, " ").replace(/\s+/g, " ");
 
   it("aparece no mobile e no desktop só quando há `model`", () => {
-    const withModel: MatchRowView = { ...fakeMatch(0), model };
+    const withModel: MatchListRowView = { ...fakeMatch(0), model };
     for (const html of [
       renderToStaticMarkup(<UpcomingMatchesMobile matches={[withModel]} />),
       renderToStaticMarkup(<UpcomingMatchesDesktop matches={[withModel]} />),
     ]) {
-      expect(text(html)).toContain("Modelo · Casa 52% · Under 2.5 55%");
+      expect(text(html)).toContain("Modelo: Casa 52% · Under 2.5 55%");
     }
     for (const html of [
       renderToStaticMarkup(<UpcomingMatchesMobile matches={[fakeMatch(0)]} />),
       renderToStaticMarkup(<UpcomingMatchesDesktop matches={[fakeMatch(0)]} />),
     ]) {
-      expect(html).not.toContain("Modelo ·");
+      expect(html).not.toContain("Modelo:");
     }
   });
 
-  it("MatchModelLine junta a className extra às classes base (cn)", () => {
-    expect(
-      renderToStaticMarkup(<MatchModelLine model={model} className="mt-1" />),
-    ).toContain(
-      'class="font-mono text-meta tabular-nums text-muted-foreground mt-1"',
-    );
+  it("MatchModelLine em 12px, rótulo sans e mono só nos números (#577)", () => {
+    const html = renderToStaticMarkup(<MatchModelLine model={model} className="mt-1" />);
+    expect(html).toContain('class="text-body-sm text-muted-foreground mt-1"');
+    expect(html).not.toContain("text-meta");
+    // Mono só nas porcentagens; o rótulo "Modelo:" e os nomes ficam fora do mono.
+    expect(html.match(/<span class="font-mono tabular-nums">[^<]*<\/span>/g)).toEqual([
+      '<span class="font-mono tabular-nums">52%</span>',
+      '<span class="font-mono tabular-nums">55%</span>',
+    ]);
     expect(renderToStaticMarkup(<MatchModelLine model={model} />)).toContain(
-      'class="font-mono text-meta tabular-nums text-muted-foreground"',
+      'class="text-body-sm text-muted-foreground"',
     );
   });
 
@@ -134,7 +214,7 @@ describe("linha da base do modelo (#555)", () => {
         matches={[{ ...fakeMatch(0), odds: null, model }]}
       />,
     );
-    const line = text(html).match(/Modelo ·[^]*?55%/)?.[0] ?? "";
+    const line = text(html).match(/Modelo:[^]*?55%/)?.[0] ?? "";
     expect(line).not.toBe("");
     expect(line).not.toMatch(/edge|valor|odd/i);
   });
