@@ -72,10 +72,7 @@ export function AppHeader({ viewer: state }: { viewer: Viewer | null | "pending"
             aria-label={viewer ? "palpiteiro, ir para jogos" : "palpiteiro, página inicial"}
             className="rounded-sm focus-visible:outline-none focus-visible:ring-[3px] focus-visible:ring-ring/50"
           >
-            <Wordmark
-              suffix="v0 · edge multi-mercado"
-              suffixClassName="hidden 2xl:inline"
-            />
+            <Wordmark />
           </Link>
           {viewer && <DesktopNav isAdmin={viewer.isAdmin} className="hidden lg:flex" />}
         </div>

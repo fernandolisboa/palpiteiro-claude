@@ -44,14 +44,17 @@ function ContactLink() {
 export default function PrivacidadePage() {
   return (
     <div className="min-h-screen bg-background text-foreground">
-      <header className="flex h-14 items-center justify-between border-b border-border-subtle px-6">
+      <header className="flex h-14 items-center justify-between border-b border-border-subtle px-4 lg:px-8">
         <Link href="/" className="rounded-sm focus-visible:outline-none focus-visible:ring-[3px] focus-visible:ring-ring/50">
           <Wordmark />
         </Link>
         <ThemeToggle />
       </header>
 
-      <main className="mx-auto w-full max-w-reading px-6 py-12 sm:py-16">
+      <main
+        data-page-width="reading"
+        className="mx-auto w-full max-w-reading px-5 py-12 sm:py-16 lg:px-8"
+      >
         <p className="text-meta uppercase tracking-eyebrow text-muted-foreground">
           Documento legal
         </p>

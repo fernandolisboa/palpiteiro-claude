@@ -15,10 +15,24 @@ vi.mock("../actions", () => ({
 }));
 
 vi.mock("../passkey-signin-button", () => ({
-  // Reflete a prop `enabled` no markup pra travar que o wrapper a propaga
-  // desabilitada no estado inicial (canSubmit(false) === false).
-  PasskeySignInButton: ({ enabled }: { enabled?: boolean }) => (
-    <button type="button" disabled={!enabled} data-testid="passkey">
+  // Reflete as props `enabled`, `email` e `describedBy` no markup pra travar que o
+  // wrapper as propaga (canSubmit(false) === false no estado inicial).
+  PasskeySignInButton: ({
+    enabled,
+    email,
+    describedBy,
+  }: {
+    enabled?: boolean;
+    email: string;
+    describedBy?: string;
+  }) => (
+    <button
+      type="button"
+      disabled={!enabled}
+      data-testid="passkey"
+      data-email={email}
+      aria-describedby={describedBy}
+    >
       Entrar com passkey
     </button>
   ),
@@ -38,7 +52,7 @@ describe("SignInMethods — gate de maioridade no estado inicial (#282)", () => 
     expect(disabledCount).toBeGreaterThanOrEqual(3);
 
     // Sanidade: os três rótulos de método estão presentes.
-    expect(markup).toContain("Entrar com Google");
+    expect(markup).toContain("Continuar com o Google");
     expect(markup).toContain("Enviar link de acesso");
     expect(markup).toContain("Entrar com passkey");
     // E o checkbox de maioridade com o texto da auto-declaração.
@@ -72,5 +86,43 @@ describe("SignInMethods — gate de maioridade no estado inicial (#282)", () => 
       <SignInMethods errorMessage={null} />,
     );
     expect(markup).not.toContain("text-destructive");
+  });
+});
+
+describe("SignInMethods — um campo de e-mail, frase do bloqueio e o \"G\" (#579)", () => {
+  const markup = renderToStaticMarkup(<SignInMethods errorMessage={null} />);
+
+  it("tem um campo de e-mail só, o do link, com name=\"email\"", () => {
+    expect((markup.match(/type="email"/g) ?? []).length).toBe(1);
+    expect(markup).toMatch(/<input[^>]*type="email"[^>]*name="email"/);
+    expect(markup).toContain('data-email=""');
+  });
+
+  it("a passkey fica DENTRO do form do link, depois do submit, e não submete", () => {
+    const magicForm = markup.slice(markup.lastIndexOf("<form"));
+    const formHtml = magicForm.slice(0, magicForm.indexOf("</form>"));
+    const submit = formHtml.indexOf("Enviar link de acesso");
+    const passkey = formHtml.indexOf('data-testid="passkey"');
+    expect(submit).toBeGreaterThan(-1);
+    expect(passkey).toBeGreaterThan(submit);
+    expect(formHtml).toMatch(/<button type="button"[^>]*data-testid="passkey"/);
+  });
+
+  it("no estado inicial mostra a frase do bloqueio e liga os botões a ela", () => {
+    expect(markup).toContain("Marque a caixa acima para entrar.");
+    expect(markup).toContain('id="signin-gate-hint"');
+    expect((markup.match(/aria-describedby="signin-gate-hint"/g) ?? []).length).toBe(3);
+  });
+
+  it("o botão do Google traz o \"G\" oficial: 18px por classe, decorativo, sem style", () => {
+    const googleForm = markup.slice(markup.indexOf("<form"), markup.indexOf("</form>"));
+    const svg = googleForm.slice(googleForm.indexOf("<svg"), googleForm.indexOf("</svg>"));
+    expect(svg).toContain('aria-hidden="true"');
+    expect(svg).toMatch(/class="[^"]*\bsize-4\.5\b/);
+    expect(svg).not.toContain("style=");
+    for (const fill of ["#EA4335", "#4285F4", "#FBBC05", "#34A853"]) {
+      expect(svg).toContain(`fill="${fill}"`);
+    }
+    expect(googleForm).toContain("bg-white");
   });
 });

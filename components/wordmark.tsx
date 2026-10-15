@@ -1,36 +1,16 @@
-import type { ReactNode } from "react";
-
 import { cn } from "@/lib/utils";
 
-type Props = {
-  /** Sufixo mono opcional (ex.: "· v0"). O texto é content — passado verbatim. */
-  suffix?: ReactNode;
-  className?: string;
-  suffixClassName?: string;
-};
-
 /**
- * Marca única "palpiteiro" + sufixo mono opcional (ADR 0029). Unifica os 3
- * tamanhos (17/18/20px → display-sm) e formas de sufixo divergentes do shell
- * (header do app, signin, landing). O TEXTO de cada sufixo segue verbatim
- * (o tagline obsoleto do signin é copy — fica pro #323).
+ * Marca única "palpiteiro" (ADR 0029), sem sufixo (ADR 0059, revisão de design linha
+ * 25): o tipo não aceita sufixo, pra nenhum tagline voltar no header do app, no login
+ * ou na landing.
  */
-export function Wordmark({ suffix, className, suffixClassName }: Props) {
+export function Wordmark({ className }: { className?: string }) {
   return (
-    <span className={cn("flex items-baseline gap-2", className)}>
+    <span className={cn("flex items-baseline", className)}>
       <span className="text-display-sm font-semibold tracking-tight">
         palpiteiro
       </span>
-      {suffix != null && (
-        <span
-          className={cn(
-            "text-meta tracking-eyebrow text-muted-foreground uppercase",
-            suffixClassName
-          )}
-        >
-          {suffix}
-        </span>
-      )}
     </span>
   );
 }

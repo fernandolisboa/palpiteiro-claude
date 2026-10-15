@@ -33,13 +33,24 @@ describe("títulos das páginas públicas — opt-out do template", () => {
 
   it("a landing usa title.absolute (não duplica a marca)", () => {
     expect(landingMetadata.title).toEqual({
-      absolute: "Palpiteiro · um palpite por jogo, com racional",
+      absolute: "Palpiteiro · palpites de futebol e bolão entre amigos",
     });
+  });
+
+  it("a metadata da landing não fala jargão do motor (#579)", () => {
+    const og = landingMetadata.openGraph as { description?: string } | undefined;
+    for (const d of [String(landingMetadata.description), String(og?.description)]) {
+      expect(d).not.toMatch(/\bedge\b|\bmotor\b|\bUM\b|cada jogo/);
+    }
   });
 
   it("/como-funciona usa title.absolute (não duplica a marca)", () => {
     expect(comoFuncionaMetadata.title).toEqual({
       absolute: "Como funciona · Palpiteiro",
     });
+  });
+
+  it("a descrição de /como-funciona não fala jargão do motor (#579)", () => {
+    expect(String(comoFuncionaMetadata.description)).not.toMatch(/\bedge\b|\bPASS\b/);
   });
 });

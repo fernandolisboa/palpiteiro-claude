@@ -8,9 +8,11 @@ const WIDTH = {
 } as const;
 
 /**
- * Wrapper das telas logadas de usuário (ADR 0056): duas larguras (`content` 1040
- * pra listas e painéis, `reading` 640 pro resto) e um gutter só. A lista sangrada
- * do celular de `/jogos` e `/time` não usa (cada bloco tem o próprio `px-5`).
+ * Wrapper das telas logadas de usuário e públicas (ADR 0056, ADR 0059): duas larguras
+ * (`content` 1040 pra listas e painéis, `reading` 640 pro resto) e um gutter só. A
+ * lista sangrada do celular de `/jogos` e `/time` não usa (cada bloco tem o próprio
+ * `px-5`). O `data-page-width` é lido pelo `app/globals.css` pra o rodapé global seguir
+ * a largura da coluna (`body:has(...) [data-footer-column]`).
  */
 export function PageContainer({
   width,
@@ -23,6 +25,7 @@ export function PageContainer({
 }) {
   return (
     <div
+      data-page-width={width}
       className={cn(
         "mx-auto w-full px-5 pt-6 pb-16 lg:px-8 lg:pt-10",
         WIDTH[width],

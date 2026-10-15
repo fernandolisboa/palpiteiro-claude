@@ -1,5 +1,7 @@
 import type { Metadata } from "next";
+import Link from "next/link";
 
+import { PageContainer } from "@/components/page-container";
 import { ThemeToggle } from "@/components/theme-toggle";
 import { Wordmark } from "@/components/wordmark";
 
@@ -12,16 +14,20 @@ import { LandingContent } from "./landing-content";
 // aparece nela) e a landing continua pré-renderizada.
 export const dynamic = "force-static";
 
+// Sob demanda ("no jogo que você escolher"): o palpite sai quando alguém pede a análise,
+// com limite diário, então a metadata não promete um palpite pra todo jogo (#579, R6).
+const LANDING_TITLE = "Palpiteiro · palpites de futebol e bolão entre amigos";
+const LANDING_DESCRIPTION =
+  "Palpite da IA no jogo que você escolher, com o porquê. Anote suas apostas e o bolão da turma; o app confere o placar e faz a conta. Ferramenta de análise, não é casa de apostas.";
+
 export const metadata: Metadata = {
   // `absolute` opta o título fora do `template: "%s · Palpiteiro"` do root — a
   // string já carrega a marca, então o template duplicaria (" · Palpiteiro").
-  title: { absolute: "Palpiteiro · um palpite por jogo, com racional" },
-  description:
-    "Motor de seleção de edge multi-mercado que emite UM palpite por jogo, com racional — resultado, total de gols, ambas marcam e dupla chance. Leitura pronta, análise como detalhe.",
+  title: { absolute: LANDING_TITLE },
+  description: LANDING_DESCRIPTION,
   openGraph: {
-    title: "Palpiteiro · um palpite por jogo, com racional",
-    description:
-      "Motor de seleção de edge multi-mercado que emite UM palpite por jogo, com racional. A IA escolhe o mercado, você lê o porquê.",
+    title: LANDING_TITLE,
+    description: LANDING_DESCRIPTION,
     type: "website",
   },
   alternates: { canonical: "/" },
@@ -52,8 +58,10 @@ const JSON_LD = {
  * Landing pública estática na raiz `/` (#373). Server Component que **NÃO**
  * chama `auth()` nem toca DB/Odds-API/IA — a rota é liberada no middleware via
  * exclusão de matcher (`$`). Não usa o `AppShell` (que lê a sessão e tornaria a
- * landing dinâmica): monta um header enxuto público (wordmark + ThemeToggle). A
- * home autenticada vive em `/jogos`.
+ * landing dinâmica) nem importa o `AppHeader` (o módulo puxa `getSession` → `@/auth`):
+ * monta um header público com a geometria do `AppHeader` anônimo (marca, tema e
+ * "entrar"). O logado nunca vê a landing (o middleware manda `/` → `/jogos`).
+ * `PageContainer width="content"` marca a largura pro rodapé alinhar (ADR 0059).
  *
  * O corpo vive em `LandingContent` (síncrono) pra que o teste de contrato
  * consiga `renderToStaticMarkup` sem aguardar Server Component async.
@@ -66,13 +74,29 @@ export default function LandingPage() {
         // Server-rendered no HTML da landing (Server Component) — sem hidratação.
         dangerouslySetInnerHTML={{ __html: JSON.stringify(JSON_LD) }}
       />
-      <header className="flex h-14 items-center justify-between border-b border-border-subtle px-6">
-        <Wordmark suffix="edge multi-mercado" suffixClassName="hidden sm:inline" />
-        <ThemeToggle />
+      <header className="flex h-14 items-center justify-between gap-3 border-b border-border-subtle px-4 lg:px-8">
+        <Link
+          href="/"
+          aria-label="palpiteiro, página inicial"
+          className="rounded-sm focus-visible:outline-none focus-visible:ring-[3px] focus-visible:ring-ring/50"
+        >
+          <Wordmark />
+        </Link>
+        <div className="flex shrink-0 items-center gap-2 lg:gap-3">
+          <ThemeToggle />
+          <Link
+            href="/signin"
+            className="rounded-sm text-meta uppercase tracking-label text-muted-foreground transition-colors hover:text-foreground focus-visible:outline-none focus-visible:ring-[3px] focus-visible:ring-ring/50"
+          >
+            entrar
+          </Link>
+        </div>
       </header>
 
-      <main className="mx-auto w-full max-w-reading px-6">
-        <LandingContent />
+      <main>
+        <PageContainer width="content">
+          <LandingContent />
+        </PageContainer>
       </main>
     </div>
   );

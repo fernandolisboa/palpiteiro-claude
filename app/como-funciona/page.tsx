@@ -1,6 +1,7 @@
 import type { Metadata } from "next";
 
 import { AppShell } from "@/components/app-shell";
+import { PageContainer } from "@/components/page-container";
 
 import { ComoFuncionaContent } from "./como-funciona-content";
 
@@ -9,7 +10,7 @@ export const metadata: Metadata = {
   // string já carrega a marca, então o template duplicaria (" · Palpiteiro").
   title: { absolute: "Como funciona · Palpiteiro" },
   description:
-    "Entenda os dois registros do Palpiteiro: O Palpite — a manchete brincalhona (confiança, placar provável, acertou/errou) — e o motor de valor que recomenda apostas em over/under, 1X2, ambas marcam e dupla chance (edge, PASS, stake e cada número da tela). Tutorial pra iniciante total e glossário.",
+    'Como o Palpiteiro funciona: o palpite da IA, o modelo de placar (Dixon-Coles), os mercados, a vantagem e o "sem aposta", Suas apostas e o bolão entre amigos. Com glossário.',
   alternates: { canonical: "/como-funciona" },
 };
 
@@ -26,9 +27,9 @@ export const metadata: Metadata = {
 export default function ComoFuncionaPage() {
   return (
     <AppShell>
-      <div className="mx-auto w-full max-w-reading px-6 py-8">
+      <PageContainer width="reading">
         <ComoFuncionaContent />
-      </div>
+      </PageContainer>
     </AppShell>
   );
 }

@@ -26,6 +26,23 @@ describe("GLOSSARY (contrato de dados)", () => {
     }
   });
 
+  it("o significado não fala jargão interno (página pública, #579)", () => {
+    for (const { anchor, meaning } of GLOSSARY) {
+      expect(meaning, anchor).not.toMatch(/\bADR\b|\bJEV\b|\bTier\b|\bcron\b|\(won\)|Claude/);
+    }
+  });
+
+  it("a leitura do modelo não convida a comparar com a odd de mercado (#579)", () => {
+    const entry = GLOSSARY.find((e) => e.anchor === "leitura-modelo");
+    expect(entry?.meaning).not.toMatch(/compare/i);
+  });
+
+  it("tem as entradas de odd justa, combinada e pote do bolão", () => {
+    for (const anchor of ["odd-justa", "combinada", "pote"]) {
+      expect(GLOSSARY.some((e) => e.anchor === anchor), anchor).toBe(true);
+    }
+  });
+
   it("cita MIN_EDGE_PP no significado de #edge (sem hardcode que pode driftar)", () => {
     const edge = GLOSSARY.find((e) => e.anchor === "edge");
     expect(edge).toBeDefined();
