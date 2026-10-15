@@ -83,6 +83,15 @@ export function slipProfitUnits(
   return status === "acertou" ? stake * (odd - 1) : -stake;
 }
 
+// Filtro de /apostas (`?status=`): valores curtos em português.
+export type SlipFilter = "abertas" | "encerradas";
+
+/** Sem valor (ou inválido): "abertas" quando há alguma em aberto, senão "encerradas". */
+export function resolveSlipFilter(raw: string | undefined, hasOpen: boolean): SlipFilter {
+  if (raw === "abertas" || raw === "encerradas") return raw;
+  return hasOpen ? "abertas" : "encerradas";
+}
+
 export type SlipLedgerSummary = {
   open: number;
   closed: number;

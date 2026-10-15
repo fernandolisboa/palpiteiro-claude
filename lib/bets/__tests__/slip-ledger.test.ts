@@ -1,6 +1,7 @@
 import { describe, expect, it } from "vitest";
 
 import {
+  resolveSlipFilter,
   slipBucket,
   slipProfitUnits,
   summarizeSlipLedger,
@@ -87,6 +88,19 @@ describe("slipProfitUnits", () => {
     expect(
       slipProfitUnits(row({ legs: [leg({ stakeUnits: "1.00", settleable: false })], matchOver: true })),
     ).toBeNull();
+  });
+});
+
+describe("resolveSlipFilter", () => {
+  it.each([
+    ["abertas", false, "abertas"],
+    ["encerradas", true, "encerradas"],
+    [undefined, true, "abertas"],
+    [undefined, false, "encerradas"],
+    ["todas", true, "abertas"],
+    ["", false, "encerradas"],
+  ] as const)("%j (há aberta: %s) → %s", (raw, hasOpen, out) => {
+    expect(resolveSlipFilter(raw, hasOpen)).toBe(out);
   });
 });
 
