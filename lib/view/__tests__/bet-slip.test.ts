@@ -534,17 +534,22 @@ describe("historyLegView (/apostas, #577)", () => {
     expect(view.visible.join(" ")).not.toContain("vantagem");
   });
 
-  it("perna sem chance do modelo: sem detalhes", () => {
-    expect(
-      historyLegView({
-        ...base,
-        modelProbPct: null,
-        gradeSource: "none",
-        modelSource: null,
-        marketImpliedPct: null,
-        suggestedStakeUnits: null,
-      }),
-    ).toEqual({ visible: ["odd 1,85", "stake 0,5u"], details: [] });
+  it("perna sem chance do modelo: sem detalhes, nem com sugerido gravado", () => {
+    const noChance = {
+      ...base,
+      modelProbPct: null,
+      gradeSource: "none" as const,
+      modelSource: null,
+      marketImpliedPct: null,
+    };
+    expect(historyLegView({ ...noChance, suggestedStakeUnits: null })).toEqual({
+      visible: ["odd 1,85", "stake 0,5u"],
+      details: [],
+    });
+    expect(historyLegView(noChance)).toEqual({
+      visible: ["odd 1,85", "stake 0,5u"],
+      details: [],
+    });
   });
 
   it("fonte da análise do usuário", () => {

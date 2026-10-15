@@ -558,6 +558,7 @@ export type HistoryLegView = {
   // perna não tem), "chance 47,8%".
   visible: string[];
   // Atrás de "detalhes": retorno esperado, vantagem do modelo, sugerido e a fonte.
+  // Vazio quando a perna não tem chance do modelo.
   details: string[];
 };
 
@@ -574,15 +575,17 @@ export function historyLegView(leg: PersistedLeg): HistoryLegView {
   const visible: string[] = [];
   if (odd !== null) visible.push(`odd ${formatOdd(odd)}`);
   if (stake !== null) visible.push(`stake ${units(stake)}`);
-  if (prob !== null) visible.push(`chance ${formatPct(prob, { decimals: 1 })}`);
+  // Perna sem chance do modelo: sem "detalhes" (PLAN-577), nem só pro sugerido.
+  if (prob === null) return { visible, details: [] };
+  visible.push(`chance ${formatPct(prob, { decimals: 1 })}`);
   const details: string[] = [];
-  if (prob !== null && odd !== null && odd > 1) {
+  if (odd !== null && odd > 1) {
     details.push(`retorno esperado ${formatEvPct((prob / 100) * odd - 1)}`);
   }
-  if (prob !== null && implied !== null) {
+  if (implied !== null) {
     details.push(`vantagem do modelo ${formatEdgePoints(prob - implied)}`);
   }
   if (suggested !== null) details.push(`sugerido ${units(suggested)}`);
-  if (prob !== null) details.push(legSourceLabel(leg));
+  details.push(legSourceLabel(leg));
   return { visible, details };
 }

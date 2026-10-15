@@ -108,11 +108,20 @@ describe("SlipCard (/apostas, #577)", () => {
     expect(before).not.toContain("vantagem do modelo");
   });
 
-  it("perna sem chance do modelo: sem <details>", () => {
+  it("perna sem chance do modelo: sem <details>, mesmo com sugerido gravado", () => {
     const html = render(
-      slip([leg({ modelProbPct: null, gradeSource: "none", modelSource: null, marketImpliedPct: null })]),
+      slip([
+        leg({
+          modelProbPct: null,
+          gradeSource: "none",
+          modelSource: null,
+          marketImpliedPct: null,
+          suggestedStakeUnits: "1.00",
+        }),
+      ]),
     );
     expect(html).not.toContain("<details");
+    expect(html).not.toContain("sugerido");
   });
 
   it("jogo cancelado com aposta pendente: 'Jogo cancelado', nunca 'Em aberto'", () => {
