@@ -6,9 +6,13 @@ import {
   poolBetShortLabel,
   poolBetsDeadlineLabel,
   poolClosesIn,
+  poolEntryStampLabel,
   poolMatchLabel,
+  poolPickerLabel,
   poolStatusView,
+  poolWinnerStampLabel,
 } from "@/lib/view/friend-pool";
+import { buildLiveStamp } from "@/lib/live/stamp";
 import { teamPair } from "@/lib/view/team";
 
 const teams = { home: "Flamengo", away: "Palmeiras" };
@@ -266,5 +270,76 @@ describe("selos do bolão ao vivo (#580)", () => {
     // A extensão não vale com a flag desligada.
     const pool = { ...noManual, betsExtendedUntil: at(60) };
     expect(poolStatusView({ pool, match: scheduled }, at(30)).label).toBe("esperando o placar");
+  });
+});
+
+describe("carimbo das apostas ao vivo (#580)", () => {
+  const KICKOFF = new Date("2026-10-18T19:00:00Z");
+  const at = (min: number) => new Date(KICKOFF.getTime() + min * 60_000);
+  const api = (over: Partial<Parameters<typeof buildLiveStamp>[0]> = {}) =>
+    buildLiveStamp({
+      source: "api_football",
+      status: "1H",
+      elapsed: 12,
+      extra: null,
+      minuteLabel: "12'",
+      score: { home: 0, away: 0 },
+      red: null,
+      fetchedAt: at(12),
+      recordedAt: at(12),
+      ...over,
+    });
+  const clock = buildLiveStamp({
+    source: "clock",
+    status: null,
+    elapsed: null,
+    extra: null,
+    minuteLabel: null,
+    score: null,
+    red: null,
+    fetchedAt: null,
+    recordedAt: new Date(at(12).getTime() + 40_000),
+  });
+  const entry = (liveState: unknown) => ({ isLive: true, liveState });
+
+  it("lista: 'aos 12' · 0–0'", () => {
+    expect(poolEntryStampLabel(entry(api()), KICKOFF)).toBe("aos 12' · 0–0");
+    expect(
+      poolEntryStampLabel(entry(api({ status: "HT", minuteLabel: "intervalo", score: { home: 1, away: 0 } })), KICKOFF),
+    ).toBe("no intervalo · 1–0");
+    expect(poolEntryStampLabel(entry(api({ score: null })), KICKOFF)).toBe("aos 12'");
+  });
+
+  it("relógio: minutos desde o apito, sem placar", () => {
+    expect(poolEntryStampLabel(entry(clock), KICKOFF)).toBe("12 min após o apito");
+  });
+
+  it("aposta de antes do apito: sem carimbo; carimbo ilegível: 'ao vivo'", () => {
+    expect(poolEntryStampLabel({ isLive: false, liveState: null }, KICKOFF)).toBeNull();
+    expect(poolEntryStampLabel(entry({ v: 9 }), KICKOFF)).toBe("ao vivo");
+  });
+
+  it("linha do ganhador: 'acertou · anotada aos 12', 1–0'", () => {
+    expect(
+      poolWinnerStampLabel(entry(api({ score: { home: 1, away: 0 } })), KICKOFF),
+    ).toBe("acertou · anotada aos 12', 1–0");
+    expect(poolWinnerStampLabel(entry(clock), KICKOFF)).toBe(
+      "acertou · anotada 12 min após o apito",
+    );
+    expect(poolWinnerStampLabel(entry("lixo"), KICKOFF)).toBe("acertou · anotada ao vivo");
+    expect(poolWinnerStampLabel({ isLive: false, liveState: null }, KICKOFF)).toBeNull();
+  });
+
+  it("seletor do Novo bolão: 'ao vivo' depois do apito", () => {
+    const m = {
+      homeTeam: "Flamengo",
+      awayTeam: "Palmeiras",
+      league: "brasileirao_a" as const,
+      kickoffAt: KICKOFF,
+    };
+    expect(poolPickerLabel(m, at(5), "America/Sao_Paulo").endsWith(" · ao vivo")).toBe(true);
+    expect(poolPickerLabel(m, at(-5), "America/Sao_Paulo")).toBe(
+      poolMatchLabel(m, at(-5), "America/Sao_Paulo"),
+    );
   });
 });

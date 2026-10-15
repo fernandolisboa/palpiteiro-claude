@@ -19,12 +19,14 @@ import {
   getInPlayStatesForMatches,
   type InPlayState,
 } from "@/lib/live/in-play-state";
+import { poolWindowOpen } from "@/lib/pools/pool-state";
 import { poolPotCents, formatBrl } from "@/lib/pools/winners";
 import { getRequestTimeZone } from "@/lib/server/request-timezone";
 import {
   POOL_MONEY_NOTE,
   POOL_RISK_NOTE,
   poolMatchLabel,
+  poolPickerLabel,
   poolStatusView,
   type PoolStatusTone,
 } from "@/lib/view/friend-pool";
@@ -51,11 +53,13 @@ export default async function BolaoPage({ searchParams }: PageProps) {
   const leagues = await getActiveLeaguesForRequest();
   const [pools, upcoming, timeZone, liveMode] = await Promise.all([
     listFriendPools(userId),
+    // Desde 4h atrás (a janela do estado ao vivo, #580): os jogos já apitados só entram
+    // no seletor se ainda estão na janela do bolão (filtro abaixo).
     getMatchesInRange({
-      from: now,
+      from: new Date(now.getTime() - IN_PLAY_WINDOW_AFTER_MS),
       to: new Date(now.getTime() + PICKER_DAYS * 24 * 60 * 60 * 1000),
       leagues,
-      statuses: ["scheduled"],
+      statuses: ["scheduled", "live"],
       order: "asc",
       limit: PICKER_LIMIT,
     }),
@@ -64,7 +68,9 @@ export default async function BolaoPage({ searchParams }: PageProps) {
   ]);
   // Estado ao vivo dos jogos apitados (#580): só as rows, nunca busca no provider.
   const liveIds = liveMode
-    ? pools.map((r) => r.match).filter((m) => isInLiveWindow(m.kickoffAt, now)).map((m) => m.id)
+    ? [...pools.map((r) => r.match), ...upcoming]
+        .filter((m) => isInLiveWindow(m.kickoffAt, now))
+        .map((m) => m.id)
     : [];
   const liveStates =
     liveIds.length > 0
@@ -73,7 +79,11 @@ export default async function BolaoPage({ searchParams }: PageProps) {
         )
       : new Map<string, InPlayState>();
 
-  const options = upcoming.map((m) => ({ id: m.id, label: poolMatchLabel(m, now, timeZone) }));
+  // Antes do apito, todo jogo; depois, só os que ainda aceitam bolão (até 15' de jogo,
+  // ou apito + 15 min pelo relógio sem a row). Flag desligada: só os de antes do apito.
+  const options = upcoming
+    .filter((m) => poolWindowOpen(m, liveStates.get(m.id) ?? null, now, { liveMode }))
+    .map((m) => ({ id: m.id, label: poolPickerLabel(m, now, timeZone) }));
   const defaultMatchId = options.some((o) => o.id === jogo) ? (jogo ?? null) : null;
 
   return (

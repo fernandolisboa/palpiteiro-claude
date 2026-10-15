@@ -45,7 +45,9 @@ import {
   joinNames,
   poolBetShortLabel,
   poolBetsDeadlineLabel,
+  poolEntryStampLabel,
   poolMatchLabel,
+  poolWinnerStampLabel,
 } from "@/lib/view/friend-pool";
 import { displayMatchTeams, teamPair } from "@/lib/view/team";
 
@@ -121,9 +123,13 @@ export default async function BolaoDetailPage({ params }: PageProps) {
     pool.manualHomeScore !== null && pool.manualAwayScore !== null
       ? { home: pool.manualHomeScore, away: pool.manualAwayScore }
       : null;
-  const winners = outcome.settled
-    ? entries.filter((e) => outcome.hitIds.has(e.id)).map((e) => e.bettorName)
-    : [];
+  const winnerEntries = outcome.settled ? entries.filter((e) => outcome.hitIds.has(e.id)) : [];
+  const winners = winnerEntries.map((e) => e.bettorName);
+  // Ganhadores que anotaram com o jogo rolando: o carimbo vai na linha do ganhador.
+  const liveWinners = winnerEntries.flatMap((e) => {
+    const label = poolWinnerStampLabel(e, match.kickoffAt);
+    return label ? [{ id: e.id, name: e.bettorName, label }] : [];
+  });
   // "Estender prazo" (ADR 0060 §7): admin, no próprio bolão (só o dono abre esta
   // página), depois do apito, jogo não terminado e antes do teto de apito + 3h.
   const canExtend =
@@ -171,6 +177,15 @@ export default async function BolaoDetailPage({ params }: PageProps) {
                   {winners.length === 1 ? "Ganhou: " : "Ganharam: "}
                   {joinNames(winners)}
                 </p>
+                {liveWinners.length > 0 && (
+                  <ul className="text-muted-foreground text-body-sm tabular-nums tracking-tight">
+                    {liveWinners.map((w) => (
+                      <li key={w.id}>
+                        {w.name}: {w.label}
+                      </li>
+                    ))}
+                  </ul>
+                )}
                 {outcome.shareCents !== null && (
                   <p className="text-body-sm tracking-tight">
                     Pote de {formatBrl(outcome.potCents ?? 0)}:{" "}
@@ -214,10 +229,19 @@ export default async function BolaoDetailPage({ params }: PageProps) {
                 const hit = outcome.settled ? outcome.hitIds.has(e.id) : null;
                 const kindLabel = POOL_KIND_LABEL[e.kind] ?? e.kind;
                 const bet = poolBetShortLabel(e.kind, e.params, teams, codes);
+                const stamp = poolEntryStampLabel(e, match.kickoffAt);
                 return (
                   <li key={e.id} className="flex items-center gap-3 px-4 py-3">
-                    <span className="min-w-16 flex-1 truncate text-body font-medium tracking-tight">
-                      {e.bettorName}
+                    <span className="flex min-w-16 flex-1 flex-col">
+                      <span className="truncate text-body font-medium tracking-tight">
+                        {e.bettorName}
+                      </span>
+                      {/* Anotada com o jogo rolando (#580): minuto e placar da hora. */}
+                      {stamp && (
+                        <span className="text-muted-foreground truncate text-meta tabular-nums">
+                          {stamp}
+                        </span>
+                      )}
                     </span>
                     {/* Tipo e aposta numa linha só (#577): o placar vai com as siglas. */}
                     <span

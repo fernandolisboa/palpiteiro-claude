@@ -9,6 +9,7 @@ import {
   leagueToKey,
 } from "@/lib/format";
 import type { LiveStateInput } from "@/lib/live/phase";
+import { readLiveStamp, type LiveStamp } from "@/lib/live/stamp";
 import {
   POOL_LIVE_CUTOFF_MINUTE,
   poolBetsOpen,
@@ -170,6 +171,63 @@ export function poolStatusView(
       : { label: "apostas abertas", tone: "open" };
   }
   return { label: "esperando o placar", tone: "neutral" };
+}
+
+type StampedEntry = { isLive: boolean; liveState: unknown };
+
+function stampMoment(stamp: LiveStamp, kickoffAt: Date): string | null {
+  if (stamp.source === "clock") {
+    const min = Math.max(
+      0,
+      Math.floor((new Date(stamp.recordedAt).getTime() - kickoffAt.getTime()) / 60_000),
+    );
+    return `${min} min após o apito`;
+  }
+  if (stamp.minuteLabel === null) return null;
+  return stamp.minuteLabel === "intervalo" ? "no intervalo" : `aos ${stamp.minuteLabel}`;
+}
+
+function stampScore(stamp: LiveStamp): string | null {
+  return stamp.score ? `${stamp.score.home}–${stamp.score.away}` : null;
+}
+
+/**
+ * Carimbo da aposta anotada com o jogo rolando, na lista de apostadores (#580, ADR
+ * 0060 §7): "aos 12' · 0–0", "no intervalo · 1–0", "12 min após o apito" (relógio,
+ * sem placar). Carimbo ilegível: "ao vivo". Aposta de antes do apito: null.
+ */
+export function poolEntryStampLabel(entry: StampedEntry, kickoffAt: Date): string | null {
+  if (!entry.isLive) return null;
+  const stamp = readLiveStamp(entry.liveState);
+  if (!stamp) return "ao vivo";
+  const parts = [stampMoment(stamp, kickoffAt), stampScore(stamp)].filter(
+    (p): p is string => p !== null,
+  );
+  return parts.length > 0 ? parts.join(" · ") : "ao vivo";
+}
+
+/**
+ * A mesma transparência na linha do ganhador: "acertou · anotada aos 12', 1–0". A
+ * pontuação não muda com o minuto (decisão do dono); o carimbo deixa à vista. Aposta
+ * de antes do apito: null.
+ */
+export function poolWinnerStampLabel(entry: StampedEntry, kickoffAt: Date): string | null {
+  if (!entry.isLive) return null;
+  const stamp = readLiveStamp(entry.liveState);
+  if (!stamp) return "acertou · anotada ao vivo";
+  const moment = stampMoment(stamp, kickoffAt) ?? "ao vivo";
+  const score = stampScore(stamp);
+  return `acertou · anotada ${moment}${score ? `, ${score}` : ""}`;
+}
+
+/** Opção do seletor do "Novo bolão": o rótulo do jogo, com "ao vivo" depois do apito. */
+export function poolPickerLabel(
+  match: { homeTeam: string; awayTeam: string; league: SupportedLeague; kickoffAt: Date },
+  now: Date,
+  timeZone?: string,
+): string {
+  const label = poolMatchLabel(match, now, timeZone);
+  return match.kickoffAt.getTime() <= now.getTime() ? `${label} · ao vivo` : label;
 }
 
 /** "em 2h 10min" só nas últimas 3h antes do apito (a trava do bolão); senão undefined. */
