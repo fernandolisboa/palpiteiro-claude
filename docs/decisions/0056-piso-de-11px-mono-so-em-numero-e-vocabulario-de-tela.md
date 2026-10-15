@@ -37,7 +37,7 @@ A revisão de design apontou que o texto pequeno (9 e 10px, ~240 usos) é difíc
 5. **Selo único de resultado:** `components/result-badge.tsx` (`ResultBadge`) com as cores `form-*` e sempre com a palavra (`lib/view/result-state.ts`). Vale para `/apostas`, palpite (inclusive `/p`), bolão e desempenho.
 6. **Cabeçalho e larguras:** `PageHeader` (h1 `display-md`/`lg:display-lg`, descrição sans, meta sans com `tabular-nums`, volta e ações) e `PageContainer` (`content` 1040 ou `reading` 640, gutter `px-5`/`lg:px-8`) nas telas logadas de usuário. A árvore celular de `/jogos` e `/time` (lista sangrada) usa só o `PageHeader`. A página do jogo fica para o PR 3.
 7. **Escopo do admin:** recebe só as regras de token (piso de 11px, contraste do `muted-fg-2`, zero `text-[Npx]`); mantém mono, termos técnicos e o próprio `PageHeading`. Componentes compartilhados com o admin (`PredictionDetail`, `PredictionsTable`, `KpiCards`) seguem a regra de usuário.
-8. **Exceção conhecida:** as iniciais do `TeamAvatar` (`components/team-avatar.tsx`, estilo inline, `aria-hidden`) ficam abaixo de 11px até a troca por escudo (PR 5 da revisão).
+8. **Exceção conhecida:** as iniciais do `TeamAvatar` (`components/team-avatar.tsx`, estilo inline, `aria-hidden`) ficam abaixo de 11px até a troca por escudo (PR 5 da revisão). **Encerrada pelo #578:** o monograma respeita o piso (sem letra quando não cabe) e o escudo substitui as iniciais.
 
 ## Alternativas rejeitadas
 
