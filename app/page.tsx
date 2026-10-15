@@ -67,7 +67,7 @@ export default function LandingPage() {
         dangerouslySetInnerHTML={{ __html: JSON.stringify(JSON_LD) }}
       />
       <header className="flex h-14 items-center justify-between border-b border-border-subtle px-6">
-        <Wordmark suffix="edge multi-mercado" suffixClassName="hidden sm:inline" />
+        <Wordmark />
         <ThemeToggle />
       </header>
 
