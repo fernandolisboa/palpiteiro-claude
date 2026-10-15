@@ -9,6 +9,7 @@
 import { PGlite } from "@electric-sql/pglite";
 import { drizzle, type PgliteDatabase } from "drizzle-orm/pglite";
 import { migrate } from "drizzle-orm/pglite/migrator";
+import { eq } from "drizzle-orm";
 import { afterAll, beforeAll, beforeEach, describe, expect, it, vi } from "vitest";
 
 import * as schema from "@/db/schema";
@@ -360,5 +361,49 @@ describe("prewarmOdds — pré-aquecimento de odds das ligas ativas (pglite)", (
     );
     expect(await getProviderQuota("odds-api")).toBeNull();
     warn.mockRestore();
+  });
+  it("1º jogo próximo adiado: aquece a liga pelo próximo jogo pré-jogo (gate de quota)", async () => {
+    getOddsForSport.mockImplementation((...args: unknown[]) => {
+      const opts = args[1] as { markets: string[] };
+      return Promise.resolve(batchFor(opts.markets));
+    });
+    await realDb
+      .update(schema.matches)
+      .set({ status: "postponed" })
+      .where(eq(schema.matches.id, matchIds.id1));
+    try {
+      const summary = await prewarmOdds({ now: new Date() });
+
+      // O adiado seria barrado no ensure; o representante passa a ser o 2º jogo.
+      expect(getOddsForSport).toHaveBeenCalledTimes(2);
+      expect(summary.warmedLeagues).toBe(1);
+      expect(summary.consideredMatches).toBe(2);
+      const ou = await getLatestSelectionOddsSnapshots({
+        matchId: matchIds.id2,
+        dbMarketKey: "over_under",
+        params: { line: 2.5 },
+      });
+      expect(ou).not.toBeNull();
+    } finally {
+      await realDb
+        .update(schema.matches)
+        .set({ status: "scheduled" })
+        .where(eq(schema.matches.id, matchIds.id1));
+    }
+  });
+
+  it("liga só com jogos fora do pré-jogo: nada a aquecer, zero chamada ao provider", async () => {
+    await realDb
+      .update(schema.matches)
+      .set({ status: "cancelled" });
+    try {
+      const summary = await prewarmOdds({ now: new Date() });
+
+      expect(getOddsForSport).not.toHaveBeenCalled();
+      expect(summary.warmedLeagues).toBe(0);
+      expect(summary.consideredMatches).toBe(2);
+    } finally {
+      await realDb.update(schema.matches).set({ status: "scheduled" });
+    }
   });
 });

@@ -10,6 +10,7 @@ import {
   type MarketOddsBundle,
 } from "@/lib/odds/select-bookmaker";
 import { oddsFreshnessMsForKickoff } from "@/lib/odds/freshness-window";
+import { isPreMatchForOdds } from "@/lib/odds/pre-match-gate";
 import {
   getLatestFreshSelectionOddsSnapshots,
   getLatestOverUnderSnapshot,
@@ -46,6 +47,10 @@ export type EnsureOddsOptions = {
  * (`getLatestOverUnderSnapshot`, best-effort) após a operação — contrato inalterado
  * pro caller (page de match), independente de quais mercados foram pedidos. null se a
  * liga não tem o evento ou nenhum book oferece o over/under 2.5 completo/coerente.
+ *
+ * Jogo fora do pré-jogo (kickoff ≤ now, ou status ≠ scheduled — `isPreMatchForOdds`):
+ * NENHUMA chamada ao provider, em nenhum mercado (featured ou additional); só devolve a
+ * última captura gravada (read-only). Ponto único: cobre página, actions e crons.
  */
 export async function ensureOddsSnapshotsFresh(
   match: DbMatch,
@@ -53,6 +58,13 @@ export async function ensureOddsSnapshotsFresh(
 ): Promise<OverUnderSnapshot | null> {
   const now = opts.now ?? new Date();
   const descriptors = opts.markets ?? [OVER_UNDER];
+
+  // Gate de quota: começou/encerrou/adiou/cancelou → só leitura. Sem isto, cada visita
+  // a um jogo já apitado gastava ~1 crédito por mercado featured sem nunca refrescar o
+  // snapshot (a escrita só cobre kickoff ≥ now). Ver pre-match-gate.ts.
+  if (!isPreMatchForOdds(match, now)) {
+    return getLatestOverUnderSnapshot(match.id);
+  }
 
   // Janela de frescor em função do tempo-até-kickoff: 60min pra jogos distantes
   // (>24h), 30min pra iminentes (≤24h, inclui o conjunto de captura do CLV de KO

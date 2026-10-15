@@ -57,6 +57,7 @@ import {
 } from "@/lib/view/user-palpite";
 import { ensureOddsSnapshotsFresh } from "@/lib/odds/fetch-and-snapshot";
 import { PAGE_LIVE_MARKETS } from "@/lib/odds/live-card-markets";
+import { isPreMatchForOdds } from "@/lib/odds/pre-match-gate";
 import type { FixtureRef } from "@/lib/providers/sports-data/types";
 import {
   toMarketAnalysisSections,
@@ -141,9 +142,13 @@ export default async function MatchPage({ params, searchParams }: PageProps) {
   // FORA do caminho crítico: com o snapshot vencido o refresh espera a The Odds API, e só
   // a tabela de mercados depende dele (o hero não mostra odd). A página renderiza sem
   // esperar e a tabela chega por streaming. Criada UMA vez aqui.
-  const refreshP: Promise<void> = ensureOddsSnapshotsFresh(match, {
-    markets: PAGE_LIVE_MARKETS,
-  })
+  // Fora do pré-jogo (já apitou, adiado, cancelado) o ensure não busca nada (gate de
+  // quota, pre-match-gate.ts): nem o chamamos, a tabela lê direto o que está no banco.
+  const refreshP: Promise<void> = (
+    isPreMatchForOdds(match, now)
+      ? ensureOddsSnapshotsFresh(match, { markets: PAGE_LIVE_MARKETS })
+      : Promise.resolve(null)
+  )
     .then(() => undefined)
     .catch((err: unknown) => {
       // Provider/rede já viram null dentro do ensure; aqui sobra erro de DB. Com a página

@@ -46,6 +46,7 @@ import { ensureOddsSnapshotsFresh } from "@/lib/odds/fetch-and-snapshot";
 import {
   BTTS,
   MATCH_RESULT,
+  OVER_UNDER,
   OVER_UNDER_ALT,
 } from "@/lib/odds/market-descriptor";
 import { getLatestSelectionOddsSnapshots } from "@/lib/db/queries/odds-snapshots";
@@ -413,5 +414,144 @@ describe("ensureOddsSnapshotsFresh — over_under_alt additional multi-linha (#1
     });
 
     expect(getOddsForEvent).toHaveBeenCalledTimes(1); // 1 crédito, não 2
+  });
+});
+
+// Gate de quota (pre-match-gate.ts): fora do pré-jogo, NENHUMA chamada ao provider
+// (featured nem additional); só a última captura gravada volta. Antes do apito, tudo
+// igual (inclui a janela de 30min ≤24h e a captura de fechamento do CLV, KO ≤90min).
+describe("ensureOddsSnapshotsFresh — gate de pré-jogo (quota)", () => {
+  const ALL_MARKETS = [OVER_UNDER, MATCH_RESULT, BTTS];
+  const MIN = 60_000;
+  let seq = 0;
+
+  async function insertMatch(
+    status: (typeof schema.matchStatusEnum.enumValues)[number],
+    kickoffAt: Date,
+  ) {
+    seq += 1;
+    const [m] = await realDb
+      .insert(schema.matches)
+      .values({
+        externalId: `ext-gate-${seq}`,
+        league: "brasileirao_a",
+        // times distintos do jogo principal: nunca casam com os eventos mockados
+        homeTeam: `Gate Home ${seq}`,
+        awayTeam: `Gate Away ${seq}`,
+        kickoffAt,
+        status,
+      })
+      .returning();
+    return m;
+  }
+
+  async function mainMatch() {
+    return (
+      await realDb.select().from(schema.matches).where(eq(schema.matches.id, matchIds.id))
+    )[0];
+  }
+
+  function expectNoProviderCall() {
+    expect(getOddsForSport).not.toHaveBeenCalled();
+    expect(getEventsForSport).not.toHaveBeenCalled();
+    expect(getOddsForEvent).not.toHaveBeenCalled();
+  }
+
+  it("jogo já apitado (scheduled stale, kickoff no passado) → nenhuma chamada ao provider", async () => {
+    const match = await insertMatch("scheduled", new Date(Date.now() - 10 * MIN));
+
+    const result = await ensureOddsSnapshotsFresh(match, { markets: ALL_MARKETS });
+
+    expectNoProviderCall();
+    expect(result).toBeNull(); // nada gravado pra ele
+  });
+
+  it("jogo encerrado (finished, kickoff no passado) → nenhuma chamada ao provider", async () => {
+    const match = await insertMatch("finished", new Date(Date.now() - 3 * 60 * MIN));
+
+    await ensureOddsSnapshotsFresh(match, { markets: ALL_MARKETS });
+
+    expectNoProviderCall();
+  });
+
+  it.each(["live", "finished", "cancelled", "postponed"] as const)(
+    "status %s barra mesmo com kickoff no futuro (allowlist: só scheduled)",
+    async (status) => {
+      const match = await insertMatch(status, new Date(Date.now() + 2 * 60 * MIN));
+
+      const result = await ensureOddsSnapshotsFresh(match, { markets: ALL_MARKETS });
+
+      expectNoProviderCall();
+      expect(result).toBeNull();
+    },
+  );
+
+  it("jogo começado devolve a última captura gravada (read-only), sem refetch mesmo stale", async () => {
+    getOddsForSport.mockResolvedValue([totalsEvent()]);
+    const match = await mainMatch();
+    const before = new Date(KICKOFF.getTime() - 10 * MIN);
+
+    // captura pré-jogo (fecha o mercado a KO−10min)
+    const seeded = await ensureOddsSnapshotsFresh(match, { now: before });
+    expect(getOddsForSport).toHaveBeenCalledTimes(1);
+    expect(seeded).not.toBeNull();
+
+    // 40min depois do apito: a captura está stale (>30min), mas o gate não busca.
+    getOddsForSport.mockClear();
+    const after = await ensureOddsSnapshotsFresh(match, {
+      now: new Date(KICKOFF.getTime() + 40 * MIN),
+      markets: ALL_MARKETS,
+    });
+
+    expectNoProviderCall();
+    expect(after).not.toBeNull();
+    expect(after!.capturedAt.getTime()).toBe(before.getTime());
+    expect(after!.overOdd).toBe(seeded!.overOdd);
+    expect(after!.underOdd).toBe(seeded!.underOdd);
+    expect(after!.bookmaker).toBe("Pinnacle");
+  });
+
+  it("antes do apito (≤24h): janela de 30min inalterada — 29min reusa, 31min refaz", async () => {
+    getOddsForSport.mockResolvedValue([totalsEvent()]);
+    const match = await mainMatch();
+    const t0 = new Date();
+
+    await ensureOddsSnapshotsFresh(match, { now: t0 });
+    expect(getOddsForSport).toHaveBeenCalledTimes(1);
+
+    await ensureOddsSnapshotsFresh(match, { now: new Date(t0.getTime() + 29 * MIN) });
+    expect(getOddsForSport).toHaveBeenCalledTimes(1); // fresco → sem crédito
+
+    await ensureOddsSnapshotsFresh(match, { now: new Date(t0.getTime() + 31 * MIN) });
+    expect(getOddsForSport).toHaveBeenCalledTimes(2); // stale → refaz
+  });
+
+  it("captura de fechamento (CLV): KO−1ms ainda busca; no instante do KO já não", async () => {
+    getOddsForSport.mockResolvedValue([totalsEvent()]);
+    getEventsForSport.mockResolvedValue([bttsEventListItem()]);
+    getOddsForEvent.mockResolvedValue(bttsEvent());
+    const match = await mainMatch();
+
+    // KO−1ms, sem captura nenhuma (stale): featured + additional buscam.
+    await ensureOddsSnapshotsFresh(match, {
+      now: new Date(KICKOFF.getTime() - 1),
+      markets: [OVER_UNDER, BTTS],
+    });
+    expect(getOddsForSport).toHaveBeenCalledTimes(1);
+    expect(getOddsForEvent).toHaveBeenCalledTimes(1);
+
+    // No KO exato (e 31min depois, já stale): bloqueado nos dois caminhos.
+    getOddsForSport.mockClear();
+    getEventsForSport.mockClear();
+    getOddsForEvent.mockClear();
+    await ensureOddsSnapshotsFresh(match, {
+      now: KICKOFF,
+      markets: [OVER_UNDER, BTTS],
+    });
+    await ensureOddsSnapshotsFresh(match, {
+      now: new Date(KICKOFF.getTime() + 31 * MIN),
+      markets: [OVER_UNDER, BTTS],
+    });
+    expectNoProviderCall();
   });
 });

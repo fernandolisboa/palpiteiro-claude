@@ -2,6 +2,7 @@ import { getActiveLeagues } from "@/lib/db/queries/league-settings";
 import { getMatchesInLeagueWindow } from "@/lib/db/queries/matches";
 import { ensureOddsSnapshotsFresh } from "@/lib/odds/fetch-and-snapshot";
 import { PAGE_LIVE_MARKETS } from "@/lib/odds/live-card-markets";
+import { isPreMatchForOdds } from "@/lib/odds/pre-match-gate";
 import { persistOddsApiQuota } from "@/lib/odds/persist-odds-api-quota";
 import { getLastOddsApiQuota } from "@/lib/providers/odds-api";
 import type { SupportedLeague } from "@/lib/providers/sports-data/leagues";
@@ -66,7 +67,9 @@ export async function prewarmOdds(
     });
     consideredMatches += upcoming.length;
 
-    const firstUpcoming = upcoming[0];
+    // Representante = 1º jogo PRÉ-JOGO: um adiado/cancelado com kickoff futuro seria
+    // barrado pelo gate de ensureOddsSnapshotsFresh e deixaria a liga sem aquecer.
+    const firstUpcoming = upcoming.find((m) => isPreMatchForOdds(m, now));
     if (!firstUpcoming) continue; // sem jogo próximo nesta liga → nada a aquecer.
 
     try {
