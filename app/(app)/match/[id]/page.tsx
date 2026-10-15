@@ -524,12 +524,7 @@ function MobileMatch({
           <ChevronLeft className="size-3.5" />
           <span className="text-body-sm tracking-tight">jogos</span>
         </Link>
-        <div className="flex items-center gap-3">
-          {unavailableReason === null && <PoolLink matchId={matchId} />}
-          <span className="font-mono text-eyebrow-xs uppercase tracking-eyebrow text-muted-fg-2">
-            match · {matchId.slice(0, 8)}
-          </span>
-        </div>
+        {unavailableReason === null && <PoolLink matchId={matchId} />}
       </div>
 
       <MatchHero

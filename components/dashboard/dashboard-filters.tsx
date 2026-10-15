@@ -67,11 +67,13 @@ function PillGroup({
   basePath: string;
 }) {
   return (
-    <div className="flex items-center gap-2">
-      <span className="font-mono text-eyebrow-xs uppercase tracking-label text-muted-foreground">
+    // Muitas opções (status, ligas) rolam DENTRO do grupo no celular, sem estourar a
+    // largura da página (#574 linha 5).
+    <div className="flex min-w-0 max-w-full items-center gap-2">
+      <span className="shrink-0 font-mono text-eyebrow-xs uppercase tracking-label text-muted-foreground">
         {label}
       </span>
-      <nav className="inline-flex h-8 items-center rounded-md border border-border bg-surface-2 p-1">
+      <nav className="inline-flex h-8 max-w-full items-center overflow-x-auto rounded-md border border-border bg-surface-2 p-1 [scrollbar-width:none]">
         {options.map((opt) => {
           const active = opt.value === current;
           return (
@@ -80,7 +82,7 @@ function PillGroup({
               href={buildDashboardHref(filters, dimension, opt.value, basePath)}
               aria-current={active ? "page" : undefined}
               className={cn(
-                "h-6 rounded-sm px-2.5 text-meta font-medium leading-6 transition-colors focus-visible:outline-none focus-visible:ring-[3px] focus-visible:ring-ring/50",
+                "h-6 shrink-0 whitespace-nowrap rounded-sm px-2.5 text-meta font-medium leading-6 transition-colors focus-visible:outline-none focus-visible:ring-[3px] focus-visible:ring-ring/50",
                 active
                   ? "bg-card text-foreground shadow-sm"
                   : "text-muted-foreground hover:text-foreground",
@@ -138,7 +140,7 @@ export function DashboardFiltersBar({
   );
   if (visible.length === 0) return null;
   return (
-    <div className="flex flex-wrap items-center gap-x-5 gap-y-3">
+    <div className="flex w-full min-w-0 flex-wrap items-center gap-x-5 gap-y-3">
       {visible.map((d) => (
         <PillGroup
           key={d}

@@ -229,28 +229,8 @@ export function AddEntryForm({
       {kind === "exact_score" ? (
         <fieldset className="flex flex-col gap-1">
           <legend className={LABEL}>placar</legend>
-          <div className="flex flex-wrap items-center gap-2 pt-1">
-            <span className="text-body-sm">{homeTeam}</span>
-            <Input
-              name="home"
-              required
-              inputMode="numeric"
-              pattern="\d{1,2}"
-              maxLength={2}
-              aria-label={`Gols do ${homeTeam}`}
-              className="w-14 text-center"
-            />
-            <span aria-hidden>×</span>
-            <Input
-              name="away"
-              required
-              inputMode="numeric"
-              pattern="\d{1,2}"
-              maxLength={2}
-              aria-label={`Gols do ${awayTeam}`}
-              className="w-14 text-center"
-            />
-            <span className="text-body-sm">{awayTeam}</span>
+          <div className="pt-1">
+            <ScoreInputsRow homeTeam={homeTeam} awayTeam={awayTeam} required />
           </div>
         </fieldset>
       ) : (
@@ -277,6 +257,53 @@ export function AddEntryForm({
   );
 }
 
+// Placar "Time A [ ] × [ ] Time B" numa linha só, também no celular (#574 linha 9):
+// os nomes ocupam as colunas flexíveis e truncam (nome inteiro no title); os campos
+// têm largura fixa.
+function ScoreInputsRow({
+  homeTeam,
+  awayTeam,
+  defaults,
+  required,
+}: {
+  homeTeam: string;
+  awayTeam: string;
+  defaults?: { home: number; away: number } | null;
+  required?: boolean;
+}) {
+  return (
+    <div className="grid grid-cols-[minmax(0,1fr)_3.5rem_auto_3.5rem_minmax(0,1fr)] items-center gap-2">
+      <span className="truncate text-right text-body-sm" title={homeTeam}>
+        {homeTeam}
+      </span>
+      <Input
+        name="home"
+        required={required}
+        inputMode="numeric"
+        pattern="\d{1,2}"
+        maxLength={2}
+        defaultValue={defaults?.home ?? ""}
+        aria-label={`Gols do ${homeTeam}`}
+        className="w-14 text-center"
+      />
+      <span aria-hidden>×</span>
+      <Input
+        name="away"
+        required={required}
+        inputMode="numeric"
+        pattern="\d{1,2}"
+        maxLength={2}
+        defaultValue={defaults?.away ?? ""}
+        aria-label={`Gols do ${awayTeam}`}
+        className="w-14 text-center"
+      />
+      <span className="truncate text-body-sm" title={awayTeam}>
+        {awayTeam}
+      </span>
+    </div>
+  );
+}
+
 export function ManualScoreForm({
   poolId,
   homeTeam,
@@ -296,29 +323,7 @@ export function ManualScoreForm({
       className="flex flex-col gap-3"
     >
       <input type="hidden" name="poolId" value={poolId} />
-      <div className="flex flex-wrap items-center gap-2">
-        <span className="text-body-sm">{homeTeam}</span>
-        <Input
-          name="home"
-          inputMode="numeric"
-          pattern="\d{1,2}"
-          maxLength={2}
-          defaultValue={manual?.home ?? ""}
-          aria-label={`Gols do ${homeTeam}`}
-          className="w-14 text-center"
-        />
-        <span aria-hidden>×</span>
-        <Input
-          name="away"
-          inputMode="numeric"
-          pattern="\d{1,2}"
-          maxLength={2}
-          defaultValue={manual?.away ?? ""}
-          aria-label={`Gols do ${awayTeam}`}
-          className="w-14 text-center"
-        />
-        <span className="text-body-sm">{awayTeam}</span>
-      </div>
+      <ScoreInputsRow homeTeam={homeTeam} awayTeam={awayTeam} defaults={manual} />
       <ErrorLine state={state} />
       <div className="flex flex-wrap gap-2">
         <Button type="submit" name="intent" value="set" disabled={pending} className="w-fit">

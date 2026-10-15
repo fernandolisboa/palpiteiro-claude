@@ -119,3 +119,44 @@ describe("ManualScoreForm", () => {
     await act(async () => root.unmount());
   });
 });
+
+describe("placar numa linha só (#574 linha 9)", () => {
+  function scoreRow(container: HTMLElement) {
+    const home = container.querySelector<HTMLInputElement>('input[name="home"]')!;
+    const away = container.querySelector<HTMLInputElement>('input[name="away"]')!;
+    const row = home.parentElement!;
+    return { home, away, row };
+  }
+
+  it("AddEntryForm: campos e nomes no mesmo grid, nomes truncam com title", async () => {
+    const { container, root } = await mount();
+    const { home, away, row } = scoreRow(container);
+    expect(row.className).toContain("grid");
+    expect(away.parentElement).toBe(row);
+    expect(home.getAttribute("aria-label")).toBe("Gols do Flamengo");
+    expect(home.required).toBe(true);
+    const names = Array.from(row.querySelectorAll("span[title]"));
+    expect(names.map((n) => n.textContent)).toEqual(["Flamengo", "Palmeiras"]);
+    for (const n of names) expect(n.className).toContain("truncate");
+    await act(async () => root.unmount());
+  });
+
+  it("ManualScoreForm: mesma linha, com o placar manual preenchido", async () => {
+    (globalThis as { IS_REACT_ACT_ENVIRONMENT?: boolean }).IS_REACT_ACT_ENVIRONMENT = true;
+    const container = document.createElement("div");
+    document.body.appendChild(container);
+    const root = createRoot(container);
+    await act(async () => {
+      root.render(
+        <ManualScoreForm poolId={POOL} homeTeam="Flamengo" awayTeam="Palmeiras" manual={{ home: 2, away: 1 }} />,
+      );
+    });
+    const { home, away, row } = scoreRow(container);
+    expect(row.className).toContain("grid");
+    expect(away.parentElement).toBe(row);
+    expect(home.value).toBe("2");
+    expect(away.value).toBe("1");
+    expect(home.required).toBe(false);
+    await act(async () => root.unmount());
+  });
+});
