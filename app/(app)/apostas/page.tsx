@@ -88,7 +88,13 @@ export default async function ApostasPage({ searchParams }: PageProps) {
               />
             ) : (
               page.slips.map((slip) => (
-                <SlipCard key={slip.id} slip={slip} now={now} timeZone={timeZone} />
+                <SlipCard
+                  key={slip.id}
+                  slip={slip}
+                  now={now}
+                  timeZone={timeZone}
+                  closed={filter === "encerradas"}
+                />
               ))
             )}
 

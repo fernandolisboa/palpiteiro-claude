@@ -140,6 +140,47 @@ describe("SlipCard (/apostas, #577)", () => {
     expect(html).not.toContain("Em aberto");
   });
 
+  it("combinada com perna pendente em jogo cancelado: nenhum 'Em aberto'", () => {
+    const html = render(
+      slip([leg({ outcome: wonOutcome() }), leg({ kind: "btts", params: { selection: "yes" } })], {
+        match: {
+          homeTeam: "SE Palmeiras",
+          awayTeam: "CR Flamengo",
+          league: "brasileirao_a",
+          kickoffAt: new Date("2026-10-15T22:00:00Z"),
+          status: "cancelled",
+        },
+      }),
+    );
+    expect(html).toContain("Jogo cancelado");
+    expect(html).toContain("Acertou");
+    expect(html).not.toContain("Em aberto");
+  });
+
+  it("combinada não conferida encerrada por tempo: perna sem resultado sem 'Em aberto'", () => {
+    const s = slip(
+      [
+        leg({ kind: "btts", params: { selection: "yes" } }),
+        leg({ kind: "corners", params: { selection: "over", line: 8.5 }, settleable: false }),
+      ],
+      {
+        match: {
+          homeTeam: "SE Palmeiras",
+          awayTeam: "CR Flamengo",
+          league: "brasileirao_a",
+          kickoffAt: new Date("2026-10-15T09:00:00Z"),
+          status: "scheduled",
+        },
+      },
+    );
+    // Na lista de abertas (jogo ainda não acabou) a perna pendente diz "Em aberto".
+    expect(render(s)).toContain("Em aberto");
+    const html = renderToStaticMarkup(<SlipCard slip={s} now={NOW} timeZone={TZ} closed />);
+    expect(html).toContain("Não conferida");
+    expect(html).toContain("não conferimos");
+    expect(html).not.toContain("Em aberto");
+  });
+
   it("acertou e não conferida", () => {
     expect(render(slip([leg({ outcome: wonOutcome() })]))).toContain("Acertou");
     const nc = render(slip([leg({ kind: "corners", params: { selection: "over", line: 8.5 }, settleable: false })]));

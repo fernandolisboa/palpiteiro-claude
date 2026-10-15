@@ -62,19 +62,25 @@ function LegRow({
   leg,
   teams,
   showBadge,
+  closed,
 }: {
   leg: UserBetLegRow;
   teams: TeamNames;
   showBadge: boolean;
+  closed: boolean;
 }) {
   const label = slipLegLabel(leg.kind, leg.params, teams);
   const view = historyLegView(leg);
   const result = legResult(leg);
+  // Encerrada sem resultado (jogo cancelado, ou não conferida fechada por tempo): a
+  // perna pendente fica sem selo; o cabeçalho já diz o porquê. Nunca "Em aberto" lá.
+  const hideBadge = closed && result === "pending";
   return (
     <div className="flex flex-col gap-0.5">
       <div className="flex items-center justify-between gap-2">
         <span className="min-w-0 text-body-sm tracking-tight text-foreground">{label}</span>
         {showBadge &&
+          !hideBadge &&
           (result ? (
             <ResultBadge result={result} />
           ) : (
@@ -106,14 +112,18 @@ export function SlipCard({
   slip,
   now,
   timeZone,
+  closed = false,
 }: {
   slip: BetSlipHistoryRow;
   now: Date;
   timeZone: string;
+  // Na lista "Encerradas" (o recorte de `slipBucket`, que a página já calculou).
+  closed?: boolean;
 }) {
   const league = leagueToKey(slip.match.league);
   const teams = displayMatchTeams(slip.match.homeTeam, slip.match.awayTeam, league);
   const combo = slip.legs.length >= 2;
+  const matchCancelled = slip.match.status === "cancelled";
   const comboStake = slip.stakeUnits === null ? null : Number(slip.stakeUnits);
   return (
     <Card className="gap-0 overflow-hidden p-0">
@@ -152,15 +162,18 @@ export function SlipCard({
             </span>
           )}
         </div>
-        <SlipStatusBadge
-          status={slip.status}
-          matchCancelled={slip.match.status === "cancelled"}
-        />
+        <SlipStatusBadge status={slip.status} matchCancelled={matchCancelled} />
       </div>
 
       <div className="flex flex-col gap-3 border-t border-border px-4 py-3">
         {slip.legs.map((leg) => (
-          <LegRow key={leg.id} leg={leg} teams={teams} showBadge={combo} />
+          <LegRow
+            key={leg.id}
+            leg={leg}
+            teams={teams}
+            showBadge={combo}
+            closed={closed || matchCancelled}
+          />
         ))}
       </div>
     </Card>
