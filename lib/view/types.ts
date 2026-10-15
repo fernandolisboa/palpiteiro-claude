@@ -26,8 +26,14 @@ export type MatchStatus =
   | "postponed"
   | "cancelled";
 
+// Time na view (#578). Display-only: o canonical (matches.home_team) é a chave
+// de matching e nunca passa por aqui de volta.
 export type Team = {
+  // Nome curto de exibição ("Palmeiras", "PSG"; Copa em PT-BR).
   name: string;
+  // Nome oficial ("SE Palmeiras"), só para `title`/tooltip.
+  fullName?: string;
+  // Sigla de 3 letras ("PAL", "ATM"), para rótulo estreito.
   short: string;
   hue: number;
   // Código de bandeira (ISO/subdivisão) p/ seleções da Copa (#341). Undefined em

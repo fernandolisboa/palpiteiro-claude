@@ -2,7 +2,7 @@ import { ImageResponse } from "next/og";
 
 import { leagueToKey } from "@/lib/format";
 import type { SupportedLeague } from "@/lib/providers/sports-data/leagues";
-import { teamToTeam } from "@/lib/view/team";
+import { teamPair } from "@/lib/view/team";
 import { OG_DISCLAIMER_STRIP } from "@/lib/view/share/disclaimer";
 import {
   buildOgTextPieces,
@@ -59,8 +59,7 @@ export default async function OpengraphImage({
 
   const { view, match } = shared;
   const leagueKey = leagueToKey(match.league as SupportedLeague);
-  const home = teamToTeam(match.homeTeam, leagueKey);
-  const away = teamToTeam(match.awayTeam, leagueKey);
+  const { home, away } = teamPair(match.homeTeam, match.awayTeam, leagueKey);
 
   const pieces = buildOgTextPieces(view, {
     homeName: home.name,

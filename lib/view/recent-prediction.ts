@@ -6,7 +6,7 @@ import {
   recommendationKind,
   recommendationLabel,
 } from "@/lib/view/recommendation";
-import { teamToTeam } from "@/lib/view/team";
+import { teamPair } from "@/lib/view/team";
 import type { RecentPredictionView } from "@/lib/view/types";
 
 const MONTH_ABBR_PT = [
@@ -53,10 +53,11 @@ export function toRecentPredictionView(
 ): RecentPredictionView {
   const league = leagueToKey(row.league);
   const marketKey = row.marketKey ?? "over_under";
-  // `.short` deriva sempre do canonical (league-inerte); o league vai junto só
-  // pra manter a assinatura uniforme do seam — a tradução de `.name` é descartada.
-  const home = teamToTeam(row.homeTeam, league).short;
-  const away = teamToTeam(row.awayTeam, league).short;
+  // Siglas do par (#578): `.short` deriva do canonical; o teamPair desempata
+  // quando as duas siglas do jogo coincidem.
+  const pair = teamPair(row.homeTeam, row.awayTeam, league);
+  const home = pair.home.short;
+  const away = pair.away.short;
   return {
     id: row.predictionId,
     matchId: row.matchId,
