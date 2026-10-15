@@ -280,9 +280,9 @@ describe("PalpiteHero — estados empty/CTA/kill-switch/encerrado", () => {
     expect(html).toContain("Analisar de novo");
   });
 
-  it("populated kicker 'O PALPITE' presente", () => {
+  it("populated kicker 'Palpite da IA' presente", () => {
     const html = render();
-    expect(html.toLowerCase()).toContain("o palpite");
+    expect(html).toContain("Palpite da IA");
   });
 });
 

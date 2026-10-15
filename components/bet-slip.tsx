@@ -387,7 +387,7 @@ function SectionHeading({ modelLabel }: { modelLabel: string | null }) {
   return (
     <div className="flex flex-col gap-1">
       <span className="text-meta uppercase tracking-eyebrow text-muted-foreground">
-        registrar apostas
+        mercados
       </span>
       <p className="text-body-sm text-muted-foreground tracking-tight">
         Toque nas seleções que você apostou, confira a odd que pegou e registre. A

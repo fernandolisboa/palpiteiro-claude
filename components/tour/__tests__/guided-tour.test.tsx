@@ -206,7 +206,7 @@ describe("GuidedTour", () => {
   it("a página do jogo abre com a lista vista e termina gravando done", () => {
     document.body.insertAdjacentHTML("afterbegin", '<form data-tour="palpite"></form>');
     mount({ chapter: "jogo", serverState: "jogos" });
-    expect(dialog()?.textContent).toContain("O Palpite");
+    expect(dialog()?.textContent).toContain("Palpite da IA");
     act(() => button("Próximo").click());
     expect(dialog()?.textContent).toContain("Pronto");
     expect(saveTourState).toHaveBeenCalledWith("done");

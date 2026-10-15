@@ -29,7 +29,7 @@ import type { ResultState } from "@/lib/view/result-state";
 
 export const dynamic = "force-dynamic";
 
-// Histórico "Minhas apostas" (#473, ADR 0036 Fase 3). Autenticado e PRIVADO — `userId`
+// Histórico "Suas apostas" (#473, ADR 0036 Fase 3). Autenticado e PRIVADO — `userId`
 // vem SEMPRE do `auth()`, NUNCA de rota/query (anti-IDOR); slip é imutável e NUNCA
 // compartilhável (§13), nada aqui cruza pra `/p/[id]`/OG. Cursor por `createdAt desc`,
 // ~20 por página. Status DERIVADO em leitura (nunca recomputado no render). O joint
@@ -70,8 +70,8 @@ export default async function ApostasPage({ searchParams }: PageProps) {
     <div className="bg-background text-foreground">
       <PageContainer width="reading">
         <PageHeader
-          title="Minhas apostas"
-          description="suas apostas registradas · privado, só você vê"
+          title="Suas apostas"
+          description="Registradas por você. Privado, só você vê."
         />
 
         {page.slips.length === 0 ? (

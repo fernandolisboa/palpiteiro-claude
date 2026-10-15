@@ -131,7 +131,7 @@ export function ComoUsarContent() {
         <p>
           Depois do login você cai em <Strong>Próximos jogos</Strong>, a tela
           principal. O menu fica sempre no topo da tela (no celular, no ícone ☰):{" "}
-          <Ui>jogos</Ui>, <Ui>apostas</Ui>, <Ui>bolão</Ui> e <Ui>desempenho</Ui> são
+          <Ui>jogos</Ui>, <Ui>suas apostas</Ui>, <Ui>bolão</Ui> e <Ui>desempenho</Ui> são
           as telas do dia a dia (no <Ui>bolão</Ui> você anota a aposta de cada amigo
           num jogo e o app diz quem ganhou); <Ui>ajuda</Ui> reúne <Ui>como usar</Ui>, <Ui>como funciona</Ui> e{" "}
           <Ui>rever o tour</Ui>. O <Ui>perfil</Ui> e o <Ui>sair</Ui> ficam no seu
@@ -174,7 +174,7 @@ export function ComoUsarContent() {
         <Steps>
           <li>
             Na página do jogo, toque em <Ui>Analisar com IA</Ui>, no quadro{" "}
-            <Strong>O Palpite</Strong>.
+            <Strong>Palpite da IA</Strong>.
           </li>
           <li>
             Espere: a IA analisa cada mercado disponível pro jogo (resultado, gols,
@@ -218,7 +218,7 @@ export function ComoUsarContent() {
 
       <Section id="ler-analise">
         <p>
-          <Strong>O Palpite</Strong> é a manchete: quem leva, o placar provável, a
+          O <Strong>Palpite da IA</Strong> é a manchete: quem leva, o placar provável, a
           confiança (baixa, média ou alta) e um parágrafo com o porquê. Embaixo
           aparecem os mercados que ele usou e, quando a IA leu notícias, os links das
           fontes. Depois do jogo, o quadro mostra se <Ui>Acertou</Ui> ou{" "}
@@ -288,7 +288,7 @@ export function ComoUsarContent() {
 
       <Section id="minha-aposta">
         <p>
-          Na página do jogo, a parte <Ui>registrar apostas</Ui> deixa todos os
+          Na página do jogo, a parte <Ui>mercados</Ui> deixa todos os
           mercados à vista: você só toca no que apostou (ou pensa em apostar). O Palpiteiro não aceita dinheiro: aqui é só
           registro e avaliação, sem gastar análises do seu limite.
         </p>
@@ -315,7 +315,7 @@ export function ComoUsarContent() {
           a odd justa, o retorno esperado na sua odd e uma sugestão de stake. Elas
           ficam salvas em{" "}
           <Link href="/apostas" className={LINK}>
-            Apostas
+            Suas apostas
           </Link>{" "}
           e são conferidas sozinhas depois do jogo.
         </p>
@@ -355,7 +355,7 @@ export function ComoUsarContent() {
           </li>
           <li>
             <Link href="/apostas" className={LINK}>
-              Apostas
+              Suas apostas
             </Link>
             : as apostas que você registrou na página do jogo, cada uma
             marcada como <Ui>Acertou</Ui>, <Ui>Errou</Ui> ou <Ui>Em aberto</Ui>. Só
