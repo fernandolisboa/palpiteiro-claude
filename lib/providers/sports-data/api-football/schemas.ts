@@ -48,8 +48,10 @@ const FixtureStatusSchema = z.object({
   elapsed: z.number().nullable(),
   // Acréscimos do tempo em andamento (`elapsed 45, extra 2` = 45+2'). INFERIDO da
   // documentação da API-Football (#580/#591), não visto em payload real: opcional e
-  // nullable, chave ausente não derruba o parse. Validar com a chave num jogo ao vivo.
-  extra: z.number().int().nullable().optional(),
+  // nullable, chave ausente não derruba o parse; valor fora do formato vira null em vez
+  // de derrubar o envelope (que serve também sync, settlement e a busca por data).
+  // Validar com a chave num jogo ao vivo.
+  extra: z.number().int().nullable().optional().catch(null),
 });
 
 const TeamRefSchema = z.object({

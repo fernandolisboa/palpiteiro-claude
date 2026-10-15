@@ -37,6 +37,11 @@ const SHARED_CLIENT_NAME = "api-football";
 // zerado no cold start: é freio de segurança, o uso normal fica muito abaixo da cota.
 export const LIVE_QUOTA_MIN_RATIO = 0.05;
 
+// Leitura de cota mais velha que isto (ou de outro dia UTC, quando a cota diária zera)
+// não freia: sem isso o freio se trancava, porque com ele ligado o cliente ao vivo não
+// busca e nunca recebe um header novo.
+export const LIVE_QUOTA_READING_MAX_AGE_MS = 15 * 60_000;
+
 // "Red Card" e "Second Yellow card" (a caixa exata não é garantida pela documentação).
 const RED_CARD_DETAIL = /red card|second yellow/i;
 
@@ -45,16 +50,27 @@ type QuotaReader = (provider: string) => ObservedQuota | null;
 /**
  * true quando a última cota diária vista nesta instância (do cliente ao vivo ou do
  * compartilhado, a mais recente) está abaixo de LIVE_QUOTA_MIN_RATIO do limite. Sem
- * leitura, ou sem os headers de restante/limite → false (não freia às cegas).
+ * leitura, sem os headers de restante/limite, leitura velha ou de outro dia UTC → false
+ * (não freia às cegas).
  */
-export function isApiFootballQuotaLow(read: QuotaReader = getLastQuota): boolean {
-  const observed = [read(API_FOOTBALL_LIVE_CLIENT_NAME), read(SHARED_CLIENT_NAME)]
-    .filter((q): q is ObservedQuota => q !== null);
+export function isApiFootballQuotaLow(
+  read: QuotaReader = getLastQuota,
+  now: Date = new Date()
+): boolean {
+  const observed = [
+    read(API_FOOTBALL_LIVE_CLIENT_NAME),
+    read(SHARED_CLIENT_NAME),
+  ].filter((q): q is ObservedQuota => q !== null);
   if (observed.length === 0) return false;
   const latest = observed.reduce((a, b) =>
-    b.observedAt.getTime() > a.observedAt.getTime() ? b : a,
+    b.observedAt.getTime() > a.observedAt.getTime() ? b : a
   );
   if (latest.dailyRemaining === null || !latest.dailyLimit) return false;
+  const at = latest.observedAt;
+  if (now.getTime() - at.getTime() > LIVE_QUOTA_READING_MAX_AGE_MS)
+    return false;
+  if (at.toISOString().slice(0, 10) !== now.toISOString().slice(0, 10))
+    return false;
   return latest.dailyRemaining / latest.dailyLimit < LIVE_QUOTA_MIN_RATIO;
 }
 
@@ -69,7 +85,7 @@ export function isApiFootballQuotaLow(read: QuotaReader = getLastQuota): boolean
  * que não dá pra atribuir a nenhum dos dois times (contar errado é pior que não saber).
  */
 export function countRedCards(
-  f: ApiFootballFixture,
+  f: ApiFootballFixture
 ): { home: number; away: number } | null {
   if (f.events === undefined) return null;
   const homeId = f.teams.home.id;
@@ -102,7 +118,7 @@ export function countRedCards(
 
 export function toNormalizedLiveState(
   f: ApiFootballFixture,
-  fetchedAt: Date,
+  fetchedAt: Date
 ): NormalizedLiveState {
   const { home, away } = f.goals;
   return {
@@ -123,12 +139,13 @@ export function toNormalizedLiveState(
  */
 export function findFixtureForRef(
   fixtures: ApiFootballFixture[],
-  ref: FixtureRef,
+  ref: FixtureRef
 ): ApiFootballFixture | undefined {
   return fixtures.find(
     (f) =>
-      canonicalizeOrPassthrough(f.teams.home.name, ref.league) === ref.homeTeam &&
-      canonicalizeOrPassthrough(f.teams.away.name, ref.league) === ref.awayTeam,
+      canonicalizeOrPassthrough(f.teams.home.name, ref.league) ===
+        ref.homeTeam &&
+      canonicalizeOrPassthrough(f.teams.away.name, ref.league) === ref.awayTeam
   );
 }
 
@@ -152,7 +169,7 @@ export type ApiFootballLiveDeps = {
   fixturesByDate: (
     date: string,
     leagueId: number,
-    season: number,
+    season: number
   ) => Promise<ApiFootballFixture[]>;
   readQuota: QuotaReader;
   // Teto do caminho inteiro (resolução + busca): o render da página espera por isto.
@@ -183,7 +200,9 @@ export class ApiFootballLiveStateProvider implements LiveStateProvider {
     return isApiFootballQuotaLow(this.deps.readQuota);
   }
 
-  async getLiveState(req: LiveStateRequest): Promise<NormalizedLiveState | null> {
+  async getLiveState(
+    req: LiveStateRequest
+  ): Promise<NormalizedLiveState | null> {
     const logBase = {
       scope: "live-state",
       provider: "api-football",
@@ -209,7 +228,7 @@ export class ApiFootballLiveStateProvider implements LiveStateProvider {
           error: err instanceof LiveCeilingError ? "ceiling" : "fetch_failed",
           errorName: err instanceof Error ? err.name : typeof err,
           message: err instanceof Error ? err.message : String(err),
-        }),
+        })
       );
       return null;
     }
@@ -227,7 +246,7 @@ export class ApiFootballLiveStateProvider implements LiveStateProvider {
     const fixtures = await this.deps.fixturesByDate(
       ref.kickoffAt.slice(0, 10),
       API_FOOTBALL_LEAGUE_IDS[ref.league],
-      currentSeason(ref.league),
+      currentSeason(ref.league)
     );
     return findFixtureForRef(fixtures, ref)?.fixture.id ?? null;
   }

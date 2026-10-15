@@ -140,7 +140,7 @@ function parseItem(raw: unknown): ApiFootballFixture {
 function card(
   teamId: number | null,
   detail: string,
-  player: { id?: number | null; name?: string | null } = { id: 99, name: "X" },
+  player: { id?: number | null; name?: string | null } = { id: 99, name: "X" }
 ): Record<string, unknown> {
   return {
     time: { elapsed: 70, extra: null },
@@ -170,8 +170,29 @@ const FETCHED_AT = new Date("2026-10-15T23:10:00.000Z");
 // ─── Zod: schema tolerante ───────────────────────────────────────────────────
 
 describe("FixtureEnvelopeSchema com o payload ao vivo (inferido da documentação)", () => {
+  it("status.extra fora do formato vira null sem derrubar o envelope", () => {
+    const item = inferredLiveItem();
+    const fixture = item.fixture as Record<string, unknown>;
+    for (const extra of ["2", 2.5]) {
+      const raw = {
+        ...item,
+        fixture: {
+          ...fixture,
+          status: { long: "Second Half", short: "2H", elapsed: 45, extra },
+        },
+      };
+      const env = FixtureEnvelopeSchema.parse(
+        inferredEnvelope([raw, inferredLiveItem()])
+      );
+      expect(env.response).toHaveLength(2);
+      expect(env.response[0]!.fixture.status.extra).toBeNull();
+    }
+  });
+
   it("aceita o item completo (chaves extras de lineups/statistics/players descartadas)", () => {
-    const env = FixtureEnvelopeSchema.parse(inferredEnvelope([inferredLiveItem()]));
+    const env = FixtureEnvelopeSchema.parse(
+      inferredEnvelope([inferredLiveItem()])
+    );
     const f = env.response[0]!;
     expect(f.fixture.status).toEqual({
       long: "Second Half",
@@ -193,7 +214,9 @@ describe("FixtureEnvelopeSchema com o payload ao vivo (inferido da documentaçã
     expect(toNormalizedLiveState(parseItem(raw), FETCHED_AT).extra).toBeNull();
 
     const withNull = inferredLiveItem();
-    expect(toNormalizedLiveState(parseItem(withNull), FETCHED_AT).extra).toBeNull();
+    expect(
+      toNormalizedLiveState(parseItem(withNull), FETCHED_AT).extra
+    ).toBeNull();
   });
 
   it("status.extra presente (45+2') vira extra 2", () => {
@@ -231,7 +254,9 @@ describe("FixtureEnvelopeSchema com o payload ao vivo (inferido da documentaçã
 
 describe("toNormalizedLiveState", () => {
   it("mapeia id, status, minuto, placar, expulsões e fetchedAt", () => {
-    expect(toNormalizedLiveState(parseItem(inferredLiveItem()), FETCHED_AT)).toEqual({
+    expect(
+      toNormalizedLiveState(parseItem(inferredLiveItem()), FETCHED_AT)
+    ).toEqual({
       providerFixtureId: 1208021,
       statusShort: "2H",
       elapsed: 63,
@@ -333,7 +358,7 @@ describe("findFixtureForRef", () => {
     const fixtures = [parseItem(other), parseItem(inferredLiveItem())];
     expect(findFixtureForRef(fixtures, REF)?.fixture.id).toBe(1208021);
     expect(
-      findFixtureForRef(fixtures, { ...REF, awayTeam: "Botafogo FR" }),
+      findFixtureForRef(fixtures, { ...REF, awayTeam: "Botafogo FR" })
     ).toBeUndefined();
   });
 });
@@ -343,7 +368,7 @@ describe("findFixtureForRef", () => {
 function quota(
   remaining: number | null,
   limit: number | null,
-  observedAt: string,
+  observedAt: string
 ): ObservedQuota {
   return {
     dailyRemaining: remaining,
@@ -364,34 +389,78 @@ describe("isApiFootballQuotaLow", () => {
   it("abaixo de 5% do limite diário → true; 5% ou mais → false", () => {
     const low = quota(374, 7500, "2026-10-15T23:00:00Z");
     const ok = quota(375, 7500, "2026-10-15T23:00:00Z");
-    expect(isApiFootballQuotaLow((p) => (p === "api-football-live" ? low : null))).toBe(true);
-    expect(isApiFootballQuotaLow((p) => (p === "api-football" ? ok : null))).toBe(false);
+    const now = new Date("2026-10-15T23:05:00Z");
+    expect(
+      isApiFootballQuotaLow(
+        (p) => (p === "api-football-live" ? low : null),
+        now
+      )
+    ).toBe(true);
+    expect(
+      isApiFootballQuotaLow((p) => (p === "api-football" ? ok : null), now)
+    ).toBe(false);
   });
 
   it("vale a leitura mais recente entre o cliente ao vivo e o compartilhado", () => {
     const olderLow = quota(10, 7500, "2026-10-15T22:00:00Z");
     const newerOk = quota(5000, 7500, "2026-10-15T23:00:00Z");
+    const now = new Date("2026-10-15T23:05:00Z");
     expect(
-      isApiFootballQuotaLow((p) => (p === "api-football-live" ? olderLow : newerOk)),
+      isApiFootballQuotaLow(
+        (p) => (p === "api-football-live" ? olderLow : newerOk),
+        now
+      )
     ).toBe(false);
     expect(
-      isApiFootballQuotaLow((p) => (p === "api-football-live" ? newerOk : olderLow)),
+      isApiFootballQuotaLow(
+        (p) => (p === "api-football-live" ? newerOk : olderLow),
+        now
+      )
     ).toBe(false);
     const newerLow = quota(10, 7500, "2026-10-15T23:30:00Z");
     expect(
-      isApiFootballQuotaLow((p) => (p === "api-football" ? newerLow : newerOk)),
+      isApiFootballQuotaLow(
+        (p) => (p === "api-football" ? newerLow : newerOk),
+        new Date("2026-10-15T23:31:00Z")
+      )
     ).toBe(true);
   });
 
+  it("leitura baixa velha ou de outro dia UTC não tranca o freio", () => {
+    const low = quota(300, 7500, "2026-10-15T23:50:00Z");
+    const read = (p: string) => (p === "api-football-live" ? low : null);
+    expect(isApiFootballQuotaLow(read, new Date("2026-10-15T23:55:00Z"))).toBe(
+      true
+    );
+    // A cota diária zera à meia-noite UTC.
+    expect(isApiFootballQuotaLow(read, new Date("2026-10-16T00:01:00Z"))).toBe(
+      false
+    );
+    // Mais de 15 min sem header novo.
+    const earlier = quota(300, 7500, "2026-10-15T12:00:00Z");
+    expect(
+      isApiFootballQuotaLow(
+        (p) => (p === "api-football-live" ? earlier : null),
+        new Date("2026-10-15T12:16:00Z")
+      )
+    ).toBe(false);
+  });
+
   it("sem restante ou sem limite no header → false (não freia às cegas)", () => {
-    expect(isApiFootballQuotaLow(() => quota(null, 7500, "2026-10-15T23:00:00Z"))).toBe(false);
-    expect(isApiFootballQuotaLow(() => quota(1, null, "2026-10-15T23:00:00Z"))).toBe(false);
+    expect(
+      isApiFootballQuotaLow(() => quota(null, 7500, "2026-10-15T23:00:00Z"))
+    ).toBe(false);
+    expect(
+      isApiFootballQuotaLow(() => quota(1, null, "2026-10-15T23:00:00Z"))
+    ).toBe(false);
   });
 });
 
 // ─── Provider (dependências injetadas) ───────────────────────────────────────
 
-type ProviderDeps = NonNullable<ConstructorParameters<typeof ApiFootballLiveStateProvider>[0]>;
+type ProviderDeps = NonNullable<
+  ConstructorParameters<typeof ApiFootballLiveStateProvider>[0]
+>;
 
 describe("ApiFootballLiveStateProvider.getLiveState", () => {
   let errorSpy: ReturnType<typeof vi.spyOn>;
@@ -414,7 +483,7 @@ describe("ApiFootballLiveStateProvider.getLiveState", () => {
     const fixturesByDate = vi.fn(
       async (_date: string, _league: number, _season: number) => [
         parseItem(inferredLiveItem()),
-      ],
+      ]
     );
     const p = new ApiFootballLiveStateProvider({
       fetchLive,
@@ -451,15 +520,21 @@ describe("ApiFootballLiveStateProvider.getLiveState", () => {
     const { p, fetchLive } = provider({ fixturesByDate: async () => [] });
     await expect(p.getLiveState({ ref: REF })).resolves.toBeNull();
     expect(fetchLive).not.toHaveBeenCalled();
-    expect(warnSpy).toHaveBeenCalledWith(expect.stringContaining("fixture_not_resolved"));
+    expect(warnSpy).toHaveBeenCalledWith(
+      expect.stringContaining("fixture_not_resolved")
+    );
   });
 
   it("id sem fixture na resposta → null", async () => {
     const { p } = provider({
       fetchLive: async () => ({ fixture: undefined, fetchedAt: FETCHED_AT }),
     });
-    await expect(p.getLiveState({ ref: REF, providerFixtureId: 1 })).resolves.toBeNull();
-    expect(warnSpy).toHaveBeenCalledWith(expect.stringContaining("fixture_not_found"));
+    await expect(
+      p.getLiveState({ ref: REF, providerFixtureId: 1 })
+    ).resolves.toBeNull();
+    expect(warnSpy).toHaveBeenCalledWith(
+      expect.stringContaining("fixture_not_found")
+    );
   });
 
   it("erro do provider → null com log estruturado (nunca lança)", async () => {
@@ -468,7 +543,9 @@ describe("ApiFootballLiveStateProvider.getLiveState", () => {
         throw new Error("HTTP 500 on /fixtures");
       },
     });
-    await expect(p.getLiveState({ ref: REF, providerFixtureId: 1 })).resolves.toBeNull();
+    await expect(
+      p.getLiveState({ ref: REF, providerFixtureId: 1 })
+    ).resolves.toBeNull();
     const line = JSON.parse(String(errorSpy.mock.calls[0]![0]));
     expect(line).toMatchObject({
       scope: "live-state",
@@ -484,8 +561,12 @@ describe("ApiFootballLiveStateProvider.getLiveState", () => {
       fetchLive: () => new Promise<never>(() => {}),
       ceilingMs: 10,
     });
-    await expect(p.getLiveState({ ref: REF, providerFixtureId: 1 })).resolves.toBeNull();
-    expect(errorSpy).toHaveBeenCalledWith(expect.stringContaining('"error":"ceiling"'));
+    await expect(
+      p.getLiveState({ ref: REF, providerFixtureId: 1 })
+    ).resolves.toBeNull();
+    expect(errorSpy).toHaveBeenCalledWith(
+      expect.stringContaining('"error":"ceiling"')
+    );
   });
 
   it("cota abaixo de 5% → null sem buscar", async () => {
@@ -520,7 +601,10 @@ describe("getLiveStateProvider", () => {
 
 // ─── adapter.getFixtureLive (fetch mockado; nenhuma chamada real) ────────────
 
-function jsonResponse(body: unknown, headers: Record<string, string> = {}): Response {
+function jsonResponse(
+  body: unknown,
+  headers: Record<string, string> = {}
+): Response {
   return new Response(JSON.stringify(body), {
     status: 200,
     headers: { "content-type": "application/json", ...headers },
@@ -531,7 +615,8 @@ describe("getFixtureLive", () => {
   const ORIGINAL_KEY = process.env.API_FOOTBALL_KEY;
   // Relógio avançando por teste: o throttle do cliente é de módulo e lê Date.now.
   let clock = Date.parse("2026-10-15T23:00:00.000Z");
-  const liveKey = (id: number) => `sports-data:api-football-live:fixtures:id:${id}`;
+  const liveKey = (id: number) =>
+    `sports-data:api-football-live:fixtures:id:${id}`;
   const IDS = [1208021, 1208022, 1208023];
 
   beforeEach(async () => {
@@ -558,7 +643,7 @@ describe("getFixtureLive", () => {
       jsonResponse(inferredEnvelope([inferredLiveItem()]), {
         "x-ratelimit-requests-remaining": "7000",
         "x-ratelimit-requests-limit": "7500",
-      }),
+      })
     );
     const out = await getFixtureLive(1208021);
     expect(fetchSpy).toHaveBeenCalledTimes(1);
@@ -566,7 +651,9 @@ describe("getFixtureLive", () => {
     expect(url.pathname).toBe("/fixtures");
     expect(url.searchParams.get("id")).toBe("1208021");
     const init = fetchSpy.mock.calls[0]![1] as RequestInit;
-    expect((init.headers as Record<string, string>)["x-apisports-key"]).toBe("test-key");
+    expect((init.headers as Record<string, string>)["x-apisports-key"]).toBe(
+      "test-key"
+    );
     expect(out.fixture?.fixture.id).toBe(1208021);
     expect(out.fetchedAt.getTime()).toBe(clock);
     expect(getLastQuota("api-football-live")).toMatchObject({
@@ -579,7 +666,9 @@ describe("getFixtureLive", () => {
     expect(LIVE_FIXTURE_CACHE_TTL_MS).toBeLessThanOrEqual(15_000);
     const fetchSpy = vi
       .spyOn(globalThis, "fetch")
-      .mockImplementation(async () => jsonResponse(inferredEnvelope([inferredLiveItem()])));
+      .mockImplementation(async () =>
+        jsonResponse(inferredEnvelope([inferredLiveItem()]))
+      );
 
     const first = await getFixtureLive(1208022);
     vi.setSystemTime(new Date(clock + 10_000));
@@ -590,13 +679,17 @@ describe("getFixtureLive", () => {
     vi.setSystemTime(new Date(clock + LIVE_FIXTURE_CACHE_TTL_MS + 1));
     const third = await getFixtureLive(1208022);
     expect(fetchSpy).toHaveBeenCalledTimes(2);
-    expect(third.fetchedAt.getTime()).toBe(clock + LIVE_FIXTURE_CACHE_TTL_MS + 1);
+    expect(third.fetchedAt.getTime()).toBe(
+      clock + LIVE_FIXTURE_CACHE_TTL_MS + 1
+    );
   });
 
   it("chamadas concorrentes dividem uma request", async () => {
     const fetchSpy = vi
       .spyOn(globalThis, "fetch")
-      .mockImplementation(async () => jsonResponse(inferredEnvelope([inferredLiveItem()])));
+      .mockImplementation(async () =>
+        jsonResponse(inferredEnvelope([inferredLiveItem()]))
+      );
     await Promise.all([getFixtureLive(1208023), getFixtureLive(1208023)]);
     expect(fetchSpy).toHaveBeenCalledTimes(1);
   });
@@ -604,7 +697,9 @@ describe("getFixtureLive", () => {
   it("chave de cache própria: não reaproveita o cache de 15 min de getFixtureById", async () => {
     const fetchSpy = vi
       .spyOn(globalThis, "fetch")
-      .mockImplementation(async () => jsonResponse(inferredEnvelope([inferredLiveItem()])));
+      .mockImplementation(async () =>
+        jsonResponse(inferredEnvelope([inferredLiveItem()]))
+      );
     await getFixtureById(1208021);
     await getFixtureLive(1208021);
     expect(fetchSpy).toHaveBeenCalledTimes(2);
