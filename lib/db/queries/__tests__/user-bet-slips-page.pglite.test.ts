@@ -11,6 +11,7 @@ import { migrate } from "drizzle-orm/pglite/migrator";
 import { afterAll, beforeAll, beforeEach, describe, expect, it, vi } from "vitest";
 
 import * as schema from "@/db/schema";
+import { slipBucket } from "@/lib/bets/slip-ledger";
 
 let realDb: PgliteDatabase<typeof schema>;
 let client: PGlite;
@@ -417,6 +418,25 @@ describe("getUserBetSlipLedger (#577)", () => {
     expect(over.get(stale)).toBe(true);
     expect(over.get(recent)).toBe(false);
     expect(rows.every((r) => Number(r.legs[0].stakeUnits) === 1)).toBe(true);
+  });
+
+  it("jogo adiado não acaba por tempo: não conferida segue em aberto", async () => {
+    const postponed = await seedMatch("ext-l-post", {
+      status: "postponed",
+      kickoffAt: new Date("2026-05-20T09:00:00Z"),
+    });
+    const slip = await seedSlip({ matchId: postponed, userId: ids.userId });
+    await seedLeg({
+      slipId: slip,
+      kind: "corners",
+      params: { selection: "over", line: 8.5 },
+      settleable: false,
+    });
+    const [row] = await getUserBetSlipLedger(ids.userId, NOW);
+    expect(row.matchStatus).toBe("postponed");
+    // Kickoff 3h antes de NOW (> 150 min), mas adiado: não acabou.
+    expect(row.matchOver).toBe(false);
+    expect(slipBucket(row)).toBe("open");
   });
 
   it("não vaza slip de outro usuário", async () => {

@@ -245,7 +245,7 @@ export { deriveSlipStatus, type SlipStatus };
  * memória. `userId` vem SEMPRE do `auth()` (anti-IDOR). `matchOver` = jogo
  * finished/cancelled OU apitado há mais de SETTLEMENT_MIN_ELAPSED_MS (a mesma janela
  * da liquidação): sem o tempo, uma aposta não conferida ficaria em aberto pra sempre
- * se o cron não virasse o status.
+ * se o cron não virasse o status. Adiado (`postponed`) nunca acaba por tempo.
  */
 export async function getUserBetSlipLedger(
   userId: string,
@@ -283,10 +283,11 @@ export async function getUserBetSlipLedger(
         stakeUnits: r.slipStake,
         comboUserOdd: r.comboUserOdd,
         matchStatus: r.matchStatus,
+        // Adiado não acaba por tempo: o jogo ainda pode ser jogado (fica em aberto).
         matchOver:
           r.matchStatus === "finished" ||
           r.matchStatus === "cancelled" ||
-          r.kickoffAt.getTime() < cutoff,
+          (r.matchStatus !== "postponed" && r.kickoffAt.getTime() < cutoff),
         legs: [],
       };
       bySlip.set(r.slipId, slip);
