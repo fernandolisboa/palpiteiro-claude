@@ -440,6 +440,28 @@ describe("AnalysisScenarios — top-K truncation (N>5, R9)", () => {
     // Placeholder "+N outras" (1 escondida).
     expect(markup).toContain("+1 outras seleções não exibidas");
   });
+
+  it("ordena pela fração com vírgula decimal ('22,8%' > '22,3%', #574)", () => {
+    // "Sel Y" (22,3%) vem antes de "Sel X" (22,8%): lendo só a parte inteira as duas
+    // empatam em 22 e a ordem estável derrubaria "Sel X" no lugar de "Sel Y".
+    const withFractions = sixOutcomes.map((o) =>
+      o.id === "d"
+        ? { ...o, scenarioLabel: "Sel Y", label: "Sel Y", modelProb: "22,3%" }
+        : o.id === "e"
+          ? { ...o, scenarioLabel: "Sel X", label: "Sel X", modelProb: "22,8%" }
+          : o,
+    );
+    const markup = renderToStaticMarkup(
+      <AnalysisScenarios
+        outcomes={withFractions}
+        framing={null}
+        note={null}
+        returnTone="neutral"
+      />,
+    );
+    expect(markup).toContain("Sel X");
+    expect(markup).not.toContain("Sel Y");
+  });
 });
 
 // #242: o(s) cenário(s) alternativo(s) ficam colapsados num <details> nativo

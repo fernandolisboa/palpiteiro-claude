@@ -7,6 +7,7 @@ import {
   toPredictionDetailView,
   toPredictionRowView,
 } from "@/lib/view/dashboard";
+import { teamToTeam } from "@/lib/view/team";
 
 function row(overrides: Partial<DashboardRow> = {}): DashboardRow {
   const predictionId = overrides.predictionId ?? "p1";
@@ -45,20 +46,28 @@ describe("toPredictionRowView", () => {
       row({ result: "won", profitUnits: "1.85" }),
     );
     expect(v.rec).toBe("OVER");
-    expect(v.odd).toBe("1.92");
-    expect(v.edge).toBe("+7.3");
+    expect(v.odd).toBe("1,92");
+    expect(v.edge).toBe("+7,3");
     expect(v.confidence).toBe("58%");
     expect(v.status).toBe("won");
-    expect(v.profit).toBe("+1.85 u");
+    expect(v.profit).toBe("+1,85 u");
   });
 
   it("renders a negative profit and a pending row", () => {
     expect(toPredictionRowView(row({ result: "lost", profitUnits: "-1.00" })).profit).toBe(
-      "-1.00 u",
+      "-1,00 u",
     );
     const pending = toPredictionRowView(row());
     expect(pending.status).toBe("pending");
     expect(pending.profit).toBeNull();
+  });
+
+  it("1X2 na tabela usa a sigla do time no lugar de 'Casa' (#574)", () => {
+    const v = toPredictionRowView(
+      row({ recommendation: "away", marketKey: "match_result", selectionLabel: "Fora" }),
+    );
+    expect(v.rec).toBe(teamToTeam("Czech Republic", "wc").short);
+    expect(v.rec).not.toBe("Fora");
   });
 
   it("maps a pass with no entry odd", () => {
@@ -74,7 +83,7 @@ describe("toPredictionRowView", () => {
   it("carrega o mercado (+ linha) ao lado da recomendação", () => {
     expect(
       toPredictionRowView(row({ marketParams: { line: 3.5 } })).market,
-    ).toBe("Over/Under gols 3.5");
+    ).toBe("Over/Under gols 3,5");
     const btts = toPredictionRowView(
       row({ marketKey: "btts", marketLabel: "Ambas marcam", recommendation: "yes" }),
     );
@@ -101,7 +110,7 @@ describe("toDashboardKpiView", () => {
     const v = toDashboardKpiView(computeDashboardKpis([]));
     expect(v.yieldPct.value).toBe("—");
     expect(v.yieldPct.n).toBe(0);
-    expect(v.totalProfit).toBe("+0.00 u");
+    expect(v.totalProfit).toBe("+0,00 u");
     expect(v.profitPositive).toBe(true);
   });
 
@@ -272,8 +281,8 @@ describe("toPredictionDetailView", () => {
     const v = toPredictionDetailView(makeDetail(), {
       includeRawPayloads: false,
     });
-    expect(v.prediction.stake).toBe("2.00 u");
-    expect(v.outcome?.profit).toBe("+1.84 u");
+    expect(v.prediction.stake).toBe("2,00 u");
+    expect(v.outcome?.profit).toBe("+1,84 u");
     expect(v.match.score).toBe("2-1");
     // Fase 5: o dashboard parou de ler a coluna legada total_goals. Uma row
     // histórica pré-backfill (resultData null) degrada honestamente pra "—" no
@@ -317,7 +326,7 @@ describe("toPredictionDetailView", () => {
     expect(v.outcome).toBeNull();
   });
 
-  it("1X2 (match_result): rec mostra 'Casa' (não 'home') e settlementMetric usa o label do mercado", () => {
+  it("1X2 (match_result): rec mostra o nome do time (não 'home'/'Casa') e settlementMetric usa o label do mercado", () => {
     // Antes do join de markets a detail view hardcodava "over_under": uma row 1X2
     // renderizava o token cru "home" e o label de gols. Com o marketKey resolvido,
     // recToken deriva o label da seleção da apresentação e o settlementMetric o do
@@ -346,7 +355,8 @@ describe("toPredictionDetailView", () => {
       },
       { includeRawPayloads: false },
     );
-    expect(v.prediction.rec).toBe("Casa");
+    // Nome de EXIBIÇÃO do mandante (#574): "South Korea" da Copa vira "Coreia do Sul".
+    expect(v.prediction.rec).toBe("Coreia do Sul");
     // Sem markets.label no detalhe, cai no label da apresentação.
     expect(v.prediction.market).toBe("Resultado (1X2)");
     expect(v.outcome?.settlementMetric.label).toBe("resultado (90')");
@@ -474,7 +484,7 @@ describe("toPredictionDetailView", () => {
       },
     });
     expect(v.clv.available).toBe(true);
-    expect(v.clv.closingOdd).toBe("1.85");
+    expect(v.clv.closingOdd).toBe("1,85");
     // oddRec 1.92 > close 1.85 → bati o fechamento → +
     expect(v.clv.oddsRatioPct.startsWith("+")).toBe(true);
     expect(v.clv.oddsRatioPct.endsWith("%")).toBe(true);

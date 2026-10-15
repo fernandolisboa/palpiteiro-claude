@@ -63,3 +63,29 @@ describe("DashboardFiltersBar — dimensions (#539)", () => {
     expect(html).not.toContain(">mercado<");
   });
 });
+
+describe("DashboardFiltersBar — largura no celular (#574)", () => {
+  it("cada grupo rola dentro do próprio nav e as pílulas não encolhem", () => {
+    const html = renderToStaticMarkup(
+      <DashboardFiltersBar
+        filters={ALL}
+        leagues={["bsa", "ucl", "epl", "laliga"]}
+        markets={MARKETS}
+      />
+    );
+    const navs = html.match(/<nav class="[^"]*"/g) ?? [];
+    expect(navs).toHaveLength(3);
+    for (const nav of navs) {
+      expect(nav).toContain("overflow-x-auto");
+      expect(nav).toContain("max-w-full");
+    }
+    const links = html.match(/<a [^>]*class="[^"]*"/g) ?? [];
+    expect(links.length).toBeGreaterThan(0);
+    for (const link of links) {
+      expect(link).toContain("shrink-0");
+      expect(link).toContain("whitespace-nowrap");
+    }
+    // Rótulos sem mudança.
+    expect(html).toContain(">Green<");
+  });
+});

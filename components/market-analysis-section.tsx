@@ -1,6 +1,7 @@
 import { AnalysisResult } from "@/components/analysis-result";
 import { MatchCollapsible } from "@/components/match-collapsible";
 import { SectionFooterDispatch } from "@/components/section-footer-dispatch";
+import { formatLine } from "@/lib/format-number";
 import type {
   AnalysisView,
   MarketAnalysisSectionItem,
@@ -13,7 +14,7 @@ import type {
 function sectionMeta(view: AnalysisView): string {
   const rec = view.recommendation;
   if (rec === null) return "sem aposta";
-  const line = rec.line !== null ? ` ${rec.line}` : "";
+  const line = rec.line !== null ? ` ${formatLine(rec.line)}` : "";
   const odd = view.oddAtRec ? ` · ${view.oddAtRec}` : "";
   return `${rec.selectionLabel}${line}${odd}`;
 }

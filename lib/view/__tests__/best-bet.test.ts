@@ -171,3 +171,20 @@ describe("toBestBetView — bundle safety (server-side mapper, painel só recebe
     for (const line of aiImports) expect(line).toMatch(/^import\s+type\s/);
   });
 });
+
+describe("toBestBetView — rótulos com o nome dos times (#574)", () => {
+  it("com teams, o card 1X2 da análise mostra o nome do time", () => {
+    const view = toBestBetView([mr()], new Map(), [], [], {
+      home: "Palmeiras",
+      away: "Flamengo",
+    });
+    const analysis = view.entries[0].analysis;
+    expect(analysis.outcomes.map((o) => o.label)).toEqual(["Palmeiras", "Empate", "Flamengo"]);
+    expect(analysis.recommendation?.selectionLabel).toBe("Palmeiras");
+  });
+
+  it("sem teams, igual a antes", () => {
+    const view = toBestBetView([mr()], new Map());
+    expect(view.entries[0].analysis.recommendation?.selectionLabel).toBe("Casa");
+  });
+});

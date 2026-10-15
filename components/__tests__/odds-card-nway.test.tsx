@@ -16,6 +16,32 @@ const NWAY: OddsView = {
   updatedAgo: "2 min",
 };
 
+describe("OddsCard — título (#574 linha 7)", () => {
+  it("null → 'Odds atuais'; live/finished → 'Odds antes do jogo'", () => {
+    expect(renderToStaticMarkup(<OddsCard view={NWAY} unavailable={null} />)).toContain(
+      "Odds atuais",
+    );
+    for (const reason of ["live", "finished"] as const) {
+      const html = renderToStaticMarkup(<OddsCard view={NWAY} unavailable={reason} />);
+      expect(html).toContain("Odds antes do jogo");
+      expect(html).not.toContain("Odds atuais");
+    }
+  });
+
+  it("3 colunas: rótulo trunca com o nome inteiro no title (#574 linha 4)", () => {
+    const html = renderToStaticMarkup(
+      <OddsCard
+        view={{
+          ...NWAY,
+          outcomes: [{ ...NWAY.outcomes[0], label: "Club Atlético Mineiro" }, ...NWAY.outcomes.slice(1)],
+        }}
+      />,
+    );
+    expect(html).toContain('title="Club Atlético Mineiro"');
+    expect(html).toContain('<span class="min-w-0 truncate">Club Atlético Mineiro</span>');
+  });
+});
+
 describe("OddsCard N-vias (1X2, N=3) — #173 PR-2", () => {
   it("renderiza grid-cols-3 com as 3 seleções e a badge do mercado", () => {
     const html = renderToStaticMarkup(<OddsCard view={NWAY} />);

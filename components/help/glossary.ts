@@ -110,10 +110,10 @@ export const GLOSSARY: readonly GlossaryEntry[] = [
       "Uma opção dentro de um mercado. O número de seleções muda por mercado. O app recomenda UMA seleção por análise — ou PASS.",
     markets: {
       over_under: "Over/under tem 2: over e under.",
-      match_result: "1X2 tem 3: casa, empate e fora.",
+      match_result: "1X2 tem 3: mandante, empate e visitante.",
       btts: "BTTS tem 2: sim e não.",
       double_chance:
-        "Dupla chance tem 3: casa ou empate, empate ou fora e casa ou fora.",
+        "Dupla chance tem 3: mandante ou empate, empate ou visitante e mandante ou visitante.",
     },
     group: "conceitos",
   },
@@ -138,10 +138,10 @@ export const GLOSSARY: readonly GlossaryEntry[] = [
       "O app sugere UMA seleção do mercado, ou PASS. PASS = não apostar, porque não há vantagem suficiente. PASS NÃO é erro — é disciplina; pass rate alto (30–60%) é BOM.",
     markets: {
       over_under: "As seleções do over/under são over e under.",
-      match_result: "No 1X2, são casa, empate e fora.",
+      match_result: "No 1X2, são mandante, empate e visitante.",
       btts: "No BTTS, são sim e não.",
       double_chance:
-        "Na dupla chance, são casa ou empate, empate ou fora e casa ou fora.",
+        "Na dupla chance, são mandante ou empate, empate ou visitante e mandante ou visitante.",
     },
     group: "decisao",
   },
@@ -149,14 +149,14 @@ export const GLOSSARY: readonly GlossaryEntry[] = [
     term: "o app não aposta por você",
     anchor: "app-nao-aposta",
     meaning:
-      "O Palpiteiro só recomenda e acompanha. A aposta de verdade você faz por fora, na casa (Betano etc.), com seu dinheiro. O app não movimenta dinheiro nenhum.",
+      "O Palpiteiro só recomenda e acompanha. As apostas são entre você e seus amigos; o app só anota e faz a conta. O app não movimenta dinheiro nenhum.",
     group: "decisao",
   },
   {
     term: 'prob. do mercado (também chamada "normalizada")',
     anchor: "prob-implicita",
     meaning:
-      "A chance que a odd embute, JÁ descontada a margem da casa. Normaliza TODAS as seleções: (1/odd da seleção) ÷ Σ(1/odd de todas as seleções). NUNCA é 1/odd cru — isso ignoraria a margem.",
+      "A chance que a odd embute, JÁ descontada a margem embutida na odd. Normaliza TODAS as seleções: (1/odd da seleção) ÷ Σ(1/odd de todas as seleções). NUNCA é 1/odd cru — isso ignoraria a margem.",
     markets: {
       over_under:
         "No over/under (2 seleções): (1/odd do lado) ÷ (1/odd_over + 1/odd_under).",
@@ -172,7 +172,7 @@ export const GLOSSARY: readonly GlossaryEntry[] = [
     term: "overround / margem do mercado",
     anchor: "overround",
     meaning:
-      "A margem embutida pela casa. Por isso, no cru, as probabilidades de todas as seleções somam mais de 100% — o excedente é a margem. Fórmula: Σ(1/odd) − 1.",
+      "A margem embutida na odd. Por isso, no cru, as probabilidades de todas as seleções somam mais de 100% — o excedente é a margem. Fórmula: Σ(1/odd) − 1.",
     markets: {
       over_under:
         "No over/under: over% + under% somam mais de 100%; (1/odd_over + 1/odd_under) − 1.",
@@ -194,7 +194,7 @@ export const GLOSSARY: readonly GlossaryEntry[] = [
     term: "leitura do modelo",
     anchor: "leitura-modelo",
     meaning:
-      "A chance de cada resultado do jogo calculada em código pelo modelo de placar (Dixon-Coles, ou o heurístico da tabela quando falta histórico), ajustada pelos julgamentos do JEV perto do jogo. Sem Claude e sem olhar as odds: não é recomendação nem mede edge. A odd justa é 100 ÷ probabilidade — compare com a odd da sua casa.",
+      "A chance de cada resultado do jogo calculada em código pelo modelo de placar (Dixon-Coles, ou o heurístico da tabela quando falta histórico), ajustada pelos julgamentos do JEV perto do jogo. Sem Claude e sem olhar as odds: não é recomendação nem mede edge. A odd justa é 100 ÷ probabilidade — compare com a odd de mercado.",
     group: "numeros",
   },
   {
@@ -213,14 +213,14 @@ export const GLOSSARY: readonly GlossaryEntry[] = [
   {
     term: 'odd mínima ("vale a pena se odd ≥")',
     anchor: "odd-minima",
-    meaning: `A menor odd em que a aposta ainda mantém edge de pelo menos ${MIN_EDGE_PP}pp — definida pela IA na análise. Se a casa baixar abaixo disso, a vantagem some.`,
+    meaning: `A menor odd em que a aposta ainda mantém edge de pelo menos ${MIN_EDGE_PP}pp — definida pela IA na análise. Se a odd de mercado cair abaixo disso, a vantagem some.`,
     group: "numeros",
   },
   {
     term: "odd na análise (congelada)",
     anchor: "odd-na-analise",
     meaning:
-      "A odd que valia no momento em que a análise rodou, registrada na predição. A casa pode ter mudado depois — por isso o card de odds atuais pode mostrar outro número.",
+      "A odd que valia no momento em que a análise rodou, registrada na predição. A odd de mercado pode ter mudado depois — por isso o card de odds pode mostrar outro número.",
     group: "numeros",
   },
   {
@@ -309,7 +309,7 @@ export const GLOSSARY: readonly GlossaryEntry[] = [
       over_under:
         'No over/under, são os dois lados (over e under); o lado não-recomendado aparece como "cenário alternativo".',
       match_result:
-        "No 1X2, são as três seleções (casa, empate, fora); as não-recomendadas aparecem como cenário alternativo.",
+        "No 1X2, são as três seleções (mandante, empate, visitante); as não-recomendadas aparecem como cenário alternativo.",
       btts: "No BTTS, são sim e não.",
       double_chance: "Na dupla chance, são as três opções de par.",
     },

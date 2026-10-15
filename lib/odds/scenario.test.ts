@@ -92,8 +92,8 @@ describe("computeScenarios", () => {
     // existe e que o salvo é o exibido.
     const recomputedEdge =
       58 - computeMarketImpliedProbabilities([1.9, 1.95]).probs[0] * 100;
-    expect(formatEdge(recomputedEdge)).toBe("+7.4");
-    expect(formatEdge(result.over.edgePct)).toBe("+7.3");
+    expect(formatEdge(recomputedEdge)).toBe("+7,4");
+    expect(formatEdge(result.over.edgePct)).toBe("+7,3");
     // Derivados do lado recomendado.
     expect(result.over.modelProbPct).toBe(58);
     expect(result.over.evPerUnit).toBeCloseTo(0.102, 6);

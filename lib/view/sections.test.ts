@@ -35,7 +35,7 @@ describe("toH2HView", () => {
     const view = toH2HView(h2h);
     expect(view.rows.map((r) => r.tag)).toEqual(["over", "over", "under"]);
     // over 2/3 = 67%; média (3+4+1)/3 = 2.7.
-    expect(view.summary).toBe("over 67% · média 2.7 gols");
+    expect(view.summary).toBe("over 67% · média 2,7 gols");
   });
 
   it("classify do registry over_under bate com o default", () => {
@@ -47,7 +47,7 @@ describe("toH2HView", () => {
   it("mercado não baseado em gols (classify null): tags neutras + summary só com a média", () => {
     const view = toH2HView(h2h, 5, null);
     expect(view.rows.map((r) => r.tag)).toEqual(["", "", ""]);
-    expect(view.summary).toBe("média 2.7 gols");
+    expect(view.summary).toBe("média 2,7 gols");
   });
 
   it("sem histórico: summary degrada", () => {

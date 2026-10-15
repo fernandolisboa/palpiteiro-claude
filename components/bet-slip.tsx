@@ -18,6 +18,7 @@ import {
   SheetHeader,
   SheetTitle,
 } from "@/components/ui/sheet";
+import { formatOdd, formatPct } from "@/lib/format-number";
 import { registerBetSlip, type RegisterBetSlipResult } from "@/app/actions/bet-slip";
 import { parseBet, type ParseBetResult } from "@/app/actions/bets";
 import type { BetLegParams } from "@/db/schema";
@@ -66,7 +67,6 @@ type Mode = "simples" | "combinada";
 
 type ParseMeta = { rawInput: string; parseAiCallId: string | null };
 
-const ptOdd = (n: number) => n.toFixed(2).replace(".", ",");
 // Odd que o usuário digitou: mantém as casas que ele deu (1.925 não vira 1,93).
 const ptUserOdd = (n: number) =>
   (Number.isInteger(n * 100) ? n.toFixed(2) : String(n)).replace(".", ",");
@@ -78,7 +78,7 @@ function legFromSelection(s: GridSelectionView): SlipLeg {
     kind: s.kind,
     params: s.params,
     label: s.legLabel,
-    oddInput: s.referenceOdd === null ? "" : ptOdd(s.referenceOdd),
+    oddInput: s.referenceOdd === null ? "" : formatOdd(s.referenceOdd),
     oddFromReference: s.referenceOdd !== null,
     stakeInput: "",
     fairOdd: s.fairOdd,
@@ -554,7 +554,7 @@ function SelectionButton({
       <span className="line-clamp-1 text-body-sm tracking-tight">{s.label}</span>
       {s.referenceOdd !== null ? (
         <span className="font-mono text-body-sm font-medium tabular-nums">
-          {ptOdd(s.referenceOdd)}
+          {formatOdd(s.referenceOdd)}
         </span>
       ) : s.fairOdd !== null ? (
         <span
@@ -562,9 +562,9 @@ function SelectionButton({
             "font-mono text-eyebrow-xs tabular-nums",
             selected ? "text-background/70" : "text-muted-fg-2",
           )}
-          title="odd justa pelo modelo (sem margem de casa)"
+          title="odd justa pelo modelo (sem margem)"
         >
-          justa {ptOdd(s.fairOdd)}
+          justa {formatOdd(s.fairOdd)}
         </span>
       ) : null}
     </button>
@@ -684,8 +684,8 @@ function SlipPanel(props: {
               </div>
               {leg.modelProbPct !== null && (
                 <span className="font-mono text-eyebrow-xs text-muted-fg-2">
-                  chance {leg.modelProbPct.toFixed(1)}%
-                  {leg.fairOdd !== null ? ` · odd justa ${ptOdd(leg.fairOdd)}` : ""}
+                  chance {formatPct(leg.modelProbPct, { decimals: 1 })}
+                  {leg.fairOdd !== null ? ` · odd justa ${formatOdd(leg.fairOdd)}` : ""}
                 </span>
               )}
               {mode === "simples" && (
@@ -760,7 +760,7 @@ function SlipPanel(props: {
                 />
               </label>
               <span className="col-span-2 text-meta leading-relaxed text-muted-fg-2 tracking-tight">
-                A odd única que a casa paga pelas {legs.length} seleções juntas. As
+                A odd única da combinada, pras {legs.length} seleções juntas. As
                 seleções do mesmo jogo andam juntas, então a chance vem do placar, não
                 da multiplicação.
               </span>

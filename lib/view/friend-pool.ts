@@ -1,5 +1,5 @@
 import type { BetLegParams } from "@/db/schema";
-import { LEAGUE_LABEL, formatKickoffDateTime, leagueToKey } from "@/lib/format";
+import { LEAGUE_LABEL, formatKickoffDateTime, formatLine, leagueToKey } from "@/lib/format";
 import type { SupportedLeague } from "@/lib/providers/sports-data/leagues";
 
 // Rótulos do bolão entre amigos (#567). Puros e serializáveis.
@@ -16,7 +16,7 @@ export const POOL_RISK_NOTE =
 type TeamNames = { home: string; away: string };
 
 function lineLabel(line: unknown): string {
-  return String(line).replace(".", ",");
+  return typeof line === "number" || typeof line === "string" ? formatLine(line) : String(line);
 }
 
 /** "Flamengo 2 × 1 Palmeiras", "Vitória do Flamengo", "Mais de 2,5 gols"… */

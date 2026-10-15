@@ -152,9 +152,11 @@ export function ComoUsarContent() {
         </Steps>
         <p>
           Cada linha traz o campeonato, o horário, os times e as odds de referência
-          (casa / empate / fora, ou over / under) quando a casa já publicou. Aparece{" "}
-          <Ui>✓ analisado</Ui> nos jogos que você já analisou, <Ui>AO VIVO</Ui> nos
-          que estão rolando e o placar nos encerrados. <Strong>sem odd</Strong>{" "}
+          (mandante / empate / visitante, ou mais / menos gols) quando o mercado já tem
+          odd. Aparece{" "}
+          <Ui>✓ analisado</Ui> nos jogos que você já analisou, <Ui>AO VIVO</Ui> e o
+          placar parcial (quando já temos) nos que estão rolando, e o placar nos
+          encerrados. <Strong>sem odd</Strong>{" "}
           significa que ainda não há cotação; sem ela a análise não roda.
         </p>
         <p>
@@ -231,7 +233,8 @@ export function ComoUsarContent() {
           <Link href="/como-funciona" className={LINK}>
             Como funciona
           </Link>
-          . Mais abaixo na página ficam as odds atuais, as partidas recentes, o
+          . Mais abaixo na página ficam as odds (as de antes do jogo, quando ele já
+          começou), as partidas recentes, o
           confronto direto, a classificação, os desfalques e as escalações. Tocar no
           nome de um time abre o histórico dele.
         </p>

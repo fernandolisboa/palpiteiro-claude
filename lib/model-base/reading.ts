@@ -1,4 +1,5 @@
 import { getLatestMatchModelSnapshot } from "@/lib/db/queries/match-model-snapshots";
+import type { TeamLabels } from "@/lib/view/markets/with-team-labels";
 import { toMatchModelReadingView } from "@/lib/view/match-model";
 import type { MatchModelReadingView } from "@/lib/view/types";
 
@@ -12,10 +13,12 @@ import type { MatchModelReadingView } from "@/lib/view/types";
 export async function loadMatchModelReading(args: {
   matchId: string;
   now: Date;
+  // Nome de exibição dos times pros rótulos do 1X2/dupla chance (#574).
+  teams?: TeamLabels;
 }): Promise<MatchModelReadingView | null> {
   try {
     const snapshot = await getLatestMatchModelSnapshot(args.matchId);
-    return snapshot ? toMatchModelReadingView(snapshot, args.now) : null;
+    return snapshot ? toMatchModelReadingView(snapshot, args.now, args.teams) : null;
   } catch (err) {
     console.error(
       JSON.stringify({

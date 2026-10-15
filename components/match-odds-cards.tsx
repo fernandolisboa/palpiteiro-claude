@@ -23,7 +23,9 @@ export async function MatchOddsCards({ odds, unavailable }: Props) {
   return (
     <>
       <OddsCard view={oddsView} unavailable={unavailable} />
-      {matchResultOddsView && <OddsCard view={matchResultOddsView} />}
+      {matchResultOddsView && (
+        <OddsCard view={matchResultOddsView} unavailable={unavailable} />
+      )}
     </>
   );
 }

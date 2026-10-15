@@ -12,13 +12,17 @@ import { THEME_PROVIDER_PROPS, THEME_SCRIPT } from "@/lib/theme";
  */
 
 // Script original do next-themes pras mesmas props (sem o scriptProps que o desliga).
+// Com defaultTheme "system" o next-themes consulta o matchMedia ao renderizar quando há
+// `window` (o jsdom tem window mas não matchMedia): stub só pra extrair o script.
 const { scriptProps: _, ...originalProps } = THEME_PROVIDER_PROPS;
+vi.stubGlobal("matchMedia", () => ({ matches: false }));
 const ORIGINAL_SCRIPT =
   /<script[^>]*>([\s\S]*?)<\/script>/.exec(
     renderToString(
       createElement(ThemeProvider, originalProps, createElement("div"))
     )
   )?.[1] ?? "";
+vi.unstubAllGlobals();
 
 type Scenario = {
   name: string;
@@ -28,7 +32,9 @@ type Scenario = {
 };
 
 const scenarios: Scenario[] = [
-  { name: "nada salvo → default dark", stored: null, systemDark: false },
+  // Default "system" (#574): sem tema salvo, segue o sistema.
+  { name: "nada salvo + sistema claro → light", stored: null, systemDark: false },
+  { name: "nada salvo + sistema escuro → dark", stored: null, systemDark: true },
   { name: "light salvo", stored: "light", systemDark: true },
   { name: "dark salvo", stored: "dark", systemDark: false },
   { name: "system + sistema escuro", stored: "system", systemDark: true },
@@ -72,5 +78,18 @@ describe("THEME_SCRIPT", () => {
 
   it.each(scenarios)("$name: igual ao next-themes", (s) => {
     expect(run(THEME_SCRIPT, s)).toEqual(run(ORIGINAL_SCRIPT, s));
+  });
+});
+
+describe("THEME_SCRIPT — default do sistema (#574)", () => {
+  it("nada salvo segue o sistema", () => {
+    expect(run(THEME_SCRIPT, { name: "claro", stored: null, systemDark: false })).toEqual({
+      className: "light",
+      colorScheme: "light",
+    });
+    expect(run(THEME_SCRIPT, { name: "escuro", stored: null, systemDark: true })).toEqual({
+      className: "dark",
+      colorScheme: "dark",
+    });
   });
 });

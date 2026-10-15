@@ -4,6 +4,7 @@ import { AnalysisScenarios } from "@/components/analysis-scenarios";
 import { HelpHint } from "@/components/help-hint";
 import { Card } from "@/components/ui/card";
 import { Separator } from "@/components/ui/separator";
+import { formatLine } from "@/lib/format-number";
 import { cn } from "@/lib/utils";
 import { ANALYSIS_RISK_DISCLAIMER } from "@/lib/view/analysis";
 import type { AnalysisView } from "@/lib/view/types";
@@ -93,7 +94,7 @@ export function AnalysisResult({ view, showRiskDisclaimer = true }: Props) {
         <div className="flex flex-col items-start gap-1">
           <span className="font-mono text-display-md font-medium leading-none tracking-tight text-accent-strong-fg">
             {rec.selectionLabel}
-            {rec.line !== null ? ` ${rec.line}` : ""}
+            {rec.line !== null ? ` ${formatLine(rec.line)}` : ""}
           </span>
           <span className="font-mono text-eyebrow uppercase tracking-label text-accent-fg">
             {rec.marketLabel}
@@ -110,7 +111,7 @@ export function AnalysisResult({ view, showRiskDisclaimer = true }: Props) {
               mercado hardcoded no componente. */}
           <p className="text-body font-medium leading-snug tracking-tight text-foreground">
             {rec.marketLabel} · {rec.selectionLabel}
-            {rec.line !== null ? ` ${rec.line}` : ""}
+            {rec.line !== null ? ` ${formatLine(rec.line)}` : ""}
           </p>
           {/* Tradução LEIGA (lay-friendly), vinda da view (betSummary): restaura
               a frase pré-pivot "Mais de 2.5 gols — pelo menos 3 gols no jogo".

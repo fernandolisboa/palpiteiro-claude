@@ -17,7 +17,14 @@ import {
   type SlipGridKind,
 } from "@/lib/bets/slip-markets";
 import { gradeScorelineLeg, type ScorelineKind } from "@/lib/bets/grade-scoreline";
-import { formatEdge, formatEvPct, formatOdd, formatPct } from "@/lib/format";
+import {
+  formatEdge,
+  formatEvPct,
+  formatLine,
+  formatOdd,
+  formatPct,
+  formatUnitsCompact,
+} from "@/lib/format";
 import type { ModelScoreline, ModelScorelineSource } from "@/lib/quant/match-model";
 import { pScoreline } from "@/lib/quant/scoreline-model";
 import { betLegLabel } from "@/lib/view/free-bet";
@@ -39,7 +46,7 @@ function groupTitle(groupKey: string): string {
   if (groupKey === "double_chance") return "Dupla chance";
   if (groupKey === "btts") return "Ambas marcam";
   if (groupKey.startsWith("over_under:")) {
-    return `Total de gols ${groupKey.split(":")[1]}`;
+    return `Total de gols ${formatLine(groupKey.split(":")[1])}`;
   }
   return "Placar exato";
 }
@@ -59,7 +66,7 @@ function buttonLabel(kind: string, params: BetLegParams, teams: TeamNames): stri
     case "btts":
       return p.selection === "yes" ? "Sim" : "Não";
     case "over_under":
-      return `${p.selection === "over" ? "Mais" : "Menos"} de ${p.line}`;
+      return `${p.selection === "over" ? "Mais" : "Menos"} de ${formatLine(p.line as number | string)}`;
     case "exact_score":
       return `${p.home} × ${p.away}`;
     default:
@@ -230,7 +237,7 @@ export function valueReading(evPerUnit: number | null): string {
 
 function stakeText(s: StakeSuggestion | null): string | null {
   if (s === null) return null;
-  const units = `${s.units.toFixed(1).replace(".0", "")}u`;
+  const units = formatUnitsCompact(s.units, 1);
   if (s.rule === "bandas") return `${units} (bandas)`;
   if (s.rule === "quarter-kelly") return `${units} (quarter-Kelly)`;
   return `${units} (quarter-Kelly conjunto)`;
@@ -284,8 +291,7 @@ export type SlipEvaluationView = {
 export const MODEL_CAVEAT_PT_BR =
   "No nosso backtest, o Dixon-Coles sozinho não bateu as odds de fechamento: leia o edge e o retorno esperado como a opinião do modelo, não como vantagem garantida.";
 
-const units = (n: number | null) =>
-  n === null ? null : `${n.toFixed(2).replace(/\.?0+$/, "")}u`;
+const units = (n: number | null) => (n === null ? null : formatUnitsCompact(n));
 
 function legView(leg: EvaluatedLeg, teams: TeamNames): EvaluatedLegView {
   const label = slipLegLabel(leg.kind, leg.params, teams);

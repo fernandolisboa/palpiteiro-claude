@@ -581,7 +581,7 @@ function UserContextField({
           value={value}
           onChange={(e) => onChange(e.target.value)}
           aria-describedby={`${id}-hint`}
-          placeholder="Ex.: o time da casa está sem o centroavante titular e vem de três derrotas."
+          placeholder="Ex.: o mandante está sem o centroavante titular e vem de três derrotas."
           className="w-full rounded-md border border-palpite-border/60 bg-background px-3 py-2 text-body-sm tracking-tight text-foreground placeholder:text-muted-fg-2 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-palpite-border"
         />
         <div className="flex items-start justify-between gap-3">

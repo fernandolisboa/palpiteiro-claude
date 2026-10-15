@@ -91,9 +91,12 @@ export function PredictionsTable({
             return (
               <TableRow key={r.id} className="border-border-subtle">
                 <TableCell className="max-w-[220px]">
+                  {/* A célula é whitespace-nowrap: sem o truncate no próprio link o
+                      nome do jogo vaza por cima do selo da liga (#574 linha 8). */}
                   <Link
                     href={appendBackParam(`${basePath}/${r.id}`, listHref, basePath)}
-                    className="rounded-sm font-medium tracking-tight hover:underline focus-visible:outline-none focus-visible:ring-[3px] focus-visible:ring-ring/50"
+                    title={`${r.home} × ${r.away}`}
+                    className="block max-w-[220px] truncate rounded-sm font-medium tracking-tight hover:underline focus-visible:outline-none focus-visible:ring-[3px] focus-visible:ring-ring/50"
                   >
                     {r.home} × {r.away}
                   </Link>

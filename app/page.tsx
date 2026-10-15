@@ -5,6 +5,13 @@ import { Wordmark } from "@/components/wordmark";
 
 import { LandingContent } from "./landing-content";
 
+// Estática de propósito, como /termos e /privacidade. Desde o 404 próprio dinâmico
+// (app/not-found.tsx, #574) o Next renderiza a fronteira de 404 da raiz junto da `/` no
+// build, e o `connection()` dela tornaria a landing dinâmica. Com force-static o
+// connection()/cookies() dessa fronteira não pesam aqui (a `/` existe, então o 404 nunca
+// aparece nela) e a landing continua pré-renderizada.
+export const dynamic = "force-static";
+
 export const metadata: Metadata = {
   // `absolute` opta o título fora do `template: "%s · Palpiteiro"` do root — a
   // string já carrega a marca, então o template duplicaria (" · Palpiteiro").

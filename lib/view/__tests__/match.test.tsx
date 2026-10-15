@@ -214,8 +214,8 @@ describe("MatchRow rendering by status", () => {
 
   it("keeps odds rendering unchanged for a scheduled match", () => {
     const markup = render(makeMatch({ status: "scheduled" }), true);
-    expect(markup).toContain("1.85");
-    expect(markup).toContain("1.95");
+    expect(markup).toContain("1,85");
+    expect(markup).toContain("1,95");
     expect(markup.toLowerCase()).not.toContain("encerrado");
   });
 
@@ -233,9 +233,12 @@ describe("MatchRow rendering by status", () => {
       }),
       true, // odds presentes — devem ser preemptadas pelo branch ao vivo
     );
-    expect(markup).toContain("ao vivo");
+    // Um selo só (#574): AO VIVO no topo; a coluna da direita mostra "—" sem placar.
+    expect(markup.split("AO VIVO")).toHaveLength(2);
+    expect(markup.toLowerCase().split("ao vivo")).toHaveLength(2);
+    expect(markup).toContain(">—<");
     expect(markup).not.toContain("sem odd");
-    expect(markup).not.toContain("1.85");
+    expect(markup).not.toContain("1,85");
     expect(markup.toLowerCase()).not.toContain("encerrado");
   });
 
@@ -249,13 +252,31 @@ describe("MatchRow rendering by status", () => {
       }),
       true,
     );
-    expect(markup).toContain("ao vivo");
-    expect(markup).not.toContain("1.85");
+    expect(markup).toContain("AO VIVO");
+    expect(markup).not.toContain("1,85");
+  });
+
+  it("live com placar parcial (#574): placar + legenda na direita, selo uma vez", () => {
+    const markup = render(
+      makeMatch({
+        status: "live",
+        kickoffAt: new Date(NOW.getTime() - 50 * 60 * 1000),
+        homeScore: 1,
+        awayScore: 1,
+        updatedAt: new Date(NOW.getTime() - 2 * 60 * 60 * 1000),
+      }),
+      true,
+    );
+    expect(markup).toMatch(/1<span[^>]*>–<\/span>1/);
+    expect(markup).toContain("parcial · atualizado há 2h");
+    expect(markup.toLowerCase().split("ao vivo")).toHaveLength(2);
+    expect(markup.toLowerCase()).not.toContain("encerrado");
+    expect(markup).not.toContain("1,85");
   });
 
   it("scheduled futuro (isInProgress false): kickoff+odds, SEM badge ao vivo", () => {
     const markup = render(makeMatch({ status: "scheduled" }), true);
-    expect(markup).toContain("1.85");
+    expect(markup).toContain("1,85");
     expect(markup).not.toContain("ao vivo");
     expect(markup).not.toContain("AO VIVO");
   });
@@ -276,7 +297,7 @@ describe("toMatchRowView — prioridade de mercado no chip (#173 PR-2)", () => {
     capturedAt: NOW,
   };
 
-  it("PREFERE 1X2 quando há captura h2h (3 outcomes Casa/Empate/Fora, ordem canônica)", () => {
+  it("PREFERE 1X2 quando há captura h2h (3 outcomes sigla/Empate/sigla, ordem canônica)", () => {
     const view = toMatchRowView({
       match: makeMatch(),
       odds: OU,
@@ -284,10 +305,11 @@ describe("toMatchRowView — prioridade de mercado no chip (#173 PR-2)", () => {
       hasPrediction: false,
       now: NOW,
     });
+    // Coluna estreita: a sigla de 3 letras do time no lugar de "Casa"/"Fora" (#574).
     expect(view.odds?.outcomes).toEqual([
-      { label: "Casa", odd: "2.10" },
-      { label: "Empate", odd: "3.40" },
-      { label: "Fora", odd: "3.90" },
+      { label: "BAR", odd: "2,10" },
+      { label: "Empate", odd: "3,40" },
+      { label: "RMA", odd: "3,90" },
     ]);
   });
 
@@ -300,8 +322,8 @@ describe("toMatchRowView — prioridade de mercado no chip (#173 PR-2)", () => {
       now: NOW,
     });
     expect(view.odds?.outcomes).toEqual([
-      { label: "Over", odd: "1.85" },
-      { label: "Under", odd: "1.95" },
+      { label: "Over", odd: "1,85" },
+      { label: "Under", odd: "1,95" },
     ]);
   });
 
@@ -316,7 +338,7 @@ describe("toMatchRowView — prioridade de mercado no chip (#173 PR-2)", () => {
     expect(view.odds).toBeNull();
   });
 
-  it("MatchRow renderiza o chip 1X2 (Casa/Empate/Fora + odds)", () => {
+  it("MatchRow renderiza o chip 1X2 (siglas/Empate + odds)", () => {
     const view = toMatchRowView({
       match: makeMatch(),
       odds: OU,
@@ -325,11 +347,13 @@ describe("toMatchRowView — prioridade de mercado no chip (#173 PR-2)", () => {
       now: NOW,
     });
     const markup = renderToStaticMarkup(<MatchRow m={view} />);
-    expect(markup).toContain("Casa");
-    expect(markup).toContain("Empate");
-    expect(markup).toContain("Fora");
-    expect(markup).toContain("2.10");
-    expect(markup).toContain("3.90");
+    expect(markup).toContain(">BAR</span> 2,10");
+    expect(markup).toContain(">Empate</span> 3,40");
+    expect(markup).toContain(">RMA</span> 3,90");
+    expect(markup).not.toContain(">Casa<");
+    expect(markup).not.toContain(">Fora<");
+    expect(markup).toContain("2,10");
+    expect(markup).toContain("3,90");
   });
 });
 
@@ -388,7 +412,7 @@ describe("base do modelo na linha e firewall do hero (#555)", () => {
       modelSnapshot,
     });
     expect(withModel.model).toEqual({
-      favorite: { label: "Casa", pct: "52%" },
+      favorite: { label: "BAR", pct: "52%" },
       goals25: { label: "Under 2.5", pct: "55%" },
     });
 
@@ -445,5 +469,53 @@ describe("base do modelo na linha e firewall do hero (#555)", () => {
       modelSnapshot,
     });
     expect("model" in hero).toBe(false);
+  });
+});
+
+describe("toMatchRowView — placar parcial ao vivo (#574)", () => {
+  const live = (overrides: Partial<MatchInput> = {}) =>
+    toMatchRowView({
+      match: makeMatch({
+        status: "live",
+        kickoffAt: new Date(NOW.getTime() - 50 * 60 * 1000),
+        homeScore: 2,
+        awayScore: 0,
+        ...overrides,
+      }),
+      odds: null,
+      hasPrediction: false,
+      now: NOW,
+    });
+
+  it("live com placar vira liveScore; o placar final continua null", () => {
+    const v = live({ updatedAt: new Date(NOW.getTime() - 2 * 60 * 60 * 1000) });
+    expect(v.liveScore).toEqual({ home: 2, away: 0, caption: "parcial · atualizado há 2h" });
+    expect(v.homeScore).toBeNull();
+    expect(v.awayScore).toBeNull();
+  });
+
+  it("legenda: há menos de 1min (nunca 'há agora') e só 'parcial' sem updatedAt", () => {
+    expect(live({ updatedAt: new Date(NOW.getTime() - 30_000) }).liveScore?.caption).toBe(
+      "parcial · atualizado há menos de 1min",
+    );
+    expect(live().liveScore?.caption).toBe("parcial");
+  });
+
+  it("sem liveScore: scheduled em andamento, live sem placar, adiado/cancelado, encerrado", () => {
+    const inProgress = toMatchRowView({
+      match: makeMatch({ status: "scheduled", kickoffAt: new Date(NOW.getTime() - 20 * 60 * 1000) }),
+      odds: null,
+      hasPrediction: false,
+      now: NOW,
+    });
+    expect(inProgress.isInProgress).toBe(true);
+    expect("liveScore" in inProgress).toBe(false);
+    expect("liveScore" in live({ homeScore: null })).toBe(false);
+    for (const status of ["postponed", "cancelled"] as MatchStatus[]) {
+      expect("liveScore" in live({ status })).toBe(false);
+    }
+    const finished = live({ status: "finished" });
+    expect("liveScore" in finished).toBe(false);
+    expect(finished.homeScore).toBe(2);
   });
 });

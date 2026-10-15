@@ -27,6 +27,21 @@ describe("recommendationLabel (#539)", () => {
     expect(recommendationLabel("home", "match_result", "Home")).toBe("Casa");
   });
 
+  it("com teams (#574): nome ou sigla do time, mesmo com 'Casa' vindo do banco", () => {
+    const teams = { home: "PAL", away: "FLA" };
+    expect(recommendationLabel("home", "match_result", "Casa", teams)).toBe("PAL");
+    expect(recommendationLabel("away", "match_result", null, teams)).toBe("FLA");
+    expect(recommendationLabel("draw", "match_result", "Empate", teams)).toBe("Empate");
+    expect(
+      recommendationLabel("home_or_draw", "double_chance", "Casa ou empate", {
+        home: "Palmeiras",
+        away: "Flamengo",
+      }),
+    ).toBe("Palmeiras ou empate");
+    expect(recommendationLabel("yes", "btts", "Sim", teams)).toBe("Sim");
+    expect(recommendationLabel("over", "over_under", null, teams)).toBe("OVER");
+  });
+
   it("artilheiro/assistência caem no label do DB (nome do jogador)", () => {
     expect(recommendationLabel("scorer_pedro", "anytime_scorer", "Pedro")).toBe(
       "Pedro"
@@ -51,7 +66,7 @@ describe("recommendationLabel (#539)", () => {
 describe("marketContextLabel", () => {
   it("anexa a linha quando o mercado tem uma", () => {
     expect(marketContextLabel("Over/Under gols", { line: 3.5 })).toBe(
-      "Over/Under gols 3.5"
+      "Over/Under gols 3,5"
     );
   });
 

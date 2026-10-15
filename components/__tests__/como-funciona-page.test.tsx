@@ -56,10 +56,10 @@ describe("ComoFuncionaContent", () => {
 
   it("traz o exemplo numérico 3-vias (1X2) com edge por seleção", () => {
     const html = render();
-    expect(html).toContain("casa 2.10 / empate 3.40 / fora 3.60");
+    expect(html).toContain("mandante 2.10 / empate 3.40 / visitante 3.60");
     expect(html).toContain("1.0481"); // soma das 3 cruas (overround sobre N=3)
-    expect(html).toContain("45,43%"); // implícita normalizada da casa
-    expect(html).toContain("+6,57pp"); // edge da casa (clears MIN_EDGE_PP)
+    expect(html).toContain("45,43%"); // implícita normalizada do mandante
+    expect(html).toContain("+6,57pp"); // edge do mandante (clears MIN_EDGE_PP)
     expect(html).toContain("+0.092 ≈ +9%"); // retorno esperado na odd crua
   });
 

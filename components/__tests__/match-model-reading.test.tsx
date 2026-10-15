@@ -49,7 +49,7 @@ describe("MatchModelReading (#555)", () => {
   it("probabilidades, odd justa, placares, rodapé e 'calculado há'", () => {
     const t = text(renderToStaticMarkup(<MatchModelReadingCard view={VIEW} />));
     expect(t).toContain("Leitura do modelo");
-    expect(t).toContain("Probabilidade do modelo, sem odds: compare com a odd da sua casa.");
+    expect(t).toContain("Probabilidade do modelo, sem odds: compare com a odd de mercado.");
     expect(t).toContain("Resultado (1X2)");
     expect(t).toContain("52.3%");
     expect(t).toContain("odd justa 1.91");

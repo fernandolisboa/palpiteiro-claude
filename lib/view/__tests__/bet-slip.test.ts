@@ -60,9 +60,9 @@ describe("toBetGridView", () => {
       ["match_result", "Resultado"],
       ["double_chance", "Dupla chance"],
       ["btts", "Ambas marcam"],
-      ["over_under:1.5", "Total de gols 1.5"],
-      ["over_under:2.5", "Total de gols 2.5"],
-      ["over_under:3.5", "Total de gols 3.5"],
+      ["over_under:1.5", "Total de gols 1,5"],
+      ["over_under:2.5", "Total de gols 2,5"],
+      ["over_under:3.5", "Total de gols 3,5"],
     ]);
   });
 
@@ -86,10 +86,10 @@ describe("toBetGridView", () => {
     expect(dc.selections[0].legLabel).toBe("Dupla chance: Flamengo ou empate");
     expect(btts.selections.map((s) => s.label)).toEqual(["Sim", "Não"]);
     expect(ou15.selections.map((s) => s.label)).toEqual([
-      "Mais de 1.5",
-      "Menos de 1.5",
+      "Mais de 1,5",
+      "Menos de 1,5",
     ]);
-    expect(ou15.selections[0].legLabel).toBe("Mais de 1.5 gols");
+    expect(ou15.selections[0].legLabel).toBe("Mais de 1,5 gols");
   });
 
   it("odd de referência quando existe; odd justa do modelo sempre presente", () => {
@@ -238,17 +238,17 @@ describe("toSlipEvaluationView", () => {
     const [l] = toSlipEvaluationView(evaluation, TEAMS).legs;
     expect(l.status).toBe("graded");
     expect(l.label).toBe("Vitória do Flamengo");
-    expect(l.modelProb).toBe("60.0%");
-    expect(l.fairOdd).toBe("1.67");
+    expect(l.modelProb).toBe("60,0%");
+    expect(l.fairOdd).toBe("1,67");
     expect(l.sourceLabel).toBe("sua análise deste mercado");
-    expect(l.userOdd).toBe("2.50");
-    expect(l.ev).toBe("+50.0%");
-    expect(l.breakEven).toBe("40.0%");
-    expect(l.edge).toMatch(/^\+\d+\.\dpp$/);
-    expect(l.edgeNote).toContain("contra o mercado (odd 2.50, sem a margem)");
+    expect(l.userOdd).toBe("2,50");
+    expect(l.ev).toBe("+50,0%");
+    expect(l.breakEven).toBe("40,0%");
+    expect(l.edge).toMatch(/^\+\d+,\dpp$/);
+    expect(l.edgeNote).toContain("contra o mercado (odd 2,50, sem a margem)");
     expect(l.reading).toBe(valueReading(0.5));
     expect(l.suggestedStake).toMatch(/u \(bandas\)$/);
-    expect(l.userStake).toBe("1.5u");
+    expect(l.userStake).toBe("1,5u");
   });
 
   it("perna pelo modelo sem referência: fonte do modelo e nota de sem referência", () => {
@@ -274,7 +274,7 @@ describe("toSlipEvaluationView", () => {
     ).legs;
     expect(l.status).toBe("not_covered");
     expect(l.modelProb).toBeNull();
-    expect(l.userOdd).toBe("1.90");
+    expect(l.userOdd).toBe("1,90");
     expect(l.reading).toContain("cartões nem escanteios");
   });
 
@@ -296,7 +296,7 @@ describe("toSlipEvaluationView", () => {
       "Ambas marcam: sim",
     ]);
     expect(v.combo.sourceLabel).toBe("modelo Dixon-Coles");
-    expect(v.combo.userOdd).toBe("4.00");
+    expect(v.combo.userOdd).toBe("4,00");
     expect(v.combo.userStake).toBe("2u");
   });
 
@@ -351,12 +351,12 @@ describe("historyLegSummary", () => {
         suggestedStakeUnits: "1.50",
       })
     ).toEqual([
-      "chance 52.3%",
-      "odd 2.10",
-      "retorno +9.8%",
-      "edge do modelo +4.5pp",
+      "chance 52,3%",
+      "odd 2,10",
+      "retorno +9,8%",
+      "edge do modelo +4,5pp",
       "seu stake 1u",
-      "sugerido 1.5u",
+      "sugerido 1,5u",
       "Dixon-Coles",
     ]);
   });
@@ -371,7 +371,7 @@ describe("historyLegSummary", () => {
       stakeUnits: null,
       suggestedStakeUnits: null,
     });
-    expect(parts).toEqual(["chance 60.0%", "sua análise"]);
+    expect(parts).toEqual(["chance 60,0%", "sua análise"]);
   });
 
   it("perna sem campos do modelo (antiga ou não gradeada)", () => {
@@ -385,7 +385,7 @@ describe("historyLegSummary", () => {
         stakeUnits: "2.00",
         suggestedStakeUnits: null,
       })
-    ).toEqual(["odd 1.90", "seu stake 2u"]);
+    ).toEqual(["odd 1,90", "seu stake 2u"]);
   });
 
   it("heurístico e modelo desconhecido", () => {

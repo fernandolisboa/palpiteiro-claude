@@ -6,7 +6,13 @@ import { Badge } from "@/components/ui/badge";
 import { Card } from "@/components/ui/card";
 import { EmptyState } from "@/components/empty-state";
 import { auth } from "@/auth";
-import { LEAGUE_LABEL, formatKickoffAbsolute, leagueToKey } from "@/lib/format";
+import {
+  LEAGUE_LABEL,
+  formatKickoffAbsolute,
+  formatOdd,
+  formatUnitsCompact,
+  leagueToKey,
+} from "@/lib/format";
 import {
   getUserBetSlipsPage,
   type BetSlipHistoryRow,
@@ -160,7 +166,7 @@ function SlipCard({
             seu stake na combinada
           </span>
           <span className="font-mono text-body font-medium tabular-nums tracking-tight text-foreground">
-            {Number(slip.stakeUnits).toFixed(2).replace(/\.?0+$/, "")}u
+            {formatUnitsCompact(Number(slip.stakeUnits))}
           </span>
         </div>
       )}
@@ -171,7 +177,7 @@ function SlipCard({
             odd da combinada
           </span>
           <span className="font-mono text-body font-medium tabular-nums tracking-tight text-foreground">
-            {Number(slip.comboUserOdd).toFixed(2)}
+            {formatOdd(slip.comboUserOdd)}
           </span>
         </div>
       )}

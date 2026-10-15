@@ -11,33 +11,12 @@ import {
   YAxis,
 } from "recharts";
 
+import { formatUnits, formatUnitsCompact } from "@/lib/format-number";
+import { dayTicks, formatTick } from "@/lib/view/chart-ticks";
 import type { BankrollChartPoint } from "@/lib/view/dashboard";
 
-const MONTH_ABBR_PT = [
-  "jan", "fev", "mar", "abr", "mai", "jun",
-  "jul", "ago", "set", "out", "nov", "dez",
-];
-
-// Tick do eixo X no fuso do usuário (#1). `timeZone` EXPLÍCITO torna a formatação
-// determinística: o MESMO output no SSR (server) e na hidratação (cliente) — sem
-// getDate/getMonth do runtime, que divergiria UTC↔navegador perto da meia-noite
-// (mismatch de hidratação). Undefined = legado (runtime-local) só fora das páginas.
-function formatTick(iso: string, timeZone?: string): string {
-  const d = new Date(iso);
-  if (timeZone) {
-    const parts = new Intl.DateTimeFormat("en-US", {
-      timeZone,
-      day: "2-digit",
-      month: "2-digit",
-    }).formatToParts(d);
-    const pick = (t: string) => Number(parts.find((p) => p.type === t)?.value);
-    return `${pick("day").toString().padStart(2, "0")} ${MONTH_ABBR_PT[pick("month") - 1]}`;
-  }
-  return `${d.getDate().toString().padStart(2, "0")} ${MONTH_ABBR_PT[d.getMonth()]}`;
-}
-
 function signed(n: number): string {
-  return `${n >= 0 ? "+" : ""}${n.toFixed(2)} u`;
+  return formatUnits(n, { signed: true });
 }
 
 function ChartTooltip({
@@ -79,6 +58,10 @@ export function BankrollLineChart({
           <CartesianGrid stroke="currentColor" strokeOpacity={0.14} vertical={false} />
           <XAxis
             dataKey="t"
+            // Um tick por dia (o primeiro ponto do dia): a série tem um ponto por
+            // liquidação e repetia a data (#574). Tick no fuso do usuário (#1): o
+            // `timeZone` explícito deixa SSR e hidratação iguais.
+            ticks={dayTicks(data, timeZone)}
             tickFormatter={(iso: string) => formatTick(iso, timeZone)}
             tick={{ fontSize: 11, fill: "currentColor" }}
             tickLine={false}
@@ -90,7 +73,7 @@ export function BankrollLineChart({
             tick={{ fontSize: 11, fill: "currentColor" }}
             tickLine={false}
             axisLine={false}
-            tickFormatter={(v: number) => `${v}u`}
+            tickFormatter={(v: number) => formatUnitsCompact(v)}
           />
           <ReferenceLine y={0} stroke="currentColor" strokeOpacity={0.35} />
           <Tooltip

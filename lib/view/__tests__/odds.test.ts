@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vitest";
 
-import { toNwayOddsView } from "@/lib/view/odds";
+import { toMatchRowResultOdds, toNwayOddsView } from "@/lib/view/odds";
 
 describe("toNwayOddsView — card N-vias (1X2) (#173 PR-2)", () => {
   it("recomputa probs+overround do mercado completo (Σ=1), labels do registry, ordem preservada", () => {
@@ -19,13 +19,13 @@ describe("toNwayOddsView — card N-vias (1X2) (#173 PR-2)", () => {
     );
     expect(v.marketLabel).toBe("Resultado (1X2)");
     expect(v.outcomes).toEqual([
-      { label: "Casa", odd: "2.10", pct: "44.0%" },
-      { label: "Empate", odd: "3.40", pct: "27.2%" },
-      { label: "Fora", odd: "3.20", pct: "28.9%" },
+      { label: "Casa", odd: "2,10", pct: "44,0%" },
+      { label: "Empate", odd: "3,40", pct: "27,2%" },
+      { label: "Fora", odd: "3,20", pct: "28,9%" },
     ]);
     // SCALING pin (#173 blocker): overround vem RE-DERIVADO das odds (~8.3%),
     // NUNCA do overroundPct armazenado (string em percent) nem inflado 100x.
-    expect(v.overround).toBe("8.3%");
+    expect(v.overround).toBe("8,3%");
     expect(v.bookmaker).toBe("Pinnacle");
     expect(typeof v.updatedAgo).toBe("string");
   });
@@ -45,9 +45,44 @@ describe("toNwayOddsView — card N-vias (1X2) (#173 PR-2)", () => {
     );
     // 1/1.5 domina → implícita do favorito > 55% (só certo com Number() aplicado;
     // string-math daria NaN/lixo). As 3 implícitas somam ~100% (Σ=1, partição).
-    const pcts = v.outcomes.map((o) => Number(o.pct.replace("%", "")));
+    const pcts = v.outcomes.map((o) => Number(o.pct.replace("%", "").replace(",", ".")));
     expect(pcts[0]).toBeGreaterThan(55);
     expect(pcts.reduce((a, b) => a + b, 0)).toBeCloseTo(100, 0);
     expect(v.outcomes.map((o) => o.label)).toEqual(["Casa", "Empate", "Fora"]);
+  });
+});
+
+describe("rótulos 1X2 com o nome dos times (#574)", () => {
+  const snap = {
+    bookmaker: "x",
+    capturedAt: new Date("2026-05-15T10:00:00Z"),
+    selections: [
+      { key: "home", odd: "2.670" },
+      { key: "draw", odd: "2.870" },
+      { key: "away", odd: "3.060" },
+    ],
+  };
+
+  it("toNwayOddsView com teams usa o nome de exibição", () => {
+    const v = toNwayOddsView(snap, "match_result", new Date(), {
+      home: "Palmeiras",
+      away: "Flamengo",
+    });
+    expect(v.outcomes.map((o) => o.label)).toEqual(["Palmeiras", "Empate", "Flamengo"]);
+  });
+
+  it("toMatchRowResultOdds com a sigla; sem teams fica igual a antes", () => {
+    expect(
+      toMatchRowResultOdds(snap, "match_result", { home: "PAL", away: "FLA" }).outcomes,
+    ).toEqual([
+      { label: "PAL", odd: "2,67" },
+      { label: "Empate", odd: "2,87" },
+      { label: "FLA", odd: "3,06" },
+    ]);
+    expect(toMatchRowResultOdds(snap, "match_result").outcomes.map((o) => o.label)).toEqual([
+      "Casa",
+      "Empate",
+      "Fora",
+    ]);
   });
 });
