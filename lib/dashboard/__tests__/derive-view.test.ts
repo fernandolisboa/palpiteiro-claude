@@ -138,6 +138,37 @@ describe("deriveDashboardView", () => {
     expect(tableRows.map((r) => r.id)).toEqual(["pend", "won", "lost"]);
   });
 
+  it("ordena a tabela pelo jogo (mais recente primeiro), desempate pela análise mais nova (#577)", () => {
+    const ordered = [
+      row({
+        predictionId: "old-game",
+        matchId: "m-old",
+        kickoffAt: new Date("2026-06-01T20:00:00Z"),
+        createdAt: new Date("2026-06-20T00:00:00Z"),
+      }),
+      row({
+        predictionId: "new-game-old-analysis",
+        matchId: "m-new",
+        kickoffAt: new Date("2026-06-15T20:00:00Z"),
+        createdAt: new Date("2026-06-01T00:00:00Z"),
+      }),
+      row({
+        predictionId: "new-game-new-analysis",
+        matchId: "m-new",
+        marketKey: "btts",
+        marketLabel: "Ambas marcam",
+        kickoffAt: new Date("2026-06-15T20:00:00Z"),
+        createdAt: new Date("2026-06-02T00:00:00Z"),
+      }),
+    ];
+    const { tableRows } = deriveDashboardView(ordered, parseDashboardFilters({}));
+    expect(tableRows.map((r) => r.id)).toEqual([
+      "new-game-new-analysis",
+      "new-game-old-analysis",
+      "old-game",
+    ]);
+  });
+
   it("produces a well-shaped kpis view and a settled-only series", () => {
     const { kpis, series } = deriveDashboardView(rows, parseDashboardFilters({}));
     // composition shape only — math is covered by kpis.test.ts

@@ -138,9 +138,14 @@ export function deriveDashboardView(
     kpis: toDashboardKpiView(segmented.aggregate),
     segments,
     series: computeBankrollSeries(scoped),
-    tableRows: applyTableFilters(deduped, filters).map((r) =>
-      toPredictionRowView(r, timeZone),
-    ),
+    // Tabela pelo jogo, mais recente primeiro (#577); desempate pela análise mais nova.
+    tableRows: [...applyTableFilters(deduped, filters)]
+      .sort(
+        (a, b) =>
+          b.kickoffAt.getTime() - a.kickoffAt.getTime() ||
+          b.createdAt.getTime() - a.createdAt.getTime(),
+      )
+      .map((r) => toPredictionRowView(r, timeZone)),
     availableLeagues: [...new Set(deduped.map((r) => leagueToKey(r.league)))],
     availableMarkets,
   };

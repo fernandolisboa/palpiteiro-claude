@@ -17,11 +17,14 @@ export type FilterDimension = "status" | "league" | "market";
 export function currentDashboardHref(
   filters: DashboardFilters,
   basePath = "/dashboard",
+  // Página da tabela (#577): só entra na URL quando > 1.
+  page?: number,
 ): string {
   const params = new URLSearchParams();
   if (filters.status !== "all") params.set("status", filters.status);
   if (filters.league !== "all") params.set("league", filters.league);
   if (filters.market !== "all") params.set("market", filters.market);
+  if (page !== undefined && page > 1) params.set("page", String(page));
   const qs = params.toString();
   return qs ? `${basePath}?${qs}` : basePath;
 }

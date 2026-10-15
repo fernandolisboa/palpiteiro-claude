@@ -1,7 +1,10 @@
 import { describe, expect, it } from "vitest";
 
 import type { DashboardFilters } from "@/lib/dashboard/kpis";
-import { buildDashboardHref } from "@/components/dashboard/dashboard-filters";
+import {
+  buildDashboardHref,
+  currentDashboardHref,
+} from "@/components/dashboard/dashboard-filters";
 
 const ALL: DashboardFilters = { status: "all", league: "all", market: "all" };
 
@@ -39,6 +42,23 @@ describe("buildDashboardHref", () => {
   it("returns the bare non-default basePath when everything is 'all'", () => {
     expect(buildDashboardHref(ALL, "market", "all", "/admin/users/u1")).toBe(
       "/admin/users/u1",
+    );
+  });
+});
+
+describe("currentDashboardHref com página (#577)", () => {
+  it("omite a página 1 e leva as outras", () => {
+    expect(currentDashboardHref(ALL, "/dashboard", 1)).toBe("/dashboard");
+    expect(currentDashboardHref(ALL, "/dashboard", 2)).toBe("/dashboard?page=2");
+    expect(currentDashboardHref({ ...ALL, league: "wc" }, "/dashboard", 3)).toBe(
+      "/dashboard?league=wc&page=3",
+    );
+  });
+
+  it("trocar qualquer filtro volta pra página 1", () => {
+    // buildDashboardHref não carrega a página atual.
+    expect(buildDashboardHref({ ...ALL, league: "wc" }, "status", "won")).toBe(
+      "/dashboard?status=won&league=wc",
     );
   });
 });

@@ -1,4 +1,4 @@
-import { describe, expect, it } from "vitest";
+import { afterEach, describe, expect, it, vi } from "vitest";
 
 import { computeDashboardKpis, type DashboardRow } from "@/lib/dashboard/kpis";
 import type { DashboardDetail } from "@/lib/db/queries/dashboard";
@@ -41,6 +41,10 @@ function row(overrides: Partial<DashboardRow> = {}): DashboardRow {
 }
 
 describe("toPredictionRowView", () => {
+  afterEach(() => {
+    vi.useRealTimers();
+  });
+
   it("nome curto na linha e oficial no title (#578)", () => {
     const v = toPredictionRowView(
       row({
@@ -109,6 +113,20 @@ describe("toPredictionRowView", () => {
     );
     expect(btts.rec).toBe("Sim");
     expect(btts.market).toBe("Ambas marcam");
+  });
+
+  it("coluna data mostra a data do JOGO, não a da análise (#577)", () => {
+    vi.useFakeTimers();
+    vi.setSystemTime(new Date("2026-06-10T12:00:00Z"));
+    const v = toPredictionRowView(
+      row({
+        createdAt: new Date("2026-06-01T12:00:00Z"),
+        kickoffAt: new Date("2026-06-13T19:00:00Z"),
+      }),
+      "America/Sao_Paulo",
+    );
+    // 13/06/2026 é sábado; a análise (01/06, segunda) não aparece.
+    expect(v.when).toBe("sáb, 13 jun");
   });
 
   it("artilheiro mostra o nome do jogador do DB, não a key", () => {
