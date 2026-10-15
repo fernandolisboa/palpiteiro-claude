@@ -94,7 +94,7 @@ export function OddsCard({ view, unavailable }: Props) {
                 {wide ? <span className="min-w-0 truncate">{o.label}</span> : o.label}
               </span>
               {/* 22px: outlier heroic da odd — sem degrau na escala (ADR 0029) */}
-              <span className="font-mono text-[22px] font-medium tabular-nums tracking-tight">
+              <span className="font-mono text-display-xs font-medium tabular-nums tracking-tight">
                 {o.odd}
               </span>
               <span

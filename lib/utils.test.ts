@@ -14,8 +14,10 @@ const FONT_SIZE_TOKENS = [
   "text-body",
   "text-label",
   "text-display-sm",
+  "text-display-xs",
   "text-display-md",
   "text-display-lg",
+  "text-display-xl",
 ];
 
 describe("cn — tokens custom de font-size (extendTailwindMerge, #333)", () => {

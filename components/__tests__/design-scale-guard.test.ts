@@ -64,4 +64,9 @@ describe("escala visual (ADR 0056)", () => {
     );
     expect(hits).toEqual([]);
   });
+
+  it("zero text-[Npx] e nenhum text-eyebrow: só os tokens da escala (piso de 11px)", () => {
+    const hits = scan((line) => /text-\[\d/.test(line) || /\btext-eyebrow\b/.test(line));
+    expect(hits).toEqual([]);
+  });
 });

@@ -78,8 +78,7 @@ export default async function AdminUserTrackingPage({
         <BackLink href="/admin/users" label="usuários" />
 
         <div className="flex flex-col gap-1 pb-7">
-          {/* text-[28px]: heroic display sem degrau 26→32 (outlier consciente, espelha dashboard) */}
-          <h1 className="text-[28px] font-medium leading-none tracking-tight lg:text-display-lg">
+          <h1 className="text-display-md font-medium leading-none tracking-tight lg:text-display-lg">
             Tracking
           </h1>
           <p className="text-body tracking-tight text-muted-foreground">

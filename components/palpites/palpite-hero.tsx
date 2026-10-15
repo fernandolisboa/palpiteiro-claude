@@ -296,7 +296,7 @@ function PopulatedHero({
             ("Vai dar Palmeiras / provável 2–1"), o registro D-leaning que o dono
             escolheu — não veredito + stat-row separado. */}
         <div className="flex flex-col gap-2">
-          <p className="max-w-reading text-balance text-display-lg font-medium leading-[1.08] tracking-tight text-foreground lg:text-[40px]">
+          <p className="max-w-reading text-balance text-display-lg font-medium leading-[1.08] tracking-tight text-foreground lg:text-display-xl">
             {view.verdict}
           </p>
           {settled ? (

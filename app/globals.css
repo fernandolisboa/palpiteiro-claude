@@ -75,8 +75,10 @@
   --text-body: 13px;
   --text-label: 14px;
   --text-display-sm: 18px;
+  --text-display-xs: 22px;
   --text-display-md: 26px;
   --text-display-lg: 32px;
+  --text-display-xl: 40px;
 
   /* Letter-spacing — eyebrow/label scale (the negative band keeps Tailwind's
      default `tracking-tight`; these two are net-new, non-colliding names). */

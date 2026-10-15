@@ -171,7 +171,7 @@ function LineupBody({
           <div key={side} className="flex flex-col gap-1.5">
             {i > 0 && <Separator />}
             <div className="flex items-center justify-between pt-1">
-              <span className="text-[10.5px] uppercase tracking-[0.14em] text-muted-foreground">
+              <span className="text-meta uppercase tracking-label text-muted-foreground">
                 {side === "home" ? "mandante" : "visitante"}
               </span>
               {lineup.formation && (

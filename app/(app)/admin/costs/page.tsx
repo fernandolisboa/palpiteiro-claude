@@ -172,7 +172,7 @@ function Kpi({ label, value }: { label: string; value: string }) {
         {label}
       </span>
       {/* outlier de escala: 16px não tem degrau (sem 14↔18); mantido literal, ADR 0029 §A.1 */}
-      <span className="font-mono text-[16px] tabular-nums">{value}</span>
+      <span className="font-mono text-display-sm tabular-nums">{value}</span>
     </div>
   );
 }
