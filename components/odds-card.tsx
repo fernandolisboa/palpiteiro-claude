@@ -61,7 +61,7 @@ export function OddsCard({ view, unavailable }: Props) {
           </span>
           <Badge
             variant="outline"
-            className="h-[17px] rounded-full px-2 text-eyebrow-xs text-muted-foreground"
+            className="h-[18px] rounded-full px-2 text-eyebrow-xs text-muted-foreground"
           >
             {view.marketLabel}
           </Badge>

@@ -70,8 +70,8 @@
   /* Typography scale — ADR 0029. font-size ONLY (no --text-*--line-height
      companion ⇒ line-height inherits, byte-identical to the text-[Npx] it
      replaces). Whole-px; half-pixels collapsed to the nearest step. */
-  --text-eyebrow-xs: 9px;
-  --text-eyebrow: 10px;
+  --text-eyebrow-xs: 11px;
+  --text-eyebrow: 11px;
   --text-meta: 11px;
   --text-body-sm: 12px;
   --text-body: 13px;
