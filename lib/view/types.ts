@@ -97,8 +97,10 @@ export type MatchModelLineView = {
   goals25: { label: string; pct: string };
 };
 
-// Bloco "Leitura do modelo" da página do jogo (#555). Probabilidade e odd justa (100/p)
-// por seleção, placares mais prováveis e de onde veio o λ. SEM odd da casa e sem edge:
+// Leitura da base do modelo do jogo (#555). Probabilidade e odd justa (100/p) por
+// seleção, placares mais prováveis e de onde veio o λ. Na página do jogo só `source` e
+// `jev` vão pra tela (rodapé da tabela de mercados, #576); `markets`/`topScorelines`
+// ficam sem uso ali (follow-up: enxugar o tipo). SEM odd da casa e sem edge:
 // a base não expõe valor (backtest de calibração, PR #558); o edge fica na análise.
 export type MatchModelReadingView = {
   markets: {
@@ -114,28 +116,6 @@ export type MatchModelReadingView = {
   source: string; // "Dixon-Coles" | "heurístico da tabela (liga sem ajuste) · dados limitados"
   jev: string | null; // "+ JEV" | "JEV falhou" | null
   computedAgo: string; // "há 3h" / "há menos de 1min" (formatRelativeAgoLabel do checked_at)
-};
-
-// Uma seleção do card de odds ao vivo, 100% strings prontas pra render. Forma
-// N-vias canônica (#173 PR-2): over/under expõe 2 outcomes, 1X2 expõe 3, na
-// ordem canônica do mercado (market_selections.sortOrder, resolvida no reader).
-export type OddsOutcomeView = {
-  label: string; // "Mais de 2,5" | "Casa" — outcomeLabel de tela (lib/view/markets/display)
-  odd: string; // "1.92"
-  pct: string; // "50.7%" — implícita normalizada (Σ=1) do mercado completo
-};
-
-export type OddsView = {
-  // `marketLabel` alimenta a badge do card ("Total de gols"/"Resultado (1X2)").
-  // `outcomes` é a forma N-vias: o card renderiza grid-cols-{outcomes.length}.
-  // over/under (N=2) é byte-idêntico ao binário pré-#173 (golden pina o DOM).
-  marketLabel: string;
-  outcomes: OddsOutcomeView[];
-  // Casa de onde veio a odd: só rastreio, NUNCA renderizado (o app é para apostas
-  // entre amigos e não aponta casa nenhuma).
-  bookmaker: string;
-  overround: string;
-  updatedAgo: string;
 };
 
 // Referência estruturada da aposta recomendada (multi-mercado). Labels vêm da

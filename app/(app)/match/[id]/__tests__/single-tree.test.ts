@@ -30,9 +30,7 @@ describe("app/(app)/match/[id]/page.tsx", () => {
 
   it("renderiza cada bloco assíncrono uma vez", () => {
     for (const tag of [
-      "<MatchOddsCards",
-      "<MatchModelReading ",
-      "<BetSlipSection",
+      "<MarketTableSection",
       "<SeuPalpiteSection",
       "<MatchSections ",
       "<MatchAuxiliarySections",
