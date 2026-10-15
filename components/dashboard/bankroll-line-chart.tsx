@@ -11,6 +11,7 @@ import {
   YAxis,
 } from "recharts";
 
+import { formatUnits, formatUnitsCompact } from "@/lib/format-number";
 import type { BankrollChartPoint } from "@/lib/view/dashboard";
 
 const MONTH_ABBR_PT = [
@@ -37,7 +38,7 @@ function formatTick(iso: string, timeZone?: string): string {
 }
 
 function signed(n: number): string {
-  return `${n >= 0 ? "+" : ""}${n.toFixed(2)} u`;
+  return formatUnits(n, { signed: true });
 }
 
 function ChartTooltip({
@@ -90,7 +91,7 @@ export function BankrollLineChart({
             tick={{ fontSize: 11, fill: "currentColor" }}
             tickLine={false}
             axisLine={false}
-            tickFormatter={(v: number) => `${v}u`}
+            tickFormatter={(v: number) => formatUnitsCompact(v)}
           />
           <ReferenceLine y={0} stroke="currentColor" strokeOpacity={0.35} />
           <Tooltip

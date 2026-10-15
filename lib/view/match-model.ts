@@ -1,4 +1,4 @@
-import { formatOdd, formatPct, formatRelativeAgoLabel } from "@/lib/format";
+import { formatLine, formatOdd, formatPct, formatRelativeAgoLabel } from "@/lib/format";
 import type { MatchModelSnapshot } from "@/lib/model-base/types";
 import type { DixonColesFallbackReason } from "@/lib/quant/match-model";
 import { getMarketPresentation } from "@/lib/view/markets/presentation";
@@ -100,7 +100,7 @@ export function toMatchModelReadingView(
     },
     ...([1.5, 2.5, 3.5] as const).map((line) => ({
       key: `over_under:${line}`,
-      label: `${ou.marketLabel} · ${line}`,
+      label: `${ou.marketLabel} · ${formatLine(line)}`,
       selections: (["over", "under"] as const).map((k) =>
         selection(ou.outcomeLabel(k, line), p.over_under[`${line}`][k]),
       ),

@@ -18,6 +18,7 @@ import {
   setFriendPoolScore,
   type PoolActionResult,
 } from "@/app/actions/friend-pools";
+import { formatLine } from "@/lib/format-number";
 import type { PoolBetKind } from "@/lib/pools/pool-schema";
 
 // Formulários do bolão entre amigos (#567). A regra mora nas actions e em lib/pools;
@@ -158,7 +159,7 @@ function pickOptions(kind: PoolBetKind, home: string, away: string) {
       ];
     case "over_under":
       return [1.5, 2.5, 3.5].flatMap((line) => {
-        const l = String(line).replace(".", ",");
+        const l = formatLine(line);
         return [
           { value: `over:${line}`, label: `Mais de ${l} gols` },
           { value: `under:${line}`, label: `Menos de ${l} gols` },

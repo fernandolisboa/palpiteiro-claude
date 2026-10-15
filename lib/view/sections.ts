@@ -1,4 +1,4 @@
-import { leagueToKey } from "@/lib/format";
+import { formatDecimal, leagueToKey } from "@/lib/format";
 import type {
   NormalizedFixture,
   NormalizedH2H,
@@ -111,8 +111,8 @@ export function toH2HView(
     counted === 0
       ? "sem histórico recente"
       : classify === null
-        ? `média ${avgGoals.toFixed(1)} gols`
-        : `over ${Math.round((overCount / counted) * 100)}% · média ${avgGoals.toFixed(1)} gols`;
+        ? `média ${formatDecimal(avgGoals, 1)} gols`
+        : `over ${Math.round((overCount / counted) * 100)}% · média ${formatDecimal(avgGoals, 1)} gols`;
   return { rows, summary };
 }
 

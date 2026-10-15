@@ -2,6 +2,7 @@ import type { PredictionJudgments } from "@/lib/ai/engine/types";
 import { computeKellyStakeUnits } from "@/lib/ai/staking";
 import type { PredictionWithAiCall } from "@/lib/db/queries/predictions";
 import {
+  EV_ZERO_LABEL,
   formatAnalysisEngine,
   formatCostUsd,
   formatEdge,
@@ -378,20 +379,21 @@ export function toAnalysisView(
     // Aviso comparado na precisão de EXIBIÇÃO (formatOdd, 2 casas): o banco
     // guarda 3 casas, e uma diferença que some no arredondamento renderizaria
     // dois números iguais declarados desiguais — a contradição que o aviso
-    // existe pra evitar.
+    // existe pra evitar. Compara em centésimos, sem reparsear a string
+    // formatada (que sai com vírgula, #574).
     const minOddAboveOddAtRec =
       minOddNum !== null &&
       oddAtRecNum !== null &&
-      Number(formatOdd(minOddNum)) > Number(formatOdd(oddAtRecNum));
+      Math.round(minOddNum * 100) > Math.round(oddAtRecNum * 100);
     if (minOddAboveOddAtRec) {
       evLegend = `a odd registrada na análise (${formatOdd(oddAtRecNum)}) estava abaixo da mínima sugerida (${minOddLabel}) — só vale a pena se a odd subir para ≥ ${minOddLabel}`;
     } else if (evPerUnit !== null && evPerUnit <= 0) {
       evLegend = `na odd registrada na análise, o retorno esperado é negativo — só vale a pena com odd ≥ ${minOddLabel}`;
     } else if (evPerUnit !== null) {
       // evPerUnit > 0 aqui; tom positivo só se o sinal sobrevive ao
-      // arredondamento de exibição — "0.0%" verde afirmaria direção que o
+      // arredondamento de exibição — "0,0%" verde afirmaria direção que o
       // próprio número não mostra.
-      if (formatEvPct(evPerUnit) !== "0.0%") expectedReturnTone = "positive";
+      if (formatEvPct(evPerUnit) !== EV_ZERO_LABEL) expectedReturnTone = "positive";
       evLegend = `ganho médio por aposta, no longo prazo, se a estimativa de ${formatPct(prediction.confidencePct)} do modelo estiver certa`;
     }
     // evPerUnit null (histórica degradada): retorno é "—", nenhuma legenda —

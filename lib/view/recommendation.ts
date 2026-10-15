@@ -1,3 +1,4 @@
+import { formatLine } from "@/lib/format-number";
 import { findMarketPresentation } from "@/lib/view/markets/presentation";
 import type { Recommendation } from "@/lib/view/types";
 
@@ -35,11 +36,11 @@ export function recommendationLabel(
 
 /**
  * Contexto do mercado ao lado da recomendação ("Ambas marcam", "Over/Under gols
- * 3.5"): sem ele, "Sim" ou "OVER" sozinhos não dizem qual aposta foi.
+ * 3,5"): sem ele, "Sim" ou "OVER" sozinhos não dizem qual aposta foi.
  */
 export function marketContextLabel(
   marketLabel: string,
   marketParams: { line: number } | null
 ): string {
-  return marketParams ? `${marketLabel} ${marketParams.line}` : marketLabel;
+  return marketParams ? `${marketLabel} ${formatLine(marketParams.line)}` : marketLabel;
 }

@@ -1,3 +1,5 @@
+import { formatLine } from "@/lib/format-number";
+
 // Rótulos PUROS das pernas de aposta do usuário (ADR 0036): a aposta em texto e o
 // histórico /apostas. Sem DB/IO — importável de qualquer lado.
 
@@ -12,6 +14,8 @@ export function exactScoreLabel(home: number, away: number): string {
 // de time). Fase 2: todos os kinds.
 const sideLabel = (s: string) => (s === "home" ? "Mandante" : "Visitante");
 const overUnder = (s: string) => (s === "over" ? "Mais" : "Menos");
+const lineOf = (line: unknown) =>
+  typeof line === "number" || typeof line === "string" ? formatLine(line) : String(line);
 
 export function betLegLabel(
   kind: string,
@@ -31,9 +35,9 @@ export function betLegLabel(
         ? "Nenhum time marca"
         : `${sideLabel(String(params.firstToScore))} marca primeiro`;
     case "over_under":
-      return `${overUnder(String(params.selection))} de ${params.line} gols`;
+      return `${overUnder(String(params.selection))} de ${lineOf(params.line)} gols`;
     case "first_half_over_under":
-      return `1º tempo: ${overUnder(String(params.selection))} de ${params.line} gols`;
+      return `1º tempo: ${overUnder(String(params.selection))} de ${lineOf(params.line)} gols`;
     case "match_result":
       return params.selection === "home"
         ? "Vitória do mandante"
@@ -51,9 +55,9 @@ export function betLegLabel(
           ? "Mandante ou visitante"
           : "Empate ou visitante";
     case "cards":
-      return `${overUnder(String(params.selection))} de ${params.line} cartões`;
+      return `${overUnder(String(params.selection))} de ${lineOf(params.line)} cartões`;
     case "corners":
-      return `${overUnder(String(params.selection))} de ${params.line} escanteios`;
+      return `${overUnder(String(params.selection))} de ${lineOf(params.line)} escanteios`;
     default:
       return kind;
   }

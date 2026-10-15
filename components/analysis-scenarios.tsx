@@ -34,8 +34,9 @@ type Props = {
 const MAX_COLUMNS = 5;
 
 function parsePct(value: string): number {
-  // "58%" → 58; "—" / não-numérico → -Infinity (vai pro fim na ordenação desc).
-  const n = Number.parseFloat(value);
+  // "58,5%" → 58.5 (vírgula decimal, #574); "—" / não-numérico → -Infinity (vai
+  // pro fim na ordenação desc).
+  const n = Number.parseFloat(value.replace(",", "."));
   return Number.isFinite(n) ? n : Number.NEGATIVE_INFINITY;
 }
 
