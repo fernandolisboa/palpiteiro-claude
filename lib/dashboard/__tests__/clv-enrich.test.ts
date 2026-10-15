@@ -37,6 +37,7 @@ function row(o: Partial<DashboardRow> = {}): DashboardRow {
     impliedProbPct: null,
     closingOdd: null,
     closingOverroundPct: null,
+    isLive: false,
     ...o,
   };
 }

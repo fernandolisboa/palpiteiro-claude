@@ -53,6 +53,7 @@ function row(over: Partial<DashboardRow>): DashboardRow {
     impliedProbPct: null,
     closingOdd: null,
     closingOverroundPct: null,
+    isLive: false,
     ...over,
   };
 }

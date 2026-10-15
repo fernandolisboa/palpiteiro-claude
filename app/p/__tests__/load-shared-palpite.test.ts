@@ -49,6 +49,8 @@ function makeSet(over: Partial<DbPalpiteSet> = {}): PalpiteSetWithLines {
       promptVersion: "leak-prompt",
       headline: HEADLINE,
       sharedAt: new Date(),
+      isLive: false,
+      liveState: null,
       createdAt: new Date(),
       ...over,
     },

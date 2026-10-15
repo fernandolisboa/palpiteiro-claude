@@ -29,7 +29,7 @@ const FAKE_ENUM = {
 const FAKE_FLAGS = [...ADMIN_FLAGS, FAKE_ENUM] as const satisfies readonly AdminFlagDef[];
 
 describe("ADMIN_FLAGS (registry, #514)", () => {
-  it("tem as 8 flags boolean + o motor de análise (enum), sem key repetida", () => {
+  it("tem as 10 flags boolean + o motor de análise (enum), sem key repetida", () => {
     const keys = ADMIN_FLAGS.map((f) => f.key);
     expect(keys).toEqual([
       "enableOverUnderExtraLines",
@@ -41,6 +41,7 @@ describe("ADMIN_FLAGS (registry, #514)", () => {
       "enableParallelFanOut",
       "enableMatchModelJev",
       "enableUserContext",
+      "enableLiveMode",
       "analysisEngine",
     ]);
     expect(new Set(keys).size).toBe(keys.length);
@@ -64,8 +65,16 @@ describe("ADMIN_FLAGS (registry, #514)", () => {
       enableParallelFanOut: true,
       enableMatchModelJev: true,
       enableUserContext: true,
+      enableLiveMode: true,
       analysisEngine: "llm",
     });
+  });
+
+  it("modo ao vivo (#580): ligado por padrão, custo só de API-Football", () => {
+    const def = getAdminFlagDef("enableLiveMode");
+    expect(def.default).toBe(true);
+    expect(def.costNote).toContain("1 chamada de API-Football por minuto por jogo aberto");
+    expect(def.costNote).toContain("nenhuma da The Odds API");
   });
 
   it("pré-previsão com JEV (#555): deixa claro que não chama Claude nem a The Odds API", () => {
@@ -102,6 +111,7 @@ describe("ADMIN_FLAGS (registry, #514)", () => {
       enableParallelFanOut: boolean;
       enableMatchModelJev: boolean;
       enableUserContext: boolean;
+      enableLiveMode: boolean;
       analysisEngine: "llm" | "code_jev";
     }>();
   });

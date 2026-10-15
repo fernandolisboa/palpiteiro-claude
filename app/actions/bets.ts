@@ -13,7 +13,7 @@ import { checkBetParseRateLimit } from "@/lib/rate-limit";
 import { deriveBetLegSettleable } from "@/lib/settlement/rules/user-bet-dispatch";
 import { betLegLabel, SETTLE_BADGE_PT_BR } from "@/lib/view/free-bet";
 
-import { notAnalyzableMessage } from "./not-analyzable";
+import { capabilityGateMessage } from "./not-analyzable";
 
 // "Digite sua aposta" (ADR 0036): parseBet lê o texto (1 chamada LLM, validada por Zod)
 // e devolve pernas tipadas que PREENCHEM a lista do cupom (#556). Nada é registrado
@@ -81,7 +81,7 @@ export async function parseBet(
   if (!match) {
     return { ok: false, error: "Jogo não encontrado." };
   }
-  const notAnalyzable = notAnalyzableMessage(match.status, match.kickoffAt);
+  const notAnalyzable = capabilityGateMessage("registerBets", match);
   if (notAnalyzable) {
     return { ok: false, error: notAnalyzable, kind: "nao-analisavel" };
   }

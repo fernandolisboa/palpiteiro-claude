@@ -111,6 +111,7 @@ async function insertPrediction(values: {
   recommendation: string;
   createdAt: Date;
   userId?: string;
+  isLive?: boolean;
 }): Promise<string> {
   const [p] = await realDb
     .insert(schema.predictions)
@@ -126,6 +127,8 @@ async function insertPrediction(values: {
       keyFactors: ["a"],
       modelVersion: "claude-opus-4-8",
       promptVersion: "v1",
+      isLive: values.isLive ?? false,
+      liveState: values.isLive ? { v: 1 } : null,
       createdAt: values.createdAt,
     })
     .returning({ id: schema.predictions.id });
@@ -207,6 +210,22 @@ describe("getRecentPredictedMatchesByUser (ADR 0058)", () => {
     const rows = await getRecentPredictedMatchesByUser(ids.userId, 5);
     expect(rows.map((r) => [r.matchId, r.recommendation])).toEqual([
       [ids.matchIds[0], "home"],
+    ]);
+  });
+
+  it("traz isLive para o selo, sem filtrar as leituras ao vivo (ADR 0060)", async () => {
+    await insertPrediction({ matchIndex: 2, marketId: ids.mrMarketId, recommendation: "home", createdAt: at(1) });
+    await insertPrediction({
+      matchIndex: 2,
+      marketId: ids.mrMarketId,
+      recommendation: "pass",
+      createdAt: at(2),
+      isLive: true,
+    });
+    const rows = await getRecentPredictedMatchesByUser(ids.userId, 5);
+    expect(rows.map((r) => [r.recommendation, r.isLive])).toEqual([
+      ["pass", true],
+      ["home", false],
     ]);
   });
 

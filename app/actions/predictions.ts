@@ -4,7 +4,10 @@ import { revalidatePath } from "next/cache";
 import { after } from "next/server";
 import { z } from "zod";
 
-import { notAnalyzableMessage } from "./not-analyzable";
+import {
+  capabilityBlockedMessage,
+  capabilityGateMessage,
+} from "./not-analyzable";
 import { auth } from "@/auth";
 import {
   MAX_ADDITIONAL_FETCHES,
@@ -68,6 +71,7 @@ import { leagueToKey } from "@/lib/format";
 import type { SupportedLeague } from "@/lib/providers/sports-data/leagues";
 import { toAnalysisView } from "@/lib/view/analysis";
 import { teamToTeam } from "@/lib/view/team";
+import { matchUnavailableReason } from "@/lib/view/match-availability";
 import { ExactScoreParamsSchema } from "@/lib/ai/palpites/cartridges/cartridge";
 import { toBestBetView } from "@/lib/view/best-bet";
 import {
@@ -136,10 +140,10 @@ function friendlyMessage(err: PredictError, ctx: MessageContext = {}): string {
       typeof err.context.kickoffMs === "number"
         ? new Date(err.context.kickoffMs)
         : undefined;
-    return (
-      notAnalyzableMessage(status, kickoffAt) ??
-      "Este jogo já foi encerrado ou cancelado."
-    );
+    const reason = matchUnavailableReason(status, kickoffAt);
+    return reason !== null
+      ? capabilityBlockedMessage("analyze", reason)
+      : "Este jogo já foi encerrado ou cancelado.";
   }
   if (msg.includes("no matching odds")) {
     return "Sem odds publicadas para este jogo no momento.";
@@ -266,7 +270,7 @@ export async function analyzeMatch(
   // evento gastar 1 crédito (additional) só pra o predict lançar depois.
   // Curto-circuita aqui (status já em escopo, read grátis), market-agnóstico —
   // espelha o gate de predict.ts.
-  const notAnalyzable = notAnalyzableMessage(match.status, match.kickoffAt);
+  const notAnalyzable = capabilityGateMessage("analyzeMarkets", match);
   if (notAnalyzable) {
     return { ok: false, error: notAnalyzable };
   }
@@ -597,7 +601,7 @@ export async function analyzeBestBet(
   if (!match) {
     return { ok: false, error: "Jogo não encontrado." };
   }
-  const notAnalyzable = notAnalyzableMessage(match.status, match.kickoffAt);
+  const notAnalyzable = capabilityGateMessage("analyze", match);
   if (notAnalyzable) {
     return { ok: false, error: notAnalyzable };
   }
@@ -958,7 +962,7 @@ export async function generatePalpiteFromAnalyses(
   if (!match) {
     return { ok: false, error: "Jogo não encontrado." };
   }
-  const notAnalyzable = notAnalyzableMessage(match.status, match.kickoffAt);
+  const notAnalyzable = capabilityGateMessage("analyze", match);
   if (notAnalyzable) {
     return { ok: false, error: notAnalyzable };
   }
@@ -1079,7 +1083,7 @@ export async function analyzeMarkets(
   if (!match) {
     return { ok: false, error: "Jogo não encontrado." };
   }
-  const notAnalyzable = notAnalyzableMessage(match.status, match.kickoffAt);
+  const notAnalyzable = capabilityGateMessage("analyzeMarkets", match);
   if (notAnalyzable) {
     return { ok: false, error: notAnalyzable };
   }

@@ -125,6 +125,8 @@ function setWith(
       promptVersion: "palpites_v2",
       headline: over.headline === undefined ? headline : over.headline,
       sharedAt: null,
+      isLive: false,
+      liveState: null,
       createdAt: new Date("2026-06-01T12:00:00Z"),
     },
     aiCall: null,

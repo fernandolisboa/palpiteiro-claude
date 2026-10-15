@@ -36,6 +36,7 @@ function row(overrides: Partial<DashboardRow> = {}): DashboardRow {
     impliedProbPct: null,
     closingOdd: null,
     closingOverroundPct: null,
+    isLive: false,
     ...overrides,
   };
 }
@@ -298,6 +299,8 @@ function makeDetail(overrides: Partial<DashboardDetail> = {}): DashboardDetail {
     judgments: null,
     modelVersion: "claude-sonnet-4-5-20250929",
     promptVersion: "over_under_v1.2",
+    isLive: false,
+    liveState: null,
     createdAt: new Date("2026-06-08T01:00:00Z"),
   };
   const aiCall: DashboardDetail["aiCall"] = {

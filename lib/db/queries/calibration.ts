@@ -36,6 +36,9 @@ import { ResultDataSchema } from "@/lib/settlement/schemas";
 // 1, lost → 0. push/half (linha inteira de over/under empatada) não é binário — a
 // predição sai inteira. Row corrompida (odd ≤ 1, resultData inválido, params que a
 // regra rejeita) é pulada, nunca derruba a página.
+//
+// Leituras AO VIVO (#580, ADR 0060) ficam FORA, na query: são `pass` (que entra de
+// propósito) feitas com o placar à vista, e sem odd (`odd` null no PSO).
 
 export type MarketCalibrationRow = {
   marketKey: CalibratedMarketKey;
@@ -107,6 +110,7 @@ export async function getMarketCalibrationRows(
   // rótulo sem sentido). Pass entra; void de aposta sai.
   const settledFilter = and(
     inArray(predictions.marketId, [...marketById.keys()]),
+    eq(predictions.isLive, false),
     or(
       ne(predictionOutcomes.result, "void"),
       eq(predictions.recommendation, "pass"),
@@ -154,12 +158,14 @@ export async function getMarketCalibrationRows(
   // predictionId → selectionId → { odd, modelPct }
   const byPred = new Map<
     string,
-    Map<string, { odd: number; modelPct: number | null }>
+    Map<string, { odd: number | null; modelPct: number | null }>
   >();
   for (const row of pso) {
     const slot = byPred.get(row.predictionId) ?? new Map();
     slot.set(row.selectionId, {
-      odd: Number(row.odd),
+      // null = seleção sem odd congelada (leitura ao vivo): sem benchmark de mercado.
+      // Nunca `Number(null)` (= 0), que só cairia fora por acaso no catch de odd ≤ 1.
+      odd: row.odd === null ? null : Number(row.odd),
       modelPct: row.modelProbPct === null ? null : Number(row.modelProbPct),
     });
     byPred.set(row.predictionId, slot);
@@ -191,7 +197,7 @@ function buildPairs(
     ruleKey: string;
     selections: { id: string; key: string }[];
   },
-  slot: Map<string, { odd: number; modelPct: number | null }>,
+  slot: Map<string, { odd: number | null; modelPct: number | null }>,
   marketParams: unknown,
   rawResultData: unknown,
 ): { model: CalibrationPair[]; market: CalibrationPair[] } | null {
@@ -204,7 +210,8 @@ function buildPairs(
   const odds: number[] = [];
   for (const sel of market.selections) {
     const odd = slot.get(sel.id)?.odd;
-    if (odd === undefined) return null;
+    // Sem a odd de alguma seleção não há de-vig do mercado completo: a predição sai.
+    if (odd === undefined || odd === null) return null;
     odds.push(odd);
   }
   let probs: number[];

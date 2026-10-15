@@ -145,6 +145,16 @@ export const ADMIN_FLAGS = [
       "Cada uso: 1 chamada Haiku (leitura do motivo) e 1 do modelo de análise do usuário (narração, até 2.000 tokens), contando 1 do limite diário de palpites. Sem The Odds API; API-Football só para o que o motivo cita (desfalques, últimos jogos, tabela), até 4 chamadas e em geral do cache.",
   },
   {
+    key: "enableLiveMode",
+    kind: "boolean",
+    label: "Modo ao vivo",
+    description:
+      "Depois do apito, a página do jogo busca placar, minuto e expulsões e libera a análise ao vivo, o Seu palpite, o registro de apostas e o bolão (que fecha aos 15 minutos de jogo). Desligada, tudo fecha no apito, como antes.",
+    default: true,
+    costNote:
+      "Até 1 chamada de API-Football por minuto por jogo aberto; nenhuma da The Odds API.",
+  },
+  {
     key: "analysisEngine",
     kind: "enum",
     label: "Motor de análise",
