@@ -104,6 +104,9 @@ describe("deriveCode", () => {
     ["Universidad Catolica", "UCA"],
     ["Sporting Cristal", "SCR"],
     ["Peñarol", "PEN"],
+    ["1899 Hoffenheim", "HOF"],
+    ["1. FC Köln", "KOL"],
+    ["1.FC Köln", "KOL"],
   ])("%s → %s", (name, code) => {
     expect(deriveCode(name)).toBe(code);
   });

@@ -370,12 +370,16 @@ export function deriveDisplayName(canonicalName: string): string {
 
 // Tokens significativos para a sigla: sem acento, maiúsculos, sem afixo/partícula.
 function codeTokens(canonicalName: string): string[] {
-  return foldUpper(canonicalName)
+  const tokens = foldUpper(canonicalName)
+    .replace(/(\d)\.(?=\S)/g, "$1 ")
     .split(/[\s\-/&]+/)
     .map((t) => t.replace(/[^A-Z0-9]/g, ""))
     .filter(
       (t) => t.length > 0 && !AFFIX_TOKENS.has(t) && !PARTICLE_TOKENS.has(t),
     );
+  // Número puro (1899 Hoffenheim, 1. FC Köln) não vira sigla quando sobra palavra.
+  const words = tokens.filter((t) => !/^\d+$/.test(t));
+  return words.length > 0 ? words : tokens;
 }
 
 function padCode(candidate: string, fill: string): string {

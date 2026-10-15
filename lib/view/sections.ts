@@ -15,6 +15,7 @@ import type {
   H2HViewRow,
   InjuriesView,
   LineupView,
+  LeagueKey,
   StandingsView,
   StandingsViewRow,
 } from "@/lib/view/types";
@@ -77,6 +78,29 @@ const overUnderClassify = (homeGoals: number, awayGoals: number): string =>
 // neutras ("") e summary só com a média (sem "mais de 2,5 em X%"). O #170 passa
 // `getMarketPresentation(marketKey).classifyH2H`; o caller atual (match-sections)
 // não muda e cai no default over/under.
+/**
+ * Troca o nome canônico pelo nome curto de exibição em Partidas recentes e H2H
+ * (#578). toFormView/toH2HView continuam canônicos porque o W/D/L e o check de
+ * afirmações do Seu palpite comparam pelo nome do banco; isto é só a borda da tela.
+ */
+export function withDisplayTeamNames(
+  form: FormView,
+  h2h: H2HView,
+  league: LeagueKey,
+): { form: FormView; h2h: H2HView } {
+  const display = (team: string) => displayTeamName(team, league);
+  return {
+    form: {
+      home: { ...form.home, name: display(form.home.name) },
+      away: { ...form.away, name: display(form.away.name) },
+    },
+    h2h: {
+      ...h2h,
+      rows: h2h.rows.map((r) => ({ ...r, h: display(r.h), a: display(r.a) })),
+    },
+  };
+}
+
 export function toH2HView(
   h2h: NormalizedH2H[],
   limit = 5,
