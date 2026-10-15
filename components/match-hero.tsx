@@ -68,7 +68,7 @@ export function MatchHero({
   homeHref,
   awayHref,
 }: Props) {
-  const { home, away, league, when, countdown, venue } = view;
+  const { home, away, league, when, countdown, venue, liveScore } = view;
   return (
     <div className="px-5 pt-5 pb-5 lg:px-0 lg:pt-0 lg:pb-0">
       <div className="flex items-center justify-between pb-4 lg:justify-start lg:gap-3 lg:pb-5">
@@ -98,16 +98,28 @@ export function MatchHero({
               <span className="px-1.5 text-muted-foreground lg:px-2">–</span>
               {score.away}
             </span>
+          ) : liveScore ? (
+            // Placar PARCIAL de jogo ao vivo (#574): nunca vira `score` (que é o
+            // final e alimenta o recibo/liquidação).
+            <span className="font-mono text-display-md font-medium leading-none tabular-nums tracking-tight lg:text-[30px]">
+              {liveScore.home}
+              <span className="px-1.5 text-muted-foreground lg:px-2">–</span>
+              {liveScore.away}
+            </span>
           ) : (
             <span className="text-display-sm font-medium text-muted-foreground tracking-tight lg:text-[22px]">
               vs
             </span>
           )}
-          {score && (
+          {score ? (
             <span className="font-mono text-eyebrow-xs uppercase tracking-label text-muted-fg-2">
               encerrado
             </span>
-          )}
+          ) : liveScore ? (
+            <span className="text-center font-mono text-eyebrow-xs text-muted-fg-2">
+              {liveScore.caption}
+            </span>
+          ) : null}
           {countdown && (
             <span className="pt-1 font-mono text-meta tabular-nums text-accent-fg lg:hidden">
               {countdown}

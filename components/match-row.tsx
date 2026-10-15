@@ -102,10 +102,23 @@ export function MatchRow({ m, last, listHref, backHref, tourTarget }: Props) {
         <div className="flex shrink-0 items-center gap-2">
           {isLive ? (
             // Ao vivo preempta odds/placar: visualmente distinto de agendado
-            // (kickoff+odds) e encerrado (placar+encerrado), e nunca "apostável".
-            <span className="font-mono text-eyebrow uppercase tracking-label text-warn-fg">
-              ao vivo
-            </span>
+            // (kickoff+odds) e encerrado (placar+encerrado), e nunca "apostável". O
+            // selo AO VIVO fica só no topo (#574): aqui vai o placar parcial, quando
+            // a sincronização já trouxe um, ou "—".
+            m.liveScore ? (
+              <div className="flex flex-col items-end gap-0.5">
+                <span className="font-mono text-label font-medium tabular-nums">
+                  {m.liveScore.home}
+                  <span className="px-1 text-muted-foreground">–</span>
+                  {m.liveScore.away}
+                </span>
+                <span className="font-mono text-eyebrow-xs text-muted-fg-2">
+                  {m.liveScore.caption}
+                </span>
+              </div>
+            ) : (
+              <span className="font-mono text-eyebrow text-muted-fg-2">—</span>
+            )
           ) : isFinished && hasScore ? (
             <div className="flex flex-col items-end gap-0.5">
               <span className="font-mono text-label font-medium tabular-nums">

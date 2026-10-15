@@ -184,6 +184,7 @@ export default async function JogosPage({ searchParams }: PageProps) {
         status: m.status,
         homeScore: m.homeScore,
         awayScore: m.awayScore,
+        updatedAt: m.updatedAt,
       },
       odds: snapshot
         ? {

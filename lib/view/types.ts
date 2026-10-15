@@ -65,6 +65,11 @@ export type MatchRowView = {
   // um 0–0.
   homeScore: number | null;
   awayScore: number | null;
+  // Placar PARCIAL de um jogo `live` (#574 linha 6), separado do placar final: o
+  // final alimenta recibo/liquidação, e usar o parcial ali o liquidaria como final.
+  // `caption` = "parcial · atualizado há 2h" (o placar vem da última sincronização,
+  // que pode ter horas; placar ao vivo de verdade é o #580). Chave ausente sem placar.
+  liveScore?: { home: number; away: number; caption: string };
   venue?: string;
   countdown?: string;
   // Linha "Modelo · Casa 52% · Under 2.5 55%" do /jogos (#555, ADR 0052): só em jogo

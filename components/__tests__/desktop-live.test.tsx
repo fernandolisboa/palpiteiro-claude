@@ -70,13 +70,36 @@ describe("UpcomingMatchesDesktop — em andamento (#385)", () => {
       kickoffAt: new Date(NOW.getTime() - 20 * 60 * 1000),
     });
     const html = renderToStaticMarkup(<UpcomingMatchesDesktop matches={[m]} />);
-    // (a) indicador ao vivo presente (célula de odds + célula de status)
+    // (a) indicador ao vivo presente UMA vez (só a célula de status, #574); a
+    // célula de odds mostra "—" quando ainda não há placar parcial
     expect(html).toContain("animate-pulse");
-    expect(html.toLowerCase()).toContain("ao vivo");
+    expect(html.toLowerCase().split("ao vivo")).toHaveLength(2);
     // (b) odds pré-jogo NÃO renderizadas pra a linha ao vivo
     expect(html).not.toContain("1,85");
     expect(html).not.toContain("1,95");
     // (c) chevron mantido → linha segue clicável
     expect(html).toContain("lucide-chevron-right");
+  });
+});
+
+describe("UpcomingMatchesDesktop — placar parcial (#574)", () => {
+  it("live com placar: placar e legenda 'parcial' na célula de odds, um selo só", () => {
+    const m = toMatchRowView({
+      match: makeMatch({
+        status: "live",
+        kickoffAt: new Date(NOW.getTime() - 50 * 60 * 1000),
+        homeScore: 1,
+        awayScore: 0,
+        updatedAt: new Date(NOW.getTime() - 2 * 60 * 60 * 1000),
+      }),
+      odds: null,
+      hasPrediction: false,
+      now: NOW,
+    });
+    const html = renderToStaticMarkup(<UpcomingMatchesDesktop matches={[m]} />);
+    expect(html).toContain("parcial · atualizado há 2h");
+    expect(html).toMatch(/1<span[^>]*>–<\/span>0/);
+    expect(html.toLowerCase().split("ao vivo")).toHaveLength(2);
+    expect(html).not.toContain("encerrado");
   });
 });

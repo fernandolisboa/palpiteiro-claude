@@ -82,12 +82,21 @@ export function UpcomingMatchesDesktop({
           </div>
           <div className="flex flex-col items-end gap-1 font-mono text-body tabular-nums">
             {m.status === "live" || m.isInProgress ? (
-              // Em andamento (#385): "ao vivo" em vez de odds pré-jogo (consistente
-              // com o mobile + não-apostável). Mesmo gate OR. Chevron mantido abaixo
-              // (live não é finished/postponed/cancelled) → linha segue clicável.
-              <span className="text-eyebrow uppercase tracking-label text-warn-fg">
-                ao vivo
-              </span>
+              // Em andamento (#385): sem odds pré-jogo (não-apostável). Mesmo gate OR.
+              // O selo AO VIVO fica só na célula de status (#574): aqui vai o placar
+              // parcial com a legenda, ou "—". Chevron mantido abaixo → clicável.
+              m.liveScore ? (
+                <>
+                  <span className="text-label font-medium">
+                    {m.liveScore.home}
+                    <span className="px-1 text-muted-foreground">–</span>
+                    {m.liveScore.away}
+                  </span>
+                  <span className="text-eyebrow-xs text-muted-fg-2">{m.liveScore.caption}</span>
+                </>
+              ) : (
+                <span className="text-eyebrow text-muted-fg-2">—</span>
+              )
             ) : m.status === "finished" &&
               m.homeScore !== null &&
               m.awayScore !== null ? (

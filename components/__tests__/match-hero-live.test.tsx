@@ -41,3 +41,37 @@ describe("MatchHero — pill ao vivo (#385)", () => {
     expect(html).not.toContain("AO VIVO");
   });
 });
+
+describe("MatchHero — placar parcial (#574)", () => {
+  it("com liveScore e sem placar final: mostra o parcial e a legenda, sem 'encerrado'", () => {
+    const html = renderToStaticMarkup(
+      <MatchHero
+        view={{
+          ...heroView(),
+          status: "live",
+          liveScore: { home: 2, away: 1, caption: "parcial · atualizado há 2h" },
+        }}
+        status="live"
+      />,
+    );
+    expect(html).toMatch(/2<span[^>]*>–<\/span>1/);
+    expect(html).toContain("parcial · atualizado há 2h");
+    expect(html).not.toContain("encerrado");
+    expect(html).not.toContain(">vs<");
+  });
+
+  it("placar final tem prioridade e mantém 'encerrado'", () => {
+    const html = renderToStaticMarkup(
+      <MatchHero
+        view={{
+          ...heroView(),
+          liveScore: { home: 2, away: 1, caption: "parcial" },
+        }}
+        status="finished"
+        score={{ home: 3, away: 1 }}
+      />,
+    );
+    expect(html).toContain("encerrado");
+    expect(html).not.toContain("parcial");
+  });
+});

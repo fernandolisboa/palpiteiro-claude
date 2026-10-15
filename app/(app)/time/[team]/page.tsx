@@ -66,6 +66,7 @@ export default async function TeamHistoryPage({ params }: PageProps) {
         status: m.status,
         homeScore: m.homeScore,
         awayScore: m.awayScore,
+        updatedAt: m.updatedAt,
       },
       odds: null,
       hasPrediction: false,

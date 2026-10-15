@@ -2,6 +2,7 @@ import {
   formatCountdown,
   formatKickoffAbsolute,
   formatKickoffRelative,
+  formatRelativeAgoLabel,
   leagueToKey,
 } from "@/lib/format";
 // Bound compartilhado da janela "em andamento" — DEVE casar com o bound da query
@@ -36,6 +37,10 @@ export type MatchInput = {
   homeScore: number | null;
   awayScore: number | null;
   venue?: string;
+  // Última gravação da linha (matches.updatedAt, regravado a cada sincronização):
+  // data do placar parcial de um jogo `live` (#574). Opcional — sem ela a legenda
+  // fica só "parcial".
+  updatedAt?: Date;
 };
 
 export type ToMatchRowArgs = {
@@ -110,6 +115,21 @@ export function toMatchRowView({
     // demais ficam null (a badge "ao vivo" é só indicador, sem placar fabricado).
     homeScore: match.status === "finished" ? match.homeScore : null,
     awayScore: match.status === "finished" ? match.awayScore : null,
+    // Placar parcial só em `live` com os dois gols (#574): chave ausente no resto,
+    // como `model`, pra não mexer nos goldens.
+    ...(match.status === "live" &&
+    match.homeScore !== null &&
+    match.awayScore !== null
+      ? {
+          liveScore: {
+            home: match.homeScore,
+            away: match.awayScore,
+            caption: match.updatedAt
+              ? `parcial · atualizado ${formatRelativeAgoLabel(match.updatedAt, now)}`
+              : "parcial",
+          },
+        }
+      : {}),
     venue: match.venue,
     countdown: formatCountdown(match.kickoffAt, now, timeZone),
     // Chave ausente (não `model: undefined`) sem base ou com base velha (mesmo limite
