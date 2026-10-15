@@ -70,4 +70,27 @@ describe("resolveSlipModel (#560)", () => {
       }),
     );
   });
+
+  it("asOf (#591): lê a base em kickoff − 1 ms", async () => {
+    const kickoff = new Date("2026-10-15T22:00:00.000Z");
+    const fromBase = model("dixon_coles", 1.7);
+    getMatchModelScoreline.mockResolvedValue(fromBase);
+
+    await expect(resolveSlipModel(match, { asOf: kickoff })).resolves.toBe(fromBase);
+    expect(getMatchModelScoreline).toHaveBeenCalledWith(
+      match.id,
+      new Date(kickoff.getTime() - 1),
+    );
+  });
+
+  it("asOf sem base cai no mesmo cálculo na hora", async () => {
+    const live = model("heuristic", 1.4);
+    getMatchModelScoreline.mockResolvedValue(null);
+    getStandings.mockResolvedValue(undefined);
+    getModelScoreline.mockResolvedValue(live);
+
+    await expect(
+      resolveSlipModel(match, { asOf: new Date("2026-10-15T22:00:00.000Z") }),
+    ).resolves.toBe(live);
+  });
 });

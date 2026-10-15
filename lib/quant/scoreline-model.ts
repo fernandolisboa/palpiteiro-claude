@@ -152,10 +152,31 @@ export function estimateLambdas(input: EstimateLambdasInput): {
 }
 
 // P(X = k) pra X ~ Poisson(λ), k inteiro ≥ 0. Forma iterativa estável até k≈10.
-function poissonPmf(k: number, lambda: number): number {
+// Exportada pro modelo em jogo (lib/quant/in-play.ts) usar a MESMA conta.
+export function poissonPmf(k: number, lambda: number): number {
   let p = Math.exp(-lambda);
   for (let i = 1; i <= k; i++) p = (p * lambda) / i;
   return p;
+}
+
+/**
+ * τ de Dixon-Coles (clássico) da célula FINAL (h, a): só 0-0, 0-1, 1-0 e 1-1 diferem
+ * de 1. Clampado a ≥ 0 (λ absurdo de um adapter bugado não pode virar célula negativa
+ * silenciosa). Compartilhado por scorelineMatrix e pelo modelo em jogo
+ * (lib/quant/in-play.ts), pra a paridade do minuto 0 sair por construção.
+ */
+export function dixonColesTau(
+  h: number,
+  a: number,
+  lambdaHome: number,
+  lambdaAway: number,
+  rho: number,
+): number {
+  if (h === 0 && a === 0) return Math.max(0, 1 - lambdaHome * lambdaAway * rho);
+  if (h === 0 && a === 1) return Math.max(0, 1 + lambdaHome * rho);
+  if (h === 1 && a === 0) return Math.max(0, 1 + lambdaAway * rho);
+  if (h === 1 && a === 1) return Math.max(0, 1 - rho);
+  return 1;
 }
 
 /**
@@ -183,17 +204,12 @@ export function scorelineMatrix(
     poissonPmf(a, lambdaAway),
   );
 
-  const cells: number[][] = homePmf.map((ph) => awayPmf.map((pa) => ph * pa));
-
-  // τ de Dixon-Coles (clássico), clampado a ≥ 0.
-  const tau00 = Math.max(0, 1 - lambdaHome * lambdaAway * rho);
-  const tau01 = Math.max(0, 1 + lambdaHome * rho);
-  const tau10 = Math.max(0, 1 + lambdaAway * rho);
-  const tau11 = Math.max(0, 1 - rho);
-  cells[0][0] *= tau00;
-  cells[0][1] *= tau01;
-  cells[1][0] *= tau10;
-  cells[1][1] *= tau11;
+  // Produto independente × τ de Dixon-Coles da célula (1 fora das 4 de placar baixo).
+  const cells: number[][] = homePmf.map((ph, h) =>
+    awayPmf.map(
+      (pa, a) => ph * pa * dixonColesTau(h, a, lambdaHome, lambdaAway, rho),
+    ),
+  );
 
   let sum = 0;
   for (const row of cells) for (const c of row) sum += c;

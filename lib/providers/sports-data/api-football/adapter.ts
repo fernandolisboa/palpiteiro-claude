@@ -8,6 +8,7 @@ import {
   HttpClientError,
   HttpClientTimeoutError,
   RetryableHttpError,
+  type ProviderClient,
 } from "@/lib/providers/http/client";
 import {
   API_FOOTBALL_BASE_URL,
@@ -81,18 +82,39 @@ import {
 } from "@/lib/providers/sports-data/types";
 import { safeCrestUrl } from "@/lib/providers/sports-data/crest-url";
 
-// API-Football free tier is 10 req/min and 100 req/day. We throttle at 8/min
-// (20% under the per-minute cap) to avoid the burst-detection auto-ban that
-// suspended the account during issue #7 testing.
+// Cota da conta: plano Pro, 7.500 req/dia (confirmado pelo dono no #580; o free tier
+// de 10 req/min e 100 req/dia não vale mais). O throttle de 8/min continua o do free
+// tier, 20% abaixo do teto por minuto dele, por causa do auto-ban por rajada que
+// suspendeu a conta no #7; subir esse número é decisão à parte (PLAN-580 §5.4). O
+// limite por minuto do Pro ainda não foi lido do header `X-RateLimit-Limit`.
+const API_FOOTBALL_QUOTA_HEADERS = {
+  daily: "x-ratelimit-requests-remaining",
+  dailyLimit: "x-ratelimit-requests-limit",
+  perMinute: "X-RateLimit-Remaining",
+} as const;
+
 const apiFootballClient = createProviderClient({
   name: "api-football",
   concurrency: 2,
   throttle: { maxRequests: 8, windowMs: ONE_MINUTE },
-  quotaHeaders: {
-    daily: "x-ratelimit-requests-remaining",
-    dailyLimit: "x-ratelimit-requests-limit",
-    perMinute: "X-RateLimit-Remaining",
-  },
+  quotaHeaders: API_FOOTBALL_QUOTA_HEADERS,
+});
+
+// Cliente PRÓPRIO do estado ao vivo (#591, PLAN-580 §5.4): a busca do placar roda no
+// render da página do jogo e não pode esperar na fila de 8/min do cliente
+// compartilhado atrás de um predict (6-8 chamadas). Mesmos headers de cota, throttle
+// 30/min (por instância), concorrência 2, teto de 4 s e sem retry: falhou, a página
+// mostra a última leitura com a idade e a próxima visita tenta de novo.
+export const API_FOOTBALL_LIVE_CLIENT_NAME = "api-football-live";
+export const API_FOOTBALL_LIVE_TIMEOUT_MS = 4_000;
+
+const apiFootballLiveClient = createProviderClient({
+  name: API_FOOTBALL_LIVE_CLIENT_NAME,
+  concurrency: 2,
+  throttle: { maxRequests: 30, windowMs: ONE_MINUTE },
+  quotaHeaders: API_FOOTBALL_QUOTA_HEADERS,
+  timeoutMs: API_FOOTBALL_LIVE_TIMEOUT_MS,
+  retry: { maxAttempts: 1 },
 });
 
 // Error classes live in ./errors — import them from there directly.
@@ -152,6 +174,13 @@ type RequestOptions<S extends z.ZodTypeAny> = {
   cache?: CacheStore;
 };
 
+type FetchOptions<S extends z.ZodTypeAny> = {
+  endpoint: string;
+  params: Record<string, string | number>;
+  schema: S;
+  client: ProviderClient;
+};
+
 // Chamadas concorrentes pra mesma chave dividem UMA request (lib/cache/in-flight.ts).
 function request<S extends z.ZodTypeAny>(
   opts: RequestOptions<S>
@@ -178,12 +207,29 @@ async function requestUncoalesced<S extends z.ZodTypeAny>(
     return cached;
   }
 
+  const { data } = await fetchAndParse({
+    endpoint: opts.endpoint,
+    params,
+    schema: opts.schema,
+    client: apiFootballClient,
+  });
+  await cache.set(cacheKey, data, opts.ttlMs);
+  return data;
+}
+
+// Ida à API sem cache: HTTP + envelope de erros + Zod. `receivedAt` = instante em que a
+// resposta HTTP chegou (o `fetched_at` do estado ao vivo, PLAN-580 §5.1/R12).
+async function fetchAndParse<S extends z.ZodTypeAny>(
+  opts: FetchOptions<S>
+): Promise<{ data: z.infer<S>; receivedAt: number }> {
+  const { params } = opts;
   const key = requireApiKey();
   const url = buildUrl(opts.endpoint, params);
 
   let result: { response: Response; text: string };
+  let receivedAt: number;
   try {
-    const r = await apiFootballClient.send({
+    const r = await opts.client.send({
       endpoint: opts.endpoint,
       url,
       init: {
@@ -192,6 +238,7 @@ async function requestUncoalesced<S extends z.ZodTypeAny>(
       },
     });
     result = { response: r.response, text: r.text };
+    receivedAt = Date.now();
   } catch (err) {
     if (err instanceof RetryableHttpError) {
       throw new ApiFootballHttpError(
@@ -265,8 +312,7 @@ async function requestUncoalesced<S extends z.ZodTypeAny>(
     );
   }
 
-  await cache.set(cacheKey, parsed.data, opts.ttlMs);
-  return parsed.data;
+  return { data: parsed.data, receivedAt };
 }
 
 // ─── Season helper ───────────────────────────────────────────────────────────
@@ -357,6 +403,50 @@ export async function getFixtureById(
     ttlMs: FIFTEEN_MINUTES,
   });
   return envelope.response[0];
+}
+
+// Estado ao vivo de um fixture (#591, PLAN-580 §5.1): o MESMO `/fixtures?id=` de
+// getFixtureById, mas com chave de cache própria (não reaproveita os 15 min de lá), o
+// cliente ao vivo (30/min, teto de 4 s) e cache em memória CURTO, só pra juntar rajadas
+// na mesma instância: o cache que vale é a row de `match_live_states`, e com 60 s nos
+// dois uma instância gravaria como "buscado agora" um payload de quase 1 min (R12).
+// `fetchedAt` = instante da resposta HTTP, também quando sai deste cache.
+export const LIVE_FIXTURE_CACHE_TTL_MS = 15_000;
+
+export type ApiFootballLiveFetch = {
+  fixture: ApiFootballFixture | undefined;
+  fetchedAt: Date;
+};
+
+function liveFixtureCacheKey(id: number): string {
+  return `sports-data:${API_FOOTBALL_LIVE_CLIENT_NAME}:fixtures:id:${id}`;
+}
+
+export function getFixtureLive(
+  id: number,
+  cache: CacheStore = inMemoryCache
+): Promise<ApiFootballLiveFetch> {
+  const cacheKey = liveFixtureCacheKey(id);
+  return coalesceInFlight(cache, cacheKey, async () => {
+    const cacheStart = Date.now();
+    const cached = await cache.get<ApiFootballLiveFetch>(cacheKey);
+    if (cached !== undefined) {
+      apiFootballLiveClient.logCacheHit("/fixtures", Date.now() - cacheStart);
+      return cached;
+    }
+    const { data, receivedAt } = await fetchAndParse({
+      endpoint: "/fixtures",
+      params: { id },
+      schema: FixtureEnvelopeSchema,
+      client: apiFootballLiveClient,
+    });
+    const out: ApiFootballLiveFetch = {
+      fixture: data.response[0],
+      fetchedAt: new Date(receivedAt),
+    };
+    await cache.set(cacheKey, out, LIVE_FIXTURE_CACHE_TTL_MS);
+    return out;
+  });
 }
 
 // Eventos de um fixture (/fixtures/events?fixture={id}, #290) pros mercados de

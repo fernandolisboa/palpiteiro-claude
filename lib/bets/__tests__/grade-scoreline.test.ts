@@ -8,6 +8,7 @@ import {
   legToScorePredicate,
   type ScorelineKind,
 } from "@/lib/bets/grade-scoreline";
+import { inPlayScoreline } from "@/lib/quant/in-play";
 import {
   pickModelScoreline,
   type ModelScoreline,
@@ -414,5 +415,53 @@ describe("modelo Dixon-Coles (#547)", () => {
       expect(j.marginalsPct[i]).toBeCloseTo(g.modelProbPct, 9);
     });
     expect(j.jointProbPct).toBeLessThanOrEqual(Math.min(...j.marginalsPct) + 1e-9);
+  });
+});
+
+// ─── Modelo em jogo (#591, PLAN-580 §6.5/R3) ─────────────────────────────────
+describe("gradeScorelineLeg — modelo em jogo", () => {
+  const LIVE = inPlayScoreline(DC_MODEL, {
+    statusShort: "2H",
+    elapsed: 63,
+    extra: null,
+    score: { home: 1, away: 0 },
+    red: { home: 0, away: 0 },
+  })!;
+
+  it.each<[ScorelineKind, BetLegParams]>([
+    ["first_half_score", { home: 1, away: 0 } as BetLegParams],
+    ["first_half_over_under", { line: 0.5, selection: "over" } as BetLegParams],
+    ["first_to_score", { firstToScore: "home" } as BetLegParams],
+  ])("%s não é precificado a partir da matriz em jogo (no_data)", (kind, params) => {
+    expect(grade(kind, params, LIVE)).toEqual({ status: "no_data" });
+    // O mesmo kind segue precificado no pré-jogo.
+    expect(grade(kind, params, DC_MODEL).status).toBe("graded");
+  });
+
+  it("os kinds da matriz leem a matriz em jogo", () => {
+    const over = grade("over_under", { line: 2.5, selection: "over" } as BetLegParams, LIVE);
+    expect(over.status === "graded" && over.modelProbPct).toBeCloseTo(
+      pOverUnder(LIVE.matrix, 2.5) * 100,
+      9,
+    );
+    const exact = grade("exact_score", { home: 0, away: 0 } as BetLegParams, LIVE);
+    expect(exact.status === "graded" && exact.modelProbPct).toBe(0);
+    const ex10 = grade("exact_score", { home: 1, away: 0 } as BetLegParams, LIVE);
+    expect(ex10.status === "graded" && ex10.modelProbPct).toBeCloseTo(
+      pScoreline(LIVE.matrix, 1, 0) * 100,
+      9,
+    );
+  });
+
+  it("a combinada com perna fora da matriz continua não avaliada", () => {
+    expect(
+      computeSlipJoint({
+        model: LIVE,
+        legs: [
+          { kind: "match_result", params: { selection: "home" } as BetLegParams },
+          { kind: "first_to_score", params: { firstToScore: "home" } as BetLegParams },
+        ],
+      }),
+    ).toBeNull();
   });
 });

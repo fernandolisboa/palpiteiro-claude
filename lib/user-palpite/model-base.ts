@@ -103,18 +103,30 @@ function fromLive(m: ModelScoreline, staleBase: boolean): PalpiteModelBase {
  * Corrida aceita: se o cron gravar uma base fresca entre a nossa leitura e a do
  * resolveSlipModel, este devolve o λ pós-JEV tratado como base. A janela é de
  * milissegundos (o cron roda a cada 6h) e o efeito tem o teto do clamp.
+ *
+ * `asOf` (#591, R10): a base "no apito" para o Seu palpite ao vivo. Passar o kickoff; a
+ * usabilidade da base é medida em `asOf − 1 ms` (prevalece sobre `now`) e o fallback
+ * pede o mesmo `asOf` a resolveSlipModel.
  */
 export async function resolvePalpiteModelBase(
   match: SlipModelMatch,
-  opts: { now?: Date; liveModel?: () => Promise<ModelScoreline | null> } = {},
+  opts: {
+    now?: Date;
+    asOf?: Date;
+    liveModel?: () => Promise<ModelScoreline | null>;
+  } = {},
 ): Promise<PalpiteModelBase | null> {
-  const now = opts.now ?? new Date();
+  const { asOf } = opts;
+  const now = asOf ? new Date(asOf.getTime() - 1) : (opts.now ?? new Date());
   try {
     const found = await getLatestMatchModelSnapshotWithKickoff(match.id);
     if (found && isSnapshotUsable(found.snapshot, found.kickoffAt, now)) {
       return fromSnapshot(found.snapshot);
     }
-    const live = await (opts.liveModel ?? (() => resolveSlipModel(match)))();
+    const fallback = asOf
+      ? () => resolveSlipModel(match, { asOf })
+      : () => resolveSlipModel(match);
+    const live = await (opts.liveModel ?? fallback)();
     return live ? fromLive(live, found !== null) : null;
   } catch (err) {
     console.error(
