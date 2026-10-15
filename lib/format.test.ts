@@ -293,6 +293,10 @@ describe("formatadores de lista por dia (#577)", () => {
     expect(formatStartsIn(at(COUNTDOWN_WINDOW_MS + 60_000), now)).toBeUndefined();
     expect(formatStartsIn(at(2 * 3_600_000 + 15 * 60_000), now)).toBe("em 2h 15min");
     expect(formatStartsIn(at(40 * 60_000), now)).toBe("em 40min");
+    // Último minuto: nunca "em 0min".
+    expect(formatStartsIn(at(59_000), now)).toBe("em menos de 1min");
+    expect(formatStartsIn(at(1), now)).toBe("em menos de 1min");
+    expect(formatStartsIn(at(60_000), now)).toBe("em 1min");
     expect(formatStartsIn(now, now)).toBeUndefined();
     expect(formatStartsIn(at(-60_000), now)).toBeUndefined();
   });

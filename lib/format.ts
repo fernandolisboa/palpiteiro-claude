@@ -124,10 +124,12 @@ function hhmm(p: DateParts): string {
 }
 
 // "em 3h 24min" / "em 40min": a contagem de um delta positivo (minutos inteiros).
+// No último minuto, "em menos de 1min" (nunca "em 0min").
 function startsInLabel(deltaMs: number): string {
   const totalMin = Math.floor(deltaMs / 60_000);
   const h = Math.floor(totalMin / 60);
   const m = totalMin % 60;
+  if (totalMin === 0) return "em menos de 1min";
   if (h === 0) return `em ${m}min`;
   return `em ${h}h ${m.toString().padStart(2, "0")}min`;
 }

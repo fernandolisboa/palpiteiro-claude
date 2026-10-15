@@ -4,6 +4,7 @@ import {
   joinNames,
   poolBetLabel,
   poolBetShortLabel,
+  poolClosesIn,
   poolMatchLabel,
   poolStatusView,
 } from "@/lib/view/friend-pool";
@@ -106,6 +107,15 @@ describe("poolStatusView (#577)", () => {
       label: "fecham em 2h 10min",
       tone: "soon",
     });
+  });
+
+  it("último minuto antes da trava: 'fecham em menos de 1min', nunca 'em 0min'", () => {
+    const kickoffAt = new Date(NOW.getTime() + 59_000);
+    expect(poolStatusView({ pool: noManual, match: match({ kickoffAt }) }, NOW)).toEqual({
+      label: "fecham em menos de 1min",
+      tone: "soon",
+    });
+    expect(poolClosesIn(kickoffAt, NOW)).toBe("em menos de 1min");
   });
 
   it("3h exatas já conta; 3h01 ainda não", () => {
