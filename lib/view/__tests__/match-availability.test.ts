@@ -153,13 +153,22 @@ describe("matchPhase", () => {
       const today = matchUnavailableReason(status, kickoffAt, NOW);
       for (const phase of [
         matchPhase(match, null, NOW),
-        matchPhase(match, null, NOW, { liveMode: true }),
         matchPhase(match, liveState(), NOW, { liveMode: false }),
+      ]) {
+        expect(phase.reason).toBe(today);
+        expect(phase.actionable).toBe(false);
+      }
+      // Flag ON sem estado lido: depois do apito vira "placar indisponível"; os outros
+      // motivos (adiado, encerrado…) ficam como hoje.
+      const withoutState =
+        today === "started" || today === "live" ? "live_unavailable" : today;
+      for (const phase of [
+        matchPhase(match, null, NOW, { liveMode: true }),
         matchPhase(match, liveState({ fetchedAt: null }), NOW, {
           liveMode: true,
         }),
       ]) {
-        expect(phase.reason).toBe(today);
+        expect(phase.reason).toBe(withoutState);
         expect(phase.actionable).toBe(false);
       }
     }
@@ -272,7 +281,11 @@ describe("matchCapabilities", () => {
       const phase = matchPhase({ status, kickoffAt: PAST }, null, NOW, {
         liveMode: true,
       });
-      expect(phase.reason).toBe(reason);
+      // Flag ON sem estado: depois do apito vira "placar indisponível"; os outros
+      // motivos ficam. Em todos, nada abre.
+      expect(phase.reason).toBe(
+        reason === "started" || reason === "live" ? "live_unavailable" : reason
+      );
       expect(matchCapabilities(phase)).toEqual(ALL_CLOSED);
       expect(
         matchCapabilities(phase, { liveMode: true, modelReady: true })

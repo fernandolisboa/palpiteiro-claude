@@ -116,7 +116,12 @@ export async function saveMatchLiveState(
     .values({ matchId: input.matchId, ...values })
     .onConflictDoUpdate({
       target: matchLiveStates.matchId,
-      set: values,
+      // Um save sem o id resolvido não apaga o que já foi resolvido (custaria outra
+      // busca por data na próxima vez).
+      set: {
+        ...values,
+        providerFixtureId: sql`COALESCE(excluded.provider_fixture_id, ${matchLiveStates.providerFixtureId})`,
+      },
       setWhere: sql`${matchLiveStates.fetchedAt} IS NULL OR ${matchLiveStates.fetchedAt} <= excluded.fetched_at`,
     });
 }

@@ -981,9 +981,7 @@ describe("capabilityGateMessage — gate hardening (#385)", () => {
           { status: "live", kickoffAt: PAST },
           { liveMode: true, modelReady: true, state: null },
         ),
-      ).toBe(
-        "Jogo em andamento — a análise fica disponível só antes do apito inicial.",
-      );
+      ).toBe("Placar ao vivo indisponível agora. Tente em um minuto.");
     },
   );
 

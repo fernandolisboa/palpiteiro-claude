@@ -177,6 +177,21 @@ describe("saveMatchLiveState / getMatchLiveState", () => {
     expect(row?.homeGoals).toBe(1);
   });
 
+  it("save sem o fixture id não apaga o id já resolvido", async () => {
+    const matchId = await newMatch();
+    await saveMatchLiveState(state(matchId));
+    await saveMatchLiveState(
+      state(matchId, {
+        providerFixtureId: null,
+        elapsed: 30,
+        fetchedAt: new Date("2026-10-15T19:31:00Z"),
+      })
+    );
+    const row = await getMatchLiveState(matchId);
+    expect(row?.elapsed).toBe(30);
+    expect(row?.providerFixtureId).toBe(1234);
+  });
+
   it("vermelhos null = sem dado de expulsão", async () => {
     const matchId = await newMatch();
     await saveMatchLiveState(state(matchId, { homeRed: null, awayRed: null }));

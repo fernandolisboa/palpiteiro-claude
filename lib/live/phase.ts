@@ -187,9 +187,10 @@ function phaseFromReason(reason: MatchUnavailableReason): MatchPhase {
 }
 
 /**
- * Fase do jogo agora. Com `liveMode` desligado, sem estado ou sem nenhuma busca
- * bem-sucedida (`fetchedAt` null), é exatamente o gate de hoje
- * (`matchUnavailableReason`): pré-jogo, ou bloqueado pelo mesmo motivo. Com estado, o
+ * Fase do jogo agora. Com `liveMode` desligado, é exatamente o gate de hoje
+ * (`matchUnavailableReason`): pré-jogo, ou bloqueado pelo mesmo motivo. Ligado, depois
+ * do apito e sem estado (ou sem nenhuma busca bem-sucedida, `fetchedAt` null), a fase é
+ * `started_unknown` com motivo `live_unavailable`. Com estado, o
  * status do provider decide a fase depois do apito; um terminal no DB (o sync só grava
  * depois do fim) vence o estado. O estado nunca reabre um jogo que o DB diz ser
  * pré-jogo: antes do apito, a fase é `pre`.
@@ -202,10 +203,13 @@ export function matchPhase(
 ): MatchPhase {
   const legacy = matchUnavailableReason(match.status, match.kickoffAt, now);
   if (legacy === null) return { kind: "pre", reason: null, actionable: false };
-  if (!liveMode || state === null || state.fetchedAt === null) {
-    return phaseFromReason(legacy);
-  }
+  if (!liveMode) return phaseFromReason(legacy);
   if (legacy !== "started" && legacy !== "live") return phaseFromReason(legacy);
+  // Modo ao vivo ligado, apito passado e nenhum estado lido (provider fora, sem row):
+  // "placar indisponível", não a copy de antes do modo ao vivo ("só antes do apito").
+  if (state === null || state.fetchedAt === null) {
+    return phaseFromReason("live_unavailable");
+  }
 
   const cls = classifyStatusShort(state.statusShort);
   switch (cls) {
