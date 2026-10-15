@@ -21,7 +21,7 @@ import {
   getLatestOverUnderSnapshotsForMatches,
   getLatestSelectionOddsSnapshotsForMatches,
 } from "@/lib/db/queries/odds-snapshots";
-import { getRecentPredictionsByUser } from "@/lib/db/queries/predictions";
+import { getRecentPredictedMatchesByUser } from "@/lib/db/queries/predictions";
 import { DateRangeTabs } from "@/components/date-range-tabs";
 import { EmptyState } from "@/components/empty-state";
 import { PageContainer } from "@/components/page-container";
@@ -40,12 +40,12 @@ import {
   rangeLabel,
 } from "@/lib/view/range-href";
 import { toMatchListRowView } from "@/lib/view/match";
-import { toRecentPredictionView } from "@/lib/view/recent-prediction";
+import { toRecentMatchViews } from "@/lib/view/recent-prediction";
 import type {
   LeagueFilter,
   LeagueKey,
   MatchListRowView,
-  RecentPredictionView,
+  RecentMatchView,
 } from "@/lib/view/types";
 import type { SupportedLeague } from "@/lib/providers/sports-data/leagues";
 
@@ -54,7 +54,9 @@ import type { SupportedLeague } from "@/lib/providers/sports-data/leagues";
 // correção de fuso de um eventual passe estático (PPR/Cache Components futuros).
 export const dynamic = "force-dynamic";
 
-const RECENT_LIMIT = 5;
+// "Suas predições recentes": os últimos 5 jogos analisados, um cartão por jogo
+// (ADR 0058).
+const RECENT_MATCH_LIMIT = 5;
 
 // Cap pra ranges ilimitados (season): evita varrer a competição inteira numa
 // query só. Presets de janela já são limitados pelo `to`.
@@ -139,7 +141,7 @@ export default async function JogosPage({ searchParams }: PageProps) {
   // query de jogos em vez de esperar por ela.
   const [dbMatches, recentRaw, tourState] = await Promise.all([
     loadRangeMatches(matchesQuery),
-    getRecentPredictionsByUser(userId, RECENT_LIMIT),
+    getRecentPredictedMatchesByUser(userId, RECENT_MATCH_LIMIT),
     getTourState(userId),
   ]);
 
@@ -208,22 +210,7 @@ export default async function JogosPage({ searchParams }: PageProps) {
     });
   });
 
-  const recents: RecentPredictionView[] = recentRaw.map((r) =>
-    toRecentPredictionView({
-      predictionId: r.predictionId,
-      matchId: r.matchId,
-      league: r.league,
-      homeTeam: r.homeTeam,
-      awayTeam: r.awayTeam,
-      recommendation: r.recommendation,
-      marketKey: r.marketKey,
-      marketLabel: r.marketLabel,
-      marketParams: r.marketParams,
-      selectionLabel: r.selectionLabel,
-      edgePct: r.edgePct,
-      createdAt: r.createdAt,
-    }, timeZone),
-  );
+  const recents: RecentMatchView[] = toRecentMatchViews(recentRaw, now, timeZone);
 
   return (
     <>
@@ -257,7 +244,7 @@ export default async function JogosPage({ searchParams }: PageProps) {
 
 type HomeContentProps = {
   matches: MatchListRowView[];
-  recents: RecentPredictionView[];
+  recents: RecentMatchView[];
   league: LeagueFilter;
   activeKeys: readonly LeagueKey[];
   range: ResolvedRange;
@@ -352,7 +339,7 @@ function MobileHome({
           ) : (
             <div className="flex gap-2">
               {recents.map((p) => (
-                <RecentPredCard key={p.id} p={p} listHref={listHref} />
+                <RecentPredCard key={p.matchId} p={p} listHref={listHref} />
               ))}
             </div>
           )}
@@ -437,7 +424,7 @@ function DesktopHome({
           ) : (
             <div className="grid grid-cols-5 gap-3">
               {recents.map((p) => (
-                <RecentPredCard key={p.id} p={p} listHref={listHref} />
+                <RecentPredCard key={p.matchId} p={p} listHref={listHref} />
               ))}
             </div>
           )}

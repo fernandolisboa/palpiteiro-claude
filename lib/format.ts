@@ -182,6 +182,20 @@ export function formatDayHeading(d: Date, now: Date, timeZone?: string): string 
 }
 
 /**
+ * "sáb 18/10": dia da semana abreviado e a data, no `timeZone` do usuário (data do
+ * jogo nos cartões de "Suas predições recentes", #577). Ano só quando difere do de
+ * `now`: "sáb 18/10/2025".
+ */
+export function formatWeekdayDate(d: Date, now: Date, timeZone?: string): string {
+  const k = partsOf(d, timeZone);
+  const n = partsOf(now, timeZone);
+  const dd = k.day.toString().padStart(2, "0");
+  const mm = k.month.toString().padStart(2, "0");
+  const year = k.year === n.year ? "" : `/${k.year}`;
+  return `${WEEKDAY_ABBR_PT[weekdayOf(k)]} ${dd}/${mm}${year}`;
+}
+
+/**
  * "em 2h 15min" / "em 40min" só quando faltam até `windowMs` (padrão 3h, inclusive)
  * para `d`; senão (passado, agora ou mais longe) undefined. Delta puro, sem fuso.
  */

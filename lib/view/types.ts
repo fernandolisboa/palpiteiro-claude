@@ -1,4 +1,3 @@
-import type { RecommendationKind } from "@/lib/view/recommendation";
 
 // Keys curtas de liga usadas em URL (?league=) e na UI. Nova liga = nova key aqui
 // (e os Records exaustivos em lib/format.ts / lib/view/league-picker.ts quebram o
@@ -258,19 +257,24 @@ export type MarketAnalysisSectionItem = {
   view: AnalysisView;
 };
 
-export type RecentPredictionView = {
-  id: string;
+// "Suas predições recentes" (/jogos), um cartão por jogo (ADR 0058): a análise mais
+// recente de cada mercado. `bets` já vem cortado nas visíveis; `moreBets` conta as
+// apostas além delas e `passCount` os mercados sem aposta.
+export type RecentMatchBetView = {
+  market: string; // "Ambas marcam", "Total de gols"
+  rec: Recommendation; // "Não", "Mais de 2,5", "PAL"
+  edge: string | null; // "+5,6" (vantagem em pontos)
+};
+
+export type RecentMatchView = {
   matchId: string;
-  home: string;
-  away: string;
-  rec: Recommendation;
-  // Tipo derivado do valor cru (estado visual do selo), nunca do rótulo.
-  recKind: RecommendationKind;
-  // Mercado da recomendação, ex.: "Ambas marcam", "Total de gols".
-  market: string;
-  edge: string | null;
-  when: string;
   league: LeagueKey;
+  home: string; // sigla
+  away: string; // sigla
+  when: string; // data do jogo: "sáb 17/10"
+  bets: RecentMatchBetView[];
+  moreBets: number;
+  passCount: number;
 };
 
 export type FormResult = "W" | "D" | "L";
