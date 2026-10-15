@@ -570,7 +570,8 @@ describe("ApiFootballLiveStateProvider.getLiveState", () => {
   });
 
   it("cota abaixo de 5% → null sem buscar", async () => {
-    const low = quota(100, 7500, "2026-10-15T23:00:00Z");
+    // Leitura "de agora": o freio ignora leitura com mais de 15 min (relógio real).
+    const low = quota(100, 7500, new Date().toISOString());
     const { p, fetchLive, fixturesByDate } = provider({ readQuota: () => low });
     expect(p.isQuotaLow()).toBe(true);
     await expect(p.getLiveState({ ref: REF })).resolves.toBeNull();
