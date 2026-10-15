@@ -1,6 +1,6 @@
 "use client";
 
-import { useState } from "react";
+import { useId, useState } from "react";
 import { useRouter } from "next/navigation";
 import { CalendarDays } from "lucide-react";
 
@@ -38,8 +38,9 @@ function RangeForm({
   league,
   from,
   to,
+  active,
   onDone,
-}: Pick<Props, "league" | "from" | "to"> & { onDone: () => void }) {
+}: Pick<Props, "league" | "from" | "to" | "active"> & { onDone: () => void }) {
   const router = useRouter();
   const [nextFrom, setNextFrom] = useState(from ?? "");
   const [nextTo, setNextTo] = useState(to ?? "");
@@ -80,17 +81,20 @@ function RangeForm({
         </label>
       </div>
       <div className="flex justify-end gap-2">
-        <Button
-          type="button"
-          variant="ghost"
-          size="sm"
-          onClick={() => {
-            onDone();
-            router.push(buildRangeHref({ league }, { preset: "today5" }));
-          }}
-        >
-          Limpar
-        </Button>
+        {/* "Limpar" só com um intervalo aplicado: sem ele, já se está nos 5 dias. */}
+        {active && (
+          <Button
+            type="button"
+            variant="ghost"
+            size="sm"
+            onClick={() => {
+              onDone();
+              router.push(buildRangeHref({ league }, { preset: "today5" }));
+            }}
+          >
+            Limpar
+          </Button>
+        )}
         <Button type="submit" size="sm" disabled={!ready}>
           Aplicar
         </Button>
@@ -102,12 +106,14 @@ function RangeForm({
 /**
  * Chip "Escolher datas" da lista de jogos (#577): abre os campos De e Até numa folha
  * (celular) ou num popover (desktop). "Aplicar" navega para o intervalo
- * (`preset=custom`, os mesmos parâmetros de URL de antes); "Limpar" volta para 5
- * dias. Com o intervalo ativo, o chip mostra as datas e fica selecionado: é o único
+ * (`preset=custom`, os mesmos parâmetros de URL de antes); "Limpar" (só com o
+ * intervalo ativo) volta para 5 dias. Com o intervalo ativo, o chip mostra as datas e fica selecionado: é o único
  * lugar onde o período aparece.
  */
 export function DateRangeSheet({ league, from, to, active, label, surface }: Props) {
   const [open, setOpen] = useState(false);
+  // Nome acessível do popover (role=dialog): o título "Escolher datas".
+  const titleId = useId();
   const trigger = (
     <button
       type="button"
@@ -119,15 +125,23 @@ export function DateRangeSheet({ league, from, to, active, label, surface }: Pro
     </button>
   );
   const form = (
-    <RangeForm league={league} from={from} to={to} onDone={() => setOpen(false)} />
+    <RangeForm
+      league={league}
+      from={from}
+      to={to}
+      active={active}
+      onDone={() => setOpen(false)}
+    />
   );
 
   if (surface === "popover") {
     return (
       <Popover open={open} onOpenChange={setOpen}>
         <PopoverTrigger asChild>{trigger}</PopoverTrigger>
-        <PopoverContent align="end" className="w-80 p-4">
-          <p className="pb-3 text-label font-medium tracking-tight">Escolher datas</p>
+        <PopoverContent align="end" aria-labelledby={titleId} className="w-80 p-4">
+          <p id={titleId} className="pb-3 text-label font-medium tracking-tight">
+            Escolher datas
+          </p>
           {form}
         </PopoverContent>
       </Popover>
