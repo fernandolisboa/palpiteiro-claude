@@ -167,6 +167,34 @@ describe("toDashboardKpiView", () => {
     expect(v.winRate.lowSample).toBe(true);
   });
 
+  it("tons por sinal e retorno com '+' pro resumo (#577)", () => {
+    const empty = toDashboardKpiView(computeDashboardKpis([]));
+    expect(empty.yieldSigned).toBe("—");
+    expect(empty.yieldTone).toBe("zero");
+    expect(empty.profitTone).toBe("zero");
+
+    const settledAt = new Date("2026-06-12T20:00:00Z");
+    const win = toDashboardKpiView(
+      computeDashboardKpis([
+        row({ result: "won", profitUnits: "0.92", stakeUnits: "1.00", settledAt }),
+      ]),
+    );
+    expect(win.yieldSigned).toBe("+92,0%");
+    expect(win.yieldTone).toBe("positive");
+    expect(win.profitTone).toBe("positive");
+    // O yieldPct (KpiCards do admin, segmentos) continua sem "+".
+    expect(win.yieldPct.value).toBe("92%");
+
+    const loss = toDashboardKpiView(
+      computeDashboardKpis([
+        row({ result: "lost", profitUnits: "-1.00", stakeUnits: "1.00", settledAt }),
+      ]),
+    );
+    expect(loss.yieldSigned).toBe("-100,0%");
+    expect(loss.yieldTone).toBe("negative");
+    expect(loss.profitTone).toBe("negative");
+  });
+
   it("formata CLV sinalizado + unidade; '—' sem amostra (#180)", () => {
     const empty = toDashboardKpiView(computeDashboardKpis([]));
     expect(empty.clvOddsRatio.value).toBe("—");

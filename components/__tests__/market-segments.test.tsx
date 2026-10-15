@@ -17,8 +17,11 @@ function segment(
       passRate: { value: "40%", n: 50, lowSample: false },
       clvOddsRatio: { value: "+3.2%", n: 30, lowSample: false },
       clvNoVigDelta: { value: "+1.8 pp", n: 30, lowSample: false },
+      yieldSigned: "+8,0%",
+      yieldTone: "positive",
       totalProfit: "+2.56 u",
       profitPositive: true,
+      profitTone: "positive",
       counts: {
         total: 50,
         bets: 32,
@@ -93,5 +96,53 @@ describe("MarketSegments", () => {
     expect(html).toContain("Sem apostas resolvidas ainda");
     // a régua/bandas não renderizam quando vazio
     expect(html).not.toContain("32 / 30 resolvidas");
+  });
+
+  it("nenhum 'D9' na tela (#577)", () => {
+    for (const s of [segment(), segment({ empty: true })]) {
+      const html = renderToStaticMarkup(<MarketSegments segments={[s]} />);
+      expect(html).not.toContain("D9");
+    }
+  });
+
+  describe("CLV com cor pelo sinal, inclusive em amostra pequena (#577)", () => {
+    function clvHtml(oddsRatio: { value: string; n: number; lowSample: boolean }) {
+      const base = segment();
+      return renderToStaticMarkup(
+        <MarketSegments
+          segments={[
+            segment({
+              kpis: {
+                ...base.kpis,
+                clvOddsRatio: oddsRatio,
+                clvNoVigDelta: { value: "—", n: 0, lowSample: false },
+              },
+            }),
+          ]}
+        />,
+      );
+    }
+    // O <span> do valor da razão de odds (o primeiro valor de CLV renderizado).
+    const valueSpan = (html: string, value: string) =>
+      html.match(new RegExp(`<span class="([^"]*)">${value.replace("+", "\\+")}</span>`))?.[1] ?? "";
+
+    it("positivo com amostra pequena: verde, com '+', e 'amostra pequena' escrito", () => {
+      const html = clvHtml({ value: "+7,7%", n: 4, lowSample: true });
+      const cls = valueSpan(html, "+7,7%");
+      expect(cls).toContain("text-edge-fg");
+      expect(cls).not.toContain("text-warn-fg");
+      expect(html).toContain("amostra pequena");
+    });
+
+    it("negativo com amostra pequena: vermelho", () => {
+      const html = clvHtml({ value: "-2,1%", n: 4, lowSample: true });
+      expect(valueSpan(html, "-2,1%")).toContain("text-destructive");
+    });
+
+    it("amostra grande: sem 'amostra pequena'", () => {
+      const html = clvHtml({ value: "+3,2%", n: 30, lowSample: false });
+      expect(valueSpan(html, "+3,2%")).toContain("text-edge-fg");
+      expect(html).not.toContain("amostra pequena");
+    });
   });
 });

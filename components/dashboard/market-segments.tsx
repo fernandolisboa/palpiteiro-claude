@@ -21,7 +21,7 @@ function GraduationRuler({
     <div className="flex flex-col gap-2">
       <div className="flex items-center justify-between">
         <span className="text-meta uppercase tracking-label text-muted-foreground">
-          graduação D9
+          graduação
         </span>
         {graduation.graduated ? (
           <Badge
@@ -55,8 +55,9 @@ function GraduationRuler({
   );
 }
 
-// Uma métrica de CLV: valor sinalizado (+ verde = bateu o fechamento; − vermelho;
-// amber em amostra pequena; "—" sem dado) + a amostra.
+// Uma métrica de CLV: valor sinalizado, cor SEMPRE pelo sinal (+ verde = bateu o
+// fechamento; − vermelho; "—" sem dado), inclusive em amostra pequena (#577): a
+// amostra pequena vira texto no rótulo, não muda a cor.
 function ClvMetric({
   label,
   view,
@@ -72,15 +73,18 @@ function ClvMetric({
   return (
     <div className="flex flex-col gap-0.5">
       <span
-        className={cn(
-          "text-label font-medium leading-none tracking-tight tabular-nums",
-          view.lowSample ? "text-warn-fg" : tone,
-        )}
+        className={cn("text-label font-medium leading-none tracking-tight tabular-nums", tone)}
       >
         {view.value}
       </span>
       <span className="text-meta uppercase tracking-label text-muted-foreground">
         {label} · n={view.n}
+        {view.lowSample && (
+          <>
+            {" · "}
+            <span className="text-warn-fg">amostra pequena</span>
+          </>
+        )}
       </span>
     </div>
   );
@@ -154,7 +158,7 @@ function MarketSegmentCard({ segment }: { segment: MarketSegmentView }) {
       <ClvLine segment={segment} />
       {segment.empty ? (
         <p className="text-body-sm tracking-tight text-muted-foreground">
-          Sem apostas resolvidas ainda — a régua D9 e o retorno por banda aparecem
+          Sem apostas resolvidas ainda — a graduação e o retorno por banda aparecem
           quando começarem a liquidar.
         </p>
       ) : (
@@ -176,7 +180,7 @@ export function MarketSegments({
   return (
     <section className="flex flex-col gap-3">
       <span className="text-meta uppercase tracking-eyebrow text-muted-foreground">
-        por mercado — régua D9 + banda de stake
+        por mercado
       </span>
       <div className="grid grid-cols-1 gap-3 lg:grid-cols-2">
         {segments.map((segment) => (
