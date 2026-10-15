@@ -6,19 +6,17 @@ import type { SeuPalpiteData } from "@/lib/view/user-palpite";
 
 // "Seu palpite" (#564) por streaming: o modelo do jogo (a base ou o cálculo ao vivo,
 // compartilhado com a grade de apostas) e a última análise do usuário chegam numa
-// promise criada UMA vez pela página e usada pelas árvores celular e desktop.
+// promise criada pela página (renderizada uma vez, #576).
 export async function SeuPalpiteSection({
   matchId,
   teams,
   data,
   aiEnabled,
-  variant,
 }: {
   matchId: string;
   teams: TeamNames;
   data: Promise<SeuPalpiteData>;
   aiEnabled: boolean;
-  variant: "mobile" | "desktop";
 }) {
   const { model, latest } = await data;
   return (
@@ -28,7 +26,6 @@ export async function SeuPalpiteSection({
       model={model}
       latest={latest}
       aiEnabled={aiEnabled}
-      variant={variant}
     />
   );
 }

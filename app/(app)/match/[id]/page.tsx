@@ -1,11 +1,11 @@
 import Link from "next/link";
 import { notFound, redirect } from "next/navigation";
 import { Suspense } from "react";
-import { ChevronLeft, Users } from "lucide-react";
+import { Users } from "lucide-react";
 
-import { MarketAnalysisSections } from "@/components/market-analysis-section";
-import { MatchCollapsible } from "@/components/match-collapsible";
-import { PreviousAnalyses } from "@/components/previous-analyses";
+import { BackLink } from "@/components/back-link";
+import { PageContainer } from "@/components/page-container";
+import { FullAnalysis } from "@/components/full-analysis";
 import { MatchAuxiliarySections } from "@/components/match-sections-auxiliary";
 import { MatchHero } from "@/components/match-hero";
 import {
@@ -17,8 +17,7 @@ import {
   MatchOddsCards,
   type MatchOddsViews,
 } from "@/components/match-odds-cards";
-import { PalpiteHero } from "@/components/palpites/palpite-hero";
-import { AnalysisUserContext } from "@/components/analysis-user-context";
+import { PalpiteArea } from "@/components/palpites/palpite-area";
 import { readAnalysisEngine } from "@/lib/ai/engine/analysis-engine-flag";
 import {
   toAnalysisUserContextView,
@@ -30,10 +29,7 @@ import {
   MatchOddsSkeleton,
   MatchSectionsSkeleton,
 } from "@/components/skeletons/match-sections-skeleton";
-import {
-  BetSlipSection,
-  BetSlipSkeleton,
-} from "@/components/bet-slip-section";
+import { BetSlipSection, BetSlipSkeleton } from "@/components/bet-slip-section";
 import { BetSlipBridgeProvider } from "@/components/bet-slip-bridge";
 import {
   SeuPalpiteSection,
@@ -72,6 +68,7 @@ import {
 import { loadMatchModelReading } from "@/lib/model-base/reading";
 import { toMatchHeroView } from "@/lib/view/match";
 import {
+  matchCapabilities,
   matchUnavailableReason,
   unavailableNoticeCopy,
   type MatchUnavailableReason,
@@ -114,7 +111,10 @@ export default async function MatchPage({ params, searchParams }: PageProps) {
   // param `back` (validado anti open-redirect; fallback /jogos). Um jogo pode ser
   // aberto da lista /jogos OU do histórico de um time (/time/[team], #408) — ambas
   // as bases são aceitas; fallback = /jogos (origem default).
-  const backHref = resolveBackHref((await searchParams).back, ["/jogos", "/time"]);
+  const backHref = resolveBackHref((await searchParams).back, [
+    "/jogos",
+    "/time",
+  ]);
   // Middleware garante sessão; redirect defensivo caso o matcher mude. Sessão e jogo
   // são independentes: buscados juntos (cada um é um round trip ao banco).
   const [session, match] = await Promise.all([auth(), getMatchById(id)]);
@@ -145,43 +145,50 @@ export default async function MatchPage({ params, searchParams }: PageProps) {
   // FORA do caminho crítico: com o snapshot vencido o refresh espera a The Odds API, e
   // só os cards de odds dependem dele (o hero não mostra odd). A página renderiza sem
   // esperar e os cards chegam por streaming (MatchOddsCards em Suspense). Criada UMA vez
-  // aqui e compartilhada pelas árvores mobile e desktop: um refresh só.
+  // aqui: a grade de apostas espera o mesmo refresh.
   const oddsP: Promise<MatchOddsViews> = ensureOddsSnapshotsFresh(match, {
     markets: PAGE_LIVE_MARKETS,
-  }).then(async (snapshot) => {
-    const matchResultMap = await getLatestSelectionOddsSnapshotsForMatches(
-      [match.id],
-      "match_result",
-    );
-    // Card 1X2 ao vivo (#173): best-effort — captura ausente/incompleta vira null
-    // (o reader OMITE, nunca throw) → card simplesmente não é empilhado.
-    const matchResultSnapshot = matchResultMap.get(match.id);
-    return {
-      oddsView: snapshot
-        ? toOddsView({
-            bookmaker: snapshot.bookmaker,
-            overOdd: snapshot.overOdd,
-            underOdd: snapshot.underOdd,
-            capturedAt: snapshot.capturedAt,
-          })
-        : null,
-      matchResultOddsView: matchResultSnapshot
-        ? toNwayOddsView(matchResultSnapshot, "match_result", undefined, displayTeams)
-        : null,
-    };
-  }).catch((err: unknown): MatchOddsViews => {
-    // Provider/rede já viram null dentro do ensure; aqui sobra erro de DB. Com a página já
-    // na tela, deixar rejeitar trocaria tudo pelo error.tsx na hidratação: degrada pro
-    // empty-state "Odds indisponíveis", como as outras seções em streaming.
-    console.error(
-      JSON.stringify({
-        scope: "match-page",
-        error: "odds_refresh_failed",
-        message: err instanceof Error ? err.message : String(err),
-      }),
-    );
-    return { oddsView: null, matchResultOddsView: null };
-  });
+  })
+    .then(async (snapshot) => {
+      const matchResultMap = await getLatestSelectionOddsSnapshotsForMatches(
+        [match.id],
+        "match_result"
+      );
+      // Card 1X2 ao vivo (#173): best-effort — captura ausente/incompleta vira null
+      // (o reader OMITE, nunca throw) → card simplesmente não é empilhado.
+      const matchResultSnapshot = matchResultMap.get(match.id);
+      return {
+        oddsView: snapshot
+          ? toOddsView({
+              bookmaker: snapshot.bookmaker,
+              overOdd: snapshot.overOdd,
+              underOdd: snapshot.underOdd,
+              capturedAt: snapshot.capturedAt,
+            })
+          : null,
+        matchResultOddsView: matchResultSnapshot
+          ? toNwayOddsView(
+              matchResultSnapshot,
+              "match_result",
+              undefined,
+              displayTeams
+            )
+          : null,
+      };
+    })
+    .catch((err: unknown): MatchOddsViews => {
+      // Provider/rede já viram null dentro do ensure; aqui sobra erro de DB. Com a página já
+      // na tela, deixar rejeitar trocaria tudo pelo error.tsx na hidratação: degrada pro
+      // empty-state "Odds indisponíveis", como as outras seções em streaming.
+      console.error(
+        JSON.stringify({
+          scope: "match-page",
+          error: "odds_refresh_failed",
+          message: err instanceof Error ? err.message : String(err),
+        })
+      );
+      return { oddsView: null, matchResultOddsView: null };
+    });
   // Predição existente e demais leituras em paralelo: pré-requisito pro render
   // síncrono do hero + panel.
   const [
@@ -192,20 +199,20 @@ export default async function MatchPage({ params, searchParams }: PageProps) {
     userContextEnabled,
     analysisEngine,
   ] = await Promise.all([
-      // Histórico COMPLETO: agrupado por mercado em toMarketAnalysisSections (#243, a
-      // última de cada mercado = uma seção) e em toPreviousAnalysisItems (as reanálises
-      // mais antigas, #204). Scoped por userId (sem leak, AC2).
-      getPredictionHistoryForMatch(match.id, session.user.id),
-      // Sets de palpite persistidos (#351): só `sets[0]` (o mais recente) alimenta o HERO.
-      // A query traz o histórico completo (espelha o painel interim); overhead mínimo —
-      // uma query "latest-only" seria follow-up se virar gargalo (PLAN §3.1 nota).
-      getPalpiteSetsForMatch(match.id, session.user.id),
-      getEnableBestBetFanOut(),
-      getTourState(session.user.id),
-      getEnableUserContext(),
-      // Motor (#565): o "Contexto extra" do HERO só vale no code_jev.
-      readAnalysisEngine(),
-    ]);
+    // Histórico COMPLETO: agrupado por mercado em toMarketAnalysisSections (#243, a
+    // última de cada mercado = uma seção) e em toPreviousAnalysisItems (as reanálises
+    // mais antigas, #204). Scoped por userId (sem leak, AC2).
+    getPredictionHistoryForMatch(match.id, session.user.id),
+    // Sets de palpite persistidos (#351): só `sets[0]` (o mais recente) alimenta o HERO.
+    // A query traz o histórico completo (espelha o painel interim); overhead mínimo —
+    // uma query "latest-only" seria follow-up se virar gargalo (PLAN §3.1 nota).
+    getPalpiteSetsForMatch(match.id, session.user.id),
+    getEnableBestBetFanOut(),
+    getTourState(session.user.id),
+    getEnableUserContext(),
+    // Motor (#565): o "Contexto extra" do HERO só vale no code_jev.
+    readAnalysisEngine(),
+  ]);
   const latestPred = history[0] ?? null;
 
   // Manchete palpite-first (ADR 0030 / #351): o HERO server-rendered lê o set mais
@@ -250,13 +257,13 @@ export default async function MatchPage({ params, searchParams }: PageProps) {
     history,
     new Date(),
     timeZone,
-    displayTeams,
+    displayTeams
   );
   const previousAnalyses: PreviousAnalysisItem[] = toPreviousAnalysisItems(
     history,
     new Date(),
     timeZone,
-    displayTeams,
+    displayTeams
   );
 
   // "Contexto extra (opcional)" no HERO (#565): kill-switch E motor code_jev (a action
@@ -265,7 +272,7 @@ export default async function MatchPage({ params, searchParams }: PageProps) {
   const userContextView = toAnalysisUserContextView(
     history,
     { home: match.homeTeam, away: match.awayTeam },
-    now,
+    now
   );
 
   const fixtureRef: FixtureRef = {
@@ -289,19 +296,20 @@ export default async function MatchPage({ params, searchParams }: PageProps) {
   const unavailableReason = matchUnavailableReason(
     match.status,
     match.kickoffAt,
-    now,
+    now
   );
-  const analyzable = unavailableReason === null;
+  // O que a página libera agora, num lugar só (#576; o ao vivo, #580, muda a função).
+  const caps = matchCapabilities(unavailableReason);
 
   // Leitura do modelo (#555, ADR 0052): a base do jogo, lida do banco (sem odd, sem
   // chamada externa) e entregue por streaming. Só em jogo analisável: ao vivo e
-  // encerrado ficam fora. Criada UMA vez e compartilhada pelas árvores mobile/desktop.
-  const modelReading = analyzable
+  // encerrado ficam fora.
+  const modelReading = caps.analyze
     ? loadMatchModelReading({ matchId: match.id, now, teams: displayTeams })
     : null;
 
   // "Registrar apostas" (#556): grade de mercados + lista, só antes do apito (a action
-  // rejeitaria o resto). FORA do caminho crítico, UMA promise pras duas árvores: o
+  // rejeitaria o resto). FORA do caminho crítico: o
   // modelo do jogo (porta única, lib/bets/slip-model) começa já; as odds de referência
   // são lidas do banco DEPOIS do refresh que a página já faz (oddsP) — nenhuma chamada
   // nova à Odds API. Falha vira grade sem odds/sem modelo (os botões ainda registram).
@@ -312,7 +320,7 @@ export default async function MatchPage({ params, searchParams }: PageProps) {
   // (que só cai nele quando não há base fresca do jogo).
   let slipModelP: Promise<ModelScoreline | null> | null = null;
   const slipModel = () => (slipModelP ??= resolveSlipModel(match));
-  const betGridP: Promise<BetGridView> | null = analyzable
+  const betGridP: Promise<BetGridView> | null = caps.registerBets
     ? Promise.all([
         slipModel(),
         oddsP.then(() => getReferenceOddsForMatch(match.id)),
@@ -323,7 +331,7 @@ export default async function MatchPage({ params, searchParams }: PageProps) {
             model,
             references,
             analysis: latestAnalysisByMarket(history),
-          }),
+          })
         )
         .catch((err: unknown): BetGridView => {
           console.error(
@@ -331,7 +339,7 @@ export default async function MatchPage({ params, searchParams }: PageProps) {
               scope: "match-page",
               error: "bet_grid_failed",
               message: err instanceof Error ? err.message : String(err),
-            }),
+            })
           );
           return toBetGridView({
             teams,
@@ -345,9 +353,10 @@ export default async function MatchPage({ params, searchParams }: PageProps) {
   // "Seu palpite" (#564): o modelo (base do jogo ou cálculo ao vivo) e a última análise
   // do usuário, por streaming. Só em jogo analisável; falha vira o estado vazio.
   const userId = session.user.id;
-  const seuPalpiteP: Promise<SeuPalpiteData> | null = analyzable
+  const seuPalpiteP: Promise<SeuPalpiteData> | null = caps.seuPalpite
     ? loadSeuPalpiteData({
-        base: () => resolvePalpiteModelBase(match, { now, liveModel: slipModel }),
+        base: () =>
+          resolvePalpiteModelBase(match, { now, liveModel: slipModel }),
         latest: () => getLatestUserPalpiteAnalysis(match.id, userId),
         teams,
         now,
@@ -357,7 +366,7 @@ export default async function MatchPage({ params, searchParams }: PageProps) {
               scope: "match-page",
               error,
               message: err instanceof Error ? err.message : String(err),
-            }),
+            })
           ),
       })
     : null;
@@ -371,11 +380,6 @@ export default async function MatchPage({ params, searchParams }: PageProps) {
 
   return (
     <>
-      {/* Palpite-first (ADR 0030 / #351): a manchete sintetizada é o HERO no topo; as
-          análises por mercado viram detalhe recolhível NEUTRO abaixo. Layout única (sem
-          flag de apresentação) — o botão "Analisar com IA" do HERO dispara o fan-out →
-          síntese → revalidatePath. `analyzeBestBet` segue gated por enable_best_bet_fan_out
-          como kill-switch de spend (go-live = o dono flipa a flag). */}
       {/* 2ª parte do tour guiado: abre sozinha no 1º jogo aberto depois da parte da
           lista (/jogos). */}
       <GuidedTour
@@ -384,68 +388,40 @@ export default async function MatchPage({ params, searchParams }: PageProps) {
         serverState={tourState}
         forceStart={false}
       />
-      <div className="lg:hidden">
-        <MobileMatch
-          heroView={heroView}
-          odds={oddsP}
-          modelReading={modelReading}
-          sections={sections}
-          previousAnalyses={previousAnalyses}
-          matchId={match.id}
-          fixtureRef={fixtureRef}
-          leagueKey={leagueKey}
-          unavailableReason={unavailableReason}
-          backHref={backHref}
-          finalScore={finalScore}
-          bestBetEnabled={bestBetEnabled}
-          heroPalpite={heroPalpite}
-          heroSetId={heroSetId}
-          heroSharedAt={heroSharedAt}
-          homeTeamHref={homeTeamHref}
-          awayTeamHref={awayTeamHref}
-          betGrid={betGridP}
-          seuPalpite={seuPalpiteP}
-          userContextEnabled={userContextEnabled}
-          contextEnabled={contextEnabled}
-          userContextView={userContextView}
-          teams={teams}
-        />
-      </div>
-      <div className="hidden lg:block">
-        <DesktopMatch
-          heroView={heroView}
-          odds={oddsP}
-          modelReading={modelReading}
-          sections={sections}
-          previousAnalyses={previousAnalyses}
-          matchId={match.id}
-          fixtureRef={fixtureRef}
-          leagueKey={leagueKey}
-          unavailableReason={unavailableReason}
-          backHref={backHref}
-          finalScore={finalScore}
-          bestBetEnabled={bestBetEnabled}
-          heroPalpite={heroPalpite}
-          heroSetId={heroSetId}
-          heroSharedAt={heroSharedAt}
-          homeTeamHref={homeTeamHref}
-          awayTeamHref={awayTeamHref}
-          betGrid={betGridP}
-          seuPalpite={seuPalpiteP}
-          userContextEnabled={userContextEnabled}
-          contextEnabled={contextEnabled}
-          userContextView={userContextView}
-          teams={teams}
-        />
-      </div>
+      <MatchLayout
+        heroView={heroView}
+        odds={oddsP}
+        modelReading={modelReading}
+        sections={sections}
+        previousAnalyses={previousAnalyses}
+        matchId={match.id}
+        fixtureRef={fixtureRef}
+        leagueKey={leagueKey}
+        unavailableReason={unavailableReason}
+        pool={caps.pool}
+        backHref={backHref}
+        finalScore={finalScore}
+        bestBetEnabled={bestBetEnabled}
+        heroPalpite={heroPalpite}
+        heroSetId={heroSetId}
+        heroSharedAt={heroSharedAt}
+        homeTeamHref={homeTeamHref}
+        awayTeamHref={awayTeamHref}
+        betGrid={betGridP}
+        seuPalpite={seuPalpiteP}
+        userContextEnabled={userContextEnabled}
+        contextEnabled={contextEnabled}
+        userContextView={userContextView}
+        teams={teams}
+      />
     </>
   );
 }
 
-type Common = {
+type MatchLayoutProps = {
   heroView: MatchHeroView;
   // Cards de odds (over/under + 1X2 ao vivo, #173), resolvidos fora do caminho crítico
-  // e renderizados por streaming. A MESMA promise nas duas árvores.
+  // e renderizados por streaming.
   odds: Promise<MatchOddsViews>;
   // Leitura do modelo (#555): só em jogo analisável (null nos demais → não renderiza).
   modelReading: Promise<MatchModelReadingView | null> | null;
@@ -453,9 +429,8 @@ type Common = {
   // uma seção colapsável por mercado. Vazio → nenhuma análise ainda.
   sections: MarketAnalysisSectionItem[];
   // Análises anteriores deste jogo (#204): as reanálises mais antigas (não-latest de
-  // cada mercado). Renderizadas numa seção colapsável abaixo das seções por-mercado
-  // (oculta durante pending no painel; sempre visível no caminho encerrado). Vazio → a
-  // seção não renderiza.
+  // cada mercado). Renderizadas numa seção colapsável abaixo das seções por-mercado.
+  // Vazio → a seção não renderiza.
   previousAnalyses: PreviousAnalysisItem[];
   matchId: string;
   fixtureRef: FixtureRef;
@@ -463,6 +438,8 @@ type Common = {
   // Por que o jogo não aceita análise (null = pré-jogo): escolhe a copy do HERO, do
   // aviso de não-analisável e do empty-state do OddsCard.
   unavailableReason: MatchUnavailableReason | null;
+  // Atalho "criar bolão" (matchCapabilities.pool).
+  pool: boolean;
   // Href de "voltar" — recompõe a lista filtrada (/jogos?…) de origem; /jogos
   // como fallback (deep-link / sem `back`).
   backHref: string;
@@ -481,11 +458,11 @@ type Common = {
   // passados aos nomes do MatchHero (imunes a mismatch por construção).
   homeTeamHref: string;
   awayTeamHref: string;
-  // #556: grade de "Registrar apostas" (streaming). null = jogo não analisável (a
-  // seção não aparece).
+  // #556: grade de "Registrar apostas" (streaming). null = sem registro (a seção não
+  // aparece; matchCapabilities.registerBets).
   betGrid: Promise<BetGridView> | null;
-  // #564: bloco "Seu palpite" (streaming), na mesma ponte da grade. null = jogo não
-  // analisável. `userContextEnabled` = kill-switch do "Analisar meu palpite".
+  // #564: bloco "Seu palpite" (streaming), na mesma ponte da grade. null = fora do
+  // pré-jogo. `userContextEnabled` = kill-switch do "Analisar meu palpite".
   seuPalpite: Promise<SeuPalpiteData> | null;
   userContextEnabled: boolean;
   // #565: campo "Contexto extra" no HERO e o "o que você acrescentou" no detalhe.
@@ -494,7 +471,11 @@ type Common = {
   teams: { home: string; away: string };
 };
 
-function MobileMatch({
+// Uma árvore responsiva (#576): a mesma ordem no celular e no desktop, com `lg:` dentro
+// de cada bloco. Cada componente assíncrono renderiza UMA vez por request e o BetSlip e
+// o "Seu palpite" têm uma instância só (o estado da lista não se divide). Nenhuma classe
+// que esconde uma árvore inteira por largura (single-tree.test.ts trava a volta).
+function MatchLayout({
   heroView,
   odds,
   modelReading,
@@ -504,6 +485,7 @@ function MobileMatch({
   fixtureRef,
   leagueKey,
   unavailableReason,
+  pool,
   backHref,
   finalScore,
   bestBetEnabled,
@@ -518,19 +500,15 @@ function MobileMatch({
   contextEnabled,
   userContextView,
   teams,
-}: Common) {
+}: MatchLayoutProps) {
   return (
-    <div className="bg-background text-foreground">
-      <div className="flex items-center justify-between px-5 pt-5 pb-2">
-        <Link
-          href={backHref}
-          className="flex items-center gap-2 rounded-sm text-muted-foreground hover:text-foreground focus-visible:outline-none focus-visible:ring-[3px] focus-visible:ring-ring/50"
-        >
-          <ChevronLeft className="size-3.5" />
-          <span className="text-body-sm tracking-tight">jogos</span>
-        </Link>
-        {unavailableReason === null && <PoolLink matchId={matchId} />}
-      </div>
+    <PageContainer width="content">
+      {/* O h1 da página fica aqui, não no MatchHero: em components/ só o PageHeader e o
+          PageHeading do admin têm <h1> (page-header-coverage.test.ts). */}
+      <h1 className="sr-only">
+        {heroView.home.name} × {heroView.away.name}
+      </h1>
+      <MatchTopBar backHref={backHref} poolMatchId={pool ? matchId : null} />
 
       <MatchHero
         view={heroView}
@@ -544,10 +522,12 @@ function MobileMatch({
         awayHref={awayTeamHref}
       />
 
-      <div className="flex flex-col gap-3 px-5 pb-6">
-        {/* HERO palpite-first (#351): a manchete sintetizada é a PROEMINÊNCIA, logo
-            abaixo da identidade do jogo. O botão dispara o fan-out → síntese. */}
-        <PalpiteHero
+      <div className="flex flex-col gap-4 pt-4 lg:gap-6">
+        {/* HERO palpite-first (#351), compacto (#576): a manchete sintetizada é a
+            PROEMINÊNCIA, logo abaixo da identidade do jogo. "Ler análise completa" abre o
+            HERO inteiro e a análise por mercado num bloco IRMÃO, fechado por padrão →
+            nenhum número de valor vaza pro HERO (firewall ADR 0030). */}
+        <PalpiteArea
           heroPalpite={heroPalpite}
           matchId={matchId}
           unavailable={unavailableReason}
@@ -557,23 +537,21 @@ function MobileMatch({
           sharedAt={heroSharedAt}
           hasAnalyses={sections.length > 0}
           contextEnabled={contextEnabled}
-        />
-
-        {/* Detalhe por mercado LOGO ABAIXO do palpite: é o "quero ver mais" imediato da
-            manchete. Collapsed por padrão → nenhum número de valor vaza pro topo (firewall
-            ADR 0030 intacto: edge/EV/stake/odd vivem DENTRO do disclosure). */}
-        <NeutralAnalysisDetail
-          sections={sections}
-          previousAnalyses={previousAnalyses}
-          userContext={userContextView}
+          analysis={
+            <FullAnalysis
+              sections={sections}
+              previousAnalyses={previousAnalyses}
+              userContext={userContextView}
+            />
+          }
         />
         {unavailableReason !== null && sections.length === 0 && (
           <NotAnalyzableNotice reason={unavailableReason} score={finalScore} />
         )}
 
-        {/* Odds (preços de referência) DEPOIS do detalhe — em tela estreita ficam abaixo do
-            palpite+análise, sem empurrar a análise pra longe da manchete. */}
-        <div className="flex flex-col gap-3" data-tour="odds">
+        {/* Odds (preços de referência): empilhadas no celular, lado a lado no desktop
+            (over/under e 1X2 na mesma linha; sem o 1X2, o over/under ocupa metade). */}
+        <div className="grid gap-3 lg:grid-cols-2" data-tour="odds">
           <Suspense fallback={<MatchOddsSkeleton />}>
             <MatchOddsCards odds={odds} unavailable={unavailableReason} />
           </Suspense>
@@ -582,17 +560,18 @@ function MobileMatch({
         {/* Leitura do modelo (#555): probabilidade e odd justa, sem valor. Fora do
             MatchHero/PalpiteHero (firewall ADR 0030). */}
         {modelReading && (
-          <div className="flex flex-col gap-3">
-            <Suspense fallback={<MatchModelReadingSkeleton />}>
-              <MatchModelReading reading={modelReading} />
-            </Suspense>
-          </div>
+          <Suspense fallback={<MatchModelReadingSkeleton />}>
+            <MatchModelReading reading={modelReading} />
+          </Suspense>
         )}
 
-        {/* Seu palpite (#564) + Registrar apostas (#556): a ponte deixa o "Seu palpite"
-            mandar o palpite pra lista "Suas apostas" desta árvore. */}
+        {/* Registrar apostas (#556) + Seu palpite (#564): UMA ponte envolve os dois, pra
+            o "Seu palpite" mandar o palpite pra lista "Suas apostas". */}
         {betGrid && (
           <BetSlipBridgeProvider>
+            <Suspense fallback={<BetSlipSkeleton />}>
+              <BetSlipSection matchId={matchId} grid={betGrid} />
+            </Suspense>
             {seuPalpite && (
               <Suspense fallback={<SeuPalpiteSkeleton />}>
                 <SeuPalpiteSection
@@ -600,13 +579,9 @@ function MobileMatch({
                   teams={teams}
                   data={seuPalpite}
                   aiEnabled={userContextEnabled}
-                  variant="mobile"
                 />
               </Suspense>
             )}
-            <Suspense fallback={<BetSlipSkeleton />}>
-              <BetSlipSection matchId={matchId} grid={betGrid} variant="mobile" />
-            </Suspense>
           </BetSlipBridgeProvider>
         )}
 
@@ -619,177 +594,23 @@ function MobileMatch({
           </Suspense>
         </div>
       </div>
-    </div>
+    </PageContainer>
   );
 }
 
-function DesktopMatch({
-  heroView,
-  odds,
-  modelReading,
-  sections,
-  previousAnalyses,
-  matchId,
-  fixtureRef,
-  leagueKey,
-  unavailableReason,
+// Volta pra lista ("jogos") à esquerda e o atalho do bolão à direita, numa linha.
+function MatchTopBar({
   backHref,
-  finalScore,
-  bestBetEnabled,
-  heroPalpite,
-  heroSetId,
-  heroSharedAt,
-  homeTeamHref,
-  awayTeamHref,
-  betGrid,
-  seuPalpite,
-  userContextEnabled,
-  contextEnabled,
-  userContextView,
-  teams,
-}: Common) {
-  return (
-    <>
-      <div className="mx-auto w-full max-w-content px-8 pt-8 pb-16">
-        <div className="mb-6 flex items-center justify-between">
-          <Link
-            href={backHref}
-            className="inline-flex items-center gap-2 rounded-sm text-muted-foreground hover:text-foreground focus-visible:outline-none focus-visible:ring-[3px] focus-visible:ring-ring/50"
-          >
-            <ChevronLeft className="size-3.5" />
-            <span className="text-body-sm tracking-tight">jogos</span>
-          </Link>
-          {unavailableReason === null && <PoolLink matchId={matchId} />}
-        </div>
-
-        {/* Identidade do jogo FULL-WIDTH no topo. */}
-        <div className="pb-6">
-          <MatchHero
-            view={heroView}
-            status={
-              heroView.status === "live" || heroView.isInProgress
-                ? "live"
-                : "scheduled"
-            }
-            score={finalScore ?? undefined}
-            homeHref={homeTeamHref}
-            awayHref={awayTeamHref}
-          />
-        </div>
-
-        {/* Palpite FULL-WIDTH, com a própria altura. Antes ficava num grid [1fr_320px]
-            esticado até a altura das odds empilhadas à direita: no estado vazio o card era
-            quase todo espaço em branco. */}
-        <div className="pb-4">
-          <PalpiteHero
-            heroPalpite={heroPalpite}
-            matchId={matchId}
-            unavailable={unavailableReason}
-            fanOutEnabled={bestBetEnabled}
-            finalScore={finalScore}
-            setId={heroSetId}
-            sharedAt={heroSharedAt}
-            hasAnalyses={sections.length > 0}
-            contextEnabled={contextEnabled}
-          />
-        </div>
-
-        {/* Odds (preços de referência) LADO A LADO logo abaixo: over/under e 1X2 na mesma
-            linha, mesma altura (stretch do grid). Sem o 1X2, o over/under ocupa metade. */}
-        <div className="mb-6 grid grid-cols-2 gap-3" data-tour="odds">
-          <Suspense fallback={<MatchOddsSkeleton />}>
-            <MatchOddsCards odds={odds} unavailable={unavailableReason} />
-          </Suspense>
-        </div>
-
-        {/* Leitura do modelo (#555) FULL-WIDTH abaixo das odds: probabilidade e odd
-            justa, sem valor. Fora do MatchHero/PalpiteHero (firewall ADR 0030). */}
-        {modelReading && (
-          <div className="mb-6">
-            <Suspense fallback={<MatchModelReadingSkeleton />}>
-              <MatchModelReading reading={modelReading} />
-            </Suspense>
-          </div>
-        )}
-
-        {/* Detalhe por mercado FULL-WIDTH abaixo das odds: collapsed por padrão, ocupa a
-            largura toda ao expandir. Firewall ADR 0030 intacto: é
-            disclosure collapsed; edge/EV/stake vivem DENTRO dele, nada de valor no HERO. */}
-        <div className="flex flex-col gap-3 pb-6">
-          <NeutralAnalysisDetail
-            sections={sections}
-            previousAnalyses={previousAnalyses}
-            userContext={userContextView}
-          />
-          {unavailableReason !== null && sections.length === 0 && (
-            <NotAnalyzableNotice reason={unavailableReason} score={finalScore} />
-          )}
-        </div>
-
-        {/* Registrar apostas (#556): seção própria, separada da análise, com a lista
-            "Suas apostas" fixa à direita. */}
-        {betGrid && (
-          <div className="flex flex-col gap-6 pb-8">
-            <BetSlipBridgeProvider>
-              {seuPalpite && (
-                <Suspense fallback={<SeuPalpiteSkeleton />}>
-                  <SeuPalpiteSection
-                    matchId={matchId}
-                    teams={teams}
-                    data={seuPalpite}
-                    aiEnabled={userContextEnabled}
-                    variant="desktop"
-                  />
-                </Suspense>
-              )}
-              <Suspense fallback={<BetSlipSkeleton />}>
-                <BetSlipSection matchId={matchId} grid={betGrid} variant="desktop" />
-              </Suspense>
-            </BetSlipBridgeProvider>
-          </div>
-        )}
-
-        <div data-tour="match-stats">
-          <Suspense fallback={<MatchSectionsSkeleton />}>
-            <MatchSections fixtureRef={fixtureRef} leagueKey={leagueKey} />
-          </Suspense>
-          <Suspense fallback={<MatchAuxiliarySkeleton />}>
-            <MatchAuxiliarySections fixtureRef={fixtureRef} />
-          </Suspense>
-        </div>
-      </div>
-    </>
-  );
-}
-
-// Detalhe NEUTRO por mercado (#351, §3.3): o MatchCollapsible (chrome neutro — a costura
-// cromática) envolve o MarketAnalysisSections em modo READ-ONLY (sem analyzable/matchId →
-// sem footer de reanálise; o botão do HERO re-roda tudo). PreviousAnalyses (#204) dentro
-// do mesmo detalhe. Os números de valor (edge/EV/stake/odd) são conteúdo LEGÍTIMO aqui —
-// o firewall só barra o HERO. Renderiza só quando há análise (sections.length > 0).
-//
-// O `view` retornado por analyzeBestBet é IGNORADO de propósito: o detalhe vem do
-// `sections` revalidado (não-stale), e o contrato #353 do action não pode ser tocado
-// (predictions-best-bet.test.ts o pina). O HERO usa só `ok`/`error`/`palpiteError` do action.
-function NeutralAnalysisDetail({
-  sections,
-  previousAnalyses,
-  userContext,
+  poolMatchId,
 }: {
-  sections: MarketAnalysisSectionItem[];
-  previousAnalyses: PreviousAnalysisItem[];
-  // "O que você acrescentou" (#565): o contexto extra da análise visível.
-  userContext: AnalysisUserContextView | null;
+  backHref: string;
+  poolMatchId: string | null;
 }) {
-  if (sections.length === 0) return null;
   return (
-    <MatchCollapsible title="ver análise por mercado">
-      <div className="flex flex-col gap-3">
-        {userContext && <AnalysisUserContext view={userContext} />}
-        <MarketAnalysisSections sections={sections} />
-        <PreviousAnalyses items={previousAnalyses} />
-      </div>
-    </MatchCollapsible>
+    <div className="flex items-center justify-between gap-3">
+      <BackLink href={backHref} label="jogos" className="mb-0" />
+      {poolMatchId !== null && <PoolLink matchId={poolMatchId} />}
+    </div>
   );
 }
 
@@ -805,11 +626,13 @@ function NotAnalyzableNotice({
 }) {
   const { label, detail } = unavailableNoticeCopy(reason, score);
   return (
-    <div className="flex flex-col gap-1.5 rounded-md border border-dashed border-border px-4 py-3.5">
-      <span className="text-meta uppercase tracking-label text-muted-foreground">
+    <div className="border-border flex flex-col gap-1.5 rounded-md border border-dashed px-4 py-3.5">
+      <span className="text-meta tracking-label text-muted-foreground uppercase">
         {label}
       </span>
-      <p className="text-body-sm text-muted-foreground tracking-tight">{detail}</p>
+      <p className="text-body-sm text-muted-foreground tracking-tight">
+        {detail}
+      </p>
     </div>
   );
 }
@@ -820,7 +643,7 @@ function PoolLink({ matchId }: { matchId: string }) {
   return (
     <Link
       href={`/bolao?jogo=${matchId}`}
-      className="inline-flex items-center gap-1.5 rounded-sm text-body-sm tracking-tight text-muted-foreground hover:text-foreground focus-visible:outline-none focus-visible:ring-[3px] focus-visible:ring-ring/50"
+      className="text-body-sm text-muted-foreground hover:text-foreground focus-visible:ring-ring/50 inline-flex items-center gap-1.5 rounded-sm tracking-tight focus-visible:ring-[3px] focus-visible:outline-none"
     >
       <Users className="size-3.5" aria-hidden />
       criar bolão

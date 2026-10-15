@@ -5,18 +5,16 @@ import type { BetGridView } from "@/lib/view/bet-slip";
 
 // "Registrar apostas" fora do caminho crítico: a grade precisa do modelo do jogo
 // (tabela + ratings) e das odds de referência (lidas DEPOIS do refresh que a página já
-// faz), então chega por streaming como os cards de odds. A promise é criada UMA vez
-// pela página e compartilhada pelas árvores celular e desktop.
+// faz), então chega por streaming como os cards de odds. Renderizada uma vez por página
+// (#576: uma árvore responsiva).
 export async function BetSlipSection({
   matchId,
   grid,
-  variant,
 }: {
   matchId: string;
   grid: Promise<BetGridView>;
-  variant: "mobile" | "desktop";
 }) {
-  return <BetSlip matchId={matchId} grid={await grid} variant={variant} />;
+  return <BetSlip matchId={matchId} grid={await grid} />;
 }
 
 export function BetSlipSkeleton() {

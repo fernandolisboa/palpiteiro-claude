@@ -182,7 +182,8 @@ export function ComoUsarContent() {
             levar alguns minutos; mantenha a página aberta.
           </li>
           <li>
-            O palpite aparece no topo e o detalhe de cada mercado fica logo abaixo.
+            O palpite aparece no topo, resumido. <Ui>Ler análise completa</Ui>,
+            logo abaixo dele, abre o porquê inteiro e o detalhe de cada mercado.
           </li>
         </Steps>
         <p>
@@ -199,7 +200,7 @@ export function ComoUsarContent() {
           já considerava, a não verificável entra com peso menor e a contradita não
           entra. O contexto não
           conta a mais no seu limite do dia. Não escreva dados pessoais. Pra ver o
-          que entrou, abra <Ui>ver análise por mercado</Ui>: lá em cima fica{" "}
+          que entrou, abra <Ui>Ler análise completa</Ui>: lá em cima fica{" "}
           <Ui>o que você acrescentou</Ui>, com o status de cada afirmação.
         </p>
         <Tip>
@@ -219,18 +220,19 @@ export function ComoUsarContent() {
       <Section id="ler-analise">
         <p>
           O <Strong>Palpite da IA</Strong> é a manchete: quem leva, o placar provável, a
-          confiança (baixa, média ou alta) e um parágrafo com o porquê. Embaixo
-          aparecem os mercados que ele usou e, quando a IA leu notícias, os links das
-          fontes. Depois do jogo, o quadro mostra se <Ui>Acertou</Ui> ou{" "}
+          confiança (baixa, média ou alta) e o começo do porquê. Ao abrir{" "}
+          <Ui>Ler análise completa</Ui>, o quadro mostra o parágrafo inteiro, os
+          mercados que ele usou, os palpites extras e, quando a IA leu notícias, os
+          links das fontes. Depois do jogo, o quadro mostra se <Ui>Acertou</Ui> ou{" "}
           <Ui>Errou</Ui> e o placar real.
         </p>
         <p>
-          Logo abaixo, toque em <Ui>ver análise por mercado</Ui> pra
-          abrir o detalhe de cada mercado: a seleção sugerida com odd, stake e
-          retorno esperado, os cenários comparados e os fatores-chave. Quando nenhum
+          O mesmo <Ui>Ler análise completa</Ui> abre, logo abaixo do palpite, o
+          detalhe de cada mercado, um embaixo do outro: a seleção sugerida com odd,
+          stake e retorno esperado, os cenários comparados e os fatores-chave. Quando nenhum
           lado tem vantagem suficiente, o mercado sai como <Strong>Sem aposta</Strong> (não
-          apostar), e isso é esperado. <Ui>análises anteriores</Ui> guarda as versões
-          antigas.
+          apostar), e isso é esperado. No fim, <Ui>análises anteriores</Ui> guarda as
+          versões antigas.
         </p>
         <p>
           Todo número com um <Ui>?</Ui> ao lado explica o que é num toque, com um
@@ -280,8 +282,9 @@ export function ComoUsarContent() {
         </p>
         <Tip>
           <Strong>Gostou do palpite?</Strong> <Ui>Adicionar às suas apostas</Ui>{" "}
-          leva o placar ou o resultado pra lista de <Ui>Suas apostas</Ui>, logo
-          abaixo, pra você registrar. Não escreva dados pessoais no motivo: ele fica
+          leva o placar ou o resultado pra lista de <Ui>Suas apostas</Ui> (ao lado da
+          grade de mercados no computador, na barra de baixo no celular), pra você
+          registrar. Não escreva dados pessoais no motivo: ele fica
           salvo com a sua análise.
         </Tip>
       </Section>

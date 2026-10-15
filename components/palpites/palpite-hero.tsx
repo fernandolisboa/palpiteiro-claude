@@ -62,6 +62,10 @@ type Props = {
   // Campo "Contexto extra (opcional)" (#565): kill-switch enable_user_context ligado E
   // motor code_jev. O servidor confere de novo.
   contextEnabled: boolean;
+  // Palpite compacto (#576): false = narrativa em 2 linhas (o texto inteiro fica no DOM)
+  // e sem "a partir de:", ficha de dimensões e fontes, que aparecem ao abrir "Ler análise
+  // completa" (PalpiteArea). Default true: os outros chamadores e testes não mudam.
+  expanded?: boolean;
 };
 
 // Campo do contexto extra, controlado pelo PalpiteHero (o estado sobrevive ao
@@ -113,6 +117,7 @@ export function PalpiteHero({
   sharedAt,
   hasAnalyses,
   contextEnabled,
+  expanded = true,
 }: Props) {
   const [state, formAction, pending] = useActionState(runPalpiteHero, null);
   const [context, setContext] = useState("");
@@ -186,6 +191,7 @@ export function PalpiteHero({
         canRegenerate={unavailable === null && fanOutEnabled && hasAnalyses}
         contextField={contextField}
         contextNotice={contextNotice}
+        expanded={expanded}
       />
     </form>
   );
@@ -204,6 +210,7 @@ function HeroBody({
   canRegenerate,
   contextField,
   contextNotice,
+  expanded,
 }: {
   heroPalpite: PalpiteHeadlineView | null;
   unavailable: MatchUnavailableReason | null;
@@ -217,6 +224,7 @@ function HeroBody({
   canRegenerate: boolean;
   contextField: ContextField;
   contextNotice: string | null;
+  expanded: boolean;
 }) {
   // Pending: skeleton que espelha o populated (sem reflow) — status em PALAVRAS, sem
   // dígito de tempo. Tem precedência sobre tudo (o run está em voo agora).
@@ -236,6 +244,7 @@ function HeroBody({
         canRegenerate={canRegenerate}
         contextField={contextField}
         contextNotice={contextNotice}
+        expanded={expanded}
       />
     );
   }
@@ -265,6 +274,7 @@ function PopulatedHero({
   canRegenerate,
   contextField,
   contextNotice,
+  expanded,
 }: {
   view: PalpiteHeadlineView;
   analyzable: boolean;
@@ -275,6 +285,7 @@ function PopulatedHero({
   canRegenerate: boolean;
   contextField: ContextField;
   contextNotice: string | null;
+  expanded: boolean;
 }) {
   const settled = view.badge !== null;
   return (
@@ -309,19 +320,26 @@ function PopulatedHero({
           )}
         </div>
 
-        <p className="max-w-reading text-body leading-relaxed tracking-tight text-muted-foreground">
+        {/* Compacto (#576): 2 linhas, com o texto inteiro no DOM (busca do navegador,
+            leitor de tela); o resto do porquê abre em "Ler análise completa". */}
+        <p
+          className={cn(
+            "max-w-reading text-body leading-relaxed tracking-tight text-muted-foreground",
+            !expanded && "line-clamp-2",
+          )}
+        >
           {view.narrative}
         </p>
 
-        {view.citedMarkets.length > 0 && (
+        {expanded && view.citedMarkets.length > 0 && (
           <p className="text-meta uppercase tracking-eyebrow text-muted-foreground">
             a partir de: {view.citedMarkets.join(" · ")}
           </p>
         )}
 
-        <DimensionScorecard dimensions={view.dimensions} />
+        {expanded && <DimensionScorecard dimensions={view.dimensions} />}
 
-        <CitedSources sources={view.sources} />
+        {expanded && <CitedSources sources={view.sources} />}
 
         {analyzable && contextField && <UserContextField {...contextField} />}
 

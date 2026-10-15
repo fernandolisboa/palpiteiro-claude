@@ -5,9 +5,10 @@ import { describe, expect, it } from "vitest";
 
 import { RISK_DISCLAIMER } from "@/lib/view/share/disclaimer";
 
-// Guards de fonte do bloco "Seu palpite" (#564, ADR 0055 Decisão 8): leitura de
-// probabilidade, não dica. Aviso de risco §3 verbatim, nada de "apostar"/"cupom" e
-// nenhum termo de preço de casa ou vantagem no código da UI (fora de comentários).
+// Guards de fonte do bloco "Seu palpite" (#564, ADR 0055 Decisão 10 emendada pela ADR
+// 0057): leitura de probabilidade, não dica. Sem aviso de risco próprio (o §3 fica no
+// registro de apostas, na mesma tela), nada de "apostar"/"cupom" e nenhum termo de preço
+// de casa ou vantagem no código da UI (fora de comentários).
 
 const root = join(__dirname, "..", "..");
 const read = (rel: string) => readFileSync(join(root, rel), "utf8");
@@ -16,30 +17,29 @@ function stripComments(src: string): string {
   return src.replace(/\/\*[\s\S]*?\*\//g, "").replace(/(^|\s)\/\/.*$/gm, "$1");
 }
 
-function localConstant(src: string, name: string): string | null {
-  const m = new RegExp(`const\\s+${name}\\s*=\\s*\\n?\\s*"([^"]+)"`).exec(src);
-  return m ? m[1] : null;
-}
-
 const UI_FILES = [
   "components/seu-palpite.tsx",
   "components/seu-palpite-section.tsx",
   "lib/view/user-palpite.ts",
 ];
 
-describe("components/seu-palpite.tsx — aviso de risco §3", () => {
-  it("renderiza {RISK_DISCLAIMER_PT_BR} e a cópia local é o §3 verbatim", () => {
+describe("components/seu-palpite.tsx — sem aviso de risco próprio (ADR 0057)", () => {
+  it("nenhum RISK_DISCLAIMER_PT_BR nem trecho do §3 no bloco", () => {
     const src = read("components/seu-palpite.tsx");
-    expect(stripComments(src)).toMatch(/\{\s*RISK_DISCLAIMER_PT_BR\s*\}/);
-    expect(localConstant(src, "RISK_DISCLAIMER_PT_BR")).toBe(RISK_DISCLAIMER);
+    expect(src).not.toMatch(/RISK_DISCLAIMER/);
+    for (const piece of [
+      RISK_DISCLAIMER,
+      "Aposta não é investimento",
+      "nunca para recuperar perdas",
+      "procure ajuda",
+    ]) {
+      expect(src).not.toContain(piece);
+    }
   });
 });
 
 describe.each(UI_FILES)("%s — copy da UI", (file) => {
-  const code = stripComments(read(file)).replace(
-    /const\s+RISK_DISCLAIMER_PT_BR\s*=\s*\n?\s*"[^"]+";/,
-    "",
-  );
+  const code = stripComments(read(file));
 
   it('nenhum "apostar" nem "cupom"', () => {
     expect(code).not.toMatch(/\bapostar\b/i);

@@ -48,12 +48,12 @@ export const TOUR_CHAPTERS: Record<TourChapter, readonly TourStep[]> = {
     {
       target: "menu",
       title: "Menu",
-      body: "O menu fica sempre aqui em cima: jogos, suas apostas, bolão e desempenho. Em \"ajuda\" ficam o guia \"como usar\", que explica cada tela com calma, e o atalho pra rever este tour. Perfil e sair ficam no seu avatar, à direita.",
+      body: 'O menu fica sempre aqui em cima: jogos, suas apostas, bolão e desempenho. Em "ajuda" ficam o guia "como usar", que explica cada tela com calma, e o atalho pra rever este tour. Perfil e sair ficam no seu avatar, à direita.',
     },
     {
       target: "league-picker",
       title: "Campeonato",
-      body: "Filtre a lista por campeonato. \"Todas as ligas\" junta todos os campeonatos que o app acompanha.",
+      body: 'Filtre a lista por campeonato. "Todas as ligas" junta todos os campeonatos que o app acompanha.',
     },
     {
       target: "date-range",
@@ -63,12 +63,12 @@ export const TOUR_CHAPTERS: Record<TourChapter, readonly TourStep[]> = {
     {
       target: "recent-predictions",
       title: "Suas predições recentes",
-      body: "Os últimos jogos que você analisou aparecem aqui. \"ver todas\" leva pro desempenho, com o histórico completo e o resultado de cada análise.",
+      body: 'Os últimos jogos que você analisou aparecem aqui. "ver todas" leva pro desempenho, com o histórico completo e o resultado de cada análise.',
     },
     {
       target: "match-row",
       title: "Abra um jogo",
-      body: "Cada linha é um jogo, com horário, odds (quando já publicadas) e \"analisado\" se você já rodou a análise. Toque neste pra abrir: o tour continua lá, mostrando como gerar o palpite.",
+      body: 'Cada linha é um jogo, com horário, odds (quando já publicadas) e "analisado" se você já rodou a análise. Toque neste pra abrir: o tour continua lá, mostrando como gerar o palpite.',
       interactive: true,
     },
   ],
@@ -76,22 +76,22 @@ export const TOUR_CHAPTERS: Record<TourChapter, readonly TourStep[]> = {
     {
       target: "palpite",
       title: "Palpite da IA",
-      body: "Aqui fica o palpite da IA: quem leva, o placar provável e o porquê. Toque em \"Analisar com IA\" pra gerar. Pode levar alguns minutos, e cada mercado analisado usa uma das suas análises do dia. Depois, \"ver análise por mercado\" abre o detalhe de cada mercado (odd, vantagem, stake ou sem aposta). Quer contar algo que você sabe (quem está fora, como os times vêm)? Quando aparecer, abra \"Contexto extra (opcional)\": a gente confere com os nossos dados antes de usar, e não conta a mais no limite.",
-    },
-    {
-      target: "seu-palpite",
-      title: "Seu palpite",
-      body: "Tem um palpite seu? Escolha o placar ou o resultado e veja na hora a chance que o modelo dá, de graça. Se quiser, escreva o motivo e toque em \"Analisar meu palpite\": a IA lê, a gente confere com os nossos dados e o modelo recalcula (conta 1 do seu limite diário de palpites). \"Adicionar às suas apostas\" leva o palpite pra lista.",
-    },
-    {
-      target: "bet-slip",
-      title: "Suas apostas",
-      body: "Fez uma aposta com os amigos? Toque nas seleções aqui (ou digite a aposta), confira a odd que você pegou e toque em \"Registrar apostas\". A avaliação sai na hora, sem gastar análise, e a aposta vai pra Suas apostas.",
+      body: 'Aqui fica o palpite da IA: quem leva, o placar provável e o porquê. Toque em "Analisar com IA" pra gerar. Pode levar alguns minutos, e cada mercado analisado usa uma das suas análises do dia. Depois, "Ler análise completa" abre o porquê inteiro e o detalhe de cada mercado (odd, vantagem, stake ou sem aposta). Quer contar algo que você sabe (quem está fora, como os times vêm)? Quando aparecer, abra "Contexto extra (opcional)": a gente confere com os nossos dados antes de usar, e não conta a mais no limite.',
     },
     {
       target: "odds",
       title: "Odds de mercado",
-      body: "As odds de mercado pra este jogo. É contra elas que a análise mede se há vantagem. Os \"?\" explicam os números num toque.",
+      body: 'As odds de mercado pra este jogo. É contra elas que a análise mede se há vantagem. Os "?" explicam os números num toque.',
+    },
+    {
+      target: "bet-slip",
+      title: "Suas apostas",
+      body: 'Fez uma aposta com os amigos? Toque nas seleções aqui (ou digite a aposta), confira a odd que você pegou e toque em "Registrar apostas". A avaliação sai na hora, sem gastar análise, e a aposta vai pra Suas apostas.',
+    },
+    {
+      target: "seu-palpite",
+      title: "Seu palpite",
+      body: 'Tem um palpite seu? Escolha o placar ou o resultado e veja na hora a chance que o modelo dá, de graça. Se quiser, escreva o motivo e toque em "Analisar meu palpite": a IA lê, a gente confere com os nossos dados e o modelo recalcula (conta 1 do seu limite diário de palpites). "Adicionar às suas apostas" leva o palpite pra lista.',
     },
     {
       target: "match-stats",
@@ -100,7 +100,7 @@ export const TOUR_CHAPTERS: Record<TourChapter, readonly TourStep[]> = {
     },
     {
       title: "Pronto",
-      body: "Depois do jogo o resultado é apurado sozinho: as análises aparecem em desempenho e as apostas que você registrou, em suas apostas. Em \"ajuda\", no menu do topo, o guia \"como usar\" explica cada tela e dá pra rever este tour.",
+      body: 'Depois do jogo o resultado é apurado sozinho: as análises aparecem em desempenho e as apostas que você registrou, em suas apostas. Em "ajuda", no menu do topo, o guia "como usar" explica cada tela e dá pra rever este tour.',
     },
   ],
 };
@@ -108,7 +108,7 @@ export const TOUR_CHAPTERS: Record<TourChapter, readonly TourStep[]> = {
 /** Capítulo que abre sozinho nesta página, dado o progresso salvo. */
 export function shouldAutoStart(
   chapter: TourChapter,
-  state: TourState | null,
+  state: TourState | null
 ): boolean {
   if (chapter === "jogos") return state === null;
   return state === "jogos";
@@ -130,7 +130,7 @@ const RANK: Record<TourState, number> = { jogos: 1, done: 2, dismissed: 2 };
  */
 export function mergeTourState(
   server: TourState | null,
-  local: TourState | null,
+  local: TourState | null
 ): TourState | null {
   if (local === null) return server;
   if (server === null) return local;
@@ -149,7 +149,7 @@ export function parseTourState(raw: unknown): TourState | null {
  * pulado).
  */
 export function tourMatchIndex(
-  matches: readonly { analyzable?: boolean }[],
+  matches: readonly { analyzable?: boolean }[]
 ): number {
   return matches.findIndex((m) => m.analyzable === true);
 }

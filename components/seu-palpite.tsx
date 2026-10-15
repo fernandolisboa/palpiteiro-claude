@@ -43,11 +43,8 @@ import {
 // 2. "Analisar meu palpite" (opcional, conta 1 do limite diário de palpites): a IA lê
 //    o motivo, o código confere cada afirmação e o modelo recalcula.
 // É leitura de probabilidade, não dica: nada de preço de casa, vantagem ou valor por
-// aqui (envelope legal, ADR 0048/0053), e o aviso de risco fica à vista.
-
-// Aviso de risco completo (ADR 0034 §12, docs/ops/05-legal-compliance.md §3), VERBATIM.
-const RISK_DISCLAIMER_PT_BR =
-  "Aposta não é investimento. As recomendações do Palpiteiro são análises e não garantem resultado. Aposte com responsabilidade, só o que você pode perder, e nunca para recuperar perdas. Se a aposta deixou de ser diversão, procure ajuda.";
+// aqui (envelope legal, ADR 0048/0053). Sem aviso de risco próprio (ADR 0057, emenda a
+// 0055 D10): o §3 completo fica no registro de apostas, na mesma tela.
 
 // Rótulos literais aqui de propósito: o guia /como-usar confere que eles existem na UI.
 const STATUS_CHIP: Record<ClaimStatus, string> = {
@@ -80,15 +77,12 @@ export function SeuPalpite({
   model,
   latest,
   aiEnabled,
-  variant,
 }: {
   matchId: string;
   teams: TeamNames;
   model: SeuPalpiteModelView | null;
   latest: UserPalpiteAnalysisView | null;
   aiEnabled: boolean;
-  // A página monta duas árvores (celular e desktop); cada uma tem a sua instância.
-  variant: "mobile" | "desktop";
 }) {
   const [mode, setMode] = useState<Mode>("score");
   const [homeGoals, setHomeGoals] = useState<number | null>(null);
@@ -234,12 +228,7 @@ export function SeuPalpite({
       </div>
       <Card className="gap-0 overflow-hidden p-0">
         {model ? (
-          <div
-            className={cn(
-              "grid gap-4 px-4 py-3.5",
-              variant === "desktop" && "grid-cols-2 items-start",
-            )}
-          >
+          <div className="grid gap-4 px-4 py-3.5 lg:grid-cols-2 lg:items-start">
             {picker}
             {readingCard ?? (
               <p className="text-body-sm tracking-tight text-muted-foreground">
@@ -274,10 +263,7 @@ export function SeuPalpite({
           </>
         )}
       </Card>
-      {analysis && <AnalysisCard analysis={analysis} teams={teams} variant={variant} />}
-      <p className="text-meta leading-relaxed text-muted-foreground tracking-tight">
-        {RISK_DISCLAIMER_PT_BR}
-      </p>
+      {analysis && <AnalysisCard analysis={analysis} teams={teams} />}
     </section>
   );
 }
@@ -446,11 +432,9 @@ function AnalyzeForm({
 function AnalysisCard({
   analysis,
   teams,
-  variant,
 }: {
   analysis: UserPalpiteAnalysisView;
   teams: TeamNames;
-  variant: "mobile" | "desktop";
 }) {
   const a = analysis;
   return (
@@ -500,12 +484,7 @@ function AnalysisCard({
           </div>
         )}
 
-        <div
-          className={cn(
-            "grid gap-3",
-            variant === "desktop" ? "grid-cols-2" : "grid-cols-1 sm:grid-cols-2",
-          )}
-        >
+        <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
           <div className="flex flex-col gap-1.5 rounded-md border border-border-subtle px-3 py-2.5">
             <span className="text-meta uppercase tracking-label text-muted-foreground">
               sem o seu contexto

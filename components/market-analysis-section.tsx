@@ -34,9 +34,11 @@ type DispatchProps = {
 function SectionContent({
   item,
   dispatch,
+  showRiskDisclaimer = true,
 }: {
   item: MarketAnalysisSectionItem;
   dispatch: DispatchProps | null;
+  showRiskDisclaimer?: boolean;
 }) {
   if (dispatch?.analyzable) {
     return (
@@ -50,7 +52,7 @@ function SectionContent({
       />
     );
   }
-  return <AnalysisResult view={item.view} />;
+  return <AnalysisResult view={item.view} showRiskDisclaimer={showRiskDisclaimer} />;
 }
 
 // Uma seção colapsável por mercado (#243): reusa o MatchCollapsible (client) com o
@@ -61,10 +63,12 @@ export function MarketAnalysisSection({
   item,
   defaultOpen = false,
   dispatch,
+  showRiskDisclaimer = true,
 }: {
   item: MarketAnalysisSectionItem;
   defaultOpen?: boolean;
   dispatch: DispatchProps | null;
+  showRiskDisclaimer?: boolean;
 }) {
   return (
     <MatchCollapsible
@@ -72,29 +76,69 @@ export function MarketAnalysisSection({
       meta={sectionMeta(item.view)}
       defaultOpen={defaultOpen}
     >
-      <SectionContent item={item} dispatch={dispatch} />
+      <SectionContent
+        item={item}
+        dispatch={dispatch}
+        showRiskDisclaimer={showRiskDisclaimer}
+      />
     </MatchCollapsible>
   );
 }
 
-// Área de resultados por-mercado. `sections.length` é a ÚNICA chave single-vs-multi: ≤1 →
-// conteúdo CRU (sem chrome de collapsible) — byte-idêntico ao atual no read-only, AC3 de
-// produção; ≥2 → uma seção colapsável por mercado, TODAS COLAPSADAS por padrão (refino
-// #366: ao abrir "ver análise por mercado", nenhum mercado vem expandido — o usuário
-// escolhe qual abrir). key=marketKey: a seção NÃO remonta na reanálise (#244) → o estado
-// do footer (dropdown de modelo) persiste.
+// Mercado aberto, sem acordeão (#576, "Ler análise completa"): cabeçalho h3 com o
+// mercado à esquerda e o resumo (seleção · odd) à direita, e o resultado logo abaixo.
+function FlatMarketSection({
+  item,
+  dispatch,
+  showRiskDisclaimer,
+}: {
+  item: MarketAnalysisSectionItem;
+  dispatch: DispatchProps | null;
+  showRiskDisclaimer: boolean;
+}) {
+  return (
+    <section className="flex flex-col gap-2">
+      <div className="flex items-baseline justify-between gap-3 px-0.5">
+        <h3 className="text-meta font-medium uppercase tracking-label text-muted-foreground">
+          {item.marketLabel}
+        </h3>
+        <span className="text-right text-body-sm tabular-nums tracking-tight text-muted-foreground">
+          {sectionMeta(item.view)}
+        </span>
+      </div>
+      <SectionContent
+        item={item}
+        dispatch={dispatch}
+        showRiskDisclaimer={showRiskDisclaimer}
+      />
+    </section>
+  );
+}
+
+// Área de resultados por-mercado. Layout `collapsible` (default): `sections.length` é a
+// ÚNICA chave single-vs-multi: ≤1 → conteúdo CRU (sem chrome de collapsible) —
+// byte-idêntico ao atual no read-only, AC3 de produção; ≥2 → uma seção colapsável por
+// mercado, TODAS COLAPSADAS por padrão (refino #366: o usuário escolhe qual abrir).
+// Layout `flat` (#576, "Ler análise completa"): todo mercado aberto, com cabeçalho, num
+// nível só. key=marketKey: a seção NÃO remonta na reanálise (#244) → o estado do footer
+// (dropdown de modelo) persiste. `showRiskDisclaimer` vai a cada AnalysisResult (false
+// quando o container mostra UMA linha de risco, ADR 0057).
 export function MarketAnalysisSections({
   sections,
   analyzable = false,
   matchId,
   selectableModels = [],
   defaultModelLabel = "",
+  layout = "collapsible",
+  showRiskDisclaimer = true,
 }: {
   sections: MarketAnalysisSectionItem[];
   analyzable?: boolean;
   matchId?: string;
   selectableModels?: { id: string; label: string }[];
   defaultModelLabel?: string;
+  layout?: "collapsible" | "flat";
+  showRiskDisclaimer?: boolean;
 }) {
   if (sections.length === 0) return null;
   const dispatch: DispatchProps | null =
@@ -102,8 +146,29 @@ export function MarketAnalysisSections({
       ? { analyzable, matchId, selectableModels, defaultModelLabel }
       : null;
 
+  if (layout === "flat") {
+    return (
+      <div className="flex flex-col gap-5">
+        {sections.map((item) => (
+          <FlatMarketSection
+            key={item.marketKey}
+            item={item}
+            dispatch={dispatch}
+            showRiskDisclaimer={showRiskDisclaimer}
+          />
+        ))}
+      </div>
+    );
+  }
+
   if (sections.length === 1) {
-    return <SectionContent item={sections[0]} dispatch={dispatch} />;
+    return (
+      <SectionContent
+        item={sections[0]}
+        dispatch={dispatch}
+        showRiskDisclaimer={showRiskDisclaimer}
+      />
+    );
   }
   return (
     <div className="flex flex-col gap-3">
@@ -112,6 +177,7 @@ export function MarketAnalysisSections({
           key={item.marketKey}
           item={item}
           dispatch={dispatch}
+          showRiskDisclaimer={showRiskDisclaimer}
         />
       ))}
     </div>

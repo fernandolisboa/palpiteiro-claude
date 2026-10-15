@@ -101,7 +101,6 @@ function props(over: Partial<Props> = {}): Props {
     model: MODEL,
     latest: null,
     aiEnabled: true,
-    variant: "desktop",
     ...over,
   };
 }
@@ -237,7 +236,7 @@ describe("SeuPalpite — ponte com Suas apostas", () => {
     await mount(
       <BetSlipBridgeProvider>
         <SeuPalpite {...props()} />
-        <BetSlip matchId={MATCH_ID} grid={grid} variant="desktop" />
+        <BetSlip matchId={MATCH_ID} grid={grid} />
       </BetSlipBridgeProvider>,
     );
     await click(button("2 gols do Flamengo"));
@@ -253,7 +252,7 @@ describe("SeuPalpite — ponte com Suas apostas", () => {
     await mount(
       <BetSlipBridgeProvider>
         <SeuPalpite {...props()} />
-        <BetSlip matchId={MATCH_ID} grid={grid} variant="desktop" />
+        <BetSlip matchId={MATCH_ID} grid={grid} />
       </BetSlipBridgeProvider>,
     );
     await click(button("2 gols do Flamengo"));
@@ -270,7 +269,7 @@ describe("SeuPalpite — ponte com Suas apostas", () => {
     await mount(
       <BetSlipBridgeProvider>
         <SeuPalpite {...props()} />
-        <BetSlip matchId={MATCH_ID} grid={grid} variant="desktop" />
+        <BetSlip matchId={MATCH_ID} grid={grid} />
       </BetSlipBridgeProvider>,
     );
     const scores = [0, 1, 2, 3, 4].flatMap((h) => [0, 1].map((a) => [h, a] as const));
@@ -294,7 +293,7 @@ describe("SeuPalpite — ponte com Suas apostas", () => {
     await mount(
       <BetSlipBridgeProvider>
         <SeuPalpite {...props()} />
-        <BetSlip matchId={MATCH_ID} grid={grid} variant="desktop" />
+        <BetSlip matchId={MATCH_ID} grid={grid} />
       </BetSlipBridgeProvider>,
     );
     await click(button("Resultado"));
@@ -317,8 +316,47 @@ describe("SeuPalpite — ponte com Suas apostas", () => {
     );
   });
 
+  it("uma instância (#576): no celular abre a folha; no desktop rola até a lista", async () => {
+    // Celular (jsdom não tem matchMedia → ramo da folha): o painel aparece na folha.
+    await mount(
+      <BetSlipBridgeProvider>
+        <SeuPalpite {...props()} />
+        <BetSlip matchId={MATCH_ID} grid={grid} />
+      </BetSlipBridgeProvider>,
+    );
+    await click(button("Resultado"));
+    await click(button("Empate"));
+    await click(button("Adicionar às suas apostas"));
+    expect(document.querySelector('[role="dialog"]')).not.toBeNull();
+    await act(async () => root.unmount());
+
+    // Desktop (lg): nada de folha, a seção rola até a vista.
+    const scroll = vi.fn();
+    const original = Element.prototype.scrollIntoView;
+    Element.prototype.scrollIntoView = scroll;
+    vi.stubGlobal("matchMedia", (q: string) => ({ matches: q === "(min-width: 1024px)" }));
+    try {
+      root = createRoot(container);
+      await mount(
+        <BetSlipBridgeProvider>
+          <SeuPalpite {...props()} />
+          <BetSlip matchId={MATCH_ID} grid={grid} />
+        </BetSlipBridgeProvider>,
+      );
+      await click(button("Resultado"));
+      await click(button("Empate"));
+      await click(button("Adicionar às suas apostas"));
+      expect(document.querySelector('[role="dialog"]')).toBeNull();
+      expect(scroll).toHaveBeenCalled();
+      expect(container.textContent).toContain("suas apostas (1)");
+    } finally {
+      vi.unstubAllGlobals();
+      Element.prototype.scrollIntoView = original;
+    }
+  });
+
   it("fora do provider o BetSlip funciona como antes", async () => {
-    await mount(<BetSlip matchId={MATCH_ID} grid={grid} variant="desktop" />);
+    await mount(<BetSlip matchId={MATCH_ID} grid={grid} />);
     await click(button(/^Flamengo/));
     expect(container.textContent).toContain("suas apostas (1)");
   });

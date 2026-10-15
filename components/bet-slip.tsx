@@ -86,16 +86,9 @@ function legFromSelection(s: GridSelectionView): SlipLeg {
   };
 }
 
-export function BetSlip({
-  matchId,
-  grid,
-  variant,
-}: {
-  matchId: string;
-  grid: BetGridView;
-  // A página monta duas árvores (celular e desktop); cada uma tem a sua instância.
-  variant: "mobile" | "desktop";
-}) {
+// Uma instância só por página (#576): a grade e o painel numa grade responsiva. O painel
+// fica ao lado no desktop e numa folha no celular; o estado da lista é um só.
+export function BetSlip({ matchId, grid }: { matchId: string; grid: BetGridView }) {
   const [legs, setLegs] = useState<SlipLeg[]>([]);
   const [mode, setMode] = useState<Mode>("simples");
   const [comboOddInput, setComboOddInput] = useState("");
@@ -200,8 +193,11 @@ export function BetSlip({
   useEffect(() => {
     fromBridge.current = (leg) => {
       const r = addLegs([legFromKindParams(leg.kind, leg.params)]);
-      if (variant === "mobile") setSheetOpen(true);
-      else sectionRef.current?.scrollIntoView?.({ behavior: "smooth", block: "start" });
+      // Desktop (lg, 1024px): o painel está ao lado da grade → rola até a seção. Celular:
+      // abre a folha. Os `?.` são de propósito: sem matchMedia (jsdom), cai na folha.
+      const desktop = window.matchMedia?.("(min-width: 1024px)")?.matches === true;
+      if (desktop) sectionRef.current?.scrollIntoView?.({ behavior: "smooth", block: "start" });
+      else setSheetOpen(true);
       return r.added > 0 ? "added" : r.full ? "full" : "duplicate";
     };
   });
@@ -337,29 +333,23 @@ export function BetSlip({
 
   const count = legs.length;
 
-  if (variant === "desktop") {
-    return (
-      <section ref={sectionRef} className="flex flex-col gap-3" data-tour="bet-slip">
-        <SectionHeading modelLabel={grid.modelLabel} />
-        <div className="grid grid-cols-[1fr_340px] items-start gap-4">
-          {grid_}
-          <div className="sticky top-20">{panel}</div>
-        </div>
-      </section>
-    );
-  }
-
+  // O par lg:hidden / hidden lg:block mora AQUI, não na página (#576): é o painel ao lado
+  // × barra + folha, com um estado só. O SheetContent só monta aberto, então o painel
+  // aparece duas vezes no DOM só com a folha aberta no celular.
   return (
     <section ref={sectionRef} className="flex flex-col gap-3" data-tour="bet-slip">
       <SectionHeading modelLabel={grid.modelLabel} />
-      {grid_}
-      {/* No celular o painel (com o aviso) fica na folha; o aviso §3 também fica à
-          vista junto da grade (ADR 0036 §12: em todo render). */}
-      <p className="text-meta leading-relaxed text-muted-foreground tracking-tight">
+      <div className="flex flex-col gap-3 lg:grid lg:grid-cols-[minmax(0,1fr)_340px] lg:items-start lg:gap-4">
+        {grid_}
+        <div className="hidden lg:sticky lg:top-20 lg:block">{panel}</div>
+      </div>
+      {/* Celular: o painel (com o §3) fica na folha modal, que cobre a página; o §3 fica
+          também à vista junto da grade (ADR 0057 item 1). No desktop o painel está ao lado. */}
+      <p className="text-meta leading-relaxed text-muted-foreground tracking-tight lg:hidden">
         {RISK_DISCLAIMER_PT_BR}
       </p>
       {(count > 0 || registerState) && (
-        <div className="fixed inset-x-0 bottom-0 z-40 border-t border-border bg-background/95 px-5 pt-3 pb-[max(0.75rem,env(safe-area-inset-bottom))] backdrop-blur supports-[backdrop-filter]:bg-background/80">
+        <div className="fixed inset-x-0 bottom-0 z-40 border-t border-border bg-background/95 px-5 pt-3 pb-[max(0.75rem,env(safe-area-inset-bottom))] backdrop-blur supports-[backdrop-filter]:bg-background/80 lg:hidden">
           <Button className="w-full" onClick={() => setSheetOpen(true)}>
             <Ticket className="size-4" aria-hidden />
             {count > 0 ? `Suas apostas (${count})` : "Ver avaliação"}
@@ -378,7 +368,7 @@ export function BetSlip({
         </SheetContent>
       </Sheet>
       {/* Espaço pra barra fixa não cobrir o fim da página. */}
-      {(count > 0 || registerState) && <div className="h-16" aria-hidden />}
+      {(count > 0 || registerState) && <div className="h-16 lg:hidden" aria-hidden />}
     </section>
   );
 }
