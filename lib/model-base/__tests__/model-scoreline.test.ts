@@ -57,6 +57,8 @@ describe("getMatchModelScoreline (seam do cupom)", () => {
       lambdaAway: 0.98,
       rho: -0.07,
       matrix: scorelineMatrix(1.6, 0.98, { rho: -0.07 }),
+      // O "calculado há" da tabela de mercados (#576) sai daqui.
+      baseCheckedAt: NOW,
     });
     expect(out).not.toHaveProperty("fallbackReason");
   });
@@ -81,6 +83,7 @@ describe("getMatchModelScoreline (seam do cupom)", () => {
       lambdaAway: 1.2,
       matrix: scorelineMatrix(1.3, 1.2),
       fallbackReason: "stale_fit",
+      baseCheckedAt: NOW,
     });
     expect(out).not.toHaveProperty("rho");
   });

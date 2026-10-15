@@ -28,7 +28,14 @@ function localConstant(src: string, name: string): string | null {
   return m ? m[1] : null;
 }
 
-const COMPONENT = "components/bet-slip.tsx";
+// O registro de apostas mora em components/bet-slip/ (#576): provider, tabela, painel,
+// barra do celular e o §3. O §3 é uma constante local de risk-notice.tsx.
+const COMPONENTS = readdirSync(join(root, "components", "bet-slip"))
+  .filter((f) => f.endsWith(".tsx"))
+  .map((f) => `components/bet-slip/${f}`);
+const RISK_NOTICE = "components/bet-slip/risk-notice.tsx";
+const PANEL = "components/bet-slip/slip-panel.tsx";
+const registro = () => COMPONENTS.map((f) => stripComments(read(f))).join("\n");
 
 describe("disclaimer de risco §3 (ADR 0034 §12, ADR 0048)", () => {
   it("o canônico do código bate com o texto do doc de compliance", () => {
@@ -47,8 +54,20 @@ describe("disclaimer de risco §3 (ADR 0034 §12, ADR 0048)", () => {
     expect(doc).toContain(CANONICAL_RISK);
   });
 
-  it(`${COMPONENT} renderiza {RISK_DISCLAIMER_PT_BR} e a constante é o §3 verbatim`, () => {
-    const src = read(COMPONENT);
+  it("os arquivos do registro de apostas existem", () => {
+    expect(COMPONENTS).toEqual(
+      expect.arrayContaining([
+        "components/bet-slip/bet-slip-provider.tsx",
+        "components/bet-slip/market-table.tsx",
+        RISK_NOTICE,
+        PANEL,
+        "components/bet-slip/slip-mobile-bar.tsx",
+      ]),
+    );
+  });
+
+  it(`${RISK_NOTICE} renderiza {RISK_DISCLAIMER_PT_BR} e a constante é o §3 verbatim`, () => {
+    const src = read(RISK_NOTICE);
     const code = stripComments(src);
     expect(code).toMatch(/\{\s*RISK_DISCLAIMER_PT_BR\s*\}/);
     // O componente ("use client") guarda uma cópia local de propósito (não puxa o
@@ -62,6 +81,10 @@ describe("disclaimer de risco §3 (ADR 0034 §12, ADR 0048)", () => {
       );
     }
   });
+
+  it(`${PANEL} renderiza o <SlipRiskNotice /> junto da lista e da avaliação`, () => {
+    expect(stripComments(read(PANEL))).toMatch(/<SlipRiskNotice\b[^>]*\/>/);
+  });
 });
 
 describe("histórico /apostas também carrega o §3 verbatim", () => {
@@ -73,8 +96,8 @@ describe("histórico /apostas também carrega o §3 verbatim", () => {
   });
 });
 
-describe(`${COMPONENT} — copy da UI`, () => {
-  const code = stripComments(read(COMPONENT));
+describe("components/bet-slip/ — copy da UI", () => {
+  const code = registro();
 
   it('o submit diz "Registrar apostas"', () => {
     expect(code).toContain('"Registrar apostas"');

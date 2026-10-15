@@ -2,6 +2,7 @@ import { describe, it, expect } from "vitest";
 
 import {
   computeMarketImpliedProbabilities,
+  computeMarketMargin,
   devigMarket,
 } from "@/lib/odds/implied-probability";
 
@@ -154,5 +155,28 @@ describe("devigMarket (report 13)", () => {
   it("keeps the core's validation", () => {
     expect(() => devigMarket([2.1, 1, 3.6], "shin")).toThrow();
     expect(() => devigMarket([], "power")).toThrow();
+  });
+});
+
+describe("computeMarketMargin (#576)", () => {
+  it("alvo 1 = overround do core", () => {
+    const odds = [2.1, 3.3, 3.6];
+    expect(computeMarketMargin(odds)).toBeCloseTo(
+      computeMarketImpliedProbabilities(odds).overround,
+      12,
+    );
+  });
+
+  it("dupla chance (alvo 2): a margem de um board derivado de um 1X2 de 5% sai 5%, não 10%", () => {
+    // 1X2 justo 50/28/22, com 5% de margem distribuída proporcionalmente.
+    const fair = [0.5, 0.28, 0.22];
+    const raw = fair.map((p) => p * 1.05);
+    const dc = [raw[0] + raw[1], raw[1] + raw[2], raw[0] + raw[2]].map((r) => 1 / r);
+    expect(computeMarketMargin(dc, 2)).toBeCloseTo(0.05, 10);
+    expect(computeMarketImpliedProbabilities(dc).overround).toBeCloseTo(1.1, 10);
+  });
+
+  it("valida as odds como o core", () => {
+    expect(() => computeMarketMargin([2, 1])).toThrow();
   });
 });

@@ -30,3 +30,4 @@ A revisão de design propôs levar o §3 para o rodapé e deixar só uma linha c
 - **(+)** Guardas de fonte travam a regra: `app/(app)/match/[id]/__tests__/one-notice.test.ts` (o §3 só sai do registro de apostas; a linha de análise sai uma vez, no detalhe) e `components/__tests__/seu-palpite-guards.test.ts`.
 - **(−)** Quem só usa o "Seu palpite" no desktop vê o §3 no painel ao lado, não dentro do bloco.
 - **(−)** Quando o registro sair de `components/bet-slip.tsx` (painel em arquivo próprio), a referência de arquivo da ADR 0053 item 7 muda; atualizar aqui, sem reabrir a 0053.
+  - **Atualização (PR B do #576):** o registro saiu. A constante local `RISK_DISCLAIMER_PT_BR` (o §3 verbatim) agora mora em `components/bet-slip/risk-notice.tsx`, renderizada pelo painel Suas apostas (`components/bet-slip/slip-panel.tsx`, coluna no desktop e folha no celular) e, no celular, uma vez abaixo das abas (`SlipMobileRiskNotice`). Mesma regra, um §3 por tela; a ADR 0053 não muda.

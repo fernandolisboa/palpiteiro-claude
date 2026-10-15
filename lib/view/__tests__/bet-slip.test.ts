@@ -11,6 +11,9 @@ import {
 import { TOP_EXACT_SCORES } from "@/lib/bets/slip-markets";
 import type { ModelScoreline } from "@/lib/quant/match-model";
 import { p1X2, pBtts, scorelineMatrix } from "@/lib/quant/scoreline-model";
+import { formatPct } from "@/lib/format";
+import { modelProbabilities } from "@/lib/model-base/build-snapshot";
+import { computeMarketImpliedProbabilities } from "@/lib/odds/implied-probability";
 import { RISK_DISCLAIMER } from "@/lib/view/share/disclaimer";
 import {
   historyLegSummary,
@@ -117,7 +120,7 @@ describe("toBetGridView", () => {
     }
     expect(view.exactScoreProbPct).toHaveLength(10);
     expect(view.exactScoreProbPct?.every((r) => r.length === 10)).toBe(true);
-    expect(view.modelLabel).toBe("modelo Dixon-Coles");
+    expect(view.model).toEqual({ label: "modelo Dixon-Coles", computedAgo: null });
   });
 
   it("prob da análise do mercado tem precedência na grade", () => {
@@ -141,7 +144,7 @@ describe("toBetGridView", () => {
     });
     expect(v.topScores).toEqual([]);
     expect(v.exactScoreProbPct).toBeNull();
-    expect(v.modelLabel).toBeNull();
+    expect(v.model).toBeNull();
     expect(v.groups[0].selections[0].fairOdd).toBeNull();
     expect(v.groups[0].selections[0].modelProbPct).toBeNull();
     expect(v.groups[2].selections[0].modelProbPct).toBe(55);
@@ -155,7 +158,171 @@ describe("toBetGridView", () => {
       references: new Map(),
       analysis: new Map(),
     });
-    expect(v.modelLabel).toBe("modelo simplificado (dados limitados)");
+    expect(v.model?.label).toBe("modelo simplificado (dados limitados)");
+  });
+});
+
+describe("toBetGridView — tabela de mercados (#576)", () => {
+  const NOW = new Date("2026-10-12T12:12:00Z");
+  const MR = { home: 2.1, draw: 3.3, away: 3.6 };
+  const OU25 = { over: 1.9, under: 1.95 };
+  // Dupla chance derivada de um 1X2 justo 50/28/22 com 5% de margem.
+  const raw = [0.5 * 1.05, 0.28 * 1.05, 0.22 * 1.05];
+  const DC = {
+    home_or_draw: 1 / (raw[0] + raw[1]),
+    away_or_draw: 1 / (raw[1] + raw[2]),
+    home_or_away: 1 / (raw[0] + raw[2]),
+  };
+  const pctNum = (s: string) => Number(s.replace("%", "").replace(",", "."));
+
+  const view = toBetGridView({
+    teams: TEAMS,
+    model: { ...MODEL, baseCheckedAt: new Date("2026-10-12T09:12:00Z") },
+    references: new Map([
+      ["match_result", ref(MR)],
+      ["double_chance", ref(DC)],
+      ["over_under:2.5", ref(OU25)],
+      // Incompleto: só um lado.
+      ["btts", ref({ yes: 1.8 })],
+    ]),
+    analysis: new Map([
+      ["match_result", { ...analysisMarket({ home: 52, draw: 26, away: 22 }), recommendation: "home" }],
+      ["over_under:1.5", { ...analysisMarket({ over: 74, under: 26 }), recommendation: "over" }],
+      ["btts", { ...analysisMarket({ yes: 50, no: 50 }), recommendation: "pass" }],
+      ["double_chance", { ...analysisMarket({ home_or_draw: 78 }), recommendation: "home_or_draw" }],
+    ]),
+    modelReading: { source: "Dixon-Coles", jev: "+ JEV" },
+    now: NOW,
+  });
+  const group = (key: string) => view.groups.find((g) => g.key === key)!;
+
+  it("chance do mercado do 1X2 e do total batem com computeMarketImpliedProbabilities", () => {
+    for (const [key, odds] of [
+      ["match_result", MR],
+      ["over_under:2.5", OU25],
+    ] as const) {
+      const { probs } = computeMarketImpliedProbabilities(Object.values(odds));
+      expect(group(key).odds?.impliedPct).toEqual(
+        probs.map((p) => formatPct(p * 100, { decimals: 1 })),
+      );
+    }
+  });
+
+  it("margem com alvo 1 = overround; idade da captura por mercado", () => {
+    const { overround } = computeMarketImpliedProbabilities(Object.values(MR));
+    expect(group("match_result").odds?.margin).toBe(formatPct(overround * 100, { decimals: 1 }));
+    expect(group("match_result").odds?.updatedAgo).toBe("há 12min");
+  });
+
+  it("dupla chance: chances somam 200% e a margem sai ≈5% (não 10%)", () => {
+    const dc = group("double_chance").odds!;
+    const sum = dc.impliedPct.map(pctNum).reduce((a, b) => a + b, 0);
+    expect(sum).toBeCloseTo(200, 0);
+    expect(dc.margin).toBe("5,0%");
+    // Na ordem da grade (home_draw, home_away, draw_away), não na do mercado.
+    expect(pctNum(dc.impliedPct[0])).toBeCloseTo(78, 0);
+    expect(pctNum(dc.impliedPct[1])).toBeCloseTo(72, 0);
+    expect(pctNum(dc.impliedPct[2])).toBeCloseTo(50, 0);
+  });
+
+  it("mercado incompleto ou sem captura → odds: null", () => {
+    expect(group("btts").odds).toBeNull();
+    expect(group("over_under:3.5").odds).toBeNull();
+  });
+
+  it("marca IA só na seleção recomendada, na linha certa, e nunca em pass", () => {
+    const picks = view.groups.flatMap((g) => g.selections.filter((s) => s.aiPick).map((s) => s.id));
+    expect(picks).toEqual([
+      "match_result:home",
+      "double_chance:home_draw",
+      "over_under:1.5:over",
+    ]);
+    expect(group("over_under:2.5").selections.some((s) => s.aiPick)).toBe(false);
+    expect(view.topScores.some((s) => s.aiPick)).toBe(false);
+  });
+
+  it("probSource por mercado", () => {
+    expect(group("match_result").probSource).toBe("analysis");
+    expect(group("over_under:1.5").probSource).toBe("analysis");
+    expect(group("over_under:2.5").probSource).toBe("model");
+    const noModel = toBetGridView({
+      teams: TEAMS,
+      model: null,
+      references: new Map(),
+      analysis: new Map(),
+    });
+    expect(noModel.groups.every((g) => g.probSource === null)).toBe(true);
+  });
+
+  it("modelo da base: rótulo da leitura (fonte + JEV) e calculado há", () => {
+    expect(view.model).toEqual({ label: "modelo Dixon-Coles + JEV", computedAgo: "há 3h" });
+    expect(view.mode).toBe("register");
+    expect(view.oddsHeading).toBe("Odds de mercado");
+    expect(view.noOdds).toBeNull();
+  });
+
+  it("cálculo na hora: sem calculado há, mesmo com a leitura da base disponível", () => {
+    const v = toBetGridView({
+      teams: TEAMS,
+      model: MODEL,
+      references: new Map(),
+      analysis: new Map(),
+      modelReading: { source: "Dixon-Coles", jev: "+ JEV" },
+      now: NOW,
+    });
+    expect(v.model).toEqual({ label: "modelo Dixon-Coles", computedAgo: null });
+  });
+
+  it("só leitura: sem modelo, sem placares, odds antes do jogo", () => {
+    const v = toBetGridView({
+      teams: TEAMS,
+      model: MODEL,
+      references: new Map([["match_result", ref(MR)]]),
+      analysis: new Map(),
+      mode: "readOnly",
+      unavailable: "finished",
+      now: NOW,
+    });
+    expect(v.mode).toBe("readOnly");
+    expect(v.oddsHeading).toBe("Odds antes do jogo");
+    expect(v.topScores).toEqual([]);
+    expect(v.exactScoreProbPct).toBeNull();
+    expect(v.model).toBeNull();
+    expect(v.groups[0].selections[0].referenceOdd).toBe(2.1);
+    expect(v.groups[0].selections[0].modelProbPct).toBeNull();
+  });
+
+  it("nenhuma captura: aviso de odds indisponíveis por estado", () => {
+    const at = (unavailable: "live" | "finished" | null) =>
+      toBetGridView({ teams: TEAMS, model: null, references: new Map(), analysis: new Map(), unavailable })
+        .noOdds;
+    // Pré-jogo cobre o mercado que não abriu e a captura velha (> 48h): não diz qual.
+    expect(at(null)).toBe("Sem cotação recente para este jogo.");
+    expect(at("live")).toBe("Jogo em andamento, sem cotação pré-jogo publicada.");
+    expect(at("finished")).toBe("Sem cotação de referência para este jogo.");
+  });
+
+  it("paridade: modelo da base e mercado sem análise → a mesma chance da Leitura do modelo", () => {
+    const base = { ...MODEL, baseCheckedAt: new Date("2026-10-12T09:00:00Z") };
+    const v = toBetGridView({ teams: TEAMS, model: base, references: new Map(), analysis: new Map() });
+    const probs = modelProbabilities(base.matrix);
+    const expected: Record<string, number> = {
+      "match_result:home": probs.match_result.home,
+      "match_result:draw": probs.match_result.draw,
+      "match_result:away": probs.match_result.away,
+      "double_chance:home_draw": probs.double_chance.home_or_draw,
+      "double_chance:home_away": probs.double_chance.home_or_away,
+      "double_chance:draw_away": probs.double_chance.away_or_draw,
+      "btts:yes": probs.btts.yes,
+      "btts:no": probs.btts.no,
+      "over_under:1.5:over": probs.over_under["1.5"].over,
+      "over_under:2.5:under": probs.over_under["2.5"].under,
+      "over_under:3.5:over": probs.over_under["3.5"].over,
+    };
+    const cells = new Map(v.groups.flatMap((g) => g.selections).map((s) => [s.id, s]));
+    for (const [id, pct] of Object.entries(expected)) {
+      expect(Math.abs((cells.get(id)?.modelProbPct ?? -1) - pct), id).toBeLessThanOrEqual(0.1);
+    }
   });
 });
 

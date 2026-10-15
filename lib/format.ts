@@ -290,7 +290,7 @@ export function formatGeneratedAtSeconds(date: Date, timeZone?: string): string 
 }
 
 /**
- * "2min" / "12min" / "1h" / "2d" — usado no OddsCard "atualizado há X".
+ * "2min" / "12min" / "1h" / "2d" — a idade da captura na tabela de mercados ("há X").
  */
 export function formatRelativeAgo(
   past: Date,

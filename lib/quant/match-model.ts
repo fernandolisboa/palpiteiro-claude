@@ -33,6 +33,10 @@ export type ModelScoreline = {
   rho?: number;
   matrix: ScorelineMatrix;
   fallbackReason?: DixonColesFallbackReason;
+  // Quando o λ veio da base do jogo (lib/model-base/model-scoreline.ts): o `checked_at`
+  // dessa base, pro "calculado há" da tabela de mercados (#576). O cálculo na hora não
+  // preenche.
+  baseCheckedAt?: Date;
 };
 
 export type DcFitSnapshot = {

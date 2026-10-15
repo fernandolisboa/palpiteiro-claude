@@ -1,4 +1,4 @@
-import { EmptyState } from "@/components/empty-state";
+import { DataEmptyLine } from "@/components/data-empty-line";
 import { MatchCollapsible } from "@/components/match-collapsible";
 import { Separator } from "@/components/ui/separator";
 import { getSportsDataProvider } from "@/lib/providers/sports-data";
@@ -75,49 +75,34 @@ export async function MatchAuxiliarySections({ fixtureRef }: Props) {
     awayTeam: fixtureRef.awayTeam,
   });
 
-  const injuriesMeta = !injuriesView.available
-    ? "dados indisponíveis"
-    : injuriesView.home.length + injuriesView.away.length === 0
-      ? "nenhuma baixa"
-      : `${injuriesView.home.length + injuriesView.away.length} baixas`;
+  const injuriesCount = injuriesView.home.length + injuriesView.away.length;
 
-  const lineupsMeta = !lineupView.available
-    ? "ainda não divulgadas"
-    : lineupView.home && lineupView.away
-      ? "divulgadas"
-      : "parciais";
-
+  // Bloco sem dado vira uma linha (#576); com dado, o MatchCollapsible (fechado).
   return (
     <>
       <div className="pt-3">
-        <MatchCollapsible title="Lesões e suspensões" meta={injuriesMeta}>
-          {injuriesView.available &&
-          injuriesView.home.length + injuriesView.away.length > 0 ? (
+        {injuriesView.available && injuriesCount > 0 ? (
+          <MatchCollapsible title="Lesões e suspensões" meta={`${injuriesCount} baixas`}>
             <InjuriesBody view={injuriesView} />
-          ) : injuriesView.available ? (
-            <EmptyState
-              className="py-6"
-              title="Nenhuma baixa reportada para esta partida."
-            />
-          ) : (
-            <EmptyState
-              className="py-6"
-              title="O provider atual não disponibiliza lesões e suspensões pra esta competição."
-            />
-          )}
-        </MatchCollapsible>
+          </MatchCollapsible>
+        ) : (
+          <DataEmptyLine
+            title="Lesões e suspensões"
+            reason={injuriesView.available ? "nenhuma baixa reportada" : "dados indisponíveis"}
+          />
+        )}
       </div>
       <div className="pt-3">
-        <MatchCollapsible title="Escalações" meta={lineupsMeta}>
-          {lineupView.available ? (
+        {lineupView.available ? (
+          <MatchCollapsible
+            title="Escalações"
+            meta={lineupView.home && lineupView.away ? "divulgadas" : "parciais"}
+          >
             <LineupBody view={lineupView} />
-          ) : (
-            <EmptyState
-              className="py-6"
-              title="Escalações ainda não foram divulgadas pela competição."
-            />
-          )}
-        </MatchCollapsible>
+          </MatchCollapsible>
+        ) : (
+          <DataEmptyLine title="Escalações" reason="ainda não divulgadas" />
+        )}
       </div>
     </>
   );

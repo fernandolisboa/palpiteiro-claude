@@ -6,7 +6,7 @@ import {
   slipFullNotice,
   useBetSlipBridge,
   type BridgeAddOutcome,
-} from "@/components/bet-slip-bridge";
+} from "@/components/bet-slip/bet-slip-provider";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Card } from "@/components/ui/card";
@@ -216,16 +216,12 @@ export function SeuPalpite({
   );
 
   return (
-    <section className="flex flex-col gap-3" data-tour="seu-palpite">
-      <div className="flex flex-col gap-1">
-        <span className="text-meta uppercase tracking-eyebrow text-muted-foreground">
-          seu palpite
-        </span>
-        <p className="text-body-sm tracking-tight text-muted-foreground">
-          Qual é o seu palpite? Escolha um placar ou um resultado e veja na hora o que o
-          modelo acha. Grátis, sem gastar análise.
-        </p>
-      </div>
+    // O título é a aba "Seu palpite" (#576); o alvo do tour também é o painel da aba.
+    <section className="flex flex-col gap-3" aria-label="Seu palpite">
+      <p className="text-body-sm tracking-tight text-muted-foreground">
+        Qual é o seu palpite? Escolha um placar ou um resultado e veja na hora o que o
+        modelo acha. Grátis, sem gastar análise.
+      </p>
       <Card className="gap-0 overflow-hidden p-0">
         {model ? (
           <div className="grid gap-4 px-4 py-3.5 lg:grid-cols-2 lg:items-start">

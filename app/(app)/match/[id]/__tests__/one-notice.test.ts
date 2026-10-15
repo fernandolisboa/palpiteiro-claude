@@ -9,8 +9,8 @@ import { RISK_DISCLAIMER } from "@/lib/view/share/disclaimer";
 
 // Um aviso por tela na página do jogo (ADR 0057). Fonte, não render: trava QUEM renderiza
 // cada aviso, pra uma mudança futura não espalhar de novo o §3 nem a linha de análise.
-// - §3 completo: só no registro de apostas (components/bet-slip.tsx), no painel e, no
-//   celular, abaixo da grade;
+// - §3 completo: só no registro de apostas (components/bet-slip/risk-notice.tsx), no
+//   painel e, no celular, abaixo da grade;
 // - ANALYSIS_RISK_DISCLAIMER: uma linha no "Ler análise completa" (full-analysis.tsx);
 //   os cartões de análise dentro dele não repetem.
 
@@ -31,10 +31,7 @@ const PAGE_FILES = [
   "components/previous-analyses.tsx",
   "components/seu-palpite.tsx",
   "components/seu-palpite-section.tsx",
-  "components/bet-slip-section.tsx",
-  "components/match-odds-cards.tsx",
-  "components/odds-card.tsx",
-  "components/match-model-reading.tsx",
+  "components/bet-slip/market-table-section.tsx",
   "components/match-hero.tsx",
   "components/match-sections.tsx",
   "components/match-sections-auxiliary.tsx",
@@ -48,11 +45,22 @@ describe("§3 completo: só no registro de apostas", () => {
     expect(code).not.toContain(RISK_DISCLAIMER);
   });
 
-  it("components/bet-slip.tsx renderiza o §3 no painel e, só no celular, abaixo da grade", () => {
-    const code = stripComments(read("components/bet-slip.tsx"));
-    expect(count(code, /\{RISK_DISCLAIMER_PT_BR\}/g)).toBe(2);
-    // A linha abaixo da grade some no desktop, onde o painel com o §3 está ao lado.
-    expect(code).toMatch(/<p className="[^"]*\blg:hidden\b[^"]*">\s*\{RISK_DISCLAIMER_PT_BR\}/);
+  it("só components/bet-slip/risk-notice.tsx renderiza o §3; o painel e a linha do celular o usam", () => {
+    const notice = stripComments(read("components/bet-slip/risk-notice.tsx"));
+    expect(count(notice, /\{RISK_DISCLAIMER_PT_BR\}/g)).toBe(1);
+    // A linha do celular some no desktop, onde o painel com o §3 está ao lado.
+    expect(notice).toMatch(/export function SlipMobileRiskNotice[\s\S]*?className="lg:hidden"/);
+    expect(stripComments(read("components/bet-slip/slip-panel.tsx"))).toMatch(/<SlipRiskNotice\b/);
+    for (const file of [
+      "components/bet-slip/bet-slip-provider.tsx",
+      "components/bet-slip/market-table.tsx",
+      "components/bet-slip/slip-panel.tsx",
+      "components/bet-slip/slip-mobile-bar.tsx",
+    ]) {
+      const code = stripComments(read(file));
+      expect(code, file).not.toContain("nunca para recuperar perdas");
+      expect(code, file).not.toMatch(/RISK_DISCLAIMER_PT_BR/);
+    }
   });
 });
 

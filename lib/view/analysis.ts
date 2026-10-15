@@ -363,7 +363,7 @@ export function toAnalysisView(
       : computeBinaryFramingNote(computed, presentation, line);
 
   // EV do lado recomendado na odd CONGELADA da análise (nunca na odd viva —
-  // o OddsCard cobre as atuais). computeEvPerUnit exige odd > 1; valores fora
+  // a tabela de mercados cobre as atuais). computeEvPerUnit exige odd > 1; valores fora
   // do domínio (defensivo) degradam pra null → "—" na UI.
   const evPerUnit =
     !isPass && oddAtRecNum !== null && oddAtRecNum > 1 && confidenceNum !== null

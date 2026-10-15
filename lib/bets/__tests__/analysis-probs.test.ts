@@ -9,6 +9,7 @@ function row(over: {
   createdAt: string;
   marketKey?: string | null;
   line?: number | null;
+  recommendation?: string;
   selections: Row["selections"];
 }): Row {
   return {
@@ -17,6 +18,7 @@ function row(over: {
       id: over.id,
       createdAt: new Date(over.createdAt),
       marketParams: over.line === undefined ? null : { line: over.line },
+      ...(over.recommendation === undefined ? {} : { recommendation: over.recommendation }),
     },
     selections: over.selections,
   };
@@ -54,8 +56,30 @@ describe("latestAnalysisByMarket", () => {
       predictionId: "new-1x2",
       createdAt: new Date("2026-10-12T12:00:00Z"),
       probs: { home: 52, draw: 26, away: 22 },
+      recommendation: null,
     });
     expect(out.get("btts")?.predictionId).toBe("btts-1");
+  });
+
+  it("guarda a recomendação da análise (a marca IA da tabela, #576), pass inclusive", () => {
+    const out = latestAnalysisByMarket([
+      row({
+        id: "dc",
+        createdAt: "2026-10-12T12:00:00Z",
+        marketKey: "double_chance",
+        recommendation: "home_or_draw",
+        selections: [{ key: "home_or_draw", modelProbPct: 78 }],
+      }),
+      row({
+        id: "btts",
+        createdAt: "2026-10-12T11:00:00Z",
+        marketKey: "btts",
+        recommendation: "pass",
+        selections: [{ key: "yes", modelProbPct: 50 }],
+      }),
+    ]);
+    expect(out.get("double_chance")?.recommendation).toBe("home_or_draw");
+    expect(out.get("btts")?.recommendation).toBe("pass");
   });
 
   it("over/under é chaveado por linha; marketKey null = over_under", () => {

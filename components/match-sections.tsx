@@ -1,3 +1,4 @@
+import { DataEmptyLine } from "@/components/data-empty-line";
 import { FormSection } from "@/components/form-section";
 import { H2HSection } from "@/components/h2h-section";
 import { MatchCollapsible } from "@/components/match-collapsible";
@@ -110,28 +111,40 @@ export async function MatchSections({ fixtureRef, leagueKey }: Props) {
     awayTeam: fixtureRef.awayTeam,
   });
 
+  // Bloco sem dado vira uma linha (#576); com dado, o MatchCollapsible de sempre.
+  const hasForm = formView.home.results.length > 0 || formView.away.results.length > 0;
+  const standingsTitle = `Classificação · ${LEAGUE_LABEL[leagueKey]}`;
+
   return (
     <>
       <div className="grid grid-cols-1 gap-3 lg:grid-cols-2">
-        <MatchCollapsible title="Partidas recentes" meta="últimos 5" defaultOpen>
-          <FormSection view={formView} />
-        </MatchCollapsible>
-        <MatchCollapsible
-          title="Confrontos diretos (H2H)"
-          meta={`${h2hView.rows.length || "0"} jogos`}
-          defaultOpen
-        >
-          <H2HSection view={h2hView} />
-        </MatchCollapsible>
+        {hasForm ? (
+          <MatchCollapsible title="Partidas recentes" meta="últimos 5" defaultOpen>
+            <FormSection view={formView} />
+          </MatchCollapsible>
+        ) : (
+          <DataEmptyLine title="Partidas recentes" reason="sem jogos recentes" />
+        )}
+        {h2hView.rows.length > 0 ? (
+          <MatchCollapsible
+            title="Confrontos diretos (H2H)"
+            meta={`${h2hView.rows.length} jogos`}
+            defaultOpen
+          >
+            <H2HSection view={h2hView} />
+          </MatchCollapsible>
+        ) : (
+          <DataEmptyLine title="Confrontos diretos (H2H)" reason="nenhum confronto recente" />
+        )}
       </div>
       <div className="pt-3">
-        <MatchCollapsible
-          title={`Classificação · ${LEAGUE_LABEL[leagueKey]}`}
-          meta={standingsView.round}
-          defaultOpen
-        >
-          <StandingsSection view={standingsView} />
-        </MatchCollapsible>
+        {standingsView.rows.length > 0 ? (
+          <MatchCollapsible title={standingsTitle} meta={standingsView.round} defaultOpen>
+            <StandingsSection view={standingsView} />
+          </MatchCollapsible>
+        ) : (
+          <DataEmptyLine title={standingsTitle} reason="classificação indisponível" />
+        )}
       </div>
     </>
   );

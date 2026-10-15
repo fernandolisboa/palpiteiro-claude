@@ -23,11 +23,16 @@ import {
   formatLine,
   formatOdd,
   formatPct,
+  formatRelativeAgoLabel,
   formatUnitsCompact,
 } from "@/lib/format";
+import { computeMarketMargin } from "@/lib/odds/implied-probability";
+import { getDescriptor } from "@/lib/odds/market-descriptor";
+import { computeMarketScenarios } from "@/lib/odds/scenario";
 import type { ModelScoreline, ModelScorelineSource } from "@/lib/quant/match-model";
 import { pScoreline } from "@/lib/quant/scoreline-model";
 import { betLegLabel } from "@/lib/view/free-bet";
+import type { MatchUnavailableReason } from "@/lib/view/match-availability";
 
 // Mappers PUROS do cupom (Fase 2, #556): a grade de mercados (server → client) e a
 // avaliação depois de registrar. Tipos serializáveis só (cruzam pra "use client").
@@ -102,7 +107,7 @@ export function modelSourceLabel(source: ModelScorelineSource, degraded: boolean
   return degraded ? "modelo simplificado (dados limitados)" : "modelo simplificado";
 }
 
-// ── Grade de mercados ───────────────────────────────────────────────────────
+// ── Tabela de mercados (a grade de registro, #556/#576) ─────────────────────
 
 export type GridSelectionView = {
   id: string;
@@ -116,23 +121,57 @@ export type GridSelectionView = {
   // Odd justa do modelo (100 / prob), mostrada em cinza quando não há referência.
   fairOdd: number | null;
   modelProbPct: number | null;
+  // A última análise deste mercado (e linha) recomendou esta seleção: a marca "IA".
+  aiPick: boolean;
+};
+
+// A captura do mercado COMPLETO: idade, margem e a chance sem a margem, na ordem das
+// seleções do grupo. Mercado incompleto não ganha linha (de-vig parcial distorce).
+export type GridMarketOddsView = {
+  updatedAgo: string; // "há 12min"
+  margin: string; // "5,2%"
+  impliedPct: string[]; // ["45,2%", "28,1%", "26,7%"]
 };
 
 export type GridGroupView = {
   key: string;
   title: string;
   selections: GridSelectionView[];
+  // De onde vem a chance do mercado: a sua análise dele, o modelo do jogo ou nenhum.
+  probSource: "analysis" | "model" | null;
+  odds: GridMarketOddsView | null;
 };
+
+// "register" = antes do apito (botões, placar exato, texto livre); "readOnly" = jogo que
+// começou, adiado, cancelado ou encerrado (só a última captura, sem botões).
+export type BetGridMode = "register" | "readOnly";
 
 export type BetGridView = {
   teams: TeamNames;
+  mode: BetGridMode;
+  oddsHeading: "Odds de mercado" | "Odds antes do jogo";
   groups: GridGroupView[];
   // Placares mais prováveis (botões) + o "outro placar" livre no cliente.
   topScores: GridSelectionView[];
-  modelLabel: string | null;
+  // O modelo que gerou as chances da tabela. `computedAgo` só quando ele veio da base
+  // do jogo (o cálculo na hora não tem "calculado há"). null = sem modelo.
+  model: { label: string; computedAgo: string | null } | null;
   // Probabilidade de QUALQUER placar 0–9 × 0–9 pro "outro placar" (cliente).
   exactScoreProbPct: number[][] | null;
+  // Nenhum mercado com captura: o corpo do aviso "Odds indisponíveis", por estado.
+  noOdds: string | null;
 };
+
+// Fonte e JEV da Leitura do modelo (lib/view/match-model.ts), da MESMA linha da base.
+export type GridModelReading = { source: string; jev: string | null };
+
+// Antes do apito, "sem odd" é mercado que não abriu OU captura de mais de 48h (o corte do
+// cupom, REFERENCE_MAX_AGE_MS): a copy não afirma qual dos dois.
+const NO_ODDS_COPY = {
+  preMatch: "Sem cotação recente para este jogo.",
+  live: "Jogo em andamento, sem cotação pré-jogo publicada.",
+  other: "Sem cotação de referência para este jogo.",
+} as const;
 
 function selectionView(
   kind: SlipGridKind,
@@ -144,8 +183,9 @@ function selectionView(
   analysis: ReadonlyMap<string, AnalysisMarket>,
 ): GridSelectionView {
   const pin = legMarketPin(kind, params);
+  const market = pin ? analysis.get(referenceKey(pin)) : undefined;
   // Mesmo número da avaliação: o da sua análise daquele mercado, senão o modelo.
-  const analysisProb = pin ? analysis.get(referenceKey(pin))?.probs[pin.selectionKey] : undefined;
+  const analysisProb = pin ? market?.probs[pin.selectionKey] : undefined;
   const grade = gradeScorelineLeg({ model, kind: kind as ScorelineKind, params });
   const modelProbPct =
     analysisProb ?? (grade.status === "graded" ? grade.modelProbPct : null);
@@ -161,25 +201,108 @@ function selectionView(
     referenceOdd: refOdd !== undefined && refOdd > 1 ? refOdd : null,
     fairOdd: modelProbPct !== null && modelProbPct > 0 ? round2(100 / modelProbPct) : null,
     modelProbPct: modelProbPct === null ? null : round2(modelProbPct),
+    // Pela chave do MERCADO (legMarketPin), nunca pelo rótulo: a dupla chance é
+    // home_draw na grade e home_or_draw na análise. "pass" nunca casa.
+    aiPick:
+      pin !== null &&
+      market?.recommendation != null &&
+      market.recommendation === pin.selectionKey,
   };
 }
 
 const round2 = (n: number) => Math.round(n * 100) / 100;
+
+// Chance sem a margem e margem do mercado COMPLETO, igual ao referenceFor do
+// evaluate-slip (descriptor: todas as seleções com odd > 1, alvo e tipo do mercado).
+// Nunca 1/odd cru como probabilidade (ADR 0018).
+function marketOdds(
+  selections: readonly { kind: string; params: BetLegParams }[],
+  references: ReferenceOdds,
+  now: Date,
+): GridMarketOddsView | null {
+  const pins = selections.map((s) => legMarketPin(s.kind, s.params));
+  const first = pins[0];
+  if (!first || pins.some((p) => p === null)) return null;
+  const ref = references.get(referenceKey(first));
+  const descriptor = getDescriptor(first.dbMarketKey);
+  if (!ref || !descriptor) return null;
+  const keys = descriptor.selectionKeys;
+  if (keys.length === 0 || keys.some((k) => !(ref.odds[k] > 1))) return null;
+  const target = descriptor.impliedSumTarget ?? 1;
+  const scen = computeMarketScenarios({
+    selections: keys.map((k) => ({ key: k, modelProbPct: 0, odd: ref.odds[k] })),
+    recommendedKey: null,
+    impliedSumTarget: target,
+    marketKind: descriptor.marketKind ?? "partition",
+  });
+  const impliedPct = pins.map((p) => {
+    const sel = scen.selections.find((s) => s.key === p!.selectionKey);
+    return formatPct(sel?.impliedProbPct ?? null, { decimals: 1 });
+  });
+  return {
+    updatedAgo: formatRelativeAgoLabel(ref.capturedAt, now),
+    margin: formatPct(computeMarketMargin(keys.map((k) => ref.odds[k]), target) * 100, {
+      decimals: 1,
+    }),
+    impliedPct,
+  };
+}
+
+function modelLine(
+  model: ModelScoreline | null,
+  reading: GridModelReading | null,
+  now: Date,
+): BetGridView["model"] {
+  if (!model) return null;
+  // O rótulo descreve o modelo que GEROU a grade (resolveSlipModel): a base do jogo
+  // (com o "calculado há" dela) ou o cálculo na hora, que não tem idade.
+  if (model.baseCheckedAt) {
+    return {
+      label: reading
+        ? `modelo ${reading.source}${reading.jev ? ` ${reading.jev}` : ""}`
+        : modelSourceLabel(model.source, model.degraded),
+      computedAgo: formatRelativeAgoLabel(model.baseCheckedAt, now),
+    };
+  }
+  return { label: modelSourceLabel(model.source, model.degraded), computedAgo: null };
+}
 
 export function toBetGridView(input: {
   teams: TeamNames;
   model: ModelScoreline | null;
   references: ReferenceOdds;
   analysis: ReadonlyMap<string, AnalysisMarket>;
+  mode?: BetGridMode;
+  modelReading?: GridModelReading | null;
+  // Por que o jogo não aceita análise (null = pré-jogo): a copy de "Odds indisponíveis".
+  unavailable?: MatchUnavailableReason | null;
+  now?: Date;
 }): BetGridView {
-  const { teams, model, references, analysis } = input;
-  const groups = GRID_FIXED_GROUPS.map((g) => ({
-    key: g.key,
-    title: groupTitle(g.key),
-    selections: g.selections.map((s) =>
+  const { teams, references, analysis } = input;
+  const mode = input.mode ?? "register";
+  const now = input.now ?? new Date();
+  // Só leitura não tem modelo (o jogo já começou ou acabou): sem chance nem placar.
+  const model = mode === "readOnly" ? null : input.model;
+  const groups = GRID_FIXED_GROUPS.map((g): GridGroupView => {
+    const selections = g.selections.map((s) =>
       selectionView(s.kind, s.params, g.key, teams, model, references, analysis),
-    ),
-  }));
+    );
+    const analyzed = g.selections.some((s) => {
+      const p = legMarketPin(s.kind, s.params);
+      return p !== null && analysis.get(referenceKey(p))?.probs[p.selectionKey] !== undefined;
+    });
+    return {
+      key: g.key,
+      title: groupTitle(g.key),
+      selections,
+      probSource: analyzed
+        ? "analysis"
+        : selections.some((s) => s.modelProbPct !== null)
+          ? "model"
+          : null,
+      odds: marketOdds(g.selections, references, now),
+    };
+  });
 
   let topScores: GridSelectionView[] = [];
   let exactScoreProbPct: number[][] | null = null;
@@ -205,12 +328,22 @@ export function toBetGridView(input: {
       );
   }
 
+  const unavailable = input.unavailable ?? null;
   return {
     teams,
+    mode,
+    oddsHeading: mode === "readOnly" ? "Odds antes do jogo" : "Odds de mercado",
     groups,
     topScores,
-    modelLabel: model ? modelSourceLabel(model.source, model.degraded) : null,
+    model: modelLine(model, input.modelReading ?? null, now),
     exactScoreProbPct,
+    noOdds: groups.some((g) => g.selections.some((s) => s.referenceOdd !== null))
+      ? null
+      : unavailable === null
+        ? NO_ODDS_COPY.preMatch
+        : unavailable === "live"
+          ? NO_ODDS_COPY.live
+          : NO_ODDS_COPY.other,
   };
 }
 

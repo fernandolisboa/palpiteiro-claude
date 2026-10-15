@@ -11,6 +11,9 @@ export type AnalysisMarket = {
   createdAt: Date;
   // Probabilidade (0–100) por seleção do mercado, só as que a análise gravou.
   probs: Record<string, number>;
+  // O que a análise recomendou (a key da seleção, ou "pass"): a marca "IA" da tabela de
+  // mercados (#576). Ausente em quem não precisa dela (avaliação do cupom).
+  recommendation?: string | null;
 };
 
 type HistoryRow = {
@@ -19,6 +22,7 @@ type HistoryRow = {
     id: string;
     createdAt: Date;
     marketParams: { line?: number | null } | null;
+    recommendation?: string | null;
   };
   selections: { key: string; modelProbPct: number; modelProbKnown?: boolean }[];
 };
@@ -55,6 +59,7 @@ export function latestAnalysisByMarket(
       predictionId: row.prediction.id,
       createdAt: row.prediction.createdAt,
       probs,
+      recommendation: row.prediction.recommendation ?? null,
     });
   }
   return out;

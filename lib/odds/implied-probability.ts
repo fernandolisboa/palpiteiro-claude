@@ -37,6 +37,17 @@ export function computeMarketImpliedProbabilities(
   };
 }
 
+/**
+ * Margem do mercado COMPLETO (fração): Σ(1/odd) ÷ alvo − 1 (#576, tabela de mercados).
+ * Com alvo 1 (partição: 1X2, over/under, ambas marcam) é o `overround` do core. Na
+ * dupla chance (alvo 2) cada resultado-base entra em duas seleções, então Σ − 2
+ * mostraria a margem em dobro: dividir pelo alvo devolve a margem do 1X2 de origem.
+ */
+export function computeMarketMargin(odds: number[], impliedSumTarget = 1): number {
+  const { overround } = computeMarketImpliedProbabilities(odds);
+  return (overround + 1) / impliedSumTarget - 1;
+}
+
 // Métodos alternativos de de-vig (trilha de calibração, report 13). O proporcional
 // acima divide a margem na proporção de cada 1/odd; as casas, porém, embutem mais
 // margem nas zebras (viés favorito–zebra), então ele deixa a zebra alta demais.

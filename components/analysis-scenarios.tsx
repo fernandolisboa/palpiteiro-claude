@@ -170,7 +170,7 @@ export function AnalysisScenarios({
         </p>
       )}
       <p className="text-meta leading-snug tracking-tight text-muted-foreground">
-        {`o app só recomenda com vantagem de pelo menos ${minEdgePp} pontos sobre o mercado; os números acima são informativos · odds do momento da análise — as atuais estão no card acima`}
+        {`o app só recomenda com vantagem de pelo menos ${minEdgePp} pontos sobre o mercado; os números acima são informativos · odds do momento da análise — as atuais estão na aba Mercados`}
       </p>
     </div>
   );
