@@ -10,6 +10,7 @@ import {
   formatPct,
   formatUnits,
   formatUnitsCompact,
+  roundOdd,
 } from "./format-number";
 
 describe("format-number (pt-BR, #574)", () => {
@@ -73,5 +74,16 @@ describe("format-number (pt-BR, #574)", () => {
     expect(formatUnitsCompact(10)).toBe("10u");
     expect(formatUnitsCompact(1.25, 1)).toBe("1,3u");
     expect(formatUnitsCompact(Number.NaN)).toBe("—");
+  });
+
+  it("formatUnitsCompact sem casas decimais não corta zeros do inteiro", () => {
+    expect(formatUnitsCompact(10, 0)).toBe("10u");
+    expect(formatUnitsCompact(100, 0)).toBe("100u");
+  });
+
+  it("roundOdd arredonda como o formatOdd exibe", () => {
+    expect(roundOdd(1.855)).toBe(Number((1.855).toFixed(2)));
+    expect(roundOdd(1.855)).toBe(roundOdd(1.85));
+    expect(roundOdd(1.923)).toBe(1.92);
   });
 });

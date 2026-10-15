@@ -15,6 +15,7 @@ import {
   formatRelativeAgoLabel,
   formatStakeUnits,
   modelIdFromVersion,
+  roundOdd,
 } from "@/lib/format";
 import {
   computeEvPerUnit,
@@ -385,12 +386,12 @@ export function toAnalysisView(
     // Aviso comparado na precisão de EXIBIÇÃO (formatOdd, 2 casas): o banco
     // guarda 3 casas, e uma diferença que some no arredondamento renderizaria
     // dois números iguais declarados desiguais — a contradição que o aviso
-    // existe pra evitar. Compara em centésimos, sem reparsear a string
-    // formatada (que sai com vírgula, #574).
+    // existe pra evitar. Usa o mesmo arredondamento do formatOdd (toFixed(2)),
+    // sem reparsear a string formatada (que sai com vírgula, #574).
     const minOddAboveOddAtRec =
       minOddNum !== null &&
       oddAtRecNum !== null &&
-      Math.round(minOddNum * 100) > Math.round(oddAtRecNum * 100);
+      roundOdd(minOddNum) > roundOdd(oddAtRecNum);
     if (minOddAboveOddAtRec) {
       evLegend = `a odd registrada na análise (${formatOdd(oddAtRecNum)}) estava abaixo da mínima sugerida (${minOddLabel}) — só vale a pena se a odd subir para ≥ ${minOddLabel}`;
     } else if (evPerUnit !== null && evPerUnit <= 0) {

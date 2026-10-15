@@ -142,7 +142,7 @@ describe("MarketAnalysisSections — read-only (jogo encerrado)", () => {
     );
     expect(markup).toContain("RACIONAL_OU");
     // Sem chrome de collapsible (meta só no trigger ≥2)…
-    expect(markup).not.toContain("Over 2.5 · 1.92");
+    expect(markup).not.toContain("Over 2,5 · 1.92");
     // …e SEM footer de reanálise (read-only).
     expect(markup).not.toContain("análise feita com modelo");
     expect(markup).not.toContain('name="modelOverride"');
@@ -182,7 +182,7 @@ describe("MarketAnalysisSections — analisável (footer por seção, #244)", ()
       />,
     );
     // Uma seção colapsável por mercado (meta no trigger de CADA — sempre renderizado).
-    expect(markup).toContain("Over 2.5 · 1.92");
+    expect(markup).toContain("Over 2,5 · 1.92");
     expect(markup).toContain("Casa · 2.10");
     // Refino #366: NENHUMA seção aberta por padrão. O Radix Collapsible fechado não emite
     // os filhos → sem footer/racional de NENHUM mercado no markup estático (abrem só no

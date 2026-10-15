@@ -587,6 +587,30 @@ describe("toAnalysisView", () => {
     );
   });
 
+  it("does not warn on half-cent odds that display the same (1.855 vs 1.850)", () => {
+    // toFixed(2) exibe "1,85" pros dois; Math.round(x*100) daria 186 > 185.
+    const view = toAnalysisView(
+      {
+        recommendation: "over",
+        confidencePct: "58.00",
+        rationale: "blah",
+        keyFactors: ["a"],
+        minimumOdd: "1.855",
+        oddAtRecommendation: "1.850",
+        bookmaker: "bet365",
+        impliedProbPct: null,
+        edgePct: "7.30",
+        modelVersion: "claude-sonnet-4-5-20250929",
+        promptVersion: "over_under_v1.1",
+        createdAt: baseCreatedAt,
+      },
+      null,
+      threeHoursLater,
+    );
+    expect(view.evLegend).not.toContain("abaixo da mínima");
+    expect(view.expectedReturnTone).toBe("positive");
+  });
+
   it("keeps neutral tone when a positive EV rounds to 0.0% at display precision", () => {
     // EV à mão: 0.61 × 1.64 − 1 = +0.0004 → exibe "0.0%"; verde aqui afirmaria
     // direção que o número não mostra.

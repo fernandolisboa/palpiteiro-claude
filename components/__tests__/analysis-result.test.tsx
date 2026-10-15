@@ -170,7 +170,7 @@ describe("AnalysisResult — bloco 'Aposta recomendada' (#103/#170)", () => {
 
     expect(markup).toContain("aposta recomendada");
     // Frase estruturada data-driven (AC3): mercado + seleção + linha do view.
-    expect(markup).toContain("Over/Under gols · Over 2.5");
+    expect(markup).toContain("Over/Under gols · Over 2,5");
     // Tradução LEIGA (lay-friendly) restaurada da view (betSummary): a frase
     // pré-pivot "Mais de 2.5 gols — pelo menos 3 gols no jogo".
     expect(markup).toContain("Mais de 2.5 gols");
@@ -199,7 +199,7 @@ describe("AnalysisResult — bloco 'Aposta recomendada' (#103/#170)", () => {
   it("over: keeps the contract order — frase estruturada → stake → odd → retorno → condição por último", () => {
     const markup = renderToStaticMarkup(<AnalysisResult view={baseView} />);
 
-    const phrase = markup.indexOf("Over/Under gols · Over 2.5");
+    const phrase = markup.indexOf("Over/Under gols · Over 2,5");
     const stake = markup.indexOf(">stake<");
     const odd = markup.indexOf("odd na análise");
     const evReturn = markup.indexOf("retorno esperado");
@@ -236,7 +236,7 @@ describe("AnalysisResult — bloco 'Aposta recomendada' (#103/#170)", () => {
         }}
       />,
     );
-    expect(markup).toContain("Over/Under gols · Under 2.5");
+    expect(markup).toContain("Over/Under gols · Under 2,5");
     // tradução leiga do under (lay-friendly).
     expect(markup).toContain("Menos de 2.5 gols");
     expect(markup).toContain("no máximo 2 gols no jogo");

@@ -22,6 +22,11 @@ export function formatOdd(value: number | string | null | undefined): string {
   return n === null ? DASH : formatDecimal(n, 2);
 }
 
+/** A odd na precisão de exibição do formatOdd, como número (pra comparar o que a tela mostra). */
+export function roundOdd(value: number): number {
+  return Number(value.toFixed(2));
+}
+
 /** "58%" ou "50,7%". Para 0-100 com até 1 casa decimal quando precisa. */
 export function formatPct(
   value: number | string | null | undefined,
@@ -83,6 +88,7 @@ export function formatUnits(
  */
 export function formatUnitsCompact(value: number, decimals = 2): string {
   if (!Number.isFinite(value)) return DASH;
-  const trimmed = value.toFixed(decimals).replace(/\.?0+$/, "");
+  const fixed = value.toFixed(decimals);
+  const trimmed = fixed.includes(".") ? fixed.replace(/\.?0+$/, "") : fixed;
   return `${trimmed === "-0" ? "0" : trimmed.replace(".", ",")}u`;
 }
