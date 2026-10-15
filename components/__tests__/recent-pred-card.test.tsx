@@ -12,8 +12,8 @@ function card(overrides: Partial<RecentMatchView> = {}): RecentMatchView {
     away: "FLA",
     when: "sáb 17/10",
     bets: [
-      { market: "Ambas marcam", rec: "Não", edge: "+5,6" },
-      { market: "Total de gols", rec: "Mais de 2,5", edge: "+4,0" },
+      { market: "Ambas marcam", rec: "Não", edge: "+5,6 pontos" },
+      { market: "Total de gols", rec: "Mais de 2,5", edge: "+4,0 pontos" },
     ],
     moreBets: 1,
     passCount: 3,
@@ -30,7 +30,7 @@ describe("RecentPredCard — um cartão por jogo (ADR 0058)", () => {
     expect(t).toContain("Brasileirão");
     expect(t).toContain("sáb 17/10");
     expect(t).toContain("PAL × FLA");
-    expect(t).toContain("Ambas marcam Não vantagem +5,6");
+    expect(t).toContain("Ambas marcam Não vantagem +5,6 pontos");
     expect(t).toContain("+1 aposta");
     expect(t).toContain("3 mercados sem aposta");
     expect(html).toContain('href="/match/m1?back=%2Fjogos%3Fleague%3Dall"');

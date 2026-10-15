@@ -40,7 +40,7 @@ describe("toRecentMatchViews — um cartão por jogo (ADR 0058)", () => {
       passCount: 0,
     });
     // 1X2 mostra a sigla do time (não "Casa" nem "HOME"), com o mercado ao lado.
-    expect(v.bets).toEqual([{ market: "Resultado (1X2)", rec: "FLA", edge: "+4,2" }]);
+    expect(v.bets).toEqual([{ market: "Resultado (1X2)", rec: "FLA", edge: "+4,2 pontos" }]);
   });
 
   it("dedup por mercado: a reanálise vence a análise antiga do mesmo mercado", () => {
@@ -53,7 +53,7 @@ describe("toRecentMatchViews — um cartão por jogo (ADR 0058)", () => {
       SP,
     );
     expect(views).toHaveLength(1);
-    expect(views[0].bets).toEqual([{ market: "Resultado (1X2)", rec: "PAL", edge: "+3,0" }]);
+    expect(views[0].bets).toEqual([{ market: "Resultado (1X2)", rec: "PAL", edge: "+3,0 pontos" }]);
   });
 
   it("over/under multi-linha divide um slot (a chave não leva a linha)", () => {
@@ -81,8 +81,8 @@ describe("toRecentMatchViews — um cartão por jogo (ADR 0058)", () => {
       SP,
     );
     expect(v.bets.map((b) => [b.market, b.rec, b.edge])).toEqual([
-      ["Ambas marcam", "Não", "+5,6"],
-      ["Total de gols", "Mais de 2,5", "+4,0"],
+      ["Ambas marcam", "Não", "+5,6 pontos"],
+      ["Total de gols", "Mais de 2,5", "+4,0 pontos"],
     ]);
     expect(v.moreBets).toBe(1);
     expect(v.passCount).toBe(2);

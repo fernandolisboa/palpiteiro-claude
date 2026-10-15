@@ -44,7 +44,7 @@ export function RecentPredCard({
             </span>
             {bet.edge && (
               <span className="shrink-0 text-meta text-edge-fg">
-                vantagem <span className="font-mono tabular-nums">{bet.edge}</span>
+                vantagem <span className="tabular-nums">{bet.edge}</span>
               </span>
             )}
           </div>

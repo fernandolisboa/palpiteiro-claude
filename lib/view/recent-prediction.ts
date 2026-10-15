@@ -1,4 +1,4 @@
-import { formatEdge, formatWeekdayDate, leagueToKey } from "@/lib/format";
+import { formatEdgePoints, formatWeekdayDate, leagueToKey } from "@/lib/format";
 import type { SupportedLeague } from "@/lib/providers/sports-data/leagues";
 import { displayMarketLabel, findDisplayPresentation } from "@/lib/view/markets/display";
 import { marketContextLabel, recommendationLabel } from "@/lib/view/recommendation";
@@ -37,8 +37,8 @@ function edgeValue(edgePct: string | number | null): number {
  * jogo, mantém a mais recente de cada mercado (a mesma chave da dedup dos KPIs,
  * `keepLatestPerMatch`: `marketKey`, sem a linha) e ordena os jogos pela análise mais
  * recente. No cartão: as apostas antes (maior vantagem primeiro), no máximo
- * `RECENT_VISIBLE_BETS` visíveis, e a contagem dos mercados sem aposta. Datas no fuso
- * do usuário.
+ * `RECENT_VISIBLE_BETS` visíveis, com a vantagem em pontos ("+5,6 pontos", ADR 0056),
+ * e a contagem dos mercados sem aposta. Datas no fuso do usuário.
  */
 export function toRecentMatchViews(
   rows: readonly RecentPredictionInput[],
@@ -90,7 +90,7 @@ export function toRecentMatchViews(
               teams,
               r.marketParams?.line ?? null,
             ),
-            edge: formatEdge(r.edgePct),
+            edge: formatEdgePoints(r.edgePct),
           };
         });
       return {

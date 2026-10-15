@@ -262,7 +262,7 @@ export type MarketAnalysisSectionItem = {
 export type RecentMatchBetView = {
   market: string; // "Ambas marcam", "Total de gols"
   rec: Recommendation; // "Não", "Mais de 2,5", "PAL"
-  edge: string | null; // "+5,6" (vantagem em pontos)
+  edge: string | null; // "+5,6 pontos" (formatEdgePoints, ADR 0056); null sem edge
 };
 
 export type RecentMatchView = {
