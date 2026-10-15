@@ -375,7 +375,8 @@ export async function getRecentPredictedMatchesByUser(
     .from(predictions)
     .where(eq(predictions.userId, userId))
     .groupBy(predictions.matchId)
-    .orderBy(desc(lastAnalysis))
+    // Desempate por jogo: com o mesmo max(createdAt), o corte do limit não varia.
+    .orderBy(desc(lastAnalysis), desc(predictions.matchId))
     .limit(matchLimit);
   if (recentMatches.length === 0) return [];
   return db
@@ -407,5 +408,5 @@ export async function getRecentPredictedMatchesByUser(
         )
       )
     )
-    .orderBy(desc(predictions.createdAt));
+    .orderBy(desc(predictions.createdAt), desc(predictions.id));
 }

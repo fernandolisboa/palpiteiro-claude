@@ -133,4 +133,14 @@ describe("toRecentMatchViews — um cartão por jogo (ADR 0058)", () => {
     );
     expect(views.map((v) => v.matchId)).toEqual(["a", "b"]);
   });
+
+  it("empate na última análise: matchId desc, como a query", () => {
+    const t = new Date("2026-10-14T10:00:00Z");
+    const views = toRecentMatchViews(
+      [pred({ matchId: "a", createdAt: t }), pred({ matchId: "c", createdAt: t }), pred({ matchId: "b", createdAt: t })],
+      NOW,
+      SP,
+    );
+    expect(views.map((v) => v.matchId)).toEqual(["c", "b", "a"]);
+  });
 });

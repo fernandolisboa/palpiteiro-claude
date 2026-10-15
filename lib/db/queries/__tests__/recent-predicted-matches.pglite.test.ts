@@ -160,6 +160,21 @@ describe("getRecentPredictedMatchesByUser (ADR 0058)", () => {
     );
   });
 
+  it("empate no max(createdAt): o desempate por matchId desc fixa quais jogos entram", async () => {
+    for (const i of [0, 1, 2, 3]) {
+      await insertPrediction({ matchIndex: i, marketId: ids.mrMarketId, recommendation: "home", createdAt: at(5) });
+    }
+    const expected = [0, 1, 2, 3]
+      .map((i) => ids.matchIds[i])
+      .sort()
+      .reverse()
+      .slice(0, 2);
+    for (let run = 0; run < 3; run++) {
+      const rows = await getRecentPredictedMatchesByUser(ids.userId, 2);
+      expect(rows.map((r) => r.matchId)).toEqual(expected);
+    }
+  });
+
   it("traz todas as predições do usuário nesses jogos (mercados e reanálises), mais novas primeiro, com a data do jogo", async () => {
     await insertPrediction({ matchIndex: 1, marketId: ids.mrMarketId, recommendation: "home", createdAt: at(1) });
     await insertPrediction({ matchIndex: 1, marketId: ids.ouMarketId, recommendation: "pass", createdAt: at(2) });

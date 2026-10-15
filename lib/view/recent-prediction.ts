@@ -59,7 +59,12 @@ export function toRecentMatchViews(
 
   return [...byMatch.values()]
     .map((markets) => [...markets.values()])
-    .sort((a, b) => lastAnalysis(b) - lastAnalysis(a))
+    // Mesmo desempate da query (matchId desc) quando a última análise coincide.
+    .sort(
+      (a, b) =>
+        lastAnalysis(b) - lastAnalysis(a) ||
+        (a[0].matchId < b[0].matchId ? 1 : a[0].matchId > b[0].matchId ? -1 : 0),
+    )
     .map((latest) => {
       const first = latest[0];
       const league = leagueToKey(first.league);
