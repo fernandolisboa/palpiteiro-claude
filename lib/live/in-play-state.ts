@@ -9,6 +9,7 @@ import {
 import type { DbMatch } from "@/lib/db/queries/matches";
 import { IN_PLAY_FRESH_MS, liveStateAgeMs } from "@/lib/live/freshness";
 import {
+  classifyStatusShort,
   isTerminalStatusShort,
   liveMinuteLabel,
   type LiveStateInput,
@@ -57,6 +58,22 @@ function pair(
   return home === null || away === null ? null : { home, away };
 }
 
+/**
+ * Placar do estado. Atraso no apito (`NS`/`TBD` depois do horário, PLAN-580 §7): o
+ * provider manda os gols null antes de a bola rolar, mas a fase é `in_play` no minuto 0,
+ * acionável. Sem gol possível ainda, o placar é 0–0 (senão a tabela cairia em só
+ * leitura e a action recusaria com "placar indisponível"). A row segue com o null cru.
+ */
+export function inPlayScore(
+  statusShort: string,
+  goals: { home: number; away: number } | null
+): { home: number; away: number } | null {
+  if (goals !== null) return goals;
+  return classifyStatusShort(statusShort) === "pre_match"
+    ? { home: 0, away: 0 }
+    : null;
+}
+
 function toInPlayState(
   row: MatchLiveState | null,
   now: Date
@@ -71,7 +88,7 @@ function toInPlayState(
     extra: row.extra,
     fetchedAt: row.fetchedAt,
     minuteLabel: liveMinuteLabel(row),
-    score: pair(row.homeGoals, row.awayGoals),
+    score: inPlayScore(row.statusShort, pair(row.homeGoals, row.awayGoals)),
     red: pair(row.homeRed, row.awayRed),
     ageMs: liveStateAgeMs(row.fetchedAt, now) ?? 0,
   };
@@ -92,7 +109,7 @@ function fromProvider(
     ...fetched,
     fetchedAt: s.fetchedAt,
     minuteLabel: liveMinuteLabel(fetched),
-    score: s.goals,
+    score: inPlayScore(s.statusShort, s.goals),
     red: s.red,
     ageMs: liveStateAgeMs(s.fetchedAt, now) ?? 0,
   };

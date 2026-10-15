@@ -94,6 +94,25 @@ describe("toLiveScoreView", () => {
     expect(toLiveScoreView(state({ statusShort: "PST" }), NOW)).toBeNull();
   });
 
+  it("atraso no apito (NS, 0–0 do in-play-state): 'aguardando o apito', ao vivo", () => {
+    expect(
+      toLiveScoreView(
+        state({
+          statusShort: "NS",
+          elapsed: null,
+          minuteLabel: "0'",
+          score: { home: 0, away: 0 },
+        }),
+        NOW
+      )
+    ).toMatchObject({
+      home: 0,
+      away: 0,
+      caption: "aguardando o apito · atualizado há 20 s",
+      ended: false,
+    });
+  });
+
   it("fim de jogo pelo provider marca `ended`", () => {
     const v = toLiveScoreView(
       state({ statusShort: "FT", minuteLabel: null }),

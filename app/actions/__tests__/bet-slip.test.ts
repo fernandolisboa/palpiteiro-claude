@@ -608,6 +608,31 @@ describe("registerBetSlip — ao vivo", () => {
     });
   });
 
+  it("atraso no apito (NS depois do horário, 0–0): registra no minuto 0", async () => {
+    mockGetMatchById.mockResolvedValue(
+      match("scheduled", new Date(Date.now() - 5 * 60_000))
+    );
+    // getInPlayState já entrega o 0–0 do atraso (inPlayScore, lib/live/in-play-state).
+    mockInPlayState.mockResolvedValue(
+      liveState({
+        statusShort: "NS",
+        elapsed: null,
+        minuteLabel: "0'",
+        score: { home: 0, away: 0 },
+        red: null,
+      })
+    );
+    const res = await registerBetSlip(null, form(slip()));
+    expect(res.ok).toBe(true);
+    const [s] = inserted();
+    expect(s.isLive).toBe(true);
+    expect(readLiveStamp(s.liveState)).toMatchObject({
+      status: "NS",
+      minuteLabel: "0'",
+      score: { home: 0, away: 0 },
+    });
+  });
+
   it("estado sem placar → recusa", async () => {
     mockInPlayState.mockResolvedValue(liveState({ score: null }));
     const res = await registerBetSlip(null, form(slip()));

@@ -218,10 +218,11 @@ describe("getInPlayState: janela [kickoff − 5 min, kickoff + 4h]", () => {
     );
     const s = await getInPlayState(m, { now: at(-IN_PLAY_WINDOW_BEFORE_MS) });
     expect(fake.getLiveState).toHaveBeenCalledTimes(1);
+    // NS sem gols = 0–0 (a fase antes do apito é `pre` de qualquer jeito, matchPhase).
     expect(s).toMatchObject({
       statusShort: "NS",
       minuteLabel: "0'",
-      score: null,
+      score: { home: 0, away: 0 },
     });
   });
 
@@ -392,6 +393,39 @@ describe("getInPlayState: busca", () => {
       fetchedAt: now,
       claimedAt: null,
     });
+  });
+
+  it("atraso no apito (NS sem gols): placar 0–0 no minuto 0, a row guarda o null cru", async () => {
+    const m = await newMatch();
+    const now = at(3 * MIN);
+    fake = installProvider(async () =>
+      providerState({
+        statusShort: "NS",
+        elapsed: null,
+        goals: null,
+        red: null,
+        fetchedAt: now,
+      })
+    );
+    const s = await getInPlayState(m, { now });
+    expect(s).toMatchObject({
+      statusShort: "NS",
+      minuteLabel: "0'",
+      score: { home: 0, away: 0 },
+    });
+    const row = await getMatchLiveState(m.id);
+    expect(row).toMatchObject({ homeGoals: null, awayGoals: null });
+    // Relida da row (cache fresco): o mesmo 0–0.
+    const again = await getInPlayState(m, { now: at(3 * MIN + 10_000) });
+    expect(again?.score).toEqual({ home: 0, away: 0 });
+    expect(fake.getLiveState).toHaveBeenCalledTimes(1);
+  });
+
+  it("1H sem gols do provider: placar segue null (não inventa 0–0)", async () => {
+    const m = await newMatch();
+    const now = at(30 * MIN);
+    fake = installProvider(async () => providerState({ goals: null, fetchedAt: now }));
+    expect((await getInPlayState(m, { now }))?.score).toBeNull();
   });
 
   it("fetchedAt = instante da resposta do provider, e a idade sai dele", async () => {
