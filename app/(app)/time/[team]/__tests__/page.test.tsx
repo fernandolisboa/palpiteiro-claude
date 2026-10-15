@@ -101,8 +101,8 @@ describe("página do time — odds dos próximos jogos (#574)", () => {
       ["f-1", "f-2"],
       "match_result",
     );
-    expect(html).toContain('>Empate</span> <span class="font-mono tabular-nums">2,87</span>');
-    expect(html).toContain('>Mais de 2,5</span> <span class="font-mono tabular-nums">1,85</span>');
+    expect(html).toContain('>Empate</span><span class="font-mono text-body-sm tabular-nums">2,87</span>');
+    expect(html).toContain('>Mais de 2,5</span><span class="font-mono text-body-sm tabular-nums">1,85</span>');
     expect(html).not.toContain("sem odd");
   });
 

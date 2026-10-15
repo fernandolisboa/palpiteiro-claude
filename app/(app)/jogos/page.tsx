@@ -39,12 +39,12 @@ import {
   rangeEmptyMessage,
   rangeLabel,
 } from "@/lib/view/range-href";
-import { toMatchRowView } from "@/lib/view/match";
+import { toMatchListRowView } from "@/lib/view/match";
 import { toRecentPredictionView } from "@/lib/view/recent-prediction";
 import type {
   LeagueFilter,
   LeagueKey,
-  MatchRowView,
+  MatchListRowView,
   RecentPredictionView,
 } from "@/lib/view/types";
 import type { SupportedLeague } from "@/lib/providers/sports-data/leagues";
@@ -103,7 +103,7 @@ export default async function JogosPage({ searchParams }: PageProps) {
   if (league === null) redirect("/jogos");
 
   // Instante ÚNICO do request: alimenta o resolver de range (bound da query) E
-  // todo toMatchRowView (elegibilidade da badge). Dois `new Date()` separados
+  // todo toMatchListRowView (elegibilidade da badge). Dois `new Date()` separados
   // dessincronizariam pertinência-na-lista × badge na borda de 3h (race). Fuso de
   // exibição (#1) é separado — só formata strings, não decide instantes.
   const now = new Date();
@@ -172,10 +172,11 @@ export default async function JogosPage({ searchParams }: PageProps) {
 
   // Fuso de exibição do usuário (#1) — formata kickoff/datas no fuso do navegador.
   const timeZone = await getRequestTimeZone();
-  const matches: MatchRowView[] = dbMatches.map((m) => {
+  // Linha com o dia e a hora no fuso do usuário (#577): a lista agrupa por dia.
+  const matches: MatchListRowView[] = dbMatches.map((m) => {
     const snapshot = snapshotByMatch.get(m.id);
     const matchResult = matchResultByMatch.get(m.id);
-    return toMatchRowView({
+    return toMatchListRowView({
       match: {
         id: m.id,
         league: m.league,
@@ -255,7 +256,7 @@ export default async function JogosPage({ searchParams }: PageProps) {
 }
 
 type HomeContentProps = {
-  matches: MatchRowView[];
+  matches: MatchListRowView[];
   recents: RecentPredictionView[];
   league: LeagueFilter;
   activeKeys: readonly LeagueKey[];

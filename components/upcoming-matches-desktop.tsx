@@ -7,135 +7,112 @@ import { ChevronRight } from "lucide-react";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Card } from "@/components/ui/card";
-import { DesktopStatusCell } from "@/components/desktop-status-cell";
+import { LiveBadge } from "@/components/live-badge";
+import { AnalyzedBadge } from "@/components/match-list/analyzed-badge";
+import { DayHeading } from "@/components/match-list/day-heading";
+import { RowTrailing } from "@/components/match-list/row-trailing";
 import { MatchModelLine } from "@/components/match-model-line";
 import { TeamCrest } from "@/components/team-crest";
 import { appendBackParam } from "@/lib/view/back-href";
 import { LEAGUE_LABEL } from "@/lib/format";
 import { tourMatchIndex } from "@/lib/tour/steps";
-import type { MatchRowView } from "@/lib/view/types";
+import { groupByDay, matchRowPhase } from "@/lib/view/match-list";
+import type { MatchListRowView } from "@/lib/view/types";
 
 const INITIAL_BATCH = 15;
 const BATCH_STEP = 15;
 
-export const UPCOMING_GRID = "grid-cols-[160px_1fr_160px_140px_40px]";
-
-// Rótulo PT-BR pros status sem placar nem CTA de análise (espelha app/page.tsx).
-const STATUS_LABEL: Record<"postponed" | "cancelled", string> = {
-  postponed: "Adiado",
-  cancelled: "Cancelado",
-};
+// Liga + hora · jogo · odds/estado · chevron (#577). Sem coluna de status nem
+// cabeçalho de grade: o dia vira a faixa do grupo e o estado vai no lado direito.
+export const UPCOMING_GRID = "grid-cols-[132px_1fr_auto_24px]";
 
 export function UpcomingMatchesDesktop({
   matches,
   listHref,
 }: {
-  matches: MatchRowView[];
+  matches: MatchListRowView[];
   // URL filtrada da lista de origem (/jogos?…) pra preservar o estado de busca
-  // ao abrir um jogo e voltar. Ausente → link de detalhe limpo (goldens intactos).
+  // ao abrir um jogo e voltar. Ausente → link de detalhe limpo.
   listHref?: string;
 }) {
   const [visible, setVisible] = useState(INITIAL_BATCH);
   const slice = matches.slice(0, visible);
-  const tourIndex = tourMatchIndex(slice);
+  // Alvo do tour e reveal na lista PLANA; só depois agrupa por dia (mesma regra do
+  // celular).
+  const tourId = slice[tourMatchIndex(slice)]?.id;
   return (
     <Card className="gap-0 overflow-hidden p-0">
-      <div className={`grid ${UPCOMING_GRID} gap-4 border-b border-border px-5 py-3 text-meta uppercase tracking-label text-muted-foreground`}>
-        <span>liga · kickoff</span>
-        <span>jogo</span>
-        <span className="text-right">odds</span>
-        <span className="text-right">status</span>
-        <span />
-      </div>
-      {slice.map((m, i, arr) => (
-        <Link
-          key={m.id}
-          href={appendBackParam(`/match/${m.id}`, listHref, "/jogos")}
-          data-tour={i === tourIndex ? "match-row" : undefined}
-          className={`grid ${UPCOMING_GRID} items-center gap-4 px-5 py-4 transition-colors hover:bg-surface-2 focus-visible:outline-none focus-visible:ring-[3px] focus-visible:ring-ring/50 focus-visible:ring-inset ${
-            i === arr.length - 1 ? "" : "border-b border-border-subtle"
-          }`}
+      {groupByDay(slice).map((group, gi) => (
+        <section
+          key={`${group.key}-${gi}`}
+          className={gi === 0 ? undefined : "border-t border-border-subtle"}
         >
-          <div className="flex flex-col gap-1">
-            <Badge
-              variant="outline"
-              size="xs"
-              className="w-fit rounded-full px-2 uppercase tracking-label text-muted-foreground"
-            >
-              {LEAGUE_LABEL[m.league]}
-            </Badge>
-            <span className="font-mono text-meta tabular-nums text-muted-foreground">
-              {m.kickoff}
-            </span>
-          </div>
-          <div className="flex flex-col gap-1.5">
-            <div className="flex items-center gap-2">
-              <TeamCrest team={m.home} size={22} />
-              <span className="text-label font-medium tracking-tight">{m.home.name}</span>
-            </div>
-            <div className="flex items-center gap-2">
-              <TeamCrest team={m.away} size={22} />
-              <span className="text-label font-medium tracking-tight">{m.away.name}</span>
-            </div>
-            {/* Base do modelo (#555): só probabilidade, abaixo dos nomes. */}
-            {m.model && <MatchModelLine model={m.model} />}
-          </div>
-          <div className="flex flex-col items-end gap-1 text-body">
-            {m.status === "live" || m.isInProgress ? (
-              // Em andamento (#385): sem odds pré-jogo (não-apostável). Mesmo gate OR.
-              // O selo AO VIVO fica só na célula de status (#574): aqui vai o placar
-              // parcial com a legenda, ou "—". Chevron mantido abaixo → clicável.
-              m.liveScore ? (
-                <>
-                  <span className="font-mono text-label font-medium tabular-nums">
-                    {m.liveScore.home}
-                    <span className="px-1 text-muted-foreground">–</span>
-                    {m.liveScore.away}
-                  </span>
-                  <span className="text-meta text-muted-foreground">{m.liveScore.caption}</span>
-                </>
-              ) : (
-                <span className="text-meta text-muted-foreground">—</span>
-              )
-            ) : m.status === "finished" &&
-              m.homeScore !== null &&
-              m.awayScore !== null ? (
-              <span className="font-mono text-label font-medium tabular-nums">
-                {m.homeScore}
-                <span className="px-1 text-muted-foreground">–</span>
-                {m.awayScore}
-              </span>
-            ) : m.status === "finished" ? (
-              // Encerrado sem placar reportado: não cai no "sem odd".
-              <span className="text-meta uppercase tracking-label text-muted-foreground">
-                —
-              </span>
-            ) : m.status === "postponed" || m.status === "cancelled" ? (
-              <span className="text-meta uppercase tracking-label text-muted-foreground">
-                {STATUS_LABEL[m.status]}
-              </span>
-            ) : m.odds ? (
-              <>
-                {m.odds.outcomes.map((o, i) => (
-                  <span key={i}>
-                    <span className="text-muted-foreground">{o.label}</span>{" "}
-                    <span className="font-mono tabular-nums">{o.odd}</span>
-                  </span>
-                ))}
-              </>
-            ) : (
-              <span className="text-muted-fg-2">sem odd</span>
-            )}
-          </div>
-          <DesktopStatusCell m={m} />
-          <span className="justify-self-end text-muted-fg-2">
-            {m.status === "finished" ||
-            m.status === "postponed" ||
-            m.status === "cancelled" ? null : (
-              <ChevronRight className="size-3.5" />
-            )}
-          </span>
-        </Link>
+          <DayHeading label={group.label} variant="band" />
+          {group.rows.map((m, i, arr) => {
+            const phase = matchRowPhase(m);
+            return (
+              <Link
+                key={m.id}
+                href={appendBackParam(`/match/${m.id}`, listHref, "/jogos")}
+                data-tour={m.id === tourId ? "match-row" : undefined}
+                className={`grid ${UPCOMING_GRID} items-center gap-4 px-5 py-3.5 transition-colors hover:bg-surface-2 focus-visible:outline-none focus-visible:ring-[3px] focus-visible:ring-ring/50 focus-visible:ring-inset ${
+                  i === arr.length - 1 ? "" : "border-b border-border-subtle"
+                }`}
+              >
+                <div className="flex flex-col items-start gap-1">
+                  {phase === "live" ? (
+                    // Ao vivo (#385, #574): o selo no lugar da hora, uma vez por linha.
+                    <span className="text-meta font-medium">
+                      <LiveBadge />
+                    </span>
+                  ) : (
+                    <span className="font-mono text-body-sm tabular-nums text-muted-foreground">
+                      {m.startsIn ?? m.time}
+                    </span>
+                  )}
+                  <Badge
+                    variant="outline"
+                    size="xs"
+                    className="uppercase tracking-label text-muted-foreground"
+                  >
+                    {LEAGUE_LABEL[m.league]}
+                  </Badge>
+                </div>
+                <div className="flex min-w-0 flex-col gap-1.5">
+                  <div className="flex min-w-0 items-center gap-3">
+                    <div className="flex min-w-0 flex-col gap-1.5">
+                      <div className="flex min-w-0 items-center gap-2">
+                        <TeamCrest team={m.home} size={22} />
+                        <span className="truncate text-label font-medium tracking-tight" title={m.home.fullName}>
+                          {m.home.name}
+                        </span>
+                      </div>
+                      <div className="flex min-w-0 items-center gap-2">
+                        <TeamCrest team={m.away} size={22} />
+                        <span className="truncate text-label font-medium tracking-tight" title={m.away.fullName}>
+                          {m.away.name}
+                        </span>
+                      </div>
+                    </div>
+                    {/* "analisado" ao lado dos nomes, na altura deles (#577); também
+                        em jogo encerrado já analisado (#99). */}
+                    {m.hasPrediction && <AnalyzedBadge />}
+                  </div>
+                  {/* Base do modelo (#555): só probabilidade, abaixo dos nomes. */}
+                  {m.model && <MatchModelLine model={m.model} />}
+                </div>
+                <div className="flex justify-end">
+                  <RowTrailing m={m} />
+                </div>
+                <span className="justify-self-end text-muted-fg-2">
+                  {phase === "finished" || phase === "off" ? null : (
+                    <ChevronRight aria-hidden="true" className="size-3.5" />
+                  )}
+                </span>
+              </Link>
+            );
+          })}
+        </section>
       ))}
       {visible < matches.length && (
         <div className="flex justify-center border-t border-border-subtle px-5 py-3">

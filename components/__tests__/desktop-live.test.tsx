@@ -1,11 +1,11 @@
 import { describe, expect, it } from "vitest";
 import { renderToStaticMarkup } from "react-dom/server";
 
-import { DesktopStatusCell } from "@/components/desktop-status-cell";
+import { RowTrailing } from "@/components/match-list/row-trailing";
 import { UpcomingMatchesDesktop } from "@/components/upcoming-matches-desktop";
-import { toMatchRowView } from "@/lib/view/match";
+import { toMatchListRowView } from "@/lib/view/match";
 import type { MatchInput } from "@/lib/view/match";
-import type { MatchRowView } from "@/lib/view/types";
+import type { MatchListRowView } from "@/lib/view/types";
 
 // Relógio fixo; o kickoff é deslocado relativo a este NOW pra derivar isInProgress.
 const NOW = new Date("2026-06-11T12:00:00.000Z");
@@ -24,8 +24,8 @@ function makeMatch(overrides: Partial<MatchInput> = {}): MatchInput {
   };
 }
 
-function view(overrides: Partial<MatchInput> = {}, odds = true): MatchRowView {
-  return toMatchRowView({
+function view(overrides: Partial<MatchInput> = {}, odds = true): MatchListRowView {
+  return toMatchListRowView({
     match: makeMatch(overrides),
     odds: odds
       ? {
@@ -37,43 +37,46 @@ function view(overrides: Partial<MatchInput> = {}, odds = true): MatchRowView {
       : null,
     hasPrediction: false,
     now: NOW,
+    timeZone: "UTC",
   });
 }
 
-describe("DesktopStatusCell — em andamento (#385)", () => {
-  it("isInProgress (scheduled apitado): renderiza a LiveBadge (animate-pulse + warn-fg), não '—'/'analisado'", () => {
+// O lado direito da linha (#577) substituiu a célula de status do desktop: um lugar
+// só decide placar / odds / estado nas duas árvores.
+describe("RowTrailing — em andamento (#385)", () => {
+  it("isInProgress (scheduled apitado): '—' sem odds e sem 'analisado'", () => {
     const m = view({
       status: "scheduled",
       kickoffAt: new Date(NOW.getTime() - 20 * 60 * 1000),
     });
     expect(m.isInProgress).toBe(true);
-    const html = renderToStaticMarkup(<DesktopStatusCell m={m} />);
-    expect(html).toContain("AO VIVO");
-    expect(html).toContain("animate-pulse");
-    expect(html).toContain("text-warn-fg");
+    const html = renderToStaticMarkup(<RowTrailing m={{ ...m, hasPrediction: true }} />);
+    expect(html).toContain(">—<");
+    expect(html).not.toContain("1,85");
     expect(html).not.toContain("analisado");
   });
 
-  it("scheduled futuro: SEM badge ao vivo", () => {
+  it("scheduled futuro: as odds lado a lado, sem selo ao vivo", () => {
     const m = view({ status: "scheduled" });
     expect(m.isInProgress).toBe(false);
-    const html = renderToStaticMarkup(<DesktopStatusCell m={m} />);
+    const html = renderToStaticMarkup(<RowTrailing m={m} />);
+    expect(html).toContain("1,85");
+    expect(html).toContain("grid-cols-2");
     expect(html).not.toContain("AO VIVO");
-    expect(html).not.toContain("animate-pulse");
   });
 });
 
 describe("UpcomingMatchesDesktop — em andamento (#385)", () => {
-  it("uma linha in-progress: 'ao vivo'/animate-pulse presente, odds ausentes, chevron presente (clicável)", () => {
+  it("uma linha in-progress: AO VIVO uma vez (no lugar da hora), odds ausentes, chevron presente", () => {
     const m = view({
       status: "scheduled",
       kickoffAt: new Date(NOW.getTime() - 20 * 60 * 1000),
     });
     const html = renderToStaticMarkup(<UpcomingMatchesDesktop matches={[m]} />);
-    // (a) indicador ao vivo presente UMA vez (só a célula de status, #574); a
-    // célula de odds mostra "—" quando ainda não há placar parcial
+    // (a) indicador ao vivo presente UMA vez, no lugar da hora (sem a hora do apito)
     expect(html).toContain("animate-pulse");
     expect(html.toLowerCase().split("ao vivo")).toHaveLength(2);
+    expect(html).not.toContain(">11:40<");
     // (b) odds pré-jogo NÃO renderizadas pra a linha ao vivo
     expect(html).not.toContain("1,85");
     expect(html).not.toContain("1,95");
@@ -83,8 +86,8 @@ describe("UpcomingMatchesDesktop — em andamento (#385)", () => {
 });
 
 describe("UpcomingMatchesDesktop — placar parcial (#574)", () => {
-  it("live com placar: placar e legenda 'parcial' na célula de odds, um selo só", () => {
-    const m = toMatchRowView({
+  it("live com placar: placar e legenda 'parcial' no lado direito, um selo só", () => {
+    const m = toMatchListRowView({
       match: makeMatch({
         status: "live",
         kickoffAt: new Date(NOW.getTime() - 50 * 60 * 1000),
@@ -95,6 +98,7 @@ describe("UpcomingMatchesDesktop — placar parcial (#574)", () => {
       odds: null,
       hasPrediction: false,
       now: NOW,
+      timeZone: "UTC",
     });
     const html = renderToStaticMarkup(<UpcomingMatchesDesktop matches={[m]} />);
     expect(html).toContain("parcial · atualizado há 2h");
