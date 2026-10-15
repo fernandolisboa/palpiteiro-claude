@@ -80,14 +80,22 @@ describe("SummaryCards (/dashboard, #577)", () => {
     expect(valueClass(html, "0,00 u")).not.toMatch(/text-edge-fg|text-destructive/);
   });
 
-  it("sem amostra: retorno '—' neutro", () => {
+  it("sem aposta liquidada: retorno e saldo '—' neutros, sem 'em 0 apostas liquidadas'", () => {
     const html = render(
       view({
         yieldPct: { value: "—", n: 0, lowSample: false },
+        winRate: { value: "—", n: 0, lowSample: false },
         yieldSigned: "—",
         yieldTone: "zero",
+        totalProfit: "0,00 u",
+        profitTone: "zero",
       }),
     );
     expect(valueClass(html, "—")).toContain("text-muted-foreground");
+    // Retorno, taxa de acerto e saldo: os três "—".
+    expect(html.split(">—</span>").length - 1).toBe(3);
+    expect(html).not.toContain("0,00 u");
+    expect(html).not.toContain("liquidada");
+    expect(html).toContain(PAST_PERFORMANCE_NOTE);
   });
 });

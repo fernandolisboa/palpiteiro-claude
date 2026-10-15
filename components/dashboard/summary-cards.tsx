@@ -47,6 +47,8 @@ function SummaryCard({
 export function SummaryCards({ view }: { view: DashboardKpiView }) {
   const settled = view.yieldPct.n;
   const empty = view.yieldPct.value === "—";
+  // Sem aposta liquidada o saldo não existe ainda: "—" neutro, como o retorno.
+  const noSettled = settled === 0;
   return (
     <section aria-label="Resumo" className="flex flex-col gap-3">
       <div className="grid grid-cols-1 gap-3 sm:grid-cols-3">
@@ -72,8 +74,8 @@ export function SummaryCards({ view }: { view: DashboardKpiView }) {
         />
         <SummaryCard
           label="saldo"
-          value={view.totalProfit}
-          valueClassName={TONE_CLASS[view.profitTone]}
+          value={noSettled ? "—" : view.totalProfit}
+          valueClassName={noSettled ? "text-muted-foreground" : TONE_CLASS[view.profitTone]}
           hint={{
             anchor: "lucro-total",
             blurb:
@@ -82,21 +84,23 @@ export function SummaryCards({ view }: { view: DashboardKpiView }) {
         />
       </div>
       <div className="flex flex-col gap-1">
-        <p className="flex flex-wrap items-center gap-x-1 text-body-sm tracking-tight text-muted-foreground">
-          <span className="tabular-nums">
-            em {settled} {settled === 1 ? "aposta liquidada" : "apostas liquidadas"}
-          </span>
-          {view.yieldPct.lowSample && (
-            <span className="inline-flex items-center gap-1 text-warn-fg">
-              · amostra pequena
-              <HelpHint
-                anchor="amostra-pequena"
-                label="amostra pequena"
-                blurb="Menos de 20 apostas liquidadas. Com tão poucas, os números são ruído de sorte, não habilidade — não conclua cedo demais."
-              />
+        {!noSettled && (
+          <p className="flex flex-wrap items-center gap-x-1 text-body-sm tracking-tight text-muted-foreground">
+            <span className="tabular-nums">
+              em {settled} {settled === 1 ? "aposta liquidada" : "apostas liquidadas"}
             </span>
-          )}
-        </p>
+            {view.yieldPct.lowSample && (
+              <span className="inline-flex items-center gap-1 text-warn-fg">
+                · amostra pequena
+                <HelpHint
+                  anchor="amostra-pequena"
+                  label="amostra pequena"
+                  blurb="Menos de 20 apostas liquidadas. Com tão poucas, os números são ruído de sorte, não habilidade — não conclua cedo demais."
+                />
+              </span>
+            )}
+          </p>
+        )}
         <p className="text-meta text-muted-foreground">{PAST_PERFORMANCE_NOTE}</p>
       </div>
     </section>
