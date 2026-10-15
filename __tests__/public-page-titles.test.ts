@@ -49,4 +49,8 @@ describe("títulos das páginas públicas — opt-out do template", () => {
       absolute: "Como funciona · Palpiteiro",
     });
   });
+
+  it("a descrição de /como-funciona não fala jargão do motor (#579)", () => {
+    expect(String(comoFuncionaMetadata.description)).not.toMatch(/\bedge\b|\bPASS\b/);
+  });
 });
