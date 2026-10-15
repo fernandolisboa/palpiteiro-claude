@@ -100,7 +100,7 @@ export const GLOSSARY: readonly GlossaryEntry[] = [
     term: "mercado",
     anchor: "mercado",
     meaning:
-      "O tipo de aposta. Tier 1: total de gols (over/under) e 1X2 (resultado final); Tier 2: BTTS (ambos marcam) e dupla chance. Cada mercado tem suas seleções e, às vezes, uma linha. O app recomenda UM mercado por análise.",
+      "O tipo de aposta. Os mercados do app: total de gols, resultado (1X2), ambas marcam e dupla chance. Cada mercado tem suas seleções e, às vezes, uma linha. O app recomenda UM mercado por análise.",
     group: "conceitos",
   },
   {
@@ -118,6 +118,13 @@ export const GLOSSARY: readonly GlossaryEntry[] = [
     group: "conceitos",
   },
   {
+    term: "combinada",
+    anchor: "combinada",
+    meaning:
+      "Duas ou mais seleções numa aposta só, com uma odd total. Só acerta se todas as seleções acertarem; uma que erra derruba a combinada inteira.",
+    group: "conceitos",
+  },
+  {
     term: "linha",
     anchor: "linha",
     meaning:
@@ -128,7 +135,7 @@ export const GLOSSARY: readonly GlossaryEntry[] = [
     term: "odd decimal",
     anchor: "odd-decimal",
     meaning:
-      "O multiplicador do retorno. Odd 1.92 = aposta 1u, recebe 1.92u se ganhar (1u de volta + 0.92u de lucro). Se perder, você perde a 1u apostada (−1u).",
+      "O multiplicador do retorno. Odd 1,92 = aposta 1u, recebe 1,92u se ganhar (1u de volta + 0,92u de lucro). Se perder, você perde a 1u apostada (−1u).",
     group: "conceitos",
   },
   {
@@ -150,6 +157,13 @@ export const GLOSSARY: readonly GlossaryEntry[] = [
     anchor: "app-nao-aposta",
     meaning:
       "O Palpiteiro só recomenda e acompanha. As apostas são entre você e seus amigos; o app só anota e faz a conta. O app não movimenta dinheiro nenhum.",
+    group: "decisao",
+  },
+  {
+    term: "pote do bolão",
+    anchor: "pote",
+    meaning:
+      "Num bolão com valor combinado: valor por pessoa × número de apostas. Quem acerta divide o pote; se ninguém acerta, o grupo decide. O app só faz a conta: não recebe, não guarda e não repassa dinheiro.",
     group: "decisao",
   },
   {
@@ -194,7 +208,14 @@ export const GLOSSARY: readonly GlossaryEntry[] = [
     term: "leitura do modelo",
     anchor: "leitura-modelo",
     meaning:
-      "A chance de cada resultado do jogo calculada em código pelo modelo de placar (Dixon-Coles, ou o heurístico da tabela quando falta histórico), ajustada pelos julgamentos do JEV perto do jogo. Sem Claude e sem olhar as odds: não é recomendação nem mede vantagem. A odd justa é 100 ÷ probabilidade — compare com a odd de mercado.",
+      "A chance de cada resultado do jogo calculada em código pelo modelo de placar (Dixon-Coles, ou um modelo mais simples a partir da tabela quando falta histórico), ajustada pela análise perto do jogo (desfalques, escalação, notícias). A conta sai sem a IA e sem olhar as odds: não é recomendação nem mede vantagem. A odd justa é 100 ÷ probabilidade.",
+    group: "numeros",
+  },
+  {
+    term: "odd justa",
+    anchor: "odd-justa",
+    meaning:
+      "100 ÷ a chance do modelo (em %): a odd que o modelo acha que a seleção deveria pagar, sem margem. Ex.: chance de 50% → odd justa 2,00.",
     group: "numeros",
   },
   {
@@ -207,7 +228,7 @@ export const GLOSSARY: readonly GlossaryEntry[] = [
     term: "retorno esperado",
     anchor: "retorno-esperado",
     meaning:
-      "Ganho médio por aposta, no longo prazo, se a estimativa do modelo estiver certa: (confiança ÷ 100) × odd − 1. Usa a odd crua (é ela que paga). Ex.: 58% e odd 1.92 → +0.1136 (≈ +11%).",
+      "Ganho médio por aposta, no longo prazo, se a estimativa do modelo estiver certa: (confiança ÷ 100) × odd − 1. Usa a odd crua (é ela que paga). Ex.: 58% e odd 1,92 → +0,1136 (≈ +11%).",
     group: "numeros",
   },
   {
@@ -234,14 +255,14 @@ export const GLOSSARY: readonly GlossaryEntry[] = [
     term: "stake por confiança (1–3u)",
     anchor: "stake-confianca",
     meaning:
-      "O tamanho da aposta varia com a força do sinal (vantagem × confiança): 1u, 2u ou 3u. Mais vantagem → mais unidades. As bandas são determinísticas (ADR 0019); o histórico antigo permanece tudo 1u.",
+      "O tamanho da aposta varia com a força do sinal (vantagem × confiança): 1u, 2u ou 3u. Mais vantagem → mais unidades. O histórico antigo permanece tudo 1u.",
     group: "numeros",
   },
   {
-    term: "liquidação / settlement",
+    term: "liquidação (conferência)",
     anchor: "liquidacao",
     meaning:
-      "A resolução da aposta depois do jogo: Acertou (won), Errou (lost) ou Anulada (void). Não é instantâneo — roda via cron depois do apito final.",
+      "A resolução da aposta depois do jogo: Acertou, Errou, Devolvida ou Anulada. Não é instantâneo — roda algumas horas depois do apito final.",
     group: "numeros",
   },
   {
@@ -255,7 +276,7 @@ export const GLOSSARY: readonly GlossaryEntry[] = [
     term: "em aberto vs liquidada (pendente)",
     anchor: "pendente-liquidada",
     meaning:
-      "Em aberto = jogo não terminou ou resultado não processado ainda. Liquidada = já resolvida (Acertou/Errou/Anulada) e contando nas métricas.",
+      "Em aberto = jogo não terminou ou resultado não processado ainda. Liquidada = já resolvida (Acertou/Errou/Devolvida/Anulada) e contando nas métricas.",
     group: "numeros",
   },
   {
@@ -280,7 +301,7 @@ export const GLOSSARY: readonly GlossaryEntry[] = [
     group: "numeros",
   },
   {
-    term: "lucro total",
+    term: "saldo (lucro total)",
     anchor: "lucro-total",
     meaning:
       "Soma de lucro/prejuízo acumulado em unidades das apostas já liquidadas (acertos e erros), em dinheiro hipotético. Diferente do bankroll (que é a trajetória no tempo) e do retorno (que é eficiência em %).",
@@ -290,7 +311,7 @@ export const GLOSSARY: readonly GlossaryEntry[] = [
     term: "bankroll",
     anchor: "bankroll",
     meaning:
-      "O gráfico de lucro/prejuízo acumulado ao longo do tempo (em unidades), começando em zero. Dinheiro hipotético — serve pra ver a trajetória, não é saldo real.",
+      "O gráfico do saldo acumulado ao longo do tempo (em unidades), começando em zero. Dinheiro hipotético — serve pra ver a trajetória, não é dinheiro de verdade.",
     group: "numeros",
   },
   {
