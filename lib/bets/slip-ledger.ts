@@ -37,7 +37,8 @@ export type SlipLedgerRow = {
   comboUserOdd: string | null;
   matchStatus: LedgerMatchStatus;
   // Jogo encerrado (finished/cancelled) OU apitado há mais que a janela de liquidação:
-  // cobre o jogo cujo status o cron ainda não virou (ou nunca vira).
+  // cobre o jogo cujo status o cron ainda não virou (ou nunca vira). Adiado nunca
+  // acaba por tempo.
   matchOver: boolean;
   legs: SlipLedgerLeg[];
 };
