@@ -46,6 +46,7 @@ import {
   createFriendPool,
   extendFriendPoolBets,
   removeFriendPoolEntry,
+  reopenFriendPoolBets,
   setFriendPoolScore,
 } from "@/app/actions/friend-pools";
 import { LiveStampSchema } from "@/lib/live/stamp";
@@ -325,6 +326,118 @@ describe("closeFriendPoolBets (dono)", () => {
     m.getEnableLiveMode.mockResolvedValue(false);
     await closeFriendPoolBets(fd());
     expect(m.setFriendPoolBetsClosed).not.toHaveBeenCalled();
+  });
+});
+
+describe("reopenFriendPoolBets (dono, #601)", () => {
+  const fd = () => form({ poolId: POOL_ID });
+  const CAP = at(180);
+
+  it("fechado pelo corte dos 15': reabre até o teto, com o dono como quem estendeu", async () => {
+    vi.setSystemTime(at(30));
+    m.getInPlayState.mockResolvedValue(inPlay({ elapsed: 30, minuteLabel: "30'" }));
+    await reopenFriendPoolBets(fd());
+    expect(m.getFriendPool).toHaveBeenCalledWith(POOL_ID, OWNER);
+    expect(m.getInPlayState).toHaveBeenCalled();
+    expect(m.setFriendPoolBetsExtended).toHaveBeenCalledWith({
+      poolId: POOL_ID,
+      userId: OWNER,
+      until: CAP,
+      now: at(30),
+    });
+    expect(m.revalidatePath).toHaveBeenCalledWith(`/bolao/${POOL_ID}`);
+    expect(m.revalidatePath).toHaveBeenCalledWith("/bolao");
+  });
+
+  it("fechado pelo dono: reabre, e depois anota no 2º tempo com carimbo", async () => {
+    vi.setSystemTime(at(70));
+    m.getFriendPool.mockResolvedValue(pool({ betsClosedAt: at(10) }));
+    m.getInPlayState.mockResolvedValue(
+      inPlay({ statusShort: "2H", elapsed: 55, minuteLabel: "55'" }),
+    );
+    await reopenFriendPoolBets(fd());
+    expect(m.setFriendPoolBetsExtended).toHaveBeenCalledTimes(1);
+    // O que a query grava: fechamento limpo, extensão até o teto.
+    m.getFriendPool.mockResolvedValue(
+      pool({ betsClosedAt: null, betsExtendedUntil: CAP, betsExtendedByUserId: OWNER }),
+    );
+    expect(await addFriendPoolEntry(null, entryForm())).toEqual({ ok: true });
+    const call = m.insertFriendPoolEntry.mock.calls[0]![0];
+    expect(call.isLive).toBe(true);
+    expect(LiveStampSchema.parse(call.liveState)).toMatchObject({
+      minuteLabel: "55'",
+      score: { home: 1, away: 0 },
+    });
+    // E o dono pode fechar de novo.
+    await closeFriendPoolBets(fd());
+    expect(m.setFriendPoolBetsClosed).toHaveBeenCalledWith({
+      poolId: POOL_ID,
+      userId: OWNER,
+      now: at(70),
+    });
+  });
+
+  it("vale para quem não é admin (é o dono)", async () => {
+    vi.setSystemTime(at(30));
+    await reopenFriendPoolBets(fd());
+    expect(m.setFriendPoolBetsExtended).toHaveBeenCalledTimes(1);
+  });
+
+  it("bolão de outra pessoa: getFriendPool não acha, nada muda", async () => {
+    vi.setSystemTime(at(30));
+    m.getFriendPool.mockResolvedValue(null);
+    await reopenFriendPoolBets(fd());
+    expect(m.setFriendPoolBetsExtended).not.toHaveBeenCalled();
+  });
+
+  it("sem sessão ou id inválido: nada muda", async () => {
+    vi.setSystemTime(at(30));
+    await reopenFriendPoolBets(form({ poolId: "x" }));
+    m.auth.mockResolvedValue(null);
+    await reopenFriendPoolBets(fd());
+    expect(m.getFriendPool).not.toHaveBeenCalled();
+    expect(m.setFriendPoolBetsExtended).not.toHaveBeenCalled();
+  });
+
+  it("apostas ainda abertas (antes dos 15'): não grava", async () => {
+    vi.setSystemTime(at(5));
+    m.getInPlayState.mockResolvedValue(inPlay({ elapsed: 5 }));
+    await reopenFriendPoolBets(fd());
+    expect(m.setFriendPoolBetsExtended).not.toHaveBeenCalled();
+  });
+
+  it("antes do apito, com a flag OFF, com resultado, jogo terminado ou no teto: recusa", async () => {
+    vi.setSystemTime(at(-10));
+    m.getFriendPool.mockResolvedValue(pool({ betsClosedAt: at(-30) }));
+    await reopenFriendPoolBets(fd());
+
+    vi.setSystemTime(at(30));
+    m.getEnableLiveMode.mockResolvedValue(false);
+    await reopenFriendPoolBets(fd());
+    m.getEnableLiveMode.mockResolvedValue(true);
+
+    m.getFriendPool.mockResolvedValue(
+      pool({ betsClosedAt: at(10), manualHomeScore: 2, manualAwayScore: 1 }),
+    );
+    await reopenFriendPoolBets(fd());
+
+    m.getFriendPool.mockResolvedValue(pool());
+    vi.setSystemTime(at(115));
+    m.getInPlayState.mockResolvedValue(inPlay({ statusShort: "FT", elapsed: 90 }));
+    await reopenFriendPoolBets(fd());
+
+    m.getInPlayState.mockResolvedValue(null);
+    vi.setSystemTime(at(180));
+    await reopenFriendPoolBets(fd());
+
+    expect(m.setFriendPoolBetsExtended).not.toHaveBeenCalled();
+  });
+
+  it("jogo encerrado no DB: recusa sem precisar do estado", async () => {
+    vi.setSystemTime(at(120));
+    m.getFriendPool.mockResolvedValue({ ...pool(), match: { ...match, status: "finished" } });
+    await reopenFriendPoolBets(fd());
+    expect(m.setFriendPoolBetsExtended).not.toHaveBeenCalled();
   });
 });
 

@@ -34,11 +34,13 @@ import {
   POOL_EXTEND_PRESETS_MIN,
   poolBetsOpen,
   poolEntriesRemovable,
+  poolExtendCap,
   poolExtendable,
   poolExtensionUntil,
   poolHasResult,
   poolManualScoreAllowed,
   poolOwnerClosable,
+  poolOwnerReopenable,
   poolWindowOpen,
   type PoolExtendPreset,
 } from "@/lib/pools/pool-state";
@@ -276,9 +278,9 @@ export async function setFriendPoolScore(
   return { ok: true };
 }
 
-// "Fechar apostas" do dono (#580, ADR 0060 §7): só fecha, nunca reabre. Só o dono
-// chega aqui (getFriendPool filtra por userId), só com as apostas abertas e só com o
-// modo ao vivo (flag desligada = como antes, sem o controle).
+// "Fechar apostas" do dono (#580, ADR 0060 §7). Só o dono chega aqui (getFriendPool
+// filtra por userId), só com as apostas abertas e só com o modo ao vivo (flag desligada
+// = como antes, sem o controle). Depois do apito o dono pode reabrir (#601).
 export async function closeFriendPoolBets(formData: FormData): Promise<void> {
   const poolId = IdSchema.safeParse(field(formData, "poolId"));
   if (!poolId.success) return;
@@ -292,6 +294,33 @@ export async function closeFriendPoolBets(formData: FormData): Promise<void> {
     return;
   }
   await setFriendPoolBetsClosed({ poolId: poolId.data, userId, now });
+  revalidatePath(`/bolao/${poolId.data}`);
+  revalidatePath("/bolao");
+}
+
+// "Reabrir apostas" do dono (#601, atualização da ADR 0060 §7): depois do apito, com as
+// apostas fechadas (corte dos 15', o próprio dono ou extensão vencida), sem resultado,
+// jogo não terminado e antes do teto. Grava uma extensão até o apito + 3h com o dono
+// como quem estendeu: fica aberto até ele fechar de novo ou o jogo acabar. Tudo é
+// relido aqui (dono pela sessão, flag, estado do jogo no servidor), nada vem do cliente.
+export async function reopenFriendPoolBets(formData: FormData): Promise<void> {
+  const poolId = IdSchema.safeParse(field(formData, "poolId"));
+  if (!poolId.success) return;
+  const userId = await requireUserId();
+  if (typeof userId !== "string") return;
+  const pool = await getFriendPool(poolId.data, userId);
+  if (!pool) return;
+  const now = new Date();
+  const ctx = await readPoolLiveContext(pool.match, now);
+  if (!poolOwnerReopenable(pool.pool, pool.match, ctx.state, now, { liveMode: ctx.liveMode })) {
+    return;
+  }
+  await setFriendPoolBetsExtended({
+    poolId: poolId.data,
+    userId,
+    until: poolExtendCap(pool.match),
+    now,
+  });
   revalidatePath(`/bolao/${poolId.data}`);
   revalidatePath("/bolao");
 }

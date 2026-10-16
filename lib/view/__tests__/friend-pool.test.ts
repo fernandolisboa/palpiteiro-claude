@@ -229,6 +229,18 @@ describe("selos do bolão ao vivo (#580)", () => {
     ).toEqual({ label: "estendidas até 17:40", tone: "soon" });
   });
 
+  it("dono reabriu (extensão até o teto, #601): 'abertas até o fim do jogo'", () => {
+    const pool = { ...noManual, betsExtendedUntil: at(180) };
+    const opts = { liveMode: true, state: live("2H", 70, at(85)), timeZone: TZ };
+    expect(poolStatusView({ pool, match: scheduled }, at(85), opts)).toEqual({
+      label: "abertas até o fim do jogo",
+      tone: "soon",
+    });
+    expect(poolBetsDeadlineLabel(pool, scheduled, at(85), opts)).toBe(
+      "abertas até o fim do jogo",
+    );
+  });
+
   it("estendido mas o jogo acabou: esperando o placar", () => {
     const pool = { ...noManual, betsExtendedUntil: at(150) };
     expect(

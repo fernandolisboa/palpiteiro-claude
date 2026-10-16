@@ -9,6 +9,7 @@ import {
   extendFriendPoolBets,
   removeFriendPool,
   removeFriendPoolEntry,
+  reopenFriendPoolBets,
 } from "@/app/actions/friend-pools";
 import { AddEntryForm, ManualScoreForm } from "@/components/friend-pool-forms";
 import { PageContainer } from "@/components/page-container";
@@ -35,7 +36,9 @@ import {
   poolExtendable,
   poolLiveStateWanted,
   poolManualScoreAllowed,
+  poolOpenUntilEnd,
   poolOwnerClosable,
+  poolOwnerReopenable,
 } from "@/lib/pools/pool-state";
 import { computePoolOutcome, formatBrl, resolvePoolScore } from "@/lib/pools/winners";
 import { getRequestTimeZone } from "@/lib/server/request-timezone";
@@ -139,9 +142,16 @@ export default async function BolaoDetailPage({ params }: PageProps) {
   });
   // "Fechar apostas" (dono): só com o modo ao vivo; flag desligada = como antes.
   const canClose = poolOwnerClosable(pool, match, state, now, live);
+  // "Reabrir apostas" (dono, #601): depois do apito, com as apostas fechadas, sem
+  // resultado, jogo não terminado e antes do apito + 3h. Só com o modo ao vivo.
+  const canReopen = poolOwnerReopenable(pool, match, state, now, live);
+  // Aberto até o fim do jogo (reaberto pelo dono, ou extensão no teto).
+  const openUntilEnd = open && poolOpenUntilEnd(pool, match);
   // "Estender prazo" (ADR 0060 §7): admin, no próprio bolão (só o dono abre esta
   // página), depois do apito, sem resultado, jogo não terminado e antes do apito + 3h.
-  const canExtend = session.user.role === "admin" && poolExtendable(pool, match, state, now, live);
+  // Aberto até o fim do jogo, um preset só encurtaria: o cartão some.
+  const canExtend =
+    session.user.role === "admin" && !openUntilEnd && poolExtendable(pool, match, state, now, live);
 
   return (
     <div className="bg-background text-foreground">
@@ -217,6 +227,13 @@ export default async function BolaoDetailPage({ params }: PageProps) {
               : match.status === "cancelled"
                 ? "Jogo cancelado. Não há resultado pra conferir."
                 : `${closedByOwner ? "Você fechou as apostas." : "Apostas fechadas."} Quando o jogo acabar, o placar aparece aqui sozinho (a atualização roda a cada poucas horas)${scoreAllowed ? ", ou lance o placar abaixo" : ""}.`}
+          </p>
+        )}
+
+        {!outcome.settled && openUntilEnd && (
+          <p className="text-muted-foreground mb-6 text-body-sm tracking-tight">
+            Você reabriu as apostas. Elas ficam abertas até você fechar de novo ou o jogo
+            acabar.
           </p>
         )}
 
@@ -301,13 +318,28 @@ export default async function BolaoDetailPage({ params }: PageProps) {
             <form action={closeFriendPoolBets} className="flex flex-col gap-2 pt-3">
               <input type="hidden" name="poolId" value={pool.id} />
               <p className="text-body-sm tracking-tight">
-                Fecha as apostas agora: ninguém mais entra no bolão. Não dá pra reabrir.
+                {removable
+                  ? "Fecha as apostas agora: ninguém mais entra no bolão. Depois do apito, dá pra reabrir enquanto o jogo não acabar."
+                  : "Fecha as apostas agora: ninguém mais entra no bolão. Dá pra reabrir enquanto o jogo não acabar."}
               </p>
               <Button type="submit" variant="outline" size="sm" className="w-fit">
                 Fechar apostas
               </Button>
             </form>
           </details>
+        )}
+
+        {canReopen && (
+          <form action={reopenFriendPoolBets} className="mb-8 flex flex-col gap-2">
+            <input type="hidden" name="poolId" value={pool.id} />
+            <p className="text-body-sm tracking-tight">
+              Reabre as apostas agora: elas ficam abertas até você fechar de novo ou o
+              jogo acabar. Cada aposta nova fica com o minuto e o placar da hora.
+            </p>
+            <Button type="submit" variant="outline" size="sm" className="w-fit">
+              Reabrir apostas
+            </Button>
+          </form>
         )}
 
         {canExtend && (

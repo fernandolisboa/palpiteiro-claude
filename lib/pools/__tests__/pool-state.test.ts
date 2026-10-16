@@ -11,7 +11,10 @@ import {
   poolLiveStateWanted,
   poolManualScoreAllowed,
   poolMatchEnded,
+  poolExtendCap,
+  poolOpenUntilEnd,
   poolOwnerClosable,
+  poolOwnerReopenable,
   poolWindow,
   poolWindowOpen,
 } from "@/lib/pools/pool-state";
@@ -296,5 +299,106 @@ describe("poolOwnerClosable (fechar apostas do dono)", () => {
   it("já fechadas ou com resultado: não", () => {
     expect(poolOwnerClosable({ betsClosedAt: at(-20) }, match(), null, at(-10), LIVE)).toBe(false);
     expect(poolOwnerClosable(noControls, match(), null, at(20), LIVE)).toBe(false);
+  });
+});
+
+describe("poolOwnerReopenable (reabrir apostas do dono, #601)", () => {
+  const CAP = new Date(KICKOFF.getTime() + POOL_EXTEND_CAP_MS);
+  // O que o "reabrir" grava: extensão até o teto, fechamento limpo.
+  const reopened = { betsClosedAt: null, betsExtendedUntil: CAP };
+
+  it("fechado pelo corte dos 15': reabre", () => {
+    expect(poolOwnerReopenable(noControls, match(), state("1H", 20, at(20)), at(20), LIVE)).toBe(
+      true,
+    );
+    expect(poolOwnerReopenable(noControls, match(), null, at(20), LIVE)).toBe(true);
+    expect(poolOwnerReopenable(noControls, match(), state("HT", 45, at(50)), at(50), LIVE)).toBe(
+      true,
+    );
+  });
+
+  it("fechado pelo dono ou por extensão vencida: reabre", () => {
+    expect(
+      poolOwnerReopenable({ betsClosedAt: at(5) }, match(), state("1H", 6, at(6)), at(6), LIVE),
+    ).toBe(true);
+    expect(
+      poolOwnerReopenable(
+        { betsExtendedUntil: at(40) },
+        match(),
+        state("2H", 50, at(65)),
+        at(65),
+        LIVE,
+      ),
+    ).toBe(true);
+  });
+
+  it("apostas abertas (janela ou extensão valendo): não há o que reabrir", () => {
+    expect(poolOwnerReopenable(noControls, match(), state("1H", 10, at(10)), at(10), LIVE)).toBe(
+      false,
+    );
+    expect(
+      poolOwnerReopenable({ betsExtendedUntil: at(90) }, match(), state("2H", 60, at(75)), at(75), LIVE),
+    ).toBe(false);
+    expect(poolOwnerReopenable(reopened, match(), state("2H", 60, at(75)), at(75), LIVE)).toBe(
+      false,
+    );
+  });
+
+  it("antes do apito, com a flag desligada ou com resultado: não", () => {
+    expect(poolOwnerReopenable({ betsClosedAt: at(-30) }, match(), null, at(-10), LIVE)).toBe(
+      false,
+    );
+    expect(poolOwnerReopenable(noControls, match(), null, at(30), OFF)).toBe(false);
+    expect(poolOwnerReopenable({ betsClosedAt: at(-30) }, match(), null, at(30))).toBe(false);
+    const scored = { betsClosedAt: at(5), manualHomeScore: 2, manualAwayScore: 1 };
+    expect(poolOwnerReopenable(scored, match(), null, at(30), LIVE)).toBe(false);
+  });
+
+  it("jogo terminado (estado ou DB) ou no teto (apito + 3h): não", () => {
+    expect(poolOwnerReopenable(noControls, match(), state("FT", 90, at(110)), at(110), LIVE)).toBe(
+      false,
+    );
+    expect(poolOwnerReopenable(noControls, match("finished"), null, at(110), LIVE)).toBe(false);
+    expect(poolOwnerReopenable(noControls, match("cancelled"), null, at(30), LIVE)).toBe(false);
+    expect(poolOwnerReopenable(noControls, match(), null, at(179), LIVE)).toBe(true);
+    expect(poolOwnerReopenable(noControls, match(), null, at(180), LIVE)).toBe(false);
+  });
+
+  it("reaberto: aberto no 2º tempo até o jogo acabar ou o teto, e o dono pode fechar", () => {
+    expect(poolExtendCap(match())).toEqual(CAP);
+    expect(poolOpenUntilEnd(reopened, match())).toBe(true);
+    expect(poolOpenUntilEnd({ betsExtendedUntil: at(90) }, match())).toBe(false);
+    expect(poolBetsOpen(reopened, match(), state("2H", 80, at(100)), at(100), LIVE)).toBe(true);
+    expect(poolOwnerClosable(reopened, match(), state("2H", 80, at(100)), at(100), LIVE)).toBe(
+      true,
+    );
+    expect(poolBetsOpen(reopened, match(), state("FT", 90, at(112)), at(112), LIVE)).toBe(false);
+    expect(poolBetsOpen(reopened, match(), null, at(180), LIVE)).toBe(false);
+    // Flag desligada: a extensão não vale (kill-switch), fecha como antes.
+    expect(poolBetsOpen(reopened, match(), null, at(100), OFF)).toBe(false);
+  });
+
+  it("fechar e reabrir se alternam", () => {
+    // Reaberto aos 30', fechado aos 60' (o fechar limpa a extensão), reabre aos 61'.
+    const closedAgain = { betsClosedAt: at(60), betsExtendedUntil: null };
+    expect(poolBetsOpen(closedAgain, match(), state("2H", 61, at(76)), at(76), LIVE)).toBe(false);
+    expect(poolOwnerReopenable(closedAgain, match(), state("2H", 61, at(76)), at(76), LIVE)).toBe(
+      true,
+    );
+  });
+
+  it("reaberto: tirar aposta segue bloqueado e o placar manual espera fechar", () => {
+    expect(poolEntriesRemovable(match(), at(100))).toBe(false);
+    expect(poolManualScoreAllowed(reopened, match(), null, at(100), LIVE)).toBe(false);
+  });
+
+  it("poolLiveStateWanted: reaberto busca; reaberto com o jogo terminado, não", () => {
+    expect(poolLiveStateWanted(reopened, match(), state("2H", 60, at(75)), at(75), LIVE)).toBe(
+      true,
+    );
+    expect(poolLiveStateWanted(reopened, match(), null, at(100), LIVE)).toBe(true);
+    expect(poolLiveStateWanted(reopened, match(), state("FT", 90, at(112)), at(115), LIVE)).toBe(
+      false,
+    );
   });
 });

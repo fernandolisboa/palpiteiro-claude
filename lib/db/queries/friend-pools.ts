@@ -106,7 +106,7 @@ export async function insertFriendPoolEntry(input: {
 
 /**
  * "Fechar apostas" do dono (#580): grava `bets_closed_at` e limpa a extensão (prazo e
- * quem estendeu). Só fecha; reabrir é só pela extensão do admin.
+ * quem estendeu). Reabrir (#601) é `setFriendPoolBetsExtended` até o teto.
  */
 export async function setFriendPoolBetsClosed(input: {
   poolId: string;
@@ -127,8 +127,9 @@ export async function setFriendPoolBetsClosed(input: {
 }
 
 /**
- * "Estender prazo" do admin (#580), só nos próprios bolões (`userId` = dono): limpa o
- * fechamento do dono, grava até quando e quem estendeu.
+ * "Estender prazo" do admin (#580) e "Reabrir apostas" do dono (#601, `until` = apito +
+ * 3h), só nos próprios bolões (`userId` = dono): limpa o fechamento do dono, grava até
+ * quando e quem estendeu.
  */
 export async function setFriendPoolBetsExtended(input: {
   poolId: string;
