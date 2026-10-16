@@ -36,11 +36,15 @@ export const SYNTHESIS_RESERVE_MS =
 
 // Tempo mínimo pra valer a pena INICIAR uma chamada paga. Abaixo disso o mercado é
 // pulado sem gasto nem slot: começar uma chamada que o timeout vai cortar paga
-// tokens e não entrega análise. Modelo `fast` (Haiku 5.5) responde em segundos (20s).
+// tokens e não entrega análise. Modelo `fast` (Haiku 5.5) responde em segundos: 20s
+// em effort low/medium (manchete, notícias, tarefas internas); em high ou acima ele
+// também pensa antes da tool call, então o mínimo sobe pra um QUARTO do timeout
+// estimado (o Haiku tem vazão bem maior que a dos `deliberate`).
 // `deliberate` pensa antes da tool call: no mínimo 120s, ou METADE do timeout estimado pro max_tokens/
 // effort da chamada (lib/ai/providers/anthropic/timeouts.ts) se for maior — um
 // mercado marginal vira "Tempo esgotado" em vez de uma chamada paga cortada no meio.
 const MIN_FAST_BUDGET_MS = 20_000;
+const FAST_ADAPTIVE_BUDGET_SHARE = 0.25;
 const MIN_DELIBERATE_BUDGET_MS = 120_000;
 const ADAPTIVE_BUDGET_SHARE = 0.5;
 // Teto do mínimo: o que o fan-out de um run NOVO oferece (prazo − reserva da síntese)
@@ -60,14 +64,35 @@ export type CallShape = {
 };
 
 export function minCallBudgetMs(call: CallShape): number {
-  if (call.speed === "fast") return MIN_FAST_BUDGET_MS;
+  if (call.speed === "fast") {
+    const thinksHard =
+      call.effort !== undefined && call.effort !== "low" && call.effort !== "medium";
+    if (call.maxTokens === undefined || !thinksHard) return MIN_FAST_BUDGET_MS;
+    return scaledMinBudget(
+      MIN_FAST_BUDGET_MS,
+      FAST_ADAPTIVE_BUDGET_SHARE,
+      call.maxTokens,
+      call.effort,
+    );
+  }
   if (call.maxTokens === undefined) return MIN_DELIBERATE_BUDGET_MS;
+  return scaledMinBudget(
+    MIN_DELIBERATE_BUDGET_MS,
+    ADAPTIVE_BUDGET_SHARE,
+    call.maxTokens,
+    call.effort,
+  );
+}
+
+function scaledMinBudget(
+  floorMs: number,
+  share: number,
+  maxTokens: number,
+  effort: Effort | undefined,
+): number {
   return Math.min(
     MAX_MIN_CALL_BUDGET_MS,
-    Math.max(
-      MIN_DELIBERATE_BUDGET_MS,
-      adaptiveTimeoutMs(call.maxTokens, call.effort) * ADAPTIVE_BUDGET_SHARE,
-    ),
+    Math.max(floorMs, adaptiveTimeoutMs(maxTokens, effort) * share),
   );
 }
 

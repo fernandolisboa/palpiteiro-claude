@@ -3,7 +3,7 @@
 import { revalidatePath } from "next/cache";
 
 import { auth } from "@/auth";
-import { isModelAllowedForAudience } from "@/lib/ai/models";
+import { isModelAllowedForAudience, resolveModelId } from "@/lib/ai/models";
 import {
   isEffort,
   isValidMaxTokens,
@@ -40,7 +40,9 @@ export async function updateDefaultModel(
     return { ok: false, error: "Acesso negado." };
   }
 
-  const modelId = String(formData.get("modelId") ?? "");
+  // Id antigo (aba aberta antes da troca de modelos) vira o 5.5 da família.
+  const rawModelId = String(formData.get("modelId") ?? "");
+  const modelId = resolveModelId(rawModelId) ?? rawModelId;
   // O default global vale pra TODOS (inclusive usuário comum), então só pode ser
   // um modelo userSelectable — audiência "usuário comum" (isAdmin=false). Isso
   // valida o id contra o registry E aplica o gating de audiência (ADR 0013).

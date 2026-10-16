@@ -2074,10 +2074,11 @@ describe("contexto do usuário (#565)", () => {
     vi.setSystemTime(new Date("2026-05-12T00:00:00.000Z"));
     const start = Date.now();
     // Só responderia em 30 s. Sem o teto, o predict esperaria até lá e o narrador
-    // (Haiku 5.5, `fast`, piso de 20 s) não caberia nos 5 s que sobram. Haiku de
-    // propósito: um `deliberate` (Sonnet/Opus 5.5, piso de 120 s) não caberia nem nos 25 s.
+    // (Haiku 5.5, `fast`; em effort high o mínimo é ~54 s) não caberia nos 40 s que
+    // sobram. Haiku de propósito: um `deliberate` (Sonnet/Opus 5.5, ~108 s+) não
+    // caberia nem nos 60 s.
     getDefaultModelId.mockResolvedValue("claude-haiku-5-5");
-    const deadlineAt = start + 35_000;
+    const deadlineAt = start + 70_000;
     extractPalpiteClaims.mockImplementation(
       () =>
         new Promise((resolve) =>
@@ -2119,8 +2120,8 @@ describe("contexto do usuário (#565)", () => {
     const narration = anthropicCreate.mock.calls.find(
       (c) => (c[0] as { tools: { name: string }[] }).tools[0].name === "submit_narration"
     )!;
-    // Restam 25 s − 5 s de margem = 20 s de timeout.
-    expect((narration[1] as { timeout: number }).timeout).toBe(20_000);
+    // Restam 60 s − 5 s de margem = 55 s de timeout.
+    expect((narration[1] as { timeout: number }).timeout).toBe(55_000);
     const [narratorRow] = rowsWhere(
       (r) => r.promptVersion === NARRATOR_VERSION && "provider" in r
     );

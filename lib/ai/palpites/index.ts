@@ -69,12 +69,15 @@ const H2H_LAST = 5;
 
 // #380 — quantas SÍNTESES PAGAS no máximo por geração quando a validação de fidelidade
 // está ON. DEFAULT = 1: na divergência, DEGRADA IMEDIATAMENTE (palpite:null) sem pagar
-// uma 2ª chamada. Racional: uma contagem errada a temp 0.3 na MESMA request é sistemática,
+// uma 2ª chamada. Racional: uma contagem errada na MESMA request é sistemática,
 // não ruído de amostragem → re-rodar raramente recupera; descartar o palpite é a escolha
 // honesta e custo-neutra (alinha com prefer-skip-over-silent-wrong). Subir pra 2 (uma
 // regeneração) é um flip trivial de preferência do dono — e valeria um nudge de prompt
 // corretivo na retry pra a regen valer o custo (non-goal de v1).
 const MAX_FIDELITY_ATTEMPTS = 1;
+
+// Piso do max_tokens da manchete (o thinking do Haiku 5.5 conta dentro dele).
+const SYNTHESIS_MIN_MAX_TOKENS = 8192;
 
 /**
  * Busca de notícias da síntese (ADR 0032 / #377): provider DEDICADO via web search da
@@ -299,7 +302,8 @@ async function runSynthesis<O extends SynthesisOutputBase>(
   const { userId, matchId, model, cartridge, userMessage, deadlineAt } = spec;
   // 7. AnalysisRequest. effort FIXO e baixo (UTILITY_EFFORT), não o do ai_config: a
   //    manchete preenche um tool a partir de análises já prontas e roda no fim do run,
-  //    na reserva da síntese. maxTokens de getGenerationParams.
+  //    na reserva da síntese. maxTokens de getGenerationParams, com piso de 8192: o
+  //    thinking conta dentro dele, e um max_tokens baixo do admin cortaria a tool call.
   const genParams = await getGenerationParams();
   const analysisRequest: AnalysisRequest = {
     model,
@@ -307,7 +311,7 @@ async function runSynthesis<O extends SynthesisOutputBase>(
     userMessage,
     tool: cartridge.tool,
     toolName: cartridge.toolName,
-    maxTokens: genParams.maxTokens,
+    maxTokens: Math.max(genParams.maxTokens, SYNTHESIS_MIN_MAX_TOKENS),
     effort: UTILITY_EFFORT,
     deadlineAt,
   };

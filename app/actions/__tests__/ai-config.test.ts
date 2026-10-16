@@ -109,57 +109,28 @@ describe("updateDefaultModel", () => {
     expect(mockSet).toHaveBeenCalledWith("claude-sonnet-5-5", "u1");
   });
 
-  it("admin + id de versão antiga (Sonnet 4.5 / Sonnet 5 / Haiku 4.5, ADR 0061) → not ok: o form do default só grava id do registry", async () => {
-    // O select do admin só oferece os três 5.5; um id antigo aqui é FormData forjado.
-    // A leitura (getDefaultModelId) é que tolera id antigo já gravado.
+  it("admin + id de versão antiga (aba aberta antes do ADR 0061) → grava o 5.5 da família", async () => {
     mockAuth.mockResolvedValue(ADMIN);
-    for (const modelId of [
-      "claude-sonnet-4-5-20250929",
-      "claude-sonnet-5",
-      "claude-haiku-4-5",
-    ]) {
+    for (const [modelId, expected] of [
+      ["claude-sonnet-4-5-20250929", "claude-sonnet-5-5"],
+      ["claude-sonnet-5", "claude-sonnet-5-5"],
+      ["claude-haiku-4-5", "claude-haiku-5-5"],
+      ["claude-opus-4-8", "claude-opus-5-5"],
+      ["claude-fable-5-1", "claude-opus-5-5"],
+    ] as const) {
+      mockSet.mockClear();
+      const res = await updateDefaultModel(null, form({ modelId }));
+      expect(res).toEqual({ ok: true });
+      expect(mockSet).toHaveBeenCalledWith(expected, "u1");
+    }
+  });
+
+  it("admin + id desconhecido (gpt-5-mini, lixo) → not ok, setter not called", async () => {
+    mockAuth.mockResolvedValue(ADMIN);
+    for (const modelId of ["gpt-5-mini", "claude-foo-1", ""]) {
       const res = await updateDefaultModel(null, form({ modelId }));
       expect(res.ok).toBe(false);
     }
-    expect(mockSet).not.toHaveBeenCalled();
-  });
-
-  it("admin + id removido em #374 (Opus 4.8 / Sonnet 4.6 / gpt-5-mini) → not ok, setter not called", async () => {
-    // Após #374 esses ids saíram do registry: isModelAllowedForAudience os trata
-    // como desconhecidos, então não são mais salváveis como default global. Guarda
-    // de remoção complementar à do Fable (#241) logo abaixo.
-    mockAuth.mockResolvedValue(ADMIN);
-    for (const modelId of [
-      "claude-opus-4-8",
-      "claude-sonnet-4-6",
-      "gpt-5-mini",
-    ]) {
-      const res = await updateDefaultModel(null, form({ modelId }));
-      expect(res.ok).toBe(false);
-    }
-    expect(mockSet).not.toHaveBeenCalled();
-  });
-
-  it("admin + id stale/removido (Fable, fora do registry após #241) → not ok, setter not called", async () => {
-    // Um id de modelo aposentado (Fable removido em #241) deixa de ser salvável:
-    // isModelAllowedForAudience o trata como desconhecido. Cobre a queda graciosa
-    // sem mudança de runtime.
-    mockAuth.mockResolvedValue(ADMIN);
-    const res = await updateDefaultModel(
-      null,
-      form({ modelId: "claude-fable-5" }),
-    );
-    expect(res.ok).toBe(false);
-    expect(mockSet).not.toHaveBeenCalled();
-  });
-
-  it("admin + Fable 5.1 (fora do registry, ADR 0061) → not ok", async () => {
-    mockAuth.mockResolvedValue(ADMIN);
-    const res = await updateDefaultModel(
-      null,
-      form({ modelId: "claude-fable-5-1" }),
-    );
-    expect(res.ok).toBe(false);
     expect(mockSet).not.toHaveBeenCalled();
   });
 

@@ -407,6 +407,14 @@ describe("generatePalpites (síntese) — caminho ok", () => {
     expect(req.maxTokens).toBe(16000);
   });
 
+  it("max_tokens baixo do admin: a manchete leva o piso de 8192 (o thinking conta dentro)", async () => {
+    getGenerationParams.mockResolvedValue({ maxTokens: 1024, effort: "high" });
+    runAnalysis.mockResolvedValue(okResult(validHeadline));
+    await generatePalpites(baseCall);
+    const req = runAnalysis.mock.calls[0][0] as AnalysisRequest;
+    expect(req.maxTokens).toBe(8192);
+  });
+
   it("all-pass: análises todas pass ainda sintetizam manchete + linha settleable", async () => {
     runAnalysis.mockResolvedValue(okResult(validHeadline));
     const passOnly = [

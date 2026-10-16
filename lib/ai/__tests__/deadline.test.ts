@@ -17,22 +17,34 @@ describe("minCallBudgetMs / canFitCall (#524 re-review)", () => {
     expect(minCallBudgetMs({ speed: "fast" })).toBe(20_000);
   });
 
-  it("fast: piso de 20s independente de maxTokens/effort", () => {
-    // Mesmo o maior formato (32000 em xhigh/max), que num `deliberate` bateria no teto,
-    // fica no piso do ritmo `fast`.
+  it("fast: piso de 20s em effort low/medium, sem effort ou sem max_tokens", () => {
     expect(minCallBudgetMs({ speed: "fast", maxTokens: 1024, effort: "low" })).toBe(
       20_000,
     );
-    expect(minCallBudgetMs({ speed: "fast", maxTokens: 16000, effort: "high" })).toBe(
+    // A manchete: max_tokens do admin, effort low — fica no piso mesmo com 32000.
+    expect(minCallBudgetMs({ speed: "fast", maxTokens: 32000, effort: "low" })).toBe(
       20_000,
     );
-    expect(minCallBudgetMs({ speed: "fast", maxTokens: 32000, effort: "xhigh" })).toBe(
-      20_000,
-    );
-    expect(minCallBudgetMs({ speed: "fast", maxTokens: 32000, effort: "max" })).toBe(
+    expect(minCallBudgetMs({ speed: "fast", maxTokens: 4096, effort: "medium" })).toBe(
       20_000,
     );
     expect(minCallBudgetMs({ speed: "fast", maxTokens: 32000 })).toBe(20_000);
+    expect(minCallBudgetMs({ speed: "fast", effort: "max" })).toBe(20_000);
+  });
+
+  it("fast: em high ou acima, um quarto do timeout estimado (Haiku 5.5 pensa)", () => {
+    // 16000 em high → timeout 215s → 53,75s.
+    expect(minCallBudgetMs({ speed: "fast", maxTokens: 16000, effort: "high" })).toBe(
+      53_750,
+    );
+    // 32000 em xhigh → 15s + 533,3s = 548,3s → ~137s, abaixo do teto.
+    expect(
+      minCallBudgetMs({ speed: "fast", maxTokens: 32000, effort: "xhigh" }),
+    ).toBeCloseTo(137_083, -1);
+    // Formato pequeno em high ainda fica no piso.
+    expect(minCallBudgetMs({ speed: "fast", maxTokens: 1024, effort: "high" })).toBe(
+      20_000,
+    );
   });
 
   it("deliberate: piso de 120s, ou metade do timeout estimado se for maior", () => {
@@ -83,8 +95,11 @@ describe("minCallBudgetMs / canFitCall (#524 re-review)", () => {
     expect(canFitCall(now + 20_000, "fast", now)).toBe(true);
     expect(canFitCall(now + 19_999, "fast", now)).toBe(false);
     expect(
-      canFitCall(now + 20_000, { speed: "fast", maxTokens: 32000, effort: "max" }, now),
+      canFitCall(now + 20_000, { speed: "fast", maxTokens: 32000, effort: "low" }, now),
     ).toBe(true);
+    expect(
+      canFitCall(now + 20_000, { speed: "fast", maxTokens: 16000, effort: "high" }, now),
+    ).toBe(false);
   });
 
   it("o ritmo do registry: Haiku 5.5 é fast, Opus e Sonnet 5.5 são deliberate", () => {

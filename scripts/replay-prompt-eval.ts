@@ -62,8 +62,8 @@ import {
   OverUnderOutputSchema,
   type OverUnderOutput,
 } from "@/lib/ai/markets/over_under";
-import { isAIModelId } from "@/lib/ai/models";
-import { isEffort } from "@/lib/ai/generation-params";
+import { resolveModelId } from "@/lib/ai/models";
+import { GENERATION_PARAM_DEFAULTS, isEffort } from "@/lib/ai/generation-params";
 import { requestTiming } from "@/lib/ai/providers/anthropic/timeouts";
 import {
   ADAPTIVE_FLIP_REPRO_RUNS,
@@ -171,13 +171,30 @@ async function replayOne(args: {
     );
   }
   const stored = args.inputPayload as Anthropic.MessageCreateParamsNonStreaming;
-  // Troca o system prompt E o tools array pela versão atual (o bump pode mudar
-  // a description da tool, não só o system). O nome "submit_prediction" não
-  // muda, então o tool_choice armazenado continua válido. Mesmo cast do
-  // predict.ts. Resto (model, messages, tool_choice, thinking/temperature,
-  // max_tokens) replayed byte a byte.
+  // Baseline gravada num modelo que saiu do app (Sonnet 4.5/5, Haiku 4.5…) replaya no
+  // 5.5 da família (ADR 0061) e no formato de request atual: sem temperature, thinking
+  // adaptive e tool_choice auto (os 5.5 rejeitam o resto). Troca também o system
+  // prompt E o tools array pela versão atual (o bump pode mudar a description da
+  // tool, não só o system). messages replayed byte a byte.
+  const modelId = resolveModelId(stored.model);
+  if (!modelId) {
+    throw new Error(`modelo "${stored.model}" sem equivalente no MODEL_REGISTRY`);
+  }
+  const {
+    temperature: _temperature,
+    top_p: _topP,
+    top_k: _topK,
+    ...rest
+  } = stored;
   const request: Anthropic.MessageCreateParamsNonStreaming = {
-    ...stored,
+    ...rest,
+    model: modelId,
+    max_tokens: Math.max(stored.max_tokens, GENERATION_PARAM_DEFAULTS.maxTokens),
+    thinking: { type: "adaptive" },
+    tool_choice: { type: "auto" },
+    output_config: stored.output_config ?? {
+      effort: GENERATION_PARAM_DEFAULTS.effort,
+    },
     system: SYSTEM_PROMPT,
     tools: [SUBMIT_PREDICTION_TOOL as unknown as Anthropic.Tool],
   };
@@ -362,10 +379,12 @@ async function main(): Promise<void> {
       continue;
     }
     const { output, usage, attempts } = replayed;
+    // O modelo em que o replay rodou (o 5.5 da família do modelo gravado).
+    const replayModelId = resolveModelId(row.model);
 
     const baselineConf = Number(row.confidencePct);
     const flip = output.recommendation !== row.recommendation;
-    const thinkingMode = classifyThinkingMode(row.model);
+    const thinkingMode = classifyThinkingMode(replayModelId ?? row.model);
     // |Δconfidence| normalizado pra P(over) nos dois lados — sem isso, um flip
     // pass→under compararia P(over) contra P(under), grandezas diferentes. É SEMPRE
     // o delta do 1º replay (paridade com o single-shot temperature); pra flips
@@ -421,19 +440,10 @@ async function main(): Promise<void> {
       );
     }
 
-    // isAIModelId inline no ternário pra TS narrow row.model (string) → AIModelId;
-    // um boolean intermediário não estreita o tipo.
-    const costKnown = isAIModelId(row.model);
-    const costUsd = isAIModelId(row.model)
-      ? calculateCost({ model: row.model, inputTokens, outputTokens })
+    const costKnown = replayModelId !== null;
+    const costUsd = replayModelId
+      ? calculateCost({ model: replayModelId, inputTokens, outputTokens })
       : 0;
-    if (!costKnown) {
-      // Modelo fora do registry → custo desconhecido E classificado como ESTRITO
-      // (temperature) pro flip. Logado de propósito: nunca tolera flip em silêncio.
-      console.warn(
-        `  ⚠ modelo "${row.model}" fora do MODEL_REGISTRY — custo desconhecido (n/a, não $0) e flip avaliado ESTRITO (caminho temperature)`,
-      );
-    }
 
     results.push({
       label,
