@@ -7,11 +7,16 @@ import { afterEach, describe, expect, it, vi } from "vitest";
 vi.mock("@/app/actions/friend-pools", () => ({
   addFriendPoolEntry: vi.fn(),
   createFriendPool: vi.fn(),
+  reopenFriendPoolBets: vi.fn(),
   setFriendPoolScore: vi.fn(),
 }));
 
-import { addFriendPoolEntry, setFriendPoolScore } from "@/app/actions/friend-pools";
-import { AddEntryForm, ManualScoreForm } from "@/components/friend-pool-forms";
+import {
+  addFriendPoolEntry,
+  reopenFriendPoolBets,
+  setFriendPoolScore,
+} from "@/app/actions/friend-pools";
+import { AddEntryForm, ManualScoreForm, ReopenBetsForm } from "@/components/friend-pool-forms";
 
 const POOL = "11111111-1111-1111-1111-111111111111";
 
@@ -46,6 +51,7 @@ afterEach(() => {
   document.body.innerHTML = "";
   vi.mocked(addFriendPoolEntry).mockReset();
   vi.mocked(setFriendPoolScore).mockReset();
+  vi.mocked(reopenFriendPoolBets).mockReset();
 });
 
 describe("AddEntryForm", () => {
@@ -157,6 +163,30 @@ describe("placar numa linha só (#574 linha 9)", () => {
     expect(home.value).toBe("2");
     expect(away.value).toBe("1");
     expect(home.required).toBe(false);
+    await act(async () => root.unmount());
+  });
+});
+
+describe("ReopenBetsForm (#601)", () => {
+  it("envia o bolão e mostra a recusa da action, em vez de um clique morto", async () => {
+    vi.mocked(reopenFriendPoolBets).mockResolvedValue({
+      ok: false,
+      error: "Não deu pra confirmar o placar ao vivo agora. Tente em um minuto.",
+    });
+    (globalThis as { IS_REACT_ACT_ENVIRONMENT?: boolean }).IS_REACT_ACT_ENVIRONMENT = true;
+    const container = document.createElement("div");
+    document.body.appendChild(container);
+    const root = createRoot(container);
+    await act(async () => {
+      root.render(<ReopenBetsForm poolId={POOL} note="Reabre as apostas agora." />);
+    });
+    expect(container.textContent).toContain("Reabre as apostas agora.");
+    await submit(container.querySelector("form")!);
+    const fd = vi.mocked(reopenFriendPoolBets).mock.calls[0]![1];
+    expect(fd.get("poolId")).toBe(POOL);
+    expect(container.querySelector('[role="alert"]')?.textContent).toBe(
+      "Não deu pra confirmar o placar ao vivo agora. Tente em um minuto.",
+    );
     await act(async () => root.unmount());
   });
 });

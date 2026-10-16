@@ -28,6 +28,7 @@ vi.mock("@/lib/db", () => ({
 }));
 
 import {
+  clearFriendPoolBetsClosed,
   deleteFriendPool,
   deleteFriendPoolEntry,
   getFriendPool,
@@ -205,6 +206,21 @@ describe("friend_pools (pglite)", () => {
     // Fechar depois de estender limpa a extensão (prazo e quem estendeu).
     await setFriendPoolBetsClosed({ poolId, userId: owner, now: later });
     pool = (await getFriendPool(poolId, owner))!.pool;
+    expect(pool.betsExtendedUntil).toBeNull();
+    expect(pool.betsExtendedByUserId).toBeNull();
+  });
+
+  it("reabrir antes do apito (#601): só limpa o fechamento, só no próprio bolão", async () => {
+    const poolId = await insertFriendPool({ userId: owner, matchId, title: null, entryAmountCents: null });
+    const closedAt = new Date("2026-10-18T18:30:00Z");
+    const now = new Date("2026-10-18T18:40:00Z");
+    await setFriendPoolBetsClosed({ poolId, userId: owner, now: closedAt });
+    expect(await clearFriendPoolBetsClosed({ poolId, userId: other, now })).toBe(false);
+    expect((await getFriendPool(poolId, owner))!.pool.betsClosedAt).toEqual(closedAt);
+    expect(await clearFriendPoolBetsClosed({ poolId, userId: owner, now })).toBe(true);
+    const pool = (await getFriendPool(poolId, owner))!.pool;
+    expect(pool.betsClosedAt).toBeNull();
+    // Sem extensão: volta a janela de sempre.
     expect(pool.betsExtendedUntil).toBeNull();
     expect(pool.betsExtendedByUserId).toBeNull();
   });

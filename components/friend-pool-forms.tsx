@@ -15,6 +15,7 @@ import { Select } from "@/components/ui/select";
 import {
   addFriendPoolEntry,
   createFriendPool,
+  reopenFriendPoolBets,
   setFriendPoolScore,
   type PoolActionResult,
 } from "@/app/actions/friend-pools";
@@ -343,6 +344,25 @@ export function ManualScoreForm({
           </Button>
         )}
       </div>
+    </form>
+  );
+}
+
+/**
+ * "Reabrir apostas" do dono (#601). Form de cliente só pela mensagem: a action pode
+ * recusar (ex.: sem placar ao vivo novo perto do fim do jogo) e a recusa tem que
+ * aparecer, não sumir num clique morto.
+ */
+export function ReopenBetsForm({ poolId, note }: { poolId: string; note: string }) {
+  const { state, pending, formProps } = usePoolAction(reopenFriendPoolBets);
+  return (
+    <form {...formProps} className="mb-8 flex flex-col gap-2">
+      <input type="hidden" name="poolId" value={poolId} />
+      <p className="text-body-sm tracking-tight">{note}</p>
+      <ErrorLine state={state} />
+      <Button type="submit" variant="outline" size="sm" disabled={pending} className="w-fit">
+        {pending ? "Reabrindo…" : "Reabrir apostas"}
+      </Button>
     </form>
   );
 }

@@ -15,6 +15,7 @@ import {
   poolOpenUntilEnd,
   poolOwnerClosable,
   poolOwnerReopenable,
+  poolReopenNeedsFreshState,
   poolWindow,
   poolWindowOpen,
 } from "@/lib/pools/pool-state";
@@ -344,10 +345,31 @@ describe("poolOwnerReopenable (reabrir apostas do dono, #601)", () => {
     );
   });
 
-  it("antes do apito, com a flag desligada ou com resultado: não", () => {
-    expect(poolOwnerReopenable({ betsClosedAt: at(-30) }, match(), null, at(-10), LIVE)).toBe(
+  it("antes do apito, fechado pelo dono: reabre e volta a janela de sempre", () => {
+    const closed = { betsClosedAt: at(-30), betsExtendedUntil: null };
+    expect(poolBetsOpen(closed, match(), null, at(-10), LIVE)).toBe(false);
+    expect(poolOwnerReopenable(closed, match(), null, at(-10), LIVE)).toBe(true);
+    // O que a action grava antes do apito: só o fechamento limpo, sem extensão.
+    expect(poolBetsOpen(noControls, match(), null, at(-10), LIVE)).toBe(true);
+    expect(poolBetsOpen(noControls, match(), state("1H", 16, at(16)), at(16), LIVE)).toBe(false);
+  });
+
+  it("antes do apito sem o dono ter fechado, com a flag desligada ou com resultado: não", () => {
+    expect(poolOwnerReopenable(noControls, match(), null, at(-10), LIVE)).toBe(false);
+    // Flag desligada: sem controle, como antes (antes ou depois do apito).
+    expect(poolOwnerReopenable({ betsClosedAt: at(-30) }, match(), null, at(-10), OFF)).toBe(
       false,
     );
+    expect(poolOwnerReopenable({ betsClosedAt: at(-30) }, match(), null, at(-10))).toBe(false);
+    expect(
+      poolOwnerReopenable(
+        { betsClosedAt: at(-30), manualHomeScore: 1, manualAwayScore: 0 },
+        match(),
+        null,
+        at(-10),
+        LIVE,
+      ),
+    ).toBe(false);
     expect(poolOwnerReopenable(noControls, match(), null, at(30), OFF)).toBe(false);
     expect(poolOwnerReopenable({ betsClosedAt: at(-30) }, match(), null, at(30))).toBe(false);
     const scored = { betsClosedAt: at(5), manualHomeScore: 2, manualAwayScore: 1 };
@@ -400,5 +422,25 @@ describe("poolOwnerReopenable (reabrir apostas do dono, #601)", () => {
     expect(poolLiveStateWanted(reopened, match(), state("FT", 90, at(112)), at(115), LIVE)).toBe(
       false,
     );
+  });
+});
+
+describe("poolReopenNeedsFreshState (reabrir perto do fim, #601)", () => {
+  it("até o apito + 105 min: não pede estado novo", () => {
+    expect(poolReopenNeedsFreshState(match(), null, at(30))).toBe(false);
+    expect(poolReopenNeedsFreshState(match(), state("1H", 20, at(20)), at(105))).toBe(false);
+  });
+
+  it("depois do apito + 105 min: sem estado ou estado com mais de 2 min, pede", () => {
+    expect(poolReopenNeedsFreshState(match(), null, at(106))).toBe(true);
+    // Cota baixa ou busca falhou: a row velha ainda diz 2º tempo.
+    expect(poolReopenNeedsFreshState(match(), state("2H", 80, at(95)), at(110))).toBe(true);
+    expect(
+      poolReopenNeedsFreshState(match(), { ...state("2H", 80, at(95)), fetchedAt: null }, at(110)),
+    ).toBe(true);
+  });
+
+  it("depois do apito + 105 min: estado de até 2 min vale", () => {
+    expect(poolReopenNeedsFreshState(match(), state("2H", 88, at(108)), at(110))).toBe(false);
   });
 });

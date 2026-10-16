@@ -1,3 +1,4 @@
+import { isLiveStateActionable } from "@/lib/live/freshness";
 import {
   classifyStatusShort,
   matchUnavailableReason,
@@ -14,8 +15,9 @@ import { resolvePoolScore } from "@/lib/pools/winners";
 //   "estender" do admin; com resultado (placar manual ou do jogo encerrado) nunca.
 // Com `enable_live_mode` desligado tudo fecha no apito, como antes, e os controles do
 // dono e do admin somem (`poolOwnerClosable`, `poolOwnerReopenable`, `poolExtendable`).
-// Reabrir (#601) não tem coluna própria: é uma extensão até o teto (apito + 3h), então
-// fica aberto até o dono fechar de novo ou o jogo acabar (`poolOpenUntilEnd`).
+// Reabrir (#601) não tem coluna própria. Antes do apito só desfaz o "fechar" (volta a
+// janela de sempre); depois, é uma extensão até o teto (apito + 3h), então fica aberto
+// até o dono fechar de novo ou o jogo acabar (`poolOpenUntilEnd`).
 
 /** Minuto jogado em que o bolão fecha sozinho. */
 export const POOL_LIVE_CUTOFF_MINUTE = 15;
@@ -26,6 +28,11 @@ export const POOL_EXTEND_PRESETS_MIN = [15, 30, 60] as const;
 export type PoolExtendPreset = (typeof POOL_EXTEND_PRESETS_MIN)[number];
 /** Teto da extensão: apito + 3h. */
 export const POOL_EXTEND_CAP_MS = 3 * 60 * 60_000;
+/**
+ * Depois do apito + isto (tempo normal com o intervalo), o jogo pode ter acabado: o
+ * "reabrir" do dono só vale com estado ao vivo novo (`poolReopenNeedsFreshState`).
+ */
+export const POOL_REOPEN_FRESH_AFTER_MS = 105 * 60_000;
 
 /** Placar do jogo opcional: só entra na pergunta "o bolão já tem resultado?". */
 export type PoolMatch = {
@@ -264,11 +271,14 @@ export function poolExtendable(
 }
 
 /**
- * "Reabrir apostas" do dono (#601): modo ao vivo ligado, depois do apito, apostas
- * fechadas agora (pelo corte dos 15', pelo próprio dono ou por uma extensão vencida),
- * sem resultado no bolão, jogo não terminado e antes do teto (apito + 3h). Fechar e
- * reabrir podem se alternar quantas vezes o dono quiser. Antes do apito não reabre
- * (o "fechar" dele vale até o apito; depois, o botão aparece).
+ * "Reabrir apostas" do dono (#601), só com o modo ao vivo ligado (flag desligada = como
+ * antes, sem o controle):
+ * - antes do apito: o dono fechou as apostas (e o bolão não tem resultado). Reabrir só
+ *   limpa o fechamento: volta a janela de sempre (pré-jogo, depois o corte dos 15');
+ * - depois do apito: apostas fechadas agora (pelo corte dos 15', pelo próprio dono ou
+ *   por uma extensão vencida), sem resultado, jogo não terminado e antes do teto (apito
+ *   + 3h). Reabrir grava a extensão até o teto.
+ * Fechar e reabrir podem se alternar quantas vezes o dono quiser.
  */
 export function poolOwnerReopenable(
   pool: PoolControls,
@@ -277,9 +287,28 @@ export function poolOwnerReopenable(
   now: Date = new Date(),
   opts: PoolLiveOptions = { liveMode: false },
 ): boolean {
+  if (!opts.liveMode) return false;
+  if (poolEntriesRemovable(match, now)) {
+    return poolClosedByOwner(pool, now) && !poolHasResult(pool, match);
+  }
   return (
     poolExtendable(pool, match, state, now, opts) && !poolBetsOpen(pool, match, state, now, opts)
   );
+}
+
+/**
+ * O "reabrir" depois do apito + 105 min pede estado ao vivo novo (≤ 2 min, a regra de
+ * registrar): sem ele (cota baixa ou busca falhou devolvem a row velha, que ainda diz
+ * 1º/2º tempo), não dá pra saber se o jogo já acabou, e reabrir deixaria apostar com o
+ * jogo encerrado até o teto. Só para a action de reabrir; a extensão não muda.
+ */
+export function poolReopenNeedsFreshState(
+  match: PoolMatch,
+  state: LiveStateInput | null,
+  now: Date = new Date(),
+): boolean {
+  if (now.getTime() <= match.kickoffAt.getTime() + POOL_REOPEN_FRESH_AFTER_MS) return false;
+  return state === null || !isLiveStateActionable(state.fetchedAt, now);
 }
 
 /**
