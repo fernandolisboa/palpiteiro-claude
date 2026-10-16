@@ -101,8 +101,10 @@ describe("MatchHero — estado ao vivo (#580)", () => {
     );
     expect(html).toMatch(/1<span[^>]*>–<\/span>0/);
     expect(html).toContain("63&#x27; · atualizado há 20 s");
-    expect(html).toContain('aria-label="2 expulsos"');
-    expect(html).not.toContain('aria-label="1 expulso"');
+    // Texto para o leitor de tela (sr-only), não um aria-label que ele ignora.
+    expect(html).toContain('<span class="sr-only"> (2 expulsos)</span>');
+    expect(html).not.toMatch(/aria-label="\d+ expulsos?"/);
+    expect(html).not.toContain("1 expulso");
     expect(html).toContain("bg-form-loss-fg");
     expect(html).toContain("Atualizar placar");
     expect(html).toContain("AO VIVO");

@@ -23,17 +23,16 @@ type Props = {
 };
 
 // Expulsões ao lado do nome (#580): o cartão vermelho como um retângulo pequeno, nas
-// cores de derrota que já existem (form-loss), e a contagem em mono.
+// cores de derrota que já existem (form-loss), e a contagem em mono. O leitor de tela
+// ouve o texto sr-only ("2 expulsos"): aria-label num <span> sem papel não é lido.
 function RedCards({ count }: { count: number }) {
   return (
-    <span
-      className="inline-flex items-center gap-0.5 align-middle"
-      aria-label={count === 1 ? "1 expulso" : `${count} expulsos`}
-    >
+    <span className="inline-flex items-center gap-0.5 align-middle">
       <span aria-hidden className="bg-form-loss-fg h-3 w-2 rounded-xs" />
       <span aria-hidden className="text-form-loss-fg font-mono text-meta tabular-nums">
         {count}
       </span>
+      <span className="sr-only">{count === 1 ? " (1 expulso)" : ` (${count} expulsos)`}</span>
     </span>
   );
 }
