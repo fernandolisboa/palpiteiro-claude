@@ -8,6 +8,7 @@ import {
   UTILITY_EFFORT,
   UTILITY_MODEL_ID,
   isAIProvider,
+  type AIModel,
 } from "@/lib/ai/models";
 import { getProviderForModel } from "@/lib/ai/providers";
 import type { AiCallStatus, AnalysisRequest } from "@/lib/ai/providers/types";
@@ -105,7 +106,7 @@ export async function extractPalpiteClaims(args: ExtractArgs): Promise<ExtractRe
         userId: args.userId,
         matchId: args.matchId,
         provider: EXTRACT_MODEL.provider,
-        model: EXTRACT_MODEL.id,
+        model: EXTRACT_MODEL,
         inputPayload: { reasonChars: args.reason.length },
         outputPayload: { error: message },
         inputTokens: 0,
@@ -141,7 +142,9 @@ async function runExtraction(args: ExtractArgs): Promise<ExtractResult> {
     return { ok: false, message: "provider inválido", aiCallId: null };
   }
 
+  // `servedModel`: o modelo que respondeu; o pedido quando não houve chamada.
   const fail = async (
+    servedModel: AIModel,
     status: Exclude<AiCallStatus, "ok">,
     errorMessage: string,
     payload: {
@@ -156,7 +159,7 @@ async function runExtraction(args: ExtractArgs): Promise<ExtractResult> {
       userId,
       matchId,
       provider: providerKey,
-      model: model.id,
+      model: servedModel,
       ...payload,
       status,
       errorMessage,
@@ -167,7 +170,7 @@ async function runExtraction(args: ExtractArgs): Promise<ExtractResult> {
 
   if (!provider.hasKey()) {
     const msg = `${providerKey} provider has no API key configured`;
-    return fail("provider_error", msg, {
+    return fail(model, "provider_error", msg, {
       inputPayload: request as unknown as Record<string, unknown>,
       outputPayload: { error: msg },
       inputTokens: 0,
@@ -177,6 +180,7 @@ async function runExtraction(args: ExtractArgs): Promise<ExtractResult> {
   }
 
   const result = await provider.runAnalysis(request);
+  const served = result.servedModel;
   const payload = {
     inputPayload: result.inputPayload,
     outputPayload: result.outputPayload,
@@ -184,13 +188,18 @@ async function runExtraction(args: ExtractArgs): Promise<ExtractResult> {
     outputTokens: result.usage.outputTokens,
     latencyMs: result.latencyMs,
   };
-  if (!result.ok) return fail(result.status, result.message, payload);
+  if (!result.ok) return fail(served, result.status, result.message, payload);
   if (result.toolInput === undefined) {
-    return fail("tool_missing", `model did not call ${USER_PALPITE_EXTRACT_TOOL_NAME}`, payload);
+    return fail(
+      served,
+      "tool_missing",
+      `model did not call ${USER_PALPITE_EXTRACT_TOOL_NAME}`,
+      payload,
+    );
   }
   const envelope = ExtractEnvelopeSchema.safeParse(result.toolInput);
   if (!envelope.success) {
-    return fail("invalid_output", JSON.stringify(envelope.error.issues), payload);
+    return fail(served, "invalid_output", JSON.stringify(envelope.error.issues), payload);
   }
 
   const parsedClaims: Claim[] = [];
@@ -227,7 +236,7 @@ async function runExtraction(args: ExtractArgs): Promise<ExtractResult> {
 
   // Sucesso (inclusive zero afirmações: motivo só de opinião). Log best-effort.
   const cost = calculateCost({
-    model: model.id,
+    model: served,
     inputTokens: payload.inputTokens,
     outputTokens: payload.outputTokens,
   });
@@ -239,7 +248,7 @@ async function runExtraction(args: ExtractArgs): Promise<ExtractResult> {
         userId,
         matchId,
         provider: providerKey,
-        model: model.id,
+        model: served.id,
         promptVersion: USER_PALPITE_EXTRACT_VERSION,
         ...payload,
         costUsd: cost.toFixed(6),

@@ -1,5 +1,7 @@
 import { beforeEach, describe, expect, it, vi } from "vitest";
 
+import { MODEL_REGISTRY, type AIModel } from "@/lib/ai/models";
+
 import type { AnalysisRequest, AnalysisResult } from "@/lib/ai/providers/types";
 
 const insertValues = vi.fn((..._args: unknown[]) => {});
@@ -56,6 +58,7 @@ function ok(toolInput: unknown): AnalysisResult {
     outputPayload: { res: 1 },
     stopReason: "tool_use",
     latencyMs: 900,
+    servedModel: MODEL_REGISTRY["claude-sonnet-5-5"],
   };
 }
 
@@ -105,6 +108,7 @@ describe("narratePalpite", () => {
       outputPayload: {},
       stopReason: null,
       latencyMs: 1,
+      servedModel: MODEL_REGISTRY["claude-sonnet-5-5"],
     });
     const r = await narratePalpite(ARGS);
     expect(r.source).toBe("template");
@@ -172,6 +176,48 @@ describe("narratePalpite", () => {
       narration: templatedPalpiteNarration(INPUT),
       source: "template",
       aiCallId: null,
+    });
+  });
+});
+
+describe("narratePalpite — modelo que serviu (PLAN-608)", () => {
+  const ADOPTED: AIModel = {
+    ...MODEL_REGISTRY["claude-sonnet-5-5"],
+    id: "claude-sonnet-5-6",
+    inputPricePerMTok: 1,
+    outputPricePerMTok: 2,
+    longPromptPricing: undefined,
+    adopted: { priceEstimated: true, pinnedId: "claude-sonnet-5-5" },
+  };
+
+  it("ok: ai_calls.model e custo do servido", async () => {
+    fakeProvider.runAnalysis.mockResolvedValueOnce({ ...ok(GOOD), servedModel: ADOPTED });
+    const r = await narratePalpite(ARGS);
+    expect(r.source).toBe("llm");
+    expect(insertValues.mock.calls[0][0]).toMatchObject({
+      model: "claude-sonnet-5-6",
+      // 1000 × $1 + 200 × $2 por 1M
+      costUsd: ((1000 * 1 + 200 * 2) / 1_000_000).toFixed(6),
+    });
+  });
+
+  it("fidelidade reprovada: a row de erro leva o servido", async () => {
+    fakeProvider.runAnalysis.mockResolvedValueOnce({
+      ...ok({ ...GOOD, resumo: "chance de 77,7%" }),
+      servedModel: ADOPTED,
+    });
+    await narratePalpite(ARGS);
+    expect(persistAiCallError.mock.calls[0][0]).toMatchObject({
+      status: "invalid_output",
+      model: ADOPTED,
+    });
+  });
+
+  it("sem chave: a row leva o modelo pedido", async () => {
+    fakeProvider.hasKey.mockReturnValue(false);
+    await narratePalpite(ARGS);
+    expect(persistAiCallError.mock.calls[0][0]).toMatchObject({
+      model: MODEL_REGISTRY["claude-sonnet-5-5"],
     });
   });
 });

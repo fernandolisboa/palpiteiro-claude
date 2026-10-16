@@ -17,6 +17,7 @@ import {
   persistJudgmentAiCall,
   truncate,
 } from "@/lib/ai/ai-call-logging";
+import { MODEL_REGISTRY } from "@/lib/ai/models";
 
 afterEach(() => {
   vi.restoreAllMocks();
@@ -27,7 +28,7 @@ const baseArgs = {
   provider: "anthropic" as const,
   userId: "u-1",
   matchId: "m-1",
-  model: "claude-haiku-5-5" as const,
+  model: MODEL_REGISTRY["claude-haiku-5-5"],
   inputPayload: { foo: "bar" },
   outputPayload: { error: "boom" },
   inputTokens: 10,
@@ -67,6 +68,7 @@ describe("persistAiCallError — swallow preservado", () => {
     const row = values.mock.calls[0][0];
     expect(row.status).toBe("invalid_output");
     expect(row.provider).toBe("anthropic");
+    expect(row.model).toBe("claude-haiku-5-5");
     expect(row.costUsd).toBe("0.000011"); // (10*0.1 + 20*0.5)/1e6 = 0.000011
     expect(consoleError).not.toHaveBeenCalled();
   });

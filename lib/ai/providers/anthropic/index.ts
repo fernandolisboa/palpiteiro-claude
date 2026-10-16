@@ -21,6 +21,7 @@ import {
   classifyAnthropicError,
   type ModelRefusalError,
   refusalFromMessage,
+  rejectionOf,
   serializeAnthropicError,
 } from "./errors";
 import { buildAnthropicRequest } from "./request-builder";
@@ -58,6 +59,7 @@ function createMessage(
 // Falha de uma chamada que não devolveu corpo (erro do SDK, timeout, sem prazo).
 function callFailure(args: {
   err: unknown;
+  request: AnalysisRequest;
   usage: AnalysisUsage;
   inputPayload: Record<string, unknown>;
   stopReason: string | null;
@@ -74,14 +76,22 @@ function callFailure(args: {
       outputPayload: { error: serializeAnthropicError(args.err) },
       stopReason: args.stopReason,
       latencyMs: args.latencyMs,
+      servedModel: args.request.model,
     };
   }
   const classified = classifyAnthropicError(args.err);
+  // Retomada de pause_turn que falha já pagou tokens: não é "rejeição do modelo"
+  // (refazer do zero perderia o custo da 1ª parte).
+  const rejection =
+    args.usage.inputTokens + args.usage.outputTokens > 0
+      ? undefined
+      : rejectionOf(args.err);
   return {
     ok: false,
     status: classified.status,
     message: classified.message,
     cause: args.err,
+    ...(rejection ? { rejection } : {}),
     usage: args.usage,
     inputPayload: args.inputPayload,
     outputPayload: {
@@ -91,6 +101,7 @@ function callFailure(args: {
     },
     stopReason: args.stopReason,
     latencyMs: args.latencyMs,
+    servedModel: args.request.model,
   };
 }
 
@@ -100,6 +111,7 @@ function callFailure(args: {
 // O outputPayload é a resposta crua (auditoria) e `usage` são os tokens cobrados.
 function refusalResult(args: {
   refusal: ModelRefusalError;
+  request: AnalysisRequest;
   response: Anthropic.Message;
   usage: AnalysisUsage;
   inputPayload: Record<string, unknown>;
@@ -119,6 +131,7 @@ function refusalResult(args: {
     outputPayload: args.response as unknown as Record<string, unknown>,
     stopReason: "refusal",
     latencyMs: args.latencyMs,
+    servedModel: args.request.model,
   };
 }
 
@@ -177,6 +190,7 @@ async function runAnalysis(
   } catch (err) {
     return callFailure({
       err,
+      request,
       usage: { inputTokens: 0, outputTokens: 0 },
       inputPayload,
       stopReason: null,
@@ -190,7 +204,14 @@ async function runAnalysis(
   };
   const refusal = refusalFromMessage(response);
   if (refusal) {
-    return refusalResult({ refusal, response, usage, inputPayload, latencyMs });
+    return refusalResult({
+      refusal,
+      request,
+      response,
+      usage,
+      inputPayload,
+      latencyMs,
+    });
   }
   // `outputPayload` == o cast pré-seam de predict.ts:817 (byte-idêntico). O
   // tool_missing snippet de predict lê `.content` daqui.
@@ -211,6 +232,7 @@ async function runAnalysis(
     outputPayload,
     stopReason: response.stop_reason ?? null,
     latencyMs,
+    servedModel: request.model,
   };
 }
 
@@ -244,6 +266,7 @@ async function runServerToolAnalysis(
   } catch (err) {
     return callFailure({
       err,
+      request,
       usage: { inputTokens: 0, outputTokens: 0 },
       inputPayload,
       stopReason: null,
@@ -278,6 +301,7 @@ async function runServerToolAnalysis(
     } catch (err) {
       return callFailure({
         err,
+        request,
         usage: { inputTokens, outputTokens },
         inputPayload,
         stopReason: response.stop_reason ?? null,
@@ -293,6 +317,7 @@ async function runServerToolAnalysis(
   if (refusal) {
     return refusalResult({
       refusal,
+      request,
       response,
       usage: { inputTokens, outputTokens },
       inputPayload,
@@ -310,6 +335,7 @@ async function runServerToolAnalysis(
     outputPayload,
     stopReason: response.stop_reason ?? null,
     latencyMs,
+    servedModel: request.model,
     contentBlocks: response.content,
   };
 }

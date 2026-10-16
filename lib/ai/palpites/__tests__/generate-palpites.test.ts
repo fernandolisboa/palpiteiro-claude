@@ -1,5 +1,7 @@
 import { beforeEach, describe, expect, it, vi } from "vitest";
 
+import { MODEL_REGISTRY, type AIModel } from "@/lib/ai/models";
+
 import type { MarketAnalysisSummary } from "@/lib/ai/palpites/synthesis-input";
 import type { SupportedLeague } from "@/lib/providers/sports-data/leagues";
 import type {
@@ -180,6 +182,7 @@ function okResult(toolInput: unknown): AnalysisResult {
     outputPayload: { content: [] },
     stopReason: "tool_use",
     latencyMs: 42,
+    servedModel: MODEL_REGISTRY["claude-haiku-5-5"],
   };
 }
 
@@ -319,6 +322,43 @@ describe("generatePalpites (síntese) — notícias já disparadas pelo run", ()
     } finally {
       errSpy.mockRestore();
     }
+  });
+});
+
+describe("generatePalpites (síntese) — modelo que serviu (PLAN-608)", () => {
+  const ADOPTED: AIModel = {
+    ...MODEL_REGISTRY["claude-haiku-5-5"],
+    id: "claude-haiku-5-6",
+    inputPricePerMTok: 1,
+    outputPricePerMTok: 2,
+    longPromptPricing: undefined,
+    adopted: { priceEstimated: true, pinnedId: "claude-haiku-5-5" },
+  };
+
+  it("ok: ai_calls.model, custo e palpite_sets.modelVersion usam o servido", async () => {
+    runAnalysis.mockResolvedValue({ ...okResult(validHeadline), servedModel: ADOPTED });
+    await generatePalpites(baseCall);
+
+    expect((runAnalysis.mock.calls[0][0] as AnalysisRequest).model.id).toBe(
+      "claude-haiku-5-5",
+    );
+    const aiCallRow = insertValues.mock.calls[0][0] as Record<string, unknown>;
+    expect(aiCallRow.model).toBe("claude-haiku-5-6");
+    // 100 × $1 + 50 × $2 por 1M
+    expect(aiCallRow.costUsd).toBe(((100 * 1 + 50 * 2) / 1_000_000).toFixed(6));
+    const setRow = insertValues.mock.calls[1][0] as Record<string, unknown>;
+    expect(setRow.modelVersion).toBe("claude-haiku-5-6");
+  });
+
+  it("Zod falha: a row invalid_output leva o servido", async () => {
+    runAnalysis.mockResolvedValue({
+      ...okResult({ ...validHeadline, edgePct: 8 }),
+      servedModel: ADOPTED,
+    });
+    await expect(generatePalpites(baseCall)).rejects.toBeInstanceOf(PalpiteError);
+    const row = insertValues.mock.calls[0][0] as Record<string, unknown>;
+    expect(row.status).toBe("invalid_output");
+    expect(row.model).toBe("claude-haiku-5-6");
   });
 });
 
@@ -680,6 +720,7 @@ describe("generatePalpites (síntese) — caminhos de erro (auditados, sem set)"
       outputPayload: {},
       stopReason: null,
       latencyMs: 10,
+      servedModel: MODEL_REGISTRY["claude-haiku-5-5"],
     } satisfies AnalysisResult);
     await expect(generatePalpites(baseCall)).rejects.toBeInstanceOf(PalpiteError);
     const row = insertValues.mock.calls[0][0] as Record<string, unknown>;

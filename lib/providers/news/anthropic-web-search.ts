@@ -151,7 +151,7 @@ export async function getNewsByMatchViaWebSearch(
       userId: audit.userId,
       matchId: audit.matchId,
       provider: providerKey,
-      model: model.id,
+      model,
       inputPayload: analysisRequest as unknown as Record<string, unknown>,
       outputPayload: { error: noKeyMsg },
       inputTokens: 0,
@@ -165,6 +165,7 @@ export async function getNewsByMatchViaWebSearch(
   }
 
   const result = await provider.runAnalysis(analysisRequest);
+  const served = result.servedModel;
 
   // Erro do provider → loga (auditado) e degrada gracioso (results:[], unavailable:false).
   // NUNCA throw: o palpite embarca sem notícias (mirror absences).
@@ -173,7 +174,7 @@ export async function getNewsByMatchViaWebSearch(
       userId: audit.userId,
       matchId: audit.matchId,
       provider: providerKey,
-      model: model.id,
+      model: served,
       inputPayload: result.inputPayload,
       outputPayload: result.outputPayload,
       inputTokens: result.usage.inputTokens,
@@ -188,12 +189,12 @@ export async function getNewsByMatchViaWebSearch(
 
   const sources = extractSources(result.contentBlocks);
 
-  // Loga o ai_call (status ok). costUsd = SÓ tokens (calculateCost keya o registry); a
+  // Loga o ai_call (status ok). costUsd = SÓ tokens (pelo preço do modelo que serviu); a
   // taxa de ~$0,01/busca da web search NÃO entra aqui — é metered out-of-band (ADR 0032
   // §4 / CLAUDE.md). Swallow do insert que falha (mirror generatePalpites 12a): o
   // resultado SOBREVIVE à falha do log de auditoria.
   const cost = calculateCost({
-    model: model.id,
+    model: served,
     inputTokens: result.usage.inputTokens,
     outputTokens: result.usage.outputTokens,
   });
@@ -205,7 +206,7 @@ export async function getNewsByMatchViaWebSearch(
         userId: audit.userId,
         matchId: audit.matchId,
         provider: providerKey,
-        model: model.id,
+        model: served.id,
         promptVersion: NEWS_PROMPT_VERSION,
         inputPayload: result.inputPayload,
         outputPayload: result.outputPayload,

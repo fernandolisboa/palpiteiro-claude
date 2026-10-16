@@ -173,7 +173,8 @@ import { computeMarketImpliedProbabilities } from "@/lib/odds/implied-probabilit
 
 import { AnalysisDeadlineError } from "@/lib/ai/deadline";
 import { predict, PredictError } from "@/lib/ai/predict";
-import { MODEL_REGISTRY, resolveModelId } from "@/lib/ai/models";
+import { MODEL_REGISTRY, resolveModelId, type AIModel } from "@/lib/ai/models";
+import { anthropicProvider } from "@/lib/ai/providers/anthropic";
 import { resetDixonColesFlagMemo } from "@/lib/ratings/model-scoreline";
 import { pOverUnder, scorelineMatrix } from "@/lib/quant/scoreline-model";
 
@@ -2133,5 +2134,89 @@ describe("predict() — guarda de seed COMPLETO falha ANTES do gasto", () => {
     // (nem ai_call, nem prediction, nem PSO).
     expect(anthropicCreate).not.toHaveBeenCalled();
     expect(insertValues).not.toHaveBeenCalled();
+  });
+});
+
+// PLAN-608: o seam informa o modelo que respondeu. Quando ele difere do pedido (uma
+// versão adotada), auditoria, custo e modelVersion seguem o que serviu, nunca o pedido.
+describe("predict() — modelo efetivo (servedModel ≠ pedido)", () => {
+  const ADOPTED: AIModel = {
+    ...MODEL_REGISTRY["claude-sonnet-5-5"],
+    id: "claude-sonnet-5-6",
+    inputPricePerMTok: 3,
+    outputPricePerMTok: 15,
+    adopted: { priceEstimated: true, pinnedId: "claude-sonnet-5-5" },
+  };
+
+  function serveAs(model: AIModel) {
+    const original = anthropicProvider.runAnalysis;
+    return vi
+      .spyOn(anthropicProvider, "runAnalysis")
+      .mockImplementation(async (req) => ({
+        ...(await original(req)),
+        servedModel: model,
+      }));
+  }
+
+  it("ok: ai_calls.model, custo e predictions.modelVersion usam o modelo que serviu", async () => {
+    getDefaultModelId.mockResolvedValue("claude-sonnet-5-5");
+    const spy = serveAs(ADOPTED);
+
+    await predict({ matchId: "m-1", userId: "u-1", isAdmin: false });
+
+    // O pedido foi a conferida; quem respondeu foi a adotada.
+    expect(spy.mock.calls[0][0].model.id).toBe("claude-sonnet-5-5");
+    const aiCallRow = insertValues.mock.calls[0]?.[0] as {
+      model: string;
+      costUsd: string;
+    };
+    const predictionRow = insertValues.mock.calls[1]?.[0] as {
+      modelVersion: string;
+    };
+    expect(aiCallRow.model).toBe("claude-sonnet-5-6");
+    // 1200 × $3 + 300 × $15 por 1M (preço do servido, não os $2/$10 do pedido).
+    expect(aiCallRow.costUsd).toBe(((1200 * 3 + 300 * 15) / 1_000_000).toFixed(6));
+    expect(predictionRow.modelVersion).toBe("claude-sonnet-5-6");
+  });
+
+  it("erro do provider: a row de erro leva o modelo que serviu", async () => {
+    getDefaultModelId.mockResolvedValue("claude-sonnet-5-5");
+    anthropicCreate.mockRejectedValue(
+      new Anthropic.APIError(500, undefined, "internal server error", undefined),
+    );
+    serveAs(ADOPTED);
+
+    await expect(
+      predict({ matchId: "m-1", userId: "u-1", isAdmin: false }),
+    ).rejects.toThrow("anthropic call failed");
+
+    expect(insertValues).toHaveBeenCalledTimes(1);
+    const aiCallRow = insertValues.mock.calls[0]?.[0] as {
+      model: string;
+      status: string;
+    };
+    expect(aiCallRow.status).toBe("provider_error");
+    expect(aiCallRow.model).toBe("claude-sonnet-5-6");
+  });
+
+  it("Zod falha: invalid_output com o modelo e o preço do servido", async () => {
+    getDefaultModelId.mockResolvedValue("claude-sonnet-5-5");
+    const msg = anthropicMessage();
+    (msg.content[0] as { input: Record<string, unknown> }).input = { lixo: true };
+    anthropicCreate.mockResolvedValue(msg);
+    serveAs(ADOPTED);
+
+    await expect(
+      predict({ matchId: "m-1", userId: "u-1", isAdmin: false }),
+    ).rejects.toThrow("LLM output failed Zod validation");
+
+    const aiCallRow = insertValues.mock.calls[0]?.[0] as {
+      model: string;
+      status: string;
+      costUsd: string;
+    };
+    expect(aiCallRow.status).toBe("invalid_output");
+    expect(aiCallRow.model).toBe("claude-sonnet-5-6");
+    expect(aiCallRow.costUsd).toBe(((1200 * 3 + 300 * 15) / 1_000_000).toFixed(6));
   });
 });

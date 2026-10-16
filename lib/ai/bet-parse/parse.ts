@@ -78,7 +78,7 @@ export async function parseBetText(args: {
       userId,
       matchId,
       provider: providerKey,
-      model: model.id,
+      model,
       inputPayload: request as unknown as Record<string, unknown>,
       outputPayload: { error: msg },
       inputTokens: 0,
@@ -92,13 +92,14 @@ export async function parseBetText(args: {
   }
 
   const result = await provider.runAnalysis(request);
+  const served = result.servedModel;
 
   if (!result.ok) {
     await persistAiCallError({
       userId,
       matchId,
       provider: providerKey,
-      model: model.id,
+      model: served,
       inputPayload: result.inputPayload,
       outputPayload: result.outputPayload,
       inputTokens: result.usage.inputTokens,
@@ -118,7 +119,7 @@ export async function parseBetText(args: {
       userId,
       matchId,
       provider: providerKey,
-      model: model.id,
+      model: served,
       inputPayload: result.inputPayload,
       outputPayload: result.outputPayload,
       inputTokens,
@@ -143,7 +144,7 @@ export async function parseBetText(args: {
       userId,
       matchId,
       provider: providerKey,
-      model: model.id,
+      model: served,
       inputPayload: result.inputPayload,
       outputPayload: result.outputPayload,
       inputTokens,
@@ -195,7 +196,7 @@ export async function parseBetText(args: {
       userId,
       matchId,
       provider: providerKey,
-      model: model.id,
+      model: served,
       inputPayload: result.inputPayload,
       outputPayload: result.outputPayload,
       inputTokens,
@@ -213,7 +214,7 @@ export async function parseBetText(args: {
   }
 
   // Sucesso: loga ai_call status ok e devolve o id (→ slip.parseAiCallId no confirm).
-  const cost = calculateCost({ model: model.id, inputTokens, outputTokens });
+  const cost = calculateCost({ model: served, inputTokens, outputTokens });
   let aiCallId: string | null = null;
   try {
     const [row] = await db
@@ -222,7 +223,7 @@ export async function parseBetText(args: {
         userId,
         matchId,
         provider: providerKey,
-        model: model.id,
+        model: served.id,
         promptVersion: BET_PARSE_VERSION,
         inputPayload: result.inputPayload,
         outputPayload: result.outputPayload,

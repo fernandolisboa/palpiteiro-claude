@@ -1,5 +1,7 @@
 import { beforeEach, describe, expect, it, vi } from "vitest";
 
+import { MODEL_REGISTRY, type AIModel } from "@/lib/ai/models";
+
 import type {
   AnalysisRequest,
   AnalysisResult,
@@ -70,6 +72,7 @@ function okResult(contentBlocks: unknown[]): AnalysisResult {
     outputPayload: { content: contentBlocks },
     stopReason: "end_turn",
     latencyMs: 33,
+    servedModel: MODEL_REGISTRY["claude-haiku-5-5"],
     contentBlocks,
   };
 }
@@ -237,6 +240,7 @@ describe("getNewsByMatchViaWebSearch — degrade gracioso", () => {
       outputPayload: {},
       stopReason: null,
       latencyMs: 10,
+      servedModel: MODEL_REGISTRY["claude-haiku-5-5"],
     } satisfies AnalysisResult);
     const out = await getNewsByMatchViaWebSearch(CTX, AUDIT);
     expect(out.results).toEqual([]);
@@ -245,5 +249,42 @@ describe("getNewsByMatchViaWebSearch — degrade gracioso", () => {
     const errArgs = persistAiCallError.mock.calls[0][0] as Record<string, unknown>;
     expect(errArgs.status).toBe("timeout");
     expect(insertValues).not.toHaveBeenCalled();
+  });
+});
+
+describe("getNewsByMatchViaWebSearch — modelo que serviu (PLAN-608)", () => {
+  const ADOPTED_HAIKU: AIModel = {
+    ...MODEL_REGISTRY["claude-haiku-5-5"],
+    id: "claude-haiku-5-6",
+    inputPricePerMTok: 1,
+    outputPricePerMTok: 2,
+    longPromptPricing: undefined,
+    adopted: { priceEstimated: true, pinnedId: "claude-haiku-5-5" },
+  };
+
+  it("ok: ai_calls.model e custo do servido", async () => {
+    runAnalysis.mockResolvedValue({ ...okResult([]), servedModel: ADOPTED_HAIKU });
+    await getNewsByMatchViaWebSearch(CTX, AUDIT);
+    const row = insertValues.mock.calls[0][0] as Record<string, unknown>;
+    expect(row.model).toBe("claude-haiku-5-6");
+    // 200 × $1 + 80 × $2 por 1M
+    expect(row.costUsd).toBe(((200 * 1 + 80 * 2) / 1_000_000).toFixed(6));
+  });
+
+  it("erro do provider: a row de erro leva o servido", async () => {
+    runAnalysis.mockResolvedValue({
+      ok: false,
+      status: "provider_error",
+      message: "boom",
+      usage: { inputTokens: 0, outputTokens: 0 },
+      inputPayload: {},
+      outputPayload: {},
+      stopReason: null,
+      latencyMs: 1,
+      servedModel: ADOPTED_HAIKU,
+    } satisfies AnalysisResult);
+    await getNewsByMatchViaWebSearch(CTX, AUDIT);
+    const errArgs = persistAiCallError.mock.calls[0][0] as { model: AIModel };
+    expect(errArgs.model).toBe(ADOPTED_HAIKU);
   });
 });

@@ -188,7 +188,7 @@ async function runOneRead(
       userId: audit.userId,
       matchId: audit.matchId,
       provider: providerKey,
-      model: model.id,
+      model,
       inputPayload: request as unknown as Record<string, unknown>,
       outputPayload: { error: noKeyMsg },
       inputTokens: 0,
@@ -211,7 +211,7 @@ async function runOneRead(
       userId: audit.userId,
       matchId: audit.matchId,
       provider: providerKey,
-      model: model.id,
+      model,
       inputPayload: request as unknown as Record<string, unknown>,
       outputPayload: {
         error: err instanceof Error ? err.message : String(err),
@@ -226,12 +226,13 @@ async function runOneRead(
     return EMPTY_READ;
   }
 
+  const served = result.servedModel;
   if (!result.ok) {
     await persistAiCallError({
       userId: audit.userId,
       matchId: audit.matchId,
       provider: providerKey,
-      model: model.id,
+      model: served,
       inputPayload: result.inputPayload,
       outputPayload: result.outputPayload,
       inputTokens: result.usage.inputTokens,
@@ -248,7 +249,7 @@ async function runOneRead(
   // é metered out-of-band (ADR 0032 §4). Swallow do insert que falha (mirror news): a
   // extração SOBREVIVE à falha do log de auditoria.
   const cost = calculateCost({
-    model: model.id,
+    model: served,
     inputTokens: result.usage.inputTokens,
     outputTokens: result.usage.outputTokens,
   });
@@ -257,7 +258,7 @@ async function runOneRead(
       userId: audit.userId,
       matchId: audit.matchId,
       provider: providerKey,
-      model: model.id,
+      model: served.id,
       promptVersion: CARDS_EXTRACT_PROMPT_VERSION,
       inputPayload: result.inputPayload,
       outputPayload: result.outputPayload,

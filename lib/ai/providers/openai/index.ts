@@ -46,6 +46,7 @@ async function runAnalysis(
       outputPayload: { error: msg },
       stopReason: null,
       latencyMs: 0,
+      servedModel: request.model,
     };
   }
 
@@ -96,6 +97,7 @@ async function runAnalysis(
       outputPayload: { error: serializeOpenAIError(err) },
       stopReason: null,
       latencyMs,
+      servedModel: request.model,
     };
   }
   const latencyMs = Math.round(performance.now() - start);
@@ -122,6 +124,7 @@ async function runAnalysis(
       outputPayload,
       stopReason,
       latencyMs,
+      servedModel: request.model,
     };
   }
 
@@ -142,6 +145,7 @@ async function runAnalysis(
       outputPayload,
       stopReason,
       latencyMs,
+      servedModel: request.model,
     };
   }
 
@@ -153,6 +157,7 @@ async function runAnalysis(
     outputPayload,
     stopReason,
     latencyMs,
+    servedModel: request.model,
   };
 }
 
