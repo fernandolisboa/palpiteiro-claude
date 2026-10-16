@@ -58,7 +58,12 @@ import {
 import { resolveInPlaySlipModel } from "@/lib/bets/slip-model";
 import { loadActionLiveContext, type ActionLiveContext } from "@/lib/live/action-state";
 import type { InPlayState } from "@/lib/live/in-play-state";
-import { currentLiveReadings, liveMomentPhrase } from "@/lib/live/readings";
+import {
+  currentLiveReadings,
+  LIVE_STALE_PAGE_COPY,
+  liveMomentPhrase,
+  livePageRefusal,
+} from "@/lib/live/readings";
 import type { InPlayScoreline } from "@/lib/quant/in-play";
 import { isEmailAllowed } from "@/lib/auth/whitelist";
 import { startAnalysisContextExtraction } from "@/lib/ai/user-palpite/analysis-context";
@@ -153,9 +158,9 @@ const NO_LIVE_READING_MESSAGE =
 const LIVE_READING_STALE_MESSAGE =
   "O jogo mudou desde a última leitura. Use Analisar com IA.";
 // Corrida (#594, PLAN-580 §8.2): o jogo apitou entre o clique e o predict de pré-jogo.
-// Com o modo ao vivo ligado, o mesmo botão agora faz a leitura ao vivo.
-const LIVE_RACE_MESSAGE =
-  "O jogo começou. Toque em Analisar com IA de novo para a leitura ao vivo.";
+// Com o modo ao vivo ligado, a leitura ao vivo pede a página atualizada (a de pré-jogo
+// não a mostra e o servidor recusa o pedido ao vivo vindo dela): a mesma copy.
+const LIVE_RACE_MESSAGE = LIVE_STALE_PAGE_COPY;
 
 /**
  * A copy de "jogo em andamento" de uma corrida no pré-jogo vira o convite pra leitura ao
@@ -677,6 +682,7 @@ export async function analyzeBestBet(
       match,
       live,
       phase,
+      pageLive: livePageRefusal(formData) === null,
       userId: session.user.id,
       role: session.user.role,
       isAdmin,
@@ -926,6 +932,8 @@ async function analyzeBestBetLive(args: {
   match: NonNullable<Awaited<ReturnType<typeof getMatchById>>>;
   live: ActionLiveContext;
   phase: MatchPhase;
+  // A página foi montada com o jogo rolando (form `pageLive=1`).
+  pageLive: boolean;
   userId: string;
   role: string | undefined;
   isAdmin: boolean;
@@ -942,6 +950,9 @@ async function analyzeBestBetLive(args: {
     modelReady: scoreline !== null,
   });
   if (gate) return { ok: false, error: gate };
+  // Página de pré-jogo (aberta antes do apito): pede para atualizar, sem cobrar. O
+  // "Contexto extra" dela não vale ao vivo e a leitura ao vivo não aparece nela.
+  if (!args.pageLive) return { ok: false, error: LIVE_STALE_PAGE_COPY };
   if (!state || !scoreline) {
     // Inalcançável com o gate acima (modelReady exige os dois); fail-closed.
     return { ok: false, error: NO_IN_PLAY_MODEL_MESSAGE };
@@ -1214,6 +1225,8 @@ export async function generatePalpiteFromAnalyses(
       modelReady: scoreline !== null,
     });
     if (gate) return { ok: false, error: gate };
+    const stale = livePageRefusal(formData);
+    if (stale) return { ok: false, error: stale };
     if (!live.state || !scoreline) {
       return { ok: false, error: NO_IN_PLAY_MODEL_MESSAGE };
     }

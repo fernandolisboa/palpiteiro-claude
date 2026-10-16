@@ -69,6 +69,10 @@ type Props = {
   // e sem "a partir de:", ficha de dimensões e fontes, que aparecem ao abrir "Ler análise
   // completa" (PalpiteArea). Default true: os outros chamadores e testes não mudam.
   expanded?: boolean;
+  // Leitura ao vivo (#594): a página foi montada com o jogo rolando e a análise liberada.
+  // O form manda `pageLive=1`; sem ele, o servidor recusa um pedido ao vivo vindo de uma
+  // página de pré-jogo (pede para atualizar). Default false: pré-jogo.
+  live?: boolean;
 };
 
 // Campo do contexto extra, controlado pelo PalpiteHero (o estado sobrevive ao
@@ -122,6 +126,7 @@ export function PalpiteHero({
   hasAnalyses,
   contextEnabled,
   expanded = true,
+  live = false,
 }: Props) {
   const [state, formAction, pending] = useActionState(runPalpiteHero, null);
   const [context, setContext] = useState("");
@@ -177,6 +182,7 @@ export function PalpiteHero({
       aria-busy={pending}
     >
       <input type="hidden" name="matchId" value={matchId} />
+      <input type="hidden" name="pageLive" value={live ? "1" : "0"} />
       {/* Região viva sempre montada (o corpo desmonta no pending): o leitor de tela anuncia
           quando o texto troca. Vazia durante o envio, pra repetir o mesmo aviso. */}
       <p role="status" className="sr-only">
@@ -197,6 +203,7 @@ export function PalpiteHero({
         contextField={contextField}
         contextNotice={contextNotice}
         expanded={expanded}
+        live={live}
       />
     </form>
   );
@@ -217,6 +224,7 @@ function HeroBody({
   contextField,
   contextNotice,
   expanded,
+  live,
 }: {
   heroPalpite: PalpiteHeadlineView | null;
   unavailable: MatchUnavailableReason | null;
@@ -232,10 +240,11 @@ function HeroBody({
   contextField: ContextField;
   contextNotice: string | null;
   expanded: boolean;
+  live: boolean;
 }) {
   // Pending: skeleton que espelha o populated (sem reflow) — status em PALAVRAS, sem
   // dígito de tempo. Tem precedência sobre tudo (o run está em voo agora).
-  if (pending) return <PendingHero intent={pendingIntent} />;
+  if (pending) return <PendingHero intent={pendingIntent} live={live} />;
 
   // Palpite presente (pendente OU settled): a manchete sobrevive a um erro de re-análise
   // (Callout inline acima dela). Settled ganha o badge + recibo.
@@ -266,6 +275,7 @@ function HeroBody({
       canRegenerate={canRegenerate}
       contextField={contextField}
       contextNotice={contextNotice}
+      live={live}
     />
   );
 }
@@ -507,6 +517,7 @@ function EmptyHero({
   canRegenerate,
   contextField,
   contextNotice,
+  live,
 }: {
   unavailable: MatchUnavailableReason | null;
   analyzable: boolean;
@@ -515,6 +526,7 @@ function EmptyHero({
   canRegenerate: boolean;
   contextField: ContextField;
   contextNotice: string | null;
+  live: boolean;
 }) {
   // Jogo não analisável sem palpite: predict() rejeitaria — sem CTA. O aviso ainda
   // aparece: um run iniciado antes do apito pode terminar depois dele, sem manchete.
@@ -545,8 +557,9 @@ function EmptyHero({
         {fanOutEnabled ? (
           <>
             <p className="max-w-reading text-body leading-relaxed tracking-tight text-muted-foreground">
-              A IA lê os dois times, os números e o mercado e crava um palpite —
-              quem ganha, o placar provável e o porquê.
+              {live
+                ? "Com o jogo rolando, a IA lê o placar e o tempo que falta e crava um palpite — como o jogo termina e o porquê."
+                : "A IA lê os dois times, os números e o mercado e crava um palpite — quem ganha, o placar provável e o porquê."}
             </p>
             {contextField && <UserContextField {...contextField} />}
             <div className="flex flex-wrap items-center gap-2">
@@ -563,8 +576,9 @@ function EmptyHero({
             </div>
             {canRegenerate && (
               <p className="max-w-reading text-body-sm tracking-tight text-muted-fg-2">
-                &quot;Gerar só o palpite&quot; usa as análises por mercado que já estão
-                abaixo, sem refazê-las.
+                {live
+                  ? "\"Gerar só o palpite\" usa a leitura ao vivo que já está abaixo, se o placar não mudou."
+                  : "\"Gerar só o palpite\" usa as análises por mercado que já estão abaixo, sem refazê-las."}
               </p>
             )}
           </>
@@ -661,7 +675,7 @@ function PalpiteOnlyButton({ label }: { label: string }) {
 
 // Skeleton que espelha o populated (mesma casca quente, mesmos blocos) — sem reflow ao
 // trocar pelo conteúdo. Status em PALAVRAS, sem dígito de tempo. aria-busy no <form>.
-function PendingHero({ intent }: { intent: HeroIntent }) {
+function PendingHero({ intent, live }: { intent: HeroIntent; live: boolean }) {
   return (
     <WarmShell tone="full">
       <div className="flex flex-col gap-4">
@@ -680,7 +694,9 @@ function PendingHero({ intent }: { intent: HeroIntent }) {
           <span>
             {intent === "palpite"
               ? "montando o palpite a partir das análises…"
-              : "lendo os mercados e montando o palpite… (pode levar um minuto)"}
+              : live
+                ? "lendo o jogo ao vivo e montando o palpite…"
+                : "lendo os mercados e montando o palpite… (pode levar um minuto)"}
           </span>
         </div>
       </div>

@@ -54,6 +54,7 @@ import { getPredictionHistoryForMatch } from "@/lib/db/queries/predictions";
 import { getLatestUserPalpiteAnalysis } from "@/lib/db/queries/user-palpite-analyses";
 import type { ModelScoreline } from "@/lib/quant/match-model";
 import { resolvePalpiteModelBase } from "@/lib/user-palpite/model-base";
+import { inPlayReadingFor } from "@/lib/user-palpite/reading";
 import {
   loadSeuPalpiteData,
   type SeuPalpiteData,
@@ -300,9 +301,7 @@ export default async function MatchPage({ params, searchParams }: PageProps) {
     { live: true }
   );
 
-  // "Contexto extra (opcional)" no HERO (#565): kill-switch E motor code_jev (a action
-  // confere de novo). "O que você acrescentou" vem da análise visível.
-  const contextEnabled = userContextEnabled && analysisEngine === "code_jev";
+  // "O que você acrescentou" vem da análise visível.
   const userContextView = toAnalysisUserContextView(
     history,
     { home: match.homeTeam, away: match.awayTeam },
@@ -331,16 +330,48 @@ export default async function MatchPage({ params, searchParams }: PageProps) {
   // gate de hoje (fecha no apito).
   const phase = matchPhase(match, inPlayState, now, { liveMode });
   const unavailableReason = phase.reason;
-  // O que a página libera agora, num lugar só (#576), por capacidade (ADR 0060).
-  // `modelReady: false` fecha a análise e o "Seu palpite" EM JOGO: o backend ao vivo
-  // deles (predictInPlay, user_palpite ao vivo) é o PR D do #580. Antes do apito não
-  // muda nada (o pré-jogo libera tudo). O atalho do bolão segue a janela do bolão ao vivo
-  // (até os 15', `poolWindowOpen`), a mesma regra de /bolao e de createFriendPool.
+  // Leitura ao vivo (#594, ADR 0060 §8): com o jogo rolando e o estado bom, o modelo em
+  // jogo (a base do apito condicionada ao placar e ao minuto) decide se a análise e o
+  // "Seu palpite" abrem (`modelReady`). Calculado UMA vez e compartilhado com a tabela e
+  // o "Seu palpite"; nunca toca a The Odds API. Antes do apito nada disso roda.
+  const liveReadable =
+    liveMode &&
+    phase.actionable &&
+    (phase.kind === "in_play" || phase.kind === "half_time") &&
+    inPlayState?.score != null;
+  const inPlayModelP: Promise<ModelScoreline | null> | null =
+    liveReadable && inPlayState
+      ? resolveInPlaySlipModel(match, inPlayState).catch((err: unknown) => {
+          console.error(
+            JSON.stringify({
+              scope: "match-page",
+              error: "in_play_model_failed",
+              message: err instanceof Error ? err.message : String(err),
+            })
+          );
+          return null;
+        })
+      : null;
+  const inPlayModel = inPlayModelP ? await inPlayModelP : null;
+  // O que a página libera agora, num lugar só (#576), por capacidade (ADR 0060). Antes
+  // do apito não muda nada (o pré-jogo libera tudo). O atalho do bolão segue a janela do
+  // bolão ao vivo (até os 15', `poolWindowOpen`), a mesma regra de /bolao e de
+  // createFriendPool.
   const rawCaps = matchCapabilities(phase, {
     liveMode,
-    modelReady: false,
+    modelReady: inPlayModel !== null,
     poolWindowOpen: poolWindowOpen(match, inPlayState, now, { liveMode }),
   });
+  // A página está na leitura ao vivo (o HERO manda pageLive=1 e muda a copy).
+  const liveAnalysis = phase.kind !== "pre" && rawCaps.analyze;
+  // "Contexto extra (opcional)" no HERO (#565): kill-switch E motor code_jev (a action
+  // confere de novo). Só antes do apito: ao vivo a action descarta o texto (#594).
+  const contextEnabled =
+    userContextEnabled && analysisEngine === "code_jev" && phase.kind === "pre";
+  // "Gerar só o palpite": antes do apito, sobre as análises de pré-jogo; ao vivo, sobre
+  // as leituras ao vivo (a action ainda confere se são do placar de agora).
+  const hasAnalyses =
+    phase.kind === "pre" ? sections.length > 0 : liveSections.length > 0;
   // Registro ao vivo (#580, §9.2): só com o placar do estado (a tabela precisa dele pra
   // condicionar o modelo e marcar o que já está decidido; a action recusa sem ele).
   const liveScore =
@@ -380,7 +411,7 @@ export default async function MatchPage({ params, searchParams }: PageProps) {
   const slipModel = () =>
     (slipModelP ??=
       liveGrid && inPlayState
-        ? resolveInPlaySlipModel(match, inPlayState)
+        ? (inPlayModelP ?? resolveInPlaySlipModel(match, inPlayState))
         : resolveSlipModel(match));
   const betGridP: Promise<BetGridView> = Promise.all([
     caps.registerBets ? slipModel() : Promise.resolve(null),
@@ -435,11 +466,22 @@ export default async function MatchPage({ params, searchParams }: PageProps) {
   const seuPalpiteP: Promise<SeuPalpiteData> | null =
     caps.seuPalpite && caps.registerBets
     ? loadSeuPalpiteData({
+        // Ao vivo (#594, §9.1): a base do APITO (asOf kickoff; sem base usável, o pré-jogo
+        // do modelo em jogo já calculado) e a leitura a partir do placar atual.
         base: () =>
-          resolvePalpiteModelBase(match, { now, liveModel: slipModel }),
+          phase.kind === "pre"
+            ? resolvePalpiteModelBase(match, { now, liveModel: slipModel })
+            : resolvePalpiteModelBase(match, {
+                asOf: match.kickoffAt,
+                liveModel: async () => inPlayModel,
+              }),
         latest: () => getLatestUserPalpiteAnalysis(match.id, userId),
         teams,
         now,
+        inPlay:
+          phase.kind !== "pre" && inPlayState?.score
+            ? inPlayReadingFor({ ...inPlayState, score: inPlayState.score })
+            : null,
         onError: (error, err) =>
           console.error(
             JSON.stringify({
@@ -496,6 +538,13 @@ export default async function MatchPage({ params, searchParams }: PageProps) {
         contextEnabled={contextEnabled}
         userContextView={userContextView}
         teams={teams}
+        hasAnalyses={hasAnalyses}
+        liveAnalysis={liveAnalysis}
+        noticeDetail={
+          liveReadable && inPlayModel === null
+            ? "Sem modelo para a leitura ao vivo deste jogo."
+            : null
+        }
       />
     </>
   );
@@ -557,6 +606,12 @@ type MatchLayoutProps = {
   contextEnabled: boolean;
   userContextView: AnalysisUserContextView | null;
   teams: { home: string; away: string };
+  // #594: há análises para o "Gerar só o palpite" (ao vivo: leituras ao vivo).
+  hasAnalyses: boolean;
+  // #594: a página está na leitura ao vivo (o HERO manda pageLive=1 e muda a copy).
+  liveAnalysis: boolean;
+  // #594: o motivo do aviso de não-analisável quando o jogo está ao vivo sem modelo.
+  noticeDetail: string | null;
 };
 
 // Uma árvore responsiva (#576): a mesma ordem no celular e no desktop, com `lg:` dentro
@@ -591,6 +646,9 @@ function MatchLayout({
   contextEnabled,
   userContextView,
   teams,
+  hasAnalyses,
+  liveAnalysis,
+  noticeDetail,
 }: MatchLayoutProps) {
   return (
     <PageContainer width="content">
@@ -639,8 +697,9 @@ function MatchLayout({
               finalScore={finalScore}
               setId={heroSetId}
               sharedAt={heroSharedAt}
-              hasAnalyses={sections.length + liveSections.length > 0}
+              hasAnalyses={hasAnalyses}
               contextEnabled={contextEnabled}
+              live={liveAnalysis}
               analysis={
                 <FullAnalysis
                   sections={sections}
@@ -653,7 +712,11 @@ function MatchLayout({
             {!analyze &&
               unavailableReason !== null &&
               sections.length + liveSections.length === 0 && (
-              <NotAnalyzableNotice reason={unavailableReason} score={finalScore} />
+              <NotAnalyzableNotice
+                reason={unavailableReason}
+                score={finalScore}
+                detail={noticeDetail}
+              />
             )}
 
             {/* Abas (#576): Mercados (a tabela: odd de mercado, chance e odd justa num
@@ -680,7 +743,7 @@ function MatchLayout({
                   </Suspense>
                 ) : (
                   <p className="text-body-sm text-muted-foreground tracking-tight">
-                    O Seu palpite fica aberto até o apito inicial.
+                    {noticeDetail ?? "O Seu palpite fica aberto até o apito inicial."}
                   </p>
                 )
               }
@@ -727,11 +790,16 @@ function MatchTopBar({
 function NotAnalyzableNotice({
   reason,
   score,
+  detail: detailOverride = null,
 }: {
   reason: MatchUnavailableReason;
   score: { home: number; away: number } | null;
+  // Ao vivo sem modelo (#594): o motivo é da capacidade, não do jogo.
+  detail?: string | null;
 }) {
-  const { label, detail } = unavailableNoticeCopy(reason, score);
+  const copy = unavailableNoticeCopy(reason, score);
+  const label = copy.label;
+  const detail = detailOverride ?? copy.detail;
   return (
     <div className="border-border flex flex-col gap-1.5 rounded-md border border-dashed px-4 py-3.5">
       <span className="text-meta tracking-label text-muted-foreground uppercase">

@@ -200,6 +200,8 @@ function liveResult(marketKey: string, narrated: boolean) {
 function form(extra: Record<string, string> = {}) {
   const fd = new FormData();
   fd.set("matchId", MATCH_ID);
+  // A página foi montada ao vivo (o hero manda pageLive=1).
+  fd.set("pageLive", "1");
   for (const [k, v] of Object.entries(extra)) fd.set(k, v);
   return fd;
 }
@@ -282,6 +284,22 @@ describe("analyzeBestBet ao vivo", () => {
     if (res.ok) {
       expect(res.palpite?.liveLabel).toBe("palpite aos 63' (1–0)");
     }
+  });
+
+  it("página de pré-jogo (pageLive ausente/0): pede para atualizar, sem cobrar", async () => {
+    for (const fd of [form({ pageLive: "0" }), (() => {
+      const f = form();
+      f.delete("pageLive");
+      return f;
+    })()]) {
+      const res = await analyzeBestBet(null, fd);
+      expect(res).toEqual({
+        ok: false,
+        error: "O jogo começou. Atualize a página para a leitura ao vivo.",
+      });
+    }
+    expect(checkAnalysisRateLimit).not.toHaveBeenCalled();
+    expect(predictInPlay).not.toHaveBeenCalled();
   });
 
   it("flag desligada: a copy de antes, sem cobrar nem ler o estado", async () => {
@@ -374,7 +392,7 @@ describe("corrida no pré-jogo (o jogo apitou durante o run)", () => {
     const res = await analyzeBestBet(null, form());
     expect(res).toEqual({
       ok: false,
-      error: "O jogo começou. Toque em Analisar com IA de novo para a leitura ao vivo.",
+      error: "O jogo começou. Atualize a página para a leitura ao vivo.",
     });
     expect(generatePalpites).not.toHaveBeenCalled();
   });
@@ -448,6 +466,15 @@ describe("Gerar só o palpite ao vivo", () => {
     });
     expect(getInPlayState).not.toHaveBeenCalled();
     expect(generateLivePalpites).not.toHaveBeenCalled();
+  });
+
+  it("página de pré-jogo: pede para atualizar, sem cobrar", async () => {
+    const res = await generatePalpiteFromAnalyses(null, form({ pageLive: "0" }));
+    expect(res).toEqual({
+      ok: false,
+      error: "O jogo começou. Atualize a página para a leitura ao vivo.",
+    });
+    expect(checkPalpitesRateLimit).not.toHaveBeenCalled();
   });
 
   it("sem modelo em jogo: recusa sem cobrar", async () => {
