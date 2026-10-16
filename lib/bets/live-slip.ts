@@ -13,6 +13,30 @@ export const LIVE_DECIDED_COPY = "Esse mercado já está decidido.";
 export const LIVE_KIND_COPY =
   "Com o jogo rolando, dá pra registrar só resultado, dupla chance, ambas marcam, total de gols (1,5, 2,5 ou 3,5) e placar exato.";
 
+export const LIVE_UNAVAILABLE_COPY =
+  "Placar ao vivo indisponível agora. Tente em um minuto.";
+// Página aberta antes do apito: a tabela pré-preencheu a odd de pré-jogo e não sabe o
+// placar. Registrar ao vivo dali gravaria a odd de antes do jogo como a que a pessoa pegou.
+export const LIVE_STALE_GRID_COPY =
+  "O jogo começou. Atualize a página para registrar ao vivo.";
+
+/**
+ * Recusa do registro ao vivo DEPOIS do gate por capacidade, a mesma no cupom e no
+ * "digite sua aposta" (que assim não gasta a chamada de LLM à toa): sem placar do
+ * estado lido no servidor, ou cupom montado numa tabela de pré-jogo (`gridLive` false).
+ * null = pode seguir. Antes do apito, sempre null (o caminho de pré-jogo não muda).
+ */
+export function liveRegistrationRefusal(
+  live: boolean,
+  score: { home: number; away: number } | null,
+  gridLive: boolean,
+): string | null {
+  if (!live) return null;
+  if (score === null) return LIVE_UNAVAILABLE_COPY;
+  if (!gridLive) return LIVE_STALE_GRID_COPY;
+  return null;
+}
+
 const LIVE_KINDS: ReadonlySet<string> = new Set<SlipGridKind>([
   "match_result",
   "double_chance",

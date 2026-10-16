@@ -339,6 +339,8 @@ function FreeText({ slip }: { slip: BetSlipContextValue }) {
     <div className="flex flex-col gap-2 px-4 py-3">
       <form action={slip.parseAction} className="flex flex-col gap-2">
         <input type="hidden" name="matchId" value={slip.matchId} />
+        {/* Tabela ao vivo? O parse recusa (sem LLM) o que o registro recusaria. */}
+        <input type="hidden" name="gridLive" value={slip.grid?.live ? "1" : "0"} />
         <label className="flex flex-col gap-1">
           <span className="text-meta uppercase tracking-label text-muted-foreground">
             ou digite sua aposta

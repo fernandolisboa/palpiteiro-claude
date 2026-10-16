@@ -11,6 +11,7 @@ import {
   isLiveSlipKind,
   LIVE_DECIDED_COPY,
   LIVE_KIND_COPY,
+  liveRegistrationRefusal,
 } from "@/lib/bets/live-slip";
 import { getMatchById } from "@/lib/db/queries/matches";
 import { getUserAccessState } from "@/lib/db/queries/users";
@@ -102,11 +103,20 @@ export async function parseBet(
   if (notAnalyzable) {
     return { ok: false, error: notAnalyzable, kind: "nao-analisavel" };
   }
-  const liveScore =
-    matchPhase(match, live.state, live.now, { liveMode: live.liveMode }).kind ===
-    "pre"
-      ? null
-      : (live.state?.score ?? null);
+  const isLivePhase =
+    matchPhase(match, live.state, live.now, { liveMode: live.liveMode }).kind !==
+    "pre";
+  const liveScore = isLivePhase ? (live.state?.score ?? null) : null;
+  // A mesma recusa do registro (registerBetSlip), ANTES do LLM: sem placar ao vivo ou
+  // com a tabela de pré-jogo na tela, a lista preenchida não registraria.
+  const liveRefusal = liveRegistrationRefusal(
+    isLivePhase,
+    liveScore,
+    formData.get("gridLive") === "1",
+  );
+  if (liveRefusal) {
+    return { ok: false, error: liveRefusal, kind: "nao-analisavel" };
+  }
 
   const raw = RawInputSchema.safeParse(formData.get("text") ?? "");
   if (!raw.success) {

@@ -11,7 +11,11 @@ import {
   type EvaluatedLeg,
   type ReferenceOdds,
 } from "@/lib/bets/evaluate-slip";
-import { liveSlipRefusal } from "@/lib/bets/live-slip";
+import {
+  LIVE_UNAVAILABLE_COPY,
+  liveRegistrationRefusal,
+  liveSlipRefusal,
+} from "@/lib/bets/live-slip";
 import { parseSlipPayload, type SlipValidationError } from "@/lib/bets/slip-schema";
 import { resolveInPlaySlipModel, resolveSlipModel } from "@/lib/bets/slip-model";
 import { isEmailAllowed } from "@/lib/auth/whitelist";
@@ -51,14 +55,6 @@ import { capabilityGateMessage } from "./not-analyzable";
 // senão recusa); só os tipos da tabela ao vivo; seleção já decidida é recusada; a
 // avaliação usa o modelo em jogo, sem referência (a odd é de antes do jogo), sem análise
 // salva e sem stake sugerido; o slip grava `is_live` + o carimbo do momento.
-
-const LIVE_UNAVAILABLE_COPY =
-  "Placar ao vivo indisponível agora. Tente em um minuto.";
-
-// Página aberta antes do apito: a tabela pré-preencheu a odd de pré-jogo e não sabe o
-// placar. Registrar ao vivo dali gravaria a odd de antes do jogo como a que a pessoa pegou.
-const STALE_GRID_COPY =
-  "O jogo começou. Atualize a página para registrar ao vivo.";
 
 export type RegisterBetSlipResult =
   | { ok: true; registered: number; evaluation: SlipEvaluationView }
@@ -165,13 +161,16 @@ export async function registerBetSlip(
   });
   // Liberado depois do apito = estado acionável (≤ 2 min, minuto conhecido).
   const liveState = phase.kind === "pre" ? null : live.state;
-  if (phase.kind !== "pre" && (liveState === null || liveState.score === null)) {
-    return { ok: false, error: LIVE_UNAVAILABLE_COPY, kind: "nao-analisavel" };
-  }
-  // O contrário (tabela ao vivo, jogo de volta ao pré-jogo no servidor) é inofensivo: o
-  // caminho de pré-jogo segue igual.
-  if (liveState !== null && !slip.gridLive) {
-    return { ok: false, error: STALE_GRID_COPY, kind: "nao-analisavel" };
+  // Sem placar do servidor, ou cupom montado numa tabela de pré-jogo (página aberta
+  // antes do apito). O contrário (tabela ao vivo, jogo ainda antes do apito no
+  // servidor) é inofensivo: o caminho de pré-jogo segue igual.
+  const liveRefusal = liveRegistrationRefusal(
+    phase.kind !== "pre",
+    liveState?.score ?? null,
+    slip.gridLive,
+  );
+  if (liveRefusal) {
+    return { ok: false, error: liveRefusal, kind: "nao-analisavel" };
   }
   if (liveState?.score) {
     const refusal = liveSlipRefusal(slip.legs, liveState.score);
