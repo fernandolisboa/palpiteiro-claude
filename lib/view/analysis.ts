@@ -28,6 +28,7 @@ import {
 } from "@/lib/odds/scenario";
 import { readLiveStamp } from "@/lib/live/stamp";
 import { getDescriptor } from "@/lib/odds/market-descriptor";
+import { decidedOutcome } from "@/lib/quant/in-play";
 import { liveStampLabel } from "@/lib/view/live-score";
 import { ownsAiCall } from "@/lib/view/owns-ai-call";
 import { getDisplayPresentation } from "@/lib/view/markets/display";
@@ -328,11 +329,11 @@ export function toAnalysisView(
   // Leitura ao vivo (#594): sem odd, então sem o caminho binário congelado (que existe
   // pela paridade das rows antigas e cai fora quando um lado já está decidido, P=100).
   // Vai pro N-vias, que mostra só a prob. do modelo por seleção.
+  const liveStamp = prediction.isLive ? readLiveStamp(prediction.liveState) : null;
   const liveLabel = prediction.isLive
-    ? (() => {
-        const stamp = readLiveStamp(prediction.liveState);
-        return stamp ? liveStampLabel(stamp) : "ao vivo";
-      })()
+    ? liveStamp
+      ? liveStampLabel(liveStamp)
+      : "ao vivo"
     : null;
   const isBinaryFrozen =
     liveLabel === null && (prediction.marketKey ?? "over_under") === "over_under";
@@ -461,7 +462,9 @@ export function toAnalysisView(
     outcomes: markDecided(
       outcomesNway ??
         (computed === null ? [] : toBinaryOutcomes(computed, presentation, line)),
-      liveLabel !== null ? prediction.selections : undefined,
+      liveLabel !== null && liveStamp?.score
+        ? { kind: prediction.marketKey ?? "over_under", line, score: liveStamp.score }
+        : null,
     ),
     minOdd: prediction.minimumOdd !== null ? formatOdd(prediction.minimumOdd) : null,
     stakeUnits,
@@ -490,18 +493,24 @@ export function toAnalysisView(
   };
 }
 
-// Leitura ao vivo (#594): marca a seleção que o placar já decidiu (prob. exata 0 ou
-// 100, gravada assim pelo predictInPlay). Fora do ao vivo, os outcomes passam intactos.
+// Leitura ao vivo (#594): marca a seleção que o placar já decidiu, pelo MESMO
+// predicado do predictInPlay (`decidedOutcome`) sobre o placar do carimbo. Nunca pela
+// prob. arredondada: um empate a 0,00% aos 88' com 3–0 não está decidido. Fora do ao
+// vivo (ou carimbo sem placar), os outcomes passam intactos.
 function markDecided(
   outcomes: OutcomeView[],
-  liveSelections: PredictionInput["selections"],
+  live: {
+    kind: string;
+    line: number | null;
+    score: { home: number; away: number };
+  } | null,
 ): OutcomeView[] {
-  if (!liveSelections) return outcomes;
-  const probByKey = new Map(liveSelections.map((s) => [s.key, s.modelProbPct]));
-  return outcomes.map((o) => {
-    const p = probByKey.get(o.id);
-    return p === 0 || p === 100 ? { ...o, decided: true } : o;
-  });
+  if (live === null) return outcomes;
+  return outcomes.map((o) =>
+    decidedOutcome(live.kind, { line: live.line, selection: o.id }, live.score) !== null
+      ? { ...o, decided: true }
+      : o,
+  );
 }
 
 // Adapta uma row do DB (PredictionWithAiCall — de getPredictionHistoryForMatch) pra

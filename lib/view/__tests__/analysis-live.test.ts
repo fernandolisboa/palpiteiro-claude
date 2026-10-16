@@ -20,14 +20,17 @@ const AT = new Date("2026-05-19T20:05:00Z");
 const LIVE_MV =
   "claude-sonnet-4-5-20250929;engine=code_jev;lambda=dixon_coles;live=live_model_v1";
 
-function stamp() {
+function stamp(
+  score: { home: number; away: number } = { home: 1, away: 0 },
+  minute = 63
+) {
   return liveStampFromState(
     {
       statusShort: "2H",
-      elapsed: 63,
+      elapsed: minute,
       extra: null,
-      minuteLabel: "63'",
-      score: { home: 1, away: 0 },
+      minuteLabel: `${minute}'`,
+      score,
       red: { home: 0, away: 0 },
       fetchedAt: AT,
     },
@@ -156,18 +159,79 @@ describe("toAnalysisView ao vivo", () => {
           { key: "under", modelProbPct: 0, odd: null },
         ],
         isLive: true,
-        liveState: stamp(),
+        liveState: stamp({ home: 2, away: 1 }),
       },
       null
     );
     expect(view.recommendation).toBeNull();
-    expect(view.liveLabel).toBe("ao vivo · 63' · 1–0");
+    expect(view.liveLabel).toBe("ao vivo · 63' · 2–1");
     expect(view.outcomes.map((o) => [o.id, o.decided === true])).toEqual([
       ["over", true],
       ["under", true],
     ]);
     expect(view.framing).toBeNull();
     expect(view.engine).toBe("Código · modelo ao vivo");
+  });
+
+  it("decidido vem do placar do carimbo, não da prob. arredondada: 3–0 aos 88', empate a 0,00% não está decidido", () => {
+    const view = toAnalysisView(
+      {
+        recommendation: "pass",
+        confidencePct: "100.00",
+        rationale: "Aos 88', 3–0.",
+        keyFactors: ["a"],
+        minimumOdd: null,
+        oddAtRecommendation: null,
+        bookmaker: null,
+        impliedProbPct: null,
+        edgePct: null,
+        modelVersion: LIVE_MV,
+        promptVersion: "narrator_live_v1",
+        createdAt: AT,
+        marketKey: "match_result",
+        selections: [
+          { key: "home", modelProbPct: 100, odd: null },
+          { key: "draw", modelProbPct: 0, odd: null },
+          { key: "away", modelProbPct: 0, odd: null },
+        ],
+        isLive: true,
+        liveState: stamp({ home: 3, away: 0 }, 88),
+      },
+      null
+    );
+    // O 1X2 nunca está decidido antes do fim (decidedOutcome), por mais que arredonde.
+    expect(view.outcomes.some((o) => o.decided)).toBe(false);
+  });
+
+  it("btts com os dois marcando: decidido pelo placar mesmo com prob. não exata", () => {
+    const view = toAnalysisView(
+      {
+        recommendation: "pass",
+        confidencePct: "99.99",
+        rationale: "r",
+        keyFactors: ["a"],
+        minimumOdd: null,
+        oddAtRecommendation: null,
+        bookmaker: null,
+        impliedProbPct: null,
+        edgePct: null,
+        modelVersion: LIVE_MV,
+        promptVersion: "narrator_live_v1",
+        createdAt: AT,
+        marketKey: "btts",
+        selections: [
+          { key: "yes", modelProbPct: 99.99, odd: null },
+          { key: "no", modelProbPct: 0.01, odd: null },
+        ],
+        isLive: true,
+        liveState: stamp({ home: 1, away: 1 }),
+      },
+      null
+    );
+    expect(view.outcomes.map((o) => [o.id, o.decided === true])).toEqual([
+      ["yes", true],
+      ["no", true],
+    ]);
   });
 
   it("carimbo ilegível ainda mostra 'ao vivo'", () => {
