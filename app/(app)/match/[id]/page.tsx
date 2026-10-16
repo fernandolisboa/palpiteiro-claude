@@ -71,6 +71,7 @@ import { loadMatchModelReading } from "@/lib/model-base/reading";
 import { toMatchHeroView } from "@/lib/view/match";
 import { heroLiveFollow } from "@/lib/view/live-score";
 import {
+  analysisAreaFlags,
   matchCapabilities,
   matchPhase,
   unavailableNoticeCopy,
@@ -368,10 +369,12 @@ export default async function MatchPage({ params, searchParams }: PageProps) {
   // confere de novo). Só antes do apito: ao vivo a action descarta o texto (#594).
   const contextEnabled =
     userContextEnabled && analysisEngine === "code_jev" && phase.kind === "pre";
-  // "Gerar só o palpite": antes do apito, sobre as análises de pré-jogo; ao vivo, sobre
-  // as leituras ao vivo (a action ainda confere se são do placar de agora).
-  const hasAnalyses =
-    phase.kind === "pre" ? sections.length > 0 : liveSections.length > 0;
+  // "Ler análise completa" abre com qualquer análise salva (pré-jogo ou ao vivo, em
+  // qualquer fase); "Gerar só o palpite" só sobre as da fase de agora.
+  const { canOpenAnalysis, canRegenerate } = analysisAreaFlags(phase.kind, {
+    sections: sections.length,
+    liveSections: liveSections.length,
+  });
   // Registro ao vivo (#580, §9.2): só com o placar do estado (a tabela precisa dele pra
   // condicionar o modelo e marcar o que já está decidido; a action recusa sem ele).
   const liveScore =
@@ -538,7 +541,8 @@ export default async function MatchPage({ params, searchParams }: PageProps) {
         contextEnabled={contextEnabled}
         userContextView={userContextView}
         teams={teams}
-        hasAnalyses={hasAnalyses}
+        hasAnalyses={canRegenerate}
+        canOpenAnalysis={canOpenAnalysis}
         liveAnalysis={liveAnalysis}
         noticeDetail={
           liveReadable && inPlayModel === null
@@ -608,6 +612,8 @@ type MatchLayoutProps = {
   teams: { home: string; away: string };
   // #594: há análises para o "Gerar só o palpite" (ao vivo: leituras ao vivo).
   hasAnalyses: boolean;
+  // #594: há análise salva (pré-jogo ou ao vivo) para "Ler análise completa".
+  canOpenAnalysis: boolean;
   // #594: a página está na leitura ao vivo (o HERO manda pageLive=1 e muda a copy).
   liveAnalysis: boolean;
   // #594: o motivo do aviso de não-analisável quando o jogo está ao vivo sem modelo.
@@ -647,6 +653,7 @@ function MatchLayout({
   userContextView,
   teams,
   hasAnalyses,
+  canOpenAnalysis,
   liveAnalysis,
   noticeDetail,
 }: MatchLayoutProps) {
@@ -698,6 +705,7 @@ function MatchLayout({
               setId={heroSetId}
               sharedAt={heroSharedAt}
               hasAnalyses={hasAnalyses}
+              canOpenAnalysis={canOpenAnalysis}
               contextEnabled={contextEnabled}
               live={liveAnalysis}
               analysis={

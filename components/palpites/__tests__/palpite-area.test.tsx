@@ -37,6 +37,7 @@ function props(over: Partial<Props> = {}): Props {
     setId: "22222222-2222-2222-2222-222222222222",
     sharedAt: null,
     hasAnalyses: true,
+    canOpenAnalysis: true,
     contextEnabled: false,
     analysis: SLOT,
     ...over,
@@ -68,16 +69,44 @@ const toggle = () =>
 describe("PalpiteArea — Ler análise completa (#576)", () => {
   it("botão só com palpite ou análise", () => {
     const none = renderToStaticMarkup(
-      <PalpiteArea {...props({ heroPalpite: null, hasAnalyses: false })} />
+      <PalpiteArea
+        {...props({
+          heroPalpite: null,
+          hasAnalyses: false,
+          canOpenAnalysis: false,
+        })}
+      />
     );
     expect(none).not.toContain("Ler análise completa");
     expect(none).not.toContain('data-testid="slot"');
     expect(
-      renderToStaticMarkup(<PalpiteArea {...props({ hasAnalyses: false })} />)
+      renderToStaticMarkup(
+        <PalpiteArea
+          {...props({ hasAnalyses: false, canOpenAnalysis: false })}
+        />
+      )
     ).toContain("Ler análise completa");
     expect(
       renderToStaticMarkup(<PalpiteArea {...props({ heroPalpite: null })} />)
     ).toContain("Ler análise completa");
+  });
+
+  it("depois do apito, sem palpite e sem leitura ao vivo: a análise de pré-jogo ainda abre", () => {
+    // Flag desligada, jogo começado/encerrado: nada a regenerar (hasAnalyses=false),
+    // mas há análise de pré-jogo pra ler.
+    const html = renderToStaticMarkup(
+      <PalpiteArea
+        {...props({
+          heroPalpite: null,
+          setId: null,
+          unavailable: "finished",
+          hasAnalyses: false,
+          canOpenAnalysis: true,
+        })}
+      />
+    );
+    expect(html).toContain("Ler análise completa");
+    expect(html).toContain('data-testid="slot"');
   });
 
   it("fechado por padrão; abrir alterna aria-expanded, hidden e o HERO inteiro", async () => {

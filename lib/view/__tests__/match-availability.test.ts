@@ -2,6 +2,7 @@ import { describe, expect, it } from "vitest";
 
 import type { LiveStateInput } from "@/lib/live/phase";
 import {
+  analysisAreaFlags,
   EMPTY_HERO_UNAVAILABLE_COPY,
   matchCapabilities,
   matchPhase,
@@ -411,4 +412,33 @@ describe("matchCapabilities", () => {
       ).toBe(false);
     }
   );
+});
+
+describe("analysisAreaFlags (#594): abrir a análise ≠ gerar só o palpite", () => {
+  it("flag desligada, jogo começado/encerrado, só análises de pré-jogo: abre, não regenera", () => {
+    for (const status of ["scheduled", "live", "finished"]) {
+      const phase = matchPhase({ status, kickoffAt: PAST }, null, NOW, {
+        liveMode: false,
+      });
+      expect(phase.kind).not.toBe("pre");
+      expect(
+        analysisAreaFlags(phase.kind, { sections: 2, liveSections: 0 })
+      ).toEqual({ canOpenAnalysis: true, canRegenerate: false });
+    }
+  });
+
+  it("pré-jogo: regenera sobre as de pré-jogo; ao vivo: só sobre as leituras ao vivo", () => {
+    expect(analysisAreaFlags("pre", { sections: 1, liveSections: 0 })).toEqual({
+      canOpenAnalysis: true,
+      canRegenerate: true,
+    });
+    expect(analysisAreaFlags("in_play", { sections: 0, liveSections: 1 })).toEqual({
+      canOpenAnalysis: true,
+      canRegenerate: true,
+    });
+    expect(analysisAreaFlags("in_play", { sections: 0, liveSections: 0 })).toEqual({
+      canOpenAnalysis: false,
+      canRegenerate: false,
+    });
+  });
 });

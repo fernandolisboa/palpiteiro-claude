@@ -15,6 +15,10 @@ type Props = Omit<ComponentProps<typeof PalpiteHero>, "expanded"> & {
   // HERO, nunca dentro do `section[aria-label=palpite]` (firewall da ADR 0030: a casca
   // quente não ganha número de valor).
   analysis: ReactNode;
+  // Há análise salva (pré-jogo ou ao vivo) para abrir, em qualquer fase. Diferente de
+  // `hasAnalyses`, que é o portão do "Gerar só o palpite" (só as análises da fase de
+  // agora): depois do apito sem leitura ao vivo, a análise de pré-jogo segue legível.
+  canOpenAnalysis: boolean;
 };
 
 /**
@@ -23,10 +27,10 @@ type Props = Omit<ComponentProps<typeof PalpiteHero>, "expanded"> & {
  * volta inteiro e a análise por mercado aparece logo abaixo, num nível só (sem acordeão
  * de acordeões). `hidden` em vez de desmontar: o texto fica no DOM e o estado não se perde.
  */
-export function PalpiteArea({ analysis, ...hero }: Props) {
+export function PalpiteArea({ analysis, canOpenAnalysis, ...hero }: Props) {
   const [open, setOpen] = useState(false);
   // Há algo para abrir: um palpite (narrativa inteira, ficha, fontes) ou uma análise.
-  const canOpen = hero.heroPalpite !== null || hero.hasAnalyses;
+  const canOpen = hero.heroPalpite !== null || canOpenAnalysis;
   return (
     <div className="flex flex-col gap-3">
       <PalpiteHero {...hero} expanded={open} />
