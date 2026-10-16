@@ -37,6 +37,7 @@ vi.mock("@/lib/db", () => ({
 
 import type { DbPalpite } from "@/lib/db/queries/palpites";
 import { getPendingPalpiteSettlements } from "@/lib/db/queries/palpites";
+import { liveColumns, liveStampFromState } from "@/lib/live/stamp";
 
 const ids: { userId: string; otherUserId: string } = {} as never;
 
@@ -58,12 +59,29 @@ async function seedMatch(externalId: string): Promise<string> {
   return m.id;
 }
 
+// Carimbo de um set gerado aos 63' (1–0), gravado no instante `at` (#594).
+function liveStamp(at: Date) {
+  return liveStampFromState(
+    {
+      statusShort: "2H",
+      elapsed: 63,
+      extra: null,
+      minuteLabel: "63'",
+      score: { home: 1, away: 0 },
+      red: { home: 0, away: 0 },
+      fetchedAt: at,
+    },
+    at,
+  );
+}
+
 // Semeia um set + 1 linha exact_score settleable; createdAt explícito p/ ordenar gerações.
 async function seedSetWithScore(args: {
   matchId: string;
   userId: string;
   createdAt: Date;
   params: { home: number; away: number };
+  live?: boolean;
 }): Promise<{ setId: string; palpiteId: string }> {
   const [s] = await realDb
     .insert(schema.palpiteSets)
@@ -72,8 +90,9 @@ async function seedSetWithScore(args: {
       userId: args.userId,
       aiCallId: null,
       modelVersion: "claude-haiku-4-5",
-      promptVersion: "palpites_v3",
+      promptVersion: args.live ? "palpites_live_v1" : "palpites_v3",
       createdAt: args.createdAt,
+      ...liveColumns(args.live ? liveStamp(args.createdAt) : null),
     })
     .returning({ id: schema.palpiteSets.id });
   const [p] = await realDb
@@ -319,5 +338,64 @@ describe("getPendingPalpiteSettlements — multi-tipo (#354)", () => {
     expect(pending).toHaveLength(5);
     expect(pendingIds.has(palpiteIds.red_card)).toBe(false);
     expect(pendingIds.has(palpiteIds.corners)).toBe(false);
+  });
+});
+
+describe("getPendingPalpiteSettlements — set ao vivo e set de pré-jogo (#594)", () => {
+  it("um set ao vivo mais novo NÃO apaga o de pré-jogo: os dois liquidam", async () => {
+    const matchId = await seedMatch("ext-live-pre");
+    const pre = await seedSetWithScore({
+      matchId,
+      userId: ids.userId,
+      createdAt: new Date("2026-05-15T12:00:00Z"),
+      params: { home: 1, away: 1 },
+    });
+    const live = await seedSetWithScore({
+      matchId,
+      userId: ids.userId,
+      createdAt: new Date("2026-05-15T20:05:00Z"),
+      params: { home: 2, away: 0 },
+      live: true,
+    });
+    const pending = await getPendingPalpiteSettlements(NOW);
+    const got = new Set(pending.map((p) => p.palpiteId));
+    expect(got.has(pre.palpiteId)).toBe(true);
+    expect(got.has(live.palpiteId)).toBe(true);
+    expect(pending).toHaveLength(2);
+  });
+
+  it("dentro de cada lado, só o mais novo liquida", async () => {
+    const matchId = await seedMatch("ext-live-regen");
+    const preOld = await seedSetWithScore({
+      matchId,
+      userId: ids.userId,
+      createdAt: new Date("2026-05-15T10:00:00Z"),
+      params: { home: 0, away: 0 },
+    });
+    const preNew = await seedSetWithScore({
+      matchId,
+      userId: ids.userId,
+      createdAt: new Date("2026-05-15T11:00:00Z"),
+      params: { home: 1, away: 0 },
+    });
+    const liveOld = await seedSetWithScore({
+      matchId,
+      userId: ids.userId,
+      createdAt: new Date("2026-05-15T19:40:00Z"),
+      params: { home: 1, away: 1 },
+      live: true,
+    });
+    const liveNew = await seedSetWithScore({
+      matchId,
+      userId: ids.userId,
+      createdAt: new Date("2026-05-15T20:10:00Z"),
+      params: { home: 2, away: 1 },
+      live: true,
+    });
+    const pending = await getPendingPalpiteSettlements(NOW);
+    const got = pending.map((p) => p.palpiteId).sort();
+    expect(got).toEqual([preNew.palpiteId, liveNew.palpiteId].sort());
+    expect(got).not.toContain(preOld.palpiteId);
+    expect(got).not.toContain(liveOld.palpiteId);
   });
 });

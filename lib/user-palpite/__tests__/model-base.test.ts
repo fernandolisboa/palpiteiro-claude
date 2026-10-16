@@ -21,6 +21,7 @@ import {
   type MatchModelSnapshot,
 } from "@/lib/model-base/types";
 import type { ModelScoreline } from "@/lib/quant/match-model";
+import { inPlayScoreline } from "@/lib/quant/in-play";
 import { scorelineMatrix } from "@/lib/quant/scoreline-model";
 import {
   isSnapshotUsable,
@@ -213,6 +214,34 @@ describe("resolvePalpiteModelBase com asOf (#591: a base do apito)", () => {
     const base = await resolvePalpiteModelBase(MATCH, { asOf: KICKOFF });
     expect(resolveSlipModel).toHaveBeenCalledWith(MATCH, { asOf: KICKOFF });
     expect(base).toMatchObject({ origin: "live", staleBase: true });
+  });
+});
+
+describe("fromLive com modelo em jogo (#594, defesa)", () => {
+  it("um InPlayScoreline vira base de PRÉ-JOGO (o preMatch dele), nunca λ = h0 + μ", async () => {
+    getLatest.mockResolvedValue(null);
+    const inPlay = inPlayScoreline(
+      { ...LIVE, source: "dixon_coles", rho: -0.05 },
+      {
+        statusShort: "2H",
+        elapsed: 63,
+        extra: null,
+        score: { home: 2, away: 0 },
+        red: null,
+      },
+    )!;
+    expect(inPlay.lambdaHome).toBeGreaterThan(2);
+    const base = await resolvePalpiteModelBase(MATCH, {
+      now: NOW,
+      liveModel: async () => inPlay,
+    });
+    expect(base).toMatchObject({
+      origin: "live",
+      lambdaHomeBase: LIVE.lambdaHome,
+      lambdaAwayBase: LIVE.lambdaAway,
+      rho: -0.05,
+      source: "dixon_coles",
+    });
   });
 });
 

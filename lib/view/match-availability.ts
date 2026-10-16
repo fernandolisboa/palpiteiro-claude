@@ -5,7 +5,11 @@
 // profundidade e precisa continuar batendo com este. A copy sai POR estado: um jogo ao
 // vivo ou adiado não pode dizer "encerrado".
 
-import type { MatchPhase, MatchUnavailableReason } from "@/lib/live/phase";
+import type {
+  MatchPhase,
+  MatchPhaseKind,
+  MatchUnavailableReason,
+} from "@/lib/live/phase";
 
 export {
   matchPhase,
@@ -84,6 +88,27 @@ export function matchCapabilities(
     registerBets: live,
     pool: liveMode && poolWindowOpen && !poolBlocked,
     analyzeMarkets: false,
+  };
+}
+
+/**
+ * O que o HERO oferece sobre as análises salvas (#594), por fase. Duas perguntas
+ * diferentes:
+ * - `canOpenAnalysis`: há algo pra "Ler análise completa", de pré-jogo OU ao vivo, em
+ *   qualquer fase (com a flag desligada, depois do apito, as análises de pré-jogo
+ *   continuam legíveis);
+ * - `canRegenerate`: o "Gerar só o palpite" tem sobre o que sintetizar AGORA: antes do
+ *   apito, as análises de pré-jogo; depois, só as leituras ao vivo (a action ainda
+ *   confere se são do placar de agora).
+ */
+export function analysisAreaFlags(
+  phaseKind: MatchPhaseKind,
+  counts: { sections: number; liveSections: number }
+): { canOpenAnalysis: boolean; canRegenerate: boolean } {
+  return {
+    canOpenAnalysis: counts.sections + counts.liveSections > 0,
+    canRegenerate:
+      phaseKind === "pre" ? counts.sections > 0 : counts.liveSections > 0,
   };
 }
 

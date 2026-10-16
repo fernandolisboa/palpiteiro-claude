@@ -4,7 +4,7 @@
 // dela (ADR 0060 §1): análise, Seu palpite, registro de apostas, reanálise por mercado.
 // Read grátis, curto-circuita ANTES de qualquer pré-warm/spend.
 
-import type { LiveStateInput } from "@/lib/live/phase";
+import type { LiveStateInput, MatchPhase } from "@/lib/live/phase";
 import {
   matchCapabilities,
   matchPhase,
@@ -75,4 +75,29 @@ export function capabilityGateMessage(
   if (phase.actionable) return IN_PLAY_BLOCKED[capability];
   // `reason` só é null em pré-jogo, que libera tudo; o fallback é fail-closed.
   return capabilityBlockedMessage(capability, phase.reason ?? "finished");
+}
+
+export const SEU_PALPITE_PRE_MATCH_ONLY =
+  "O Seu palpite fica aberto até o apito inicial.";
+
+/**
+ * Copy da aba "Seu palpite" quando ela não abre (página do jogo, #594). Com o modo ao
+ * vivo desligado (ou antes do apito), a de sempre; ligado, POR motivo: um jogo ao vivo
+ * nunca diz "fica aberto até o apito inicial".
+ */
+export function seuPalpiteClosedMessage(
+  phase: MatchPhase,
+  {
+    liveMode = false,
+    modelReady = false,
+    hasScore = false,
+  }: { liveMode?: boolean; modelReady?: boolean; hasScore?: boolean } = {}
+): string {
+  if (!liveMode || phase.kind === "pre") return SEU_PALPITE_PRE_MATCH_ONLY;
+  if (phase.actionable) {
+    // Sem placar não há leitura (a lista recusa); com placar, falta o modelo.
+    if (!hasScore) return IN_PLAY_BLOCKED.registerBets;
+    if (!modelReady) return IN_PLAY_BLOCKED.seuPalpite;
+  }
+  return capabilityBlockedMessage("seuPalpite", phase.reason ?? "finished");
 }

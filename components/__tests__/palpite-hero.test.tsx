@@ -737,3 +737,27 @@ describe("PalpiteHero — compacto (#576, expanded=false)", () => {
     }
   });
 });
+
+describe("PalpiteHero — leitura ao vivo (#594)", () => {
+  it("ao vivo: pageLive=1, copy da leitura ao vivo e o selo do momento no palpite", () => {
+    const empty = render({ heroPalpite: null, live: true, unavailable: "live", analyzable: true });
+    expect(empty).toContain('name="pageLive" value="1"');
+    expect(empty).toContain("Com o jogo rolando, a IA lê o placar e o tempo que falta");
+    expect(leaksValue(empty)).toBe(false);
+    const populated = render({
+      heroPalpite: { ...POPULATED, liveLabel: "palpite aos 63' (1–0)" },
+      live: true,
+      unavailable: "live",
+      analyzable: true,
+    });
+    expect(populated).toContain("palpite aos 63&#x27; (1–0)");
+    expect(leaksValue(populated)).toBe(false);
+  });
+
+  it("pré-jogo: pageLive=0 e a copy de sempre, sem selo", () => {
+    const html = render({ heroPalpite: null });
+    expect(html).toContain('name="pageLive" value="0"');
+    expect(html).toContain("A IA lê os dois times, os números e o mercado");
+    expect(render()).not.toContain("palpite aos");
+  });
+});

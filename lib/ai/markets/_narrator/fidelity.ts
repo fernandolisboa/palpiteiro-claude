@@ -65,7 +65,7 @@ function negatedAfter(text: string, end: number): boolean {
   return NEGATION_AFTER.test(text.slice(end, end + NEGATION_WINDOW));
 }
 
-function recommends(text: string, alias: string): boolean {
+export function recommends(text: string, alias: string): boolean {
   const forward = new RegExp(
     `${RECOMMEND_VERB}${FILLER}\\s+["'“”]?${aliasRe(alias)}`,
     "giu"

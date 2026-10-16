@@ -219,12 +219,18 @@ export function ComoUsarContent() {
           primeira análise da janela.
         </Tip>
         <p>
-          A análise só roda <Strong>antes do apito inicial</Strong>. Com o jogo em
-          andamento, adiado ou encerrado, os botões somem, mas o que você já
-          analisou continua lá. Com o jogo rolando, o topo da página mostra o
-          placar, o minuto e há quanto tempo ele foi atualizado (e as expulsões,
-          quando há); <Ui>Atualizar placar</Ui> busca de novo, e voltar pra aba
-          também atualiza.
+          Com o jogo rolando, o topo da página mostra o placar, o minuto e há
+          quanto tempo ele foi atualizado (e as expulsões, quando há);{" "}
+          <Ui>Atualizar placar</Ui> busca de novo, e voltar pra aba também
+          atualiza. Durante o jogo, <Ui>Analisar com IA</Ui> faz uma{" "}
+          <Strong>leitura ao vivo</Strong>: as chances de cada mercado
+          para o resultado final, a partir do placar e do tempo que falta, e um
+          palpite com o minuto e o placar. Sem odd ao vivo, ela não recomenda
+          aposta, e o <Ui>Contexto extra (opcional)</Ui> fica só pro pré-jogo. A
+          leitura conta uma análise do seu limite do dia e fica separada da
+          análise de antes do apito. Se o placar mudar, faça uma leitura nova. Com
+          o jogo adiado ou encerrado (ou quando a leitura ao vivo não está
+          disponível), os botões somem, mas o que você já analisou continua lá.
         </p>
       </Section>
 

@@ -16,6 +16,7 @@ import {
   type AnalyzeUserPalpiteResult,
 } from "@/app/actions/user-palpite";
 import {
+  isPastScore,
   palpiteToLeg,
   readingMatrix,
   readPalpite,
@@ -99,9 +100,12 @@ export function SeuPalpite({
       : { kind: "score", home: homeGoals, away: awayGoals };
   }, [mode, homeGoals, awayGoals, result]);
 
+  // Ao vivo (#594): a matriz é a do placar FINAL a partir do atual (model.inPlay).
   const matrix = useMemo(() => (model ? readingMatrix(model) : null), [model]);
+  const inPlay = model?.inPlay ?? null;
+  const past = palpite !== null && isPastScore(palpite, inPlay);
   const rows = useMemo(() => {
-    if (!model || !matrix || !palpite) return null;
+    if (!model || !matrix || !palpite || isPastScore(palpite, model.inPlay)) return null;
     const reading = readPalpite(
       { matrix, lambdaHome: model.lambdaHome, lambdaAway: model.lambdaAway },
       palpite,
@@ -151,16 +155,25 @@ export function SeuPalpite({
               <div key={side} className="flex flex-col gap-1.5">
                 <span className="text-body-sm tracking-tight">{teams[side]}</span>
                 <div className="grid grid-cols-6 gap-1.5">
-                  {CHIP_GOALS.map((n) => (
-                    <ToggleButton
-                      key={n}
-                      pressed={value === n}
-                      onClick={() => pickScore(side, n)}
-                      ariaLabel={`${n} gols do ${teams[side]}`}
-                    >
-                      {n}
-                    </ToggleButton>
-                  ))}
+                  {CHIP_GOALS.map((n) => {
+                    // Gols não se desfazem: abaixo do placar atual "já passou".
+                    const gone = inPlay !== null && n < inPlay.score[side];
+                    return (
+                      <ToggleButton
+                        key={n}
+                        pressed={value === n}
+                        onClick={() => pickScore(side, n)}
+                        disabled={gone}
+                        ariaLabel={
+                          gone
+                            ? `${n} gols do ${teams[side]}: já passou`
+                            : `${n} gols do ${teams[side]}`
+                        }
+                      >
+                        {n}
+                      </ToggleButton>
+                    );
+                  })}
                 </div>
               </div>
             );
@@ -169,9 +182,19 @@ export function SeuPalpite({
             <span className="text-meta uppercase tracking-label text-muted-foreground">
               outro placar
             </span>
-            <GoalsSelect label={teams.home} value={otherHome} onChange={setOtherHome} />
+            <GoalsSelect
+              label={teams.home}
+              value={otherHome}
+              onChange={setOtherHome}
+              min={inPlay?.score.home ?? 0}
+            />
             <span className="text-muted-foreground">×</span>
-            <GoalsSelect label={teams.away} value={otherAway} onChange={setOtherAway} />
+            <GoalsSelect
+              label={teams.away}
+              value={otherAway}
+              onChange={setOtherAway}
+              min={inPlay?.score.away ?? 0}
+            />
             <Button
               type="button"
               size="xs"
@@ -195,6 +218,12 @@ export function SeuPalpite({
         </div>
       )}
     </div>
+  );
+
+  const pastCard = past && inPlay && (
+    <p className="text-body-sm tracking-tight text-muted-foreground" role="status">
+      Esse placar já passou: o jogo está {inPlay.score.home} × {inPlay.score.away}.
+    </p>
   );
 
   const readingCard = model && rows && (
@@ -222,11 +251,20 @@ export function SeuPalpite({
         Qual é o seu palpite? Escolha um placar ou um resultado e veja na hora o que o
         modelo acha. Grátis, sem gastar análise.
       </p>
+      {inPlay && (
+        <p className="text-meta tracking-tight text-muted-foreground">
+          Leitura ao vivo: as chances são do placar final, a partir de{" "}
+          <span className="font-mono tabular-nums">
+            {inPlay.score.home} × {inPlay.score.away}
+          </span>{" "}
+          e do tempo que falta.
+        </p>
+      )}
       <Card className="gap-0 overflow-hidden p-0">
         {model ? (
           <div className="grid gap-4 px-4 py-3.5 lg:grid-cols-2 lg:items-start">
             {picker}
-            {readingCard ?? (
+            {readingCard ?? pastCard ?? (
               <p className="text-body-sm tracking-tight text-muted-foreground">
                 Escolha um placar ou um resultado para ver a chance pelo modelo.
               </p>
@@ -244,7 +282,8 @@ export function SeuPalpite({
               {aiEnabled ? (
                 <AnalyzeForm
                   matchId={matchId}
-                  palpite={palpite}
+                  palpite={past ? null : palpite}
+                  live={inPlay !== null}
                   action={analyzeAction}
                   pending={analyzing}
                   error={state && !state.ok ? state.error : null}
@@ -270,11 +309,13 @@ function ToggleButton({
   pressed,
   onClick,
   ariaLabel,
+  disabled = false,
   children,
 }: {
   pressed: boolean;
   onClick: () => void;
   ariaLabel?: string;
+  disabled?: boolean;
   children: React.ReactNode;
 }) {
   return (
@@ -283,8 +324,9 @@ function ToggleButton({
       aria-pressed={pressed}
       aria-label={ariaLabel}
       onClick={onClick}
+      disabled={disabled}
       className={cn(
-        "flex min-h-10 items-center justify-center rounded-md border px-2 py-1.5 text-center text-body-sm tracking-tight transition-colors focus-visible:outline-none focus-visible:ring-[3px] focus-visible:ring-ring/50",
+        "flex min-h-10 items-center justify-center rounded-md border px-2 py-1.5 text-center text-body-sm tracking-tight transition-colors focus-visible:outline-none focus-visible:ring-[3px] focus-visible:ring-ring/50 disabled:cursor-not-allowed disabled:opacity-40",
         pressed
           ? "border-foreground bg-foreground text-background"
           : "border-border hover:border-foreground/40",
@@ -299,10 +341,13 @@ function GoalsSelect({
   label,
   value,
   onChange,
+  min = 0,
 }: {
   label: string;
   value: number;
   onChange: (n: number) => void;
+  // Ao vivo: gols abaixo do placar atual já passaram.
+  min?: number;
 }) {
   return (
     <select
@@ -312,7 +357,7 @@ function GoalsSelect({
       className="h-8 rounded-md border border-border bg-transparent px-2 font-mono text-body-sm tabular-nums focus-visible:outline-none focus-visible:ring-[3px] focus-visible:ring-ring/50"
     >
       {ALL_GOALS.map((n) => (
-        <option key={n} value={n}>
+        <option key={n} value={n} disabled={n < min}>
           {n}
         </option>
       ))}
@@ -365,12 +410,16 @@ function ReadingRows({ rows, teams }: { rows: ReadingRowsView; teams: TeamNames 
 function AnalyzeForm({
   matchId,
   palpite,
+  live,
   action,
   pending,
   error,
 }: {
   matchId: string;
   palpite: UserPalpite | null;
+  // A página foi montada com o jogo rolando: o servidor recusa o pedido ao vivo vindo de
+  // uma página de pré-jogo (pede para atualizar).
+  live: boolean;
   action: (fd: FormData) => void;
   pending: boolean;
   error: string | null;
@@ -383,6 +432,7 @@ function AnalyzeForm({
     <form action={action} className="flex flex-col gap-2">
       <input type="hidden" name="matchId" value={matchId} />
       <input type="hidden" name="palpite" value={palpite ? JSON.stringify(palpite) : ""} />
+      <input type="hidden" name="pageLive" value={live ? "1" : "0"} />
       <label
         htmlFor={reasonId}
         className="text-meta uppercase tracking-label text-muted-foreground"
@@ -437,7 +487,7 @@ function AnalysisCard({
     <Card className="gap-0 overflow-hidden p-0" data-testid="seu-palpite-analysis">
       <div className="flex flex-col gap-1 px-4 pt-3.5 pb-3">
         <span className="text-meta uppercase tracking-eyebrow text-muted-foreground">
-          sua última análise · {a.createdAgo}
+          sua última análise{a.liveLabel ? ` · ${a.liveLabel}` : ""} · {a.createdAgo}
         </span>
         <span className="text-body font-medium tracking-tight">{a.palpiteLabel}</span>
       </div>

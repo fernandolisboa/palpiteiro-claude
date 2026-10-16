@@ -24,6 +24,9 @@ export type RecentPredictionInput = {
   marketParams: { line: number } | null;
   selectionLabel: string | null;
   edgePct: string | number | null;
+  // Leitura ao vivo (#594): sempre `pass`, sem odd. Não entra na dedup de um jogo que
+  // tem análise de pré-jogo (senão a leitura das 16h apagaria a aposta das 15h).
+  isLive: boolean;
   createdAt: Date;
 };
 
@@ -36,7 +39,8 @@ function edgeValue(edgePct: string | number | null): number {
  * "Suas predições recentes", um cartão por jogo (ADR 0058). Agrupa as predições por
  * jogo, mantém a mais recente de cada mercado (a mesma chave da dedup dos KPIs,
  * `keepLatestPerMatch`: `marketKey`, sem a linha) e ordena os jogos pela análise mais
- * recente. No cartão: as apostas antes (maior vantagem primeiro), no máximo
+ * recente (leituras ao vivo só contam num jogo sem análise de pré-jogo). No cartão: as
+ * apostas antes (maior vantagem primeiro), no máximo
  * `RECENT_VISIBLE_BETS` visíveis, com a vantagem em pontos ("+5,6 pontos", ADR 0056),
  * e a contagem dos mercados sem aposta. Datas no fuso do usuário.
  */
@@ -45,8 +49,12 @@ export function toRecentMatchViews(
   now: Date,
   timeZone: string,
 ): RecentMatchView[] {
+  // Jogo com análise de pré-jogo: o cartão é o do pré-jogo, as leituras ao vivo ficam
+  // de fora. Só leituras ao vivo: o cartão mostra elas (todas sem aposta).
+  const hasPreMatch = new Set(rows.filter((r) => !r.isLive).map((r) => r.matchId));
   const byMatch = new Map<string, Map<string, RecentPredictionInput>>();
   for (const row of rows) {
+    if (row.isLive && hasPreMatch.has(row.matchId)) continue;
     const marketKey = row.marketKey ?? "over_under";
     const markets = byMatch.get(row.matchId) ?? new Map<string, RecentPredictionInput>();
     const current = markets.get(marketKey);

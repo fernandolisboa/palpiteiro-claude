@@ -25,22 +25,39 @@ import {
   canFitCall,
   remainingMs,
 } from "../deadline";
-import { MODEL_REGISTRY, isAIProvider, type AIModelId } from "../models";
+import { liveColumns, liveStampFromState } from "@/lib/live/stamp";
+import { LEAGUE_LABEL, leagueToKey } from "@/lib/format";
+import type { ZodType } from "zod";
+
+import {
+  MODEL_REGISTRY,
+  isAIProvider,
+  type AIModel,
+  type AIModelId,
+} from "../models";
 import { getProviderForModel } from "../providers";
-import type { AnalysisRequest } from "../providers/types";
-import { type PalpiteSynthesisOutput } from "./cartridges/cartridge";
-import { checkFidelity } from "./fidelity-validator";
+import type { AnalysisRequest, ToolDef } from "../providers/types";
+import {
+  palpitesLiveCartridge,
+  type PalpiteLiveOutput,
+} from "./cartridges/live";
+import { checkFidelity, type FidelityCheck } from "./fidelity-validator";
 import { getPalpiteCartridge } from "./registry";
-import { buildSettleablePalpiteRows } from "./settleable-rows";
+import {
+  buildLivePalpiteRows,
+  buildSettleablePalpiteRows,
+} from "./settleable-rows";
 import { containsValueLanguage } from "./value-language-guard";
 import {
   PalpiteError,
+  type GenerateLivePalpiteArgs,
   type GeneratePalpiteArgs,
   type PalpiteGenerationResult,
 } from "./types";
 
 export { PalpiteError } from "./types";
 export type {
+  GenerateLivePalpiteArgs,
   GeneratePalpiteArgs,
   PalpiteGenerationResult,
 } from "./types";
@@ -222,6 +239,62 @@ export async function generatePalpites({
   );
   const userMessage = cartridge.buildUserMessage(input, { daysToKickoff });
 
+  return runSynthesis({
+    userId,
+    matchId,
+    model,
+    cartridge,
+    userMessage,
+    deadlineAt,
+    rowsFor: (output) => buildSettleablePalpiteRows("", output),
+    fidelity: (output) => checkFidelity(output, input),
+    sourcePredictionIds: analyses.map((a) => a.predictionId),
+    sources: newsOutcome.results,
+    live: null,
+  });
+}
+
+// ─── Síntese → manchete persistida (pré-jogo e ao vivo) ──────────────────────
+
+type SynthesisCartridge<O> = {
+  version: string;
+  systemPrompt: string;
+  tool: ToolDef;
+  toolName: string;
+  outputSchema: ZodType<O>;
+};
+
+type SynthesisOutputBase = {
+  verdict: string;
+  confidence: "baixa" | "media" | "alta";
+  narrative: string;
+  citedMarkets: string[];
+};
+
+type SynthesisSpec<O extends SynthesisOutputBase> = {
+  userId: string;
+  matchId: string;
+  model: AIModel;
+  cartridge: SynthesisCartridge<O>;
+  userMessage: string;
+  deadlineAt?: number;
+  // As linhas settleable (templates fixos) da saída.
+  rowsFor: (output: O) => ReturnType<typeof buildSettleablePalpiteRows>;
+  fidelity: (output: O) => FidelityCheck;
+  sourcePredictionIds: string[];
+  sources: NewsResult[];
+  live: ReturnType<typeof liveColumns> | null;
+};
+
+/**
+ * O loop de síntese (#380) + a persistência (ai_call → palpite_set → palpites), comum ao
+ * palpite de pré-jogo e ao ao vivo. O firewall (Zod `.strict()` + guard de conteúdo) roda
+ * em todo candidato; a fidelidade depois dele.
+ */
+async function runSynthesis<O extends SynthesisOutputBase>(
+  spec: SynthesisSpec<O>,
+): Promise<PalpiteGenerationResult> {
+  const { userId, matchId, model, cartridge, userMessage, deadlineAt } = spec;
   // 7. AnalysisRequest. temperature EXPLÍCITO de model.temperature (0.3 p/ Haiku) —
   //    NÃO genParams.temperature (null em temperature-mode). SEM effort (Haiku é
   //    temperature-mode; effort seria ignorado). maxTokens de getGenerationParams.
@@ -277,7 +350,7 @@ export async function generatePalpites({
   //   do firewall e só pode ADICIONAR uma rejeição (regen/degrade), nunca burlar/enfraquecer
   //   o guard. Sai APENAS por `break` (aceite) ou `throw` (degrade/erro terminal) — sem
   //   recursão. Com MAX_FIDELITY_ATTEMPTS=1, divergência → degrada na hora (sem 2ª paga).
-  let output: PalpiteSynthesisOutput;
+  let output: O;
   let settleableRows: ReturnType<typeof buildSettleablePalpiteRows>;
   let latencyMs: number;
   let inputTokens: number;
@@ -372,7 +445,7 @@ export async function generatePalpites({
     }
     // Já tipado pelo schema concreto do cartucho (diferente de predict, que apaga
     // para BaseMarketOutput).
-    const candidate: PalpiteSynthesisOutput = parsed.data;
+    const candidate: O = parsed.data;
 
     // 11b. FIREWALL leg (b) — guard de CONTEÚDO pós-Zod (ADR 0030 §3, blocker #5). O
     //      `.strict()` só barra chaves; o LLM pode ecoar um TERMO de valor numa string.
@@ -382,7 +455,7 @@ export async function generatePalpites({
     //      → tratado como `invalid_output` (mesmo path auditado do Zod) → throw → degrada
     //      pra palpite:null no try/catch do analyzeBestBet. REJEITAR > VAZAR. As rows são
     //      construídas AQUI (puras, sem DB) e reusadas no insert em batch (12c).
-    const candidateRows = buildSettleablePalpiteRows("", candidate);
+    const candidateRows = spec.rowsFor(candidate);
     const valueLeak =
       containsValueLanguage(candidate.verdict) ||
       containsValueLanguage(candidate.narrative) ||
@@ -422,7 +495,7 @@ export async function generatePalpites({
       settleableRows = candidateRows;
       break;
     }
-    const fidelity = checkFidelity(candidate, input);
+    const fidelity = spec.fidelity(candidate);
     if (fidelity.ok) {
       output = candidate;
       settleableRows = candidateRows;
@@ -503,7 +576,7 @@ export async function generatePalpites({
   //      (throw): sem set, não há filho a inserir — nada de órfãos. `headline` jsonb
   //      carrega a manchete (sem placar — esse vira a linha settleable); proveniência
   //      = os predictionIds das análises que alimentaram a síntese (ADR 0030 §4).
-  const sourcePredictionIds = analyses.map((a) => a.predictionId);
+  const { sourcePredictionIds } = spec;
   let setRow: DbPalpiteSet;
   try {
     const [row] = await db
@@ -522,10 +595,10 @@ export async function generatePalpites({
           sourcePredictionIds,
           // ADR 0032 / #377 — fontes de notícia REAIS capturadas que alimentaram o
           // palpite (no jsonb existente, sem migration). Omitido quando não houve notícia.
-          ...(newsOutcome.results.length > 0
-            ? { sources: newsOutcome.results }
-            : {}),
+          ...(spec.sources.length > 0 ? { sources: spec.sources } : {}),
         },
+        // Palpite ao vivo (#594): is_live + o carimbo. Pré-jogo: as colunas no default.
+        ...(spec.live ? spec.live : {}),
       })
       .returning();
     setRow = row;
@@ -560,4 +633,84 @@ export async function generatePalpites({
     palpites: inserted,
     aiCall: aiCallId ? { id: aiCallId } : null,
   };
+}
+
+/**
+ * Palpite AO VIVO (#594, ADR 0060 §8.2, PLAN-580 §12): a manchete sobre a leitura ao vivo
+ * (as predictions is_live do mesmo momento). Sem forma/confrontos/tabela e sem notícias:
+ * só a situação do jogo, os placares finais mais prováveis do modelo em jogo e as chances
+ * por mercado. Cartucho palpites_live_v1 (output sem 1º tempo/primeiro a marcar/cartões);
+ * placar provável abaixo do atual falha fechado (Zod, invalid_output: o veredito e a
+ * narrativa foram escritos pra esse placar, trocar só o placar deixaria a manchete se
+ * contradizendo); linhas só exact_score/margin/clean_sheet; o set grava is_live +
+ * carimbo.
+ */
+export async function generateLivePalpites({
+  matchId,
+  userId,
+  analyses,
+  live,
+  modelOverride,
+  deadlineAt,
+}: GenerateLivePalpiteArgs): Promise<PalpiteGenerationResult> {
+  const model = MODEL_REGISTRY[modelOverride ?? "claude-haiku-4-5"];
+  const matchRows = await db
+    .select()
+    .from(matches)
+    .where(eq(matches.id, matchId))
+    .limit(1);
+  const match = matchRows[0];
+  if (!match) {
+    throw new PalpiteError("match not found", { matchId });
+  }
+  if (match.status === "finished" || match.status === "cancelled") {
+    throw new PalpiteError("match is not analyzable", {
+      matchId,
+      status: match.status,
+    });
+  }
+  const { state, scoreline, moment, now } = live;
+  const score = state.score;
+  const cartridge = palpitesLiveCartridge;
+  const input = cartridge.buildInput({
+    match: {
+      league: LEAGUE_LABEL[leagueToKey(match.league)],
+      homeTeam: match.homeTeam,
+      awayTeam: match.awayTeam,
+    },
+    situation: { moment, score, red: state.red },
+    matrix: scoreline.matrix,
+    analyses,
+  });
+  // Placar provável abaixo do atual (gols não se desfazem): o veredito e a narrativa do
+  // LLM foram escritos pra esse placar, então só trocar o placar deixaria a manchete se
+  // contradizendo. Falha fechado pelo caminho do Zod (invalid_output auditado → sem
+  // manchete, as leituras seguem na página), sem 2ª chamada paga. O cartucho (prompt,
+  // tool e schema) não muda: a regra já está no prompt; aqui só é conferida.
+  const outputSchema = cartridge.outputSchema.superRefine((output, ctx) => {
+    if (
+      output.probableScore.home < score.home ||
+      output.probableScore.away < score.away
+    ) {
+      ctx.addIssue({
+        code: "custom",
+        path: ["probableScore"],
+        message: `placar provável ${output.probableScore.home}–${output.probableScore.away} abaixo do placar atual ${score.home}–${score.away}`,
+      });
+    }
+  });
+  const stamp = liveStampFromState(state, now, scoreline.inPlay);
+  return runSynthesis<PalpiteLiveOutput>({
+    userId,
+    matchId,
+    model,
+    cartridge: { ...cartridge, outputSchema },
+    userMessage: cartridge.buildUserMessage(input),
+    deadlineAt,
+    rowsFor: (output) => buildLivePalpiteRows("", output),
+    fidelity: (output) => cartridge.checkFidelity(output, input),
+    sourcePredictionIds: analyses.map((a) => a.predictionId),
+    sources: [],
+    live: liveColumns(stamp),
+  });
 }

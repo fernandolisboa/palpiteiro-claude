@@ -32,6 +32,10 @@ function headline(i: NarrationInput, r: PalpiteReading): string {
     : `${i.palpiteLabel} tem ${ptPct(r.palpitePct)} (${rankPhrase(r.scoreRank)})`;
 }
 
+function capitalize(s: string): string {
+  return s.charAt(0).toUpperCase() + s.slice(1);
+}
+
 export function templatedPalpiteNarration(i: NarrationInput): PalpiteNarration {
   const changed = !sameReading(i.without, i.with);
   const context = changed
@@ -39,10 +43,12 @@ export function templatedPalpiteNarration(i: NarrationInput): PalpiteNarration {
     : i.claims.length > 0
       ? " O seu contexto não mudou a leitura do modelo."
       : "";
-  const resumo = truncate(
-    `Pelo modelo (${i.modelLabel}), ${headline(i, i.without)}.${context}`,
-    400,
-  );
+  // Ao vivo (#594): o momento e o placar abrem o texto, como na narração por IA.
+  const lead = `pelo modelo (${i.modelLabel}), ${headline(i, i.without)}`;
+  const opening = i.live
+    ? `${capitalize(i.live.moment)}, com ${i.live.score.home} × ${i.live.score.away}, ${lead}`
+    : capitalize(lead);
+  const resumo = truncate(`${opening}.${context}`, 400);
   const pontos = i.claims
     .slice(0, MAX_POINTS)
     .map((c) =>

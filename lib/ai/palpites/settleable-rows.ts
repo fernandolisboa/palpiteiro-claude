@@ -71,33 +71,12 @@ function row(
   };
 }
 
-/**
- * Constrói as linhas settleable de UMA síntese (#354). Sempre emite a linha
- * `exact_score` (a manchete/placar central); as outras 4 dimensões são EMITIDAS SÓ
- * QUANDO COERENTES com `probableScore` (gate de emissão, PLAN §2.4/§3.13) — uma
- * dimensão incoerente é PULADA (uma a menos, honesto), nunca barrada com null. Logo
- * um set rende exact_score + 0..4 dimensões.
- *
- * Coerência ancorada em `probableScore` (o campo ESTRUTURADO contratado coerente com o
- * veredito), NÃO no `verdict` em texto livre:
- *   - margin: só se |home-away| >= 2 (floor — "ganha por 2+" é ortogonal ao 1X2,
- *     nunca colapsa pra "home vence"). Empate/vitória-por-1 não emitem.
- *   - clean_sheet: só se UM lado leva 0 no placar provável (e não 0-0); emite pro lado
- *     que não sofre. Ambos marcam → não emite.
- *   - first_half_score: só se <= probableScore em CADA lado (gols só acumulam).
- *   - first_to_score: só se ∈{home,away} E concorda com o vencedor implícito de
- *     probableScore. "none" NUNCA emite row (fica só como caso interno de settlement).
- *
- * #419 — `cards` (fun-only, settleable=false derivado): uma linha A MAIS, ORTOGONAL ao
- * placar (cartões não derivam de probableScore) → SEM gate de coerência, só presença-
- * gated (o modelo OMITE cardsTemperature em jogo morno). A LINHA de amarelos é do
- * PROJETO (CARDS_LINE), não do LLM. Não entra no cron (#394 a promove a settleable).
- */
-export function buildSettleablePalpiteRows(
-  palpiteSetId: string,
-  output: PalpiteSynthesisOutput,
-): SettleableRowInsert[] {
-  const { probableScore, firstHalfScore, firstToScore } = output;
+// As linhas do placar FINAL provável: exact_score (sempre), margin (diferença ≥ 2) e
+// clean_sheet (um lado zerado). Comuns ao palpite de pré-jogo e ao ao vivo.
+function finalScoreRows(probableScore: {
+  home: number;
+  away: number;
+}): Omit<SettleableRowInsert, "palpiteSetId">[] {
   const rows: Omit<SettleableRowInsert, "palpiteSetId">[] = [];
 
   // exact_score — sempre. O placar provável é o ponto central conferido.
@@ -126,6 +105,50 @@ export function buildSettleablePalpiteRows(
   } else if (awayCleanSheet) {
     rows.push(row("clean_sheet", cleanSheetText("away"), { side: "away" }));
   }
+
+  return rows;
+}
+
+/**
+ * Linhas do palpite AO VIVO (#594, PLAN-580 §8.2): só as do placar final (exact_score,
+ * margin, clean_sheet). O placar do 1º tempo e "quem marca primeiro" já podem ter
+ * passado, e cartões ficam fora.
+ */
+export function buildLivePalpiteRows(
+  palpiteSetId: string,
+  output: { probableScore: { home: number; away: number } },
+): SettleableRowInsert[] {
+  return finalScoreRows(output.probableScore).map((r) => ({ ...r, palpiteSetId }));
+}
+
+/**
+ * Constrói as linhas settleable de UMA síntese (#354). Sempre emite a linha
+ * `exact_score` (a manchete/placar central); as outras 4 dimensões são EMITIDAS SÓ
+ * QUANDO COERENTES com `probableScore` (gate de emissão, PLAN §2.4/§3.13) — uma
+ * dimensão incoerente é PULADA (uma a menos, honesto), nunca barrada com null. Logo
+ * um set rende exact_score + 0..4 dimensões.
+ *
+ * Coerência ancorada em `probableScore` (o campo ESTRUTURADO contratado coerente com o
+ * veredito), NÃO no `verdict` em texto livre:
+ *   - margin: só se |home-away| >= 2 (floor — "ganha por 2+" é ortogonal ao 1X2,
+ *     nunca colapsa pra "home vence"). Empate/vitória-por-1 não emitem.
+ *   - clean_sheet: só se UM lado leva 0 no placar provável (e não 0-0); emite pro lado
+ *     que não sofre. Ambos marcam → não emite.
+ *   - first_half_score: só se <= probableScore em CADA lado (gols só acumulam).
+ *   - first_to_score: só se ∈{home,away} E concorda com o vencedor implícito de
+ *     probableScore. "none" NUNCA emite row (fica só como caso interno de settlement).
+ *
+ * #419 — `cards` (fun-only, settleable=false derivado): uma linha A MAIS, ORTOGONAL ao
+ * placar (cartões não derivam de probableScore) → SEM gate de coerência, só presença-
+ * gated (o modelo OMITE cardsTemperature em jogo morno). A LINHA de amarelos é do
+ * PROJETO (CARDS_LINE), não do LLM. Não entra no cron (#394 a promove a settleable).
+ */
+export function buildSettleablePalpiteRows(
+  palpiteSetId: string,
+  output: PalpiteSynthesisOutput,
+): SettleableRowInsert[] {
+  const { probableScore, firstHalfScore, firstToScore } = output;
+  const rows = finalScoreRows(probableScore);
 
   // first_half_score — só quando <= probableScore em CADA lado.
   if (

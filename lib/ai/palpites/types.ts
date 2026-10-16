@@ -4,6 +4,9 @@ import type { ToolDef } from "@/lib/ai/providers/types";
 import type { AIModelId } from "@/lib/ai/models";
 import type { DbPalpite, DbPalpiteSet } from "@/lib/db/queries/palpites";
 
+import type { StampableState } from "@/lib/live/stamp";
+import type { InPlayScoreline } from "@/lib/quant/in-play";
+
 import type { MarketAnalysisSummary } from "./synthesis-input";
 
 // Re-export pra os tipos do cartucho resolverem sem ciclo cross-layer (lib/ai/palpites
@@ -48,6 +51,24 @@ export type GeneratePalpiteArgs = {
   // Busca de notícias já em andamento (startNewsFetch), disparada pelo caller em paralelo
   // ao fan-out. Ausente = a síntese busca agora, como antes.
   news?: Promise<NewsFetchOutcome>;
+};
+
+// Palpite ao vivo (#594): a leitura ao vivo já feita + o estado e o modelo em jogo do
+// MESMO momento (lidos no servidor pela action).
+export type GenerateLivePalpiteArgs = {
+  matchId: string;
+  userId: string;
+  // As leituras ao vivo do momento (summarizeAnalysesForSynthesis / Saved com live).
+  analyses: MarketAnalysisSummary[];
+  live: {
+    state: StampableState & { score: { home: number; away: number } };
+    scoreline: InPlayScoreline;
+    // "aos 63'", "no intervalo".
+    moment: string;
+    now: Date;
+  };
+  modelOverride?: AIModelId;
+  deadlineAt?: number;
 };
 
 export type PalpiteGenerationResult = {

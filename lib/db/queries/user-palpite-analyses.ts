@@ -37,6 +37,9 @@ export type UserPalpiteAnalysisRecord = {
   reading: StoredReading;
   narration: StoredNarration;
   narrationSource: NarrationSource;
+  // Feita com o jogo rolando (#594): o carimbo vai em liveState. Ausente = pré-jogo.
+  isLive?: boolean;
+  liveState?: unknown;
 };
 
 const recordSchema = z.object({
@@ -49,6 +52,8 @@ const recordSchema = z.object({
   reading: StoredReadingSchema,
   narration: StoredNarrationSchema,
   narrationSource: z.enum(NARRATION_SOURCES),
+  isLive: z.boolean().optional(),
+  liveState: z.unknown().optional(),
 });
 
 export async function insertUserPalpiteAnalysis(
@@ -78,6 +83,8 @@ export async function getLatestUserPalpiteAnalysis(
       reading: t.reading,
       narration: t.narration,
       narrationSource: t.narrationSource,
+      isLive: t.isLive,
+      liveState: t.liveState,
     })
     .from(t)
     .where(and(eq(t.matchId, matchId), eq(t.userId, userId)))

@@ -207,12 +207,14 @@ function row(
   marketKey: string | null,
   minutesAgo: number,
   j: PredictionJudgments | null,
+  isLive = false,
 ) {
   return {
     marketKey,
     prediction: {
       createdAt: new Date(KICKOFF.getTime() - 86_400_000 - minutesAgo * 60_000),
       judgments: j,
+      isLive,
     },
   };
 }
@@ -237,6 +239,17 @@ describe("pickUserContext", () => {
       row("over_under", 10, judgments({ userContext: CONTEXT })),
     ];
     expect(pickUserContext(history)).toBeNull();
+  });
+
+  it("leitura ao vivo mais nova não esconde o contexto da análise de pré-jogo (#594)", () => {
+    const history = [
+      row("match_result", -60, null, true),
+      row("over_under", -60, null, true),
+      row("match_result", 10, judgments({ userContext: CONTEXT })),
+    ];
+    const picked = pickUserContext(history);
+    expect(picked?.context.claims).toHaveLength(1);
+    expect(picked?.createdAt).toEqual(history[2].prediction.createdAt);
   });
 
   it("row antiga superada no mesmo mercado não conta", () => {
