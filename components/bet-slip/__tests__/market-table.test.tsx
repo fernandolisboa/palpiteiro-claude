@@ -176,6 +176,8 @@ describe("MarketTable — ao vivo (#580)", () => {
     expect(t).toContain("chances pelo modelo ao vivo · 63&#x27; · 2–0");
     expect(t).toContain("digite a odd que pegou");
     expect(t).toContain("odd antes do jogo 2,10 chance do modelo ao vivo");
+    // O rodapé do mercado (chance sem a margem) é da captura de antes do apito.
+    expect(t).toMatch(/antes do jogo, sem a margem: \d\d,\d%/);
     // A análise salva (que recomendaria a casa) não aparece ao vivo.
     expect(t).not.toContain("pela sua análise");
     expect(html(liveGrid())).not.toContain("recomendada pela análise da IA");

@@ -167,7 +167,9 @@ function MarketRow({
       </div>
       {group.odds && (
         <p className="flex flex-wrap items-center gap-x-1 gap-y-0.5 text-meta text-muted-foreground">
-          <span>sem a margem:</span>
+          {/* Ao vivo a chance da célula é a do jogo de agora; este rodapé é da captura
+              de antes do apito, e diz isso. */}
+          <span>{live ? "antes do jogo, sem a margem:" : "sem a margem:"}</span>
           <span className="font-mono tabular-nums">{group.odds.impliedPct.join(" · ")}</span>
           <span aria-hidden>·</span>
           <span>
