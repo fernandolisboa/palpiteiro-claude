@@ -120,12 +120,17 @@ export function applyUserClaims(args: {
 
 type HistoryRow = {
   marketKey: string | null;
-  prediction: { createdAt: Date; judgments: PredictionJudgments | null };
+  prediction: {
+    createdAt: Date;
+    judgments: PredictionJudgments | null;
+    isLive?: boolean;
+  };
 };
 
 /**
- * O contexto exibido na página: a row `code_jev` mais nova entre as ÚLTIMAS por mercado
- * (as que aparecem nas seções), com o `userContext` DELA ou nada. Não filtra antes de
+ * O contexto exibido na página: a row `code_jev` mais nova entre as ÚLTIMAS de pré-jogo
+ * por mercado (as que aparecem nas seções; leituras ao vivo ficam de fora), com o
+ * `userContext` DELA ou nada. Não filtra antes de
  * escolher: uma reanálise sem contexto esconde o contexto do run anterior. Histórico em
  * ordem desc(createdAt), como a página recebe.
  */
@@ -135,6 +140,9 @@ export function pickUserContext(
   const seen = new Set<string>();
   let newest: HistoryRow | null = null;
   for (const row of rows) {
+    // Leitura ao vivo (#594): sem judgments nem contexto extra; não ocupa o mercado
+    // (senão a leitura das 16h esconderia o contexto da análise de pré-jogo).
+    if (row.prediction.isLive === true) continue;
     const marketKey = row.marketKey ?? "over_under";
     if (seen.has(marketKey)) continue;
     seen.add(marketKey);
