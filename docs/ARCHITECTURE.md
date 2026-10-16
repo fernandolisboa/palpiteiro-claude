@@ -10,9 +10,9 @@
 | ORM | Drizzle | TS-first; SQL transparente |
 | Auth | Auth.js v5 (magic link) | Whitelist Fase 2; ver `decisions/0004` |
 | Cache/KV | Vercel KV | Cache de odds e match data |
-| AI | Claude Haiku, Sonnet e Opus 5.5 | Único provider; ver `decisions/0001` e `decisions/0061` |
+| AI | Claude Haiku, Sonnet e Opus (5.5 conferidas + versões novas automáticas) | Único provider; ver `decisions/0001`, `decisions/0061` e `decisions/0062` |
 | Validação JSON | Zod | Garantir output válido do LLM |
-| Cron | Vercel Cron | Sync de jogos + settlement |
+| Cron | Vercel Cron | Sync de jogos + settlement + versões novas de modelo |
 | Observabilidade | Sentry (free) + Vercel Analytics | Suficiente pra MVP |
 
 ADRs em `docs/decisions/` documentam decisões críticas com contexto e alternativas.
@@ -50,6 +50,19 @@ ADRs em `docs/decisions/` documentam decisões críticas com contexto e alternat
   └→ pra cada predição com status pendente:
      └→ fetch resultado do jogo via API-Football
         └→ se finalizado: atualiza prediction_outcomes (won/lost/void/profit)
+
+[Cron diário 08:15 UTC — /api/cron/check-model-versions (ADR 0062)]
+  └→ lista os modelos da API Anthropic (GET /v1/models)
+     ├→ avisa se uma versão conferida (registry) sumiu da listagem
+     ├→ rebaixa a versão adotada que regrediu em produção (taxa de tool_missing/invalid_output/recusa)
+     └→ por família (Opus/Sonnet/Haiku): candidato novo → capabilities → sondagem
+        (logada em ai_calls como model_probe_*) → adota em model_versions (preço estimado)
+        └→ e-mail pro dono quando algo muda
+
+[Toda chamada de LLM]
+  └→ getProviderForModel() → withAdoptedVersions: a conferida pedida vira a versão
+     adotada da família (memo 60s); rejeição ou 529 → refaz na conferida;
+     ai_calls.model = o modelo que serviu (servedModel)
 ```
 
 ## Modelo de dados (resumo)
@@ -62,6 +75,7 @@ Tabelas principais:
 - `predictions` — palpites gerados pela IA
 - `prediction_outcomes` — resultado real (preenchido pelo cron de settlement)
 - `ai_calls` — auditoria de cada chamada LLM (input, output, tokens, custo, latência, prompt_version)
+- `model_versions` — versões novas de Haiku/Sonnet/Opus achadas pelo cron (uma `active` por família, preço estimado até confirmar; ADR 0062)
 
 Schema completo em `db/schema.ts`. Decisões de modelagem com tradeoffs ficam em ADRs específicos quando relevantes.
 
