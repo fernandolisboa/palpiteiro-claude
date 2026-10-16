@@ -942,6 +942,10 @@ async function analyzeBestBetLive(args: {
 }): Promise<AnalyzeBestBetResult> {
   const { match, live, phase, isAdmin } = args;
   const state = live.state;
+  // Página de pré-jogo (aberta antes do apito): pede para atualizar, sem cobrar. O
+  // "Contexto extra" dela não vale ao vivo e a leitura ao vivo não aparece nela.
+  const freeGate = liveFreeGate(match, live, args.pageLive);
+  if (freeGate) return { ok: false, error: freeGate };
   const scoreline = await inPlayModelFor(match, live, phase);
   const gate = capabilityGateMessage("analyze", match, {
     now: live.now,
@@ -950,9 +954,6 @@ async function analyzeBestBetLive(args: {
     modelReady: scoreline !== null,
   });
   if (gate) return { ok: false, error: gate };
-  // Página de pré-jogo (aberta antes do apito): pede para atualizar, sem cobrar. O
-  // "Contexto extra" dela não vale ao vivo e a leitura ao vivo não aparece nela.
-  if (!args.pageLive) return { ok: false, error: LIVE_STALE_PAGE_COPY };
   if (!state || !scoreline) {
     // Inalcançável com o gate acima (modelReady exige os dois); fail-closed.
     return { ok: false, error: NO_IN_PLAY_MODEL_MESSAGE };
@@ -997,6 +998,9 @@ async function analyzeBestBetLive(args: {
         message: err instanceof Error ? err.message : String(err),
       }),
     );
+    // Uma falha no meio (prazo, corrida) pode vir depois de leituras já gravadas: a
+    // página mostra o que ficou salvo.
+    revalidatePath(`/match/${match.id}`);
     return {
       ok: false,
       error: friendlyMessageFromUnknown(err, messageContextFor(isAdmin)),
@@ -1054,6 +1058,24 @@ function liveSynthesisContext(
     }),
     now,
   };
+}
+
+// Portões grátis do ao vivo, ANTES de resolver o modelo em jogo (que lê o banco): a
+// fase (como se houvesse modelo; o portão com o modelo roda depois) e a página de
+// pré-jogo velha.
+function liveFreeGate(
+  match: NonNullable<Awaited<ReturnType<typeof getMatchById>>>,
+  live: ActionLiveContext,
+  pageLive: boolean,
+): string | null {
+  const phaseGate = capabilityGateMessage("analyze", match, {
+    now: live.now,
+    state: live.state,
+    liveMode: live.liveMode,
+    modelReady: true,
+  });
+  if (phaseGate) return phaseGate;
+  return pageLive ? null : LIVE_STALE_PAGE_COPY;
 }
 
 // O modelo em jogo quando a fase deixa ler (in_play/intervalo com estado bom); senão null.
@@ -1217,6 +1239,12 @@ export async function generatePalpiteFromAnalyses(
   let liveContext: GenerateLivePalpiteArgs["live"] | undefined;
   let analyses: MarketAnalysisSummary[];
   if (isLiveRun) {
+    const freeGate = liveFreeGate(
+      match,
+      live,
+      livePageRefusal(formData) === null,
+    );
+    if (freeGate) return { ok: false, error: freeGate };
     const scoreline = await inPlayModelFor(match, live, phase);
     const gate = capabilityGateMessage("analyze", match, {
       now: live.now,
@@ -1225,8 +1253,6 @@ export async function generatePalpiteFromAnalyses(
       modelReady: scoreline !== null,
     });
     if (gate) return { ok: false, error: gate };
-    const stale = livePageRefusal(formData);
-    if (stale) return { ok: false, error: stale };
     if (!live.state || !scoreline) {
       return { ok: false, error: NO_IN_PLAY_MODEL_MESSAGE };
     }

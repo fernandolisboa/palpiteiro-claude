@@ -61,6 +61,8 @@ vi.mock("@/lib/db/queries/ai-config", () => ({
   getEnableUserContext: vi.fn(),
 }));
 
+import { revalidatePath } from "next/cache";
+
 import { analyzeBestBet, generatePalpiteFromAnalyses } from "@/app/actions/predictions";
 import { auth } from "@/auth";
 import { PredictError, predict, predictInPlay } from "@/lib/ai/predict";
@@ -300,6 +302,8 @@ describe("analyzeBestBet ao vivo", () => {
     }
     expect(checkAnalysisRateLimit).not.toHaveBeenCalled();
     expect(predictInPlay).not.toHaveBeenCalled();
+    // Portão grátis: nem o modelo em jogo é resolvido.
+    expect(resolveInPlaySlipModel).not.toHaveBeenCalled();
   });
 
   it("flag desligada: a copy de antes, sem cobrar nem ler o estado", async () => {
@@ -357,7 +361,9 @@ describe("analyzeBestBet ao vivo", () => {
     expect(predictInPlay).not.toHaveBeenCalled();
   });
 
-  it("estado que envelheceu dentro do predictInPlay → copy do placar indisponível", async () => {
+  // A rechecagem em si (relógio de agora) é testada em lib/ai/__tests__/predict.in-play;
+  // aqui, a recusa dela vira a copy certa e a página é revalidada.
+  it("predictInPlay recusa (o estado envelheceu) → copy do placar indisponível", async () => {
     vi.mocked(predictInPlay).mockRejectedValue(
       new PredictError("match is not analyzable live", {}),
     );
@@ -366,6 +372,8 @@ describe("analyzeBestBet ao vivo", () => {
       ok: false,
       error: "Placar ao vivo indisponível agora. Tente em um minuto.",
     });
+    // Leituras gravadas antes da falha aparecem na página.
+    expect(revalidatePath).toHaveBeenCalledWith(`/match/${MATCH_ID}`);
   });
 });
 
@@ -468,13 +476,14 @@ describe("Gerar só o palpite ao vivo", () => {
     expect(generateLivePalpites).not.toHaveBeenCalled();
   });
 
-  it("página de pré-jogo: pede para atualizar, sem cobrar", async () => {
+  it("página de pré-jogo: pede para atualizar, sem cobrar nem resolver o modelo", async () => {
     const res = await generatePalpiteFromAnalyses(null, form({ pageLive: "0" }));
     expect(res).toEqual({
       ok: false,
       error: "O jogo começou. Atualize a página para a leitura ao vivo.",
     });
     expect(checkPalpitesRateLimit).not.toHaveBeenCalled();
+    expect(resolveInPlaySlipModel).not.toHaveBeenCalled();
   });
 
   it("sem modelo em jogo: recusa sem cobrar", async () => {
