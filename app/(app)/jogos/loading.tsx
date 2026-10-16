@@ -7,16 +7,13 @@ import {
 import { Skeleton } from "@/components/ui/skeleton";
 import { cn } from "@/lib/utils";
 
-// A linha de chips dos filtros (#577): liga | 5 dias · 14 dias · Competição ·
-// Escolher datas, com as alturas dos chips de verdade (anti-CLS).
+// A linha de chips dos filtros (#577): liga | Escolher datas, com as alturas dos
+// chips de verdade (anti-CLS).
 function FilterRowSkeleton({ className }: { className?: string }) {
   return (
     <div className={cn("flex items-center gap-2 overflow-hidden py-1", className)}>
       <Skeleton className="h-8 w-32 shrink-0 rounded-full" />
       <span aria-hidden="true" className="h-5 w-px shrink-0 bg-border" />
-      <Skeleton className="h-8 w-16 shrink-0 rounded-full" />
-      <Skeleton className="h-8 w-[72px] shrink-0 rounded-full" />
-      <Skeleton className="h-8 w-24 shrink-0 rounded-full" />
       <Skeleton className="h-8 w-32 shrink-0 rounded-full" />
     </div>
   );

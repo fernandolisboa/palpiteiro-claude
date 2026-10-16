@@ -8,7 +8,7 @@ import { LeaguePicker } from "@/components/league-picker";
 describe("LeaguePicker rendering", () => {
   it("renderiza um select rotulado com as ligas ativas e 'Todas as ligas'", () => {
     const markup = renderToStaticMarkup(
-      <LeaguePicker value="all" activeKeys={["bsa", "ucl"]} range={{ preset: "today5" }} />,
+      <LeaguePicker value="all" activeKeys={["bsa", "ucl"]} range={{ preset: "upcoming" }} />,
     );
     expect(markup).toContain('aria-label="Filtro de liga"');
     expect(markup).toContain('<option value="all" selected="">Todas as ligas</option>');
@@ -21,7 +21,7 @@ describe("LeaguePicker rendering", () => {
 
   it("liga inativa não vira opção (nem desabilitada)", () => {
     const markup = renderToStaticMarkup(
-      <LeaguePicker value="bsa" activeKeys={["bsa", "ucl"]} range={{ preset: "today5" }} />,
+      <LeaguePicker value="bsa" activeKeys={["bsa", "ucl"]} range={{ preset: "upcoming" }} />,
     );
     expect(markup).not.toContain("Premier League");
     expect(markup).not.toContain("disabled=\"\"");
@@ -30,19 +30,19 @@ describe("LeaguePicker rendering", () => {
 
   it("marca a liga atual como selecionada", () => {
     const markup = renderToStaticMarkup(
-      <LeaguePicker value="ucl" activeKeys={["bsa", "ucl"]} range={{ preset: "today14" }} />,
+      <LeaguePicker value="ucl" activeKeys={["bsa", "ucl"]} range={{ preset: "upcoming" }} />,
     );
     expect(markup).toContain('<option value="ucl" selected="">Champions</option>');
   });
 
   it("tem aparência de chip (#577): altura e raio dos chips, destaque com liga escolhida", () => {
     const all = renderToStaticMarkup(
-      <LeaguePicker value="all" activeKeys={["bsa", "ucl"]} range={{ preset: "today5" }} />,
+      <LeaguePicker value="all" activeKeys={["bsa", "ucl"]} range={{ preset: "upcoming" }} />,
     );
     expect(all).toMatch(/<select[^>]*class="[^"]*\bh-8\b[^"]*\brounded-full\b/);
     expect(all).not.toContain("bg-accent-soft");
     const one = renderToStaticMarkup(
-      <LeaguePicker value="bsa" activeKeys={["bsa", "ucl"]} range={{ preset: "today5" }} />,
+      <LeaguePicker value="bsa" activeKeys={["bsa", "ucl"]} range={{ preset: "upcoming" }} />,
     );
     expect(one).toContain("bg-accent-soft");
   });

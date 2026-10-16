@@ -9,33 +9,15 @@ import {
 } from "@/lib/view/range-href";
 
 describe("buildRangeHref", () => {
-  it("today5 com liga 'all' → league=all EXPLÍCITO (sem param = liga default, não Todos — #491)", () => {
-    expect(buildRangeHref({ league: "all" }, { preset: "today5" })).toBe(
+  it("lista padrão com liga 'all' → league=all EXPLÍCITO (sem param = liga default, não Todos — #491)", () => {
+    expect(buildRangeHref({ league: "all" }, { preset: "upcoming" })).toBe(
       "/jogos?league=all",
     );
   });
 
-  it("preserva a liga ao escolher um preset", () => {
-    expect(buildRangeHref({ league: "wc" }, { preset: "today5" })).toBe(
+  it("lista padrão preserva a liga e não escreve preset", () => {
+    expect(buildRangeHref({ league: "wc" }, { preset: "upcoming" })).toBe(
       "/jogos?league=wc",
-    );
-  });
-
-  it("today14 com liga", () => {
-    expect(buildRangeHref({ league: "wc" }, { preset: "today14" })).toBe(
-      "/jogos?league=wc&preset=today14",
-    );
-  });
-
-  it("season com liga", () => {
-    expect(buildRangeHref({ league: "bsa" }, { preset: "season" })).toBe(
-      "/jogos?league=bsa&preset=season",
-    );
-  });
-
-  it("season com liga 'all'", () => {
-    expect(buildRangeHref({ league: "all" }, { preset: "season" })).toBe(
-      "/jogos?league=all&preset=season",
     );
   });
 
@@ -59,14 +41,8 @@ describe("buildRangeHref", () => {
 });
 
 describe("buildLeagueHref", () => {
-  it("troca a liga preservando o preset today14", () => {
-    expect(buildLeagueHref({ preset: "today14" }, "wc")).toBe(
-      "/jogos?league=wc&preset=today14",
-    );
-  });
-
-  it("today5 → não escreve preset, só a liga", () => {
-    expect(buildLeagueHref({ preset: "today5" }, "wc")).toBe("/jogos?league=wc");
+  it("lista padrão → não escreve preset, só a liga", () => {
+    expect(buildLeagueHref({ preset: "upcoming" }, "wc")).toBe("/jogos?league=wc");
   });
 
   it("preserva um range custom com from/to ao trocar liga", () => {
@@ -78,13 +54,13 @@ describe("buildLeagueHref", () => {
     ).toBe("/jogos?league=bsa&preset=custom&from=2026-06-10&to=2026-06-20");
   });
 
-  it("trocar pra 'all' escreve league=all e mantém o preset", () => {
-    expect(buildLeagueHref({ preset: "season" }, "all")).toBe(
-      "/jogos?league=all&preset=season",
-    );
+  it("trocar pra 'all' escreve league=all e mantém o range custom", () => {
+    expect(
+      buildLeagueHref({ preset: "custom", from: "2026-06-10", to: "2026-06-20" }, "all"),
+    ).toBe("/jogos?league=all&preset=custom&from=2026-06-10&to=2026-06-20");
   });
 
-  it("custom sem from/to válidos degrada pro default today5", () => {
+  it("custom sem from/to válidos degrada pro default", () => {
     expect(buildLeagueHref({ preset: "custom" }, "wc")).toBe("/jogos?league=wc");
   });
 });
@@ -92,22 +68,8 @@ describe("buildLeagueHref", () => {
 describe("rangeLabel", () => {
   const now = new Date("2026-06-11T12:00:00.000Z");
 
-  it("today5 → 'Próximos 5 dias'", () => {
-    expect(rangeLabel(parseRangeParams({ preset: "today5" }, now))).toBe(
-      "Próximos 5 dias",
-    );
-  });
-
-  it("today14 → 'Próximos 14 dias'", () => {
-    expect(rangeLabel(parseRangeParams({ preset: "today14" }, now))).toBe(
-      "Próximos 14 dias",
-    );
-  });
-
-  it("season → 'Competição'", () => {
-    expect(rangeLabel(parseRangeParams({ preset: "season" }, now))).toBe(
-      "Competição",
-    );
+  it("lista padrão → 'Próximos jogos'", () => {
+    expect(rangeLabel(parseRangeParams({}, now))).toBe("Próximos jogos");
   });
 
   it("custom → 'DD/MM – DD/MM' (UTC)", () => {
@@ -133,15 +95,10 @@ describe("rangeLabel", () => {
 describe("rangeEmptyMessage", () => {
   const now = new Date("2026-06-11T12:00:00.000Z");
 
-  it("preset de janela → mensagem 'volte mais perto'", () => {
-    const msg = rangeEmptyMessage(parseRangeParams({ preset: "today5" }, now));
-    expect(msg.title).toBe("Sem jogos — próximos 5 dias");
-    expect(msg.detail).toContain("Volte mais perto");
-  });
-
-  it("season → mensagem específica de competição", () => {
-    const msg = rangeEmptyMessage(parseRangeParams({ preset: "season" }, now));
-    expect(msg.title).toBe("Nenhum jogo na competição");
+  it("lista padrão → 'Nenhum jogo marcado', apontando pro Escolher datas", () => {
+    const msg = rangeEmptyMessage(parseRangeParams({ preset: "upcoming" }, now));
+    expect(msg.title).toBe("Nenhum jogo marcado");
+    expect(msg.detail).toContain("Escolher datas");
   });
 
   it("custom → 'Nenhum jogo nesse período'", () => {

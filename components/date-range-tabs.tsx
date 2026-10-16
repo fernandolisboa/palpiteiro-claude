@@ -1,20 +1,12 @@
+import Link from "next/link";
+import { X } from "lucide-react";
+
 import { DateRangeSheet } from "@/components/date-range-sheet";
-import { FilterChipLink } from "@/components/filter-chip";
+import { filterChipClassName } from "@/components/filter-chip";
 import { buildRangeHref } from "@/lib/view/range-href";
 import type { RangePreset } from "@/lib/view/date-range";
 import type { LeagueFilter } from "@/lib/view/types";
 import { cn } from "@/lib/utils";
-
-type PresetItem = {
-  value: "today5" | "today14" | "season";
-  label: string;
-};
-
-const PRESETS: PresetItem[] = [
-  { value: "today5", label: "5 dias" },
-  { value: "today14", label: "14 dias" },
-  { value: "season", label: "Competição" },
-];
 
 type Props = {
   league: LeagueFilter;
@@ -30,10 +22,11 @@ type Props = {
 };
 
 /**
- * Chips de período da lista de jogos (#577): 5 dias, 14 dias, Competição (links com
- * `aria-current`) e "Escolher datas" (folha/popover com De e Até). Os `href` são os de
- * sempre (`buildRangeHref`, preservando a liga): links salvos seguem valendo. O
- * período aparece só aqui, no chip selecionado.
+ * Período da lista de jogos. Sem escolha, a lista mostra os próximos jogos de agora
+ * em diante e cresce com "Carregar mais"; os chips 5 dias, 14 dias e "Competição"
+ * (#577) saíram porque a lista já cobre isso. Sobra o "Escolher datas" (folha/popover
+ * com De e Até), que também serve pra jogos que já passaram. Com um intervalo
+ * aplicado, o chip mostra as datas e ganha um × do lado que volta pra lista padrão.
  */
 export function DateRangeTabs({
   league,
@@ -47,15 +40,6 @@ export function DateRangeTabs({
   const customActive = preset === "custom" && customLabel !== undefined;
   return (
     <nav aria-label="Filtro de período" className={cn("flex items-center gap-2", className)}>
-      {PRESETS.map(({ value, label }) => (
-        <FilterChipLink
-          key={value}
-          href={buildRangeHref({ league }, { preset: value })}
-          active={preset === value}
-        >
-          {label}
-        </FilterChipLink>
-      ))}
       <DateRangeSheet
         league={league}
         from={customActive ? from : undefined}
@@ -64,6 +48,16 @@ export function DateRangeTabs({
         label={customActive && customLabel ? customLabel : "Escolher datas"}
         surface={surface}
       />
+      {customActive && (
+        <Link
+          href={buildRangeHref({ league }, { preset: "upcoming" })}
+          aria-label="Limpar datas"
+          title="Limpar datas"
+          className={filterChipClassName(false, "w-8 justify-center px-0")}
+        >
+          <X aria-hidden="true" className="size-3.5" />
+        </Link>
+      )}
     </nav>
   );
 }

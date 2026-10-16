@@ -81,7 +81,7 @@ function RangeForm({
         </label>
       </div>
       <div className="flex justify-end gap-2">
-        {/* "Limpar" só com um intervalo aplicado: sem ele, já se está nos 5 dias. */}
+        {/* "Limpar" só com um intervalo aplicado: sem ele, já se está nos próximos jogos. */}
         {active && (
           <Button
             type="button"
@@ -89,7 +89,7 @@ function RangeForm({
             size="sm"
             onClick={() => {
               onDone();
-              router.push(buildRangeHref({ league }, { preset: "today5" }));
+              router.push(buildRangeHref({ league }, { preset: "upcoming" }));
             }}
           >
             Limpar
@@ -107,7 +107,7 @@ function RangeForm({
  * Chip "Escolher datas" da lista de jogos (#577): abre os campos De e Até numa folha
  * (celular) ou num popover (desktop). "Aplicar" navega para o intervalo
  * (`preset=custom`, os mesmos parâmetros de URL de antes); "Limpar" (só com o
- * intervalo ativo) volta para 5 dias. Com o intervalo ativo, o chip mostra as datas
+ * intervalo ativo) volta para os próximos jogos. Com o intervalo ativo, o chip mostra as datas
  * e fica selecionado: é o único lugar onde o período aparece.
  */
 export function DateRangeSheet({ league, from, to, active, label, surface }: Props) {
@@ -154,7 +154,7 @@ export function DateRangeSheet({ league, from, to, active, label, surface }: Pro
         <SheetHeader className="pb-2">
           <SheetTitle className="text-label">Escolher datas</SheetTitle>
           <SheetDescription className="text-body-sm">
-            Mostra os jogos entre as duas datas.
+            Mostra os jogos entre as duas datas, inclusive os que já passaram.
           </SheetDescription>
         </SheetHeader>
         <div className="px-4 pb-2">{form}</div>

@@ -19,10 +19,13 @@ const BATCH_STEP = 15;
 export function UpcomingMatchesMobile({
   matches,
   listHref,
+  endNote,
 }: {
   matches: MatchListRowView[];
   // URL filtrada da lista (/jogos?…) propagada ao link de cada jogo (ver MatchRow).
   listHref?: string;
+  // Aviso no fim da lista cortada no teto da query, quando tudo já foi revelado.
+  endNote?: string;
 }) {
   const [visible, setVisible] = useState(INITIAL_BATCH);
   const slice = matches.slice(0, visible);
@@ -58,6 +61,9 @@ export function UpcomingMatchesMobile({
             Carregar mais
           </Button>
         </div>
+      )}
+      {visible >= matches.length && endNote && (
+        <p className="px-5 pt-3 text-center text-body-sm text-muted-foreground">{endNote}</p>
       )}
     </>
   );

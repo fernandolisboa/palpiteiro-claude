@@ -60,8 +60,11 @@ export const dynamic = "force-dynamic";
 // (ADR 0058).
 const RECENT_MATCH_LIMIT = 5;
 
-// Cap pra ranges ilimitados (season): evita varrer a competição inteira numa
-// query só. Presets de janela já são limitados pelo `to`.
+// Teto da lista padrão (de agora em diante, sem data final): "Carregar mais" revela
+// 15 por vez no cliente, e as duas listas (celular e desktop) vão no payload, então
+// 100 cobre semanas de jogo sem pesar a página. Pra ir além, Escolher datas.
+const UPCOMING_LIMIT = 100;
+// Teto de um intervalo escolhido (pode ser longo, inclusive no passado).
 const RANGE_LIMIT = 200;
 
 type PageProps = {
@@ -76,7 +79,7 @@ type PageProps = {
 };
 
 // "Todos" = só as ligas ATIVAS (nunca o histórico de uma liga inativa, ex.: a
-// Copa encerrada aparecendo no preset `season`).
+// Copa encerrada aparecendo num intervalo de Escolher datas).
 function filterToLeagues(
   filter: LeagueFilter,
   activeLeagues: readonly SupportedLeague[],
@@ -116,8 +119,8 @@ export default async function JogosPage({ searchParams }: PageProps) {
   // do intervalo `custom`, os mesmos dos títulos da lista agrupada por dia.
   const timeZone = await getRequestTimeZone();
 
-  // Range escolhido pelo usuário (5/14 dias, competição ou custom). Nunca lança
-  // — input inválido cai pro default today5.
+  // Próximos jogos (default) ou o intervalo do Escolher datas. Nunca lança — input
+  // inválido cai no default.
   const range = parseRangeParams(
     {
       preset: presetParam,
@@ -132,8 +135,9 @@ export default async function JogosPage({ searchParams }: PageProps) {
   if (!session?.user?.id) redirect("/signin");
   const userId = session.user.id;
 
+  const limit = range.preset === "upcoming" ? UPCOMING_LIMIT : RANGE_LIMIT;
   const matchesQuery = {
-    // Bound inferior recuado em 3h só nas presets de janela (#385): admite os
+    // Bound inferior recuado em 3h só na lista padrão (#385): admite os
     // jogos já apitados que matches.ts gte() de outra forma dropava ANTES do
     // filtro de status. Concern de query — range.from segue intocado.
     from: windowedQueryFrom(range),
@@ -141,16 +145,19 @@ export default async function JogosPage({ searchParams }: PageProps) {
     leagues: filterToLeagues(league, activeLeagues),
     statuses: range.statuses,
     order: range.order,
-    limit: RANGE_LIMIT,
+    // Uma linha a mais só pra saber se a lista foi cortada no teto.
+    limit: limit + 1,
   };
 
   // Predições recentes e estado do tour só dependem do usuário: correm junto da
   // query de jogos em vez de esperar por ela.
-  const [dbMatches, recentRaw, tourState] = await Promise.all([
+  const [queried, recentRaw, tourState] = await Promise.all([
     loadRangeMatches(matchesQuery),
     getRecentPredictedMatchesByUser(userId, RECENT_MATCH_LIMIT),
     getTourState(userId),
   ]);
+  const truncated = queried.length > limit;
+  const dbMatches = truncated ? queried.slice(0, limit) : queried;
 
   const matchIds = dbMatches.map((m) => m.id);
   // Chip N-vias (#173): além do over/under legado (tabela velha), lê 1X2 da tabela
@@ -225,6 +232,13 @@ export default async function JogosPage({ searchParams }: PageProps) {
   });
 
   const recents: RecentMatchView[] = toRecentMatchViews(recentRaw, now, timeZone);
+  const countLabel = matchCountLabel(matches.length, truncated);
+  // Fim da lista cortada no teto: diz como ver o resto (o "Carregar mais" some ali).
+  const endNote = !truncated
+    ? undefined
+    : range.preset === "upcoming"
+      ? `Esses são os próximos ${limit} jogos. Pra ver além, use Escolher datas.`
+      : `Esses são os primeiros ${limit} jogos do período. Pra ver o resto, escolha um intervalo menor.`;
 
   return (
     <>
@@ -241,6 +255,8 @@ export default async function JogosPage({ searchParams }: PageProps) {
           league={league}
           activeKeys={activeKeys}
           range={range}
+          countLabel={countLabel}
+          endNote={endNote}
         />
       </div>
       <div className="hidden lg:block">
@@ -250,6 +266,8 @@ export default async function JogosPage({ searchParams }: PageProps) {
           league={league}
           activeKeys={activeKeys}
           range={range}
+          countLabel={countLabel}
+          endNote={endNote}
         />
       </div>
     </>
@@ -262,6 +280,8 @@ type HomeContentProps = {
   league: LeagueFilter;
   activeKeys: readonly LeagueKey[];
   range: ResolvedRange;
+  countLabel: string;
+  endNote?: string;
 };
 
 // Props compartilhadas pra preservar o range ao trocar de liga no seletor.
@@ -278,13 +298,14 @@ function rangeNavProps(range: ResolvedRange) {
   return { preset: range.preset, from, to };
 }
 
-// "{n} jogos": a liga e o período ficam nos chips, não no meta (#577).
-function matchCountLabel(n: number): string {
+// "{n} jogos": a liga e o período ficam nos chips, não no meta (#577). No teto da
+// query há mais jogos além dos carregados: "100+ jogos".
+function matchCountLabel(n: number, capped: boolean): string {
+  if (capped) return `${n}+ jogos`;
   return n === 1 ? "1 jogo" : `${n} jogos`;
 }
 
-// Linha única de filtros (#577): liga (select em chip) | 5 dias · 14 dias ·
-// Competição · Escolher datas. Rolável na horizontal quando não cabe, e rola sozinha
+// Linha única de filtros (#577): liga (select em chip) | Escolher datas. Rolável na horizontal quando não cabe, e rola sozinha
 // até o chip selecionado (FilterScrollRow); os alvos do tour ficam dentro dela (o
 // scrollIntoView do tour rola o contêiner até o alvo).
 function FilterRow({
@@ -330,6 +351,8 @@ function MobileHome({
   league,
   activeKeys,
   range,
+  countLabel,
+  endNote,
 }: HomeContentProps) {
   const empty = rangeEmptyMessage(range);
   const navProps = rangeNavProps(range);
@@ -343,7 +366,7 @@ function MobileHome({
       <div className="px-5 pt-6">
         <PageHeader
           title="Próximos jogos"
-          meta={matchCountLabel(matches.length)}
+          meta={countLabel}
           className="pb-4"
         />
       </div>
@@ -366,7 +389,12 @@ function MobileHome({
           />
         </Card>
       ) : (
-        <UpcomingMatchesMobile key={listKey} matches={matches} listHref={listHref} />
+        <UpcomingMatchesMobile
+          key={listKey}
+          matches={matches}
+          listHref={listHref}
+          endNote={endNote}
+        />
       )}
 
       <div className="pt-7" />
@@ -407,6 +435,8 @@ function DesktopHome({
   league,
   activeKeys,
   range,
+  countLabel,
+  endNote,
 }: HomeContentProps) {
   const empty = rangeEmptyMessage(range);
   const navProps = rangeNavProps(range);
@@ -419,7 +449,7 @@ function DesktopHome({
       <PageContainer width="content">
         <PageHeader
           title="Próximos jogos"
-          meta={matchCountLabel(matches.length)}
+          meta={countLabel}
           className="lg:pb-5"
         />
         {/* Os chips numa linha própria abaixo do título: a linha não cabe à direita. */}
@@ -441,7 +471,12 @@ function DesktopHome({
             />
           </Card>
         ) : (
-          <UpcomingMatchesDesktop key={listKey} matches={matches} listHref={listHref} />
+          <UpcomingMatchesDesktop
+            key={listKey}
+            matches={matches}
+            listHref={listHref}
+            endNote={endNote}
+          />
         )}
 
         <div className="mt-12" data-tour="recent-predictions">

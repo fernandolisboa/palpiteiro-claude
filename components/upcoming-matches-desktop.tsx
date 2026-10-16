@@ -29,11 +29,14 @@ export const UPCOMING_GRID = "grid-cols-[132px_1fr_auto_24px]";
 export function UpcomingMatchesDesktop({
   matches,
   listHref,
+  endNote,
 }: {
   matches: MatchListRowView[];
   // URL filtrada da lista de origem (/jogos?…) pra preservar o estado de busca
   // ao abrir um jogo e voltar. Ausente → link de detalhe limpo.
   listHref?: string;
+  // Aviso no fim da lista cortada no teto da query, quando tudo já foi revelado.
+  endNote?: string;
 }) {
   const [visible, setVisible] = useState(INITIAL_BATCH);
   const slice = matches.slice(0, visible);
@@ -125,6 +128,11 @@ export function UpcomingMatchesDesktop({
             Carregar mais
           </Button>
         </div>
+      )}
+      {visible >= matches.length && endNote && (
+        <p className="border-t border-border-subtle px-5 py-3 text-center text-body-sm text-muted-foreground">
+          {endNote}
+        </p>
       )}
     </Card>
   );
