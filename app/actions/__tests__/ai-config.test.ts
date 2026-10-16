@@ -6,6 +6,9 @@ vi.mock("@/auth", () => ({ auth: vi.fn() }));
 vi.mock("@/lib/ai/engine/analysis-engine-flag", () => ({
   resetAnalysisEngineMemo: vi.fn(),
 }));
+vi.mock("@/lib/ai/model-versions/active", () => ({
+  resetActiveModelMemo: vi.fn(),
+}));
 vi.mock("@/lib/ratings/model-scoreline", () => ({
   resetDixonColesFlagMemo: vi.fn(),
 }));
@@ -29,6 +32,7 @@ import {
 } from "@/app/actions/ai-config";
 import { auth } from "@/auth";
 import { resetAnalysisEngineMemo } from "@/lib/ai/engine/analysis-engine-flag";
+import { resetActiveModelMemo } from "@/lib/ai/model-versions/active";
 import { resetDixonColesFlagMemo } from "@/lib/ratings/model-scoreline";
 import { refitTeamRatings } from "@/lib/ratings/refit-team-ratings";
 import {
@@ -44,6 +48,7 @@ const mockSetFlag = vi.mocked(setAdminFlag);
 const mockResetMemo = vi.mocked(resetAnalysisEngineMemo);
 const mockResetDcMemo = vi.mocked(resetDixonColesFlagMemo);
 const mockRefit = vi.mocked(refitTeamRatings);
+const mockResetActive = vi.mocked(resetActiveModelMemo);
 
 const ADMIN = {
   user: { id: "u1", email: "a@b.com", role: "admin" },
@@ -68,6 +73,7 @@ beforeEach(() => {
   mockSetFlag.mockReset();
   mockResetMemo.mockReset();
   mockResetDcMemo.mockReset();
+  mockResetActive.mockReset();
   mockRefit.mockReset();
 });
 
@@ -253,6 +259,20 @@ describe("updateAdminFlag (#514) — analysisEngine (#511)", () => {
     expect(mockSetFlag).toHaveBeenCalledWith("enableDixonColes", false, "u1");
     expect(mockResetDcMemo).toHaveBeenCalledTimes(1);
     expect(mockResetMemo).not.toHaveBeenCalled();
+    expect(mockResetActive).not.toHaveBeenCalled();
+  });
+
+  it("enableAutoModelVersions zera o memo das versões adotadas (ADR 0062)", async () => {
+    mockAuth.mockResolvedValue(ADMIN);
+    const res = await updateAdminFlag(
+      null,
+      form({ key: "enableAutoModelVersions", value: "false" }),
+    );
+    expect(res).toEqual({ ok: true });
+    expect(mockSetFlag).toHaveBeenCalledWith("enableAutoModelVersions", false, "u1");
+    expect(mockResetActive).toHaveBeenCalledTimes(1);
+    expect(mockResetMemo).not.toHaveBeenCalled();
+    expect(mockResetDcMemo).not.toHaveBeenCalled();
   });
 });
 

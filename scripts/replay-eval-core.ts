@@ -13,8 +13,11 @@
 
 import {
   isAIModelId,
+  MODEL_REGISTRY,
   parseClaudeVersion,
   pinnedModelFor,
+  resolveModelId,
+  type AIModel,
 } from "@/lib/ai/models";
 
 export type ThinkingPath = "adaptive" | "temperature";
@@ -49,6 +52,45 @@ function isPinnedOrNewer(modelId: string): boolean {
   return v.major !== pinned.major
     ? v.major > pinned.major
     : v.minor >= pinned.minor;
+}
+
+// Versão estritamente mais nova que a conferida da família (uma adotada, ADR 0062).
+function isNewerThanPinned(modelId: string): boolean {
+  const v = parseClaudeVersion(modelId);
+  if (v === null || isAIModelId(modelId)) return false;
+  const pinned = parseClaudeVersion(pinnedModelFor(v.family).id);
+  if (pinned === null) return false;
+  return v.major !== pinned.major ? v.major > pinned.major : v.minor > pinned.minor;
+}
+
+export type ReplayModel = {
+  // O id mandado pra API no replay.
+  id: string;
+  // O modelo cujo preço calcula o custo do replay.
+  costModel: AIModel;
+  // true = o replay roda na versão adotada gravada (S9), com o preço ESTIMADO pelo
+  // da conferida da família (o script não lê model_versions). O caller avisa no log.
+  adopted: boolean;
+};
+
+// Em que modelo replayar a baseline gravada (PLAN-608 S9): uma versão adotada
+// (mais nova que a conferida, no formato estrito) roda nela mesma, pra o replay
+// medir o prompt no modelo que gerou a baseline; o resto (conferida, versão antiga)
+// cai na conferida da família (resolveModelId). null = sem equivalente.
+export function replayModelFor(storedModel: string): ReplayModel | null {
+  if (isNewerThanPinned(storedModel)) {
+    const family = parseClaudeVersion(storedModel)?.family;
+    if (family) {
+      return {
+        id: storedModel,
+        costModel: { ...pinnedModelFor(family), id: storedModel },
+        adopted: true,
+      };
+    }
+  }
+  const id = resolveModelId(storedModel);
+  if (id === null) return null;
+  return { id, costModel: MODEL_REGISTRY[id], adopted: false };
 }
 
 // Um flip no caminho adaptive só conta como reprovação se reproduzir na MAIORIA

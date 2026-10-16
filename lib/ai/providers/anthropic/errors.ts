@@ -105,3 +105,13 @@ export function refusalFromMessage(message: {
     message.stop_details?.explanation ?? null,
   );
 }
+
+// 529 `overloaded_error`: a API está sem capacidade agora (o SDK já esgotou os
+// retries). Não diz nada sobre o pedido nem sobre o modelo — o seam das versões
+// adotadas (ADR 0062) usa isto pra cair na conferida SEM marcar a versão nova.
+export function isOverloadedError(err: unknown): boolean {
+  if (!(err instanceof Anthropic.APIError)) return false;
+  if (err.status === 529) return true;
+  const body = err.error as { error?: { type?: unknown } } | undefined;
+  return body?.error?.type === "overloaded_error";
+}

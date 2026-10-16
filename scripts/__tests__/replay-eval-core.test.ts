@@ -13,8 +13,10 @@ import {
   MAX_DELTA_CONF_MEDIAN_PP,
   median,
   pOver,
+  replayModelFor,
   type VerdictRow,
 } from "@/scripts/replay-eval-core";
+import { MODEL_REGISTRY } from "@/lib/ai/models";
 
 // Linha "limpa": sem flip, delta zero — não contribui pra reprovação por si só.
 const clean = (over: Partial<VerdictRow> = {}): VerdictRow => ({
@@ -170,5 +172,39 @@ describe("helpers puros (median, pOver)", () => {
     expect(pOver("over", 70)).toBe(70);
     expect(pOver("pass", 55)).toBe(55);
     expect(pOver("under", 70)).toBe(30);
+  });
+});
+
+describe("replayModelFor — em que modelo replayar a baseline (PLAN-608 S9)", () => {
+  it("versão adotada (mais nova que a conferida) replaya nela mesma, custo pelo preço da conferida", () => {
+    expect(replayModelFor("claude-sonnet-5-6")).toEqual({
+      id: "claude-sonnet-5-6",
+      costModel: { ...MODEL_REGISTRY["claude-sonnet-5-5"], id: "claude-sonnet-5-6" },
+      adopted: true,
+    });
+    expect(replayModelFor("claude-opus-6-20270101")).toMatchObject({
+      id: "claude-opus-6-20270101",
+      adopted: true,
+    });
+  });
+
+  it("conferida, versão antiga e Fable → a conferida da família (resolveModelId)", () => {
+    expect(replayModelFor("claude-sonnet-5-5")).toEqual({
+      id: "claude-sonnet-5-5",
+      costModel: MODEL_REGISTRY["claude-sonnet-5-5"],
+      adopted: false,
+    });
+    expect(replayModelFor("claude-haiku-4-5")?.id).toBe("claude-haiku-5-5");
+    expect(replayModelFor("claude-sonnet-5-20260301")?.id).toBe("claude-sonnet-5-5");
+    expect(replayModelFor("claude-fable-5-1")?.id).toBe("claude-opus-5-5");
+    // `-preview` fica fora do formato estrito: não é adotada, cai na família.
+    expect(replayModelFor("claude-sonnet-6-preview")).toMatchObject({
+      id: "claude-sonnet-5-5",
+      adopted: false,
+    });
+  });
+
+  it("id que não é Claude → null", () => {
+    expect(replayModelFor("gpt-5-mini")).toBeNull();
   });
 });

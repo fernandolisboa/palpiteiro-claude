@@ -4,6 +4,7 @@ import {
   initialModelOverride,
   resyncModelOverride,
 } from "@/lib/ai/model-override";
+import { modelIdFromVersion } from "@/lib/format";
 
 // Regra de seed do dropdown de override (#239): o `<select>` do AnalysisPanel é
 // controlado por este valor e o sentinel "default" significa "usar a cascata
@@ -39,6 +40,25 @@ describe("initialModelOverride — seed do dropdown de modelo (#239)", () => {
     expect(initialModelOverride("claude-fable-5-1", selectable)).toBe(
       "claude-opus-5-5",
     );
+  });
+
+  it("id de versão adotada (ADR 0062), com ou sem tags do motor, semeia a conferida da família", () => {
+    // lib/view/analysis.ts semeia o rodapé com modelIdFromVersion(modelVersion): o id
+    // que serviu. A versão adotada não é opção do dropdown; a família é.
+    for (const [served, pinned] of [
+      ["claude-sonnet-5-6", "claude-sonnet-5-5"],
+      ["claude-sonnet-6", "claude-sonnet-5-5"],
+      ["claude-haiku-5-6-20261101", "claude-haiku-5-5"],
+      ["claude-opus-6-20270101", "claude-opus-5-5"],
+    ]) {
+      expect(initialModelOverride(served, selectable)).toBe(pinned);
+      expect(
+        initialModelOverride(
+          modelIdFromVersion(`${served};engine=code_jev;lambda=dixon_coles`),
+          selectable,
+        ),
+      ).toBe(pinned);
+    }
   });
 
   it("id antigo cai no sentinel quando o 5.5 da família NÃO está na lista", () => {

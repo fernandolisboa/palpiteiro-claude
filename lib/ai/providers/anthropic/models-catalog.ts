@@ -1,5 +1,5 @@
-// Catálogo de modelos da API Anthropic (GET /v1/models) pro aviso de
-// /admin/settings "modelos disponíveis na API ainda sem cadastro" (#524).
+// Catálogo de modelos da API Anthropic (GET /v1/models) pro cron
+// check-model-versions (ADR 0062), que acha versões novas de Haiku, Sonnet e Opus.
 //
 // Por que mora AQUI e não passa por predict.ts: a regra do CLAUDE.md ("toda chamada
 // de LLM passa por lib/ai/predict.ts", que loga em ai_calls) é sobre INFERÊNCIA —
@@ -7,128 +7,49 @@
 // nada a auditar em ai_calls. Continua dentro do módulo do provider Anthropic
 // (lib/ai/providers/anthropic/), que é o único lugar autorizado a usar o SDK.
 //
-// O registry (lib/ai/models.ts) segue curado à mão porque a Models API NÃO devolve
-// pricing: isto só AVISA que existe id novo; cadastrar é decisão humana.
+// A Models API NÃO devolve pricing: uma versão adotada herda o preço da conferida da
+// família até o admin confirmar o oficial.
+
+import type Anthropic from "@anthropic-ai/sdk";
 
 import { getAnthropicClient } from "@/lib/ai/anthropic";
-import { claudeFamilyOf } from "@/lib/ai/models";
 
-import { hasKey } from "./client";
+export type ApiModelCapabilities = Anthropic.ModelCapabilities;
 
 export type ApiModelInfo = {
   id: string;
   displayName: string;
   // RFC 3339, como a API devolve.
   createdAt: string;
+  // `null` quando a API não informa (o cron trata como transitório).
+  capabilities: ApiModelCapabilities | null;
+  // Teto de `max_tokens` do modelo; `null` = não informado.
+  maxTokens: number | null;
 };
 
-// Um id da API conta como cadastrado quando é IGUAL a um id do registry ou é o
-// SNAPSHOT DATADO de um alias do registry (um alias `claude-x-1-0` cobre
-// `claude-x-1-0-20260101`). Sem isso o aviso acusaria o próprio modelo cadastrado.
-function isRegistered(apiId: string, registryIds: readonly string[]): boolean {
-  return registryIds.some(
-    (r) =>
-      apiId === r ||
-      (apiId.startsWith(`${r}-`) && /^\d{8}$/.test(apiId.slice(r.length + 1))),
-  );
-}
+// Opções de CADA request da listagem: 10s e 2 retries. Quem chama é o cron (sem
+// usuário esperando), mas um travamento não pode comer o prazo da sondagem.
+export const LIST_REQUEST_OPTIONS = { timeout: 10_000, maxRetries: 2 } as const;
 
-// Diff PURO: ids `claude-*` da API que valem um aviso de cadastro. O aviso serve pra
-// notar versão NOVA, então corta:
-//   - Fable e Mythos: fora do app de propósito (ADR 0061), nunca avisa;
-//   - numa família do registry (opus/sonnet/haiku), o que não for MAIS NOVO que o
-//     modelo cadastrado dela (Sonnet 5, Haiku 4.5, Opus 4.x… são legados, não novidade);
-//   - de família desconhecida, o lançado antes do modelo cadastrado mais antigo que a
-//     API lista (a família antiga 3.x, 4.0, … que nunca vai ser cadastrada).
-// Sem nenhum cadastrado na lista da API não há referência: nada é cortado. Mantém a
-// ordem da API (mais novo primeiro) e deduplica.
-export function unregisteredApiModels(
-  apiModels: readonly ApiModelInfo[],
-  registryIds: readonly string[],
-): ApiModelInfo[] {
-  const claude = apiModels.filter((m) => m.id.startsWith("claude-"));
-  const familyLatest = new Map<string, number>();
-  let oldestRegistered = Infinity;
-  for (const m of claude) {
-    if (!isRegistered(m.id, registryIds)) continue;
-    const t = Date.parse(m.createdAt);
-    if (!Number.isFinite(t)) continue;
-    oldestRegistered = Math.min(oldestRegistered, t);
-    const family = claudeFamilyOf(m.id);
-    if (family) familyLatest.set(family, Math.max(familyLatest.get(family) ?? -Infinity, t));
-  }
-  const cutoff = Number.isFinite(oldestRegistered) ? oldestRegistered : -Infinity;
-
-  const seen = new Set<string>();
-  return claude.filter((m) => {
-    if (seen.has(m.id) || isRegistered(m.id, registryIds)) return false;
-    seen.add(m.id);
-    const family = claudeFamilyOf(m.id);
-    if (family === "fable" || family === "mythos") return false;
-    const created = Date.parse(m.createdAt);
-    // createdAt inválido não é cortado: na dúvida, avisa.
-    if (!Number.isFinite(created)) return true;
-    const latest = family ? familyLatest.get(family) : undefined;
-    return latest !== undefined ? created > latest : created >= cutoff;
-  });
-}
-
-// Cache em memória por instância: 1h pro sucesso, 5min pra falha (não martela a
-// API a cada load da página quando ela está fora, mas se recupera logo).
-const SUCCESS_TTL_MS = 60 * 60 * 1000;
-const FAILURE_TTL_MS = 5 * 60 * 1000;
-// Opções de CADA request da listagem (#524 review): 5s e sem retry — o aviso é
-// informativo e não pode segurar a página nos 60s × 3 tentativas do client.
-export const LIST_REQUEST_OPTIONS = { timeout: 5_000, maxRetries: 0 } as const;
-let cache: { value: ApiModelInfo[]; expiresAt: number } | undefined;
-// Listagem em andamento: loads concorrentes com o cache frio esperam a MESMA
-// chamada em vez de abrir uma cada.
-let inFlight: Promise<ApiModelInfo[]> | undefined;
-
-// Lista os modelos da API. FALHA EM SILÊNCIO: sem ANTHROPIC_API_KEY ou com erro
-// (rede, timeout, 4xx/5xx), devolve [] e o aviso some. É informativo; nunca derruba
-// a página (que ainda o renderiza dentro de um <Suspense>, fora do caminho crítico).
+/**
+ * Lista os modelos da API, sem cache. LANÇA em qualquer erro (sem chave, rede,
+ * 4xx/5xx): o cron grava a falha no resumo e responde 500, em vez de concluir que
+ * não há versão nova.
+ */
 export async function listApiModels(): Promise<ApiModelInfo[]> {
-  if (cache && cache.expiresAt > Date.now()) return cache.value;
-  if (!hasKey()) return [];
-  if (!inFlight) {
-    inFlight = fetchApiModels().finally(() => {
-      inFlight = undefined;
+  const models: ApiModelInfo[] = [];
+  // O SDK pagina sozinho no for-await; as páginas seguintes reusam as opções.
+  for await (const m of getAnthropicClient().models.list(
+    { limit: 100 },
+    LIST_REQUEST_OPTIONS,
+  )) {
+    models.push({
+      id: m.id,
+      displayName: m.display_name,
+      createdAt: m.created_at,
+      capabilities: m.capabilities ?? null,
+      maxTokens: m.max_tokens ?? null,
     });
   }
-  return inFlight;
-}
-
-async function fetchApiModels(): Promise<ApiModelInfo[]> {
-  try {
-    const models: ApiModelInfo[] = [];
-    // O SDK pagina sozinho no for-await; as páginas seguintes reusam as opções.
-    for await (const m of getAnthropicClient().models.list(
-      { limit: 100 },
-      LIST_REQUEST_OPTIONS,
-    )) {
-      models.push({
-        id: m.id,
-        displayName: m.display_name,
-        createdAt: m.created_at,
-      });
-    }
-    cache = { value: models, expiresAt: Date.now() + SUCCESS_TTL_MS };
-    return models;
-  } catch (err) {
-    console.warn(
-      JSON.stringify({
-        scope: "anthropic-models-catalog",
-        error: err instanceof Error ? err.message : String(err),
-      }),
-    );
-    cache = { value: [], expiresAt: Date.now() + FAILURE_TTL_MS };
-    return [];
-  }
-}
-
-// Só pros testes: zera o cache do módulo entre casos.
-export function resetApiModelsCacheForTests(): void {
-  cache = undefined;
-  inFlight = undefined;
+  return models;
 }

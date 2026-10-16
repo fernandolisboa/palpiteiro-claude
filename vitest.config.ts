@@ -8,6 +8,8 @@ export default defineConfig({
     environment: "jsdom",
     globals: true,
     passWithNoTests: true,
+    // Mock global do estado das versões adotadas (PLAN-608 N2): ver o arquivo.
+    setupFiles: ["./vitest.setup.ts"],
     // `.claude/` holds the agent harness's worktrees (gitignored full-repo
     // checkouts); without this, vitest walks into those stale copies and runs
     // their test files — hundreds of phantom failures. Keep the built-in

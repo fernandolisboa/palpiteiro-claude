@@ -3,6 +3,7 @@ import { describe, expect, it } from "vitest";
 
 import {
   classifyAnthropicError,
+  isOverloadedError,
   rejectionOf,
   serializeAnthropicError,
 } from "../errors";
@@ -140,5 +141,32 @@ describe("anthropic adapter — rejectionOf", () => {
       classifyAnthropicError(new Anthropic.NotFoundError(404, undefined, "nf", headers))
         .status,
     ).toBe("provider_error");
+  });
+});
+
+describe("anthropic adapter — isOverloadedError (ADR 0062)", () => {
+  const headers = new Headers();
+  it("529 ou corpo overloaded_error → true", () => {
+    expect(
+      isOverloadedError(new Anthropic.InternalServerError(529, undefined, "x", headers)),
+    ).toBe(true);
+    expect(
+      isOverloadedError(
+        new Anthropic.APIError(
+          500,
+          { type: "error", error: { type: "overloaded_error", message: "o" } },
+          "x",
+          headers,
+        ),
+      ),
+    ).toBe(true);
+  });
+
+  it("500, 400, 429 e erro que não é do SDK → false", () => {
+    expect(isOverloadedError(new Anthropic.APIError(500, undefined, "x", headers))).toBe(false);
+    expect(isOverloadedError(new Anthropic.BadRequestError(400, undefined, "x", headers))).toBe(false);
+    expect(isOverloadedError(new Anthropic.RateLimitError(429, undefined, "x", headers))).toBe(false);
+    expect(isOverloadedError(new Error("529"))).toBe(false);
+    expect(isOverloadedError(undefined)).toBe(false);
   });
 });

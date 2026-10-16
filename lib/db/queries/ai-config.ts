@@ -294,6 +294,20 @@ export async function getEnableLiveMode(): Promise<boolean> {
 }
 
 /**
+ * Kill-switch das versões novas automáticas (ADR 0062). Default ON quando não há row.
+ * false → o seam roda só as conferidas do registry. O seam NÃO lê daqui (lê via
+ * lib/db/queries/model-versions.ts, getActiveModelState); este getter é do cron.
+ */
+export async function getEnableAutoModelVersions(): Promise<boolean> {
+  const rows = await db
+    .select({ enabled: aiConfig.enableAutoModelVersions })
+    .from(aiConfig)
+    .where(eq(aiConfig.id, 1))
+    .limit(1);
+  return rows[0]?.enabled ?? true;
+}
+
+/**
  * Motor de análise (ADR 0041 §5, #511): 'llm' (cartucho de mercado decide — caminho
  * de hoje) ou 'code_jev' (código + julgamentos JEV decidem, LLM narra). Sem row ou
  * valor persistido inválido → 'llm'. Editado em /admin/settings via registry

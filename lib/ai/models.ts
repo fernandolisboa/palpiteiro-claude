@@ -10,10 +10,13 @@
 // `tool_choice: auto`, `effort` explícito. O antigo caminho `temperature` (Sonnet
 // 4.5/Haiku 4.5, tool forçado) acabou com eles.
 //
-// O registry segue CURADO à mão: a Models API da Anthropic (GET /v1/models) não
-// devolve pricing, então um modelo novo só entra aqui com o preço oficial. O
-// /admin/settings avisa quando a API lista uma versão mais nova de uma família daqui
-// (lib/ai/providers/anthropic/models-catalog.ts).
+// O registry segue CURADO à mão e é a base CONFERIDA (preço oficial, sempre disponível
+// como fallback). Versões mais novas de cada família entram sozinhas pelo banco (ADR
+// 0062): o cron check-model-versions sonda e adota, e o seam troca a conferida pela
+// adotada na hora da chamada (lib/ai/providers/adopted-versions.ts). Por isso o
+// `label` daqui é o nome da FAMÍLIA, sem número: a versão concreta aparece no painel
+// do admin e no rodapé da análise (formatModelName do id que serviu). Este arquivo
+// NÃO importa `db`: componentes "use client" o importam.
 
 // Provider de IA que atende um modelo (ADR 0027). União FECHADA: um provider novo
 // é uma edição aqui + um adapter no seam. Validado contra strings não-confiáveis
@@ -75,7 +78,7 @@ export const MODEL_REGISTRY: Record<AIModelId, PinnedModel> = {
     id: "claude-opus-5-5",
     provider: "anthropic",
     family: "opus",
-    label: "Opus 5.5",
+    label: "Opus",
     inputPricePerMTok: 4,
     outputPricePerMTok: 20,
     speed: "deliberate",
@@ -87,7 +90,7 @@ export const MODEL_REGISTRY: Record<AIModelId, PinnedModel> = {
     id: "claude-sonnet-5-5",
     provider: "anthropic",
     family: "sonnet",
-    label: "Sonnet 5.5",
+    label: "Sonnet",
     inputPricePerMTok: 2,
     outputPricePerMTok: 10,
     speed: "deliberate",
@@ -100,7 +103,7 @@ export const MODEL_REGISTRY: Record<AIModelId, PinnedModel> = {
     id: "claude-haiku-5-5",
     provider: "anthropic",
     family: "haiku",
-    label: "Haiku 5.5 (econômico)",
+    label: "Haiku (econômico)",
     inputPricePerMTok: 0.1,
     outputPricePerMTok: 0.5,
     longPromptPricing: {

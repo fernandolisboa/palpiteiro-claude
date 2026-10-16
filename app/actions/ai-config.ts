@@ -11,6 +11,7 @@ import {
   MAX_TOKENS_MIN,
 } from "@/lib/ai/generation-params";
 import { resetAnalysisEngineMemo } from "@/lib/ai/engine/analysis-engine-flag";
+import { resetActiveModelMemo } from "@/lib/ai/model-versions/active";
 import type { SupportedLeague } from "@/lib/providers/sports-data/leagues";
 import { resetDixonColesFlagMemo } from "@/lib/ratings/model-scoreline";
 import {
@@ -120,6 +121,8 @@ export async function updateAdminFlag(
   // (TTL do memo lido pelo predict).
   if (verdict.key === "analysisEngine") resetAnalysisEngineMemo();
   if (verdict.key === "enableDixonColes") resetDixonColesFlagMemo();
+  // Versões adotadas (ADR 0062): mesma regra, TTL de 60s do resolver do seam.
+  if (verdict.key === "enableAutoModelVersions") resetActiveModelMemo();
   revalidatePath("/admin/settings");
   return { ok: true };
 }

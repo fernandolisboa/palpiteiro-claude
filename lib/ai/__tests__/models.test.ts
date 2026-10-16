@@ -157,7 +157,7 @@ describe("registry — sanidade dos modelos (ADR 0061)", () => {
     const m = MODEL_REGISTRY["claude-opus-5-5"];
     expect(m.provider).toBe("anthropic");
     expect(m.family).toBe("opus");
-    expect(m.label).toBe("Opus 5.5");
+    expect(m.label).toBe("Opus");
     expect(m.inputPricePerMTok).toBe(4);
     expect(m.outputPricePerMTok).toBe(20);
     expect(m.speed).toBe("deliberate");
@@ -169,7 +169,7 @@ describe("registry — sanidade dos modelos (ADR 0061)", () => {
     const m = MODEL_REGISTRY["claude-sonnet-5-5"];
     expect(m.provider).toBe("anthropic");
     expect(m.family).toBe("sonnet");
-    expect(m.label).toBe("Sonnet 5.5");
+    expect(m.label).toBe("Sonnet");
     expect(m.inputPricePerMTok).toBe(2);
     expect(m.outputPricePerMTok).toBe(10);
     expect(m.speed).toBe("deliberate");
@@ -181,7 +181,7 @@ describe("registry — sanidade dos modelos (ADR 0061)", () => {
     const m = MODEL_REGISTRY["claude-haiku-5-5"];
     expect(m.provider).toBe("anthropic");
     expect(m.family).toBe("haiku");
-    expect(m.label).toBe("Haiku 5.5 (econômico)");
+    expect(m.label).toBe("Haiku (econômico)");
     expect(m.inputPricePerMTok).toBe(0.1);
     expect(m.outputPricePerMTok).toBe(0.5);
     expect(m.longPromptPricing).toEqual({

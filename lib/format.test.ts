@@ -352,6 +352,19 @@ describe("formatModelName", () => {
   });
   it("passes through unknown format", () => {
     expect(formatModelName("custom-model")).toBe("custom-model");
+    expect(formatModelName("claude-3-5-haiku-20241022")).toBe(
+      "claude-3-5-haiku-20241022",
+    );
+  });
+  it("versões adotadas (ADR 0062): minor opcional e snapshot datado", () => {
+    expect(formatModelName("claude-sonnet-5-5")).toBe("claude-sonnet-5.5");
+    expect(formatModelName("claude-sonnet-5-6")).toBe("claude-sonnet-5.6");
+    expect(formatModelName("claude-sonnet-6")).toBe("claude-sonnet-6");
+    expect(formatModelName("claude-sonnet-6-20270101")).toBe("claude-sonnet-6");
+    expect(formatModelName("claude-haiku-5-6-20261101")).toBe("claude-haiku-5.6");
+    expect(formatModelName("claude-opus-6;engine=code_jev;lambda=heuristic")).toBe(
+      "claude-opus-6",
+    );
   });
   it("ignora o sufixo do motor code_jev (#511)", () => {
     expect(

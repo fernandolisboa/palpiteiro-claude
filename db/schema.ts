@@ -4,6 +4,7 @@ import { sql } from "drizzle-orm";
 
 import type { PredictionJudgments } from "@/lib/ai/engine/types";
 import { JUDGMENT_PROVIDER_KEY } from "@/lib/ai/models";
+import type { ModelPricing } from "@/lib/ai/model-versions/types";
 import type {
   MatchModelJevStatus,
   MatchModelJudgments,
@@ -38,6 +39,7 @@ import {
   text,
   timestamp,
   unique,
+  uniqueIndex,
   uuid,
 } from "drizzle-orm/pg-core";
 
@@ -306,12 +308,13 @@ export const aiCalls = pgTable(
   {
     id: uuid().primaryKey().defaultRandom(),
     // Nullable SÓ pras chamadas de sistema (#555, ADR 0052): o JEV do cron da base do
-    // modelo não tem usuário. O CHECK abaixo trava no banco que só provider TypeSafe
-    // pode ficar sem usuário — um insert Claude/narração sem user_id é bug e falha.
+    // modelo não tem usuário, nem a sondagem de versão nova de modelo (ADR 0062). O
+    // CHECK abaixo trava no banco que só provider TypeSafe ou a sondagem podem ficar sem
+    // usuário — um insert Claude/narração sem user_id é bug e falha.
     userId: uuid().references(() => users.id, { onDelete: "restrict" }),
-    matchId: uuid()
-      .notNull()
-      .references(() => matches.id, { onDelete: "restrict" }),
+    // Nullable SÓ pra sondagem de versão nova (ADR 0062, prompt_version
+    // `model_probe_*`), que não é sobre jogo nenhum. CHECK ai_calls_match_id_system_only.
+    matchId: uuid().references(() => matches.id, { onDelete: "restrict" }),
     provider: text().notNull().default("anthropic"),
     model: text().notNull(),
     promptVersion: text().notNull(),
@@ -330,7 +333,11 @@ export const aiCalls = pgTable(
     index("ai_calls_user_id_idx").on(t.userId),
     check(
       "ai_calls_user_id_system_only",
-      sql`${t.userId} IS NOT NULL OR ${t.provider} = ${sql.raw(`'${JUDGMENT_PROVIDER_KEY}'`)}`,
+      sql`${t.userId} IS NOT NULL OR ${t.provider} = ${sql.raw(`'${JUDGMENT_PROVIDER_KEY}'`)} OR ${t.promptVersion} LIKE 'model_probe_%'`,
+    ),
+    check(
+      "ai_calls_match_id_system_only",
+      sql`${t.matchId} IS NOT NULL OR ${t.promptVersion} LIKE 'model_probe_%'`,
     ),
   ],
 );
@@ -916,9 +923,61 @@ export const aiConfig = pgTable("ai_config", {
   // fecha no apito como antes (análise, Seu palpite, registro e bolão) e nada busca o
   // estado ao vivo na API-Football.
   enableLiveMode: boolean().notNull().default(true),
+  // Kill-switch das versões novas automáticas de Haiku, Sonnet e Opus (ADR 0062).
+  // Default ON. SET ... = false → só as versões conferidas do registry rodam; as rows
+  // `active` de model_versions ficam intactas e voltam a valer quando religar.
+  enableAutoModelVersions: boolean().notNull().default(true),
+  // Última checagem do cron check-model-versions e o resumo dela (ADR 0062), lidos
+  // pelo painel do /admin/settings. O resumo é validado por Zod na leitura
+  // (ModelVersionsCheckSummarySchema).
+  modelVersionsCheckedAt: timestamp({ withTimezone: true }),
+  modelVersionsCheckSummary: jsonb(),
   updatedByUserId: uuid().references(() => users.id, { onDelete: "set null" }),
   updatedAt: timestamp({ withTimezone: true }).notNull().defaultNow(),
 });
+
+// Versões novas de Haiku, Sonnet e Opus achadas pelo cron check-model-versions (ADR
+// 0062). No máximo UMA `active` por família (índice parcial): é a que o seam usa no
+// lugar da conferida do registry (lib/ai/model-versions/active.ts). Ler e escrever SÓ
+// via lib/db/queries/model-versions.ts.
+export const modelVersions = pgTable(
+  "model_versions",
+  {
+    // Id da API (`claude-sonnet-5-6`, `claude-sonnet-6-20270101`).
+    id: text().primaryKey(),
+    family: text().notNull(),
+    displayName: text().notNull(),
+    apiCreatedAt: timestamp({ withTimezone: true }),
+    // `capabilities` e `max_tokens` como a Models API devolveu (auditoria).
+    capabilities: jsonb(),
+    maxTokens: integer(),
+    status: text().notNull(),
+    // Preço por 1M de tokens no formato do AIModel. Na adoção é o da conferida da
+    // família (a API não informa preço); `priceConfirmedAt` null = ainda estimado.
+    pricing: jsonb().$type<ModelPricing>().notNull(),
+    priceConfirmedAt: timestamp({ withTimezone: true }),
+    adoptedAt: timestamp({ withTimezone: true }),
+    // Por que a versão foi reprovada, rebaixada ou rejeitada (status `failed`).
+    failureReason: text(),
+    // A chamada de sondagem que aprovou (ou reprovou) a versão.
+    probeAiCallId: uuid().references(() => aiCalls.id, { onDelete: "set null" }),
+    createdAt: timestamp({ withTimezone: true }).notNull().defaultNow(),
+    updatedAt: timestamp({ withTimezone: true }).notNull().defaultNow(),
+  },
+  (t) => [
+    check(
+      "model_versions_family_check",
+      sql`${t.family} IN ('opus', 'sonnet', 'haiku')`,
+    ),
+    check(
+      "model_versions_status_check",
+      sql`${t.status} IN ('active', 'superseded', 'failed')`,
+    ),
+    uniqueIndex("model_versions_one_active_per_family")
+      .on(t.family)
+      .where(sql`status = 'active'`),
+  ],
+);
 
 // Ligas ATIVAS (ADR 0050, #508): uma row por liga ligada/desligada no /admin/leagues.
 // Fonte de verdade do que o sync de fixtures itera, o prewarm de odds aquece e a home
