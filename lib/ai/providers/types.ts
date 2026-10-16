@@ -120,8 +120,11 @@ export type AnalysisErr = {
   // DB) e o caller usa este campo pra dar uma mensagem amigável em vez de "falha
   // temporária". `category`/`explanation` vêm do provider e podem ser null.
   refusal?: ModelRefusal;
-  // A API rejeitou o pedido pro modelo (400 = pedido inválido; 404/403 = modelo
-  // inexistente ou sem acesso). Só informativo: `status` continua `provider_error`.
+  // A API rejeitou o pedido antes de gastar tokens (400 = pedido inválido; 404/403 =
+  // modelo inexistente ou sem acesso). É PISTA, não prova de que o modelo é o culpado:
+  // um 400 também vem de crédito esgotado ou prompt longo demais, e um 403 de
+  // permissão da conta. Quem age em cima disso confirma (ex.: o mesmo pedido passa
+  // noutro modelo). `status` continua `provider_error`.
   rejection?: "invalid_request" | "not_found";
   usage: AnalysisUsage;
   inputPayload: Record<string, unknown>;

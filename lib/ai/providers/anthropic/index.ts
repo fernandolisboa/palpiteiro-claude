@@ -80,7 +80,12 @@ function callFailure(args: {
     };
   }
   const classified = classifyAnthropicError(args.err);
-  const rejection = rejectionOf(args.err);
+  // Retomada de pause_turn que falha já pagou tokens: não é "rejeição do modelo"
+  // (refazer do zero perderia o custo da 1ª parte).
+  const rejection =
+    args.usage.inputTokens + args.usage.outputTokens > 0
+      ? undefined
+      : rejectionOf(args.err);
   return {
     ok: false,
     status: classified.status,

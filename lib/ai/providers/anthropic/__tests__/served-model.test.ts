@@ -115,7 +115,7 @@ describe("anthropic adapter — rejection na falha", () => {
     expect(r429).not.toHaveProperty("rejection");
   });
 
-  it("rejeição numa retomada de pause_turn carrega o usage já gasto", async () => {
+  it("falha 404 numa retomada de pause_turn não é rejeição: tokens já foram pagos", async () => {
     messagesCreate
       .mockResolvedValueOnce(message({ content: [], stop_reason: "pause_turn" }))
       .mockRejectedValueOnce(new Anthropic.NotFoundError(404, undefined, "nf", headers));
@@ -124,7 +124,7 @@ describe("anthropic adapter — rejection na falha", () => {
     );
     expect(r.ok).toBe(false);
     if (r.ok) return;
-    expect(r.rejection).toBe("not_found");
+    expect(r).not.toHaveProperty("rejection");
     expect(r.usage).toEqual({ inputTokens: 10, outputTokens: 5 });
   });
 });
