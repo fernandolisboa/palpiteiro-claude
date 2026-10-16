@@ -599,7 +599,9 @@ export function toMarketAnalysisSections(
       marketLabel: getDisplayPresentation(marketKey).marketLabel,
       // modelVersion CRU (AIModelId) — semeia o dropdown do footer com o modelo que
       // rodou aquela análise (#244). initialModelOverride cai pro "default" se for um id
-      // aposentado/fora-da-audiência (histórica), sem <option> órfã.
+      // aposentado/fora-da-audiência (histórica), sem <option> órfã. Um id de versão
+      // adotada (ADR 0062, `claude-sonnet-5-6`) vira a conferida da família lá
+      // (resolveModelId), que é a opção do dropdown.
       modelId: modelIdFromVersion(row.prediction.modelVersion),
       view: toAnalysisViewFromPrediction(row, now, timeZone, teams),
     });

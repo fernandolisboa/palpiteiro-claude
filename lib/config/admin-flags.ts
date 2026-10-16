@@ -155,6 +155,16 @@ export const ADMIN_FLAGS = [
       "Até 1 chamada de API-Football por minuto por jogo aberto; nenhuma da The Odds API.",
   },
   {
+    key: "enableAutoModelVersions",
+    kind: "boolean",
+    label: "Versões novas de modelo automáticas",
+    description:
+      "Quando a Anthropic lança uma versão nova de Haiku, Sonnet ou Opus, o cron diário a testa e, se passar, ela passa a rodar no lugar da versão conferida da família, com volta automática pra conferida se a nova falhar. Vale também pra escolha do admin. Desligada, só as versões conferidas (5.5) rodam.",
+    default: true,
+    costNote:
+      "Centavos de Claude por versão nova testada (1 chamada curta; 2 no Haiku, com 1 busca na web). Até sair o preço oficial, o custo é estimado pelo da conferida.",
+  },
+  {
     key: "analysisEngine",
     kind: "enum",
     label: "Motor de análise",

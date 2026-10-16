@@ -1,8 +1,7 @@
-import { Suspense } from "react";
-
 import { DefinitionRow } from "@/components/admin/definition-row";
 import { PageHeading } from "@/components/admin/page-heading";
-import { SELECTABLE_MODELS } from "@/lib/ai/models";
+import { MODEL_FAMILIES } from "@/lib/ai/model-versions/types";
+import { pinnedModelFor } from "@/lib/ai/models";
 import { ADMIN_FLAGS, type AdminFlagDef } from "@/lib/config/admin-flags";
 import {
   getAdminFlagValues,
@@ -11,10 +10,14 @@ import {
 } from "@/lib/db/queries/ai-config";
 
 import { AdminFlagControl } from "./admin-flag-control";
-import { DefaultModelForm } from "./default-model-form";
+import { DefaultModelForm, type InUsePrices } from "./default-model-form";
 import { GenerationParamsForm } from "./generation-params-form";
+import {
+  familyModelInUse,
+  ModelVersionsPanel,
+  readModelVersionsPanelData,
+} from "./model-versions-panel";
 import { TeamRatingsPanel } from "./team-ratings-panel";
-import { UnregisteredModelsNote } from "./unregistered-models-note";
 
 export const dynamic = "force-dynamic";
 // "Reajustar agora" roda o refit do Dixon-Coles na server action desta página.
@@ -22,11 +25,25 @@ export const maxDuration = 300;
 
 // Gateado por app/admin/layout.tsx (role === "admin" → notFound pra outros).
 export default async function AdminSettingsPage() {
-  const [current, genParams, flagValues] = await Promise.all([
+  const [current, genParams, flagValues, versions] = await Promise.all([
     getDefaultModelId(),
     getGenerationParams(),
     getAdminFlagValues(),
+    readModelVersionsPanelData(),
   ]);
+  const autoVersions = flagValues.enableAutoModelVersions === true;
+  // O padrão global grava a conferida (chave da família), mas roda a versão em uso:
+  // o form mostra o preço dela (estimado até o admin confirmar).
+  const inUsePrices: InUsePrices = {};
+  for (const family of MODEL_FAMILIES) {
+    const inUse = familyModelInUse(family, versions, autoVersions);
+    if (inUse === null) continue;
+    inUsePrices[pinnedModelFor(family).id] = {
+      inputPricePerMTok: inUse.inputPricePerMTok,
+      outputPricePerMTok: inUse.outputPricePerMTok,
+      estimated: inUse.adopted?.priceEstimated === true,
+    };
+  }
 
   return (
     <div className="bg-background text-foreground">
@@ -39,51 +56,18 @@ export default async function AdminSettingsPage() {
 
         <section className="pb-8">
           <h2 className="pb-3 font-mono text-meta uppercase tracking-label text-muted-foreground">
-            modelos disponíveis
+            versões de modelo
           </h2>
-          <div className="rounded-md border border-border">
-            {/* Lista TODO o registry (ADR 0061: Haiku, Sonnet e Opus 5.5, todos
-                adaptive). Um modelo admin-only ganharia rótulo explícito — assim a
-                lista nunca insinua que um modelo não-salvável é padrão usável (o
-                dropdown de "padrão global" o desabilita em paralelo). */}
-            {SELECTABLE_MODELS.map((m) => (
-              <DefinitionRow
-                key={m.id}
-                className="px-4 py-3 last:border-b-0"
-                label={
-                  <div className="flex flex-col">
-                    <span className="text-body font-medium">
-                      {m.label}
-                      {m.userSelectable ? "" : " · admin-only"}
-                    </span>
-                    <span className="font-mono text-meta text-muted-foreground">
-                      {m.id}
-                    </span>
-                  </div>
-                }
-                value={
-                  <span className="font-mono text-meta tabular-nums text-muted-foreground">
-                    ${m.inputPricePerMTok} in / ${m.outputPricePerMTok} out · 1M
-                    {m.longPromptPricing
-                      ? ` (prompt > ${m.longPromptPricing.aboveInputTokens / 1000}K: $${m.longPromptPricing.inputPricePerMTok} / $${m.longPromptPricing.outputPricePerMTok})`
-                      : ""}
-                  </span>
-                }
-              />
-            ))}
-          </div>
-          {/* Fora do caminho crítico: a listagem da API (#524) faz streaming
-              depois, sem segurar o resto da página. */}
-          <Suspense fallback={null}>
-            <UnregisteredModelsNote />
-          </Suspense>
+          {/* Haiku, Sonnet e Opus: a versão em uso (automática, ADR 0062, ou a
+              conferida do registry), o fallback, o preço e as falhas. */}
+          <ModelVersionsPanel enabled={autoVersions} data={versions} />
         </section>
 
         <section>
           <h2 className="pb-4 font-mono text-meta uppercase tracking-label text-muted-foreground">
             padrão global
           </h2>
-          <DefaultModelForm current={current} />
+          <DefaultModelForm current={current} inUsePrices={inUsePrices} />
         </section>
 
         <section className="pt-10">

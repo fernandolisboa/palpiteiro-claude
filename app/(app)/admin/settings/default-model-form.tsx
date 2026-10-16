@@ -17,11 +17,22 @@ import { SELECTABLE_MODELS, type AIModelId } from "@/lib/ai/models";
 // "disponível mas impossível de salvar". A ordem do registry rege a UI.
 const DEFAULT_MODEL_OPTIONS = SELECTABLE_MODELS;
 
+// Preço da versão que cada família roda agora, quando é uma adotada (ADR 0062). A
+// opção grava a conferida, mas o custo é o da versão em uso; sem entrada aqui, vale o
+// preço da conferida do registry.
+export type InUsePrices = Partial<
+  Record<
+    AIModelId,
+    { inputPricePerMTok: number; outputPricePerMTok: number; estimated: boolean }
+  >
+>;
+
 type Props = {
   current: AIModelId;
+  inUsePrices?: InUsePrices;
 };
 
-export function DefaultModelForm({ current }: Props) {
+export function DefaultModelForm({ current, inUsePrices = {} }: Props) {
   const [state, action, pending] = useActionState<
     UpdateDefaultModelResult | null,
     FormData
@@ -39,20 +50,24 @@ export function DefaultModelForm({ current }: Props) {
         </span>
         <div className="max-w-aside">
           <Select name="modelId" defaultValue={current}>
-            {DEFAULT_MODEL_OPTIONS.map((m) => (
-              <option
-                key={m.id}
-                value={m.id}
-                // Admin-only (userSelectable:false) NÃO pode virar padrão global —
-                // renderiza desabilitado com nota em vez de sumir (feedback visual).
-                disabled={!m.userSelectable}
-              >
-                {m.label} — ${m.inputPricePerMTok}/${m.outputPricePerMTok} por 1M
-                {m.userSelectable
-                  ? ""
-                  : " (admin-only — indisponível como padrão)"}
-              </option>
-            ))}
+            {DEFAULT_MODEL_OPTIONS.map((m) => {
+              const price = inUsePrices[m.id] ?? m;
+              return (
+                <option
+                  key={m.id}
+                  value={m.id}
+                  // Admin-only (userSelectable:false) NÃO pode virar padrão global —
+                  // renderiza desabilitado com nota em vez de sumir (feedback visual).
+                  disabled={!m.userSelectable}
+                >
+                  {m.label} — ${price.inputPricePerMTok}/${price.outputPricePerMTok} por 1M
+                  {inUsePrices[m.id]?.estimated ? " (estimado)" : ""}
+                  {m.userSelectable
+                    ? ""
+                    : " (admin-only — indisponível como padrão)"}
+                </option>
+              );
+            })}
           </Select>
         </div>
       </label>

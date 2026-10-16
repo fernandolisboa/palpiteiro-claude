@@ -17,7 +17,7 @@ Documentação primária:
 - Next.js 15 (App Router) + TypeScript strict
 - PostgreSQL via Neon + Drizzle ORM
 - Auth.js v5 (magic link via Resend)
-- Anthropic SDK (Claude Haiku, Sonnet e Opus 5.5 — ADR 0061)
+- Anthropic SDK (Claude Haiku, Sonnet e Opus — 5.5 conferidas + versões novas automáticas, ADR 0062)
 - Tailwind + shadcn/ui
 - Vercel (hosting + cron + KV)
 

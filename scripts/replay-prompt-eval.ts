@@ -62,7 +62,6 @@ import {
   OverUnderOutputSchema,
   type OverUnderOutput,
 } from "@/lib/ai/markets/over_under";
-import { MODEL_REGISTRY, resolveModelId } from "@/lib/ai/models";
 import { GENERATION_PARAM_DEFAULTS, isEffort } from "@/lib/ai/generation-params";
 import { requestTiming } from "@/lib/ai/providers/anthropic/timeouts";
 import {
@@ -72,6 +71,7 @@ import {
   isAdaptiveFlipConfirmed,
   MAX_DELTA_CONF_MEDIAN_PP,
   pOver,
+  replayModelFor,
   type ThinkingPath,
 } from "@/scripts/replay-eval-core";
 
@@ -176,10 +176,12 @@ async function replayOne(args: {
   // adaptive e tool_choice auto (os 5.5 rejeitam o resto). Troca também o system
   // prompt E o tools array pela versão atual (o bump pode mudar a description da
   // tool, não só o system). messages replayed byte a byte.
-  const modelId = resolveModelId(stored.model);
-  if (!modelId) {
+  // Versão adotada (ADR 0062, S9) replaya nela mesma; o resto, na conferida da família.
+  const replayModel = replayModelFor(stored.model);
+  if (!replayModel) {
     throw new Error(`modelo "${stored.model}" sem equivalente no MODEL_REGISTRY`);
   }
+  const modelId = replayModel.id;
   const {
     temperature: _temperature,
     top_p: _topP,
@@ -320,6 +322,8 @@ async function main(): Promise<void> {
     })
     .from(aiCalls)
     .innerJoin(predictions, eq(predictions.aiCallId, aiCalls.id))
+    // inner join = guard do match_id nullable (a sondagem de modelo, ADR 0062, não tem
+    // jogo e nunca é baseline).
     .innerJoin(matches, eq(matches.id, aiCalls.matchId))
     .where(
       and(
@@ -379,8 +383,15 @@ async function main(): Promise<void> {
       continue;
     }
     const { output, usage, attempts } = replayed;
-    // O modelo em que o replay rodou (o 5.5 da família do modelo gravado).
-    const replayModelId = resolveModelId(row.model);
+    // O modelo em que o replay rodou: a versão adotada gravada (S9) ou a conferida da
+    // família do modelo gravado.
+    const replayModel = replayModelFor(row.model);
+    const replayModelId = replayModel?.id ?? null;
+    if (replayModel?.adopted) {
+      console.warn(
+        `  ⚠ ${row.model} é uma versão adotada (ADR 0062): replay nela mesma, custo ESTIMADO pelo preço da conferida da família`,
+      );
+    }
 
     const baselineConf = Number(row.confidencePct);
     const flip = output.recommendation !== row.recommendation;
@@ -441,9 +452,9 @@ async function main(): Promise<void> {
     }
 
     const costKnown = replayModelId !== null;
-    const costUsd = replayModelId
+    const costUsd = replayModel
       ? calculateCost({
-          model: MODEL_REGISTRY[replayModelId],
+          model: replayModel.costModel,
           inputTokens,
           outputTokens,
         })

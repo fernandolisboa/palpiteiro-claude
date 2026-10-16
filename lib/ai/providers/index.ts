@@ -5,13 +5,16 @@
 
 import type { AIModel, AIProviderKey } from "@/lib/ai/models";
 
+import { withAdoptedVersions } from "./adopted-versions";
 import { anthropicProvider } from "./anthropic";
 import { openaiProvider } from "./openai";
 import type { AIProvider } from "./types";
 
-// Total sobre AIProviderKey — um provider novo no union força uma entrada aqui.
+// Total sobre AIProviderKey — um provider novo no union força uma entrada aqui. O
+// Anthropic sai embrulhado: a conferida pedida vira a versão adotada da família, com
+// fallback (ADR 0062). A sondagem do cron usa o adapter cru, fora daqui.
 const PROVIDERS: Record<AIProviderKey, AIProvider> = {
-  anthropic: anthropicProvider,
+  anthropic: withAdoptedVersions(anthropicProvider),
   openai: openaiProvider,
 };
 

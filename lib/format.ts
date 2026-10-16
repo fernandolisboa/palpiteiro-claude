@@ -410,9 +410,13 @@ export function formatRelativeAgoLabel(past: Date, now: Date = new Date()): stri
 export function formatModelName(modelVersion: string): string {
   // O motor code_jev (ADR 0041, #511) grava "<modelId>;engine=code_jev;…" — exibe só o modelo.
   const modelId = modelIdFromVersion(modelVersion);
-  const match = /^(claude-[a-z]+)-(\d+)-(\d+)(?:-\d+)?$/.exec(modelId);
+  // Minor opcional e snapshot de 8 dígitos (ADR 0062): uma versão adotada pode ser
+  // `claude-sonnet-6` ou `claude-sonnet-6-20270101`, que exibem "claude-sonnet-6".
+  const match = /^(claude-[a-z]+)-(\d{1,2})(?:-(\d{1,2}))?(?:-\d{8})?$/.exec(modelId);
   if (!match) return modelId;
-  return `${match[1]}-${match[2]}.${match[3]}`;
+  return match[3] === undefined
+    ? `${match[1]}-${match[2]}`
+    : `${match[1]}-${match[2]}.${match[3]}`;
 }
 
 // predictions.modelVersion = o AIModelId, seguido de ";chave=valor" do motor quando a

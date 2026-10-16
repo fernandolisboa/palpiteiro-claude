@@ -29,7 +29,7 @@ const FAKE_ENUM = {
 const FAKE_FLAGS = [...ADMIN_FLAGS, FAKE_ENUM] as const satisfies readonly AdminFlagDef[];
 
 describe("ADMIN_FLAGS (registry, #514)", () => {
-  it("tem as 10 flags boolean + o motor de análise (enum), sem key repetida", () => {
+  it("tem as 11 flags boolean + o motor de análise (enum), sem key repetida", () => {
     const keys = ADMIN_FLAGS.map((f) => f.key);
     expect(keys).toEqual([
       "enableOverUnderExtraLines",
@@ -42,6 +42,7 @@ describe("ADMIN_FLAGS (registry, #514)", () => {
       "enableMatchModelJev",
       "enableUserContext",
       "enableLiveMode",
+      "enableAutoModelVersions",
       "analysisEngine",
     ]);
     expect(new Set(keys).size).toBe(keys.length);
@@ -66,8 +67,17 @@ describe("ADMIN_FLAGS (registry, #514)", () => {
       enableMatchModelJev: true,
       enableUserContext: true,
       enableLiveMode: true,
+      enableAutoModelVersions: true,
       analysisEngine: "llm",
     });
+  });
+
+  it("versões novas automáticas (ADR 0062): ligada por padrão, custo de centavos e preço estimado", () => {
+    const def = getAdminFlagDef("enableAutoModelVersions");
+    expect(def.kind).toBe("boolean");
+    expect(def.default).toBe(true);
+    expect(def.description).toContain("Desligada, só as versões conferidas");
+    expect(def.costNote).toContain("estimado");
   });
 
   it("modo ao vivo (#580): ligado por padrão, custo só de API-Football", () => {
@@ -112,6 +122,7 @@ describe("ADMIN_FLAGS (registry, #514)", () => {
       enableMatchModelJev: boolean;
       enableUserContext: boolean;
       enableLiveMode: boolean;
+      enableAutoModelVersions: boolean;
       analysisEngine: "llm" | "code_jev";
     }>();
   });
