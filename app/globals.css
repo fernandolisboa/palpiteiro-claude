@@ -262,7 +262,8 @@ body {
 }
 
 /* Lista aberta de todo <select> nativo, nos dois temas — regra única, nenhum componente
-   repete. Medido no Chromium (Windows/Linux, popup interno do Blink):
+   repete. Medido no Chromium 141 (popup interno do Blink, o mesmo no Windows e no
+   Linux) e conferido no Firefox 142:
    - o fundo da lista vem do `background-color` do <select>; com o `transparent` do
      preflight do Tailwind vira BRANCO, e o texto herda o foreground claro do dark →
      lista ilegível. Fundo e cor explícitos nas <option>/<optgroup> resolvem;

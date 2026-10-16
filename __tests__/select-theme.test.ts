@@ -80,6 +80,18 @@ describe("selects nativos: tema da lista aberta é global", () => {
     );
   });
 
+  it("nenhuma regra fora do @layer base mexe em cor de select/option", () => {
+    // CSS sem camada vence qualquer camada: uma regra solta reabriria o bug.
+    const unlayered = css.replace(/@layer base\s*\{[\s\S]*?\n\}/g, "");
+    const rules = [...unlayered.matchAll(/([^{}]+)\{([^{}]*)\}/g)];
+    const offending = rules.filter(
+      ([, selector, body]) =>
+        /\b(select|option|optgroup)\b/.test(selector) &&
+        /(^|[\s;])(color|background(-color)?|color-scheme)\s*:/.test(body)
+    );
+    expect(offending.map(([rule]) => rule.trim())).toEqual([]);
+  });
+
   it("nenhum componente repete cor nas <option> nem color-scheme no select", () => {
     const files = [
       ...tsxFiles(join(ROOT, "app")),
