@@ -26,10 +26,9 @@ import {
   checkPalpiteNarrationLanguage,
 } from "./fidelity";
 import {
-  NARRATE_SYSTEM_PROMPT,
   NARRATE_TOOL_NAME,
-  USER_PALPITE_NARRATE_VERSION,
   buildNarrateUserMessage,
+  narrateSpecFor,
   narrateTool,
   type NarrationInput,
 } from "./narrate-cartridge";
@@ -63,6 +62,8 @@ export async function narratePalpite(args: {
   deadlineAt?: number;
 }): Promise<NarratePalpiteResult> {
   const { input, userId, matchId } = args;
+  // Ao vivo (#594): user_palpite_narrate_live_v1; pré-jogo: o de sempre.
+  const spec = narrateSpecFor(input);
   const template = (aiCallId: string | null): NarratePalpiteResult => ({
     narration: templatedPalpiteNarration(input),
     source: "template",
@@ -74,7 +75,7 @@ export async function narratePalpite(args: {
     const adaptive = model.thinkingMode === "adaptive";
     const request: AnalysisRequest = {
       model,
-      system: NARRATE_SYSTEM_PROMPT,
+      system: spec.system,
       userMessage: buildNarrateUserMessage(input),
       tool: narrateTool,
       toolName: NARRATE_TOOL_NAME,
@@ -114,7 +115,7 @@ export async function narratePalpite(args: {
           ...payload,
           status,
           errorMessage,
-          promptVersion: USER_PALPITE_NARRATE_VERSION,
+          promptVersion: spec.version,
         }),
       );
 
@@ -166,7 +167,7 @@ export async function narratePalpite(args: {
           matchId,
           provider: providerKey,
           model: model.id,
-          promptVersion: USER_PALPITE_NARRATE_VERSION,
+          promptVersion: spec.version,
           ...payload,
           costUsd: cost.toFixed(6),
           status: "ok",

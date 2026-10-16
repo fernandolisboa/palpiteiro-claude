@@ -30,6 +30,9 @@ import { fenceSafe } from "./extract-cartridge";
 // commit `prompt:`.
 
 export const USER_PALPITE_NARRATE_VERSION = "user_palpite_narrate_v1";
+// Narração com o jogo rolando (#594, PLAN-580 §12): o mesmo cartucho com o momento e o
+// placar no contexto; o veredito continua em código. O de pré-jogo fica byte-idêntico.
+export const USER_PALPITE_NARRATE_LIVE_VERSION = "user_palpite_narrate_live_v1";
 export const NARRATE_TOOL_NAME = "submit_palpite_review";
 
 const SUBMIT_PALPITE_REVIEW_TOOL = {
@@ -86,6 +89,20 @@ FORMATO (ferramenta ${NARRATE_TOOL_NAME}):
 - discordancias: uma por afirmação CONTRADITA que você comentar, {claimIndex, texto}; vazio se nenhuma.
 Não inclua outros campos.`;
 
+const LIVE_INTRO_FROM =
+  "Um usuário deu um palpite para um jogo de futebol e escreveu o motivo.";
+const LIVE_INTRO_TO =
+  "Um usuário deu um palpite para um jogo de futebol EM ANDAMENTO e escreveu o motivo.";
+const LIVE_RULES_ANCHOR = "9. Tom sóbrio, sem exclamações e sem promessas.";
+const LIVE_RULES = `
+10. O jogo está EM ANDAMENTO. As chances do bloco "Leitura" são do resultado FINAL a partir do placar atual e do tempo que falta. Comece situando o momento e o placar exatamente como vieram em "Situação do jogo" (ex.: "aos 63', com 1 × 0"). Placar abaixo do atual já passou e tem 0%.
+11. Você só sabe do jogo o que está em "Situação do jogo" (momento, placar, expulsões). Não invente lances, chances perdidas nem domínio de um time.`;
+
+export const NARRATE_LIVE_SYSTEM_PROMPT = NARRATE_SYSTEM_PROMPT.replace(
+  LIVE_INTRO_FROM,
+  LIVE_INTRO_TO,
+).replace(LIVE_RULES_ANCHOR, `${LIVE_RULES_ANCHOR}${LIVE_RULES}`);
+
 export type NarrationClaim = {
   index: number;
   teamLabel: string;
@@ -110,7 +127,42 @@ export type NarrationInput = {
   claims: NarrationClaim[];
   // Linhas de fatos já em PT-BR, só com o que foi buscado (summarizeFacts).
   facts: string[];
+  // Jogo rolando (#594): o momento ("aos 63'", "no intervalo"), o placar e as expulsões
+  // lidos no servidor. Ausente = pré-jogo (user_palpite_narrate_v1).
+  live?: {
+    moment: string;
+    score: { home: number; away: number };
+    red: { home: number; away: number } | null;
+  };
 };
+
+/** A versão e o system prompt da narração: ao vivo ou de pré-jogo. */
+export function narrateSpecFor(i: Pick<NarrationInput, "live">): {
+  version: string;
+  system: string;
+} {
+  return i.live
+    ? { version: USER_PALPITE_NARRATE_LIVE_VERSION, system: NARRATE_LIVE_SYSTEM_PROMPT }
+    : { version: USER_PALPITE_NARRATE_VERSION, system: NARRATE_SYSTEM_PROMPT };
+}
+
+function situationLine(i: NarrationInput): string {
+  const live = i.live!;
+  const { teams } = i;
+  const red = live.red;
+  const reds =
+    red === null
+      ? "expulsões sem dado"
+      : red.home === 0 && red.away === 0
+        ? "sem expulsões"
+        : `expulsões: ${[
+            red.home > 0 ? `${teams.home} ${red.home}` : null,
+            red.away > 0 ? `${teams.away} ${red.away}` : null,
+          ]
+            .filter(Boolean)
+            .join(", ")}`;
+  return `Situação do jogo: ${live.moment}, placar ${teams.home} ${live.score.home} × ${live.score.away} ${teams.away}, ${reds}.`;
+}
 
 const NO_EFFECT = "nenhum";
 const ALREADY = "nenhum a mais (o modelo já considerava isso)";
@@ -192,10 +244,14 @@ export function buildNarrateUserMessage(i: NarrationInput): string {
     i.facts.length === 0
       ? "- (nenhum dado buscado: o motivo não citou desfalques, momento, rodízio nem tabela)"
       : i.facts.map((f) => `- ${f}`).join("\n");
-  return `Jogo: ${i.teams.home} (mandante) × ${i.teams.away} (visitante), ${i.competition}, ${i.kickoffLabel}.
+  const situation = i.live ? `\n${situationLine(i)}` : "";
+  const readingHeader = i.live
+    ? `Leitura (modelo ${i.modelLabel}; resultado final a partir do placar atual):`
+    : `Leitura (modelo ${i.modelLabel}):`;
+  return `Jogo: ${i.teams.home} (mandante) × ${i.teams.away} (visitante), ${i.competition}, ${i.kickoffLabel}.${situation}
 Palpite do usuário: ${i.palpiteLabel}
 
-Leitura (modelo ${i.modelLabel}):
+${readingHeader}
 ${readingLine("Sem o contexto do usuário", i.without, i)}
 ${readingLine("Com o contexto do usuário", i.with, i)}
 Veredito do código: ${i.codeVerdict}
