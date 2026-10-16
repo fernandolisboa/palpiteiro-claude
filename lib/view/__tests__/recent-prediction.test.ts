@@ -22,6 +22,7 @@ function pred(overrides: Partial<RecentPredictionInput> = {}): RecentPredictionI
     marketParams: null,
     selectionLabel: "Casa",
     edgePct: "4.20",
+    isLive: false,
     createdAt: new Date("2026-10-14T12:00:00Z"),
     ...overrides,
   };
@@ -54,6 +55,33 @@ describe("toRecentMatchViews — um cartão por jogo (ADR 0058)", () => {
     );
     expect(views).toHaveLength(1);
     expect(views[0].bets).toEqual([{ market: "Resultado (1X2)", rec: "PAL", edge: "+3,0 pontos" }]);
+  });
+
+  it("leitura ao vivo (pass) não apaga a aposta de pré-jogo do mesmo mercado (#594)", () => {
+    const views = toRecentMatchViews(
+      [
+        pred({ predictionId: "live", recommendation: "pass", selectionLabel: null, edgePct: null, isLive: true, createdAt: new Date("2026-10-17T22:40:00Z") }),
+        pred({ predictionId: "pre", createdAt: new Date("2026-10-14T12:00:00Z") }),
+      ],
+      NOW,
+      SP,
+    );
+    expect(views).toHaveLength(1);
+    expect(views[0].bets).toEqual([{ market: "Resultado (1X2)", rec: "FLA", edge: "+4,2 pontos" }]);
+    expect(views[0].passCount).toBe(0);
+  });
+
+  it("jogo só com leituras ao vivo ainda tem cartão (todas sem aposta)", () => {
+    const [v] = toRecentMatchViews(
+      [
+        pred({ recommendation: "pass", selectionLabel: null, edgePct: null, isLive: true }),
+        pred({ marketKey: "btts", marketLabel: "Ambas marcam", recommendation: "pass", selectionLabel: null, edgePct: null, isLive: true }),
+      ],
+      NOW,
+      SP,
+    );
+    expect(v.bets).toEqual([]);
+    expect(v.passCount).toBe(2);
   });
 
   it("over/under multi-linha divide um slot (a chave não leva a linha)", () => {
