@@ -2,10 +2,9 @@
 // client, o adapter e os scripts leem daqui, e os testes calculam sem mock.
 
 import type { Effort } from "@/lib/ai/generation-params";
-import type { AIModel } from "@/lib/ai/models";
 
-// Opções do client (valem pra toda chamada que não passa opções próprias): 60s foi
-// dimensionado pros modelos temperature (Sonnet 4.5 / Haiku, sem thinking).
+// Opções do client (valem pra chamada que não passa opções próprias, como a listagem
+// de modelos). As chamadas de análise sempre passam as suas (requestTiming).
 export const CLIENT_TIMEOUT_MS = 60_000;
 export const CLIENT_MAX_RETRIES = 2;
 
@@ -17,7 +16,7 @@ export const REQUEST_SAFETY_MARGIN_MS = 5_000;
 // o teto por retry (não a média) pra um retry nunca estourar o prazo.
 export const RETRY_BACKOFF_MS = 8_000;
 
-// Estimativa do tempo de uma chamada ADAPTIVE não-streaming. O thinking conta dentro
+// Estimativa do tempo de uma chamada não-streaming (todo modelo do registry é adaptive). O thinking conta dentro
 // de max_tokens, e o effort decide quanto dele o modelo tende a usar. Vazão
 // conservadora de 60 tok/s + 15s de latência fixa (fila + input). Ex.: max_tokens
 // 16000 em effort high → 15s + 12000/60s = 215s. Piso de 60s (nunca abaixo do
@@ -39,8 +38,8 @@ export function adaptiveTimeoutMs(
   maxTokens: number,
   effort: Effort | undefined,
 ): number {
-  // Sem effort explícito o servidor usa o default do modelo (medium no Opus 5.5,
-  // high nos outros): assume high, o maior dos dois.
+  // Sem effort explícito o servidor usa o default do modelo (medium no Opus e no
+  // Haiku 5.5, high no Sonnet 5.5): assume high, o maior dos dois.
   const share = EFFORT_TOKEN_SHARE[effort ?? "high"];
   const estimate =
     ADAPTIVE_BASE_LATENCY_MS +
@@ -51,41 +50,32 @@ export function adaptiveTimeoutMs(
 }
 
 export type RequestTiming =
-  // Sem opções por request: usa as do client (temperature sem prazo — o caminho de
-  // sempre, chamada com 1 argumento).
-  | { kind: "client-default" }
   | { kind: "options"; options: { timeout: number; maxRetries: number } }
   // O prazo não comporta nem a margem de segurança: não chamar (sem gasto).
   | { kind: "no-budget" };
 
 /**
- * Timeout + retries de UMA chamada. `timeout` = o do modelo (adaptive: escalado por
- * max_tokens/effort; temperature: o do client), cortado pelo que resta do prazo
+ * Timeout + retries de UMA chamada. `timeout` = o escalado por max_tokens/effort,
+ * cortado pelo que resta do prazo
  * menos a margem. `maxRetries` só conta retries que ainda cabem inteiros no prazo
  * (o SDK re-tenta timeout/429/5xx, e cada tentativa pode esgotar o timeout), com o
  * backoff entre elas: `(retries + 1) × timeout + retries × backoff ≤ restante`.
  * Um `retry-after` do servidor maior que o backoff ainda pode passar disso — raro,
- * e a margem de segurança cobre parte. Sem prazo: adaptive leva só o timeout
- * escalado (retries do client); temperature fica com as opções do client.
+ * e a margem de segurança cobre parte. Sem prazo: leva só o timeout escalado
+ * (retries do client).
  */
 export function requestTiming(args: {
-  thinkingMode: AIModel["thinkingMode"];
   maxTokens: number;
   effort?: Effort;
   deadlineAt?: number;
   now?: number;
 }): RequestTiming {
-  const base =
-    args.thinkingMode === "adaptive"
-      ? adaptiveTimeoutMs(args.maxTokens, args.effort)
-      : CLIENT_TIMEOUT_MS;
+  const base = adaptiveTimeoutMs(args.maxTokens, args.effort);
   if (args.deadlineAt === undefined) {
-    return args.thinkingMode === "adaptive"
-      ? {
-          kind: "options",
-          options: { timeout: base, maxRetries: CLIENT_MAX_RETRIES },
-        }
-      : { kind: "client-default" };
+    return {
+      kind: "options",
+      options: { timeout: base, maxRetries: CLIENT_MAX_RETRIES },
+    };
   }
   const available =
     args.deadlineAt - (args.now ?? Date.now()) - REQUEST_SAFETY_MARGIN_MS;

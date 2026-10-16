@@ -11,7 +11,7 @@
 // payload (mata o ruído single-shot — o modo de falha A/A observado no #105). Os
 // outros abortos do gate (mediana |Δconf| e errors) NÃO são model-aware.
 
-import { MODEL_REGISTRY, isAIModelId } from "@/lib/ai/models";
+import { isAIModelId } from "@/lib/ai/models";
 
 export type ThinkingPath = "adaptive" | "temperature";
 
@@ -22,15 +22,14 @@ export type ThinkingPath = "adaptive" | "temperature";
 export const ADAPTIVE_FLIP_REPRO_RUNS = 3;
 export const MAX_DELTA_CONF_MEDIAN_PP = 5;
 
-// Caminho de amostragem do modelo. Id fora do registry (modelo legado/removido —
-// ex.: um payload Fable antigo) → "temperature" = caminho ESTRITO (qualquer flip
+// Caminho de amostragem do modelo. Todo modelo do registry é adaptive (ADR 0061). Id
+// fora do registry (modelo legado/removido — ex.: um payload Sonnet 4.5 antigo) →
+// "temperature" = caminho ESTRITO (qualquer flip
 // reprova). Conservador de propósito: nunca tolera flip de um modelo que não
 // conseguimos classificar. O CALLER deve LOGAR ao cair aqui (não tolerar em
 // silêncio); a classificação em si é pura.
 export function classifyThinkingMode(modelId: string): ThinkingPath {
-  return isAIModelId(modelId)
-    ? MODEL_REGISTRY[modelId].thinkingMode
-    : "temperature";
+  return isAIModelId(modelId) ? "adaptive" : "temperature";
 }
 
 // Um flip no caminho adaptive só conta como reprovação se reproduzir na MAIORIA

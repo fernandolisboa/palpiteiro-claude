@@ -72,7 +72,7 @@ async function runAnalysis(
     ],
     tool_choice: { type: "function", function: { name: request.toolName } },
     // gpt-5-mini é modelo de RACIOCÍNIO: usa max_completion_tokens e REJEITA
-    // `temperature` → omitida INCONDICIONALMENTE (não keyamos por thinkingMode).
+    // `temperature` → omitida INCONDICIONALMENTE.
     max_completion_tokens: request.maxTokens,
   };
   const inputPayload = openaiRequest as unknown as Record<string, unknown>;

@@ -42,11 +42,10 @@ export default async function AdminSettingsPage() {
             modelos disponíveis
           </h2>
           <div className="rounded-md border border-border">
-            {/* Lista TODO o registry. Modelo admin-only (Fable 5.1, #524) ganha
-                rótulo explícito — assim a lista nunca insinua que um modelo
-                não-salvável é padrão usável (o dropdown de "padrão global" o
-                desabilita em paralelo). Adaptive = thinking sem temperatura: não
-                reproduzível no motor llm (ADR 0021, emenda de #524). */}
+            {/* Lista TODO o registry (ADR 0061: Haiku, Sonnet e Opus 5.5, todos
+                adaptive). Um modelo admin-only ganharia rótulo explícito — assim a
+                lista nunca insinua que um modelo não-salvável é padrão usável (o
+                dropdown de "padrão global" o desabilita em paralelo). */}
             {SELECTABLE_MODELS.map((m) => (
               <DefinitionRow
                 key={m.id}
@@ -56,7 +55,6 @@ export default async function AdminSettingsPage() {
                     <span className="text-body font-medium">
                       {m.label}
                       {m.userSelectable ? "" : " · admin-only"}
-                      {m.thinkingMode === "adaptive" ? " · adaptive" : ""}
                     </span>
                     <span className="font-mono text-meta text-muted-foreground">
                       {m.id}
@@ -66,6 +64,9 @@ export default async function AdminSettingsPage() {
                 value={
                   <span className="font-mono text-meta tabular-nums text-muted-foreground">
                     ${m.inputPricePerMTok} in / ${m.outputPricePerMTok} out · 1M
+                    {m.longPromptPricing
+                      ? ` (prompt > ${m.longPromptPricing.aboveInputTokens / 1000}K: $${m.longPromptPricing.inputPricePerMTok} / $${m.longPromptPricing.outputPricePerMTok})`
+                      : ""}
                   </span>
                 }
               />

@@ -17,8 +17,8 @@ export async function UnregisteredModelsNote() {
   return (
     <div role="note" className="mt-3 text-body-sm text-muted-foreground">
       <p>
-        Modelos disponíveis na API ainda sem cadastro (a API não informa preço;
-        cadastro manual em lib/ai/models.ts):
+        Versões novas disponíveis na API ainda sem cadastro (a API não informa
+        preço; cadastro manual em lib/ai/models.ts):
       </p>
       <ul className="mt-1 flex flex-col gap-0.5">
         {unregistered.map((m) => (

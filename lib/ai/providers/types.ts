@@ -45,10 +45,9 @@ export type ServerToolDef = {
 };
 
 // O que predict entrega ao seam (substitui os args de `buildAnthropicRequest`).
-// Tudo já é provider-neutro em predict hoje. O MAPEAMENTO de `effort`/`temperature`
-// pros campos do request (adaptive→thinking / temperature→forced-tool; modelos de
-// raciocínio rejeitam `temperature`) é per-adapter, keyed por `model.thinkingMode`
-// — NUNCA re-derivado em predict.
+// Tudo já é provider-neutro em predict hoje. O MAPEAMENTO de `effort` pros campos do
+// request (Anthropic: output_config.effort + thinking adaptive) é per-adapter — NUNCA
+// re-derivado em predict.
 export type AnalysisRequest = {
   model: AIModel;
   system: string;
@@ -57,7 +56,6 @@ export type AnalysisRequest = {
   toolName: string;
   maxTokens: number;
   effort?: Effort;
-  temperature?: number;
   // ADITIVO opt-in (ADR 0032, #377). Presente ⇒ o adapter Anthropic usa a server
   // tool (web search, tool_choice:auto) em vez de forçar o `tool`. Ausente (todo
   // caller de hoje) ⇒ caminho forçado byte-idêntico. `tool`/`toolName` ainda são

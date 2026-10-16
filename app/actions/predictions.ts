@@ -33,7 +33,8 @@ import {
 import { readAnalysisEngine } from "@/lib/ai/engine/analysis-engine-flag";
 import { getCartridge } from "@/lib/ai/markets/registry";
 import {
-  isModelAllowedForAudience,
+  modelChoiceForAudience,
+  UTILITY_MODEL_ID,
   modelsForAudience,
   type AIModelId,
 } from "@/lib/ai/models";
@@ -303,14 +304,8 @@ export async function analyzeMatch(
   // Defense-in-depth além de esconder o seletor/limitar a lista na UI.
   const isAdmin = session.user.role === "admin";
   const overrideRaw = String(formData.get("modelOverride") ?? "");
-  let modelOverride: AIModelId | undefined;
-  if (
-    overrideRaw &&
-    overrideRaw !== "default" &&
-    isModelAllowedForAudience(overrideRaw, isAdmin)
-  ) {
-    modelOverride = overrideRaw;
-  }
+  const modelOverride: AIModelId | undefined =
+    modelChoiceForAudience(overrideRaw, isAdmin) ?? undefined;
   // Mercado a analisar, gateado por AUDIÊNCIA (ADR 0017) e re-validado AQUI
   // (server actions são POST chamáveis fora do layout): usuário comum só pode
   // escolher mercados graduados; admin enxerga também os ativos-não-graduados
@@ -662,14 +657,8 @@ export async function analyzeBestBet(
   }
   const isAdmin = session.user.role === "admin";
   const overrideRaw = String(formData.get("modelOverride") ?? "");
-  let modelOverride: AIModelId | undefined;
-  if (
-    overrideRaw &&
-    overrideRaw !== "default" &&
-    isModelAllowedForAudience(overrideRaw, isAdmin)
-  ) {
-    modelOverride = overrideRaw;
-  }
+  const modelOverride: AIModelId | undefined =
+    modelChoiceForAudience(overrideRaw, isAdmin) ?? undefined;
   // Ao vivo (#594): depois do apito o estado é relido no servidor (≤ 2 min; senão uma
   // busca). Antes do apito nada é lido e o caminho de pré-jogo segue intacto; com a
   // flag desligada o gate abaixo responde como antes.
@@ -1115,7 +1104,7 @@ async function synthesizeHeadline(args: {
   try {
     // Sem tempo pra uma chamada Haiku antes do prazo do run: pula a síntese limpa (o
     // gerador nem é chamado → sem row de ai_calls).
-    if (!canFitCall(args.deadlineAt, "temperature")) {
+    if (!canFitCall(args.deadlineAt, "fast")) {
       throw new AnalysisDeadlineError();
     }
     const result = args.live
@@ -1124,14 +1113,14 @@ async function synthesizeHeadline(args: {
           userId: args.userId,
           analyses: args.analyses,
           live: args.live,
-          modelOverride: "claude-haiku-4-5",
+          modelOverride: UTILITY_MODEL_ID,
           deadlineAt: args.deadlineAt,
         })
       : await generatePalpites({
           matchId,
           userId: args.userId,
           analyses: args.analyses,
-          modelOverride: "claude-haiku-4-5",
+          modelOverride: UTILITY_MODEL_ID,
           deadlineAt: args.deadlineAt,
           news: args.news,
         });
@@ -1398,14 +1387,8 @@ export async function analyzeMarkets(
   }
   const isAdmin = session.user.role === "admin";
   const overrideRaw = String(formData.get("modelOverride") ?? "");
-  let modelOverride: AIModelId | undefined;
-  if (
-    overrideRaw &&
-    overrideRaw !== "default" &&
-    isModelAllowedForAudience(overrideRaw, isAdmin)
-  ) {
-    modelOverride = overrideRaw;
-  }
+  const modelOverride: AIModelId | undefined =
+    modelChoiceForAudience(overrideRaw, isAdmin) ?? undefined;
   // Allowlist server-side: audiência ∩ cobertura de liga (MESMA expressão de analyzeMatch e
   // page.tsx). A seleção do POST é re-validada contra ESTA lista — nunca confiar no cliente.
   const allowed = marketsForLeague(

@@ -3,7 +3,8 @@
 // A página do jogo roda as actions com `maxDuration = 300` (Vercel mata o request
 // depois disso). Os fan-outs (melhor aposta, multi-mercado) chamam predict() por
 // mercado (em paralelo com a flag enable_parallel_fan_out, em série sem ela), e um
-// modelo adaptive (Opus 5.5 / Sonnet 5 / Fable 5.1) leva 45–90s por chamada. Sem teto, o request morre no meio: mercados sem análise, síntese que
+// modelo `deliberate` (Opus 5.5 / Sonnet 5.5) leva 45–90s por chamada. Sem teto, o
+// request morre no meio: mercados sem análise, síntese que
 // nunca roda. Aqui mora o prazo do run inteiro, medido do início da action, e as
 // regras puras de "ainda cabe uma chamada?". Módulo PURO (sem SDK/DB) de propósito:
 // predict, o orquestrador do fan-out e a síntese o importam sem ciclo (a estimativa
@@ -23,7 +24,7 @@ export const ACTION_BUDGET_MS = 270_000;
 // a busca de notícias (Haiku + web search, ADR 0032) e a manchete (Haiku). Com 25s,
 // um fan-out que ia até o prazo deixava a busca comer a reserva inteira e a manchete
 // não cabia mais: o run voltava ok sem palpite. Agora: folga + notícias + manchete.
-// Custo aceito: o fan-out perde 20s (um mercado a menos num run de modelo adaptive que
+// Custo aceito: o fan-out perde 20s (um mercado a menos num run de modelo `deliberate` que
 // ia até o prazo), porque sem manchete o HERO fica vazio.
 export const SYNTHESIS_CALL_RESERVE_MS = 25_000;
 // Janela mínima pra valer a pena iniciar a busca de notícias. Inclui a margem de
@@ -35,36 +36,36 @@ export const SYNTHESIS_RESERVE_MS =
 
 // Tempo mínimo pra valer a pena INICIAR uma chamada paga. Abaixo disso o mercado é
 // pulado sem gasto nem slot: começar uma chamada que o timeout vai cortar paga
-// tokens e não entrega análise. Temperature responde direto (20s). Adaptive pensa
-// antes da tool call: no mínimo 120s, ou METADE do timeout estimado pro max_tokens/
+// tokens e não entrega análise. Modelo `fast` (Haiku 5.5) responde em segundos (20s).
+// `deliberate` pensa antes da tool call: no mínimo 120s, ou METADE do timeout estimado pro max_tokens/
 // effort da chamada (lib/ai/providers/anthropic/timeouts.ts) se for maior — um
 // mercado marginal vira "Tempo esgotado" em vez de uma chamada paga cortada no meio.
-const MIN_TEMPERATURE_BUDGET_MS = 20_000;
-const MIN_ADAPTIVE_BUDGET_MS = 120_000;
+const MIN_FAST_BUDGET_MS = 20_000;
+const MIN_DELIBERATE_BUDGET_MS = 120_000;
 const ADAPTIVE_BUDGET_SHARE = 0.5;
 // Teto do mínimo: o que o fan-out de um run NOVO oferece (prazo − reserva da síntese)
 // menos 60s de folga pros passos antes da 1ª chamada. Sem ele, um max_tokens alto
 // (32000 em xhigh → metade de ~548s = 274s) exigiria mais que o run inteiro e toda
-// análise adaptive viraria impossível; com ele a chamada começa com o timeout cortado
+// análise `deliberate` viraria impossível; com ele a chamada começa com o timeout cortado
 // pelo prazo (requestTiming).
 export const MAX_MIN_CALL_BUDGET_MS =
   ACTION_BUDGET_MS - SYNTHESIS_RESERVE_MS - 60_000;
 
 // O formato da chamada que decide o mínimo. Sem max_tokens (checagem grossa, antes
-// de resolver os parâmetros de geração) vale só o piso do modo.
+// de resolver os parâmetros de geração) vale só o piso do ritmo.
 export type CallShape = {
-  thinkingMode: AIModel["thinkingMode"];
+  speed: AIModel["speed"];
   maxTokens?: number;
   effort?: Effort;
 };
 
 export function minCallBudgetMs(call: CallShape): number {
-  if (call.thinkingMode === "temperature") return MIN_TEMPERATURE_BUDGET_MS;
-  if (call.maxTokens === undefined) return MIN_ADAPTIVE_BUDGET_MS;
+  if (call.speed === "fast") return MIN_FAST_BUDGET_MS;
+  if (call.maxTokens === undefined) return MIN_DELIBERATE_BUDGET_MS;
   return Math.min(
     MAX_MIN_CALL_BUDGET_MS,
     Math.max(
-      MIN_ADAPTIVE_BUDGET_MS,
+      MIN_DELIBERATE_BUDGET_MS,
       adaptiveTimeoutMs(call.maxTokens, call.effort) * ADAPTIVE_BUDGET_SHARE,
     ),
   );
@@ -81,15 +82,15 @@ export function remainingMs(deadlineAt: number, now: number = Date.now()): numbe
   return deadlineAt - now;
 }
 
-// Ainda cabe uma chamada desse formato (ou só desse modo de thinking) antes do
+// Ainda cabe uma chamada desse formato (ou só desse ritmo de modelo) antes do
 // prazo? Sem prazo = cabe.
 export function canFitCall(
   deadlineAt: number | undefined,
-  call: CallShape | AIModel["thinkingMode"],
+  call: CallShape | AIModel["speed"],
   now: number = Date.now(),
 ): boolean {
   if (deadlineAt === undefined) return true;
-  const shape = typeof call === "string" ? { thinkingMode: call } : call;
+  const shape = typeof call === "string" ? { speed: call } : call;
   return remainingMs(deadlineAt, now) >= minCallBudgetMs(shape);
 }
 

@@ -8,7 +8,7 @@ import {
 } from "@/app/actions/profile";
 import { ModelSelect } from "@/components/model-select";
 import { Button } from "@/components/ui/button";
-import { isAIModelId } from "@/lib/ai/models";
+import { resolveModelId } from "@/lib/ai/models";
 
 type Props = {
   // Modelos que esta audiência pode escolher ({id,label} serializável,
@@ -33,15 +33,12 @@ export function PreferredModelForm({
     FormData
   >(updatePreferredModel, null);
 
-  // Só pré-seleciona a preferência se ela for um id válido E presente na lista
-  // desta audiência (preferência fora da audiência ou id stale/removido cai em
-  // "padrão global").
+  // Só pré-seleciona a preferência se ela resolver pra um id presente na lista desta
+  // audiência (um id de versão antiga mostra o 5.5 da mesma família, como a cascata
+  // de predict o lê; fora da audiência ou desconhecido cai em "padrão global").
+  const resolved = resolveModelId(preferredModelId);
   const initial =
-    preferredModelId &&
-    isAIModelId(preferredModelId) &&
-    models.some((m) => m.id === preferredModelId)
-      ? preferredModelId
-      : "default";
+    resolved && models.some((m) => m.id === resolved) ? resolved : "default";
 
   return (
     // key = valor persistido: o React 19 reseta o <form> depois de uma action e

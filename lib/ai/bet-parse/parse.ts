@@ -2,7 +2,12 @@ import { aiCalls } from "@/db/schema";
 import { db } from "@/lib/db";
 import { persistAiCallError } from "@/lib/ai/ai-call-logging";
 import { calculateCost } from "@/lib/ai/cost";
-import { MODEL_REGISTRY, isAIProvider } from "@/lib/ai/models";
+import {
+  MODEL_REGISTRY,
+  UTILITY_EFFORT,
+  UTILITY_MODEL_ID,
+  isAIProvider,
+} from "@/lib/ai/models";
 import { getProviderForModel } from "@/lib/ai/providers";
 import type { AnalysisRequest } from "@/lib/ai/providers/types";
 
@@ -26,10 +31,10 @@ import {
 // MAX_RAW_INPUT pelo boundary Zod da action. Devolve as pernas VÁLIDAS + avisos de
 // drop-por-perna + o aiCallId (pra o slip carregar parseAiCallId no confirm).
 
-// Modelo econômico do registry (Decisão 2). maxTokens pequeno: o output é um
-// envelope minúsculo de pernas.
-const BET_PARSE_MODEL = MODEL_REGISTRY["claude-haiku-4-5"];
-const BET_PARSE_MAX_TOKENS = 1024;
+// Modelo econômico do registry (Decisão 2). O output é um envelope minúsculo de
+// pernas; o teto tem folga pro thinking do Haiku 5.5 (conta dentro de max_tokens).
+const BET_PARSE_MODEL = MODEL_REGISTRY[UTILITY_MODEL_ID];
+const BET_PARSE_MAX_TOKENS = 4096;
 
 export type BetParseWarning = { message: string };
 
@@ -58,7 +63,7 @@ export async function parseBetText(args: {
     tool: betParseTool,
     toolName: BET_PARSE_TOOL_NAME,
     maxTokens: BET_PARSE_MAX_TOKENS,
-    temperature: model.temperature,
+    effort: UTILITY_EFFORT,
   };
 
   const provider = getProviderForModel(model);

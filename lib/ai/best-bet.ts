@@ -194,7 +194,7 @@ export async function runFanOut(
   let stopped: StopState = null;
   const runOne = async (m: FanOutMarket): Promise<FanOutOutcome> => {
     // Piso barato antes de buscar dados: nem o modelo mais rápido caberia.
-    if (!stopped && !canFitCall(opts.deadlineAt, "temperature")) {
+    if (!stopped && !canFitCall(opts.deadlineAt, "fast")) {
       stopped = { message: DEADLINE_MARKET_MESSAGE, notRun: "deadline" };
     }
     if (stopped) return { ok: false, marketKey: m.marketKey, ...stopped };
@@ -327,7 +327,7 @@ export async function runCodeJevFanOut(
       },
       // Prazo/slot já esgotados: o mercado não roda (sem gasto nem slot).
       skipIfStopped: (index: number, marketKey: string): boolean => {
-        if (!stopped && !canFitCall(deadlineAt, "temperature")) {
+        if (!stopped && !canFitCall(deadlineAt, "fast")) {
           stopped = { message: DEADLINE_MARKET_MESSAGE, notRun: "deadline" };
         }
         if (!stopped) return false;

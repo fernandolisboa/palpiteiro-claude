@@ -34,9 +34,8 @@ class NoBudgetError extends Error {
   }
 }
 
-// A chamada paga, com timeout/retries por request (requestTiming): adaptive escala
-// o timeout por max_tokens/effort; com prazo, os dois são cortados pelo restante.
-// Temperature sem prazo chama com 1 argumento só, como sempre.
+// A chamada paga, com timeout/retries por request (requestTiming): o timeout escala
+// por max_tokens/effort; com prazo, os dois são cortados pelo restante.
 //
 // TOKENS NUM TIMEOUT: a chamada é não-streaming, então um timeout (do SDK ou do
 // prazo) não devolve `usage` nenhum — os tokens NÃO são conhecíveis e a row de
@@ -48,15 +47,12 @@ function createMessage(
   request: AnalysisRequest,
 ): Promise<Anthropic.Message> {
   const timing = requestTiming({
-    thinkingMode: request.model.thinkingMode,
     maxTokens: request.maxTokens,
     effort: request.effort,
     deadlineAt: request.deadlineAt,
   });
   if (timing.kind === "no-budget") return Promise.reject(new NoBudgetError());
-  return timing.kind === "options"
-    ? client.messages.create(params, timing.options)
-    : client.messages.create(params);
+  return client.messages.create(params, timing.options);
 }
 
 // Falha de uma chamada que não devolveu corpo (erro do SDK, timeout, sem prazo).
@@ -166,7 +162,6 @@ async function runAnalysis(
     toolName: request.toolName,
     maxTokens: request.maxTokens,
     effort: request.effort,
-    temperature: request.temperature,
   });
   // Mesmo objeto logado em ai_calls.inputPayload e enviado na chamada paga (==
   // o cast pré-seam de predict.ts:786, byte-idêntico).
@@ -238,7 +233,6 @@ async function runServerToolAnalysis(
     toolName: request.toolName,
     maxTokens: request.maxTokens,
     effort: request.effort,
-    temperature: request.temperature,
     serverTool: request.serverTool,
   });
   const inputPayload = anthropicRequest as unknown as Record<string, unknown>;

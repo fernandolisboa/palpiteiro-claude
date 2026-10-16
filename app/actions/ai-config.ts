@@ -7,11 +7,8 @@ import { isModelAllowedForAudience } from "@/lib/ai/models";
 import {
   isEffort,
   isValidMaxTokens,
-  isValidTemperature,
   MAX_TOKENS_MAX,
   MAX_TOKENS_MIN,
-  TEMPERATURE_MAX,
-  TEMPERATURE_MIN,
 } from "@/lib/ai/generation-params";
 import { resetAnalysisEngineMemo } from "@/lib/ai/engine/analysis-engine-flag";
 import type { SupportedLeague } from "@/lib/providers/sports-data/leagues";
@@ -74,7 +71,6 @@ export async function updateGenerationParams(
 
   const maxTokens = Number(formData.get("maxTokens"));
   const effort = String(formData.get("effort") ?? "");
-  const temperature = Number(formData.get("temperature"));
 
   if (!isValidMaxTokens(maxTokens)) {
     return {
@@ -85,14 +81,7 @@ export async function updateGenerationParams(
   if (!isEffort(effort)) {
     return { ok: false, error: "Effort inválido." };
   }
-  if (!isValidTemperature(temperature)) {
-    return {
-      ok: false,
-      error: `temperature deve estar entre ${TEMPERATURE_MIN} e ${TEMPERATURE_MAX}.`,
-    };
-  }
-
-  await setGenerationParams({ maxTokens, effort, temperature }, session.user.id);
+  await setGenerationParams({ maxTokens, effort }, session.user.id);
   revalidatePath("/admin/settings");
   return { ok: true };
 }

@@ -2,24 +2,17 @@
 // e pricing de modelo — nada de strings de modelo soltas espalhadas pelo código
 // (CLAUDE.md). Cada consumidor (predict, cost, UI, server actions) resolve daqui.
 //
-// `thinkingMode` codifica a divergência crítica da API Anthropic: o modo
-// ADAPTIVE THINKING (modelos que REJEITAM 400 em `temperature`/`top_p`/`top_k`,
-// em `budget_tokens`, e — Opus 5.5 / Fable 5.1 — em thinking desligado e em
-// `tool_choice` forçado) vs. o modo `temperature` (reproduzível). A construção da
-// request é model-aware em lib/ai/providers/anthropic/request-builder.ts a partir
-// deste campo.
-//
-// #524: os adaptive VOLTARAM (Fable 5.1 admin-only; Opus 5.5 e Sonnet 5
-// selecionáveis por QUALQUER usuário). No motor "Código + JEV" (ADR 0041) a DECISÃO
-// é código determinístico e o LLM só narra, então o motivo do ADR 0021 pra manter só
-// modelos `temperature` não vale lá. No motor `llm` (o default) eles seguem
-// não-reproduzíveis, inclusive pra usuário comum que escolher Opus 5.5 / Sonnet 5 —
-// trade-off aceito na emenda do ADR 0021: o default global continua Sonnet 4.5
-// (temperature) e o Yield segue segmentável por `predictions.modelVersion`.
+// ADR 0061 (#607): só Haiku, Sonnet e Opus 5.5. Os três são ADAPTIVE: thinking
+// sempre disponível e controlado por `effort`, e a API REJEITA (400) `temperature`
+// fora do default, `top_p`/`top_k`, `budget_tokens` e prefill; Opus 5.5 e Sonnet 5.5
+// também rejeitam `tool_choice` forçado. Então todo modelo daqui usa o MESMO corpo de
+// request (lib/ai/providers/anthropic/request-builder.ts): `thinking: adaptive`,
+// `tool_choice: auto`, `effort` explícito. O antigo caminho `temperature` (Sonnet
+// 4.5/Haiku 4.5, tool forçado) acabou com eles.
 //
 // O registry segue CURADO à mão: a Models API da Anthropic (GET /v1/models) não
 // devolve pricing, então um modelo novo só entra aqui com o preço oficial. O
-// /admin/settings avisa quando a API lista um id `claude-*` ainda sem cadastro
+// /admin/settings avisa quando a API lista uma versão mais nova de uma família daqui
 // (lib/ai/providers/anthropic/models-catalog.ts).
 
 // Provider de IA que atende um modelo (ADR 0027). União FECHADA: um provider novo
@@ -27,94 +20,87 @@
 // por isAIProvider (espelha isAIModelId).
 export type AIProviderKey = "anthropic" | "openai";
 
-export type AIModelId =
-  | "claude-fable-5-1"
-  | "claude-opus-5-5"
-  | "claude-sonnet-5"
-  | "claude-sonnet-4-5-20250929"
-  | "claude-haiku-4-5";
+export type AIModelId = "claude-opus-5-5" | "claude-sonnet-5-5" | "claude-haiku-5-5";
+
+// Família do modelo (o nível de capacidade). É o eixo estável: as versões trocam,
+// a família fica. Um id gravado de versão antiga é lido como o modelo atual da
+// mesma família (resolveModelId).
+export type ModelFamily = "opus" | "sonnet" | "haiku";
 
 export type AIModel = {
   id: AIModelId;
   // Provider que atende este modelo (ADR 0027): despacha o adapter no seam
   // (getProviderForModel) e é gravado em ai_calls.provider.
   provider: AIProviderKey;
+  family: ModelFamily;
   label: string;
   // Pricing por 1M de tokens em USD (cache write/read omitidos — sem prompt
   // caching no MVP). Fonte: pricing oficial do provider.
   inputPricePerMTok: number;
   outputPricePerMTok: number;
-  thinkingMode: "adaptive" | "temperature";
-  // Só relevante quando thinkingMode === "temperature".
-  temperature?: number;
+  // Tarifa de prompt longo: com mais de `aboveInputTokens` tokens de input, a
+  // chamada inteira (input E output) é cobrada nesta tarifa. Só o Haiku 5.5 tem.
+  longPromptPricing?: {
+    aboveInputTokens: number;
+    inputPricePerMTok: number;
+    outputPricePerMTok: number;
+  };
+  // Ritmo pro orçamento de tempo do run (lib/ai/deadline.ts): `fast` responde em
+  // segundos e cabe na reserva da síntese no fim do run; `deliberate` pensa antes
+  // da tool call e precisa de uma janela grande pra valer a pena começar.
+  speed: "fast" | "deliberate";
   // Audiência: `true` = visível/escolhível pelo usuário comum; `false` =
   // admin-only (ADR 0013). O default global e a preferência do usuário comum só
-  // aceitam modelos userSelectable; admin enxerga todos.
+  // aceitam modelos userSelectable; admin enxerga todos. Hoje os três são
+  // selecionáveis; o gate fica pra um modelo admin-only futuro.
   userSelectable: boolean;
 };
 
-// ORDEM = capacidade decrescente (Fable 5.1 > Opus 5.5 > Sonnet 5 > Sonnet 4.5 >
-// Haiku). A UI DEPENDE desta ordem: SELECTABLE_MODELS e modelsForAudience preservam
-// a ordem de inserção do objeto, então é ela que rege os dropdowns. O default
-// (Sonnet 4.5) NÃO é o primeiro — ele vem de DEFAULT_MODEL_ID / ai_config, não da
-// posição. Não reordene sem querer mexer no que aparece nos seletores.
+// ORDEM = capacidade decrescente (Opus > Sonnet > Haiku). A UI DEPENDE desta ordem:
+// SELECTABLE_MODELS e modelsForAudience preservam a ordem de inserção do objeto,
+// então é ela que rege os dropdowns. O default NÃO é o primeiro — ele vem de
+// DEFAULT_MODEL_ID / ai_config, não da posição.
 export const MODEL_REGISTRY: Record<AIModelId, AIModel> = {
-  // Adaptive (#524). Thinking sempre ligado: omitir ou `adaptive`; `disabled` e
-  // `budget_tokens` dão 400, sampling params dão 400, tool_choice forçado dá 400,
-  // sem prefill. Pode devolver `stop_reason: "refusal"` (tratado no adapter).
-  // ADMIN-ONLY: o mais caro do registry ($10/$50).
-  "claude-fable-5-1": {
-    id: "claude-fable-5-1",
-    provider: "anthropic",
-    label: "Fable 5.1",
-    inputPricePerMTok: 10,
-    outputPricePerMTok: 50,
-    thinkingMode: "adaptive",
-    userSelectable: false,
-  },
-  // Adaptive (#524). Thinking não desliga (disabled/budget_tokens = 400), sem
-  // sampling, tool_choice forçado = 400, sem prefill. Effort default do servidor é
-  // `medium` — mandamos o effort do ai_config explicitamente.
+  // Thinking não desliga (disabled = 400 em qualquer effort); effort default do
+  // servidor é `medium`, por isso mandamos o effort do ai_config explicitamente.
   "claude-opus-5-5": {
     id: "claude-opus-5-5",
     provider: "anthropic",
+    family: "opus",
     label: "Opus 5.5",
     inputPricePerMTok: 4,
     outputPricePerMTok: 20,
-    thinkingMode: "adaptive",
+    speed: "deliberate",
     userSelectable: true,
   },
-  // Adaptive (#524). Aceita thinking disabled e tool_choice forçado, mas com
-  // thinking ligado usamos `auto` (o mesmo caminho adaptive dos outros). Sem
-  // sampling nem budget_tokens.
-  "claude-sonnet-5": {
-    id: "claude-sonnet-5",
+  // `disabled` dá 400 (o mínimo seria `between_tools`, que não usamos); effort
+  // default `high`, com níveis recalibrados em relação ao Sonnet 5.
+  "claude-sonnet-5-5": {
+    id: "claude-sonnet-5-5",
     provider: "anthropic",
-    label: "Sonnet 5",
+    family: "sonnet",
+    label: "Sonnet 5.5",
     inputPricePerMTok: 2,
     outputPricePerMTok: 10,
-    thinkingMode: "adaptive",
+    speed: "deliberate",
     userSelectable: true,
   },
-  "claude-sonnet-4-5-20250929": {
-    id: "claude-sonnet-4-5-20250929",
+  // Pode recusar (`stop_reason: "refusal"`) e NÃO tem fallback server-side: nunca
+  // mandar `fallbacks`. Thinking ligado por padrão (effort default `medium`); as
+  // tarefas internas mandam effort baixo (UTILITY_EFFORT).
+  "claude-haiku-5-5": {
+    id: "claude-haiku-5-5",
     provider: "anthropic",
-    label: "Sonnet 4.5",
-    inputPricePerMTok: 3,
-    outputPricePerMTok: 15,
-    thinkingMode: "temperature",
-    temperature: 0.3,
-    // Default global + selecionável pelo usuário comum (#240/#203).
-    userSelectable: true,
-  },
-  "claude-haiku-4-5": {
-    id: "claude-haiku-4-5",
-    provider: "anthropic",
-    label: "Haiku 4.5 (econômico)",
-    inputPricePerMTok: 1,
-    outputPricePerMTok: 5,
-    thinkingMode: "temperature",
-    temperature: 0.3,
+    family: "haiku",
+    label: "Haiku 5.5 (econômico)",
+    inputPricePerMTok: 0.1,
+    outputPricePerMTok: 0.5,
+    longPromptPricing: {
+      aboveInputTokens: 100_000,
+      inputPricePerMTok: 0.5,
+      outputPricePerMTok: 2.5,
+    },
+    speed: "fast",
     userSelectable: true,
   },
   // Seam OpenAI (ADR 0027) permanece RETIDO no código (AIProviderKey, PROVIDERS,
@@ -123,9 +109,49 @@ export const MODEL_REGISTRY: Record<AIModelId, AIModel> = {
   // uma entrada de registry aqui + adapter no seam, sem ressuscitar código.
 };
 
+// O modelo atual de cada família. Fable e Mythos (acima do Opus) saíram do app de
+// propósito (ADR 0061) e um id gravado deles é lido como o Opus.
+const FAMILY_MODEL: Record<ModelFamily, AIModelId> = {
+  opus: "claude-opus-5-5",
+  sonnet: "claude-sonnet-5-5",
+  haiku: "claude-haiku-5-5",
+};
+
+// Família de um id `claude-*` qualquer, inclusive os antigos (`claude-sonnet-4-5-20250929`,
+// `claude-3-5-haiku-20241022`, `claude-fable-5-1`). `null` pra id que não é Claude.
+export function claudeFamilyOf(
+  id: string,
+): ModelFamily | "fable" | "mythos" | null {
+  const m = /^claude-(?:\d+(?:-\d+)?-)?(opus|sonnet|haiku|fable|mythos)(?:-|$)/.exec(id);
+  return m ? (m[1] as ModelFamily | "fable" | "mythos") : null;
+}
+
+// Lê um id de modelo vindo de fonte não-confiável (coluna text do DB, FormData de uma
+// aba aberta antes do deploy): id atual passa; id de versão antiga vira o modelo atual
+// da MESMA família (Haiku 4.5 → Haiku 5.5, Sonnet 4.5/5 → Sonnet 5.5, Opus 4.x/Fable →
+// Opus 5.5), sem reescrever o dado gravado. O histórico (predictions.modelVersion,
+// ai_calls.model) não passa por aqui: continua mostrando o modelo que rodou de fato.
+// Id desconhecido (lixo, gpt-5-mini antigo) → null, e o caller cai no default.
+export function resolveModelId(raw: string | null | undefined): AIModelId | null {
+  if (!raw) return null;
+  if (isAIModelId(raw)) return raw;
+  const family = claudeFamilyOf(raw);
+  if (family === null) return null;
+  return FAMILY_MODEL[family === "fable" || family === "mythos" ? "opus" : family];
+}
+
+// Modelo das tarefas internas baratas (manchete, parse de aposta, extração do Seu
+// palpite, notícias, cartões): não seguem a preferência do usuário.
+export const UTILITY_MODEL_ID: AIModelId = "claude-haiku-5-5";
+// Effort das tarefas internas que só preenchem um tool (manchete, parse, extração):
+// `low` pensa pouco e pula o thinking nas fáceis, o mais perto do Haiku 4.5 sem
+// thinking. As que buscam na web usam `medium`: em `low` o modelo às vezes não busca.
+export const UTILITY_EFFORT = "low" as const;
+export const UTILITY_SEARCH_EFFORT = "medium" as const;
+
 // Modelo de JULGAMENTOS (ADR 0041): o JEV da TypeSafe fica FORA do MODEL_REGISTRY
-// de propósito — o registry é de LLMs selecionáveis com tool calling (thinkingMode,
-// temperature, audiência), e o JEV não é escolhível nem gera texto. Pinado na versão
+// de propósito — o registry é de LLMs selecionáveis com tool calling (família,
+// ritmo, audiência), e o JEV não é escolhível nem gera texto. Pinado na versão
 // (nunca `jev-latest`: o alias move e muda as respostas); upgrade = bump deliberado
 // + re-backtest. Preço oficial por 1M de tokens de input; output é grátis.
 export const JUDGMENT_MODEL_ID = "jev-1.13.0";
@@ -135,13 +161,12 @@ export const JUDGMENT_PROVIDER_KEY = "typesafe";
 export const TYPESAFE_PRICE_PER_MTOK_INPUT = 0.042;
 
 // Default global de fallback terminal da cascata (predict.ts) e seed do INSERT
-// de ai_config. Sonnet 4.5 (ADR 0021, #203): caminho `temperature` (reproduzível,
-// ~40% mais barato que Opus) e `userSelectable: true` — satisfaz a invariante do
-// ADR 0013 (o default vale pra TODOS, então tem que passar o gate de audiência).
-// O default em RUNTIME é a row ai_config.id=1 (migration 0032); esta constante só
-// entra quando a row falta/é inválida. Trocar aqui exige atualizar models.test.ts
-// (sentinel) + a row persistida (migration), senão prod não muda.
-export const DEFAULT_MODEL_ID: AIModelId = "claude-sonnet-4-5-20250929";
+// de ai_config. Sonnet 5.5 (ADR 0061): o meio-termo de custo, `userSelectable: true`
+// — satisfaz a invariante do ADR 0013 (o default vale pra TODOS, então tem que passar
+// o gate de audiência). O default em RUNTIME é a row ai_config.id=1, lida por
+// resolveModelId (um id antigo gravado lá vira o 5.5 da mesma família); esta constante
+// só entra quando a row falta/é inválida.
+export const DEFAULT_MODEL_ID: AIModelId = "claude-sonnet-5-5";
 
 export const SELECTABLE_MODELS: AIModel[] = Object.values(MODEL_REGISTRY);
 
@@ -185,4 +210,16 @@ export function isModelAllowedForAudience(
 ): id is AIModelId {
   if (!isAIModelId(id)) return false;
   return isAdmin || MODEL_REGISTRY[id].userSelectable;
+}
+
+// Escolha de modelo vinda do usuário (FormData do override por análise ou da
+// preferência): um id de versão antiga, de uma aba aberta antes do deploy, vira o 5.5
+// da mesma família (resolveModelId) e então passa pelo gate de audiência. Null =
+// inválido ou fora da audiência.
+export function modelChoiceForAudience(
+  raw: string,
+  isAdmin: boolean,
+): AIModelId | null {
+  const id = resolveModelId(raw);
+  return id && isModelAllowedForAudience(id, isAdmin) ? id : null;
 }

@@ -188,9 +188,8 @@ async function replayOne(args: {
   let inputTokens = 0;
   let outputTokens = 0;
   for (let attempt = 1; attempt <= MAX_ATTEMPTS_PER_PAYLOAD; attempt++) {
-    // Payload adaptive (tem `thinking`) leva o timeout escalado do adapter (#524).
+    // O timeout escalado do adapter (#524).
     const timing = requestTiming({
-      thinkingMode: request.thinking ? "adaptive" : "temperature",
       maxTokens: request.max_tokens,
       effort: isEffort(request.output_config?.effort)
         ? request.output_config.effort
