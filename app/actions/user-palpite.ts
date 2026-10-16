@@ -11,7 +11,7 @@ import { JUDGMENT_WEIGHTS_VERSION } from "@/lib/ai/judgments/apply";
 import { USER_PALPITE_EXTRACT_VERSION } from "@/lib/ai/user-palpite/extract-cartridge";
 import { extractPalpiteClaims } from "@/lib/ai/user-palpite/extract";
 import {
-  USER_PALPITE_NARRATE_VERSION,
+  narrateSpecFor,
   toNarrationClaims,
   type NarrationInput,
 } from "@/lib/ai/user-palpite/narrate-cartridge";
@@ -25,6 +25,13 @@ import {
   type UserPalpiteAnalysisRecord,
 } from "@/lib/db/queries/user-palpite-analyses";
 import { getUserAccessState } from "@/lib/db/queries/users";
+import { loadActionLiveContext } from "@/lib/live/action-state";
+import type { InPlayState } from "@/lib/live/in-play-state";
+import { matchPhase } from "@/lib/live/phase";
+import { liveMomentPhrase, livePageRefusal } from "@/lib/live/readings";
+import { liveColumns, liveStampFromState } from "@/lib/live/stamp";
+import { LIVE_MODEL_VERSION } from "@/lib/quant/in-play";
+import { DIXON_COLES_RHO } from "@/lib/quant/scoreline-model";
 import { formatKickoffAbsolute, LEAGUE_LABEL, leagueToKey } from "@/lib/format";
 import { checkPalpitesRateLimit } from "@/lib/rate-limit";
 import { getRequestTimeZone } from "@/lib/server/request-timezone";
@@ -47,8 +54,11 @@ import {
 } from "@/lib/user-palpite/model-base";
 import {
   codeVerdict,
+  inPlayReadingFor,
+  isPastScore,
   palpiteLabel,
   PALPITE_VERDICT_VERSION,
+  type InPlayReading,
 } from "@/lib/user-palpite/reading";
 import {
   AnalyzeUserPalpiteInputSchema,
@@ -92,6 +102,8 @@ const PIPELINE_FAILED_WARNING =
   "Não consegui analisar o seu motivo agora; a leitura abaixo não considera o texto.";
 const PIPELINE_FAILED_MESSAGE =
   "Não consegui analisar o seu palpite agora. A leitura pelos botões continua valendo.";
+const PAST_SCORE_MESSAGE =
+  "Esse placar já passou. Escolha um placar a partir do placar atual.";
 
 function parseInput(formData: FormData) {
   const rawPalpite = formData.get("palpite");
@@ -164,13 +176,44 @@ export async function analyzeUserPalpite(
   }
   const match = await getMatchById(matchId);
   if (!match) return { ok: false, error: "Jogo não encontrado." };
-  const notAnalyzable = capabilityGateMessage("seuPalpite", match);
-  if (notAnalyzable) return { ok: false, error: notAnalyzable, kind: "nao-analisavel" };
-
-  const now = new Date();
-  const base = await resolvePalpiteModelBase(match, { now });
-  if (!base) {
-    return { ok: false, error: "Ainda não temos o modelo deste jogo.", kind: "sem-modelo" };
+  // Ao vivo (#594, PLAN-580 §9.1): o estado relido no servidor (até 2 min); com a flag
+  // ligada e o jogo rolando, a leitura a partir do placar atual sobre a base do APITO.
+  // Flag desligada (ou pré-jogo): o caminho de hoje, sem ler o estado.
+  const live = await loadActionLiveContext(match);
+  const phase = matchPhase(match, live.state, live.now, { liveMode: live.liveMode });
+  let base: PalpiteModelBase | null;
+  let liveRun: ChargedContext["live"] = null;
+  const now = live.now;
+  if (phase.kind !== "pre" && live.liveMode) {
+    const state = live.state;
+    const inPlay =
+      state?.score && phase.actionable && (phase.kind === "in_play" || phase.kind === "half_time")
+        ? inPlayReadingFor({ ...state, score: state.score })
+        : null;
+    base = inPlay ? await resolvePalpiteModelBase(match, { asOf: match.kickoffAt }) : null;
+    const gate = capabilityGateMessage("seuPalpite", match, {
+      now,
+      state,
+      liveMode: true,
+      modelReady: base !== null,
+    });
+    if (gate) return { ok: false, error: gate, kind: "nao-analisavel" };
+    const stale = livePageRefusal(formData);
+    if (stale) return { ok: false, error: stale, kind: "nao-analisavel" };
+    if (!base || !inPlay || !state?.score) {
+      return { ok: false, error: "Ainda não temos o modelo deste jogo.", kind: "sem-modelo" };
+    }
+    if (isPastScore(palpite, inPlay)) {
+      return { ok: false, error: PAST_SCORE_MESSAGE, kind: "invalido" };
+    }
+    liveRun = { state: { ...state, score: state.score }, inPlay };
+  } else {
+    const notAnalyzable = capabilityGateMessage("seuPalpite", match);
+    if (notAnalyzable) return { ok: false, error: notAnalyzable, kind: "nao-analisavel" };
+    base = await resolvePalpiteModelBase(match, { now });
+    if (!base) {
+      return { ok: false, error: "Ainda não temos o modelo deste jogo.", kind: "sem-modelo" };
+    }
   }
 
   const isAdmin = session.user.role === "admin";
@@ -196,6 +239,7 @@ export async function analyzeUserPalpite(
     isAdmin,
     now,
     deadlineAt,
+    live: liveRun,
   };
   try {
     return await analyzeAfterCharge(ctx);
@@ -220,7 +264,49 @@ type ChargedContext = {
   isAdmin: boolean;
   now: Date;
   deadlineAt: number | undefined;
+  // Jogo rolando (#594): o estado relido e a leitura a partir do placar atual.
+  live: { state: InPlayState & { score: { home: number; away: number } }; inPlay: InPlayReading } | null;
 };
+
+/** O momento pra narração ao vivo; undefined no pré-jogo (o input fica o de hoje). */
+function narrationLive(ctx: ChargedContext): NarrationInput["live"] {
+  if (!ctx.live) return undefined;
+  const { state, inPlay } = ctx.live;
+  return {
+    moment: liveMomentPhrase({
+      statusShort: state.statusShort,
+      minuteLabel: state.minuteLabel ?? inPlay.minuteLabel,
+    }),
+    score: inPlay.score,
+    red: state.red,
+  };
+}
+
+/** is_live + o carimbo (com as entradas do modelo em jogo da leitura sem o contexto). */
+function liveRowColumns(
+  ctx: ChargedContext,
+  readings: ReturnType<typeof computeReadings>,
+): ReturnType<typeof liveColumns> {
+  if (!ctx.live) return liveColumns(null);
+  const { state, inPlay } = ctx.live;
+  const l = readings.lambdaWithout;
+  return liveColumns(
+    liveStampFromState(state, new Date(), {
+      liveModelVersion: LIVE_MODEL_VERSION,
+      r: inPlay.r,
+      muHome: l.lambdaHome * inPlay.r * inPlay.multipliers.home,
+      muAway: l.lambdaAway * inPlay.r * inPlay.multipliers.away,
+      multipliers: inPlay.multipliers,
+      preMatch: {
+        source: ctx.base.source,
+        lambdaHome: l.lambdaHome,
+        lambdaAway: l.lambdaAway,
+        rho: ctx.base.rho ?? DIXON_COLES_RHO,
+        baseCheckedAt: null,
+      },
+    }),
+  );
+}
 
 function logPostChargeError(error: string, matchId: string, err: unknown): void {
   console.error(
@@ -237,7 +323,8 @@ function logPostChargeError(error: string, matchId: string, err: unknown): void 
 function degradedAnalysis(ctx: ChargedContext): AnalyzeUserPalpiteResult {
   const { match, base, palpite, now } = ctx;
   const teams = { home: match.homeTeam, away: match.awayTeam };
-  const readings = computeReadings(base, {}, palpite);
+  const readings = computeReadings(base, {}, palpite, ctx.live?.inPlay ?? null);
+  const liveInput = narrationLive(ctx);
   const verdict = codeVerdict(readings.with, palpite, []);
   const jevApplied = base.jevAnswers !== null;
   const label = modelLabel({ ...base, jevApplied });
@@ -254,6 +341,7 @@ function degradedAnalysis(ctx: ChargedContext): AnalyzeUserPalpiteResult {
     codeVerdict: verdict,
     claims: [],
     facts: [],
+    ...(liveInput ? { live: liveInput } : {}),
   });
   const record: UserPalpiteAnalysisRecord = {
     id: crypto.randomUUID(),
@@ -261,7 +349,8 @@ function degradedAnalysis(ctx: ChargedContext): AnalyzeUserPalpiteResult {
     palpite,
     palpiteSource: "buttons",
     claims: [],
-    model: storedModel(base, readings, {}, label),
+    model: storedModel(base, readings, {}, label, narrateSpecFor({ live: liveInput }).version),
+    ...liveRowColumns(ctx, readings),
     reading: { without: readings.without, with: readings.with },
     narration: {
       ...narration,
@@ -286,6 +375,7 @@ function storedModel(
   readings: ReturnType<typeof computeReadings>,
   ev: StoredPalpiteModel["userEvidence"],
   label: string,
+  narrateVersion: string,
 ): StoredPalpiteModel {
   return {
     origin: base.origin,
@@ -317,7 +407,7 @@ function storedModel(
       userEvidence: USER_EVIDENCE_VERSION,
       verdict: PALPITE_VERDICT_VERSION,
       extract: USER_PALPITE_EXTRACT_VERSION,
-      narrate: USER_PALPITE_NARRATE_VERSION,
+      narrate: narrateVersion,
     },
   };
 }
@@ -348,7 +438,7 @@ async function analyzeAfterCharge(ctx: ChargedContext): Promise<AnalyzeUserPalpi
   const checked: CheckedClaim[] = checkClaims({ claims, ...factInput });
   const jevApplied = base.jevAnswers !== null;
   const ev = evidenceFromClaims(checked, { jevApplied });
-  const readings = computeReadings(base, ev, palpite);
+  const readings = computeReadings(base, ev, palpite, ctx.live?.inPlay ?? null);
   const verdict = codeVerdict(readings.with, palpite, checked);
   const label = modelLabel({ ...base, jevApplied });
 
@@ -366,6 +456,7 @@ async function analyzeAfterCharge(ctx: ChargedContext): Promise<AnalyzeUserPalpi
     codeVerdict: verdict,
     claims: toNarrationClaims(checked, base.jevAnswers, teams),
     facts: summarizeFacts(factInput),
+    ...(ctx.live ? { live: narrationLive(ctx) } : {}),
   };
 
   // Extração falhou: não há o que comentar, então nada de 2ª chamada paga.
@@ -388,9 +479,16 @@ async function analyzeAfterCharge(ctx: ChargedContext): Promise<AnalyzeUserPalpi
     narrationSource = "template";
   }
 
-  const model = storedModel(base, readings, ev, label);
+  const model = storedModel(
+    base,
+    readings,
+    ev,
+    label,
+    narrateSpecFor(narrationInput).version,
+  );
   const reading = { without: readings.without, with: readings.with };
   const createdAt = new Date();
+  const liveCols = liveRowColumns(ctx, readings);
 
   let id: string = crypto.randomUUID();
   const storedWarnings = [...warnings];
@@ -409,6 +507,7 @@ async function analyzeAfterCharge(ctx: ChargedContext): Promise<AnalyzeUserPalpi
       extractionAiCallId: extraction.aiCallId,
       narrationAiCallId,
       createdAt,
+      ...liveCols,
     });
   } catch (err) {
     console.error(
@@ -432,6 +531,7 @@ async function analyzeAfterCharge(ctx: ChargedContext): Promise<AnalyzeUserPalpi
     reading,
     narration: { ...narration, codeVerdict: verdict, warnings },
     narrationSource,
+    ...liveCols,
   };
   // Só a view devolvida usa o nome curto (#578); `teams` (canonical) foi ao modelo.
   return {

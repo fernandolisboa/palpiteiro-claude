@@ -4,7 +4,7 @@ import type { JudgmentAnswers, JudgmentQuestionId } from "@/lib/ai/judgments/typ
 
 import { lambdasFor, matrixFor } from "./lambdas";
 import type { PalpiteModelBase } from "./model-base";
-import { readPalpite } from "./reading";
+import { readPalpite, type InPlayReading } from "./reading";
 import type {
   CheckedClaim,
   PalpiteReading,
@@ -83,13 +83,20 @@ export function computeReadings(
   base: PalpiteModelBase,
   ev: UserEvidence,
   p: UserPalpite,
+  // Jogo rolando (#594): o contexto do usuário mexe no λ de pré-jogo e só depois vem a
+  // transformação em jogo (o JEV nunca entra duas vezes).
+  inPlay: InPlayReading | null = null,
 ): ComputedReadings {
   const combined = combineAnswers(base.jevAnswers, ev);
   const lambdaWithout = lambdasFor(base, base.jevAnswers);
   const lambdaWith = lambdasFor(base, combined);
   const read = (l: AppliedJudgments) =>
     readPalpite(
-      { matrix: matrixFor(base, l), lambdaHome: l.lambdaHome, lambdaAway: l.lambdaAway },
+      {
+        matrix: matrixFor(base, l, inPlay),
+        lambdaHome: l.lambdaHome,
+        lambdaAway: l.lambdaAway,
+      },
       p,
     );
   return {

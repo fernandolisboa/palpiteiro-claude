@@ -4,7 +4,11 @@ import type { Session } from "next-auth";
 vi.mock("@/auth", () => ({ auth: vi.fn() }));
 vi.mock("@/lib/db/queries/matches", () => ({ getMatchById: vi.fn() }));
 vi.mock("@/lib/db/queries/users", () => ({ getUserAccessState: vi.fn() }));
-vi.mock("@/lib/db/queries/ai-config", () => ({ getEnableUserContext: vi.fn() }));
+vi.mock("@/lib/db/queries/ai-config", () => ({
+  getEnableUserContext: vi.fn(),
+  // Modo ao vivo desligado: o caminho de pré-jogo de sempre (o ao vivo tem suíte própria).
+  getEnableLiveMode: vi.fn(async () => false),
+}));
 vi.mock("@/lib/db/queries/user-palpite-analyses", () => ({
   insertUserPalpiteAnalysis: vi.fn(),
 }));

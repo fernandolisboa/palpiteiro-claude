@@ -28,6 +28,7 @@ const MODEL: SeuPalpiteModelView = {
   rho: null,
   modelLabel: "Dixon-Coles · JEV aplicado",
   jevApplied: true,
+  inPlay: null,
 };
 
 const ROWS = {
@@ -47,6 +48,7 @@ const ANALYSIS: UserPalpiteAnalysisView = {
   palpite: { kind: "score", home: 2, away: 0 },
   palpiteLabel: "Flamengo 2 × 0 Palmeiras",
   verdict: "em_parte",
+  liveLabel: null,
   verdictLabel: "o modelo concorda em parte",
   verdictHeadline: "Flamengo 2 × 0 Palmeiras é o 4º placar mais provável (9,1%)",
   resumo: "O modelo vê o Flamengo favorito, mas 2 × 0 é só o 4º placar.",
@@ -217,6 +219,52 @@ describe("SeuPalpite — leitura grátis pelos botões", () => {
     expect(html).toContain("Ainda não temos o modelo deste jogo.");
     expect(html).not.toContain("Placar");
     expect(html).not.toContain("<form");
+  });
+});
+
+describe("SeuPalpite — ao vivo (#594)", () => {
+  const LIVE_MODEL: SeuPalpiteModelView = {
+    ...MODEL,
+    inPlay: {
+      score: { home: 1, away: 0 },
+      r: 0.35,
+      multipliers: { home: 1, away: 1 },
+      minuteLabel: "63'",
+    },
+  };
+
+  it("lê do placar final a partir do atual; gols abaixo dele 'já passou'", async () => {
+    await mount(<SeuPalpite {...props({ model: LIVE_MODEL })} />);
+    expect(container.textContent).toContain("Leitura ao vivo");
+    expect(button("0 gols do Flamengo: já passou").disabled).toBe(true);
+    expect(button("1 gols do Flamengo").disabled).toBe(false);
+    await click(button("2 gols do Flamengo"));
+    await click(button("0 gols do Palmeiras"));
+    const expected = readPalpite(
+      { matrix: readingMatrix(LIVE_MODEL), lambdaHome: 1.6, lambdaAway: 1.0 },
+      { kind: "score", home: 2, away: 0 },
+    );
+    expect(container.textContent).toContain(`Chance desse placar:${ptPct(expected.palpitePct)}`);
+    // A página foi montada ao vivo: o form avisa o servidor.
+    const pageLive = container.querySelector<HTMLInputElement>('input[name="pageLive"]');
+    expect(pageLive?.value).toBe("1");
+  });
+
+  it("outro placar abaixo do atual: aviso de que já passou, sem leitura nem análise", async () => {
+    await mount(<SeuPalpite {...props({ model: { ...LIVE_MODEL, inPlay: { ...LIVE_MODEL.inPlay!, score: { home: 2, away: 1 } } } })} />);
+    // O padrão do "outro placar" é 1 × 0: abaixo de 2 × 1.
+    await click(button("Usar placar"));
+    expect(container.textContent).toContain("Esse placar já passou");
+    expect(container.querySelector('[data-testid="seu-palpite-reading"]')).toBeNull();
+    const hidden = container.querySelector<HTMLInputElement>('input[name="palpite"]');
+    expect(hidden?.value).toBe("");
+  });
+
+  it("pré-jogo: sem 'já passou' e pageLive=0", () => {
+    const html = renderToStaticMarkup(<SeuPalpite {...props()} />);
+    expect(html).not.toContain("já passou");
+    expect(html).not.toContain("Leitura ao vivo");
+    expect(html).toContain('name="pageLive" value="0"');
   });
 });
 

@@ -1,5 +1,6 @@
 import type { UserPalpiteAnalysisRecord } from "@/lib/db/queries/user-palpite-analyses";
 import { formatRelativeAgoLabel } from "@/lib/format";
+import { readLiveStamp } from "@/lib/live/stamp";
 import { claimEffect } from "@/lib/user-palpite/evidence";
 import {
   effectLabel,
@@ -14,8 +15,10 @@ import {
   ptPct,
   readingSentence,
   resultOf,
+  type InPlayReading,
   type TeamNames,
 } from "@/lib/user-palpite/reading";
+import { liveStampLabel } from "@/lib/view/live-score";
 import type { JudgmentAnswers } from "@/lib/ai/judgments/types";
 import type {
   CheckedClaim,
@@ -40,6 +43,9 @@ export type SeuPalpiteModelView = {
   rho: number | null;
   modelLabel: string;
   jevApplied: boolean;
+  // Jogo rolando (#594): placar, fração que falta e desconto por expulsão. readingMatrix
+  // lê a partir do placar atual; placar abaixo dele "já passou". null = pré-jogo.
+  inPlay: InPlayReading | null;
 };
 
 export type SeuPalpiteData = {
@@ -47,7 +53,10 @@ export type SeuPalpiteData = {
   latest: UserPalpiteAnalysisView | null;
 };
 
-export function toSeuPalpiteModelView(base: PalpiteModelBase): SeuPalpiteModelView {
+export function toSeuPalpiteModelView(
+  base: PalpiteModelBase,
+  inPlay: InPlayReading | null = null,
+): SeuPalpiteModelView {
   const l = lambdasFor(base, base.jevAnswers);
   const jevApplied = base.jevAnswers !== null;
   return {
@@ -56,6 +65,7 @@ export function toSeuPalpiteModelView(base: PalpiteModelBase): SeuPalpiteModelVi
     rho: base.rho,
     modelLabel: modelLabel({ ...base, jevApplied }),
     jevApplied,
+    inPlay,
   };
 }
 
@@ -68,12 +78,14 @@ export async function loadSeuPalpiteData(input: {
   latest: () => Promise<UserPalpiteAnalysisRecord | null>;
   teams: TeamNames;
   now: Date;
+  // Jogo rolando (#594): a leitura pelos botões a partir do placar atual.
+  inPlay?: InPlayReading | null;
   onError: (error: "seu_palpite_failed" | "seu_palpite_latest_failed", err: unknown) => void;
 }): Promise<SeuPalpiteData> {
   const [model, latest] = await Promise.all([
     Promise.resolve()
       .then(input.base)
-      .then((b) => (b ? toSeuPalpiteModelView(b) : null))
+      .then((b) => (b ? toSeuPalpiteModelView(b, input.inPlay ?? null) : null))
       .catch((err: unknown) => {
         input.onError("seu_palpite_failed", err);
         return null;
@@ -188,6 +200,8 @@ export type UserPalpiteAnalysisView = {
   showFullSquadNote: boolean;
   showUnverifiedNote: boolean;
   warnings: string[];
+  // Análise feita com o jogo rolando (#594): "ao vivo · 63' · 1–0". null = pré-jogo.
+  liveLabel: string | null;
 };
 
 /** "Flamengo 2 × 0 Palmeiras está entre os 3 placares mais prováveis (9,1%)". */
@@ -284,5 +298,12 @@ export function toUserPalpiteAnalysisView(
         claimEffect(c, model.jevAnswers).moved.length > 0,
     ),
     warnings: narration.warnings,
+    liveLabel: liveLabelOf(r),
   };
+}
+
+function liveLabelOf(r: Pick<UserPalpiteAnalysisRecord, "isLive" | "liveState">): string | null {
+  if (r.isLive !== true) return null;
+  const stamp = readLiveStamp(r.liveState);
+  return stamp ? liveStampLabel(stamp) : "ao vivo";
 }

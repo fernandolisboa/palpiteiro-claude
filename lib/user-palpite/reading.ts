@@ -1,4 +1,12 @@
 import {
+  conditionedScorelineMatrix,
+  inPlayMinuteLabel,
+  redCardMultipliers,
+  remainingFraction,
+  type InPlayInput,
+} from "@/lib/quant/in-play";
+import {
+  DIXON_COLES_RHO,
   p1X2,
   pScoreline,
   scorelineMatrix,
@@ -27,14 +35,72 @@ export type ReadingLambdas = {
   lambdaAway: number;
   // null = DIXON_COLES_RHO pinado (mesma semântica de ModelScoreline.rho).
   rho: number | null;
+  // Jogo rolando (#594): a leitura é do placar FINAL a partir do atual. Ausente/null =
+  // pré-jogo.
+  inPlay?: InPlayReading | null;
 };
 
+/**
+ * O que a leitura ao vivo precisa do estado do jogo (PLAN-580 §9.1), independente do λ:
+ * o placar atual, a fração que falta (r) e o desconto por expulsão. O λ (base × JEV ×
+ * contexto do usuário) entra depois, em readingMatrix: μ = λ · r · multiplicador.
+ */
+export type InPlayReading = {
+  score: { home: number; away: number };
+  r: number;
+  multipliers: { home: number; away: number };
+  minuteLabel: string;
+};
+
+/**
+ * A leitura ao vivo a partir do estado lido no servidor. null = sem leitura (prorrogação,
+ * encerrado, minuto desconhecido, placar inválido): as mesmas regras de inPlayScoreline.
+ */
+export function inPlayReadingFor(state: InPlayInput): InPlayReading | null {
+  const fraction = remainingFraction(state);
+  if (!fraction.ok) return null;
+  const { home, away } = state.score;
+  if (![home, away].every((g) => Number.isInteger(g) && g >= 0)) return null;
+  const mult = redCardMultipliers(state.red);
+  return {
+    score: { home, away },
+    r: fraction.r,
+    multipliers: { home: mult.home, away: mult.away },
+    minuteLabel: inPlayMinuteLabel(state),
+  };
+}
+
+/**
+ * A matriz da leitura. Pré-jogo: Dixon-Coles com o λ/ρ. Ao vivo: a matriz FINAL
+ * condicionada ao placar atual (a mesma conta do modelo em jogo), nunca a de pré-jogo
+ * com λ = gols já feitos + μ: essa poria chance em placar que já passou.
+ */
 export function readingMatrix(l: ReadingLambdas): ScorelineMatrix {
+  if (l.inPlay) {
+    const { r, multipliers, score } = l.inPlay;
+    return conditionedScorelineMatrix({
+      lambdaHome: l.lambdaHome,
+      lambdaAway: l.lambdaAway,
+      rho: l.rho ?? DIXON_COLES_RHO,
+      muHome: l.lambdaHome * r * multipliers.home,
+      muAway: l.lambdaAway * r * multipliers.away,
+      score,
+    }).matrix;
+  }
   return scorelineMatrix(
     l.lambdaHome,
     l.lambdaAway,
     l.rho === null ? undefined : { rho: l.rho },
   );
+}
+
+/** Placar exato abaixo do atual em algum lado: já passou (gols não se desfazem). */
+export function isPastScore(
+  p: UserPalpite,
+  inPlay: InPlayReading | null | undefined,
+): boolean {
+  if (!inPlay || p.kind !== "score") return false;
+  return p.home < inPlay.score.home || p.away < inPlay.score.away;
 }
 
 const TOP_SCORELINES = 5;

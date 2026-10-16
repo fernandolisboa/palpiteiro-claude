@@ -5,6 +5,7 @@ import { getLatestMatchModelSnapshotWithKickoff } from "@/lib/db/queries/match-m
 import { MODEL_SCORELINE_MAX_AGE_MS } from "@/lib/model-base/model-scoreline";
 import type { MatchModelSnapshot } from "@/lib/model-base/types";
 import { MATCH_MODEL_VERSION } from "@/lib/model-base/version";
+import { isInPlayScoreline } from "@/lib/quant/in-play";
 import type {
   DixonColesFallbackReason,
   ModelScoreline,
@@ -79,6 +80,25 @@ function fromSnapshot(s: MatchModelSnapshot): PalpiteModelBase {
 }
 
 function fromLive(m: ModelScoreline, staleBase: boolean): PalpiteModelBase {
+  // Defesa (#594): um modelo EM JOGO tem λ = gols já feitos + μ, que não é base de
+  // pré-jogo. A base é o pré-jogo que ele carrega; a transformação em jogo vem depois.
+  if (isInPlayScoreline(m)) {
+    const pre = m.inPlay.preMatch;
+    return {
+      origin: "live",
+      snapshotId: null,
+      modelVersion: null,
+      snapshotWeightsVersion: null,
+      source: pre.source,
+      degraded: m.degraded,
+      fallbackReason: m.fallbackReason ?? null,
+      staleBase,
+      lambdaHomeBase: pre.lambdaHome,
+      lambdaAwayBase: pre.lambdaAway,
+      rho: pre.rho,
+      jevAnswers: null,
+    };
+  }
   return {
     origin: "live",
     snapshotId: null,

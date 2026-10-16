@@ -4,6 +4,17 @@ import { readLiveStamp, type LiveStamp } from "@/lib/live/stamp";
 
 // Leituras ao vivo (#594, PLAN-580 §8.2). Puro: sem I/O.
 
+// Página aberta antes do apito, pedido feito depois dele: a tela de pré-jogo não mostra
+// a leitura ao vivo (oferece o "Contexto extra", lê o modelo de pré-jogo). Mesmo padrão
+// do registro de apostas (LIVE_STALE_GRID_COPY): atualizar a página.
+export const LIVE_STALE_PAGE_COPY =
+  "O jogo começou. Atualize a página para a leitura ao vivo.";
+
+/** O form manda `pageLive=1` só quando a página foi montada com o jogo rolando. */
+export function livePageRefusal(formData: { get(name: string): unknown }): string | null {
+  return formData.get("pageLive") === "1" ? null : LIVE_STALE_PAGE_COPY;
+}
+
 /**
  * O momento do jogo numa frase: "aos 63'", "aos 45+2'", "no intervalo". Sem minuto,
  * "com o jogo em andamento". A mesma frase vai pros prompts ao vivo e pros selos.
