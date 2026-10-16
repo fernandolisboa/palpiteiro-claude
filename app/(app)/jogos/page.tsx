@@ -137,7 +137,7 @@ export default async function JogosPage({ searchParams }: PageProps) {
 
   const limit = range.preset === "upcoming" ? UPCOMING_LIMIT : RANGE_LIMIT;
   const matchesQuery = {
-    // Bound inferior recuado em 3h só nas presets de janela (#385): admite os
+    // Bound inferior recuado em 3h só na lista padrão (#385): admite os
     // jogos já apitados que matches.ts gte() de outra forma dropava ANTES do
     // filtro de status. Concern de query — range.from segue intocado.
     from: windowedQueryFrom(range),
@@ -145,16 +145,19 @@ export default async function JogosPage({ searchParams }: PageProps) {
     leagues: filterToLeagues(league, activeLeagues),
     statuses: range.statuses,
     order: range.order,
-    limit,
+    // Uma linha a mais só pra saber se a lista foi cortada no teto.
+    limit: limit + 1,
   };
 
   // Predições recentes e estado do tour só dependem do usuário: correm junto da
   // query de jogos em vez de esperar por ela.
-  const [dbMatches, recentRaw, tourState] = await Promise.all([
+  const [queried, recentRaw, tourState] = await Promise.all([
     loadRangeMatches(matchesQuery),
     getRecentPredictedMatchesByUser(userId, RECENT_MATCH_LIMIT),
     getTourState(userId),
   ]);
+  const truncated = queried.length > limit;
+  const dbMatches = truncated ? queried.slice(0, limit) : queried;
 
   const matchIds = dbMatches.map((m) => m.id);
   // Chip N-vias (#173): além do over/under legado (tabela velha), lê 1X2 da tabela
@@ -229,7 +232,13 @@ export default async function JogosPage({ searchParams }: PageProps) {
   });
 
   const recents: RecentMatchView[] = toRecentMatchViews(recentRaw, now, timeZone);
-  const countLabel = matchCountLabel(matches.length, dbMatches.length >= limit);
+  const countLabel = matchCountLabel(matches.length, truncated);
+  // Fim da lista cortada no teto: diz como ver o resto (o "Carregar mais" some ali).
+  const endNote = !truncated
+    ? undefined
+    : range.preset === "upcoming"
+      ? `Esses são os próximos ${limit} jogos. Pra ver além, use Escolher datas.`
+      : `Esses são os primeiros ${limit} jogos do período. Pra ver o resto, escolha um intervalo menor.`;
 
   return (
     <>
@@ -247,6 +256,7 @@ export default async function JogosPage({ searchParams }: PageProps) {
           activeKeys={activeKeys}
           range={range}
           countLabel={countLabel}
+          endNote={endNote}
         />
       </div>
       <div className="hidden lg:block">
@@ -257,6 +267,7 @@ export default async function JogosPage({ searchParams }: PageProps) {
           activeKeys={activeKeys}
           range={range}
           countLabel={countLabel}
+          endNote={endNote}
         />
       </div>
     </>
@@ -270,6 +281,7 @@ type HomeContentProps = {
   activeKeys: readonly LeagueKey[];
   range: ResolvedRange;
   countLabel: string;
+  endNote?: string;
 };
 
 // Props compartilhadas pra preservar o range ao trocar de liga no seletor.
@@ -340,6 +352,7 @@ function MobileHome({
   activeKeys,
   range,
   countLabel,
+  endNote,
 }: HomeContentProps) {
   const empty = rangeEmptyMessage(range);
   const navProps = rangeNavProps(range);
@@ -376,7 +389,12 @@ function MobileHome({
           />
         </Card>
       ) : (
-        <UpcomingMatchesMobile key={listKey} matches={matches} listHref={listHref} />
+        <UpcomingMatchesMobile
+          key={listKey}
+          matches={matches}
+          listHref={listHref}
+          endNote={endNote}
+        />
       )}
 
       <div className="pt-7" />
@@ -418,6 +436,7 @@ function DesktopHome({
   activeKeys,
   range,
   countLabel,
+  endNote,
 }: HomeContentProps) {
   const empty = rangeEmptyMessage(range);
   const navProps = rangeNavProps(range);
@@ -452,7 +471,12 @@ function DesktopHome({
             />
           </Card>
         ) : (
-          <UpcomingMatchesDesktop key={listKey} matches={matches} listHref={listHref} />
+          <UpcomingMatchesDesktop
+            key={listKey}
+            matches={matches}
+            listHref={listHref}
+            endNote={endNote}
+          />
         )}
 
         <div className="mt-12" data-tour="recent-predictions">

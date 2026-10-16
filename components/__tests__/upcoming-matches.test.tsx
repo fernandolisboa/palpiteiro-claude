@@ -74,6 +74,22 @@ describe("UpcomingMatchesDesktop reveal (#134)", () => {
   });
 });
 
+describe("aviso no fim da lista cortada no teto", () => {
+  const note = "Pra ver além, use Escolher datas.";
+
+  it("aparece só depois de revelar tudo, nas duas árvores", () => {
+    for (const List of [UpcomingMatchesMobile, UpcomingMatchesDesktop]) {
+      expect(renderToStaticMarkup(<List matches={fakeMatches(10)} endNote={note} />)).toContain(
+        note,
+      );
+      // Ainda há "Carregar mais": o aviso espera.
+      expect(
+        renderToStaticMarkup(<List matches={fakeMatches(16)} endNote={note} />),
+      ).not.toContain(note);
+    }
+  });
+});
+
 describe("UpcomingMatchesDesktop chip N-vias (1X2) — #173 PR-2", () => {
   it("renderiza os 3 outcomes 1X2 no chip desktop (bloco byte-distinto do mobile)", () => {
     const m: MatchListRowView = {
