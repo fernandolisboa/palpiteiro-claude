@@ -44,11 +44,20 @@ import {
   summarizeSavedAnalysesForSynthesis,
   type MarketAnalysisSummary,
 } from "@/lib/ai/palpites/synthesis-input";
-import { PredictError, predict } from "@/lib/ai/predict";
+import {
+  IN_PLAY_MARKETS,
+  PredictError,
+  predict,
+  predictInPlay,
+} from "@/lib/ai/predict";
+import { resolveInPlaySlipModel } from "@/lib/bets/slip-model";
+import { loadActionLiveContext, type ActionLiveContext } from "@/lib/live/action-state";
+import type { InPlayState } from "@/lib/live/in-play-state";
 import { isEmailAllowed } from "@/lib/auth/whitelist";
 import { startAnalysisContextExtraction } from "@/lib/ai/user-palpite/analysis-context";
 import {
   getEnableBestBetFanOut,
+  getEnableLiveMode,
   getEnableOverUnderExtraLines,
   getEnableParallelFanOut,
   getEnableUserContext,
@@ -71,7 +80,11 @@ import { leagueToKey } from "@/lib/format";
 import type { SupportedLeague } from "@/lib/providers/sports-data/leagues";
 import { toAnalysisView } from "@/lib/view/analysis";
 import { teamToTeam } from "@/lib/view/team";
-import { matchUnavailableReason } from "@/lib/view/match-availability";
+import {
+  matchPhase,
+  matchUnavailableReason,
+  type MatchPhase,
+} from "@/lib/view/match-availability";
 import { ExactScoreParamsSchema } from "@/lib/ai/palpites/cartridges/cartridge";
 import { toBestBetView } from "@/lib/view/best-bet";
 import {
@@ -122,12 +135,40 @@ function messageContextFor(isAdmin: boolean): MessageContext {
 const DEADLINE_SINGLE_MESSAGE =
   "A análise demorou mais que o limite. Tente novamente.";
 
+// Leitura ao vivo (#594).
+const LIVE_STATE_UNAVAILABLE_MESSAGE =
+  "Placar ao vivo indisponível agora. Tente em um minuto.";
+const NO_IN_PLAY_MODEL_MESSAGE = "Sem modelo para a leitura ao vivo deste jogo.";
+// Corrida (#594, PLAN-580 §8.2): o jogo apitou entre o clique e o predict de pré-jogo.
+// Com o modo ao vivo ligado, o mesmo botão agora faz a leitura ao vivo.
+const LIVE_RACE_MESSAGE =
+  "O jogo começou. Toque em Analisar com IA de novo para a leitura ao vivo.";
+
+/**
+ * A copy de "jogo em andamento" de uma corrida no pré-jogo vira o convite pra leitura ao
+ * vivo quando o modo ao vivo está ligado. A flag só é lida nesse caso (flag desligada =
+ * a copy de hoje).
+ */
+async function withLiveRaceCopy(message: string): Promise<string> {
+  const startedCopy = capabilityBlockedMessage("analyze", "started");
+  if (message !== startedCopy) return message;
+  return (await getEnableLiveMode()) ? LIVE_RACE_MESSAGE : message;
+}
+
 function friendlyMessage(err: PredictError, ctx: MessageContext = {}): string {
   // PredictError.context contém detalhes técnicos; aqui mapeamos mensagens
   // conhecidas pra UI sem vazar implementação.
   const msg = err.message.toLowerCase();
   if (msg.includes("match not found")) {
     return "Jogo não encontrado.";
+  }
+  // Leitura ao vivo (#594): o estado envelheceu ou a fase mudou entre a action e o
+  // predictInPlay; sem modelo em jogo, a copy da capacidade.
+  if (msg.includes("match is not analyzable live")) {
+    return LIVE_STATE_UNAVAILABLE_MESSAGE;
+  }
+  if (msg.includes("no in-play model")) {
+    return NO_IN_PLAY_MODEL_MESSAGE;
   }
   if (msg.includes("match is not analyzable")) {
     // Race: o status pode ter virado live/postponed — OU o jogo apitou e o enum
@@ -601,10 +642,6 @@ export async function analyzeBestBet(
   if (!match) {
     return { ok: false, error: "Jogo não encontrado." };
   }
-  const notAnalyzable = capabilityGateMessage("analyze", match);
-  if (notAnalyzable) {
-    return { ok: false, error: notAnalyzable };
-  }
   const isAdmin = session.user.role === "admin";
   const overrideRaw = String(formData.get("modelOverride") ?? "");
   let modelOverride: AIModelId | undefined;
@@ -614,6 +651,29 @@ export async function analyzeBestBet(
     isModelAllowedForAudience(overrideRaw, isAdmin)
   ) {
     modelOverride = overrideRaw;
+  }
+  // Ao vivo (#594): depois do apito o estado é relido no servidor (≤ 2 min; senão uma
+  // busca). Antes do apito nada é lido e o caminho de pré-jogo segue intacto; com a
+  // flag desligada o gate abaixo responde como antes.
+  const live = await loadActionLiveContext(match);
+  const phase = matchPhase(match, live.state, live.now, {
+    liveMode: live.liveMode,
+  });
+  if (phase.kind !== "pre" && live.liveMode) {
+    return analyzeBestBetLive({
+      match,
+      live,
+      phase,
+      userId: session.user.id,
+      role: session.user.role,
+      isAdmin,
+      modelOverride,
+      runDeadline,
+    });
+  }
+  const notAnalyzable = capabilityGateMessage("analyze", match);
+  if (notAnalyzable) {
+    return { ok: false, error: notAnalyzable };
   }
   // Candidatos = audiência ∩ cobertura de liga (a MESMA expressão do analyzeMatch +
   // page.tsx). Cap retendo Tier-1 (over/under + 1X2) p/ teto de LLM calls.
@@ -811,7 +871,9 @@ export async function analyzeBestBet(
     // sucesso vazio. O run pode ter pago ≤N calls (e os mesmos N slots) — surge como erro.
     return {
       ok: false,
-      error: view.errors[0]?.message ?? "Nenhum mercado pôde ser analisado.",
+      error: await withLiveRaceCopy(
+        view.errors[0]?.message ?? "Nenhum mercado pôde ser analisado.",
+      ),
     };
   }
   // PASSO DE SÍNTESE (ADR 0030 / #353): turna as N análises numa manchete. Roda DENTRO
@@ -837,6 +899,131 @@ export async function analyzeBestBet(
     ...(palpiteError === undefined ? {} : { palpiteError }),
     ...(contextNotice === undefined ? {} : { contextNotice }),
   };
+}
+
+/**
+ * "Analisar com IA" com o jogo rolando (#594, PLAN-580 §8.2): os mesmos gates grátis já
+ * passaram (auth, acesso, flag do fan-out, jogo); aqui o estado relido, a flag do modo
+ * ao vivo e o modelo em jogo (`modelReady`), e só então 1 unidade do limite do dia (a
+ * mesma do best bet code_jev de pré-jogo: 1 chamada paga, a narração). Sem odd, sem
+ * notícias e sem "Contexto extra" (o campo some ao vivo; um texto que chegue é
+ * descartado). Nenhum caminho daqui toca a The Odds API.
+ */
+async function analyzeBestBetLive(args: {
+  match: NonNullable<Awaited<ReturnType<typeof getMatchById>>>;
+  live: ActionLiveContext;
+  phase: MatchPhase;
+  userId: string;
+  role: string | undefined;
+  isAdmin: boolean;
+  modelOverride: AIModelId | undefined;
+  runDeadline: number;
+}): Promise<AnalyzeBestBetResult> {
+  const { match, live, phase, isAdmin } = args;
+  const state = live.state;
+  const scoreline =
+    state &&
+    phase.actionable &&
+    (phase.kind === "in_play" || phase.kind === "half_time")
+      ? await resolveInPlaySlipModel(match, state)
+      : null;
+  const gate = capabilityGateMessage("analyze", match, {
+    now: live.now,
+    state,
+    liveMode: live.liveMode,
+    modelReady: scoreline !== null,
+  });
+  if (gate) return { ok: false, error: gate };
+  if (!state || !scoreline) {
+    // Inalcançável com o gate acima (modelReady exige os dois); fail-closed.
+    return { ok: false, error: NO_IN_PLAY_MODEL_MESSAGE };
+  }
+  const liveMarkets: readonly string[] = IN_PLAY_MARKETS;
+  const marketKeys = marketsForLeague(await marketsForAudience(isAdmin), match.league)
+    .map((c) => c.key)
+    .filter((k) => liveMarkets.includes(k));
+  if (marketKeys.length === 0) {
+    return { ok: false, error: "Nenhum mercado disponível para este jogo." };
+  }
+  const budget = await chargeRunBudget(args.userId, args.role);
+  if (!budget.ok) return { ok: false, error: budget.error };
+  console.info(
+    JSON.stringify({
+      scope: "analyzeBestBet",
+      matchId: match.id,
+      live: true,
+      markets: marketKeys.length,
+    }),
+  );
+  let results: Awaited<ReturnType<typeof predictInPlay>>;
+  try {
+    results = await predictInPlay({
+      matchId: match.id,
+      userId: args.userId,
+      isAdmin,
+      modelOverride: args.modelOverride,
+      marketKeys,
+      state,
+      scoreline,
+      now: live.now,
+      deadlineAt: args.runDeadline - SYNTHESIS_RESERVE_MS,
+    });
+  } catch (err) {
+    console.error(
+      JSON.stringify({
+        scope: "analyzeBestBet",
+        matchId: match.id,
+        live: true,
+        error: "predict_in_play_failed",
+        message: err instanceof Error ? err.message : String(err),
+      }),
+    );
+    return {
+      ok: false,
+      error: friendlyMessageFromUnknown(err, messageContextFor(isAdmin)),
+    };
+  }
+  const outcomes: FanOutOutcome[] = results.map((r) => ({
+    ok: true,
+    marketKey: r.marketKey,
+    result: r.result,
+    ...(r.narrated ? {} : { sharesAiCall: true as const }),
+  }));
+  const aiCallByMarketKey = new Map<string, { costUsd: string | number } | null>();
+  for (const r of results) {
+    if (!r.narrated) continue;
+    const aiCall = await getAiCallById(r.result.prediction.aiCallId);
+    aiCallByMarketKey.set(r.marketKey, aiCall ? { costUsd: aiCall.costUsd } : null);
+  }
+  const view = toBestBetView(outcomes, aiCallByMarketKey, [], [], displayTeams(match));
+  const { palpite, palpiteError } = await synthesizeLiveHeadline({
+    matchId: match.id,
+    userId: args.userId,
+    isAdmin,
+    outcomes,
+    state,
+    deadlineAt: args.runDeadline,
+  });
+  revalidatePath(`/match/${match.id}`);
+  revalidatePath("/jogos");
+  return {
+    ok: true,
+    view,
+    palpite,
+    ...(palpiteError === undefined ? {} : { palpiteError }),
+  };
+}
+
+// Síntese da leitura ao vivo: ligada no commit do palpites_live_v1.
+async function synthesizeLiveHeadline(_args: {
+  matchId: string;
+  userId: string;
+  isAdmin: boolean;
+  outcomes: FanOutOutcome[];
+  state: InPlayState;
+  deadlineAt: number;
+}): Promise<HeadlineOutcome> {
+  return { palpite: null };
 }
 
 type HeadlineOutcome = {

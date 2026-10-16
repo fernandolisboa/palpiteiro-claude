@@ -29,6 +29,17 @@ import { isNeutralVenue } from "@/lib/providers/sports-data/neutral-venue";
 import { getAbsencesProvider } from "@/lib/providers/absences";
 import type { ModelScoreline } from "@/lib/quant/match-model";
 import { getModelScoreline } from "@/lib/ratings/model-scoreline";
+import { LEAGUE_LABEL, leagueToKey } from "@/lib/format";
+import { resolveInPlaySlipModel } from "@/lib/bets/slip-model";
+import { IN_PLAY_ACT_MAX_AGE_MS, isLiveStateActionable } from "@/lib/live/freshness";
+import type { InPlayState } from "@/lib/live/in-play-state";
+import { matchPhase } from "@/lib/live/phase";
+import { liveColumns, liveStampFromState } from "@/lib/live/stamp";
+import {
+  decidedOutcome,
+  LIVE_MODEL_VERSION,
+  type InPlayScoreline,
+} from "@/lib/quant/in-play";
 import { normalizeTeamName } from "@/lib/providers/sports-data/team-names";
 import { pOverUnder } from "@/lib/quant/scoreline-model";
 import {
@@ -72,6 +83,7 @@ import { readAnalysisEngine } from "./engine/analysis-engine-flag";
 import {
   isCodeJevMarket,
   runCodeJevEngine,
+  selectionProbsFromMatrix,
   type CodeJevDecision,
 } from "./engine/code-jev";
 import {
@@ -110,6 +122,12 @@ import {
   type NarratorOutput,
   type UserFactorOrigins,
 } from "./markets/_narrator";
+import {
+  liveNarratorCartridge,
+  templatedLiveNarration,
+  type LiveNarratorDecision,
+  type LiveReadingMarket,
+} from "./markets/_narrator/live";
 import { getCartridge } from "./markets/registry";
 import type { BaseMarketOutput, MarketCartridge } from "./markets/types";
 import {
@@ -370,6 +388,24 @@ export async function persistPendingPrediction(
   });
 }
 
+// Cascata do modelo (ADR 0013), a mesma do predict e do predictInPlay.
+async function resolveRunModel(args: {
+  userId: string;
+  isAdmin: boolean;
+  modelOverride?: AIModelId;
+}): Promise<AIModel> {
+  let resolvedModelId: AIModelId;
+  if (args.modelOverride) {
+    resolvedModelId = args.modelOverride;
+  } else {
+    const pref = await getPreferredModelId(args.userId);
+    const usablePref =
+      pref && isModelAllowedForAudience(pref, args.isAdmin) ? pref : null;
+    resolvedModelId = usablePref ?? (await getDefaultModelId());
+  }
+  return MODEL_REGISTRY[resolvedModelId];
+}
+
 type RunPredictOptions = Partial<BestBetPredictOptions> &
   PredictOptions & {
     deferNarration?: boolean;
@@ -408,16 +444,7 @@ async function runPredict(
   //    (um id stale/removido — ex.: um modelo aposentado salvo no DB — é filtrado
   //    pra null por getPreferredModelId e cai no default). Havendo override, nem
   //    lemos a preferência. As leituras de DB são baratas ante a chamada ao LLM.
-  let resolvedModelId: AIModelId;
-  if (modelOverride) {
-    resolvedModelId = modelOverride;
-  } else {
-    const pref = await getPreferredModelId(userId);
-    const usablePref =
-      pref && isModelAllowedForAudience(pref, isAdmin) ? pref : null;
-    resolvedModelId = usablePref ?? (await getDefaultModelId());
-  }
-  const model = MODEL_REGISTRY[resolvedModelId];
+  const model = await resolveRunModel({ userId, isAdmin, modelOverride });
 
   // 1. Lookup do match no DB
   const matchRows = await db
@@ -1481,7 +1508,8 @@ type GatedDecision = {
   selectionId: string | null;
   psoRowsToInsert: {
     selectionId: string;
-    odd: string;
+    // null só na leitura ao vivo (#594): sem odd depois do apito.
+    odd: string | null;
     modelProbPct: string | null;
   }[];
 };
@@ -1629,11 +1657,14 @@ type PersistArgs = {
   rationale: string;
   keyFactors: string[];
   minimumOdd: number | undefined;
-  bookmaker: string;
+  // null só na leitura ao vivo (#594): não há odd, logo não há casa.
+  bookmaker: string | null;
   modelVersion: string;
   promptVersion: string;
   judgments?: PredictionJudgments;
   labelByKey: Record<string, string> | null;
+  // Leitura ao vivo (#594, ADR 0060): is_live + o carimbo. Ausente = pré-jogo.
+  live?: ReturnType<typeof liveColumns>;
 };
 
 async function persistPrediction(a: PersistArgs): Promise<PredictResult> {
@@ -1683,6 +1714,7 @@ async function persistPrediction(a: PersistArgs): Promise<PredictResult> {
         promptVersion: a.promptVersion,
         // Só o motor code_jev grava (ADR 0041 §6); o caminho LLM não envia a chave.
         ...(a.judgments ? { judgments: a.judgments } : {}),
+        ...(a.live ? a.live : {}),
       })
       .returning();
     predictionRow = row;
@@ -1751,6 +1783,275 @@ async function persistPrediction(a: PersistArgs): Promise<PredictResult> {
       ...(labelByKey ? { label: labelByKey[key] } : {}),
     })),
   };
+}
+
+// ─── Leitura ao vivo (#594, ADR 0060 §8) ─────────────────────────────────────
+
+// Mercados lidos ao vivo: os do placar FINAL que o modelo em jogo precifica.
+// over/under só na linha base (2,5); as linhas extras ficam pra depois.
+export const IN_PLAY_MARKETS = [
+  "match_result",
+  "double_chance",
+  "btts",
+  "over_under",
+] as const;
+
+// O mercado narrado (a única chamada paga do run): o 1X2 quando está entre os pedidos.
+const IN_PLAY_NARRATED_MARKET = "match_result";
+
+export type PredictInPlayArgs = {
+  matchId: string;
+  userId: string;
+  isAdmin: boolean;
+  modelOverride?: AIModelId;
+  // Já filtrados pela action (audiência ∩ liga ∩ IN_PLAY_MARKETS), em ordem.
+  marketKeys: readonly string[];
+  // Estado lido NO SERVIDOR pela action (loadActionLiveContext), nunca do cliente.
+  state: InPlayState;
+  // O modelo em jogo que a action já calculou (o mesmo resolveInPlaySlipModel sobre o
+  // mesmo estado), pra não buscar a base duas vezes. Ausente = calcula aqui.
+  scoreline?: InPlayScoreline;
+  now?: Date;
+  deadlineAt?: number;
+};
+
+export type InPlayMarketResult = {
+  marketKey: string;
+  result: PredictResult;
+  // A narração paga é a deste mercado (os demais levam o racional templado e apontam
+  // pra mesma row de ai_calls).
+  narrated: boolean;
+};
+
+type InPlayMarketPlan = {
+  marketKey: string;
+  cartridge: MarketCartridge;
+  catalog: MarketCatalog;
+  selectionKeys: string[];
+  line: number | null;
+  probs: Record<string, number>;
+  reading: LiveReadingMarket;
+};
+
+/**
+ * Leitura ao vivo (#594): a porta do LLM com o jogo rolando. Não passa pelo runPredict:
+ * sem odd (nenhuma busca nem leitura de odds depois do apito), sem JEV e sem os dados de
+ * contexto de pré-jogo. As chances vêm do modelo em jogo EM CÓDIGO (a base do apito
+ * condicionada ao placar, às expulsões e ao tempo que falta); o LLM só narra, numa
+ * chamada (narrator_live_v1, logada em ai_calls, saída validada por Zod). Cada mercado
+ * vira uma prediction `pass` com is_live + carimbo; a PSO leva a prob. do modelo e
+ * odd NULL. Recheca a fase aqui (defesa em profundidade): só in_play/half_time com
+ * estado de até 2 min e minuto conhecido.
+ */
+export async function predictInPlay(
+  args: PredictInPlayArgs,
+): Promise<InPlayMarketResult[]> {
+  const now = args.now ?? new Date();
+  const { matchId, userId, state } = args;
+  const model = await resolveRunModel(args);
+
+  const matchRows = await db
+    .select()
+    .from(matches)
+    .where(eq(matches.id, matchId))
+    .limit(1);
+  const match = matchRows[0];
+  if (!match) {
+    throw new PredictError("match not found", { matchId });
+  }
+  const phase = matchPhase(match, state, now, { liveMode: true });
+  if (
+    !phase.actionable ||
+    (phase.kind !== "in_play" && phase.kind !== "half_time") ||
+    !isLiveStateActionable(state.fetchedAt, now) ||
+    state.score === null
+  ) {
+    throw new PredictError("match is not analyzable live", {
+      matchId,
+      status: match.status,
+      phase: phase.kind,
+      kickoffMs: match.kickoffAt.getTime(),
+      maxAgeMs: IN_PLAY_ACT_MAX_AGE_MS,
+    });
+  }
+  const score = state.score;
+
+  const marketKeys = args.marketKeys.filter((k): k is (typeof IN_PLAY_MARKETS)[number] =>
+    (IN_PLAY_MARKETS as readonly string[]).includes(k),
+  );
+  if (marketKeys.length === 0) {
+    throw new PredictError("no in-play market", { matchId });
+  }
+
+  // O modelo em jogo: o MESMO da tabela de mercados (porta única lib/bets/slip-model).
+  const scoreline =
+    args.scoreline ?? (await resolveInPlaySlipModel(match, state));
+  if (scoreline === null) {
+    throw new PredictError("no in-play model", { matchId });
+  }
+
+  const teams = { home: match.homeTeam, away: match.awayTeam };
+  // Tudo que pode falhar antes do gasto: catálogo e preços, por mercado.
+  const plans: InPlayMarketPlan[] = [];
+  for (const marketKey of marketKeys) {
+    plans.push(await planInPlayMarket(marketKey, scoreline, score, teams));
+  }
+
+  const narratedIndex = Math.max(
+    0,
+    plans.findIndex((p) => p.marketKey === IN_PLAY_NARRATED_MARKET),
+  );
+  const situation = {
+    moment:
+      phase.kind === "half_time"
+        ? "no intervalo"
+        : `aos ${state.minuteLabel ?? scoreline.inPlay.minuteLabel}`,
+    score,
+    red: state.red,
+  };
+  const decisionFor = (i: number): LiveNarratorDecision => ({
+    teams,
+    situation,
+    remainingGoals: {
+      home: scoreline.inPlay.muHome,
+      away: scoreline.inPlay.muAway,
+    },
+    readings: [plans[i].reading, ...plans.filter((_, j) => j !== i).map((p) => p.reading)],
+  });
+
+  const narration = await narrateWith(liveNarratorCartridge, {
+    model,
+    userId,
+    matchId,
+    decision: decisionFor(narratedIndex),
+    context: { leagueLabel: LEAGUE_LABEL[leagueToKey(match.league)] },
+    deadlineAt: args.deadlineAt,
+  });
+
+  const stamp = liveStampFromState(state, now, scoreline.inPlay);
+  const live = liveColumns(stamp);
+  const modelVersion = inPlayModelVersion(model.id, scoreline);
+
+  const out: InPlayMarketResult[] = [];
+  for (let i = 0; i < plans.length; i++) {
+    const plan = plans[i];
+    const narrated = i === narratedIndex;
+    const text = narrated
+      ? narration.output
+      : templatedLiveNarration({ ...decisionFor(i), readings: [plan.reading] });
+    const result = await persistPrediction({
+      matchId,
+      userId,
+      aiCallId: narration.aiCallId,
+      cartridge: plan.cartridge,
+      catalog: plan.catalog,
+      selectionKeys: plan.selectionKeys,
+      oddByKey: {},
+      modelProbByKey: plan.probs,
+      marketParams: plan.line === null ? null : { line: plan.line },
+      decision: inPlayPassDecision(plan),
+      // Convenção dos cartuchos num pass: P da 1ª seleção.
+      confidencePct: plan.probs[plan.selectionKeys[0]],
+      rationale: text.rationale,
+      keyFactors: text.key_factors,
+      minimumOdd: undefined,
+      bookmaker: null,
+      modelVersion,
+      promptVersion: liveNarratorCartridge.version,
+      labelByKey: null,
+      live,
+    });
+    out.push({ marketKey: plan.marketKey, result, narrated });
+  }
+  return out;
+}
+
+async function planInPlayMarket(
+  marketKey: string,
+  scoreline: InPlayScoreline,
+  score: { home: number; away: number },
+  teams: { home: string; away: string },
+): Promise<InPlayMarketPlan> {
+  const cartridge = getCartridge(marketKey);
+  const { descriptor } = cartridge;
+  const selectionKeys = [...descriptor.selectionKeys];
+  const line = descriptor.params?.line ?? null;
+  const resolved = await resolveMarketCatalog(descriptor.dbMarketKey);
+  const catalog: MarketCatalog = {
+    marketId: resolved.marketId,
+    idByKey: resolved.idByKey,
+  };
+  const missing = selectionKeys.filter((k) => !catalog.idByKey.has(k));
+  if (missing.length > 0) {
+    throw new PredictError(
+      `market '${descriptor.dbMarketKey}' seedado incompleto: faltam seleções [${missing.join(", ")}]`,
+      { marketKey, missingSelections: missing },
+    );
+  }
+  const probs = selectionProbsFromMatrix(
+    descriptor.dbMarketKey,
+    selectionKeys,
+    scoreline.matrix,
+    line,
+  );
+  // O placar já decidiu (over que já bateu, ambas marcam que já marcaram): 100/0 exatos,
+  // pelo predicado do placar (a soma da matriz dá 99,99…).
+  const decided = new Set<string>();
+  for (const key of selectionKeys) {
+    const o = decidedOutcome(
+      descriptor.dbMarketKey,
+      { line, selection: key },
+      score,
+    );
+    if (o === null) continue;
+    probs[key] = o === "won" ? 100 : 0;
+    decided.add(key);
+  }
+  const presentation = getMarketPresentation(marketKey);
+  return {
+    marketKey,
+    cartridge,
+    catalog,
+    selectionKeys,
+    line,
+    probs,
+    reading: {
+      marketKey,
+      marketLabel: presentation.marketLabel,
+      line,
+      selections: selectionKeys.map((key) => ({
+        key,
+        label: selectionLabel(marketKey, key, teams, line),
+        modelProbPct: probs[key],
+        decided: decided.has(key),
+      })),
+    },
+  };
+}
+
+// Leitura ao vivo é sempre `pass`: sem odd, sem edge, sem stake (1u, fora do Yield).
+function inPlayPassDecision(plan: InPlayMarketPlan): GatedDecision {
+  return {
+    side: "pass",
+    gatedToPass: false,
+    oddAtRec: null,
+    impliedPct: null,
+    recModelProb: null,
+    edge: null,
+    stakeUnits: 1,
+    selectionId: null,
+    psoRowsToInsert: plan.selectionKeys.map((key) => ({
+      selectionId: plan.catalog.idByKey.get(key)!,
+      odd: null,
+      modelProbPct: plan.probs[key].toFixed(2),
+    })),
+  };
+}
+
+// `engine=code_jev` (o código decide os números; o rodapé e a calibração leem por aqui)
+// + `live=` (a versão do modelo em jogo). Sem `judg=`/`w=`: não há JEV ao vivo.
+function inPlayModelVersion(modelId: AIModelId, scoreline: InPlayScoreline): string {
+  return `${modelId};engine=code_jev;lambda=${scoreline.source};live=${LIVE_MODEL_VERSION}`;
 }
 
 // ─── Motor code_jev (ADR 0041, #511) ─────────────────────────────────────────
@@ -2185,6 +2486,23 @@ type NarrationOutcome = {
   output: NarratorOutput | null;
 };
 
+// O contrato de um cartucho narrador (ADR 0041 §4): o de pré-jogo (narrator_v1.1) e o
+// ao vivo (narrator_live_v1, #594) dividem a ferramenta e o schema; mudam o prompt, a
+// mensagem, a fidelidade e o fallback.
+type NarrationCartridge<D, C> = {
+  version: string;
+  systemPrompt: string;
+  tool: AnalysisRequest["tool"];
+  toolName: string;
+  outputSchema: typeof narratorCartridge.outputSchema;
+  buildUserMessage: (decision: D, context: C) => string;
+  checkFidelity: (
+    output: NarratorOutput,
+    decision: D,
+  ) => { ok: true } | { ok: false; reason: string };
+  fallback: (decision: D) => NarratorOutput;
+};
+
 // Uma chamada narradora (ADR 0041 §4) pelo MESMO seam AIProvider, mesmo modelo
 // resolvido e mesmos genParams. NUNCA bloqueia a análise: sem chave, erro de
 // provider, tool ausente, Zod ou fidelidade → racional templado. A row de ai_calls
@@ -2198,14 +2516,29 @@ async function narrateDecision(args: {
   deadlineAt?: number;
   beforeLlmPath?: () => Promise<void>;
 }): Promise<{ aiCallId: string; output: NarratorOutput }> {
+  return narrateWith(narratorCartridge, args);
+}
+
+async function narrateWith<D, C>(
+  cartridge: NarrationCartridge<D, C>,
+  args: {
+    model: AIModel;
+    userId: string;
+    matchId: string;
+    decision: D;
+    context: C;
+    deadlineAt?: number;
+    beforeLlmPath?: () => Promise<void>;
+  },
+): Promise<{ aiCallId: string; output: NarratorOutput }> {
   const { model, decision } = args;
   const genParams = await getGenerationParams();
   const request: AnalysisRequest = {
     model,
-    system: narratorCartridge.systemPrompt,
-    userMessage: narratorCartridge.buildUserMessage(decision, args.context),
-    tool: narratorCartridge.tool,
-    toolName: narratorCartridge.toolName,
+    system: cartridge.systemPrompt,
+    userMessage: cartridge.buildUserMessage(decision, args.context),
+    tool: cartridge.tool,
+    toolName: cartridge.toolName,
     maxTokens: genParams.maxTokens,
     effort: genParams.effort,
     temperature: genParams.temperature,
@@ -2231,7 +2564,7 @@ async function narrateDecision(args: {
   });
   if (fits && args.beforeLlmPath) await args.beforeLlmPath();
   const outcome = fits
-    ? await runNarration(aiProvider, request, decision)
+    ? await runNarration(cartridge, aiProvider, request, decision)
     : narrationSkippedForDeadline(request);
   const cost = calculateCost({
     model: model.id,
@@ -2247,7 +2580,7 @@ async function narrateDecision(args: {
         matchId: args.matchId,
         provider: providerKey,
         model: model.id,
-        promptVersion: narratorCartridge.version,
+        promptVersion: cartridge.version,
         inputPayload: outcome.inputPayload,
         outputPayload: outcome.outputPayload,
         inputTokens: outcome.inputTokens,
@@ -2277,7 +2610,7 @@ async function narrateDecision(args: {
   }
   return {
     aiCallId,
-    output: outcome.output ?? narratorCartridge.fallback(decision),
+    output: outcome.output ?? cartridge.fallback(decision),
   };
 }
 
@@ -2297,10 +2630,11 @@ function narrationSkippedForDeadline(
   };
 }
 
-async function runNarration(
+async function runNarration<D, C>(
+  cartridge: NarrationCartridge<D, C>,
   aiProvider: ReturnType<typeof getProviderForModel>,
   request: AnalysisRequest,
-  decision: NarratorDecision,
+  decision: D,
 ): Promise<NarrationOutcome> {
   const failed = (
     status: AiCallStatus,
@@ -2344,15 +2678,15 @@ async function runNarration(
   if (result.toolInput === undefined) {
     return failed(
       "tool_missing",
-      `model did not call ${narratorCartridge.toolName}`,
+      `model did not call ${cartridge.toolName}`,
       base,
     );
   }
-  const parsed = narratorCartridge.outputSchema.safeParse(result.toolInput);
+  const parsed = cartridge.outputSchema.safeParse(result.toolInput);
   if (!parsed.success) {
     return failed("invalid_output", JSON.stringify(parsed.error.issues), base);
   }
-  const fidelity = narratorCartridge.checkFidelity(parsed.data, decision);
+  const fidelity = cartridge.checkFidelity(parsed.data, decision);
   if (!fidelity.ok) {
     return failed("invalid_output", `fidelity: ${fidelity.reason}`, base);
   }

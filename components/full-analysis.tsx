@@ -48,33 +48,35 @@ export function FullAnalysis({
         <Info className="size-3 shrink-0" aria-hidden="true" />
         {ANALYSIS_RISK_DISCLAIMER}
       </p>
-      {liveSections.length > 0 && (
-        <section className="flex flex-col gap-3">
-          <h3 className="text-meta font-medium uppercase tracking-eyebrow text-foreground">
-            Leituras ao vivo
-          </h3>
-          <MarketAnalysisSections
-            sections={liveSections}
-            layout="flat"
-            showRiskDisclaimer={false}
-          />
-        </section>
-      )}
-      {sections.length > 0 && (
-        <section className="flex flex-col gap-3">
-          {both && (
-            <h3 className="text-meta font-medium uppercase tracking-eyebrow text-foreground">
-              Antes do apito
-            </h3>
-          )}
-          <MarketAnalysisSections
-            sections={sections}
-            layout="flat"
-            showRiskDisclaimer={false}
-          />
-        </section>
-      )}
+      <SectionGroup title="Leituras ao vivo" sections={liveSections} />
+      <SectionGroup title={both ? "Antes do apito" : null} sections={sections} />
       <PreviousAnalyses items={previousAnalyses} showRiskDisclaimer={false} />
     </div>
+  );
+}
+
+// Um bloco de mercados abertos, com o título do lado (ao vivo ou antes do apito) quando
+// há os dois. Nenhum cartão repete a linha de risco.
+function SectionGroup({
+  title,
+  sections,
+}: {
+  title: string | null;
+  sections: MarketAnalysisSectionItem[];
+}) {
+  if (sections.length === 0) return null;
+  return (
+    <section className="flex flex-col gap-3">
+      {title && (
+        <h3 className="text-meta font-medium uppercase tracking-eyebrow text-foreground">
+          {title}
+        </h3>
+      )}
+      <MarketAnalysisSections
+        sections={sections}
+        layout="flat"
+        showRiskDisclaimer={false}
+      />
+    </section>
   );
 }
