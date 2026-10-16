@@ -60,7 +60,6 @@ export function AdminFlagControl({ flag, current }: Props) {
               <option
                 key={v}
                 value={v}
-                className="bg-popover text-popover-foreground"
               >
                 {flag.valueLabels?.[v] ?? v}
               </option>

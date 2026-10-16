@@ -47,7 +47,6 @@ export function DefaultModelForm({ current }: Props) {
                 // Admin-only (userSelectable:false) NÃO pode virar padrão global —
                 // renderiza desabilitado com nota em vez de sumir (feedback visual).
                 disabled={!m.userSelectable}
-                className="bg-popover text-popover-foreground"
               >
                 {m.label} — ${m.inputPricePerMTok}/${m.outputPricePerMTok} por 1M
                 {m.userSelectable
