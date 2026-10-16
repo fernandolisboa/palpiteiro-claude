@@ -1,6 +1,8 @@
 import type { PalpiteHeadline } from "@/db/schema";
 import { ExactScoreParamsSchema } from "@/lib/ai/palpites/cartridges/cartridge";
 import type { PalpiteSetWithLines } from "@/lib/db/queries/palpites";
+import { livePalpiteLabel } from "@/lib/live/readings";
+import { readLiveStamp } from "@/lib/live/stamp";
 
 // View da MANCHETE palpite-first (ADR 0030 / #353). Consumida pelo HERO (#351). ZERO
 // número de valor — firewall leg (c): mesmo que a manchete derive de análises que
@@ -45,6 +47,9 @@ export type PalpiteHeadlineView = {
   // título/URL não são gerados. A UI rende só texto do título + href, cor warm (NUNCA
   // edge-* verde) → asserido firewall-limpo por leaksValue() sobre o HTML renderizado.
   sources?: Array<{ title: string; url: string }>;
+  // Palpite gerado com o jogo rolando (#594): "palpite aos 63' (1–0)", do carimbo do set.
+  // Ausente = palpite de antes do apito.
+  liveLabel?: string;
 };
 
 // Insumos do mapper — tipos puros (sem importar @/lib/db pra não arrastar Drizzle pra
@@ -56,6 +61,8 @@ export type PalpiteHeadlineSource = {
   probableScore: { home: number; away: number };
   outcome: { result: "won" | "lost" } | null;
   dimensions?: PalpiteDimensionView[];
+  // As colunas is_live/live_state do set (#594). Ausente = pré-jogo.
+  live?: { isLive: boolean; liveState: unknown };
 };
 
 /**
@@ -81,6 +88,9 @@ export function toPalpiteHeadlineView(
     // #378: passthrough das fontes persistidas (undefined em sets pré-#377). NÃO derramamos
     // em prosa nem cruzamos pelo guard de valor — é tool output, renderizado verbatim como link.
     sources: source.headline.sources,
+    ...(source.live?.isLive
+      ? { liveLabel: livePalpiteLabel(readLiveStamp(source.live.liveState)) }
+      : {}),
   };
 }
 
@@ -124,5 +134,9 @@ export function toPalpiteHeadlineViewFromSet(
     probableScore: ps.data,
     outcome: scoreLine.outcome,
     dimensions: toDimensionViews(set.palpites),
+    live: {
+      isLive: set.palpiteSet.isLive,
+      liveState: set.palpiteSet.liveState,
+    },
   });
 }

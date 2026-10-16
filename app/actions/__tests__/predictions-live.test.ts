@@ -42,6 +42,7 @@ vi.mock("@/lib/rate-limit", () => ({
 }));
 vi.mock("@/lib/view/analysis", () => ({ toAnalysisView: vi.fn(() => ({})) }));
 vi.mock("@/lib/ai/palpites", () => ({
+  generateLivePalpites: vi.fn(),
   generatePalpites: vi.fn(),
   startNewsFetch: vi.fn(),
 }));
@@ -60,10 +61,14 @@ vi.mock("@/lib/db/queries/ai-config", () => ({
   getEnableUserContext: vi.fn(),
 }));
 
-import { analyzeBestBet } from "@/app/actions/predictions";
+import { analyzeBestBet, generatePalpiteFromAnalyses } from "@/app/actions/predictions";
 import { auth } from "@/auth";
 import { PredictError, predict, predictInPlay } from "@/lib/ai/predict";
-import { generatePalpites, startNewsFetch } from "@/lib/ai/palpites";
+import {
+  generateLivePalpites,
+  generatePalpites,
+  startNewsFetch,
+} from "@/lib/ai/palpites";
 import { readAnalysisEngine } from "@/lib/ai/engine/analysis-engine-flag";
 import { startAnalysisContextExtraction } from "@/lib/ai/user-palpite/analysis-context";
 import { resolveInPlaySlipModel } from "@/lib/bets/slip-model";
@@ -74,11 +79,15 @@ import {
 } from "@/lib/db/queries/ai-config";
 import { marketsForAudience } from "@/lib/db/queries/market-catalog";
 import { getMatchById } from "@/lib/db/queries/matches";
-import { getAiCallById } from "@/lib/db/queries/predictions";
+import {
+  getAiCallById,
+  getPredictionHistoryForMatch,
+} from "@/lib/db/queries/predictions";
 import { getUserAccessState } from "@/lib/db/queries/users";
 import { getInPlayState } from "@/lib/live/in-play-state";
 import { ensureOddsSnapshotsFresh } from "@/lib/odds/fetch-and-snapshot";
-import { checkAnalysisRateLimit } from "@/lib/rate-limit";
+import { liveColumns, liveStampFromState } from "@/lib/live/stamp";
+import { checkAnalysisRateLimit, checkPalpitesRateLimit } from "@/lib/rate-limit";
 
 const mockAuth = auth as unknown as Mock<() => Promise<Session | null>>;
 const MATCH_ID = "550e8400-e29b-41d4-a716-446655440000";
@@ -115,7 +124,56 @@ function freshState() {
   };
 }
 
-const MODEL = { inPlay: { liveModelVersion: "live_model_v1" } };
+const MODEL = {
+  matrix: { cells: [[0, 0], [0.6, 0.4]] },
+  inPlay: { liveModelVersion: "live_model_v1", minuteLabel: "63'", score: { home: 1, away: 0 } },
+};
+
+// O set que a síntese ao vivo devolve (o selo vem do carimbo).
+function liveSet(stampState = freshState()) {
+  const cols = liveColumns(liveStampFromState(stampState, new Date(NOW)));
+  return {
+    palpiteSet: {
+      id: "set-live",
+      headline: {
+        verdict: "O Flamengo segura",
+        confidence: "media",
+        narrative: "Aos 63', 1 a 0.",
+        citedMarkets: [],
+        sourcePredictionIds: [],
+      },
+      ...cols,
+    },
+    palpites: [
+      { id: "l-1", type: "exact_score", text: "Placar 2–0", params: { home: 2, away: 0 }, settleable: true },
+    ],
+    aiCall: { id: "ac-s" },
+  };
+}
+
+// Uma prediction ao vivo do histórico, gravada com o estado dado.
+function liveHistoryRow(stampState = freshState(), recordedAt = new Date(NOW)) {
+  const cols = liveColumns(liveStampFromState(stampState, recordedAt));
+  return {
+    marketKey: "match_result",
+    prediction: {
+      id: "pred-live-1",
+      recommendation: "pass",
+      confidencePct: "70.00",
+      edgePct: null,
+      oddAtRecommendation: null,
+      rationale: "Leitura ao vivo.",
+      marketParams: null,
+      createdAt: recordedAt,
+      ...cols,
+    },
+    selections: [
+      { key: "home", modelProbPct: "70.00" },
+      { key: "draw", modelProbPct: "20.00" },
+      { key: "away", modelProbPct: "10.00" },
+    ],
+  };
+}
 
 function liveResult(marketKey: string, narrated: boolean) {
   return {
@@ -177,6 +235,14 @@ beforeEach(() => {
     liveResult("btts", false),
     liveResult("double_chance", false),
   ]);
+  vi.mocked(generateLivePalpites).mockResolvedValue(liveSet() as never);
+  vi.mocked(checkPalpitesRateLimit).mockResolvedValue({
+    ok: true,
+    limit: 10,
+    remaining: 5,
+    reason: undefined,
+  } as never);
+  vi.mocked(getPredictionHistoryForMatch).mockResolvedValue([liveHistoryRow()] as never);
 });
 
 describe("analyzeBestBet ao vivo", () => {
@@ -202,6 +268,19 @@ describe("analyzeBestBet ao vivo", () => {
     if (res.ok) {
       expect(res.contextNotice).toBeUndefined();
       expect(res.view.entries).toHaveLength(4);
+    }
+  });
+
+  it("a manchete sai do palpites_live_v1 com o momento do jogo; nunca do pré-jogo", async () => {
+    const res = await analyzeBestBet(null, form());
+    expect(generatePalpites).not.toHaveBeenCalled();
+    expect(generateLivePalpites).toHaveBeenCalledTimes(1);
+    const arg = vi.mocked(generateLivePalpites).mock.calls[0][0];
+    expect(arg.live.moment).toBe("aos 63'");
+    expect(arg.live.state.score).toEqual({ home: 1, away: 0 });
+    expect(arg.live.scoreline).toBe(MODEL);
+    if (res.ok) {
+      expect(res.palpite?.liveLabel).toBe("palpite aos 63' (1–0)");
     }
   });
 
@@ -307,5 +386,74 @@ describe("corrida no pré-jogo (o jogo apitou durante o run)", () => {
       ok: false,
       error: "Jogo em andamento — a análise fica disponível só antes do apito inicial.",
     });
+  });
+});
+
+describe("Gerar só o palpite ao vivo", () => {
+  it("sintetiza sobre as leituras ao vivo do mesmo momento, mesma cota de palpites", async () => {
+    const res = await generatePalpiteFromAnalyses(null, form());
+    expect(res.ok).toBe(true);
+    expect(checkPalpitesRateLimit).toHaveBeenCalledTimes(1);
+    expect(generatePalpites).not.toHaveBeenCalled();
+    const arg = vi.mocked(generateLivePalpites).mock.calls[0][0];
+    expect(arg.analyses.map((a) => a.predictionId)).toEqual(["pred-live-1"]);
+    expect(arg.live.moment).toBe("aos 63'");
+    expect(vi.mocked(getInPlayState).mock.calls[0][1]).toMatchObject({ maxAgeMs: 120_000 });
+    if (res.ok) expect(res.palpite?.liveLabel).toBe("palpite aos 63' (1–0)");
+  });
+
+  it("sem leitura ao vivo (só análises de pré-jogo): manda pro Analisar com IA", async () => {
+    const pre = liveHistoryRow();
+    vi.mocked(getPredictionHistoryForMatch).mockResolvedValue([
+      { ...pre, prediction: { ...pre.prediction, isLive: false, liveState: null } },
+    ] as never);
+    const res = await generatePalpiteFromAnalyses(null, form());
+    expect(res).toEqual({
+      ok: false,
+      error: 'Ainda não há leitura ao vivo deste jogo. Use "Analisar com IA".',
+    });
+    expect(checkPalpitesRateLimit).not.toHaveBeenCalled();
+    expect(generateLivePalpites).not.toHaveBeenCalled();
+  });
+
+  it("o placar mudou desde a leitura: pede uma leitura nova", async () => {
+    vi.mocked(getPredictionHistoryForMatch).mockResolvedValue([
+      liveHistoryRow({ ...freshState(), score: { home: 0, away: 0 } }),
+    ] as never);
+    const res = await generatePalpiteFromAnalyses(null, form());
+    expect(res).toEqual({
+      ok: false,
+      error: "O jogo mudou desde a última leitura. Use Analisar com IA.",
+    });
+    expect(checkPalpitesRateLimit).not.toHaveBeenCalled();
+  });
+
+  it("leitura com mais de 10 min: também pede uma leitura nova", async () => {
+    vi.mocked(getPredictionHistoryForMatch).mockResolvedValue([
+      liveHistoryRow(freshState(), new Date(NOW - 11 * 60_000)),
+    ] as never);
+    const res = await generatePalpiteFromAnalyses(null, form());
+    expect(res).toEqual({
+      ok: false,
+      error: "O jogo mudou desde a última leitura. Use Analisar com IA.",
+    });
+  });
+
+  it("flag desligada: o gate de hoje, sem ler o estado", async () => {
+    vi.mocked(getEnableLiveMode).mockResolvedValue(false);
+    const res = await generatePalpiteFromAnalyses(null, form());
+    expect(res).toEqual({
+      ok: false,
+      error: "Jogo em andamento — a análise fica disponível só antes do apito inicial.",
+    });
+    expect(getInPlayState).not.toHaveBeenCalled();
+    expect(generateLivePalpites).not.toHaveBeenCalled();
+  });
+
+  it("sem modelo em jogo: recusa sem cobrar", async () => {
+    vi.mocked(resolveInPlaySlipModel).mockResolvedValue(null);
+    const res = await generatePalpiteFromAnalyses(null, form());
+    expect(res).toEqual({ ok: false, error: "Sem modelo para a leitura ao vivo deste jogo." });
+    expect(checkPalpitesRateLimit).not.toHaveBeenCalled();
   });
 });

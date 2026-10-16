@@ -74,6 +74,11 @@ export function PublicPalpite({
           ) : (
             <ConfidenceChip confidence={view.confidence} />
           )}
+          {view.liveLabel && (
+            <span className="inline-flex items-center rounded-full border border-dashed border-palpite-border/70 px-2.5 py-0.5 font-mono text-meta tabular-nums tracking-tight text-muted-foreground">
+              {view.liveLabel}
+            </span>
+          )}
         </div>
       </div>
 

@@ -309,6 +309,7 @@ function PopulatedHero({
           ) : (
             <ConfidenceChip confidence={view.confidence} />
           )}
+          {view.liveLabel && <LiveMomentChip label={view.liveLabel} />}
         </div>
 
         {/* Veredito + placar AGRUPADOS (gap-2): leem como UMA fala do amigo
@@ -716,6 +717,16 @@ function Kicker() {
   return (
     <span className="inline-flex w-fit items-center rounded-full bg-palpite-soft px-2.5 py-0.5 text-meta uppercase tracking-eyebrow text-palpite-strong-fg">
       Palpite da IA
+    </span>
+  );
+}
+
+// Palpite gerado com o jogo rolando (#594): "palpite aos 63' (1–0)". Minuto e placar são
+// FATOS do jogo (não número de valor), em mono discreto — nunca verde edge-*.
+function LiveMomentChip({ label }: { label: string }) {
+  return (
+    <span className="inline-flex items-center rounded-full border border-dashed border-palpite-border/70 px-2.5 py-0.5 font-mono text-meta tabular-nums tracking-tight text-muted-foreground">
+      {label}
     </span>
   );
 }

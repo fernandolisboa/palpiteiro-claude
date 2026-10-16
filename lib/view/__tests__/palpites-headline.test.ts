@@ -3,6 +3,7 @@ import { describe, expect, it } from "vitest";
 import type { PalpiteHeadline } from "@/db/schema";
 import { containsValueLanguage } from "@/lib/ai/palpites/value-language-guard";
 import type { PalpiteSetWithLines } from "@/lib/db/queries/palpites";
+import { liveColumns, liveStampFromState } from "@/lib/live/stamp";
 import {
   PALPITE_DISCLAIMER,
   toDimensionViews,
@@ -266,5 +267,31 @@ describe("toPalpiteHeadlineViewFromSet", () => {
     expect(fresh).toEqual([{ label: "Mandante ganha por 2+", badge: null }]);
     // Paridade fresh == reload mantida (a #354 anti-glitch invariant segue de pé).
     expect(fresh).toEqual(reload);
+  });
+});
+
+describe("toPalpiteHeadlineView — palpite ao vivo (#594)", () => {
+  it("set ao vivo ganha o selo do momento; pré-jogo não", () => {
+    const cols = liveColumns(
+      liveStampFromState(
+        {
+          statusShort: "2H",
+          elapsed: 63,
+          extra: null,
+          minuteLabel: "63'",
+          score: { home: 1, away: 0 },
+          red: { home: 0, away: 0 },
+          fetchedAt: new Date("2026-06-01T12:00:00Z"),
+        },
+        new Date("2026-06-01T12:00:10Z"),
+      ),
+    );
+    const live = toPalpiteHeadlineView(source({ live: cols }));
+    expect(live.liveLabel).toBe("palpite aos 63' (1–0)");
+    expect(containsValueLanguage(live.liveLabel!)).toBe(false);
+    expect(toPalpiteHeadlineView(source()).liveLabel).toBeUndefined();
+    expect(
+      toPalpiteHeadlineView(source({ live: { isLive: false, liveState: null } })).liveLabel,
+    ).toBeUndefined();
   });
 });

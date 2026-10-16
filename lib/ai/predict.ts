@@ -34,6 +34,7 @@ import { resolveInPlaySlipModel } from "@/lib/bets/slip-model";
 import { IN_PLAY_ACT_MAX_AGE_MS, isLiveStateActionable } from "@/lib/live/freshness";
 import type { InPlayState } from "@/lib/live/in-play-state";
 import { matchPhase } from "@/lib/live/phase";
+import { liveMomentPhrase } from "@/lib/live/readings";
 import { liveColumns, liveStampFromState } from "@/lib/live/stamp";
 import {
   decidedOutcome,
@@ -1902,10 +1903,10 @@ export async function predictInPlay(
     plans.findIndex((p) => p.marketKey === IN_PLAY_NARRATED_MARKET),
   );
   const situation = {
-    moment:
-      phase.kind === "half_time"
-        ? "no intervalo"
-        : `aos ${state.minuteLabel ?? scoreline.inPlay.minuteLabel}`,
+    moment: liveMomentPhrase({
+      statusShort: state.statusShort,
+      minuteLabel: state.minuteLabel ?? scoreline.inPlay.minuteLabel,
+    }),
     score,
     red: state.red,
   };
