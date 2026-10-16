@@ -105,7 +105,7 @@ export function AnalysisResult({ view, showRiskDisclaimer = true }: Props) {
         </div>
       </div>
       {rec && (
-        <div className="mx-4 mb-4 flex flex-col gap-2 rounded-md border border-border-subtle bg-surface-2 px-3 py-2.5">
+        <div className="mx-4 mb-4 flex max-w-reading flex-col gap-2 rounded-md border border-border-subtle bg-surface-2 px-3 py-2.5">
           <span className="text-meta uppercase tracking-label text-muted-foreground">
             aposta recomendada
           </span>

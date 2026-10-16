@@ -116,6 +116,9 @@ export function AnalysisScenarios({
               returnTone={returnTone}
               showHints
               minEdgePp={minEdgePp}
+              // Sozinha na largura cheia: rótulo e valor (justify-between) não se
+              // afastam além da medida de leitura na coluna larga da página do jogo.
+              className="max-w-reading"
             />
           ))}
           {alternatives.length > 0 && (
@@ -160,16 +163,16 @@ export function AnalysisScenarios({
         </p>
       )}
       {framing && (
-        <p className="text-meta leading-snug tracking-tight text-muted-foreground">
+        <p className="max-w-reading text-meta leading-snug tracking-tight text-muted-foreground">
           {framing}
         </p>
       )}
       {note && (
-        <p className="text-meta leading-snug tracking-tight text-muted-foreground">
+        <p className="max-w-reading text-meta leading-snug tracking-tight text-muted-foreground">
           {note}
         </p>
       )}
-      <p className="text-meta leading-snug tracking-tight text-muted-foreground">
+      <p className="max-w-reading text-meta leading-snug tracking-tight text-muted-foreground">
         {`o app só recomenda com vantagem de pelo menos ${minEdgePp} pontos sobre o mercado; os números acima são informativos · odds do momento da análise — as atuais estão na aba Mercados`}
       </p>
     </div>
@@ -185,6 +188,7 @@ type ColumnProps = {
   showHints: boolean;
   // Piso de edge do mercado (#290) — usado no HelpHint do edge. Default 5.
   minEdgePp: number;
+  className?: string;
 };
 
 function ScenarioColumn({
@@ -193,6 +197,7 @@ function ScenarioColumn({
   returnTone,
   showHints,
   minEdgePp,
+  className,
 }: ColumnProps) {
   const isRecommended = outcome.isRecommended;
   // Distingue a superfície "alternative" da "neutral" (pass) pro data-scenario-col
@@ -209,6 +214,7 @@ function ScenarioColumn({
         isRecommended
           ? "border-accent-border bg-accent-soft"
           : "border-border-subtle bg-surface-2",
+        className,
       )}
     >
       <div className="flex items-baseline justify-between gap-2 pb-0.5">

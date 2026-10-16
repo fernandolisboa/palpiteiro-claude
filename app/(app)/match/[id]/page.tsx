@@ -667,7 +667,10 @@ function MatchLayout({
   seuPalpiteClosed,
 }: MatchLayoutProps) {
   return (
-    <PageContainer width="wide">
+    // `wide` só com o painel Suas apostas ao lado (a coluna principal fica em ~852px);
+    // sem ele (jogo encerrado, adiado, ou em andamento sem o ao vivo), a coluna única
+    // volta pra `content`, senão a tabela e os Dados esticariam a ~1216px.
+    <PageContainer width={registerBets ? "wide" : "content"}>
       {/* O h1 da página fica aqui, não no MatchHero: em components/ só o PageHeader e o
           PageHeading do admin têm <h1> (page-header-coverage.test.ts). */}
       <h1 className="sr-only">
@@ -759,7 +762,7 @@ function MatchLayout({
                     />
                   </Suspense>
                 ) : (
-                  <p className="text-body-sm text-muted-foreground tracking-tight">
+                  <p className="max-w-reading text-body-sm text-muted-foreground tracking-tight">
                     {seuPalpiteClosed}
                   </p>
                 )
@@ -822,7 +825,7 @@ function NotAnalyzableNotice({
       <span className="text-meta tracking-label text-muted-foreground uppercase">
         {label}
       </span>
-      <p className="text-body-sm text-muted-foreground tracking-tight">
+      <p className="max-w-reading text-body-sm text-muted-foreground tracking-tight">
         {detail}
       </p>
     </div>

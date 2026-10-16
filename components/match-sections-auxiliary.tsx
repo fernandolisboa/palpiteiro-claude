@@ -114,7 +114,7 @@ function InjuriesBody({
   view: ReturnType<typeof toInjuriesView>;
 }) {
   return (
-    <div className="flex flex-col gap-3">
+    <div className="flex max-w-reading flex-col gap-3">
       {(["home", "away"] as const).map((side) => {
         const items = view[side];
         if (items.length === 0) return null;
