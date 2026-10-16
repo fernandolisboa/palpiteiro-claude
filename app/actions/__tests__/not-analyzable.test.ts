@@ -3,8 +3,10 @@ import { describe, expect, it } from "vitest";
 import {
   capabilityBlockedMessage,
   capabilityGateMessage,
+  SEU_PALPITE_PRE_MATCH_ONLY,
+  seuPalpiteClosedMessage,
 } from "@/app/actions/not-analyzable";
-import type { LiveStateInput } from "@/lib/live/phase";
+import { matchPhase, type LiveStateInput } from "@/lib/live/phase";
 
 const NOW = new Date("2026-10-15T20:00:00Z");
 const KICKOFF = new Date(NOW.getTime() - 40 * 60_000);
@@ -105,6 +107,66 @@ describe("capabilityGateMessage (ADR 0060)", () => {
     ] as const) {
       expect(capabilityBlockedMessage("analyze", reason)).not.toMatch(
         /encerrado|cancelado/
+      );
+    }
+  });
+});
+
+describe("seuPalpiteClosedMessage (#594): a aba Seu palpite fechada", () => {
+  const phaseOf = (
+    match: { status: string; kickoffAt: Date },
+    s: LiveStateInput | null,
+    liveMode: boolean
+  ) => matchPhase(match, s, NOW, { liveMode });
+
+  it("flag desligada ou antes do apito: a copy de sempre", () => {
+    expect(seuPalpiteClosedMessage(phaseOf(LIVE_MATCH, null, false))).toBe(
+      SEU_PALPITE_PRE_MATCH_ONLY
+    );
+    expect(
+      seuPalpiteClosedMessage(phaseOf(LIVE_MATCH, state(), false), {
+        liveMode: false,
+      })
+    ).toBe(SEU_PALPITE_PRE_MATCH_ONLY);
+    const pre = phaseOf(
+      { status: "scheduled", kickoffAt: new Date(NOW.getTime() + 3_600_000) },
+      null,
+      true
+    );
+    expect(seuPalpiteClosedMessage(pre, { liveMode: true })).toBe(
+      SEU_PALPITE_PRE_MATCH_ONLY
+    );
+  });
+
+  it("ao vivo: por motivo, nunca 'aberto até o apito inicial'", () => {
+    const opts = { liveMode: true };
+    // Sem estado: placar indisponível.
+    expect(
+      seuPalpiteClosedMessage(phaseOf(LIVE_MATCH, null, true), opts)
+    ).toBe(capabilityBlockedMessage("seuPalpite", "live_unavailable"));
+    // Encerrado.
+    expect(
+      seuPalpiteClosedMessage(
+        phaseOf(LIVE_MATCH, state({ statusShort: "FT", elapsed: 90 }), true),
+        opts
+      )
+    ).toBe(capabilityBlockedMessage("seuPalpite", "finished"));
+    // Rolando, estado bom, sem placar / sem modelo.
+    const inPlay = phaseOf(LIVE_MATCH, state(), true);
+    expect(inPlay.actionable).toBe(true);
+    expect(seuPalpiteClosedMessage(inPlay, opts)).toBe(
+      "Placar ao vivo indisponível agora. Tente em um minuto."
+    );
+    expect(
+      seuPalpiteClosedMessage(inPlay, { ...opts, hasScore: true })
+    ).toBe("Sem modelo para a leitura ao vivo deste jogo.");
+    for (const p of [
+      phaseOf(LIVE_MATCH, null, true),
+      phaseOf(LIVE_MATCH, state({ statusShort: "FT", elapsed: 90 }), true),
+      inPlay,
+    ]) {
+      expect(seuPalpiteClosedMessage(p, opts)).not.toBe(
+        SEU_PALPITE_PRE_MATCH_ONLY
       );
     }
   });

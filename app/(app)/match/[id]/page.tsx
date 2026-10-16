@@ -33,6 +33,7 @@ import {
   SeuPalpiteSection,
   SeuPalpiteSkeleton,
 } from "@/components/seu-palpite-section";
+import { seuPalpiteClosedMessage } from "@/app/actions/not-analyzable";
 import { auth } from "@/auth";
 import { leagueToKey } from "@/lib/format";
 import { teamToTeam } from "@/lib/view/team";
@@ -549,6 +550,11 @@ export default async function MatchPage({ params, searchParams }: PageProps) {
             ? "Sem modelo para a leitura ao vivo deste jogo."
             : null
         }
+        seuPalpiteClosed={seuPalpiteClosedMessage(phase, {
+          liveMode,
+          modelReady: inPlayModel !== null,
+          hasScore: liveScore !== null,
+        })}
       />
     </>
   );
@@ -618,6 +624,8 @@ type MatchLayoutProps = {
   liveAnalysis: boolean;
   // #594: o motivo do aviso de não-analisável quando o jogo está ao vivo sem modelo.
   noticeDetail: string | null;
+  // #594: a copy da aba "Seu palpite" quando ela não abre (por motivo, ao vivo).
+  seuPalpiteClosed: string;
 };
 
 // Uma árvore responsiva (#576): a mesma ordem no celular e no desktop, com `lg:` dentro
@@ -656,6 +664,7 @@ function MatchLayout({
   canOpenAnalysis,
   liveAnalysis,
   noticeDetail,
+  seuPalpiteClosed,
 }: MatchLayoutProps) {
   return (
     <PageContainer width="content">
@@ -751,7 +760,7 @@ function MatchLayout({
                   </Suspense>
                 ) : (
                   <p className="text-body-sm text-muted-foreground tracking-tight">
-                    {noticeDetail ?? "O Seu palpite fica aberto até o apito inicial."}
+                    {seuPalpiteClosed}
                   </p>
                 )
               }
