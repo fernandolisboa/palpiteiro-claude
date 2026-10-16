@@ -284,13 +284,16 @@ function rowHasSettleableType<T extends { type: DbPalpite["type"] }>(
  * SETTLEABLE_PALPITE_TYPES é a fonte ÚNICA que dirige este predicado E deriveSettleable
  * (#354) — sem drift.
  *
- * LATEST-ONLY (ADR 0030 / #353, blocker #2): cada run do palpite-first grava um
- * `palpite_set` novo (semântica de regen, sets imutáveis newest-first), então um jogo
- * pode ter N sets/usuário. SÓ a ÚLTIMA geração por (matchId,userId,isLive) liquida —
- * `notExists` de um set mais novo do mesmo (match,user,isLive). Mantém paridade com o
- * display, que já mostra `sets[0]`. Sem isso, N badges/jogo apareceriam. O palpite ao
- * vivo (#580/#594) NÃO apaga o de pré-jogo: são dois palpites diferentes e os dois
- * liquidam (o mais novo de cada lado).
+ * LATEST-ONLY POR LADO (ADR 0030 / #353, blocker #2; #594): cada run do palpite-first
+ * grava um `palpite_set` novo (semântica de regen, sets imutáveis newest-first), então
+ * um jogo pode ter N sets/usuário. Liquida SÓ o set mais novo de cada lado, pré-jogo
+ * (`is_live = false`) e ao vivo (`is_live = true`), por (matchId,userId,isLive):
+ * `notExists` de um set mais novo do mesmo (match,user,isLive). Então liquidam no
+ * máximo DOIS sets por jogo/usuário: o pré-jogo mais novo e o ao vivo mais novo; os
+ * regens mais velhos de cada lado nunca liquidam. O palpite ao vivo NÃO apaga o de
+ * pré-jogo: são dois palpites diferentes. Antes do #594 (só pré-jogo) isso era a
+ * paridade exata com o HERO, que mostra `sets[0]` (o mais novo de todos); com um set
+ * ao vivo, o HERO mostra o ao vivo e o de pré-jogo mais novo liquida sem estar no HERO.
  */
 export async function getPendingPalpiteSettlements(
   now: Date = new Date()
