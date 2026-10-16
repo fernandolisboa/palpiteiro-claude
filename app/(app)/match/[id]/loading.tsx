@@ -59,7 +59,7 @@ function TabsSkeleton() {
 // de 340px do painel Suas apostas, então a coluna principal nasce na largura final.
 export default function MatchLoading() {
   return (
-    <PageContainer width="content">
+    <PageContainer width="wide">
       <HeaderBar />
       <HeroSkeleton />
       <div className="pt-4 lg:grid lg:grid-cols-[minmax(0,1fr)_340px] lg:items-start lg:gap-6">

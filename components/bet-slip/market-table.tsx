@@ -47,7 +47,7 @@ export function MarketTable({ grid }: { grid: BetGridView }) {
   return (
     <div className="flex flex-col gap-3">
       {register && (
-        <p className="text-body-sm text-muted-foreground tracking-tight">
+        <p className="max-w-reading text-body-sm text-muted-foreground tracking-tight">
           {live
             ? "Toque nas seleções que você apostou, digite a odd que pegou e registre. A avaliação sai na hora, pela chance do modelo ao vivo."
             : "Toque nas seleções que você apostou, confira a odd que pegou e registre. A avaliação sai na hora, sem gastar análise do dia."}

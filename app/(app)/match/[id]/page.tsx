@@ -667,7 +667,7 @@ function MatchLayout({
   seuPalpiteClosed,
 }: MatchLayoutProps) {
   return (
-    <PageContainer width="content">
+    <PageContainer width="wide">
       {/* O h1 da página fica aqui, não no MatchHero: em components/ só o PageHeader e o
           PageHeading do admin têm <h1> (page-header-coverage.test.ts). */}
       <h1 className="sr-only">

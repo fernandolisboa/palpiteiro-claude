@@ -59,17 +59,19 @@ describe("SiteFooter", () => {
 describe("rodapé na largura da página (guarda de fonte, ADR 0059)", () => {
   const css = read("app/globals.css");
   const reading = css.indexOf('body:has([data-page-width="reading"]) [data-footer-column]');
+  const wide = css.indexOf('body:has([data-page-width="wide"]) [data-footer-column]');
   const form = css.indexOf('body:has([data-page-width="form"]) [data-footer-column]');
 
-  it("as regras de reading e form existem, com form por último", () => {
+  it("as regras de reading, wide e form existem, com form por último", () => {
     expect(reading).toBeGreaterThan(-1);
-    expect(form).toBeGreaterThan(reading);
+    expect(wide).toBeGreaterThan(reading);
+    expect(form).toBeGreaterThan(wide);
   });
 
   it("toda var(--container-…) tem fallback literal e não há content-box", () => {
     const rules = css.slice(reading, css.indexOf("}", css.lastIndexOf("[data-footer-column]")) + 1);
     const vars = rules.match(/var\(--container-[a-z]+[^)]*\)/g) ?? [];
-    expect(vars.length).toBeGreaterThanOrEqual(3);
+    expect(vars.length).toBeGreaterThanOrEqual(4);
     for (const v of vars) expect(v).toMatch(/var\(--container-[a-z]+, \d+px\)/);
     expect(css).not.toContain("content-box");
   });

@@ -48,12 +48,14 @@ describe("PageHeader (ADR 0056)", () => {
 });
 
 describe("PageContainer", () => {
-  it("duas larguras e o mesmo gutter", () => {
+  it("três larguras e o mesmo gutter", () => {
     const content = renderToStaticMarkup(<PageContainer width="content">x</PageContainer>);
     const reading = renderToStaticMarkup(<PageContainer width="reading">x</PageContainer>);
+    const wide = renderToStaticMarkup(<PageContainer width="wide">x</PageContainer>);
     expect(content).toContain("max-w-content");
     expect(reading).toContain("max-w-reading");
-    for (const html of [content, reading]) {
+    expect(wide).toContain("max-w-wide");
+    for (const html of [content, reading, wide]) {
       expect(html).toContain("px-5");
       expect(html).toContain("lg:px-8");
     }
@@ -64,5 +66,7 @@ describe("PageContainer", () => {
     const reading = renderToStaticMarkup(<PageContainer width="reading">x</PageContainer>);
     expect(content).toContain('data-page-width="content"');
     expect(reading).toContain('data-page-width="reading"');
+    const wide = renderToStaticMarkup(<PageContainer width="wide">x</PageContainer>);
+    expect(wide).toContain('data-page-width="wide"');
   });
 });

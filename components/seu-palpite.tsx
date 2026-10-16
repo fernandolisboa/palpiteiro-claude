@@ -499,7 +499,7 @@ function AnalysisCard({
             {a.verdictHeadline}
           </span>
         </div>
-        <p className="text-body-sm tracking-tight">{a.resumo}</p>
+        <p className="max-w-reading text-body-sm tracking-tight">{a.resumo}</p>
 
         {a.claims.length > 0 && (
           <div className="flex flex-col gap-2">
@@ -552,7 +552,7 @@ function AnalysisCard({
         </div>
 
         {a.pontos.length > 0 && (
-          <ul className="flex list-disc flex-col gap-1 pl-5 text-body-sm tracking-tight">
+          <ul className="flex max-w-reading list-disc flex-col gap-1 pl-5 text-body-sm tracking-tight">
             {a.pontos.map((p, i) => (
               <li key={i}>{p}</li>
             ))}
@@ -564,7 +564,7 @@ function AnalysisCard({
               onde o modelo discorda de você
             </span>
             {a.discordancias.map((d, i) => (
-              <p key={i} className="text-body-sm tracking-tight">
+              <p key={i} className="max-w-reading text-body-sm tracking-tight">
                 <span className="text-muted-foreground">“{d.claimText}”: </span>
                 {d.texto}
               </p>

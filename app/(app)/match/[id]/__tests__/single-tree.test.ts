@@ -20,8 +20,8 @@ describe.each(["page.tsx", "loading.tsx"])("app/(app)/match/[id]/%s", (file) => 
     expect(src).not.toMatch(/\bhidden lg:block\b/);
   });
 
-  it("usa o PageContainer (um gutter só)", () => {
-    expect(src).toMatch(/<PageContainer width="content">/);
+  it("usa o PageContainer largo (um gutter só, mesma largura na página e no loading)", () => {
+    expect(src).toMatch(/<PageContainer width="wide">/);
   });
 });
 
