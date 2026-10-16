@@ -147,14 +147,15 @@ export function ComoUsarContent() {
             celular, a linha rola pro lado.
           </li>
           <li>
-            Escolha o período: <Ui>5 dias</Ui>, <Ui>14 dias</Ui>,{" "}
-            <Ui>Competição</Ui> (a temporada inteira) ou um intervalo seu em{" "}
-            <Ui>Escolher datas</Ui> (campos <Ui>De</Ui> e <Ui>Até</Ui>, depois{" "}
-            <Ui>Aplicar</Ui>). Com um intervalo escolhido, o botão mostra as datas.
+            A lista começa nos próximos jogos e segue daqui pra frente;{" "}
+            <Ui>Carregar mais</Ui>, no fim, traz mais 15. Pra um período seu,
+            inclusive jogos que já passaram, use <Ui>Escolher datas</Ui> (campos{" "}
+            <Ui>De</Ui> e <Ui>Até</Ui>, depois <Ui>Aplicar</Ui>). Com um intervalo
+            escolhido, o botão mostra as datas e o <Ui>×</Ui> do lado volta pros
+            próximos jogos.
           </li>
           <li>
-            Toque no jogo pra abrir. A lista mostra 15 jogos por vez;{" "}
-            <Ui>Carregar mais</Ui> traz mais 15.
+            Toque no jogo pra abrir.
           </li>
         </Steps>
         <p>

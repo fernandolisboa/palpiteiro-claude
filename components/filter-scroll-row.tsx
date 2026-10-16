@@ -30,7 +30,7 @@ export function revealActiveChip(row: HTMLElement): void {
 
 /**
  * Linha rolável de filtros da lista de jogos (#577). Em 390px o chip selecionado
- * (o intervalo "18/10 – 25/10", às vezes "Competição") fica fora da tela, e o
+ * (o intervalo "18/10 – 25/10") pode ficar fora da tela, e o
  * período não aparece em outro lugar: ao montar e a cada troca de filtro
  * (`activeKey`), a linha rola até ele. Os chips seguem vindo do servidor (`children`).
  */

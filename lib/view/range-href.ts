@@ -14,16 +14,16 @@ export type RangeNavState = {
 };
 
 /**
- * Próxima escolha do usuário — ou um preset (today5/today14/season) ou um
- * range custom com `from`/`to` em `YYYY-MM-DD`.
+ * Próxima escolha do usuário — a lista padrão (upcoming) ou um range custom com
+ * `from`/`to` em `YYYY-MM-DD`.
  */
 export type RangeChoice =
-  | { preset: "today5" | "today14" | "season" }
+  | { preset: "upcoming" }
   | { preset: "custom"; from: string; to: string };
 
 /**
  * Href puro pra home autenticada (`/jogos`) preservando a liga atual e aplicando
- * a próxima escolha de range. `preset=today5` (default) não aparece na URL. A liga
+ * a próxima escolha de range. `upcoming` (default) não aparece na URL. A liga
  * vai SEMPRE explícita, inclusive `league=all`: o default de /jogos sem param
  * (`defaultLeagueFilter`) depende de quantas ligas estão ativas no banco, então o href não
  * pode assumir que omitir o param dá "Todos" (#491).
@@ -40,13 +40,11 @@ export function buildRangeHref(
 
   params.set("league", current.league);
 
-  // `today5` é o default — não polui a URL.
-  if (next.preset !== "today5") {
+  // `upcoming` é o default — não polui a URL.
+  if (next.preset === "custom") {
     params.set("preset", next.preset);
-    if (next.preset === "custom") {
-      params.set("from", next.from);
-      params.set("to", next.to);
-    }
+    params.set("from", next.from);
+    params.set("to", next.to);
   }
 
   return `/jogos?${params.toString()}`;
@@ -61,20 +59,13 @@ export function buildLeagueHref(
   current: Pick<RangeNavState, "preset" | "from" | "to">,
   league: LeagueFilter,
 ): string {
+  // custom sem from/to válidos cai pro default (upcoming).
   const choice: RangeChoice =
     current.preset === "custom" && current.from && current.to
       ? { preset: "custom", from: current.from, to: current.to }
-      : current.preset === "custom"
-        ? // custom sem from/to válidos cai pro default (today5)
-          { preset: "today5" }
-        : { preset: current.preset };
+      : { preset: "upcoming" };
   return buildRangeHref({ league }, choice);
 }
-
-const DAY_LABEL: Record<"today5" | "today14", string> = {
-  today5: "Próximos 5 dias",
-  today14: "Próximos 14 dias",
-};
 
 // "2026-10-18" → "18/10": o dia civil escolhido, sem passar por Date (sem fuso).
 function formatDayLabel(day: string): string {
@@ -83,44 +74,33 @@ function formatDayLabel(day: string): string {
 }
 
 /**
- * Rótulo derivado do range resolvido (não de literais espalhados pela page).
- * "Próximos 5 dias" / "Próximos 14 dias" / "Competição" / "DD/MM – DD/MM".
+ * Rótulo derivado do range resolvido (não de literais espalhados pela page):
+ * "Próximos jogos" ou, no custom, "DD/MM – DD/MM".
  */
 export function rangeLabel(range: ResolvedRange): string {
-  if (range.preset === "season") return "Competição";
-  if (range.preset === "custom") {
-    if (range.days) {
-      return `${formatDayLabel(range.days.from)} – ${formatDayLabel(range.days.to)}`;
-    }
-    // custom que caiu no fallback today5 (datas inválidas) — usa rótulo de 5 dias.
-    return DAY_LABEL.today5;
+  if (range.preset === "custom" && range.days) {
+    return `${formatDayLabel(range.days.from)} – ${formatDayLabel(range.days.to)}`;
   }
-  return DAY_LABEL[range.preset];
+  return "Próximos jogos";
 }
 
 /**
- * Mensagem de empty-state sensível ao range: presets "próximos N dias" sugerem
- * voltar perto do jogo; season/custom indicam ausência no período escolhido.
+ * Mensagem de empty-state sensível ao range: a lista padrão diz que não há jogo
+ * marcado e aponta pro Escolher datas; custom indica ausência no período escolhido.
  */
 export function rangeEmptyMessage(range: ResolvedRange): {
   title: string;
   detail: string;
 } {
-  if (range.preset === "season") {
-    return {
-      title: "Nenhum jogo na competição",
-      detail: "Sem partidas registradas para esta competição ainda.",
-    };
-  }
   if (range.preset === "custom") {
     return {
       title: "Nenhum jogo nesse período",
-      detail: "Tente um intervalo diferente ou um dos períodos pré-definidos.",
+      detail: "Tente um intervalo diferente ou limpe as datas pra voltar aos próximos jogos.",
     };
   }
   return {
-    title: `Sem jogos — ${rangeLabel(range).toLowerCase()}`,
+    title: "Nenhum jogo marcado",
     detail:
-      "Sem partidas agendadas nessa janela. Volte mais perto do próximo jogo.",
+      "Sem partidas agendadas daqui pra frente. Pra ver jogos que já passaram, use Escolher datas.",
   };
 }

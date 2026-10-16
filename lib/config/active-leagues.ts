@@ -27,10 +27,6 @@ export const FALLBACK_ACTIVE_LEAGUES: readonly SupportedLeague[] = [
   "champions_league",
 ];
 
-// Janela default de EXIBIÇÃO da home (preset `today5`). NÃO dirige mais o sync:
-// o sync busca a competição+temporada inteira via getFixturesBySeason.
-export const LIST_WINDOW_HOURS = 120; // 5 dias
-
 /**
  * Filtro default da home quando não há ?league=: "Todos" com >1 liga ativa (decisão
  * do dono, #491); com 1 liga só, a própria liga (aí "Todos" nem existe como aba).
