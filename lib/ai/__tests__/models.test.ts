@@ -2,6 +2,7 @@ import { afterEach, beforeEach, describe, expect, it } from "vitest";
 
 import {
   DEFAULT_MODEL_ID,
+  FAMILY_LABEL,
   MODEL_REGISTRY,
   SELECTABLE_MODELS,
   UTILITY_MODEL_ID,
@@ -10,6 +11,8 @@ import {
   isModelAllowedForAudience,
   modelChoiceForAudience,
   modelsForAudience,
+  parseClaudeVersion,
+  pinnedModelFor,
   providerHasKey,
   resolveModelId,
 } from "@/lib/ai/models";
@@ -357,5 +360,77 @@ describe("UTILITY_MODEL_ID — modelo das tarefas internas baratas", () => {
     expect(UTILITY_MODEL_ID).toBe("claude-haiku-5-5");
     expect(MODEL_REGISTRY[UTILITY_MODEL_ID].family).toBe("haiku");
     expect(MODEL_REGISTRY[UTILITY_MODEL_ID].speed).toBe("fast");
+  });
+});
+
+describe("parseClaudeVersion — versão de um id das três famílias (PLAN-608)", () => {
+  it("major sem minor vale .0", () => {
+    expect(parseClaudeVersion("claude-sonnet-6")).toEqual({
+      family: "sonnet",
+      major: 6,
+      minor: 0,
+      snapshot: null,
+    });
+  });
+
+  it("major + snapshot (sem minor) vale .0 com snapshot", () => {
+    expect(parseClaudeVersion("claude-sonnet-5-20260301")).toEqual({
+      family: "sonnet",
+      major: 5,
+      minor: 0,
+      snapshot: "20260301",
+    });
+  });
+
+  it("major.minor com e sem snapshot", () => {
+    expect(parseClaudeVersion("claude-haiku-5-6-20261101")).toEqual({
+      family: "haiku",
+      major: 5,
+      minor: 6,
+      snapshot: "20261101",
+    });
+    expect(parseClaudeVersion("claude-opus-5-5")).toEqual({
+      family: "opus",
+      major: 5,
+      minor: 5,
+      snapshot: null,
+    });
+  });
+
+  it("os três conferidos do registry são reconhecidos", () => {
+    for (const id of ANTHROPIC_IDS) {
+      expect(parseClaudeVersion(id)).not.toBeNull();
+    }
+  });
+
+  it("formato antigo, outra família, sufixo e lixo → null", () => {
+    expect(parseClaudeVersion("claude-3-5-haiku-20241022")).toBeNull();
+    expect(parseClaudeVersion("claude-fable-5-1")).toBeNull();
+    expect(parseClaudeVersion("claude-mythos-1")).toBeNull();
+    expect(parseClaudeVersion("claude-opus-5-5-preview")).toBeNull();
+    expect(parseClaudeVersion("claude-opus-5-5[1m]")).toBeNull();
+    expect(parseClaudeVersion("claude-sonnet-123")).toBeNull();
+    expect(parseClaudeVersion("claude-sonnet")).toBeNull();
+    expect(parseClaudeVersion("gpt-5-mini")).toBeNull();
+    expect(parseClaudeVersion("")).toBeNull();
+  });
+});
+
+describe("pinnedModelFor / FAMILY_LABEL", () => {
+  it("a conferida de cada família é a entrada do registry", () => {
+    expect(pinnedModelFor("opus")).toBe(MODEL_REGISTRY["claude-opus-5-5"]);
+    expect(pinnedModelFor("sonnet")).toBe(MODEL_REGISTRY["claude-sonnet-5-5"]);
+    expect(pinnedModelFor("haiku")).toBe(MODEL_REGISTRY["claude-haiku-5-5"]);
+  });
+
+  it("família ↔ conferida casam e os conferidos não têm `adopted`", () => {
+    for (const m of Object.values(MODEL_REGISTRY)) {
+      expect(pinnedModelFor(m.family).id).toBe(m.id);
+      expect(m.adopted).toBeUndefined();
+    }
+  });
+
+  it("rótulo da família", () => {
+    expect(FAMILY_LABEL).toEqual({ opus: "Opus", sonnet: "Sonnet", haiku: "Haiku" });
   });
 });

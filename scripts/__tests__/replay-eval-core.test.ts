@@ -51,6 +51,16 @@ describe("classifyThinkingMode — bifurcação por caminho de amostragem", () =
     expect(classifyThinkingMode("claude-sonnet-5")).toBe("temperature");
     expect(classifyThinkingMode("lixo-qualquer")).toBe("temperature");
   });
+
+  it("versão da família igual ou mais nova que a conferida (adotada, PLAN-608) → adaptive", () => {
+    expect(classifyThinkingMode("claude-sonnet-5-6")).toBe("adaptive");
+    expect(classifyThinkingMode("claude-haiku-5-6-20261101")).toBe("adaptive");
+    expect(classifyThinkingMode("claude-opus-6")).toBe("adaptive");
+    expect(classifyThinkingMode("claude-sonnet-5-5-20260301")).toBe("adaptive");
+    // Mais antiga que a conferida ou fora do formato estrito → estrito.
+    expect(classifyThinkingMode("claude-sonnet-5-4")).toBe("temperature");
+    expect(classifyThinkingMode("claude-opus-5-5-preview")).toBe("temperature");
+  });
 });
 
 describe("isAdaptiveFlipConfirmed — maioria de N runs", () => {

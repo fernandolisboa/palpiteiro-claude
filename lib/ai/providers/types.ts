@@ -91,6 +91,9 @@ export type AnalysisOk = {
   outputPayload: Record<string, unknown>;
   stopReason: string | null;
   latencyMs: number;
+  // O modelo que respondeu de fato. Os adapters devolvem `request.model`; quem loga
+  // `ai_calls.model`, custo e `modelVersion` lê daqui, nunca do pedido (PLAN-608).
+  servedModel: AIModel;
   // ADITIVO opt-in (ADR 0032, #377). Só populado no modo server-tool: os blocos de
   // conteúdo CRUS da resposta final (após resolver pause_turn), pra o provider de
   // notícias andar atrás dos `web_search_tool_result`. `undefined` no caminho do
@@ -117,11 +120,15 @@ export type AnalysisErr = {
   // DB) e o caller usa este campo pra dar uma mensagem amigável em vez de "falha
   // temporária". `category`/`explanation` vêm do provider e podem ser null.
   refusal?: ModelRefusal;
+  // A API rejeitou o pedido pro modelo (400 = pedido inválido; 404/403 = modelo
+  // inexistente ou sem acesso). Só informativo: `status` continua `provider_error`.
+  rejection?: "invalid_request" | "not_found";
   usage: AnalysisUsage;
   inputPayload: Record<string, unknown>;
   outputPayload: Record<string, unknown>;
   stopReason: string | null;
   latencyMs: number;
+  servedModel: AIModel;
 };
 
 export type AnalysisResult = AnalysisOk | AnalysisErr;

@@ -28,7 +28,9 @@ export type AIModelId = "claude-opus-5-5" | "claude-sonnet-5-5" | "claude-haiku-
 export type ModelFamily = "opus" | "sonnet" | "haiku";
 
 export type AIModel = {
-  id: AIModelId;
+  // `string`, não `AIModelId`: uma versão adotada (PLAN-608) tem id fora do registry.
+  // Quem precisa do id conferido usa `PinnedModel`.
+  id: string;
   // Provider que atende este modelo (ADR 0027): despacha o adapter no seam
   // (getProviderForModel) e é gravado em ai_calls.provider.
   provider: AIProviderKey;
@@ -54,13 +56,19 @@ export type AIModel = {
   // aceitam modelos userSelectable; admin enxerga todos. Hoje os três são
   // selecionáveis; o gate fica pra um modelo admin-only futuro.
   userSelectable: boolean;
+  // Presente só numa versão adotada automaticamente (PLAN-608): o preço é herdado da
+  // conferida da família até ser confirmado, e `pinnedId` é a conferida de fallback.
+  adopted?: { priceEstimated: boolean; pinnedId: AIModelId };
 };
+
+// Modelo do registry estático: o id é um dos conferidos.
+export type PinnedModel = AIModel & { id: AIModelId };
 
 // ORDEM = capacidade decrescente (Opus > Sonnet > Haiku). A UI DEPENDE desta ordem:
 // SELECTABLE_MODELS e modelsForAudience preservam a ordem de inserção do objeto,
 // então é ela que rege os dropdowns. O default NÃO é o primeiro — ele vem de
 // DEFAULT_MODEL_ID / ai_config, não da posição.
-export const MODEL_REGISTRY: Record<AIModelId, AIModel> = {
+export const MODEL_REGISTRY: Record<AIModelId, PinnedModel> = {
   // Thinking não desliga (disabled = 400 em qualquer effort); effort default do
   // servidor é `medium`, por isso mandamos o effort do ai_config explicitamente.
   "claude-opus-5-5": {
@@ -117,6 +125,39 @@ const FAMILY_MODEL: Record<ModelFamily, AIModelId> = {
   haiku: "claude-haiku-5-5",
 };
 
+export const FAMILY_LABEL: Record<ModelFamily, string> = {
+  opus: "Opus",
+  sonnet: "Sonnet",
+  haiku: "Haiku",
+};
+
+// A conferida da família: a base sempre disponível como fallback.
+export function pinnedModelFor(family: ModelFamily): PinnedModel {
+  return MODEL_REGISTRY[FAMILY_MODEL[family]];
+}
+
+export type ClaudeVersion = {
+  family: ModelFamily;
+  major: number;
+  minor: number;
+  snapshot: string | null;
+};
+
+// Versão de um id `claude-<família>-<major>[-<minor>][-<AAAAMMDD>]`, das três famílias
+// do app. Minor ausente vale 0 (`claude-sonnet-6` = 6.0). Estrita de propósito: o
+// formato antigo (`claude-3-5-haiku-…`), outras famílias (Fable, Mythos) e sufixos
+// como `-preview` ficam de fora (null).
+export function parseClaudeVersion(id: string): ClaudeVersion | null {
+  const m = /^claude-(opus|sonnet|haiku)-(\d{1,2})(?:-(\d{1,2}))?(?:-(\d{8}))?$/.exec(id);
+  if (!m) return null;
+  return {
+    family: m[1] as ModelFamily,
+    major: Number(m[2]),
+    minor: m[3] === undefined ? 0 : Number(m[3]),
+    snapshot: m[4] ?? null,
+  };
+}
+
 // Família de um id `claude-*` qualquer, inclusive os antigos (`claude-sonnet-4-5-20250929`,
 // `claude-3-5-haiku-20241022`, `claude-fable-5-1`). `null` pra id que não é Claude.
 export function claudeFamilyOf(
@@ -168,7 +209,7 @@ export const TYPESAFE_PRICE_PER_MTOK_INPUT = 0.042;
 // só entra quando a row falta/é inválida.
 export const DEFAULT_MODEL_ID: AIModelId = "claude-sonnet-5-5";
 
-export const SELECTABLE_MODELS: AIModel[] = Object.values(MODEL_REGISTRY);
+export const SELECTABLE_MODELS: PinnedModel[] = Object.values(MODEL_REGISTRY);
 
 // Valida strings não-confiáveis (FormData / coluna text do DB) contra o registry.
 export function isAIModelId(v: string): v is AIModelId {
@@ -197,7 +238,7 @@ export function providerHasKey(provider: AIProviderKey): boolean {
 // (admin vê todos; usuário comum só userSelectable), filtra modelos cujo provider
 // NÃO tem chave — um provider inerte (ex.: OpenAI sem OPENAI_API_KEY) some da
 // seleção em TODAS as audiências. Usada pela UI e revalidada no servidor.
-export function modelsForAudience(isAdmin: boolean): AIModel[] {
+export function modelsForAudience(isAdmin: boolean): PinnedModel[] {
   const withKey = SELECTABLE_MODELS.filter((m) => providerHasKey(m.provider));
   return isAdmin ? withKey : withKey.filter((m) => m.userSelectable);
 }

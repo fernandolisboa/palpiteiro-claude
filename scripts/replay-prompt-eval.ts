@@ -62,7 +62,7 @@ import {
   OverUnderOutputSchema,
   type OverUnderOutput,
 } from "@/lib/ai/markets/over_under";
-import { resolveModelId } from "@/lib/ai/models";
+import { MODEL_REGISTRY, resolveModelId } from "@/lib/ai/models";
 import { GENERATION_PARAM_DEFAULTS, isEffort } from "@/lib/ai/generation-params";
 import { requestTiming } from "@/lib/ai/providers/anthropic/timeouts";
 import {
@@ -442,7 +442,11 @@ async function main(): Promise<void> {
 
     const costKnown = replayModelId !== null;
     const costUsd = replayModelId
-      ? calculateCost({ model: replayModelId, inputTokens, outputTokens })
+      ? calculateCost({
+          model: MODEL_REGISTRY[replayModelId],
+          inputTokens,
+          outputTokens,
+        })
       : 0;
 
     results.push({

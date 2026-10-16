@@ -1,19 +1,16 @@
-import {
-  MODEL_REGISTRY,
-  TYPESAFE_PRICE_PER_MTOK_INPUT,
-  type AIModelId,
-} from "./models";
+import { TYPESAFE_PRICE_PER_MTOK_INPUT, type AIModel } from "./models";
 
-// Custo derivado do registry — garante que TODO modelo selecionável tem pricing.
+// Custo lido do próprio `AIModel` (o que rodou de fato, `result.servedModel`): o tipo
+// garante que todo modelo tem pricing, inclusive uma versão fora do registry.
 // Com `longPromptPricing` (Haiku 5.5), um prompt acima do limite cobra a chamada
 // inteira na tarifa maior. `inputTokens` é o total da chamada; no ramo server-tool ele
 // soma as retomadas de pause_turn, e o limite vale pela soma (aproximação a maior).
 export function calculateCost(args: {
-  model: AIModelId;
+  model: AIModel;
   inputTokens: number;
   outputTokens: number;
 }): number {
-  const m = MODEL_REGISTRY[args.model];
+  const m = args.model;
   const rates =
     m.longPromptPricing && args.inputTokens > m.longPromptPricing.aboveInputTokens
       ? m.longPromptPricing

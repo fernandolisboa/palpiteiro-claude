@@ -325,7 +325,9 @@ export type PendingCodeJevPrediction = {
   narratorContext: NarratorContext;
   // Prazo do run (PredictArgs.deadlineAt), repassado à chamada narradora.
   deadlineAt?: number;
-  persist: Omit<PersistArgs, "aiCallId" | "rationale" | "keyFactors">;
+  // Sem `modelId`: o id que vai no modelVersion é o que serviu a narração do run,
+  // só conhecido depois dela (persistPendingPrediction).
+  persist: Omit<PersistArgs, "aiCallId" | "rationale" | "keyFactors" | "modelId">;
 };
 
 export type PredictOutcome =
@@ -353,7 +355,7 @@ export async function predictForBestBet(
 export async function narratePendingPrediction(
   pending: PendingCodeJevPrediction,
   options: PredictOptions = {},
-): Promise<{ aiCallId: string; output: NarratorOutput }> {
+): Promise<NarrationResult> {
   return narrateDecision({
     model: pending.model,
     userId: pending.userId,
@@ -369,10 +371,12 @@ export async function narratePendingPrediction(
  * Persiste uma decisão pendente. `narration` = a saída da chamada narradora DESTE
  * mercado; ausente = mercado não escolhido → racional templado em código (custo
  * zero), apontando pra row de ai_calls da narração do run (`aiCallId`).
+ * `servedModelId` = o modelo que serviu a narração do run, o mesmo em TODOS os
+ * mercados dele.
  */
 export async function persistPendingPrediction(
   pending: PendingCodeJevPrediction,
-  args: { aiCallId: string; narration?: NarratorOutput },
+  args: { aiCallId: string; servedModelId: string; narration?: NarratorOutput },
 ): Promise<PredictResult> {
   const text =
     args.narration ?? narratorCartridge.fallback(pending.narratorDecision);
@@ -380,6 +384,7 @@ export async function persistPendingPrediction(
   return persistPrediction({
     ...pending.persist,
     aiCallId: args.aiCallId,
+    modelId: args.servedModelId,
     rationale: text.rationale,
     keyFactors: text.key_factors,
     judgments: judgments && {
@@ -1034,8 +1039,7 @@ async function runPredict(
         bookmaker: oddsBundle.bookmakerTitle,
         // Tag `user=` só quando o contexto extra moveu um fator: a calibração separa
         // esses números (afirmação não verificável) do motor puro.
-        modelVersion: codeJevModelVersion(
-          model.id,
+        modelTags: codeJevModelTags(
           engineScoreline,
           user?.moved ? USER_EVIDENCE_VERSION : null,
         ),
@@ -1056,6 +1060,7 @@ async function runPredict(
       kind: "done",
       result: await persistPendingPrediction(pending, {
         aiCallId: narration.aiCallId,
+        servedModelId: narration.servedModelId,
         narration: narration.output,
       }),
     };
@@ -1236,7 +1241,7 @@ async function runPredict(
       userId,
       matchId,
       provider: providerKey,
-      model: model.id,
+      model,
       inputPayload: analysisRequest as unknown as Record<string, unknown>,
       outputPayload: { error: noKeyMsg },
       inputTokens: 0,
@@ -1265,12 +1270,14 @@ async function runPredict(
   if (opts.beforeLlmPath) await opts.beforeLlmPath();
   const result = await aiProvider.runAnalysis(analysisRequest);
   const latencyMs = result.latencyMs;
+  // Daqui em diante, auditoria, custo e modelVersion usam o modelo que respondeu.
+  const served = result.servedModel;
   if (!result.ok) {
     await persistAiCallError({
       userId,
       matchId,
       provider: providerKey,
-      model: model.id,
+      model: served,
       inputPayload: result.inputPayload,
       outputPayload: result.outputPayload,
       inputTokens: result.usage.inputTokens,
@@ -1286,7 +1293,7 @@ async function runPredict(
     if (result.refusal) {
       throw new PredictError("model refused the analysis", {
         refusal: result.refusal,
-        model: model.id,
+        model: served.id,
         cause: result.cause,
       });
     }
@@ -1310,7 +1317,7 @@ async function runPredict(
       userId,
       matchId,
       provider: providerKey,
-      model: model.id,
+      model: served,
       inputPayload,
       outputPayload,
       inputTokens,
@@ -1333,7 +1340,7 @@ async function runPredict(
       userId,
       matchId,
       provider: providerKey,
-      model: model.id,
+      model: served,
       inputPayload,
       outputPayload,
       inputTokens,
@@ -1393,7 +1400,7 @@ async function runPredict(
 
   // 11. Persistência (sequencial — neon-http não suporta transações reais).
   const cost = calculateCost({
-    model: model.id,
+    model: served,
     inputTokens,
     outputTokens,
   });
@@ -1405,7 +1412,7 @@ async function runPredict(
         userId,
         matchId,
         provider: providerKey,
-        model: model.id,
+        model: served.id,
         promptVersion: cartridge.version,
         inputPayload,
         outputPayload,
@@ -1469,7 +1476,8 @@ async function runPredict(
     keyFactors: output.key_factors,
     minimumOdd: output.minimum_odd,
     bookmaker: bookmakerTitle,
-    modelVersion: model.id,
+    modelId: served.id,
+    modelTags: "",
     promptVersion: cartridge.version,
     // `label` (nome do jogador) viaja só pro scorer (#290).
     labelByKey: isIndependentBinary
@@ -1658,7 +1666,11 @@ type PersistArgs = {
   minimumOdd: number | undefined;
   // null só na leitura ao vivo (#594): não há odd, logo não há casa.
   bookmaker: string | null;
-  modelVersion: string;
+  // modelVersion = `${modelId}${modelTags}`, montado só aqui: `modelId` é o modelo
+  // que respondeu (servedModel), só conhecido depois da chamada; `modelTags` são os
+  // marcadores do motor (`;engine=…`), vazio no caminho LLM.
+  modelId: string;
+  modelTags: string;
   promptVersion: string;
   judgments?: PredictionJudgments;
   labelByKey: Record<string, string> | null;
@@ -1709,7 +1721,7 @@ async function persistPrediction(a: PersistArgs): Promise<PredictResult> {
         // Stake congelado (ADR 0019): banda determinística sobre edge/confiança;
         // pass → 1u (irrelevante, fora do Yield). numeric(6,2) → string.
         stakeUnits: stakeUnits.toFixed(2),
-        modelVersion: a.modelVersion,
+        modelVersion: `${a.modelId}${a.modelTags}`,
         promptVersion: a.promptVersion,
         // Só o motor code_jev grava (ADR 0041 §6); o caminho LLM não envia a chave.
         ...(a.judgments ? { judgments: a.judgments } : {}),
@@ -1925,7 +1937,6 @@ export async function predictInPlay(
   // que não vira carimbo recusa sem gastar.
   const stamp = liveStampFromState(state, now, scoreline.inPlay);
   const live = liveColumns(stamp);
-  const modelVersion = inPlayModelVersion(model.id, scoreline);
 
   const narration = await narrateWith(liveNarratorCartridge, {
     model,
@@ -1960,7 +1971,8 @@ export async function predictInPlay(
       keyFactors: text.key_factors,
       minimumOdd: undefined,
       bookmaker: null,
-      modelVersion,
+      modelId: narration.servedModelId,
+      modelTags: inPlayModelTags(scoreline),
       promptVersion: liveNarratorCartridge.version,
       labelByKey: null,
       live,
@@ -2054,8 +2066,8 @@ function inPlayPassDecision(plan: InPlayMarketPlan): GatedDecision {
 
 // `engine=code_jev` (o código decide os números; o rodapé e a calibração leem por aqui)
 // + `live=` (a versão do modelo em jogo). Sem `judg=`/`w=`: não há JEV ao vivo.
-function inPlayModelVersion(modelId: AIModelId, scoreline: InPlayScoreline): string {
-  return `${modelId};engine=code_jev;lambda=${scoreline.source};live=${LIVE_MODEL_VERSION}`;
+function inPlayModelTags(scoreline: InPlayScoreline): string {
+  return `;engine=code_jev;lambda=${scoreline.source};live=${LIVE_MODEL_VERSION}`;
 }
 
 // ─── Motor code_jev (ADR 0041, #511) ─────────────────────────────────────────
@@ -2313,12 +2325,11 @@ async function fetchPreviousLineups(args: {
   return { home, away };
 }
 
-function codeJevModelVersion(
-  modelId: AIModelId,
+function codeJevModelTags(
   scoreline: ModelScoreline,
   userTag: string | null = null,
-) {
-  return `${modelId};engine=code_jev;lambda=${scoreline.source};judg=${JUDGMENTS_VERSION};w=${JUDGMENT_WEIGHTS_VERSION}${userTag ? `;user=${userTag}` : ""}`;
+): string {
+  return `;engine=code_jev;lambda=${scoreline.source};judg=${JUDGMENTS_VERSION};w=${JUDGMENT_WEIGHTS_VERSION}${userTag ? `;user=${userTag}` : ""}`;
 }
 
 // Contexto extra da análise (#565): espera a extração (já com teto na action), confere
@@ -2488,6 +2499,16 @@ type NarrationOutcome = {
   latencyMs: number;
   errorMessage: string | null;
   output: NarratorOutput | null;
+  // O modelo que respondeu; o pedido quando não houve chamada (prazo, sem chave).
+  servedModel: AIModel;
+};
+
+// O que a narração devolve: a row de ai_calls, o texto (ou o templado) e o id do
+// modelo que serviu, pro modelVersion das predições que apontam pra essa row.
+type NarrationResult = {
+  aiCallId: string;
+  output: NarratorOutput;
+  servedModelId: string;
 };
 
 // O contrato de um cartucho narrador (ADR 0041 §4): o de pré-jogo (narrator_v1.1) e o
@@ -2519,7 +2540,7 @@ async function narrateDecision(args: {
   context: NarratorContext;
   deadlineAt?: number;
   beforeLlmPath?: () => Promise<void>;
-}): Promise<{ aiCallId: string; output: NarratorOutput }> {
+}): Promise<NarrationResult> {
   return narrateWith(narratorCartridge, args);
 }
 
@@ -2534,7 +2555,7 @@ async function narrateWith<D, C>(
     deadlineAt?: number;
     beforeLlmPath?: () => Promise<void>;
   },
-): Promise<{ aiCallId: string; output: NarratorOutput }> {
+): Promise<NarrationResult> {
   const { model, decision } = args;
   const genParams = await getGenerationParams();
   const request: AnalysisRequest = {
@@ -2570,7 +2591,7 @@ async function narrateWith<D, C>(
     ? await runNarration(cartridge, aiProvider, request, decision)
     : narrationSkippedForDeadline(request);
   const cost = calculateCost({
-    model: model.id,
+    model: outcome.servedModel,
     inputTokens: outcome.inputTokens,
     outputTokens: outcome.outputTokens,
   });
@@ -2582,7 +2603,7 @@ async function narrateWith<D, C>(
         userId: args.userId,
         matchId: args.matchId,
         provider: providerKey,
-        model: model.id,
+        model: outcome.servedModel.id,
         promptVersion: cartridge.version,
         inputPayload: outcome.inputPayload,
         outputPayload: outcome.outputPayload,
@@ -2614,6 +2635,7 @@ async function narrateWith<D, C>(
   return {
     aiCallId,
     output: outcome.output ?? cartridge.fallback(decision),
+    servedModelId: outcome.servedModel.id,
   };
 }
 
@@ -2630,6 +2652,7 @@ function narrationSkippedForDeadline(
     latencyMs: 0,
     errorMessage: message,
     output: null,
+    servedModel: request.model,
   };
 }
 
@@ -2653,6 +2676,7 @@ async function runNarration<D, C>(
     latencyMs: base.latencyMs ?? 0,
     errorMessage,
     output: null,
+    servedModel: base.servedModel ?? request.model,
   });
 
   if (!aiProvider.hasKey()) {
@@ -2676,6 +2700,7 @@ async function runNarration<D, C>(
     inputTokens: result.usage.inputTokens,
     outputTokens: result.usage.outputTokens,
     latencyMs: result.latencyMs,
+    servedModel: result.servedModel,
   };
   if (!result.ok) return failed(result.status, result.message, base);
   if (result.toolInput === undefined) {

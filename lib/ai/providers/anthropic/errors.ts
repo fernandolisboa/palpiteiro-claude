@@ -38,6 +38,22 @@ export function classifyAnthropicError(err: unknown): {
   };
 }
 
+// Rejeição do pedido pela API, separada do resto dos `provider_error`: um 400 diz
+// que o corpo não serve pra aquele modelo; 404 e 403 dizem que o modelo não existe
+// ou a chave não tem acesso. Qualquer outro erro → undefined.
+export function rejectionOf(
+  err: unknown,
+): "invalid_request" | "not_found" | undefined {
+  if (err instanceof Anthropic.BadRequestError) return "invalid_request";
+  if (
+    err instanceof Anthropic.NotFoundError ||
+    err instanceof Anthropic.PermissionDeniedError
+  ) {
+    return "not_found";
+  }
+  return undefined;
+}
+
 // Serializa o erro do SDK pro `outputPayload.error` logado em `ai_calls`. Movido
 // verbatim de predict.ts (#230).
 export function serializeAnthropicError(err: unknown): Record<string, unknown> {

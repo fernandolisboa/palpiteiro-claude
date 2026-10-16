@@ -11,7 +11,11 @@
 // payload (mata o ruído single-shot — o modo de falha A/A observado no #105). Os
 // outros abortos do gate (mediana |Δconf| e errors) NÃO são model-aware.
 
-import { isAIModelId } from "@/lib/ai/models";
+import {
+  isAIModelId,
+  parseClaudeVersion,
+  pinnedModelFor,
+} from "@/lib/ai/models";
 
 export type ThinkingPath = "adaptive" | "temperature";
 
@@ -22,14 +26,29 @@ export type ThinkingPath = "adaptive" | "temperature";
 export const ADAPTIVE_FLIP_REPRO_RUNS = 3;
 export const MAX_DELTA_CONF_MEDIAN_PP = 5;
 
-// Caminho de amostragem do modelo. Todo modelo do registry é adaptive (ADR 0061). Id
-// fora do registry (modelo legado/removido — ex.: um payload Sonnet 4.5 antigo) →
-// "temperature" = caminho ESTRITO (qualquer flip
+// Caminho de amostragem do modelo. Todo modelo do registry é adaptive (ADR 0061), e
+// também uma versão da mesma família igual ou mais nova que a conferida (as adotadas,
+// PLAN-608: só entram se forem adaptive). Id fora disso (modelo legado/removido — ex.:
+// um payload Sonnet 4.5 antigo) → "temperature" = caminho ESTRITO (qualquer flip
 // reprova). Conservador de propósito: nunca tolera flip de um modelo que não
 // conseguimos classificar. O CALLER deve LOGAR ao cair aqui (não tolerar em
 // silêncio); a classificação em si é pura.
 export function classifyThinkingMode(modelId: string): ThinkingPath {
-  return isAIModelId(modelId) ? "adaptive" : "temperature";
+  return isAIModelId(modelId) || isPinnedOrNewer(modelId)
+    ? "adaptive"
+    : "temperature";
+}
+
+// Uma versão `parseClaudeVersion` sozinha também casa os ids antigos (Sonnet 4.5,
+// Haiku 4.5), que eram temperature: por isso a comparação com a conferida da família.
+function isPinnedOrNewer(modelId: string): boolean {
+  const v = parseClaudeVersion(modelId);
+  if (v === null) return false;
+  const pinned = parseClaudeVersion(pinnedModelFor(v.family).id);
+  if (pinned === null) return false;
+  return v.major !== pinned.major
+    ? v.major > pinned.major
+    : v.minor >= pinned.minor;
 }
 
 // Um flip no caminho adaptive só conta como reprovação se reproduzir na MAIORIA

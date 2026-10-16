@@ -103,9 +103,12 @@ const resultFor = (marketKey: string, aiCallId: string) =>
     selections: [],
   }) as unknown as PredictResult;
 
+// O modelo que serviu a narração difere do pedido de propósito: TODO mercado do run
+// grava o id que serviu, não o do pendente.
 const NARRATION = {
   aiCallId: "ac-narr",
   output: { rationale: "narrado", key_factors: ["a", "b"] },
+  servedModelId: "claude-sonnet-5-6",
 };
 
 const markets = (...keys: string[]): FanOutMarket[] =>
@@ -209,12 +212,13 @@ describe("runCodeJevFanOut — 1 narração por best bet", () => {
     const persisted = mockPersist.mock.calls.map(([p, a]) => ({
       market: p.marketKey,
       aiCallId: a.aiCallId,
+      servedModelId: a.servedModelId,
       narrated: a.narration !== undefined,
     }));
     expect(persisted).toEqual([
-      { market: "over_under", aiCallId: "ac-narr", narrated: true },
-      { market: "match_result", aiCallId: "ac-narr", narrated: false },
-      { market: "btts", aiCallId: "ac-narr", narrated: false },
+      { market: "over_under", aiCallId: "ac-narr", servedModelId: "claude-sonnet-5-6", narrated: true },
+      { market: "match_result", aiCallId: "ac-narr", servedModelId: "claude-sonnet-5-6", narrated: false },
+      { market: "btts", aiCallId: "ac-narr", servedModelId: "claude-sonnet-5-6", narrated: false },
     ]);
     // Ordem-base preservada; só os não narrados compartilham a ai_call.
     expect(out.map((o) => [o.marketKey, o.ok, o.ok && o.sharesAiCall])).toEqual(
@@ -512,6 +516,7 @@ describe("runCodeJevFanOut — prazo do run (#524 review)", () => {
     mockNarrate.mockImplementation(async () => ({
       aiCallId: "ac-timeout",
       output: { rationale: "templado", key_factors: ["a", "b"] },
+      servedModelId: "claude-sonnet-5-5",
     }));
     const acquireSlot = vi.fn(async () => ({ ok: true }));
     const out = await runCodeJevFanOut(

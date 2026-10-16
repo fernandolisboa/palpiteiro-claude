@@ -472,8 +472,11 @@ async function narrateAndPersist(
   for (const p of [chosen, ...others]) {
     const isChosen = p === chosen;
     try {
+      // Todos os mercados apontam pra row da narração: o modelVersion leva o modelo que
+      // a serviu, também nos templados.
       const result = await persistPendingPrediction(p.pending, {
         aiCallId: narration.aiCallId,
+        servedModelId: narration.servedModelId,
         narration: isChosen ? narration.output : undefined,
       });
       out[p.index] = isChosen

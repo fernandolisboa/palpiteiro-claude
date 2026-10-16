@@ -598,7 +598,7 @@ async function main(): Promise<void> {
         (acc, p) =>
           acc +
           calculateCost({
-            model: model.id,
+            model,
             inputTokens: p.inputTokens,
             outputTokens: p.outputTokens,
           }),

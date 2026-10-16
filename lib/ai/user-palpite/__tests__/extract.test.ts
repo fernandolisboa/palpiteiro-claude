@@ -1,5 +1,7 @@
 import { beforeEach, describe, expect, it, vi } from "vitest";
 
+import { MODEL_REGISTRY, type AIModel } from "@/lib/ai/models";
+
 import type { AnalysisRequest, AnalysisResult } from "@/lib/ai/providers/types";
 
 // db: insert().values().returning() → [{ id }]. Captura a row da chamada ok.
@@ -45,6 +47,7 @@ function ok(toolInput: unknown): AnalysisResult {
     outputPayload: { res: 1 },
     stopReason: "tool_use",
     latencyMs: 300,
+    servedModel: MODEL_REGISTRY["claude-haiku-5-5"],
   };
 }
 
@@ -83,6 +86,7 @@ describe("extractPalpiteClaims", () => {
       outputPayload: {},
       stopReason: null,
       latencyMs: 10,
+      servedModel: MODEL_REGISTRY["claude-haiku-5-5"],
     });
     const r = await extractPalpiteClaims(ARGS);
     expect(r.ok).toBe(false);
@@ -170,7 +174,7 @@ describe("extractPalpiteClaims — correções do review (#564)", () => {
     expect(persistAiCallError.mock.calls[0][0]).toMatchObject({
       status: "provider_error",
       provider: "anthropic",
-      model: "claude-haiku-5-5",
+      model: MODEL_REGISTRY["claude-haiku-5-5"],
       promptVersion: USER_PALPITE_EXTRACT_VERSION,
     });
     // O motivo cru não vai pra row de erro.
@@ -284,5 +288,36 @@ describe("cerca do motivo", () => {
     const [before] = msg.split("<<<MOTIVO>>>\n");
     expect(before).toContain("MANDANTE = Flamengo; VISITANTE = Palmeiras");
     expect(msg).toContain("texto ‹‹‹MOTIVO››› injetado");
+  });
+});
+
+describe("extractPalpiteClaims — modelo que serviu (PLAN-608)", () => {
+  const ADOPTED: AIModel = {
+    ...MODEL_REGISTRY["claude-haiku-5-5"],
+    id: "claude-haiku-5-6",
+    inputPricePerMTok: 1,
+    outputPricePerMTok: 2,
+    longPromptPricing: undefined,
+    adopted: { priceEstimated: true, pinnedId: "claude-haiku-5-5" },
+  };
+
+  it("ok: ai_calls.model e custo do servido", async () => {
+    fakeProvider.runAnalysis.mockResolvedValueOnce({ ...ok({ claims: [] }), servedModel: ADOPTED });
+    const r = await extractPalpiteClaims(ARGS);
+    expect(r.ok).toBe(true);
+    expect(insertValues.mock.calls[0][0]).toMatchObject({
+      model: "claude-haiku-5-6",
+      // 100 × $1 + 50 × $2 por 1M
+      costUsd: ((100 * 1 + 50 * 2) / 1_000_000).toFixed(6),
+    });
+  });
+
+  it("tool ausente: a row de erro leva o servido", async () => {
+    fakeProvider.runAnalysis.mockResolvedValueOnce({ ...ok(undefined), servedModel: ADOPTED });
+    await extractPalpiteClaims(ARGS);
+    expect(persistAiCallError.mock.calls[0][0]).toMatchObject({
+      status: "tool_missing",
+      model: ADOPTED,
+    });
   });
 });

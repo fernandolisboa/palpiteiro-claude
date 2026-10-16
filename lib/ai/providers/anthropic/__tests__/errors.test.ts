@@ -1,7 +1,11 @@
 import Anthropic from "@anthropic-ai/sdk";
 import { describe, expect, it } from "vitest";
 
-import { classifyAnthropicError, serializeAnthropicError } from "../errors";
+import {
+  classifyAnthropicError,
+  rejectionOf,
+  serializeAnthropicError,
+} from "../errors";
 
 // Cobre o mapeamento de erro do adapter Anthropic em ISOLAMENTO: sem client real,
 // sem ANTHROPIC_API_KEY, sem chamada paga (regra dura do CLAUDE.md). Espelha o que
@@ -93,5 +97,48 @@ describe("anthropic adapter — serializeAnthropicError", () => {
 
   it("valor não-Error → {error: String(err)}", () => {
     expect(serializeAnthropicError(42)).toEqual({ error: "42" });
+  });
+});
+
+describe("anthropic adapter — rejectionOf", () => {
+  const headers = new Headers();
+
+  it("400 (BadRequestError) → invalid_request", () => {
+    const err = new Anthropic.BadRequestError(400, undefined, "bad", headers);
+    expect(rejectionOf(err)).toBe("invalid_request");
+  });
+
+  it("404 (NotFoundError) e 403 (PermissionDeniedError) → not_found", () => {
+    expect(
+      rejectionOf(new Anthropic.NotFoundError(404, undefined, "no model", headers)),
+    ).toBe("not_found");
+    expect(
+      rejectionOf(new Anthropic.PermissionDeniedError(403, undefined, "denied", headers)),
+    ).toBe("not_found");
+  });
+
+  it("os demais erros não são rejeição → undefined", () => {
+    expect(
+      rejectionOf(new Anthropic.APIError(500, undefined, "boom", headers)),
+    ).toBeUndefined();
+    expect(
+      rejectionOf(new Anthropic.RateLimitError(429, undefined, "slow", headers)),
+    ).toBeUndefined();
+    expect(
+      rejectionOf(new Anthropic.APIConnectionTimeoutError({ message: "t" })),
+    ).toBeUndefined();
+    expect(rejectionOf(new Error("x"))).toBeUndefined();
+    expect(rejectionOf("x")).toBeUndefined();
+  });
+
+  it("a classificação de status não muda: 400/404 seguem provider_error", () => {
+    expect(
+      classifyAnthropicError(new Anthropic.BadRequestError(400, undefined, "bad", headers))
+        .status,
+    ).toBe("provider_error");
+    expect(
+      classifyAnthropicError(new Anthropic.NotFoundError(404, undefined, "nf", headers))
+        .status,
+    ).toBe("provider_error");
   });
 });

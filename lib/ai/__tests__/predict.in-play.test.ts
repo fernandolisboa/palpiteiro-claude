@@ -98,6 +98,8 @@ vi.mock("@/lib/bets/slip-model", () => ({
 }));
 
 import { predictInPlay, PredictError } from "@/lib/ai/predict";
+import { MODEL_REGISTRY, type AIModel } from "@/lib/ai/models";
+import { anthropicProvider } from "@/lib/ai/providers/anthropic";
 import { NARRATOR_VERSION } from "@/lib/ai/markets/_narrator";
 import { NARRATOR_LIVE_VERSION } from "@/lib/ai/markets/_narrator/live";
 import type { InPlayState } from "@/lib/live/in-play-state";
@@ -284,6 +286,37 @@ describe("predictInPlay", () => {
     expect(oddsTouched).not.toHaveBeenCalled();
     expect(sportsTouched).not.toHaveBeenCalled();
     expect(judgeTouched).not.toHaveBeenCalled();
+  });
+
+  it("narração servida por outra versão (PLAN-608): modelVersion, ai_calls.model e custo usam a que serviu", async () => {
+    const adopted: AIModel = {
+      ...MODEL_REGISTRY["claude-sonnet-5-5"],
+      id: "claude-sonnet-5-6",
+      inputPricePerMTok: 3,
+      outputPricePerMTok: 15,
+      adopted: { priceEstimated: true, pinnedId: "claude-sonnet-5-5" },
+    };
+    const original = anthropicProvider.runAnalysis;
+    const spy = vi
+      .spyOn(anthropicProvider, "runAnalysis")
+      .mockImplementation(async (req) => ({ ...(await original(req)), servedModel: adopted }));
+    try {
+      await predictInPlay(args());
+
+      expect(spy.mock.calls[0][0].model.id).toBe("claude-sonnet-5-5");
+      const [call] = aiCallRows();
+      expect(call.model).toBe("claude-sonnet-5-6");
+      expect(call.costUsd).toBe(((700 * 3 + 150 * 15) / 1_000_000).toFixed(6));
+      const preds = predictionRows();
+      expect(preds).toHaveLength(4);
+      for (const p of preds) {
+        expect(p.modelVersion).toBe(
+          "claude-sonnet-5-6;engine=code_jev;lambda=dixon_coles;live=live_model_v1",
+        );
+      }
+    } finally {
+      spy.mockRestore();
+    }
   });
 
   it("as chances são as do modelo em jogo (soma 100 no 1X2) e o placar decide o que já bateu", async () => {

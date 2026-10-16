@@ -18,6 +18,8 @@ import {
   vi,
 } from "vitest";
 
+import { MODEL_REGISTRY } from "@/lib/ai/models";
+
 import * as schema from "@/db/schema";
 import type { SupportedLeague } from "@/lib/providers/sports-data/leagues";
 import type {
@@ -219,6 +221,7 @@ function okResult(toolInput: unknown): AnalysisResult {
     outputPayload: { content: [] },
     stopReason: "tool_use",
     latencyMs: 42,
+    servedModel: MODEL_REGISTRY["claude-haiku-5-5"],
   };
 }
 

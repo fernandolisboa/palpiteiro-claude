@@ -4,7 +4,7 @@ import { db } from "@/lib/db";
 import { calculateCost } from "./cost";
 import {
   JUDGMENT_PROVIDER_KEY,
-  type AIModelId,
+  type AIModel,
   type AIProviderKey,
 } from "./models";
 import type { AiCallStatus } from "./providers/types";
@@ -36,7 +36,8 @@ export async function persistAiCallError(args: {
   provider: AIProviderKey;
   userId: string;
   matchId: string;
-  model: AIModelId;
+  // O modelo que rodou (`result.servedModel`; o pedido quando não houve chamada).
+  model: AIModel;
   inputPayload: Record<string, unknown>;
   outputPayload: Record<string, unknown>;
   inputTokens: number;
@@ -61,7 +62,7 @@ export async function persistAiCallError(args: {
         userId: args.userId,
         matchId: args.matchId,
         provider: args.provider,
-        model: args.model,
+        model: args.model.id,
         promptVersion: args.promptVersion,
         inputPayload: args.inputPayload,
         outputPayload: args.outputPayload,

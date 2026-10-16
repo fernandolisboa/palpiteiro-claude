@@ -7,6 +7,7 @@ import {
   MODEL_REGISTRY,
   isAIProvider,
   isModelAllowedForAudience,
+  type AIModel,
   type AIModelId,
 } from "@/lib/ai/models";
 import { getProviderForModel } from "@/lib/ai/providers";
@@ -86,7 +87,9 @@ export async function narratePalpite(args: {
     const providerKey = provider.providerKey;
     if (!isAIProvider(providerKey)) return template(null);
 
+    // `servedModel`: o modelo que respondeu; o pedido quando não houve chamada.
     const fail = async (
+      servedModel: AIModel,
       status: Exclude<AiCallStatus, "ok">,
       errorMessage: string,
       payload: {
@@ -108,7 +111,7 @@ export async function narratePalpite(args: {
           userId,
           matchId,
           provider: providerKey,
-          model: model.id,
+          model: servedModel,
           ...payload,
           status,
           errorMessage,
@@ -117,7 +120,7 @@ export async function narratePalpite(args: {
       );
 
     if (!provider.hasKey()) {
-      return fail("provider_error", `${providerKey} provider has no API key configured`);
+      return fail(model, "provider_error", `${providerKey} provider has no API key configured`);
     }
     // Uma narração que o timeout cortaria não é iniciada (padrão do narrador do predict).
     const fits = canFitCall(args.deadlineAt, {
@@ -126,10 +129,11 @@ export async function narratePalpite(args: {
       effort: NARRATE_EFFORT,
     });
     if (!fits) {
-      return fail("timeout", "deadline exceeded before the narration; nothing was sent");
+      return fail(model, "timeout", "deadline exceeded before the narration; nothing was sent");
     }
 
     const result = await provider.runAnalysis(request);
+    const served = result.servedModel;
     const payload = {
       inputPayload: result.inputPayload,
       outputPayload: result.outputPayload,
@@ -137,21 +141,21 @@ export async function narratePalpite(args: {
       outputTokens: result.usage.outputTokens,
       latencyMs: result.latencyMs,
     };
-    if (!result.ok) return fail(result.status, result.message, payload);
+    if (!result.ok) return fail(served, result.status, result.message, payload);
     if (result.toolInput === undefined) {
-      return fail("tool_missing", `model did not call ${NARRATE_TOOL_NAME}`, payload);
+      return fail(served, "tool_missing", `model did not call ${NARRATE_TOOL_NAME}`, payload);
     }
     const parsed = PalpiteNarrationSchema.safeParse(result.toolInput);
     if (!parsed.success) {
-      return fail("invalid_output", JSON.stringify(parsed.error.issues), payload);
+      return fail(served, "invalid_output", JSON.stringify(parsed.error.issues), payload);
     }
     const fidelity = checkPalpiteNarrationFidelity(parsed.data, input);
-    if (!fidelity.ok) return fail("invalid_output", fidelity.reason, payload);
+    if (!fidelity.ok) return fail(served, "invalid_output", fidelity.reason, payload);
     const language = checkPalpiteNarrationLanguage(parsed.data);
-    if (!language.ok) return fail("invalid_output", language.reason, payload);
+    if (!language.ok) return fail(served, "invalid_output", language.reason, payload);
 
     const cost = calculateCost({
-      model: model.id,
+      model: served,
       inputTokens: payload.inputTokens,
       outputTokens: payload.outputTokens,
     });
@@ -163,7 +167,7 @@ export async function narratePalpite(args: {
           userId,
           matchId,
           provider: providerKey,
-          model: model.id,
+          model: served.id,
           promptVersion: spec.version,
           ...payload,
           costUsd: cost.toFixed(6),

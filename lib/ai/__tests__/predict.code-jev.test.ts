@@ -269,6 +269,8 @@ import { TypeSafeError } from "@/lib/ai/providers/typesafe/errors";
 import { computeMarketImpliedProbabilities } from "@/lib/odds/implied-probability";
 import { CORRECT_SCORE } from "@/lib/odds/market-descriptor";
 import { predict } from "@/lib/ai/predict";
+import { MODEL_REGISTRY, type AIModel } from "@/lib/ai/models";
+import { anthropicProvider } from "@/lib/ai/providers/anthropic";
 import { runCodeJevFanOut } from "@/lib/ai/best-bet";
 import { computeBestBetRank } from "@/lib/view/best-bet";
 import { sortBestBetEntries } from "@/lib/view/best-bet-sort";
@@ -578,7 +580,53 @@ describe("flag analysis_engine = 'llm' (default)", () => {
   });
 });
 
+// PLAN-608: a versão que serviu a narração (≠ do pedido) é a que vai no modelVersion,
+// em ai_calls.model e no custo.
+const ADOPTED_SONNET: AIModel = {
+  ...MODEL_REGISTRY["claude-sonnet-5-5"],
+  id: "claude-sonnet-5-6",
+  inputPricePerMTok: 3,
+  outputPricePerMTok: 15,
+  adopted: { priceEstimated: true, pinnedId: "claude-sonnet-5-5" },
+};
+const CODE_JEV_TAGS =
+  ";engine=code_jev;lambda=heuristic;judg=jev_judgments_v1;w=judgment_weights_v1";
+
+function serveAs(model: AIModel) {
+  const original = anthropicProvider.runAnalysis;
+  return vi
+    .spyOn(anthropicProvider, "runAnalysis")
+    .mockImplementation(async (req) => ({ ...(await original(req)), servedModel: model }));
+}
+
 describe("flag analysis_engine = 'code_jev'", () => {
+  it("narração servida por outra versão: modelVersion, ai_calls.model e custo usam a que serviu", async () => {
+    const spy = serveAs(ADOPTED_SONNET);
+
+    await predict({ matchId: "m-1", userId: "u-1", isAdmin: true, marketKey: "match_result" });
+
+    expect(spy.mock.calls[0][0].model.id).toBe("claude-sonnet-5-5");
+    const [narratorCall] = rowsWhere((r) => r.promptVersion === NARRATOR_VERSION && "provider" in r);
+    expect(narratorCall.model).toBe("claude-sonnet-5-6");
+    expect(narratorCall.costUsd).toBe(((900 * 3 + 200 * 15) / 1_000_000).toFixed(6));
+    const [prediction] = rowsWhere((r) => "recommendation" in r);
+    // Mesmo formato de hoje, só com o id que serviu.
+    expect(prediction.modelVersion).toBe(`claude-sonnet-5-6${CODE_JEV_TAGS}`);
+  });
+
+  it("narrador falha com o servido → a row de erro e o modelVersion também levam o servido", async () => {
+    anthropicCreate.mockRejectedValue(new Error("boom"));
+    serveAs(ADOPTED_SONNET);
+
+    await predict({ matchId: "m-1", userId: "u-1", isAdmin: true, marketKey: "match_result" });
+
+    const [narratorCall] = rowsWhere((r) => r.promptVersion === NARRATOR_VERSION && "provider" in r);
+    expect(narratorCall.status).toBe("provider_error");
+    expect(narratorCall.model).toBe("claude-sonnet-5-6");
+    const [prediction] = rowsWhere((r) => "recommendation" in r);
+    expect(prediction.modelVersion).toBe(`claude-sonnet-5-6${CODE_JEV_TAGS}`);
+  });
+
   it("JEV uma vez, narrador chamado, cartucho de mercado não; a row carrega as probs do motor + judgments", async () => {
     const buildSpy = vi.spyOn(matchResultCartridge, "buildPredictionInput");
     const expected = expectedEngine(JEV_ANSWERS);
@@ -1462,6 +1510,32 @@ describe("best bet no motor code_jev (#512): 1 JEV, mercados em código, 1 narra
     }
   });
 
+  it("narração servida por outra versão: TODOS os mercados do run gravam o id que serviu", async () => {
+    const spy = serveAs(ADOPTED_SONNET);
+    const out = await runCodeJevFanOut(
+      base,
+      markets("over_under", "match_result", "btts"),
+      mapError,
+      vi.fn(async () => ({ ok: true }))
+    );
+
+    expect(out.every((o) => o.ok)).toBe(true);
+    expect(spy).toHaveBeenCalledTimes(1);
+    expect(spy.mock.calls[0][0].model.id).toBe("claude-sonnet-5-5");
+    const [narratorCall] = rowsWhere(
+      (r) => r.promptVersion === NARRATOR_VERSION && "provider" in r
+    );
+    expect(narratorCall.model).toBe("claude-sonnet-5-6");
+    expect(narratorCall.costUsd).toBe(((900 * 3 + 200 * 15) / 1_000_000).toFixed(6));
+    const predictions = rowsWhere((r) => "recommendation" in r);
+    expect(predictions).toHaveLength(3);
+    // O narrado e os dois templados: a mesma row de ai_calls, o mesmo modelo.
+    for (const p of predictions) {
+      expect(p.aiCallId).toBe(narratorCall.__id);
+      expect(p.modelVersion).toMatch(/^claude-sonnet-5-6;engine=code_jev;lambda=/);
+    }
+  });
+
   it("λ indisponível (tabela sem gols, início de temporada): cada mercado vai pro caminho LLM e cada chamada paga pede o próprio slot", async () => {
     // Tabela presente (os cartuchos rodam), mas degenerada pro λ (média 0).
     getStandings.mockResolvedValue({
@@ -1598,7 +1672,10 @@ describe("best bet no motor code_jev (#512): 1 JEV, mercados em código, 1 narra
     for (const p of predictions) {
       expect(p.aiCallId).toBe(narratorCalls[0].__id);
       expect(p.rationale).toMatch(/^(O modelo de placar estima|Sem aposta)/);
+      // Sem chamada, o modelo "que serviu" é o pedido.
+      expect(p.modelVersion).toMatch(/^claude-opus-5-5;engine=code_jev;/);
     }
+    expect(narratorCalls[0].model).toBe("claude-opus-5-5");
   });
 });
 

@@ -332,7 +332,7 @@ async function runSynthesis<O extends SynthesisOutputBase>(
       userId,
       matchId,
       provider: providerKey,
-      model: model.id,
+      model,
       inputPayload: analysisRequest as unknown as Record<string, unknown>,
       outputPayload: { error: noKeyMsg },
       inputTokens: 0,
@@ -363,6 +363,8 @@ async function runSynthesis<O extends SynthesisOutputBase>(
   let outputTokens: number;
   let inputPayload: Record<string, unknown>;
   let outputPayload: Record<string, unknown>;
+  // O modelo que respondeu a tentativa aceita (auditoria, custo e modelVersion).
+  let servedModel: AIModel;
 
   for (let attempt = 1; ; attempt += 1) {
     // Prazo do run (#524): sem tempo pra uma chamada inteira, não chama — nada gasto e
@@ -378,6 +380,7 @@ async function runSynthesis<O extends SynthesisOutputBase>(
     }
     const result = await aiProvider.runAnalysis(analysisRequest);
     latencyMs = result.latencyMs;
+    servedModel = result.servedModel;
 
     // 9. Erro do provider.
     if (!result.ok) {
@@ -385,7 +388,7 @@ async function runSynthesis<O extends SynthesisOutputBase>(
         userId,
         matchId,
         provider: providerKey,
-        model: model.id,
+        model: servedModel,
         inputPayload: result.inputPayload,
         outputPayload: result.outputPayload,
         inputTokens: result.usage.inputTokens,
@@ -413,7 +416,7 @@ async function runSynthesis<O extends SynthesisOutputBase>(
         userId,
         matchId,
         provider: providerKey,
-        model: model.id,
+        model: servedModel,
         inputPayload,
         outputPayload,
         inputTokens,
@@ -435,7 +438,7 @@ async function runSynthesis<O extends SynthesisOutputBase>(
         userId,
         matchId,
         provider: providerKey,
-        model: model.id,
+        model: servedModel,
         inputPayload,
         outputPayload,
         inputTokens,
@@ -472,7 +475,7 @@ async function runSynthesis<O extends SynthesisOutputBase>(
         userId,
         matchId,
         provider: providerKey,
-        model: model.id,
+        model: servedModel,
         inputPayload,
         outputPayload,
         inputTokens,
@@ -511,7 +514,7 @@ async function runSynthesis<O extends SynthesisOutputBase>(
       userId,
       matchId,
       provider: providerKey,
-      model: model.id,
+      model: servedModel,
       inputPayload,
       outputPayload,
       inputTokens,
@@ -541,7 +544,7 @@ async function runSynthesis<O extends SynthesisOutputBase>(
 
   // 12. Persistência (sequencial — neon-http não suporta transação real).
   // 12a. ai_call (status ok) — id alimenta palpite_sets.aiCallId.
-  const cost = calculateCost({ model: model.id, inputTokens, outputTokens });
+  const cost = calculateCost({ model: servedModel, inputTokens, outputTokens });
   let aiCallId: string | null = null;
   try {
     const [row] = await db
@@ -550,7 +553,7 @@ async function runSynthesis<O extends SynthesisOutputBase>(
         userId,
         matchId,
         provider: providerKey,
-        model: model.id,
+        model: servedModel.id,
         promptVersion: cartridge.version,
         inputPayload,
         outputPayload,
@@ -591,7 +594,7 @@ async function runSynthesis<O extends SynthesisOutputBase>(
         matchId,
         userId,
         aiCallId, // pode ser null
-        modelVersion: model.id,
+        modelVersion: servedModel.id,
         promptVersion: cartridge.version,
         headline: {
           verdict: output.verdict,
