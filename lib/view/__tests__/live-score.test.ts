@@ -120,7 +120,27 @@ describe("toLiveScoreView", () => {
       NOW
     );
     expect(v?.ended).toBe(true);
-    expect(v?.caption).toBe("fim de jogo · atualizado há 20 s");
+    expect(v?.caption).toBe("fim de jogo");
+  });
+
+  it("fim do provider não envelhece: aparece depois dos 10 min (row nunca rebuscada)", () => {
+    for (const statusShort of ["FT", "AET", "PEN"]) {
+      const v = toLiveScoreView(
+        state({
+          statusShort,
+          minuteLabel: null,
+          fetchedAt: new Date(NOW.getTime() - 3 * 60 * 60_000),
+        }),
+        NOW
+      );
+      expect(v).toMatchObject({ home: 1, away: 0, caption: "fim de jogo", ended: true });
+    }
+    // Não terminal velho segue cortado; adiado/cancelado seguem sem rótulo.
+    const old = new Date(NOW.getTime() - 11 * 60_000);
+    expect(toLiveScoreView(state({ fetchedAt: old }), NOW)).toBeNull();
+    expect(
+      toLiveScoreView(state({ statusShort: "PST", fetchedAt: old }), NOW)
+    ).toBeNull();
   });
 });
 

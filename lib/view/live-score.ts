@@ -71,12 +71,18 @@ export function liveMomentLabel(
   }
 }
 
-/** Placar ao vivo para o cabeçalho e as listas; null quando velho demais ou sem placar. */
+/**
+ * Placar ao vivo para o cabeçalho e as listas; null quando velho demais ou sem placar.
+ * O fim dado pelo provider (FT/AET/PEN…) não envelhece: a row terminal nunca é buscada
+ * de novo, então vale sem o corte de 10 min e sem "atualizado há X" (senão, até o sync
+ * virar o jogo, a tela voltava ao "AO VIVO" com o parcial do sync).
+ */
 export function toLiveScoreView(
   state: LiveScoreInput,
   now: Date
 ): LiveScoreView | null {
-  if (!isLiveStateShowable(state.fetchedAt, now)) return null;
+  const ended = classifyStatusShort(state.statusShort) === "finished";
+  if (!ended && !isLiveStateShowable(state.fetchedAt, now)) return null;
   if (state.score === null) return null;
   const moment = liveMomentLabel(state);
   if (moment === null) return null;
@@ -88,10 +94,10 @@ export function toLiveScoreView(
   return {
     home: state.score.home,
     away: state.score.away,
-    caption: `${moment} · atualizado ${formatLiveAge(age)}`,
+    caption: ended ? moment : `${moment} · atualizado ${formatLiveAge(age)}`,
     live: true,
     red,
-    ended: classifyStatusShort(state.statusShort) === "finished",
+    ended,
   };
 }
 

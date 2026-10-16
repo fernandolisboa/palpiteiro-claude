@@ -2,7 +2,7 @@ import { describe, expect, it } from "vitest";
 
 import type { MatchInput } from "@/lib/view/match";
 import { toMatchListRowView } from "@/lib/view/match";
-import { groupByDay, matchRowPhase } from "@/lib/view/match-list";
+import { groupByDay, matchRowPhase, showsRowLiveBadge } from "@/lib/view/match-list";
 import type { MatchListRowView, MatchStatus } from "@/lib/view/types";
 
 // Quinta 15/10/2026, 12:00 em São Paulo (UTC-3, sem horário de verão desde 2019).
@@ -106,5 +106,24 @@ describe("matchRowPhase (#577)", () => {
       timeZone: SP,
     });
     expect(matchRowPhase(m)).toBe("live");
+  });
+});
+
+describe("showsRowLiveBadge (#580)", () => {
+  const score = { home: 2, away: 1, caption: "63' · atualizado há 20 s", live: true as const };
+  it("jogo rolando: selo; fim pelo provider (sync ainda não virou): sem selo", () => {
+    const m = { status: "scheduled" as const, isInProgress: true };
+    expect(showsRowLiveBadge(m)).toBe(true);
+    expect(showsRowLiveBadge({ ...m, liveScore: { ...score, ended: false } })).toBe(true);
+    expect(
+      showsRowLiveBadge({ ...m, liveScore: { ...score, caption: "fim de jogo", ended: true } })
+    ).toBe(false);
+    // O lado direito segue no ramo live (placar + "fim de jogo").
+    expect(matchRowPhase(m)).toBe("live");
+  });
+
+  it("fora do ao vivo: nunca selo", () => {
+    expect(showsRowLiveBadge({ status: "finished", isInProgress: false })).toBe(false);
+    expect(showsRowLiveBadge({ status: "scheduled", isInProgress: false })).toBe(false);
   });
 });

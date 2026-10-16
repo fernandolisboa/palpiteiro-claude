@@ -9,7 +9,7 @@ import { RowTrailing } from "@/components/match-list/row-trailing";
 import { MatchModelLine } from "@/components/match-model-line";
 import { TeamCrest } from "@/components/team-crest";
 import { appendBackParam } from "@/lib/view/back-href";
-import { matchRowPhase } from "@/lib/view/match-list";
+import { showsRowLiveBadge } from "@/lib/view/match-list";
 import { cn } from "@/lib/utils";
 import { LEAGUE_LABEL } from "@/lib/format";
 import type { MatchRowView } from "@/lib/view/types";
@@ -42,7 +42,7 @@ export function MatchRow({ m, last, listHref, backHref, tourTarget, timeLabel }:
   const href = backHref
     ? `/match/${m.id}?back=${encodeURIComponent(backHref)}`
     : appendBackParam(`/match/${m.id}`, listHref, "/jogos");
-  const isLive = matchRowPhase(m) === "live";
+  const isLive = showsRowLiveBadge(m);
   return (
     <Link
       href={href}

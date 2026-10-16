@@ -16,7 +16,7 @@ import { TeamCrest } from "@/components/team-crest";
 import { appendBackParam } from "@/lib/view/back-href";
 import { LEAGUE_LABEL } from "@/lib/format";
 import { tourMatchIndex } from "@/lib/tour/steps";
-import { groupByDay, matchRowPhase } from "@/lib/view/match-list";
+import { groupByDay, matchRowPhase, showsRowLiveBadge } from "@/lib/view/match-list";
 import type { MatchListRowView } from "@/lib/view/types";
 
 const INITIAL_BATCH = 15;
@@ -50,6 +50,7 @@ export function UpcomingMatchesDesktop({
           <DayHeading label={group.label} variant="band" />
           {group.rows.map((m, i, arr) => {
             const phase = matchRowPhase(m);
+            const liveBadge = showsRowLiveBadge(m);
             return (
               <Link
                 key={m.id}
@@ -60,7 +61,7 @@ export function UpcomingMatchesDesktop({
                 }`}
               >
                 <div className="flex flex-col items-start gap-1">
-                  {phase === "live" ? (
+                  {liveBadge ? (
                     // Ao vivo (#385, #574): o selo no lugar da hora, uma vez por linha.
                     <span className="text-meta font-medium">
                       <LiveBadge />

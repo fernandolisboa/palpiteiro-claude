@@ -21,6 +21,17 @@ export function matchRowPhase(
   return "upcoming";
 }
 
+/**
+ * O selo AO VIVO da linha: fase `live`, menos quando o provider já deu o fim e o sync
+ * ainda não virou o jogo (o lado direito mostra o placar com "fim de jogo"; o selo ao
+ * lado diria o contrário). Mesma regra do cabeçalho (`MatchHero`).
+ */
+export function showsRowLiveBadge(
+  m: Pick<MatchRowView, "status" | "isInProgress" | "liveScore">,
+): boolean {
+  return matchRowPhase(m) === "live" && !m.liveScore?.ended;
+}
+
 export type MatchDayGroup<T> = { key: string; label: string; rows: T[] };
 
 /**
