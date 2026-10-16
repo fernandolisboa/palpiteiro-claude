@@ -1841,8 +1841,9 @@ type InPlayMarketPlan = {
  * condicionada ao placar, às expulsões e ao tempo que falta); o LLM só narra, numa
  * chamada (narrator_live_v1, logada em ai_calls, saída validada por Zod). Cada mercado
  * vira uma prediction `pass` com is_live + carimbo; a PSO leva a prob. do modelo e
- * odd NULL. Recheca a fase aqui (defesa em profundidade): só in_play/half_time com
- * estado de até 2 min e minuto conhecido.
+ * odd NULL. Recheca a fase aqui (defesa em profundidade) pelo relógio de AGORA, não
+ * pelo `now` da action: só in_play/half_time com estado de até 2 min e minuto conhecido
+ * (o estado pode ter envelhecido entre a leitura na action e esta chamada).
  */
 export async function predictInPlay(
   args: PredictInPlayArgs,
@@ -1860,11 +1861,13 @@ export async function predictInPlay(
   if (!match) {
     throw new PredictError("match not found", { matchId });
   }
-  const phase = matchPhase(match, state, now, { liveMode: true });
+  // O `now` da action carimba a leitura; a rechecagem usa o relógio de agora.
+  const checkedAt = new Date();
+  const phase = matchPhase(match, state, checkedAt, { liveMode: true });
   if (
     !phase.actionable ||
     (phase.kind !== "in_play" && phase.kind !== "half_time") ||
-    !isLiveStateActionable(state.fetchedAt, now) ||
+    !isLiveStateActionable(state.fetchedAt, checkedAt) ||
     state.score === null
   ) {
     throw new PredictError("match is not analyzable live", {
@@ -1920,6 +1923,12 @@ export async function predictInPlay(
     readings: [plans[i].reading, ...plans.filter((_, j) => j !== i).map((p) => p.reading)],
   });
 
+  // Carimbo montado e validado (Zod, em liveColumns) ANTES da chamada paga: um estado
+  // que não vira carimbo recusa sem gastar.
+  const stamp = liveStampFromState(state, now, scoreline.inPlay);
+  const live = liveColumns(stamp);
+  const modelVersion = inPlayModelVersion(model.id, scoreline);
+
   const narration = await narrateWith(liveNarratorCartridge, {
     model,
     userId,
@@ -1928,10 +1937,6 @@ export async function predictInPlay(
     context: { leagueLabel: LEAGUE_LABEL[leagueToKey(match.league)] },
     deadlineAt: args.deadlineAt,
   });
-
-  const stamp = liveStampFromState(state, now, scoreline.inPlay);
-  const live = liveColumns(stamp);
-  const modelVersion = inPlayModelVersion(model.id, scoreline);
 
   const out: InPlayMarketResult[] = [];
   for (let i = 0; i < plans.length; i++) {

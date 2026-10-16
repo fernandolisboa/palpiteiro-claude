@@ -1,4 +1,4 @@
-import { beforeEach, describe, expect, it, vi } from "vitest";
+import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 
 import type { SupportedLeague } from "@/lib/providers/sports-data/leagues";
 
@@ -177,6 +177,10 @@ const aiCallRows = () => inserted.filter((r) => "promptVersion" in r && "provide
 const psoRows = () => inserted.filter((r) => "predictionId" in r);
 
 beforeEach(() => {
+  // A rechecagem de fase do predictInPlay usa o relógio de agora (não o `now` da
+  // action): o relógio do teste fica no NOW, e um teste o adianta.
+  vi.useFakeTimers({ toFake: ["Date"] });
+  vi.setSystemTime(NOW);
   process.env.ANTHROPIC_API_KEY = "test-anthropic-key";
   vi.clearAllMocks();
   inserted.length = 0;
@@ -202,6 +206,10 @@ beforeEach(() => {
     key_factors: ["Placar 1 × 0 aos 63'", "Menos de meia hora pela frente"],
   };
   anthropicCreate.mockImplementation(() => Promise.resolve(anthropicMessage(narration)));
+});
+
+afterEach(() => {
+  vi.useRealTimers();
 });
 
 describe("predictInPlay", () => {
@@ -335,6 +343,17 @@ describe("predictInPlay", () => {
     ).rejects.toThrow(/not analyzable live/);
     matchRow.status = "finished";
     await expect(predictInPlay(args())).rejects.toThrow(/not analyzable live/);
+    expect(anthropicCreate).not.toHaveBeenCalled();
+    expect(inserted).toHaveLength(0);
+  });
+
+  it("estado bom no `now` da action, velho no relógio de agora → recusa sem gasto", async () => {
+    // A action leu o estado (20 s) e chamou com o now dela; até a rechecagem passaram
+    // 2,5 min: o estado já tem 2m50s.
+    vi.setSystemTime(new Date(NOW.getTime() + 150_000));
+    await expect(predictInPlay(args({ now: NOW }))).rejects.toThrow(
+      /not analyzable live/,
+    );
     expect(anthropicCreate).not.toHaveBeenCalled();
     expect(inserted).toHaveLength(0);
   });
