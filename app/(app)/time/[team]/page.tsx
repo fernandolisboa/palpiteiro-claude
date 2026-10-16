@@ -17,6 +17,7 @@ import {
 import { getRequestTimeZone } from "@/lib/server/request-timezone";
 import { leagueToKey } from "@/lib/format";
 import { displayTeamName } from "@/lib/view/team-labels";
+import { loadListInPlayStates } from "@/lib/live/list-states";
 import { toMatchRowView } from "@/lib/view/match";
 import type { MatchRowView } from "@/lib/view/types";
 
@@ -65,7 +66,9 @@ export default async function TeamHistoryPage({ params }: PageProps) {
   // só leitura do banco (sem chamada externa). Os passados estão encerrados e não
   // mostram odd. Falha de leitura vira "sem odd", nunca derruba a página.
   const futureIds = future.map((m) => m.id);
-  const [snapshotByMatch, matchResultByMatch] = await Promise.all([
+  // Placar ao vivo (#580): só as rows já gravadas, nunca o provider. O jogo rolando
+  // pode estar em qualquer fatia (o corte é da query).
+  const [snapshotByMatch, matchResultByMatch, inPlayByMatch] = await Promise.all([
     getLatestOverUnderSnapshotsForMatches(futureIds).catch((err: unknown) => {
       logOddsReadError(err);
       return new Map<string, OverUnderSnapshot>();
@@ -76,6 +79,7 @@ export default async function TeamHistoryPage({ params }: PageProps) {
         return new Map<string, OrderedSelectionSnapshot>();
       },
     ),
+    loadListInPlayStates([...past, ...future], now),
   ]);
 
   const toRow = (m: DbMatch): MatchRowView => {
@@ -106,6 +110,7 @@ export default async function TeamHistoryPage({ params }: PageProps) {
       hasPrediction: false,
       now,
       timeZone,
+      inPlay: inPlayByMatch.get(m.id) ?? null,
     });
   };
 

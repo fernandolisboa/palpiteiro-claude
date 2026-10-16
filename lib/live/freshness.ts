@@ -21,6 +21,23 @@ export const IN_PLAY_SHOW_MAX_AGE_MS = 10 * 60_000;
  */
 export const LIVE_STATE_LEASE_MS = 20_000;
 
+/**
+ * Janela de busca do estado ao vivo, `[kickoff − 5 min, kickoff + 4h]` (PLAN-580 §5.2
+ * passo 1). 4h cobre 2º tempo + prorrogação + pênaltis com folga. Depois dela nada é
+ * buscado: sem um terminal já lido, a tela e as actions voltam ao "já começou" de antes
+ * do modo ao vivo (nunca um "indisponível, tente em um minuto" que não se resolve).
+ */
+export const IN_PLAY_WINDOW_BEFORE_MS = 5 * 60_000;
+export const IN_PLAY_WINDOW_AFTER_MS = 4 * 60 * 60_000;
+
+/** O apito foi há mais de `IN_PLAY_WINDOW_AFTER_MS`: o estado não é mais buscado. */
+export function isPastInPlayWindow(
+  kickoffAt: Date,
+  now: Date = new Date()
+): boolean {
+  return now.getTime() > kickoffAt.getTime() + IN_PLAY_WINDOW_AFTER_MS;
+}
+
 /** Idade do estado em ms; `null` quando nunca houve busca bem-sucedida. */
 export function liveStateAgeMs(
   fetchedAt: Date | null,

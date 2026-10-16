@@ -75,6 +75,8 @@ function render(props: Partial<Parameters<typeof PalpiteHero>[0]> = {}): string 
       hasAnalyses={false}
       contextEnabled={false}
       {...props}
+      // Capacidade (ADR 0060): nos testes de antes, analisável = pré-jogo.
+      analyzable={props.analyzable ?? (props.unavailable ?? null) === null}
     />,
   );
 }
@@ -314,6 +316,7 @@ describe("PalpiteHero — ShareButton + kill-switch (ADR 0035 §3e / #438)", () 
           heroPalpite={POPULATED}
           matchId="11111111-1111-1111-1111-111111111111"
           unavailable={null}
+          analyzable
           fanOutEnabled
           finalScore={null}
           setId="22222222-2222-2222-2222-222222222222"
@@ -365,6 +368,7 @@ describe("PalpiteHero — análises saíram mas o palpite não (regressão)", ()
           heroPalpite={heroPalpite}
           matchId="11111111-1111-1111-1111-111111111111"
           unavailable={null}
+          analyzable
           fanOutEnabled
           finalScore={null}
           setId={null}
@@ -388,6 +392,7 @@ describe("PalpiteHero — análises saíram mas o palpite não (regressão)", ()
             heroPalpite={heroPalpite}
             matchId="11111111-1111-1111-1111-111111111111"
             unavailable={after.unavailable ?? null}
+            analyzable={(after.unavailable ?? null) === null}
             fanOutEnabled
             finalScore={null}
             setId={after.setId ?? null}
@@ -512,6 +517,7 @@ describe("PalpiteHero — gerar só o palpite (síntese sobre as análises salva
           heroPalpite={null}
           matchId="11111111-1111-1111-1111-111111111111"
           unavailable={null}
+          analyzable
           fanOutEnabled
           finalScore={null}
           setId={null}
@@ -579,6 +585,7 @@ describe("PalpiteHero — Contexto extra (#565)", () => {
           heroPalpite={POPULATED}
           matchId="11111111-1111-1111-1111-111111111111"
           unavailable={null}
+          analyzable
           fanOutEnabled
           finalScore={null}
           setId={null}

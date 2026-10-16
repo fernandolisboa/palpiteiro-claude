@@ -573,6 +573,89 @@ describe("toMatchRowView — placar parcial ao vivo (#574)", () => {
   });
 });
 
+describe("toMatchRowView — placar ao vivo do estado (#580)", () => {
+  const STARTED = new Date(NOW.getTime() - 63 * 60 * 1000);
+  const fresh = {
+    statusShort: "2H",
+    elapsed: 63,
+    extra: null,
+    fetchedAt: new Date(NOW.getTime() - 20_000),
+    minuteLabel: "63'",
+    score: { home: 1, away: 0 },
+    red: { home: 0, away: 1 },
+  };
+  function row(over: Partial<MatchInput>, inPlay: typeof fresh | null) {
+    return toMatchRowView({
+      match: makeMatch({ kickoffAt: STARTED, ...over }),
+      odds: null,
+      hasPrediction: false,
+      now: NOW,
+      inPlay,
+    });
+  }
+
+  it("estado fresco vence o parcial do sync: minuto, idade e expulsões", () => {
+    const v = row({ status: "live", homeScore: 0, awayScore: 0 }, fresh);
+    expect(v.liveScore).toEqual({
+      home: 1,
+      away: 0,
+      caption: "63' · atualizado há 20 s",
+      live: true,
+      red: { home: 0, away: 1 },
+      ended: false,
+    });
+    // `scheduled` stale depois do apito também ganha o placar ao vivo.
+    expect(row({ status: "scheduled" }, fresh).liveScore?.live).toBe(true);
+  });
+
+  it("estado velho (> 10 min) cai no parcial do sync, como antes", () => {
+    const stale = { ...fresh, fetchedAt: new Date(NOW.getTime() - 11 * 60_000) };
+    expect(
+      row({ status: "live", homeScore: 0, awayScore: 0 }, stale).liveScore,
+    ).toEqual({ home: 0, away: 0, caption: "parcial" });
+    expect("liveScore" in row({ status: "scheduled" }, stale)).toBe(false);
+  });
+
+  it("o banco encerrado/adiado vence o estado; antes do apito o estado não vale", () => {
+    for (const status of ["finished", "postponed", "cancelled"] as MatchStatus[]) {
+      expect(
+        row({ status, homeScore: 2, awayScore: 1 }, fresh).liveScore,
+      ).toBeUndefined();
+    }
+    const future = row(
+      { status: "scheduled", kickoffAt: new Date(NOW.getTime() + 60_000) },
+      fresh,
+    );
+    expect("liveScore" in future).toBe(false);
+  });
+
+  it("o hero leva o mesmo placar ao vivo (sem a leitura do modelo)", () => {
+    const hero = toMatchHeroView({
+      match: makeMatch({ kickoffAt: STARTED, status: "live" }),
+      odds: null,
+      hasPrediction: false,
+      now: NOW,
+      inPlay: fresh,
+    });
+    expect(hero.liveScore?.caption).toBe("63' · atualizado há 20 s");
+    expect("model" in hero).toBe(false);
+  });
+
+  it("a linha das listas mostra minuto e placar, nunca odd", () => {
+    const listRow = toMatchListRowView({
+      match: makeMatch({ kickoffAt: STARTED, status: "live" }),
+      odds: { bookmaker: "x", overOdd: "1.900", underOdd: "1.950", capturedAt: NOW },
+      hasPrediction: false,
+      now: NOW,
+      timeZone: "America/Sao_Paulo",
+      inPlay: fresh,
+    });
+    const html = renderToStaticMarkup(<MatchRow m={listRow} />);
+    expect(html).toContain("63&#x27; · atualizado há 20 s");
+    expect(html).not.toContain("1,90");
+  });
+});
+
 describe("toMatchListRowView — dia, hora e contagem (#577)", () => {
   const SP = "America/Sao_Paulo";
   function listRow(kickoffAt: Date, status: MatchStatus = "scheduled") {

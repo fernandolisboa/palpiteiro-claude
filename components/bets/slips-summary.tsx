@@ -4,7 +4,8 @@ import { formatUnitsSigned } from "@/lib/format";
 import { cn } from "@/lib/utils";
 
 // Resumo de /apostas (#577): em aberto, acertos e saldo em unidades. É o histórico
-// do próprio usuário (privado), não desempenho do app (ADR 0048 D4).
+// do próprio usuário (privado), não desempenho do app (ADR 0048 D4). Acertos e saldo
+// são só de pré-jogo; as ao vivo têm linha própria embaixo (#580, PLAN-580 §11).
 
 const LABEL = "text-meta uppercase tracking-label text-muted-foreground";
 const VALUE =
@@ -14,6 +15,37 @@ function balanceTone(units: number): string {
   if (units > 0) return "text-edge-fg";
   if (units < 0) return "text-destructive";
   return "text-foreground";
+}
+
+function LiveLine({ live }: { live: NonNullable<SlipLedgerSummary["live"]> }) {
+  const settled = live.won + live.lost;
+  const num = "font-mono tabular-nums text-foreground";
+  return (
+    <p className="text-meta text-muted-foreground">
+      ao vivo, fora dos números acima:{" "}
+      {settled === 0 ? (
+        <>
+          <span className={num}>{live.total}</span>{" "}
+          {live.total === 1 ? "aposta" : "apostas"}, sem resultado ainda
+        </>
+      ) : (
+        <>
+          <span className={num}>{live.won}</span> de{" "}
+          <span className={num}>{settled}</span> acertos
+          {live.settledWithStake > 0 && (
+            <>
+              {" · "}
+              <span
+                className={cn("font-mono tabular-nums", balanceTone(live.balanceUnits))}
+              >
+                {formatUnitsSigned(live.balanceUnits)}
+              </span>
+            </>
+          )}
+        </>
+      )}
+    </p>
+  );
 }
 
 export function SlipsSummary({ summary }: { summary: SlipLedgerSummary }) {
@@ -58,6 +90,7 @@ export function SlipsSummary({ summary }: { summary: SlipLedgerSummary }) {
           apostas sem stake não entram no saldo
         </p>
       )}
+      {summary.live && <LiveLine live={summary.live} />}
     </Card>
   );
 }

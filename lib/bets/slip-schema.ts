@@ -43,6 +43,10 @@ const EnvelopeSchema = z
     // Preenchido quando o cupom veio do atalho "digite sua aposta".
     rawInput: z.string().max(MAX_RAW_INPUT).nullable().optional(),
     parseAiCallId: z.uuid().nullable().optional(),
+    // A tabela que montou o cupom estava no modo ao vivo (#580). Página aberta antes do
+    // apito manda false (ou nada): a odd foi pré-preenchida com a de pré-jogo e a action
+    // recusa registrar ao vivo a partir dela.
+    gridLive: z.boolean().optional(),
   })
   .strict();
 
@@ -56,6 +60,7 @@ export type ValidatedSlip = {
   comboStakeUnits: number | null;
   rawInput: string | null;
   parseAiCallId: string | null;
+  gridLive: boolean;
 };
 
 export type SlipValidationError =
@@ -103,6 +108,7 @@ export function parseSlipPayload(
       comboStakeUnits: combinada ? (env.data.comboStakeUnits ?? null) : null,
       rawInput: env.data.rawInput ?? null,
       parseAiCallId: env.data.parseAiCallId ?? null,
+      gridLive: env.data.gridLive ?? false,
     },
   };
 }

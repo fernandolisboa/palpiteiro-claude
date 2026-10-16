@@ -18,6 +18,7 @@ import { getMatchIdsWithPredictionsByUser } from "@/lib/db/queries/matches";
 import { getLatestMatchModelSnapshotsForMatches } from "@/lib/db/queries/match-model-snapshots";
 import { loadRangeMatches } from "@/lib/db/queries/load-range-matches";
 import type { MatchModelSnapshot } from "@/lib/model-base/types";
+import { loadListInPlayStates } from "@/lib/live/list-states";
 import {
   getLatestOverUnderSnapshotsForMatches,
   getLatestSelectionOddsSnapshotsForMatches,
@@ -158,7 +159,14 @@ export default async function JogosPage({ searchParams }: PageProps) {
   // semântica latest-not-fresh do chip over/under). Ambos batch, sem N+1.
   // Base do modelo por jogo (#555): uma leitura batch, sem chamada externa. Opcional:
   // falha de leitura só tira a linha "Modelo" da lista, nunca derruba a página.
-  const [snapshotByMatch, matchResultByMatch, predictedMatchIds, modelByMatch] =
+  // Placar ao vivo (#580): só as rows já gravadas, nunca o provider (lib/live/list-states).
+  const [
+    snapshotByMatch,
+    matchResultByMatch,
+    predictedMatchIds,
+    modelByMatch,
+    inPlayByMatch,
+  ] =
     await Promise.all([
       getLatestOverUnderSnapshotsForMatches(matchIds),
       getLatestSelectionOddsSnapshotsForMatches(matchIds, "match_result"),
@@ -176,6 +184,7 @@ export default async function JogosPage({ searchParams }: PageProps) {
         );
         return new Map<string, MatchModelSnapshot>();
       }),
+      loadListInPlayStates(dbMatches, now),
     ]);
 
   // Linha com o dia e a hora no fuso do usuário (#577): a lista agrupa por dia.
@@ -211,6 +220,7 @@ export default async function JogosPage({ searchParams }: PageProps) {
       now,
       timeZone,
       modelSnapshot: modelByMatch.get(m.id) ?? null,
+      inPlay: inPlayByMatch.get(m.id) ?? null,
     });
   });
 

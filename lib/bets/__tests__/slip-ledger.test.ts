@@ -26,6 +26,7 @@ const row = (over: Partial<SlipLedgerRow> = {}): SlipLedgerRow => ({
   comboUserOdd: null,
   matchStatus: "scheduled",
   matchOver: false,
+  isLive: false,
   legs: [leg()],
   ...over,
 });
@@ -139,6 +140,7 @@ describe("summarizeSlipLedger", () => {
       balanceUnits: 0,
       openIds: [],
       closedIds: [],
+      live: null,
     });
   });
 
@@ -149,5 +151,43 @@ describe("summarizeSlipLedger", () => {
     ]);
     expect(Object.is(s.balanceUnits, -0)).toBe(false);
     expect(s.balanceUnits).toBe(0);
+  });
+
+  it("ao vivo (#580): fora do resumo de pré-jogo, numa linha própria; listas contam todas", () => {
+    const s = summarizeSlipLedger([
+      row({ id: "pre", legs: [won({ stakeUnits: "1.00", userOdd: "2.000" })] }),
+      row({ id: "live-won", isLive: true, legs: [won({ stakeUnits: "1.00", userOdd: "1.500" })] }),
+      row({ id: "live-lost", isLive: true, legs: [lost({ stakeUnits: "2.00" })] }),
+      row({ id: "live-open", isLive: true }),
+    ]);
+    expect(s.won).toBe(1);
+    expect(s.lost).toBe(0);
+    expect(s.balanceUnits).toBe(1);
+    expect(s.settledWithStake).toBe(1);
+    expect(s.live).toEqual({
+      total: 3,
+      won: 1,
+      lost: 1,
+      settledWithStake: 2,
+      settledWithoutStake: 0,
+      balanceUnits: -1.5,
+    });
+    expect(s.open).toBe(1);
+    expect(s.openIds).toEqual(["live-open"]);
+    expect(s.closed).toBe(3);
+  });
+
+  it("primeira aposta ao vivo não mexe no resumo de pré-jogo", () => {
+    const pre = [row({ id: "a", legs: [won({ stakeUnits: "1.00", userOdd: "2.000" })] })];
+    const before = summarizeSlipLedger(pre);
+    const after = summarizeSlipLedger([
+      ...pre,
+      row({ id: "l", isLive: true, legs: [won({ stakeUnits: "5.00", userOdd: "3.000" })] }),
+    ]);
+    for (const k of ["won", "lost", "settledWithStake", "settledWithoutStake", "balanceUnits"] as const) {
+      expect(after[k]).toBe(before[k]);
+    }
+    expect(before.live).toBeNull();
+    expect(after.live?.total).toBe(1);
   });
 });

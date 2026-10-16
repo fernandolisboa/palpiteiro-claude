@@ -165,8 +165,8 @@ export function ComoUsarContent() {
           mercado já tem odd. Embaixo, quando já calculada, a linha do{" "}
           <Strong>Modelo</Strong> dá a chance do favorito e de menos de 2,5 gols.
           Aparece <Ui>✓ analisado</Ui> nos jogos que você já analisou,{" "}
-          <Ui>AO VIVO</Ui> no lugar do horário e o placar parcial (quando já temos)
-          nos que estão rolando, e o placar nos encerrados.{" "}
+          <Ui>AO VIVO</Ui> no lugar do horário e o placar com o minuto (quando já
+          temos) nos que estão rolando, e o placar nos encerrados.{" "}
           <Strong>sem odd</Strong> significa que ainda não há cotação; sem ela a
           análise não roda.
         </p>
@@ -221,7 +221,10 @@ export function ComoUsarContent() {
         <p>
           A análise só roda <Strong>antes do apito inicial</Strong>. Com o jogo em
           andamento, adiado ou encerrado, os botões somem, mas o que você já
-          analisou continua lá.
+          analisou continua lá. Com o jogo rolando, o topo da página mostra o
+          placar, o minuto e há quanto tempo ele foi atualizado (e as expulsões,
+          quando há); <Ui>Atualizar placar</Ui> busca de novo, e voltar pra aba
+          também atualiza.
         </p>
       </Section>
 
@@ -335,6 +338,17 @@ export function ComoUsarContent() {
           </Link>{" "}
           e são conferidas sozinhas depois do jogo.
         </p>
+        <p>
+          <Strong>Com o jogo rolando</Strong>, dá pra registrar resultado, dupla
+          chance, ambas marcam, mais ou menos gols (1.5, 2.5, 3.5) e placar exato. A
+          chance da tabela é a do modelo ao vivo, que leva em conta o placar e o
+          minuto; as odds mostradas são as de antes do jogo, só de referência, e a
+          odd vem em branco: digite a que você pegou. O mercado que o placar já
+          decidiu aparece como <Ui>decidido</Ui> e não entra. A avaliação sai pela
+          chance ao vivo, sem sugestão de stake. A aposta fica marcada com o minuto
+          e o placar do registro, e em Suas apostas as de jogo rolando têm uma linha
+          própria, fora do saldo das de antes do jogo.
+        </p>
         <Tip>
           <Strong>Prefere escrever?</Strong> Em <Ui>ou digite sua aposta</Ui>,
           escreva do seu jeito, por exemplo{" "}
@@ -380,7 +394,9 @@ export function ComoUsarContent() {
             em aberto, quantas você acertou e o saldo em unidades; o filtro separa{" "}
             <Ui>Em aberto</Ui> e <Ui>Encerradas</Ui>. Cada aposta vem marcada como{" "}
             <Ui>Acertou</Ui>, <Ui>Errou</Ui> ou <Ui>Em aberto</Ui>, e a combinada traz
-            o selo de cada seleção. Só você vê.
+            o selo de cada seleção. As registradas com o jogo rolando levam o selo{" "}
+            <Ui>ao vivo</Ui> com o minuto e o placar da hora, e contam numa linha à
+            parte, fora dos acertos e do saldo do topo. Só você vê.
           </li>
         </ul>
         <p>

@@ -45,11 +45,11 @@ afterEach(async () => {
 });
 
 // Duas instâncias do painel (a coluna do desktop e a folha do celular) no mesmo provider.
-async function mountPage() {
+async function mountPage(g = grid) {
   await act(async () =>
     root.render(
       <BetSlipProvider matchId={MATCH_ID}>
-        <MarketTable grid={grid} />
+        <MarketTable grid={g} />
         <div data-testid="panel-a">
           <SlipPanel />
         </div>
@@ -143,8 +143,31 @@ describe("BetSlipProvider", () => {
     await act(async () => form.requestSubmit());
     await act(async () => {});
     expect(registerBetSlip).toHaveBeenCalledTimes(1);
+    // Tabela de pré-jogo: o payload diz que não é a tabela ao vivo.
+    const fd = vi.mocked(registerBetSlip).mock.calls[0][1];
+    expect(JSON.parse(String(fd.get("slip"))).gridLive).toBe(false);
     expect(panel("a")).not.toContain("suas apostas (1)");
     expect(panel("a")).toContain("aposta registrada");
     expect(panel("b")).toContain("aposta registrada");
+  });
+
+  it("tabela ao vivo: o payload leva gridLive e a odd não vem pré-preenchida", async () => {
+    vi.mocked(registerBetSlip).mockResolvedValue({ ok: false, error: "x" });
+    const liveGrid = toBetGridView({
+      teams: TEAMS,
+      model: null,
+      references: new Map(),
+      analysis: new Map(),
+      live: { score: { home: 0, away: 0 }, minuteLabel: "10'" },
+    });
+    await mountPage(liveGrid);
+    await click(cell(/^Empate/));
+    const form = container.querySelector<HTMLFormElement>('[data-testid="panel-a"] form')!;
+    await act(async () => form.requestSubmit());
+    await act(async () => {});
+    const fd = vi.mocked(registerBetSlip).mock.calls[0][1];
+    const sent = JSON.parse(String(fd.get("slip")));
+    expect(sent.gridLive).toBe(true);
+    expect(sent.legs[0].userOdd).toBeUndefined();
   });
 });

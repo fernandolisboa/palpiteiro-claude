@@ -255,6 +255,45 @@ describe("matchPhase", () => {
     }
   });
 
+  it("depois da janela de busca (kickoff + 4h) sem terminal: volta o 'já começou'", () => {
+    const old = new Date(NOW.getTime() - 4 * 60 * 60_000 - 1);
+    for (const status of ["scheduled", "live"] as const) {
+      const legacy = matchUnavailableReason(status, old, NOW);
+      for (const state of [
+        null,
+        liveState({ fetchedAt: new Date(NOW.getTime() - 3 * 60 * 60_000) }),
+      ]) {
+        const phase = matchPhase({ status, kickoffAt: old }, state, NOW, {
+          liveMode: true,
+        });
+        expect(phase).toEqual({
+          kind: "started_unknown",
+          reason: legacy,
+          actionable: false,
+        });
+        expect(
+          matchCapabilities(phase, { liveMode: true, modelReady: true })
+        ).toEqual(ALL_CLOSED);
+      }
+    }
+    // Na borda (exatamente 4h) segue o modo ao vivo: sem estado = "indisponível".
+    const edge = new Date(NOW.getTime() - 4 * 60 * 60_000);
+    expect(
+      matchPhase({ status: "scheduled", kickoffAt: edge }, null, NOW, {
+        liveMode: true,
+      }).reason
+    ).toBe("live_unavailable");
+    // Terminal lido pelo provider ainda vale depois da janela.
+    expect(
+      matchPhase(
+        { status: "scheduled", kickoffAt: old },
+        liveState({ statusShort: "FT" }),
+        NOW,
+        { liveMode: true }
+      ).kind
+    ).toBe("finished");
+  });
+
   it("terminal no DB vence o estado ao vivo", () => {
     expect(
       matchPhase({ status: "finished", kickoffAt: KICKOFF }, liveState(), NOW, {

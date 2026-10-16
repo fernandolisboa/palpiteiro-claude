@@ -41,9 +41,12 @@ type Props = {
   // null = sem palpite persistido ainda (estado empty/CTA) OU set antigo sem manchete.
   heroPalpite: PalpiteHeadlineView | null;
   matchId: string;
-  // Por que o jogo não aceita análise (ao vivo/adiado/cancelado/encerrado; predict()
-  // os rejeita) → sem CTA, copy do motivo. null = pré-jogo, analisável.
+  // Por que o jogo não está em pré-jogo (ao vivo/adiado/cancelado/encerrado): escolhe a
+  // copy do HERO sem CTA. null = pré-jogo.
   unavailable: MatchUnavailableReason | null;
+  // "Analisar com IA" e "Gerar só o palpite" liberados (matchCapabilities.analyze, ADR
+  // 0060): a página decide por capacidade, não por `unavailable === null`.
+  analyzable: boolean;
   // Kill-switch de spend (enable_best_bet_fan_out). false → aviso suave, sem botão que erra.
   fanOutEnabled: boolean;
   // Placar real do jogo encerrado (fato do mundo, NÃO número de valor) — só pro recibo
@@ -111,6 +114,7 @@ export function PalpiteHero({
   heroPalpite,
   matchId,
   unavailable,
+  analyzable,
   fanOutEnabled,
   finalScore,
   setId,
@@ -135,7 +139,7 @@ export function PalpiteHero({
   const contextNotice =
     state?.ok && "contextNotice" in state ? (state.contextNotice ?? null) : null;
   const contextField: ContextField =
-    contextEnabled && unavailable === null && fanOutEnabled
+    contextEnabled && analyzable && fanOutEnabled
       ? {
           value: context,
           onChange: setContext,
@@ -181,6 +185,7 @@ export function PalpiteHero({
       <HeroBody
         heroPalpite={heroPalpite}
         unavailable={unavailable}
+        analyzable={analyzable}
         fanOutEnabled={fanOutEnabled}
         finalScore={finalScore}
         setId={setId}
@@ -188,7 +193,7 @@ export function PalpiteHero({
         pending={pending}
         pendingIntent={intent}
         error={error}
-        canRegenerate={unavailable === null && fanOutEnabled && hasAnalyses}
+        canRegenerate={analyzable && fanOutEnabled && hasAnalyses}
         contextField={contextField}
         contextNotice={contextNotice}
         expanded={expanded}
@@ -200,6 +205,7 @@ export function PalpiteHero({
 function HeroBody({
   heroPalpite,
   unavailable,
+  analyzable,
   fanOutEnabled,
   finalScore,
   setId,
@@ -214,6 +220,7 @@ function HeroBody({
 }: {
   heroPalpite: PalpiteHeadlineView | null;
   unavailable: MatchUnavailableReason | null;
+  analyzable: boolean;
   fanOutEnabled: boolean;
   finalScore: { home: number; away: number } | null;
   setId: string | null;
@@ -236,7 +243,7 @@ function HeroBody({
     return (
       <PopulatedHero
         view={heroPalpite}
-        analyzable={unavailable === null}
+        analyzable={analyzable}
         finalScore={finalScore}
         setId={setId}
         sharedAt={sharedAt}
@@ -253,6 +260,7 @@ function HeroBody({
   return (
     <EmptyHero
       unavailable={unavailable}
+      analyzable={analyzable}
       fanOutEnabled={fanOutEnabled}
       error={error}
       canRegenerate={canRegenerate}
@@ -492,6 +500,7 @@ function ShareButton({
 // (kill-switch) | aviso do motivo (ao vivo/adiado/cancelado/encerrado).
 function EmptyHero({
   unavailable,
+  analyzable,
   fanOutEnabled,
   error,
   canRegenerate,
@@ -499,6 +508,7 @@ function EmptyHero({
   contextNotice,
 }: {
   unavailable: MatchUnavailableReason | null;
+  analyzable: boolean;
   fanOutEnabled: boolean;
   error: string | null;
   canRegenerate: boolean;
@@ -507,14 +517,15 @@ function EmptyHero({
 }) {
   // Jogo não analisável sem palpite: predict() rejeitaria — sem CTA. O aviso ainda
   // aparece: um run iniciado antes do apito pode terminar depois dele, sem manchete.
-  if (unavailable !== null) {
+  // Sem motivo e sem análise não acontece (o pré-jogo libera tudo): fail-closed.
+  if (!analyzable) {
     return (
       <WarmShell tone="quiet">
         <div className="flex flex-col gap-2">
           {error && <InlineError error={error} />}
           <Kicker />
           <p className="text-body tracking-tight text-muted-foreground">
-            {EMPTY_HERO_UNAVAILABLE_COPY[unavailable]}
+            {EMPTY_HERO_UNAVAILABLE_COPY[unavailable ?? "finished"]}
           </p>
         </div>
       </WarmShell>

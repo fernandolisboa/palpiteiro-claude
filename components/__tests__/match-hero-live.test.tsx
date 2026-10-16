@@ -1,5 +1,10 @@
-import { describe, expect, it } from "vitest";
+import { describe, expect, it, vi } from "vitest";
 import { renderToStaticMarkup } from "react-dom/server";
+
+// "Atualizar placar" usa o router do App Router (router.refresh).
+vi.mock("next/navigation", () => ({
+  useRouter: () => ({ refresh: vi.fn() }),
+}));
 
 import { MatchHero } from "@/components/match-hero";
 import type { MatchHeroView } from "@/lib/view/types";
@@ -73,5 +78,75 @@ describe("MatchHero — placar parcial (#574)", () => {
     );
     expect(html).toContain("encerrado");
     expect(html).not.toContain("parcial");
+  });
+});
+
+describe("MatchHero — estado ao vivo (#580)", () => {
+  const live = {
+    home: 1,
+    away: 0,
+    caption: "63' · atualizado há 20 s",
+    live: true as const,
+    red: { home: 0, away: 2 },
+    ended: false,
+  };
+
+  it("placar, minuto com idade, expulsões (form-loss) e 'Atualizar placar'", () => {
+    const html = renderToStaticMarkup(
+      <MatchHero
+        view={{ ...heroView(), status: "live", liveScore: live }}
+        status="live"
+        live={{ note: null }}
+      />,
+    );
+    expect(html).toMatch(/1<span[^>]*>–<\/span>0/);
+    expect(html).toContain("63&#x27; · atualizado há 20 s");
+    // Texto para o leitor de tela (sr-only), não um aria-label que ele ignora.
+    expect(html).toContain('<span class="sr-only"> (2 expulsos)</span>');
+    expect(html).not.toMatch(/aria-label="\d+ expulsos?"/);
+    expect(html).not.toContain("1 expulso");
+    expect(html).toContain("bg-form-loss-fg");
+    expect(html).toContain("Atualizar placar");
+    // Alvo de toque de 44px no celular.
+    expect(html).toMatch(/<button[^>]*min-h-11[^>]*>[\s\S]*?Atualizar placar/);
+    expect(html).toContain("AO VIVO");
+  });
+
+  it("sem placar ao vivo utilizável: 'placar ao vivo indisponível' sob o vs", () => {
+    const html = renderToStaticMarkup(
+      <MatchHero
+        view={{ ...heroView(), isInProgress: true }}
+        status="live"
+        live={{ note: "placar ao vivo indisponível" }}
+      />,
+    );
+    expect(html).toContain(">vs<");
+    expect(html).toContain("placar ao vivo indisponível");
+    expect(html).toContain("Atualizar placar");
+  });
+
+  it("fim de jogo pelo provider: sem o selo AO VIVO", () => {
+    const html = renderToStaticMarkup(
+      <MatchHero
+        view={{
+          ...heroView(),
+          isInProgress: true,
+          liveScore: {
+            ...live,
+            caption: "fim de jogo · atualizado há 20 s",
+            ended: true,
+          },
+        }}
+        status="live"
+      />,
+    );
+    expect(html).not.toContain("AO VIVO");
+    expect(html).toContain("fim de jogo");
+  });
+
+  it("sem `live` (flag desligada / pré-jogo): sem botão de atualizar", () => {
+    const html = renderToStaticMarkup(<MatchHero view={heroView()} />);
+    expect(html).not.toContain("Atualizar placar");
+    expect(html).not.toContain("expulso");
   });
 });

@@ -70,6 +70,8 @@ describe("/como-usar", () => {
       "Detalhe técnico",
       "Escolher datas",
       "Aplicar",
+      "Atualizar placar",
+      "decidido",
     ]) {
       expect(html).toContain(label);
       expect(ui).toContain(label);

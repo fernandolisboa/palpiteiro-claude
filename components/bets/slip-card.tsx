@@ -10,7 +10,9 @@ import {
   formatUnitsCompact,
   leagueToKey,
 } from "@/lib/format";
+import { readLiveStamp } from "@/lib/live/stamp";
 import { historyLegView, slipLegLabel, type TeamNames } from "@/lib/view/bet-slip";
+import { liveStampLabel } from "@/lib/view/live-score";
 import type { ResultState } from "@/lib/view/result-state";
 import { displayMatchTeams } from "@/lib/view/team";
 
@@ -63,14 +65,16 @@ function LegRow({
   teams,
   showBadge,
   closed,
+  isLive,
 }: {
   leg: UserBetLegRow;
   teams: TeamNames;
   showBadge: boolean;
   closed: boolean;
+  isLive: boolean;
 }) {
   const label = slipLegLabel(leg.kind, leg.params, teams);
-  const view = historyLegView(leg);
+  const view = historyLegView(leg, { isLive });
   const result = legResult(leg);
   // Encerrada sem resultado (jogo cancelado, ou não conferida fechada por tempo): a
   // perna pendente fica sem selo; o cabeçalho já diz o porquê. Nunca "Em aberto" lá.
@@ -125,6 +129,10 @@ export function SlipCard({
   const combo = slip.legs.length >= 2;
   const matchCancelled = slip.match.status === "cancelled";
   const comboStake = slip.stakeUnits === null ? null : Number(slip.stakeUnits);
+  // Registrada com o jogo rolando (#580): o momento do registro, do carimbo. Carimbo
+  // ilegível numa slip ao vivo ainda leva o selo "ao vivo".
+  const liveStamp = slip.isLive ? readLiveStamp(slip.liveState) : null;
+  const liveLabel = slip.isLive ? (liveStamp ? liveStampLabel(liveStamp) : "ao vivo") : null;
   return (
     <Card className="gap-0 overflow-hidden p-0">
       <div className="flex items-start justify-between gap-2 px-4 pt-3 pb-3">
@@ -140,6 +148,17 @@ export function SlipCard({
           <span className="text-meta uppercase tracking-label text-muted-foreground">
             {LEAGUE_LABEL[league]} · {formatKickoffAbsolute(slip.match.kickoffAt, now, timeZone)}
           </span>
+          {liveLabel && (
+            <span className="pt-1">
+              <Badge
+                variant="outline"
+                size="xs"
+                className="font-mono tabular-nums tracking-tight text-muted-foreground"
+              >
+                {liveLabel}
+              </Badge>
+            </span>
+          )}
           {combo && (slip.comboUserOdd !== null || comboStake !== null) && (
             <span className="pt-1 text-body-sm tracking-tight text-muted-foreground">
               {slip.comboUserOdd !== null && (
@@ -173,6 +192,7 @@ export function SlipCard({
             teams={teams}
             showBadge={combo}
             closed={closed || matchCancelled}
+            isLive={slip.isLive}
           />
         ))}
       </div>

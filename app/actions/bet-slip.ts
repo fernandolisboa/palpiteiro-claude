@@ -6,9 +6,18 @@ import { and, eq } from "drizzle-orm";
 import { auth } from "@/auth";
 import { aiCalls } from "@/db/schema";
 import { latestAnalysisByMarket } from "@/lib/bets/analysis-probs";
-import { evaluateSlip, type EvaluatedLeg } from "@/lib/bets/evaluate-slip";
+import {
+  evaluateSlip,
+  type EvaluatedLeg,
+  type ReferenceOdds,
+} from "@/lib/bets/evaluate-slip";
+import {
+  LIVE_UNAVAILABLE_COPY,
+  liveRegistrationRefusal,
+  liveSlipRefusal,
+} from "@/lib/bets/live-slip";
 import { parseSlipPayload, type SlipValidationError } from "@/lib/bets/slip-schema";
-import { resolveSlipModel } from "@/lib/bets/slip-model";
+import { resolveInPlaySlipModel, resolveSlipModel } from "@/lib/bets/slip-model";
 import { isEmailAllowed } from "@/lib/auth/whitelist";
 import { db } from "@/lib/db";
 import { getMatchById } from "@/lib/db/queries/matches";
@@ -20,6 +29,11 @@ import {
   type NewBetSlip,
 } from "@/lib/db/queries/user-bets";
 import { getUserAccessState } from "@/lib/db/queries/users";
+import { loadActionLiveContext } from "@/lib/live/action-state";
+import { matchPhase } from "@/lib/live/phase";
+import { liveColumns, liveStampFromState, type LiveStamp } from "@/lib/live/stamp";
+import { isInPlayScoreline } from "@/lib/quant/in-play";
+import type { ModelScoreline } from "@/lib/quant/match-model";
 import { checkBetSlipsRateLimit } from "@/lib/rate-limit";
 import {
   deriveBetLegSettleable,
@@ -36,13 +50,23 @@ import { capabilityGateMessage } from "./not-analyzable";
 // re-validadas (Zod fail-closed), avaliadas EM CÓDIGO (evaluateSlip: sem LLM, sem
 // limite de análises, sem Odds API) e gravadas congeladas. "Simples" = um slip por
 // perna; "Combinada" = um slip com todas as pernas e a conjunta da matriz.
+//
+// Ao vivo (#580, PLAN-580 §9.2): o estado é relido AQUI (≤ 2 min, senão tenta buscar,
+// senão recusa); só os tipos da tabela ao vivo; seleção já decidida é recusada; a
+// avaliação usa o modelo em jogo, sem referência (a odd é de antes do jogo), sem análise
+// salva e sem stake sugerido; o slip grava `is_live` + o carimbo do momento.
 
 export type RegisterBetSlipResult =
   | { ok: true; registered: number; evaluation: SlipEvaluationView }
   | {
       ok: false;
       error: string;
-      kind?: "slip-invalido" | "nao-analisavel" | "limite-de-slips" | "falha-ao-salvar";
+      kind?:
+        | "slip-invalido"
+        | "nao-analisavel"
+        | "mercado-ao-vivo"
+        | "limite-de-slips"
+        | "falha-ao-salvar";
     };
 
 const INVALID_COPY: Record<SlipValidationError, string> = {
@@ -119,12 +143,38 @@ export async function registerBetSlip(
     };
   }
 
-  // 3. Jogo existe e ainda não começou (mesmo gate da análise).
+  // 3. Jogo existe e aceita registro: antes do apito, ou ao vivo com o estado relido
+  //    no servidor (nunca o minuto/placar do cliente).
   const match = await getMatchById(slip.matchId);
   if (!match) return { ok: false, error: "Jogo não encontrado." };
-  const notAnalyzable = capabilityGateMessage("registerBets", match);
+  const live = await loadActionLiveContext(match);
+  const notAnalyzable = capabilityGateMessage("registerBets", match, {
+    now: live.now,
+    state: live.state,
+    liveMode: live.liveMode,
+  });
   if (notAnalyzable) {
     return { ok: false, error: notAnalyzable, kind: "nao-analisavel" };
+  }
+  const phase = matchPhase(match, live.state, live.now, {
+    liveMode: live.liveMode,
+  });
+  // Liberado depois do apito = estado acionável (≤ 2 min, minuto conhecido).
+  const liveState = phase.kind === "pre" ? null : live.state;
+  // Sem placar do servidor, ou cupom montado numa tabela de pré-jogo (página aberta
+  // antes do apito). O contrário (tabela ao vivo, jogo ainda antes do apito no
+  // servidor) é inofensivo: o caminho de pré-jogo segue igual.
+  const liveRefusal = liveRegistrationRefusal(
+    phase.kind !== "pre",
+    liveState?.score ?? null,
+    slip.gridLive,
+  );
+  if (liveRefusal) {
+    return { ok: false, error: liveRefusal, kind: "nao-analisavel" };
+  }
+  if (liveState?.score) {
+    const refusal = liveSlipRefusal(slip.legs, liveState.score);
+    if (refusal) return { ok: false, error: refusal, kind: "mercado-ao-vivo" };
   }
 
   // 4. parseAiCallId vem do cliente: só vale se a chamada é do próprio usuário (evita
@@ -156,12 +206,40 @@ export async function registerBetSlip(
   }
 
   // 6. Modelo do jogo (porta única), odds de referência (só DB) e a sua análise por
-  //    mercado, em paralelo.
-  const [model, references, history] = await Promise.all([
-    resolveSlipModel(match),
-    getReferenceOddsForMatch(match.id),
-    getPredictionHistoryForMatch(match.id, userId),
-  ]);
+  //    mercado, em paralelo. Ao vivo: só o modelo em jogo (a referência é de antes do
+  //    jogo e a análise salva já está obsoleta, PLAN-580 achado 4).
+  let model: ModelScoreline | null;
+  let references: ReferenceOdds;
+  let analysis: ReturnType<typeof latestAnalysisByMarket>;
+  if (liveState) {
+    model = await resolveInPlaySlipModel(match, liveState);
+    references = new Map();
+    analysis = new Map();
+  } else {
+    const [preModel, refs, history] = await Promise.all([
+      resolveSlipModel(match),
+      getReferenceOddsForMatch(match.id),
+      getPredictionHistoryForMatch(match.id, userId),
+    ]);
+    model = preModel;
+    references = refs;
+    analysis = latestAnalysisByMarket(history);
+  }
+
+  // Carimbo do momento (lido no servidor), com as entradas do modelo quando houve.
+  let stamp: LiveStamp | null = null;
+  if (liveState) {
+    try {
+      stamp = liveStampFromState(
+        liveState,
+        live.now,
+        model && isInPlayScoreline(model) ? model.inPlay : null,
+      );
+    } catch (err) {
+      console.error("[registerBetSlip] carimbo ao vivo inválido", err);
+      return { ok: false, error: LIVE_UNAVAILABLE_COPY, kind: "nao-analisavel" };
+    }
+  }
 
   const evaluation = evaluateSlip({
     mode: slip.mode,
@@ -173,9 +251,11 @@ export async function registerBetSlip(
     })),
     model,
     references,
-    analysis: latestAnalysisByMarket(history),
+    analysis,
     comboUserOdd: slip.comboUserOdd,
     comboStakeUnits: slip.comboStakeUnits,
+    // Ao vivo: sem banda nem Kelly (modelo em jogo sem calibração, ADR 0060).
+    suggestStake: liveState === null,
   });
 
   // 7. Persiste congelado, tudo numa ida (db.batch = transação no neon-http).
@@ -185,6 +265,7 @@ export async function registerBetSlip(
     rawInput: slip.rawInput,
     parseAiCallId,
     mode: slip.mode,
+    ...liveColumns(stamp),
   };
   const newSlips: NewBetSlip[] =
     slip.mode === "simples"
