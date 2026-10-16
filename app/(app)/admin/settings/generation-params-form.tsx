@@ -100,7 +100,6 @@ export function GenerationParamsForm({ current }: Props) {
               <option
                 key={level}
                 value={level}
-                className="bg-popover text-popover-foreground"
               >
                 {level}
               </option>

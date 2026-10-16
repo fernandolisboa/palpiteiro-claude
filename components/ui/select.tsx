@@ -6,7 +6,8 @@ import { cn } from "@/lib/utils"
 /**
  * Select primitivo (ADR 0029): `<select>` NATIVO estilizado — não Radix. Os
  * consumidores (perfil/admin) já são selects nativos, então é drop-in e não muda
- * o modelo de interação. `color-scheme` deixa o dropdown nativo reagir ao tema.
+ * o modelo de interação. As cores da lista aberta vêm da regra global de
+ * `select`/`option` em app/globals.css, que vale pra todo select do app.
  * Nesta fatia é criado como fundação; os consumidores migram nos heirs.
  */
 function Select({
@@ -19,7 +20,7 @@ function Select({
       <select
         data-slot="select"
         className={cn(
-          "h-9 w-full appearance-none rounded-md border border-input bg-transparent px-3 py-1 pr-8 text-body-sm shadow-xs transition-[color,box-shadow] outline-none [color-scheme:light] dark:[color-scheme:dark]",
+          "h-9 w-full appearance-none rounded-md border border-input bg-transparent px-3 py-1 pr-8 text-body-sm shadow-xs transition-[color,box-shadow] outline-none",
           "focus-visible:border-ring focus-visible:ring-[3px] focus-visible:ring-ring/50",
           "disabled:pointer-events-none disabled:cursor-not-allowed disabled:opacity-50",
           "aria-invalid:border-destructive aria-invalid:ring-destructive/20 dark:aria-invalid:ring-destructive/40",

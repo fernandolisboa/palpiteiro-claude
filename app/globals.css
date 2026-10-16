@@ -261,6 +261,33 @@ body {
   color: var(--foreground);
 }
 
+/* Lista aberta de todo <select> nativo, nos dois temas — regra única, nenhum componente
+   repete. Medido no Chromium (Windows/Linux, popup interno do Blink):
+   - o fundo da lista vem do `background-color` do <select>; com o `transparent` do
+     preflight do Tailwind vira BRANCO, e o texto herda o foreground claro do dark →
+     lista ilegível. Fundo e cor explícitos nas <option>/<optgroup> resolvem;
+   - com `color-scheme: dark` o destaque do item ativo é azul-claro e mantém a cor
+     clara da <option> → ilegível. Com `color-scheme: light` o destaque é azul forte
+     com texto branco, legível nos dois temas. O select fechado não muda: cor e fundo
+     são do preflight/das classes, a seta nativa segue a cor do texto;
+   - `scrollbar-color` é copiado pra lista; sem ele a barra de rolagem ficaria clara.
+   `option:disabled` precisa voltar pro muted: a cor explícita apaga o cinza do UA.
+   Teste: __tests__/select-theme.test.ts. */
+@layer base {
+  select {
+    color-scheme: light;
+    scrollbar-color: var(--border-strong) var(--popover);
+  }
+  option,
+  optgroup {
+    background-color: var(--popover);
+    color: var(--popover-foreground);
+  }
+  option:disabled {
+    color: var(--muted-foreground);
+  }
+}
+
 /* Rodapé alinhado à coluna da página (#579, ADR 0059): a página marca a largura no
    contêiner (PageContainer ou data-page-width à mão). Sem marca, ou sem suporte a :has(),
    fica content (max-w-content do próprio rodapé). Fora de @layer de propósito: CSS sem

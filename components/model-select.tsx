@@ -9,7 +9,7 @@ type Props = {
 
 /**
  * Select de modelo compartilhado (ADR 0029 / #325): a opção "Usar padrão global
- * (…)" + a lista de modelos, sobre o primitivo `Select` (foco/chevron/color-scheme).
+ * (…)" + a lista de modelos, sobre o primitivo `Select` (foco/chevron).
  * Suporta os dois modos pelo spread: form-uncontrolled (`name`+`defaultValue`) ou
  * controlled (`value`+`onChange`). Constrange a largura no wrapper externo
  * (`max-w-aside`), NUNCA via `className` no Select — que cairia no `<select>`
@@ -18,22 +18,16 @@ type Props = {
  * Consumido pelo perfil (`preferred-model-form`) e pelo `model-override-select`
  * da página do jogo.
  *
- * `bg-popover text-popover-foreground` em cada `<option>` é obrigatório: o
- * Chromium não herda a cor do `<select>` pro popup nativo (texto escuro no dark).
+ * As cores da lista aberta vêm da regra global de `<select>`/`<option>` em
+ * app/globals.css — nada de classe de cor nas `<option>`.
  */
 export function ModelSelect({ models, defaultModelLabel, ...selectProps }: Props) {
   return (
     <div className="max-w-aside">
       <Select {...selectProps}>
-        <option value="default" className="bg-popover text-popover-foreground">
-          Usar padrão global ({defaultModelLabel})
-        </option>
+        <option value="default">Usar padrão global ({defaultModelLabel})</option>
         {models.map((m) => (
-          <option
-            key={m.id}
-            value={m.id}
-            className="bg-popover text-popover-foreground"
-          >
+          <option key={m.id} value={m.id}>
             {m.label}
           </option>
         ))}
