@@ -20,6 +20,7 @@ const m = vi.hoisted(() => ({
   setFriendPoolManualScore: vi.fn(),
   setFriendPoolBetsClosed: vi.fn(),
   setFriendPoolBetsExtended: vi.fn(),
+  clearFriendPoolBetsClosed: vi.fn(),
 }));
 vi.mock("@/auth", () => ({ auth: m.auth }));
 vi.mock("next/cache", () => ({ revalidatePath: m.revalidatePath }));
@@ -38,6 +39,7 @@ vi.mock("@/lib/db/queries/friend-pools", () => ({
   setFriendPoolManualScore: m.setFriendPoolManualScore,
   setFriendPoolBetsClosed: m.setFriendPoolBetsClosed,
   setFriendPoolBetsExtended: m.setFriendPoolBetsExtended,
+  clearFriendPoolBetsClosed: m.clearFriendPoolBetsClosed,
 }));
 
 import {
@@ -46,6 +48,7 @@ import {
   createFriendPool,
   extendFriendPoolBets,
   removeFriendPoolEntry,
+  reopenFriendPoolBets,
   setFriendPoolScore,
 } from "@/app/actions/friend-pools";
 import { LiveStampSchema } from "@/lib/live/stamp";
@@ -325,6 +328,182 @@ describe("closeFriendPoolBets (dono)", () => {
     m.getEnableLiveMode.mockResolvedValue(false);
     await closeFriendPoolBets(fd());
     expect(m.setFriendPoolBetsClosed).not.toHaveBeenCalled();
+  });
+});
+
+describe("reopenFriendPoolBets (dono, #601)", () => {
+  const fd = () => form({ poolId: POOL_ID });
+  const reopen = () => reopenFriendPoolBets(null, fd());
+  const CAP = at(180);
+  const REFUSED = { ok: false, error: "Não dá pra reabrir as apostas agora." };
+  const UNCONFIRMED = {
+    ok: false,
+    error: "Não deu pra confirmar o placar ao vivo agora. Tente em um minuto.",
+  };
+  const expectRevalidated = () => {
+    expect(m.revalidatePath).toHaveBeenCalledWith(`/bolao/${POOL_ID}`);
+    expect(m.revalidatePath).toHaveBeenCalledWith("/bolao");
+  };
+
+  it("fechado pelo corte dos 15': reabre até o teto, com o dono como quem estendeu", async () => {
+    vi.setSystemTime(at(30));
+    m.getInPlayState.mockResolvedValue(inPlay({ elapsed: 30, minuteLabel: "30'" }));
+    expect(await reopen()).toEqual({ ok: true });
+    expect(m.getFriendPool).toHaveBeenCalledWith(POOL_ID, OWNER);
+    expect(m.getInPlayState).toHaveBeenCalled();
+    expect(m.setFriendPoolBetsExtended).toHaveBeenCalledWith({
+      poolId: POOL_ID,
+      userId: OWNER,
+      until: CAP,
+      now: at(30),
+    });
+    expect(m.clearFriendPoolBetsClosed).not.toHaveBeenCalled();
+    expectRevalidated();
+  });
+
+  it("fechado pelo dono: reabre, e depois anota no 2º tempo com carimbo", async () => {
+    vi.setSystemTime(at(70));
+    m.getFriendPool.mockResolvedValue(pool({ betsClosedAt: at(10) }));
+    m.getInPlayState.mockResolvedValue(
+      inPlay({ statusShort: "2H", elapsed: 55, minuteLabel: "55'" }),
+    );
+    expect(await reopen()).toEqual({ ok: true });
+    expect(m.setFriendPoolBetsExtended).toHaveBeenCalledTimes(1);
+    // O que a query grava: fechamento limpo, extensão até o teto.
+    m.getFriendPool.mockResolvedValue(
+      pool({ betsClosedAt: null, betsExtendedUntil: CAP, betsExtendedByUserId: OWNER }),
+    );
+    expect(await addFriendPoolEntry(null, entryForm())).toEqual({ ok: true });
+    const call = m.insertFriendPoolEntry.mock.calls[0]![0];
+    expect(call.isLive).toBe(true);
+    expect(LiveStampSchema.parse(call.liveState)).toMatchObject({
+      minuteLabel: "55'",
+      score: { home: 1, away: 0 },
+    });
+    // E o dono pode fechar de novo.
+    await closeFriendPoolBets(fd());
+    expect(m.setFriendPoolBetsClosed).toHaveBeenCalledWith({
+      poolId: POOL_ID,
+      userId: OWNER,
+      now: at(70),
+    });
+  });
+
+  it("antes do apito, fechado pelo dono: só limpa o fechamento, sem extensão", async () => {
+    vi.setSystemTime(at(-10));
+    m.getFriendPool.mockResolvedValue(pool({ betsClosedAt: at(-30) }));
+    expect(await reopen()).toEqual({ ok: true });
+    expect(m.clearFriendPoolBetsClosed).toHaveBeenCalledWith({
+      poolId: POOL_ID,
+      userId: OWNER,
+      now: at(-10),
+    });
+    expect(m.setFriendPoolBetsExtended).not.toHaveBeenCalled();
+    // Antes do apito não lê estado ao vivo.
+    expect(m.getInPlayState).not.toHaveBeenCalled();
+    expectRevalidated();
+    // Reaberto: volta a janela de sempre, anota sem carimbo.
+    m.getFriendPool.mockResolvedValue(pool());
+    expect(await addFriendPoolEntry(null, entryForm())).toEqual({ ok: true });
+  });
+
+  it("antes do apito: sem o dono ter fechado ou com a flag OFF, recusa", async () => {
+    vi.setSystemTime(at(-10));
+    expect(await reopen()).toEqual(REFUSED);
+    m.getFriendPool.mockResolvedValue(pool({ betsClosedAt: at(-30) }));
+    m.getEnableLiveMode.mockResolvedValue(false);
+    expect(await reopen()).toEqual(REFUSED);
+    expect(m.clearFriendPoolBetsClosed).not.toHaveBeenCalled();
+    expect(m.setFriendPoolBetsExtended).not.toHaveBeenCalled();
+  });
+
+  it("vale para quem não é admin (é o dono)", async () => {
+    vi.setSystemTime(at(30));
+    expect(await reopen()).toEqual({ ok: true });
+    expect(m.setFriendPoolBetsExtended).toHaveBeenCalledTimes(1);
+  });
+
+  it("bolão de outra pessoa: getFriendPool não acha, nada muda", async () => {
+    vi.setSystemTime(at(30));
+    m.getFriendPool.mockResolvedValue(null);
+    expect(await reopen()).toEqual({ ok: false, error: "Bolão não encontrado." });
+    expect(m.setFriendPoolBetsExtended).not.toHaveBeenCalled();
+  });
+
+  it("sem sessão ou id inválido: nada muda", async () => {
+    vi.setSystemTime(at(30));
+    expect((await reopenFriendPoolBets(null, form({ poolId: "x" }))).ok).toBe(false);
+    m.auth.mockResolvedValue(null);
+    expect((await reopen()).ok).toBe(false);
+    expect(m.getFriendPool).not.toHaveBeenCalled();
+    expect(m.setFriendPoolBetsExtended).not.toHaveBeenCalled();
+  });
+
+  it("apostas ainda abertas (antes dos 15'): não grava", async () => {
+    vi.setSystemTime(at(5));
+    m.getInPlayState.mockResolvedValue(inPlay({ elapsed: 5 }));
+    expect(await reopen()).toEqual(REFUSED);
+    expect(m.setFriendPoolBetsExtended).not.toHaveBeenCalled();
+  });
+
+  it("com a flag OFF, com resultado, jogo terminado ou no teto: recusa", async () => {
+    vi.setSystemTime(at(30));
+    m.getEnableLiveMode.mockResolvedValue(false);
+    expect(await reopen()).toEqual(REFUSED);
+    m.getEnableLiveMode.mockResolvedValue(true);
+
+    m.getFriendPool.mockResolvedValue(
+      pool({ betsClosedAt: at(10), manualHomeScore: 2, manualAwayScore: 1 }),
+    );
+    expect(await reopen()).toEqual(REFUSED);
+
+    m.getFriendPool.mockResolvedValue(pool());
+    vi.setSystemTime(at(115));
+    m.getInPlayState.mockResolvedValue(inPlay({ statusShort: "FT", elapsed: 90 }));
+    expect(await reopen()).toEqual(REFUSED);
+
+    m.getInPlayState.mockResolvedValue(null);
+    vi.setSystemTime(at(180));
+    expect(await reopen()).toEqual(REFUSED);
+
+    expect(m.setFriendPoolBetsExtended).not.toHaveBeenCalled();
+  });
+
+  it("recusou depois de ler o estado (ex.: a busca viu o FT): revalida mesmo assim", async () => {
+    // A página leu uma row velha (2º tempo) e mostrou o botão; a action busca e vê o fim.
+    vi.setSystemTime(at(115));
+    m.getInPlayState.mockResolvedValue(inPlay({ statusShort: "FT", elapsed: 90 }));
+    expect(await reopen()).toEqual(REFUSED);
+    expect(m.setFriendPoolBetsExtended).not.toHaveBeenCalled();
+    expectRevalidated();
+  });
+
+  it("depois do apito + 105 min sem estado novo (cota baixa, busca falhou): recusa", async () => {
+    vi.setSystemTime(at(120));
+    // Row velha (cota baixa devolve a última leitura): ainda diz 2º tempo.
+    m.getInPlayState.mockResolvedValue(
+      inPlay({ statusShort: "2H", elapsed: 80, fetchedAt: at(95), ageMs: 25 * MIN }),
+    );
+    expect(await reopen()).toEqual(UNCONFIRMED);
+    // Sem estado nenhum (busca lançou ou nunca houve leitura).
+    m.getInPlayState.mockRejectedValue(new Error("provider fora"));
+    expect(await reopen()).toEqual(UNCONFIRMED);
+    expect(m.setFriendPoolBetsExtended).not.toHaveBeenCalled();
+    expectRevalidated();
+  });
+
+  it("depois do apito + 105 min com estado novo do 2º tempo: reabre", async () => {
+    vi.setSystemTime(at(110));
+    m.getInPlayState.mockResolvedValue(inPlay({ statusShort: "2H", elapsed: 88 }));
+    expect(await reopen()).toEqual({ ok: true });
+    expect(m.setFriendPoolBetsExtended).toHaveBeenCalledTimes(1);
+  });
+
+  it("jogo encerrado no DB: recusa sem precisar do estado", async () => {
+    vi.setSystemTime(at(120));
+    m.getFriendPool.mockResolvedValue({ ...pool(), match: { ...match, status: "finished" } });
+    expect(await reopen()).toEqual(REFUSED);
+    expect(m.setFriendPoolBetsExtended).not.toHaveBeenCalled();
   });
 });
 

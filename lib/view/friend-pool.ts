@@ -15,6 +15,7 @@ import {
   poolBetsOpen,
   poolClosedByOwner,
   poolExtensionActive,
+  poolOpenUntilEnd,
   poolWindow,
   type PoolControls,
 } from "@/lib/pools/pool-state";
@@ -114,6 +115,7 @@ export type PoolLiveViewOptions = {
 
 /**
  * Prazo das apostas ABERTAS, para o selo e o cabeçalho do detalhe (#580, PLAN-580 §10):
+ * "abertas até o fim do jogo" (o dono reabriu, #601, ou a extensão bateu no teto),
  * "estendidas até 17:40" (extensão do admin; concorda com "apostas" no cabeçalho do
  * detalhe, "apostas estendidas até 17:40"), "fecham aos 15'" (ao vivo com minuto, ou
  * nas últimas 3h antes do apito com o modo ao vivo), "fecham em 8 min" (ao vivo pelo
@@ -128,6 +130,8 @@ export function poolBetsDeadlineLabel(
 ): string | undefined {
   const live = { liveMode };
   if (pool.betsExtendedUntil && poolExtensionActive(pool, match, state, now, live)) {
+    // Até o teto (apito + 3h) a hora não diz nada: o jogo acaba antes.
+    if (poolOpenUntilEnd(pool, match)) return "abertas até o fim do jogo";
     return `estendidas até ${formatTimeOfDay(pool.betsExtendedUntil, timeZone)}`;
   }
   const window = poolWindow(match, state, now, live);

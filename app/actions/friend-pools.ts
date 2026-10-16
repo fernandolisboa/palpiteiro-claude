@@ -8,6 +8,7 @@ import { auth } from "@/auth";
 import { isEmailAllowed } from "@/lib/auth/whitelist";
 import { getEnableLiveMode } from "@/lib/db/queries/ai-config";
 import {
+  clearFriendPoolBetsClosed,
   deleteFriendPool,
   deleteFriendPoolEntry,
   getFriendPool,
@@ -16,6 +17,7 @@ import {
   setFriendPoolBetsClosed,
   setFriendPoolBetsExtended,
   setFriendPoolManualScore,
+  type FriendPoolDetail,
 } from "@/lib/db/queries/friend-pools";
 import { getMatchById, type DbMatch } from "@/lib/db/queries/matches";
 import { getUserAccessState } from "@/lib/db/queries/users";
@@ -34,11 +36,14 @@ import {
   POOL_EXTEND_PRESETS_MIN,
   poolBetsOpen,
   poolEntriesRemovable,
+  poolExtendCap,
   poolExtendable,
   poolExtensionUntil,
   poolHasResult,
   poolManualScoreAllowed,
   poolOwnerClosable,
+  poolOwnerReopenable,
+  poolReopenNeedsFreshState,
   poolWindowOpen,
   type PoolExtendPreset,
 } from "@/lib/pools/pool-state";
@@ -276,9 +281,9 @@ export async function setFriendPoolScore(
   return { ok: true };
 }
 
-// "Fechar apostas" do dono (#580, ADR 0060 §7): só fecha, nunca reabre. Só o dono
-// chega aqui (getFriendPool filtra por userId), só com as apostas abertas e só com o
-// modo ao vivo (flag desligada = como antes, sem o controle).
+// "Fechar apostas" do dono (#580, ADR 0060 §7). Só o dono chega aqui (getFriendPool
+// filtra por userId), só com as apostas abertas e só com o modo ao vivo (flag desligada
+// = como antes, sem o controle). Depois do apito o dono pode reabrir (#601).
 export async function closeFriendPoolBets(formData: FormData): Promise<void> {
   const poolId = IdSchema.safeParse(field(formData, "poolId"));
   if (!poolId.success) return;
@@ -294,6 +299,58 @@ export async function closeFriendPoolBets(formData: FormData): Promise<void> {
   await setFriendPoolBetsClosed({ poolId: poolId.data, userId, now });
   revalidatePath(`/bolao/${poolId.data}`);
   revalidatePath("/bolao");
+}
+
+// "Reabrir apostas" do dono (#601, atualização da ADR 0060 §7), só com o modo ao vivo.
+// Antes do apito: desfaz o "fechar" do dono, sem extensão (volta a janela de sempre).
+// Depois: com as apostas fechadas (corte dos 15', o próprio dono ou extensão vencida),
+// sem resultado, jogo não terminado e antes do teto, grava uma extensão até o apito + 3h
+// com o dono como quem estendeu: fica aberto até ele fechar de novo ou o jogo acabar.
+// Tudo é relido aqui (dono pela sessão, flag, estado do jogo no servidor), nada vem do
+// cliente. Depois de ler o estado, toda saída revalida: a busca pode ter atualizado a
+// row (ex.: o jogo acabou) e a página precisa sumir com o botão.
+export async function reopenFriendPoolBets(
+  _prev: PoolActionResult | null,
+  formData: FormData,
+): Promise<PoolActionResult> {
+  const poolId = IdSchema.safeParse(field(formData, "poolId"));
+  if (!poolId.success) return { ok: false, error: "Bolão não encontrado." };
+  const userId = await requireUserId();
+  if (typeof userId !== "string") return { ok: false, error: userId.error };
+  const pool = await getFriendPool(poolId.data, userId);
+  if (!pool) return { ok: false, error: "Bolão não encontrado." };
+  const now = new Date();
+  const ctx = await readPoolLiveContext(pool.match, now);
+  const result = await reopenWith(pool, userId, ctx, now);
+  revalidatePath(`/bolao/${poolId.data}`);
+  revalidatePath("/bolao");
+  return result;
+}
+
+async function reopenWith(
+  pool: FriendPoolDetail,
+  userId: string,
+  ctx: PoolLiveContext,
+  now: Date,
+): Promise<PoolActionResult> {
+  const live = { liveMode: ctx.liveMode };
+  if (!poolOwnerReopenable(pool.pool, pool.match, ctx.state, now, live)) {
+    return { ok: false, error: "Não dá pra reabrir as apostas agora." };
+  }
+  if (poolEntriesRemovable(pool.match, now)) {
+    await clearFriendPoolBetsClosed({ poolId: pool.pool.id, userId, now });
+    return { ok: true };
+  }
+  if (poolReopenNeedsFreshState(pool.match, ctx.state, now)) {
+    return { ok: false, error: "Não deu pra confirmar o placar ao vivo agora. Tente em um minuto." };
+  }
+  await setFriendPoolBetsExtended({
+    poolId: pool.pool.id,
+    userId,
+    until: poolExtendCap(pool.match),
+    now,
+  });
+  return { ok: true };
 }
 
 const ExtendMinutesSchema = z.coerce

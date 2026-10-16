@@ -1069,6 +1069,8 @@ export const friendPools = pgTable(
     manualAwayScore: integer(),
     // Janela das apostas ao vivo (#580, ADR 0060): o dono fecha antes
     // (`betsClosedAt`); o admin estende os próprios bolões (`betsExtendedUntil` e quem).
+    // O dono reabrir (#601): antes do apito só limpa `betsClosedAt`; depois, é uma
+    // extensão até o apito + 3h, com ele como quem estendeu.
     betsClosedAt: timestamp({ withTimezone: true }),
     betsExtendedUntil: timestamp({ withTimezone: true }),
     betsExtendedByUserId: uuid().references(() => users.id, {
