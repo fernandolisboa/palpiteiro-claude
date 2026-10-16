@@ -13,8 +13,6 @@ import {
   EFFORT_LEVELS,
   MAX_TOKENS_MAX,
   MAX_TOKENS_MIN,
-  TEMPERATURE_MAX,
-  TEMPERATURE_MIN,
   type GenerationParams,
 } from "@/lib/ai/generation-params";
 
@@ -39,7 +37,7 @@ export function GenerationParamsForm({ current }: Props) {
     // acompanha o prop). Remontar quando o servidor devolve o valor novo faz o reset
     // cair no valor salvo em vez do antigo.
     <form
-      key={`${current.maxTokens}|${current.effort}|${current.temperature}`}
+      key={`${current.maxTokens}|${current.effort}`}
       action={action}
       className="flex flex-col gap-4"
     >
@@ -72,7 +70,7 @@ export function GenerationParamsForm({ current }: Props) {
 
       <label className="flex flex-col gap-1">
         <span className="font-mono text-meta uppercase tracking-label text-muted-foreground">
-          max_tokens (todos os modelos)
+          max_tokens
         </span>
         <input
           name="maxTokens"
@@ -85,14 +83,14 @@ export function GenerationParamsForm({ current }: Props) {
           className="w-80 rounded-md border border-border bg-transparent px-3 py-2 text-body-sm text-foreground focus-visible:outline-none focus-visible:ring-[3px] focus-visible:ring-ring/50 disabled:opacity-50"
         />
         <span className="text-meta text-muted-foreground">
-          Teto de saída. Nos modelos adaptive (Fable 5.1 / Opus 5.5 / Sonnet 5)
-          o thinking conta aqui — valores baixos cortam a tool call.
+          Teto de saída. O thinking conta aqui — valores baixos cortam a tool
+          call.
         </span>
       </label>
 
       <label className="flex flex-col gap-1">
         <span className="font-mono text-meta uppercase tracking-label text-muted-foreground">
-          effort (só modelos adaptive)
+          effort
         </span>
         <div className="max-w-aside">
           <Select name="effort" defaultValue={current.effort} disabled={!enabled}>
@@ -107,28 +105,8 @@ export function GenerationParamsForm({ current }: Props) {
           </Select>
         </div>
         <span className="text-meta text-muted-foreground">
-          Profundidade do raciocínio. Ignorado pelos modelos temperature (Sonnet
-          4.5 / Haiku).
-        </span>
-      </label>
-
-      <label className="flex flex-col gap-1">
-        <span className="font-mono text-meta uppercase tracking-label text-muted-foreground">
-          temperature (só modelos temperature)
-        </span>
-        <input
-          name="temperature"
-          type="number"
-          defaultValue={current.temperature}
-          min={TEMPERATURE_MIN}
-          max={TEMPERATURE_MAX}
-          step={0.05}
-          disabled={!enabled}
-          className="w-80 rounded-md border border-border bg-transparent px-3 py-2 text-body-sm text-foreground focus-visible:outline-none focus-visible:ring-[3px] focus-visible:ring-ring/50 disabled:opacity-50"
-        />
-        <span className="text-meta text-muted-foreground">
-          Aleatoriedade da amostragem. Só Sonnet 4.5 / Haiku; ignorado pelos
-          adaptive.
+          Profundidade do raciocínio da análise. As tarefas internas do Haiku
+          (manchete, notícias, cartões) usam o próprio effort.
         </span>
       </label>
 

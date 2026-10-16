@@ -32,10 +32,9 @@ describe("adaptiveTimeoutMs (#524 review)", () => {
 describe("requestTiming", () => {
   const now = 1_000_000;
 
-  it("sem prazo: adaptive leva o timeout escalado + retries do client", () => {
+  it("sem prazo: leva o timeout escalado + retries do client", () => {
     expect(
       requestTiming({
-        thinkingMode: "adaptive",
         maxTokens: 16000,
         effort: "high",
       }),
@@ -45,17 +44,25 @@ describe("requestTiming", () => {
     });
   });
 
-  it("sem prazo: temperature usa as opções do client", () => {
-    expect(
-      requestTiming({ thinkingMode: "temperature", maxTokens: 16000 }),
-    ).toEqual({ kind: "client-default" });
+  it("sem prazo e sem effort: SEMPRE opções próprias (timeout como high), nunca o default do client", () => {
+    // O antigo kind `client-default` (caminho temperature) acabou com o ADR 0061.
+    expect(requestTiming({ maxTokens: 16000 })).toEqual({
+      kind: "options",
+      options: { timeout: 215_000, maxRetries: CLIENT_MAX_RETRIES },
+    });
+    // max_tokens baixo: o piso de 60s coincide com o timeout do client.
+    expect(requestTiming({ maxTokens: 1000, effort: "low" })).toEqual({
+      kind: "options",
+      options: { timeout: CLIENT_TIMEOUT_MS, maxRetries: CLIENT_MAX_RETRIES },
+    });
   });
 
   it("com prazo: só os retries que cabem inteiros no restante", () => {
     const at = (deadlineMs: number) =>
+      // 1000 em low → piso de 60s (o mesmo do client).
       requestTiming({
-        thinkingMode: "temperature",
-        maxTokens: 16000,
+        maxTokens: 1000,
+        effort: "low",
         deadlineAt: now + deadlineMs,
         now,
       });
@@ -79,7 +86,6 @@ describe("requestTiming", () => {
   it("prazo apertado: timeout = restante − margem, sem retry", () => {
     expect(
       requestTiming({
-        thinkingMode: "adaptive",
         maxTokens: 16000,
         effort: "high",
         deadlineAt: now + 100_000,
@@ -91,7 +97,6 @@ describe("requestTiming", () => {
   it("prazo menor que a margem: no-budget (não chama)", () => {
     expect(
       requestTiming({
-        thinkingMode: "temperature",
         maxTokens: 16000,
         deadlineAt: now + 5_000,
         now,

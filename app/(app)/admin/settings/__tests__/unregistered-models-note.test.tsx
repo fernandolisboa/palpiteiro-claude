@@ -24,6 +24,11 @@ describe("UnregisteredModelsNote (#524)", () => {
   it("lista os ids da API fora do registry", async () => {
     mockList.mockResolvedValue([
       {
+        id: "claude-opus-6",
+        displayName: "Claude Opus 6",
+        createdAt: "2026-10-01T00:00:00Z",
+      },
+      {
         id: "claude-fable-6",
         displayName: "Claude Fable 6",
         createdAt: "2026-10-01T00:00:00Z",
@@ -33,9 +38,17 @@ describe("UnregisteredModelsNote (#524)", () => {
         displayName: "Claude Opus 5.5",
         createdAt: "2026-09-01T00:00:00Z",
       },
+      {
+        id: "claude-sonnet-5",
+        displayName: "Claude Sonnet 5",
+        createdAt: "2026-04-01T00:00:00Z",
+      },
     ]);
     const html = renderToStaticMarkup(await UnregisteredModelsNote());
-    expect(html).toContain("claude-fable-6 · Claude Fable 6");
+    expect(html).toContain("claude-opus-6 · Claude Opus 6");
+    // Fable fica fora do app (ADR 0061); Sonnet 5 é legado da família cadastrada.
+    expect(html).not.toContain("claude-fable-6");
+    expect(html).not.toContain("claude-sonnet-5");
     expect(html).not.toContain("claude-opus-5-5");
   });
 

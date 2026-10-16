@@ -11,6 +11,7 @@
 // pricing: isto só AVISA que existe id novo; cadastrar é decisão humana.
 
 import { getAnthropicClient } from "@/lib/ai/anthropic";
+import { claudeFamilyOf } from "@/lib/ai/models";
 
 import { hasKey } from "./client";
 
@@ -22,8 +23,8 @@ export type ApiModelInfo = {
 };
 
 // Um id da API conta como cadastrado quando é IGUAL a um id do registry ou é o
-// SNAPSHOT DATADO de um alias do registry (`claude-haiku-4-5` cobre
-// `claude-haiku-4-5-20251001`). Sem isso o aviso acusaria o próprio Haiku.
+// SNAPSHOT DATADO de um alias do registry (um alias `claude-x-1-0` cobre
+// `claude-x-1-0-20260101`). Sem isso o aviso acusaria o próprio modelo cadastrado.
 function isRegistered(apiId: string, registryIds: readonly string[]): boolean {
   return registryIds.some(
     (r) =>
@@ -32,31 +33,43 @@ function isRegistered(apiId: string, registryIds: readonly string[]): boolean {
   );
 }
 
-// Diff PURO: ids `claude-*` da API que não estão no registry. Corta os LEGADOS —
-// modelos lançados antes do modelo cadastrado mais antigo que a API ainda lista
-// (hoje o Sonnet 4.5) — porque o aviso serve pra notar modelo NOVO, e a API lista
-// toda a família antiga (3.x, 4.0, …) que nunca vai ser cadastrada. Sem nenhum
-// cadastrado na lista da API não há referência: nada é cortado. Mantém a ordem da
-// API (mais novo primeiro) e deduplica.
+// Diff PURO: ids `claude-*` da API que valem um aviso de cadastro. O aviso serve pra
+// notar versão NOVA, então corta:
+//   - Fable e Mythos: fora do app de propósito (ADR 0061), nunca avisa;
+//   - numa família do registry (opus/sonnet/haiku), o que não for MAIS NOVO que o
+//     modelo cadastrado dela (Sonnet 5, Haiku 4.5, Opus 4.x… são legados, não novidade);
+//   - de família desconhecida, o lançado antes do modelo cadastrado mais antigo que a
+//     API lista (a família antiga 3.x, 4.0, … que nunca vai ser cadastrada).
+// Sem nenhum cadastrado na lista da API não há referência: nada é cortado. Mantém a
+// ordem da API (mais novo primeiro) e deduplica.
 export function unregisteredApiModels(
   apiModels: readonly ApiModelInfo[],
   registryIds: readonly string[],
 ): ApiModelInfo[] {
   const claude = apiModels.filter((m) => m.id.startsWith("claude-"));
-  const registeredTimes = claude
-    .filter((m) => isRegistered(m.id, registryIds))
-    .map((m) => Date.parse(m.createdAt))
-    .filter((t) => Number.isFinite(t));
-  const cutoff =
-    registeredTimes.length > 0 ? Math.min(...registeredTimes) : -Infinity;
+  const familyLatest = new Map<string, number>();
+  let oldestRegistered = Infinity;
+  for (const m of claude) {
+    if (!isRegistered(m.id, registryIds)) continue;
+    const t = Date.parse(m.createdAt);
+    if (!Number.isFinite(t)) continue;
+    oldestRegistered = Math.min(oldestRegistered, t);
+    const family = claudeFamilyOf(m.id);
+    if (family) familyLatest.set(family, Math.max(familyLatest.get(family) ?? -Infinity, t));
+  }
+  const cutoff = Number.isFinite(oldestRegistered) ? oldestRegistered : -Infinity;
 
   const seen = new Set<string>();
   return claude.filter((m) => {
     if (seen.has(m.id) || isRegistered(m.id, registryIds)) return false;
     seen.add(m.id);
+    const family = claudeFamilyOf(m.id);
+    if (family === "fable" || family === "mythos") return false;
     const created = Date.parse(m.createdAt);
     // createdAt inválido não é cortado: na dúvida, avisa.
-    return !Number.isFinite(created) || created >= cutoff;
+    if (!Number.isFinite(created)) return true;
+    const latest = family ? familyLatest.get(family) : undefined;
+    return latest !== undefined ? created > latest : created >= cutoff;
   });
 }
 

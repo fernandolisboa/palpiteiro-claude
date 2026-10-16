@@ -3,7 +3,12 @@ import { z } from "zod";
 import { aiCalls } from "@/db/schema";
 import { persistAiCallError } from "@/lib/ai/ai-call-logging";
 import { calculateCost } from "@/lib/ai/cost";
-import { MODEL_REGISTRY, isAIProvider } from "@/lib/ai/models";
+import {
+  MODEL_REGISTRY,
+  UTILITY_EFFORT,
+  UTILITY_MODEL_ID,
+  isAIProvider,
+} from "@/lib/ai/models";
 import { getProviderForModel } from "@/lib/ai/providers";
 import type { AiCallStatus, AnalysisRequest } from "@/lib/ai/providers/types";
 import { db } from "@/lib/db";
@@ -24,8 +29,9 @@ import {
 // nunca por predict.ts. Sem `canFitCall`: a action começa agora e a extração é a 1ª
 // chamada (cabe sempre); o `deadlineAt` ainda vai pro adapter cortar o timeout.
 
-const EXTRACT_MODEL = MODEL_REGISTRY["claude-haiku-4-5"];
-const EXTRACT_MAX_TOKENS = 1500;
+const EXTRACT_MODEL = MODEL_REGISTRY[UTILITY_MODEL_ID];
+// Folga pro thinking do Haiku 5.5, que conta dentro de max_tokens.
+const EXTRACT_MAX_TOKENS = 4096;
 
 // Envelope frouxo: o item a item é o Zod de verdade (ClaimSchema); o teto de 8 é do
 // código (o excedente é cortado com aviso).
@@ -126,7 +132,7 @@ async function runExtraction(args: ExtractArgs): Promise<ExtractResult> {
     tool: extractTool,
     toolName: USER_PALPITE_EXTRACT_TOOL_NAME,
     maxTokens: EXTRACT_MAX_TOKENS,
-    temperature: model.temperature,
+    effort: UTILITY_EFFORT,
     deadlineAt: args.deadlineAt,
   };
   const provider = getProviderForModel(model);

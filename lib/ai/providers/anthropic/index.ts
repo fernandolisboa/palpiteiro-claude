@@ -34,9 +34,8 @@ class NoBudgetError extends Error {
   }
 }
 
-// A chamada paga, com timeout/retries por request (requestTiming): adaptive escala
-// o timeout por max_tokens/effort; com prazo, os dois são cortados pelo restante.
-// Temperature sem prazo chama com 1 argumento só, como sempre.
+// A chamada paga, com timeout/retries por request (requestTiming): o timeout escala
+// por max_tokens/effort; com prazo, os dois são cortados pelo restante.
 //
 // TOKENS NUM TIMEOUT: a chamada é não-streaming, então um timeout (do SDK ou do
 // prazo) não devolve `usage` nenhum — os tokens NÃO são conhecíveis e a row de
@@ -48,15 +47,12 @@ function createMessage(
   request: AnalysisRequest,
 ): Promise<Anthropic.Message> {
   const timing = requestTiming({
-    thinkingMode: request.model.thinkingMode,
     maxTokens: request.maxTokens,
     effort: request.effort,
     deadlineAt: request.deadlineAt,
   });
   if (timing.kind === "no-budget") return Promise.reject(new NoBudgetError());
-  return timing.kind === "options"
-    ? client.messages.create(params, timing.options)
-    : client.messages.create(params);
+  return client.messages.create(params, timing.options);
 }
 
 // Falha de uma chamada que não devolveu corpo (erro do SDK, timeout, sem prazo).
@@ -143,8 +139,7 @@ async function runAnalysis(
   request: AnalysisRequest,
 ): Promise<AnalysisResult> {
   // RAMO SERVER-TOOL (ADR 0032, #377). ADITIVO: só quando `serverTool` está setado
-  // (provider de notícias). O caminho forçado abaixo fica BYTE-IDÊNTICO — os golden
-  // payload tests (request-builder.test.ts / predict.test.ts) seguem verdes.
+  // (notícias, cartões). Abaixo, o caminho do submit tool.
   if (request.serverTool) {
     return runServerToolAnalysis(request);
   }
@@ -166,7 +161,6 @@ async function runAnalysis(
     toolName: request.toolName,
     maxTokens: request.maxTokens,
     effort: request.effort,
-    temperature: request.temperature,
   });
   // Mesmo objeto logado em ai_calls.inputPayload e enviado na chamada paga (==
   // o cast pré-seam de predict.ts:786, byte-idêntico).
@@ -221,7 +215,7 @@ async function runAnalysis(
 }
 
 // Caminho SERVER-TOOL (ADR 0032 / #377). Espelha o cronômetro/coerção/serialização do
-// caminho forçado, mas: (a) tool_choice:auto + a web search tool (request-builder); (b)
+// caminho do submit tool, mas: (a) a web search tool no lugar do submit (request-builder); (b)
 // laço bounded de pause_turn (reenvia [user, {assistant, content}] sem "Continue"); (c)
 // devolve `contentBlocks` (os blocos crus da resposta FINAL) pro provider de notícias
 // andar atrás dos `web_search_tool_result`. NÃO extrai/valida nada aqui — o provider faz.
@@ -232,13 +226,12 @@ async function runServerToolAnalysis(
     model: request.model,
     system: request.system,
     userMessage: request.userMessage,
-    // Tool forçado IGNORADO no modo server-tool (passamos um array vazio; o builder
+    // Submit tool IGNORADO no modo server-tool (passamos um array vazio; o builder
     // monta a web search tool a partir de `serverTool`).
     tools: [],
     toolName: request.toolName,
     maxTokens: request.maxTokens,
     effort: request.effort,
-    temperature: request.temperature,
     serverTool: request.serverTool,
   });
   const inputPayload = anthropicRequest as unknown as Record<string, unknown>;
@@ -310,7 +303,7 @@ async function runServerToolAnalysis(
 
   return {
     ok: true,
-    // Sem submit forçado no modo server-tool — `toolInput` não se aplica.
+    // Sem submit no modo server-tool — `toolInput` não se aplica.
     toolInput: undefined,
     usage: { inputTokens, outputTokens },
     inputPayload,

@@ -749,6 +749,17 @@ describe("analyzeBestBet — candidate set por liga (marketsForLeague REAL)", ()
       });
     }
   });
+
+  it("override antigo no FormData (claude-sonnet-5, ADR 0061) → cada predict recebe o Sonnet 5.5 resolvido", async () => {
+    await analyzeBestBet(
+      null,
+      form({ matchId: VALID_MATCH_ID, modelOverride: "claude-sonnet-5" }),
+    );
+    expect(mockPredict.mock.calls.length).toBeGreaterThan(0);
+    for (const call of mockPredict.mock.calls) {
+      expect(call[0].modelOverride).toBe("claude-sonnet-5-5");
+    }
+  });
 });
 
 describe("analyzeBestBet — pré-warm additional flag-conditional (#175)", () => {
@@ -855,7 +866,7 @@ describe("analyzeBestBet — passo de síntese (#353, palpite-first)", () => {
     const args = mockGeneratePalpites.mock.calls[0][0];
     expect(args.matchId).toBe(VALID_MATCH_ID);
     expect(args.userId).toBe("u1");
-    expect(args.modelOverride).toBe("claude-haiku-4-5");
+    expect(args.modelOverride).toBe("claude-haiku-5-5");
     expect(args.deadlineAt).toEqual(expect.any(Number));
     // As análises projetadas alimentam a síntese (1 por mercado WC = 4).
     expect(args.analyses).toHaveLength(4);

@@ -1,7 +1,13 @@
 import { aiCalls } from "@/db/schema";
 import { persistAiCallError } from "@/lib/ai/ai-call-logging";
 import { calculateCost } from "@/lib/ai/cost";
-import { MODEL_REGISTRY, isAIProvider, type AIModelId } from "@/lib/ai/models";
+import {
+  MODEL_REGISTRY,
+  UTILITY_MODEL_ID,
+  UTILITY_SEARCH_EFFORT,
+  isAIProvider,
+  type AIModelId,
+} from "@/lib/ai/models";
 import { getProviderForModel } from "@/lib/ai/providers";
 import type { AnalysisRequest } from "@/lib/ai/providers/types";
 import { db } from "@/lib/db";
@@ -39,8 +45,9 @@ export type CardExtractRef = {
 export type CardExtractAudit = { userId: string; matchId: string };
 
 const CARDS_EXTRACT_PROMPT_VERSION = "cards_extract_v1";
-const CARDS_MODEL_ID: AIModelId = "claude-haiku-4-5";
-const CARDS_MAX_TOKENS = 1024;
+const CARDS_MODEL_ID: AIModelId = UTILITY_MODEL_ID;
+// Folga pro thinking do Haiku 5.5, que conta dentro de max_tokens.
+const CARDS_MAX_TOKENS = 4096;
 // max_uses=2 por leitura: um único fato (total de amarelos) raramente exige mais de uma
 // busca; 2 dá folga pra conferir uma 2ª página sem inflar a taxa metered. Pior caso de
 // gasto = 2 leituras (A+B) × 2 buscas = ≤ 4 web-searches por tick (ver attempt-cap).
@@ -163,11 +170,11 @@ async function runOneRead(
     model,
     system: SYSTEM_PROMPT,
     userMessage: buildUserMessage(ref),
-    // tool/toolName são IGNORADOS no modo server-tool (sem submit forçado) — placeholders.
+    // tool/toolName são IGNORADOS no modo server-tool (sem submit tool) — placeholders.
     tool: { name: "cards_noop", inputSchema: { type: "object" } },
     toolName: "cards_noop",
     maxTokens: CARDS_MAX_TOKENS,
-    temperature: model.temperature,
+    effort: UTILITY_SEARCH_EFFORT,
     serverTool: {
       kind: "web_search",
       allowedDomains: [...allowedDomains],

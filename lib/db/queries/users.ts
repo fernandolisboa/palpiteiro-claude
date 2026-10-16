@@ -2,7 +2,7 @@ import { asc, count, eq, ilike } from "drizzle-orm";
 
 import { users } from "@/db/schema";
 import { db } from "@/lib/db";
-import { isAIModelId, type AIModelId } from "@/lib/ai/models";
+import { resolveModelId, type AIModelId } from "@/lib/ai/models";
 import { parseTourState, type TourState } from "@/lib/tour/steps";
 
 type UserSummary = { id: string; email: string; role: "admin" | "user" };
@@ -127,10 +127,10 @@ export async function getUserProfile(id: string): Promise<UserProfile | null> {
 }
 
 /**
- * Preferência pessoal de modelo do usuário, validada contra o registry. Se a
- * coluna for null/ausente OU o valor persistido não estiver no registry
- * (registry encolheu / dado ruim), devolve null — um id stale nunca chega à
- * cascata de predict. NÃO filtra audiência: o gate admin-only mora em predict,
+ * Preferência pessoal de modelo do usuário, validada contra o registry. Um id de
+ * versão antiga (ADR 0061) é lido como o 5.5 da mesma família (Haiku 4.5 → Haiku
+ * 5.5), sem reescrever a coluna. Null/ausente ou id desconhecido → null, e a cascata
+ * de predict cai no default. NÃO filtra audiência: o gate admin-only mora em predict,
  * que é quem resolve o modelo final.
  */
 export async function getPreferredModelId(
@@ -141,9 +141,7 @@ export async function getPreferredModelId(
     .from(users)
     .where(eq(users.id, userId))
     .limit(1);
-  const stored = rows[0]?.preferredModelId;
-  if (stored && isAIModelId(stored)) return stored;
-  return null;
+  return resolveModelId(rows[0]?.preferredModelId);
 }
 
 /**

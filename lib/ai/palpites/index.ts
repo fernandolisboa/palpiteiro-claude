@@ -31,6 +31,8 @@ import type { ZodType } from "zod";
 
 import {
   MODEL_REGISTRY,
+  UTILITY_EFFORT,
+  UTILITY_MODEL_ID,
   isAIProvider,
   type AIModel,
   type AIModelId,
@@ -67,12 +69,15 @@ const H2H_LAST = 5;
 
 // #380 — quantas SÍNTESES PAGAS no máximo por geração quando a validação de fidelidade
 // está ON. DEFAULT = 1: na divergência, DEGRADA IMEDIATAMENTE (palpite:null) sem pagar
-// uma 2ª chamada. Racional: uma contagem errada a temp 0.3 na MESMA request é sistemática,
+// uma 2ª chamada. Racional: uma contagem errada na MESMA request é sistemática,
 // não ruído de amostragem → re-rodar raramente recupera; descartar o palpite é a escolha
 // honesta e custo-neutra (alinha com prefer-skip-over-silent-wrong). Subir pra 2 (uma
 // regeneração) é um flip trivial de preferência do dono — e valeria um nudge de prompt
 // corretivo na retry pra a regen valer o custo (non-goal de v1).
 const MAX_FIDELITY_ATTEMPTS = 1;
+
+// Piso do max_tokens da manchete (o thinking do Haiku 5.5 conta dentro dele).
+const SYNTHESIS_MIN_MAX_TOKENS = 8192;
 
 /**
  * Busca de notícias da síntese (ADR 0032 / #377): provider DEDICADO via web search da
@@ -136,7 +141,7 @@ export function startNewsFetch(
  * output Zod `.strict()` sem campo de valor; (b) `containsValueLanguage` pós-Zod;
  * (c) o `PalpiteHeadlineView` sem campo de valor (na camada de view).
  *
- * Default Haiku (econômico, temperature-mode). Fetch de suporte ENXUTO (form/h2h/
+ * Default Haiku (econômico, UTILITY_MODEL_ID). Fetch de suporte ENXUTO (form/h2h/
  * standings) como cor narrativa — crucial no caso all-pass (veredito apoia na forma).
  */
 export async function generatePalpites({
@@ -148,7 +153,7 @@ export async function generatePalpites({
   news,
 }: GeneratePalpiteArgs): Promise<PalpiteGenerationResult> {
   // 1. Modelo: SEM cascata de preferência (palpite é universal). Fixo no registry.
-  const resolvedModelId: AIModelId = modelOverride ?? "claude-haiku-4-5";
+  const resolvedModelId: AIModelId = modelOverride ?? UTILITY_MODEL_ID;
   const model = MODEL_REGISTRY[resolvedModelId];
 
   // 2. Lookup do match. Backstop de analisabilidade da SÍNTESE — só barra estados
@@ -295,9 +300,10 @@ async function runSynthesis<O extends SynthesisOutputBase>(
   spec: SynthesisSpec<O>,
 ): Promise<PalpiteGenerationResult> {
   const { userId, matchId, model, cartridge, userMessage, deadlineAt } = spec;
-  // 7. AnalysisRequest. temperature EXPLÍCITO de model.temperature (0.3 p/ Haiku) —
-  //    NÃO genParams.temperature (null em temperature-mode). SEM effort (Haiku é
-  //    temperature-mode; effort seria ignorado). maxTokens de getGenerationParams.
+  // 7. AnalysisRequest. effort FIXO e baixo (UTILITY_EFFORT), não o do ai_config: a
+  //    manchete preenche um tool a partir de análises já prontas e roda no fim do run,
+  //    na reserva da síntese. maxTokens de getGenerationParams, com piso de 8192: o
+  //    thinking conta dentro dele, e um max_tokens baixo do admin cortaria a tool call.
   const genParams = await getGenerationParams();
   const analysisRequest: AnalysisRequest = {
     model,
@@ -305,8 +311,8 @@ async function runSynthesis<O extends SynthesisOutputBase>(
     userMessage,
     tool: cartridge.tool,
     toolName: cartridge.toolName,
-    maxTokens: genParams.maxTokens,
-    temperature: model.temperature,
+    maxTokens: Math.max(genParams.maxTokens, SYNTHESIS_MIN_MAX_TOKENS),
+    effort: UTILITY_EFFORT,
     deadlineAt,
   };
 
@@ -363,7 +369,7 @@ async function runSynthesis<O extends SynthesisOutputBase>(
     // nenhuma row 0/0 de timeout falso em ai_calls. O caller trata como síntese falha.
     if (
       !canFitCall(deadlineAt, {
-        thinkingMode: model.thinkingMode,
+        speed: model.speed,
         maxTokens: analysisRequest.maxTokens,
         effort: analysisRequest.effort,
       })
@@ -653,7 +659,7 @@ export async function generateLivePalpites({
   modelOverride,
   deadlineAt,
 }: GenerateLivePalpiteArgs): Promise<PalpiteGenerationResult> {
-  const model = MODEL_REGISTRY[modelOverride ?? "claude-haiku-4-5"];
+  const model = MODEL_REGISTRY[modelOverride ?? UTILITY_MODEL_ID];
   const matchRows = await db
     .select()
     .from(matches)

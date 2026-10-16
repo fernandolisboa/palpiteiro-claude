@@ -344,14 +344,12 @@ async function main(): Promise<void> {
   const model: AIModel = MODEL_REGISTRY[resolvedModelId];
   const genParams = await getGenerationParams();
   console.log(`modelo      : ${model.id} (${model.label})\n`);
-  if (model.thinkingMode === "adaptive") {
-    // ADR 0021 (emenda #524): adaptive não fixa temperatura — a recomendação de um
-    // jogo borderline pode flipar entre rodadas. O backtest do motor llm com esses
-    // modelos NÃO é reproduzível; compare amostras, não jogo a jogo.
-    console.warn(
-      `⚠ ${model.label} é adaptive (sem temperature): resultado NÃO reproduzível entre rodadas.\n`,
-    );
-  }
+  // ADR 0021/0061: todo modelo do registry é adaptive e não fixa temperatura — a
+  // recomendação de um jogo borderline pode flipar entre rodadas. O backtest do motor
+  // llm NÃO é reproduzível; compare amostras, não jogo a jogo.
+  console.warn(
+    `⚠ ${model.label} é adaptive (sem temperature): resultado NÃO reproduzível entre rodadas.\n`,
+  );
 
   const provider = getSportsDataProvider();
   const client = getAnthropicClient();
@@ -494,7 +492,6 @@ async function main(): Promise<void> {
       toolName: cartridge.toolName,
       maxTokens: genParams.maxTokens,
       effort: genParams.effort,
-      temperature: genParams.temperature,
     });
 
     let output: BaseMarketOutput | null = null;
@@ -504,10 +501,8 @@ async function main(): Promise<void> {
     let lastFailure = "";
     for (let attempt = 1; attempt <= MAX_ATTEMPTS_PER_GAME; attempt++) {
       attempts = attempt;
-      // Adaptive leva o timeout escalado por max_tokens/effort (o mesmo cálculo do
-      // adapter, #524). Script sem prazo de run: temperature fica com o do client.
+      // Timeout escalado por max_tokens/effort (o mesmo cálculo do adapter, #524).
       const timing = requestTiming({
-        thinkingMode: model.thinkingMode,
         maxTokens: genParams.maxTokens,
         effort: genParams.effort,
       });

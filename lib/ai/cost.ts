@@ -5,16 +5,22 @@ import {
 } from "./models";
 
 // Custo derivado do registry — garante que TODO modelo selecionável tem pricing.
-// (Antes só Sonnet 4.5 existia aqui; um call Opus indexaria undefined → NaN.)
+// Com `longPromptPricing` (Haiku 5.5), um prompt acima do limite cobra a chamada
+// inteira na tarifa maior. `inputTokens` é o total da chamada; no ramo server-tool ele
+// soma as retomadas de pause_turn, e o limite vale pela soma (aproximação a maior).
 export function calculateCost(args: {
   model: AIModelId;
   inputTokens: number;
   outputTokens: number;
 }): number {
   const m = MODEL_REGISTRY[args.model];
+  const rates =
+    m.longPromptPricing && args.inputTokens > m.longPromptPricing.aboveInputTokens
+      ? m.longPromptPricing
+      : m;
   return (
-    (args.inputTokens * m.inputPricePerMTok +
-      args.outputTokens * m.outputPricePerMTok) /
+    (args.inputTokens * rates.inputPricePerMTok +
+      args.outputTokens * rates.outputPricePerMTok) /
     1_000_000
   );
 }

@@ -172,13 +172,27 @@ describe("getUserAllowedByEmail — lookup do flag allowed por e-mail (#257)", (
 
 describe("getPreferredModelId — leitura validada contra o registry", () => {
   it("id válido na coluna → retorna o id e aplica eq(users.id, userId)", async () => {
-    h.state.limitResult = [{ preferredModelId: "claude-haiku-4-5" }];
-    await expect(getPreferredModelId("u1")).resolves.toBe("claude-haiku-4-5");
+    h.state.limitResult = [{ preferredModelId: "claude-haiku-5-5" }];
+    await expect(getPreferredModelId("u1")).resolves.toBe("claude-haiku-5-5");
     expect(h.state.whereCalled).toBe(true);
     const cond = h.state.whereArg as { op?: string; col?: unknown; val?: unknown };
     expect(cond.op).toBe("eq");
     expect(cond.col).toBe(users.id);
     expect(cond.val).toBe("u1");
+  });
+
+  it("id de versão antiga → lido como o 5.5 da mesma família (ADR 0061)", async () => {
+    h.state.limitResult = [{ preferredModelId: "claude-sonnet-4-5-20250929" }];
+    await expect(getPreferredModelId("u1")).resolves.toBe("claude-sonnet-5-5");
+    h.state.limitResult = [{ preferredModelId: "claude-haiku-4-5" }];
+    await expect(getPreferredModelId("u1")).resolves.toBe("claude-haiku-5-5");
+    h.state.limitResult = [{ preferredModelId: "claude-fable-5-1" }];
+    await expect(getPreferredModelId("u1")).resolves.toBe("claude-opus-5-5");
+  });
+
+  it("id desconhecido (não-Claude) → null", async () => {
+    h.state.limitResult = [{ preferredModelId: "gpt-5-mini" }];
+    await expect(getPreferredModelId("u1")).resolves.toBeNull();
   });
 
   it("id fora do registry (stale) → null", async () => {
@@ -199,8 +213,8 @@ describe("getPreferredModelId — leitura validada contra o registry", () => {
 
 describe("setPreferredModelId — grava (ou limpa) a preferência", () => {
   it("id válido → update().set({preferredModelId: id}).where(eq(users.id, userId))", async () => {
-    await setPreferredModelId("u1", "claude-haiku-4-5");
-    expect(h.state.updateSetArg).toEqual({ preferredModelId: "claude-haiku-4-5" });
+    await setPreferredModelId("u1", "claude-haiku-5-5");
+    expect(h.state.updateSetArg).toEqual({ preferredModelId: "claude-haiku-5-5" });
     const cond = h.state.updateWhereArg as {
       op?: string;
       col?: unknown;

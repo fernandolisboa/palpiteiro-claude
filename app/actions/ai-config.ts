@@ -3,15 +3,12 @@
 import { revalidatePath } from "next/cache";
 
 import { auth } from "@/auth";
-import { isModelAllowedForAudience } from "@/lib/ai/models";
+import { isModelAllowedForAudience, resolveModelId } from "@/lib/ai/models";
 import {
   isEffort,
   isValidMaxTokens,
-  isValidTemperature,
   MAX_TOKENS_MAX,
   MAX_TOKENS_MIN,
-  TEMPERATURE_MAX,
-  TEMPERATURE_MIN,
 } from "@/lib/ai/generation-params";
 import { resetAnalysisEngineMemo } from "@/lib/ai/engine/analysis-engine-flag";
 import type { SupportedLeague } from "@/lib/providers/sports-data/leagues";
@@ -43,7 +40,9 @@ export async function updateDefaultModel(
     return { ok: false, error: "Acesso negado." };
   }
 
-  const modelId = String(formData.get("modelId") ?? "");
+  // Id antigo (aba aberta antes da troca de modelos) vira o 5.5 da família.
+  const rawModelId = String(formData.get("modelId") ?? "");
+  const modelId = resolveModelId(rawModelId) ?? rawModelId;
   // O default global vale pra TODOS (inclusive usuário comum), então só pode ser
   // um modelo userSelectable — audiência "usuário comum" (isAdmin=false). Isso
   // valida o id contra o registry E aplica o gating de audiência (ADR 0013).
@@ -74,7 +73,6 @@ export async function updateGenerationParams(
 
   const maxTokens = Number(formData.get("maxTokens"));
   const effort = String(formData.get("effort") ?? "");
-  const temperature = Number(formData.get("temperature"));
 
   if (!isValidMaxTokens(maxTokens)) {
     return {
@@ -85,14 +83,7 @@ export async function updateGenerationParams(
   if (!isEffort(effort)) {
     return { ok: false, error: "Effort inválido." };
   }
-  if (!isValidTemperature(temperature)) {
-    return {
-      ok: false,
-      error: `temperature deve estar entre ${TEMPERATURE_MIN} e ${TEMPERATURE_MAX}.`,
-    };
-  }
-
-  await setGenerationParams({ maxTokens, effort, temperature }, session.user.id);
+  await setGenerationParams({ maxTokens, effort }, session.user.id);
   revalidatePath("/admin/settings");
   return { ok: true };
 }

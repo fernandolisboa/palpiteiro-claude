@@ -12,10 +12,9 @@ import { SELECTABLE_MODELS, type AIModelId } from "@/lib/ai/models";
 
 // O default global vale pra TODOS, então só um modelo `userSelectable` pode ser
 // salvo — o server revalida via isModelAllowedForAudience(false) em
-// updateDefaultModel (ADR 0013). O Fable 5.1 (#524) é admin-only: em vez de
-// FILTRÁ-LO (sumiço silencioso), o dropdown lista todos e desabilita os
-// não-salváveis com nota — assim ele não aparece como "disponível mas impossível
-// de salvar". A ordem do registry rege a UI.
+// updateDefaultModel (ADR 0013). Um modelo admin-only, em vez de FILTRADO (sumiço
+// silencioso), apareceria desabilitado com nota — assim ele não aparece como
+// "disponível mas impossível de salvar". A ordem do registry rege a UI.
 const DEFAULT_MODEL_OPTIONS = SELECTABLE_MODELS;
 
 type Props = {

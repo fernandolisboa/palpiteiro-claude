@@ -363,26 +363,94 @@ describe("analyzeMatch — model override gating", () => {
     mockGetAiCall.mockResolvedValue({ costUsd: "0.01" } as never);
   });
 
-  it("regular user + userSelectable override (Haiku) is forwarded to predict", async () => {
+  it("regular user + userSelectable override (Haiku 5.5) is forwarded to predict", async () => {
     mockAuth.mockResolvedValue(USER_SESSION);
+    await analyzeMatch(
+      null,
+      form({ matchId: VALID_MATCH_ID, modelOverride: "claude-haiku-5-5" }),
+    );
+    expect(mockPredict).toHaveBeenCalledWith({
+      matchId: VALID_MATCH_ID,
+      userId: "u2",
+      isAdmin: false,
+      modelOverride: "claude-haiku-5-5",
+      marketKey: "over_under",
+      extraLines: false,
+      deadlineAt: expect.any(Number),
+    });
+  });
+
+  it("admin + userSelectable override (Opus 5.5) is forwarded", async () => {
+    mockAuth.mockResolvedValue(SESSION);
+    await analyzeMatch(
+      null,
+      form({ matchId: VALID_MATCH_ID, modelOverride: "claude-opus-5-5" }),
+    );
+    expect(mockPredict).toHaveBeenCalledWith({
+      matchId: VALID_MATCH_ID,
+      userId: "u1",
+      isAdmin: true,
+      modelOverride: "claude-opus-5-5",
+      marketKey: "over_under",
+      extraLines: false,
+      deadlineAt: expect.any(Number),
+    });
+  });
+
+  it("regular user + override antigo (Sonnet 5, aba aberta antes do deploy) → o Sonnet 5.5 resolvido é o que chega ao predict", async () => {
+    // ADR 0061: um id de versão antiga vira o 5.5 da mesma família; o id cru nunca
+    // chega ao predict.
+    mockAuth.mockResolvedValue(USER_SESSION);
+    await analyzeMatch(
+      null,
+      form({ matchId: VALID_MATCH_ID, modelOverride: "claude-sonnet-5" }),
+    );
+    expect(mockPredict).toHaveBeenCalledWith({
+      matchId: VALID_MATCH_ID,
+      userId: "u2",
+      isAdmin: false,
+      modelOverride: "claude-sonnet-5-5",
+      marketKey: "over_under",
+      extraLines: false,
+      deadlineAt: expect.any(Number),
+    });
+  });
+
+  it("regular user + override antigo datado (Sonnet 4.5) → Sonnet 5.5", async () => {
+    mockAuth.mockResolvedValue(USER_SESSION);
+    await analyzeMatch(
+      null,
+      form({ matchId: VALID_MATCH_ID, modelOverride: "claude-sonnet-4-5-20250929" }),
+    );
+    expect(mockPredict).toHaveBeenCalledWith({
+      matchId: VALID_MATCH_ID,
+      userId: "u2",
+      isAdmin: false,
+      modelOverride: "claude-sonnet-5-5",
+      marketKey: "over_under",
+      extraLines: false,
+      deadlineAt: expect.any(Number),
+    });
+  });
+
+  it("admin + override antigo (Haiku 4.5) → Haiku 5.5", async () => {
+    mockAuth.mockResolvedValue(SESSION);
     await analyzeMatch(
       null,
       form({ matchId: VALID_MATCH_ID, modelOverride: "claude-haiku-4-5" }),
     );
     expect(mockPredict).toHaveBeenCalledWith({
       matchId: VALID_MATCH_ID,
-      userId: "u2",
-      isAdmin: false,
-      modelOverride: "claude-haiku-4-5",
+      userId: "u1",
+      isAdmin: true,
+      modelOverride: "claude-haiku-5-5",
       marketKey: "over_under",
       extraLines: false,
       deadlineAt: expect.any(Number),
     });
   });
 
-  it("regular user + stale/removed override (Fable, fora do registry após #241) is IGNORED", async () => {
-    // Após #241 o Fable não está no registry; um override forjado com esse id é
-    // tratado como desconhecido pelo gate e cai pro default — queda graciosa.
+  it("regular user + Fable (fora do app, ADR 0061) → lido como Opus 5.5", async () => {
     mockAuth.mockResolvedValue(USER_SESSION);
     await analyzeMatch(
       null,
@@ -392,70 +460,7 @@ describe("analyzeMatch — model override gating", () => {
       matchId: VALID_MATCH_ID,
       userId: "u2",
       isAdmin: false,
-      modelOverride: undefined,
-      marketKey: "over_under",
-      extraLines: false,
-      deadlineAt: expect.any(Number),
-    });
-  });
-
-  it("admin + stale/removed override (Fable) is ALSO ignored (não há mais modelo admin-only)", async () => {
-    // Antes este caso provava que admin podia forçar um modelo admin-only. Após
-    // #240 + #241 não sobra modelo admin-only; o Fable virou id desconhecido e é
-    // ignorado até pra admin. O caminho "admin força id válido" fica coberto pelo
-    // teste de Sonnet 4.5 abaixo.
-    mockAuth.mockResolvedValue(SESSION);
-    await analyzeMatch(
-      null,
-      form({ matchId: VALID_MATCH_ID, modelOverride: "claude-fable-5" }),
-    );
-    expect(mockPredict).toHaveBeenCalledWith({
-      matchId: VALID_MATCH_ID,
-      userId: "u1",
-      isAdmin: true,
-      modelOverride: undefined,
-      marketKey: "over_under",
-      extraLines: false,
-      deadlineAt: expect.any(Number),
-    });
-  });
-
-  it("admin + userSelectable override (Sonnet 4.5 valid id) is forwarded", async () => {
-    mockAuth.mockResolvedValue(SESSION);
-    await analyzeMatch(
-      null,
-      form({
-        matchId: VALID_MATCH_ID,
-        modelOverride: "claude-sonnet-4-5-20250929",
-      }),
-    );
-    expect(mockPredict).toHaveBeenCalledWith({
-      matchId: VALID_MATCH_ID,
-      userId: "u1",
-      isAdmin: true,
-      modelOverride: "claude-sonnet-4-5-20250929",
-      marketKey: "over_under",
-      extraLines: false,
-      deadlineAt: expect.any(Number),
-    });
-  });
-
-  it("regular user + Sonnet 4.5 override (promovido em #240) é AGORA encaminhado", async () => {
-    // Sonnet 4.5 passou a userSelectable em #240, então um usuário comum pode
-    // forçá-lo por análise — antes era ignorado por ser admin-only.
-    mockAuth.mockResolvedValue(USER_SESSION);
-    await analyzeMatch(
-      null,
-      form({
-        matchId: VALID_MATCH_ID,
-        modelOverride: "claude-sonnet-4-5-20250929",
-      }),
-    );
-    expect(mockPredict).toHaveBeenCalledWith({
-      matchId: VALID_MATCH_ID,
-      userId: "u2",
-      isAdmin: false,
-      modelOverride: "claude-sonnet-4-5-20250929",
+      modelOverride: "claude-opus-5-5",
       marketKey: "over_under",
       extraLines: false,
       deadlineAt: expect.any(Number),

@@ -376,7 +376,7 @@ function anthropicMessage(name: string, input: Record<string, unknown>) {
     id: "msg-1",
     type: "message",
     role: "assistant",
-    model: "claude-sonnet-4-5-20250929",
+    model: "claude-sonnet-5-5",
     stop_reason: "tool_use",
     stop_sequence: null,
     content: [{ type: "tool_use", id: "tu-1", name, input }],
@@ -442,11 +442,10 @@ function setHappyPath() {
   getOddsForSport.mockResolvedValue([]);
   getLatestFreshSelectionOddsSnapshots.mockResolvedValue(freshSnapshot(ODDS));
   resolveMarketCatalog.mockResolvedValue(catalogFor(["home", "draw", "away"]));
-  getDefaultModelId.mockResolvedValue("claude-sonnet-4-5-20250929");
+  getDefaultModelId.mockResolvedValue("claude-sonnet-5-5");
   getGenerationParams.mockResolvedValue({
     maxTokens: 16000,
     effort: "high",
-    temperature: 0.3,
   });
   getPreferredModelId.mockResolvedValue(null);
   getAnalysisEngine.mockResolvedValue("code_jev");
@@ -555,7 +554,7 @@ describe("flag analysis_engine = 'llm' (default)", () => {
     expect(insertValues).toHaveBeenCalledTimes(3);
     const prediction = insertValues.mock.calls[1][0] as Row;
     expect(prediction).not.toHaveProperty("judgments");
-    expect(prediction.modelVersion).toBe("claude-sonnet-4-5-20250929");
+    expect(prediction.modelVersion).toBe("claude-sonnet-5-5");
     expect(prediction.promptVersion).toBe("match_result_v1.1");
     expect(prediction.rationale).toBe(MARKET_OUTPUT.rationale);
     // Motor llm fora do over/under: ninguém usa o λ, o DC nem é lido.
@@ -623,7 +622,7 @@ describe("flag analysis_engine = 'code_jev'", () => {
     expect(prediction.keyFactors).toEqual(NARRATION.key_factors);
     expect(prediction.promptVersion).toBe(NARRATOR_VERSION);
     expect(prediction.modelVersion).toBe(
-      "claude-sonnet-4-5-20250929;engine=code_jev;lambda=heuristic;judg=jev_judgments_v1;w=judgment_weights_v1"
+      "claude-sonnet-5-5;engine=code_jev;lambda=heuristic;judg=jev_judgments_v1;w=judgment_weights_v1"
     );
     expect(Number(prediction.minimumOdd)).toBeCloseTo(
       100 / (expected.modelProbByKey.home - 5),
@@ -1571,7 +1570,7 @@ describe("best bet no motor code_jev (#512): 1 JEV, mercados em código, 1 narra
   it("narração sem espaço no prazo (#524) → NÃO chama nem cobra slot; racional templado, row timeout de custo zero, pendentes persistidos", async () => {
     const acquireSlot = vi.fn(async () => ({ ok: true }));
 
-    // Opus 5.5 (adaptive) precisa de ≥120s pra começar; restam 100s. As decisões em
+    // Opus 5.5 (deliberate) precisa de ≥120s pra começar; restam 100s. As decisões em
     // código ainda cabem (piso de 20s do orquestrador).
     const out = await runCodeJevFanOut(
       { ...base, modelOverride: "claude-opus-5-5" },
@@ -1853,7 +1852,7 @@ describe("contexto do usuário (#565)", () => {
     expect(stored).not.toContain("Pedro");
     expect(stored).not.toContain("está sem");
     expect(prediction.modelVersion).toBe(
-      "claude-sonnet-4-5-20250929;engine=code_jev;lambda=heuristic;judg=jev_judgments_v1;w=judgment_weights_v1;user=user_evidence_v1"
+      "claude-sonnet-5-5;engine=code_jev;lambda=heuristic;judg=jev_judgments_v1;w=judgment_weights_v1;user=user_evidence_v1"
     );
     expect(prediction.promptVersion).toBe(NARRATOR_VERSION);
 
@@ -2046,7 +2045,7 @@ describe("contexto do usuário (#565)", () => {
     expect(message).not.toContain("informado por você");
     const prediction = onlyPrediction();
     expect(prediction).not.toHaveProperty("judgments");
-    expect(prediction.modelVersion).toBe("claude-sonnet-4-5-20250929");
+    expect(prediction.modelVersion).toBe("claude-sonnet-5-5");
   });
 
   it("(h) reuso: predição com contexto, reusada por uma análise SEM contexto, dá só o JEV", async () => {
@@ -2075,8 +2074,11 @@ describe("contexto do usuário (#565)", () => {
     vi.setSystemTime(new Date("2026-05-12T00:00:00.000Z"));
     const start = Date.now();
     // Só responderia em 30 s. Sem o teto, o predict esperaria até lá e o narrador
-    // (Sonnet 4.5, piso de 20 s) não caberia nos 5 s que sobram.
-    const deadlineAt = start + 35_000;
+    // (Haiku 5.5, `fast`; em effort high o mínimo é ~54 s) não caberia nos 40 s que
+    // sobram. Haiku de propósito: um `deliberate` (Sonnet/Opus 5.5, ~108 s+) não
+    // caberia nem nos 60 s.
+    getDefaultModelId.mockResolvedValue("claude-haiku-5-5");
+    const deadlineAt = start + 70_000;
     extractPalpiteClaims.mockImplementation(
       () =>
         new Promise((resolve) =>
@@ -2118,8 +2120,8 @@ describe("contexto do usuário (#565)", () => {
     const narration = anthropicCreate.mock.calls.find(
       (c) => (c[0] as { tools: { name: string }[] }).tools[0].name === "submit_narration"
     )!;
-    // Restam 25 s − 5 s de margem = 20 s de timeout.
-    expect((narration[1] as { timeout: number }).timeout).toBe(20_000);
+    // Restam 60 s − 5 s de margem = 55 s de timeout.
+    expect((narration[1] as { timeout: number }).timeout).toBe(55_000);
     const [narratorRow] = rowsWhere(
       (r) => r.promptVersion === NARRATOR_VERSION && "provider" in r
     );

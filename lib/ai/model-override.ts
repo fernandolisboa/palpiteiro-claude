@@ -1,4 +1,4 @@
-import { isAIModelId } from "@/lib/ai/models";
+import { resolveModelId } from "@/lib/ai/models";
 
 // Valor inicial do dropdown de override de modelo (AnalysisPanel). O `<select>`
 // é controlado por este valor, e seu sentinel "default" significa "usar a
@@ -8,19 +8,14 @@ import { isAIModelId } from "@/lib/ai/models";
 // escolhido PERSISTIR entre reanálises (#239) em vez de voltar pro "default".
 // Modelos fora da audiência (lista `selectableModels` resolvida no server) caem
 // no sentinel: o gate efetivo é server-side, aqui só evitamos um value órfão sem
-// <option> correspondente. Puro (sem React/server) pra ser testável isolado.
+// <option> correspondente. Um id de versão antiga (análise de antes do ADR 0061) semeia
+// o 5.5 da mesma família. Puro (sem React/server) pra ser testável isolado.
 export function initialModelOverride(
   preferredModelId: string | null,
   selectableModels: { id: string }[],
 ): string {
-  if (
-    preferredModelId &&
-    isAIModelId(preferredModelId) &&
-    selectableModels.some((m) => m.id === preferredModelId)
-  ) {
-    return preferredModelId;
-  }
-  return "default";
+  const id = resolveModelId(preferredModelId);
+  return id && selectableModels.some((m) => m.id === id) ? id : "default";
 }
 
 // Regra de persistência do dropdown entre reanálises (#239). Decide qual valor o

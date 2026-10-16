@@ -4,6 +4,11 @@
 
 Accepted (2026-06-11) — **emenda o ADR 0008** (modelo de análise configurável).
 
+> **Nota (2026-10-16, ADR 0061, #607):** o **Fable 5.1 saiu** do registry, que fica com
+> Haiku, Sonnet e Opus 5.5, todos `userSelectable`. Nenhum modelo é admin-only de novo; o
+> mecanismo de audiência continua. Uma preferência ou default gravado com id antigo é lido
+> como o 5.5 da mesma família (`resolveModelId`).
+
 > **Nota (2026-06-14):** O **Fable 5 foi removido do registry** (issues #240/#241)
 > por custo ($10/$50 por 1M) + indisponibilidade no Brasil; o Opus 4.8 cobre os
 > overrides admin. Em paralelo, o **Sonnet 4.5 foi promovido a `userSelectable:

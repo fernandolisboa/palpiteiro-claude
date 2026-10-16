@@ -14,12 +14,13 @@ import type { AnalysisRequest } from "@/lib/ai/providers/types";
 // independente do registry — basta um AIModel com provider:'openai'. O `id` é só
 // um placeholder válido (AIModelId); o que importa é o `provider`.
 const OPENAI_MODEL_FIXTURE: AIModel = {
-  id: "claude-haiku-4-5",
+  id: "claude-haiku-5-5",
   provider: "openai",
+  family: "haiku",
   label: "OpenAI seam fixture (#374)",
   inputPricePerMTok: 0.25,
   outputPricePerMTok: 2.0,
-  thinkingMode: "temperature",
+  speed: "fast",
   userSelectable: false,
 };
 

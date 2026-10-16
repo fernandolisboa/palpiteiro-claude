@@ -139,7 +139,7 @@ describe("extractPalpiteClaims", () => {
     expect(insertValues.mock.calls[0][0]).toMatchObject({
       status: "ok",
       promptVersion: USER_PALPITE_EXTRACT_VERSION,
-      model: "claude-haiku-4-5",
+      model: "claude-haiku-5-5",
       userId: "u-1",
       matchId: "m-1",
     });
@@ -149,8 +149,12 @@ describe("extractPalpiteClaims", () => {
   it("o request vai pro Haiku com o prazo e sem o palpite no tool", async () => {
     await extractPalpiteClaims({ ...ARGS, deadlineAt: 123 });
     const req = fakeProvider.runAnalysis.mock.calls[0][0];
-    expect(req.model.id).toBe("claude-haiku-4-5");
+    expect(req.model.id).toBe("claude-haiku-5-5");
     expect(req.deadlineAt).toBe(123);
+    // Haiku 5.5 tem thinking: effort low (UTILITY_EFFORT) e folga de 4096 tokens, sem temperature.
+    expect(req.effort).toBe("low");
+    expect(req.maxTokens).toBe(4096);
+    expect(req).not.toHaveProperty("temperature");
     expect(JSON.stringify(req.tool.inputSchema)).not.toContain("palpite");
   });
 });
@@ -166,7 +170,7 @@ describe("extractPalpiteClaims — correções do review (#564)", () => {
     expect(persistAiCallError.mock.calls[0][0]).toMatchObject({
       status: "provider_error",
       provider: "anthropic",
-      model: "claude-haiku-4-5",
+      model: "claude-haiku-5-5",
       promptVersion: USER_PALPITE_EXTRACT_VERSION,
     });
     // O motivo cru não vai pra row de erro.

@@ -55,7 +55,7 @@ export function serializeAnthropicError(err: unknown): Record<string, unknown> {
   return { error: String(err) };
 }
 
-// Recusa do modelo (#524). Fable 5.1 (e, em tese, qualquer Claude recente) pode
+// Recusa do modelo (#524). Os modelos 5.5 (o Haiku sem fallback server-side) podem
 // responder HTTP 200 com `stop_reason: "refusal"` e um `stop_details` {category,
 // explanation}: a chamada foi paga, mas o conteúdo não serve. É erro TIPADO (não
 // uma string solta) pra o caller distinguir de falha de provider/rede e mostrar

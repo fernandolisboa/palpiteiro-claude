@@ -4,7 +4,7 @@ import { revalidatePath } from "next/cache";
 import { z } from "zod";
 
 import { auth, unstable_update } from "@/auth";
-import { isModelAllowedForAudience } from "@/lib/ai/models";
+import { modelChoiceForAudience } from "@/lib/ai/models";
 import { deleteAuthenticator } from "@/lib/db/queries/authenticators";
 import { setPreferredModelId, updateUser } from "@/lib/db/queries/users";
 
@@ -92,12 +92,13 @@ export async function updatePreferredModel(
     revalidatePath("/", "layout");
     return { ok: true };
   }
-  // Valida contra o registry E a audiência num passo (type guard estreita pra
-  // AIModelId). Um modelo admin-only vindo de usuário comum é recusado.
-  if (!isModelAllowedForAudience(raw, isAdmin)) {
+  // Valida contra o registry E a audiência num passo (um id antigo vira o 5.5 da
+  // mesma família). Um modelo admin-only vindo de usuário comum é recusado.
+  const modelId = modelChoiceForAudience(raw, isAdmin);
+  if (!modelId) {
     return { ok: false, error: "Modelo indisponível para a sua conta." };
   }
-  await setPreferredModelId(session.user.id, raw);
+  await setPreferredModelId(session.user.id, modelId);
   revalidatePath("/perfil");
   revalidatePath("/", "layout");
   return { ok: true };

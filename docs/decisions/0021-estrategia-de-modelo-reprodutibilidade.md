@@ -4,6 +4,12 @@
 
 Accepted (2026-06-12) — **emenda o ADR 0008** (default global Opus 4.8 → Sonnet 4.5)
 
+> **Emenda (2026-10-16, ADR 0061, #607):** o registry fica só com **Haiku, Sonnet e
+> Opus 5.5**, todos adaptive. Sonnet 4.5 e Haiku 4.5 saem, e com eles o caminho
+> `temperature`: **não há mais análise reproduzível por temperatura** no motor `llm`. O
+> default global vira o **Sonnet 5.5**; ids antigos gravados são lidos como o 5.5 da
+> mesma família. Detalhes no ADR 0061.
+
 > **Nota (2026-06-14):** O **Fable 5 foi removido do registry** (issues #240/#241)
 > por custo + indisponibilidade no Brasil; o Opus 4.8 cobre os overrides admin de
 > capacidade alta. O **Sonnet 4.5 foi promovido a `userSelectable: true`** (#240),

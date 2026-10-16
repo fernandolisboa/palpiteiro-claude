@@ -4,8 +4,8 @@ import { aiConfig } from "@/db/schema";
 import { db } from "@/lib/db";
 import {
   DEFAULT_MODEL_ID,
-  isAIModelId,
   MODEL_REGISTRY,
+  resolveModelId,
   type AIModelId,
 } from "@/lib/ai/models";
 import {
@@ -17,7 +17,6 @@ import {
   GENERATION_PARAM_DEFAULTS,
   isEffort,
   isValidMaxTokens,
-  isValidTemperature,
   type GenerationParams,
 } from "@/lib/ai/generation-params";
 import {
@@ -31,16 +30,17 @@ import {
 
 // Boundary única de leitura/escrita da config global de IA em ai_config (single
 // row, id=1): o default global de modelo E os parâmetros de geração
-// (max_tokens/effort/temperature — ADR 0008, emenda 2).
+// (max_tokens/effort — ADR 0008, emenda 2; a coluna temperature ficou sem uso no ADR 0061).
 
 /**
  * Default global de modelo. Se não houver row (DB vazio em testes) OU o valor
- * persistido falhar a validação contra o registry (registry encolheu / dado
- * ruim), cai no DEFAULT_MODEL_ID — um id stale/inválido nunca chega ao Anthropic
- * como 404 de modelo. O default vale pra TODOS (ADR 0013): um id admin-only
- * (`userSelectable: false`, ex. Fable 5.1 — #524) também cai no DEFAULT_MODEL_ID,
- * pra um usuário comum nunca rodar um modelo que não poderia escolher. O setter
- * já recusa isso; aqui é a defesa contra dado gravado por fora dele.
+ * persistido não resolver pra um modelo do registry, cai no DEFAULT_MODEL_ID — um id
+ * inválido nunca chega ao Anthropic como 404 de modelo. Um id de versão antiga
+ * (ex.: `claude-haiku-4-5`, ADR 0061) é lido como o 5.5 da mesma família, sem
+ * reescrever a row. O default vale pra TODOS (ADR 0013): um id admin-only
+ * (`userSelectable: false`) também cai no DEFAULT_MODEL_ID, pra um usuário comum
+ * nunca rodar um modelo que não poderia escolher. O setter já recusa isso; aqui é a
+ * defesa contra dado gravado por fora dele.
  */
 export async function getDefaultModelId(): Promise<AIModelId> {
   const rows = await db
@@ -48,10 +48,8 @@ export async function getDefaultModelId(): Promise<AIModelId> {
     .from(aiConfig)
     .where(eq(aiConfig.id, 1))
     .limit(1);
-  const stored = rows[0]?.defaultModelId;
-  if (stored && isAIModelId(stored) && MODEL_REGISTRY[stored].userSelectable) {
-    return stored;
-  }
+  const stored = resolveModelId(rows[0]?.defaultModelId);
+  if (stored && MODEL_REGISTRY[stored].userSelectable) return stored;
   return DEFAULT_MODEL_ID;
 }
 
@@ -145,14 +143,13 @@ export async function getEnableFidelityValidation(): Promise<boolean> {
  * Parâmetros de geração (ADR 0008, emenda 2). Lê do single-row (id=1) e cai nos
  * defaults seguros POR CAMPO se a row não existir ou o valor persistido for
  * inválido — espelha o fallback de getDefaultModelId (nunca manda lixo pro
- * Anthropic). `temperature` é numeric → string no Drizzle, convertido aqui.
+ * Anthropic).
  */
 export async function getGenerationParams(): Promise<GenerationParams> {
   const rows = await db
     .select({
       maxTokens: aiConfig.maxTokens,
       effort: aiConfig.effort,
-      temperature: aiConfig.temperature,
     })
     .from(aiConfig)
     .where(eq(aiConfig.id, 1))
@@ -160,25 +157,17 @@ export async function getGenerationParams(): Promise<GenerationParams> {
   const row = rows[0];
   if (!row) return GENERATION_PARAM_DEFAULTS;
 
-  const temperatureNum = Number(row.temperature);
   const maxTokens = isValidMaxTokens(row.maxTokens)
     ? row.maxTokens
     : GENERATION_PARAM_DEFAULTS.maxTokens;
   const effort = isEffort(row.effort)
     ? row.effort
     : GENERATION_PARAM_DEFAULTS.effort;
-  const temperature = isValidTemperature(temperatureNum)
-    ? temperatureNum
-    : GENERATION_PARAM_DEFAULTS.temperature;
 
   // Observabilidade: se um valor persistido cai no default (DB editado direto,
   // registry encolheu, etc.) o swap é silencioso e some o sintoma. Avisa só
   // quando ALGUM campo de fato divergiu — DB vazio (sem row) é normal e não loga.
-  if (
-    maxTokens !== row.maxTokens ||
-    effort !== row.effort ||
-    temperature !== temperatureNum
-  ) {
+  if (maxTokens !== row.maxTokens || effort !== row.effort) {
     console.warn(
       JSON.stringify({
         scope: "getGenerationParams",
@@ -186,20 +175,18 @@ export async function getGenerationParams(): Promise<GenerationParams> {
         stored: {
           maxTokens: row.maxTokens,
           effort: row.effort,
-          temperature: row.temperature,
         },
-        used: { maxTokens, effort, temperature },
+        used: { maxTokens, effort },
       }),
     );
   }
 
-  return { maxTokens, effort, temperature };
+  return { maxTokens, effort };
 }
 
 /**
  * Upsert dos parâmetros de geração (single-row id=1). Grava quem alterou pra
- * auditoria. Os valores já vêm validados da server action. `temperature` é
- * numeric → string no Drizzle.
+ * auditoria. Os valores já vêm validados da server action.
  */
 export async function setGenerationParams(
   params: GenerationParams,
@@ -212,7 +199,6 @@ export async function setGenerationParams(
       defaultModelId: DEFAULT_MODEL_ID,
       maxTokens: params.maxTokens,
       effort: params.effort,
-      temperature: params.temperature.toFixed(2),
       updatedByUserId: userId,
     })
     .onConflictDoUpdate({
@@ -220,7 +206,6 @@ export async function setGenerationParams(
       set: {
         maxTokens: params.maxTokens,
         effort: params.effort,
-        temperature: params.temperature.toFixed(2),
         updatedByUserId: userId,
         updatedAt: new Date(),
       },

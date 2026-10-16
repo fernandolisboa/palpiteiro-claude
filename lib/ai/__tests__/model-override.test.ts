@@ -12,43 +12,60 @@ import {
 // preferência é um modelo de fato selecionável pela audiência atual.
 describe("initialModelOverride — seed do dropdown de modelo (#239)", () => {
   const selectable = [
-    { id: "claude-sonnet-4-5-20250929" },
-    { id: "claude-haiku-4-5" },
+    { id: "claude-opus-5-5" },
+    { id: "claude-sonnet-5-5" },
+    { id: "claude-haiku-5-5" },
   ];
 
   it("semeia com a preferência quando ela é um modelo selecionável", () => {
-    expect(initialModelOverride("claude-haiku-4-5", selectable)).toBe(
-      "claude-haiku-4-5",
+    expect(initialModelOverride("claude-haiku-5-5", selectable)).toBe(
+      "claude-haiku-5-5",
     );
+  });
+
+  it("id de versão antiga (ADR 0061) semeia o 5.5 da mesma família quando ele está na lista", () => {
+    expect(initialModelOverride("claude-haiku-4-5", selectable)).toBe(
+      "claude-haiku-5-5",
+    );
+    expect(
+      initialModelOverride("claude-sonnet-4-5-20250929", selectable),
+    ).toBe("claude-sonnet-5-5");
+    expect(initialModelOverride("claude-sonnet-5", selectable)).toBe(
+      "claude-sonnet-5-5",
+    );
+    expect(initialModelOverride("claude-opus-4-8", selectable)).toBe(
+      "claude-opus-5-5",
+    );
+    expect(initialModelOverride("claude-fable-5-1", selectable)).toBe(
+      "claude-opus-5-5",
+    );
+  });
+
+  it("id antigo cai no sentinel quando o 5.5 da família NÃO está na lista", () => {
+    const semHaiku = [{ id: "claude-sonnet-5-5" }];
+    expect(initialModelOverride("claude-haiku-4-5", semHaiku)).toBe("default");
   });
 
   it("cai no sentinel 'default' quando não há preferência (null)", () => {
     expect(initialModelOverride(null, selectable)).toBe("default");
   });
 
-  it("cai no sentinel quando a preferência não é um AIModelId válido", () => {
-    // Inclui ids removidos em #374 (Opus/Sonnet 4.6/gpt-5-mini): após a remoção
-    // eles deixaram de ser AIModelId válidos, então caem aqui.
+  it("cai no sentinel quando a preferência não é um id Claude reconhecível", () => {
     expect(initialModelOverride("modelo-inexistente", selectable)).toBe(
       "default",
     );
-    for (const removed of [
-      "claude-opus-4-8",
-      "claude-sonnet-4-6",
-      "gpt-5-mini",
-    ]) {
-      expect(initialModelOverride(removed, selectable)).toBe("default");
-    }
+    expect(initialModelOverride("gpt-5-mini", selectable)).toBe("default");
+    expect(initialModelOverride("", selectable)).toBe("default");
   });
 
-  it("cai no sentinel quando o id é válido mas fora da audiência (Fable 5.1 admin-only, #524)", () => {
-    // `selectable` = lista do usuário comum: o Fable 5.1 é AIModelId válido mas não
-    // está nela — um value órfão sem <option> vira "default".
-    expect(initialModelOverride("claude-fable-5-1", selectable)).toBe("default");
+  it("cai no sentinel quando o id é válido mas fora da audiência", () => {
+    // Lista resolvida no server sem o Opus: um value órfão sem <option> vira "default".
+    const semOpus = [{ id: "claude-sonnet-5-5" }, { id: "claude-haiku-5-5" }];
+    expect(initialModelOverride("claude-opus-5-5", semOpus)).toBe("default");
   });
 
   it("cai no sentinel quando a audiência não tem modelos selecionáveis", () => {
-    expect(initialModelOverride("claude-haiku-4-5", [])).toBe("default");
+    expect(initialModelOverride("claude-haiku-5-5", [])).toBe("default");
   });
 });
 
@@ -101,62 +118,62 @@ describe("resyncModelOverride — persistência do dropdown entre reanálises (#
     const panel = makePanelModel("default");
     expect(panel.value).toBe("default");
 
-    panel.choose("claude-haiku-4-5"); // usuário troca o modelo
+    panel.choose("claude-haiku-5-5"); // usuário troca o modelo
     panel.completeAnalysis(); // dispara a reanálise e ela conclui
 
     // Antes da fix isto voltava pra "default"; a regressão é exatamente este expect.
-    expect(panel.value).toBe("claude-haiku-4-5");
+    expect(panel.value).toBe("claude-haiku-5-5");
   });
 
   it("preserva a escolha através de MÚLTIPLAS reanálises seguidas", () => {
     const panel = makePanelModel("default");
-    panel.choose("claude-haiku-4-5");
+    panel.choose("claude-haiku-5-5");
 
     panel.completeAnalysis();
     panel.completeAnalysis();
     panel.completeAnalysis();
 
-    expect(panel.value).toBe("claude-haiku-4-5");
+    expect(panel.value).toBe("claude-haiku-5-5");
   });
 
   it("mantém a escolha viva mesmo num re-render sem conclusão de action", () => {
     const panel = makePanelModel("default");
-    panel.choose("claude-haiku-4-5");
+    panel.choose("claude-haiku-5-5");
 
     panel.rerenderWithoutCompletion(); // ex.: render de pending
-    expect(panel.value).toBe("claude-haiku-4-5");
+    expect(panel.value).toBe("claude-haiku-5-5");
 
     panel.completeAnalysis();
-    expect(panel.value).toBe("claude-haiku-4-5");
+    expect(panel.value).toBe("claude-haiku-5-5");
   });
 
   it("uma nova escolha substitui a anterior e PERSISTE após a próxima reanálise", () => {
     const panel = makePanelModel("default");
 
-    panel.choose("claude-haiku-4-5");
+    panel.choose("claude-haiku-5-5");
     panel.completeAnalysis();
-    expect(panel.value).toBe("claude-haiku-4-5");
+    expect(panel.value).toBe("claude-haiku-5-5");
 
-    panel.choose("claude-sonnet-4-5-20250929"); // troca de novo
+    panel.choose("claude-sonnet-5-5"); // troca de novo
     panel.completeAnalysis();
-    expect(panel.value).toBe("claude-sonnet-4-5-20250929");
+    expect(panel.value).toBe("claude-sonnet-5-5");
   });
 
   it("preserva a PREFERÊNCIA semeada (não-default) através da reanálise", () => {
     // Sem escolha one-off: o seed já é a preferência server-side e deve sobreviver.
-    const panel = makePanelModel("claude-sonnet-4-5-20250929");
+    const panel = makePanelModel("claude-sonnet-5-5");
 
     panel.completeAnalysis();
 
-    expect(panel.value).toBe("claude-sonnet-4-5-20250929");
+    expect(panel.value).toBe("claude-sonnet-5-5");
   });
 
   it("não força mudança quando displayed já é igual a live (no-op estável)", () => {
     // Contrato de eficiência: sem divergência, resync não pede setState.
     expect(
       resyncModelOverride({
-        displayed: "claude-haiku-4-5",
-        live: "claude-haiku-4-5",
+        displayed: "claude-haiku-5-5",
+        live: "claude-haiku-5-5",
         actionCompleted: true,
       }),
     ).toBeNull();

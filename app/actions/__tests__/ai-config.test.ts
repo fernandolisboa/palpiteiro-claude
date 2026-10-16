@@ -76,7 +76,7 @@ describe("updateDefaultModel", () => {
     mockAuth.mockResolvedValue(USER);
     const res = await updateDefaultModel(
       null,
-      form({ modelId: "claude-haiku-4-5" }),
+      form({ modelId: "claude-haiku-5-5" }),
     );
     expect(res.ok).toBe(false);
     expect(mockSet).not.toHaveBeenCalled();
@@ -86,10 +86,10 @@ describe("updateDefaultModel", () => {
     mockAuth.mockResolvedValue(ADMIN);
     const res = await updateDefaultModel(
       null,
-      form({ modelId: "claude-haiku-4-5" }),
+      form({ modelId: "claude-haiku-5-5" }),
     );
     expect(res).toEqual({ ok: true });
-    expect(mockSet).toHaveBeenCalledWith("claude-haiku-4-5", "u1");
+    expect(mockSet).toHaveBeenCalledWith("claude-haiku-5-5", "u1");
   });
 
   it("admin + invalid modelId → not ok, setter not called", async () => {
@@ -99,54 +99,38 @@ describe("updateDefaultModel", () => {
     expect(mockSet).not.toHaveBeenCalled();
   });
 
-  it("admin + Sonnet 4.5 (promovido a userSelectable em #240) → setter chamado, ok", async () => {
-    // Antes admin-only; após #240 ambos os Sonnets podem ser padrão global. Este
-    // é o caso de aceite central da issue #240.
+  it("admin + Sonnet 5.5 (o DEFAULT_MODEL_ID, ADR 0061) → setter chamado, ok", async () => {
     mockAuth.mockResolvedValue(ADMIN);
     const res = await updateDefaultModel(
       null,
-      form({ modelId: "claude-sonnet-4-5-20250929" }),
+      form({ modelId: "claude-sonnet-5-5" }),
     );
     expect(res).toEqual({ ok: true });
-    expect(mockSet).toHaveBeenCalledWith("claude-sonnet-4-5-20250929", "u1");
+    expect(mockSet).toHaveBeenCalledWith("claude-sonnet-5-5", "u1");
   });
 
-  it("admin + id removido em #374 (Opus 4.8 / Sonnet 4.6 / gpt-5-mini) → not ok, setter not called", async () => {
-    // Após #374 esses ids saíram do registry: isModelAllowedForAudience os trata
-    // como desconhecidos, então não são mais salváveis como default global. Guarda
-    // de remoção complementar à do Fable (#241) logo abaixo.
+  it("admin + id de versão antiga (aba aberta antes do ADR 0061) → grava o 5.5 da família", async () => {
     mockAuth.mockResolvedValue(ADMIN);
-    for (const modelId of [
-      "claude-opus-4-8",
-      "claude-sonnet-4-6",
-      "gpt-5-mini",
-    ]) {
+    for (const [modelId, expected] of [
+      ["claude-sonnet-4-5-20250929", "claude-sonnet-5-5"],
+      ["claude-sonnet-5", "claude-sonnet-5-5"],
+      ["claude-haiku-4-5", "claude-haiku-5-5"],
+      ["claude-opus-4-8", "claude-opus-5-5"],
+      ["claude-fable-5-1", "claude-opus-5-5"],
+    ] as const) {
+      mockSet.mockClear();
+      const res = await updateDefaultModel(null, form({ modelId }));
+      expect(res).toEqual({ ok: true });
+      expect(mockSet).toHaveBeenCalledWith(expected, "u1");
+    }
+  });
+
+  it("admin + id desconhecido (gpt-5-mini, lixo) → not ok, setter not called", async () => {
+    mockAuth.mockResolvedValue(ADMIN);
+    for (const modelId of ["gpt-5-mini", "claude-foo-1", ""]) {
       const res = await updateDefaultModel(null, form({ modelId }));
       expect(res.ok).toBe(false);
     }
-    expect(mockSet).not.toHaveBeenCalled();
-  });
-
-  it("admin + id stale/removido (Fable, fora do registry após #241) → not ok, setter not called", async () => {
-    // Um id de modelo aposentado (Fable removido em #241) deixa de ser salvável:
-    // isModelAllowedForAudience o trata como desconhecido. Cobre a queda graciosa
-    // sem mudança de runtime.
-    mockAuth.mockResolvedValue(ADMIN);
-    const res = await updateDefaultModel(
-      null,
-      form({ modelId: "claude-fable-5" }),
-    );
-    expect(res.ok).toBe(false);
-    expect(mockSet).not.toHaveBeenCalled();
-  });
-
-  it("admin + Fable 5.1 (admin-only, #524) → not ok: o default vale pra todos (ADR 0013)", async () => {
-    mockAuth.mockResolvedValue(ADMIN);
-    const res = await updateDefaultModel(
-      null,
-      form({ modelId: "claude-fable-5-1" }),
-    );
-    expect(res.ok).toBe(false);
     expect(mockSet).not.toHaveBeenCalled();
   });
 
@@ -162,7 +146,7 @@ describe("updateDefaultModel", () => {
 });
 
 describe("updateGenerationParams", () => {
-  const valid = { maxTokens: "12000", effort: "medium", temperature: "0.4" };
+  const valid = { maxTokens: "12000", effort: "medium" };
 
   it("non-admin caller is rejected and setter is NOT called", async () => {
     mockAuth.mockResolvedValue(USER);
@@ -176,7 +160,7 @@ describe("updateGenerationParams", () => {
     const res = await updateGenerationParams(null, form(valid));
     expect(res).toEqual({ ok: true });
     expect(mockSetParams).toHaveBeenCalledWith(
-      { maxTokens: 12000, effort: "medium", temperature: 0.4 },
+      { maxTokens: 12000, effort: "medium" },
       "u1",
     );
   });
@@ -201,14 +185,17 @@ describe("updateGenerationParams", () => {
     expect(mockSetParams).not.toHaveBeenCalled();
   });
 
-  it("admin + temperature fora de [0,1] → not ok, setter not called", async () => {
+  it("admin + temperature legada no FormData (aba antiga, ADR 0061) → ignorada; setter só com maxTokens/effort", async () => {
     mockAuth.mockResolvedValue(ADMIN);
     const res = await updateGenerationParams(
       null,
       form({ ...valid, temperature: "2" }),
     );
-    expect(res.ok).toBe(false);
-    expect(mockSetParams).not.toHaveBeenCalled();
+    expect(res).toEqual({ ok: true });
+    expect(mockSetParams).toHaveBeenCalledWith(
+      { maxTokens: 12000, effort: "medium" },
+      "u1",
+    );
   });
 });
 

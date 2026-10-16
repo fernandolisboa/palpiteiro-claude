@@ -41,7 +41,7 @@ import {
 // status.
 
 export const NARRATE_MAX_TOKENS = 2000;
-const NARRATE_ADAPTIVE_EFFORT: Effort = "low";
+const NARRATE_EFFORT: Effort = "low";
 
 export type NarratePalpiteResult = {
   narration: PalpiteNarration;
@@ -49,7 +49,7 @@ export type NarratePalpiteResult = {
   aiCallId: string | null;
 };
 
-async function resolveModelId(userId: string, isAdmin: boolean): Promise<AIModelId> {
+async function resolveRunModelId(userId: string, isAdmin: boolean): Promise<AIModelId> {
   const pref = await getPreferredModelId(userId);
   return pref && isModelAllowedForAudience(pref, isAdmin) ? pref : getDefaultModelId();
 }
@@ -71,8 +71,7 @@ export async function narratePalpite(args: {
   });
 
   try {
-    const model = MODEL_REGISTRY[await resolveModelId(userId, args.isAdmin)];
-    const adaptive = model.thinkingMode === "adaptive";
+    const model = MODEL_REGISTRY[await resolveRunModelId(userId, args.isAdmin)];
     const request: AnalysisRequest = {
       model,
       system: spec.system,
@@ -80,9 +79,7 @@ export async function narratePalpite(args: {
       tool: narrateTool,
       toolName: NARRATE_TOOL_NAME,
       maxTokens: NARRATE_MAX_TOKENS,
-      ...(adaptive
-        ? { effort: NARRATE_ADAPTIVE_EFFORT }
-        : { temperature: model.temperature }),
+      effort: NARRATE_EFFORT,
       deadlineAt: args.deadlineAt,
     };
     const provider = getProviderForModel(model);
@@ -124,9 +121,9 @@ export async function narratePalpite(args: {
     }
     // Uma narração que o timeout cortaria não é iniciada (padrão do narrador do predict).
     const fits = canFitCall(args.deadlineAt, {
-      thinkingMode: model.thinkingMode,
+      speed: model.speed,
       maxTokens: NARRATE_MAX_TOKENS,
-      ...(adaptive ? { effort: NARRATE_ADAPTIVE_EFFORT } : {}),
+      effort: NARRATE_EFFORT,
     });
     if (!fits) {
       return fail("timeout", "deadline exceeded before the narration; nothing was sent");

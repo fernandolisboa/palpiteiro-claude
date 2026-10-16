@@ -26,15 +26,10 @@ const clean = (over: Partial<VerdictRow> = {}): VerdictRow => ({
 });
 
 describe("classifyThinkingMode — bifurcação por caminho de amostragem", () => {
-  it("Sonnet 4.5 / Haiku → temperature (estrito)", () => {
-    expect(classifyThinkingMode("claude-sonnet-4-5-20250929")).toBe("temperature");
-    expect(classifyThinkingMode("claude-haiku-4-5")).toBe("temperature");
-  });
-
-  it("Fable 5.1 / Opus 5.5 / Sonnet 5 (#524) → adaptive (flip só conta se reproduzir)", () => {
-    expect(classifyThinkingMode("claude-fable-5-1")).toBe("adaptive");
+  it("os 3 modelos do registry (Opus/Sonnet/Haiku 5.5, ADR 0061) → adaptive (flip só conta se reproduzir)", () => {
     expect(classifyThinkingMode("claude-opus-5-5")).toBe("adaptive");
-    expect(classifyThinkingMode("claude-sonnet-5")).toBe("adaptive");
+    expect(classifyThinkingMode("claude-sonnet-5-5")).toBe("adaptive");
+    expect(classifyThinkingMode("claude-haiku-5-5")).toBe("adaptive");
   });
 
   it("id fora do registry (legado/removido) → temperature = ESTRITO (conservador)", () => {
@@ -47,6 +42,13 @@ describe("classifyThinkingMode — bifurcação por caminho de amostragem", () =
     expect(classifyThinkingMode("claude-sonnet-4-6")).toBe("temperature");
     expect(classifyThinkingMode("gpt-5-mini")).toBe("temperature");
     expect(classifyThinkingMode("claude-fable-5")).toBe("temperature");
+    // ADR 0061: os que saíram do registry também caem no estrito (payload antigo de
+    // Sonnet 4.5/Haiku 4.5 era temperature de fato; Fable 5.1/Sonnet 5 não são
+    // classificáveis sem o registry, então o conservador vale).
+    expect(classifyThinkingMode("claude-sonnet-4-5-20250929")).toBe("temperature");
+    expect(classifyThinkingMode("claude-haiku-4-5")).toBe("temperature");
+    expect(classifyThinkingMode("claude-fable-5-1")).toBe("temperature");
+    expect(classifyThinkingMode("claude-sonnet-5")).toBe("temperature");
     expect(classifyThinkingMode("lixo-qualquer")).toBe("temperature");
   });
 });

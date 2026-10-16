@@ -28,7 +28,7 @@ const getPreferredModelId = vi.fn(async (_u: string): Promise<string | null> => 
 vi.mock("@/lib/db/queries/users", () => ({
   getPreferredModelId: (u: string) => getPreferredModelId(u),
 }));
-const getDefaultModelId = vi.fn(async () => "claude-sonnet-4-5-20250929");
+const getDefaultModelId = vi.fn(async () => "claude-sonnet-5-5");
 vi.mock("@/lib/db/queries/ai-config", () => ({
   getDefaultModelId: () => getDefaultModelId(),
 }));
@@ -65,7 +65,7 @@ beforeEach(() => {
   vi.clearAllMocks();
   fakeProvider.hasKey.mockReturnValue(true);
   getPreferredModelId.mockResolvedValue(null);
-  getDefaultModelId.mockResolvedValue("claude-sonnet-4-5-20250929");
+  getDefaultModelId.mockResolvedValue("claude-sonnet-5-5");
 });
 
 describe("narratePalpite", () => {
@@ -75,7 +75,7 @@ describe("narratePalpite", () => {
     expect(insertValues.mock.calls[0][0]).toMatchObject({
       status: "ok",
       promptVersion: USER_PALPITE_NARRATE_VERSION,
-      model: "claude-sonnet-4-5-20250929",
+      model: "claude-sonnet-5-5",
     });
   });
 
@@ -130,31 +130,38 @@ describe("narratePalpite", () => {
     });
   });
 
-  it("modelo adaptive: effort low, sem temperature, orçamento de 2000 tokens", async () => {
-    getPreferredModelId.mockResolvedValue("claude-opus-5-5");
+  it.each(["claude-opus-5-5", "claude-sonnet-5-5", "claude-haiku-5-5"])(
+    "%s: effort low sempre (caminho único), sem temperature, orçamento de 2000 tokens",
+    async (id) => {
+      getPreferredModelId.mockResolvedValue(id);
+      await narratePalpite(ARGS);
+      const req = fakeProvider.runAnalysis.mock.calls[0][0];
+      expect(req.model.id).toBe(id);
+      expect(req.effort).toBe("low");
+      expect(req).not.toHaveProperty("temperature");
+      expect(req.maxTokens).toBe(NARRATE_MAX_TOKENS);
+    },
+  );
+
+  it("sem preferência → default global, também com effort low", async () => {
     await narratePalpite(ARGS);
     const req = fakeProvider.runAnalysis.mock.calls[0][0];
-    expect(req.model.id).toBe("claude-opus-5-5");
+    expect(req.model.id).toBe("claude-sonnet-5-5");
     expect(req.effort).toBe("low");
     expect(req).not.toHaveProperty("temperature");
-    expect(req.maxTokens).toBe(NARRATE_MAX_TOKENS);
   });
 
-  it("modelo temperature: temperatura do registry, sem effort", async () => {
-    await narratePalpite(ARGS);
-    const req = fakeProvider.runAnalysis.mock.calls[0][0];
-    expect(req.temperature).toBe(0.3);
-    expect(req).not.toHaveProperty("effort");
-  });
-
-  it("preferência admin-only pra não-admin cai no default; admin usa a preferência", async () => {
+  it("preferência fora do registry cai no default (qualquer audiência); válida é usada", async () => {
+    // getPreferredModelId já resolve ids antigos (lib/db/queries/users.ts); um valor cru
+    // que chegue aqui sem estar no registry não passa o gate de audiência.
     getPreferredModelId.mockResolvedValue("claude-fable-5-1");
     await narratePalpite(ARGS);
-    expect(fakeProvider.runAnalysis.mock.calls[0][0].model.id).toBe(
-      "claude-sonnet-4-5-20250929",
-    );
+    expect(fakeProvider.runAnalysis.mock.calls[0][0].model.id).toBe("claude-sonnet-5-5");
     await narratePalpite({ ...ARGS, isAdmin: true });
-    expect(fakeProvider.runAnalysis.mock.calls[1][0].model.id).toBe("claude-fable-5-1");
+    expect(fakeProvider.runAnalysis.mock.calls[1][0].model.id).toBe("claude-sonnet-5-5");
+    getPreferredModelId.mockResolvedValue("claude-opus-5-5");
+    await narratePalpite(ARGS);
+    expect(fakeProvider.runAnalysis.mock.calls[2][0].model.id).toBe("claude-opus-5-5");
   });
 
   it("nunca lança: erro inesperado vira template", async () => {

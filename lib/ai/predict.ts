@@ -1191,8 +1191,7 @@ async function runPredict(
   }
 
   // 7. Monta a request da análise (provider-neutra; ADR 0027). O cartucho fornece
-  //    system/tool/toolName; os genParams são MODEL-AWARE dentro do adapter
-  //    (maxTokens p/ todos, effort só adaptive, temperature só temperature-mode).
+  //    system/tool/toolName; maxTokens e effort vêm dos genParams (ai_config).
   //    Leitura barata de DB ante a chamada paga ao LLM.
   const daysToKickoff = Math.max(
     0,
@@ -1210,7 +1209,6 @@ async function runPredict(
     toolName: cartridge.toolName,
     maxTokens: genParams.maxTokens,
     effort: genParams.effort,
-    temperature: genParams.temperature,
     deadlineAt,
   };
 
@@ -1257,7 +1255,7 @@ async function runPredict(
   // gasto e sem slot (o hook abaixo cobra o slot).
   if (
     !canFitCall(deadlineAt, {
-      thinkingMode: model.thinkingMode,
+      speed: model.speed,
       maxTokens: genParams.maxTokens,
       effort: genParams.effort,
     })
@@ -2547,7 +2545,6 @@ async function narrateWith<D, C>(
     toolName: cartridge.toolName,
     maxTokens: genParams.maxTokens,
     effort: genParams.effort,
-    temperature: genParams.temperature,
     deadlineAt: args.deadlineAt,
   };
   const aiProvider = getProviderForModel(model);
@@ -2564,7 +2561,7 @@ async function narrateWith<D, C>(
   // (o hook só roda antes de uma chamada de verdade), e uma row de ai_calls com
   // status timeout e custo zero pra prediction ter o aiCallId.
   const fits = canFitCall(args.deadlineAt, {
-    thinkingMode: model.thinkingMode,
+    speed: model.speed,
     maxTokens: genParams.maxTokens,
     effort: genParams.effort,
   });

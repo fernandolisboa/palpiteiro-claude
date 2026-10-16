@@ -3,7 +3,13 @@ import { db } from "@/lib/db";
 import { extractDbCause } from "@/lib/db/pg-error";
 import { persistAiCallError } from "@/lib/ai/ai-call-logging";
 import { calculateCost } from "@/lib/ai/cost";
-import { MODEL_REGISTRY, isAIProvider, type AIModelId } from "@/lib/ai/models";
+import {
+  MODEL_REGISTRY,
+  UTILITY_MODEL_ID,
+  UTILITY_SEARCH_EFFORT,
+  isAIProvider,
+  type AIModelId,
+} from "@/lib/ai/models";
 import { getProviderForModel } from "@/lib/ai/providers";
 import type { AnalysisRequest } from "@/lib/ai/providers/types";
 
@@ -30,9 +36,10 @@ import type {
 // Versão do "cartucho" de notícias (ADR 0017) — grava em ai_calls.promptVersion.
 const NEWS_PROMPT_VERSION = "news_v1";
 
-// Default Haiku: econômico, temperature-mode (web_search_20250305 básica). NÃO admin-
-// gated. maxTokens enxuto — a busca devolve poucos resultados; não geramos prosa longa.
-const NEWS_MODEL_ID: AIModelId = "claude-haiku-4-5";
+// Default Haiku: econômico (web_search_20250305 básica). NÃO admin-gated. maxTokens
+// enxuto — a busca devolve poucos resultados; não geramos prosa longa (o thinking do
+// Haiku 5.5 conta dentro).
+const NEWS_MODEL_ID: AIModelId = UTILITY_MODEL_ID;
 const NEWS_MAX_TOKENS = 4096;
 // max_uses:1 — 1 busca por run (ADR 0032 §4: teto ≈ 20/dia pelo cap de 20 runs).
 const NEWS_MAX_SEARCH_USES = 1;
@@ -125,11 +132,11 @@ export async function getNewsByMatchViaWebSearch(
     system: SYSTEM_PROMPT,
     userMessage: buildUserMessage(ctx),
     // tool/toolName são REQUIRED no shape mas IGNORADOS no modo server-tool (sem submit
-    // forçado). Passamos placeholders válidos; o adapter monta a web search tool.
+    // tool). Passamos placeholders válidos; o adapter monta a web search tool.
     tool: { name: "news_noop", inputSchema: { type: "object" } },
     toolName: "news_noop",
     maxTokens: NEWS_MAX_TOKENS,
-    temperature: model.temperature,
+    effort: UTILITY_SEARCH_EFFORT,
     serverTool: {
       kind: "web_search",
       allowedDomains: [...ALLOWED_DOMAINS],

@@ -245,7 +245,6 @@ beforeEach(async () => {
   getGenerationParams.mockResolvedValue({
     maxTokens: 16000,
     effort: "high",
-    temperature: 0.3,
   });
 });
 
@@ -259,7 +258,7 @@ const call = (over?: Partial<Parameters<typeof generatePalpites>[0]>) =>
     matchId: ids.matchId,
     userId: ids.userId,
     analyses,
-    modelOverride: "claude-haiku-4-5",
+    modelOverride: "claude-haiku-5-5",
     ...over,
   });
 
