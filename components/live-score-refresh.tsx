@@ -29,7 +29,9 @@ export function LiveScoreRefresh() {
       type="button"
       variant="ghost"
       size="xs"
-      className="text-muted-foreground"
+      // Alvo de toque de 44px no celular (min-h-11, como as células da tabela de
+      // mercados); no desktop volta ao tamanho xs.
+      className="min-h-11 text-muted-foreground lg:min-h-0"
       disabled={pending}
       aria-busy={pending}
       onClick={() => startTransition(() => router.refresh())}

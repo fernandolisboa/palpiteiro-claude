@@ -107,6 +107,8 @@ describe("MatchHero — estado ao vivo (#580)", () => {
     expect(html).not.toContain("1 expulso");
     expect(html).toContain("bg-form-loss-fg");
     expect(html).toContain("Atualizar placar");
+    // Alvo de toque de 44px no celular.
+    expect(html).toMatch(/<button[^>]*min-h-11[^>]*>[\s\S]*?Atualizar placar/);
     expect(html).toContain("AO VIVO");
   });
 
