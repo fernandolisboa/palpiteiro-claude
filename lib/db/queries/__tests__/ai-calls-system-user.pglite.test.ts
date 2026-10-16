@@ -92,6 +92,14 @@ describe("ai_calls da sondagem de modelo (ADR 0062)", () => {
     }
   });
 
+  it("o `_` do LIKE é literal: `modelXprobeY…` sem usuário nem jogo → recusado", async () => {
+    await expect(
+      db
+        .insert(schema.aiCalls)
+        .values(row("anthropic", { matchId: null, promptVersion: "modelXprobeYv1" })),
+    ).rejects.toMatchObject({ cause: { code: "23514" } });
+  });
+
   it("Claude sem usuário e com prompt de produção segue recusado", async () => {
     await expect(
       db.insert(schema.aiCalls).values(row("anthropic", { promptVersion: "news_v1" })),

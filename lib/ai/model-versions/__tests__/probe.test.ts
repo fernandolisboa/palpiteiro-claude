@@ -128,14 +128,92 @@ describe("probeModelVersion — chamada de tool", () => {
     expect(await probeModelVersion(SONNET_56)).toMatchObject({ kind: "fail" });
   });
 
+  it("erro de conteúdo duas vezes seguidas → reprova; as duas chamadas logadas", async () => {
+    messagesCreate.mockResolvedValue(answer(6));
+    const out = await probeModelVersion(SONNET_56);
+    expect(out).toMatchObject({
+      kind: "fail",
+      reason: expect.stringContaining("2ª tentativa"),
+      aiCallId: "call-2",
+    });
+    expect(messagesCreate).toHaveBeenCalledTimes(2);
+    expect(inserted.map((r) => [r.model, r.status])).toEqual([
+      ["claude-sonnet-5-6", "invalid_output"],
+      ["claude-sonnet-5-6", "invalid_output"],
+    ]);
+  });
+
+  it("um erro de conteúdo e depois acerto → passa", async () => {
+    messagesCreate
+      .mockResolvedValueOnce(message([{ type: "text", text: "5" }], { stop_reason: "end_turn" }))
+      .mockResolvedValueOnce(answer(5));
+    expect(await probeModelVersion(SONNET_56)).toEqual({ kind: "pass", aiCallId: "call-2" });
+    expect(messagesCreate).toHaveBeenCalledTimes(2);
+    expect(inserted.map((r) => r.status)).toEqual(["tool_missing", "ok"]);
+  });
+
   it.each([
     ["404", new Anthropic.NotFoundError(404, undefined, "nf", headers)],
+    ["403", new Anthropic.PermissionDeniedError(403, undefined, "forbidden", headers)],
     ["400", new Anthropic.BadRequestError(400, undefined, "bad", headers)],
-  ])("%s → reprova (rejeição)", async (_l, e) => {
-    messagesCreate.mockRejectedValue(e);
+  ])("%s na versão e a conferida passa no mesmo pedido → reprova", async (_l, e) => {
+    messagesCreate.mockRejectedValueOnce(e).mockResolvedValueOnce(answer(5));
     const out = await probeModelVersion(SONNET_56);
-    expect(out).toMatchObject({ kind: "fail", reason: expect.stringContaining("recusou o pedido") });
-    expect(inserted[0]).toMatchObject({ status: "provider_error", promptVersion: PROBE_PROMPT_VERSION });
+    expect(out).toMatchObject({
+      kind: "fail",
+      reason: expect.stringMatching(/recusou o pedido.*conferida passou/),
+      // O id é o da chamada da versão, não o da contraprova.
+      aiCallId: "call-1",
+    });
+    expect(messagesCreate.mock.calls.map(([p]) => p.model)).toEqual([
+      "claude-sonnet-5-6",
+      "claude-sonnet-5-5",
+    ]);
+    // A contraprova também é logada (mesmo prompt_version, sem usuário nem jogo).
+    expect(inserted.map((r) => [r.model, r.status, r.promptVersion])).toEqual([
+      ["claude-sonnet-5-6", "provider_error", PROBE_PROMPT_VERSION],
+      ["claude-sonnet-5-5", "ok", PROBE_PROMPT_VERSION],
+    ]);
+    expect(inserted[1]).toMatchObject({ userId: null, matchId: null });
+  });
+
+  it("crédito esgotado (400 na versão E na conferida) → transitório, não reprova", async () => {
+    messagesCreate.mockRejectedValue(
+      new Anthropic.BadRequestError(
+        400,
+        undefined,
+        "Your credit balance is too low to access the Anthropic API.",
+        headers,
+      ),
+    );
+    const out = await probeModelVersion(SONNET_56);
+    expect(out).toMatchObject({
+      kind: "transient",
+      reason: expect.stringContaining("a conferida também falhou"),
+      aiCallId: "call-1",
+    });
+    expect(messagesCreate).toHaveBeenCalledTimes(2);
+    expect(inserted.map((r) => r.model)).toEqual(["claude-sonnet-5-6", "claude-sonnet-5-5"]);
+  });
+
+  it("403 da conta (na versão e na conferida) → transitório", async () => {
+    messagesCreate.mockRejectedValue(
+      new Anthropic.PermissionDeniedError(403, undefined, "forbidden", headers),
+    );
+    expect(await probeModelVersion(SONNET_56)).toMatchObject({ kind: "transient" });
+  });
+
+  it("erro de conteúdo e depois rejeição → contraprova na conferida", async () => {
+    messagesCreate
+      .mockResolvedValueOnce(answer(6))
+      .mockRejectedValueOnce(new Anthropic.BadRequestError(400, undefined, "bad", headers))
+      .mockResolvedValueOnce(answer(5));
+    expect(await probeModelVersion(SONNET_56)).toMatchObject({ kind: "fail", aiCallId: "call-2" });
+    expect(messagesCreate.mock.calls.map(([p]) => p.model)).toEqual([
+      "claude-sonnet-5-6",
+      "claude-sonnet-5-6",
+      "claude-sonnet-5-5",
+    ]);
   });
 
   it.each([
@@ -193,18 +271,48 @@ describe("probeModelVersion — Haiku com web search (S6)", () => {
     ]);
   });
 
-  it("sem bloco de busca → reprova", async () => {
+  const noSearch = () =>
+    message([{ type: "text", text: "sei lá" }], { stop_reason: "end_turn" });
+
+  it("sem bloco de busca duas vezes → reprova", async () => {
     messagesCreate
       .mockResolvedValueOnce(answer(5))
-      .mockResolvedValueOnce(message([{ type: "text", text: "sei lá" }], { stop_reason: "end_turn" }));
+      .mockResolvedValueOnce(noSearch())
+      .mockResolvedValueOnce(noSearch());
     const out = await probeModelVersion(HAIKU_56);
     expect(out).toMatchObject({ kind: "fail", reason: expect.stringContaining("web") });
-    expect(inserted[1]).toMatchObject({ status: "tool_missing" });
+    expect(inserted.map((r) => r.status)).toEqual(["ok", "tool_missing", "tool_missing"]);
+  });
+
+  it("sem bloco de busca uma vez e depois com busca → passa", async () => {
+    messagesCreate
+      .mockResolvedValueOnce(answer(5))
+      .mockResolvedValueOnce(noSearch())
+      .mockResolvedValueOnce(message([searchResult], { stop_reason: "end_turn" }));
+    expect(await probeModelVersion(HAIKU_56)).toEqual({ kind: "pass", aiCallId: "call-3" });
+  });
+
+  it("busca rejeitada na versão e a conferida busca → reprova; contraprova no formato de notícias", async () => {
+    messagesCreate
+      .mockResolvedValueOnce(answer(5))
+      .mockRejectedValueOnce(new Anthropic.BadRequestError(400, undefined, "bad", headers))
+      .mockResolvedValueOnce(message([searchResult], { stop_reason: "end_turn" }));
+    expect(await probeModelVersion(HAIKU_56)).toMatchObject({ kind: "fail", aiCallId: "call-2" });
+    const [control] = messagesCreate.mock.calls[2];
+    expect(control).toMatchObject({
+      model: "claude-haiku-5-5",
+      tools: [{ type: "web_search_20250305", max_uses: 1 }],
+    });
+    expect(inserted[2]).toMatchObject({
+      model: "claude-haiku-5-5",
+      promptVersion: PROBE_SEARCH_PROMPT_VERSION,
+      status: "ok",
+    });
   });
 
   it("a chamada de tool reprovada não chega a buscar", async () => {
-    messagesCreate.mockResolvedValueOnce(answer(4));
+    messagesCreate.mockResolvedValue(answer(4));
     expect(await probeModelVersion(HAIKU_56)).toMatchObject({ kind: "fail" });
-    expect(messagesCreate).toHaveBeenCalledTimes(1);
+    expect(messagesCreate).toHaveBeenCalledTimes(2);
   });
 });

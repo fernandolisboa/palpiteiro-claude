@@ -19,10 +19,14 @@ import { ConfirmPriceForm, RejectVersionButton } from "./model-version-actions";
 // Quantas falhas por família o painel mostra (as mais novas).
 const MAX_FAILURES_SHOWN = 5;
 
-type PanelData = { rows: ModelVersionRow[]; check: ModelVersionsCheck };
+export type ModelVersionsPanelData = {
+  rows: ModelVersionRow[];
+  check: ModelVersionsCheck;
+};
 
-// Telemetria: falha de leitura não pode derrubar a página de configurações.
-async function readData(): Promise<PanelData | null> {
+// Telemetria: falha de leitura não pode derrubar a página de configurações. A página
+// lê uma vez e passa pro painel e pro form do padrão global (preço da versão em uso).
+export async function readModelVersionsPanelData(): Promise<ModelVersionsPanelData | null> {
   try {
     const [rows, check] = await Promise.all([
       listModelVersions(),
@@ -68,6 +72,20 @@ function summaryText(s: ModelVersionsCheckSummary): string[] {
   if (s.error) lines.push(`erro: ${s.error}`);
   if (s.emailError) lines.push(`e-mail não enviado: ${s.emailError}`);
   return lines;
+}
+
+/**
+ * A versão adotada que a família roda agora, ou null (roda a conferida): flag
+ * desligada, leitura que falhou, nada `active` ou row inválida.
+ */
+export function familyModelInUse(
+  family: ModelFamily,
+  data: ModelVersionsPanelData | null,
+  enabled: boolean,
+): AIModel | null {
+  if (!enabled || data === null) return null;
+  const activeRow = data.rows.find((r) => r.family === family && r.status === "active");
+  return activeRow ? adoptedModelFromRow(activeRow) : null;
 }
 
 function FamilyRow({
@@ -171,8 +189,13 @@ function FamilyRow({
  * fallback, o preço (com selo "estimado" até ser confirmado), as falhas e a última
  * checagem do cron.
  */
-export async function ModelVersionsPanel({ enabled }: { enabled: boolean }) {
-  const data = await readData();
+export function ModelVersionsPanel({
+  enabled,
+  data,
+}: {
+  enabled: boolean;
+  data: ModelVersionsPanelData | null;
+}) {
   const now = new Date();
   const checkedAt = data?.check.checkedAt ?? null;
   const summary = data?.check.summary ?? null;

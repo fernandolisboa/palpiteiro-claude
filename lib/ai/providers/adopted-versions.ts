@@ -75,6 +75,7 @@ async function markFailed(model: AIModel, r1: AnalysisErr): Promise<void> {
  *     MESMO pedido. `rejection` é uma pista, não prova: um 400 pode ser crédito
  *     esgotado ou prompt grande demais, e um 403 pode ser permissão da conta. Se a
  *     conferida também falha, devolve essa falha e não marca nada. 529 nunca marca.
+ *     A marcação sai no e-mail da próxima checagem do cron (ADR 0062 §9).
  */
 export function withAdoptedVersions(provider: AIProvider): AIProvider {
   return {

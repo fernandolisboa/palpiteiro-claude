@@ -2,6 +2,8 @@
 -- DROP CONSTRAINT IF EXISTS antes de re-ADD: o DB de preview da Vercel é compartilhado entre branches,
 -- então tudo aqui pode rodar de novo. ai_calls.match_id só afrouxa (DROP NOT NULL), e os CHECKs
 -- mantêm o nome: ai_calls_user_id_system_only passa a aceitar também a sondagem (model_probe_*).
+-- Os CHECKs entram NOT VALID e depois VALIDATE (o VALIDATE varre ai_calls sem bloquear escrita).
+-- No LIKE, o `_` é escapado (escape padrão `\`): `model_probe_%` aceitaria `modelXprobeY…`.
 CREATE TABLE IF NOT EXISTS "model_versions" (
 	"id" text PRIMARY KEY NOT NULL,
 	"family" text NOT NULL,
@@ -31,5 +33,7 @@ DO $$ BEGIN
   ALTER TABLE "model_versions" ADD CONSTRAINT "model_versions_probe_ai_call_id_ai_calls_id_fk" FOREIGN KEY ("probe_ai_call_id") REFERENCES "public"."ai_calls"("id") ON DELETE set null ON UPDATE no action;
 EXCEPTION WHEN duplicate_object THEN NULL; END $$;--> statement-breakpoint
 CREATE UNIQUE INDEX IF NOT EXISTS "model_versions_one_active_per_family" ON "model_versions" USING btree ("family") WHERE status = 'active';--> statement-breakpoint
-ALTER TABLE "ai_calls" ADD CONSTRAINT "ai_calls_match_id_system_only" CHECK ("ai_calls"."match_id" IS NOT NULL OR "ai_calls"."prompt_version" LIKE 'model_probe_%');--> statement-breakpoint
-ALTER TABLE "ai_calls" ADD CONSTRAINT "ai_calls_user_id_system_only" CHECK ("ai_calls"."user_id" IS NOT NULL OR "ai_calls"."provider" = 'typesafe' OR "ai_calls"."prompt_version" LIKE 'model_probe_%');
+ALTER TABLE "ai_calls" ADD CONSTRAINT "ai_calls_match_id_system_only" CHECK ("ai_calls"."match_id" IS NOT NULL OR "ai_calls"."prompt_version" LIKE 'model\_probe\_%') NOT VALID;--> statement-breakpoint
+ALTER TABLE "ai_calls" VALIDATE CONSTRAINT "ai_calls_match_id_system_only";--> statement-breakpoint
+ALTER TABLE "ai_calls" ADD CONSTRAINT "ai_calls_user_id_system_only" CHECK ("ai_calls"."user_id" IS NOT NULL OR "ai_calls"."provider" = 'typesafe' OR "ai_calls"."prompt_version" LIKE 'model\_probe\_%') NOT VALID;--> statement-breakpoint
+ALTER TABLE "ai_calls" VALIDATE CONSTRAINT "ai_calls_user_id_system_only";

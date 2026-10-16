@@ -139,15 +139,17 @@ export const REGRESSION_MIN_DELTA = 0.15;
 
 /**
  * Regressão em produção (S2): a taxa de chamadas ruins da versão adotada desde a
- * adoção, contra a da conferida nos 7 dias anteriores. Com pelo menos 10 chamadas
- * da adotada, regride quando a taxa é ≥ 2× a da conferida E ≥ ela + 15pp.
+ * adoção, contra a da família (conferida ou adotada anterior) nos 7 dias anteriores.
+ * Com pelo menos 10 chamadas de cada lado, regride quando a taxa é ≥ 2× a da base E
+ * ≥ ela + 15pp. Base com menos de 10 chamadas não julga: sem comparação, não rebaixa.
  */
 export function isRegression(
   adopted: CallOutcomeCounts,
   baseline: CallOutcomeCounts,
 ): boolean {
   if (adopted.total < REGRESSION_MIN_CALLS) return false;
+  if (baseline.total < REGRESSION_MIN_CALLS) return false;
   const rate = adopted.bad / adopted.total;
-  const base = baseline.total > 0 ? baseline.bad / baseline.total : 0;
+  const base = baseline.bad / baseline.total;
   return rate >= Math.max(2 * base, base + REGRESSION_MIN_DELTA);
 }

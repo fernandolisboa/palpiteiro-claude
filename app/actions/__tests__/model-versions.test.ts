@@ -86,6 +86,8 @@ describe("confirmModelVersionPriceAction (ADR 0062)", () => {
   it.each([
     ["preço vazio", { ...VALID, inputPricePerMTok: "" }],
     ["preço negativo", { ...VALID, outputPricePerMTok: "-1" }],
+    ["preço de entrada zero", { ...VALID, inputPricePerMTok: "0" }],
+    ["preço de saída zero", { ...VALID, outputPricePerMTok: "0" }],
     ["preço não numérico", { ...VALID, inputPricePerMTok: "abc" }],
     ["preço absurdo", { ...VALID, inputPricePerMTok: "5000" }],
     ["id fora do formato", { ...VALID, id: "gpt-5" }],

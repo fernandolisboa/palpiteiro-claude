@@ -5,6 +5,7 @@ import { db } from "@/lib/db";
 import { truncate } from "@/lib/ai/ai-call-logging";
 import { calculateCost } from "@/lib/ai/cost";
 import {
+  pinnedModelFor,
   UTILITY_EFFORT,
   UTILITY_SEARCH_EFFORT,
   type AIModel,
@@ -22,7 +23,8 @@ import { ALLOWED_DOMAINS } from "@/lib/providers/news/allowed-domains";
 // modelo) com o MESMO corpo de produção (buildAnthropicRequest: thinking adaptive,
 // tool_choice auto, effort explícito). Cada chamada loga em ai_calls sem usuário e sem
 // jogo (CHECKs ai_calls_*_system_only aceitam `model_probe_*`), com o custo pelo preço
-// herdado da conferida.
+// herdado da conferida. Uma sondagem só não reprova (runStep): o erro de conteúdo é
+// repetido, e a rejeição é contraprovada na conferida, também logada.
 
 export const PROBE_PROMPT_VERSION = "model_probe_v1";
 export const PROBE_SEARCH_PROMPT_VERSION = "model_probe_search_v1";
@@ -46,11 +48,27 @@ const ProbeAnswerSchema = z.object({ answer: z.number().int() });
 
 export type ProbeOutcome =
   | { kind: "pass"; aiCallId: string | null }
-  // Reprovação: rejeição da API, tool ausente, saída inválida, resposta errada,
-  // recusa, sem busca na web (Haiku).
+  // Reprovação: a conferida passou no mesmo pedido que a versão teve rejeitado, ou a
+  // versão errou o conteúdo (tool ausente, saída inválida, resposta errada, recusa,
+  // sem busca na web no Haiku) duas vezes seguidas.
   | { kind: "fail"; reason: string; aiCallId: string | null }
-  // Erro transitório (timeout, 429, 5xx, rede): tenta de novo amanhã.
+  // Erro transitório (timeout, 429, 5xx, rede, ou rejeição que a conferida também
+  // sofreu): tenta de novo amanhã; o N5 (7 dias) cuida de quem não sai disso.
   | { kind: "transient"; reason: string; aiCallId: string | null };
+
+// Veredito de UMA chamada. `rejection` (400/403/404) e `content` não reprovam sozinhos:
+// um 400 pode ser crédito esgotado e um 403, permissão da conta; e a dedup por versão
+// (S3) nunca mais revisita uma reprovada, então uma sondagem só não pode condenar.
+type StepVerdict =
+  | { kind: "pass"; aiCallId: string | null }
+  | { kind: "rejection"; reason: string; aiCallId: string | null }
+  | { kind: "content"; reason: string; aiCallId: string | null }
+  | { kind: "transient"; reason: string; aiCallId: string | null };
+
+type ProbeStep = (
+  model: AIModel,
+  deadlineAt: number | undefined,
+) => Promise<StepVerdict>;
 
 async function logProbeCall(args: {
   model: AIModel;
@@ -100,28 +118,24 @@ async function logProbeCall(args: {
   }
 }
 
-// Falha do adapter → reprovação (rejeição, recusa) ou transitória (o resto).
-function failureOutcome(
+// Falha do adapter → rejeição, recusa (conteúdo) ou transitória (o resto).
+function failureVerdict(
   r: Extract<AnalysisResult, { ok: false }>,
   aiCallId: string | null,
-): ProbeOutcome {
+): StepVerdict {
   if (r.rejection) {
     return {
-      kind: "fail",
+      kind: "rejection",
       reason: `a API recusou o pedido (${r.rejection}): ${r.message}`,
       aiCallId,
     };
   }
   if (r.refusal) {
-    return { kind: "fail", reason: `o modelo recusou: ${r.message}`, aiCallId };
+    return { kind: "content", reason: `o modelo recusou: ${r.message}`, aiCallId };
   }
   return { kind: "transient", reason: `${r.status}: ${r.message}`, aiCallId };
 }
-
-async function probeToolCall(
-  model: AIModel,
-  deadlineAt: number | undefined,
-): Promise<ProbeOutcome> {
+const probeToolCall: ProbeStep = async (model, deadlineAt) => {
   const request: AnalysisRequest = {
     model,
     system:
@@ -142,7 +156,7 @@ async function probeToolCall(
       status: r.status,
       errorMessage: r.message,
     });
-    return failureOutcome(r, id);
+    return failureVerdict(r, id);
   }
   if (r.toolInput === undefined) {
     const reason = `não chamou ${PROBE_TOOL_NAME} (stop_reason=${r.stopReason ?? "?"})`;
@@ -153,7 +167,7 @@ async function probeToolCall(
       status: "tool_missing",
       errorMessage: reason,
     });
-    return { kind: "fail", reason, aiCallId: id };
+    return { kind: "content", reason, aiCallId: id };
   }
   const parsed = ProbeAnswerSchema.safeParse(r.toolInput);
   if (!parsed.success || parsed.data.answer !== 5) {
@@ -167,7 +181,7 @@ async function probeToolCall(
       status: "invalid_output",
       errorMessage: reason,
     });
-    return { kind: "fail", reason, aiCallId: id };
+    return { kind: "content", reason, aiCallId: id };
   }
   const id = await logProbeCall({
     model,
@@ -177,15 +191,12 @@ async function probeToolCall(
     errorMessage: null,
   });
   return { kind: "pass", aiCallId: id };
-}
+};
 
 // S6: o Haiku é o modelo de notícias e cartões, que buscam na web. Mesmo formato
 // desses caminhos (effort medium, allowed_domains, max_uses 1); passa só se veio um
 // bloco `web_search_tool_result`. Opus e Sonnet não buscam em produção.
-async function probeWebSearch(
-  model: AIModel,
-  deadlineAt: number | undefined,
-): Promise<ProbeOutcome> {
+const probeWebSearch: ProbeStep = async (model, deadlineAt) => {
   const request: AnalysisRequest = {
     model,
     system:
@@ -212,7 +223,7 @@ async function probeWebSearch(
       status: r.status,
       errorMessage: r.message,
     });
-    return failureOutcome(r, id);
+    return failureVerdict(r, id);
   }
   const searched = (r.contentBlocks ?? []).some(
     (b) =>
@@ -229,7 +240,7 @@ async function probeWebSearch(
       status: "tool_missing",
       errorMessage: reason,
     });
-    return { kind: "fail", reason, aiCallId: id };
+    return { kind: "content", reason, aiCallId: id };
   }
   const id = await logProbeCall({
     model,
@@ -239,17 +250,59 @@ async function probeWebSearch(
     errorMessage: null,
   });
   return { kind: "pass", aiCallId: id };
+};
+
+/**
+ * Um passo da sondagem, com as contraprovas:
+ *  - erro de conteúdo → repete uma vez na versão; só o 2º erro seguido reprova;
+ *  - rejeição → o MESMO pedido na conferida (adapter cru, logado igual): a conferida
+ *    passou → reprova; a conferida também falhou → transitório (conta, crédito);
+ *  - transitório → transitório.
+ * O `aiCallId` é o da chamada da versão que decidiu (nunca o da conferida).
+ */
+async function runStep(
+  step: ProbeStep,
+  model: AIModel,
+  deadlineAt: number | undefined,
+): Promise<ProbeOutcome> {
+  let verdict = await step(model, deadlineAt);
+  if (verdict.kind === "content") {
+    const first = verdict;
+    verdict = await step(model, deadlineAt);
+    if (verdict.kind === "content") {
+      return {
+        kind: "fail",
+        reason: `${first.reason}; 2ª tentativa: ${verdict.reason}`,
+        aiCallId: verdict.aiCallId,
+      };
+    }
+  }
+  if (verdict.kind !== "rejection") return verdict;
+  const control = await step(pinnedModelFor(model.family), deadlineAt);
+  if (control.kind === "pass") {
+    return {
+      kind: "fail",
+      reason: `${verdict.reason}, e a conferida passou`,
+      aiCallId: verdict.aiCallId,
+    };
+  }
+  return {
+    kind: "transient",
+    reason: `${verdict.reason}; a conferida também falhou (${control.reason})`,
+    aiCallId: verdict.aiCallId,
+  };
 }
 
 /**
  * Sonda a versão: a chamada de tool (todas as famílias) e, no Haiku, a busca na web.
- * O `aiCallId` devolvido é o da chamada que decidiu (a última feita).
+ * O `aiCallId` devolvido é o da chamada que decidiu (a última da versão). No pior
+ * caso são 3 chamadas curtas por passo (6 no Haiku): centavos, e só com versão nova.
  */
 export async function probeModelVersion(
   model: AIModel,
   deadlineAt?: number,
 ): Promise<ProbeOutcome> {
-  const tool = await probeToolCall(model, deadlineAt);
+  const tool = await runStep(probeToolCall, model, deadlineAt);
   if (tool.kind !== "pass" || model.family !== "haiku") return tool;
-  return probeWebSearch(model, deadlineAt);
+  return runStep(probeWebSearch, model, deadlineAt);
 }

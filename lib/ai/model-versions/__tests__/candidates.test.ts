@@ -227,9 +227,14 @@ describe("isRegression (S2)", () => {
     expect(isRegression({ total: 10, bad: 2 }, { total: 100, bad: 10 })).toBe(false);
     // 50% contra 40%: +10pp e < 2× → não.
     expect(isRegression({ total: 10, bad: 5 }, { total: 100, bad: 40 })).toBe(false);
-    // Conferida sem chamadas conta 0%: precisa de 15%.
-    expect(isRegression({ total: 20, bad: 3 }, { total: 0, bad: 0 })).toBe(true);
-    expect(isRegression({ total: 20, bad: 2 }, { total: 0, bad: 0 })).toBe(false);
-    expect(isRegression({ total: 20, bad: 0 }, { total: 0, bad: 0 })).toBe(false);
+    // Base 0% (com chamadas): precisa de 15%.
+    expect(isRegression({ total: 20, bad: 3 }, { total: 10, bad: 0 })).toBe(true);
+    expect(isRegression({ total: 20, bad: 2 }, { total: 10, bad: 0 })).toBe(false);
+  });
+
+  it("base com menos de 10 chamadas → não julga", () => {
+    expect(isRegression({ total: 20, bad: 20 }, { total: 0, bad: 0 })).toBe(false);
+    expect(isRegression({ total: 20, bad: 20 }, { total: 9, bad: 0 })).toBe(false);
+    expect(isRegression({ total: 20, bad: 20 }, { total: 10, bad: 0 })).toBe(true);
   });
 });

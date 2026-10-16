@@ -21,9 +21,10 @@ const VersionIdSchema = z
   .max(100)
   .refine((id) => parseClaudeVersion(id) !== null, "versão inválida");
 
-// Preço por 1M de tokens, como a página de preços da Anthropic publica. Teto largo
-// só contra erro de digitação absurdo.
-const PriceSchema = z.coerce.number().nonnegative().max(1000);
+// Preço por 1M de tokens, como a página de preços da Anthropic publica. Zero não vale
+// (zeraria o custo em ai_calls e o teto de gasto). Teto largo só contra erro de
+// digitação absurdo.
+const PriceSchema = z.coerce.number().positive().max(1000);
 
 const ConfirmPriceSchema = z.object({
   id: VersionIdSchema,
@@ -49,7 +50,7 @@ export async function confirmModelVersionPriceAction(
     outputPricePerMTok: formData.get("outputPricePerMTok") || undefined,
   });
   if (!parsed.success) {
-    return { ok: false, error: "Preço inválido: use números, em US$ por 1M de tokens." };
+    return { ok: false, error: "Preço inválido: use números maiores que zero, em US$ por 1M de tokens." };
   }
   const { id, ...price } = parsed.data;
   const updated = await confirmModelVersionPrice(id, price);

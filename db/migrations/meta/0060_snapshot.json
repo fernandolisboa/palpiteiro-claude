@@ -271,11 +271,11 @@
       "checkConstraints": {
         "ai_calls_user_id_system_only": {
           "name": "ai_calls_user_id_system_only",
-          "value": "\"ai_calls\".\"user_id\" IS NOT NULL OR \"ai_calls\".\"provider\" = 'typesafe' OR \"ai_calls\".\"prompt_version\" LIKE 'model_probe_%'"
+          "value": "\"ai_calls\".\"user_id\" IS NOT NULL OR \"ai_calls\".\"provider\" = 'typesafe' OR \"ai_calls\".\"prompt_version\" LIKE 'model\\_probe\\_%'"
         },
         "ai_calls_match_id_system_only": {
           "name": "ai_calls_match_id_system_only",
-          "value": "\"ai_calls\".\"match_id\" IS NOT NULL OR \"ai_calls\".\"prompt_version\" LIKE 'model_probe_%'"
+          "value": "\"ai_calls\".\"match_id\" IS NOT NULL OR \"ai_calls\".\"prompt_version\" LIKE 'model\\_probe\\_%'"
         }
       },
       "isRLSEnabled": false

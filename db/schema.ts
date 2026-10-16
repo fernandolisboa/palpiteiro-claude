@@ -333,11 +333,11 @@ export const aiCalls = pgTable(
     index("ai_calls_user_id_idx").on(t.userId),
     check(
       "ai_calls_user_id_system_only",
-      sql`${t.userId} IS NOT NULL OR ${t.provider} = ${sql.raw(`'${JUDGMENT_PROVIDER_KEY}'`)} OR ${t.promptVersion} LIKE 'model_probe_%'`,
+      sql`${t.userId} IS NOT NULL OR ${t.provider} = ${sql.raw(`'${JUDGMENT_PROVIDER_KEY}'`)} OR ${t.promptVersion} LIKE 'model\\_probe\\_%'`,
     ),
     check(
       "ai_calls_match_id_system_only",
-      sql`${t.matchId} IS NOT NULL OR ${t.promptVersion} LIKE 'model_probe_%'`,
+      sql`${t.matchId} IS NOT NULL OR ${t.promptVersion} LIKE 'model\\_probe\\_%'`,
     ),
   ],
 );

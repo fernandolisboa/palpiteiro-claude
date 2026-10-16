@@ -10,7 +10,11 @@ vi.mock("@/lib/db/queries/model-versions", () => ({
   getModelVersionsCheck: vi.fn(),
 }));
 
-import { ModelVersionsPanel } from "@/app/(app)/admin/settings/model-versions-panel";
+import {
+  familyModelInUse,
+  ModelVersionsPanel,
+  readModelVersionsPanelData,
+} from "@/app/(app)/admin/settings/model-versions-panel";
 import {
   getModelVersionsCheck,
   listModelVersions,
@@ -43,7 +47,8 @@ function row(over: Partial<ModelVersionRow>): ModelVersionRow {
 }
 
 async function render(enabled = true): Promise<string> {
-  return renderToStaticMarkup(await ModelVersionsPanel({ enabled }));
+  const data = await readModelVersionsPanelData();
+  return renderToStaticMarkup(ModelVersionsPanel({ enabled, data }));
 }
 
 beforeEach(() => {
@@ -136,5 +141,28 @@ describe("ModelVersionsPanel (ADR 0062)", () => {
     expect(html).toContain("Não foi possível ler as versões");
     expect(html).toContain("em uso: claude-sonnet-5-5");
     warn.mockRestore();
+  });
+});
+
+describe("familyModelInUse", () => {
+  const data = (rows: ModelVersionRow[]) => ({
+    rows,
+    check: { checkedAt: null, summary: null },
+  });
+
+  it("a adotada `active` da família, com o preço dela e o selo de estimado", () => {
+    const m = familyModelInUse("sonnet", data([row({})]), true);
+    expect(m).toMatchObject({
+      id: "claude-sonnet-5-6",
+      inputPricePerMTok: 2,
+      adopted: { priceEstimated: true },
+    });
+  });
+
+  it("flag desligada, leitura que falhou ou nada ativo → null (roda a conferida)", () => {
+    expect(familyModelInUse("sonnet", data([row({})]), false)).toBeNull();
+    expect(familyModelInUse("sonnet", null, true)).toBeNull();
+    expect(familyModelInUse("opus", data([row({})]), true)).toBeNull();
+    expect(familyModelInUse("sonnet", data([row({ status: "failed" })]), true)).toBeNull();
   });
 });

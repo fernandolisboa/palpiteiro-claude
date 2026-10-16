@@ -1,4 +1,4 @@
-import { and, desc, eq, gte, inArray, lt, ne, notLike, sql } from "drizzle-orm";
+import { and, desc, eq, gt, gte, inArray, lt, lte, ne, notLike, sql } from "drizzle-orm";
 
 import { aiCalls, aiConfig, modelVersions } from "@/db/schema";
 import { db } from "@/lib/db";
@@ -166,6 +166,27 @@ export async function confirmModelVersionPrice(
   return rows.length > 0;
 }
 
+/**
+ * Versões que viraram `failed` em (from, to]: o cron avisa por e-mail as que o
+ * wrapper do seam marcou entre uma checagem e outra (ADR 0062 §9).
+ */
+export async function listVersionsFailedBetween(
+  from: Date,
+  to: Date,
+): Promise<ModelVersionRow[]> {
+  return db
+    .select()
+    .from(modelVersions)
+    .where(
+      and(
+        eq(modelVersions.status, "failed"),
+        gt(modelVersions.updatedAt, from),
+        lte(modelVersions.updatedAt, to),
+      ),
+    )
+    .orderBy(modelVersions.updatedAt, modelVersions.id);
+}
+
 export type ModelVersionsCheck = {
   checkedAt: Date | null;
   summary: ModelVersionsCheckSummary | null;
@@ -211,16 +232,20 @@ export async function setModelVersionsCheck(
     });
 }
 
+// `_` é curinga no LIKE: escapado (escape padrão `\`), igual aos CHECKs de ai_calls.
+const PROBE_PROMPT_VERSION_LIKE = "model\\_probe\\_%";
+
 /**
- * Chamadas de produção de um modelo numa janela, e quantas saíram ruins (S2):
- * `tool_missing`, `invalid_output` ou recusa do modelo (`stop_reason: refusal` na
- * resposta crua). A sondagem (`model_probe_*`) fica de fora.
+ * Chamadas de produção de um ou mais modelos numa janela, e quantas saíram ruins
+ * (S2): `tool_missing`, `invalid_output` ou recusa do modelo (`stop_reason: refusal`
+ * na resposta crua). A sondagem (`model_probe_*`) fica de fora.
  */
 export async function countCallOutcomes(args: {
-  model: string;
+  models: readonly string[];
   from: Date;
   to: Date;
 }): Promise<CallOutcomeCounts> {
+  if (args.models.length === 0) return { total: 0, bad: 0 };
   const [row] = await db
     .select({
       total: sql<number>`count(*)::int`,
@@ -232,11 +257,11 @@ export async function countCallOutcomes(args: {
     .from(aiCalls)
     .where(
       and(
-        eq(aiCalls.model, args.model),
+        inArray(aiCalls.model, [...args.models]),
         eq(aiCalls.provider, "anthropic"),
         gte(aiCalls.createdAt, args.from),
         lt(aiCalls.createdAt, args.to),
-        notLike(aiCalls.promptVersion, "model_probe_%"),
+        notLike(aiCalls.promptVersion, PROBE_PROMPT_VERSION_LIKE),
       ),
     );
   return { total: Number(row?.total ?? 0), bad: Number(row?.bad ?? 0) };

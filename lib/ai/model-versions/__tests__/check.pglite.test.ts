@@ -403,6 +403,189 @@ describe("runModelVersionCheck", () => {
   });
 });
 
+describe("runModelVersionCheck — ajustes do review", () => {
+  // users/matches não são limpos entre testes: e-mail e externalId únicos.
+  let seq = 0;
+  async function seedCallFixtures() {
+    seq += 1;
+    const [user] = await realDb
+      .insert(schema.users)
+      .values({ email: `r${seq}@x.com` })
+      .returning({ id: schema.users.id });
+    const [match] = await realDb
+      .insert(schema.matches)
+      .values({
+        externalId: `ext-rev-${seq}`,
+        league: "brasileirao_a",
+        homeTeam: "A",
+        awayTeam: "B",
+        kickoffAt: T0,
+      })
+      .returning({ id: schema.matches.id });
+    return (model: string, status: "ok" | "tool_missing", at: Date) => ({
+      userId: user.id,
+      matchId: match.id,
+      provider: "anthropic",
+      model,
+      promptVersion: "over_under_v3.0",
+      inputPayload: {},
+      outputPayload: {},
+      inputTokens: 1,
+      outputTokens: 1,
+      latencyMs: 1,
+      costUsd: "0",
+      status,
+      createdAt: at,
+    });
+  }
+
+  // 5.6 adotada em T0, 5.7 em T1: nos 7 dias antes de T1 quem serviu o Sonnet foi a 5.6.
+  const T1 = new Date(T0.getTime() + 3 * DAY);
+  async function adoptTwice() {
+    listMock.mockResolvedValue([api("claude-sonnet-5-6"), ...PINNED]);
+    probeMock.mockResolvedValue({ kind: "pass", aiCallId: null });
+    await runModelVersionCheck(T0);
+    listMock.mockResolvedValue([api("claude-sonnet-5-7"), api("claude-sonnet-5-6"), ...PINNED]);
+    await runModelVersionCheck(T1);
+    expect((await rowsById())["claude-sonnet-5-7"].status).toBe("active");
+  }
+
+  it("S2: a base é o que a FAMÍLIA serviu antes da adoção (a adotada anterior conta)", async () => {
+    await adoptTwice();
+    const call = await seedCallFixtures();
+    const before = new Date(T1.getTime() - DAY);
+    const after = new Date(T1.getTime() + 60_000);
+    await realDb.insert(schema.aiCalls).values([
+      ...Array.from({ length: 19 }, () => call("claude-sonnet-5-6", "ok", before)),
+      call("claude-sonnet-5-6", "tool_missing", before),
+      ...Array.from({ length: 6 }, () => call("claude-sonnet-5-7", "ok", after)),
+      ...Array.from({ length: 4 }, () => call("claude-sonnet-5-7", "tool_missing", after)),
+    ]);
+    const r = await runModelVersionCheck(new Date(T1.getTime() + DAY + 1));
+    expect(r).toMatchObject({
+      summary: {
+        failed: [
+          {
+            id: "claude-sonnet-5-7",
+            reason: expect.stringContaining("contra 1/20 (5%) da família"),
+          },
+        ],
+      },
+    });
+    expect((await rowsById())["claude-sonnet-5-7"].status).toBe("failed");
+  });
+
+  it("S2: base com menos de 10 chamadas → não julga (a adotada segue)", async () => {
+    await adoptTwice();
+    const call = await seedCallFixtures();
+    const before = new Date(T1.getTime() - DAY);
+    const after = new Date(T1.getTime() + 60_000);
+    await realDb.insert(schema.aiCalls).values([
+      ...Array.from({ length: 9 }, () => call("claude-sonnet-5-6", "ok", before)),
+      ...Array.from({ length: 10 }, () => call("claude-sonnet-5-7", "tool_missing", after)),
+    ]);
+    await runModelVersionCheck(new Date(T1.getTime() + DAY + 1));
+    expect((await rowsById())["claude-sonnet-5-7"].status).toBe("active");
+  });
+
+  it("§9: versão que o wrapper marcou `failed` entre checagens sai no e-mail, uma vez só; a rejeição do admin não", async () => {
+    listMock.mockResolvedValue([api("claude-sonnet-5-6"), api("claude-haiku-5-6"), ...PINNED]);
+    probeMock.mockResolvedValue({ kind: "pass", aiCallId: null });
+    await runModelVersionCheck(T0);
+    expect(emailMock.mock.calls[0][0].failed).toEqual([]);
+
+    // O seam marca a Sonnet 5.6 (como withAdoptedVersions faz); o admin rejeita a Haiku.
+    const seamReason = "a API recusou o pedido (400), e a conferida passou: bad";
+    await markModelVersionFailed("claude-sonnet-5-6", seamReason, new Date(T0.getTime() + 3600_000));
+    await rejectModelVersion("claude-haiku-5-6", new Date(T0.getTime() + 7200_000));
+
+    await runModelVersionCheck(new Date(T0.getTime() + DAY));
+    expect(emailMock.mock.calls[1][0].failed).toEqual([
+      { id: "claude-sonnet-5-6", reason: seamReason },
+    ]);
+
+    await runModelVersionCheck(new Date(T0.getTime() + 2 * DAY));
+    expect(emailMock.mock.calls[2][0].failed).toEqual([]);
+  });
+
+  it("§9: a reprovação desta checagem não sai duplicada no e-mail", async () => {
+    listMock.mockResolvedValue([...PINNED]);
+    await runModelVersionCheck(T0);
+    listMock.mockResolvedValue([api("claude-opus-5-6"), ...PINNED]);
+    probeMock.mockResolvedValue({ kind: "fail", reason: "resposta errada (6)", aiCallId: null });
+    await runModelVersionCheck(new Date(T0.getTime() + DAY));
+    expect(emailMock.mock.calls[1][0].failed).toEqual([
+      { id: "claude-opus-5-6", reason: "sondagem: resposta errada (6)" },
+    ]);
+  });
+
+  it("§9: listagem fora do ar ainda avisa a falha marcada pelo seam", async () => {
+    listMock.mockResolvedValue([api("claude-sonnet-5-6"), ...PINNED]);
+    probeMock.mockResolvedValue({ kind: "pass", aiCallId: null });
+    await runModelVersionCheck(T0);
+    await markModelVersionFailed("claude-sonnet-5-6", "404", new Date(T0.getTime() + 3600_000));
+    listMock.mockRejectedValue(new Error("api fora"));
+    const r = await runModelVersionCheck(new Date(T0.getTime() + DAY));
+    expect(r.status).toBe("listing_failed");
+    expect(emailMock.mock.lastCall?.[0].failed).toEqual([{ id: "claude-sonnet-5-6", reason: "404" }]);
+  });
+
+  it("N5: o transitório não reavaliado (flag desligada, erro no meio) segue com o `since`; o snapshot conta os mesmos dias", async () => {
+    listMock.mockResolvedValue([api("claude-sonnet-5-6"), ...PINNED]);
+    probeMock.mockResolvedValue({ kind: "transient", reason: "timeout: t", aiCallId: null });
+    await runModelVersionCheck(T0);
+
+    // Dia 3: flag desligada, nada sondado, o transitório segue.
+    await realDb
+      .update(schema.aiConfig)
+      .set({ enableAutoModelVersions: false })
+      .where(eq(schema.aiConfig.id, 1));
+    const r3 = await runModelVersionCheck(new Date(T0.getTime() + 3 * DAY));
+    expect(r3).toMatchObject({
+      status: "disabled",
+      summary: { transient: [{ id: "claude-sonnet-5-6", since: T0.toISOString() }] },
+    });
+    await realDb
+      .update(schema.aiConfig)
+      .set({ enableAutoModelVersions: true })
+      .where(eq(schema.aiConfig.id, 1));
+
+    // Dia 5: a família lança no meio, o transitório segue.
+    probeMock.mockRejectedValueOnce(new Error("boom"));
+    const r5 = await runModelVersionCheck(new Date(T0.getTime() + 5 * DAY));
+    expect(r5).toMatchObject({
+      summary: {
+        error: expect.stringContaining("sonnet: boom"),
+        transient: [{ id: "claude-sonnet-5-6", since: T0.toISOString() }],
+      },
+    });
+
+    // Dia 7: só o snapshot datado da mesma versão na listagem → mesma contagem, reprova.
+    listMock.mockResolvedValue([api("claude-sonnet-5-6-20261101"), ...PINNED]);
+    const r7 = await runModelVersionCheck(new Date(T0.getTime() + 7 * DAY));
+    expect(r7).toMatchObject({
+      summary: {
+        transient: [],
+        failed: [
+          {
+            id: "claude-sonnet-5-6-20261101",
+            reason: expect.stringContaining("transitório persistente"),
+          },
+        ],
+      },
+    });
+  });
+
+  it("N5: família avaliada sem o candidato antigo larga o transitório", async () => {
+    listMock.mockResolvedValue([api("claude-sonnet-5-6"), ...PINNED]);
+    probeMock.mockResolvedValue({ kind: "transient", reason: "timeout: t", aiCallId: null });
+    await runModelVersionCheck(T0);
+    listMock.mockResolvedValue([...PINNED]);
+    const r = await runModelVersionCheck(new Date(T0.getTime() + DAY));
+    expect(r).toMatchObject({ summary: { transient: [] } });
+  });
+});
+
 describe("queries de model_versions", () => {
   async function seedActive(id = "claude-haiku-5-6") {
     listMock.mockResolvedValue([api(id), ...PINNED]);

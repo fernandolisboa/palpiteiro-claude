@@ -1,4 +1,9 @@
-import { MODEL_REGISTRY, pinnedModelFor, type ModelFamily } from "@/lib/ai/models";
+import {
+  MODEL_REGISTRY,
+  parseClaudeVersion,
+  pinnedModelFor,
+  type ModelFamily,
+} from "@/lib/ai/models";
 import { hasKey } from "@/lib/ai/providers/anthropic/client";
 import {
   listApiModels,
@@ -10,8 +15,10 @@ import {
   countCallOutcomes,
   getModelVersionsCheck,
   listModelVersions,
+  listVersionsFailedBetween,
   markModelVersionFailed,
   recordFailedVersion,
+  REJECTED_BY_ADMIN_REASON,
   setModelVersionsCheck,
   type ModelVersionInput,
   type ModelVersionRow,
@@ -37,7 +44,8 @@ import {
 // Orquestrador do cron check-model-versions (ADR 0062, PLAN-608 §5 + §11). Uma vez por
 // dia: lista os modelos da API, confere se as conferidas seguem lá (S8), rebaixa a
 // versão adotada que regrediu em produção (S2), e pra cada família sonda o candidato
-// novo e o adota se passar. Avisa por e-mail (S1) o que mudou.
+// novo e o adota se passar. Avisa por e-mail (S1) o que mudou, inclusive a versão que
+// o wrapper do seam reprovou em produção desde a checagem anterior.
 
 const DAY_MS = 24 * 60 * 60 * 1000;
 // Prazo da checagem inteira (a rota tem maxDuration 300).
@@ -75,6 +83,9 @@ function versionInput(
 }
 
 // S2: rebaixa as versões adotadas há mais de 24h que regrediram. Devolve as rebaixadas.
+// A base é tudo que a FAMÍLIA serviu nos 7 dias antes da adoção (a conferida ou a
+// adotada anterior, que já tem row): com uma adotada em uso, a conferida quase não
+// roda, e contar só ela deixaria a base vazia.
 async function demoteRegressions(
   rows: readonly ModelVersionRow[],
   now: Date,
@@ -84,20 +95,23 @@ async function demoteRegressions(
     if (row.status !== "active" || row.adoptedAt === null) continue;
     if (now.getTime() - row.adoptedAt.getTime() < REGRESSION_MIN_AGE_MS) continue;
     const family = row.family as ModelFamily;
-    const pinned = pinnedModelFor(family);
+    const familyIds = new Set([
+      pinnedModelFor(family).id,
+      ...rows.filter((r) => r.family === family && r.id !== row.id).map((r) => r.id),
+    ]);
     const adopted = await countCallOutcomes({
-      model: row.id,
+      models: [row.id],
       from: row.adoptedAt,
       to: now,
     });
     const baseline = await countCallOutcomes({
-      model: pinned.id,
+      models: [...familyIds],
       from: new Date(row.adoptedAt.getTime() - REGRESSION_BASELINE_MS),
       to: row.adoptedAt,
     });
     if (!isRegression(adopted, baseline)) continue;
     const pct = (n: number, d: number) => (d > 0 ? Math.round((100 * n) / d) : 0);
-    const reason = `regressão: ${adopted.bad}/${adopted.total} chamadas ruins (${pct(adopted.bad, adopted.total)}%) contra ${baseline.bad}/${baseline.total} (${pct(baseline.bad, baseline.total)}%) da conferida nos 7 dias antes`;
+    const reason = `regressão: ${adopted.bad}/${adopted.total} chamadas ruins (${pct(adopted.bad, adopted.total)}%) contra ${baseline.bad}/${baseline.total} (${pct(baseline.bad, baseline.total)}%) da família nos 7 dias antes`;
     if (await markModelVersionFailed(row.id, reason, now)) {
       demoted.push({ id: row.id, reason });
     }
@@ -115,9 +129,9 @@ export async function runModelVersionCheck(
   if (!hasKey()) return { status: "skipped", reason: "no_key" };
   const deadlineAt = Date.now() + CHECK_BUDGET_MS;
 
-  const previous = await getModelVersionsCheck()
-    .then((c) => c.summary)
-    .catch(() => null);
+  const previousCheck = await getModelVersionsCheck().catch(() => null);
+  const previous = previousCheck?.summary ?? null;
+  const previousCheckedAt = previousCheck?.checkedAt ?? null;
 
   let apiModels: ApiModelInfo[];
   try {
@@ -132,6 +146,13 @@ export async function runModelVersionCheck(
       pinnedMissing: previous?.pinnedMissing ?? [],
       error: `listagem da API falhou: ${message(err)}`,
     };
+    // As marcadas pelo wrapper desde a última checagem saem no e-mail mesmo assim:
+    // o checkedAt avança, e a próxima não as veria.
+    const events: ModelVersionsAlertEvents = { adopted: [], failed: [], pinnedMissing: [] };
+    await addSeamFailures(events, previousCheckedAt, now).catch((e: unknown) => {
+      summary.error = `${summary.error}; falhas do seam: ${message(e)}`.slice(0, 2000);
+    });
+    await sendAlert(events, summary);
     await setModelVersionsCheck(summary, now);
     return { status: summary.status, summary };
   }
@@ -155,6 +176,7 @@ export async function runModelVersionCheck(
     pinnedMissing: newlyMissing,
   };
   const errors: string[] = [];
+  const evaluated = new Set<ModelFamily>();
 
   if (!(await getEnableAutoModelVersions())) {
     summary.status = "disabled";
@@ -179,14 +201,31 @@ export async function runModelVersionCheck(
       }
       try {
         await checkFamily({ family, apiModels, rows, now, deadlineAt, previous, summary, events });
+        evaluated.add(family);
       } catch (err) {
         errors.push(`${family}: ${message(err)}`);
       }
     }
   }
+  carryOverTransient(previous, evaluated, summary);
+
+  try {
+    await addSeamFailures(events, previousCheckedAt, now);
+  } catch (err) {
+    errors.push(`falhas do seam: ${message(err)}`);
+  }
 
   if (errors.length > 0) summary.error = errors.join("; ").slice(0, 2000);
 
+  await sendAlert(events, summary);
+  await setModelVersionsCheck(summary, now);
+  return { status: summary.status, summary };
+}
+
+async function sendAlert(
+  events: ModelVersionsAlertEvents,
+  summary: ModelVersionsCheckSummary,
+): Promise<void> {
   try {
     await sendModelVersionsAlert(events);
   } catch (err) {
@@ -199,9 +238,59 @@ export async function runModelVersionCheck(
       }),
     );
   }
+}
 
-  await setModelVersionsCheck(summary, now);
-  return { status: summary.status, summary };
+/**
+ * ADR 0062 §9: a versão que o wrapper do seam marcou `failed` em produção (rejeição
+ * com a conferida passando) entre a checagem anterior e esta entra no e-mail. Janela
+ * (checkedAt anterior, now]: o que esta checagem marca tem updatedAt = now e já está
+ * em `events`; o que for marcado depois de `now` fica pra próxima. A rejeição do admin
+ * fica de fora (foi ele quem fez).
+ */
+async function addSeamFailures(
+  events: ModelVersionsAlertEvents,
+  previousCheckedAt: Date | null,
+  now: Date,
+): Promise<void> {
+  if (previousCheckedAt === null) return;
+  const reported = new Set(events.failed.map((f) => f.id));
+  const rows = await listVersionsFailedBetween(previousCheckedAt, now);
+  for (const row of rows) {
+    if (reported.has(row.id) || row.failureReason === REJECTED_BY_ADMIN_REASON) continue;
+    events.failed.push({ id: row.id, reason: row.failureReason ?? "reprovada" });
+  }
+}
+
+// N5: a chave do transitório é a versão (família, major, minor), não o id: o alias e
+// o snapshot datado da mesma versão contam os mesmos dias.
+function sameVersion(a: string, b: string): boolean {
+  const va = parseClaudeVersion(a);
+  const vb = parseClaudeVersion(b);
+  return (
+    va !== null &&
+    vb !== null &&
+    va.family === vb.family &&
+    va.major === vb.major &&
+    va.minor === vb.minor
+  );
+}
+
+/**
+ * N5: o transitório da checagem anterior cuja família NÃO foi avaliada nesta (flag
+ * desligada, prazo esgotado, erro no meio) segue no resumo com o `since` original,
+ * senão a contagem de 7 dias recomeçaria pra sempre. Família avaliada já decidiu o
+ * próprio transitório (manteve, adotou, reprovou ou o candidato mudou).
+ */
+function carryOverTransient(
+  previous: ModelVersionsCheckSummary | null,
+  evaluated: ReadonlySet<ModelFamily>,
+  summary: ModelVersionsCheckSummary,
+): void {
+  for (const t of previous?.transient ?? []) {
+    if (evaluated.has(t.family)) continue;
+    if (summary.transient.some((s) => sameVersion(s.id, t.id))) continue;
+    summary.transient.push(t);
+  }
 }
 
 async function checkFamily(args: {
@@ -236,7 +325,7 @@ async function checkFamily(args: {
   };
   // N5: erro transitório conta os dias desde a primeira vez (carregado no resumo).
   const transient = async (reason: string, probeAiCallId: string | null) => {
-    const prev = args.previous?.transient.find((t) => t.id === candidate.id);
+    const prev = args.previous?.transient.find((t) => sameVersion(t.id, candidate.id));
     const since = prev?.since ?? now.toISOString();
     const elapsed = now.getTime() - Date.parse(since);
     if (Number.isFinite(elapsed) && elapsed >= TRANSIENT_FAIL_AFTER_MS) {
