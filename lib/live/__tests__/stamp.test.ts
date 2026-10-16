@@ -7,6 +7,7 @@ import {
   readLiveStamp,
   type LiveStampInput,
 } from "@/lib/live/stamp";
+import { LIVE_MODEL_VERSION } from "@/lib/quant/in-play";
 
 const INPUT: LiveStampInput = {
   source: "api_football",
@@ -126,7 +127,7 @@ describe("liveStampFromState (registro ao vivo, #592)", () => {
 
   it("com modelo: leva as entradas do modelo em jogo", () => {
     const stamp = liveStampFromState(state, recordedAt, {
-      liveModelVersion: "inplay_v1",
+      liveModelVersion: LIVE_MODEL_VERSION,
       r: 0.3,
       muHome: 0.4,
       muAway: 0.3,
@@ -139,7 +140,7 @@ describe("liveStampFromState (registro ao vivo, #592)", () => {
         baseCheckedAt: null,
       },
     });
-    expect(stamp.inPlay?.liveModelVersion).toBe("inplay_v1");
+    expect(stamp.inPlay?.liveModelVersion).toBe(LIVE_MODEL_VERSION);
     expect(stamp.inPlay?.muHome).toBe(0.4);
     expect(readLiveStamp(stamp)).toEqual(stamp);
   });
