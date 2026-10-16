@@ -1,18 +1,10 @@
 import { beforeEach, describe, expect, it, vi } from "vitest";
 
-import type { AIModel } from "@/lib/ai/models";
+import { MODEL_REGISTRY, UTILITY_MODEL_ID, type AIModel } from "@/lib/ai/models";
 import type { AnalysisRequest } from "@/lib/ai/providers/types";
 
-// Modelo temperature-mode (Haiku do registry) — o que o provider de notícias usa.
-const HAIKU: AIModel = {
-  id: "claude-haiku-4-5",
-  provider: "anthropic",
-  label: "Haiku fixture",
-  inputPricePerMTok: 1,
-  outputPricePerMTok: 5,
-  thinkingMode: "temperature",
-  userSelectable: false,
-};
+// O modelo das tarefas internas (Haiku 5.5) — o que o provider de notícias usa.
+const HAIKU: AIModel = MODEL_REGISTRY[UTILITY_MODEL_ID];
 
 // Mocka SÓ o shim @/lib/ai/anthropic (boundary mockável): o adapter importa
 // getAnthropicClient DAQUI. hasKey vem de ./client (não relevante aqui — chamamos
@@ -34,7 +26,7 @@ function serverToolRequest(): AnalysisRequest {
     tool: { name: "news_noop", inputSchema: { type: "object" } },
     toolName: "news_noop",
     maxTokens: 4096,
-    temperature: 0.3,
+    effort: "medium",
     serverTool: {
       kind: "web_search",
       allowedDomains: ["ge.globo.com"],
@@ -77,6 +69,22 @@ describe("anthropic adapter — modo server-tool (web search, ADR 0032 / #377)",
     expect(res.toolInput).toBeUndefined();
     expect(res.usage).toEqual({ inputTokens: 100, outputTokens: 50 });
     expect(messagesCreate).toHaveBeenCalledTimes(1);
+  });
+
+  it("corpo do ramo server-tool: thinking adaptive + effort, sem temperature; opções por request", async () => {
+    messagesCreate.mockResolvedValue(message({}));
+    await anthropicProvider.runAnalysis(serverToolRequest());
+    const [body, opts] = messagesCreate.mock.calls[0] as [
+      Record<string, unknown>,
+      unknown,
+    ];
+    expect(body.model).toBe("claude-haiku-5-5");
+    expect(body.thinking).toEqual({ type: "adaptive" });
+    expect(body.output_config).toEqual({ effort: "medium" });
+    expect(body.tool_choice).toEqual({ type: "auto" });
+    expect(body).not.toHaveProperty("temperature");
+    // 4096 em medium → 15s + 2048/60 s ≈ 49s → piso de 60s; retries do client.
+    expect(opts).toEqual({ timeout: 60_000, maxRetries: 2 });
   });
 
   it("pause_turn → reenvia [user, {assistant, content}] SEM 'Continue'; acumula tokens", async () => {

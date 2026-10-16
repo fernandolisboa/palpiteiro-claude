@@ -5,11 +5,8 @@ import {
   GENERATION_PARAM_DEFAULTS,
   isEffort,
   isValidMaxTokens,
-  isValidTemperature,
   MAX_TOKENS_MAX,
   MAX_TOKENS_MIN,
-  TEMPERATURE_MAX,
-  TEMPERATURE_MIN,
 } from "@/lib/ai/generation-params";
 
 describe("generation-params — validação pura (ADR 0008 emenda 2)", () => {
@@ -17,12 +14,12 @@ describe("generation-params — validação pura (ADR 0008 emenda 2)", () => {
     expect(EFFORT_LEVELS).toEqual(["low", "medium", "high", "xhigh", "max"]);
   });
 
-  it("defaults espelham o seed da migration (16000 / high / 0.3)", () => {
+  it("defaults espelham o seed da migration (16000 / high), sem temperature (ADR 0061)", () => {
     expect(GENERATION_PARAM_DEFAULTS).toEqual({
       maxTokens: 16000,
       effort: "high",
-      temperature: 0.3,
     });
+    expect("temperature" in GENERATION_PARAM_DEFAULTS).toBe(false);
   });
 
   it("isEffort aceita só os níveis do registry", () => {
@@ -43,14 +40,5 @@ describe("generation-params — validação pura (ADR 0008 emenda 2)", () => {
     expect(isValidMaxTokens(MAX_TOKENS_MAX + 1)).toBe(false);
     expect(isValidMaxTokens(1024.5)).toBe(false);
     expect(isValidMaxTokens(Number.NaN)).toBe(false);
-  });
-
-  it("isValidTemperature: finito dentro de [0,1]", () => {
-    expect(isValidTemperature(TEMPERATURE_MIN)).toBe(true);
-    expect(isValidTemperature(TEMPERATURE_MAX)).toBe(true);
-    expect(isValidTemperature(0.3)).toBe(true);
-    expect(isValidTemperature(-0.1)).toBe(false);
-    expect(isValidTemperature(1.1)).toBe(false);
-    expect(isValidTemperature(Number.NaN)).toBe(false);
   });
 });

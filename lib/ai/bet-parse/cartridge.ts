@@ -5,7 +5,7 @@ import type { ToolDef } from "@/lib/ai/providers/types";
 // cartucho (systemPrompt versionado + ToolDef neutro + Zod .strict()), mas é
 // menor: não tem descriptor/seleções/edge — só extrai pernas tipadas de texto NL.
 // A proveniência em ai_calls é a `promptVersion` abaixo (a tabela não tem coluna
-// `purpose`). Modelo: Haiku 4.5 via seam AIProvider — NUNCA SDK direto, NUNCA por
+// `purpose`). Modelo: Haiku 5.5 (UTILITY_MODEL_ID) via seam AIProvider — NUNCA SDK direto, NUNCA por
 // predict.ts (parse não é análise). Fase 2: união completa dos kinds.
 
 export const BET_PARSE_VERSION = "bet_parse_v2";

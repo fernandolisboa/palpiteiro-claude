@@ -173,6 +173,7 @@ import { computeMarketImpliedProbabilities } from "@/lib/odds/implied-probabilit
 
 import { AnalysisDeadlineError } from "@/lib/ai/deadline";
 import { predict, PredictError } from "@/lib/ai/predict";
+import { MODEL_REGISTRY, resolveModelId } from "@/lib/ai/models";
 import { resetDixonColesFlagMemo } from "@/lib/ratings/model-scoreline";
 import { pOverUnder, scorelineMatrix } from "@/lib/quant/scoreline-model";
 
@@ -282,7 +283,7 @@ function anthropicMessage() {
     id: "msg-1",
     type: "message",
     role: "assistant",
-    model: "claude-sonnet-4-5-20250929",
+    model: "claude-sonnet-5-5",
     stop_reason: "tool_use",
     stop_sequence: null,
     content: [
@@ -330,11 +331,10 @@ function setHappyPath() {
     ]),
   });
   // Default global resolvido pelo DB quando não há override nem preferência.
-  getDefaultModelId.mockResolvedValue("claude-sonnet-4-5-20250929");
+  getDefaultModelId.mockResolvedValue("claude-sonnet-5-5");
   getGenerationParams.mockResolvedValue({
     maxTokens: 16000,
     effort: "high",
-    temperature: 0.3,
   });
   // Sem preferência por padrão — cada teste que exercita a preferência sobrescreve.
   getPreferredModelId.mockResolvedValue(null);
@@ -1256,13 +1256,20 @@ describe("predict() — over_under_v2.4: snapshot literal do prompt (guard anti-
   });
 });
 
+// Corpo único de request (ADR 0061): todo modelo do registry é adaptive, então a
+// request leva thinking adaptive + tool_choice auto + effort em output_config e
+// NUNCA temperature (a API rejeita com 400). Golden compartilhado pelos testes de
+// resolução abaixo.
+function expectAdaptiveRequestShape(arg: Record<string, unknown>) {
+  expect(arg.thinking).toEqual({ type: "adaptive" });
+  expect(arg.tool_choice).toEqual({ type: "auto" });
+  expect(arg.output_config).toEqual({ effort: "high" });
+  expect(arg).not.toHaveProperty("temperature");
+}
+
 describe("predict() — model resolution (override > DB default) + model-aware request", () => {
-  it("no override + DB default Sonnet 4.5 → Anthropic called with sonnet id + temperature 0.3 (default real, #374)", async () => {
-    // Pós-#374 o default global é o Sonnet 4.5 (caminho temperature). A cobertura
-    // do request-SHAPE adaptive (thinking + tool_choice auto = guarda do 400) foi
-    // RELOCADA pra request-builder.test.ts (fixture inline), já que nenhum modelo
-    // de registry alcança mais o ramo adaptive.
-    getDefaultModelId.mockResolvedValue("claude-sonnet-4-5-20250929");
+  it("no override + DB default Sonnet 5.5 → Anthropic called with sonnet id + corpo adaptive (default real, ADR 0061)", async () => {
+    getDefaultModelId.mockResolvedValue("claude-sonnet-5-5");
 
     await expect(
       predict({ matchId: "m-1", userId: "u-1", isAdmin: false }),
@@ -1270,31 +1277,37 @@ describe("predict() — model resolution (override > DB default) + model-aware r
 
     expect(getDefaultModelId).toHaveBeenCalledTimes(1);
     const arg = anthropicCreate.mock.calls[0]?.[0];
-    expect(arg.model).toBe("claude-sonnet-4-5-20250929");
-    expect(arg.temperature).toBe(0.3);
-    expect(arg).not.toHaveProperty("thinking");
-    // Sonnet não usa thinking, então forçar o submit_prediction é válido e desejável.
-    expect(arg.tool_choice).toEqual({ type: "tool", name: "submit_prediction" });
+    expect(arg.model).toBe("claude-sonnet-5-5");
+    expectAdaptiveRequestShape(arg);
+    // O adapter sempre passa as opções de timing (2 args): timeout escalado por
+    // max_tokens/effort (16000 em high → 215s) + retries do client.
+    expect(anthropicCreate.mock.calls[0]?.[1]).toEqual({
+      timeout: 215_000,
+      maxRetries: 2,
+    });
 
     // Critério de aceite do #57: as colunas de auditoria refletem o modelo
-    // RESOLVIDO, não o `response.model` (que aqui é o id stale "sonnet" do mock).
+    // RESOLVIDO, não o `response.model` do mock.
     // ai_calls é inserido primeiro, predictions depois.
     const aiCallRow = insertValues.mock.calls[0]?.[0] as {
       model: string;
       provider: string;
+      costUsd: string;
     };
     const predictionRow = insertValues.mock.calls[1]?.[0] as {
       modelVersion: string;
     };
-    expect(aiCallRow.model).toBe("claude-sonnet-4-5-20250929");
-    expect(predictionRow.modelVersion).toBe("claude-sonnet-4-5-20250929");
+    expect(aiCallRow.model).toBe("claude-sonnet-5-5");
+    expect(predictionRow.modelVersion).toBe("claude-sonnet-5-5");
     // #230: a coluna provider é a ÚNICA cuja FONTE o refactor trocou (literal
     // "anthropic" → aiProvider.providerKey). Trava o valor persistido no caminho ok.
     expect(aiCallRow.provider).toBe("anthropic");
+    // Custo pelo pricing do registry: 1200 × $2 + 300 × $10 por 1M.
+    expect(aiCallRow.costUsd).toBe(((1200 * 2 + 300 * 10) / 1_000_000).toFixed(6));
   });
 
   it("seam (#230): tools[0] e system do request batem byte a byte com o cartucho (ToolDef round-trip = identidade)", async () => {
-    getDefaultModelId.mockResolvedValue("claude-sonnet-4-5-20250929");
+    getDefaultModelId.mockResolvedValue("claude-sonnet-5-5");
 
     await expect(
       predict({ matchId: "m-1", userId: "u-1", isAdmin: false }),
@@ -1337,11 +1350,11 @@ describe("predict() — model resolution (override > DB default) + model-aware r
     expect(arg.max_tokens).toBeGreaterThanOrEqual(4000);
   });
 
-  it("modelOverride Sonnet wins over DB default Haiku → sonnet id + temperature 0.3", async () => {
-    getDefaultModelId.mockResolvedValue("claude-haiku-4-5");
+  it("modelOverride Sonnet wins over DB default Haiku → sonnet id + corpo adaptive", async () => {
+    getDefaultModelId.mockResolvedValue("claude-haiku-5-5");
     // Resposta carrega um `model` STALE (≠ id resolvido) pra provar que as
     // colunas de auditoria gravam o id RESOLVIDO, não `response.model`. Usa um id
-    // removido (#374) de propósito: o passthrough grava o id resolvido, não este.
+    // fora do registry de propósito: o passthrough grava o id resolvido, não este.
     anthropicCreate.mockResolvedValueOnce({
       ...anthropicMessage(),
       model: "claude-opus-4-8",
@@ -1352,21 +1365,15 @@ describe("predict() — model resolution (override > DB default) + model-aware r
         matchId: "m-1",
         userId: "u-1",
         isAdmin: false,
-        modelOverride: "claude-sonnet-4-5-20250929",
+        modelOverride: "claude-sonnet-5-5",
       }),
     ).resolves.toBeDefined();
 
     // Override curto-circuita o lookup do default global.
     expect(getDefaultModelId).not.toHaveBeenCalled();
     const arg = anthropicCreate.mock.calls[0]?.[0];
-    expect(arg.model).toBe("claude-sonnet-4-5-20250929");
-    expect(arg.temperature).toBe(0.3);
-    expect(arg).not.toHaveProperty("thinking");
-    // Sonnet não usa thinking, então forçar o submit_prediction é válido.
-    expect(arg.tool_choice).toEqual({
-      type: "tool",
-      name: "submit_prediction",
-    });
+    expect(arg.model).toBe("claude-sonnet-5-5");
+    expectAdaptiveRequestShape(arg);
 
     // Auditoria reflete o modelo RESOLVIDO (override), não o `response.model`
     // stale ("claude-opus-4-8") devolvido pelo provider acima.
@@ -1374,19 +1381,19 @@ describe("predict() — model resolution (override > DB default) + model-aware r
     const predictionRow = insertValues.mock.calls[1]?.[0] as {
       modelVersion: string;
     };
-    expect(aiCallRow.model).toBe("claude-sonnet-4-5-20250929");
-    expect(predictionRow.modelVersion).toBe("claude-sonnet-4-5-20250929");
+    expect(aiCallRow.model).toBe("claude-sonnet-5-5");
+    expect(predictionRow.modelVersion).toBe("claude-sonnet-5-5");
   });
 
-  it("modelOverride Haiku → haiku id + temperature 0.3 (temperature mode), skips DB default", async () => {
-    getDefaultModelId.mockResolvedValue("claude-sonnet-4-5-20250929");
+  it("modelOverride Haiku 5.5 → haiku id + MESMO corpo adaptive (não há mais caminho temperature), skips DB default", async () => {
+    getDefaultModelId.mockResolvedValue("claude-sonnet-5-5");
 
     await expect(
       predict({
         matchId: "m-1",
         userId: "u-1",
         isAdmin: false,
-        modelOverride: "claude-haiku-4-5",
+        modelOverride: "claude-haiku-5-5",
       }),
     ).resolves.toBeDefined();
 
@@ -1394,111 +1401,173 @@ describe("predict() — model resolution (override > DB default) + model-aware r
     expect(getPreferredModelId).not.toHaveBeenCalled();
     expect(getDefaultModelId).not.toHaveBeenCalled();
     const arg = anthropicCreate.mock.calls[0]?.[0];
-    expect(arg.model).toBe("claude-haiku-4-5");
-    expect(arg.temperature).toBe(0.3);
-    expect(arg).not.toHaveProperty("thinking");
+    expect(arg.model).toBe("claude-haiku-5-5");
+    expectAdaptiveRequestShape(arg);
 
     // Auditoria reflete o modelo resolvido (override).
-    const aiCallRow = insertValues.mock.calls[0]?.[0] as { model: string };
+    const aiCallRow = insertValues.mock.calls[0]?.[0] as {
+      model: string;
+      costUsd: string;
+    };
     const predictionRow = insertValues.mock.calls[1]?.[0] as {
       modelVersion: string;
     };
-    expect(aiCallRow.model).toBe("claude-haiku-4-5");
-    expect(predictionRow.modelVersion).toBe("claude-haiku-4-5");
+    expect(aiCallRow.model).toBe("claude-haiku-5-5");
+    expect(predictionRow.modelVersion).toBe("claude-haiku-5-5");
+    // 1200 tokens de input ficam abaixo do limiar de prompt longo (100K): tarifa base.
+    expect(aiCallRow.costUsd).toBe(
+      ((1200 * 0.1 + 300 * 0.5) / 1_000_000).toFixed(6),
+    );
   });
 
   it("no override + DB default Sonnet → Anthropic called with sonnet id", async () => {
-    getDefaultModelId.mockResolvedValue("claude-sonnet-4-5-20250929");
+    getDefaultModelId.mockResolvedValue("claude-sonnet-5-5");
 
     await expect(
       predict({ matchId: "m-1", userId: "u-1", isAdmin: false }),
     ).resolves.toBeDefined();
 
     const arg = anthropicCreate.mock.calls[0]?.[0];
-    expect(arg.model).toBe("claude-sonnet-4-5-20250929");
-    expect(arg.temperature).toBe(0.3);
+    expect(arg.model).toBe("claude-sonnet-5-5");
+    expect(arg).not.toHaveProperty("temperature");
   });
 });
 
 describe("predict() — cascata completa: preferência do usuário + filtro de audiência", () => {
   it("sem override + preferência Haiku (não-admin) → usa Haiku; default global NÃO é lido", async () => {
-    getPreferredModelId.mockResolvedValue("claude-haiku-4-5");
-    getDefaultModelId.mockResolvedValue("claude-sonnet-4-5-20250929");
+    getPreferredModelId.mockResolvedValue("claude-haiku-5-5");
+    getDefaultModelId.mockResolvedValue("claude-sonnet-5-5");
 
     await expect(
       predict({ matchId: "m-1", userId: "u-1", isAdmin: false }),
     ).resolves.toBeDefined();
 
     const arg = anthropicCreate.mock.calls[0]?.[0];
-    expect(arg.model).toBe("claude-haiku-4-5");
+    expect(arg.model).toBe("claude-haiku-5-5");
     // Preferência válida curto-circuita o default global.
     expect(getDefaultModelId).not.toHaveBeenCalled();
 
     const aiCallRow = insertValues.mock.calls[0]?.[0] as { model: string };
-    expect(aiCallRow.model).toBe("claude-haiku-4-5");
+    expect(aiCallRow.model).toBe("claude-haiku-5-5");
   });
 
-  it("QUEDA GRACIOSA: preferência stale/removida (ex.: Fable após #241) → getPreferredModelId devolve null → cai no default global", async () => {
-    // getPreferredModelId (query real) filtra ids fora do registry pra null, então
-    // um preferredModelId='claude-fable-5' antigo no DB nunca chega à cascata: a
-    // predict recai no default global. Sem mudança de runtime — só confirma a queda.
-    getPreferredModelId.mockResolvedValue(null);
-    getDefaultModelId.mockResolvedValue("claude-sonnet-4-5-20250929");
+  it("QUEDA GRACIOSA: preferência gravada com id desconhecido → getPreferredModelId devolve null → cai no default global", async () => {
+    // getPreferredModelId (query real) passa a coluna por resolveModelId: um id
+    // que não é de família Claude conhecida (ex.: o gpt-5-mini removido em #374)
+    // vira null e nunca chega à cascata — predict recai no default global.
+    expect(resolveModelId("gpt-5-mini")).toBeNull();
+    expect(resolveModelId("modelo-inexistente")).toBeNull();
+    getPreferredModelId.mockResolvedValue(resolveModelId("gpt-5-mini"));
+    getDefaultModelId.mockResolvedValue("claude-sonnet-5-5");
 
     await expect(
       predict({ matchId: "m-1", userId: "u-1", isAdmin: false }),
     ).resolves.toBeDefined();
 
     const arg = anthropicCreate.mock.calls[0]?.[0];
-    expect(arg.model).toBe("claude-sonnet-4-5-20250929");
+    expect(arg.model).toBe("claude-sonnet-5-5");
     expect(getDefaultModelId).toHaveBeenCalledTimes(1);
   });
 
-  it("sem override + preferência Sonnet 4.5 (promovido em #240) + isAdmin=false → usa Sonnet 4.5", async () => {
-    // Sonnet 4.5 agora é userSelectable, então passa no filtro de audiência até
-    // pro usuário comum — a preferência válida curto-circuita o default global.
-    getPreferredModelId.mockResolvedValue("claude-sonnet-4-5-20250929");
-    getDefaultModelId.mockResolvedValue("claude-haiku-4-5");
+  it("backstop da cascata: preferência fora do registry que escape da query → filtrada, cai no default global", async () => {
+    // Defesa em profundidade: mesmo que a query devolvesse um id cru fora do
+    // registry, isModelAllowedForAudience o rejeita e predict usa o default.
+    getPreferredModelId.mockResolvedValue("modelo-inexistente");
+    getDefaultModelId.mockResolvedValue("claude-sonnet-5-5");
+
+    await expect(
+      predict({ matchId: "m-1", userId: "u-1", isAdmin: false }),
+    ).resolves.toBeDefined();
+
+    expect(anthropicCreate.mock.calls[0]?.[0].model).toBe("claude-sonnet-5-5");
+    expect(getDefaultModelId).toHaveBeenCalledTimes(1);
+  });
+
+  it.each([
+    ["claude-haiku-4-5", "claude-haiku-5-5"],
+    ["claude-sonnet-4-5-20250929", "claude-sonnet-5-5"],
+    ["claude-fable-5-1", "claude-opus-5-5"],
+  ] as const)(
+    "preferência gravada com id antigo %s → resolve pro 5.5 da família (%s) e roda nele",
+    async (storedId, expected) => {
+      // A query real passa a coluna por resolveModelId: id antigo de família
+      // conhecida vira o 5.5 da mesma família (Fable/Mythos → Opus), sem cair no
+      // default global.
+      getPreferredModelId.mockResolvedValue(resolveModelId(storedId));
+      getDefaultModelId.mockResolvedValue("claude-sonnet-5-5");
+
+      await expect(
+        predict({ matchId: "m-1", userId: "u-1", isAdmin: false }),
+      ).resolves.toBeDefined();
+
+      const arg = anthropicCreate.mock.calls[0]?.[0];
+      expect(arg.model).toBe(expected);
+      expectAdaptiveRequestShape(arg);
+      expect(getDefaultModelId).not.toHaveBeenCalled();
+      const predictionRow = insertValues.mock.calls[1]?.[0] as {
+        modelVersion: string;
+      };
+      expect(predictionRow.modelVersion).toBe(expected);
+    },
+  );
+
+  it("default global gravado com id antigo (Sonnet 4.5) → resolve pro Sonnet 5.5", async () => {
+    // getDefaultModelId (query real) também passa a row ai_config por resolveModelId.
+    getPreferredModelId.mockResolvedValue(null);
+    getDefaultModelId.mockResolvedValue(
+      resolveModelId("claude-sonnet-4-5-20250929"),
+    );
+
+    await expect(
+      predict({ matchId: "m-1", userId: "u-1", isAdmin: false }),
+    ).resolves.toBeDefined();
+
+    expect(anthropicCreate.mock.calls[0]?.[0].model).toBe("claude-sonnet-5-5");
+  });
+
+  it("sem override + preferência Opus 5.5 + isAdmin=false → usa Opus 5.5 (todos userSelectable)", async () => {
+    getPreferredModelId.mockResolvedValue("claude-opus-5-5");
+    getDefaultModelId.mockResolvedValue("claude-haiku-5-5");
 
     await expect(
       predict({ matchId: "m-1", userId: "u-1", isAdmin: false }),
     ).resolves.toBeDefined();
 
     const arg = anthropicCreate.mock.calls[0]?.[0];
-    expect(arg.model).toBe("claude-sonnet-4-5-20250929");
+    expect(arg.model).toBe("claude-opus-5-5");
     expect(getDefaultModelId).not.toHaveBeenCalled();
   });
 
   it("override sempre vence a preferência: override Haiku + preferência Sonnet → usa Haiku", async () => {
-    getPreferredModelId.mockResolvedValue("claude-sonnet-4-5-20250929");
-    getDefaultModelId.mockResolvedValue("claude-sonnet-4-5-20250929");
+    getPreferredModelId.mockResolvedValue("claude-sonnet-5-5");
+    getDefaultModelId.mockResolvedValue("claude-sonnet-5-5");
 
     await expect(
       predict({
         matchId: "m-1",
         userId: "u-1",
         isAdmin: false,
-        modelOverride: "claude-haiku-4-5",
+        modelOverride: "claude-haiku-5-5",
       }),
     ).resolves.toBeDefined();
 
     const arg = anthropicCreate.mock.calls[0]?.[0];
-    expect(arg.model).toBe("claude-haiku-4-5");
+    expect(arg.model).toBe("claude-haiku-5-5");
     // Override curto-circuita preferência E default.
     expect(getPreferredModelId).not.toHaveBeenCalled();
     expect(getDefaultModelId).not.toHaveBeenCalled();
   });
 
-  it("sem override + sem preferência (null) + default Sonnet 4.5 → Sonnet 4.5 (comportamento atual preservado)", async () => {
+  it("sem override + sem preferência (null) + default Sonnet 5.5 → Sonnet 5.5", async () => {
     getPreferredModelId.mockResolvedValue(null);
-    getDefaultModelId.mockResolvedValue("claude-sonnet-4-5-20250929");
+    getDefaultModelId.mockResolvedValue("claude-sonnet-5-5");
 
     await expect(
       predict({ matchId: "m-1", userId: "u-1", isAdmin: false }),
     ).resolves.toBeDefined();
 
     const arg = anthropicCreate.mock.calls[0]?.[0];
-    expect(arg.model).toBe("claude-sonnet-4-5-20250929");
+    expect(arg.model).toBe("claude-sonnet-5-5");
     expect(getDefaultModelId).toHaveBeenCalledTimes(1);
   });
 });
@@ -1512,7 +1581,7 @@ describe("predict() — cascata completa: preferência do usuário + filtro de a
 // o backstop de predict — não são equivalentes. Follow-up pos-pivot: reintroduzir
 // quando um provider OpenAI voltar ao registry.
 
-describe("predict() — modelos adaptive de volta ao registry (#524)", () => {
+describe("predict() — modelos 5.5 adaptive + gate de audiência (ADR 0061)", () => {
   it("modelOverride Opus 5.5 → request adaptive: thinking adaptive, tool_choice auto, effort em output_config, SEM temperature", async () => {
     await expect(
       predict({
@@ -1525,10 +1594,7 @@ describe("predict() — modelos adaptive de volta ao registry (#524)", () => {
 
     const arg = anthropicCreate.mock.calls[0]?.[0];
     expect(arg.model).toBe("claude-opus-5-5");
-    expect(arg.thinking).toEqual({ type: "adaptive" });
-    expect(arg.tool_choice).toEqual({ type: "auto" });
-    expect(arg.output_config).toEqual({ effort: "high" });
-    expect(arg).not.toHaveProperty("temperature");
+    expectAdaptiveRequestShape(arg);
     // Adaptive leva o timeout escalado por max_tokens/effort (16000 em high → 215s).
     expect(anthropicCreate.mock.calls[0]?.[1]).toEqual({
       timeout: 215_000,
@@ -1544,34 +1610,48 @@ describe("predict() — modelos adaptive de volta ao registry (#524)", () => {
     expect(aiCallRow.costUsd).toBe(((1200 * 4 + 300 * 20) / 1_000_000).toFixed(6));
   });
 
-  it("preferência Fable 5.1 (admin-only) + isAdmin=false → filtrada pelo gate, cai no default global", async () => {
-    getPreferredModelId.mockResolvedValue("claude-fable-5-1");
-    getDefaultModelId.mockResolvedValue("claude-sonnet-4-5-20250929");
+  // O mecanismo de audiência (ADR 0013) segue vivo, mas hoje os três modelos são
+  // userSelectable. Pra manter a cobertura do gate, o Opus vira admin-only SÓ
+  // dentro destes testes (restaurado no finally).
+  it("preferência admin-only + isAdmin=false → filtrada pelo gate, cai no default global", async () => {
+    const opus = MODEL_REGISTRY["claude-opus-5-5"];
+    opus.userSelectable = false;
+    try {
+      getPreferredModelId.mockResolvedValue("claude-opus-5-5");
+      getDefaultModelId.mockResolvedValue("claude-sonnet-5-5");
 
-    await expect(
-      predict({ matchId: "m-1", userId: "u-1", isAdmin: false }),
-    ).resolves.toBeDefined();
+      await expect(
+        predict({ matchId: "m-1", userId: "u-1", isAdmin: false }),
+      ).resolves.toBeDefined();
 
-    expect(anthropicCreate.mock.calls[0]?.[0].model).toBe(
-      "claude-sonnet-4-5-20250929",
-    );
+      expect(anthropicCreate.mock.calls[0]?.[0].model).toBe("claude-sonnet-5-5");
+      expect(getDefaultModelId).toHaveBeenCalledTimes(1);
+    } finally {
+      opus.userSelectable = true;
+    }
   });
 
-  it("preferência Fable 5.1 + isAdmin=true → usa o Fable 5.1", async () => {
-    getPreferredModelId.mockResolvedValue("claude-fable-5-1");
+  it("preferência admin-only + isAdmin=true → usa o modelo preferido", async () => {
+    const opus = MODEL_REGISTRY["claude-opus-5-5"];
+    opus.userSelectable = false;
+    try {
+      getPreferredModelId.mockResolvedValue("claude-opus-5-5");
 
-    await expect(
-      predict({ matchId: "m-1", userId: "u-1", isAdmin: true }),
-    ).resolves.toBeDefined();
+      await expect(
+        predict({ matchId: "m-1", userId: "u-1", isAdmin: true }),
+      ).resolves.toBeDefined();
 
-    expect(anthropicCreate.mock.calls[0]?.[0].model).toBe("claude-fable-5-1");
-    expect(getDefaultModelId).not.toHaveBeenCalled();
+      expect(anthropicCreate.mock.calls[0]?.[0].model).toBe("claude-opus-5-5");
+      expect(getDefaultModelId).not.toHaveBeenCalled();
+    } finally {
+      opus.userSelectable = true;
+    }
   });
 
   it("tool_choice auto e o modelo responde só texto → tool_missing auditado, sem prediction", async () => {
     anthropicCreate.mockResolvedValue({
       ...anthropicMessage(),
-      model: "claude-sonnet-5",
+      model: "claude-sonnet-5-5",
       stop_reason: "end_turn",
       content: [{ type: "text", text: "Prefiro não recomendar." }],
     });
@@ -1581,7 +1661,7 @@ describe("predict() — modelos adaptive de volta ao registry (#524)", () => {
         matchId: "m-1",
         userId: "u-1",
         isAdmin: false,
-        modelOverride: "claude-sonnet-5",
+        modelOverride: "claude-sonnet-5-5",
       }),
     ).rejects.toThrow("LLM did not call submit_prediction tool");
 
@@ -1591,9 +1671,10 @@ describe("predict() — modelos adaptive de volta ao registry (#524)", () => {
   });
 
   it("recusa (stop_reason 'refusal') → 1 ai_call provider_error com tokens, 0 prediction, PredictError 'model refused'", async () => {
+    // O Haiku 5.5 pode recusar e não tem fallback server-side.
     anthropicCreate.mockResolvedValue({
       ...anthropicMessage(),
-      model: "claude-fable-5-1",
+      model: "claude-haiku-5-5",
       stop_reason: "refusal",
       stop_details: {
         type: "refusal",
@@ -1607,8 +1688,8 @@ describe("predict() — modelos adaptive de volta ao registry (#524)", () => {
     const err = await predict({
       matchId: "m-1",
       userId: "u-1",
-      isAdmin: true,
-      modelOverride: "claude-fable-5-1",
+      isAdmin: false,
+      modelOverride: "claude-haiku-5-5",
     }).catch((e: unknown) => e);
 
     expect(err).toBeInstanceOf(PredictError);
@@ -1630,7 +1711,7 @@ describe("predict() — modelos adaptive de volta ao registry (#524)", () => {
       errorMessage: string;
     };
     expect(aiCallRow.status).toBe("provider_error");
-    expect(aiCallRow.model).toBe("claude-fable-5-1");
+    expect(aiCallRow.model).toBe("claude-haiku-5-5");
     expect(aiCallRow.inputTokens).toBe(1500);
     expect(aiCallRow.outputTokens).toBe(12);
     expect(aiCallRow.errorMessage).toBe(
@@ -1711,13 +1792,13 @@ describe("predict() — model declines to call the tool", () => {
   it("no submit_prediction tool_use (thinking/text only) → persists tool_missing ai_call, still paid, and throws", async () => {
     // predict() deve registrar o ai_call pago (tokens cobrados) com status
     // tool_missing E lançar quando a resposta NÃO traz tool_use de submit_prediction
-    // — comportamento agnóstico ao modelo/caminho. Default real pós-#374 = Sonnet 4.5.
-    getDefaultModelId.mockResolvedValue("claude-sonnet-4-5-20250929");
+    // — comportamento agnóstico ao modelo/caminho. Default real (ADR 0061) = Sonnet 5.5.
+    getDefaultModelId.mockResolvedValue("claude-sonnet-5-5");
     anthropicCreate.mockResolvedValue({
       id: "msg-2",
       type: "message",
       role: "assistant",
-      model: "claude-sonnet-4-5-20250929",
+      model: "claude-sonnet-5-5",
       stop_reason: "end_turn",
       stop_sequence: null,
       content: [
@@ -1746,8 +1827,8 @@ describe("predict() — model declines to call the tool", () => {
     expect(aiCallRow.status).toBe("tool_missing");
     // #230: caminho de erro também escreve provider via providerKey (não literal).
     expect(aiCallRow.provider).toBe("anthropic");
-    // Modelo resolvido (Sonnet 4.5), não o response.model, e tokens cobrados.
-    expect(aiCallRow.model).toBe("claude-sonnet-4-5-20250929");
+    // Modelo resolvido (Sonnet 5.5), não o response.model, e tokens cobrados.
+    expect(aiCallRow.model).toBe("claude-sonnet-5-5");
     expect(aiCallRow.inputTokens).toBe(1200);
     expect(aiCallRow.outputTokens).toBe(300);
     // #230: o snippet do errorMessage vem agora do outputPayload do seam (== o

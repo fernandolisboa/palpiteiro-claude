@@ -10,7 +10,7 @@
 | ORM | Drizzle | TS-first; SQL transparente |
 | Auth | Auth.js v5 (magic link) | Whitelist Fase 2; ver `decisions/0004` |
 | Cache/KV | Vercel KV | Cache de odds e match data |
-| AI | Claude Sonnet 4.5 | Único provider no MVP; ver `decisions/0001` |
+| AI | Claude Haiku, Sonnet e Opus 5.5 | Único provider; ver `decisions/0001` e `decisions/0061` |
 | Validação JSON | Zod | Garantir output válido do LLM |
 | Cron | Vercel Cron | Sync de jogos + settlement |
 | Observabilidade | Sentry (free) + Vercel Analytics | Suficiente pra MVP |

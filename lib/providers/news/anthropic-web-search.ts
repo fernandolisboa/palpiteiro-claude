@@ -132,7 +132,7 @@ export async function getNewsByMatchViaWebSearch(
     system: SYSTEM_PROMPT,
     userMessage: buildUserMessage(ctx),
     // tool/toolName são REQUIRED no shape mas IGNORADOS no modo server-tool (sem submit
-    // forçado). Passamos placeholders válidos; o adapter monta a web search tool.
+    // tool). Passamos placeholders válidos; o adapter monta a web search tool.
     tool: { name: "news_noop", inputSchema: { type: "object" } },
     toolName: "news_noop",
     maxTokens: NEWS_MAX_TOKENS,

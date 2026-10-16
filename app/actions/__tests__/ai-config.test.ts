@@ -76,7 +76,7 @@ describe("updateDefaultModel", () => {
     mockAuth.mockResolvedValue(USER);
     const res = await updateDefaultModel(
       null,
-      form({ modelId: "claude-haiku-4-5" }),
+      form({ modelId: "claude-haiku-5-5" }),
     );
     expect(res.ok).toBe(false);
     expect(mockSet).not.toHaveBeenCalled();
@@ -86,10 +86,10 @@ describe("updateDefaultModel", () => {
     mockAuth.mockResolvedValue(ADMIN);
     const res = await updateDefaultModel(
       null,
-      form({ modelId: "claude-haiku-4-5" }),
+      form({ modelId: "claude-haiku-5-5" }),
     );
     expect(res).toEqual({ ok: true });
-    expect(mockSet).toHaveBeenCalledWith("claude-haiku-4-5", "u1");
+    expect(mockSet).toHaveBeenCalledWith("claude-haiku-5-5", "u1");
   });
 
   it("admin + invalid modelId → not ok, setter not called", async () => {
@@ -99,16 +99,29 @@ describe("updateDefaultModel", () => {
     expect(mockSet).not.toHaveBeenCalled();
   });
 
-  it("admin + Sonnet 4.5 (promovido a userSelectable em #240) → setter chamado, ok", async () => {
-    // Antes admin-only; após #240 ambos os Sonnets podem ser padrão global. Este
-    // é o caso de aceite central da issue #240.
+  it("admin + Sonnet 5.5 (o DEFAULT_MODEL_ID, ADR 0061) → setter chamado, ok", async () => {
     mockAuth.mockResolvedValue(ADMIN);
     const res = await updateDefaultModel(
       null,
-      form({ modelId: "claude-sonnet-4-5-20250929" }),
+      form({ modelId: "claude-sonnet-5-5" }),
     );
     expect(res).toEqual({ ok: true });
-    expect(mockSet).toHaveBeenCalledWith("claude-sonnet-4-5-20250929", "u1");
+    expect(mockSet).toHaveBeenCalledWith("claude-sonnet-5-5", "u1");
+  });
+
+  it("admin + id de versão antiga (Sonnet 4.5 / Sonnet 5 / Haiku 4.5, ADR 0061) → not ok: o form do default só grava id do registry", async () => {
+    // O select do admin só oferece os três 5.5; um id antigo aqui é FormData forjado.
+    // A leitura (getDefaultModelId) é que tolera id antigo já gravado.
+    mockAuth.mockResolvedValue(ADMIN);
+    for (const modelId of [
+      "claude-sonnet-4-5-20250929",
+      "claude-sonnet-5",
+      "claude-haiku-4-5",
+    ]) {
+      const res = await updateDefaultModel(null, form({ modelId }));
+      expect(res.ok).toBe(false);
+    }
+    expect(mockSet).not.toHaveBeenCalled();
   });
 
   it("admin + id removido em #374 (Opus 4.8 / Sonnet 4.6 / gpt-5-mini) → not ok, setter not called", async () => {
@@ -140,7 +153,7 @@ describe("updateDefaultModel", () => {
     expect(mockSet).not.toHaveBeenCalled();
   });
 
-  it("admin + Fable 5.1 (admin-only, #524) → not ok: o default vale pra todos (ADR 0013)", async () => {
+  it("admin + Fable 5.1 (fora do registry, ADR 0061) → not ok", async () => {
     mockAuth.mockResolvedValue(ADMIN);
     const res = await updateDefaultModel(
       null,
@@ -162,7 +175,7 @@ describe("updateDefaultModel", () => {
 });
 
 describe("updateGenerationParams", () => {
-  const valid = { maxTokens: "12000", effort: "medium", temperature: "0.4" };
+  const valid = { maxTokens: "12000", effort: "medium" };
 
   it("non-admin caller is rejected and setter is NOT called", async () => {
     mockAuth.mockResolvedValue(USER);
@@ -176,7 +189,7 @@ describe("updateGenerationParams", () => {
     const res = await updateGenerationParams(null, form(valid));
     expect(res).toEqual({ ok: true });
     expect(mockSetParams).toHaveBeenCalledWith(
-      { maxTokens: 12000, effort: "medium", temperature: 0.4 },
+      { maxTokens: 12000, effort: "medium" },
       "u1",
     );
   });
@@ -201,14 +214,17 @@ describe("updateGenerationParams", () => {
     expect(mockSetParams).not.toHaveBeenCalled();
   });
 
-  it("admin + temperature fora de [0,1] → not ok, setter not called", async () => {
+  it("admin + temperature legada no FormData (aba antiga, ADR 0061) → ignorada; setter só com maxTokens/effort", async () => {
     mockAuth.mockResolvedValue(ADMIN);
     const res = await updateGenerationParams(
       null,
       form({ ...valid, temperature: "2" }),
     );
-    expect(res.ok).toBe(false);
-    expect(mockSetParams).not.toHaveBeenCalled();
+    expect(res).toEqual({ ok: true });
+    expect(mockSetParams).toHaveBeenCalledWith(
+      { maxTokens: 12000, effort: "medium" },
+      "u1",
+    );
   });
 });
 

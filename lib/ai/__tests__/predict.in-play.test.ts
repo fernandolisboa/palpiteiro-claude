@@ -83,9 +83,9 @@ vi.mock("@/lib/ai/anthropic", () => ({
 }));
 
 vi.mock("@/lib/db/queries/ai-config", () => ({
-  getDefaultModelId: () => Promise.resolve("claude-sonnet-4-5-20250929"),
+  getDefaultModelId: () => Promise.resolve("claude-sonnet-5-5"),
   getGenerationParams: () =>
-    Promise.resolve({ maxTokens: 16000, effort: "high", temperature: 0.3 }),
+    Promise.resolve({ maxTokens: 16000, effort: "high" }),
 }));
 vi.mock("@/lib/db/queries/users", () => ({
   getPreferredModelId: () => Promise.resolve(null),
@@ -152,7 +152,7 @@ function anthropicMessage(input: Record<string, unknown>) {
     id: "msg-1",
     type: "message",
     role: "assistant",
-    model: "claude-sonnet-4-5-20250929",
+    model: "claude-sonnet-5-5",
     stop_reason: "tool_use",
     stop_sequence: null,
     content: [{ type: "tool_use", id: "tu-1", name: "submit_narration", input }],
@@ -250,7 +250,7 @@ describe("predictInPlay", () => {
         promptVersion: NARRATOR_LIVE_VERSION,
         isLive: true,
         modelVersion:
-          "claude-sonnet-4-5-20250929;engine=code_jev;lambda=dixon_coles;live=live_model_v1",
+          "claude-sonnet-5-5;engine=code_jev;lambda=dixon_coles;live=live_model_v1",
       });
       expect(p).not.toHaveProperty("judgments");
       const stamp = readLiveStamp(p.liveState);

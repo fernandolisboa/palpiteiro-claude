@@ -139,8 +139,7 @@ async function runAnalysis(
   request: AnalysisRequest,
 ): Promise<AnalysisResult> {
   // RAMO SERVER-TOOL (ADR 0032, #377). ADITIVO: só quando `serverTool` está setado
-  // (provider de notícias). O caminho forçado abaixo fica BYTE-IDÊNTICO — os golden
-  // payload tests (request-builder.test.ts / predict.test.ts) seguem verdes.
+  // (notícias, cartões). Abaixo, o caminho do submit tool.
   if (request.serverTool) {
     return runServerToolAnalysis(request);
   }
@@ -216,7 +215,7 @@ async function runAnalysis(
 }
 
 // Caminho SERVER-TOOL (ADR 0032 / #377). Espelha o cronômetro/coerção/serialização do
-// caminho forçado, mas: (a) tool_choice:auto + a web search tool (request-builder); (b)
+// caminho do submit tool, mas: (a) a web search tool no lugar do submit (request-builder); (b)
 // laço bounded de pause_turn (reenvia [user, {assistant, content}] sem "Continue"); (c)
 // devolve `contentBlocks` (os blocos crus da resposta FINAL) pro provider de notícias
 // andar atrás dos `web_search_tool_result`. NÃO extrai/valida nada aqui — o provider faz.
@@ -227,7 +226,7 @@ async function runServerToolAnalysis(
     model: request.model,
     system: request.system,
     userMessage: request.userMessage,
-    // Tool forçado IGNORADO no modo server-tool (passamos um array vazio; o builder
+    // Submit tool IGNORADO no modo server-tool (passamos um array vazio; o builder
     // monta a web search tool a partir de `serverTool`).
     tools: [],
     toolName: request.toolName,
@@ -304,7 +303,7 @@ async function runServerToolAnalysis(
 
   return {
     ok: true,
-    // Sem submit forçado no modo server-tool — `toolInput` não se aplica.
+    // Sem submit no modo server-tool — `toolInput` não se aplica.
     toolInput: undefined,
     usage: { inputTokens, outputTokens },
     inputPayload,

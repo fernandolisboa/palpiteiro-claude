@@ -222,7 +222,7 @@ function friendlyMessage(err: PredictError, ctx: MessageContext = {}): string {
   if (msg.includes("standings row missing")) {
     return "Dados de classificação indisponíveis pra esta análise.";
   }
-  // Recusa do modelo (#524, `stop_reason: "refusal"` — Fable 5.1 principalmente).
+  // Recusa do modelo (#524, `stop_reason: "refusal"`).
   // Copy neutra (não insinua que o usuário pediu algo errado). Repetir com o mesmo
   // modelo tende a dar o mesmo resultado, então sugere outro — só se houver outro.
   if (msg.includes("model refused")) {

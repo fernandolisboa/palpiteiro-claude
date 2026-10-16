@@ -135,8 +135,8 @@ beforeEach(() => {
   mockRateLimit.mockResolvedValue({ ok: true, limit: 20, remaining: 19, reset: 0 });
   mockModelsForAudience.mockReset();
   mockModelsForAudience.mockReturnValue([
-    MODEL_REGISTRY["claude-sonnet-4-5-20250929"],
-    MODEL_REGISTRY["claude-haiku-4-5"],
+    MODEL_REGISTRY["claude-sonnet-5-5"],
+    MODEL_REGISTRY["claude-haiku-5-5"],
   ]);
   mockMarketsForAudience.mockReset();
   mockMarketsForAudience.mockResolvedValue([
@@ -154,6 +154,34 @@ beforeEach(() => {
 });
 
 describe("analyzeMarkets — fan-out multi-mercado (custo/rate-limit por N)", () => {
+  it("override antigo no FormData (claude-sonnet-5, ADR 0061) → cada predict recebe o Sonnet 5.5 resolvido", async () => {
+    await analyzeMarkets(
+      null,
+      form({
+        matchId: VALID_MATCH_ID,
+        marketKeys: ["over_under", "match_result"],
+        modelOverride: "claude-sonnet-5",
+      }),
+    );
+    expect(mockPredict).toHaveBeenCalledTimes(2);
+    for (const call of mockPredict.mock.calls) {
+      expect(call[0].modelOverride).toBe("claude-sonnet-5-5");
+    }
+  });
+
+  it("override desconhecido (gpt-4) → ignorado (undefined, cai na cascata)", async () => {
+    await analyzeMarkets(
+      null,
+      form({
+        matchId: VALID_MATCH_ID,
+        marketKeys: ["over_under"],
+        modelOverride: "gpt-4",
+      }),
+    );
+    expect(mockPredict).toHaveBeenCalledTimes(1);
+    expect(mockPredict.mock.calls[0][0].modelOverride).toBeUndefined();
+  });
+
   it("2 mercados ok → predict 2×, rate-limit 2×, 2 summaries ok, revalidate, ok:true", async () => {
     const res = await analyzeMarkets(
       null,
@@ -414,7 +442,7 @@ describe("analyzeMarkets — fan-out multi-mercado (custo/rate-limit por N)", ()
   });
 
   it("recusa do modelo com UM só modelo disponível → copy neutra, sem sugerir troca", async () => {
-    mockModelsForAudience.mockReturnValue([MODEL_REGISTRY["claude-sonnet-4-5-20250929"]]);
+    mockModelsForAudience.mockReturnValue([MODEL_REGISTRY["claude-sonnet-5-5"]]);
     const { PredictError } = await import("@/lib/ai/predict");
     mockPredict.mockRejectedValue(
       new PredictError("model refused the analysis", {

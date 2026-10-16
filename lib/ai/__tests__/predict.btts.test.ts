@@ -197,7 +197,7 @@ function anthropicMessage(input: Record<string, unknown>) {
     id: "msg-1",
     type: "message",
     role: "assistant",
-    model: "claude-sonnet-4-5-20250929",
+    model: "claude-sonnet-5-5",
     stop_reason: "tool_use",
     stop_sequence: null,
     content: [
@@ -242,11 +242,10 @@ function setHappyPath() {
   getOddsForSport.mockResolvedValue([]);
   getLatestFreshSelectionOddsSnapshots.mockResolvedValue(freshSnapshotBtts());
   resolveMarketCatalog.mockResolvedValue(catalogBtts());
-  getDefaultModelId.mockResolvedValue("claude-sonnet-4-5-20250929");
+  getDefaultModelId.mockResolvedValue("claude-sonnet-5-5");
   getGenerationParams.mockResolvedValue({
     maxTokens: 16000,
     effort: "high",
-    temperature: 0.3,
   });
   getPreferredModelId.mockResolvedValue(null);
   anthropicCreate.mockResolvedValue(anthropicMessage(YES_OUTPUT));

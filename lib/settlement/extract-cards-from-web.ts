@@ -170,7 +170,7 @@ async function runOneRead(
     model,
     system: SYSTEM_PROMPT,
     userMessage: buildUserMessage(ref),
-    // tool/toolName são IGNORADOS no modo server-tool (sem submit forçado) — placeholders.
+    // tool/toolName são IGNORADOS no modo server-tool (sem submit tool) — placeholders.
     tool: { name: "cards_noop", inputSchema: { type: "object" } },
     toolName: "cards_noop",
     maxTokens: CARDS_MAX_TOKENS,

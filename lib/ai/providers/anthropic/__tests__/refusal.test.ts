@@ -17,8 +17,8 @@ import { ModelRefusalError, refusalFromMessage } from "../errors";
 import { anthropicProvider } from "../index";
 import { adaptiveTimeoutMs } from "../timeouts";
 
-const FABLE: AIModel = MODEL_REGISTRY["claude-fable-5-1"];
-const HAIKU: AIModel = MODEL_REGISTRY["claude-haiku-4-5"];
+const OPUS: AIModel = MODEL_REGISTRY["claude-opus-5-5"];
+const HAIKU: AIModel = MODEL_REGISTRY["claude-haiku-5-5"];
 
 function forcedRequest(model: AIModel): AnalysisRequest {
   return {
@@ -33,7 +33,6 @@ function forcedRequest(model: AIModel): AnalysisRequest {
     toolName: "submit_prediction",
     maxTokens: 16000,
     effort: "high",
-    temperature: 0.3,
   };
 }
 
@@ -42,7 +41,7 @@ function message(overrides: Record<string, unknown>) {
     id: "msg-1",
     type: "message",
     role: "assistant",
-    model: "claude-fable-5-1",
+    model: "claude-opus-5-5",
     content: [],
     stop_reason: "end_turn",
     stop_details: null,
@@ -95,7 +94,7 @@ describe("anthropic adapter — recusa do modelo (#524)", () => {
       }),
     );
 
-    const res = await anthropicProvider.runAnalysis(forcedRequest(FABLE));
+    const res = await anthropicProvider.runAnalysis(forcedRequest(OPUS));
     expect(res.ok).toBe(false);
     if (res.ok) return;
     expect(res.status).toBe("provider_error");
@@ -115,7 +114,7 @@ describe("anthropic adapter — recusa do modelo (#524)", () => {
       "refusal",
     );
     expect((res.inputPayload as { model: string }).model).toBe(
-      "claude-fable-5-1",
+      "claude-opus-5-5",
     );
   });
 
@@ -147,7 +146,7 @@ describe("anthropic adapter — recusa do modelo (#524)", () => {
         ],
       }),
     );
-    const res = await anthropicProvider.runAnalysis(forcedRequest(FABLE));
+    const res = await anthropicProvider.runAnalysis(forcedRequest(OPUS));
     expect(res.ok).toBe(true);
     if (!res.ok) return;
     expect(res.toolInput).toEqual({ recommendation: "pass" });
@@ -155,9 +154,9 @@ describe("anthropic adapter — recusa do modelo (#524)", () => {
 });
 
 describe("anthropic adapter — opções por request (#524)", () => {
-  it("adaptive sem prazo: timeout escalado por max_tokens/effort como 2º argumento", async () => {
+  it("sem prazo: timeout escalado por max_tokens/effort como 2º argumento", async () => {
     messagesCreate.mockResolvedValue(message({}));
-    await anthropicProvider.runAnalysis(forcedRequest(FABLE));
+    await anthropicProvider.runAnalysis(forcedRequest(OPUS));
     expect(messagesCreate.mock.calls[0]).toHaveLength(2);
     // 16000 tokens × 0.75 (high) / 60 tok/s + 15s = 215s.
     expect(adaptiveTimeoutMs(16000, "high")).toBe(215_000);
@@ -167,16 +166,26 @@ describe("anthropic adapter — opções por request (#524)", () => {
     });
   });
 
-  it("temperature sem prazo: chamada com 1 argumento só (opções do client, como antes)", async () => {
+  it("Haiku 5.5 sem prazo: também passa as opções próprias (não há mais o caminho de 1 argumento)", async () => {
     messagesCreate.mockResolvedValue(message({}));
     await anthropicProvider.runAnalysis(forcedRequest(HAIKU));
-    expect(messagesCreate.mock.calls[0]).toHaveLength(1);
+    expect(messagesCreate.mock.calls[0]).toHaveLength(2);
+    expect(messagesCreate.mock.calls[0][1]).toEqual({
+      timeout: 215_000,
+      maxRetries: 2,
+    });
+    // O corpo enviado é o único formato (ADR 0061): auto + adaptive + effort, sem temperature.
+    const body = messagesCreate.mock.calls[0][0] as Record<string, unknown>;
+    expect(body.tool_choice).toEqual({ type: "auto" });
+    expect(body.thinking).toEqual({ type: "adaptive" });
+    expect(body.output_config).toEqual({ effort: "high" });
+    expect(body).not.toHaveProperty("temperature");
   });
 
   it("com prazo: timeout cortado pelo restante − margem, sem retry que não caiba", async () => {
     messagesCreate.mockResolvedValue(message({}));
     await anthropicProvider.runAnalysis({
-      ...forcedRequest(FABLE),
+      ...forcedRequest(OPUS),
       deadlineAt: Date.now() + 100_000,
     });
     const opts = messagesCreate.mock.calls[0][1] as {
@@ -205,7 +214,7 @@ describe("anthropic adapter — opções por request (#524)", () => {
     messagesCreate.mockRejectedValue(
       new Anthropic.APIConnectionTimeoutError({ message: "Request timed out." }),
     );
-    const res = await anthropicProvider.runAnalysis(forcedRequest(FABLE));
+    const res = await anthropicProvider.runAnalysis(forcedRequest(OPUS));
     expect(res.ok).toBe(false);
     if (res.ok) return;
     expect(res.status).toBe("timeout");

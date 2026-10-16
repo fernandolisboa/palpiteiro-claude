@@ -210,7 +210,6 @@ beforeEach(() => {
   getGenerationParams.mockResolvedValue({
     maxTokens: 16000,
     effort: "high",
-    temperature: 0.3,
   });
   // #380 — default ON (espelha a coluna default true). Casos flag-OFF sobrescrevem.
   getEnableFidelityValidation.mockReset();
@@ -221,7 +220,7 @@ const baseCall = {
   matchId: "m-1",
   userId: "u-1",
   analyses: [analysis()],
-  modelOverride: "claude-haiku-4-5" as const,
+  modelOverride: "claude-haiku-5-5" as const,
 };
 
 describe("generatePalpites (síntese) — prazo do run (#524 re-review)", () => {
@@ -331,11 +330,11 @@ describe("generatePalpites (síntese) — caminho ok", () => {
     // Sequência de inserts: ai_calls, palpite_sets, palpites (UM batch).
     const aiCallRow = insertValues.mock.calls[0][0] as Record<string, unknown>;
     expect(aiCallRow.status).toBe("ok");
-    expect(aiCallRow.model).toBe("claude-haiku-4-5");
+    expect(aiCallRow.model).toBe("claude-haiku-5-5");
     expect(aiCallRow.promptVersion).toBe("palpites_v10");
 
     const setRow = insertValues.mock.calls[1][0] as Record<string, unknown>;
-    expect(setRow.modelVersion).toBe("claude-haiku-4-5");
+    expect(setRow.modelVersion).toBe("claude-haiku-5-5");
     expect(setRow.promptVersion).toBe("palpites_v10");
     expect(setRow.aiCallId).toBe("row-1");
     // headline jsonb: a manchete SEM placar (vira a linha) e SEM número de valor.
@@ -397,12 +396,13 @@ describe("generatePalpites (síntese) — caminho ok", () => {
     }
   });
 
-  it("golden payload: a AnalysisRequest leva temperature 0.3 e o tool submit_palpite", async () => {
+  it("golden payload: a AnalysisRequest leva effort UTILITY_EFFORT (low, não o do ai_config), sem temperature, e o tool submit_palpite", async () => {
     runAnalysis.mockResolvedValue(okResult(validHeadline));
     await generatePalpites(baseCall);
     const req = runAnalysis.mock.calls[0][0] as AnalysisRequest;
-    expect(req.temperature).toBe(0.3);
-    expect(req.effort).toBeUndefined();
+    expect(req.effort).toBe("low");
+    expect("temperature" in req).toBe(false);
+    expect(req.model.id).toBe("claude-haiku-5-5");
     expect(req.toolName).toBe("submit_palpite");
     expect(req.maxTokens).toBe(16000);
   });
@@ -492,7 +492,7 @@ describe("generatePalpites (síntese) — validação de fidelidade (#380)", () 
     const aiCallRow = insertValues.mock.calls[0][0] as Record<string, unknown>;
     expect(aiCallRow.status).toBe("ok");
     const setRow = insertValues.mock.calls[1][0] as Record<string, unknown>;
-    expect(setRow.modelVersion).toBe("claude-haiku-4-5");
+    expect(setRow.modelVersion).toBe("claude-haiku-5-5");
     expect(res.palpiteSet).toBeDefined();
   });
 
@@ -578,7 +578,7 @@ describe("generatePalpites (síntese) — notícias (#377 / ADR 0032)", () => {
     const headline = setRow.headline as Record<string, unknown>;
     expect(headline.sources).toBeUndefined();
     // O set ainda foi gravado (notícia nunca bloqueia a manchete).
-    expect(setRow.modelVersion).toBe("claude-haiku-4-5");
+    expect(setRow.modelVersion).toBe("claude-haiku-5-5");
     expect(res.palpiteSet).toBeDefined();
   });
 

@@ -238,11 +238,10 @@ beforeEach(() => {
       ["scorer_arrascaeta", "sel-arrascaeta"],
     ]),
   });
-  getDefaultModelId.mockResolvedValue("claude-sonnet-4-5-20250929");
+  getDefaultModelId.mockResolvedValue("claude-sonnet-5-5");
   getGenerationParams.mockResolvedValue({
     maxTokens: 16000,
     effort: "high",
-    temperature: 0.3,
   });
   getPreferredModelId.mockResolvedValue(null);
 });

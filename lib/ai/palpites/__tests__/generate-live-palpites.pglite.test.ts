@@ -264,7 +264,6 @@ beforeEach(async () => {
   getGenerationParams.mockResolvedValue({
     maxTokens: 16000,
     effort: "high",
-    temperature: 0.3,
   });
 });
 
@@ -278,7 +277,7 @@ const callLive = () =>
     userId: ids.userId,
     analyses,
     live: { state: STATE, scoreline: SCORELINE, moment: "aos 63'", now: NOW },
-    modelOverride: "claude-haiku-4-5",
+    modelOverride: "claude-haiku-5-5",
   });
 
 describe("generateLivePalpites (palpites_live_v1) — pglite", () => {
@@ -361,7 +360,7 @@ describe("generateLivePalpites (palpites_live_v1) — pglite", () => {
       matchId: ids.matchId,
       userId: ids.userId,
       analyses,
-      modelOverride: "claude-haiku-4-5",
+      modelOverride: "claude-haiku-5-5",
     });
     runAnalysis.mockResolvedValueOnce(okResult(liveToolInput));
     const live = await callLive();
