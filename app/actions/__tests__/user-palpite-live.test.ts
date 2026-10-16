@@ -36,6 +36,7 @@ import { getUserAccessState } from "@/lib/db/queries/users";
 import { getInPlayState } from "@/lib/live/in-play-state";
 import { readLiveStamp } from "@/lib/live/stamp";
 import { checkPalpitesRateLimit } from "@/lib/rate-limit";
+import { fetchPalpiteFacts } from "@/lib/user-palpite/facts";
 import {
   resolvePalpiteModelBase,
   type PalpiteModelBase,
@@ -164,6 +165,30 @@ describe("analyzeUserPalpite ao vivo", () => {
     if (res.ok) expect(res.analysis.liveLabel).toBe("ao vivo · 63' · 1–0");
   });
 
+  it("motivo com afirmação: não busca fatos depois do apito; a afirmação fica sem conferir", async () => {
+    vi.mocked(extractPalpiteClaims).mockResolvedValue({
+      ok: true,
+      claims: [
+        {
+          team: "away",
+          topic: "absence",
+          text: "o centroavante está fora",
+          players: ["Fulano"],
+          role: "attack",
+        },
+      ],
+      warnings: [],
+      aiCallId: null,
+    } as never);
+    const res = await analyzeUserPalpite(null, form());
+    expect(res.ok).toBe(true);
+    expect(fetchPalpiteFacts).not.toHaveBeenCalled();
+    const row = vi.mocked(insertUserPalpiteAnalysis).mock.calls[0][0];
+    expect(row.claims).toHaveLength(1);
+    // Sem fato pra conferir: o mesmo status de quando os fatos faltam no pré-jogo.
+    expect(row.claims[0].status).toBe("unverifiable");
+  });
+
   it("placar que já passou: recusa antes de cobrar", async () => {
     const res = await analyzeUserPalpite(
       null,
@@ -173,13 +198,14 @@ describe("analyzeUserPalpite ao vivo", () => {
     expect(checkPalpitesRateLimit).not.toHaveBeenCalled();
   });
 
-  it("página de pré-jogo: pede para atualizar, sem cobrar", async () => {
+  it("página de pré-jogo: pede para atualizar, sem cobrar nem ler a base", async () => {
     const res = await analyzeUserPalpite(null, form({ pageLive: "0" }));
     expect(res).toEqual({
       ok: false,
       error: "O jogo começou. Atualize a página para a leitura ao vivo.",
       kind: "nao-analisavel",
     });
+    expect(resolvePalpiteModelBase).not.toHaveBeenCalled();
     expect(checkPalpitesRateLimit).not.toHaveBeenCalled();
   });
 

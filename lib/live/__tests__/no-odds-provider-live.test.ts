@@ -57,6 +57,16 @@ describe("ao vivo não chama o provider de odds", () => {
     );
   });
 
+  // "Analisar meu palpite" ao vivo (#594): sem busca de fatos (desfalques, forma,
+  // tabela) depois do apito; a única chamada fica atrás de `!ctx.live`.
+  it("analyzeUserPalpite só busca fatos fora do ao vivo", () => {
+    const src = read("app/actions/user-palpite.ts");
+    const calls = src.match(/fetchPalpiteFacts\(/g) ?? [];
+    expect(calls).toHaveLength(1);
+    expect(src).toMatch(/!ctx\.live\s*&&[^?]*\?\s*await fetchPalpiteFacts\(/);
+    expect(src).not.toMatch(/getSportsDataProvider|getAbsencesProvider/);
+  });
+
   it("o ramo ao vivo do analyzeBestBet não aquece odds nem busca notícias", () => {
     const src = read("app/actions/predictions.ts");
     const start = src.indexOf("async function analyzeBestBetLive(");

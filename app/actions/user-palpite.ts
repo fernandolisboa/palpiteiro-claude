@@ -190,16 +190,22 @@ export async function analyzeUserPalpite(
       state?.score && phase.actionable && (phase.kind === "in_play" || phase.kind === "half_time")
         ? inPlayReadingFor({ ...state, score: state.score })
         : null;
+    const gateOpts = { now, state, liveMode: true };
+    // Portões grátis antes de ler a base: a fase (como se houvesse modelo) e a página
+    // de pré-jogo velha. Só então a base do apito, e o portão de novo com o modelo.
+    const phaseGate = capabilityGateMessage("seuPalpite", match, {
+      ...gateOpts,
+      modelReady: true,
+    });
+    if (phaseGate) return { ok: false, error: phaseGate, kind: "nao-analisavel" };
+    const stale = livePageRefusal(formData);
+    if (stale) return { ok: false, error: stale, kind: "nao-analisavel" };
     base = inPlay ? await resolvePalpiteModelBase(match, { asOf: match.kickoffAt }) : null;
     const gate = capabilityGateMessage("seuPalpite", match, {
-      now,
-      state,
-      liveMode: true,
+      ...gateOpts,
       modelReady: base !== null,
     });
     if (gate) return { ok: false, error: gate, kind: "nao-analisavel" };
-    const stale = livePageRefusal(formData);
-    if (stale) return { ok: false, error: stale, kind: "nao-analisavel" };
     if (!base || !inPlay || !state?.score) {
       return { ok: false, error: "Ainda não temos o modelo deste jogo.", kind: "sem-modelo" };
     }
@@ -428,10 +434,12 @@ async function analyzeAfterCharge(ctx: ChargedContext): Promise<AnalyzeUserPalpi
   if (extraction.ok) warnings.push(...extraction.warnings);
   else warnings.push(EXTRACTION_FAILED_WARNING);
 
-  // Fatos por tópico, só depois da extração: zero afirmações → zero chamadas.
+  // Fatos por tópico, só depois da extração: zero afirmações → zero chamadas. Ao vivo
+  // (#594), nenhuma: depois do apito não há busca de dados esportivos (como no
+  // predictInPlay), e as afirmações ficam sem conferir, como quando os fatos faltam.
   const needs = factsNeeded(claims);
   const facts: PalpiteFacts =
-    needs.absences || needs.form || needs.standings
+    !ctx.live && (needs.absences || needs.form || needs.standings)
       ? await fetchPalpiteFacts(match, needs)
       : {};
   const factInput = { facts, teams, league: match.league, kickoffAt: match.kickoffAt };
