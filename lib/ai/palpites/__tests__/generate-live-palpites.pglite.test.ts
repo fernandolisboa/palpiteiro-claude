@@ -2,7 +2,7 @@
 //
 // Palpite AO VIVO (#594): generateLivePalpites contra Postgres via pglite. O set grava
 // is_live + o carimbo; só exact_score/margin/clean_sheet; placar provável abaixo do
-// atual vira o mais provável do modelo; sem forma/confrontos/tabela nem notícias; e o
+// atual falha fechado; sem forma/confrontos/tabela nem notícias; e o
 // set ao vivo convive com o de pré-jogo (os dois liquidam).
 import { PGlite } from "@electric-sql/pglite";
 import { drizzle, type PgliteDatabase } from "drizzle-orm/pglite";
@@ -145,10 +145,7 @@ vi.mock("@/lib/providers/news", () => ({
 }));
 
 import { generateLivePalpites, generatePalpites } from "@/lib/ai/palpites";
-import {
-  likelyFinalScores,
-  PALPITES_LIVE_VERSION,
-} from "@/lib/ai/palpites/cartridges/live";
+import { PALPITES_LIVE_VERSION } from "@/lib/ai/palpites/cartridges/live";
 import type { MarketAnalysisSummary } from "@/lib/ai/palpites/synthesis-input";
 import {
   getPalpiteSetsForMatch,
@@ -317,15 +314,19 @@ describe("generateLivePalpites (palpites_live_v1) — pglite", () => {
     expect(JSON.stringify(req)).toContain("Situação do jogo");
   });
 
-  it("placar provável abaixo do atual vira o placar final mais provável do modelo", async () => {
+  it("placar provável abaixo do atual falha fechado (o veredito foi escrito pra ele): invalid_output, sem set", async () => {
     runAnalysis.mockResolvedValue(
       okResult({ ...liveToolInput, probableScore: { home: 0, away: 0 } }),
     );
-    const res = await callLive();
-    const exact = res.palpites.find((p) => p.type === "exact_score")!;
-    const [top] = likelyFinalScores(SCORELINE.matrix.cells, 1);
-    expect(exact.params).toEqual({ home: top.home, away: top.away });
-    expect(top.home).toBeGreaterThanOrEqual(1);
+    await expect(callLive()).rejects.toThrow(/Zod/);
+    expect(runAnalysis).toHaveBeenCalledTimes(1);
+    expect(await getPalpiteSetsForMatch(ids.matchId, ids.userId)).toHaveLength(0);
+    const calls = await realDb
+      .select()
+      .from(schema.aiCalls)
+      .where(eq(schema.aiCalls.matchId, ids.matchId));
+    expect(calls.map((c) => c.status)).toEqual(["invalid_output"]);
+    expect(calls[0].errorMessage).toContain("abaixo do placar atual");
   });
 
   it("saída com campo de pré-jogo (firstHalfScore) é rejeitada pelo .strict()", async () => {

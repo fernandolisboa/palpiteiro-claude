@@ -38,7 +38,6 @@ import {
 import { getProviderForModel } from "../providers";
 import type { AnalysisRequest, ToolDef } from "../providers/types";
 import {
-  likelyFinalScores,
   palpitesLiveCartridge,
   type PalpiteLiveOutput,
 } from "./cartridges/live";
@@ -279,8 +278,6 @@ type SynthesisSpec<O extends SynthesisOutputBase> = {
   cartridge: SynthesisCartridge<O>;
   userMessage: string;
   deadlineAt?: number;
-  // Ajuste em código da saída validada (ao vivo: o placar provável nunca abaixo do atual).
-  adjust?: (output: O) => O;
   // As linhas settleable (templates fixos) da saída.
   rowsFor: (output: O) => ReturnType<typeof buildSettleablePalpiteRows>;
   fidelity: (output: O) => FidelityCheck;
@@ -448,7 +445,7 @@ async function runSynthesis<O extends SynthesisOutputBase>(
     }
     // Já tipado pelo schema concreto do cartucho (diferente de predict, que apaga
     // para BaseMarketOutput).
-    const candidate: O = spec.adjust ? spec.adjust(parsed.data) : parsed.data;
+    const candidate: O = parsed.data;
 
     // 11b. FIREWALL leg (b) — guard de CONTEÚDO pós-Zod (ADR 0030 §3, blocker #5). O
     //      `.strict()` só barra chaves; o LLM pode ecoar um TERMO de valor numa string.
@@ -643,8 +640,10 @@ async function runSynthesis<O extends SynthesisOutputBase>(
  * (as predictions is_live do mesmo momento). Sem forma/confrontos/tabela e sem notícias:
  * só a situação do jogo, os placares finais mais prováveis do modelo em jogo e as chances
  * por mercado. Cartucho palpites_live_v1 (output sem 1º tempo/primeiro a marcar/cartões);
- * placar provável abaixo do atual é corrigido em código para o placar final mais provável
- * do modelo; linhas só exact_score/margin/clean_sheet; o set grava is_live + carimbo.
+ * placar provável abaixo do atual falha fechado (Zod, invalid_output: o veredito e a
+ * narrativa foram escritos pra esse placar, trocar só o placar deixaria a manchete se
+ * contradizendo); linhas só exact_score/margin/clean_sheet; o set grava is_live +
+ * carimbo.
  */
 export async function generateLivePalpites({
   matchId,
@@ -683,25 +682,31 @@ export async function generateLivePalpites({
     matrix: scoreline.matrix,
     analyses,
   });
-  // O placar final mais provável do modelo em jogo: a correção de um placar provável
-  // que ficou abaixo do atual (gols não se desfazem).
-  const [mostLikely] = likelyFinalScores(scoreline.matrix.cells, 1);
+  // Placar provável abaixo do atual (gols não se desfazem): o veredito e a narrativa do
+  // LLM foram escritos pra esse placar, então só trocar o placar deixaria a manchete se
+  // contradizendo. Falha fechado pelo caminho do Zod (invalid_output auditado → sem
+  // manchete, as leituras seguem na página), sem 2ª chamada paga. O cartucho (prompt,
+  // tool e schema) não muda: a regra já está no prompt; aqui só é conferida.
+  const outputSchema = cartridge.outputSchema.superRefine((output, ctx) => {
+    if (
+      output.probableScore.home < score.home ||
+      output.probableScore.away < score.away
+    ) {
+      ctx.addIssue({
+        code: "custom",
+        path: ["probableScore"],
+        message: `placar provável ${output.probableScore.home}–${output.probableScore.away} abaixo do placar atual ${score.home}–${score.away}`,
+      });
+    }
+  });
   const stamp = liveStampFromState(state, now, scoreline.inPlay);
   return runSynthesis<PalpiteLiveOutput>({
     userId,
     matchId,
     model,
-    cartridge,
+    cartridge: { ...cartridge, outputSchema },
     userMessage: cartridge.buildUserMessage(input),
     deadlineAt,
-    adjust: (output) =>
-      output.probableScore.home < score.home ||
-      output.probableScore.away < score.away
-        ? {
-            ...output,
-            probableScore: { home: mostLikely.home, away: mostLikely.away },
-          }
-        : output,
     rowsFor: (output) => buildLivePalpiteRows("", output),
     fidelity: (output) => cartridge.checkFidelity(output, input),
     sourcePredictionIds: analyses.map((a) => a.predictionId),

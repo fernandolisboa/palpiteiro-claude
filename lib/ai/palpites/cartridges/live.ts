@@ -29,7 +29,7 @@ export const PalpitesLiveOutputSchema = z
       .string()
       .min(1)
       .transform((s) => truncate(s, TEXT_MAX)),
-    // Placar FINAL provável. Abaixo do placar atual é corrigido em código (o gerador).
+    // Placar FINAL provável. Abaixo do placar atual o gerador recusa (falha fechado).
     probableScore: ExactScoreParamsSchema,
     confidence: z.enum(["baixa", "media", "alta"]),
     narrative: z
