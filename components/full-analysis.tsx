@@ -44,7 +44,7 @@ export function FullAnalysis({
   return (
     <div className="flex flex-col gap-4">
       {userContext && <AnalysisUserContext view={userContext} />}
-      <p className="text-meta text-muted-foreground flex items-center gap-1.5 leading-snug tracking-tight">
+      <p className="max-w-reading text-meta text-muted-foreground flex items-center gap-1.5 leading-snug tracking-tight">
         <Info className="size-3 shrink-0" aria-hidden="true" />
         {ANALYSIS_RISK_DISCLAIMER}
       </p>

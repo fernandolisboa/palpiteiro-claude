@@ -51,7 +51,7 @@ export function AnalysisResult({ view, showRiskDisclaimer = true }: Props) {
             </span>
           </div>
         </div>
-        <p className="px-4 pb-4 text-body-sm leading-relaxed tracking-tight text-muted-foreground">
+        <p className="max-w-reading px-4 pb-4 text-body-sm leading-relaxed tracking-tight text-muted-foreground">
           Sem aposta recomendada — nenhum dos lados tem vantagem mínima de{" "}
           {view.minEdgeLabel} sobre o mercado
         </p>
@@ -66,7 +66,7 @@ export function AnalysisResult({ view, showRiskDisclaimer = true }: Props) {
         )}
         <Separator />
         <div className="px-4 py-3">
-          <p className="text-body-sm leading-relaxed text-foreground tracking-tight">
+          <p className="max-w-reading text-body-sm leading-relaxed text-foreground tracking-tight">
             {view.rationale}
           </p>
           <KeyFactors items={view.factors} />
@@ -105,7 +105,7 @@ export function AnalysisResult({ view, showRiskDisclaimer = true }: Props) {
         </div>
       </div>
       {rec && (
-        <div className="mx-4 mb-4 flex flex-col gap-2 rounded-md border border-border-subtle bg-surface-2 px-3 py-2.5">
+        <div className="mx-4 mb-4 flex max-w-reading flex-col gap-2 rounded-md border border-border-subtle bg-surface-2 px-3 py-2.5">
           <span className="text-meta uppercase tracking-label text-muted-foreground">
             aposta recomendada
           </span>
@@ -205,7 +205,7 @@ export function AnalysisResult({ view, showRiskDisclaimer = true }: Props) {
       )}
       <Separator />
       <div className="px-4 py-3.5">
-        <p className="text-body-sm leading-relaxed text-foreground tracking-tight">
+        <p className="max-w-reading text-body-sm leading-relaxed text-foreground tracking-tight">
           {view.rationale}
         </p>
         <KeyFactors items={view.factors} />
@@ -217,7 +217,7 @@ export function AnalysisResult({ view, showRiskDisclaimer = true }: Props) {
 
 function KeyFactors({ items }: { items: string[] }) {
   return (
-    <ul className="flex flex-col gap-2 pt-4">
+    <ul className="flex max-w-reading flex-col gap-2 pt-4">
       <span className="text-meta uppercase tracking-label text-muted-foreground">
         fatores-chave
       </span>
@@ -285,7 +285,7 @@ function LiveReading({
         </span>
       </div>
       <Separator />
-      <p className="px-4 py-3 text-body-sm leading-relaxed tracking-tight text-muted-foreground">
+      <p className="max-w-reading px-4 py-3 text-body-sm leading-relaxed tracking-tight text-muted-foreground">
         Sem odd ao vivo, o app não recomenda aposta. As chances abaixo são do modelo
         para o resultado final, com o placar e o tempo que faltam.
       </p>
@@ -313,7 +313,7 @@ function LiveReading({
       )}
       <Separator />
       <div className="px-4 py-3">
-        <p className="text-body-sm leading-relaxed text-foreground tracking-tight">
+        <p className="max-w-reading text-body-sm leading-relaxed text-foreground tracking-tight">
           {view.rationale}
         </p>
         <KeyFactors items={view.factors} />

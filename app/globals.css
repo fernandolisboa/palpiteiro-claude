@@ -85,7 +85,8 @@
   --tracking-label: 0.14em;
   --tracking-eyebrow: 0.18em;
 
-  /* Layout widths — named max-w-* constants (max-w-content/aside/narrow/…). */
+  /* Layout widths — named max-w-* constants (max-w-wide/content/aside/narrow/…). */
+  --container-wide: 1280px;
   --container-content: 1040px;
   --container-aside: 320px;
   --container-narrow: 480px;
@@ -264,10 +265,13 @@ body {
    contêiner (PageContainer ou data-page-width à mão). Sem marca, ou sem suporte a :has(),
    fica content (max-w-content do próprio rodapé). Fora de @layer de propósito: CSS sem
    camada vence as utilities do Tailwind. Fallback literal: o @theme é `inline`, então
-   --container-reading/--container-form não existem no :root em runtime. Ordem importa:
-   form por último (vence o mais estreito). */
+   --container-reading/-wide/-form não existem no :root em runtime. Ordem importa:
+   form por último (vence o mais estreito). `wide` (só a página do jogo) alarga. */
 body:has([data-page-width="reading"]) [data-footer-column] {
   max-width: var(--container-reading, 640px);
+}
+body:has([data-page-width="wide"]) [data-footer-column] {
+  max-width: var(--container-wide, 1280px);
 }
 /* Login: o gutter px-5 fica FORA da coluna de 380px; o rodapé tem o gutter dentro
    (border-box), então a largura máxima é a coluna + os dois gutters. */

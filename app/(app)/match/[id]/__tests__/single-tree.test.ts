@@ -20,8 +20,12 @@ describe.each(["page.tsx", "loading.tsx"])("app/(app)/match/[id]/%s", (file) => 
     expect(src).not.toMatch(/\bhidden lg:block\b/);
   });
 
-  it("usa o PageContainer (um gutter só)", () => {
-    expect(src).toMatch(/<PageContainer width="content">/);
+  it("usa o PageContainer (um gutter só), largo quando há o painel Suas apostas", () => {
+    expect(src).toMatch(
+      file === "page.tsx"
+        ? /<PageContainer width=\{registerBets \? "wide" : "content"\}>/
+        : /<PageContainer width="wide">/,
+    );
   });
 });
 

@@ -38,11 +38,11 @@ export function AnalysisUserContext({ view }: { view: AnalysisUserContextView })
         ))}
       </ul>
       {view.showUnverifiedNote && (
-        <p className="text-meta leading-relaxed tracking-tight text-muted-foreground">
+        <p className="max-w-reading text-meta leading-relaxed tracking-tight text-muted-foreground">
           Não verificável: não temos esse dado; entrou com peso menor.
         </p>
       )}
-      <p className="text-meta leading-relaxed tracking-tight text-muted-foreground">
+      <p className="max-w-reading text-meta leading-relaxed tracking-tight text-muted-foreground">
         O texto que você escreveu não vai pra análise; ela guarda só as afirmações conferidas.
       </p>
     </section>

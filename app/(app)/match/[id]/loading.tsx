@@ -56,10 +56,12 @@ function TabsSkeleton() {
 
 // Um esqueleto só (#576), na ordem da página: barra, hero, palpite, abas e a tabela de
 // mercados (a aba padrão). Sem árvores por largura: no `lg:` a grade já reserva a coluna
-// de 340px do painel Suas apostas, então a coluna principal nasce na largura final.
+// de 340px do painel Suas apostas, então a coluna principal nasce na largura final. Por
+// isso é sempre `wide`: a página só cai pra `content` sem o painel (jogo encerrado ou
+// sem registro), caso em que o esqueleto já não casava antes.
 export default function MatchLoading() {
   return (
-    <PageContainer width="content">
+    <PageContainer width="wide">
       <HeaderBar />
       <HeroSkeleton />
       <div className="pt-4 lg:grid lg:grid-cols-[minmax(0,1fr)_340px] lg:items-start lg:gap-6">

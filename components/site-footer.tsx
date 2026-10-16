@@ -27,8 +27,8 @@ export function SiteFooter() {
   return (
     <footer className="border-t border-border-subtle py-8 text-muted-foreground">
       {/* Mesma geometria do PageContainer (`max-w-content px-5 lg:px-8`, border-box):
-          o texto começa no mesmo x do conteúdo. Nas páginas `reading` e `form` o
-          `app/globals.css` estreita a coluna via `data-page-width` (ADR 0059). */}
+          o texto começa no mesmo x do conteúdo. Nas páginas `wide`, `reading` e `form` o
+          `app/globals.css` alarga ou estreita a coluna via `data-page-width` (ADR 0059). */}
       <div
         data-footer-column
         className="mx-auto flex w-full max-w-content flex-col gap-3 px-5 lg:px-8"

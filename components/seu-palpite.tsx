@@ -247,7 +247,7 @@ export function SeuPalpite({
   return (
     // O título é a aba "Seu palpite" (#576); o alvo do tour também é o painel da aba.
     <section className="flex flex-col gap-3" aria-label="Seu palpite">
-      <p className="text-body-sm tracking-tight text-muted-foreground">
+      <p className="max-w-reading text-body-sm tracking-tight text-muted-foreground">
         Qual é o seu palpite? Escolha um placar ou um resultado e veja na hora o que o
         modelo acha. Grátis, sem gastar análise.
       </p>
@@ -453,7 +453,7 @@ function AnalyzeForm({
       <span className="self-end font-mono text-meta tabular-nums text-muted-foreground">
         {reason.length}/{MAX_REASON_CHARS}
       </span>
-      <p id={hintId} className="text-meta leading-relaxed text-muted-foreground tracking-tight">
+      <p id={hintId} className="max-w-reading text-meta leading-relaxed text-muted-foreground tracking-tight">
         A IA lê o seu motivo, a gente confere cada afirmação com os nossos dados e o
         modelo recalcula. Conta 1 do seu limite diário de palpites. Não escreva dados
         pessoais.
@@ -499,7 +499,7 @@ function AnalysisCard({
             {a.verdictHeadline}
           </span>
         </div>
-        <p className="text-body-sm tracking-tight">{a.resumo}</p>
+        <p className="max-w-reading text-body-sm tracking-tight">{a.resumo}</p>
 
         {a.claims.length > 0 && (
           <div className="flex flex-col gap-2">
@@ -552,7 +552,7 @@ function AnalysisCard({
         </div>
 
         {a.pontos.length > 0 && (
-          <ul className="flex list-disc flex-col gap-1 pl-5 text-body-sm tracking-tight">
+          <ul className="flex max-w-reading list-disc flex-col gap-1 pl-5 text-body-sm tracking-tight">
             {a.pontos.map((p, i) => (
               <li key={i}>{p}</li>
             ))}
@@ -564,7 +564,7 @@ function AnalysisCard({
               onde o modelo discorda de você
             </span>
             {a.discordancias.map((d, i) => (
-              <p key={i} className="text-body-sm tracking-tight">
+              <p key={i} className="max-w-reading text-body-sm tracking-tight">
                 <span className="text-muted-foreground">“{d.claimText}”: </span>
                 {d.texto}
               </p>
@@ -572,18 +572,18 @@ function AnalysisCard({
           </div>
         )}
         {a.showFullSquadNote && (
-          <p className="text-meta leading-relaxed tracking-tight text-muted-foreground">
+          <p className="max-w-reading text-meta leading-relaxed tracking-tight text-muted-foreground">
             &quot;Time completo&quot; não aumenta a chance no modelo: os ajustes só
             descontam desfalques e rodízio e somam o peso do jogo.
           </p>
         )}
         {a.showUnverifiedNote && (
-          <p className="text-meta leading-relaxed tracking-tight text-muted-foreground">
+          <p className="max-w-reading text-meta leading-relaxed tracking-tight text-muted-foreground">
             Não verificável: não temos esse dado; entrou com peso menor.
           </p>
         )}
         {a.warnings.map((w, i) => (
-          <p key={i} className="text-meta leading-relaxed tracking-tight text-muted-foreground">
+          <p key={i} className="max-w-reading text-meta leading-relaxed tracking-tight text-muted-foreground">
             {w}
           </p>
         ))}
