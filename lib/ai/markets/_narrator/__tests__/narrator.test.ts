@@ -430,7 +430,7 @@ describe("judgmentFactorPhrases", () => {
       expect(SYSTEM_PROMPT).toContain('"(informado por você, não conferido)"');
       expect(SYSTEM_PROMPT).toContain("nunca como fato confirmado");
       expect(SYSTEM_PROMPT).toContain('Os itens do bloco "Informado por você"');
-      expect(SYSTEM_PROMPT).toContain("não mudaram nenhum número");
+      expect(SYSTEM_PROMPT).toContain("não mudaram nenhum número: cite-os uma vez");
     });
 
     it("a fidelidade aceita a narração que cita a origem", () => {
@@ -558,6 +558,17 @@ describe("buildNarratorMessage", () => {
       const plain = templatedNarration(overDecision());
       const out = templatedNarration(overDecision({ userNotes: ["x".repeat(600)] }));
       expect(out.rationale).toBe(plain.rationale);
+    });
+
+    it("o template põe as notas que cabem, uma a uma", () => {
+      const plain = templatedNarration(overDecision());
+      const out = templatedNarration(
+        overDecision({ userNotes: ["clássico entre os dois times", "x".repeat(600)] }),
+      );
+      expect(out.rationale).toBe(
+        `${plain.rationale} Você também informou (não conferido, sem efeito nos números): clássico entre os dois times.`,
+      );
+      expect(out.rationale.length).toBeLessThanOrEqual(600);
     });
   });
 });

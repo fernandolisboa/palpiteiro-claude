@@ -122,17 +122,18 @@ Plano: `docs/plans/PLAN-569.md`.
   enum e do nome do time ("troca de técnico no Flamengo"; clássico e clima são do jogo).
   O narrador `code_jev` (`narrator_v1.2`) recebe essas linhas num bloco "Informado por você
   (não conferido, sem efeito nos números)", só quando há alguma (sem nota, a mensagem é a
-  mesma da v1.1); a regra 4 manda citá-las como informação da pessoa, nunca como fato nem
-  como motivo dos percentuais. O racional templado também as registra (quando cabem
-  inteiras), pra todo mercado do run ter a nota mesmo quando o LLM não narra.
+  mesma da v1.1); a regra 4 manda citá-las uma vez como informação da pessoa, nunca como
+  fato nem como motivo dos percentuais. O racional templado também as registra (uma a uma,
+  as que cabem inteiras no limite), pra todo mercado do run ter a nota mesmo quando o LLM
+  não narra.
 - **Gravação.** `otherKind` (enum) entra em `predictions.judgments.userContext.claims` e em
   `user_palpite_analyses.claims`; sem texto livre, "Onde NÃO há PII" do ADR 0046 continua
   valendo.
 - **Síntese.** Como o racional do narrador passa a citar a nota mesmo sem fator movido, a
   síntese do palpite trata "tem nota" (`hasContextNote`) como "moveu": recebe o racional
   montado em código (fatores do JEV que o usuário não moveu).
-- **Aviso do HERO.** Sem fator movido e com nota: "não mudou os números, mas … entrou no
-  texto da análise como informação sua".
+- **Aviso do HERO.** Sem fator movido e com nota: "não mudou os números; … foi passado à
+  análise como informação sua, não conferida" (não promete que o texto do LLM a cite).
 - **"Seu palpite".** Mesma extração (v2); a tela mostra o subtipo como tópico. O narrador do
   palpite não muda (`user_palpite_narrate_v1`/`_live_v1` byte-idênticos): ele já recebe a
   paráfrase cercada.

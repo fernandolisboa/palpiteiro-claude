@@ -80,7 +80,7 @@ Afirmações ("claims", no máximo ${MAX_CLAIMS}, só as que o texto diz):
     - "weather": chuva, calor, frio, gramado ruim (team "both").
     - "travel_fatigue": viagem longa, altitude, fuso. Desgaste de calendário é "rotation".
     - "crowd": torcida (estádio cheio, portões fechados, pressão da torcida).
-    - "motivation": motivação fora da tabela (despedida, vingança, crise no elenco). Título, vaga ou rebaixamento é "stakes".
+    - "motivation": motivação fora da tabela e dos resultados (despedida, vingança, clima ruim no elenco). Título, vaga ou rebaixamento é "stakes"; sequência de vitórias ou derrotas é "form".
     Sem subtipo que encaixe (retrospecto, arbitragem, outros): omita otherKind.
 - Use "other" só quando nenhum dos tópicos acima servir. otherKind só existe em "other".
 - text: paráfrase curta e neutra em português (até 200 caracteres) do que o usuário afirmou. NUNCA escreva nome de jogador no text: use "o jogador citado" ou a função ("o atacante titular").

@@ -172,7 +172,7 @@ export const CONTEXT_APPLIED_NOTICE =
 export const CONTEXT_NO_EFFECT_NOTICE =
   'Conferimos o seu contexto extra, mas ele não mudou a análise: o que você contou foi contradito pelos nossos dados, o modelo já considerava, ou não é um tipo que a gente confere. Veja em "Ler análise completa".';
 export const CONTEXT_NOTED_NOTICE =
-  'Conferimos o seu contexto extra. Ele não mudou os números, mas o que você contou e a gente não confere entrou no texto da análise como informação sua. Veja em "Ler análise completa".';
+  'Conferimos o seu contexto extra. Ele não mudou os números; o que você contou e a gente não confere foi passado à análise como informação sua, não conferida. Veja em "Ler análise completa".';
 export const CONTEXT_EMPTY_NOTICE =
   "Não achamos no seu contexto extra nenhuma afirmação de fato pra conferir; a análise seguiu sem ele.";
 export const CONTEXT_FAILED_NOTICE =

@@ -16,6 +16,7 @@ import {
   type MarketAnalysisSummary,
 } from "@/lib/ai/palpites/synthesis-input";
 import type { PredictionWithAiCall } from "@/lib/db/queries/predictions";
+import { claimEffect } from "@/lib/user-palpite/evidence";
 
 // Prediction stub mínima: só os campos lidos pela projeção (Drizzle numeric → STRING).
 function prediction(over: Partial<Prediction> = {}): Prediction {
@@ -415,8 +416,10 @@ describe("contexto extra fora da síntese (PLAN-565 §13.2)", () => {
   });
 
   it("nota do contexto extra (#569) sem fator movido: o racional do narrador também não vai", () => {
-    const j = judgments({ answers: answers({ attack_weakened_home: 0.9 }) });
-    j.userContext!.claims.push({
+    // Só a afirmação "other": nenhum fator movido, o ramo novo é o único que tira o racional.
+    const j = judgments();
+    j.userContext!.evidence = {};
+    j.userContext!.claims = [{
       team: "home",
       topic: "other",
       otherKind: "coach_change",
@@ -426,7 +429,8 @@ describe("contexto extra fora da síntese (PLAN-565 §13.2)", () => {
       sides: [{ side: "home", status: "unverifiable" }],
       playerChecks: [],
       signals: [],
-    });
+    }];
+    expect(j.userContext!.claims.flatMap((c) => claimEffect(c, j.answers).moved)).toEqual([]);
     const noted = prediction({
       rationale: "Segundo o que você informou, há troca de técnico no Flamengo.",
       judgments: j,

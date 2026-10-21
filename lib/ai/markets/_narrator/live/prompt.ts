@@ -9,8 +9,8 @@ import {
 // código já leu o jogo (o modelo em jogo: a base do apito condicionada ao placar e ao
 // tempo que falta) e o LLM só escreve racional + fatores. Não há odd ao vivo, então a
 // leitura nunca vira aposta. Mesma ferramenta (submit_narration), mesmo schema Zod e
-// mesmos limites do narrador de pré-jogo; o prompt de pré-jogo (narrator_v1.1) fica
-// byte-idêntico. Mudou texto do prompt, tool ou mensagem? Bump + commit `prompt:`.
+// mesmos limites do narrador de pré-jogo; o prompt de pré-jogo (NARRATOR_VERSION) não
+// muda por causa dele. Mudou texto do prompt, tool ou mensagem? Bump + commit `prompt:`.
 export const NARRATOR_LIVE_VERSION = "narrator_live_v1" as const;
 
 export const LIVE_SYSTEM_PROMPT = `Você é o narrador do Palpiteiro, um app de palpites de futebol. O jogo está EM ANDAMENTO. Um modelo estatístico em código JÁ leu o jogo a partir do placar, das expulsões e do tempo que falta, e calculou as chances do resultado final. Seu único trabalho é explicar essa leitura em português do Brasil, com clareza.

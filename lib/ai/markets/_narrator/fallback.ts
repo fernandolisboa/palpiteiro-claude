@@ -18,10 +18,6 @@ export function templatedNarration(d: NarratorDecision): NarratorOutput {
   // Contexto extra sem efeito no número (#569): o template também o registra, pra o
   // aviso do HERO valer em todo mercado do run, narrado pelo LLM ou não.
   const notes = d.userNotes ?? [];
-  const noted =
-    notes.length > 0
-      ? ` Você também informou (não conferido, sem efeito nos números): ${notes.join("; ")}.`
-      : "";
 
   let rationale: string;
   const factors: string[] = [];
@@ -51,8 +47,7 @@ export function templatedNarration(d: NarratorDecision): NarratorOutput {
     rationale = `Sem aposta: não foi possível medir o edge deste mercado com as odds disponíveis. ${goals}${judgments}`;
     factors.push(`Piso de edge do mercado: ${floor}`);
   }
-  // Nota que não cabe inteira no racional fica de fora (nunca cortada no meio).
-  if (noted && rationale.length + noted.length <= RATIONALE_MAX_CHARS) rationale += noted;
+  rationale = withNotes(rationale, notes);
   factors.push(...d.judgmentFactors);
   if (factors.length < 2) factors.push(goals);
 
@@ -60,4 +55,17 @@ export function templatedNarration(d: NarratorDecision): NarratorOutput {
     rationale: rationale.slice(0, RATIONALE_MAX_CHARS),
     key_factors: factors.slice(0, KEY_FACTORS_MAX),
   };
+}
+
+const NOTES_PREFIX = " Você também informou (não conferido, sem efeito nos números): ";
+
+// As notas entram uma a uma enquanto cabem; nenhuma é cortada no meio.
+function withNotes(rationale: string, notes: readonly string[]): string {
+  const fit: string[] = [];
+  for (const note of notes) {
+    const next = `${rationale}${NOTES_PREFIX}${[...fit, note].join("; ")}.`;
+    if (next.length > RATIONALE_MAX_CHARS) break;
+    fit.push(note);
+  }
+  return fit.length > 0 ? `${rationale}${NOTES_PREFIX}${fit.join("; ")}.` : rationale;
 }
