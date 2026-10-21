@@ -3,18 +3,11 @@ import { persistAiCallError } from "@/lib/ai/ai-call-logging";
 import { calculateCost } from "@/lib/ai/cost";
 import { canFitCall } from "@/lib/ai/deadline";
 import type { Effort } from "@/lib/ai/generation-params";
-import {
-  MODEL_REGISTRY,
-  isAIProvider,
-  isModelAllowedForAudience,
-  type AIModel,
-  type AIModelId,
-} from "@/lib/ai/models";
+import { MODEL_REGISTRY, isAIProvider, type AIModel } from "@/lib/ai/models";
 import { getProviderForModel } from "@/lib/ai/providers";
 import type { AiCallStatus, AnalysisRequest } from "@/lib/ai/providers/types";
+import { resolveUserRunModelId } from "@/lib/ai/user-run-model";
 import { db } from "@/lib/db";
-import { getDefaultModelId } from "@/lib/db/queries/ai-config";
-import { getPreferredModelId } from "@/lib/db/queries/users";
 import {
   PalpiteNarrationSchema,
   type NarrationSource,
@@ -50,11 +43,6 @@ export type NarratePalpiteResult = {
   aiCallId: string | null;
 };
 
-async function resolveRunModelId(userId: string, isAdmin: boolean): Promise<AIModelId> {
-  const pref = await getPreferredModelId(userId);
-  return pref && isModelAllowedForAudience(pref, isAdmin) ? pref : getDefaultModelId();
-}
-
 export async function narratePalpite(args: {
   input: NarrationInput;
   userId: string;
@@ -72,7 +60,7 @@ export async function narratePalpite(args: {
   });
 
   try {
-    const model = MODEL_REGISTRY[await resolveRunModelId(userId, args.isAdmin)];
+    const model = MODEL_REGISTRY[await resolveUserRunModelId(userId, args.isAdmin)];
     const request: AnalysisRequest = {
       model,
       system: spec.system,
