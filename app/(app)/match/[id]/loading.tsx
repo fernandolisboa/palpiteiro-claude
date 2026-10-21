@@ -9,7 +9,8 @@ function HeaderBar() {
     <div className="flex items-center justify-between gap-3">
       <span className="flex items-center gap-2 text-muted-foreground">
         <ChevronLeft className="size-3.5" />
-        <span className="text-body-sm tracking-tight">jogos</span>
+        {/* O rótulo do voltar depende da origem ("jogos" ou o time, #446). */}
+        <Skeleton className="h-3.5 w-14" />
       </span>
       <Skeleton className="h-4 w-24" />
     </div>

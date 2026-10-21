@@ -117,25 +117,36 @@ describe("resolveBackHref", () => {
 });
 
 describe("teamFromBackHref (#446)", () => {
+  const teams = ["Flamengo", "Atlético Mineiro", "Brighton & Hove Albion"];
+
   it("lista de jogos → null (o rótulo fica 'jogos')", () => {
-    expect(teamFromBackHref("/jogos")).toBeNull();
-    expect(teamFromBackHref("/jogos?league=bra")).toBeNull();
+    expect(teamFromBackHref("/jogos", teams)).toBeNull();
+    expect(teamFromBackHref("/jogos?league=bra", teams)).toBeNull();
   });
 
-  it("histórico de time → nome canônico decodificado", () => {
-    expect(teamFromBackHref("/time/Flamengo")).toBe("Flamengo");
-    expect(teamFromBackHref("/time/Atl%C3%A9tico%20Mineiro")).toBe("Atlético Mineiro");
-    expect(teamFromBackHref("/time/Brighton%20%26%20Hove%20Albion")).toBe(
+  it("histórico de um dos times → nome canônico decodificado", () => {
+    expect(teamFromBackHref("/time/Flamengo", teams)).toBe("Flamengo");
+    expect(teamFromBackHref("/time/Atl%C3%A9tico%20Mineiro", teams)).toBe(
+      "Atlético Mineiro",
+    );
+    expect(teamFromBackHref("/time/Brighton%20%26%20Hove%20Albion", teams)).toBe(
       "Brighton & Hove Albion",
     );
   });
 
   it("ignora query/hash depois do segmento", () => {
-    expect(teamFromBackHref("/time/Flamengo?x=1")).toBe("Flamengo");
+    expect(teamFromBackHref("/time/Flamengo?x=1", teams)).toBe("Flamengo");
+  });
+
+  it("time que não é do jogo (link forjado) → null", () => {
+    expect(teamFromBackHref("/time/Palmeiras", teams)).toBeNull();
+    expect(
+      teamFromBackHref("/time/Sua%20conta%20foi%20bloqueada", teams),
+    ).toBeNull();
   });
 
   it("segmento vazio ou malformado → null", () => {
-    expect(teamFromBackHref("/time/")).toBeNull();
-    expect(teamFromBackHref("/time/%E0%A4%A")).toBeNull();
+    expect(teamFromBackHref("/time/", teams)).toBeNull();
+    expect(teamFromBackHref("/time/%E0%A4%A", teams)).toBeNull();
   });
 });

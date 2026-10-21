@@ -18,7 +18,7 @@ export function RecentPredsEmpty({
   return (
     <div className="rounded-lg border border-dashed border-border">
       <EmptyState
-        className="max-w-reading py-6"
+        className="py-6"
         title="Nenhuma predição ainda"
         description='Abra um jogo e toque em "Analisar com IA". Os últimos jogos que você analisar aparecem aqui.'
         action={

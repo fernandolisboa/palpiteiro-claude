@@ -68,15 +68,24 @@ export function resolveBackHref(
  * já validado por `resolveBackHref`): devolve o nome canônico decodificado, ou null
  * quando a origem é outra lista. O rótulo do link vem daqui (#446): vindo de
  * `/time/Flamengo`, "voltar" diz "Flamengo", não "jogos". Segmento malformado → null.
+ *
+ * Só vale um dos times do jogo (`teams`, nomes canônicos): todo `/time` legítimo é o
+ * histórico de um deles, e o `back` vem da URL, então qualquer outro texto (um link
+ * forjado que poria uma frase no "voltar") cai no rótulo padrão.
  */
-export function teamFromBackHref(backHref: string): string | null {
+export function teamFromBackHref(
+  backHref: string,
+  teams: readonly string[],
+): string | null {
   const prefix = "/time/";
   if (!backHref.startsWith(prefix)) return null;
   const segment = backHref.slice(prefix.length).split(/[?#]/)[0];
   if (!segment) return null;
+  let team: string;
   try {
-    return decodeURIComponent(segment);
+    team = decodeURIComponent(segment);
   } catch {
     return null;
   }
+  return teams.includes(team) ? team : null;
 }

@@ -2,6 +2,7 @@ import Link from "next/link";
 import { notFound, redirect } from "next/navigation";
 import { Suspense } from "react";
 import { Users } from "lucide-react";
+import { z } from "zod";
 
 import { BackLink } from "@/components/back-link";
 import { PageContainer } from "@/components/page-container";
@@ -118,11 +119,13 @@ export default async function MatchPage({ params, searchParams }: PageProps) {
   // as bases são aceitas; fallback = /jogos (origem default).
   const query = await searchParams;
   const backHref = resolveBackHref(query.back, ["/jogos", "/time"]);
-  const backTeam = teamFromBackHref(backHref);
   // Aba aberta (#576): o SSR já sai com ela visível (sem pulo); depois a troca é local.
   const initialTab = parseMatchTab(query.aba);
   // Middleware garante sessão; redirect defensivo caso o matcher mude. Sessão e jogo
   // são independentes: buscados juntos (cada um é um round trip ao banco).
+  // Id fora do formato uuid nem chega ao banco (o Postgres lançaria e cairia no
+  // error.tsx): é o 404 de jogo não encontrado, como no bolão.
+  if (!z.uuid().safeParse(id).success) notFound();
   const [session, match] = await Promise.all([auth(), getMatchById(id)]);
   if (!session?.user?.id) redirect("/signin");
   if (!match) notFound();
@@ -144,6 +147,7 @@ export default async function MatchPage({ params, searchParams }: PageProps) {
   };
   // Rótulo do "voltar" pela origem resolvida (#446): vindo do histórico de um time, o
   // link diz o nome dele, não "jogos".
+  const backTeam = teamFromBackHref(backHref, [match.homeTeam, match.awayTeam]);
   const backLabel = backTeam ? teamToTeam(backTeam, leagueKey).name : "jogos";
 
   // Pré-aquece over/under + 1X2 ao vivo (#173): featured/batch, +1 crédito de liga por
