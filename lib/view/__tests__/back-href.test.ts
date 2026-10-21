@@ -1,6 +1,10 @@
 import { describe, expect, it } from "vitest";
 
-import { appendBackParam, resolveBackHref } from "@/lib/view/back-href";
+import {
+  appendBackParam,
+  resolveBackHref,
+  teamFromBackHref,
+} from "@/lib/view/back-href";
 
 describe("appendBackParam", () => {
   it("no-op quando listHref ausente (undefined) → href de detalhe limpo", () => {
@@ -109,5 +113,29 @@ describe("resolveBackHref", () => {
       "/jogos",
     );
     expect(resolveBackHref(undefined, ["/jogos", "/time"])).toBe("/jogos");
+  });
+});
+
+describe("teamFromBackHref (#446)", () => {
+  it("lista de jogos → null (o rótulo fica 'jogos')", () => {
+    expect(teamFromBackHref("/jogos")).toBeNull();
+    expect(teamFromBackHref("/jogos?league=bra")).toBeNull();
+  });
+
+  it("histórico de time → nome canônico decodificado", () => {
+    expect(teamFromBackHref("/time/Flamengo")).toBe("Flamengo");
+    expect(teamFromBackHref("/time/Atl%C3%A9tico%20Mineiro")).toBe("Atlético Mineiro");
+    expect(teamFromBackHref("/time/Brighton%20%26%20Hove%20Albion")).toBe(
+      "Brighton & Hove Albion",
+    );
+  });
+
+  it("ignora query/hash depois do segmento", () => {
+    expect(teamFromBackHref("/time/Flamengo?x=1")).toBe("Flamengo");
+  });
+
+  it("segmento vazio ou malformado → null", () => {
+    expect(teamFromBackHref("/time/")).toBeNull();
+    expect(teamFromBackHref("/time/%E0%A4%A")).toBeNull();
   });
 });

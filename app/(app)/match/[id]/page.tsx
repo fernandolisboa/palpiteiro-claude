@@ -83,7 +83,7 @@ import {
   type PalpiteHeadlineView,
 } from "@/lib/view/palpites-headline";
 import { getRequestTimeZone } from "@/lib/server/request-timezone";
-import { resolveBackHref } from "@/lib/view/back-href";
+import { resolveBackHref, teamFromBackHref } from "@/lib/view/back-href";
 import { parseMatchTab, type MatchTab } from "@/lib/view/match-tabs";
 import type {
   MarketAnalysisSectionItem,
@@ -118,6 +118,7 @@ export default async function MatchPage({ params, searchParams }: PageProps) {
   // as bases são aceitas; fallback = /jogos (origem default).
   const query = await searchParams;
   const backHref = resolveBackHref(query.back, ["/jogos", "/time"]);
+  const backTeam = teamFromBackHref(backHref);
   // Aba aberta (#576): o SSR já sai com ela visível (sem pulo); depois a troca é local.
   const initialTab = parseMatchTab(query.aba);
   // Middleware garante sessão; redirect defensivo caso o matcher mude. Sessão e jogo
@@ -141,6 +142,9 @@ export default async function MatchPage({ params, searchParams }: PageProps) {
     home: teamToTeam(match.homeTeam, leagueKey).name,
     away: teamToTeam(match.awayTeam, leagueKey).name,
   };
+  // Rótulo do "voltar" pela origem resolvida (#446): vindo do histórico de um time, o
+  // link diz o nome dele, não "jogos".
+  const backLabel = backTeam ? teamToTeam(backTeam, leagueKey).name : "jogos";
 
   // Pré-aquece over/under + 1X2 ao vivo (#173): featured/batch, +1 crédito de liga por
   // refresh stale (h2h é market separado de totals). A tabela de mercados lê as capturas
@@ -529,6 +533,7 @@ export default async function MatchPage({ params, searchParams }: PageProps) {
         analyze={caps.analyze}
         heroLive={heroLive}
         backHref={backHref}
+        backLabel={backLabel}
         finalScore={finalScore}
         bestBetEnabled={bestBetEnabled}
         heroPalpite={heroPalpite}
@@ -591,6 +596,8 @@ type MatchLayoutProps = {
   // Href de "voltar" — recompõe a lista filtrada (/jogos?…) de origem; /jogos
   // como fallback (deep-link / sem `back`).
   backHref: string;
+  // Texto do "voltar": "jogos" ou o nome do time de origem (#446).
+  backLabel: string;
   // Placar final pra jogos encerrados; null caso contrário.
   finalScore: { home: number; away: number } | null;
   // Flag #178/#351: o kill-switch de spend (enable_best_bet_fan_out). Passado ao HERO
@@ -647,6 +654,7 @@ function MatchLayout({
   analyze,
   heroLive,
   backHref,
+  backLabel,
   finalScore,
   bestBetEnabled,
   heroPalpite,
@@ -676,7 +684,7 @@ function MatchLayout({
       <h1 className="sr-only">
         {heroView.home.name} × {heroView.away.name}
       </h1>
-      <MatchTopBar backHref={backHref} poolMatchId={pool ? matchId : null} />
+      <MatchTopBar backHref={backHref} backLabel={backLabel} poolMatchId={pool ? matchId : null} />
 
       <MatchHero
         view={heroView}
@@ -788,17 +796,19 @@ function MatchLayout({
   );
 }
 
-// Volta pra lista ("jogos") à esquerda e o atalho do bolão à direita, numa linha.
+// Volta pra origem ("jogos" ou o time) à esquerda e o atalho do bolão à direita, numa linha.
 function MatchTopBar({
   backHref,
+  backLabel,
   poolMatchId,
 }: {
   backHref: string;
+  backLabel: string;
   poolMatchId: string | null;
 }) {
   return (
     <div className="flex items-center justify-between gap-3">
-      <BackLink href={backHref} label="jogos" className="mb-0" />
+      <BackLink href={backHref} label={backLabel} className="mb-0" />
       {poolMatchId !== null && <PoolLink matchId={poolMatchId} />}
     </div>
   );
