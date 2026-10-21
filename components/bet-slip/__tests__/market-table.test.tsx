@@ -4,6 +4,7 @@ import { renderToStaticMarkup } from "react-dom/server";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 
 vi.mock("@/app/actions/bet-slip", () => ({ registerBetSlip: vi.fn() }));
+vi.mock("@/app/actions/bet-slip-explain", () => ({ explainBetSlip: vi.fn() }));
 vi.mock("@/app/actions/bets", () => ({ parseBet: vi.fn() }));
 
 import { BetSlipProvider } from "@/components/bet-slip/bet-slip-provider";

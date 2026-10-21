@@ -343,7 +343,9 @@ export function ComoUsarContent() {
           <Link href="/apostas" className={LINK}>
             Suas apostas
           </Link>{" "}
-          e são conferidas sozinhas depois do jogo.
+          e são conferidas sozinhas depois do jogo. Antes do jogo, <Ui>Explicar com IA</Ui>{" "}
+          abaixo da avaliação conta em texto o porquê desses números, sem mudar nenhum
+          deles (1 do seu limite diário de palpites).
         </p>
         <p>
           <Strong>Com o jogo rolando</Strong>, dá pra registrar resultado, dupla
