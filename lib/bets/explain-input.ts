@@ -66,7 +66,8 @@ export type ExplainCombo = {
   userStakeUnits: number | null;
 };
 
-// O que a base do jogo diz do JEV. null quando nenhuma perna veio do modelo de placar.
+// O que a base do jogo diz do JEV. Em `BetExplainInput.jev`, null quando nenhuma perna
+// veio do modelo de placar ou quando não dá pra afirmar nada (base ilegível).
 export type ExplainJev =
   | { kind: "applied"; phrases: string[] }
   | { kind: "no_change" }
@@ -117,15 +118,21 @@ function lineOf(params: BetLegParams): number | null {
   return Number.isFinite(n) ? n : null;
 }
 
+// null = não dá pra afirmar nada do JEV: base gravada que não voltou (row inválida ou
+// apagada) ou JEV aplicado com os julgamentos ilegíveis. Melhor calar do que dizer
+// "sem ajuste" de um número que pode ter sido ajustado.
 function jevFrom(
+  recordedId: string | null,
   snapshot: MatchModelSnapshot | null,
   teams: TeamNames
-): ExplainJev {
-  if (snapshot === null) return { kind: "no_base" };
+): ExplainJev | null {
+  if (recordedId === null) return { kind: "no_base" };
+  if (snapshot === null || snapshot.id !== recordedId) return null;
   if (snapshot.jevStatus === "not_attempted") return { kind: "not_attempted" };
   if (snapshot.jevStatus === "failed") return { kind: "failed" };
   const j = snapshot.judgments;
-  const phrases = j?.applied
+  if (!j) return null;
+  const phrases = j.applied
     ? judgmentFactorPhrases(j.answers, j.multipliers, teams)
     : [];
   return phrases.length > 0
@@ -239,7 +246,9 @@ export function buildBetExplainInput(args: {
     scorelineSource:
       scorelineSource ??
       (usesScoreline ? (args.snapshot?.lambdaSource ?? null) : null),
-    jev: usesScoreline ? jevFrom(args.snapshot, teams) : null,
+    jev: usesScoreline
+      ? jevFrom(slips[0]?.modelSnapshotId ?? null, args.snapshot, teams)
+      : null,
     lines,
   };
 }

@@ -31,11 +31,30 @@ const DECIMAL_RE =
 
 // Mandar apostar ou mexer na aposta. Lookarounds de letra: o \b do JS não enxerga
 // letra acentuada.
+// "Recomendação" e "recomendado pelas bandas" descrevem; só a forma ativa sem "não"
+// antes é ordem.
 const IMPERATIVE_RE =
-  /(?<![\p{L}\d])(?:aposte|apostem|apostaria|v[áa]\s+de|vai\s+de|vamos\s+de|entre\s+n[oa]s?|coloque|aumente|diminua|reduza|dobre|troque|recomend\p{L}*|sugiro|deveria\s+apostar|vale\s+apostar)(?![\p{L}\d])/iu;
-// Promessa. "garantid*" só fora de negação ("não é garantido" é o aviso do backtest).
+  /(?<![\p{L}\d])(?:aposte|apostem|apostaria|v[áa]\s+de|vai\s+de|vamos\s+de|entre\s+n[oa]s?|entre\s+nessa|coloque|aumente|diminua|reduza|dobre|troque|aproveite|jogue|pegue|sugiro|deveria\s+apostar|vale\s+apostar)(?![\p{L}\d])|(?<!n[ãa]o\s)(?<![\p{L}\d])(?:recomendo|recomendamos|recomenda-se|recomendaria|recomende|recomendem)(?![\p{L}\d])/iu;
+// Promessa. "garantid*" só conta fora de negação: "isso não é uma vantagem garantida"
+// é o aviso do backtest (a negação vale pra oração inteira).
 const PROMISE_RE =
-  /(?<![\p{L}\d])(?:lucro\s+certo|dinheiro\s+f[áa]cil|imperd[íi]vel|aposta\s+certa|com\s+certeza|sem\s+risco)(?![\p{L}\d])|(?<!n[ãa]o\s(?:\p{L}+\s){0,2})(?<![\p{L}\d])garantid\p{L}*/iu;
+  /(?<![\p{L}\d])(?:lucro\s+certo|dinheiro\s+f[áa]cil|imperd[íi]vel|aposta\s+certa|com\s+certeza|sem\s+risco)(?![\p{L}\d])/iu;
+const GUARANTEE_RE = /(?<![\p{L}\d])garantid\p{L}*/giu;
+const NEGATION_RE =
+  /(?<![\p{L}\d])(?:n[ãa]o|nada|nenhum\p{L}*|nunca|sem)(?![\p{L}\d])/iu;
+
+function promisesGuarantee(text: string): boolean {
+  for (const m of text.matchAll(GUARANTEE_RE)) {
+    const before = text.slice(0, m.index);
+    const clause = before.slice(
+      Math.max(
+        ...[".", "!", "?", ";", "\n"].map((c) => before.lastIndexOf(c))
+      ) + 1
+    );
+    if (!NEGATION_RE.test(clause)) return true;
+  }
+  return false;
+}
 export const BOOKMAKER_NAME_RE =
   /\b(betano|bet365|pinnacle|betfair|sportingbet|superbet|novibet|kto)\b/i;
 const HOUSE_RE =
@@ -45,8 +64,10 @@ const URL_RE = /https?:\/\/|www\.|\.com\b|\.bet\b/iu;
 // Contradição do veredito, por perna: "tem valor" numa perna sem valor e vice-versa.
 const SAYS_NO_VALUE_RE =
   /n[ãa]o\s+tem\s+valor|sem\s+valor|n[ãa]o\s+(?:vale|compensa|se\s+paga)/iu;
+// Sem "se paga": descrever o break-even ("só se paga se a chance passar de…") é a
+// explicação pedida, não um veredito.
 const SAYS_VALUE_RE =
-  /(?<!n[ãa]o\s)(?<![\p{L}])(?:tem\s+valor|com\s+valor|vale\s+a\s+pena|se\s+paga)(?![\p{L}])/iu;
+  /(?<!n[ãa]o\s)(?<![\p{L}])(?:tem\s+valor|com\s+valor|vale\s+a\s+pena)(?![\p{L}])/iu;
 
 function llmTexts(o: BetExplanation): string[] {
   return [
@@ -127,12 +148,15 @@ export function checkExplanationFidelity(
   }
 
   // O veredito é do código: o texto de cada perna não pode dizer o contrário.
+  // Com a odd de mercado contando outra história (coherenceWarning), o texto fala dos
+  // dois lados de propósito: sem checagem.
   const byIndex = new Map(i.legs.map((l) => [l.index, l]));
   const clash = (reading: string | null, t: string) =>
     (reading === "negative" && SAYS_VALUE_RE.test(t)) ||
     (reading === "positive" && SAYS_NO_VALUE_RE.test(t));
   for (const p of o.pernas) {
-    if (clash(byIndex.get(p.indice)?.reading ?? null, p.texto)) {
+    const l = byIndex.get(p.indice);
+    if (l && !l.coherenceWarning && clash(l.reading, p.texto)) {
       return {
         ok: false,
         reason: `fidelity: perna ${p.indice} contradiz o veredito`,
@@ -150,7 +174,9 @@ export function checkExplanationLanguage(o: BetExplanation): FidelityCheck {
   const text = llmTexts(o).join(" \n ");
   if (IMPERATIVE_RE.test(text))
     return { ok: false, reason: "language: imperativo" };
-  if (PROMISE_RE.test(text)) return { ok: false, reason: "language: promessa" };
+  if (PROMISE_RE.test(text) || promisesGuarantee(text)) {
+    return { ok: false, reason: "language: promessa" };
+  }
   if (BOOKMAKER_NAME_RE.test(text) || HOUSE_RE.test(text)) {
     return { ok: false, reason: "language: casa de apostas" };
   }

@@ -30,7 +30,7 @@ import { BetExplanationSchema, type BetExplanation } from "./schema";
 export const EXPLAIN_MAX_TOKENS = 2000;
 const EXPLAIN_EFFORT: Effort = "low";
 
-export type ExplainBetSlipResult = {
+export type ExplainWithAIResult = {
   explanation: BetExplanation;
   source: "llm" | "template";
   aiCallId: string | null;
@@ -42,9 +42,9 @@ export async function explainBetSlipWithAI(args: {
   matchId: string;
   isAdmin: boolean;
   deadlineAt?: number;
-}): Promise<ExplainBetSlipResult> {
+}): Promise<ExplainWithAIResult> {
   const { input, userId, matchId } = args;
-  const template = (aiCallId: string | null): ExplainBetSlipResult => ({
+  const template = (aiCallId: string | null): ExplainWithAIResult => ({
     explanation: templatedBetExplanation(input),
     source: "template",
     aiCallId,

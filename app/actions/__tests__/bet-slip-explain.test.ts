@@ -150,6 +150,33 @@ describe("explainBetSlip — portões grátis (sem cobrar)", () => {
     expect(mockRateLimit).not.toHaveBeenCalled();
   });
 
+  it("ids inválidos ecoam na recusa (o painel casa o erro com o registro)", async () => {
+    const res = await explainBetSlip(null, form([ID1, "x"]));
+    expect(res).toMatchObject({
+      ok: false,
+      kind: "invalido",
+      slipIds: [ID1, "x"],
+    });
+  });
+
+  it("slips de registros diferentes (instante ou base) → não encontrado", async () => {
+    mockSlips.mockResolvedValue([
+      SLIPS[0],
+      { ...SLIPS[1], createdAt: new Date("2026-10-21T19:00:00Z") },
+    ]);
+    expect(await explainBetSlip(null, form())).toMatchObject({
+      kind: "nao-encontrado",
+    });
+    mockSlips.mockResolvedValue([
+      SLIPS[0],
+      { ...SLIPS[1], modelSnapshotId: "snap-2" },
+    ]);
+    expect(await explainBetSlip(null, form())).toMatchObject({
+      kind: "nao-encontrado",
+    });
+    expect(mockRateLimit).not.toHaveBeenCalled();
+  });
+
   it("slips de jogos diferentes ou combinada misturada → não encontrado", async () => {
     mockSlips.mockResolvedValue([SLIPS[0], { ...SLIPS[1], matchId: "m-2" }]);
     expect(await explainBetSlip(null, form())).toMatchObject({

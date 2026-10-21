@@ -10,7 +10,17 @@ import { Button } from "@/components/ui/button";
 const sameIds = (a: readonly string[], b: readonly string[]) =>
   a.length === b.length && a.every((id, i) => id === b[i]);
 
+// A região viva fica montada o tempo todo: o resultado troca o botão DENTRO dela, e o
+// leitor de tela anuncia a explicação quando chega.
 export function SlipExplain({ slipIds }: { slipIds: string[] }) {
+  return (
+    <div aria-live="polite">
+      <SlipExplainContent slipIds={slipIds} />
+    </div>
+  );
+}
+
+function SlipExplainContent({ slipIds }: { slipIds: string[] }) {
   const slip = useBetSlip();
   if (!slip) return null;
   const state =
@@ -21,7 +31,7 @@ export function SlipExplain({ slipIds }: { slipIds: string[] }) {
   if (state?.ok) {
     const { explanation } = state;
     return (
-      <div className="flex flex-col gap-3 px-4 pb-3" aria-live="polite">
+      <div className="flex flex-col gap-3 px-4 pb-3">
         <span className="text-meta tracking-eyebrow text-muted-foreground uppercase">
           explicação com IA
         </span>

@@ -171,6 +171,7 @@ export function comboInput(): BetExplainInput {
         {
           mode: "combinada",
           comboUserOdd: "3.400",
+          modelSnapshotId: null,
           jointProbPct: "31.50",
           stakeUnits: "1.00",
         }

@@ -72,6 +72,29 @@ describe("checkExplanationFidelity (#562)", () => {
     );
   });
 
+  it("descrever o break-even numa perna sem valor não é contradição", () => {
+    expect(
+      checkExplanationFidelity(
+        withLeg(1, "Sua odd só se paga se a chance passar de 55,6%."),
+        INPUT
+      )
+    ).toEqual({ ok: true });
+  });
+
+  it("com coherenceWarning o texto pode falar dos dois lados", () => {
+    const input = simplesInput();
+    input.legs[0].coherenceWarning = true;
+    expect(
+      checkExplanationFidelity(
+        withLeg(
+          0,
+          "Pela odd de mercado ficaria sem valor, mas a sua odd paga mais."
+        ),
+        input
+      )
+    ).toEqual({ ok: true });
+  });
+
   it("'não tem valor' numa perna sem valor passa", () => {
     expect(
       checkExplanationFidelity(
@@ -110,7 +133,22 @@ describe("checkExplanationLanguage (#562)", () => {
   });
 
   it.each([
+    "Isso não é uma vantagem garantida.",
+    "No backtest, nada está garantido.",
+    "Isto é uma leitura do modelo, não uma recomendação.",
+    "O stake recomendado pelas bandas é 1u.",
+    "Não recomendamos nada: só explicamos os números.",
+  ])("%s → passa", (texto) => {
+    expect(checkExplanationLanguage({ ...GOOD, resumo: texto })).toEqual({
+      ok: true,
+    });
+  });
+
+  it.each([
     "Aposte no over.",
+    "Aproveite essa odd.",
+    "Recomendamos o over.",
+    "O over está garantido. Não perca.",
     "Vá de over sem medo.",
     "Recomendo dobrar o stake.",
     "Aumente o stake.",

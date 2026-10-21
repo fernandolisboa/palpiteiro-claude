@@ -56,15 +56,26 @@ const SlipIdsSchema = z
   .max(MAX_SLIP_SELECTIONS)
   .refine((ids) => new Set(ids).size === ids.length);
 
-function parseSlipIds(formData: FormData): string[] | null {
+function parseSlipIds(formData: FormData): {
+  ids: string[] | null;
+  // O que veio, pra a recusa casar com o registro na tela (o painel só mostra o
+  // estado dos ids dele).
+  echo: string[];
+} {
+  let raw: unknown;
   try {
-    const parsed = SlipIdsSchema.safeParse(
-      JSON.parse(String(formData.get("slipIds") ?? ""))
-    );
-    return parsed.success ? parsed.data : null;
+    raw = JSON.parse(String(formData.get("slipIds") ?? ""));
   } catch {
-    return null;
+    return { ids: null, echo: [] };
   }
+  const parsed = SlipIdsSchema.safeParse(raw);
+  if (parsed.success) return { ids: parsed.data, echo: parsed.data };
+  const echo = Array.isArray(raw)
+    ? raw
+        .filter((v): v is string => typeof v === "string")
+        .slice(0, MAX_SLIP_SELECTIONS)
+    : [];
+  return { ids: null, echo };
 }
 
 const NOT_FOUND =
@@ -75,11 +86,11 @@ export async function explainBetSlip(
   formData: FormData
 ): Promise<ExplainBetSlipResult> {
   const deadlineAt = actionDeadline();
-  const slipIds = parseSlipIds(formData);
+  const { ids: slipIds, echo } = parseSlipIds(formData);
   if (!slipIds) {
     return {
       ok: false,
-      slipIds: [],
+      slipIds: echo,
       error: "Pedido inválido.",
       kind: "invalido",
     };
@@ -109,8 +120,16 @@ export async function explainBetSlip(
   if (slips.length !== slipIds.length)
     return refuse(NOT_FOUND, "nao-encontrado");
   const matchId = slips[0].matchId;
+  // Um registro só: mesmo jogo, mesmo instante e mesma base (a explicação cita o JEV
+  // de UMA base); combinada sempre sozinha.
+  const first = slips[0];
   const oneRegistration =
-    slips.every((s) => s.matchId === matchId) &&
+    slips.every(
+      (s) =>
+        s.matchId === matchId &&
+        s.createdAt.getTime() === first.createdAt.getTime() &&
+        s.modelSnapshotId === first.modelSnapshotId
+    ) &&
     (slips.every((s) => s.mode !== "combinada") || slips.length === 1);
   if (!oneRegistration) return refuse(NOT_FOUND, "nao-encontrado");
   if (slips.some((s) => s.isLive)) {

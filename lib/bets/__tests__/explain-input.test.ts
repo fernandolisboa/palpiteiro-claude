@@ -63,10 +63,28 @@ describe("buildBetExplainInput (#562)", () => {
   ] as const)("%s → jev %s", (_l, snap, kind) => {
     const i = buildBetExplainInput({
       ...base,
-      slips: [slipRow([leg()])],
+      slips: [slipRow([leg()], { modelSnapshotId: snap ? "snap-1" : null })],
       snapshot: snap,
     });
     expect(i.jev?.kind).toBe(kind);
+  });
+
+  it("base gravada que não voltou (row inválida/apagada) → não afirma nada do JEV", () => {
+    const i = buildBetExplainInput({
+      ...base,
+      slips: [slipRow([leg()])],
+      snapshot: null,
+    });
+    expect(i.jev).toBeNull();
+  });
+
+  it("JEV aplicado com julgamentos ilegíveis → não afirma nada", () => {
+    const i = buildBetExplainInput({
+      ...base,
+      slips: [slipRow([leg()])],
+      snapshot: snapshot({ jevStatus: "applied", judgments: null }),
+    });
+    expect(i.jev).toBeNull();
   });
 
   it("JEV respondido sem mexer em nada → no_change", () => {
