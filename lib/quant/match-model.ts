@@ -37,6 +37,9 @@ export type ModelScoreline = {
   // dessa base, pro "calculado há" da tabela de mercados (#576). O cálculo na hora não
   // preenche.
   baseCheckedAt?: Date;
+  // A row dessa base (#562): o registro de apostas grava de onde veio o número. O
+  // modelo em jogo não herda (o número dele não é o da base).
+  baseSnapshotId?: string;
 };
 
 export type DcFitSnapshot = {

@@ -13,9 +13,10 @@ export const MODEL_SCORELINE_MAX_AGE_MS = MATCH_MODEL_MAX_AGE_MS;
  * O MESMO ModelScoreline de getModelScoreline (lib/quant/match-model.ts), lido da última
  * base do jogo: source = lambda_source, degraded = lambda_degraded, λ = o AJUSTADO
  * (pós-JEV quando aplicado), rho/fallbackReason ausentes quando null, matriz refeita com
- * o mesmo λ/ρ e `baseCheckedAt` = o `checked_at` da base (o "calculado há" da tabela de
- * mercados, #576). null quando: sem base; versão ≠ MATCH_MODEL_VERSION; `checked_at` mais
- * velho que MODEL_SCORELINE_MAX_AGE_MS; ou o jogo já começou. Nunca lança.
+ * o mesmo λ/ρ, `baseCheckedAt` = o `checked_at` da base (o "calculado há" da tabela de
+ * mercados, #576) e `baseSnapshotId` = a row (#562). null quando: sem base; versão ≠
+ * MATCH_MODEL_VERSION; `checked_at` mais velho que MODEL_SCORELINE_MAX_AGE_MS; ou o jogo
+ * já começou. Nunca lança.
  */
 export async function getMatchModelScoreline(
   matchId: string,
@@ -46,6 +47,7 @@ export async function getMatchModelScoreline(
         ? { fallbackReason: snapshot.lambdaFallbackReason }
         : {}),
       baseCheckedAt: snapshot.checkedAt,
+      baseSnapshotId: snapshot.id,
     };
   } catch (err) {
     console.error(

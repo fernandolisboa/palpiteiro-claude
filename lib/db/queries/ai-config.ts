@@ -58,7 +58,7 @@ export async function getDefaultModelId(): Promise<AIModelId> {
  */
 export async function setDefaultModelId(
   modelId: AIModelId,
-  userId: string,
+  userId: string
 ): Promise<void> {
   await db
     .insert(aiConfig)
@@ -177,7 +177,7 @@ export async function getGenerationParams(): Promise<GenerationParams> {
           effort: row.effort,
         },
         used: { maxTokens, effort },
-      }),
+      })
     );
   }
 
@@ -190,7 +190,7 @@ export async function getGenerationParams(): Promise<GenerationParams> {
  */
 export async function setGenerationParams(
   params: GenerationParams,
-  userId: string,
+  userId: string
 ): Promise<void> {
   await db
     .insert(aiConfig)
@@ -308,6 +308,20 @@ export async function getEnableAutoModelVersions(): Promise<boolean> {
 }
 
 /**
+ * Kill-switch do "Explicar com IA" na avaliação das apostas registradas (#562, ADR
+ * 0063). Default ON quando não há row. false → o painel mostra só a avaliação em
+ * código, sem o botão.
+ */
+export async function getEnableBetSlipExplain(): Promise<boolean> {
+  const rows = await db
+    .select({ enabled: aiConfig.enableBetSlipExplain })
+    .from(aiConfig)
+    .where(eq(aiConfig.id, 1))
+    .limit(1);
+  return rows[0]?.enabled ?? true;
+}
+
+/**
  * Motor de análise (ADR 0041 §5, #511): 'llm' (cartucho de mercado decide — caminho
  * de hoje) ou 'code_jev' (código + julgamentos JEV decidem, LLM narra). Sem row ou
  * valor persistido inválido → 'llm'. Editado em /admin/settings via registry
@@ -337,7 +351,7 @@ export async function getAdminFlagValues(): Promise<AdminFlagValues> {
   const row = rows[0];
   if (!row) return adminFlagDefaults();
   return Object.fromEntries(
-    ADMIN_FLAGS.map((f) => [f.key, coerceStoredFlagValue(f, row[f.key])]),
+    ADMIN_FLAGS.map((f) => [f.key, coerceStoredFlagValue(f, row[f.key])])
   ) as AdminFlagValues;
 }
 
@@ -349,7 +363,7 @@ export async function getAdminFlagValues(): Promise<AdminFlagValues> {
 export async function setAdminFlag(
   key: AdminFlagKey,
   value: AdminFlagValue,
-  userId: string,
+  userId: string
 ): Promise<void> {
   // Chave computada perde o tipo por coluna no Drizzle; o par key/value já foi
   // checado contra o registry (validateAdminFlagInput) antes de chegar aqui.

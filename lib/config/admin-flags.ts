@@ -165,6 +165,16 @@ export const ADMIN_FLAGS = [
       "Centavos de Claude por versão nova testada (1 chamada curta; 2 no Haiku, com 1 busca na web). Até sair o preço oficial, o custo é estimado pelo da conferida.",
   },
   {
+    key: "enableBetSlipExplain",
+    kind: "boolean",
+    label: "Explicar aposta com IA",
+    description:
+      "Mostra o botão \"Explicar com IA\" na avaliação das apostas registradas (pré-jogo): a IA explica em texto o porquê dos números (chance do modelo, odd de mercado sem a margem, ajustes do JEV, stake), sem mudar nenhum deles. Desligada, o painel mostra só a avaliação em código.",
+    default: true,
+    costNote:
+      "Cada uso: 1 chamada do modelo de análise do usuário (até 2.000 tokens), contando 1 do limite diário de palpites. Sem The Odds API e sem API-Football.",
+  },
+  {
     key: "analysisEngine",
     kind: "enum",
     label: "Motor de análise",
