@@ -64,6 +64,17 @@ function judgmentBlock(d: NarratorDecision): string[] {
   return d.judgmentFactors.map((f) => `- ${f}`);
 }
 
+// Sem nota, nenhuma linha: a mensagem fica igual à de antes do #569.
+function notesBlock(d: NarratorDecision): string[] {
+  const notes = d.userNotes ?? [];
+  if (notes.length === 0) return [];
+  return [
+    "## Informado por você (não conferido, sem efeito nos números)",
+    ...notes.map((n) => `- ${n} (informado por você, não conferido)`),
+    "",
+  ];
+}
+
 function contextBlock(c: NarratorContext, d: NarratorDecision): string[] {
   const lines: string[] = [];
   lines.push(
@@ -110,6 +121,7 @@ export function buildNarratorMessage(
     "## Fatores qualitativos já aplicados ao modelo",
     ...judgmentBlock(decision),
     "",
+    ...notesBlock(decision),
     "## Contexto",
     ...contextBlock(context, decision),
     "",

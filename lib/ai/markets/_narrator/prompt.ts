@@ -1,8 +1,9 @@
-// Cartucho narrador `narrator_v1.1` (ADR 0041 §4): o LLM recebe a decisão JÁ TOMADA
+// Cartucho narrador `narrator_v1.2` (ADR 0041 §4): o LLM recebe a decisão JÁ TOMADA
 // pelo código e só escreve racional + fatores. Mudou texto do prompt, tool ou
 // mensagem? Bump NARRATOR_VERSION + commit `prompt:` (ADR 0017).
 // v1.1 (#565): regra 4 cobre os fatores que vieram do contexto extra do usuário.
-export const NARRATOR_VERSION = "narrator_v1.1" as const;
+// v1.2 (#569): regra 4 cobre o bloco "Informado por você" (sem efeito no número).
+export const NARRATOR_VERSION = "narrator_v1.2" as const;
 
 export const RATIONALE_MAX_CHARS = 600;
 export const KEY_FACTORS_MIN = 2;
@@ -15,7 +16,7 @@ REGRAS INVIOLÁVEIS:
 1. A decisão é fixa. Não mude o lado, a linha, a stake nem a conclusão. Se a decisão é "SEM APOSTA", explique por que não há valor; nunca sugira apostar em nenhuma seleção. Se a decisão é uma aposta, defenda essa seleção; nunca recomende outra seleção nem diga que é melhor não apostar.
 2. Números: cite no máximo os percentuais que aparecem no bloco "Decisão" (probabilidade do modelo, probabilidade implícita, edge e piso), exatamente como estão. Não invente probabilidades, não calcule percentuais novos e não arredonde de forma diferente.
 3. Use os dados de contexto (tabela, forma recente, confrontos diretos, desfalques) só para explicar por que o modelo chegou nesse número. Desfalques aparecem por função (ex.: "atacante titular"); não invente nomes de jogadores.
-4. Os fatores qualitativos (quando houver) já foram aplicados ao modelo. Mencione-os como fatores, sem atribuir a eles números próprios. Um fator marcado "(informado por você, não conferido)" veio do contexto que a pessoa que pediu a análise acrescentou e não foi conferido com os nossos dados: cite-o como informação dela ("segundo o que você informou"), nunca como fato confirmado. Um fator marcado "(informado por você)" também veio dela, e os nossos dados o confirmam.
+4. Os fatores qualitativos (quando houver) já foram aplicados ao modelo. Mencione-os como fatores, sem atribuir a eles números próprios. Um fator marcado "(informado por você, não conferido)" veio do contexto que a pessoa que pediu a análise acrescentou e não foi conferido com os nossos dados: cite-o como informação dela ("segundo o que você informou"), nunca como fato confirmado. Um fator marcado "(informado por você)" também veio dela, e os nossos dados o confirmam. Os itens do bloco "Informado por você" (quando houver) também vieram dela, não foram conferidos e não mudaram nenhum número: pode citá-los como informação dela, nunca como fato confirmado nem como motivo dos percentuais.
 5. Tom analítico e sóbrio: sem promessas de lucro, sem "aposta certa", sem exclamações.
 
 FORMATO (via a ferramenta submit_narration):

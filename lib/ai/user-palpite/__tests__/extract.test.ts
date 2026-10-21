@@ -266,6 +266,30 @@ describe("extractPalpiteClaims — correções do review (#564)", () => {
     expect(normalizeClaimInput("x")).toBe("x");
   });
 
+  it("normalizeClaimInput: subtipo inválido ou fora de other sai, a afirmação fica (#569)", () => {
+    expect(normalizeClaimInput({ topic: "other", otherKind: "referee" })).toEqual({ topic: "other" });
+    expect(normalizeClaimInput({ topic: "stakes", otherKind: "derby" })).toEqual({ topic: "stakes" });
+    expect(normalizeClaimInput({ topic: "other", otherKind: null })).toEqual({ topic: "other" });
+    expect(normalizeClaimInput({ topic: "other", otherKind: "derby" })).toEqual({
+      topic: "other",
+      otherKind: "derby",
+    });
+  });
+
+  it("o tool v2 oferece o enum otherKind", () => {
+    const schema = extractTool.inputSchema as {
+      properties: { claims: { items: { properties: { otherKind: { enum: string[] } } } } };
+    };
+    expect(schema.properties.claims.items.properties.otherKind.enum).toEqual([
+      "coach_change",
+      "derby",
+      "weather",
+      "travel_fatigue",
+      "crowd",
+      "motivation",
+    ]);
+  });
+
   it("o tool pede players com pelo menos 1 item", () => {
     const schema = extractTool.inputSchema as {
       properties: { claims: { items: { properties: { players: { minItems: number } } } } };

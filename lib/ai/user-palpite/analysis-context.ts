@@ -3,7 +3,7 @@ import type { TeamNames } from "@/lib/user-palpite/reading";
 import { extractPalpiteClaims, type ExtractResult } from "./extract";
 
 // Contexto extra da análise com IA (#565): a mesma extração Haiku do "Seu palpite"
-// (user_palpite_extract_v1, pelo seam AIProvider, logada em ai_calls), disparada pela
+// (USER_PALPITE_EXTRACT_VERSION, pelo seam AIProvider, logada em ai_calls), disparada pela
 // action logo antes do fan-out. Corre em paralelo com o JEV; o predict só a espera
 // depois dele. O texto cru só vai à extração: aqui nada o loga nem o guarda.
 

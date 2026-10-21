@@ -15,6 +15,13 @@ export function templatedNarration(d: NarratorDecision): NarratorOutput {
       ? " Fatores qualitativos de desfalques e contexto foram aplicados ao modelo."
       : ""
     : " Sem julgamentos qualitativos nesta análise: só o modelo estatístico.";
+  // Contexto extra sem efeito no número (#569): o template também o registra, pra o
+  // aviso do HERO valer em todo mercado do run, narrado pelo LLM ou não.
+  const notes = d.userNotes ?? [];
+  const noted =
+    notes.length > 0
+      ? ` Você também informou (não conferido, sem efeito nos números): ${notes.join("; ")}.`
+      : "";
 
   let rationale: string;
   const factors: string[] = [];
@@ -44,6 +51,8 @@ export function templatedNarration(d: NarratorDecision): NarratorOutput {
     rationale = `Sem aposta: não foi possível medir o edge deste mercado com as odds disponíveis. ${goals}${judgments}`;
     factors.push(`Piso de edge do mercado: ${floor}`);
   }
+  // Nota que não cabe inteira no racional fica de fora (nunca cortada no meio).
+  if (noted && rationale.length + noted.length <= RATIONALE_MAX_CHARS) rationale += noted;
   factors.push(...d.judgmentFactors);
   if (factors.length < 2) factors.push(goals);
 

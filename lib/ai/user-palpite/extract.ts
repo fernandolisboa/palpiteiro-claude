@@ -15,7 +15,12 @@ import type { AiCallStatus, AnalysisRequest } from "@/lib/ai/providers/types";
 import { db } from "@/lib/db";
 import { roleFromPlayerWord, stripPlayerNames } from "@/lib/user-palpite/check-claims";
 import type { TeamNames } from "@/lib/user-palpite/reading";
-import { ClaimSchema, MAX_CLAIMS, type Claim } from "@/lib/user-palpite/types";
+import {
+  ClaimSchema,
+  MAX_CLAIMS,
+  OTHER_KINDS,
+  type Claim,
+} from "@/lib/user-palpite/types";
 
 import {
   EXTRACT_SYSTEM_PROMPT,
@@ -38,12 +43,14 @@ const EXTRACT_MAX_TOKENS = 4096;
 // código (o excedente é cortado com aviso).
 export const ExtractEnvelopeSchema = z.object({ claims: z.array(z.unknown()) }).strict();
 
-const OPTIONAL_FIELDS = ["players", "role", "direction", "scope"] as const;
+const OPTIONAL_FIELDS = ["players", "role", "direction", "scope", "otherKind"] as const;
 
 /**
  * Limpa o item antes do Zod estrito: a Haiku às vezes manda `players: []`, `null` ou ""
  * nos campos que não se aplicam (vira ausente), e às vezes põe uma função
- * ("artilheiro") em players (sai de players e, sem role, vira o role).
+ * ("artilheiro") em players (sai de players e, sem role, vira o role). Subtipo de
+ * "other" fora do enum ou num tópico que não é "other" sai: perde-se o rótulo, não a
+ * afirmação (#569).
  */
 export function normalizeClaimInput(item: unknown): unknown {
   if (typeof item !== "object" || item === null || Array.isArray(item)) return item;
@@ -51,6 +58,12 @@ export function normalizeClaimInput(item: unknown): unknown {
   for (const k of OPTIONAL_FIELDS) {
     const v = out[k];
     if (v === null || v === "" || (Array.isArray(v) && v.length === 0)) delete out[k];
+  }
+  if (
+    out.otherKind !== undefined &&
+    (out.topic !== "other" || !(OTHER_KINDS as readonly unknown[]).includes(out.otherKind))
+  ) {
+    delete out.otherKind;
   }
   if (Array.isArray(out.players)) {
     const names: unknown[] = [];

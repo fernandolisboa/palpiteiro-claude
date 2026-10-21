@@ -23,6 +23,11 @@ prometido na `/privacidade` (§8) com prazo de 15 dias.
 > e os prompts de análise (narrador) levam só afirmações tipadas montadas pelo código, sem
 > texto livre nem nome de jogador, então "Onde NÃO há PII" continua valendo pra eles.
 
+> **Emenda (#569, ADR 0055, 2026-10-21):** a extração passa a `user_palpite_extract_v2`
+> (mesmo prefixo, a linha 1 segue cobrindo). O subtipo novo (`otherKind`) é enum, e as
+> notas que o narrador da análise recebe são frases do código (enum + nome do time): nada
+> muda em "Onde NÃO há PII".
+
 > **Escopo:** estratégia de eliminação/anonimização quando o titular pede pra excluir a
 > conta; o que é apagado, o que é anonimizado e por quê; spec da feature (`/perfil` +
 > admin) e dos testes. **Fora de escopo:** exportação (portabilidade, art. 18, V — atendida

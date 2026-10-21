@@ -7,14 +7,17 @@ import {
   CLAIM_TEAMS,
   CLAIM_TOPICS,
   MAX_CLAIMS,
+  OTHER_KINDS,
 } from "@/lib/user-palpite/types";
 
 // Cartucho de EXTRAÇÃO do motivo do "Seu palpite" (#564, ADR 0055). Mesma forma do
 // parse da aposta livre (lib/ai/bet-parse/cartridge.ts): system prompt versionado +
 // ToolDef neutro; a validação dura é o Zod item a item em extract.ts. O palpite NÃO é
 // extraído: vem sempre dos botões. Mudou prompt ou tool → bump + commit `prompt:`.
+// v2 (#569): subtipo `otherKind` na afirmação "other". O prefixo `user_palpite` fica: é o
+// que a redação de `ai_calls` da exclusão de conta cobre (ADR 0046, linha 1).
 
-export const USER_PALPITE_EXTRACT_VERSION = "user_palpite_extract_v1";
+export const USER_PALPITE_EXTRACT_VERSION = "user_palpite_extract_v2";
 export const USER_PALPITE_EXTRACT_TOOL_NAME = "submit_palpite_claims";
 
 const SUBMIT_PALPITE_CLAIMS_TOOL = {
@@ -48,6 +51,7 @@ const SUBMIT_PALPITE_CLAIMS_TOOL = {
             role: { type: "string", enum: CLAIM_ROLES },
             direction: { type: "string", enum: CLAIM_DIRECTIONS },
             scope: { type: "string", enum: CLAIM_SCOPES },
+            otherKind: { type: "string", enum: OTHER_KINDS },
           },
           required: ["team", "topic", "text"],
         },
@@ -70,7 +74,15 @@ Afirmações ("claims", no máximo ${MAX_CLAIMS}, só as que o texto diz):
   - "form": momento. direction: "good" (vem de vitórias) | "bad" (vem de derrotas).
   - "rotation": vai poupar titulares, time misto, desgaste de calendário.
   - "stakes": peso do jogo. direction: "good" = decisivo (título, vaga, rebaixamento); "bad" = sem importância.
-  - "other": qualquer outra afirmação (técnico, clássico, torcida, clima, retrospecto).
+  - "other": qualquer outra afirmação de fato. otherKind, quando encaixar:
+    - "coach_change": técnico demitido, trocado, interino ou estreando.
+    - "derby": clássico, rivalidade (team "both").
+    - "weather": chuva, calor, frio, gramado ruim (team "both").
+    - "travel_fatigue": viagem longa, altitude, fuso. Desgaste de calendário é "rotation".
+    - "crowd": torcida (estádio cheio, portões fechados, pressão da torcida).
+    - "motivation": motivação fora da tabela (despedida, vingança, crise no elenco). Título, vaga ou rebaixamento é "stakes".
+    Sem subtipo que encaixe (retrospecto, arbitragem, outros): omita otherKind.
+- Use "other" só quando nenhum dos tópicos acima servir. otherKind só existe em "other".
 - text: paráfrase curta e neutra em português (até 200 caracteres) do que o usuário afirmou. NUNCA escreva nome de jogador no text: use "o jogador citado" ou a função ("o atacante titular").
 - Opinião sem fato ("acho que vai ser fácil", "o time é melhor") não é afirmação: ignore.
 

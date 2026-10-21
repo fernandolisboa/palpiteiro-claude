@@ -413,4 +413,26 @@ describe("contexto extra fora da síntese (PLAN-565 §13.2)", () => {
       summarizeAnalysesForSynthesis([okOutcome("match_result", plain, SELECTIONS)])[0].rationale,
     ).toBe("Mandante superior.");
   });
+
+  it("nota do contexto extra (#569) sem fator movido: o racional do narrador também não vai", () => {
+    const j = judgments({ answers: answers({ attack_weakened_home: 0.9 }) });
+    j.userContext!.claims.push({
+      team: "home",
+      topic: "other",
+      otherKind: "coach_change",
+      index: 1,
+      status: "unverifiable",
+      evidence: "Não conferimos esse tipo de informação; fica como contexto, sem efeito no modelo.",
+      sides: [{ side: "home", status: "unverifiable" }],
+      playerChecks: [],
+      signals: [],
+    });
+    const noted = prediction({
+      rationale: "Segundo o que você informou, há troca de técnico no Flamengo.",
+      judgments: j,
+    } as Partial<Prediction>);
+    const out = summarizeAnalysesForSynthesis([okOutcome("match_result", noted, SELECTIONS)]);
+    expect(out[0].rationale).toMatch(/^Fatores do modelo: /);
+    expect(out[0].rationale).not.toContain("técnico");
+  });
 });

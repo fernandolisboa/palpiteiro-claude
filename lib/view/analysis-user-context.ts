@@ -4,7 +4,7 @@ import { pickUserContext } from "@/lib/user-palpite/analysis-context";
 import { claimEffect } from "@/lib/user-palpite/evidence";
 import {
   STATUS_LABEL,
-  TOPIC_LABEL,
+  claimTopicLabel,
   claimDescription,
 } from "@/lib/user-palpite/labels";
 import type { TeamNames } from "@/lib/user-palpite/reading";
@@ -45,7 +45,7 @@ export function toAnalysisUserContextView(
     claims: context.claims.map((c) => ({
       index: c.index,
       text: claimDescription(c, teams),
-      topicLabel: TOPIC_LABEL[c.topic],
+      topicLabel: claimTopicLabel(c),
       status: c.status,
       statusLabel: STATUS_LABEL[c.status],
       evidence: c.evidence,

@@ -43,6 +43,9 @@ export type NarratorDecision = {
   judgmentsApplied: boolean;
   // Fatores JEV aplicados, já em frases PT-BR (sem números).
   judgmentFactors: string[];
+  // Contexto extra (#569): o que a pessoa informou e o código não confere (subtipos de
+  // "outra informação"), em linhas montadas pelo código. Sem efeito no número.
+  userNotes?: string[];
 };
 
 // Dados de contexto (os mesmos que o prompt de mercado recebe, com desfalques por

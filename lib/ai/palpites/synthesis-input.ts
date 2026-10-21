@@ -3,6 +3,7 @@ import type { JudgmentQuestionId } from "@/lib/ai/judgments/types";
 import { judgmentFactorPhrases } from "@/lib/ai/markets/_narrator/labels";
 import type { PredictionWithAiCall } from "@/lib/db/queries/predictions";
 import { claimEffect } from "@/lib/user-palpite/evidence";
+import { hasContextNote } from "@/lib/user-palpite/labels";
 import { PredictionUserContextSchema } from "@/lib/user-palpite/types";
 import { getMarketPresentation } from "@/lib/view/markets/presentation";
 
@@ -175,8 +176,8 @@ const GENERIC_TEAMS = { home: "mandante", away: "visitante" };
 /**
  * O racional que a síntese vê. A manchete pode ser compartilhada (/p) e a síntese não
  * sabe de onde veio cada fator: quando o contexto extra do usuário moveu algum fator
- * (PLAN-565 §13.2, emenda do ADR 0055), o racional do narrador (que cita o que a pessoa
- * informou) NÃO vai. No lugar, um racional montado em código só com os fatores do JEV
+ * (PLAN-565 §13.2, emenda do ADR 0055) ou deixou nota pro narrador (#569), o racional do
+ * narrador (que cita o que a pessoa informou) NÃO vai. No lugar, um racional montado em código só com os fatores do JEV
  * que o usuário não moveu; sem nenhum, vazio (a linha "Racional" some). As probs e a
  * seleção seguem as da row.
  */
@@ -192,7 +193,9 @@ function synthesisRationale(prediction: PredictResult["prediction"]): string {
         parsed.data.claims.flatMap((c) => claimEffect(c, judgments.answers ?? null).moved),
       )
     : null;
-  if (userMoved?.size === 0) return prediction.rationale;
+  // Nota do contexto extra (#569): o racional a cita mesmo sem fator movido.
+  const noted = !parsed.success || hasContextNote(parsed.data.claims);
+  if (userMoved?.size === 0 && !noted) return prediction.rationale;
   if (!userMoved || !judgments.answers || !judgments.multipliers) return "";
   const phrases = judgmentFactorPhrases(
     judgments.answers,
