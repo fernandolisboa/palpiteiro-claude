@@ -6,6 +6,7 @@ import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 // Server actions "use server": mocks leves pra não puxar o servidor no env de teste.
 vi.mock("@/app/actions/user-palpite", () => ({ analyzeUserPalpite: vi.fn() }));
 vi.mock("@/app/actions/bet-slip", () => ({ registerBetSlip: vi.fn() }));
+vi.mock("@/app/actions/bet-slip-explain", () => ({ explainBetSlip: vi.fn() }));
 vi.mock("@/app/actions/bets", () => ({ parseBet: vi.fn() }));
 
 import { analyzeUserPalpite } from "@/app/actions/user-palpite";

@@ -45,6 +45,7 @@ import {
   getEnableParallelFanOut,
   getEnableLiveMode,
   getEnableAutoModelVersions,
+  getEnableBetSlipExplain,
   getEnableUserContext,
   setAdminFlag,
 } from "@/lib/db/queries/ai-config";
@@ -63,6 +64,7 @@ const GETTERS = {
   enableUserContext: getEnableUserContext,
   enableLiveMode: getEnableLiveMode,
   enableAutoModelVersions: getEnableAutoModelVersions,
+  enableBetSlipExplain: getEnableBetSlipExplain,
   analysisEngine: getAnalysisEngine,
 } satisfies Record<AdminFlagKey, () => Promise<unknown>>;
 

@@ -26,7 +26,12 @@ vi.mock("@/lib/db", () => ({
   ),
 }));
 
-import { insertBetSlipsBatch, type NewBetLeg } from "@/lib/db/queries/user-bets";
+import {
+  getUserBetSlipsByIds,
+  insertBetSlipsBatch,
+  type NewBetLeg,
+  type NewBetSlip,
+} from "@/lib/db/queries/user-bets";
 
 const ids = {} as { userId: string; matchId: string };
 
@@ -168,5 +173,64 @@ describe("insertBetSlipsBatch", () => {
       .from(schema.betLegs)
       .where(eq(schema.betLegs.slipId, slipIds[0]));
     expect(legs).toHaveLength(2);
+  });
+});
+
+describe("getUserBetSlipsByIds + model_snapshot_id (#562)", () => {
+  const simples = (over: Partial<NewBetSlip> = {}): NewBetSlip => ({
+    matchId: ids.matchId,
+    userId: ids.userId,
+    rawInput: null,
+    parseAiCallId: null,
+    comboUserOdd: null,
+    jointProbPct: null,
+    mode: "simples",
+    stakeUnits: null,
+    legs: [leg()],
+    ...over,
+  });
+
+  it("devolve na ordem dos ids pedidos, com pernas e a base gravada", async () => {
+    const [snap] = await realDb
+      .insert(schema.matchModelSnapshots)
+      .values({
+        matchId: ids.matchId,
+        modelVersion: "v",
+        fingerprint: "f",
+        lambdaSource: "dixon_coles",
+        lambdaDegraded: false,
+        neutral: false,
+        lambdaHomeBase: 1.5,
+        lambdaAwayBase: 1.1,
+        lambdaHome: 1.5,
+        lambdaAway: 1.1,
+        jevStatus: "not_attempted",
+        probabilities: {} as never,
+        topScorelines: [],
+      })
+      .returning({ id: schema.matchModelSnapshots.id });
+    const { slipIds } = await insertBetSlipsBatch([
+      simples({ modelSnapshotId: snap.id }),
+      simples({ modelSnapshotId: snap.id }),
+    ]);
+    const reversed = [...slipIds].reverse();
+    const rows = await getUserBetSlipsByIds(ids.userId, reversed);
+    expect(rows.map((r) => r.id)).toEqual(reversed);
+    expect(rows.every((r) => r.legs.length === 1)).toBe(true);
+    expect(rows[0].modelSnapshotId).toBe(snap.id);
+  });
+
+  it("ids de outro usuário não voltam (anti-IDOR)", async () => {
+    const [other] = await realDb
+      .insert(schema.users)
+      .values({ email: "outro@example.com" })
+      .returning({ id: schema.users.id });
+    const { slipIds } = await insertBetSlipsBatch([simples({ userId: other.id })]);
+    expect(await getUserBetSlipsByIds(ids.userId, slipIds)).toEqual([]);
+    expect(await getUserBetSlipsByIds(other.id, slipIds)).toHaveLength(1);
+  });
+
+  it("lista vazia → sem query", async () => {
+    expect(await getUserBetSlipsByIds(ids.userId, [])).toEqual([]);
   });
 });

@@ -29,7 +29,7 @@ const FAKE_ENUM = {
 const FAKE_FLAGS = [...ADMIN_FLAGS, FAKE_ENUM] as const satisfies readonly AdminFlagDef[];
 
 describe("ADMIN_FLAGS (registry, #514)", () => {
-  it("tem as 11 flags boolean + o motor de análise (enum), sem key repetida", () => {
+  it("tem as 12 flags boolean + o motor de análise (enum), sem key repetida", () => {
     const keys = ADMIN_FLAGS.map((f) => f.key);
     expect(keys).toEqual([
       "enableOverUnderExtraLines",
@@ -43,6 +43,7 @@ describe("ADMIN_FLAGS (registry, #514)", () => {
       "enableUserContext",
       "enableLiveMode",
       "enableAutoModelVersions",
+      "enableBetSlipExplain",
       "analysisEngine",
     ]);
     expect(new Set(keys).size).toBe(keys.length);
@@ -68,6 +69,7 @@ describe("ADMIN_FLAGS (registry, #514)", () => {
       enableUserContext: true,
       enableLiveMode: true,
       enableAutoModelVersions: true,
+      enableBetSlipExplain: true,
       analysisEngine: "llm",
     });
   });
@@ -104,6 +106,14 @@ describe("ADMIN_FLAGS (registry, #514)", () => {
     expect(def.costNote).toContain("Sem The Odds API");
   });
 
+  it("explicar aposta com IA (#562): ligada por padrão, limite de palpites, sem The Odds API", () => {
+    const def = getAdminFlagDef("enableBetSlipExplain");
+    expect(def.default).toBe(true);
+    expect(def.description).toContain("Explicar com IA");
+    expect(def.costNote).toContain("limite diário de palpites");
+    expect(def.costNote).toContain("Sem The Odds API");
+  });
+
   it("nota de custo do fan-out casa com os tetos pinados em best-bet", () => {
     const note = getAdminFlagDef("enableBestBetFanOut").costNote ?? "";
     expect(note).toContain(`até ${MAX_FANOUT_MARKETS} chamadas pagas`);
@@ -123,6 +133,7 @@ describe("ADMIN_FLAGS (registry, #514)", () => {
       enableUserContext: boolean;
       enableLiveMode: boolean;
       enableAutoModelVersions: boolean;
+      enableBetSlipExplain: boolean;
       analysisEngine: "llm" | "code_jev";
     }>();
   });

@@ -19,7 +19,10 @@ vi.mock("@/lib/bets/slip-model", () => ({
 }));
 // Modo ao vivo (#580): a flag e o estado lido no servidor. A lógica de
 // loadActionLiveContext/matchPhase roda de verdade em cima destes dois.
-vi.mock("@/lib/db/queries/ai-config", () => ({ getEnableLiveMode: vi.fn() }));
+vi.mock("@/lib/db/queries/ai-config", () => ({
+  getEnableLiveMode: vi.fn(),
+  getEnableBetSlipExplain: vi.fn(),
+}));
 vi.mock("@/lib/live/in-play-state", () => ({ getInPlayState: vi.fn() }));
 // Guarda: nenhum caminho do registro (pré-jogo ou ao vivo) toca a The Odds API.
 vi.mock("@/lib/providers/odds-api", () => {
@@ -43,7 +46,7 @@ import { registerBetSlip } from "@/app/actions/bet-slip";
 import { auth } from "@/auth";
 import { revalidatePath } from "next/cache";
 import { resolveInPlaySlipModel, resolveSlipModel } from "@/lib/bets/slip-model";
-import { getEnableLiveMode } from "@/lib/db/queries/ai-config";
+import { getEnableBetSlipExplain, getEnableLiveMode } from "@/lib/db/queries/ai-config";
 import { getInPlayState, type InPlayState } from "@/lib/live/in-play-state";
 import { readLiveStamp } from "@/lib/live/stamp";
 import { inPlayScoreline } from "@/lib/quant/in-play";
@@ -70,6 +73,7 @@ const mockRateLimit = vi.mocked(checkBetSlipsRateLimit);
 const mockModel = vi.mocked(resolveSlipModel);
 const mockInPlayModel = vi.mocked(resolveInPlaySlipModel);
 const mockLiveMode = vi.mocked(getEnableLiveMode);
+const mockExplainFlag = vi.mocked(getEnableBetSlipExplain);
 const mockInPlayState = vi.mocked(getInPlayState);
 
 const MATCH_ID = "550e8400-e29b-41d4-a716-446655440000";
@@ -143,6 +147,7 @@ beforeEach(() => {
   mockHistory.mockResolvedValue([]);
   mockInsert.mockResolvedValue({ slipIds: [] });
   mockLiveMode.mockResolvedValue(true);
+  mockExplainFlag.mockResolvedValue(true);
   mockInPlayState.mockResolvedValue(null);
   mockInPlayModel.mockResolvedValue(null);
 });
@@ -277,6 +282,43 @@ describe("registerBetSlip — rate limit conta slips criados", () => {
     expect(res).toMatchObject({ ok: false, kind: "limite-de-slips" });
     if (res.ok) return;
     expect(res.error).toContain("indisponível");
+  });
+});
+
+describe("registerBetSlip — Explicar com IA (#562)", () => {
+  it("devolve os ids gravados e explainable quando há perna avaliada e a flag está ligada", async () => {
+    mockInsert.mockResolvedValue({ slipIds: ["s-1"] });
+    const res = await registerBetSlip(null, form(slip()));
+    expect(res).toMatchObject({ ok: true, slipIds: ["s-1"], explainable: true });
+  });
+
+  it("grava a base do jogo que avaliou as pernas; sem base, null", async () => {
+    mockModel.mockResolvedValue({ ...MODEL, baseSnapshotId: "snap-9" });
+    await registerBetSlip(null, form(slip()));
+    expect(inserted()[0].modelSnapshotId).toBe("snap-9");
+    mockInsert.mockClear();
+    mockModel.mockResolvedValue(MODEL);
+    await registerBetSlip(null, form(slip()));
+    expect(inserted()[0].modelSnapshotId).toBeNull();
+  });
+
+  it("flag desligada → explainable false", async () => {
+    mockExplainFlag.mockResolvedValue(false);
+    const res = await registerBetSlip(null, form(slip()));
+    expect(res).toMatchObject({ ok: true, explainable: false });
+  });
+
+  it("ler a flag falha depois do insert → registro ok, sem o botão", async () => {
+    mockExplainFlag.mockRejectedValue(new Error("db down"));
+    const res = await registerBetSlip(null, form(slip()));
+    expect(res).toMatchObject({ ok: true, explainable: false });
+  });
+
+  it("nenhuma perna avaliada (sem modelo) → explainable false, sem ler a flag", async () => {
+    mockModel.mockResolvedValue(null);
+    const res = await registerBetSlip(null, form(slip()));
+    expect(res).toMatchObject({ ok: true, explainable: false });
+    expect(mockExplainFlag).not.toHaveBeenCalled();
   });
 });
 
@@ -575,6 +617,9 @@ describe("registerBetSlip — ao vivo", () => {
       expect(s.legs[0].referenceOdd ?? null).toBeNull();
     }
     if (!res.ok) return;
+    // Explicar com IA (#562) é só pré-jogo; o modelo em jogo não grava a base.
+    expect(res.explainable).toBe(false);
+    for (const s of slips) expect(s.modelSnapshotId ?? null).toBeNull();
     expect(res.evaluation.legs[0].suggestedStake).toBeNull();
     expect(res.evaluation.legs[0].sourceLabel).toBe("modelo ao vivo");
     expect(res.evaluation.legs[0].edgeNote).toBeNull();

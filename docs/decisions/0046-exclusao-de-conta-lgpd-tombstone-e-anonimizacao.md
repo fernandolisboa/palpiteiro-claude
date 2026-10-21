@@ -97,7 +97,7 @@ Num único `db.batch` (atômico), na ordem:
 
 | # | Statement | Por quê |
 |---|---|---|
-| 1 | `UPDATE ai_calls SET input_payload='{"redacted":"account_deleted"}', output_payload='{"redacted":"account_deleted"}', error_message=NULL WHERE user_id=$1 AND (prompt_version LIKE 'bet_parse%' OR prompt_version LIKE 'user_palpite%')` | apaga o texto livre logado (PII potencial) sem quebrar FKs nem o custo agregado (tokens/custo/latência ficam). Emenda #564: inclui as chamadas do "Seu palpite" (motivo e paráfrases) |
+| 1 | `UPDATE ai_calls SET input_payload='{"redacted":"account_deleted"}', output_payload='{"redacted":"account_deleted"}', error_message=NULL WHERE user_id=$1 AND (prompt_version LIKE 'bet_parse%' OR prompt_version LIKE 'user_palpite%' OR prompt_version LIKE 'bet_slip_explain%')` | apaga o texto livre logado (PII potencial) sem quebrar FKs nem o custo agregado (tokens/custo/latência ficam). Emenda #564: inclui as chamadas do "Seu palpite" (motivo e paráfrases). Emenda #562 (ADR 0063): inclui o "Explicar com IA" (seleções, odds e stakes) |
 | 2 | `DELETE FROM bet_slips WHERE user_id=$1` (cascata: `bet_legs`, `bet_leg_outcomes`) | apostas registradas são **comportamento de aposta do titular**, não saída do modelo — não há finalidade que justifique manter (art. 16) |
 | 2b | `DELETE FROM friend_pools WHERE user_id=$1` (cascata: `friend_pool_entries`) | bolões entre amigos (ADR 0054): guardam **nomes de terceiros** digitados pelo titular, sem finalidade fora da conta dele |
 | 2c | `DELETE FROM user_palpite_analyses WHERE user_id=$1` (emenda #564) | o motivo livre e o palpite do titular: mesmo racional do `bet_slips` (apagar, não anular `reason_text`; Alternativa 4) |
@@ -174,7 +174,8 @@ UPDATE ai_calls SET input_payload = '{"redacted":"account_deleted"}',
                     output_payload = '{"redacted":"account_deleted"}',
                     error_message = NULL
  WHERE user_id = :uid
-   AND (prompt_version LIKE 'bet_parse%' OR prompt_version LIKE 'user_palpite%');
+   AND (prompt_version LIKE 'bet_parse%' OR prompt_version LIKE 'user_palpite%'
+        OR prompt_version LIKE 'bet_slip_explain%');
 DELETE FROM bet_slips WHERE user_id = :uid;
 DELETE FROM friend_pools WHERE user_id = :uid;  -- ADR 0054: nomes dos amigos
 DELETE FROM user_palpite_analyses WHERE user_id = :uid;

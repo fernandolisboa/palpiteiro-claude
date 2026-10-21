@@ -428,6 +428,13 @@
       "when": 1792157028584,
       "tag": "0060_model_versions",
       "breakpoints": true
+    },
+    {
+      "idx": 61,
+      "version": "7",
+      "when": 1792614950014,
+      "tag": "0061_bet_slip_explain",
+      "breakpoints": true
     }
   ]
 }

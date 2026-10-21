@@ -13,6 +13,10 @@ import {
 } from "react";
 
 import { registerBetSlip, type RegisterBetSlipResult } from "@/app/actions/bet-slip";
+import {
+  explainBetSlip,
+  type ExplainBetSlipResult,
+} from "@/app/actions/bet-slip-explain";
 import { parseBet, type ParseBetResult } from "@/app/actions/bets";
 import type { BetLegParams } from "@/db/schema";
 import { MAX_LEGS } from "@/lib/ai/bet-parse/schema";
@@ -83,6 +87,11 @@ export type BetSlipContextValue = {
   parseAction: (fd: FormData) => void;
   parsing: boolean;
   parseState: ParseBetResult | null;
+  // "Explicar com IA" (#562): aqui e não no painel, porque os dois painéis (coluna e
+  // folha) mostram a mesma avaliação.
+  explainAction: (fd: FormData) => void;
+  explaining: boolean;
+  explainState: ExplainBetSlipResult | null;
 };
 
 const BetSlipContext = createContext<BetSlipContextValue | null>(null);
@@ -185,6 +194,10 @@ export function BetSlipProvider({
     ParseBetResult | null,
     FormData
   >(parseBet, null);
+  const [explainState, explainAction, explaining] = useActionState<
+    ExplainBetSlipResult | null,
+    FormData
+  >(explainBetSlip, null);
 
   // Todas as seleções da tabela por id (pra o atalho em texto e o "Seu palpite" acharem
   // odd e chance).
@@ -368,6 +381,9 @@ export function BetSlipProvider({
     parseAction,
     parsing,
     parseState,
+    explainAction,
+    explaining,
+    explainState,
   };
 
   return <BetSlipContext.Provider value={value}>{children}</BetSlipContext.Provider>;

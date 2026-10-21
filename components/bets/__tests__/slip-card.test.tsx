@@ -48,6 +48,7 @@ function slip(
     mode: legs.length >= 2 ? "combinada" : "simples",
     stakeUnits: null,
     isLive: false,
+    modelSnapshotId: null,
     liveState: null,
     createdAt: NOW,
     match: {

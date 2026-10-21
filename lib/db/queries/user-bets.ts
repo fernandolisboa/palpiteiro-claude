@@ -65,6 +65,8 @@ export type NewBetSlip = {
   // (`liveColumns`, lib/live/stamp.ts). Ausente = pré-jogo (CHECK no banco).
   isLive?: boolean;
   liveState?: LiveStamp | null;
+  // A base do jogo que avaliou as pernas do modelo de placar (#562); só no pré-jogo.
+  modelSnapshotId?: string | null;
   legs: NewBetLeg[];
 };
 
@@ -94,6 +96,7 @@ export async function insertBetSlipsBatch(
       stakeUnits: fixed(slip.stakeUnits, 2),
       isLive: slip.isLive ?? false,
       liveState: slip.liveState ?? null,
+      modelSnapshotId: slip.modelSnapshotId ?? null,
     })),
   );
   const legInsert = db.insert(betLegs).values(
@@ -238,6 +241,38 @@ export async function getUserBetSlipsForMatch(
     slip.legs.push({ ...r.leg, outcome: r.outcome });
   }
   return [...bySlip.values()];
+}
+
+/**
+ * Os slips pedidos por id, só os do usuário (anti-IDOR: `userId` vem SEMPRE do
+ * `auth()`; id de outro usuário simplesmente não volta). Na ordem dos `slipIds`, que é
+ * a ordem do registro: os slips de um mesmo registro dividem o `createdAt` (#562).
+ */
+export async function getUserBetSlipsByIds(
+  userId: string,
+  slipIds: readonly string[],
+): Promise<UserBetSlipRow[]> {
+  if (slipIds.length === 0) return [];
+  const rows = await db
+    .select({ slip: betSlips, leg: betLegs, outcome: betLegOutcomes })
+    .from(betSlips)
+    .innerJoin(betLegs, eq(betLegs.slipId, betSlips.id))
+    .leftJoin(betLegOutcomes, eq(betLegOutcomes.legId, betLegs.id))
+    .where(and(inArray(betSlips.id, [...slipIds]), eq(betSlips.userId, userId)));
+
+  const bySlip = new Map<string, UserBetSlipRow>();
+  for (const r of rows) {
+    let slip = bySlip.get(r.slip.id);
+    if (!slip) {
+      slip = { ...r.slip, legs: [] };
+      bySlip.set(r.slip.id, slip);
+    }
+    slip.legs.push({ ...r.leg, outcome: r.outcome });
+  }
+  return slipIds.flatMap((id) => {
+    const slip = bySlip.get(id);
+    return slip ? [slip] : [];
+  });
 }
 
 // ── Histórico "Minhas apostas" (#473, ADR 0036) ──────────────────────────────

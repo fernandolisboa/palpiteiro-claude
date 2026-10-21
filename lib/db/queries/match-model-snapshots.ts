@@ -25,7 +25,7 @@ function parseSnapshot(row: SnapshotRow): MatchModelSnapshot | null {
   const parsed = matchModelSnapshotSchema.safeParse(row);
   if (parsed.success) return parsed.data;
   const onlyJudgments = parsed.error.issues.every(
-    (i) => i.path[0] === "judgments",
+    (i) => i.path[0] === "judgments"
   );
   if (onlyJudgments) {
     const lenient = matchModelSnapshotSchema.safeParse({
@@ -39,7 +39,7 @@ function parseSnapshot(row: SnapshotRow): MatchModelSnapshot | null {
           event: "snapshot_judgments_unparsed",
           snapshotId: row.id,
           matchId: row.matchId,
-        }),
+        })
       );
       return lenient.data;
     }
@@ -54,13 +54,13 @@ function parseSnapshot(row: SnapshotRow): MatchModelSnapshot | null {
         path: i.path.join("."),
         message: i.message,
       })),
-    }),
+    })
   );
   return null;
 }
 
 export async function insertMatchModelSnapshot(
-  row: NewMatchModelSnapshot,
+  row: NewMatchModelSnapshot
 ): Promise<string> {
   const [inserted] = await db
     .insert(matchModelSnapshots)
@@ -74,7 +74,7 @@ export async function insertMatchModelSnapshot(
 // UPDATE da tabela; o conteúdo da row nunca muda.
 export async function touchMatchModelSnapshot(
   id: string,
-  checkedAt: Date,
+  checkedAt: Date
 ): Promise<void> {
   await db
     .update(matchModelSnapshots)
@@ -85,7 +85,7 @@ export async function touchMatchModelSnapshot(
 }
 
 export async function getLatestMatchModelSnapshot(
-  matchId: string,
+  matchId: string
 ): Promise<MatchModelSnapshot | null> {
   const [row] = await db
     .select()
@@ -93,8 +93,20 @@ export async function getLatestMatchModelSnapshot(
     .where(eq(matchModelSnapshots.matchId, matchId))
     .orderBy(
       desc(matchModelSnapshots.computedAt),
-      desc(matchModelSnapshots.checkedAt),
+      desc(matchModelSnapshots.checkedAt)
     )
+    .limit(1);
+  return row ? parseSnapshot(row) : null;
+}
+
+/** A base por id (a gravada no registro de apostas, #562). null se não existe ou é inválida. */
+export async function getMatchModelSnapshotById(
+  id: string
+): Promise<MatchModelSnapshot | null> {
+  const [row] = await db
+    .select()
+    .from(matchModelSnapshots)
+    .where(eq(matchModelSnapshots.id, id))
     .limit(1);
   return row ? parseSnapshot(row) : null;
 }
@@ -105,7 +117,7 @@ export async function getLatestMatchModelSnapshot(
  * inválida fica fora do Map.
  */
 export async function getLatestMatchModelSnapshotsForMatches(
-  matchIds: string[],
+  matchIds: string[]
 ): Promise<Map<string, MatchModelSnapshot>> {
   if (matchIds.length === 0) return new Map();
   const rows = await db
@@ -115,7 +127,7 @@ export async function getLatestMatchModelSnapshotsForMatches(
     .orderBy(
       matchModelSnapshots.matchId,
       desc(matchModelSnapshots.computedAt),
-      desc(matchModelSnapshots.checkedAt),
+      desc(matchModelSnapshots.checkedAt)
     );
   const out = new Map<string, MatchModelSnapshot>();
   for (const row of rows) {
@@ -130,7 +142,7 @@ export async function getLatestMatchModelSnapshotsForMatches(
  * lib/model-base/model-scoreline.ts). null sem base ou com a última row inválida.
  */
 export async function getLatestMatchModelSnapshotWithKickoff(
-  matchId: string,
+  matchId: string
 ): Promise<{ snapshot: MatchModelSnapshot; kickoffAt: Date } | null> {
   const [row] = await db
     .select({ snapshot: matchModelSnapshots, kickoffAt: matches.kickoffAt })
@@ -139,7 +151,7 @@ export async function getLatestMatchModelSnapshotWithKickoff(
     .where(eq(matchModelSnapshots.matchId, matchId))
     .orderBy(
       desc(matchModelSnapshots.computedAt),
-      desc(matchModelSnapshots.checkedAt),
+      desc(matchModelSnapshots.checkedAt)
     )
     .limit(1);
   if (!row) return null;
@@ -175,8 +187,8 @@ export async function findReusableSnapshotJudgments(args: {
         sql`${j}->>'stateHash' = ${args.stateHash}`,
         sql`${j}->'versions'->>'judgments' = ${args.judgmentsVersion}`,
         sql`${j}->'versions'->>'weights' = ${args.weightsVersion}`,
-        sql`${j}->'versions'->>'jevModel' = ${args.jevModel}`,
-      ),
+        sql`${j}->'versions'->>'jevModel' = ${args.jevModel}`
+      )
     )
     .orderBy(desc(matchModelSnapshots.checkedAt))
     .limit(1);
@@ -188,7 +200,7 @@ export async function findReusableSnapshotJudgments(args: {
         scope: "match_model_snapshots",
         error: "invalid_snapshot_judgments",
         snapshotId: row.id,
-      }),
+      })
     );
     return null;
   }

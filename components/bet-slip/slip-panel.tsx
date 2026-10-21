@@ -4,6 +4,7 @@ import { X } from "lucide-react";
 
 import { useBetSlip } from "@/components/bet-slip/bet-slip-provider";
 import { SlipRiskNotice } from "@/components/bet-slip/risk-notice";
+import { SlipExplain } from "@/components/bet-slip/slip-explain";
 import { Button } from "@/components/ui/button";
 import { Card } from "@/components/ui/card";
 import { Separator } from "@/components/ui/separator";
@@ -210,6 +211,9 @@ export function SlipPanel() {
             view={slip.registerState.evaluation}
             registered={slip.registerState.registered}
           />
+          {slip.registerState.explainable && (
+            <SlipExplain slipIds={slip.registerState.slipIds} />
+          )}
         </>
       )}
 

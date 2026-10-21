@@ -20,6 +20,7 @@ import { parseSlipPayload, type SlipValidationError } from "@/lib/bets/slip-sche
 import { resolveInPlaySlipModel, resolveSlipModel } from "@/lib/bets/slip-model";
 import { isEmailAllowed } from "@/lib/auth/whitelist";
 import { db } from "@/lib/db";
+import { getEnableBetSlipExplain } from "@/lib/db/queries/ai-config";
 import { getMatchById } from "@/lib/db/queries/matches";
 import { getPredictionHistoryForMatch } from "@/lib/db/queries/predictions";
 import { getReferenceOddsForMatch } from "@/lib/db/queries/reference-odds";
@@ -57,7 +58,15 @@ import { capabilityGateMessage } from "./not-analyzable";
 // salva e sem stake sugerido; o slip grava `is_live` + o carimbo do momento.
 
 export type RegisterBetSlipResult =
-  | { ok: true; registered: number; evaluation: SlipEvaluationView }
+  | {
+      ok: true;
+      registered: number;
+      evaluation: SlipEvaluationView;
+      // Os slips gravados, na ordem do registro, e se o "Explicar com IA" (#562) vale
+      // pra eles: pré-jogo, com alguma perna avaliada e a flag ligada.
+      slipIds: string[];
+      explainable: boolean;
+    }
   | {
       ok: false;
       error: string;
@@ -107,6 +116,15 @@ function toNewLeg(leg: EvaluatedLeg): NewBetLeg {
     marketImpliedPct: leg.reference?.impliedPct ?? null,
     suggestedStakeUnits: leg.suggestedStake?.units ?? null,
   };
+}
+
+// Depois do insert: uma falha ao ler a flag não pode virar erro de um registro salvo.
+async function explainEnabled(): Promise<boolean> {
+  try {
+    return (await getEnableBetSlipExplain()) === true;
+  } catch {
+    return false;
+  }
 }
 
 export async function registerBetSlip(
@@ -266,6 +284,9 @@ export async function registerBetSlip(
     parseAiCallId,
     mode: slip.mode,
     ...liveColumns(stamp),
+    // De onde veio o número das pernas do modelo de placar (#562). O modelo em jogo não
+    // carrega o id da base.
+    modelSnapshotId: model?.baseSnapshotId ?? null,
   };
   const newSlips: NewBetSlip[] =
     slip.mode === "simples"
@@ -288,8 +309,9 @@ export async function registerBetSlip(
             legs: evaluation.legs.map(toNewLeg),
           },
         ];
+  let slipIds: string[];
   try {
-    await insertBetSlipsBatch(newSlips);
+    ({ slipIds } = await insertBetSlipsBatch(newSlips));
   } catch (err) {
     console.error("[registerBetSlip] insert falhou", err);
     return {
@@ -301,9 +323,15 @@ export async function registerBetSlip(
 
   revalidatePath(`/match/${match.id}`);
   revalidatePath("/apostas");
+  const explainable =
+    liveState === null &&
+    evaluation.legs.some((l) => l.status === "graded") &&
+    (await explainEnabled());
   return {
     ok: true,
     registered: newSlips.length,
+    slipIds,
+    explainable,
     // Rótulo de tela (#578): nome curto. A avaliação já foi calculada com o canonical.
     evaluation: toSlipEvaluationView(
       evaluation,

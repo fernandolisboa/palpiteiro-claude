@@ -738,6 +738,13 @@ export const betSlips = pgTable(
     // pré-jogo. Carimbo lido no servidor, via lib/live/stamp.ts.
     isLive: boolean().notNull().default(false),
     liveState: jsonb(),
+    // A base do jogo (match_model_snapshots, ADR 0052) que avaliou as pernas do modelo
+    // de placar neste registro (#562, ADR 0063): é dela que o "Explicar com IA" tira os
+    // ajustes do JEV. null quando a avaliação calculou na hora (sem base fresca) e em
+    // registro ao vivo.
+    modelSnapshotId: uuid().references(() => matchModelSnapshots.id, {
+      onDelete: "set null",
+    }),
     createdAt: timestamp({ withTimezone: true }).notNull().defaultNow(),
   },
   (t) => [
@@ -927,6 +934,10 @@ export const aiConfig = pgTable("ai_config", {
   // Default ON. SET ... = false → só as versões conferidas do registry rodam; as rows
   // `active` de model_versions ficam intactas e voltam a valer quando religar.
   enableAutoModelVersions: boolean().notNull().default(true),
+  // Kill-switch do "Explicar com IA" na avaliação das apostas registradas (#562, ADR
+  // 0063). Default ON. SET ... = false → o painel mostra só a avaliação em código, sem
+  // o botão.
+  enableBetSlipExplain: boolean().notNull().default(true),
   // Última checagem do cron check-model-versions e o resumo dela (ADR 0062), lidos
   // pelo painel do /admin/settings. O resumo é validado por Zod na leitura
   // (ModelVersionsCheckSummarySchema).

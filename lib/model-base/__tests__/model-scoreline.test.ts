@@ -59,6 +59,7 @@ describe("getMatchModelScoreline (seam do cupom)", () => {
       matrix: scorelineMatrix(1.6, 0.98, { rho: -0.07 }),
       // O "calculado há" da tabela de mercados (#576) sai daqui.
       baseCheckedAt: NOW,
+      baseSnapshotId: "snap-1",
     });
     expect(out).not.toHaveProperty("fallbackReason");
   });
@@ -84,6 +85,7 @@ describe("getMatchModelScoreline (seam do cupom)", () => {
       matrix: scorelineMatrix(1.3, 1.2),
       fallbackReason: "stale_fit",
       baseCheckedAt: NOW,
+      baseSnapshotId: "snap-1",
     });
     expect(out).not.toHaveProperty("rho");
   });

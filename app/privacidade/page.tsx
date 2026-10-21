@@ -170,7 +170,8 @@ export default function PrivacidadePage() {
                 <Strong>Anthropic</Strong> — geração das análises e palpites; recebe dados das
                 partidas e, quando você registra uma aposta em texto livre, escreve o motivo
                 de um palpite seu ou o contexto extra que você escrever ao pedir uma análise,
-                esse texto (nunca seu e-mail ou nome);
+                esse texto, e, quando você pede a explicação de apostas registradas, as
+                seleções, odds e stakes delas (nunca seu e-mail ou nome);
               </li>
               <li>
                 <Strong>OpenAI</Strong> — geração de texto, uso condicional e só quando habilitado,
