@@ -148,11 +148,11 @@ function referenceFor(
   const keys = descriptor.selectionKeys;
   if (keys.length === 0 || keys.some((k) => !(ref.odds[k] > 1))) return null;
   // O edge da seleção só depende da prob dela e da implícita (que só depende das
-  // odds); as outras seleções entram com 0 só pra completar o mercado.
+  // odds); as outras seleções entram sem prob só pra completar o mercado.
   const scen = computeMarketScenarios({
     selections: keys.map((k) => ({
       key: k,
-      modelProbPct: k === pin.selectionKey ? probPct : 0,
+      modelProbPct: k === pin.selectionKey ? probPct : null,
       odd: ref.odds[k],
     })),
     recommendedKey: null,

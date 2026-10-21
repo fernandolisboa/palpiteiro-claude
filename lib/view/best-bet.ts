@@ -35,7 +35,7 @@ export function computeBestBetRank(
     "recommendation" | "confidencePct" | "oddAtRecommendation"
   >,
   marketKey: string,
-  selections: { key: string; modelProbPct: number; odd: number | null }[],
+  selections: { key: string; modelProbPct: number | null; odd: number | null }[],
 ): BestBetRank {
   const recommendation = prediction.recommendation;
   const isPass = recommendation === "pass";

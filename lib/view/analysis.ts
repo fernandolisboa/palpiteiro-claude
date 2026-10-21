@@ -87,9 +87,11 @@ type PredictionInput = {
   // Ausente/≤2 → caminho binário congelado (over/under byte-idêntico). `label`
   // (nome do jogador, #290) viaja só pra mercados dynamicSelections — a view o
   // prefere ao presentation.selectionLabel(key) (que devolveria a key crua).
+  // `modelProbPct` null = o modelo não estimou a seleção (artilheiro parcial, row
+  // antiga sem prob): a grade mostra "—", nunca 0%.
   selections?: {
     key: string;
-    modelProbPct: number;
+    modelProbPct: number | null;
     odd: number | null;
     label?: string;
   }[];
@@ -119,7 +121,7 @@ function toValidOdd(value: string | number | null): number | null {
   return n !== null && n > 1 ? n : null;
 }
 
-function toScenarioSideView(side: ScenarioSide): ScenarioSideView {
+function toScenarioSideView(side: ScenarioSide | ScenarioSelection): ScenarioSideView {
   const edge = formatEdgePoints(side.edgePct);
   return {
     modelProb: formatPct(side.modelProbPct),
@@ -217,9 +219,10 @@ function computeBinaryFramingNote(
 // Uma seleção → OutcomeView, REUSANDO toScenarioSideView pra garantir formatação
 // byte-idêntica ao bloco de cenários (paridade). `breakEven` é a odd de
 // equilíbrio do modelo (modelBreakEvenOdd), nunca a probabilidade. ScenarioSide e
-// ScenarioSelection compartilham os campos numéricos, então serve aos dois caminhos.
+// ScenarioSelection compartilham os campos numéricos, então serve aos dois caminhos
+// (no N-vias a prob pode ser null: o modelo não estimou a seleção → "—").
 function toOutcomeView(
-  side: ScenarioSide,
+  side: ScenarioSide | ScenarioSelection,
   key: string,
   presentation: MarketPresentation,
   line: number | null,

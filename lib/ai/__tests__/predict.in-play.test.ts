@@ -329,7 +329,8 @@ describe("predictInPlay", () => {
         Object.fromEntries(r.result.selections.map((s) => [s.key, s.modelProbPct])),
       ]),
     );
-    const mr = byMarket.match_result;
+    // Ao vivo toda seleção tem prob (o modelo em jogo cobre o mercado inteiro).
+    const mr = byMarket.match_result as Record<string, number>;
     expect(mr.home + mr.draw + mr.away).toBeCloseTo(100, 0);
     expect(mr.home).toBeGreaterThan(mr.away);
     // 2–1: over 2,5 e ambas marcam já decididos, exatos.

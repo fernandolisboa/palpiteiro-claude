@@ -155,15 +155,15 @@ describe("latestAnalysisByMarket", () => {
     expect(out.size).toBe(0);
   });
 
-  it("seleções com modelProbKnown === false são puladas", () => {
+  it("seleções sem prob gravada (null) são puladas", () => {
     const out = latestAnalysisByMarket([
       row({
         id: "dc",
         createdAt: "2026-10-12T12:00:00Z",
         marketKey: "double_chance",
         selections: [
-          { key: "home_or_draw", modelProbPct: 70, modelProbKnown: true },
-          { key: "home_or_away", modelProbPct: 0, modelProbKnown: false },
+          { key: "home_or_draw", modelProbPct: 70 },
+          { key: "home_or_away", modelProbPct: null },
           { key: "away_or_draw", modelProbPct: 50 },
         ],
       }),
@@ -179,7 +179,7 @@ describe("latestAnalysisByMarket", () => {
       row({
         id: "unknown",
         createdAt: "2026-10-12T12:00:00Z",
-        selections: [{ key: "home", modelProbPct: 0, modelProbKnown: false }],
+        selections: [{ key: "home", modelProbPct: null }],
       }),
       row({
         id: "older",

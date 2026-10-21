@@ -203,9 +203,11 @@ export type PredictResult = {
   // `label` (nome do jogador) viaja só pra mercados dynamicSelections (#290) — a
   // view o prefere ao presentation.selectionLabel(key) (que devolveria a key crua
   // num mercado de seleções dinâmicas). Ausente pros mercados de partição.
+  // `modelProbPct` null = o modelo não estimou a seleção (player_probs parcial do
+  // artilheiro/assistência) — a mesma regra da row de PSO, que grava NULL (#533).
   selections: {
     key: string;
-    modelProbPct: number;
+    modelProbPct: number | null;
     odd: number | null;
     label?: string;
   }[];
@@ -1010,7 +1012,7 @@ async function runPredict(
         oddAtRecommendation: decision.oddAtRec?.toFixed(3) ?? null,
         selections: selectionKeys.map((key) => ({
           key,
-          modelProbPct: engine.modelProbByKey[key],
+          modelProbPct: engine.modelProbByKey[key] ?? null,
           odd: oddByKey[key] ?? null,
         })),
       },
@@ -1789,7 +1791,7 @@ async function persistPrediction(a: PersistArgs): Promise<PredictResult> {
     marketKey: a.cartridge.marketKey,
     selections: a.selectionKeys.map((key) => ({
       key,
-      modelProbPct: a.modelProbByKey[key],
+      modelProbPct: a.modelProbByKey[key] ?? null,
       odd: a.oddByKey[key] ?? null,
       ...(labelByKey ? { label: labelByKey[key] } : {}),
     })),

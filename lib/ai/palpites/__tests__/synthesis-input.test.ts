@@ -236,11 +236,11 @@ describe("summarizeSavedAnalysesForSynthesis (gerar só o palpite)", () => {
     expect(a.recommendedLabel).toBe("Over 3.5");
   });
 
-  it("prob não gravada (coalesce 0 no DB) vira ausente, não 0%", () => {
+  it("prob não gravada (NULL no DB) fica fora, não vira 0%", () => {
     const [a] = summarizeSavedAnalysesForSynthesis([
       row("anytime_scorer", prediction({ recommendation: "p1" }), [
-        { key: "p1", label: "Calleri", modelProbPct: 41, modelProbKnown: true, odd: 2.6 },
-        { key: "p2", label: "Lucas", modelProbPct: 0, modelProbKnown: false, odd: 3.1 },
+        { key: "p1", label: "Calleri", modelProbPct: 41, odd: 2.6 },
+        { key: "p2", label: "Lucas", modelProbPct: null, odd: 3.1 },
       ]),
     ]);
     expect(a.selections).toEqual([

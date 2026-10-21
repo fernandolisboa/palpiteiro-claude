@@ -1476,6 +1476,40 @@ describe("toAnalysisView — anytime_scorer (independent_binary, #290)", () => {
     expect(view.minEdgePp).toBe(8);
   });
 
+  it("jogador sem prob do modelo mostra \"—\" na grade, nunca 0% (#533)", () => {
+    const view = toAnalysisView(
+      {
+        recommendation: "scorer_pedro",
+        confidencePct: "52",
+        rationale: "Pedro é o melhor palpite de artilheiro.",
+        keyFactors: ["forma recente"],
+        minimumOdd: "2.100",
+        oddAtRecommendation: "2.500",
+        bookmaker: "Bet365",
+        impliedProbPct: "40.00",
+        edgePct: "12.00",
+        modelVersion: "claude-opus-4-8",
+        promptVersion: "anytime_scorer_v1",
+        createdAt: baseCreatedAt,
+        marketKey: "anytime_scorer",
+        line: null,
+        stakeUnits: "1.00",
+        selections: [
+          { key: "scorer_pedro", modelProbPct: 52, odd: 2.5, label: "Pedro" },
+          { key: "scorer_gabigol", modelProbPct: null, odd: 5.0, label: "Gabigol" },
+        ],
+      },
+      null,
+    );
+    const gabigol = view.outcomes.find((o) => o.label === "Gabigol");
+    expect(gabigol?.modelProb).toBe("—");
+    expect(gabigol?.edge).toBe("—");
+    expect(gabigol?.expectedReturn).toBe("—");
+    expect(gabigol?.breakEven).toBe("—");
+    // A odd de mercado segue: ela não depende do modelo.
+    expect(gabigol?.marketProb).toBe("20%");
+  });
+
   it("edge da grade usa a implícita-TETO (1/odd*100), sem normalização Σ=1", () => {
     const view = scorerView("scorer_pedro");
     const pedro = view.outcomes.find((o) => o.label === "Pedro");

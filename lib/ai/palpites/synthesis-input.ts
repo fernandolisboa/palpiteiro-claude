@@ -36,7 +36,7 @@ export type MarketAnalysisSummary = {
 };
 
 // Uma análise já persistida, venha ela do fan-out em memória (PredictResult) ou do
-// histórico do DB. `modelProbPct` pode faltar: mercados de seleção dinâmica (artilheiro,
+// histórico do DB. `modelProbPct` null: mercados de seleção dinâmica (artilheiro,
 // assistência) só trazem prob pros jogadores que o modelo estimou.
 type AnalysisSource = {
   marketKey: string;
@@ -44,7 +44,7 @@ type AnalysisSource = {
   selections: {
     key: string;
     label?: string;
-    modelProbPct?: number | null;
+    modelProbPct: number | null;
   }[];
 };
 
@@ -71,8 +71,8 @@ export function summarizeAnalysesForSynthesis(
 /**
  * Mesma projeção, a partir do histórico salvo (botão "gerar só o palpite"): a análise
  * MAIS RECENTE de cada mercado, a mesma que "Ler análise completa" mostra na página do jogo.
- * O histórico vem em ordem desc de criação. Seleção sem prob gravada (`modelProbKnown`
- * false) vira prob ausente, nunca 0%.
+ * O histórico vem em ordem desc de criação. Seleção sem prob gravada (null) segue
+ * sem prob, nunca 0%.
  */
 //
 // Pré-jogo e ao vivo não se misturam (#594): `live: false` (default) lê só as análises
@@ -94,7 +94,7 @@ export function summarizeSavedAnalysesForSynthesis(
       selections: row.selections.map((s) => ({
         key: s.key,
         ...(s.label !== undefined ? { label: s.label } : {}),
-        modelProbPct: s.modelProbKnown === false ? null : s.modelProbPct,
+        modelProbPct: s.modelProbPct,
       })),
     });
   }
