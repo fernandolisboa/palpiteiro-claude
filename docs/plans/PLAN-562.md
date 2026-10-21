@@ -17,20 +17,21 @@ Faz sentido e não é coberto pelo "Seu palpite": ele lê só resultado/placar e
 | Superfície | Só no painel "Suas apostas", na avaliação recém-registrada. Não em `/apostas`. | `/apostas` não mostra avaliação nem conjunta da combinada sem marginais (invariante de coerência). |
 | Persistência | Efêmera: o texto vive no retorno da action e em `ai_calls.output_payload`. | A avaliação também é efêmera (some no reload). Persistir pediria tabela, LGPD e UI sem quem leia. Reload perde o texto; pedir de novo custa outra unidade. |
 | Números | Só das rows congeladas (`bet_slips`/`bet_legs`), por ids do próprio usuário. Nunca do cliente, nunca reavaliando. | A base muda a cada 6h; reavaliar faria o texto divergir do painel (mesmo princípio de `historyLegView`). |
-| JEV | Frases de ajuste só quando o snapshot da base em vigor no registro reproduz as pernas `scoreline_model` gravadas (±0,011 pp). Senão, "sem dado de ajuste". Pernas da análise do usuário (`cartridge`) sem frases de JEV na v1. | Não atribuir ao JEV um número que não veio dele. |
+| JEV | O registro grava `bet_slips.model_snapshot_id` (a base que avaliou as pernas do modelo de placar; null no cálculo na hora e ao vivo). As frases de ajuste saem dessa row. Pernas da análise do usuário (`cartridge`) sem frases de JEV na v1. | Não atribuir ao JEV um número que não veio dele. (A revisão do plano trocou a reconstrução da base pelo `created_at` por gravar o id: exato e mais simples.) |
 | Casas | Nenhum nome de casa no prompt nem na UI; "odd de mercado" / "mercado sem a margem". | Regra de produto (#571/#572). |
 
 ## 2. Fluxo
 
 1. `registerBetSlip` passa a devolver `slipIds` (já vinham de `insertBetSlipsBatch`) e `explainable` (pré-jogo, ≥ 1 perna avaliada, flag ligada; leitura da flag com `.catch(() => false)`, porque o insert já aconteceu).
 2. Cliente manda só `slipIds` para `explainBetSlip`.
-3. `explainBetSlip`: Zod (1..8 uuids únicos) → `auth` → acesso → flag → slips do usuário por id (todos precisam voltar) → mesmo jogo, combinada sozinha → nenhum ao vivo → ≥ 1 perna avaliada → jogo → snapshot da base no registro → builder puro → **cobra** `checkPalpitesRateLimit` → runner (nunca lança; falha vira template).
+3. `explainBetSlip`: Zod (1..8 uuids únicos) → `auth` → acesso → flag → slips do usuário por id (todos precisam voltar) → mesmo jogo, combinada sozinha → nenhum ao vivo → jogo → base pelo `model_snapshot_id` → builder puro → ≥ 1 perna avaliada → **cobra** `checkPalpitesRateLimit` → runner (nunca lança; falha vira template).
 
 ## 3. Arquivos
 
 - Docs: este plano; ADR 0063; nota de status na 0053; linha de redação na 0046 (`prompt_version LIKE 'bet_slip_explain%'`).
 - DB/flag: `db/schema.ts`, migration nova (IF NOT EXISTS), `getEnableBetSlipExplain` em `lib/db/queries/ai-config.ts`, entrada em `lib/config/admin-flags.ts` (+ testes de flags que fixam a lista).
-- Queries: `getUserBetSlipsByIds(userId, ids)` em `lib/db/queries/user-bets.ts`; `getMatchModelSnapshotAsOf(matchId, at)` em `lib/db/queries/match-model-snapshots.ts`.
+- Queries: `getUserBetSlipsByIds(userId, ids)` em `lib/db/queries/user-bets.ts`; `getMatchModelSnapshotById(id)` em `lib/db/queries/match-model-snapshots.ts`.
+- Proveniência: `ModelScoreline.baseSnapshotId` (preenchido em `getMatchModelScoreline`, não herdado pelo modelo em jogo) → `bet_slips.model_snapshot_id`.
 - Builder puro: `lib/bets/explain-input.ts` (`buildBetExplainInput`).
 - View: `valueReadingKind` + `BetSlipExplanationView` em `lib/view/bet-slip.ts`.
 - Cartucho (`prompt:`): `lib/ai/bet-slip-explain/{cartridge,schema,fidelity,fallback,explain}.ts`, versão `bet_slip_explain_v1`, tool `submit_bet_explanation`.
@@ -41,7 +42,7 @@ Faz sentido e não é coberto pelo "Seu palpite": ele lê só resultado/placar e
 
 ## 4. Guardas do texto
 
-- Fidelidade: percentuais, "pontos", odds (decimais 2-3 casas) e unidades só do conjunto permitido; cada perna avaliada exatamente uma vez; `leitura` igual à do código.
+- Fidelidade: percentuais (±1 pp), "pontos" de edge, decimais soltos (odds/linhas, ±0,011) e unidades só do conjunto permitido; cada perna avaliada exatamente uma vez; o LLM não ecoa o veredito (o painel já mostra o do código), mas o texto da perna não pode contradizê-lo.
 - Linguagem: sem imperativo de aposta ("aposte", "vá de", "recomendo"...), sem promessa ("garantido", "certeza"), sem nome de casa, sem "na casa", sem URL. Não reusar o guard do 0055 (proíbe toda linguagem de valor).
 - Break-even é "a chance mínima pra sua odd se pagar", nunca probabilidade do mercado (gotcha do `1/odd`).
 
