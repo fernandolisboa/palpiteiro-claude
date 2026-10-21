@@ -62,9 +62,9 @@ export type PredictionWithAiCall = {
 // regra (usada por getPredictionHistoryForMatch): numeric → string no Drizzle →
 // Number() na fronteira (gotcha drizzle-numeric-returns-string). `modelProbPct` e
 // `odd` PRESERVAM null (Number(null) viraria um 0 errado: 0% de chance afirmaria uma
-// estimativa que o modelo não fez). `label`
-// (market_selections.label, #290) viaja pra a view preferir o nome do jogador à key
-// crua em mercados dynamicSelections (scorer); inerte pros demais (label é o seed).
+// estimativa que o modelo não fez). `label` (market_selections.label, #290) viaja
+// pra a view preferir o nome do jogador à key crua em mercados dynamicSelections
+// (scorer); inerte pros demais (label é o seed).
 function mapSelectionRow(s: {
   key: string;
   label: string;

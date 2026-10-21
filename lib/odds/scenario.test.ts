@@ -528,9 +528,8 @@ describe("computeMarketScenarios", () => {
   });
 
   it("seleção com modelProbPct=0 não lança: modelBreakEvenOdd dela vira null, as demais derivam", () => {
-    // MatchResultOutputSchema permite prob 0; uma row reaberta com model_prob_pct
-    // null vira 0 no boundary (Number(null) = 0). 100/0 é indefinido — degrada pra
-    // null em vez de derrubar a view N-vias (computeModelBreakEvenOdd lançaria).
+    // MatchResultOutputSchema permite prob 0. 100/0 é indefinido — degrada pra null
+    // em vez de derrubar a view N-vias (computeModelBreakEvenOdd lançaria).
     expect(() =>
       computeMarketScenarios({
         selections: [

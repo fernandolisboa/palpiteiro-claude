@@ -961,10 +961,9 @@ describe("toAnalysisView (N-vias / 1X2)", () => {
   });
 
   it("uma seleção com prob 0 (schema-válida / row reaberta) NÃO derruba a view; breakEven dela vira '—'", () => {
-    // MatchResultOutputSchema permite prob 0, e uma row reaberta com model_prob_pct
-    // null coalesce pra 0 no boundary (predictions.ts). computeModelBreakEvenOdd
-    // lançaria em 100/0 — o branch N-vias precisa degradar a coluna, não derrubar
-    // o render (post-analysis e reabertura na match-page).
+    // MatchResultOutputSchema permite prob 0. computeModelBreakEvenOdd lançaria em
+    // 100/0 — o branch N-vias precisa degradar a coluna, não derrubar o render
+    // (post-analysis e reabertura na match-page).
     expect(() =>
       toAnalysisView(
         {
@@ -1570,6 +1569,19 @@ describe("toAnalysisViewFromPrediction — custo da ai_call (#512)", () => {
     row.prediction.modelVersion = "claude-sonnet-4-5-20250929";
     row.prediction.judgments = null;
     expect(toAnalysisViewFromPrediction(row).engine).toBe("LLM");
+  });
+
+  it("row reaberta com prob NULL do histórico mostra \"—\" naquela seleção (#533)", () => {
+    const row = mkRow();
+    row.selections = [
+      { key: "home", modelProbPct: 52, odd: 2.1 },
+      { key: "draw", modelProbPct: null, odd: 3.4 },
+      { key: "away", modelProbPct: 21, odd: 3.6 },
+    ];
+    const outcomes = toAnalysisViewFromPrediction(row).outcomes;
+    expect(outcomes.map((o) => o.modelProb)).toEqual(["52%", "—", "21%"]);
+    expect(outcomes[1].edge).toBe("—");
+    expect(outcomes[1].marketProb).not.toBe("—");
   });
 });
 

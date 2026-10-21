@@ -1500,7 +1500,8 @@ type DecisionArgs = {
   selectionKeys: string[];
   oddByKey: Record<string, number>;
   impliedByKey: Record<string, number>;
-  modelProbByKey: Record<string, number>;
+  // Parcial no artilheiro/assistência (player_probs só dos jogadores estimados).
+  modelProbByKey: Partial<Record<string, number>>;
   // selectionKey recomendada pelo motor (LLM ou código), ou "pass" — PRÉ-gate.
   recommendation: string;
   confidencePct: number;
@@ -1659,7 +1660,7 @@ type PersistArgs = {
   catalog: MarketCatalog;
   selectionKeys: string[];
   oddByKey: Record<string, number>;
-  modelProbByKey: Record<string, number>;
+  modelProbByKey: Partial<Record<string, number>>;
   marketParams: { line: number } | null;
   decision: GatedDecision;
   confidencePct: number;
