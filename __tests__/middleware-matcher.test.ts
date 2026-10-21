@@ -61,6 +61,32 @@ describe("middleware matcher — exclusões de SEO (#439)", () => {
   });
 });
 
+describe("middleware matcher — ícones, manifest e card da landing (#440/#442)", () => {
+  it.each([
+    "/manifest.webmanifest",
+    "/icon",
+    "/icon/32",
+    "/icon/512",
+    "/apple-icon",
+    "/opengraph-image",
+  ])("libera %s (rota de metadata do Next, sem sessão)", (path) => {
+    expect(isGated(path)).toBe(false);
+  });
+
+  it.each([
+    "/manifest.webmanifestfoo",
+    "/manifestXwebmanifest",
+    "/iconx",
+    "/icon/32/extra",
+    "/apple-iconx",
+    "/opengraph-imagex",
+    "/jogos/opengraph-image",
+    "/match/123/opengraph-image",
+  ])("ancora as exclusões — %s segue gateado", (path) => {
+    expect(isGated(path)).toBe(true);
+  });
+});
+
 describe("middleware matcher — app autenticado segue gateado", () => {
   it.each(["/jogos", "/dashboard", "/match/123", "/perfil", "/admin", "/time/palmeiras"])(
     "gateia %s",

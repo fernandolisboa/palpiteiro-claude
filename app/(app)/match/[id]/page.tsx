@@ -1,6 +1,7 @@
+import type { Metadata } from "next";
 import Link from "next/link";
 import { notFound, redirect } from "next/navigation";
-import { Suspense } from "react";
+import { cache, Suspense } from "react";
 import { Users } from "lucide-react";
 
 import { BackLink } from "@/components/back-link";
@@ -110,6 +111,23 @@ type PageProps = {
   searchParams: Promise<{ back?: string; aba?: string | string[] }>;
 };
 
+// Uma leitura do jogo por request, compartilhada entre a metadata e a página.
+const loadMatch = cache(getMatchById);
+
+// Título da aba com os times (#441): "Flamengo × Palmeiras · Palpiteiro". Mesmo nome de
+// exibição da página. A metadata não chega a bots (rota gateada), então não há o que indexar.
+export async function generateMetadata({
+  params,
+}: Pick<PageProps, "params">): Promise<Metadata> {
+  const { id } = await params;
+  const match = await loadMatch(id);
+  if (!match) return { title: "Jogo" };
+  const leagueKey = leagueToKey(match.league);
+  const home = teamToTeam(match.homeTeam, leagueKey).name;
+  const away = teamToTeam(match.awayTeam, leagueKey).name;
+  return { title: `${home} × ${away}` };
+}
+
 export default async function MatchPage({ params, searchParams }: PageProps) {
   const { id } = await params;
   // "Voltar" preserva o estado de busca da origem: recompõe a URL a partir do
@@ -122,7 +140,7 @@ export default async function MatchPage({ params, searchParams }: PageProps) {
   const initialTab = parseMatchTab(query.aba);
   // Middleware garante sessão; redirect defensivo caso o matcher mude. Sessão e jogo
   // são independentes: buscados juntos (cada um é um round trip ao banco).
-  const [session, match] = await Promise.all([auth(), getMatchById(id)]);
+  const [session, match] = await Promise.all([auth(), loadMatch(id)]);
   if (!session?.user?.id) redirect("/signin");
   if (!match) notFound();
 

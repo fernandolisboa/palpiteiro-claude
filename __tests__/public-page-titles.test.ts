@@ -10,6 +10,7 @@ vi.mock("@/auth", () => ({ auth: vi.fn(), signOut: vi.fn() }));
 
 import { metadata as comoFuncionaMetadata } from "@/app/como-funciona/page";
 import { metadata as landingMetadata } from "@/app/page";
+import { metadata as signinMetadata } from "@/app/signin/page";
 
 /**
  * Guarda do double-brand no `<title>` (#441 subset).
@@ -52,5 +53,12 @@ describe("títulos das páginas públicas — opt-out do template", () => {
 
   it("a descrição de /como-funciona não fala jargão do motor (#579)", () => {
     expect(String(comoFuncionaMetadata.description)).not.toMatch(/\bedge\b|\bPASS\b/);
+  });
+});
+
+describe("/signin (#441)", () => {
+  it("fica fora do índice e tem título próprio", () => {
+    expect(signinMetadata.title).toBe("Entrar");
+    expect(signinMetadata.robots).toEqual({ index: false });
   });
 });

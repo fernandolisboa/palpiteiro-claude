@@ -1,3 +1,4 @@
+import type { Metadata } from "next";
 import Link from "next/link";
 import { redirect } from "next/navigation";
 import { Inbox } from "lucide-react";
@@ -55,6 +56,8 @@ import type { SupportedLeague } from "@/lib/providers/sports-data/leagues";
 // getRequestTimeZone(); auth() já a tornava dinâmica, mas o explícito blinda a
 // correção de fuso de um eventual passe estático (PPR/Cache Components futuros).
 export const dynamic = "force-dynamic";
+
+export const metadata: Metadata = { title: "Jogos" };
 
 // "Suas predições recentes": os últimos 5 jogos analisados, um cartão por jogo
 // (ADR 0058).

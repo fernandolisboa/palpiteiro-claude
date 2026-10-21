@@ -1,3 +1,4 @@
+import type { Metadata } from "next";
 import Link from "next/link";
 import { redirect } from "next/navigation";
 import { Ticket } from "lucide-react";
@@ -14,6 +15,8 @@ import { getUserBetSlipLedger, getUserBetSlipsPage } from "@/lib/db/queries/user
 import { getRequestTimeZone } from "@/lib/server/request-timezone";
 
 export const dynamic = "force-dynamic";
+
+export const metadata: Metadata = { title: "Suas apostas" };
 
 // Histórico "Suas apostas" (#473, ADR 0036 Fase 3; resumo e filtro #577). Autenticado
 // e PRIVADO — `userId` vem SEMPRE do `auth()`, NUNCA de rota/query (anti-IDOR); slip é

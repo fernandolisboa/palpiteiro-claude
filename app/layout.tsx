@@ -21,8 +21,8 @@ const geistMono = Geist_Mono({
 export const metadata: Metadata = {
   metadataBase: new URL("https://palpiteiro.live"),
   // `default` é o título de rotas sem `title` próprio; `template` embrulha os que
-  // têm (ex.: "%s · Palpiteiro"). Rotas que já definem título absoluto (landing,
-  // como-funciona) serão reconciliadas no restante do #441 — este PR é o subset.
+  // têm (ex.: "Jogos · Palpiteiro"). Landing e /como-funciona usam `absolute` porque
+  // a string já carrega a marca (__tests__/public-page-titles.test.ts).
   title: {
     default: "Palpiteiro — palpites de futebol com IA",
     template: "%s · Palpiteiro",
