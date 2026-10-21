@@ -65,6 +65,17 @@ export const CLAIM_TEAMS = ["home", "away", "both"] as const;
 export const CLAIM_ROLES = ["attack", "defense", "goalkeeper", "unknown"] as const;
 export const CLAIM_DIRECTIONS = ["good", "bad"] as const;
 export const CLAIM_SCOPES = ["injuries", "suspensions", "all"] as const;
+// Subtipo da afirmação "other" (#569). Só rotula: nunca move número (check-claims.ts
+// devolve "não verificável" sem sinal). Ausente = outra informação sem subtipo.
+export const OTHER_KINDS = [
+  "coach_change",
+  "derby",
+  "weather",
+  "travel_fatigue",
+  "crowd",
+  "motivation",
+] as const;
+export type OtherKind = (typeof OTHER_KINDS)[number];
 
 export const ClaimSchema = z
   .object({
@@ -75,9 +86,13 @@ export const ClaimSchema = z
     role: z.enum(CLAIM_ROLES).optional(),
     direction: z.enum(CLAIM_DIRECTIONS).optional(),
     scope: z.enum(CLAIM_SCOPES).optional(),
+    otherKind: z.enum(OTHER_KINDS).optional(),
   })
   .strict()
   .superRefine((c, ctx) => {
+    if (c.otherKind !== undefined && c.topic !== "other") {
+      ctx.addIssue({ code: "custom", message: "otherKind fora de other" });
+    }
     // Desfalque sem nome ("o Palmeiras está sem o artilheiro") vale se a função vier:
     // fica não verificável, com o peso de não verificável (check-claims.ts).
     if (c.topic === "absence" && !c.players?.length && !c.role) {
@@ -135,6 +150,7 @@ const checkedClaimSchema = z.object({
   role: z.enum(CLAIM_ROLES).optional(),
   direction: z.enum(CLAIM_DIRECTIONS).optional(),
   scope: z.enum(CLAIM_SCOPES).optional(),
+  otherKind: z.enum(OTHER_KINDS).optional(),
   index: z.number().int().nonnegative(),
   status: z.enum(CLAIM_STATUSES),
   evidence: z.string(),
@@ -331,6 +347,7 @@ export const StoredContextClaimSchema: z.ZodType<StoredContextClaim> = z.object(
   role: z.enum(CLAIM_ROLES).optional(),
   direction: z.enum(CLAIM_DIRECTIONS).optional(),
   scope: z.enum(CLAIM_SCOPES).optional(),
+  otherKind: z.enum(OTHER_KINDS).optional(),
   playersCount: z.number().int().nonnegative().optional(),
   index: z.number().int().nonnegative(),
   status: z.enum(CLAIM_STATUSES),

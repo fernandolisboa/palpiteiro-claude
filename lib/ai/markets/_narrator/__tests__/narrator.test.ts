@@ -425,10 +425,12 @@ describe("judgmentFactorPhrases", () => {
       expect(phrases[0]).toMatch(/ajustado para baixo\) \(informado por você, não conferido\)$/);
     });
 
-    it("narrator_v1.1: a regra 4 explica as duas origens", () => {
-      expect(NARRATOR_VERSION).toBe("narrator_v1.1");
+    it("narrator_v1.2: a regra 4 explica as duas origens e as notas", () => {
+      expect(NARRATOR_VERSION).toBe("narrator_v1.2");
       expect(SYSTEM_PROMPT).toContain('"(informado por você, não conferido)"');
       expect(SYSTEM_PROMPT).toContain("nunca como fato confirmado");
+      expect(SYSTEM_PROMPT).toContain('Os itens do bloco "Informado por você"');
+      expect(SYSTEM_PROMPT).toContain("não mudaram nenhum número: cite-os uma vez");
     });
 
     it("a fidelidade aceita a narração que cita a origem", () => {
@@ -509,5 +511,64 @@ describe("buildNarratorMessage", () => {
     const msg = buildNarratorMessage(passDecision(), context);
     expect(msg).toContain("SEM APOSTA");
     expect(msg).toContain("Desfalques: dados indisponíveis");
+  });
+
+  describe("notas do contexto extra (#569)", () => {
+    const context = () =>
+      buildNarratorContext({
+        league: "brasileirao_a",
+        kickoffAt: new Date("2026-05-15T19:00:00.000Z"),
+        homeTeam: TEAMS.home,
+        awayTeam: TEAMS.away,
+        standings: undefined,
+        homeForm: [],
+        awayForm: [],
+        h2h: [],
+        absencesAvailable: false,
+        absences: { home: [], away: [] },
+      });
+
+    it("sem nota a mensagem é a mesma de antes (sem a seção)", () => {
+      const before = buildNarratorMessage(overDecision(), context());
+      expect(buildNarratorMessage(overDecision({ userNotes: [] }), context())).toBe(before);
+      expect(before).not.toContain("Informado por você");
+    });
+
+    it("com nota, a seção vem depois dos fatores, uma linha marcada por nota", () => {
+      const msg = buildNarratorMessage(
+        overDecision({ userNotes: ["troca de técnico no CR Flamengo", "clássico entre os dois times"] }),
+        context(),
+      );
+      expect(msg).toContain(
+        "## Informado por você (não conferido, sem efeito nos números)\n- troca de técnico no CR Flamengo (informado por você, não conferido)\n- clássico entre os dois times (informado por você, não conferido)\n\n## Contexto",
+      );
+      expect(msg.indexOf("## Fatores qualitativos")).toBeLessThan(msg.indexOf("## Informado por você"));
+    });
+
+    it("o template registra a nota no racional, sem mexer nos key_factors", () => {
+      const plain = templatedNarration(overDecision());
+      const out = templatedNarration(overDecision({ userNotes: ["troca de técnico no CR Flamengo"] }));
+      expect(out.rationale).toBe(
+        `${plain.rationale} Você também informou (não conferido, sem efeito nos números): troca de técnico no CR Flamengo.`,
+      );
+      expect(out.key_factors).toEqual(plain.key_factors);
+    });
+
+    it("o template nunca corta a nota no meio: sem espaço, fica de fora", () => {
+      const plain = templatedNarration(overDecision());
+      const out = templatedNarration(overDecision({ userNotes: ["x".repeat(600)] }));
+      expect(out.rationale).toBe(plain.rationale);
+    });
+
+    it("o template põe as notas que cabem, uma a uma", () => {
+      const plain = templatedNarration(overDecision());
+      const out = templatedNarration(
+        overDecision({ userNotes: ["clássico entre os dois times", "x".repeat(600)] }),
+      );
+      expect(out.rationale).toBe(
+        `${plain.rationale} Você também informou (não conferido, sem efeito nos números): clássico entre os dois times.`,
+      );
+      expect(out.rationale.length).toBeLessThanOrEqual(600);
+    });
   });
 });

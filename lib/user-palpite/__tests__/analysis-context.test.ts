@@ -10,17 +10,26 @@ import {
   CONTEXT_FAILED_NOTICE,
   CONTEXT_NO_EFFECT_NOTICE,
   CONTEXT_NOT_USED_NOTICE,
+  CONTEXT_NOTED_NOTICE,
   analysisContextNotice,
   applyUserClaims,
   factsFromAnalysisData,
   pickUserContext,
   toStoredContextClaim,
 } from "@/lib/user-palpite/analysis-context";
-import { claimDescription } from "@/lib/user-palpite/labels";
-import type {
-  CheckedClaim,
-  Claim,
-  PredictionUserContext,
+import {
+  claimDescription,
+  claimTopicLabel,
+  contextNotes,
+  hasContextNote,
+} from "@/lib/user-palpite/labels";
+import {
+  ClaimSchema,
+  PredictionUserContextSchema,
+  StoredClaimsSchema,
+  type CheckedClaim,
+  type Claim,
+  type PredictionUserContext,
 } from "@/lib/user-palpite/types";
 
 const TEAMS = { home: "Flamengo", away: "Palmeiras" };
@@ -171,6 +180,32 @@ describe("applyUserClaims", () => {
     expect(r.evidence).toEqual({});
     expect(r.moved).toBe(false);
     expect(r.stored.claims).toHaveLength(1);
+    expect(r.notes).toEqual([]);
+  });
+
+  it("other com subtipo (#569): vira nota do código, guarda o enum, sem efeito no número", () => {
+    const r = apply(
+      [
+        { team: "home", topic: "other", otherKind: "coach_change", text: "o técnico caiu ontem" },
+        { team: "both", topic: "other", otherKind: "derby", text: "é clássico" },
+        { team: "away", topic: "other", otherKind: "derby", text: "clássico de novo" },
+        { team: "both", topic: "other", text: "o juiz é ruim" },
+      ],
+      null,
+    );
+    expect(r.evidence).toEqual({});
+    expect(r.moved).toBe(false);
+    expect(r.notes).toEqual(["troca de técnico no Flamengo", "clássico entre os dois times"]);
+    expect(r.stored.claims.map((c) => c.otherKind)).toEqual([
+      "coach_change",
+      "derby",
+      "derby",
+      undefined,
+    ]);
+    expect(JSON.stringify(r.stored)).not.toContain("técnico caiu");
+    // O schema de leitura não descarta o subtipo.
+    const parsed = PredictionUserContextSchema.parse(JSON.parse(JSON.stringify(r.stored)));
+    expect(parsed.claims[0].otherKind).toBe("coach_change");
   });
 });
 
@@ -298,6 +333,24 @@ describe("analysisContextNotice", () => {
     );
   });
 
+  it("sem fator movido, mas com nota (#569)", () => {
+    const noted = apply(
+      [{ team: "home", topic: "other", otherKind: "coach_change", text: "técnico novo" }],
+      answers(),
+    ).stored;
+    expect(analysisContextNotice(ok(1), [judgments({ userContext: noted })])).toBe(
+      CONTEXT_NOTED_NOTICE,
+    );
+    // Fator movido continua mandando o aviso de "entrou".
+    const both = apply(
+      [ATTACK_HOME, { team: "home", topic: "other", otherKind: "crowd", text: "casa cheia" }],
+      answers(),
+    ).stored;
+    expect(analysisContextNotice(ok(2), [judgments({ userContext: both })])).toBe(
+      CONTEXT_APPLIED_NOTICE,
+    );
+  });
+
   it("conferido mas sem efeito (JEV já considerava)", () => {
     expect(
       analysisContextNotice(ok(1), [
@@ -318,7 +371,64 @@ describe("claimDescription", () => {
     [{ team: "away", topic: "stakes", direction: "good" }, "jogo decisivo pro Palmeiras"],
     [{ team: "home", topic: "stakes", direction: "bad" }, "jogo sem peso pro Flamengo"],
     [{ team: "both", topic: "other" }, "outra informação sobre o jogo"],
+    [{ team: "home", topic: "other", otherKind: "coach_change" }, "troca de técnico no Flamengo"],
+    [{ team: "both", topic: "other", otherKind: "coach_change" }, "troca de técnico nos dois times"],
+    [{ team: "away", topic: "other", otherKind: "derby" }, "clássico entre os dois times"],
+    [{ team: "home", topic: "other", otherKind: "weather" }, "clima ou gramado que pode pesar no jogo"],
+    [{ team: "away", topic: "other", otherKind: "travel_fatigue" }, "desgaste de viagem do Palmeiras"],
+    [{ team: "home", topic: "other", otherKind: "crowd" }, "torcida como fator pro Flamengo"],
+    [{ team: "away", topic: "other", otherKind: "motivation" }, "motivação do Palmeiras como fator"],
   ] as const)("%o → %s", (c, expected) => {
     expect(claimDescription(c, TEAMS)).toBe(expected);
+  });
+});
+
+describe("subtipos de other (#569)", () => {
+  it("rótulo do tópico: o subtipo, senão o tópico", () => {
+    expect(claimTopicLabel({ topic: "other", otherKind: "weather" })).toBe("clima");
+    expect(claimTopicLabel({ topic: "other" })).toBe("outro");
+    expect(claimTopicLabel({ topic: "form" })).toBe("momento");
+  });
+
+  it("hasContextNote e contextNotes só contam other com subtipo", () => {
+    const claims = [
+      { team: "home", topic: "other" },
+      { team: "home", topic: "form" },
+    ] as const;
+    expect(hasContextNote(claims)).toBe(false);
+    expect(contextNotes(claims, TEAMS)).toEqual([]);
+    const withKind = [...claims, { team: "away", topic: "other", otherKind: "crowd" }] as const;
+    expect(hasContextNote(withKind)).toBe(true);
+    expect(contextNotes(withKind, TEAMS)).toEqual(["torcida como fator pro Palmeiras"]);
+  });
+
+  it("ClaimSchema: otherKind só em other e só do enum", () => {
+    const base = { team: "home", text: "x" } as const;
+    expect(ClaimSchema.safeParse({ ...base, topic: "other", otherKind: "derby" }).success).toBe(true);
+    expect(ClaimSchema.safeParse({ ...base, topic: "other" }).success).toBe(true);
+    expect(
+      ClaimSchema.safeParse({ ...base, topic: "rotation", otherKind: "derby" }).success,
+    ).toBe(false);
+    expect(ClaimSchema.safeParse({ ...base, topic: "other", otherKind: "referee" }).success).toBe(
+      false,
+    );
+  });
+
+  it("StoredClaimsSchema lê row antiga (sem subtipo) e nova", () => {
+    const row = {
+      team: "home",
+      topic: "other",
+      text: "x",
+      index: 0,
+      status: "unverifiable",
+      evidence: "e",
+      sides: [{ side: "home", status: "unverifiable" }],
+      playerChecks: [],
+      signals: [],
+    };
+    expect(StoredClaimsSchema.parse([row])[0].otherKind).toBeUndefined();
+    expect(StoredClaimsSchema.parse([{ ...row, otherKind: "motivation" }])[0].otherKind).toBe(
+      "motivation",
+    );
   });
 });

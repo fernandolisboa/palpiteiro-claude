@@ -1916,7 +1916,7 @@ describe("contexto do usuário (#565)", () => {
       extractionAiCallId: "ai-extract",
       versions: {
         userEvidence: "user_evidence_v1",
-        extract: "user_palpite_extract_v1",
+        extract: "user_palpite_extract_v2",
       },
     });
     expect(j.userContext?.claims).toHaveLength(1);
@@ -1976,6 +1976,32 @@ describe("contexto do usuário (#565)", () => {
       (anthropicCreate.mock.calls[0][0] as { messages: unknown }).messages
     );
     expect(message).not.toContain("informado por você");
+  });
+
+  it("(b2) other com subtipo (#569): nota do código no narrador, sem número nem texto livre", async () => {
+    await run(
+      extraction([
+        { team: "home", topic: "other", otherKind: "coach_change", text: "o técnico caiu ontem" },
+      ])
+    );
+
+    const prediction = onlyPrediction();
+    const j = prediction.judgments as PredictionJudgments;
+    const without = expectedEngine(JEV_ANSWERS);
+    expect(j.lambda.adjusted).toEqual({
+      home: without.judgments.lambdaHome,
+      away: without.judgments.lambdaAway,
+    });
+    expect(prediction.modelVersion).not.toContain(";user=");
+    expect(j.userContext?.claims[0]).toMatchObject({ topic: "other", otherKind: "coach_change" });
+    expect(JSON.stringify(j.userContext)).not.toContain("técnico caiu");
+    const message = JSON.stringify(
+      (anthropicCreate.mock.calls[0][0] as { messages: unknown }).messages
+    );
+    expect(message).toContain(
+      "- troca de técnico no CR Flamengo (informado por você, não conferido)"
+    );
+    expect(message).not.toContain("técnico caiu");
   });
 
   it("(c) JEV falhou + não verificável: applied=false, answers=null, λ movido pelo usuário, falha gravada", async () => {

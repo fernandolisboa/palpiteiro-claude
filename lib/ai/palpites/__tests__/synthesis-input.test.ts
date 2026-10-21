@@ -16,6 +16,7 @@ import {
   type MarketAnalysisSummary,
 } from "@/lib/ai/palpites/synthesis-input";
 import type { PredictionWithAiCall } from "@/lib/db/queries/predictions";
+import { claimEffect } from "@/lib/user-palpite/evidence";
 
 // Prediction stub mínima: só os campos lidos pela projeção (Drizzle numeric → STRING).
 function prediction(over: Partial<Prediction> = {}): Prediction {
@@ -412,5 +413,30 @@ describe("contexto extra fora da síntese (PLAN-565 §13.2)", () => {
     expect(
       summarizeAnalysesForSynthesis([okOutcome("match_result", plain, SELECTIONS)])[0].rationale,
     ).toBe("Mandante superior.");
+  });
+
+  it("nota do contexto extra (#569) sem fator movido: o racional do narrador também não vai", () => {
+    // Só a afirmação "other": nenhum fator movido, o ramo novo é o único que tira o racional.
+    const j = judgments();
+    j.userContext!.evidence = {};
+    j.userContext!.claims = [{
+      team: "home",
+      topic: "other",
+      otherKind: "coach_change",
+      index: 1,
+      status: "unverifiable",
+      evidence: "Não conferimos esse tipo de informação; fica como contexto, sem efeito no modelo.",
+      sides: [{ side: "home", status: "unverifiable" }],
+      playerChecks: [],
+      signals: [],
+    }];
+    expect(j.userContext!.claims.flatMap((c) => claimEffect(c, j.answers).moved)).toEqual([]);
+    const noted = prediction({
+      rationale: "Segundo o que você informou, há troca de técnico no Flamengo.",
+      judgments: j,
+    } as Partial<Prediction>);
+    const out = summarizeAnalysesForSynthesis([okOutcome("match_result", noted, SELECTIONS)]);
+    expect(out[0].rationale).toMatch(/^Fatores do modelo: /);
+    expect(out[0].rationale).not.toContain("técnico");
   });
 });

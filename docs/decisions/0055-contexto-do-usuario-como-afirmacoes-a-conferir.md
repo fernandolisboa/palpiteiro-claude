@@ -8,6 +8,10 @@ Accepted (2026-10-13). Fase 3 da proposta "pré-previsão, bet slip e análise d
 > `predict` no motor `code_jev`. Ver a seção "Emenda (#565)" no fim: ela muda o §6 e a
 > frase "não toca `lib/ai/predict.ts`" do Status para esse caminho.
 >
+> **Emenda (#569, 2026-10-21):** "outra informação" ganha subtipos tipados
+> (`user_palpite_extract_v2`) e chega ao narrador da análise como linha do código, sem
+> efeito no número. Ver a seção "Emenda (#569)" no fim.
+>
 > **Emenda (ADR 0060, 2026-10-15):** o bloco existe durante o jogo. A leitura pelos botões
 > refaz a matriz em jogo no cliente; "Analisar meu palpite" usa a base do apito e aplica a
 > transformação em jogo depois da evidência do usuário. Ver [ADR 0060](./0060-modo-ao-vivo-estado-do-jogo-modelo-em-jogo-registros-marcados.md).
@@ -100,3 +104,36 @@ Plano: `docs/plans/PLAN-565.md` (o §13 vale sobre o resto).
   tipo"); subtipos tipados ficam pro #569. Se o grupo `code_jev` inteiro cair no caminho
   LLM (sem λ), o contexto não entra e a página não mostra "o que você acrescentou".
 
+## Emenda (#569): subtipos de "outra informação"
+
+Plano: `docs/plans/PLAN-569.md`.
+
+- **Extração `user_palpite_extract_v2`** (mesmo prefixo `user_palpite`, coberto pela linha
+  1 da redação do ADR 0046). A afirmação `other` ganha `otherKind` opcional:
+  `coach_change`, `derby`, `weather`, `travel_fatigue`, `crowd`, `motivation`. Só vale em
+  `other` (Zod); subtipo inválido ou em outro tópico é descartado no `normalizeClaimInput`
+  (perde-se o rótulo, não a afirmação). Sem subtipo que encaixe (retrospecto, arbitragem),
+  fica como antes. O prompt manda o que é peso do jogo, rodízio, momento ou desfalque pros
+  tópicos que movem fator: desgaste de calendário é `rotation`, título/vaga/rebaixamento é
+  `stakes`.
+- **Nenhum efeito numérico.** `checkClaims` segue devolvendo "não verificável" sem sinal pra
+  `other`; evidência, `user_evidence_v1`, tag `user=`, gate, stake, modelo e odds intocados.
+- **A linha é do código.** `otherKindLine` (`lib/user-palpite/labels.ts`) monta a frase do
+  enum e do nome do time ("troca de técnico no Flamengo"; clássico e clima são do jogo).
+  O narrador `code_jev` (`narrator_v1.2`) recebe essas linhas num bloco "Informado por você
+  (não conferido, sem efeito nos números)", só quando há alguma (sem nota, a mensagem é a
+  mesma da v1.1); a regra 4 manda citá-las uma vez como informação da pessoa, nunca como
+  fato nem como motivo dos percentuais. O racional templado também as registra (uma a uma,
+  as que cabem inteiras no limite), pra todo mercado do run ter a nota mesmo quando o LLM
+  não narra.
+- **Gravação.** `otherKind` (enum) entra em `predictions.judgments.userContext.claims` e em
+  `user_palpite_analyses.claims`; sem texto livre, "Onde NÃO há PII" do ADR 0046 continua
+  valendo.
+- **Síntese.** Como o racional do narrador passa a citar a nota mesmo sem fator movido, a
+  síntese do palpite trata "tem nota" (`hasContextNote`) como "moveu": recebe o racional
+  montado em código (fatores do JEV que o usuário não moveu).
+- **Aviso do HERO.** Sem fator movido e com nota: "não mudou os números; … foi passado à
+  análise como informação sua, não conferida" (não promete que o texto do LLM a cite).
+- **"Seu palpite".** Mesma extração (v2); a tela mostra o subtipo como tópico. O narrador do
+  palpite não muda (`user_palpite_narrate_v1`/`_live_v1` byte-idênticos): ele já recebe a
+  paráfrase cercada.
