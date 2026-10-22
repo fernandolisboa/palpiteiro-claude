@@ -12,9 +12,13 @@ import {
   getFixturesRaw,
   RAW_FIXTURES_MAX_IDS,
 } from "@/lib/providers/sports-data/api-football/adapter";
-import { FixtureItemSchema } from "@/lib/providers/sports-data/api-football/schemas";
+import {
+  envelopeErrorsAreEmpty,
+  FixtureItemSchema,
+} from "@/lib/providers/sports-data/api-football/schemas";
 import {
   API_FOOTBALL_LEAGUE_IDS,
+  currentSeason,
   SUPPORTED_LEAGUES,
   type SupportedLeague,
 } from "@/lib/providers/sports-data/leagues";
@@ -67,9 +71,11 @@ async function resolveIds(
   date: string,
   team: string | undefined
 ): Promise<number[]> {
+  // Temporada do dia pedido, não de hoje: senão um jogo de temporada anterior some.
   const fixtures = await getFixturesByDate(
     date,
-    API_FOOTBALL_LEAGUE_IDS[league]
+    API_FOOTBALL_LEAGUE_IDS[league],
+    currentSeason(league, new Date(`${date}T12:00:00Z`))
   );
   const needle = team?.toLowerCase();
   const picked = fixtures.filter(
@@ -85,6 +91,18 @@ async function resolveIds(
     );
   }
   return picked.map((f) => f.fixture.id);
+}
+
+// Por que o parser devolveu `red: null`: são justamente as falhas que o #600 procura.
+function redNullReason(
+  item: RawItem,
+  parsedEvents: unknown[] | undefined
+): string {
+  if (item.events === undefined) return "sem events no payload";
+  if (parsedEvents === undefined) {
+    return "!! events veio no payload mas o schema descartou";
+  }
+  return "!! expulsão com team.id fora dos dois times";
 }
 
 function report(item: RawItem, receivedAt: Date): void {
@@ -107,7 +125,7 @@ function report(item: RawItem, receivedAt: Date): void {
   );
   console.log(
     `  gols=${s.goals ? `${s.goals.home}-${s.goals.away}` : "null"} ` +
-      `vermelhos=${s.red ? `${s.red.home}-${s.red.away}` : "null (sem events)"}`
+      `vermelhos=${s.red ? `${s.red.home}-${s.red.away}` : `null (${redNullReason(item, parsed.data.events)})`}`
   );
   if (item.events === undefined) {
     console.log("  events: AUSENTE no payload");
@@ -168,12 +186,21 @@ async function main() {
   for (let i = 0; i < ids.length; i += RAW_FIXTURES_MAX_IDS) {
     const batch = ids.slice(i, i + RAW_FIXTURES_MAX_IDS);
     const raw = await getFixturesRaw(batch);
-    const body = raw.body as { errors?: unknown; response?: RawItem[] };
     console.log(
       `\nHTTP ${raw.statusCode}, cota: ${JSON.stringify(raw.quotaHeaders)}`
     );
-    if (body.errors && JSON.stringify(body.errors) !== "[]") {
-      console.log(`  errors no envelope: ${JSON.stringify(body.errors)}`);
+    if (raw.bodyText !== null) {
+      console.log(`  !! corpo não é JSON: ${raw.bodyText}`);
+      return;
+    }
+    const body = (raw.body ?? {}) as {
+      errors?: string[] | Record<string, string>;
+      response?: RawItem[];
+    };
+    if (body.errors && !envelopeErrorsAreEmpty(body.errors)) {
+      // Erro de conta/parâmetro se repete nos próximos lotes: para antes de gastar mais.
+      console.log(`  !! errors no envelope: ${JSON.stringify(body.errors)}`);
+      return;
     }
     const stamp = raw.receivedAt.toISOString().replace(/[-:]|\.\d+/g, "");
     for (const item of body.response ?? []) {

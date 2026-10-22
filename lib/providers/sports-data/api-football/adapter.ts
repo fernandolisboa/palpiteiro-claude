@@ -451,11 +451,15 @@ export function getFixtureLive(
 
 // Resposta CRUA de `/fixtures?id=` (1 id) ou `/fixtures?ids=` (até 20) pro probe do #600
 // (scripts/probe-live-fixture.ts): corpo sem Zod e headers de cota, pra conferir o
-// payload real e virar fixture de replay. Sem cache e fora do caminho de produção.
+// payload real e virar fixture de replay. Sem cache e fora do caminho de produção. Usa o
+// cliente compartilhado (teto de 10 s): `ids=` com 20 jogos traz eventos, escalações e
+// estatísticas e passa fácil dos 4 s do cliente ao vivo. Corpo que não é JSON volta como
+// `bodyText` em vez de lançar, pra o operador ver o que a API mandou.
 export type ApiFootballRawFetch = {
   statusCode: number;
   quotaHeaders: Record<string, string>;
   body: unknown;
+  bodyText: string | null;
   receivedAt: Date;
 };
 
@@ -469,7 +473,7 @@ export async function getFixturesRaw(
   }
   const params: Record<string, string | number> =
     ids.length === 1 ? { id: ids[0]! } : { ids: ids.join("-") };
-  const r = await apiFootballLiveClient.send({
+  const r = await apiFootballClient.send({
     endpoint: "/fixtures",
     url: buildUrl("/fixtures", params),
     init: {
@@ -486,10 +490,18 @@ export async function getFixturesRaw(
       quotaHeaders[name] = value;
     }
   });
+  let body: unknown = null;
+  let bodyText: string | null = null;
+  try {
+    body = JSON.parse(r.text) as unknown;
+  } catch {
+    bodyText = r.text.slice(0, 2048);
+  }
   return {
     statusCode: r.statusCode,
     quotaHeaders,
-    body: JSON.parse(r.text) as unknown,
+    body,
+    bodyText,
     receivedAt: new Date(),
   };
 }

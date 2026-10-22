@@ -761,6 +761,15 @@ describe("getFixturesRaw", () => {
     });
   });
 
+  it("corpo que não é JSON volta em bodyText em vez de lançar", async () => {
+    vi.spyOn(globalThis, "fetch").mockResolvedValue(
+      new Response("<html>gateway</html>", { status: 200 })
+    );
+    const out = await getFixturesRaw([1208021]);
+    expect(out.body).toBeNull();
+    expect(out.bodyText).toBe("<html>gateway</html>");
+  });
+
   it("vários ids → `ids=a-b-c`; vazio ou acima do teto lança sem buscar", async () => {
     const fetchSpy = vi
       .spyOn(globalThis, "fetch")
