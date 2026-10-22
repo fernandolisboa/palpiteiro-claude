@@ -27,7 +27,7 @@ type HistoryRow = {
     // ou o modelo em jogo calculado agora).
     isLive?: boolean;
   };
-  selections: { key: string; modelProbPct: number; modelProbKnown?: boolean }[];
+  selections: { key: string; modelProbPct: number | null }[];
 };
 
 const SLIP_MARKETS = new Set(["match_result", "double_chance", "btts", "over_under"]);
@@ -55,8 +55,10 @@ export function latestAnalysisByMarket(
     if (out.has(key)) continue; // já tem uma mais nova
     const probs: Record<string, number> = {};
     for (const s of row.selections) {
-      if (s.modelProbKnown === false) continue;
-      if (Number.isFinite(s.modelProbPct)) probs[s.key] = s.modelProbPct;
+      // null = sem estimativa gravada: a perna cai pro modelo do jogo, nunca 0%.
+      if (s.modelProbPct !== null && Number.isFinite(s.modelProbPct)) {
+        probs[s.key] = s.modelProbPct;
+      }
     }
     if (Object.keys(probs).length === 0) continue;
     out.set(key, {

@@ -47,14 +47,12 @@ export type PredictionWithAiCall = {
   // toAnalysisView ao REABRIR uma predição passada — sem ela a grade 1X2 não
   // renderiza. over/under tem 2 rows e cai no caminho binário; 1X2 tem 3 e dispara
   // o caminho N-vias. `modelProbPct` é NULLABLE (backfill histórico / over/under
-  // pré-#173 não a grava). Vazio em predições antigas sem PSO. numeric → string no
-  // Drizzle: Number() na fronteira (modelProbPct ausente coalesce null→0).
+  // pré-#173 não a grava; artilheiro/assistência só têm prob pros jogadores que o
+  // modelo estimou). Vazio em predições antigas sem PSO. numeric → string no
+  // Drizzle: Number() na fronteira; null segue null ("sem estimativa" ≠ 0%, #533).
   selections: {
     key: string;
-    modelProbPct: number;
-    // false = a row não gravou prob (coalesce 0 acima). A síntese precisa distinguir
-    // "0%" de "sem estimativa". Ausente = conhecida.
-    modelProbKnown?: boolean;
+    modelProbPct: number | null;
     odd: number | null;
     label?: string;
   }[];
@@ -62,11 +60,11 @@ export type PredictionWithAiCall = {
 
 // Mapeia uma row de prediction_selection_odds pra a forma da view. Casa ÚNICA da
 // regra (usada por getPredictionHistoryForMatch): numeric → string no Drizzle →
-// Number() na fronteira (gotcha drizzle-numeric-returns-string). modelProbPct nullable
-// (over/under pré-#173 / históricas) → coalesce 0; `odd` PRESERVA null (Number(odd ??
-// 0) viraria um 0 errado). A assimetria odd-null vs prob-coalesce mora aqui. `label`
-// (market_selections.label, #290) viaja pra a view preferir o nome do jogador à key
-// crua em mercados dynamicSelections (scorer); inerte pros demais (label é o seed).
+// Number() na fronteira (gotcha drizzle-numeric-returns-string). `modelProbPct` e
+// `odd` PRESERVAM null (Number(null) viraria um 0 errado: 0% de chance afirmaria uma
+// estimativa que o modelo não fez). `label` (market_selections.label, #290) viaja
+// pra a view preferir o nome do jogador à key crua em mercados dynamicSelections
+// (scorer); inerte pros demais (label é o seed).
 function mapSelectionRow(s: {
   key: string;
   label: string;
@@ -74,16 +72,14 @@ function mapSelectionRow(s: {
   modelProbPct: string | null;
 }): {
   key: string;
-  modelProbPct: number;
-  modelProbKnown: boolean;
+  modelProbPct: number | null;
   odd: number | null;
   label: string;
 } {
   return {
     key: s.key,
     label: s.label,
-    modelProbPct: Number(s.modelProbPct ?? 0),
-    modelProbKnown: s.modelProbPct !== null,
+    modelProbPct: s.modelProbPct === null ? null : Number(s.modelProbPct),
     odd: s.odd === null ? null : Number(s.odd),
   };
 }

@@ -300,6 +300,31 @@ describe("predict — anytime_scorer (independent_binary fork)", () => {
     expect(Number(predictionRow.edgePct)).toBeCloseTo(12, 5);
   });
 
+  it("jogador sem prob no player_probs volta null no carrier, nunca 0 (#533)", async () => {
+    anthropicCreate.mockResolvedValue(
+      anthropicMessage({
+        recommendation: "scorer_pedro",
+        confidence_pct: 52,
+        player_probs: { scorer_pedro: 52 },
+        rationale: "Pedro é o melhor palpite de artilheiro.",
+        key_factors: ["forma recente", "centroavante titular"],
+        minimum_odd: 2.1,
+      }),
+    );
+
+    const result = await predict({
+      matchId: "m-1",
+      userId: "u-1",
+      isAdmin: true,
+      marketKey: "anytime_scorer",
+    });
+
+    const byKey = Object.fromEntries(
+      result.selections.map((s) => [s.key, s.modelProbPct]),
+    );
+    expect(byKey).toEqual({ scorer_pedro: 52, scorer_arrascaeta: null });
+  });
+
   it("PASS quando nenhum jogador bate o piso de edge", async () => {
     anthropicCreate.mockResolvedValue(
       anthropicMessage({

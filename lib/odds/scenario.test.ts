@@ -277,6 +277,37 @@ describe("computeSelectionEdgePp", () => {
 });
 
 describe("computeMarketScenarios", () => {
+  it("seleção sem prob (null): implícita do mercado completo, sem edge/EV/odd justa (#533)", () => {
+    const withNull = computeMarketScenarios({
+      selections: [
+        { key: "home", modelProbPct: 52, odd: 2.1 },
+        { key: "draw", modelProbPct: null, odd: 3.4 },
+        { key: "away", modelProbPct: 21, odd: 3.6 },
+      ],
+      recommendedKey: "home",
+    }).selections;
+    const full = computeMarketScenarios({
+      selections: [
+        { key: "home", modelProbPct: 52, odd: 2.1 },
+        { key: "draw", modelProbPct: 27, odd: 3.4 },
+        { key: "away", modelProbPct: 21, odd: 3.6 },
+      ],
+      recommendedKey: "home",
+    }).selections;
+
+    const draw = withNull[1];
+    expect(draw.modelProbPct).toBeNull();
+    expect(draw.edgePct).toBeNull();
+    expect(draw.evPerUnit).toBeNull();
+    expect(draw.modelBreakEvenOdd).toBeNull();
+    // A implícita e o break-even só dependem das odds: iguais aos do mercado completo.
+    expect(draw.impliedProbPct).toBeCloseTo(full[1].impliedProbPct as number, 9);
+    expect(draw.breakEvenProbPct).toBeCloseTo(full[1].breakEvenProbPct as number, 9);
+    // As outras seleções não mudam.
+    expect(withNull[0]).toEqual(full[0]);
+    expect(withNull[2]).toEqual(full[2]);
+  });
+
   it("N=3 (1X2): pina todos os campos das 3 seleções (ADR 0018)", () => {
     // Odds casa 2.10 / empate 3.40 / fora 3.60; modelProb 52 / 27 / 21.
     const { selections, recommended } = computeMarketScenarios({
@@ -388,7 +419,7 @@ describe("computeMarketScenarios", () => {
     // edge = modelProb honesto − implícita escalada (ambos na escala Σ≈200).
     scaled.selections.forEach((s) => {
       expect(s.edgePct as number).toBeCloseTo(
-        s.modelProbPct - (s.impliedProbPct as number),
+        (s.modelProbPct as number) - (s.impliedProbPct as number),
         9,
       );
     });
@@ -497,9 +528,8 @@ describe("computeMarketScenarios", () => {
   });
 
   it("seleção com modelProbPct=0 não lança: modelBreakEvenOdd dela vira null, as demais derivam", () => {
-    // MatchResultOutputSchema permite prob 0; uma row reaberta com model_prob_pct
-    // null vira 0 no boundary (Number(null) = 0). 100/0 é indefinido — degrada pra
-    // null em vez de derrubar a view N-vias (computeModelBreakEvenOdd lançaria).
+    // MatchResultOutputSchema permite prob 0. 100/0 é indefinido — degrada pra null
+    // em vez de derrubar a view N-vias (computeModelBreakEvenOdd lançaria).
     expect(() =>
       computeMarketScenarios({
         selections: [

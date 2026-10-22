@@ -70,16 +70,17 @@ export function computeSelectionEdgePp(
 
 // Uma seleção no cenário N-ário (ADR 0018, decisão 4). impliedProbPct/edgePct
 // são null quando o mercado não pode ser normalizado (alguma odd ausente);
-// modelBreakEvenOdd (100/modelProbPct) é null quando modelProbPct ≤ 0 — uma
-// seleção pode chegar com prob 0 (MatchResultOutputSchema permite, e o backfill
-// histórico coalesce null→0), e 100/0 não existe.
+// modelProbPct é null quando o modelo não estimou a seleção (artilheiro/assistência
+// com player_probs parcial, rows antigas sem prob gravada, #533) — e aí edge, EV e
+// odd justa também saem null. modelBreakEvenOdd (100/modelProbPct) é null quando
+// modelProbPct ≤ 0: MatchResultOutputSchema permite prob 0, e 100/0 não existe.
 export type ScenarioSelection = {
   key: string;
-  modelProbPct: number;
+  modelProbPct: number | null;
   impliedProbPct: number | null;
   odd: number | null;
   edgePct: number | null; // modelProbPct − impliedProbPct (normalizada)
-  evPerUnit: number | null; // null quando odd ausente; odd CRUA quando presente
+  evPerUnit: number | null; // null quando odd ou prob ausente; odd CRUA quando presente
   breakEvenProbPct: number | null; // 100/odd cru; null quando odd ausente
   modelBreakEvenOdd: number | null; // 100/modelProbPct; null quando modelProbPct ≤ 0
 };
@@ -98,7 +99,9 @@ export type ScenarioSelection = {
 // as seleções viram null (mercado parcial não normaliza). EV/break-even saem da
 // odd CRUA por seleção (ADR 0018 decisão 3). SEM 100−x em nenhum ponto.
 export function computeMarketScenarios(input: {
-  selections: { key: string; modelProbPct: number; odd: number | null }[];
+  // modelProbPct null = seleção sem estimativa: entra só pra completar o mercado no
+  // de-vig (a implícita depende só das odds) e sai sem edge/EV.
+  selections: { key: string; modelProbPct: number | null; odd: number | null }[];
   recommendedKey: string | null;
   // Soma-alvo da implícita (ADR 0018 + emenda não-partição). Default 1 (partição:
   // over/under, 1X2 — Σ implied = 1, byte-idêntico ao anterior). >1 p/ mercados de
@@ -130,23 +133,24 @@ export function computeMarketScenarios(input: {
 
   const selections = input.selections.map((s, i): ScenarioSelection => {
     const impliedProbPct = impliedByIndex !== null ? impliedByIndex[i] : null;
+    const model = s.modelProbPct;
     return {
       key: s.key,
-      modelProbPct: s.modelProbPct,
+      modelProbPct: model,
       impliedProbPct,
       odd: s.odd,
       edgePct:
-        impliedProbPct !== null
-          ? computeSelectionEdgePp(s.modelProbPct, impliedProbPct)
+        impliedProbPct !== null && model !== null
+          ? computeSelectionEdgePp(model, impliedProbPct)
           : null,
-      evPerUnit: s.odd !== null ? computeEvPerUnit(s.modelProbPct, s.odd) : null,
+      evPerUnit:
+        s.odd !== null && model !== null ? computeEvPerUnit(model, s.odd) : null,
       breakEvenProbPct: s.odd !== null ? computeBreakEvenProbPct(s.odd) : null,
       // computeModelBreakEvenOdd lança pra modelProbPct ≤ 0 (contrato de odd > 1
-      // do caminho binário). Em N-vias uma seleção pode ter prob 0 (schema permite,
-      // backfill coalesce null→0) — degrada pra null como evPerUnit/breakEvenProbPct,
-      // sem derrubar a view N-vias.
+      // do caminho binário). Em N-vias uma seleção pode ter prob 0 (schema permite)
+      // — degrada pra null como evPerUnit/breakEvenProbPct, sem derrubar a view.
       modelBreakEvenOdd:
-        s.modelProbPct > 0 ? computeModelBreakEvenOdd(s.modelProbPct) : null,
+        model !== null && model > 0 ? computeModelBreakEvenOdd(model) : null,
     };
   });
 

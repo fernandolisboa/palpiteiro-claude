@@ -127,8 +127,9 @@ export type MarketCartridge<
   // (não toca prompt/schema/payload) — predict grava `model_prob_pct` por seleção
   // em prediction_selection_odds e alimenta a grade N-vias. binário (over_under)
   // deriva `{[rec]: confidence, [outro]: 100−confidence}`; distribuição (1X2)
-  // retorna as 3 probs diretas do output.
-  selectionProbs: (output: Output) => Record<string, number>;
+  // retorna as 3 probs diretas do output. Parcial: o artilheiro/assistência só traz
+  // prob pros jogadores que o modelo estimou (a seleção ausente grava NULL, #533).
+  selectionProbs: (output: Output) => Partial<Record<string, number>>;
   // Deriva os marketParams persistidos (a linha ESCOLHIDA) a partir do output do
   // LLM — usado por mercados MULTI-LINHA (over_under v3.0, #175) onde a linha não é
   // estática no descriptor. Quando presente, predict persiste marketParams DAQUI (a

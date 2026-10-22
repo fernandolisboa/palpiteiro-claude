@@ -251,7 +251,7 @@ function marketOdds(
   if (keys.length === 0 || keys.some((k) => !(ref.odds[k] > 1))) return null;
   const target = descriptor.impliedSumTarget ?? 1;
   const scen = computeMarketScenarios({
-    selections: keys.map((k) => ({ key: k, modelProbPct: 0, odd: ref.odds[k] })),
+    selections: keys.map((k) => ({ key: k, modelProbPct: null, odd: ref.odds[k] })),
     recommendedKey: null,
     impliedSumTarget: target,
     marketKind: descriptor.marketKind ?? "partition",
