@@ -52,6 +52,7 @@ import {
   type NormalizedStanding,
   type NormalizedTeamLineup,
   type SportsDataProvider,
+  type UpcomingTeamFixture,
 } from "@/lib/providers/sports-data/types";
 import type { SupportedLeague } from "@/lib/providers/sports-data/leagues";
 
@@ -495,6 +496,16 @@ async function runPredict(
     awayTeam: match.awayTeam,
   };
 
+  // 1.5 Próximos jogos dos dois times pro state JEV (#617): só no motor code_jev, fora
+  //     do memo do run, e disparados antes das buscas abaixo pra pegar as primeiras
+  //     vagas do throttle da API-Football. Settled: ninguém esperar não vaza rejeição.
+  const upcomingFetch =
+    !opts.runMemo?.get(matchId) &&
+    isCodeJevMarket(cartridge.descriptor) &&
+    (opts.engine ?? (await readAnalysisEngine())) === "code_jev"
+      ? startUpcomingFetch(provider, match)
+      : undefined;
+
   // 2. Fetch normalized fixture (composite-keyed). Used to populate venue
   //    and serve as the reference for downstream lookups (lineups, injuries).
   const fixture = await provider.getFixtureByMatch(ref);
@@ -903,6 +914,7 @@ async function runPredict(
           awayForm,
           standings,
         },
+        upcoming: upcomingFetch,
       });
       const user = await resolveUserContext({
         userContextP,
@@ -2219,20 +2231,162 @@ async function runJudgments(args: {
   };
 }
 
-// Input do state JEV + julgamentos do jogo. O reuso entre análises (runJudgments) é
-// chaveado pelo stateHash, que depende da escalação anterior (papel do desfalque)
-// — por isso a busca vem antes do lookup. Dentro de um best bet, o memo do run
-// (CodeJevRunMemo) evita as duas.
-async function resolveMatchJudgments(args: {
-  userId: string | null;
-  matchId: string;
+// Dados que o state JEV busca além do passo 3 (as mesmas buscas no predict e no cron
+// da base do modelo, senão o stateHash diverge e o reuso erra).
+type JudgmentFetchedData = Omit<
+  MatchJudgmentData,
+  "previousLineups" | "upcoming" | "topScorers"
+>;
+
+// Prazo das buscas extras do state JEV (#617) na análise interativa: o cliente da
+// API-Football é limitado a 8 req/min por instância (cache por instância), e uma
+// busca no fim da fila esperaria até ~60 s. Por isso os próximos jogos saem ANTES do
+// passo 3 (pegam as 1as vagas); passou do prazo → o campo fica "unknown". O cron não
+// passa prazo.
+export const JUDGMENT_EXTRAS_BUDGET_MS = 8_000;
+// Quantos jogos à frente pedir: a lista conta a partir de AGORA (inclui este jogo e
+// os que vêm antes dele); 5 cobre a janela de análise.
+export const UPCOMING_FIXTURES_NEXT = 5;
+// Copas: a lista de artilheiros é só da competição, poucos jogos por time — não
+// identifica o artilheiro do time.
+const NO_TOP_SCORER_LEAGUES: ReadonlySet<SupportedLeague> = new Set<SupportedLeague>([
+  "champions_league",
+  "copa_libertadores",
+  "copa_sudamericana",
+  "world_cup",
+]);
+
+class JudgmentExtrasTimeoutError extends Error {}
+
+// Exportado só pro teste do prazo.
+export function withBudget<T>(
+  p: Promise<T>,
+  budgetMs: number | undefined,
+): Promise<T> {
+  if (budgetMs === undefined) return p;
+  let timer: ReturnType<typeof setTimeout> | undefined;
+  const timeout = new Promise<never>((_, reject) => {
+    timer = setTimeout(
+      () => reject(new JudgmentExtrasTimeoutError(`exceeded ${budgetMs}ms`)),
+      budgetMs,
+    );
+  });
+  return Promise.race([p, timeout]).finally(() => clearTimeout(timer));
+}
+
+type Settled<T> = { ok: true; value: T } | { ok: false; error: unknown };
+
+// Chama `run` na hora (a request entra na fila do throttle já) e captura até um
+// throw síncrono como { ok: false }.
+function settle<T>(run: () => Promise<T>): Promise<Settled<T>> {
+  let pending: Promise<T>;
+  try {
+    pending = Promise.resolve(run());
+  } catch (error) {
+    pending = Promise.reject(error);
+  }
+  return pending.then(
+    (value): Settled<T> => ({ ok: true, value }),
+    (error: unknown): Settled<T> => ({ ok: false, error }),
+  );
+}
+
+// Próximos jogos dos dois times (#617), já disparados. Settled: quem dispara cedo
+// pode nunca esperar (ex.: o predict cai no caminho LLM) sem rejeição solta.
+type UpcomingFetch = {
+  home: Promise<Settled<UpcomingTeamFixture[]>>;
+  away: Promise<Settled<UpcomingTeamFixture[]>>;
+};
+
+// Provider sem o método → undefined (o state fica sem calendário, como antes).
+function startUpcomingFetch(
+  provider: SportsDataProvider,
+  match: { league: SupportedLeague; homeTeam: string; awayTeam: string },
+): UpcomingFetch | undefined {
+  const get = provider.getUpcomingTeamFixtures?.bind(provider);
+  if (!get) return undefined;
+  return {
+    home: settle(() => get(match.homeTeam, match.league, UPCOMING_FIXTURES_NEXT)),
+    away: settle(() => get(match.awayTeam, match.league, UPCOMING_FIXTURES_NEXT)),
+  };
+}
+
+// Calendário e artilheiros do state JEV (#617). Fail-open por campo, nas duas pontas
+// (predict e cron): Unsupported → campo fora, sem log (o provider não tem o dado);
+// erro ou prazo estourado → campo fora + log. O reuso é chaveado pelo stateHash
+// exato, então um state com "unknown" só é reusado por outro igual. Artilheiros só
+// pra liga nacional e só quando algum lado tem desfalque: o rótulo só existe no
+// desfalcado.
+async function fetchJudgmentExtras(args: {
   provider: SportsDataProvider;
-  data: Omit<MatchJudgmentData, "previousLineups">;
-}): Promise<{ input: MatchJudgmentInput; run: JudgmentRun }> {
+  data: JudgmentFetchedData;
+  budgetMs?: number;
+  // Próximos jogos já disparados pelo predict antes do passo 3 (pegam as 1as vagas
+  // do throttle); sem isso, dispara aqui.
+  upcoming?: UpcomingFetch;
+}): Promise<{
+  upcoming: MatchJudgmentData["upcoming"];
+  topScorers: MatchJudgmentData["topScorers"];
+}> {
+  const { provider, data } = args;
+  const attempt = async <T>(
+    what: string,
+    pending: Promise<Settled<T>> | undefined,
+  ): Promise<T | undefined> => {
+    if (!pending) return undefined;
+    let error: unknown;
+    try {
+      const r = await withBudget(pending, args.budgetMs);
+      if (r.ok) return r.value;
+      error = r.error;
+    } catch (err) {
+      error = err;
+    }
+    if (error instanceof SportsDataUnsupportedError) return undefined;
+    console.error(
+      JSON.stringify({
+        scope: "predict",
+        error: `${what}_fetch_failed`,
+        league: data.league,
+        message: error instanceof Error ? error.message : String(error),
+      }),
+    );
+    return undefined;
+  };
+  const upcoming = args.upcoming ?? startUpcomingFetch(provider, data);
+  const getTopScorers = provider.getTopScorers?.bind(provider);
+  const wantsTopScorers =
+    !NO_TOP_SCORER_LEAGUES.has(data.league) &&
+    data.injuries.home.length + data.injuries.away.length > 0;
+  const [home, away, topScorers] = await Promise.all([
+    attempt("upcoming_fixtures", upcoming?.home),
+    attempt("upcoming_fixtures", upcoming?.away),
+    attempt(
+      "top_scorers",
+      getTopScorers && wantsTopScorers
+        ? settle(() => getTopScorers(data.league))
+        : undefined,
+    ),
+  ]);
+  return {
+    upcoming: home || away ? { home, away } : undefined,
+    topScorers,
+  };
+}
+
+// Input do state JEV (escalação anterior, calendário e artilheiros buscados aqui). O
+// reuso entre análises (runJudgments) é chaveado pelo stateHash, que depende de tudo
+// isso — por isso as buscas vêm antes do lookup. Dentro de um best bet, o memo do run
+// (CodeJevRunMemo) evita tudo.
+async function prepareMatchJudgmentInput(args: {
+  provider: SportsDataProvider;
+  data: JudgmentFetchedData;
+  extrasBudgetMs?: number;
+  upcoming?: UpcomingFetch;
+}): Promise<MatchJudgmentInput> {
   const { data } = args;
-  const input = buildMatchJudgmentInput({
-    ...data,
-    previousLineups: await fetchPreviousLineups({
+  const [previousLineups, extras] = await Promise.all([
+    fetchPreviousLineups({
       provider: args.provider,
       kickoffAt: data.kickoffAt,
       homeTeam: data.homeTeam,
@@ -2241,6 +2395,35 @@ async function resolveMatchJudgments(args: {
       awayForm: data.awayForm,
       injuries: data.injuries,
     }),
+    fetchJudgmentExtras({
+      provider: args.provider,
+      data,
+      budgetMs: args.extrasBudgetMs,
+      upcoming: args.upcoming,
+    }),
+  ]);
+  return buildMatchJudgmentInput({
+    ...data,
+    previousLineups,
+    ...(extras.upcoming ? { upcoming: extras.upcoming } : {}),
+    ...(extras.topScorers ? { topScorers: extras.topScorers } : {}),
+  });
+}
+
+// Análise interativa: busca extra que falhou ou estourou o prazo vira "unknown" no
+// state e o JEV roda mesmo assim.
+async function resolveMatchJudgments(args: {
+  userId: string;
+  matchId: string;
+  provider: SportsDataProvider;
+  data: JudgmentFetchedData;
+  upcoming?: UpcomingFetch;
+}): Promise<{ input: MatchJudgmentInput; run: JudgmentRun }> {
+  const input = await prepareMatchJudgmentInput({
+    provider: args.provider,
+    data: args.data,
+    extrasBudgetMs: JUDGMENT_EXTRAS_BUDGET_MS,
+    upcoming: args.upcoming,
   });
   const run = await runJudgments({
     userId: args.userId,
@@ -2259,11 +2442,21 @@ async function resolveMatchJudgments(args: {
 export async function resolveModelBaseJudgments(args: {
   matchId: string;
   provider: SportsDataProvider;
-  data: Omit<MatchJudgmentData, "previousLineups">;
+  data: JudgmentFetchedData;
 }): Promise<{ input: MatchJudgmentInput; run: JudgmentRun } | null> {
   try {
     if (!createTypeSafeJudgmentProvider().hasKey()) return null;
-    return await resolveMatchJudgments({ ...args, userId: null });
+    // Sem prazo nas buscas extras (#617): o cron não tem usuário esperando.
+    const input = await prepareMatchJudgmentInput({
+      provider: args.provider,
+      data: args.data,
+    });
+    const run = await runJudgments({
+      userId: null,
+      matchId: args.matchId,
+      stateInput: input.stateInput,
+    });
+    return { input, run };
   } catch (err) {
     console.error(
       JSON.stringify({

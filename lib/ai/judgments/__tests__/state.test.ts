@@ -8,6 +8,7 @@ import type {
 
 import {
   buildJudgmentState,
+  competitionStage,
   contestMargin,
   describeAbsence,
   enrichAbsences,
@@ -146,6 +147,52 @@ describe("calendário → buckets", () => {
     ).toBe("next match more than 7 days away");
     expect(nextMatchBucket(kickoff, undefined)).toBe("unknown");
   });
+
+  it("próximo jogo com fase do torneio (#617)", () => {
+    expect(
+      nextMatchBucket(kickoff, {
+        kickoffAt: "2026-09-27T00:00:00Z",
+        competition: "CONMEBOL Libertadores",
+        round: "Quarter-finals",
+      })
+    ).toBe("next match within 72h (CONMEBOL Libertadores, knockout)");
+    expect(
+      nextMatchBucket(kickoff, {
+        kickoffAt: "2026-09-29T22:00:00Z",
+        competition: "UEFA Champions League",
+        round: "League Stage - 5",
+      })
+    ).toBe("next match in 3 to 7 days (UEFA Champions League, group stage)");
+    expect(
+      nextMatchBucket(kickoff, {
+        kickoffAt: "2026-09-27T00:00:00Z",
+        competition: "Serie A",
+        round: "Regular Season - 30",
+      })
+    ).toBe("next match within 72h (Serie A)");
+  });
+
+  it("fase do torneio a partir do round cru da API-Football", () => {
+    for (const round of [
+      "Round of 16",
+      "Quarter-finals",
+      "Semi-finals",
+      "Final",
+      "Knockout Round Play-offs",
+      "3rd Round",
+      "1st Round",
+      "2nd Qualifying Round",
+      "Preliminary Round",
+    ]) {
+      expect(competitionStage(round), round).toBe("knockout");
+    }
+    for (const round of ["Group A - 3", "League Stage - 5", "Group Stage - 1"]) {
+      expect(competitionStage(round), round).toBe("group stage");
+    }
+    expect(competitionStage("Regular Season - 12")).toBeUndefined();
+    expect(competitionStage("Relegation Group - 3")).toBeUndefined();
+    expect(competitionStage(undefined)).toBeUndefined();
+  });
 });
 
 describe("tabela → buckets", () => {
@@ -244,6 +291,19 @@ describe("tabela → buckets", () => {
       })
     ).toBeUndefined();
     expect(tableInputForLeague("brasileirao_a", undefined)).toBeUndefined();
+  });
+
+  it("Premier League e La Liga têm zonas (#617): 4 vagas de Champions, 3 rebaixados", () => {
+    for (const league of ["premier_league", "la_liga"] as const) {
+      const input = tableInputForLeague(league, {
+        league,
+        season: 2026,
+        tables: [{ teams: table().rows as NormalizedStandingTeam[] }],
+      });
+      expect(input?.continentalSpots).toBe(4);
+      expect(input?.relegationSpots).toBe(3);
+      expect(input?.totalRounds).toBe(38);
+    }
   });
 });
 

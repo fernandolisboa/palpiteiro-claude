@@ -6,9 +6,9 @@ import {
   JUDGMENTS_VERSION,
 } from "../questions";
 
-describe("jev_judgments_v1", () => {
+describe("jev_judgments_v2", () => {
   it("versão e as 8 perguntas noul", () => {
-    expect(JUDGMENTS_VERSION).toBe("jev_judgments_v1");
+    expect(JUDGMENTS_VERSION).toBe("jev_judgments_v2");
     expect(JUDGMENT_QUESTION_IDS).toHaveLength(8);
     expect(Object.keys(JUDGMENT_QUESTIONS).sort()).toEqual(
       [...JUDGMENT_QUESTION_IDS].sort()

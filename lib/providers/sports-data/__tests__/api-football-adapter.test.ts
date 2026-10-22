@@ -36,6 +36,8 @@ const {
   toNormalizedStanding,
   toNormalizedInjury,
   toNormalizedTeamLineup,
+  toUpcomingTeamFixture,
+  toNormalizedTopScorer,
   mapStatusToNormalized,
   resolveApiFootballTeamId,
   seasonForApiFootballLeagueId,
@@ -594,6 +596,73 @@ function makeLineup(): ApiFootballLineup {
     coach: null,
   };
 }
+
+describe("toUpcomingTeamFixture (#617)", () => {
+  it("competição e fase crus, times canônicos pela liga analisada", () => {
+    const f = makeFixture({
+      league: {
+        id: 13,
+        name: "CONMEBOL Libertadores",
+        country: "World",
+        season: 2026,
+        round: "Semi-finals",
+      },
+    });
+    expect(toUpcomingTeamFixture(f, "brasileirao_a")).toEqual({
+      kickoffAt: "2026-05-15T19:00:00.000Z",
+      kickoffTimestampMs: Date.parse("2026-05-15T19:00:00Z"),
+      homeTeam: "CR Flamengo",
+      awayTeam: "Fluminense FC",
+      competition: "CONMEBOL Libertadores",
+      round: "Semi-finals",
+    });
+  });
+
+  it("round nulo → sem round", () => {
+    const f = makeFixture();
+    const u = toUpcomingTeamFixture(
+      { ...f, league: { ...f.league, round: null } },
+      "brasileirao_a"
+    );
+    expect(u.round).toBeUndefined();
+  });
+});
+
+describe("toNormalizedTopScorer (#617)", () => {
+  it("1ª linha de statistics: time canônico e gols", () => {
+    expect(
+      toNormalizedTopScorer(
+        {
+          player: { id: 1, name: "P. Atacante" },
+          statistics: [
+            { team: { id: 127, name: "Flamengo" }, goals: { total: 12 } },
+          ],
+        },
+        "brasileirao_a"
+      )
+    ).toEqual([
+      { player: { name: "P. Atacante" }, team: "CR Flamengo", goals: 12 },
+    ]);
+  });
+
+  it("sem statistics ou gols nulos → fora", () => {
+    expect(
+      toNormalizedTopScorer(
+        { player: { name: "X" }, statistics: [] },
+        "brasileirao_a"
+      )
+    ).toEqual([]);
+    expect(
+      toNormalizedTopScorer(
+        {
+          player: { name: "X" },
+          statistics: [{ team: { name: "Flamengo" }, goals: { total: null } }],
+        },
+        "brasileirao_a"
+      )
+    ).toEqual([]);
+  });
+});
 
 describe("toNormalizedTeamLineup", () => {
   it("normalizes starters with role labels and bench", () => {

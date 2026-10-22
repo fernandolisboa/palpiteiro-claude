@@ -290,3 +290,14 @@ Não são portões de merge. São os números mostrados pro Fernando antes e dep
 3. **JEV só em shadow ao lado do motor atual, sem backtest.** **Rejeitada.** Com um único usuário, o volume nunca dá leitura.
 4. **Motor `code` puro, sem JEV.** **Não descartado.** É o que o motor vira, na prática, se o backtest zerar os pesos (leitura 1).
 5. **Blend `w·P_estatístico + (1−w)·P_LLM`.** Mantém a não-reprodutibilidade e o custo por mercado. O ADR 0037 (Decisão 4) já o adiou.
+
+## Adendo (2026-10-22, #617): `jev_judgments_v2`, insumos que faltavam
+
+As perguntas da Decisão 2 já citavam o próximo jogo, o artilheiro e a situação na tabela, mas o state chegava sem eles. A v2 só completa o state; os pesos seguem `judgment_weights_v1`. Plano: `docs/plans/PLAN-617.md`.
+
+- **Calendário.** Próximos jogos de cada time em qualquer competição (`/fixtures?team&next=5`, API-Football). `next_match` passa a sair preenchido, com a competição e, quando o round indica, `knockout` ou `group stage` entre parênteses. O jogo anterior passa a considerar também um jogo ainda não disputado antes deste (o de meio de semana), não só a forma encerrada. O próprio jogo é reconhecido pelos dois times numa janela de ±36 h.
+- **Artilheiro.** `/players/topscorers` da liga nacional, só quando algum lado tem desfalque: o tag "team top scorer" passa a sair. O nome serve só pro cruzamento em `state.ts`; o state continua só com papéis.
+- **Zonas.** Premier League e La Liga entram em `LEAGUE_TABLE_CONFIG` (38 rodadas, 4 vagas de Champions como piso, 3 rebaixados). Isso também torna "peso do jogo" verificável nessas ligas (ADR 0055).
+- **Falha.** Fail-open nas duas pontas: falhou, o campo fica `unknown` e o JEV roda (o reuso é pelo `stateHash` exato). Na análise interativa os próximos jogos saem antes das outras buscas, pra pegar as primeiras vagas do cliente da API-Football (8 req/min por instância), e cada busca nova tem prazo de 8 s. O cron não tem prazo.
+- **Custo.** +2 req de API-Football por jogo (próximos jogos) e +1 por liga quando há desfalque (artilheiros), cache por instância. Zero The Odds API, zero LLM.
+- **Segmentação.** A tag `judg=` do `modelVersion` vira `jev_judgments_v2`: calibração e Yield por motor recomeçam um segmento novo em n=0. Bases do modelo com respostas v1 vão pro começo da fila do cron.

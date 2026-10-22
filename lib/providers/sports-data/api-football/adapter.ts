@@ -38,6 +38,7 @@ import {
   StandingsEnvelopeSchema,
   StatusResponseSchema,
   TeamEnvelopeSchema,
+  TopScorerEnvelopeSchema,
   type ApiFootballFixture,
   type ApiFootballFixtureEvent,
   type ApiFootballInjury,
@@ -45,6 +46,7 @@ import {
   type ApiFootballStandings,
   type ApiFootballStatus,
   type ApiFootballTeamItem,
+  type ApiFootballTopScorer,
 } from "@/lib/providers/sports-data/api-football/schemas";
 import { API_FOOTBALL_TEAM_IDS } from "@/lib/providers/sports-data/api-football/team-ids";
 import {
@@ -74,8 +76,10 @@ import {
   type NormalizedStandingSplit,
   type NormalizedStandingTeam,
   type NormalizedTeamLineup,
+  type NormalizedTopScorer,
   type ProviderCapabilities,
   type SportsDataProvider,
+  type UpcomingTeamFixture,
   SportsDataNotFoundError,
   SportsDataTransientError,
   SportsDataUnsupportedError,
@@ -300,7 +304,11 @@ async function fetchAndParse<S extends z.ZodTypeAny>(
         endpoint: opts.endpoint,
         params,
         error: "schema_validation_failed",
-        payload_preview: text.slice(0, 2048),
+        // Resposta de jogador (artilheiros, #617) traz nome, nascimento e
+        // nacionalidade: fica fora do log (LGPD, minimização).
+        ...(opts.endpoint.startsWith("/players")
+          ? {}
+          : { payload_preview: text.slice(0, 2048) }),
         zod_issues: parsed.error.issues.slice(0, 10),
       })
     );
@@ -615,6 +623,39 @@ export async function getTeamForm(
   return envelope.response;
 }
 
+// Próximos jogos do time em TODAS as competições (#617). `next` conta a partir de
+// agora, então inclui o próprio jogo analisado; quem chama filtra.
+export async function getTeamUpcoming(
+  teamId: number,
+  next: number
+): Promise<ApiFootballFixture[]> {
+  if (next < 1 || next > 99) {
+    throw new Error("getTeamUpcoming `next` must be between 1 and 99");
+  }
+  const envelope = await request({
+    endpoint: "/fixtures",
+    params: { team: teamId, next },
+    schema: FixtureEnvelopeSchema,
+    ttlMs: ONE_HOUR,
+  });
+  return envelope.response;
+}
+
+// Artilheiros da competição (#617): até 20 linhas, 1 request por liga/temporada/dia
+// (por instância).
+export async function getTopScorers(
+  leagueId: number,
+  season: number
+): Promise<ApiFootballTopScorer[]> {
+  const envelope = await request({
+    endpoint: "/players/topscorers",
+    params: { league: leagueId, season },
+    schema: TopScorerEnvelopeSchema,
+    ttlMs: ONE_DAY,
+  });
+  return envelope.response;
+}
+
 // Calls /status — does NOT count against the daily quota. Useful for diagnostics
 // and to verify how many real API calls a script consumed.
 export async function getApiStatus(): Promise<ApiFootballStatus["response"]> {
@@ -888,6 +929,39 @@ function mapApiFootballAbsenceStatus(
   if (reason.includes("card") || reason.includes("suspension"))
     return "suspended";
   return "injured";
+}
+
+// Times canônicos pela liga ANALISADA: num jogo desta liga batem com o match do banco
+// (é assim que o caller reconhece o próprio jogo); nos de outra competição passam crus.
+function toUpcomingTeamFixture(
+  f: ApiFootballFixture,
+  league: SupportedLeague
+): UpcomingTeamFixture {
+  return {
+    kickoffAt: new Date(f.fixture.timestamp * 1000).toISOString(),
+    kickoffTimestampMs: f.fixture.timestamp * 1000,
+    homeTeam: canonicalizeOrPassthrough(f.teams.home.name, league),
+    awayTeam: canonicalizeOrPassthrough(f.teams.away.name, league),
+    competition: f.league.name,
+    ...(f.league.round ? { round: f.league.round } : {}),
+  };
+}
+
+// A 1ª linha de `statistics` é a da competição pedida. Sem gols contados → fora.
+function toNormalizedTopScorer(
+  row: ApiFootballTopScorer,
+  league: SupportedLeague
+): NormalizedTopScorer[] {
+  const stat = row.statistics[0];
+  const goals = stat?.goals?.total;
+  if (!stat || goals === null || goals === undefined) return [];
+  return [
+    {
+      player: { name: row.player.name },
+      team: canonicalizeOrPassthrough(stat.team.name, league),
+      goals,
+    },
+  ];
 }
 
 function toNormalizedInjury(injury: ApiFootballInjury): NormalizedInjury {
@@ -1436,6 +1510,47 @@ export class ApiFootballAdapter implements SportsDataProvider {
       wrapApiFootballError(err, "getTeamForm", { team, league, last });
     }
   }
+
+  async getUpcomingTeamFixtures(
+    team: string,
+    league: SupportedLeague,
+    next: number
+  ): Promise<UpcomingTeamFixture[]> {
+    try {
+      const teamId = await resolveApiFootballTeamId(
+        team,
+        league,
+        "getUpcomingTeamFixtures"
+      );
+      const fixtures = await getTeamUpcoming(teamId, next);
+      return fixtures
+        .filter((f) => {
+          const status = mapStatusToNormalized(f.fixture.status.short);
+          return status !== "cancelled" && status !== "postponed";
+        })
+        .map((f) => toUpcomingTeamFixture(f, league));
+    } catch (err) {
+      if (err instanceof SportsDataTransientError) throw err;
+      wrapApiFootballError(err, "getUpcomingTeamFixtures", {
+        team,
+        league,
+        next,
+      });
+    }
+  }
+
+  async getTopScorers(league: SupportedLeague): Promise<NormalizedTopScorer[]> {
+    try {
+      const rows = await getTopScorers(
+        API_FOOTBALL_LEAGUE_IDS[league],
+        currentSeasonByLeague(league)
+      );
+      return rows.flatMap((row) => toNormalizedTopScorer(row, league));
+    } catch (err) {
+      if (err instanceof SportsDataTransientError) throw err;
+      wrapApiFootballError(err, "getTopScorers", { league });
+    }
+  }
 }
 
 // Internal exports for unit tests.
@@ -1447,6 +1562,8 @@ export const __testing = {
   toNormalizedStanding,
   toNormalizedInjury,
   toNormalizedTeamLineup,
+  toUpcomingTeamFixture,
+  toNormalizedTopScorer,
   mapStatusToNormalized,
   resolveApiFootballTeamId,
   seasonForApiFootballLeagueId,

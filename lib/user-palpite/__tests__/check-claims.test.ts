@@ -15,6 +15,7 @@ import {
   stripPlayerNames,
   type PalpiteFacts,
 } from "@/lib/user-palpite/check-claims";
+import type { SupportedLeague } from "@/lib/providers/sports-data/leagues";
 import type { Claim } from "@/lib/user-palpite/types";
 
 const TEAMS = { home: "Flamengo", away: "Palmeiras" };
@@ -86,7 +87,7 @@ function standing(): NormalizedStanding {
   };
 }
 
-function check(claims: Claim[], facts: PalpiteFacts, league: "brasileirao_a" | "premier_league" = "brasileirao_a") {
+function check(claims: Claim[], facts: PalpiteFacts, league: SupportedLeague = "brasileirao_a") {
   return checkClaims({ claims, facts, teams: TEAMS, league, kickoffAt: KICKOFF });
 }
 
@@ -460,8 +461,13 @@ describe("stakes", () => {
     expect(c.signals).toEqual([{ questionId: "high_stakes_home", strength: "confirmed" }]);
   });
 
-  it("premier_league (sem config de tabela) → não verificável com sinal de não verificável", () => {
+  it("premier_league (#617) agora tem zonas: a afirmação é conferida", () => {
     const [c] = check([stakes("home", "good")], facts, "premier_league");
+    expect(c.status).not.toBe("unverifiable");
+  });
+
+  it("serie_a (sem config de tabela) → não verificável com sinal de não verificável", () => {
+    const [c] = check([stakes("home", "good")], facts, "serie_a");
     expect(c.status).toBe("unverifiable");
     expect(c.signals).toEqual([{ questionId: "high_stakes_home", strength: "unverified" }]);
   });

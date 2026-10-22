@@ -11,11 +11,13 @@ import type {
   NormalizedLineup,
   NormalizedStanding,
   NormalizedTeamLineup,
+  NormalizedTopScorer,
+  UpcomingTeamFixture,
 } from "@/lib/providers/sports-data/types";
 
-// Monta o input do state JEV (ADR 0041 §2) SÓ com o que o predict já buscou (a
-// única busca extra, a escalação do jogo anterior de cada time, é do predict). O
-// que não temos (próximo jogo, artilheiros) fica ausente e vira "unknown" no state.
+// Monta o input do state JEV (ADR 0041 §2) SÓ com o que o predict já buscou (as
+// buscas extras — escalação do jogo anterior, próximos jogos e artilheiros — são do
+// predict). O que não veio fica ausente e vira "unknown" no state.
 
 // Rótulo em inglês da competição (o state do JEV é em inglês).
 const COMPETITION_LABEL: Record<SupportedLeague, string> = {
@@ -45,6 +47,86 @@ export function previousFixture(
   return best;
 }
 
+// Um jogo de OUTRA data contra o mesmo adversário não é este: a API e o banco podem
+// divergir em minutos/horas no kickoff (adapter.getFixtureByMatch tolera o mesmo).
+const SAME_MATCH_WINDOW_MS = 36 * 60 * 60 * 1000;
+
+function isThisMatch(
+  f: UpcomingTeamFixture,
+  match: { kickoffMs: number; homeTeam: string; awayTeam: string }
+): boolean {
+  const sameTeams =
+    (f.homeTeam === match.homeTeam && f.awayTeam === match.awayTeam) ||
+    (f.homeTeam === match.awayTeam && f.awayTeam === match.homeTeam);
+  return (
+    sameTeams &&
+    Math.abs(f.kickoffTimestampMs - match.kickoffMs) <= SAME_MATCH_WINDOW_MS
+  );
+}
+
+// Calendário de um time em volta deste jogo (#617): o anterior é o mais recente antes
+// do kickoff entre a forma (encerrados) e os próximos jogos (um jogo de meio de semana
+// ainda não disputado conta pro descanso); o próximo é o 1º depois do kickoff. Este
+// jogo nunca conta como nenhum dos dois.
+export function teamSchedule(args: {
+  kickoffMs: number;
+  homeTeam: string;
+  awayTeam: string;
+  form: readonly NormalizedFixture[];
+  upcoming: readonly UpcomingTeamFixture[] | undefined;
+}): {
+  previousKickoffAt?: string;
+  nextFixture?: { kickoffAt: string; competition: string; round?: string };
+} {
+  const others = (args.upcoming ?? []).filter((f) => !isThisMatch(f, args));
+  const fromForm = previousFixture(args.form, args.kickoffMs);
+  let previousMs = fromForm?.kickoffTimestampMs;
+  let previousKickoffAt = fromForm?.kickoffAt;
+  let next: UpcomingTeamFixture | undefined;
+  for (const f of others) {
+    if (f.kickoffTimestampMs < args.kickoffMs) {
+      if (previousMs === undefined || f.kickoffTimestampMs > previousMs) {
+        previousMs = f.kickoffTimestampMs;
+        previousKickoffAt = f.kickoffAt;
+      }
+    } else if (
+      f.kickoffTimestampMs > args.kickoffMs &&
+      (!next || f.kickoffTimestampMs < next.kickoffTimestampMs)
+    ) {
+      next = f;
+    }
+  }
+  return {
+    ...(previousKickoffAt ? { previousKickoffAt } : {}),
+    ...(next
+      ? {
+          nextFixture: {
+            kickoffAt: next.kickoffAt,
+            competition: next.competition,
+            ...(next.round ? { round: next.round } : {}),
+          },
+        }
+      : {}),
+  };
+}
+
+// Gols mínimos pra alguém ser "o artilheiro do time": abaixo disso (começo de
+// temporada) o rótulo é ruído.
+export const TOP_SCORER_MIN_GOALS = 3;
+
+// Artilheiro(s) do time na lista da competição: quem tem mais gols pelo time (empate
+// = todos), com o piso acima. Times fora da lista (top 20) ficam sem rótulo.
+export function teamTopScorerNames(
+  topScorers: readonly NormalizedTopScorer[] | undefined,
+  team: string
+): string[] {
+  const rows = (topScorers ?? []).filter(
+    (r) => r.team === team && r.goals >= TOP_SCORER_MIN_GOALS
+  );
+  const max = Math.max(0, ...rows.map((r) => r.goals));
+  return rows.filter((r) => r.goals === max).map((r) => r.player.name);
+}
+
 export type MatchJudgmentData = {
   league: SupportedLeague;
   kickoffAt: Date;
@@ -62,6 +144,14 @@ export type MatchJudgmentData = {
   homeForm: readonly NormalizedFixture[];
   awayForm: readonly NormalizedFixture[];
   standings: NormalizedStanding | undefined;
+  // Próximos jogos de cada time em qualquer competição (#617); ausente = não buscado
+  // ou indisponível → calendário só pela forma, próximo jogo "unknown".
+  upcoming?: {
+    home?: readonly UpcomingTeamFixture[];
+    away?: readonly UpcomingTeamFixture[];
+  };
+  // Artilheiros da competição (#617); ausente → ninguém é "team top scorer".
+  topScorers?: readonly NormalizedTopScorer[];
 };
 
 export type MatchJudgmentInput = {
@@ -77,10 +167,17 @@ export function buildMatchJudgmentInput(
   const absences = {
     home: enrichAbsences(data.injuries.home, {
       lastLineup: data.previousLineups?.home ?? data.lineups?.home,
+      topScorerNames: teamTopScorerNames(data.topScorers, data.homeTeam),
     }),
     away: enrichAbsences(data.injuries.away, {
       lastLineup: data.previousLineups?.away ?? data.lineups?.away,
+      topScorerNames: teamTopScorerNames(data.topScorers, data.awayTeam),
     }),
+  };
+  const match = {
+    kickoffMs,
+    homeTeam: data.homeTeam,
+    awayTeam: data.awayTeam,
   };
   return {
     absences,
@@ -90,12 +187,20 @@ export function buildMatchJudgmentInput(
       home: {
         name: data.homeTeam,
         absences: absences.home,
-        previousKickoffAt: previousFixture(data.homeForm, kickoffMs)?.kickoffAt,
+        ...teamSchedule({
+          ...match,
+          form: data.homeForm,
+          upcoming: data.upcoming?.home,
+        }),
       },
       away: {
         name: data.awayTeam,
         absences: absences.away,
-        previousKickoffAt: previousFixture(data.awayForm, kickoffMs)?.kickoffAt,
+        ...teamSchedule({
+          ...match,
+          form: data.awayForm,
+          upcoming: data.upcoming?.away,
+        }),
       },
       table: tableInputForLeague(data.league, data.standings),
     },

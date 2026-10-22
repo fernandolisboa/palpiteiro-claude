@@ -218,6 +218,27 @@ export const NormalizedFormSchema = z.object({
 });
 export type NormalizedForm = z.infer<typeof NormalizedFormSchema>;
 
+// Próximos jogos de UM time em QUALQUER competição (#617): alimentam o calendário do
+// state JEV (descanso antes deste jogo e próximo compromisso). Tipo próprio, sem mexer
+// no NormalizedFixture: a competição sai crua do provider ("CONMEBOL Libertadores") e
+// o time da casa/fora canônico (pela liga analisada) só serve pra reconhecer ESTE jogo.
+export type UpcomingTeamFixture = {
+  kickoffAt: string;
+  kickoffTimestampMs: number;
+  homeTeam: string;
+  awayTeam: string;
+  competition: string;
+  round?: string;
+};
+
+// Artilheiros de uma competição (#617). O nome do jogador serve só pro cruzamento
+// com os desfalques no código (lib/ai/judgments/state.ts); nunca vai pra prompt/JEV.
+export type NormalizedTopScorer = {
+  player: { name: string };
+  team: string;
+  goals: number;
+};
+
 export const FixtureRefSchema = z.object({
   league: SupportedLeagueSchema,
   kickoffAt: z.string().datetime(),
@@ -311,6 +332,14 @@ export interface SportsDataProvider {
     league: SupportedLeague,
     last: number,
   ): Promise<NormalizedFixture[]>;
+  // Opcionais (#617): só a api-football implementa. Ausente ⇒ o state JEV fica sem o
+  // dado ("unknown"), como antes. Sem cancelados/adiados.
+  getUpcomingTeamFixtures?(
+    team: string,
+    league: SupportedLeague,
+    next: number,
+  ): Promise<UpcomingTeamFixture[]>;
+  getTopScorers?(league: SupportedLeague): Promise<NormalizedTopScorer[]>;
 }
 
 // ─── Error hierarchy (cascade contract for FallbackProvider) ────────────────

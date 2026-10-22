@@ -414,3 +414,37 @@ describe("FallbackProvider does not double-log on success", () => {
     warnSpy.mockRestore();
   });
 });
+
+describe("FallbackProvider — métodos opcionais (#617)", () => {
+  it("nenhum adapter implementa → Unsupported, sem chamar ninguém", async () => {
+    const fp = new FallbackProvider(makeMockProvider("p"), makeMockProvider("f"));
+    await expect(
+      fp.getUpcomingTeamFixtures("CR Flamengo", "brasileirao_a", 5),
+    ).rejects.toThrow(SportsDataUnsupportedError);
+    await expect(fp.getTopScorers("brasileirao_a")).rejects.toThrow(
+      SportsDataUnsupportedError,
+    );
+  });
+
+  it("só quem implementa entra; transient cai pro próximo que implementa", async () => {
+    const p = makeMockProvider("p");
+    const f = makeMockProvider("f");
+    const pUpcoming = vi
+      .fn()
+      .mockRejectedValueOnce(
+        new SportsDataTransientError("boom", "p", "getUpcomingTeamFixtures", undefined),
+      );
+    const fUpcoming = vi.fn().mockResolvedValueOnce([]);
+    const fTop = vi.fn().mockResolvedValueOnce([]);
+    Object.assign(p, { getUpcomingTeamFixtures: pUpcoming });
+    Object.assign(f, { getUpcomingTeamFixtures: fUpcoming, getTopScorers: fTop });
+    const fp = new FallbackProvider(p, f);
+    await expect(
+      fp.getUpcomingTeamFixtures("CR Flamengo", "brasileirao_a", 5),
+    ).resolves.toEqual([]);
+    expect(pUpcoming).toHaveBeenCalledTimes(1);
+    expect(fUpcoming).toHaveBeenCalledWith("CR Flamengo", "brasileirao_a", 5);
+    await expect(fp.getTopScorers("brasileirao_a")).resolves.toEqual([]);
+    expect(fTop).toHaveBeenCalledWith("brasileirao_a");
+  });
+});
