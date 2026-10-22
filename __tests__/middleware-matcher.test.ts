@@ -65,8 +65,8 @@ describe("middleware matcher — ícones, manifest e card da landing (#440/#442)
   it.each([
     "/manifest.webmanifest",
     "/icon",
-    "/icon/32",
-    "/icon/512",
+    "/icon1",
+    "/icon2",
     "/apple-icon",
     "/opengraph-image",
   ])("libera %s (rota de metadata do Next, sem sessão)", (path) => {
@@ -77,7 +77,8 @@ describe("middleware matcher — ícones, manifest e card da landing (#440/#442)
     "/manifest.webmanifestfoo",
     "/manifestXwebmanifest",
     "/iconx",
-    "/icon/32/extra",
+    "/icon12",
+    "/icon/32",
     "/apple-iconx",
     "/opengraph-imagex",
     "/jogos/opengraph-image",

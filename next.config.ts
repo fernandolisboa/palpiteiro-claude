@@ -38,15 +38,17 @@ const nextConfig: NextConfig = {
         // do próprio Next (try-to-parse-path).
         //
         // Ícones, manifest e o card da landing (#440/#442) também são metadata routes
-        // estáticas: saem deste bloco e entram no de cache abaixo, junto de robots/sitemap.
-        // Se outro estático for adicionado fora de `_next/`, estenda o lookahead também.
+        // estáticas e saem deste bloco. Os PNGs ficam com o `immutable` que o próprio
+        // ImageResponse manda (o HTML aponta pra eles com `?<hash>` do conteúdo); o
+        // manifest entra no bloco de cache abaixo, junto de robots/sitemap. Se outro
+        // estático for adicionado fora de `_next/`, estenda o lookahead também.
         //
         // `robots\.txt`/`sitemap\.xml` (#468, fecha #439): metadata routes ESTÁTICAS
         // (`○` prerendered) que mudam só no deploy — não são documento HTML e não
         // devem tomar `no-cache`. Excluídas aqui (como `_next/`) e cacheadas no bloco
         // dedicado abaixo. Sem essa exclusão, o crawler re-baixaria as duas a cada hit.
         source:
-          "/:path((?!_next/|api/|monitoring(?:/|$)|p/|robots\\.txt|sitemap\\.xml|manifest\\.webmanifest$|icon(?:/|$)|apple-icon$|opengraph-image$).*)",
+          "/:path((?!_next/|api/|monitoring(?:/|$)|p/|robots\\.txt|sitemap\\.xml|manifest\\.webmanifest$|icon\\d?$|apple-icon$|opengraph-image$).*)",
         headers: [{ key: "Cache-Control", value: "no-cache, must-revalidate" }],
       },
       {
@@ -56,12 +58,8 @@ const nextConfig: NextConfig = {
         // CDN (serve cacheado por 24h entre deploys). Header ÚNICO de Cache-Control:
         // o bloco no-cache acima agora as exclui, então não há colisão. Verificar em
         // prod: `curl -I https://palpiteiro.live/robots.txt` (e /sitemap.xml).
-        //
-        // Mesma política pro manifest, os ícones (`/icon/<tamanho>`, `/apple-icon`) e o card
-        // da landing (`/opengraph-image`), #440/#442: o HTML aponta pra eles com `?<hash>` do
-        // conteúdo, e a CDN serve do cache entre deploys.
-        source:
-          "/:path(robots\\.txt|sitemap\\.xml|manifest\\.webmanifest|icon|icon/\\d+|apple-icon|opengraph-image)",
+        // Mesma política pro manifest (#440), que não tem `?<hash>` na URL.
+        source: "/:path(robots\\.txt|sitemap\\.xml|manifest\\.webmanifest)",
         headers: [
           {
             key: "Cache-Control",

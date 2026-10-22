@@ -26,11 +26,11 @@ import {
  *    sumiam pros bots (report 06 achado #2). Ancoradas (`robots\.txt$`/`sitemap\.xml$`)
  *    como as irmãs, com o ponto escapado — liberam só o arquivo exato;
  *    `/robots.txtfoo` e `/robotsXtxt` seguem gateados.
- *  - `/manifest.webmanifest`, `/icon/<tamanho>`, `/apple-icon` e `/opengraph-image` (raiz)
- *    → ícones, manifest e card de compartilhamento da landing (#440/#442). Também são
- *    rotas de metadata do Next lidas sem sessão (navegador instalando o app, bot do
- *    WhatsApp/X montando o card). Ancoradas: `icon(?:/[^/]+)?$` libera `/icon` e UM
- *    segmento de tamanho; `opengraph-image$` só a da raiz (a do /p tem entrada própria).
+ *  - `/manifest.webmanifest`, `/icon`, `/icon1`, `/icon2`, `/apple-icon` e `/opengraph-image`
+ *    (raiz) → ícones, manifest e card de compartilhamento da landing (#440/#442). Também
+ *    são rotas de metadata do Next lidas sem sessão (navegador instalando o app, bot do
+ *    WhatsApp/X montando o card). Ancoradas: `icon\d?$` libera só esses três ícones;
+ *    `opengraph-image$` só a da raiz (a do /p tem entrada própria).
  *  - `/signin` → a própria página de login
  *  - `/como-funciona` → página pública de ajuda (sem sessão, conteúdo estático)
  *  - `/termos` e `/privacidade` → páginas legais públicas (ops 05 §7): precisam ser
@@ -72,7 +72,7 @@ export const config = {
   // A segunda entrada (`"/"`) é a raiz exata: o middleware roda nela só pra redirecionar
   // o usuário logado (ver `landingResponse`), sem gatear nem emitir CSP de nonce.
   matcher: [
-    "/((?!api/|monitoring(?:/|$)|_next/static|_next/image|favicon.ico|robots\\.txt$|sitemap\\.xml$|manifest\\.webmanifest$|icon(?:/[^/]+)?$|apple-icon$|opengraph-image$|signin$|como-funciona$|termos$|privacidade$|p/[^/]+(?:/opengraph-image[^/]*)?$|$).*)",
+    "/((?!api/|monitoring(?:/|$)|_next/static|_next/image|favicon.ico|robots\\.txt$|sitemap\\.xml$|manifest\\.webmanifest$|icon\\d?$|apple-icon$|opengraph-image$|signin$|como-funciona$|termos$|privacidade$|p/[^/]+(?:/opengraph-image[^/]*)?$|$).*)",
     "/",
   ],
 };
