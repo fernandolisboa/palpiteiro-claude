@@ -14,6 +14,7 @@ import {
 import { applyJudgments } from "@/lib/ai/judgments/apply";
 import { JUDGMENT_QUESTION_IDS } from "@/lib/ai/judgments/questions";
 import type { JudgmentAnswers } from "@/lib/ai/judgments/types";
+import type { NormalizedFixture } from "@/lib/providers/sports-data/types";
 
 const TEAMS = { home: "CR Flamengo", away: "Fluminense FC" };
 
@@ -425,8 +426,8 @@ describe("judgmentFactorPhrases", () => {
       expect(phrases[0]).toMatch(/ajustado para baixo\) \(informado por você, não conferido\)$/);
     });
 
-    it("narrator_v1.2: a regra 4 explica as duas origens e as notas", () => {
-      expect(NARRATOR_VERSION).toBe("narrator_v1.2");
+    it("narrator_v1.2+: a regra 4 explica as duas origens e as notas", () => {
+      expect(NARRATOR_VERSION).toBe("narrator_v1.3");
       expect(SYSTEM_PROMPT).toContain('"(informado por você, não conferido)"');
       expect(SYSTEM_PROMPT).toContain("nunca como fato confirmado");
       expect(SYSTEM_PROMPT).toContain('Os itens do bloco "Informado por você"');
@@ -570,5 +571,80 @@ describe("buildNarratorMessage", () => {
       );
       expect(out.rationale.length).toBeLessThanOrEqual(600);
     });
+  });
+});
+
+describe("forma recente por competição (#618)", () => {
+  const fx = (
+    id: string,
+    home: string,
+    away: string,
+    score: [number, number],
+    iso: string,
+    competition?: NormalizedFixture["competition"]
+  ): NormalizedFixture => ({
+    id,
+    league: "brasileirao_a",
+    kickoffAt: iso,
+    kickoffTimestampMs: Date.parse(iso),
+    homeTeam: home,
+    awayTeam: away,
+    status: "finished",
+    score: { home: score[0], away: score[1] },
+    ...(competition ? { competition } : {}),
+  });
+
+  const context = (homeForm: NormalizedFixture[]) =>
+    buildNarratorContext({
+      league: "brasileirao_a",
+      kickoffAt: new Date("2026-05-15T19:00:00.000Z"),
+      homeTeam: TEAMS.home,
+      awayTeam: TEAMS.away,
+      standings: undefined,
+      homeForm,
+      awayForm: [],
+      h2h: [],
+      absencesAvailable: false,
+      absences: { home: [], away: [] },
+    });
+
+  it("tira amistoso e rotula jogo de outra competição", () => {
+    const c = context([
+      fx("1", TEAMS.home, "EC Bahia", [2, 1], "2026-05-10T19:00:00.000Z", {
+        name: "Serie A",
+        league: "brasileirao_a",
+        friendly: false,
+      }),
+      fx("2", "Ceará SC", TEAMS.home, [0, 0], "2026-05-06T22:00:00.000Z", {
+        name: "Copa Do Brasil",
+        friendly: false,
+      }),
+      fx("3", TEAMS.home, "Racing Club", [1, 2], "2026-05-03T22:00:00.000Z", {
+        name: "CONMEBOL Libertadores",
+        league: "copa_libertadores",
+        friendly: false,
+      }),
+      fx("4", TEAMS.home, "Benfica", [0, 3], "2026-04-30T19:00:00.000Z", {
+        name: "Friendlies Clubs",
+        friendly: true,
+      }),
+    ]);
+    expect(c.form.home).toEqual([
+      "V 2-1 x EC Bahia (casa)",
+      "E 0-0 x Ceará SC (fora, Copa Do Brasil)",
+      "D 1-2 x Racing Club (casa, Libertadores)",
+    ]);
+    const msg = buildNarratorMessage(overDecision(), c);
+    expect(msg).toContain(
+      "- Forma recente (mais recente primeiro, sem amistosos; jogo de outra competição traz o nome dela):"
+    );
+    expect(msg).not.toContain("Benfica");
+  });
+
+  it("sem competição de origem (cache antigo) a linha é a de antes", () => {
+    const c = context([
+      fx("1", TEAMS.home, "EC Bahia", [2, 1], "2026-05-10T19:00:00.000Z"),
+    ]);
+    expect(c.form.home).toEqual(["V 2-1 x EC Bahia (casa)"]);
   });
 });

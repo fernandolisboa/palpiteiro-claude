@@ -1,5 +1,9 @@
 import type { JudgmentAbsenceInput } from "@/lib/ai/judgments/state";
-import { LEAGUE_LABEL, leagueToKey } from "@/lib/format";
+import { competitionLabel, LEAGUE_LABEL, leagueToKey } from "@/lib/format";
+import {
+  otherCompetition,
+  withoutFriendlies,
+} from "@/lib/providers/sports-data/competition";
 import type { SupportedLeague } from "@/lib/providers/sports-data/leagues";
 import { normalizeTeamName } from "@/lib/providers/sports-data/team-names";
 import type {
@@ -22,8 +26,13 @@ function isoDate(iso: string): string {
   return iso.slice(0, 10);
 }
 
-// "V 2-1 x Bahia (casa)" do ponto de vista de `team`. Jogo sem placar é pulado.
-function formLine(team: string, f: NormalizedFixture): string | null {
+// "V 2-1 x Bahia (casa)" do ponto de vista de `team`; jogo de outra competição leva
+// o nome dela ("(fora, Copa do Brasil)", #618). Jogo sem placar é pulado.
+function formLine(
+  team: string,
+  f: NormalizedFixture,
+  league: SupportedLeague
+): string | null {
   const { home, away } = f.score;
   if (home === null || away === null) return null;
   const isHome = sameTeam(f.homeTeam, team);
@@ -31,7 +40,9 @@ function formLine(team: string, f: NormalizedFixture): string | null {
   const ga = isHome ? away : home;
   const result = gf > ga ? "V" : gf === ga ? "E" : "D";
   const opponent = isHome ? f.awayTeam : f.homeTeam;
-  return `${result} ${gf}-${ga} x ${opponent} (${isHome ? "casa" : "fora"})`;
+  const other = otherCompetition(f, league);
+  const where = isHome ? "casa" : "fora";
+  return `${result} ${gf}-${ga} x ${opponent} (${other ? `${where}, ${competitionLabel(other)}` : where})`;
 }
 
 export function buildNarratorContext(data: {
@@ -66,10 +77,11 @@ export function buildNarratorContext(data: {
       });
     }
   }
+  // Amistoso não entra na forma (#618).
   const form = (team: string, fixtures: readonly NormalizedFixture[]) =>
-    [...fixtures]
+    withoutFriendlies(fixtures)
       .sort((a, b) => b.kickoffTimestampMs - a.kickoffTimestampMs)
-      .map((f) => formLine(team, f))
+      .map((f) => formLine(team, f, data.league))
       .filter((l): l is string => l !== null);
 
   return {

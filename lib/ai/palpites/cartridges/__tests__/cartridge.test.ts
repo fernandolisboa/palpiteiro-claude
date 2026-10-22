@@ -234,9 +234,9 @@ describe("SUBMIT_PALPITE_TOOL", () => {
       SUBMIT_PALPITE_TOOL.input_schema,
     );
   });
-  it("a versão é palpites_v10 (regra de total de gols)", () => {
-    expect(PALPITES_VERSION).toBe("palpites_v10");
-    expect(palpitesCartridge.version).toBe("palpites_v10");
+  it("a versão é palpites_v11 (forma sem amistosos)", () => {
+    expect(PALPITES_VERSION).toBe("palpites_v11");
+    expect(palpitesCartridge.version).toBe("palpites_v11");
   });
   it("o tool NÃO declara campos de valor (firewall estrutural); declara firstHalfScore + firstToScore (#354) + cardsTemperature (#419)", () => {
     const props = SUBMIT_PALPITE_TOOL.input_schema.properties as Record<
@@ -831,5 +831,69 @@ describe("#379 — buildUserMessage renderiza os fatos pré-contados (tally, nã
     // guard nunca o lê. (validHeadline não contém 'Odd' → manchete limpa.)
     expect(containsValueLanguage(validHeadline.verdict)).toBe(false);
     expect(containsValueLanguage(validHeadline.narrative)).toBe(false);
+  });
+});
+
+// ─── Forma recente por competição (#618) ─────────────────────────────────────
+
+describe("forma sem amistosos e com competição de origem (#618)", () => {
+  const withComp = (
+    f: NormalizedFixture,
+    competition: NormalizedFixture["competition"],
+  ): NormalizedFixture => ({ ...f, competition });
+  const LEAGUE = { name: "Serie A", league: "brasileirao_a", friendly: false } as const;
+  const CUP = { name: "Copa Do Brasil", friendly: false } as const;
+  const LIBERTA = {
+    name: "CONMEBOL Libertadores",
+    league: "copa_libertadores",
+    friendly: false,
+  } as const;
+  const FRIENDLY = { name: "Friendlies Clubs", friendly: true } as const;
+
+  function argsWithMixedForm(): BuildPalpitesInputArgs {
+    const args = baseArgs();
+    args.homeForm = [
+      withComp(fixture("CR Flamengo", "X", 3, 1), LEAGUE),
+      withComp(fixture("Y", "CR Flamengo", 0, 2), CUP),
+      withComp(fixture("CR Flamengo", "W", 1, 1), LIBERTA),
+      withComp(fixture("CR Flamengo", "Benfica", 0, 4), FRIENDLY),
+    ];
+    return args;
+  }
+
+  it("amistoso sai da forma e dos placares contados", () => {
+    const input = buildPredictionInput(argsWithMixedForm());
+    expect(input.homeForm.gamesConsidered).toBe(3);
+    expect(input.homeForm.results).toEqual(["W", "W", "D"]);
+    expect(input.homeRecentScores?.gamesConsidered).toBe(3);
+    expect(input.homeRecentScores?.goalsAgainst).toBe(2);
+  });
+
+  it("conta os jogos de outra competição com o rótulo do app quando há", () => {
+    const input = buildPredictionInput(argsWithMixedForm());
+    expect(input.homeForm.otherCompetitions).toEqual([
+      { name: "Copa Do Brasil", games: 1 },
+      { name: "Libertadores", games: 1 },
+    ]);
+    const msg = buildUserMessage(input, { daysToKickoff: 2 });
+    expect(msg).toContain(
+      "- Desses, 2 jogo(s) por outra competição: Copa Do Brasil (1), Libertadores (1)",
+    );
+    expect(msg).not.toContain("Benfica");
+  });
+
+  it("sem competição de origem (cache antigo) a mensagem não muda", () => {
+    const input = buildPredictionInput(baseArgs());
+    expect(input.homeForm.otherCompetitions).toBeUndefined();
+    expect(buildUserMessage(input, { daysToKickoff: 2 })).not.toContain(
+      "outra competição",
+    );
+  });
+
+  it("só amistosos → forma sem dados", () => {
+    const args = baseArgs();
+    args.awayForm = [withComp(fixture("Fluminense FC", "Z", 5, 0), FRIENDLY)];
+    const msg = buildUserMessage(buildPredictionInput(args), { daysToKickoff: 2 });
+    expect(msg).toMatch(/# Visitante — Fluminense FC\n- Posição: 5º \(15 pts\)\n- Forma recente: \(sem dados\)/);
   });
 });

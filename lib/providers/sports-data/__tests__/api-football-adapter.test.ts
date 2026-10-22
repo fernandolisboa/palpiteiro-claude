@@ -1215,3 +1215,120 @@ describe("ApiFootballAdapter.getInjuriesByFixture — logs WARN when fixture not
     vi.useRealTimers();
   });
 });
+
+// ─── Forma recente por competição (#618) ────────────────────────────────────
+
+describe("toFixtureCompetition (#618)", () => {
+  const { toFixtureCompetition } = __testing;
+  const league = (id: number, name: string) =>
+    makeFixture({
+      league: { id, name, country: "Brazil", season: 2026, round: null },
+    });
+
+  it("liga suportada carrega a SupportedLeague", () => {
+    expect(toFixtureCompetition(league(71, "Serie A"))).toEqual({
+      name: "Serie A",
+      league: "brasileirao_a",
+      friendly: false,
+    });
+    expect(toFixtureCompetition(league(13, "CONMEBOL Libertadores"))).toEqual({
+      name: "CONMEBOL Libertadores",
+      league: "copa_libertadores",
+      friendly: false,
+    });
+  });
+
+  it("competição fora do app fica só com o nome do provider", () => {
+    expect(toFixtureCompetition(league(73, "Copa Do Brasil"))).toEqual({
+      name: "Copa Do Brasil",
+      friendly: false,
+    });
+  });
+
+  it("amistoso de clubes pelo id 667 ou pelo nome", () => {
+    expect(toFixtureCompetition(league(667, "Friendlies Clubs")).friendly).toBe(
+      true
+    );
+    expect(toFixtureCompetition(league(9999, "Club Friendlies")).friendly).toBe(
+      true
+    );
+  });
+
+  it("amistoso de seleção (id 10) segue na forma: antes de Copa é quase tudo", () => {
+    expect(toFixtureCompetition(league(10, "Friendlies"))).toEqual({
+      name: "Friendlies",
+      friendly: false,
+    });
+  });
+});
+
+describe("ApiFootballAdapter.getTeamForm — competição de origem (#618)", () => {
+  const ORIGINAL_KEY = process.env.API_FOOTBALL_KEY;
+  const cacheKey = "sports-data:api-football:fixtures:last:5:team:127";
+  const finished = (
+    id: number,
+    leagueId: number,
+    leagueName: string,
+    iso: string
+  ) =>
+    makeFixture({
+      fixture: {
+        id,
+        date: iso,
+        timestamp: Math.floor(Date.parse(iso) / 1000),
+        timezone: "UTC",
+        status: { long: "Match Finished", short: "FT", elapsed: 90 },
+        venue: { id: 1, name: "Maracanã", city: "Rio de Janeiro" },
+      },
+      league: {
+        id: leagueId,
+        name: leagueName,
+        country: "Brazil",
+        season: 2026,
+        round: null,
+      },
+      goals: { home: 2, away: 1 },
+    });
+
+  beforeEach(async () => {
+    process.env.API_FOOTBALL_KEY = "test-key";
+    await inMemoryCache.delete(cacheKey);
+  });
+
+  afterEach(async () => {
+    vi.restoreAllMocks();
+    await inMemoryCache.delete(cacheKey);
+    if (ORIGINAL_KEY === undefined) delete process.env.API_FOOTBALL_KEY;
+    else process.env.API_FOOTBALL_KEY = ORIGINAL_KEY;
+  });
+
+  it("uma chamada /fixtures?team&last; amistoso fica marcado, não some", async () => {
+    const fetchSpy = vi.spyOn(globalThis, "fetch").mockResolvedValue(
+      jsonResponse(
+        fixtureEnvelope([
+          finished(1, 71, "Serie A", "2026-05-10T19:00:00Z"),
+          finished(2, 73, "Copa Do Brasil", "2026-05-06T22:00:00Z"),
+          finished(3, 667, "Friendlies Clubs", "2026-05-02T19:00:00Z"),
+        ])
+      )
+    );
+    const a = new ApiFootballAdapter();
+    const form = await a.getTeamForm("CR Flamengo", "brasileirao_a", 5);
+
+    expect(fetchSpy).toHaveBeenCalledTimes(1);
+    const url = String(fetchSpy.mock.calls[0]![0]);
+    expect(url).toContain("team=127");
+    expect(url).toContain("last=5");
+    // `league` segue a liga analisada (chave composta igual); a origem vai à parte.
+    expect(form.map((f) => f.league)).toEqual([
+      "brasileirao_a",
+      "brasileirao_a",
+      "brasileirao_a",
+    ]);
+    expect(form.map((f) => f.competition)).toEqual([
+      { name: "Serie A", league: "brasileirao_a", friendly: false },
+      { name: "Copa Do Brasil", friendly: false },
+      { name: "Friendlies Clubs", friendly: true },
+    ]);
+  });
+});

@@ -371,11 +371,11 @@ describe("generatePalpites (síntese) — caminho ok", () => {
     const aiCallRow = insertValues.mock.calls[0][0] as Record<string, unknown>;
     expect(aiCallRow.status).toBe("ok");
     expect(aiCallRow.model).toBe("claude-haiku-5-5");
-    expect(aiCallRow.promptVersion).toBe("palpites_v10");
+    expect(aiCallRow.promptVersion).toBe("palpites_v11");
 
     const setRow = insertValues.mock.calls[1][0] as Record<string, unknown>;
     expect(setRow.modelVersion).toBe("claude-haiku-5-5");
-    expect(setRow.promptVersion).toBe("palpites_v10");
+    expect(setRow.promptVersion).toBe("palpites_v11");
     expect(setRow.aiCallId).toBe("row-1");
     // headline jsonb: a manchete SEM placar (vira a linha) e SEM número de valor.
     expect(setRow.headline).toEqual({

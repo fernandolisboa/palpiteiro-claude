@@ -39,6 +39,15 @@ export function leagueToKey(league: SupportedLeague): LeagueKey {
   return LEAGUE_KEY_BY_LEAGUE[league];
 }
 
+// Nome de exibição da competição de origem de um jogo (#618): liga suportada usa o
+// rótulo do app ("Libertadores"); as outras ficam com o nome do provider.
+export function competitionLabel(c: {
+  name: string;
+  league?: SupportedLeague;
+}): string {
+  return c.league ? LEAGUE_LABEL[leagueToKey(c.league)] : c.name;
+}
+
 const LEAGUE_BY_KEY = Object.fromEntries(
   Object.entries(LEAGUE_KEY_BY_LEAGUE).map(([league, key]) => [key, league]),
 ) as Record<LeagueKey, SupportedLeague>;

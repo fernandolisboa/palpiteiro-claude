@@ -44,6 +44,18 @@ export const NormalizedFixtureSchema = z.object({
   // Opcional/aditivo: o cache de fixtures antigo continua válido.
   homeCrestUrl: z.url().optional(),
   awayCrestUrl: z.url().optional(),
+  // Competição de origem do jogo (#618). A forma recente vem de todas as competições
+  // do time e `league` acima é regravado com a liga analisada; isto guarda a de
+  // verdade. `league` aqui só existe quando a origem é uma liga suportada; `friendly`
+  // marca amistoso de clubes (sai da forma, fica pro descanso). Opcional/aditivo:
+  // cache antigo e football-data.org seguem sem o campo (comportamento anterior).
+  competition: z
+    .object({
+      name: z.string().min(1),
+      league: SupportedLeagueSchema.optional(),
+      friendly: z.boolean(),
+    })
+    .optional(),
 });
 export type NormalizedFixture = z.infer<typeof NormalizedFixtureSchema>;
 

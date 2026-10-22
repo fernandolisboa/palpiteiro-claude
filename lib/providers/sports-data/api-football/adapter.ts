@@ -620,6 +620,28 @@ function toNormalizedFixture(
   };
 }
 
+// "Friendlies Clubs" na API-Football (#618). O nome cobre id novo/variante
+// ("Club Friendlies", "Friendlies Clubs"). Amistoso de seleção (id 10, "Friendlies")
+// NÃO entra: antes de Copa é quase toda a forma da seleção.
+const API_FOOTBALL_CLUB_FRIENDLIES_ID = 667;
+const isClubFriendlyName = (name: string) =>
+  /friendl/i.test(name) && /club/i.test(name);
+
+// Competição de origem (#618): o fixture da forma vem de qualquer competição do time.
+function toFixtureCompetition(
+  f: ApiFootballFixture
+): NonNullable<NormalizedFixture["competition"]> {
+  const league = SUPPORTED_LEAGUE_BY_API_FOOTBALL_ID[f.league.id];
+  const name = f.league.name.trim() || `league ${f.league.id}`;
+  return {
+    name,
+    ...(league ? { league } : {}),
+    friendly:
+      f.league.id === API_FOOTBALL_CLUB_FRIENDLIES_ID ||
+      isClubFriendlyName(name),
+  };
+}
+
 // Settlement result: 90' regulation score from `score.fulltime` — NOT `goals`,
 // which on knockout fixtures already includes extra time. `fulltime` is null
 // until the 90' result exists, so regulationScore is null for not-yet-played
@@ -1343,9 +1365,14 @@ export class ApiFootballAdapter implements SportsDataProvider {
         "getTeamForm"
       );
       const fixtures = await getTeamForm(teamId, last);
-      // Map to normalized; keep only finished games (form analysis).
+      // Map to normalized; keep only finished games (form analysis). Amistosos
+      // continuam aqui (marcados em `competition`) porque o descanso precisa deles;
+      // quem monta linha de forma tira com withoutFriendlies (#618).
       return fixtures
-        .map((f) => toNormalizedFixture(f, league))
+        .map((f) => ({
+          ...toNormalizedFixture(f, league),
+          competition: toFixtureCompetition(f),
+        }))
         .filter((f) => f.status === "finished");
     } catch (err) {
       if (err instanceof SportsDataTransientError) throw err;
@@ -1357,6 +1384,7 @@ export class ApiFootballAdapter implements SportsDataProvider {
 // Internal exports for unit tests.
 export const __testing = {
   toNormalizedFixture,
+  toFixtureCompetition,
   toNormalizedFixtureResult,
   toNormalizedFixtureEvents,
   toNormalizedStanding,

@@ -2,6 +2,12 @@ import { z } from "zod";
 
 import { truncate } from "@/lib/ai/ai-call-logging";
 import { toToolDef } from "@/lib/ai/markets/types";
+import { competitionLabel } from "@/lib/format";
+import {
+  otherCompetition,
+  withoutFriendlies,
+} from "@/lib/providers/sports-data/competition";
+import type { SupportedLeague } from "@/lib/providers/sports-data/leagues";
 import type {
   NormalizedFixture,
   NormalizedH2H,
@@ -61,8 +67,10 @@ import type { PalpiteCartridge } from "../types";
 // v10 = + regra de TOTAL DE GOLS: citar o total exato da linha "Últimos N jogos" com a
 // janela, nunca somar/recalcular, e média por jogo só como média. Acompanha o ajuste do
 // validador de fidelidade (#380), que lia "0,8 gols sofridos por jogo" como total 8.
+// v11 (#618) = forma recente sem amistosos de clubes (forma e "Últimos N jogos") e, quando
+// a forma tem jogo de outra competição, a linha diz quantos e de qual. System prompt igual.
 // BUMP MANUAL (commit `prompt:`) em QUALQUER mudança de prompt/schema.
-export const PALPITES_VERSION = "palpites_v10" as const;
+export const PALPITES_VERSION = "palpites_v11" as const;
 
 const TEXT_MAX = 280;
 // Narrativa: prosa um pouco mais longa que uma linha de palpite. Truncada (não
@@ -130,6 +138,16 @@ const FormSummarySchema = z.object({
   avgGoalsFor: z.number().nonnegative(),
   avgGoalsAgainst: z.number().nonnegative(),
   results: z.array(z.enum(["W", "D", "L"])),
+  // #618: jogos da forma que foram por outra competição (Copa do Brasil, Libertadores…),
+  // na ordem em que aparecem. Opcional: input montado à mão nos testes segue válido.
+  otherCompetitions: z
+    .array(
+      z.object({
+        name: z.string().min(1),
+        games: z.number().int().positive(),
+      }),
+    )
+    .optional(),
 });
 
 const H2HEntrySchema = z.object({
@@ -363,11 +381,14 @@ export type BuildPalpitesInputArgs = {
 
 // Resume a forma de UM time a partir das fixtures recentes (já desc do adapter):
 // médias de gols PRÓ/CONTRA na perspectiva do time + a sequência de resultados.
+// Amistoso já saiu no caller (#618).
 function summarizeForm(
   team: string,
   fixtures: NormalizedFixture[],
+  league: SupportedLeague,
 ): z.infer<typeof FormSummarySchema> {
   const results: ("W" | "D" | "L")[] = [];
+  const others = new Map<string, number>();
   let goalsFor = 0;
   let goalsAgainst = 0;
   let counted = 0;
@@ -380,6 +401,11 @@ function summarizeForm(
     goalsAgainst += ga;
     counted += 1;
     results.push(gf > ga ? "W" : gf < ga ? "L" : "D");
+    const other = otherCompetition(fx, league);
+    if (other) {
+      const name = competitionLabel(other);
+      others.set(name, (others.get(name) ?? 0) + 1);
+    }
   }
   return {
     team,
@@ -387,6 +413,14 @@ function summarizeForm(
     avgGoalsFor: counted ? goalsFor / counted : 0,
     avgGoalsAgainst: counted ? goalsAgainst / counted : 0,
     results,
+    ...(others.size > 0
+      ? {
+          otherCompetitions: [...others].map(([name, games]) => ({
+            name,
+            games,
+          })),
+        }
+      : {}),
   };
 }
 
@@ -479,6 +513,9 @@ function summarizeRecentScores(
 }
 
 export function buildPredictionInput(args: BuildPalpitesInputArgs): PalpitesInput {
+  // Amistoso de clubes não é forma (#618): sai da forma E dos placares contados.
+  const homeForm = withoutFriendlies(args.homeForm);
+  const awayForm = withoutFriendlies(args.awayForm);
   const input: PalpitesInput = {
     match: {
       league: args.match.league,
@@ -488,8 +525,8 @@ export function buildPredictionInput(args: BuildPalpitesInputArgs): PalpitesInpu
       venue: args.fixture?.venue,
     },
     analyses: args.analyses,
-    homeForm: summarizeForm(args.match.homeTeam, args.homeForm),
-    awayForm: summarizeForm(args.match.awayTeam, args.awayForm),
+    homeForm: summarizeForm(args.match.homeTeam, homeForm, args.match.league),
+    awayForm: summarizeForm(args.match.awayTeam, awayForm, args.match.league),
     h2h: args.h2h.slice(0, 10).map((m) => ({
       date: m.kickoffAt.slice(0, 10),
       home: m.homeTeam,
@@ -508,8 +545,8 @@ export function buildPredictionInput(args: BuildPalpitesInputArgs): PalpitesInpu
       args.match.awayTeam,
       args.h2h,
     ),
-    homeRecentScores: summarizeRecentScores(args.match.homeTeam, args.homeForm),
-    awayRecentScores: summarizeRecentScores(args.match.awayTeam, args.awayForm),
+    homeRecentScores: summarizeRecentScores(args.match.homeTeam, homeForm),
+    awayRecentScores: summarizeRecentScores(args.match.awayTeam, awayForm),
   };
   // Valida no boundary de montagem (fronteira do CLAUDE.md p/ o input do LLM).
   return PalpitesInputSchema.parse(input);
@@ -558,6 +595,15 @@ export function buildUserMessage(
       lines.push(
         `- Forma recente (últimos ${form.gamesConsidered}): ${wins}V ${draws}E ${losses}D · do mais recente ao mais antigo: ${seq}`,
       );
+      // #618: a forma mistura competições; diz quantos jogos foram fora da liga.
+      const others = form.otherCompetitions ?? [];
+      if (others.length > 0) {
+        const total = others.reduce((n, o) => n + o.games, 0);
+        const list = others.map((o) => `${o.name} (${o.games})`).join(", ");
+        lines.push(
+          `- Desses, ${total} jogo(s) por outra competição: ${list}`,
+        );
+      }
     }
     lines.push(
       `- Média de gols: ${fmt1(form.avgGoalsFor)} marcados / ${fmt1(

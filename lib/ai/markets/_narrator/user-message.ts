@@ -92,7 +92,9 @@ function contextBlock(c: NarratorContext, d: NarratorDecision): string[] {
   }
   const form = (team: string, entries: string[]) =>
     `  - ${team}: ${entries.length > 0 ? entries.join("; ") : "sem dados"}`;
-  lines.push("- Forma recente (mais recente primeiro):");
+  lines.push(
+    "- Forma recente (mais recente primeiro, sem amistosos; jogo de outra competição traz o nome dela):"
+  );
   lines.push(form(d.teams.home, c.form.home));
   lines.push(form(d.teams.away, c.form.away));
   lines.push(
