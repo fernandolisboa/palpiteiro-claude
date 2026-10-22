@@ -61,7 +61,7 @@ describe("narrator_live_v1", () => {
   it("versão própria; o narrador de pré-jogo fica intacto", () => {
     expect(NARRATOR_LIVE_VERSION).toBe("narrator_live_v1");
     expect(liveNarratorCartridge.version).toBe("narrator_live_v1");
-    expect(NARRATOR_VERSION).toBe("narrator_v1.2");
+    expect(NARRATOR_VERSION).toBe("narrator_v1.3");
     expect(LIVE_SYSTEM_PROMPT).not.toBe(SYSTEM_PROMPT);
     // Mesmo schema e mesma ferramenta do pré-jogo (só o texto muda).
     expect(liveNarratorCartridge.outputSchema).toBe(NarratorOutputSchema);
