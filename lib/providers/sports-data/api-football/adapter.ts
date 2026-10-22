@@ -449,6 +449,63 @@ export function getFixtureLive(
   });
 }
 
+// Resposta CRUA de `/fixtures?id=` (1 id) ou `/fixtures?ids=` (até 20) pro probe do #600
+// (scripts/probe-live-fixture.ts): corpo sem Zod e headers de cota, pra conferir o
+// payload real e virar fixture de replay. Sem cache e fora do caminho de produção. Usa o
+// cliente compartilhado (teto de 10 s): `ids=` com 20 jogos traz eventos, escalações e
+// estatísticas e passa fácil dos 4 s do cliente ao vivo. Corpo que não é JSON volta como
+// `bodyText` em vez de lançar, pra o operador ver o que a API mandou.
+export type ApiFootballRawFetch = {
+  statusCode: number;
+  quotaHeaders: Record<string, string>;
+  body: unknown;
+  bodyText: string | null;
+  receivedAt: Date;
+};
+
+export const RAW_FIXTURES_MAX_IDS = 20;
+
+export async function getFixturesRaw(
+  ids: number[]
+): Promise<ApiFootballRawFetch> {
+  if (ids.length === 0 || ids.length > RAW_FIXTURES_MAX_IDS) {
+    throw new Error(`getFixturesRaw: 1 a ${RAW_FIXTURES_MAX_IDS} ids`);
+  }
+  const params: Record<string, string | number> =
+    ids.length === 1 ? { id: ids[0]! } : { ids: ids.join("-") };
+  const r = await apiFootballClient.send({
+    endpoint: "/fixtures",
+    url: buildUrl("/fixtures", params),
+    init: {
+      method: "GET",
+      headers: {
+        "x-apisports-key": requireApiKey(),
+        Accept: "application/json",
+      },
+    },
+  });
+  const quotaHeaders: Record<string, string> = {};
+  r.response.headers.forEach((value, name) => {
+    if (name.toLowerCase().startsWith("x-ratelimit")) {
+      quotaHeaders[name] = value;
+    }
+  });
+  let body: unknown = null;
+  let bodyText: string | null = null;
+  try {
+    body = JSON.parse(r.text) as unknown;
+  } catch {
+    bodyText = r.text.slice(0, 2048);
+  }
+  return {
+    statusCode: r.statusCode,
+    quotaHeaders,
+    body,
+    bodyText,
+    receivedAt: new Date(),
+  };
+}
+
 // Eventos de um fixture (/fixtures/events?fixture={id}, #290) pros mercados de
 // jogador. Cache 15min (settlement roda no cron, não em loop). Cada item é um
 // gol/cartão/substituição/VAR — o normalizer filtra gols/assists de 90'.

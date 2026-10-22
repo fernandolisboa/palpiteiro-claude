@@ -20,7 +20,9 @@ import {
 import {
   getFixtureById,
   getFixtureLive,
+  getFixturesRaw,
   LIVE_FIXTURE_CACHE_TTL_MS,
+  RAW_FIXTURES_MAX_IDS,
 } from "@/lib/providers/sports-data/api-football/adapter";
 import {
   FixtureEnvelopeSchema,
@@ -712,6 +714,77 @@ describe("getFixtureLive", () => {
       .mockResolvedValue(new Response("boom", { status: 500 }));
     vi.spyOn(console, "error").mockImplementation(() => {});
     await expect(getFixtureLive(1208021)).rejects.toThrow(/HTTP 500/);
+    expect(fetchSpy).toHaveBeenCalledTimes(1);
+  });
+});
+
+// ─── adapter.getFixturesRaw (probe do #600; fetch mockado) ───────────────────
+
+describe("getFixturesRaw", () => {
+  const ORIGINAL_KEY = process.env.API_FOOTBALL_KEY;
+  let clock = Date.parse("2026-10-22T20:00:00.000Z");
+
+  beforeEach(() => {
+    process.env.API_FOOTBALL_KEY = "test-key";
+    vi.useFakeTimers();
+    clock += 5 * 60 * 1000;
+    vi.setSystemTime(new Date(clock));
+    vi.spyOn(console, "log").mockImplementation(() => {});
+  });
+
+  afterEach(() => {
+    vi.useRealTimers();
+    vi.restoreAllMocks();
+    if (ORIGINAL_KEY === undefined) delete process.env.API_FOOTBALL_KEY;
+    else process.env.API_FOOTBALL_KEY = ORIGINAL_KEY;
+  });
+
+  it("1 id → `id=`, corpo cru sem Zod e só os headers x-ratelimit*", async () => {
+    const body = { errors: [], response: [{ cru: true }] };
+    const fetchSpy = vi.spyOn(globalThis, "fetch").mockResolvedValue(
+      jsonResponse(body, {
+        "x-ratelimit-requests-remaining": "7000",
+        "x-ratelimit-requests-limit": "7500",
+        "set-cookie": "x=1",
+      })
+    );
+    const out = await getFixturesRaw([1208021]);
+    const url = new URL(String(fetchSpy.mock.calls[0]![0]));
+    expect(url.pathname).toBe("/fixtures");
+    expect(url.searchParams.get("id")).toBe("1208021");
+    expect(url.searchParams.has("ids")).toBe(false);
+    expect(out.body).toEqual(body);
+    expect(out.statusCode).toBe(200);
+    expect(out.quotaHeaders).toEqual({
+      "x-ratelimit-requests-remaining": "7000",
+      "x-ratelimit-requests-limit": "7500",
+    });
+  });
+
+  it("corpo que não é JSON volta em bodyText em vez de lançar", async () => {
+    vi.spyOn(globalThis, "fetch").mockResolvedValue(
+      new Response("<html>gateway</html>", { status: 200 })
+    );
+    const out = await getFixturesRaw([1208021]);
+    expect(out.body).toBeNull();
+    expect(out.bodyText).toBe("<html>gateway</html>");
+  });
+
+  it("vários ids → `ids=a-b-c`; vazio ou acima do teto lança sem buscar", async () => {
+    const fetchSpy = vi
+      .spyOn(globalThis, "fetch")
+      .mockImplementation(async () => jsonResponse({ response: [] }));
+    await getFixturesRaw([1, 2, 3]);
+    const url = new URL(String(fetchSpy.mock.calls[0]![0]));
+    expect(url.searchParams.get("ids")).toBe("1-2-3");
+    expect(url.searchParams.has("id")).toBe(false);
+
+    await expect(getFixturesRaw([])).rejects.toThrow();
+    const tooMany = Array.from(
+      { length: RAW_FIXTURES_MAX_IDS + 1 },
+      (_, i) => i + 1
+    );
+    await expect(getFixturesRaw(tooMany)).rejects.toThrow();
     expect(fetchSpy).toHaveBeenCalledTimes(1);
   });
 });
