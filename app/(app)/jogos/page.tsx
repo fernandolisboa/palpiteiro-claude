@@ -7,6 +7,7 @@ import { Card } from "@/components/ui/card";
 import { FilterScrollRow } from "@/components/filter-scroll-row";
 import { LeaguePicker } from "@/components/league-picker";
 import { RecentPredCard } from "@/components/recent-pred-card";
+import { RecentPredsEmpty } from "@/components/recent-preds-empty";
 import { SectionLabel } from "@/components/section-label";
 import { UpcomingMatchesDesktop } from "@/components/upcoming-matches-desktop";
 import { UpcomingMatchesMobile } from "@/components/upcoming-matches-mobile";
@@ -287,6 +288,12 @@ type HomeContentProps = {
   endNote?: string;
 };
 
+// Atalho do estado vazio das predições recentes (#446): o primeiro jogo da lista que
+// ainda aceita análise (a lista pode abrir com jogos já em andamento).
+function firstAnalyzableId(matches: MatchListRowView[]): string | null {
+  return matches.find((m) => m.analyzable)?.id ?? null;
+}
+
 // Props compartilhadas pra preservar o range ao trocar de liga no seletor.
 function rangeNavProps(range: ResolvedRange) {
   // custom: os dias da URL. `from`/`to` são instantes no fuso do usuário e o
@@ -364,6 +371,7 @@ function MobileHome({
   const listHref = buildLeagueHref(navProps, league);
   // Remonta a lista ao trocar de filtro (liga/range) pra resetar o reveal.
   const listKey = `${league}-${range.preset}-${navProps.from ?? ""}-${navProps.to ?? ""}`;
+  const nextMatchId = firstAnalyzableId(matches);
   return (
     <div className="overflow-x-clip bg-background text-foreground">
       <div className="px-5 pt-6">
@@ -416,9 +424,7 @@ function MobileHome({
         </SectionLabel>
         <div className="overflow-x-auto px-5 pb-6">
           {recents.length === 0 ? (
-            <div className="text-body-sm text-muted-foreground tracking-tight">
-              Nenhuma predição ainda.
-            </div>
+            <RecentPredsEmpty nextMatchId={nextMatchId} listHref={listHref} />
           ) : (
             <div className="flex gap-2">
               {recents.map((p) => (
@@ -447,6 +453,7 @@ function DesktopHome({
   const listHref = buildLeagueHref(navProps, league);
   // Remonta a grade ao trocar de filtro (liga/range) pra resetar o reveal.
   const listKey = `${league}-${range.preset}-${navProps.from ?? ""}-${navProps.to ?? ""}`;
+  const nextMatchId = firstAnalyzableId(matches);
   return (
     <>
       <PageContainer width="content">
@@ -496,9 +503,7 @@ function DesktopHome({
             Suas predições recentes
           </SectionLabel>
           {recents.length === 0 ? (
-            <div className="text-body-sm text-muted-foreground tracking-tight">
-              Nenhuma predição ainda.
-            </div>
+            <RecentPredsEmpty nextMatchId={nextMatchId} listHref={listHref} />
           ) : (
             <div className="grid grid-cols-5 gap-3">
               {recents.map((p) => (
