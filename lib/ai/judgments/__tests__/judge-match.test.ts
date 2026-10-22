@@ -138,7 +138,7 @@ describe("judgeMatch", () => {
     const r = await judgeMatch(provider, STATE_INPUT);
 
     expect(r).not.toBeNull();
-    expect(r?.version).toBe("jev_judgments_v1");
+    expect(r?.version).toBe("jev_judgments_v2");
     expect(Object.keys(r!.answers)).toHaveLength(8);
     expect(r?.answers.high_stakes_away.value).toBe(0.9);
     // Noul não traz confidence na API → null (nada fabricado).

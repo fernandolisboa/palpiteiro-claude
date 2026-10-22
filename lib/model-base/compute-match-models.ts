@@ -1,3 +1,4 @@
+import { JUDGMENTS_VERSION } from "@/lib/ai/judgments/questions";
 import { resolveModelBaseJudgments, type JudgmentRun } from "@/lib/ai/predict";
 import { hasTypeSafeKey } from "@/lib/ai/providers/typesafe/client";
 import { getEnableMatchModelJev } from "@/lib/db/queries/ai-config";
@@ -29,9 +30,11 @@ export const MODEL_BASE_WINDOW_HOURS = 7 * 24;
 export const JEV_WINDOW_MS = 48 * 60 * 60 * 1000;
 // Base com JEV mais velha que isto volta pro começo da fila JEV.
 export const JEV_STALE_MS = 6 * 60 * 60 * 1000;
-// Prazo pra COMEÇAR um jogo da fila JEV. Pior caso por jogo ≈ 7 req a 8/min na
-// API-Football (~55 s) + JEV (~15 s) ≈ 70 s ⇒ 200 + 70 = 270 s < maxDuration 300.
-export const RUN_DEADLINE_MS = 200_000;
+// Prazo pra COMEÇAR um jogo da fila JEV. Pior caso por jogo ≈ 12 req a 8/min na
+// API-Football (forma ×2, fixtures do dia, desfalques, escalação, escalações
+// anteriores 2×2, próximos jogos ×2 e artilheiros do #617: ~90 s) + JEV (~15 s)
+// ≈ 105 s ⇒ 180 + 105 = 285 s < maxDuration 300.
+export const RUN_DEADLINE_MS = 180_000;
 export const COMPUTE_MATCH_MODELS_LOCK_KEY = "model-base:compute:lock";
 // = maxDuration da rota: um run que morre no meio libera o lock pelo TTL.
 const LOCK_TTL_MS = 300_000;
@@ -83,8 +86,9 @@ function emptySummary(): ComputeMatchModelsSummary {
 
 /**
  * Ordem da fila JEV (puro). Bucket 0: jogo sem base, base sem JEV (`not_attempted`),
- * JEV que falhou (`failed`, tenta de novo antes de uma base `applied` fresca) ou base
- * com `checked_at` mais velho que JEV_STALE_MS; bucket 1: o resto (JEV fresco).
+ * JEV que falhou (`failed`, tenta de novo antes de uma base `applied` fresca), base
+ * com respostas de outra versão das perguntas ou com `checked_at` mais velho que
+ * JEV_STALE_MS; bucket 1: o resto (JEV fresco).
  * Dentro do bucket, kickoff mais próximo primeiro. O que não cabe no prazo do run
  * entra no próximo.
  */
@@ -96,6 +100,9 @@ export function orderJevQueue<T extends { matchId: string; kickoffAt: Date }>(
   const bucket = (item: T): number => {
     const latest = latestByMatch.get(item.matchId);
     if (!latest || latest.jevStatus !== "applied") return 0;
+    // Respostas de outro conjunto de perguntas (bump de JUDGMENTS_VERSION) não servem
+    // mais pra ninguém: refaz primeiro.
+    if (latest.judgments?.versions.judgments !== JUDGMENTS_VERSION) return 0;
     return now.getTime() - latest.checkedAt.getTime() > JEV_STALE_MS ? 0 : 1;
   };
   return [...items].sort(
@@ -340,6 +347,13 @@ async function runComputeMatchModels(opts: {
         provider,
         data,
       });
+      if (resolved === "data_unavailable") {
+        // Calendário ou artilheiros falharam (#617; já logado lá): mesmo tratamento
+        // da forma que falha acima.
+        summary.jev.dataUnavailable++;
+        await writeBaseUnlessJev(item);
+        continue;
+      }
       if (!resolved) {
         // Erro inesperado na porta do JEV (já logado lá): conta como falha do JEV.
         summary.jev.failed++;

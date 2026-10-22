@@ -47,7 +47,7 @@ O usuário quer dar o próprio palpite e explicar o porquê ("o Palmeiras está 
 - **(+)** A pergunta mais comum ("qual a chance do meu palpite?") é respondida de graça e na hora.
 - **(+)** O que o usuário sabe e o modelo não sabia entra, limitado e auditável (cada análise grava as versões e a evidência).
 - **(−)** Até 2 chamadas de LLM por uso (centavos mesmo no Opus) e até 4 de API-Football, em geral do cache.
-- **(−)** "Peso do jogo" só é verificável no Brasileirão (`LEAGUE_TABLE_CONFIG`); nas demais ligas entra como não verificável.
+- **(−)** "Peso do jogo" só é verificável no Brasileirão (`LEAGUE_TABLE_CONFIG`); nas demais ligas entra como não verificável. *(Emendado pelo #617: Premier League e La Liga também têm zonas e passam a ser verificáveis.)*
 - **(−)** O bloco só aparece em jogo analisável: a análise gravada some da página depois do apito. *(Emendado pela ADR 0060: com o modo ao vivo ligado, o bloco fica aberto no 1º e no 2º tempo e no intervalo.)*
 
 ## Emenda (#565): contexto extra na análise com IA

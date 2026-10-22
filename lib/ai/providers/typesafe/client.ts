@@ -6,7 +6,7 @@ import { TypeSafeError } from "./errors";
 
 // Cliente HTTP mínimo da TypeSafe (ADR 0041 §5). ÚNICO módulo que fala com
 // api.typesafe.ai. fetch direto, sem SDK (zero dependência nova). Só expõe o
-// primitivo `noul` — o único que o jev_judgments_v1 usa.
+// primitivo `noul` — o único que o jev_judgments_v2 usa.
 // Contrato: https://docs.typesafe.ai/api.md (lido em 2026-09-24).
 
 export const TYPESAFE_ENDPOINT = "https://api.typesafe.ai/v1/systemone";

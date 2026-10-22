@@ -338,7 +338,7 @@ describe("analyzeUserPalpite — depois da cobrança", () => {
     expect(row.claims![0]).toMatchObject({ topic: "absence", status: "unverifiable" });
     expect(row.model!.versions).toEqual({
       matchModel: null,
-      judgments: "jev_judgments_v1",
+      judgments: "jev_judgments_v2",
       weights: "judgment_weights_v1",
       snapshotWeights: null,
       userEvidence: "user_evidence_v1",

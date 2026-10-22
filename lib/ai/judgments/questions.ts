@@ -8,7 +8,10 @@ import type {
 
 // Conjunto FIXO e versionado de perguntas JEV (ADR 0041 §2). Mudou texto,
 // criteria ou o vocabulário do state (state.ts)? Bump aqui + commit `prompt:`.
-export const JUDGMENTS_VERSION = "jev_judgments_v1";
+// v2 (#617): `next_match` preenchido (competição + "knockout"/"group stage" entre
+// parênteses), descanso conta jogo ainda não disputado antes deste, tag "team top
+// scorer" sai de fato e `league_situation` existe na Premier League e na La Liga.
+export const JUDGMENTS_VERSION = "jev_judgments_v2";
 
 // Frases literais da tabela da Decisão 2 — sem negação (jaggedness #1).
 const INSTRUCTIONS: Record<JudgmentFactor, string> = {
@@ -41,7 +44,7 @@ function criteriaFor(
       };
     case "rotation_risk":
       return {
-        true: `The schedule of \`${team}\` is congested: \`${team}.rest_before_match\` is short rest (<72h), or \`${team}.next_match\` is within 72h. A next match in a knockout or continental competition makes rotation more likely.`,
+        true: `The schedule of \`${team}\` is congested: \`${team}.rest_before_match\` is short rest (<72h), or \`${team}.next_match\` is within 72h. \`${team}.next_match\` names the competition in parentheses; a next match marked knockout, or in a continental competition (Libertadores, Sudamericana, Champions League), makes rotation more likely.`,
         false: `\`${team}.rest_before_match\` is normal rest, long rest or unknown, and \`${team}.next_match\` is 3 or more days away or unknown.`,
       };
     case "high_stakes":

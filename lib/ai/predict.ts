@@ -51,7 +51,9 @@ import {
   type NormalizedInjury,
   type NormalizedStanding,
   type NormalizedTeamLineup,
+  type NormalizedTopScorer,
   type SportsDataProvider,
+  type UpcomingTeamFixture,
 } from "@/lib/providers/sports-data/types";
 import type { SupportedLeague } from "@/lib/providers/sports-data/leagues";
 
@@ -2219,20 +2221,120 @@ async function runJudgments(args: {
   };
 }
 
-// Input do state JEV + julgamentos do jogo. O reuso entre análises (runJudgments) é
-// chaveado pelo stateHash, que depende da escalação anterior (papel do desfalque)
-// — por isso a busca vem antes do lookup. Dentro de um best bet, o memo do run
-// (CodeJevRunMemo) evita as duas.
-async function resolveMatchJudgments(args: {
-  userId: string | null;
-  matchId: string;
+// Dados que o state JEV busca além do passo 3 (as mesmas buscas no predict e no cron
+// da base do modelo, senão o stateHash diverge e o reuso erra).
+type JudgmentFetchedData = Omit<
+  MatchJudgmentData,
+  "previousLineups" | "upcoming" | "topScorers"
+>;
+
+// Prazo das buscas extras do state JEV (#617) na análise interativa: o cliente da
+// API-Football é limitado a 8 req/min por instância, e uma busca que cai no fim da
+// fila esperaria até ~60 s. Passou do prazo → o campo fica "unknown" (o cron, sem
+// prazo, preenche a base do modelo). O cron não passa prazo.
+export const JUDGMENT_EXTRAS_BUDGET_MS = 8_000;
+// Quantos jogos à frente pedir: a lista conta a partir de AGORA (inclui este jogo e
+// os que vêm antes dele); 5 cobre a janela de análise.
+export const UPCOMING_FIXTURES_NEXT = 5;
+// Copas: a lista de artilheiros é só da competição, poucos jogos por time — não
+// identifica o artilheiro do time.
+const NO_TOP_SCORER_LEAGUES: ReadonlySet<SupportedLeague> = new Set<SupportedLeague>([
+  "champions_league",
+  "copa_libertadores",
+  "copa_sudamericana",
+  "world_cup",
+]);
+
+class JudgmentExtrasTimeoutError extends Error {}
+
+function withBudget<T>(p: Promise<T>, budgetMs: number | undefined): Promise<T> {
+  if (budgetMs === undefined) return p;
+  let timer: ReturnType<typeof setTimeout> | undefined;
+  const timeout = new Promise<never>((_, reject) => {
+    timer = setTimeout(
+      () => reject(new JudgmentExtrasTimeoutError(`exceeded ${budgetMs}ms`)),
+      budgetMs,
+    );
+  });
+  return Promise.race([p, timeout]).finally(() => clearTimeout(timer));
+}
+
+// Calendário (próximos jogos dos dois times) e artilheiros do state JEV (#617).
+// Fail-open por campo: método ausente ou Unsupported → campo fora, sem log (o provider
+// não tem o dado); erro ou prazo estourado → campo fora + `degraded` (o cron usa pra
+// pular o JEV do jogo, como faz quando a forma falha). Artilheiros só pra liga
+// nacional e só quando algum lado tem desfalque: o rótulo só existe no desfalcado.
+async function fetchJudgmentExtras(args: {
   provider: SportsDataProvider;
-  data: Omit<MatchJudgmentData, "previousLineups">;
-}): Promise<{ input: MatchJudgmentInput; run: JudgmentRun }> {
+  data: JudgmentFetchedData;
+  budgetMs?: number;
+}): Promise<{
+  upcoming: MatchJudgmentData["upcoming"];
+  topScorers: MatchJudgmentData["topScorers"];
+  degraded: boolean;
+}> {
+  const { provider, data } = args;
+  let degraded = false;
+  const attempt = async <T>(
+    what: string,
+    run: (() => Promise<T>) | null,
+  ): Promise<T | undefined> => {
+    if (!run) return undefined;
+    try {
+      return await withBudget(run(), args.budgetMs);
+    } catch (err) {
+      if (err instanceof SportsDataUnsupportedError) return undefined;
+      degraded = true;
+      console.error(
+        JSON.stringify({
+          scope: "predict",
+          error: `${what}_fetch_failed`,
+          league: data.league,
+          message: err instanceof Error ? err.message : String(err),
+        }),
+      );
+      return undefined;
+    }
+  };
+  const getUpcoming = provider.getUpcomingTeamFixtures?.bind(provider);
+  const getTopScorers = provider.getTopScorers?.bind(provider);
+  const upcomingFor = (team: string) =>
+    attempt<UpcomingTeamFixture[]>(
+      "upcoming_fixtures",
+      getUpcoming
+        ? () => getUpcoming(team, data.league, UPCOMING_FIXTURES_NEXT)
+        : null,
+    );
+  const wantsTopScorers =
+    !NO_TOP_SCORER_LEAGUES.has(data.league) &&
+    data.injuries.home.length + data.injuries.away.length > 0;
+  const [home, away, topScorers] = await Promise.all([
+    upcomingFor(data.homeTeam),
+    upcomingFor(data.awayTeam),
+    attempt<NormalizedTopScorer[]>(
+      "top_scorers",
+      getTopScorers && wantsTopScorers ? () => getTopScorers(data.league) : null,
+    ),
+  ]);
+  return {
+    upcoming: home || away ? { home, away } : undefined,
+    topScorers,
+    degraded,
+  };
+}
+
+// Input do state JEV (escalação anterior, calendário e artilheiros buscados aqui). O
+// reuso entre análises (runJudgments) é chaveado pelo stateHash, que depende de tudo
+// isso — por isso as buscas vêm antes do lookup. Dentro de um best bet, o memo do run
+// (CodeJevRunMemo) evita tudo.
+async function prepareMatchJudgmentInput(args: {
+  provider: SportsDataProvider;
+  data: JudgmentFetchedData;
+  extrasBudgetMs?: number;
+}): Promise<{ input: MatchJudgmentInput; extrasDegraded: boolean }> {
   const { data } = args;
-  const input = buildMatchJudgmentInput({
-    ...data,
-    previousLineups: await fetchPreviousLineups({
+  const [previousLineups, extras] = await Promise.all([
+    fetchPreviousLineups({
       provider: args.provider,
       kickoffAt: data.kickoffAt,
       homeTeam: data.homeTeam,
@@ -2241,6 +2343,33 @@ async function resolveMatchJudgments(args: {
       awayForm: data.awayForm,
       injuries: data.injuries,
     }),
+    fetchJudgmentExtras({
+      provider: args.provider,
+      data,
+      budgetMs: args.extrasBudgetMs,
+    }),
+  ]);
+  const input = buildMatchJudgmentInput({
+    ...data,
+    previousLineups,
+    ...(extras.upcoming ? { upcoming: extras.upcoming } : {}),
+    ...(extras.topScorers ? { topScorers: extras.topScorers } : {}),
+  });
+  return { input, extrasDegraded: extras.degraded };
+}
+
+// Análise interativa: busca extra que falhou ou estourou o prazo vira "unknown" no
+// state e o JEV roda mesmo assim (fail-open).
+async function resolveMatchJudgments(args: {
+  userId: string;
+  matchId: string;
+  provider: SportsDataProvider;
+  data: JudgmentFetchedData;
+}): Promise<{ input: MatchJudgmentInput; run: JudgmentRun }> {
+  const { input } = await prepareMatchJudgmentInput({
+    provider: args.provider,
+    data: args.data,
+    extrasBudgetMs: JUDGMENT_EXTRAS_BUDGET_MS,
   });
   const run = await runJudgments({
     userId: args.userId,
@@ -2259,11 +2388,27 @@ async function resolveMatchJudgments(args: {
 export async function resolveModelBaseJudgments(args: {
   matchId: string;
   provider: SportsDataProvider;
-  data: Omit<MatchJudgmentData, "previousLineups">;
-}): Promise<{ input: MatchJudgmentInput; run: JudgmentRun } | null> {
+  data: JudgmentFetchedData;
+}): Promise<
+  | { input: MatchJudgmentInput; run: JudgmentRun }
+  | "data_unavailable"
+  | null
+> {
   try {
     if (!createTypeSafeJudgmentProvider().hasKey()) return null;
-    return await resolveMatchJudgments({ ...args, userId: null });
+    // Sem prazo nas buscas extras; uma que falhou → sem JEV neste run (um state
+    // remendado ficaria diferente do predict e o reuso erraria), como a forma.
+    const { input, extrasDegraded } = await prepareMatchJudgmentInput({
+      provider: args.provider,
+      data: args.data,
+    });
+    if (extrasDegraded) return "data_unavailable";
+    const run = await runJudgments({
+      userId: null,
+      matchId: args.matchId,
+      stateInput: input.stateInput,
+    });
+    return { input, run };
   } catch (err) {
     console.error(
       JSON.stringify({

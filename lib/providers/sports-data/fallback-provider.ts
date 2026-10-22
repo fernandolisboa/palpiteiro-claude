@@ -11,8 +11,10 @@ import {
   type NormalizedInjury,
   type NormalizedLineup,
   type NormalizedStanding,
+  type NormalizedTopScorer,
   type ProviderCapabilities,
   type SportsDataProvider,
+  type UpcomingTeamFixture,
 } from "@/lib/providers/sports-data/types";
 
 /**
@@ -252,6 +254,31 @@ export class FallbackProvider implements SportsDataProvider {
       "getTeamForm",
       (p) => p.capabilities.supportedLeagues.has(league),
       (p) => p.getTeamForm(team, league, last),
+    );
+  }
+
+  // Métodos opcionais (#617): só entra na cascata quem os implementa.
+  getUpcomingTeamFixtures(
+    team: string,
+    league: SupportedLeague,
+    next: number,
+  ): Promise<UpcomingTeamFixture[]> {
+    return this.withFallback(
+      "getUpcomingTeamFixtures",
+      (p) =>
+        p.getUpcomingTeamFixtures !== undefined &&
+        p.capabilities.supportedLeagues.has(league),
+      (p) => p.getUpcomingTeamFixtures!(team, league, next),
+    );
+  }
+
+  getTopScorers(league: SupportedLeague): Promise<NormalizedTopScorer[]> {
+    return this.withFallback(
+      "getTopScorers",
+      (p) =>
+        p.getTopScorers !== undefined &&
+        p.capabilities.supportedLeagues.has(league),
+      (p) => p.getTopScorers!(league),
     );
   }
 }

@@ -4,6 +4,7 @@ import {
   JEV_STALE_MS,
   orderJevQueue,
 } from "@/lib/model-base/compute-match-models";
+import { JUDGMENTS_VERSION } from "@/lib/ai/judgments/questions";
 import type { MatchModelSnapshot } from "@/lib/model-base/types";
 
 const NOW = new Date("2026-05-14T12:00:00Z");
@@ -13,8 +14,14 @@ function latest(
   matchId: string,
   jevStatus: MatchModelSnapshot["jevStatus"],
   checkedAt: Date,
+  judgmentsVersion: string = JUDGMENTS_VERSION,
 ): MatchModelSnapshot {
-  return { matchId, jevStatus, checkedAt } as MatchModelSnapshot;
+  return {
+    matchId,
+    jevStatus,
+    checkedAt,
+    judgments: { versions: { judgments: judgmentsVersion } },
+  } as MatchModelSnapshot;
 }
 
 describe("orderJevQueue (puro)", () => {
@@ -45,6 +52,21 @@ describe("orderJevQueue (puro)", () => {
       "not-attempted",
       "none",
       "failed-fresh",
+      "fresh",
+    ]);
+  });
+
+  it("JEV fresco de outra versão das perguntas volta pro começo da fila (#617)", () => {
+    const items = [
+      { matchId: "fresh", kickoffAt: at(2) },
+      { matchId: "old-version", kickoffAt: at(30) },
+    ];
+    const byMatch = new Map<string, MatchModelSnapshot>([
+      ["fresh", latest("fresh", "applied", at(-1))],
+      ["old-version", latest("old-version", "applied", at(-1), "jev_judgments_v1")],
+    ]);
+    expect(orderJevQueue(items, byMatch, NOW).map((i) => i.matchId)).toEqual([
+      "old-version",
       "fresh",
     ]);
   });

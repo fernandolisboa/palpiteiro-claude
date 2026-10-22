@@ -305,8 +305,33 @@ const TeamItemSchema = z.object({
 });
 export type ApiFootballTeamItem = z.infer<typeof TeamItemSchema>;
 
+// Item de /players/topscorers?league&season (#617). Tolerante: só o nome, o time e os
+// gols de cada linha de `statistics` são load-bearing (a 1ª linha é a da competição
+// pedida; num time trocado no meio da temporada pode haver mais de uma).
+export const TopScorerItemSchema = z.object({
+  player: z.object({
+    id: z.number().int().nullable().optional(),
+    name: z.string().min(1),
+  }),
+  statistics: z.array(
+    z.object({
+      team: z.object({
+        id: z.number().int().nullable().optional(),
+        name: z.string().min(1),
+      }),
+      goals: z
+        .object({ total: z.number().int().nullable().optional() })
+        .partial()
+        .optional(),
+    })
+  ),
+});
+
+export type ApiFootballTopScorer = z.infer<typeof TopScorerItemSchema>;
+
 export const FixtureEnvelopeSchema = envelope(FixtureItemSchema);
 export const TeamEnvelopeSchema = envelope(TeamItemSchema);
 export const LineupEnvelopeSchema = envelope(LineupItemSchema);
 export const StandingsEnvelopeSchema = envelope(StandingsItemSchema);
 export const InjuryEnvelopeSchema = envelope(InjuryItemSchema);
+export const TopScorerEnvelopeSchema = envelope(TopScorerItemSchema);

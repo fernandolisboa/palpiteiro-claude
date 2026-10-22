@@ -147,9 +147,28 @@ export function restBucket(
   return "long rest (>7 days)";
 }
 
+// Fase do torneio crua do provider → rótulo fixo (#617). Strings reais da
+// API-Football: "Regular Season - 12", "League Stage - 5", "Group A - 3", "Round of
+// 16", "Quarter-finals", "Semi-finals", "Final", "Knockout Round Play-offs", "3rd
+// Round" (copas nacionais), "2nd Qualifying Round", "Preliminary Round".
+export function competitionStage(
+  round: string | undefined
+): "knockout" | "group stage" | undefined {
+  if (!round) return undefined;
+  if (/group|league stage/i.test(round)) return "group stage";
+  if (
+    /final|round of|play-?offs?|knockout|qualifying|preliminary|\b\d+(st|nd|rd|th) round\b/i.test(
+      round
+    )
+  ) {
+    return "knockout";
+  }
+  return undefined;
+}
+
 export function nextMatchBucket(
   kickoffAt: string,
-  next: { kickoffAt: string; competition?: string } | undefined
+  next: { kickoffAt: string; competition?: string; round?: string } | undefined
 ): string {
   if (!next) return UNKNOWN;
   const hours = hoursBetween(kickoffAt, next.kickoffAt);
@@ -160,7 +179,11 @@ export function nextMatchBucket(
       : hours <= LONG_REST_HOURS
         ? "next match in 3 to 7 days"
         : "next match more than 7 days away";
-  return next.competition ? `${bucket} (${next.competition})` : bucket;
+  if (!next.competition) return bucket;
+  const stage = competitionStage(next.round);
+  return stage
+    ? `${bucket} (${next.competition}, ${stage})`
+    : `${bucket} (${next.competition})`;
 }
 
 // ─── Tabela → buckets ──────────────────────────────────────────────────────
@@ -178,6 +201,10 @@ const LEAGUE_TABLE_CONFIG: Partial<
   Record<SupportedLeague, Omit<LeagueTableInput, "rows">>
 > = {
   brasileirao_a: { totalRounds: 38, continentalSpots: 6, relegationSpots: 4 },
+  // #617: 4 = piso de vagas de Champions (a 5ª por coeficiente europeu varia ano a
+  // ano), mesmo racional do G6 acima.
+  premier_league: { totalRounds: 38, continentalSpots: 4, relegationSpots: 3 },
+  la_liga: { totalRounds: 38, continentalSpots: 4, relegationSpots: 3 },
 };
 
 // Tabela única da liga (sem grupos) + config de zonas; senão undefined → "unknown".
@@ -321,7 +348,7 @@ export type JudgmentTeamInput = {
   name: string;
   absences: readonly JudgmentAbsenceInput[];
   previousKickoffAt?: string;
-  nextFixture?: { kickoffAt: string; competition?: string };
+  nextFixture?: { kickoffAt: string; competition?: string; round?: string };
 };
 
 export type JudgmentStateInput = {

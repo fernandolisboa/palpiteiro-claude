@@ -1,6 +1,8 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 
 import {
+  SportsDataTransientError,
+  SportsDataUnsupportedError,
   type FixtureRef,
   type NormalizedFixture,
   type NormalizedStanding,
@@ -161,6 +163,9 @@ const getH2H = vi.fn();
 const getStandings = vi.fn();
 const getLineups = vi.fn();
 const getFixtureByMatch = vi.fn();
+// Opcionais (#617): vi.fn() sem implementação devolve undefined = "sem dado".
+const getUpcomingTeamFixtures = vi.fn();
+const getTopScorers = vi.fn();
 
 vi.mock("@/lib/providers/sports-data", () => ({
   getSportsDataProvider: vi.fn((): SportsDataProvider => {
@@ -184,6 +189,8 @@ vi.mock("@/lib/providers/sports-data", () => ({
       getInjuriesByTeam: vi.fn() as never,
       getLineups: getLineups as never,
       getTeamForm: getTeamForm as never,
+      getUpcomingTeamFixtures: getUpcomingTeamFixtures as never,
+      getTopScorers: getTopScorers as never,
     };
   }),
 }));
@@ -590,7 +597,7 @@ const ADOPTED_SONNET: AIModel = {
   adopted: { priceEstimated: true, pinnedId: "claude-sonnet-5-5" },
 };
 const CODE_JEV_TAGS =
-  ";engine=code_jev;lambda=heuristic;judg=jev_judgments_v1;w=judgment_weights_v1";
+  ";engine=code_jev;lambda=heuristic;judg=jev_judgments_v2;w=judgment_weights_v1";
 
 function serveAs(model: AIModel) {
   const original = anthropicProvider.runAnalysis;
@@ -647,7 +654,7 @@ describe("flag analysis_engine = 'code_jev'", () => {
     // ai_calls: JEV (typesafe) e narrador.
     const [jevCall] = rowsWhere((r) => r.provider === "typesafe");
     expect(jevCall).toMatchObject({
-      promptVersion: "jev_judgments_v1",
+      promptVersion: "jev_judgments_v2",
       model: "jev-1.13.0",
       inputTokens: 1500,
       outputTokens: 0,
@@ -670,7 +677,7 @@ describe("flag analysis_engine = 'code_jev'", () => {
     expect(prediction.keyFactors).toEqual(NARRATION.key_factors);
     expect(prediction.promptVersion).toBe(NARRATOR_VERSION);
     expect(prediction.modelVersion).toBe(
-      "claude-sonnet-5-5;engine=code_jev;lambda=heuristic;judg=jev_judgments_v1;w=judgment_weights_v1"
+      "claude-sonnet-5-5;engine=code_jev;lambda=heuristic;judg=jev_judgments_v2;w=judgment_weights_v1"
     );
     expect(Number(prediction.minimumOdd)).toBeCloseTo(
       100 / (expected.modelProbByKey.home - 5),
@@ -684,7 +691,7 @@ describe("flag analysis_engine = 'code_jev'", () => {
       judgments.lambda.base.away
     );
     expect(judgments.versions).toEqual({
-      judgments: "jev_judgments_v1",
+      judgments: "jev_judgments_v2",
       weights: "judgment_weights_v1",
       narrator: NARRATOR_VERSION,
       jevModel: "jev-1.13.0",
@@ -1216,7 +1223,7 @@ describe("reuso com origem na base do modelo (#555)", () => {
         reusedFromPredictionId: null,
         reusedFromModelSnapshotId: null,
         versions: {
-          judgments: "jev_judgments_v1",
+          judgments: "jev_judgments_v2",
           weights: "judgment_weights_v1",
           jevModel: "jev-1.13.0",
           jevModelServed: "jev-1.13.0",
@@ -1372,6 +1379,92 @@ describe("papel do desfalque pela escalação do jogo ANTERIOR", () => {
     expect(result.prediction).toBeDefined();
     expect(JSON.stringify(anthropicCreate.mock.calls[0][0])).toContain(
       "jogador (lesionado)"
+    );
+    err.mockRestore();
+  });
+});
+
+describe("calendário e artilheiros no state JEV (#617)", () => {
+  const NEXT = {
+    kickoffAt: "2026-05-17T22:00:00.000Z",
+    kickoffTimestampMs: Date.parse("2026-05-17T22:00:00.000Z"),
+    homeTeam: "Racing Club",
+    awayTeam: matchRow.homeTeam,
+    competition: "CONMEBOL Libertadores",
+    round: "Semi-finals",
+  };
+  const THIS_MATCH = {
+    ...NEXT,
+    kickoffAt: "2026-05-15T19:30:00.000Z",
+    kickoffTimestampMs: Date.parse("2026-05-15T19:30:00.000Z"),
+    homeTeam: matchRow.homeTeam,
+    awayTeam: matchRow.awayTeam,
+    competition: "Serie A",
+    round: "Regular Season - 8",
+  };
+
+  it("próximo jogo e artilheiro desfalcado chegam ao JEV, sem nome", async () => {
+    getInjuriesByFixture.mockResolvedValue({
+      home: [{ player: { name: "P. Atacante" }, type: "injury", status: "injured" }],
+      away: [],
+    });
+    getUpcomingTeamFixtures.mockImplementation((team: string) =>
+      Promise.resolve(team === matchRow.homeTeam ? [THIS_MATCH, NEXT] : []),
+    );
+    getTopScorers.mockResolvedValue([
+      { player: { name: "P. Atacante" }, team: matchRow.homeTeam, goals: 9 },
+    ]);
+
+    await predict({ matchId: "m-1", userId: "u-1", isAdmin: true, marketKey: "match_result" });
+
+    expect(getUpcomingTeamFixtures).toHaveBeenCalledWith(matchRow.homeTeam, "brasileirao_a", 5);
+    expect(getTopScorers).toHaveBeenCalledWith("brasileirao_a");
+    const state = judge.mock.calls[0][0] as {
+      home_team: { next_match: string; absences: string[] };
+      away_team: { next_match: string };
+    };
+    expect(state.home_team.next_match).toBe(
+      "next match within 72h (CONMEBOL Libertadores, knockout)",
+    );
+    expect(state.away_team.next_match).toBe("unknown");
+    expect(state.home_team.absences).toEqual(["player, team top scorer (injured)"]);
+    expect(JSON.stringify(state)).not.toContain("Atacante");
+  });
+
+  it("sem desfalques não busca artilheiros", async () => {
+    await predict({ matchId: "m-1", userId: "u-1", isAdmin: true, marketKey: "match_result" });
+    expect(getTopScorers).not.toHaveBeenCalled();
+  });
+
+  it("busca que falha não derruba: JEV roda com próximo jogo unknown", async () => {
+    getUpcomingTeamFixtures.mockRejectedValue(
+      new SportsDataTransientError("boom", "mock", "getUpcomingTeamFixtures", undefined),
+    );
+    const err = vi.spyOn(console, "error").mockImplementation(() => {});
+    const result = await predict({
+      matchId: "m-1",
+      userId: "u-1",
+      isAdmin: true,
+      marketKey: "match_result",
+    });
+    expect(result.prediction).toBeDefined();
+    expect(judge).toHaveBeenCalledTimes(1);
+    const state = judge.mock.calls[0][0] as { home_team: { next_match: string } };
+    expect(state.home_team.next_match).toBe("unknown");
+    expect(err.mock.calls.map((c) => String(c[0]))).toContainEqual(
+      expect.stringContaining("upcoming_fixtures_fetch_failed"),
+    );
+    err.mockRestore();
+  });
+
+  it("Unsupported não loga erro", async () => {
+    getUpcomingTeamFixtures.mockRejectedValue(
+      new SportsDataUnsupportedError("no", "mock", "getUpcomingTeamFixtures"),
+    );
+    const err = vi.spyOn(console, "error").mockImplementation(() => {});
+    await predict({ matchId: "m-1", userId: "u-1", isAdmin: true, marketKey: "match_result" });
+    expect(err.mock.calls.map((c) => String(c[0]))).not.toContainEqual(
+      expect.stringContaining("fetch_failed"),
     );
     err.mockRestore();
   });
@@ -1929,7 +2022,7 @@ describe("contexto do usuário (#565)", () => {
     expect(stored).not.toContain("Pedro");
     expect(stored).not.toContain("está sem");
     expect(prediction.modelVersion).toBe(
-      "claude-sonnet-5-5;engine=code_jev;lambda=heuristic;judg=jev_judgments_v1;w=judgment_weights_v1;user=user_evidence_v1"
+      "claude-sonnet-5-5;engine=code_jev;lambda=heuristic;judg=jev_judgments_v2;w=judgment_weights_v1;user=user_evidence_v1"
     );
     expect(prediction.promptVersion).toBe(NARRATOR_VERSION);
 
