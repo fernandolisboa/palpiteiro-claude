@@ -1253,6 +1253,13 @@ describe("toFixtureCompetition (#618)", () => {
       true
     );
   });
+
+  it("amistoso de seleção (id 10) segue na forma: antes de Copa é quase tudo", () => {
+    expect(toFixtureCompetition(league(10, "Friendlies"))).toEqual({
+      name: "Friendlies",
+      friendly: false,
+    });
+  });
 });
 
 describe("ApiFootballAdapter.getTeamForm — competição de origem (#618)", () => {

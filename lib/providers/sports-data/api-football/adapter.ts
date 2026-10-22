@@ -621,9 +621,11 @@ function toNormalizedFixture(
 }
 
 // "Friendlies Clubs" na API-Football (#618). O nome cobre id novo/variante
-// ("Club Friendlies", "Friendlies Clubs").
+// ("Club Friendlies", "Friendlies Clubs"). Amistoso de seleção (id 10, "Friendlies")
+// NÃO entra: antes de Copa é quase toda a forma da seleção.
 const API_FOOTBALL_CLUB_FRIENDLIES_ID = 667;
-const FRIENDLY_NAME_RE = /friendl/i;
+const isClubFriendlyName = (name: string) =>
+  /friendl/i.test(name) && /club/i.test(name);
 
 // Competição de origem (#618): o fixture da forma vem de qualquer competição do time.
 function toFixtureCompetition(
@@ -636,7 +638,7 @@ function toFixtureCompetition(
     ...(league ? { league } : {}),
     friendly:
       f.league.id === API_FOOTBALL_CLUB_FRIENDLIES_ID ||
-      FRIENDLY_NAME_RE.test(name),
+      isClubFriendlyName(name),
   };
 }
 
