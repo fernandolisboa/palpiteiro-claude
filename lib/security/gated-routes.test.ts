@@ -28,6 +28,12 @@ describe("findStaticGatedRoutes", () => {
           "/signin",
           "/robots.txt",
           "/sitemap.xml",
+          "/manifest.webmanifest",
+          "/icon",
+          "/icon1",
+          "/icon2",
+          "/apple-icon",
+          "/opengraph-image",
         ],
         isGated
       )

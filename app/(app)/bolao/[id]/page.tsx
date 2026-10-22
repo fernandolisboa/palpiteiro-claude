@@ -1,3 +1,4 @@
+import type { Metadata } from "next";
 import Link from "next/link";
 import { notFound, redirect } from "next/navigation";
 import { Trophy, X } from "lucide-react";
@@ -55,6 +56,8 @@ import {
 import { displayMatchTeams, teamPair } from "@/lib/view/team";
 
 export const dynamic = "force-dynamic";
+
+export const metadata: Metadata = { title: "Bolão" };
 
 // Um bolão (#567, ADR 0054): apostadores com a aposta ao lado, e no fim os ganhadores
 // e a divisão do pote. Ganhadores saem em código do placar (lib/pools/winners.ts).
