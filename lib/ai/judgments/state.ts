@@ -155,7 +155,8 @@ export function competitionStage(
   round: string | undefined
 ): "knockout" | "group stage" | undefined {
   if (!round) return undefined;
-  if (/group|league stage/i.test(round)) return "group stage";
+  // Âncora: "Relegation Group - 3"/"Championship Group" são fases de pontos corridos.
+  if (/^group|league stage/i.test(round)) return "group stage";
   if (
     /final|round of|play-?offs?|knockout|qualifying|preliminary|\b\d+(st|nd|rd|th) round\b/i.test(
       round

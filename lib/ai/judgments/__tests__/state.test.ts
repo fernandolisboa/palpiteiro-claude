@@ -190,6 +190,7 @@ describe("calendário → buckets", () => {
       expect(competitionStage(round), round).toBe("group stage");
     }
     expect(competitionStage("Regular Season - 12")).toBeUndefined();
+    expect(competitionStage("Relegation Group - 3")).toBeUndefined();
     expect(competitionStage(undefined)).toBeUndefined();
   });
 });

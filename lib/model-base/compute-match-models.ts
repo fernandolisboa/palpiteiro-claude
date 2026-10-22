@@ -347,13 +347,6 @@ async function runComputeMatchModels(opts: {
         provider,
         data,
       });
-      if (resolved === "data_unavailable") {
-        // Calendário ou artilheiros falharam (#617; já logado lá): mesmo tratamento
-        // da forma que falha acima.
-        summary.jev.dataUnavailable++;
-        await writeBaseUnlessJev(item);
-        continue;
-      }
       if (!resolved) {
         // Erro inesperado na porta do JEV (já logado lá): conta como falha do JEV.
         summary.jev.failed++;

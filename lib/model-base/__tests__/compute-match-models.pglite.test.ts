@@ -20,9 +20,10 @@ import {
 
 import * as schema from "@/db/schema";
 import type { SupportedLeague } from "@/lib/providers/sports-data/leagues";
-import type {
-  NormalizedStanding,
-  SportsDataProvider,
+import {
+  SportsDataTransientError,
+  type NormalizedStanding,
+  type SportsDataProvider,
 } from "@/lib/providers/sports-data/types";
 
 let realDb: PgliteDatabase<typeof schema>;
@@ -576,17 +577,21 @@ describe("JEV da base", () => {
     expect(await snapshotsOf(withJev)).toEqual([before]);
   });
 
-  it("próximos jogos falharam (#617) → sem JEV (dado indisponível), base sem JEV", async () => {
+  it("próximos jogos falharam (#617) → JEV roda mesmo assim, com próximo jogo unknown", async () => {
     const id = await insertMatch("brasileirao_a", BR[0], BR[1], inHours(10));
-    provider.getUpcomingTeamFixtures.mockRejectedValue(new Error("503"));
+    provider.getUpcomingTeamFixtures.mockRejectedValue(
+      new SportsDataTransientError("503", "api-football", "getUpcomingTeamFixtures", undefined),
+    );
     const summary = await computeMatchModels({
       now: NOW,
       leagues: ["brasileirao_a"],
     });
-    expect(summary.jev).toMatchObject({ queued: 1, dataUnavailable: 1, failed: 0 });
-    expect(judge).not.toHaveBeenCalled();
+    expect(summary.jev).toMatchObject({ queued: 1, applied: 1, dataUnavailable: 0 });
+    expect(judge).toHaveBeenCalledTimes(1);
+    const state = judge.mock.calls[0][0] as { home_team: { next_match: string } };
+    expect(state.home_team.next_match).toBe("unknown");
     const [row] = await snapshotsOf(id);
-    expect(row.jevStatus).toBe("not_attempted");
+    expect(row.jevStatus).toBe("applied");
   });
 
   it("provider responde sem tabela (undefined) → o JEV roda mesmo assim", async () => {

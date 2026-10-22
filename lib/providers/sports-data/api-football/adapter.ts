@@ -304,7 +304,11 @@ async function fetchAndParse<S extends z.ZodTypeAny>(
         endpoint: opts.endpoint,
         params,
         error: "schema_validation_failed",
-        payload_preview: text.slice(0, 2048),
+        // Resposta de jogador (artilheiros, #617) traz nome, nascimento e
+        // nacionalidade: fica fora do log (LGPD, minimização).
+        ...(opts.endpoint.startsWith("/players")
+          ? {}
+          : { payload_preview: text.slice(0, 2048) }),
         zod_issues: parsed.error.issues.slice(0, 10),
       })
     );

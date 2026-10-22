@@ -16,7 +16,7 @@ Issue #617. Proposta: https://claude.ai/artifact/DhAYuVkXK3PsQXsxEa1CKH. Snapsho
 Opcionais pra não quebrar os mocks de teste nem o football-data-org (que não implementa; o caller trata ausência como `unknown`).
 
 - `getUpcomingTeamFixtures?(team, league, next): Promise<UpcomingTeamFixture[]>`
-  - `/fixtures?team={id}&next={n}` (todas as competições), `n = 5`, TTL 6h, cliente compartilhado (8/min).
+  - `/fixtures?team={id}&next={n}` (todas as competições), `n = 5`, TTL 1h (como a forma), cliente compartilhado (8/min).
   - `UpcomingTeamFixture = { kickoffAt; kickoffTimestampMs; competition: string /* league.name cru */; round?: string; status }` — tipo **próprio**, sem mexer no `NormalizedFixture` (a #618 mexe nele em paralelo).
   - Filtra `cancelled`/`postponed`.
 - `getTopScorers?(league): Promise<NormalizedTopScorer[]>`
@@ -66,7 +66,7 @@ Data FIFA (sem fonte confiável; calendário fixo exigiria datas que não temos 
 2. **Cache é por instância** (`inMemoryCache`): o cron não aquece o predict. Artilheiros só quando algum lado tem desfalque e só em liga nacional (nas copas a lista é só da competição). Na análise interativa, cada busca nova tem prazo de 8 s (`JUDGMENT_EXTRAS_BUDGET_MS`); passou, `unknown`.
 3. **Cron:** pior caso ~12 req por jogo; `RUN_DEADLINE_MS` 200 → 180 s.
 4. **Fila do cron:** base `applied` com outra `versions.judgments` vai pro bucket 0.
-5. **Paridade:** no cron, busca extra que falha (não Unsupported) → `data_unavailable`, sem JEV no run; no predict, fail-open.
+5. **Paridade:** fail-open nas duas pontas. (Uma versão anterior pulava o JEV no cron quando a busca falhava; o code review mostrou que o reuso é pelo stateHash exato, então um state com "unknown" não contamina nada, e pular desligaria o JEV inteiro numa queda da API-Football ou com time sem id mapeado.) No predict, os próximos jogos saem antes do passo 3, pra pegar as primeiras vagas do throttle.
 6. **Fora (follow-up):** `check-claims` (afirmação "vai poupar") continua só com a forma; `fetchPreviousLineups` continua só com a forma (jogo não disputado não tem escalação).
 7. **Fase do torneio:** regex testada contra strings reais (Round of 16, Quarter-finals, Semi-finals, Final, Knockout Round Play-offs, 3rd Round, 2nd Qualifying Round, Group A - 3, League Stage - 5, Regular Season - 12).
 8. Data FIFA fica fora.

@@ -44,7 +44,7 @@ function criteriaFor(
       };
     case "rotation_risk":
       return {
-        true: `The schedule of \`${team}\` is congested: \`${team}.rest_before_match\` is short rest (<72h), or \`${team}.next_match\` is within 72h. \`${team}.next_match\` names the competition in parentheses; a next match marked knockout, or in a continental competition (Libertadores, Sudamericana, Champions League), makes rotation more likely.`,
+        true: `The schedule of \`${team}\` is congested: \`${team}.rest_before_match\` is short rest (<72h), or \`${team}.next_match\` is within 72h. \`${team}.next_match\` names the competition in parentheses; a next match marked knockout, or in a continental competition (for example CONMEBOL Libertadores, CONMEBOL Sudamericana, UEFA Champions League, UEFA Europa League), makes rotation more likely.`,
         false: `\`${team}.rest_before_match\` is normal rest, long rest or unknown, and \`${team}.next_match\` is 3 or more days away or unknown.`,
       };
     case "high_stakes":

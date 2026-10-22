@@ -557,6 +557,8 @@ describe("flag analysis_engine = 'llm' (default)", () => {
 
     expect(buildSpy).toHaveBeenCalledTimes(1);
     expect(judge).not.toHaveBeenCalled();
+    // Calendário do JEV (#617) só no motor code_jev.
+    expect(getUpcomingTeamFixtures).not.toHaveBeenCalled();
     expect(anthropicCreate).toHaveBeenCalledTimes(1);
     expect(toolNameOf(anthropicCreate.mock.calls[0])).toBe("submit_prediction");
     // ai_call → prediction → PSO, como antes.
@@ -1429,6 +1431,14 @@ describe("calendário e artilheiros no state JEV (#617)", () => {
     expect(state.away_team.next_match).toBe("unknown");
     expect(state.home_team.absences).toEqual(["player, team top scorer (injured)"]);
     expect(JSON.stringify(state)).not.toContain("Atacante");
+  });
+
+  it("próximos jogos saem antes das buscas do passo 3 (primeiras vagas do throttle)", async () => {
+    await predict({ matchId: "m-1", userId: "u-1", isAdmin: true, marketKey: "match_result" });
+    const firstUpcoming = Math.min(...getUpcomingTeamFixtures.mock.invocationCallOrder);
+    expect(getUpcomingTeamFixtures).toHaveBeenCalledTimes(2);
+    expect(firstUpcoming).toBeLessThan(Math.min(...getTeamForm.mock.invocationCallOrder));
+    expect(firstUpcoming).toBeLessThan(Math.min(...getFixtureByMatch.mock.invocationCallOrder));
   });
 
   it("sem desfalques não busca artilheiros", async () => {
