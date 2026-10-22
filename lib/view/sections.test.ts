@@ -1,13 +1,19 @@
 import { describe, expect, it } from "vitest";
 
 import type {
+  NormalizedFixture,
   NormalizedH2H,
   NormalizedStanding,
   NormalizedStandingTeam,
 } from "@/lib/providers/sports-data/types";
 
 import { getMarketPresentation } from "./markets/presentation";
-import { toH2HView, toStandingsView, withDisplayTeamNames } from "./sections";
+import {
+  toFormView,
+  toH2HView,
+  toStandingsView,
+  withDisplayTeamNames,
+} from "./sections";
 
 // Confronto mínimo (toH2HView só lê score + kickoffTimestampMs + times).
 function fx(homeGoals: number, awayGoals: number, ms: number): NormalizedH2H {
@@ -253,5 +259,37 @@ describe("withDisplayTeamNames", () => {
     expect(out.h2h.summary).toBe("resumo");
     // entrada canônica intacta (W/D/L e o check de afirmações dependem dela)
     expect(form.home.name).toBe("SE Palmeiras");
+  });
+});
+
+describe("toFormView — sem amistosos (#618)", () => {
+  const game = (
+    ms: number,
+    score: [number, number],
+    competition?: NormalizedFixture["competition"],
+  ): NormalizedFixture => ({
+    id: `g${ms}`,
+    league: "brasileirao_a",
+    kickoffAt: new Date(ms).toISOString(),
+    kickoffTimestampMs: ms,
+    homeTeam: "CR Flamengo",
+    awayTeam: "EC Bahia",
+    status: "finished",
+    score: { home: score[0], away: score[1] },
+    ...(competition ? { competition } : {}),
+  });
+
+  it("amistoso não vira V/E/D; o resto (inclusive copa) entra", () => {
+    const view = toFormView({
+      homeTeam: "CR Flamengo",
+      awayTeam: "Fluminense FC",
+      homeForm: [
+        game(3_000, [0, 3], { name: "Friendlies Clubs", friendly: true }),
+        game(2_000, [1, 1], { name: "Copa Do Brasil", friendly: false }),
+        game(1_000, [2, 0]),
+      ],
+      awayForm: [],
+    });
+    expect(view.home.results).toEqual(["D", "W"]);
   });
 });

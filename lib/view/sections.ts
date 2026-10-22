@@ -1,4 +1,5 @@
 import { formatDecimal, leagueToKey } from "@/lib/format";
+import { withoutFriendlies } from "@/lib/providers/sports-data/competition";
 import type {
   NormalizedFixture,
   NormalizedH2H,
@@ -37,7 +38,8 @@ function buildFormRow(
   team: string,
   limit: number,
 ): FormViewRow {
-  const sorted = [...fixtures].sort(
+  // Amistoso de clubes não é forma (#618); o descanso lê a lista crua.
+  const sorted = withoutFriendlies(fixtures).sort(
     (a, b) => b.kickoffTimestampMs - a.kickoffTimestampMs,
   );
   const results: FormResult[] = [];
