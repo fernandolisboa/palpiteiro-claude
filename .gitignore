@@ -49,3 +49,6 @@ pnpm-workspace.yaml
 
 # Sentry Config File
 .env.sentry-build-plugin
+
+# Payloads crus da API-Football gravados por scripts/probe-live-fixture.ts (#600)
+.live-probes/
