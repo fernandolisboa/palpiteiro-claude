@@ -1,9 +1,17 @@
+import type { Metadata } from "next";
 import { redirect } from "next/navigation";
 
 import { auth } from "@/auth";
 import { Wordmark } from "@/components/wordmark";
 
 import { SignInMethods } from "./sign-in-methods";
+
+// Fora do índice (#441): a página só serve pra entrar, e o robots.txt já a bloqueia; o
+// noindex cobre o caso de alguém linkar /signin de fora.
+export const metadata: Metadata = {
+  title: "Entrar",
+  robots: { index: false },
+};
 
 type PageProps = {
   searchParams: Promise<{ error?: string; sent?: string }>;

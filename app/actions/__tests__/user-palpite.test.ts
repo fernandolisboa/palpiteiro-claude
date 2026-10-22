@@ -343,7 +343,7 @@ describe("analyzeUserPalpite — depois da cobrança", () => {
       snapshotWeights: null,
       userEvidence: "user_evidence_v1",
       verdict: "palpite_verdict_v1",
-      extract: "user_palpite_extract_v1",
+      extract: "user_palpite_extract_v2",
       narrate: "user_palpite_narrate_v1",
     });
     // Desfalque não verificável do Palmeiras com papel dito pelo usuário: 0.7 no ataque.

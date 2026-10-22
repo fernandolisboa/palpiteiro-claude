@@ -1,3 +1,5 @@
+import type { Metadata } from "next";
+import { cache } from "react";
 import { notFound, redirect } from "next/navigation";
 
 import { Card } from "@/components/ui/card";
@@ -30,6 +32,18 @@ type PageProps = {
   params: Promise<{ team: string }>;
 };
 
+// Uma leitura dos jogos do time por request, compartilhada entre a metadata e a página.
+const loadTeamMatches = cache(getMatchesByTeam);
+
+// Título da aba com o nome do time (#441), o mesmo nome de exibição do cabeçalho.
+export async function generateMetadata({ params }: PageProps): Promise<Metadata> {
+  const canonical = decodeURIComponent((await params).team);
+  const { past, future } = await loadTeamMatches(canonical);
+  const sample = future[0] ?? past[0];
+  if (!sample) return { title: "Time" };
+  return { title: displayTeamName(canonical, leagueToKey(sample.league)) };
+}
+
 export default async function TeamHistoryPage({ params }: PageProps) {
   const { team } = await params;
   // Route key = nome CANÔNICO do time, URL-encoded (não slug, não id — #407).
@@ -48,7 +62,7 @@ export default async function TeamHistoryPage({ params }: PageProps) {
   // instantes independentes (a diferença de ms é irrelevante pra formatação).
   const now = new Date();
 
-  const { past, future } = await getMatchesByTeam(canonical);
+  const { past, future } = await loadTeamMatches(canonical);
 
   // Time só existe em liga inativa (ou nome inválido) → nenhuma das fatias.
   if (past.length === 0 && future.length === 0) notFound();

@@ -14,6 +14,8 @@ Light and dark, both first-class. Neutral-forward product surface (chroma-0 gray
 
 **Leaf green — `edge-*` (hue 145):** `edge-fg`/`edge-soft`/`edge-border`. **Semantic for the value engine's edge** — reserve for value/edge surfaces; do NOT borrow it for unrelated emphasis.
 
+**Terracotta — `palpite-*` (hue 40):** `palpite-fg` (light 0.52 / dark 0.78), `palpite-strong-fg` (0.45 / 0.82), `palpite-soft` (0.96 / 0.28), `palpite-border` (0.84 / 0.40), all with `.dark` values. **Semantic for the palpite** (the playful headline register of ADR 0030), the counterpart of `edge-*` on the value side: the AI palpite hero and its "Analisar com IA" button, the shared `/p` page (`public-palpite.tsx`) and the landing preview (`palpite-preview.tsx`). Never on value surfaces (odd, edge, stake), and never `edge-*` on palpite surfaces: the two registers stay visually apart. Warm, not loud: soft fills and borders carry the area, `palpite-strong-fg` carries body and link text, `palpite-fg` only the confidence chip text and the solid fill of the one primary action ("Analisar com IA"). No gradients, glow, gold or flashing (PRODUCT.md anti-reference: casino/sportsbook loudness). The OG image (`components/palpites/og-palpite-image.tsx`) renders outside CSS and keeps its own literal neutrals.
+
 **Amber — `warn-*` (hue 55):** `warn-fg`/`warn-soft`/`warn-border`. Cautions, soft warnings (the `Callout variant="warn"`).
 
 **Form W/D/L — `form-{win,loss,draw}-{bg,fg}`:** win green (145), loss red (25), draw neutral. The settled-state language: `components/result-badge.tsx` (`ResultBadge`, the one result seal) and `components/form-dot.tsx` (V/E/D form) — never hand-roll a won/lost/pending badge.

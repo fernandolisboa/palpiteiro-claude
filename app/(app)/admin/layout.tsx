@@ -1,7 +1,11 @@
+import type { Metadata } from "next";
 import type { ReactNode } from "react";
 import { notFound } from "next/navigation";
 
 import { getSession } from "@/lib/auth/session";
+
+// Título de toda a área admin (#441): "Admin · Palpiteiro".
+export const metadata: Metadata = { title: "Admin" };
 
 /**
  * Gate de admin pra toda rota sob `/admin`. O middleware só exige sessão — não

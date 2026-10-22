@@ -984,6 +984,7 @@ async function runPredict(
       engine,
       answers: resolved.answers,
       user: user ? { jev: jev.answers, origins: user.origins } : undefined,
+      userNotes: user?.notes ?? [],
       decision,
       line: marketParams?.line ?? null,
       oddByKey,
@@ -2441,6 +2442,8 @@ function toNarratorDecision(args: {
   // Contexto extra (#565): respostas só do JEV (a força das frases) e os fatores movidos
   // pelo usuário (a origem).
   user?: { jev: JudgmentAnswers | null; origins: UserFactorOrigins };
+  // Contexto extra sem efeito no número (#569), em linhas do código.
+  userNotes: string[];
   decision: GatedDecision;
   line: number | null;
   oddByKey: Record<string, number>;
@@ -2490,6 +2493,7 @@ function toNarratorDecision(args: {
       teams,
       args.user,
     ),
+    ...(args.userNotes.length > 0 ? { userNotes: args.userNotes } : {}),
   };
 }
 

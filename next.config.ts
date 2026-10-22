@@ -37,17 +37,18 @@ const nextConfig: NextConfig = {
         // (não rotas-irmãs), em sincronia com middleware.ts. Validado via o parser
         // do próprio Next (try-to-parse-path).
         //
-        // Hoje não há estáticos fora de `_next/` (sem `public/`, sem favicon de
-        // metadata). Se um ícone estático for adicionado (ex.: `app/favicon.ico`,
-        // `app/icon.png`), estenda o lookahead (ex.: `|favicon\.ico|icon|apple-icon`)
-        // pra ele não cair em `no-cache` em vez de cache longo (ADR 0024).
+        // Ícones, manifest e o card da landing (#440/#442) também são metadata routes
+        // estáticas e saem deste bloco. Os PNGs ficam com o `immutable` que o próprio
+        // ImageResponse manda (o HTML aponta pra eles com `?<hash>` do conteúdo); o
+        // manifest entra no bloco de cache abaixo, junto de robots/sitemap. Se outro
+        // estático for adicionado fora de `_next/`, estenda o lookahead também.
         //
         // `robots\.txt`/`sitemap\.xml` (#468, fecha #439): metadata routes ESTÁTICAS
         // (`○` prerendered) que mudam só no deploy — não são documento HTML e não
         // devem tomar `no-cache`. Excluídas aqui (como `_next/`) e cacheadas no bloco
         // dedicado abaixo. Sem essa exclusão, o crawler re-baixaria as duas a cada hit.
         source:
-          "/:path((?!_next/|api/|monitoring(?:/|$)|p/|robots\\.txt|sitemap\\.xml).*)",
+          "/:path((?!_next/|api/|monitoring(?:/|$)|p/|robots\\.txt|sitemap\\.xml|manifest\\.webmanifest$|icon\\d?$|apple-icon$|opengraph-image$).*)",
         headers: [{ key: "Cache-Control", value: "no-cache, must-revalidate" }],
       },
       {
@@ -57,7 +58,8 @@ const nextConfig: NextConfig = {
         // CDN (serve cacheado por 24h entre deploys). Header ÚNICO de Cache-Control:
         // o bloco no-cache acima agora as exclui, então não há colisão. Verificar em
         // prod: `curl -I https://palpiteiro.live/robots.txt` (e /sitemap.xml).
-        source: "/:path(robots\\.txt|sitemap\\.xml)",
+        // Mesma política pro manifest (#440), que não tem `?<hash>` na URL.
+        source: "/:path(robots\\.txt|sitemap\\.xml|manifest\\.webmanifest)",
         headers: [
           {
             key: "Cache-Control",

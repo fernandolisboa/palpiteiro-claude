@@ -406,12 +406,23 @@ const VALUE_READING = {
   noOdd: "Sem a odd que você pegou, mostramos só a chance pelo modelo e a odd justa.",
 } as const;
 
-export function valueReading(evPerUnit: number | null): string {
-  if (evPerUnit === null) return VALUE_READING.noOdd;
+export type ValueReadingKind = keyof typeof VALUE_READING;
+
+/** O sinal do EV na precisão da tela (1 casa): o veredito que o painel mostra. */
+export function valueReadingKind(evPerUnit: number | null): ValueReadingKind {
+  if (evPerUnit === null) return "noOdd";
   const pct = Number((evPerUnit * 100).toFixed(1));
-  if (pct > 0) return VALUE_READING.positive;
-  if (pct < 0) return VALUE_READING.negative;
-  return VALUE_READING.zero;
+  if (pct > 0) return "positive";
+  if (pct < 0) return "negative";
+  return "zero";
+}
+
+export function valueReading(evPerUnit: number | null): string {
+  return VALUE_READING[valueReadingKind(evPerUnit)];
+}
+
+export function valueReadingText(kind: ValueReadingKind): string {
+  return VALUE_READING[kind];
 }
 
 function stakeText(s: StakeSuggestion | null): string | null {

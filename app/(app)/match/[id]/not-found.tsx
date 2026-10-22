@@ -17,8 +17,8 @@ export default function MatchNotFound() {
               Jogo não encontrado
             </span>
             <span className="max-w-[280px] text-body-sm text-muted-foreground tracking-tight">
-              Este id não corresponde a nenhum jogo das próximas 48h. Ele pode ter sido
-              removido, adiado ou nunca existiu.
+              Não achamos esse jogo. Ele pode ter sido removido ou o link está
+              incompleto.
             </span>
             <Button asChild size="sm" variant="secondary" className="mt-2">
               <Link href="/jogos">

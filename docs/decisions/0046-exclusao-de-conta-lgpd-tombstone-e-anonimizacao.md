@@ -23,6 +23,11 @@ prometido na `/privacidade` (§8) com prazo de 15 dias.
 > e os prompts de análise (narrador) levam só afirmações tipadas montadas pelo código, sem
 > texto livre nem nome de jogador, então "Onde NÃO há PII" continua valendo pra eles.
 
+> **Emenda (#569, ADR 0055, 2026-10-21):** a extração passa a `user_palpite_extract_v2`
+> (mesmo prefixo, a linha 1 segue cobrindo). O subtipo novo (`otherKind`) é enum, e as
+> notas que o narrador da análise recebe são frases do código (enum + nome do time): nada
+> muda em "Onde NÃO há PII".
+
 > **Escopo:** estratégia de eliminação/anonimização quando o titular pede pra excluir a
 > conta; o que é apagado, o que é anonimizado e por quê; spec da feature (`/perfil` +
 > admin) e dos testes. **Fora de escopo:** exportação (portabilidade, art. 18, V — atendida
@@ -92,7 +97,7 @@ Num único `db.batch` (atômico), na ordem:
 
 | # | Statement | Por quê |
 |---|---|---|
-| 1 | `UPDATE ai_calls SET input_payload='{"redacted":"account_deleted"}', output_payload='{"redacted":"account_deleted"}', error_message=NULL WHERE user_id=$1 AND (prompt_version LIKE 'bet_parse%' OR prompt_version LIKE 'user_palpite%')` | apaga o texto livre logado (PII potencial) sem quebrar FKs nem o custo agregado (tokens/custo/latência ficam). Emenda #564: inclui as chamadas do "Seu palpite" (motivo e paráfrases) |
+| 1 | `UPDATE ai_calls SET input_payload='{"redacted":"account_deleted"}', output_payload='{"redacted":"account_deleted"}', error_message=NULL WHERE user_id=$1 AND (prompt_version LIKE 'bet_parse%' OR prompt_version LIKE 'user_palpite%' OR prompt_version LIKE 'bet_slip_explain%')` | apaga o texto livre logado (PII potencial) sem quebrar FKs nem o custo agregado (tokens/custo/latência ficam). Emenda #564: inclui as chamadas do "Seu palpite" (motivo e paráfrases). Emenda #562 (ADR 0063): inclui o "Explicar com IA" (seleções, odds e stakes) |
 | 2 | `DELETE FROM bet_slips WHERE user_id=$1` (cascata: `bet_legs`, `bet_leg_outcomes`) | apostas registradas são **comportamento de aposta do titular**, não saída do modelo — não há finalidade que justifique manter (art. 16) |
 | 2b | `DELETE FROM friend_pools WHERE user_id=$1` (cascata: `friend_pool_entries`) | bolões entre amigos (ADR 0054): guardam **nomes de terceiros** digitados pelo titular, sem finalidade fora da conta dele |
 | 2c | `DELETE FROM user_palpite_analyses WHERE user_id=$1` (emenda #564) | o motivo livre e o palpite do titular: mesmo racional do `bet_slips` (apagar, não anular `reason_text`; Alternativa 4) |
@@ -169,7 +174,8 @@ UPDATE ai_calls SET input_payload = '{"redacted":"account_deleted"}',
                     output_payload = '{"redacted":"account_deleted"}',
                     error_message = NULL
  WHERE user_id = :uid
-   AND (prompt_version LIKE 'bet_parse%' OR prompt_version LIKE 'user_palpite%');
+   AND (prompt_version LIKE 'bet_parse%' OR prompt_version LIKE 'user_palpite%'
+        OR prompt_version LIKE 'bet_slip_explain%');
 DELETE FROM bet_slips WHERE user_id = :uid;
 DELETE FROM friend_pools WHERE user_id = :uid;  -- ADR 0054: nomes dos amigos
 DELETE FROM user_palpite_analyses WHERE user_id = :uid;

@@ -1,3 +1,4 @@
+import type { Metadata } from "next";
 import Link from "next/link";
 import { redirect } from "next/navigation";
 import { Users } from "lucide-react";
@@ -34,6 +35,8 @@ import { cn } from "@/lib/utils";
 import { displayMatchTeams } from "@/lib/view/team";
 
 export const dynamic = "force-dynamic";
+
+export const metadata: Metadata = { title: "Bolão" };
 
 // Bolão entre amigos (#567, ADR 0054): lista dos bolões do usuário + criar um novo.
 // Privado: userId sempre do auth().

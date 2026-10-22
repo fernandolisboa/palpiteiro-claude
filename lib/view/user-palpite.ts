@@ -6,7 +6,7 @@ import {
   effectLabel,
   modelLabel,
   STATUS_LABEL,
-  TOPIC_LABEL,
+  claimTopicLabel,
 } from "@/lib/user-palpite/labels";
 import { lambdasFor } from "@/lib/user-palpite/lambdas";
 import type { PalpiteModelBase } from "@/lib/user-palpite/model-base";
@@ -255,7 +255,7 @@ export function toUserPalpiteAnalysisView(
     return {
       index: c.index,
       text: c.text,
-      topicLabel: TOPIC_LABEL[c.topic],
+      topicLabel: claimTopicLabel(c),
       status: c.status,
       statusLabel: STATUS_LABEL[c.status],
       evidence: c.evidence,

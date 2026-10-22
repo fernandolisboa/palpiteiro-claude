@@ -1,3 +1,4 @@
+import type { Metadata } from "next";
 import { notFound, redirect } from "next/navigation";
 
 import { PredictionDetail } from "@/components/dashboard/prediction-detail";
@@ -9,6 +10,8 @@ import { getPredictionDetailForUser } from "@/lib/db/queries/dashboard";
 import { toPredictionDetailView } from "@/lib/view/dashboard";
 
 export const dynamic = "force-dynamic";
+
+export const metadata: Metadata = { title: "Análise" };
 
 type PageProps = {
   params: Promise<{ predictionId: string }>;

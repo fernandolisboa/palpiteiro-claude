@@ -1,3 +1,4 @@
+import type { Metadata } from "next";
 import Link from "next/link";
 import { redirect } from "next/navigation";
 import { Inbox } from "lucide-react";
@@ -33,6 +34,8 @@ import { paginate } from "@/lib/view/paginate";
 const TABLE_PAGE_SIZE = 25;
 
 export const dynamic = "force-dynamic";
+
+export const metadata: Metadata = { title: "Desempenho" };
 
 type PageProps = {
   searchParams: Promise<{

@@ -3,6 +3,7 @@ import { createRoot, type Root } from "react-dom/client";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 
 vi.mock("@/app/actions/bet-slip", () => ({ registerBetSlip: vi.fn() }));
+vi.mock("@/app/actions/bet-slip-explain", () => ({ explainBetSlip: vi.fn() }));
 vi.mock("@/app/actions/bets", () => ({ parseBet: vi.fn() }));
 
 import { registerBetSlip } from "@/app/actions/bet-slip";
@@ -136,6 +137,8 @@ describe("BetSlipProvider", () => {
         stakeRuleNote: "Stake sugerido pelas bandas.",
         modelCaveat: "Leia o edge como opinião do modelo.",
       },
+      slipIds: ["slip-1"],
+      explainable: false,
     });
     await mountPage();
     await click(cell(/^Empate/));

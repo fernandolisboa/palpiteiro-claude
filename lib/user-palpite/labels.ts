@@ -2,7 +2,7 @@ import type { JudgmentQuestionId, TeamSide } from "@/lib/ai/judgments/types";
 import type { DixonColesFallbackReason, ModelScorelineSource } from "@/lib/quant/match-model";
 
 import type { TeamNames } from "./reading";
-import type { ClaimStatus, ClaimTopic, StoredContextClaim } from "./types";
+import type { ClaimStatus, ClaimTopic, OtherKind, StoredContextClaim } from "./types";
 
 // Rótulos em PT-BR do "Seu palpite" (#564). PURO e seguro no cliente: a tela, o
 // narrador e o template usam os MESMOS textos.
@@ -22,6 +22,64 @@ export const TOPIC_LABEL: Record<ClaimTopic, string> = {
   other: "outro",
 };
 
+// Rótulo curto do subtipo de "other" (#569), no lugar de "outro" na tela.
+export const OTHER_KIND_LABEL: Record<OtherKind, string> = {
+  coach_change: "troca de técnico",
+  derby: "clássico",
+  weather: "clima",
+  travel_fatigue: "viagem",
+  crowd: "torcida",
+  motivation: "motivação",
+};
+
+type TypedClaim = Pick<StoredContextClaim, "team" | "topic" | "otherKind">;
+
+/** O tópico na tela: o subtipo quando a afirmação "other" tem um. */
+export function claimTopicLabel(c: Pick<TypedClaim, "topic" | "otherKind">): string {
+  return c.topic === "other" && c.otherKind ? OTHER_KIND_LABEL[c.otherKind] : TOPIC_LABEL[c.topic];
+}
+
+/**
+ * A afirmação "other" com subtipo em uma frase montada SÓ pelo código (#569): enum +
+ * nome do time, nunca a paráfrase. Clássico e clima são do jogo, não de um time.
+ */
+export function otherKindLine(kind: OtherKind, team: TypedClaim["team"], teams: TeamNames): string {
+  const name = team === "home" ? teams.home : teams.away;
+  const both = team === "both";
+  switch (kind) {
+    case "coach_change":
+      return both ? "troca de técnico nos dois times" : `troca de técnico no ${name}`;
+    case "derby":
+      return "clássico entre os dois times";
+    case "weather":
+      return "clima ou gramado que pode pesar no jogo";
+    case "travel_fatigue":
+      return both ? "desgaste de viagem dos dois times" : `desgaste de viagem do ${name}`;
+    case "crowd":
+      return both ? "torcida como fator no jogo" : `torcida como fator pro ${name}`;
+    case "motivation":
+      return both ? "motivação dos dois times como fator" : `motivação do ${name} como fator`;
+  }
+}
+
+/** Tem afirmação que vira nota pro narrador da análise (contextNotes não vazio). */
+export function hasContextNote(claims: readonly TypedClaim[]): boolean {
+  return claims.some((c) => c.topic === "other" && c.otherKind !== undefined);
+}
+
+/**
+ * As notas do contexto extra que o narrador `code_jev` recebe (#569): uma por
+ * afirmação "other" com subtipo, sem repetir. Não conferidas e sem efeito no número.
+ */
+export function contextNotes(claims: readonly TypedClaim[], teams: TeamNames): string[] {
+  const lines = claims.flatMap((c) =>
+    c.topic === "other" && c.otherKind
+      ? [otherKindLine(c.otherKind, c.team, teams)]
+      : [],
+  );
+  return [...new Set(lines)];
+}
+
 const ROLE_PT: Record<NonNullable<StoredContextClaim["role"]>, string> = {
   attack: "no ataque",
   defense: "na defesa",
@@ -34,7 +92,10 @@ const ROLE_PT: Record<NonNullable<StoredContextClaim["role"]>, string> = {
  * jogador. É o texto que a tela mostra no "o que você acrescentou".
  */
 export function claimDescription(
-  c: Pick<StoredContextClaim, "team" | "topic" | "role" | "direction" | "scope" | "playersCount">,
+  c: Pick<
+    StoredContextClaim,
+    "team" | "topic" | "role" | "direction" | "scope" | "playersCount" | "otherKind"
+  >,
   teams: TeamNames,
 ): string {
   const team =
@@ -58,6 +119,7 @@ export function claimDescription(
     case "stakes":
       return `jogo ${c.direction === "bad" ? "sem peso" : "decisivo"} ${forTeam}`;
     case "other":
+      if (c.otherKind) return otherKindLine(c.otherKind, c.team, teams);
       return c.team === "both" ? "outra informação sobre o jogo" : `outra informação sobre o ${team}`;
   }
 }

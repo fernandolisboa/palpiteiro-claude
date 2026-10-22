@@ -15,6 +15,7 @@ import {
   combineAnswers,
   evidenceFromClaims,
 } from "./evidence";
+import { contextNotes, hasContextNote } from "./labels";
 import type { TeamNames } from "./reading";
 import {
   PredictionUserContextSchema,
@@ -67,6 +68,9 @@ export type AppliedUserContext = {
   origins: UserFactorOrigins;
   // Alguma afirmação moveu um fator (tag `user=` no modelVersion).
   moved: boolean;
+  // Linhas montadas pelo código pras afirmações "other" com subtipo (#569): vão ao
+  // narrador como informação da pessoa, sem efeito no número.
+  notes: string[];
   stored: PredictionUserContext;
 };
 
@@ -108,6 +112,7 @@ export function applyUserClaims(args: {
     evidence,
     origins,
     moved: Object.keys(origins).length > 0,
+    notes: contextNotes(checked, args.teams),
     stored: {
       claims: checked.map(toStoredContextClaim),
       evidence,
@@ -166,6 +171,8 @@ export const CONTEXT_APPLIED_NOTICE =
   'Conferimos o seu contexto extra e ele entrou na análise. Veja o que entrou em "Ler análise completa".';
 export const CONTEXT_NO_EFFECT_NOTICE =
   'Conferimos o seu contexto extra, mas ele não mudou a análise: o que você contou foi contradito pelos nossos dados, o modelo já considerava, ou não é um tipo que a gente confere. Veja em "Ler análise completa".';
+export const CONTEXT_NOTED_NOTICE =
+  'Conferimos o seu contexto extra. Ele não mudou os números; o que você contou e a gente não confere foi passado à análise como informação sua, não conferida. Veja em "Ler análise completa".';
 export const CONTEXT_EMPTY_NOTICE =
   "Não achamos no seu contexto extra nenhuma afirmação de fato pra conferir; a análise seguiu sem ele.";
 export const CONTEXT_FAILED_NOTICE =
@@ -201,6 +208,8 @@ export function analysisContextNotice(
             j.userContext.claims.some((c) => claimEffect(c, j.answers).moved.length > 0),
           )
         ? CONTEXT_APPLIED_NOTICE
-        : CONTEXT_NO_EFFECT_NOTICE;
+        : withContext.some((j) => hasContextNote(j.userContext.claims))
+          ? CONTEXT_NOTED_NOTICE
+          : CONTEXT_NO_EFFECT_NOTICE;
   return [base, ...new Set(extraction.warnings)].join(" ");
 }

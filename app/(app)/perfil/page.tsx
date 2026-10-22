@@ -1,3 +1,4 @@
+import type { Metadata } from "next";
 import Link from "next/link";
 import { redirect } from "next/navigation";
 
@@ -18,6 +19,8 @@ import { PreferredModelForm } from "./preferred-model-form";
 import { ProfileForm } from "./profile-form";
 
 export const dynamic = "force-dynamic";
+
+export const metadata: Metadata = { title: "Perfil" };
 
 export default async function PerfilPage() {
   // O middleware já exige sessão; o guard é defensivo e estreita o tipo.
