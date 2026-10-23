@@ -54,7 +54,7 @@ export default async function AdminAiModelsPage() {
         />
         <AdminSubTabs section="/admin/ia" current="/admin/ia" />
 
-        <section className="pb-8">
+        <section id="versoes-de-modelo" className="scroll-mt-20 pb-8">
           <h2 className="pb-3 font-mono text-meta uppercase tracking-label text-muted-foreground">
             versões de modelo
           </h2>
@@ -63,14 +63,14 @@ export default async function AdminAiModelsPage() {
           <ModelVersionsPanel enabled={autoVersions} data={versions} />
         </section>
 
-        <section>
+        <section id="padrao-global" className="scroll-mt-20">
           <h2 className="pb-4 font-mono text-meta uppercase tracking-label text-muted-foreground">
             padrão global
           </h2>
           <DefaultModelForm current={current} inUsePrices={inUsePrices} />
         </section>
 
-        <section className="pt-10">
+        <section id="parametros-de-geracao" className="mt-10 scroll-mt-20">
           <h2 className="pb-4 font-mono text-meta uppercase tracking-label text-muted-foreground">
             parâmetros de geração
           </h2>

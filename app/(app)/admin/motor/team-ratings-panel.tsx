@@ -33,7 +33,7 @@ export async function TeamRatingsPanel({ enabled }: { enabled: boolean }) {
   const now = new Date();
 
   return (
-    <section className="pt-10">
+    <section id="dixon-coles" className="mt-10 scroll-mt-20">
       <div className="flex items-start justify-between gap-4 pb-3">
         <div className="flex flex-col gap-1">
           <h2 className="text-meta tracking-label text-muted-foreground font-mono uppercase">
