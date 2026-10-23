@@ -58,6 +58,59 @@ export function computeModelBreakEvenOdd(modelProbPct: number): number {
   return 100 / modelProbPct;
 }
 
+// Odd mínima do motor em código: a menor odd da seleção `key` em que o edge contra a
+// implícita DE-VIGADA (proporcional, mercado completo, ADR 0018) ainda fica ≥ piso,
+// com as outras odds paradas. É o mesmo critério do gate, então a odd da análise de
+// uma recomendação nunca fica abaixo dela. `100 / (P − piso)` comparava P com 1/odd
+// CRU e pedia odd maior que a do próprio gate (dupla chance 34,7% → 3,37 numa
+// recomendação a 3,32 com edge de 5,4 pp).
+// Com r = 1/odd, S = Σ 1/odd das outras e T = impliedSumTarget, a implícita é
+// T·r/(r+S); igualar a q = (P − piso)/100 dá odd = (T − q)/(q·S).
+// 1 quando qualquer odd > 1 já passa no piso; null quando falta odd ou a conta não
+// fecha (P − piso ≥ alvo).
+export function computeMinOddForEdgeFloor(input: {
+  oddByKey: Readonly<Record<string, number | null | undefined>>;
+  selectionKeys: readonly string[];
+  key: string;
+  modelProbPct: number;
+  minEdgePp: number;
+  impliedSumTarget?: number;
+}): number | null {
+  const target = input.impliedSumTarget ?? 1;
+  const q = (input.modelProbPct - input.minEdgePp) / 100;
+  if (!Number.isFinite(q) || q >= target) return null;
+  if (!input.selectionKeys.includes(input.key)) return null;
+  let others = 0;
+  for (const k of input.selectionKeys) {
+    const odd = input.oddByKey[k];
+    if (odd == null || !Number.isFinite(odd) || odd <= 1) return null;
+    if (k !== input.key) others += 1 / odd;
+  }
+  if (others <= 0) return null;
+  if (q <= 0) return 1;
+  const odd = (target - q) / (q * others);
+  return odd > 1 ? odd : 1;
+}
+
+// "Vale a pena se odd ≥" do motor em código: a odd do piso de edge, com teto na odd da
+// análise (o gate aprova com o edge arredondado a 2 casas, que pode ficar um fio abaixo
+// do piso exato), e nunca abaixo da odd justa 100/P. Com as outras odds paradas, a
+// implícita de-vigada de um favorito quase não se mexe quando a odd dele cai, então
+// só o piso de edge poderia apontar uma odd de retorno esperado negativo. null quando
+// a conta não fecha (odd ausente, prob ≤ 0).
+export function computeMinimumOdd(
+  input: Parameters<typeof computeMinOddForEdgeFloor>[0] & {
+    oddAtRec: number | null;
+  },
+): number | null {
+  if (!Number.isFinite(input.modelProbPct) || input.modelProbPct <= 0) return null;
+  const edgeMin = computeMinOddForEdgeFloor(input);
+  if (edgeMin === null) return null;
+  const capped =
+    input.oddAtRec !== null ? Math.min(edgeMin, input.oddAtRec) : edgeMin;
+  return Math.max(capped, computeModelBreakEvenOdd(Math.min(input.modelProbPct, 100)));
+}
+
 // Edge por seleção em pontos percentuais (ADR 0018, decisão 2): model − implied.
 // A implícita é a NORMALIZADA pelo overround do mercado completo (não a crua).
 // NÃO existe edge_oposto = −edge fora de N=2 — cada seleção tem o seu.
