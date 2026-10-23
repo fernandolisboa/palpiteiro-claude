@@ -14,14 +14,18 @@ import { navLinkVariants } from "@/components/nav-link";
 import {
   activeItemHref,
   ariaCurrentFor,
+  BETS_NAV,
+  GAMES_NAV,
   isActivePath,
   navGroups,
-  PRIMARY_NAV,
   type NavGroup,
 } from "@/lib/nav/menu";
 import { cn } from "@/lib/utils";
 
-/** Barra do computador: telas de uso soltas, ajuda e admin como dropdown. */
+/**
+ * Barra do computador: jogos solto; "apostas" (suas apostas, bolão, desempenho),
+ * ajuda e admin como dropdown (#633).
+ */
 export function DesktopNav({
   isAdmin,
   className,
@@ -37,18 +41,18 @@ export function DesktopNav({
       className={cn("items-center gap-5", className)}
       data-tour="menu"
     >
-      {PRIMARY_NAV.map(({ href, label }) => (
-        <Link
-          key={href}
-          href={href}
-          aria-current={
-            isActivePath(pathname, href) ? ariaCurrentFor(pathname, href) : undefined
-          }
-          className={navLinkVariants({ variant: "inline" })}
-        >
-          {label}
-        </Link>
-      ))}
+      <Link
+        href={GAMES_NAV.href}
+        aria-current={
+          isActivePath(pathname, GAMES_NAV.href)
+            ? ariaCurrentFor(pathname, GAMES_NAV.href)
+            : undefined
+        }
+        className={navLinkVariants({ variant: "inline" })}
+      >
+        {GAMES_NAV.label}
+      </Link>
+      <NavGroupMenu group={BETS_NAV} pathname={pathname} />
       <span aria-hidden="true" className="h-4 w-px bg-border-subtle" />
       {navGroups(isAdmin).map((group) => (
         <NavGroupMenu key={group.id} group={group} pathname={pathname} />

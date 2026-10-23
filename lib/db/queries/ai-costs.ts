@@ -123,7 +123,7 @@ export async function getCostByDay(
  * desde #555 (ADR 0052) `aiCalls.userId` é nullable pras chamadas de sistema (JEV do
  * cron da base do modelo); um innerJoin as perderia em silêncio e o gasto por usuário
  * deixaria de fechar com o total. Essas rows voltam agrupadas numa linha com
- * userId/email null ("sistema" no /admin/costs).
+ * userId/email null ("sistema" no /admin/ia/custos).
  */
 export async function getCostByUser(): Promise<CostByUser[]> {
   const rows = await db

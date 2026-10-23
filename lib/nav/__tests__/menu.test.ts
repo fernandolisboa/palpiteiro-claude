@@ -4,6 +4,7 @@ import {
   activeItemHref,
   ADMIN_NAV,
   ariaCurrentFor,
+  BETS_NAV,
   HELP_NAV,
   isActivePath,
   navGroups,
@@ -18,6 +19,24 @@ describe("menu do app", () => {
       ["bolão", "/bolao"],
       ["desempenho", "/dashboard"],
     ]);
+  });
+
+  it("no computador, suas apostas, bolão e desempenho formam o grupo \"apostas\" (#633)", () => {
+    expect(BETS_NAV.label).toBe("apostas");
+    expect(BETS_NAV.items.map((i) => i.href)).toEqual(["/apostas", "/bolao", "/dashboard"]);
+    expect(activeItemHref("/bolao/abc", BETS_NAV.items)).toBe("/bolao");
+  });
+
+  it("admin: visão geral + assistente de IA, motor e calibração, ligas e odds, usuários", () => {
+    expect(ADMIN_NAV.items.map((i) => [i.label, i.href])).toEqual([
+      ["visão geral", "/admin"],
+      ["assistente de IA", "/admin/ia"],
+      ["motor e calibração", "/admin/motor"],
+      ["ligas e odds", "/admin/leagues"],
+      ["usuários", "/admin/users"],
+    ]);
+    expect(activeItemHref("/admin/ia/custos", ADMIN_NAV.items)).toBe("/admin/ia");
+    expect(activeItemHref("/admin/motor/calibracao", ADMIN_NAV.items)).toBe("/admin/motor");
   });
 
   it("admin só aparece pra admin; ajuda pra todos", () => {

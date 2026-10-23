@@ -1,6 +1,7 @@
 import { withSentryConfig } from "@sentry/nextjs";
 import type { NextConfig } from "next";
 
+import { LEGACY_ADMIN_REDIRECTS } from "./lib/nav/legacy-redirects";
 import { CSP_HEADER, cspForEnv, PUBLIC_HTML_SOURCES } from "./lib/security/csp";
 
 const nextConfig: NextConfig = {
@@ -15,6 +16,15 @@ const nextConfig: NextConfig = {
   env: {
     NEXT_PUBLIC_VERCEL_GIT_COMMIT_SHA:
       process.env.VERCEL_GIT_COMMIT_SHA ?? "dev",
+  },
+  // Admin reorganizado (#633): os endereços antigos seguem abrindo. Temporário (307)
+  // de propósito: se a estrutura mudar de novo, o navegador não fica preso no destino.
+  async redirects() {
+    return LEGACY_ADMIN_REDIRECTS.map(({ source, destination }) => ({
+      source,
+      destination,
+      permanent: false,
+    }));
   },
   async headers() {
     const publicCsp = cspForEnv();

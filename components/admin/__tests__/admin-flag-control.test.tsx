@@ -7,7 +7,7 @@ vi.mock("@/app/actions/ai-config", () => ({
   updateAdminFlag: vi.fn(async () => ({ ok: true })),
 }));
 
-import { AdminFlagControl } from "@/app/(app)/admin/settings/admin-flag-control";
+import { AdminFlagControl } from "@/components/admin/admin-flag-control";
 import { getAdminFlagDef } from "@/lib/config/admin-flags";
 
 // Regressão: o React 19 reseta o <form> depois da action e o <select> voltava pro

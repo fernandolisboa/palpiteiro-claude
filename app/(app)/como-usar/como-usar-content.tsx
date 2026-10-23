@@ -130,10 +130,13 @@ export function ComoUsarContent() {
         </p>
         <p>
           Depois do login você cai em <Strong>Próximos jogos</Strong>, a tela
-          principal. O menu fica sempre no topo da tela (no celular, no ícone ☰):{" "}
+          principal. O menu fica sempre à vista: no computador, no topo da tela; no
+          celular, nas abas da parte de baixo.{" "}
           <Ui>jogos</Ui>, <Ui>suas apostas</Ui>, <Ui>bolão</Ui> e <Ui>desempenho</Ui> são
           as telas do dia a dia (no <Ui>bolão</Ui> você anota a aposta de cada amigo
-          num jogo e o app diz quem ganhou); <Ui>ajuda</Ui> reúne <Ui>como usar</Ui>, <Ui>como funciona</Ui> e{" "}
+          num jogo e o app diz quem ganhou). No computador, as três últimas ficam
+          juntas no menu <Ui>apostas</Ui>. <Ui>Ajuda</Ui> (no celular, em{" "}
+          <Ui>mais</Ui>) reúne <Ui>como usar</Ui>, <Ui>como funciona</Ui> e{" "}
           <Ui>rever o tour</Ui>. O <Ui>perfil</Ui> e o <Ui>sair</Ui> ficam no seu
           avatar, no canto direito.
         </p>
@@ -454,7 +457,8 @@ export function ComoUsarContent() {
           <Link href={TOUR_RESTART_HREF} className={LINK}>
             Fazer o tour
           </Link>{" "}
-          ou em <Ui>ajuda</Ui> → <Ui>rever o tour</Ui>, no menu.
+          ou em <Ui>ajuda</Ui> → <Ui>rever o tour</Ui>, no menu (no celular, em{" "}
+          <Ui>mais</Ui>).
         </p>
       </Section>
     </>

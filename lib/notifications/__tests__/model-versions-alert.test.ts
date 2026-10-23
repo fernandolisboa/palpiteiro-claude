@@ -44,7 +44,7 @@ describe("buildModelVersionsAlert (ADR 0062, S1)", () => {
     expect(subject).toBe("[Palpiteiro] Modelos: versão nova em uso: claude-sonnet-5-6");
     expect(text).toContain("claude-sonnet-5-6 (fallback: claude-sonnet-5-5)");
     expect(text).toContain("Preço ESTIMADO");
-    expect(text).toContain("Confirme o preço oficial em /admin/settings");
+    expect(text).toContain("Confirme o preço oficial em /admin/ia");
   });
 
   it("reprovada e conferida fora da API entram no mesmo e-mail", () => {

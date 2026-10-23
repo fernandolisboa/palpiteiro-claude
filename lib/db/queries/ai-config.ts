@@ -337,7 +337,7 @@ export async function getEnableLineupRecheck(): Promise<boolean> {
 /**
  * Motor de análise (ADR 0041 §5, #511): 'llm' (cartucho de mercado decide — caminho
  * de hoje) ou 'code_jev' (código + julgamentos JEV decidem, LLM narra). Sem row ou
- * valor persistido inválido → 'llm'. Editado em /admin/settings via registry
+ * valor persistido inválido → 'llm'. Editado em /admin/motor via registry
  * (lib/config/admin-flags.ts, entrada enum `analysisEngine`).
  */
 export async function getAnalysisEngine(): Promise<AnalysisEngine> {
@@ -351,7 +351,7 @@ export async function getAnalysisEngine(): Promise<AnalysisEngine> {
 }
 
 /**
- * Valores atuais de TODAS as flags do registry (#514) pro /admin/settings. Lê a
+ * Valores atuais de TODAS as flags do registry (#514) pro /admin/ia e /admin/motor. Lê a
  * row uma vez; sem row → defaults do registry; valor persistido inválido → default
  * da entrada. Só pra exibição/edição: o runtime continua lendo pelos getters acima.
  */

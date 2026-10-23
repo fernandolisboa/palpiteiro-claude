@@ -1,5 +1,6 @@
 import Link from "next/link";
 
+import { AdminSubTabs } from "@/components/admin/admin-sub-tabs";
 import { PageHeading } from "@/components/admin/page-heading";
 import { EmptyState } from "@/components/empty-state";
 import {
@@ -32,7 +33,7 @@ import { getMarketCalibrationRows } from "@/lib/db/queries/calibration";
 
 export const dynamic = "force-dynamic";
 
-// Gateado por app/admin/layout.tsx (role === "admin" → notFound pra outros).
+// Gateado por app/(app)/admin/layout.tsx (role === "admin" → notFound pra outros).
 // Harness de calibração (Report 03 rec. 3, ADR 0037): mede o P(seleção) do modelo
 // contra os resultados liquidados, com o mercado no-vig de benchmark. Substituto vivo
 // dos backtests desescopados. Recortes na URL:
@@ -59,13 +60,16 @@ type PageProps = {
   }>;
 };
 
+// Motor e calibração · calibração (#633; antes /admin/calibration).
+const CALIBRATION_PATH = "/admin/motor/calibracao";
+
 // Link do recorte, omitindo os defaults (over/under, todos os motores).
 function calibrationHref(market: CalibratedMarketKey, engine: EngineSegment) {
   const params = new URLSearchParams();
   if (market !== "over_under") params.set("market", market);
   if (engine !== "all") params.set("engine", engine);
   const qs = params.toString();
-  return qs ? `/admin/calibration?${qs}` : "/admin/calibration";
+  return qs ? `${CALIBRATION_PATH}?${qs}` : CALIBRATION_PATH;
 }
 
 // Rótulo da faixa de probabilidade dos bins: no binário é o lado positivo; no N-ário
@@ -103,10 +107,10 @@ export default async function AdminCalibrationPage({ searchParams }: PageProps) 
     <div className="bg-background text-foreground">
       <div className="mx-auto w-full max-w-reading px-6 py-8">
         <PageHeading
-          backLink={{ href: "/admin", label: "admin" }}
-          title="Calibração"
-          subtitle="P(seleção) do modelo vs resultados · benchmark = mercado no-vig"
+          title="Motor e calibração"
+          subtitle="calibração · P(seleção) do modelo vs resultados · benchmark = mercado no-vig"
         />
+        <AdminSubTabs section="/admin/motor" current={CALIBRATION_PATH} />
 
         <GateSection gate={gate} />
 

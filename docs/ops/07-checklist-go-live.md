@@ -148,7 +148,7 @@ Rode estes **depois** do deploy de produção com o domínio custom e o Resend j
 ### 2. Analisar um jogo (rate limit + custo logado)
 
 - [ ] Disparar uma análise de um jogo na UI; recomendação (1X2 ou over/under multi-linha) renderiza.
-- [ ] O custo da chamada aparece em `ai_calls` (visível em `/admin/costs`).
+- [ ] O custo da chamada aparece em `ai_calls` (visível em `/admin/ia/custos`).
 - [ ] O **rate limit por usuário/dia** aplica (depois de `RATE_LIMIT_ANALYSES_PER_DAY` análises, novas chamadas são barradas **antes** de tocar a Anthropic).
 
 > ⚠️ **Custo real:** cada análise gasta tokens (dinheiro de verdade). No smoke test, rode o **mínimo** necessário — uma análise basta pra validar o caminho feliz.
@@ -208,7 +208,7 @@ A Fase 2 está **pronta** quando:
 
 - [ ] **≥3 amigos convidados** (whitelist env + DB) conseguem **logar por magic link** (e-mail chega na caixa deles, fora do modo teste do Resend).
 - [ ] Esses amigos **veem recomendações** (análise: recomendação de seleção de edge ou `pass`) e o **dashboard/Yield** deles.
-- [ ] Você (admin) consegue convidar/revogar, ver custos (`/admin/costs`) e aplicar override de settlement.
+- [ ] Você (admin) consegue convidar/revogar, ver custos (`/admin/ia/custos`) e aplicar override de settlement.
 - [ ] Os crons rodam autenticados (settlement diário + spend-alert opt-in ligado).
 - [ ] Páginas `/termos` e `/privacidade` no ar + footer 18+/jogo responsável.
 

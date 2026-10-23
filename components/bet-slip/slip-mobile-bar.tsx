@@ -19,12 +19,13 @@ import {
 // O par lg:hidden / hidden lg:block da página mora aqui e no SlipAside, não em page.tsx
 // (single-tree.test.ts): é o mesmo painel, com um estado só, em dois lugares.
 
-// Altura da barra = borda (1px) + pt-3 + botão h-9 + pb (12px ou a área segura do
-// aparelho, o que for maior). O espaçador abaixo usa a MESMA conta.
+// Altura da barra = borda (1px) + pt-3 + botão h-9 + pb (12px ou a área segura que
+// sobra, o que for maior). O espaçador abaixo usa a MESMA conta. Fica logo acima da
+// barra de abas do celular (#633): as variáveis moram no globals.css.
 const BAR =
-  "fixed inset-x-0 bottom-0 z-40 border-t border-border bg-background/95 px-5 pt-3 pb-[max(0.75rem,env(safe-area-inset-bottom))] backdrop-blur supports-[backdrop-filter]:bg-background/80 lg:hidden";
+  "fixed inset-x-0 bottom-[var(--mobile-tabbar-h)] z-40 border-t border-border bg-background/95 px-5 pt-3 pb-[max(0.75rem,var(--mobile-bottom-safe))] backdrop-blur supports-[backdrop-filter]:bg-background/80 lg:hidden";
 const BAR_CLEARANCE =
-  "h-[calc(3.0625rem+max(0.75rem,env(safe-area-inset-bottom)))] lg:hidden";
+  "h-[calc(3.0625rem+max(0.75rem,var(--mobile-bottom-safe)))] lg:hidden";
 
 const DESKTOP_QUERY = "(min-width: 1024px)";
 

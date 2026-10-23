@@ -1,5 +1,5 @@
 // Parâmetros de GERAÇÃO da análise (distintos do modelo em si): calibráveis em
-// /admin/settings e persistidos em `ai_config` (ADR 0008, emenda 2):
+// /admin/ia e persistidos em `ai_config` (ADR 0008, emenda 2):
 //   - maxTokens → teto de saída; o thinking conta dentro
 //   - effort    → profundidade do thinking, via output_config.effort
 // Sem `temperature` desde o ADR 0061: nenhum modelo do registry aceita sampling fora

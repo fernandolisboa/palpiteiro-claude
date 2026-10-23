@@ -33,7 +33,7 @@ beforeEach(() => {
 });
 
 describe("loadKellyGate", () => {
-  // O /admin/calibration segmenta por motor (#513), mas o gate que alimenta o staking
+  // O /admin/motor/calibracao segmenta por motor (#513), mas o gate que alimenta o staking
   // segue sobre TODAS as análises — nenhum recorte por motor antes do evaluate.
   it("o skill do gate usa as rows de todos os motores", async () => {
     const llm = {

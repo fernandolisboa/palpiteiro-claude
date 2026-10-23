@@ -2,8 +2,10 @@ import { describe, expect, expectTypeOf, it } from "vitest";
 
 import { MAX_ADDITIONAL_FETCHES, MAX_FANOUT_MARKETS } from "@/lib/ai/best-bet";
 import {
+  ADMIN_FLAG_AREAS,
   ADMIN_FLAGS,
   adminFlagDefaults,
+  adminFlagsFor,
   coerceStoredFlagValue,
   flagValueSchema,
   getAdminFlagDef,
@@ -20,6 +22,7 @@ import {
 const FAKE_ENUM = {
   key: "effort",
   kind: "enum",
+  area: "motor",
   label: "Motor de análise",
   description: "Qual motor gera a análise.",
   values: ["llm", "code_jev"],
@@ -250,5 +253,24 @@ describe("coerceStoredFlagValue", () => {
     expect(coerceStoredFlagValue(FAKE_ENUM, "code_jev")).toBe("code_jev");
     expect(coerceStoredFlagValue(FAKE_ENUM, "legacy")).toBe("llm");
     expect(coerceStoredFlagValue(FAKE_ENUM, undefined)).toBe("llm");
+  });
+});
+
+describe("áreas das flags (#633)", () => {
+  it("toda flag cai em exatamente uma tela do admin, sem sobra", () => {
+    const byArea = ADMIN_FLAG_AREAS.flatMap((area) => adminFlagsFor(area));
+    expect(byArea.map((f) => f.key).sort()).toEqual(
+      ADMIN_FLAGS.map((f) => f.key).sort()
+    );
+    for (const area of ADMIN_FLAG_AREAS) {
+      expect(adminFlagsFor(area).length).toBeGreaterThan(0);
+    }
+  });
+
+  it("o motor de análise fica na tela do motor; as de IA no assistente", () => {
+    expect(getAdminFlagDef("analysisEngine").area).toBe("motor");
+    expect(getAdminFlagDef("enableDixonColes").area).toBe("motor");
+    expect(getAdminFlagDef("enableAutoModelVersions").area).toBe("ia");
+    expect(getAdminFlagDef("enableBetSlipExplain").area).toBe("ia");
   });
 });

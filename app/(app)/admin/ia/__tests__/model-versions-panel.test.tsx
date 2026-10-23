@@ -14,7 +14,7 @@ import {
   familyModelInUse,
   ModelVersionsPanel,
   readModelVersionsPanelData,
-} from "@/app/(app)/admin/settings/model-versions-panel";
+} from "@/app/(app)/admin/ia/model-versions-panel";
 import {
   getModelVersionsCheck,
   listModelVersions,
