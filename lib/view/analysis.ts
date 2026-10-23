@@ -14,9 +14,11 @@ import {
   formatPct,
   formatRelativeAgoLabel,
   formatStakeUnits,
+  formatTimeOfDay,
   modelIdFromVersion,
   roundOdd,
 } from "@/lib/format";
+import { formatLine } from "@/lib/format-number";
 import {
   computeEvPerUnit,
   computeMarketScenarios,
@@ -36,6 +38,7 @@ import type { MarketPresentation } from "@/lib/view/markets/presentation";
 import type { TeamLabels } from "@/lib/view/markets/with-team-labels";
 import type {
   AnalysisView,
+  LineupRecheckView,
   MarketAnalysisSectionItem,
   OutcomeView,
   PreviousAnalysisItem,
@@ -443,6 +446,22 @@ export function toAnalysisView(
       : null;
   const kellyInfoUnits = kellyRaw !== stakeUnits ? kellyRaw : null;
 
+  // Reconferência com a escalação (#619): o "há X" da odd conta da captura usada, não da
+  // gravação; com as odds congeladas da análise anterior, sem "há" (o aviso diz de onde).
+  const lineupRecheck = toLineupRecheckView(prediction, presentation, line, timeZone);
+  const recheckOdds = prediction.judgments?.recheck;
+  const oddCapturedAt =
+    lineupRecheck && recheckOdds?.oddsFrom === "snapshot" && recheckOdds.oddsCapturedAt
+      ? new Date(recheckOdds.oddsCapturedAt)
+      : null;
+  const oddAtRecAgo = isPass
+    ? null
+    : lineupRecheck
+      ? oddCapturedAt && Number.isFinite(oddCapturedAt.getTime())
+        ? formatRelativeAgoLabel(oddCapturedAt, now)
+        : null
+      : formatRelativeAgoLabel(prediction.createdAt, now);
+
   return {
     recommendation: isPass
       ? null
@@ -475,7 +494,7 @@ export function toAnalysisView(
     framing: framingNote.framing,
     note: framingNote.note,
     oddAtRec: isPass ? null : formatOdd(prediction.oddAtRecommendation),
-    oddAtRecAgo: isPass ? null : formatRelativeAgoLabel(prediction.createdAt, now),
+    oddAtRecAgo,
     bookmaker: isPass ? null : prediction.bookmaker,
     expectedReturn: isPass ? null : formatEvPct(evPerUnit),
     expectedReturnTone,
@@ -493,6 +512,51 @@ export function toAnalysisView(
     engine: formatAnalysisEngine(prediction.modelVersion, prediction.judgments),
     costUsd: formatCostUsd(aiCall?.costUsd ?? null),
     ...(liveLabel !== null ? { liveLabel } : {}),
+    ...(lineupRecheck ? { lineupRecheck } : {}),
+  };
+}
+
+// "Mais de 2,5" / "Vitória do Flamengo" / "sem aposta": o lado de uma recomendação pro
+// "antes → agora" da reconferência. Mesmo rótulo do resumo da seção.
+function recommendationLabel(
+  presentation: MarketPresentation,
+  recommendation: string,
+  line: number | null,
+): string {
+  if (recommendation === "pass") return "sem aposta";
+  const lineLabel = line !== null ? ` ${formatLine(line)}` : "";
+  return `${presentation.selectionLabel(recommendation)}${lineLabel}`;
+}
+
+// Reconferência com a escalação (#619): lida do jsonb sem validação, então defensiva
+// (row antiga ou parcial nunca derruba a view; sem marcador → null).
+function toLineupRecheckView(
+  prediction: PredictionInput,
+  presentation: MarketPresentation,
+  line: number | null,
+  timeZone: string | undefined,
+): LineupRecheckView | null {
+  const recheck = prediction.judgments?.recheck;
+  if (!recheck || recheck.kind !== "lineup" || !recheck.before) return null;
+  const capturedAt =
+    recheck.oddsFrom === "snapshot" && recheck.oddsCapturedAt
+      ? new Date(recheck.oddsCapturedAt)
+      : null;
+  const before = recommendationLabel(
+    presentation,
+    recheck.before.recommendation,
+    recheck.before.line,
+  );
+  const after = recommendationLabel(presentation, prediction.recommendation, line);
+  return {
+    at: formatTimeOfDay(prediction.createdAt, timeZone),
+    oddsAt:
+      capturedAt && Number.isFinite(capturedAt.getTime())
+        ? formatTimeOfDay(capturedAt, timeZone)
+        : null,
+    before,
+    after,
+    changed: before !== after,
   };
 }
 
@@ -645,4 +709,26 @@ export function toPreviousAnalysisItems(
     });
   }
   return items;
+}
+
+export const PALPITE_BEFORE_LINEUP_NOTICE = "Palpite gerado antes da escalação.";
+
+/**
+ * Aviso de uma linha do HERO (#619): há reconferência com a escalação mais nova que o
+ * palpite exibido (o palpite foi sintetizado sobre análises que a escalação já
+ * atualizou). Só texto, sem número (firewall da ADR 0030). null sem palpite ou sem
+ * reconferência mais nova.
+ */
+export function palpiteBeforeLineupNotice(
+  history: readonly Pick<PredictionWithAiCall, "prediction">[],
+  palpiteCreatedAt: Date | null,
+): string | null {
+  if (palpiteCreatedAt === null) return null;
+  const newer = history.some(
+    (r) =>
+      r.prediction.isLive !== true &&
+      r.prediction.judgments?.recheck?.kind === "lineup" &&
+      r.prediction.createdAt.getTime() > palpiteCreatedAt.getTime(),
+  );
+  return newer ? PALPITE_BEFORE_LINEUP_NOTICE : null;
 }

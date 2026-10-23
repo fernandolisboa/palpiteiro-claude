@@ -73,6 +73,9 @@ type Props = {
   // O form manda `pageLive=1`; sem ele, o servidor recusa um pedido ao vivo vindo de uma
   // página de pré-jogo (pede para atualizar). Default false: pré-jogo.
   live?: boolean;
+  // Reconferência com a escalação mais nova que o palpite (#619): uma linha muda, só
+  // texto ("Palpite gerado antes da escalação."). null/ausente = nada.
+  lineupNotice?: string | null;
 };
 
 // Campo do contexto extra, controlado pelo PalpiteHero (o estado sobrevive ao
@@ -127,6 +130,7 @@ export function PalpiteHero({
   contextEnabled,
   expanded = true,
   live = false,
+  lineupNotice = null,
 }: Props) {
   const [state, formAction, pending] = useActionState(runPalpiteHero, null);
   const [context, setContext] = useState("");
@@ -204,6 +208,7 @@ export function PalpiteHero({
         contextNotice={contextNotice}
         expanded={expanded}
         live={live}
+        lineupNotice={lineupNotice}
       />
     </form>
   );
@@ -225,6 +230,7 @@ function HeroBody({
   contextNotice,
   expanded,
   live,
+  lineupNotice,
 }: {
   heroPalpite: PalpiteHeadlineView | null;
   unavailable: MatchUnavailableReason | null;
@@ -241,6 +247,7 @@ function HeroBody({
   contextNotice: string | null;
   expanded: boolean;
   live: boolean;
+  lineupNotice: string | null;
 }) {
   // Pending: skeleton que espelha o populated (sem reflow) — status em PALAVRAS, sem
   // dígito de tempo. Tem precedência sobre tudo (o run está em voo agora).
@@ -261,6 +268,7 @@ function HeroBody({
         contextField={contextField}
         contextNotice={contextNotice}
         expanded={expanded}
+        lineupNotice={lineupNotice}
       />
     );
   }
@@ -293,6 +301,7 @@ function PopulatedHero({
   contextField,
   contextNotice,
   expanded,
+  lineupNotice,
 }: {
   view: PalpiteHeadlineView;
   analyzable: boolean;
@@ -304,6 +313,7 @@ function PopulatedHero({
   contextField: ContextField;
   contextNotice: string | null;
   expanded: boolean;
+  lineupNotice: string | null;
 }) {
   const settled = view.badge !== null;
   return (
@@ -349,6 +359,16 @@ function PopulatedHero({
         >
           {view.narrative}
         </p>
+
+        {lineupNotice && (
+          <p
+            data-testid="palpite-lineup-notice"
+            className="flex items-center gap-1.5 text-meta tracking-tight text-muted-foreground"
+          >
+            <RefreshCw className="size-3 shrink-0" aria-hidden="true" />
+            {lineupNotice}
+          </p>
+        )}
 
         {expanded && view.citedMarkets.length > 0 && (
           <p className="text-meta uppercase tracking-eyebrow text-muted-foreground">

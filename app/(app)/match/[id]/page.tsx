@@ -67,6 +67,7 @@ import { PAGE_LIVE_MARKETS } from "@/lib/odds/live-card-markets";
 import { isPreMatchForOdds } from "@/lib/odds/pre-match-gate";
 import type { FixtureRef } from "@/lib/providers/sports-data/types";
 import {
+  palpiteBeforeLineupNotice,
   toMarketAnalysisSections,
   toPreviousAnalysisItems,
 } from "@/lib/view/analysis";
@@ -265,6 +266,11 @@ export default async function MatchPage({ params, searchParams }: PageProps) {
   // o link /p/[id] e ramifica Compartilhar/Copiar). null quando não há set persistido ainda.
   const heroSetId = palpiteSets[0]?.palpiteSet.id ?? null;
   const heroSharedAt = palpiteSets[0]?.palpiteSet.sharedAt ?? null;
+  // #619: análise reconferida com a escalação depois do palpite exibido → uma linha no
+  // HERO (só texto). Sem palpite, nada.
+  const heroLineupNotice = palpiteSets[0]
+    ? palpiteBeforeLineupNotice(history, palpiteSets[0].palpiteSet.createdAt)
+    : null;
 
   // toMatchHeroView (não toMatchRowView): o tipo do hero não tem a leitura do modelo
   // (firewall ADR 0030).
@@ -562,6 +568,7 @@ export default async function MatchPage({ params, searchParams }: PageProps) {
         heroPalpite={heroPalpite}
         heroSetId={heroSetId}
         heroSharedAt={heroSharedAt}
+        heroLineupNotice={heroLineupNotice}
         homeTeamHref={homeTeamHref}
         awayTeamHref={awayTeamHref}
         betGrid={betGridP}
@@ -632,6 +639,7 @@ type MatchLayoutProps = {
   // #384: id + shared_at do set mais recente, pro botão de compartilhar do HERO. null = sem set.
   heroSetId: string | null;
   heroSharedAt: Date | null;
+  heroLineupNotice: string | null;
   // #408: hrefs do histórico de cada time, montados do canonical persistido →
   // passados aos nomes do MatchHero (imunes a mismatch por construção).
   homeTeamHref: string;
@@ -683,6 +691,7 @@ function MatchLayout({
   heroPalpite,
   heroSetId,
   heroSharedAt,
+  heroLineupNotice,
   homeTeamHref,
   awayTeamHref,
   betGrid,
@@ -747,6 +756,7 @@ function MatchLayout({
               finalScore={finalScore}
               setId={heroSetId}
               sharedAt={heroSharedAt}
+              lineupNotice={heroLineupNotice}
               hasAnalyses={hasAnalyses}
               canOpenAnalysis={canOpenAnalysis}
               contextEnabled={contextEnabled}

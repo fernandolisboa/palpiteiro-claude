@@ -158,3 +158,21 @@ Divisão em **dois PRs**: **A** = state v3 (sinal da escalação no JEV, sem rec
 9. Só o XI de referência precisa de ids completos. Hoje basta 11 titulares, ids sem repetição, nenhum de outro provider e ao menos um do mesmo (estreante sem id conta como mudança; hoje sem id nenhum, o fallback football-data.org, segue "changes unknown").
 10. Custo corrigido pra "até +4 req" (item 3 acima e ADR); ADR registra a espera maior atrás do limite de 8 req/min na análise interativa.
 11. Testes novos: nome curto × completo por id, fallback por nome, lesionado no XI de hoje sai, ids repetidos, estreante sem id, XI vazio (state e adapter), lançamento síncrono no memo, cron fail-open com a referência falhando, `providerAbsences` na conferência, vocabulário inteiro nos criteria.
+
+## Notas da implementação do PR B
+
+Onde o código difere do plano e dos ajustes acima:
+
+1. **`before` no jsonb.** `judgments.recheck` grava o `before` do pai (recomendação, linha, confiança, edge), além do `of`. A view monta o "Antes da escalação: … → agora: …" só com a row, sem buscar o pai por id.
+2. **Sem helper de `extraLines`.** Como só a linha do pai é avaliada (item 10), basta o cartucho base mais `marketParams.line` do pai. Não houve o que extrair de `app/actions/predictions.ts`.
+3. **`judgeIf` em `resolveModelBaseJudgments`.** O teste de "sem informação" (item 9) roda sobre o input, antes do JEV, então pular não gasta a chamada. Junto do `logScope` (item 17).
+4. **Marcador.** É gravado depois que a sonda confirma a escalação, com o instante da busca dos candidatos. Qualquer falha antes de gravar (tabela, dados, JEV) restaura o carimbo anterior ou apaga a chave. "Sem informação" mantém o marcador: só um pai novo reabre o jogo.
+5. **Ordem do run.** Flag → lock do `compute-match-models` → lock próprio → candidatos → chave do JEV. Sem candidatos, o run faz uma query e sai sem log.
+6. **Elegibilidade em JS.** O `DISTINCT ON` roda em SQL (item 12) e a elegibilidade (`code_jev`, sem `recheck`, sem `userContext`, escalação não anunciada, λ válido) é filtrada em JS sobre esse resultado, na mesma query.
+7. **Motivo `parent_incomplete`.** Pai sem λ válido ou over/under sem linha é pulado com esse motivo (além de `not_code_jev_market`, `jev_failed`, `no_odds`, `superseded` e `kickoff_passed`).
+8. **"(mesma recomendação)".** Na tela, o "antes → agora" ganha esse sufixo quando a recomendação não mudou.
+9. **Hero.** Uma linha sem horário ("Palpite gerado antes da escalação."), só quando a reconferência é mais nova que o palpite.
+10. **Guardas de KO.** O jogo só é começado com KO a mais de 2 min. Antes do insert, a guarda estrita é `kickoffAt > now`, pelo horário e não pelo status.
+11. **"Odd há X".** Na reconferência é medido a partir da captura usada. Vem `null` quando as odds são as do pai, e a linha diz "Odds da análise anterior."
+12. **`aiCallId`.** Aponta pra row de `ai_calls` do JEV usado: a desta passada (de sistema, `user_id` nulo) ou a da origem do reuso. Só quando não há nenhuma, aponta pra do pai. `ownsAiCall` (allow-list) não atribui custo de LLM à reconferência.
+13. **Notas da escalação no racional.** Os fatores vêm depois de probabilidade e edge, e o racional só ganha o prefixo das notas se tudo couber em `RATIONALE_MAX_CHARS`. O prompt do LLM não lê `lineupNotes`, então o narrador não muda de versão.

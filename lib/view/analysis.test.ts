@@ -7,6 +7,8 @@ import type {
 import { computeMarketScenarios } from "@/lib/odds/scenario";
 
 import {
+  PALPITE_BEFORE_LINEUP_NOTICE,
+  palpiteBeforeLineupNotice,
   toAnalysisView,
   toAnalysisViewFromPrediction,
   toMarketAnalysisSections,
@@ -1519,7 +1521,7 @@ describe("toAnalysisView — anytime_scorer (independent_binary, #290)", () => {
 });
 
 describe("toAnalysisViewFromPrediction — custo da ai_call (#512)", () => {
-  function mkRow(narration?: "llm_call" | "best_bet_template"): PredictionWithAiCall {
+  function mkRow(narration?: string): PredictionWithAiCall {
     return {
       prediction: {
         id: "p1",
@@ -1549,6 +1551,13 @@ describe("toAnalysisViewFromPrediction — custo da ai_call (#512)", () => {
     expect(toAnalysisViewFromPrediction(mkRow("best_bet_template")).costUsd).toBe(
       "$0.000",
     );
+  });
+
+  it("allow-list (#619): reconferência com a escalação e marcador desconhecido não herdam custo", () => {
+    expect(
+      toAnalysisViewFromPrediction(mkRow("lineup_recheck_template")).costUsd,
+    ).toBe("$0.000");
+    expect(toAnalysisViewFromPrediction(mkRow("algo_novo")).costUsd).toBe("$0.000");
   });
 
   it("row com a própria chamada (ou sem judgments) mostra o custo dela", () => {
@@ -1628,5 +1637,165 @@ describe("toAnalysisView — quarter-Kelly informativo", () => {
     expect(view({ oddAtRecommendation: null }).kellyInfoUnits).toBeNull();
     expect(view({ impliedProbPct: null }).kellyInfoUnits).toBeNull();
     expect(view({ edgePct: null }).kellyInfoUnits).toBeNull();
+  });
+});
+
+describe("reconferência com a escalação (#619) na view", () => {
+  const TZ = "America/Sao_Paulo";
+  const parentAt = new Date("2026-05-15T12:00:00Z"); // 09:00 em SP
+  const recheckAt = new Date("2026-05-15T18:22:00Z"); // 15:22 em SP
+  const oddsAt = new Date("2026-05-15T18:05:00Z"); // 15:05 em SP
+  const now = new Date("2026-05-15T18:30:00Z");
+
+  function row(o: {
+    id: string;
+    createdAt: Date;
+    recommendation: string;
+    recheck?: Record<string, unknown>;
+    marketKey?: string;
+    line?: number | null;
+    isLive?: boolean;
+  }): PredictionWithAiCall {
+    const isPass = o.recommendation === "pass";
+    return {
+      prediction: {
+        id: o.id,
+        recommendation: o.recommendation,
+        confidencePct: "58.00",
+        rationale: "r",
+        keyFactors: ["a"],
+        minimumOdd: isPass ? null : "1.700",
+        oddAtRecommendation: isPass ? null : "2.100",
+        bookmaker: "x",
+        impliedProbPct: isPass ? null : "46.00",
+        edgePct: isPass ? null : "12.00",
+        modelVersion: "claude-sonnet-5-5;engine=code_jev;lambda=dixon_coles",
+        promptVersion: "narrator_v1.4",
+        createdAt: o.createdAt,
+        marketParams: o.line === undefined || o.line === null ? null : { line: o.line },
+        stakeUnits: "2.00",
+        isLive: o.isLive ?? false,
+        judgments: {
+          engine: "code_jev",
+          applied: true,
+          lambda: { source: "dixon_coles" },
+          ...(o.recheck
+            ? { narration: "lineup_recheck_template", recheck: o.recheck }
+            : {}),
+        },
+      } as unknown as DbPrediction,
+      aiCall: { costUsd: "0.000100" } as PredictionWithAiCall["aiCall"],
+      marketKey: o.marketKey ?? "match_result",
+      selections: [
+        { key: "home", modelProbPct: 58, odd: 2.1 },
+        { key: "draw", modelProbPct: 24, odd: 3.4 },
+        { key: "away", modelProbPct: 18, odd: 3.9 },
+      ],
+    };
+  }
+
+  const recheck = (over: Record<string, unknown> = {}) => ({
+    kind: "lineup",
+    version: "lineup_v1",
+    of: "parent",
+    parentStateHash: "h",
+    oddsFrom: "snapshot",
+    oddsCapturedAt: oddsAt.toISOString(),
+    before: { recommendation: "pass", line: null, confidencePct: 51, edgePct: null },
+    ...over,
+  });
+
+  it("selo + hora da reconferência + hora da captura + antes → agora", () => {
+    const view = toAnalysisViewFromPrediction(
+      row({ id: "r", createdAt: recheckAt, recommendation: "home", recheck: recheck() }),
+      now,
+      TZ,
+      { home: "Flamengo", away: "Fluminense" },
+    );
+    expect(view.lineupRecheck).toEqual({
+      at: "15:22",
+      oddsAt: "15:05",
+      before: "sem aposta",
+      after: "Flamengo",
+      changed: true,
+    });
+    // "há X" da odd conta da captura usada, não da gravação da row.
+    expect(view.oddAtRecAgo).toBe("há 25min");
+    // Sem custo próprio (a ai_call é do JEV de sistema).
+    expect(view.costUsd).toBe("$0.000");
+  });
+
+  it("odds congeladas do pai: sem hora de captura nem \"há\" da odd", () => {
+    const view = toAnalysisViewFromPrediction(
+      row({
+        id: "r",
+        createdAt: recheckAt,
+        recommendation: "home",
+        recheck: recheck({ oddsFrom: "parent", oddsCapturedAt: null }),
+      }),
+      now,
+      TZ,
+    );
+    expect(view.lineupRecheck?.oddsAt).toBeNull();
+    expect(view.oddAtRecAgo).toBeNull();
+  });
+
+  it("over/under com a mesma recomendação na linha do pai: changed false", () => {
+    const view = toAnalysisViewFromPrediction(
+      row({
+        id: "r",
+        createdAt: recheckAt,
+        recommendation: "over",
+        marketKey: "over_under",
+        line: 1.5,
+        recheck: recheck({
+          before: { recommendation: "over", line: 1.5, confidencePct: 70, edgePct: 6 },
+        }),
+      }),
+      now,
+      TZ,
+    );
+    expect(view.lineupRecheck).toMatchObject({ changed: false });
+    expect(view.lineupRecheck?.before).toBe(view.lineupRecheck?.after);
+    expect(view.lineupRecheck?.after).toContain("1,5");
+  });
+
+  it("análise comum não tem lineupRecheck; marcador parcial no jsonb degrada pra null", () => {
+    expect(
+      toAnalysisViewFromPrediction(row({ id: "p", createdAt: parentAt, recommendation: "pass" }))
+        .lineupRecheck,
+    ).toBeUndefined();
+    expect(
+      toAnalysisViewFromPrediction(
+        row({ id: "r", createdAt: recheckAt, recommendation: "home", recheck: { kind: "lineup" } }),
+      ).lineupRecheck,
+    ).toBeUndefined();
+  });
+
+  it("seção = a reconferência; o pai segue em \"análises anteriores\"", () => {
+    const history = [
+      row({ id: "r", createdAt: recheckAt, recommendation: "home", recheck: recheck() }),
+      row({ id: "parent", createdAt: parentAt, recommendation: "pass" }),
+    ];
+    const sections = toMarketAnalysisSections(history, now, TZ);
+    expect(sections.map((x) => x.id)).toEqual(["r"]);
+    expect(sections[0].view.lineupRecheck?.before).toBe("sem aposta");
+    expect(toPreviousAnalysisItems(history, now, TZ).map((x) => x.id)).toEqual(["parent"]);
+  });
+
+  it("aviso do HERO só com reconferência mais nova que o palpite", () => {
+    const history = [
+      row({ id: "r", createdAt: recheckAt, recommendation: "home", recheck: recheck() }),
+      row({ id: "parent", createdAt: parentAt, recommendation: "pass" }),
+    ];
+    expect(palpiteBeforeLineupNotice(history, new Date("2026-05-15T13:00:00Z"))).toBe(
+      PALPITE_BEFORE_LINEUP_NOTICE,
+    );
+    expect(PALPITE_BEFORE_LINEUP_NOTICE).toBe("Palpite gerado antes da escalação.");
+    // Palpite refeito depois da reconferência, ou sem palpite: nada.
+    expect(palpiteBeforeLineupNotice(history, new Date("2026-05-15T18:40:00Z"))).toBeNull();
+    expect(palpiteBeforeLineupNotice(history, null)).toBeNull();
+    // Sem reconferência no histórico: nada.
+    expect(palpiteBeforeLineupNotice(history.slice(1), new Date("2026-05-15T13:00:00Z"))).toBeNull();
   });
 });

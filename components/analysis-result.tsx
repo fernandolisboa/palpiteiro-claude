@@ -1,13 +1,14 @@
-import { Dot, Info } from "lucide-react";
+import { Dot, Info, RefreshCw } from "lucide-react";
 
 import { AnalysisScenarios } from "@/components/analysis-scenarios";
 import { HelpHint } from "@/components/help-hint";
+import { Badge } from "@/components/ui/badge";
 import { Card } from "@/components/ui/card";
 import { Separator } from "@/components/ui/separator";
 import { formatLine } from "@/lib/format-number";
 import { cn } from "@/lib/utils";
 import { ANALYSIS_RISK_DISCLAIMER } from "@/lib/view/analysis";
-import type { AnalysisView } from "@/lib/view/types";
+import type { AnalysisView, LineupRecheckView } from "@/lib/view/types";
 
 type Props = {
   view: AnalysisView;
@@ -38,6 +39,7 @@ export function AnalysisResult({ view, showRiskDisclaimer = true }: Props) {
           </span>
         </div>
         <Separator />
+        {view.lineupRecheck && <LineupRecheckNotice recheck={view.lineupRecheck} />}
         {/* O grid de stats confidence/edge saiu do card (ADR 0012): os números
             vivem no bloco de cenários com o label unificado "prob. do modelo"
             — "confidence" exibia P(over) em pass sem dizer isso. */}
@@ -88,6 +90,7 @@ export function AnalysisResult({ view, showRiskDisclaimer = true }: Props) {
         </span>
       </div>
       <Separator />
+      {view.lineupRecheck && <LineupRecheckNotice recheck={view.lineupRecheck} />}
       {/* O grid de stats confidence/edge saiu da row (ADR 0012): os mesmos
           números (valores salvos da row) vivem na coluna recomendada do bloco
           de cenários, com labels unificados "prob. do modelo"/"edge". O destaque
@@ -212,6 +215,37 @@ export function AnalysisResult({ view, showRiskDisclaimer = true }: Props) {
       </div>
       <AnalysisFooter view={view} showRiskDisclaimer={showRiskDisclaimer} />
     </Card>
+  );
+}
+
+// Reconferência com a escalação (#619): selo + de onde vieram os números + o que mudou.
+// Só texto e hora; as odds da linha de baixo são as da tabela de cenários do card.
+function LineupRecheckNotice({ recheck }: { recheck: LineupRecheckView }) {
+  const odds = recheck.oddsAt
+    ? `Odds de ${recheck.oddsAt}.`
+    : "Odds da análise anterior.";
+  return (
+    <div
+      data-testid="lineup-recheck"
+      className="mx-4 mt-3 flex max-w-reading flex-col gap-1.5 rounded-md border border-border-subtle bg-surface-2 px-3 py-2.5"
+    >
+      <Badge
+        variant="outline"
+        size="xs"
+        className="border-accent-border bg-accent-soft text-accent-fg"
+      >
+        <RefreshCw aria-hidden="true" className="size-3" />
+        Atualizado com a escalação
+      </Badge>
+      <p className="text-meta leading-snug tracking-tight text-muted-foreground">
+        Recalculado em código às {recheck.at} com as escalações confirmadas, sem nova
+        chamada de IA. {odds}
+      </p>
+      <p className="text-body-sm leading-snug tracking-tight text-foreground">
+        Antes da escalação: {recheck.before} → agora: {recheck.after}
+        {recheck.changed ? "" : " (mesma recomendação)"}
+      </p>
+    </div>
   );
 }
 
