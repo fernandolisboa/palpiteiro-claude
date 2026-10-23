@@ -192,6 +192,10 @@ export const NormalizedLineupPlayerSchema = z.object({
   name: z.string().min(1),
   shirtNumber: z.number().int().nullable().optional(),
   position: z.string().optional(),
+  // Id do jogador no provider, prefixado ("api-football:123"), #619: cruza o XI de
+  // hoje com o XI de referência sem depender da grafia do nome. Só compara ids de
+  // MESMO prefixo. Opcional/aditivo: football-data.org e cache antigo seguem sem.
+  providerPlayerId: z.string().min(1).optional(),
 });
 export type NormalizedLineupPlayer = z.infer<
   typeof NormalizedLineupPlayerSchema

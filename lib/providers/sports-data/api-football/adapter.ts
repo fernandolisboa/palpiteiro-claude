@@ -977,20 +977,26 @@ function toNormalizedInjury(injury: ApiFootballInjury): NormalizedInjury {
   };
 }
 
+function toNormalizedLineupPlayer(
+  entry: ApiFootballLineup["startXI"][number]
+): NormalizedLineupPlayer {
+  return {
+    name: entry.player.name,
+    shirtNumber: entry.player.number ?? undefined,
+    position: mapApiFootballPositionToLabel(entry.player.pos),
+    // #619: id estável pro diff entre escalações (o nome varia de grafia).
+    ...(entry.player.id !== null
+      ? { providerPlayerId: `api-football:${entry.player.id}` }
+      : {}),
+  };
+}
+
 function toNormalizedTeamLineup(
   lineup: ApiFootballLineup,
   league: SupportedLeague
 ): NormalizedTeamLineup {
-  const starters: NormalizedLineupPlayer[] = lineup.startXI.map((entry) => ({
-    name: entry.player.name,
-    shirtNumber: entry.player.number ?? undefined,
-    position: mapApiFootballPositionToLabel(entry.player.pos),
-  }));
-  const bench: NormalizedLineupPlayer[] = lineup.substitutes.map((entry) => ({
-    name: entry.player.name,
-    shirtNumber: entry.player.number ?? undefined,
-    position: mapApiFootballPositionToLabel(entry.player.pos),
-  }));
+  const starters = lineup.startXI.map(toNormalizedLineupPlayer);
+  const bench = lineup.substitutes.map(toNormalizedLineupPlayer);
   return {
     team: canonicalizeOrPassthrough(lineup.team.name, league),
     formation: lineup.formation ?? undefined,

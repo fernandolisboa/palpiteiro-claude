@@ -674,24 +674,39 @@ describe("toNormalizedTeamLineup", () => {
       name: "GK",
       shirtNumber: 1,
       position: "GK",
+      providerPlayerId: "api-football:1",
     });
     expect(t.starters[1]).toEqual({
       name: "RB",
       shirtNumber: 2,
       position: "DEF",
+      providerPlayerId: "api-football:2",
     });
     expect(t.starters[2]).toEqual({
       name: "CM",
       shirtNumber: 8,
       position: "MID",
+      providerPlayerId: "api-football:3",
     });
     expect(t.starters[3]).toEqual({
       name: "ST",
       shirtNumber: 9,
       position: "FWD",
+      providerPlayerId: "api-football:4",
     });
     expect(t.bench).toHaveLength(1);
     expect(t.bench?.[0]?.position).toBeUndefined();
+    expect(t.bench?.[0]?.providerPlayerId).toBe("api-football:11");
+  });
+
+  it("id nulo do jogador → sem providerPlayerId (#619)", () => {
+    const lineup = makeLineup();
+    lineup.startXI[0] = {
+      player: { id: null, name: "GK", number: 1, pos: "G", grid: "1:1" },
+    };
+    const t = toNormalizedTeamLineup(lineup, "brasileirao_a");
+    expect(t.starters[0]).not.toHaveProperty("providerPlayerId");
+    expect(t.starters[1]?.providerPlayerId).toBe("api-football:2");
   });
 });
 
