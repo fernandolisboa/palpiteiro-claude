@@ -1,0 +1,340 @@
+{
+  "_comment": "Payload REAL de /fixtures?id=1640556 (Flamengo x Estudiantes, Libertadores, semifinal volta), gravado por scripts/probe-live-fixture.ts em 2026-10-23T01:48:23Z, no 2H aos 60. Expulsao de Baltasar Gallego (Estudiantes) aos 50, segundo amarelo enviado como \"Red Card\". lineups e players removidos (o schema nao le; ~38 KB). #600.",
+  "probedAt": "2026-10-23T01:48:23.952Z",
+  "quotaHeaders": {
+    "x-ratelimit-limit": "300",
+    "x-ratelimit-remaining": "296",
+    "x-ratelimit-requests-limit": "7500",
+    "x-ratelimit-requests-remaining": "7445"
+  },
+  "item": {
+    "fixture": {
+      "id": 1640556,
+      "referee": "Gustavo Tejera",
+      "timezone": "UTC",
+      "date": "2026-10-23T00:30:00+00:00",
+      "timestamp": 1792715400,
+      "periods": {
+        "first": null,
+        "second": null
+      },
+      "venue": {
+        "id": 204,
+        "name": "Estádio do Maracanã",
+        "city": "Rio de Janeiro"
+      },
+      "status": {
+        "long": "Second Half",
+        "short": "2H",
+        "elapsed": 60,
+        "extra": null
+      }
+    },
+    "league": {
+      "id": 13,
+      "name": "CONMEBOL Libertadores",
+      "country": "World",
+      "logo": "https://media.api-sports.io/football/leagues/13.png",
+      "flag": null,
+      "season": 2026,
+      "round": "Semi-finals",
+      "standings": true
+    },
+    "teams": {
+      "home": {
+        "id": 127,
+        "name": "Flamengo",
+        "logo": "https://media.api-sports.io/football/teams/127.png",
+        "winner": null
+      },
+      "away": {
+        "id": 450,
+        "name": "Estudiantes L.P.",
+        "logo": "https://media.api-sports.io/football/teams/450.png",
+        "winner": null
+      }
+    },
+    "goals": {
+      "home": 0,
+      "away": 0
+    },
+    "score": {
+      "halftime": {
+        "home": 0,
+        "away": 0
+      },
+      "fulltime": {
+        "home": null,
+        "away": null
+      },
+      "extratime": {
+        "home": null,
+        "away": null
+      },
+      "penalty": {
+        "home": null,
+        "away": null
+      }
+    },
+    "events": [
+      {
+        "time": {
+          "elapsed": 35,
+          "extra": null
+        },
+        "team": {
+          "id": 450,
+          "name": "Estudiantes L.P.",
+          "logo": "https://media.api-sports.io/football/teams/450.png"
+        },
+        "player": {
+          "id": 363341,
+          "name": "Baltasar Gallego Rodriguez"
+        },
+        "assist": {
+          "id": null,
+          "name": null
+        },
+        "type": "Card",
+        "detail": "Yellow Card",
+        "comments": "Persistent Infringement"
+      },
+      {
+        "time": {
+          "elapsed": 38,
+          "extra": null
+        },
+        "team": {
+          "id": 450,
+          "name": "Estudiantes L.P.",
+          "logo": "https://media.api-sports.io/football/teams/450.png"
+        },
+        "player": {
+          "id": 1854,
+          "name": "Joaquín Correa"
+        },
+        "assist": {
+          "id": 206984,
+          "name": "Tiago Palacios"
+        },
+        "type": "subst",
+        "detail": "Substitution 1",
+        "comments": null
+      },
+      {
+        "time": {
+          "elapsed": 49,
+          "extra": null
+        },
+        "team": {
+          "id": 450,
+          "name": "Estudiantes L.P.",
+          "logo": "https://media.api-sports.io/football/teams/450.png"
+        },
+        "player": {
+          "id": 50875,
+          "name": "Leandro Gonzalez Pirez"
+        },
+        "assist": {
+          "id": null,
+          "name": null
+        },
+        "type": "Card",
+        "detail": "Yellow Card",
+        "comments": "Foul"
+      },
+      {
+        "time": {
+          "elapsed": 50,
+          "extra": null
+        },
+        "team": {
+          "id": 450,
+          "name": "Estudiantes L.P.",
+          "logo": "https://media.api-sports.io/football/teams/450.png"
+        },
+        "player": {
+          "id": 363341,
+          "name": "Baltasar Gallego Rodriguez"
+        },
+        "assist": {
+          "id": null,
+          "name": null
+        },
+        "type": "Card",
+        "detail": "Red Card",
+        "comments": null
+      },
+      {
+        "time": {
+          "elapsed": 54,
+          "extra": null
+        },
+        "team": {
+          "id": 450,
+          "name": "Estudiantes L.P.",
+          "logo": "https://media.api-sports.io/football/teams/450.png"
+        },
+        "player": {
+          "id": 346270,
+          "name": "Santiago Núñez"
+        },
+        "assist": {
+          "id": null,
+          "name": null
+        },
+        "type": "Card",
+        "detail": "Yellow Card",
+        "comments": "Foul"
+      }
+    ],
+    "statistics": [
+      {
+        "team": {
+          "id": 127,
+          "name": "Flamengo",
+          "logo": "https://media.api-sports.io/football/teams/127.png"
+        },
+        "statistics": [
+          {
+            "type": "expected_goals",
+            "value": "0.44"
+          },
+          {
+            "type": "Passes accurate",
+            "value": 305
+          },
+          {
+            "type": "Shots insidebox",
+            "value": 3
+          },
+          {
+            "type": "Shots outsidebox",
+            "value": 2
+          },
+          {
+            "type": "Blocked Shots",
+            "value": 2
+          },
+          {
+            "type": "Free Kicks",
+            "value": 13
+          },
+          {
+            "type": "Shots on Goal",
+            "value": 2
+          },
+          {
+            "type": "Goalkeeper Saves",
+            "value": 3
+          },
+          {
+            "type": "Shots off Goal",
+            "value": 2
+          },
+          {
+            "type": "Total passes",
+            "value": 355
+          },
+          {
+            "type": "Total Shots",
+            "value": 6
+          },
+          {
+            "type": "Corner Kicks",
+            "value": 1
+          },
+          {
+            "type": "Red Cards",
+            "value": 0
+          },
+          {
+            "type": "Yellow Cards",
+            "value": 0
+          },
+          {
+            "type": "Fouls",
+            "value": 7
+          },
+          {
+            "type": "Ball Possession",
+            "value": "70%"
+          }
+        ]
+      },
+      {
+        "team": {
+          "id": 450,
+          "name": "Estudiantes L.P.",
+          "logo": "https://media.api-sports.io/football/teams/450.png"
+        },
+        "statistics": [
+          {
+            "type": "expected_goals",
+            "value": "0.79"
+          },
+          {
+            "type": "Passes accurate",
+            "value": 104
+          },
+          {
+            "type": "Shots insidebox",
+            "value": 4
+          },
+          {
+            "type": "Shots outsidebox",
+            "value": 3
+          },
+          {
+            "type": "Blocked Shots",
+            "value": 2
+          },
+          {
+            "type": "Free Kicks",
+            "value": 7
+          },
+          {
+            "type": "Shots on Goal",
+            "value": 3
+          },
+          {
+            "type": "Goalkeeper Saves",
+            "value": 2
+          },
+          {
+            "type": "Shots off Goal",
+            "value": 2
+          },
+          {
+            "type": "Total passes",
+            "value": 151
+          },
+          {
+            "type": "Total Shots",
+            "value": 7
+          },
+          {
+            "type": "Corner Kicks",
+            "value": 4
+          },
+          {
+            "type": "Red Cards",
+            "value": 1
+          },
+          {
+            "type": "Yellow Cards",
+            "value": 2
+          },
+          {
+            "type": "Fouls",
+            "value": 13
+          },
+          {
+            "type": "Ball Possession",
+            "value": "30%"
+          }
+        ]
+      }
+    ]
+  }
+}
