@@ -30,8 +30,8 @@ const CLOVER_LEAF =
  * `beat` sobe a cada passo (etapa pronta no run, próximo passo do tour) e o papagaio dá
  * um pulinho, pra o movimento acompanhar o que acontece de verdade.
  *
- * Com prefers-reduced-motion nada se desloca nem troca de forma: fica o papagaio parado e
- * o olho só respira (`palpite-calm`). Decorativo (aria-hidden): quem fala é o texto ao lado.
+ * Anima mesmo com prefers-reduced-motion (`mascot-motion`, pedido do Fernando: parado ele
+ * parece travado). Decorativo (aria-hidden): quem fala é o texto ao lado.
  */
 export function ParrotMascot({
   beat = 0,
@@ -51,7 +51,6 @@ export function ParrotMascot({
     lastBeat.current = beat;
     const el = hopRef.current;
     if (!el || typeof el.animate !== "function") return;
-    if (window.matchMedia?.("(prefers-reduced-motion: reduce)").matches) return;
     el.animate(
       [
         { transform: "translateY(0)" },
@@ -69,7 +68,7 @@ export function ParrotMascot({
       aria-hidden="true"
       focusable="false"
       data-testid="parrot-mascot"
-      className={cn("size-12 shrink-0", className)}
+      className={cn("mascot-motion size-12 shrink-0", className)}
     >
       <g className="text-primary">
         <rect width="100" height="100" rx="22" fill="currentColor" />
@@ -83,7 +82,7 @@ export function ParrotMascot({
               strokeWidth={3.2}
             />
           </g>
-          <g className="parrot-eye palpite-calm">
+          <g className="parrot-eye">
             <circle cx={cx} cy={cy} r={r} fill={MARK_BALL_COLOR} />
             <circle cx={53} cy={39} r={5.2} fill="currentColor" />
             <circle cx={54.6} cy={37.4} r={1.7} fill="#ffffff" />

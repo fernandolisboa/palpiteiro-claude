@@ -24,8 +24,8 @@ export type ProgressStepView = {
  * Motion (DESIGN.md): o robozinho (palpite-bot.tsx) ou o papagaio (parrot-mascot.tsx),
  * conforme a flag `progressMascot` (ADR 0068), ao lado do título; entrada curta de cada
  * linha (fade + 4px), o check entra com um zoom curto, o ícone da etapa em andamento gira.
- * Sem brilho nem gradiente. Com prefers-reduced-motion nada se desloca: os olhos do
- * personagem só respiram (`palpite-calm`) e o spinner segue girando (`palpite-spin`).
+ * Sem brilho nem gradiente. Com prefers-reduced-motion as linhas entram sem movimento, mas
+ * o personagem (`mascot-motion`) e o spinner (`palpite-spin`) seguem se mexendo.
  *
  * FIREWALL (ADR 0030 §3): as frases vêm prontas do servidor (lib/ai/progress/steps.ts),
  * sem odd, edge, stake, % ou nome de casa.

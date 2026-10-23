@@ -17,8 +17,8 @@ import {
 
 /**
  * Mascote (ADR 0068, #640). A bola do olho é a do símbolo da marca, o fim é o trevo (não o
- * gol), e o estado parado (sem animação) é o papagaio: é o que fica com
- * prefers-reduced-motion.
+ * gol), e o estado parado (sem animação) é o papagaio. Anima mesmo com
+ * prefers-reduced-motion (pedido do Fernando).
  */
 
 describe("desenho", () => {
@@ -40,8 +40,8 @@ describe("desenho", () => {
     expect(html.match(new RegExp(`fill="${CLOVER_COLOR}"`, "g"))).toHaveLength(4);
   });
 
-  it("o olho respira com movimento reduzido", () => {
-    expect(html).toContain('class="parrot-eye palpite-calm"');
+  it("fica fora da regra global de movimento reduzido", () => {
+    expect(html).toMatch(/<svg[^>]*class="mascot-motion /);
   });
 });
 
@@ -102,11 +102,11 @@ describe("pulinho a cada passo", () => {
     expect(animate).toHaveBeenCalledTimes(1);
   });
 
-  it("com movimento reduzido não pula", () => {
+  it("com movimento reduzido pula também", () => {
     reduced(true);
     act(() => root.render(<ParrotMascot beat={0} />));
     act(() => root.render(<ParrotMascot beat={2} />));
-    expect(animate).not.toHaveBeenCalled();
+    expect(animate).toHaveBeenCalledTimes(1);
   });
 });
 
