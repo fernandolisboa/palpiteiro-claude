@@ -21,11 +21,12 @@ const nextConfig: NextConfig = {
   // navegação pra página dinâmica (todas as logadas são), então voltar pro desempenho
   // ou reabrir um jogo sempre esperava o servidor. `dynamic`: página visitada nos
   // últimos 5 min reabre na hora, do cache; o `RevisitRefresh` de cada página relê em
-  // segundo plano o que passou de 30s (ver lib/nav/router-cache.ts). `static`: página
-  // buscada inteira pelo mouse em cima (`IntentLink`) vale 60s; depois o clique busca
-  // de novo. Server action com revalidatePath e `router.refresh()` limpam tudo.
+  // segundo plano o que passou de 30s (ver lib/nav/router-cache.ts). A janela vale
+  // também pra página buscada inteira pelo `IntentLink` (o Next confere `dynamic`
+  // antes de `static`). Server action com revalidatePath e `router.refresh()` limpam
+  // tudo.
   experimental: {
-    staleTimes: { dynamic: 300, static: 60 },
+    staleTimes: { dynamic: 300 },
   },
   // Admin reorganizado (#633): os endereços antigos seguem abrindo. Temporário (307)
   // de propósito: se a estrutura mudar de novo, o navegador não fica preso no destino.

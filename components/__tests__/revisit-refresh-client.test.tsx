@@ -5,7 +5,7 @@ import type { AppRouterInstance } from "next/dist/shared/lib/app-router-context.
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 
 import { RevisitRefreshClient } from "@/components/revisit-refresh-client";
-import { resetRouterCacheState } from "@/lib/nav/router-cache";
+import { markRouterCacheStale, notePrefetch, resetRouterCacheState } from "@/lib/nav/router-cache";
 
 // Simula a navegação do App Router: a página sai da tela e volta do cache com o MESMO
 // render do servidor (mesmo id) — é isso que o cache do roteador faz (#639).
@@ -81,6 +81,36 @@ describe("RevisitRefreshClient (#639)", () => {
     vi.setSystemTime(1_000_000 + 40_000);
     act(() => document.dispatchEvent(new Event("visibilitychange")));
     expect(refresh).not.toHaveBeenCalled();
+  });
+
+  it("depois do refresh chega um id novo: não relê de novo (sem laço)", () => {
+    show("r1");
+    leave();
+    vi.setSystemTime(1_000_000 + 45_000);
+    show("r1");
+    expect(refresh).toHaveBeenCalledTimes(1);
+    show("r2");
+    vi.setSystemTime(1_000_000 + 46_000);
+    act(() => document.dispatchEvent(new Event("visibilitychange")));
+    expect(refresh).toHaveBeenCalledTimes(1);
+  });
+
+  it("gravação fora do servidor: a página guardada relê ao reabrir, mesmo nova", () => {
+    show("r1");
+    leave();
+    vi.setSystemTime(1_000_000 + 5_000);
+    markRouterCacheStale();
+    show("r1");
+    expect(refresh).toHaveBeenCalledTimes(1);
+  });
+
+  it("página buscada com o mouse há 4 min: abre e relê em seguida", () => {
+    window.history.replaceState(null, "", "/match/1?back=%2Fjogos");
+    notePrefetch("/match/1?back=%2Fjogos");
+    vi.setSystemTime(1_000_000 + 240_000);
+    show("novo");
+    expect(refresh).toHaveBeenCalledTimes(1);
+    window.history.replaceState(null, "", "/");
   });
 
   it("sem App Router (render solto, testes): não faz nada nem quebra", () => {

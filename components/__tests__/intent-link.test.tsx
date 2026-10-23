@@ -12,7 +12,8 @@ describe("IntentLink (#639)", () => {
   let container: HTMLDivElement;
   let root: Root;
   const prefetch = vi.fn();
-  const router = { prefetch, push: vi.fn(), replace: vi.fn() };
+  const refresh = vi.fn();
+  const router = { prefetch, refresh, push: vi.fn(), replace: vi.fn() };
   let hover = true;
 
   beforeEach(() => {
@@ -20,6 +21,8 @@ describe("IntentLink (#639)", () => {
     vi.useFakeTimers();
     resetIntentPrefetch();
     prefetch.mockClear();
+    refresh.mockClear();
+    window.history.replaceState(null, "", "/jogos");
     hover = true;
     window.matchMedia = ((q: string) => ({
       matches: q === "(hover: hover)" ? hover : false,
@@ -30,14 +33,20 @@ describe("IntentLink (#639)", () => {
     container = document.createElement("div");
     document.body.appendChild(container);
     root = createRoot(container);
+    renderLink();
+  });
+
+  function renderLink(props: Partial<Parameters<typeof IntentLink>[0]> = {}) {
     act(() => {
       root.render(
         <AppRouterContext.Provider value={router as unknown as AppRouterInstance}>
-          <IntentLink href="/match/1?back=%2Fjogos">jogo</IntentLink>
+          <IntentLink href="/match/1?back=%2Fjogos" {...props}>
+            jogo
+          </IntentLink>
         </AppRouterContext.Provider>,
       );
     });
-  });
+  }
   afterEach(() => {
     act(() => root.unmount());
     container.remove();
@@ -112,6 +121,51 @@ describe("IntentLink (#639)", () => {
     enter();
     act(() => root.render(<div />));
     act(() => vi.advanceTimersByTime(200));
+    expect(prefetch).not.toHaveBeenCalled();
+  });
+
+  it("clique em URL sem query: a navegação comum busca (prioridade alta), sem busca extra", () => {
+    renderLink({ href: "/dashboard" });
+    click();
+    expect(prefetch).not.toHaveBeenCalled();
+  });
+
+  it("shift/alt+clique ou clique cancelado por quem usa o link: não busca", () => {
+    click({ shiftKey: true });
+    click({ altKey: true });
+    renderLink({ onClick: (e) => e.preventDefault() });
+    click();
+    expect(prefetch).not.toHaveBeenCalled();
+  });
+
+  it("clique no link da página atual: relê a página", () => {
+    window.history.replaceState(null, "", "/match/1?back=%2Fjogos");
+    click();
+    expect(refresh).toHaveBeenCalledTimes(1);
+    expect(prefetch).not.toHaveBeenCalled();
+  });
+
+  it("âncora na página atual: só rola, não relê", () => {
+    renderLink({ href: "/jogos#fim" });
+    click();
+    expect(refresh).not.toHaveBeenCalled();
+  });
+
+  it("nova aba (target=_blank) ou download: nem o hover busca", () => {
+    renderLink({ target: "_blank" });
+    enter();
+    act(() => vi.advanceTimersByTime(150));
+    renderLink({ download: true });
+    enter();
+    act(() => vi.advanceTimersByTime(150));
+    expect(prefetch).not.toHaveBeenCalled();
+  });
+
+  it("link pra fora do app: não busca", () => {
+    renderLink({ href: "https://example.com/x?y=1" });
+    enter();
+    act(() => vi.advanceTimersByTime(150));
+    click();
     expect(prefetch).not.toHaveBeenCalled();
   });
 

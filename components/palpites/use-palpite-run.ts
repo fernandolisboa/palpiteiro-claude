@@ -57,7 +57,8 @@ export function usePalpiteRun(): PalpiteRun {
   // em estado nem dá refresh numa página que já é outra.
   const abortRef = useRef<AbortController | null>(null);
   // O run que segue sozinho grava depois: as páginas guardadas no cache do roteador
-  // são relidas quando reabertas (#639).
+  // até aqui são relidas quando reabertas (#639). As abertas depois e antes do fim do
+  // run seguem a regra dos 30s do `RevisitRefresh` (o run leva bem mais que isso).
   useEffect(
     () => () => {
       if (inFlight.current) markRouterCacheStale();

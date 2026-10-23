@@ -31,14 +31,19 @@ describe("toda página logada relê o servidor quando reaberta do cache", () => 
   });
 
   it.each(all)("app/(app)/%s renderiza <RevisitRefresh", (page) => {
-    expect(readFileSync(join(root, page), "utf8")).toMatch(/<RevisitRefresh[\s/]/);
+    // Sem comentários: citar o componente num comentário não conta.
+    const code = readFileSync(join(root, page), "utf8")
+      .replace(/\/\*[\s\S]*?\*\//g, "")
+      .replace(/\{\/\*[\s\S]*?\*\/\}/g, "")
+      .replace(/^\s*\/\/.*$/gm, "");
+    expect(code).toMatch(/<RevisitRefresh[\s/]/);
   });
 });
 
 describe("configuração", () => {
-  it("cache do roteador: 5 min pra página dinâmica, 60s pra busca completa", () => {
+  it("cache do roteador: 5 min pra página dinâmica", () => {
     const src = readFileSync(join(process.cwd(), "next.config.ts"), "utf8");
-    expect(src).toMatch(/staleTimes:\s*\{\s*dynamic:\s*300,\s*static:\s*60\s*\}/);
+    expect(src).toMatch(/staleTimes:\s*\{\s*dynamic:\s*300\s*\}/);
   });
 
   it("funções na mesma região do banco (gru1, ADR 0067)", () => {

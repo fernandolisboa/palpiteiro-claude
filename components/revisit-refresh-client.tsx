@@ -2,7 +2,7 @@
 
 import { startTransition, useEffect } from "react";
 
-import { shouldRevalidate } from "@/lib/nav/router-cache";
+import { notePrefetchCacheCleared, shouldRevalidate } from "@/lib/nav/router-cache";
 import { useOptionalRouter } from "@/lib/nav/use-optional-router";
 
 /**
@@ -22,8 +22,11 @@ export function RevisitRefreshClient({
 
   useEffect(() => {
     if (!router) return;
+    const url = window.location.pathname + window.location.search;
     const revalidate = () => {
-      if (shouldRevalidate(renderId, maxAgeMs)) {
+      if (shouldRevalidate(renderId, maxAgeMs, Date.now(), url)) {
+        // O refresh limpa o cache do roteador inteiro, buscas por intenção incluídas.
+        notePrefetchCacheCleared();
         startTransition(() => router.refresh());
       }
     };
