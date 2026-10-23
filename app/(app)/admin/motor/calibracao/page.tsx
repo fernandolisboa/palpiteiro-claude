@@ -257,7 +257,7 @@ export default async function AdminCalibrationPage({ searchParams }: PageProps) 
 // o build do Kelly. As bandas do ADR 0019 seguem até lá.
 function GateSection({ gate }: { gate: KellyGate }) {
   return (
-    <section className="pb-8">
+    <section id="gate-do-kelly" className="scroll-mt-20 pb-8">
       <h2 className="pb-3 font-mono text-meta uppercase tracking-label text-muted-foreground">
         gate do kelly · {gate.ready ? "pronto" : "ainda não"}
       </h2>

@@ -60,7 +60,7 @@ export default async function PerfilPage() {
           initialImage={profile.image ?? ""}
         />
 
-        <div className="border-border mt-10 border-t pt-8">
+        <div id="modelo-de-analise" className="border-border mt-10 scroll-mt-20 border-t pt-8">
           <h2 className="text-display-sm font-medium tracking-tight">
             Modelo de análise
           </h2>
@@ -74,7 +74,7 @@ export default async function PerfilPage() {
           />
         </div>
 
-        <div className="border-border mt-10 border-t pt-8">
+        <div id="passkeys" className="border-border mt-10 scroll-mt-20 border-t pt-8">
           <h2 className="text-display-sm font-medium tracking-tight">
             Passkeys
           </h2>
@@ -87,7 +87,7 @@ export default async function PerfilPage() {
         {/* Caminho visível pros direitos do titular (LGPD art. 18) enquanto a exclusão
             self-serve (ADR 0046) não existe: o pedido sai do e-mail da conta, o que já
             confirma a titularidade. */}
-        <div className="border-border mt-10 border-t pt-8">
+        <div id="seus-dados" className="border-border mt-10 scroll-mt-20 border-t pt-8">
           <h2 className="text-display-sm font-medium tracking-tight">
             Seus dados
           </h2>

@@ -9,6 +9,7 @@ import {
   ODDS_CREDITS_PER_MONTH_ESTIMATE,
   projectRemainingMonthOddsCredits,
 } from "@/lib/config/odds-credits";
+import { leagueAnchorId } from "@/lib/admin/settings-index";
 import { getLeagueSettings } from "@/lib/db/queries/league-settings";
 import {
   getProviderQuota,
@@ -89,7 +90,7 @@ export default async function AdminLeaguesPage() {
           subtitle="ligas ativas · créditos da Odds API · sem deploy"
         />
 
-        <section className="pb-8">
+        <section id="orcamento-odds-api" className="scroll-mt-20 pb-8">
           <h2 className="text-meta tracking-label text-muted-foreground pb-3 font-mono uppercase">
             orçamento da odds api
           </h2>
@@ -172,7 +173,7 @@ export default async function AdminLeaguesPage() {
           </p>
         </section>
 
-        <section>
+        <section id="ligas" className="scroll-mt-20">
           <h2 className="text-meta tracking-label text-muted-foreground pb-3 font-mono uppercase">
             ligas suportadas
           </h2>
@@ -182,7 +183,8 @@ export default async function AdminLeaguesPage() {
               return (
                 <DefinitionRow
                   key={s.league}
-                  className="gap-4 px-4 py-3 last:border-b-0"
+                  id={leagueAnchorId(s.league)}
+                  className="scroll-mt-20 gap-4 px-4 py-3 last:border-b-0"
                   label={
                     <div className="flex flex-col">
                       <span className="text-body font-medium">
