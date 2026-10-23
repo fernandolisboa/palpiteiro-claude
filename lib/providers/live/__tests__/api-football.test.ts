@@ -840,6 +840,16 @@ describe("payload real: Flamengo x Estudiantes, 2H aos 60', expulsão aos 50'", 
       "Red Card",
       "Yellow Card",
     ]);
+    // O "Red Card" é de quem já tinha amarelo: segundo amarelo, não vermelho direto.
+    const red = cards.find((e) => e.detail === "Red Card")!;
+    expect(
+      cards.some(
+        (e) =>
+          e.detail === "Yellow Card" &&
+          e.player?.id === red.player?.id &&
+          (e.time.elapsed ?? 0) < (red.time.elapsed ?? 0)
+      )
+    ).toBe(true);
     const statRed = (teamId: number) =>
       realLive.item.statistics
         .find((t) => t.team.id === teamId)!
