@@ -3,7 +3,8 @@
 // Reconferência com a escalação (#619, PR B), contra Postgres REAL (pglite): quem é
 // reconferido (DISTINCT ON por jogo/usuário/mercado ANTES da elegibilidade), a guarda de
 // corrida antes do insert, as odds congeladas do pai, e o lugar da reconferência nas
-// métricas: fora do Yield/CLV/Kelly e da captura da closing line, dentro da calibração.
+// métricas: fora do Yield/CLV/Kelly e da captura da closing line, dentro da calibração
+// (marcada, fora dos agregados).
 import { PGlite } from "@electric-sql/pglite";
 import { eq } from "drizzle-orm";
 import { drizzle, type PgliteDatabase } from "drizzle-orm/pglite";
@@ -29,7 +30,10 @@ vi.mock("@/lib/db", () => ({
   ),
 }));
 
-import { getMarketCalibrationRows } from "@/lib/db/queries/calibration";
+import {
+  getMarketCalibrationRows,
+  getOverUnderCalibrationRows,
+} from "@/lib/db/queries/calibration";
 import {
   getAllDashboardRows,
   getUserDashboardRows,
@@ -361,7 +365,6 @@ describe("hasNewerPreMatchPrediction (guarda antes do insert)", () => {
       matchId,
       userId: ids.userA,
       marketId: ids.ouMarketId,
-      createdAt,
     };
     expect(await hasNewerPreMatchPrediction(parent)).toBe(false);
     // Outro usuário, outro mercado e ao vivo não contam.
@@ -370,6 +373,42 @@ describe("hasNewerPreMatchPrediction (guarda antes do insert)", () => {
     await insertPrediction({ matchId, createdAt: NOW, live: true, recommendation: "pass" });
     expect(await hasNewerPreMatchPrediction(parent)).toBe(false);
     await insertPrediction({ matchId, createdAt: NOW, judgments: null });
+    expect(await hasNewerPreMatchPrediction(parent)).toBe(true);
+  });
+  it("pai gravado com microssegundos não conta como mais novo que ele mesmo", async () => {
+    const matchId = await insertMatch({ kickoffAt: new Date(NOW.getTime() + min(40)) });
+    const parentId = await insertPrediction({ matchId, createdAt: NOW });
+    // O Postgres guarda µs; o Date do JS (o que a reconferência lê do pai) trunca em ms.
+    await client.query(
+      `UPDATE predictions SET created_at = '2026-05-15 08:00:00.123456+00' WHERE id = $1`,
+      [parentId]
+    );
+    const [row] = await realDb
+      .select({ createdAt: schema.predictions.createdAt })
+      .from(schema.predictions)
+      .where(eq(schema.predictions.id, parentId));
+    expect(row.createdAt.toISOString()).toBe("2026-05-15T08:00:00.123Z");
+    const parent = {
+      id: parentId,
+      matchId,
+      userId: ids.userA,
+      marketId: ids.ouMarketId,
+    };
+    expect(await hasNewerPreMatchPrediction(parent)).toBe(false);
+
+    // Outra no MESMO µs: desempata pelo id (só a de id maior é "mais nova").
+    const twin = await insertPrediction({ matchId, createdAt: NOW, judgments: null });
+    await client.query(
+      `UPDATE predictions SET created_at = '2026-05-15 08:00:00.123456+00' WHERE id = $1`,
+      [twin]
+    );
+    expect(await hasNewerPreMatchPrediction(parent)).toBe(twin > parentId);
+
+    // Uma µs depois já é mais nova.
+    await client.query(
+      `UPDATE predictions SET created_at = '2026-05-15 08:00:00.123457+00' WHERE id = $1`,
+      [twin]
+    );
     expect(await hasNewerPreMatchPrediction(parent)).toBe(true);
   });
 });
@@ -434,5 +473,12 @@ describe("reconferência nas métricas (ADR 0020 adendo)", () => {
     expect(cal).toHaveLength(2);
     expect(cal.find((r) => r.isBet)?.engineConfig).toContain("recheck=lineup_v1");
     expect(cal.find((r) => !r.isBet)?.engineConfig).not.toContain("recheck");
+    // Marcada pra sair dos agregados; o gate do Kelly a tira na query.
+    expect(cal.find((r) => r.isBet)?.isRecheck).toBe(true);
+    expect(cal.find((r) => !r.isBet)?.isRecheck).toBe(false);
+    const kelly = await getOverUnderCalibrationRows({ excludeRechecks: true });
+    expect(kelly).toHaveLength(1);
+    expect(kelly[0]).toMatchObject({ isBet: false, isRecheck: false });
+    expect(await getOverUnderCalibrationRows()).toHaveLength(2);
   });
 });

@@ -1788,14 +1788,68 @@ describe("reconferência com a escalação (#619) na view", () => {
       row({ id: "r", createdAt: recheckAt, recommendation: "home", recheck: recheck() }),
       row({ id: "parent", createdAt: parentAt, recommendation: "pass" }),
     ];
-    expect(palpiteBeforeLineupNotice(history, new Date("2026-05-15T13:00:00Z"))).toBe(
+    expect(palpiteBeforeLineupNotice(history, new Date("2026-05-15T13:00:00Z"), true)).toBe(
       PALPITE_BEFORE_LINEUP_NOTICE,
     );
     expect(PALPITE_BEFORE_LINEUP_NOTICE).toBe("Palpite gerado antes da escalação.");
     // Palpite refeito depois da reconferência, ou sem palpite: nada.
-    expect(palpiteBeforeLineupNotice(history, new Date("2026-05-15T18:40:00Z"))).toBeNull();
-    expect(palpiteBeforeLineupNotice(history, null)).toBeNull();
+    expect(
+      palpiteBeforeLineupNotice(history, new Date("2026-05-15T18:40:00Z"), true),
+    ).toBeNull();
+    expect(palpiteBeforeLineupNotice(history, null, true)).toBeNull();
     // Sem reconferência no histórico: nada.
-    expect(palpiteBeforeLineupNotice(history.slice(1), new Date("2026-05-15T13:00:00Z"))).toBeNull();
+    expect(
+      palpiteBeforeLineupNotice(history.slice(1), new Date("2026-05-15T13:00:00Z"), true),
+    ).toBeNull();
+    // Depois do apito (ao vivo/encerrado): nada.
+    expect(
+      palpiteBeforeLineupNotice(history, new Date("2026-05-15T13:00:00Z"), false),
+    ).toBeNull();
+  });
+
+  it("rodapé: texto automático no lugar do modelo do pai", () => {
+    const recheckView = toAnalysisViewFromPrediction(
+      row({ id: "r", createdAt: recheckAt, recommendation: "home", recheck: recheck() }),
+      now,
+      TZ,
+    );
+    expect(recheckView.model).toBe("texto automático");
+    const parentView = toAnalysisViewFromPrediction(
+      row({ id: "parent", createdAt: parentAt, recommendation: "pass" }),
+      now,
+      TZ,
+    );
+    expect(parentView.model).not.toBe("texto automático");
+  });
+
+  it("a reconferência não muda a ordem das seções por mercado", () => {
+    const ouAt = new Date("2026-05-15T11:00:00Z");
+    const history = [
+      // O cron reconferiu o over/under (mais novo de todos)…
+      row({
+        id: "r-ou",
+        createdAt: recheckAt,
+        recommendation: "over",
+        marketKey: "over_under",
+        line: 2.5,
+        recheck: recheck({
+          before: { recommendation: "pass", line: 2.5, confidencePct: 51, edgePct: null },
+        }),
+      }),
+      // …mas a última análise PEDIDA foi a de 1X2.
+      row({ id: "mr", createdAt: parentAt, recommendation: "pass" }),
+      row({
+        id: "ou",
+        createdAt: ouAt,
+        recommendation: "pass",
+        marketKey: "over_under",
+        line: 2.5,
+      }),
+    ];
+    const sections = toMarketAnalysisSections(history, now, TZ);
+    expect(sections.map((x) => [x.marketKey, x.id])).toEqual([
+      ["match_result", "mr"],
+      ["over_under", "r-ou"],
+    ]);
   });
 });

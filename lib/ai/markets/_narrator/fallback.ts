@@ -1,4 +1,4 @@
-import { fmtNumber } from "./labels";
+import { capKeyFactor, fmtNumber } from "./labels";
 import { KEY_FACTORS_MAX, RATIONALE_MAX_CHARS } from "./prompt";
 import type { NarratorOutput } from "./schemas";
 import type { NarratorDecision } from "./types";
@@ -50,7 +50,8 @@ export function templatedNarration(d: NarratorDecision): NarratorOutput {
   rationale = withLineupNotes(withNotes(rationale, notes), d.lineupNotes ?? []);
   // Escalação (#619) depois de probabilidade/edge (ou piso/candidata no pass): o número
   // continua sendo o 1º fato do card.
-  factors.push(...(d.lineupNotes ?? []));
+  // Cortadas no limite do fator (o schema rejeitaria a saída inteira).
+  factors.push(...(d.lineupNotes ?? []).map(capKeyFactor));
   factors.push(...d.judgmentFactors);
   if (factors.length < 2) factors.push(goals);
 

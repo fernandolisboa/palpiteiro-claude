@@ -266,11 +266,6 @@ export default async function MatchPage({ params, searchParams }: PageProps) {
   // o link /p/[id] e ramifica Compartilhar/Copiar). null quando não há set persistido ainda.
   const heroSetId = palpiteSets[0]?.palpiteSet.id ?? null;
   const heroSharedAt = palpiteSets[0]?.palpiteSet.sharedAt ?? null;
-  // #619: análise reconferida com a escalação depois do palpite exibido → uma linha no
-  // HERO (só texto). Sem palpite, nada.
-  const heroLineupNotice = palpiteSets[0]
-    ? palpiteBeforeLineupNotice(history, palpiteSets[0].palpiteSet.createdAt)
-    : null;
 
   // toMatchHeroView (não toMatchRowView): o tipo do hero não tem a leitura do modelo
   // (firewall ADR 0030).
@@ -364,6 +359,15 @@ export default async function MatchPage({ params, searchParams }: PageProps) {
   // Ao vivo (#580): com a flag ligada, a fase vem do estado lido acima; desligada, é o
   // gate de hoje (fecha no apito).
   const phase = matchPhase(match, inPlayState, now, { liveMode });
+  // #619: análise reconferida com a escalação depois do palpite exibido → uma linha no
+  // HERO (só texto), só no pré-jogo. Sem palpite, nada.
+  const heroLineupNotice = palpiteSets[0]
+    ? palpiteBeforeLineupNotice(
+        history,
+        palpiteSets[0].palpiteSet.createdAt,
+        phase.kind === "pre"
+      )
+    : null;
   const unavailableReason = phase.reason;
   // Leitura ao vivo (#594, ADR 0060 §8): com o jogo rolando e o estado bom, o modelo em
   // jogo (a base do apito condicionada ao placar e ao minuto) decide se a análise e o

@@ -299,7 +299,7 @@ describe("runLineupRechecks: escalação publicada", () => {
     expect(kv.has(lineupRecheckMarkerKey("m1"))).toBe(false);
   });
 
-  it("falha na porta do JEV (null) também solta o marcador, e volta ao carimbo anterior", async () => {
+  it("falha na porta do JEV (null) não mexe no marcador: fica o carimbo anterior", async () => {
     const old = NOW.getTime() - min(60);
     kv.set(lineupRecheckMarkerKey("m1"), old);
     getLineupRecheckCandidates.mockResolvedValue([
@@ -373,6 +373,76 @@ describe("runLineupRechecks: escalação publicada", () => {
     expect(s.errors).toBe(1);
     expect(s.persisted).toBe(1);
   });
+
+  it("pai que lança: sem marcador novo, e o próximo run refaz o jogo", async () => {
+    const m1 = match("m1", 40);
+    const old = NOW.getTime() - min(60);
+    kv.set(lineupRecheckMarkerKey("m1"), old);
+    const p1 = candidate("p1", m1, new Date(NOW.getTime() - min(5)));
+    const p2 = candidate("p2", m1, new Date(NOW.getTime() - min(5)));
+    getLineupRecheckCandidates.mockResolvedValue([p1, p2]);
+    recheckPredictionWithLineup.mockRejectedValueOnce(new Error("db down"));
+    await runLineupRechecks({ now: NOW });
+    expect(kv.get(lineupRecheckMarkerKey("m1"))).toBe(old);
+
+    // p2 virou reconferência (sai dos candidatos pelo DISTINCT ON); p1 volta.
+    recheckPredictionWithLineup.mockClear();
+    getLineupRecheckCandidates.mockResolvedValue([p1]);
+    const s = await runLineupRechecks({ now: NOW });
+    expect(recheckPredictionWithLineup).toHaveBeenCalledTimes(1);
+    expect(recheckPredictionWithLineup.mock.calls[0][0].parent.prediction.id).toBe("p1");
+    expect(s).toMatchObject({ persisted: 1, errors: 0, alreadyDone: 0 });
+    expect(kv.get(lineupRecheckMarkerKey("m1"))).toBe(NOW.getTime());
+  });
+
+  it("marcador só depois da passada: um run que morre no meio não marca o jogo", async () => {
+    const m1 = match("m1", 40);
+    getLineupRecheckCandidates.mockResolvedValue([candidate("p1", m1), candidate("p2", m1)]);
+    const markerDuringLoop: boolean[] = [];
+    recheckPredictionWithLineup.mockImplementation(async () => {
+      markerDuringLoop.push(kv.has(lineupRecheckMarkerKey("m1")));
+      return { kind: "persisted", predictionId: "n", flipped: false, oddsFrom: "snapshot" };
+    });
+    await runLineupRechecks({ now: NOW });
+    expect(markerDuringLoop).toEqual([false, false]);
+    expect(kv.get(lineupRecheckMarkerKey("m1"))).toBe(NOW.getTime());
+  });
+
+  it("pulos determinísticos (sem odds, superseded) marcam o jogo", async () => {
+    const m1 = match("m1", 40);
+    getLineupRecheckCandidates.mockResolvedValue([candidate("p1", m1), candidate("p2", m1)]);
+    recheckPredictionWithLineup
+      .mockResolvedValueOnce({ kind: "skipped", reason: "no_odds" })
+      .mockResolvedValueOnce({ kind: "skipped", reason: "superseded" });
+    await runLineupRechecks({ now: NOW });
+    expect(kv.get(lineupRecheckMarkerKey("m1"))).toBe(NOW.getTime());
+  });
+
+  it("o log do run traz as contagens de sem odds, superseded e sem informação", async () => {
+    const m1 = match("m1", 40);
+    const m2 = match("m2", 50);
+    getLineupRecheckCandidates.mockResolvedValue([
+      candidate("p1", m1),
+      candidate("p2", m1),
+      candidate("p3", m2),
+    ]);
+    resolveModelBaseJudgments
+      .mockResolvedValueOnce({ input: input(), run: RUN_OK })
+      .mockResolvedValueOnce({ input: input(), run: null });
+    recheckPredictionWithLineup
+      .mockResolvedValueOnce({ kind: "skipped", reason: "no_odds" })
+      .mockResolvedValueOnce({ kind: "skipped", reason: "superseded" });
+    await runLineupRechecks({ now: NOW });
+    const logged = vi
+      .mocked(console.log)
+      .mock.calls.map((c) => JSON.parse(String(c[0])))
+      .find((l) => l.event === "run_complete");
+    expect(logged).toMatchObject({
+      scope: "recheck_lineups",
+      uninformative: 1,
+      parentsSkipped: { no_odds: 1, superseded: 1, kickoff_passed: 0 },
+    });
+  });
 });
 
 describe("isLineupInformative", () => {
@@ -398,6 +468,41 @@ describe("isLineupInformative", () => {
       isLineupInformative({
         ...unknown,
         lineup: { home: { status: "not_announced" }, away: { status: "not_announced" } },
+      })
+    ).toBe(false);
+  });
+
+  it("escalação anunciada com desfalcado em dúvida que sobrou na lista → informativo", () => {
+    const absent = (status: "doubtful" | "injured") =>
+      ({
+        injury: { player: { name: "X" }, type: "injury", status },
+      }) as MatchJudgmentInput["absences"]["home"][number];
+    const unknown = input({
+      lineup: {
+        home: { status: "announced", changes: null, leftOut: [] },
+        away: { status: "announced", changes: null, leftOut: [] },
+      },
+    });
+    // Em dúvida no banco (ou fora) com a escalação saída: o v3 o trata como fora do jogo.
+    const doubtful = {
+      ...unknown,
+      absences: { home: [], away: [absent("doubtful")] },
+      providerAbsences: { home: [], away: [absent("doubtful")] },
+    };
+    expect(isLineupInformative(doubtful)).toBe(true);
+    // Lesionado já era fora antes da escalação: nada novo.
+    expect(
+      isLineupInformative({
+        ...unknown,
+        absences: { home: [absent("injured")], away: [] },
+        providerAbsences: { home: [absent("injured")], away: [] },
+      })
+    ).toBe(false);
+    // Sem a escalação daquele lado, a dúvida segue dúvida.
+    expect(
+      isLineupInformative({
+        ...doubtful,
+        lineup: { ...doubtful.lineup, away: { status: "not_announced" } },
       })
     ).toBe(false);
   });

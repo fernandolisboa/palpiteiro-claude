@@ -27,6 +27,9 @@ export type RecentPredictionInput = {
   // Leitura ao vivo (#594): sempre `pass`, sem odd. Não entra na dedup de um jogo que
   // tem análise de pré-jogo (senão a leitura das 16h apagaria a aposta das 15h).
   isLive: boolean;
+  // Reconferência com a escalação (#619): entra no cartão (é a análise atual do
+  // mercado), mas não conta como "analisado por último" (é do cron, não do usuário).
+  isRecheck?: boolean;
   createdAt: Date;
 };
 
@@ -53,8 +56,16 @@ export function toRecentMatchViews(
   // de fora. Só leituras ao vivo: o cartão mostra elas (todas sem aposta).
   const hasPreMatch = new Set(rows.filter((r) => !r.isLive).map((r) => r.matchId));
   const byMatch = new Map<string, Map<string, RecentPredictionInput>>();
+  // Ordem dos cartões: a última análise do USUÁRIO no jogo (a mesma da query).
+  const lastUserAnalysis = new Map<string, number>();
   for (const row of rows) {
     if (row.isLive && hasPreMatch.has(row.matchId)) continue;
+    if (!row.isRecheck) {
+      lastUserAnalysis.set(
+        row.matchId,
+        Math.max(lastUserAnalysis.get(row.matchId) ?? 0, row.createdAt.getTime()),
+      );
+    }
     const marketKey = row.marketKey ?? "over_under";
     const markets = byMatch.get(row.matchId) ?? new Map<string, RecentPredictionInput>();
     const current = markets.get(marketKey);
@@ -63,6 +74,7 @@ export function toRecentMatchViews(
   }
 
   const lastAnalysis = (latest: RecentPredictionInput[]) =>
+    lastUserAnalysis.get(latest[0].matchId) ??
     Math.max(...latest.map((r) => r.createdAt.getTime()));
 
   return [...byMatch.values()]

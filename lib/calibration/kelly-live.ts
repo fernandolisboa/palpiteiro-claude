@@ -14,7 +14,9 @@ import { evaluateKellyGate, type KellyGate } from "./phase-c-gate";
 export async function loadKellyGate(): Promise<KellyGate> {
   const [dashboardRows, calibrationRows] = await Promise.all([
     getAllDashboardRows(),
-    getOverUnderCalibrationRows(),
+    // Sem a reconferência com a escalação (#619): ela divide o resultado com o pai e
+    // contaria o mesmo jogo duas vezes no skill do gate.
+    getOverUnderCalibrationRows({ excludeRechecks: true }),
   ]);
   // Dedup por (jogo, mercado) como o dashboard (ADR 0020).
   const withClosing = keepLatestPerMatch(

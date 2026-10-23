@@ -390,4 +390,18 @@ describe("reconferência com a escalação (#619): aviso em todo layout", () => 
       NOTICE,
     );
   });
+
+  it("rodapé da seção: texto automático, não o modelo da análise anterior", () => {
+    const markup = renderToStaticMarkup(
+      <MarketAnalysisSections
+        sections={[{ ...RECHECKED, view: { ...recheckView, model: "texto automático" } }]}
+        analyzable
+        matchId="m"
+        selectableModels={[]}
+        defaultModelLabel="Sonnet 5.5"
+      />,
+    );
+    expect(markup).toContain("reconferida em código com a escalação, texto automático");
+    expect(markup).not.toContain("análise feita com modelo");
+  });
 });

@@ -23,6 +23,7 @@ import {
   deriveIndependentImplied,
   type IndependentBinaryBundle,
 } from "@/lib/odds/collect-independent-binaries";
+import { ODDS_SNAPSHOT_FRESHNESS_MS } from "@/lib/odds/freshness-window";
 import { computeMarketImpliedProbabilities } from "@/lib/odds/implied-probability";
 import { pickBestBookmaker, type MarketOddsBundle } from "@/lib/odds/select-bookmaker";
 import { getOddsProvider } from "@/lib/providers/odds";
@@ -1911,8 +1912,11 @@ type RecheckOdds = {
 };
 
 // Odds da reconferência, SÓ do banco: a captura mais recente (≤ 6 h) da linha do pai;
-// sem ela, as odds congeladas do próprio pai (prediction_selection_odds). Mercado
-// incompleto ou odd fora do domínio → null (pula).
+// sem ela, as odds congeladas do próprio pai (prediction_selection_odds). Também ficam
+// as do pai quando a captura é mais velha que as que ELE usou (o pai leu uma captura de
+// no máximo ODDS_SNAPSHOT_FRESHNESS_MS antes de ser gravado) ou quando a leitura lança
+// (captura incompleta ou incoerente: a query hard-faila). Mercado incompleto ou odd fora
+// do domínio → null (pula).
 async function recheckOdds(args: {
   parent: Prediction;
   matchId: string;
@@ -1932,18 +1936,37 @@ async function recheckOdds(args: {
     }
     return out;
   };
-  const snapshot = await getLatestFreshSelectionOddsSnapshots(
-    {
-      matchId: args.matchId,
-      dbMarketKey: args.dbMarketKey,
-      ...(args.line === null ? {} : { params: { line: args.line } }),
-    },
-    args.now,
-    RECHECK_ODDS_MAX_AGE_MS,
-  );
-  const fromSnapshot = snapshot
-    ? complete(snapshot.selections.map((s) => ({ key: s.key, odd: Number(s.odd) })))
-    : null;
+  let snapshot: Awaited<ReturnType<typeof getLatestFreshSelectionOddsSnapshots>> =
+    null;
+  try {
+    snapshot = await getLatestFreshSelectionOddsSnapshots(
+      {
+        matchId: args.matchId,
+        dbMarketKey: args.dbMarketKey,
+        ...(args.line === null ? {} : { params: { line: args.line } }),
+      },
+      args.now,
+      RECHECK_ODDS_MAX_AGE_MS,
+    );
+  } catch (err) {
+    console.error(
+      JSON.stringify({
+        scope: "recheck_lineups",
+        matchId: args.matchId,
+        predictionId: args.parent.id,
+        error: "recheck_snapshot_read_failed",
+        message: err instanceof Error ? err.message : String(err),
+      }),
+    );
+  }
+  const olderThanParent =
+    snapshot !== null &&
+    snapshot.capturedAt.getTime() <
+      args.parent.createdAt.getTime() - ODDS_SNAPSHOT_FRESHNESS_MS;
+  const fromSnapshot =
+    snapshot && !olderThanParent
+      ? complete(snapshot.selections.map((s) => ({ key: s.key, odd: Number(s.odd) })))
+      : null;
   if (snapshot && fromSnapshot) {
     return {
       oddByKey: fromSnapshot,
@@ -2102,7 +2125,6 @@ export async function recheckPredictionWithLineup(
       matchId: p.matchId,
       userId: p.userId,
       marketId: p.marketId,
-      createdAt: p.createdAt,
     })
   ) {
     return skip("superseded");
@@ -2112,10 +2134,14 @@ export async function recheckPredictionWithLineup(
   const result = await persistPrediction({
     matchId: match.id,
     userId: p.userId,
-    // A chamada JEV deste run (row de sistema), ou a do pai quando o JEV veio de reuso
-    // sem row (`aiCallId` null). A reconferência não tem chamada narradora própria:
-    // ownsAiCall é false (sem custo no card).
-    aiCallId: judgment.run.aiCallId ?? p.aiCallId,
+    // A chamada JEV deste run (row de sistema, ou a da base do modelo que a fez) só
+    // quando o JEV NÃO veio de outra predição: essa row é de outro usuário. Senão (ou
+    // sem row), a do pai. A reconferência não tem chamada narradora própria: ownsAiCall
+    // é false (sem custo no card).
+    aiCallId:
+      judgment.run.reusedFromPredictionId === null
+        ? (judgment.run.aiCallId ?? p.aiCallId)
+        : p.aiCallId,
     cartridge,
     catalog,
     selectionKeys: [...selectionKeys],

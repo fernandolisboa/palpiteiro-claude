@@ -35,7 +35,14 @@ function summary(over: Partial<LineupRecheckSummary> = {}): LineupRecheckSummary
     persisted: 0,
     flipped: 0,
     oddsFromParent: 0,
-    parentsSkipped: {},
+    parentsSkipped: {
+      not_code_jev_market: 0,
+      parent_incomplete: 0,
+      jev_failed: 0,
+      no_odds: 0,
+      superseded: 0,
+      kickoff_passed: 0,
+    },
     errors: 0,
     ...over,
   };

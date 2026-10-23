@@ -1,4 +1,4 @@
-import { and, asc, desc, eq, gt, isNotNull, lte, or, sql } from "drizzle-orm";
+import { and, asc, desc, eq, gt, isNotNull, lte, ne, sql } from "drizzle-orm";
 
 import {
   marketSelections,
@@ -102,13 +102,16 @@ export async function getLineupRecheckCandidates(args: {
  * Guarda da corrida com a análise interativa (ou outro run), imediatamente antes do
  * insert: o pai deixou de ser a análise atual → a reconferência não grava. "Mais nova"
  * segue a ordem do display: createdAt maior, ou igual com id maior.
+ *
+ * A comparação é contra a row GRAVADA do pai, em SQL: o Postgres guarda microssegundos
+ * e o `Date` do JS só milissegundos, então comparar com `parent.createdAt` faria o pai
+ * contar como mais novo que ele mesmo (e quase toda reconferência sairia `superseded`).
  */
 export async function hasNewerPreMatchPrediction(parent: {
   id: string;
   matchId: string;
   userId: string;
   marketId: string;
-  createdAt: Date;
 }): Promise<boolean> {
   const rows = await db
     .select({ id: predictions.id })
@@ -119,13 +122,8 @@ export async function hasNewerPreMatchPrediction(parent: {
         eq(predictions.userId, parent.userId),
         eq(predictions.marketId, parent.marketId),
         eq(predictions.isLive, false),
-        or(
-          gt(predictions.createdAt, parent.createdAt),
-          and(
-            eq(predictions.createdAt, parent.createdAt),
-            sql`${predictions.id} > ${parent.id}`,
-          ),
-        ),
+        ne(predictions.id, parent.id),
+        sql`(${predictions.createdAt}, ${predictions.id}) > (SELECT p.created_at, p.id FROM ${predictions} p WHERE p.id = ${parent.id})`,
       ),
     )
     .limit(1);

@@ -12,6 +12,7 @@ import type {
   TeamSide,
 } from "@/lib/ai/judgments/types";
 
+import { KEY_FACTOR_MAX_CHARS } from "./prompt";
 import type { NarratorTeams, UserFactorOrigins } from "./types";
 
 // Número em PT-BR (vírgula decimal).
@@ -244,24 +245,40 @@ function lineupNoteForTeam(
   startingAbsentees: number,
 ): string | null {
   if (summary.status !== "announced") return null;
-  let phrase: string;
-  if (summary.changes === null) {
-    phrase = `Escalação do ${team} confirmada, sem como comparar com o time titular habitual`;
-  } else {
-    phrase = `Escalação do ${team} confirmada com ${CHANGES_PT[summary.changes]} em relação ao time titular habitual`;
-    if (summary.leftOut.length > 0) {
-      const roles = summary.leftOut.slice(0, LEFT_OUT_ROLES_MAX).map(leftOutRolePt);
-      const more = summary.leftOut.length - roles.length;
-      phrase += ` (${roles.join(", ")}${more > 0 ? ` e mais ${more}` : ""})`;
-    }
-  }
-  if (startingAbsentees > 0) {
-    phrase +=
-      startingAbsentees === 1
+  const { changes, leftOut } = summary;
+  const absentees =
+    startingAbsentees === 0
+      ? ""
+      : startingAbsentees === 1
         ? "; 1 jogador listado como desfalque está entre os titulares"
         : `; ${startingAbsentees} jogadores listados como desfalque estão entre os titulares`;
+  // "Escalação: <time>" (sem artigo: "do"/"da" depende do time).
+  const build = (rolesMax: number): string => {
+    if (changes === null) {
+      return `Escalação: ${team} sem comparação com o time titular habitual${absentees}`;
+    }
+    let phrase = `Escalação: ${team} com ${CHANGES_PT[changes]} em relação ao time titular habitual`;
+    if (leftOut.length > 0 && rolesMax > 0) {
+      const roles = leftOut.slice(0, rolesMax).map(leftOutRolePt);
+      const more = leftOut.length - roles.length;
+      phrase += ` (${roles.join(", ")}${more > 0 ? ` e mais ${more}` : ""})`;
+    }
+    return `${phrase}${absentees}`;
+  };
+  // A frase também é fator-chave: cabe em KEY_FACTOR_MAX_CHARS citando menos papéis
+  // (nome de time longo) e, no limite, cortada.
+  for (let n = LEFT_OUT_ROLES_MAX; n >= 0; n--) {
+    const phrase = build(n);
+    if (phrase.length <= KEY_FACTOR_MAX_CHARS) return phrase;
   }
-  return phrase;
+  return capKeyFactor(build(0));
+}
+
+/** Corta uma frase de fator-chave no limite do schema, com reticências. */
+export function capKeyFactor(phrase: string): string {
+  return phrase.length <= KEY_FACTOR_MAX_CHARS
+    ? phrase
+    : `${phrase.slice(0, KEY_FACTOR_MAX_CHARS - 1).trimEnd()}…`;
 }
 
 /**

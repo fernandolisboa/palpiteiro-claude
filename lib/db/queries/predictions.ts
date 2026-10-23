@@ -9,7 +9,6 @@ import {
   isNull,
   lte,
   lt,
-  max,
   ne,
   sql,
 } from "drizzle-orm";
@@ -356,6 +355,8 @@ export type RecentPredictionRow = {
   edgePct: DbPrediction["edgePct"];
   // Leitura ao vivo (#580, ADR 0060): o cartão mostra o selo. Sem filtro aqui.
   isLive: boolean;
+  // Reconferência com a escalação (#619): não conta pra ordem dos cartões.
+  isRecheck: boolean;
   createdAt: Date;
 };
 
@@ -371,14 +372,16 @@ export async function getRecentPredictedMatchesByUser(
   userId: string,
   matchLimit = 5
 ): Promise<RecentPredictionRow[]> {
-  const lastAnalysis = max(predictions.createdAt);
+  // A reconferência com a escalação (#619) é do cron, não uma análise do usuário: não
+  // puxa o jogo pro topo. O jogo sempre tem o pai (a reconferência nasce dele).
+  const lastAnalysis = sql`max(${predictions.createdAt}) filter (where ${predictions.judgments}->'recheck' is null)`;
   const recentMatches = await db
     .select({ matchId: predictions.matchId })
     .from(predictions)
     .where(eq(predictions.userId, userId))
     .groupBy(predictions.matchId)
     // Desempate por jogo: com o mesmo max(createdAt), o corte do limit não varia.
-    .orderBy(desc(lastAnalysis), desc(predictions.matchId))
+    .orderBy(sql`${lastAnalysis} desc nulls last`, desc(predictions.matchId))
     .limit(matchLimit);
   if (recentMatches.length === 0) return [];
   return db
@@ -396,6 +399,7 @@ export async function getRecentPredictedMatchesByUser(
       selectionLabel: marketSelections.label,
       edgePct: predictions.edgePct,
       isLive: predictions.isLive,
+      isRecheck: sql<boolean>`(${predictions.judgments}->'recheck') is not null`,
       createdAt: predictions.createdAt,
     })
     .from(predictions)

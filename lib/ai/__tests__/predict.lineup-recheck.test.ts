@@ -329,10 +329,10 @@ describe("recheckPredictionWithLineup", () => {
     const factors = row.keyFactors as string[];
     expect(factors[0]).toMatch(/^Probabilidade do modelo/);
     expect(factors[1]).toMatch(/^Edge/);
-    expect(factors[2]).toContain("Escalação do CR Flamengo confirmada com 5 ou mais mudanças");
+    expect(factors[2]).toContain("Escalação: CR Flamengo com 5 ou mais mudanças");
     expect(factors[2]).toContain("atacante titular no banco");
     expect(factors[2]).toContain("1 jogador listado como desfalque está entre os titulares");
-    expect(row.rationale as string).toMatch(/^Escalação do CR Flamengo confirmada/);
+    expect(row.rationale as string).toMatch(/^Escalação: CR Flamengo com 5 ou mais/);
     // Odds só do banco, janela de 6 h.
     expect(getLatestFreshSelectionOddsSnapshots).toHaveBeenCalledWith(
       { matchId: MATCH.id, dbMarketKey: "match_result" },
@@ -373,13 +373,64 @@ describe("recheckPredictionWithLineup", () => {
     expectNoPaidBoundaries();
   });
 
-  it("captura incompleta também cai nas odds do pai; sem nenhuma → no_odds, sem insert", async () => {
-    getLatestFreshSelectionOddsSnapshots.mockResolvedValue(snapshot({ home: 2.6, draw: 3.4 }));
+  // A query hard-faila (lança) em captura incompleta ou incoerente: nunca devolve curta.
+  it("captura que lança (incompleta/incoerente) cai nas odds do pai", async () => {
+    const error = vi.spyOn(console, "error").mockImplementation(() => {});
+    getLatestFreshSelectionOddsSnapshots.mockRejectedValue(
+      new Error("getLatestSelectionOddsSnapshots: captura incompleta — 2/3 seleções")
+    );
+    getFrozenSelectionOdds.mockResolvedValue([
+      { key: "home", odd: 2.5 },
+      { key: "draw", odd: 3.3 },
+      { key: "away", odd: 3.0 },
+    ]);
+    const out = await recheckPredictionWithLineup(args());
+    expect(out).toMatchObject({ kind: "persisted", oddsFrom: "parent" });
+    expect(predictionInsert()!.bookmaker).toBe("Casa Antiga");
+    expect(error.mock.calls.map((c) => JSON.parse(String(c[0])))).toContainEqual(
+      expect.objectContaining({ error: "recheck_snapshot_read_failed", predictionId: "p-parent" })
+    );
+    expectNoPaidBoundaries();
+    error.mockRestore();
+  });
+
+  it("captura que lança e pai sem odds completas → no_odds, sem insert", async () => {
+    const error = vi.spyOn(console, "error").mockImplementation(() => {});
+    getLatestFreshSelectionOddsSnapshots.mockRejectedValue(new Error("captura incoerente"));
     getFrozenSelectionOdds.mockResolvedValue([{ key: "home", odd: 2.5 }]);
     const out = await recheckPredictionWithLineup(args());
     expect(out).toEqual({ kind: "skipped", reason: "no_odds" });
     expect(inserted).toEqual([]);
     expectNoPaidBoundaries();
+    error.mockRestore();
+  });
+
+  it("captura mais velha que as odds que o pai usou → odds do pai", async () => {
+    const createdAt = new Date("2026-05-15T17:00:00.000Z");
+    // O pai leu uma captura de no máximo 30 min antes de ser gravado (16:30+).
+    getLatestFreshSelectionOddsSnapshots.mockResolvedValue(
+      snapshot({ home: 2.6, draw: 3.4, away: 2.9 }, new Date("2026-05-15T16:20:00.000Z"))
+    );
+    getFrozenSelectionOdds.mockResolvedValue([
+      { key: "home", odd: 2.5 },
+      { key: "draw", odd: 3.3 },
+      { key: "away", odd: 3.0 },
+    ]);
+    const out = await recheckPredictionWithLineup(
+      args({ parent: { prediction: parent({ createdAt }), marketKey: "match_result" } })
+    );
+    expect(out).toMatchObject({ kind: "persisted", oddsFrom: "parent" });
+    expect(predictionInsert()!.oddAtRecommendation).toBe("2.500");
+
+    // Na fronteira (captura 30 min antes do pai) ainda vale a captura.
+    inserted.length = 0;
+    getLatestFreshSelectionOddsSnapshots.mockResolvedValue(
+      snapshot({ home: 2.6, draw: 3.4, away: 2.9 }, new Date("2026-05-15T16:30:00.000Z"))
+    );
+    const edge = await recheckPredictionWithLineup(
+      args({ parent: { prediction: parent({ createdAt }), marketKey: "match_result" } })
+    );
+    expect(edge).toMatchObject({ kind: "persisted", oddsFrom: "snapshot" });
   });
 
   it("over/under avalia só a linha do pai", async () => {
@@ -423,7 +474,6 @@ describe("recheckPredictionWithLineup", () => {
       matchId: MATCH.id,
       userId: "u-1",
       marketId: "mkt-1",
-      createdAt: parent().createdAt,
     });
     expect(inserted).toEqual([]);
   });
@@ -456,6 +506,30 @@ describe("recheckPredictionWithLineup", () => {
       args({ judgment: { input: judgmentInput(), run: run({ aiCallId: null }) } })
     );
     expect(predictionInsert()!.aiCallId).toBe("narration-call-parent");
+  });
+
+  it("JEV reusado de outra predição (row de outro usuário): aponta pra ai_call do pai", async () => {
+    await recheckPredictionWithLineup(
+      args({
+        judgment: {
+          input: judgmentInput(),
+          run: run({ aiCallId: "jev-call-other-user", reusedFromPredictionId: "p-other" }),
+        },
+      })
+    );
+    expect(predictionInsert()!.aiCallId).toBe("narration-call-parent");
+  });
+
+  it("JEV reusado da base do modelo (row de sistema): aponta pra ela", async () => {
+    await recheckPredictionWithLineup(
+      args({
+        judgment: {
+          input: judgmentInput(),
+          run: run({ aiCallId: "jev-call-model-base", reusedFromModelSnapshotId: "snap-1" }),
+        },
+      })
+    );
+    expect(predictionInsert()!.aiCallId).toBe("jev-call-model-base");
   });
 });
 

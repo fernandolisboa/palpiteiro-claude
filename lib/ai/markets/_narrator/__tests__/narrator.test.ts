@@ -12,6 +12,7 @@ import {
   templatedNarration,
   type NarratorDecision,
 } from "@/lib/ai/markets/_narrator";
+import { KEY_FACTOR_MAX_CHARS } from "@/lib/ai/markets/_narrator/prompt";
 import { applyJudgments } from "@/lib/ai/judgments/apply";
 import { JUDGMENT_QUESTION_IDS } from "@/lib/ai/judgments/questions";
 import type { JudgmentAnswers } from "@/lib/ai/judgments/types";
@@ -671,8 +672,8 @@ describe("escalação confirmada na reconferência (#619)", () => {
       { home: 0, away: 2 }
     );
     expect(phrases).toEqual([
-      `Escalação do ${TEAMS.home} confirmada com 5 ou mais mudanças por escolha em relação ao time titular habitual (goleiro titular no banco, defensor titular fora da lista, meio-campista titular e mais 1)`,
-      `Escalação do ${TEAMS.away} confirmada, sem como comparar com o time titular habitual; 2 jogadores listados como desfalque estão entre os titulares`,
+      `Escalação: ${TEAMS.home} com 5 ou mais mudanças por escolha em relação ao time titular habitual (goleiro titular no banco, defensor titular fora da lista, meio-campista titular e mais 1)`,
+      `Escalação: ${TEAMS.away} sem comparação com o time titular habitual; 2 jogadores listados como desfalque estão entre os titulares`,
     ]);
   });
 
@@ -683,16 +684,20 @@ describe("escalação confirmada na reconferência (#619)", () => {
         TEAMS
       )
     ).toEqual([
-      `Escalação do ${TEAMS.away} confirmada com 0 a 2 mudanças por escolha em relação ao time titular habitual`,
+      `Escalação: ${TEAMS.away} com 0 a 2 mudanças por escolha em relação ao time titular habitual`,
     ]);
   });
 
   it("template: notas abrem o racional e vêm DEPOIS de prob./edge nos fatores", () => {
-    const notes = ["Escalação do A confirmada", "Escalação do B confirmada"];
+    const notes = ["Escalação: A com 0 a 2 mudanças", "Escalação: B com 3 a 4 mudanças"];
     const out = templatedNarration(
       overDecision({ lineupNotes: notes, judgmentFactors: ["fator JEV"] })
     );
-    expect(out.rationale.startsWith("Escalação do A confirmada. Escalação do B confirmada. O modelo")).toBe(true);
+    expect(
+      out.rationale.startsWith(
+        "Escalação: A com 0 a 2 mudanças. Escalação: B com 3 a 4 mudanças. O modelo"
+      )
+    ).toBe(true);
     expect(out.key_factors).toEqual([
       "Probabilidade do modelo: 58,4%",
       "Edge: 8,2 pp",
@@ -703,11 +708,35 @@ describe("escalação confirmada na reconferência (#619)", () => {
     expect(checkNarrationFidelity(out, overDecision({ lineupNotes: notes }))).toEqual({ ok: true });
   });
 
-  it("nota longa demais não corta os números do racional (fica só nos fatores)", () => {
+  it("nota longa demais não corta os números do racional (fica só nos fatores, cortada)", () => {
     const plain = templatedNarration(overDecision());
     const out = templatedNarration(overDecision({ lineupNotes: ["x".repeat(590)] }));
     expect(out.rationale).toBe(plain.rationale);
-    expect(out.key_factors).toContain("x".repeat(590));
+    const note = out.key_factors.find((f) => f.startsWith("xxx"));
+    expect(note).toBe(`${"x".repeat(KEY_FACTOR_MAX_CHARS - 1)}…`);
+    expect(NarratorOutputSchema.safeParse(out).success).toBe(true);
+  });
+
+  it("frase longa: cita menos papéis pra caber no limite do fator", () => {
+    // 20 caracteres: a frase com 1 papel tem 200 (cabe); com 2 ou mais, não.
+    const longTeam = "Grêmio Novorizontino";
+    const [phrase] = lineupNotePhrases(
+      {
+        home: announced("5+", [
+          { position: "goalkeeper", whereabouts: "bench" },
+          { position: "defender", whereabouts: "out_of_squad" },
+          { position: "midfielder", whereabouts: "out_of_squad" },
+          { position: "forward", whereabouts: "out_of_squad" },
+        ]),
+        away: { status: "not_announced" },
+      },
+      { home: longTeam, away: TEAMS.away },
+      { home: 2, away: 0 }
+    );
+    expect(phrase.length).toBeLessThanOrEqual(KEY_FACTOR_MAX_CHARS);
+    expect(phrase.startsWith(`Escalação: ${longTeam} com 5 ou mais mudanças`)).toBe(true);
+    expect(phrase).toContain("(goleiro titular no banco e mais 3)");
+    expect(phrase.endsWith("2 jogadores listados como desfalque estão entre os titulares")).toBe(true);
   });
 
   it("o narrador LLM nunca lê as notas (mensagem idêntica, sem bump)", () => {
