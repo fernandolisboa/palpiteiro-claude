@@ -23,6 +23,7 @@ export function ReasoningButton({ onClick }: { onClick: () => void }) {
       size="sm"
       variant="ghost"
       onClick={onClick}
+      data-reasoning-trigger=""
       className="self-start text-palpite-strong-fg hover:bg-palpite-soft"
     >
       <ListTree className="size-3.5" /> Ver raciocínio
@@ -51,7 +52,16 @@ export function ReasoningDialog({
 }) {
   return (
     <Dialog open={open} onOpenChange={onOpenChange}>
-      <DialogContent>
+      <DialogContent
+        // O botão que abriu pode ter saído da tela (o run terminou com o diálogo aberto):
+        // o foco volta pro botão de agora, não pro <body>.
+        onCloseAutoFocus={(e) => {
+          const trigger = document.querySelector<HTMLElement>("[data-reasoning-trigger]");
+          if (!trigger) return;
+          e.preventDefault();
+          trigger.focus();
+        }}
+      >
         <DialogHeader>
           <DialogTitle className="text-display-sm font-medium tracking-tight">
             Raciocínio da análise
@@ -79,9 +89,9 @@ export function ReasoningDialog({
                 </p>
                 {step.detail && step.detail.length > 0 && (
                   <ul className="flex flex-col gap-1">
-                    {step.detail.map((line) => (
+                    {step.detail.map((line, i) => (
                       <li
-                        key={line}
+                        key={i}
                         className="relative pl-3 text-body-sm leading-snug tracking-tight text-muted-foreground before:absolute before:top-[0.55em] before:left-0 before:size-1 before:rounded-full before:bg-palpite-border"
                       >
                         {line}

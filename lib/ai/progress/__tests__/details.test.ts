@@ -103,7 +103,7 @@ describe("detalhes das etapas (Ver raciocínio, ADR 0065)", () => {
       "Forma recente do Vitória (mais novo primeiro): V E D",
       "Últimos 3 confrontos: 1 vitória do Vitória, 1 empate, 1 vitória do Athletico-PR",
       "Tabela: Vitória em 14º, Athletico-PR em 8º",
-      "Desfalques: 3 no Vitória, 1 no Athletico-PR",
+      "Na lista de desfalques: 3 do Vitória, 1 do Athletico-PR",
       "Escalações ainda não divulgadas",
     ]);
   });
@@ -120,11 +120,11 @@ describe("detalhes das etapas (Ver raciocínio, ADR 0065)", () => {
 
   it("modelo: gols esperados em pt-BR, placar mais provável e a fonte", () => {
     expect(modelDetail(scoreline("dixon_coles"), teams)).toEqual([
-      "Gols esperados: Vitória 1,4, Athletico-PR 1,1",
-      "Placar mais provável pelo modelo: 1–0",
+      "Gols esperados antes do contexto do jogo: Vitória 1,4, Athletico-PR 1,1",
+      "Placar mais provável pelo modelo base: 1–0",
       "Força de ataque e defesa dos times recalculada todo dia com os jogos da liga",
     ]);
-    expect(modelDetail(scoreline("heuristic"), teams)[2]).toMatch(/tabela/);
+    expect(modelDetail(scoreline("heuristic"), teams)[2]).toMatch(/^Modelo de reserva/);
   });
 
   it("JEV: só os fatores que mexem nas chances; nenhum → frase neutra; sem respostas → nada", () => {
@@ -177,6 +177,11 @@ describe("detalhes das etapas (Ver raciocínio, ADR 0065)", () => {
       ...jevDetail(answers(), teams),
       ...userContextDetail({ moved: false, notes: [] }),
       ...newsDetail(3),
+      ...analysesDetail([
+        { marketLabel: "Resultado (1X2)", recommendedLabel: "Casa", isPass: false },
+        { marketLabel: "Over/Under gols", recommendedLabel: "Mais de 2.5", isPass: false },
+        { marketLabel: "Placar exato", recommendedLabel: "2-1", isPass: false },
+      ]),
       ...synthesisDetail({ confidence: "alta" }),
     ];
     for (const line of lines) {

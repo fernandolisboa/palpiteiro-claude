@@ -1,8 +1,9 @@
 // O que cada etapa encontrou, em frases curtas pro "Ver raciocínio" (ADR 0065). Puro:
 // recebe o que o pipeline já tem em mãos e devolve linhas prontas. Mesmas regras da copy
 // das etapas (steps.ts): português conversacional, sem termo de valor (nem "odds"), sem
-// %, sem nome de casa de aposta e sem nome de jogador (a lista de desfalques vai em
-// contagem). Números de jogo (gols esperados, posição na tabela, placar) podem.
+// %, sem nome de casa de aposta, e desfalques só em contagem (nunca o nome do jogador;
+// o artilheiro escolhido por uma análise aparece como em "Ler análise completa").
+// Números de jogo (gols esperados, posição na tabela, placar) podem.
 
 import { applyJudgments } from "@/lib/ai/judgments/apply";
 import type { JudgmentAnswers } from "@/lib/ai/judgments/types";
@@ -89,11 +90,13 @@ export function sportsDataDetail(args: {
     lines.push("Nenhum desfalque informado para os dois times");
   } else {
     lines.push(
-      `Desfalques: ${args.absences.home} no ${teams.home}, ${args.absences.away} no ${teams.away}`,
+      `Na lista de desfalques: ${args.absences.home} do ${teams.home}, ${args.absences.away} do ${teams.away}`,
     );
   }
   lines.push(
-    args.lineups && args.lineups.home.starters.length + args.lineups.away.starters.length > 0
+    args.lineups &&
+      args.lineups.home.starters.length > 0 &&
+      args.lineups.away.starters.length > 0
       ? "Escalações confirmadas"
       : "Escalações ainda não divulgadas",
   );
@@ -118,14 +121,16 @@ function likeliestScore(model: ModelScoreline): { home: number; away: number } |
 
 export function modelDetail(model: ModelScoreline, teams: Teams): string[] {
   const lines = [
-    `Gols esperados: ${teams.home} ${ONE_DECIMAL.format(model.lambdaHome)}, ${teams.away} ${ONE_DECIMAL.format(model.lambdaAway)}`,
+    `Gols esperados antes do contexto do jogo: ${teams.home} ${ONE_DECIMAL.format(model.lambdaHome)}, ${teams.away} ${ONE_DECIMAL.format(model.lambdaAway)}`,
   ];
   const score = likeliestScore(model);
-  if (score) lines.push(`Placar mais provável pelo modelo: ${score.home}–${score.away}`);
+  if (score) {
+    lines.push(`Placar mais provável pelo modelo base: ${score.home}–${score.away}`);
+  }
   lines.push(
     model.source === "dixon_coles"
       ? "Força de ataque e defesa dos times recalculada todo dia com os jogos da liga"
-      : "Estimativa pela campanha na tabela (o modelo principal não tinha dados suficientes)",
+      : "Modelo de reserva: estimativa pela campanha dos times na tabela",
   );
   return lines;
 }

@@ -118,9 +118,14 @@ export function progressTrace(opts?: { assumeDone?: StepSpec }): ReasoningStep[]
 }
 
 // Desfecho que depende do valor devolvido (JEV reaproveitado, modelo de reserva…), e o
-// que a etapa encontrou.
+// que a etapa encontrou. `detail` em função roda à parte: se lançar, a etapa perde só as
+// linhas, nunca o desfecho e a frase.
 export type StepVerdict =
-  | { status?: Terminal; label?: string; detail?: readonly string[] }
+  | {
+      status?: Terminal;
+      label?: string;
+      detail?: readonly string[] | (() => readonly string[]);
+    }
   | void;
 
 export async function trackStep<T>(
@@ -142,7 +147,15 @@ export async function trackStep<T>(
   } catch {
     outcome = undefined;
   }
-  if (outcome?.detail) stepDetail(spec, outcome.detail);
+  if (outcome?.detail) {
+    try {
+      const lines =
+        typeof outcome.detail === "function" ? outcome.detail() : outcome.detail;
+      stepDetail(spec, lines);
+    } catch {
+      // Sem as linhas desta etapa; o desfecho segue.
+    }
+  }
   const status = outcome?.status ?? "done";
   if (status === "done") step.done(outcome?.label);
   else if (status === "failed") step.fail(outcome?.label);

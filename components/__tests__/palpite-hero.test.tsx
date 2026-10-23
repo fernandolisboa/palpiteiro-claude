@@ -1011,7 +1011,7 @@ describe("PalpiteHero — Ver raciocínio + robozinho (ADR 0065)", () => {
     const container = document.createElement("div");
     document.body.appendChild(container);
     const root = createRoot(container);
-    const renderWith = (view: PalpiteHeadlineView | null) =>
+    const renderWith = (view: PalpiteHeadlineView | null, setId: string | null = null) =>
       act(async () => {
         root.render(
           <PalpiteHero
@@ -1022,7 +1022,7 @@ describe("PalpiteHero — Ver raciocínio + robozinho (ADR 0065)", () => {
             analyzable
             fanOutEnabled
             finalScore={null}
-            setId={null}
+            setId={setId}
             sharedAt={null}
             hasAnalyses={false}
           />,
@@ -1108,11 +1108,46 @@ describe("PalpiteHero — Ver raciocínio + robozinho (ADR 0065)", () => {
     push({ t: "result", outcome: { ok: true, analysis: true } });
     controller.close();
     await act(settle);
-    await h.renderWith({ ...POPULATED, reasoning: REASONING });
+    // O refresh traz o set novo (outro id).
+    await h.renderWith({ ...POPULATED, reasoning: REASONING }, "33333333-3333-3333-3333-333333333333");
     await act(settle);
     // Mesmo diálogo, agora com o raciocínio gravado com o palpite.
     expect(h.dialog()!.textContent).toContain("Confiança do palpite: média");
     expect(h.dialog()!.textContent).toContain("nesta análise");
+    await h.cleanup();
+  });
+
+  it("run que falha com o diálogo aberto: segue nas etapas dele, não nas do palpite anterior", async () => {
+    let controller!: ReadableStreamDefaultController<Uint8Array>;
+    const body = new ReadableStream<Uint8Array>({
+      start(c) {
+        controller = c;
+      },
+    });
+    vi.stubGlobal(
+      "fetch",
+      vi.fn(async () => new Response(body, { status: 200 })),
+    );
+    const push = (msg: StreamMessage) =>
+      controller.enqueue(new TextEncoder().encode(encodeStreamMessage(msg)));
+    const h = await mount({ ...POPULATED, reasoning: REASONING });
+    const analyze = h.container.querySelector<HTMLButtonElement>(
+      'button[name="intent"][value="analysis"]',
+    )!;
+    await act(async () => {
+      h.container.querySelector("form")!.requestSubmit(analyze);
+      await settle();
+    });
+    push({ t: "step", id: "odds", status: "failed", label: "Faltaram preços do mercado" });
+    await act(settle);
+    await act(async () => h.button()!.click());
+    push({ t: "result", outcome: { ok: false, error: "Falhou agora." } });
+    controller.close();
+    await act(settle);
+    expect(h.container.textContent).toContain("Falhou agora.");
+    const text = h.dialog()!.textContent;
+    expect(text).toContain("Faltaram preços do mercado");
+    expect(text).not.toContain("Confiança do palpite: média");
     await h.cleanup();
   });
 });

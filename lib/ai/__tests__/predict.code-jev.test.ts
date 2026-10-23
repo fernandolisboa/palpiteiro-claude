@@ -2661,10 +2661,10 @@ describe("progresso ao vivo (ADR 0064)", () => {
     );
     const detailOf = (id: string) =>
       events.filter((e) => e.id === id && e.status === "done").at(-1)?.detail ?? [];
-    expect(detailOf("sports_data").some((l) => l.startsWith("Desfalques") || l.includes("desfalque"))).toBe(true);
+    expect(detailOf("sports_data").some((l) => l.includes("desfalque"))).toBe(true);
     expect(detailOf("sports_data")).toContain("Escalações ainda não divulgadas");
-    expect(detailOf("model")[0]).toMatch(/^Gols esperados: .+ \d,\d, .+ \d,\d$/);
-    expect(detailOf("model")[1]).toMatch(/^Placar mais provável pelo modelo: \d–\d$/);
+    expect(detailOf("model")[0]).toMatch(/^Gols esperados antes do contexto do jogo: .+ \d,\d, .+ \d,\d$/);
+    expect(detailOf("model")[1]).toMatch(/^Placar mais provável pelo modelo base: \d–\d$/);
     expect(detailOf("jev").length).toBeGreaterThan(0);
     for (const line of events.flatMap((e) => e.detail ?? [])) {
       expect(containsValueLanguage(line), line).toBe(false);

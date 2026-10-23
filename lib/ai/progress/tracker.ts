@@ -107,17 +107,18 @@ export function createProgressTracker(
     },
     snapshot(assumeDone) {
       const out: ReasoningStep[] = [];
+      let closing: ReasoningStep | null = null;
       for (const [id, s] of steps) {
-        const closing = assumeDone?.id === id && s.shown === "active";
-        if (!closing && (s.shown === null || s.shown === "active")) continue;
-        out.push({
-          id,
-          status: closing ? "done" : (s.shown as Terminal),
-          label: closing ? assumeDone.label : s.label,
-          ...(s.detail.length > 0 ? { detail: [...s.detail] } : {}),
-        });
+        const detail = s.detail.length > 0 ? { detail: [...s.detail] } : {};
+        if (assumeDone?.id === id && s.shown === "active") {
+          // Termina com a gravação: entra por último, depois do que a alimentou.
+          closing = { id, status: "done", label: assumeDone.label, ...detail };
+          continue;
+        }
+        if (s.shown === null || s.shown === "active") continue;
+        out.push({ id, status: s.shown, label: s.label, ...detail });
       }
-      return out;
+      return closing ? [...out, closing] : out;
     },
   };
 }

@@ -141,6 +141,14 @@ describe("createProgressTracker", () => {
       { id: "sports_data", status: "done", label: "lido", detail: ["Forma"] },
       { id: "news", status: "skipped", label: "sem tempo" },
     ]);
+    // A etapa que fecha com a gravação entra por último, depois do que a alimentou.
+    tracker.note("check", "done", "conferido");
+    expect(tracker.snapshot({ id: "synthesis", label: "pronto" }).map((s) => s.id)).toEqual([
+      "sports_data",
+      "news",
+      "check",
+      "synthesis",
+    ]);
     expect(tracker.snapshot({ id: "synthesis", label: "pronto" }).at(-1)).toEqual({
       id: "synthesis",
       status: "done",

@@ -148,6 +148,19 @@ describe("run-progress", () => {
     });
   });
 
+  it("detail que lança não leva junto o desfecho nem a frase da etapa", async () => {
+    const c = collect();
+    await withRunProgress(c.send, () =>
+      trackStep(STEPS.model, async () => 1, () => ({
+        label: "reserva",
+        detail: () => {
+          throw new Error("boom");
+        },
+      })),
+    );
+    expect(c.events.at(-1)).toEqual({ t: "step", id: "model", status: "done", label: "reserva" });
+  });
+
   it("stepDetail derruba linha com linguagem de valor ou %", async () => {
     const c = collect();
     await withRunProgress(c.send, async () => {

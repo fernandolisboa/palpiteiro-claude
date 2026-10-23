@@ -195,13 +195,17 @@ export function PalpiteHero({
         : null
       : state.error;
   // "Ver raciocínio" (ADR 0065): durante o run, as etapas ao vivo; depois, as gravadas
-  // com o palpite exibido. Um diálogo só, fora do corpo: segue aberto quando o run
-  // termina e o palpite novo chega.
+  // com o palpite exibido. Run que terminou sem set novo (falhou, ou a síntese não saiu)
+  // segue mostrando as próprias etapas, nunca as do palpite anterior. Um diálogo só,
+  // fora do corpo: segue aberto quando o run termina e o palpite novo chega.
   const liveSteps = source === "stream" ? run.steps : [];
-  const reasoningSteps: ProgressStepView[] = pending
+  const showLive = pending || (liveSteps.length > 0 && setId === setIdAtSubmit);
+  const reasoningSteps: ProgressStepView[] = showLive
     ? liveSteps
     : (heroPalpite?.reasoning ?? []);
   const [reasoningOpen, setReasoningOpen] = useState(false);
+  // Sem etapas, o diálogo fecha de vez (não reabre sozinho no próximo run).
+  if (reasoningOpen && reasoningSteps.length === 0) setReasoningOpen(false);
   const showReasoning =
     reasoningSteps.length > 0 ? () => setReasoningOpen(true) : undefined;
 
@@ -214,6 +218,7 @@ export function PalpiteHero({
         // da hidratação (preventDefault cancela a action do React).
         e.preventDefault();
         if (pending) return;
+        setReasoningOpen(false);
         const submitter = (e.nativeEvent as SubmitEvent).submitter;
         setSetIdAtSubmit(setId);
         setIntent(

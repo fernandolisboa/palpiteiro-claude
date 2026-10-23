@@ -596,20 +596,24 @@ async function runPredict(
   // separado já cria a fronteira sem mudar o comportamento atual.
   const absencesAvailableHome = !injuries.unavailable;
   const absencesAvailableAway = !injuries.unavailable;
-  stepDetail(
-    STEPS.sportsData,
-    sportsDataDetail({
-      teams: { home: match.homeTeam, away: match.awayTeam },
-      homeForm,
-      awayForm,
-      h2h,
-      standings,
-      absences: injuries.unavailable
-        ? null
-        : { home: injuries.data.home.length, away: injuries.data.away.length },
-      lineups,
-    }),
-  );
+  try {
+    stepDetail(
+      STEPS.sportsData,
+      sportsDataDetail({
+        teams: { home: match.homeTeam, away: match.awayTeam },
+        homeForm,
+        awayForm,
+        h2h,
+        standings,
+        absences: injuries.unavailable
+          ? null
+          : { home: injuries.data.home.length, away: injuries.data.away.length },
+        lineups,
+      }),
+    );
+  } catch {
+    // Só as linhas do "Ver raciocínio" (ADR 0065); a análise segue.
+  }
   sportsDataStep.done();
 
   // 4. Odds (N-vias): reusa uma captura fresca se a página já snapshotou nesta
@@ -918,7 +922,8 @@ async function runPredict(
           ? { status: "skipped", label: STEP_NOTES.modelUnavailable }
           : {
               label: s.source === "heuristic" ? STEP_NOTES.modelFallback : undefined,
-              detail: modelDetail(s, { home: match.homeTeam, away: match.awayTeam }),
+              detail: () =>
+                modelDetail(s, { home: match.homeTeam, away: match.awayTeam }),
             },
     ));
 
@@ -985,7 +990,8 @@ async function runPredict(
           if (!reused && r.answers === null) return { status: "failed" };
           return {
             label: reused ? STEP_NOTES.jevReused : undefined,
-            detail: jevDetail(r.answers, { home: match.homeTeam, away: match.awayTeam }),
+            detail: () =>
+              jevDetail(r.answers, { home: match.homeTeam, away: match.awayTeam }),
           };
         },
       );
@@ -1006,7 +1012,7 @@ async function runPredict(
         });
       const user = userContextP
         ? await trackStep(STEPS.userContext, resolveUser, (u) =>
-            u ? { detail: userContextDetail(u) } : undefined,
+            u ? { detail: () => userContextDetail(u) } : undefined,
           )
         : await resolveUser();
       resolved = {
