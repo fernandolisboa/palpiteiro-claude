@@ -43,4 +43,10 @@ describe("movimento do robozinho e do progresso (globals.css)", () => {
     const kf = /@keyframes palpite-spin \{([\s\S]*?)\n\}/.exec(css)?.[1] ?? "";
     expect(kf).toContain("rotate(360deg)");
   });
+
+  it("o bloco do spinner vem depois da regra global (mesma especificidade, vence pela ordem)", () => {
+    expect(
+      css.indexOf(".palpite-spin {\n    animation: palpite-spin")
+    ).toBeGreaterThan(css.indexOf("*:not(.mascot-motion"));
+  });
 });

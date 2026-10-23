@@ -512,8 +512,9 @@ body:has([data-page-width="form"]) [data-footer-column] {
 }
 /* Movimento reduzido: a regra global acima para tudo, menos os personagens. O spinner da
    etapa em andamento (`palpite-spin`) continua girando, um pouco mais devagar: é o ícone
-   de carregando, e parado ele parece travado (pedido do Fernando). Classe vence o `*` da
-   regra global (especificidade maior, os dois com !important). */
+   de carregando, e parado ele parece travado (pedido do Fernando). Mesma especificidade
+   (0,1,0) da regra global, os dois com !important: vence por vir DEPOIS dela. Não mover
+   este bloco pra antes da regra global (teste em palpite-bot-motion.test.ts). */
 @media (prefers-reduced-motion: reduce) {
   .palpite-spin {
     animation: palpite-spin 1.4s linear infinite !important;
