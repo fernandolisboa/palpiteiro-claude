@@ -8,6 +8,8 @@ import {
   DEADLINE_MARKET_MESSAGE,
 } from "./deadline";
 import { isCodeJevMarket } from "./engine/code-jev";
+import { noteStep, progressMarketLabel } from "./progress/run-progress";
+import { decideStep } from "./progress/steps";
 import { getCartridge } from "./markets/registry";
 import {
   narratePendingPrediction,
@@ -446,6 +448,8 @@ async function narrateAndPersist(
     })),
     "edge",
   ).map((e) => e.p);
+
+  noteStep(decideStep(progressMarketLabel(chosen.pending.marketKey)));
 
   let narration: Awaited<ReturnType<typeof narratePendingPrediction>>;
   try {

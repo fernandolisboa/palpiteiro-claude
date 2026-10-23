@@ -1,7 +1,11 @@
 import { act } from "react";
 import { createRoot } from "react-dom/client";
-import { describe, expect, it, vi } from "vitest";
+import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { renderToStaticMarkup } from "react-dom/server";
+
+// O HERO roda pela rota de streaming (ADR 0064) e faz router.refresh() no fim.
+const nav = vi.hoisted(() => ({ refresh: vi.fn() }));
+vi.mock("next/navigation", () => ({ useRouter: () => ({ refresh: nav.refresh }) }));
 
 // PalpiteHero usa useActionState(runPalpiteHero) — mock leve pra não puxar o server
 // action server-only no env de teste. O runPalpiteHero mockado reproduz o roteamento
@@ -29,15 +33,52 @@ vi.mock("@/app/actions/share", () => ({
 import {
   analyzeBestBet,
   generatePalpiteFromAnalyses,
+  runPalpiteHero,
 } from "@/app/actions/predictions";
 import { unshareSet } from "@/app/actions/share";
 import { PalpiteHero } from "@/components/palpites/palpite-hero";
+import { PALPITE_RUN_ENDPOINT } from "@/components/palpites/use-palpite-run";
+import {
+  encodeStreamMessage,
+  toHeroRunOutcome,
+  type StreamMessage,
+} from "@/lib/ai/progress/protocol";
 import { containsValueLanguage } from "@/lib/ai/palpites/value-language-guard";
 import type { MatchUnavailableReason } from "@/lib/view/match-availability";
 import {
   PALPITE_DISCLAIMER,
   type PalpiteHeadlineView,
 } from "@/lib/view/palpites-headline";
+
+// A rota de streaming nos testes: roda a action mockada com o MESMO FormData e devolve
+// o resultado em NDJSON, como app/api/palpite/run faria (as etapas vêm de `extra`).
+function streamingFetch(extra: StreamMessage[] = []) {
+  return vi.fn(async (url: string, init: RequestInit) => {
+    expect(url).toBe(PALPITE_RUN_ENDPOINT);
+    const result = await runPalpiteHero(null, init.body as FormData);
+    const body = [...extra, { t: "result", outcome: toHeroRunOutcome(result) } as const]
+      .map(encodeStreamMessage)
+      .join("");
+    return new Response(body, {
+      status: 200,
+      headers: { "Content-Type": "application/x-ndjson" },
+    });
+  });
+}
+
+beforeEach(() => {
+  nav.refresh.mockClear();
+  vi.stubGlobal("fetch", streamingFetch());
+});
+
+afterEach(() => {
+  vi.unstubAllGlobals();
+});
+
+// O run passa por fetch + leitura do stream: deixa as promessas assentarem dentro do act.
+async function settle() {
+  for (let i = 0; i < 5; i += 1) await new Promise((r) => setTimeout(r, 0));
+}
 
 // Manchete POVOADA de propósito (com confiança qualitativa + placar) — a asserção-chave
 // é que NENHUM número de valor cruza pra UI. Espelha o POPULATED do guard de dado.
@@ -382,6 +423,7 @@ describe("PalpiteHero — análises saíram mas o palpite não (regressão)", ()
     )!;
     await act(async () => {
       container.querySelector("form")!.requestSubmit(analyze);
+      await settle();
     });
     // Re-render como o revalidate faria (props do servidor depois do run).
     if (after) {
@@ -531,6 +573,7 @@ describe("PalpiteHero — gerar só o palpite (síntese sobre as análises salva
     )!;
     await act(async () => {
       container.querySelector("form")!.requestSubmit(button);
+      await settle();
     });
     expect(generatePalpiteFromAnalyses).toHaveBeenCalledTimes(1);
     const fd = vi.mocked(generatePalpiteFromAnalyses).mock.calls[0][1];
@@ -610,6 +653,7 @@ describe("PalpiteHero — Contexto extra (#565)", () => {
       )!;
       await act(async () => {
         container.querySelector("form")!.requestSubmit(analyze);
+        await settle();
       });
     };
     const cleanup = async () => {
@@ -759,5 +803,175 @@ describe("PalpiteHero — leitura ao vivo (#594)", () => {
     expect(html).toContain('name="pageLive" value="0"');
     expect(html).toContain("A IA lê os dois times, os números e o mercado");
     expect(render()).not.toContain("palpite aos");
+  });
+});
+
+describe("PalpiteHero — progresso ao vivo do run (ADR 0064)", () => {
+  // Stream controlado pelo teste: cada `push` é uma linha que o servidor mandou.
+  function controlledFetch() {
+    let controller!: ReadableStreamDefaultController<Uint8Array>;
+    const body = new ReadableStream<Uint8Array>({
+      start(c) {
+        controller = c;
+      },
+    });
+    const fetchMock = vi.fn(async () => new Response(body, { status: 200 }));
+    const encoder = new TextEncoder();
+    return {
+      fetchMock,
+      push: (msg: StreamMessage) => controller.enqueue(encoder.encode(encodeStreamMessage(msg))),
+      close: () => controller.close(),
+    };
+  }
+
+  async function mountHero(heroPalpite: PalpiteHeadlineView | null = null) {
+    (globalThis as { IS_REACT_ACT_ENVIRONMENT?: boolean }).IS_REACT_ACT_ENVIRONMENT =
+      true;
+    const container = document.createElement("div");
+    document.body.appendChild(container);
+    const root = createRoot(container);
+    await act(async () => {
+      root.render(
+        <PalpiteHero
+          contextEnabled={false}
+          heroPalpite={heroPalpite}
+          matchId="11111111-1111-1111-1111-111111111111"
+          unavailable={null}
+          analyzable
+          fanOutEnabled
+          finalScore={null}
+          setId={null}
+          sharedAt={null}
+          hasAnalyses={false}
+        />,
+      );
+    });
+    const submit = async () => {
+      const analyze = container.querySelector<HTMLButtonElement>(
+        'button[name="intent"][value="analysis"]',
+      )!;
+      await act(async () => {
+        container.querySelector("form")!.requestSubmit(analyze);
+        await settle();
+      });
+    };
+    const flush = () => act(settle);
+    const cleanup = async () => {
+      await act(async () => root.unmount());
+      container.remove();
+    };
+    return { container, submit, flush, cleanup };
+  }
+
+  const rows = (container: HTMLElement) =>
+    Array.from(container.querySelectorAll("ol[aria-label='etapas da análise'] li")).map(
+      (li) => `${li.getAttribute("data-status")}:${li.textContent}`,
+    );
+
+  it("mostra as etapas na ordem em que chegam, com o estado de cada uma", async () => {
+    const s = controlledFetch();
+    vi.stubGlobal("fetch", s.fetchMock);
+    const h = await mountHero();
+    await h.submit();
+    // Antes da 1ª etapa: a linha de espera.
+    expect(rows(h.container)).toEqual(["active:Começando a análise…"]);
+    expect(h.container.textContent).toContain("Analisando o jogo");
+    expect(h.container.querySelector("form")!.getAttribute("aria-busy")).toBe("true");
+
+    s.push({ t: "step", id: "sports_data", status: "active", label: "Lendo dados" });
+    s.push({ t: "step", id: "jev", status: "active", label: "Consultando o JEV" });
+    await h.flush();
+    expect(rows(h.container)).toEqual(["active:Lendo dados", "active:Consultando o JEV"]);
+
+    s.push({ t: "step", id: "sports_data", status: "done", label: "Dados lidos" });
+    s.push({ t: "ping" });
+    await h.flush();
+    expect(rows(h.container)).toEqual(["done:Dados lidos", "active:Consultando o JEV"]);
+    // O leitor de tela ouve a etapa em andamento.
+    expect(h.container.querySelector("ol + [role='status']")?.textContent).toBe(
+      "Consultando o JEV",
+    );
+    expect(leaksValue(h.container.innerHTML)).toBe(false);
+
+    s.push({ t: "step", id: "jev", status: "done", label: "JEV consultado" });
+    s.push({ t: "result", outcome: { ok: true, analysis: true } });
+    s.close();
+    await h.flush();
+    // Run ok: a página relê o palpite novo do servidor.
+    expect(nav.refresh).toHaveBeenCalledTimes(1);
+    await h.cleanup();
+  });
+
+  it("falha no fim: mostra o erro e não recarrega a página", async () => {
+    const s = controlledFetch();
+    vi.stubGlobal("fetch", s.fetchMock);
+    const h = await mountHero();
+    await h.submit();
+    s.push({ t: "result", outcome: { ok: false, error: "Você atingiu o limite." } });
+    s.close();
+    await h.flush();
+    expect(h.container.textContent).toContain("Você atingiu o limite.");
+    expect(nav.refresh).not.toHaveBeenCalled();
+    await h.cleanup();
+  });
+
+  it("conexão caiu sem resultado: avisa e relê a página (o run segue no servidor)", async () => {
+    const s = controlledFetch();
+    vi.stubGlobal("fetch", s.fetchMock);
+    const h = await mountHero();
+    await h.submit();
+    s.push({ t: "step", id: "odds", status: "active", label: "Lendo os preços" });
+    s.close();
+    await h.flush();
+    expect(h.container.textContent).toContain("A conexão caiu antes do fim.");
+    expect(nav.refresh).toHaveBeenCalledTimes(1);
+    await h.cleanup();
+  });
+
+  it("rota ausente (deploy antigo) → cai na server action, sem cobrar duas vezes", async () => {
+    vi.stubGlobal(
+      "fetch",
+      vi.fn(async () => new Response(null, { status: 404 })),
+    );
+    vi.mocked(analyzeBestBet).mockReset();
+    vi.mocked(analyzeBestBet).mockResolvedValue({ ok: false, error: "Falhou pela action." });
+    const h = await mountHero();
+    await h.submit();
+    await h.flush();
+    expect(analyzeBestBet).toHaveBeenCalledTimes(1);
+    expect(vi.mocked(analyzeBestBet).mock.calls[0][1].get("intent")).toBe("analysis");
+    expect(h.container.textContent).toContain("Falhou pela action.");
+    await h.cleanup();
+  });
+
+  it("sem rede: aviso, sem server action (o pedido pode ter chegado)", async () => {
+    vi.stubGlobal(
+      "fetch",
+      vi.fn(async () => {
+        throw new TypeError("Failed to fetch");
+      }),
+    );
+    vi.mocked(analyzeBestBet).mockReset();
+    const h = await mountHero();
+    await h.submit();
+    await h.flush();
+    expect(analyzeBestBet).not.toHaveBeenCalled();
+    expect(h.container.textContent).toContain("Não deu pra falar com o servidor.");
+    await h.cleanup();
+  });
+
+  it("o FormData enviado leva o intent do botão clicado e o matchId", async () => {
+    const fetchMock = streamingFetch();
+    vi.stubGlobal("fetch", fetchMock);
+    vi.mocked(analyzeBestBet).mockResolvedValue({ ok: false, error: "x" });
+    const h = await mountHero();
+    await h.submit();
+    const init = fetchMock.mock.calls[0][1];
+    expect(init.method).toBe("POST");
+    const fd = init.body as FormData;
+    expect(fd.get("intent")).toBe("analysis");
+    expect(fd.get("matchId")).toBe("11111111-1111-1111-1111-111111111111");
+    expect(fd.get("pageLive")).toBe("0");
+    await h.cleanup();
   });
 });

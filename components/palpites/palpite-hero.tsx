@@ -1,12 +1,11 @@
 "use client";
 
-import { useActionState, useId, useState } from "react";
+import { startTransition, useActionState, useId, useMemo, useState } from "react";
 import {
   Check,
   Info,
   Link2,
   Link2Off,
-  Loader2,
   RefreshCw,
   Sparkles,
   TriangleAlert,
@@ -15,8 +14,14 @@ import {
 import { runPalpiteHero } from "@/app/actions/predictions";
 import { shareSet, unshareSet } from "@/app/actions/share";
 import { SettleableBadge } from "@/components/palpites/palpite-badges";
+import {
+  PalpiteProgress,
+  type ProgressStepView,
+} from "@/components/palpites/palpite-progress";
+import { usePalpiteRun } from "@/components/palpites/use-palpite-run";
 import { Button } from "@/components/ui/button";
 import { Callout } from "@/components/ui/callout";
+import { toHeroRunOutcome, type HeroRunOutcome } from "@/lib/ai/progress/protocol";
 import { MAX_CONTEXT_CHARS } from "@/lib/user-palpite/types";
 import { cn } from "@/lib/utils";
 import {
@@ -132,7 +137,18 @@ export function PalpiteHero({
   live = false,
   lineupNotice = null,
 }: Props) {
-  const [state, formAction, pending] = useActionState(runPalpiteHero, null);
+  // Dois caminhos pro mesmo run (ADR 0064): com JS, a rota de streaming mostra as etapas
+  // ao vivo; sem JS (ou se a rota não atender), a server action do form, como antes.
+  const [actionState, formAction, actionPending] = useActionState(runPalpiteHero, null);
+  const run = usePalpiteRun();
+  const [source, setSource] = useState<"stream" | "action">("stream");
+  const actionOutcome = useMemo(
+    () => (actionState ? toHeroRunOutcome(actionState) : null),
+    [actionState],
+  );
+  const state: HeroRunOutcome | null =
+    source === "stream" ? run.outcome : actionOutcome;
+  const pending = actionPending || run.running;
   const [context, setContext] = useState("");
   const [contextOpen, setContextOpen] = useState(false);
   // Análise completa que deu certo limpa e fecha o campo: "Analisar de novo" não reenvia
@@ -140,13 +156,12 @@ export function PalpiteHero({
   const [seenState, setSeenState] = useState(state);
   if (state !== seenState) {
     setSeenState(state);
-    if (state?.ok && "view" in state) {
+    if (state?.ok && state.analysis) {
       setContext("");
       setContextOpen(false);
     }
   }
-  const contextNotice =
-    state?.ok && "contextNotice" in state ? (state.contextNotice ?? null) : null;
+  const contextNotice = state?.ok ? (state.contextNotice ?? null) : null;
   const contextField: ContextField =
     contextEnabled && analyzable && fanOutEnabled
       ? {
@@ -177,11 +192,26 @@ export function PalpiteHero({
       data-tour="palpite"
       action={formAction}
       onSubmit={(e) => {
-        setSetIdAtSubmit(setId);
+        // Com JS o envio vai pela rota de streaming; o `action` do form só atende antes
+        // da hidratação (preventDefault cancela a action do React).
+        e.preventDefault();
+        if (pending) return;
         const submitter = (e.nativeEvent as SubmitEvent).submitter;
+        setSetIdAtSubmit(setId);
         setIntent(
           submitter?.getAttribute("value") === "palpite" ? "palpite" : "analysis",
         );
+        // O botão clicado manda `intent`, como no envio nativo. Sem ele, nada de
+        // intent: o servidor recusa em vez de cair no run pago.
+        const formData = new FormData(e.currentTarget);
+        const name = submitter?.getAttribute("name");
+        if (name) formData.set(name, submitter?.getAttribute("value") ?? "");
+        setSource("stream");
+        void run.start(formData).then((mode) => {
+          if (mode !== "fallback") return;
+          setSource("action");
+          startTransition(() => formAction(formData));
+        });
       }}
       aria-busy={pending}
     >
@@ -202,6 +232,7 @@ export function PalpiteHero({
         sharedAt={sharedAt}
         pending={pending}
         pendingIntent={intent}
+        pendingSteps={source === "stream" ? run.steps : []}
         error={error}
         canRegenerate={analyzable && fanOutEnabled && hasAnalyses}
         contextField={contextField}
@@ -224,6 +255,7 @@ function HeroBody({
   sharedAt,
   pending,
   pendingIntent,
+  pendingSteps,
   error,
   canRegenerate,
   contextField,
@@ -241,6 +273,7 @@ function HeroBody({
   sharedAt: Date | null;
   pending: boolean;
   pendingIntent: HeroIntent;
+  pendingSteps: ProgressStepView[];
   error: string | null;
   canRegenerate: boolean;
   contextField: ContextField;
@@ -249,9 +282,11 @@ function HeroBody({
   live: boolean;
   lineupNotice: string | null;
 }) {
-  // Pending: skeleton que espelha o populated (sem reflow) — status em PALAVRAS, sem
-  // dígito de tempo. Tem precedência sobre tudo (o run está em voo agora).
-  if (pending) return <PendingHero intent={pendingIntent} live={live} />;
+  // Pending: as etapas do run em PALAVRAS, sem dígito de tempo. Tem precedência sobre
+  // tudo (o run está em voo agora).
+  if (pending) {
+    return <PendingHero intent={pendingIntent} live={live} steps={pendingSteps} />;
+  }
 
   // Palpite presente (pendente OU settled): a manchete sobrevive a um erro de re-análise
   // (Callout inline acima dela). Settled ganha o badge + recibo.
@@ -693,32 +728,50 @@ function PalpiteOnlyButton({ label }: { label: string }) {
   );
 }
 
-// Skeleton que espelha o populated (mesma casca quente, mesmos blocos) — sem reflow ao
-// trocar pelo conteúdo. Status em PALAVRAS, sem dígito de tempo. aria-busy no <form>.
-function PendingHero({ intent, live }: { intent: HeroIntent; live: boolean }) {
+// Run em voo (ADR 0064): as etapas que o servidor já rodou, ao vivo. Pela server action
+// de reserva não há etapas: fica a linha de espera. Status em PALAVRAS, sem dígito de
+// tempo. aria-busy no <form>.
+const PENDING_COPY: Record<
+  "palpite" | "live" | "analysis",
+  { title: string; hint: string; waiting: string }
+> = {
+  palpite: {
+    title: "Montando o palpite",
+    hint: "A partir das análises salvas. Cada etapa aparece aqui assim que acontece.",
+    waiting: "Montando o palpite a partir das análises…",
+  },
+  live: {
+    title: "Lendo o jogo ao vivo",
+    hint: "Cada etapa aparece aqui assim que acontece.",
+    waiting: "Lendo o jogo ao vivo e montando o palpite…",
+  },
+  analysis: {
+    title: "Analisando o jogo",
+    hint: "Pode levar um minuto. Cada etapa aparece aqui assim que acontece.",
+    waiting: "Começando a análise…",
+  },
+};
+
+function PendingHero({
+  intent,
+  live,
+  steps,
+}: {
+  intent: HeroIntent;
+  live: boolean;
+  steps: ProgressStepView[];
+}) {
+  const copy = PENDING_COPY[intent === "palpite" ? "palpite" : live ? "live" : "analysis"];
   return (
     <WarmShell tone="full">
       <div className="flex flex-col gap-4">
         <Kicker />
-        <div className="flex flex-col gap-2.5">
-          <div className="h-8 w-3/4 rounded-md bg-palpite-soft" />
-          <div className="h-8 w-1/2 rounded-md bg-palpite-soft" />
-        </div>
-        <div className="h-4 w-40 rounded-md bg-palpite-soft" />
-        <div className="flex flex-col gap-1.5">
-          <div className="h-3 w-full rounded-md bg-palpite-soft/70" />
-          <div className="h-3 w-5/6 rounded-md bg-palpite-soft/70" />
-        </div>
-        <div className="flex items-center gap-2 text-body-sm tracking-tight text-muted-foreground">
-          <Loader2 className="size-4 animate-spin motion-reduce:animate-none" />
-          <span>
-            {intent === "palpite"
-              ? "montando o palpite a partir das análises…"
-              : live
-                ? "lendo o jogo ao vivo e montando o palpite…"
-                : "lendo os mercados e montando o palpite… (pode levar um minuto)"}
-          </span>
-        </div>
+        <PalpiteProgress
+          title={copy.title}
+          hint={copy.hint}
+          steps={steps}
+          waitingLabel={copy.waiting}
+        />
       </div>
     </WarmShell>
   );

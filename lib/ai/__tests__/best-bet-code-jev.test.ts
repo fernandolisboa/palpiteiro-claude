@@ -12,6 +12,11 @@ vi.mock("@/lib/ai/predict", () => ({
 }));
 
 import { DEADLINE_MARKET_MESSAGE } from "@/lib/ai/deadline";
+import type { ProgressEvent } from "@/lib/ai/progress/protocol";
+import {
+  setProgressMarketLabels,
+  withRunProgress,
+} from "@/lib/ai/progress/run-progress";
 import {
   RATE_LIMITED_MARKET_MESSAGE,
   groupSlotUnits,
@@ -639,5 +644,32 @@ describe("runCodeJevFanOut — erro inesperado fora do try por mercado", () => {
       expect.objectContaining({ marketKey: "correct_score", ok: true }),
     ]);
     expect(mockNarrate).not.toHaveBeenCalled();
+  });
+});
+
+describe("runCodeJevFanOut — progresso ao vivo (ADR 0064)", () => {
+  it("o mercado escolhido pra narração vira uma etapa com o nome do catálogo", async () => {
+    const events: ProgressEvent[] = [];
+    await withRunProgress(
+      (e) => events.push(e),
+      async () => {
+        setProgressMarketLabels([
+          { key: "over_under", label: "Over/Under gols" },
+          { key: "match_result", label: "Resultado (1X2)" },
+        ]);
+        await runCodeJevFanOut(
+          base,
+          markets("match_result", "over_under"),
+          mapError,
+          vi.fn(async () => ({ ok: true }))
+        );
+      }
+    );
+    expect(events).toContainEqual({
+      t: "step",
+      id: "decide",
+      status: "done",
+      label: "Mercado escolhido para a análise: Over/Under gols",
+    });
   });
 });

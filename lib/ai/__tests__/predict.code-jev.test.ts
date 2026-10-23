@@ -1,5 +1,9 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 
+import type { ProgressEvent } from "@/lib/ai/progress/protocol";
+import { withRunProgress } from "@/lib/ai/progress/run-progress";
+import { STEP_NOTES } from "@/lib/ai/progress/steps";
+
 import {
   SportsDataTransientError,
   SportsDataUnsupportedError,
@@ -2608,5 +2612,83 @@ describe("contexto do usuário (#565)", () => {
       expect.objectContaining({ event: "user_context", outcome: "timeout", latencyMs: 10_000 })
     );
     info.mockRestore();
+  });
+});
+
+describe("progresso ao vivo (ADR 0064)", () => {
+  async function stepsOf(run: () => Promise<unknown>) {
+    const events: ProgressEvent[] = [];
+    await withRunProgress((e) => events.push(e), run);
+    return events;
+  }
+  const seen = (events: ProgressEvent[]) => events.map((e) => `${e.id}:${e.status}`);
+
+  it("code_jev: as etapas na ordem em que rodam, com o modelo e o mercado nas frases", async () => {
+    const events = await stepsOf(() =>
+      predict({ matchId: "m-1", userId: "u-1", isAdmin: true, marketKey: "match_result" })
+    );
+    expect(seen(events)).toEqual([
+      "sports_data:active",
+      "sports_data:done",
+      "odds:active",
+      "odds:done",
+      "model:active",
+      "model:done",
+      "jev:active",
+      "jev:done",
+      "narration:active",
+      "narration:done",
+    ]);
+    // λ heurístico neste fixture: a frase diz que foi o modelo de reserva.
+    expect(events.find((e) => e.id === "model" && e.status === "done")?.label).toBe(
+      STEP_NOTES.modelFallback
+    );
+    expect(events.find((e) => e.id === "narration")?.label).toBe(
+      "Escrevendo a análise com o Claude Sonnet"
+    );
+  });
+
+  it("JEV fora do ar → a etapa fecha como falha e a análise segue", async () => {
+    judge.mockRejectedValue(
+      new TypeSafeError({ kind: "rate_limited", message: "429", httpStatus: 429, latencyMs: 40 })
+    );
+    const events = await stepsOf(() =>
+      predict({ matchId: "m-1", userId: "u-1", isAdmin: true, marketKey: "match_result" })
+    );
+    expect(seen(events)).toContain("jev:failed");
+    expect(seen(events).at(-1)).toBe("narration:done");
+  });
+
+  it("narrador falha → a análise sai com o texto padrão e a etapa diz isso", async () => {
+    anthropicCreate.mockRejectedValue(new Error("boom"));
+    const events = await stepsOf(() =>
+      predict({ matchId: "m-1", userId: "u-1", isAdmin: true, marketKey: "match_result" })
+    );
+    expect(seen(events).at(-1)).toBe("narration:failed");
+  });
+
+  it("motor llm: a chamada paga do mercado é a etapa market:<key>", async () => {
+    getAnalysisEngine.mockResolvedValue("llm");
+    const events = await stepsOf(() =>
+      predict({ matchId: "m-1", userId: "u-1", isAdmin: true, marketKey: "match_result" })
+    );
+    expect(seen(events)).toEqual([
+      "sports_data:active",
+      "sports_data:done",
+      "odds:active",
+      "odds:done",
+      "market:match_result:active",
+      "market:match_result:done",
+    ]);
+  });
+
+  it("fora de um run com progresso, nada muda (server action, cron)", async () => {
+    const result = await predict({
+      matchId: "m-1",
+      userId: "u-1",
+      isAdmin: true,
+      marketKey: "match_result",
+    });
+    expect(result.prediction).toBeDefined();
   });
 });

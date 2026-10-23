@@ -27,6 +27,13 @@ import { ODDS_SNAPSHOT_FRESHNESS_MS } from "@/lib/odds/freshness-window";
 import { computeMarketImpliedProbabilities } from "@/lib/odds/implied-probability";
 import { pickBestBookmaker, type MarketOddsBundle } from "@/lib/odds/select-bookmaker";
 import { getOddsProvider } from "@/lib/providers/odds";
+import {
+  beginStep,
+  progressMarketLabel,
+  progressScope,
+  trackStep,
+} from "@/lib/ai/progress/run-progress";
+import { STEP_NOTES, STEPS, marketStep, narrationStep } from "@/lib/ai/progress/steps";
 import { leagueToSportKey } from "@/lib/providers/odds-api-constants";
 import type { NormalizedOddsEvent } from "@/lib/providers/odds/types";
 import { getSportsDataProvider } from "@/lib/providers/sports-data";
@@ -283,7 +290,7 @@ export async function predict(
   args: PredictArgs,
   options: PredictOptions = {},
 ): Promise<PredictResult> {
-  const outcome = await runPredict(args, options);
+  const outcome = await progressScope(() => runPredict(args, options));
   if (outcome.kind !== "done") {
     // Inalcançável: sem `deferNarration`, o ramo code_jev narra e persiste.
     throw new PredictError("predict: decisão code_jev pendente sem pedido");
@@ -359,7 +366,7 @@ export async function predictForBestBet(
   args: PredictArgs,
   opts: BestBetPredictOptions,
 ): Promise<PredictOutcome> {
-  return runPredict(args, { ...opts, deferNarration: true });
+  return progressScope(() => runPredict(args, { ...opts, deferNarration: true }));
 }
 
 /**
@@ -380,6 +387,7 @@ export async function narratePendingPrediction(
     context: pending.narratorContext,
     deadlineAt: pending.deadlineAt,
     beforeLlmPath: options.beforeLlmPath,
+    marketKey: pending.marketKey,
   });
 }
 
@@ -521,6 +529,7 @@ async function runPredict(
 
   // 2. Fetch normalized fixture (composite-keyed). Used to populate venue
   //    and serve as the reference for downstream lookups (lineups, injuries).
+  const sportsDataStep = beginStep(STEPS.sportsData);
   const fixture = await provider.getFixtureByMatch(ref);
   if (!fixture) {
     throw new PredictError("fixture not found in provider", {
@@ -580,6 +589,7 @@ async function runPredict(
   // separado já cria a fronteira sem mudar o comportamento atual.
   const absencesAvailableHome = !injuries.unavailable;
   const absencesAvailableAway = !injuries.unavailable;
+  sportsDataStep.done();
 
   // 4. Odds (N-vias): reusa uma captura fresca se a página já snapshotou nesta
   //    sessão (quota: evita uma 2ª call à Odds API). Cai no fetch direto quando
@@ -591,6 +601,7 @@ async function runPredict(
   // fixado pós-output). `!` = definite-assignment: o single-line atribui aqui; o
   // multi-linha atribui após a escolha do LLM — ambos antes do 1º uso (edge).
   let oddsBundle!: MarketOddsBundle;
+  const oddsStep = beginStep(STEPS.odds);
   // Bundle scorer (#290): jogadores cotados yes-only de UM book. Atribuído só no
   // caminho independent_binary; usado pra threadar selectionKeys/labels/implícita.
   let scorerBundle: IndependentBinaryBundle | undefined;
@@ -807,6 +818,7 @@ async function runPredict(
       );
     }
   }
+  oddsStep.done();
 
   // 5. Implied probabilities normalizadas (N seleções; contrato chave→índice).
   //    O candidate-odds array é montado na ordem `descriptor.selectionKeys`
@@ -868,13 +880,23 @@ async function runPredict(
   //    tabela → escada de degradação, o cartucho roda como antes.
   let modelScorelinePromise: Promise<ModelScoreline | null> | null = null;
   const modelScoreline = () =>
-    (modelScorelinePromise ??= getModelScoreline({
-      league: match.league,
-      standing: standings,
-      homeTeam: match.homeTeam,
-      awayTeam: match.awayTeam,
-      neutral: isNeutralVenue(match),
-    }));
+    (modelScorelinePromise ??= trackStep(
+      STEPS.model,
+      () =>
+        getModelScoreline({
+          league: match.league,
+          standing: standings,
+          homeTeam: match.homeTeam,
+          awayTeam: match.awayTeam,
+          neutral: isNeutralVenue(match),
+        }),
+      (s) =>
+        s === null
+          ? { status: "skipped", label: STEP_NOTES.modelUnavailable }
+          : s.source === "heuristic"
+            ? { status: "done", label: STEP_NOTES.modelFallback }
+            : undefined,
+    ));
 
   // 5.6 Motor code_jev (ADR 0041, #511), atrás do flag `analysis_engine`: nos mercados
   //     partition que o código precifica, a decisão sai do λ (× julgamentos JEV) → matriz
@@ -912,37 +934,51 @@ async function runPredict(
     if (pinned) {
       resolved = pinned;
     } else {
-      const { input, run } = await resolveMatchJudgments({
-        userId,
-        matchId,
-        provider,
-        data: {
+      const { input, run } = await trackStep(
+        STEPS.jev,
+        () =>
+          resolveMatchJudgments({
+            userId,
+            matchId,
+            provider,
+            data: {
+              league: match.league,
+              kickoffAt: match.kickoffAt,
+              homeTeam: match.homeTeam,
+              awayTeam: match.awayTeam,
+              injuries: injuries.data,
+              lineups,
+              homeForm,
+              awayForm,
+              standings,
+            },
+            upcoming: upcomingFetch,
+          }),
+        ({ run: r }) =>
+          r.reusedFromPredictionId || r.reusedFromModelSnapshotId
+            ? { status: "done", label: STEP_NOTES.jevReused }
+            : r.answers === null
+              ? { status: "failed" }
+              : undefined,
+      );
+      const resolveUser = () =>
+        resolveUserContext({
+          userContextP,
+          matchId,
+          jev: run.answers,
+          teams: { home: match.homeTeam, away: match.awayTeam },
           league: match.league,
           kickoffAt: match.kickoffAt,
-          homeTeam: match.homeTeam,
-          awayTeam: match.awayTeam,
-          injuries: injuries.data,
-          lineups,
+          // Lista do provider, sem tirar o XI de hoje (#619): a conferência das
+          // afirmações não muda com a escalação (igual a user-palpite/facts.ts).
+          absences: injuries.unavailable ? null : input.providerAbsences,
           homeForm,
           awayForm,
           standings,
-        },
-        upcoming: upcomingFetch,
-      });
-      const user = await resolveUserContext({
-        userContextP,
-        matchId,
-        jev: run.answers,
-        teams: { home: match.homeTeam, away: match.awayTeam },
-        league: match.league,
-        kickoffAt: match.kickoffAt,
-        // Lista do provider, sem tirar o XI de hoje (#619): a conferência das
-        // afirmações não muda com a escalação (igual a user-palpite/facts.ts).
-        absences: injuries.unavailable ? null : input.providerAbsences,
-        homeForm,
-        awayForm,
-        standings,
-      });
+        });
+      const user = userContextP
+        ? await trackStep(STEPS.userContext, resolveUser)
+        : await resolveUser();
       resolved = {
         scoreline: engineScoreline,
         input,
@@ -1304,7 +1340,11 @@ async function runPredict(
     throw new AnalysisDeadlineError();
   }
   if (opts.beforeLlmPath) await opts.beforeLlmPath();
-  const result = await aiProvider.runAnalysis(analysisRequest);
+  const result = await trackStep(
+    marketStep(marketKey, progressMarketLabel(marketKey), model.family),
+    () => aiProvider.runAnalysis(analysisRequest),
+    (r) => (r.ok ? undefined : { status: "failed" }),
+  );
   const latencyMs = result.latencyMs;
   // Daqui em diante, auditoria, custo e modelVersion usam o modelo que respondeu.
   const served = result.servedModel;
@@ -2324,6 +2364,7 @@ export async function predictInPlay(
     decision: decisionFor(narratedIndex),
     context: { leagueLabel: LEAGUE_LABEL[leagueToKey(match.league)] },
     deadlineAt: args.deadlineAt,
+    live: true,
   });
 
   const out: InPlayMarketResult[] = [];
@@ -3208,6 +3249,7 @@ async function narrateDecision(args: {
   context: NarratorContext;
   deadlineAt?: number;
   beforeLlmPath?: () => Promise<void>;
+  marketKey?: string;
 }): Promise<NarrationResult> {
   return narrateWith(narratorCartridge, args);
 }
@@ -3222,6 +3264,9 @@ async function narrateWith<D, C>(
     context: C;
     deadlineAt?: number;
     beforeLlmPath?: () => Promise<void>;
+    // Só pra frase do progresso (ADR 0064): o mercado narrado e se é a leitura ao vivo.
+    marketKey?: string;
+    live?: boolean;
   },
 ): Promise<NarrationResult> {
   const { model, decision } = args;
@@ -3255,9 +3300,19 @@ async function narrateWith<D, C>(
     effort: genParams.effort,
   });
   if (fits && args.beforeLlmPath) await args.beforeLlmPath();
+  const step = beginStep(
+    narrationStep({
+      family: model.family,
+      marketLabel: args.marketKey ? progressMarketLabel(args.marketKey) : null,
+      live: args.live ?? false,
+    }),
+  );
   const outcome = fits
     ? await runNarration(cartridge, aiProvider, request, decision)
     : narrationSkippedForDeadline(request);
+  if (!fits) step.skip();
+  else if (outcome.output === null) step.fail();
+  else step.done();
   const cost = calculateCost({
     model: outcome.servedModel,
     inputTokens: outcome.inputTokens,
