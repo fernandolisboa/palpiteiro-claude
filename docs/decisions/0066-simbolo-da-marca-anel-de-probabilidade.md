@@ -2,7 +2,7 @@
 
 ## Status
 
-Accepted (2026-10-23). Fernando escolheu a direção A da proposta de logo (#629). Complementa a ADR 0059 (marca só "palpiteiro"): o nome continua igual, agora com o símbolo ao lado.
+Superseded pela ADR 0067 (2026-10-23): o Google recusou este símbolo na verificação da marca do OAuth e ele virou a trave com a bola no ângulo. Antes: Accepted (2026-10-23). Fernando escolheu a direção A da proposta de logo (#629). Complementa a ADR 0059 (marca só "palpiteiro"): o nome continua igual, agora com o símbolo ao lado.
 
 ## Contexto
 
