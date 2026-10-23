@@ -1,4 +1,4 @@
-import Link from "next/link";
+import { IntentLink } from "@/components/intent-link";
 
 import type { DashboardFilters } from "@/lib/dashboard/kpis";
 import type { AvailableMarket } from "@/lib/dashboard/derive-view";
@@ -83,7 +83,7 @@ function PillGroup({
         {options.map((opt) => {
           const active = opt.value === current;
           return (
-            <Link
+            <IntentLink
               key={opt.value}
               href={buildDashboardHref(filters, dimension, opt.value, basePath)}
               aria-current={active ? "page" : undefined}
@@ -95,7 +95,7 @@ function PillGroup({
               )}
             >
               {opt.label}
-            </Link>
+            </IntentLink>
           );
         })}
       </nav>

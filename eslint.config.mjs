@@ -41,6 +41,26 @@ const eslintConfig = [
       ],
     },
   },
+  // Navegação rápida (#639, ADR 0067): todo link interno passa pelo IntentLink. O
+  // prefetch automático do `next/link` guarda só o esqueleto de página dinâmica e
+  // impede o cache do roteador de guardar a página inteira pra aquela URL.
+  {
+    files: ["**/*.ts", "**/*.tsx"],
+    ignores: ["components/intent-link.tsx", "**/__tests__/**", "**/*.test.ts", "**/*.test.tsx"],
+    rules: {
+      "no-restricted-imports": [
+        "error",
+        {
+          paths: [
+            {
+              name: "next/link",
+              message: "Use IntentLink (@/components/intent-link): sem prefetch automático, busca por intenção (ADR 0067).",
+            },
+          ],
+        },
+      ],
+    },
+  },
 ];
 
 export default eslintConfig;

@@ -1,5 +1,5 @@
 import type { Metadata } from "next";
-import Link from "next/link";
+import { IntentLink } from "@/components/intent-link";
 import { redirect } from "next/navigation";
 
 import { auth } from "@/auth";
@@ -17,6 +17,7 @@ import {
 import { PasskeysSection } from "./passkeys-section";
 import { PreferredModelForm } from "./preferred-model-form";
 import { ProfileForm } from "./profile-form";
+import { RevisitRefresh } from "@/components/revisit-refresh";
 
 export const dynamic = "force-dynamic";
 
@@ -49,6 +50,7 @@ export default async function PerfilPage() {
 
   return (
     <div className="bg-background text-foreground">
+      <RevisitRefresh />
       <PageContainer width="reading">
         <PageHeader title="Perfil" description="seu nome e avatar · visíveis no app" />
 
@@ -103,12 +105,12 @@ export default async function PerfilPage() {
             </a>
             . Respondemos em até {DATA_REQUEST_RESPONSE_DAYS} dias. O que é apagado e o
             que fica anonimizado está na{" "}
-            <Link
+            <IntentLink
               href="/privacidade"
               className="text-foreground rounded-sm underline underline-offset-4 focus-visible:outline-none focus-visible:ring-[3px] focus-visible:ring-ring/50"
             >
               Política de Privacidade
-            </Link>
+            </IntentLink>
             .
           </p>
         </div>

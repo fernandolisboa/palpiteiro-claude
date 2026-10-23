@@ -1,5 +1,5 @@
 import type { Metadata } from "next";
-import Link from "next/link";
+import { IntentLink } from "@/components/intent-link";
 
 import { ThemeToggle } from "@/components/theme-toggle";
 import { Wordmark } from "@/components/wordmark";
@@ -45,9 +45,9 @@ export default function PrivacidadePage() {
   return (
     <div className="min-h-screen bg-background text-foreground">
       <header className="flex h-14 items-center justify-between border-b border-border-subtle px-4 lg:px-8">
-        <Link href="/" className="rounded-sm focus-visible:outline-none focus-visible:ring-[3px] focus-visible:ring-ring/50">
+        <IntentLink href="/" className="rounded-sm focus-visible:outline-none focus-visible:ring-[3px] focus-visible:ring-ring/50">
           <Wordmark />
-        </Link>
+        </IntentLink>
         <ThemeToggle />
       </header>
 
@@ -249,9 +249,9 @@ export default function PrivacidadePage() {
               <li>
                 correção de dados incompletos, inexatos ou desatualizados (nome e avatar você
                 edita direto no{" "}
-                <Link href="/perfil" className={linkClass}>
+                <IntentLink href="/perfil" className={linkClass}>
                   perfil
-                </Link>
+                </IntentLink>
                 );
               </li>
               <li>
@@ -333,9 +333,9 @@ export default function PrivacidadePage() {
             <h2 className="text-label font-medium text-foreground">15. Contato</h2>
             <p>
               Dúvidas sobre esta Política: <ContactLink />. Veja também os{" "}
-              <Link href="/termos" className={linkClass}>
+              <IntentLink href="/termos" className={linkClass}>
                 Termos de Uso
-              </Link>
+              </IntentLink>
               .
             </p>
           </section>

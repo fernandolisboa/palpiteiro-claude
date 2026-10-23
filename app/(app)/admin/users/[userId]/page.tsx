@@ -22,6 +22,7 @@ import { getUserManagement } from "@/lib/db/queries/users";
 import { getRequestTimeZone } from "@/lib/server/request-timezone";
 
 import { UserAdminControls } from "./user-admin-controls";
+import { RevisitRefresh } from "@/components/revisit-refresh";
 
 export const dynamic = "force-dynamic";
 
@@ -74,6 +75,7 @@ export default async function AdminUserTrackingPage({
 
   return (
     <>
+      <RevisitRefresh />
       <div className="mx-auto w-full max-w-content px-5 pb-16 pt-8 lg:px-8 lg:pt-10">
         <BackLink href="/admin/users" label="usuários" />
 

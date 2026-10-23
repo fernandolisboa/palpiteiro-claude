@@ -1,4 +1,4 @@
-import Link from "next/link";
+import { IntentLink } from "@/components/intent-link";
 import { ChevronLeft } from "lucide-react";
 
 import { Button } from "@/components/ui/button";
@@ -20,9 +20,9 @@ export default function BolaoNotFound() {
               Ele pode ter sido excluído, ou o link não é de um bolão seu.
             </span>
             <Button asChild size="sm" variant="secondary" className="mt-2">
-              <Link href="/bolao">
+              <IntentLink href="/bolao">
                 <ChevronLeft className="size-3.5" /> Voltar pros bolões
-              </Link>
+              </IntentLink>
             </Button>
           </div>
         </Card>

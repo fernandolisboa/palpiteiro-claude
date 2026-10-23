@@ -1,6 +1,6 @@
 "use client";
 
-import Link from "next/link";
+import { IntentLink } from "@/components/intent-link";
 import { usePathname } from "next/navigation";
 
 import {
@@ -27,7 +27,7 @@ export function AdminSectionNav() {
         {ADMIN_NAV.items.map(({ href, label }) => {
           const isActive = href === active;
           return (
-            <Link
+            <IntentLink
               key={href}
               href={href}
               aria-current={isActive ? ariaCurrentFor(pathname, href) : undefined}
@@ -39,7 +39,7 @@ export function AdminSectionNav() {
               )}
             >
               {label}
-            </Link>
+            </IntentLink>
           );
         })}
       </div>

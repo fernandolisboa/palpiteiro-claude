@@ -8,6 +8,7 @@ import { resolveBackHref } from "@/lib/view/back-href";
 import { getClosingSnapshotForDetail } from "@/lib/db/queries/clv-snapshots";
 import { getPredictionDetailForUser } from "@/lib/db/queries/dashboard";
 import { toPredictionDetailView } from "@/lib/view/dashboard";
+import { RevisitRefresh } from "@/components/revisit-refresh";
 
 export const dynamic = "force-dynamic";
 
@@ -48,6 +49,7 @@ export default async function PredictionDetailPage({
 
   return (
     <>
+      <RevisitRefresh />
       <PredictionDetail view={view} backHref={backHref} />
     </>
   );

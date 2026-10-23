@@ -1,4 +1,4 @@
-import Link from "next/link";
+import { IntentLink } from "@/components/intent-link";
 
 import { EmptyState } from "@/components/empty-state";
 import { cn } from "@/lib/utils";
@@ -46,12 +46,12 @@ export function StandingsSection({ view }: Props) {
             <span className="font-mono tabular-nums text-meta text-muted-foreground">{r.pos}</span>
             {/* Nome clicável (#408) → histórico do time. Linka pelo canonical cru
                 (r.teamKey), EXIBE o nome traduzido (r.team, PT-BR p/ Copa). */}
-            <Link
+            <IntentLink
               href={`/time/${encodeURIComponent(r.teamKey)}`}
               className="truncate font-medium hover:underline focus-visible:outline-none focus-visible:ring-[3px] focus-visible:ring-ring/50 rounded-sm"
             >
               {r.team}
-            </Link>
+            </IntentLink>
             <span className="text-right font-mono tabular-nums">{r.p}</span>
             <span className="text-right font-mono tabular-nums">{r.gf}</span>
             <span className="text-right font-mono tabular-nums">

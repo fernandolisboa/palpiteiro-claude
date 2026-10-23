@@ -1,4 +1,4 @@
-import Link from "next/link";
+import { IntentLink } from "@/components/intent-link";
 import { ChevronRight } from "lucide-react";
 
 import { Badge } from "@/components/ui/badge";
@@ -44,7 +44,7 @@ export function MatchRow({ m, last, listHref, backHref, tourTarget, timeLabel }:
     : appendBackParam(`/match/${m.id}`, listHref, "/jogos");
   const isLive = showsRowLiveBadge(m);
   return (
-    <Link
+    <IntentLink
       href={href}
       data-tour={tourTarget ? "match-row" : undefined}
       className={cn(
@@ -100,7 +100,7 @@ export function MatchRow({ m, last, listHref, backHref, tourTarget, timeLabel }:
       </div>
       {/* Base do modelo (#555): só em jogo analisável com base calculada. */}
       {m.model && <MatchModelLine model={m.model} className="block pt-2" />}
-    </Link>
+    </IntentLink>
   );
 }
 

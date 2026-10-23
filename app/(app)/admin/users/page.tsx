@@ -1,10 +1,11 @@
-import Link from "next/link";
+import { IntentLink } from "@/components/intent-link";
 import { notFound } from "next/navigation";
 import { ChevronRight } from "lucide-react";
 
 import { PageHeading } from "@/components/admin/page-heading";
 import { auth } from "@/auth";
 import { searchUsers } from "@/lib/db/queries/users";
+import { RevisitRefresh } from "@/components/revisit-refresh";
 
 export const dynamic = "force-dynamic";
 
@@ -25,6 +26,7 @@ export default async function AdminUsersPage({ searchParams }: PageProps) {
 
   return (
     <div className="bg-background text-foreground">
+      <RevisitRefresh />
       <div className="mx-auto w-full max-w-reading px-6 py-8">
         <PageHeading
           title="Usuários"
@@ -56,7 +58,7 @@ export default async function AdminUsersPage({ searchParams }: PageProps) {
         ) : (
           <div className="rounded-md border border-border">
             {usersList.map((u) => (
-              <Link
+              <IntentLink
                 key={u.id}
                 href={`/admin/users/${u.id}`}
                 className="flex items-center justify-between gap-4 border-b border-border px-4 py-3 last:border-b-0 hover:bg-surface-2 focus-visible:outline-none focus-visible:ring-[3px] focus-visible:ring-ring/50 focus-visible:ring-inset"
@@ -75,7 +77,7 @@ export default async function AdminUsersPage({ searchParams }: PageProps) {
                   </span>
                   <ChevronRight className="size-3.5 text-muted-fg-2" />
                 </div>
-              </Link>
+              </IntentLink>
             ))}
           </div>
         )}

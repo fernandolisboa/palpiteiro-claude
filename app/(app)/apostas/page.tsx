@@ -1,5 +1,5 @@
 import type { Metadata } from "next";
-import Link from "next/link";
+import { IntentLink } from "@/components/intent-link";
 import { redirect } from "next/navigation";
 
 import { SlipCard } from "@/components/bets/slip-card";
@@ -12,6 +12,7 @@ import { auth } from "@/auth";
 import { resolveSlipFilter, summarizeSlipLedger } from "@/lib/bets/slip-ledger";
 import { getUserBetSlipLedger, getUserBetSlipsPage } from "@/lib/db/queries/user-bets";
 import { getRequestTimeZone } from "@/lib/server/request-timezone";
+import { RevisitRefresh } from "@/components/revisit-refresh";
 
 export const dynamic = "force-dynamic";
 
@@ -62,6 +63,7 @@ export default async function ApostasPage({ searchParams }: PageProps) {
 
   return (
     <div className="bg-background text-foreground">
+      <RevisitRefresh />
       <PageContainer width="reading">
         <PageHeader
           title="Suas apostas"
@@ -103,14 +105,14 @@ export default async function ApostasPage({ searchParams }: PageProps) {
             {(page.nextCursor || cursor) && (
               <div className="flex flex-col gap-3 pt-2">
                 {page.nextCursor && (
-                  <Link href={slipFilterHref(filter, page.nextCursor)} className={PAGER_LINK}>
+                  <IntentLink href={slipFilterHref(filter, page.nextCursor)} className={PAGER_LINK}>
                     apostas mais antigas →
-                  </Link>
+                  </IntentLink>
                 )}
                 {cursor && (
-                  <Link href={slipFilterHref(filter)} className={PAGER_LINK}>
+                  <IntentLink href={slipFilterHref(filter)} className={PAGER_LINK}>
                     ← voltar ao topo
-                  </Link>
+                  </IntentLink>
                 )}
               </div>
             )}

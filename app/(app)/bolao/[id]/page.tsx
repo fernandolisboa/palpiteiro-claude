@@ -1,5 +1,5 @@
 import type { Metadata } from "next";
-import Link from "next/link";
+import { IntentLink } from "@/components/intent-link";
 import { notFound, redirect } from "next/navigation";
 import { Trophy, X } from "lucide-react";
 import { z } from "zod";
@@ -54,6 +54,7 @@ import {
   poolWinnerStampLabel,
 } from "@/lib/view/friend-pool";
 import { displayMatchTeams, teamPair } from "@/lib/view/team";
+import { RevisitRefresh } from "@/components/revisit-refresh";
 
 export const dynamic = "force-dynamic";
 
@@ -162,6 +163,7 @@ export default async function BolaoDetailPage({ params }: PageProps) {
 
   return (
     <div className="bg-background text-foreground">
+      <RevisitRefresh />
       <PageContainer width="reading">
         <PageHeader
           back={{ href: "/bolao", label: "bolão" }}
@@ -169,9 +171,9 @@ export default async function BolaoDetailPage({ params }: PageProps) {
           description={
             <>
               {poolMatchLabel(match, now, timeZone)} ·{" "}
-              <Link href={`/match/${match.id}`} className="underline underline-offset-2 hover:text-foreground">
+              <IntentLink href={`/match/${match.id}`} className="underline underline-offset-2 hover:text-foreground">
                 ver jogo
-              </Link>
+              </IntentLink>
             </>
           }
           meta={

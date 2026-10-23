@@ -1,5 +1,5 @@
 import type { Metadata } from "next";
-import Link from "next/link";
+import { IntentLink } from "@/components/intent-link";
 import { redirect } from "next/navigation";
 
 import { Card } from "@/components/ui/card";
@@ -51,6 +51,7 @@ import type {
   RecentMatchView,
 } from "@/lib/view/types";
 import type { SupportedLeague } from "@/lib/providers/sports-data/leagues";
+import { RevisitRefresh } from "@/components/revisit-refresh";
 
 // Render dinâmico explícito: a rota lê o cookie de fuso (#1) por-request via
 // getRequestTimeZone(); auth() já a tornava dinâmica, mas o explícito blinda a
@@ -245,6 +246,7 @@ export default async function JogosPage({ searchParams }: PageProps) {
 
   return (
     <>
+      <RevisitRefresh />
       <GuidedTour
         chapter="jogos"
         userId={userId}
@@ -411,12 +413,12 @@ function MobileHome({
       <div data-tour="recent-predictions">
         <SectionLabel
           action={
-            <Link
+            <IntentLink
               href="/dashboard"
               className="text-meta uppercase tracking-eyebrow text-muted-foreground transition-colors hover:text-foreground focus-visible:outline-none focus-visible:ring-[3px] focus-visible:ring-ring/50 rounded-sm"
             >
               ver todas →
-            </Link>
+            </IntentLink>
           }
         >
           Suas predições recentes
@@ -491,12 +493,12 @@ function DesktopHome({
         <div className="mt-12" data-tour="recent-predictions">
           <SectionLabel
             action={
-              <Link
+              <IntentLink
                 href="/dashboard"
                 className="text-meta uppercase tracking-eyebrow text-muted-foreground transition-colors hover:text-foreground focus-visible:outline-none focus-visible:ring-[3px] focus-visible:ring-ring/50 rounded-sm"
               >
                 ver todas →
-              </Link>
+              </IntentLink>
             }
           >
             Suas predições recentes

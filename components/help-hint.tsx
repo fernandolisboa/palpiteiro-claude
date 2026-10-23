@@ -1,6 +1,6 @@
 "use client";
 
-import Link from "next/link";
+import { IntentLink } from "@/components/intent-link";
 
 import { GLOSSARY } from "@/components/help/glossary";
 import {
@@ -46,12 +46,12 @@ export function HelpHint({ anchor, label, blurb }: HelpHintProps) {
         <p className="text-body-sm leading-snug tracking-tight text-foreground">
           {blurb}
         </p>
-        <Link
+        <IntentLink
           href={`/como-funciona#${anchor}`}
           className="text-meta tracking-tight text-muted-foreground underline-offset-2 hover:text-foreground hover:underline focus-visible:rounded-sm focus-visible:outline-none focus-visible:ring-[3px] focus-visible:ring-ring/50"
         >
           saiba mais
-        </Link>
+        </IntentLink>
       </PopoverContent>
     </Popover>
   );

@@ -1,4 +1,4 @@
-import Link from "next/link";
+import { IntentLink } from "@/components/intent-link";
 
 import { AdminSubTabs } from "@/components/admin/admin-sub-tabs";
 import { PageHeading } from "@/components/admin/page-heading";
@@ -30,6 +30,7 @@ import type { ReliabilityBin } from "@/lib/calibration/metrics";
 import { loadKellyGate } from "@/lib/calibration/kelly-live";
 import type { KellyGate } from "@/lib/calibration/phase-c-gate";
 import { getMarketCalibrationRows } from "@/lib/db/queries/calibration";
+import { RevisitRefresh } from "@/components/revisit-refresh";
 
 export const dynamic = "force-dynamic";
 
@@ -105,6 +106,7 @@ export default async function AdminCalibrationPage({ searchParams }: PageProps) 
 
   return (
     <div className="bg-background text-foreground">
+      <RevisitRefresh />
       <div className="mx-auto w-full max-w-reading px-6 py-8">
         <PageHeading
           title="Motor e calibração"
@@ -481,7 +483,7 @@ function SegmentLink({
   active: boolean;
 }) {
   return (
-    <Link
+    <IntentLink
       href={href}
       aria-current={active ? "page" : undefined}
       className={
@@ -491,7 +493,7 @@ function SegmentLink({
       }
     >
       {label}
-    </Link>
+    </IntentLink>
   );
 }
 

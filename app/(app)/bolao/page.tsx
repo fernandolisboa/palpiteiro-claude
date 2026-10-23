@@ -1,5 +1,5 @@
 import type { Metadata } from "next";
-import Link from "next/link";
+import { IntentLink } from "@/components/intent-link";
 import { redirect } from "next/navigation";
 
 import { auth } from "@/auth";
@@ -32,6 +32,7 @@ import {
 } from "@/lib/view/friend-pool";
 import { cn } from "@/lib/utils";
 import { displayMatchTeams } from "@/lib/view/team";
+import { RevisitRefresh } from "@/components/revisit-refresh";
 
 export const dynamic = "force-dynamic";
 
@@ -93,6 +94,7 @@ export default async function BolaoPage({ searchParams }: PageProps) {
 
   return (
     <div className="bg-background text-foreground">
+      <RevisitRefresh />
       <PageContainer width="reading">
         <PageHeader title="Bolão" description="bolão entre amigos · cada um com seu palpite" />
 
@@ -172,7 +174,7 @@ function PoolRow({
   );
   const title = row.pool.title ?? `${teams.home} × ${teams.away}`;
   return (
-    <Link
+    <IntentLink
       href={`/bolao/${row.pool.id}`}
       className="block rounded-xl border border-border px-5 py-4 transition-colors hover:bg-muted/40 focus-visible:outline-none focus-visible:ring-[3px] focus-visible:ring-ring/50"
     >
@@ -195,6 +197,6 @@ function PoolRow({
           {status.label}
         </Badge>
       </div>
-    </Link>
+    </IntentLink>
   );
 }

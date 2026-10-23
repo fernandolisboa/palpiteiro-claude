@@ -1,8 +1,9 @@
-import Link from "next/link";
+import { IntentLink } from "@/components/intent-link";
 import { ChevronRight } from "lucide-react";
 
 import { PageHeading } from "@/components/admin/page-heading";
 import { ADMIN_SECTIONS } from "@/lib/nav/menu";
+import { RevisitRefresh } from "@/components/revisit-refresh";
 
 export const dynamic = "force-dynamic";
 
@@ -16,6 +17,7 @@ function capitalize(text: string): string {
 export default function AdminIndexPage() {
   return (
     <div className="bg-background text-foreground">
+      <RevisitRefresh />
       <div className="mx-auto w-full max-w-reading px-6 py-8">
         <PageHeading
           title="Admin"
@@ -24,7 +26,7 @@ export default function AdminIndexPage() {
 
         <nav className="border-border rounded-md border">
           {ADMIN_SECTIONS.map((section) => (
-            <Link
+            <IntentLink
               key={section.href}
               href={section.href}
               className="border-border hover:bg-surface-2 flex items-center justify-between gap-4 border-b px-4 py-3 transition-colors last:border-b-0 focus-visible:outline-none focus-visible:ring-[3px] focus-visible:ring-ring/50 focus-visible:ring-inset"
@@ -36,7 +38,7 @@ export default function AdminIndexPage() {
                 </span>
               </div>
               <ChevronRight className="text-muted-foreground size-3.5 shrink-0" />
-            </Link>
+            </IntentLink>
           ))}
         </nav>
       </div>

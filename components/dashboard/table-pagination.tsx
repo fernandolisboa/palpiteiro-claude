@@ -1,4 +1,4 @@
-import Link from "next/link";
+import { IntentLink } from "@/components/intent-link";
 
 // Paginação da tabela do Desempenho (#577). Server; some com uma página só. A tabela
 // vem do jogo mais recente pro mais antigo, então "anterior" = mais recentes.
@@ -22,9 +22,9 @@ export function TablePagination({
       className="flex flex-wrap items-center justify-between gap-x-4 gap-y-2"
     >
       {page > 1 ? (
-        <Link href={hrefFor(page - 1)} aria-label="Página anterior, mais recentes" className={LINK}>
+        <IntentLink href={hrefFor(page - 1)} aria-label="Página anterior, mais recentes" className={LINK}>
           ← mais recentes
-        </Link>
+        </IntentLink>
       ) : (
         <span aria-hidden />
       )}
@@ -32,9 +32,9 @@ export function TablePagination({
         Página {page} de {pageCount}
       </span>
       {page < pageCount ? (
-        <Link href={hrefFor(page + 1)} aria-label="Próxima página, mais antigas" className={LINK}>
+        <IntentLink href={hrefFor(page + 1)} aria-label="Próxima página, mais antigas" className={LINK}>
           mais antigas →
-        </Link>
+        </IntentLink>
       ) : (
         <span aria-hidden />
       )}

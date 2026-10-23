@@ -1,6 +1,6 @@
 "use client";
 
-import Link from "next/link";
+import { IntentLink } from "@/components/intent-link";
 import { ChevronDown } from "lucide-react";
 
 import { signOutAction } from "@/app/actions/auth";
@@ -56,7 +56,7 @@ export function AccountMenu({ viewer }: { viewer: Viewer }) {
         <DropdownMenuSeparator />
         {ACCOUNT_NAV.map(({ href, label }) => (
           <DropdownMenuItem key={href} asChild>
-            <Link href={href}>{label}</Link>
+            <IntentLink href={href}>{label}</IntentLink>
           </DropdownMenuItem>
         ))}
         {/* Sair é server action. `preventDefault` no select segura o menu aberto: fechar

@@ -7,6 +7,7 @@ import { getClosingSnapshotForDetail } from "@/lib/db/queries/clv-snapshots";
 import { getPredictionDetailForUser } from "@/lib/db/queries/dashboard";
 import { getRequestTimeZone } from "@/lib/server/request-timezone";
 import { toPredictionDetailView } from "@/lib/view/dashboard";
+import { RevisitRefresh } from "@/components/revisit-refresh";
 
 export const dynamic = "force-dynamic";
 
@@ -48,6 +49,7 @@ export default async function AdminUserPredictionPage({ params }: PageProps) {
 
   return (
     <>
+      <RevisitRefresh />
       <PredictionDetail
         view={view}
         backHref={`/admin/users/${userId}`}

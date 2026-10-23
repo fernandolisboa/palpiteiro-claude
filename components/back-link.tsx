@@ -1,4 +1,4 @@
-import Link from "next/link";
+import { IntentLink } from "@/components/intent-link";
 import { ChevronLeft } from "lucide-react";
 
 import { cn } from "@/lib/utils";
@@ -14,7 +14,7 @@ export function BackLink({
   className?: string;
 }) {
   return (
-    <Link
+    <IntentLink
       href={href}
       className={cn(
         "mb-6 inline-flex items-center gap-2 rounded-sm text-muted-foreground hover:text-foreground focus-visible:outline-none focus-visible:ring-[3px] focus-visible:ring-ring/50",
@@ -23,6 +23,6 @@ export function BackLink({
     >
       <ChevronLeft className="size-3.5" />
       <span className="text-body-sm tracking-tight">{label}</span>
-    </Link>
+    </IntentLink>
   );
 }

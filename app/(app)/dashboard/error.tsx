@@ -1,7 +1,7 @@
 "use client";
 
 import * as Sentry from "@sentry/nextjs";
-import Link from "next/link";
+import { IntentLink } from "@/components/intent-link";
 import { TriangleAlert } from "lucide-react";
 import { useEffect } from "react";
 
@@ -39,12 +39,12 @@ export default function DashboardError({
           <Button onClick={reset} size="sm">
             Tentar novamente
           </Button>
-          <Link
+          <IntentLink
             href="/jogos"
             className="rounded-sm text-body text-muted-foreground hover:text-foreground focus-visible:outline-none focus-visible:ring-[3px] focus-visible:ring-ring/50"
           >
             Início
-          </Link>
+          </IntentLink>
         </div>
       </div>
     </div>

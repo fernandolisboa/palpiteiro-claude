@@ -1,7 +1,7 @@
 "use client";
 
 import * as Sentry from "@sentry/nextjs";
-import Link from "next/link";
+import { IntentLink } from "@/components/intent-link";
 import { RefreshCcw, TriangleAlert } from "lucide-react";
 import { useEffect } from "react";
 
@@ -40,7 +40,7 @@ export default function GlobalError({
               <RefreshCcw className="size-3.5" /> Tentar novamente
             </Button>
             <Button asChild size="sm" variant="ghost">
-              <Link href="/jogos">Voltar para a lista</Link>
+              <IntentLink href="/jogos">Voltar para a lista</IntentLink>
             </Button>
           </div>
         </Callout>

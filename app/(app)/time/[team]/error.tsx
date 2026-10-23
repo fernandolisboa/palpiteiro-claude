@@ -1,7 +1,7 @@
 "use client";
 
 import * as Sentry from "@sentry/nextjs";
-import Link from "next/link";
+import { IntentLink } from "@/components/intent-link";
 import { ChevronLeft, RefreshCcw, TriangleAlert } from "lucide-react";
 import { useEffect } from "react";
 
@@ -22,13 +22,13 @@ export default function TeamHistoryError({
   return (
     <main className="bg-background text-foreground">
       <div className="flex items-center justify-between px-5 pt-5 pb-2">
-        <Link
+        <IntentLink
           href="/jogos"
           className="flex items-center gap-2 rounded-sm text-muted-foreground hover:text-foreground focus-visible:outline-none focus-visible:ring-[3px] focus-visible:ring-ring/50"
         >
           <ChevronLeft className="size-3.5" />
           <span className="text-body-sm tracking-tight">jogos</span>
-        </Link>
+        </IntentLink>
       </div>
       <div className="mx-auto w-full max-w-narrow px-5 pt-6">
         <Callout
@@ -49,7 +49,7 @@ export default function TeamHistoryError({
               <RefreshCcw className="size-3.5" /> Tentar novamente
             </Button>
             <Button asChild size="sm" variant="ghost">
-              <Link href="/jogos">Voltar para a lista</Link>
+              <IntentLink href="/jogos">Voltar para a lista</IntentLink>
             </Button>
           </div>
         </Callout>
