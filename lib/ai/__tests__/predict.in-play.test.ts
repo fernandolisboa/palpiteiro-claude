@@ -126,6 +126,7 @@ function state(over: Partial<InPlayState> = {}): InPlayState {
     minuteLabel: "63'",
     score: { home: 1, away: 0 },
     red: { home: 0, away: 0 },
+    penalties: null,
     fetchedAt: new Date(NOW.getTime() - 20_000),
     ageMs: 20_000,
     ...over,

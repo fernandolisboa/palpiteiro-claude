@@ -103,6 +103,8 @@ export const FixtureEventItemSchema = z.object({
     .optional(),
   type: z.string(),
   detail: z.string().nullable().optional(),
+  // "Penalty Shootout" marca as cobranças da disputa de pênaltis (visto ao vivo, #600).
+  comments: z.string().nullable().optional(),
 });
 
 export const FixtureItemSchema = z.object({
@@ -133,9 +135,8 @@ export const FixtureItemSchema = z.object({
     extratime: ScoreLineSchema.nullable(),
     penalty: ScoreLineSchema.nullable(),
   }),
-  // Eventos do jogo. Só a busca por id (`/fixtures?id=`) os traz junto, segundo a
-  // documentação (INFERIDO, #591: validar com payload real); a busca por data/liga
-  // não. Tolerante em dobro: chave ausente → undefined, e um evento malformado também
+  // Eventos do jogo. Só a busca por id (`/fixtures?id=`) os traz junto (confirmado em
+  // payload real, #600); a busca por data/liga não. Tolerante em dobro: chave ausente → undefined, e um evento malformado também
   // vira undefined (`.catch`) em vez de derrubar o fixture inteiro: quem lê trata
   // undefined como "sem dados de eventos" (expulsões desconhecidas).
   events: z.array(FixtureEventItemSchema).optional().catch(undefined),

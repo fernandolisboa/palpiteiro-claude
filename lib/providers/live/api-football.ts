@@ -79,9 +79,9 @@ export function isApiFootballQuotaLow(
 /**
  * Expulsões por time a partir dos eventos `Card` do fixture: `detail` com "red card" ou
  * "second yellow" (sem diferenciar maiúsculas), atribuídas por `team.id` contra
- * `teams.home.id`/`teams.away.id`. Um jogador só é expulso uma vez: o mesmo jogador
- * (id, ou nome sem id) do mesmo time conta uma vez, caso o provider mande o segundo
- * amarelo e o vermelho como dois eventos.
+ * `teams.home.id`/`teams.away.id`. Um jogador só é expulso uma vez: o mesmo
+ * `player.id` do mesmo time conta uma vez, caso o provider mande o segundo amarelo e o
+ * vermelho como dois eventos. Cartão sem `player.id` é de técnico (não conta).
  *
  * null = sem dados: `events` ausente (ou descartado pelo schema), ou um cartão vermelho
  * que não dá pra atribuir a nenhum dos dois times (contar errado é pior que não saber).
@@ -106,16 +106,53 @@ export function countRedCards(
           ? "away"
           : null;
     if (side === null) return null;
-    const player = ev.player?.id ?? ev.player?.name ?? null;
-    if (player !== null) {
-      const key = `${side}:${player}`;
-      if (seen.has(key)) continue;
-      seen.add(key);
-    }
+    // Cartão de técnico vem em `events` como um cartão comum, sem `player.id` (visto ao
+    // vivo, #600): não tira jogador de campo. Jogador sempre veio com id.
+    const playerId = ev.player?.id ?? null;
+    if (playerId === null) continue;
+    const key = `${side}:${playerId}`;
+    if (seen.has(key)) continue;
+    seen.add(key);
     if (side === "home") home += 1;
     else away += 1;
   }
   return { home, away };
+}
+
+/**
+ * Placar da disputa de pênaltis. `score.penalty` quando vem com os dois números; senão,
+ * as cobranças em `events` (`type: "Goal"`, `comments: "Penalty Shootout"`, convertida
+ * = `detail: "Penalty"`, perdida = `"Missed Penalty"`), pra ter o placar enquanto a
+ * disputa roda. Visto em payload real (#600) com o `score.penalty` preenchido no fim;
+ * se ele vem ao vivo ainda não foi visto, daí a contagem.
+ *
+ * null = sem disputa (nenhuma cobrança) ou cobrança que não dá pra atribuir a um time.
+ */
+export function penaltyShootoutScore(
+  f: ApiFootballFixture
+): { home: number; away: number } | null {
+  const { home, away } = f.score.penalty ?? { home: null, away: null };
+  if (home !== null && away !== null) return { home, away };
+  if (f.events === undefined) return null;
+  const kicks = f.events.filter(
+    (ev) =>
+      ev.type.toLowerCase() === "goal" &&
+      /penalty shootout/i.test(ev.comments ?? "")
+  );
+  if (kicks.length === 0) return null;
+  const out = { home: 0, away: 0 };
+  for (const ev of kicks) {
+    const teamId = ev.team?.id ?? null;
+    const side =
+      teamId !== null && teamId === f.teams.home.id
+        ? "home"
+        : teamId !== null && teamId === f.teams.away.id
+          ? "away"
+          : null;
+    if (side === null) return null;
+    if (/^penalty$/i.test((ev.detail ?? "").trim())) out[side] += 1;
+  }
+  return out;
 }
 
 export function toNormalizedLiveState(
@@ -130,6 +167,7 @@ export function toNormalizedLiveState(
     extra: f.fixture.status.extra ?? null,
     goals: home !== null && away !== null ? { home, away } : null,
     red: countRedCards(f),
+    penalties: penaltyShootoutScore(f),
     fetchedAt,
   };
 }

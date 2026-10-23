@@ -65,6 +65,8 @@ function state(
     awayGoals: 0,
     homeRed: 0,
     awayRed: 0,
+    homePens: null,
+    awayPens: null,
     fetchedAt: new Date("2026-10-15T19:13:00Z"),
     ...over,
   };
