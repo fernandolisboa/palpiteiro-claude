@@ -31,6 +31,13 @@ import {
   SYNTHESIS_RESERVE_MS,
 } from "@/lib/ai/deadline";
 import { readAnalysisEngine } from "@/lib/ai/engine/analysis-engine-flag";
+import {
+  beginStep,
+  noteStep,
+  setProgressMarketLabels,
+  trackStep,
+} from "@/lib/ai/progress/run-progress";
+import { STEPS, synthesisStep } from "@/lib/ai/progress/steps";
 import { getCartridge } from "@/lib/ai/markets/registry";
 import {
   modelChoiceForAudience,
@@ -692,6 +699,7 @@ export async function analyzeBestBet(
   if (candidates.length === 0) {
     return { ok: false, error: "Nenhum mercado disponível para este jogo." };
   }
+  setProgressMarketLabels(candidates);
   // Linhas extras (#175): flag SEPARADA (enable_over_under_extra_lines), NÃO a do
   // best-bet. Leitura grátis → ANTES do 1º slot. Resolvida UMA vez por mercado no
   // FanOutMarket — o MESMO valor alimenta o pré-warm e o predict (senão predict
@@ -808,6 +816,7 @@ export async function analyzeBestBet(
   const messageContext = messageContextFor(isAdmin);
   const mapError = (err: unknown) => friendlyMessageFromUnknown(err, messageContext);
   const preWarmErrors: { marketKey: string; message: string }[] = [];
+  const preWarmStep = additionalToFetch.length > 0 ? beginStep(STEPS.odds) : null;
   for (const { marketKey: mk, descriptor } of additionalToFetch) {
     try {
       await ensureOddsSnapshotsFresh(match, { markets: [descriptor] });
@@ -815,6 +824,8 @@ export async function analyzeBestBet(
       preWarmErrors.push({ marketKey: mk, message: mapError(err) });
     }
   }
+  if (preWarmErrors.length === additionalToFetch.length) preWarmStep?.fail();
+  else preWarmStep?.done();
   // Fan-out (paralelo ou serial, flag): predict() por mercado concedido (a única porta pro
   // LLM), best-of-successful.
   // code_jev (#512): decide todos em código e narra só o escolhido (1 chamada paga).
@@ -935,6 +946,7 @@ async function analyzeBestBetLive(args: {
   // "Contexto extra" dela não vale ao vivo e a leitura ao vivo não aparece nela.
   const freeGate = liveFreeGate(match, live, args.pageLive);
   if (freeGate) return { ok: false, error: freeGate };
+  noteStep(STEPS.liveState);
   const scoreline = await inPlayModelFor(match, live, phase);
   const gate = capabilityGateMessage("analyze", match, {
     now: live.now,
@@ -1073,10 +1085,15 @@ async function inPlayModelFor(
   live: ActionLiveContext,
   phase: MatchPhase,
 ): Promise<InPlayScoreline | null> {
-  return live.state &&
+  const state = live.state;
+  return state &&
     phase.actionable &&
     (phase.kind === "in_play" || phase.kind === "half_time")
-    ? resolveInPlaySlipModel(match, live.state)
+    ? trackStep(
+        STEPS.liveModel,
+        () => resolveInPlaySlipModel(match, state),
+        (s) => (s === null ? { status: "failed" } : undefined),
+      )
     : null;
 }
 
@@ -1101,14 +1118,17 @@ async function synthesizeHeadline(args: {
   live?: GenerateLivePalpiteArgs["live"];
 }): Promise<HeadlineOutcome> {
   const { scope, matchId, isAdmin } = args;
+  const spec = synthesisStep(args.live !== undefined);
   try {
     // Sem tempo pra uma chamada Haiku antes do prazo do run: pula a síntese limpa (o
     // gerador nem é chamado → sem row de ai_calls).
     if (!canFitCall(args.deadlineAt, "fast")) {
+      noteStep(spec, "skipped");
       throw new AnalysisDeadlineError();
     }
-    const result = args.live
-      ? await generateLivePalpites({
+    const step = beginStep(spec);
+    const result = await (args.live
+      ? generateLivePalpites({
           matchId,
           userId: args.userId,
           analyses: args.analyses,
@@ -1116,14 +1136,18 @@ async function synthesizeHeadline(args: {
           modelOverride: UTILITY_MODEL_ID,
           deadlineAt: args.deadlineAt,
         })
-      : await generatePalpites({
+      : generatePalpites({
           matchId,
           userId: args.userId,
           analyses: args.analyses,
           modelOverride: UTILITY_MODEL_ID,
           deadlineAt: args.deadlineAt,
           news: args.news,
-        });
+        })
+    ).catch((err: unknown) => {
+      step.fail();
+      throw err;
+    });
     // As linhas settleable recém-gravadas estão TODAS pendentes (sem outcome) → badge
     // null. NARROW-not-cast (#354 / blocker §3.2): `params` é a union larga do jsonb;
     // estreitamos via ExactScoreParamsSchema.safeParse (prefer-skip: params ruins →
@@ -1135,6 +1159,7 @@ async function synthesizeHeadline(args: {
       ? ExactScoreParamsSchema.safeParse(scoreLine.params)
       : null;
     if (result.palpiteSet.headline && ps?.success) {
+      step.done();
       const linesWithPendingOutcome = result.palpites.map((p) => ({
         ...p,
         outcome: null,
@@ -1152,6 +1177,7 @@ async function synthesizeHeadline(args: {
         }),
       };
     }
+    step.fail();
     console.error(
       JSON.stringify({ scope, matchId, error: "synthesis_without_headline" }),
     );
@@ -1234,6 +1260,7 @@ export async function generatePalpiteFromAnalyses(
       livePageRefusal(formData) === null,
     );
     if (freeGate) return { ok: false, error: freeGate };
+    noteStep(STEPS.liveState);
     const scoreline = await inPlayModelFor(match, live, phase);
     const gate = capabilityGateMessage("analyze", match, {
       now: live.now,
@@ -1245,7 +1272,9 @@ export async function generatePalpiteFromAnalyses(
     if (!live.state || !scoreline) {
       return { ok: false, error: NO_IN_PLAY_MODEL_MESSAGE };
     }
-    const history = await getPredictionHistoryForMatch(matchId, session.user.id);
+    const history = await trackStep(STEPS.savedAnalyses, () =>
+      getPredictionHistoryForMatch(matchId, session.user.id),
+    );
     if (!history.some((row) => row.prediction.isLive)) {
       return { ok: false, error: NO_LIVE_READING_MESSAGE };
     }
@@ -1263,7 +1292,9 @@ export async function generatePalpiteFromAnalyses(
       return { ok: false, error: notAnalyzable };
     }
     analyses = summarizeSavedAnalysesForSynthesis(
-      await getPredictionHistoryForMatch(matchId, session.user.id),
+      await trackStep(STEPS.savedAnalyses, () =>
+        getPredictionHistoryForMatch(matchId, session.user.id),
+      ),
     );
     if (analyses.length === 0) {
       return {

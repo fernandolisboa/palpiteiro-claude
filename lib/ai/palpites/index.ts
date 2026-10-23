@@ -7,6 +7,8 @@ import type { DbPalpiteSet } from "@/lib/db/queries/palpites";
 import { getSportsDataProvider } from "@/lib/providers/sports-data";
 import type { FixtureRef } from "@/lib/providers/sports-data/types";
 import { getNewsProvider } from "@/lib/providers/news";
+import { noteStep, trackStep } from "@/lib/ai/progress/run-progress";
+import { STEP_NOTES, STEPS } from "@/lib/ai/progress/steps";
 import type {
   NewsFetchOutcome,
   NewsResult,
@@ -103,8 +105,26 @@ export function startNewsFetch(
   const newsFits =
     newsDeadline === undefined || remainingMs(newsDeadline) >= NEWS_MIN_BUDGET_MS;
   if (!newsFits) {
+    noteStep(STEPS.news, "skipped");
     return Promise.resolve({ results: [], aiCall: null, unavailable: true });
   }
+  return trackStep(
+    STEPS.news,
+    () => fetchNews(match, audit, newsDeadline),
+    (outcome) =>
+      outcome.unavailable
+        ? { status: "failed" }
+        : outcome.results.length === 0
+          ? { status: "done", label: STEP_NOTES.newsEmpty }
+          : undefined,
+  );
+}
+
+function fetchNews(
+  match: Parameters<typeof startNewsFetch>[0],
+  audit: Parameters<typeof startNewsFetch>[1],
+  newsDeadline: number | undefined,
+): Promise<NewsFetchOutcome> {
   return getNewsProvider()
     .getNewsByMatch(
       {
@@ -506,6 +526,7 @@ async function runSynthesis<O extends SynthesisOutputBase>(
     }
     const fidelity = spec.fidelity(candidate);
     if (fidelity.ok) {
+      noteStep(STEPS.check);
       output = candidate;
       settleableRows = candidateRows;
       break;
