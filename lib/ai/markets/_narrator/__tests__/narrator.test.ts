@@ -5,6 +5,7 @@ import {
   buildNarratorMessage,
   checkNarrationFidelity,
   judgmentFactorPhrases,
+  lineupNotePhrases,
   NARRATOR_VERSION,
   NarratorOutputSchema,
   SYSTEM_PROMPT,
@@ -646,5 +647,84 @@ describe("forma recente por competição (#618)", () => {
       fx("1", TEAMS.home, "EC Bahia", [2, 1], "2026-05-10T19:00:00.000Z"),
     ]);
     expect(c.form.home).toEqual(["V 2-1 x EC Bahia (casa)"]);
+  });
+});
+
+describe("escalação confirmada na reconferência (#619)", () => {
+  const announced = (
+    changes: "0-2" | "3-4" | "5+" | null,
+    leftOut: { position?: "goalkeeper" | "defender" | "midfielder" | "forward"; whereabouts?: "bench" | "out_of_squad" }[] = []
+  ) => ({ status: "announced" as const, changes, leftOut });
+
+  it("uma frase por time anunciado, com papéis (sem nome) e desfalcados no XI", () => {
+    const phrases = lineupNotePhrases(
+      {
+        home: announced("5+", [
+          { position: "goalkeeper", whereabouts: "bench" },
+          { position: "defender", whereabouts: "out_of_squad" },
+          { position: "midfielder" },
+          { whereabouts: "bench" },
+        ]),
+        away: announced(null),
+      },
+      TEAMS,
+      { home: 0, away: 2 }
+    );
+    expect(phrases).toEqual([
+      `Escalação do ${TEAMS.home} confirmada com 5 ou mais mudanças por escolha em relação ao time titular habitual (goleiro titular no banco, defensor titular fora da lista, meio-campista titular e mais 1)`,
+      `Escalação do ${TEAMS.away} confirmada, sem como comparar com o time titular habitual; 2 jogadores listados como desfalque estão entre os titulares`,
+    ]);
+  });
+
+  it("time sem escalação anunciada não gera frase", () => {
+    expect(
+      lineupNotePhrases(
+        { home: { status: "not_announced" }, away: announced("0-2") },
+        TEAMS
+      )
+    ).toEqual([
+      `Escalação do ${TEAMS.away} confirmada com 0 a 2 mudanças por escolha em relação ao time titular habitual`,
+    ]);
+  });
+
+  it("template: notas abrem o racional e vêm DEPOIS de prob./edge nos fatores", () => {
+    const notes = ["Escalação do A confirmada", "Escalação do B confirmada"];
+    const out = templatedNarration(
+      overDecision({ lineupNotes: notes, judgmentFactors: ["fator JEV"] })
+    );
+    expect(out.rationale.startsWith("Escalação do A confirmada. Escalação do B confirmada. O modelo")).toBe(true);
+    expect(out.key_factors).toEqual([
+      "Probabilidade do modelo: 58,4%",
+      "Edge: 8,2 pp",
+      ...notes,
+      "fator JEV",
+    ]);
+    expect(NarratorOutputSchema.safeParse(out).success).toBe(true);
+    expect(checkNarrationFidelity(out, overDecision({ lineupNotes: notes }))).toEqual({ ok: true });
+  });
+
+  it("nota longa demais não corta os números do racional (fica só nos fatores)", () => {
+    const plain = templatedNarration(overDecision());
+    const out = templatedNarration(overDecision({ lineupNotes: ["x".repeat(590)] }));
+    expect(out.rationale).toBe(plain.rationale);
+    expect(out.key_factors).toContain("x".repeat(590));
+  });
+
+  it("o narrador LLM nunca lê as notas (mensagem idêntica, sem bump)", () => {
+    const ctx = buildNarratorContext({
+      league: "brasileirao_a",
+      kickoffAt: new Date("2026-05-15T19:00:00Z"),
+      homeTeam: TEAMS.home,
+      awayTeam: TEAMS.away,
+      standings: undefined,
+      homeForm: [],
+      awayForm: [],
+      h2h: [],
+      absencesAvailable: false,
+      absences: { home: [], away: [] },
+    });
+    expect(buildNarratorMessage(overDecision({ lineupNotes: ["Escalação X"] }), ctx)).toBe(
+      buildNarratorMessage(overDecision(), ctx)
+    );
   });
 });

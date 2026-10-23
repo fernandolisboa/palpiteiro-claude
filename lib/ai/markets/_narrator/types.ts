@@ -46,6 +46,10 @@ export type NarratorDecision = {
   // Contexto extra (#569): o que a pessoa informou e o código não confere (subtipos de
   // "outra informação"), em linhas montadas pelo código. Sem efeito no número.
   userNotes?: string[];
+  // Reconferência com a escalação (#619): frases da escalação confirmada (papéis, sem
+  // nome), montadas pelo código. Só o racional templado lê; o narrador LLM nunca recebe
+  // este campo (a reconferência não chama o narrador).
+  lineupNotes?: string[];
 };
 
 // Dados de contexto (os mesmos que o prompt de mercado recebe, com desfalques por

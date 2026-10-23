@@ -1,5 +1,10 @@
 import type { JudgmentMultipliers } from "@/lib/ai/judgments/apply";
-import type { JudgmentAbsenceInput } from "@/lib/ai/judgments/state";
+import type { LineupChangeBucket } from "@/lib/ai/judgments/lineup-vocabulary";
+import type {
+  JudgmentAbsenceInput,
+  LineupLeftOut,
+  LineupSummary,
+} from "@/lib/ai/judgments/state";
 import type {
   JudgmentAnswers,
   JudgmentFactor,
@@ -201,4 +206,77 @@ export function describeAbsencePt(input: JudgmentAbsenceInput): string {
   }
   if (isTopScorer) role = `${role}, artilheiro do time`;
   return `${role} (${STATUS_PT[input.injury.status] ?? input.injury.status})`;
+}
+
+// ─── Escalação confirmada → frases PT-BR (#619, reconferência; nunca o nome) ──
+
+const LEFT_OUT_PLACE_PT: Record<
+  NonNullable<LineupLeftOut["whereabouts"]>,
+  string
+> = {
+  bench: "no banco",
+  out_of_squad: "fora da lista",
+};
+
+const CHANGES_PT: Record<LineupChangeBucket, string> = {
+  "0-2": "0 a 2 mudanças por escolha",
+  "3-4": "3 a 4 mudanças por escolha",
+  "5+": "5 ou mais mudanças por escolha",
+};
+
+// Quantos papéis citar entre parênteses; o resto vira "e mais N".
+const LEFT_OUT_ROLES_MAX = 3;
+
+function leftOutRolePt(entry: LineupLeftOut): string {
+  const base = entry.position
+    ? entry.position === "goalkeeper"
+      ? "goleiro titular"
+      : `${POSITION_PT[entry.position]} titular`
+    : "titular";
+  return entry.whereabouts
+    ? `${base} ${LEFT_OUT_PLACE_PT[entry.whereabouts]}`
+    : base;
+}
+
+function lineupNoteForTeam(
+  summary: LineupSummary,
+  team: string,
+  startingAbsentees: number,
+): string | null {
+  if (summary.status !== "announced") return null;
+  let phrase: string;
+  if (summary.changes === null) {
+    phrase = `Escalação do ${team} confirmada, sem como comparar com o time titular habitual`;
+  } else {
+    phrase = `Escalação do ${team} confirmada com ${CHANGES_PT[summary.changes]} em relação ao time titular habitual`;
+    if (summary.leftOut.length > 0) {
+      const roles = summary.leftOut.slice(0, LEFT_OUT_ROLES_MAX).map(leftOutRolePt);
+      const more = summary.leftOut.length - roles.length;
+      phrase += ` (${roles.join(", ")}${more > 0 ? ` e mais ${more}` : ""})`;
+    }
+  }
+  if (startingAbsentees > 0) {
+    phrase +=
+      startingAbsentees === 1
+        ? "; 1 jogador listado como desfalque está entre os titulares"
+        : `; ${startingAbsentees} jogadores listados como desfalque estão entre os titulares`;
+  }
+  return phrase;
+}
+
+/**
+ * Notas da escalação confirmada pra reconferência (#619): uma frase por time com a
+ * escalação anunciada (mudanças por escolha, papéis dos titulares habituais fora e
+ * desfalcados da lista do provider que vão começar jogando). Sem nome de jogador: a
+ * entrada já é o LineupSummary (papéis), que é o que sai de state.ts.
+ */
+export function lineupNotePhrases(
+  lineup: { home: LineupSummary; away: LineupSummary },
+  teams: NarratorTeams,
+  startingAbsentees: { home: number; away: number } = { home: 0, away: 0 },
+): string[] {
+  return [
+    lineupNoteForTeam(lineup.home, teams.home, startingAbsentees.home),
+    lineupNoteForTeam(lineup.away, teams.away, startingAbsentees.away),
+  ].filter((p): p is string => p !== null);
 }

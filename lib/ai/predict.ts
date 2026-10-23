@@ -12,6 +12,10 @@ import {
   resolveMarketCatalog,
   resolveMarketRow,
 } from "@/lib/db/queries/market-catalog";
+import {
+  getFrozenSelectionOdds,
+  hasNewerPreMatchPrediction,
+} from "@/lib/db/queries/lineup-recheck";
 import { getLatestFreshSelectionOddsSnapshots } from "@/lib/db/queries/odds-snapshots";
 import { extractDbCause } from "@/lib/db/pg-error";
 import {
@@ -29,7 +33,7 @@ import { isNeutralVenue } from "@/lib/providers/sports-data/neutral-venue";
 import { getAbsencesProvider } from "@/lib/providers/absences";
 import type { ModelScoreline } from "@/lib/quant/match-model";
 import { getModelScoreline } from "@/lib/ratings/model-scoreline";
-import { LEAGUE_LABEL, leagueToKey } from "@/lib/format";
+import { LEAGUE_LABEL, leagueToKey, modelIdFromVersion } from "@/lib/format";
 import { resolveInPlaySlipModel } from "@/lib/bets/slip-model";
 import { IN_PLAY_ACT_MAX_AGE_MS, isLiveStateActionable } from "@/lib/live/freshness";
 import type { InPlayState } from "@/lib/live/in-play-state";
@@ -42,7 +46,7 @@ import {
   type InPlayScoreline,
 } from "@/lib/quant/in-play";
 import { normalizeTeamName } from "@/lib/providers/sports-data/team-names";
-import { pOverUnder } from "@/lib/quant/scoreline-model";
+import { pOverUnder, scorelineMatrix } from "@/lib/quant/scoreline-model";
 import {
   SportsDataTransientError,
   SportsDataUnsupportedError,
@@ -96,7 +100,11 @@ import {
   type MatchJudgmentData,
   type MatchJudgmentInput,
 } from "./engine/judgment-input";
-import type { PredictionJudgments } from "./engine/types";
+import {
+  LINEUP_RECHECK_VERSION,
+  type PredictionJudgments,
+  type PredictionRecheck,
+} from "./engine/types";
 import { JUDGMENT_WEIGHTS_VERSION } from "./judgments/apply";
 import {
   judgeMatch,
@@ -120,6 +128,7 @@ import {
 import {
   buildNarratorContext,
   judgmentFactorPhrases,
+  lineupNotePhrases,
   narratorCartridge,
   selectionLabel,
   type NarratorContext,
@@ -1823,6 +1832,323 @@ async function persistPrediction(a: PersistArgs): Promise<PredictResult> {
   };
 }
 
+// ─── Reconferência com a escalação (#619, PR B) ──────────────────────────────
+
+// Idade máxima da captura de odds do banco usada na reconferência: o prewarm-odds (0
+// */6, janela 24 h) mantém 1X2 e O/U 2,5 de toda liga ativa com captura ≤ 6 h. Sem ela,
+// as odds congeladas do próprio pai. Nunca uma busca nova (zero crédito da The Odds API).
+export const RECHECK_ODDS_MAX_AGE_MS = 6 * 60 * 60 * 1000;
+
+export type LineupRecheckArgs = {
+  parent: { prediction: Prediction; marketKey: string };
+  match: {
+    id: string;
+    homeTeam: string;
+    awayTeam: string;
+    kickoffAt: Date;
+  };
+  // Input do state e JEV do jogo com a escalação confirmada, resolvidos UMA vez por
+  // jogo pelo cron (resolveModelBaseJudgments) e aplicados a todo pai do jogo.
+  judgment: { input: MatchJudgmentInput; run: JudgmentRun };
+  // Relógio (teste). Default: agora.
+  now?: () => Date;
+};
+
+export type LineupRecheckSkipReason =
+  | "not_code_jev_market"
+  | "parent_incomplete"
+  | "jev_failed"
+  | "no_odds"
+  | "superseded"
+  | "kickoff_passed";
+
+export type LineupRecheckOutcome =
+  | {
+      kind: "persisted";
+      predictionId: string;
+      flipped: boolean;
+      oddsFrom: PredictionRecheck["oddsFrom"];
+    }
+  | { kind: "skipped"; reason: LineupRecheckSkipReason };
+
+// O ModelScoreline do PAI, refeito do jsonb dele (`judgments.lambda`): a reconferência
+// isola o efeito da escalação do refit diário do Dixon-Coles (mesmo λ de base).
+function scorelineFromParent(
+  judgments: PredictionJudgments,
+): ModelScoreline | null {
+  const lambda = judgments.lambda;
+  const base = lambda?.base;
+  if (
+    !base ||
+    !Number.isFinite(base.home) ||
+    !Number.isFinite(base.away) ||
+    base.home <= 0 ||
+    base.away <= 0
+  ) {
+    return null;
+  }
+  const rho = lambda.rho ?? undefined;
+  return {
+    source: lambda.source,
+    degraded: lambda.degraded,
+    lambdaHome: base.home,
+    lambdaAway: base.away,
+    ...(rho === undefined ? {} : { rho }),
+    matrix: scorelineMatrix(
+      base.home,
+      base.away,
+      rho === undefined ? undefined : { rho },
+    ),
+    ...(lambda.fallbackReason ? { fallbackReason: lambda.fallbackReason } : {}),
+  };
+}
+
+type RecheckOdds = {
+  oddByKey: Record<string, number>;
+  bookmaker: string | null;
+  oddsFrom: PredictionRecheck["oddsFrom"];
+  capturedAt: Date | null;
+};
+
+// Odds da reconferência, SÓ do banco: a captura mais recente (≤ 6 h) da linha do pai;
+// sem ela, as odds congeladas do próprio pai (prediction_selection_odds). Mercado
+// incompleto ou odd fora do domínio → null (pula).
+async function recheckOdds(args: {
+  parent: Prediction;
+  matchId: string;
+  dbMarketKey: string;
+  selectionKeys: readonly string[];
+  line: number | null;
+  now: Date;
+}): Promise<RecheckOdds | null> {
+  const complete = (
+    sels: readonly { key: string; odd: number }[],
+  ): Record<string, number> | null => {
+    const out: Record<string, number> = {};
+    for (const key of args.selectionKeys) {
+      const odd = sels.find((s) => s.key === key)?.odd;
+      if (odd === undefined || !Number.isFinite(odd) || odd <= 1) return null;
+      out[key] = odd;
+    }
+    return out;
+  };
+  const snapshot = await getLatestFreshSelectionOddsSnapshots(
+    {
+      matchId: args.matchId,
+      dbMarketKey: args.dbMarketKey,
+      ...(args.line === null ? {} : { params: { line: args.line } }),
+    },
+    args.now,
+    RECHECK_ODDS_MAX_AGE_MS,
+  );
+  const fromSnapshot = snapshot
+    ? complete(snapshot.selections.map((s) => ({ key: s.key, odd: Number(s.odd) })))
+    : null;
+  if (snapshot && fromSnapshot) {
+    return {
+      oddByKey: fromSnapshot,
+      bookmaker: snapshot.bookmaker,
+      oddsFrom: "snapshot",
+      capturedAt: snapshot.capturedAt,
+    };
+  }
+  const frozen = complete(await getFrozenSelectionOdds(args.parent.id));
+  if (!frozen) return null;
+  return {
+    oddByKey: frozen,
+    bookmaker: args.parent.bookmaker,
+    oddsFrom: "parent",
+    capturedAt: null,
+  };
+}
+
+/**
+ * Reconferência de UMA predição code_jev feita antes da escalação (#619, PR B): o mesmo
+ * λ de base do pai × o JEV refeito com a escalação confirmada → matriz → max-edge → gate
+ * → stake, com o racional templado em código. Sempre uma row NOVA (o pai é imutável; a
+ * referência fica só em `judgments.recheck.of`). Fica neste módulo pra reusar o motor, o
+ * gate e a persistência e manter a porta única do JEV, mas NENHUM caminho daqui chama
+ * LLM, The Odds API ou o limite diário (só leituras do banco e o insert).
+ *
+ * Mercado: o do pai; no over/under, só a linha do pai. Imediatamente antes do insert:
+ * pula se outra análise de pré-jogo já é mais nova que o pai no mesmo balde
+ * (`superseded`) ou se o jogo já começou pelo horário do kickoff (`kickoff_passed`).
+ */
+export async function recheckPredictionWithLineup(
+  args: LineupRecheckArgs,
+): Promise<LineupRecheckOutcome> {
+  const now = args.now ?? (() => new Date());
+  const { parent, match, judgment } = args;
+  const p = parent.prediction;
+  const skip = (reason: LineupRecheckSkipReason): LineupRecheckOutcome => ({
+    kind: "skipped",
+    reason,
+  });
+
+  // JEV que não respondeu = falha: nunca grava DC puro rotulado "com a escalação".
+  const answers = judgment.run.answers;
+  if (answers === null) return skip("jev_failed");
+
+  const cartridge = getCartridge(parent.marketKey);
+  const descriptor = cartridge.descriptor;
+  if (!isCodeJevMarket(descriptor)) return skip("not_code_jev_market");
+
+  const parentJudgments = p.judgments;
+  if (
+    !parentJudgments ||
+    parentJudgments.engine !== "code_jev" ||
+    p.marketId === null
+  ) {
+    return skip("parent_incomplete");
+  }
+  const scoreline = scorelineFromParent(parentJudgments);
+  if (!scoreline) return skip("parent_incomplete");
+
+  const line = p.marketParams?.line ?? descriptor.params?.line ?? null;
+  if (descriptor.dbMarketKey === "over_under" && line === null) {
+    return skip("parent_incomplete");
+  }
+  const selectionKeys = descriptor.selectionKeys;
+  const odds = await recheckOdds({
+    parent: p,
+    matchId: match.id,
+    dbMarketKey: descriptor.dbMarketKey,
+    selectionKeys,
+    line,
+    now: now(),
+  });
+  if (!odds) return skip("no_odds");
+
+  // Implícita de-vigada pelo mercado completo (ADR 0018), como o predict.
+  const impliedSumTarget = descriptor.impliedSumTarget ?? 1;
+  const { probs } = computeMarketImpliedProbabilities(
+    selectionKeys.map((key) => odds.oddByKey[key]),
+  );
+  const impliedByKey: Record<string, number> = {};
+  selectionKeys.forEach((key, i) => {
+    impliedByKey[key] = probs[i] * 100 * impliedSumTarget;
+  });
+
+  const catalog = await resolveMarketCatalog(descriptor.dbMarketKey);
+  const minEdgePp = descriptor.minEdgePp ?? MIN_EDGE_PP;
+  const engine = runCodeJevEngine({
+    dbMarketKey: descriptor.dbMarketKey,
+    selectionKeys,
+    scoreline,
+    judgments: answers,
+    candidates: [{ line, impliedByKey }],
+    minEdgePp,
+  });
+  const confidencePct =
+    engine.modelProbByKey[
+      engine.recommendation === "pass" ? selectionKeys[0] : engine.recommendation
+    ];
+  const decision = await decideRecommendation({
+    cartridge,
+    marketKey: parent.marketKey,
+    catalog,
+    selectionKeys: [...selectionKeys],
+    oddByKey: odds.oddByKey,
+    impliedByKey,
+    modelProbByKey: engine.modelProbByKey,
+    recommendation: engine.recommendation,
+    confidencePct,
+  });
+
+  const teams = { home: match.homeTeam, away: match.awayTeam };
+  const { input } = judgment;
+  const lineupNotes = lineupNotePhrases(input.lineup, teams, {
+    home: Math.max(0, input.providerAbsences.home.length - input.absences.home.length),
+    away: Math.max(0, input.providerAbsences.away.length - input.absences.away.length),
+  });
+  const narratorDecision: NarratorDecision = {
+    ...toNarratorDecision({
+      marketKey: cartridge.marketKey,
+      selectionKeys,
+      teams,
+      engine,
+      answers,
+      userNotes: [],
+      decision,
+      line,
+      oddByKey: odds.oddByKey,
+      minEdgePp,
+    }),
+    ...(lineupNotes.length > 0 ? { lineupNotes } : {}),
+  };
+  const text = narratorCartridge.fallback(narratorDecision);
+
+  const recheck: PredictionRecheck = {
+    kind: "lineup",
+    version: LINEUP_RECHECK_VERSION,
+    of: p.id,
+    parentStateHash: parentJudgments.stateHash ?? null,
+    oddsFrom: odds.oddsFrom,
+    oddsCapturedAt: odds.capturedAt?.toISOString() ?? null,
+    before: {
+      recommendation: p.recommendation,
+      line: p.marketParams?.line ?? null,
+      confidencePct: Number(p.confidencePct),
+      edgePct: p.edgePct === null ? null : Number(p.edgePct),
+    },
+  };
+  const recModelProb = decision.recModelProb;
+
+  // Guardas imediatamente antes do insert: outra análise passou na frente do pai, ou o
+  // jogo começou (pelo horário; o status pode seguir `scheduled` por horas).
+  if (
+    await hasNewerPreMatchPrediction({
+      id: p.id,
+      matchId: p.matchId,
+      userId: p.userId,
+      marketId: p.marketId,
+      createdAt: p.createdAt,
+    })
+  ) {
+    return skip("superseded");
+  }
+  if (match.kickoffAt.getTime() <= now().getTime()) return skip("kickoff_passed");
+
+  const result = await persistPrediction({
+    matchId: match.id,
+    userId: p.userId,
+    // A chamada JEV deste run (row de sistema), ou a do pai quando o JEV veio de reuso
+    // sem row (`aiCallId` null). A reconferência não tem chamada narradora própria:
+    // ownsAiCall é false (sem custo no card).
+    aiCallId: judgment.run.aiCallId ?? p.aiCallId,
+    cartridge,
+    catalog,
+    selectionKeys: [...selectionKeys],
+    oddByKey: odds.oddByKey,
+    modelProbByKey: engine.modelProbByKey,
+    marketParams: line === null ? null : { line },
+    decision,
+    confidencePct,
+    rationale: text.rationale,
+    keyFactors: text.key_factors,
+    minimumOdd:
+      recModelProb !== null && recModelProb - minEdgePp > 0
+        ? 100 / (recModelProb - minEdgePp)
+        : undefined,
+    bookmaker: odds.bookmaker,
+    modelId: modelIdFromVersion(p.modelVersion),
+    modelTags: `${codeJevModelTags(scoreline)};recheck=${LINEUP_RECHECK_VERSION}`,
+    promptVersion: narratorCartridge.version,
+    judgments: {
+      ...toPredictionJudgments(scoreline, engine, judgment.run, input.lineup),
+      narration: "lineup_recheck_template",
+      recheck,
+    },
+    labelByKey: null,
+  });
+  return {
+    kind: "persisted",
+    predictionId: result.prediction.id,
+    flipped: decision.side !== p.recommendation,
+    oddsFrom: odds.oddsFrom,
+  };
+}
+
 // ─── Leitura ao vivo (#594, ADR 0060 §8) ─────────────────────────────────────
 
 // Mercados lidos ao vivo: os do placar FINAL que o modelo em jogo precifica.
@@ -2529,17 +2855,36 @@ async function resolveMatchJudgments(args: {
   return { input, run };
 }
 
-/**
- * JEV da base do modelo por jogo (#555, ADR 0052): mesmo state, reuso e log do predict,
- * sem usuário (ai_calls.user_id null, permitido só pro provider TypeSafe). A porta do
- * JEV continua sendo este módulo (ADR 0041 §5). Guarda defensiva: sem TYPESAFE_API_KEY
- * → null sem chamar nem logar (o cron já checa antes). Nunca lança: erro → log + null.
- */
-export async function resolveModelBaseJudgments(args: {
+type ModelBaseJudgmentsArgs = {
   matchId: string;
   provider: SportsDataProvider;
   data: JudgmentFetchedData;
-}): Promise<{ input: MatchJudgmentInput; run: JudgmentRun } | null> {
+  // Escopo do log de erro (#619): "predict" pro cron da base (o de sempre),
+  // "recheck_lineups" pra reconferência com a escalação.
+  logScope?: string;
+};
+
+/**
+ * JEV da base do modelo por jogo (#555, ADR 0052) e da reconferência com a escalação
+ * (#619): mesmo state, reuso e log do predict, sem usuário (ai_calls.user_id null,
+ * permitido só pro provider TypeSafe). A porta do JEV continua sendo este módulo (ADR
+ * 0041 §5). Guarda defensiva: sem TYPESAFE_API_KEY → null sem chamar nem logar (os
+ * crons já checam antes). Nunca lança: erro → log + null. `judgeIf` (reconferência):
+ * chamado com o input pronto ANTES do JEV; false → `run: null`, sem chamada.
+ */
+export async function resolveModelBaseJudgments(
+  args: ModelBaseJudgmentsArgs,
+): Promise<{ input: MatchJudgmentInput; run: JudgmentRun } | null>;
+export async function resolveModelBaseJudgments(
+  args: ModelBaseJudgmentsArgs & {
+    judgeIf: (input: MatchJudgmentInput) => boolean;
+  },
+): Promise<{ input: MatchJudgmentInput; run: JudgmentRun | null } | null>;
+export async function resolveModelBaseJudgments(
+  args: ModelBaseJudgmentsArgs & {
+    judgeIf?: (input: MatchJudgmentInput) => boolean;
+  },
+): Promise<{ input: MatchJudgmentInput; run: JudgmentRun | null } | null> {
   try {
     if (!createTypeSafeJudgmentProvider().hasKey()) return null;
     // Sem prazo nas buscas extras (#617): o cron não tem usuário esperando.
@@ -2547,6 +2892,7 @@ export async function resolveModelBaseJudgments(args: {
       provider: args.provider,
       data: args.data,
     });
+    if (args.judgeIf && !args.judgeIf(input)) return { input, run: null };
     const run = await runJudgments({
       userId: null,
       matchId: args.matchId,
@@ -2556,7 +2902,7 @@ export async function resolveModelBaseJudgments(args: {
   } catch (err) {
     console.error(
       JSON.stringify({
-        scope: "predict",
+        scope: args.logScope ?? "predict",
         matchId: args.matchId,
         error: "model_base_judgments_failed",
         message: err instanceof Error ? err.message : String(err),
