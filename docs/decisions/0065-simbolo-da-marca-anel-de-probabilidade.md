@@ -16,7 +16,7 @@ A proposta comparou quatro direções (anel de probabilidade, balão de conversa
 2. **Uma geometria só**, em `components/brand/brand-mark.tsx` (viewBox 100×100, só atributos de SVG). O `AppIconMark` (Satori: favicon, manifest, apple-touch-icon, cards OG) e o `BrandSymbol` (DOM) desenham a partir dela. Um teste trava os traços.
 3. **O `Wordmark` sempre leva o símbolo** à esquerda do nome (24px), no header do app e nas telas públicas. O símbolo é decorativo (`aria-hidden`); quem nomeia é o texto e o `aria-label` do link.
 4. **Cards OG:** a landing já usava o `AppIconMark`; o fallback do `/p` e o card do palpite compartilhado passam a mostrar o símbolo antes de "palpiteiro".
-5. **Fora do app:** o PNG 120×120 da tela de consentimento do Google sai da mesma geometria; o upload em Google Cloud → Auth → Branding é manual.
+5. **Fora do app:** o PNG 120×120 da tela de consentimento do Google foi exportado à mão (Chromium, mesmos traços de `brand-mark.tsx`, fundo quadrado `#0057c0`), fora do repo; o upload em Google Cloud → Auth → Branding é manual. Se o símbolo mudar, exporte de novo.
 
 ## Alternativas rejeitadas
 
