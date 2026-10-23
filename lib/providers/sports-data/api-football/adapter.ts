@@ -967,7 +967,11 @@ function toNormalizedTopScorer(
 function toNormalizedInjury(injury: ApiFootballInjury): NormalizedInjury {
   const status = mapApiFootballAbsenceStatus(injury);
   return {
-    player: { name: injury.player.name },
+    player: {
+      name: injury.player.name,
+      // #619: id pro cruzamento com a escalação (o nome aqui é o curto).
+      providerPlayerId: `api-football:${injury.player.id}`,
+    },
     type: status === "suspended" ? "suspension" : "injury",
     reason: injury.player.reason ?? undefined,
     status,
@@ -977,20 +981,26 @@ function toNormalizedInjury(injury: ApiFootballInjury): NormalizedInjury {
   };
 }
 
+function toNormalizedLineupPlayer(
+  entry: ApiFootballLineup["startXI"][number]
+): NormalizedLineupPlayer {
+  return {
+    name: entry.player.name,
+    shirtNumber: entry.player.number ?? undefined,
+    position: mapApiFootballPositionToLabel(entry.player.pos),
+    // #619: id estável pro diff entre escalações (o nome varia de grafia).
+    ...(entry.player.id !== null
+      ? { providerPlayerId: `api-football:${entry.player.id}` }
+      : {}),
+  };
+}
+
 function toNormalizedTeamLineup(
   lineup: ApiFootballLineup,
   league: SupportedLeague
 ): NormalizedTeamLineup {
-  const starters: NormalizedLineupPlayer[] = lineup.startXI.map((entry) => ({
-    name: entry.player.name,
-    shirtNumber: entry.player.number ?? undefined,
-    position: mapApiFootballPositionToLabel(entry.player.pos),
-  }));
-  const bench: NormalizedLineupPlayer[] = lineup.substitutes.map((entry) => ({
-    name: entry.player.name,
-    shirtNumber: entry.player.number ?? undefined,
-    position: mapApiFootballPositionToLabel(entry.player.pos),
-  }));
+  const starters = lineup.startXI.map(toNormalizedLineupPlayer);
+  const bench = lineup.substitutes.map(toNormalizedLineupPlayer);
   return {
     team: canonicalizeOrPassthrough(lineup.team.name, league),
     formation: lineup.formation ?? undefined,
@@ -1473,7 +1483,15 @@ export class ApiFootballAdapter implements SportsDataProvider {
         (l) =>
           canonicalizeOrPassthrough(l.team.name, ref.league) === ref.awayTeam
       );
-      if (!homeLineup || !awayLineup) return undefined;
+      // XI vazio de um lado = escalação ainda não publicada (#619).
+      if (
+        !homeLineup ||
+        !awayLineup ||
+        homeLineup.startXI.length === 0 ||
+        awayLineup.startXI.length === 0
+      ) {
+        return undefined;
+      }
       return {
         fixtureId: compositeFixtureKey(ref),
         home: toNormalizedTeamLineup(homeLineup, ref.league),

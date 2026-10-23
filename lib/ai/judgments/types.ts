@@ -28,6 +28,12 @@ export type JudgmentQuestionSet = Record<JudgmentQuestionId, JudgmentQuestion>;
 export type JudgmentTeamState = {
   name: string;
   absences: string[];
+  // Escalação deste jogo (#619): "not announced", "announced, changes unknown" ou o
+  // bucket de mudanças VOLUNTÁRIAS sobre o XI de referência (state.ts).
+  lineup: string;
+  // Papéis dos titulares habituais fora do XI de hoje e fora de `absences`; [] antes
+  // da escalação ou com mudanças desconhecidas.
+  starters_left_out: string[];
   rest_before_match: string;
   next_match: string;
   league_situation: string;

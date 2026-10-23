@@ -1,7 +1,13 @@
 import type { JudgmentMultipliers } from "@/lib/ai/judgments/apply";
+import type { LineupChangeBucket } from "@/lib/ai/judgments/lineup-vocabulary";
 import type { JudgmentAnswers } from "@/lib/ai/judgments/types";
 import type { DixonColesFallbackReason } from "@/lib/quant/match-model";
 import type { PredictionUserContext } from "@/lib/user-palpite/types";
+
+export type PredictionLineupSide = {
+  changes: LineupChangeBucket | null;
+  leftOut: number;
+};
 
 // Conteúdo de `predictions.judgments` (jsonb, ADR 0041 §6): tudo que a decisão do
 // motor code_jev precisa pra ser recomputada a partir da row.
@@ -59,6 +65,15 @@ export type PredictionJudgments = {
   // bet — racional templado em código, sem chamada; `aiCallId` da predição aponta
   // pra narração do mercado escolhido no mesmo run. Ausente nas rows anteriores.
   narration?: "llm_call" | "best_bet_template";
+  // Escalação deste jogo vista pelo JEV (#619), sem nomes: `status` "announced" quando
+  // a escalação saiu; por lado, o bucket de mudanças voluntárias (null = não deu pra
+  // comparar) e quantos titulares habituais ficaram fora por escolha. Ausente nas rows
+  // anteriores ao jev_judgments_v3.
+  lineup?: {
+    status: "not_announced" | "announced";
+    home: PredictionLineupSide | null;
+    away: PredictionLineupSide | null;
+  };
   // Contexto extra da análise (#565): afirmações conferidas, sem texto livre nem nome de
   // jogador, e a evidência que entrou no combine. Ausente nas rows sem contexto e nas
   // anteriores.

@@ -49,6 +49,7 @@ import {
   type FixtureRef,
   type NormalizedFixture,
   type NormalizedInjury,
+  type NormalizedLineup,
   type NormalizedStanding,
   type NormalizedTeamLineup,
   type SportsDataProvider,
@@ -90,6 +91,7 @@ import {
 } from "./engine/code-jev";
 import {
   buildMatchJudgmentInput,
+  pickLineupBaseline,
   previousFixture,
   type MatchJudgmentData,
   type MatchJudgmentInput,
@@ -105,6 +107,7 @@ import { JUDGMENTS_VERSION } from "./judgments/questions";
 import {
   buildJudgmentState,
   type JudgmentStateInput,
+  type LineupSummary,
 } from "./judgments/state";
 import { judgmentStateHash } from "./judgments/state-hash";
 import type { JudgmentAnswers } from "./judgments/types";
@@ -923,7 +926,9 @@ async function runPredict(
         teams: { home: match.homeTeam, away: match.awayTeam },
         league: match.league,
         kickoffAt: match.kickoffAt,
-        absences: injuries.unavailable ? null : input.absences,
+        // Lista do provider, sem tirar o XI de hoje (#619): a conferência das
+        // afirmações não muda com a escalação (igual a user-palpite/facts.ts).
+        absences: injuries.unavailable ? null : input.providerAbsences,
         homeForm,
         awayForm,
         standings,
@@ -1059,7 +1064,13 @@ async function runPredict(
           user?.moved ? USER_EVIDENCE_VERSION : null,
         ),
         promptVersion: narratorCartridge.version,
-        judgments: toPredictionJudgments(engineScoreline, engine, jev, user?.stored),
+        judgments: toPredictionJudgments(
+          engineScoreline,
+          engine,
+          jev,
+          judgmentInput.lineup,
+          user?.stored,
+        ),
         labelByKey: null,
       },
     };
@@ -2235,7 +2246,7 @@ async function runJudgments(args: {
 // da base do modelo, senão o stateHash diverge e o reuso erra).
 type JudgmentFetchedData = Omit<
   MatchJudgmentData,
-  "previousLineups" | "upcoming" | "topScorers"
+  "previousLineups" | "lineupBaseline" | "upcoming" | "topScorers"
 >;
 
 // Prazo das buscas extras do state JEV (#617) na análise interativa: o cliente da
@@ -2374,10 +2385,12 @@ async function fetchJudgmentExtras(args: {
   };
 }
 
-// Input do state JEV (escalação anterior, calendário e artilheiros buscados aqui). O
-// reuso entre análises (runJudgments) é chaveado pelo stateHash, que depende de tudo
-// isso — por isso as buscas vêm antes do lookup. Dentro de um best bet, o memo do run
-// (CodeJevRunMemo) evita tudo.
+// Input do state JEV (escalação anterior, XI de referência, calendário e artilheiros
+// buscados aqui). O reuso entre análises (runJudgments) é chaveado pelo stateHash, que
+// depende de tudo isso — por isso as buscas vêm antes do lookup. Dentro de um best
+// bet, o memo do run (CodeJevRunMemo) evita tudo. O predict e o cron da base do modelo
+// passam por aqui com os mesmos dados do passo 3: é o que mantém o stateHash igual
+// antes e depois da escalação sair.
 async function prepareMatchJudgmentInput(args: {
   provider: SportsDataProvider;
   data: JudgmentFetchedData;
@@ -2385,9 +2398,10 @@ async function prepareMatchJudgmentInput(args: {
   upcoming?: UpcomingFetch;
 }): Promise<MatchJudgmentInput> {
   const { data } = args;
-  const [previousLineups, extras] = await Promise.all([
+  const lineupOf = pastLineupFetcher(args.provider);
+  const [previousLineups, lineupBaseline, extras] = await Promise.all([
     fetchPreviousLineups({
-      provider: args.provider,
+      lineupOf,
       kickoffAt: data.kickoffAt,
       homeTeam: data.homeTeam,
       awayTeam: data.awayTeam,
@@ -2395,6 +2409,7 @@ async function prepareMatchJudgmentInput(args: {
       awayForm: data.awayForm,
       injuries: data.injuries,
     }),
+    fetchLineupBaselines({ lineupOf, data }),
     fetchJudgmentExtras({
       provider: args.provider,
       data,
@@ -2405,9 +2420,90 @@ async function prepareMatchJudgmentInput(args: {
   return buildMatchJudgmentInput({
     ...data,
     previousLineups,
+    ...(lineupBaseline ? { lineupBaseline } : {}),
     ...(extras.upcoming ? { upcoming: extras.upcoming } : {}),
     ...(extras.topScorers ? { topScorers: extras.topScorers } : {}),
   });
+}
+
+// Escalação de um jogo passado da forma, memoizada por chamada de
+// prepareMatchJudgmentInput (#619): o jogo anterior do time desfalcado e o XI de
+// referência costumam ser o MESMO jogo (num mata-mata de ida e volta, o dos dois
+// times) → uma busca só. Fail-open aqui dentro: erro (inclusive síncrono) é logado UMA
+// vez e vira undefined pra todos os chamadores.
+type PastLineupFetch = (
+  f: NormalizedFixture,
+) => Promise<NormalizedLineup | undefined>;
+
+function pastLineupFetcher(provider: SportsDataProvider): PastLineupFetch {
+  const memo = new Map<string, Promise<NormalizedLineup | undefined>>();
+  return (f) => {
+    const key = [f.league, f.kickoffAt, f.homeTeam, f.awayTeam].join("|");
+    let pending = memo.get(key);
+    if (!pending) {
+      pending = (async () => {
+        try {
+          return await provider.getLineups({
+            league: f.league,
+            kickoffAt: f.kickoffAt,
+            homeTeam: f.homeTeam,
+            awayTeam: f.awayTeam,
+          });
+        } catch (err) {
+          console.error(
+            JSON.stringify({
+              scope: "predict",
+              error: "past_lineup_fetch_failed",
+              homeTeam: f.homeTeam,
+              awayTeam: f.awayTeam,
+              message: err instanceof Error ? err.message : String(err),
+            }),
+          );
+          return undefined;
+        }
+      })();
+      memo.set(key, pending);
+    }
+    return pending;
+  };
+}
+
+function lineupSideOf(
+  lineup: NormalizedLineup | undefined,
+  f: NormalizedFixture,
+  team: string,
+): NormalizedTeamLineup | undefined {
+  if (f.homeTeam === team) return lineup?.home;
+  if (f.awayTeam === team) return lineup?.away;
+  return undefined;
+}
+
+// XI de referência de cada time (#619, pickLineupBaseline): SÓ com a escalação deste
+// jogo publicada (antes dela, zero request e o state fica "not announced"). Sem prazo,
+// como a escalação anterior: com prazo, a análise interativa depois da escalação
+// sairia quase sempre "changes unknown" e o stateHash divergiria do cron (o custo:
+// esperar mais atrás do limite de 8 req/min do cliente). Fail-open: erro (logado no
+// memo) ou lado ausente → undefined → "announced, changes unknown".
+async function fetchLineupBaselines(args: {
+  lineupOf: PastLineupFetch;
+  data: JudgmentFetchedData;
+}): Promise<MatchJudgmentData["lineupBaseline"]> {
+  const { data } = args;
+  if (!data.lineups) return undefined;
+  const kickoffMs = data.kickoffAt.getTime();
+  const forTeam = async (
+    team: string,
+    form: readonly NormalizedFixture[],
+  ): Promise<NormalizedTeamLineup | undefined> => {
+    const ref = pickLineupBaseline(form, { league: data.league, kickoffMs });
+    if (!ref) return undefined;
+    return lineupSideOf(await args.lineupOf(ref), ref, team);
+  };
+  const [home, away] = await Promise.all([
+    forTeam(data.homeTeam, data.homeForm),
+    forTeam(data.awayTeam, data.awayForm),
+  ]);
+  return home || away ? { home, away } : undefined;
 }
 
 // Análise interativa: busca extra que falhou ou estourou o prazo vira "unknown" no
@@ -2473,10 +2569,10 @@ export async function resolveModelBaseJudgments(args: {
 // Escalação do ÚLTIMO jogo de cada time (o da forma, antes deste) pra derivar o
 // papel dos desfalques: a escalação DESTE jogo nunca traz quem está fora. Só busca
 // pro time que tem desfalque (zero custo sem desfalques); uma chamada getLineups
-// por time, cacheada no adapter. Falha/ausência → undefined e o input cai na
-// escalação deste jogo (o comportamento anterior).
+// por jogo (memo da chamada + cache do adapter). Falha/ausência → undefined e o
+// input cai no XI de referência (#619), senão o desfalcado fica sem papel.
 async function fetchPreviousLineups(args: {
-  provider: SportsDataProvider;
+  lineupOf: PastLineupFetch;
   kickoffAt: Date;
   homeTeam: string;
   awayTeam: string;
@@ -2493,27 +2589,7 @@ async function fetchPreviousLineups(args: {
     if (injuries.length === 0) return undefined;
     const prev = previousFixture(form, kickoffMs);
     if (!prev) return undefined;
-    try {
-      const lineup = await args.provider.getLineups({
-        league: prev.league,
-        kickoffAt: prev.kickoffAt,
-        homeTeam: prev.homeTeam,
-        awayTeam: prev.awayTeam,
-      });
-      if (prev.homeTeam === team) return lineup?.home;
-      if (prev.awayTeam === team) return lineup?.away;
-      return undefined;
-    } catch (err) {
-      console.error(
-        JSON.stringify({
-          scope: "predict",
-          error: "previous_lineup_fetch_failed",
-          team,
-          message: err instanceof Error ? err.message : String(err),
-        }),
-      );
-      return undefined;
-    }
+    return lineupSideOf(await args.lineupOf(prev), prev, team);
   };
   const [home, away] = await Promise.all([
     forTeam(args.homeTeam, args.homeForm, args.injuries.home),
@@ -2579,10 +2655,29 @@ async function resolveUserContext(args: {
   }
 }
 
+// Resumo da escalação pro jsonb (#619): bucket e quantos titulares habituais ficaram
+// fora por escolha, sem nome nem papel.
+function toPredictionLineup(
+  lineup: MatchJudgmentInput["lineup"],
+): NonNullable<PredictionJudgments["lineup"]> {
+  const side = (summary: LineupSummary) =>
+    summary.status === "announced"
+      ? { changes: summary.changes, leftOut: summary.leftOut.length }
+      : null;
+  const home = side(lineup.home);
+  const away = side(lineup.away);
+  return {
+    status: home || away ? "announced" : "not_announced",
+    home,
+    away,
+  };
+}
+
 function toPredictionJudgments(
   scoreline: ModelScoreline,
   engine: CodeJevDecision,
   jev: JudgmentRun,
+  lineup: MatchJudgmentInput["lineup"],
   userContext?: PredictionUserContext,
 ): PredictionJudgments {
   return {
@@ -2619,6 +2714,7 @@ function toPredictionJudgments(
     aiCallId: jev.aiCallId,
     reusedFromPredictionId: jev.reusedFromPredictionId,
     reusedFromModelSnapshotId: jev.reusedFromModelSnapshotId,
+    lineup: toPredictionLineup(lineup),
     ...(userContext ? { userContext } : {}),
   };
 }

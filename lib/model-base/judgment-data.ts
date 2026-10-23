@@ -20,7 +20,7 @@ export async function fetchMatchJudgmentData(args: {
   match: DbMatch;
   provider: SportsDataProvider;
   standings: NormalizedStanding | undefined;
-}): Promise<Omit<MatchJudgmentData, "previousLineups">> {
+}): Promise<Omit<MatchJudgmentData, "previousLineups" | "lineupBaseline">> {
   const { match, provider } = args;
   const ref: FixtureRef = {
     league: match.league,
