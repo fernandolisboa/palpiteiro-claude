@@ -1,4 +1,5 @@
 import { DefinitionRow } from "@/components/admin/definition-row";
+import { AdminSubTabs } from "@/components/admin/admin-sub-tabs";
 import { PageHeading } from "@/components/admin/page-heading";
 import {
   getCostByDay,
@@ -14,7 +15,8 @@ import {
 
 export const dynamic = "force-dynamic";
 
-// Gateado por app/admin/layout.tsx (role === "admin" → notFound pra outros).
+// Assistente de IA · custos (#633; antes /admin/costs). Gateado por
+// app/(app)/admin/layout.tsx (role === "admin" → notFound pra outros).
 export default async function AdminCostsPage() {
   const [summary, byDay, byUser, byModel] = await Promise.all([
     getCostSummary(),
@@ -27,10 +29,10 @@ export default async function AdminCostsPage() {
     <div className="bg-background text-foreground">
       <div className="mx-auto w-full max-w-reading px-6 py-8">
         <PageHeading
-          backLink={{ href: "/admin", label: "admin" }}
-          title="Custos de IA"
-          subtitle="gasto agregado · por dia, usuário, modelo · USD"
+          title="Assistente de IA"
+          subtitle="custos · gasto agregado por dia, usuário e modelo · USD"
         />
+        <AdminSubTabs section="/admin/ia" current="/admin/ia/custos" />
 
         <section className="pb-8">
           <h2 className="pb-3 font-mono text-meta uppercase tracking-label text-muted-foreground">

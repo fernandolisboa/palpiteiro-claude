@@ -52,7 +52,7 @@ export async function updateDefaultModel(
   }
 
   await setDefaultModelId(modelId, session.user.id);
-  revalidatePath("/admin/settings");
+  revalidatePath("/admin/ia");
   return { ok: true };
 }
 
@@ -85,13 +85,13 @@ export async function updateGenerationParams(
     return { ok: false, error: "Effort inválido." };
   }
   await setGenerationParams({ maxTokens, effort }, session.user.id);
-  revalidatePath("/admin/settings");
+  revalidatePath("/admin/ia");
   return { ok: true };
 }
 
 export type UpdateAdminFlagResult = { ok: boolean; error?: string };
 
-// Flags de ai_config editáveis pelo /admin/settings (#514), dirigidas pelo registry
+// Flags de ai_config editáveis no admin (#514; /admin/ia e /admin/motor, #633), dirigidas pelo registry
 // lib/config/admin-flags.ts. Key fora do registry ou valor que não casa com o kind
 // (boolean / valores do enum) é recusado em validateAdminFlagInput.
 export async function updateAdminFlag(
@@ -123,7 +123,9 @@ export async function updateAdminFlag(
   if (verdict.key === "enableDixonColes") resetDixonColesFlagMemo();
   // Versões adotadas (ADR 0062): mesma regra, TTL de 60s do resolver do seam.
   if (verdict.key === "enableAutoModelVersions") resetActiveModelMemo();
-  revalidatePath("/admin/settings");
+  // A flag pode ser de qualquer uma das duas telas (`area` no registry, #633).
+  revalidatePath("/admin/ia");
+  revalidatePath("/admin/motor");
   return { ok: true };
 }
 
@@ -152,7 +154,7 @@ export async function refitTeamRatingsNow(
   }
   try {
     const results = await refitTeamRatings();
-    revalidatePath("/admin/settings");
+    revalidatePath("/admin/motor");
     const fitted = results.filter((r) => r.status === "fitted").length;
     const failed = results.filter(isRefitFailure).map((r) => r.league);
     return {

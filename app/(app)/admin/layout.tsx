@@ -2,6 +2,7 @@ import type { Metadata } from "next";
 import type { ReactNode } from "react";
 import { notFound } from "next/navigation";
 
+import { AdminSectionNav } from "@/components/admin/admin-section-nav";
 import { getSession } from "@/lib/auth/session";
 
 // Título de toda a área admin (#441): "Admin · Palpiteiro".
@@ -21,5 +22,10 @@ export default async function AdminLayout({
 }) {
   const session = await getSession();
   if (session?.user?.role !== "admin") notFound();
-  return <>{children}</>;
+  return (
+    <>
+      <AdminSectionNav />
+      {children}
+    </>
+  );
 }

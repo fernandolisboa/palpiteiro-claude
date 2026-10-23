@@ -27,7 +27,6 @@ export default async function AdminUsersPage({ searchParams }: PageProps) {
     <div className="bg-background text-foreground">
       <div className="mx-auto w-full max-w-reading px-6 py-8">
         <PageHeading
-          backLink={{ href: "/admin", label: "admin" }}
           title="Usuários"
           subtitle="auditar o tracking de qualquer usuário · busca por e-mail"
         />

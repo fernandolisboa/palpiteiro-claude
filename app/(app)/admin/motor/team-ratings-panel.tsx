@@ -11,14 +11,14 @@ import {
 
 import { RefitRatingsButton } from "./refit-ratings-button";
 
-// Telemetria: falha de leitura não pode derrubar a página de configurações.
+// Telemetria: falha de leitura não pode derrubar a página do motor.
 async function readFits(): Promise<LeagueFitSummary[] | null> {
   try {
     return await listLeagueFits();
   } catch (err) {
     console.warn(
       JSON.stringify({
-        scope: "admin_settings",
+        scope: "admin_motor",
         warning: "falha ao ler team_rating_fits",
         message: err instanceof Error ? err.message : String(err),
       })

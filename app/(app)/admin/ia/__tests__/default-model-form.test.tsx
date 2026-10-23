@@ -6,7 +6,7 @@ vi.mock("@/app/actions/ai-config", () => ({
   updateDefaultModel: vi.fn(async () => ({ ok: true })),
 }));
 
-import { DefaultModelForm } from "@/app/(app)/admin/settings/default-model-form";
+import { DefaultModelForm } from "@/app/(app)/admin/ia/default-model-form";
 
 // O padrão global grava a conferida, mas roda a versão em uso da família (ADR 0062):
 // o preço mostrado é o dela, com "estimado" até o admin confirmar.

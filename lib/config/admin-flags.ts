@@ -10,8 +10,8 @@ import {
 import type { aiConfig } from "@/db/schema";
 
 // Registry declarativo das flags de `ai_config` (single row id=1) editáveis no
-// /admin/settings (#514). A seção "flags" da página, o Server Action e a query
-// layer (getAdminFlagValues/setAdminFlag) são dirigidos por ESTA lista: uma flag
+// admin (#514), divididas por `area` entre /admin/ia e /admin/motor (#633). As
+// seções de flags das duas páginas, o Server Action e a query layer (getAdminFlagValues/setAdminFlag) são dirigidos por ESTA lista: uma flag
 // nova (boolean ou enum) entra com uma entrada aqui + a coluna no schema, sem
 // mexer na tela. Os getters dedicados (getEnable*) seguem sendo a leitura do
 // runtime; este registry só descreve e edita.
@@ -29,7 +29,15 @@ export type EnumFlagColumn = {
   [K in AiConfigColumn]: AiConfigRow[K] extends string ? K : never;
 }[AiConfigColumn];
 
+/**
+ * Tela do admin onde a flag aparece: `ia` no "assistente de IA" (/admin/ia), `motor`
+ * no "motor e calibração" (/admin/motor). Obrigatório: flag sem área não aparece.
+ */
+export const ADMIN_FLAG_AREAS = ["ia", "motor"] as const;
+export type AdminFlagArea = (typeof ADMIN_FLAG_AREAS)[number];
+
 type FlagCommon = {
+  area: AdminFlagArea;
   /** Rótulo curto em PT-BR. */
   label: string;
   /** Uma ou duas frases: o que a flag faz ligada/desligada. */
@@ -60,6 +68,7 @@ export const ADMIN_FLAGS = [
   {
     key: "enableOverUnderExtraLines",
     kind: "boolean",
+    area: "motor",
     label: "Linhas extras de over/under",
     description:
       "Liga as linhas 1.5 e 3.5 de over/under (cartucho multi-linha over_under_v3.0) onde há cobertura de alternate_totals. Desligada, a análise usa só a linha 2.5.",
@@ -70,6 +79,7 @@ export const ADMIN_FLAGS = [
   {
     key: "enableBestBetFanOut",
     kind: "boolean",
+    area: "ia",
     label: "Melhor aposta do jogo (fan-out)",
     description:
       "Mostra pra todos os usuários a opção \"Analisar todos os mercados\" onde há 2 ou mais mercados candidatos: uma análise por mercado, ranqueadas por edge.",
@@ -80,6 +90,7 @@ export const ADMIN_FLAGS = [
   {
     key: "enableClvCapture",
     kind: "boolean",
+    area: "motor",
     label: "Captura da closing line (CLV)",
     description:
       "O cron capture-closing-odds busca as odds perto do kickoff dos jogos com palpite non-pass, pra calcular o CLV. A exibição do CLV não depende desta flag.",
@@ -89,6 +100,7 @@ export const ADMIN_FLAGS = [
   {
     key: "enableFidelityValidation",
     kind: "boolean",
+    area: "ia",
     label: "Validação de fidelidade",
     description:
       "Checa por regras se as contagens citadas na manchete (H2H, gols) contradizem os fatos pré-contados; se contradizem, o palpite é descartado em vez de sair errado.",
@@ -99,14 +111,16 @@ export const ADMIN_FLAGS = [
   {
     key: "enableKellyStaking",
     kind: "boolean",
+    area: "motor",
     label: "Staking quarter-Kelly",
     description:
-      "Permite trocar as bandas de stake (ADR 0019) pelo quarter-Kelly, mas só quando o gate do Kelly em /admin/calibration estiver pronto. Desligada, usa as bandas sempre.",
+      "Permite trocar as bandas de stake (ADR 0019) pelo quarter-Kelly, mas só quando o gate do Kelly na calibração do motor estiver pronto. Desligada, usa as bandas sempre.",
     default: true,
   },
   {
     key: "enableDixonColes",
     kind: "boolean",
+    area: "motor",
     label: "Dixon-Coles no modelo de placar",
     description:
       "Os gols esperados de cada time saem do Dixon-Coles refitado todo dia com os últimos 3 anos da liga (ADR 0051), no motor Código + JEV, na âncora estatística do over/under e na avaliação da aposta que você registra. Sem ajuste recente ou com time de pouco histórico, cai no heurístico da tabela sozinho. Desligada, usa sempre o heurístico.",
@@ -117,6 +131,7 @@ export const ADMIN_FLAGS = [
   {
     key: "enableParallelFanOut",
     kind: "boolean",
+    area: "ia",
     label: "Análise em paralelo",
     description:
       "No \"Analisar com IA\", os mercados independentes e a busca de notícias rodam ao mesmo tempo: a análise leva o tempo do mercado mais lento, não a soma. Desligada, roda um mercado de cada vez, como antes.",
@@ -127,6 +142,7 @@ export const ADMIN_FLAGS = [
   {
     key: "enableMatchModelJev",
     kind: "boolean",
+    area: "motor",
     label: "Pré-previsão com JEV",
     description:
       "A base do modelo de cada jogo (recalculada a cada 6h, sem Claude) ajusta os gols esperados com os julgamentos JEV nos jogos a até 48h do início, e o \"Analisar com IA\" reaproveita essas respostas. Desligada, a base usa só o Dixon-Coles (ou o heurístico da tabela).",
@@ -137,6 +153,7 @@ export const ADMIN_FLAGS = [
   {
     key: "enableUserContext",
     kind: "boolean",
+    area: "ia",
     label: "Contexto do usuário",
     description:
       "Libera o \"Analisar meu palpite\": a IA lê o motivo que o usuário escreveu, o código confere cada afirmação com os nossos dados e o modelo recalcula dentro do teto do JEV. Desligada, o bloco \"Seu palpite\" mostra só a leitura pelos botões, sem IA.",
@@ -147,6 +164,7 @@ export const ADMIN_FLAGS = [
   {
     key: "enableLiveMode",
     kind: "boolean",
+    area: "motor",
     label: "Modo ao vivo",
     description:
       "Depois do apito, a página do jogo busca placar, minuto e expulsões e libera a análise ao vivo, o Seu palpite, o registro de apostas e o bolão (que fecha aos 15 minutos de jogo). Desligada, tudo fecha no apito, como antes.",
@@ -157,6 +175,7 @@ export const ADMIN_FLAGS = [
   {
     key: "enableAutoModelVersions",
     kind: "boolean",
+    area: "ia",
     label: "Versões novas de modelo automáticas",
     description:
       "Quando a Anthropic lança uma versão nova de Haiku, Sonnet ou Opus, o cron diário a testa e, se passar, ela passa a rodar no lugar da versão conferida da família, com volta automática pra conferida se a nova falhar. Vale também pra escolha do admin. Desligada, só as versões conferidas (5.5) rodam.",
@@ -167,6 +186,7 @@ export const ADMIN_FLAGS = [
   {
     key: "enableBetSlipExplain",
     kind: "boolean",
+    area: "ia",
     label: "Explicar aposta com IA",
     description:
       "Mostra o botão \"Explicar com IA\" na avaliação das apostas registradas (pré-jogo): a IA explica em texto o porquê dos números (chance do modelo, odd de mercado sem a margem, ajustes do JEV, stake), sem mudar nenhum deles. Desligada, o painel mostra só a avaliação em código.",
@@ -177,6 +197,7 @@ export const ADMIN_FLAGS = [
   {
     key: "enableLineupRecheck",
     kind: "boolean",
+    area: "motor",
     label: "Reconferir com a escalação",
     description:
       "Na última hora antes do jogo, quando as escalações saem, as análises do motor Código + JEV feitas antes delas são recalculadas em código com a escalação confirmada e o mesmo modelo de placar: uma análise nova por mercado, com selo \"Atualizado com a escalação\". A anterior continua no histórico. Desligada, nada é reconferido.",
@@ -187,6 +208,7 @@ export const ADMIN_FLAGS = [
   {
     key: "analysisEngine",
     kind: "enum",
+    area: "motor",
     label: "Motor de análise",
     description:
       "LLM: o cartucho de mercado decide a aposta. Código + JEV: a probabilidade sai do modelo de placar ajustado pelos julgamentos JEV, o gate e o stake ficam no código e o LLM só escreve o racional (ADR 0041). Vale pra toda análise nova; voltar é trocar de novo.",
@@ -276,4 +298,9 @@ export function validateAdminFlagInput<
   if (!value.success) return { ok: false, error: "Valor inválido pra flag." };
 
   return { ok: true, key: def.key as F[number]["key"], value: value.data };
+}
+
+/** Flags de uma área, na ordem do registry. */
+export function adminFlagsFor(area: AdminFlagArea): RegistryEntry[] {
+  return ADMIN_FLAGS.filter((flag) => flag.area === area);
 }

@@ -80,7 +80,7 @@ describe("confirmModelVersionPriceAction (ADR 0062)", () => {
       outputPricePerMTok: 12,
     });
     expect(resetMock).toHaveBeenCalledTimes(1);
-    expect(revalidateMock).toHaveBeenCalledWith("/admin/settings");
+    expect(revalidateMock).toHaveBeenCalledWith("/admin/ia");
   });
 
   it.each([
@@ -120,7 +120,7 @@ describe("rejectModelVersionAction (ADR 0062)", () => {
     expect(await rejectModelVersionAction(null, form({ id: VALID.id }))).toEqual({ ok: true });
     expect(rejectMock).toHaveBeenCalledWith("claude-sonnet-5-6");
     expect(resetMock).toHaveBeenCalledTimes(1);
-    expect(revalidateMock).toHaveBeenCalledWith("/admin/settings");
+    expect(revalidateMock).toHaveBeenCalledWith("/admin/ia");
   });
 
   it("id inválido ou versão já reprovada → erro, sem reset", async () => {

@@ -32,7 +32,7 @@ export function buildModelVersionsAlert(e: ModelVersionsAlertEvents): {
         "Versões novas adotadas (passaram na sondagem e já rodam no lugar da conferida):",
         ...e.adopted.map(
           (a) =>
-            `- ${a.id} (fallback: ${a.pinnedId}). Preço ESTIMADO pelo da conferida: $${a.inputPricePerMTok} in / $${a.outputPricePerMTok} out por 1M. Confirme o preço oficial em /admin/settings.`,
+            `- ${a.id} (fallback: ${a.pinnedId}). Preço ESTIMADO pelo da conferida: $${a.inputPricePerMTok} in / $${a.outputPricePerMTok} out por 1M. Confirme o preço oficial em /admin/ia.`,
         ),
       ].join("\n"),
     );

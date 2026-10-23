@@ -12,6 +12,8 @@ export type NavItem = {
   label: string;
   /** Linha de apoio mostrada no índice do admin. */
   description?: string;
+  /** Abas internas da tela (só seções do admin). */
+  children?: readonly NavItem[];
 };
 
 export type NavGroup = {
@@ -37,33 +39,39 @@ export const HELP_NAV: NavGroup = {
   ],
 };
 
-/** Seções do admin; o índice `/admin` lista as mesmas, com descrição. */
+/**
+ * Seções do admin (#633). O dropdown "admin" do header, a faixa de abas do layout do
+ * admin e o índice `/admin` leem daqui. `children` são as abas internas de uma seção
+ * (o seletor no topo da página); a primeira tem o mesmo href da seção.
+ */
 export const ADMIN_SECTIONS: readonly NavItem[] = [
+  {
+    href: "/admin/ia",
+    label: "assistente de IA",
+    description: "modelos · parâmetros · custos · flags de IA",
+    children: [
+      { href: "/admin/ia", label: "modelos" },
+      { href: "/admin/ia/custos", label: "custos" },
+    ],
+  },
+  {
+    href: "/admin/motor",
+    label: "motor e calibração",
+    description: "motor de análise · Dixon-Coles · calibração · flags do motor",
+    children: [
+      { href: "/admin/motor", label: "motor" },
+      { href: "/admin/motor/calibracao", label: "calibração" },
+    ],
+  },
+  {
+    href: "/admin/leagues",
+    label: "ligas e odds",
+    description: "ligar/desligar ligas · créditos da Odds API · sem deploy",
+  },
   {
     href: "/admin/users",
     label: "usuários",
     description: "auditar o tracking de qualquer usuário · busca por e-mail",
-  },
-  {
-    href: "/admin/costs",
-    label: "custos de IA",
-    description: "gasto agregado · por dia, usuário, modelo · USD",
-  },
-  {
-    href: "/admin/calibration",
-    label: "calibração",
-    description:
-      "1X2, over/under, ambos marcam, dupla chance · modelo vs resultados · por motor",
-  },
-  {
-    href: "/admin/settings",
-    label: "configurações de IA",
-    description: "modelo e motor de análise · flags · Dixon-Coles",
-  },
-  {
-    href: "/admin/leagues",
-    label: "ligas",
-    description: "ligar/desligar ligas · orçamento da Odds API · sem deploy",
   },
 ];
 

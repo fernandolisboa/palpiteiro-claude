@@ -7,7 +7,8 @@ import { ADMIN_SECTIONS } from "@/lib/nav/menu";
 export const dynamic = "force-dynamic";
 
 // Gateado por app/(app)/admin/layout.tsx (role === "admin" → notFound pra outros).
-// Índice do admin; as mesmas seções estão no menu "admin" do header (lib/nav/menu.ts).
+// Índice do admin; as mesmas seções estão no menu "admin" do header e na faixa de
+// abas do layout (lib/nav/menu.ts).
 function capitalize(text: string): string {
   return text.charAt(0).toUpperCase() + text.slice(1);
 }

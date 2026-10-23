@@ -11,7 +11,7 @@ import {
   rejectModelVersion,
 } from "@/lib/db/queries/model-versions";
 
-// Ações do painel de versões de modelo em /admin/settings (ADR 0062). Server actions
+// Ações do painel de versões de modelo em /admin/ia (ADR 0062). Server actions
 // são POST chamáveis fora do layout /admin, então a role é revalidada AQUI.
 
 export type ModelVersionActionResult = { ok: boolean; error?: string };
@@ -56,7 +56,7 @@ export async function confirmModelVersionPriceAction(
   const updated = await confirmModelVersionPrice(id, price);
   if (!updated) return { ok: false, error: "Versão não encontrada." };
   resetActiveModelMemo();
-  revalidatePath("/admin/settings");
+  revalidatePath("/admin/ia");
   return { ok: true };
 }
 
@@ -71,6 +71,6 @@ export async function rejectModelVersionAction(
   const changed = await rejectModelVersion(id.data);
   if (!changed) return { ok: false, error: "Versão não encontrada ou já reprovada." };
   resetActiveModelMemo();
-  revalidatePath("/admin/settings");
+  revalidatePath("/admin/ia");
   return { ok: true };
 }

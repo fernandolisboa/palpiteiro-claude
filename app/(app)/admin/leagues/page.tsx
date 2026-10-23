@@ -83,9 +83,8 @@ export default async function AdminLeaguesPage() {
     <div className="bg-background text-foreground">
       <div className="max-w-reading mx-auto w-full px-6 py-8">
         <PageHeading
-          backLink={{ href: "/admin", label: "admin" }}
-          title="Ligas"
-          subtitle="ligas ativas · sem deploy"
+          title="Ligas e odds"
+          subtitle="ligas ativas · créditos da Odds API · sem deploy"
         />
 
         <section className="pb-8">
