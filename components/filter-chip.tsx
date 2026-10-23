@@ -1,4 +1,4 @@
-import Link from "next/link";
+import { IntentLink } from "@/components/intent-link";
 import type { ReactNode } from "react";
 
 import { cn } from "@/lib/utils";
@@ -30,12 +30,12 @@ export function FilterChipLink({
   className?: string;
 }) {
   return (
-    <Link
+    <IntentLink
       href={href}
       aria-current={active ? "page" : undefined}
       className={filterChipClassName(active, className)}
     >
       {children}
-    </Link>
+    </IntentLink>
   );
 }

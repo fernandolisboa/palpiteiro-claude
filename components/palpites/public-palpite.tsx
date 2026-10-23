@@ -1,4 +1,4 @@
-import Link from "next/link";
+import { IntentLink } from "@/components/intent-link";
 import { Info } from "lucide-react";
 
 import { SettleableBadge } from "@/components/palpites/palpite-badges";
@@ -145,12 +145,12 @@ export function PublicPalpite({
           um convite a entrar no app (`/` é a landing pública/estática). É a única ponta de
           crescimento no dead-end do unfurl; firewall-clean por construção (copy sem odds/EV/
           stake/R$/%) e coberta pelo teste de firewall deste componente. */}
-      <Link
+      <IntentLink
         href="/"
         className="mt-1 w-fit rounded-sm text-body-sm font-medium tracking-tight text-muted-foreground transition-colors hover:text-foreground focus-visible:outline-none focus-visible:ring-[3px] focus-visible:ring-ring/50"
       >
         Peça o palpite do seu jogo →
-      </Link>
+      </IntentLink>
     </section>
   );
 }

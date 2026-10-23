@@ -1,4 +1,4 @@
-import Link from "next/link";
+import { IntentLink } from "@/components/intent-link";
 import { ChevronLeft } from "lucide-react";
 
 import { Button } from "@/components/ui/button";
@@ -21,9 +21,9 @@ export default function MatchNotFound() {
               incompleto.
             </span>
             <Button asChild size="sm" variant="secondary" className="mt-2">
-              <Link href="/jogos">
+              <IntentLink href="/jogos">
                 <ChevronLeft className="size-3.5" /> Voltar para a lista
-              </Link>
+              </IntentLink>
             </Button>
           </div>
         </Card>

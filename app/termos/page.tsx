@@ -1,5 +1,5 @@
 import type { Metadata } from "next";
-import Link from "next/link";
+import { IntentLink } from "@/components/intent-link";
 
 import { ThemeToggle } from "@/components/theme-toggle";
 import { Wordmark } from "@/components/wordmark";
@@ -32,9 +32,9 @@ export default function TermosPage() {
   return (
     <div className="min-h-screen bg-background text-foreground">
       <header className="flex h-14 items-center justify-between border-b border-border-subtle px-4 lg:px-8">
-        <Link href="/" className="rounded-sm focus-visible:outline-none focus-visible:ring-[3px] focus-visible:ring-ring/50">
+        <IntentLink href="/" className="rounded-sm focus-visible:outline-none focus-visible:ring-[3px] focus-visible:ring-ring/50">
           <Wordmark />
-        </Link>
+        </IntentLink>
         <ThemeToggle />
       </header>
 
@@ -97,9 +97,9 @@ export default function TermosPage() {
               Para criar a conta, você marca a caixa em que declara ter 18 anos ou mais e aceita
               estes Termos. Guardamos a data desse aceite. Se não concordar com estes Termos, não
               use o Palpiteiro. O tratamento dos seus dados está descrito na{" "}
-              <Link href="/privacidade" className={linkClass}>
+              <IntentLink href="/privacidade" className={linkClass}>
                 Política de Privacidade
-              </Link>
+              </IntentLink>
               .
             </p>
           </section>
@@ -198,9 +198,9 @@ export default function TermosPage() {
             <p>
               Você pode encerrar sua conta a qualquer momento, pedindo a exclusão pelo contato
               acima; o que acontece com seus dados está na{" "}
-              <Link href="/privacidade" className={linkClass}>
+              <IntentLink href="/privacidade" className={linkClass}>
                 Política de Privacidade
-              </Link>
+              </IntentLink>
               . O Palpiteiro pode descontinuar o serviço, avisando no app com antecedência
               razoável sempre que possível.
             </p>
@@ -232,9 +232,9 @@ export default function TermosPage() {
                 {LEGAL_CONTACT_EMAIL}
               </a>
               . Veja também a{" "}
-              <Link href="/privacidade" className={linkClass}>
+              <IntentLink href="/privacidade" className={linkClass}>
                 Política de Privacidade
-              </Link>
+              </IntentLink>
               .
             </p>
           </section>

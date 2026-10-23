@@ -1,4 +1,4 @@
-import Link from "next/link";
+import { IntentLink } from "@/components/intent-link";
 import { ChevronLeft } from "lucide-react";
 
 import { Button } from "@/components/ui/button";
@@ -22,9 +22,9 @@ export function NotFoundContent() {
               O endereço pode estar errado ou a página saiu do ar.
             </p>
             <Button asChild size="sm" variant="secondary" className="mt-2">
-              <Link href="/jogos">
+              <IntentLink href="/jogos">
                 <ChevronLeft className="size-3.5" /> Ir para os jogos
-              </Link>
+              </IntentLink>
             </Button>
           </div>
         </Card>

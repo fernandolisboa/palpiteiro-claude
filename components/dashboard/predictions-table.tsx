@@ -1,4 +1,4 @@
-import Link from "next/link";
+import { IntentLink } from "@/components/intent-link";
 import { ChevronRight } from "lucide-react";
 
 import { Badge } from "@/components/ui/badge";
@@ -77,13 +77,13 @@ export function PredictionsTable({
                 <TableCell className="max-w-[220px]">
                   {/* A célula é whitespace-nowrap: sem o truncate no próprio link o
                       nome do jogo vaza por cima do selo da liga (#574 linha 8). */}
-                  <Link
+                  <IntentLink
                     href={appendBackParam(`${basePath}/${r.id}`, listHref, basePath)}
                     title={r.title}
                     className="block max-w-[220px] truncate rounded-sm font-medium tracking-tight hover:underline focus-visible:outline-none focus-visible:ring-[3px] focus-visible:ring-ring/50"
                   >
                     {r.home} × {r.away}
-                  </Link>
+                  </IntentLink>
                 </TableCell>
                 <TableCell>
                   <Badge
@@ -138,13 +138,13 @@ export function PredictionsTable({
                   {r.profit ?? "—"}
                 </TableCell>
                 <TableCell className="w-8">
-                  <Link
+                  <IntentLink
                     href={appendBackParam(`${basePath}/${r.id}`, listHref, basePath)}
                     aria-label="Abrir predição"
                     className="rounded-sm text-muted-fg-2 hover:text-foreground focus-visible:outline-none focus-visible:ring-[3px] focus-visible:ring-ring/50"
                   >
                     <ChevronRight className="size-3.5" />
-                  </Link>
+                  </IntentLink>
                 </TableCell>
               </TableRow>
             );

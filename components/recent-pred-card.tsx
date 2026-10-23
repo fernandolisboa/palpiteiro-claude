@@ -1,4 +1,4 @@
-import Link from "next/link";
+import { IntentLink } from "@/components/intent-link";
 
 import { appendBackParam } from "@/lib/view/back-href";
 import { LEAGUE_LABEL } from "@/lib/format";
@@ -20,7 +20,7 @@ export function RecentPredCard({
   listHref?: string;
 }) {
   return (
-    <Link
+    <IntentLink
       href={appendBackParam(`/match/${p.matchId}`, listHref, "/jogos")}
       className="flex min-w-[200px] max-w-[240px] shrink-0 flex-col gap-2 rounded-lg border border-border bg-card px-3 py-3 transition-colors hover:bg-surface-2 focus-visible:outline-none focus-visible:ring-[3px] focus-visible:ring-ring/50 lg:min-w-0 lg:max-w-none"
     >
@@ -66,6 +66,6 @@ export function RecentPredCard({
           )}
         </div>
       )}
-    </Link>
+    </IntentLink>
   );
 }

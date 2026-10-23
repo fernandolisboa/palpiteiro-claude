@@ -1,4 +1,4 @@
-import Link from "next/link";
+import { IntentLink } from "@/components/intent-link";
 import type { ReactNode } from "react";
 import { Compass } from "lucide-react";
 
@@ -83,9 +83,9 @@ export function ComoUsarContent() {
             O caminho do app, tela por tela: achar um jogo, pedir o palpite da IA, ler a
             análise, registrar sua aposta e acompanhar o resultado. O que os números
             querem dizer (vantagem, sem aposta, odd, stake) está em{" "}
-            <Link href="/como-funciona" className={LINK}>
+            <IntentLink href="/como-funciona" className={LINK}>
               Como funciona
-            </Link>
+            </IntentLink>
             .
           </>
         }
@@ -104,7 +104,7 @@ export function ComoUsarContent() {
           </p>
         </div>
         <Button asChild size="sm" className="w-fit shrink-0">
-          <Link href={TOUR_RESTART_HREF}>Fazer o tour</Link>
+          <IntentLink href={TOUR_RESTART_HREF}>Fazer o tour</IntentLink>
         </Button>
       </div>
 
@@ -258,9 +258,9 @@ export function ComoUsarContent() {
         <p>
           Todo número com um <Ui>?</Ui> ao lado explica o que é num toque, com um
           link pro trecho certo de{" "}
-          <Link href="/como-funciona" className={LINK}>
+          <IntentLink href="/como-funciona" className={LINK}>
             Como funciona
-          </Link>
+          </IntentLink>
           . Logo abaixo do palpite ficam três abas. Em <Ui>Mercados</Ui>, as odds de
           mercado (as de antes do jogo, quando ele já começou) com a chance do modelo e
           a odd justa de cada seleção. Em <Ui>Seu palpite</Ui>, o seu palpite. Em{" "}
@@ -343,9 +343,9 @@ export function ComoUsarContent() {
           Logo depois aparece a avaliação de cada aposta: a probabilidade do modelo,
           a odd justa, o retorno esperado na sua odd e uma sugestão de stake. Elas
           ficam salvas em{" "}
-          <Link href="/apostas" className={LINK}>
+          <IntentLink href="/apostas" className={LINK}>
             Suas apostas
-          </Link>{" "}
+          </IntentLink>{" "}
           e são conferidas sozinhas depois do jogo. Antes do jogo, <Ui>Explicar com IA</Ui>{" "}
           abaixo da avaliação conta em texto o porquê desses números, sem mudar nenhum
           deles (1 do seu limite diário de palpites).
@@ -387,9 +387,9 @@ export function ComoUsarContent() {
         </p>
         <ul className="flex list-disc flex-col gap-2 pl-5">
           <li>
-            <Link href="/dashboard" className={LINK}>
+            <IntentLink href="/dashboard" className={LINK}>
               Desempenho
-            </Link>
+            </IntentLink>
             : as análises da IA que você pediu. No topo, o retorno, a taxa de acerto e
             o saldo em unidades; logo abaixo, o gráfico do saldo. Em{" "}
             <Ui>Detalhe técnico</Ui> ficam os números por mercado (CLV, amostra,
@@ -399,9 +399,9 @@ export function ComoUsarContent() {
             detalhe da análise.
           </li>
           <li>
-            <Link href="/apostas" className={LINK}>
+            <IntentLink href="/apostas" className={LINK}>
               Suas apostas
-            </Link>
+            </IntentLink>
             : as apostas que você registrou na página do jogo. No topo, quantas estão
             em aberto, quantas você acertou e o saldo em unidades; o filtro separa{" "}
             <Ui>Em aberto</Ui> e <Ui>Encerradas</Ui>. Cada aposta vem marcada como{" "}
@@ -413,9 +413,9 @@ export function ComoUsarContent() {
         </ul>
         <p>
           O que cada indicador do desempenho mede está em{" "}
-          <Link href="/como-funciona" className={LINK}>
+          <IntentLink href="/como-funciona" className={LINK}>
             Como funciona
-          </Link>
+          </IntentLink>
           .
         </p>
       </Section>
@@ -454,9 +454,9 @@ export function ComoUsarContent() {
         </p>
         <p>
           Pra ver de novo, é só tocar em{" "}
-          <Link href={TOUR_RESTART_HREF} className={LINK}>
+          <IntentLink href={TOUR_RESTART_HREF} className={LINK}>
             Fazer o tour
-          </Link>{" "}
+          </IntentLink>{" "}
           ou em <Ui>ajuda</Ui> → <Ui>rever o tour</Ui>, no menu (no celular, em{" "}
           <Ui>mais</Ui>).
         </p>

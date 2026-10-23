@@ -1,4 +1,4 @@
-import Link from "next/link";
+import { IntentLink } from "@/components/intent-link";
 
 import { ADMIN_SECTIONS } from "@/lib/nav/menu";
 import { cn } from "@/lib/utils";
@@ -23,7 +23,7 @@ export function AdminSubTabs({
       className="mb-8 inline-flex gap-0.5 rounded-md border border-border p-0.5"
     >
       {tabs.map(({ href, label }) => (
-        <Link
+        <IntentLink
           key={href}
           href={href}
           aria-current={href === current ? "page" : undefined}
@@ -33,7 +33,7 @@ export function AdminSubTabs({
           )}
         >
           {label}
-        </Link>
+        </IntentLink>
       ))}
     </nav>
   );

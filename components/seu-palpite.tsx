@@ -30,6 +30,7 @@ import {
   type PalpiteResult,
   type UserPalpite,
 } from "@/lib/user-palpite/types";
+import { markRouterCacheStale } from "@/lib/nav/router-cache";
 import { cn } from "@/lib/utils";
 import {
   toReadingRowsView,
@@ -134,7 +135,13 @@ export function SeuPalpite({
   const [state, analyzeAction, analyzing] = useActionState<
     AnalyzeUserPalpiteResult | null,
     FormData
-  >(analyzeUserPalpite, null);
+  >(async (prev, formData) => {
+    const result = await analyzeUserPalpite(prev, formData);
+    // A action não revalida (a tela mostra o retorno): a página do jogo guardada no
+    // cache do roteador é relida quando reaberta (#639).
+    if (result.ok) markRouterCacheStale();
+    return result;
+  }, null);
   const analysis = state?.ok ? state.analysis : latest;
 
   const picker = model && (

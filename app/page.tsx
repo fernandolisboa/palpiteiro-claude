@@ -1,5 +1,5 @@
 import type { Metadata } from "next";
-import Link from "next/link";
+import { IntentLink } from "@/components/intent-link";
 
 import { PageContainer } from "@/components/page-container";
 import { ThemeToggle } from "@/components/theme-toggle";
@@ -75,21 +75,21 @@ export default function LandingPage() {
         dangerouslySetInnerHTML={{ __html: JSON.stringify(JSON_LD) }}
       />
       <header className="flex h-14 items-center justify-between gap-3 border-b border-border-subtle px-4 lg:px-8">
-        <Link
+        <IntentLink
           href="/"
           aria-label="palpiteiro, página inicial"
           className="rounded-sm focus-visible:outline-none focus-visible:ring-[3px] focus-visible:ring-ring/50"
         >
           <Wordmark />
-        </Link>
+        </IntentLink>
         <div className="flex shrink-0 items-center gap-2 lg:gap-3">
           <ThemeToggle />
-          <Link
+          <IntentLink
             href="/signin"
             className="rounded-sm text-meta uppercase tracking-label text-muted-foreground transition-colors hover:text-foreground focus-visible:outline-none focus-visible:ring-[3px] focus-visible:ring-ring/50"
           >
             entrar
-          </Link>
+          </IntentLink>
         </div>
       </header>
 

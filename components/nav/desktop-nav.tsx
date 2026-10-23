@@ -1,6 +1,6 @@
 "use client";
 
-import Link from "next/link";
+import { IntentLink } from "@/components/intent-link";
 import { usePathname } from "next/navigation";
 import { ChevronDown } from "lucide-react";
 
@@ -41,7 +41,7 @@ export function DesktopNav({
       className={cn("items-center gap-5", className)}
       data-tour="menu"
     >
-      <Link
+      <IntentLink
         href={GAMES_NAV.href}
         aria-current={
           isActivePath(pathname, GAMES_NAV.href)
@@ -51,7 +51,7 @@ export function DesktopNav({
         className={navLinkVariants({ variant: "inline" })}
       >
         {GAMES_NAV.label}
-      </Link>
+      </IntentLink>
       <NavGroupMenu group={BETS_NAV} pathname={pathname} />
       <span aria-hidden="true" className="h-4 w-px bg-border-subtle" />
       {navGroups(isAdmin).map((group) => (
@@ -85,14 +85,14 @@ function NavGroupMenu({
       <DropdownMenuContent>
         {group.items.map(({ href, label }) => (
           <DropdownMenuItem key={href} asChild>
-            <Link
+            <IntentLink
               href={href}
               aria-current={
                 href === active ? ariaCurrentFor(pathname, href) : undefined
               }
             >
               {label}
-            </Link>
+            </IntentLink>
           </DropdownMenuItem>
         ))}
       </DropdownMenuContent>

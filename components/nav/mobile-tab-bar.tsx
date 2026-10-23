@@ -1,7 +1,7 @@
 "use client";
 
 import { useEffect, useState, type ReactNode } from "react";
-import Link from "next/link";
+import { IntentLink } from "@/components/intent-link";
 import { usePathname } from "next/navigation";
 import {
   CalendarDays,
@@ -104,7 +104,7 @@ export function MobileTabBar({ isAdmin }: { isAdmin: boolean }) {
           {PRIMARY_NAV.map((item) => {
             const Icon = TAB_ICON[item.href];
             return (
-              <Link
+              <IntentLink
                 key={item.href}
                 href={item.href}
                 aria-current={
@@ -114,7 +114,7 @@ export function MobileTabBar({ isAdmin }: { isAdmin: boolean }) {
               >
                 {Icon && <Icon aria-hidden="true" className="size-5" strokeWidth={1.75} />}
                 <span className="max-w-full truncate">{item.shortLabel ?? item.label}</span>
-              </Link>
+              </IntentLink>
             );
           })}
           <Sheet open={moreOpen} onOpenChange={setMoreOpen}>
@@ -134,7 +134,7 @@ export function MobileTabBar({ isAdmin }: { isAdmin: boolean }) {
                 <div className="flex flex-col">
                   {more.help.map(({ href, label }) => (
                     <SheetClose asChild key={href}>
-                      <Link
+                      <IntentLink
                         href={href}
                         aria-current={
                           href === moreActive ? ariaCurrentFor(pathname, href) : undefined
@@ -143,7 +143,7 @@ export function MobileTabBar({ isAdmin }: { isAdmin: boolean }) {
                       >
                         {label}
                         <ChevronRight aria-hidden="true" className="size-4" />
-                      </Link>
+                      </IntentLink>
                     </SheetClose>
                   ))}
                 </div>
@@ -153,7 +153,7 @@ export function MobileTabBar({ isAdmin }: { isAdmin: boolean }) {
                   label="admin"
                   action={
                     <SheetClose asChild>
-                      <Link
+                      <IntentLink
                         href={more.admin.overview.href}
                         aria-current={
                           moreActive === more.admin.overview.href
@@ -163,14 +163,14 @@ export function MobileTabBar({ isAdmin }: { isAdmin: boolean }) {
                         className="rounded-sm text-body-sm tracking-tight text-muted-foreground hover:text-foreground focus-visible:outline-none focus-visible:ring-[3px] focus-visible:ring-ring/50 aria-[current]:text-foreground"
                       >
                         {more.admin.overview.label} ›
-                      </Link>
+                      </IntentLink>
                     </SheetClose>
                   }
                 >
                   <div className="grid grid-cols-2 gap-2">
                     {more.admin.sections.map(({ href, label, description }) => (
                       <SheetClose asChild key={href}>
-                        <Link
+                        <IntentLink
                           href={href}
                           aria-current={
                             href === moreActive ? ariaCurrentFor(pathname, href) : undefined
@@ -185,7 +185,7 @@ export function MobileTabBar({ isAdmin }: { isAdmin: boolean }) {
                               {description}
                             </span>
                           )}
-                        </Link>
+                        </IntentLink>
                       </SheetClose>
                     ))}
                   </div>

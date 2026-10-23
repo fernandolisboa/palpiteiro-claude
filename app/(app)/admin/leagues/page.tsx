@@ -23,6 +23,7 @@ import {
 } from "@/lib/providers/sports-data/leagues";
 
 import { LeagueToggle } from "./league-toggle";
+import { RevisitRefresh } from "@/components/revisit-refresh";
 
 export const dynamic = "force-dynamic";
 
@@ -81,6 +82,7 @@ export default async function AdminLeaguesPage() {
 
   return (
     <div className="bg-background text-foreground">
+      <RevisitRefresh />
       <div className="max-w-reading mx-auto w-full px-6 py-8">
         <PageHeading
           title="Ligas e odds"

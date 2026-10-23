@@ -1,7 +1,7 @@
 "use client";
 
 import { useState } from "react";
-import Link from "next/link";
+import { IntentLink } from "@/components/intent-link";
 import { ChevronRight } from "lucide-react";
 
 import { Badge } from "@/components/ui/badge";
@@ -55,7 +55,7 @@ export function UpcomingMatchesDesktop({
             const phase = matchRowPhase(m);
             const liveBadge = showsRowLiveBadge(m);
             return (
-              <Link
+              <IntentLink
                 key={m.id}
                 href={appendBackParam(`/match/${m.id}`, listHref, "/jogos")}
                 data-tour={m.id === tourId ? "match-row" : undefined}
@@ -113,7 +113,7 @@ export function UpcomingMatchesDesktop({
                     <ChevronRight aria-hidden="true" className="size-3.5" />
                   )}
                 </span>
-              </Link>
+              </IntentLink>
             );
           })}
         </section>

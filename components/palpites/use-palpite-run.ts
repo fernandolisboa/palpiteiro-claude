@@ -8,6 +8,7 @@ import {
   type HeroRunOutcome,
   type StepStatus,
 } from "@/lib/ai/progress/protocol";
+import { markRouterCacheStale } from "@/lib/nav/router-cache";
 
 export const PALPITE_RUN_ENDPOINT = "/api/palpite/run";
 
@@ -55,8 +56,11 @@ export function usePalpiteRun(): PalpiteRun {
   // Saiu da página no meio do run: para de ler (o run segue no servidor) e não mexe
   // em estado nem dá refresh numa página que já é outra.
   const abortRef = useRef<AbortController | null>(null);
+  // O run que segue sozinho grava depois: as páginas guardadas no cache do roteador
+  // são relidas quando reabertas (#639).
   useEffect(
     () => () => {
+      if (inFlight.current) markRouterCacheStale();
       abortRef.current?.abort();
     },
     [],
@@ -112,6 +116,10 @@ export function usePalpiteRun(): PalpiteRun {
           refresh = true;
         } else if (result.ok) {
           refresh = true;
+        } else {
+          // Falha no meio pode ter gravado leituras antes: a tela fica com a mensagem,
+          // e as páginas guardadas no cache são relidas quando reabertas (#639).
+          markRouterCacheStale();
         }
         return "streamed";
       } finally {

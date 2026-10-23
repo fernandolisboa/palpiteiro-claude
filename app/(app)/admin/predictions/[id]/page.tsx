@@ -6,6 +6,7 @@ import { LEAGUE_LABEL, leagueToKey } from "@/lib/format";
 import { getPredictionForOverride } from "@/lib/db/queries/predictions";
 
 import { OverrideForm } from "./override-form";
+import { RevisitRefresh } from "@/components/revisit-refresh";
 
 export const dynamic = "force-dynamic";
 
@@ -39,6 +40,7 @@ export default async function AdminPredictionPage({ params }: PageProps) {
 
   return (
     <div className="bg-background text-foreground">
+      <RevisitRefresh />
       <div className="mx-auto w-full max-w-reading px-6 py-8">
         <PageHeading
           backLink={{ href: `/match/${match.id}`, label: "jogo" }}

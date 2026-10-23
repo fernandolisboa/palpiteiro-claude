@@ -4,6 +4,7 @@ import { PageHeading } from "@/components/admin/page-heading";
 import { getAdminFlagValues } from "@/lib/db/queries/ai-config";
 
 import { TeamRatingsPanel } from "./team-ratings-panel";
+import { RevisitRefresh } from "@/components/revisit-refresh";
 
 export const dynamic = "force-dynamic";
 // "Reajustar agora" roda o refit do Dixon-Coles na server action desta página.
@@ -17,6 +18,7 @@ export default async function AdminEnginePage() {
 
   return (
     <div className="bg-background text-foreground">
+      <RevisitRefresh />
       <div className="mx-auto w-full max-w-reading px-6 py-8">
         <PageHeading
           title="Motor e calibração"

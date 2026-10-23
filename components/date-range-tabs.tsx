@@ -1,4 +1,4 @@
-import Link from "next/link";
+import { IntentLink } from "@/components/intent-link";
 import { X } from "lucide-react";
 
 import { DateRangeSheet } from "@/components/date-range-sheet";
@@ -49,14 +49,14 @@ export function DateRangeTabs({
         surface={surface}
       />
       {customActive && (
-        <Link
+        <IntentLink
           href={buildRangeHref({ league }, { preset: "upcoming" })}
           aria-label="Limpar datas"
           title="Limpar datas"
           className={filterChipClassName(false, "w-8 justify-center px-0")}
         >
           <X aria-hidden="true" className="size-3.5" />
-        </Link>
+        </IntentLink>
       )}
     </nav>
   );

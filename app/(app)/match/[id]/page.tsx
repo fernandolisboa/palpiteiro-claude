@@ -1,5 +1,5 @@
 import type { Metadata } from "next";
-import Link from "next/link";
+import { IntentLink } from "@/components/intent-link";
 import { notFound, redirect } from "next/navigation";
 import { cache, Suspense } from "react";
 import { Users } from "lucide-react";
@@ -94,6 +94,7 @@ import type {
   PreviousAnalysisItem,
 } from "@/lib/view/types";
 import { cn } from "@/lib/utils";
+import { RevisitRefresh } from "@/components/revisit-refresh";
 
 // Os fan-outs (melhor aposta #178, multi-mercado #245) rodam até MAX_FANOUT_MARKETS (7)
 // predict() num request (em paralelo com a flag enable_parallel_fan_out, em série sem
@@ -543,6 +544,9 @@ export default async function MatchPage({ params, searchParams }: PageProps) {
 
   return (
     <>
+      {/* Jogo rolando: reaberto do cache ou de volta à aba, relê sempre (é o que traz o
+          placar novo, além do "Atualizar placar"). */}
+      <RevisitRefresh live={heroLive !== null} />
       {/* 2ª parte do tour guiado: abre sozinha no 1º jogo aberto depois da parte da
           lista (/jogos). */}
       <GuidedTour
@@ -883,12 +887,12 @@ function NotAnalyzableNotice({
 // do bolão estiver aberta: antes do apito e, no modo ao vivo, até os 15' de jogo.
 function PoolLink({ matchId }: { matchId: string }) {
   return (
-    <Link
+    <IntentLink
       href={`/bolao?jogo=${matchId}`}
       className="text-body-sm text-muted-foreground hover:text-foreground focus-visible:ring-ring/50 inline-flex items-center gap-1.5 rounded-sm tracking-tight focus-visible:ring-[3px] focus-visible:outline-none"
     >
       <Users className="size-3.5" aria-hidden />
       criar bolão
-    </Link>
+    </IntentLink>
   );
 }

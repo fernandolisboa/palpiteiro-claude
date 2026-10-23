@@ -1,5 +1,5 @@
 import * as Sentry from "@sentry/nextjs";
-import Link from "next/link";
+import { IntentLink } from "@/components/intent-link";
 import { unstable_rethrow } from "next/navigation";
 import { cache, Suspense, type ReactNode } from "react";
 
@@ -75,14 +75,14 @@ export function AppHeader({ viewer: state }: { viewer: Viewer | null | "pending"
     <header className="sticky top-0 z-40 border-b border-border-subtle bg-background/90 backdrop-blur-sm">
       <div className="flex h-14 items-center justify-between gap-3 px-4 lg:px-8">
         <div className="flex min-w-0 items-center gap-7">
-          <Link
+          <IntentLink
             // "/" leva o logado pra /jogos (middleware) e o anônimo pra landing.
             href={viewer ? "/jogos" : "/"}
             aria-label={viewer ? "palpiteiro, ir para jogos" : "palpiteiro, página inicial"}
             className="rounded-sm focus-visible:outline-none focus-visible:ring-[3px] focus-visible:ring-ring/50"
           >
             <Wordmark />
-          </Link>
+          </IntentLink>
           {viewer && <DesktopNav isAdmin={viewer.isAdmin} className="hidden lg:flex" />}
         </div>
         <div className="flex shrink-0 items-center gap-2 lg:gap-3">
@@ -90,12 +90,12 @@ export function AppHeader({ viewer: state }: { viewer: Viewer | null | "pending"
           {pending ? null : viewer ? (
             <AccountMenu viewer={viewer} />
           ) : (
-            <Link
+            <IntentLink
               href="/signin"
               className="rounded-sm text-meta uppercase tracking-label text-muted-foreground transition-colors hover:text-foreground focus-visible:outline-none focus-visible:ring-[3px] focus-visible:ring-ring/50"
             >
               entrar
-            </Link>
+            </IntentLink>
           )}
         </div>
       </div>

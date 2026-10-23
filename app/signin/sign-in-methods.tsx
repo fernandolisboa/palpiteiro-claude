@@ -1,6 +1,6 @@
 "use client";
 
-import Link from "next/link";
+import { IntentLink } from "@/components/intent-link";
 import { useState } from "react";
 import { Checkbox } from "radix-ui";
 import { Check } from "lucide-react";
@@ -78,23 +78,23 @@ export function SignInMethods({
         </label>
         <p className="pl-[26px] text-meta leading-snug tracking-tight text-muted-foreground">
           Leia os{" "}
-          <Link
+          <IntentLink
             href="/termos"
             target="_blank"
             rel="noopener noreferrer"
             className="rounded-sm underline underline-offset-2 hover:text-foreground focus-visible:outline-none focus-visible:ring-[3px] focus-visible:ring-ring/50"
           >
             Termos de Uso
-          </Link>{" "}
+          </IntentLink>{" "}
           e a{" "}
-          <Link
+          <IntentLink
             href="/privacidade"
             target="_blank"
             rel="noopener noreferrer"
             className="rounded-sm underline underline-offset-2 hover:text-foreground focus-visible:outline-none focus-visible:ring-[3px] focus-visible:ring-ring/50"
           >
             Política de Privacidade
-          </Link>
+          </IntentLink>
           , que explica como tratamos seus dados.
         </p>
       </div>

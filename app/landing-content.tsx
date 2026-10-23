@@ -1,4 +1,4 @@
-import Link from "next/link";
+import { IntentLink } from "@/components/intent-link";
 import { ArrowRight } from "lucide-react";
 import type { ReactNode } from "react";
 
@@ -39,16 +39,16 @@ export function LandingContent() {
 
         <div className="flex flex-col items-start gap-3 pt-2 sm:flex-row sm:items-center">
           <Button asChild size="lg">
-            <Link href="/signin">
+            <IntentLink href="/signin">
               Entrar <ArrowRight className="size-4" />
-            </Link>
+            </IntentLink>
           </Button>
-          <Link
+          <IntentLink
             href="/como-funciona"
             className="rounded-sm px-1 text-body font-medium text-muted-foreground transition-colors hover:text-foreground focus-visible:outline-none focus-visible:ring-[3px] focus-visible:ring-ring/50"
           >
             Como funciona →
-          </Link>
+          </IntentLink>
         </div>
       </section>
 

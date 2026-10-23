@@ -17,6 +17,16 @@ const nextConfig: NextConfig = {
     NEXT_PUBLIC_VERCEL_GIT_COMMIT_SHA:
       process.env.VERCEL_GIT_COMMIT_SHA ?? "dev",
   },
+  // Cache do roteador no cliente (#639). Por padrão o Next 15 refaz no servidor TODA
+  // navegação pra página dinâmica (todas as logadas são), então voltar pro desempenho
+  // ou reabrir um jogo sempre esperava o servidor. `dynamic`: página visitada nos
+  // últimos 5 min reabre na hora, do cache; o `RevisitRefresh` de cada página relê em
+  // segundo plano o que passou de 30s (ver lib/nav/router-cache.ts). `static`: página
+  // buscada inteira pelo mouse em cima (`IntentLink`) vale 60s; depois o clique busca
+  // de novo. Server action com revalidatePath e `router.refresh()` limpam tudo.
+  experimental: {
+    staleTimes: { dynamic: 300, static: 60 },
+  },
   // Admin reorganizado (#633): os endereços antigos seguem abrindo. Temporário (307)
   // de propósito: se a estrutura mudar de novo, o navegador não fica preso no destino.
   async redirects() {

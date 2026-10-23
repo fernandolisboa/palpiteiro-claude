@@ -1,6 +1,6 @@
 "use client";
 
-import Link from "next/link";
+import { IntentLink } from "@/components/intent-link";
 import { usePathname } from "next/navigation";
 
 import { LEGAL_CONTACT_EMAIL } from "@/lib/legal/controller";
@@ -41,15 +41,15 @@ export function SiteFooter() {
         </div>
 
         <nav className="flex flex-wrap items-center gap-x-4 gap-y-1.5 text-body-sm tracking-tight">
-          <Link href="/termos" className={linkClass}>
+          <IntentLink href="/termos" className={linkClass}>
             Termos
-          </Link>
-          <Link href="/privacidade" className={linkClass}>
+          </IntentLink>
+          <IntentLink href="/privacidade" className={linkClass}>
             Privacidade
-          </Link>
-          <Link href="/como-funciona" className={linkClass}>
+          </IntentLink>
+          <IntentLink href="/como-funciona" className={linkClass}>
             Como funciona
-          </Link>
+          </IntentLink>
           {/* Canal do titular (LGPD art. 9º, IV; Res. CD/ANPD 2/2022 art. 11) a um clique
               de qualquer página — report 11. */}
           <a href={`mailto:${LEGAL_CONTACT_EMAIL}`} className={linkClass}>

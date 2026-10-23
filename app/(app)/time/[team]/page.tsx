@@ -22,6 +22,7 @@ import { displayTeamName } from "@/lib/view/team-labels";
 import { loadListInPlayStates } from "@/lib/live/list-states";
 import { toMatchRowView } from "@/lib/view/match";
 import type { MatchRowView } from "@/lib/view/types";
+import { RevisitRefresh } from "@/components/revisit-refresh";
 
 // Render dinâmico explícito: lê o cookie de fuso (#1) por-request via
 // getRequestTimeZone() e a sessão. auth() já a tornava dinâmica; o explícito
@@ -133,6 +134,7 @@ export default async function TeamHistoryPage({ params }: PageProps) {
 
   return (
     <>
+      <RevisitRefresh />
       <div className="lg:hidden">
         <MobileTeam
           displayName={displayName}

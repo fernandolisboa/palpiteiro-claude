@@ -1,5 +1,5 @@
 import type { Metadata } from "next";
-import Link from "next/link";
+import { IntentLink } from "@/components/intent-link";
 import { redirect } from "next/navigation";
 import { Inbox } from "lucide-react";
 
@@ -29,6 +29,7 @@ import { enrichDashboardRowsWithClosing } from "@/lib/dashboard/clv-enrich";
 import { getRequestTimeZone } from "@/lib/server/request-timezone";
 import { getUserDashboardRows } from "@/lib/db/queries/dashboard";
 import { paginate } from "@/lib/view/paginate";
+import { RevisitRefresh } from "@/components/revisit-refresh";
 
 // Análises por página na tabela (#577). Só na página do usuário: o admin vê tudo.
 const TABLE_PAGE_SIZE = 25;
@@ -76,6 +77,7 @@ export default async function DashboardPage({ searchParams }: PageProps) {
 
   return (
     <>
+      <RevisitRefresh />
       <PageContainer width="content">
         <PageHeader
           title="Desempenho"
@@ -90,12 +92,12 @@ export default async function DashboardPage({ searchParams }: PageProps) {
               title="Você ainda não tem predições"
               description="Gere uma análise num jogo pra começar a acompanhar seu retorno."
               action={
-                <Link
+                <IntentLink
                   href="/jogos"
                   className="mt-1 rounded-sm text-body font-medium text-accent-fg hover:underline focus-visible:outline-none focus-visible:ring-[3px] focus-visible:ring-ring/50"
                 >
                   Ver próximos jogos →
-                </Link>
+                </IntentLink>
               }
             />
           </Card>

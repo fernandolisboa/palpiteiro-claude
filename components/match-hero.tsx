@@ -1,4 +1,4 @@
-import Link from "next/link";
+import { IntentLink } from "@/components/intent-link";
 
 import { Badge } from "@/components/ui/badge";
 import { LiveBadge } from "@/components/live-badge";
@@ -54,12 +54,12 @@ function TeamBlock({
 }) {
   // Nome clicável (#408) → histórico do time. Sem href, segue um <span> simples.
   const name = href ? (
-    <Link
+    <IntentLink
       href={href}
       className="rounded-sm hover:underline focus-visible:outline-none focus-visible:ring-[3px] focus-visible:ring-ring/50"
     >
       {team.name}
-    </Link>
+    </IntentLink>
   ) : (
     team.name
   );

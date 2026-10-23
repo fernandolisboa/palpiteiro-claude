@@ -1,4 +1,4 @@
-import Link from "next/link";
+import { IntentLink } from "@/components/intent-link";
 
 import { EmptyState } from "@/components/empty-state";
 import { Button } from "@/components/ui/button";
@@ -24,11 +24,11 @@ export function RecentPredsEmpty({
         action={
           <Button asChild size="sm" variant="secondary">
             {nextMatchId ? (
-              <Link href={appendBackParam(`/match/${nextMatchId}`, listHref, "/jogos")}>
+              <IntentLink href={appendBackParam(`/match/${nextMatchId}`, listHref, "/jogos")}>
                 Abrir o próximo jogo
-              </Link>
+              </IntentLink>
             ) : (
-              <Link href="/como-usar">Ver como usar</Link>
+              <IntentLink href="/como-usar">Ver como usar</IntentLink>
             )}
           </Button>
         }
