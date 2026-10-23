@@ -14,7 +14,7 @@ Arquivos pra usar **fora do app**: tela de consentimento do Google, perfil de re
 
 - **Cores:** fundo azul `#0057c0` (no tema escuro do app, `#3177dc`, o `--primary` do escuro), trave em branco e bola em amarelo `#ffb547`. O amarelo é a segunda cor da marca; o azul continua sendo a principal.
 - **Nome:** "palpiteiro", minúsculo, em Geist SemiBold, à direita do símbolo (ou embaixo, no quadrado do Google). Sem sufixo nem tagline (ADR 0059).
-- **Nada de cara de casa de aposta:** sem fichas, dados, dinheiro, dourado ou neon, e nenhum nome de casa de aposta junto da marca.
+- **Nada de cara de casa de aposta:** sem fichas, dados, dinheiro, dourado ou neon, e nenhum nome de casa de aposta junto da marca. O amarelo da bola é cor de bola, não de ficha: chapado, sem brilho nem degradê metálico, e só na bola.
 
 ## Atualizar
 

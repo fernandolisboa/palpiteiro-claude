@@ -125,8 +125,10 @@ export function markGlyph(cut: string) {
 
 /**
  * O símbolo em azul da marca, pro DOM (header e telas públicas). O azul é o `--primary` do
- * tema (via `text-primary` + `currentColor`, que também vaza os gomos da bola), então
- * acompanha claro/escuro; decorativo, quem dá nome é o texto ao lado.
+ * tema, no fundo e nos gomos da bola (`currentColor` sob o `text-primary` do `<g>`), então
+ * acompanha claro/escuro. A cor fica no `<g>`, não no `<svg>`: assim uma classe de cor vinda
+ * de quem usa (`text-white` num fundo azul, por exemplo) não apaga a trave. Decorativo, quem
+ * dá nome é o texto ao lado.
  */
 export function BrandSymbol({ className }: { className?: string }) {
   return (
@@ -134,10 +136,12 @@ export function BrandSymbol({ className }: { className?: string }) {
       viewBox="0 0 100 100"
       aria-hidden="true"
       focusable="false"
-      className={cn("text-primary shrink-0", className)}
+      className={cn("shrink-0", className)}
     >
-      <rect width="100" height="100" rx="22" fill="currentColor" />
-      {markGlyph("currentColor")}
+      <g className="text-primary">
+        <rect width="100" height="100" rx="22" fill="currentColor" />
+        {markGlyph("currentColor")}
+      </g>
     </svg>
   );
 }

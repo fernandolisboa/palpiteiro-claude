@@ -32,6 +32,9 @@ describe("geometria do símbolo", () => {
   it("os gomos da borda ficam dentro da bola (sem clipPath, não vazam pra trave)", () => {
     expect(MARK_BALL_PATCHES).toHaveLength(5);
     for (const d of MARK_BALL_PATCHES) {
+      // Os dois arcos no sentido horário: a borda da bola e a volta do gomo curvando pro
+      // centro. Com o segundo flag em 0 o gomo sai pra fora da bola (e some no fundo azul).
+      expect(d.match(/ 0 0 1 /g)).toHaveLength(2);
       const nums = d.match(/-?\d+(\.\d+)?/g)!.map(Number);
       // M x1 y1 A r r 0 0 1 x2 y2 A pr pr 0 0 1 x1 y1: as duas pontas estão na borda.
       const ends = [
@@ -70,11 +73,18 @@ describe("AppIconMark (Satori) e BrandSymbol (DOM) desenham os mesmos traços", 
 
   it("o símbolo do DOM é decorativo e usa o azul do tema no fundo e nos gomos", () => {
     expect(symbol).toContain('aria-hidden="true"');
-    expect(symbol).toContain("text-primary");
     expect(symbol).toContain(
-      '<rect width="100" height="100" rx="22" fill="currentColor"'
+      '<g class="text-primary"><rect width="100" height="100" rx="22" fill="currentColor"'
     );
-    expect(symbol).toContain('fill="currentColor"');
+    for (const d of MARK_BALL_PATCHES)
+      expect(symbol).toContain(`d="${d}" fill="currentColor"`);
+  });
+
+  it("uma classe de cor de quem usa não troca o azul do fundo nem dos gomos", () => {
+    const html = renderToStaticMarkup(
+      <BrandSymbol className="size-6 text-white" />
+    );
+    expect(html).toContain('<g class="text-primary">');
   });
 });
 
