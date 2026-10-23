@@ -234,7 +234,7 @@ export const GLOSSARY: readonly GlossaryEntry[] = [
   {
     term: 'odd mínima ("vale a pena se odd ≥")',
     anchor: "odd-minima",
-    meaning: `A menor odd em que a aposta ainda mantém vantagem de pelo menos ${MIN_EDGE_PP} pontos sobre o mercado, com as outras odds do mercado paradas. No motor em código é calculada com a mesma conta da vantagem; nas análises antigas decididas pela IA, era a IA que informava. Se a odd cair abaixo disso, a vantagem some.`,
+    meaning: `A menor odd em que a aposta ainda mantém vantagem de pelo menos ${MIN_EDGE_PP} pontos sobre o mercado, com as outras odds do mercado paradas. No motor em código é calculada com a mesma conta da vantagem, e nunca fica abaixo da odd justa (100 ÷ prob. do modelo); nas análises antigas decididas pela IA, era a IA que informava. Se a odd cair abaixo disso, a vantagem some.`,
     group: "numeros",
   },
   {

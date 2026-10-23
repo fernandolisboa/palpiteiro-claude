@@ -23,7 +23,7 @@ import { formatLine } from "@/lib/format-number";
 import {
   computeEvPerUnit,
   computeMarketScenarios,
-  computeMinOddForEdgeFloor,
+  computeMinimumOdd,
   computeScenarios,
   MIN_EDGE_PP,
   type ScenarioSelection,
@@ -455,7 +455,15 @@ export function toAnalysisView(
       : null;
   const kellyInfoUnits = kellyRaw !== stakeUnits ? kellyRaw : null;
   const valueNote =
-    isPass || liveLabel !== null ? null : valueBetNote(kellyProb, impliedNum);
+    isPass || liveLabel !== null
+      ? null
+      : valueBetNote({
+          modelProb: kellyProb,
+          impliedPct: impliedNum,
+          marketKind,
+          recommendation,
+          selections: prediction.selections,
+        });
 
   // Reconferência com a escalação (#619): o "há X" da odd conta da captura usada, não da
   // gravação; com as odds congeladas da análise anterior, sem "há" (o aviso diz de onde).
@@ -536,11 +544,10 @@ export function toAnalysisView(
 export const LINEUP_RECHECK_MODEL_LABEL = "texto automático";
 
 // Odd mínima ("vale a pena se odd ≥"). No motor em código ela sai das odds congeladas
-// com a mesma implícita de-vigada do gate, inclusive em rows antigas, que gravaram
-// 100/(P − piso) contra 1/odd cru e pediam odd acima da própria análise. O teto na odd
-// da análise segura o arredondamento do edge (2 casas): a recomendação passou no gate
-// com essa odd. No LLM é a odd que o modelo declarou (ADR 0012), e a contradição com a
-// odd da análise, quando aparece, é real.
+// pela mesma conta do predict (computeMinimumOdd), inclusive em rows antigas, que
+// gravaram 100/(P − piso) contra 1/odd cru e pediam odd acima da própria análise. No
+// LLM é a odd que o modelo declarou (ADR 0012), e a contradição com a odd da análise,
+// quando aparece, é real.
 function resolveMinOdd(args: {
   prediction: PredictionInput;
   recommendation: string | null;
@@ -565,29 +572,46 @@ function resolveMinOdd(args: {
     (s) => s.key === recommendation
   )?.modelProbPct;
   if (modelProbPct == null) return stored;
-  const derived = computeMinOddForEdgeFloor({
-    oddByKey: Object.fromEntries(selections.map((s) => [s.key, s.odd])),
-    selectionKeys: selections.map((s) => s.key),
-    key: recommendation,
-    modelProbPct,
-    minEdgePp: args.minEdgePp,
-    impliedSumTarget: args.impliedSumTarget,
-  });
-  if (derived === null) return stored;
-  return args.oddAtRec !== null ? Math.min(derived, args.oddAtRec) : derived;
+  return (
+    computeMinimumOdd({
+      oddByKey: Object.fromEntries(selections.map((s) => [s.key, s.odd])),
+      selectionKeys: selections.map((s) => s.key),
+      key: recommendation,
+      modelProbPct,
+      minEdgePp: args.minEdgePp,
+      impliedSumTarget: args.impliedSumTarget,
+      oddAtRec: args.oddAtRec,
+    }) ?? stored
+  );
 }
 
-// Recomendação com prob. do modelo abaixo de 50%: é aposta de valor, não o resultado
-// mais provável, e por isso pode ir contra o palpite (dupla chance "Empate ou Remo" com
-// o palpite em 2–0 Cruzeiro). Sem implícita (ao vivo, row antiga) não há o que comparar.
-function valueBetNote(
-  modelProb: number | null,
-  impliedPct: number | null
-): string | null {
+// Recomendação com prob. do modelo abaixo de 50%: é aposta de valor e perde mais vezes
+// do que ganha. Quando outra seleção do mercado é mais provável pro modelo, ela também
+// não é o resultado mais provável e pode ir contra o palpite (dupla chance "Empate ou
+// Remo" com o palpite em 2–0 Cruzeiro); um 1X2 a 45% pode ser o favorito. Sem implícita
+// (ao vivo, row antiga) não há o que comparar; artilheiro (implícita-teto) fica de fora.
+function valueBetNote(args: {
+  modelProb: number | null;
+  impliedPct: number | null;
+  marketKind: string;
+  recommendation: string;
+  selections: PredictionInput["selections"];
+}): string | null {
+  const { modelProb, impliedPct } = args;
   if (modelProb === null || impliedPct === null) return null;
+  if (args.marketKind !== "partition") return null;
   const modelPct = modelProb * 100;
   if (modelPct >= 50) return null;
-  return `Aposta de valor, não o resultado mais provável: o modelo dá ${formatPct(modelPct)} de chance e o mercado, ${formatPct(impliedPct)}. Perde mais vezes do que ganha, por isso pode ir contra o palpite; compensa no longo prazo se o modelo estiver certo.`;
+  const numbers = `o modelo dá ${formatPct(modelPct)} de chance e o mercado, ${formatPct(impliedPct)}`;
+  const otherMoreLikely = (args.selections ?? []).some(
+    (s) =>
+      s.key !== args.recommendation &&
+      s.modelProbPct !== null &&
+      s.modelProbPct > modelPct,
+  );
+  return otherMoreLikely
+    ? `Aposta de valor, não o resultado mais provável: ${numbers}. Perde mais vezes do que ganha, por isso pode ir contra o palpite; compensa no longo prazo se o modelo estiver certo.`
+    : `Aposta de valor: ${numbers}. Perde mais vezes do que ganha; compensa no longo prazo se o modelo estiver certo.`;
 }
 
 // "Mais de 2,5" / "Vitória do Flamengo" / "sem aposta": o lado de uma recomendação pro

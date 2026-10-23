@@ -1257,19 +1257,28 @@ describe("toAnalysisView (N-vias / dupla chance) — edge da grade == edge persi
   });
 
   it("code_jev: odd mínima nunca passa da odd da análise (arredondamento do edge no gate)", () => {
-    // Edge de exatamente 5 pp na odd da análise: a odd mínima exata é a própria odd.
+    // Edge exato de 4,996 pp na odd da análise (o gate aprova com 5,00 arredondado):
+    // a odd do piso exata fica um fio acima de 3,32; o teto a segura na odd da análise.
+    const implied =
+      computeMarketScenarios({
+        selections: cruzeiroRemo.selections,
+        recommendedKey: "away_or_draw",
+        impliedSumTarget: 2,
+      }).selections[1].impliedProbPct!;
+    const p = implied + 4.996;
     const view = toAnalysisView(
       {
         ...cruzeiroRemo,
-        confidencePct: "34.30",
+        confidencePct: p.toFixed(2),
         edgePct: "5.00",
         selections: cruzeiroRemo.selections.map((s) =>
-          s.key === "away_or_draw" ? { ...s, modelProbPct: 34.3 } : s
+          s.key === "away_or_draw" ? { ...s, modelProbPct: p } : s
         ),
       },
       null,
       threeHoursLater
     );
+    expect(view.minOdd).toBe("3,32");
     expect(view.evLegend).not.toContain("abaixo da mínima");
   });
 
@@ -1287,6 +1296,31 @@ describe("toAnalysisView (N-vias / dupla chance) — edge da grade == edge persi
     const view = toAnalysisView(cruzeiroRemo, null, threeHoursLater);
     expect(view.valueNote).toBe(
       "Aposta de valor, não o resultado mais provável: o modelo dá 34,7% de chance e o mercado, 29,3%. Perde mais vezes do que ganha, por isso pode ir contra o palpite; compensa no longo prazo se o modelo estiver certo."
+    );
+  });
+
+  it("1X2 a 45% como seleção mais provável: aposta de valor, sem dizer que não é o mais provável", () => {
+    const view = toAnalysisView(
+      {
+        ...cruzeiroRemo,
+        recommendation: "home",
+        confidencePct: "45.00",
+        impliedProbPct: "39.00",
+        edgePct: "6.00",
+        oddAtRecommendation: "2.450",
+        promptVersion: "narrator_v1.4",
+        marketKey: "match_result",
+        selections: [
+          { key: "home", modelProbPct: 45, odd: 2.45 },
+          { key: "draw", modelProbPct: 28, odd: 3.3 },
+          { key: "away", modelProbPct: 27, odd: 3.0 },
+        ],
+      },
+      null,
+      threeHoursLater
+    );
+    expect(view.valueNote).toBe(
+      "Aposta de valor: o modelo dá 45% de chance e o mercado, 39%. Perde mais vezes do que ganha; compensa no longo prazo se o modelo estiver certo."
     );
   });
 

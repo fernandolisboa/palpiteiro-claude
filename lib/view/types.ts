@@ -198,8 +198,8 @@ export type AnalysisView = {
   // → 2; 1X2 → 3. É a fonte única de cenários dos componentes.
   outcomes: OutcomeView[];
   minOdd: string | null;
-  // Recomendação com prob. do modelo < 50%: avisa que é aposta de valor, não o
-  // resultado mais provável (e que pode ir contra o palpite). Ausente nos demais casos.
+  // Recomendação com prob. do modelo < 50%: avisa que é aposta de valor (e, se outra
+  // seleção é mais provável, que pode ir contra o palpite). Ausente nos demais casos.
   valueNote?: string;
   oddAtRec: string | null;
   oddAtRecAgo: string | null;
