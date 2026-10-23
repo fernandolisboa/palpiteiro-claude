@@ -127,7 +127,7 @@ describe("buildSearchTerms", () => {
     expect(terms("amanhã")).toEqual([{ kind: "day", day: "2026-10-24" }]);
     expect(terms("ontem")).toEqual([{ kind: "day", day: "2026-10-22" }]);
     expect(terms("sábado")).toEqual([{ kind: "weekday", isoDow: 6 }]);
-    expect(terms("dom")).toEqual([{ kind: "weekday", isoDow: 7 }]);
+    expect(terms("domingo")).toEqual([{ kind: "weekday", isoDow: 7 }]);
     expect(terms("terça-feira")).toEqual([{ kind: "weekday", isoDow: 2 }]);
   });
 
@@ -193,5 +193,25 @@ describe("filteredEmptyMessage", () => {
       detail:
         'Nada com "sábado" + Flamengo + não analisados neste período. Tente outro termo ou limpe os filtros.',
     });
+  });
+});
+
+describe("ajustes do review (#643)", () => {
+  it("'2.5' não é data; só barra ou hífen", () => {
+    expect(terms("2.5")[0]).toMatchObject({ kind: "text" });
+  });
+
+  it("abreviação de dia da semana não vira data (só 'sáb')", () => {
+    expect(terms("ter")[0]).toMatchObject({ kind: "text" });
+    expect(terms("sáb")).toEqual([{ kind: "weekday", isoDow: 6 }]);
+  });
+
+  it("no máximo 6 termos", () => {
+    expect(tokenizeQuery("a b c d e f g h")).toHaveLength(6);
+  });
+
+  it("'..' sai do texto (o voltar do jogo descartaria a URL)", () => {
+    expect(normalizeQuery("flamengo...")).toBe("flamengo");
+    expect(normalizeQuery("25..10")).toBe("25 10");
   });
 });

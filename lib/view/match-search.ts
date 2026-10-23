@@ -33,7 +33,13 @@ const analyzedSchema = z.enum(["yes", "no"]);
 /** Colapsa espaços e corta no teto; vazio vira undefined. */
 export function normalizeQuery(raw: string | undefined): string | undefined {
   if (typeof raw !== "string") return undefined;
-  const q = raw.replace(/\s+/g, " ").trim().slice(0, MAX_QUERY_LENGTH).trim();
+  const q = raw
+    // ".." no `back` do link do jogo faz o voltar descartar a URL (resolveBackHref).
+    .replace(/\.{2,}/g, " ")
+    .replace(/\s+/g, " ")
+    .trim()
+    .slice(0, MAX_QUERY_LENGTH)
+    .trim();
   return q === "" ? undefined : q;
 }
 
@@ -82,27 +88,27 @@ const LEAGUE_ALIASES: Partial<Record<SupportedLeague, string[]>> = {
   copa_sudamericana: ["sudamericana", "sulamericana"],
 };
 
-// Dia da semana ISO (1 = segunda … 7 = domingo), nome inteiro e abreviado.
+// Dia da semana ISO (1 = segunda … 7 = domingo). Só o nome inteiro (e "sáb"): as
+// abreviações "ter", "qua", "seg"… são começo de nome de time ("Terengganu") e
+// virariam filtro de data no meio da digitação.
 const WEEKDAYS: Record<string, number> = {
   segunda: 1,
-  seg: 1,
   terca: 2,
-  ter: 2,
   quarta: 3,
-  qua: 3,
   quinta: 4,
-  qui: 4,
   sexta: 5,
-  sex: 5,
   sabado: 6,
   sab: 6,
   domingo: 7,
-  dom: 7,
 };
+
+// Teto de termos: cada termo de texto leva as listas de times pro SQL.
+const MAX_TERMS = 6;
 
 const RELATIVE_DAYS: Record<string, number> = { ontem: -1, hoje: 0, amanha: 1 };
 
-const DATE_PATTERN = /^(\d{1,2})[/.-](\d{1,2})(?:[/.-](\d{2}|\d{4}))?$/;
+// Barra ou hífen; ponto não ("2.5" é a linha de gols, não 2 de maio).
+const DATE_PATTERN = /^(\d{1,2})[/-](\d{1,2})(?:[/-](\d{2}|\d{4}))?$/;
 
 /** Os termos da busca: minúsculos, sem acento, sem pontuação nas pontas. */
 export function tokenizeQuery(q: string): string[] {
@@ -112,7 +118,7 @@ export function tokenizeQuery(q: string): string[] {
     .split(/[\s,;]+/)
     .map((t) => t.replace(/^[^\p{L}\p{N}]+|[^\p{L}\p{N}]+$/gu, ""))
     .filter((t) => t !== "" && !STOPWORDS.has(t));
-  return [...new Set(tokens)];
+  return [...new Set(tokens)].slice(0, MAX_TERMS);
 }
 
 function pad2(n: number): string {

@@ -22,3 +22,18 @@ describe("resolveTimeZone", () => {
     expect(resolveTimeZone("America/Sao_Paulo; evil")).toBe(DEFAULT_TIME_ZONE);
   });
 });
+
+describe("resolveTimeZone — só nome IANA (#643)", () => {
+  it("rejeita offset cru, que o Postgres leria com o sinal trocado", () => {
+    expect(resolveTimeZone("+03:00")).toBe(DEFAULT_TIME_ZONE);
+    expect(resolveTimeZone("-0300")).toBe(DEFAULT_TIME_ZONE);
+  });
+
+  it("aceita UTC e nomes com +/- (Etc/GMT+3)", () => {
+    expect(resolveTimeZone("UTC")).toBe("UTC");
+    expect(resolveTimeZone("Etc/GMT+3")).toBe("Etc/GMT+3");
+    expect(resolveTimeZone("America/Argentina/Buenos_Aires")).toBe(
+      "America/Argentina/Buenos_Aires",
+    );
+  });
+});

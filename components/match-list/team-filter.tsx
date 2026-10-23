@@ -1,6 +1,6 @@
 "use client";
 
-import { useId, useState } from "react";
+import { useId, useState, useTransition } from "react";
 import { useRouter } from "next/navigation";
 import { Shield, X } from "lucide-react";
 
@@ -129,13 +129,14 @@ function TeamGrid({
 export function TeamFilter({ nav, groups, selected, surface }: Props) {
   const router = useRouter();
   const [open, setOpen] = useState(false);
+  const [pending, startTransition] = useTransition();
   const titleId = useId();
   const active = selected !== undefined;
 
   function pick(value: string) {
     setOpen(false);
     if (value === selected?.value) return;
-    router.push(buildFiltersHref(nav, { team: value }));
+    startTransition(() => router.push(buildFiltersHref(nav, { team: value })));
   }
 
   const trigger = (
@@ -143,7 +144,8 @@ export function TeamFilter({ nav, groups, selected, surface }: Props) {
       type="button"
       aria-current={active ? "true" : undefined}
       aria-label={active ? `Time: ${selected.team.name}. Trocar time` : "Filtrar por time"}
-      className={filterChipClassName(active, "max-w-56 gap-1.5")}
+      aria-busy={pending || undefined}
+      className={filterChipClassName(active, cn("max-w-56 gap-1.5", pending && "opacity-70"))}
     >
       {active ? (
         <TeamCrest team={selected.team} size={16} />

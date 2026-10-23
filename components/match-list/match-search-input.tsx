@@ -48,9 +48,16 @@ export function MatchSearchInput({
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
+  // A URL mudou (busca que voltou do servidor, voltar do navegador, limpar filtros,
+  // a outra cópia): o campo acompanha, a não ser que haja texto ainda não mandado.
+  // Com foco ou sem: o voltar do navegador não tira o foco do campo.
   useEffect(() => {
+    const sent = lastSent.current;
     lastSent.current = urlValue;
-    if (document.activeElement !== inputRef.current) setText(urlValue);
+    setText((current) => {
+      const typed = normalizeQuery(current) ?? "";
+      return typed === sent && typed !== urlValue ? urlValue : current;
+    });
   }, [urlValue]);
 
   function submit(raw: string) {

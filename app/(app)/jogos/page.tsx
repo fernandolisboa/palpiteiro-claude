@@ -188,6 +188,14 @@ export default async function JogosPage({ searchParams }: PageProps) {
   // escudos e o casamento de time da busca. Com busca, a query de jogos espera por
   // ele; sem, corre junto.
   const catalogPromise = getTeamsInRange(rangeWhere);
+  // Predições recentes e estado do tour só dependem do usuário: saem já, sem esperar
+  // o catálogo nem a query de jogos.
+  const recentPromise = getRecentPredictedMatchesByUser(userId, RECENT_MATCH_LIMIT);
+  const tourPromise = getTourState(userId);
+  // Podem falhar enquanto a busca espera o catálogo, antes do Promise.all abaixo: o
+  // catch vazio só evita o aviso de rejeição sem handler (o Promise.all ainda lança).
+  recentPromise.catch(() => {});
+  tourPromise.catch(() => {});
   const search = filters.q
     ? buildSearchTerms({
         q: filters.q,
@@ -210,12 +218,10 @@ export default async function JogosPage({ searchParams }: PageProps) {
     limit: limit + 1,
   };
 
-  // Predições recentes e estado do tour só dependem do usuário: correm junto da
-  // query de jogos em vez de esperar por ela.
   const [queried, recentRaw, tourState, catalog] = await Promise.all([
     loadRangeMatches(matchesQuery),
-    getRecentPredictedMatchesByUser(userId, RECENT_MATCH_LIMIT),
-    getTourState(userId),
+    recentPromise,
+    tourPromise,
     catalogPromise,
   ]);
   const truncated = queried.length > limit;
@@ -424,7 +430,11 @@ function FilterRow({
   const navProps = rangeNavProps(range);
   const nav = navState(league, range, filters);
   return (
-    <FilterScrollRow activeKey={buildLeagueHref(nav, league)} className={className}>
+    // Sem o texto da busca na chave: cada busca digitada não rola a linha de chips.
+    <FilterScrollRow
+      activeKey={buildFiltersHref(nav, { q: undefined })}
+      className={className}
+    >
       <div data-tour="league-picker" className="shrink-0">
         <LeaguePicker
           value={league}

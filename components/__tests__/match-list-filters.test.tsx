@@ -132,3 +132,50 @@ describe("filtros da lista de jogos (#643)", () => {
     );
   });
 });
+
+describe("busca: voltar do navegador com o campo em foco (#643)", () => {
+  let container: HTMLDivElement;
+  let root: Root;
+  beforeEach(() => {
+    (globalThis as { IS_REACT_ACT_ENVIRONMENT?: boolean }).IS_REACT_ACT_ENVIRONMENT = true;
+    vi.useFakeTimers();
+    router.replace.mockClear();
+    container = document.createElement("div");
+    document.body.appendChild(container);
+    root = createRoot(container);
+  });
+  afterEach(() => {
+    act(() => root.unmount());
+    container.remove();
+    document.body.innerHTML = "";
+    vi.useRealTimers();
+  });
+
+  it("sem texto pendente, o campo acompanha a URL mesmo com foco", () => {
+    act(() => root.render(<MatchSearchInput nav={{ ...NAV, filters: { q: "flamengo" } }} />));
+    const input = container.querySelector("input")!;
+    input.focus();
+    act(() => root.render(<MatchSearchInput nav={{ ...NAV, filters: { q: "fla" } }} />));
+    expect(input.value).toBe("fla");
+    act(() => vi.advanceTimersByTime(SEARCH_DEBOUNCE_MS * 2));
+    expect(router.replace).not.toHaveBeenCalled();
+  });
+
+  it("com texto ainda não mandado, o campo não é sobrescrito", () => {
+    act(() => root.render(<MatchSearchInput nav={NAV} />));
+    const input = container.querySelector("input")!;
+    act(() => type(input, "flamengo"));
+    act(() => root.render(<MatchSearchInput nav={{ ...NAV, filters: { q: "gremio" } }} />));
+    expect(input.value).toBe("flamengo");
+  });
+
+  it("espaço digitado depois da busca mandada não some quando a URL chega", () => {
+    act(() => root.render(<MatchSearchInput nav={NAV} />));
+    const input = container.querySelector("input")!;
+    act(() => type(input, "flamengo"));
+    act(() => vi.advanceTimersByTime(SEARCH_DEBOUNCE_MS));
+    act(() => type(input, "flamengo "));
+    act(() => root.render(<MatchSearchInput nav={{ ...NAV, filters: { q: "flamengo" } }} />));
+    expect(input.value).toBe("flamengo ");
+  });
+});

@@ -15,8 +15,13 @@ export const DEFAULT_TIME_ZONE = "America/Sao_Paulo";
  * `RangeError` em fuso desconhecido) — também blinda os format helpers de um
  * cookie forjado/corrompido.
  */
+// Só nome IANA ("America/Sao_Paulo", "Etc/GMT+3") ou "UTC": o `Intl` também aceita
+// offsets como "+03:00", que o Postgres lê com o sinal trocado (POSIX) quando o fuso
+// vai pra query (busca por data da lista de jogos, #643).
+const IANA_SHAPE = /^(?:UTC|[A-Za-z]+(?:\/[A-Za-z0-9_+-]+)+)$/;
+
 export function resolveTimeZone(raw: string | undefined | null): string {
-  if (raw) {
+  if (raw && IANA_SHAPE.test(raw)) {
     try {
       // Lança se `raw` não for um time zone reconhecido.
       new Intl.DateTimeFormat("en-US", { timeZone: raw });
