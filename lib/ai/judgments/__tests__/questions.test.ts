@@ -53,8 +53,10 @@ describe("jev_judgments_v3", () => {
       "attack_weakened_home",
       "defense_weakened_away",
     ] as const) {
-      expect(JUDGMENT_QUESTIONS[id].criteria.false).toContain(
-        "`player (...)` has an unknown role and does not by itself make the statement true"
+      const no = JUDGMENT_QUESTIONS[id].criteria.false;
+      expect(no).toContain("An absence listed only as `player (...)`");
+      expect(no).toContain(
+        "has an unknown role and does not by itself make the statement true"
       );
     }
   });
@@ -120,9 +122,19 @@ describe("jev_judgments_v3", () => {
     expect(defense.false).toContain(
       "`home_team.starters_left_out` has no starting defender and no first-choice goalkeeper"
     );
+    // A regra do em dúvida com a escalação anunciada vale igual no true e no false.
     for (const c of [attack, defense]) {
+      for (const text of [c.true, c.false]) {
+        expect(text).toContain(
+          "Once `home_team.lineup` is announced, a doubtful player still listed in `home_team.absences` is not starting and counts like an injured one."
+        );
+      }
       expect(c.true).toContain(
-        "Once `home_team.lineup` is announced, every player still listed in `home_team.absences` is outside the starting lineup, including doubtful ones."
+        'While `home_team.lineup` is "not announced", a doubtful starting'
+      );
+      // Entrada de posição desconhecida em starters_left_out.
+      expect(c.false).toContain(
+        "an entry of `home_team.starters_left_out` listed as `starting player`, has an unknown role"
       );
     }
     expect(
@@ -136,27 +148,48 @@ describe("jev_judgments_v3", () => {
     );
   });
 
-  it("papéis de `starters_left_out` citados existem no que state.ts emite", () => {
-    const { starters_left_out } = lineupStateFields({
+  it("os criteria citam todo o vocabulário de escalação que state.ts emite (#619)", () => {
+    const allCriteria = Object.values(JUDGMENT_QUESTIONS)
+      .map((q) => {
+        const c = q.criteria as Criteria;
+        return `${c.true} ${c.false}`;
+      })
+      .join(" ");
+    // Todo valor de `lineup`, tirado do emissor (lineupStateFields).
+    const lineupValues = [
+      lineupStateFields({ status: "not_announced" }).lineup,
+      lineupStateFields({ status: "announced", changes: null, leftOut: [] })
+        .lineup,
+      ...(["0-2", "3-4", "5+"] as const).map(
+        (changes) =>
+          lineupStateFields({ status: "announced", changes, leftOut: [] })
+            .lineup
+      ),
+    ];
+    expect(new Set(lineupValues).size).toBe(5);
+    for (const value of lineupValues) {
+      expect(allCriteria).toContain(`"${value}"`);
+    }
+    // Papéis de `starters_left_out` que algum critério lê (meia não pesa em nenhum
+    // fator, como meia em `absences`), também tirados do emissor.
+    const roles = lineupStateFields({
       status: "announced",
       changes: "3-4",
       leftOut: [
-        { position: "goalkeeper", whereabouts: "bench" },
+        { position: "goalkeeper" },
         { position: "defender" },
-        { position: "forward", whereabouts: "out_of_squad" },
+        { position: "forward" },
+        {},
       ],
-    });
-    expect(starters_left_out).toEqual([
-      "first-choice goalkeeper (on the bench)",
-      "starting defender",
-      "starting forward (not in the squad)",
-    ]);
-    for (const role of [
+    }).starters_left_out;
+    expect(roles).toEqual([
       "first-choice goalkeeper",
       "starting defender",
       "starting forward",
-    ]) {
-      expect(starters_left_out.some((s) => s.startsWith(role))).toBe(true);
+      "starting player",
+    ]);
+    for (const role of roles) {
+      expect(allCriteria).toContain(role);
     }
   });
 });

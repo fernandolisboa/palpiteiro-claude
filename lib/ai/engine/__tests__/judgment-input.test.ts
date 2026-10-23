@@ -254,10 +254,10 @@ describe("pickLineupBaseline (#619)", () => {
     expect(pickLineupBaseline([midweek, clean], args)).toBe(clean);
   });
 
-  it("todos congestionados → o mais recente", () => {
+  it("todos congestionados → undefined (mudanças desconhecidas; o calendário decide)", () => {
     const a = inCompetition(at(-6 * DAY), LEAGUE);
     const b = inCompetition(at(-8 * DAY), LEAGUE, "Vasco");
-    expect(pickLineupBaseline([b, a], args)).toBe(a);
+    expect(pickLineupBaseline([b, a], args)).toBeUndefined();
   });
 });
 
@@ -336,6 +336,31 @@ describe("buildMatchJudgmentInput com a escalação deste jogo (#619)", () => {
       changes: "0-2",
       leftOut: [],
     });
+  });
+
+  it("providerAbsences mantém quem está no XI de hoje (conferência das afirmações)", () => {
+    // J10 lesionado, mas titular hoje: sai de absences, fica em providerAbsences.
+    const input = buildMatchJudgmentInput({
+      ...base,
+      lineups: {
+        fixtureId: "fx",
+        home: xi("Flamengo", ELEVEN),
+        away: xi(
+          "Palmeiras",
+          ELEVEN.map((n) => n + 100)
+        ),
+      },
+      lineupBaseline: { home: xi("Flamengo", ELEVEN) },
+    });
+    expect(input.absences.home).toEqual([]);
+    expect(input.providerAbsences.home).toEqual([
+      {
+        injury: injuredJ10,
+        position: "forward",
+        isRegularStarter: true,
+        isTopScorer: undefined,
+      },
+    ]);
   });
 
   it("o XI do jogo anterior vence o de referência no papel do desfalcado", () => {

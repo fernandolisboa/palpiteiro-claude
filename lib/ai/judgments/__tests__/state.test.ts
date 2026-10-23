@@ -616,7 +616,7 @@ describe("summarizeLineup (#619)", () => {
     ).toEqual(["starting forward"]);
   });
 
-  it("providers misturados, jogador sem id ou XI incompleto → mudanças desconhecidas", () => {
+  it("providers misturados, jogador sem id na referência ou XI incompleto → mudanças desconhecidas", () => {
     const unknown = { status: "announced", changes: null, leftOut: [] };
     // Referência do football-data.org × hoje da API-Football.
     expect(
@@ -626,11 +626,28 @@ describe("summarizeLineup (#619)", () => {
         absences: [],
       })
     ).toEqual(unknown);
-    // Um titular sem id.
-    const noId = todayXi([]);
-    noId.starters[4] = { name: "Jogador Sem Id", position: "DEF" };
+    // Um titular da referência sem id.
+    const refNoId = referenceXi();
+    refNoId.starters[4] = { name: "Jogador Sem Id", position: "DEF" };
     expect(
-      summarizeLineup({ today: noId, reference: referenceXi(), absences: [] })
+      summarizeLineup({ today: todayXi([]), reference: refNoId, absences: [] })
+    ).toEqual(unknown);
+    // Hoje sem id nenhum (fallback football-data.org) × referência da API-Football.
+    const noIds = todayXi([]);
+    noIds.starters = noIds.starters.map(({ providerPlayerId: _id, ...p }) => p);
+    expect(
+      summarizeLineup({ today: noIds, reference: referenceXi(), absences: [] })
+    ).toEqual(unknown);
+    // Ids repetidos no XI de hoje ou no de referência.
+    const dupToday = todayXi([]);
+    dupToday.starters[4] = player(4, "DEF");
+    expect(
+      summarizeLineup({ today: dupToday, reference: referenceXi(), absences: [] })
+    ).toEqual(unknown);
+    const dupRef = referenceXi();
+    dupRef.starters[4] = player(4, "DEF");
+    expect(
+      summarizeLineup({ today: todayXi([]), reference: dupRef, absences: [] })
     ).toEqual(unknown);
     // Prefixos misturados dentro do mesmo XI.
     const mixed = todayXi([]);
@@ -648,6 +665,51 @@ describe("summarizeLineup (#619)", () => {
       lineup: "announced, changes unknown",
       starters_left_out: [],
     });
+  });
+
+  it("titular de hoje sem id (estreante) não impede a contagem", () => {
+    // O id 5 sai e entra um estreante sem id: conta 1 mudança, como deve.
+    const today = todayXi([]);
+    today.starters[4] = { name: "Jogador Estreante", position: "DEF" };
+    expect(
+      summarizeLineup({ today, reference: referenceXi(), absences: [] })
+    ).toEqual({
+      status: "announced",
+      changes: "0-2",
+      leftOut: [{ position: "defender", whereabouts: "out_of_squad" }],
+    });
+  });
+
+  it("XI de hoje vazio = escalação não anunciada", () => {
+    expect(
+      summarizeLineup({
+        today: { team: "Team 1", starters: [], bench: [] },
+        reference: referenceXi(),
+        absences: [],
+      })
+    ).toEqual({ status: "not_announced" });
+  });
+
+  it("desfalcado casa com o XI de referência por id mesmo com o nome curto", () => {
+    // /injuries grafa "J. Pafúncio"; a referência tem "Jogador Pafúncio", id 5.
+    const shortName: NormalizedInjury = {
+      ...injury("J. Pafúncio"),
+      player: { name: "J. Pafúncio", providerPlayerId: "api-football:5" },
+    };
+    const absences = enrichAbsences([shortName], {
+      lastLineup: referenceXi(),
+    });
+    expect(absences.map(describeAbsence)).toEqual([
+      "starting defender (injured)",
+    ]);
+    // Forçada, não voluntária: o 5 fora hoje não entra em starters_left_out.
+    expect(
+      summarizeLineup({
+        today: todayXi([5]),
+        reference: referenceXi(),
+        absences,
+      })
+    ).toEqual({ status: "announced", changes: "0-2", leftOut: [] });
   });
 
   it("vocabulário do campo lineup", () => {
@@ -698,6 +760,68 @@ describe("enrichAbsences com a escalação confirmada (#619)", () => {
         "announced, 0 to 2 voluntary changes from the usual starting lineup",
       starters_left_out: [],
     });
+  });
+
+  it("lesionado (não só em dúvida) entre os titulares de hoje também sai", () => {
+    const absences = enrichAbsences([absentee(10), absentee(3, "suspended")], {
+      lastLineup: referenceXi(),
+      confirmedLineup: todayXi([]),
+    });
+    expect(absences).toEqual([]);
+  });
+
+  it("por id: nome curto do /injuries × nome completo do XI de hoje", () => {
+    const short: NormalizedInjury = {
+      ...injury("J. Wellingtão", "doubtful"),
+      player: { name: "J. Wellingtão", providerPlayerId: "api-football:8" },
+    };
+    expect(
+      enrichAbsences([short], {
+        lastLineup: referenceXi(),
+        confirmedLineup: todayXi([]),
+      })
+    ).toEqual([]);
+    // Mesmo id em outro jogador do XI não importa: o 8 no banco segue desfalque.
+    expect(
+      enrichAbsences([short], {
+        lastLineup: referenceXi(),
+        confirmedLineup: todayXi([8], { benched: [8] }),
+      }).map(describeAbsence)
+    ).toEqual(["starting midfielder (doubtful)"]);
+  });
+
+  it("id de outro provider → cai no nome normalizado", () => {
+    // Desfalque do SportMonks (outro prefixo) com o nome igual ao do XI.
+    const other: NormalizedInjury = {
+      ...injury("Jogador Wellingtão", "doubtful"),
+      player: { name: "Jogador Wellingtão", providerPlayerId: "sportmonks:99" },
+    };
+    expect(
+      enrichAbsences([other], {
+        lastLineup: referenceXi(),
+        confirmedLineup: todayXi([]),
+      })
+    ).toEqual([]);
+    // Nome curto + outro provider: não casa (sem id comum, nome diferente).
+    const otherShort: NormalizedInjury = {
+      ...other,
+      player: { name: "J. Wellingtão", providerPlayerId: "sportmonks:99" },
+    };
+    expect(
+      enrichAbsences([otherShort], {
+        lastLineup: referenceXi(),
+        confirmedLineup: todayXi([]),
+      }).map(describeAbsence)
+    ).toEqual(["player (doubtful)"]);
+  });
+
+  it("XI de hoje vazio não tira ninguém de absences", () => {
+    expect(
+      enrichAbsences([absentee(10, "doubtful")], {
+        lastLineup: referenceXi(),
+        confirmedLineup: { team: "Team 1", starters: [] },
+      }).map(describeAbsence)
+    ).toEqual(["starting forward (doubtful)"]);
   });
 
   it("sem a escalação confirmada nada muda", () => {

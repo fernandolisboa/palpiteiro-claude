@@ -812,3 +812,68 @@ describe("paridade cron → predict", () => {
     });
   });
 });
+
+describe("escalação publicada no cron (#619)", () => {
+  it("referência que falha → o JEV roda mesmo assim, com 'announced, changes unknown' (fail-open)", async () => {
+    const kickoff = inHours(2);
+    const id = await insertMatch("brasileirao_a", BR[0], BR[1], kickoff);
+    const pastAt = new Date(kickoff.getTime() - 6 * 24 * HOUR);
+    const past = (home: string, away: string) => ({
+      id: `past:${home}:${away}`,
+      league: "brasileirao_a" as const,
+      kickoffAt: pastAt.toISOString(),
+      kickoffTimestampMs: pastAt.getTime(),
+      homeTeam: home,
+      awayTeam: away,
+      status: "finished" as const,
+      score: { home: 1, away: 0 },
+      competition: {
+        name: "Serie A",
+        league: "brasileirao_a" as const,
+        friendly: false,
+      },
+    });
+    provider.getTeamForm.mockImplementation((team: string) =>
+      Promise.resolve([team === BR[0] ? past(BR[0], BR[2]) : past(BR[3], BR[1])])
+    );
+    const xi = (team: string) => ({
+      team,
+      starters: Array.from({ length: 11 }, (_, i) => ({
+        name: `Jogador ${team} ${i + 1}`,
+        position: i === 0 ? "GK" : "DEF",
+        providerPlayerId: `api-football:${team.length * 1000 + i + 1}`,
+      })),
+    });
+    provider.getLineups.mockImplementation(
+      (ref: { kickoffAt: string; homeTeam: string; awayTeam: string }) =>
+        ref.kickoffAt === kickoff.toISOString()
+          ? Promise.resolve({
+              fixtureId: "today",
+              home: xi(ref.homeTeam),
+              away: xi(ref.awayTeam),
+            })
+          : Promise.reject(new Error("api-football down"))
+    );
+
+    await computeMatchModels({ now: NOW, leagues: ["brasileirao_a"] });
+
+    expect(judge).toHaveBeenCalledTimes(1);
+    const state = judge.mock.calls[0][0] as {
+      home_team: { lineup: string; starters_left_out: string[] };
+      away_team: { lineup: string; starters_left_out: string[] };
+    };
+    for (const team of [state.home_team, state.away_team]) {
+      expect(team).toMatchObject({
+        lineup: "announced, changes unknown",
+        starters_left_out: [],
+      });
+    }
+    const [snap] = await snapshotsOf(id);
+    expect(snap.jevStatus).toBe("applied");
+    expect(
+      vi
+        .mocked(console.error)
+        .mock.calls.filter((c) => String(c[0]).includes("past_lineup_fetch_failed"))
+    ).toHaveLength(2);
+  });
+});

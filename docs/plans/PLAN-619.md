@@ -120,7 +120,7 @@ Divisão em **dois PRs**: **A** = state v3 (sinal da escalação no JEV, sem rec
 
 1. **Mudanças voluntárias, não totais.** O bucket conta só titulares do XI de referência fora do XI de hoje **e fora de `absences`** (= `starters_left_out.length`). Lesionado/suspenso já pesa em `attack_weakened`/`defense_weakened`; contar de novo em `rotation_risk` puniria duas vezes o mesmo λ. O campo vira `"announced, 0 to 2 voluntary changes from the usual starting lineup"` etc.
 2. **Diff só com id do mesmo provider.** `changes` só é calculado quando os dois XIs têm 11 titulares com `providerPlayerId` do mesmo prefixo; senão `null` ("changes unknown"). Football-data.org (fallback de escalação) escreve nomes diferentes e daria "5+" falso. Nome normalizado só pro cruzamento desfalcado ↔ XI (já é assim hoje).
-3. **Referência sem prazo**, como `fetchPreviousLineups` (no máximo +2 req via memo compartilhado). Com prazo, a análise interativa depois da escalação sairia quase sempre "changes unknown" e quebraria a paridade de `stateHash` com o cron.
+3. **Referência sem prazo**, como `fetchPreviousLineups` (até +4 req: referências em datas diferentes custam a busca de jogos por data e a escalação de cada uma; o memo compartilhado evita repetir o mesmo jogo). Com prazo, a análise interativa depois da escalação sairia quase sempre "changes unknown" e quebraria a paridade de `stateHash` com o cron.
 4. **`defense_weakened` também lê `starters_left_out`** (goleiro titular / zagueiro titular no banco), já que o bump v3 é a parte cara; evita um v4.
 5. `compute-match-models`: `RUN_DEADLINE_MS` 180 → 150 s (comentário com a conta nova).
 6. Testes extras: paridade predict ↔ cron com escalação publicada; diff `null` com providers mistos/sem id; voluntária × forçada; em dúvida no XI sai de `absences` e não entra em `starters_left_out`, em dúvida no banco fica; `pickLineupBaseline` (amistoso, sem `competition`, > 45 dias, congestionado); LGPD (nomes marcantes na fixture, ausentes do state e do jsonb).
@@ -143,4 +143,18 @@ Divisão em **dois PRs**: **A** = state v3 (sinal da escalação no JEV, sem rec
 
 - As strings de `lineup` e o tipo `LineupChangeBucket` ficam em `lib/ai/judgments/lineup-vocabulary.ts` (sem dependências), reexportados por `state.ts`. Motivo: `questions.ts` cita essas strings e é importado por componentes de cliente via `lib/user-palpite/types`; importar `state.ts` puxaria o mapa de times canônicos pro bundle.
 - `starters_left_out` só leva o lugar entre parênteses quando o banco de hoje veio com id do mesmo provider em todos os jogadores; senão sai sem parênteses (mesma regra do item 2 do review).
-- Fica para depois (sem bump do narrador neste PR): `FACTOR_PHRASE` de `attack_weakened`/`defense_weakened` em `lib/ai/markets/_narrator/labels.ts` começa com "Desfalques…", e na v3 o fator também pode subir por titular poupado (`starters_left_out`).
+- ~~Fica para depois (sem bump do narrador neste PR)~~ Feito no code review (`narrator_v1.4`, item 6 abaixo): `FACTOR_PHRASE` de `attack_weakened`/`defense_weakened` em `lib/ai/markets/_narrator/labels.ts` começa com "Desfalques…", e na v3 o fator também pode subir por titular poupado (`starters_left_out`).
+
+### Ajustes do code review do PR A
+
+1. Desfalcado ↔ XI por id: `NormalizedInjury.player.providerPlayerId` (`api-football:<id>`, mesmo formato da escalação), porque o `/injuries` grafa o nome curto ("K. Walker"). Vale pra tirar o titular de hoje de `absences`, pra excluir desfalcado das mudanças voluntárias e pro papel no XI anterior/de referência. Id de prefixo diferente ou ausente → nome normalizado.
+2. `pickLineupBaseline`: todos os candidatos congestionados → `undefined` ("changes unknown", o calendário decide), não o mais recente.
+3. Atacante titular poupado conta em `rotation_risk` e em `attack_weakened`: aceito e documentado no ADR 0041.
+4. Criteria de `attack_weakened`/`defense_weakened`: "Once `T.lineup` is announced, a doubtful player still listed in `T.absences` is not starting and counts like an injured one" no true e no false; `starting player` (posição desconhecida) citado como papel desconhecido. Segue `jev_judgments_v3` (não mergeado).
+5. XI vazio não é escalação: adapter da API-Football devolve `undefined` com `startXI` vazio de um lado; `summarizeLineup`/`enrichAbsences` tratam XI de hoje sem titulares como não anunciado.
+6. Narrador `narrator_v1.4`: `FACTOR_PHRASE` de ataque/defesa cobre desfalque e titular poupado (commit `prompt:` próprio).
+7. Conferência das afirmações do usuário recebe `providerAbsences` (lista do provider, sem tirar o XI de hoje), igual a `lib/user-palpite/facts.ts`.
+8. Falha de escalação passada logada uma vez, dentro do memo (`past_lineup_fetch_failed`, só nomes dos times); o memo vira `undefined` e os chamadores não logam.
+9. Só o XI de referência precisa de ids completos. Hoje basta 11 titulares, ids sem repetição, nenhum de outro provider e ao menos um do mesmo (estreante sem id conta como mudança; hoje sem id nenhum, o fallback football-data.org, segue "changes unknown").
+10. Custo corrigido pra "até +4 req" (item 3 acima e ADR); ADR registra a espera maior atrás do limite de 8 req/min na análise interativa.
+11. Testes novos: nome curto × completo por id, fallback por nome, lesionado no XI de hoje sai, ids repetidos, estreante sem id, XI vazio (state e adapter), lançamento síncrono no memo, cron fail-open com a referência falhando, `providerAbsences` na conferência, vocabulário inteiro nos criteria.

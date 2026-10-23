@@ -178,7 +178,13 @@ export type NormalizedStanding = z.infer<typeof NormalizedStandingSchema>;
 // consumidores/construtores de NormalizedInjury). Hoje só a API-Football produz
 // injuries e marca `source:"official"`.
 export const NormalizedInjurySchema = z.object({
-  player: z.object({ name: z.string().min(1) }),
+  player: z.object({
+    name: z.string().min(1),
+    // Mesmo formato de NormalizedLineupPlayer.providerPlayerId ("api-football:123"),
+    // #619: o /injuries grafa o nome curto ("K. Walker") e a escalação o completo; o
+    // cruzamento desfalcado ↔ XI vai por id quando os dois lados têm (state.ts).
+    providerPlayerId: z.string().min(1).optional(),
+  }),
   type: z.enum(["injury", "suspension"]),
   reason: z.string().optional(),
   status: z.enum(["injured", "suspended", "doubtful"]),

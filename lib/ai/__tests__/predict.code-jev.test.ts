@@ -1650,6 +1650,11 @@ describe("escalação confirmada no state JEV (#619)", () => {
   });
 
   it("referência que falha → 'announced, changes unknown' e a análise segue (fail-open)", async () => {
+    // Visitante desfalcado: o jogo anterior dele É a referência (uma busca, um log).
+    getInjuriesByFixture.mockResolvedValue({
+      home: [],
+      away: [{ player: { name: NAMES[12] }, type: "injury", status: "injured" }],
+    });
     getLineups.mockImplementation((ref: FixtureRef) =>
       isThisMatch(ref) ? Promise.resolve(TODAY) : Promise.reject(new Error("boom"))
     );
@@ -1668,10 +1673,79 @@ describe("escalação confirmada no state JEV (#619)", () => {
       home: { changes: null, leftOut: 0 },
       away: { changes: null, leftOut: 0 },
     });
-    expect(err.mock.calls.map((c) => String(c[0]))).toContainEqual(
-      expect.stringContaining("lineup_baseline_fetch_failed")
+    // Um log por jogo buscado, dentro do memo; os chamadores não logam de novo.
+    const logs = err.mock.calls.map((c) => String(c[0]));
+    const pastFailures = logs.filter((l) => l.includes("past_lineup_fetch_failed"));
+    expect(pastFailures).toHaveLength(2);
+    expect(
+      pastFailures.filter((l) => l.includes(`"homeTeam":"${AWAY_PAST.homeTeam}"`))
+    ).toHaveLength(1);
+    expect(logs.some((l) => /previous_lineup_fetch_failed|lineup_baseline_fetch_failed/.test(l))).toBe(
+      false
     );
     err.mockRestore();
+  });
+
+  it("getLineups que lança SÍNCRONO num jogo passado também é fail-open", async () => {
+    getLineups.mockImplementation((ref: FixtureRef) => {
+      if (isThisMatch(ref)) return Promise.resolve(TODAY);
+      throw new Error("sync boom");
+    });
+    const err = vi.spyOn(console, "error").mockImplementation(() => {});
+
+    const result = await run();
+
+    expect(result.prediction).toBeDefined();
+    expect(judge).toHaveBeenCalledTimes(1);
+    expect(stateSent().home_team.lineup).toBe("announced, changes unknown");
+    expect(stateSent().away_team.lineup).toBe("announced, changes unknown");
+    expect(
+      err.mock.calls.filter((c) => String(c[0]).includes("past_lineup_fetch_failed"))
+    ).toHaveLength(2);
+    err.mockRestore();
+  });
+
+  it("conferência das afirmações recebe os desfalques do provider, sem tirar o XI de hoje", async () => {
+    // Lesionado na lista do provider mas titular hoje: sai do state do JEV, e a
+    // afirmação do usuário segue conferida contra a lista crua (como em facts.ts).
+    const starterToday = `${NAMES[3]} 2`;
+    getInjuriesByFixture.mockResolvedValue({
+      home: [],
+      away: [{ player: { name: starterToday }, type: "injury", status: "injured" }],
+    });
+    getLineups.mockImplementation((ref: FixtureRef) => {
+      if (isThisMatch(ref)) return Promise.resolve(TODAY);
+      if (ref.kickoffAt === HOME_PAST.kickoffAt) {
+        return Promise.resolve(lineupOf(HOME_PAST, ELEVEN, ELEVEN));
+      }
+      return Promise.resolve(lineupOf(AWAY_PAST, ELEVEN, ELEVEN));
+    });
+    const claim: Claim = {
+      team: "away",
+      topic: "absence",
+      text: "o visitante está sem o zagueiro citado",
+      players: [starterToday],
+      role: "defense",
+    };
+
+    await predict({
+      matchId: "m-1",
+      userId: "u-1",
+      isAdmin: true,
+      marketKey: "match_result",
+      userContextP: Promise.resolve<ExtractResult>({
+        ok: true,
+        claims: [claim],
+        warnings: [],
+        aiCallId: "ai-extract",
+      }),
+    });
+
+    expect(stateSent().away_team.absences).toEqual([]);
+    expect(lastPrediction().userContext?.claims[0]).toMatchObject({
+      topic: "absence",
+      status: "confirmed",
+    });
   });
 });
 

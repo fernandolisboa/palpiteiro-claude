@@ -967,7 +967,11 @@ function toNormalizedTopScorer(
 function toNormalizedInjury(injury: ApiFootballInjury): NormalizedInjury {
   const status = mapApiFootballAbsenceStatus(injury);
   return {
-    player: { name: injury.player.name },
+    player: {
+      name: injury.player.name,
+      // #619: id pro cruzamento com a escalação (o nome aqui é o curto).
+      providerPlayerId: `api-football:${injury.player.id}`,
+    },
     type: status === "suspended" ? "suspension" : "injury",
     reason: injury.player.reason ?? undefined,
     status,
@@ -1479,7 +1483,15 @@ export class ApiFootballAdapter implements SportsDataProvider {
         (l) =>
           canonicalizeOrPassthrough(l.team.name, ref.league) === ref.awayTeam
       );
-      if (!homeLineup || !awayLineup) return undefined;
+      // XI vazio de um lado = escalação ainda não publicada (#619).
+      if (
+        !homeLineup ||
+        !awayLineup ||
+        homeLineup.startXI.length === 0 ||
+        awayLineup.startXI.length === 0
+      ) {
+        return undefined;
+      }
       return {
         fixtureId: compositeFixtureKey(ref),
         home: toNormalizedTeamLineup(homeLineup, ref.league),

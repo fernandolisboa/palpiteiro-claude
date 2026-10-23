@@ -926,7 +926,9 @@ async function runPredict(
         teams: { home: match.homeTeam, away: match.awayTeam },
         league: match.league,
         kickoffAt: match.kickoffAt,
-        absences: injuries.unavailable ? null : input.absences,
+        // Lista do provider, sem tirar o XI de hoje (#619): a conferência das
+        // afirmações não muda com a escalação (igual a user-palpite/facts.ts).
+        absences: injuries.unavailable ? null : input.providerAbsences,
         homeForm,
         awayForm,
         standings,
@@ -2427,7 +2429,8 @@ async function prepareMatchJudgmentInput(args: {
 // Escalação de um jogo passado da forma, memoizada por chamada de
 // prepareMatchJudgmentInput (#619): o jogo anterior do time desfalcado e o XI de
 // referência costumam ser o MESMO jogo (num mata-mata de ida e volta, o dos dois
-// times) → uma busca só. A rejeição fica na promise memoizada; cada chamador trata.
+// times) → uma busca só. Fail-open aqui dentro: erro (inclusive síncrono) é logado UMA
+// vez e vira undefined pra todos os chamadores.
 type PastLineupFetch = (
   f: NormalizedFixture,
 ) => Promise<NormalizedLineup | undefined>;
@@ -2438,16 +2441,27 @@ function pastLineupFetcher(provider: SportsDataProvider): PastLineupFetch {
     const key = [f.league, f.kickoffAt, f.homeTeam, f.awayTeam].join("|");
     let pending = memo.get(key);
     if (!pending) {
-      try {
-        pending = provider.getLineups({
-          league: f.league,
-          kickoffAt: f.kickoffAt,
-          homeTeam: f.homeTeam,
-          awayTeam: f.awayTeam,
-        });
-      } catch (err) {
-        pending = Promise.reject(err);
-      }
+      pending = (async () => {
+        try {
+          return await provider.getLineups({
+            league: f.league,
+            kickoffAt: f.kickoffAt,
+            homeTeam: f.homeTeam,
+            awayTeam: f.awayTeam,
+          });
+        } catch (err) {
+          console.error(
+            JSON.stringify({
+              scope: "predict",
+              error: "past_lineup_fetch_failed",
+              homeTeam: f.homeTeam,
+              awayTeam: f.awayTeam,
+              message: err instanceof Error ? err.message : String(err),
+            }),
+          );
+          return undefined;
+        }
+      })();
       memo.set(key, pending);
     }
     return pending;
@@ -2467,8 +2481,9 @@ function lineupSideOf(
 // XI de referência de cada time (#619, pickLineupBaseline): SÓ com a escalação deste
 // jogo publicada (antes dela, zero request e o state fica "not announced"). Sem prazo,
 // como a escalação anterior: com prazo, a análise interativa depois da escalação
-// sairia quase sempre "changes unknown" e o stateHash divergiria do cron. Fail-open:
-// erro ou lado ausente → undefined → "announced, changes unknown".
+// sairia quase sempre "changes unknown" e o stateHash divergiria do cron (o custo:
+// esperar mais atrás do limite de 8 req/min do cliente). Fail-open: erro (logado no
+// memo) ou lado ausente → undefined → "announced, changes unknown".
 async function fetchLineupBaselines(args: {
   lineupOf: PastLineupFetch;
   data: JudgmentFetchedData;
@@ -2482,19 +2497,7 @@ async function fetchLineupBaselines(args: {
   ): Promise<NormalizedTeamLineup | undefined> => {
     const ref = pickLineupBaseline(form, { league: data.league, kickoffMs });
     if (!ref) return undefined;
-    try {
-      return lineupSideOf(await args.lineupOf(ref), ref, team);
-    } catch (err) {
-      console.error(
-        JSON.stringify({
-          scope: "predict",
-          error: "lineup_baseline_fetch_failed",
-          team,
-          message: err instanceof Error ? err.message : String(err),
-        }),
-      );
-      return undefined;
-    }
+    return lineupSideOf(await args.lineupOf(ref), ref, team);
   };
   const [home, away] = await Promise.all([
     forTeam(data.homeTeam, data.homeForm),
@@ -2586,19 +2589,7 @@ async function fetchPreviousLineups(args: {
     if (injuries.length === 0) return undefined;
     const prev = previousFixture(form, kickoffMs);
     if (!prev) return undefined;
-    try {
-      return lineupSideOf(await args.lineupOf(prev), prev, team);
-    } catch (err) {
-      console.error(
-        JSON.stringify({
-          scope: "predict",
-          error: "previous_lineup_fetch_failed",
-          team,
-          message: err instanceof Error ? err.message : String(err),
-        }),
-      );
-      return undefined;
-    }
+    return lineupSideOf(await args.lineupOf(prev), prev, team);
   };
   const [home, away] = await Promise.all([
     forTeam(args.homeTeam, args.homeForm, args.injuries.home),

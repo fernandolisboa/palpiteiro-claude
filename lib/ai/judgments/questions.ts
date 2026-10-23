@@ -19,7 +19,7 @@ import type {
 // v3 (#619): escalação confirmada — `lineup` (mudanças VOLUNTÁRIAS sobre o XI de
 // referência) e `starters_left_out` em rotation_risk, attack_weakened e
 // defense_weakened; com a escalação anunciada, quem segue em `absences` está fora do
-// XI (em dúvida inclusive).
+// XI e o em dúvida conta como lesionado.
 export const JUDGMENTS_VERSION = "jev_judgments_v3";
 
 // Frases literais da tabela da Decisão 2 — sem negação (jaggedness #1).
@@ -37,9 +37,10 @@ const INSTRUCTIONS: Record<JudgmentFactor, string> = {
 // Casos de borda por escrito, apontando o campo do state pelo nome (jaggedness
 // #1/#4). O vocabulário citado aqui é o que state.ts emite.
 // Com a escalação anunciada, o código já tirou de `absences` quem vai começar
-// jogando (state.ts, enrichAbsences): o que sobra está fora do XI.
+// jogando (state.ts, enrichAbsences): o que sobra está fora do XI, em dúvida inclusive.
+// Vai no true e no false pra regra valer igual nos dois lados.
 function announcedAbsencesNote(team: string): string {
-  return `Once \`${team}.lineup\` is announced, every player still listed in \`${team}.absences\` is outside the starting lineup, including doubtful ones.`;
+  return `Once \`${team}.lineup\` is announced, a doubtful player still listed in \`${team}.absences\` is not starting and counts like an injured one.`;
 }
 
 function criteriaFor(
@@ -50,13 +51,13 @@ function criteriaFor(
   switch (factor) {
     case "attack_weakened":
       return {
-        true: `\`${team}.absences\` includes a starting forward or the team top scorer whose status is injured or suspended, or \`${team}.starters_left_out\` includes a starting forward. A doubtful starting forward or doubtful top scorer is weaker evidence than an injured or suspended one while \`${team}.lineup\` is "${LINEUP_NOT_ANNOUNCED}". ${announcedAbsencesNote(team)}`,
-        false: `\`${team}.absences\` is empty, or every listed player is a goalkeeper, a defender, a rotation player, a backup player, a midfielder without the team top scorer tag, or a player of unknown role without the team top scorer tag; and \`${team}.starters_left_out\` has no starting forward. An absence listed only as \`player (...)\` has an unknown role and does not by itself make the statement true.`,
+        true: `\`${team}.absences\` includes a starting forward or the team top scorer whose status is injured or suspended, or \`${team}.starters_left_out\` includes a starting forward. While \`${team}.lineup\` is "${LINEUP_NOT_ANNOUNCED}", a doubtful starting forward or doubtful top scorer is weaker evidence than an injured or suspended one. ${announcedAbsencesNote(team)}`,
+        false: `\`${team}.absences\` is empty, or every listed player is a goalkeeper, a defender, a rotation player, a backup player, a midfielder without the team top scorer tag, or a player of unknown role without the team top scorer tag; and \`${team}.starters_left_out\` has no starting forward. An absence listed only as \`player (...)\`, or an entry of \`${team}.starters_left_out\` listed as \`starting player\`, has an unknown role and does not by itself make the statement true. ${announcedAbsencesNote(team)}`,
       };
     case "defense_weakened":
       return {
-        true: `\`${team}.absences\` includes a starting defender or the first-choice goalkeeper whose status is injured or suspended, or \`${team}.starters_left_out\` includes a starting defender or the first-choice goalkeeper. A doubtful starting defender or doubtful first-choice goalkeeper is weaker evidence than an injured or suspended one while \`${team}.lineup\` is "${LINEUP_NOT_ANNOUNCED}". ${announcedAbsencesNote(team)}`,
-        false: `\`${team}.absences\` is empty, or it lists only forwards, midfielders, rotation defenders, backup goalkeepers or players of unknown role; and \`${team}.starters_left_out\` has no starting defender and no first-choice goalkeeper. An absence listed only as \`player (...)\` has an unknown role and does not by itself make the statement true.`,
+        true: `\`${team}.absences\` includes a starting defender or the first-choice goalkeeper whose status is injured or suspended, or \`${team}.starters_left_out\` includes a starting defender or the first-choice goalkeeper. While \`${team}.lineup\` is "${LINEUP_NOT_ANNOUNCED}", a doubtful starting defender or doubtful first-choice goalkeeper is weaker evidence than an injured or suspended one. ${announcedAbsencesNote(team)}`,
+        false: `\`${team}.absences\` is empty, or it lists only forwards, midfielders, rotation defenders, backup goalkeepers or players of unknown role; and \`${team}.starters_left_out\` has no starting defender and no first-choice goalkeeper. An absence listed only as \`player (...)\`, or an entry of \`${team}.starters_left_out\` listed as \`starting player\`, has an unknown role and does not by itself make the statement true. ${announcedAbsencesNote(team)}`,
       };
     case "rotation_risk":
       return {

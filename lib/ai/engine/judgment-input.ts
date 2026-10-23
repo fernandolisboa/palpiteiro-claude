@@ -58,11 +58,11 @@ const LINEUP_BASELINE_CONGESTION_MS = 72 * 60 * 60 * 1000;
 
 // Jogo da forma que serve de XI de referência: o mais recente da mesma competição
 // (`competition.league`; forma sem o campo, amistoso ou outra competição ficam fora),
-// antes do kickoff e com no máximo 45 dias, preferindo um NÃO congestionado (sem outro
-// jogo do time — forma, qualquer competição — nem este jogo a < 72 h dele); sem
-// nenhum assim, o mais recente. Com um XI só, um jogo de liga poupado antes da
-// Champions viraria referência e o time completo de hoje sairia "5+ mudanças". Só
-// datas da forma: zero request.
+// antes do kickoff e com no máximo 45 dias, e NÃO congestionado (sem outro jogo do
+// time — forma, qualquer competição — nem este jogo a < 72 h dele). Todos
+// congestionados → undefined ("changes unknown": o calendário decide). Com um XI só,
+// um jogo de liga poupado antes da Champions viraria referência e o time completo de
+// hoje sairia "5+ mudanças". Só datas da forma: zero request.
 export function pickLineupBaseline(
   form: readonly NormalizedFixture[],
   args: { league: SupportedLeague; kickoffMs: number }
@@ -85,7 +85,7 @@ export function pickLineupBaseline(
         Math.abs(g.kickoffTimestampMs - f.kickoffTimestampMs) <
           LINEUP_BASELINE_CONGESTION_MS
     );
-  return candidates.find((f) => !congested(f)) ?? candidates[0];
+  return candidates.find((f) => !congested(f));
 }
 
 // Um jogo de OUTRA data contra o mesmo adversário não é este: a API e o banco podem
@@ -207,6 +207,9 @@ export type MatchJudgmentInput = {
   stateInput: JudgmentStateInput;
   // Desfalques enriquecidos com papel — reusados pelo narrador (papel, não nome).
   absences: { home: JudgmentAbsenceInput[]; away: JudgmentAbsenceInput[] };
+  // A mesma lista ANTES de tirar quem está no XI de hoje (#619): é a que confere as
+  // afirmações do usuário (check-claims), como em lib/user-palpite/facts.ts.
+  providerAbsences: { home: JudgmentAbsenceInput[]; away: JudgmentAbsenceInput[] };
   // Resumo da escalação de cada time (#619), sem nomes: vai pro jsonb da predição.
   lineup: { home: LineupSummary; away: LineupSummary };
 };
@@ -216,17 +219,19 @@ export function buildMatchJudgmentInput(
 ): MatchJudgmentInput {
   const kickoffMs = data.kickoffAt.getTime();
   // Papel do desfalcado: XI do jogo anterior → XI de referência → sem papel (#619).
+  const enrich = (side: "home" | "away", team: string, today?: boolean) =>
+    enrichAbsences(data.injuries[side], {
+      lastLineup: data.previousLineups?.[side] ?? data.lineupBaseline?.[side],
+      topScorerNames: teamTopScorerNames(data.topScorers, team),
+      ...(today ? { confirmedLineup: data.lineups?.[side] } : {}),
+    });
+  const providerAbsences = {
+    home: enrich("home", data.homeTeam),
+    away: enrich("away", data.awayTeam),
+  };
   const absences = {
-    home: enrichAbsences(data.injuries.home, {
-      lastLineup: data.previousLineups?.home ?? data.lineupBaseline?.home,
-      topScorerNames: teamTopScorerNames(data.topScorers, data.homeTeam),
-      confirmedLineup: data.lineups?.home,
-    }),
-    away: enrichAbsences(data.injuries.away, {
-      lastLineup: data.previousLineups?.away ?? data.lineupBaseline?.away,
-      topScorerNames: teamTopScorerNames(data.topScorers, data.awayTeam),
-      confirmedLineup: data.lineups?.away,
-    }),
+    home: enrich("home", data.homeTeam, true),
+    away: enrich("away", data.awayTeam, true),
   };
   const lineup = {
     home: summarizeLineup({
@@ -247,6 +252,7 @@ export function buildMatchJudgmentInput(
   };
   return {
     absences,
+    providerAbsences,
     lineup,
     stateInput: {
       competition: COMPETITION_LABEL[data.league],

@@ -77,8 +77,41 @@ function positionFromLineupLabel(
   }
 }
 
+// Prefixo do provider num id de jogador ("api-football:123" → "api-football").
+function providerPrefix(id: string): string {
+  const i = id.indexOf(":");
+  return i <= 0 ? "" : id.slice(0, i);
+}
+
+type PersonRef = { name: string; providerPlayerId?: string };
+
+// Mesmo jogador? Por id quando os dois lados têm id do MESMO provider (o /injuries da
+// API-Football grafa "K. Walker", o /fixtures/lineups "Kyle Walker"); senão por nome
+// normalizado (provider diferente ou id ausente).
+function samePerson(a: PersonRef, b: PersonRef): boolean {
+  const idA = a.providerPlayerId;
+  const idB = b.providerPlayerId;
+  if (idA && idB) {
+    const prefix = providerPrefix(idA);
+    if (prefix && prefix === providerPrefix(idB)) return idA === idB;
+  }
+  return normalizePersonName(a.name) === normalizePersonName(b.name);
+}
+
+function absenteeRef(injury: NormalizedInjury): PersonRef {
+  return injury.player;
+}
+
+// Escalação deste jogo com titulares: a API às vezes devolve o time com XI vazio antes
+// de publicar, e isso não é escalação anunciada (#619).
+function announcedXi(
+  lineup: NormalizedTeamLineup | undefined
+): NormalizedTeamLineup | undefined {
+  return lineup && lineup.starters.length > 0 ? lineup : undefined;
+}
+
 // Cruza os desfalques com a última escalação do time (posição + titularidade) e
-// a lista de artilheiros, por nome normalizado. O nome serve só pro match aqui.
+// a lista de artilheiros. Id/nome servem só pro match aqui.
 // Com a escalação DESTE jogo confirmada (#619), quem está entre os titulares de hoje
 // sai da lista (vai jogar); em dúvida no banco continua desfalque.
 export function enrichAbsences(
@@ -89,44 +122,30 @@ export function enrichAbsences(
     confirmedLineup?: NormalizedTeamLineup;
   } = {}
 ): JudgmentAbsenceInput[] {
-  const startingToday = new Set(
-    (context.confirmedLineup?.starters ?? []).map((p) =>
-      normalizePersonName(p.name)
-    )
-  );
-  const lineupIndex = new Map<
-    string,
-    { position?: AbsencePosition; starter: boolean }
-  >();
-  for (const p of context.lastLineup?.bench ?? []) {
-    lineupIndex.set(normalizePersonName(p.name), {
-      position: positionFromLineupLabel(p.position),
-      starter: false,
-    });
-  }
-  // Titulares por último: vence se o nome aparecer nas duas listas.
-  for (const p of context.lastLineup?.starters ?? []) {
-    lineupIndex.set(normalizePersonName(p.name), {
-      position: positionFromLineupLabel(p.position),
-      starter: true,
-    });
-  }
+  const startingToday = announcedXi(context.confirmedLineup)?.starters ?? [];
+  const lastStarters = context.lastLineup?.starters ?? [];
+  const lastBench = context.lastLineup?.bench ?? [];
   const topScorers = new Set(
     (context.topScorerNames ?? []).map(normalizePersonName)
   );
 
   return injuries
-    .filter(
-      (injury) => !startingToday.has(normalizePersonName(injury.player.name))
-    )
+    .filter((injury) => {
+      const ref = absenteeRef(injury);
+      return !startingToday.some((p) => samePerson(p, ref));
+    })
     .map((injury) => {
-      const key = normalizePersonName(injury.player.name);
-      const hit = lineupIndex.get(key);
+      const ref = absenteeRef(injury);
+      // Titular vence se o jogador aparecer nas duas listas.
+      const starter = lastStarters.find((p) => samePerson(p, ref));
+      const hit = starter ?? lastBench.find((p) => samePerson(p, ref));
       return {
         injury,
-        position: hit?.position,
-        isRegularStarter: hit ? hit.starter : undefined,
-        isTopScorer: topScorers.has(key) ? true : undefined,
+        position: positionFromLineupLabel(hit?.position),
+        isRegularStarter: hit ? hit === starter : undefined,
+        isTopScorer: topScorers.has(normalizePersonName(ref.name))
+          ? true
+          : undefined,
       };
     });
 }
@@ -187,11 +206,6 @@ export function lineupChangeBucket(changes: number): LineupChangeBucket {
   return "5+";
 }
 
-function providerPrefix(id: string): string {
-  const i = id.indexOf(":");
-  return i <= 0 ? "" : id.slice(0, i);
-}
-
 // Ids de uma lista de jogadores quando TODOS têm id do MESMO provider; senão null.
 // O nome nunca entra no diff entre escalações: football-data.org (fallback) grafa
 // diferente da API-Football e daria "5+" falso.
@@ -212,7 +226,8 @@ function providerIds(
   return prefix === null ? null : { prefix, ids };
 }
 
-function startingXiIds(
+// XI de referência: 11 titulares, todos com id do mesmo provider, sem repetição.
+function referenceXiIds(
   lineup: NormalizedTeamLineup
 ): { prefix: string; ids: Set<string> } | null {
   const r = providerIds(lineup.starters);
@@ -221,6 +236,26 @@ function startingXiIds(
     r.ids.size === STARTING_XI_SIZE
     ? r
     : null;
+}
+
+// XI de hoje comparável com uma referência de prefixo `prefix`: 11 titulares, ids sem
+// repetição, nenhum de outro provider e ao menos um do mesmo (o fallback
+// football-data.org não traz id nenhum e daria "5+" falso). Titular sem id (estreante
+// que o provider ainda não cadastrou) não casa com nenhum id da referência, e está
+// certo: ele não era titular habitual.
+function todayXiIds(
+  lineup: NormalizedTeamLineup,
+  prefix: string
+): Set<string> | null {
+  if (lineup.starters.length !== STARTING_XI_SIZE) return null;
+  const ids = new Set<string>();
+  for (const p of lineup.starters) {
+    const id = p.providerPlayerId;
+    if (!id) continue;
+    if (providerPrefix(id) !== prefix || ids.has(id)) return null;
+    ids.add(id);
+  }
+  return ids.size > 0 ? ids : null;
 }
 
 const POSITION_ORDER: readonly (AbsencePosition | undefined)[] = [
@@ -246,14 +281,15 @@ function compareLeftOut(a: LineupLeftOut, b: LineupLeftOut): number {
   );
 }
 
-// Escalação de hoje × XI de referência de um time. `absences` = a lista final (já sem
-// quem está entre os titulares de hoje).
+// Escalação de hoje × XI de referência de um time. XI de hoje vazio = não anunciada.
+// `absences` = a lista final (já sem quem está entre os titulares de hoje).
 export function summarizeLineup(args: {
   today?: NormalizedTeamLineup;
   reference?: NormalizedTeamLineup;
   absences: readonly JudgmentAbsenceInput[];
 }): LineupSummary {
-  const { today, reference } = args;
+  const today = announcedXi(args.today);
+  const { reference } = args;
   if (!today) return { status: "not_announced" };
   const unknown: LineupSummary = {
     status: "announced",
@@ -261,22 +297,16 @@ export function summarizeLineup(args: {
     leftOut: [],
   };
   if (!reference) return unknown;
-  const todayXi = startingXiIds(today);
-  const referenceXi = startingXiIds(reference);
-  if (!todayXi || !referenceXi || todayXi.prefix !== referenceXi.prefix) {
-    return unknown;
-  }
+  const referenceXi = referenceXiIds(reference);
+  const todayIds = referenceXi && todayXiIds(today, referenceXi.prefix);
+  if (!referenceXi || !todayIds) return unknown;
   const bench = providerIds(today.bench ?? []);
-  const benchIds = bench?.prefix === todayXi.prefix ? bench.ids : null;
-  const absent = new Set(
-    args.absences.map((a) => normalizePersonName(a.injury.player.name))
-  );
+  const benchIds = bench?.prefix === referenceXi.prefix ? bench.ids : null;
+  const absent = args.absences.map((a) => absenteeRef(a.injury));
   const leftOut: LineupLeftOut[] = [];
   for (const p of reference.starters) {
     const id = p.providerPlayerId as string;
-    if (todayXi.ids.has(id) || absent.has(normalizePersonName(p.name))) {
-      continue;
-    }
+    if (todayIds.has(id) || absent.some((a) => samePerson(a, p))) continue;
     const position = positionFromLineupLabel(p.position);
     leftOut.push({
       ...(position ? { position } : {}),

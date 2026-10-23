@@ -554,7 +554,8 @@ describe("toNormalizedInjury", () => {
   it("maps Missing Fixture + Knee -> injured (com proveniência source:official, #226)", () => {
     const n = toNormalizedInjury(makeInjury());
     expect(n).toEqual({
-      player: { name: "Test Player" },
+      // #619: id no mesmo formato da escalação, pro cruzamento desfalcado ↔ XI.
+      player: { name: "Test Player", providerPlayerId: "api-football:1" },
       type: "injury",
       reason: "Knee injury",
       status: "injured",
@@ -707,6 +708,55 @@ describe("toNormalizedTeamLineup", () => {
     const t = toNormalizedTeamLineup(lineup, "brasileirao_a");
     expect(t.starters[0]).not.toHaveProperty("providerPlayerId");
     expect(t.starters[1]?.providerPlayerId).toBe("api-football:2");
+  });
+});
+
+describe("ApiFootballAdapter.getLineups — XI vazio não é escalação publicada (#619)", () => {
+  const ref: FixtureRef = {
+    league: "brasileirao_a",
+    kickoffAt: "2026-05-15T19:00:00.000Z",
+    homeTeam: "CR Flamengo",
+    awayTeam: "Fluminense FC",
+  };
+  const fixturesKey =
+    "sports-data:api-football:fixtures:date:2026-05-15:league:71:season:2026";
+  const lineupsKey = "sports-data:api-football:fixtures:lineups:fixture:12345";
+  const away = (startXI: ApiFootballLineup["startXI"]): ApiFootballLineup => ({
+    ...makeLineup(),
+    team: { id: 124, name: "Fluminense" },
+    startXI,
+  });
+
+  beforeEach(async () => {
+    // Mesmo truque do teste de desfalques: cache em memória no lugar do HTTP.
+    vi.useFakeTimers();
+    vi.setSystemTime(new Date("2026-06-08T12:00:00.000Z"));
+    await inMemoryCache.set(fixturesKey, { response: [makeFixture()] }, 60_000);
+  });
+  afterEach(async () => {
+    await inMemoryCache.delete(fixturesKey);
+    await inMemoryCache.delete(lineupsKey);
+    vi.useRealTimers();
+  });
+
+  it("um lado com startXI vazio → undefined", async () => {
+    await inMemoryCache.set(
+      lineupsKey,
+      { response: [makeLineup(), away([])] },
+      60_000
+    );
+    expect(await new ApiFootballAdapter().getLineups(ref)).toBeUndefined();
+  });
+
+  it("os dois lados com titulares → escalação", async () => {
+    await inMemoryCache.set(
+      lineupsKey,
+      { response: [makeLineup(), away(makeLineup().startXI)] },
+      60_000
+    );
+    const lineup = await new ApiFootballAdapter().getLineups(ref);
+    expect(lineup?.home.starters).toHaveLength(4);
+    expect(lineup?.away.starters).toHaveLength(4);
   });
 });
 
