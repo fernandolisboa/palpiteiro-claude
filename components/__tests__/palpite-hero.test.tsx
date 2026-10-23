@@ -766,7 +766,7 @@ describe("PalpiteHero — Contexto extra (#565)", () => {
   });
 });
 
-describe("PalpiteHero — compacto (#576, expanded=false)", () => {
+describe("PalpiteHero — compacto (#576, collapsible)", () => {
   const FULL: PalpiteHeadlineView = {
     ...POPULATED,
     dimensions: [{ label: "Mandante ganha por 2+", badge: null }],
@@ -774,7 +774,7 @@ describe("PalpiteHero — compacto (#576, expanded=false)", () => {
   };
 
   it("narrativa em 2 linhas (texto inteiro no DOM), sem 'a partir de:', ficha e fontes", () => {
-    const html = render({ heroPalpite: FULL, expanded: false });
+    const html = render({ heroPalpite: FULL, collapsible: true });
     expect(html).toContain("line-clamp-2");
     expect(html).toContain(POPULATED.narrative);
     expect(html).not.toContain("a partir de:");
@@ -783,7 +783,7 @@ describe("PalpiteHero — compacto (#576, expanded=false)", () => {
   });
 
   it("veredito, placar, confiança, ações e o disclaimer continuam", () => {
-    const html = render({ heroPalpite: FULL, expanded: false, hasAnalyses: true });
+    const html = render({ heroPalpite: FULL, collapsible: true, hasAnalyses: true });
     expect(html).toContain(POPULATED.verdict);
     expect(html).toContain("confiança média");
     expect(html).toContain("Analisar de novo");
@@ -792,8 +792,9 @@ describe("PalpiteHero — compacto (#576, expanded=false)", () => {
     expect(html).toContain(PALPITE_DISCLAIMER);
   });
 
-  it("expanded (default) mostra tudo e não corta a narrativa", () => {
+  it("não colapsável (default) mostra tudo, não corta a narrativa e não tem 'Ler mais'", () => {
     const html = render({ heroPalpite: FULL });
+    expect(html).not.toContain("Ler mais");
     expect(html).not.toContain("line-clamp-2");
     expect(html).toContain("a partir de:");
     expect(html).toContain("e ainda");
@@ -801,8 +802,8 @@ describe("PalpiteHero — compacto (#576, expanded=false)", () => {
   });
 
   it("firewall limpo nos dois modos", () => {
-    for (const expanded of [true, false]) {
-      const html = render({ heroPalpite: FULL, expanded });
+    for (const collapsible of [true, false]) {
+      const html = render({ heroPalpite: FULL, collapsible });
       expect(leaksValue(html)).toBe(false);
       expect(html).not.toContain("edge-");
     }

@@ -199,8 +199,9 @@ export function ComoUsarContent() {
             levar alguns minutos; mantenha a página aberta.
           </li>
           <li>
-            O palpite aparece no topo, resumido. <Ui>Ler análise completa</Ui>,
-            logo abaixo dele, abre o porquê inteiro e o detalhe de cada mercado.
+            O palpite aparece no topo, resumido. <Ui>Ler mais</Ui> abre o porquê
+            inteiro ali mesmo, e <Ui>Ler análise completa</Ui>, logo abaixo, o
+            detalhe de cada mercado.
           </li>
         </Steps>
         <p>
@@ -248,13 +249,13 @@ export function ComoUsarContent() {
           O <Strong>Palpite da IA</Strong> é a manchete: quem leva, o placar provável, a
           confiança (baixa, média ou alta, pela chance que o modelo dá a esse
           resultado) e o começo do porquê. Ao abrir{" "}
-          <Ui>Ler análise completa</Ui>, o quadro mostra o parágrafo inteiro, os
+          <Ui>Ler mais</Ui>, o quadro mostra o parágrafo inteiro, os
           mercados que ele usou, os palpites extras e, quando a IA leu notícias, os
           links das fontes. Depois do jogo, o quadro mostra se <Ui>Acertou</Ui> ou{" "}
           <Ui>Errou</Ui> e o placar real.
         </p>
         <p>
-          O mesmo <Ui>Ler análise completa</Ui> abre, logo abaixo do palpite, o
+          Já <Ui>Ler análise completa</Ui> abre, logo abaixo do palpite, o
           detalhe de cada mercado, um embaixo do outro: a seleção sugerida com odd,
           stake e retorno esperado, os cenários comparados e os fatores-chave. Quando nenhum
           lado tem vantagem suficiente, o mercado sai como <Strong>Sem aposta</Strong> (não

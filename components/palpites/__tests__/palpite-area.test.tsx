@@ -62,13 +62,23 @@ afterEach(async () => {
   container.remove();
 });
 
+const readMore = () =>
+  Array.from(container.querySelectorAll("button")).find((b) =>
+    /^Ler (mais|menos)$/.test(b.textContent ?? "")
+  ) ?? null;
+
+const narrative = () =>
+  Array.from(container.querySelectorAll("p")).find(
+    (p) => p.textContent === PALPITE.narrative
+  )!;
+
 const toggle = () =>
   Array.from(container.querySelectorAll("button")).find((b) =>
     /análise completa/.test(b.textContent ?? "")
   ) ?? null;
 
 describe("PalpiteArea — Ler análise completa (#576)", () => {
-  it("botão só com palpite ou análise", () => {
+  it("botão só com análise para abrir", () => {
     const none = renderToStaticMarkup(
       <PalpiteArea
         {...props({
@@ -80,13 +90,12 @@ describe("PalpiteArea — Ler análise completa (#576)", () => {
     );
     expect(none).not.toContain("Ler análise completa");
     expect(none).not.toContain('data-testid="slot"');
-    expect(
-      renderToStaticMarkup(
-        <PalpiteArea
-          {...props({ hasAnalyses: false, canOpenAnalysis: false })}
-        />
-      )
-    ).toContain("Ler análise completa");
+    // Palpite sem análise para abrir: o palpite abre pelo próprio "Ler mais".
+    const palpiteOnly = renderToStaticMarkup(
+      <PalpiteArea {...props({ hasAnalyses: false, canOpenAnalysis: false })} />
+    );
+    expect(palpiteOnly).not.toContain("Ler análise completa");
+    expect(palpiteOnly).toContain("Ler mais");
     expect(
       renderToStaticMarkup(<PalpiteArea {...props({ heroPalpite: null })} />)
     ).toContain("Ler análise completa");
@@ -110,7 +119,7 @@ describe("PalpiteArea — Ler análise completa (#576)", () => {
     expect(html).toContain('data-testid="slot"');
   });
 
-  it("fechado por padrão; abrir alterna aria-expanded, hidden e o HERO inteiro", async () => {
+  it("fechado por padrão; abrir alterna aria-expanded e hidden, sem mexer no palpite", async () => {
     await act(async () => root.render(<PalpiteArea {...props()} />));
     const region = container.querySelector<HTMLElement>("#analise-completa")!;
     const button = toggle()!;
@@ -131,10 +140,47 @@ describe("PalpiteArea — Ler análise completa (#576)", () => {
     expect(toggle()!.getAttribute("aria-expanded")).toBe("true");
     expect(toggle()!.textContent).toContain("Fechar análise completa");
     expect(region.hidden).toBe(false);
-    expect(container.textContent).toContain("a partir de:");
+    // O palpite continua compacto: abrir a análise não abre o texto dele.
+    expect(container.textContent).not.toContain("a partir de:");
+    expect(narrative().className).toContain("line-clamp-2");
+    expect(readMore()!.getAttribute("aria-expanded")).toBe("false");
 
     await act(async () => toggle()!.click());
     expect(region.hidden).toBe(true);
+  });
+
+  it("'Ler mais' abre o palpite inteiro sem abrir a análise", async () => {
+    await act(async () => root.render(<PalpiteArea {...props()} />));
+    const region = container.querySelector<HTMLElement>("#analise-completa")!;
+    const button = readMore()!;
+    expect(button.getAttribute("type")).toBe("button");
+    expect(button.getAttribute("aria-expanded")).toBe("false");
+    const detail = document.getElementById(button.getAttribute("aria-controls")!)!;
+    expect(detail.contains(narrative())).toBe(true);
+    expect(narrative().className).toContain("line-clamp-2");
+
+    await act(async () => button.click());
+    expect(readMore()!.textContent).toBe("Ler menos");
+    expect(readMore()!.getAttribute("aria-expanded")).toBe("true");
+    expect(narrative().className).not.toContain("line-clamp-2");
+    expect(container.textContent).toContain("a partir de:");
+    expect(region.hidden).toBe(true);
+    expect(toggle()!.getAttribute("aria-expanded")).toBe("false");
+
+    // E vice-versa: fechar o palpite com a análise aberta deixa a análise aberta.
+    await act(async () => toggle()!.click());
+    await act(async () => readMore()!.click());
+    expect(narrative().className).toContain("line-clamp-2");
+    expect(region.hidden).toBe(false);
+  });
+
+  it("sem ficha e com texto curto, sem 'Ler mais' (nada a abrir)", () => {
+    const html = renderToStaticMarkup(
+      <PalpiteArea
+        {...props({ heroPalpite: { ...PALPITE, citedMarkets: [] } })}
+      />
+    );
+    expect(html).not.toContain("Ler mais");
   });
 
   it("o slot da análise fica FORA da casca quente do palpite e do <form> do HERO", async () => {
