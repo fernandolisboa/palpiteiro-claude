@@ -10,19 +10,26 @@ vi.mock("next/server", () => ({
   },
 }));
 
+const session = vi.hoisted(() => ({ userId: "user-1" as string | null }));
+vi.mock("@/auth", () => ({
+  auth: vi.fn(async () => (session.userId ? { user: { id: session.userId } } : null)),
+}));
+
 import { runPalpiteHero } from "@/app/actions/predictions";
-import { maxDuration, POST } from "@/app/api/palpite/run/route";
+import { GET, maxDuration, POST } from "@/app/api/palpite/run/route";
+import { readRunMarker } from "@/lib/ai/progress/run-marker";
 import { parseStreamLine, type StreamMessage } from "@/lib/ai/progress/protocol";
 import { trackStep } from "@/lib/ai/progress/run-progress";
 import { STEPS } from "@/lib/ai/progress/steps";
 
 const runMock = vi.mocked(runPalpiteHero);
+const MATCH = "6f1c2a3b-4d5e-4f60-8a7b-9c0d1e2f3a4b";
 
 function req(
   headers: Record<string, string> = { origin: "https://palpiteiro.live", host: "palpiteiro.live" },
 ): Request {
   const body = new FormData();
-  body.set("matchId", "11111111-1111-1111-1111-111111111111");
+  body.set("matchId", MATCH);
   body.set("intent", "analysis");
   return new Request("https://palpiteiro.live/api/palpite/run", {
     method: "POST",
@@ -42,6 +49,7 @@ async function readAll(res: Response): Promise<StreamMessage[]> {
 beforeEach(() => {
   runMock.mockReset();
   afterTasks.length = 0;
+  session.userId = "user-1";
 });
 
 describe("POST /api/palpite/run", () => {
@@ -90,7 +98,8 @@ describe("POST /api/palpite/run", () => {
     expect(res.headers.get("content-type")).toContain("application/x-ndjson");
     expect(res.headers.get("cache-control")).toContain("no-store");
     const msgs = await readAll(res);
-    expect(msgs).toEqual([
+    expect(msgs[0]).toEqual({ t: "run", id: expect.any(String) });
+    expect(msgs.slice(1)).toEqual([
       { t: "step", id: "sports_data", status: "active", label: STEPS.sportsData.active },
       { t: "step", id: "sports_data", status: "done", label: STEPS.sportsData.done },
       { t: "step", id: "jev", status: "active", label: STEPS.jev.active },
@@ -125,5 +134,79 @@ describe("POST /api/palpite/run", () => {
     release();
     await expect(afterTasks[0]).resolves.toBeUndefined();
     expect(runMock).toHaveBeenCalledTimes(1);
+  });
+
+  it("grava o run no marcador do jogo: quem volta pra página acompanha e vê o fim", async () => {
+    session.userId = "user-marker";
+    let release!: () => void;
+    const gate = new Promise<void>((r) => (release = r));
+    runMock.mockImplementation(async () => {
+      await trackStep(STEPS.sportsData, async () => undefined);
+      await gate;
+      return { ok: true, palpite: null };
+    });
+    const res = await POST(req());
+    const reading = readAll(res);
+    await new Promise((r) => setTimeout(r, 0));
+    const running = await readRunMarker("user-marker", MATCH);
+    expect(running).toMatchObject({
+      status: "running",
+      intent: "analysis",
+      live: false,
+      outcome: null,
+    });
+    expect(running!.steps[0]).toMatchObject({ id: "sports_data" });
+
+    release();
+    const msgs = await reading;
+    const runId = (msgs[0] as { id: string }).id;
+    const done = await readRunMarker("user-marker", MATCH);
+    expect(done).toMatchObject({
+      runId,
+      status: "done",
+      outcome: { ok: true, analysis: false },
+    });
+    expect(done!.steps).toEqual([
+      { id: "sports_data", status: "done", label: STEPS.sportsData.done },
+    ]);
+  });
+
+  it("sem sessão: nenhum marcador (a action recusa o run)", async () => {
+    session.userId = null;
+    runMock.mockImplementation(async () => {
+      await trackStep(STEPS.sportsData, async () => undefined);
+      return { ok: false, error: "Faça login para analisar." };
+    });
+    await readAll(await POST(req()));
+    expect(await readRunMarker("null", MATCH)).toBeNull();
+  });
+});
+
+describe("GET /api/palpite/run", () => {
+  const get = (matchId: string) =>
+    GET(new Request(`https://palpiteiro.live/api/palpite/run?matchId=${matchId}`));
+
+  it("matchId inválido → 400", async () => {
+    expect((await get("x")).status).toBe(400);
+  });
+
+  it("sem sessão → 401", async () => {
+    session.userId = null;
+    expect((await get(MATCH)).status).toBe(401);
+  });
+
+  it("só o run da própria pessoa", async () => {
+    session.userId = "user-get";
+    runMock.mockImplementation(async () => {
+      await trackStep(STEPS.odds, async () => undefined);
+      return { ok: true, palpite: null };
+    });
+    await readAll(await POST(req()));
+    const mine = await get(MATCH);
+    expect(mine.headers.get("cache-control")).toContain("no-store");
+    expect((await mine.json()).run).toMatchObject({ status: "done" });
+
+    session.userId = "someone-else";
+    expect((await (await get(MATCH)).json()).run).toBeNull();
   });
 });

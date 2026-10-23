@@ -32,3 +32,14 @@ A server action (`runPalpiteHero`) só devolve no fim: o `useActionState` não t
 
 - Uma rota nova, sem tabela nem flag nova. O custo do run não muda (mesma action, mesmas chamadas pagas).
 - Novas etapas entram com um `trackStep`/`beginStep` no ponto do pipeline e a frase em `steps.ts`.
+
+## Adendo (2026-10-23): o run segue visível ao sair do jogo e voltar
+
+Fernando começou uma análise, saiu do jogo e voltou: a página não sabia do run em voo (o HERO mostrava o palpite antigo) e só um F5 na hora certa trazia o resultado. O run seguia no servidor (item 6), mas o cliente cortava a leitura ao desmontar e a página nova não tinha como saber dele.
+
+1. **Store por jogo no navegador** (`components/palpites/palpite-run-store.ts`). O run mora fora do componente, num registro por `matchId`: sair do jogo não corta a leitura do stream, e o HERO que monta de novo (mesmo jogo) assina o mesmo registro e mostra as etapas de agora. Terminou com ninguém olhando: as páginas do cache do roteador ficam velhas (`markRouterCacheStale`) e o HERO entrega o desfecho e faz o refresh quando o jogo volta. Dois jogos analisando ao mesmo tempo têm registros separados.
+2. **Marcador no KV**, por pessoa e jogo (`lib/ai/progress/run-marker.ts`, chave `palpite:run:<userId>:<matchId>`). Pra quando o navegador não tem o registro (F5, outra aba, outro aparelho) ou o stream caiu: a rota grava as etapas (a 1ª na hora, depois no máximo uma escrita a cada 1,5 s) e o desfecho (TTL 6 min em voo, 2 min depois do fim). Run barrado nos gates não grava nada. A página do jogo lê o marcador junto com as outras leituras (teto de 400 ms; sem resposta, segue sem ele) e o HERO abre já no progresso, sem piscar o palpite antigo. `GET /api/palpite/run?matchId=` devolve o marcador da própria pessoa; o HERO lê a cada 2 s enquanto o jogo está na tela, até o desfecho.
+3. **Stream cortado** (item 7) agora acompanha o marcador em vez de avisar na hora; o aviso de conexão caída fica pra quando o marcador não existe (KV fora, ou o run ainda não gravou depois de algumas tentativas).
+4. A 1ª linha do stream é o id do run (`{"t":"run"}`), o mesmo do marcador: uma página antiga do cache que ainda diga "em voo" não volta a acompanhar um run já entregue.
+
+A alternativa 3 continua rejeitada como canal principal: o stream segue sendo o caminho ao vivo, e o marcador só cobre quem não tem o stream. Custo: algumas dezenas de comandos no Upstash por run e uma leitura por abertura de página do jogo.

@@ -29,7 +29,11 @@ import {
   type ProgressMascot,
 } from "@/lib/brand/progress-mascot";
 import { Callout } from "@/components/ui/callout";
-import { toHeroRunOutcome, type HeroRunOutcome } from "@/lib/ai/progress/protocol";
+import {
+  toHeroRunOutcome,
+  type HeroRunOutcome,
+  type RunSnapshot,
+} from "@/lib/ai/progress/protocol";
 import { MAX_CONTEXT_CHARS } from "@/lib/user-palpite/types";
 import { cn } from "@/lib/utils";
 import {
@@ -92,6 +96,9 @@ type Props = {
   // Personagem ao lado do progresso do run (ADR 0068, flag `progressMascot` do
   // /admin/ia). Default o robozinho: os outros chamadores e testes não mudam.
   mascot?: ProgressMascot;
+  // Run em voo deste jogo que a página leu do servidor (saiu no meio e voltou, F5, outra
+  // aba): o HERO abre acompanhando ele. null/ausente = nenhum.
+  activeRun?: RunSnapshot | null;
 };
 
 // Campo do contexto extra, controlado pelo PalpiteHero (o estado sobrevive ao
@@ -148,11 +155,12 @@ export function PalpiteHero({
   live = false,
   lineupNotice = null,
   mascot = DEFAULT_PROGRESS_MASCOT,
+  activeRun = null,
 }: Props) {
   // Dois caminhos pro mesmo run (ADR 0064): com JS, a rota de streaming mostra as etapas
   // ao vivo; sem JS (ou se a rota não atender), a server action do form, como antes.
   const [actionState, formAction, actionPending] = useActionState(runPalpiteHero, null);
-  const run = usePalpiteRun();
+  const run = usePalpiteRun(matchId, activeRun, setId);
   // Envio sem JS (ou antes da hidratação) volta com o resultado da action já no estado
   // inicial: ele vale até o próximo envio.
   const [source, setSource] = useState<"stream" | "action">(() =>
@@ -195,10 +203,12 @@ export function PalpiteHero({
   // ignora a view. Dois caminhos de aviso: o run falhou (ok:false) OU as análises saíram
   // mas a síntese não (ok:true + palpiteError). Sem o 2º, o HERO voltava mudo pro vazio
   // enquanto o detalhe por mercado aparecia logo abaixo.
+  // O run pelo stream guarda o próprio set de partida (sobrevive a sair e voltar).
+  const baseSetId = source === "stream" ? run.baseSetId : setIdAtSubmit;
   const error = !state
     ? null
     : state.ok
-      ? setId === setIdAtSubmit
+      ? setId === baseSetId
         ? (state.palpiteError ?? null)
         : null
       : state.error;
@@ -207,7 +217,7 @@ export function PalpiteHero({
   // segue mostrando as próprias etapas, nunca as do palpite anterior. Um diálogo só,
   // fora do corpo: segue aberto quando o run termina e o palpite novo chega.
   const liveSteps = source === "stream" ? run.steps : [];
-  const showLive = pending || (liveSteps.length > 0 && setId === setIdAtSubmit);
+  const showLive = pending || (liveSteps.length > 0 && setId === baseSetId);
   const reasoningSteps: ProgressStepView[] = showLive
     ? liveSteps
     : (heroPalpite?.reasoning ?? []);
@@ -229,16 +239,16 @@ export function PalpiteHero({
         setReasoningOpen(false);
         const submitter = (e.nativeEvent as SubmitEvent).submitter;
         setSetIdAtSubmit(setId);
-        setIntent(
-          submitter?.getAttribute("value") === "palpite" ? "palpite" : "analysis",
-        );
+        const chosen: HeroIntent =
+          submitter?.getAttribute("value") === "palpite" ? "palpite" : "analysis";
+        setIntent(chosen);
         // O botão clicado manda `intent`, como no envio nativo. Sem ele, nada de
         // intent: o servidor recusa em vez de cair no run pago.
         const formData = new FormData(e.currentTarget);
         const name = submitter?.getAttribute("name");
         if (name) formData.set(name, submitter?.getAttribute("value") ?? "");
         setSource("stream");
-        void run.start(formData).then((mode) => {
+        void run.start(formData, { intent: chosen, live, baseSetId: setId }).then((mode) => {
           if (mode !== "fallback") return;
           setSource("action");
           startTransition(() => formAction(formData));
@@ -262,7 +272,7 @@ export function PalpiteHero({
         setId={setId}
         sharedAt={sharedAt}
         pending={pending}
-        pendingIntent={intent}
+        pendingIntent={actionPending ? intent : (run.intent ?? intent)}
         pendingSteps={liveSteps}
         onShowReasoning={showReasoning}
         error={error}
