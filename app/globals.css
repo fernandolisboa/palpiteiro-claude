@@ -332,82 +332,105 @@ body:has([data-page-width="form"]) [data-footer-column] {
   }
 }
 
-/* Robozinho do run do HERO (ADR 0065, components/palpites/palpite-bot.tsx). Cada parte
-   gira/move em torno do próprio centro. Curvas suaves, sem bounce; só cores palpite-*. */
-.palpite-bot-part,
-.palpite-bot-bob,
-.palpite-bot-spin,
-.palpite-bot-look,
-.palpite-bot-blink,
-.palpite-bot-shadow {
-  transform-box: fill-box;
-  transform-origin: center;
+/* Mascote papagaio (ADR 0068, components/brand/parrot-mascot.tsx). Ciclo de 8 s: o olho
+   pisca, vira bola, a bola vai pro ângulo e o papagaio dá lugar à trave (o símbolo da
+   marca); depois volta. Origens em unidades do viewBox 100×100 (olho em 52,40; bola do
+   símbolo em 62.5,41.5). Estado base = papagaio parado, que é o que fica com
+   prefers-reduced-motion (a regra global zera as animações). */
+.parrot-hop,
+.parrot-eye,
+.parrot-ball {
+  transform-box: view-box;
 }
-.palpite-bot-bob {
-  animation: palpite-bot-bob 2.4s ease-in-out infinite;
+.parrot-hop {
+  transform-origin: 50px 50px;
 }
-.palpite-bot-shadow {
-  opacity: 0.5;
-  animation: palpite-bot-shadow 2.4s ease-in-out infinite;
+.parrot-eye {
+  transform-origin: 52px 40px;
+  animation: parrot-eye 8s ease-in-out infinite;
 }
-.palpite-bot-spin {
-  animation: palpite-bot-spin 3.2s linear infinite;
+.parrot-ball {
+  transform-origin: 62.5px 41.5px;
+  transform: translate(-10.5px, -1.5px) scale(0.88);
+  opacity: 0;
+  animation: parrot-ball 8s ease-in-out infinite;
 }
-.palpite-bot-look {
-  animation: palpite-bot-look 5s ease-in-out infinite;
+.parrot-body {
+  animation: parrot-body 8s ease-in-out infinite;
 }
-.palpite-bot-blink {
-  animation: palpite-bot-blink 4.2s ease-in-out infinite;
+.parrot-goal {
+  opacity: 0;
+  animation: parrot-goal 8s ease-in-out infinite;
 }
-@keyframes palpite-bot-bob {
+@keyframes parrot-eye {
   0%,
-  100% {
-    transform: translateY(0);
+  5%,
+  8%,
+  14% {
+    transform: scaleY(1);
+    opacity: 1;
   }
-  50% {
-    transform: translateY(-2px);
+  6.5% {
+    transform: scaleY(0.1);
+    opacity: 1;
   }
-}
-@keyframes palpite-bot-shadow {
-  0%,
-  100% {
-    transform: scaleX(1);
-    opacity: 0.5;
+  20%,
+  92% {
+    transform: scaleY(1);
+    opacity: 0;
   }
-  50% {
-    transform: scaleX(0.8);
-    opacity: 0.3;
-  }
-}
-@keyframes palpite-bot-spin {
-  to {
-    transform: rotate(360deg);
-  }
-}
-@keyframes palpite-bot-look {
-  0%,
-  28%,
-  100% {
-    transform: translateX(0);
-  }
-  36%,
-  58% {
-    transform: translateX(-1.5px);
-  }
-  66%,
-  90% {
-    transform: translateX(1.5px);
-  }
-}
-@keyframes palpite-bot-blink {
-  0%,
-  91%,
-  97%,
   100% {
     transform: scaleY(1);
+    opacity: 1;
   }
-  94% {
-    transform: scaleY(0.12);
+}
+@keyframes parrot-ball {
+  0%,
+  14% {
+    opacity: 0;
+    transform: translate(-10.5px, -1.5px) scale(0.88) rotate(-120deg);
+  }
+  20%,
+  28% {
+    opacity: 1;
+    transform: translate(-10.5px, -1.5px) scale(0.88) rotate(0deg);
+  }
+  40%,
+  82% {
+    opacity: 1;
+    transform: translate(0, 0) scale(1) rotate(360deg);
+  }
+  92% {
+    opacity: 1;
+    transform: translate(-10.5px, -1.5px) scale(0.88) rotate(720deg);
+  }
+  100% {
+    opacity: 0;
+    transform: translate(-10.5px, -1.5px) scale(0.88) rotate(720deg);
+  }
+}
+@keyframes parrot-body {
+  0%,
+  30%,
+  92%,
+  100% {
+    opacity: 1;
+  }
+  40%,
+  82% {
+    opacity: 0;
+  }
+}
+@keyframes parrot-goal {
+  0%,
+  30%,
+  90%,
+  100% {
+    opacity: 0;
+  }
+  40%,
+  82% {
+    opacity: 1;
   }
 }
 @keyframes palpite-breathe {
@@ -421,8 +444,8 @@ body:has([data-page-width="form"]) [data-footer-column] {
 }
 
 /* Movimento reduzido: nada se desloca (a regra global acima para tudo), mas o que leva
-   `palpite-calm` respira devagar, só na opacidade, pra o run não parecer travado (olhos
-   do robô, bola da antena, ícone da etapa em andamento). Classe vence o `*` da regra
+   `palpite-calm` respira devagar, só na opacidade, pra o run não parecer travado (olho do
+   papagaio mascote, ícone da etapa em andamento). Classe vence o `*` da regra
    global (especificidade maior, os dois com !important). Lento de propósito: um ciclo a
    cada 2,4 s, longe de piscar. */
 @media (prefers-reduced-motion: reduce) {

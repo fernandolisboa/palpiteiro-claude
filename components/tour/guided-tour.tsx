@@ -13,6 +13,7 @@ import { useSearchParams } from "next/navigation";
 import { X } from "lucide-react";
 
 import { saveTourState } from "@/app/actions/tour";
+import { ParrotMascot } from "@/components/brand/parrot-mascot";
 import { Button } from "@/components/ui/button";
 import { cn } from "@/lib/utils";
 import {
@@ -405,9 +406,12 @@ export function GuidedTour({ chapter, userId, serverState, forceStart }: Props) 
         style={{ top: cardAt?.top ?? 0, left: cardAt?.left ?? 0 }}
       >
         <div className="flex items-start justify-between gap-3">
-          <p className="text-meta uppercase tracking-label text-muted-foreground">
-            tour · {position + 1} de {available.length}
-          </p>
+          <div className="flex items-center gap-2.5">
+            <ParrotMascot beat={position} className="size-9" />
+            <p className="text-meta uppercase tracking-label text-muted-foreground">
+              tour · {position + 1} de {available.length}
+            </p>
+          </div>
           <button
             type="button"
             aria-label="Fechar o tour"

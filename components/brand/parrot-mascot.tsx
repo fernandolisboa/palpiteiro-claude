@@ -1,0 +1,93 @@
+"use client";
+
+import { useEffect, useRef } from "react";
+
+import {
+  MARK_BALL_COLOR,
+  markBall,
+  markGoal,
+} from "@/components/brand/brand-mark";
+import { cn } from "@/lib/utils";
+
+// Papagaio de perfil, olhando pra direita, no mesmo ladrilho azul do símbolo (viewBox 100×100).
+// O bico é separado da cara por um vão na cor do fundo (`currentColor`, o azul do tema).
+export const PARROT_BODY =
+  "M20 90C14 66 16 36 36 24C50 16 64 18 70 28L80 60C72 68 64 76 61 90Z";
+export const PARROT_BEAK =
+  "M70 30C82 30 90 40 89 54C88 63 83 70 76 72C79 64 78 57 72 54C69 52 66 50 66 46C66 40 66 34 70 30Z";
+export const PARROT_EYE = { cx: 52, cy: 40, r: 11 } as const;
+
+/**
+ * O mascote (ADR 0068): o papagaio palpiteiro, com o olho amarelo que pisca, vira bola e
+ * vai pro ângulo do gol, onde o papagaio dá lugar ao símbolo da marca. Depois volta. A bola
+ * do olho é a MESMA bola do símbolo (brand-mark.tsx), só deslocada e reduzida até o olho;
+ * a trave é o `markGoal()`. As animações moram em globals.css (`.parrot-*`).
+ *
+ * `beat` sobe a cada passo (etapa pronta no run, próximo passo do tour) e o papagaio dá
+ * um pulinho, pra o movimento acompanhar o que acontece de verdade.
+ *
+ * Com prefers-reduced-motion nada se desloca nem troca de forma: fica o papagaio parado e
+ * o olho só respira (`palpite-calm`). Decorativo (aria-hidden): quem fala é o texto ao lado.
+ */
+export function ParrotMascot({
+  beat = 0,
+  className,
+}: {
+  beat?: number;
+  className?: string;
+}) {
+  const hopRef = useRef<SVGGElement>(null);
+  const lastBeat = useRef(beat);
+
+  useEffect(() => {
+    if (beat <= lastBeat.current) {
+      lastBeat.current = beat;
+      return;
+    }
+    lastBeat.current = beat;
+    const el = hopRef.current;
+    if (!el || typeof el.animate !== "function") return;
+    if (window.matchMedia?.("(prefers-reduced-motion: reduce)").matches) return;
+    el.animate(
+      [
+        { transform: "translateY(0)" },
+        { transform: "translateY(-6px)" },
+        { transform: "translateY(0)" },
+      ],
+      { duration: 420, easing: "ease-out" }
+    );
+  }, [beat]);
+
+  const { cx, cy, r } = PARROT_EYE;
+  return (
+    <svg
+      viewBox="0 0 100 100"
+      aria-hidden="true"
+      focusable="false"
+      data-testid="parrot-mascot"
+      className={cn("size-12 shrink-0", className)}
+    >
+      <g className="text-primary">
+        <rect width="100" height="100" rx="22" fill="currentColor" />
+        <g ref={hopRef} className="parrot-hop">
+          <g className="parrot-body">
+            <path d={PARROT_BODY} fill="#ffffff" />
+            <path
+              d={PARROT_BEAK}
+              fill="#ffffff"
+              stroke="currentColor"
+              strokeWidth={3.2}
+            />
+          </g>
+          <g className="parrot-goal">{markGoal()}</g>
+          <g className="parrot-eye palpite-calm">
+            <circle cx={cx} cy={cy} r={r} fill={MARK_BALL_COLOR} />
+            <circle cx={53} cy={39} r={5.2} fill="currentColor" />
+            <circle cx={54.6} cy={37.4} r={1.7} fill="#ffffff" />
+          </g>
+          <g className="parrot-ball">{markBall("currentColor")}</g>
+        </g>
+      </g>
+    </svg>
+  );
+}

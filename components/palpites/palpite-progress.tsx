@@ -1,4 +1,4 @@
-import { PalpiteBot } from "@/components/palpites/palpite-bot";
+import { ParrotMascot } from "@/components/brand/parrot-mascot";
 import { ReasoningButton } from "@/components/palpites/reasoning-dialog";
 import { StepIcon } from "@/components/palpites/step-icon";
 import type { StepStatus } from "@/lib/ai/progress/protocol";
@@ -16,10 +16,10 @@ export type ProgressStepView = {
  * na ordem em que começou, com o estado atual. Etapas em paralelo (mercados do fan-out)
  * giram juntas. Quem chama passa a casca (WarmShell) e o kicker.
  *
- * Motion (DESIGN.md): o robozinho (palpite-bot.tsx) ao lado do título, entrada curta de
- * cada linha (fade + 4px), o check entra com um zoom curto, o ícone da etapa em andamento
- * gira. Sem brilho nem gradiente. Com prefers-reduced-motion nada se desloca; o robô e o
- * ícone em andamento só respiram devagar (`palpite-calm`, globals.css).
+ * Motion (DESIGN.md): o papagaio mascote (parrot-mascot.tsx, ADR 0068) ao lado do título,
+ * entrada curta de cada linha (fade + 4px), o check entra com um zoom curto, o ícone da
+ * etapa em andamento gira. Sem brilho nem gradiente. Com prefers-reduced-motion nada se desloca; o olho do
+ * papagaio e o ícone em andamento só respiram devagar (`palpite-calm`, globals.css).
  *
  * FIREWALL (ADR 0030 §3): as frases vêm prontas do servidor (lib/ai/progress/steps.ts),
  * sem odd, edge, stake, % ou nome de casa.
@@ -47,7 +47,7 @@ export function PalpiteProgress({
   return (
     <div className="flex flex-col gap-4">
       <div className="flex items-center gap-3">
-        <PalpiteBot beat={doneCount} />
+        <ParrotMascot beat={doneCount} />
         <div className="flex flex-col gap-1">
           <p className="text-display-sm font-medium tracking-tight text-foreground">
             {title}

@@ -1088,7 +1088,7 @@ describe("PalpiteHero — Ver raciocínio + robozinho (ADR 0065)", () => {
       h.container.querySelector("form")!.requestSubmit(analyze);
       await settle();
     });
-    const bot = h.container.querySelector("[data-testid='palpite-bot']");
+    const bot = h.container.querySelector("[data-testid='parrot-mascot']");
     expect(bot?.getAttribute("aria-hidden")).toBe("true");
     // Nenhuma etapa ainda: sem botão.
     expect(h.button()).toBeUndefined();
