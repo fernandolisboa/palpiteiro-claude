@@ -1,17 +1,29 @@
 import type { RangePreset, ResolvedRange } from "@/lib/view/date-range";
+import type { ListFilters } from "@/lib/view/match-search";
 import type { LeagueFilter } from "@/lib/view/types";
 
 /**
- * Estado de filtro que vive na query string da home: liga + range. Os dois
- * filtros compõem (trocar um preserva o outro). `from`/`to` só fazem sentido
- * com `preset === "custom"`.
+ * Estado de filtro que vive na query string da home: liga + range + busca/filtros
+ * da lista (#643). Todos compõem (trocar um preserva os outros). `from`/`to` só
+ * fazem sentido com `preset === "custom"`.
  */
 export type RangeNavState = {
   league: LeagueFilter;
   preset: RangePreset;
   from?: string;
   to?: string;
+  filters?: ListFilters;
 };
+
+// Busca, time e analisados (#643) no fim da URL; valor padrão não aparece.
+function appendFilters(params: URLSearchParams, filters: ListFilters | undefined) {
+  if (!filters) return;
+  if (filters.q) params.set("q", filters.q);
+  if (filters.team) params.set("team", filters.team);
+  if (filters.analyzed && filters.analyzed !== "all") {
+    params.set("analyzed", filters.analyzed);
+  }
+}
 
 /**
  * Próxima escolha do usuário — a lista padrão (upcoming) ou um range custom com
@@ -33,7 +45,7 @@ export type RangeChoice =
  * Função pura (seam de teste sem @testing-library).
  */
 export function buildRangeHref(
-  current: Pick<RangeNavState, "league">,
+  current: Pick<RangeNavState, "league" | "filters">,
   next: RangeChoice,
 ): string {
   const params = new URLSearchParams();
@@ -46,6 +58,7 @@ export function buildRangeHref(
     params.set("from", next.from);
     params.set("to", next.to);
   }
+  appendFilters(params, current.filters);
 
   return `/jogos?${params.toString()}`;
 }
@@ -56,7 +69,7 @@ export function buildRangeHref(
  * não se clobberem.
  */
 export function buildLeagueHref(
-  current: Pick<RangeNavState, "preset" | "from" | "to">,
+  current: Pick<RangeNavState, "preset" | "from" | "to" | "filters">,
   league: LeagueFilter,
 ): string {
   // custom sem from/to válidos cai pro default (upcoming).
@@ -64,7 +77,21 @@ export function buildLeagueHref(
     current.preset === "custom" && current.from && current.to
       ? { preset: "custom", from: current.from, to: current.to }
       : { preset: "upcoming" };
-  return buildRangeHref({ league }, choice);
+  return buildRangeHref({ league, filters: current.filters }, choice);
+}
+
+/**
+ * Href com a liga e o range atuais e os filtros da lista trocados (#643): `patch`
+ * sobrescreve só as chaves que traz (`undefined` limpa a chave).
+ */
+export function buildFiltersHref(
+  current: RangeNavState,
+  patch: Partial<ListFilters>,
+): string {
+  return buildLeagueHref(
+    { ...current, filters: { ...current.filters, ...patch } },
+    current.league,
+  );
 }
 
 // "2026-10-18" → "18/10": o dia civil escolhido, sem passar por Date (sem fuso).

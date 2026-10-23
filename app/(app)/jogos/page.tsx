@@ -4,6 +4,10 @@ import { redirect } from "next/navigation";
 
 import { Card } from "@/components/ui/card";
 import { FilterScrollRow } from "@/components/filter-scroll-row";
+import { buttonVariants } from "@/components/ui/button";
+import { AnalyzedPicker } from "@/components/match-list/analyzed-picker";
+import { MatchSearchInput } from "@/components/match-list/match-search-input";
+import { TeamFilter } from "@/components/match-list/team-filter";
 import { LeaguePicker } from "@/components/league-picker";
 import { RecentPredCard } from "@/components/recent-pred-card";
 import { RecentPredsEmpty } from "@/components/recent-preds-empty";
@@ -12,10 +16,13 @@ import { UpcomingMatchesDesktop } from "@/components/upcoming-matches-desktop";
 import { UpcomingMatchesMobile } from "@/components/upcoming-matches-mobile";
 import { auth } from "@/auth";
 import { resolveHomeLeagueFilter } from "@/lib/config/active-leagues";
-import { keyToLeague, leagueToKey } from "@/lib/format";
+import { dayKeyOf, keyToLeague, leagueToKey } from "@/lib/format";
 import { getActiveLeaguesForRequest } from "@/lib/db/queries/league-settings";
 import { getRequestTimeZone } from "@/lib/server/request-timezone";
-import { getMatchIdsWithPredictionsByUser } from "@/lib/db/queries/matches";
+import {
+  getMatchIdsWithPredictionsByUser,
+  getTeamsInRange,
+} from "@/lib/db/queries/matches";
 import { getLatestMatchModelSnapshotsForMatches } from "@/lib/db/queries/match-model-snapshots";
 import { loadRangeMatches } from "@/lib/db/queries/load-range-matches";
 import type { MatchModelSnapshot } from "@/lib/model-base/types";
@@ -38,10 +45,23 @@ import {
   type ResolvedRange,
 } from "@/lib/view/date-range";
 import {
+  buildFiltersHref,
   buildLeagueHref,
   rangeEmptyMessage,
   rangeLabel,
+  type RangeNavState,
 } from "@/lib/view/range-href";
+import {
+  buildSearchTerms,
+  filteredEmptyMessage,
+  hasActiveFilters,
+  parseListFilters,
+  selectedTeamOption,
+  teamOptionGroups,
+  type ListFilters,
+  type TeamOption,
+  type TeamOptionGroup,
+} from "@/lib/view/match-search";
 import { toMatchListRowView } from "@/lib/view/match";
 import { toRecentMatchViews } from "@/lib/view/recent-prediction";
 import type {
@@ -77,6 +97,10 @@ type PageProps = {
     preset?: string;
     from?: string;
     to?: string;
+    // Busca e filtros da lista (#643): texto, time (escudo) e analisados.
+    q?: string;
+    team?: string;
+    analyzed?: string;
     // "rever o tour" (/como-usar) — força o tour guiado mesmo já concluído/pulado.
     [TOUR_FORCE_PARAM]?: string;
   }>;
@@ -97,6 +121,9 @@ export default async function JogosPage({ searchParams }: PageProps) {
     preset: presetParam,
     from: fromParam,
     to: toParam,
+    q: qParam,
+    team: teamParam,
+    analyzed: analyzedParam,
     [TOUR_FORCE_PARAM]: tourParam,
   } = await searchParams;
   // Ligas ativas por request (league_settings, ADR 0050 — toggle no admin vale sem
@@ -139,15 +166,45 @@ export default async function JogosPage({ searchParams }: PageProps) {
   if (!session?.user?.id) redirect("/signin");
   const userId = session.user.id;
 
+  // Busca, time e analisados (#643). Nunca lança: valor inválido = sem filtro.
+  const filters = parseListFilters({
+    q: qParam,
+    team: teamParam,
+    analyzed: analyzedParam,
+  });
+
   const limit = range.preset === "upcoming" ? UPCOMING_LIMIT : RANGE_LIMIT;
-  const matchesQuery = {
+  const leagues = filterToLeagues(league, activeLeagues);
+  const rangeWhere = {
     // Bound inferior recuado em 3h só na lista padrão (#385): admite os
     // jogos já apitados que matches.ts gte() de outra forma dropava ANTES do
     // filtro de status. Concern de query — range.from segue intocado.
     from: windowedQueryFrom(range),
     to: range.to,
-    leagues: filterToLeagues(league, activeLeagues),
+    leagues,
     statuses: range.statuses,
+  };
+  // Times com jogo no período (sem a busca nem os outros filtros): a grade de
+  // escudos e o casamento de time da busca. Com busca, a query de jogos espera por
+  // ele; sem, corre junto.
+  const catalogPromise = getTeamsInRange(rangeWhere);
+  const search = filters.q
+    ? buildSearchTerms({
+        q: filters.q,
+        catalog: await catalogPromise,
+        leagues,
+        todayKey: dayKeyOf(now, timeZone),
+      })
+    : undefined;
+  const matchesQuery = {
+    ...rangeWhere,
+    teams: filters.team ? [filters.team] : undefined,
+    search,
+    timeZone,
+    analyzedBy:
+      filters.analyzed === "yes" || filters.analyzed === "no"
+        ? { userId, analyzed: filters.analyzed === "yes" }
+        : undefined,
     order: range.order,
     // Uma linha a mais só pra saber se a lista foi cortada no teto.
     limit: limit + 1,
@@ -155,10 +212,11 @@ export default async function JogosPage({ searchParams }: PageProps) {
 
   // Predições recentes e estado do tour só dependem do usuário: correm junto da
   // query de jogos em vez de esperar por ela.
-  const [queried, recentRaw, tourState] = await Promise.all([
+  const [queried, recentRaw, tourState, catalog] = await Promise.all([
     loadRangeMatches(matchesQuery),
     getRecentPredictedMatchesByUser(userId, RECENT_MATCH_LIMIT),
     getTourState(userId),
+    catalogPromise,
   ]);
   const truncated = queried.length > limit;
   const dbMatches = truncated ? queried.slice(0, limit) : queried;
@@ -236,6 +294,12 @@ export default async function JogosPage({ searchParams }: PageProps) {
   });
 
   const recents: RecentMatchView[] = toRecentMatchViews(recentRaw, now, timeZone);
+  const teamGroups = teamOptionGroups(catalog, activeKeys);
+  const selectedTeam = selectedTeamOption(
+    catalog,
+    filters.team,
+    league === "all" ? activeKeys[0] : league,
+  );
   const countLabel = matchCountLabel(matches.length, truncated);
   // Fim da lista cortada no teto: diz como ver o resto (o "Carregar mais" some ali).
   const endNote = !truncated
@@ -260,6 +324,9 @@ export default async function JogosPage({ searchParams }: PageProps) {
           league={league}
           activeKeys={activeKeys}
           range={range}
+          filters={filters}
+          teamGroups={teamGroups}
+          selectedTeam={selectedTeam}
           countLabel={countLabel}
           endNote={endNote}
         />
@@ -271,6 +338,9 @@ export default async function JogosPage({ searchParams }: PageProps) {
           league={league}
           activeKeys={activeKeys}
           range={range}
+          filters={filters}
+          teamGroups={teamGroups}
+          selectedTeam={selectedTeam}
           countLabel={countLabel}
           endNote={endNote}
         />
@@ -285,6 +355,9 @@ type HomeContentProps = {
   league: LeagueFilter;
   activeKeys: readonly LeagueKey[];
   range: ResolvedRange;
+  filters: ListFilters;
+  teamGroups: TeamOptionGroup[];
+  selectedTeam?: TeamOption;
   countLabel: string;
   endNote?: string;
 };
@@ -316,35 +389,54 @@ function matchCountLabel(n: number, capped: boolean): string {
   return n === 1 ? "1 jogo" : `${n} jogos`;
 }
 
-// Linha única de filtros (#577): liga (select em chip) | Escolher datas. Rolável na horizontal quando não cabe, e rola sozinha
+// Estado de navegação completo da lista: liga, período e busca/filtros (#643).
+function navState(
+  league: LeagueFilter,
+  range: ResolvedRange,
+  filters: ListFilters,
+): RangeNavState {
+  return { league, ...rangeNavProps(range), filters };
+}
+
+// Linha única de filtros (#577): liga (select em chip) | Escolher datas | Time |
+// análise (#643). Rolável na horizontal quando não cabe, e rola sozinha
 // até o chip selecionado (FilterScrollRow); os alvos do tour ficam dentro dela (o
 // scrollIntoView do tour rola o contêiner até o alvo).
 function FilterRow({
   league,
   activeKeys,
   range,
+  filters,
+  teamGroups,
+  selectedTeam,
   surface,
   className,
 }: {
   league: LeagueFilter;
   activeKeys: readonly LeagueKey[];
   range: ResolvedRange;
+  filters: ListFilters;
+  teamGroups: TeamOptionGroup[];
+  selectedTeam?: TeamOption;
   surface: "sheet" | "popover";
   className?: string;
 }) {
   const navProps = rangeNavProps(range);
+  const nav = navState(league, range, filters);
   return (
-    <FilterScrollRow
-      activeKey={`${league}-${range.preset}-${navProps.from ?? ""}-${navProps.to ?? ""}`}
-      className={className}
-    >
+    <FilterScrollRow activeKey={buildLeagueHref(nav, league)} className={className}>
       <div data-tour="league-picker" className="shrink-0">
-        <LeaguePicker value={league} activeKeys={activeKeys} range={navProps} />
+        <LeaguePicker
+          value={league}
+          activeKeys={activeKeys}
+          range={{ ...navProps, filters }}
+        />
       </div>
       <span aria-hidden="true" className="h-5 w-px shrink-0 bg-border" />
       <div data-tour="date-range" className="shrink-0">
         <DateRangeTabs
           league={league}
+          filters={filters}
           preset={range.preset}
           from={navProps.from}
           to={navProps.to}
@@ -352,7 +444,51 @@ function FilterRow({
           surface={surface}
         />
       </div>
+      <TeamFilter
+        nav={nav}
+        groups={teamGroups}
+        selected={selectedTeam}
+        surface={surface}
+      />
+      <AnalyzedPicker nav={nav} />
     </FilterScrollRow>
+  );
+}
+
+// Lista vazia: com busca/filtro ativo, diz o que foi buscado e oferece limpar só os
+// filtros (liga e datas ficam); sem, a mensagem do período.
+function EmptyMatches({
+  nav,
+  range,
+  selectedTeam,
+}: {
+  nav: RangeNavState;
+  range: ResolvedRange;
+  selectedTeam?: TeamOption;
+}) {
+  const filters = nav.filters ?? {};
+  if (!hasActiveFilters(filters)) {
+    const empty = rangeEmptyMessage(range);
+    return (
+      <EmptyState className="py-6" mascot title={empty.title} description={empty.detail} />
+    );
+  }
+  const empty = filteredEmptyMessage(filters, selectedTeam?.team.name);
+  return (
+    <EmptyState
+      className="py-6"
+      mascot
+      title={empty.title}
+      description={empty.detail}
+      action={
+        <IntentLink
+          href={buildFiltersHref(nav, { q: undefined, team: undefined, analyzed: "all" })}
+          className={buttonVariants({ variant: "outline", size: "sm" })}
+        >
+          Limpar filtros
+        </IntentLink>
+      }
+    />
   );
 }
 
@@ -362,16 +498,17 @@ function MobileHome({
   league,
   activeKeys,
   range,
+  filters,
+  teamGroups,
+  selectedTeam,
   countLabel,
   endNote,
 }: HomeContentProps) {
-  const empty = rangeEmptyMessage(range);
-  const navProps = rangeNavProps(range);
+  const nav = navState(league, range, filters);
   // URL filtrada atual da lista — propagada aos links de jogo pra preservar o
-  // estado de busca (liga + date range) ao abrir um jogo e voltar.
-  const listHref = buildLeagueHref(navProps, league);
-  // Remonta a lista ao trocar de filtro (liga/range) pra resetar o reveal.
-  const listKey = `${league}-${range.preset}-${navProps.from ?? ""}-${navProps.to ?? ""}`;
+  // estado de busca (liga + date range + busca/filtros) ao abrir um jogo e voltar.
+  // Também é a chave que remonta a lista ao trocar de filtro (reseta o reveal).
+  const listHref = buildLeagueHref(nav, league);
   const nextMatchId = firstAnalyzableId(matches);
   return (
     <div className="overflow-x-clip bg-background text-foreground">
@@ -383,26 +520,28 @@ function MobileHome({
         />
       </div>
 
+      <div data-tour="match-search" className="px-5 pb-2">
+        <MatchSearchInput nav={nav} />
+      </div>
+
       <FilterRow
         league={league}
         activeKeys={activeKeys}
         range={range}
+        filters={filters}
+        teamGroups={teamGroups}
+        selectedTeam={selectedTeam}
         surface="sheet"
         className="px-5 pb-3"
       />
 
       {matches.length === 0 ? (
         <Card className="mx-5">
-          <EmptyState
-            className="py-6"
-            mascot
-            title={empty.title}
-            description={empty.detail}
-          />
+          <EmptyMatches nav={nav} range={range} selectedTeam={selectedTeam} />
         </Card>
       ) : (
         <UpcomingMatchesMobile
-          key={listKey}
+          key={listHref}
           matches={matches}
           listHref={listHref}
           endNote={endNote}
@@ -445,15 +584,16 @@ function DesktopHome({
   league,
   activeKeys,
   range,
+  filters,
+  teamGroups,
+  selectedTeam,
   countLabel,
   endNote,
 }: HomeContentProps) {
-  const empty = rangeEmptyMessage(range);
-  const navProps = rangeNavProps(range);
-  // URL filtrada atual da lista — propagada aos links de jogo (preserva busca ao voltar).
-  const listHref = buildLeagueHref(navProps, league);
-  // Remonta a grade ao trocar de filtro (liga/range) pra resetar o reveal.
-  const listKey = `${league}-${range.preset}-${navProps.from ?? ""}-${navProps.to ?? ""}`;
+  const nav = navState(league, range, filters);
+  // URL filtrada atual da lista — propagada aos links de jogo (preserva busca ao
+  // voltar) e chave que remonta a grade ao trocar de filtro (reseta o reveal).
+  const listHref = buildLeagueHref(nav, league);
   const nextMatchId = firstAnalyzableId(matches);
   return (
     <>
@@ -463,27 +603,30 @@ function DesktopHome({
           meta={countLabel}
           className="lg:pb-5"
         />
-        {/* Os chips numa linha própria abaixo do título: a linha não cabe à direita. */}
-        <FilterRow
-          league={league}
-          activeKeys={activeKeys}
-          range={range}
-          surface="popover"
-          className="pb-5"
-        />
+        {/* Busca e chips numa linha própria abaixo do título: não cabem à direita. */}
+        <div className="flex items-center gap-3 pb-5">
+          <div data-tour="match-search" className="w-72 shrink-0">
+            <MatchSearchInput nav={nav} />
+          </div>
+          <FilterRow
+            league={league}
+            activeKeys={activeKeys}
+            range={range}
+            filters={filters}
+            teamGroups={teamGroups}
+            selectedTeam={selectedTeam}
+            surface="popover"
+            className="min-w-0 flex-1"
+          />
+        </div>
 
         {matches.length === 0 ? (
           <Card className="px-8 py-16 text-center">
-            <EmptyState
-              className="py-6"
-              mascot
-              title={empty.title}
-              description={empty.detail}
-            />
+            <EmptyMatches nav={nav} range={range} selectedTeam={selectedTeam} />
           </Card>
         ) : (
           <UpcomingMatchesDesktop
-            key={listKey}
+            key={listHref}
             matches={matches}
             listHref={listHref}
             endNote={endNote}

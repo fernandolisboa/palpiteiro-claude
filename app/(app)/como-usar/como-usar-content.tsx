@@ -154,6 +154,15 @@ export function ComoUsarContent() {
             próximos jogos.
           </li>
           <li>
+            Pra achar um jogo, use a busca acima dos filtros: time, campeonato ou
+            data (<Ui>flamengo</Ui>, <Ui>champions</Ui>, <Ui>sábado</Ui>,{" "}
+            <Ui>25/10</Ui>, <Ui>amanhã</Ui>). Vários termos juntos estreitam a lista
+            (<Ui>flamengo sábado</Ui>). Em <Ui>Time</Ui> você escolhe pelo escudo, e
+            o último botão mostra só os jogos que você já analisou, ou só os que
+            ainda não. Tudo isso vale junto com o campeonato e as datas, e{" "}
+            <Ui>Limpar filtros</Ui> aparece quando nada bate.
+          </li>
+          <li>
             Toque no jogo pra abrir.
           </li>
         </Steps>

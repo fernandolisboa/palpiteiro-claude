@@ -6,6 +6,7 @@ import { useRouter } from "next/navigation";
 import { Select } from "@/components/ui/select";
 import { cn } from "@/lib/utils";
 import type { RangePreset } from "@/lib/view/date-range";
+import type { ListFilters } from "@/lib/view/match-search";
 import {
   leaguePickerGroups,
   type LeaguePickerOption,
@@ -17,6 +18,8 @@ type RangeState = {
   preset: RangePreset;
   from?: string;
   to?: string;
+  // Busca e filtros da lista (#643), preservados ao trocar de liga.
+  filters?: ListFilters;
 };
 
 type Props = {
