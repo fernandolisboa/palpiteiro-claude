@@ -27,4 +27,11 @@ describe("movimento do robozinho e do progresso (globals.css)", () => {
     expect(kf).toContain("opacity");
     expect(kf).not.toMatch(/transform|scale|translate|rotate/);
   });
+
+  it("o spinner da etapa em andamento continua girando com movimento reduzido", () => {
+    const block = reducedMotionBlocks().find((b) => b.includes(".palpite-spin"));
+    expect(block).toMatch(/\.palpite-spin \{\s*animation:\s*palpite-spin\s+[\d.]+s\s+linear\s+infinite\s*!important/);
+    const kf = /@keyframes palpite-spin \{([\s\S]*?)\n\}/.exec(css)?.[1] ?? "";
+    expect(kf).toContain("rotate(360deg)");
+  });
 });

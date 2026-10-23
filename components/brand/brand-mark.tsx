@@ -69,12 +69,19 @@ export const MARK_TRAILS = (
   return [x1, y1, r2(x1 + (cx - x1) * k), r2(y1 + (cy - y1) * k)] as const;
 });
 
+const WHITE = "#ffffff";
+
 /**
  * Os traços do glifo: trave e rastro em branco, bola em amarelo, gomos na cor `cut`, que tem
  * que ser a do fundo do símbolo (hex no Satori, `currentColor` no DOM).
  */
 export function markGlyph(cut: string) {
-  const white = "#ffffff";
+  return [...markGoal(), ...markBall(cut)];
+}
+
+/** A trave e o rastro do chute. */
+function markGoal() {
+  const white = WHITE;
   return [
     ...MARK_TRAILS.map(([x1, y1, x2, y2], i) => (
       <line
@@ -104,6 +111,13 @@ export function markGlyph(cut: string) {
       stroke={white}
       strokeWidth={MARK_STROKE}
     />,
+  ];
+}
+
+/** Só a bola, no ângulo, com os gomos vazados em `cut` (o mascote, parrot-mascot.tsx, a
+ * leva até o olho do papagaio). */
+export function markBall(cut: string) {
+  return [
     <circle key="ball" cx={cx} cy={cy} r={r} fill={MARK_BALL_COLOR} />,
     ...MARK_BALL_SEAMS.map(([x1, y1, x2, y2], i) => (
       <line

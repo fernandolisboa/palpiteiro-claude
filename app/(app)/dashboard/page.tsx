@@ -1,7 +1,6 @@
 import type { Metadata } from "next";
 import Link from "next/link";
 import { redirect } from "next/navigation";
-import { Inbox } from "lucide-react";
 
 import { BankrollChart } from "@/components/dashboard/bankroll-chart";
 import {
@@ -86,7 +85,7 @@ export default async function DashboardPage({ searchParams }: PageProps) {
           <Card className="px-8 py-16 text-center">
             <EmptyState
               className="max-w-form py-6"
-              icon={<Inbox className="size-10" strokeWidth={1.25} />}
+              mascot
               title="Você ainda não tem predições"
               description="Gere uma análise num jogo pra começar a acompanhar seu retorno."
               action={

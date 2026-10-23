@@ -11,9 +11,11 @@ export function StepIcon({ status }: { status: StepStatus }) {
     return (
       <span
         aria-hidden="true"
-        className={cn(base, "palpite-calm border-palpite-border bg-palpite-soft")}
+        className={cn(base, "border-palpite-border bg-palpite-soft")}
       >
-        <Loader2 className="size-3.5 animate-spin text-palpite-strong-fg motion-reduce:animate-none" />
+        {/* Gira sempre, inclusive com movimento reduzido (`palpite-spin`, globals.css):
+            parado, um círculo com seta parece travado. */}
+        <Loader2 className="palpite-spin size-3.5 animate-spin text-palpite-strong-fg" />
       </span>
     );
   }

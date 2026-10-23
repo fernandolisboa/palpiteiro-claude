@@ -24,6 +24,10 @@ import {
 } from "@/components/palpites/reasoning-dialog";
 import { usePalpiteRun } from "@/components/palpites/use-palpite-run";
 import { Button } from "@/components/ui/button";
+import {
+  DEFAULT_PROGRESS_MASCOT,
+  type ProgressMascot,
+} from "@/lib/brand/progress-mascot";
 import { Callout } from "@/components/ui/callout";
 import { toHeroRunOutcome, type HeroRunOutcome } from "@/lib/ai/progress/protocol";
 import { MAX_CONTEXT_CHARS } from "@/lib/user-palpite/types";
@@ -85,6 +89,9 @@ type Props = {
   // Reconferência com a escalação mais nova que o palpite (#619): uma linha muda, só
   // texto ("Palpite gerado antes da escalação."). null/ausente = nada.
   lineupNotice?: string | null;
+  // Personagem ao lado do progresso do run (ADR 0068, flag `progressMascot` do
+  // /admin/ia). Default o robozinho: os outros chamadores e testes não mudam.
+  mascot?: ProgressMascot;
 };
 
 // Campo do contexto extra, controlado pelo PalpiteHero (o estado sobrevive ao
@@ -140,6 +147,7 @@ export function PalpiteHero({
   expanded = true,
   live = false,
   lineupNotice = null,
+  mascot = DEFAULT_PROGRESS_MASCOT,
 }: Props) {
   // Dois caminhos pro mesmo run (ADR 0064): com JS, a rota de streaming mostra as etapas
   // ao vivo; sem JS (ou se a rota não atender), a server action do form, como antes.
@@ -264,6 +272,7 @@ export function PalpiteHero({
         expanded={expanded}
         live={live}
         lineupNotice={lineupNotice}
+        mascot={mascot}
       />
       <ReasoningDialog
         open={reasoningOpen && reasoningSteps.length > 0}
@@ -294,6 +303,7 @@ function HeroBody({
   expanded,
   live,
   lineupNotice,
+  mascot,
 }: {
   heroPalpite: PalpiteHeadlineView | null;
   unavailable: MatchUnavailableReason | null;
@@ -313,6 +323,7 @@ function HeroBody({
   expanded: boolean;
   live: boolean;
   lineupNotice: string | null;
+  mascot: ProgressMascot;
 }) {
   // Pending: as etapas do run em PALAVRAS, sem dígito de tempo. Tem precedência sobre
   // tudo (o run está em voo agora).
@@ -323,6 +334,7 @@ function HeroBody({
         live={live}
         steps={pendingSteps}
         onShowReasoning={onShowReasoning}
+        mascot={mascot}
       />
     );
   }
@@ -800,11 +812,13 @@ function PendingHero({
   live,
   steps,
   onShowReasoning,
+  mascot,
 }: {
   intent: HeroIntent;
   live: boolean;
   steps: ProgressStepView[];
   onShowReasoning: (() => void) | undefined;
+  mascot: ProgressMascot;
 }) {
   const copy = PENDING_COPY[intent === "palpite" ? "palpite" : live ? "live" : "analysis"];
   return (
@@ -817,6 +831,7 @@ function PendingHero({
           steps={steps}
           waitingLabel={copy.waiting}
           onShowReasoning={onShowReasoning}
+          mascot={mascot}
         />
       </div>
     </WarmShell>

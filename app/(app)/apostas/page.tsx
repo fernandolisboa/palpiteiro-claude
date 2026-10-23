@@ -1,7 +1,6 @@
 import type { Metadata } from "next";
 import Link from "next/link";
 import { redirect } from "next/navigation";
-import { Ticket } from "lucide-react";
 
 import { SlipCard } from "@/components/bets/slip-card";
 import { SlipFilterChips, slipFilterHref } from "@/components/bets/slip-filter";
@@ -71,7 +70,7 @@ export default async function ApostasPage({ searchParams }: PageProps) {
 
         {page === null ? (
           <EmptyState
-            icon={<Ticket className="size-6" aria-hidden />}
+            mascot
             title="Você ainda não registrou apostas"
             description="Abra um jogo, toque nas seleções que você apostou e registre — elas aparecem aqui."
           />

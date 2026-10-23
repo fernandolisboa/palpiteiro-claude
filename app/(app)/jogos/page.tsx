@@ -1,7 +1,6 @@
 import type { Metadata } from "next";
 import Link from "next/link";
 import { redirect } from "next/navigation";
-import { Inbox } from "lucide-react";
 
 import { Card } from "@/components/ui/card";
 import { FilterScrollRow } from "@/components/filter-scroll-row";
@@ -394,7 +393,7 @@ function MobileHome({
         <Card className="mx-5">
           <EmptyState
             className="py-6"
-            icon={<Inbox aria-hidden="true" className="size-10" strokeWidth={1.25} />}
+            mascot
             title={empty.title}
             description={empty.detail}
           />
@@ -475,7 +474,7 @@ function DesktopHome({
           <Card className="px-8 py-16 text-center">
             <EmptyState
               className="py-6"
-              icon={<Inbox aria-hidden="true" className="size-10" strokeWidth={1.25} />}
+              mascot
               title={empty.title}
               description={empty.detail}
             />
