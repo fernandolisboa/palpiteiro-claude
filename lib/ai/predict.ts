@@ -1340,11 +1340,12 @@ async function runPredict(
     throw new AnalysisDeadlineError();
   }
   if (opts.beforeLlmPath) await opts.beforeLlmPath();
-  const result = await trackStep(
+  // A etapa do mercado só fecha "pronta" depois de validar e gravar; qualquer throw
+  // daqui em diante a fecha como falha pelo progressScope do predict.
+  const marketProgress = beginStep(
     marketStep(marketKey, progressMarketLabel(marketKey), model.family),
-    () => aiProvider.runAnalysis(analysisRequest),
-    (r) => (r.ok ? undefined : { status: "failed" }),
   );
+  const result = await aiProvider.runAnalysis(analysisRequest);
   const latencyMs = result.latencyMs;
   // Daqui em diante, auditoria, custo e modelVersion usam o modelo que respondeu.
   const served = result.servedModel;
@@ -1560,6 +1561,7 @@ async function runPredict(
       ? Object.fromEntries(scorerBundle!.players.map((p) => [p.key, p.label]))
       : null,
   });
+  marketProgress.done();
   return { kind: "done", result: persisted };
 }
 

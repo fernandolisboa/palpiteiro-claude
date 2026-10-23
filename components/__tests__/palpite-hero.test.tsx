@@ -960,6 +960,18 @@ describe("PalpiteHero — progresso ao vivo do run (ADR 0064)", () => {
     await h.cleanup();
   });
 
+  it("sair da página no meio do run: para de ler e não dá refresh depois", async () => {
+    const s = controlledFetch();
+    vi.stubGlobal("fetch", s.fetchMock);
+    const h = await mountHero();
+    await h.submit();
+    await h.cleanup();
+    await act(settle);
+    // O leitor foi cancelado: o servidor não tem mais pra quem escrever.
+    expect(() => s.push({ t: "result", outcome: { ok: true, analysis: true } })).toThrow();
+    expect(nav.refresh).not.toHaveBeenCalled();
+  });
+
   it("o FormData enviado leva o intent do botão clicado e o matchId", async () => {
     const fetchMock = streamingFetch();
     vi.stubGlobal("fetch", fetchMock);

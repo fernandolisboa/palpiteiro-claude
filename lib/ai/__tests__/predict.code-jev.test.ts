@@ -2682,6 +2682,23 @@ describe("progresso ao vivo (ADR 0064)", () => {
     ]);
   });
 
+  it("motor llm: saída fora do schema → a etapa do mercado fecha como falha, não pronta", async () => {
+    getAnalysisEngine.mockResolvedValue("llm");
+    anthropicCreate.mockResolvedValue(anthropicMessage("submit_prediction", { foo: 1 }));
+    const events: ProgressEvent[] = [];
+    await expect(
+      withRunProgress(
+        (e) => events.push(e),
+        () =>
+          predict({ matchId: "m-1", userId: "u-1", isAdmin: true, marketKey: "match_result" })
+      )
+    ).rejects.toThrow();
+    expect(seen(events).slice(-2)).toEqual([
+      "market:match_result:active",
+      "market:match_result:failed",
+    ]);
+  });
+
   it("fora de um run com progresso, nada muda (server action, cron)", async () => {
     const result = await predict({
       matchId: "m-1",

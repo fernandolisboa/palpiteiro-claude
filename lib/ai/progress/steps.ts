@@ -134,12 +134,13 @@ export function marketStep(
   marketLabel: string | null,
   family: ModelFamily,
 ): StepSpec {
-  const label = marketLabel ?? "mercado";
+  const label = marketLabel ?? "o mercado";
+  const subject = marketLabel ?? "Mercado";
   return {
     id: `market:${marketKey}`,
     active: `Analisando ${label} com o ${FAMILY_NAME[family]}`,
-    done: `${label}: análise pronta`,
-    failed: `${label}: a análise não saiu`,
+    done: `${subject}: análise pronta`,
+    failed: `${subject}: a análise não saiu`,
   };
 }
 

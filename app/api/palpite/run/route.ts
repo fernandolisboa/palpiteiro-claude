@@ -17,6 +17,13 @@ import { isSameOriginPost } from "@/lib/security/same-origin";
 //
 // Fora do middleware (/api/*): a sessão é conferida dentro da action (auth()), e a
 // origem aqui, já que só server actions têm essa conferência de graça.
+//
+// Ciclo de vida: a resposta sai antes do run terminar. Por isso o `revalidatePath` da
+// action não tem efeito aqui (o Next aplica as revalidações quando o handler devolve);
+// hoje as páginas são dinâmicas e o cliente faz router.refresh() no fim. Se a pessoa
+// desconectar, o Next entra na fase `after` com o run ainda em voo: cookies()/headers()
+// chamados DEPOIS disso lançam. Hoje a action só os lê nos gates, antes de qualquer
+// espera longa; mantenha assim.
 export const dynamic = "force-dynamic";
 // O mesmo teto da página do jogo (ACTION_BUDGET_MS = 270s conta a partir da action).
 export const maxDuration = 300;

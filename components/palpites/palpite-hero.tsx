@@ -141,7 +141,11 @@ export function PalpiteHero({
   // ao vivo; sem JS (ou se a rota não atender), a server action do form, como antes.
   const [actionState, formAction, actionPending] = useActionState(runPalpiteHero, null);
   const run = usePalpiteRun();
-  const [source, setSource] = useState<"stream" | "action">("stream");
+  // Envio sem JS (ou antes da hidratação) volta com o resultado da action já no estado
+  // inicial: ele vale até o próximo envio.
+  const [source, setSource] = useState<"stream" | "action">(() =>
+    actionState ? "action" : "stream",
+  );
   const actionOutcome = useMemo(
     () => (actionState ? toHeroRunOutcome(actionState) : null),
     [actionState],

@@ -1,6 +1,6 @@
 "use client";
 
-import { useCallback, useRef, useState, useTransition } from "react";
+import { useCallback, useEffect, useRef, useState, useTransition } from "react";
 import { useRouter } from "next/navigation";
 
 import {
@@ -21,6 +21,7 @@ const CUT_MESSAGE =
   "A conexão caiu antes do fim. A análise pode ter sido salva: confira em instantes.";
 const OFFLINE_MESSAGE =
   "Não deu pra falar com o servidor. Confira a conexão e tente de novo.";
+const SERVER_MESSAGE = "O servidor não respondeu agora. Tente de novo em instantes.";
 
 export type PalpiteRun = {
   steps: RunStep[];
@@ -45,6 +46,15 @@ export function usePalpiteRun(): PalpiteRun {
   const [outcome, setOutcome] = useState<HeroRunOutcome | null>(null);
   const [refreshing, startRefresh] = useTransition();
   const inFlight = useRef(false);
+  // Saiu da página no meio do run: para de ler (o run segue no servidor) e não mexe
+  // em estado nem dá refresh numa página que já é outra.
+  const abortRef = useRef<AbortController | null>(null);
+  useEffect(
+    () => () => {
+      abortRef.current?.abort();
+    },
+    [],
+  );
 
   const applyStep = useCallback((step: RunStep) => {
     setSteps((prev) => {
@@ -60,6 +70,8 @@ export function usePalpiteRun(): PalpiteRun {
     async (formData: FormData): Promise<"streamed" | "fallback"> => {
       if (inFlight.current) return "streamed";
       inFlight.current = true;
+      const abort = new AbortController();
+      abortRef.current = abort;
       setSteps([]);
       setOutcome(null);
       setStreaming(true);
@@ -72,6 +84,7 @@ export function usePalpiteRun(): PalpiteRun {
             method: "POST",
             body: formData,
             headers: { Accept: "application/x-ndjson" },
+            signal: abort.signal,
           });
         } catch {
           result = { ok: false, error: OFFLINE_MESSAGE };
@@ -79,11 +92,11 @@ export function usePalpiteRun(): PalpiteRun {
         }
         if (!res.ok || !res.body) {
           if (FALLBACK_STATUSES.has(res.status)) return "fallback";
-          result = { ok: false, error: OFFLINE_MESSAGE };
+          result = { ok: false, error: SERVER_MESSAGE };
           return "streamed";
         }
         try {
-          result = await readStream(res.body, applyStep);
+          result = await readStream(res.body, applyStep, abort.signal);
         } catch {
           result = null;
         }
@@ -97,9 +110,11 @@ export function usePalpiteRun(): PalpiteRun {
         return "streamed";
       } finally {
         inFlight.current = false;
-        if (result) setOutcome(result);
-        setStreaming(false);
-        if (refresh) startRefresh(() => router.refresh());
+        if (!abort.signal.aborted) {
+          if (result) setOutcome(result);
+          setStreaming(false);
+          if (refresh) startRefresh(() => router.refresh());
+        }
       }
     },
     [applyStep, router],
@@ -123,8 +138,10 @@ export function usePalpiteRun(): PalpiteRun {
 async function readStream(
   body: ReadableStream<Uint8Array>,
   onStep: (step: RunStep) => void,
+  signal: AbortSignal,
 ): Promise<HeroRunOutcome | null> {
   const reader = body.getReader();
+  signal.addEventListener("abort", () => void reader.cancel().catch(() => undefined));
   const decoder = new TextDecoder();
   let buffer = "";
   let outcome: HeroRunOutcome | null = null;
@@ -136,7 +153,7 @@ async function readStream(
   };
   for (;;) {
     const { value, done } = await reader.read();
-    if (done) break;
+    if (done || signal.aborted) break;
     buffer += decoder.decode(value, { stream: true });
     let nl = buffer.indexOf("\n");
     while (nl !== -1) {
