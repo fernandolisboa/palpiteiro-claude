@@ -18,6 +18,10 @@ import {
   PalpiteProgress,
   type ProgressStepView,
 } from "@/components/palpites/palpite-progress";
+import {
+  ReasoningButton,
+  ReasoningDialog,
+} from "@/components/palpites/reasoning-dialog";
 import { usePalpiteRun } from "@/components/palpites/use-palpite-run";
 import { Button } from "@/components/ui/button";
 import { Callout } from "@/components/ui/callout";
@@ -190,6 +194,20 @@ export function PalpiteHero({
         ? (state.palpiteError ?? null)
         : null
       : state.error;
+  // "Ver raciocínio" (ADR 0065): durante o run, as etapas ao vivo; depois, as gravadas
+  // com o palpite exibido. Run que terminou sem set novo (falhou, ou a síntese não saiu)
+  // segue mostrando as próprias etapas, nunca as do palpite anterior. Um diálogo só,
+  // fora do corpo: segue aberto quando o run termina e o palpite novo chega.
+  const liveSteps = source === "stream" ? run.steps : [];
+  const showLive = pending || (liveSteps.length > 0 && setId === setIdAtSubmit);
+  const reasoningSteps: ProgressStepView[] = showLive
+    ? liveSteps
+    : (heroPalpite?.reasoning ?? []);
+  const [reasoningOpen, setReasoningOpen] = useState(false);
+  // Sem etapas, o diálogo fecha de vez (não reabre sozinho no próximo run).
+  if (reasoningOpen && reasoningSteps.length === 0) setReasoningOpen(false);
+  const showReasoning =
+    reasoningSteps.length > 0 ? () => setReasoningOpen(true) : undefined;
 
   return (
     <form
@@ -200,6 +218,7 @@ export function PalpiteHero({
         // da hidratação (preventDefault cancela a action do React).
         e.preventDefault();
         if (pending) return;
+        setReasoningOpen(false);
         const submitter = (e.nativeEvent as SubmitEvent).submitter;
         setSetIdAtSubmit(setId);
         setIntent(
@@ -236,7 +255,8 @@ export function PalpiteHero({
         sharedAt={sharedAt}
         pending={pending}
         pendingIntent={intent}
-        pendingSteps={source === "stream" ? run.steps : []}
+        pendingSteps={liveSteps}
+        onShowReasoning={showReasoning}
         error={error}
         canRegenerate={analyzable && fanOutEnabled && hasAnalyses}
         contextField={contextField}
@@ -244,6 +264,12 @@ export function PalpiteHero({
         expanded={expanded}
         live={live}
         lineupNotice={lineupNotice}
+      />
+      <ReasoningDialog
+        open={reasoningOpen && reasoningSteps.length > 0}
+        onOpenChange={setReasoningOpen}
+        steps={reasoningSteps}
+        running={pending}
       />
     </form>
   );
@@ -260,6 +286,7 @@ function HeroBody({
   pending,
   pendingIntent,
   pendingSteps,
+  onShowReasoning,
   error,
   canRegenerate,
   contextField,
@@ -278,6 +305,7 @@ function HeroBody({
   pending: boolean;
   pendingIntent: HeroIntent;
   pendingSteps: ProgressStepView[];
+  onShowReasoning: (() => void) | undefined;
   error: string | null;
   canRegenerate: boolean;
   contextField: ContextField;
@@ -289,7 +317,14 @@ function HeroBody({
   // Pending: as etapas do run em PALAVRAS, sem dígito de tempo. Tem precedência sobre
   // tudo (o run está em voo agora).
   if (pending) {
-    return <PendingHero intent={pendingIntent} live={live} steps={pendingSteps} />;
+    return (
+      <PendingHero
+        intent={pendingIntent}
+        live={live}
+        steps={pendingSteps}
+        onShowReasoning={onShowReasoning}
+      />
+    );
   }
 
   // Palpite presente (pendente OU settled): a manchete sobrevive a um erro de re-análise
@@ -308,6 +343,7 @@ function HeroBody({
         contextNotice={contextNotice}
         expanded={expanded}
         lineupNotice={lineupNotice}
+        onShowReasoning={onShowReasoning}
       />
     );
   }
@@ -341,6 +377,7 @@ function PopulatedHero({
   contextNotice,
   expanded,
   lineupNotice,
+  onShowReasoning,
 }: {
   view: PalpiteHeadlineView;
   analyzable: boolean;
@@ -353,6 +390,7 @@ function PopulatedHero({
   contextNotice: string | null;
   expanded: boolean;
   lineupNotice: string | null;
+  onShowReasoning: (() => void) | undefined;
 }) {
   const settled = view.badge !== null;
   return (
@@ -435,6 +473,7 @@ function PopulatedHero({
             </Button>
           )}
           {canRegenerate && <PalpiteOnlyButton label="Refazer só o palpite" />}
+          {onShowReasoning && <ReasoningButton onClick={onShowReasoning} />}
           {/* #384: compartilhar. Só com set persistido (setId). IMPERATIVO (type="button",
               onClick) — NÃO sequestra o <form action={runPalpiteHero}>. */}
           {setId !== null && <ShareButton key={setId} setId={setId} sharedAt={sharedAt} />}
@@ -760,10 +799,12 @@ function PendingHero({
   intent,
   live,
   steps,
+  onShowReasoning,
 }: {
   intent: HeroIntent;
   live: boolean;
   steps: ProgressStepView[];
+  onShowReasoning: (() => void) | undefined;
 }) {
   const copy = PENDING_COPY[intent === "palpite" ? "palpite" : live ? "live" : "analysis"];
   return (
@@ -775,6 +816,7 @@ function PendingHero({
           hint={copy.hint}
           steps={steps}
           waitingLabel={copy.waiting}
+          onShowReasoning={onShowReasoning}
         />
       </div>
     </WarmShell>

@@ -10,6 +10,7 @@ import {
   toPalpiteHeadlineView,
   toPalpiteHeadlineViewFromSet,
   type PalpiteHeadlineSource,
+  type PalpiteHeadlineView,
 } from "@/lib/view/palpites-headline";
 
 // headline POVOADO de propósito + uma proveniência cheia: a asserção-chave é que
@@ -80,6 +81,20 @@ describe("toPalpiteHeadlineView", () => {
   it("#378: view.sources é undefined quando a manchete não carrega sources (sets pré-#377)", () => {
     // O fixture `headline` não tem sources → o passthrough rende undefined (seção escondida).
     expect(toPalpiteHeadlineView(source()).sources).toBeUndefined();
+  });
+
+  it("ADR 0065: headline.reasoning → view.reasoning validado; ausente ou lixo → sem campo", () => {
+    const reasoning: NonNullable<PalpiteHeadlineView["reasoning"]> = [
+      { id: "odds", status: "done", label: "Preços do mercado lidos", detail: ["Ambas marcam"] },
+    ];
+    const v = toPalpiteHeadlineView(source({ headline: { ...headline, reasoning } }));
+    expect(v.reasoning).toEqual(reasoning);
+    expect(toPalpiteHeadlineView(source()).reasoning).toBeUndefined();
+    expect(
+      toPalpiteHeadlineView(
+        source({ headline: { ...headline, reasoning: "x" as never } }),
+      ),
+    ).not.toHaveProperty("reasoning");
   });
 
   it("NÃO vaza sourcePredictionIds nem nenhum número de valor (firewall leg c)", () => {

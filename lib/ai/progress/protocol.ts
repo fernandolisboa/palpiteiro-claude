@@ -14,7 +14,23 @@ export type ProgressEvent = {
   id: string;
   status: StepStatus;
   label: string;
+  // O que a etapa encontrou (ADR 0065), em frases curtas montadas pelo código: o "Ver
+  // raciocínio" mostra. Mesmas regras da `label`.
+  detail?: string[];
 };
+
+// Uma etapa terminada, como fica gravada com o palpite (headline.reasoning) e como o
+// "Ver raciocínio" desenha.
+export type ReasoningStep = {
+  id: string;
+  status: Exclude<StepStatus, "active">;
+  label: string;
+  detail?: string[];
+};
+
+export const MAX_DETAIL_LINES = 12;
+const MAX_TEXT_CHARS = 240;
+const MAX_REASONING_STEPS = 40;
 
 // O que o HERO precisa do fim do run. O palpite em si chega pelas props do servidor
 // depois do refresh; aqui só os avisos.
@@ -60,11 +76,13 @@ export function parseStreamLine(line: string): StreamMessage | null {
     ) {
       return null;
     }
+    const detail = toDetail(msg.detail);
     return {
       t: "step",
       id: msg.id,
       status: msg.status as StepStatus,
       label: msg.label,
+      ...(detail ? { detail } : {}),
     };
   }
   if (msg.t === "result") {
@@ -72,6 +90,44 @@ export function parseStreamLine(line: string): StreamMessage | null {
     return outcome ? { t: "result", outcome } : null;
   }
   return null;
+}
+
+function toDetail(raw: unknown): string[] | null {
+  if (!Array.isArray(raw)) return null;
+  const lines = raw
+    .filter((l): l is string => typeof l === "string" && l !== "")
+    .slice(0, MAX_DETAIL_LINES)
+    .map((l) => l.slice(0, MAX_TEXT_CHARS));
+  return lines.length > 0 ? lines : null;
+}
+
+const TERMINAL: readonly ReasoningStep["status"][] = ["done", "failed", "skipped"];
+
+// Lê o raciocínio gravado (jsonb, sem schema no banco): o que não tiver a forma cai
+// fora, e um raciocínio vazio vira null (sem botão).
+export function parseReasoning(raw: unknown): ReasoningStep[] | null {
+  if (!Array.isArray(raw)) return null;
+  const steps: ReasoningStep[] = [];
+  for (const item of raw.slice(0, MAX_REASONING_STEPS)) {
+    if (typeof item !== "object" || item === null) continue;
+    const r = item as Record<string, unknown>;
+    if (
+      typeof r.id !== "string" ||
+      typeof r.label !== "string" ||
+      r.label === "" ||
+      !TERMINAL.includes(r.status as ReasoningStep["status"])
+    ) {
+      continue;
+    }
+    const detail = toDetail(r.detail);
+    steps.push({
+      id: r.id,
+      status: r.status as ReasoningStep["status"],
+      label: r.label.slice(0, MAX_TEXT_CHARS),
+      ...(detail ? { detail } : {}),
+    });
+  }
+  return steps.length > 0 ? steps : null;
 }
 
 function toOutcome(raw: unknown): HeroRunOutcome | null {

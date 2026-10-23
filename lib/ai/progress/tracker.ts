@@ -7,8 +7,17 @@
 // mercado que falhou nas odds não pinta a etapa de falha se os outros leram. Depois de
 // "done", uma releitura não reabre a linha; depois de falha ou pulo, uma nova tentativa
 // reabre.
+//
+// Cada etapa junta também o que encontrou (`detail`, ADR 0065): linhas curtas que o
+// "Ver raciocínio" mostra. As instâncias somam linhas (sem repetir), inclusive depois de
+// "done": o mercado seguinte que leu preços acrescenta o nome dele à mesma linha.
 
-import type { ProgressEvent, StepStatus } from "./protocol";
+import {
+  MAX_DETAIL_LINES,
+  type ProgressEvent,
+  type ReasoningStep,
+  type StepStatus,
+} from "./protocol";
 
 type Terminal = Exclude<StepStatus, "active">;
 
@@ -17,7 +26,9 @@ const RANK: Record<Terminal, number> = { failed: 0, skipped: 1, done: 2 };
 type StepState = {
   running: number;
   shown: StepStatus | null;
+  label: string;
   best: { status: Terminal; label: string } | null;
+  detail: string[];
 };
 
 export type ProgressTracker = {
@@ -25,6 +36,11 @@ export type ProgressTracker = {
   end(id: string, status: Terminal, label: string): void;
   // Etapa instantânea (já aconteceu): vira uma linha terminal direto.
   note(id: string, status: Terminal, label: string): void;
+  // Acrescenta o que a etapa encontrou. Numa etapa já terminada, reenvia a linha.
+  detail(id: string, lines: readonly string[]): void;
+  // As etapas terminadas, na ordem em que começaram (o raciocínio gravado com o palpite).
+  // `assumeDone` conta como pronta a etapa que termina junto com a gravação.
+  snapshot(assumeDone?: { id: string; label: string }): ReasoningStep[];
 };
 
 export function createProgressTracker(
@@ -34,13 +50,21 @@ export function createProgressTracker(
   const stateOf = (id: string): StepState => {
     let s = steps.get(id);
     if (!s) {
-      s = { running: 0, shown: null, best: null };
+      s = { running: 0, shown: null, label: "", best: null, detail: [] };
       steps.set(id, s);
     }
     return s;
   };
-  const emit = (id: string, status: StepStatus, label: string) => {
-    send({ t: "step", id, status, label });
+  const emit = (id: string, s: StepState, status: StepStatus, label: string) => {
+    s.shown = status;
+    s.label = label;
+    send({
+      t: "step",
+      id,
+      status,
+      label,
+      ...(s.detail.length > 0 ? { detail: [...s.detail] } : {}),
+    });
   };
 
   return {
@@ -50,10 +74,7 @@ export function createProgressTracker(
       if (s.shown === "done") return;
       if (s.running === 1) {
         s.best = null;
-        if (s.shown !== "active") {
-          s.shown = "active";
-          emit(id, "active", label);
-        }
+        if (s.shown !== "active") emit(id, s, "active", label);
       }
     },
     end(id, status, label) {
@@ -64,16 +85,40 @@ export function createProgressTracker(
       if (!s.best || RANK[status] > RANK[s.best.status]) {
         s.best = { status, label };
       }
-      if (s.running === 0) {
-        s.shown = s.best.status;
-        emit(id, s.best.status, s.best.label);
-      }
+      if (s.running === 0) emit(id, s, s.best.status, s.best.label);
     },
     note(id, status, label) {
       const s = stateOf(id);
       if (s.shown === "done" || s.running > 0) return;
-      s.shown = status;
-      emit(id, status, label);
+      emit(id, s, status, label);
+    },
+    detail(id, lines) {
+      const s = stateOf(id);
+      let added = false;
+      for (const line of lines) {
+        if (s.detail.length >= MAX_DETAIL_LINES) break;
+        if (line === "" || s.detail.includes(line)) continue;
+        s.detail.push(line);
+        added = true;
+      }
+      if (added && s.shown !== null && s.shown !== "active") {
+        emit(id, s, s.shown, s.label);
+      }
+    },
+    snapshot(assumeDone) {
+      const out: ReasoningStep[] = [];
+      let closing: ReasoningStep | null = null;
+      for (const [id, s] of steps) {
+        const detail = s.detail.length > 0 ? { detail: [...s.detail] } : {};
+        if (assumeDone?.id === id && s.shown === "active") {
+          // Termina com a gravação: entra por último, depois do que a alimentou.
+          closing = { id, status: "done", label: assumeDone.label, ...detail };
+          continue;
+        }
+        if (s.shown === null || s.shown === "active") continue;
+        out.push({ id, status: s.shown, label: s.label, ...detail });
+      }
+      return closing ? [...out, closing] : out;
     },
   };
 }

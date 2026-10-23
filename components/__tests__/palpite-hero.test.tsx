@@ -987,3 +987,168 @@ describe("PalpiteHero — progresso ao vivo do run (ADR 0064)", () => {
     await h.cleanup();
   });
 });
+
+describe("PalpiteHero — Ver raciocínio + robozinho (ADR 0065)", () => {
+  const REASONING: NonNullable<PalpiteHeadlineView["reasoning"]> = [
+    {
+      id: "sports_data",
+      status: "done",
+      label: "Forma, confronto direto, tabela e desfalques lidos",
+      detail: ["Desfalques: 2 no Palmeiras, 0 no Santos"],
+    },
+    { id: "news", status: "skipped", label: "Sem tempo para notícias desta vez" },
+    {
+      id: "synthesis",
+      status: "done",
+      label: "Palpite pronto",
+      detail: ["Confiança do palpite: média"],
+    },
+  ];
+
+  async function mount(heroPalpite: PalpiteHeadlineView | null) {
+    (globalThis as { IS_REACT_ACT_ENVIRONMENT?: boolean }).IS_REACT_ACT_ENVIRONMENT =
+      true;
+    const container = document.createElement("div");
+    document.body.appendChild(container);
+    const root = createRoot(container);
+    const renderWith = (view: PalpiteHeadlineView | null, setId: string | null = null) =>
+      act(async () => {
+        root.render(
+          <PalpiteHero
+            contextEnabled={false}
+            heroPalpite={view}
+            matchId="11111111-1111-1111-1111-111111111111"
+            unavailable={null}
+            analyzable
+            fanOutEnabled
+            finalScore={null}
+            setId={setId}
+            sharedAt={null}
+            hasAnalyses={false}
+          />,
+        );
+      });
+    await renderWith(heroPalpite);
+    const button = () =>
+      Array.from(container.querySelectorAll("button")).find(
+        (b) => b.textContent === " Ver raciocínio" || b.textContent === "Ver raciocínio",
+      );
+    const dialog = () => document.body.querySelector<HTMLElement>("[role='dialog']");
+    const cleanup = async () => {
+      await act(async () => root.unmount());
+      container.remove();
+    };
+    return { container, button, dialog, renderWith, cleanup };
+  }
+
+  it("palpite com raciocínio gravado: o botão abre o diálogo com cada etapa e o que encontrou", async () => {
+    const h = await mount({ ...POPULATED, reasoning: REASONING });
+    const btn = h.button();
+    expect(btn).toBeDefined();
+    expect(btn!.getAttribute("type")).toBe("button");
+    await act(async () => btn!.click());
+    const dialog = h.dialog()!;
+    expect(dialog.textContent).toContain("Raciocínio da análise");
+    const items = Array.from(
+      dialog.querySelectorAll("ol[aria-label='raciocínio da análise'] > li"),
+    ).map((li) => li.getAttribute("data-status"));
+    expect(items).toEqual(["done", "skipped", "done"]);
+    expect(dialog.textContent).toContain("Desfalques: 2 no Palmeiras, 0 no Santos");
+    expect(dialog.textContent).toContain("Confiança do palpite: média");
+    expect(leaksValue(dialog.innerHTML)).toBe(false);
+    // Abrir o diálogo não dispara o run.
+    expect(nav.refresh).not.toHaveBeenCalled();
+    await h.cleanup();
+  });
+
+  it("palpite antigo, sem raciocínio: sem botão", async () => {
+    const h = await mount(POPULATED);
+    expect(h.button()).toBeUndefined();
+    await h.cleanup();
+  });
+
+  it("durante o run: robozinho decorativo, botão com as etapas ao vivo; o diálogo segue aberto quando o palpite novo chega", async () => {
+    let controller!: ReadableStreamDefaultController<Uint8Array>;
+    const body = new ReadableStream<Uint8Array>({
+      start(c) {
+        controller = c;
+      },
+    });
+    vi.stubGlobal(
+      "fetch",
+      vi.fn(async () => new Response(body, { status: 200 })),
+    );
+    const push = (msg: StreamMessage) =>
+      controller.enqueue(new TextEncoder().encode(encodeStreamMessage(msg)));
+    const h = await mount(null);
+    const analyze = h.container.querySelector<HTMLButtonElement>(
+      'button[name="intent"][value="analysis"]',
+    )!;
+    await act(async () => {
+      h.container.querySelector("form")!.requestSubmit(analyze);
+      await settle();
+    });
+    const bot = h.container.querySelector("[data-testid='palpite-bot']");
+    expect(bot?.getAttribute("aria-hidden")).toBe("true");
+    // Nenhuma etapa ainda: sem botão.
+    expect(h.button()).toBeUndefined();
+
+    push({
+      t: "step",
+      id: "model",
+      status: "done",
+      label: "Chances calculadas pelo Dixon-Coles",
+      detail: ["Gols esperados: Palmeiras 1,6, Santos 0,9"],
+    });
+    await act(settle);
+    await act(async () => h.button()!.click());
+    expect(h.dialog()!.textContent).toContain("Gols esperados: Palmeiras 1,6, Santos 0,9");
+    expect(h.dialog()!.textContent).toContain("assim que acontece");
+
+    push({ t: "result", outcome: { ok: true, analysis: true } });
+    controller.close();
+    await act(settle);
+    // O refresh traz o set novo (outro id).
+    await h.renderWith({ ...POPULATED, reasoning: REASONING }, "33333333-3333-3333-3333-333333333333");
+    await act(settle);
+    // Mesmo diálogo, agora com o raciocínio gravado com o palpite.
+    expect(h.dialog()!.textContent).toContain("Confiança do palpite: média");
+    expect(h.dialog()!.textContent).toContain("nesta análise");
+    await h.cleanup();
+  });
+
+  it("run que falha com o diálogo aberto: segue nas etapas dele, não nas do palpite anterior", async () => {
+    let controller!: ReadableStreamDefaultController<Uint8Array>;
+    const body = new ReadableStream<Uint8Array>({
+      start(c) {
+        controller = c;
+      },
+    });
+    vi.stubGlobal(
+      "fetch",
+      vi.fn(async () => new Response(body, { status: 200 })),
+    );
+    const push = (msg: StreamMessage) =>
+      controller.enqueue(new TextEncoder().encode(encodeStreamMessage(msg)));
+    const h = await mount({ ...POPULATED, reasoning: REASONING });
+    const analyze = h.container.querySelector<HTMLButtonElement>(
+      'button[name="intent"][value="analysis"]',
+    )!;
+    await act(async () => {
+      h.container.querySelector("form")!.requestSubmit(analyze);
+      await settle();
+    });
+    push({ t: "step", id: "odds", status: "failed", label: "Faltaram preços do mercado" });
+    await act(settle);
+    await act(async () => h.button()!.click());
+    push({ t: "result", outcome: { ok: false, error: "Falhou agora." } });
+    controller.close();
+    await act(settle);
+    expect(h.container.textContent).toContain("Falhou agora.");
+    const text = h.dialog()!.textContent;
+    expect(text).toContain("Faltaram preços do mercado");
+    expect(text).not.toContain("Confiança do palpite: média");
+    await h.cleanup();
+  });
+});
+

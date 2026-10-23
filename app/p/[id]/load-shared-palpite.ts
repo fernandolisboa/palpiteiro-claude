@@ -62,8 +62,12 @@ export const loadSharedPalpite = cache(
     if (!row) return null;
 
     // (iii) mapper (drop de proveniência + narrow exact_score).
-    const mapped = toPalpiteHeadlineViewFromSet(row.palpiteSetWithLines);
-    if (!mapped) return null;
+    const owned = toPalpiteHeadlineViewFromSet(row.palpiteSetWithLines);
+    if (!owned) return null;
+    // O raciocínio do run é do dono (pode citar o contexto extra dele, ADR 0065): fica
+    // fora da página pública.
+    const mapped: PalpiteHeadlineView = { ...owned };
+    delete mapped.reasoning;
 
     // (iv) guard de texto público: veredito inseguro → 404; narrativa insegura → "".
     if (unsafeForPublic(mapped.verdict)) return null;

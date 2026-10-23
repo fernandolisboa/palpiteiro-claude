@@ -7,8 +7,14 @@ import type { DbPalpiteSet } from "@/lib/db/queries/palpites";
 import { getSportsDataProvider } from "@/lib/providers/sports-data";
 import type { FixtureRef } from "@/lib/providers/sports-data/types";
 import { getNewsProvider } from "@/lib/providers/news";
-import { noteStep, trackStep } from "@/lib/ai/progress/run-progress";
-import { STEP_NOTES, STEPS } from "@/lib/ai/progress/steps";
+import { analysesDetail, newsDetail, synthesisDetail } from "@/lib/ai/progress/details";
+import {
+  noteStep,
+  progressTrace,
+  stepDetail,
+  trackStep,
+} from "@/lib/ai/progress/run-progress";
+import { STEP_NOTES, STEPS, synthesisStep } from "@/lib/ai/progress/steps";
 import type {
   NewsFetchOutcome,
   NewsResult,
@@ -116,7 +122,7 @@ export function startNewsFetch(
         ? { status: "failed" }
         : outcome.results.length === 0
           ? { status: "done", label: STEP_NOTES.newsEmpty }
-          : undefined,
+          : { detail: newsDetail(outcome.results.length) },
   );
 }
 
@@ -276,6 +282,7 @@ export async function generatePalpites({
     sourcePredictionIds: analyses.map((a) => a.predictionId),
     sources: newsOutcome.results,
     live: null,
+    analysesLines: analysesDetail(analyses),
   });
 }
 
@@ -309,6 +316,8 @@ type SynthesisSpec<O extends SynthesisOutputBase> = {
   sourcePredictionIds: string[];
   sources: NewsResult[];
   live: ReturnType<typeof liveColumns> | null;
+  // O que cada análise escolheu, pro "Ver raciocínio" (ADR 0065).
+  analysesLines: string[];
 };
 
 /**
@@ -607,6 +616,11 @@ async function runSynthesis<O extends SynthesisOutputBase>(
   //      carrega a manchete (sem placar — esse vira a linha settleable); proveniência
   //      = os predictionIds das análises que alimentaram a síntese (ADR 0030 §4).
   const { sourcePredictionIds } = spec;
+  // O raciocínio do run (ADR 0065): as etapas que rodaram até aqui, mais a síntese, que
+  // termina com este insert. Vazio fora de um run com progresso (cron, script).
+  const synthesis = synthesisStep(spec.live !== null);
+  stepDetail(synthesis, [...synthesisDetail(output), ...spec.analysesLines]);
+  const reasoning = progressTrace({ assumeDone: synthesis });
   let setRow: DbPalpiteSet;
   try {
     const [row] = await db
@@ -626,6 +640,7 @@ async function runSynthesis<O extends SynthesisOutputBase>(
           // ADR 0032 / #377 — fontes de notícia REAIS capturadas que alimentaram o
           // palpite (no jsonb existente, sem migration). Omitido quando não houve notícia.
           ...(spec.sources.length > 0 ? { sources: spec.sources } : {}),
+          ...(reasoning.length > 0 ? { reasoning } : {}),
         },
         // Palpite ao vivo (#594): is_live + o carimbo. Pré-jogo: as colunas no default.
         ...(spec.live ? spec.live : {}),
@@ -742,5 +757,6 @@ export async function generateLivePalpites({
     sourcePredictionIds: analyses.map((a) => a.predictionId),
     sources: [],
     live: liveColumns(stamp),
+    analysesLines: analysesDetail(analyses),
   });
 }

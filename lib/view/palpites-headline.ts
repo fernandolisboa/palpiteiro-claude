@@ -1,5 +1,6 @@
 import type { PalpiteHeadline } from "@/db/schema";
 import { ExactScoreParamsSchema } from "@/lib/ai/palpites/cartridges/cartridge";
+import { parseReasoning, type ReasoningStep } from "@/lib/ai/progress/protocol";
 import type { PalpiteSetWithLines } from "@/lib/db/queries/palpites";
 import { livePalpiteLabel } from "@/lib/live/readings";
 import { readLiveStamp } from "@/lib/live/stamp";
@@ -50,6 +51,9 @@ export type PalpiteHeadlineView = {
   // Palpite gerado com o jogo rolando (#594): "palpite aos 63' (1–0)", do carimbo do set.
   // Ausente = palpite de antes do apito.
   liveLabel?: string;
+  // ADR 0065: as etapas do run que gerou o palpite e o que cada uma encontrou ("Ver
+  // raciocínio"). Ausente = set antigo ou gerado fora do HERO (sem botão).
+  reasoning?: ReasoningStep[];
 };
 
 // Insumos do mapper — tipos puros (sem importar @/lib/db pra não arrastar Drizzle pra
@@ -91,7 +95,14 @@ export function toPalpiteHeadlineView(
     ...(source.live?.isLive
       ? { liveLabel: livePalpiteLabel(readLiveStamp(source.live.liveState)) }
       : {}),
+    ...reasoningField(source.headline.reasoning),
   };
+}
+
+// jsonb sem schema no banco: lê com a mesma validação do stream.
+function reasoningField(raw: unknown): { reasoning?: ReasoningStep[] } {
+  const reasoning = parseReasoning(raw);
+  return reasoning ? { reasoning } : {};
 }
 
 // #354: mapeia as rows settleable de um set (EXCETO exact_score, que é a manchete) pras
