@@ -165,7 +165,8 @@ function fetchNews(
 /**
  * Passo de SÍNTESE do palpite-first (ADR 0030 / #353): turna as N análises
  * multi-mercado já pagas pelo fan-out (`analyses`) numa única MANCHETE — veredito de
- * quem ganha + placar provável + confiança qualitativa + narrativa + mercados citados.
+ * quem ganha + placar provável + narrativa + mercados citados; a confiança vem do motor
+ * (#649, ADR 0069), calculada aqui depois da síntese.
  * IRMÃO de `predict()` (NÃO o chama): reusa SÓ (a) o seam de provider (ADR 0027, p/
  * logar ai_calls) e (b) o padrão de logging. ZERO import de SDK de IA.
  *

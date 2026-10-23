@@ -140,7 +140,7 @@ describe("getPalpiteConfidenceRows", () => {
       result: { home: 1, away: 2 },
       createdAt: new Date("2026-10-23T20:00:00Z"),
     });
-    const rows = await getPalpiteConfidenceRows();
+    const rows = (await getPalpiteConfidenceRows()).rows;
     expect(rows).toEqual([
       { matchId: ids.matchA, era: "motor", level: "baixa", probPct: 30, hit: true },
     ]);
@@ -162,7 +162,7 @@ describe("getPalpiteConfidenceRows", () => {
       result: null,
       createdAt: new Date("2026-10-23T20:00:00Z"),
     });
-    expect(await getPalpiteConfidenceRows()).toEqual([]);
+    expect((await getPalpiteConfidenceRows()).rows).toEqual([]);
   });
 
   it("set ao vivo fica fora e não esconde o de pré-jogo", async () => {
@@ -181,10 +181,24 @@ describe("getPalpiteConfidenceRows", () => {
       createdAt: new Date("2026-10-24T20:30:00Z"),
       isLive: true,
     });
-    const rows = await getPalpiteConfidenceRows();
+    const rows = (await getPalpiteConfidenceRows()).rows;
     expect(rows).toEqual([
       { matchId: ids.matchA, era: "motor", level: "media", probPct: 45, hit: false },
     ]);
+  });
+
+  it("liquidado sem placar (override manual) fica fora e é contado", async () => {
+    await insertSettled({
+      matchId: ids.matchA,
+      headline: motorHeadline("media", 45),
+      probable: { home: 1, away: 0 },
+      result: { home: 1, away: 0 },
+      createdAt: new Date("2026-10-23T18:00:00Z"),
+    });
+    await realDb
+      .update(schema.palpiteOutcomes)
+      .set({ resultData: null, result: "won" });
+    expect(await getPalpiteConfidenceRows()).toEqual({ rows: [], skipped: 1 });
   });
 
   it("set antigo (palavra do LLM, sem confidenceSource) entra como era llm; sem confiança fica null", async () => {
@@ -208,7 +222,7 @@ describe("getPalpiteConfidenceRows", () => {
       result: { home: 1, away: 2 },
       createdAt: new Date("2026-10-23T18:00:00Z"),
     });
-    const rows = await getPalpiteConfidenceRows();
+    const rows = (await getPalpiteConfidenceRows()).rows;
     expect(rows).toHaveLength(2);
     expect(rows).toEqual(
       expect.arrayContaining([

@@ -9,7 +9,7 @@ import type { FidelityCheck } from "../fidelity-validator";
 import type { MarketAnalysisSummary } from "../synthesis-input";
 import { ExactScoreParamsSchema, MarketAnalysisSchema } from "./cartridge";
 
-// Cartucho de palpite AO VIVO `palpites_live_v1` (#594, ADR 0060, PLAN-580 §12): a
+// Cartucho de palpite AO VIVO `palpites_live_*` (#594, ADR 0060, PLAN-580 §12): a
 // manchete com o jogo rolando. Recebe a situação do jogo, os placares finais mais
 // prováveis do modelo em jogo e as chances por mercado da leitura ao vivo; sem forma,
 // confrontos, tabela nem notícias. Output próprio `.strict()` SEM firstHalfScore,

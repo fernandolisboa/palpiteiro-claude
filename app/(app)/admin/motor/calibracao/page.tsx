@@ -92,7 +92,7 @@ export default async function AdminCalibrationPage({ searchParams }: PageProps) 
   const params = await searchParams;
   const segment = parseEngineSegment(params.engine);
   const market = parseMarketSegment(params.market);
-  const [rows, gate, confidenceRows] = await Promise.all([
+  const [rows, gate, confidence] = await Promise.all([
     getMarketCalibrationRows(),
     loadKellyGate(),
     getPalpiteConfidenceRows(),
@@ -125,7 +125,10 @@ export default async function AdminCalibrationPage({ searchParams }: PageProps) 
 
         <BacktestSection />
 
-        <ConfidenceSection eras={deriveConfidenceCalibration(confidenceRows)} />
+        <ConfidenceSection
+          eras={deriveConfidenceCalibration(confidence.rows)}
+          skipped={confidence.skipped}
+        />
 
         {rows.length > 0 && (
           <MarketSection
@@ -338,7 +341,13 @@ const ERA_LABEL = { motor: "pelo motor", llm: "LLM (antes do #649)" } as const;
 
 // Confiança do palpite (#649, ADR 0069): a P que o motor deu ao resultado do placar
 // provável, por faixa, contra o resultado de 90 minutos. A era LLM fica de comparação.
-function ConfidenceSection({ eras }: { eras: ConfidenceEraSummary[] }) {
+function ConfidenceSection({
+  eras,
+  skipped,
+}: {
+  eras: ConfidenceEraSummary[];
+  skipped: number;
+}) {
   const { media, alta } = PALPITE_CONFIDENCE_BANDS;
   return (
     <section className="pb-8">
@@ -378,12 +387,14 @@ function ConfidenceSection({ eras }: { eras: ConfidenceEraSummary[] }) {
       </div>
       <p className="pt-2 text-meta leading-relaxed text-muted-foreground tracking-tight">
         Desde o #649 a confiança é a chance que o modelo dá ao resultado (casa, empate ou
-        fora) do placar provável: abaixo de {media}% é baixa, de {media}% a {alta}% é
-        média, a partir de {alta}% é alta. Previsto = essa chance, em média; acerto = quantas
+        fora) do placar provável: abaixo de {media}% é baixa, de {media}% a menos de{" "}
+        {alta}% é média, a partir de {alta}% é alta. Previsto = essa chance, em média; acerto = quantas
         vezes o resultado bateu com o placar de 90 minutos. Só palpites de pré-jogo
         liquidados, o mais novo de cada jogo e usuário.
         {eras[0].withoutConfidence > 0 &&
           ` ${eras[0].withoutConfidence} palpite(s) pelo motor ficaram sem confiança (sem a chance do modelo pro jogo).`}
+        {skipped > 0 &&
+          ` ${skipped} palpite(s) liquidado(s) ficaram fora por não ter o placar de 90 minutos gravado (override manual) ou dado ilegível.`}
       </p>
     </section>
   );

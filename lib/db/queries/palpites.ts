@@ -10,6 +10,7 @@ import {
   lt,
   notExists,
   or,
+  type SQL,
 } from "drizzle-orm";
 import { alias } from "drizzle-orm/pg-core";
 
@@ -271,6 +272,39 @@ function rowHasSettleableType<T extends { type: DbPalpite["type"] }>(
 }
 
 /**
+ * O set de `palpite_sets` da query é o mais novo do seu (matchId, userId, isLive): não
+ * existe um set mais novo do MESMO match+user+lado. "Mais novo" = createdAt maior, OU
+ * createdAt igual e id maior — espelha EXATAMENTE o desc(createdAt), desc(id) do display,
+ * então o mesmo set único vence nos dois caminhos mesmo num empate de instante (writes
+ * sequenciais quase nunca empatam, mas o tiebreak determinístico fecha a divergência
+ * display↔settlement). #594: o set ao vivo e o de pré-jogo são leituras distintas e AMBOS
+ * liquidam — "mais novo" só compete dentro do mesmo lado (isLive). Fonte única da
+ * liquidação e da calibração da confiança (#649), pra as duas medirem o mesmo set.
+ */
+export function isNewestPalpiteSetOfSide(): SQL {
+  const newerSet = alias(palpiteSets, "newer_set");
+  return notExists(
+    db
+      .select({ one: newerSet.id })
+      .from(newerSet)
+      .where(
+        and(
+          eq(newerSet.matchId, palpiteSets.matchId),
+          eq(newerSet.userId, palpiteSets.userId),
+          eq(newerSet.isLive, palpiteSets.isLive),
+          or(
+            gt(newerSet.createdAt, palpiteSets.createdAt),
+            and(
+              eq(newerSet.createdAt, palpiteSets.createdAt),
+              gt(newerSet.id, palpiteSets.id)
+            )
+          )
+        )
+      )
+  );
+}
+
+/**
  * Palpites de placar exato ainda aguardando liquidação: sem palpite_outcomes row
  * E o jogo começou há tempo suficiente pra ter um placar de 90'. Espelha
  * getPendingSettlementPredictions (lib/db/queries/predictions.ts) — mesmo cutoff
@@ -299,7 +333,6 @@ export async function getPendingPalpiteSettlements(
   now: Date = new Date()
 ): Promise<PendingPalpiteSettlement[]> {
   const cutoff = new Date(now.getTime() - SETTLEMENT_MIN_ELAPSED_MS);
-  const newerSet = alias(palpiteSets, "newer_set");
   const rows = await db
     .select({
       palpiteId: palpites.id,
@@ -322,33 +355,7 @@ export async function getPendingPalpiteSettlements(
         eq(palpites.settleable, true),
         isNull(palpiteOutcomes.id),
         lt(matches.kickoffAt, cutoff),
-        // Só a última geração por (matchId,userId,isLive): não existe um set mais novo
-        // do MESMO match+user+lado. "Mais novo" = createdAt maior, OU createdAt igual e id
-        // maior — espelha EXATAMENTE o desc(createdAt), desc(id) do display, então o
-        // mesmo set único vence nos dois caminhos mesmo num empate de instante (writes
-        // sequenciais quase nunca empatam, mas o tiebreak determinístico fecha a
-        // divergência display↔settlement).
-        notExists(
-          db
-            .select({ one: newerSet.id })
-            .from(newerSet)
-            .where(
-              and(
-                eq(newerSet.matchId, palpiteSets.matchId),
-                eq(newerSet.userId, palpiteSets.userId),
-                // #594: o set ao vivo e o de pré-jogo são leituras distintas e AMBOS
-                // liquidam — "mais novo" só compete dentro do mesmo lado (isLive).
-                eq(newerSet.isLive, palpiteSets.isLive),
-                or(
-                  gt(newerSet.createdAt, palpiteSets.createdAt),
-                  and(
-                    eq(newerSet.createdAt, palpiteSets.createdAt),
-                    gt(newerSet.id, palpiteSets.id)
-                  )
-                )
-              )
-            )
-        )
+        isNewestPalpiteSetOfSide(),
       )
     )
     .orderBy(desc(matches.kickoffAt));

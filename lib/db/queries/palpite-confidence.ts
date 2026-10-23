@@ -1,25 +1,27 @@
-import { and, eq, gt, isNotNull, notExists, or } from "drizzle-orm";
-import { alias } from "drizzle-orm/pg-core";
+import { and, eq, isNotNull } from "drizzle-orm";
 
-import {
-  palpiteOutcomes,
-  palpiteSets,
-  palpites,
-} from "@/db/schema";
+import { palpiteOutcomes, palpiteSets, palpites } from "@/db/schema";
 import {
   toConfidenceRow,
   type PalpiteConfidenceRow,
 } from "@/lib/calibration/palpite-confidence";
 import { db } from "@/lib/db";
+import { isNewestPalpiteSetOfSide } from "@/lib/db/queries/palpites";
+
+export type PalpiteConfidenceRows = {
+  rows: PalpiteConfidenceRow[];
+  // Liquidados que ficaram fora: sem placar (override manual sem resultData) ou jsonb
+  // ilegível. Contados pra a página dizer quantos, em vez de sumirem do n.
+  skipped: number;
+};
 
 // Calibração da confiança do palpite (#649, ADR 0069). Uma row por palpite PRÉ-JOGO
-// liquidado: o set mais novo de cada (jogo, usuário), o mesmo que a liquidação considera
-// (getPendingPalpiteSettlements: notExists de um set mais novo do mesmo lado), com a
-// linha exact_score e o placar de 90 minutos do outcome. Ao vivo fica fora: com o placar
-// à vista a confiança satura e não mede o motor de pré-jogo.
-export async function getPalpiteConfidenceRows(): Promise<PalpiteConfidenceRow[]> {
-  const newerSet = alias(palpiteSets, "newer_set");
-  const rows = await db
+// liquidado: o set mais novo de cada (jogo, usuário), pelo mesmo critério da liquidação
+// (isNewestPalpiteSetOfSide), com a linha exact_score e o placar de 90 minutos do
+// outcome. Ao vivo fica fora: com o placar à vista a confiança satura e não mede o
+// motor de pré-jogo.
+export async function getPalpiteConfidenceRows(): Promise<PalpiteConfidenceRows> {
+  const raw = await db
     .select({
       matchId: palpiteSets.matchId,
       headline: palpiteSets.headline,
@@ -34,29 +36,12 @@ export async function getPalpiteConfidenceRows(): Promise<PalpiteConfidenceRow[]
         eq(palpiteSets.isLive, false),
         isNotNull(palpiteSets.headline),
         eq(palpites.type, "exact_score"),
-        notExists(
-          db
-            .select({ one: newerSet.id })
-            .from(newerSet)
-            .where(
-              and(
-                eq(newerSet.matchId, palpiteSets.matchId),
-                eq(newerSet.userId, palpiteSets.userId),
-                eq(newerSet.isLive, false),
-                or(
-                  gt(newerSet.createdAt, palpiteSets.createdAt),
-                  and(
-                    eq(newerSet.createdAt, palpiteSets.createdAt),
-                    gt(newerSet.id, palpiteSets.id),
-                  ),
-                ),
-              ),
-            ),
-        ),
+        isNewestPalpiteSetOfSide(),
       ),
     );
-  return rows.flatMap((r) => {
+  const rows = raw.flatMap((r) => {
     const row = toConfidenceRow(r);
     return row ? [row] : [];
   });
+  return { rows, skipped: raw.length - rows.length };
 }

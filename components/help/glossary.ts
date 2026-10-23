@@ -58,7 +58,7 @@ export const GLOSSARY: readonly GlossaryEntry[] = [
     term: "confiança do palpite (palavra)",
     anchor: "confianca-palpite",
     meaning:
-      "O quanto o modelo acredita no resultado do palpite (vitória do mandante, empate ou vitória do visitante), dito em PALAVRA: baixa, média ou alta. Não é a IA que escolhe: vem da chance que o modelo estatístico dá a esse resultado. Por isso um palpite de zebra ou de empate costuma sair com confiança baixa. Sem a chance do modelo pro jogo, o palpite sai sem a palavra.",
+      "O quanto o modelo acredita no resultado do palpite (vitória do mandante, empate ou vitória do visitante), dito em PALAVRA: baixa, média ou alta. Não é a IA que escolhe: vem da chance que o modelo estatístico dá a esse resultado. Por isso um palpite de zebra ou de empate costuma sair com confiança baixa. Sem a chance do modelo pro jogo, o palpite sai sem a palavra. Palpites gerados antes de 23/10/2026 mostram a palavra que a IA escolhia.",
     group: "conceitos",
   },
   {

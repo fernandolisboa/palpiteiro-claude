@@ -155,7 +155,7 @@ import {
 } from "@/lib/db/queries/palpites";
 import { readLiveStamp } from "@/lib/live/stamp";
 import { inPlayScoreline } from "@/lib/quant/in-play";
-import { scorelineMatrix } from "@/lib/quant/scoreline-model";
+import { p1X2, scorelineMatrix } from "@/lib/quant/scoreline-model";
 import { eq } from "drizzle-orm";
 
 const ids: { userId: string; matchId: string } = {} as never;
@@ -299,8 +299,12 @@ describe("generateLivePalpites (palpites_live_v1) — pglite", () => {
     // Confiança pelo motor (#649): a P do resultado (casa) na matriz do placar final.
     const headline = sets[0].palpiteSet.headline!;
     expect(headline.confidenceSource).toBe("live_matrix");
-    expect(headline.confidenceProbPct).toEqual(expect.any(Number));
-    expect(headline.confidence).not.toBeNull();
+    // Placar provável 2–0 → vitória do mandante na matriz condicionada (0..1 → pp).
+    const homePct = Number((p1X2(SCORELINE.matrix).home * 100).toFixed(2));
+    expect(headline.confidenceProbPct).toBeCloseTo(homePct, 1);
+    expect(headline.confidence).toBe(
+      homePct >= 55 ? "alta" : homePct >= 40 ? "media" : "baixa",
+    );
     const call = await realDb
       .select()
       .from(schema.aiCalls)
