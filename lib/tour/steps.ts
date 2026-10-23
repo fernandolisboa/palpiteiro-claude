@@ -64,7 +64,7 @@ export const TOUR_CHAPTERS: Record<TourChapter, readonly TourStep[]> = {
     {
       target: "menu",
       title: "Menu",
-      body: 'O menu fica sempre aqui em cima: jogos, suas apostas, bolão e desempenho. Em "ajuda" ficam o guia "como usar", que explica cada tela com calma, e o atalho pra rever este tour. Perfil e sair ficam no seu avatar, à direita.',
+      body: 'O menu fica sempre à vista (no celular, nas abas de baixo): jogos, suas apostas, bolão e desempenho. No computador, os três últimos ficam juntos em "apostas". Em "ajuda" (no celular, em "mais") ficam o guia "como usar", que explica cada tela com calma, e o atalho pra rever este tour. Perfil e sair ficam no seu avatar, no canto de cima.',
     },
     {
       target: "league-picker",

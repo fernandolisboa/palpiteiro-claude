@@ -430,3 +430,20 @@ body:has([data-page-width="form"]) [data-footer-column] {
     animation: palpite-breathe 2.4s ease-in-out infinite !important;
   }
 }
+
+/* Barra de abas do celular (#633, components/nav/mobile-tab-bar.tsx). O que é fixo na
+   base da tela (barra de Suas apostas, aviso de versão nova) usa estas variáveis pra
+   ficar logo acima dela: `--mobile-tabbar-h` é a altura da barra (0 sem ela ou no
+   computador) e `--mobile-bottom-safe` é a área segura que sobra pra quem fica na
+   base (a barra já ocupa a do aparelho). Dirigido pelo DOM: sem a barra (anônimo,
+   computador), nada muda. */
+:root {
+  --mobile-tabbar-h: 0px;
+  --mobile-bottom-safe: env(safe-area-inset-bottom, 0px);
+}
+@media (width < 64rem) {
+  :root:has([data-mobile-tabbar]) {
+    --mobile-tabbar-h: calc(3.5rem + env(safe-area-inset-bottom, 0px));
+    --mobile-bottom-safe: 0px;
+  }
+}

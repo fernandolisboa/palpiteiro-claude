@@ -1,15 +1,19 @@
 import { TOUR_RESTART_HREF } from "@/lib/tour/steps";
 
 /**
- * Modelo único do menu do app (#553). O header do computador e o drawer do celular
+ * Modelo único do menu do app (#553). O header do computador e as abas do celular
  * leem daqui, então ordem, rótulos e o gate de admin não divergem mais entre os dois.
  *
- * Agrupamento: as telas de uso ficam soltas na barra (`PRIMARY_NAV`); ajuda e admin
- * viram grupos (dropdown no computador, seção no drawer); a conta fica no avatar.
+ * Agrupamento (#633): no computador, jogos fica solto e suas apostas, bolão e
+ * desempenho viram o dropdown "apostas"; no celular as quatro telas de uso
+ * (`PRIMARY_NAV`) têm uma aba cada na barra de baixo. Ajuda e admin são grupos
+ * (dropdown no computador, folha do "mais" no celular); a conta fica no avatar.
  */
 export type NavItem = {
   href: string;
   label: string;
+  /** Rótulo curto da barra de abas do celular (cabe em 1/5 da tela). */
+  shortLabel?: string;
   /** Linha de apoio mostrada no índice do admin. */
   description?: string;
   /** Abas internas da tela (só seções do admin). */
@@ -17,17 +21,26 @@ export type NavItem = {
 };
 
 export type NavGroup = {
-  id: "ajuda" | "admin";
+  id: "apostas" | "ajuda" | "admin";
   label: string;
   items: readonly NavItem[];
 };
 
-export const PRIMARY_NAV: readonly NavItem[] = [
-  { href: "/jogos", label: "jogos" },
-  { href: "/apostas", label: "suas apostas" },
-  { href: "/bolao", label: "bolão" },
-  { href: "/dashboard", label: "desempenho" },
-];
+export const GAMES_NAV: NavItem = { href: "/jogos", label: "jogos" };
+
+/** O que o usuário aposta e mede (#633): no computador vira o dropdown "apostas". */
+export const BETS_NAV: NavGroup = {
+  id: "apostas",
+  label: "apostas",
+  items: [
+    { href: "/apostas", label: "suas apostas", shortLabel: "apostas" },
+    { href: "/bolao", label: "bolão" },
+    { href: "/dashboard", label: "desempenho" },
+  ],
+};
+
+/** Telas do dia a dia: no celular, uma aba cada na barra de baixo. */
+export const PRIMARY_NAV: readonly NavItem[] = [GAMES_NAV, ...BETS_NAV.items];
 
 export const HELP_NAV: NavGroup = {
   id: "ajuda",

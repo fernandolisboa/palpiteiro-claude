@@ -97,14 +97,15 @@ export function VersionChecker() {
   if (!isActive || !serverSha || serverSha === dismissedSha) return null;
 
   return (
-    // z-40 fica ABAIXO do Sheet/Dialog do shadcn (z-50) — não prende o drawer da
-    // MobileNav aberto. Barra ancorada na base, largura limitada e centralizada
-    // (não é overlay full-bleed) pra não bloquear navegação. Polish visual fica
+    // z-40 fica ABAIXO do Sheet/Dialog do shadcn (z-50) — não prende uma folha
+    // aberta. Barra ancorada na base (acima da barra de abas do celular, #633),
+    // largura limitada e centralizada (não é overlay full-bleed) pra não bloquear
+    // navegação. Polish visual fica
     // pra um passo /impeccable posterior (#260).
     <div
       role="status"
       aria-live="polite"
-      className="fixed inset-x-0 bottom-0 z-40 flex justify-center p-4"
+      className="fixed inset-x-0 bottom-[var(--mobile-tabbar-h)] z-40 flex justify-center p-4"
     >
       <div className="pointer-events-auto flex items-center gap-3 rounded-lg border bg-popover px-4 py-3 text-sm text-popover-foreground shadow-lg">
         <span>Nova versão disponível.</span>
