@@ -397,8 +397,8 @@ describe("judgmentFactorPhrases", () => {
         origins: { attack_weakened_home: "unverified" },
       });
       expect(phrases).toEqual([
-        "Desfalques tiram do CR Flamengo uma peça ofensiva central (ataque do CR Flamengo ajustado para baixo) (informado por você, não conferido)",
-        "Desfalques tiram do Fluminense FC uma peça ofensiva central (ataque do Fluminense FC ajustado para baixo) — sinal forte",
+        "Desfalques ou titulares poupados tiram do CR Flamengo uma peça ofensiva central (ataque do CR Flamengo ajustado para baixo) (informado por você, não conferido)",
+        "Desfalques ou titulares poupados tiram do Fluminense FC uma peça ofensiva central (ataque do Fluminense FC ajustado para baixo) — sinal forte",
       ]);
     });
 
@@ -427,7 +427,7 @@ describe("judgmentFactorPhrases", () => {
     });
 
     it("narrator_v1.2+: a regra 4 explica as duas origens e as notas", () => {
-      expect(NARRATOR_VERSION).toBe("narrator_v1.3");
+      expect(NARRATOR_VERSION).toBe("narrator_v1.4");
       expect(SYSTEM_PROMPT).toContain('"(informado por você, não conferido)"');
       expect(SYSTEM_PROMPT).toContain("nunca como fato confirmado");
       expect(SYSTEM_PROMPT).toContain('Os itens do bloco "Informado por você"');
@@ -437,7 +437,7 @@ describe("judgmentFactorPhrases", () => {
     it("a fidelidade aceita a narração que cita a origem", () => {
       const d = overDecision({
         judgmentFactors: [
-          "Desfalques tiram do CR Flamengo uma peça ofensiva central (ataque do CR Flamengo ajustado para baixo) (informado por você, não conferido)",
+          "Desfalques ou titulares poupados tiram do CR Flamengo uma peça ofensiva central (ataque do CR Flamengo ajustado para baixo) (informado por você, não conferido)",
         ],
       });
       const out = {
@@ -452,7 +452,7 @@ describe("judgmentFactorPhrases", () => {
       const out = templatedNarration(
         overDecision({
           judgmentFactors: [
-            "Desfalques tiram do CR Flamengo uma peça ofensiva central (ataque do CR Flamengo ajustado para baixo) (informado por você, não conferido)",
+            "Desfalques ou titulares poupados tiram do CR Flamengo uma peça ofensiva central (ataque do CR Flamengo ajustado para baixo) (informado por você, não conferido)",
           ],
         })
       );

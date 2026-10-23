@@ -360,7 +360,7 @@ describe("contexto extra fora da síntese (PLAN-565 §13.2)", () => {
     ]);
     const [a] = out;
     expect(a.rationale).toBe(
-      "Fatores do modelo: Desfalques atingem a defesa ou o goleiro titular do visitante (gols esperados do mandante ajustados para cima) — sinal forte.",
+      "Fatores do modelo: Desfalques ou titulares poupados atingem a defesa ou o goleiro titular do visitante (gols esperados do mandante ajustados para cima) — sinal forte.",
     );
     // Probs, seleção e edge seguem os da row.
     expect(a.recommendation).toBe("home");

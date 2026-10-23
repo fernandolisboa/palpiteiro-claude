@@ -1,11 +1,13 @@
-// Cartucho narrador `narrator_v1.3` (ADR 0041 §4): o LLM recebe a decisão JÁ TOMADA
+// Cartucho narrador `narrator_v1.4` (ADR 0041 §4): o LLM recebe a decisão JÁ TOMADA
 // pelo código e só escreve racional + fatores. Mudou texto do prompt, tool ou
 // mensagem? Bump NARRATOR_VERSION + commit `prompt:` (ADR 0017).
 // v1.1 (#565): regra 4 cobre os fatores que vieram do contexto extra do usuário.
 // v1.2 (#569): regra 4 cobre o bloco "Informado por você" (sem efeito no número).
 // v1.3 (#618): forma recente sem amistosos e com o nome da competição nos jogos de
 // outra competição (só a mensagem; system prompt igual).
-export const NARRATOR_VERSION = "narrator_v1.3" as const;
+// v1.4 (#619): frases dos fatores de ataque/defesa enfraquecidos cobrem desfalque e
+// titular poupado (jev_judgments_v3 lê a escalação); só a mensagem.
+export const NARRATOR_VERSION = "narrator_v1.4" as const;
 
 export const RATIONALE_MAX_CHARS = 600;
 export const KEY_FACTORS_MIN = 2;

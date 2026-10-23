@@ -108,10 +108,11 @@ const FACTOR_PHRASE: Record<
   JudgmentFactor,
   (team: string, opponent: string) => string
 > = {
+  // narrator_v1.4 (#619): na v3 do JEV o fator também sobe por titular poupado.
   attack_weakened: (team) =>
-    `Desfalques tiram do ${team} uma peça ofensiva central (ataque do ${team} ajustado para baixo)`,
+    `Desfalques ou titulares poupados tiram do ${team} uma peça ofensiva central (ataque do ${team} ajustado para baixo)`,
   defense_weakened: (team, opponent) =>
-    `Desfalques atingem a defesa ou o goleiro titular do ${team} (gols esperados do ${opponent} ajustados para cima)`,
+    `Desfalques ou titulares poupados atingem a defesa ou o goleiro titular do ${team} (gols esperados do ${opponent} ajustados para cima)`,
   rotation_risk: (team) =>
     `O ${team} tende a escalar um time poupado ou rotacionado (ataque ajustado para baixo)`,
   high_stakes: (team) =>
