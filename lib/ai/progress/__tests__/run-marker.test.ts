@@ -1,13 +1,19 @@
 import { afterEach, describe, expect, it, vi } from "vitest";
 
 import { parseRunSnapshot, parseStreamLine, encodeStreamMessage } from "../protocol";
-import { createRunMarkerWriter, readRunMarker } from "../run-marker";
+import {
+  RUN_MARKER_MAX_AGE_MS,
+  createRunMarkerWriter,
+  readRunMarker,
+  readRunMarkerResult,
+} from "../run-marker";
 
 // Sem KV no teste: o marcador cai no cache em memória do processo (como em dev).
 const MATCH = "6f1c2a3b-4d5e-4f60-8a7b-9c0d1e2f3a4b";
 
-function writer(userId: string) {
+function writer(userId: string, now?: () => number) {
   return createRunMarkerWriter({
+    now,
     userId,
     matchId: MATCH,
     runId: "run-1",
@@ -63,10 +69,23 @@ describe("marcador do run (adendo da ADR 0064)", () => {
       runId: "run-1",
       intent: "analysis",
       live: false,
+      startedAt: expect.any(Number),
       status: "done",
       steps: [{ id: "odds", status: "done", label: "odds" }],
       outcome: { ok: true, analysis: true },
     });
+  });
+
+  it("marcador em voo velho demais (função morreu sem gravar o fim) vale como ausente", async () => {
+    const w = writer("u-dead", () => 1_000);
+    w.step(step("odds", "active"));
+    await new Promise((r) => setTimeout(r, 0));
+    expect(
+      await readRunMarkerResult("u-dead", MATCH, { now: 1_000 + RUN_MARKER_MAX_AGE_MS - 1 }),
+    ).toMatchObject({ known: true, run: { status: "running" } });
+    expect(
+      await readRunMarkerResult("u-dead", MATCH, { now: 1_000 + RUN_MARKER_MAX_AGE_MS + 1 }),
+    ).toEqual({ known: true, run: null });
   });
 
   it("por pessoa: o run de uma não aparece pra outra", async () => {
@@ -83,10 +102,14 @@ describe("parseRunSnapshot", () => {
     expect(parseRunSnapshot(null)).toBeNull();
     expect(parseRunSnapshot({ runId: "r", intent: "x", status: "running", steps: [] })).toBeNull();
     expect(
+      parseRunSnapshot({ runId: "r", intent: "palpite", status: "running", steps: [] }),
+    ).toBeNull();
+    expect(
       parseRunSnapshot({
         runId: "r",
         intent: "palpite",
         live: true,
+        startedAt: 5,
         status: "running",
         steps: [{ id: "a", status: "active", label: "A" }, { id: 1 }, "x"],
         outcome: { ok: "talvez" },
@@ -95,6 +118,7 @@ describe("parseRunSnapshot", () => {
       runId: "r",
       intent: "palpite",
       live: true,
+      startedAt: 5,
       status: "running",
       steps: [{ id: "a", status: "active", label: "A" }],
       outcome: null,

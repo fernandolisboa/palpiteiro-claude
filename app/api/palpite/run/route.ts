@@ -11,7 +11,7 @@ import {
 } from "@/lib/ai/progress/protocol";
 import {
   createRunMarkerWriter,
-  readRunMarker,
+  readRunMarkerResult,
   type RunMarkerWriter,
 } from "@/lib/ai/progress/run-marker";
 import { withRunProgress } from "@/lib/ai/progress/run-progress";
@@ -70,6 +70,15 @@ export async function POST(req: Request): Promise<Response> {
       open = false;
     }
   };
+  const close = () => {
+    if (!open || !controller) return;
+    open = false;
+    try {
+      controller.close();
+    } catch {
+      // Já fechado pelo cliente.
+    }
+  };
   const stream = new ReadableStream<Uint8Array>({
     start(c) {
       controller = c;
@@ -96,21 +105,16 @@ export async function POST(req: Request): Promise<Response> {
       return { ok: false, error: UNEXPECTED_ERROR };
     })
     .then(async (outcome) => {
-      // O marcador antes da linha final: quem acompanha pelo GET não fica pra trás de
-      // quem lê o stream.
-      await marker?.finish(outcome);
+      // A linha final e o fim do stream primeiro: quem lê não espera o KV. O desfecho no
+      // marcador vem logo depois, pra quem acompanha pelo GET (o after segura até gravar).
       send({ t: "result", outcome });
+      clearInterval(ping);
+      close();
+      await marker?.finish(outcome);
     })
     .finally(() => {
       clearInterval(ping);
-      if (open && controller) {
-        open = false;
-        try {
-          controller.close();
-        } catch {
-          // Já fechado pelo cliente.
-        }
-      }
+      close();
     });
   // Segura a função viva até o run terminar, mesmo se o cliente desconectar.
   after(run);
@@ -158,6 +162,10 @@ export async function GET(req: Request): Promise<Response> {
   }
   const userId = (await auth())?.user?.id;
   if (!userId) return new Response(null, { status: 401 });
-  const run = await readRunMarker(userId, matchId);
-  return Response.json({ run }, { headers: { "Cache-Control": "no-store" } });
+  const read = await readRunMarkerResult(userId, matchId);
+  // KV sem resposta: "não sei" (503), diferente de "não há run" — o HERO tenta de novo.
+  if (!read.known) {
+    return new Response(null, { status: 503, headers: { "Cache-Control": "no-store" } });
+  }
+  return Response.json({ run: read.run }, { headers: { "Cache-Control": "no-store" } });
 }

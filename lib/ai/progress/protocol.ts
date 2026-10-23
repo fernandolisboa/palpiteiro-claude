@@ -95,6 +95,9 @@ export type RunSnapshot = {
   runId: string;
   intent: RunIntent;
   live: boolean;
+  // Epoch ms do começo do run (relógio do servidor): marcador velho demais vale como
+  // ausente (função que morreu sem gravar o fim).
+  startedAt: number;
   status: "running" | "done";
   steps: RunStepSnapshot[];
   outcome: HeroRunOutcome | null;
@@ -108,6 +111,8 @@ export function parseRunSnapshot(raw: unknown): RunSnapshot | null {
     r.runId === "" ||
     (r.intent !== "analysis" && r.intent !== "palpite") ||
     (r.status !== "running" && r.status !== "done") ||
+    typeof r.startedAt !== "number" ||
+    !Number.isFinite(r.startedAt) ||
     !Array.isArray(r.steps)
   ) {
     return null;
@@ -124,6 +129,7 @@ export function parseRunSnapshot(raw: unknown): RunSnapshot | null {
     runId: r.runId,
     intent: r.intent,
     live: r.live === true,
+    startedAt: r.startedAt,
     status: r.status,
     steps,
     outcome: toOutcome(r.outcome),

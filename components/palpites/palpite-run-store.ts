@@ -36,6 +36,9 @@ export type RunEntry = {
   outcome: HeroRunOutcome | null;
   // O fim gravou algo (ou pode ter gravado): a página relê o servidor.
   refresh: boolean;
+  // O desfecho veio do run mesmo (linha final ou marcador `done`), não de uma desistência
+  // do acompanhamento: só então uma página antiga que diga "em voo" é ignorada.
+  settled: boolean;
 };
 
 export type RunMeta = Pick<RunEntry, "intent" | "live" | "baseSetId">;
@@ -129,9 +132,14 @@ function applyStep(slot: Slot, step: RunStep) {
   update(slot, { steps });
 }
 
-function finish(slot: Slot, outcome: HeroRunOutcome | null, refresh: boolean) {
+function finish(
+  slot: Slot,
+  outcome: HeroRunOutcome | null,
+  refresh: boolean,
+  settled = true,
+) {
   if (!current(slot)) return;
-  update(slot, { status: "finished", outcome, refresh });
+  update(slot, { status: "finished", outcome, refresh, settled });
   // Ninguém olhando este jogo agora: as páginas guardadas no cache do roteador (#639)
   // são relidas quando reabertas, e o HERO entrega o desfecho quando o jogo voltar.
   if (!watched(slot.matchId) && refresh) markRouterCacheStale();
@@ -144,7 +152,7 @@ function finish(slot: Slot, outcome: HeroRunOutcome | null, refresh: boolean) {
 export function consumeRun(matchId: string): RunEntry | null {
   const slot = slots.get(matchId);
   if (!slot || slot.entry.status !== "finished") return null;
-  if (slot.entry.runId) consumed.add(slot.entry.runId);
+  if (slot.entry.runId && slot.entry.settled) consumed.add(slot.entry.runId);
   drop(slot);
   return slot.entry;
 }
@@ -166,6 +174,7 @@ export async function startRun(
     status: "running",
     outcome: null,
     refresh: false,
+    settled: false,
   });
 
   let res: Response;
@@ -227,6 +236,7 @@ export function resumeRun(
     status: "running",
     outcome: null,
     refresh: false,
+    settled: false,
   });
   void follow(slot, { cut: false });
 }
@@ -239,10 +249,12 @@ async function follow(slot: Slot, { cut }: { cut: boolean }) {
   if (slot.following) return;
   slot.following = true;
   const startedAt = Date.now();
-  let first = cut;
+  let first = true;
   let misses = 0;
+  // Sem o desfecho do run: relê a página (o que tiver gravado aparece), e uma página que
+  // ainda diga "em voo" volta a acompanhar.
   const giveUp = () =>
-    finish(slot, cut ? { ok: false, error: CUT_MESSAGE } : null, true);
+    finish(slot, cut ? { ok: false, error: CUT_MESSAGE } : null, true, false);
   for (;;) {
     if (!first) await sleep(pollMs);
     first = false;
@@ -252,28 +264,23 @@ async function follow(slot: Slot, { cut }: { cut: boolean }) {
       markRouterCacheStale();
       return;
     }
-    let snapshot: RunSnapshot | null;
-    try {
-      const res = await fetch(
-        `${PALPITE_RUN_ENDPOINT}?matchId=${encodeURIComponent(slot.matchId)}`,
-        { headers: { Accept: "application/json" }, cache: "no-store" },
-      );
-      snapshot = res.ok ? await readSnapshot(res) : null;
-    } catch {
-      // Sem rede agora: tenta de novo até o run já ter passado do teto da rota.
+    const read = await readMarker(slot.matchId);
+    if (read === "unknown") {
+      // Sem rede ou KV sem resposta: tenta de novo até o run já ter passado do teto.
       if (Date.now() - startedAt > POLL_GIVE_UP_MS) {
         giveUp();
         return;
       }
       continue;
     }
-    // Stream que caiu: só vale o marcador deste run. Sem ele (ainda não gravou, ou KV
-    // fora), o mesmo aviso de antes. Na volta à página, um run mais novo (outra aba)
-    // passa a ser o acompanhado.
+    let snapshot = read;
+    // Stream que caiu: só vale o marcador deste run. Na volta à página, um run mais novo
+    // (outra aba) passa a ser o acompanhado.
     if (snapshot && cut && slot.entry.runId && snapshot.runId !== slot.entry.runId) {
       snapshot = null;
     }
     if (!snapshot) {
+      // Stream que caiu logo no começo: o marcador pode ainda não ter sido gravado.
       if (cut && misses < CUT_MISS_RETRIES) {
         misses += 1;
         continue;
@@ -289,13 +296,24 @@ async function follow(slot: Slot, { cut }: { cut: boolean }) {
   }
 }
 
-async function readSnapshot(res: Response): Promise<RunSnapshot | null> {
+// O marcador do jogo pelo GET da rota. null = não há run; "unknown" = não deu pra saber
+// (rede, KV sem resposta, resposta estranha).
+async function readMarker(matchId: string): Promise<RunSnapshot | null | "unknown"> {
   try {
+    const res = await fetch(
+      `${PALPITE_RUN_ENDPOINT}?matchId=${encodeURIComponent(matchId)}`,
+      { headers: { Accept: "application/json" }, cache: "no-store" },
+    );
+    // Sem sessão, pedido recusado ou rota ausente (deploy antigo): não há run a seguir.
+    if ([400, 401, 403, 404].includes(res.status)) return null;
+    if (!res.ok) return "unknown";
     const body: unknown = await res.json();
-    if (typeof body !== "object" || body === null) return null;
-    return parseRunSnapshot((body as { run?: unknown }).run);
+    if (typeof body !== "object" || body === null || !("run" in body)) return "unknown";
+    const raw = (body as { run: unknown }).run;
+    if (raw === null) return null;
+    return parseRunSnapshot(raw) ?? "unknown";
   } catch {
-    return null;
+    return "unknown";
   }
 }
 

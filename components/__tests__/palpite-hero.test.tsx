@@ -57,7 +57,15 @@ const MATCH_A = "11111111-1111-1111-1111-111111111111";
 const MATCH_B = "22222222-2222-2222-2222-222222222222";
 
 function snapshot(runId: string): RunSnapshot {
-  return { runId, intent: "analysis", live: false, status: "running", steps: [], outcome: null };
+  return {
+    runId,
+    intent: "analysis",
+    live: false,
+    startedAt: Date.now(),
+    status: "running",
+    steps: [],
+    outcome: null,
+  };
 }
 
 // A rota de streaming nos testes: roda a action mockada com o MESMO FormData e devolve
@@ -829,10 +837,18 @@ describe("PalpiteHero — progresso ao vivo do run (ADR 0064)", () => {
         controller = c;
       },
     });
-    const state: { marker: RunSnapshot | null } = { marker: null };
+    // `unavailable` > 0: as próximas leituras respondem 503 (KV sem resposta).
+    const state: { marker: RunSnapshot | null; unavailable: number } = {
+      marker: null,
+      unavailable: 0,
+    };
     const fetchMock = vi.fn(async (url: string, init?: RequestInit) => {
       if (init?.method === "POST") return new Response(body, { status: 200 });
       expect(url).toBe(`${PALPITE_RUN_ENDPOINT}?matchId=${MATCH_A}`);
+      if (state.unavailable > 0) {
+        state.unavailable -= 1;
+        return new Response(null, { status: 503 });
+      }
       return Response.json({ run: state.marker });
     });
     const encoder = new TextEncoder();
@@ -1133,6 +1149,25 @@ describe("PalpiteHero — progresso ao vivo do run (ADR 0064)", () => {
     const stale = await mountHero(POPULATED, { activeRun: snapshot("run-9") });
     expect(stale.container.textContent).toContain(POPULATED.verdict);
     await stale.cleanup();
+  });
+
+  it("KV sem resposta no acompanhamento: tenta de novo em vez de largar o run", async () => {
+    const s = controlledFetch();
+    vi.stubGlobal("fetch", s.fetchMock);
+    s.state.marker = {
+      ...snapshot("run-7"),
+      steps: [{ id: "jev", status: "active", label: "Consultando o JEV" }],
+    };
+    s.state.unavailable = 3;
+    const h = await mountHero(POPULATED, { activeRun: s.state.marker });
+    await h.flush();
+    await h.flush();
+    expect(rows(h.container)).toEqual(["active:Consultando o JEV"]);
+    expect(nav.refresh).not.toHaveBeenCalled();
+    s.state.marker = { ...s.state.marker, status: "done", outcome: { ok: true, analysis: true } };
+    await h.flush();
+    expect(nav.refresh).toHaveBeenCalledTimes(1);
+    await h.cleanup();
   });
 
   it("o FormData enviado leva o intent do botão clicado e o matchId", async () => {
