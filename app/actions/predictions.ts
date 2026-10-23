@@ -1022,7 +1022,7 @@ async function analyzeBestBetLive(args: {
     aiCallByMarketKey.set(r.marketKey, aiCall ? { costUsd: aiCall.costUsd } : null);
   }
   const view = toBestBetView(outcomes, aiCallByMarketKey, [], [], displayTeams(match));
-  // Síntese ao vivo (palpites_live_v1) sobre a leitura recém-feita, sem notícias. Sem
+  // Síntese ao vivo (cartucho palpites_live) sobre a leitura recém-feita, sem notícias. Sem
   // unidade própria, como no pré-jogo.
   const { palpite, palpiteError } = await synthesizeHeadline({
     scope: "analyzeBestBet",
@@ -1116,7 +1116,7 @@ async function synthesizeHeadline(args: {
   deadlineAt: number;
   // Busca de notícias já disparada pelo run (modo paralelo); ausente = a síntese busca.
   news?: ReturnType<typeof startNewsFetch>;
-  // Palpite ao vivo (#594): palpites_live_v1, sem notícias.
+  // Palpite ao vivo (#594): cartucho palpites_live, sem notícias.
   live?: GenerateLivePalpiteArgs["live"];
 }): Promise<HeadlineOutcome> {
   const { scope, matchId, isAdmin } = args;

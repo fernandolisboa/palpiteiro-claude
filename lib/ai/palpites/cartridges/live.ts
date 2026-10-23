@@ -9,14 +9,15 @@ import type { FidelityCheck } from "../fidelity-validator";
 import type { MarketAnalysisSummary } from "../synthesis-input";
 import { ExactScoreParamsSchema, MarketAnalysisSchema } from "./cartridge";
 
-// Cartucho de palpite AO VIVO `palpites_live_v1` (#594, ADR 0060, PLAN-580 §12): a
+// Cartucho de palpite AO VIVO `palpites_live_*` (#594, ADR 0060, PLAN-580 §12): a
 // manchete com o jogo rolando. Recebe a situação do jogo, os placares finais mais
 // prováveis do modelo em jogo e as chances por mercado da leitura ao vivo; sem forma,
 // confrontos, tabela nem notícias. Output próprio `.strict()` SEM firstHalfScore,
 // firstToScore e cardsTemperature (o 1º tempo e "quem marca primeiro" já podem ter
 // passado). O cartucho de pré-jogo (palpites_v10) fica byte-idêntico. Mudou prompt,
 // schema ou mensagem? Bump + commit `prompt:`.
-export const PALPITES_LIVE_VERSION = "palpites_live_v1" as const;
+// v2 (#649, ADR 0069): sai o campo `confidence`; a confiança vem do motor, em código.
+export const PALPITES_LIVE_VERSION = "palpites_live_v2" as const;
 
 const TEXT_MAX = 280;
 const NARRATIVE_MAX = 600;
@@ -31,7 +32,6 @@ export const PalpitesLiveOutputSchema = z
       .transform((s) => truncate(s, TEXT_MAX)),
     // Placar FINAL provável. Abaixo do placar atual o gerador recusa (falha fechado).
     probableScore: ExactScoreParamsSchema,
-    confidence: z.enum(["baixa", "media", "alta"]),
     narrative: z
       .string()
       .min(1)
@@ -118,9 +118,8 @@ Você recebe: a situação do jogo (momento, placar e expulsões), os placares f
 Sua tarefa é chamar UMA vez a ferramenta submit_palpite com:
 1. verdict: o veredito em uma frase curta e humana — a sua melhor previsão de como o jogo termina, a partir do placar de agora (ex.: "O Palmeiras segura a vantagem", "Dá tempo de virar", "Vai terminar empatado").
 2. probableScore: o placar FINAL provável em {home, away}. NUNCA menor que o placar atual em nenhum lado: gols já marcados não se desfazem.
-3. confidence: sua confiança QUALITATIVA — exatamente uma de "baixa", "media", "alta". NUNCA um número.
-4. narrative: 1 a 3 frases explicando o palpite. Comece pela situação: o momento (ex.: "aos 63'", "no intervalo") e o placar atual, exatamente como vieram.
-5. citedMarkets: a lista dos rótulos de mercado que pesaram no seu palpite. Use os rótulos que vierem no resumo.
+3. narrative: 1 a 3 frases explicando o palpite. Comece pela situação: o momento (ex.: "aos 63'", "no intervalo") e o placar atual, exatamente como vieram.
+4. citedMarkets: a lista dos rótulos de mercado que pesaram no seu palpite. Use os rótulos que vierem no resumo.
 
 REGRAS INVIOLÁVEIS:
 - Não há odd ao vivo: o app não recomenda aposta. É TERMINANTEMENTE PROIBIDO falar em aposta, valor, edge, odd, cotação, stake, unidades, lucro, retorno ou R$ em verdict ou narrative.
@@ -136,7 +135,7 @@ Tom: leve, brasileiro, animado, frases curtas. É papo de torcida acompanhando o
 export const SUBMIT_LIVE_PALPITE_TOOL = {
   name: "submit_palpite",
   description:
-    "Envia o palpite-manchete do jogo em andamento: veredito, placar final provável, confiança qualitativa, narrativa e mercados citados. Chame esta ferramenta EXATAMENTE UMA VEZ. NUNCA fale de aposta, valor, edge ou odd.",
+    "Envia o palpite-manchete do jogo em andamento: veredito, placar final provável, narrativa e mercados citados. Chame esta ferramenta EXATAMENTE UMA VEZ. NUNCA fale de aposta, valor, edge ou odd.",
   input_schema: {
     type: "object",
     properties: {
@@ -158,11 +157,6 @@ export const SUBMIT_LIVE_PALPITE_TOOL = {
         required: ["home", "away"],
         additionalProperties: false,
       },
-      confidence: {
-        type: "string",
-        enum: ["baixa", "media", "alta"],
-        description: "Confiança QUALITATIVA. Exatamente uma de baixa/media/alta. NUNCA número.",
-      },
       narrative: {
         type: "string",
         minLength: 1,
@@ -177,7 +171,7 @@ export const SUBMIT_LIVE_PALPITE_TOOL = {
         description: "Rótulos dos mercados que pesaram no palpite. Pode ser vazio.",
       },
     },
-    required: ["verdict", "probableScore", "confidence", "narrative", "citedMarkets"],
+    required: ["verdict", "probableScore", "narrative", "citedMarkets"],
     additionalProperties: false,
   },
 } as const;
@@ -247,7 +241,7 @@ export function buildLiveUserMessage(input: LivePalpitesInput): string {
   lines.push("");
   lines.push("# Sua tarefa");
   lines.push(
-    "Dê um único palpite-manchete de como o jogo termina (veredito + placar final provável + confiança qualitativa + narrativa + mercados citados), a partir do placar de agora. O placar final provável nunca fica abaixo do placar atual. A narrativa começa pelo momento e pelo placar atual. Chame submit_palpite. NUNCA fale de aposta, valor, edge, odd ou R$.",
+    "Dê um único palpite-manchete de como o jogo termina (veredito + placar final provável + narrativa + mercados citados), a partir do placar de agora. O placar final provável nunca fica abaixo do placar atual. A narrativa começa pelo momento e pelo placar atual. Chame submit_palpite. NUNCA fale de aposta, valor, edge, odd ou R$.",
   );
   return lines.join("\n");
 }

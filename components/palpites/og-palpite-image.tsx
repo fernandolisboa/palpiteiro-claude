@@ -16,13 +16,16 @@
 // assando um preço no PNG.
 
 import { AppIconMark } from "@/components/brand/app-icon-mark";
-import type { PalpiteHeadlineView } from "@/lib/view/palpites-headline";
+import type {
+  PalpiteConfidenceWord,
+  PalpiteHeadlineView,
+} from "@/lib/view/palpites-headline";
 import { OG_DISCLAIMER_STRIP } from "@/lib/view/share/disclaimer";
 import { unsafeForPublic } from "@/lib/view/share/public-text-guard";
 
 // Rótulo qualitativo da confiança — definido LOCAL (não importado do palpite-hero.tsx, que é
 // "use client" e arrasta analyzeBestBet). Firewall-safe: palavra, nunca dígito/%.
-const CONFIDENCE_LABEL: Record<PalpiteHeadlineView["confidence"], string> = {
+const CONFIDENCE_LABEL: Record<PalpiteConfidenceWord, string> = {
   baixa: "confiança baixa",
   media: "confiança média",
   alta: "confiança alta",
@@ -33,7 +36,7 @@ export type OgTextPieces = {
   verdict: string;
   // Placar provável "home–away" (en-dash). É o placar PREVISTO (inteiros 0–20), nunca uma odd.
   probableScore: string;
-  // Rótulo qualitativo da confiança (palavra).
+  // Rótulo qualitativo da confiança (palavra); "" sem confiança do motor (#649).
   confidence: string;
   // "Mandante x Visitante".
   teams: string;
@@ -69,7 +72,7 @@ export function buildOgTextPieces(
     verdict,
     // Placar PREVISTO (inteiros) com en-dash — case /^\d{1,2}[–-]\d{1,2}$/, nunca decimal.
     probableScore: `${view.probableScore.home}–${view.probableScore.away}`,
-    confidence: CONFIDENCE_LABEL[view.confidence],
+    confidence: view.confidence ? CONFIDENCE_LABEL[view.confidence] : "",
     teams: `${match.homeName} x ${match.awayName}`,
     homeInitials: initialsOf(match.homeShort),
     awayInitials: initialsOf(match.awayShort),

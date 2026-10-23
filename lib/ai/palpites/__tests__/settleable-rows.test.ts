@@ -12,7 +12,6 @@ function output(
     probableScore: { home: 2, away: 0 },
     firstHalfScore: { home: 1, away: 0 },
     firstToScore: "home",
-    confidence: "media",
     narrative: "narrativa qualquer",
     citedMarkets: [],
     ...over,

@@ -27,10 +27,14 @@ export type PalpiteDimensionView = {
   badge: "won" | "lost" | null; // null = pendente / sem dado
 };
 
+export type PalpiteConfidenceWord = "baixa" | "media" | "alta";
+
 export type PalpiteHeadlineView = {
   verdict: string;
   probableScore: { home: number; away: number };
-  confidence: "baixa" | "media" | "alta";
+  // Pelo motor desde o #649; null = sem chip. Só a palavra: a P (`confidenceProbPct` do
+  // jsonb) NÃO cruza pra view (firewall).
+  confidence: PalpiteConfidenceWord | null;
   narrative: string;
   citedMarkets: string[];
   // Settlement do placar provável (a linha exact_score). null = pendente OU sem placar.

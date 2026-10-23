@@ -246,7 +246,8 @@ export function ComoUsarContent() {
       <Section id="ler-analise">
         <p>
           O <Strong>Palpite da IA</Strong> é a manchete: quem leva, o placar provável, a
-          confiança (baixa, média ou alta) e o começo do porquê. Ao abrir{" "}
+          confiança (baixa, média ou alta, pela chance que o modelo dá a esse
+          resultado) e o começo do porquê. Ao abrir{" "}
           <Ui>Ler análise completa</Ui>, o quadro mostra o parágrafo inteiro, os
           mercados que ele usou, os palpites extras e, quando a IA leu notícias, os
           links das fontes. Depois do jogo, o quadro mostra se <Ui>Acertou</Ui> ou{" "}

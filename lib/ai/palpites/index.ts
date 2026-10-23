@@ -3,6 +3,7 @@ import { eq } from "drizzle-orm";
 import { aiCalls, matches, palpiteSets, palpites } from "@/db/schema";
 import { db } from "@/lib/db";
 import { extractDbCause } from "@/lib/db/pg-error";
+import { getLatestMatchModelSnapshot } from "@/lib/db/queries/match-model-snapshots";
 import type { DbPalpiteSet } from "@/lib/db/queries/palpites";
 import { getSportsDataProvider } from "@/lib/providers/sports-data";
 import type { FixtureRef } from "@/lib/providers/sports-data/types";
@@ -51,6 +52,12 @@ import {
   palpitesLiveCartridge,
   type PalpiteLiveOutput,
 } from "./cartridges/live";
+import {
+  liveConfidenceProbs,
+  palpiteConfidence,
+  pregameConfidenceProbs,
+  type ConfidenceProbs,
+} from "./confidence";
 import { checkFidelity, type FidelityCheck } from "./fidelity-validator";
 import { getPalpiteCartridge } from "./registry";
 import {
@@ -158,7 +165,8 @@ function fetchNews(
 /**
  * Passo de SÍNTESE do palpite-first (ADR 0030 / #353): turna as N análises
  * multi-mercado já pagas pelo fan-out (`analyses`) numa única MANCHETE — veredito de
- * quem ganha + placar provável + confiança qualitativa + narrativa + mercados citados.
+ * quem ganha + placar provável + narrativa + mercados citados; a confiança vem do motor
+ * (#649, ADR 0069), calculada aqui depois da síntese.
  * IRMÃO de `predict()` (NÃO o chama): reusa SÓ (a) o seam de provider (ADR 0027, p/
  * logar ai_calls) e (b) o padrão de logging. ZERO import de SDK de IA.
  *
@@ -237,7 +245,7 @@ export async function generatePalpites({
       deadlineAt,
     );
 
-  const [fixture, homeForm, awayForm, h2h, standings, newsOutcome] =
+  const [fixture, homeForm, awayForm, h2h, standings, newsOutcome, snapshot] =
     await Promise.all([
       provider.getFixtureByMatch(ref),
       provider.getTeamForm(match.homeTeam, match.league, FORM_LAST),
@@ -245,6 +253,19 @@ export async function generatePalpites({
       provider.getH2H(match.homeTeam, match.awayTeam, match.league, H2H_LAST),
       provider.getStandings(match.league),
       newsFetch,
+      // Fonte da confiança do palpite (#649). Falha de leitura não derruba a síntese:
+      // cai na análise de 1X2 do code_jev ou fica sem chip.
+      getLatestMatchModelSnapshot(matchId).catch((err: unknown) => {
+        console.error(
+          JSON.stringify({
+            scope: "generatePalpites",
+            matchId,
+            error: "snapshot_read_failed",
+            message: err instanceof Error ? err.message : String(err),
+          }),
+        );
+        return null;
+      }),
     ]);
 
   // 5. Monta input (com as análises) + 6. userMessage.
@@ -283,6 +304,7 @@ export async function generatePalpites({
     sources: newsOutcome.results,
     live: null,
     analysesLines: analysesDetail(analyses),
+    confidenceProbs: pregameConfidenceProbs(snapshot, analyses),
   });
 }
 
@@ -298,7 +320,7 @@ type SynthesisCartridge<O> = {
 
 type SynthesisOutputBase = {
   verdict: string;
-  confidence: "baixa" | "media" | "alta";
+  probableScore: { home: number; away: number };
   narrative: string;
   citedMarkets: string[];
 };
@@ -318,6 +340,8 @@ type SynthesisSpec<O extends SynthesisOutputBase> = {
   live: ReturnType<typeof liveColumns> | null;
   // O que cada análise escolheu, pro "Ver raciocínio" (ADR 0065).
   analysesLines: string[];
+  // P(1X2) do motor pra confiança do palpite (#649); null = sem fonte, sem chip.
+  confidenceProbs: ConfidenceProbs | null;
 };
 
 /**
@@ -619,7 +643,10 @@ async function runSynthesis<O extends SynthesisOutputBase>(
   // O raciocínio do run (ADR 0065): as etapas que rodaram até aqui, mais a síntese, que
   // termina com este insert. Vazio fora de um run com progresso (cron, script).
   const synthesis = synthesisStep(spec.live !== null);
-  stepDetail(synthesis, [...synthesisDetail(output), ...spec.analysesLines]);
+  // Confiança calculada pelo motor (#649, ADR 0069): a chance do resultado do placar
+  // provável, não a palavra do LLM.
+  const confidence = palpiteConfidence(output.probableScore, spec.confidenceProbs);
+  stepDetail(synthesis, [...synthesisDetail(confidence), ...spec.analysesLines]);
   const reasoning = progressTrace({ assumeDone: synthesis });
   let setRow: DbPalpiteSet;
   try {
@@ -633,7 +660,9 @@ async function runSynthesis<O extends SynthesisOutputBase>(
         promptVersion: cartridge.version,
         headline: {
           verdict: output.verdict,
-          confidence: output.confidence,
+          confidence: confidence?.level ?? null,
+          confidenceProbPct: confidence?.probPct ?? null,
+          confidenceSource: confidence?.source ?? "none",
           narrative: output.narrative,
           citedMarkets: output.citedMarkets,
           sourcePredictionIds,
@@ -684,7 +713,7 @@ async function runSynthesis<O extends SynthesisOutputBase>(
  * Palpite AO VIVO (#594, ADR 0060 §8.2, PLAN-580 §12): a manchete sobre a leitura ao vivo
  * (as predictions is_live do mesmo momento). Sem forma/confrontos/tabela e sem notícias:
  * só a situação do jogo, os placares finais mais prováveis do modelo em jogo e as chances
- * por mercado. Cartucho palpites_live_v1 (output sem 1º tempo/primeiro a marcar/cartões);
+ * por mercado. Cartucho palpites_live_v2 (output sem 1º tempo/primeiro a marcar/cartões);
  * placar provável abaixo do atual falha fechado (Zod, invalid_output: o veredito e a
  * narrativa foram escritos pra esse placar, trocar só o placar deixaria a manchete se
  * contradizendo); linhas só exact_score/margin/clean_sheet; o set grava is_live +
@@ -758,5 +787,7 @@ export async function generateLivePalpites({
     sources: [],
     live: liveColumns(stamp),
     analysesLines: analysesDetail(analyses),
+    // Ao vivo, a matriz do placar final do modelo em jogo (a mesma das leituras).
+    confidenceProbs: liveConfidenceProbs(scoreline.matrix),
   });
 }

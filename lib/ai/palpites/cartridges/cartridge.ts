@@ -69,8 +69,11 @@ import type { PalpiteCartridge } from "../types";
 // validador de fidelidade (#380), que lia "0,8 gols sofridos por jogo" como total 8.
 // v11 (#618) = forma recente sem amistosos de clubes (forma e "Últimos N jogos") e, quando
 // a forma tem jogo de outra competição, a linha diz quantos e de qual. System prompt igual.
+// v12 (#649, ADR 0069) = sai o campo `confidence`: a confiança do palpite passa a ser
+// calculada em código (lib/ai/palpites/confidence.ts) a partir da chance que o motor dá ao
+// resultado do placar provável. O LLM não escolhe mais o rótulo.
 // BUMP MANUAL (commit `prompt:`) em QUALQUER mudança de prompt/schema.
-export const PALPITES_VERSION = "palpites_v11" as const;
+export const PALPITES_VERSION = "palpites_v12" as const;
 
 const TEXT_MAX = 280;
 // Narrativa: prosa um pouco mais longa que uma linha de palpite. Truncada (não
@@ -98,7 +101,7 @@ const narrativeText = z
 
 // A manchete. `.strict()` → uma chave de VALOR parasita do LLM (edgePct, ev, stake,
 // odd, …) é REJEITADA estruturalmente (firewall leg (a), ADR 0030 §3). NÃO há campo de
-// valor aqui. `confidence` é QUALITATIVO (baixa/media/alta), nunca %.
+// valor aqui. A confiança não vem do LLM (#649): é calculada pelo motor depois.
 export const PalpitesOutputSchema = z
   .object({
     // Veredito "quem ganha" / opinião ("Vai dar Palmeiras").
@@ -119,8 +122,6 @@ export const PalpitesOutputSchema = z
     // AMARELOS (projeto, não LLM) no boundary do template. `scope` fica fora do schema —
     // é sempre "total" na v1 (constante do template), aditivo no futuro.
     cardsTemperature: z.enum(["pegado", "muito_pegado"]).optional(),
-    // Confiança QUALITATIVA — nunca número.
-    confidence: z.enum(["baixa", "media", "alta"]),
     // Prosa SEM linguagem de valor (validada também pelo guard de conteúdo no generator).
     narrative: narrativeText,
     // Rótulos de mercados citados ("Resultado", "Mais de 2.5"). Pode ser vazio.
@@ -261,10 +262,9 @@ Sua tarefa é chamar UMA vez a ferramenta submit_palpite com:
 2. probableScore: o placar provável em {home, away} (inteiros de 0 a 20), coerente com o veredito.
 3. firstHalfScore: o placar provável do 1º TEMPO em {home, away} (inteiros de 0 a 20). DEVE ser <= o placar provável final em cada lado (gols só se acumulam — um time não "desmarca"). Ex.: se o provável é 2–1, o 1º tempo pode ser 1–0 ou 1–1, nunca 3–0.
 4. firstToScore: quem marca o 1º gol — exatamente "home", "away" ou "none". Coerente com o veredito: se você acha que o mandante ganha, normalmente ele marca primeiro ("home"). "none" SÓ quando você prevê um 0-0 (ninguém marca).
-5. confidence: sua confiança QUALITATIVA — exatamente uma de "baixa", "media", "alta". NUNCA um número.
-6. narrative: 1 a 3 frases explicando o palpite a partir da forma, do histórico e do que as análises apontaram, em linguagem de torcida.
-7. citedMarkets: a lista dos rótulos de mercado que pesaram no seu palpite (ex.: ["Resultado (1X2)", "Over/Under gols"]). Use os rótulos que vierem no resumo.
-8. cardsTemperature (OPCIONAL): se o jogo tem CARA de pegado (clássico, rivalidade quente, jogo decisivo, ou árbitro rigoroso citado nas notícias), escolha "pegado" ou "muito_pegado". É a dimensão MAIS RUIDOSA e divertida — em jogo morno/amistoso ou na dúvida, OMITA o campo (não force). NUNCA um número de cartões. E NUNCA mencione cartões, árbitro ou contagem de cartões em verdict ou narrative — essa estimativa vai SÓ no campo estruturado cardsTemperature.
+5. narrative: 1 a 3 frases explicando o palpite a partir da forma, do histórico e do que as análises apontaram, em linguagem de torcida.
+6. citedMarkets: a lista dos rótulos de mercado que pesaram no seu palpite (ex.: ["Resultado (1X2)", "Over/Under gols"]). Use os rótulos que vierem no resumo.
+7. cardsTemperature (OPCIONAL): se o jogo tem CARA de pegado (clássico, rivalidade quente, jogo decisivo, ou árbitro rigoroso citado nas notícias), escolha "pegado" ou "muito_pegado". É a dimensão MAIS RUIDOSA e divertida — em jogo morno/amistoso ou na dúvida, OMITA o campo (não force). NUNCA um número de cartões. E NUNCA mencione cartões, árbitro ou contagem de cartões em verdict ou narrative — essa estimativa vai SÓ no campo estruturado cardsTemperature.
 
 REGRAS INVIOLÁVEIS:
 - Os números internos das análises (edge, valor esperado/EV, stake/unidades, Yield, lucro, odd/cotação, R$) são SÓ pra você decidir. É TERMINANTEMENTE PROIBIDO mencioná-los — como número OU como palavra — em verdict ou narrative. Escreva como um torcedor empolgado dando seu palpite, NUNCA como um analista de valor. (PROIBIDO: "tem edge no over", "odd boa no Palmeiras", "vale a stake". OK: "o Palmeiras vem voando e marca fácil em casa".)
@@ -284,7 +284,7 @@ Tom: leve, brasileiro, animado, frases curtas. É papo de torcida com embasament
 const SUBMIT_PALPITE_TOOL = {
   name: "submit_palpite",
   description:
-    "Envia o palpite-manchete do jogo: veredito de quem ganha, placar provável, confiança qualitativa, narrativa e mercados citados. Chame esta ferramenta EXATAMENTE UMA VEZ. NUNCA inclua números de valor (edge/EV/stake/odd).",
+    "Envia o palpite-manchete do jogo: veredito de quem ganha, placar provável, narrativa e mercados citados. Chame esta ferramenta EXATAMENTE UMA VEZ. NUNCA inclua números de valor (edge/EV/stake/odd).",
   input_schema: {
     type: "object",
     properties: {
@@ -328,11 +328,6 @@ const SUBMIT_PALPITE_TOOL = {
         description:
           "OPCIONAL: temperatura de cartões do jogo — 'pegado' (clássico/decisão/rivalidade → vira linha 4+ amarelos) ou 'muito_pegado' (rivalidade quente/árbitro citado → 6+). OMITA em jogo morno. NUNCA um número exato. NUNCA mencione cartões/árbitro em verdict/narrative.",
       },
-      confidence: {
-        type: "string",
-        enum: ["baixa", "media", "alta"],
-        description: "Confiança QUALITATIVA. Exatamente uma de baixa/media/alta. NUNCA número.",
-      },
       narrative: {
         type: "string",
         minLength: 1,
@@ -353,7 +348,6 @@ const SUBMIT_PALPITE_TOOL = {
       "probableScore",
       "firstHalfScore",
       "firstToScore",
-      "confidence",
       "narrative",
       "citedMarkets",
     ],
@@ -706,7 +700,7 @@ export function buildUserMessage(
   lines.push("");
   lines.push("# Sua tarefa");
   lines.push(
-    "Sintetize TUDO acima num único palpite-manchete (quem ganha + placar provável + placar do 1º tempo + quem marca primeiro + confiança qualitativa + narrativa + mercados citados). Use TODO o insumo — forma/H2H/tabela MAIS o sinal das análises MAIS as notícias factuais — pra dar a sua MELHOR previsão; pode cravar o lado menos óbvio/azarão quando o conjunto justifica. O placar do 1º tempo deve ser <= o placar provável final em cada lado; o 'primeiro a marcar' deve ser coerente com quem você acha que ganha. Opcionalmente preencha cardsTemperature ('pegado'/'muito_pegado') se o jogo tem cara de pegado (clássico/decisão/rivalidade/árbitro citado) — OMITA em jogo morno; NUNCA cite cartões/árbitro em verdict ou narrative (a estimativa vai SÓ no campo cardsTemperature). Mesmo sem valor em nenhum mercado, dê seu palpite honesto a partir de forma/H2H/tabela. Chame submit_palpite. NUNCA cite edge/EV/stake/odd/R$ — tom de torcida.",
+    "Sintetize TUDO acima num único palpite-manchete (quem ganha + placar provável + placar do 1º tempo + quem marca primeiro + narrativa + mercados citados). Use TODO o insumo — forma/H2H/tabela MAIS o sinal das análises MAIS as notícias factuais — pra dar a sua MELHOR previsão; pode cravar o lado menos óbvio/azarão quando o conjunto justifica. O placar do 1º tempo deve ser <= o placar provável final em cada lado; o 'primeiro a marcar' deve ser coerente com quem você acha que ganha. Opcionalmente preencha cardsTemperature ('pegado'/'muito_pegado') se o jogo tem cara de pegado (clássico/decisão/rivalidade/árbitro citado) — OMITA em jogo morno; NUNCA cite cartões/árbitro em verdict ou narrative (a estimativa vai SÓ no campo cardsTemperature). Mesmo sem valor em nenhum mercado, dê seu palpite honesto a partir de forma/H2H/tabela. Chame submit_palpite. NUNCA cite edge/EV/stake/odd/R$ — tom de torcida.",
   );
 
   return lines.join("\n");
