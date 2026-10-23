@@ -50,6 +50,15 @@ const LEAK_VIEW: PalpiteHeadlineView = {
   ],
 };
 
+describe("buildOgTextPieces — confiança (#649)", () => {
+  it("palavra quando há; vazio quando null", () => {
+    expect(buildOgTextPieces(LEAK_VIEW, MATCH).confidence).toBe("confiança média");
+    expect(
+      buildOgTextPieces({ ...LEAK_VIEW, confidence: null }, MATCH).confidence,
+    ).toBe("");
+  });
+});
+
 describe("OgPalpiteImage — chip com a sigla inteira (#578)", () => {
   it("usa as 3 letras (ATM × ATH não vira AT × AT)", () => {
     const pieces = buildOgTextPieces(LEAK_VIEW, {

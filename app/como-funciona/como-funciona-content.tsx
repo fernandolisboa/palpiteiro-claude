@@ -157,8 +157,9 @@ export function ComoFuncionaContent() {
             um <G to="palpite">palpite</G>: quem leva, o{" "}
             <G to="placar-provavel">placar provável</G> e o porquê, no tom de um amigo
             que entende de futebol. A análise é sob demanda e tem um limite por dia,
-            então nem todo jogo tem palpite pronto. A convicção vem numa{" "}
-            <G to="confianca-palpite">palavra</G>: baixa, média ou alta.
+            então nem todo jogo tem palpite pronto. A{" "}
+            <G to="confianca-palpite">confiança</G> vem numa palavra (baixa, média ou
+            alta) e é do modelo, não da IA: é a chance que ele dá ao resultado do palpite.
           </p>
           <p>
             O palpite não traz odd, vantagem, stake nem porcentagem: o placar provável

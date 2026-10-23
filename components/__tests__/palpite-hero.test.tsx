@@ -185,6 +185,12 @@ describe("PalpiteHero — confiança = palavra-chip (sem dígito/%/meter)", () =
     const html = render({ heroPalpite: { ...POPULATED, confidence } });
     expect(html).toContain(label);
   });
+
+  it("#649: sem confiança do motor (null) → sem chip", () => {
+    const html = render({ heroPalpite: { ...POPULATED, confidence: null } });
+    expect(html).not.toContain("confiança");
+    expect(html).toContain("provável");
+  });
 });
 
 describe("PalpiteHero — settled honesty (palavra, nunca só cor; a11y)", () => {

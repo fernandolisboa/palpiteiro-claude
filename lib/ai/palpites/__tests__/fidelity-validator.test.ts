@@ -15,7 +15,6 @@ function output(over: Partial<PalpiteSynthesisOutput> = {}): PalpiteSynthesisOut
     probableScore: { home: 2, away: 1 },
     firstHalfScore: { home: 1, away: 0 },
     firstToScore: "home",
-    confidence: "alta",
     narrative: "O Fla vem voando em casa.",
     citedMarkets: ["Resultado (1X2)"],
     ...over,

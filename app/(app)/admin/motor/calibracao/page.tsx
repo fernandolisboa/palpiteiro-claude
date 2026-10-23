@@ -29,7 +29,13 @@ import {
 import type { ReliabilityBin } from "@/lib/calibration/metrics";
 import { loadKellyGate } from "@/lib/calibration/kelly-live";
 import type { KellyGate } from "@/lib/calibration/phase-c-gate";
+import {
+  deriveConfidenceCalibration,
+  type ConfidenceEraSummary,
+} from "@/lib/calibration/palpite-confidence";
+import { PALPITE_CONFIDENCE_BANDS } from "@/lib/ai/palpites/confidence";
 import { getMarketCalibrationRows } from "@/lib/db/queries/calibration";
+import { getPalpiteConfidenceRows } from "@/lib/db/queries/palpite-confidence";
 import { RevisitRefresh } from "@/components/revisit-refresh";
 
 export const dynamic = "force-dynamic";
@@ -86,9 +92,10 @@ export default async function AdminCalibrationPage({ searchParams }: PageProps) 
   const params = await searchParams;
   const segment = parseEngineSegment(params.engine);
   const market = parseMarketSegment(params.market);
-  const [rows, gate] = await Promise.all([
+  const [rows, gate, confidenceRows] = await Promise.all([
     getMarketCalibrationRows(),
     loadKellyGate(),
+    getPalpiteConfidenceRows(),
   ]);
   const byMarket = deriveCalibrationByMarket(
     filterByEngineSegment(rows, segment),
@@ -117,6 +124,8 @@ export default async function AdminCalibrationPage({ searchParams }: PageProps) 
         <GateSection gate={gate} />
 
         <BacktestSection />
+
+        <ConfidenceSection eras={deriveConfidenceCalibration(confidenceRows)} />
 
         {rows.length > 0 && (
           <MarketSection
@@ -319,6 +328,62 @@ function BacktestSection() {
         >
           report 10
         </a>
+      </p>
+    </section>
+  );
+}
+
+const CONFIDENCE_WORD = { baixa: "baixa", media: "média", alta: "alta" } as const;
+const ERA_LABEL = { motor: "pelo motor", llm: "LLM (antes do #649)" } as const;
+
+// Confiança do palpite (#649, ADR 0069): a P que o motor deu ao resultado do placar
+// provável, por faixa, contra o resultado de 90 minutos. A era LLM fica de comparação.
+function ConfidenceSection({ eras }: { eras: ConfidenceEraSummary[] }) {
+  const { media, alta } = PALPITE_CONFIDENCE_BANDS;
+  return (
+    <section className="pb-8">
+      <h2 className="pb-3 font-mono text-meta uppercase tracking-label text-muted-foreground">
+        confiança do palpite · resultado do placar provável
+      </h2>
+      <div className="overflow-x-auto rounded-md border border-border">
+        <table className="w-full text-body-sm tabular-nums">
+          <thead>
+            <tr className="border-b border-border text-left font-mono text-meta uppercase tracking-label text-muted-foreground">
+              <Th>fonte</Th>
+              <Th>faixa</Th>
+              <Th align="right">n</Th>
+              <Th align="right">jogos</Th>
+              <Th align="right">previsto</Th>
+              <Th align="right">acerto</Th>
+            </tr>
+          </thead>
+          <tbody>
+            {eras.flatMap((e) =>
+              e.bands.map((b) => (
+                <tr
+                  key={`${e.era}-${b.level}`}
+                  className="border-b border-border last:border-b-0"
+                >
+                  <Td>{ERA_LABEL[e.era]}</Td>
+                  <Td>{CONFIDENCE_WORD[b.level]}</Td>
+                  <Td align="right">{b.n}</Td>
+                  <Td align="right">{b.matches}</Td>
+                  <Td align="right">{fmtPct(b.meanForecast)}</Td>
+                  <Td align="right">{fmtPct(b.hitRate)}</Td>
+                </tr>
+              )),
+            )}
+          </tbody>
+        </table>
+      </div>
+      <p className="pt-2 text-meta leading-relaxed text-muted-foreground tracking-tight">
+        Desde o #649 a confiança é a chance que o modelo dá ao resultado (casa, empate ou
+        fora) do placar provável: abaixo de {media}% é baixa, de {media}% a {alta}% é
+        média, a partir de {alta}% é alta. Previsto = essa chance, em média; acerto = quantas
+        vezes o resultado bateu com o placar de 90 minutos. Só palpites de pré-jogo
+        liquidados, o mais novo de cada jogo e usuário.
+        {eras[0].withoutConfidence > 0 &&
+          ` ${eras[0].withoutConfidence} palpite(s) pelo motor ficaram sem confiança (sem a chance do modelo pro jogo).`}
       </p>
     </section>
   );

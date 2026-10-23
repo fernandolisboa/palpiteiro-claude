@@ -43,6 +43,15 @@ function render(
   );
 }
 
+describe("PublicPalpite — confiança (#649)", () => {
+  it("palavra quando há; sem chip quando null", () => {
+    expect(render()).toContain("confiança média");
+    const html = render({ confidence: null });
+    expect(html).not.toContain("confiança");
+    expect(html).toContain("Pra mim vai dar Palmeiras");
+  });
+});
+
 describe("PublicPalpite — privacidade + firewall (ADR §3/§5)", () => {
   it("NÃO renderiza proveniência (sourcePredictionIds/userId/aiCallId/model/prompt)", () => {
     // O mapper já dropa esses por construção, mas a manchete persistida pode ter os campos —

@@ -1,3 +1,7 @@
+import {
+  engineFromModelVersion,
+  type AnalysisEngine,
+} from "@/lib/ai/engine/analysis-engine";
 import type { JudgmentMultipliers } from "@/lib/ai/judgments/apply";
 import type { JudgmentQuestionId } from "@/lib/ai/judgments/types";
 import { judgmentFactorPhrases } from "@/lib/ai/markets/_narrator/labels";
@@ -34,6 +38,9 @@ export type MarketAnalysisSummary = {
   rationale: string; // prediction.rationale (sinal p/ a narrativa); ver synthesisRationale
   predictionId: string; // proveniência → headline.sourcePredictionIds
   selections: { key: string; label?: string; modelProbPct: number }[];
+  // Motor que produziu a análise (do modelVersion). Só decide se o 1X2 serve de fonte
+  // da confiança do palpite (#649); não vai pro prompt. Ausente = desconhecido.
+  engine?: AnalysisEngine | null;
 };
 
 // Uma análise já persistida, venha ela do fan-out em memória (PredictResult) ou do
@@ -148,6 +155,7 @@ function summarizeSources(sources: AnalysisSource[]): MarketAnalysisSummary[] {
           : null,
       rationale: synthesisRationale(prediction),
       predictionId: prediction.id,
+      engine: analysisEngineOf(prediction),
       // Só as seleções COM prob: sem isso o schema da síntese rejeitava o input inteiro
       // (um jogador sem estimativa derrubava a manchete de todos os mercados).
       selections: selections.flatMap((s) => {
@@ -166,6 +174,16 @@ function summarizeSources(sources: AnalysisSource[]): MarketAnalysisSummary[] {
   // Edge desc só como contexto (pass = sem edge → fim da lista). NÃO é o "pick".
   summaries.sort((a, b) => (b.edgePct ?? -Infinity) - (a.edgePct ?? -Infinity));
   return summaries;
+}
+
+// O motor da análise: o carimbo dos julgamentos (code_jev) ou a tag do modelVersion.
+function analysisEngineOf(
+  prediction: PredictResult["prediction"],
+): AnalysisEngine | null {
+  if (prediction.judgments?.engine) return prediction.judgments.engine;
+  return typeof prediction.modelVersion === "string"
+    ? engineFromModelVersion(prediction.modelVersion)
+    : null;
 }
 
 // ─── Contexto extra (#565) fora da síntese ───────────────────────────────────

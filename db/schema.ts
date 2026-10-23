@@ -499,9 +499,16 @@ export const predictionOutcomes = pgTable("prediction_outcomes", {
 // narrativa + mercados citados + proveniência (as predictions que a alimentaram).
 // ZERO número de valor (edge/EV/stake/Yield) — firewall de apresentação. O placar
 // provável NÃO mora aqui: vira a linha `palpites` exact_score settleable (o badge).
+// A única probabilidade é `confidenceProbPct` (#649), pra calibração: a view não a lê.
 export type PalpiteHeadline = {
   verdict: string;
-  confidence: "baixa" | "media" | "alta";
+  // Desde o #649 (ADR 0069) calculada pelo motor; null = sem probabilidade do motor (sem
+  // chip). Sets anteriores trazem a palavra escolhida pelo LLM, sem os campos abaixo.
+  confidence: "baixa" | "media" | "alta" | null;
+  // P (pp) que o motor deu ao resultado do placar provável. Só calibração, nunca na view.
+  confidenceProbPct?: number | null;
+  // De onde veio a P; "none" = sem fonte. Ausente = confiança do LLM (set antigo).
+  confidenceSource?: "snapshot" | "analysis" | "live_matrix" | "none";
   narrative: string;
   citedMarkets: string[];
   sourcePredictionIds: string[];

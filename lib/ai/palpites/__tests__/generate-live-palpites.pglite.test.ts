@@ -207,7 +207,6 @@ const analyses: MarketAnalysisSummary[] = [
 const liveToolInput = {
   verdict: "O Flamengo segura a vantagem",
   probableScore: { home: 2, away: 0 },
-  confidence: "media",
   narrative: "Aos 63', com 1 a 0 no placar, o Fla tem 70% de chance de vencer.",
   citedMarkets: ["Resultado (1X2)"],
 };
@@ -297,6 +296,11 @@ describe("generateLivePalpites (palpites_live_v1) — pglite", () => {
     const types = new Set(sets[0].palpites.map((l) => l.type));
     // 2–0: exact_score + margin (vitória por 2+) + clean_sheet (visitante zerado).
     expect(types).toEqual(new Set(["exact_score", "margin", "clean_sheet"]));
+    // Confiança pelo motor (#649): a P do resultado (casa) na matriz do placar final.
+    const headline = sets[0].palpiteSet.headline!;
+    expect(headline.confidenceSource).toBe("live_matrix");
+    expect(headline.confidenceProbPct).toEqual(expect.any(Number));
+    expect(headline.confidence).not.toBeNull();
     const call = await realDb
       .select()
       .from(schema.aiCalls)
@@ -346,7 +350,6 @@ describe("generateLivePalpites (palpites_live_v1) — pglite", () => {
         probableScore: { home: 2, away: 1 },
         firstHalfScore: { home: 1, away: 0 },
         firstToScore: "home",
-        confidence: "alta",
         narrative: "O Fla vem voando em casa.",
         citedMarkets: ["Resultado (1X2)"],
       }),

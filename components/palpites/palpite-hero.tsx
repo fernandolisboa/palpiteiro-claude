@@ -43,12 +43,13 @@ import {
 import {
   PALPITE_DISCLAIMER,
   type PalpiteDimensionView,
+  type PalpiteConfidenceWord,
   type PalpiteHeadlineView,
 } from "@/lib/view/palpites-headline";
 
 // Rótulo qualitativo da confiança (firewall: PALAVRA, nunca dígito/%/meter/pip). O
 // `aria-label` repete a palavra inteira pro leitor de tela ("confiança média").
-const CONFIDENCE_LABEL: Record<PalpiteHeadlineView["confidence"], string> = {
+const CONFIDENCE_LABEL: Record<PalpiteConfidenceWord, string> = {
   baixa: "confiança baixa",
   media: "confiança média",
   alta: "confiança alta",
@@ -897,6 +898,8 @@ function ConfidenceChip({
 }: {
   confidence: PalpiteHeadlineView["confidence"];
 }) {
+  // Sem probabilidade do motor (#649): sem chip.
+  if (confidence === null) return null;
   const label = CONFIDENCE_LABEL[confidence];
   return (
     <span

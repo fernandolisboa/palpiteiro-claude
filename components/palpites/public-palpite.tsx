@@ -6,6 +6,7 @@ import { leagueToKey } from "@/lib/format";
 import type { SupportedLeague } from "@/lib/providers/sports-data/leagues";
 import { cn } from "@/lib/utils";
 import type {
+  PalpiteConfidenceWord,
   PalpiteDimensionView,
   PalpiteHeadlineView,
 } from "@/lib/view/palpites-headline";
@@ -23,7 +24,7 @@ import type { MatchPublicView } from "@/app/p/[id]/load-shared-palpite";
 
 // Rótulo qualitativo da confiança — LOCAL (não importado do palpite-hero "use client").
 // Firewall-safe: palavra, nunca dígito/%/meter.
-const CONFIDENCE_LABEL: Record<PalpiteHeadlineView["confidence"], string> = {
+const CONFIDENCE_LABEL: Record<PalpiteConfidenceWord, string> = {
   baixa: "confiança baixa",
   media: "confiança média",
   alta: "confiança alta",
@@ -171,6 +172,8 @@ export function ConfidenceChip({
 }: {
   confidence: PalpiteHeadlineView["confidence"];
 }) {
+  // Sem probabilidade do motor (#649): sem chip.
+  if (confidence === null) return null;
   const label = CONFIDENCE_LABEL[confidence];
   return (
     <span

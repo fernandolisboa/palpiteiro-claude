@@ -58,7 +58,7 @@ export const GLOSSARY: readonly GlossaryEntry[] = [
     term: "confiança do palpite (palavra)",
     anchor: "confianca-palpite",
     meaning:
-      "A convicção do palpite, dita em PALAVRA — baixa, média ou alta. Nunca porcentagem, barra ou dígito. Não confundir com a prob. do modelo do motor de valor: aqui é só o tom da manchete.",
+      "O quanto o modelo acredita no resultado do palpite (vitória do mandante, empate ou vitória do visitante), dito em PALAVRA: baixa, média ou alta. Não é a IA que escolhe: vem da chance que o modelo estatístico dá a esse resultado. Por isso um palpite de zebra ou de empate costuma sair com confiança baixa. Sem a chance do modelo pro jogo, o palpite sai sem a palavra.",
     group: "conceitos",
   },
   {

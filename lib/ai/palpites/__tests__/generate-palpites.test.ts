@@ -118,6 +118,13 @@ vi.mock("@/lib/providers/news", () => ({
   getNewsProvider: vi.fn(() => ({ getNewsByMatch })),
 }));
 
+// Base do modelo por jogo (#649): fonte da confiança do palpite. Default = sem base.
+const getLatestMatchModelSnapshot = vi.fn();
+vi.mock("@/lib/db/queries/match-model-snapshots", () => ({
+  getLatestMatchModelSnapshot: (...args: unknown[]) =>
+    getLatestMatchModelSnapshot(...args),
+}));
+
 import {
   generatePalpites,
   PalpiteError,
@@ -168,7 +175,6 @@ const validHeadline = {
   probableScore: { home: 2, away: 1 },
   firstHalfScore: { home: 1, away: 0 },
   firstToScore: "home",
-  confidence: "alta",
   narrative: "O Fla vem voando em casa e o Flu sofre fora.",
   citedMarkets: ["Resultado (1X2)"],
 };
@@ -187,6 +193,8 @@ function okResult(toolInput: unknown): AnalysisResult {
 }
 
 beforeEach(() => {
+  getLatestMatchModelSnapshot.mockReset();
+  getLatestMatchModelSnapshot.mockResolvedValue(null);
   insertValues.mockReset();
   insertTable.mockReset();
   runAnalysis.mockReset();
@@ -371,16 +379,19 @@ describe("generatePalpites (síntese) — caminho ok", () => {
     const aiCallRow = insertValues.mock.calls[0][0] as Record<string, unknown>;
     expect(aiCallRow.status).toBe("ok");
     expect(aiCallRow.model).toBe("claude-haiku-5-5");
-    expect(aiCallRow.promptVersion).toBe("palpites_v11");
+    expect(aiCallRow.promptVersion).toBe("palpites_v12");
 
     const setRow = insertValues.mock.calls[1][0] as Record<string, unknown>;
     expect(setRow.modelVersion).toBe("claude-haiku-5-5");
-    expect(setRow.promptVersion).toBe("palpites_v11");
+    expect(setRow.promptVersion).toBe("palpites_v12");
     expect(setRow.aiCallId).toBe("row-1");
     // headline jsonb: a manchete SEM placar (vira a linha) e SEM número de valor.
     expect(setRow.headline).toEqual({
       verdict: "Vai dar Flamengo",
-      confidence: "alta",
+      // Sem base do modelo e a análise de 1X2 não é do code_jev: sem confiança (#649).
+      confidence: null,
+      confidenceProbPct: null,
+      confidenceSource: "none",
       narrative: "O Fla vem voando em casa e o Flu sofre fora.",
       citedMarkets: ["Resultado (1X2)"],
       sourcePredictionIds: ["pred-1"],
@@ -476,6 +487,84 @@ describe("generatePalpites (síntese) — caminho ok", () => {
     const exact = rows.find((r) => r.type === "exact_score")!;
     expect(exact.type).toBe("exact_score");
     expect(exact.settleable).toBe(true);
+  });
+});
+
+describe("generatePalpites (síntese) — confiança pelo motor (#649)", () => {
+  const headlineOf = () =>
+    (insertValues.mock.calls[1][0] as { headline: Record<string, unknown> }).headline;
+  const snapshot = (home: number, draw: number, away: number) => ({
+    probabilities: { match_result: { home, draw, away } },
+  });
+
+  it("base do modelo primeiro: P do resultado do placar provável (2–1 → casa)", async () => {
+    getLatestMatchModelSnapshot.mockResolvedValue(snapshot(56.2, 25, 18.8));
+    runAnalysis.mockResolvedValue(okResult(validHeadline));
+    await generatePalpites({
+      ...baseCall,
+      analyses: [analysis({ engine: "code_jev" })],
+    });
+    expect(getLatestMatchModelSnapshot).toHaveBeenCalledWith("m-1");
+    expect(headlineOf()).toMatchObject({
+      confidence: "alta",
+      confidenceProbPct: 56.2,
+      confidenceSource: "snapshot",
+    });
+  });
+
+  it("zebra (1–2) com a base dando 30% ao visitante → baixa", async () => {
+    getLatestMatchModelSnapshot.mockResolvedValue(snapshot(45, 25, 30));
+    runAnalysis.mockResolvedValue(
+      okResult({
+        ...validHeadline,
+        probableScore: { home: 1, away: 2 },
+        firstHalfScore: { home: 0, away: 1 },
+        firstToScore: "away",
+      }),
+    );
+    await generatePalpites(baseCall);
+    expect(headlineOf()).toMatchObject({
+      confidence: "baixa",
+      confidenceProbPct: 30,
+      confidenceSource: "snapshot",
+    });
+  });
+
+  it("sem base: usa a análise de 1X2 do code_jev do run", async () => {
+    runAnalysis.mockResolvedValue(okResult(validHeadline));
+    await generatePalpites({
+      ...baseCall,
+      analyses: [analysis({ engine: "code_jev" })],
+    });
+    expect(headlineOf()).toMatchObject({
+      confidence: "alta",
+      confidenceProbPct: 58,
+      confidenceSource: "analysis",
+    });
+  });
+
+  it("análise do motor LLM não serve de fonte: sem chip", async () => {
+    runAnalysis.mockResolvedValue(okResult(validHeadline));
+    await generatePalpites({
+      ...baseCall,
+      analyses: [analysis({ engine: "llm" })],
+    });
+    expect(headlineOf()).toMatchObject({
+      confidence: null,
+      confidenceProbPct: null,
+      confidenceSource: "none",
+    });
+  });
+
+  it("leitura da base falha: não derruba a síntese, cai na análise", async () => {
+    vi.spyOn(console, "error").mockImplementation(() => {});
+    getLatestMatchModelSnapshot.mockRejectedValue(new Error("db down"));
+    runAnalysis.mockResolvedValue(okResult(validHeadline));
+    await generatePalpites({
+      ...baseCall,
+      analyses: [analysis({ engine: "code_jev" })],
+    });
+    expect(headlineOf()).toMatchObject({ confidenceSource: "analysis" });
   });
 });
 
@@ -689,7 +778,7 @@ describe("generatePalpites (síntese) — caminhos de erro (auditados, sem set)"
 
   it("output inválido (placar faltando) → invalid_output, throw, sem set", async () => {
     runAnalysis.mockResolvedValue(
-      okResult({ verdict: "x", confidence: "alta", narrative: "y", citedMarkets: [] }),
+      okResult({ verdict: "x", narrative: "y", citedMarkets: [] }),
     );
     await expect(generatePalpites(baseCall)).rejects.toBeInstanceOf(PalpiteError);
     const row = insertValues.mock.calls[0][0] as Record<string, unknown>;
