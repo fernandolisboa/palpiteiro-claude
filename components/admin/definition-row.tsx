@@ -6,6 +6,8 @@ type Props = {
   label: ReactNode;
   value: ReactNode;
   className?: string;
+  /** Âncora da busca de configurações (`lib/admin/settings-index.ts`). */
+  id?: string;
 };
 
 /**
@@ -16,9 +18,10 @@ type Props = {
  * As linhas Role/Acesso de `user-admin-controls` são flex-col + action (forma
  * distinta) → NÃO consomem este frame.
  */
-export function DefinitionRow({ label, value, className }: Props) {
+export function DefinitionRow({ label, value, className, id }: Props) {
   return (
     <div
+      id={id}
       className={cn(
         "flex items-center justify-between border-b border-border py-2",
         className

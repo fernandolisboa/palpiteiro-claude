@@ -1,6 +1,20 @@
-import { and, asc, desc, eq, gte, inArray, lt, lte, or, sql } from "drizzle-orm";
+import {
+  and,
+  asc,
+  desc,
+  eq,
+  exists,
+  gte,
+  inArray,
+  lt,
+  lte,
+  notExists,
+  or,
+  sql,
+  type SQL,
+} from "drizzle-orm";
 
-import { matches } from "@/db/schema";
+import { matches, predictions } from "@/db/schema";
 import { db } from "@/lib/db";
 import { IN_PROGRESS_WINDOW_MS } from "@/lib/view/date-range";
 import { compositeFixtureKey } from "@/lib/providers/sports-data/types";
@@ -23,11 +37,25 @@ const STATUS_MAP: Record<NormalizedFixtureStatus, DbMatch["status"]> = {
 };
 
 /**
- * Range query flexível sobre `matches`. `from`/`to` null = lado ilimitado.
- * Predicado todo-undefined (sem filtros) retorna TODAS as rows — drizzle dropa
- * operandos undefined dentro de `and(...)`, então não vira `WHERE false`.
+ * Termo da busca da lista de jogos (#643), já resolvido em TS
+ * (lib/view/match-search.ts): `text` casa pelo time (nomes CANÔNICOS) ou pela
+ * competição; os de data comparam o kickoff no fuso do usuário (`day` =
+ * "2026-10-25", `dayMonth` = "25/10" de qualquer ano, `weekday` ISO 1–7).
  */
-export async function getMatchesInRange(opts: {
+export type MatchSearchTerm =
+  | { kind: "text"; teams: readonly string[]; leagues: readonly SupportedLeague[] }
+  | { kind: "day"; day: string }
+  | { kind: "dayMonth"; dayMonth: string }
+  | { kind: "weekday"; isoDow: number };
+
+/** Um time no catálogo do período (escolha por escudo e casamento da busca, #643). */
+export type TeamCatalogEntry = {
+  name: string;
+  league: SupportedLeague;
+  crestUrl: string | null;
+};
+
+type RangeWhere = {
   from: Date | null; // null = unbounded past
   to: Date | null; // null = unbounded future
   league?: SupportedLeague;
@@ -35,10 +63,11 @@ export async function getMatchesInRange(opts: {
   // mesma convenção de `statuses`. Compõe com `league` via AND.
   leagues?: readonly SupportedLeague[];
   statuses?: DbMatch["status"][]; // default: all statuses (no status filter)
-  order?: "asc" | "desc"; // default: "asc"
-  limit?: number; // safety cap for unbounded ranges
-}): Promise<DbMatch[]> {
-  const whereClause = and(
+};
+
+// Condições do range, soltas: quem chama junta no próprio and() (um nível só).
+function rangeConditions(opts: RangeWhere): (SQL | undefined)[] {
+  return [
     opts.from ? gte(matches.kickoffAt, opts.from) : undefined,
     opts.to ? lte(matches.kickoffAt, opts.to) : undefined,
     opts.league ? eq(matches.league, opts.league) : undefined,
@@ -47,6 +76,81 @@ export async function getMatchesInRange(opts: {
       : undefined,
     opts.statuses && opts.statuses.length
       ? inArray(matches.status, opts.statuses)
+      : undefined,
+  ];
+}
+
+// Jogo em que um dos dois times está na lista.
+function eitherTeamIn(teams: readonly string[]): SQL | undefined {
+  if (teams.length === 0) return undefined;
+  return or(
+    inArray(matches.homeTeam, [...teams]),
+    inArray(matches.awayTeam, [...teams]),
+  );
+}
+
+// Um termo da busca em SQL. `timeZone` já validado (resolveTimeZone) e sempre como
+// parâmetro, nunca interpolado no texto da query.
+function searchTermWhere(term: MatchSearchTerm, timeZone: string): SQL {
+  const localKickoff = sql`(${matches.kickoffAt} AT TIME ZONE ${timeZone})`;
+  switch (term.kind) {
+    case "text":
+      // Termo que não casou nada: nenhum jogo (OR vazio seria "sem filtro").
+      return (
+        or(
+          eitherTeamIn(term.teams),
+          term.leagues.length ? inArray(matches.league, [...term.leagues]) : undefined,
+        ) ?? sql`false`
+      );
+    case "day":
+      return sql`to_char(${localKickoff}, 'YYYY-MM-DD') = ${term.day}`;
+    case "dayMonth":
+      return sql`to_char(${localKickoff}, 'DD/MM') = ${term.dayMonth}`;
+    case "weekday":
+      return sql`extract(isodow from ${localKickoff}) = ${term.isoDow}`;
+  }
+}
+
+/**
+ * Range query flexível sobre `matches`. `from`/`to` null = lado ilimitado.
+ * Predicado todo-undefined (sem filtros) retorna TODAS as rows — drizzle dropa
+ * operandos undefined dentro de `and(...)`, então não vira `WHERE false`.
+ *
+ * Filtros da lista de jogos (#643), todos opcionais e em AND com o range:
+ * `teams` (um dos dois times na lista; o escudo escolhido), `search` (cada termo
+ * precisa casar; datas no `timeZone`) e `analyzedBy` (o usuário tem, ou não tem,
+ * predição do jogo, o mesmo critério do selo "analisado").
+ */
+export async function getMatchesInRange(
+  opts: RangeWhere & {
+    teams?: readonly string[];
+    search?: readonly MatchSearchTerm[];
+    timeZone?: string;
+    analyzedBy?: { userId: string; analyzed: boolean };
+    order?: "asc" | "desc"; // default: "asc"
+    limit?: number; // safety cap for unbounded ranges
+  },
+): Promise<DbMatch[]> {
+  const timeZone = opts.timeZone ?? "UTC";
+  const predictedByUser = opts.analyzedBy
+    ? db
+        .select({ one: sql`1` })
+        .from(predictions)
+        .where(
+          and(
+            eq(predictions.matchId, matches.id),
+            eq(predictions.userId, opts.analyzedBy.userId),
+          ),
+        )
+    : undefined;
+  const whereClause = and(
+    ...rangeConditions(opts),
+    opts.teams && opts.teams.length ? eitherTeamIn(opts.teams) : undefined,
+    ...(opts.search ?? []).map((term) => searchTermWhere(term, timeZone)),
+    predictedByUser
+      ? opts.analyzedBy?.analyzed
+        ? exists(predictedByUser)
+        : notExists(predictedByUser)
       : undefined,
   );
   const ordered = db
@@ -57,6 +161,39 @@ export async function getMatchesInRange(opts: {
       opts.order === "desc" ? desc(matches.kickoffAt) : asc(matches.kickoffAt),
     );
   return opts.limit !== undefined ? ordered.limit(opts.limit) : ordered;
+}
+
+/**
+ * Times com jogo no range (#643): o catálogo da escolha por escudo e do casamento de
+ * time da busca. Um por (time, liga), com o escudo mais recente gravado. Ordem livre:
+ * quem exibe ordena pelo nome de exibição.
+ */
+export async function getTeamsInRange(opts: RangeWhere): Promise<TeamCatalogEntry[]> {
+  const where = and(...rangeConditions(opts));
+  const side = (team: "home" | "away") => {
+    const name = team === "home" ? matches.homeTeam : matches.awayTeam;
+    const crest = team === "home" ? matches.homeTeamCrestUrl : matches.awayTeamCrestUrl;
+    return db
+      .select({
+        name: sql<string>`${name}`,
+        league: matches.league,
+        crestUrl: sql<string | null>`max(${crest})`,
+      })
+      .from(matches)
+      .where(where)
+      .groupBy(name, matches.league);
+  };
+  const [home, away] = await Promise.all([
+    side("home"),
+    side("away"),
+  ]);
+  const byKey = new Map<string, TeamCatalogEntry>();
+  for (const row of [...home, ...away]) {
+    const key = `${row.league}|${row.name}`;
+    const seen = byKey.get(key);
+    if (!seen || (!seen.crestUrl && row.crestUrl)) byKey.set(key, row);
+  }
+  return [...byKey.values()];
 }
 
 /**

@@ -60,6 +60,30 @@ describe("toPalpiteHeadlineView", () => {
     });
   });
 
+  it("#649: a P do motor (confidenceProbPct/confidenceSource) NÃO cruza pra view; null passa", () => {
+    const v = toPalpiteHeadlineView(
+      source({
+        headline: {
+          ...headline,
+          confidence: "baixa",
+          confidenceProbPct: 30.25,
+          confidenceSource: "snapshot",
+        },
+      }),
+    );
+    expect(v.confidence).toBe("baixa");
+    expect(JSON.stringify(v)).not.toContain("30.25");
+    expect(v).not.toHaveProperty("confidenceProbPct");
+    expect(v).not.toHaveProperty("confidenceSource");
+    expect(
+      toPalpiteHeadlineView(
+        source({
+          headline: { ...headline, confidence: null, confidenceProbPct: null, confidenceSource: "none" },
+        }),
+      ).confidence,
+    ).toBeNull();
+  });
+
   it("badge = outcome.result quando liquidado (won/lost)", () => {
     expect(toPalpiteHeadlineView(source({ outcome: { result: "won" } })).badge).toBe(
       "won",

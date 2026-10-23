@@ -173,8 +173,13 @@ export function analysesDetail(
 
 const CONFIDENCE_WORD = { baixa: "baixa", media: "média", alta: "alta" } as const;
 
-export function synthesisDetail(headline: {
-  confidence: keyof typeof CONFIDENCE_WORD;
-}): string[] {
-  return [`Confiança do palpite: ${CONFIDENCE_WORD[headline.confidence]}`];
+// A confiança vem do motor (#649): a chance do resultado do placar provável, em palavra.
+export function synthesisDetail(
+  confidence: { level: keyof typeof CONFIDENCE_WORD } | null,
+): string[] {
+  return confidence
+    ? [
+        `Confiança do palpite: ${CONFIDENCE_WORD[confidence.level]}, pela chance que o modelo dá a esse resultado`,
+      ]
+    : ["Confiança do palpite: sem a chance do modelo pra esse jogo"];
 }

@@ -5,11 +5,14 @@ import { DateRangeSheet } from "@/components/date-range-sheet";
 import { filterChipClassName } from "@/components/filter-chip";
 import { buildRangeHref } from "@/lib/view/range-href";
 import type { RangePreset } from "@/lib/view/date-range";
+import type { ListFilters } from "@/lib/view/match-search";
 import type { LeagueFilter } from "@/lib/view/types";
 import { cn } from "@/lib/utils";
 
 type Props = {
   league: LeagueFilter;
+  // Busca e filtros da lista (#643): preservados ao escolher ou limpar as datas.
+  filters?: ListFilters;
   preset: RangePreset;
   from?: string;
   to?: string;
@@ -30,6 +33,7 @@ type Props = {
  */
 export function DateRangeTabs({
   league,
+  filters,
   preset,
   from,
   to,
@@ -42,6 +46,7 @@ export function DateRangeTabs({
     <nav aria-label="Filtro de período" className={cn("flex items-center gap-2", className)}>
       <DateRangeSheet
         league={league}
+        filters={filters}
         from={customActive ? from : undefined}
         to={customActive ? to : undefined}
         active={customActive}
@@ -50,7 +55,7 @@ export function DateRangeTabs({
       />
       {customActive && (
         <IntentLink
-          href={buildRangeHref({ league }, { preset: "upcoming" })}
+          href={buildRangeHref({ league, filters }, { preset: "upcoming" })}
           aria-label="Limpar datas"
           title="Limpar datas"
           className={filterChipClassName(false, "w-8 justify-center px-0")}

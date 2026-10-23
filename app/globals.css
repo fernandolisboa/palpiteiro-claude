@@ -318,6 +318,17 @@ body:has([data-page-width="form"]) [data-footer-column] {
   scroll-margin-top: 4.5rem;
 }
 
+/* Bloco achado pela busca de configurações do admin: contorno fixo por ~2s (some
+   por JS), sem animação, então vale igual com movimento reduzido. O bloco recebe o
+   foco (tabindex=-1, só até perder o foco) pra leitor de tela; sem anel padrão. */
+[data-search-hit] {
+  outline: 2px solid var(--ring);
+  outline-offset: 2px;
+}
+[data-search-target]:focus:not([data-search-hit]) {
+  outline: none;
+}
+
 /* Respeita a preferência do SO de movimento reduzido (ADR 0029). Zera SÓ a
    duração — nunca animation-name/display — pra Radix (sheet/popover) ainda
    montar e abrir/fechar (instantâneo) sob reduce. */

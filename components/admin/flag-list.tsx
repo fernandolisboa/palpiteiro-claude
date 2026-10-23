@@ -1,5 +1,6 @@
 import { AdminFlagControl } from "@/components/admin/admin-flag-control";
 import { DefinitionRow } from "@/components/admin/definition-row";
+import { flagAnchorId } from "@/lib/admin/settings-index";
 import {
   adminFlagsFor,
   type AdminFlagArea,
@@ -31,7 +32,8 @@ export function FlagList({
           return (
             <DefinitionRow
               key={flag.key}
-              className="items-start gap-4 px-4 py-3 last:border-b-0"
+              id={flagAnchorId(flag.key)}
+              className="scroll-mt-20 items-start gap-4 px-4 py-3 last:border-b-0"
               label={
                 <div className="flex flex-col gap-1">
                   <span className="text-body font-medium">

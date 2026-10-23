@@ -44,6 +44,29 @@ function okOutcome(
 }
 
 describe("summarizeAnalysesForSynthesis", () => {
+  it("#649: carimba o motor da análise (julgamentos code_jev ou tag do modelVersion)", () => {
+    const sels = [
+      { key: "home", modelProbPct: 58, odd: 1.85 },
+      { key: "draw", modelProbPct: 24, odd: 3.4 },
+      { key: "away", modelProbPct: 18, odd: 4.2 },
+    ];
+    const engineOf = (pred: Prediction) =>
+      summarizeAnalysesForSynthesis([okOutcome("match_result", pred, sels)])[0].engine;
+    expect(
+      engineOf(prediction({ modelVersion: "claude-sonnet-5-5;engine=code_jev;lambda=dixon_coles" })),
+    ).toBe("code_jev");
+    expect(
+      engineOf(
+        prediction({
+          modelVersion: "claude-sonnet-5-5",
+          judgments: { engine: "code_jev" } as Prediction["judgments"],
+        }),
+      ),
+    ).toBe("code_jev");
+    expect(engineOf(prediction({ modelVersion: "claude-sonnet-5-5" }))).toBe("llm");
+    expect(engineOf(prediction())).toBeNull();
+  });
+
   it("projeta um outcome ok: lê os campos PERSISTIDOS Number()'d + marketLabel do descriptor", () => {
     const out = summarizeAnalysesForSynthesis([
       okOutcome("match_result", prediction(), [

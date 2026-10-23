@@ -150,7 +150,12 @@ describe("detalhes das etapas (Ver raciocínio, ADR 0065)", () => {
         { marketLabel: "Ambas marcam", recommendedLabel: null, isPass: true },
       ]),
     ).toEqual(["Dupla chance: Vitória ou empate", "Ambas marcam: sem escolha neste mercado"]);
-    expect(synthesisDetail({ confidence: "media" })).toEqual(["Confiança do palpite: média"]);
+    expect(synthesisDetail({ level: "media" })).toEqual([
+      "Confiança do palpite: média, pela chance que o modelo dá a esse resultado",
+    ]);
+    expect(synthesisDetail(null)).toEqual([
+      "Confiança do palpite: sem a chance do modelo pra esse jogo",
+    ]);
   });
 
   it("nenhuma linha tem linguagem de valor, % ou casa de aposta", () => {
@@ -182,7 +187,8 @@ describe("detalhes das etapas (Ver raciocínio, ADR 0065)", () => {
         { marketLabel: "Over/Under gols", recommendedLabel: "Mais de 2.5", isPass: false },
         { marketLabel: "Placar exato", recommendedLabel: "2-1", isPass: false },
       ]),
-      ...synthesisDetail({ confidence: "alta" }),
+      ...synthesisDetail({ level: "alta" }),
+      ...synthesisDetail(null),
     ];
     for (const line of lines) {
       expect(containsValueLanguage(line), line).toBe(false);

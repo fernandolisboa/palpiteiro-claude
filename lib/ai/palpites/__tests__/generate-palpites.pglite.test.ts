@@ -188,7 +188,6 @@ const validToolInput = {
   probableScore: { home: 2, away: 1 },
   firstHalfScore: { home: 1, away: 0 },
   firstToScore: "home",
-  confidence: "alta",
   narrative: "O Fla vem voando em casa.",
   citedMarkets: ["Resultado (1X2)"],
 };
@@ -285,7 +284,10 @@ describe("generatePalpites (síntese) — write path real (pglite)", () => {
     // headline jsonb persistido (round-trip via Postgres real).
     expect(sets[0].palpiteSet.headline).toEqual({
       verdict: "Vai dar Flamengo",
-      confidence: "alta",
+      // Sem base do modelo no banco e sem 1X2 do code_jev: sem confiança (#649).
+      confidence: null,
+      confidenceProbPct: null,
+      confidenceSource: "none",
       narrative: "O Fla vem voando em casa.",
       citedMarkets: ["Resultado (1X2)"],
       sourcePredictionIds: ["00000000-0000-0000-0000-000000000abc"],
@@ -327,7 +329,10 @@ describe("generatePalpites (síntese) — write path real (pglite)", () => {
       id: "synthesis",
       status: "done",
       label: "Palpite pronto",
-      detail: ["Confiança do palpite: alta", "Resultado (1X2): Casa"],
+      detail: [
+        "Confiança do palpite: sem a chance do modelo pra esse jogo",
+        "Resultado (1X2): Casa",
+      ],
     });
   });
 

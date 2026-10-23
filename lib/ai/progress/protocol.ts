@@ -46,6 +46,8 @@ export type HeroRunOutcome =
 
 export type StreamMessage =
   | ProgressEvent
+  // Primeira linha: o id do run, o mesmo do marcador que a página relê (RunSnapshot).
+  | { t: "run"; id: string }
   | { t: "result"; outcome: HeroRunOutcome }
   // Batida pra conexão não parecer ociosa durante uma chamada longa de LLM.
   | { t: "ping" };
@@ -68,28 +70,87 @@ export function parseStreamLine(line: string): StreamMessage | null {
   if (typeof raw !== "object" || raw === null) return null;
   const msg = raw as Record<string, unknown>;
   if (msg.t === "ping") return { t: "ping" };
+  if (msg.t === "run") {
+    return typeof msg.id === "string" && msg.id !== "" ? { t: "run", id: msg.id } : null;
+  }
   if (msg.t === "step") {
-    if (
-      typeof msg.id !== "string" ||
-      typeof msg.label !== "string" ||
-      !STATUSES.includes(msg.status as StepStatus)
-    ) {
-      return null;
-    }
-    const detail = toDetail(msg.detail);
-    return {
-      t: "step",
-      id: msg.id,
-      status: msg.status as StepStatus,
-      label: msg.label,
-      ...(detail ? { detail } : {}),
-    };
+    const step = toStep(msg);
+    return step ? { t: "step", ...step } : null;
   }
   if (msg.t === "result") {
     const outcome = toOutcome(msg.outcome);
     return outcome ? { t: "result", outcome } : null;
   }
   return null;
+}
+
+// Run em voo de um jogo, guardado fora da conexão (KV, por pessoa e jogo): quem sai da
+// página e volta (outra navegação, F5, outra aba) acompanha o mesmo run, que segue no
+// servidor. `done` fica pouco tempo, só pra quem acompanha ver o desfecho.
+export type RunIntent = "analysis" | "palpite";
+
+export type RunStepSnapshot = Omit<ProgressEvent, "t">;
+
+export type RunSnapshot = {
+  runId: string;
+  intent: RunIntent;
+  live: boolean;
+  // Epoch ms do começo do run (relógio do servidor): marcador velho demais vale como
+  // ausente (função que morreu sem gravar o fim).
+  startedAt: number;
+  status: "running" | "done";
+  steps: RunStepSnapshot[];
+  outcome: HeroRunOutcome | null;
+};
+
+export function parseRunSnapshot(raw: unknown): RunSnapshot | null {
+  if (typeof raw !== "object" || raw === null) return null;
+  const r = raw as Record<string, unknown>;
+  if (
+    typeof r.runId !== "string" ||
+    r.runId === "" ||
+    (r.intent !== "analysis" && r.intent !== "palpite") ||
+    (r.status !== "running" && r.status !== "done") ||
+    typeof r.startedAt !== "number" ||
+    !Number.isFinite(r.startedAt) ||
+    !Array.isArray(r.steps)
+  ) {
+    return null;
+  }
+  const steps = r.steps
+    .slice(0, MAX_REASONING_STEPS)
+    .map((item) =>
+      typeof item === "object" && item !== null
+        ? toStep(item as Record<string, unknown>)
+        : null,
+    )
+    .filter((step): step is RunStepSnapshot => step !== null);
+  return {
+    runId: r.runId,
+    intent: r.intent,
+    live: r.live === true,
+    startedAt: r.startedAt,
+    status: r.status,
+    steps,
+    outcome: toOutcome(r.outcome),
+  };
+}
+
+function toStep(raw: Record<string, unknown>): RunStepSnapshot | null {
+  if (
+    typeof raw.id !== "string" ||
+    typeof raw.label !== "string" ||
+    !STATUSES.includes(raw.status as StepStatus)
+  ) {
+    return null;
+  }
+  const detail = toDetail(raw.detail);
+  return {
+    id: raw.id,
+    status: raw.status as StepStatus,
+    label: raw.label,
+    ...(detail ? { detail } : {}),
+  };
 }
 
 function toDetail(raw: unknown): string[] | null {

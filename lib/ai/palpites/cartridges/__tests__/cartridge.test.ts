@@ -26,7 +26,6 @@ const validHeadline = {
   probableScore: { home: 2, away: 1 },
   firstHalfScore: { home: 1, away: 0 },
   firstToScore: "home" as const,
-  confidence: "alta" as const,
   narrative: "O Fla vem voando em casa e o Flu sofre fora.",
   citedMarkets: ["Resultado (1X2)", "Over/Under gols"],
 };
@@ -51,7 +50,6 @@ describe("PalpitesOutputSchema (síntese v3)", () => {
       probableScore: { home: 1, away: 1 },
       firstHalfScore: { home: 0, away: 0 },
       firstToScore: "none",
-      confidence: "baixa",
       narrative: "Sem destaque claro nos mercados; aposto num empate apertado.",
       citedMarkets: [],
     });
@@ -102,25 +100,19 @@ describe("PalpitesOutputSchema (síntese v3)", () => {
     }
   });
 
-  it("confidence aceita só baixa/media/alta (enum qualitativo, nunca número)", () => {
+  it("#649: rejeita confidence — a confiança vem do motor, não do LLM", () => {
     for (const confidence of ["baixa", "media", "alta"]) {
       expect(
         PalpitesOutputSchema.safeParse({ ...validHeadline, confidence }).success,
-      ).toBe(true);
-    }
-    for (const bad of ["high", "70", 70, "altíssima"]) {
-      expect(
-        PalpitesOutputSchema.safeParse({ ...validHeadline, confidence: bad })
-          .success,
       ).toBe(false);
     }
+    expect(palpitesCartridge.systemPrompt).not.toMatch(/confidence/);
   });
 
   it("rejeita probableScore faltando / negativo / não-inteiro / >20", () => {
     expect(
       PalpitesOutputSchema.safeParse({
         verdict: "x",
-        confidence: "media",
         narrative: "y",
         citedMarkets: [],
       }).success,
@@ -234,9 +226,9 @@ describe("SUBMIT_PALPITE_TOOL", () => {
       SUBMIT_PALPITE_TOOL.input_schema,
     );
   });
-  it("a versão é palpites_v11 (forma sem amistosos)", () => {
-    expect(PALPITES_VERSION).toBe("palpites_v11");
-    expect(palpitesCartridge.version).toBe("palpites_v11");
+  it("a versão é palpites_v12 (confiança pelo motor, #649)", () => {
+    expect(PALPITES_VERSION).toBe("palpites_v12");
+    expect(palpitesCartridge.version).toBe("palpites_v12");
   });
   it("o tool NÃO declara campos de valor (firewall estrutural); declara firstHalfScore + firstToScore (#354) + cardsTemperature (#419)", () => {
     const props = SUBMIT_PALPITE_TOOL.input_schema.properties as Record<
@@ -246,7 +238,6 @@ describe("SUBMIT_PALPITE_TOOL", () => {
     expect(Object.keys(props).sort()).toEqual([
       "cardsTemperature",
       "citedMarkets",
-      "confidence",
       "firstHalfScore",
       "firstToScore",
       "narrative",
@@ -265,10 +256,9 @@ describe("SUBMIT_PALPITE_TOOL", () => {
     expect(SUBMIT_PALPITE_TOOL.input_schema.required).not.toContain(
       "cardsTemperature",
     );
-    // os 7 campos obrigatórios de hoje seguem required (cardsTemperature é o único opcional).
+    // os 6 campos obrigatórios de hoje seguem required (cardsTemperature é o único opcional).
     expect([...SUBMIT_PALPITE_TOOL.input_schema.required].sort()).toEqual([
       "citedMarkets",
-      "confidence",
       "firstHalfScore",
       "firstToScore",
       "narrative",

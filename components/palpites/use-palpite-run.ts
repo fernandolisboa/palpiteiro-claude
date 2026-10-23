@@ -1,190 +1,139 @@
 "use client";
 
-import { useCallback, useEffect, useRef, useState, useTransition } from "react";
+import {
+  useCallback,
+  useEffect,
+  useState,
+  useSyncExternalStore,
+  useTransition,
+} from "react";
 import { useRouter } from "next/navigation";
 
 import {
-  parseStreamLine,
-  type HeroRunOutcome,
-  type StepStatus,
+  consumeRun,
+  getRun,
+  isRunConsumed,
+  resumeRun,
+  startRun,
+  subscribeRun,
+  type RunMeta,
+  type RunStep,
+} from "@/components/palpites/palpite-run-store";
+import type {
+  HeroRunOutcome,
+  RunIntent,
+  RunSnapshot,
 } from "@/lib/ai/progress/protocol";
-import { markRouterCacheStale } from "@/lib/nav/router-cache";
 
-export const PALPITE_RUN_ENDPOINT = "/api/palpite/run";
-
-export type RunStep = {
-  id: string;
-  status: StepStatus;
-  label: string;
-  // O que a etapa encontrou (ADR 0065), pro "Ver raciocínio".
-  detail?: string[];
-};
-
-// Respostas em que a rota provadamente não começou o run (rota ausente num deploy
-// antigo, origem recusada, corpo inválido): o HERO cai na server action de sempre.
-const FALLBACK_STATUSES = new Set([400, 403, 404, 405, 415]);
-
-const CUT_MESSAGE =
-  "A conexão caiu antes do fim. A análise pode ter sido salva: confira em instantes.";
-const OFFLINE_MESSAGE =
-  "Não deu pra falar com o servidor. Confira a conexão e tente de novo.";
-const SERVER_MESSAGE = "O servidor não respondeu agora. Tente de novo em instantes.";
+export { PALPITE_RUN_ENDPOINT, type RunStep } from "@/components/palpites/palpite-run-store";
 
 export type PalpiteRun = {
   steps: RunStep[];
-  // Stream em voo OU o refresh da página com o resultado ainda chegando.
+  // Run em voo OU o refresh da página com o resultado ainda chegando.
   running: boolean;
+  // Do run em voo (ou do último entregue): a copy do progresso e o aviso de manchete.
+  intent: RunIntent | null;
+  baseSetId: string | null;
   outcome: HeroRunOutcome | null;
   // "fallback" = a rota não atendeu; quem chamou usa a server action.
-  start(formData: FormData): Promise<"streamed" | "fallback">;
-  reset(): void;
+  start(formData: FormData, meta: RunMeta): Promise<"streamed" | "fallback">;
 };
 
-/**
- * Run do HERO com progresso ao vivo (ADR 0064): POST na rota de streaming, uma linha
- * NDJSON por etapa que de fato rodou no servidor, e o resultado no fim. No fim, o
- * refresh traz o palpite novo pelas props do servidor; `running` só cai quando ele
- * chega, pra o HERO não piscar o estado antigo.
- */
-export function usePalpiteRun(): PalpiteRun {
-  const router = useRouter();
-  const [steps, setSteps] = useState<RunStep[]>([]);
-  const [streaming, setStreaming] = useState(false);
-  const [outcome, setOutcome] = useState<HeroRunOutcome | null>(null);
-  const [refreshing, startRefresh] = useTransition();
-  const inFlight = useRef(false);
-  // Saiu da página no meio do run: para de ler (o run segue no servidor) e não mexe
-  // em estado nem dá refresh numa página que já é outra.
-  const abortRef = useRef<AbortController | null>(null);
-  // O run que segue sozinho grava depois: as páginas guardadas no cache do roteador
-  // até aqui são relidas quando reabertas (#639). As abertas depois e antes do fim do
-  // run seguem a regra dos 30s do `RevisitRefresh` (o run leva bem mais que isso).
-  useEffect(
-    () => () => {
-      if (inFlight.current) markRouterCacheStale();
-      abortRef.current?.abort();
-    },
-    [],
-  );
+const noSubscribe = () => () => {};
 
-  const applyStep = useCallback((step: RunStep) => {
-    setSteps((prev) => {
-      const i = prev.findIndex((s) => s.id === step.id);
-      if (i === -1) return [...prev, step];
-      const next = prev.slice();
-      next[i] = step;
-      return next;
+/**
+ * Run do HERO com progresso ao vivo (ADR 0064), por jogo. O run mora no store
+ * (palpite-run-store), não no componente: sair do jogo não para a leitura, e voltar
+ * mostra as etapas de agora ou entrega o desfecho. `activeRun` é o run em voo que a
+ * página leu do servidor (sem registro no navegador: F5, outra aba). No fim, o refresh
+ * traz o palpite novo pelas props do servidor; `running` só cai quando ele chega, pra
+ * o HERO não piscar o estado antigo.
+ */
+export function usePalpiteRun(
+  matchId: string,
+  activeRun: RunSnapshot | null,
+  setId: string | null,
+): PalpiteRun {
+  const router = useRouter();
+  const subscribe = useCallback(
+    (listener: () => void) => subscribeRun(matchId, listener),
+    [matchId],
+  );
+  const entry = useSyncExternalStore(
+    subscribe,
+    () => getRun(matchId),
+    () => null,
+  );
+  // Montou sem nada assinado ainda (SSR, 1º render): o run do servidor já vale pro
+  // desenho, sem piscar o palpite antigo até o efeito abaixo assumir.
+  const consumedAlready = useSyncExternalStore(
+    noSubscribe,
+    () => (activeRun ? isRunConsumed(activeRun.runId) : false),
+    () => false,
+  );
+  const pendingResume = !entry && activeRun !== null && !consumedAlready;
+
+  // Desfecho entregue: fica até o próximo run (os avisos e o "Ver raciocínio").
+  const [delivered, setDelivered] = useState<{
+    steps: RunStep[];
+    intent: RunIntent;
+    baseSetId: string | null;
+    outcome: HeroRunOutcome | null;
+  } | null>(null);
+  const [refreshing, startRefresh] = useTransition();
+
+  useEffect(() => {
+    if (pendingResume) resumeRun(matchId, activeRun, setId);
+  }, [pendingResume, matchId, activeRun, setId]);
+
+  const finished = entry?.status === "finished";
+  useEffect(() => {
+    if (!finished) return;
+    const done = consumeRun(matchId);
+    if (!done) return;
+    setDelivered({
+      steps: done.steps,
+      intent: done.intent,
+      baseSetId: done.baseSetId,
+      outcome: done.outcome,
     });
-  }, []);
+    if (done.refresh) startRefresh(() => router.refresh());
+  }, [finished, matchId, router]);
 
   const start = useCallback(
-    async (formData: FormData): Promise<"streamed" | "fallback"> => {
-      if (inFlight.current) return "streamed";
-      inFlight.current = true;
-      const abort = new AbortController();
-      abortRef.current = abort;
-      setSteps([]);
-      setOutcome(null);
-      setStreaming(true);
-      let result: HeroRunOutcome | null = null;
-      let refresh = false;
-      try {
-        let res: Response;
-        try {
-          res = await fetch(PALPITE_RUN_ENDPOINT, {
-            method: "POST",
-            body: formData,
-            headers: { Accept: "application/x-ndjson" },
-            signal: abort.signal,
-          });
-        } catch {
-          result = { ok: false, error: OFFLINE_MESSAGE };
-          return "streamed";
-        }
-        if (!res.ok || !res.body) {
-          if (FALLBACK_STATUSES.has(res.status)) return "fallback";
-          result = { ok: false, error: SERVER_MESSAGE };
-          return "streamed";
-        }
-        try {
-          result = await readStream(res.body, applyStep, abort.signal);
-        } catch {
-          result = null;
-        }
-        if (!result) {
-          // O run segue no servidor mesmo sem o cliente: a página relê o que salvou.
-          result = { ok: false, error: CUT_MESSAGE };
-          refresh = true;
-        } else if (result.ok) {
-          refresh = true;
-        } else {
-          // Falha no meio pode ter gravado leituras antes: a tela fica com a mensagem,
-          // e as páginas guardadas no cache são relidas quando reabertas (#639).
-          markRouterCacheStale();
-        }
-        return "streamed";
-      } finally {
-        inFlight.current = false;
-        if (!abort.signal.aborted) {
-          if (result) setOutcome(result);
-          setStreaming(false);
-          if (refresh) startRefresh(() => router.refresh());
-        }
-      }
+    (formData: FormData, meta: RunMeta) => {
+      setDelivered(null);
+      return startRun(matchId, formData, meta);
     },
-    [applyStep, router],
+    [matchId],
   );
 
-  const reset = useCallback(() => {
-    setSteps([]);
-    setOutcome(null);
-  }, []);
-
-  return {
-    steps,
-    running: streaming || refreshing,
-    outcome,
-    start,
-    reset,
-  };
-}
-
-// Lê o NDJSON até o resultado; null = o stream acabou sem resultado.
-async function readStream(
-  body: ReadableStream<Uint8Array>,
-  onStep: (step: RunStep) => void,
-  signal: AbortSignal,
-): Promise<HeroRunOutcome | null> {
-  const reader = body.getReader();
-  signal.addEventListener("abort", () => void reader.cancel().catch(() => undefined));
-  const decoder = new TextDecoder();
-  let buffer = "";
-  let outcome: HeroRunOutcome | null = null;
-  const consume = (line: string) => {
-    const msg = parseStreamLine(line);
-    if (!msg) return;
-    if (msg.t === "step") {
-      onStep({
-        id: msg.id,
-        status: msg.status,
-        label: msg.label,
-        ...(msg.detail ? { detail: msg.detail } : {}),
-      });
-    }
-    else if (msg.t === "result") outcome = msg.outcome;
-  };
-  for (;;) {
-    const { value, done } = await reader.read();
-    if (done || signal.aborted) break;
-    buffer += decoder.decode(value, { stream: true });
-    let nl = buffer.indexOf("\n");
-    while (nl !== -1) {
-      consume(buffer.slice(0, nl));
-      buffer = buffer.slice(nl + 1);
-      nl = buffer.indexOf("\n");
-    }
+  if (entry) {
+    return {
+      steps: entry.steps,
+      running: true,
+      intent: entry.intent,
+      baseSetId: entry.baseSetId,
+      outcome: null,
+      start,
+    };
   }
-  buffer += decoder.decode();
-  if (buffer) consume(buffer);
-  return outcome;
+  if (pendingResume) {
+    return {
+      steps: activeRun.steps,
+      running: true,
+      intent: activeRun.intent,
+      baseSetId: setId,
+      outcome: null,
+      start,
+    };
+  }
+  return {
+    steps: delivered?.steps ?? [],
+    running: refreshing,
+    intent: delivered?.intent ?? null,
+    baseSetId: delivered?.baseSetId ?? null,
+    outcome: delivered?.outcome ?? null,
+    start,
+  };
 }

@@ -1,12 +1,19 @@
 import { after } from "next/server";
+import { z } from "zod";
 
 import { runPalpiteHero } from "@/app/actions/predictions";
+import { auth } from "@/auth";
 import {
   encodeStreamMessage,
   toHeroRunOutcome,
   type HeroRunOutcome,
   type StreamMessage,
 } from "@/lib/ai/progress/protocol";
+import {
+  createRunMarkerWriter,
+  readRunMarkerResult,
+  type RunMarkerWriter,
+} from "@/lib/ai/progress/run-marker";
 import { withRunProgress } from "@/lib/ai/progress/run-progress";
 import { isSameOriginPost } from "@/lib/security/same-origin";
 
@@ -24,6 +31,10 @@ import { isSameOriginPost } from "@/lib/security/same-origin";
 // desconectar, o Next entra na fase `after` com o run ainda em voo: cookies()/headers()
 // chamados DEPOIS disso lançam. Hoje a action só os lê nos gates, antes de qualquer
 // espera longa; mantenha assim.
+//
+// Marcador (adendo da ADR 0064): as etapas também vão pro KV, por pessoa e jogo. Quem
+// sai do jogo e volta acompanha o mesmo run pela página (que lê o marcador) e pelo GET
+// abaixo, até o desfecho.
 export const dynamic = "force-dynamic";
 // O mesmo teto da página do jogo (ACTION_BUDGET_MS = 270s conta a partir da action).
 export const maxDuration = 300;
@@ -44,10 +55,14 @@ export async function POST(req: Request): Promise<Response> {
     return new Response(null, { status: 400 });
   }
 
+  const runId = crypto.randomUUID();
+  const marker = await openMarker(formData, runId);
+
   const encoder = new TextEncoder();
   let controller: ReadableStreamDefaultController<Uint8Array> | null = null;
   let open = true;
   const send = (msg: StreamMessage) => {
+    if (msg.t === "step") marker?.step(msg);
     if (!open || !controller) return;
     try {
       controller.enqueue(encoder.encode(encodeStreamMessage(msg)));
@@ -55,9 +70,19 @@ export async function POST(req: Request): Promise<Response> {
       open = false;
     }
   };
+  const close = () => {
+    if (!open || !controller) return;
+    open = false;
+    try {
+      controller.close();
+    } catch {
+      // Já fechado pelo cliente.
+    }
+  };
   const stream = new ReadableStream<Uint8Array>({
     start(c) {
       controller = c;
+      send({ t: "run", id: runId });
     },
     // Cliente saiu da página: para de escrever. O run segue até o fim (after abaixo),
     // como a server action seguiria, e o resultado fica salvo pro próximo acesso.
@@ -79,19 +104,17 @@ export async function POST(req: Request): Promise<Response> {
       );
       return { ok: false, error: UNEXPECTED_ERROR };
     })
-    .then((outcome) => {
+    .then(async (outcome) => {
+      // A linha final e o fim do stream primeiro: quem lê não espera o KV. O desfecho no
+      // marcador vem logo depois, pra quem acompanha pelo GET (o after segura até gravar).
       send({ t: "result", outcome });
+      clearInterval(ping);
+      close();
+      await marker?.finish(outcome);
     })
     .finally(() => {
       clearInterval(ping);
-      if (open && controller) {
-        open = false;
-        try {
-          controller.close();
-        } catch {
-          // Já fechado pelo cliente.
-        }
-      }
+      close();
     });
   // Segura a função viva até o run terminar, mesmo se o cliente desconectar.
   after(run);
@@ -103,4 +126,46 @@ export async function POST(req: Request): Promise<Response> {
       "X-Accel-Buffering": "no",
     },
   });
+}
+
+// A sessão é lida aqui, antes de qualquer espera (depois de o cliente sair, cookies()
+// lançaria). Sem sessão ou com corpo estranho, sem marcador: a action recusa o run.
+async function openMarker(
+  formData: FormData,
+  runId: string,
+): Promise<RunMarkerWriter | null> {
+  const matchId = String(formData.get("matchId") ?? "");
+  const intent = formData.get("intent");
+  if (!z.uuid().safeParse(matchId).success) return null;
+  if (intent !== "analysis" && intent !== "palpite") return null;
+  let userId: string | undefined;
+  try {
+    userId = (await auth())?.user?.id;
+  } catch {
+    return null;
+  }
+  if (!userId) return null;
+  return createRunMarkerWriter({
+    userId,
+    matchId,
+    runId,
+    intent,
+    live: formData.get("pageLive") === "1",
+  });
+}
+
+// O run em voo (ou recém-terminado) deste jogo, pra página que voltou acompanhar.
+export async function GET(req: Request): Promise<Response> {
+  const matchId = new URL(req.url).searchParams.get("matchId") ?? "";
+  if (!z.uuid().safeParse(matchId).success) {
+    return new Response(null, { status: 400 });
+  }
+  const userId = (await auth())?.user?.id;
+  if (!userId) return new Response(null, { status: 401 });
+  const read = await readRunMarkerResult(userId, matchId);
+  // KV sem resposta: "não sei" (503), diferente de "não há run" — o HERO tenta de novo.
+  if (!read.known) {
+    return new Response(null, { status: 503, headers: { "Cache-Control": "no-store" } });
+  }
+  return Response.json({ run: read.run }, { headers: { "Cache-Control": "no-store" } });
 }
