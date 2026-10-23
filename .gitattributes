@@ -1,2 +1,3 @@
 docs/brand/*.svg -text
 docs/brand/*.png binary
+scripts/fonts/*.ttf binary

@@ -6,7 +6,7 @@ import { describe, expect, it } from "vitest";
 import { BRAND_ASSETS_DIR, renderBrandAssets } from "@/scripts/brand-assets";
 
 /**
- * Arquivos da marca em docs/brand/ (ADR 0066). Eles são cópia da geometria do app pra uso
+ * Arquivos da marca em docs/brand/ (ADR 0067). Eles são cópia da geometria do app pra uso
  * fora dele; se o símbolo mudar e ninguém rodar `pnpm brand:export`, este teste falha em vez
  * de o Google ou um perfil social ficarem com o logo velho sem ninguém notar.
  */

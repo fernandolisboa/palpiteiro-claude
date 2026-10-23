@@ -6,13 +6,11 @@ import { markGlyph } from "@/components/brand/brand-mark";
 // que entra no `new ImageResponse(...)` de app/icon*.tsx e app/apple-icon.tsx, então segue
 // as regras do Satori: só flexbox e cores sRGB em hex (o Satori não resolve OKLCH).
 //
-// O "p" é desenhado em SVG (haste + anel-medidor, ADR 0066), não com texto: o next/og só
-// traz a Noto Sans regular, fina demais pra ler a 16px na aba. A geometria mora em
-// brand-mark.tsx, a mesma do símbolo no header.
+// O símbolo (trave + bola no ângulo, ADR 0067) é SVG. A geometria mora em brand-mark.tsx, a
+// mesma do símbolo no header; os gomos da bola são vazados na cor do fundo (BRAND_BLUE).
 
 // `--primary` do tema claro (oklch(0.48 0.18 258), app/globals.css) convertido pra sRGB.
 export const BRAND_BLUE = "#0057c0";
-export const BRAND_WHITE = "#ffffff";
 
 export function AppIconMark({
   size,
@@ -36,7 +34,7 @@ export function AppIconMark({
       }}
     >
       <svg width={size} height={size} viewBox="0 0 100 100">
-        {markGlyph(BRAND_WHITE)}
+        {markGlyph(BRAND_BLUE)}
       </svg>
     </div>
   );
