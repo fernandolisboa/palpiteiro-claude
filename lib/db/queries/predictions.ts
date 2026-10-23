@@ -11,6 +11,7 @@ import {
   lt,
   max,
   ne,
+  sql,
 } from "drizzle-orm";
 
 import {
@@ -277,6 +278,9 @@ export async function getNonPassPredictionsNearKickoff(args: {
       and(
         ne(predictions.recommendation, "pass"),
         isNotNull(predictions.selectionId),
+        // Reconferência com a escalação (#619): uma virada pra aposta perto do apito
+        // nunca gasta crédito de closing line (ela já fica fora do CLV no dashboard).
+        sql`${predictions.judgments}->'recheck' IS NULL`,
         inArray(matches.status, ["scheduled", "live"]),
         gt(matches.kickoffAt, now),
         lte(matches.kickoffAt, until)

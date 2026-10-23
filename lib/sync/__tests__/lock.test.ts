@@ -2,6 +2,7 @@ import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 
 const mockSet = vi.fn();
 const mockDel = vi.fn();
+const mockGet = vi.fn();
 
 // Construtor como classe normal (não vi.fn().mockImplementation) pra que a
 // implementação sobreviva ao vi.resetModules() de cada teste — espelha o mock
@@ -18,6 +19,9 @@ vi.mock("@upstash/redis", () => ({
     del(...args: unknown[]) {
       return mockDel(...args);
     }
+    get(...args: unknown[]) {
+      return mockGet(...args);
+    }
   },
 }));
 
@@ -33,6 +37,7 @@ beforeEach(() => {
   vi.resetModules();
   mockSet.mockReset();
   mockDel.mockReset();
+  mockGet.mockReset();
   vi.stubEnv("KV_REST_API_URL", "https://kv.example");
   vi.stubEnv("KV_REST_API_TOKEN", "tok");
 });
@@ -179,5 +184,43 @@ describe("acquireKvLock / releaseKvLock — por chave (#555)", () => {
 
     await releaseKvLock("model-base:compute:lock");
     expect(mockDel).toHaveBeenCalledWith("model-base:compute:lock");
+  });
+});
+
+describe("readKvStamp / writeKvStamp — marcador e lock alheio (#619)", () => {
+  it("KV: lê o carimbo (número ou string) sem tomar o lock; grava com EX, sem NX", async () => {
+    const { readKvStamp, writeKvStamp } = await load();
+    mockGet.mockResolvedValueOnce(1_700_000_000_000);
+    expect(await readKvStamp("model-base:compute:lock")).toBe(1_700_000_000_000);
+    mockGet.mockResolvedValueOnce("1700000000001");
+    expect(await readKvStamp("x")).toBe(1_700_000_000_001);
+    mockGet.mockResolvedValueOnce(null);
+    expect(await readKvStamp("x")).toBeNull();
+    expect(mockSet).not.toHaveBeenCalled();
+
+    mockSet.mockResolvedValue("OK");
+    await writeKvStamp("lineup-recheck:done:m1", 42, 3 * 60 * 60_000);
+    expect(mockSet).toHaveBeenCalledWith("lineup-recheck:done:m1", 42, {
+      ex: 10_800,
+    });
+  });
+
+  it("fail-open in-memory: escreve, lê e o release apaga", async () => {
+    vi.stubEnv("KV_REST_API_URL", "");
+    vi.stubEnv("KV_REST_API_TOKEN", "");
+    vi.spyOn(console, "warn").mockImplementation(() => {});
+    const { readKvStamp, writeKvStamp, releaseKvLock, acquireKvLock } = await load();
+    expect(await readKvStamp("m")).toBeNull();
+    await writeKvStamp("m", 7, 60_000);
+    expect(await readKvStamp("m")).toBe(7);
+    await writeKvStamp("m", 9, 60_000);
+    expect(await readKvStamp("m")).toBe(9);
+    await releaseKvLock("m");
+    expect(await readKvStamp("m")).toBeNull();
+    // O carimbo de um lock tomado é visível pra quem só lê.
+    expect(await acquireKvLock("l")).toBe(true);
+    expect(await readKvStamp("l")).toEqual(expect.any(Number));
+    await releaseKvLock("l");
+    expect(mockGet).not.toHaveBeenCalled();
   });
 });

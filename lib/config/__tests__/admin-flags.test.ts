@@ -29,7 +29,7 @@ const FAKE_ENUM = {
 const FAKE_FLAGS = [...ADMIN_FLAGS, FAKE_ENUM] as const satisfies readonly AdminFlagDef[];
 
 describe("ADMIN_FLAGS (registry, #514)", () => {
-  it("tem as 12 flags boolean + o motor de análise (enum), sem key repetida", () => {
+  it("tem as 13 flags boolean + o motor de análise (enum), sem key repetida", () => {
     const keys = ADMIN_FLAGS.map((f) => f.key);
     expect(keys).toEqual([
       "enableOverUnderExtraLines",
@@ -44,6 +44,7 @@ describe("ADMIN_FLAGS (registry, #514)", () => {
       "enableLiveMode",
       "enableAutoModelVersions",
       "enableBetSlipExplain",
+      "enableLineupRecheck",
       "analysisEngine",
     ]);
     expect(new Set(keys).size).toBe(keys.length);
@@ -70,6 +71,7 @@ describe("ADMIN_FLAGS (registry, #514)", () => {
       enableLiveMode: true,
       enableAutoModelVersions: true,
       enableBetSlipExplain: true,
+      enableLineupRecheck: true,
       analysisEngine: "llm",
     });
   });
@@ -114,6 +116,17 @@ describe("ADMIN_FLAGS (registry, #514)", () => {
     expect(def.costNote).toContain("Sem The Odds API");
   });
 
+  it("reconferir com a escalação (#619): ligada, sem LLM, sem The Odds API e fora do limite diário", () => {
+    const def = getAdminFlagDef("enableLineupRecheck");
+    expect(def.kind).toBe("boolean");
+    expect(def.default).toBe(true);
+    expect(def.label).toBe("Reconferir com a escalação");
+    expect(def.costNote).toContain("Sem LLM, sem The Odds API");
+    expect(def.costNote).toContain("limite diário");
+    expect(def.costNote).toContain("1 chamada JEV");
+    expect(def.costNote).toContain("API-Football só na última hora");
+  });
+
   it("nota de custo do fan-out casa com os tetos pinados em best-bet", () => {
     const note = getAdminFlagDef("enableBestBetFanOut").costNote ?? "";
     expect(note).toContain(`até ${MAX_FANOUT_MARKETS} chamadas pagas`);
@@ -134,6 +147,7 @@ describe("ADMIN_FLAGS (registry, #514)", () => {
       enableLiveMode: boolean;
       enableAutoModelVersions: boolean;
       enableBetSlipExplain: boolean;
+      enableLineupRecheck: boolean;
       analysisEngine: "llm" | "code_jev";
     }>();
   });

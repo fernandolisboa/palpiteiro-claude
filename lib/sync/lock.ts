@@ -130,3 +130,33 @@ export function acquireSyncLock(opts?: {
 export function releaseSyncLock(): Promise<void> {
   return releaseKvLock(SYNC_LOCK_KEY);
 }
+
+/**
+ * Lê o carimbo (epoch ms) gravado em `key` por acquireKvLock/writeKvStamp, ou null
+ * quando a chave não existe (ou venceu). Só leitura: a reconferência com a escalação
+ * (#619) usa pra saber se o cron da base está rodando (sem tomar o lock dele) e pro
+ * marcador por jogo. Fail-open sem KV, como o lock.
+ */
+export async function readKvStamp(key: string): Promise<number | null> {
+  const redis = getRedis();
+  const value = redis
+    ? await redis.get<number | string>(key)
+    : await inMemoryCache.get<number>(key);
+  if (value === null || value === undefined) return null;
+  const n = typeof value === "number" ? value : Number(value);
+  return Number.isFinite(n) ? n : null;
+}
+
+/** Grava `stamp` em `key` com TTL, sobrescrevendo (marcador, não lock). */
+export async function writeKvStamp(
+  key: string,
+  stamp: number,
+  ttlMs: number,
+): Promise<void> {
+  const redis = getRedis();
+  if (!redis) {
+    await inMemoryCache.set(key, stamp, ttlMs);
+    return;
+  }
+  await redis.set(key, stamp, { ex: Math.ceil(ttlMs / 1000) });
+}
