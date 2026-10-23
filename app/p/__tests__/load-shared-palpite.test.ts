@@ -154,6 +154,21 @@ describe("loadSharedPalpite — guard de texto público (ADR §2d/§2e / #438)",
     expect(out!.view.verdict).toBe("Vai dar Palmeiras");
   });
 
+  it("ADR 0065: o raciocínio do run fica fora da página pública", async () => {
+    getSharedPalpiteSet.mockResolvedValue({
+      palpiteSetWithLines: makeSet({
+        headline: {
+          ...HEADLINE,
+          reasoning: [{ id: "user_context", status: "done", label: "Seu contexto extra foi lido" }],
+        },
+      }),
+      match: makeMatch(),
+    });
+    const out = await loadSharedPalpite(freshUuid());
+    expect(out).not.toBeNull();
+    expect(out!.view).not.toHaveProperty("reasoning");
+  });
+
   it("narrativa limpa passa verbatim", async () => {
     getSharedPalpiteSet.mockResolvedValue({
       palpiteSetWithLines: makeSet(),

@@ -331,3 +331,102 @@ body:has([data-page-width="form"]) [data-footer-column] {
     scroll-behavior: auto !important;
   }
 }
+
+/* Robozinho do run do HERO (ADR 0065, components/palpites/palpite-bot.tsx). Cada parte
+   gira/move em torno do próprio centro. Curvas suaves, sem bounce; só cores palpite-*. */
+.palpite-bot-part,
+.palpite-bot-bob,
+.palpite-bot-spin,
+.palpite-bot-look,
+.palpite-bot-blink,
+.palpite-bot-shadow {
+  transform-box: fill-box;
+  transform-origin: center;
+}
+.palpite-bot-bob {
+  animation: palpite-bot-bob 2.4s ease-in-out infinite;
+}
+.palpite-bot-shadow {
+  opacity: 0.5;
+  animation: palpite-bot-shadow 2.4s ease-in-out infinite;
+}
+.palpite-bot-spin {
+  animation: palpite-bot-spin 3.2s linear infinite;
+}
+.palpite-bot-look {
+  animation: palpite-bot-look 5s ease-in-out infinite;
+}
+.palpite-bot-blink {
+  animation: palpite-bot-blink 4.2s ease-in-out infinite;
+}
+@keyframes palpite-bot-bob {
+  0%,
+  100% {
+    transform: translateY(0);
+  }
+  50% {
+    transform: translateY(-2px);
+  }
+}
+@keyframes palpite-bot-shadow {
+  0%,
+  100% {
+    transform: scaleX(1);
+    opacity: 0.5;
+  }
+  50% {
+    transform: scaleX(0.8);
+    opacity: 0.3;
+  }
+}
+@keyframes palpite-bot-spin {
+  to {
+    transform: rotate(360deg);
+  }
+}
+@keyframes palpite-bot-look {
+  0%,
+  28%,
+  100% {
+    transform: translateX(0);
+  }
+  36%,
+  58% {
+    transform: translateX(-1.5px);
+  }
+  66%,
+  90% {
+    transform: translateX(1.5px);
+  }
+}
+@keyframes palpite-bot-blink {
+  0%,
+  91%,
+  97%,
+  100% {
+    transform: scaleY(1);
+  }
+  94% {
+    transform: scaleY(0.12);
+  }
+}
+@keyframes palpite-breathe {
+  0%,
+  100% {
+    opacity: 1;
+  }
+  50% {
+    opacity: 0.4;
+  }
+}
+
+/* Movimento reduzido: nada se desloca (a regra global acima para tudo), mas o que leva
+   `palpite-calm` respira devagar, só na opacidade, pra o run não parecer travado (olhos
+   do robô, bola da antena, ícone da etapa em andamento). Classe vence o `*` da regra
+   global (especificidade maior, os dois com !important). Lento de propósito: um ciclo a
+   cada 2,4 s, longe de piscar. */
+@media (prefers-reduced-motion: reduce) {
+  .palpite-calm {
+    animation: palpite-breathe 2.4s ease-in-out infinite !important;
+  }
+}

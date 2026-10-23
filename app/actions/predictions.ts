@@ -33,9 +33,11 @@ import {
 import { readAnalysisEngine } from "@/lib/ai/engine/analysis-engine-flag";
 import {
   beginStep,
+  isTrackingProgress,
   noteStep,
   setProgressMarketLabels,
   trackStep,
+  withRunProgress,
 } from "@/lib/ai/progress/run-progress";
 import { STEPS, synthesisStep } from "@/lib/ai/progress/steps";
 import { getCartridge } from "@/lib/ai/markets/registry";
@@ -1344,9 +1346,16 @@ export async function runPalpiteHero(
   formData: FormData,
 ): Promise<PalpiteHeroResult> {
   const intent = formData.get("intent");
-  if (intent === "palpite") return generatePalpiteFromAnalyses(null, formData);
-  if (intent === "analysis") return analyzeBestBet(null, formData);
-  return { ok: false, error: "Ação inválida." };
+  const run =
+    intent === "palpite"
+      ? () => generatePalpiteFromAnalyses(null, formData)
+      : intent === "analysis"
+        ? () => analyzeBestBet(null, formData)
+        : null;
+  if (!run) return { ok: false, error: "Ação inválida." };
+  // Pelo envio sem JS (ou a reserva do cliente) ninguém lê as etapas ao vivo, mas o
+  // raciocínio gravado com o palpite (ADR 0065) sai igual: o run abre o próprio contexto.
+  return isTrackingProgress() ? run() : withRunProgress(() => {}, run);
 }
 
 // ─── Análise multi-mercado SELECIONADA pelo usuário (#245) ────────────────────

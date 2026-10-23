@@ -3,9 +3,12 @@ import { describe, expect, it } from "vitest";
 import { containsValueLanguage } from "@/lib/ai/palpites/value-language-guard";
 
 import {
+  MAX_DETAIL_LINES,
   encodeStreamMessage,
+  parseReasoning,
   parseStreamLine,
   toHeroRunOutcome,
+  type StreamMessage,
 } from "../protocol";
 import {
   STEP_NOTES,
@@ -38,6 +41,47 @@ describe("protocolo NDJSON", () => {
     expect(parseStreamLine('{"t":"step","id":"x","status":"weird","label":"y"}')).toBeNull();
     expect(parseStreamLine('{"t":"result","outcome":{"ok":true}}')).toBeNull();
     expect(parseStreamLine('{"t":"other"}')).toBeNull();
+  });
+
+  it("detail da etapa: ida e volta; lixo cai fora; teto de linhas", () => {
+    const step: StreamMessage = {
+      t: "step",
+      id: "model",
+      status: "done",
+      label: "x",
+      detail: ["Gols esperados: A 1,4, B 1,1"],
+    };
+    expect(parseStreamLine(encodeStreamMessage(step))).toEqual(step);
+    expect(
+      parseStreamLine('{"t":"step","id":"x","status":"done","label":"y","detail":[1,"",null]}'),
+    ).toEqual({ t: "step", id: "x", status: "done", label: "y" });
+    const many = JSON.stringify({
+      t: "step",
+      id: "x",
+      status: "done",
+      label: "y",
+      detail: Array.from({ length: 40 }, (_, i) => `l${i}`),
+    });
+    const parsed = parseStreamLine(many);
+    expect(parsed?.t === "step" && parsed.detail).toHaveLength(MAX_DETAIL_LINES);
+  });
+
+  it("parseReasoning: lê o jsonb gravado e descarta o que não tem a forma", () => {
+    expect(parseReasoning(undefined)).toBeNull();
+    expect(parseReasoning("x")).toBeNull();
+    expect(parseReasoning([])).toBeNull();
+    expect(
+      parseReasoning([
+        { id: "odds", status: "done", label: "Preços lidos", detail: ["Ambas marcam"] },
+        { id: "jev", status: "active", label: "consultando" },
+        { id: "news", status: "skipped", label: "" },
+        { id: 3, status: "done", label: "x" },
+        { id: "check", status: "failed", label: "Não bateu", detail: "x" },
+      ]),
+    ).toEqual([
+      { id: "odds", status: "done", label: "Preços lidos", detail: ["Ambas marcam"] },
+      { id: "check", status: "failed", label: "Não bateu" },
+    ]);
   });
 
   it("toHeroRunOutcome: run completo, só o palpite e falha", () => {

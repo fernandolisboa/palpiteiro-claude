@@ -31,8 +31,15 @@ import {
   beginStep,
   progressMarketLabel,
   progressScope,
+  stepDetail,
   trackStep,
 } from "@/lib/ai/progress/run-progress";
+import {
+  jevDetail,
+  modelDetail,
+  sportsDataDetail,
+  userContextDetail,
+} from "@/lib/ai/progress/details";
 import { STEP_NOTES, STEPS, marketStep, narrationStep } from "@/lib/ai/progress/steps";
 import { leagueToSportKey } from "@/lib/providers/odds-api-constants";
 import type { NormalizedOddsEvent } from "@/lib/providers/odds/types";
@@ -589,6 +596,20 @@ async function runPredict(
   // separado já cria a fronteira sem mudar o comportamento atual.
   const absencesAvailableHome = !injuries.unavailable;
   const absencesAvailableAway = !injuries.unavailable;
+  stepDetail(
+    STEPS.sportsData,
+    sportsDataDetail({
+      teams: { home: match.homeTeam, away: match.awayTeam },
+      homeForm,
+      awayForm,
+      h2h,
+      standings,
+      absences: injuries.unavailable
+        ? null
+        : { home: injuries.data.home.length, away: injuries.data.away.length },
+      lineups,
+    }),
+  );
   sportsDataStep.done();
 
   // 4. Odds (N-vias): reusa uma captura fresca se a página já snapshotou nesta
@@ -818,6 +839,8 @@ async function runPredict(
       );
     }
   }
+  const oddsMarketLabel = progressMarketLabel(marketKey);
+  if (oddsMarketLabel) stepDetail(STEPS.odds, [oddsMarketLabel]);
   oddsStep.done();
 
   // 5. Implied probabilities normalizadas (N seleções; contrato chave→índice).
@@ -893,9 +916,10 @@ async function runPredict(
       (s) =>
         s === null
           ? { status: "skipped", label: STEP_NOTES.modelUnavailable }
-          : s.source === "heuristic"
-            ? { status: "done", label: STEP_NOTES.modelFallback }
-            : undefined,
+          : {
+              label: s.source === "heuristic" ? STEP_NOTES.modelFallback : undefined,
+              detail: modelDetail(s, { home: match.homeTeam, away: match.awayTeam }),
+            },
     ));
 
   // 5.6 Motor code_jev (ADR 0041, #511), atrás do flag `analysis_engine`: nos mercados
@@ -954,12 +978,16 @@ async function runPredict(
             },
             upcoming: upcomingFetch,
           }),
-        ({ run: r }) =>
-          r.reusedFromPredictionId || r.reusedFromModelSnapshotId
-            ? { status: "done", label: STEP_NOTES.jevReused }
-            : r.answers === null
-              ? { status: "failed" }
-              : undefined,
+        ({ run: r }) => {
+          const reused = Boolean(
+            r.reusedFromPredictionId || r.reusedFromModelSnapshotId,
+          );
+          if (!reused && r.answers === null) return { status: "failed" };
+          return {
+            label: reused ? STEP_NOTES.jevReused : undefined,
+            detail: jevDetail(r.answers, { home: match.homeTeam, away: match.awayTeam }),
+          };
+        },
       );
       const resolveUser = () =>
         resolveUserContext({
@@ -977,7 +1005,9 @@ async function runPredict(
           standings,
         });
       const user = userContextP
-        ? await trackStep(STEPS.userContext, resolveUser)
+        ? await trackStep(STEPS.userContext, resolveUser, (u) =>
+            u ? { detail: userContextDetail(u) } : undefined,
+          )
         : await resolveUser();
       resolved = {
         scoreline: engineScoreline,

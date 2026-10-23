@@ -147,6 +147,13 @@ vi.mock("@/lib/providers/news", () => ({
 }));
 
 import { generatePalpites, PalpiteError } from "@/lib/ai/palpites";
+import {
+  beginStep,
+  noteStep,
+  stepDetail,
+  withRunProgress,
+} from "@/lib/ai/progress/run-progress";
+import { STEPS, synthesisStep } from "@/lib/ai/progress/steps";
 import type { MarketAnalysisSummary } from "@/lib/ai/palpites/synthesis-input";
 import {
   getPalpiteSetsForMatch,
@@ -295,6 +302,33 @@ describe("generatePalpites (síntese) — write path real (pglite)", () => {
     expect(exact.params).toEqual({ home: 2, away: 1 });
     expect(byType.get("first_half_score")!.params).toEqual({ home: 1, away: 0 });
     expect(byType.get("first_to_score")!.params).toEqual({ firstToScore: "home" });
+  });
+
+  it("ADR 0065: dentro de um run com progresso, grava o raciocínio com a síntese no fim", async () => {
+    runAnalysis.mockResolvedValue(okResult(validToolInput));
+    await withRunProgress(
+      () => {},
+      async () => {
+        noteStep(STEPS.odds);
+        stepDetail(STEPS.odds, ["Resultado (1X2)"]);
+        beginStep(synthesisStep(false));
+        await call();
+      },
+    );
+    const [set] = await getPalpiteSetsForMatch(ids.matchId, ids.userId);
+    const reasoning = set.palpiteSet.headline?.reasoning ?? [];
+    expect(reasoning[0]).toEqual({
+      id: "odds",
+      status: "done",
+      label: STEPS.odds.done,
+      detail: ["Resultado (1X2)"],
+    });
+    expect(reasoning.find((r) => r.id === "synthesis")).toEqual({
+      id: "synthesis",
+      status: "done",
+      label: "Palpite pronto",
+      detail: ["Confiança do palpite: alta", "Resultado (1X2): Casa"],
+    });
   });
 
   it("#394: cardsTemperature persiste linha cards settleable=true (promovida); ENTRA no pending — inércia vem da COBERTURA, não do gate SQL", async () => {

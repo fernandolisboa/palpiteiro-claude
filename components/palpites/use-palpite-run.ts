@@ -11,7 +11,13 @@ import {
 
 export const PALPITE_RUN_ENDPOINT = "/api/palpite/run";
 
-export type RunStep = { id: string; status: StepStatus; label: string };
+export type RunStep = {
+  id: string;
+  status: StepStatus;
+  label: string;
+  // O que a etapa encontrou (ADR 0065), pro "Ver raciocínio".
+  detail?: string[];
+};
 
 // Respostas em que a rota provadamente não começou o run (rota ausente num deploy
 // antigo, origem recusada, corpo inválido): o HERO cai na server action de sempre.
@@ -148,7 +154,14 @@ async function readStream(
   const consume = (line: string) => {
     const msg = parseStreamLine(line);
     if (!msg) return;
-    if (msg.t === "step") onStep({ id: msg.id, status: msg.status, label: msg.label });
+    if (msg.t === "step") {
+      onStep({
+        id: msg.id,
+        status: msg.status,
+        label: msg.label,
+        ...(msg.detail ? { detail: msg.detail } : {}),
+      });
+    }
     else if (msg.t === "result") outcome = msg.outcome;
   };
   for (;;) {

@@ -7,7 +7,9 @@
 
 import { AsyncLocalStorage } from "node:async_hooks";
 
-import type { ProgressEvent } from "./protocol";
+import { containsValueLanguage } from "@/lib/ai/palpites/value-language-guard";
+
+import type { ProgressEvent, ReasoningStep } from "./protocol";
 import type { StepSpec } from "./steps";
 import { createProgressTracker, type ProgressTracker } from "./tracker";
 
@@ -94,8 +96,32 @@ export function beginStep(spec: StepSpec): StepHandle {
   };
 }
 
-// Desfecho que depende do valor devolvido (JEV reaproveitado, modelo de reserva…).
-export type StepVerdict = { status: Terminal; label?: string } | void;
+// O que a etapa encontrou (ADR 0065): linhas curtas que o "Ver raciocínio" mostra. Pode
+// vir antes ou depois do fim da etapa. A linha passa pelo mesmo guard do HERO (e sem %):
+// uma que escorregue pra linguagem de valor cai fora em vez de vazar.
+export function stepDetail(spec: Pick<StepSpec, "id">, lines: readonly string[]): void {
+  const store = storage.getStore();
+  if (!store) return;
+  const safe = lines.filter(
+    (line) => line !== "" && !line.includes("%") && !containsValueLanguage(line),
+  );
+  if (safe.length > 0) store.run.tracker.detail(spec.id, safe);
+}
+
+// As etapas terminadas do run até aqui, pra gravar com o palpite. [] fora de um run.
+// `assumeDone`: a etapa em andamento que termina com a própria gravação (a síntese).
+export function progressTrace(opts?: { assumeDone?: StepSpec }): ReasoningStep[] {
+  const store = storage.getStore();
+  if (!store) return [];
+  const spec = opts?.assumeDone;
+  return store.run.tracker.snapshot(spec ? { id: spec.id, label: spec.done } : undefined);
+}
+
+// Desfecho que depende do valor devolvido (JEV reaproveitado, modelo de reserva…), e o
+// que a etapa encontrou.
+export type StepVerdict =
+  | { status?: Terminal; label?: string; detail?: readonly string[] }
+  | void;
 
 export async function trackStep<T>(
   spec: StepSpec,
@@ -116,9 +142,11 @@ export async function trackStep<T>(
   } catch {
     outcome = undefined;
   }
-  if (!outcome || outcome.status === "done") step.done(outcome?.label);
-  else if (outcome.status === "failed") step.fail(outcome.label);
-  else step.skip(outcome.label);
+  if (outcome?.detail) stepDetail(spec, outcome.detail);
+  const status = outcome?.status ?? "done";
+  if (status === "done") step.done(outcome?.label);
+  else if (status === "failed") step.fail(outcome?.label);
+  else step.skip(outcome?.label);
   return value;
 }
 

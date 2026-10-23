@@ -1,6 +1,7 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 
 import type { ProgressEvent } from "@/lib/ai/progress/protocol";
+import { containsValueLanguage } from "@/lib/ai/palpites/value-language-guard";
 import { withRunProgress } from "@/lib/ai/progress/run-progress";
 import { STEP_NOTES } from "@/lib/ai/progress/steps";
 
@@ -2652,6 +2653,23 @@ describe("progresso ao vivo (ADR 0064)", () => {
     expect(events.find((e) => e.id === "narration")?.label).toBe(
       "Escrevendo a análise com o Claude Sonnet"
     );
+  });
+
+  it("cada etapa leva o que encontrou pro Ver raciocínio (ADR 0065)", async () => {
+    const events = await stepsOf(() =>
+      predict({ matchId: "m-1", userId: "u-1", isAdmin: true, marketKey: "match_result" })
+    );
+    const detailOf = (id: string) =>
+      events.filter((e) => e.id === id && e.status === "done").at(-1)?.detail ?? [];
+    expect(detailOf("sports_data").some((l) => l.startsWith("Desfalques") || l.includes("desfalque"))).toBe(true);
+    expect(detailOf("sports_data")).toContain("Escalações ainda não divulgadas");
+    expect(detailOf("model")[0]).toMatch(/^Gols esperados: .+ \d,\d, .+ \d,\d$/);
+    expect(detailOf("model")[1]).toMatch(/^Placar mais provável pelo modelo: \d–\d$/);
+    expect(detailOf("jev").length).toBeGreaterThan(0);
+    for (const line of events.flatMap((e) => e.detail ?? [])) {
+      expect(containsValueLanguage(line), line).toBe(false);
+      expect(line, line).not.toMatch(/%/);
+    }
   });
 
   it("JEV fora do ar → a etapa fecha como falha e a análise segue", async () => {

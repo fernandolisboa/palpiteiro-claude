@@ -7,7 +7,9 @@ import {
   noteStep,
   progressMarketLabel,
   progressScope,
+  progressTrace,
   setProgressMarketLabels,
+  stepDetail,
   trackStep,
   withRunProgress,
 } from "../run-progress";
@@ -130,5 +132,42 @@ describe("run-progress", () => {
     ]);
     expect(a.seen()).toEqual(["odds:active", "odds:done"]);
     expect(b.seen()).toEqual(["jev:active", "jev:done"]);
+  });
+
+  it("verdict com detail: as linhas saem com o fim da etapa", async () => {
+    const c = collect();
+    await withRunProgress(c.send, () =>
+      trackStep(STEPS.model, async () => 1, () => ({ detail: ["Gols esperados: A 1,4, B 1,1"] })),
+    );
+    expect(c.events.at(-1)).toEqual({
+      t: "step",
+      id: "model",
+      status: "done",
+      label: STEPS.model.done,
+      detail: ["Gols esperados: A 1,4, B 1,1"],
+    });
+  });
+
+  it("stepDetail derruba linha com linguagem de valor ou %", async () => {
+    const c = collect();
+    await withRunProgress(c.send, async () => {
+      noteStep(STEPS.news);
+      stepDetail(STEPS.news, ["2 notícias usadas", "edge de 4 pontos", "60% de chance", "odd 2,1"]);
+    });
+    expect(c.events.at(-1)?.detail).toEqual(["2 notícias usadas"]);
+  });
+
+  it("progressTrace: [] fora do run; dentro, as etapas terminadas e a que fecha com a gravação", async () => {
+    expect(progressTrace()).toEqual([]);
+    await withRunProgress(() => {}, async () => {
+      await trackStep(STEPS.odds, async () => 1);
+      beginStep(STEPS.check);
+      expect(progressTrace().map((s) => s.id)).toEqual(["odds"]);
+      expect(progressTrace({ assumeDone: STEPS.check }).at(-1)).toEqual({
+        id: "check",
+        status: "done",
+        label: STEPS.check.done,
+      });
+    });
   });
 });

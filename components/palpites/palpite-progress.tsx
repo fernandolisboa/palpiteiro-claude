@@ -1,18 +1,25 @@
-import { Check, Loader2, Minus, TriangleAlert } from "lucide-react";
-
+import { PalpiteBot } from "@/components/palpites/palpite-bot";
+import { ReasoningButton } from "@/components/palpites/reasoning-dialog";
+import { StepIcon } from "@/components/palpites/step-icon";
 import type { StepStatus } from "@/lib/ai/progress/protocol";
 import { cn } from "@/lib/utils";
 
-export type ProgressStepView = { id: string; status: StepStatus; label: string };
+export type ProgressStepView = {
+  id: string;
+  status: StepStatus;
+  label: string;
+  detail?: string[];
+};
 
 /**
  * Linha do tempo do run do HERO (ADR 0064): cada etapa que DE FATO rodou no servidor,
  * na ordem em que começou, com o estado atual. Etapas em paralelo (mercados do fan-out)
  * giram juntas. Quem chama passa a casca (WarmShell) e o kicker.
  *
- * Motion (DESIGN.md): entrada curta de cada linha (fade + 4px), o check entra com um
- * zoom curto, o ícone da etapa em andamento gira. Sem brilho, gradiente ou piscada; com
- * prefers-reduced-motion tudo vira instantâneo (globals.css + motion-reduce:).
+ * Motion (DESIGN.md): o robozinho (palpite-bot.tsx) ao lado do título, entrada curta de
+ * cada linha (fade + 4px), o check entra com um zoom curto, o ícone da etapa em andamento
+ * gira. Sem brilho nem gradiente. Com prefers-reduced-motion nada se desloca; o robô e o
+ * ícone em andamento só respiram devagar (`palpite-calm`, globals.css).
  *
  * FIREWALL (ADR 0030 §3): as frases vêm prontas do servidor (lib/ai/progress/steps.ts),
  * sem odd, edge, stake, % ou nome de casa.
@@ -22,24 +29,31 @@ export function PalpiteProgress({
   hint,
   steps,
   waitingLabel,
+  onShowReasoning,
 }: {
   title: string;
   hint: string;
   steps: ProgressStepView[];
   // Linha enquanto nenhuma etapa chegou (o pedido está a caminho).
   waitingLabel: string;
+  // Abre o "Ver raciocínio" (ADR 0065). Ausente = sem botão.
+  onShowReasoning?: () => void;
 }) {
   const rows: ProgressStepView[] =
     steps.length > 0 ? steps : [{ id: "waiting", status: "active", label: waitingLabel }];
   const current =
     [...rows].reverse().find((s) => s.status === "active") ?? rows[rows.length - 1];
+  const doneCount = steps.filter((s) => s.status === "done").length;
   return (
     <div className="flex flex-col gap-4">
-      <div className="flex flex-col gap-1">
-        <p className="text-display-sm font-medium tracking-tight text-foreground">
-          {title}
-        </p>
-        <p className="text-body-sm tracking-tight text-muted-foreground">{hint}</p>
+      <div className="flex items-center gap-3">
+        <PalpiteBot beat={doneCount} />
+        <div className="flex flex-col gap-1">
+          <p className="text-display-sm font-medium tracking-tight text-foreground">
+            {title}
+          </p>
+          <p className="text-body-sm tracking-tight text-muted-foreground">{hint}</p>
+        </div>
       </div>
       <ol aria-label="etapas da análise" className="flex flex-col">
         {rows.map((step, i) => (
@@ -49,6 +63,9 @@ export function PalpiteProgress({
       <p role="status" className="sr-only">
         {current.label}
       </p>
+      {onShowReasoning && steps.length > 0 && (
+        <ReasoningButton onClick={onShowReasoning} />
+      )}
     </div>
   );
 }
@@ -77,39 +94,5 @@ function StepRow({ step, last }: { step: ProgressStepView; last: boolean }) {
         {step.label}
       </span>
     </li>
-  );
-}
-
-function StepIcon({ status }: { status: StepStatus }) {
-  const base =
-    "relative z-10 flex size-6 shrink-0 items-center justify-center rounded-full border";
-  if (status === "active") {
-    return (
-      <span aria-hidden="true" className={cn(base, "border-palpite-border bg-palpite-soft")}>
-        <Loader2 className="size-3.5 animate-spin text-palpite-strong-fg motion-reduce:animate-none" />
-      </span>
-    );
-  }
-  if (status === "done") {
-    return (
-      <span aria-hidden="true" className={cn(base, "border-palpite-border bg-palpite-soft")}>
-        <Check
-          key="done"
-          className="size-3.5 animate-in text-palpite-strong-fg duration-300 ease-out zoom-in-50 motion-reduce:animate-none"
-        />
-      </span>
-    );
-  }
-  return (
-    <span
-      aria-hidden="true"
-      className={cn(base, "border-dashed border-palpite-border/70 bg-background")}
-    >
-      {status === "failed" ? (
-        <TriangleAlert className="size-3 text-muted-fg-2" />
-      ) : (
-        <Minus className="size-3 text-muted-fg-2" />
-      )}
-    </span>
   );
 }

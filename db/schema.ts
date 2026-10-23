@@ -5,6 +5,7 @@ import { sql } from "drizzle-orm";
 import type { PredictionJudgments } from "@/lib/ai/engine/types";
 import { JUDGMENT_PROVIDER_KEY } from "@/lib/ai/models";
 import type { ModelPricing } from "@/lib/ai/model-versions/types";
+import type { ReasoningStep } from "@/lib/ai/progress/protocol";
 import type {
   MatchModelJevStatus,
   MatchModelJudgments,
@@ -509,6 +510,10 @@ export type PalpiteHeadline = {
   // não prosa do LLM). Opcional: sets pré-#377 e o caso "sem notícia" não carregam.
   // jsonb é schema-less no DB → mudança SÓ de tipo TS, SEM migration/DDL.
   sources?: Array<{ title: string; url: string }>;
+  // ADR 0065 — o raciocínio do run que gerou o palpite: as etapas que rodaram e o que
+  // cada uma encontrou (frases do código, sem número de valor), pro "Ver raciocínio".
+  // Opcional: sets antigos e os gerados fora do HERO não carregam. Sem migration.
+  reasoning?: ReasoningStep[];
 };
 
 export const palpiteSets = pgTable(
