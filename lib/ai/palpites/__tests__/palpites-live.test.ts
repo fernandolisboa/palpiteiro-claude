@@ -18,7 +18,7 @@ import { buildLivePalpiteRows } from "@/lib/ai/palpites/settleable-rows";
 import type { MarketAnalysisSummary } from "@/lib/ai/palpites/synthesis-input";
 import { containsValueLanguage } from "@/lib/ai/palpites/value-language-guard";
 
-// palpites_live_v1 (#594): a manchete com o jogo rolando. Puro.
+// palpites_live_v2 (#594, #649): a manchete com o jogo rolando. Puro.
 
 const BOOKMAKER_NAME =
   /\b(betano|bet365|pinnacle|betfair|sportingbet|superbet|novibet|kto)\b/i;
@@ -63,21 +63,20 @@ const input = buildLivePalpitesInput({
 const output = {
   verdict: "O Flamengo segura a vantagem",
   probableScore: { home: 1, away: 0 },
-  confidence: "media" as const,
   narrative: "Aos 63', com 1 a 0, o Fla tem 70% de chance de vencer.",
   citedMarkets: ["Resultado (1X2)"],
 };
 
-describe("palpites_live_v1 — cartucho", () => {
+describe("palpites_live_v2 — cartucho", () => {
   it("versão própria; o cartucho de pré-jogo segue o mesmo", () => {
-    expect(PALPITES_LIVE_VERSION).toBe("palpites_live_v1");
-    expect(palpitesLiveCartridge.version).toBe("palpites_live_v1");
+    expect(PALPITES_LIVE_VERSION).toBe("palpites_live_v2");
+    expect(palpitesLiveCartridge.version).toBe("palpites_live_v2");
     expect(getPalpiteCartridge().version).not.toBe(PALPITES_LIVE_VERSION);
   });
 
   it("prompt fixado (mudou? bump + commit prompt:)", () => {
-    expect(sha(LIVE_SYSTEM_PROMPT)).toMatchInlineSnapshot(`"a9bb6e99c672cfc1"`);
-    expect(sha(JSON.stringify(SUBMIT_LIVE_PALPITE_TOOL))).toMatchInlineSnapshot(`"bd477e0ae920d41f"`);
+    expect(sha(LIVE_SYSTEM_PROMPT)).toMatchInlineSnapshot(`"c3e943cbf4a6adc7"`);
+    expect(sha(JSON.stringify(SUBMIT_LIVE_PALPITE_TOOL))).toMatchInlineSnapshot(`"83a0c8ecf89c94b4"`);
   });
 
   it("sem nome de casa no prompt, na ferramenta nem na mensagem", () => {
@@ -100,7 +99,6 @@ describe("palpites_live_v1 — cartucho", () => {
     expect(Object.keys(SUBMIT_LIVE_PALPITE_TOOL.input_schema.properties)).toEqual([
       "verdict",
       "probableScore",
-      "confidence",
       "narrative",
       "citedMarkets",
     ]);
