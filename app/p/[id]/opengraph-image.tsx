@@ -1,5 +1,6 @@
 import { ImageResponse } from "next/og";
 
+import { AppIconMark } from "@/components/brand/app-icon-mark";
 import { leagueToKey } from "@/lib/format";
 import type { SupportedLeague } from "@/lib/providers/sports-data/leagues";
 import { teamPair } from "@/lib/view/team";
@@ -35,7 +36,12 @@ function fallbackImage() {
           fontFamily: "sans-serif",
         }}
       >
-        <div style={{ display: "flex", fontSize: 40, color: "#a8a29e" }}>
+        <div
+          style={{ display: "flex", alignItems: "center", gap: 20, fontSize: 40, color: "#a8a29e" }}
+        >
+          <div style={{ display: "flex", width: 56, height: 56 }}>
+            <AppIconMark size={56} rounded />
+          </div>
           palpiteiro
         </div>
         <div style={{ display: "flex", fontSize: 26, color: "#78716c" }}>
