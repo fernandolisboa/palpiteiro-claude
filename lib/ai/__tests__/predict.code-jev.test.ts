@@ -681,10 +681,13 @@ describe("flag analysis_engine = 'code_jev'", () => {
     expect(prediction.modelVersion).toBe(
       "claude-sonnet-5-5;engine=code_jev;lambda=heuristic;judg=jev_judgments_v3;w=judgment_weights_v1"
     );
-    expect(Number(prediction.minimumOdd)).toBeCloseTo(
-      100 / (expected.modelProbByKey.home - 5),
-      2
-    );
+    // Odd mínima na implícita de-vigada do gate (as outras odds paradas): nela o edge
+    // fica exatamente no piso de 5 pp, e ela não passa da odd da análise.
+    const minOdd = Number(prediction.minimumOdd);
+    expect(minOdd).toBeLessThanOrEqual(ODDS.home);
+    expect(
+      computeMarketImpliedProbabilities([minOdd, ODDS.draw, ODDS.away]).probs[0] * 100
+    ).toBeCloseTo(expected.modelProbByKey.home - 5, 1);
     const judgments = prediction.judgments as PredictionJudgments;
     expect(judgments.applied).toBe(true);
     expect(judgments.answers).toEqual(JEV_ANSWERS);

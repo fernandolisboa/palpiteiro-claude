@@ -69,7 +69,7 @@ import {
 import { findReusableJudgments } from "@/lib/db/queries/judgments";
 import { isKellyStakingActive } from "@/lib/calibration/kelly-live";
 import { getPreferredModelId } from "@/lib/db/queries/users";
-import { MIN_EDGE_PP } from "@/lib/odds/scenario";
+import { computeMinOddForEdgeFloor, MIN_EDGE_PP } from "@/lib/odds/scenario";
 import { getMarketPresentation } from "@/lib/view/markets/presentation";
 import {
   applyUserClaims,
@@ -1061,11 +1061,19 @@ async function runPredict(
         marketParams,
         decision,
         confidencePct,
-        // Odd mínima em que o lado ainda tem edge ≥ piso: 100 / (P_modelo − piso).
+        // Odd mínima em que o lado ainda tem edge ≥ piso, na mesma implícita de-vigada
+        // do gate (com as outras odds paradas).
         minimumOdd:
-          recModelProb !== null && recModelProb - minEdgePp > 0
-            ? 100 / (recModelProb - minEdgePp)
-            : undefined,
+          recModelProb === null
+            ? undefined
+            : (computeMinOddForEdgeFloor({
+                oddByKey,
+                selectionKeys,
+                key: decision.side,
+                modelProbPct: recModelProb,
+                minEdgePp,
+                impliedSumTarget: cartridge.descriptor.impliedSumTarget,
+              }) ?? undefined),
         bookmaker: oddsBundle.bookmakerTitle,
         // Tag `user=` só quando o contexto extra moveu um fator: a calibração separa
         // esses números (afirmação não verificável) do motor puro.
@@ -2153,9 +2161,16 @@ export async function recheckPredictionWithLineup(
     rationale: text.rationale,
     keyFactors: text.key_factors,
     minimumOdd:
-      recModelProb !== null && recModelProb - minEdgePp > 0
-        ? 100 / (recModelProb - minEdgePp)
-        : undefined,
+      recModelProb === null
+        ? undefined
+        : (computeMinOddForEdgeFloor({
+            oddByKey: odds.oddByKey,
+            selectionKeys,
+            key: decision.side,
+            modelProbPct: recModelProb,
+            minEdgePp,
+            impliedSumTarget,
+          }) ?? undefined),
     bookmaker: odds.bookmaker,
     modelId: modelIdFromVersion(p.modelVersion),
     modelTags: `${codeJevModelTags(scoreline)};recheck=${LINEUP_RECHECK_VERSION}`,

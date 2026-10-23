@@ -6,6 +6,7 @@ import {
   computeBreakEvenProbPct,
   computeEvPerUnit,
   computeMarketScenarios,
+  computeMinOddForEdgeFloor,
   computeModelBreakEvenOdd,
   computeScenarios,
   computeSelectionEdgePp,
@@ -66,6 +67,92 @@ describe("computeModelBreakEvenOdd", () => {
     expect(() => computeModelBreakEvenOdd(-5)).toThrow();
     expect(() => computeModelBreakEvenOdd(100.1)).toThrow();
     expect(() => computeModelBreakEvenOdd(NaN)).toThrow();
+  });
+});
+
+describe("computeMinOddForEdgeFloor", () => {
+  // Implícita de-vigada (proporcional, Σ = alvo) da seleção `key` numa odd dada.
+  const impliedAt = (
+    oddByKey: Record<string, number>,
+    keys: string[],
+    key: string,
+    target: number
+  ) =>
+    computeMarketImpliedProbabilities(keys.map((k) => oddByKey[k])).probs[
+      keys.indexOf(key)
+    ] *
+    100 *
+    target;
+
+  const dcKeys = ["home_or_draw", "away_or_draw", "home_or_away"];
+  const dc = { home_or_draw: 1.06, away_or_draw: 3.32, home_or_away: 1.23 };
+
+  it("dupla chance (Σ=2): na odd mínima o edge de-vigado fica exatamente no piso", () => {
+    const min = computeMinOddForEdgeFloor({
+      oddByKey: dc,
+      selectionKeys: dcKeys,
+      key: "away_or_draw",
+      modelProbPct: 34.7,
+      minEdgePp: 5,
+      impliedSumTarget: 2,
+    });
+    expect(min).not.toBeNull();
+    // Abaixo da 3,32 da análise (edge 5,4 pp), e não 100/(34,7 − 5) = 3,37 (1/odd cru).
+    expect(min!).toBeCloseTo(3.267, 2);
+    expect(
+      impliedAt({ ...dc, away_or_draw: min! }, dcKeys, "away_or_draw", 2)
+    ).toBeCloseTo(29.7, 9);
+  });
+
+  it("1X2 (partição): mesma propriedade com Σ=1", () => {
+    const keys = ["home", "draw", "away"];
+    const odds = { home: 2.1, draw: 3.4, away: 3.6 };
+    const min = computeMinOddForEdgeFloor({
+      oddByKey: odds,
+      selectionKeys: keys,
+      key: "away",
+      modelProbPct: 33,
+      minEdgePp: 5,
+    });
+    expect(impliedAt({ ...odds, away: min! }, keys, "away", 1)).toBeCloseTo(
+      28,
+      9
+    );
+  });
+
+  it("null sem odd completa, com P ≤ piso ou com seleção fora do mercado", () => {
+    const base = {
+      selectionKeys: dcKeys,
+      key: "away_or_draw",
+      modelProbPct: 34.7,
+      minEdgePp: 5,
+      impliedSumTarget: 2,
+    };
+    expect(
+      computeMinOddForEdgeFloor({
+        ...base,
+        oddByKey: { ...dc, home_or_away: null },
+      })
+    ).toBeNull();
+    expect(
+      computeMinOddForEdgeFloor({ ...base, oddByKey: dc, modelProbPct: 4 })
+    ).toBeNull();
+    expect(
+      computeMinOddForEdgeFloor({ ...base, oddByKey: dc, key: "x" })
+    ).toBeNull();
+  });
+
+  it("null quando qualquer odd > 1 já passa no piso", () => {
+    // P = 99%: a implícita de-vigada nunca chega a 94% com as outras odds paradas.
+    expect(
+      computeMinOddForEdgeFloor({
+        oddByKey: { over: 1.9, under: 1.9 },
+        selectionKeys: ["over", "under"],
+        key: "over",
+        modelProbPct: 99,
+        minEdgePp: 5,
+      })
+    ).toBeNull();
   });
 });
 

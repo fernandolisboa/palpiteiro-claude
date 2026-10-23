@@ -128,6 +128,15 @@ export function AnalysisResult({ view, showRiskDisclaimer = true }: Props) {
               {rec.betSummary.plain ? ` — ${rec.betSummary.plain}` : ""}
             </p>
           )}
+          {view.valueNote && (
+            <p
+              data-testid="value-note"
+              className="flex items-start gap-1.5 text-meta leading-snug tracking-tight text-muted-foreground"
+            >
+              <Info aria-hidden="true" className="mt-0.5 size-3 shrink-0" />
+              <span>{view.valueNote}</span>
+            </p>
+          )}
           {view.stakeUnits && (
             <div className="flex items-baseline justify-between gap-2">
               <span className="text-meta uppercase tracking-label text-muted-foreground">
@@ -187,7 +196,7 @@ export function AnalysisResult({ view, showRiskDisclaimer = true }: Props) {
                 <HelpHint
                   anchor="odd-minima"
                   label="odd mínima"
-                  blurb="A menor odd em que a aposta ainda mantém vantagem mínima — definida pela IA. Abaixo dela, a vantagem some."
+                  blurb="A menor odd em que a aposta ainda mantém a vantagem mínima sobre o mercado, com as outras odds paradas. Abaixo dela, a vantagem some."
                 />
               </span>
               <span className="font-mono text-label font-medium tabular-nums tracking-tight">

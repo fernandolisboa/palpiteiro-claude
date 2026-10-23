@@ -1222,6 +1222,89 @@ describe("toAnalysisView (N-vias / dupla chance) — edge da grade == edge persi
     expect(view.recommendation?.marketKey).toBe("double_chance");
     expect(view.recommendation?.selectionLabel).toBe("Casa ou empate");
   });
+
+  // Cruzeiro × Remo (23/10): row code_jev gravada com 100/(34,7 − 5) = 3,367 contra
+  // 1/odd cru. Na implícita de-vigada do gate (Σ=2) a odd mínima é ~3,26, abaixo da
+  // 3,32 da análise: sem o aviso "estava abaixo da mínima sugerida".
+  const cruzeiroRemo = {
+    recommendation: "away_or_draw",
+    confidencePct: "34.70",
+    rationale: "valor no empate ou Remo",
+    keyFactors: ["a"],
+    minimumOdd: "3.367",
+    oddAtRecommendation: "3.320",
+    bookmaker: "x",
+    impliedProbPct: "29.30",
+    edgePct: "5.40",
+    modelVersion: "claude-haiku-5-5;engine=code_jev;lambda=dixon_coles",
+    promptVersion: "narrator_v1.4",
+    createdAt: baseCreatedAt,
+    marketKey: "double_chance",
+    line: null,
+    stakeUnits: "1",
+    selections: [
+      { key: "home_or_draw", modelProbPct: 86.2, odd: 1.06 },
+      { key: "away_or_draw", modelProbPct: 34.7, odd: 3.32 },
+      { key: "home_or_away", modelProbPct: 79.1, odd: 1.23 },
+    ],
+  };
+
+  it("code_jev: odd mínima na implícita de-vigada do gate, sem contradição com a odd da análise", () => {
+    const view = toAnalysisView(cruzeiroRemo, null, threeHoursLater);
+    expect(view.minOdd).toBe("3,26");
+    expect(view.evLegend).not.toContain("abaixo da mínima");
+    expect(view.expectedReturnTone).toBe("positive");
+  });
+
+  it("code_jev: odd mínima nunca passa da odd da análise (arredondamento do edge no gate)", () => {
+    // Edge de exatamente 5 pp na odd da análise: a odd mínima exata é a própria odd.
+    const view = toAnalysisView(
+      {
+        ...cruzeiroRemo,
+        confidencePct: "34.30",
+        edgePct: "5.00",
+        selections: cruzeiroRemo.selections.map((s) =>
+          s.key === "away_or_draw" ? { ...s, modelProbPct: 34.3 } : s
+        ),
+      },
+      null,
+      threeHoursLater
+    );
+    expect(view.evLegend).not.toContain("abaixo da mínima");
+  });
+
+  it("llm: mantém a odd mínima declarada pela IA e o aviso de contradição (ADR 0012)", () => {
+    const view = toAnalysisView(
+      { ...cruzeiroRemo, modelVersion: "claude-opus-4-8" },
+      null,
+      threeHoursLater
+    );
+    expect(view.minOdd).toBe("3,37");
+    expect(view.evLegend).toContain("estava abaixo da mínima sugerida (3,37)");
+  });
+
+  it("prob. do modelo < 50%: avisa que é aposta de valor e pode ir contra o palpite", () => {
+    const view = toAnalysisView(cruzeiroRemo, null, threeHoursLater);
+    expect(view.valueNote).toBe(
+      "Aposta de valor, não o resultado mais provável: o modelo dá 34,7% de chance e o mercado, 29,3%. Perde mais vezes do que ganha, por isso pode ir contra o palpite; compensa no longo prazo se o modelo estiver certo."
+    );
+  });
+
+  it("prob. do modelo ≥ 50%: sem aviso de aposta de valor", () => {
+    const view = toAnalysisView(
+      {
+        ...cruzeiroRemo,
+        recommendation: "home_or_draw",
+        confidencePct: "86.20",
+        impliedProbPct: "80.00",
+        edgePct: "6.20",
+        oddAtRecommendation: "1.060",
+      },
+      null,
+      threeHoursLater
+    );
+    expect(view.valueNote).toBeUndefined();
+  });
 });
 
 describe("toPreviousAnalysisItems", () => {

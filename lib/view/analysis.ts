@@ -1,3 +1,4 @@
+import { engineFromModelVersion } from "@/lib/ai/engine/analysis-engine";
 import type { PredictionJudgments } from "@/lib/ai/engine/types";
 import { computeKellyStakeUnits } from "@/lib/ai/staking";
 import type { PredictionWithAiCall } from "@/lib/db/queries/predictions";
@@ -22,6 +23,7 @@ import { formatLine } from "@/lib/format-number";
 import {
   computeEvPerUnit,
   computeMarketScenarios,
+  computeMinOddForEdgeFloor,
   computeScenarios,
   MIN_EDGE_PP,
   type ScenarioSelection,
@@ -314,7 +316,6 @@ export function toAnalysisView(
   const recommendation = prediction.recommendation;
   const isPass = recommendation === "pass";
   const oddAtRecNum = toFiniteNumber(prediction.oddAtRecommendation);
-  const minOddNum = toFiniteNumber(prediction.minimumOdd);
   const confidenceNum = toFiniteNumber(prediction.confidencePct);
 
   // Apresentação do mercado (labels/frases). Default over_under: o page/action
@@ -356,6 +357,14 @@ export function toAnalysisView(
   // minEdgeLabel + a prop minEdgePp do AnalysisScenarios — a view nunca hardcoda 5
   // pra um mercado de piso 8.
   const minEdgePp = descriptor?.minEdgePp ?? MIN_EDGE_PP;
+  const minOddNum = resolveMinOdd({
+    prediction,
+    recommendation: isPass || liveLabel !== null ? null : recommendation,
+    oddAtRec: oddAtRecNum,
+    minEdgePp,
+    impliedSumTarget,
+    marketKind,
+  });
   const outcomesNway = isNway
     ? toOutcomesView(
         computeMarketScenarios({
@@ -399,7 +408,7 @@ export function toAnalysisView(
   let expectedReturnTone: AnalysisView["expectedReturnTone"] = "neutral";
   let evLegend: string | null = null;
   if (!isPass) {
-    const minOddLabel = formatOdd(prediction.minimumOdd);
+    const minOddLabel = formatOdd(minOddNum);
     // Aviso comparado na precisão de EXIBIÇÃO (formatOdd, 2 casas): o banco
     // guarda 3 casas, e uma diferença que some no arredondamento renderizaria
     // dois números iguais declarados desiguais — a contradição que o aviso
@@ -445,6 +454,8 @@ export function toAnalysisView(
       ? formatStakeUnits(computeKellyStakeUnits(kellyProb, oddAtRecNum))
       : null;
   const kellyInfoUnits = kellyRaw !== stakeUnits ? kellyRaw : null;
+  const valueNote =
+    isPass || liveLabel !== null ? null : valueBetNote(kellyProb, impliedNum);
 
   // Reconferência com a escalação (#619): o "há X" da odd conta da captura usada, não da
   // gravação; com as odds congeladas da análise anterior, sem "há" (o aviso diz de onde).
@@ -488,7 +499,7 @@ export function toAnalysisView(
         ? { kind: prediction.marketKey ?? "over_under", line, score: liveStamp.score }
         : null,
     ),
-    minOdd: prediction.minimumOdd !== null ? formatOdd(prediction.minimumOdd) : null,
+    minOdd: minOddNum !== null ? formatOdd(minOddNum) : null,
     stakeUnits,
     kellyInfoUnits,
     framing: framingNote.framing,
@@ -518,10 +529,66 @@ export function toAnalysisView(
     costUsd: formatCostUsd(aiCall?.costUsd ?? null),
     ...(liveLabel !== null ? { liveLabel } : {}),
     ...(lineupRecheck ? { lineupRecheck } : {}),
+    ...(valueNote !== null ? { valueNote } : {}),
   };
 }
 
 export const LINEUP_RECHECK_MODEL_LABEL = "texto automático";
+
+// Odd mínima ("vale a pena se odd ≥"). No motor em código ela sai das odds congeladas
+// com a mesma implícita de-vigada do gate, inclusive em rows antigas, que gravaram
+// 100/(P − piso) contra 1/odd cru e pediam odd acima da própria análise. O teto na odd
+// da análise segura o arredondamento do edge (2 casas): a recomendação passou no gate
+// com essa odd. No LLM é a odd que o modelo declarou (ADR 0012), e a contradição com a
+// odd da análise, quando aparece, é real.
+function resolveMinOdd(args: {
+  prediction: PredictionInput;
+  recommendation: string | null;
+  oddAtRec: number | null;
+  minEdgePp: number;
+  impliedSumTarget: number;
+  marketKind: string;
+}): number | null {
+  const stored = toFiniteNumber(args.prediction.minimumOdd);
+  const { prediction, recommendation } = args;
+  const selections = prediction.selections;
+  if (
+    recommendation === null ||
+    args.marketKind !== "partition" ||
+    engineFromModelVersion(prediction.modelVersion) !== "code_jev" ||
+    !selections ||
+    selections.length < 2
+  ) {
+    return stored;
+  }
+  const modelProbPct = selections.find(
+    (s) => s.key === recommendation
+  )?.modelProbPct;
+  if (modelProbPct == null) return stored;
+  const derived = computeMinOddForEdgeFloor({
+    oddByKey: Object.fromEntries(selections.map((s) => [s.key, s.odd])),
+    selectionKeys: selections.map((s) => s.key),
+    key: recommendation,
+    modelProbPct,
+    minEdgePp: args.minEdgePp,
+    impliedSumTarget: args.impliedSumTarget,
+  });
+  if (derived === null) return stored;
+  return args.oddAtRec !== null ? Math.min(derived, args.oddAtRec) : derived;
+}
+
+// Recomendação com prob. do modelo abaixo de 50%: é aposta de valor, não o resultado
+// mais provável, e por isso pode ir contra o palpite (dupla chance "Empate ou Remo" com
+// o palpite em 2–0 Cruzeiro). Sem implícita (ao vivo, row antiga) não há o que comparar.
+function valueBetNote(
+  modelProb: number | null,
+  impliedPct: number | null
+): string | null {
+  if (modelProb === null || impliedPct === null) return null;
+  const modelPct = modelProb * 100;
+  if (modelPct >= 50) return null;
+  return `Aposta de valor, não o resultado mais provável: o modelo dá ${formatPct(modelPct)} de chance e o mercado, ${formatPct(impliedPct)}. Perde mais vezes do que ganha, por isso pode ir contra o palpite; compensa no longo prazo se o modelo estiver certo.`;
+}
 
 // "Mais de 2,5" / "Vitória do Flamengo" / "sem aposta": o lado de uma recomendação pro
 // "antes → agora" da reconferência. Mesmo rótulo do resumo da seção.
