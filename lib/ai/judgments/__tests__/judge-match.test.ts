@@ -9,8 +9,8 @@ import type { JudgmentProvider } from "../types";
 const STATE_INPUT: JudgmentStateInput = {
   competition: "Brazilian Serie A",
   kickoffAt: "2026-09-24T22:00:00Z",
-  home: { name: "Home FC", absences: [] },
-  away: { name: "Away FC", absences: [] },
+  home: { name: "Home FC", absences: [], lineup: { status: "not_announced" } },
+  away: { name: "Away FC", absences: [], lineup: { status: "not_announced" } },
 };
 
 function okBody(noul = 0.9) {
@@ -138,7 +138,7 @@ describe("judgeMatch", () => {
     const r = await judgeMatch(provider, STATE_INPUT);
 
     expect(r).not.toBeNull();
-    expect(r?.version).toBe("jev_judgments_v2");
+    expect(r?.version).toBe("jev_judgments_v3");
     expect(Object.keys(r!.answers)).toHaveLength(8);
     expect(r?.answers.high_stakes_away.value).toBe(0.9);
     // Noul não traz confidence na API → null (nada fabricado).

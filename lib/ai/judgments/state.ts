@@ -2,12 +2,26 @@ import type { SupportedLeague } from "@/lib/providers/sports-data/leagues";
 import { normalizeTeamName } from "@/lib/providers/sports-data/team-names";
 import type {
   NormalizedInjury,
+  NormalizedLineupPlayer,
   NormalizedStanding,
   NormalizedStandingTeam,
   NormalizedTeamLineup,
 } from "@/lib/providers/sports-data/types";
 
+import {
+  LINEUP_CHANGES_LABEL,
+  LINEUP_CHANGES_UNKNOWN,
+  LINEUP_NOT_ANNOUNCED,
+  type LineupChangeBucket,
+} from "./lineup-vocabulary";
 import type { JudgmentState, JudgmentTeamState } from "./types";
+
+export {
+  LINEUP_CHANGES_LABEL,
+  LINEUP_CHANGES_UNKNOWN,
+  LINEUP_NOT_ANNOUNCED,
+  type LineupChangeBucket,
+};
 
 // Monta o `state` em inglês do JEV (ADR 0041 §2). Toda aritmética e comparação
 // de datas acontece AQUI; o JEV só vê buckets nomeados e papéis. Nome de
@@ -65,13 +79,21 @@ function positionFromLineupLabel(
 
 // Cruza os desfalques com a última escalação do time (posição + titularidade) e
 // a lista de artilheiros, por nome normalizado. O nome serve só pro match aqui.
+// Com a escalação DESTE jogo confirmada (#619), quem está entre os titulares de hoje
+// sai da lista (vai jogar); em dúvida no banco continua desfalque.
 export function enrichAbsences(
   injuries: readonly NormalizedInjury[],
   context: {
     lastLineup?: NormalizedTeamLineup;
     topScorerNames?: readonly string[];
+    confirmedLineup?: NormalizedTeamLineup;
   } = {}
 ): JudgmentAbsenceInput[] {
+  const startingToday = new Set(
+    (context.confirmedLineup?.starters ?? []).map((p) =>
+      normalizePersonName(p.name)
+    )
+  );
   const lineupIndex = new Map<
     string,
     { position?: AbsencePosition; starter: boolean }
@@ -93,16 +115,20 @@ export function enrichAbsences(
     (context.topScorerNames ?? []).map(normalizePersonName)
   );
 
-  return injuries.map((injury) => {
-    const key = normalizePersonName(injury.player.name);
-    const hit = lineupIndex.get(key);
-    return {
-      injury,
-      position: hit?.position,
-      isRegularStarter: hit ? hit.starter : undefined,
-      isTopScorer: topScorers.has(key) ? true : undefined,
-    };
-  });
+  return injuries
+    .filter(
+      (injury) => !startingToday.has(normalizePersonName(injury.player.name))
+    )
+    .map((injury) => {
+      const key = normalizePersonName(injury.player.name);
+      const hit = lineupIndex.get(key);
+      return {
+        injury,
+        position: hit?.position,
+        isRegularStarter: hit ? hit.starter : undefined,
+        isTopScorer: topScorers.has(key) ? true : undefined,
+      };
+    });
 }
 
 function roleFor(input: JudgmentAbsenceInput): string {
@@ -120,6 +146,176 @@ export function describeAbsence(input: JudgmentAbsenceInput): string {
     ? `${roleFor(input)}, team top scorer`
     : roleFor(input);
   return `${role} (${input.injury.status})`;
+}
+
+// ─── Escalação confirmada → mudanças voluntárias (#619) ─────────────────────
+
+// "Titular habitual" = titular no XI de referência (último jogo da mesma competição,
+// pickLineupBaseline). Conta só mudança VOLUNTÁRIA: titular habitual fora do XI de
+// hoje e fora de `absences` (lesionado/suspenso já pesa em attack/defense_weakened;
+// contar de novo em rotation_risk puniria duas vezes o mesmo λ).
+export type LineupLeftOut = {
+  position?: AbsencePosition;
+  // Ausente = a resposta de hoje não traz o banco (ou o banco sem id do provider).
+  whereabouts?: "bench" | "out_of_squad";
+};
+
+// Sem nomes: é o que sai do módulo (state, jsonb da predição).
+export type LineupSummary =
+  | { status: "not_announced" }
+  | {
+      status: "announced";
+      // null = não deu pra comparar os XIs ("announced, changes unknown").
+      changes: LineupChangeBucket | null;
+      // Vazio quando `changes` é null.
+      leftOut: LineupLeftOut[];
+    };
+
+export const LEFT_OUT_WHEREABOUTS_LABEL: Record<
+  NonNullable<LineupLeftOut["whereabouts"]>,
+  string
+> = {
+  bench: "on the bench",
+  out_of_squad: "not in the squad",
+};
+
+const STARTING_XI_SIZE = 11;
+
+export function lineupChangeBucket(changes: number): LineupChangeBucket {
+  if (changes <= 2) return "0-2";
+  if (changes <= 4) return "3-4";
+  return "5+";
+}
+
+function providerPrefix(id: string): string {
+  const i = id.indexOf(":");
+  return i <= 0 ? "" : id.slice(0, i);
+}
+
+// Ids de uma lista de jogadores quando TODOS têm id do MESMO provider; senão null.
+// O nome nunca entra no diff entre escalações: football-data.org (fallback) grafa
+// diferente da API-Football e daria "5+" falso.
+function providerIds(
+  players: readonly NormalizedLineupPlayer[]
+): { prefix: string; ids: Set<string> } | null {
+  if (players.length === 0) return null;
+  const ids = new Set<string>();
+  let prefix: string | null = null;
+  for (const p of players) {
+    const id = p.providerPlayerId;
+    if (!id) return null;
+    const pre = providerPrefix(id);
+    if (!pre || (prefix !== null && pre !== prefix)) return null;
+    prefix = pre;
+    ids.add(id);
+  }
+  return prefix === null ? null : { prefix, ids };
+}
+
+function startingXiIds(
+  lineup: NormalizedTeamLineup
+): { prefix: string; ids: Set<string> } | null {
+  const r = providerIds(lineup.starters);
+  return r &&
+    lineup.starters.length === STARTING_XI_SIZE &&
+    r.ids.size === STARTING_XI_SIZE
+    ? r
+    : null;
+}
+
+const POSITION_ORDER: readonly (AbsencePosition | undefined)[] = [
+  "goalkeeper",
+  "defender",
+  "midfielder",
+  "forward",
+  undefined,
+];
+const WHEREABOUTS_ORDER: readonly LineupLeftOut["whereabouts"][] = [
+  "bench",
+  "out_of_squad",
+  undefined,
+];
+
+// Ordem estável (GK, DEF, MID, FWD, sem posição) pro stateHash não depender da ordem
+// em que o provider lista o XI.
+function compareLeftOut(a: LineupLeftOut, b: LineupLeftOut): number {
+  return (
+    POSITION_ORDER.indexOf(a.position) - POSITION_ORDER.indexOf(b.position) ||
+    WHEREABOUTS_ORDER.indexOf(a.whereabouts) -
+      WHEREABOUTS_ORDER.indexOf(b.whereabouts)
+  );
+}
+
+// Escalação de hoje × XI de referência de um time. `absences` = a lista final (já sem
+// quem está entre os titulares de hoje).
+export function summarizeLineup(args: {
+  today?: NormalizedTeamLineup;
+  reference?: NormalizedTeamLineup;
+  absences: readonly JudgmentAbsenceInput[];
+}): LineupSummary {
+  const { today, reference } = args;
+  if (!today) return { status: "not_announced" };
+  const unknown: LineupSummary = {
+    status: "announced",
+    changes: null,
+    leftOut: [],
+  };
+  if (!reference) return unknown;
+  const todayXi = startingXiIds(today);
+  const referenceXi = startingXiIds(reference);
+  if (!todayXi || !referenceXi || todayXi.prefix !== referenceXi.prefix) {
+    return unknown;
+  }
+  const bench = providerIds(today.bench ?? []);
+  const benchIds = bench?.prefix === todayXi.prefix ? bench.ids : null;
+  const absent = new Set(
+    args.absences.map((a) => normalizePersonName(a.injury.player.name))
+  );
+  const leftOut: LineupLeftOut[] = [];
+  for (const p of reference.starters) {
+    const id = p.providerPlayerId as string;
+    if (todayXi.ids.has(id) || absent.has(normalizePersonName(p.name))) {
+      continue;
+    }
+    const position = positionFromLineupLabel(p.position);
+    leftOut.push({
+      ...(position ? { position } : {}),
+      ...(benchIds
+        ? { whereabouts: benchIds.has(id) ? "bench" : "out_of_squad" }
+        : {}),
+    });
+  }
+  leftOut.sort(compareLeftOut);
+  return {
+    status: "announced",
+    changes: lineupChangeBucket(leftOut.length),
+    leftOut,
+  };
+}
+
+function describeLeftOut(entry: LineupLeftOut): string {
+  const role =
+    entry.position === "goalkeeper"
+      ? "first-choice goalkeeper"
+      : `starting ${entry.position ?? "player"}`;
+  return entry.whereabouts
+    ? `${role} (${LEFT_OUT_WHEREABOUTS_LABEL[entry.whereabouts]})`
+    : role;
+}
+
+export function lineupStateFields(
+  summary: LineupSummary
+): Pick<JudgmentTeamState, "lineup" | "starters_left_out"> {
+  if (summary.status === "not_announced") {
+    return { lineup: LINEUP_NOT_ANNOUNCED, starters_left_out: [] };
+  }
+  if (summary.changes === null) {
+    return { lineup: LINEUP_CHANGES_UNKNOWN, starters_left_out: [] };
+  }
+  return {
+    lineup: LINEUP_CHANGES_LABEL[summary.changes],
+    starters_left_out: summary.leftOut.map(describeLeftOut),
+  };
 }
 
 // ─── Calendário → buckets ──────────────────────────────────────────────────
@@ -348,6 +544,8 @@ export function seasonStage(
 export type JudgmentTeamInput = {
   name: string;
   absences: readonly JudgmentAbsenceInput[];
+  // Escalação deste jogo × XI de referência (#619), já sem nomes.
+  lineup: LineupSummary;
   previousKickoffAt?: string;
   nextFixture?: { kickoffAt: string; competition?: string; round?: string };
 };
@@ -368,6 +566,7 @@ function teamState(
   return {
     name: team.name,
     absences: team.absences.map(describeAbsence),
+    ...lineupStateFields(team.lineup),
     rest_before_match: restBucket(team.previousKickoffAt, input.kickoffAt),
     next_match: nextMatchBucket(input.kickoffAt, team.nextFixture),
     league_situation: tableSituation(input.table, team.name),

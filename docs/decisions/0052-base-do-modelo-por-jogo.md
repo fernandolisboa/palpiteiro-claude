@@ -31,6 +31,7 @@ UI: a lista `/jogos` ganha uma linha "Modelo · Casa 52% · Under 2.5 55%" (favo
 - **(−)** A tabela cresce ~1 row por jogo por dia (o refit diário mexe no λ); sem retenção nesta fase.
 - **(−)** Qualquer query futura que fizer `innerJoin(users)` em `ai_calls` perde as rows de sistema. O `getCostByUser` usa `leftJoin`.
 - Escalação ou desfalques que mudam entre o cron e a análise mudam o `stateHash`: o predict paga o JEV de novo (custo, não erro).
+- Com a escalação publicada (#619, `jev_judgments_v3`), o cron também busca o XI de referência de cada time (até +4 req por jogo, mesmo caminho do predict, sem prazo), então a paridade do `stateHash` vale depois da escalação; `RUN_DEADLINE_MS` cai pra 150 s.
 - A Copa do Mundo sai no heurístico (o DC exclui a Copa, ADR 0051).
 
 ## Referências

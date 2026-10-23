@@ -468,7 +468,7 @@ describe("JEV da base", () => {
             adjusted: { home: 1, away: 1 },
           },
           versions: {
-            judgments: "jev_judgments_v2",
+            judgments: "jev_judgments_v3",
             weights: "judgment_weights_v1",
             narrator: "narrator_v1",
             jevModel: "jev-1.13.0",
@@ -622,26 +622,25 @@ describe("JEV da base", () => {
 });
 
 describe("paridade cron → predict", () => {
-  it("o predict em code_jev reusa as respostas da base: JEV chamado 1× no total", async () => {
-    process.env.ANTHROPIC_API_KEY = "test-anthropic-key";
-    resetAnalysisEngineMemo();
-    await realDb.update(schema.aiConfig).set({ analysisEngine: "code_jev" });
-    const id = await insertMatch("brasileirao_a", BR[0], BR[1], inHours(24));
-
-    await computeMatchModels({ now: NOW, leagues: ["brasileirao_a"] });
-    expect(judge).toHaveBeenCalledTimes(1);
-    const [snap] = await snapshotsOf(id);
-
+  // Odds frescas, fixture e narrador pro predict do jogo `id` (sem The Odds API).
+  async function preparePredict(id: string) {
     // Odds 1X2 frescas pra o predict (lidas do banco, sem The Odds API).
     const [market] = await realDb
       .select({ id: schema.markets.id })
       .from(schema.markets)
       .where(eq(schema.markets.key, "match_result"));
     const sels = await realDb
-      .select({ id: schema.marketSelections.id, key: schema.marketSelections.key })
+      .select({
+        id: schema.marketSelections.id,
+        key: schema.marketSelections.key,
+      })
       .from(schema.marketSelections)
       .where(and(eq(schema.marketSelections.marketId, market.id)));
-    const odd: Record<string, string> = { home: "2.600", draw: "3.400", away: "2.900" };
+    const odd: Record<string, string> = {
+      home: "2.600",
+      draw: "3.400",
+      away: "2.900",
+    };
     await realDb.insert(schema.selectionOddsSnapshots).values(
       sels.map((s) => ({
         matchId: id,
@@ -650,7 +649,7 @@ describe("paridade cron → predict", () => {
         bookmaker: "Pinnacle",
         odd: odd[s.key],
         overroundPct: "4.00",
-      })),
+      }))
     );
     provider.getFixtureByMatch.mockResolvedValue({
       id: "fx",
@@ -685,17 +684,131 @@ describe("paridade cron → predict", () => {
       ],
       usage: { input_tokens: 900, output_tokens: 200 },
     });
+  }
 
-    const result = await predict({
-      matchId: id,
-      userId,
-      isAdmin: true,
-      marketKey: "match_result",
-    });
+  const runPredict = (id: string) =>
+    predict({ matchId: id, userId, isAdmin: true, marketKey: "match_result" });
+
+  beforeEach(async () => {
+    process.env.ANTHROPIC_API_KEY = "test-anthropic-key";
+    resetAnalysisEngineMemo();
+    await realDb.update(schema.aiConfig).set({ analysisEngine: "code_jev" });
+  });
+
+  it("o predict em code_jev reusa as respostas da base: JEV chamado 1× no total", async () => {
+    const id = await insertMatch("brasileirao_a", BR[0], BR[1], inHours(24));
+
+    await computeMatchModels({ now: NOW, leagues: ["brasileirao_a"] });
+    expect(judge).toHaveBeenCalledTimes(1);
+    const [snap] = await snapshotsOf(id);
+    await preparePredict(id);
+
+    const result = await runPredict(id);
 
     expect(judge).toHaveBeenCalledTimes(1);
-    expect(result.prediction.judgments?.reusedFromModelSnapshotId).toBe(snap.id);
+    expect(result.prediction.judgments?.reusedFromModelSnapshotId).toBe(
+      snap.id
+    );
     expect(result.prediction.judgments?.reusedFromPredictionId).toBeNull();
-    expect(result.prediction.judgments?.stateHash).toBe(snap.judgments?.stateHash);
+    expect(result.prediction.judgments?.stateHash).toBe(
+      snap.judgments?.stateHash
+    );
+  });
+
+  it("com a escalação publicada (#619): mesmo XI de referência nas duas pontas, mesmo stateHash", async () => {
+    const kickoff = inHours(2);
+    const id = await insertMatch("brasileirao_a", BR[0], BR[1], kickoff);
+    // Último jogo de liga de cada time há 6 dias (o XI de referência).
+    const past = (home: string, away: string, days: number) => {
+      const at = new Date(kickoff.getTime() - days * 24 * HOUR);
+      return {
+        id: `past:${home}:${away}`,
+        league: "brasileirao_a" as const,
+        kickoffAt: at.toISOString(),
+        kickoffTimestampMs: at.getTime(),
+        homeTeam: home,
+        awayTeam: away,
+        status: "finished" as const,
+        score: { home: 1, away: 0 },
+        competition: {
+          name: "Serie A",
+          league: "brasileirao_a" as const,
+          friendly: false,
+        },
+      };
+    };
+    const homePast = past(BR[0], BR[2], 6);
+    const awayPast = past(BR[3], BR[1], 7);
+    provider.getTeamForm.mockImplementation((team: string) =>
+      Promise.resolve(team === BR[0] ? [homePast] : [awayPast])
+    );
+    const xi = (team: string, ids: readonly number[]) => ({
+      team,
+      starters: ids.map((n, i) => ({
+        name: `Jogador ${team} ${n}`,
+        position: i === 0 ? "GK" : i < 5 ? "DEF" : i < 8 ? "MID" : "FWD",
+        providerPlayerId: `api-football:${team.length * 1000 + n}`,
+      })),
+      bench: [],
+    });
+    const ELEVEN = [1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11];
+    provider.getLineups.mockImplementation(
+      (ref: { kickoffAt: string; homeTeam: string; awayTeam: string }) => {
+        if (ref.kickoffAt === kickoff.toISOString()) {
+          // Mandante poupa 5 (6..10 → 21..25).
+          return Promise.resolve({
+            fixtureId: "today",
+            home: xi(ref.homeTeam, [1, 2, 3, 4, 5, 21, 22, 23, 24, 25, 11]),
+            away: xi(ref.awayTeam, ELEVEN),
+          });
+        }
+        return Promise.resolve({
+          fixtureId: "past",
+          home: xi(ref.homeTeam, ELEVEN),
+          away: xi(ref.awayTeam, ELEVEN),
+        });
+      }
+    );
+
+    await computeMatchModels({ now: NOW, leagues: ["brasileirao_a"] });
+    expect(judge).toHaveBeenCalledTimes(1);
+    const cronState = judge.mock.calls[0][0] as {
+      home_team: { lineup: string };
+      away_team: { lineup: string };
+    };
+    expect(cronState.home_team.lineup).toBe(
+      "announced, 5 or more voluntary changes from the usual starting lineup"
+    );
+    expect(cronState.away_team.lineup).toBe(
+      "announced, 0 to 2 voluntary changes from the usual starting lineup"
+    );
+    const [snap] = await snapshotsOf(id);
+    await preparePredict(id);
+    provider.getFixtureByMatch.mockResolvedValue({
+      id: "fx",
+      league: "brasileirao_a",
+      kickoffAt: kickoff.toISOString(),
+      kickoffTimestampMs: kickoff.getTime(),
+      homeTeam: BR[0],
+      awayTeam: BR[1],
+      status: "scheduled",
+      score: { home: null, away: null },
+      venue: "Maracanã",
+    });
+
+    const result = await runPredict(id);
+
+    expect(judge).toHaveBeenCalledTimes(1);
+    expect(result.prediction.judgments?.reusedFromModelSnapshotId).toBe(
+      snap.id
+    );
+    expect(result.prediction.judgments?.stateHash).toBe(
+      snap.judgments?.stateHash
+    );
+    expect(result.prediction.judgments?.lineup).toEqual({
+      status: "announced",
+      home: { changes: "5+", leftOut: 5 },
+      away: { changes: "0-2", leftOut: 0 },
+    });
   });
 });

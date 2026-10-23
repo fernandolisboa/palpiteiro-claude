@@ -599,7 +599,7 @@ const ADOPTED_SONNET: AIModel = {
   adopted: { priceEstimated: true, pinnedId: "claude-sonnet-5-5" },
 };
 const CODE_JEV_TAGS =
-  ";engine=code_jev;lambda=heuristic;judg=jev_judgments_v2;w=judgment_weights_v1";
+  ";engine=code_jev;lambda=heuristic;judg=jev_judgments_v3;w=judgment_weights_v1";
 
 function serveAs(model: AIModel) {
   const original = anthropicProvider.runAnalysis;
@@ -656,7 +656,7 @@ describe("flag analysis_engine = 'code_jev'", () => {
     // ai_calls: JEV (typesafe) e narrador.
     const [jevCall] = rowsWhere((r) => r.provider === "typesafe");
     expect(jevCall).toMatchObject({
-      promptVersion: "jev_judgments_v2",
+      promptVersion: "jev_judgments_v3",
       model: "jev-1.13.0",
       inputTokens: 1500,
       outputTokens: 0,
@@ -679,7 +679,7 @@ describe("flag analysis_engine = 'code_jev'", () => {
     expect(prediction.keyFactors).toEqual(NARRATION.key_factors);
     expect(prediction.promptVersion).toBe(NARRATOR_VERSION);
     expect(prediction.modelVersion).toBe(
-      "claude-sonnet-5-5;engine=code_jev;lambda=heuristic;judg=jev_judgments_v2;w=judgment_weights_v1"
+      "claude-sonnet-5-5;engine=code_jev;lambda=heuristic;judg=jev_judgments_v3;w=judgment_weights_v1"
     );
     expect(Number(prediction.minimumOdd)).toBeCloseTo(
       100 / (expected.modelProbByKey.home - 5),
@@ -693,7 +693,7 @@ describe("flag analysis_engine = 'code_jev'", () => {
       judgments.lambda.base.away
     );
     expect(judgments.versions).toEqual({
-      judgments: "jev_judgments_v2",
+      judgments: "jev_judgments_v3",
       weights: "judgment_weights_v1",
       narrator: NARRATOR_VERSION,
       jevModel: "jev-1.13.0",
@@ -1225,7 +1225,7 @@ describe("reuso com origem na base do modelo (#555)", () => {
         reusedFromPredictionId: null,
         reusedFromModelSnapshotId: null,
         versions: {
-          judgments: "jev_judgments_v2",
+          judgments: "jev_judgments_v3",
           weights: "judgment_weights_v1",
           jevModel: "jev-1.13.0",
           jevModelServed: "jev-1.13.0",
@@ -1475,6 +1475,201 @@ describe("calendário e artilheiros no state JEV (#617)", () => {
     await predict({ matchId: "m-1", userId: "u-1", isAdmin: true, marketKey: "match_result" });
     expect(err.mock.calls.map((c) => String(c[0]))).not.toContainEqual(
       expect.stringContaining("fetch_failed"),
+    );
+    err.mockRestore();
+  });
+});
+
+describe("escalação confirmada no state JEV (#619)", () => {
+  const LEAGUE_COMPETITION = {
+    name: "Serie A",
+    league: "brasileirao_a" as const,
+    friendly: false,
+  };
+  // Último jogo de liga de cada time, 7 dias antes (não congestionado).
+  const pastLeague = (home: string, away: string): NormalizedFixture => ({
+    ...FIXTURE,
+    id: `past:${home}:${away}`,
+    kickoffAt: "2026-05-08T19:00:00.000Z",
+    kickoffTimestampMs: Date.parse("2026-05-08T19:00:00.000Z"),
+    homeTeam: home,
+    awayTeam: away,
+    status: "finished",
+    score: { home: 1, away: 1 },
+    competition: LEAGUE_COMPETITION,
+  });
+  const HOME_PAST = pastLeague(matchRow.homeTeam, "SE Palmeiras");
+  // Visitante: jogo de liga de 5 dias antes (o MESMO pro anterior e pra referência).
+  const AWAY_PAST: NormalizedFixture = {
+    ...pastLeague("SC Corinthians", matchRow.awayTeam),
+    kickoffAt: "2026-05-10T19:00:00.000Z",
+    kickoffTimestampMs: Date.parse("2026-05-10T19:00:00.000Z"),
+  };
+
+  // Nomes marcantes (LGPD): nenhum pode sair pro state, pro jsonb ou pro narrador.
+  const NAMES = [
+    "Zebedeu Quintanilha",
+    "Ataulfo Brandimarte",
+    "Clodoveu Pimpão",
+    "Deoclides Furtunato",
+    "Eleutério Bambozzi",
+    "Filisberto Carvoeiro",
+    "Genésio Trombetta",
+    "Hermógenes Barrufi",
+    "Isauro Cotrim",
+    "Jacinto Malaquias",
+    "Leovigildo Sarapião",
+    "Mamede Tobias",
+    "Nicanor Pellegrino",
+    "Olegário Vasconcellos",
+  ];
+  const POS = ["GK", "DEF", "DEF", "DEF", "DEF", "MID", "MID", "MID", "FWD", "FWD", "FWD"];
+  // XI de ids `ids` (nome = NAMES[id - 1] + o lado, pra os dois times terem nomes).
+  const xi = (team: string, ids: readonly number[], side: number) => ({
+    team,
+    starters: ids.map((id, i) => ({
+      name: `${NAMES[id - 1]} ${side}`,
+      position: POS[i],
+      providerPlayerId: `api-football:${side * 100 + id}`,
+    })),
+  });
+  const ELEVEN = [1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11];
+  const lineupOf = (f: NormalizedFixture | FixtureRef, home: number[], away: number[]) => ({
+    fixtureId: "fx",
+    home: xi(f.homeTeam, home, f.homeTeam === matchRow.awayTeam ? 2 : 1),
+    away: xi(f.awayTeam, away, f.awayTeam === matchRow.homeTeam ? 1 : 2),
+  });
+  // Hoje: o mandante poupa 3 titulares (meias 7 e 8, atacante 9); 8 e 9 no banco, 7
+  // fora da lista. O visitante repete o XI.
+  const TODAY = {
+    fixtureId: "today",
+    home: {
+      ...xi(matchRow.homeTeam, [1, 2, 3, 4, 5, 6, 12, 13, 14, 10, 11], 1),
+      bench: xi(matchRow.homeTeam, [8, 9], 1).starters,
+    },
+    away: xi(matchRow.awayTeam, ELEVEN, 2),
+  };
+
+  const isThisMatch = (ref: FixtureRef) => ref.kickoffAt === FIXTURE.kickoffAt;
+  const run = () =>
+    predict({ matchId: "m-1", userId: "u-1", isAdmin: true, marketKey: "match_result" });
+  const lastPrediction = () =>
+    rowsWhere((r) => "recommendation" in r).at(-1)!.judgments as PredictionJudgments;
+  type TeamState = { lineup: string; starters_left_out: string[]; absences: string[] };
+  const stateSent = () =>
+    judge.mock.calls[0][0] as { home_team: TeamState; away_team: TeamState };
+
+  beforeEach(() => {
+    getTeamForm.mockImplementation((team: string) =>
+      Promise.resolve(team === matchRow.homeTeam ? [HOME_PAST] : [AWAY_PAST])
+    );
+  });
+
+  it("antes da escalação: nenhuma busca de referência, state 'not announced' e jsonb gravado", async () => {
+    getLineups.mockResolvedValue(undefined);
+    await run();
+    // Só a escalação deste jogo (ninguém desfalcado → sem escalação anterior).
+    expect(getLineups).toHaveBeenCalledTimes(1);
+    expect(stateSent().home_team).toMatchObject({
+      lineup: "not announced",
+      starters_left_out: [],
+    });
+    expect(lastPrediction().lineup).toEqual({
+      status: "not_announced",
+      home: null,
+      away: null,
+    });
+  });
+
+  it("com a escalação: referência buscada, mudanças voluntárias no state e no jsonb, sem nomes", async () => {
+    getInjuriesByFixture.mockResolvedValue({
+      home: [],
+      // Visitante: desfalcado em dúvida que está no XI de hoje (sai de absences) e um
+      // lesionado de verdade (fora da lista de hoje e do XI de referência).
+      away: [
+        { player: { name: `${NAMES[3]} 2` }, type: "injury", status: "doubtful" },
+        { player: { name: NAMES[12] }, type: "injury", status: "injured" },
+      ],
+    });
+    getLineups.mockImplementation((ref: FixtureRef) => {
+      if (isThisMatch(ref)) return Promise.resolve(TODAY);
+      if (ref.kickoffAt === HOME_PAST.kickoffAt) {
+        return Promise.resolve(lineupOf(HOME_PAST, ELEVEN, ELEVEN));
+      }
+      if (ref.kickoffAt === AWAY_PAST.kickoffAt) {
+        return Promise.resolve(lineupOf(AWAY_PAST, ELEVEN, ELEVEN));
+      }
+      return Promise.resolve(undefined);
+    });
+
+    await run();
+
+    // Este jogo + a referência do mandante + o jogo do visitante (anterior E referência:
+    // o memo da chamada faz UMA busca).
+    expect(getLineups).toHaveBeenCalledTimes(3);
+    expect(
+      getLineups.mock.calls.filter(([ref]) => (ref as FixtureRef).kickoffAt === AWAY_PAST.kickoffAt)
+    ).toHaveLength(1);
+    expect(getLineups).toHaveBeenCalledWith({
+      league: HOME_PAST.league,
+      kickoffAt: HOME_PAST.kickoffAt,
+      homeTeam: HOME_PAST.homeTeam,
+      awayTeam: HOME_PAST.awayTeam,
+    });
+
+    const state = stateSent();
+    expect(state.home_team.lineup).toBe(
+      "announced, 3 to 4 voluntary changes from the usual starting lineup"
+    );
+    expect(state.home_team.starters_left_out).toEqual([
+      "starting midfielder (on the bench)",
+      "starting midfielder (not in the squad)",
+      "starting forward (on the bench)",
+    ]);
+    expect(state.away_team.lineup).toBe(
+      "announced, 0 to 2 voluntary changes from the usual starting lineup"
+    );
+    expect(state.away_team.absences).toEqual(["player (injured)"]);
+
+    const judgments = lastPrediction();
+    expect(judgments.lineup).toEqual({
+      status: "announced",
+      home: { changes: "3-4", leftOut: 3 },
+      away: { changes: "0-2", leftOut: 0 },
+    });
+
+    const outgoing = [
+      JSON.stringify(judge.mock.calls),
+      JSON.stringify(insertValues.mock.calls),
+      JSON.stringify(anthropicCreate.mock.calls),
+    ].join("\n");
+    for (const name of NAMES) {
+      expect(outgoing).not.toContain(name.split(" ")[1]);
+    }
+    expect(outgoing).not.toContain("api-football:");
+  });
+
+  it("referência que falha → 'announced, changes unknown' e a análise segue (fail-open)", async () => {
+    getLineups.mockImplementation((ref: FixtureRef) =>
+      isThisMatch(ref) ? Promise.resolve(TODAY) : Promise.reject(new Error("boom"))
+    );
+    const err = vi.spyOn(console, "error").mockImplementation(() => {});
+
+    const result = await run();
+
+    expect(result.prediction).toBeDefined();
+    expect(judge).toHaveBeenCalledTimes(1);
+    expect(stateSent().home_team).toMatchObject({
+      lineup: "announced, changes unknown",
+      starters_left_out: [],
+    });
+    expect(lastPrediction().lineup).toEqual({
+      status: "announced",
+      home: { changes: null, leftOut: 0 },
+      away: { changes: null, leftOut: 0 },
+    });
+    expect(err.mock.calls.map((c) => String(c[0]))).toContainEqual(
+      expect.stringContaining("lineup_baseline_fetch_failed")
     );
     err.mockRestore();
   });
@@ -2032,7 +2227,7 @@ describe("contexto do usuário (#565)", () => {
     expect(stored).not.toContain("Pedro");
     expect(stored).not.toContain("está sem");
     expect(prediction.modelVersion).toBe(
-      "claude-sonnet-5-5;engine=code_jev;lambda=heuristic;judg=jev_judgments_v2;w=judgment_weights_v1;user=user_evidence_v1"
+      "claude-sonnet-5-5;engine=code_jev;lambda=heuristic;judg=jev_judgments_v3;w=judgment_weights_v1;user=user_evidence_v1"
     );
     expect(prediction.promptVersion).toBe(NARRATOR_VERSION);
 

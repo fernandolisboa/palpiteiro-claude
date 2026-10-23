@@ -30,11 +30,12 @@ export const MODEL_BASE_WINDOW_HOURS = 7 * 24;
 export const JEV_WINDOW_MS = 48 * 60 * 60 * 1000;
 // Base com JEV mais velha que isto volta pro começo da fila JEV.
 export const JEV_STALE_MS = 6 * 60 * 60 * 1000;
-// Prazo pra COMEÇAR um jogo da fila JEV. Pior caso por jogo ≈ 12 req a 8/min na
+// Prazo pra COMEÇAR um jogo da fila JEV. Pior caso por jogo ≈ 16 req a 8/min na
 // API-Football (forma ×2, fixtures do dia, desfalques, escalação, escalações
-// anteriores 2×2, próximos jogos ×2 e artilheiros do #617: ~90 s) + JEV (~15 s)
-// ≈ 105 s ⇒ 180 + 105 = 285 s < maxDuration 300.
-export const RUN_DEADLINE_MS = 180_000;
+// anteriores 2×2, próximos jogos ×2, artilheiros do #617 e, com a escalação
+// publicada, XI de referência 2×2 do #619: ~120 s) + JEV (~15 s) ≈ 135 s ⇒
+// 150 + 135 = 285 s < maxDuration 300.
+export const RUN_DEADLINE_MS = 150_000;
 export const COMPUTE_MATCH_MODELS_LOCK_KEY = "model-base:compute:lock";
 // = maxDuration da rota: um run que morre no meio libera o lock pelo TTL.
 const LOCK_TTL_MS = 300_000;
