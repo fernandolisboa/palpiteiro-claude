@@ -1,6 +1,7 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 
 import { inMemoryCache } from "@/lib/cache/in-memory";
+import { classifyStatusShort } from "@/lib/live/phase";
 import {
   getLastQuota,
   type ObservedQuota,
@@ -31,12 +32,14 @@ import {
 } from "@/lib/providers/sports-data/api-football/schemas";
 import type { FixtureRef } from "@/lib/providers/sports-data/types";
 
+import realLive from "./fixtures/api-football-1640556-2h-red-card.json";
+
 // ─── Payload de /fixtures?id= ────────────────────────────────────────────────
 // INFERIDO DA DOCUMENTAÇÃO da API-Football v3 (exemplo de resposta de `/fixtures` com
 // `id`: `status.extra`, `events`, `lineups`, `statistics`, `players` no mesmo item).
-// NÃO é um payload gravado: não há chave da API-Football neste ambiente. Trocar por um
-// `curl` gravado num jogo ao vivo antes do merge do PR A2 (PLAN-580 §17, pergunta 1),
-// conferindo em especial o texto do `detail` do segundo amarelo.
+// Serve pros casos montados à mão (variações de status/eventos). O formato foi conferido
+// contra o payload REAL em `fixtures/api-football-1640556-2h-red-card.json` (#600),
+// testado em "payload real" no fim deste arquivo.
 function inferredLiveItem(): Record<string, unknown> {
   return {
     fixture: {
@@ -786,5 +789,76 @@ describe("getFixturesRaw", () => {
     );
     await expect(getFixturesRaw(tooMany)).rejects.toThrow();
     expect(fetchSpy).toHaveBeenCalledTimes(1);
+  });
+});
+
+// ─── Payload real gravado num jogo ao vivo (#600) ─────────────────────────────
+
+describe("payload real: Flamengo x Estudiantes, 2H aos 60', expulsão aos 50'", () => {
+  const ORIGINAL_KEY = process.env.API_FOOTBALL_KEY;
+  const ID = realLive.item.fixture.id;
+  const liveKey = `sports-data:api-football-live:fixtures:id:${ID}`;
+
+  beforeEach(async () => {
+    process.env.API_FOOTBALL_KEY = "test-key";
+    vi.useFakeTimers();
+    vi.setSystemTime(new Date(realLive.probedAt));
+    vi.spyOn(console, "log").mockImplementation(() => {});
+    await inMemoryCache.delete(liveKey);
+  });
+
+  afterEach(async () => {
+    vi.useRealTimers();
+    vi.restoreAllMocks();
+    await inMemoryCache.delete(liveKey);
+    if (ORIGINAL_KEY === undefined) delete process.env.API_FOOTBALL_KEY;
+    else process.env.API_FOOTBALL_KEY = ORIGINAL_KEY;
+  });
+
+  it("o schema aceita o item e o estado normalizado bate com o jogo", () => {
+    const env = FixtureEnvelopeSchema.parse(inferredEnvelope([realLive.item]));
+    const f = env.response[0]!;
+    const s = toNormalizedLiveState(f, FETCHED_AT);
+    expect(s).toEqual({
+      providerFixtureId: 1640556,
+      statusShort: "2H",
+      elapsed: 60,
+      extra: null,
+      goals: { home: 0, away: 0 },
+      red: { home: 0, away: 1 },
+      fetchedAt: FETCHED_AT,
+    });
+    expect(classifyStatusShort(s.statusShort)).toBe("in_play");
+  });
+
+  it('segundo amarelo chega como "Red Card" e a contagem bate com statistics', () => {
+    const f = parseItem(realLive.item);
+    const cards = (f.events ?? []).filter((e) => e.type === "Card");
+    expect(cards.map((e) => e.detail)).toEqual([
+      "Yellow Card",
+      "Yellow Card",
+      "Red Card",
+      "Yellow Card",
+    ]);
+    const statRed = (teamId: number) =>
+      realLive.item.statistics
+        .find((t) => t.team.id === teamId)!
+        .statistics.find((x) => x.type === "Red Cards")!.value;
+    expect(countRedCards(f)).toEqual({
+      home: statRed(f.teams.home.id),
+      away: statRed(f.teams.away.id),
+    });
+  });
+
+  it("os headers de cota reais são os que o freio lê", async () => {
+    vi.spyOn(globalThis, "fetch").mockResolvedValue(
+      jsonResponse(inferredEnvelope([realLive.item]), realLive.quotaHeaders)
+    );
+    const out = await getFixtureLive(ID);
+    expect(out.fixture?.fixture.status.short).toBe("2H");
+    expect(getLastQuota("api-football-live")).toMatchObject({
+      dailyRemaining: 7445,
+      dailyLimit: 7500,
+    });
   });
 });

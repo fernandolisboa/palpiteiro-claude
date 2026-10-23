@@ -25,9 +25,10 @@ import type {
 
 // Estado ao vivo pela API-Football (#591, PLAN-580 §5.1): `/fixtures?id=` pelo cliente
 // próprio do ao vivo (adapter.getFixtureLive), normalizado pra NormalizedLiveState.
-// Formato do payload ao vivo (`status.extra`, `events` junto na busca por id, texto do
-// `detail` do segundo amarelo) INFERIDO da documentação: validar com a chave num jogo
-// em andamento (pergunta 1 do PLAN-580 §17).
+// Formato conferido num jogo ao vivo (#600, Flamengo x Estudiantes, 2026-10-23): `events`
+// vem junto na busca por id, `status.extra` null fora de acréscimo, e o segundo amarelo
+// chegou como `detail: "Red Card"` (payload em __tests__/fixtures). Pênaltis (P/PEN) e
+// acréscimo (`extra`) ainda não foram vistos num payload real.
 
 // Nome do cliente compartilhado (adapter.ts). A cota é da CONTA, então a leitura mais
 // recente de qualquer um dos dois clientes vale pro freio.
@@ -42,7 +43,8 @@ export const LIVE_QUOTA_MIN_RATIO = 0.05;
 // busca e nunca recebe um header novo.
 export const LIVE_QUOTA_READING_MAX_AGE_MS = 15 * 60_000;
 
-// "Red Card" e "Second Yellow card" (a caixa exata não é garantida pela documentação).
+// "Red Card" (visto ao vivo, inclusive no segundo amarelo) e "Second Yellow card" (da
+// documentação; mantido porque a caixa e o formato não são garantidos).
 const RED_CARD_DETAIL = /red card|second yellow/i;
 
 type QuotaReader = (provider: string) => ObservedQuota | null;
