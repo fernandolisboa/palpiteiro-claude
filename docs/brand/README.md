@@ -18,4 +18,4 @@ Arquivos pra usar **fora do app**: tela de consentimento do Google, perfil de re
 
 ## Atualizar
 
-Mudou o símbolo em `components/brand/`? Rode `pnpm brand:export` e versione os arquivos. O teste `scripts/__tests__/brand-assets.test.ts` falha enquanto eles estiverem diferentes do código.
+Mudou o símbolo em `components/brand/`? Rode `pnpm brand:export` e versione os arquivos. O teste `scripts/__tests__/brand-assets.test.ts` falha enquanto eles estiverem diferentes do código. Ele compara byte a byte, então um upgrade do `next` que mude o renderizador (satori/resvg) também faz ele falhar com "desatualizado" sem o símbolo ter mudado: a correção é a mesma, rodar `pnpm brand:export`.
