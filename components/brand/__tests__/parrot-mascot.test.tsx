@@ -5,7 +5,9 @@ import { createRoot, type Root } from "react-dom/client";
 import { renderToStaticMarkup } from "react-dom/server";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 
+import { ComoUsarContent } from "@/app/(app)/como-usar/como-usar-content";
 import { MARK_BALL_PATCHES, MARK_FRAME } from "@/components/brand/brand-mark";
+import { EmptyState } from "@/components/empty-state";
 import {
   CLOVER_COLOR,
   PARROT_BEAK,
@@ -105,5 +107,20 @@ describe("pulinho a cada passo", () => {
     act(() => root.render(<ParrotMascot beat={0} />));
     act(() => root.render(<ParrotMascot beat={2} />));
     expect(animate).not.toHaveBeenCalled();
+  });
+});
+
+describe("onde o papagaio aparece sempre (ADR 0068)", () => {
+  it("estado vazio de página com `mascot`: o papagaio no lugar do ícone", () => {
+    const html = renderToStaticMarkup(
+      <EmptyState mascot icon={<span data-testid="icone" />} title="Nada aqui" />,
+    );
+    expect(html).toContain('data-testid="parrot-mascot"');
+    expect(html).not.toContain('data-testid="icone"');
+    expect(renderToStaticMarkup(<EmptyState title="Nada aqui" />)).not.toContain("parrot-mascot");
+  });
+
+  it("chamado do tour no /como-usar", () => {
+    expect(renderToStaticMarkup(<ComoUsarContent />)).toContain('data-testid="parrot-mascot"');
   });
 });

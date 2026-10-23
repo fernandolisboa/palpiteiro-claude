@@ -37,6 +37,7 @@ import {
 } from "@/app/actions/predictions";
 import { unshareSet } from "@/app/actions/share";
 import { PalpiteHero } from "@/components/palpites/palpite-hero";
+import type { ProgressMascot } from "@/lib/brand/progress-mascot";
 import { PALPITE_RUN_ENDPOINT } from "@/components/palpites/use-palpite-run";
 import {
   encodeStreamMessage,
@@ -1005,7 +1006,7 @@ describe("PalpiteHero — Ver raciocínio + robozinho (ADR 0065)", () => {
     },
   ];
 
-  async function mount(heroPalpite: PalpiteHeadlineView | null) {
+  async function mount(heroPalpite: PalpiteHeadlineView | null, mascot?: ProgressMascot) {
     (globalThis as { IS_REACT_ACT_ENVIRONMENT?: boolean }).IS_REACT_ACT_ENVIRONMENT =
       true;
     const container = document.createElement("div");
@@ -1015,6 +1016,7 @@ describe("PalpiteHero — Ver raciocínio + robozinho (ADR 0065)", () => {
       act(async () => {
         root.render(
           <PalpiteHero
+            mascot={mascot}
             contextEnabled={false}
             heroPalpite={view}
             matchId="11111111-1111-1111-1111-111111111111"
@@ -1064,6 +1066,25 @@ describe("PalpiteHero — Ver raciocínio + robozinho (ADR 0065)", () => {
   it("palpite antigo, sem raciocínio: sem botão", async () => {
     const h = await mount(POPULATED);
     expect(h.button()).toBeUndefined();
+    await h.cleanup();
+  });
+
+  it("com a flag em papagaio, o papagaio fica no lugar do robô durante o run (ADR 0068)", async () => {
+    const body = new ReadableStream<Uint8Array>({ start() {} });
+    vi.stubGlobal(
+      "fetch",
+      vi.fn(async () => new Response(body, { status: 200 })),
+    );
+    const h = await mount(null, "papagaio");
+    const analyze = h.container.querySelector<HTMLButtonElement>(
+      'button[name="intent"][value="analysis"]',
+    )!;
+    await act(async () => {
+      h.container.querySelector("form")!.requestSubmit(analyze);
+      await settle();
+    });
+    expect(h.container.querySelector("[data-testid='parrot-mascot']")).not.toBeNull();
+    expect(h.container.querySelector("[data-testid='palpite-bot']")).toBeNull();
     await h.cleanup();
   });
 

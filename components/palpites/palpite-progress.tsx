@@ -3,7 +3,10 @@ import { PalpiteBot } from "@/components/palpites/palpite-bot";
 import { ReasoningButton } from "@/components/palpites/reasoning-dialog";
 import { StepIcon } from "@/components/palpites/step-icon";
 import type { StepStatus } from "@/lib/ai/progress/protocol";
-import type { ProgressMascot } from "@/lib/brand/progress-mascot";
+import {
+  DEFAULT_PROGRESS_MASCOT,
+  type ProgressMascot,
+} from "@/lib/brand/progress-mascot";
 import { cn } from "@/lib/utils";
 
 export type ProgressStepView = {
@@ -33,7 +36,7 @@ export function PalpiteProgress({
   steps,
   waitingLabel,
   onShowReasoning,
-  mascot = "robo",
+  mascot = DEFAULT_PROGRESS_MASCOT,
 }: {
   title: string;
   hint: string;
