@@ -48,6 +48,7 @@ import {
   getEnableBetSlipExplain,
   getEnableLineupRecheck,
   getEnableUserContext,
+  getProgressMascot,
   setAdminFlag,
 } from "@/lib/db/queries/ai-config";
 
@@ -68,6 +69,7 @@ const GETTERS = {
   enableBetSlipExplain: getEnableBetSlipExplain,
   enableLineupRecheck: getEnableLineupRecheck,
   analysisEngine: getAnalysisEngine,
+  progressMascot: getProgressMascot,
 } satisfies Record<AdminFlagKey, () => Promise<unknown>>;
 
 async function readViaGetters(): Promise<Record<string, unknown>> {

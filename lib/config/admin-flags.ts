@@ -5,6 +5,11 @@ import {
   ANALYSIS_ENGINES,
   DEFAULT_ANALYSIS_ENGINE,
 } from "@/lib/ai/engine/analysis-engine";
+import {
+  DEFAULT_PROGRESS_MASCOT,
+  PROGRESS_MASCOT_LABEL,
+  PROGRESS_MASCOTS,
+} from "@/lib/brand/progress-mascot";
 
 // `import type`: o registry é lido também pela UI; nada de drizzle no bundle.
 import type { aiConfig } from "@/db/schema";
@@ -217,6 +222,17 @@ export const ADMIN_FLAGS = [
     default: DEFAULT_ANALYSIS_ENGINE,
     costNote:
       "Código + JEV: ~US$ 0,0001 de JEV por jogo (reusado por 6h) e 1 chamada de LLM só pro racional.",
+  },
+  {
+    key: "progressMascot",
+    kind: "enum",
+    area: "ia",
+    label: "Personagem do progresso",
+    description:
+      "Quem fica ao lado das etapas enquanto o \"Analisar com IA\" e o \"Gerar só o palpite\" rodam: o robozinho ou o papagaio mascote (o olho vira bola e depois trevo). Vale na hora, pra todo mundo; o papagaio continua no tour, no Como usar e nos estados vazios.",
+    values: PROGRESS_MASCOTS,
+    valueLabels: PROGRESS_MASCOT_LABEL,
+    default: DEFAULT_PROGRESS_MASCOT,
   },
 ] as const satisfies readonly AdminFlagDef[];
 

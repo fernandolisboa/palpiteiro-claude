@@ -7,14 +7,16 @@ import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 
 import { MARK_BALL_PATCHES, MARK_FRAME } from "@/components/brand/brand-mark";
 import {
+  CLOVER_COLOR,
   PARROT_BEAK,
   PARROT_BODY,
   ParrotMascot,
 } from "@/components/brand/parrot-mascot";
 
 /**
- * Mascote (ADR 0068, #640). A bola do olho e a trave são as do símbolo da marca, e o
- * estado parado (sem animação) é o papagaio: é o que fica com prefers-reduced-motion.
+ * Mascote (ADR 0068, #640). A bola do olho é a do símbolo da marca, o fim é o trevo (não o
+ * gol), e o estado parado (sem animação) é o papagaio: é o que fica com
+ * prefers-reduced-motion.
  */
 
 describe("desenho", () => {
@@ -29,10 +31,11 @@ describe("desenho", () => {
     expect(html).toContain(`d="${PARROT_BEAK}"`);
   });
 
-  it("a bola e a trave são as mesmas do símbolo da marca", () => {
-    expect(html).toContain(`d="${MARK_FRAME}"`);
+  it("a bola do olho é a mesma do símbolo; o fim é o trevo, sem a trave", () => {
     for (const d of MARK_BALL_PATCHES)
       expect(html).toContain(`d="${d}" fill="currentColor"`);
+    expect(html).not.toContain(`d="${MARK_FRAME}"`);
+    expect(html.match(new RegExp(`fill="${CLOVER_COLOR}"`, "g"))).toHaveLength(4);
   });
 
   it("o olho respira com movimento reduzido", () => {
@@ -51,9 +54,9 @@ describe("estado parado em globals.css", () => {
     return bodies.join("\n");
   };
 
-  it("sem animação, aparece só o papagaio: bola e trave escondidas", () => {
+  it("sem animação, aparece só o papagaio: bola e trevo escondidos", () => {
     expect(rule(".parrot-ball")).toContain("opacity: 0");
-    expect(rule(".parrot-goal")).toContain("opacity: 0");
+    expect(rule(".parrot-clover")).toContain("transform: scale(0)");
     expect(rule(".parrot-body")).not.toContain("opacity");
     expect(rule(".parrot-eye")).not.toContain("opacity");
   });

@@ -79,8 +79,8 @@ export function markGlyph(cut: string) {
   return [...markGoal(), ...markBall(cut)];
 }
 
-/** Só a trave e o rastro (o mascote, parrot-mascot.tsx, anima a trave e a bola em separado). */
-export function markGoal() {
+/** A trave e o rastro do chute. */
+function markGoal() {
   const white = WHITE;
   return [
     ...MARK_TRAILS.map(([x1, y1, x2, y2], i) => (
@@ -114,7 +114,8 @@ export function markGoal() {
   ];
 }
 
-/** Só a bola, no ângulo, com os gomos vazados em `cut`. */
+/** Só a bola, no ângulo, com os gomos vazados em `cut` (o mascote, parrot-mascot.tsx, a
+ * leva até o olho do papagaio). */
 export function markBall(cut: string) {
   return [
     <circle key="ball" cx={cx} cy={cy} r={r} fill={MARK_BALL_COLOR} />,

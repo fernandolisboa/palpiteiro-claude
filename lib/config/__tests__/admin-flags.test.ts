@@ -32,7 +32,7 @@ const FAKE_ENUM = {
 const FAKE_FLAGS = [...ADMIN_FLAGS, FAKE_ENUM] as const satisfies readonly AdminFlagDef[];
 
 describe("ADMIN_FLAGS (registry, #514)", () => {
-  it("tem as 13 flags boolean + o motor de análise (enum), sem key repetida", () => {
+  it("tem as 13 flags boolean + o motor de análise e o personagem do progresso (enums), sem key repetida", () => {
     const keys = ADMIN_FLAGS.map((f) => f.key);
     expect(keys).toEqual([
       "enableOverUnderExtraLines",
@@ -49,6 +49,7 @@ describe("ADMIN_FLAGS (registry, #514)", () => {
       "enableBetSlipExplain",
       "enableLineupRecheck",
       "analysisEngine",
+      "progressMascot",
     ]);
     expect(new Set(keys).size).toBe(keys.length);
   });
@@ -60,7 +61,7 @@ describe("ADMIN_FLAGS (registry, #514)", () => {
     }
   });
 
-  it("defaults: as 3 flags de custo OFF, fidelidade e Kelly ON, motor 'llm' (espelham o schema)", () => {
+  it("defaults: as 3 flags de custo OFF, fidelidade e Kelly ON, motor 'llm', robozinho (espelham o schema)", () => {
     expect(adminFlagDefaults()).toEqual({
       enableOverUnderExtraLines: false,
       enableBestBetFanOut: false,
@@ -76,6 +77,7 @@ describe("ADMIN_FLAGS (registry, #514)", () => {
       enableBetSlipExplain: true,
       enableLineupRecheck: true,
       analysisEngine: "llm",
+      progressMascot: "robo",
     });
   });
 
@@ -152,6 +154,7 @@ describe("ADMIN_FLAGS (registry, #514)", () => {
       enableBetSlipExplain: boolean;
       enableLineupRecheck: boolean;
       analysisEngine: "llm" | "code_jev";
+      progressMascot: "robo" | "papagaio";
     }>();
   });
 

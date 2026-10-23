@@ -1,7 +1,6 @@
 import type { Metadata } from "next";
 import Link from "next/link";
 import { redirect } from "next/navigation";
-import { Users } from "lucide-react";
 
 import { auth } from "@/auth";
 import { EmptyState } from "@/components/empty-state";
@@ -105,7 +104,7 @@ export default async function BolaoPage({ searchParams }: PageProps) {
         <h2 className="pb-3 text-body font-medium tracking-tight">Seus bolões</h2>
         {pools.length === 0 ? (
           <EmptyState
-            icon={<Users className="size-6" aria-hidden />}
+            mascot
             title="Nenhum bolão ainda"
             description={
               options.length > 0

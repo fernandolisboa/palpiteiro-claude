@@ -332,18 +332,94 @@ body:has([data-page-width="form"]) [data-footer-column] {
   }
 }
 
+/* Robozinho do run do HERO (ADR 0065, components/palpites/palpite-bot.tsx). Cada parte
+   gira/move em torno do próprio centro. Curvas suaves, sem bounce; só cores palpite-*. */
+.palpite-bot-part,
+.palpite-bot-bob,
+.palpite-bot-spin,
+.palpite-bot-look,
+.palpite-bot-blink,
+.palpite-bot-shadow {
+  transform-box: fill-box;
+  transform-origin: center;
+}
+.palpite-bot-bob {
+  animation: palpite-bot-bob 2.4s ease-in-out infinite;
+}
+.palpite-bot-shadow {
+  opacity: 0.5;
+  animation: palpite-bot-shadow 2.4s ease-in-out infinite;
+}
+.palpite-bot-spin {
+  animation: palpite-bot-spin 3.2s linear infinite;
+}
+.palpite-bot-look {
+  animation: palpite-bot-look 5s ease-in-out infinite;
+}
+.palpite-bot-blink {
+  animation: palpite-bot-blink 4.2s ease-in-out infinite;
+}
+@keyframes palpite-bot-bob {
+  0%,
+  100% {
+    transform: translateY(0);
+  }
+  50% {
+    transform: translateY(-2px);
+  }
+}
+@keyframes palpite-bot-shadow {
+  0%,
+  100% {
+    transform: scaleX(1);
+    opacity: 0.5;
+  }
+  50% {
+    transform: scaleX(0.8);
+    opacity: 0.3;
+  }
+}
+@keyframes palpite-bot-spin {
+  to {
+    transform: rotate(360deg);
+  }
+}
+@keyframes palpite-bot-look {
+  0%,
+  28%,
+  100% {
+    transform: translateX(0);
+  }
+  36%,
+  58% {
+    transform: translateX(-1.5px);
+  }
+  66%,
+  90% {
+    transform: translateX(1.5px);
+  }
+}
+@keyframes palpite-bot-blink {
+  0%,
+  91%,
+  97%,
+  100% {
+    transform: scaleY(1);
+  }
+  94% {
+    transform: scaleY(0.12);
+  }
+}
 /* Mascote papagaio (ADR 0068, components/brand/parrot-mascot.tsx). Ciclo de 8 s: o olho
-   pisca, vira bola, a bola vai pro ângulo e o papagaio dá lugar à trave (o símbolo da
-   marca); depois volta. Origens em unidades do viewBox 100×100 (olho em 52,40; bola do
-   símbolo em 62.5,41.5). Estado base = papagaio parado, que é o que fica com
-   prefers-reduced-motion (a regra global zera as animações). */
+   pisca, ganha os gomos da bola, vira trevo e o trevo toma o ícone; depois volta.
+   Origens em unidades do viewBox 100×100 (olho em 52,40; bola do símbolo em 62.5,41.5).
+   Estado base = papagaio parado, que é o que fica com prefers-reduced-motion (a regra
+   global zera as animações). */
 .parrot-hop,
 .parrot-eye,
-.parrot-ball {
+.parrot-ball,
+.parrot-clover {
   transform-box: view-box;
-}
-.parrot-hop {
-  transform-origin: 50px 50px;
 }
 .parrot-eye {
   transform-origin: 52px 40px;
@@ -355,12 +431,13 @@ body:has([data-page-width="form"]) [data-footer-column] {
   opacity: 0;
   animation: parrot-ball 8s ease-in-out infinite;
 }
+.parrot-clover {
+  transform-origin: 52px 40px;
+  transform: scale(0);
+  animation: parrot-clover 8s ease-in-out infinite;
+}
 .parrot-body {
   animation: parrot-body 8s ease-in-out infinite;
-}
-.parrot-goal {
-  opacity: 0;
-  animation: parrot-goal 8s ease-in-out infinite;
 }
 @keyframes parrot-eye {
   0%,
@@ -391,46 +468,44 @@ body:has([data-page-width="form"]) [data-footer-column] {
     transform: translate(-10.5px, -1.5px) scale(0.88) rotate(-120deg);
   }
   20%,
-  28% {
+  32% {
     opacity: 1;
     transform: translate(-10.5px, -1.5px) scale(0.88) rotate(0deg);
   }
-  40%,
-  82% {
-    opacity: 1;
-    transform: translate(0, 0) scale(1) rotate(360deg);
-  }
-  92% {
-    opacity: 1;
-    transform: translate(-10.5px, -1.5px) scale(0.88) rotate(720deg);
-  }
+  42%,
   100% {
     opacity: 0;
-    transform: translate(-10.5px, -1.5px) scale(0.88) rotate(720deg);
+    transform: translate(-10.5px, -1.5px) scale(0.26) rotate(120deg);
+  }
+}
+@keyframes parrot-clover {
+  0%,
+  32% {
+    transform: translate(0, 0) scale(0) rotate(-90deg);
+  }
+  44%,
+  54% {
+    transform: translate(0, 0) scale(0.72) rotate(0deg);
+  }
+  66%,
+  84% {
+    transform: translate(-2px, 10px) scale(2.5) rotate(45deg);
+  }
+  94%,
+  100% {
+    transform: translate(0, 0) scale(0) rotate(90deg);
   }
 }
 @keyframes parrot-body {
   0%,
-  30%,
-  92%,
+  56%,
+  94%,
   100% {
     opacity: 1;
   }
-  40%,
-  82% {
+  64%,
+  86% {
     opacity: 0;
-  }
-}
-@keyframes parrot-goal {
-  0%,
-  30%,
-  90%,
-  100% {
-    opacity: 0;
-  }
-  40%,
-  82% {
-    opacity: 1;
   }
 }
 @keyframes palpite-breathe {
@@ -443,14 +518,23 @@ body:has([data-page-width="form"]) [data-footer-column] {
   }
 }
 
-/* Movimento reduzido: nada se desloca (a regra global acima para tudo), mas o que leva
-   `palpite-calm` respira devagar, só na opacidade, pra o run não parecer travado (olho do
-   papagaio mascote, ícone da etapa em andamento). Classe vence o `*` da regra
-   global (especificidade maior, os dois com !important). Lento de propósito: um ciclo a
-   cada 2,4 s, longe de piscar. */
+/* Movimento reduzido: nada se desloca (a regra global acima para tudo), com duas
+   exceções pra o run não parecer travado. O que leva `palpite-calm` respira devagar, só
+   na opacidade (olhos do robô, bola da antena, olho do papagaio). O spinner da etapa em
+   andamento (`palpite-spin`) continua girando, um pouco mais devagar: é o ícone de
+   carregando, e parado ele parece travado (pedido do Fernando). Classe vence o `*` da
+   regra global (especificidade maior, os dois com !important). */
 @media (prefers-reduced-motion: reduce) {
   .palpite-calm {
     animation: palpite-breathe 2.4s ease-in-out infinite !important;
+  }
+  .palpite-spin {
+    animation: palpite-spin 1.4s linear infinite !important;
+  }
+}
+@keyframes palpite-spin {
+  to {
+    transform: rotate(360deg);
   }
 }
 

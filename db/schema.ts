@@ -948,6 +948,9 @@ export const aiConfig = pgTable("ai_config", {
   // análises code_jev feitas antes da escalação sair. SET ... = false → nada é
   // reconferido; o state v3 do JEV (escalação no state) vale sempre.
   enableLineupRecheck: boolean().notNull().default(true),
+  // Personagem ao lado do progresso da análise (ADR 0068): 'robo' (robozinho da ADR
+  // 0065, padrão) ou 'papagaio'. Text validado na app (lib/brand/progress-mascot.ts).
+  progressMascot: text().notNull().default("robo"),
   // Última checagem do cron check-model-versions e o resumo dela (ADR 0062), lidos
   // pelo painel do /admin/ia. O resumo é validado por Zod na leitura
   // (ModelVersionsCheckSummarySchema).

@@ -43,8 +43,10 @@ import {
   getEnableBestBetFanOut,
   getEnableLiveMode,
   getEnableUserContext,
+  getProgressMascot,
 } from "@/lib/db/queries/ai-config";
 import { getInPlayState, type InPlayState } from "@/lib/live/in-play-state";
+import type { ProgressMascot } from "@/lib/brand/progress-mascot";
 import { poolWindowOpen } from "@/lib/pools/pool-state";
 import { latestAnalysisByMarket } from "@/lib/bets/analysis-probs";
 import { resolveInPlaySlipModel, resolveSlipModel } from "@/lib/bets/slip-model";
@@ -237,6 +239,7 @@ export default async function MatchPage({ params, searchParams }: PageProps) {
     userContextEnabled,
     analysisEngine,
     live,
+    progressMascot,
   ] = await Promise.all([
     // Histórico COMPLETO: agrupado por mercado em toMarketAnalysisSections (#243, a
     // última de cada mercado = uma seção) e em toPreviousAnalysisItems (as reanálises
@@ -252,6 +255,8 @@ export default async function MatchPage({ params, searchParams }: PageProps) {
     // Motor (#565): o "Contexto extra" do HERO só vale no code_jev.
     readAnalysisEngine(),
     liveP,
+    // Personagem do progresso do run (ADR 0068).
+    getProgressMascot(),
   ]);
   const { liveMode, state: inPlayState } = live;
   const latestPred = history[0] ?? null;
@@ -584,6 +589,7 @@ export default async function MatchPage({ params, searchParams }: PageProps) {
         hasAnalyses={canRegenerate}
         canOpenAnalysis={canOpenAnalysis}
         liveAnalysis={liveAnalysis}
+        progressMascot={progressMascot}
         noticeDetail={
           liveReadable && inPlayModel === null
             ? "Sem modelo para a leitura ao vivo deste jogo."
@@ -664,6 +670,8 @@ type MatchLayoutProps = {
   canOpenAnalysis: boolean;
   // #594: a página está na leitura ao vivo (o HERO manda pageLive=1 e muda a copy).
   liveAnalysis: boolean;
+  // Personagem do progresso do run do HERO (ADR 0068, flag `progressMascot`).
+  progressMascot: ProgressMascot;
   // #594: o motivo do aviso de não-analisável quando o jogo está ao vivo sem modelo.
   noticeDetail: string | null;
   // #594: a copy da aba "Seu palpite" quando ela não abre (por motivo, ao vivo).
@@ -707,6 +715,7 @@ function MatchLayout({
   hasAnalyses,
   canOpenAnalysis,
   liveAnalysis,
+  progressMascot,
   noticeDetail,
   seuPalpiteClosed,
 }: MatchLayoutProps) {
@@ -765,6 +774,7 @@ function MatchLayout({
               canOpenAnalysis={canOpenAnalysis}
               contextEnabled={contextEnabled}
               live={liveAnalysis}
+              mascot={progressMascot}
               analysis={
                 <FullAnalysis
                   sections={sections}

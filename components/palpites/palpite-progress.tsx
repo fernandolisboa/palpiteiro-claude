@@ -1,7 +1,9 @@
 import { ParrotMascot } from "@/components/brand/parrot-mascot";
+import { PalpiteBot } from "@/components/palpites/palpite-bot";
 import { ReasoningButton } from "@/components/palpites/reasoning-dialog";
 import { StepIcon } from "@/components/palpites/step-icon";
 import type { StepStatus } from "@/lib/ai/progress/protocol";
+import type { ProgressMascot } from "@/lib/brand/progress-mascot";
 import { cn } from "@/lib/utils";
 
 export type ProgressStepView = {
@@ -16,11 +18,11 @@ export type ProgressStepView = {
  * na ordem em que começou, com o estado atual. Etapas em paralelo (mercados do fan-out)
  * giram juntas. Quem chama passa a casca (WarmShell) e o kicker.
  *
- * Motion (DESIGN.md): o papagaio mascote (parrot-mascot.tsx, ADR 0068) ao lado do título,
- * entrada curta de cada linha (fade + 4px), o check entra com um zoom curto, o ícone da
- * etapa em andamento gira. Sem brilho nem gradiente. Com prefers-reduced-motion nada se
- * desloca; o olho do papagaio e o ícone em andamento só respiram devagar (`palpite-calm`,
- * globals.css).
+ * Motion (DESIGN.md): o robozinho (palpite-bot.tsx) ou o papagaio (parrot-mascot.tsx),
+ * conforme a flag `progressMascot` (ADR 0068), ao lado do título; entrada curta de cada
+ * linha (fade + 4px), o check entra com um zoom curto, o ícone da etapa em andamento gira.
+ * Sem brilho nem gradiente. Com prefers-reduced-motion nada se desloca: os olhos do
+ * personagem só respiram (`palpite-calm`) e o spinner segue girando (`palpite-spin`).
  *
  * FIREWALL (ADR 0030 §3): as frases vêm prontas do servidor (lib/ai/progress/steps.ts),
  * sem odd, edge, stake, % ou nome de casa.
@@ -31,6 +33,7 @@ export function PalpiteProgress({
   steps,
   waitingLabel,
   onShowReasoning,
+  mascot = "robo",
 }: {
   title: string;
   hint: string;
@@ -39,6 +42,7 @@ export function PalpiteProgress({
   waitingLabel: string;
   // Abre o "Ver raciocínio" (ADR 0065). Ausente = sem botão.
   onShowReasoning?: () => void;
+  mascot?: ProgressMascot;
 }) {
   const rows: ProgressStepView[] =
     steps.length > 0 ? steps : [{ id: "waiting", status: "active", label: waitingLabel }];
@@ -48,7 +52,11 @@ export function PalpiteProgress({
   return (
     <div className="flex flex-col gap-4">
       <div className="flex items-center gap-3">
-        <ParrotMascot beat={doneCount} />
+        {mascot === "papagaio" ? (
+          <ParrotMascot beat={doneCount} />
+        ) : (
+          <PalpiteBot beat={doneCount} />
+        )}
         <div className="flex flex-col gap-1">
           <p className="text-display-sm font-medium tracking-tight text-foreground">
             {title}

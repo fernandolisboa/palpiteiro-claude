@@ -1,7 +1,7 @@
 import Link from "next/link";
 import type { ReactNode } from "react";
-import { Compass } from "lucide-react";
 
+import { ParrotMascot } from "@/components/brand/parrot-mascot";
 import { PageHeader } from "@/components/page-header";
 import { Button } from "@/components/ui/button";
 import { TOUR_RESTART_HREF } from "@/lib/tour/steps";
@@ -92,12 +92,8 @@ export function ComoUsarContent() {
       />
 
       <div className="border-accent-border bg-accent-soft flex flex-col gap-3 rounded-xl border p-4 sm:flex-row sm:items-center sm:justify-between">
-        <div className="flex items-start gap-3">
-          <Compass
-            aria-hidden="true"
-            className="text-accent-fg mt-0.5 size-5 shrink-0"
-            strokeWidth={1.5}
-          />
+        <div className="flex items-center gap-3">
+          <ParrotMascot className="size-10" />
           <p className="text-body leading-relaxed tracking-tight text-foreground">
             Prefere ver na prática? O tour guiado destaca cada parte da tela e diz
             onde tocar. Leva menos de um minuto.

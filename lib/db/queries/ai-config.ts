@@ -20,6 +20,11 @@ import {
   type GenerationParams,
 } from "@/lib/ai/generation-params";
 import {
+  DEFAULT_PROGRESS_MASCOT,
+  isProgressMascot,
+  type ProgressMascot,
+} from "@/lib/brand/progress-mascot";
+import {
   ADMIN_FLAGS,
   adminFlagDefaults,
   coerceStoredFlagValue,
@@ -348,6 +353,21 @@ export async function getAnalysisEngine(): Promise<AnalysisEngine> {
     .limit(1);
   const stored = rows[0]?.analysisEngine;
   return isAnalysisEngine(stored) ? stored : DEFAULT_ANALYSIS_ENGINE;
+}
+
+/**
+ * Personagem do progresso da análise (ADR 0068): 'robo' ou 'papagaio'. Sem row ou valor
+ * persistido inválido → 'robo'. Editado em /admin/ia via registry (entrada enum
+ * `progressMascot`).
+ */
+export async function getProgressMascot(): Promise<ProgressMascot> {
+  const rows = await db
+    .select({ progressMascot: aiConfig.progressMascot })
+    .from(aiConfig)
+    .where(eq(aiConfig.id, 1))
+    .limit(1);
+  const stored = rows[0]?.progressMascot;
+  return isProgressMascot(stored) ? stored : DEFAULT_PROGRESS_MASCOT;
 }
 
 /**

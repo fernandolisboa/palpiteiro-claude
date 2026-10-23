@@ -15,7 +15,7 @@ function reducedMotionBlocks(): string[] {
   return blocks;
 }
 
-describe("movimento do mascote e do progresso (globals.css)", () => {
+describe("movimento do robozinho e do progresso (globals.css)", () => {
   it("sob movimento reduzido, palpite-calm respira devagar e vence a regra global", () => {
     const calm = reducedMotionBlocks().find((b) => b.includes(".palpite-calm"));
     expect(calm).toBeDefined();
@@ -26,5 +26,12 @@ describe("movimento do mascote e do progresso (globals.css)", () => {
     const kf = /@keyframes palpite-breathe \{([\s\S]*?)\n\}/.exec(css)?.[1] ?? "";
     expect(kf).toContain("opacity");
     expect(kf).not.toMatch(/transform|scale|translate|rotate/);
+  });
+
+  it("o spinner da etapa em andamento continua girando com movimento reduzido", () => {
+    const block = reducedMotionBlocks().find((b) => b.includes(".palpite-spin"));
+    expect(block).toMatch(/\.palpite-spin \{\s*animation:\s*palpite-spin\s+[\d.]+s\s+linear\s+infinite\s*!important/);
+    const kf = /@keyframes palpite-spin \{([\s\S]*?)\n\}/.exec(css)?.[1] ?? "";
+    expect(kf).toContain("rotate(360deg)");
   });
 });

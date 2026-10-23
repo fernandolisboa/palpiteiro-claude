@@ -449,6 +449,13 @@
       "when": 1792723429423,
       "tag": "0063_live_penalties",
       "breakpoints": true
+    },
+    {
+      "idx": 64,
+      "version": "7",
+      "when": 1792778239414,
+      "tag": "0064_progress_mascot",
+      "breakpoints": true
     }
   ]
 }
