@@ -196,6 +196,9 @@ export function TeamFilter({ nav, groups, selected, surface }: Props) {
         <SheetTrigger asChild>{trigger}</SheetTrigger>
         <SheetContent
           side="bottom"
+          // Sem foco automático no "Filtrar times": no celular o teclado subiria por cima
+          // da grade de escudos, que é o que a pessoa veio ver.
+          onOpenAutoFocus={(e) => e.preventDefault()}
           className="max-h-[85dvh] gap-0 rounded-t-xl pb-[max(1rem,env(safe-area-inset-bottom))]"
         >
           <SheetHeader className="pb-2">
