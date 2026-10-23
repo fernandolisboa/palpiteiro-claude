@@ -326,6 +326,24 @@ describe("countRedCards", () => {
     expect(countRedCards(f)).toEqual({ home: 0, away: 1 });
   });
 
+  it("cartão sem player.id de quem está na escalação conta, uma vez por nome", () => {
+    const raw = inferredLiveItem();
+    raw.events = [
+      card(127, "Second Yellow card", { id: null, name: "Fulano" }),
+      card(127, "Red Card", { id: null, name: "Fulano" }),
+      card(127, "Red Card", { id: null, name: "Técnico" }),
+    ];
+    raw.lineups = [
+      {
+        team: { id: 127, name: "Flamengo" },
+        coach: { id: 5, name: "Técnico" },
+        startXI: [{ player: { id: null, name: "Fulano" } }],
+        substitutes: [],
+      },
+    ];
+    expect(countRedCards(parseItem(raw))).toEqual({ home: 1, away: 0 });
+  });
+
   it("dois jogadores do mesmo time expulsos = 2", () => {
     const f = withEvents([
       card(127, "Red Card", { id: 1 }),
@@ -962,6 +980,28 @@ describe("penaltyShootoutScore", () => {
       },
     ];
     expect(penaltyShootoutScore(parseItem(item))).toBeNull();
+  });
+
+  it("em P, score.penalty atrasado (0–0) não esconde as cobranças", () => {
+    const f = parseItem(shootoutItem(6, { home: 0, away: 0 }));
+    expect(penaltyShootoutScore(f)).toEqual({ home: 1, away: 2 });
+  });
+
+  it("em P, vale o maior de cada lado entre score.penalty e as cobranças", () => {
+    // 2 cobranças nos eventos (1–1) e score.penalty já com a terceira (1–2)
+    const f = parseItem(shootoutItem(2, { home: 1, away: 2 }));
+    expect(penaltyShootoutScore(f)).toEqual({ home: 1, away: 2 });
+  });
+
+  it("fora de P/PEN → null, mesmo com score.penalty 0–0", () => {
+    const item = structuredClone(realLive.item) as Record<string, unknown>;
+    item.score = {
+      ...(item.score as Record<string, unknown>),
+      penalty: { home: 0, away: 0 },
+    };
+    const f = parseItem(item);
+    expect(penaltyShootoutScore(f)).toBeNull();
+    expect(toNormalizedLiveState(f, FETCHED_AT).penalties).toBeNull();
   });
 
   it("cobrança sem time atribuível → null", () => {

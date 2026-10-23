@@ -107,6 +107,20 @@ export const FixtureEventItemSchema = z.object({
   comments: z.string().nullable().optional(),
 });
 
+// Escalação como vem na busca por id, só o que o ao vivo usa: os nomes de quem está na
+// súmula, pra separar um cartão de jogador sem `player.id` de um cartão de técnico.
+const FixtureLineupSchema = z.object({
+  team: z.object({ id: z.number().int() }),
+  startXI: z
+    .array(z.object({ player: z.object({ name: z.string().nullable() }) }))
+    .optional()
+    .default([]),
+  substitutes: z
+    .array(z.object({ player: z.object({ name: z.string().nullable() }) }))
+    .optional()
+    .default([]),
+});
+
 export const FixtureItemSchema = z.object({
   fixture: z.object({
     id: z.number().int(),
@@ -140,6 +154,8 @@ export const FixtureItemSchema = z.object({
   // vira undefined (`.catch`) em vez de derrubar o fixture inteiro: quem lê trata
   // undefined como "sem dados de eventos" (expulsões desconhecidas).
   events: z.array(FixtureEventItemSchema).optional().catch(undefined),
+  // Também só na busca por id, e só depois que a escalação sai. Malformada → undefined.
+  lineups: z.array(FixtureLineupSchema).optional().catch(undefined),
 });
 
 export type ApiFootballFixture = z.infer<typeof FixtureItemSchema>;
