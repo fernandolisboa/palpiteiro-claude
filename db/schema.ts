@@ -1262,6 +1262,9 @@ export const matchLiveStates = pgTable("match_live_states", {
   awayGoals: smallint(),
   homeRed: smallint(),
   awayRed: smallint(),
+  // Disputa de pênaltis (convertidos por time); null fora dela (#600).
+  homePens: smallint(),
+  awayPens: smallint(),
   fetchedAt: timestamp({ withTimezone: true }),
   claimedAt: timestamp({ withTimezone: true }),
   updatedAt: timestamp({ withTimezone: true }).notNull().defaultNow(),

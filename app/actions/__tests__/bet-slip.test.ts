@@ -560,6 +560,7 @@ function liveState(over: Partial<InPlayState> = {}): InPlayState {
     minuteLabel: "63'",
     score: { home: 1, away: 0 },
     red: { home: 0, away: 0 },
+    penalties: null,
     ageMs: 30_000,
     ...over,
   };

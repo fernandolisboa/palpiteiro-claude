@@ -24,6 +24,8 @@ export type NormalizedLiveState = {
   // Expulsões por time (vermelho direto + segundo amarelo). null = sem dados de eventos
   // (o modelo em jogo roda sem ajuste e a tela diz "sem dados de expulsão").
   red: { home: number; away: number } | null;
+  // Placar da disputa de pênaltis (convertidos por time). null fora da disputa ou sem dado.
+  penalties: { home: number; away: number } | null;
   // Instante da resposta HTTP (não o do upsert nem o da leitura de cache, R12).
   fetchedAt: Date;
 };

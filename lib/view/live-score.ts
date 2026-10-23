@@ -23,6 +23,8 @@ export type LiveScoreInput = LiveStateInput & {
   minuteLabel: string | null;
   score: { home: number; away: number } | null;
   red: { home: number; away: number } | null;
+  // Placar da disputa de pênaltis; ausente/null fora dela.
+  penalties?: { home: number; away: number } | null;
 };
 
 export type LiveScoreView = {
@@ -49,10 +51,14 @@ export function formatLiveAge(ageMs: number): string {
  * Rótulo do momento do jogo: o minuto ("63'", "45+2'"), "intervalo", "prorrogação",
  * "pênaltis", "jogo interrompido", "fim de jogo". Atraso (NS/TBD depois do horário):
  * "aguardando o apito". Adiado, cancelado ou código desconhecido: null (não mostra).
+ * Com o placar da disputa: "pênaltis 2–3" durante e "fim de jogo · pênaltis 2–3" no fim.
  */
 export function liveMomentLabel(
-  state: Pick<LiveScoreInput, "statusShort" | "minuteLabel">
+  state: Pick<LiveScoreInput, "statusShort" | "minuteLabel" | "penalties">
 ): string | null {
+  const pens = state.penalties
+    ? `pênaltis ${state.penalties.home}–${state.penalties.away}`
+    : null;
   switch (classifyStatusShort(state.statusShort)) {
     case "pre_match":
       return "aguardando o apito";
@@ -61,11 +67,13 @@ export function liveMomentLabel(
     case "half_time":
       return "intervalo";
     case "extra_time":
-      return state.statusShort === "P" ? "pênaltis" : "prorrogação";
+      return state.statusShort === "P" ? (pens ?? "pênaltis") : "prorrogação";
     case "interrupted":
       return "jogo interrompido";
     case "finished":
-      return "fim de jogo";
+      return state.statusShort === "PEN" && pens
+        ? `fim de jogo · ${pens}`
+        : "fim de jogo";
     default:
       return null;
   }

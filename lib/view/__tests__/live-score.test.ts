@@ -55,6 +55,20 @@ describe("liveMomentLabel", () => {
     expect(liveMomentLabel({ statusShort, minuteLabel })).toBe(expected);
   });
 
+  it("com o placar da disputa: 'pênaltis 2–3' durante e no fim (#600)", () => {
+    const penalties = { home: 2, away: 3 };
+    expect(
+      liveMomentLabel({ statusShort: "P", minuteLabel: null, penalties })
+    ).toBe("pênaltis 2–3");
+    expect(
+      liveMomentLabel({ statusShort: "PEN", minuteLabel: null, penalties })
+    ).toBe("fim de jogo · pênaltis 2–3");
+    // Fora da disputa o placar de pênaltis não aparece.
+    expect(
+      liveMomentLabel({ statusShort: "FT", minuteLabel: null, penalties })
+    ).toBe("fim de jogo");
+  });
+
   it("adiado, cancelado e código desconhecido não mostram nada", () => {
     for (const statusShort of ["PST", "CANC", "ABD", "XYZ"]) {
       expect(liveMomentLabel({ statusShort, minuteLabel: null })).toBeNull();
@@ -121,6 +135,28 @@ describe("toLiveScoreView", () => {
     );
     expect(v?.ended).toBe(true);
     expect(v?.caption).toBe("fim de jogo");
+  });
+
+  it("disputa de pênaltis no cabeçalho, ao vivo e no fim", () => {
+    const penalties = { home: 2, away: 3 };
+    const zero = { home: 0, away: 0 };
+    expect(
+      toLiveScoreView(
+        state({ statusShort: "P", minuteLabel: null, score: zero, penalties }),
+        NOW
+      )?.caption
+    ).toBe("pênaltis 2–3 · atualizado há 20 s");
+    expect(
+      toLiveScoreView(
+        state({ statusShort: "PEN", minuteLabel: null, score: zero, penalties }),
+        NOW
+      )
+    ).toMatchObject({
+      home: 0,
+      away: 0,
+      caption: "fim de jogo · pênaltis 2–3",
+      ended: true,
+    });
   });
 
   it("fim do provider não envelhece: aparece depois dos 10 min (row nunca rebuscada)", () => {

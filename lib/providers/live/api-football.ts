@@ -76,12 +76,23 @@ export function isApiFootballQuotaLow(
   return latest.dailyRemaining / latest.dailyLimit < LIVE_QUOTA_MIN_RATIO;
 }
 
+function lineupNames(f: ApiFootballFixture, teamId: number): Set<string> {
+  const lineup = f.lineups?.find((l) => l.team.id === teamId);
+  if (!lineup) return new Set();
+  return new Set(
+    [...lineup.startXI, ...lineup.substitutes]
+      .map((p) => p.player.name)
+      .filter((n): n is string => n !== null)
+  );
+}
+
 /**
  * Expulsões por time a partir dos eventos `Card` do fixture: `detail` com "red card" ou
  * "second yellow" (sem diferenciar maiúsculas), atribuídas por `team.id` contra
- * `teams.home.id`/`teams.away.id`. Um jogador só é expulso uma vez: o mesmo jogador
- * (id, ou nome sem id) do mesmo time conta uma vez, caso o provider mande o segundo
- * amarelo e o vermelho como dois eventos.
+ * `teams.home.id`/`teams.away.id`. Um jogador só é expulso uma vez: o mesmo
+ * `player.id` do mesmo time conta uma vez, caso o provider mande o segundo amarelo e o
+ * vermelho como dois eventos. Cartão sem `player.id` só conta se o nome está na
+ * escalação daquele time (`lineups`); fora dela é de técnico e não conta.
  *
  * null = sem dados: `events` ausente (ou descartado pelo schema), ou um cartão vermelho
  * que não dá pra atribuir a nenhum dos dois times (contar errado é pior que não saber).
@@ -106,16 +117,80 @@ export function countRedCards(
           ? "away"
           : null;
     if (side === null) return null;
-    const player = ev.player?.id ?? ev.player?.name ?? null;
-    if (player !== null) {
-      const key = `${side}:${player}`;
-      if (seen.has(key)) continue;
-      seen.add(key);
+    // Cartão de técnico vem em `events` como um cartão comum, sem `player.id` (visto ao
+    // vivo, #600, vermelho do técnico do Estudiantes): não tira jogador de campo. Sem id,
+    // só conta se o nome está na súmula daquele time; sem escalação no payload, fica de
+    // fora (jogador sem id não apareceu; técnico expulso é comum).
+    const playerId = ev.player?.id ?? null;
+    let key: string;
+    if (playerId !== null) key = `${side}:id:${playerId}`;
+    else {
+      const name = ev.player?.name ?? null;
+      if (
+        name === null ||
+        !lineupNames(f, side === "home" ? homeId : awayId).has(name)
+      )
+        continue;
+      key = `${side}:name:${name}`;
     }
+    if (seen.has(key)) continue;
+    seen.add(key);
     if (side === "home") home += 1;
     else away += 1;
   }
   return { home, away };
+}
+
+/**
+ * Placar da disputa de pênaltis, só com status P (em andamento) ou PEN (terminou nos
+ * pênaltis); fora disso null, mesmo que `score.penalty` venha {0,0}. Duas fontes:
+ * `score.penalty` e as cobranças em `events` (`type: "Goal"`, `comments: "Penalty
+ * Shootout"`, convertida = `detail: "Penalty"`, perdida = `"Missed Penalty"`). Em PEN,
+ * `score.penalty` é o oficial (visto preenchido no fim, #600). Em P, o maior de cada
+ * lado entre as duas fontes: se `score.penalty` vem ao vivo ainda não foi visto, e uma
+ * fonte atrasada não pode puxar o placar pra trás.
+ *
+ * null = sem placar: nenhuma fonte, ou só cobranças e uma delas sem time atribuível.
+ */
+export function penaltyShootoutScore(
+  f: ApiFootballFixture
+): { home: number; away: number } | null {
+  const status = f.fixture.status.short;
+  if (status !== "P" && status !== "PEN") return null;
+  const { home, away } = f.score.penalty ?? { home: null, away: null };
+  const official = home !== null && away !== null ? { home, away } : null;
+  if (status === "PEN" && official) return official;
+  const kicks = countShootoutKicks(f);
+  if (!kicks) return official;
+  if (!official) return kicks;
+  return {
+    home: Math.max(kicks.home, official.home),
+    away: Math.max(kicks.away, official.away),
+  };
+}
+
+function countShootoutKicks(
+  f: ApiFootballFixture
+): { home: number; away: number } | null {
+  const kicks = (f.events ?? []).filter(
+    (ev) =>
+      ev.type.toLowerCase() === "goal" &&
+      /penalty shootout/i.test(ev.comments ?? "")
+  );
+  if (kicks.length === 0) return null;
+  const out = { home: 0, away: 0 };
+  for (const ev of kicks) {
+    const teamId = ev.team?.id ?? null;
+    const side =
+      teamId !== null && teamId === f.teams.home.id
+        ? "home"
+        : teamId !== null && teamId === f.teams.away.id
+          ? "away"
+          : null;
+    if (side === null) return null;
+    if (/^penalty$/i.test((ev.detail ?? "").trim())) out[side] += 1;
+  }
+  return out;
 }
 
 export function toNormalizedLiveState(
@@ -130,6 +205,7 @@ export function toNormalizedLiveState(
     extra: f.fixture.status.extra ?? null,
     goals: home !== null && away !== null ? { home, away } : null,
     red: countRedCards(f),
+    penalties: penaltyShootoutScore(f),
     fetchedAt,
   };
 }

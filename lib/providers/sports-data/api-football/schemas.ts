@@ -103,6 +103,22 @@ export const FixtureEventItemSchema = z.object({
     .optional(),
   type: z.string(),
   detail: z.string().nullable().optional(),
+  // "Penalty Shootout" marca as cobranças da disputa de pênaltis (visto ao vivo, #600).
+  comments: z.string().nullable().optional(),
+});
+
+// Escalação como vem na busca por id, só o que o ao vivo usa: os nomes de quem está na
+// súmula, pra separar um cartão de jogador sem `player.id` de um cartão de técnico.
+const FixtureLineupSchema = z.object({
+  team: z.object({ id: z.number().int() }),
+  startXI: z
+    .array(z.object({ player: z.object({ name: z.string().nullable() }) }))
+    .optional()
+    .default([]),
+  substitutes: z
+    .array(z.object({ player: z.object({ name: z.string().nullable() }) }))
+    .optional()
+    .default([]),
 });
 
 export const FixtureItemSchema = z.object({
@@ -133,12 +149,13 @@ export const FixtureItemSchema = z.object({
     extratime: ScoreLineSchema.nullable(),
     penalty: ScoreLineSchema.nullable(),
   }),
-  // Eventos do jogo. Só a busca por id (`/fixtures?id=`) os traz junto, segundo a
-  // documentação (INFERIDO, #591: validar com payload real); a busca por data/liga
-  // não. Tolerante em dobro: chave ausente → undefined, e um evento malformado também
+  // Eventos do jogo. Só a busca por id (`/fixtures?id=`) os traz junto (confirmado em
+  // payload real, #600); a busca por data/liga não. Tolerante em dobro: chave ausente → undefined, e um evento malformado também
   // vira undefined (`.catch`) em vez de derrubar o fixture inteiro: quem lê trata
   // undefined como "sem dados de eventos" (expulsões desconhecidas).
   events: z.array(FixtureEventItemSchema).optional().catch(undefined),
+  // Também só na busca por id, e só depois que a escalação sai. Malformada → undefined.
+  lineups: z.array(FixtureLineupSchema).optional().catch(undefined),
 });
 
 export type ApiFootballFixture = z.infer<typeof FixtureItemSchema>;

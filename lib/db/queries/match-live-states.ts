@@ -87,6 +87,9 @@ export type SaveMatchLiveStateInput = {
   // null = sem dado de expulsão (payload sem `events`).
   homeRed: number | null;
   awayRed: number | null;
+  // null = fora da disputa de pênaltis.
+  homePens: number | null;
+  awayPens: number | null;
   /** Instante da RESPOSTA do provider, não do upsert (§5.1). */
   fetchedAt: Date;
 };
@@ -107,6 +110,8 @@ export async function saveMatchLiveState(
     awayGoals: input.awayGoals,
     homeRed: input.homeRed,
     awayRed: input.awayRed,
+    homePens: input.homePens,
+    awayPens: input.awayPens,
     fetchedAt: input.fetchedAt,
     claimedAt: null,
     updatedAt: new Date(),

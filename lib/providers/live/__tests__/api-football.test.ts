@@ -10,6 +10,7 @@ import {
   ApiFootballLiveStateProvider,
   countRedCards,
   findFixtureForRef,
+  penaltyShootoutScore,
   isApiFootballQuotaLow,
   toNormalizedLiveState,
 } from "@/lib/providers/live/api-football";
@@ -268,6 +269,7 @@ describe("toNormalizedLiveState", () => {
       extra: null,
       goals: { home: 1, away: 0 },
       red: { home: 0, away: 1 },
+      penalties: null,
       fetchedAt: FETCHED_AT,
     });
   });
@@ -315,18 +317,31 @@ describe("countRedCards", () => {
     expect(countRedCards(f)).toEqual({ home: 0, away: 1 });
   });
 
-  it("mesmo jogador sem id dedupa pelo nome; sem identidade conta cada evento", () => {
-    const byName = withEvents([
-      card(127, "Second Yellow card", { id: null, name: "Pedro" }),
-      card(127, "Red Card", { id: null, name: "Pedro" }),
+  it("cartão sem player.id (técnico, como veio ao vivo no #600) não conta", () => {
+    const f = withEvents([
+      card(127, "Red Card", { id: null, name: "Alexander Medina" }),
+      card(127, "Red Card", { id: null, name: null }),
+      card(121, "Red Card", { id: 7, name: "Gómez" }),
     ]);
-    expect(countRedCards(byName)).toEqual({ home: 1, away: 0 });
+    expect(countRedCards(f)).toEqual({ home: 0, away: 1 });
+  });
 
-    const anonymous = withEvents([
-      card(127, "Red Card", { id: null, name: null }),
-      card(127, "Red Card", { id: null, name: null }),
-    ]);
-    expect(countRedCards(anonymous)).toEqual({ home: 2, away: 0 });
+  it("cartão sem player.id de quem está na escalação conta, uma vez por nome", () => {
+    const raw = inferredLiveItem();
+    raw.events = [
+      card(127, "Second Yellow card", { id: null, name: "Fulano" }),
+      card(127, "Red Card", { id: null, name: "Fulano" }),
+      card(127, "Red Card", { id: null, name: "Técnico" }),
+    ];
+    raw.lineups = [
+      {
+        team: { id: 127, name: "Flamengo" },
+        coach: { id: 5, name: "Técnico" },
+        startXI: [{ player: { id: null, name: "Fulano" } }],
+        substitutes: [],
+      },
+    ];
+    expect(countRedCards(parseItem(raw))).toEqual({ home: 1, away: 0 });
   });
 
   it("dois jogadores do mesmo time expulsos = 2", () => {
@@ -510,6 +525,7 @@ describe("ApiFootballLiveStateProvider.getLiveState", () => {
       statusShort: "2H",
       goals: { home: 1, away: 0 },
       red: { home: 0, away: 1 },
+      penalties: null,
       fetchedAt: FETCHED_AT,
     });
   });
@@ -826,6 +842,7 @@ describe("payload real: Flamengo x Estudiantes, 2H aos 60', expulsão aos 50'", 
       extra: null,
       goals: { home: 0, away: 0 },
       red: { home: 0, away: 1 },
+      penalties: null,
       fetchedAt: FETCHED_AT,
     });
     expect(classifyStatusShort(s.statusShort)).toBe("in_play");
@@ -870,5 +887,144 @@ describe("payload real: Flamengo x Estudiantes, 2H aos 60', expulsão aos 50'", 
       dailyRemaining: 7445,
       dailyLimit: 7500,
     });
+  });
+});
+
+// ─── Disputa de pênaltis (trechos do payload real do mesmo jogo, PEN, #600) ───
+
+// As 9 cobranças como vieram no payload final (status PEN, `score.penalty` 2–3):
+// type "Goal", comments "Penalty Shootout", elapsed 91–99 apesar dos 120' jogados.
+const SHOOTOUT: Array<
+  [teamId: number, playerId: number, detail: string, minute: number]
+> = [
+  [127, 2612, "Penalty", 91],
+  [450, 49887, "Penalty", 92],
+  [127, 2289, "Missed Penalty", 93],
+  [450, 94599, "Missed Penalty", 95],
+  [127, 1646, "Missed Penalty", 95],
+  [450, 311070, "Penalty", 97],
+  [127, 10124, "Penalty", 97],
+  [450, 206984, "Penalty", 98],
+  [127, 10180, "Missed Penalty", 99],
+];
+
+function shootoutItem(
+  kicks: number,
+  penalty: { home: number | null; away: number | null }
+): Record<string, unknown> {
+  const item = structuredClone(realLive.item) as Record<string, unknown>;
+  item.fixture = {
+    ...(item.fixture as Record<string, unknown>),
+    status: {
+      long: kicks < SHOOTOUT.length ? "Penalty In Progress" : "Match Finished",
+      short: kicks < SHOOTOUT.length ? "P" : "PEN",
+      elapsed: 120,
+      extra: null,
+    },
+  };
+  item.score = {
+    ...(item.score as Record<string, unknown>),
+    fulltime: { home: 0, away: 0 },
+    extratime: { home: 0, away: 0 },
+    penalty,
+  };
+  item.events = [
+    ...(item.events as unknown[]),
+    ...SHOOTOUT.slice(0, kicks).map(([teamId, playerId, detail, minute]) => ({
+      time: { elapsed: minute, extra: null },
+      team: { id: teamId, name: "T" },
+      player: { id: playerId, name: "P" },
+      assist: { id: null, name: null },
+      type: "Goal",
+      detail,
+      comments: "Penalty Shootout",
+    })),
+  ];
+  return item;
+}
+
+describe("penaltyShootoutScore", () => {
+  it("no fim usa score.penalty (2–3)", () => {
+    const f = parseItem(shootoutItem(SHOOTOUT.length, { home: 2, away: 3 }));
+    expect(penaltyShootoutScore(f)).toEqual({ home: 2, away: 3 });
+    const s = toNormalizedLiveState(f, FETCHED_AT);
+    expect(s.statusShort).toBe("PEN");
+    expect(s.goals).toEqual({ home: 0, away: 0 });
+    expect(s.penalties).toEqual({ home: 2, away: 3 });
+  });
+
+  it("durante a disputa, sem score.penalty, conta as cobranças convertidas", () => {
+    const f = parseItem(shootoutItem(6, { home: null, away: null }));
+    expect(penaltyShootoutScore(f)).toEqual({ home: 1, away: 2 });
+  });
+
+  it("as cobranças contadas batem com o score.penalty real", () => {
+    const f = parseItem(
+      shootoutItem(SHOOTOUT.length, { home: null, away: null })
+    );
+    expect(penaltyShootoutScore(f)).toEqual({ home: 2, away: 3 });
+  });
+
+  it("sem disputa → null (inclusive pênalti no tempo normal)", () => {
+    expect(penaltyShootoutScore(parseItem(realLive.item))).toBeNull();
+    const item = structuredClone(realLive.item) as Record<string, unknown>;
+    item.events = [
+      {
+        time: { elapsed: 30, extra: null },
+        team: { id: 127, name: "Flamengo" },
+        player: { id: 10321, name: "Pedro" },
+        assist: { id: null, name: null },
+        type: "Goal",
+        detail: "Penalty",
+        comments: null,
+      },
+    ];
+    expect(penaltyShootoutScore(parseItem(item))).toBeNull();
+  });
+
+  it("em P, score.penalty atrasado (0–0) não esconde as cobranças", () => {
+    const f = parseItem(shootoutItem(6, { home: 0, away: 0 }));
+    expect(penaltyShootoutScore(f)).toEqual({ home: 1, away: 2 });
+  });
+
+  it("em P, vale o maior de cada lado entre score.penalty e as cobranças", () => {
+    // 2 cobranças nos eventos (1–1) e score.penalty já com a terceira (1–2)
+    const f = parseItem(shootoutItem(2, { home: 1, away: 2 }));
+    expect(penaltyShootoutScore(f)).toEqual({ home: 1, away: 2 });
+  });
+
+  it("fora de P/PEN → null, mesmo com score.penalty 0–0", () => {
+    const item = structuredClone(realLive.item) as Record<string, unknown>;
+    item.score = {
+      ...(item.score as Record<string, unknown>),
+      penalty: { home: 0, away: 0 },
+    };
+    const f = parseItem(item);
+    expect(penaltyShootoutScore(f)).toBeNull();
+    expect(toNormalizedLiveState(f, FETCHED_AT).penalties).toBeNull();
+  });
+
+  it("cobrança sem time atribuível → null", () => {
+    const item = shootoutItem(2, { home: null, away: null });
+    (item.events as Array<Record<string, unknown>>).at(-1)!.team = { id: 999 };
+    expect(penaltyShootoutScore(parseItem(item))).toBeNull();
+  });
+
+  it("cartão do técnico, como veio no payload (sem player.id), não vira expulsão", () => {
+    const item = shootoutItem(SHOOTOUT.length, { home: 2, away: 3 });
+    const coach = {
+      time: { elapsed: 65, extra: null },
+      team: { id: 450, name: "Estudiantes L.P." },
+      player: { id: null, name: "Alexander Jesús Medina Reobasco" },
+      assist: { id: null, name: null },
+      type: "Card",
+      comments: "Dissent",
+    };
+    item.events = [
+      ...(item.events as unknown[]),
+      { ...coach, detail: "Yellow Card" },
+      { ...coach, detail: "Red Card" },
+    ];
+    expect(countRedCards(parseItem(item))).toEqual({ home: 0, away: 1 });
   });
 });

@@ -802,7 +802,11 @@ function toNormalizedFixtureEvents(
     if (!playerName) continue; // sem identidade → não settla
     const isOwnGoal = detail === "Own Goal";
     const isPenalty = detail === "Penalty";
-    const isRegulation = isRegulationMinute(ev.time.elapsed);
+    // Cobrança de disputa vem com elapsed 91+ (visto ao vivo, #600), mas a marca
+    // explícita não depende disso (jogo sem prorrogação vai direto aos pênaltis).
+    const isRegulation =
+      isRegulationMinute(ev.time.elapsed) &&
+      !/penalty shootout/i.test(ev.comments ?? "");
     const teamSide: "home" | "away" =
       ev.team?.id != null && homeTeamId != null && ev.team.id === homeTeamId
         ? "home"

@@ -51,6 +51,8 @@ export type InPlayState = LiveStateInput & {
   score: { home: number; away: number } | null;
   /** null = sem dado de expulsão. */
   red: { home: number; away: number } | null;
+  /** Placar da disputa de pênaltis; null fora dela. */
+  penalties: { home: number; away: number } | null;
   /** Idade a partir da resposta do provider, no `now` da leitura. */
   ageMs: number;
 };
@@ -94,6 +96,7 @@ function toInPlayState(
     minuteLabel: liveMinuteLabel(row),
     score: inPlayScore(row.statusShort, pair(row.homeGoals, row.awayGoals)),
     red: pair(row.homeRed, row.awayRed),
+    penalties: pair(row.homePens, row.awayPens),
     ageMs: liveStateAgeMs(row.fetchedAt, now) ?? 0,
   };
 }
@@ -115,6 +118,7 @@ function fromProvider(
     minuteLabel: liveMinuteLabel(fetched),
     score: inPlayScore(s.statusShort, s.goals),
     red: s.red,
+    penalties: s.penalties,
     ageMs: liveStateAgeMs(s.fetchedAt, now) ?? 0,
   };
 }
@@ -203,6 +207,8 @@ async function readOrFetch(
       awayGoals: fetched.goals?.away ?? null,
       homeRed: fetched.red?.home ?? null,
       awayRed: fetched.red?.away ?? null,
+      homePens: fetched.penalties?.home ?? null,
+      awayPens: fetched.penalties?.away ?? null,
       fetchedAt: fetched.fetchedAt,
     });
   } catch (err) {

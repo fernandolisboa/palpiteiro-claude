@@ -293,6 +293,19 @@ describe("toNormalizedFixtureEvents", () => {
     expect(r.goals).toHaveLength(0);
   });
 
+  it("flags shootout kicks (comments 'Penalty Shootout') as non-regulation, even at elapsed <= 90", () => {
+    const r = toNormalizedFixtureEvents(finished, [
+      ev({
+        player: { id: 11, name: "Striker" },
+        detail: "Penalty",
+        comments: "Penalty Shootout",
+        time: { elapsed: 90, extra: null },
+      }),
+    ]);
+    expect(r.goals).toHaveLength(1);
+    expect(r.goals[0]?.isRegulation).toBe(false);
+  });
+
   it("flags extra-time goals (elapsed > 90) as non-regulation", () => {
     const r = toNormalizedFixtureEvents(finished, [
       ev({ time: { elapsed: 105, extra: null } }),

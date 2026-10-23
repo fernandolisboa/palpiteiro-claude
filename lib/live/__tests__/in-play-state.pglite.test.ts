@@ -119,6 +119,8 @@ async function seed(
     awayGoals: 0,
     homeRed: 0,
     awayRed: 0,
+    homePens: null,
+    awayPens: null,
     fetchedAt: at(20 * MIN),
     ...over,
   });
@@ -134,6 +136,7 @@ function providerState(
     extra: null,
     goals: { home: 1, away: 0 },
     red: { home: 0, away: 1 },
+    penalties: null,
     fetchedAt: at(30 * MIN),
     ...over,
   };
@@ -265,6 +268,8 @@ describe("getInPlayState: cache na row", () => {
       awayGoals: 1,
       homeRed: 1,
       awayRed: 0,
+      homePens: null,
+      awayPens: null,
     });
     const s = await getInPlayState(m, { now: at(20 * MIN + 60_000) });
     expect(fake.getLiveState).not.toHaveBeenCalled();
@@ -277,6 +282,7 @@ describe("getInPlayState: cache na row", () => {
       minuteLabel: "45+2'",
       score: { home: 2, away: 1 },
       red: { home: 1, away: 0 },
+      penalties: null,
       ageMs: 60_000,
     });
   });
@@ -379,6 +385,7 @@ describe("getInPlayState: busca", () => {
       minuteLabel: "30'",
       score: { home: 1, away: 0 },
       red: { home: 0, away: 1 },
+      penalties: null,
       ageMs: 0,
     });
     const row = await getMatchLiveState(m.id);
@@ -390,9 +397,37 @@ describe("getInPlayState: busca", () => {
       awayGoals: 0,
       homeRed: 0,
       awayRed: 1,
+      homePens: null,
+      awayPens: null,
       fetchedAt: now,
       claimedAt: null,
     });
+  });
+
+  it("disputa de pênaltis: grava o placar na row e devolve no estado (#600)", async () => {
+    const m = await newMatch();
+    const now = at(150 * MIN);
+    fake.getLiveState.mockResolvedValueOnce(
+      providerState({
+        statusShort: "P",
+        elapsed: 120,
+        goals: { home: 0, away: 0 },
+        penalties: { home: 1, away: 2 },
+        fetchedAt: now,
+      })
+    );
+    const s = await getInPlayState(m, { now });
+    expect(s?.penalties).toEqual({ home: 1, away: 2 });
+    expect(await getMatchLiveState(m.id)).toMatchObject({
+      statusShort: "P",
+      homePens: 1,
+      awayPens: 2,
+    });
+    // Leitura seguinte sai da row.
+    const again = await getInPlayState(m, {
+      now: new Date(now.getTime() + 1_000),
+    });
+    expect(again?.penalties).toEqual({ home: 1, away: 2 });
   });
 
   it("atraso no apito (NS sem gols): placar 0–0 no minuto 0, a row guarda o null cru", async () => {
@@ -424,7 +459,9 @@ describe("getInPlayState: busca", () => {
   it("1H sem gols do provider: placar segue null (não inventa 0–0)", async () => {
     const m = await newMatch();
     const now = at(30 * MIN);
-    fake = installProvider(async () => providerState({ goals: null, fetchedAt: now }));
+    fake = installProvider(async () =>
+      providerState({ goals: null, fetchedAt: now })
+    );
     expect((await getInPlayState(m, { now }))?.score).toBeNull();
   });
 
