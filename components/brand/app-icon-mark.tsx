@@ -6,7 +6,7 @@ import { markGlyph } from "@/components/brand/brand-mark";
 // que entra no `new ImageResponse(...)` de app/icon*.tsx e app/apple-icon.tsx, então segue
 // as regras do Satori: só flexbox e cores sRGB em hex (o Satori não resolve OKLCH).
 //
-// O "p" é desenhado em SVG (haste + anel-medidor, ADR 0065), não com texto: o next/og só
+// O "p" é desenhado em SVG (haste + anel-medidor, ADR 0066), não com texto: o next/og só
 // traz a Noto Sans regular, fina demais pra ler a 16px na aba. A geometria mora em
 // brand-mark.tsx, a mesma do símbolo no header.
 

@@ -13,7 +13,7 @@ import {
 import { Wordmark } from "@/components/wordmark";
 
 /**
- * Símbolo da marca (ADR 0065, #629). A geometria é a marca: mexer num traço muda o ícone
+ * Símbolo da marca (ADR 0066, #629). A geometria é a marca: mexer num traço muda o ícone
  * instalado nos celulares, o header e os cards OG de uma vez. Mudança aqui é decisão, não
  * ajuste de passagem.
  */

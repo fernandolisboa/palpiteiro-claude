@@ -1,4 +1,4 @@
-# ADR 0065 — Símbolo da marca: o "p" com o bojo de medidor de probabilidade
+# ADR 0066 — Símbolo da marca: o "p" com o bojo de medidor de probabilidade
 
 ## Status
 

@@ -1,6 +1,6 @@
 import { cn } from "@/lib/utils";
 
-// Símbolo da marca (ADR 0065, #629): o "p" do ícone (#616) com o bojo virado medidor de
+// Símbolo da marca (ADR 0066, #629): o "p" do ícone (#616) com o bojo virado medidor de
 // probabilidade, 68% do anel cheio e o resto atenuado. Geometria única num viewBox 100×100,
 // usada pelo Satori (ícones e cards OG, via app-icon-mark.tsx) e pelo DOM (Wordmark).
 // Só atributos de SVG, sem `style` nem CSS: o Satori e o resvg leem os dois iguais.
