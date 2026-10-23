@@ -15,6 +15,7 @@
 // lê, então um hit degrada pra forma SEM VEREDITO (times + placar + disclaimer), nunca
 // assando um preço no PNG.
 
+import { AppIconMark } from "@/components/brand/app-icon-mark";
 import type { PalpiteHeadlineView } from "@/lib/view/palpites-headline";
 import { OG_DISCLAIMER_STRIP } from "@/lib/view/share/disclaimer";
 import { unsafeForPublic } from "@/lib/view/share/public-text-guard";
@@ -126,7 +127,12 @@ export function OgPalpiteImage({ pieces }: { pieces: OgTextPieces }) {
           justifyContent: "space-between",
         }}
       >
-        <div style={{ display: "flex", fontSize: 28, color: "#a8a29e" }}>
+        <div
+          style={{ display: "flex", alignItems: "center", gap: 14, fontSize: 28, color: "#a8a29e" }}
+        >
+          <div style={{ display: "flex", width: 40, height: 40 }}>
+            <AppIconMark size={40} rounded />
+          </div>
           palpiteiro
         </div>
         <div style={{ display: "flex", fontSize: 28, color: "#a8a29e" }}>
