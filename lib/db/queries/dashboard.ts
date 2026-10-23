@@ -160,7 +160,7 @@ export async function getUserDashboardRows(
 
 /**
  * Mesmas rows de getUserDashboardRows, de TODOS os usuários. SÓ pra superfícies
- * admin (gate do Kelly em /admin/calibration, ADR 0039): o CLV mede o modelo, não
+ * admin (gate do Kelly em /admin/motor/calibracao, ADR 0039): o CLV mede o modelo, não
  * o usuário. Nunca usar numa página de usuário (quebra a privacidade per-user).
  */
 export async function getAllDashboardRows(

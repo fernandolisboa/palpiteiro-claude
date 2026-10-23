@@ -116,7 +116,7 @@ Versionamento **por cartucho de mercado** (ADR 0017): cada prompt tem `prompt_ve
 
 - Logs estruturados (JSON) em todas as server actions
 - Erros enviados pro Sentry (free tier)
-- Dashboard interno (`/admin/costs`) com gasto agregado de tokens (vindo de `ai_calls`)
+- Dashboard interno (`/admin/ia/custos`) com gasto agregado de tokens (vindo de `ai_calls`)
 - Alerta por e-mail se gasto diário > R$ X (configurável em env var)
 
 ## Decisões em aberto

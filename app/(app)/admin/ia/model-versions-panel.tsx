@@ -36,7 +36,7 @@ export async function readModelVersionsPanelData(): Promise<ModelVersionsPanelDa
   } catch (err) {
     console.warn(
       JSON.stringify({
-        scope: "admin_settings",
+        scope: "admin_ia",
         warning: "falha ao ler model_versions",
         message: err instanceof Error ? err.message : String(err),
       }),

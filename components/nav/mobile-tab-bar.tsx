@@ -1,6 +1,6 @@
 "use client";
 
-import type { ReactNode } from "react";
+import { useEffect, useState, type ReactNode } from "react";
 import Link from "next/link";
 import { usePathname } from "next/navigation";
 import {
@@ -53,14 +53,17 @@ export function moreSheetSections(isAdmin: boolean): {
   };
 }
 
+const DESKTOP_QUERY = "(min-width: 1024px)";
+
 const TAB =
   "flex min-w-0 flex-col items-center justify-center gap-1 text-meta tracking-tight text-muted-foreground transition-colors hover:text-foreground focus-visible:outline-none focus-visible:ring-[3px] focus-visible:ring-inset focus-visible:ring-ring/50 aria-[current]:text-foreground data-[active=true]:text-foreground";
 
 /**
  * Barra de abas do celular (#633): as quatro telas de uso a um toque, na altura do
  * polegar, e o "mais" com ajuda e admin numa folha curta. Substitui o drawer ☰.
- * `data-mobile-tabbar` liga, no globals.css, a variável que sobe o que é fixo na
- * base (barra de Suas apostas, aviso de versão nova) pra cima da barra.
+ * `data-mobile-tabbar` liga, no globals.css, o respiro no fim do <body> (o rodapé não
+ * fica atrás da barra) e a variável que sobe o que é fixo na base (barra de Suas
+ * apostas, aviso de versão nova) pra cima dela.
  */
 export function MobileTabBar({ isAdmin }: { isAdmin: boolean }) {
   const pathname = usePathname();
@@ -71,11 +74,26 @@ export function MobileTabBar({ isAdmin }: { isAdmin: boolean }) {
     ...(more.admin ? [more.admin.overview, ...more.admin.sections] : []),
   ];
   const moreActive = activeItemHref(pathname, moreItems);
+  const [moreOpen, setMoreOpen] = useState(false);
+
+  // A folha é só do celular: se a tela cruza pro computador com ela aberta (girou o
+  // tablet, esticou a janela), fecha; a barra some e o menu está no header.
+  useEffect(() => {
+    if (!moreOpen) return;
+    const mq = window.matchMedia?.(DESKTOP_QUERY);
+    if (!mq) return;
+    if (mq.matches) {
+      setMoreOpen(false);
+      return;
+    }
+    const onChange = (e: MediaQueryListEvent) => {
+      if (e.matches) setMoreOpen(false);
+    };
+    mq.addEventListener?.("change", onChange);
+    return () => mq.removeEventListener?.("change", onChange);
+  }, [moreOpen]);
 
   return (
-    <>
-      {/* Espaçador no fluxo: o fim da página não fica escondido atrás da barra. */}
-      <div aria-hidden="true" className="h-[calc(3.5rem+env(safe-area-inset-bottom))] lg:hidden" />
       <nav
         aria-label="Navegação principal"
         data-tour="menu"
@@ -99,7 +117,7 @@ export function MobileTabBar({ isAdmin }: { isAdmin: boolean }) {
               </Link>
             );
           })}
-          <Sheet>
+          <Sheet open={moreOpen} onOpenChange={setMoreOpen}>
             <SheetTrigger
               data-active={moreActive ? "true" : undefined}
               className={TAB}
@@ -177,7 +195,6 @@ export function MobileTabBar({ isAdmin }: { isAdmin: boolean }) {
           </Sheet>
         </div>
       </nav>
-    </>
   );
 }
 

@@ -179,7 +179,7 @@ export type LeagueFitSummary = {
   usableTeamCount: number;
 };
 
-/** Fits gravados + contagem de times, pro painel do /admin/settings. */
+/** Fits gravados + contagem de times, pro painel do /admin/motor. */
 export async function listLeagueFits(): Promise<LeagueFitSummary[]> {
   const [fits, counts] = await Promise.all([
     db.select().from(teamRatingFits).orderBy(asc(teamRatingFits.league)),

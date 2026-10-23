@@ -50,7 +50,7 @@ ações do usuário e da captura de CLV:
 - **Análise over/under** nessas ligas, com `enableOverUnderExtraLines` ON (migration
   0022): usa a escada por evento → **+1 crédito por jogo** a cada janela de frescor
   (60min fora das últimas 24h, 30min dentro). Antes reaproveitava o snapshot featured
-  do prewarm (0 extra). Kill-switch: desligar "linhas extras" em /admin/settings.
+  do prewarm (0 extra). Kill-switch: desligar "linhas extras" em /admin/motor.
 - **Análise btts / dupla chance**: +1 crédito cada, por jogo, por janela.
 - **Melhor aposta / multi-mercado**: até +3 por jogo (btts + dupla chance + escada).
 - **CLV** (flag ON, migration 0042): cada predição não-pass de btts/dupla chance custa

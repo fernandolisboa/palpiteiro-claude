@@ -446,4 +446,9 @@ body:has([data-page-width="form"]) [data-footer-column] {
     --mobile-tabbar-h: calc(3.5rem + env(safe-area-inset-bottom, 0px));
     --mobile-bottom-safe: 0px;
   }
+  /* No <body>, não no AppShell: o rodapé do site vem depois do casco e precisa
+     terminar acima da barra também. */
+  :root:has([data-mobile-tabbar]) body {
+    padding-bottom: var(--mobile-tabbar-h);
+  }
 }

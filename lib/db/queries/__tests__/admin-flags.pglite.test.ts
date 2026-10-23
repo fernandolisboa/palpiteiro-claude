@@ -1,6 +1,6 @@
 // @vitest-environment node
 //
-// Flags do /admin/settings (#514) contra Postgres REAL (pglite): getAdminFlagValues
+// Flags do admin (/admin/ia e /admin/motor) (#514) contra Postgres REAL (pglite): getAdminFlagValues
 // lê a row, setAdminFlag faz upsert com autor, e os defaults do registry casam com
 // (a) o `??` de cada getter quando não há row e (b) o default de cada coluna.
 import { PGlite } from "@electric-sql/pglite";

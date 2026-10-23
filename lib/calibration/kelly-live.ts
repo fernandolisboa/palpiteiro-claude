@@ -7,7 +7,7 @@ import { getAllDashboardRows } from "@/lib/db/queries/dashboard";
 import { evaluateKellyGate, type KellyGate } from "./phase-c-gate";
 
 // Leitura AO VIVO do gate do Kelly (ADR 0039 D3/D4, #503). Um só caminho de dados pra
-// /admin/calibration (exibe) e pro predict (decide o staking) — os dois nunca
+// /admin/motor/calibracao (exibe) e pro predict (decide o staking) — os dois nunca
 // divergem sobre "pronto".
 
 /** CLV de TODAS as recomendações (mede o modelo) + calibração → gate. */

@@ -168,7 +168,7 @@ export function GuidedTour({ chapter, userId, serverState, forceStart }: Props) 
   );
 
   // Partida: automática (primeira vez) ou forçada pelo link "rever o tour". O link
-  // vive no menu do topo (#553), então pode ser clicado já nesta página: o efeito
+  // vive no menu (#553; no celular, no "mais", #633), então pode ser clicado já nesta página: o efeito
   // reage ao `?tour=1` aparecendo na URL, sem precisar remontar o componente.
   const forcedParam = useSearchParams().get(TOUR_FORCE_PARAM);
   const startCheckedRef = useRef(false);

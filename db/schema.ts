@@ -868,7 +868,7 @@ export const selectionOddsSnapshots = pgTable(
 export const aiConfig = pgTable("ai_config", {
   id: integer().primaryKey().default(1),
   defaultModelId: text().notNull(),
-  // Parâmetros de geração calibráveis em /admin/settings (ADR 0008, emenda 2).
+  // Parâmetros de geração calibráveis em /admin/ia (ADR 0008, emenda 2).
   // Defaults espelham lib/ai/generation-params.ts (GENERATION_PARAM_DEFAULTS);
   // consumo MODEL-AWARE no request-builder (maxTokens p/ todos, effort só
   // adaptive, temperature só temperature-mode). Validados na query layer.
@@ -891,7 +891,7 @@ export const aiConfig = pgTable("ai_config", {
   // EXIBIÇÃO do CLV no dashboard/detail é sempre on (mostra null até haver dado).
   // Flip data-driven (sem deploy): true → o cron /api/cron/capture-closing-odds
   // passa a capturar odds perto do KO SÓ pra jogos com predição non-pass. Editável
-  // no /admin/settings (registry lib/config/admin-flags.ts, #514). Reversível.
+  // em /admin/motor (registry lib/config/admin-flags.ts, #514). Reversível.
   enableClvCapture: boolean().notNull().default(false),
   // Feature-flag (#380): liga a VALIDAÇÃO DE FIDELIDADE pós-síntese — um validador
   // DETERMINÍSTICO (regras, sem juiz LLM) que checa se contagens citadas na manchete
@@ -905,13 +905,13 @@ export const aiConfig = pgTable("ai_config", {
   enableFidelityValidation: boolean().notNull().default(true),
   // Kill-switch (#503, ADR 0039 D3): staking quarter-Kelly no lugar das bandas do ADR
   // 0019. Default ON (padrão sem-gates do dono) mas DORMENTE: o predict só usa Kelly
-  // quando o gate do Kelly (/admin/calibration — CLV ≥ 50 apostas com IC > 0 + guarda
+  // quando o gate do Kelly (/admin/motor/calibracao — CLV ≥ 50 apostas com IC > 0 + guarda
   // de skill) está "pronto". Até lá, bandas. SET ... = false → bandas sempre.
   enableKellyStaking: boolean().notNull().default(true),
   // Motor de análise (ADR 0041 §5, #511): 'llm' = cartucho de mercado decide (caminho
   // de hoje); 'code_jev' = o código decide (λ + julgamentos JEV) e o LLM só narra.
   // text validado na app (isAnalysisEngine, lib/ai/engine/analysis-engine.ts), como
-  // defaultModelId. Default 'llm'; editável em /admin/settings, sem deploy.
+  // defaultModelId. Default 'llm'; editável em /admin/motor, sem deploy.
   analysisEngine: text().notNull().default("llm"),
   // Kill-switch (ADR 0051): λ do modelo de placar vem do Dixon-Coles refitado todo dia
   // (team_ratings) no motor code_jev e na âncora estatística do over/under. Default ON
@@ -949,7 +949,7 @@ export const aiConfig = pgTable("ai_config", {
   // reconferido; o state v3 do JEV (escalação no state) vale sempre.
   enableLineupRecheck: boolean().notNull().default(true),
   // Última checagem do cron check-model-versions e o resumo dela (ADR 0062), lidos
-  // pelo painel do /admin/settings. O resumo é validado por Zod na leitura
+  // pelo painel do /admin/ia. O resumo é validado por Zod na leitura
   // (ModelVersionsCheckSummarySchema).
   modelVersionsCheckedAt: timestamp({ withTimezone: true }),
   modelVersionsCheckSummary: jsonb(),

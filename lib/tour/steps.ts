@@ -114,7 +114,7 @@ export const TOUR_CHAPTERS: Record<TourChapter, readonly TourStep[]> = {
     },
     {
       title: "Pronto",
-      body: 'Depois do jogo o resultado é apurado sozinho: as análises aparecem em desempenho e as apostas que você registrou, em suas apostas. Em "ajuda", no menu do topo, o guia "como usar" explica cada tela e dá pra rever este tour.',
+      body: 'Depois do jogo o resultado é apurado sozinho: as análises aparecem em desempenho e as apostas que você registrou, em suas apostas. Em "ajuda" (no celular, em "mais"), o guia "como usar" explica cada tela e dá pra rever este tour.',
     },
   ],
 };

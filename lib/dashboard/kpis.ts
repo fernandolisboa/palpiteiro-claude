@@ -138,7 +138,7 @@ function impliedSumTargetForMarket(marketKey: string): number {
 }
 
 // Δ no-vig (pp, + = bateu o fechamento) de cada row non-pass COM closing line. Base
-// do KPI de CLV e do gate do Kelly (ADR 0039, /admin/calibration).
+// do KPI de CLV e do gate do Kelly (ADR 0039, /admin/motor/calibracao).
 export function clvNoVigDeltas(rows: DashboardRow[]): number[] {
   return rows
     .filter((r) => r.recommendation !== "pass")

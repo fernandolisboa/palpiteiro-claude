@@ -100,12 +100,13 @@ export function VersionChecker() {
     // z-40 fica ABAIXO do Sheet/Dialog do shadcn (z-50) — não prende uma folha
     // aberta. Barra ancorada na base (acima da barra de abas do celular, #633),
     // largura limitada e centralizada (não é overlay full-bleed) pra não bloquear
-    // navegação. Polish visual fica
+    // navegação; o respiro em volta do card não captura toque (pointer-events-none),
+    // pra não tampar a barra de Suas apostas logo abaixo. Polish visual fica
     // pra um passo /impeccable posterior (#260).
     <div
       role="status"
       aria-live="polite"
-      className="fixed inset-x-0 bottom-[var(--mobile-tabbar-h)] z-40 flex justify-center p-4"
+      className="pointer-events-none fixed inset-x-0 bottom-[var(--mobile-tabbar-h)] z-40 flex justify-center p-4"
     >
       <div className="pointer-events-auto flex items-center gap-3 rounded-lg border bg-popover px-4 py-3 text-sm text-popover-foreground shadow-lg">
         <span>Nova versão disponível.</span>
