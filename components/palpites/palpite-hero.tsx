@@ -1,8 +1,18 @@
 "use client";
 
-import { startTransition, useActionState, useId, useMemo, useState } from "react";
+import {
+  startTransition,
+  useActionState,
+  useEffect,
+  useId,
+  useMemo,
+  useRef,
+  useState,
+  type RefObject,
+} from "react";
 import {
   Check,
+  ChevronDown,
   Info,
   Link2,
   Link2Off,
@@ -78,10 +88,11 @@ type Props = {
   // Campo "Contexto extra (opcional)" (#565): kill-switch enable_user_context ligado E
   // motor code_jev. O servidor confere de novo.
   contextEnabled: boolean;
-  // Palpite compacto (#576): false = narrativa em 2 linhas (o texto inteiro fica no DOM)
-  // e sem "a partir de:", ficha de dimensões e fontes, que aparecem ao abrir "Ler análise
-  // completa" (PalpiteArea). Default true: os outros chamadores e testes não mudam.
-  expanded?: boolean;
+  // Palpite compacto (#576): true = abre com a narrativa em 2 linhas (o texto inteiro fica
+  // no DOM) e sem "a partir de:", ficha de dimensões e fontes; o "Ler mais" do próprio
+  // palpite abre tudo, independente do "Ler análise completa" (PalpiteArea). Default
+  // false: sempre inteiro, os outros chamadores e testes não mudam.
+  collapsible?: boolean;
   // Leitura ao vivo (#594): a página foi montada com o jogo rolando e a análise liberada.
   // O form manda `pageLive=1`; sem ele, o servidor recusa um pedido ao vivo vindo de uma
   // página de pré-jogo (pede para atualizar). Default false: pré-jogo.
@@ -144,7 +155,7 @@ export function PalpiteHero({
   sharedAt,
   hasAnalyses,
   contextEnabled,
-  expanded = true,
+  collapsible = false,
   live = false,
   lineupNotice = null,
   mascot = DEFAULT_PROGRESS_MASCOT,
@@ -269,7 +280,7 @@ export function PalpiteHero({
         canRegenerate={analyzable && fanOutEnabled && hasAnalyses}
         contextField={contextField}
         contextNotice={contextNotice}
-        expanded={expanded}
+        collapsible={collapsible}
         live={live}
         lineupNotice={lineupNotice}
         mascot={mascot}
@@ -300,7 +311,7 @@ function HeroBody({
   canRegenerate,
   contextField,
   contextNotice,
-  expanded,
+  collapsible,
   live,
   lineupNotice,
   mascot,
@@ -320,7 +331,7 @@ function HeroBody({
   canRegenerate: boolean;
   contextField: ContextField;
   contextNotice: string | null;
-  expanded: boolean;
+  collapsible: boolean;
   live: boolean;
   lineupNotice: string | null;
   mascot: ProgressMascot;
@@ -353,7 +364,7 @@ function HeroBody({
         canRegenerate={canRegenerate}
         contextField={contextField}
         contextNotice={contextNotice}
-        expanded={expanded}
+        collapsible={collapsible}
         lineupNotice={lineupNotice}
         onShowReasoning={onShowReasoning}
       />
@@ -387,7 +398,7 @@ function PopulatedHero({
   canRegenerate,
   contextField,
   contextNotice,
-  expanded,
+  collapsible,
   lineupNotice,
   onShowReasoning,
 }: {
@@ -400,11 +411,22 @@ function PopulatedHero({
   canRegenerate: boolean;
   contextField: ContextField;
   contextNotice: string | null;
-  expanded: boolean;
+  collapsible: boolean;
   lineupNotice: string | null;
   onShowReasoning: (() => void) | undefined;
 }) {
   const settled = view.badge !== null;
+  // Estado próprio do palpite: não abre junto com "Ler análise completa". Volta fechado
+  // depois de um run (o PendingHero desmonta este corpo).
+  const [open, setOpen] = useState(false);
+  const expanded = !collapsible || open;
+  const narrativeRef = useRef<HTMLParagraphElement>(null);
+  const clipped = useClampOverflow(narrativeRef, !expanded);
+  const hasDetail =
+    view.citedMarkets.length > 0 ||
+    view.dimensions.length > 0 ||
+    (view.sources?.length ?? 0) > 0;
+  const detailId = useId();
   return (
     <WarmShell tone="full">
       <div className="flex animate-in fade-in duration-200 flex-col gap-4 motion-reduce:animate-none">
@@ -439,15 +461,44 @@ function PopulatedHero({
         </div>
 
         {/* Compacto (#576): 2 linhas, com o texto inteiro no DOM (busca do navegador,
-            leitor de tela); o resto do porquê abre em "Ler análise completa". */}
-        <p
-          className={cn(
-            "max-w-reading text-body leading-relaxed tracking-tight text-muted-foreground",
-            !expanded && "line-clamp-2",
+            leitor de tela); "Ler mais" abre o resto do palpite aqui mesmo. */}
+        <div id={detailId} className="flex flex-col gap-4">
+          <p
+            ref={narrativeRef}
+            className={cn(
+              "max-w-reading text-body leading-relaxed tracking-tight text-muted-foreground",
+              !expanded && "line-clamp-2",
+            )}
+          >
+            {view.narrative}
+          </p>
+
+          {expanded && view.citedMarkets.length > 0 && (
+            <p className="text-meta uppercase tracking-eyebrow text-muted-foreground">
+              a partir de: {view.citedMarkets.join(" · ")}
+            </p>
           )}
-        >
-          {view.narrative}
-        </p>
+
+          {expanded && <DimensionScorecard dimensions={view.dimensions} />}
+
+          {expanded && <CitedSources sources={view.sources} />}
+        </div>
+
+        {collapsible && (open || hasDetail || clipped) && (
+          <button
+            type="button"
+            aria-expanded={open}
+            aria-controls={detailId}
+            onClick={() => setOpen((v) => !v)}
+            className="-mt-3 inline-flex items-center gap-1 self-start rounded-sm py-1 text-meta font-medium tracking-tight text-palpite-strong-fg hover:underline focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
+          >
+            {open ? "Ler menos" : "Ler mais"}
+            <ChevronDown
+              className={cn("size-3.5 transition-transform", open && "rotate-180")}
+              aria-hidden
+            />
+          </button>
+        )}
 
         {lineupNotice && (
           <p
@@ -458,16 +509,6 @@ function PopulatedHero({
             {lineupNotice}
           </p>
         )}
-
-        {expanded && view.citedMarkets.length > 0 && (
-          <p className="text-meta uppercase tracking-eyebrow text-muted-foreground">
-            a partir de: {view.citedMarkets.join(" · ")}
-          </p>
-        )}
-
-        {expanded && <DimensionScorecard dimensions={view.dimensions} />}
-
-        {expanded && <CitedSources sources={view.sources} />}
 
         {analyzable && contextField && <UserContextField {...contextField} />}
 
@@ -502,6 +543,26 @@ function PopulatedHero({
       </div>
     </WarmShell>
   );
+}
+
+// A narrativa cortada em 2 linhas passa do corte? Mede só enquanto cortada (aberta não
+// há o que medir) e de novo quando a largura muda. Sem layout (SSR, jsdom) fica false.
+function useClampOverflow(
+  ref: RefObject<HTMLElement | null>,
+  active: boolean,
+): boolean {
+  const [overflows, setOverflows] = useState(false);
+  useEffect(() => {
+    const el = ref.current;
+    if (!active || !el) return;
+    const measure = () => setOverflows(el.scrollHeight > el.clientHeight + 1);
+    measure();
+    if (typeof ResizeObserver === "undefined") return;
+    const observer = new ResizeObserver(measure);
+    observer.observe(el);
+    return () => observer.disconnect();
+  }, [ref, active]);
+  return overflows;
 }
 
 // Botão de compartilhar (#384): IMPERATIVO (type="button", onClick) — não toca o <form

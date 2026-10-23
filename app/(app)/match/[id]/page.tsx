@@ -761,9 +761,9 @@ function MatchLayout({
         >
           <div className="flex min-w-0 flex-col gap-4 lg:gap-6">
             {/* HERO palpite-first (#351), compacto (#576): a manchete sintetizada é a
-                PROEMINÊNCIA, logo abaixo da identidade do jogo. "Ler análise completa"
-                abre o HERO inteiro e a análise por mercado num bloco IRMÃO, fechado por
-                padrão → nenhum número de valor vaza pro HERO (firewall ADR 0030). */}
+                PROEMINÊNCIA, logo abaixo da identidade do jogo. O HERO tem o próprio
+                "Ler mais"; "Ler análise completa" abre a análise por mercado num bloco
+                IRMÃO, fechado por padrão → nenhum número de valor vaza pro HERO (firewall ADR 0030). */}
             <PalpiteArea
               heroPalpite={heroPalpite}
               matchId={matchId}

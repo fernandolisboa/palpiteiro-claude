@@ -10,7 +10,7 @@ import { cn } from "@/lib/utils";
 export const FULL_ANALYSIS_ID = "analise-completa";
 export const FULL_ANALYSIS_TITLE_ID = "analise-completa-titulo";
 
-type Props = Omit<ComponentProps<typeof PalpiteHero>, "expanded"> & {
+type Props = Omit<ComponentProps<typeof PalpiteHero>, "collapsible"> & {
   // A análise por mercado, montada no servidor (FullAnalysis). Fica num bloco IRMÃO do
   // HERO, nunca dentro do `section[aria-label=palpite]` (firewall da ADR 0030: a casca
   // quente não ganha número de valor).
@@ -22,19 +22,18 @@ type Props = Omit<ComponentProps<typeof PalpiteHero>, "expanded"> & {
 };
 
 /**
- * Palpite da IA compacto + "Ler análise completa" (#576). Fechado, o HERO mostra o
- * veredito, o placar, a confiança, as ações e a narrativa em 2 linhas. Aberto, o HERO
- * volta inteiro e a análise por mercado aparece logo abaixo, num nível só (sem acordeão
- * de acordeões). `hidden` em vez de desmontar: o texto fica no DOM e o estado não se perde.
+ * Palpite da IA compacto + "Ler análise completa" (#576). O HERO abre compacto (veredito,
+ * placar, confiança, ações e a narrativa em 2 linhas) e tem o próprio "Ler mais". "Ler
+ * análise completa" só abre a análise por mercado logo abaixo, num nível só (sem acordeão
+ * de acordeões): os dois são independentes. `hidden` em vez de desmontar: o texto fica no
+ * DOM e o estado não se perde.
  */
 export function PalpiteArea({ analysis, canOpenAnalysis, ...hero }: Props) {
   const [open, setOpen] = useState(false);
-  // Há algo para abrir: um palpite (narrativa inteira, ficha, fontes) ou uma análise.
-  const canOpen = hero.heroPalpite !== null || canOpenAnalysis;
   return (
     <div className="flex flex-col gap-3">
-      <PalpiteHero {...hero} expanded={open} />
-      {canOpen && (
+      <PalpiteHero {...hero} collapsible />
+      {canOpenAnalysis && (
         <>
           <Button
             type="button"
