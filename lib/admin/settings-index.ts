@@ -339,7 +339,7 @@ function tokenScore(fields: Field[], token: string): number {
 export function searchSettings(
   query: string,
   {
-    limit = 8,
+    limit = 10,
     index = SETTINGS_INDEX,
   }: { limit?: number; index?: readonly SettingEntry[] } = {}
 ): SettingEntry[] {

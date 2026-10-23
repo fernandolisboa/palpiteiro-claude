@@ -3,7 +3,12 @@ import { createRoot, type Root } from "react-dom/client";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 
 const push = vi.fn();
-vi.mock("next/navigation", () => ({ useRouter: () => ({ push }) }));
+const refresh = vi.fn();
+let pathname = "/admin/leagues";
+vi.mock("next/navigation", () => ({
+  useRouter: () => ({ push, refresh }),
+  usePathname: () => pathname,
+}));
 
 import {
   revealSetting,
@@ -39,6 +44,8 @@ describe("SettingsSearch", () => {
       globalThis as { IS_REACT_ACT_ENVIRONMENT?: boolean }
     ).IS_REACT_ACT_ENVIRONMENT = true;
     push.mockClear();
+    refresh.mockClear();
+    pathname = "/admin/leagues";
     container = document.createElement("div");
     document.body.appendChild(container);
     root = createRoot(container);
@@ -84,6 +91,51 @@ describe("SettingsSearch", () => {
     expect(push).toHaveBeenCalledWith("/admin/ia/custos");
   });
 
+  it("página em que já se está relê em vez de navegar", () => {
+    pathname = "/admin/ia/custos";
+    act(() => root.render(<SettingsSearch key="again" />));
+    input = container.querySelector("input")!;
+    act(() => input.focus());
+    type(input, "custos de ia");
+    key(input, "Enter");
+    expect(push).not.toHaveBeenCalled();
+    expect(refresh).toHaveBeenCalled();
+  });
+
+  it("clique num resultado navega", () => {
+    act(() => input.focus());
+    type(input, "ao vivo");
+    act(() => (options()[0] as HTMLElement).click());
+    expect(push).toHaveBeenCalledWith("/admin/motor#flag-enableLiveMode", {
+      scroll: false,
+    });
+  });
+
+  it("Enter durante composição (IME) não navega", () => {
+    act(() => input.focus());
+    type(input, "ao vivo");
+    act(() => {
+      input.dispatchEvent(
+        new KeyboardEvent("keydown", {
+          key: "Enter",
+          bubbles: true,
+          isComposing: true,
+        })
+      );
+    });
+    expect(push).not.toHaveBeenCalled();
+  });
+
+  it("anuncia quantos resultados há numa região sempre montada", () => {
+    const status = container.querySelector('[role="status"]')!;
+    expect(status.textContent).toBe("");
+    act(() => input.focus());
+    type(input, "ao vivo");
+    expect(status.textContent).toBe("1 configuração encontrada.");
+    type(input, "xyzzy");
+    expect(status.textContent).toBe("Nenhuma configuração encontrada.");
+  });
+
   it("mostra quando nada casa", () => {
     act(() => input.focus());
     type(input, "xyzzy");
@@ -121,5 +173,28 @@ describe("revealSetting", () => {
     expect(document.activeElement).toBe(el);
     vi.advanceTimersByTime(3000);
     expect(el.hasAttribute("data-search-hit")).toBe(false);
+    act(() => el.blur());
+    expect(el.hasAttribute("tabindex")).toBe(false);
+  });
+
+  it("destacar de novo reinicia o tempo do destaque", () => {
+    vi.useFakeTimers();
+    const el = document.createElement("div");
+    el.id = "flag-y";
+    document.body.appendChild(el);
+    revealSetting("flag-y");
+    vi.advanceTimersByTime(2000);
+    revealSetting("flag-y");
+    vi.advanceTimersByTime(1000);
+    expect(el.hasAttribute("data-search-hit")).toBe(true);
+  });
+
+  it("sem a âncora, desiste e volta ao topo", () => {
+    vi.useFakeTimers();
+    const scrollTo = vi.fn();
+    window.scrollTo = scrollTo as typeof window.scrollTo;
+    revealSetting("nao-existe");
+    vi.advanceTimersByTime(11_000);
+    expect(scrollTo).toHaveBeenCalledWith(0, 0);
   });
 });

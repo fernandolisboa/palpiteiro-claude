@@ -15,25 +15,20 @@ import { SUPPORTED_LEAGUES } from "@/lib/providers/sports-data/leagues";
 const ROOT = process.cwd();
 const APP = join(ROOT, "app", "(app)");
 
-function sourceFiles(dir: string): string[] {
-  return readdirSync(dir).flatMap((entry) => {
-    const full = join(dir, entry);
-    if (statSync(full).isDirectory())
-      return entry === "__tests__" ? [] : sourceFiles(full);
-    return /\.tsx?$/.test(entry) ? [full] : [];
-  });
-}
-
-/** Fontes da rota (sem as sub-rotas) + os componentes do admin que ela usa. */
+/** Fontes da própria rota (page.tsx e os componentes locais, sem as sub-rotas). */
 function routeSource(path: string): string {
   const dir = join(APP, ...path.split("/").filter(Boolean));
-  const own = readdirSync(dir)
+  return readdirSync(dir)
     .map((entry) => join(dir, entry))
-    .filter((f) => statSync(f).isFile() && /\.tsx?$/.test(f));
-  return [...own, ...sourceFiles(join(ROOT, "components", "admin"))]
+    .filter((f) => statSync(f).isFile() && /\.tsx?$/.test(f))
     .map((f) => readFileSync(f, "utf8"))
     .join("\n");
 }
+
+const FLAG_LIST_SRC = readFileSync(
+  join(ROOT, "components", "admin", "flag-list.tsx"),
+  "utf8"
+);
 
 const ids = (results: { id: string }[]) => results.map((r) => r.id);
 
@@ -73,7 +68,7 @@ describe("SETTINGS_INDEX", () => {
         // id gerado no FlagList, que a página tem que renderizar com a área da flag.
         const flag = ADMIN_FLAGS.find((f) => `flag-${f.key}` === anchor);
         expect(flag, anchor).toBeDefined();
-        expect(src).toContain("id={flagAnchorId(flag.key)}");
+        expect(FLAG_LIST_SRC).toContain("id={flagAnchorId(flag.key)}");
         expect(src).toContain(`<FlagList area="${flag?.area}"`);
       } else if (anchor.startsWith("liga-")) {
         expect(src).toContain("id={leagueAnchorId(s.league)}");

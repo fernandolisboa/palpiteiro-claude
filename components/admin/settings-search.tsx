@@ -1,7 +1,7 @@
 "use client";
 
 import { Search } from "lucide-react";
-import { useRouter } from "next/navigation";
+import { usePathname, useRouter } from "next/navigation";
 import {
   useEffect,
   useId,
@@ -14,16 +14,23 @@ import {
 import { searchSettings, type SettingEntry } from "@/lib/admin/settings-index";
 import { cn } from "@/lib/utils";
 
-// Quanto tempo esperar a página nova montar a âncora antes de desistir de destacar.
-const REVEAL_TIMEOUT_MS = 6000;
+// Quanto tempo esperar a página nova montar a âncora antes de desistir de destacar
+// (cold start do Neon + as queries da calibração cabem com folga).
+const REVEAL_TIMEOUT_MS = 10_000;
 const REVEAL_POLL_MS = 100;
 const HIGHLIGHT_MS = 2400;
+
+const highlightTimers = new WeakMap<
+  HTMLElement,
+  ReturnType<typeof setTimeout>
+>();
 
 /**
  * Rola até o bloco da configuração e o contorna por um instante. A âncora pode estar
  * numa página que ainda está carregando: espera ela aparecer (ids são únicos por
- * página, então a página antiga nunca tem a da nova). O foco vai pro bloco, não pro
- * botão dentro dele: um Enter a mais não liga nem desliga nada.
+ * página, então a página antiga nunca tem a da nova). Se ela não aparecer, volta ao
+ * topo: a navegação foi sem o scroll do Next. O foco vai pro bloco, não pro botão
+ * dentro dele: um Enter a mais não liga nem desliga nada.
  */
 export function revealSetting(anchorId: string): void {
   const startedAt = Date.now();
@@ -32,6 +39,7 @@ export function revealSetting(anchorId: string): void {
     if (!el) {
       if (Date.now() - startedAt < REVEAL_TIMEOUT_MS)
         setTimeout(attempt, REVEAL_POLL_MS);
+      else window.scrollTo(0, 0);
       return;
     }
     const reduce =
@@ -40,10 +48,27 @@ export function revealSetting(anchorId: string): void {
       block: "start",
       behavior: reduce ? "auto" : "smooth",
     });
-    if (!el.hasAttribute("tabindex")) el.setAttribute("tabindex", "-1");
+    // tabindex só enquanto o bloco tem o foco: senão um clique dentro dele focaria o
+    // bloco inteiro depois.
+    if (!el.hasAttribute("tabindex")) {
+      el.setAttribute("tabindex", "-1");
+      el.setAttribute("data-search-target", "");
+      el.addEventListener(
+        "blur",
+        () => {
+          el.removeAttribute("tabindex");
+          el.removeAttribute("data-search-target");
+        },
+        { once: true }
+      );
+    }
     el.focus({ preventScroll: true });
     el.setAttribute("data-search-hit", "");
-    setTimeout(() => el.removeAttribute("data-search-hit"), HIGHLIGHT_MS);
+    clearTimeout(highlightTimers.get(el));
+    highlightTimers.set(
+      el,
+      setTimeout(() => el.removeAttribute("data-search-hit"), HIGHLIGHT_MS)
+    );
   };
   attempt();
 }
@@ -65,6 +90,7 @@ function isTypingTarget(target: EventTarget | null): boolean {
  */
 export function SettingsSearch({ className }: { className?: string }) {
   const router = useRouter();
+  const pathname = usePathname();
   const inputRef = useRef<HTMLInputElement>(null);
   const listId = useId();
   const [query, setQuery] = useState("");
@@ -87,12 +113,14 @@ export function SettingsSearch({ className }: { className?: string }) {
   }, []);
 
   const go = (entry: SettingEntry) => {
-    const anchor = entry.href.split("#")[1];
+    const [path, anchor] = entry.href.split("#");
     setQuery("");
     setOpen(false);
     inputRef.current?.blur();
     if (!anchor) {
-      router.push(entry.href);
+      // Já nesta tela: relê, como o IntentLink faz (o push reaproveitaria o cache).
+      if (path === pathname) router.refresh();
+      else router.push(entry.href);
       return;
     }
     // Sem o scroll do Next: quem rola (e destaca) é o revealSetting, que espera a
@@ -109,6 +137,8 @@ export function SettingsSearch({ className }: { className?: string }) {
       const step = event.key === "ArrowDown" ? 1 : -1;
       setActive((i) => (i + step + results.length) % results.length);
     } else if (event.key === "Enter") {
+      // Enter que fecha a composição (IME, acento morto no Safari) não navega.
+      if (event.nativeEvent.isComposing) return;
       const entry = results[active];
       if (!showList || !entry) return;
       event.preventDefault();
@@ -160,7 +190,10 @@ export function SettingsSearch({ className }: { className?: string }) {
       >
         /
       </kbd>
+      {/* mousedown, não click, em toda a lista (itens e barra de rolagem): o blur do
+          campo fecharia a lista antes do click. */}
       <div
+        onMouseDown={(event) => event.preventDefault()}
         className={cn(
           "border-border-subtle bg-popover text-popover-foreground absolute top-full right-0 z-30 mt-1 w-full min-w-72 overflow-hidden rounded-md border shadow-md sm:w-[26rem]",
           !showList && "hidden"
@@ -178,11 +211,7 @@ export function SettingsSearch({ className }: { className?: string }) {
               id={optionId(i)}
               role="option"
               aria-selected={i === active}
-              // mousedown, não click: o blur do campo fecharia a lista antes do click.
-              onMouseDown={(event) => {
-                event.preventDefault();
-                go(entry);
-              }}
+              onClick={() => go(entry)}
               onMouseMove={() => setActive(i)}
               className={cn(
                 "flex cursor-pointer flex-col gap-0.5 px-3 py-2",
@@ -205,14 +234,21 @@ export function SettingsSearch({ className }: { className?: string }) {
           ))}
         </ul>
         {results.length === 0 && (
-          <p
-            role="status"
-            className="text-body-sm text-muted-foreground px-3 py-2"
-          >
+          <p className="text-body-sm text-muted-foreground px-3 py-2">
             Nenhuma configuração com “{query.trim()}”.
           </p>
         )}
       </div>
+      {/* Sempre montado: uma região que aparece junto com o texto não é anunciada. */}
+      <p role="status" aria-live="polite" className="sr-only">
+        {!showList
+          ? ""
+          : results.length === 0
+            ? "Nenhuma configuração encontrada."
+            : results.length === 1
+              ? "1 configuração encontrada."
+              : `${results.length} configurações encontradas.`}
+      </p>
     </div>
   );
 }

@@ -18,9 +18,9 @@ export function AdminSectionNav() {
   const pathname = usePathname();
   const active = activeItemHref(pathname, ADMIN_NAV.items);
   return (
-    <div className="border-border-subtle flex flex-col border-b px-4 sm:flex-row sm:items-center sm:gap-4 lg:px-8">
+    <div className="border-border-subtle flex flex-col border-b sm:flex-row sm:items-center sm:gap-4">
       <nav aria-label="Seções do admin" className="min-w-0 flex-1">
-        <div className="flex [scrollbar-width:none] gap-1 overflow-x-auto">
+        <div className="flex [scrollbar-width:none] gap-1 overflow-x-auto px-4 lg:px-8">
           {ADMIN_NAV.items.map(({ href, label }) => {
             const isActive = href === active;
             return (
@@ -44,7 +44,11 @@ export function AdminSectionNav() {
           })}
         </div>
       </nav>
-      <SettingsSearch className="pb-2.5 sm:w-60 sm:shrink-0 sm:pb-0" />
+      {/* Padding fora do componente: o ícone, o atalho e a lista se posicionam pela
+          caixa do campo. */}
+      <div className="px-4 pb-2.5 sm:w-68 sm:shrink-0 sm:pb-0 sm:pl-0 lg:pr-8">
+        <SettingsSearch />
+      </div>
     </div>
   );
 }
