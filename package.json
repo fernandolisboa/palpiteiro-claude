@@ -14,7 +14,8 @@
     "db:studio": "drizzle-kit studio",
     "db:seed": "tsx db/seed.ts",
     "db:claim-admin": "tsx db/scripts/claim-admin.ts",
-    "probe:live": "tsx scripts/probe-live-fixture.ts"
+    "probe:live": "tsx scripts/probe-live-fixture.ts",
+    "brand:export": "tsx --tsconfig scripts/tsconfig.brand.json scripts/export-brand.ts"
   },
   "dependencies": {
     "@anthropic-ai/sdk": "^0.95.2",
