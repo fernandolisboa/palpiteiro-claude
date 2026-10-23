@@ -77,6 +77,11 @@ export const TOUR_CHAPTERS: Record<TourChapter, readonly TourStep[]> = {
       body: 'A lista mostra os próximos jogos e cresce com "Carregar mais". Em "Escolher datas" você escolhe um período seu, inclusive jogos que já passaram.',
     },
     {
+      target: "match-search",
+      title: "Busca",
+      body: 'Ache um jogo pelo time, pelo campeonato ou pela data ("flamengo", "sábado", "25/10"). Na linha de filtros, "Time" escolhe pelo escudo, e o último botão separa os jogos que você já analisou dos que ainda não.',
+    },
+    {
       target: "recent-predictions",
       title: "Suas predições recentes",
       body: 'Os últimos jogos que você analisou aparecem aqui. "ver todas" leva pro desempenho, com o histórico completo e o resultado de cada análise.',

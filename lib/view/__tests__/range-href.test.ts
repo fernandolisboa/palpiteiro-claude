@@ -2,6 +2,7 @@ import { describe, expect, it } from "vitest";
 
 import { parseRangeParams } from "@/lib/view/date-range";
 import {
+  buildFiltersHref,
   buildLeagueHref,
   buildRangeHref,
   rangeEmptyMessage,
@@ -109,5 +110,48 @@ describe("rangeEmptyMessage", () => {
       ),
     );
     expect(msg.title).toBe("Nenhum jogo nesse período");
+  });
+});
+
+describe("filtros da lista na URL (#643)", () => {
+  const filters = { q: "flamengo sábado", team: "CR Flamengo", analyzed: "no" as const };
+
+  it("trocar a liga preserva busca, time e analisados", () => {
+    expect(buildLeagueHref({ preset: "upcoming", filters }, "lib")).toBe(
+      "/jogos?league=lib&q=flamengo+s%C3%A1bado&team=CR+Flamengo&analyzed=no",
+    );
+  });
+
+  it("escolher ou limpar datas preserva os filtros", () => {
+    expect(
+      buildRangeHref(
+        { league: "all", filters },
+        { preset: "custom", from: "2026-10-24", to: "2026-10-26" },
+      ),
+    ).toBe(
+      "/jogos?league=all&preset=custom&from=2026-10-24&to=2026-10-26&q=flamengo+s%C3%A1bado&team=CR+Flamengo&analyzed=no",
+    );
+  });
+
+  it("valor padrão não vai na URL", () => {
+    expect(
+      buildLeagueHref({ preset: "upcoming", filters: { q: "", analyzed: "all" } }, "all"),
+    ).toBe("/jogos?league=all");
+  });
+
+  it("buildFiltersHref troca só as chaves do patch, preservando liga e datas", () => {
+    const nav = {
+      league: "bsa" as const,
+      preset: "custom" as const,
+      from: "2026-10-24",
+      to: "2026-10-26",
+      filters,
+    };
+    expect(buildFiltersHref(nav, { team: undefined })).toBe(
+      "/jogos?league=bsa&preset=custom&from=2026-10-24&to=2026-10-26&q=flamengo+s%C3%A1bado&analyzed=no",
+    );
+    expect(buildFiltersHref(nav, { q: undefined, team: undefined, analyzed: "all" })).toBe(
+      "/jogos?league=bsa&preset=custom&from=2026-10-24&to=2026-10-26",
+    );
   });
 });

@@ -15,11 +15,14 @@ import {
   SheetTrigger,
 } from "@/components/ui/sheet";
 import { filterChipClassName } from "@/components/filter-chip";
+import type { ListFilters } from "@/lib/view/match-search";
 import { buildRangeHref } from "@/lib/view/range-href";
 import type { LeagueFilter } from "@/lib/view/types";
 
 type Props = {
   league: LeagueFilter;
+  // Busca e filtros da lista (#643): preservados ao aplicar ou limpar as datas.
+  filters?: ListFilters;
   // Intervalo atual quando `preset=custom` ("2026-10-18"); preenche os campos.
   from?: string;
   to?: string;
@@ -36,11 +39,12 @@ const INPUT =
 
 function RangeForm({
   league,
+  filters,
   from,
   to,
   active,
   onDone,
-}: Pick<Props, "league" | "from" | "to" | "active"> & { onDone: () => void }) {
+}: Pick<Props, "league" | "filters" | "from" | "to" | "active"> & { onDone: () => void }) {
   const router = useRouter();
   const [nextFrom, setNextFrom] = useState(from ?? "");
   const [nextTo, setNextTo] = useState(to ?? "");
@@ -53,7 +57,9 @@ function RangeForm({
         e.preventDefault();
         if (!ready) return;
         onDone();
-        router.push(buildRangeHref({ league }, { preset: "custom", from: nextFrom, to: nextTo }));
+        router.push(
+          buildRangeHref({ league, filters }, { preset: "custom", from: nextFrom, to: nextTo }),
+        );
       }}
     >
       <div className="grid grid-cols-2 gap-3">
@@ -89,7 +95,7 @@ function RangeForm({
             size="sm"
             onClick={() => {
               onDone();
-              router.push(buildRangeHref({ league }, { preset: "upcoming" }));
+              router.push(buildRangeHref({ league, filters }, { preset: "upcoming" }));
             }}
           >
             Limpar
@@ -110,7 +116,15 @@ function RangeForm({
  * intervalo ativo) volta para os próximos jogos. Com o intervalo ativo, o chip mostra as datas
  * e fica selecionado: é o único lugar onde o período aparece.
  */
-export function DateRangeSheet({ league, from, to, active, label, surface }: Props) {
+export function DateRangeSheet({
+  league,
+  filters,
+  from,
+  to,
+  active,
+  label,
+  surface,
+}: Props) {
   const [open, setOpen] = useState(false);
   // Nome acessível do popover (role=dialog): o título "Escolher datas".
   const titleId = useId();
@@ -127,6 +141,7 @@ export function DateRangeSheet({ league, from, to, active, label, surface }: Pro
   const form = (
     <RangeForm
       league={league}
+      filters={filters}
       from={from}
       to={to}
       active={active}
