@@ -42,9 +42,14 @@ describe("desenho", () => {
 
 describe("estado parado em globals.css", () => {
   const css = readFileSync(join(process.cwd(), "app/globals.css"), "utf8");
-  // Só a regra própria do seletor (precedida de "}"), não o grupo `.parrot-hop, .parrot-eye, ...`.
-  const rule = (sel: string) =>
-    css.match(new RegExp(`\\}\\n\\${sel} \\{([^}]*)\\}`))?.[1] ?? "";
+  // Só as regras próprias do seletor (precedidas de "}"), não o grupo
+  // `.parrot-hop, .parrot-eye, ...`; falha se o seletor sumir, em vez de passar vazio.
+  const rule = (sel: string) => {
+    const re = new RegExp(`\\}\\n\\${sel} \\{([^}]*)\\}`, "g");
+    const bodies = [...css.matchAll(re)].map((m) => m[1]);
+    expect(bodies.length, `${sel} sem regra própria em globals.css`).toBeGreaterThan(0);
+    return bodies.join("\n");
+  };
 
   it("sem animação, aparece só o papagaio: bola e trave escondidas", () => {
     expect(rule(".parrot-ball")).toContain("opacity: 0");
@@ -67,9 +72,12 @@ describe("pulinho a cada passo", () => {
     (SVGElement.prototype as unknown as { animate: typeof animate }).animate =
       animate;
   });
+  const originalMatchMedia = window.matchMedia;
   afterEach(() => {
     act(() => root.unmount());
     container.remove();
+    delete (SVGElement.prototype as unknown as { animate?: unknown }).animate;
+    window.matchMedia = originalMatchMedia;
   });
 
   const reduced = (matches: boolean) => {

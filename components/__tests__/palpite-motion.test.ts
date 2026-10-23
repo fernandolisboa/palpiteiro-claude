@@ -15,7 +15,7 @@ function reducedMotionBlocks(): string[] {
   return blocks;
 }
 
-describe("movimento do robozinho e do progresso (globals.css)", () => {
+describe("movimento do mascote e do progresso (globals.css)", () => {
   it("sob movimento reduzido, palpite-calm respira devagar e vence a regra global", () => {
     const calm = reducedMotionBlocks().find((b) => b.includes(".palpite-calm"));
     expect(calm).toBeDefined();

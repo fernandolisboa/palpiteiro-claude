@@ -988,7 +988,7 @@ describe("PalpiteHero — progresso ao vivo do run (ADR 0064)", () => {
   });
 });
 
-describe("PalpiteHero — Ver raciocínio + robozinho (ADR 0065)", () => {
+describe("PalpiteHero — Ver raciocínio + mascote (ADR 0065, 0068)", () => {
   const REASONING: NonNullable<PalpiteHeadlineView["reasoning"]> = [
     {
       id: "sports_data",
@@ -1067,7 +1067,7 @@ describe("PalpiteHero — Ver raciocínio + robozinho (ADR 0065)", () => {
     await h.cleanup();
   });
 
-  it("durante o run: robozinho decorativo, botão com as etapas ao vivo; o diálogo segue aberto quando o palpite novo chega", async () => {
+  it("durante o run: mascote decorativo, botão com as etapas ao vivo; o diálogo segue aberto quando o palpite novo chega", async () => {
     let controller!: ReadableStreamDefaultController<Uint8Array>;
     const body = new ReadableStream<Uint8Array>({
       start(c) {

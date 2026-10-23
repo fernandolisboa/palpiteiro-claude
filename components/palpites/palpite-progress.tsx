@@ -18,8 +18,9 @@ export type ProgressStepView = {
  *
  * Motion (DESIGN.md): o papagaio mascote (parrot-mascot.tsx, ADR 0068) ao lado do título,
  * entrada curta de cada linha (fade + 4px), o check entra com um zoom curto, o ícone da
- * etapa em andamento gira. Sem brilho nem gradiente. Com prefers-reduced-motion nada se desloca; o olho do
- * papagaio e o ícone em andamento só respiram devagar (`palpite-calm`, globals.css).
+ * etapa em andamento gira. Sem brilho nem gradiente. Com prefers-reduced-motion nada se
+ * desloca; o olho do papagaio e o ícone em andamento só respiram devagar (`palpite-calm`,
+ * globals.css).
  *
  * FIREWALL (ADR 0030 §3): as frases vêm prontas do servidor (lib/ai/progress/steps.ts),
  * sem odd, edge, stake, % ou nome de casa.
