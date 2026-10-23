@@ -421,7 +421,7 @@ function PopulatedHero({
   const [open, setOpen] = useState(false);
   const expanded = !collapsible || open;
   const narrativeRef = useRef<HTMLParagraphElement>(null);
-  const clipped = useClampOverflow(narrativeRef, !expanded);
+  const clipped = useClampOverflow(narrativeRef, !expanded, view.narrative);
   const hasDetail =
     view.citedMarkets.length > 0 ||
     view.dimensions.length > 0 ||
@@ -546,22 +546,36 @@ function PopulatedHero({
 }
 
 // A narrativa cortada em 2 linhas passa do corte? Mede só enquanto cortada (aberta não
-// há o que medir) e de novo quando a largura muda. Sem layout (SSR, jsdom) fica false.
+// há o que medir) e de novo quando a largura muda, o texto muda (refresh do servidor) ou
+// a fonte web termina de carregar: a caixa cortada não muda de altura nesses dois casos,
+// então o ResizeObserver sozinho não pegaria. Sem layout (SSR, jsdom) fica false.
 function useClampOverflow(
   ref: RefObject<HTMLElement | null>,
   active: boolean,
+  text: string,
 ): boolean {
   const [overflows, setOverflows] = useState(false);
   useEffect(() => {
     const el = ref.current;
     if (!active || !el) return;
-    const measure = () => setOverflows(el.scrollHeight > el.clientHeight + 1);
+    let alive = true;
+    const measure = () => {
+      if (alive) setOverflows(el.scrollHeight > el.clientHeight + 1);
+    };
     measure();
-    if (typeof ResizeObserver === "undefined") return;
+    void document.fonts?.ready.then(measure);
+    if (typeof ResizeObserver === "undefined") {
+      return () => {
+        alive = false;
+      };
+    }
     const observer = new ResizeObserver(measure);
     observer.observe(el);
-    return () => observer.disconnect();
-  }, [ref, active]);
+    return () => {
+      alive = false;
+      observer.disconnect();
+    };
+  }, [ref, active, text]);
   return overflows;
 }
 
