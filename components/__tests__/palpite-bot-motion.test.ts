@@ -1,11 +1,15 @@
 import { readFileSync } from "node:fs";
 import { join } from "node:path";
 
+import { renderToStaticMarkup } from "react-dom/server";
+import { createElement } from "react";
 import { describe, expect, it } from "vitest";
 
-// ADR 0065: com "reduzir movimento" ligado no sistema, a regra global de globals.css para
-// todas as animações. O run do HERO não pode parecer travado: o que leva `palpite-calm`
-// volta a respirar (só opacidade, lento), e mais nada se mexe.
+import { PalpiteBot } from "@/components/palpites/palpite-bot";
+
+// ADR 0065/0068: com "reduzir movimento" ligado no sistema, a regra global de globals.css
+// para as animações do app. O run do HERO não pode parecer travado (pedido do Fernando):
+// os personagens (`mascot-motion`) ficam fora da regra e o spinner da etapa segue girando.
 const css = readFileSync(join(process.cwd(), "app/globals.css"), "utf8");
 
 function reducedMotionBlocks(): string[] {
@@ -16,22 +20,33 @@ function reducedMotionBlocks(): string[] {
 }
 
 describe("movimento do robozinho e do progresso (globals.css)", () => {
-  it("sob movimento reduzido, palpite-calm respira devagar e vence a regra global", () => {
-    const calm = reducedMotionBlocks().find((b) => b.includes(".palpite-calm"));
-    expect(calm).toBeDefined();
-    expect(calm).toMatch(/animation:\s*palpite-breathe\s+2\.4s[^;]*infinite\s*!important/);
+  it("a regra global de movimento reduzido não pega os personagens", () => {
+    const global = reducedMotionBlocks().find((b) =>
+      b.includes("animation-duration: 0.01ms")
+    );
+    expect(global).toContain("*:not(.mascot-motion, .mascot-motion *)");
+    expect(global).not.toMatch(/^\s*\*,/m);
   });
 
-  it("a respiração só mexe na opacidade (nada se desloca)", () => {
-    const kf = /@keyframes palpite-breathe \{([\s\S]*?)\n\}/.exec(css)?.[1] ?? "";
-    expect(kf).toContain("opacity");
-    expect(kf).not.toMatch(/transform|scale|translate|rotate/);
+  it("o robozinho leva mascot-motion na raiz do SVG", () => {
+    const html = renderToStaticMarkup(createElement(PalpiteBot, { beat: 0 }));
+    expect(html).toMatch(/<svg[^>]*class="mascot-motion /);
   });
 
   it("o spinner da etapa em andamento continua girando com movimento reduzido", () => {
-    const block = reducedMotionBlocks().find((b) => b.includes(".palpite-spin"));
-    expect(block).toMatch(/\.palpite-spin \{\s*animation:\s*palpite-spin\s+[\d.]+s\s+linear\s+infinite\s*!important/);
+    const block = reducedMotionBlocks().find((b) =>
+      b.includes(".palpite-spin")
+    );
+    expect(block).toMatch(
+      /\.palpite-spin \{\s*animation:\s*palpite-spin\s+[\d.]+s\s+linear\s+infinite\s*!important/
+    );
     const kf = /@keyframes palpite-spin \{([\s\S]*?)\n\}/.exec(css)?.[1] ?? "";
     expect(kf).toContain("rotate(360deg)");
+  });
+
+  it("o bloco do spinner vem depois da regra global (mesma especificidade, vence pela ordem)", () => {
+    expect(
+      css.indexOf(".palpite-spin {\n    animation: palpite-spin")
+    ).toBeGreaterThan(css.indexOf("*:not(.mascot-motion"));
   });
 });

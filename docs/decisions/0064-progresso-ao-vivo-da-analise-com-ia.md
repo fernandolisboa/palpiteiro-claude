@@ -20,7 +20,7 @@ A server action (`runPalpiteHero`) só devolve no fim: o `useActionState` não t
 6. **O run não depende do cliente.** A rota registra o run em `after()`: se a pessoa sair da página, ele termina e grava, como a server action terminaria. Batida (`ping`) a cada 15 s pra conexão não parecer ociosa durante uma chamada longa.
 7. **Reserva.** O form mantém `action={runPalpiteHero}`: sem JS (antes da hidratação) o envio nativo vai pela server action, como antes. Com JS, se a rota responder 400/403/404/405/415 (provadamente não rodou nada; ex.: deploy antigo), o cliente cai na server action. Rede caída ou stream cortado não reenviam (o pedido pode ter chegado): o HERO avisa e relê a página.
 8. **Fim do run.** Resultado ok (ou stream cortado) → `router.refresh()` numa transição; o HERO segue no estado de progresso até o palpite novo chegar pelas props, sem piscar o estado antigo.
-9. **UI** (`components/palpites/palpite-progress.tsx`): linha do tempo na casca quente, ícone girando na etapa em andamento, check com zoom curto ao terminar, entrada de 4 px por linha. Sem brilho, gradiente ou piscada (DESIGN.md); `prefers-reduced-motion` desliga tudo. Região `role="status"` com a etapa em andamento.
+9. **UI** (`components/palpites/palpite-progress.tsx`): linha do tempo na casca quente, ícone girando na etapa em andamento, check com zoom curto ao terminar, entrada de 4 px por linha. Sem brilho, gradiente ou piscada (DESIGN.md); `prefers-reduced-motion` desliga tudo _(emendado pelas ADRs 0065/0068: o spinner da etapa e os personagens seguem animando)_. Região `role="status"` com a etapa em andamento.
 
 ## Alternativas rejeitadas
 

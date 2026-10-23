@@ -30,8 +30,8 @@ Ele também achou que o ícone da etapa em andamento parecia travado. O motivo: 
 
    Os vazios de seção (forma, confrontos, tabela) e os do admin ficam como estão.
 5. **Movimento reduzido.**
-   - O estado parado do papagaio é o próprio papagaio, e é o que aparece quando a regra global zera as animações.
-   - O olho leva `palpite-calm` e só respira, igual aos olhos do robô.
+   - O estado parado do papagaio é o próprio papagaio (bola e trevo escondidos).
+   - ~~O olho leva `palpite-calm` e só respira, igual aos olhos do robô.~~ _(Emenda de 2026-10-23, pedido do Fernando: os dois personagens animam por completo mesmo com movimento reduzido. A classe `mascot-motion` na raiz do SVG tira o robô e o papagaio da regra global, e a respiração `palpite-calm` saiu. O resto do app continua respeitando a preferência do sistema.)_
    - **Emenda da ADR 0065:** o spinner da etapa em andamento (`palpite-spin`) gira também com movimento reduzido, um pouco mais devagar (1,4 s por volta). É o indicador de que algo está carregando, e parado ele parece erro.
 
 ## Alternativas rejeitadas

@@ -9,10 +9,9 @@ import { cn } from "@/lib/utils";
  * bola da antena gira enquanto a análise roda. A cada etapa que termina ele dá um pulinho
  * (`beat` = etapas prontas), então o movimento acompanha o progresso de verdade.
  *
- * Motion (DESIGN.md): só as cores palpite-*, sem brilho nem gradiente. Com
- * prefers-reduced-motion nada se mexe: os olhos e a bola só respiram (opacidade lenta,
- * `palpite-calm` em globals.css), pra a tela não parecer congelada. Decorativo
- * (aria-hidden): o texto da etapa é o que o leitor de tela anuncia.
+ * Motion (DESIGN.md): só as cores palpite-*, sem brilho nem gradiente. Anima mesmo com
+ * prefers-reduced-motion (`mascot-motion` em globals.css, ADR 0068): parado, o run parece
+ * travado. Decorativo (aria-hidden): o texto da etapa é o que o leitor de tela anuncia.
  */
 export function PalpiteBot({ beat, className }: { beat: number; className?: string }) {
   const hopRef = useRef<SVGGElement>(null);
@@ -26,7 +25,6 @@ export function PalpiteBot({ beat, className }: { beat: number; className?: stri
     lastBeat.current = beat;
     const el = hopRef.current;
     if (!el || typeof el.animate !== "function") return;
-    if (window.matchMedia?.("(prefers-reduced-motion: reduce)").matches) return;
     el.animate(
       [
         { transform: "translateY(0)" },
@@ -42,7 +40,7 @@ export function PalpiteBot({ beat, className }: { beat: number; className?: stri
       viewBox="0 0 48 48"
       aria-hidden="true"
       data-testid="palpite-bot"
-      className={cn("size-12 shrink-0 overflow-visible", className)}
+      className={cn("mascot-motion size-12 shrink-0 overflow-visible", className)}
     >
       <ellipse
         cx="24"
@@ -69,7 +67,7 @@ export function PalpiteBot({ beat, className }: { beat: number; className?: stri
               cy="4"
               r="3.2"
               strokeWidth="1.2"
-              className="palpite-calm fill-palpite-soft stroke-palpite-strong-fg"
+              className="fill-palpite-soft stroke-palpite-strong-fg"
             />
             <path
               d="M24 2.6 L25.3 3.55 L24.8 5.05 L23.2 5.05 L22.7 3.55 Z"
@@ -98,7 +96,7 @@ export function PalpiteBot({ beat, className }: { beat: number; className?: stri
                 width="3.5"
                 height="5.5"
                 rx="1.75"
-                className="palpite-calm fill-palpite-strong-fg"
+                className="fill-palpite-strong-fg"
               />
               <rect
                 x="27"
@@ -106,7 +104,7 @@ export function PalpiteBot({ beat, className }: { beat: number; className?: stri
                 width="3.5"
                 height="5.5"
                 rx="1.75"
-                className="palpite-calm fill-palpite-strong-fg"
+                className="fill-palpite-strong-fg"
               />
             </g>
           </g>
