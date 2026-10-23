@@ -158,3 +158,35 @@ Divisão em **dois PRs**: **A** = state v3 (sinal da escalação no JEV, sem rec
 9. Só o XI de referência precisa de ids completos. Hoje basta 11 titulares, ids sem repetição, nenhum de outro provider e ao menos um do mesmo (estreante sem id conta como mudança; hoje sem id nenhum, o fallback football-data.org, segue "changes unknown").
 10. Custo corrigido pra "até +4 req" (item 3 acima e ADR); ADR registra a espera maior atrás do limite de 8 req/min na análise interativa.
 11. Testes novos: nome curto × completo por id, fallback por nome, lesionado no XI de hoje sai, ids repetidos, estreante sem id, XI vazio (state e adapter), lançamento síncrono no memo, cron fail-open com a referência falhando, `providerAbsences` na conferência, vocabulário inteiro nos criteria.
+
+## Notas da implementação do PR B
+
+Onde o código difere do plano e dos ajustes acima:
+
+1. **`before` no jsonb.** `judgments.recheck` grava o `before` do pai (recomendação, linha, confiança, edge), além do `of`. A view monta o "Antes da escalação: … → agora: …" só com a row, sem buscar o pai por id.
+2. **Sem helper de `extraLines`.** Como só a linha do pai é avaliada (item 10), basta o cartucho base mais `marketParams.line` do pai. Não houve o que extrair de `app/actions/predictions.ts`.
+3. **`judgeIf` em `resolveModelBaseJudgments`.** O teste de "sem informação" (item 9) roda sobre o input, antes do JEV, então pular não gasta a chamada. Junto do `logScope` (item 17).
+4. **Marcador.** Carimbo = instante da busca dos candidatos. Gravado só no fim da passada do jogo (ver o ajuste 5 do code review abaixo); "sem informação" também marca: só um pai novo reabre o jogo.
+5. **Ordem do run.** Flag → lock do `compute-match-models` → lock próprio → candidatos → chave do JEV. Sem candidatos, o run faz uma query e sai sem log.
+6. **Elegibilidade em JS.** O `DISTINCT ON` roda em SQL (item 12) e a elegibilidade (`code_jev`, sem `recheck`, sem `userContext`, escalação não anunciada, λ válido) é filtrada em JS sobre esse resultado, na mesma query.
+7. **Motivo `parent_incomplete`.** Pai sem λ válido ou over/under sem linha é pulado com esse motivo (além de `not_code_jev_market`, `jev_failed`, `no_odds`, `superseded` e `kickoff_passed`).
+8. **"(mesma recomendação)".** Na tela, o "antes → agora" ganha esse sufixo quando a recomendação não mudou.
+9. **Hero.** Uma linha sem horário ("Palpite gerado antes da escalação."), só quando a reconferência é mais nova que o palpite.
+10. **Guardas de KO.** O jogo só é começado com KO a mais de 2 min. Antes do insert, a guarda estrita é `kickoffAt > now`, pelo horário e não pelo status.
+11. **"Odd há X".** Na reconferência é medido a partir da captura usada. Vem `null` quando as odds são as do pai, e a linha diz "Odds da análise anterior."
+12. **`aiCallId`.** Aponta pra row de `ai_calls` do JEV usado quando ela é de sistema: a desta passada (`user_id` nulo) ou a da base do modelo que a fez. JEV reusado de outra predição (row de outro usuário) ou sem row → a do pai. `ownsAiCall` (allow-list) não atribui custo de LLM à reconferência.
+13. **Notas da escalação no racional.** Os fatores vêm depois de probabilidade e edge, e o racional só ganha o prefixo das notas se tudo couber em `RATIONALE_MAX_CHARS`. O prompt do LLM não lê `lineupNotes`, então o narrador não muda de versão.
+
+### Ajustes do code review (PR #624)
+
+1. **Guarda `superseded` em SQL.** `hasNewerPreMatchPrediction` comparava `created_at` com o `Date` do JS (ms); o Postgres guarda µs, então o pai contava como mais novo que ele mesmo e quase toda reconferência saía `superseded`. Agora compara `(created_at, id)` com a row gravada do pai (subquery) e exclui o próprio id. Teste pglite com `created_at` em µs.
+2. **Gate do Kelly sem reconferências.** `getOverUnderCalibrationRows({ excludeRechecks: true })` (`judgments->'recheck' IS NULL`) no `loadKellyGate`.
+3. **Calibração sem contagem dupla.** As rows ganham `isRecheck`; resumo, "por motor" e "por mercado" (e a contagem de apostas do resumo) as deixam de fora. Só a tabela por versão as mostra, no segmento `recheck=lineup_v1`.
+4. **"Em dúvida" é informação.** `isLineupInformative` também dispara quando um lado anunciado ainda tem desfalcado `doubtful` na lista (o v3 o trata como fora do jogo).
+5. **Marcador no fim.** Gravado só depois da passada pelos pais, e só sem erro de pai (pulos determinísticos marcam). Pai que lança ou run que morre no meio não marcam: o próximo run refaz, e quem já virou reconferência sai sozinho pelo `DISTINCT ON`. Falhas antes do JEV não mexem no marcador.
+6. **Odds robustas.** A leitura da captura lança em captura incompleta/incoerente: vira fallback pras odds do pai (com log). Captura mais velha que `pai.createdAt − ODDS_SNAPSHOT_FRESHNESS_MS` também perde pras odds do pai.
+7. **`aiCallId`.** A row do JEV só quando `reusedFromPredictionId` é nulo (chamada nova de sistema ou base do modelo); senão a do pai (item 12 acima).
+8. **Teste de ponta a ponta.** `lib/lineup-recheck/__tests__/run.pglite.test.ts`: `runLineupRechecks` com o `predict` real contra pglite (persistência + PSO, predicado da linha do over/under contra capturas reais, pai em µs), 0 candidatos depois, e Anthropic, The Odds API, `ensureOddsSnapshotsFresh` e limite diário nunca chamados.
+9. **Detalhes.** Notas da escalação cabem em `KEY_FACTOR_MAX_CHARS` (menos papéis citados e, no limite, corte com reticências) e sem artigo ("Escalação: <time> com …"). Rodapé da reconferência diz "texto automático" em vez do modelo narrador do pai. A reconferência não reordena "Suas predições recentes" nem as seções por mercado da página do jogo. O log `run_complete` traz todos os motivos de pulo zerados (`no_odds`, `superseded`…) e `uninformative`. Aviso do hero só no pré-jogo.
+10. **Não feito: exclusão nos dois sentidos com o `compute-match-models`.** Pular o cron da base quando o lock da reconferência está tomado custaria uma base inteira (ele roda de 6 em 6 h), e esperar comeria o prazo dele (150 + 135 s de 300 s). Os horários já separam os dois: a reconferência de :25 não começa jogo depois de :27 (prazo de 120 s) e a base roda às :30; a de :35 já cede ao lock da base.
+11. **Não feito: janela entre a guarda e o insert.** Entre o `hasNewerPreMatchPrediction` e o insert sobra uma janela de milissegundos sem advisory lock; uma análise interativa que caia nela deixa a reconferência como a mais recente do balde até a próxima análise. Aceito: raro, sem efeito em Yield/CLV/Kelly (a reconferência está fora deles) e corrigido pela próxima análise do usuário.

@@ -1,4 +1,4 @@
-import { fmtNumber } from "./labels";
+import { capKeyFactor, fmtNumber } from "./labels";
 import { KEY_FACTORS_MAX, RATIONALE_MAX_CHARS } from "./prompt";
 import type { NarratorOutput } from "./schemas";
 import type { NarratorDecision } from "./types";
@@ -47,7 +47,11 @@ export function templatedNarration(d: NarratorDecision): NarratorOutput {
     rationale = `Sem aposta: não foi possível medir o edge deste mercado com as odds disponíveis. ${goals}${judgments}`;
     factors.push(`Piso de edge do mercado: ${floor}`);
   }
-  rationale = withNotes(rationale, notes);
+  rationale = withLineupNotes(withNotes(rationale, notes), d.lineupNotes ?? []);
+  // Escalação (#619) depois de probabilidade/edge (ou piso/candidata no pass): o número
+  // continua sendo o 1º fato do card.
+  // Cortadas no limite do fator (o schema rejeitaria a saída inteira).
+  factors.push(...(d.lineupNotes ?? []).map(capKeyFactor));
   factors.push(...d.judgmentFactors);
   if (factors.length < 2) factors.push(goals);
 
@@ -68,4 +72,15 @@ function withNotes(rationale: string, notes: readonly string[]): string {
     fit.push(note);
   }
   return fit.length > 0 ? `${rationale}${NOTES_PREFIX}${fit.join("; ")}.` : rationale;
+}
+
+// Reconferência com a escalação (#619): as notas ABREM o racional (é o que mudou desde a
+// análise anterior). Entram enquanto cabem no limite junto do racional inteiro; nunca
+// cortam os números do fim (as notas também vão nos fatores-chave).
+function withLineupNotes(rationale: string, notes: readonly string[]): string {
+  for (let n = notes.length; n > 0; n--) {
+    const next = `${notes.slice(0, n).join(". ")}. ${rationale}`;
+    if (next.length <= RATIONALE_MAX_CHARS) return next;
+  }
+  return rationale;
 }

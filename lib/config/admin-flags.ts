@@ -175,6 +175,16 @@ export const ADMIN_FLAGS = [
       "Cada uso: 1 chamada do modelo de análise do usuário (até 2.000 tokens), contando 1 do limite diário de palpites. Sem The Odds API e sem API-Football.",
   },
   {
+    key: "enableLineupRecheck",
+    kind: "boolean",
+    label: "Reconferir com a escalação",
+    description:
+      "Na última hora antes do jogo, quando as escalações saem, as análises do motor Código + JEV feitas antes delas são recalculadas em código com a escalação confirmada e o mesmo modelo de placar: uma análise nova por mercado, com selo \"Atualizado com a escalação\". A anterior continua no histórico. Desligada, nada é reconferido.",
+    default: true,
+    costNote:
+      "Sem LLM, sem The Odds API e sem contar no limite diário: 1 chamada JEV (~US$ 0,0001) por jogo. API-Football só na última hora antes do jogo.",
+  },
+  {
     key: "analysisEngine",
     kind: "enum",
     label: "Motor de análise",

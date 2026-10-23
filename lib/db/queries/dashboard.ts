@@ -1,4 +1,4 @@
-import { and, desc, eq, type SQL } from "drizzle-orm";
+import { and, desc, eq, sql, type SQL } from "drizzle-orm";
 
 import {
   aiCalls,
@@ -83,12 +83,21 @@ export type DashboardRowsOptions = {
   live?: boolean;
 };
 
+// `judgments` null (caminho LLM) também passa: `NULL->'recheck'` é NULL.
+export const notLineupRecheck = sql`${predictions.judgments}->'recheck' IS NULL`;
+
 // Select compartilhado das rows do dashboard; `userId` null = todos (só admin).
 async function selectDashboardRows(
   userId: string | null,
   { live = false }: DashboardRowsOptions = {},
 ): Promise<DashboardRow[]> {
-  const filters: SQL[] = [eq(predictions.isLive, live)];
+  const filters: SQL[] = [
+    eq(predictions.isLive, live),
+    // Reconferência com a escalação (#619, ADR 0020 adendo): também fora, antes do
+    // dedup. Recalculada com odds anteriores à escalação, ela inflaria edge/Yield/CLV e
+    // tomaria o lugar da análise original no "mais recente". A calibração a mantém.
+    notLineupRecheck,
+  ];
   if (userId !== null) filters.push(eq(predictions.userId, userId));
   const rows = await db
     .select({

@@ -172,3 +172,33 @@ describe("toRecentMatchViews — um cartão por jogo (ADR 0058)", () => {
     expect(views.map((v) => v.matchId)).toEqual(["c", "b", "a"]);
   });
 });
+
+describe("toRecentMatchViews — reconferência com a escalação (#619)", () => {
+  it("é a análise atual do mercado no cartão, mas não muda a ordem dos jogos", () => {
+    const views = toRecentMatchViews(
+      [
+        // Jogo m1: analisado às 12h, reconferido pelo cron às 18h.
+        pred({
+          predictionId: "r1",
+          matchId: "m1",
+          recommendation: "away",
+          selectionLabel: "Fora",
+          isRecheck: true,
+          createdAt: new Date("2026-10-14T18:00:00Z"),
+        }),
+        pred({ predictionId: "p1", matchId: "m1" }),
+        // Jogo m2: analisado às 14h, depois da análise do m1.
+        pred({
+          predictionId: "p2",
+          matchId: "m2",
+          createdAt: new Date("2026-10-14T14:00:00Z"),
+        }),
+      ],
+      NOW,
+      SP,
+    );
+    expect(views.map((v) => v.matchId)).toEqual(["m2", "m1"]);
+    // A aposta do cartão é a da reconferência (fora: PAL), não a da análise de 12h.
+    expect(views[1].bets.map((b) => b.rec)).toEqual(["PAL"]);
+  });
+});

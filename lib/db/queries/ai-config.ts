@@ -322,6 +322,19 @@ export async function getEnableBetSlipExplain(): Promise<boolean> {
 }
 
 /**
+ * Kill-switch da reconferência com a escalação (#619, PR B). Default ON quando não há
+ * row. false → o cron recheck-lineups sai sem tocar em provider nem gravar nada.
+ */
+export async function getEnableLineupRecheck(): Promise<boolean> {
+  const rows = await db
+    .select({ enabled: aiConfig.enableLineupRecheck })
+    .from(aiConfig)
+    .where(eq(aiConfig.id, 1))
+    .limit(1);
+  return rows[0]?.enabled ?? true;
+}
+
+/**
  * Motor de análise (ADR 0041 §5, #511): 'llm' (cartucho de mercado decide — caminho
  * de hoje) ou 'code_jev' (código + julgamentos JEV decidem, LLM narra). Sem row ou
  * valor persistido inválido → 'llm'. Editado em /admin/settings via registry

@@ -46,6 +46,7 @@ import {
   getEnableLiveMode,
   getEnableAutoModelVersions,
   getEnableBetSlipExplain,
+  getEnableLineupRecheck,
   getEnableUserContext,
   setAdminFlag,
 } from "@/lib/db/queries/ai-config";
@@ -65,6 +66,7 @@ const GETTERS = {
   enableLiveMode: getEnableLiveMode,
   enableAutoModelVersions: getEnableAutoModelVersions,
   enableBetSlipExplain: getEnableBetSlipExplain,
+  enableLineupRecheck: getEnableLineupRecheck,
   analysisEngine: getAnalysisEngine,
 } satisfies Record<AdminFlagKey, () => Promise<unknown>>;
 

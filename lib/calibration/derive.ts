@@ -37,6 +37,15 @@ export type CalibrationGroup = {
   brierSkill: number;
 };
 
+// Reconferência com a escalação (#619): divide o jogo e o resultado com o pai, então
+// fica fora dos agregados (geral, por motor, por mercado) e só aparece no próprio
+// segmento da tabela por versão (a tag `recheck=lineup_v1` no engineConfig).
+export function withoutRechecks(
+  rows: MarketCalibrationRow[],
+): MarketCalibrationRow[] {
+  return rows.filter((r) => !r.isRecheck);
+}
+
 export function calibrationVersionOf(r: MarketCalibrationRow): string {
   return r.engine === "code_jev" && r.engineConfig
     ? r.engineConfig
@@ -85,6 +94,10 @@ function groupFor(
   };
 }
 
+/**
+ * Resumo do recorte (sem reconferências) + uma linha por versão (com elas, cada uma no
+ * seu segmento `recheck=…`).
+ */
 export function deriveCalibration(rows: MarketCalibrationRow[]): {
   overall: CalibrationGroup | null;
   byVersion: CalibrationGroup[];
@@ -100,8 +113,9 @@ export function deriveCalibration(rows: MarketCalibrationRow[]): {
     .map(([version, rs]) => groupFor(version, rs))
     // Mais amostras primeiro; empate desce pra versão (desc — a mais nova no topo).
     .sort((a, b) => b.n - a.n || b.version.localeCompare(a.version));
+  const aggregate = withoutRechecks(rows);
   return {
-    overall: rows.length ? groupFor("(todas as versões)", rows) : null,
+    overall: aggregate.length ? groupFor("(todas as versões)", aggregate) : null,
     byVersion,
   };
 }
@@ -139,8 +153,9 @@ export function deriveCalibrationByEngine(rows: MarketCalibrationRow[]): {
   engines: EngineCalibration[];
   unattributed: number;
 } {
+  const aggregate = withoutRechecks(rows);
   const engines = ANALYSIS_ENGINES.map((engine) => {
-    const rs = rows.filter((r) => r.engine === engine);
+    const rs = aggregate.filter((r) => r.engine === engine);
     return {
       engine,
       bets: rs.filter((r) => r.isBet).length,
@@ -149,7 +164,7 @@ export function deriveCalibrationByEngine(rows: MarketCalibrationRow[]): {
   });
   return {
     engines,
-    unattributed: rows.filter((r) => r.engine === null).length,
+    unattributed: aggregate.filter((r) => r.engine === null).length,
   };
 }
 
@@ -175,8 +190,9 @@ export type MarketCalibration = {
 export function deriveCalibrationByMarket(
   rows: MarketCalibrationRow[],
 ): MarketCalibration[] {
+  const aggregate = withoutRechecks(rows);
   return CALIBRATED_MARKETS.map((market) => {
-    const rs = filterByMarket(rows, market);
+    const rs = filterByMarket(aggregate, market);
     return {
       market,
       bets: rs.filter((r) => r.isBet).length,

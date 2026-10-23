@@ -110,7 +110,9 @@ export function SectionFooterDispatch({
       <div className="mt-3 flex flex-wrap items-end justify-between gap-3 border-t border-border pt-3">
         <div className="flex flex-wrap items-end gap-3">
           <span className="text-meta text-muted-foreground tracking-tight">
-            análise feita com modelo {shownView.model}
+            {shownView.lineupRecheck
+              ? "reconferida em código com a escalação, texto automático"
+              : `análise feita com modelo ${shownView.model}`}
           </span>
           {hasModelChoice && (
             <ModelOverrideSelect

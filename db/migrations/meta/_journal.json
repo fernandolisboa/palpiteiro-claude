@@ -435,6 +435,13 @@
       "when": 1792614950014,
       "tag": "0061_bet_slip_explain",
       "breakpoints": true
+    },
+    {
+      "idx": 62,
+      "version": "7",
+      "when": 1792717043779,
+      "tag": "0062_lineup_recheck",
+      "breakpoints": true
     }
   ]
 }

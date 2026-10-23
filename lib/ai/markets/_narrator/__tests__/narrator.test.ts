@@ -5,12 +5,14 @@ import {
   buildNarratorMessage,
   checkNarrationFidelity,
   judgmentFactorPhrases,
+  lineupNotePhrases,
   NARRATOR_VERSION,
   NarratorOutputSchema,
   SYSTEM_PROMPT,
   templatedNarration,
   type NarratorDecision,
 } from "@/lib/ai/markets/_narrator";
+import { KEY_FACTOR_MAX_CHARS } from "@/lib/ai/markets/_narrator/prompt";
 import { applyJudgments } from "@/lib/ai/judgments/apply";
 import { JUDGMENT_QUESTION_IDS } from "@/lib/ai/judgments/questions";
 import type { JudgmentAnswers } from "@/lib/ai/judgments/types";
@@ -646,5 +648,112 @@ describe("forma recente por competição (#618)", () => {
       fx("1", TEAMS.home, "EC Bahia", [2, 1], "2026-05-10T19:00:00.000Z"),
     ]);
     expect(c.form.home).toEqual(["V 2-1 x EC Bahia (casa)"]);
+  });
+});
+
+describe("escalação confirmada na reconferência (#619)", () => {
+  const announced = (
+    changes: "0-2" | "3-4" | "5+" | null,
+    leftOut: { position?: "goalkeeper" | "defender" | "midfielder" | "forward"; whereabouts?: "bench" | "out_of_squad" }[] = []
+  ) => ({ status: "announced" as const, changes, leftOut });
+
+  it("uma frase por time anunciado, com papéis (sem nome) e desfalcados no XI", () => {
+    const phrases = lineupNotePhrases(
+      {
+        home: announced("5+", [
+          { position: "goalkeeper", whereabouts: "bench" },
+          { position: "defender", whereabouts: "out_of_squad" },
+          { position: "midfielder" },
+          { whereabouts: "bench" },
+        ]),
+        away: announced(null),
+      },
+      TEAMS,
+      { home: 0, away: 2 }
+    );
+    expect(phrases).toEqual([
+      `Escalação: ${TEAMS.home} com 5 ou mais mudanças por escolha em relação ao time titular habitual (goleiro titular no banco, defensor titular fora da lista, meio-campista titular e mais 1)`,
+      `Escalação: ${TEAMS.away} sem comparação com o time titular habitual; 2 jogadores listados como desfalque estão entre os titulares`,
+    ]);
+  });
+
+  it("time sem escalação anunciada não gera frase", () => {
+    expect(
+      lineupNotePhrases(
+        { home: { status: "not_announced" }, away: announced("0-2") },
+        TEAMS
+      )
+    ).toEqual([
+      `Escalação: ${TEAMS.away} com 0 a 2 mudanças por escolha em relação ao time titular habitual`,
+    ]);
+  });
+
+  it("template: notas abrem o racional e vêm DEPOIS de prob./edge nos fatores", () => {
+    const notes = ["Escalação: A com 0 a 2 mudanças", "Escalação: B com 3 a 4 mudanças"];
+    const out = templatedNarration(
+      overDecision({ lineupNotes: notes, judgmentFactors: ["fator JEV"] })
+    );
+    expect(
+      out.rationale.startsWith(
+        "Escalação: A com 0 a 2 mudanças. Escalação: B com 3 a 4 mudanças. O modelo"
+      )
+    ).toBe(true);
+    expect(out.key_factors).toEqual([
+      "Probabilidade do modelo: 58,4%",
+      "Edge: 8,2 pp",
+      ...notes,
+      "fator JEV",
+    ]);
+    expect(NarratorOutputSchema.safeParse(out).success).toBe(true);
+    expect(checkNarrationFidelity(out, overDecision({ lineupNotes: notes }))).toEqual({ ok: true });
+  });
+
+  it("nota longa demais não corta os números do racional (fica só nos fatores, cortada)", () => {
+    const plain = templatedNarration(overDecision());
+    const out = templatedNarration(overDecision({ lineupNotes: ["x".repeat(590)] }));
+    expect(out.rationale).toBe(plain.rationale);
+    const note = out.key_factors.find((f) => f.startsWith("xxx"));
+    expect(note).toBe(`${"x".repeat(KEY_FACTOR_MAX_CHARS - 1)}…`);
+    expect(NarratorOutputSchema.safeParse(out).success).toBe(true);
+  });
+
+  it("frase longa: cita menos papéis pra caber no limite do fator", () => {
+    // 20 caracteres: a frase com 1 papel tem 200 (cabe); com 2 ou mais, não.
+    const longTeam = "Grêmio Novorizontino";
+    const [phrase] = lineupNotePhrases(
+      {
+        home: announced("5+", [
+          { position: "goalkeeper", whereabouts: "bench" },
+          { position: "defender", whereabouts: "out_of_squad" },
+          { position: "midfielder", whereabouts: "out_of_squad" },
+          { position: "forward", whereabouts: "out_of_squad" },
+        ]),
+        away: { status: "not_announced" },
+      },
+      { home: longTeam, away: TEAMS.away },
+      { home: 2, away: 0 }
+    );
+    expect(phrase.length).toBeLessThanOrEqual(KEY_FACTOR_MAX_CHARS);
+    expect(phrase.startsWith(`Escalação: ${longTeam} com 5 ou mais mudanças`)).toBe(true);
+    expect(phrase).toContain("(goleiro titular no banco e mais 3)");
+    expect(phrase.endsWith("2 jogadores listados como desfalque estão entre os titulares")).toBe(true);
+  });
+
+  it("o narrador LLM nunca lê as notas (mensagem idêntica, sem bump)", () => {
+    const ctx = buildNarratorContext({
+      league: "brasileirao_a",
+      kickoffAt: new Date("2026-05-15T19:00:00Z"),
+      homeTeam: TEAMS.home,
+      awayTeam: TEAMS.away,
+      standings: undefined,
+      homeForm: [],
+      awayForm: [],
+      h2h: [],
+      absencesAvailable: false,
+      absences: { home: [], away: [] },
+    });
+    expect(buildNarratorMessage(overDecision({ lineupNotes: ["Escalação X"] }), ctx)).toBe(
+      buildNarratorMessage(overDecision(), ctx)
+    );
   });
 });

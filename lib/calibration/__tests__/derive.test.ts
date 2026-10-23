@@ -25,6 +25,7 @@ const row = (
   isBet: true,
   engine: "llm",
   engineConfig: null,
+  isRecheck: false,
 });
 
 const JEV_CONFIG = "lambda=heuristic;judg=jev_judgments_v1;w=judgment_weights_v1";
@@ -41,6 +42,7 @@ const jevRow = (
   isBet,
   engine: "code_jev",
   engineConfig: JEV_CONFIG,
+  isRecheck: false,
 });
 
 describe("deriveCalibration", () => {
@@ -181,6 +183,7 @@ const oneX2 = (
     isBet,
     engine: "llm",
     engineConfig: null,
+    isRecheck: false,
   };
 };
 
@@ -258,6 +261,7 @@ describe("calibração por mercado (#453)", () => {
       isBet: true,
       engine: "llm",
       engineConfig: null,
+      isRecheck: false,
     };
     const { overall } = deriveCalibration([dc]);
     expect(overall?.model.logLoss).toBeCloseTo(logLoss(dc.model), 12);
@@ -270,5 +274,45 @@ describe("calibração por mercado (#453)", () => {
     expect(parseMarketSegment("correct_score")).toBe("over_under");
     expect(parseMarketSegment(["btts"])).toBe("over_under");
     expect(parseMarketSegment(undefined)).toBe("over_under");
+  });
+});
+
+describe("reconferência com a escalação (#619)", () => {
+  // Pai e reconferência dividem o jogo e o resultado: contar os dois dobraria o jogo.
+  const parent = jevRow(0.6, 0.5, 1);
+  const recheck: MarketCalibrationRow = {
+    ...jevRow(0.8, 0.5, 1),
+    engineConfig: `${JEV_CONFIG};recheck=lineup_v1`,
+    isRecheck: true,
+  };
+  const rows = [parent, recheck];
+
+  it("fora do resumo geral; só no próprio segmento por versão", () => {
+    const { overall, byVersion } = deriveCalibration(rows);
+    expect(overall?.n).toBe(1);
+    expect(overall?.model.logLoss).toBeCloseTo(logLoss(parent.model), 12);
+    expect(byVersion.map((g) => [g.version, g.n])).toEqual(
+      expect.arrayContaining([
+        [JEV_CONFIG, 1],
+        [`${JEV_CONFIG};recheck=lineup_v1`, 1],
+      ])
+    );
+    expect(byVersion).toHaveLength(2);
+  });
+
+  it("fora das tabelas por motor e por mercado", () => {
+    const { engines } = deriveCalibrationByEngine(rows);
+    const jev = engines.find((e) => e.engine === "code_jev");
+    expect(jev?.group?.n).toBe(1);
+    expect(jev?.bets).toBe(1);
+    const ou = deriveCalibrationByMarket(rows).find((m) => m.market === "over_under");
+    expect(ou?.group?.n).toBe(1);
+    expect(ou?.bets).toBe(1);
+  });
+
+  it("só reconferência no recorte → resumo vazio, segmento presente", () => {
+    const { overall, byVersion } = deriveCalibration([recheck]);
+    expect(overall).toBeNull();
+    expect(byVersion).toHaveLength(1);
   });
 });

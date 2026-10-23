@@ -1,5 +1,10 @@
 import type { JudgmentMultipliers } from "@/lib/ai/judgments/apply";
-import type { JudgmentAbsenceInput } from "@/lib/ai/judgments/state";
+import type { LineupChangeBucket } from "@/lib/ai/judgments/lineup-vocabulary";
+import type {
+  JudgmentAbsenceInput,
+  LineupLeftOut,
+  LineupSummary,
+} from "@/lib/ai/judgments/state";
 import type {
   JudgmentAnswers,
   JudgmentFactor,
@@ -7,6 +12,7 @@ import type {
   TeamSide,
 } from "@/lib/ai/judgments/types";
 
+import { KEY_FACTOR_MAX_CHARS } from "./prompt";
 import type { NarratorTeams, UserFactorOrigins } from "./types";
 
 // Número em PT-BR (vírgula decimal).
@@ -201,4 +207,93 @@ export function describeAbsencePt(input: JudgmentAbsenceInput): string {
   }
   if (isTopScorer) role = `${role}, artilheiro do time`;
   return `${role} (${STATUS_PT[input.injury.status] ?? input.injury.status})`;
+}
+
+// ─── Escalação confirmada → frases PT-BR (#619, reconferência; nunca o nome) ──
+
+const LEFT_OUT_PLACE_PT: Record<
+  NonNullable<LineupLeftOut["whereabouts"]>,
+  string
+> = {
+  bench: "no banco",
+  out_of_squad: "fora da lista",
+};
+
+const CHANGES_PT: Record<LineupChangeBucket, string> = {
+  "0-2": "0 a 2 mudanças por escolha",
+  "3-4": "3 a 4 mudanças por escolha",
+  "5+": "5 ou mais mudanças por escolha",
+};
+
+// Quantos papéis citar entre parênteses; o resto vira "e mais N".
+const LEFT_OUT_ROLES_MAX = 3;
+
+function leftOutRolePt(entry: LineupLeftOut): string {
+  const base = entry.position
+    ? entry.position === "goalkeeper"
+      ? "goleiro titular"
+      : `${POSITION_PT[entry.position]} titular`
+    : "titular";
+  return entry.whereabouts
+    ? `${base} ${LEFT_OUT_PLACE_PT[entry.whereabouts]}`
+    : base;
+}
+
+function lineupNoteForTeam(
+  summary: LineupSummary,
+  team: string,
+  startingAbsentees: number,
+): string | null {
+  if (summary.status !== "announced") return null;
+  const { changes, leftOut } = summary;
+  const absentees =
+    startingAbsentees === 0
+      ? ""
+      : startingAbsentees === 1
+        ? "; 1 jogador listado como desfalque está entre os titulares"
+        : `; ${startingAbsentees} jogadores listados como desfalque estão entre os titulares`;
+  // "Escalação: <time>" (sem artigo: "do"/"da" depende do time).
+  const build = (rolesMax: number): string => {
+    if (changes === null) {
+      return `Escalação: ${team} sem comparação com o time titular habitual${absentees}`;
+    }
+    let phrase = `Escalação: ${team} com ${CHANGES_PT[changes]} em relação ao time titular habitual`;
+    if (leftOut.length > 0 && rolesMax > 0) {
+      const roles = leftOut.slice(0, rolesMax).map(leftOutRolePt);
+      const more = leftOut.length - roles.length;
+      phrase += ` (${roles.join(", ")}${more > 0 ? ` e mais ${more}` : ""})`;
+    }
+    return `${phrase}${absentees}`;
+  };
+  // A frase também é fator-chave: cabe em KEY_FACTOR_MAX_CHARS citando menos papéis
+  // (nome de time longo) e, no limite, cortada.
+  for (let n = LEFT_OUT_ROLES_MAX; n >= 0; n--) {
+    const phrase = build(n);
+    if (phrase.length <= KEY_FACTOR_MAX_CHARS) return phrase;
+  }
+  return capKeyFactor(build(0));
+}
+
+/** Corta uma frase de fator-chave no limite do schema, com reticências. */
+export function capKeyFactor(phrase: string): string {
+  return phrase.length <= KEY_FACTOR_MAX_CHARS
+    ? phrase
+    : `${phrase.slice(0, KEY_FACTOR_MAX_CHARS - 1).trimEnd()}…`;
+}
+
+/**
+ * Notas da escalação confirmada pra reconferência (#619): uma frase por time com a
+ * escalação anunciada (mudanças por escolha, papéis dos titulares habituais fora e
+ * desfalcados da lista do provider que vão começar jogando). Sem nome de jogador: a
+ * entrada já é o LineupSummary (papéis), que é o que sai de state.ts.
+ */
+export function lineupNotePhrases(
+  lineup: { home: LineupSummary; away: LineupSummary },
+  teams: NarratorTeams,
+  startingAbsentees: { home: number; away: number } = { home: 0, away: 0 },
+): string[] {
+  return [
+    lineupNoteForTeam(lineup.home, teams.home, startingAbsentees.home),
+    lineupNoteForTeam(lineup.away, teams.away, startingAbsentees.away),
+  ].filter((p): p is string => p !== null);
 }

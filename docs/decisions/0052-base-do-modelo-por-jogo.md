@@ -32,6 +32,7 @@ UI: a lista `/jogos` ganha uma linha "Modelo · Casa 52% · Under 2.5 55%" (favo
 - **(−)** Qualquer query futura que fizer `innerJoin(users)` em `ai_calls` perde as rows de sistema. O `getCostByUser` usa `leftJoin`.
 - Escalação ou desfalques que mudam entre o cron e a análise mudam o `stateHash`: o predict paga o JEV de novo (custo, não erro).
 - Com a escalação publicada (#619, `jev_judgments_v3`), o cron também busca o XI de referência de cada time (até +4 req por jogo, mesmo caminho do predict, sem prazo), então a paridade do `stateHash` vale depois da escalação; `RUN_DEADLINE_MS` cai pra 150 s.
+- A reconferência com a escalação (#619, PR B; ADR 0041) usa o mesmo `resolveModelBaseJudgments` (com `logScope` próprio), então reaproveita as respostas JEV da base pelo `stateHash`. Ela não roda enquanto o lock deste cron está tomado: os dois dividiriam o limite de 8 req/min da API-Football entre instâncias.
 - A Copa do Mundo sai no heurístico (o DC exclui a Copa, ADR 0051).
 
 ## Referências

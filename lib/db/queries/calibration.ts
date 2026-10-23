@@ -1,4 +1,4 @@
-import { and, eq, inArray, ne, or } from "drizzle-orm";
+import { and, eq, inArray, ne, or, sql, type SQL } from "drizzle-orm";
 
 import {
   marketSelections,
@@ -39,6 +39,12 @@ import { ResultDataSchema } from "@/lib/settlement/schemas";
 //
 // Leituras AO VIVO (#580, ADR 0060) ficam FORA, na query: são `pass` (que entra de
 // propósito) feitas com o placar à vista, e sem odd (`odd` null no PSO).
+//
+// Reconferência com a escalação (#619, ADR 0020 adendo) ENTRA, marcada `isRecheck`: ela
+// divide o resultado com o pai, então os agregados (geral, por motor, por mercado)
+// a deixam de fora e ela só aparece no próprio segmento (a versão com
+// `recheck=lineup_v1`, lib/calibration/derive.ts). O gate do Kelly a tira na query
+// (`excludeRechecks`).
 
 export type MarketCalibrationRow = {
   marketKey: CalibratedMarketKey;
@@ -48,14 +54,26 @@ export type MarketCalibrationRow = {
   engine: AnalysisEngine | null;
   // Tags do motor no modelVersion (ex. "lambda=heuristic;judg=…;w=…"); null no llm.
   engineConfig: string | null;
+  // Reconferência com a escalação (#619): mesmo jogo e mesmo resultado do pai.
+  isRecheck: boolean;
   // Pares alinhados (mesma seleção, mesmo y, na mesma ordem): 1 no binário, N no
   // N-ário (um-contra-o-resto) — ver POSITIVE_SELECTION.
   model: CalibrationPair[];
   market: CalibrationPair[];
 };
 
+export type CalibrationRowsOptions = {
+  // true = sem as reconferências com a escalação (o gate do Kelly).
+  excludeRechecks?: boolean;
+};
+
+// `judgments` null (caminho LLM) também passa: `NULL->'recheck'` é NULL.
+const isLineupRecheck = sql<boolean>`(${predictions.judgments}->'recheck') IS NOT NULL`;
+const notLineupRecheck = sql`${predictions.judgments}->'recheck' IS NULL`;
+
 export async function getMarketCalibrationRows(
   only: readonly CalibratedMarketKey[] = CALIBRATED_MARKETS,
+  { excludeRechecks = false }: CalibrationRowsOptions = {},
 ): Promise<MarketCalibrationRow[]> {
   // 1. Mercados calibrados + as seleções seedadas de cada um.
   const mks = await db
@@ -108,14 +126,16 @@ export async function getMarketCalibrationRows(
   // caminhos: `pass` (computeSettlement curto-circuita pass → void/0 com o placar
   // REAL no resultData) ou override manual do admin numa aposta (jogo anulado →
   // rótulo sem sentido). Pass entra; void de aposta sai.
-  const settledFilter = and(
+  const settledFilters: (SQL | undefined)[] = [
     inArray(predictions.marketId, [...marketById.keys()]),
     eq(predictions.isLive, false),
     or(
       ne(predictionOutcomes.result, "void"),
       eq(predictions.recommendation, "pass"),
     ),
-  );
+  ];
+  if (excludeRechecks) settledFilters.push(notLineupRecheck);
+  const settledFilter = and(...settledFilters);
   const settled = await db
     .select({
       id: predictions.id,
@@ -125,6 +145,7 @@ export async function getMarketCalibrationRows(
       recommendation: predictions.recommendation,
       marketParams: predictions.marketParams,
       resultData: predictionOutcomes.resultData,
+      isRecheck: isLineupRecheck,
     })
     .from(predictions)
     .innerJoin(
@@ -185,6 +206,7 @@ export async function getMarketCalibrationRows(
       isBet: s.recommendation !== "pass",
       engine: engineFromModelVersion(s.modelVersion),
       engineConfig: engineConfigFromModelVersion(s.modelVersion),
+      isRecheck: s.isRecheck === true,
       ...pairs,
     });
   }
@@ -266,6 +288,7 @@ export type OverUnderCalibrationRow = {
   isBet: boolean; // false = pass (no-bet); o gate da Fase C conta só apostas
   engine: AnalysisEngine | null;
   engineConfig: string | null;
+  isRecheck: boolean;
 };
 
 // `model[0]`/`market[0]` existem: over/under tem seleção positiva (over), então
@@ -283,11 +306,12 @@ function toOverUnderRows(
       isBet: r.isBet,
       engine: r.engine,
       engineConfig: r.engineConfig,
+      isRecheck: r.isRecheck,
     }));
 }
 
-export async function getOverUnderCalibrationRows(): Promise<
-  OverUnderCalibrationRow[]
-> {
-  return toOverUnderRows(await getMarketCalibrationRows(["over_under"]));
+export async function getOverUnderCalibrationRows(
+  opts: CalibrationRowsOptions = {},
+): Promise<OverUnderCalibrationRow[]> {
+  return toOverUnderRows(await getMarketCalibrationRows(["over_under"], opts));
 }

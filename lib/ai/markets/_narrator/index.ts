@@ -5,6 +5,7 @@ import { checkNarrationFidelity } from "./fidelity";
 import {
   describeAbsencePt,
   judgmentFactorPhrases,
+  lineupNotePhrases,
   selectionLabel,
 } from "./labels";
 import {
@@ -41,6 +42,7 @@ export {
   checkNarrationFidelity,
   describeAbsencePt,
   judgmentFactorPhrases,
+  lineupNotePhrases,
   NARRATOR_VERSION,
   NarratorOutputSchema,
   selectionLabel,

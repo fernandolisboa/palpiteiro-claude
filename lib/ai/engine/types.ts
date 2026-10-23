@@ -9,6 +9,29 @@ export type PredictionLineupSide = {
   leftOut: number;
 };
 
+export const LINEUP_RECHECK_VERSION = "lineup_v1";
+
+// Marcador da reconferência com a escalação (#619). Sem nomes de jogador.
+export type PredictionRecheck = {
+  kind: "lineup";
+  version: typeof LINEUP_RECHECK_VERSION;
+  // predictions.id do pai.
+  of: string;
+  parentStateHash: string | null;
+  // De onde vieram as odds: a captura mais recente do banco (≤ 6 h) ou, sem ela, as
+  // odds congeladas do próprio pai. Nunca uma busca nova na The Odds API.
+  oddsFrom: "snapshot" | "parent";
+  // ISO da captura usada; null quando `oddsFrom` é "parent".
+  oddsCapturedAt: string | null;
+  // O que o pai dizia, pro "Antes da escalação: … → agora: …" da tela.
+  before: {
+    recommendation: string;
+    line: number | null;
+    confidencePct: number;
+    edgePct: number | null;
+  };
+};
+
 // Conteúdo de `predictions.judgments` (jsonb, ADR 0041 §6): tudo que a decisão do
 // motor code_jev precisa pra ser recomputada a partir da row.
 export type PredictionJudgments = {
@@ -63,8 +86,11 @@ export type PredictionJudgments = {
   // narradora (a row de ai_calls é a dela; falha do narrador → texto templado, com
   // o status da falha na row). "best_bet_template": mercado não escolhido no best
   // bet — racional templado em código, sem chamada; `aiCallId` da predição aponta
-  // pra narração do mercado escolhido no mesmo run. Ausente nas rows anteriores.
-  narration?: "llm_call" | "best_bet_template";
+  // pra narração do mercado escolhido no mesmo run. "lineup_recheck_template":
+  // reconferência com a escalação (#619), racional templado em código, sem chamada
+  // narradora; `aiCallId` aponta pra chamada JEV (ou pra do pai). Ausente nas rows
+  // anteriores.
+  narration?: "llm_call" | "best_bet_template" | "lineup_recheck_template";
   // Escalação deste jogo vista pelo JEV (#619), sem nomes: `status` "announced" quando
   // a escalação saiu; por lado, o bucket de mudanças voluntárias (null = não deu pra
   // comparar) e quantos titulares habituais ficaram fora por escolha. Ausente nas rows
@@ -74,6 +100,12 @@ export type PredictionJudgments = {
     home: PredictionLineupSide | null;
     away: PredictionLineupSide | null;
   };
+  // Reconferência com a escalação (#619, PR B): esta row foi recalculada em código pelo
+  // cron recheck-lineups a partir da predição `of` (o pai, imutável), com o mesmo λ de
+  // base do pai e o JEV refeito com a escalação confirmada. Ponteiro só aqui (ADR 0020,
+  // adendo): sem coluna nova. Rows com `recheck` ficam fora do Yield/CLV/Kelly (dedup do
+  // "mais recente") e entram na calibração (tag `recheck=lineup_v1`). Ausente nas demais.
+  recheck?: PredictionRecheck;
   // Contexto extra da análise (#565): afirmações conferidas, sem texto livre nem nome de
   // jogador, e a evidência que entrou no combine. Ausente nas rows sem contexto e nas
   // anteriores.

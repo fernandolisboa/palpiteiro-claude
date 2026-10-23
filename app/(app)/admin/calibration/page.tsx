@@ -17,6 +17,7 @@ import {
   type EngineCalibration,
   type EngineSegment,
   type MarketCalibration,
+  withoutRechecks,
 } from "@/lib/calibration/derive";
 import {
   CALIBRATED_MARKET_LABEL,
@@ -91,7 +92,8 @@ export default async function AdminCalibrationPage({ searchParams }: PageProps) 
   const byEngine = deriveCalibrationByEngine(marketRows);
   const scoped = filterByEngineSegment(marketRows, segment);
   const { overall, byVersion } = deriveCalibration(scoped);
-  const betCount = scoped.filter((r) => r.isBet).length;
+  // Mesmo universo do resumo: sem as reconferências com a escalação (#619).
+  const betCount = withoutRechecks(scoped).filter((r) => r.isBet).length;
   const segmentLabel =
     segment === "all" ? "todos os motores" : ANALYSIS_ENGINE_LABEL[segment];
   const marketLabel = CALIBRATED_MARKET_LABEL[market];
@@ -178,7 +180,10 @@ export default async function AdminCalibrationPage({ searchParams }: PageProps) 
               </h2>
               <p className="pb-3 text-meta leading-relaxed text-muted-foreground tracking-tight">
                 LLM: versão do prompt do cartucho. Código + JEV: fonte de λ, versão dos
-                julgamentos e dos pesos (o narrador não mexe no número).
+                julgamentos e dos pesos (o narrador não mexe no número). As
+                reconferências com a escalação (recheck=…) só aparecem aqui: dividem o
+                resultado com a análise original e ficam fora do resumo e das outras
+                tabelas.
               </p>
               <div className="overflow-x-auto rounded-md border border-border">
                 <table className="w-full text-body-sm tabular-nums">

@@ -10,7 +10,8 @@ vi.mock("@/lib/db/queries/dashboard", () => ({
 }));
 const getOverUnderCalibrationRows = vi.fn();
 vi.mock("@/lib/db/queries/calibration", () => ({
-  getOverUnderCalibrationRows: () => getOverUnderCalibrationRows(),
+  getOverUnderCalibrationRows: (...a: unknown[]) =>
+    getOverUnderCalibrationRows(...a),
 }));
 vi.mock("@/lib/dashboard/clv-enrich", () => ({
   enrichDashboardRowsWithClosing: async (rows: unknown[]) => rows,
@@ -43,6 +44,7 @@ describe("loadKellyGate", () => {
       isBet: true,
       engine: "llm" as const,
       engineConfig: null,
+      isRecheck: false,
     };
     const jev = {
       ...llm,
@@ -56,6 +58,14 @@ describe("loadKellyGate", () => {
     const skill = (p: number) =>
       logLoss([{ p: 0.5, y: 1 }]) - logLoss([{ p, y: 1 }]);
     expect(gate.skillMean).toBeCloseTo((skill(0.7) + skill(0.3)) / 2, 12);
+  });
+
+  // #619: a reconferência com a escalação divide o resultado com o pai; o gate lê sem ela.
+  it("lê a calibração sem as reconferências com a escalação", async () => {
+    await loadKellyGate();
+    expect(getOverUnderCalibrationRows).toHaveBeenCalledWith({
+      excludeRechecks: true,
+    });
   });
 });
 

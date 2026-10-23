@@ -316,3 +316,92 @@ describe("MarketAnalysisSections — layout flat (#576, Ler análise completa)",
     expect(occurrences(without, ANALYSIS_RISK_DISCLAIMER)).toBe(0);
   });
 });
+
+describe("reconferência com a escalação (#619): aviso em todo layout", () => {
+  const recheckView: AnalysisView = {
+    ...OU.view,
+    lineupRecheck: {
+      at: "15:22",
+      oddsAt: "15:05",
+      before: "sem aposta",
+      after: "Over 2,5",
+      changed: true,
+    },
+  };
+  const RECHECKED = { ...OU, view: recheckView };
+  const NOTICE = "Atualizado com a escalação";
+  const LINE =
+    "Recalculado em código às 15:22 com as escalações confirmadas, sem nova chamada de IA. Odds de 15:05.";
+  const text = (markup: string) =>
+    markup.replace(/<[^>]+>/g, "").replace(/&gt;/g, ">").replace(/\s+/g, " ");
+
+  it("≤1 mercado (cru, read-only e analisável)", () => {
+    for (const markup of [
+      renderToStaticMarkup(<MarketAnalysisSections sections={[RECHECKED]} />),
+      renderToStaticMarkup(
+        <MarketAnalysisSections
+          sections={[RECHECKED]}
+          analyzable
+          matchId="m"
+          defaultModelLabel="Sonnet 5.5"
+        />,
+      ),
+    ]) {
+      expect(markup).toContain(NOTICE);
+      expect(text(markup)).toContain(LINE);
+      expect(text(markup)).toContain("Antes da escalação: sem aposta → agora: Over 2,5");
+    }
+  });
+
+  it("flat (Ler análise completa) e seção colapsável aberta", () => {
+    const flat = renderToStaticMarkup(
+      <MarketAnalysisSections sections={[RECHECKED, MR]} layout="flat" />,
+    );
+    expect(occurrences(flat, NOTICE)).toBe(1);
+    const open = renderToStaticMarkup(
+      <MarketAnalysisSection item={RECHECKED} defaultOpen dispatch={null} />,
+    );
+    expect(open).toContain(NOTICE);
+    expect(text(open)).toContain(LINE);
+  });
+
+  it("odds da análise anterior, pass e mesma recomendação", () => {
+    const passView: AnalysisView = {
+      ...recheckView,
+      recommendation: null,
+      lineupRecheck: {
+        at: "15:22",
+        oddsAt: null,
+        before: "sem aposta",
+        after: "sem aposta",
+        changed: false,
+      },
+    };
+    const markup = text(
+      renderToStaticMarkup(<MarketAnalysisSections sections={[{ ...OU, view: passView }]} />),
+    );
+    expect(markup).toContain(NOTICE);
+    expect(markup).toContain("sem nova chamada de IA. Odds da análise anterior.");
+    expect(markup).toContain("Antes da escalação: sem aposta → agora: sem aposta (mesma recomendação)");
+  });
+
+  it("análise comum não mostra o aviso", () => {
+    expect(renderToStaticMarkup(<MarketAnalysisSections sections={[OU]} />)).not.toContain(
+      NOTICE,
+    );
+  });
+
+  it("rodapé da seção: texto automático, não o modelo da análise anterior", () => {
+    const markup = renderToStaticMarkup(
+      <MarketAnalysisSections
+        sections={[{ ...RECHECKED, view: { ...recheckView, model: "texto automático" } }]}
+        analyzable
+        matchId="m"
+        selectableModels={[]}
+        defaultModelLabel="Sonnet 5.5"
+      />,
+    );
+    expect(markup).toContain("reconferida em código com a escalação, texto automático");
+    expect(markup).not.toContain("análise feita com modelo");
+  });
+});

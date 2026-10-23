@@ -938,6 +938,11 @@ export const aiConfig = pgTable("ai_config", {
   // 0063). Default ON. SET ... = false → o painel mostra só a avaliação em código, sem
   // o botão.
   enableBetSlipExplain: boolean().notNull().default(true),
+  // Kill-switch da reconferência com a escalação (#619, PR B; ADR 0041 adendo). Default
+  // ON. O cron recheck-lineups recalcula em código, sem LLM e sem The Odds API, as
+  // análises code_jev feitas antes da escalação sair. SET ... = false → nada é
+  // reconferido; o state v3 do JEV (escalação no state) vale sempre.
+  enableLineupRecheck: boolean().notNull().default(true),
   // Última checagem do cron check-model-versions e o resumo dela (ADR 0062), lidos
   // pelo painel do /admin/settings. O resumo é validado por Zod na leitura
   // (ModelVersionsCheckSummarySchema).

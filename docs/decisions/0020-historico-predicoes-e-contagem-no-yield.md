@@ -127,6 +127,15 @@ Desde então:
   têm a mesma `markets.key='over_under'` (a chave NÃO inclui `marketParams`/linha), então
   a mais recente vence line-agnóstico — comportamento intencional desta era.
 
+## Adendo (2026-10-23, #619): reconferência com a escalação
+
+A reconferência com a escalação (ADR 0041, adendo de 2026-10-23) grava uma predição **nova** a partir de outra: o ponteiro pro pai fica só em `predictions.judgments.recheck.of` (jsonb, sem coluna nem FK). É a primeira exceção ao "sem ponteiro pro pai" da Decisão 1, e fica no jsonb de propósito: a row segue imutável e o histórico continua sendo a lista por `createdAt`.
+
+- **Fora do "mais recente vence".** `selectDashboardRows` exclui `judgments->'recheck' IS NOT NULL` em SQL, antes da dedup (junto do filtro `isLive`): Yield, CLV e o estado do Kelly seguem contando o pai, a decisão que a pessoa viu e podia apostar. `getNonPassPredictionsNearKickoff` também exclui, então uma reconferência não gasta crédito de closing line.
+- **Calibração.** Pai e reconferência dividem o jogo e o resultado, então a reconferência fica fora dos agregados (resumo, por motor, por mercado) e só aparece no próprio segmento da tabela por versão (tag `recheck=lineup_v1` no `modelVersion`). O gate do Kelly lê a calibração sem ela (`excludeRechecks`).
+- **"Suas predições recentes".** A reconferência entra no cartão do jogo, mas não conta como "analisado por último" (a ordem dos cartões e o corte do limite ignoram ela).
+- **Histórico e tela.** A reconferência aparece como a análise mais recente do mercado; o pai continua em "análises anteriores".
+
 ## Referências
 
 - Registra as decisões pedidas no #115; a contagem é implementada no **#116** (dedup

@@ -112,6 +112,7 @@ async function insertPrediction(values: {
   createdAt: Date;
   userId?: string;
   isLive?: boolean;
+  judgments?: Record<string, unknown>;
 }): Promise<string> {
   const [p] = await realDb
     .insert(schema.predictions)
@@ -130,6 +131,9 @@ async function insertPrediction(values: {
       isLive: values.isLive ?? false,
       liveState: values.isLive ? { v: 1 } : null,
       createdAt: values.createdAt,
+      ...(values.judgments
+        ? { judgments: values.judgments as typeof schema.predictions.$inferInsert.judgments }
+        : {}),
     })
     .returning({ id: schema.predictions.id });
   return p.id;
@@ -161,6 +165,32 @@ describe("getRecentPredictedMatchesByUser (ADR 0058)", () => {
     expect(matches).toEqual(
       new Set([0, 3, 4, 5, 6].map((i) => ids.matchIds[i]))
     );
+  });
+
+  it("reconferência com a escalação (#619) não puxa o jogo pro topo, mas vem no cartão", async () => {
+    // Jogo i analisado na hora i (0..5); o cron reconferiu o jogo 0 na hora 10.
+    for (let i = 0; i < 6; i++) {
+      await insertPrediction({
+        matchIndex: i,
+        marketId: ids.mrMarketId,
+        recommendation: "home",
+        createdAt: at(i),
+      });
+    }
+    const recheckId = await insertPrediction({
+      matchIndex: 0,
+      marketId: ids.mrMarketId,
+      recommendation: "away",
+      createdAt: at(10),
+      judgments: { engine: "code_jev", recheck: { kind: "lineup", of: "x" } },
+    });
+    const top5 = new Set(
+      (await getRecentPredictedMatchesByUser(ids.userId, 5)).map((r) => r.matchId)
+    );
+    expect(top5).toEqual(new Set([1, 2, 3, 4, 5].map((i) => ids.matchIds[i])));
+    // Com o jogo 0 no corte, a reconferência aparece entre as predições dele.
+    const all = await getRecentPredictedMatchesByUser(ids.userId, 6);
+    expect(all.map((r) => r.predictionId)).toContain(recheckId);
   });
 
   it("empate no max(createdAt): o desempate por matchId desc fixa quais jogos entram", async () => {

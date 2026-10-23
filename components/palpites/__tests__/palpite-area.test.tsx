@@ -147,3 +147,23 @@ describe("PalpiteArea — Ler análise completa (#576)", () => {
     ).toBeNull();
   });
 });
+
+describe("PalpiteArea — palpite anterior à escalação (#619)", () => {
+  it("uma linha no HERO, só texto, sem número de valor", () => {
+    const markup = renderToStaticMarkup(
+      <PalpiteArea {...props({ lineupNotice: "Palpite gerado antes da escalação." })} />
+    );
+    const hero = markup.slice(0, markup.indexOf('data-testid="slot"'));
+    expect(hero).toContain("Palpite gerado antes da escalação.");
+    const line = hero.match(/data-testid="palpite-lineup-notice"[^>]*>(.*?)<\/p>/)?.[1] ?? "";
+    const lineText = line.replace(/<svg.*?<\/svg>/g, "").replace(/<[^>]+>/g, "");
+    expect(lineText).toBe("Palpite gerado antes da escalação.");
+    expect(lineText).not.toMatch(/\d/);
+  });
+
+  it("sem aviso, nada", () => {
+    expect(renderToStaticMarkup(<PalpiteArea {...props()} />)).not.toContain(
+      "palpite-lineup-notice"
+    );
+  });
+});

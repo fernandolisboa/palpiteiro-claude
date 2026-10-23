@@ -236,6 +236,22 @@ export type AnalysisView = {
   // Leitura ao vivo (#594): o selo do momento congelado no carimbo ("ao vivo · 63' ·
   // 1–0"). Sempre `pass` (sem odd ao vivo). null/ausente = análise de pré-jogo.
   liveLabel?: string | null;
+  // Reconferência com a escalação (#619, PR B): a análise foi recalculada em código pelo
+  // cron com as escalações confirmadas. No AnalysisView (não na seção) pra aparecer em
+  // todo layout. null/ausente = análise comum.
+  lineupRecheck?: LineupRecheckView | null;
+};
+
+export type LineupRecheckView = {
+  // "14:22": quando a reconferência foi gravada (fuso do usuário).
+  at: string;
+  // "14:05": captura das odds usadas; null = odds congeladas da análise anterior.
+  oddsAt: string | null;
+  // O que a análise anterior dizia e o que diz agora ("Mais de 2,5", "sem aposta").
+  before: string;
+  after: string;
+  // A recomendação mudou (lado, linha ou aposta ↔ sem aposta).
+  changed: boolean;
 };
 
 // Item da seção colapsável "análises anteriores" (#204): uma predição passada
