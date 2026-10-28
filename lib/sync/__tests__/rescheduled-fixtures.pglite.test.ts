@@ -28,7 +28,11 @@ vi.mock("@/lib/db", () => ({
   ),
 }));
 
-import { upsertMatchesFromProvider } from "@/lib/db/queries/matches";
+import {
+  getMatchesInRange,
+  SUPERSEDED_KEY_PREFIX,
+  upsertMatchesFromProvider,
+} from "@/lib/db/queries/matches";
 import { reconcileRescheduledFixtures } from "@/lib/sync/rescheduled-fixtures";
 
 const NOW = new Date("2026-10-28T23:30:00.000Z");
@@ -74,8 +78,28 @@ beforeAll(async () => {
 });
 
 beforeEach(async () => {
+  await realDb.delete(schema.friendPools);
+  await realDb.delete(schema.matchLiveStates);
   await realDb.delete(schema.matches);
+  await realDb.delete(schema.users);
 });
+
+async function matchIdByKey(key: string): Promise<string> {
+  const [m] = await realDb
+    .select({ id: schema.matches.id })
+    .from(schema.matches)
+    .where(eq(schema.matches.externalId, key));
+  return m.id;
+}
+
+// Um bolão no jogo: o dado de usuário que decide qual cópia fica.
+async function addPool(matchId: string) {
+  const [u] = await realDb
+    .insert(schema.users)
+    .values({ email: `u-${matchId}@test.dev` })
+    .returning({ id: schema.users.id });
+  await realDb.insert(schema.friendPools).values({ userId: u.id, matchId });
+}
 
 afterAll(async () => {
   await client.close();
@@ -100,22 +124,61 @@ describe("jogo remarcado no sync", () => {
     ]);
   });
 
-  it("cópia velha já duplicada vira adiada e a nova segue intacta", async () => {
+  it("cópia velha duplicada e sem dados é aposentada, some da lista e a nova fica", async () => {
     vi.spyOn(console, "info").mockImplementation(() => {});
     // Estado de produção antes da correção: as duas rows, a velha ainda `scheduled`.
     await upsertMatchesFromProvider([fixture(OLD), fixture(NEW)]);
+    const oldId = await matchIdByKey(compositeFixtureKey(fixture(OLD)));
 
     await syncRound([fixture(NEW)]);
 
     const rows = await allMatches();
     expect(rows.map((r) => [r.externalId, r.status])).toEqual([
-      [compositeFixtureKey(fixture(OLD)), "postponed"],
+      [`${SUPERSEDED_KEY_PREFIX}${oldId}:${compositeFixtureKey(fixture(OLD))}`, "postponed"],
       [compositeFixtureKey(fixture(NEW)), "scheduled"],
     ]);
+    const listed = await getMatchesInRange({ from: null, to: null });
+    expect(listed.map((m) => m.externalId)).toEqual([compositeFixtureKey(fixture(NEW))]);
 
     // Rodada seguinte: nada muda (idempotente).
     await syncRound([fixture(NEW)]);
-    expect((await allMatches()).map((r) => r.status)).toEqual(["postponed", "scheduled"]);
+    expect(await allMatches()).toEqual(rows);
+  });
+
+  it("cópia velha com bolão herda a chave nova; a nova, vazia, é aposentada", async () => {
+    vi.spyOn(console, "info").mockImplementation(() => {});
+    await upsertMatchesFromProvider([fixture(OLD), fixture(NEW)]);
+    const oldId = await matchIdByKey(compositeFixtureKey(fixture(OLD)));
+    const newId = await matchIdByKey(compositeFixtureKey(fixture(NEW)));
+    await addPool(oldId);
+
+    await syncRound([fixture(NEW)]);
+
+    const rows = await allMatches();
+    expect(rows.find((r) => r.id === oldId)).toMatchObject({
+      externalId: compositeFixtureKey(fixture(NEW)),
+      kickoffAt: new Date(NEW),
+      status: "scheduled",
+    });
+    expect(rows.find((r) => r.id === newId)).toMatchObject({
+      externalId: `${SUPERSEDED_KEY_PREFIX}${newId}:${compositeFixtureKey(fixture(NEW))}`,
+      status: "postponed",
+    });
+  });
+
+  it("o estado ao vivo do horário velho sai com o rekey (um PST travaria o novo)", async () => {
+    vi.spyOn(console, "info").mockImplementation(() => {});
+    await syncRound([fixture(OLD)]);
+    const id = await matchIdByKey(compositeFixtureKey(fixture(OLD)));
+    await realDb.insert(schema.matchLiveStates).values({
+      matchId: id,
+      statusShort: "PST",
+      fetchedAt: new Date(OLD),
+    });
+
+    await syncRound([fixture(NEW)]);
+
+    expect(await realDb.select().from(schema.matchLiveStates)).toEqual([]);
   });
 
   it("jogo encerrado com a chave sumida do provider não é tocado", async () => {

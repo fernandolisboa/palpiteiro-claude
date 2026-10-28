@@ -9,12 +9,21 @@ import {
   lt,
   lte,
   notExists,
+  notLike,
   or,
   sql,
   type SQL,
 } from "drizzle-orm";
 
-import { matches, predictions } from "@/db/schema";
+import {
+  betSlips,
+  friendPools,
+  matches,
+  matchLiveStates,
+  palpiteSets,
+  predictions,
+  userPalpiteAnalyses,
+} from "@/db/schema";
 import { db } from "@/lib/db";
 import { IN_PROGRESS_WINDOW_MS } from "@/lib/view/date-range";
 import { compositeFixtureKey } from "@/lib/providers/sports-data/types";
@@ -26,6 +35,10 @@ import type {
 import type { SupportedLeague } from "@/lib/providers/sports-data/leagues";
 
 export type DbMatch = typeof matches.$inferSelect;
+
+// Cópia aposentada de um jogo remarcado (lib/sync/rescheduled-fixtures.ts): a chave
+// ganha este prefixo e a row some das listas de jogos.
+export const SUPERSEDED_KEY_PREFIX = "superseded:";
 
 const STATUS_MAP: Record<NormalizedFixtureStatus, DbMatch["status"]> = {
   scheduled: "scheduled",
@@ -68,6 +81,7 @@ type RangeWhere = {
 // Condições do range, soltas: quem chama junta no próprio and() (um nível só).
 function rangeConditions(opts: RangeWhere): (SQL | undefined)[] {
   return [
+    notLike(matches.externalId, `${SUPERSEDED_KEY_PREFIX}%`),
     opts.from ? gte(matches.kickoffAt, opts.from) : undefined,
     opts.to ? lte(matches.kickoffAt, opts.to) : undefined,
     opts.league ? eq(matches.league, opts.league) : undefined,
@@ -373,18 +387,32 @@ export async function upsertMatchesFromProvider(
 /**
  * Rows das ligas a partir de `since` (kickoff), pro casamento de jogo remarcado
  * (lib/sync/rescheduled-fixtures.ts). Todas as fases: a chave de uma row encerrada
- * também ocupa o lugar.
+ * também ocupa o lugar. `hasUserData` = alguém já registrou algo no jogo (análise,
+ * palpite, aposta, bolão, "Seu palpite"): decide qual de duas cópias fica.
  */
 export async function getReschedulableMatches(args: {
   leagues: readonly SupportedLeague[];
   since: Date;
 }): Promise<
-  Pick<
+  (Pick<
     DbMatch,
     "id" | "externalId" | "league" | "homeTeam" | "awayTeam" | "kickoffAt" | "status"
-  >[]
+  > & { hasUserData: boolean })[]
 > {
   if (args.leagues.length === 0) return [];
+  const one = { one: sql`1` };
+  const hasUserData = sql<boolean>`${or(
+    exists(db.select(one).from(predictions).where(eq(predictions.matchId, matches.id))),
+    exists(db.select(one).from(palpiteSets).where(eq(palpiteSets.matchId, matches.id))),
+    exists(db.select(one).from(betSlips).where(eq(betSlips.matchId, matches.id))),
+    exists(db.select(one).from(friendPools).where(eq(friendPools.matchId, matches.id))),
+    exists(
+      db
+        .select(one)
+        .from(userPalpiteAnalyses)
+        .where(eq(userPalpiteAnalyses.matchId, matches.id)),
+    ),
+  )}`;
   return db
     .select({
       id: matches.id,
@@ -394,6 +422,7 @@ export async function getReschedulableMatches(args: {
       awayTeam: matches.awayTeam,
       kickoffAt: matches.kickoffAt,
       status: matches.status,
+      hasUserData,
     })
     .from(matches)
     .where(
@@ -404,12 +433,17 @@ export async function getReschedulableMatches(args: {
     );
 }
 
-/** Jogo remarcado: a row segue sendo o mesmo jogo, com a chave e o horário novos. */
+/**
+ * Jogo remarcado: a row segue sendo o mesmo jogo, com a chave e o horário novos. O
+ * estado ao vivo lido no horário velho sai junto: um `PST` gravado ali é terminal e
+ * travaria a leitura ao vivo no horário novo.
+ */
 export async function rekeyMatch(args: {
   id: string;
   externalId: string;
   kickoffAt: Date;
 }): Promise<void> {
+  await db.delete(matchLiveStates).where(eq(matchLiveStates.matchId, args.id));
   await db
     .update(matches)
     .set({
@@ -421,18 +455,24 @@ export async function rekeyMatch(args: {
 }
 
 /**
- * Cópia velha de um jogo remarcado cuja row nova já existe: `postponed` (fora do "ao
- * vivo", sem análise). Só mexe em row ainda aberta.
+ * Cópia aposentada de um jogo remarcado: `postponed` (fora do "ao vivo", sem análise)
+ * e a chave com SUPERSEDED_KEY_PREFIX, que libera a chave e tira a row das listas. O
+ * link direto continua abrindo. Encerrado/cancelado nunca é tocado.
  */
 export async function markMatchesSuperseded(ids: readonly string[]): Promise<void> {
   if (ids.length === 0) return;
   await db
     .update(matches)
-    .set({ status: "postponed", updatedAt: new Date() })
+    .set({
+      status: "postponed",
+      externalId: sql`${SUPERSEDED_KEY_PREFIX} || ${matches.id} || ':' || ${matches.externalId}`,
+      updatedAt: new Date(),
+    })
     .where(
       and(
         inArray(matches.id, [...ids]),
-        inArray(matches.status, ["scheduled", "live"]),
+        inArray(matches.status, ["scheduled", "live", "postponed"]),
+        notLike(matches.externalId, `${SUPERSEDED_KEY_PREFIX}%`),
       ),
     );
 }
