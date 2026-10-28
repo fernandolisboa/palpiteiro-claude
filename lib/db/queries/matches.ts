@@ -370,6 +370,73 @@ export async function upsertMatchesFromProvider(
     });
 }
 
+/**
+ * Rows das ligas a partir de `since` (kickoff), pro casamento de jogo remarcado
+ * (lib/sync/rescheduled-fixtures.ts). Todas as fases: a chave de uma row encerrada
+ * também ocupa o lugar.
+ */
+export async function getReschedulableMatches(args: {
+  leagues: readonly SupportedLeague[];
+  since: Date;
+}): Promise<
+  Pick<
+    DbMatch,
+    "id" | "externalId" | "league" | "homeTeam" | "awayTeam" | "kickoffAt" | "status"
+  >[]
+> {
+  if (args.leagues.length === 0) return [];
+  return db
+    .select({
+      id: matches.id,
+      externalId: matches.externalId,
+      league: matches.league,
+      homeTeam: matches.homeTeam,
+      awayTeam: matches.awayTeam,
+      kickoffAt: matches.kickoffAt,
+      status: matches.status,
+    })
+    .from(matches)
+    .where(
+      and(
+        inArray(matches.league, [...args.leagues]),
+        gte(matches.kickoffAt, args.since),
+      ),
+    );
+}
+
+/** Jogo remarcado: a row segue sendo o mesmo jogo, com a chave e o horário novos. */
+export async function rekeyMatch(args: {
+  id: string;
+  externalId: string;
+  kickoffAt: Date;
+}): Promise<void> {
+  await db
+    .update(matches)
+    .set({
+      externalId: args.externalId,
+      kickoffAt: args.kickoffAt,
+      updatedAt: new Date(),
+    })
+    .where(eq(matches.id, args.id));
+}
+
+/**
+ * Cópia velha de um jogo remarcado cuja row nova já existe: `postponed` (fora do "ao
+ * vivo", sem análise). Só mexe em row ainda aberta.
+ */
+export async function markMatchesSuperseded(ids: readonly string[]): Promise<void> {
+  if (ids.length === 0) return;
+  await db
+    .update(matches)
+    .set({ status: "postponed", updatedAt: new Date() })
+    .where(
+      and(
+        inArray(matches.id, [...ids]),
+        inArray(matches.status, ["scheduled", "live"]),
+      ),
+    );
+}
+
 export async function getMatchIdsWithPredictionsByUser(args: {
   matchIds: string[];
   userId: string;

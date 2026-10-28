@@ -26,6 +26,14 @@ vi.mock("@/lib/db/queries/matches", () => ({
     upsertSpy(fixtures),
 }));
 
+// Jogo remarcado (lib/sync/rescheduled-fixtures.ts): coberto nos próprios testes; aqui
+// só a ordem (antes do upsert) e que uma falha não segura o sync.
+const reconcileSpy = vi.hoisted(() => vi.fn());
+vi.mock("@/lib/sync/rescheduled-fixtures", () => ({
+  reconcileRescheduledFixtures: (fixtures: NormalizedFixture[]) =>
+    reconcileSpy(fixtures),
+}));
+
 // Lock mockado: simula a semântica check-and-set (1º acquire vence, próximos
 // no-mesmo-"lock" falham) sem KV nem in-memory store real. `force` sempre vence.
 // Estado de lock compartilhado pelo mock — via vi.hoisted pra ser inicializado
@@ -86,6 +94,8 @@ function makeProvider(overrides?: {
 describe("ensureUpcomingFixturesSynced", () => {
   beforeEach(() => {
     upsertSpy.mockClear();
+    reconcileSpy.mockReset();
+    reconcileSpy.mockResolvedValue({ rekey: [], supersede: [] });
     acquireMock.mockClear();
     releaseMock.mockClear();
     lockState.held = false;
@@ -173,6 +183,43 @@ describe("ensureUpcomingFixturesSynced", () => {
 
     expect(upsertSpy).toHaveBeenCalledTimes(1);
     expect(upsertSpy).toHaveBeenCalledWith([bsa, ucl, epl, lal]);
+  });
+
+  it("acerta jogo remarcado antes do upsert, com as mesmas fixtures", async () => {
+    const bsa = { id: "bsa-1", league: "brasileirao_a" } as unknown as NormalizedFixture;
+    const getFixturesBySeason = vi.fn((league: string) =>
+      Promise.resolve(league === "brasileirao_a" ? [bsa] : []),
+    );
+    __setSportsDataProviderForTesting(makeProvider({ getFixturesBySeason }));
+    const order: string[] = [];
+    reconcileSpy.mockImplementation(async () => {
+      order.push("reconcile");
+      return { rekey: [], supersede: [] };
+    });
+    upsertSpy.mockImplementation(async () => {
+      order.push("upsert");
+    });
+
+    await ensureUpcomingFixturesSynced();
+
+    expect(reconcileSpy).toHaveBeenCalledWith([bsa]);
+    expect(order).toEqual(["reconcile", "upsert"]);
+    upsertSpy.mockReset();
+  });
+
+  it("falha no acerto de remarcados não segura o upsert", async () => {
+    const getFixturesBySeason = vi.fn().mockResolvedValue([]);
+    __setSportsDataProviderForTesting(makeProvider({ getFixturesBySeason }));
+    reconcileSpy.mockRejectedValue(new Error("db down"));
+    const errorSpy = vi.spyOn(console, "error").mockImplementation(() => {});
+
+    await ensureUpcomingFixturesSynced();
+
+    expect(upsertSpy).toHaveBeenCalledTimes(1);
+    expect(errorSpy).toHaveBeenCalledWith(
+      expect.stringContaining("reschedule_reconcile_failed"),
+    );
+    errorSpy.mockRestore();
   });
 
   it("não roda (no-op) quando o lock não é adquirido", async () => {
