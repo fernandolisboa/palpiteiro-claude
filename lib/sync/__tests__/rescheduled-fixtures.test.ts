@@ -69,8 +69,18 @@ describe("planRescheduledFixtures", () => {
     expect(plan.retire).toEqual([]);
     expect(plan.rekey).toEqual([]);
     expect(plan.supersede).toEqual([
-      { id: "old", externalId: compositeFixtureKey(fixture(OLD)) },
+      { id: "old", externalId: compositeFixtureKey(fixture(OLD)), hasUserData: false },
     ]);
+  });
+
+  it("row nova vazia já encerrada e a velha tem dados: a velha herda (e liquida pelo upsert)", () => {
+    const plan = planRescheduledFixtures(
+      [row("old", fixture(OLD), "scheduled", true), row("new", fixture(NEW), "finished")],
+      [fixture(NEW, { status: "finished" })],
+    );
+    expect(plan.retire.map((r) => r.id)).toEqual(["new"]);
+    expect(plan.rekey.map((r) => r.id)).toEqual(["old"]);
+    expect(plan.supersede).toEqual([]);
   });
 
   it("row nova já existe vazia e a velha tem dados: a nova é aposentada e a velha herda", () => {

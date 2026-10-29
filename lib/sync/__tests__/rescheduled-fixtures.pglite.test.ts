@@ -166,6 +166,24 @@ describe("jogo remarcado no sync", () => {
     });
   });
 
+  it("as duas com dados: fica a nova e a velha aposentada gera aviso pra acerto manual", async () => {
+    vi.spyOn(console, "info").mockImplementation(() => {});
+    const warn = vi.spyOn(console, "warn").mockImplementation(() => {});
+    await upsertMatchesFromProvider([fixture(OLD), fixture(NEW)]);
+    const oldId = await matchIdByKey(compositeFixtureKey(fixture(OLD)));
+    const newId = await matchIdByKey(compositeFixtureKey(fixture(NEW)));
+    await addPool(oldId);
+    await addPool(newId);
+
+    await syncRound([fixture(NEW)]);
+
+    const rows = await allMatches();
+    expect(rows.find((r) => r.id === newId)?.externalId).toBe(compositeFixtureKey(fixture(NEW)));
+    expect(rows.find((r) => r.id === oldId)?.status).toBe("postponed");
+    expect(warn).toHaveBeenCalledWith(expect.stringContaining("superseded_with_user_data"));
+    warn.mockRestore();
+  });
+
   it("o estado ao vivo do horário velho sai com o rekey (um PST travaria o novo)", async () => {
     vi.spyOn(console, "info").mockImplementation(() => {});
     await syncRound([fixture(OLD)]);

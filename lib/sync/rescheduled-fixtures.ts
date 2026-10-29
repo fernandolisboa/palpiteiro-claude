@@ -44,7 +44,7 @@ export type ReschedulePlan = {
   // Aplicado primeiro: libera a chave nova pra row que tem os dados do usuário.
   retire: { id: string; externalId: string }[];
   rekey: { id: string; fromKey: string; externalId: string; kickoffAt: Date }[];
-  supersede: { id: string; externalId: string }[];
+  supersede: { id: string; externalId: string; hasUserData: boolean }[];
 };
 
 const EMPTY_PLAN: ReschedulePlan = { retire: [], rekey: [], supersede: [] };
@@ -62,8 +62,10 @@ function pairKey(x: { league: string; homeTeam: string; awayTeam: string }): str
  * - ninguém tem a chave nova: a herda a cópia mais próxima do horário novo que tem
  *   dados do usuário (sem nenhuma com dados, a mais próxima);
  * - a chave nova já tem row (sync de antes desta correção): fica a row com os dados do
- *   usuário. Se só a velha tem, a nova é aposentada e a velha herda a chave; senão as
- *   velhas são aposentadas. Juntar duas rows com dados não é feito aqui.
+ *   usuário. Se só a velha tem, a nova é aposentada (em qualquer fase: se já encerrou,
+ *   o upsert passa o placar pra velha, que liquida) e a velha herda a chave; senão as
+ *   velhas são aposentadas. Juntar duas rows com dados não é feito aqui (log
+ *   `superseded_with_user_data` pra acerto manual).
  * As demais cópias velhas são aposentadas. Sem par no provider, nada muda (pode ser só
  * um buraco do provider). Row já aposentada (SUPERSEDED_KEY_PREFIX) nunca entra.
  */
@@ -114,7 +116,7 @@ export function planRescheduledFixtures(
     const heir =
       existing === undefined
         ? (orphans.find((o) => o.row.hasUserData) ?? orphans[0]).row
-        : !existing.hasUserData && OPEN_STATUSES.has(existing.status)
+        : !existing.hasUserData
           ? orphans.find((o) => o.row.hasUserData)?.row
           : undefined;
     if (existing !== undefined && heir !== undefined) {
@@ -129,7 +131,13 @@ export function planRescheduledFixtures(
       });
     }
     for (const { row } of orphans) {
-      if (row !== heir) plan.supersede.push({ id: row.id, externalId: row.externalId });
+      if (row !== heir) {
+        plan.supersede.push({
+          id: row.id,
+          externalId: row.externalId,
+          hasUserData: row.hasUserData,
+        });
+      }
     }
   }
   return plan;
@@ -158,6 +166,16 @@ export async function reconcileRescheduledFixtures(
     await rekeyMatch(r);
   }
   await markMatchesSuperseded(plan.supersede.map((s) => s.id));
+  const stranded = plan.supersede.filter((s) => s.hasUserData);
+  if (stranded.length > 0) {
+    console.warn(
+      JSON.stringify({
+        scope: "sync-upcoming-fixtures",
+        event: "superseded_with_user_data",
+        matchIds: stranded.map((s) => s.id),
+      }),
+    );
+  }
   if (plan.retire.length + plan.rekey.length + plan.supersede.length > 0) {
     console.info(
       JSON.stringify({

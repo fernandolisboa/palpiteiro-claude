@@ -328,6 +328,7 @@ export async function getMatchesInLeagueWindow(args: {
         eq(matches.league, args.league),
         gte(matches.kickoffAt, from),
         lte(matches.kickoffAt, horizon),
+        notLike(matches.externalId, `${SUPERSEDED_KEY_PREFIX}%`),
       ),
     )
     .orderBy(asc(matches.kickoffAt));
@@ -457,7 +458,8 @@ export async function rekeyMatch(args: {
 /**
  * Cópia aposentada de um jogo remarcado: `postponed` (fora do "ao vivo", sem análise)
  * e a chave com SUPERSEDED_KEY_PREFIX, que libera a chave e tira a row das listas. O
- * link direto continua abrindo. Encerrado/cancelado nunca é tocado.
+ * link direto continua abrindo. Quem chama escolhe as rows (o planner só aposenta row
+ * encerrada quando ela está vazia e a cópia velha tem os dados do usuário).
  */
 export async function markMatchesSuperseded(ids: readonly string[]): Promise<void> {
   if (ids.length === 0) return;
@@ -471,7 +473,6 @@ export async function markMatchesSuperseded(ids: readonly string[]): Promise<voi
     .where(
       and(
         inArray(matches.id, [...ids]),
-        inArray(matches.status, ["scheduled", "live", "postponed"]),
         notLike(matches.externalId, `${SUPERSEDED_KEY_PREFIX}%`),
       ),
     );
