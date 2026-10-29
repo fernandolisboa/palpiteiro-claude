@@ -47,6 +47,7 @@ vi.mock("drizzle-orm", () => ({
   lt: (col: unknown, val: unknown) => ({ op: "lt", col, val }),
   lte: (col: unknown, val: unknown) => ({ op: "lte", col, val }),
   inArray: (col: unknown, val: unknown) => ({ op: "inArray", col, val }),
+  notLike: (col: unknown, val: unknown) => ({ op: "notLike", col, val }),
   asc: (col: unknown) => ({ op: "asc", col }),
   desc: (col: unknown) => ({ op: "desc", col }),
   // sql só é usado em upsertMatchesFromProvider; tag passthrough inofensivo.
@@ -115,6 +116,7 @@ import {
   getMatchesByTeam,
   getMatchesInRange,
   getUpcomingMatches,
+  SUPERSEDED_KEY_PREFIX,
   upsertMatchesFromProvider,
 } from "@/lib/db/queries/matches";
 import type { NormalizedFixture } from "@/lib/providers/sports-data/types";
@@ -146,7 +148,7 @@ beforeEach(() => {
 });
 
 describe("getMatchesInRange — range query flexível", () => {
-  it("unbounded dos dois lados → and() vira undefined, WHERE sem filtro = todas as rows", async () => {
+  it("unbounded dos dois lados → só o filtro das cópias aposentadas de jogo remarcado", async () => {
     const rows = [{ id: "m1" }, { id: "m2" }];
     h.state.rows = rows;
 
@@ -154,11 +156,11 @@ describe("getMatchesInRange — range query flexível", () => {
       getMatchesInRange({ from: null, to: null }),
     ).resolves.toEqual(rows);
 
-    // Todos os operandos undefined → and() retorna undefined (igual ao drizzle
-    // real v0.45.2), e .where(undefined) NÃO emite cláusula WHERE → TODAS as
-    // rows, não zero. Travar que o predicado chegou como undefined é o contrato
-    // de verdade (não a fidelidade do mock).
-    expect(h.state.whereArg).toBeUndefined();
+    // Sem filtro do chamador, a única condição é a que tira da lista a cópia
+    // aposentada de um jogo remarcado (lib/sync/rescheduled-fixtures.ts).
+    expect(andConds()).toEqual([
+      { op: "notLike", col: matches.externalId, val: `${SUPERSEDED_KEY_PREFIX}%` },
+    ]);
   });
 
   it("from-only → só gte(kickoffAt, from)", async () => {
@@ -220,7 +222,7 @@ describe("getMatchesInRange — range query flexível", () => {
 
   it("leagues vazio → NÃO aplica filtro de liga", async () => {
     await getMatchesInRange({ from: null, to: null, leagues: [] });
-    expect(h.state.whereArg).toBeUndefined();
+    expect(andConds().map((c) => c.op)).toEqual(["notLike"]);
   });
 
   it("order default → asc(kickoffAt)", async () => {

@@ -4,6 +4,7 @@ import { getSportsDataProvider } from "@/lib/providers/sports-data";
 import type { SupportedLeague } from "@/lib/providers/sports-data/leagues";
 import type { NormalizedFixture } from "@/lib/providers/sports-data/types";
 import { acquireSyncLock, releaseSyncLock } from "@/lib/sync/lock";
+import { reconcileRescheduledFixtures } from "@/lib/sync/rescheduled-fixtures";
 
 // TTL do lock durável. DELIBERADAMENTE > a cadência do cron (a cada 6h — ver
 // vercel.json / app/api/cron/sync-fixtures). Mantendo o TTL ≥ intervalo do cron,
@@ -61,6 +62,19 @@ export async function ensureUpcomingFixturesSynced(
           }),
         );
       }
+    }
+    // Jogo remarcado antes do upsert: a row antiga herda a chave nova em vez de nascer
+    // uma segunda. Falha aqui não segura o sync (a próxima rodada replaneja).
+    try {
+      await reconcileRescheduledFixtures(fixtures);
+    } catch (err) {
+      console.error(
+        JSON.stringify({
+          scope: "sync-upcoming-fixtures",
+          error: "reschedule_reconcile_failed",
+          message: err instanceof Error ? err.message : String(err),
+        }),
+      );
     }
     await upsertMatchesFromProvider(fixtures);
   } catch (err) {
