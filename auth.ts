@@ -12,7 +12,7 @@ import {
   users,
   verificationTokens,
 } from "@/db/schema";
-import { isSignInAllowed } from "@/lib/auth/whitelist-db";
+import { isSignInAllowedForAccount } from "@/lib/auth/whitelist-db";
 import { revalidateToken } from "@/lib/auth/jwt-revalidate";
 import { db } from "@/lib/db";
 import { getUserAccessState, markTermsAccepted } from "@/lib/db/queries/users";
@@ -82,8 +82,10 @@ export const { handlers, auth, signIn, signOut, unstable_update } = NextAuth({
   // pra preservar authorized/jwt/session; só o signIn é adicionado/sobrescrito.
   callbacks: {
     ...authConfig.callbacks,
-    async signIn({ user }) {
-      return isSignInAllowed(user.email);
+    // Passkey só entra em conta que já existe — nunca cria uma (ver
+    // `isSignInAllowedForAccount`: pre-account takeover, auditoria 2026-11-01).
+    async signIn({ user, account }) {
+      return isSignInAllowedForAccount(user.email, account?.type);
     },
     // Override Node do jwt() (#252, ADR 0023): roda o jwt() edge-safe primeiro
     // (carimbo de id/role no login + edição de perfil), depois revalida

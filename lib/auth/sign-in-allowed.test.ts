@@ -7,7 +7,10 @@ vi.mock("@/lib/db/queries/users", () => ({
   getUserAllowedByEmail: vi.fn(),
 }));
 
-import { isSignInAllowed } from "@/lib/auth/whitelist-db";
+import {
+  isSignInAllowed,
+  isSignInAllowedForAccount,
+} from "@/lib/auth/whitelist-db";
 import { getUserAllowedByEmail } from "@/lib/db/queries/users";
 
 const dbSpy = vi.mocked(getUserAllowedByEmail);
@@ -88,5 +91,60 @@ describe("isSignInAllowed — self-provision aberto (allow-by-default)", () => {
     dbSpy.mockRejectedValue(new Error("neon down"));
     await expect(isSignInAllowed("estranho@ex.com")).resolves.toBe(false);
     expect(dbSpy).toHaveBeenCalledWith("estranho@ex.com");
+  });
+});
+
+// Regressão da auditoria de segurança 2026-11-01: passkey registrada deslogada com o
+// e-mail de outra pessoa criava a row e, depois, Google/magic link caíam nessa conta.
+describe("isSignInAllowedForAccount — passkey nunca cria conta", () => {
+  it("webauthn + e-mail SEM row → false (bloqueia o pre-account takeover)", async () => {
+    process.env.ALLOWED_EMAILS = "outro@ex.com";
+    dbSpy.mockResolvedValue(null);
+    await expect(
+      isSignInAllowedForAccount("vitima@ex.com", "webauthn"),
+    ).resolves.toBe(false);
+  });
+
+  it("webauthn + e-mail do env-floor SEM row → false (o floor não abre exceção)", async () => {
+    process.env.ALLOWED_EMAILS = "dono@ex.com";
+    dbSpy.mockResolvedValue(null);
+    await expect(
+      isSignInAllowedForAccount("dono@ex.com", "webauthn"),
+    ).resolves.toBe(false);
+  });
+
+  it("webauthn + erro de DB → false (fail-closed)", async () => {
+    process.env.ALLOWED_EMAILS = "dono@ex.com";
+    dbSpy.mockRejectedValue(new Error("db down"));
+    await expect(
+      isSignInAllowedForAccount("dono@ex.com", "webauthn"),
+    ).resolves.toBe(false);
+  });
+
+  it("webauthn + e-mail vazio → false", async () => {
+    await expect(isSignInAllowedForAccount(null, "webauthn")).resolves.toBe(false);
+  });
+
+  it("webauthn + row existente allowed=true → true (passkey de conta existente)", async () => {
+    process.env.ALLOWED_EMAILS = "outro@ex.com";
+    dbSpy.mockResolvedValue({ allowed: true });
+    await expect(
+      isSignInAllowedForAccount("ativo@ex.com", "webauthn"),
+    ).resolves.toBe(true);
+  });
+
+  it("webauthn + row existente allowed=false → false (bloqueio segue valendo)", async () => {
+    process.env.ALLOWED_EMAILS = "outro@ex.com";
+    dbSpy.mockResolvedValue({ allowed: false });
+    await expect(
+      isSignInAllowedForAccount("bloqueado@ex.com", "webauthn"),
+    ).resolves.toBe(false);
+  });
+
+  it("outros providers mantêm o allow-by-default (e-mail novo → true)", async () => {
+    process.env.ALLOWED_EMAILS = "outro@ex.com";
+    dbSpy.mockResolvedValue(null);
+    await expect(isSignInAllowedForAccount("novo@ex.com", "email")).resolves.toBe(true);
+    await expect(isSignInAllowedForAccount("novo@ex.com", "oidc")).resolves.toBe(true);
   });
 });
