@@ -4,12 +4,10 @@ import { headers } from "next/headers";
 import { redirect } from "next/navigation";
 
 import { signIn } from "@/auth";
-import { clientIp, ipBucketKey } from "@/lib/auth/client-ip";
 import {
-  checkMagicLinkGlobalRateLimit,
-  checkMagicLinkIpRateLimit,
-  checkMagicLinkRateLimit,
-} from "@/lib/auth/magic-link-rate-limit";
+  isMagicLinkSendAllowed,
+  normalizeMagicLinkEmail,
+} from "@/lib/auth/magic-link-guard";
 
 // Server actions extraídas do Server Component do /signin (#282): viraram um
 // módulo "use server" próprio pra serem importáveis pelo wrapper CLIENT que
@@ -19,29 +17,14 @@ import {
 // de erros via redirect e o `redirectTo`.
 
 export async function sendMagicLink(formData: FormData) {
-  const email = String(formData.get("email") ?? "")
-    .trim()
-    .toLowerCase();
+  const email = normalizeMagicLinkEmail(formData.get("email"));
   if (!email) redirect("/signin?error=MissingEmail");
   // Cost-safety (ADR 0023 §3, #257): com o cadastro aberto, rate-limita o envio
   // ANTES do Resend — cada link é um e-mail pago e 4xx do Resend não é free de
   // quota. Estourou → redirect, NUNCA chega a signIn("resend") → nenhum e-mail.
-  //
-  // Teto por origem PRIMEIRO (report 01 achado #1 / #435): sem ele, o teto por-e-mail não
-  // barra email-bombing (o atacante varia o endereço da vítima a cada 5 envios). A chave é
-  // o IPv4 ou o prefixo IPv6 /64 (#469) — um VPS com /64 roteado não troca de bucket a
-  // cada request. Sem IP válido nos headers (dev) → pula; o teto global abaixo segue valendo.
-  const rawIp = clientIp(await headers());
-  const ipBucket = rawIp ? ipBucketKey(rawIp) : null;
-  if (ipBucket && !(await checkMagicLinkIpRateLimit(ipBucket))) {
-    redirect("/signin?error=RateLimited");
-  }
-  if (!(await checkMagicLinkRateLimit(email))) {
-    redirect("/signin?error=RateLimited");
-  }
-  // Circuit breaker app-wide (#469) POR ÚLTIMO: só conta envios que passaram nos tetos
-  // individuais, então um script barrado por IP/e-mail não consome o orçamento global.
-  if (!(await checkMagicLinkGlobalRateLimit())) {
+  // Os tetos (IP/64, e-mail, global) moram em `isMagicLinkSendAllowed`, que também
+  // guarda o POST cru do Auth.js (app/api/auth/[...nextauth]/route.ts).
+  if (!(await isMagicLinkSendAllowed(email, await headers()))) {
     redirect("/signin?error=RateLimited");
   }
   // signIn redireciona internamente: sucesso → verifyRequest; e-mail bloqueado

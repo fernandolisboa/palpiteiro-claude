@@ -1,3 +1,5 @@
+import { notFound } from "next/navigation";
+import { getSession } from "@/lib/auth/session";
 import { IntentLink } from "@/components/intent-link";
 import { ChevronRight } from "lucide-react";
 
@@ -14,7 +16,10 @@ function capitalize(text: string): string {
   return text.charAt(0).toUpperCase() + text.slice(1);
 }
 
-export default function AdminIndexPage() {
+export default async function AdminIndexPage() {
+  // Role checado na própria página, não só no layout: o App Router pode renderizar o
+  // segmento da página sem re-rodar o layout (auditoria de segurança 2026-11-01).
+  if ((await getSession())?.user?.role !== "admin") notFound();
   return (
     <div className="bg-background text-foreground">
       <RevisitRefresh />

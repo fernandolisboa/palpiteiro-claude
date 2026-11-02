@@ -1,0 +1,134 @@
+# Varredura de segurança contínua (proposta da auditoria /security-audit de 2026-11-01).
+#
+# Em todo PR: semgrep, gitleaks (histórico do PR), osv-scanner (lockfile) e a suíte de
+# regressão de authz/auth. Quando a Vercel publica um Preview: ZAP baseline (PASSIVO) contra
+# a URL do Preview. Semanal: varredura ATIVA do ZAP, SOMENTE contra um alvo descartável.
+#
+# ⚠️ Hoje os Previews da Vercel usam branches Neon criadas com cópia dos dados de produção
+# (integração Neon↔Vercel, init_source = parent-data). Por isso o scan ATIVO não aponta pro
+# Preview: ele só roda quando a variable AUDIT_ACTIVE_TARGET_URL existir, apontando pra um
+# deploy ligado a um banco schema-only/vazio (ver .security-audit/config.md local).
+#
+# Sem actions de terceiros: as ferramentas rodam por imagem/CLI com versão fixa, pra que
+# nenhuma action externa veja o GITHUB_TOKEN. Actions oficiais pinadas por SHA.
+name: Security
+
+on:
+  pull_request:
+    branches: [main]
+  deployment_status:
+  schedule:
+    - cron: "0 6 * * 1" # segunda 06:00 UTC
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: security-${{ github.workflow }}-${{ github.ref }}-${{ github.event_name }}
+  cancel-in-progress: true
+
+jobs:
+  sast:
+    if: github.event_name == 'pull_request' || github.event_name == 'workflow_dispatch'
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4
+        with:
+          fetch-depth: 0
+
+      - name: Semgrep
+        run: |
+          docker run --rm -v "$PWD:/src" -w /src semgrep/semgrep:1.183.0 \
+            semgrep scan --error --metrics=off \
+              --config p/owasp-top-ten --config p/secrets --config p/nextjs --config p/typescript \
+              --exclude node_modules --exclude .next --exclude '__tests__' --exclude '*.test.ts' --exclude '*.test.tsx' \
+              --exclude-rule javascript.lang.security.audit.detect-non-literal-regexp.detect-non-literal-regexp
+
+      - name: Gitleaks (commits do PR)
+        env:
+          BASE: ${{ github.event.pull_request.base.sha }}
+        run: |
+          RANGE="${BASE:+$BASE..HEAD}"
+          docker run --rm -v "$PWD:/repo" zricethezav/gitleaks:v8.30.1 \
+            detect --source /repo --redact --log-opts="${RANGE:---all}"
+
+      - name: OSV-Scanner (lockfile)
+        run: |
+          docker run --rm -v "$PWD:/src" ghcr.io/google/osv-scanner:v2.7.0 \
+            scan --lockfile /src/pnpm-lock.yaml
+
+  authz-tests:
+    if: github.event_name == 'pull_request' || github.event_name == 'workflow_dispatch'
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4
+      - uses: pnpm/action-setup@b906affcce14559ad1aafd4ab0e942779e9f58b1 # v4
+        with:
+          version: 10
+      - uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020 # v4
+        with:
+          node-version: "20"
+          cache: "pnpm"
+      - run: pnpm install --frozen-lockfile
+      # Regressões de auth/authz (passkey sem conta, tetos do magic link, role nas
+      # páginas admin, matcher do middleware, cron secret). Também rodam no CI geral;
+      # aqui ficam isoladas pra o check de segurança ter um sinal próprio.
+      - name: Auth/authz regression suite
+        run: >
+          pnpm exec vitest run
+          lib/auth
+          "app/api/auth"
+          "app/(app)/admin/__tests__"
+          __tests__/middleware-matcher.test.ts
+
+  zap-baseline-preview:
+    # Passivo apenas: seguro contra o Preview mesmo com dados copiados de produção.
+    if: >
+      github.event_name == 'deployment_status' &&
+      github.event.deployment_status.state == 'success' &&
+      github.event.deployment.environment == 'Preview'
+    runs-on: ubuntu-latest
+    steps:
+      - name: ZAP baseline (passive)
+        env:
+          TARGET: ${{ github.event.deployment_status.environment_url }}
+        run: |
+          mkdir -p zap && chmod 777 zap
+          docker run --rm -v "$PWD/zap:/zap/wrk" \
+            ghcr.io/zaproxy/zaproxy@sha256:030d3df57735dacbb83464854758e674dd9ad01d79d12a129a8e58b1fd384238 \
+            zap-baseline.py -t "$TARGET" -J zap-baseline.json -I
+      - uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4
+        if: always()
+        with:
+          name: zap-baseline
+          path: zap/
+
+  zap-full-weekly:
+    # Ativo: SÓ contra um alvo descartável configurado explicitamente, nunca produção nem
+    # um Preview com dados copiados de produção.
+    if: >
+      (github.event_name == 'schedule' || github.event_name == 'workflow_dispatch') &&
+      vars.AUDIT_ACTIVE_TARGET_URL != ''
+    runs-on: ubuntu-latest
+    steps:
+      - name: Refuse production
+        env:
+          TARGET: ${{ vars.AUDIT_ACTIVE_TARGET_URL }}
+        run: |
+          case "$TARGET" in
+            *palpiteiro.live*) echo "::error::AUDIT_ACTIVE_TARGET_URL aponta pra produção"; exit 1;;
+          esac
+      - name: ZAP full scan (active)
+        env:
+          TARGET: ${{ vars.AUDIT_ACTIVE_TARGET_URL }}
+        run: |
+          mkdir -p zap && chmod 777 zap
+          docker run --rm -v "$PWD/zap:/zap/wrk" \
+            ghcr.io/zaproxy/zaproxy@sha256:030d3df57735dacbb83464854758e674dd9ad01d79d12a129a8e58b1fd384238 \
+            zap-full-scan.py -t "$TARGET" -J zap-full.json -I
+      - uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4
+        if: always()
+        with:
+          name: zap-full
+          path: zap/

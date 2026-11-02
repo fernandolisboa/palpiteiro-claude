@@ -1,3 +1,4 @@
+import { getSession } from "@/lib/auth/session";
 import { notFound } from "next/navigation";
 
 import { DefinitionRow } from "@/components/admin/definition-row";
@@ -27,8 +28,15 @@ function Row({ label, value }: { label: string; value: string }) {
   );
 }
 
+const UUID_RE =
+  /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
+
 export default async function AdminPredictionPage({ params }: PageProps) {
   const { id } = await params;
+  // Role checado na própria página, não só no layout: o App Router pode renderizar o
+  // segmento da página sem re-rodar o layout (auditoria de segurança 2026-11-01).
+  if ((await getSession())?.user?.role !== "admin") notFound();
+  if (!UUID_RE.test(id)) notFound();
   const row = await getPredictionForOverride(id);
   if (!row) notFound();
   const { prediction, match, outcome } = row;

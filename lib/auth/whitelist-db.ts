@@ -32,3 +32,31 @@ export async function isSignInAllowed(
     return isEmailAllowed(email);
   }
 }
+
+/**
+ * Passkey NUNCA cria conta (auditoria de segurança 2026-11-01). O @auth/core aceita
+ * `register` deslogado quando o e-mail ainda não tem row e cria o `users` SEM provar
+ * posse do e-mail. Como Google (`allowDangerousEmailAccountLinking`) e o magic link
+ * resolvem a conta por e-mail, quem registrasse uma passkey com o e-mail da vítima
+ * ANTES dela se cadastrar entraria depois na conta dela (pre-account takeover).
+ *
+ * Regra: login `webauthn` só passa quando já existe row pro e-mail (passkey é método
+ * ADICIONAL, cadastrado logado em /perfil — ADR 0023). Sem row → recusa, inclusive
+ * pro floor do env. Erro de DB → recusa (fail-closed). Os demais providers seguem
+ * `isSignInAllowed`.
+ */
+export async function isSignInAllowedForAccount(
+  email: string | null | undefined,
+  accountType: string | undefined,
+): Promise<boolean> {
+  if (accountType === "webauthn") {
+    if (!email) return false;
+    try {
+      const row = await getUserAllowedByEmail(email);
+      if (row === null) return false;
+    } catch {
+      return false;
+    }
+  }
+  return isSignInAllowed(email);
+}

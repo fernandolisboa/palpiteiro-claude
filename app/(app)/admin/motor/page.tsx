@@ -1,3 +1,5 @@
+import { notFound } from "next/navigation";
+import { getSession } from "@/lib/auth/session";
 import { AdminSubTabs } from "@/components/admin/admin-sub-tabs";
 import { FlagList } from "@/components/admin/flag-list";
 import { PageHeading } from "@/components/admin/page-heading";
@@ -14,6 +16,9 @@ export const maxDuration = 300;
 // análise e as flags que decidem as probabilidades, mais o Dixon-Coles. As flags do
 // modelo de linguagem moram em /admin/ia. Gateado por app/(app)/admin/layout.tsx.
 export default async function AdminEnginePage() {
+  // Role checado na própria página, não só no layout: o App Router pode renderizar o
+  // segmento da página sem re-rodar o layout (auditoria de segurança 2026-11-01).
+  if ((await getSession())?.user?.role !== "admin") notFound();
   const flagValues = await getAdminFlagValues();
 
   return (

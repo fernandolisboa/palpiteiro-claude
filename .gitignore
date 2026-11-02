@@ -52,3 +52,9 @@ pnpm-workspace.yaml
 
 # Payloads crus da API-Football gravados por scripts/probe-live-fixture.ts (#600)
 .live-probes/
+
+# Security audit (/security-audit). Repo is PUBLIC: findings, reports, raw scanner output,
+# per-run secrets and the local config (Neon/Vercel ids) stay out of git. Only the
+# renderer is versioned.
+.security-audit/*
+!.security-audit/render-report.mjs

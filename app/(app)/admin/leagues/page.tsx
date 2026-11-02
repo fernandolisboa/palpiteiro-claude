@@ -1,3 +1,5 @@
+import { notFound } from "next/navigation";
+import { getSession } from "@/lib/auth/session";
 import { AlertTriangle } from "lucide-react";
 
 import { DefinitionRow } from "@/components/admin/definition-row";
@@ -63,6 +65,9 @@ function isSameUtcMonth(a: Date, b: Date): boolean {
 // Ligas ativas no banco (ADR 0050): o toggle vale sem deploy pra home, sync de
 // fixtures e prewarm de odds.
 export default async function AdminLeaguesPage() {
+  // Role checado na própria página, não só no layout: o App Router pode renderizar o
+  // segmento da página sem re-rodar o layout (auditoria de segurança 2026-11-01).
+  if ((await getSession())?.user?.role !== "admin") notFound();
   const [settings, quota] = await Promise.all([
     getLeagueSettings(),
     readOddsApiQuota(),

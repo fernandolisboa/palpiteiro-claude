@@ -1,3 +1,5 @@
+import { notFound } from "next/navigation";
+import { getSession } from "@/lib/auth/session";
 import { IntentLink } from "@/components/intent-link";
 
 import { AdminSubTabs } from "@/components/admin/admin-sub-tabs";
@@ -89,6 +91,9 @@ const BIN_LABEL: Record<CalibratedMarketKey, string> = {
 };
 
 export default async function AdminCalibrationPage({ searchParams }: PageProps) {
+  // Role checado na própria página, não só no layout: o App Router pode renderizar o
+  // segmento da página sem re-rodar o layout (auditoria de segurança 2026-11-01).
+  if ((await getSession())?.user?.role !== "admin") notFound();
   const params = await searchParams;
   const segment = parseEngineSegment(params.engine);
   const market = parseMarketSegment(params.market);
