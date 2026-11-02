@@ -1,3 +1,5 @@
+import { notFound } from "next/navigation";
+import { getSession } from "@/lib/auth/session";
 import { DefinitionRow } from "@/components/admin/definition-row";
 import { AdminSubTabs } from "@/components/admin/admin-sub-tabs";
 import { PageHeading } from "@/components/admin/page-heading";
@@ -19,6 +21,9 @@ export const dynamic = "force-dynamic";
 // Assistente de IA · custos (#633; antes /admin/costs). Gateado por
 // app/(app)/admin/layout.tsx (role === "admin" → notFound pra outros).
 export default async function AdminCostsPage() {
+  // Role checado na própria página, não só no layout: o App Router pode renderizar o
+  // segmento da página sem re-rodar o layout (auditoria de segurança 2026-11-01).
+  if ((await getSession())?.user?.role !== "admin") notFound();
   const [summary, byDay, byUser, byModel] = await Promise.all([
     getCostSummary(),
     getCostByDay(30),

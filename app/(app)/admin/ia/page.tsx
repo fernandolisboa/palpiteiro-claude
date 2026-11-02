@@ -1,3 +1,5 @@
+import { notFound } from "next/navigation";
+import { getSession } from "@/lib/auth/session";
 import { AdminSubTabs } from "@/components/admin/admin-sub-tabs";
 import { FlagList } from "@/components/admin/flag-list";
 import { PageHeading } from "@/components/admin/page-heading";
@@ -24,6 +26,9 @@ export const dynamic = "force-dynamic";
 // seus parâmetros e as flags de IA. As flags do motor e o Dixon-Coles moram em
 // /admin/motor. Gateado por app/(app)/admin/layout.tsx.
 export default async function AdminAiModelsPage() {
+  // Role checado na própria página, não só no layout: o App Router pode renderizar o
+  // segmento da página sem re-rodar o layout (auditoria de segurança 2026-11-01).
+  if ((await getSession())?.user?.role !== "admin") notFound();
   const [current, genParams, flagValues, versions] = await Promise.all([
     getDefaultModelId(),
     getGenerationParams(),
