@@ -1,0 +1,27 @@
+# Exceções do osv-scanner (workflow Security). Cada uma com motivo e data de validade:
+# ao vencer, o check volta a falhar e a exceção precisa ser revista. Auditoria 2026-11-01.
+
+[[IgnoredVulns]]
+id = "GHSA-6hxq-p678-4hr2"
+ignoreUntil = 2027-02-01
+reason = "@simplewebauthn/server 9.x: fix só no 13.x e o next-auth beta exige peer ^9. O app não confia em attestation (SA-14)."
+
+[[IgnoredVulns]]
+id = "GHSA-67mh-4wv8-2f99"
+ignoreUntil = 2027-02-01
+reason = "esbuild 0.18 via drizzle-kit: dev server do esbuild, nunca exposto; só roda localmente no CLI de migrations."
+
+[[IgnoredVulns]]
+id = "GHSA-g7r4-m6w7-qqqr"
+ignoreUntil = 2027-02-01
+reason = "esbuild 0.27 via tsx/drizzle-kit: ferramenta de dev/build, fix só no 0.28 (major de 0.x)."
+
+[[IgnoredVulns]]
+id = "GHSA-3g3m-2fjr-6pw4"
+ignoreUntil = 2027-02-01
+reason = "glob 13 via plugin de build do Sentry/eslint: padrões vêm da config de build, não de usuário; fix exige major 14 (SA-15)."
+
+[[IgnoredVulns]]
+id = "GHSA-g3hv-75wg-m249"
+ignoreUntil = 2027-02-01
+reason = "minimatch 3/10 via eslint e plugin de build do Sentry: só build/lint; fix exige major 11 (SA-15)."

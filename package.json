@@ -58,7 +58,9 @@
       "fast-uri@<3.1.9": "^3.1.9",
       "browserslist@<4.28.7": "^4.29.5",
       "@babel/core@<7.29.6": "^7.29.7",
-      "baseline-browser-mapping@<2.11.0": "^2.11.34"
+      "baseline-browser-mapping@<2.11.0": "^2.11.34",
+      "js-yaml@>=4 <4.3.2": "^4.3.2",
+      "brace-expansion@<1.1.21": "^1.1.21"
     }
   },
   "devDependencies": {
@@ -80,6 +82,7 @@
     "tsx": "^4.21.0",
     "tw-animate-css": "^1",
     "typescript": "^5",
-    "vitest": "^4.1.6"
+    "vite": "^7.3.7",
+    "vitest": "^4.1.12"
   }
 }
