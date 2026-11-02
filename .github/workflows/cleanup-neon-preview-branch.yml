@@ -15,11 +15,15 @@ on:
   pull_request:
     types: [closed]
 
+# A action só fala com a API do Neon; o GITHUB_TOKEN não precisa de escopo nenhum.
+# Actions pinadas por SHA: a de terceiro recebe o NEON_API_KEY (auditoria 2026-11-01).
+permissions: {}
+
 jobs:
   delete-preview-branch:
     runs-on: ubuntu-latest
     steps:
-      - uses: neondatabase/delete-branch-action@v3
+      - uses: neondatabase/delete-branch-action@4468d825d5a88ef4012f1705a82f02ec3072f776 # v3
         with:
           project_id: ${{ vars.NEON_PROJECT_ID }}
           branch: preview/${{ github.head_ref }}
