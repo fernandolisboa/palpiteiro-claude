@@ -72,8 +72,6 @@ export function MatchRow({ m, last, listHref, backHref, tourTarget, timeLabel }:
           >
             {LEAGUE_LABEL[m.league]}
           </Badge>
-          {/* Etiquetas de mesa de amigos (ADR 0070): reta final, zebra, chocolate, azarão. */}
-          {m.tags && <MatchTags tags={m.tags} className="min-w-0" />}
         </div>
         {m.hasPrediction && <AnalyzedBadge />}
       </div>
@@ -101,6 +99,9 @@ export function MatchRow({ m, last, listHref, backHref, tourTarget, timeLabel }:
           </span>
         </div>
       </div>
+      {/* Etiquetas de mesa de amigos (ADR 0070): linha própria, pra não disputar a
+          largura do cabeçalho com a liga e o "analisado" no celular. */}
+      {m.tags && <MatchTags tags={m.tags} className="pt-2" />}
       {/* Base do modelo (#555): só em jogo analisável com base calculada. */}
       {m.model && <MatchModelLine model={m.model} className="block pt-2" />}
     </IntentLink>

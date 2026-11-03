@@ -102,7 +102,7 @@ export function matchRowTags(input: {
       tags.push({
         key: "azarao",
         label: `azarão: ${team}`,
-        title: `O modelo dá menos de ${LONGSHOT_MAX_PCT}% de vitória pro ${team}`,
+        title: `O modelo dá menos de ${LONGSHOT_MAX_PCT}% de chance de vitória pro ${team}`,
       });
     }
   }

@@ -165,8 +165,11 @@ export default async function BolaoDetailPage({ params }: PageProps) {
       : null;
   const winnerEntries = outcome.settled ? entries.filter((e) => outcome.hitIds.has(e.id)) : [];
   const winners = winnerEntries.map((e) => e.bettorName);
+  // Zebra e cravou/na trave só com o jogo encerrado (ADR 0070): o placar lançado à mão
+  // pode vir no meio do jogo ou num jogo cancelado.
+  const matchEnded = match.status === "finished";
   const zebra =
-    outcome.settled && winners.length === 0
+    outcome.settled && matchEnded && winners.length === 0
       ? await poolResultWasZebra(match, outcome.score)
       : false;
   // Ganhadores que anotaram com o jogo rolando: o carimbo vai na linha do ganhador.
@@ -292,8 +295,9 @@ export default async function BolaoDetailPage({ params }: PageProps) {
                 const kindLabel = POOL_KIND_LABEL[e.kind] ?? e.kind;
                 const bet = poolBetShortLabel(e.kind, e.params, teams, codes);
                 const stamp = poolEntryStampLabel(e, match.kickoffAt);
-                // Cravou / na trave, só com o bolão decidido (ADR 0070).
-                const quip = outcome.settled ? poolEntryQuip(e.kind, e.params, outcome.score) : null;
+                // Cravou / na trave, só com o bolão decidido e o jogo encerrado (ADR 0070).
+                const quip =
+                  outcome.settled && matchEnded ? poolEntryQuip(e.kind, e.params, outcome.score) : null;
                 return (
                   <li key={e.id} className="flex items-center gap-3 px-4 py-3">
                     <span className="flex min-w-16 flex-1 flex-col">

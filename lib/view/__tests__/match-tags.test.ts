@@ -4,6 +4,7 @@ import { describe, expect, it } from "vitest";
 
 import { H2HSection } from "@/components/h2h-section";
 import { MatchRow } from "@/components/match-row";
+import { CravouTag } from "@/components/palpites/palpite-badges";
 
 import type { MatchModelSnapshot } from "@/lib/model-base/types";
 import { MATCH_MODEL_MAX_AGE_MS } from "@/lib/model-base/version";
@@ -114,6 +115,8 @@ describe("cravou e na trave", () => {
     expect(readScore({ homeScore: null, awayScore: null })).toBeNull();
     expect(readScore({ selection: "over" })).toBeNull();
     expect(readScore(null)).toBeNull();
+    // params do placar exato usam home/away; essas chaves vencem se as duas vierem.
+    expect(readScore({ home: 1, away: 0, homeScore: 5, awayScore: 5 })).toEqual({ home: 1, away: 0 });
   });
 
   it("Suas apostas: só placar exato decidido, contra o placar da liquidação", () => {
@@ -268,6 +271,15 @@ describe("toMatchRowView com etiquetas", () => {
     expect(row({ status: "finished", homeScore: 1, awayScore: 0, kickoffAt }, { modelSnapshot: fresh }).tags).toBeUndefined();
   });
 
+  it("adiado ou cancelado com placar no banco: nenhuma etiqueta de resultado", () => {
+    const kickoffAt = new Date("2026-06-10T18:00:00Z");
+    const fresh = snapshot(new Date(kickoffAt.getTime() - 2 * 3_600_000));
+    for (const status of ["postponed", "cancelled", "live"] as const) {
+      const v = row({ status, homeScore: 0, awayScore: 4, kickoffAt }, { modelSnapshot: fresh });
+      expect("tags" in v, status).toBe(false);
+    }
+  });
+
   it("ao vivo: reta final só com o estado fresco do minuto 80 em diante", () => {
     const kickoffAt = new Date(NOW.getTime() - 90 * 60_000);
     const state = (elapsed: number, fetchedAgoMs = 20_000, statusShort = "2H") => ({
@@ -332,5 +344,13 @@ describe("na tela", () => {
       }),
     );
     expect(html).toContain("Freguesia: Palmeiras venceu 4 dos últimos 5 confrontos.");
+  });
+});
+
+describe("cravou o placar", () => {
+  it("o selo do palpite da IA ganha a etiqueta ao lado, sem trocar o selo", () => {
+    const html = renderToStaticMarkup(createElement(CravouTag));
+    expect(html).toContain("cravou o placar");
+    expect(html).toContain('data-tag="cravou"');
   });
 });
