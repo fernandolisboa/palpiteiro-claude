@@ -335,7 +335,7 @@ async function reopenWith(
 ): Promise<PoolActionResult> {
   const live = { liveMode: ctx.liveMode };
   if (!poolOwnerReopenable(pool.pool, pool.match, ctx.state, now, live)) {
-    return { ok: false, error: "Não dá pra reabrir as apostas agora." };
+    return { ok: false, error: "Não dá pra reabrir a mesa agora." };
   }
   if (poolEntriesRemovable(pool.match, now)) {
     await clearFriendPoolBetsClosed({ poolId: pool.pool.id, userId, now });

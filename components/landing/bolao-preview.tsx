@@ -23,7 +23,7 @@ export function BolaoPreview() {
     <div className="flex flex-col gap-3">
       <Card className="gap-2 px-5 py-4">
         <p className="text-meta uppercase tracking-label text-muted-foreground">
-          resultado · placar do jogo
+          resenha · placar do jogo
         </p>
         <p className="text-body font-medium tabular-nums tracking-tight">
           {PREVIEW_HOME.name} {PREVIEW_FINAL_SCORE.home} × {PREVIEW_FINAL_SCORE.away}{" "}
@@ -31,7 +31,7 @@ export function BolaoPreview() {
         </p>
         <p className="flex items-center gap-2 text-display-sm font-medium tracking-tight">
           <Trophy className="size-5 shrink-0" aria-hidden />
-          Ganhou: {winners.join(", ")}
+          Palpiteiro do bolão: {winners.join(", ")}
         </p>
       </Card>
       <ul className="divide-y divide-border rounded-xl border border-border bg-card">

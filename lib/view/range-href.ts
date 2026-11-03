@@ -121,13 +121,13 @@ export function rangeEmptyMessage(range: ResolvedRange): {
 } {
   if (range.preset === "custom") {
     return {
-      title: "Nenhum jogo nesse período",
+      title: "Sem bola rolando nesse período",
       detail: "Tente um intervalo diferente ou limpe as datas pra voltar aos próximos jogos.",
     };
   }
   return {
-    title: "Nenhum jogo marcado",
+    title: "Rodada de folga",
     detail:
-      "Sem partidas agendadas daqui pra frente. Pra ver jogos que já passaram, use Escolher datas.",
+      "Sem bola rolando daqui pra frente. Pra ver jogos que já passaram, use Escolher datas.",
   };
 }
