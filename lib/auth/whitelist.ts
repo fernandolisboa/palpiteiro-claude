@@ -1,14 +1,15 @@
 /**
- * Whitelist de e-mails autorizados a logar (proteção de custo — sem ela
- * qualquer um se cadastra e queima quota de Anthropic / providers).
+ * Floor de e-mails do env `ALLOWED_EMAILS` (lista separada por vírgula), checagem
+ * env-only e edge-safe.
  *
- * Fonte autoritativa: env `ALLOWED_EMAILS` (lista separada por vírgula).
- * Aplicada no callback `signIn` do Auth.js, que roda ANTES do envio do magic
- * link — e-mail fora da lista → `AccessDenied` → nenhum e-mail enviado, nenhum
- * token criado.
+ * NÃO é mais o gate de cadastro: desde o self-provision aberto (#257, ADR 0023) o
+ * `signIn` usa `isSignInAllowed` (lib/auth/whitelist-db.ts), allow-by-default — e-mail
+ * novo entra e é auto-provisionado; só `users.allowed=false` recusa. Este floor
+ * continua como anti-lockout (e-mail do env sempre entra, nunca é bloqueável), como
+ * fallback quando o DB falha, e como atalho nas actions (`!access.allowed &&
+ * !isEmailAllowed(...)`).
  *
- * ADR 0007 (que emenda o 0004): para o MVP a whitelist vive no env, não em
- * tabela. A coluna `users.allowed` permanece para uma futura whitelist em DB.
+ * Histórico: ADR 0007 (emenda o 0004) começou com a whitelist só no env.
  */
 
 function parseAllowedEmails(raw: string | undefined): ReadonlySet<string> {

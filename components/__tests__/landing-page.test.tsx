@@ -59,10 +59,6 @@ describe("LandingContent", () => {
     }
   });
 
-  it("avisa que o acesso é por convite (o login passa pela whitelist, ADR 0007)", () => {
-    expect(text(render())).toMatch(/convite/i);
-  });
-
   it("o bloco do bolão diz que o app não mexe em dinheiro (fato do produto, ADR 0054)", () => {
     expect(render()).toContain(POOL_MONEY_NOTE);
   });

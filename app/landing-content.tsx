@@ -37,25 +37,18 @@ export function LandingContent() {
           confere o placar e mostra quem acertou.
         </p>
 
-        <div className="flex flex-col items-start gap-3 pt-2">
-          <div className="flex flex-col items-start gap-3 sm:flex-row sm:items-center">
-            <Button asChild size="lg">
-              <IntentLink href="/signin">
-                Entrar e escolher um jogo <ArrowRight className="size-4" />
-              </IntentLink>
-            </Button>
-            <IntentLink
-              href="/como-funciona"
-              className="rounded-sm px-1 text-body font-medium text-muted-foreground transition-colors hover:text-foreground focus-visible:outline-none focus-visible:ring-[3px] focus-visible:ring-ring/50"
-            >
-              Como funciona →
+        <div className="flex flex-col items-start gap-3 pt-2 sm:flex-row sm:items-center">
+          <Button asChild size="lg">
+            <IntentLink href="/signin">
+              Entrar e escolher um jogo <ArrowRight className="size-4" />
             </IntentLink>
-          </div>
-          {/* Fato do produto: o login passa pela whitelist (lib/auth/whitelist.ts). Sem
-              isto, quem chega de fora clica, digita o e-mail e só então descobre. */}
-          <p className="text-body-sm text-muted-foreground tracking-tight">
-            Acesso por convite.
-          </p>
+          </Button>
+          <IntentLink
+            href="/como-funciona"
+            className="rounded-sm px-1 text-body font-medium text-muted-foreground transition-colors hover:text-foreground focus-visible:outline-none focus-visible:ring-[3px] focus-visible:ring-ring/50"
+          >
+            Como funciona →
+          </IntentLink>
         </div>
       </section>
 
