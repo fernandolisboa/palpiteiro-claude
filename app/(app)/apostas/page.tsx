@@ -74,7 +74,7 @@ export default async function ApostasPage({ searchParams }: PageProps) {
           <EmptyState
             mascot
             title="Nenhuma fezinha anotada ainda"
-            description="Abra um jogo, toque no que você apostou e registre. O app confere sozinho depois do apito."
+            description="Abra um jogo, toque no que você apostou e registre. O app confere sozinho quando o jogo acaba."
           />
         ) : (
           <div className="flex flex-col gap-4">

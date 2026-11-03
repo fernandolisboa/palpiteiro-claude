@@ -110,8 +110,8 @@ export default async function BolaoPage({ searchParams }: PageProps) {
             title="Mesa vazia por enquanto"
             description={
               options.length > 0
-                ? "Escolha um jogo acima, abra o bolão e anote o chute de cada um da galera."
-                : `Quando houver jogo nos próximos ${PICKER_DAYS} dias, abra o bolão aqui em cima e anote o chute de cada um da galera.`
+                ? "Escolha um jogo acima, crie o bolão e anote o chute de cada um da galera."
+                : `Quando houver jogo nos próximos ${PICKER_DAYS} dias, crie o bolão aqui em cima e anote o chute de cada um da galera.`
             }
           />
         ) : (

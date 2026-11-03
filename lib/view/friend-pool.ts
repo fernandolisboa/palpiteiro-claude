@@ -167,13 +167,13 @@ export function poolStatusView(
   if (score) return { label: `placar ${score.home} × ${score.away}`, tone: "neutral" };
   if (row.match.status === "postponed") return { label: "jogo adiado", tone: "neutral" };
   if (row.match.status === "cancelled") return { label: "jogo cancelado", tone: "neutral" };
-  if (poolClosedByOwner(row.pool, now)) return { label: "fechadas por você", tone: "neutral" };
+  if (poolClosedByOwner(row.pool, now)) return { label: "mesa fechada por você", tone: "neutral" };
   const live = { liveMode: opts.liveMode ?? false };
   if (poolBetsOpen(row.pool, row.match, opts.state ?? null, now, live)) {
     const deadline = poolBetsDeadlineLabel(row.pool, row.match, now, opts);
     return deadline
       ? { label: deadline, tone: "soon" }
-      : { label: "apostas abertas", tone: "open" };
+      : { label: "mesa aberta", tone: "open" };
   }
   return { label: "esperando o placar", tone: "neutral" };
 }

@@ -101,7 +101,7 @@ describe("poolStatusView (#577)", () => {
 
   it("aberto e longe da trava: destaque, sem hora", () => {
     expect(poolStatusView({ pool: noManual, match: match() }, NOW)).toEqual({
-      label: "apostas abertas",
+      label: "mesa aberta",
       tone: "open",
     });
   });
@@ -207,14 +207,14 @@ describe("selos do bolão ao vivo (#580)", () => {
     ).toBe("fecham em 1 min");
   });
 
-  it("dono fechou: 'fechadas por você', neutro (antes ou depois do apito)", () => {
+  it("dono fechou: 'mesa fechada por você', neutro (antes ou depois do apito)", () => {
     const pool = { ...noManual, betsClosedAt: at(-20) };
     expect(poolStatusView({ pool, match: scheduled }, at(-10), { liveMode: true })).toEqual({
-      label: "fechadas por você",
+      label: "mesa fechada por você",
       tone: "neutral",
     });
     expect(poolStatusView({ pool, match: scheduled }, at(30), { liveMode: true }).label).toBe(
-      "fechadas por você",
+      "mesa fechada por você",
     );
   });
 
@@ -257,7 +257,7 @@ describe("selos do bolão ao vivo (#580)", () => {
     ).toEqual({ label: "fecham aos 15'", tone: "soon" });
     expect(
       poolStatusView({ pool: noManual, match: scheduled }, at(-24 * 60), { liveMode: true }),
-    ).toEqual({ label: "apostas abertas", tone: "open" });
+    ).toEqual({ label: "mesa aberta", tone: "open" });
   });
 
   it("depois do corte: esperando o placar", () => {

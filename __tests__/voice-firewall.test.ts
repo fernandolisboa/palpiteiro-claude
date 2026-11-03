@@ -15,23 +15,26 @@ import { describe, expect, it } from "vitest";
 const ROOT = process.cwd();
 
 // Superfícies com o tom. Arquivo novo de bolão/apostas entra sozinho pelas pastas.
-const DIRS = ["app/(app)/bolao", "app/(app)/apostas", "components/landing"];
+const DIRS = ["app/(app)/bolao", "app/(app)/apostas", "components/landing", "components/bets"];
 const FILES = [
   "components/friend-pool-forms.tsx",
+  "lib/view/friend-pool.ts",
   "lib/view/range-href.ts",
   "lib/view/match-search.ts",
   "app/landing-content.tsx",
 ];
 
 const FORA: Array<[string, RegExp]> = [
-  ["bet", /(^|[\s"'`>(])bets?([\s.,!?:;"'`<)]|$)/i],
+  // Fronteira por letra/dígito/hífen: "bet-slip" e "alfabeto" passam; o "." antes deixa
+  // passar o ".bet.br" dos Termos (fora das superfícies, mas a regra é a mesma).
+  ["bet", /(?<![\p{L}\p{N}./-])bets?(?![\p{L}\p{N}/-])/iu],
   ["barbada", /barbada/i],
   ["garantido", /garantid[oa]s?/i],
   ["bora recuperar", /bora recuperar|recupera(r)? o preju/i],
   ["revanche", /revanche/i],
-  ["dobrar a aposta", /dobr(a|e|ar) a aposta/i],
-  ["all-in", /all[\s-]?in/i],
-  ["forrar", /\bforr(ar|ou|a)\b/i],
+  ["dobrar a aposta", /dobr\w* (a|as|o) (apostas?|valor)/i],
+  ["all-in", /\ball[\s-]?in\b/i],
+  ["forrar", /\bforr\w*/i],
 ];
 
 function walk(dir: string): string[] {
@@ -44,11 +47,24 @@ function walk(dir: string): string[] {
   });
 }
 
-/** Texto de tela aproximado: literais de string e texto entre tags JSX, sem comentários. */
-function screenText(source: string): string[] {
-  const code = source.replace(/\/\*[\s\S]*?\*\//g, "").replace(/^\s*\/\/.*$/gm, "");
-  const strings = [...code.matchAll(/"([^"\n]*)"|`([^`]*)`/g)].map((m) => m[1] ?? m[2] ?? "");
-  const jsx = [...code.matchAll(/>([^<>{}]+)</g)].map((m) => m[1]);
+/**
+ * Texto de tela aproximado: literais de string ("…", '…', `…`) e texto JSX, sem
+ * comentários. O texto JSX vai de `>` ou `}` até `<` ou `{`, então
+ * `<p>Pega essa bet {x}</p>` também é lido.
+ */
+export function screenText(source: string): string[] {
+  const code = source
+    .replace(/\/\*[\s\S]*?\*\//g, "")
+    .replace(/(^|[^:"'`])\/\/.*$/gm, "$1");
+  const strings = [...code.matchAll(/"([^"\n]*)"|'([^'\n]*)'|`([^`]*)`/g)].map((m) =>
+    (m[1] ?? m[2] ?? m[3] ?? "").replace(/\$\{[^}]*\}/g, " "),
+  );
+  // Texto JSX: de um `>` que fecha tag (colado no nome, atributo ou `}`, ou sozinho no
+  // começo da linha, como o Prettier quebra) até o `<` seguinte. As expressões `{…}` no
+  // meio saem, as strings dentro delas já entram pelo passo de cima.
+  const jsx = [...code.matchAll(/(?:(?<=[\w"'}/])|(?<=^[ \t]*))>([^<>]+)</gm)].map((m) =>
+    m[1].replace(/\{[^{}]*\}/g, " "),
+  );
   return [...strings, ...jsx].filter((t) => /\s/.test(t.trim()) || /^[A-ZÁÉÍÓÚ]/.test(t.trim()));
 }
 
@@ -73,7 +89,24 @@ describe("firewall de vocabulário do tom (ADR 0070)", () => {
     const [, bet] = FORA[0];
     expect(bet.test("pega essa bet?")).toBe(true);
     expect(bet.test("Bet do dia")).toBe(true);
+    expect(bet.test("“Pega essa bet”")).toBe(true);
     expect(bet.test("bet-slip")).toBe(false);
     expect(bet.test("alfabeto")).toBe(false);
+    expect(bet.test("casa autorizada (.bet.br)")).toBe(false);
+  });
+
+  it("a extração de texto lê os formatos que o código usa", () => {
+    const hit = (src: string) => screenText(src).some((t) => FORA[0][1].test(t));
+    expect(hit("<p>Pega essa bet {name}</p>")).toBe(true);
+    expect(hit("const x = 'Pega essa bet';")).toBe(true);
+    expect(hit("const x = `Pega essa bet ${n}`;")).toBe(true);
+    expect(hit('<p>{"Pega essa bet"}</p>')).toBe(true);
+    expect(hit("<p>\n  Pega essa\n  bet\n</p>")).toBe(true);
+    // Código, não tela.
+    expect(hit("if (n > 0 && bets.length < 5) return;")).toBe(false);
+    expect(hit("const bet = poolBetShortLabel(e.kind);")).toBe(false);
+    expect(hit("const label = `${kind} · ${bet}`;")).toBe(false);
+    expect(hit('import { SlipCard } from "@/components/bets/slip-card";')).toBe(false);
+    expect(hit('<div className="transition-all inline-flex" />')).toBe(false);
   });
 });

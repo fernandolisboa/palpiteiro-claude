@@ -335,7 +335,7 @@ describe("reopenFriendPoolBets (dono, #601)", () => {
   const fd = () => form({ poolId: POOL_ID });
   const reopen = () => reopenFriendPoolBets(null, fd());
   const CAP = at(180);
-  const REFUSED = { ok: false, error: "Não dá pra reabrir as apostas agora." };
+  const REFUSED = { ok: false, error: "Não dá pra reabrir a mesa agora." };
   const UNCONFIRMED = {
     ok: false,
     error: "Não deu pra confirmar o placar ao vivo agora. Tente em um minuto.",

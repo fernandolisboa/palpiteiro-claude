@@ -118,14 +118,14 @@ describe("toBestBetView — rank LÊ os números que o card mostra (#178)", () =
   });
 
   it("llmCalls = entries.length; unavailableMarkets = errors.length", () => {
-    const fail: FanOutOutcome = { ok: false, marketKey: "btts", message: "Este mercado ainda não tem odd de mercado" };
+    const fail: FanOutOutcome = { ok: false, marketKey: "btts", message: "Ainda não há odd publicada para este mercado" };
     const view = toBestBetView([mr(), fail], new Map());
     expect(view.llmCalls).toBe(1);
     expect(view.unavailableMarkets).toBe(1);
     expect(view.errors[0]).toMatchObject({
       marketKey: "btts",
       marketLabel: getMarketPresentation("btts").marketLabel,
-      message: "Este mercado ainda não tem odd de mercado",
+      message: "Ainda não há odd publicada para este mercado",
     });
   });
 

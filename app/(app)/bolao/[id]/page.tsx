@@ -252,7 +252,7 @@ export default async function BolaoDetailPage({ params }: PageProps) {
           </h2>
           {entries.length === 0 ? (
             <p className="text-muted-foreground text-body-sm">
-              {open ? "Ninguém sentou na mesa ainda. Anote o chute de cada um abaixo." : "Ninguém sentou nesta mesa."}
+              {open ? "Ninguém sentou à mesa ainda. Anote o chute de cada um abaixo." : "Ninguém sentou à mesa neste bolão."}
             </p>
           ) : (
             <ul className="divide-y divide-border rounded-xl border border-border">
@@ -307,7 +307,7 @@ export default async function BolaoDetailPage({ params }: PageProps) {
 
         {open && entries.length < MAX_ENTRIES_PER_POOL && (
           <Card className="mb-8 gap-4 px-5 py-5">
-            <h2 className="text-body font-medium tracking-tight">Anotar aposta</h2>
+            <h2 className="text-body font-medium tracking-tight">Anotar chute</h2>
             {liveMode && (
               <p className="text-muted-foreground text-body-sm tracking-tight">
                 {removable
@@ -352,8 +352,8 @@ export default async function BolaoDetailPage({ params }: PageProps) {
           <Card className="mb-8 gap-3 px-5 py-5">
             <h2 className="text-body font-medium tracking-tight">Estender prazo</h2>
             <p className="text-muted-foreground text-body-sm tracking-tight">
-              Deixa anotar aposta por mais um tempo a partir de agora, até 3h depois do
-              apito. Vale também se as apostas já fecharam.
+              Deixa anotar chute por mais um tempo a partir de agora, até 3h depois do
+              apito. Vale também se a mesa já fechou.
             </p>
             <div className="flex flex-wrap gap-2">
               {POOL_EXTEND_PRESETS_MIN.map((minutes) => (

@@ -658,7 +658,7 @@ describe("analyzeMatch — market league coverage gating (#158)", () => {
     );
     expect(res).toEqual({
       ok: false,
-      error: "Este mercado ainda não tem odd de mercado pra este jogo.",
+      error: "Ainda não há odd publicada para este mercado neste jogo.",
     });
   });
 
