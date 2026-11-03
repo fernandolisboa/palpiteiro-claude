@@ -499,7 +499,7 @@ describe("analyzeBestBet — rate-limit POR MERCADO (#492, Report 01 #3)", () =>
     expect(mockRateLimit).toHaveBeenCalledTimes(1);
     expect(res).toEqual({
       ok: false,
-      error: "Nenhum bookmaker oferece este mercado para o jogo no momento.",
+      error: "Este mercado ainda não tem odd de mercado pra este jogo.",
     });
   });
 
@@ -853,7 +853,7 @@ describe("analyzeBestBet — best-of-successful / all-fail", () => {
     expect(res.ok).toBe(false);
     if (!res.ok) {
       expect(res.error).toBe(
-        "Nenhum bookmaker oferece este mercado para o jogo no momento.",
+        "Este mercado ainda não tem odd de mercado pra este jogo.",
       );
     }
   });

@@ -189,7 +189,7 @@ export default async function BolaoDetailPage({ params }: PageProps) {
         {outcome.settled && (
           <Card className="mb-6 gap-2 px-5 py-5">
             <p className="text-muted-foreground text-meta uppercase tracking-label">
-              resultado · {outcome.score.source === "manual" ? "placar lançado por você" : "placar do jogo"}
+              resenha · {outcome.score.source === "manual" ? "placar lançado por você" : "placar do jogo"}
             </p>
             <p className="text-body font-medium tracking-tight">
               {teams.home} {outcome.score.home} × {outcome.score.away} {teams.away}
@@ -198,7 +198,7 @@ export default async function BolaoDetailPage({ params }: PageProps) {
               <>
                 <p className="flex items-center gap-2 text-display-sm font-medium tracking-tight">
                   <Trophy className="size-5 shrink-0" aria-hidden />
-                  {winners.length === 1 ? "Ganhou: " : "Ganharam: "}
+                  {winners.length === 1 ? "Palpiteiro do bolão: " : "Foi na foto de chegada: "}
                   {joinNames(winners)}
                 </p>
                 {liveWinners.length > 0 && (
@@ -222,7 +222,7 @@ export default async function BolaoDetailPage({ params }: PageProps) {
               </>
             ) : (
               <p className="text-body tracking-tight">
-                Ninguém acertou.
+                Ninguém acertou dessa vez.
                 {outcome.potCents ? ` O pote de ${formatBrl(outcome.potCents)} fica pra vocês decidirem.` : ""}
               </p>
             )}
@@ -235,24 +235,24 @@ export default async function BolaoDetailPage({ params }: PageProps) {
               ? "Jogo adiado. As apostas ficam guardadas; quando ele for jogado, lance o placar aqui."
               : match.status === "cancelled"
                 ? "Jogo cancelado. Não há resultado pra conferir."
-                : `${closedByOwner ? "Você fechou as apostas." : "Apostas fechadas."} Quando o jogo acabar, o placar aparece aqui sozinho (a atualização roda a cada poucas horas)${scoreAllowed ? ", ou lance o placar abaixo" : ""}.`}
+                : `${closedByOwner ? "Você fechou a mesa." : "Mesa fechada."} Agora é secar. Quando o jogo acabar, o placar aparece aqui sozinho (a atualização roda a cada poucas horas)${scoreAllowed ? ", ou lance o placar abaixo" : ""}.`}
           </p>
         )}
 
         {!outcome.settled && openUntilEnd && (
           <p className="text-muted-foreground mb-6 text-body-sm tracking-tight">
-            As apostas estão abertas até você fechar de novo ou o jogo acabar (no máximo
+            A mesa está aberta até você fechar de novo ou o jogo acabar (no máximo
             até 3h depois do apito).
           </p>
         )}
 
         <section aria-labelledby="apostadores" className="mb-8">
           <h2 id="apostadores" className="pb-3 text-body font-medium tracking-tight">
-            Apostadores
+            Quem está na mesa
           </h2>
           {entries.length === 0 ? (
             <p className="text-muted-foreground text-body-sm">
-              {open ? "Ninguém apostou ainda. Anote a aposta de cada um abaixo." : "Ninguém apostou neste bolão."}
+              {open ? "Ninguém sentou na mesa ainda. Anote o chute de cada um abaixo." : "Ninguém sentou nesta mesa."}
             </p>
           ) : (
             <ul className="divide-y divide-border rounded-xl border border-border">
@@ -322,16 +322,16 @@ export default async function BolaoDetailPage({ params }: PageProps) {
         {canClose && (
           <details className="mb-8">
             <summary className="text-muted-foreground cursor-pointer text-meta uppercase tracking-label hover:text-foreground">
-              fechar apostas
+              fechar a mesa
             </summary>
             <form action={closeFriendPoolBets} className="flex flex-col gap-2 pt-3">
               <input type="hidden" name="poolId" value={pool.id} />
               <p className="text-body-sm tracking-tight">
-                Fecha as apostas agora: ninguém mais entra no bolão. Dá pra reabrir enquanto o
+                Fecha a mesa agora: ninguém mais entra no bolão. Dá pra reabrir enquanto o
                 jogo não acabar.
               </p>
               <Button type="submit" variant="outline" size="sm" className="w-fit">
-                Fechar apostas
+                Fechar a mesa
               </Button>
             </form>
           </details>
@@ -342,8 +342,8 @@ export default async function BolaoDetailPage({ params }: PageProps) {
             poolId={pool.id}
             note={
               removable
-                ? `Reabre as apostas agora: volta o prazo de sempre, até os ${POOL_LIVE_CUTOFF_MINUTE} minutos de jogo.`
-                : "Reabre as apostas agora: elas ficam abertas até você fechar de novo ou o jogo acabar. Cada aposta nova fica com o minuto e o placar da hora."
+                ? `Reabre a mesa agora: volta o prazo de sempre, até os ${POOL_LIVE_CUTOFF_MINUTE} minutos de jogo.`
+                : "Reabre a mesa agora: ela fica aberta até você fechar de novo ou o jogo acabar. Cada aposta nova fica com o minuto e o placar da hora."
             }
           />
         )}

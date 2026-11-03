@@ -73,8 +73,8 @@ export default async function ApostasPage({ searchParams }: PageProps) {
         {page === null ? (
           <EmptyState
             mascot
-            title="Você ainda não registrou apostas"
-            description="Abra um jogo, toque nas seleções que você apostou e registre — elas aparecem aqui."
+            title="Nenhuma fezinha anotada ainda"
+            description="Abra um jogo, toque no que você apostou e registre. O app confere sozinho depois do apito."
           />
         ) : (
           <div className="flex flex-col gap-4">
@@ -86,8 +86,8 @@ export default async function ApostasPage({ searchParams }: PageProps) {
                 className="py-8"
                 title={
                   filter === "abertas"
-                    ? "Nenhuma aposta em aberto."
-                    : "Nenhuma aposta encerrada ainda."
+                    ? "Nenhuma fezinha rolando."
+                    : "Nenhuma fezinha decidida ainda."
                 }
               />
             ) : (

@@ -96,20 +96,20 @@ describe("rangeLabel", () => {
 describe("rangeEmptyMessage", () => {
   const now = new Date("2026-06-11T12:00:00.000Z");
 
-  it("lista padrão → 'Nenhum jogo marcado', apontando pro Escolher datas", () => {
+  it("lista padrão → 'Rodada de folga', apontando pro Escolher datas", () => {
     const msg = rangeEmptyMessage(parseRangeParams({ preset: "upcoming" }, now));
-    expect(msg.title).toBe("Nenhum jogo marcado");
+    expect(msg.title).toBe("Rodada de folga");
     expect(msg.detail).toContain("Escolher datas");
   });
 
-  it("custom → 'Nenhum jogo nesse período'", () => {
+  it("custom → 'Sem bola rolando nesse período'", () => {
     const msg = rangeEmptyMessage(
       parseRangeParams(
         { preset: "custom", from: "2026-06-10", to: "2026-06-20" },
         now,
       ),
     );
-    expect(msg.title).toBe("Nenhum jogo nesse período");
+    expect(msg.title).toBe("Sem bola rolando nesse período");
   });
 });
 

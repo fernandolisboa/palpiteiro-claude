@@ -107,11 +107,11 @@ export default async function BolaoPage({ searchParams }: PageProps) {
         {pools.length === 0 ? (
           <EmptyState
             mascot
-            title="Nenhum bolão ainda"
+            title="Mesa vazia por enquanto"
             description={
               options.length > 0
-                ? "Escolha um jogo acima, crie o bolão e anote a aposta de cada amigo."
-                : `Quando houver jogo nos próximos ${PICKER_DAYS} dias, crie o bolão aqui em cima e anote a aposta de cada amigo.`
+                ? "Escolha um jogo acima, abra o bolão e anote o chute de cada um da galera."
+                : `Quando houver jogo nos próximos ${PICKER_DAYS} dias, abra o bolão aqui em cima e anote o chute de cada um da galera.`
             }
           />
         ) : (

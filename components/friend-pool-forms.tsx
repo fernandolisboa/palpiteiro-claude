@@ -252,7 +252,7 @@ export function AddEntryForm({
 
       <ErrorLine state={state} />
       <Button type="submit" disabled={pending} className="w-fit">
-        {pending ? "Anotando…" : "Anotar aposta"}
+        {pending ? "Anotando…" : "Anotar chute"}
       </Button>
     </form>
   );
@@ -361,7 +361,7 @@ export function ReopenBetsForm({ poolId, note }: { poolId: string; note: string 
       <p className="text-body-sm tracking-tight">{note}</p>
       <ErrorLine state={state} />
       <Button type="submit" variant="outline" size="sm" disabled={pending} className="w-fit">
-        {pending ? "Reabrindo…" : "Reabrir apostas"}
+        {pending ? "Reabrindo…" : "Reabrir a mesa"}
       </Button>
     </form>
   );

@@ -223,7 +223,7 @@ function friendlyMessage(err: PredictError, ctx: MessageContext = {}): string {
   // Mercado *additional* (btts) sem snapshot fresco = o pre-warm por evento não
   // achou book ofertando o mercado pra este jogo (degradou sem escrever).
   if (msg.includes("sem snapshot fresco")) {
-    return "Nenhum bookmaker oferece este mercado para o jogo no momento.";
+    return "Este mercado ainda não tem odd de mercado pra este jogo.";
   }
   if (msg.includes("fixture not found in provider")) {
     return "Dados do jogo indisponíveis no provider esportivo.";
