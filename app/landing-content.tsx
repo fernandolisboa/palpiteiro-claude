@@ -28,7 +28,7 @@ export function LandingContent() {
     <div className="flex flex-col gap-14 lg:gap-20">
       <section className="flex flex-col items-start gap-6 pt-6 sm:pt-12 lg:pt-14">
         <h1 className="max-w-reading text-balance text-display-lg font-medium leading-[1.1] tracking-tight lg:text-display-xl">
-          Palpite com o porquê. Bolão com a conta feita.
+          Palpites e bolão da galera num só lugar.
         </h1>
 
         <p className="max-w-reading text-body leading-relaxed text-muted-foreground tracking-tight">
