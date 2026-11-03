@@ -23,7 +23,7 @@ import {
 
 import { runPalpiteHero } from "@/app/actions/predictions";
 import { shareSet, unshareSet } from "@/app/actions/share";
-import { SettleableBadge } from "@/components/palpites/palpite-badges";
+import { CravouTag, SettleableBadge } from "@/components/palpites/palpite-badges";
 import {
   PalpiteProgress,
   type ProgressStepView,
@@ -447,7 +447,10 @@ function PopulatedHero({
         <div className="flex flex-wrap items-center gap-2">
           <Kicker />
           {settled ? (
-            <SettleableBadge state={{ kind: "settled", result: view.badge! }} />
+            <>
+              <SettleableBadge state={{ kind: "settled", result: view.badge! }} />
+              {view.badge === "won" && <CravouTag />}
+            </>
           ) : (
             <ConfidenceChip confidence={view.confidence} />
           )}

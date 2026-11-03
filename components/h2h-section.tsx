@@ -1,6 +1,7 @@
 import { EmptyState } from "@/components/empty-state";
 import { Badge } from "@/components/ui/badge";
 import { cn } from "@/lib/utils";
+import { freguesiaLine } from "@/lib/view/match-tags";
 import type { H2HView } from "@/lib/view/types";
 
 type Props = {
@@ -18,6 +19,12 @@ export function H2HSection({ view }: Props) {
   }
   return (
     <div className="flex flex-col">
+      {/* Freguesia (ADR 0070): regra em código sobre os confrontos listados. */}
+      {view.streak && (
+        <p className="pb-2 text-body-sm font-medium tracking-tight text-foreground">
+          {freguesiaLine(view.streak)}
+        </p>
+      )}
       {view.rows.map((r, i) => (
         <div
           key={i}

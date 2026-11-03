@@ -19,6 +19,7 @@ import { Button } from "@/components/ui/button";
 import { Card } from "@/components/ui/card";
 import { getEnableLiveMode } from "@/lib/db/queries/ai-config";
 import { getFriendPool, type FriendPoolDetail } from "@/lib/db/queries/friend-pools";
+import { getLatestMatchModelSnapshot } from "@/lib/db/queries/match-model-snapshots";
 import { leagueToKey } from "@/lib/format";
 import {
   getInPlayState,
@@ -53,6 +54,12 @@ import {
   poolMatchLabel,
   poolWinnerStampLabel,
 } from "@/lib/view/friend-pool";
+import {
+  isZebra,
+  modelFreshAtKickoff,
+  poolEntryQuip,
+  poolNoWinnerLine,
+} from "@/lib/view/match-tags";
 import { displayMatchTeams, teamPair } from "@/lib/view/team";
 import { RevisitRefresh } from "@/components/revisit-refresh";
 
@@ -92,6 +99,26 @@ async function poolInPlayState(
   } catch {
     // A busca falhou: fica a row que já foi lida (as regras extrapolam a idade dela).
     return row;
+  }
+}
+
+/**
+ * Bolão sem ganhador: "Deu zebra" quando o placar era improvável na base do modelo de
+ * antes do jogo (ADR 0070, #656). Só busca nesse caso; sem base fresca ou com erro, não.
+ */
+async function poolResultWasZebra(
+  match: FriendPoolDetail["match"],
+  score: { home: number; away: number },
+): Promise<boolean> {
+  try {
+    const snapshot = await getLatestMatchModelSnapshot(match.id);
+    return (
+      snapshot !== null &&
+      modelFreshAtKickoff(snapshot.checkedAt, match.kickoffAt) &&
+      isZebra(snapshot.probabilities.match_result, score)
+    );
+  } catch {
+    return false;
   }
 }
 
@@ -138,6 +165,13 @@ export default async function BolaoDetailPage({ params }: PageProps) {
       : null;
   const winnerEntries = outcome.settled ? entries.filter((e) => outcome.hitIds.has(e.id)) : [];
   const winners = winnerEntries.map((e) => e.bettorName);
+  // Zebra e cravou/na trave só com o jogo encerrado (ADR 0070): o placar lançado à mão
+  // pode vir no meio do jogo ou num jogo cancelado.
+  const matchEnded = match.status === "finished";
+  const zebra =
+    outcome.settled && matchEnded && winners.length === 0
+      ? await poolResultWasZebra(match, outcome.score)
+      : false;
   // Ganhadores que anotaram com o jogo rolando: o carimbo vai na linha do ganhador.
   const liveWinners = winnerEntries.flatMap((e) => {
     const label = poolWinnerStampLabel(e, match.kickoffAt);
@@ -222,7 +256,7 @@ export default async function BolaoDetailPage({ params }: PageProps) {
               </>
             ) : (
               <p className="text-body tracking-tight">
-                Ninguém acertou dessa vez.
+                {poolNoWinnerLine(zebra)}
                 {outcome.potCents ? ` O pote de ${formatBrl(outcome.potCents)} fica pra vocês decidirem.` : ""}
               </p>
             )}
@@ -261,6 +295,9 @@ export default async function BolaoDetailPage({ params }: PageProps) {
                 const kindLabel = POOL_KIND_LABEL[e.kind] ?? e.kind;
                 const bet = poolBetShortLabel(e.kind, e.params, teams, codes);
                 const stamp = poolEntryStampLabel(e, match.kickoffAt);
+                // Cravou / na trave, só com o bolão decidido e o jogo encerrado (ADR 0070).
+                const quip =
+                  outcome.settled && matchEnded ? poolEntryQuip(e.kind, e.params, outcome.score) : null;
                 return (
                   <li key={e.id} className="flex items-center gap-3 px-4 py-3">
                     <span className="flex min-w-16 flex-1 flex-col">
@@ -271,6 +308,11 @@ export default async function BolaoDetailPage({ params }: PageProps) {
                       {stamp && (
                         <span className="text-muted-foreground truncate text-meta tabular-nums">
                           {stamp}
+                        </span>
+                      )}
+                      {quip && (
+                        <span className="text-muted-foreground truncate text-meta tracking-tight">
+                          {quip}
                         </span>
                       )}
                     </span>

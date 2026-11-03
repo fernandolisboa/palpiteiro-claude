@@ -22,6 +22,22 @@ export function SettleableBadge({
   return <ResultBadge result={state.kind === "pending" ? "pending" : state.result} />;
 }
 
+// "Cravou o placar" (ADR 0070, #656): o placar provável da IA bateu com o resultado (o
+// exact_score liquidou como acertou). Vai AO LADO do selo, que continua sendo o dado, e
+// só dentro do app: a página pública /p não usa.
+export function CravouTag() {
+  return (
+    <Badge
+      variant="outline"
+      size="xs"
+      data-tag="cravou"
+      className="border-palpite-border/60 bg-palpite-soft/40 tracking-tight text-foreground"
+    >
+      cravou o placar
+    </Badge>
+  );
+}
+
 // Palpite NÃO-liquidável (red_card/corners): tag muted PERMANENTE "só por
 // diversão". Honestidade de settleable (PLAN §0.4): fun nunca vira acertou/errou.
 export function NonSettleableTag() {

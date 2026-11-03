@@ -7,6 +7,7 @@ import type {
   NormalizedLineup,
   NormalizedStanding,
 } from "@/lib/providers/sports-data/types";
+import { freguesiaStreak } from "@/lib/view/match-tags";
 import { displayTeamName } from "@/lib/view/team-labels";
 import type {
   FormResult,
@@ -99,6 +100,7 @@ export function withDisplayTeamNames(
     h2h: {
       ...h2h,
       rows: h2h.rows.map((r) => ({ ...r, h: display(r.h), a: display(r.a) })),
+      ...(h2h.streak ? { streak: { ...h2h.streak, team: display(h2h.streak.team) } } : {}),
     },
   };
 }
@@ -113,6 +115,7 @@ export function toH2HView(
     (a, b) => b.kickoffTimestampMs - a.kickoffTimestampMs,
   );
   const rows: H2HViewRow[] = [];
+  const scored: { homeTeam: string; awayTeam: string; home: number; away: number }[] = [];
   let overCount = 0;
   let totalGoals = 0;
   let counted = 0;
@@ -127,6 +130,12 @@ export function toH2HView(
       s: `${f.score.home} – ${f.score.away}`,
       tag,
     });
+    scored.push({
+      homeTeam: f.homeTeam,
+      awayTeam: f.awayTeam,
+      home: f.score.home,
+      away: f.score.away,
+    });
     if (tag === "over") overCount++;
     totalGoals += total;
     counted++;
@@ -139,7 +148,8 @@ export function toH2HView(
       : classify === null
         ? `média ${formatDecimal(avgGoals, 1)} gols`
         : `mais de 2,5 em ${Math.round((overCount / counted) * 100)}% · média ${formatDecimal(avgGoals, 1)} gols`;
-  return { rows, summary };
+  const streak = freguesiaStreak(scored);
+  return { rows, summary, ...(streak ? { streak } : {}) };
 }
 
 export function toStandingsView(args: {

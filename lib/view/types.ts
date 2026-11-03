@@ -1,3 +1,4 @@
+import type { FreguesiaStreak, MatchTagView } from "@/lib/view/match-tags";
 // Keys curtas de liga usadas em URL (?league=) e na UI. Nova liga = nova key aqui
 // (e os Records exaustivos em lib/format.ts / lib/view/league-picker.ts quebram o
 // build até serem preenchidos).
@@ -91,6 +92,9 @@ export type MatchRowView = {
   // Linha "Modelo: PAL 42% · Menos de 2,5 59%" do /jogos (#555, ADR 0052): só em jogo
   // analisável com base do modelo calculada. Só probabilidade: sem odd, edge ou valor.
   model?: MatchModelLineView;
+  // Etiquetas de mesa de amigos (ADR 0070, #656): reta final, deu zebra, chocolate,
+  // azarão. Regra em código (lib/view/match-tags.ts). Chave ausente sem etiqueta.
+  tags?: MatchTagView[];
 };
 
 // Linha da lista de jogos agrupada por dia (/jogos, #577): a MatchRowView + o dia
@@ -105,7 +109,7 @@ export type MatchListRowView = MatchRowView & {
 
 // Firewall do ADR 0030 no TIPO: o hero nunca recebe a leitura do modelo (toMatchHeroView
 // remove o campo mesmo se alguém passar a base).
-export type MatchHeroView = Omit<MatchRowView, "model">;
+export type MatchHeroView = Omit<MatchRowView, "model" | "tags">;
 
 // Linha compacta da base do modelo no /jogos (#555). `label` vem da apresentação do
 // mercado de tela ("Casa", "Menos de 2,5"); `pct` inteiro ("52%").
@@ -336,6 +340,9 @@ export type H2HViewRow = {
 export type H2HView = {
   rows: H2HViewRow[];
   summary: string;
+  // Freguesia (ADR 0070, #656): um time venceu 4+ dos confrontos listados. Nome
+  // canônico em toH2HView, de exibição depois de withDisplayTeamNames. Chave ausente sem.
+  streak?: FreguesiaStreak;
 };
 
 export type StandingsViewRow = {

@@ -20,7 +20,16 @@ O limite vem da ADR 0048 §4, que adotou de forma voluntária as regras de conte
 4. **Glossário liberado:** cravar, zebra, azarão, foto de chegada, reta final, chocolate/lavada, freguês/freguesia, fezinha, chute, galera/turma, resenha, palpiteiro do bolão, secar, na trave (só depois do jogo), mesa. Zona cinzenta: blefe. A fonte viva é a tabela da proposta.
 5. **Fora, sempre:** "bet" (inglês e marca das casas `.bet.br`); barbada, certeza, garantido (promessa); bora recuperar, revanche, dobrar a aposta, all-in, forrar (convite a apostar mais). O teste `__tests__/voice-firewall.test.ts` barra essa lista no texto de tela das superfícies do item 2, menos "certeza", que aparece legítima em confirmações ("tem certeza?") e fica pra revisão.
 6. **Grafia:** "fezinha", sem acento, como "cafezinho".
-7. **Etiquetas com dado (#656)** são regra em código, nunca texto do LLM, e cada uma tem teste.
+7. **Etiquetas com dado (#656)** são regra em código, nunca texto do LLM, e cada uma tem teste (`lib/view/match-tags.ts`):
+   - **reta final**: ao vivo, 2º tempo, do minuto 80 em diante, só com o estado ao vivo fresco.
+   - **deu zebra**: jogo encerrado cujo resultado (casa, empate ou fora) tinha menos de 20% na base do modelo conferida até 24h antes do apito. No bolão sem ganhador, "Deu zebra: ninguém acertou." pela mesma regra, só com o jogo encerrado (o placar lançado à mão pode vir no meio do jogo ou num jogo cancelado).
+   - **chocolate**: vitória por 3 gols ou mais.
+   - **azarão**: antes do jogo, o lado com menos de 20% de vitória na base fresca.
+   - **Freguesia**: nos confrontos diretos listados (até 5, no mínimo 4 com placar), um time venceu 4 ou mais.
+   - **cravou o placar**: ao lado do selo Acertou do palpite da IA (só dentro do app, não na /p), e na linha do placar exato acertado em Suas apostas e no bolão.
+   - **Ficou na trave.**: placar exato errado por um gol só, depois do jogo, em Suas apostas e no bolão (no bolão, também só com o jogo encerrado).
+
+   As etiquetas de linha ficam no /jogos (as quatro) e no /time (reta final e chocolate, que não usam a base do modelo); o cabeçalho do jogo não leva nenhuma (firewall da ADR 0030, como a linha do modelo). Zebra e chocolate usam o placar sincronizado, que inclui prorrogação.
 
 ## Consequências
 
