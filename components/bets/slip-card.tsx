@@ -13,6 +13,7 @@ import {
 import { readLiveStamp } from "@/lib/live/stamp";
 import { historyLegView, slipLegLabel, type TeamNames } from "@/lib/view/bet-slip";
 import { liveStampLabel } from "@/lib/view/live-score";
+import { exactScoreLegQuip } from "@/lib/view/match-tags";
 import type { ResultState } from "@/lib/view/result-state";
 import { displayMatchTeams } from "@/lib/view/team";
 
@@ -79,6 +80,7 @@ function LegRow({
   // Encerrada sem resultado (jogo cancelado, ou não conferida fechada por tempo): a
   // perna pendente fica sem selo; o cabeçalho já diz o porquê. Nunca "Em aberto" lá.
   const hideBadge = closed && result === "pending";
+  const quip = exactScoreLegQuip(leg);
   return (
     <div className="flex flex-col gap-0.5">
       <div className="flex items-center justify-between gap-2">
@@ -93,6 +95,7 @@ function LegRow({
             </Badge>
           ))}
       </div>
+      {quip && <span className="text-body-sm tracking-tight text-muted-foreground">{quip}</span>}
       {view.visible.length > 0 && (
         <span className="font-mono text-meta tabular-nums text-muted-foreground">
           {view.visible.join(" · ")}

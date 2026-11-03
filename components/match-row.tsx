@@ -6,6 +6,7 @@ import { Skeleton } from "@/components/ui/skeleton";
 import { LiveBadge } from "@/components/live-badge";
 import { AnalyzedBadge } from "@/components/match-list/analyzed-badge";
 import { RowTrailing } from "@/components/match-list/row-trailing";
+import { MatchTags } from "@/components/match-list/match-tags";
 import { MatchModelLine } from "@/components/match-model-line";
 import { TeamCrest } from "@/components/team-crest";
 import { appendBackParam } from "@/lib/view/back-href";
@@ -71,6 +72,8 @@ export function MatchRow({ m, last, listHref, backHref, tourTarget, timeLabel }:
           >
             {LEAGUE_LABEL[m.league]}
           </Badge>
+          {/* Etiquetas de mesa de amigos (ADR 0070): reta final, zebra, chocolate, azarão. */}
+          {m.tags && <MatchTags tags={m.tags} className="min-w-0" />}
         </div>
         {m.hasPrediction && <AnalyzedBadge />}
       </div>

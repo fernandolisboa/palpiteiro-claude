@@ -22,6 +22,11 @@ const FILES = [
   "lib/view/range-href.ts",
   "lib/view/match-search.ts",
   "app/landing-content.tsx",
+  // Etiquetas com dado (#656).
+  "lib/view/match-tags.ts",
+  "components/match-list/match-tags.tsx",
+  "components/h2h-section.tsx",
+  "components/palpites/palpite-badges.tsx",
 ];
 
 const FORA: Array<[string, RegExp]> = [

@@ -11,6 +11,7 @@ import { LiveBadge } from "@/components/live-badge";
 import { AnalyzedBadge } from "@/components/match-list/analyzed-badge";
 import { DayHeading } from "@/components/match-list/day-heading";
 import { RowTrailing } from "@/components/match-list/row-trailing";
+import { MatchTags } from "@/components/match-list/match-tags";
 import { MatchModelLine } from "@/components/match-model-line";
 import { TeamCrest } from "@/components/team-crest";
 import { appendBackParam } from "@/lib/view/back-href";
@@ -101,6 +102,8 @@ export function UpcomingMatchesDesktop({
                     {/* "analisado" ao lado dos nomes, na altura deles (#577); também
                         em jogo encerrado já analisado (#99). */}
                     {m.hasPrediction && <AnalyzedBadge />}
+                    {/* Etiquetas de mesa de amigos (ADR 0070). */}
+                    {m.tags && <MatchTags tags={m.tags} />}
                   </div>
                   {/* Base do modelo (#555): só probabilidade, abaixo dos nomes. */}
                   {m.model && <MatchModelLine model={m.model} />}

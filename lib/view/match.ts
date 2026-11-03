@@ -21,6 +21,7 @@ import { teamPair } from "@/lib/view/team";
 import type { MatchModelSnapshot } from "@/lib/model-base/types";
 import { MATCH_MODEL_MAX_AGE_MS } from "@/lib/model-base/version";
 import { toMatchModelLineView } from "@/lib/view/match-model";
+import { matchRowTags, modelFreshAtKickoff } from "@/lib/view/match-tags";
 import {
   toMatchRowOdds,
   toMatchRowResultOdds,
@@ -115,6 +116,23 @@ export function toMatchRowView({
     (match.status === "scheduled" || match.status === "live")
       ? toLiveScoreView(inPlay, now)
       : null;
+  const modelFresh =
+    modelSnapshot != null &&
+    nowMs - modelSnapshot.checkedAt.getTime() <= MATCH_MODEL_MAX_AGE_MS;
+  const finalScore =
+    match.status === "finished" && match.homeScore !== null && match.awayScore !== null
+      ? { home: match.homeScore, away: match.awayScore }
+      : null;
+  const tags = matchRowTags({
+    teams: shortTeams,
+    live: liveFromState && !liveFromState.ended && inPlay ? inPlay : null,
+    finalScore,
+    resultModel:
+      finalScore && modelSnapshot && modelFreshAtKickoff(modelSnapshot.checkedAt, match.kickoffAt)
+        ? modelSnapshot.probabilities.match_result
+        : null,
+    pregameModel: analyzable && modelFresh ? modelSnapshot.probabilities.match_result : null,
+  });
   return {
     id: match.id,
     home,
@@ -161,11 +179,10 @@ export function toMatchRowView({
     countdown: formatCountdown(match.kickoffAt, now, timeZone),
     // Chave ausente (não `model: undefined`) sem base ou com base velha (mesmo limite
     // do seam do cupom): goldens do MatchRow intactos.
-    ...(analyzable &&
-    modelSnapshot &&
-    nowMs - modelSnapshot.checkedAt.getTime() <= MATCH_MODEL_MAX_AGE_MS
+    ...(analyzable && modelFresh
       ? { model: toMatchModelLineView(modelSnapshot, shortTeams) }
       : {}),
+    ...(tags.length > 0 ? { tags } : {}),
   };
 }
 
@@ -197,6 +214,6 @@ export function toMatchListRowView(
 // Firewall do ADR 0030: o hero nunca carrega a leitura do modelo, mesmo que o caller
 // passe a base (o tipo MatchHeroView também não tem o campo).
 export function toMatchHeroView(args: ToMatchRowArgs): MatchHeroView {
-  const { model: _model, ...hero } = toMatchRowView(args);
+  const { model: _model, tags: _tags, ...hero } = toMatchRowView(args);
   return hero;
 }
