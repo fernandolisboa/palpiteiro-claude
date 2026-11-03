@@ -28,19 +28,19 @@ export function LandingContent() {
     <div className="flex flex-col gap-14 lg:gap-20">
       <section className="flex flex-col items-start gap-6 pt-6 sm:pt-12 lg:pt-14">
         <h1 className="max-w-reading text-balance text-display-lg font-medium leading-[1.1] tracking-tight lg:text-display-xl">
-          Palpites de futebol e o bolão da turma, num lugar só.
+          Palpites e bolão da galera num só lugar.
         </h1>
 
         <p className="max-w-reading text-body leading-relaxed text-muted-foreground tracking-tight">
-          Escolha o jogo e a IA crava um palpite com o porquê. Você anota suas
-          apostas e o bolão com os amigos; depois do apito, o app confere o placar e
-          faz a conta.
+          Escolha o jogo e a IA crava quem leva, o placar provável e por quê. Você
+          anota suas apostas e o palpite de cada amigo; quando o jogo acaba, o app
+          confere o placar e mostra quem acertou.
         </p>
 
         <div className="flex flex-col items-start gap-3 pt-2 sm:flex-row sm:items-center">
           <Button asChild size="lg">
             <IntentLink href="/signin">
-              Entrar <ArrowRight className="size-4" />
+              Entrar e escolher um jogo <ArrowRight className="size-4" />
             </IntentLink>
           </Button>
           <IntentLink
@@ -55,8 +55,9 @@ export function LandingContent() {
       <div className="grid gap-12 lg:grid-cols-3 lg:gap-8">
         <Block
           id="landing-palpite"
-          title="Palpite da IA"
-          text="No jogo que você escolher, a IA cruza forma, confrontos, desfalques e o modelo de placar e diz quem leva, o placar provável e por quê. É palpite, não recomendação de aposta."
+          feature="Palpite da IA"
+          title="Quem leva, o placar provável e o porquê"
+          text="No jogo que você escolher, a IA cruza forma, confrontos, desfalques e um modelo de placar calculado em código. Depois do apito, o palpite ganha o selo Acertou ou Errou. É palpite, não recomendação de aposta."
           figure={
             <LandingFigure description="Um cartão de Palpite da IA: Coqueiros FC contra Serra Azul, confiança média, Coqueiros leva num jogo de poucos gols, placar provável 1 a 0.">
               <PalpitePreview />
@@ -65,8 +66,9 @@ export function LandingContent() {
         />
         <Block
           id="landing-apostas"
-          title="Suas apostas"
-          text="Marque o que você apostou e o app guarda tudo, em unidades. Depois do jogo, ele confere sozinho: Acertou, Errou ou Devolvida. Só você vê."
+          feature="Suas apostas"
+          title="Anote a aposta, o app confere"
+          text="Marque o que você apostou e o app guarda tudo, em unidades. Quando o jogo acaba, ele confere sozinho: Acertou, Errou ou Devolvida. Só você vê."
           figure={
             <LandingFigure description="Uma aposta combinada anotada em Suas apostas: vitória do Coqueiros FC e menos de 2,5 gols, as duas em aberto.">
               <ApostasPreview />
@@ -75,8 +77,9 @@ export function LandingContent() {
         />
         <Block
           id="landing-bolao"
-          title="Bolão"
-          text="Anote o palpite de cada amigo, sem ninguém precisar de conta. No fim do jogo o app mostra quem acertou e, se vocês combinaram um valor, como fica a divisão."
+          feature="Bolão"
+          title="Cada amigo dá o palpite, o app diz quem acertou"
+          text="Você anota o palpite de cada um, sem ninguém precisar criar conta. No fim do jogo aparece quem acertou e, se vocês combinaram um valor, como fica a divisão."
           note={POOL_MONEY_NOTE}
           figure={
             <LandingFigure description="Um bolão conferido: placar final 1 a 0; Ana acertou o placar e ganhou, Beto e Caio erraram.">
@@ -91,12 +94,15 @@ export function LandingContent() {
 
 function Block({
   id,
+  feature,
   title,
   text,
   note,
   figure,
 }: {
   id: string;
+  /** Nome da área no app (o mesmo da navegação), acima do título que afirma. */
+  feature: string;
   title: string;
   text: string;
   note?: string;
@@ -105,6 +111,9 @@ function Block({
   return (
     <section aria-labelledby={id} className="flex min-w-0 flex-col gap-4">
       <div className="flex flex-col gap-2">
+        <p className="text-meta uppercase tracking-label text-muted-foreground">
+          {feature}
+        </p>
         <h2 id={id} className="text-display-sm font-medium tracking-tight">
           {title}
         </h2>

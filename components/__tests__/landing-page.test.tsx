@@ -44,14 +44,16 @@ describe("LandingContent", () => {
     expect(html).toContain('href="/como-funciona"');
   });
 
-  it("três blocos (Palpite da IA, Suas apostas, Bolão), cada um com a ilustração rotulada", () => {
+  // O nome da área (o mesmo da navegação) fica no rótulo acima do H2; o H2 é a frase
+  // que afirma o que a área faz e pode mudar de wording sem quebrar o teste.
+  it("três blocos (Palpite da IA, Suas apostas, Bolão), cada um com H2 e a ilustração rotulada", () => {
     const html = render();
     const sections = html.split("<section").slice(1);
     const blocks = sections.filter((s) => s.includes("<figure"));
     expect(blocks).toHaveLength(3);
     for (const [i, title] of ["Palpite da IA", "Suas apostas", "Bolão"].entries()) {
       const block = blocks[i];
-      expect(block).toMatch(new RegExp(`<h2[^>]*>${title}</h2>`));
+      expect(block).toMatch(new RegExp(`<p[^>]*>${title}</p><h2[^>]*>[^<]+</h2>`));
       expect(block).toMatch(/<div aria-hidden="true" inert=""/);
       expect(block).toContain("Exemplo ilustrativo");
     }
