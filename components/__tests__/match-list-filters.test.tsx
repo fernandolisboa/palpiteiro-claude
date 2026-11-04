@@ -111,7 +111,7 @@ describe("filtros da lista de jogos (#643)", () => {
     );
   });
 
-  it("time escolhido: o chip mostra o nome e o × limpa só o time", () => {
+  it("time escolhido: o chip mostra o nome e o × (dentro dele) limpa só o time", () => {
     const groups = teamOptionGroups(
       [{ name: "CR Flamengo", league: "brasileirao_a", crestUrl: null }],
       ["bsa"],
@@ -127,9 +127,36 @@ describe("filtros da lista de jogos (#643)", () => {
       ),
     );
     expect(container.querySelector("button")!.textContent).toContain("Flamengo");
-    expect(container.querySelector('a[aria-label="Limpar time"]')!.getAttribute("href")).toBe(
+    const clear = container.querySelector('a[aria-label="Limpar time"]')!;
+    expect(clear.getAttribute("href")).toBe(
       "/jogos?league=bsa&preset=custom&from=2026-10-24&to=2026-10-26&analyzed=no",
     );
+    // Mesmo pill: o × é irmão do botão que abre a grade, dentro do wrapper com contorno.
+    const pill = clear.parentElement!;
+    expect(pill.className).toContain("rounded-full");
+    expect(pill.className).toContain("border-accent-border");
+    expect(pill.querySelector("button")!.getAttribute("aria-label")).toBe(
+      "Time: Flamengo. Trocar time",
+    );
+  });
+
+  it("time escolhido no desktop: clicar no nome ainda abre a grade", () => {
+    const groups = teamOptionGroups(
+      [{ name: "CR Flamengo", league: "brasileirao_a", crestUrl: null }],
+      ["bsa"],
+    );
+    act(() =>
+      root.render(
+        <TeamFilter
+          nav={{ ...NAV, filters: { team: "CR Flamengo" } }}
+          groups={groups}
+          selected={groups[0].teams[0]}
+          surface="popover"
+        />,
+      ),
+    );
+    act(() => container.querySelector("button")!.click());
+    expect(document.querySelector('[role="dialog"]')).not.toBeNull();
   });
 });
 

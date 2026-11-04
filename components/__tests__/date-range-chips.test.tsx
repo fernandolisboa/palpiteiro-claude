@@ -56,7 +56,7 @@ describe("período da lista de jogos", () => {
     expect(html).toContain(`href="${amp(buildRangeHref({ league: "bsa" }, { preset: "upcoming" }))}"`);
   });
 
-  it("chips com a aparência do FilterChipLink (h-8, redondo)", () => {
+  it("chip com intervalo: um pill só (h-8, redondo) com o × dentro", () => {
     const html = renderToStaticMarkup(
       <DateRangeTabs
         league="all"
@@ -67,6 +67,8 @@ describe("período da lista de jogos", () => {
         surface="sheet"
       />,
     );
-    expect(html.match(/h-8 shrink-0 items-center whitespace-nowrap rounded-full/g)).toHaveLength(2);
+    expect(html.match(/h-8 shrink-0 items-center whitespace-nowrap rounded-full/g)).toHaveLength(1);
+    // O × mora dentro do mesmo pill do botão das datas, não num chip solto do lado.
+    expect(html).toMatch(/rounded-full[^"]*bg-accent-soft[^>]*><button[^>]*>.*18\/10 – 25\/10<\/button><a[^>]*aria-label="Limpar datas"/);
   });
 });

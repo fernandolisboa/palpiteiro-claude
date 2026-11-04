@@ -1,9 +1,4 @@
-import { IntentLink } from "@/components/intent-link";
-import { X } from "lucide-react";
-
 import { DateRangeSheet } from "@/components/date-range-sheet";
-import { filterChipClassName } from "@/components/filter-chip";
-import { buildRangeHref } from "@/lib/view/range-href";
 import type { RangePreset } from "@/lib/view/date-range";
 import type { ListFilters } from "@/lib/view/match-search";
 import type { LeagueFilter } from "@/lib/view/types";
@@ -29,7 +24,7 @@ type Props = {
  * em diante e cresce com "Carregar mais"; os chips 5 dias, 14 dias e "Competição"
  * (#577) saíram porque a lista já cobre isso. Sobra o "Escolher datas" (folha/popover
  * com De e Até), que também serve pra jogos que já passaram. Com um intervalo
- * aplicado, o chip mostra as datas e ganha um × do lado que volta pra lista padrão.
+ * aplicado, o chip mostra as datas e ganha um × dentro dele que volta pra lista padrão.
  */
 export function DateRangeTabs({
   league,
@@ -53,16 +48,6 @@ export function DateRangeTabs({
         label={customActive && customLabel ? customLabel : "Escolher datas"}
         surface={surface}
       />
-      {customActive && (
-        <IntentLink
-          href={buildRangeHref({ league, filters }, { preset: "upcoming" })}
-          aria-label="Limpar datas"
-          title="Limpar datas"
-          className={filterChipClassName(false, "w-8 justify-center px-0")}
-        >
-          <X aria-hidden="true" className="size-3.5" />
-        </IntentLink>
-      )}
     </nav>
   );
 }
