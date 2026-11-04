@@ -8,7 +8,11 @@ import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Card } from "@/components/ui/card";
 import { LiveBadge } from "@/components/live-badge";
-import { AnalyzedBadge } from "@/components/match-list/analyzed-badge";
+import {
+  RowAnalyzeChip,
+  RowAnalyzeStatus,
+  useRowAnalysis,
+} from "@/components/match-list/row-analyze";
 import { DayHeading } from "@/components/match-list/day-heading";
 import { RowTrailing } from "@/components/match-list/row-trailing";
 import { MatchTags } from "@/components/match-list/match-tags";
@@ -17,7 +21,12 @@ import { TeamCrest } from "@/components/team-crest";
 import { appendBackParam } from "@/lib/view/back-href";
 import { LEAGUE_LABEL } from "@/lib/format";
 import { tourMatchIndex } from "@/lib/tour/steps";
-import { groupByDay, matchRowPhase, showsRowLiveBadge } from "@/lib/view/match-list";
+import {
+  canAnalyzeFromList,
+  groupByDay,
+  matchRowPhase,
+  showsRowLiveBadge,
+} from "@/lib/view/match-list";
 import type { MatchListRowView } from "@/lib/view/types";
 
 const INITIAL_BATCH = 15;
@@ -31,6 +40,7 @@ export function UpcomingMatchesDesktop({
   matches,
   listHref,
   endNote,
+  analyzeEnabled = false,
 }: {
   matches: MatchListRowView[];
   // URL filtrada da lista de origem (/jogos?…) pra preservar o estado de busca
@@ -38,6 +48,8 @@ export function UpcomingMatchesDesktop({
   listHref?: string;
   // Aviso no fim da lista cortada no teto da query, quando tudo já foi revelado.
   endNote?: string;
+  // "analisar" na linha (flag do fan-out ligada). Desligado, a linha não oferece o botão.
+  analyzeEnabled?: boolean;
 }) {
   const [visible, setVisible] = useState(INITIAL_BATCH);
   const slice = matches.slice(0, visible);
@@ -52,73 +64,16 @@ export function UpcomingMatchesDesktop({
           className={gi === 0 ? undefined : "border-t border-border-subtle"}
         >
           <DayHeading label={group.label} variant="band" />
-          {group.rows.map((m, i, arr) => {
-            const phase = matchRowPhase(m);
-            const liveBadge = showsRowLiveBadge(m);
-            return (
-              <IntentLink
-                key={m.id}
-                href={appendBackParam(`/match/${m.id}`, listHref, "/jogos")}
-                data-tour={m.id === tourId ? "match-row" : undefined}
-                className={`grid ${UPCOMING_GRID} items-center gap-4 px-5 py-3.5 transition-colors hover:bg-surface-2 focus-visible:outline-none focus-visible:ring-[3px] focus-visible:ring-ring/50 focus-visible:ring-inset ${
-                  i === arr.length - 1 ? "" : "border-b border-border-subtle"
-                }`}
-              >
-                <div className="flex flex-col items-start gap-1">
-                  {liveBadge ? (
-                    // Ao vivo (#385, #574): o selo no lugar da hora, uma vez por linha.
-                    <span className="text-meta font-medium">
-                      <LiveBadge />
-                    </span>
-                  ) : (
-                    <span className="font-mono text-body-sm tabular-nums text-muted-foreground">
-                      {m.startsIn ?? m.time}
-                    </span>
-                  )}
-                  <Badge
-                    variant="outline"
-                    size="xs"
-                    className="uppercase tracking-label text-muted-foreground"
-                  >
-                    {LEAGUE_LABEL[m.league]}
-                  </Badge>
-                </div>
-                <div className="flex min-w-0 flex-col gap-1.5">
-                  <div className="flex min-w-0 items-center gap-3">
-                    <div className="flex min-w-0 flex-col gap-1.5">
-                      <div className="flex min-w-0 items-center gap-2">
-                        <TeamCrest team={m.home} size={22} />
-                        <span className="truncate text-label font-medium tracking-tight" title={m.home.fullName}>
-                          {m.home.name}
-                        </span>
-                      </div>
-                      <div className="flex min-w-0 items-center gap-2">
-                        <TeamCrest team={m.away} size={22} />
-                        <span className="truncate text-label font-medium tracking-tight" title={m.away.fullName}>
-                          {m.away.name}
-                        </span>
-                      </div>
-                    </div>
-                    {/* "analisado" ao lado dos nomes, na altura deles (#577); também
-                        em jogo encerrado já analisado (#99). */}
-                    {m.hasPrediction && <AnalyzedBadge />}
-                  </div>
-                  {/* Etiquetas de mesa de amigos (ADR 0070), na mesma ordem do celular. */}
-                  {m.tags && <MatchTags tags={m.tags} />}
-                  {/* Base do modelo (#555): só probabilidade, abaixo dos nomes. */}
-                  {m.model && <MatchModelLine model={m.model} />}
-                </div>
-                <div className="flex justify-end">
-                  <RowTrailing m={m} />
-                </div>
-                <span className="justify-self-end text-muted-fg-2">
-                  {phase === "finished" || phase === "off" ? null : (
-                    <ChevronRight aria-hidden="true" className="size-3.5" />
-                  )}
-                </span>
-              </IntentLink>
-            );
-          })}
+          {group.rows.map((m, i, arr) => (
+            <DesktopMatchRow
+              key={m.id}
+              m={m}
+              href={appendBackParam(`/match/${m.id}`, listHref, "/jogos")}
+              last={i === arr.length - 1}
+              tourTarget={m.id === tourId}
+              analyzeEnabled={analyzeEnabled}
+            />
+          ))}
         </section>
       ))}
       {visible < matches.length && (
@@ -138,5 +93,96 @@ export function UpcomingMatchesDesktop({
         </p>
       )}
     </Card>
+  );
+}
+
+function DesktopMatchRow({
+  m,
+  href,
+  last,
+  tourTarget,
+  analyzeEnabled,
+}: {
+  m: MatchListRowView;
+  href: string;
+  last: boolean;
+  tourTarget: boolean;
+  analyzeEnabled: boolean;
+}) {
+  const phase = matchRowPhase(m);
+  const liveBadge = showsRowLiveBadge(m);
+  const analysis = useRowAnalysis(m.id);
+  return (
+    // Linha clicável inteira pelo link "esticado" (o ::after cobre a linha): o botão
+    // "analisar" fica fora do <a> (botão dentro de link é HTML inválido) e acima dele.
+    <div
+      data-tour={tourTarget ? "match-row" : undefined}
+      className={`relative grid ${UPCOMING_GRID} items-center gap-4 px-5 py-3.5 transition-colors hover:bg-surface-2 has-[a:focus-visible]:ring-[3px] has-[a:focus-visible]:ring-ring/50 has-[a:focus-visible]:ring-inset ${
+        last ? "" : "border-b border-border-subtle"
+      }`}
+    >
+      <div className="flex flex-col items-start gap-1">
+        {liveBadge ? (
+          // Ao vivo (#385, #574): o selo no lugar da hora, uma vez por linha.
+          <span className="text-meta font-medium">
+            <LiveBadge />
+          </span>
+        ) : (
+          <span className="font-mono text-body-sm tabular-nums text-muted-foreground">
+            {m.startsIn ?? m.time}
+          </span>
+        )}
+        <Badge
+          variant="outline"
+          size="xs"
+          className="uppercase tracking-label text-muted-foreground"
+        >
+          {LEAGUE_LABEL[m.league]}
+        </Badge>
+      </div>
+      <div className="flex min-w-0 flex-col gap-1.5">
+        <div className="flex min-w-0 items-center gap-3">
+          <IntentLink
+            href={href}
+            aria-label={`${m.home.fullName} x ${m.away.fullName}`}
+            className="flex min-w-0 flex-col gap-1.5 after:absolute after:inset-0 after:content-[''] focus-visible:outline-none"
+          >
+            <div className="flex min-w-0 items-center gap-2">
+              <TeamCrest team={m.home} size={22} />
+              <span className="relative truncate text-label font-medium tracking-tight" title={m.home.fullName}>
+                {m.home.name}
+              </span>
+            </div>
+            <div className="flex min-w-0 items-center gap-2">
+              <TeamCrest team={m.away} size={22} />
+              <span className="relative truncate text-label font-medium tracking-tight" title={m.away.fullName}>
+                {m.away.name}
+              </span>
+            </div>
+          </IntentLink>
+          {/* "analisado" ao lado dos nomes, na altura deles (#577); também em jogo
+              encerrado já analisado (#99). No mesmo lugar, "analisar" quando dá. */}
+          <RowAnalyzeChip
+            state={analysis.state}
+            onStart={analysis.start}
+            hasPrediction={m.hasPrediction}
+            canAnalyze={analyzeEnabled && canAnalyzeFromList(m)}
+          />
+        </div>
+        <RowAnalyzeStatus state={analysis.state} />
+        {/* Etiquetas de mesa de amigos (ADR 0070), na mesma ordem do celular. */}
+        {m.tags && <MatchTags tags={m.tags} />}
+        {/* Base do modelo (#555): só probabilidade, abaixo dos nomes. */}
+        {m.model && <MatchModelLine model={m.model} />}
+      </div>
+      <div className="flex justify-end">
+        <RowTrailing m={m} />
+      </div>
+      <span className="justify-self-end text-muted-fg-2">
+        {phase === "finished" || phase === "off" ? null : (
+          <ChevronRight aria-hidden="true" className="size-3.5" />
+        )}
+      </span>
+    </div>
   );
 }

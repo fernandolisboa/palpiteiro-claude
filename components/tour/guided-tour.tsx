@@ -455,7 +455,7 @@ export function GuidedTour({ chapter, userId, serverState, forceStart }: Props) 
               ref={primaryRef}
               type="button"
               size="sm"
-              onClick={interactive ? () => target.click() : next}
+              onClick={interactive ? () => clickTarget(target) : next}
             >
               {interactive ? "Abrir jogo" : isLast ? "Concluir" : "Próximo"}
             </Button>
@@ -465,4 +465,11 @@ export function GuidedTour({ chapter, userId, serverState, forceStart }: Props) 
     </div>,
     document.body,
   );
+}
+
+// Passo interativo: clica no link do alvo. A linha da lista é um <div> com o link do
+// jogo dentro (o botão "analisar" fica fora do link), então o clique vai no <a>.
+function clickTarget(target: HTMLElement) {
+  const link = target.matches("a[href]") ? target : target.querySelector<HTMLElement>("a[href]");
+  (link ?? target).click();
 }

@@ -18,6 +18,7 @@ import { auth } from "@/auth";
 import { resolveHomeLeagueFilter } from "@/lib/config/active-leagues";
 import { dayKeyOf, keyToLeague, leagueToKey } from "@/lib/format";
 import { getActiveLeaguesForRequest } from "@/lib/db/queries/league-settings";
+import { getEnableBestBetFanOut } from "@/lib/db/queries/ai-config";
 import { getRequestTimeZone } from "@/lib/server/request-timezone";
 import {
   getMatchIdsWithPredictionsByUser,
@@ -218,11 +219,15 @@ export default async function JogosPage({ searchParams }: PageProps) {
     limit: limit + 1,
   };
 
-  const [queried, recentRaw, tourState, catalog] = await Promise.all([
+  // "analisar" na linha (flag do fan-out, a mesma do botão da página do jogo). Falha de
+  // leitura só tira o botão da lista, nunca derruba a página.
+  const analyzeEnabledPromise = getEnableBestBetFanOut().catch(() => false);
+  const [queried, recentRaw, tourState, catalog, analyzeEnabled] = await Promise.all([
     loadRangeMatches(matchesQuery),
     recentPromise,
     tourPromise,
     catalogPromise,
+    analyzeEnabledPromise,
   ]);
   const truncated = queried.length > limit;
   const dbMatches = truncated ? queried.slice(0, limit) : queried;
@@ -335,6 +340,7 @@ export default async function JogosPage({ searchParams }: PageProps) {
           selectedTeam={selectedTeam}
           countLabel={countLabel}
           endNote={endNote}
+          analyzeEnabled={analyzeEnabled}
         />
       </div>
       <div className="hidden lg:block">
@@ -349,6 +355,7 @@ export default async function JogosPage({ searchParams }: PageProps) {
           selectedTeam={selectedTeam}
           countLabel={countLabel}
           endNote={endNote}
+          analyzeEnabled={analyzeEnabled}
         />
       </div>
     </>
@@ -366,6 +373,7 @@ type HomeContentProps = {
   selectedTeam?: TeamOption;
   countLabel: string;
   endNote?: string;
+  analyzeEnabled: boolean;
 };
 
 // Atalho do estado vazio das predições recentes (#446): o primeiro jogo da lista que
@@ -513,6 +521,7 @@ function MobileHome({
   selectedTeam,
   countLabel,
   endNote,
+  analyzeEnabled,
 }: HomeContentProps) {
   const nav = navState(league, range, filters);
   // URL filtrada atual da lista — propagada aos links de jogo pra preservar o
@@ -555,6 +564,7 @@ function MobileHome({
           matches={matches}
           listHref={listHref}
           endNote={endNote}
+          analyzeEnabled={analyzeEnabled}
         />
       )}
 
@@ -599,6 +609,7 @@ function DesktopHome({
   selectedTeam,
   countLabel,
   endNote,
+  analyzeEnabled,
 }: HomeContentProps) {
   const nav = navState(league, range, filters);
   // URL filtrada atual da lista — propagada aos links de jogo (preserva busca ao
@@ -640,6 +651,7 @@ function DesktopHome({
             matches={matches}
             listHref={listHref}
             endNote={endNote}
+            analyzeEnabled={analyzeEnabled}
           />
         )}
 

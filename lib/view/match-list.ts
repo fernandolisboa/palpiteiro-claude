@@ -32,6 +32,23 @@ export function showsRowLiveBadge(
   return matchRowPhase(m) === "live" && !m.liveScore?.ended;
 }
 
+/**
+ * "analisar" direto na linha da lista: só jogo que ainda aceita análise de pré-jogo
+ * (o mesmo gate da página do jogo), que a pessoa ainda não analisou, com o jogo em
+ * pré-jogo (nunca ao vivo, mesmo recém-apitado) e com preço de mercado já publicado
+ * (sem odd = jogo distante: a análise ainda não tem o mercado pra ler).
+ */
+export function canAnalyzeFromList(
+  m: Pick<MatchRowView, "status" | "isInProgress" | "analyzable" | "hasPrediction" | "odds">,
+): boolean {
+  return (
+    m.analyzable === true &&
+    !m.hasPrediction &&
+    matchRowPhase(m) === "upcoming" &&
+    m.odds !== null
+  );
+}
+
 export type MatchDayGroup<T> = { key: string; label: string; rows: T[] };
 
 /**

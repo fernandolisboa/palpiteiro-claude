@@ -89,7 +89,7 @@ export const TOUR_CHAPTERS: Record<TourChapter, readonly TourStep[]> = {
     {
       target: "match-row",
       title: "Abra um jogo",
-      body: 'Cada linha é um jogo, com horário, odds (quando já publicadas) e "analisado" se você já rodou a análise. Toque neste pra abrir: o tour continua lá, mostrando como gerar o palpite.',
+      body: 'Cada linha é um jogo, com horário, odds (quando já publicadas) e "analisado" se você já rodou a análise. "analisar" roda a análise dali mesmo, sem abrir o jogo (gasta o mesmo limite do dia). Toque neste pra abrir: o tour continua lá, mostrando como gerar o palpite.',
       interactive: true,
     },
   ],
