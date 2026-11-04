@@ -1,13 +1,17 @@
 "use client";
 
-import { useId, useState, useTransition } from "react";
+import { useId, useState, useTransition, type ReactNode } from "react";
 import { useRouter } from "next/navigation";
-import { Shield, X } from "lucide-react";
+import { Shield } from "lucide-react";
 
-import { IntentLink } from "@/components/intent-link";
-import { filterChipClassName } from "@/components/filter-chip";
+import {
+  ChipClearLink,
+  clearableChipBodyClassName,
+  clearableChipClassName,
+  filterChipClassName,
+} from "@/components/filter-chip";
 import { TeamCrest } from "@/components/team-crest";
-import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover";
+import { Popover, PopoverAnchor, PopoverContent, PopoverTrigger } from "@/components/ui/popover";
 import {
   Sheet,
   SheetContent,
@@ -124,7 +128,7 @@ function TeamGrid({
  * Chip "Time" da lista de jogos (#643): abre a grade de escudos dos times com jogo no
  * período (folha no celular, popover no desktop). Escolher um mostra só os jogos dele
  * (`team` na URL, com a liga, as datas e a busca preservadas). Com um time escolhido,
- * o chip mostra o escudo e o nome e ganha um × do lado que limpa.
+ * o chip mostra o escudo e o nome e ganha um × dentro dele que limpa.
  */
 export function TeamFilter({ nav, groups, selected, surface }: Props) {
   const router = useRouter();
@@ -145,7 +149,11 @@ export function TeamFilter({ nav, groups, selected, surface }: Props) {
       aria-current={active ? "true" : undefined}
       aria-label={active ? `Time: ${selected.team.name}. Trocar time` : "Filtrar por time"}
       aria-busy={pending || undefined}
-      className={filterChipClassName(active, cn("max-w-56 gap-1.5", pending && "opacity-70"))}
+      className={
+        active
+          ? clearableChipBodyClassName("gap-1.5")
+          : filterChipClassName(false, "max-w-56 gap-1.5")
+      }
     >
       {active ? (
         <TeamCrest team={selected.team} size={16} />
@@ -159,58 +167,53 @@ export function TeamFilter({ nav, groups, selected, surface }: Props) {
     <TeamGrid groups={groups} selected={selected?.value} onPick={pick} />
   );
 
-  const clear = active && (
-    <IntentLink
-      href={buildFiltersHref(nav, { team: undefined })}
-      aria-label="Limpar time"
-      title="Limpar time"
-      className={filterChipClassName(false, "w-8 justify-center px-0")}
-    >
-      <X aria-hidden="true" className="size-3.5" />
-    </IntentLink>
-  );
+  // Com time escolhido, o × fica dentro do pill, ao lado do nome; o miolo segue abrindo
+  // a grade.
+  const chip = (wrappedTrigger: ReactNode) =>
+    active ? (
+      <span className={clearableChipClassName(cn("max-w-56", pending && "opacity-70"))}>
+        {wrappedTrigger}
+        <ChipClearLink href={buildFiltersHref(nav, { team: undefined })} label="Limpar time" />
+      </span>
+    ) : (
+      <span className={cn("inline-flex shrink-0", pending && "opacity-70")}>{wrappedTrigger}</span>
+    );
 
   if (surface === "popover") {
     return (
-      <div className="flex shrink-0 items-center gap-2">
-        <Popover open={open} onOpenChange={setOpen}>
-          <PopoverTrigger asChild>{trigger}</PopoverTrigger>
-          <PopoverContent
-            align="start"
-            aria-labelledby={titleId}
-            className="flex max-h-[min(32rem,70vh)] w-[26rem] flex-col p-4"
-          >
-            <p id={titleId} className="pb-3 text-label font-medium tracking-tight">
-              Escolher time
-            </p>
-            {grid}
-          </PopoverContent>
-        </Popover>
-        {clear}
-      </div>
+      <Popover open={open} onOpenChange={setOpen}>
+        <PopoverAnchor asChild>{chip(<PopoverTrigger asChild>{trigger}</PopoverTrigger>)}</PopoverAnchor>
+        <PopoverContent
+          align="start"
+          aria-labelledby={titleId}
+          className="flex max-h-[min(32rem,70vh)] w-[26rem] flex-col p-4"
+        >
+          <p id={titleId} className="pb-3 text-label font-medium tracking-tight">
+            Escolher time
+          </p>
+          {grid}
+        </PopoverContent>
+      </Popover>
     );
   }
   return (
-    <div className="flex shrink-0 items-center gap-2">
-      <Sheet open={open} onOpenChange={setOpen}>
-        <SheetTrigger asChild>{trigger}</SheetTrigger>
-        <SheetContent
-          side="bottom"
-          // Sem foco automático no "Filtrar times": no celular o teclado subiria por cima
-          // da grade de escudos, que é o que a pessoa veio ver.
-          onOpenAutoFocus={(e) => e.preventDefault()}
-          className="max-h-[85dvh] gap-0 rounded-t-xl pb-[max(1rem,env(safe-area-inset-bottom))]"
-        >
-          <SheetHeader className="pb-2">
-            <SheetTitle className="text-label">Escolher time</SheetTitle>
-            <SheetDescription className="text-body-sm">
-              Mostra só os jogos do time, nas competições do filtro.
-            </SheetDescription>
-          </SheetHeader>
-          <div className="flex min-h-0 flex-col px-4 pb-2">{grid}</div>
-        </SheetContent>
-      </Sheet>
-      {clear}
-    </div>
+    <Sheet open={open} onOpenChange={setOpen}>
+      {chip(<SheetTrigger asChild>{trigger}</SheetTrigger>)}
+      <SheetContent
+        side="bottom"
+        // Sem foco automático no "Filtrar times": no celular o teclado subiria por cima
+        // da grade de escudos, que é o que a pessoa veio ver.
+        onOpenAutoFocus={(e) => e.preventDefault()}
+        className="max-h-[85dvh] gap-0 rounded-t-xl pb-[max(1rem,env(safe-area-inset-bottom))]"
+      >
+        <SheetHeader className="pb-2">
+          <SheetTitle className="text-label">Escolher time</SheetTitle>
+          <SheetDescription className="text-body-sm">
+            Mostra só os jogos do time, nas competições do filtro.
+          </SheetDescription>
+        </SheetHeader>
+        <div className="flex min-h-0 flex-col px-4 pb-2">{grid}</div>
+      </SheetContent>
+    </Sheet>
   );
 }

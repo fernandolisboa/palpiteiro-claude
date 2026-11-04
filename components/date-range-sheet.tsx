@@ -1,11 +1,11 @@
 "use client";
 
-import { useId, useState } from "react";
+import { useId, useState, type ReactNode } from "react";
 import { useRouter } from "next/navigation";
 import { CalendarDays } from "lucide-react";
 
 import { Button } from "@/components/ui/button";
-import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover";
+import { Popover, PopoverAnchor, PopoverContent, PopoverTrigger } from "@/components/ui/popover";
 import {
   Sheet,
   SheetContent,
@@ -14,7 +14,12 @@ import {
   SheetTitle,
   SheetTrigger,
 } from "@/components/ui/sheet";
-import { filterChipClassName } from "@/components/filter-chip";
+import {
+  ChipClearLink,
+  clearableChipBodyClassName,
+  clearableChipClassName,
+  filterChipClassName,
+} from "@/components/filter-chip";
 import type { ListFilters } from "@/lib/view/match-search";
 import { buildRangeHref } from "@/lib/view/range-href";
 import type { LeagueFilter } from "@/lib/view/types";
@@ -113,8 +118,8 @@ function RangeForm({
  * Chip "Escolher datas" da lista de jogos (#577): abre os campos De e Até numa folha
  * (celular) ou num popover (desktop). "Aplicar" navega para o intervalo
  * (`preset=custom`, os mesmos parâmetros de URL de antes); "Limpar" (só com o
- * intervalo ativo) volta para os próximos jogos. Com o intervalo ativo, o chip mostra as datas
- * e fica selecionado: é o único lugar onde o período aparece.
+ * intervalo ativo) volta para os próximos jogos. Com o intervalo ativo, o chip mostra as datas,
+ * fica selecionado (é o único lugar onde o período aparece) e ganha um × dentro dele.
  */
 export function DateRangeSheet({
   league,
@@ -132,12 +137,30 @@ export function DateRangeSheet({
     <button
       type="button"
       aria-current={active ? "true" : undefined}
-      className={filterChipClassName(active, "gap-1.5 tabular-nums")}
+      className={
+        active
+          ? clearableChipBodyClassName("gap-1.5 tabular-nums")
+          : filterChipClassName(false, "gap-1.5 tabular-nums")
+      }
     >
       <CalendarDays aria-hidden="true" className="size-3.5" />
       {label}
     </button>
   );
+  // Com intervalo aplicado, o × fica dentro do pill, ao lado das datas (como no chip de
+  // time); o miolo segue abrindo De/Até.
+  const chip = (wrappedTrigger: ReactNode) =>
+    active ? (
+      <span className={clearableChipClassName()}>
+        {wrappedTrigger}
+        <ChipClearLink
+          href={buildRangeHref({ league, filters }, { preset: "upcoming" })}
+          label="Limpar datas"
+        />
+      </span>
+    ) : (
+      <span className="inline-flex shrink-0">{wrappedTrigger}</span>
+    );
   const form = (
     <RangeForm
       league={league}
@@ -152,7 +175,7 @@ export function DateRangeSheet({
   if (surface === "popover") {
     return (
       <Popover open={open} onOpenChange={setOpen}>
-        <PopoverTrigger asChild>{trigger}</PopoverTrigger>
+        <PopoverAnchor asChild>{chip(<PopoverTrigger asChild>{trigger}</PopoverTrigger>)}</PopoverAnchor>
         <PopoverContent align="end" aria-labelledby={titleId} className="w-80 p-4">
           <p id={titleId} className="pb-3 text-label font-medium tracking-tight">
             Escolher datas
@@ -164,7 +187,7 @@ export function DateRangeSheet({
   }
   return (
     <Sheet open={open} onOpenChange={setOpen}>
-      <SheetTrigger asChild>{trigger}</SheetTrigger>
+      {chip(<SheetTrigger asChild>{trigger}</SheetTrigger>)}
       <SheetContent side="bottom" className="gap-0 rounded-t-xl pb-[max(1rem,env(safe-area-inset-bottom))]">
         <SheetHeader className="pb-2">
           <SheetTitle className="text-label">Escolher datas</SheetTitle>
