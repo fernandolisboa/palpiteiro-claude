@@ -1,10 +1,11 @@
 "use client";
 
-import { useCallback, useEffect, useState, useSyncExternalStore, useTransition } from "react";
+import { useCallback, useEffect, useSyncExternalStore } from "react";
 import { Loader2, RotateCcw, Sparkles } from "lucide-react";
 
 import { AnalyzedBadge } from "@/components/match-list/analyzed-badge";
 import {
+  consumeRun,
   getRun,
   startRun,
   subscribeRun,
@@ -29,10 +30,40 @@ export type RowAnalysis =
   | { kind: "done" }
   | { kind: "error"; message: string };
 
-const noSubscribe = () => () => {};
 // O fim de cada run relê a lista uma vez só, mesmo com as duas árvores (celular e
 // desktop) montadas e olhando o mesmo jogo.
 const refreshed = new WeakSet<RunEntry>();
+
+// Estado da linha fora do store de runs, compartilhado pelas duas árvores: "analisado"
+// depois de a lista entregar o run (o refresh ainda não trouxe o `hasPrediction`) e o
+// run pela reserva da server action, que não passa pelo store.
+const rowStates = new Map<string, RowAnalysis>();
+const rowListeners = new Map<string, Set<() => void>>();
+
+function setRowState(matchId: string, state: RowAnalysis | null) {
+  if (state) rowStates.set(matchId, state);
+  else rowStates.delete(matchId);
+  for (const l of rowListeners.get(matchId) ?? []) l();
+}
+
+function subscribeRowState(matchId: string, listener: () => void): () => void {
+  let set = rowListeners.get(matchId);
+  if (!set) {
+    set = new Set();
+    rowListeners.set(matchId, set);
+  }
+  set.add(listener);
+  return () => {
+    set.delete(listener);
+    if (set.size === 0) rowListeners.delete(matchId);
+  };
+}
+
+// Testes: cada caso começa sem estado de linha de outro.
+export function resetRowStatesForTests(): void {
+  rowStates.clear();
+  rowListeners.clear();
+}
 
 function currentStep(entry: RunEntry): string | null {
   for (let i = entry.steps.length - 1; i >= 0; i--) {
@@ -41,16 +72,24 @@ function currentStep(entry: RunEntry): string | null {
   return null;
 }
 
-function fromOutcome(outcome: HeroRunOutcome | null): RowAnalysis {
-  if (outcome && !outcome.ok) return { kind: "error", message: outcome.error };
-  return { kind: "done" };
+// Só um run de pré-jogo completo é "da linha". Um "só o palpite" ou um run ao vivo que
+// terminou com a lista aberta fica pro HERO entregar na página do jogo.
+function isRowRun(entry: RunEntry): boolean {
+  return entry.intent === "analysis" && !entry.live;
 }
 
+const FALLBACK_ERROR = "Falha temporária ao gerar análise. Tente novamente.";
+
 /**
- * Estado do run deste jogo pra linha da lista. O run vive no store por jogo; a reserva
- * pela server action (rota de streaming fora do ar) fica no estado local.
+ * Estado do run deste jogo pra linha da lista. O run vive no store por jogo (o mesmo do
+ * HERO); a lista entrega o run que terminou bem (relê a lista e tira do store, pra o
+ * HERO não reabrir as etapas de um run já visto) e deixa as falhas no store, que o HERO
+ * também mostra. `canAnalyze` falso esconde a falha: sem botão, sem "tentar de novo".
  */
-export function useRowAnalysis(matchId: string): {
+export function useRowAnalysis(
+  matchId: string,
+  canAnalyze: boolean,
+): {
   state: RowAnalysis;
   start: () => void;
 } {
@@ -60,10 +99,15 @@ export function useRowAnalysis(matchId: string): {
     [matchId],
   );
   const entry = useSyncExternalStore(subscribe, () => getRun(matchId), () => null);
-  // useSyncExternalStore sem assinatura só pra saber se já hidratou.
-  const hydrated = useSyncExternalStore(noSubscribe, () => true, () => false);
-  const [fallback, setFallback] = useState<RowAnalysis | null>(null);
-  const [fallbackPending, startFallback] = useTransition();
+  const subscribeRow = useCallback(
+    (listener: () => void) => subscribeRowState(matchId, listener),
+    [matchId],
+  );
+  const rowState = useSyncExternalStore(
+    subscribeRow,
+    () => rowStates.get(matchId) ?? null,
+    () => null,
+  );
 
   const finished = entry?.status === "finished" ? entry : null;
   useEffect(() => {
@@ -71,44 +115,55 @@ export function useRowAnalysis(matchId: string): {
     refreshed.add(finished);
     // O jogo guardado no cache do roteador também fica velho (#639).
     markRouterCacheStale();
+    if (!isRowRun(finished)) return;
+    if (finished.outcome && !finished.outcome.ok) return;
+    // Terminou bem (ou sem desfecho conhecido): a lista relida decide pelo
+    // `hasPrediction`; "analisado" só quando o run disse que deu certo.
+    if (finished.outcome?.ok) setRowState(matchId, { kind: "done" });
+    consumeRun(matchId);
     if (finished.refresh) router?.refresh();
-  }, [finished, router]);
+  }, [finished, matchId, router]);
 
   const start = useCallback(() => {
     const formData = new FormData();
     formData.set("matchId", matchId);
     formData.set("intent", "analysis");
     formData.set("pageLive", "0");
-    setFallback(null);
+    setRowState(matchId, null);
     void startRun(matchId, formData, {
       intent: "analysis",
       live: false,
       baseSetId: null,
-    }).then((mode) => {
+    }).then(async (mode) => {
       if (mode !== "fallback") return;
-      startFallback(async () => {
-        // Import sob demanda: a reserva quase nunca roda, e a lista (e os testes que a
-        // renderizam soltos) não carrega o módulo das actions à toa.
-        const result = await import("@/app/actions/predictions")
-          .then(({ runPalpiteHero }) => runPalpiteHero(null, formData))
-          .catch(() => null);
-        const outcome = result
-          ? toHeroRunOutcome(result)
-          : { ok: false as const, error: "Falha temporária ao gerar análise. Tente novamente." };
-        setFallback(fromOutcome(outcome));
-        markRouterCacheStale();
-        if (outcome.ok) router?.refresh();
-      });
+      setRowState(matchId, { kind: "running", step: null });
+      // Import sob demanda: a reserva quase nunca roda, e a lista (e os testes que a
+      // renderizam soltos) não carrega o módulo das actions à toa.
+      const result = await import("@/app/actions/predictions")
+        .then(({ runPalpiteHero }) => runPalpiteHero(null, formData))
+        .catch(() => null);
+      const outcome: HeroRunOutcome = result
+        ? toHeroRunOutcome(result)
+        : { ok: false, error: FALLBACK_ERROR };
+      // A action já revalida /jogos; o cache do roteador guarda o jogo velho.
+      markRouterCacheStale();
+      setRowState(
+        matchId,
+        outcome.ok ? { kind: "done" } : { kind: "error", message: outcome.error },
+      );
     });
-  }, [matchId, router]);
+  }, [matchId]);
 
-  if (!hydrated) return { state: { kind: "idle" }, start };
-  if (entry?.status === "running") {
-    return { state: { kind: "running", step: currentStep(entry) }, start };
-  }
-  if (fallbackPending) return { state: { kind: "running", step: null }, start };
-  if (finished) return { state: fromOutcome(finished.outcome), start };
-  return { state: fallback ?? { kind: "idle" }, start };
+  const state = ((): RowAnalysis => {
+    if (entry?.status === "running") return { kind: "running", step: currentStep(entry) };
+    if (rowState) return rowState;
+    if (finished && isRowRun(finished) && finished.outcome && !finished.outcome.ok) {
+      return { kind: "error", message: finished.outcome.error };
+    }
+    return { kind: "idle" };
+  })();
+  if (state.kind === "error" && !canAnalyze) return { state: { kind: "idle" }, start };
+  return { state, start };
 }
 
 const CHIP =
@@ -143,7 +198,7 @@ export function RowAnalyzeChip({
     );
   }
   if (hasPrediction || state.kind === "done") return <AnalyzedBadge className={className} />;
-  if (!canAnalyze && state.kind !== "error") return null;
+  if (!canAnalyze) return null;
   const retry = state.kind === "error";
   return (
     <button
@@ -153,6 +208,8 @@ export function RowAnalyzeChip({
       aria-label={retry ? "Tentar a análise com IA de novo" : "Analisar com IA"}
       className={cn(
         CHIP,
+        // Some na linha destacada pelo passo "abra um jogo" do tour (guided-tour.tsx).
+        "[[data-tour-interactive]_[data-tour=match-row]_&]:hidden",
         // Quieto em repouso (a lista tem muitos): cinza com a faísca quente; quente
         // inteiro no hover/foco.
         "group/analyze cursor-pointer border-border bg-background text-muted-foreground transition-colors hover:border-palpite-border hover:bg-palpite-soft hover:text-palpite-strong-fg focus-visible:outline-none focus-visible:ring-[3px] focus-visible:ring-ring/50",
@@ -190,7 +247,8 @@ export function RowAnalyzeStatus({
     <p
       role="status"
       className={cn(
-        "text-meta tracking-tight empty:hidden",
+        // Acima do link esticado da linha: o `title` da etapa cortada aparece.
+        "relative z-10 text-meta tracking-tight empty:hidden",
         state.kind === "running" && "truncate",
         state.kind === "error" ? "text-destructive" : "text-muted-foreground",
         className,

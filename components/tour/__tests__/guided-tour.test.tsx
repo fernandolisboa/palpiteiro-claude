@@ -44,7 +44,7 @@ beforeEach(() => {
     <div data-tour="league-picker">liga</div>
     <div data-tour="date-range" hidden>período escondido</div>
     <div data-tour="date-range">período</div>
-    <a data-tour="match-row" href="/match/1">jogo</a>
+    <div data-tour="match-row"><a href="/match/1">jogo</a><button>analisar</button></div>
   `;
   container = document.createElement("div");
   document.body.appendChild(container);
@@ -133,13 +133,23 @@ describe("GuidedTour", () => {
   });
 
   it("\"Abrir jogo\" clica no jogo destacado (teclado/leitor de tela)", () => {
-    const row = document.querySelector<HTMLAnchorElement>('[data-tour="match-row"]')!;
+    // A linha é um <div> com o link do jogo e o "analisar" dentro: o clique vai no link.
+    const link = document.querySelector<HTMLAnchorElement>('[data-tour="match-row"] a')!;
     const onClick = vi.fn((e: Event) => e.preventDefault());
-    row.addEventListener("click", onClick);
+    link.addEventListener("click", onClick);
     mount({});
     for (let i = 0; i < 4; i++) act(() => button("Próximo").click());
     act(() => button("Abrir jogo").click());
     expect(onClick).toHaveBeenCalledTimes(1);
+  });
+
+  it("marca o passo interativo no documento (o 'analisar' da linha some) e desmarca ao fechar", () => {
+    mount({});
+    expect(document.documentElement.dataset.tourInteractive).toBeUndefined();
+    for (let i = 0; i < 4; i++) act(() => button("Próximo").click());
+    expect(document.documentElement.dataset.tourInteractive).toBe("1");
+    act(() => button("Agora não").click());
+    expect(document.documentElement.dataset.tourInteractive).toBeUndefined();
   });
 
   it("põe o foco no botão principal ao abrir", () => {

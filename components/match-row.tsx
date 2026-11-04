@@ -61,7 +61,8 @@ export function MatchRow({
     ? `/match/${m.id}?back=${encodeURIComponent(backHref)}`
     : appendBackParam(`/match/${m.id}`, listHref, "/jogos");
   const isLive = showsRowLiveBadge(m);
-  const analysis = useRowAnalysis(m.id);
+  const canAnalyze = analyzeEnabled && canAnalyzeFromList(m);
+  const analysis = useRowAnalysis(m.id, canAnalyze);
   return (
     // Linha clicável inteira pelo link "esticado" (o ::after cobre a linha): o botão
     // "analisar" fica fora do <a> (botão dentro de link é HTML inválido) e acima dele.
@@ -96,25 +97,24 @@ export function MatchRow({
           state={analysis.state}
           onStart={analysis.start}
           hasPrediction={m.hasPrediction}
-          canAnalyze={analyzeEnabled && canAnalyzeFromList(m)}
+          canAnalyze={canAnalyze}
         />
       </div>
 
       <div className="flex items-center justify-between gap-3">
         <IntentLink
           href={href}
-          aria-label={`${m.home.fullName} x ${m.away.fullName}`}
           className="flex min-w-0 flex-col gap-1 after:absolute after:inset-0 after:content-[''] focus-visible:outline-none"
         >
           <div className="flex min-w-0 items-center gap-2">
             <TeamCrest team={m.home} size={22} />
-            <span className="relative truncate text-label font-medium tracking-tight" title={m.home.fullName}>
+            <span className="relative z-10 truncate text-label font-medium tracking-tight" title={m.home.fullName}>
               {m.home.name}
             </span>
           </div>
           <div className="flex min-w-0 items-center gap-2">
             <TeamCrest team={m.away} size={22} />
-            <span className="relative truncate text-label font-medium tracking-tight" title={m.away.fullName}>
+            <span className="relative z-10 truncate text-label font-medium tracking-tight" title={m.away.fullName}>
               {m.away.name}
             </span>
           </div>
@@ -130,7 +130,7 @@ export function MatchRow({
       <RowAnalyzeStatus state={analysis.state} className="pt-2" />
       {/* Etiquetas de mesa de amigos (ADR 0070): linha própria, pra não disputar a
           largura do cabeçalho com a liga e o "analisado" no celular. */}
-      {m.tags && <MatchTags tags={m.tags} className="pt-2" />}
+      {m.tags && <MatchTags tags={m.tags} className="relative z-10 w-fit pt-2" />}
       {/* Base do modelo (#555): só em jogo analisável com base calculada. */}
       {m.model && <MatchModelLine model={m.model} className="block pt-2" />}
     </div>

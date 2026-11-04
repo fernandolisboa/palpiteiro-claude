@@ -9,10 +9,15 @@ import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 
 import { UpcomingMatchesDesktop } from "@/components/upcoming-matches-desktop";
 import { UpcomingMatchesMobile } from "@/components/upcoming-matches-mobile";
-import { ROW_ANALYZE_TITLE } from "@/components/match-list/row-analyze";
+import {
+  ROW_ANALYZE_TITLE,
+  resetRowStatesForTests,
+} from "@/components/match-list/row-analyze";
 import {
   PALPITE_RUN_ENDPOINT,
+  getRun,
   resetRunStoreForTests,
+  resumeRun,
 } from "@/components/palpites/palpite-run-store";
 import { encodeStreamMessage, type StreamMessage } from "@/lib/ai/progress/protocol";
 import { canAnalyzeFromList } from "@/lib/view/match-list";
@@ -141,11 +146,13 @@ describe("run pela linha", () => {
     for (let i = 0; i < 5; i += 1) await new Promise((r) => setTimeout(r, 0));
   }
 
-  function mount() {
+  // As duas árvores montadas, como na página (o CSS esconde uma delas).
+  function mount(analyzeEnabled = true) {
     act(() => {
       root.render(
         <AppRouterContext.Provider value={router as unknown as AppRouterInstance}>
-          <UpcomingMatchesDesktop matches={[row()]} analyzeEnabled />
+          <UpcomingMatchesDesktop matches={[row()]} analyzeEnabled={analyzeEnabled} />
+          <UpcomingMatchesMobile matches={[row()]} analyzeEnabled={analyzeEnabled} />
         </AppRouterContext.Provider>,
       );
     });
@@ -154,6 +161,7 @@ describe("run pela linha", () => {
   beforeEach(() => {
     (globalThis as { IS_REACT_ACT_ENVIRONMENT?: boolean }).IS_REACT_ACT_ENVIRONMENT = true;
     resetRunStoreForTests({ pollMs: 0 });
+    resetRowStatesForTests();
     refresh.mockClear();
     release = null;
     container = document.createElement("div");
@@ -174,6 +182,7 @@ describe("run pela linha", () => {
     );
     mount();
     const button = container.querySelector<HTMLButtonElement>('button[aria-label="Analisar com IA"]')!;
+    expect(container.querySelectorAll('button[aria-label="Analisar com IA"]')).toHaveLength(2);
     await act(async () => {
       button.click();
       await settle();
@@ -188,6 +197,30 @@ describe("run pela linha", () => {
     });
     expect(container.textContent).toContain("analisado");
     expect(container.textContent).not.toContain("Lendo os preços do mercado");
+    expect(container.querySelector("button")).toBeNull();
+    // Uma releitura só, mesmo com as duas árvores olhando o mesmo jogo; e o run sai do
+    // store (o HERO não reabre as etapas de um run já visto na lista).
+    expect(refresh).toHaveBeenCalledTimes(1);
+    expect(getRun(row().id)).toBeNull();
+  });
+
+  it("run sem desfecho conhecido volta pro 'analisar' (não finge 'analisado')", async () => {
+    // Run retomado (F5 na página do jogo) cujo marcador sumiu: o store desiste sem desfecho.
+    vi.stubGlobal(
+      "fetch",
+      vi.fn(async () => Response.json({ run: null })),
+    );
+    mount();
+    await act(async () => {
+      resumeRun(
+        row().id,
+        { runId: "r9", intent: "analysis", live: false, startedAt: Date.now(), status: "running", steps: [], outcome: null },
+        null,
+      );
+      await settle();
+    });
+    expect(container.textContent).not.toContain("analisado");
+    expect(container.querySelectorAll('button[aria-label="Analisar com IA"]')).toHaveLength(2);
     expect(refresh).toHaveBeenCalledTimes(1);
   });
 
@@ -211,5 +244,9 @@ describe("run pela linha", () => {
       container.querySelector('button[aria-label="Tentar a análise com IA de novo"]'),
     ).not.toBeNull();
     expect(refresh).not.toHaveBeenCalled();
+    // Sem o botão (flag desligada), a falha antiga não aparece nem oferece "tentar de novo".
+    mount(false);
+    expect(container.textContent).not.toContain("limite");
+    expect(container.querySelector("button")).toBeNull();
   });
 });

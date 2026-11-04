@@ -111,7 +111,8 @@ function DesktopMatchRow({
 }) {
   const phase = matchRowPhase(m);
   const liveBadge = showsRowLiveBadge(m);
-  const analysis = useRowAnalysis(m.id);
+  const canAnalyze = analyzeEnabled && canAnalyzeFromList(m);
+  const analysis = useRowAnalysis(m.id, canAnalyze);
   return (
     // Linha clicável inteira pelo link "esticado" (o ::after cobre a linha): o botão
     // "analisar" fica fora do <a> (botão dentro de link é HTML inválido) e acima dele.
@@ -144,18 +145,17 @@ function DesktopMatchRow({
         <div className="flex min-w-0 items-center gap-3">
           <IntentLink
             href={href}
-            aria-label={`${m.home.fullName} x ${m.away.fullName}`}
             className="flex min-w-0 flex-col gap-1.5 after:absolute after:inset-0 after:content-[''] focus-visible:outline-none"
           >
             <div className="flex min-w-0 items-center gap-2">
               <TeamCrest team={m.home} size={22} />
-              <span className="relative truncate text-label font-medium tracking-tight" title={m.home.fullName}>
+              <span className="relative z-10 truncate text-label font-medium tracking-tight" title={m.home.fullName}>
                 {m.home.name}
               </span>
             </div>
             <div className="flex min-w-0 items-center gap-2">
               <TeamCrest team={m.away} size={22} />
-              <span className="relative truncate text-label font-medium tracking-tight" title={m.away.fullName}>
+              <span className="relative z-10 truncate text-label font-medium tracking-tight" title={m.away.fullName}>
                 {m.away.name}
               </span>
             </div>
@@ -166,12 +166,12 @@ function DesktopMatchRow({
             state={analysis.state}
             onStart={analysis.start}
             hasPrediction={m.hasPrediction}
-            canAnalyze={analyzeEnabled && canAnalyzeFromList(m)}
+            canAnalyze={canAnalyze}
           />
         </div>
         <RowAnalyzeStatus state={analysis.state} />
         {/* Etiquetas de mesa de amigos (ADR 0070), na mesma ordem do celular. */}
-        {m.tags && <MatchTags tags={m.tags} />}
+        {m.tags && <MatchTags tags={m.tags} className="relative z-10 w-fit" />}
         {/* Base do modelo (#555): só probabilidade, abaixo dos nomes. */}
         {m.model && <MatchModelLine model={m.model} />}
       </div>

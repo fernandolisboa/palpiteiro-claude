@@ -326,6 +326,17 @@ export function GuidedTour({ chapter, userId, serverState, forceStart }: Props) 
     return () => document.removeEventListener("keydown", onKeyDown);
   }, [index, close]);
 
+  // Passo interativo aberto: a linha destacada só abre o jogo. O "analisar" dela some
+  // (row-analyze.tsx lê este atributo), pra o toque do tour não gastar o limite do dia.
+  const interactiveOpen = index !== null && steps[index]?.interactive === true;
+  useEffect(() => {
+    if (!interactiveOpen) return;
+    document.documentElement.dataset.tourInteractive = "1";
+    return () => {
+      delete document.documentElement.dataset.tourInteractive;
+    };
+  }, [interactiveOpen]);
+
   if (index === null) return null;
 
   const step = steps[index]!;
