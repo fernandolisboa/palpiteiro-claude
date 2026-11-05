@@ -50,6 +50,7 @@ describe("ADMIN_FLAGS (registry, #514)", () => {
       "enableLineupRecheck",
       "analysisEngine",
       "progressMascot",
+      "listAnalyzePlacement",
     ]);
     expect(new Set(keys).size).toBe(keys.length);
   });
@@ -78,6 +79,7 @@ describe("ADMIN_FLAGS (registry, #514)", () => {
       enableLineupRecheck: true,
       analysisEngine: "llm",
       progressMascot: "robo",
+      listAnalyzePlacement: "lateral",
     });
   });
 
@@ -155,6 +157,7 @@ describe("ADMIN_FLAGS (registry, #514)", () => {
       enableLineupRecheck: boolean;
       analysisEngine: "llm" | "code_jev";
       progressMascot: "robo" | "papagaio";
+      listAnalyzePlacement: "lateral" | "embaixo";
     }>();
   });
 

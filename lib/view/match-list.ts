@@ -34,18 +34,15 @@ export function showsRowLiveBadge(
 
 /**
  * "analisar" direto na linha da lista: só jogo que ainda aceita análise de pré-jogo
- * (o mesmo gate da página do jogo), que a pessoa ainda não analisou, com o jogo em
- * pré-jogo (nunca ao vivo, mesmo recém-apitado) e com preço de mercado já publicado
- * (sem odd = jogo distante: a análise ainda não tem o mercado pra ler).
+ * (o mesmo gate da página do jogo), com o jogo em pré-jogo (nunca ao vivo, mesmo recém-apitado) e com preço de mercado já publicado
+ * (sem odd = jogo distante: a análise ainda não tem o mercado pra ler). Jogo já
+ * analisado também entra: a linha oferece "reanalisar", como o "Analisar de novo" do jogo.
  */
 export function canAnalyzeFromList(
-  m: Pick<MatchRowView, "status" | "isInProgress" | "analyzable" | "hasPrediction" | "odds">,
+  m: Pick<MatchRowView, "status" | "isInProgress" | "analyzable" | "odds">
 ): boolean {
   return (
-    m.analyzable === true &&
-    !m.hasPrediction &&
-    matchRowPhase(m) === "upcoming" &&
-    m.odds !== null
+    m.analyzable === true && matchRowPhase(m) === "upcoming" && m.odds !== null
   );
 }
 

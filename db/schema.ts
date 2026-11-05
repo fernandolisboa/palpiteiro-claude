@@ -958,6 +958,10 @@ export const aiConfig = pgTable("ai_config", {
   // Personagem ao lado do progresso da análise (ADR 0068): 'robo' (robozinho da ADR
   // 0065, padrão) ou 'papagaio'. Text validado na app (lib/brand/progress-mascot.ts).
   progressMascot: text().notNull().default("robo"),
+  // Onde fica o "analisar" na linha da lista de jogos no desktop: 'lateral' (ícone no
+  // lugar da setinha, padrão) ou 'embaixo' (botão largo embaixo das odds). Text
+  // validado na app (lib/view/list-analyze-placement.ts).
+  listAnalyzePlacement: text().notNull().default("lateral"),
   // Última checagem do cron check-model-versions e o resumo dela (ADR 0062), lidos
   // pelo painel do /admin/ia. O resumo é validado por Zod na leitura
   // (ModelVersionsCheckSummarySchema).

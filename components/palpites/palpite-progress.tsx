@@ -1,3 +1,5 @@
+import type { ReactNode } from "react";
+
 import { ParrotMascot } from "@/components/brand/parrot-mascot";
 import { PalpiteBot } from "@/components/palpites/palpite-bot";
 import { ReasoningButton } from "@/components/palpites/reasoning-dialog";
@@ -38,7 +40,7 @@ export function PalpiteProgress({
   onShowReasoning,
   mascot = DEFAULT_PROGRESS_MASCOT,
 }: {
-  title: string;
+  title: ReactNode;
   hint: string;
   steps: ProgressStepView[];
   // Linha enquanto nenhuma etapa chegou (o pedido está a caminho).
@@ -61,10 +63,13 @@ export function PalpiteProgress({
           <PalpiteBot beat={doneCount} />
         )}
         <div className="flex flex-col gap-1">
-          <p className="text-display-sm font-medium tracking-tight text-foreground">
+          {/* div: o título pode trazer escudos (lista de jogos), e o monograma é div. */}
+          <div className="text-display-sm text-foreground font-medium tracking-tight">
             {title}
+          </div>
+          <p className="text-body-sm text-muted-foreground tracking-tight">
+            {hint}
           </p>
-          <p className="text-body-sm tracking-tight text-muted-foreground">{hint}</p>
         </div>
       </div>
       <ol aria-label="etapas da análise" className="flex flex-col">

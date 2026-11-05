@@ -8,6 +8,7 @@ import { DayHeading } from "@/components/match-list/day-heading";
 import { MatchRow } from "@/components/match-row";
 import { tourMatchIndex } from "@/lib/tour/steps";
 import { groupByDay } from "@/lib/view/match-list";
+import type { ProgressMascot } from "@/lib/brand/progress-mascot";
 import type { MatchListRowView } from "@/lib/view/types";
 
 // Lote inicial e incremento do reveal client-side. Exportado pra que o teste
@@ -21,6 +22,7 @@ export function UpcomingMatchesMobile({
   listHref,
   endNote,
   analyzeEnabled = false,
+  mascot,
 }: {
   matches: MatchListRowView[];
   // URL filtrada da lista (/jogos?…) propagada ao link de cada jogo (ver MatchRow).
@@ -29,6 +31,8 @@ export function UpcomingMatchesMobile({
   endNote?: string;
   // "analisar" na linha (flag do fan-out ligada).
   analyzeEnabled?: boolean;
+  // Personagem do progresso (/admin/ia).
+  mascot?: ProgressMascot;
 }) {
   const [visible, setVisible] = useState(INITIAL_BATCH);
   const slice = matches.slice(0, visible);
@@ -50,6 +54,8 @@ export function UpcomingMatchesMobile({
                 tourTarget={m.id === tourId}
                 timeLabel={m.startsIn ?? m.time}
                 analyzeEnabled={analyzeEnabled}
+                palpite={m.palpite ?? null}
+                mascot={mascot}
               />
             ))}
           </Card>

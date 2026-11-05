@@ -49,6 +49,7 @@ import {
   getEnableLineupRecheck,
   getEnableUserContext,
   getProgressMascot,
+  getListAnalyzePlacement,
   setAdminFlag,
 } from "@/lib/db/queries/ai-config";
 
@@ -70,6 +71,7 @@ const GETTERS = {
   enableLineupRecheck: getEnableLineupRecheck,
   analysisEngine: getAnalysisEngine,
   progressMascot: getProgressMascot,
+  listAnalyzePlacement: getListAnalyzePlacement,
 } satisfies Record<AdminFlagKey, () => Promise<unknown>>;
 
 async function readViaGetters(): Promise<Record<string, unknown>> {

@@ -25,6 +25,11 @@ import {
   type ProgressMascot,
 } from "@/lib/brand/progress-mascot";
 import {
+  DEFAULT_LIST_ANALYZE_PLACEMENT,
+  isListAnalyzePlacement,
+  type ListAnalyzePlacement,
+} from "@/lib/view/list-analyze-placement";
+import {
   ADMIN_FLAGS,
   adminFlagDefaults,
   coerceStoredFlagValue,
@@ -368,6 +373,23 @@ export async function getProgressMascot(): Promise<ProgressMascot> {
     .limit(1);
   const stored = rows[0]?.progressMascot;
   return isProgressMascot(stored) ? stored : DEFAULT_PROGRESS_MASCOT;
+}
+
+/**
+ * Onde fica o "analisar" na linha de /jogos no desktop: 'lateral' ou 'embaixo'. Sem row
+ * ou valor persistido inválido → 'lateral'. Editado em /admin/ia via registry (entrada
+ * enum `listAnalyzePlacement`).
+ */
+export async function getListAnalyzePlacement(): Promise<ListAnalyzePlacement> {
+  const rows = await db
+    .select({ placement: aiConfig.listAnalyzePlacement })
+    .from(aiConfig)
+    .where(eq(aiConfig.id, 1))
+    .limit(1);
+  const stored = rows[0]?.placement;
+  return isListAnalyzePlacement(stored)
+    ? stored
+    : DEFAULT_LIST_ANALYZE_PLACEMENT;
 }
 
 /**

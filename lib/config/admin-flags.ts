@@ -10,6 +10,11 @@ import {
   PROGRESS_MASCOT_LABEL,
   PROGRESS_MASCOTS,
 } from "@/lib/brand/progress-mascot";
+import {
+  DEFAULT_LIST_ANALYZE_PLACEMENT,
+  LIST_ANALYZE_PLACEMENT_LABEL,
+  LIST_ANALYZE_PLACEMENTS,
+} from "@/lib/view/list-analyze-placement";
 
 // `import type`: o registry é lido também pela UI; nada de drizzle no bundle.
 import type { aiConfig } from "@/db/schema";
@@ -233,6 +238,17 @@ export const ADMIN_FLAGS = [
     values: PROGRESS_MASCOTS,
     valueLabels: PROGRESS_MASCOT_LABEL,
     default: DEFAULT_PROGRESS_MASCOT,
+  },
+  {
+    key: "listAnalyzePlacement",
+    kind: "enum",
+    area: "ia",
+    label: "Botão analisar na lista (desktop)",
+    description:
+      'Onde fica o "analisar" / "reanalisar" nas linhas de /jogos no computador: só o ícone, no lugar da setinha do fim da linha, ou o botão largo embaixo das odds. No celular ele fica sempre no cabeçalho da linha. Vale na hora, pra todo mundo.',
+    values: LIST_ANALYZE_PLACEMENTS,
+    valueLabels: LIST_ANALYZE_PLACEMENT_LABEL,
+    default: DEFAULT_LIST_ANALYZE_PLACEMENT,
   },
 ] as const satisfies readonly AdminFlagDef[];
 

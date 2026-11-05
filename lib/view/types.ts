@@ -105,6 +105,18 @@ export type MatchListRowView = MatchRowView & {
   day: { key: string; label: string }; // "2026-10-18", "Hoje" | "Amanhã" | "Sábado 18/10"
   time: string; // "19:00"
   startsIn?: string;
+  // O palpite mais recente do usuário neste jogo (manchete + placar provável), no meio
+  // da linha no desktop. Ausente = sem palpite com manchete (fica o "analisado").
+  palpite?: ListPalpiteView | null;
+};
+
+// Resumo do palpite na lista: só campos da manchete (firewall ADR 0030: sem número de
+// valor; a P da confiança não cruza).
+export type ListPalpiteView = {
+  verdict: string;
+  probableScore: { home: number; away: number } | null;
+  confidence: "baixa" | "media" | "alta" | null;
+  narrative: string;
 };
 
 // Firewall do ADR 0030 no TIPO: o hero nunca recebe a leitura do modelo (toMatchHeroView
