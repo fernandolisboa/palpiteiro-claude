@@ -156,13 +156,21 @@ export function RowProgressTicker({
       : [{ id: "waiting", status: "active", label: WAITING }];
   return (
     <div
-      className={cn("relative z-10 flex min-w-0 items-end gap-3", className)}
+            // Só a lista (rolagem) e o "ver progresso" pegam o mouse: o resto do meio da
+      // linha segue abrindo o jogo pelo link esticado.
+      className={cn(
+        "pointer-events-none relative z-10 flex min-w-0 items-end gap-3",
+        className
+      )}
     >
       <ol
         ref={listRef}
+        // Rolável sem filho focável: fora da ordem do Tab (o leitor de tela ouve a etapa
+        // pela região viva abaixo).
+        tabIndex={-1}
         aria-label="etapas da análise"
         className={cn(
-          "flex h-[54px] min-w-0 flex-1 flex-col overflow-y-auto pt-9",
+          "pointer-events-auto flex h-[54px] min-w-0 flex-1 flex-col overflow-y-auto pt-9",
           "[scrollbar-width:none] [&::-webkit-scrollbar]:hidden",
           "[mask-image:linear-gradient(to_bottom,transparent,black_55%)]"
         )}
@@ -192,7 +200,7 @@ export function RowProgressTicker({
         <PopoverTrigger
           data-progress-trigger=""
           className={cn(
-            "text-meta text-muted-foreground hover:text-foreground data-[state=open]:text-palpite-strong-fg shrink-0 cursor-pointer rounded-sm tracking-tight underline-offset-2 hover:underline data-[state=open]:underline",
+            "pointer-events-auto text-meta text-muted-foreground hover:text-foreground data-[state=open]:text-palpite-strong-fg shrink-0 cursor-pointer rounded-sm tracking-tight underline-offset-2 hover:underline data-[state=open]:underline",
             ROW_FOCUS
           )}
         >

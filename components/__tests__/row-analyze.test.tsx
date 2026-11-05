@@ -192,12 +192,12 @@ describe("run pela linha", () => {
   }
 
   // As duas árvores montadas, como na página (o CSS esconde uma delas).
-  function mount(analyzeEnabled = true) {
+  function mount(analyzeEnabled = true, m: MatchListRowView = row()) {
     act(() => {
       root.render(
         <AppRouterContext.Provider value={router as unknown as AppRouterInstance}>
-          <UpcomingMatchesDesktop matches={[row()]} analyzeEnabled={analyzeEnabled} />
-          <UpcomingMatchesMobile matches={[row()]} analyzeEnabled={analyzeEnabled} />
+          <UpcomingMatchesDesktop matches={[m]} analyzeEnabled={analyzeEnabled} />
+          <UpcomingMatchesMobile matches={[m]} analyzeEnabled={analyzeEnabled} />
         </AppRouterContext.Provider>,
       );
     });
@@ -255,6 +255,39 @@ describe("run pela linha", () => {
     // store (o HERO não reabre as etapas de um run já visto na lista).
     expect(refresh).toHaveBeenCalledTimes(1);
     expect(getRun(row().id)).toBeNull();
+  });
+
+  it("reanalisar: o palpite sai do meio da linha durante o run e volta no fim, relendo uma vez", async () => {
+    vi.stubGlobal(
+      "fetch",
+      streamingFetch({ t: "result", outcome: { ok: true, analysis: true } }),
+    );
+    mount(
+      true,
+      row({
+        hasPrediction: true,
+        palpite: {
+          verdict: "Palmeiras vence em casa",
+          probableScore: { home: 2, away: 1 },
+          confidence: "media",
+          narrative: "Resumo.",
+        },
+      }),
+    );
+    expect(container.textContent).toContain("Palmeiras vence em casa");
+    await act(async () => {
+      container.querySelector<HTMLButtonElement>('button[aria-label="Analisar com IA de novo"]')!.click();
+      await settle();
+    });
+    expect(container.textContent).not.toContain("Palmeiras vence em casa");
+    expect(container.textContent).toContain("Lendo os preços do mercado");
+    await act(async () => {
+      release!();
+      await settle();
+    });
+    expect(container.textContent).toContain("Palmeiras vence em casa");
+    expect(container.querySelector('button[aria-label="Analisar com IA de novo"]')).not.toBeNull();
+    expect(refresh).toHaveBeenCalledTimes(1);
   });
 
   it("run sem desfecho conhecido volta pro 'analisar' (não finge 'analisado')", async () => {

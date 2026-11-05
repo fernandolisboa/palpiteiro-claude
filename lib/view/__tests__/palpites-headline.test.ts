@@ -7,6 +7,7 @@ import { liveColumns, liveStampFromState } from "@/lib/live/stamp";
 import {
   PALPITE_DISCLAIMER,
   toDimensionViews,
+  toListPalpiteView,
   toPalpiteHeadlineView,
   toPalpiteHeadlineViewFromSet,
   type PalpiteHeadlineSource,
@@ -332,5 +333,26 @@ describe("toPalpiteHeadlineView — palpite ao vivo (#594)", () => {
     expect(
       toPalpiteHeadlineView(source({ live: { isLive: false, liveState: null } })).liveLabel,
     ).toBeUndefined();
+  });
+});
+
+describe("toListPalpiteView (lista de jogos, #662)", () => {
+  const base = { verdict: "Casa vence", narrative: "Resumo.", confidence: "alta" };
+
+  it("passa veredito, narrativa, confiança e placar", () => {
+    expect(toListPalpiteView({ ...base, probableScore: { home: 2, away: 1 } })).toEqual({
+      verdict: "Casa vence",
+      narrative: "Resumo.",
+      confidence: "alta",
+      probableScore: { home: 2, away: 1 },
+    });
+  });
+
+  it("placar ausente ou com forma inválida vira null; confiança desconhecida também", () => {
+    for (const probableScore of [null, undefined, { home: "2", away: 1 }, { home: 1.5, away: 0 }]) {
+      expect(toListPalpiteView({ ...base, probableScore }).probableScore).toBeNull();
+    }
+    expect(toListPalpiteView({ ...base, confidence: "talvez", probableScore: null }).confidence).toBeNull();
+    expect(toListPalpiteView({ ...base, confidence: null, probableScore: null }).confidence).toBeNull();
   });
 });

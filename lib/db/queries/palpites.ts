@@ -10,6 +10,7 @@ import {
   lt,
   notExists,
   or,
+  sql,
   type SQL,
 } from "drizzle-orm";
 import { alias } from "drizzle-orm/pg-core";
@@ -17,7 +18,6 @@ import { alias } from "drizzle-orm/pg-core";
 import {
   aiCalls,
   matches,
-  type PalpiteHeadline,
   palpiteOutcomes,
   palpiteSets,
   palpites,
@@ -368,54 +368,52 @@ export async function getPendingPalpiteSettlements(
   return rows.filter(rowHasSettleableType);
 }
 
+/** Os campos da manchete que a lista de jogos mostra (sem o resto do jsonb). */
+export type ListPalpiteHeadlineRow = {
+  verdict: string;
+  narrative: string;
+  confidence: string | null;
+  probableScore: unknown;
+};
+
 /**
- * Lista de jogos (/jogos): o palpite mais recente do usuário em cada jogo, com manchete,
- * e o placar provável (a linha exact_score). Uma leitura só (DISTINCT ON match_id), sem
- * N+1. Jogo sem set com manchete fica fora do Map (a linha mostra só "analisado").
+ * Lista de jogos (/jogos): o palpite mais recente do usuário em cada jogo e o placar
+ * provável (a linha exact_score). Uma leitura só (DISTINCT ON match_id), sem N+1, e só
+ * os campos da manchete que a linha usa (o jsonb inteiro carrega o raciocínio). O set
+ * mais recente vale mesmo sem manchete (como na página do jogo): aí o jogo fica fora do
+ * Map e a linha mostra só "analisado".
  */
 export async function getLatestPalpiteHeadlinesForMatches(args: {
   matchIds: string[];
   userId: string;
-}): Promise<
-  Map<string, { headline: PalpiteHeadline; probableScore: unknown }>
-> {
+}): Promise<Map<string, ListPalpiteHeadlineRow>> {
   if (args.matchIds.length === 0) return new Map();
   const rows = await db
     .selectDistinctOn([palpiteSets.matchId], {
       matchId: palpiteSets.matchId,
-      headline: palpiteSets.headline,
+      verdict: sql<string | null>`${palpiteSets.headline}->>'verdict'`,
+      narrative: sql<string | null>`${palpiteSets.headline}->>'narrative'`,
+      confidence: sql<string | null>`${palpiteSets.headline}->>'confidence'`,
       probableScore: palpites.params,
     })
     .from(palpiteSets)
     .leftJoin(
       palpites,
-      and(
-        eq(palpites.palpiteSetId, palpiteSets.id),
-        eq(palpites.type, "exact_score")
-      )
+      and(eq(palpites.palpiteSetId, palpiteSets.id), eq(palpites.type, "exact_score"))
     )
     .where(
-      and(
-        inArray(palpiteSets.matchId, args.matchIds),
-        eq(palpiteSets.userId, args.userId),
-        isNotNull(palpiteSets.headline)
-      )
+      and(inArray(palpiteSets.matchId, args.matchIds), eq(palpiteSets.userId, args.userId))
     )
-    .orderBy(
-      palpiteSets.matchId,
-      desc(palpiteSets.createdAt),
-      desc(palpiteSets.id)
-    );
-  const out = new Map<
-    string,
-    { headline: PalpiteHeadline; probableScore: unknown }
-  >();
+    .orderBy(palpiteSets.matchId, desc(palpiteSets.createdAt), desc(palpiteSets.id));
+  const out = new Map<string, ListPalpiteHeadlineRow>();
   for (const r of rows) {
-    if (r.headline)
-      out.set(r.matchId, {
-        headline: r.headline,
-        probableScore: r.probableScore,
-      });
+    if (!r.verdict) continue;
+    out.set(r.matchId, {
+      verdict: r.verdict,
+      narrative: r.narrative ?? "",
+      confidence: r.confidence,
+      probableScore: r.probableScore,
+    });
   }
   return out;
 }

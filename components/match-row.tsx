@@ -1,6 +1,6 @@
 "use client";
 
-import { useState } from "react";
+import { useEffect, useState } from "react";
 import { IntentLink } from "@/components/intent-link";
 import { ChevronRight } from "lucide-react";
 
@@ -78,6 +78,11 @@ export function MatchRow({
   const [progressOpen, setProgressOpen] = useState(false);
   const running = analysis.state.kind === "running";
   const analyzed = showsAnalyzed(analysis.state, m.hasPrediction);
+  // A folha fecha sozinha no fim do run (o `open` dela depende do run); zera o pedido
+  // pra o próximo run não abrir a folha sem o toque.
+  useEffect(() => {
+    if (!running) setProgressOpen(false);
+  }, [running]);
   return (
     // Linha clicável inteira pelo link "esticado" (o ::after cobre a linha): o botão
     // "analisar" fica fora do <a> (botão dentro de link é HTML inválido) e acima dele.

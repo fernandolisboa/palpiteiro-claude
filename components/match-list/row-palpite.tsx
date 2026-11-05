@@ -63,14 +63,23 @@ export function RowPalpiteSummary({
   const [edge, setEdge] = useState<Edge>("top");
   const [overflows, setOverflows] = useState(true);
 
+  // Mede de novo quando a caixa muda de tamanho (a árvore do desktop nasce escondida
+  // abaixo de lg, a largura encolhe com a linha, a fonte troca) e quando o texto muda.
+  const content = `${palpite.verdict}|${scoreLabel(palpite)}|${palpite.narrative}`;
   useEffect(() => {
     const el = boxRef.current;
-    if (el) setOverflows(el.scrollHeight > el.clientHeight + 1);
+    if (!el) return;
+    const measure = () => setOverflows(el.scrollHeight > el.clientHeight + 1);
+    measure();
+    const observer =
+      typeof ResizeObserver === "undefined" ? null : new ResizeObserver(measure);
+    observer?.observe(el);
     return () => {
+      observer?.disconnect();
       if (frame.current !== null) cancelAnimationFrame(frame.current);
       if (timer.current !== null) clearTimeout(timer.current);
     };
-  }, [palpite.narrative]);
+  }, [content]);
 
   function edgeOf(el: HTMLDivElement): Edge {
     if (el.scrollTop <= 1) return "top";
@@ -119,6 +128,9 @@ export function RowPalpiteSummary({
     >
       <div
         ref={boxRef}
+        // Caixa que rola sem filho focável vira parada de Tab no Chrome; o link já leva
+        // ao jogo e a linha tem o link principal.
+        tabIndex={-1}
         onScroll={(e) => setEdge(edgeOf(e.currentTarget))}
         className={cn(
           "h-[54px] [scrollbar-width:none] overflow-y-auto [&::-webkit-scrollbar]:hidden",
@@ -164,6 +176,7 @@ export function AnalyzedMenu({
           "border-accent-border bg-accent-soft text-meta text-accent-fg relative z-10 inline-flex h-6 shrink-0 cursor-pointer items-center gap-0.5 rounded-full border pr-1 pl-2.5 font-medium whitespace-nowrap transition-colors hover:brightness-110 data-[state=open]:brightness-110",
           // Toque de ~44px sem crescer a pílula.
           "before:absolute before:-inset-x-1 before:-inset-y-2.5 before:content-['']",
+          ROW_TOUR_HIDDEN,
           ROW_FOCUS
         )}
       >
@@ -197,7 +210,7 @@ export function AnalyzedMenu({
         </DropdownMenuItem>
         <DropdownMenuItem
           onSelect={onReanalyze}
-          className={cn("flex-col items-start gap-0.5", ROW_TOUR_HIDDEN)}
+          className="flex-col items-start gap-0.5"
         >
           <span className="text-foreground inline-flex items-center gap-1.5">
             <RefreshCw aria-hidden="true" className="size-3.5" />

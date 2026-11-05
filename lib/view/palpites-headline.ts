@@ -158,20 +158,25 @@ export function toPalpiteHeadlineViewFromSet(
 }
 
 /**
- * Resumo do palpite pra linha de /jogos: veredito, placar provável e a narrativa. O
- * placar vem cru do jsonb da linha exact_score: forma inválida vira null (sem placar).
+ * Resumo do palpite pra linha de /jogos: veredito, placar provável e a narrativa. Vem
+ * cru do banco (campos do jsonb da manchete + params da linha exact_score): placar com
+ * forma inválida vira null (sem placar), confiança fora das três palavras vira null.
  */
 export function toListPalpiteView(source: {
-  headline: PalpiteHeadline;
+  verdict: string;
+  narrative: string;
+  confidence: string | null;
   probableScore: unknown;
 }): ListPalpiteView {
   const score = ExactScoreParamsSchema.safeParse(source.probableScore);
+  const confidence =
+    source.confidence === "baixa" || source.confidence === "media" || source.confidence === "alta"
+      ? source.confidence
+      : null;
   return {
-    verdict: source.headline.verdict,
-    probableScore: score.success
-      ? { home: score.data.home, away: score.data.away }
-      : null,
-    confidence: source.headline.confidence ?? null,
-    narrative: source.headline.narrative,
+    verdict: source.verdict,
+    probableScore: score.success ? { home: score.data.home, away: score.data.away } : null,
+    confidence,
+    narrative: source.narrative,
   };
 }
