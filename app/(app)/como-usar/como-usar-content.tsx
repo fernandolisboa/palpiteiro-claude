@@ -180,6 +180,13 @@ export function ComoUsarContent() {
           análise não roda.
         </p>
         <p>
+          Nos jogos que ainda não começaram, já têm odd e você não analisou,{" "}
+          <Ui>✨ analisar</Ui> roda a análise dali mesmo, sem abrir o jogo. A linha
+          mostra a etapa do momento e vira <Ui>✓ analisado</Ui> no fim; se você abrir
+          o jogo no meio, as etapas continuam lá. Gasta o mesmo limite do dia que o{" "}
+          <Ui>Analisar com IA</Ui> da página do jogo.
+        </p>
+        <p>
           Abaixo da lista, <Strong>Suas predições recentes</Strong> mostra os últimos
           jogos que você analisou, um cartão por jogo com o que a IA recomendou em
           cada mercado (e quantos ficaram sem aposta). <Ui>ver todas →</Ui> abre o

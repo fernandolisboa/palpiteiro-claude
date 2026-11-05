@@ -1,3 +1,5 @@
+"use client";
+
 import { IntentLink } from "@/components/intent-link";
 import { ChevronRight } from "lucide-react";
 
@@ -5,12 +7,18 @@ import { Badge } from "@/components/ui/badge";
 import { Skeleton } from "@/components/ui/skeleton";
 import { LiveBadge } from "@/components/live-badge";
 import { AnalyzedBadge } from "@/components/match-list/analyzed-badge";
+import {
+  RowAnalyzeChip,
+  RowAnalyzeStatus,
+  showsAnalyzed,
+  useRowAnalysis,
+} from "@/components/match-list/row-analyze";
 import { RowTrailing } from "@/components/match-list/row-trailing";
 import { MatchTags } from "@/components/match-list/match-tags";
 import { MatchModelLine } from "@/components/match-model-line";
 import { TeamCrest } from "@/components/team-crest";
 import { appendBackParam } from "@/lib/view/back-href";
-import { showsRowLiveBadge } from "@/lib/view/match-list";
+import { canAnalyzeFromList, showsRowLiveBadge } from "@/lib/view/match-list";
 import { cn } from "@/lib/utils";
 import { LEAGUE_LABEL } from "@/lib/format";
 import type { MatchRowView } from "@/lib/view/types";
@@ -31,25 +39,39 @@ type Props = {
   // últimas 3h, "em 2h 15min". Ausente → `m.kickoff` com a data ("amanhã, 19:00"),
   // como o /time, que não agrupa por dia.
   timeLabel?: string;
+  // "analisar" na linha (/jogos com a flag do fan-out ligada). Ausente → só o
+  // "analisado", como no /time.
+  analyzeEnabled?: boolean;
 };
 
 // Linha da lista de jogos no celular e no /time (#577). Em cima, a hora (ou AO VIVO,
 // no lugar dela) e a liga; à direita, "analisado" (no celular ele não disputa a
 // largura das odds). No meio, os times e o lado direito por fase (RowTrailing: odds
 // lado a lado, placar, adiado). Embaixo, a linha do modelo quando há base.
-export function MatchRow({ m, last, listHref, backHref, tourTarget, timeLabel }: Props) {
+export function MatchRow({
+  m,
+  last,
+  listHref,
+  backHref,
+  tourTarget,
+  timeLabel,
+  analyzeEnabled = false,
+}: Props) {
   // /time/[team] (#408) passa o backHref pronto; /jogos passa listHref e deriva o
   // back via appendBackParam (base /jogos). Mutuamente exclusivos na prática.
   const href = backHref
     ? `/match/${m.id}?back=${encodeURIComponent(backHref)}`
     : appendBackParam(`/match/${m.id}`, listHref, "/jogos");
   const isLive = showsRowLiveBadge(m);
+  const canAnalyze = analyzeEnabled && canAnalyzeFromList(m);
+  const analysis = useRowAnalysis(m.id, canAnalyze);
   return (
-    <IntentLink
-      href={href}
+    // Linha clicável inteira pelo link "esticado" (o ::after cobre a linha): o botão
+    // "analisar" fica fora do <a> (botão dentro de link é HTML inválido) e acima dele.
+    <div
       data-tour={tourTarget ? "match-row" : undefined}
       className={cn(
-        "block px-5 py-3.5 transition-colors hover:bg-surface-2 focus-visible:outline-none focus-visible:ring-[3px] focus-visible:ring-ring/50 focus-visible:ring-inset",
+        "relative block px-5 py-3.5 transition-colors hover:bg-surface-2 has-[a:focus-visible]:ring-[3px] has-[a:focus-visible]:ring-ring/50 has-[a:focus-visible]:ring-inset",
         !last && "border-b border-border-subtle",
       )}
     >
@@ -73,38 +95,51 @@ export function MatchRow({ m, last, listHref, backHref, tourTarget, timeLabel }:
             {LEAGUE_LABEL[m.league]}
           </Badge>
         </div>
-        {m.hasPrediction && <AnalyzedBadge />}
+        {showsAnalyzed(analysis.state, m.hasPrediction) && <AnalyzedBadge />}
       </div>
 
       <div className="flex items-center justify-between gap-3">
-        <div className="flex min-w-0 flex-col gap-1">
+        <IntentLink
+          href={href}
+          className="flex min-w-0 flex-col gap-1 after:absolute after:inset-0 after:content-[''] focus-visible:outline-none"
+        >
           <div className="flex min-w-0 items-center gap-2">
             <TeamCrest team={m.home} size={22} />
-            <span className="truncate text-label font-medium tracking-tight" title={m.home.fullName}>
+            <span className="relative z-10 truncate text-label font-medium tracking-tight" title={m.home.fullName}>
               {m.home.name}
             </span>
           </div>
           <div className="flex min-w-0 items-center gap-2">
             <TeamCrest team={m.away} size={22} />
-            <span className="truncate text-label font-medium tracking-tight" title={m.away.fullName}>
+            <span className="relative z-10 truncate text-label font-medium tracking-tight" title={m.away.fullName}>
               {m.away.name}
             </span>
           </div>
-        </div>
+        </IntentLink>
 
         <div className="flex shrink-0 items-center gap-2">
-          <RowTrailing m={m} />
+          <div className="flex flex-col items-end gap-2">
+            <RowTrailing m={m} />
+            {/* "analisar" embaixo das odds, alinhado à direita com elas. */}
+            <RowAnalyzeChip
+              state={analysis.state}
+              onStart={analysis.start}
+              hasPrediction={m.hasPrediction}
+              canAnalyze={canAnalyze}
+            />
+          </div>
           <span className="text-muted-fg-2">
             <ChevronRight aria-hidden="true" className="size-3.5" />
           </span>
         </div>
       </div>
+      <RowAnalyzeStatus state={analysis.state} className="pt-2" />
       {/* Etiquetas de mesa de amigos (ADR 0070): linha própria, pra não disputar a
           largura do cabeçalho com a liga e o "analisado" no celular. */}
-      {m.tags && <MatchTags tags={m.tags} className="pt-2" />}
+      {m.tags && <MatchTags tags={m.tags} className="relative z-10 w-fit pt-2" />}
       {/* Base do modelo (#555): só em jogo analisável com base calculada. */}
       {m.model && <MatchModelLine model={m.model} className="block pt-2" />}
-    </IntentLink>
+    </div>
   );
 }
 

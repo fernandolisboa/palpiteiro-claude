@@ -20,12 +20,15 @@ export function UpcomingMatchesMobile({
   matches,
   listHref,
   endNote,
+  analyzeEnabled = false,
 }: {
   matches: MatchListRowView[];
   // URL filtrada da lista (/jogos?…) propagada ao link de cada jogo (ver MatchRow).
   listHref?: string;
   // Aviso no fim da lista cortada no teto da query, quando tudo já foi revelado.
   endNote?: string;
+  // "analisar" na linha (flag do fan-out ligada).
+  analyzeEnabled?: boolean;
 }) {
   const [visible, setVisible] = useState(INITIAL_BATCH);
   const slice = matches.slice(0, visible);
@@ -46,6 +49,7 @@ export function UpcomingMatchesMobile({
                 listHref={listHref}
                 tourTarget={m.id === tourId}
                 timeLabel={m.startsIn ?? m.time}
+                analyzeEnabled={analyzeEnabled}
               />
             ))}
           </Card>

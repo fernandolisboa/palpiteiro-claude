@@ -167,7 +167,9 @@ describe("lista agrupada por dia, odds numa linha (#577)", () => {
     const rows = dayRows().map((m, i) => ({ ...m, analyzable: i === 2 }));
     for (const html of both(rows)) {
       expect(html.match(/data-tour="match-row"/g)).toHaveLength(1);
-      expect(html).toMatch(/data-tour="match-row"[^>]*href="\/match\/m2"|href="\/match\/m2"[^>]*data-tour="match-row"/);
+      // O alvo é a linha inteira (<div>); o link do jogo dele é o 1º depois do alvo.
+      const fromTarget = html.slice(html.indexOf('data-tour="match-row"'));
+      expect(fromTarget.match(/href="\/match\/([^"?]+)/)?.[1]).toBe("m2");
     }
   });
 

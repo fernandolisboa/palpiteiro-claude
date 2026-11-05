@@ -326,6 +326,17 @@ export function GuidedTour({ chapter, userId, serverState, forceStart }: Props) 
     return () => document.removeEventListener("keydown", onKeyDown);
   }, [index, close]);
 
+  // Passo interativo aberto: a linha destacada só abre o jogo. O "analisar" dela some
+  // (row-analyze.tsx lê este atributo), pra o toque do tour não gastar o limite do dia.
+  const interactiveOpen = index !== null && steps[index]?.interactive === true;
+  useEffect(() => {
+    if (!interactiveOpen) return;
+    document.documentElement.dataset.tourInteractive = "1";
+    return () => {
+      delete document.documentElement.dataset.tourInteractive;
+    };
+  }, [interactiveOpen]);
+
   if (index === null) return null;
 
   const step = steps[index]!;
@@ -455,7 +466,7 @@ export function GuidedTour({ chapter, userId, serverState, forceStart }: Props) 
               ref={primaryRef}
               type="button"
               size="sm"
-              onClick={interactive ? () => target.click() : next}
+              onClick={interactive ? () => clickTarget(target) : next}
             >
               {interactive ? "Abrir jogo" : isLast ? "Concluir" : "Próximo"}
             </Button>
@@ -465,4 +476,11 @@ export function GuidedTour({ chapter, userId, serverState, forceStart }: Props) 
     </div>,
     document.body,
   );
+}
+
+// Passo interativo: clica no link do alvo. A linha da lista é um <div> com o link do
+// jogo dentro (o botão "analisar" fica fora do link), então o clique vai no <a>.
+function clickTarget(target: HTMLElement) {
+  const link = target.matches("a[href]") ? target : target.querySelector<HTMLElement>("a[href]");
+  (link ?? target).click();
 }
