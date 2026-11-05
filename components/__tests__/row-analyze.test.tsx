@@ -11,6 +11,7 @@ import { UpcomingMatchesDesktop } from "@/components/upcoming-matches-desktop";
 import { UpcomingMatchesMobile } from "@/components/upcoming-matches-mobile";
 import {
   ROW_ANALYZE_TITLE,
+  ROW_REANALYZE_TITLE,
   resetRowStatesForTests,
 } from "@/components/match-list/row-analyze";
 import {
@@ -54,9 +55,9 @@ function row(over: Partial<MatchListRowView> = {}): MatchListRowView {
 }
 
 describe("canAnalyzeFromList", () => {
-  it("só pré-jogo analisável, não analisado e com odd publicada", () => {
+  it("só pré-jogo analisável e com odd publicada (já analisado entra: reanalisar)", () => {
     expect(canAnalyzeFromList(row())).toBe(true);
-    expect(canAnalyzeFromList(row({ hasPrediction: true }))).toBe(false);
+    expect(canAnalyzeFromList(row({ hasPrediction: true }))).toBe(true);
     expect(canAnalyzeFromList(row({ odds: null }))).toBe(false);
     expect(canAnalyzeFromList(row({ analyzable: false }))).toBe(false);
     expect(canAnalyzeFromList(row({ isInProgress: true }))).toBe(false);
@@ -81,12 +82,12 @@ describe("selo na linha (render do servidor)", () => {
     }
   });
 
-  it("sem o botão com a flag desligada, em jogo sem odd, ao vivo ou já analisado", () => {
+  it("sem o botão com a flag desligada, em jogo sem odd ou ao vivo", () => {
     const cases: [MatchListRowView, boolean][] = [
       [row(), false],
       [row({ odds: null }), true],
       [row({ isInProgress: true }), true],
-      [row({ hasPrediction: true }), true],
+      [row({ hasPrediction: true }), false],
     ];
     for (const [m, enabled] of cases) {
       for (const html of both(m, enabled)) expect(html).not.toContain("<button");
@@ -97,6 +98,50 @@ describe("selo na linha (render do servidor)", () => {
     for (const html of both(row({ hasPrediction: true }), true)) {
       expect(html).toContain("analisado");
     }
+  });
+
+  it("já analisado: 'reanalisar' no desktop e o menu do 'analisado' no celular", () => {
+    const m = row({ hasPrediction: true });
+    const desktop = renderToStaticMarkup(
+      <UpcomingMatchesDesktop matches={[m]} analyzeEnabled />,
+    );
+    expect(desktop).toContain('aria-label="Analisar com IA de novo"');
+    expect(desktop).toContain(`title="${ROW_REANALYZE_TITLE}"`);
+    const below = renderToStaticMarkup(
+      <UpcomingMatchesDesktop matches={[m]} analyzeEnabled placement="embaixo" />,
+    );
+    expect(below).toContain(">reanalisar<");
+    const mobile = renderToStaticMarkup(<UpcomingMatchesMobile matches={[m]} analyzeEnabled />);
+    expect(mobile).toContain('aria-label="Analisado: ver palpite ou reanalisar"');
+    expect(mobile).not.toContain('aria-label="Analisar com IA de novo"');
+  });
+
+  it("posição no desktop: ícone no lugar da setinha (padrão) ou botão largo embaixo das odds", () => {
+    const side = renderToStaticMarkup(<UpcomingMatchesDesktop matches={[row()]} analyzeEnabled />);
+    expect(side).toContain("grid-cols-[132px_1fr_auto_32px]");
+    expect(side).not.toContain(">analisar<");
+    const below = renderToStaticMarkup(
+      <UpcomingMatchesDesktop matches={[row()]} analyzeEnabled placement="embaixo" />,
+    );
+    expect(below).toContain("grid-cols-[132px_1fr_auto_24px]");
+    expect(below).toContain(">analisar<");
+  });
+
+  it("palpite feito: veredito e placar no meio da linha (desktop), no lugar do selo", () => {
+    const m = row({
+      hasPrediction: true,
+      palpite: {
+        verdict: "Palmeiras vence em casa",
+        probableScore: { home: 2, away: 1 },
+        confidence: "media",
+        narrative: "O Palmeiras chega embalado.",
+      },
+    });
+    const desktop = renderToStaticMarkup(<UpcomingMatchesDesktop matches={[m]} analyzeEnabled />);
+    expect(desktop).toContain("Palmeiras vence em casa");
+    expect(desktop).toContain("2–1");
+    expect(desktop).toContain("O Palmeiras chega embalado.");
+    expect(desktop).not.toContain(">analisado<");
   });
 });
 
@@ -189,7 +234,10 @@ describe("run pela linha", () => {
     });
     expect(container.textContent).toContain("analisando");
     expect(container.textContent).toContain("Lendo os preços do mercado");
-    expect(container.querySelector("button")).toBeNull();
+    expect(container.querySelector('button[aria-label="Analisar com IA"]')).toBeNull();
+    // Celular: "analisando" abre as etapas; desktop: "ver progresso".
+    expect(container.querySelector('button[aria-label="Ver o progresso da análise"]')).not.toBeNull();
+    expect(container.textContent).toContain("ver progresso");
 
     await act(async () => {
       release!();
@@ -197,7 +245,12 @@ describe("run pela linha", () => {
     });
     expect(container.textContent).toContain("analisado");
     expect(container.textContent).not.toContain("Lendo os preços do mercado");
-    expect(container.querySelector("button")).toBeNull();
+    expect(container.querySelector('button[aria-label="Analisar com IA"]')).toBeNull();
+    // Já analisado: o desktop oferece reanalisar; o celular, o menu do "analisado".
+    expect(container.querySelector('button[aria-label="Analisar com IA de novo"]')).not.toBeNull();
+    expect(
+      container.querySelector('button[aria-label="Analisado: ver palpite ou reanalisar"]'),
+    ).not.toBeNull();
     // Uma releitura só, mesmo com as duas árvores olhando o mesmo jogo; e o run sai do
     // store (o HERO não reabre as etapas de um run já visto na lista).
     expect(refresh).toHaveBeenCalledTimes(1);

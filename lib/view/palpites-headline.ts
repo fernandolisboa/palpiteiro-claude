@@ -2,6 +2,7 @@ import type { PalpiteHeadline } from "@/db/schema";
 import { ExactScoreParamsSchema } from "@/lib/ai/palpites/cartridges/cartridge";
 import { parseReasoning, type ReasoningStep } from "@/lib/ai/progress/protocol";
 import type { PalpiteSetWithLines } from "@/lib/db/queries/palpites";
+import type { ListPalpiteView } from "@/lib/view/types";
 import { livePalpiteLabel } from "@/lib/live/readings";
 import { readLiveStamp } from "@/lib/live/stamp";
 
@@ -154,4 +155,23 @@ export function toPalpiteHeadlineViewFromSet(
       liveState: set.palpiteSet.liveState,
     },
   });
+}
+
+/**
+ * Resumo do palpite pra linha de /jogos: veredito, placar provável e a narrativa. O
+ * placar vem cru do jsonb da linha exact_score: forma inválida vira null (sem placar).
+ */
+export function toListPalpiteView(source: {
+  headline: PalpiteHeadline;
+  probableScore: unknown;
+}): ListPalpiteView {
+  const score = ExactScoreParamsSchema.safeParse(source.probableScore);
+  return {
+    verdict: source.headline.verdict,
+    probableScore: score.success
+      ? { home: score.data.home, away: score.data.away }
+      : null,
+    confidence: source.headline.confidence ?? null,
+    narrative: source.headline.narrative,
+  };
 }

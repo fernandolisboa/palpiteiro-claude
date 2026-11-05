@@ -17,6 +17,7 @@ import { alias } from "drizzle-orm/pg-core";
 import {
   aiCalls,
   matches,
+  type PalpiteHeadline,
   palpiteOutcomes,
   palpiteSets,
   palpites,
@@ -365,4 +366,56 @@ export async function getPendingPalpiteSettlements(
   // type-guard sobre a row (filter), descartando qualquer linha fora da tupla (nunca
   // deve acontecer dado o gate SQL — defense-in-depth).
   return rows.filter(rowHasSettleableType);
+}
+
+/**
+ * Lista de jogos (/jogos): o palpite mais recente do usuário em cada jogo, com manchete,
+ * e o placar provável (a linha exact_score). Uma leitura só (DISTINCT ON match_id), sem
+ * N+1. Jogo sem set com manchete fica fora do Map (a linha mostra só "analisado").
+ */
+export async function getLatestPalpiteHeadlinesForMatches(args: {
+  matchIds: string[];
+  userId: string;
+}): Promise<
+  Map<string, { headline: PalpiteHeadline; probableScore: unknown }>
+> {
+  if (args.matchIds.length === 0) return new Map();
+  const rows = await db
+    .selectDistinctOn([palpiteSets.matchId], {
+      matchId: palpiteSets.matchId,
+      headline: palpiteSets.headline,
+      probableScore: palpites.params,
+    })
+    .from(palpiteSets)
+    .leftJoin(
+      palpites,
+      and(
+        eq(palpites.palpiteSetId, palpiteSets.id),
+        eq(palpites.type, "exact_score")
+      )
+    )
+    .where(
+      and(
+        inArray(palpiteSets.matchId, args.matchIds),
+        eq(palpiteSets.userId, args.userId),
+        isNotNull(palpiteSets.headline)
+      )
+    )
+    .orderBy(
+      palpiteSets.matchId,
+      desc(palpiteSets.createdAt),
+      desc(palpiteSets.id)
+    );
+  const out = new Map<
+    string,
+    { headline: PalpiteHeadline; probableScore: unknown }
+  >();
+  for (const r of rows) {
+    if (r.headline)
+      out.set(r.matchId, {
+        headline: r.headline,
+        probableScore: r.probableScore,
+      });
+  }
+  return out;
 }

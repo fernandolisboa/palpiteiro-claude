@@ -1,5 +1,6 @@
 "use client";
 
+import { useState } from "react";
 import { IntentLink } from "@/components/intent-link";
 import { ChevronRight } from "lucide-react";
 
@@ -13,6 +14,9 @@ import {
   showsAnalyzed,
   useRowAnalysis,
 } from "@/components/match-list/row-analyze";
+import { AnalyzedMenu } from "@/components/match-list/row-palpite";
+import { RowProgressSheet } from "@/components/match-list/row-progress";
+import type { ProgressMascot } from "@/lib/brand/progress-mascot";
 import { RowTrailing } from "@/components/match-list/row-trailing";
 import { MatchTags } from "@/components/match-list/match-tags";
 import { MatchModelLine } from "@/components/match-model-line";
@@ -21,7 +25,7 @@ import { appendBackParam } from "@/lib/view/back-href";
 import { canAnalyzeFromList, showsRowLiveBadge } from "@/lib/view/match-list";
 import { cn } from "@/lib/utils";
 import { LEAGUE_LABEL } from "@/lib/format";
-import type { MatchRowView } from "@/lib/view/types";
+import type { ListPalpiteView, MatchRowView } from "@/lib/view/types";
 
 type Props = {
   m: MatchRowView;
@@ -42,6 +46,10 @@ type Props = {
   // "analisar" na linha (/jogos com a flag do fan-out ligada). Ausente → só o
   // "analisado", como no /time.
   analyzeEnabled?: boolean;
+  // O palpite já feito (/jogos): vai no menu do "analisado". Ausente = só o menu.
+  palpite?: ListPalpiteView | null;
+  // Personagem do progresso (/admin/ia).
+  mascot?: ProgressMascot;
 };
 
 // Linha da lista de jogos no celular e no /time (#577). Em cima, a hora (ou AO VIVO,
@@ -56,6 +64,8 @@ export function MatchRow({
   tourTarget,
   timeLabel,
   analyzeEnabled = false,
+  palpite = null,
+  mascot,
 }: Props) {
   // /time/[team] (#408) passa o backHref pronto; /jogos passa listHref e deriva o
   // back via appendBackParam (base /jogos). Mutuamente exclusivos na prática.
@@ -65,6 +75,9 @@ export function MatchRow({
   const isLive = showsRowLiveBadge(m);
   const canAnalyze = analyzeEnabled && canAnalyzeFromList(m);
   const analysis = useRowAnalysis(m.id, canAnalyze);
+  const [progressOpen, setProgressOpen] = useState(false);
+  const running = analysis.state.kind === "running";
+  const analyzed = showsAnalyzed(analysis.state, m.hasPrediction);
   return (
     // Linha clicável inteira pelo link "esticado" (o ::after cobre a linha): o botão
     // "analisar" fica fora do <a> (botão dentro de link é HTML inválido) e acima dele.
@@ -95,7 +108,35 @@ export function MatchRow({
             {LEAGUE_LABEL[m.league]}
           </Badge>
         </div>
-        {showsAnalyzed(analysis.state, m.hasPrediction) && <AnalyzedBadge />}
+        {/* À direita do cabeçalho, acima das odds (Fernando, 2026-11-05): a ação
+            ("analisar" / "analisando" / "tentar de novo"), ou "analisado" com o ↻ de
+            reanalisar grudado. Tocar em "analisando" abre as etapas. */}
+        {!running && analyzed ? (
+          canAnalyze ? (
+            <AnalyzedMenu
+              palpite={palpite}
+              href={href}
+              onReanalyze={analysis.start}
+            />
+          ) : (
+            <AnalyzedBadge />
+          )
+        ) : (
+          <RowAnalyzeChip
+            state={analysis.state}
+            onStart={analysis.start}
+            onShowProgress={() => setProgressOpen(true)}
+            hasPrediction={m.hasPrediction}
+            canAnalyze={canAnalyze}
+          />
+        )}
+        <RowProgressSheet
+          state={analysis.state}
+          teams={{ home: m.home, away: m.away }}
+          mascot={mascot}
+          open={progressOpen}
+          onOpenChange={setProgressOpen}
+        />
       </div>
 
       <div className="flex items-center justify-between gap-3">
@@ -118,16 +159,7 @@ export function MatchRow({
         </IntentLink>
 
         <div className="flex shrink-0 items-center gap-2">
-          <div className="flex flex-col items-end gap-2">
-            <RowTrailing m={m} />
-            {/* "analisar" embaixo das odds, alinhado à direita com elas. */}
-            <RowAnalyzeChip
-              state={analysis.state}
-              onStart={analysis.start}
-              hasPrediction={m.hasPrediction}
-              canAnalyze={canAnalyze}
-            />
-          </div>
+          <RowTrailing m={m} />
           <span className="text-muted-fg-2">
             <ChevronRight aria-hidden="true" className="size-3.5" />
           </span>

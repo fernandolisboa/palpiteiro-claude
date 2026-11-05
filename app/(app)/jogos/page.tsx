@@ -18,7 +18,19 @@ import { auth } from "@/auth";
 import { resolveHomeLeagueFilter } from "@/lib/config/active-leagues";
 import { dayKeyOf, keyToLeague, leagueToKey } from "@/lib/format";
 import { getActiveLeaguesForRequest } from "@/lib/db/queries/league-settings";
-import { getEnableBestBetFanOut } from "@/lib/db/queries/ai-config";
+import {
+  getEnableBestBetFanOut,
+  getListAnalyzePlacement,
+  getProgressMascot,
+} from "@/lib/db/queries/ai-config";
+import { getLatestPalpiteHeadlinesForMatches } from "@/lib/db/queries/palpites";
+import { DEFAULT_PROGRESS_MASCOT } from "@/lib/brand/progress-mascot";
+import {
+  DEFAULT_LIST_ANALYZE_PLACEMENT,
+  type ListAnalyzePlacement,
+} from "@/lib/view/list-analyze-placement";
+import type { ProgressMascot } from "@/lib/brand/progress-mascot";
+import { toListPalpiteView } from "@/lib/view/palpites-headline";
 import { getRequestTimeZone } from "@/lib/server/request-timezone";
 import {
   getMatchIdsWithPredictionsByUser,
@@ -222,12 +234,19 @@ export default async function JogosPage({ searchParams }: PageProps) {
   // "analisar" na linha (flag do fan-out, a mesma do botão da página do jogo). Falha de
   // leitura só tira o botão da lista, nunca derruba a página.
   const analyzeEnabledPromise = getEnableBestBetFanOut().catch(() => false);
-  const [queried, recentRaw, tourState, catalog, analyzeEnabled] = await Promise.all([
+  // Aparência do "analisar" na linha (/admin/ia): onde fica no desktop e o personagem
+  // do progresso. Falha de leitura = os padrões.
+  const listUiPromise = Promise.all([
+    getListAnalyzePlacement().catch(() => DEFAULT_LIST_ANALYZE_PLACEMENT),
+    getProgressMascot().catch(() => DEFAULT_PROGRESS_MASCOT),
+  ]).then(([placement, mascot]) => ({ placement, mascot }));
+  const [queried, recentRaw, tourState, catalog, analyzeEnabled, listUi] = await Promise.all([
     loadRangeMatches(matchesQuery),
     recentPromise,
     tourPromise,
     catalogPromise,
     analyzeEnabledPromise,
+    listUiPromise,
   ]);
   const truncated = queried.length > limit;
   const dbMatches = truncated ? queried.slice(0, limit) : queried;
@@ -246,6 +265,7 @@ export default async function JogosPage({ searchParams }: PageProps) {
     predictedMatchIds,
     modelByMatch,
     inPlayByMatch,
+    palpiteByMatch,
   ] =
     await Promise.all([
       getLatestOverUnderSnapshotsForMatches(matchIds),
@@ -265,13 +285,27 @@ export default async function JogosPage({ searchParams }: PageProps) {
         return new Map<string, MatchModelSnapshot>();
       }),
       loadListInPlayStates(dbMatches, now),
+      // O palpite de cada jogo no meio da linha (desktop). Falha de leitura só tira o
+      // resumo (fica o "analisado").
+      getLatestPalpiteHeadlinesForMatches({ matchIds, userId }).catch((err: unknown) => {
+        console.error(
+          JSON.stringify({
+            scope: "jogos-page",
+            error: "palpite_headlines_read_failed",
+            message: err instanceof Error ? err.message : String(err),
+          }),
+        );
+        return new Map<string, Parameters<typeof toListPalpiteView>[0]>();
+      }),
     ]);
+
 
   // Linha com o dia e a hora no fuso do usuário (#577): a lista agrupa por dia.
   const matches: MatchListRowView[] = dbMatches.map((m) => {
     const snapshot = snapshotByMatch.get(m.id);
     const matchResult = matchResultByMatch.get(m.id);
-    return toMatchListRowView({
+    const palpite = palpiteByMatch.get(m.id);
+    const row = toMatchListRowView({
       match: {
         id: m.id,
         league: m.league,
@@ -302,6 +336,7 @@ export default async function JogosPage({ searchParams }: PageProps) {
       modelSnapshot: modelByMatch.get(m.id) ?? null,
       inPlay: inPlayByMatch.get(m.id) ?? null,
     });
+    return { ...row, palpite: palpite ? toListPalpiteView(palpite) : null };
   });
 
   const recents: RecentMatchView[] = toRecentMatchViews(recentRaw, now, timeZone);
@@ -341,6 +376,7 @@ export default async function JogosPage({ searchParams }: PageProps) {
           countLabel={countLabel}
           endNote={endNote}
           analyzeEnabled={analyzeEnabled}
+          listUi={listUi}
         />
       </div>
       <div className="hidden lg:block">
@@ -356,6 +392,7 @@ export default async function JogosPage({ searchParams }: PageProps) {
           countLabel={countLabel}
           endNote={endNote}
           analyzeEnabled={analyzeEnabled}
+          listUi={listUi}
         />
       </div>
     </>
@@ -374,7 +411,10 @@ type HomeContentProps = {
   countLabel: string;
   endNote?: string;
   analyzeEnabled: boolean;
+  listUi: ListUi;
 };
+
+type ListUi = { placement: ListAnalyzePlacement; mascot: ProgressMascot };
 
 // Atalho do estado vazio das predições recentes (#446): o primeiro jogo da lista que
 // ainda aceita análise (a lista pode abrir com jogos já em andamento).
@@ -522,6 +562,7 @@ function MobileHome({
   countLabel,
   endNote,
   analyzeEnabled,
+  listUi,
 }: HomeContentProps) {
   const nav = navState(league, range, filters);
   // URL filtrada atual da lista — propagada aos links de jogo pra preservar o
@@ -565,6 +606,7 @@ function MobileHome({
           listHref={listHref}
           endNote={endNote}
           analyzeEnabled={analyzeEnabled}
+          mascot={listUi.mascot}
         />
       )}
 
@@ -610,6 +652,7 @@ function DesktopHome({
   countLabel,
   endNote,
   analyzeEnabled,
+  listUi,
 }: HomeContentProps) {
   const nav = navState(league, range, filters);
   // URL filtrada atual da lista — propagada aos links de jogo (preserva busca ao
@@ -652,6 +695,8 @@ function DesktopHome({
             listHref={listHref}
             endNote={endNote}
             analyzeEnabled={analyzeEnabled}
+            placement={listUi.placement}
+            mascot={listUi.mascot}
           />
         )}
 

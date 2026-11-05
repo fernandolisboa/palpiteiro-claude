@@ -1,7 +1,7 @@
 "use client";
 
 import { useCallback, useEffect, useSyncExternalStore } from "react";
-import { Loader2, RotateCcw, Sparkles } from "lucide-react";
+import { Loader2, RefreshCw, RotateCcw, Sparkles } from "lucide-react";
 
 import {
   consumeRun,
@@ -10,7 +10,11 @@ import {
   subscribeRun,
   type RunEntry,
 } from "@/components/palpites/palpite-run-store";
-import { toHeroRunOutcome, type HeroRunOutcome } from "@/lib/ai/progress/protocol";
+import type { ProgressStepView } from "@/components/palpites/palpite-progress";
+import {
+  toHeroRunOutcome,
+  type HeroRunOutcome,
+} from "@/lib/ai/progress/protocol";
 import { markRouterCacheStale } from "@/lib/nav/router-cache";
 import { useOptionalRouter } from "@/lib/nav/use-optional-router";
 import { cn } from "@/lib/utils";
@@ -22,10 +26,12 @@ import { cn } from "@/lib/utils";
 
 export const ROW_ANALYZE_TITLE =
   "Analisar com IA: usa análises do seu limite do dia e leva alguns minutos.";
+export const ROW_REANALYZE_TITLE =
+  "Analisar de novo com IA: usa análises do seu limite do dia e leva alguns minutos.";
 
 export type RowAnalysis =
   | { kind: "idle" }
-  | { kind: "running"; step: string | null }
+  | { kind: "running"; step: string | null; steps: ProgressStepView[] }
   | { kind: "done" }
   | { kind: "error"; message: string };
 
@@ -135,7 +141,7 @@ export function useRowAnalysis(
       baseSetId: null,
     }).then(async (mode) => {
       if (mode !== "fallback") return;
-      setRowState(matchId, { kind: "running", step: null });
+      setRowState(matchId, { kind: "running", step: null, steps: [] });
       // Import sob demanda: a reserva quase nunca roda, e a lista (e os testes que a
       // renderizam soltos) não carrega o módulo das actions à toa.
       const result = await import("@/app/actions/predictions")
@@ -154,7 +160,9 @@ export function useRowAnalysis(
   }, [matchId]);
 
   const state = ((): RowAnalysis => {
-    if (entry?.status === "running") return { kind: "running", step: currentStep(entry) };
+    if (entry?.status === "running") {
+      return { kind: "running", step: currentStep(entry), steps: entry.steps };
+    }
     if (rowState) return rowState;
     if (finished && isRowRun(finished) && finished.outcome && !finished.outcome.ok) {
       return { kind: "error", message: finished.outcome.error };
@@ -168,71 +176,139 @@ export function useRowAnalysis(
 const CHIP =
   "relative z-10 inline-flex h-6 shrink-0 items-center gap-1 rounded-full border px-2.5 text-meta font-medium whitespace-nowrap";
 
-/** "analisado" ao lado dos nomes: já analisado, ou o run da linha acabou de dar certo. */
-export function showsAnalyzed(state: RowAnalysis, hasPrediction: boolean): boolean {
+export const ROW_FOCUS =
+  "focus-visible:outline-none focus-visible:ring-[3px] focus-visible:ring-ring/50";
+
+// Some na linha destacada pelo passo "abra um jogo" do tour (guided-tour.tsx).
+export const ROW_TOUR_HIDDEN =
+  "[[data-tour-interactive]_[data-tour=match-row]_&]:hidden";
+
+/** "analisado": já analisado, ou o run da linha acabou de dar certo. */
+export function showsAnalyzed(
+  state: RowAnalysis,
+  hasPrediction: boolean
+): boolean {
   return hasPrediction || state.kind === "done";
 }
 
+const ANALYZE_LABEL = "Analisar com IA";
+export const REANALYZE_LABEL = "Analisar com IA de novo";
+const RETRY_LABEL = "Tentar a análise com IA de novo";
+export const PROGRESS_LABEL = "Ver o progresso da análise";
+
 /**
- * A ação embaixo das odds (pedido do Fernando, 2026-11-04): "analisar" quando dá pra
- * rodar, "analisando" durante o run e "tentar de novo" se falhou. Some quando o jogo
- * já está analisado (o selo "analisado" fica ao lado dos nomes).
+ * A ação da linha: "analisar", "reanalisar" quando o jogo já tem análise, "analisando"
+ * durante o run e "tentar de novo" se falhou. Em repouso todas são cinza quietas (a
+ * lista tem muitas); o que muda é o ícone: a faísca quente pra analisar, o ↻ cinza pra
+ * reanalisar. No hover/foco, quente (analisar) ou azul do "analisado" (reanalisar).
  * `relative z-10`: fica acima do link esticado da linha.
+ *
+ * look: chip (pílula com a palavra), icon (só o ícone, no lugar da setinha), block
+ * (largura toda do pai, embaixo das odds).
  */
 export function RowAnalyzeChip({
   state,
   onStart,
+  onShowProgress,
   hasPrediction,
   canAnalyze,
+  look = "chip",
   className,
 }: {
   state: RowAnalysis;
   onStart: () => void;
+  // Durante o run, tocar em "analisando" abre as etapas (celular). Ausente = só o selo.
+  onShowProgress?: () => void;
   hasPrediction: boolean;
   canAnalyze: boolean;
+  look?: "chip" | "icon" | "block";
   className?: string;
 }) {
+  const icon = look === "icon";
+  const shape = icon
+    ? "relative z-10 inline-flex size-8 shrink-0 items-center justify-center rounded-md border"
+    : look === "block"
+      ? "relative z-10 inline-flex h-7 w-full items-center justify-center gap-1.5 rounded-md border px-2.5 text-meta font-medium whitespace-nowrap"
+      : CHIP;
+  const glyph = icon ? "size-3.5" : "size-3";
   if (state.kind === "running") {
+    const running = cn(
+      shape,
+      "border-palpite-border bg-palpite-soft text-palpite-strong-fg",
+      className
+    );
+    const body = (
+      <>
+        <Loader2
+          aria-hidden="true"
+          className={cn("palpite-spin animate-spin", glyph)}
+        />
+        {!icon && "analisando"}
+      </>
+    );
+    if (onShowProgress) {
+      return (
+        <button
+          type="button"
+          onClick={onShowProgress}
+          aria-label={PROGRESS_LABEL}
+          title={PROGRESS_LABEL}
+          className={cn(running, "cursor-pointer", ROW_FOCUS)}
+        >
+          {body}
+        </button>
+      );
+    }
     return (
       <span
-        className={cn(CHIP, "border-palpite-border bg-palpite-soft text-palpite-strong-fg", className)}
+        role={icon ? "img" : undefined}
+        aria-label={icon ? "analisando" : undefined}
+        title={icon ? "Analisando" : undefined}
+        className={running}
       >
-        <Loader2 aria-hidden="true" className="palpite-spin size-3 animate-spin" />
-        analisando
+        {body}
       </span>
     );
   }
-  if (showsAnalyzed(state, hasPrediction) || !canAnalyze) return null;
+  if (!canAnalyze) return null;
   const retry = state.kind === "error";
+  const again = !retry && showsAnalyzed(state, hasPrediction);
+  const label = retry ? RETRY_LABEL : again ? REANALYZE_LABEL : ANALYZE_LABEL;
   return (
     <button
       type="button"
       onClick={onStart}
-      title={ROW_ANALYZE_TITLE}
-      aria-label={retry ? "Tentar a análise com IA de novo" : "Analisar com IA"}
+      title={again ? ROW_REANALYZE_TITLE : ROW_ANALYZE_TITLE}
+      aria-label={label}
       className={cn(
-        CHIP,
-        // Some na linha destacada pelo passo "abra um jogo" do tour (guided-tour.tsx).
-        "[[data-tour-interactive]_[data-tour=match-row]_&]:hidden",
-        // Quieto em repouso (a lista tem muitos): cinza com a faísca quente; quente
-        // inteiro no hover/foco.
-        "group/analyze cursor-pointer border-border bg-background text-muted-foreground transition-colors hover:border-palpite-border hover:bg-palpite-soft hover:text-palpite-strong-fg focus-visible:outline-none focus-visible:ring-[3px] focus-visible:ring-ring/50",
-        className,
+        shape,
+        ROW_TOUR_HIDDEN,
+        "border-border bg-background text-muted-foreground cursor-pointer transition-colors",
+        ROW_FOCUS,
+        again
+          ? "hover:border-accent-border hover:bg-accent-soft hover:text-accent-fg"
+          : "hover:border-palpite-border hover:bg-palpite-soft hover:text-palpite-strong-fg",
+        className
       )}
     >
       {retry ? (
-        <RotateCcw aria-hidden="true" className="size-3" />
+        <RotateCcw aria-hidden="true" className={glyph} />
+      ) : again ? (
+        <RefreshCw aria-hidden="true" className={glyph} />
       ) : (
-        <Sparkles aria-hidden="true" className="size-3 text-palpite-strong-fg" />
+        <Sparkles
+          aria-hidden="true"
+          className={cn("text-palpite-strong-fg", icon ? "size-4" : "size-3")}
+        />
       )}
-      {retry ? "tentar de novo" : "analisar"}
+      {!icon && (retry ? "tentar de novo" : again ? "reanalisar" : "analisar")}
     </button>
   );
 }
 
 /**
- * A linha de baixo durante e depois do run: a etapa de agora ("Lendo os preços do
- * mercado") ou o erro. Região viva, pra o leitor de tela ouvir o andamento.
+ * A linha de baixo durante e depois do run (celular): a etapa de agora ("Lendo os
+ * preços do mercado") ou o erro. Região viva, pra o leitor de tela ouvir o andamento.
  */
 export function RowAnalyzeStatus({
   state,
