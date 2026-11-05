@@ -8,9 +8,11 @@ import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Card } from "@/components/ui/card";
 import { LiveBadge } from "@/components/live-badge";
+import { AnalyzedBadge } from "@/components/match-list/analyzed-badge";
 import {
   RowAnalyzeChip,
   RowAnalyzeStatus,
+  showsAnalyzed,
   useRowAnalysis,
 } from "@/components/match-list/row-analyze";
 import { DayHeading } from "@/components/match-list/day-heading";
@@ -161,13 +163,8 @@ function DesktopMatchRow({
             </div>
           </IntentLink>
           {/* "analisado" ao lado dos nomes, na altura deles (#577); também em jogo
-              encerrado já analisado (#99). No mesmo lugar, "analisar" quando dá. */}
-          <RowAnalyzeChip
-            state={analysis.state}
-            onStart={analysis.start}
-            hasPrediction={m.hasPrediction}
-            canAnalyze={canAnalyze}
-          />
+              encerrado já analisado (#99). */}
+          {showsAnalyzed(analysis.state, m.hasPrediction) && <AnalyzedBadge />}
         </div>
         <RowAnalyzeStatus state={analysis.state} />
         {/* Etiquetas de mesa de amigos (ADR 0070), na mesma ordem do celular. */}
@@ -175,8 +172,15 @@ function DesktopMatchRow({
         {/* Base do modelo (#555): só probabilidade, abaixo dos nomes. */}
         {m.model && <MatchModelLine model={m.model} />}
       </div>
-      <div className="flex justify-end">
+      <div className="flex flex-col items-end gap-2">
         <RowTrailing m={m} />
+        {/* "analisar" embaixo das odds, alinhado à direita com elas. */}
+        <RowAnalyzeChip
+          state={analysis.state}
+          onStart={analysis.start}
+          hasPrediction={m.hasPrediction}
+          canAnalyze={canAnalyze}
+        />
       </div>
       <span className="justify-self-end text-muted-fg-2">
         {phase === "finished" || phase === "off" ? null : (

@@ -6,9 +6,11 @@ import { ChevronRight } from "lucide-react";
 import { Badge } from "@/components/ui/badge";
 import { Skeleton } from "@/components/ui/skeleton";
 import { LiveBadge } from "@/components/live-badge";
+import { AnalyzedBadge } from "@/components/match-list/analyzed-badge";
 import {
   RowAnalyzeChip,
   RowAnalyzeStatus,
+  showsAnalyzed,
   useRowAnalysis,
 } from "@/components/match-list/row-analyze";
 import { RowTrailing } from "@/components/match-list/row-trailing";
@@ -93,12 +95,7 @@ export function MatchRow({
             {LEAGUE_LABEL[m.league]}
           </Badge>
         </div>
-        <RowAnalyzeChip
-          state={analysis.state}
-          onStart={analysis.start}
-          hasPrediction={m.hasPrediction}
-          canAnalyze={canAnalyze}
-        />
+        {showsAnalyzed(analysis.state, m.hasPrediction) && <AnalyzedBadge />}
       </div>
 
       <div className="flex items-center justify-between gap-3">
@@ -121,7 +118,16 @@ export function MatchRow({
         </IntentLink>
 
         <div className="flex shrink-0 items-center gap-2">
-          <RowTrailing m={m} />
+          <div className="flex flex-col items-end gap-2">
+            <RowTrailing m={m} />
+            {/* "analisar" embaixo das odds, alinhado à direita com elas. */}
+            <RowAnalyzeChip
+              state={analysis.state}
+              onStart={analysis.start}
+              hasPrediction={m.hasPrediction}
+              canAnalyze={canAnalyze}
+            />
+          </div>
           <span className="text-muted-fg-2">
             <ChevronRight aria-hidden="true" className="size-3.5" />
           </span>

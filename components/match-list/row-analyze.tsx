@@ -3,7 +3,6 @@
 import { useCallback, useEffect, useSyncExternalStore } from "react";
 import { Loader2, RotateCcw, Sparkles } from "lucide-react";
 
-import { AnalyzedBadge } from "@/components/match-list/analyzed-badge";
 import {
   consumeRun,
   getRun,
@@ -169,9 +168,15 @@ export function useRowAnalysis(
 const CHIP =
   "relative z-10 inline-flex h-6 shrink-0 items-center gap-1 rounded-full border px-2.5 text-meta font-medium whitespace-nowrap";
 
+/** "analisado" ao lado dos nomes: já analisado, ou o run da linha acabou de dar certo. */
+export function showsAnalyzed(state: RowAnalysis, hasPrediction: boolean): boolean {
+  return hasPrediction || state.kind === "done";
+}
+
 /**
- * O selo à direita dos nomes: "analisado" quando já há análise, o botão "analisar"
- * quando dá pra rodar, "analisando" durante o run e "tentar de novo" se falhou.
+ * A ação embaixo das odds (pedido do Fernando, 2026-11-04): "analisar" quando dá pra
+ * rodar, "analisando" durante o run e "tentar de novo" se falhou. Some quando o jogo
+ * já está analisado (o selo "analisado" fica ao lado dos nomes).
  * `relative z-10`: fica acima do link esticado da linha.
  */
 export function RowAnalyzeChip({
@@ -197,8 +202,7 @@ export function RowAnalyzeChip({
       </span>
     );
   }
-  if (hasPrediction || state.kind === "done") return <AnalyzedBadge className={className} />;
-  if (!canAnalyze) return null;
+  if (showsAnalyzed(state, hasPrediction) || !canAnalyze) return null;
   const retry = state.kind === "error";
   return (
     <button
