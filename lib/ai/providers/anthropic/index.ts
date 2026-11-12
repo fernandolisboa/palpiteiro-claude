@@ -25,6 +25,7 @@ import {
   serializeAnthropicError,
 } from "./errors";
 import { buildAnthropicRequest } from "./request-builder";
+import { addUsage, NO_USAGE, usageFromMessage } from "./usage";
 import { requestTiming } from "./timeouts";
 
 // Sinal interno: o prazo do run acabou antes da chamada (nada foi enviado).
@@ -135,13 +136,6 @@ function refusalResult(args: {
   };
 }
 
-// Coage o uso de tokens a inteiro finito ≥0 (anti-NaN em `calculateCost` →
-// `costUsd` numeric NOT NULL). Identidade pros valores inteiros que a Anthropic
-// sempre devolve; relevante de fato no #231 (OpenAI).
-function coerceTokens(n: number): number {
-  return Number.isFinite(n) && n >= 0 ? n : 0;
-}
-
 // Teto de continuações do laço de pause_turn (ADR 0032 / #377). A server-tool loop da
 // Claude para em `stop_reason: "pause_turn"` quando bate o limite interno de iterações;
 // retomamos reenviando [user, {assistant, content}] SEM mensagem "Continue". Bounded pra
@@ -191,17 +185,14 @@ async function runAnalysis(
     return callFailure({
       err,
       request,
-      usage: { inputTokens: 0, outputTokens: 0 },
+      usage: NO_USAGE,
       inputPayload,
       stopReason: null,
       latencyMs: Math.round(performance.now() - start),
     });
   }
   const latencyMs = Math.round(performance.now() - start);
-  const usage = {
-    inputTokens: coerceTokens(response.usage.input_tokens),
-    outputTokens: coerceTokens(response.usage.output_tokens),
-  };
+  const usage = usageFromMessage(response.usage);
   const refusal = refusalFromMessage(response);
   if (refusal) {
     return refusalResult({
@@ -267,7 +258,7 @@ async function runServerToolAnalysis(
     return callFailure({
       err,
       request,
-      usage: { inputTokens: 0, outputTokens: 0 },
+      usage: NO_USAGE,
       inputPayload,
       stopReason: null,
       latencyMs: Math.round(performance.now() - start),
@@ -277,8 +268,7 @@ async function runServerToolAnalysis(
   // Laço bounded de pause_turn: a server-tool loop pausa quando bate o limite interno;
   // retomamos reenviando o histórico ([user, {assistant, content}]) SEM "Continue" — a
   // API detecta o server_tool_use pendente e resume sozinha. Acumula tokens das rodadas.
-  let inputTokens = coerceTokens(response.usage.input_tokens);
-  let outputTokens = coerceTokens(response.usage.output_tokens);
+  let usage = usageFromMessage(response.usage);
   let continuations = 0;
   while (
     response.stop_reason === "pause_turn" &&
@@ -302,15 +292,14 @@ async function runServerToolAnalysis(
       return callFailure({
         err,
         request,
-        usage: { inputTokens, outputTokens },
+        usage,
         inputPayload,
         stopReason: response.stop_reason ?? null,
         latencyMs: Math.round(performance.now() - start),
       });
     }
     response = next;
-    inputTokens += coerceTokens(response.usage.input_tokens);
-    outputTokens += coerceTokens(response.usage.output_tokens);
+    usage = addUsage(usage, usageFromMessage(response.usage));
   }
   const latencyMs = Math.round(performance.now() - start);
   const refusal = refusalFromMessage(response);
@@ -319,7 +308,7 @@ async function runServerToolAnalysis(
       refusal,
       request,
       response,
-      usage: { inputTokens, outputTokens },
+      usage,
       inputPayload,
       latencyMs,
     });
@@ -330,7 +319,7 @@ async function runServerToolAnalysis(
     ok: true,
     // Sem submit no modo server-tool — `toolInput` não se aplica.
     toolInput: undefined,
-    usage: { inputTokens, outputTokens },
+    usage,
     inputPayload,
     outputPayload,
     stopReason: response.stop_reason ?? null,

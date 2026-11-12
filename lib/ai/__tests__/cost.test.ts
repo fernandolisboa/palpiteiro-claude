@@ -135,6 +135,97 @@ describe("calculateCost — Haiku 5.5 com tarifa de prompt longo", () => {
   });
 });
 
+describe("calculateCost — prompt caching (ADR 0071)", () => {
+  const sonnet = MODEL_REGISTRY["claude-sonnet-5-5"];
+  const haiku = MODEL_REGISTRY["claude-haiku-5-5"];
+
+  it("multiplicador de leitura por modelo: 0,05 Opus/Sonnet 5.5, 0,1 Haiku 5.5", () => {
+    expect(MODEL_REGISTRY["claude-opus-5-5"].cacheReadMultiplier).toBe(0.05);
+    expect(sonnet.cacheReadMultiplier).toBe(0.05);
+    expect(haiku.cacheReadMultiplier).toBe(0.1);
+  });
+
+  it("sem campos de cache: o custo de antes (tudo a preço cheio)", () => {
+    expect(
+      calculateCost({ model: sonnet, inputTokens: 3000, outputTokens: 500 }),
+    ).toBeCloseTo((3000 * 2 + 500 * 10) / 1_000_000, 12);
+  });
+
+  it("escrita: a parte escrita sai a 1,25×, o resto a preço cheio", () => {
+    // 3000 de prompt, 2000 escritos no cache: 1000×$2 + 2000×$2,50 + 500×$10.
+    expect(
+      calculateCost({
+        model: sonnet,
+        inputTokens: 3000,
+        outputTokens: 500,
+        cacheCreationInputTokens: 2000,
+      }),
+    ).toBeCloseTo((1000 * 2 + 2000 * 2.5 + 500 * 10) / 1_000_000, 12);
+  });
+
+  it("leitura: a parte lida sai a 0,05× no Sonnet 5.5 ($0,10/1M)", () => {
+    expect(
+      calculateCost({
+        model: sonnet,
+        inputTokens: 3000,
+        outputTokens: 500,
+        cacheReadInputTokens: 2000,
+      }),
+    ).toBeCloseTo((1000 * 2 + 2000 * 0.1 + 500 * 10) / 1_000_000, 12);
+  });
+
+  it("leitura no Haiku 5.5 sai a 0,1× ($0,01/1M)", () => {
+    expect(
+      calculateCost({
+        model: haiku,
+        inputTokens: 3000,
+        outputTokens: 0,
+        cacheReadInputTokens: 2000,
+      }),
+    ).toBeCloseTo((1000 * 0.1 + 2000 * 0.01) / 1_000_000, 12);
+  });
+
+  it("tarifa de prompt longo: o limite vale pelo total e o cache usa a tarifa alta", () => {
+    // 150K de prompt (100K lidos do cache): acima de 100K → $0,50 base.
+    expect(
+      calculateCost({
+        model: haiku,
+        inputTokens: 150_000,
+        outputTokens: 0,
+        cacheReadInputTokens: 100_000,
+      }),
+    ).toBeCloseTo((50_000 * 0.5 + 100_000 * 0.05) / 1_000_000, 12);
+  });
+
+  it("versão adotada herda o multiplicador da conferida", () => {
+    const adopted: AIModel = {
+      ...sonnet,
+      id: "claude-sonnet-5-6",
+      inputPricePerMTok: 4,
+      adopted: { priceEstimated: false, pinnedId: "claude-sonnet-5-5" },
+    };
+    expect(
+      calculateCost({
+        model: adopted,
+        inputTokens: 1_000_000,
+        outputTokens: 0,
+        cacheReadInputTokens: 1_000_000,
+      }),
+    ).toBeCloseTo(4 * 0.05, 12);
+  });
+
+  it("campos de cache maiores que o total não geram custo negativo", () => {
+    expect(
+      calculateCost({
+        model: sonnet,
+        inputTokens: 100,
+        outputTokens: 0,
+        cacheReadInputTokens: 500,
+      }),
+    ).toBeGreaterThanOrEqual(0);
+  });
+});
+
 describe("calculateJudgmentCost — JEV (ADR 0041)", () => {
   it("US$ 0,042 por 1M de tokens de input; output grátis", () => {
     expect(calculateJudgmentCost(1_000_000)).toBeCloseTo(0.042, 12);

@@ -66,6 +66,7 @@ pnpm build             # build de produção
 - Mudanças em prompt → bump de versão → registrar no commit
 - Toda chamada de LLM passa por `lib/ai/predict.ts`, que loga em `ai_calls`
 - Output do LLM é **sempre** validado por Zod antes de uso
+- Prompt caching (ADR 0071): o builder marca o fim do `system` como cacheável. **Nada que varie por pedido** (data, id, usuário, flag) no system prompt nem na tool do cartucho; dado variável vai na mensagem do usuário, senão o cache erra em silêncio
 
 ### Commits
 - Conventional Commits: `feat:`, `fix:`, `chore:`, `docs:`, `refactor:`, `test:`, `prompt:`

@@ -177,8 +177,7 @@ export async function getNewsByMatchViaWebSearch(
       model: served,
       inputPayload: result.inputPayload,
       outputPayload: result.outputPayload,
-      inputTokens: result.usage.inputTokens,
-      outputTokens: result.usage.outputTokens,
+      ...result.usage,
       latencyMs: result.latencyMs,
       status: result.status,
       errorMessage: result.message,
@@ -195,8 +194,7 @@ export async function getNewsByMatchViaWebSearch(
   // resultado SOBREVIVE à falha do log de auditoria.
   const cost = calculateCost({
     model: served,
-    inputTokens: result.usage.inputTokens,
-    outputTokens: result.usage.outputTokens,
+    ...result.usage,
   });
   let aiCallId: string | null = null;
   try {
@@ -210,8 +208,7 @@ export async function getNewsByMatchViaWebSearch(
         promptVersion: NEWS_PROMPT_VERSION,
         inputPayload: result.inputPayload,
         outputPayload: result.outputPayload,
-        inputTokens: result.usage.inputTokens,
-        outputTokens: result.usage.outputTokens,
+        ...result.usage,
         latencyMs: result.latencyMs,
         costUsd: cost.toFixed(6),
         status: "ok",

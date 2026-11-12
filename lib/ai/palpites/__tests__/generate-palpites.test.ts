@@ -183,7 +183,12 @@ function okResult(toolInput: unknown): AnalysisResult {
   return {
     ok: true,
     toolInput,
-    usage: { inputTokens: 100, outputTokens: 50 },
+    usage: {
+      inputTokens: 100,
+      outputTokens: 50,
+      cacheCreationInputTokens: 0,
+      cacheReadInputTokens: 0,
+    },
     inputPayload: { foo: "bar" },
     outputPayload: { content: [] },
     stopReason: "tool_use",
@@ -804,7 +809,12 @@ describe("generatePalpites (síntese) — caminhos de erro (auditados, sem set)"
       ok: false,
       status: "timeout",
       message: "timed out",
-      usage: { inputTokens: 0, outputTokens: 0 },
+      usage: {
+      inputTokens: 0,
+      outputTokens: 0,
+      cacheCreationInputTokens: 0,
+      cacheReadInputTokens: 0,
+    },
       inputPayload: {},
       outputPayload: {},
       stopReason: null,

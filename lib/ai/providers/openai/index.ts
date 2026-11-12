@@ -41,7 +41,12 @@ async function runAnalysis(
       ok: false,
       status: "provider_error",
       message: msg,
-      usage: { inputTokens: 0, outputTokens: 0 },
+      usage: {
+        inputTokens: 0,
+        outputTokens: 0,
+        cacheCreationInputTokens: 0,
+        cacheReadInputTokens: 0,
+      },
       inputPayload,
       outputPayload: { error: msg },
       stopReason: null,
@@ -92,7 +97,12 @@ async function runAnalysis(
       status: classified.status,
       message: classified.message,
       cause: err,
-      usage: { inputTokens: 0, outputTokens: 0 },
+      usage: {
+        inputTokens: 0,
+        outputTokens: 0,
+        cacheCreationInputTokens: 0,
+        cacheReadInputTokens: 0,
+      },
       inputPayload,
       outputPayload: { error: serializeOpenAIError(err) },
       stopReason: null,
@@ -105,6 +115,9 @@ async function runAnalysis(
   const usage = {
     inputTokens: coerceTokens(response.usage?.prompt_tokens),
     outputTokens: coerceTokens(response.usage?.completion_tokens),
+    // Sem modelo OpenAI no registry: o cache deles não é contabilizado (fica no total).
+    cacheCreationInputTokens: 0,
+    cacheReadInputTokens: 0,
   };
   const choice = response.choices[0];
   const stopReason = choice?.finish_reason ?? null;

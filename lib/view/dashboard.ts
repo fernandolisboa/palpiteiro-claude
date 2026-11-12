@@ -325,6 +325,8 @@ export type PredictionDetailView = {
     model: string;
     promptVersion: string;
     inputTokens: number;
+    // Parte do input lida do cache de prompt (ADR 0071); 0 = sem acerto.
+    cacheReadInputTokens: number;
     outputTokens: number;
     costUsd: string;
     latencyMs: number;
@@ -447,6 +449,7 @@ export function toPredictionDetailView(
           model: formatModelName(aiCall.model),
           promptVersion: aiCall.promptVersion,
           inputTokens: aiCall.inputTokens,
+          cacheReadInputTokens: aiCall.cacheReadInputTokens,
           outputTokens: aiCall.outputTokens,
           costUsd: formatCostUsd(aiCall.costUsd),
           latencyMs: aiCall.latencyMs,

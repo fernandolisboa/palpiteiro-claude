@@ -67,13 +67,21 @@ export type AnalysisRequest = {
   deadlineAt?: number;
 };
 
-// Uso provider-neutro. Os ÚNICOS dois campos consumidos hoje (→ `calculateCost` +
-// `ai_calls.inputTokens/outputTokens`, integer NOT NULL). O ADAPTER DEVE coagir a
-// inteiro finito ≥0 antes de devolver, pra um campo ausente/ambíguo do vendor nunca
-// fazer `calculateCost` devolver NaN (`costUsd` é numeric NOT NULL).
+// Uso provider-neutro (→ `calculateCost` + colunas de tokens de `ai_calls`, integer
+// NOT NULL). O ADAPTER DEVE coagir a inteiro finito ≥0 antes de devolver, pra um campo
+// ausente/ambíguo do vendor nunca fazer `calculateCost` devolver NaN (`costUsd` é
+// numeric NOT NULL).
+//
+// `inputTokens` é o TOTAL do prompt, cache incluído (ADR 0071): sem cache é o mesmo
+// número de antes, e os relatórios de tokens continuam medindo o tamanho do prompt. Os
+// dois campos de cache são a parte desse total que foi escrita no cache (cobrada a
+// 1,25×) e a que foi lida dele (cobrada pelo `cacheReadMultiplier` do modelo). Provider
+// sem prompt caching devolve 0 nos dois.
 export type AnalysisUsage = {
   inputTokens: number;
   outputTokens: number;
+  cacheCreationInputTokens: number;
+  cacheReadInputTokens: number;
 };
 
 // Sucesso: `toolInput` CRU (`unknown` — Zod roda em predict contra

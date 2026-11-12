@@ -321,8 +321,12 @@ export const aiCalls = pgTable(
     promptVersion: text().notNull(),
     inputPayload: jsonb().notNull(),
     outputPayload: jsonb().notNull(),
+    // Total do prompt, cache incluído (ADR 0071). As duas colunas de cache abaixo são
+    // a parte dele escrita no cache e a lida do cache (0 = sem cache).
     inputTokens: integer().notNull(),
     outputTokens: integer().notNull(),
+    cacheCreationInputTokens: integer().notNull().default(0),
+    cacheReadInputTokens: integer().notNull().default(0),
     latencyMs: integer().notNull(),
     costUsd: numeric({ precision: 10, scale: 6 }).notNull(),
     status: aiCallStatusEnum().notNull().default("ok"),

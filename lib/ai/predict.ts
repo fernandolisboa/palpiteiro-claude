@@ -1402,8 +1402,7 @@ async function runPredict(
       model: served,
       inputPayload: result.inputPayload,
       outputPayload: result.outputPayload,
-      inputTokens: result.usage.inputTokens,
-      outputTokens: result.usage.outputTokens,
+      ...result.usage,
       latencyMs,
       status: result.status,
       errorMessage: result.message,
@@ -1423,8 +1422,7 @@ async function runPredict(
       cause: result.cause,
     });
   }
-  const inputTokens = result.usage.inputTokens;
-  const outputTokens = result.usage.outputTokens;
+  const usage = result.usage;
   const inputPayload = result.inputPayload;
   const outputPayload = result.outputPayload;
 
@@ -1442,8 +1440,7 @@ async function runPredict(
       model: served,
       inputPayload,
       outputPayload,
-      inputTokens,
-      outputTokens,
+      ...usage,
       latencyMs,
       status: "tool_missing",
       errorMessage: `model did not call ${cartridge.toolName}; content=${snippet}`,
@@ -1465,8 +1462,7 @@ async function runPredict(
       model: served,
       inputPayload,
       outputPayload,
-      inputTokens,
-      outputTokens,
+      ...usage,
       latencyMs,
       status: "invalid_output",
       errorMessage: JSON.stringify(parsed.error.issues),
@@ -1523,8 +1519,7 @@ async function runPredict(
   // 11. Persistência (sequencial — neon-http não suporta transações reais).
   const cost = calculateCost({
     model: served,
-    inputTokens,
-    outputTokens,
+    ...usage,
   });
   let aiCallRow: typeof aiCalls.$inferSelect;
   try {
@@ -1538,8 +1533,7 @@ async function runPredict(
         promptVersion: cartridge.version,
         inputPayload,
         outputPayload,
-        inputTokens,
-        outputTokens,
+        ...usage,
         latencyMs,
         costUsd: cost.toFixed(6),
         status: "ok",
@@ -3260,6 +3254,8 @@ type NarrationOutcome = {
   outputPayload: Record<string, unknown>;
   inputTokens: number;
   outputTokens: number;
+  cacheCreationInputTokens: number;
+  cacheReadInputTokens: number;
   latencyMs: number;
   errorMessage: string | null;
   output: NarratorOutput | null;
@@ -3372,6 +3368,8 @@ async function narrateWith<D, C>(
     model: outcome.servedModel,
     inputTokens: outcome.inputTokens,
     outputTokens: outcome.outputTokens,
+    cacheCreationInputTokens: outcome.cacheCreationInputTokens,
+    cacheReadInputTokens: outcome.cacheReadInputTokens,
   });
   let aiCallId: string;
   try {
@@ -3387,6 +3385,8 @@ async function narrateWith<D, C>(
         outputPayload: outcome.outputPayload,
         inputTokens: outcome.inputTokens,
         outputTokens: outcome.outputTokens,
+        cacheCreationInputTokens: outcome.cacheCreationInputTokens,
+        cacheReadInputTokens: outcome.cacheReadInputTokens,
         latencyMs: outcome.latencyMs,
         costUsd: cost.toFixed(6),
         status: outcome.status,
@@ -3427,6 +3427,8 @@ function narrationSkippedForDeadline(
     outputPayload: { error: message, skipped: "deadline" },
     inputTokens: 0,
     outputTokens: 0,
+    cacheCreationInputTokens: 0,
+    cacheReadInputTokens: 0,
     latencyMs: 0,
     errorMessage: message,
     output: null,
@@ -3451,6 +3453,8 @@ async function runNarration<D, C>(
     outputPayload: base.outputPayload ?? { error: errorMessage },
     inputTokens: base.inputTokens ?? 0,
     outputTokens: base.outputTokens ?? 0,
+    cacheCreationInputTokens: base.cacheCreationInputTokens ?? 0,
+    cacheReadInputTokens: base.cacheReadInputTokens ?? 0,
     latencyMs: base.latencyMs ?? 0,
     errorMessage,
     output: null,
@@ -3475,8 +3479,7 @@ async function runNarration<D, C>(
   const base = {
     inputPayload: result.inputPayload,
     outputPayload: result.outputPayload,
-    inputTokens: result.usage.inputTokens,
-    outputTokens: result.usage.outputTokens,
+    ...result.usage,
     latencyMs: result.latencyMs,
     servedModel: result.servedModel,
   };

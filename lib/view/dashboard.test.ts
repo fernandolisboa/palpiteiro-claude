@@ -314,6 +314,8 @@ function makeDetail(overrides: Partial<DashboardDetail> = {}): DashboardDetail {
     outputPayload: { recommendation: "over" },
     inputTokens: 2345,
     outputTokens: 447,
+    cacheCreationInputTokens: 0,
+    cacheReadInputTokens: 0,
     latencyMs: 9427,
     costUsd: "0.013740",
     status: "ok",

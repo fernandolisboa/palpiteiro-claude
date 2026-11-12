@@ -73,6 +73,38 @@ describe("persistAiCallError — swallow preservado", () => {
     expect(consoleError).not.toHaveBeenCalled();
   });
 
+  it("grava os tokens de cache e desconta no custo (ADR 0071)", async () => {
+    const values = vi.fn((_row: Record<string, unknown>) => ({
+      returning: () => Promise.resolve([{ id: "err-2" }]),
+    }));
+    insert.mockReturnValue({ values });
+
+    await persistAiCallError({
+      ...baseArgs,
+      inputTokens: 3000,
+      outputTokens: 0,
+      cacheCreationInputTokens: 1000,
+      cacheReadInputTokens: 1500,
+    });
+    const row = values.mock.calls[0][0];
+    expect(row.inputTokens).toBe(3000);
+    expect(row.cacheCreationInputTokens).toBe(1000);
+    expect(row.cacheReadInputTokens).toBe(1500);
+    // Haiku 5.5: 500×$0,10 + 1000×$0,125 + 1500×$0,01 por 1M = 0,00019.
+    expect(row.costUsd).toBe("0.000190");
+  });
+
+  it("sem tokens de cache grava 0 nas colunas", async () => {
+    const values = vi.fn((_row: Record<string, unknown>) => ({
+      returning: () => Promise.resolve([{ id: "err-3" }]),
+    }));
+    insert.mockReturnValue({ values });
+    await persistAiCallError(baseArgs);
+    const row = values.mock.calls[0][0];
+    expect(row.cacheCreationInputTokens).toBe(0);
+    expect(row.cacheReadInputTokens).toBe(0);
+  });
+
   it("trunca o errorMessage no teto (2000 chars)", async () => {
     const values = vi.fn((_row: { errorMessage: string }) => ({
       returning: () => Promise.resolve([{ id: "err-2" }]),

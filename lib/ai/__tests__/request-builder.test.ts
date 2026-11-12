@@ -19,7 +19,7 @@ const MODEL_IDS = Object.keys(MODEL_REGISTRY) as AIModelId[];
 
 function build(
   id: AIModelId,
-  extra: { effort?: Effort; maxTokens?: number } = {},
+  extra: { effort?: Effort; maxTokens?: number } = {}
 ) {
   return buildAnthropicRequest({
     model: MODEL_REGISTRY[id],
@@ -79,7 +79,9 @@ describe("buildAnthropicRequest — golden payloads (#524, ADR 0061)", () => {
   function golden(id: AIModelId) {
     return {
       model: id,
-      system: "sys",
+      system: [
+        { type: "text", text: "sys", cache_control: { type: "ephemeral" } },
+      ],
       messages: [{ role: "user", content: "msg" }],
       tools: [SUBMIT_PREDICTION_TOOL],
       max_tokens: 16000,
@@ -178,7 +180,9 @@ describe("buildAnthropicRequest — ramo server-tool (web search, ADR 0032 / #37
   it("payload server-tool exato (Haiku 5.5, effort medium)", () => {
     expect(buildWithServerTool("claude-haiku-5-5", "medium")).toEqual({
       model: "claude-haiku-5-5",
-      system: "sys",
+      system: [
+        { type: "text", text: "sys", cache_control: { type: "ephemeral" } },
+      ],
       messages: [{ role: "user", content: "msg" }],
       tools: [
         {
@@ -214,11 +218,93 @@ describe("MIN_EDGE_PP ↔ SYSTEM_PROMPT sync", () => {
     // de a UI mentir. A constante mora em lib/odds/scenario.ts (não no cartucho)
     // pra não vazar o systemPrompt pro client bundle.
     expect(overUnderCartridge.systemPrompt).toContain(
-      `${MIN_EDGE_PP} pontos percentuais`,
+      `${MIN_EDGE_PP} pontos percentuais`
     );
     // Regra 4 (minimum_odd) também deriva de MIN_EDGE_PP, não de um literal.
     expect(overUnderCartridge.systemPrompt).toContain(
-      `mantém edge >= ${MIN_EDGE_PP}%. Obrigatório quando recommendation ∈ {"over","under"}`,
+      `mantém edge >= ${MIN_EDGE_PP}%. Obrigatório quando recommendation ∈ {"over","under"}`
     );
+  });
+});
+
+describe("buildAnthropicRequest — prompt caching (ADR 0071)", () => {
+  // O cache é por PREFIXO (tools → system → messages). O breakpoint fica no ÚLTIMO
+  // bloco do system: cacheia tool + system, que são constantes por cartucho, e deixa de
+  // fora a mensagem do usuário (dados do jogo, muda a cada pedido).
+  function cacheMarkers(payload: unknown): string[] {
+    const found: string[] = [];
+    const walk = (node: unknown, path: string) => {
+      if (Array.isArray(node)) node.forEach((n, i) => walk(n, `${path}[${i}]`));
+      else if (node && typeof node === "object") {
+        for (const [k, v] of Object.entries(node)) {
+          if (k === "cache_control") found.push(path);
+          else walk(v, `${path}.${k}`);
+        }
+      }
+    };
+    walk(payload, "");
+    return found;
+  }
+
+  for (const id of MODEL_IDS) {
+    it(`${id}: UM breakpoint ephemeral (5 min), no último bloco do system`, () => {
+      const payload = build(id, { effort: "high" });
+      expect(cacheMarkers(payload)).toEqual([".system[0]"]);
+      const system = payload.system as Anthropic.TextBlockParam[];
+      expect(system[system.length - 1].cache_control).toEqual({
+        type: "ephemeral",
+      });
+      // Sem `ttl`: o default de 5 min. O de 1h custa 2× na escrita e não compensa no
+      // ritmo de uso do app.
+      expect(JSON.stringify(payload)).not.toContain('"ttl"');
+      // Nada de cache automático no topo: ele marcaria a mensagem do usuário.
+      expect(payload).not.toHaveProperty("cache_control");
+    });
+
+    it(`${id}: ramo server-tool também cacheia tools + system`, () => {
+      const payload = buildAnthropicRequest({
+        model: MODEL_REGISTRY[id],
+        system: "sys",
+        userMessage: "msg",
+        tools: [],
+        toolName: "x",
+        maxTokens: 1024,
+        serverTool: { kind: "web_search", maxUses: 1 },
+      });
+      expect(cacheMarkers(payload)).toEqual([".system[0]"]);
+    });
+  }
+
+  it("o texto do system vai verbatim no bloco cacheado", () => {
+    const payload = buildAnthropicRequest({
+      model: MODEL_REGISTRY["claude-sonnet-5-5"],
+      system: overUnderCartridge.systemPrompt,
+      userMessage: "msg",
+      tools: [],
+      toolName: "x",
+      maxTokens: 1024,
+    });
+    expect((payload.system as Anthropic.TextBlockParam[])[0].text).toBe(
+      overUnderCartridge.systemPrompt
+    );
+  });
+
+  it("o prefixo cacheado é idêntico entre dois jogos diferentes (só a mensagem muda)", () => {
+    const req = (userMessage: string) =>
+      buildAnthropicRequest({
+        model: MODEL_REGISTRY["claude-sonnet-5-5"],
+        system: overUnderCartridge.systemPrompt,
+        userMessage,
+        tools: [SUBMIT_PREDICTION_TOOL as unknown as Anthropic.Tool],
+        toolName: SUBMIT_PREDICTION_TOOL.name,
+        maxTokens: 1024,
+        effort: "high",
+      });
+    const a = req("jogo A");
+    const b = req("jogo B");
+    const prefix = (p: typeof a) =>
+      JSON.stringify([p.model, p.tools, p.system, p.thinking, p.output_config]);
+    expect(prefix(a)).toBe(prefix(b));
+    expect(a.messages).not.toEqual(b.messages);
   });
 });

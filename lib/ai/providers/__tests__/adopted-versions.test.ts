@@ -56,7 +56,12 @@ function ok(model: AIModel): AnalysisOk {
   return {
     ok: true,
     toolInput: { a: 1 },
-    usage: { inputTokens: 10, outputTokens: 5 },
+    usage: {
+      inputTokens: 10,
+      outputTokens: 5,
+      cacheCreationInputTokens: 0,
+      cacheReadInputTokens: 0,
+    },
     inputPayload: { model: model.id },
     outputPayload: { content: [] },
     stopReason: "tool_use",
@@ -70,7 +75,12 @@ function err(model: AIModel, over: Partial<AnalysisErr> = {}): AnalysisErr {
     ok: false,
     status: "provider_error",
     message: "boom",
-    usage: { inputTokens: 0, outputTokens: 0 },
+    usage: {
+      inputTokens: 0,
+      outputTokens: 0,
+      cacheCreationInputTokens: 0,
+      cacheReadInputTokens: 0,
+    },
     inputPayload: {},
     outputPayload: { error: {} },
     stopReason: null,
@@ -170,7 +180,12 @@ describe("withAdoptedVersions — chamada na adotada", () => {
       [SONNET_56.id]: () =>
         err(SONNET_56, {
           rejection: "invalid_request",
-          usage: { inputTokens: 500, outputTokens: 20 },
+          usage: {
+      inputTokens: 500,
+      outputTokens: 20,
+      cacheCreationInputTokens: 0,
+      cacheReadInputTokens: 0,
+    },
         }),
     });
     const r = await withAdoptedVersions(provider).runAnalysis(req());

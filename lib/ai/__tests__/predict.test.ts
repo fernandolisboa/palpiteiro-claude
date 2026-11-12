@@ -1307,6 +1307,31 @@ describe("predict() — model resolution (override > DB default) + model-aware r
     expect(aiCallRow.costUsd).toBe(((1200 * 2 + 300 * 10) / 1_000_000).toFixed(6));
   });
 
+  it("prompt caching (ADR 0071): ai_calls grava total + tokens de cache e o custo desconta a leitura", async () => {
+    getDefaultModelId.mockResolvedValue("claude-sonnet-5-5");
+    const base = anthropicMessage();
+    anthropicCreate.mockResolvedValueOnce({
+      ...base,
+      usage: {
+        input_tokens: 400,
+        output_tokens: 300,
+        cache_creation_input_tokens: 0,
+        cache_read_input_tokens: 2000,
+      },
+    });
+
+    await expect(
+      predict({ matchId: "m-1", userId: "u-1", isAdmin: false }),
+    ).resolves.toBeDefined();
+
+    const aiCallRow = insertValues.mock.calls[0]?.[0] as Record<string, unknown>;
+    expect(aiCallRow.inputTokens).toBe(2400);
+    expect(aiCallRow.cacheCreationInputTokens).toBe(0);
+    expect(aiCallRow.cacheReadInputTokens).toBe(2000);
+    // Sonnet 5.5: 400 × $2 + 2000 × $0,10 + 300 × $10 por 1M.
+    expect(aiCallRow.costUsd).toBe(((400 * 2 + 2000 * 0.1 + 300 * 10) / 1_000_000).toFixed(6));
+  });
+
   it("seam (#230): tools[0] e system do request batem byte a byte com o cartucho (ToolDef round-trip = identidade)", async () => {
     getDefaultModelId.mockResolvedValue("claude-sonnet-5-5");
 
@@ -1321,7 +1346,7 @@ describe("predict() — model resolution (override > DB default) + model-aware r
     // INALTERADO (re-exportado), coberto pelos outros testes deste describe.
     const sent = anthropicCreate.mock.calls[0]?.[0] as {
       tools: unknown[];
-      system: string;
+      system: { type: string; text: string; cache_control?: unknown }[];
     };
     expect(sent.tools).toHaveLength(1);
     // O adapter Anthropic down-mapeia o ToolDef neutro do cartucho (camelCase
@@ -1338,7 +1363,14 @@ describe("predict() — model resolution (override > DB default) + model-aware r
       "input_schema",
       "name",
     ]);
-    expect(sent.system).toBe(overUnderCartridge.systemPrompt);
+    // Um bloco só, com o texto do cartucho verbatim e o breakpoint de cache (ADR 0071).
+    expect(sent.system).toEqual([
+      {
+        type: "text",
+        text: overUnderCartridge.systemPrompt,
+        cache_control: { type: "ephemeral" },
+      },
+    ]);
   });
 
   it("a request carrega o max_tokens configurado com folga pro thinking (guarda o bug stopReason max_tokens)", async () => {
