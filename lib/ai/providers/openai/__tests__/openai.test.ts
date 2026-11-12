@@ -20,6 +20,7 @@ const OPENAI_MODEL_FIXTURE: AIModel = {
   label: "OpenAI seam fixture (#374)",
   inputPricePerMTok: 0.25,
   outputPricePerMTok: 2.0,
+  cacheReadMultiplier: 0.1,
   speed: "fast",
   userSelectable: false,
 };
@@ -111,7 +112,12 @@ describe("openaiProvider.runAnalysis — guard de server-tool (ADR 0032 / #377)"
     expect(result.ok).toBe(false);
     if (result.ok) throw new Error("unreachable");
     expect(result.status).toBe("provider_error");
-    expect(result.usage).toEqual({ inputTokens: 0, outputTokens: 0 });
+    expect(result.usage).toEqual({
+      inputTokens: 0,
+      outputTokens: 0,
+      cacheCreationInputTokens: 0,
+      cacheReadInputTokens: 0,
+    });
     // payloads serializáveis (jsonb NOT NULL) + nenhuma chamada paga.
     expect(result.inputPayload).toBeTypeOf("object");
     expect(result.outputPayload).toBeTypeOf("object");
@@ -220,7 +226,12 @@ describe("openaiProvider.runAnalysis — classificação de erro do SDK (sem cha
     expect(result.ok).toBe(false);
     if (result.ok) throw new Error("unreachable");
     expect(result.status).toBe("timeout");
-    expect(result.usage).toEqual({ inputTokens: 0, outputTokens: 0 });
+    expect(result.usage).toEqual({
+      inputTokens: 0,
+      outputTokens: 0,
+      cacheCreationInputTokens: 0,
+      cacheReadInputTokens: 0,
+    });
   });
 
   it("RateLimitError (429) → rate_limited", async () => {

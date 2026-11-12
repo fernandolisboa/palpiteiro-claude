@@ -42,6 +42,9 @@ export async function persistAiCallError(args: {
   outputPayload: Record<string, unknown>;
   inputTokens: number;
   outputTokens: number;
+  // Partes do input escritas/lidas no cache (ADR 0071). Ausentes = 0.
+  cacheCreationInputTokens?: number;
+  cacheReadInputTokens?: number;
   latencyMs: number;
   status: AiCallStatus;
   errorMessage: string;
@@ -51,6 +54,8 @@ export async function persistAiCallError(args: {
     model: args.model,
     inputTokens: args.inputTokens,
     outputTokens: args.outputTokens,
+    cacheCreationInputTokens: args.cacheCreationInputTokens,
+    cacheReadInputTokens: args.cacheReadInputTokens,
   });
   // This logs an error that ALREADY happened, so its own failure must not mask
   // the primary error by throwing a raw "Failed query: insert into ai_calls".
@@ -68,6 +73,8 @@ export async function persistAiCallError(args: {
         outputPayload: args.outputPayload,
         inputTokens: args.inputTokens,
         outputTokens: args.outputTokens,
+        cacheCreationInputTokens: args.cacheCreationInputTokens ?? 0,
+        cacheReadInputTokens: args.cacheReadInputTokens ?? 0,
         latencyMs: args.latencyMs,
         costUsd: cost.toFixed(6),
         status: args.status,

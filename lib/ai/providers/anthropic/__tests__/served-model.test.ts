@@ -96,7 +96,12 @@ describe("anthropic adapter — rejection na falha", () => {
     expect(r.status).toBe("provider_error");
     expect(r.rejection).toBe(rejection);
     expect(r.servedModel).toBe(SONNET);
-    expect(r.usage).toEqual({ inputTokens: 0, outputTokens: 0 });
+    expect(r.usage).toEqual({
+      inputTokens: 0,
+      outputTokens: 0,
+      cacheCreationInputTokens: 0,
+      cacheReadInputTokens: 0,
+    });
   });
 
   it("500 e 429 não são rejeição", async () => {
@@ -125,6 +130,11 @@ describe("anthropic adapter — rejection na falha", () => {
     expect(r.ok).toBe(false);
     if (r.ok) return;
     expect(r).not.toHaveProperty("rejection");
-    expect(r.usage).toEqual({ inputTokens: 10, outputTokens: 5 });
+    expect(r.usage).toEqual({
+      inputTokens: 10,
+      outputTokens: 5,
+      cacheCreationInputTokens: 0,
+      cacheReadInputTokens: 0,
+    });
   });
 });

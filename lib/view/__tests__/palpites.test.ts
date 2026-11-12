@@ -33,6 +33,8 @@ const fullAiCall: DbAiCall = {
   outputPayload: { lines: [] },
   inputTokens: 1234,
   outputTokens: 567,
+  cacheCreationInputTokens: 0,
+  cacheReadInputTokens: 0,
   latencyMs: 890,
   costUsd: "0.004200",
   status: "ok",

@@ -45,7 +45,12 @@ function ok(servedModel: AIModel = HAIKU): AnalysisResult {
   return {
     ok: true,
     toolInput: { legs: [{ kind: "btts", params: { selection: "yes" }, userOdd: 1.9 }] },
-    usage: { inputTokens: 1000, outputTokens: 500 },
+    usage: {
+      inputTokens: 1000,
+      outputTokens: 500,
+      cacheCreationInputTokens: 0,
+      cacheReadInputTokens: 0,
+    },
     inputPayload: { req: 1 },
     outputPayload: { res: 1 },
     stopReason: "tool_use",
@@ -80,7 +85,12 @@ describe("parseBetText — modelo que serviu", () => {
       ok: false,
       status: "provider_error",
       message: "boom",
-      usage: { inputTokens: 0, outputTokens: 0 },
+      usage: {
+      inputTokens: 0,
+      outputTokens: 0,
+      cacheCreationInputTokens: 0,
+      cacheReadInputTokens: 0,
+    },
       inputPayload: {},
       outputPayload: {},
       stopReason: null,

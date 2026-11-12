@@ -108,7 +108,12 @@ describe("anthropic adapter — recusa do modelo (#524)", () => {
       "o modelo recusou a análise (category=cyber): Pedido fora da política.",
     );
     // A chamada foi paga: os tokens vão pro ai_calls/custo.
-    expect(res.usage).toEqual({ inputTokens: 900, outputTokens: 40 });
+    expect(res.usage).toEqual({
+      inputTokens: 900,
+      outputTokens: 40,
+      cacheCreationInputTokens: 0,
+      cacheReadInputTokens: 0,
+    });
     // outputPayload = a resposta crua (auditoria), inputPayload = o request enviado.
     expect((res.outputPayload as { stop_reason: string }).stop_reason).toBe(
       "refusal",
@@ -207,7 +212,12 @@ describe("anthropic adapter — opções por request (#524)", () => {
     expect(res.ok).toBe(false);
     if (res.ok) return;
     expect(res.status).toBe("timeout");
-    expect(res.usage).toEqual({ inputTokens: 0, outputTokens: 0 });
+    expect(res.usage).toEqual({
+      inputTokens: 0,
+      outputTokens: 0,
+      cacheCreationInputTokens: 0,
+      cacheReadInputTokens: 0,
+    });
   });
 
   it("timeout do SDK: status timeout, tokens 0/0 marcados como desconhecidos", async () => {
@@ -218,7 +228,12 @@ describe("anthropic adapter — opções por request (#524)", () => {
     expect(res.ok).toBe(false);
     if (res.ok) return;
     expect(res.status).toBe("timeout");
-    expect(res.usage).toEqual({ inputTokens: 0, outputTokens: 0 });
+    expect(res.usage).toEqual({
+      inputTokens: 0,
+      outputTokens: 0,
+      cacheCreationInputTokens: 0,
+      cacheReadInputTokens: 0,
+    });
     expect(res.outputPayload).toMatchObject({ usageUnknown: true });
   });
 });

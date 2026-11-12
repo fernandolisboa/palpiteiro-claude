@@ -23,6 +23,18 @@ import type { ServerToolDef } from "../types";
 //
 // O mesmo objeto retornado é usado para o inputPayload logado em ai_calls E para
 // a chamada real client.messages.create() — evita duplicação/divergência.
+//
+// PROMPT CACHING (ADR 0071). A API monta o prompt na ordem tools → system → messages,
+// e o cache é por PREFIXO: um byte diferente invalida tudo que vem depois. Aqui a
+// ordem já é a certa: a tool e o system são constantes por cartucho (iguais pra todo
+// jogo e usuário) e os dados do jogo vêm por último, na mensagem do usuário. O
+// breakpoint vai no ÚLTIMO bloco do system, e cacheia tools + system juntos; a mensagem
+// do usuário fica fora (muda a cada jogo, escrevê-la no cache só pagaria o prêmio).
+// TTL de 5 min (o default): duas chamadas do mesmo cartucho e modelo com menos de 5
+// min de intervalo leem o cache. Prefixo abaixo do mínimo do modelo (512 tokens nos
+// 5.5) não cacheia e não dá erro, então o marcador é seguro em todo pedido.
+// NÃO interpole nada que varie por pedido (data, id, usuário) no system nem na tool:
+// isso zera o acerto em silêncio. Dado variável vai na mensagem do usuário.
 
 export function buildAnthropicRequest(args: {
   model: AIModel;
@@ -37,6 +49,9 @@ export function buildAnthropicRequest(args: {
   serverTool?: ServerToolDef;
 }): Anthropic.MessageCreateParamsNonStreaming {
   const effort = args.effort ? { output_config: { effort: args.effort } } : {};
+  const system: Anthropic.TextBlockParam[] = [
+    { type: "text", text: args.system, cache_control: { type: "ephemeral" } },
+  ];
 
   // RAMO SERVER-TOOL (ADR 0032, #377). NÃO declara o submit tool nem code_execution.
   //
@@ -58,7 +73,7 @@ export function buildAnthropicRequest(args: {
     } as unknown as Anthropic.Tool;
     return {
       model: args.model.id,
-      system: args.system,
+      system,
       messages: [{ role: "user", content: args.userMessage }],
       tools: [webSearch],
       tool_choice: { type: "auto" },
@@ -70,7 +85,7 @@ export function buildAnthropicRequest(args: {
 
   return {
     model: args.model.id,
-    system: args.system,
+    system,
     messages: [{ role: "user", content: args.userMessage }],
     tools: args.tools,
     max_tokens: args.maxTokens,

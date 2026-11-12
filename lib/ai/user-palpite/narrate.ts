@@ -85,6 +85,8 @@ export async function narratePalpite(args: {
         outputPayload: Record<string, unknown>;
         inputTokens: number;
         outputTokens: number;
+        cacheCreationInputTokens?: number;
+        cacheReadInputTokens?: number;
         latencyMs: number;
       } = {
         inputPayload: request as unknown as Record<string, unknown>,
@@ -125,8 +127,7 @@ export async function narratePalpite(args: {
     const payload = {
       inputPayload: result.inputPayload,
       outputPayload: result.outputPayload,
-      inputTokens: result.usage.inputTokens,
-      outputTokens: result.usage.outputTokens,
+      ...result.usage,
       latencyMs: result.latencyMs,
     };
     if (!result.ok) return fail(served, result.status, result.message, payload);
@@ -146,6 +147,8 @@ export async function narratePalpite(args: {
       model: served,
       inputTokens: payload.inputTokens,
       outputTokens: payload.outputTokens,
+      cacheCreationInputTokens: payload.cacheCreationInputTokens,
+      cacheReadInputTokens: payload.cacheReadInputTokens,
     });
     let aiCallId: string | null = null;
     try {

@@ -71,7 +71,12 @@ function ok(toolInput: unknown): AnalysisResult {
   return {
     ok: true,
     toolInput,
-    usage: { inputTokens: 1000, outputTokens: 200 },
+    usage: {
+      inputTokens: 1000,
+      outputTokens: 200,
+      cacheCreationInputTokens: 0,
+      cacheReadInputTokens: 0,
+    },
     inputPayload: { req: 1 },
     outputPayload: { res: 1 },
     stopReason: "tool_use",

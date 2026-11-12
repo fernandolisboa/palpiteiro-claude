@@ -39,10 +39,14 @@ export type AIModel = {
   provider: AIProviderKey;
   family: ModelFamily;
   label: string;
-  // Pricing por 1M de tokens em USD (cache write/read omitidos — sem prompt
-  // caching no MVP). Fonte: pricing oficial do provider.
+  // Pricing por 1M de tokens em USD. Fonte: pricing oficial do provider.
   inputPricePerMTok: number;
   outputPricePerMTok: number;
+  // Prompt caching (ADR 0071): leitura de cache custa esta fração do preço de input
+  // (0,05 no Opus/Sonnet 5.5, 0,1 no Haiku 5.5). Fração, não preço absoluto, pra uma
+  // versão adotada herdar da conferida e acompanhar o preço de input confirmado. A
+  // escrita é 1,25× em todo modelo (CACHE_WRITE_MULTIPLIER, TTL de 5 min).
+  cacheReadMultiplier: number;
   // Tarifa de prompt longo: com mais de `aboveInputTokens` tokens de input, a
   // chamada inteira (input E output) é cobrada nesta tarifa. Só o Haiku 5.5 tem.
   longPromptPricing?: {
@@ -64,6 +68,9 @@ export type AIModel = {
   adopted?: { priceEstimated: boolean; pinnedId: AIModelId };
 };
 
+// Escrita no cache com TTL de 5 min (o único que o app usa): 1,25× o preço de input.
+export const CACHE_WRITE_MULTIPLIER = 1.25;
+
 // Modelo do registry estático: o id é um dos conferidos.
 export type PinnedModel = AIModel & { id: AIModelId };
 
@@ -81,6 +88,7 @@ export const MODEL_REGISTRY: Record<AIModelId, PinnedModel> = {
     label: "Opus",
     inputPricePerMTok: 4,
     outputPricePerMTok: 20,
+    cacheReadMultiplier: 0.05, // $0,20/1M
     speed: "deliberate",
     userSelectable: true,
   },
@@ -93,6 +101,7 @@ export const MODEL_REGISTRY: Record<AIModelId, PinnedModel> = {
     label: "Sonnet",
     inputPricePerMTok: 2,
     outputPricePerMTok: 10,
+    cacheReadMultiplier: 0.05, // $0,10/1M
     speed: "deliberate",
     userSelectable: true,
   },
@@ -106,6 +115,7 @@ export const MODEL_REGISTRY: Record<AIModelId, PinnedModel> = {
     label: "Haiku (econômico)",
     inputPricePerMTok: 0.1,
     outputPricePerMTok: 0.5,
+    cacheReadMultiplier: 0.1,
     longPromptPricing: {
       aboveInputTokens: 100_000,
       inputPricePerMTok: 0.5,

@@ -235,8 +235,7 @@ async function runOneRead(
       model: served,
       inputPayload: result.inputPayload,
       outputPayload: result.outputPayload,
-      inputTokens: result.usage.inputTokens,
-      outputTokens: result.usage.outputTokens,
+      ...result.usage,
       latencyMs: result.latencyMs,
       status: result.status,
       errorMessage: result.message,
@@ -250,8 +249,7 @@ async function runOneRead(
   // extração SOBREVIVE à falha do log de auditoria.
   const cost = calculateCost({
     model: served,
-    inputTokens: result.usage.inputTokens,
-    outputTokens: result.usage.outputTokens,
+    ...result.usage,
   });
   try {
     await db.insert(aiCalls).values({
@@ -262,8 +260,7 @@ async function runOneRead(
       promptVersion: CARDS_EXTRACT_PROMPT_VERSION,
       inputPayload: result.inputPayload,
       outputPayload: result.outputPayload,
-      inputTokens: result.usage.inputTokens,
-      outputTokens: result.usage.outputTokens,
+      ...result.usage,
       latencyMs: result.latencyMs,
       costUsd: cost.toFixed(6),
       status: "ok",

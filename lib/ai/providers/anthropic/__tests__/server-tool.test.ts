@@ -52,6 +52,49 @@ beforeEach(() => {
 });
 
 describe("anthropic adapter — modo server-tool (web search, ADR 0032 / #377)", () => {
+  it("prompt caching (ADR 0071): retomada reusa o system cacheado e soma os tokens de cache", async () => {
+    messagesCreate
+      .mockResolvedValueOnce(
+        message({
+          content: [{ type: "server_tool_use", id: "srv-1" }],
+          stop_reason: "pause_turn",
+          usage: {
+            input_tokens: 100,
+            output_tokens: 40,
+            cache_creation_input_tokens: 600,
+            cache_read_input_tokens: 0,
+          },
+        }),
+      )
+      .mockResolvedValueOnce(
+        message({
+          content: [],
+          stop_reason: "end_turn",
+          usage: {
+            input_tokens: 30,
+            output_tokens: 20,
+            cache_creation_input_tokens: 900,
+            cache_read_input_tokens: 600,
+          },
+        }),
+      );
+
+    const res = await anthropicProvider.runAnalysis(serverToolRequest());
+    expect(res.ok).toBe(true);
+    const [first, second] = messagesCreate.mock.calls.map((c) => c[0] as { system: unknown });
+    // O mesmo system (com o breakpoint) nas duas rodadas: a retomada lê o cache.
+    expect(first.system).toEqual([
+      { type: "text", text: "busque notícias", cache_control: { type: "ephemeral" } },
+    ]);
+    expect(second.system).toEqual(first.system);
+    expect(res.usage).toEqual({
+      inputTokens: 100 + 600 + 30 + 900 + 600,
+      outputTokens: 60,
+      cacheCreationInputTokens: 1500,
+      cacheReadInputTokens: 600,
+    });
+  });
+
   it("devolve contentBlocks crus (pro provider andar atrás dos web_search_tool_result)", async () => {
     const blocks = [
       { type: "text", text: "Resumo" },
@@ -67,7 +110,12 @@ describe("anthropic adapter — modo server-tool (web search, ADR 0032 / #377)",
     if (!res.ok) return;
     expect(res.contentBlocks).toEqual(blocks);
     expect(res.toolInput).toBeUndefined();
-    expect(res.usage).toEqual({ inputTokens: 100, outputTokens: 50 });
+    expect(res.usage).toEqual({
+      inputTokens: 100,
+      outputTokens: 50,
+      cacheCreationInputTokens: 0,
+      cacheReadInputTokens: 0,
+    });
     expect(messagesCreate).toHaveBeenCalledTimes(1);
   });
 
@@ -125,7 +173,12 @@ describe("anthropic adapter — modo server-tool (web search, ADR 0032 / #377)",
     expect(secondCall.messages[1].content).toEqual(pausedContent);
     expect(JSON.stringify(secondCall.messages)).not.toContain("Continue");
     // Tokens acumulados das duas rodadas.
-    expect(res.usage).toEqual({ inputTokens: 130, outputTokens: 60 });
+    expect(res.usage).toEqual({
+      inputTokens: 130,
+      outputTokens: 60,
+      cacheCreationInputTokens: 0,
+      cacheReadInputTokens: 0,
+    });
     expect(res.contentBlocks).toEqual(finalBlocks);
   });
 
@@ -145,6 +198,11 @@ describe("anthropic adapter — modo server-tool (web search, ADR 0032 / #377)",
     const res = await anthropicProvider.runAnalysis(serverToolRequest());
     expect(res.ok).toBe(false);
     if (res.ok) return;
-    expect(res.usage).toEqual({ inputTokens: 0, outputTokens: 0 });
+    expect(res.usage).toEqual({
+      inputTokens: 0,
+      outputTokens: 0,
+      cacheCreationInputTokens: 0,
+      cacheReadInputTokens: 0,
+    });
   });
 });

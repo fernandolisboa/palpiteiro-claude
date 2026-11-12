@@ -79,6 +79,8 @@ import { getCartridge } from "@/lib/ai/markets/registry";
 import type { BaseMarketOutput } from "@/lib/ai/markets/types";
 import { MODEL_REGISTRY, isAIModelId, type AIModel } from "@/lib/ai/models";
 import { requestTiming } from "@/lib/ai/providers/anthropic/timeouts";
+import { addUsage, usageFromMessage } from "@/lib/ai/providers/anthropic/usage";
+import type { AnalysisUsage } from "@/lib/ai/providers/types";
 import { buildAnthropicRequest } from "@/lib/ai/request-builder";
 import { getDefaultModelId, getGenerationParams } from "@/lib/db/queries/ai-config";
 import { getLatestSelectionOddsSnapshots } from "@/lib/db/queries/odds-snapshots";
@@ -208,8 +210,7 @@ type GamePoint = {
   won: boolean; // recommendation acertou a seleção vencedora (false em pass)
   yieldUnits: number;
   attempts: number;
-  inputTokens: number;
-  outputTokens: number;
+  usage: AnalysisUsage;
 };
 
 function accuracy(points: { won: boolean; recommendation: string }[]): {
@@ -496,8 +497,12 @@ async function main(): Promise<void> {
 
     let output: BaseMarketOutput | null = null;
     let attempts = 0;
-    let inputTokens = 0;
-    let outputTokens = 0;
+    let usage: AnalysisUsage = {
+      inputTokens: 0,
+      outputTokens: 0,
+      cacheCreationInputTokens: 0,
+      cacheReadInputTokens: 0,
+    };
     let lastFailure = "";
     for (let attempt = 1; attempt <= MAX_ATTEMPTS_PER_GAME; attempt++) {
       attempts = attempt;
@@ -510,8 +515,9 @@ async function main(): Promise<void> {
         timing.kind === "options"
           ? await client.messages.create(request, timing.options)
           : await client.messages.create(request);
-      inputTokens += response.usage.input_tokens;
-      outputTokens += response.usage.output_tokens;
+      // input_tokens da API é só a parte sem cache; usageFromMessage soma o total (ADR
+      // 0071). Os jogos do backtest rodam em série no mesmo cartucho: leem o cache.
+      usage = addUsage(usage, usageFromMessage(response.usage));
       // Recusa (#524): re-tentar o mesmo payload tende a recusar de novo e é pago.
       if (response.stop_reason === "refusal") {
         lastFailure = `o modelo recusou a análise (category=${response.stop_details?.category ?? "n/a"})`;
@@ -568,8 +574,7 @@ async function main(): Promise<void> {
       won,
       yieldUnits,
       attempts,
-      inputTokens,
-      outputTokens,
+      usage,
     });
     console.log(
       `  → ${recommendation}${recommendation === "pass" ? "" : won ? " ✓ ACERTOU" : " ✗ errou"} | yield ${fmtUnits(yieldUnits)}${attempts > 1 ? ` | ${attempts} tentativas` : ""}`,
@@ -594,16 +599,7 @@ async function main(): Promise<void> {
   const passes = points.filter((p) => p.recommendation === "pass").length;
   const passRate = passes / points.length;
   const totalCost = isAIModelId(model.id)
-    ? points.reduce(
-        (acc, p) =>
-          acc +
-          calculateCost({
-            model,
-            inputTokens: p.inputTokens,
-            outputTokens: p.outputTokens,
-          }),
-        0,
-      )
+    ? points.reduce((acc, p) => acc + calculateCost({ model, ...p.usage }), 0)
     : 0;
   const costKnown = isAIModelId(model.id);
 

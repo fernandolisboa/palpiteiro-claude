@@ -80,8 +80,7 @@ async function logProbeCall(args: {
   const r = args.result;
   const cost = calculateCost({
     model: args.model,
-    inputTokens: r.usage.inputTokens,
-    outputTokens: r.usage.outputTokens,
+    ...r.usage,
   });
   try {
     const [row] = await db
@@ -94,8 +93,7 @@ async function logProbeCall(args: {
         promptVersion: args.promptVersion,
         inputPayload: r.inputPayload,
         outputPayload: r.outputPayload,
-        inputTokens: r.usage.inputTokens,
-        outputTokens: r.usage.outputTokens,
+        ...r.usage,
         latencyMs: r.latencyMs,
         costUsd: cost.toFixed(6),
         status: args.status,

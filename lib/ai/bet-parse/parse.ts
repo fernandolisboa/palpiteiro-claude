@@ -102,8 +102,7 @@ export async function parseBetText(args: {
       model: served,
       inputPayload: result.inputPayload,
       outputPayload: result.outputPayload,
-      inputTokens: result.usage.inputTokens,
-      outputTokens: result.usage.outputTokens,
+      ...result.usage,
       latencyMs: result.latencyMs,
       status: result.status,
       errorMessage: result.message,
@@ -112,7 +111,7 @@ export async function parseBetText(args: {
     return { ok: false, status: "parse-falhou", message: result.message };
   }
 
-  const { inputTokens, outputTokens } = result.usage;
+  const usage = result.usage;
 
   if (result.toolInput === undefined) {
     await persistAiCallError({
@@ -122,8 +121,7 @@ export async function parseBetText(args: {
       model: served,
       inputPayload: result.inputPayload,
       outputPayload: result.outputPayload,
-      inputTokens,
-      outputTokens,
+      ...usage,
       latencyMs: result.latencyMs,
       status: "tool_missing",
       errorMessage: `model did not call ${BET_PARSE_TOOL_NAME}`,
@@ -147,8 +145,7 @@ export async function parseBetText(args: {
       model: served,
       inputPayload: result.inputPayload,
       outputPayload: result.outputPayload,
-      inputTokens,
-      outputTokens,
+      ...usage,
       latencyMs: result.latencyMs,
       status: "invalid_output",
       errorMessage: envelope.success
@@ -199,8 +196,7 @@ export async function parseBetText(args: {
       model: served,
       inputPayload: result.inputPayload,
       outputPayload: result.outputPayload,
-      inputTokens,
-      outputTokens,
+      ...usage,
       latencyMs: result.latencyMs,
       status: "invalid_output",
       errorMessage: "todas as pernas do parse foram dropadas na validação por-item",
@@ -214,7 +210,7 @@ export async function parseBetText(args: {
   }
 
   // Sucesso: loga ai_call status ok e devolve o id (→ slip.parseAiCallId no confirm).
-  const cost = calculateCost({ model: served, inputTokens, outputTokens });
+  const cost = calculateCost({ model: served, ...usage });
   let aiCallId: string | null = null;
   try {
     const [row] = await db
@@ -227,8 +223,7 @@ export async function parseBetText(args: {
         promptVersion: BET_PARSE_VERSION,
         inputPayload: result.inputPayload,
         outputPayload: result.outputPayload,
-        inputTokens,
-        outputTokens,
+        ...usage,
         latencyMs: result.latencyMs,
         costUsd: cost.toFixed(6),
         status: "ok",

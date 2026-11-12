@@ -64,6 +64,8 @@ import {
 } from "@/lib/ai/markets/over_under";
 import { GENERATION_PARAM_DEFAULTS, isEffort } from "@/lib/ai/generation-params";
 import { requestTiming } from "@/lib/ai/providers/anthropic/timeouts";
+import { addUsage, usageFromMessage } from "@/lib/ai/providers/anthropic/usage";
+import type { AnalysisUsage } from "@/lib/ai/providers/types";
 import {
   ADAPTIVE_FLIP_REPRO_RUNS,
   classifyThinkingMode,
@@ -130,6 +132,8 @@ type ReplayResult = {
   attempts: number;
   inputTokens: number;
   outputTokens: number;
+  cacheCreationInputTokens: number;
+  cacheReadInputTokens: number;
   costUsd: number;
   // null = modelo fora do registry de pricing (custo desconhecido, não $0).
   costKnown: boolean;
@@ -153,7 +157,7 @@ const StoredRequestSchema = z.object({
 
 type ReplayOneResult = {
   output: OverUnderOutput;
-  usage: { inputTokens: number; outputTokens: number };
+  usage: AnalysisUsage;
   attempts: number;
 };
 
@@ -204,8 +208,12 @@ async function replayOne(args: {
   let lastFailure = "";
   // Custo de TODA tentativa conta (chamada falha ainda é paga) — acumulamos o
   // usage de tentativas falhas pra não subreportar o custo total.
-  let inputTokens = 0;
-  let outputTokens = 0;
+  let usage: AnalysisUsage = {
+    inputTokens: 0,
+    outputTokens: 0,
+    cacheCreationInputTokens: 0,
+    cacheReadInputTokens: 0,
+  };
   for (let attempt = 1; attempt <= MAX_ATTEMPTS_PER_PAYLOAD; attempt++) {
     // O timeout escalado do adapter (#524).
     const timing = requestTiming({
@@ -218,8 +226,8 @@ async function replayOne(args: {
       timing.kind === "options"
         ? await args.client.messages.create(request, timing.options)
         : await args.client.messages.create(request);
-    inputTokens += response.usage.input_tokens;
-    outputTokens += response.usage.output_tokens;
+    // input_tokens da API é só a parte sem cache; usageFromMessage soma o total (ADR 0071).
+    usage = addUsage(usage, usageFromMessage(response.usage));
     // Recusa (#524): re-tentar tende a recusar de novo e é pago — falha já.
     if (response.stop_reason === "refusal") {
       lastFailure = `o modelo recusou a análise (category=${response.stop_details?.category ?? "n/a"})`;
@@ -243,7 +251,7 @@ async function replayOne(args: {
     }
     return {
       output: parsed.data,
-      usage: { inputTokens, outputTokens },
+      usage,
       attempts: attempt,
     };
   }
@@ -412,8 +420,7 @@ async function main(): Promise<void> {
     // fliparam re-rodam. Tokens/custo acumulam TODAS as tentativas (1 row por
     // payload, paridade com temperature). No caminho temperature, flipConfirmed
     // === flip (estrito, sem rerun).
-    let inputTokens = usage.inputTokens;
-    let outputTokens = usage.outputTokens;
+    let totalUsage = usage;
     // attempts acumula TODAS as tentativas (incl. as internas de cada rerun, até
     // MAX_ATTEMPTS_PER_PAYLOAD) — senão o volume de chamadas pagas é subreportado.
     let totalAttempts = attempts;
@@ -425,8 +432,7 @@ async function main(): Promise<void> {
       for (let run = 2; run <= ADAPTIVE_FLIP_REPRO_RUNS; run++) {
         try {
           const rep = await replayOne({ client, inputPayload: row.inputPayload });
-          inputTokens += rep.usage.inputTokens;
-          outputTokens += rep.usage.outputTokens;
+          totalUsage = addUsage(totalUsage, rep.usage);
           totalAttempts += rep.attempts;
           const repFlip = rep.output.recommendation !== row.recommendation;
           if (repFlip) flippedRuns++;
@@ -453,11 +459,7 @@ async function main(): Promise<void> {
 
     const costKnown = replayModelId !== null;
     const costUsd = replayModel
-      ? calculateCost({
-          model: replayModel.costModel,
-          inputTokens,
-          outputTokens,
-        })
+      ? calculateCost({ model: replayModel.costModel, ...totalUsage })
       : 0;
 
     results.push({
@@ -477,8 +479,7 @@ async function main(): Promise<void> {
       reproRuns,
       reproFlipped,
       attempts: totalAttempts,
-      inputTokens,
-      outputTokens,
+      ...totalUsage,
       costUsd,
       costKnown,
     });

@@ -47,7 +47,11 @@ import {
   type AIModelId,
 } from "../models";
 import { getProviderForModel } from "../providers";
-import type { AnalysisRequest, ToolDef } from "../providers/types";
+import type {
+  AnalysisRequest,
+  AnalysisUsage,
+  ToolDef,
+} from "../providers/types";
 import {
   palpitesLiveCartridge,
   type PalpiteLiveOutput,
@@ -412,8 +416,7 @@ async function runSynthesis<O extends SynthesisOutputBase>(
   let output: O;
   let settleableRows: ReturnType<typeof buildSettleablePalpiteRows>;
   let latencyMs: number;
-  let inputTokens: number;
-  let outputTokens: number;
+  let usage: AnalysisUsage;
   let inputPayload: Record<string, unknown>;
   let outputPayload: Record<string, unknown>;
   // O modelo que respondeu a tentativa aceita (auditoria, custo e modelVersion).
@@ -444,8 +447,7 @@ async function runSynthesis<O extends SynthesisOutputBase>(
         model: servedModel,
         inputPayload: result.inputPayload,
         outputPayload: result.outputPayload,
-        inputTokens: result.usage.inputTokens,
-        outputTokens: result.usage.outputTokens,
+        ...result.usage,
         latencyMs,
         status: result.status,
         errorMessage: result.message,
@@ -455,8 +457,7 @@ async function runSynthesis<O extends SynthesisOutputBase>(
         cause: result.cause,
       });
     }
-    inputTokens = result.usage.inputTokens;
-    outputTokens = result.usage.outputTokens;
+    usage = result.usage;
     inputPayload = result.inputPayload;
     outputPayload = result.outputPayload;
 
@@ -472,8 +473,7 @@ async function runSynthesis<O extends SynthesisOutputBase>(
         model: servedModel,
         inputPayload,
         outputPayload,
-        inputTokens,
-        outputTokens,
+        ...usage,
         latencyMs,
         status: "tool_missing",
         errorMessage: `model did not call ${cartridge.toolName}; content=${snippet}`,
@@ -494,8 +494,7 @@ async function runSynthesis<O extends SynthesisOutputBase>(
         model: servedModel,
         inputPayload,
         outputPayload,
-        inputTokens,
-        outputTokens,
+        ...usage,
         latencyMs,
         status: "invalid_output",
         errorMessage: JSON.stringify(parsed.error.issues),
@@ -531,8 +530,7 @@ async function runSynthesis<O extends SynthesisOutputBase>(
         model: servedModel,
         inputPayload,
         outputPayload,
-        inputTokens,
-        outputTokens,
+        ...usage,
         latencyMs,
         status: "invalid_output",
         errorMessage:
@@ -571,8 +569,7 @@ async function runSynthesis<O extends SynthesisOutputBase>(
       model: servedModel,
       inputPayload,
       outputPayload,
-      inputTokens,
-      outputTokens,
+      ...usage,
       latencyMs,
       status: "fidelity_divergence",
       errorMessage: `validação de fidelidade falhou (#380): ${fidelity.reason}`,
@@ -598,7 +595,7 @@ async function runSynthesis<O extends SynthesisOutputBase>(
 
   // 12. Persistência (sequencial — neon-http não suporta transação real).
   // 12a. ai_call (status ok) — id alimenta palpite_sets.aiCallId.
-  const cost = calculateCost({ model: servedModel, inputTokens, outputTokens });
+  const cost = calculateCost({ model: servedModel, ...usage });
   let aiCallId: string | null = null;
   try {
     const [row] = await db
@@ -611,8 +608,7 @@ async function runSynthesis<O extends SynthesisOutputBase>(
         promptVersion: cartridge.version,
         inputPayload,
         outputPayload,
-        inputTokens,
-        outputTokens,
+        ...usage,
         latencyMs,
         costUsd: cost.toFixed(6),
         status: "ok",

@@ -157,7 +157,11 @@ export function PredictionDetail({
           <Row label="prompt" value={aiCall.promptVersion} />
           <Row
             label="tokens"
-            value={`${aiCall.inputTokens} in · ${aiCall.outputTokens} out`}
+            value={`${aiCall.inputTokens} in${
+              aiCall.cacheReadInputTokens > 0
+                ? ` (${aiCall.cacheReadInputTokens} do cache)`
+                : ""
+            } · ${aiCall.outputTokens} out`}
           />
           <Row label="custo" value={aiCall.costUsd} />
           <Row label="latência" value={`${aiCall.latencyMs}ms`} />
