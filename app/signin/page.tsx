@@ -6,8 +6,8 @@ import { Wordmark } from "@/components/wordmark";
 
 import { SignInMethods } from "./sign-in-methods";
 
-// Fora do índice (#441): a página só serve pra entrar, e o robots.txt já a bloqueia; o
-// noindex cobre o caso de alguém linkar /signin de fora.
+// Fora do índice (#441): a página só serve pra entrar. O robots.txt NÃO a bloqueia
+// (#666): o Google precisa rastrear a página pra ler este noindex.
 export const metadata: Metadata = {
   title: "Entrar",
   robots: { index: false },

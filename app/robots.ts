@@ -16,6 +16,14 @@ const SITE_URL = "https://palpiteiro.live";
  * noindex (a URL ainda pode aparecer no índice "reference-only") e bots de
  * unfurl que respeitam robots.txt (Twitterbot) deixariam de montar o card.
  *
+ * Todo segmento de topo de `app/(app)/` (área logada, 307 → /signin) TEM que estar
+ * no disallow: senão o Google rastreia o redirect e reporta "Page with redirect"
+ * (#666). O teste `__tests__/robots.test.ts` lê o diretório e acusa rota esquecida.
+ *
+ * `/signin` fica FORA do disallow de propósito (#666): a página tem `noindex`, e o
+ * crawler só obedece o noindex se puder ler a página. Bloqueada no robots, a URL
+ * ainda podia entrar no índice como "indexada, mas bloqueada".
+ *
  * LANDMINE (report 06 achado #2): esta rota só é alcançável por crawlers porque o
  * matcher do middleware exclui `robots.txt$` — sem essa emenda pareada,
  * `/robots.txt` tomava 307→/signin e sumia pros bots. Ver middleware.ts.
@@ -33,7 +41,7 @@ export default function robots(): MetadataRoute.Robots {
         "/match",
         "/perfil",
         "/admin",
-        "/signin",
+        "/como-usar",
         "/api",
         "/time",
       ],
