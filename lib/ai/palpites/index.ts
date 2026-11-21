@@ -71,6 +71,7 @@ import {
 import { checkFidelity, type FidelityCheck } from "./fidelity-validator";
 import {
   finalLeaksValue,
+  finalLeaksValueModelPick,
   finalizeLivePick,
   finalizeLlmPick,
   finalizeModelPick,
@@ -351,6 +352,7 @@ export async function generatePalpites({
       finalize: (output) => finalizeModelPick(output, pick, teams),
       textFallback: {
         template: (reason) => templateModelPick(pick, teams, reason),
+        leaks: finalLeaksValueModelPick,
         repairLeaks: (final) => repairValueLeaks(final, pick, teams),
       },
       fidelity: (final) => checkFidelity(final, input),
@@ -400,6 +402,8 @@ type SynthesisSpec<O> = {
   // null = sem rede (v12 e ao vivo: a falha degrada pra palpite nulo, como antes).
   textFallback: {
     template: (reason: string) => FinalPalpite;
+    // O guard de valor do v13 (pega também "preço") e o reparo campo a campo.
+    leaks: (final: FinalPalpite) => boolean;
     repairLeaks: (final: FinalPalpite) => FinalPalpite;
   } | null;
   fidelity: (final: FinalPalpite) => FidelityCheck;
@@ -610,7 +614,7 @@ async function runSynthesis<O>(
     //      sem rede → `invalid_output` (mesmo path auditado do Zod) → throw → degrada pra
     //      palpite:null no try/catch do analyzeBestBet. REJEITAR > VAZAR. Com o palpite
     //      decidido em código, o campo que vazou troca pelo template (#668).
-    const leaked = finalLeaksValue(candidate);
+    const leaked = fallback ? fallback.leaks(candidate) : finalLeaksValue(candidate);
     const leakMessage = "manchete contém linguagem de valor (firewall ADR 0030 §3)";
     if (leaked && !fallback) {
       await failRow("invalid_output", leakMessage);

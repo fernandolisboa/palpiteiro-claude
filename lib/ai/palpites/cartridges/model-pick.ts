@@ -179,8 +179,9 @@ const fmt1 = (n: number): string => (Number.isFinite(n) ? n.toFixed(1) : "n/a");
 
 const CONFIDENCE_WORD = { baixa: "baixa", media: "média", alta: "alta" } as const;
 
-// Mercados cujo resultado é o próprio palpite fixado: sem "recomenda/preço" e sem o
-// racional (que defende a escolha de valor), pra o texto não puxar pro outro lado.
+// Mercados cujo resultado é o próprio palpite fixado: sem "recomenda/destacou" e sem o
+// racional (que defende a escolha de valor), pra o texto não puxar pro outro lado. Nos
+// outros, "a análise destacou", nunca "preço": a palavra no insumo vazava pro texto.
 const RESULT_MARKETS = new Set(["match_result", "double_chance"]);
 
 function outcomeText(
@@ -230,7 +231,7 @@ export function buildModelPickUserMessage(
   }
 
   lines.push("");
-  lines.push("# Análises por mercado (insumo — NÃO cite números nem preços na manchete)");
+  lines.push("# Análises por mercado (insumo — NÃO cite números na manchete)");
   if (input.analyses.length === 0) {
     lines.push("- (nenhuma análise disponível)");
   } else {
@@ -240,10 +241,10 @@ export function buildModelPickUserMessage(
         continue;
       }
       if (a.isPass || !(a.recommendedLabel ?? a.recommendation)) {
-        lines.push(`- ${a.marketLabel}: nenhum preço chamou atenção.`);
+        lines.push(`- ${a.marketLabel}: nada se destacou.`);
       } else {
         lines.push(
-          `- ${a.marketLabel}: preço mais interessante em "${a.recommendedLabel ?? a.recommendation}".`,
+          `- ${a.marketLabel}: a análise destacou "${a.recommendedLabel ?? a.recommendation}".`,
         );
       }
       if (a.rationale) lines.push(`  Racional: ${a.rationale}`);

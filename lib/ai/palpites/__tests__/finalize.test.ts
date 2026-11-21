@@ -2,11 +2,13 @@ import { describe, expect, it } from "vitest";
 
 import {
   finalLeaksValue,
+  finalLeaksValueModelPick,
   finalizeLlmPick,
   finalizeModelPick,
   repairValueLeaks,
   templateModelPick,
 } from "@/lib/ai/palpites/finalize";
+import { containsValueLanguage } from "@/lib/ai/palpites/value-language-guard";
 
 const teams = { home: "Palmeiras", away: "Flamengo" };
 const pick = {
@@ -72,6 +74,29 @@ describe("templateModelPick e repairValueLeaks", () => {
     expect(fixed.narrative).not.toContain("edge");
     expect(fixed.citedMarkets).toEqual(["Resultado (1X2)"]);
     expect(fixed.templated).toMatchObject({ verdict: false, narrative: true });
+  });
+
+  it("v13: \"preço\" é vazamento só no palpite decidido em código", () => {
+    const leaky = finalizeModelPick(
+      { ...output, narrative: "O preço do over tá bom demais.", citedMarkets: ["Preços do 1X2"] },
+      pick,
+      teams,
+    );
+    // O guard geral deixa passar (o "Ver raciocínio" usa "preço" de propósito)…
+    expect(containsValueLanguage(leaky.narrative)).toBe(false);
+    expect(finalLeaksValue(leaky)).toBe(false);
+    // …o do v13 pega e o reparo troca só a narrativa.
+    expect(finalLeaksValueModelPick(leaky)).toBe(true);
+    const fixed = repairValueLeaks(leaky, pick, teams);
+    expect(finalLeaksValueModelPick(fixed)).toBe(false);
+    expect(fixed.verdict).toBe(output.verdict);
+    expect(fixed.narrative).not.toMatch(/preço/i);
+    expect(fixed.citedMarkets).toEqual([]);
+    expect(fixed.templated).toMatchObject({ verdict: false, narrative: true });
+    // "Apreço" não é "preço".
+    expect(
+      finalLeaksValueModelPick(finalizeModelPick({ ...output, narrative: "Com todo apreço ao Fla." }, pick, teams)),
+    ).toBe(false);
   });
 });
 

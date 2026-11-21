@@ -102,32 +102,50 @@ export function templateModelPick(
   };
 }
 
-/** Algum campo que cruza pra manchete/view tem linguagem de valor (ADR 0030 §3)? */
-export function finalLeaksValue(final: FinalPalpite): boolean {
+function leaksWith(final: FinalPalpite, leaks: (text: string) => boolean): boolean {
   return (
-    containsValueLanguage(final.verdict) ||
-    containsValueLanguage(final.narrative) ||
-    final.rows.some((r) => containsValueLanguage(r.text)) ||
-    final.citedMarkets.some(containsValueLanguage)
+    leaks(final.verdict) ||
+    leaks(final.narrative) ||
+    final.rows.some((r) => leaks(r.text)) ||
+    final.citedMarkets.some(leaks)
   );
 }
 
+/** Algum campo que cruza pra manchete/view tem linguagem de valor (ADR 0030 §3)? */
+export function finalLeaksValue(final: FinalPalpite): boolean {
+  return leaksWith(final, containsValueLanguage);
+}
+
+// No palpite decidido em código (v13), "preço" também é vazamento: a palavra já foi
+// insumo da síntese. Fica fora do containsValueLanguage porque o "Ver raciocínio"
+// (run-progress.ts) usa "preço" de propósito e descartaria a linha.
+const PRICE_WORD = /\bpreços?\b/i;
+
+function modelPickLeaks(text: string): boolean {
+  return containsValueLanguage(text) || PRICE_WORD.test(text);
+}
+
+/** `finalLeaksValue` do v13: o guard de valor + "preço". */
+export function finalLeaksValueModelPick(final: FinalPalpite): boolean {
+  return leaksWith(final, modelPickLeaks);
+}
+
 /**
- * Só os campos que vazaram linguagem de valor trocam pelo template; rótulo citado que
- * vazou sai da lista. As linhas são de templates fixos (nunca vazam).
+ * v13: só os campos que vazaram linguagem de valor (ou "preço") trocam pelo template;
+ * rótulo citado que vazou sai da lista. As linhas são de templates fixos (nunca vazam).
  */
 export function repairValueLeaks(
   final: FinalPalpite,
   pick: PickForFinal,
   teams: CoherenceTeams,
 ): FinalPalpite {
-  const verdictLeak = containsValueLanguage(final.verdict);
-  const narrativeLeak = containsValueLanguage(final.narrative);
+  const verdictLeak = modelPickLeaks(final.verdict);
+  const narrativeLeak = modelPickLeaks(final.narrative);
   return {
     ...final,
     verdict: verdictLeak ? templateVerdict(pick, teams) : final.verdict,
     narrative: narrativeLeak ? templateNarrative(pick, teams) : final.narrative,
-    citedMarkets: final.citedMarkets.filter((m) => !containsValueLanguage(m)),
+    citedMarkets: final.citedMarkets.filter((m) => !modelPickLeaks(m)),
     templated: mergeTemplated(
       final.templated,
       verdictLeak || narrativeLeak

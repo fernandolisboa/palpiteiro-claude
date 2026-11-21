@@ -189,12 +189,15 @@ describe("buildModelPickUserMessage", () => {
     expect(msg).toContain("Desfalques tiram do mandante");
   });
 
-  it("análises: 'preço' nos outros mercados; o 1X2 sem recomendação nem racional; sem edge/odd", () => {
+  it("análises: 'a análise destacou' nos outros mercados; o 1X2 sem recomendação nem racional; sem edge/odd", () => {
     expect(msg).toContain("- Resultado (1X2): considerado no palpite fixado acima.");
     expect(msg).not.toContain("Preço do mandante acima do justo.");
-    expect(msg).toContain('- Mais/Menos gols: preço mais interessante em "Mais de 2,5 gols".');
+    expect(msg).toContain('- Mais/Menos gols: a análise destacou "Mais de 2,5 gols".');
     expect(msg).toContain("  Racional: Times que marcam.");
-    expect(msg).toContain("- Ambas marcam: nenhum preço chamou atenção.");
+    expect(msg).toContain("- Ambas marcam: nada se destacou.");
+    // "preço" só na proibição da tarefa, nunca como insumo (vazava pro texto).
+    expect(msg.match(/\bpreços?\b/gi) ?? []).toHaveLength(1);
+    expect(msg).toMatch(/NUNCA cite chances, porcentagens, preço,/);
     // Nenhum número de edge/odd (as palavras só aparecem na proibição da tarefa).
     expect(msg).not.toMatch(/\bedge -?[0-9]/i);
     expect(msg).not.toMatch(/[0-9]pp\b/);

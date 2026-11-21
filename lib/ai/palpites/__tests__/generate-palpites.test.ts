@@ -1047,6 +1047,20 @@ describe("generatePalpites — palpite decidido em código (#668)", () => {
     expect(setRow.headline.templated).toMatchObject({ verdict: false, narrative: true });
   });
 
+  it("v13: 'preço' no veredito → só ele sai do template; uma row invalid_output", async () => {
+    runAnalysis.mockResolvedValue(
+      okResult({ ...modelPickText, verdict: "Flu no preço certo pra levar" }),
+    );
+    await quietly(() => generatePalpites(pickCall));
+    expect(insertValues).toHaveBeenCalledTimes(3);
+    const errRow = insertValues.mock.calls[0][0] as Record<string, unknown>;
+    expect(errRow.status).toBe("invalid_output");
+    const setRow = insertValues.mock.calls[1][0] as SetRow;
+    expect(setRow.headline.verdict).not.toMatch(/preço/i);
+    expect(setRow.headline.narrative).toBe(modelPickText.narrative);
+    expect(setRow.headline.templated).toMatchObject({ verdict: true, narrative: false });
+  });
+
   it("determinismo: dois runs com textos diferentes → mesmo exact_score e mesma confiança", async () => {
     const capture = () => ({
       set: insertValues.mock.calls[1][0] as SetRow,
