@@ -391,6 +391,24 @@ describe("toPredictionDetailView", () => {
     });
     expect(v.rawPayloads).not.toBeNull();
     expect(v.rawPayloads?.input).toContain(SYSTEM_PROMPT_MARKER);
+    expect(v.rawPayloads?.errorMessage).toBeNull();
+  });
+
+  it("admin vê o motivo da falha da chamada (#669); o dono, não", () => {
+    const base = makeDetail();
+    const failed = makeDetail({
+      aiCall: {
+        ...base.aiCall!,
+        status: "invalid_output",
+        errorMessage: "fidelity: texto recomenda 'draw', mas a decisão é 'home'",
+      },
+    });
+    const admin = toPredictionDetailView(failed, { includeRawPayloads: true });
+    expect(admin.rawPayloads?.errorMessage).toBe(
+      "fidelity: texto recomenda 'draw', mas a decisão é 'home'"
+    );
+    const owner = toPredictionDetailView(failed, { includeRawPayloads: false });
+    expect(owner.rawPayloads).toBeNull();
   });
 
   it("título do detalhe com o nome curto (#578)", () => {
