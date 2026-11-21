@@ -831,7 +831,7 @@ describe("PalpiteHero — leitura ao vivo (#594)", () => {
   it("pré-jogo: pageLive=0 e a copy de sempre, sem selo", () => {
     const html = render({ heroPalpite: null });
     expect(html).toContain('name="pageLive" value="0"');
-    expect(html).toContain("A IA lê os dois times, os números e o mercado");
+    expect(html).toContain("O modelo cruza os dois times, os números e o mercado");
     expect(render()).not.toContain("palpite aos");
   });
 });

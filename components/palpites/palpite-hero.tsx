@@ -751,7 +751,7 @@ function EmptyHero({
             <p className="max-w-reading text-body leading-relaxed tracking-tight text-muted-foreground">
               {live
                 ? "Com o jogo rolando, a IA lê o placar e o tempo que falta e crava um palpite — como o jogo termina e o porquê."
-                : "A IA lê os dois times, os números e o mercado e crava um palpite — quem ganha, o placar provável e o porquê."}
+                : "O modelo cruza os dois times, os números e o mercado e crava quem ganha e o placar provável; a IA explica o porquê."}
             </p>
             {contextField && <UserContextField {...contextField} />}
             <div className="flex flex-wrap items-center gap-2">

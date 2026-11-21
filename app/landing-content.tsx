@@ -32,9 +32,9 @@ export function LandingContent() {
         </h1>
 
         <p className="max-w-reading text-body leading-relaxed text-muted-foreground tracking-tight">
-          Escolha o jogo e a IA crava quem leva, o placar provável e por quê. Você
-          anota suas apostas e o palpite de cada amigo; quando o jogo acaba, o app
-          confere o placar e mostra quem acertou.
+          Escolha o jogo e o app crava quem leva e o placar provável; a IA explica
+          por quê. Você anota suas apostas e o palpite de cada amigo; quando o jogo
+          acaba, o app confere o placar e mostra quem acertou.
         </p>
 
         <div className="flex flex-col items-start gap-3 pt-2 sm:flex-row sm:items-center">
