@@ -528,7 +528,7 @@ function PopulatedHero({
         <div className="@container">
           <div
             data-testid="palpite-actions"
-            className="grid grid-cols-1 items-start justify-items-start gap-x-2 gap-y-1 @min-[19.5rem]:grid-cols-[repeat(2,max-content)] @min-[40rem]:grid-cols-[repeat(4,max-content)]"
+            className="grid grid-cols-1 items-start justify-items-start gap-x-2 gap-y-1 @min-[18.75rem]:grid-cols-[repeat(2,max-content)] @min-[40rem]:grid-cols-[repeat(4,max-content)]"
           >
             {analyzable && (
               <Button

@@ -560,9 +560,10 @@ describe("PalpiteHero — gerar só o palpite (síntese sobre as análises salva
 
   it("ações em grade (pares), nunca flex-wrap que mistura linhas de 1 e de 2", () => {
     const html = render({ hasAnalyses: true });
-    const actions = html.match(/data-testid="palpite-actions" class="([^"]*)"/);
-    expect(actions?.[1]).toMatch(/\bgrid\b/);
-    expect(actions?.[1]).not.toMatch(/flex-wrap/);
+    const tag = html.match(/<div[^>]*data-testid="palpite-actions"[^>]*>/)?.[0];
+    const cls = tag?.match(/class="([^"]*)"/)?.[1];
+    expect(cls).toMatch(/\bgrid\b/);
+    expect(cls).not.toMatch(/flex-wrap/);
     expect(html).not.toContain("Refazer só o palpite");
   });
 
