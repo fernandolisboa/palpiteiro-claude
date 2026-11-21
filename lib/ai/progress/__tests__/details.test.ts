@@ -142,8 +142,15 @@ describe("detalhes das etapas (Ver raciocínio, ADR 0065)", () => {
       "O que você contou mexeu nas chances do modelo",
       "nota",
     ]);
-    expect(newsDetail(0)).toEqual([]);
-    expect(newsDetail(1)).toEqual(["1 notícia usada no palpite"]);
+    expect(newsDetail([])).toEqual([]);
+    expect(newsDetail([{}])).toEqual(["1 notícia usada no palpite"]);
+    // #670: agrupa por fonte, na ordem em que a fonte aparece.
+    expect(
+      newsDetail([{ source: "ge" }, { source: "web_search" }, { source: "ge" }, { source: "ge" }]),
+    ).toEqual(["3 notícias do ge", "1 notícia da busca na web"]);
+    expect(newsDetail([{ source: "web_search" }, { source: "web_search" }])).toEqual([
+      "2 notícias da busca na web",
+    ]);
     expect(
       analysesDetail([
         { marketLabel: "Dupla chance", recommendedLabel: "Vitória ou empate", isPass: false },
@@ -181,7 +188,7 @@ describe("detalhes das etapas (Ver raciocínio, ADR 0065)", () => {
       ),
       ...jevDetail(answers(), teams),
       ...userContextDetail({ moved: false, notes: [] }),
-      ...newsDetail(3),
+      ...newsDetail([{ source: "ge" }, { source: "ge" }, { source: "web_search" }, {}]),
       ...analysesDetail([
         { marketLabel: "Resultado (1X2)", recommendedLabel: "Casa", isPass: false },
         { marketLabel: "Over/Under gols", recommendedLabel: "Mais de 2.5", isPass: false },

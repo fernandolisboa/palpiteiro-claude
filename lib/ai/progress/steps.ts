@@ -88,7 +88,12 @@ export const STEP_NOTES = {
   modelFallback: "Chances calculadas pelo modelo de reserva",
   modelUnavailable: "Sem dados para o modelo estatístico neste jogo",
   jevReused: "JEV já consultado neste cenário: respostas reaproveitadas",
-  newsEmpty: "Nenhuma notícia relevante do jogo",
+  // Notícias (#670): cada desfecho diz o que aconteceu de verdade. "Nenhuma notícia"
+  // só quando a fonte respondeu e não havia nada.
+  newsNoneGe: "Nada novo sobre o jogo no ge nos últimos três dias",
+  newsNoneWeb: "A busca não achou notícia recente do jogo",
+  newsNoSearch: "A busca de notícias não rodou desta vez",
+  newsPartial: "Só deu pra ler as notícias de um dos times",
   // Narração reprovada pela nossa conferência (#669), por tipo. "A IA não respondeu"
   // (sem resposta, erro, recusa) é o `failed` de narrationStep.
   narrationOffFormat: "O texto da IA veio fora do formato: a análise saiu com o texto padrão",

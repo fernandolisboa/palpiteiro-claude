@@ -154,10 +154,24 @@ export function userContextDetail(user: { moved: boolean; notes: readonly string
   ];
 }
 
-export function newsDetail(count: number): string[] {
-  return count > 0
-    ? [`${count} ${count === 1 ? "notícia usada" : "notícias usadas"} no palpite`]
-    : [];
+// Notícias usadas no palpite, agrupadas pela fonte (#670): "3 notícias do ge",
+// "1 notícia da busca na web". Item sem fonte conta como "usada no palpite".
+const NEWS_SOURCE_PHRASE = { ge: "do ge", web_search: "da busca na web" } as const;
+
+export function newsDetail(
+  results: readonly { source?: keyof typeof NEWS_SOURCE_PHRASE }[],
+): string[] {
+  const counts = new Map<keyof typeof NEWS_SOURCE_PHRASE | "other", number>();
+  for (const r of results) {
+    const key = r.source ?? "other";
+    counts.set(key, (counts.get(key) ?? 0) + 1);
+  }
+  const noun = (n: number) => `${n} ${n === 1 ? "notícia" : "notícias"}`;
+  return [...counts].map(([key, n]) =>
+    key === "other"
+      ? `${noun(n)} ${n === 1 ? "usada" : "usadas"} no palpite`
+      : `${noun(n)} ${NEWS_SOURCE_PHRASE[key]}`,
+  );
 }
 
 // Uma linha por análise que alimentou o palpite: o mercado e o que ela escolheu.

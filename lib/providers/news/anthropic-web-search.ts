@@ -12,14 +12,18 @@ import {
 } from "@/lib/ai/models";
 import { getProviderForModel } from "@/lib/ai/providers";
 import type { AnalysisRequest } from "@/lib/ai/providers/types";
+import { LEAGUE_LABEL, leagueToKey } from "@/lib/format";
+import { SupportedLeagueSchema } from "@/lib/providers/sports-data/leagues";
 
 import { NewsUnavailableError } from "./types";
 
 import { ALLOWED_DOMAINS } from "./allowed-domains";
+import { newsShortName } from "./team-sources";
 import type {
   NewsAuditContext,
   NewsFetchOptions,
   NewsFetchOutcome,
+  NewsFetchStatus,
   NewsMatchContext,
   NewsResult,
 } from "./types";
@@ -34,15 +38,18 @@ import type {
 // gerado), uma fonte não pode carregar afirmação de valor por construção.
 
 // Versão do "cartucho" de notícias (ADR 0017) — grava em ai_calls.promptVersion.
-const NEWS_PROMPT_VERSION = "news_v1";
+// v2 (#670) = consulta com o nome curto dos times, a liga por extenso, a data no fuso
+// de Brasília e a sugestão "<Mandante> x <Visitante>"; max_uses 2. System prompt igual.
+const NEWS_PROMPT_VERSION = "news_v2";
 
 // Default Haiku: econômico (web_search_20250305 básica). NÃO admin-gated. maxTokens
 // enxuto — a busca devolve poucos resultados; não geramos prosa longa (o thinking do
 // Haiku 5.5 conta dentro).
 const NEWS_MODEL_ID: AIModelId = UTILITY_MODEL_ID;
 const NEWS_MAX_TOKENS = 4096;
-// max_uses:1 — 1 busca por run (ADR 0032 §4: teto ≈ 20/dia pelo cap de 20 runs).
-const NEWS_MAX_SEARCH_USES = 1;
+// max_uses:2 (#670): uma 2ª consulta quando a 1ª volta vazia ou erra. Teto do ADR 0032
+// §4 dobra no pior caso, e só roda quando o RSS do ge não cobre o jogo (adendo #670).
+const NEWS_MAX_SEARCH_USES = 2;
 const MAX_RESULTS = 10;
 
 const SYSTEM_PROMPT = `Você é um assistente de PESQUISA de notícias de futebol. Sua única função é BUSCAR, com a ferramenta de web search, notícias FACTUAIS e recentes sobre a partida indicada (desfalques de última hora, troca de técnico, contexto de lesão/motivação, escalação provável).
@@ -53,27 +60,66 @@ REGRAS:
 - Não emita opinião de aposta, palpite, odd, edge ou valor — só os fatos noticiados.
 - Pode resumir brevemente, mas o que importa são as fontes reais encontradas.`;
 
+// Data do jogo no fuso de Brasília (o horário que a imprensa BR usa).
+const KICKOFF_FORMAT = new Intl.DateTimeFormat("pt-BR", {
+  timeZone: "America/Sao_Paulo",
+  day: "2-digit",
+  month: "2-digit",
+  year: "numeric",
+  hour: "2-digit",
+  minute: "2-digit",
+});
+
+function leagueLabel(league: string): string {
+  const parsed = SupportedLeagueSchema.safeParse(league);
+  return parsed.success ? LEAGUE_LABEL[leagueToKey(parsed.data)] : league;
+}
+
+function kickoffLabel(kickoffAt: string): string {
+  const ms = Date.parse(kickoffAt);
+  return Number.isFinite(ms) ? `${KICKOFF_FORMAT.format(new Date(ms))} (horário de Brasília)` : kickoffAt;
+}
+
+// Tudo que varia por jogo fica aqui, na mensagem do usuário (ADR 0071: o system prompt é
+// constante). Nome curto só na consulta (team-sources.ts, fronteira do #578).
 function buildUserMessage(ctx: NewsMatchContext): string {
+  const home = newsShortName(ctx.homeTeam);
+  const away = newsShortName(ctx.awayTeam);
   return [
     "Busque notícias recentes e factuais sobre esta partida de futebol:",
-    `- Competição: ${ctx.league}`,
-    `- Mandante: ${ctx.homeTeam}`,
-    `- Visitante: ${ctx.awayTeam}`,
-    `- Data (UTC): ${ctx.kickoffAt}`,
+    `- Competição: ${leagueLabel(ctx.league)}`,
+    `- Mandante: ${home}`,
+    `- Visitante: ${away}`,
+    `- Data: ${kickoffLabel(ctx.kickoffAt)}`,
     "",
-    "Foque em desfalques confirmados, troca de técnico, lesões, suspensões e contexto relevante das duas equipes. Use a web search; não invente.",
+    `Sugestão de consulta: "${home} x ${away}". Foque em desfalques confirmados, troca de técnico, lesões, suspensões e contexto relevante das duas equipes. Use a web search; não invente.`,
   ].join("\n");
 }
+
+type ExtractedSources = {
+  sources: NewsResult[];
+  // error_code de cada bloco de erro da busca (HTTP 200, não cobrado).
+  searchErrors: string[];
+  // A busca rodou? (veio ao menos um bloco `web_search_tool_result`, de sucesso ou erro)
+  searched: boolean;
+  // Blocos de sucesso (lista), mesmo vazios.
+  successfulSearches: number;
+};
 
 // Anda atrás dos blocos `web_search_tool_result` nos contentBlocks crus da resposta e
 // extrai SÓ os {title, url} reais (ADR 0032 §2). Na server tool da Claude:
 //   - sucesso: block.content é uma LISTA de web_search_result ({title,url,...})
 //   - erro:    block.content é um OBJETO { error_code } (HTTP 200, não cobrado)
 // Dropa qualquer item sem title NÃO-VAZIO E url http(s) válida (nunca inventa); dedup
-// por url.
-function extractSources(contentBlocks: unknown[] | undefined): NewsResult[] {
-  if (!Array.isArray(contentBlocks)) return [];
-  const out: NewsResult[] = [];
+// por url. O erro não some calado (#670): volta em `searchErrors`.
+function extractSources(contentBlocks: unknown[] | undefined): ExtractedSources {
+  const out: ExtractedSources = {
+    sources: [],
+    searchErrors: [],
+    searched: false,
+    successfulSearches: 0,
+  };
+  if (!Array.isArray(contentBlocks)) return out;
   const seen = new Set<string>();
   for (const block of contentBlocks) {
     if (
@@ -83,28 +129,46 @@ function extractSources(contentBlocks: unknown[] | undefined): NewsResult[] {
     ) {
       continue;
     }
+    out.searched = true;
     const content = (block as { content?: unknown }).content;
     // Erro = objeto ({error_code}); só LISTA é sucesso. Branch ANTES de iterar.
-    if (!Array.isArray(content)) continue;
+    if (!Array.isArray(content)) {
+      const code =
+        content && typeof content === "object"
+          ? (content as { error_code?: unknown }).error_code
+          : undefined;
+      out.searchErrors.push(typeof code === "string" ? code : "unknown");
+      continue;
+    }
+    out.successfulSearches += 1;
     for (const item of content) {
+      if (out.sources.length >= MAX_RESULTS) break;
       if (!item || typeof item !== "object") continue;
       const title = (item as { title?: unknown }).title;
       const url = (item as { url?: unknown }).url;
       if (typeof title !== "string" || title.trim() === "") continue;
       if (typeof url !== "string") continue;
       const cleanUrl = url.trim();
-      // Só http(s): a url vira <a href> na UI, então dropamos esquemas perigosos/
-      // estranhos (javascript:, data:, mailto:, //protocol-relative, …). Espelha o
-      // urlSchema do avatar em app/actions/profile.ts (report 01 achado #5). Cobre
+      // Só https: a url vira <a href> na UI, então dropamos esquemas perigosos/
+      // estranhos (javascript:, data:, mailto:, //protocol-relative, …) e http puro
+      // (#670: a síntese também só aceita https; o que persiste é o que ela viu). Cobre
       // também a url vazia (trim === "" não casa o regex).
-      if (!/^https?:\/\//i.test(cleanUrl)) continue;
+      if (!/^https:\/\//i.test(cleanUrl)) continue;
       if (seen.has(cleanUrl)) continue;
       seen.add(cleanUrl);
-      out.push({ title: title.trim(), url: cleanUrl });
-      if (out.length >= MAX_RESULTS) return out;
+      out.sources.push({ title: title.trim(), url: cleanUrl, source: "web_search" });
     }
   }
   return out;
+}
+
+// Desfecho honesto (#670): só erro de busca = falhou; resposta sem busca = não buscou;
+// buscou e nada = none.
+function searchStatus(extracted: ExtractedSources): NewsFetchStatus {
+  if (extracted.sources.length > 0) return "found";
+  if (!extracted.searched) return "no_search";
+  if (extracted.successfulSearches === 0) return "failed";
+  return "none";
 }
 
 export async function getNewsByMatchViaWebSearch(
@@ -125,7 +189,7 @@ export async function getNewsByMatchViaWebSearch(
     );
   }
 
-  // Key-gated/inerte (mirror SportMonks/#227): sem chave Anthropic → unavailable:true,
+  // Key-gated/inerte (mirror SportMonks/#227): sem chave Anthropic → status failed,
   // ZERO gasto. Loga um provider_error de auditoria (não throw) e devolve [].
   const analysisRequest: AnalysisRequest = {
     model,
@@ -161,14 +225,14 @@ export async function getNewsByMatchViaWebSearch(
       errorMessage: noKeyMsg,
       promptVersion: NEWS_PROMPT_VERSION,
     });
-    return { results: [], aiCall: null, unavailable: true };
+    return { results: [], aiCall: null, status: "failed", via: null };
   }
 
   const result = await provider.runAnalysis(analysisRequest);
   const served = result.servedModel;
 
-  // Erro do provider → loga (auditado) e degrada gracioso (results:[], unavailable:false).
-  // NUNCA throw: o palpite embarca sem notícias (mirror absences).
+  // Erro do provider → loga (auditado) e degrada gracioso (results:[], status failed:
+  // antes virava "nenhuma notícia", #670). NUNCA throw: o palpite embarca sem notícias.
   if (!result.ok) {
     await persistAiCallError({
       userId: audit.userId,
@@ -183,10 +247,22 @@ export async function getNewsByMatchViaWebSearch(
       errorMessage: result.message,
       promptVersion: NEWS_PROMPT_VERSION,
     });
-    return { results: [], aiCall: null, unavailable: false };
+    return { results: [], aiCall: null, status: "failed", via: null };
   }
 
-  const sources = extractSources(result.contentBlocks);
+  const extracted = extractSources(result.contentBlocks);
+  const status = searchStatus(extracted);
+  if (extracted.searchErrors.length > 0) {
+    console.error(
+      JSON.stringify({
+        scope: "getNewsByMatchViaWebSearch",
+        matchId: audit.matchId,
+        error: "news_search_error",
+        errorCodes: extracted.searchErrors,
+        status,
+      }),
+    );
+  }
 
   // Loga o ai_call (status ok). costUsd = SÓ tokens (pelo preço do modelo que serviu); a
   // taxa de ~$0,01/busca da web search NÃO entra aqui — é metered out-of-band (ADR 0032
@@ -228,8 +304,9 @@ export async function getNewsByMatchViaWebSearch(
   }
 
   return {
-    results: sources,
+    results: extracted.sources,
     aiCall: aiCallId ? { id: aiCallId } : null,
-    unavailable: false,
+    status,
+    via: status === "failed" ? null : "web_search",
   };
 }

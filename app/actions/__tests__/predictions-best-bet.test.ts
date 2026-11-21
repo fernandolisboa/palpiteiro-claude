@@ -1276,7 +1276,12 @@ describe("runPalpiteHero — roteia pelo botão (intent) do formulário", () => 
 });
 
 describe("analyzeBestBet — fan-out paralelo (flag enable_parallel_fan_out)", () => {
-  const NEWS = Promise.resolve({ results: [], aiCall: null, unavailable: true });
+  const NEWS = Promise.resolve({
+    results: [],
+    aiCall: null,
+    status: "skipped" as const,
+    via: null,
+  });
 
   beforeEach(() => {
     mockParallelFlag.mockResolvedValue(true);

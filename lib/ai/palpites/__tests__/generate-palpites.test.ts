@@ -127,9 +127,11 @@ vi.mock("@/lib/db/queries/match-model-snapshots", () => ({
 
 import {
   generatePalpites,
+  newsVerdict,
   PalpiteError,
   startNewsFetch,
 } from "@/lib/ai/palpites";
+import { STEP_NOTES } from "@/lib/ai/progress/steps";
 import {
   NEWS_MIN_BUDGET_MS,
   SYNTHESIS_CALL_RESERVE_MS,
@@ -210,7 +212,8 @@ beforeEach(() => {
   getNewsByMatch.mockResolvedValue({
     results: [],
     aiCall: null,
-    unavailable: true,
+    status: "failed",
+    via: null,
   });
   getFixtureByMatch.mockResolvedValue({
     ...fixture("CR Flamengo", "Fluminense FC", 0, 0),
@@ -275,7 +278,7 @@ describe("generatePalpites (síntese) — prazo do run (#524 re-review)", () => 
       getNewsByMatch.mockImplementation(async (_ctx, _audit, opts) => {
         // A busca roda até o próprio prazo (o timeout da request corta aqui).
         clock = opts.deadlineAt;
-        return { results: [], aiCall: null, unavailable: false };
+        return { results: [], aiCall: null, status: "none", via: "ge" };
       });
       runAnalysis.mockResolvedValue(okResult(validHeadline));
       const res = await generatePalpites({ ...baseCall, deadlineAt });
@@ -309,7 +312,8 @@ describe("generatePalpites (síntese) — notícias já disparadas pelo run", ()
     const news = Promise.resolve({
       results: [],
       aiCall: { id: "ac-news" },
-      unavailable: false,
+      status: "none" as const,
+      via: "web_search" as const,
     });
     const res = await generatePalpites({ ...baseCall, news });
     expect(getNewsByMatch).not.toHaveBeenCalled();
@@ -331,7 +335,7 @@ describe("generatePalpites (síntese) — notícias já disparadas pelo run", ()
           { userId: "u-1", matchId: "m-1" },
           undefined,
         ),
-      ).resolves.toEqual({ results: [], aiCall: null, unavailable: true });
+      ).resolves.toEqual({ results: [], aiCall: null, status: "failed", via: null });
     } finally {
       errSpy.mockRestore();
     }
@@ -384,11 +388,11 @@ describe("generatePalpites (síntese) — caminho ok", () => {
     const aiCallRow = insertValues.mock.calls[0][0] as Record<string, unknown>;
     expect(aiCallRow.status).toBe("ok");
     expect(aiCallRow.model).toBe("claude-haiku-5-5");
-    expect(aiCallRow.promptVersion).toBe("palpites_v12");
+    expect(aiCallRow.promptVersion).toBe("palpites_v13");
 
     const setRow = insertValues.mock.calls[1][0] as Record<string, unknown>;
     expect(setRow.modelVersion).toBe("claude-haiku-5-5");
-    expect(setRow.promptVersion).toBe("palpites_v12");
+    expect(setRow.promptVersion).toBe("palpites_v13");
     expect(setRow.aiCallId).toBe("row-1");
     // headline jsonb: a manchete SEM placar (vira a linha) e SEM número de valor.
     expect(setRow.headline).toEqual({
@@ -696,7 +700,8 @@ describe("generatePalpites (síntese) — notícias (#377 / ADR 0032)", () => {
     getNewsByMatch.mockResolvedValue({
       results: newsSources,
       aiCall: { id: "news-1" },
-      unavailable: false,
+      status: "found",
+      via: "web_search",
     });
     runAnalysis.mockResolvedValue(okResult(validHeadline));
     await generatePalpites(baseCall);
@@ -713,7 +718,7 @@ describe("generatePalpites (síntese) — notícias (#377 / ADR 0032)", () => {
   });
 
   it("sem notícia (degrade gracioso) → headline SEM sources; palpite ainda embarca", async () => {
-    getNewsByMatch.mockResolvedValue({ results: [], aiCall: null, unavailable: true });
+    getNewsByMatch.mockResolvedValue({ results: [], aiCall: null, status: "failed", via: null });
     runAnalysis.mockResolvedValue(okResult(validHeadline));
     const res = await generatePalpites(baseCall);
     const setRow = insertValues.mock.calls[1][0] as Record<string, unknown>;
@@ -725,38 +730,80 @@ describe("generatePalpites (síntese) — notícias (#377 / ADR 0032)", () => {
   });
 
   it("FIREWALL-REGRESSION: termo de valor numa NOTÍCIA não derruba a síntese NEM vaza pra manchete", async () => {
-    // Uma fonte com "odd" no título é INPUT (sources), não verdict/narrative — não
-    // pode tropeçar no guard de value-language. E o output limpo (validHeadline) não
-    // vaza o termo pra manchete. Defesa-em-profundidade: se o LLM ECOASSE "odd" no
-    // output, o guard existente ainda pegaria (provado nos testes de firewall acima).
+    // Um título com "odd" sai na ENTRADA (o modelo nem o vê) e, por isso, também não
+    // persiste. O output limpo (validHeadline) segue; se o LLM ECOASSE "odd", o guard
+    // de saída ainda pegaria (testes de firewall acima).
     getNewsByMatch.mockResolvedValue({
       results: [
         { title: "Palmeiras com odd alta no mercado", url: "https://ge.globo.com/odd" },
+        { title: "Flamengo confirma retorno de Arrascaeta", url: "https://ge.globo.com/volta" },
       ],
       aiCall: { id: "news-2" },
-      unavailable: false,
+      status: "found",
+      via: "web_search",
     });
     runAnalysis.mockResolvedValue(okResult(validHeadline));
 
-    // Não lança (a notícia com "odd" é fonte, não manchete).
     const res = await generatePalpites(baseCall);
     expect(res.palpiteSet).toBeDefined();
 
-    // A fonte (com "odd") foi persistida como sources…
+    const req = runAnalysis.mock.calls[0][0] as AnalysisRequest;
+    expect(req.userMessage).not.toContain("odd alta");
+    expect(req.userMessage).toContain("retorno de Arrascaeta");
+
     const setRow = insertValues.mock.calls[1][0] as Record<string, unknown>;
     const headline = setRow.headline as {
       verdict: string;
       narrative: string;
-      sources?: Array<{ title: string }>;
+      sources?: Array<{ title: string; url: string }>;
     };
-    expect(headline.sources?.[0].title).toContain("odd");
-    // …mas NÃO vazou pra verdict/narrative (a manchete segue limpa).
+    expect(headline.sources).toEqual([
+      { title: "Flamengo confirma retorno de Arrascaeta", url: "https://ge.globo.com/volta" },
+    ]);
     const serialized = `${headline.verdict} ${headline.narrative}`.toLowerCase();
     expect(serialized).not.toContain("odd");
 
-    // O ai_call(ok) foi gravado (a síntese não foi rejeitada pelo firewall).
     const aiCallRow = insertValues.mock.calls[0][0] as Record<string, unknown>;
     expect(aiCallRow.status).toBe("ok");
+  });
+
+  it("persiste EXATAMENTE a notícia limpa que o modelo viu (#670)", async () => {
+    getNewsByMatch.mockResolvedValue({
+      results: [
+        {
+          title: "  Escalação do Flamengo:\n três   desfalques ",
+          url: " https://ge.globo.com/a b ",
+          snippet: "Pulgar está suspenso.",
+          source: "ge",
+        },
+        { title: "Sem https", url: "http://ge.globo.com/http", source: "ge" },
+        { title: "Esquema estranho", url: "javascript:alert(1)", source: "ge" },
+        { title: "Casa de apostas patrocina o clube", url: "https://ge.globo.com/bet", source: "ge" },
+      ],
+      aiCall: null,
+      status: "found",
+      via: "ge",
+    });
+    runAnalysis.mockResolvedValue(okResult(validHeadline));
+    await generatePalpites(baseCall);
+
+    const req = runAnalysis.mock.calls[0][0] as AnalysisRequest;
+    const setRow = insertValues.mock.calls[1][0] as Record<string, unknown>;
+    const headline = setRow.headline as {
+      sources?: Array<{ title: string; url: string }>;
+    };
+    expect(headline.sources).toEqual([
+      {
+        title: "Escalação do Flamengo: três desfalques",
+        url: "https://ge.globo.com/a%20b",
+      },
+    ]);
+    // Cada fonte persistida aparece no prompt exatamente assim; as barradas, não.
+    for (const src of headline.sources ?? []) {
+      expect(req.userMessage).toContain(`${src.title} (${src.url})`);
+    }
+    expect(req.userMessage).not.toContain("http://ge.globo.com/http");
+    expect(req.userMessage).not.toContain("Casa de apostas");
   });
 });
 
@@ -840,5 +887,125 @@ describe("generatePalpites (síntese) — caminhos de erro (auditados, sem set)"
       "match is not analyzable",
     );
     expect(runAnalysis).not.toHaveBeenCalled();
+  });
+});
+
+describe("generatePalpites (síntese) — notícias honestas (#670)", () => {
+  const geNews = [
+    {
+      title: "Escalação do Flamengo: Jardim tem três desfalques",
+      url: "https://ge.globo.com/futebol/times/flamengo/noticia/a.ghtml",
+      snippet: "Léo Pereira e Pulgar cumprem suspensão e não viajam",
+      publishedAt: "2026-05-14T20:02:01.000Z",
+      source: "ge" as const,
+    },
+  ];
+
+  it("trecho e data vão pro prompt, mas só {title,url} persiste", async () => {
+    getNewsByMatch.mockResolvedValue({ results: geNews, aiCall: null, status: "found", via: "ge" });
+    runAnalysis.mockResolvedValue(okResult(validHeadline));
+    await generatePalpites(baseCall);
+
+    const req = runAnalysis.mock.calls[0][0] as AnalysisRequest;
+    expect(req.userMessage).toContain("[ge, 14/05 17:02] Escalação do Flamengo");
+    expect(req.userMessage).toContain("  Trecho: Léo Pereira e Pulgar cumprem suspensão");
+
+    const setRow = insertValues.mock.calls[1][0] as Record<string, unknown>;
+    const headline = setRow.headline as { sources?: unknown };
+    expect(headline.sources).toEqual([
+      { title: geNews[0].title, url: geNews[0].url },
+    ]);
+  });
+
+  it("'none' diz 'nenhuma notícia recente'; 'failed' diz 'indisponíveis'", async () => {
+    runAnalysis.mockResolvedValue(okResult(validHeadline));
+    getNewsByMatch.mockResolvedValue({ results: [], aiCall: null, status: "none", via: "ge" });
+    await generatePalpites(baseCall);
+    const noneMsg = (runAnalysis.mock.calls[0][0] as AnalysisRequest).userMessage;
+    expect(noneMsg).toContain("(nenhuma notícia recente sobre o jogo)");
+
+    runAnalysis.mockClear();
+    getNewsByMatch.mockResolvedValue({ results: [], aiCall: null, status: "failed", via: null });
+    await generatePalpites(baseCall);
+    const failedMsg = (runAnalysis.mock.calls[0][0] as AnalysisRequest).userMessage;
+    expect(failedMsg).toContain(
+      "(notícias indisponíveis nesta análise: não conclua nada pela ausência)",
+    );
+    expect(failedMsg).not.toContain("nenhuma notícia recente");
+  });
+
+  it("sem tempo pra busca → status skipped", async () => {
+    await expect(
+      startNewsFetch(
+        {
+          league: "brasileirao_a",
+          homeTeam: "A",
+          awayTeam: "B",
+          kickoffAt: new Date("2099-01-01T00:00:00Z"),
+        },
+        { userId: "u-1", matchId: "m-1" },
+        Date.now() + 1_000,
+      ),
+    ).resolves.toEqual({ results: [], aiCall: null, status: "skipped", via: null });
+    expect(getNewsByMatch).not.toHaveBeenCalled();
+  });
+});
+
+describe("newsVerdict — desfecho do passo de notícias (#670)", () => {
+  const base = { aiCall: null } as const;
+
+  it("found → done com o detalhe por fonte", () => {
+    expect(
+      newsVerdict({
+        ...base,
+        results: [
+          { title: "a", url: "https://ge.globo.com/a", source: "ge" },
+          { title: "b", url: "https://ge.globo.com/b", source: "ge" },
+        ],
+        status: "found",
+        via: "ge",
+      }),
+    ).toEqual({ detail: ["2 notícias do ge"] });
+  });
+
+  it("found com meia falha → detalhe + nota de um dos times", () => {
+    expect(
+      newsVerdict({
+        ...base,
+        results: [{ title: "a", url: "https://ge.globo.com/a", source: "ge" }],
+        status: "found",
+        via: "ge",
+        partial: true,
+      }),
+    ).toEqual({ detail: ["1 notícia do ge", STEP_NOTES.newsPartial] });
+  });
+
+  it("none pelo ge, none pela busca, none com meia falha", () => {
+    expect(newsVerdict({ ...base, results: [], status: "none", via: "ge" })).toEqual({
+      status: "done",
+      label: STEP_NOTES.newsNoneGe,
+    });
+    expect(
+      newsVerdict({ ...base, results: [], status: "none", via: "web_search" }),
+    ).toEqual({ status: "done", label: STEP_NOTES.newsNoneWeb });
+    expect(
+      newsVerdict({ ...base, results: [], status: "none", via: "ge", partial: true }),
+    ).toEqual({
+      status: "done",
+      label: STEP_NOTES.newsPartial,
+      detail: [STEP_NOTES.newsNoneGe],
+    });
+  });
+
+  it("no_search → skipped com nota; failed → failed; skipped → skipped", () => {
+    expect(
+      newsVerdict({ ...base, results: [], status: "no_search", via: "web_search" }),
+    ).toEqual({ status: "skipped", label: STEP_NOTES.newsNoSearch });
+    expect(newsVerdict({ ...base, results: [], status: "failed", via: null })).toEqual({
+      status: "failed",
+    });
+    expect(newsVerdict({ ...base, results: [], status: "skipped", via: null })).toEqual({
+      status: "skipped",
+    });
   });
 });
