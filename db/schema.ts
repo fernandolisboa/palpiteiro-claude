@@ -25,6 +25,13 @@ import type {
   StoredReading,
   UserPalpite,
 } from "@/lib/user-palpite/types";
+import type {
+  UnderdogFacts,
+  UnderdogNarrative,
+  UnderdogNarrativeSource,
+  UnderdogSide,
+  UnderdogVersions,
+} from "@/lib/underdog/types";
 import {
   boolean,
   check,
@@ -954,6 +961,9 @@ export const aiConfig = pgTable("ai_config", {
   // 0063). Default ON. SET ... = false → o painel mostra só a avaliação em código, sem
   // o botão.
   enableBetSlipExplain: boolean().notNull().default(true),
+  // Kill-switch do painel "Chances do azarão" (#671, ADR 0072). Default ON. SET ... =
+  // false → nada aparece na página do jogo (nem o texto guardado) e a action recusa.
+  enableUnderdogView: boolean().notNull().default(true),
   // Kill-switch da reconferência com a escalação (#619, PR B; ADR 0041 adendo). Default
   // ON. O cron recheck-lineups recalcula em código, sem LLM e sem The Odds API, as
   // análises code_jev feitas antes da escalação sair. SET ... = false → nada é
@@ -1262,6 +1272,50 @@ export const userPalpiteAnalyses = pgTable(
     check(
       "user_palpite_analyses_live_state_check",
       sql`${t.isLive} = false OR ${t.liveState} IS NOT NULL`,
+    ),
+  ],
+);
+
+// Chances do azarão (#671, ADR 0072): o painel aberto por usuário e base do modelo. Os
+// números congelados (`facts`) e o texto revisado (`narrative`) batem ao reabrir; ler e
+// escrever só via lib/db/queries/underdog-views.ts (Zod em toda leitura). UNIQUE (user,
+// base) só deduplica a corrida de dois cliques; "mesma base" na tela é a materialidade
+// (lib/underdog/gate.ts). Comportamento do titular: a exclusão de conta apaga (ADR 0046).
+export const underdogViews = pgTable(
+  "underdog_views",
+  {
+    id: uuid().primaryKey().defaultRandom(),
+    userId: uuid()
+      .notNull()
+      .references(() => users.id, { onDelete: "restrict" }),
+    matchId: uuid()
+      .notNull()
+      .references(() => matches.id, { onDelete: "restrict" }),
+    modelSnapshotId: uuid()
+      .notNull()
+      .references(() => matchModelSnapshots.id, { onDelete: "restrict" }),
+    underdogSide: text().$type<UnderdogSide>().notNull(),
+    facts: jsonb().$type<UnderdogFacts>().notNull(),
+    narrative: jsonb().$type<UnderdogNarrative>().notNull(),
+    narrativeSource: text().$type<UnderdogNarrativeSource>().notNull(),
+    versions: jsonb().$type<UnderdogVersions>().notNull(),
+    advocateAiCallId: uuid().references(() => aiCalls.id, {
+      onDelete: "set null",
+    }),
+    reviewerAiCallId: uuid().references(() => aiCalls.id, {
+      onDelete: "set null",
+    }),
+    createdAt: timestamp({ withTimezone: true }).notNull().defaultNow(),
+  },
+  (t) => [
+    uniqueIndex("underdog_views_user_snapshot_uniq").on(
+      t.userId,
+      t.modelSnapshotId,
+    ),
+    index("underdog_views_user_match_created_idx").on(
+      t.userId,
+      t.matchId,
+      t.createdAt.desc(),
     ),
   ],
 );
