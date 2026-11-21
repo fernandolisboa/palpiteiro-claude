@@ -28,6 +28,13 @@ const nextConfig: NextConfig = {
   experimental: {
     staleTimes: { dynamic: 300 },
   },
+  // Build da Vercel sem o lint e o typecheck do `next build`: o deploy de produção do
+  // #676 morreu por falta de memória (exit 137) justo nesse passo, com o mesmo commit
+  // passando no preview. O CI (.github/workflows/ci.yml) roda `pnpm typecheck` e
+  // `pnpm lint` em todo PR e em todo push na main, e o merge só sai com ele verde.
+  // Fora da Vercel (build local) as duas checagens continuam no `next build`.
+  typescript: { ignoreBuildErrors: process.env.VERCEL === "1" },
+  eslint: { ignoreDuringBuilds: process.env.VERCEL === "1" },
   // Admin reorganizado (#633): os endereços antigos seguem abrindo. Temporário (307)
   // de propósito: se a estrutura mudar de novo, o navegador não fica preso no destino.
   async redirects() {
