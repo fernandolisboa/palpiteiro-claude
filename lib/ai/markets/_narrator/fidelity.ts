@@ -112,6 +112,13 @@ function allowedPercents(d: NarratorDecision): number[] {
       if (f.impliedPct !== null) out.push(100 - f.impliedPct);
     }
   }
+  // narrator_v1.5 (#669): a chance do modelo e a implícita de cada seleção estão no
+  // bloco "Decisão" e são citáveis (ex.: a chance do favorito num 1X2). O edge das
+  // outras não está lá e não entra. A checagem de lado não muda.
+  for (const s of d.selections) {
+    out.push(s.modelProbPct);
+    if (s.impliedPct !== null) out.push(s.impliedPct);
+  }
   return out;
 }
 

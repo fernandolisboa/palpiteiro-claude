@@ -13,10 +13,19 @@ import {
   SUBMIT_NARRATION_TOOL,
   SYSTEM_PROMPT,
 } from "./prompt";
+import {
+  fidelityRejectionFeedback,
+  rejectionBlock,
+  TOOL_MISSING_FEEDBACK,
+  withRejection,
+  zodRejectionFeedback,
+  type NarrationRejection,
+} from "./retry";
 import { NarratorOutputSchema, type NarratorOutput } from "./schemas";
 import type {
   NarratorContext,
   NarratorDecision,
+  NarratorMarketSelection,
   NarratorSelection,
   UserFactorOrigins,
 } from "./types";
@@ -41,18 +50,25 @@ export {
   buildNarratorMessage,
   checkNarrationFidelity,
   describeAbsencePt,
+  fidelityRejectionFeedback,
   judgmentFactorPhrases,
   lineupNotePhrases,
   NARRATOR_VERSION,
   NarratorOutputSchema,
+  rejectionBlock,
   selectionLabel,
   SUBMIT_NARRATION_TOOL,
   SYSTEM_PROMPT,
   templatedNarration,
+  TOOL_MISSING_FEEDBACK,
+  withRejection,
+  zodRejectionFeedback,
 };
 export type {
+  NarrationRejection,
   NarratorContext,
   NarratorDecision,
+  NarratorMarketSelection,
   NarratorOutput,
   NarratorSelection,
   UserFactorOrigins,

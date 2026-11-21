@@ -142,10 +142,16 @@ import {
 } from "./staking";
 import {
   buildNarratorContext,
+  fidelityRejectionFeedback,
   judgmentFactorPhrases,
   lineupNotePhrases,
   narratorCartridge,
+  rejectionBlock,
   selectionLabel,
+  TOOL_MISSING_FEEDBACK,
+  withRejection,
+  zodRejectionFeedback,
+  type NarrationRejection,
   type NarratorContext,
   type NarratorDecision,
   type NarratorOutput,
@@ -336,8 +342,9 @@ export type BestBetPredictOptions = {
 };
 
 // Decisão code_jev tomada, gateada e com a narração ADIADA (nada persistido ainda).
-// O orquestrador escolhe UM mercado pra narrar (1 chamada paga) e persiste os
-// demais com o racional templado.
+// O orquestrador escolhe UM mercado pra narrar (1 slot; 1 chamada paga, 2 quando a
+// 1ª é reprovada pela nossa conferência, #669) e persiste os demais com o racional
+// templado.
 export type PendingCodeJevPrediction = {
   marketKey: string;
   // Os MESMOS valores que a row vai gravar (toFixed de persistPrediction) → o rank
@@ -377,10 +384,12 @@ export async function predictForBestBet(
 }
 
 /**
- * A ÚNICA chamada paga do best bet code_jev: narra a decisão escolhida (logada em
- * ai_calls). Nunca bloqueia: falha do narrador, ou prazo do run sem espaço pra
- * chamada (não chamada, sem slot), → racional templado. Lança se o insert de
- * ai_calls falhar ou se o hook `beforeLlmPath` (slot) lançar.
+ * A narração do best bet code_jev: narra a decisão escolhida (logada em ai_calls). Um
+ * slot (`beforeLlmPath`) cobre a narração: uma 2ª tentativa depois de uma reprovação
+ * nossa (formato ou fidelidade, #669) não cobra outro, porque a falha é nossa e não do
+ * pedido. Nunca bloqueia: falha do narrador, ou prazo do run sem espaço pra chamada
+ * (não chamada, sem slot), → racional templado. Lança se o insert de ai_calls falhar
+ * ou se o hook `beforeLlmPath` (slot) lançar.
  */
 export async function narratePendingPrediction(
   pending: PendingCodeJevPrediction,
@@ -1165,11 +1174,13 @@ async function runPredict(
         labelByKey: null,
       },
     };
-    // Best bet (#512): o orquestrador decide qual mercado narra (1 chamada paga).
+    // Best bet (#512): o orquestrador decide qual mercado narra (1 slot, ver
+    // narratePendingPrediction).
     if (opts.deferNarration) return { kind: "pending", pending };
 
-    // Narração paga fora do best bet: hook de slot da análise; sem espaço no prazo,
-    // narrateDecision nem chama (templado, sem slot).
+    // Narração paga fora do best bet: hook de slot da análise (um só, mesmo com a 2ª
+    // tentativa do #669); sem espaço no prazo, narrateDecision nem chama (templado, sem
+    // slot).
     const narration = await narratePendingPrediction(pending, {
       beforeLlmPath: opts.beforeLlmPath,
     });
@@ -2317,7 +2328,7 @@ type InPlayMarketPlan = {
  * sem odd (nenhuma busca nem leitura de odds depois do apito), sem JEV e sem os dados de
  * contexto de pré-jogo. As chances vêm do modelo em jogo EM CÓDIGO (a base do apito
  * condicionada ao placar, às expulsões e ao tempo que falta); o LLM só narra, numa
- * chamada (narrator_live_v1, logada em ai_calls, saída validada por Zod). Cada mercado
+ * chamada (narrator_live_v1.x, logada em ai_calls, saída validada por Zod). Cada mercado
  * vira uma prediction `pass` com is_live + carimbo; a PSO leva a prob. do modelo e
  * odd NULL. Recheca a fase aqui (defesa em profundidade) pelo relógio de AGORA, não
  * pelo `now` da action: só in_play/half_time com estado de até 2 min e minuto conhecido
@@ -3223,12 +3234,26 @@ function toNarratorDecision(args: {
       odd: args.oddByKey[engine.best.key] ?? null,
     };
   }
+  // #669: todas as seleções da linha decidida (a mesma do modelProbByKey do motor), na
+  // ordem de selectionKeys, só com chance do modelo e implícita.
+  const selections: NarratorDecision["selections"] = [];
+  for (const key of args.selectionKeys) {
+    const e = engine.evaluations.find((x) => x.key === key && x.line === engine.line);
+    if (!e) continue;
+    selections.push({
+      key,
+      label: label(key),
+      modelProbPct: e.modelProbPct,
+      impliedPct: e.impliedPct === null ? null : Number(e.impliedPct.toFixed(2)),
+    });
+  }
   return {
     marketKey: args.marketKey,
     marketLabel: getMarketPresentation(args.marketKey).marketLabel,
     line,
     teams,
     selectionKeys: args.selectionKeys,
+    selections,
     side: decision.side,
     focus,
     stakeUnits: decision.side === "pass" ? null : decision.stakeUnits,
@@ -3248,6 +3273,10 @@ function toNarratorDecision(args: {
   };
 }
 
+// Por que a narração não serviu (#669): a IA não respondeu (sem chave, erro, recusa,
+// timeout), veio fora do formato (sem a tool, Zod) ou não passou na fidelidade.
+type NarrationFailure = "no_answer" | NarrationRejection;
+
 type NarrationOutcome = {
   status: AiCallStatus;
   inputPayload: Record<string, unknown>;
@@ -3261,6 +3290,11 @@ type NarrationOutcome = {
   output: NarratorOutput | null;
   // O modelo que respondeu; o pedido quando não houve chamada (prazo, sem chave).
   servedModel: AIModel;
+  // null quando a narração serviu (ou não houve chamada, por prazo).
+  failure: NarrationFailure | null;
+  // O motivo pra 2ª tentativa (#669), em texto pro modelo. Só em formato/fidelidade, e
+  // nunca num tool_missing por max_tokens (a 2ª falharia igual).
+  retryFeedback: string | null;
 };
 
 // O que a narração devolve: a row de ai_calls, o texto (ou o templado) e o id do
@@ -3271,9 +3305,10 @@ type NarrationResult = {
   servedModelId: string;
 };
 
-// O contrato de um cartucho narrador (ADR 0041 §4): o de pré-jogo (narrator_v1.1) e o
-// ao vivo (narrator_live_v1, #594) dividem a ferramenta e o schema; mudam o prompt, a
-// mensagem, a fidelidade e o fallback.
+// O contrato de um cartucho narrador (ADR 0041 §4): o de pré-jogo (narrator_v1.x) e o
+// ao vivo (narrator_live_v1.x, #594) dividem a ferramenta e o schema; mudam o prompt, a
+// mensagem, a fidelidade e o fallback. As duas mensagens terminam na linha "Escreva …
+// via submit_narration.", antes da qual entra o bloco da 2ª tentativa (#669).
 type NarrationCartridge<D, C> = {
   version: string;
   systemPrompt: string;
@@ -3291,7 +3326,8 @@ type NarrationCartridge<D, C> = {
 // Uma chamada narradora (ADR 0041 §4) pelo MESMO seam AIProvider, mesmo modelo
 // resolvido e mesmos genParams. NUNCA bloqueia a análise: sem chave, erro de
 // provider, tool ausente, Zod ou fidelidade → racional templado. A row de ai_calls
-// (qualquer status) é a que a prediction referencia.
+// (qualquer status) é a que a prediction referencia. Reprovada no formato ou na
+// fidelidade, ganha UMA 2ª tentativa (#669) — ver narrateWith.
 async function narrateDecision(args: {
   model: AIModel;
   userId: string;
@@ -3305,27 +3341,30 @@ async function narrateDecision(args: {
   return narrateWith(narratorCartridge, args);
 }
 
+type NarrateArgs<D, C> = {
+  model: AIModel;
+  userId: string;
+  matchId: string;
+  decision: D;
+  context: C;
+  deadlineAt?: number;
+  beforeLlmPath?: () => Promise<void>;
+  // Só pra frase do progresso (ADR 0064): o mercado narrado e se é a leitura ao vivo.
+  marketKey?: string;
+  live?: boolean;
+};
+
 async function narrateWith<D, C>(
   cartridge: NarrationCartridge<D, C>,
-  args: {
-    model: AIModel;
-    userId: string;
-    matchId: string;
-    decision: D;
-    context: C;
-    deadlineAt?: number;
-    beforeLlmPath?: () => Promise<void>;
-    // Só pra frase do progresso (ADR 0064): o mercado narrado e se é a leitura ao vivo.
-    marketKey?: string;
-    live?: boolean;
-  },
+  args: NarrateArgs<D, C>,
 ): Promise<NarrationResult> {
   const { model, decision } = args;
   const genParams = await getGenerationParams();
+  const userMessage = cartridge.buildUserMessage(decision, args.context);
   const request: AnalysisRequest = {
     model,
     system: cartridge.systemPrompt,
-    userMessage: cartridge.buildUserMessage(decision, args.context),
+    userMessage,
     tool: cartridge.tool,
     toolName: cartridge.toolName,
     maxTokens: genParams.maxTokens,
@@ -3340,30 +3379,111 @@ async function narrateWith<D, C>(
       { provider: providerKey, model: model.id },
     );
   }
+  const insert = (outcome: NarrationOutcome) =>
+    insertNarrationCall({
+      cartridgeVersion: cartridge.version,
+      providerKey,
+      userId: args.userId,
+      matchId: args.matchId,
+      outcome,
+    });
+  const fitsCall = () =>
+    canFitCall(args.deadlineAt, {
+      speed: model.speed,
+      maxTokens: genParams.maxTokens,
+      effort: genParams.effort,
+    });
 
   // Prazo (#524): uma narração que o timeout cortaria NÃO é iniciada. Mantém o
   // contrato do narrador (nunca bloqueia → racional templado): sem chamada, sem slot
   // (o hook só roda antes de uma chamada de verdade), e uma row de ai_calls com
   // status timeout e custo zero pra prediction ter o aiCallId.
-  const fits = canFitCall(args.deadlineAt, {
-    speed: model.speed,
-    maxTokens: genParams.maxTokens,
-    effort: genParams.effort,
-  });
+  const fits = fitsCall();
   if (fits && args.beforeLlmPath) await args.beforeLlmPath();
+  const live = args.live ?? false;
   const step = beginStep(
     narrationStep({
       family: model.family,
       marketLabel: args.marketKey ? progressMarketLabel(args.marketKey) : null,
-      live: args.live ?? false,
+      live,
     }),
   );
-  const outcome = fits
-    ? await runNarration(cartridge, aiProvider, request, decision)
-    : narrationSkippedForDeadline(request);
-  if (!fits) step.skip();
-  else if (outcome.output === null) step.fail();
-  else step.done();
+  if (!fits) {
+    const outcome = narrationSkippedForDeadline(request);
+    step.skip();
+    return {
+      aiCallId: await insert(outcome),
+      output: cartridge.fallback(decision),
+      servedModelId: outcome.servedModel.id,
+    };
+  }
+
+  let outcome = await runNarration(cartridge, aiProvider, request, decision);
+  const rejection =
+    outcome.failure === "format" || outcome.failure === "fidelity"
+      ? outcome.failure
+      : null;
+  // Id da row já gravada do `outcome` final (a 1ª tentativa, quando a 2ª não coube).
+  let persistedId: string | null = null;
+  if (rejection !== null && outcome.retryFeedback !== null) {
+    // 2ª tentativa (#669): a reprovação é nossa (formato ou fidelidade), então tenta de
+    // novo UMA vez, com o motivo no fim da mensagem (system e tool idênticos: o prefixo
+    // cacheado é lido). Sem slot novo: `beforeLlmPath` não roda de novo, a falha é
+    // nossa e não do pedido. A row da 1ª fica gravada ANTES, pra o custo já pago não se
+    // perder se a função morrer no meio; a prediction aponta pra row final.
+    const firstId = await insert(outcome);
+    persistedId = firstId;
+    if (fitsCall()) {
+      const retry = await runNarration(
+        cartridge,
+        aiProvider,
+        {
+          ...request,
+          userMessage: withRejection(
+            userMessage,
+            rejectionBlock(rejection, outcome.retryFeedback),
+          ),
+        },
+        decision,
+      );
+      outcome = {
+        ...retry,
+        outputPayload: { ...retry.outputPayload, retryOf: firstId },
+        errorMessage:
+          retry.errorMessage === null ? null : `retry: ${retry.errorMessage}`,
+      };
+      persistedId = null;
+    }
+  }
+
+  if (outcome.output !== null) step.done();
+  else if (outcome.failure === "format") {
+    step.fail(
+      live ? STEP_NOTES.narrationOffFormatLive : STEP_NOTES.narrationOffFormat,
+    );
+  } else if (outcome.failure === "fidelity") {
+    step.fail(
+      live ? STEP_NOTES.narrationMismatchLive : STEP_NOTES.narrationMismatch,
+    );
+  } else step.fail();
+  const aiCallId = persistedId ?? (await insert(outcome));
+
+  return {
+    aiCallId,
+    output: outcome.output ?? cartridge.fallback(decision),
+    servedModelId: outcome.servedModel.id,
+  };
+}
+
+// Uma row de ai_calls por chamada do narrador (ou pela narração pulada por prazo).
+async function insertNarrationCall(args: {
+  cartridgeVersion: string;
+  providerKey: string;
+  userId: string;
+  matchId: string;
+  outcome: NarrationOutcome;
+}): Promise<string> {
+  const { outcome } = args;
   const cost = calculateCost({
     model: outcome.servedModel,
     inputTokens: outcome.inputTokens,
@@ -3371,16 +3491,15 @@ async function narrateWith<D, C>(
     cacheCreationInputTokens: outcome.cacheCreationInputTokens,
     cacheReadInputTokens: outcome.cacheReadInputTokens,
   });
-  let aiCallId: string;
   try {
     const [row] = await db
       .insert(aiCalls)
       .values({
         userId: args.userId,
         matchId: args.matchId,
-        provider: providerKey,
+        provider: args.providerKey,
         model: outcome.servedModel.id,
-        promptVersion: cartridge.version,
+        promptVersion: args.cartridgeVersion,
         inputPayload: outcome.inputPayload,
         outputPayload: outcome.outputPayload,
         inputTokens: outcome.inputTokens,
@@ -3396,7 +3515,7 @@ async function narrateWith<D, C>(
             : truncate(outcome.errorMessage, 2000),
       })
       .returning();
-    aiCallId = row.id;
+    return row.id;
   } catch (err) {
     const cause = extractDbCause(err);
     console.error(
@@ -3410,11 +3529,6 @@ async function narrateWith<D, C>(
     );
     throw new PredictError("failed to persist ai_call", cause);
   }
-  return {
-    aiCallId,
-    output: outcome.output ?? cartridge.fallback(decision),
-    servedModelId: outcome.servedModel.id,
-  };
 }
 
 function narrationSkippedForDeadline(
@@ -3433,8 +3547,13 @@ function narrationSkippedForDeadline(
     errorMessage: message,
     output: null,
     servedModel: request.model,
+    failure: null,
+    retryFeedback: null,
   };
 }
+
+// stop_reason de resposta cortada no teto de tokens (Anthropic / OpenAI).
+const TRUNCATED_STOP_REASONS = new Set(["max_tokens", "length"]);
 
 async function runNarration<D, C>(
   cartridge: NarrationCartridge<D, C>,
@@ -3446,6 +3565,7 @@ async function runNarration<D, C>(
     status: AiCallStatus,
     errorMessage: string,
     base: Partial<NarrationOutcome> = {},
+    rejection: { failure: NarrationRejection; retryFeedback: string | null } | null = null,
   ): NarrationOutcome => ({
     status,
     inputPayload:
@@ -3459,6 +3579,8 @@ async function runNarration<D, C>(
     errorMessage,
     output: null,
     servedModel: base.servedModel ?? request.model,
+    failure: rejection?.failure ?? "no_answer",
+    retryFeedback: rejection?.retryFeedback ?? null,
   });
 
   if (!aiProvider.hasKey()) {
@@ -3483,21 +3605,37 @@ async function runNarration<D, C>(
     latencyMs: result.latencyMs,
     servedModel: result.servedModel,
   };
+  // Recusa do modelo (stop_reason refusal), erro e timeout: "a IA não respondeu".
   if (!result.ok) return failed(result.status, result.message, base);
   if (result.toolInput === undefined) {
-    return failed(
-      "tool_missing",
-      `model did not call ${cartridge.toolName}`,
-      base,
-    );
+    // Cortada no teto de tokens: a 2ª falharia igual, não tenta de novo.
+    const truncated =
+      result.stopReason !== null && TRUNCATED_STOP_REASONS.has(result.stopReason);
+    return failed("tool_missing", `model did not call ${cartridge.toolName}`, base, {
+      failure: "format",
+      retryFeedback: truncated ? null : TOOL_MISSING_FEEDBACK,
+    });
   }
   const parsed = cartridge.outputSchema.safeParse(result.toolInput);
   if (!parsed.success) {
-    return failed("invalid_output", JSON.stringify(parsed.error.issues), base);
+    return failed("invalid_output", JSON.stringify(parsed.error.issues), base, {
+      failure: "format",
+      retryFeedback: zodRejectionFeedback(parsed.error.issues),
+    });
   }
   const fidelity = cartridge.checkFidelity(parsed.data, decision);
   if (!fidelity.ok) {
-    return failed("invalid_output", `fidelity: ${fidelity.reason}`, base);
+    return failed("invalid_output", `fidelity: ${fidelity.reason}`, base, {
+      failure: "fidelity",
+      retryFeedback: fidelityRejectionFeedback(fidelity.reason),
+    });
   }
-  return { ...base, status: "ok", errorMessage: null, output: parsed.data };
+  return {
+    ...base,
+    status: "ok",
+    errorMessage: null,
+    output: parsed.data,
+    failure: null,
+    retryFeedback: null,
+  };
 }

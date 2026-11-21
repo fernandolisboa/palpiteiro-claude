@@ -11,7 +11,10 @@ import {
 // leitura nunca vira aposta. Mesma ferramenta (submit_narration), mesmo schema Zod e
 // mesmos limites do narrador de pré-jogo; o prompt de pré-jogo (NARRATOR_VERSION) não
 // muda por causa dele. Mudou texto do prompt, tool ou mensagem? Bump + commit `prompt:`.
-export const NARRATOR_LIVE_VERSION = "narrator_live_v1" as const;
+// v1.1 (#669): uma leitura reprovada (formato ou fidelidade) ganha UMA 2ª tentativa com
+// o motivo no fim da mensagem (../retry.ts). System prompt e tool idênticos aos da v1
+// (cache, ADR 0071): só a mensagem da 2ª tentativa muda.
+export const NARRATOR_LIVE_VERSION = "narrator_live_v1.1" as const;
 
 export const LIVE_SYSTEM_PROMPT = `Você é o narrador do Palpiteiro, um app de palpites de futebol. O jogo está EM ANDAMENTO. Um modelo estatístico em código JÁ leu o jogo a partir do placar, das expulsões e do tempo que falta, e calculou as chances do resultado final. Seu único trabalho é explicar essa leitura em português do Brasil, com clareza.
 

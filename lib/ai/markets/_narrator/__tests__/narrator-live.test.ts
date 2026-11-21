@@ -5,7 +5,9 @@ import { describe, expect, it } from "vitest";
 import {
   NARRATOR_VERSION,
   NarratorOutputSchema,
+  rejectionBlock,
   SYSTEM_PROMPT,
+  withRejection,
 } from "@/lib/ai/markets/_narrator";
 import {
   buildLiveNarratorMessage,
@@ -13,6 +15,7 @@ import {
   LIVE_SYSTEM_PROMPT,
   liveNarratorCartridge,
   NARRATOR_LIVE_VERSION,
+  SUBMIT_LIVE_NARRATION_TOOL,
   templatedLiveNarration,
   type LiveNarratorDecision,
 } from "@/lib/ai/markets/_narrator/live";
@@ -56,12 +59,13 @@ function decision(over: Partial<LiveNarratorDecision> = {}): LiveNarratorDecisio
 }
 
 const sha = (s: string) => createHash("sha256").update(s).digest("hex").slice(0, 16);
+const sha256 = (s: string) => createHash("sha256").update(s).digest("hex");
 
-describe("narrator_live_v1", () => {
+describe("narrator_live_v1.1", () => {
   it("versão própria; o narrador de pré-jogo fica intacto", () => {
-    expect(NARRATOR_LIVE_VERSION).toBe("narrator_live_v1");
-    expect(liveNarratorCartridge.version).toBe("narrator_live_v1");
-    expect(NARRATOR_VERSION).toBe("narrator_v1.4");
+    expect(NARRATOR_LIVE_VERSION).toBe("narrator_live_v1.1");
+    expect(liveNarratorCartridge.version).toBe("narrator_live_v1.1");
+    expect(NARRATOR_VERSION).toBe("narrator_v1.5");
     expect(LIVE_SYSTEM_PROMPT).not.toBe(SYSTEM_PROMPT);
     // Mesmo schema e mesma ferramenta do pré-jogo (só o texto muda).
     expect(liveNarratorCartridge.outputSchema).toBe(NarratorOutputSchema);
@@ -70,6 +74,34 @@ describe("narrator_live_v1", () => {
 
   it("prompt pinado (mudou? bump da versão + commit prompt:)", () => {
     expect(sha(LIVE_SYSTEM_PROMPT)).toMatchInlineSnapshot(`"ef74c6b66e5866fc"`);
+  });
+
+  it("v1.1 (#669): system e tool byte-idênticos aos da v1 (cache, ADR 0071)", () => {
+    // Literais calculados no código da narrator_live_v1, antes da mudança.
+    expect(sha256(LIVE_SYSTEM_PROMPT)).toBe(
+      "ef74c6b66e5866fc346cce464497ea3f86101525f097c3c8020177bd21955f98",
+    );
+    expect(sha256(JSON.stringify(SUBMIT_LIVE_NARRATION_TOOL))).toBe(
+      "d24ce6e7512b8c73127c36f700af088ee22b80987b6bff438b61cb1da1b6cf30",
+    );
+    expect(sha256(JSON.stringify(liveNarratorCartridge.tool))).toBe(
+      "a1e43c85d60f67a62c5a320f1b47c0cf4203eeb43425d0f33241f309732e4dfb",
+    );
+  });
+
+  it("a mensagem termina na instrução, e a 2ª tentativa põe a reprovação logo antes dela", () => {
+    const msg = buildLiveNarratorMessage(decision(), { leagueLabel: "Brasileirão Série A" });
+    const last = "Escreva o racional e os fatores-chave desta leitura via submit_narration.";
+    expect(msg.split("\n").at(-1)).toBe(last);
+    const retry = withRejection(
+      msg,
+      rejectionBlock("fidelity", "termo de aposta 'valor' na leitura ao vivo"),
+    );
+    expect(retry.startsWith(msg.slice(0, msg.lastIndexOf("\n")))).toBe(true);
+    expect(retry.split("\n").at(-1)).toBe(last);
+    expect(retry).toContain(
+      "\n\n## Tentativa anterior reprovada\n- A resposta anterior não passou na conferência com os números e o lado da decisão: termo de aposta 'valor' na leitura ao vivo.\n",
+    );
   });
 
   it("o prompt diz que não há aposta ao vivo e proíbe os termos de aposta", () => {
