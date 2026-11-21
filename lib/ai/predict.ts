@@ -26,6 +26,7 @@ import {
 import { ODDS_SNAPSHOT_FRESHNESS_MS } from "@/lib/odds/freshness-window";
 import { computeMarketImpliedProbabilities } from "@/lib/odds/implied-probability";
 import { pickBestBookmaker, type MarketOddsBundle } from "@/lib/odds/select-bookmaker";
+import { storedOddText } from "@/lib/odds/stored-odd";
 import { getOddsProvider } from "@/lib/providers/odds";
 import {
   beginStep,
@@ -1760,7 +1761,7 @@ async function decideRecommendation(a: DecisionArgs): Promise<GatedDecision> {
     const modelProb = a.modelProbByKey[key];
     return {
       selectionId: sid,
-      odd: a.oddByKey[key].toFixed(3),
+      odd: storedOddText(a.oddByKey[key]),
       modelProbPct: modelProb === undefined ? null : modelProb.toFixed(2),
     };
   });

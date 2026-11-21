@@ -6,6 +6,7 @@ import type { JudgmentMultipliers } from "@/lib/ai/judgments/apply";
 import type { JudgmentQuestionId } from "@/lib/ai/judgments/types";
 import { judgmentFactorPhrases } from "@/lib/ai/markets/_narrator/labels";
 import type { PredictionWithAiCall } from "@/lib/db/queries/predictions";
+import { asStoredOdd } from "@/lib/odds/stored-odd";
 import { claimEffect } from "@/lib/user-palpite/evidence";
 import { hasContextNote } from "@/lib/user-palpite/labels";
 import { PredictionUserContextSchema } from "@/lib/user-palpite/types";
@@ -206,18 +207,13 @@ function summarizeSources(sources: AnalysisSource[]): MarketAnalysisSummary[] {
   return summaries;
 }
 
-// Odd de 3 casas, como `numeric(6,3)` grava: o run em memória e o histórico iguais.
-export function roundOdd(odd: number): number {
-  return Math.round(odd * 1000) / 1000;
-}
-
 function frozenOdds(
   selections: AnalysisSource["selections"],
 ): Record<string, number> {
   const out: Record<string, number> = {};
   for (const s of selections) {
     const odd = finiteOrNull(s.odd);
-    if (odd !== null && odd > 1) out[s.key] = roundOdd(odd);
+    if (odd !== null && odd > 1) out[s.key] = asStoredOdd(odd);
   }
   return out;
 }

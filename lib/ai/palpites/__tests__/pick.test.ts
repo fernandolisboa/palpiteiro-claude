@@ -369,6 +369,44 @@ describe("paridade dos caminhos (T2)", () => {
     expect(saved).toEqual(mem);
   });
 
+  it("empate na 4ª casa (2.0025): em memória arredonda como o insert grava", () => {
+    // O insert manda `toFixed(3)` → "2.002"; `Math.round(x*1000)/1000` daria 2.003.
+    const mem3 = { home: 2.0025, draw: 3.4, away: 3.6 };
+    const db3 = { home: 2.002, draw: 3.4, away: 3.6 };
+    const outcomes: FanOutOutcome[] = [
+      {
+        ok: true,
+        marketKey: "match_result",
+        result: {
+          prediction: mrPred,
+          marketKey: "match_result",
+          selections: (["home", "draw", "away"] as const).map((key) => ({
+            key,
+            modelProbPct: 33,
+            odd: mem3[key],
+          })),
+        },
+      },
+    ];
+    const history = [
+      {
+        prediction: mrPred,
+        aiCall: null,
+        marketKey: "match_result",
+        selections: (["home", "draw", "away"] as const).map((key) => ({
+          key,
+          modelProbPct: 33,
+          odd: db3[key],
+        })),
+      },
+    ] as unknown as PredictionWithAiCall[];
+    const memSummaries = summarizeAnalysesForSynthesis(outcomes);
+    const savedSummaries = summarizeSavedAnalysesForSynthesis(history);
+    expect(memSummaries[0].odds).toEqual(db3);
+    expect(memSummaries[0].odds).toEqual(savedSummaries[0].odds);
+    expect(resolvePregamePick(savedSummaries)).toEqual(resolvePregamePick(memSummaries));
+  });
+
   it("histórico com over/under de OUTRO run: ignorado (empate ancora)", () => {
     const oldOu = prediction({
       id: "pred-ou-old",
