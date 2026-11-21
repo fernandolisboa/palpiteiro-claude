@@ -153,11 +153,13 @@ export function ComoFuncionaContent() {
       <Section id="o-palpite">
         <Prose>
           <p>
-            Na página de um jogo, toque em <Strong>Analisar com IA</Strong> e a IA crava
-            um <G to="palpite">palpite</G>: quem leva, o{" "}
+            Na página de um jogo, toque em <Strong>Analisar com IA</Strong> e sai um{" "}
+            <G to="palpite">palpite</G>: quem leva, o{" "}
             <G to="placar-provavel">placar provável</G> e o porquê, no tom de um amigo
-            que entende de futebol. A análise é sob demanda e tem um limite por dia,
-            então nem todo jogo tem palpite pronto. A{" "}
+            que entende de futebol. Quem leva e o placar saem da conta do modelo (o
+            resultado mais provável do jogo) e a IA escreve o porquê. Quando falta dado
+            pra essa conta, a IA escolhe sozinha. A análise é sob demanda e tem um
+            limite por dia, então nem todo jogo tem palpite pronto. A{" "}
             <G to="confianca-palpite">confiança</G> vem numa palavra (baixa, média ou
             alta) e é do modelo, não da IA: é a chance que ele dá ao resultado do palpite.
           </p>

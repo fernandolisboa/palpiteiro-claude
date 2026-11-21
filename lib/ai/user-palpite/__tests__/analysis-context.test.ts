@@ -2,8 +2,11 @@ import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 
 // A extração é a fronteira paga (Haiku pelo seam AIProvider): mockada.
 const extractPalpiteClaims = vi.fn();
+// Reaproveitamento (#668): sem extração anterior do mesmo texto por padrão.
+const reuseExtraction = vi.fn();
 vi.mock("@/lib/ai/user-palpite/extract", () => ({
   extractPalpiteClaims: (...args: unknown[]) => extractPalpiteClaims(...args),
+  reuseExtraction: (...args: unknown[]) => reuseExtraction(...args),
 }));
 
 import {
@@ -35,6 +38,8 @@ beforeEach(() => {
   vi.useFakeTimers();
   vi.setSystemTime(new Date("2026-05-12T00:00:00.000Z"));
   extractPalpiteClaims.mockReset();
+  reuseExtraction.mockReset();
+  reuseExtraction.mockResolvedValue(null);
   info = vi.spyOn(console, "info").mockImplementation(() => {});
 });
 
@@ -79,6 +84,24 @@ describe("startAnalysisContextExtraction", () => {
   it("extração que lança vira ok:false (nunca rejeita)", async () => {
     extractPalpiteClaims.mockRejectedValue(new Error("boom"));
     await expect(start()).resolves.toMatchObject({ ok: false, message: "boom" });
+  });
+
+  it("mesmo texto já extraído: reaproveita, sem outra Haiku", async () => {
+    const reused = { ...OK, aiCallId: "ac-old", reused: true };
+    reuseExtraction.mockResolvedValue(reused);
+    await expect(start()).resolves.toEqual(reused);
+    expect(extractPalpiteClaims).not.toHaveBeenCalled();
+    expect(reuseExtraction).toHaveBeenCalledWith(
+      expect.objectContaining({ reason: TEXT, matchId: "m1", userId: "u1", subject: "contexto" }),
+    );
+    expect(JSON.stringify(info.mock.calls)).toContain('\\"outcome\\":\\"reused\\"');
+  });
+
+  it("sem extração anterior (null): extrai do zero", async () => {
+    extractPalpiteClaims.mockResolvedValue(OK);
+    await expect(start()).resolves.toEqual(OK);
+    expect(reuseExtraction).toHaveBeenCalledTimes(1);
+    expect(extractPalpiteClaims).toHaveBeenCalledTimes(1);
   });
 
   it("o log não leva o texto", async () => {

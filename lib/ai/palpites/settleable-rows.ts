@@ -1,10 +1,18 @@
 import type { palpites } from "@/db/schema";
-import type { PalpiteSynthesisOutput } from "./cartridges/cartridge";
 import { deriveSettleable, type PalpiteType } from "./settleable";
 
 // Linha a inserir em `palpites` (shape de escrita). `palpiteSetId` é preenchido pelo
 // caller (id do set recém-inserido). `params` carrega a union LARGA por tipo (#354).
 type SettleableRowInsert = typeof palpites.$inferInsert;
+
+// O que as linhas leem (estrutural): o palpite decidido em código (#668) e a saída do
+// cartucho v13 têm esta forma; os portões de coerência são os mesmos pros dois.
+export type SettleableRowsSource = {
+  probableScore: { home: number; away: number };
+  firstHalfScore: { home: number; away: number };
+  firstToScore: "home" | "away" | "none";
+  cardsTemperature?: "pegado" | "muito_pegado";
+};
 
 const TEXT_MAX = 280;
 
@@ -145,7 +153,7 @@ export function buildLivePalpiteRows(
  */
 export function buildSettleablePalpiteRows(
   palpiteSetId: string,
-  output: PalpiteSynthesisOutput,
+  output: SettleableRowsSource,
 ): SettleableRowInsert[] {
   const { probableScore, firstHalfScore, firstToScore } = output;
   const rows = finalScoreRows(probableScore);

@@ -6,6 +6,7 @@ import type { JudgmentMultipliers } from "@/lib/ai/judgments/apply";
 import type { JudgmentQuestionId } from "@/lib/ai/judgments/types";
 import { judgmentFactorPhrases } from "@/lib/ai/markets/_narrator/labels";
 import type { PredictionWithAiCall } from "@/lib/db/queries/predictions";
+import { asStoredOdd } from "@/lib/odds/stored-odd";
 import { claimEffect } from "@/lib/user-palpite/evidence";
 import { hasContextNote } from "@/lib/user-palpite/labels";
 import { PredictionUserContextSchema } from "@/lib/user-palpite/types";
@@ -41,6 +42,29 @@ export type MarketAnalysisSummary = {
   // Motor que produziu a análise (do modelVersion). Só decide se o 1X2 serve de fonte
   // da confiança do palpite (#649); não vai pro prompt. Ausente = desconhecido.
   engine?: AnalysisEngine | null;
+  // ── Insumo do palpite decidido em código (#668, ADR 0072). Nunca vai ao prompt: o
+  // parse do input da síntese descarta, e o pick é calculado antes (lib/ai/palpites/pick).
+  // Odd CONGELADA de cada seleção na análise, arredondada a 3 casas (a precisão de
+  // `prediction_selection_odds.odd`), pra o caminho em memória e o do histórico darem o
+  // mesmo palpite. Só as seleções com odd válida.
+  odds?: Record<string, number>;
+  // Linha da análise (over/under); null nos mercados sem linha.
+  line?: number | null;
+  // ISO do createdAt da predição: decide se duas análises são do mesmo run.
+  predictionCreatedAt?: string | null;
+  // λ do motor code_jev gravado na predição (judgments.lambda) + chaves do run.
+  judgmentsModel?: AnalysisJudgmentsModel | null;
+  // Fatores do JEV que mexeram no λ, em frases sem número (times genéricos), sem os que
+  // o contexto extra do usuário moveu (mesma regra do racional, #565).
+  factorPhrases?: string[];
+};
+
+export type AnalysisJudgmentsModel = {
+  base: { home: number; away: number };
+  adjusted: { home: number; away: number };
+  rho: number | null;
+  stateHash: string;
+  jevAiCallId: string | null;
 };
 
 // Uma análise já persistida, venha ela do fan-out em memória (PredictResult) ou do
@@ -53,6 +77,7 @@ type AnalysisSource = {
     key: string;
     label?: string;
     modelProbPct: number | null;
+    odd?: number | null;
   }[];
 };
 
@@ -103,6 +128,7 @@ export function summarizeSavedAnalysesForSynthesis(
         key: s.key,
         ...(s.label !== undefined ? { label: s.label } : {}),
         modelProbPct: s.modelProbPct,
+        odd: s.odd,
       })),
     });
   }
@@ -156,6 +182,11 @@ function summarizeSources(sources: AnalysisSource[]): MarketAnalysisSummary[] {
       rationale: synthesisRationale(prediction),
       predictionId: prediction.id,
       engine: analysisEngineOf(prediction),
+      odds: frozenOdds(selections),
+      line: finiteOrNull(prediction.marketParams?.line),
+      predictionCreatedAt: isoOrNull(prediction.createdAt),
+      judgmentsModel: judgmentsModelOf(prediction),
+      factorPhrases: synthesisFactorPhrases(prediction),
       // Só as seleções COM prob: sem isso o schema da síntese rejeitava o input inteiro
       // (um jogador sem estimativa derrubava a manchete de todos os mercados).
       selections: selections.flatMap((s) => {
@@ -174,6 +205,36 @@ function summarizeSources(sources: AnalysisSource[]): MarketAnalysisSummary[] {
   // Edge desc só como contexto (pass = sem edge → fim da lista). NÃO é o "pick".
   summaries.sort((a, b) => (b.edgePct ?? -Infinity) - (a.edgePct ?? -Infinity));
   return summaries;
+}
+
+function frozenOdds(
+  selections: AnalysisSource["selections"],
+): Record<string, number> {
+  const out: Record<string, number> = {};
+  for (const s of selections) {
+    const odd = finiteOrNull(s.odd);
+    if (odd !== null && odd > 1) out[s.key] = asStoredOdd(odd);
+  }
+  return out;
+}
+
+function isoOrNull(d: Date | string | null | undefined): string | null {
+  if (d instanceof Date) return Number.isNaN(d.getTime()) ? null : d.toISOString();
+  return typeof d === "string" ? d : null;
+}
+
+function judgmentsModelOf(
+  prediction: PredictResult["prediction"],
+): AnalysisJudgmentsModel | null {
+  const j = prediction.judgments;
+  if (j?.engine !== "code_jev" || !j.lambda) return null;
+  return {
+    base: { home: j.lambda.base.home, away: j.lambda.base.away },
+    adjusted: { home: j.lambda.adjusted.home, away: j.lambda.adjusted.away },
+    rho: j.lambda.rho ?? null,
+    stateHash: j.stateHash,
+    jevAiCallId: j.aiCallId ?? null,
+  };
 }
 
 // O motor da análise: o carimbo dos julgamentos (code_jev) ou a tag do modelVersion.
@@ -221,6 +282,28 @@ function synthesisRationale(prediction: PredictResult["prediction"]): string {
     GENERIC_TEAMS,
   );
   return phrases.length > 0 ? `Fatores do modelo: ${phrases.join("; ")}.` : "";
+}
+
+// Os fatores do JEV pra síntese, sem os que o contexto extra do usuário moveu (#565).
+// Contexto ilegível: na dúvida, nenhum fator (como no racional).
+function synthesisFactorPhrases(prediction: PredictResult["prediction"]): string[] {
+  const judgments = prediction.judgments;
+  if (judgments?.engine !== "code_jev" || !judgments.answers || !judgments.multipliers) {
+    return [];
+  }
+  if (judgments.userContext === undefined) {
+    return judgmentFactorPhrases(judgments.answers, judgments.multipliers, GENERIC_TEAMS);
+  }
+  const parsed = PredictionUserContextSchema.safeParse(judgments.userContext);
+  if (!parsed.success) return [];
+  const moved = new Set(
+    parsed.data.claims.flatMap((c) => claimEffect(c, judgments.answers ?? null).moved),
+  );
+  return judgmentFactorPhrases(
+    judgments.answers,
+    withoutFactors(judgments.multipliers, moved),
+    GENERIC_TEAMS,
+  );
 }
 
 function withoutFactors(

@@ -13,6 +13,7 @@ import {
 import { getProviderForModel } from "@/lib/ai/providers";
 import type { AiCallStatus, AnalysisRequest } from "@/lib/ai/providers/types";
 import { db } from "@/lib/db";
+import { findLatestExtractionCall } from "@/lib/db/queries/user-context-extraction";
 import { roleFromPlayerWord, stripPlayerNames } from "@/lib/user-palpite/check-claims";
 import type { TeamNames } from "@/lib/user-palpite/reading";
 import {
@@ -81,7 +82,14 @@ export function normalizeClaimInput(item: unknown): unknown {
 }
 
 export type ExtractResult =
-  | { ok: true; claims: Claim[]; warnings: string[]; aiCallId: string | null }
+  | {
+      ok: true;
+      claims: Claim[];
+      warnings: string[];
+      aiCallId: string | null;
+      // A resposta é a de uma extração anterior do mesmo texto (aiCallId aponta pra ela).
+      reused?: true;
+    }
   | { ok: false; message: string; aiCallId: string | null };
 
 type ExtractArgs = {
@@ -94,6 +102,102 @@ type ExtractArgs = {
   // contexto extra da análise com IA (#565). O prompt é o mesmo.
   subject?: "motivo" | "contexto";
 };
+
+/**
+ * Da entrada crua da ferramenta às afirmações: Zod item a item (o que não passa sai com
+ * aviso), teto de MAX_CLAIMS e nomes de jogador fora das paráfrases. PURO: o mesmo
+ * tool_use dá sempre as mesmas afirmações, seja da chamada de agora ou de uma gravada.
+ */
+export function claimsFromToolInput(
+  toolInput: unknown,
+  args: Pick<ExtractArgs, "teams" | "subject">,
+): { ok: true; claims: Claim[]; warnings: string[] } | { ok: false; message: string } {
+  const envelope = ExtractEnvelopeSchema.safeParse(toolInput);
+  if (!envelope.success) {
+    return { ok: false, message: JSON.stringify(envelope.error.issues) };
+  }
+
+  const parsedClaims: Claim[] = [];
+  const warnings: string[] = [];
+  let dropped = 0;
+  for (const item of envelope.data.claims) {
+    const parsed = ClaimSchema.safeParse(normalizeClaimInput(item));
+    if (!parsed.success) {
+      dropped++;
+      continue;
+    }
+    if (parsedClaims.length >= MAX_CLAIMS) {
+      warnings.push(
+        `Considerei só as ${MAX_CLAIMS} primeiras afirmações do seu ${args.subject ?? "motivo"}.`,
+      );
+      break;
+    }
+    parsedClaims.push(parsed.data);
+  }
+  // Nome de jogador não fica na paráfrase (LGPD): ela vai ao narrador e à tela. Tira de
+  // TODAS as paráfrases os nomes que o extrator identificou em qualquer afirmação.
+  const allPlayers = parsedClaims.flatMap((c) => c.players ?? []);
+  const claims: Claim[] = parsedClaims.map((c) => {
+    const text = stripPlayerNames(c.text, allPlayers, args.teams);
+    return text === c.text ? c : { ...c, text };
+  });
+  if (dropped > 0) {
+    warnings.push(
+      dropped === 1
+        ? "Não entendi uma das suas afirmações; ela ficou de fora."
+        : `Não entendi ${dropped} das suas afirmações; elas ficaram de fora.`,
+    );
+  }
+  return { ok: true, claims, warnings };
+}
+
+// O tool_use gravado no outputPayload de uma row Anthropic (a resposta crua da API:
+// `content: [{ type: "tool_use", name, input }, ...]`).
+function storedToolInput(outputPayload: unknown): unknown {
+  if (typeof outputPayload !== "object" || outputPayload === null) return undefined;
+  const content = (outputPayload as { content?: unknown }).content;
+  if (!Array.isArray(content)) return undefined;
+  const block = content.find(
+    (b): b is { input: unknown } =>
+      typeof b === "object" &&
+      b !== null &&
+      (b as { type?: unknown }).type === "tool_use" &&
+      (b as { name?: unknown }).name === USER_PALPITE_EXTRACT_TOOL_NAME,
+  );
+  return block?.input;
+}
+
+/**
+ * Contexto extra (#668): a mesma pessoa mandou o MESMO texto pro mesmo jogo (o
+ * "Analisar de novo" com o campo preenchido) → as afirmações da última extração ok,
+ * relidas do ai_calls, em vez de outra Haiku que pode ler o texto de outro jeito e mexer
+ * nos fatores. Texto diferente, outra pessoa, outra versão do prompt ou row ilegível →
+ * null (extrai do zero). Nunca lança.
+ */
+export async function reuseExtraction(args: ExtractArgs): Promise<ExtractResult | null> {
+  try {
+    const row = await findLatestExtractionCall({
+      userId: args.userId,
+      matchId: args.matchId,
+      promptVersion: USER_PALPITE_EXTRACT_VERSION,
+      userMessage: buildExtractUserMessage(args.reason, args.teams),
+    });
+    if (!row) return null;
+    const read = claimsFromToolInput(storedToolInput(row.outputPayload), args);
+    if (!read.ok) return null;
+    return { ...read, aiCallId: row.id, reused: true };
+  } catch (err) {
+    console.error(
+      JSON.stringify({
+        scope: "extractPalpiteClaims",
+        matchId: args.matchId,
+        error: "reuse_lookup_failed",
+        message: err instanceof Error ? err.message : String(err),
+      }),
+    );
+    return null;
+  }
+}
 
 /**
  * Nunca lança: roda depois da cobrança, então qualquer exceção (montar o request,
@@ -211,42 +315,9 @@ async function runExtraction(args: ExtractArgs): Promise<ExtractResult> {
       payload,
     );
   }
-  const envelope = ExtractEnvelopeSchema.safeParse(result.toolInput);
-  if (!envelope.success) {
-    return fail(served, "invalid_output", JSON.stringify(envelope.error.issues), payload);
-  }
-
-  const parsedClaims: Claim[] = [];
-  const warnings: string[] = [];
-  let dropped = 0;
-  for (const item of envelope.data.claims) {
-    const parsed = ClaimSchema.safeParse(normalizeClaimInput(item));
-    if (!parsed.success) {
-      dropped++;
-      continue;
-    }
-    if (parsedClaims.length >= MAX_CLAIMS) {
-      warnings.push(
-        `Considerei só as ${MAX_CLAIMS} primeiras afirmações do seu ${args.subject ?? "motivo"}.`,
-      );
-      break;
-    }
-    parsedClaims.push(parsed.data);
-  }
-  // Nome de jogador não fica na paráfrase (LGPD): ela vai ao narrador e à tela. Tira de
-  // TODAS as paráfrases os nomes que o extrator identificou em qualquer afirmação.
-  const allPlayers = parsedClaims.flatMap((c) => c.players ?? []);
-  const claims: Claim[] = parsedClaims.map((c) => {
-    const text = stripPlayerNames(c.text, allPlayers, args.teams);
-    return text === c.text ? c : { ...c, text };
-  });
-  if (dropped > 0) {
-    warnings.push(
-      dropped === 1
-        ? "Não entendi uma das suas afirmações; ela ficou de fora."
-        : `Não entendi ${dropped} das suas afirmações; elas ficaram de fora.`,
-    );
-  }
+  const read = claimsFromToolInput(result.toolInput, args);
+  if (!read.ok) return fail(served, "invalid_output", read.message, payload);
+  const { claims, warnings } = read;
 
   // Sucesso (inclusive zero afirmações: motivo só de opinião). Log best-effort.
   const cost = calculateCost({

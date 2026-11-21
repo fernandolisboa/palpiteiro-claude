@@ -5,6 +5,7 @@ import { sql } from "drizzle-orm";
 import type { PredictionJudgments } from "@/lib/ai/engine/types";
 import { JUDGMENT_PROVIDER_KEY } from "@/lib/ai/models";
 import type { ModelPricing } from "@/lib/ai/model-versions/types";
+import type { PalpitePick } from "@/lib/ai/palpites/pick";
 import type { ReasoningStep } from "@/lib/ai/progress/protocol";
 import type {
   MatchModelJevStatus,
@@ -519,7 +520,21 @@ export type PalpiteHeadline = {
   // P (pp) que o motor deu ao resultado do placar provável. Só calibração, nunca na view.
   confidenceProbPct?: number | null;
   // De onde veio a P; "none" = sem fonte. Ausente = confiança do LLM (set antigo).
-  confidenceSource?: "snapshot" | "analysis" | "live_matrix" | "none";
+  // market/dc_jev (#668): o palpite decidido em código, a P da mesma matriz.
+  confidenceSource?:
+    | "market"
+    | "dc_jev"
+    | "snapshot"
+    | "analysis"
+    | "live_matrix"
+    | "none";
+  // #668 (ADR 0072) — o palpite decidido em código: regra, fonte, resultado, placar, P do
+  // 1X2, λ, base, multiplicadores, ajuste ao mercado e a predição de origem. Calibração e
+  // auditoria; a view NÃO lê. Ausente nos sets do v12 e anteriores. Sem migration.
+  pick?: PalpitePick;
+  // #668 — quais campos de texto saíram do template (veredito incoerente, linguagem de
+  // valor, falha da chamada) e por quê. Ausente quando o texto é todo do LLM.
+  templated?: { verdict: boolean; narrative: boolean; reason: string };
   narrative: string;
   citedMarkets: string[];
   sourcePredictionIds: string[];

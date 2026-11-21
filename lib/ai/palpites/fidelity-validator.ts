@@ -57,7 +57,7 @@ function toInt(raw: string | undefined): number | null {
  * O `reason` nomeia campo + claimed-vs-actual pro log de ai_calls/console.
  */
 export function checkFidelity(
-  output: PalpiteSynthesisOutput,
+  output: Pick<PalpiteSynthesisOutput, "verdict" | "narrative">,
   input: PalpitesInput,
 ): FidelityCheck {
   // Concatena os DOIS campos de prosa livre que cruzam pra manchete. Os regexes são

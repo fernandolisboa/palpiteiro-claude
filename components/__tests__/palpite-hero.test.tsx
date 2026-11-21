@@ -690,7 +690,7 @@ describe("PalpiteHero — Contexto extra (#565)", () => {
     return { container, textarea, submit, cleanup };
   }
 
-  it("envio ok: o texto vai no form, o aviso aparece e o campo é limpo", async () => {
+  it("envio ok: o texto vai no form, o aviso aparece e o campo continua preenchido (#668)", async () => {
     const NOTICE =
       'Conferimos o seu contexto extra e ele entrou na análise. Veja o que entrou em "Ler análise completa".';
     vi.mocked(analyzeBestBet).mockResolvedValue({
@@ -705,7 +705,8 @@ describe("PalpiteHero — Contexto extra (#565)", () => {
     const fd = vi.mocked(analyzeBestBet).mock.calls.at(-1)![1];
     expect(fd.get("userContext")).toBe(TEXT);
     expect(h.container.textContent).toContain(NOTICE);
-    expect(h.textarea().value).toBe("");
+    expect(h.textarea().value).toBe(TEXT);
+    expect(h.container.textContent).toContain("O que estiver aqui vai junto em “Analisar de novo”.");
     expect(leaksValue(h.container.innerHTML)).toBe(false);
     await h.cleanup();
   });
@@ -732,7 +733,7 @@ describe("PalpiteHero — Contexto extra (#565)", () => {
     await h.cleanup();
   });
 
-  it("envio ok fecha o painel; o aviso vai pela região viva sempre montada", async () => {
+  it("envio ok mantém o painel aberto; o aviso vai pela região viva sempre montada", async () => {
     const NOTICE = "Conferimos o seu contexto extra, mas ele não mudou a análise.";
     vi.mocked(analyzeBestBet).mockResolvedValue({
       ok: true,
@@ -752,7 +753,8 @@ describe("PalpiteHero — Contexto extra (#565)", () => {
     // O MESMO nó (não remontado) com o texto novo.
     expect(h.container.querySelector('[role="status"]')).toBe(live);
     expect(live?.textContent).toBe(NOTICE);
-    expect(h.container.querySelector("details")!.open).toBe(false);
+    expect(h.container.querySelector("details")!.open).toBe(true);
+    expect(h.textarea().value).toBe(TEXT);
     await h.cleanup();
   });
 
@@ -829,7 +831,7 @@ describe("PalpiteHero — leitura ao vivo (#594)", () => {
   it("pré-jogo: pageLive=0 e a copy de sempre, sem selo", () => {
     const html = render({ heroPalpite: null });
     expect(html).toContain('name="pageLive" value="0"');
-    expect(html).toContain("A IA lê os dois times, os números e o mercado");
+    expect(html).toContain("O modelo cruza os dois times, os números e o mercado");
     expect(render()).not.toContain("palpite aos");
   });
 });

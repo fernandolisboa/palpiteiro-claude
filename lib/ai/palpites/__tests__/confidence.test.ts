@@ -4,6 +4,7 @@ import { scorelineMatrix } from "@/lib/quant/scoreline-model";
 
 import {
   PALPITE_CONFIDENCE_BANDS,
+  confidenceFromPick,
   confidenceLevel,
   liveConfidenceProbs,
   matchResultProbsFromAnalyses,
@@ -123,5 +124,20 @@ describe("fonte ao vivo", () => {
     expect(home + draw + away).toBeCloseTo(100, 10);
     expect(home).toBeGreaterThan(55);
     expect(away).toBeLessThan(home);
+  });
+});
+
+describe("palpite decidido em código (#668)", () => {
+  it("a chance do resultado escolhido, da mesma matriz, com a fonte do pick", () => {
+    expect(
+      confidenceFromPick({ outcome: "away", probs: { home: 31.2, draw: 27.43, away: 41.37 }, source: "market" }),
+    ).toEqual({ level: "media", probPct: 41.37, source: "market" });
+    expect(
+      confidenceFromPick({ outcome: "home", probs: { home: 58.004, draw: 24, away: 18 }, source: "dc_jev" }),
+    ).toEqual({ level: "alta", probPct: 58, source: "dc_jev" });
+    expect(
+      confidenceFromPick({ outcome: "draw", probs: { home: 30, draw: 36, away: 34 }, source: "dc_jev" })
+        .level,
+    ).toBe("baixa");
   });
 });

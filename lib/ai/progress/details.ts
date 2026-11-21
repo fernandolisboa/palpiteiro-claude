@@ -7,7 +7,7 @@
 
 import { applyJudgments } from "@/lib/ai/judgments/apply";
 import type { JudgmentAnswers } from "@/lib/ai/judgments/types";
-import { judgmentFactorPhrases } from "@/lib/ai/markets/_narrator/labels";
+import { judgmentFactorPhrases, selectionLabel } from "@/lib/ai/markets/_narrator/labels";
 import type {
   NormalizedFixture,
   NormalizedLineup,
@@ -174,15 +174,79 @@ export function newsDetail(
   );
 }
 
-// Uma linha por análise que alimentou o palpite: o mercado e o que ela escolheu.
+type AnalysisLine = {
+  marketKey?: string;
+  marketLabel: string;
+  recommendation?: string;
+  recommendedLabel: string | null;
+  isPass: boolean;
+  line?: number | null;
+};
+
+// Mercados de resultado: a escolha sai com o nome do time ("vitória do Palmeiras"), nunca
+// "Casa"/"Fora" (que se confundia com o palpite, #668).
+const TEAM_LABEL_MARKETS = new Set(["match_result", "double_chance"]);
+
+function choiceLabel(a: AnalysisLine, teams: Teams): string | null {
+  if (a.marketKey && a.recommendation && TEAM_LABEL_MARKETS.has(a.marketKey)) {
+    const label = selectionLabel(a.marketKey, a.recommendation, teams, a.line ?? null);
+    return /^(Vitória|Empate)\b/.test(label) ? label[0].toLowerCase() + label.slice(1) : label;
+  }
+  return a.recommendedLabel;
+}
+
+// Uma linha por análise que alimentou o palpite: o mercado e o preço que ela destacou.
+// Antes do jogo a escolha de cada análise é de PREÇO (a seleção de maior vantagem), não o
+// palpite (#668): a linha diz isso. Ao vivo, como antes: o que a leitura escolheu.
 export function analysesDetail(
-  analyses: readonly { marketLabel: string; recommendedLabel: string | null; isPass: boolean }[],
+  analyses: readonly AnalysisLine[],
+  teams?: Teams,
+  opts: { live?: boolean } = {},
 ): string[] {
-  return analyses.map((a) =>
-    a.isPass || !a.recommendedLabel
-      ? `${a.marketLabel}: sem escolha neste mercado`
-      : `${a.marketLabel}: ${a.recommendedLabel}`,
-  );
+  if (opts.live || !teams) {
+    return analyses.map((a) =>
+      a.isPass || !a.recommendedLabel
+        ? `${a.marketLabel}: sem escolha neste mercado`
+        : `${a.marketLabel}: ${a.recommendedLabel}`,
+    );
+  }
+  return analyses.map((a) => {
+    const choice = a.isPass ? null : choiceLabel(a, teams);
+    return choice
+      ? `${a.marketLabel}: preço mais interessante em ${choice}`
+      : `${a.marketLabel}: nenhum preço chamou atenção`;
+  });
+}
+
+function outcomePhrase(
+  pick: { outcome: "home" | "draw" | "away" },
+  teams: Teams,
+): string {
+  if (pick.outcome === "home") return `vitória do ${teams.home}`;
+  if (pick.outcome === "away") return `vitória do ${teams.away}`;
+  return "empate";
+}
+
+// De onde saiu o palpite (#668, ADR 0072), numa frase sem número de chance.
+export function pickDetail(
+  pick: {
+    source: "market" | "dc_jev";
+    outcome: "home" | "draw" | "away";
+    score: { home: number; away: number };
+  } | null,
+  teams: Teams,
+  opts: { live?: boolean } = {},
+): string[] {
+  if (opts.live) {
+    return ["Palpite ao vivo: o placar final escolhido pela IA sobre o modelo em jogo"];
+  }
+  if (!pick) {
+    return ["Palpite escolhido pela IA: sem preço nem modelo de placar para este jogo"];
+  }
+  const head = `Palpite: ${outcomePhrase(pick, teams)}, ${pick.score.home}–${pick.score.away}`;
+  return pick.source === "market"
+    ? [`${head}. O resultado mais provável pelos preços do jogo, com o contexto do jogo por cima`]
+    : [`${head}. O resultado mais provável pelo modelo de força dos times, com o contexto do jogo por cima`];
 }
 
 const CONFIDENCE_WORD = { baixa: "baixa", media: "média", alta: "alta" } as const;

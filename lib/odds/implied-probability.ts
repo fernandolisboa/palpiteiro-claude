@@ -57,7 +57,8 @@ export type DevigMethod = "proportional" | "shin" | "power";
 
 // Bisseção de uma função monótona em [lo, hi] até `iterations` passos. 80 passos
 // num intervalo de largura ≤ 100 dão erro < 1e-22: bem abaixo de qualquer odd.
-function bisect(
+// Exportada pro ajuste de λ ao mercado (lib/quant/market-fit.ts, #668).
+export function bisect(
   f: (x: number) => number,
   lo: number,
   hi: number,

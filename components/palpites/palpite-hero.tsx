@@ -185,18 +185,11 @@ export function PalpiteHero({
   const state: HeroRunOutcome | null =
     source === "stream" ? run.outcome : actionOutcome;
   const pending = actionPending || run.running;
+  // O texto do contexto extra e o painel ficam como estão depois do run (#668): o que a
+  // pessoa escreveu continua visível e vai junto em "Analisar de novo" (a dica diz isso),
+  // pra a nova análise não perder o contexto sem querer.
   const [context, setContext] = useState("");
   const [contextOpen, setContextOpen] = useState(false);
-  // Análise completa que deu certo limpa e fecha o campo: "Analisar de novo" não reenvia
-  // o mesmo contexto sem querer. Ajuste no render (não em efeito) quando o resultado muda.
-  const [seenState, setSeenState] = useState(state);
-  if (state !== seenState) {
-    setSeenState(state);
-    if (state?.ok && state.analysis) {
-      setContext("");
-      setContextOpen(false);
-    }
-  }
   const contextNotice = state?.ok ? (state.contextNotice ?? null) : null;
   const contextField: ContextField =
     contextEnabled && analyzable && fanOutEnabled
@@ -758,7 +751,7 @@ function EmptyHero({
             <p className="max-w-reading text-body leading-relaxed tracking-tight text-muted-foreground">
               {live
                 ? "Com o jogo rolando, a IA lê o placar e o tempo que falta e crava um palpite — como o jogo termina e o porquê."
-                : "A IA lê os dois times, os números e o mercado e crava um palpite — quem ganha, o placar provável e o porquê."}
+                : "O modelo cruza os dois times, os números e o mercado e crava quem ganha e o placar provável; a IA explica o porquê."}
             </p>
             {contextField && <UserContextField {...contextField} />}
             <div className="flex flex-wrap items-center gap-2">
@@ -831,7 +824,8 @@ function UserContextField({
           <p id={`${id}-hint`} className="text-meta leading-relaxed tracking-tight text-muted-foreground">
             A IA lê o que você escrever e a gente confere cada afirmação com os nossos dados
             antes de usar. Só entra o que passa, com peso limitado. Não conta a mais no seu
-            limite do dia. Não escreva dados pessoais.
+            limite do dia. Não escreva dados pessoais. O que estiver aqui vai junto em
+            “Analisar de novo”.
           </p>
           <span className="shrink-0 font-mono text-meta tabular-nums text-muted-foreground">
             {value.length}/{MAX_CONTEXT_CHARS}
