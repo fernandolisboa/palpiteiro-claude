@@ -3,6 +3,7 @@ import { describe, expect, it } from "vitest";
 import { computeMarketImpliedProbabilities } from "@/lib/odds/implied-probability";
 import {
   MARKET_FIT_VERSION,
+  MAX_SPLIT_RESIDUAL_PP,
   fitLambdasToMarket,
 } from "@/lib/quant/market-fit";
 import {
@@ -82,6 +83,17 @@ describe("fitLambdasToMarket", () => {
     }
     expect(fit!.lambdaHome).toBeGreaterThan(3 * fit!.lambdaAway);
     expect(Number.isFinite(fit!.residuals.drawPp)).toBe(true);
+  });
+
+  it("empate fora do alcance (1.7 / 8 / 2.5): a divisão não fecha → null (cai no dc_jev)", () => {
+    const { probs } = computeMarketImpliedProbabilities([1.7, 8, 2.5]);
+    const oneXTwo = { home: probs[0], draw: probs[1], away: probs[2] };
+    expect(fitLambdasToMarket({ oneXTwo })).toBeNull();
+    // Com o over/under ancorando o total, a divisão cabe e o ajuste segue.
+    const withOver = fitLambdasToMarket({ oneXTwo, overUnder: { line: 2.5, over: 0.6 } });
+    expect(withOver).not.toBeNull();
+    expect(Math.abs(withOver!.residuals.homeMinusAwayPp)).toBeLessThanOrEqual(MAX_SPLIT_RESIDUAL_PP);
+    expect(withOver!.lambdaHome).toBeGreaterThan(withOver!.lambdaAway);
   });
 
   it("alvos inválidos → null", () => {

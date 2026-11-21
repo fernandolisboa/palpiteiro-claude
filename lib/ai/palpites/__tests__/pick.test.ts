@@ -114,6 +114,11 @@ describe("prioridades das bases", () => {
     }
   });
 
+  it("1X2 que o modelo não reproduz (1.7 / 8 / 2.5, empate baixo demais) → dc_jev", () => {
+    const pick = resolvePregamePick([summary({ odds: { home: 1.7, draw: 8, away: 2.5 } })]);
+    expect(pick!.source).toBe("dc_jev");
+  });
+
   it("histórico sem rows de odds (odds vazio) → dc_jev (documentado, M3)", () => {
     expect(resolvePregamePick([summary({ odds: {} })])!.source).toBe("dc_jev");
   });

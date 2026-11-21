@@ -8,8 +8,10 @@
 //   - externa: o total T tal que P(over linha) bata com o over/under (cresce com T) ou,
 //     sem over/under, tal que P(empate) bata com o 1X2 (cai com T). No 2º caso a solução
 //     reproduz o 1X2 inteiro (2 equações, 2 incógnitas).
-// λ fica preso a [LAMBDA_MIN, LAMBDA_MAX] pelo intervalo de busca; quando o alvo cai fora
-// do alcance, fica a ponta mais perto e os resíduos dizem quanto sobrou (vão pro log).
+// λ fica preso a [LAMBDA_MIN, LAMBDA_MAX] pelo intervalo de busca; quando o alvo do total
+// (empate ou over) cai fora do alcance, fica a ponta mais perto e os resíduos dizem quanto
+// sobrou (vão pro log). A divisão mandante × visitante, não: se ela não fecha, o ajuste é
+// null e o palpite cai na base seguinte (dc_jev).
 
 import { bisect } from "@/lib/odds/implied-probability";
 
@@ -26,6 +28,11 @@ export const MARKET_FIT_VERSION = "market_fit_v1" as const;
 
 // 50 passos num intervalo de largura < 9 dão erro < 1e-14: bem abaixo de qualquer odd.
 const ITERATIONS = 50;
+
+// Quanto P(mandante) − P(visitante) pode ficar fora do mercado, em pp. Acima disso o lado
+// do favorito já não é o do mercado: com o empate abaixo do alcance do modelo (1.7 / 8 /
+// 2.5), o total ia ao máximo, a divisão travava em 0.5 (λ 4.5 / 4.5) e o 1X2 se perdia.
+export const MAX_SPLIT_RESIDUAL_PP = 1;
 
 export type MarketFitTargets = {
   // Probabilidades sem margem do 1X2 (qualquer escala; normalizadas aqui).
@@ -133,6 +140,8 @@ export function fitLambdasToMarket(
   const matrix = matrixAt(total, share);
   const fitted = p1X2(matrix);
   const pp = (x: number) => Number((x * 100).toFixed(4));
+  const splitResidualPp = pp(fitted.home - fitted.away - diffTarget);
+  if (Math.abs(splitResidualPp) > MAX_SPLIT_RESIDUAL_PP) return null;
   return {
     version: MARKET_FIT_VERSION,
     lambdaHome,
@@ -140,7 +149,7 @@ export function fitLambdasToMarket(
     rho,
     anchor: over ? "over_under" : "draw",
     residuals: {
-      homeMinusAwayPp: pp(fitted.home - fitted.away - diffTarget),
+      homeMinusAwayPp: splitResidualPp,
       drawPp: pp(fitted.draw - target.draw),
       overPp: over ? pp(pOverUnder(matrix, over.line) - over.over) : null,
     },
