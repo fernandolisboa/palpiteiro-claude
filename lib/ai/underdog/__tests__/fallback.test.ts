@@ -68,8 +68,26 @@ describe("texto padrão", () => {
       `${Math.round(best.afterPct)}%`
     );
     expect(templateCounterpoint(f, TEAMS)).toBe(
-      `Nos outros ${Math.round(f.chances.draw + f.chances.favorite)}% o jogo termina empatado (${Math.round(f.chances.draw)}%) ou com vitória de Palmeiras (${Math.round(f.chances.favorite)}%).`
+      `Nos outros ${Math.round(f.chances.draw) + Math.round(f.chances.favorite)}% o jogo termina empatado (${Math.round(f.chances.draw)}%) ou com vitória de Palmeiras (${Math.round(f.chances.favorite)}%).`
     );
+  });
+
+  it("complemento = soma dos inteiros exibidos (25,4 + 54,4 → 25% + 54% = 79%)", () => {
+    const base = facts();
+    const f: UnderdogFacts = {
+      ...base,
+      chances: { underdog: 20.2, draw: 25.4, favorite: 54.4 },
+    };
+    expect(templateCounterpoint(f, TEAMS)).toBe(
+      "Nos outros 79% o jogo termina empatado (25%) ou com vitória de Palmeiras (54%)."
+    );
+    const b = buildFactsBlock(f, CTX);
+    expect(b.allowed.percents).toContain(79);
+    expect(b.allowed.percents).not.toContain(80);
+    expect(b.text).toContain("Somados, empate ou Palmeiras: 79%.");
+    expect(checkCounterpoint(templateCounterpoint(f, TEAMS), b, [])).toEqual({
+      ok: true,
+    });
   });
 
   it("narrativa padrão: sem veredito, sem família", () => {

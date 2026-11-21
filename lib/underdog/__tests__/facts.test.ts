@@ -113,6 +113,39 @@ describe("buildFactsBlock", () => {
     expect(b.allowed.ratios).toEqual([Math.round(100 / f.chances.underdog)]);
   });
 
+  it("números soltos e pares 'N dos últimos M' vêm só dos sinais e do bloco", () => {
+    const b = buildFactsBlock(facts(), CTX);
+    // Confronto 5 jogos: Flamengo 3, Palmeiras 1, empate 1; minutos 30 e 60.
+    expect(b.allowed.numbers).toEqual(
+      expect.arrayContaining([5, 3, 1, 30, 60])
+    );
+    expect(b.allowed.numbers).not.toContain(7);
+    expect(b.allowed.pairs).toEqual(
+      expect.arrayContaining([
+        { who: "underdog", result: "W", n: 3, of: 5 },
+        { who: "favorite", result: "W", n: 1, of: 5 },
+        { who: "any", result: "D", n: 1, of: 5 },
+      ])
+    );
+    expect(b.allowed.teams).toEqual({
+      home: "Palmeiras",
+      away: "Flamengo",
+      underdog: "Flamengo",
+      favorite: "Palmeiras",
+    });
+  });
+
+  it("percentuais como o bloco os mostra (sem o valor cru)", () => {
+    const f = facts();
+    const b = buildFactsBlock(f, CTX);
+    expect(Number.isInteger(f.chances.underdog)).toBe(false);
+    expect(b.allowed.percents).toContain(Math.round(f.chances.underdog));
+    expect(b.allowed.percents).not.toContain(f.chances.underdog);
+    expect(
+      complementPct({ chances: { underdog: 20.2, draw: 25.4, favorite: 54.4 } })
+    ).toBe(79);
+  });
+
   it("modelo simplificado sem JEV", () => {
     const f = {
       ...facts(),

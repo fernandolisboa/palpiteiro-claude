@@ -2,7 +2,7 @@ import {
   computeUnderdogFacts,
   underdogBaseFromSnapshot,
 } from "@/lib/underdog/compute";
-import { buildFactsBlock } from "@/lib/underdog/facts";
+import { buildFactsBlock, complementPct } from "@/lib/underdog/facts";
 import type { UnderdogFacts } from "@/lib/underdog/types";
 import type { UnderdogReview } from "@/lib/ai/underdog/schema";
 import { KICKOFF, NOW, snapshot } from "@/lib/underdog/__tests__/fixtures";
@@ -61,6 +61,6 @@ export function goodReview(n = 4): UnderdogReview {
       veredito: "apoiada",
       motivo: "Os números estão no bloco.",
     })),
-    contraponto: `Nos outros ${Math.round(facts().chances.draw + facts().chances.favorite)}% o jogo empata ou o Palmeiras vence.`,
+    contraponto: `Nos outros ${complementPct(facts())}% o jogo empata ou o Palmeiras vence.`,
   };
 }
