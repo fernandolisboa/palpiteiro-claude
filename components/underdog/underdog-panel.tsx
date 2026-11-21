@@ -28,6 +28,8 @@ import type { UnderdogSlotView } from "@/lib/view/underdog";
 export const UNDERDOG_LOADING_COPY =
   "O advogado da zebra está montando o caso…";
 export const UNDERDOG_COST_NOTE = "Usa 1 do seu limite diário de palpites";
+export const underdogReadyCopy = (underdogName: string, pct: string) =>
+  `Chances do azarão prontas: ${underdogName} vence em ${pct}.`;
 
 export function UnderdogPanel({
   matchId,
@@ -42,6 +44,7 @@ export function UnderdogPanel({
   >(openUnderdogView, null);
   const [open, setOpen] = useState(false);
   const titleRef = useRef<HTMLHeadingElement>(null);
+  const regionRef = useRef<HTMLDivElement>(null);
   const formRef = useRef<HTMLFormElement>(null);
   const panelId = useId();
   const costId = useId();
@@ -92,7 +95,9 @@ export function UnderdogPanel({
         <button
           type="button"
           onClick={onHeader}
-          disabled={pending}
+          // Sem `disabled`: o botão focado não perde o foco enquanto carrega (o clique é
+          // ignorado em onHeader).
+          aria-disabled={pending || undefined}
           aria-expanded={expanded}
           aria-controls={panelId}
           aria-describedby={paid ? undefined : costId}
@@ -100,7 +105,7 @@ export function UnderdogPanel({
             "flex w-full items-center justify-between gap-3 rounded-lg border px-4 py-3 text-left transition-colors",
             "border-palpite-border/60 bg-palpite-soft/30 hover:bg-palpite-soft/60",
             "focus-visible:ring-ring focus-visible:ring-2 focus-visible:outline-none",
-            "disabled:cursor-progress"
+            "aria-disabled:cursor-progress"
           )}
         >
           <span className="flex min-w-0 flex-col gap-0.5">
@@ -145,14 +150,25 @@ export function UnderdogPanel({
             {error}
           </p>
         )}
+        {result?.ok && !pending && (
+          <p className="sr-only">
+            {underdogReadyCopy(
+              result.view.underdogName,
+              result.view.chances.underdog
+            )}
+          </p>
+        )}
       </div>
 
       <div
+        ref={regionRef}
         id={panelId}
         role="region"
         aria-label="Chances do azarão"
         hidden={!expanded}
-        className="border-border-subtle rounded-lg border px-4 py-4"
+        // Recebe o foco quando "Atualizar" some (vira o esqueleto do carregando).
+        tabIndex={-1}
+        className="border-border-subtle rounded-lg border px-4 py-4 focus-visible:outline-none"
       >
         {pending ? (
           <UnderdogSkeleton />
@@ -166,7 +182,8 @@ export function UnderdogPanel({
                   type="submit"
                   size="sm"
                   variant="outline"
-                  disabled={pending}
+                  // O botão some no carregando: o foco vai pro painel antes.
+                  onClick={() => regionRef.current?.focus()}
                 >
                   Atualizar · usa 1 do limite
                 </Button>

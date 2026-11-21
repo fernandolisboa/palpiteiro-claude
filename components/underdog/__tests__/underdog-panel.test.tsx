@@ -10,6 +10,7 @@ import {
   UNDERDOG_COST_NOTE,
   UNDERDOG_LOADING_COPY,
   UnderdogPanel,
+  underdogReadyCopy,
 } from "@/components/underdog/underdog-panel";
 import { containsValueLanguage } from "@/lib/ai/palpites/value-language-guard";
 import {
@@ -111,6 +112,14 @@ describe("UnderdogPanel — fechado (#671)", () => {
       () => new Promise((r) => (resolve = r as (v: unknown) => void))
     );
     await render({ teaser: TEASER, view: null });
+    header().focus();
+    await act(async () => header().click());
+    expect(openUnderdogView).toHaveBeenCalledTimes(1);
+    // Carregando: o botão focado segue focável (aria-disabled, sem `disabled`) e um
+    // segundo clique não chama a action de novo.
+    expect(header().disabled).toBe(false);
+    expect(header().getAttribute("aria-disabled")).toBe("true");
+    expect(document.activeElement).toBe(header());
     await act(async () => header().click());
     expect(openUnderdogView).toHaveBeenCalledTimes(1);
     const fd = vi.mocked(openUnderdogView).mock.calls[0]![1];
@@ -128,9 +137,13 @@ describe("UnderdogPanel — fechado (#671)", () => {
     expect(container.textContent).toContain("Se acontecer…");
     expect(container.textContent).toContain("Sinais a favor hoje");
     expect(container.textContent).toContain("1 frase cortada");
-    // Pago: o custo some e o título recebe o foco.
+    // Pago: o custo some e o título recebe o foco; o status anuncia o resultado.
     expect(container.textContent).not.toContain(UNDERDOG_COST_NOTE);
     expect(document.activeElement?.tagName).toBe("H3");
+    expect(container.querySelector('[role="status"]')!.textContent).toBe(
+      underdogReadyCopy("Flamengo", "24%")
+    );
+    expect(header().getAttribute("aria-disabled")).toBeNull();
   });
 
   it("erro da action aparece no status e não abre o painel", async () => {
@@ -195,6 +208,35 @@ describe("UnderdogPanel — texto guardado", () => {
     expect(update.closest("form")).toBe(container.querySelector("form"));
   });
 
+  it("'Atualizar' some no carregando: o foco vai pro painel e depois pro título", async () => {
+    let resolve: (v: unknown) => void = () => {};
+    vi.mocked(openUnderdogView).mockImplementation(
+      () => new Promise((r) => (resolve = r as (v: unknown) => void))
+    );
+    await render({ teaser: TEASER, view: { ...VIEW, freshness: "refresh" } });
+    await act(async () => header().click());
+    const update = Array.from(container.querySelectorAll("button")).find((b) =>
+      b.textContent?.startsWith("Atualizar")
+    )!;
+    update.focus();
+    await act(async () => update.click());
+    expect(openUnderdogView).toHaveBeenCalledTimes(1);
+    expect(container.textContent).not.toContain("Atualizar");
+    expect(document.activeElement).toBe(region());
+    await act(async () => resolve({ ok: true, view: VIEW, charged: true }));
+    expect(document.activeElement?.tagName).toBe("H3");
+  });
+
+  it("recalculada com o botão suspenso: aviso de recálculo sem botão", async () => {
+    await render({
+      teaser: TEASER,
+      view: { ...VIEW, freshness: "recalculated" },
+    });
+    expect(container.textContent).toContain(UNDERDOG_STALE_REFRESH);
+    expect(container.textContent).not.toContain(UNDERDOG_STALE_CHANGED);
+    expect(container.textContent).not.toContain("Atualizar");
+  });
+
   it("base que não passa mais na porta: aviso sem botão", async () => {
     await render({ teaser: TEASER, view: { ...VIEW, freshness: "changed" } });
     expect(container.textContent).toContain(UNDERDOG_STALE_CHANGED);
@@ -204,7 +246,12 @@ describe("UnderdogPanel — texto guardado", () => {
 
 describe("UnderdogPanel — linguagem", () => {
   it("sem linguagem de valor, casa de apostas ou 'bet' na tela", () => {
-    for (const freshness of ["current", "refresh", "changed"] as const) {
+    for (const freshness of [
+      "current",
+      "refresh",
+      "recalculated",
+      "changed",
+    ] as const) {
       const html = renderToStaticMarkup(
         <UnderdogPanel
           matchId={MATCH_ID}
