@@ -35,6 +35,8 @@ const PAGE_FILES = [
   "components/match-hero.tsx",
   "components/match-sections.tsx",
   "components/match-sections-auxiliary.tsx",
+  "components/underdog/underdog-panel.tsx",
+  "components/underdog/underdog-facts.tsx",
 ];
 
 describe("§3 completo: só no registro de apostas", () => {

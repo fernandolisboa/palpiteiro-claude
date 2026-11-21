@@ -15,7 +15,13 @@ import { describe, expect, it } from "vitest";
 const ROOT = process.cwd();
 
 // Superfícies com o tom. Arquivo novo de bolão/apostas entra sozinho pelas pastas.
-const DIRS = ["app/(app)/bolao", "app/(app)/apostas", "components/landing", "components/bets"];
+const DIRS = [
+  "app/(app)/bolao",
+  "app/(app)/apostas",
+  "components/landing",
+  "components/bets",
+  "components/underdog",
+];
 const FILES = [
   "components/friend-pool-forms.tsx",
   "lib/view/friend-pool.ts",
@@ -27,6 +33,10 @@ const FILES = [
   "components/match-list/match-tags.tsx",
   "components/h2h-section.tsx",
   "components/palpites/palpite-badges.tsx",
+  // Chances do azarão (#671, ADR 0072): o texto de tela e o texto padrão.
+  "lib/view/underdog.ts",
+  "lib/underdog/labels.ts",
+  "lib/ai/underdog/fallback.ts",
 ];
 
 const FORA: Array<[string, RegExp]> = [

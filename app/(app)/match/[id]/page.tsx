@@ -12,6 +12,9 @@ import { MatchAuxiliarySections } from "@/components/match-sections-auxiliary";
 import { MatchHero } from "@/components/match-hero";
 import { MatchSections } from "@/components/match-sections";
 import { PalpiteArea } from "@/components/palpites/palpite-area";
+import { UnderdogPanel } from "@/components/underdog/underdog-panel";
+import { loadUnderdogTeaser } from "@/lib/underdog/load";
+import { toUnderdogSlot, type UnderdogSlotView } from "@/lib/view/underdog";
 import { readAnalysisEngine } from "@/lib/ai/engine/analysis-engine-flag";
 import {
   toAnalysisUserContextView,
@@ -244,6 +247,7 @@ export default async function MatchPage({ params, searchParams }: PageProps) {
     live,
     progressMascot,
     runMarker,
+    underdogData,
   ] = await Promise.all([
     // Histórico COMPLETO: agrupado por mercado em toMarketAnalysisSections (#243, a
     // última de cada mercado = uma seção) e em toPreviousAnalysisItems (as reanálises
@@ -264,6 +268,12 @@ export default async function MatchPage({ params, searchParams }: PageProps) {
     // Análise que segue rodando de uma visita anterior (saiu do jogo no meio, F5, outra
     // aba): o HERO volta acompanhando o mesmo run. Nunca lança; KV lento = sem marcador.
     readRunMarker(session.user.id, match.id),
+    // Chances do azarão (#671, ADR 0072): só leitura do banco (flag, base, texto
+    // guardado), em paralelo e sem Suspense pra não haver salto abaixo do HERO. Antes do
+    // apito só; nunca lança.
+    match.status === "scheduled" && match.kickoffAt.getTime() > now.getTime()
+      ? loadUnderdogTeaser({ matchId: match.id, userId: session.user.id, now })
+      : Promise.resolve(null),
   ]);
   const { liveMode, state: inPlayState } = live;
   const latestPred = history[0] ?? null;
@@ -433,6 +443,16 @@ export default async function MatchPage({ params, searchParams }: PageProps) {
     ...rawCaps,
     registerBets: rawCaps.registerBets && (phase.kind === "pre" || liveScore !== null),
   };
+  // Chances do azarão (#671): o teaser só no pré-jogo analisável, com palpite na tela, sem
+  // run em andamento e coerente com o palpite; o texto pago aparece até o apito.
+  const activeRun = runMarker?.status === "running" ? runMarker : null;
+  const underdogSlot = toUnderdogSlot({
+    data: underdogData,
+    preMatch: phase.kind === "pre" && caps.analyze,
+    heroPalpite,
+    runInFlight: activeRun !== null,
+    teams: displayTeams,
+  });
   const liveGrid =
     caps.registerBets && liveScore !== null && inPlayState
       ? { score: liveScore, minuteLabel: inPlayState.minuteLabel }
@@ -600,7 +620,8 @@ export default async function MatchPage({ params, searchParams }: PageProps) {
         canOpenAnalysis={canOpenAnalysis}
         liveAnalysis={liveAnalysis}
         progressMascot={progressMascot}
-        activeRun={runMarker?.status === "running" ? runMarker : null}
+        activeRun={activeRun}
+        underdog={underdogSlot}
         noticeDetail={
           liveReadable && inPlayModel === null
             ? "Sem modelo para a leitura ao vivo deste jogo."
@@ -685,6 +706,8 @@ type MatchLayoutProps = {
   progressMascot: ProgressMascot;
   // Run do HERO em voo de uma visita anterior (marcador no KV, adendo da ADR 0064).
   activeRun: RunSnapshot | null;
+  // Chances do azarão (#671): o slot abaixo do palpite; null = nada aparece.
+  underdog: UnderdogSlotView | null;
   // #594: o motivo do aviso de não-analisável quando o jogo está ao vivo sem modelo.
   noticeDetail: string | null;
   // #594: a copy da aba "Seu palpite" quando ela não abre (por motivo, ao vivo).
@@ -730,6 +753,7 @@ function MatchLayout({
   liveAnalysis,
   progressMascot,
   activeRun,
+  underdog,
   noticeDetail,
   seuPalpiteClosed,
 }: MatchLayoutProps) {
@@ -790,6 +814,11 @@ function MatchLayout({
               live={liveAnalysis}
               mascot={progressMascot}
               activeRun={activeRun}
+              underdog={
+                underdog ? (
+                  <UnderdogPanel matchId={matchId} slot={underdog} />
+                ) : null
+              }
               analysis={
                 <FullAnalysis
                   sections={sections}
