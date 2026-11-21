@@ -1,8 +1,8 @@
 import { z } from "zod";
 
 import { truncate } from "@/lib/ai/ai-call-logging";
-import { containsNewsValueLanguage } from "../value-language-guard";
 import { toToolDef } from "@/lib/ai/markets/types";
+import { NEWS_SNIPPET_MAX, newsDateLabel, sanitizeNews } from "@/lib/ai/news-input";
 import { competitionLabel } from "@/lib/format";
 import {
   otherCompetition,
@@ -213,7 +213,6 @@ export const MarketAnalysisSchema = z.object({
 // capturada pelo provider de notícias (RSS do ge ou web search da Claude, #670) — NUNCA
 // inventada. Cap em 10, default []: ausência não derruba a síntese. #670: + trecho curto
 // da matéria, data e fonte (só no prompt; nada disso persiste).
-const NEWS_SNIPPET_MAX = 400;
 const NewsItemSchema = z.object({
   title: z.string().min(1),
   url: z.string().min(1),
@@ -412,59 +411,10 @@ export type BuildPalpitesInputArgs = {
   newsStatus?: NewsFetchStatus;
 };
 
-// #670 — título e trecho vêm de fora (feed/web): uma linha só, sem os delimitadores
-// da seção de notícias (`<<<`/`>>>` viram um sinal só).
-function neutralizeExternal(s: string): string {
-  return s.replace(/\s+/g, " ").replace(/<{2,}/g, "<").replace(/>{2,}/g, ">").trim();
-}
-
-// #670 — URL externa só https, revalidada pelo parser de URL e emitida normalizada
-// (`href` codifica `<`, `>` e espaço: um link não fecha os delimitadores da seção).
-function safeHttpsUrl(raw: string): string | null {
-  try {
-    const u = new URL(raw.trim());
-    return u.protocol === "https:" && u.hostname !== "" ? u.href : null;
-  } catch {
-    return null;
-  }
-}
-
-// #670 — tira do trecho só as frases com linguagem de valor (o resto da matéria segue).
-function cleanSnippet(snippet: string): string | null {
-  const kept = snippet
-    .split(/(?<=[.!?…])\s+/)
-    .filter((sentence) => !containsNewsValueLanguage(sentence))
-    .join(" ")
-    .trim();
-  return kept === "" ? null : truncate(kept, NEWS_SNIPPET_MAX);
-}
-
-// #670 — prepara as notícias pro prompt: título/trecho achatados e neutralizados, URL
-// só https (normalizada), frase do trecho com linguagem de valor fora (o resto do trecho
-// fica) e item cujo título tem linguagem de valor fora. A régua da notícia
-// (containsNewsValueLanguage) deixa passar "retorno" e "R$"; o firewall de SAÍDA continua
-// a rede final. O que sai daqui é exatamente o que o modelo vê E o que persiste em
-// headline.sources ({title,url}).
-function sanitizeNews(news: readonly NewsResult[]): PalpitesInput["news"] {
-  const out: PalpitesInput["news"] = [];
-  for (const n of news) {
-    const title = neutralizeExternal(n.title);
-    const url = safeHttpsUrl(n.url);
-    if (title === "" || url === null) continue;
-    if (containsNewsValueLanguage(title)) continue;
-    const snippetRaw = n.snippet ? neutralizeExternal(n.snippet) : "";
-    const snippet = snippetRaw === "" ? null : cleanSnippet(snippetRaw);
-    out.push({
-      title,
-      url,
-      ...(snippet ? { snippet } : {}),
-      ...(n.publishedAt ? { publishedAt: n.publishedAt } : {}),
-      ...(n.source ? { source: n.source } : {}),
-    });
-    if (out.length >= 10) break;
-  }
-  return out;
-}
+// #670 — saneamento das notícias (título/trecho achatados, cerca neutralizada, URL só
+// https, linguagem de valor fora): lib/ai/news-input.ts, compartilhado com o extrator
+// das notícias do jogo (#672). O que sai de lá é exatamente o que o modelo vê E o que
+// persiste em headline.sources ({title,url}).
 
 // Resume a forma de UM time a partir das fixtures recentes (já desc do adapter):
 // médias de gols PRÓ/CONTRA na perspectiva do time + a sequência de resultados.
@@ -642,25 +592,14 @@ export function buildPredictionInput(args: BuildPalpitesInputArgs): PalpitesInpu
 
 // ─── buildUserMessage ─────────────────────────────────────────────────────────
 
-// #670 — data da notícia no fuso de Brasília ("21/11 15:43"), como a imprensa BR mostra.
-const NEWS_DATE_FORMAT = new Intl.DateTimeFormat("pt-BR", {
-  timeZone: "America/Sao_Paulo",
-  day: "2-digit",
-  month: "2-digit",
-  hour: "2-digit",
-  minute: "2-digit",
-  hour12: false,
-});
 const NEWS_SOURCE_LABEL = { ge: "ge", web_search: "busca na web" } as const;
 
 // "ge, 21/11 15:43" / "busca na web" / null (item sem fonte nem data).
 function newsTag(n: PalpitesInput["news"][number]): string | null {
   const parts: string[] = [];
   if (n.source) parts.push(NEWS_SOURCE_LABEL[n.source]);
-  const ms = n.publishedAt ? Date.parse(n.publishedAt) : Number.NaN;
-  if (Number.isFinite(ms)) {
-    parts.push(NEWS_DATE_FORMAT.format(new Date(ms)).replace(",", ""));
-  }
+  const date = newsDateLabel(n.publishedAt);
+  if (date !== null) parts.push(date);
   return parts.length > 0 ? parts.join(", ") : null;
 }
 
