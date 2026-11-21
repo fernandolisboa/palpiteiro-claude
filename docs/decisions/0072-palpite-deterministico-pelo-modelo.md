@@ -28,6 +28,6 @@ Palmeiras x Flamengo, 2026-11-21: o mesmo jogo, analisado 4 vezes com o motor `c
 - O mesmo jogo com os mesmos dados dá o mesmo palpite; dado real novo (odds, JEV) muda o palpite, e isso é correto.
 - A distribuição do `exact_score` muda: mais 1–0/1–1/0–1, quase nenhum empate escolhido (raramente é o resultado mais provável antes do jogo). Eras separadas por `promptVersion` e `headline.pick`.
 - Mercado + JEV pode contar o mesmo desfalque duas vezes (o preço já o reflete); os multiplicadores gravados permitem medir.
-- A extração do contexto extra (Haiku) segue não determinística; o campo agora fica preenchido depois do run.
+- O campo do contexto extra fica preenchido depois do run, e o "Analisar de novo" com o mesmo texto reaproveita a última extração ok da mesma pessoa no mesmo jogo (relida do `ai_calls`, sem migration): a Haiku não é determinística e duas leituras do mesmo texto podiam mexer em fatores diferentes. Texto diferente extrai de novo.
 - Dois system prompts (v12/v13) = duas entradas de cache.
 - Acompanhamentos: palpite ao vivo pela mesma regra (`palpites_live_v3`), tirar o "crave o azarão" do v12, medir mercado+JEV contra mercado puro.
