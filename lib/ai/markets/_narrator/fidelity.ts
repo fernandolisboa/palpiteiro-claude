@@ -1,7 +1,5 @@
-import type { FidelityCheck } from "@/lib/ai/palpites/fidelity-validator";
-
 import type { NarratorOutput } from "./schemas";
-import { selectionAliases } from "./labels";
+import { selectionAliases, selectionLabel } from "./labels";
 import type { NarratorDecision } from "./types";
 
 // Checagem de FIDELIDADE do narrador (ADR 0041 §4), no espírito de
@@ -98,6 +96,14 @@ function tiedToAlias(
   return aliases.some((a) => new RegExp(aliasRe(a), "iu").test(around));
 }
 
+// Reprovação da narração. `feedback` (opcional) é o motivo com os rótulos que o modelo
+// leu no bloco "Decisão" ("Empate", "Vitória do X"), pra 2ª tentativa (#669);
+// `reason` segue com as chaves cruas ('draw', 'home') e é o que vai pro error_message.
+export type NarrationFidelityCheck =
+  | { ok: true }
+  | { ok: false; reason: string; feedback?: string };
+
+// Lista global (fallback quando a frase não cita nenhuma seleção).
 function allowedPercents(d: NarratorDecision): number[] {
   const f = d.focus;
   const out: number[] = [d.minEdgePp];
@@ -122,24 +128,161 @@ function allowedPercents(d: NarratorDecision): number[] {
   return out;
 }
 
+// Números de UMA seleção (#669, code review): quando a frase cita a seleção, o
+// percentual tem de ser dela, senão "o CR Flamengo tem 34,4%" passava com o número do
+// visitante. `modelOnly` = só o lado do modelo (frase que atribui o número ao modelo).
+function selectionPercents(
+  d: NarratorDecision,
+  key: string,
+  modelOnly: boolean
+): number[] {
+  // Em 2 vias o outro lado é o complemento (e o edge é o mesmo, com sinal trocado):
+  // cada lado aceita os números dos dois, como antes.
+  const twoWay = d.selectionKeys.length === 2;
+  const f = d.focus;
+  const focusCounts = f !== null && (twoWay || f.key === key);
+  const out: number[] = [d.minEdgePp];
+  if (focusCounts && f.edgePct !== null) out.push(Math.abs(f.edgePct));
+  const sides = [
+    ...d.selections.filter((s) => twoWay || s.key === key),
+    ...(focusCounts ? [f] : []),
+  ];
+  for (const s of sides) {
+    const values = [s.modelProbPct];
+    if (!modelOnly && s.impliedPct !== null) values.push(s.impliedPct);
+    out.push(...values);
+    if (twoWay) out.push(...values.map((v) => 100 - v));
+  }
+  return out;
+}
+
+// Só o lado do modelo, sem frase citando seleção.
+function modelPercents(d: NarratorDecision): number[] {
+  const keys = new Set([
+    ...d.selections.map((s) => s.key),
+    ...(d.focus ? [d.focus.key] : []),
+  ]);
+  if (keys.size === 0) return [d.minEdgePp];
+  return [...keys].flatMap((k) => selectionPercents(d, k, true));
+}
+
+// Palavras de papel no 1X2 que não são apelido de recomendação (ficam fora de
+// `selectionAliases` pra não mexer na checagem de lado), mas ligam o número à seleção.
+const ROLE_WORDS: Record<string, Record<string, string[]>> = {
+  match_result: {
+    home: [
+      "mandante",
+      "mandantes",
+      "time da casa",
+      "dono da casa",
+      "donos da casa",
+    ],
+    away: ["visitante", "visitantes", "time de fora"],
+  },
+};
+
+// Fim de frase: . ! ? ; ou quebra de linha. Ponto seguido de dígito é decimal ("2.5").
+const SENTENCE_END = /[!?;\n]|\.(?!\d)/u;
+const SENTENCE_END_G = /[!?;\n]|\.(?!\d)/gu;
+
+function sentenceAround(text: string, start: number, end: number): string {
+  let from = 0;
+  for (const m of text.slice(0, start).matchAll(SENTENCE_END_G)) {
+    from = m.index + m[0].length;
+  }
+  const tail = text.slice(end);
+  const stop = tail.search(SENTENCE_END);
+  return text.slice(from, stop < 0 ? text.length : end + stop);
+}
+
+// Atribuição explícita ao modelo logo antes do número, na mesma oração ("o modelo dá
+// 39,8%"): aí o número tem de ser do lado do modelo, não a implícita. Conservador:
+// qualquer menção ao preço na oração (antes ou logo depois) desliga a regra.
+const MODEL_WORD = /\bmodelo\b/iu;
+const PRICE_WORD =
+  /implícit|implicit|mercado|\bodds?\b|preço|cotaç|casas? de apostas?|bookmaker/iu;
+const PRICE_LOOKAHEAD = 25;
+
+function attributedToModel(
+  text: string,
+  clauseFrom: number,
+  start: number,
+  end: number,
+  unit: string
+): boolean {
+  if (!unit.startsWith("%")) return false; // pp é edge/piso, não chance.
+  const before = text.slice(clauseFrom, start).split(/[,:]/).pop() ?? "";
+  const after = text.slice(end, end + PRICE_LOOKAHEAD).split(/[,:;.!?\n]/)[0];
+  return (
+    MODEL_WORD.test(before) &&
+    !PRICE_WORD.test(before) &&
+    !PRICE_WORD.test(after)
+  );
+}
+
+function fmtList(values: readonly number[]): string {
+  return values.map((a) => a.toFixed(2)).join(", ");
+}
+
 export function checkNarrationFidelity(
   output: NarratorOutput,
   decision: NarratorDecision
-): FidelityCheck {
+): NarrationFidelityCheck {
   const text = [output.rationale, ...output.key_factors].join(" \n ");
+  const label = (key: string) =>
+    selectionLabel(decision.marketKey, key, decision.teams, decision.line);
 
-  // (1) Percentuais citados.
+  // (1) Percentuais citados. A frase que cita uma (ou mais) seleções amarra o número a
+  // elas; sem seleção na frase, vale a lista global.
   const allowed = allowedPercents(decision);
+  const labelRes = decision.selectionKeys.map((key) => ({
+    key,
+    res: [
+      ...selectionAliases(
+        decision.marketKey,
+        key,
+        decision.teams,
+        decision.line
+      ),
+      ...(ROLE_WORDS[decision.marketKey]?.[key] ?? []),
+    ].map((a) => new RegExp(aliasRe(a), "iu")),
+  }));
+  let prevEnd = 0;
   for (const m of text.matchAll(PERCENT_RE)) {
+    const start = m.index;
+    const end = start + m[0].length;
     const cited = Number(m[1].replace(",", "."));
+    const sentence = sentenceAround(text, start, end);
+    const sentenceFrom = text.lastIndexOf(sentence, start);
+    const clauseFrom = Math.max(prevEnd, sentenceFrom);
+    prevEnd = end;
     if (!Number.isFinite(cited)) continue;
-    const ok = allowed.some((a) => Math.abs(a - cited) <= PERCENT_TOLERANCE_PP);
-    if (!ok) {
+    const unit = m[0].slice(m[1].length).trim();
+    const modelOnly = attributedToModel(text, clauseFrom, start, end, unit);
+    const keys = labelRes
+      .filter(({ res }) => res.some((re) => re.test(sentence)))
+      .map(({ key }) => key);
+    const pool =
+      keys.length > 0
+        ? keys.flatMap((k) => selectionPercents(decision, k, modelOnly))
+        : modelOnly
+          ? modelPercents(decision)
+          : allowed;
+    if (pool.some((a) => Math.abs(a - cited) <= PERCENT_TOLERANCE_PP)) continue;
+    const what = modelOnly ? "como chance do modelo " : "";
+    if (keys.length > 0) {
+      const raw = keys.map((k) => `'${k}'`).join(", ");
+      const named = keys.map((k) => `'${label(k)}'`).join(", ");
       return {
         ok: false,
-        reason: `percentual citado ${m[0].trim()} não bate com a decisão persistida [${allowed.map((a) => a.toFixed(2)).join(", ")}]`,
+        reason: `percentual citado ${m[0].trim()} ${what}não bate com ${raw}, citada na mesma frase [${fmtList(pool)}]`,
+        feedback: `percentual citado ${m[0].trim()} ${what}não bate com os números de ${named}, citada na mesma frase`,
       };
     }
+    return {
+      ok: false,
+      reason: `percentual citado ${m[0].trim()} ${what}não bate com a decisão persistida [${fmtList(pool)}]`,
+    };
   }
 
   // (2) Lado. Conservador: na dúvida, passa — os números persistidos mandam; a
@@ -169,6 +312,7 @@ export function checkNarrationFidelity(
       return {
         ok: false,
         reason: `texto diz que não há aposta, mas a decisão é '${side}'`,
+        feedback: `texto diz que não há aposta, mas a decisão é '${label(side)}'`,
       };
     }
   }
@@ -181,6 +325,10 @@ export function checkNarrationFidelity(
             side === "pass"
               ? `texto recomenda '${key}' numa decisão sem aposta`
               : `texto recomenda '${key}', mas a decisão é '${side}'`,
+          feedback:
+            side === "pass"
+              ? `texto recomenda '${label(key)}' numa decisão sem aposta`
+              : `texto recomenda '${label(key)}', mas a decisão é '${label(side)}'`,
         };
       }
     }

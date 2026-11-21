@@ -892,6 +892,71 @@ describe("narrator_v1.5 (#669): todas as seleções na decisão e 2ª tentativa"
     expect(checkNarrationFidelity(edgeDraw, homeByPrice()).ok).toBe(false);
   });
 
+  describe("fidelidade: o percentual fica amarrado à seleção citada na frase (code review)", () => {
+    const say = (rationale: string) => ({ rationale, key_factors: ["a", "b"] });
+
+    it("reprova o número de outra seleção na frase do mandante", () => {
+      const res = checkNarrationFidelity(say("O CR Flamengo tem 34,4% de chance."), homeByPrice());
+      expect(res.ok).toBe(false);
+      if (res.ok) return;
+      // error_message com a chave crua; o retorno pro modelo com o rótulo que ele leu.
+      expect(res.reason).toContain("não bate com 'home', citada na mesma frase [");
+      expect(res.feedback).toBe(
+        "percentual citado 34,4% não bate com os números de 'Vitória do CR Flamengo', citada na mesma frase"
+      );
+    });
+
+    it("reprova a implícita apresentada como chance do modelo", () => {
+      for (const text of [
+        "O modelo dá 39,8% ao Fluminense FC.",
+        // Sem o rótulo completo: cai na lista do modelo, onde 39,8 não está.
+        "O modelo dá 39,8% ao Fluminense.",
+      ]) {
+        const res = checkNarrationFidelity(say(text), homeByPrice());
+        expect(res.ok, text).toBe(false);
+        if (!res.ok) expect(res.reason).toContain("como chance do modelo");
+      }
+    });
+
+    it("aceita a chance do modelo do favorito, a implícita do empate e o focus com edge e piso", () => {
+      for (const text of [
+        "O modelo dá 34,4% ao Fluminense FC.",
+        "O mercado dá 39,8% ao Fluminense FC.",
+        "O empate tem 29,0% implícitos.",
+        "Para o CR Flamengo o modelo vê 38,5% contra 31,2%: edge de 7,3 pp, acima do piso de 5 pp.",
+        // Duas seleções na frase: vale o número de qualquer uma.
+        "O Fluminense FC é o favorito do mercado, mas o modelo vê 38,5% para o CR Flamengo.",
+        // Papel ("mandante"/"visitante") também liga o número à seleção.
+        "O Fluminense FC é favorito do mercado, mas o modelo vê 38,5% para o mandante.",
+        // Sem seleção na frase: a lista global.
+        "O favorito do mercado aparece com 39,8% implícitos.",
+      ]) {
+        expect(checkNarrationFidelity(say(text), homeByPrice()), text).toEqual({ ok: true });
+      }
+    });
+  });
+
+  it("feedback do lado usa os rótulos; o reason segue com as chaves cruas", () => {
+    const res = checkNarrationFidelity(
+      { rationale: "O mercado aposta no Fluminense FC.", key_factors: ["a", "b"] },
+      homeByPrice()
+    );
+    expect(res).toEqual({
+      ok: false,
+      reason: "texto recomenda 'away', mas a decisão é 'home'",
+      feedback: "texto recomenda 'Vitória do Fluminense FC', mas a decisão é 'Vitória do CR Flamengo'",
+    });
+    const draw = checkNarrationFidelity(
+      { rationale: "Jogo sem aposta.", key_factors: ["a", "b"] },
+      homeByPrice({ side: "draw" })
+    );
+    expect(draw).toEqual({
+      ok: false,
+      reason: "texto diz que não há aposta, mas a decisão é 'draw'",
+      feedback: "texto diz que não há aposta, mas a decisão é 'Empate'",
+    });
+  });
+
   it("fidelidade: 'o mercado aposta no favorito' continua sendo recomendação da outra seleção", () => {
     const out = {
       rationale: "O mercado aposta no Fluminense FC, mas o modelo vê valor no mandante.",

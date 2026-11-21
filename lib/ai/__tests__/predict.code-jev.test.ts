@@ -1193,14 +1193,16 @@ describe("2ª tentativa do narrador (#669)", () => {
     expect(second.tools).toEqual(first.tools);
     expect(userText(first)).not.toContain("## Tentativa anterior reprovada");
     expect(userText(second)).toContain(
-      "## Tentativa anterior reprovada\n- A resposta anterior não passou na conferência com os números e o lado da decisão: texto recomenda 'draw', mas a decisão é 'home'."
+      "## Tentativa anterior reprovada\n- A resposta anterior não passou na conferência com os números e o lado da decisão: texto recomenda 'Empate', mas a decisão é 'Vitória do CR Flamengo'."
     );
+    // O retorno usa os rótulos que o modelo leu; as chaves cruas ficam só no error_message.
+    expect(userText(second)).not.toContain("'draw'");
     expect(userText(first).endsWith(LAST_NARRATION_LINE)).toBe(true);
     expect(userText(second).endsWith(LAST_NARRATION_LINE)).toBe(true);
 
     const rows = narratorRows();
     expect(rows.map((r) => r.status)).toEqual(["invalid_output", "ok"]);
-    expect(rows[0].errorMessage).toMatch(/^fidelity: /);
+    expect(rows[0].errorMessage).toBe("fidelity: texto recomenda 'draw', mas a decisão é 'home'");
     expect(rows[1].errorMessage).toBeNull();
     expect((rows[1].outputPayload as Record<string, unknown>).retryOf).toBe(rows[0].__id);
     expect(rows[0].outputPayload).not.toHaveProperty("retryOf");
@@ -1251,6 +1253,37 @@ describe("2ª tentativa do narrador (#669)", () => {
     await runMatchResult();
     expect(narratorRequests()).toHaveLength(1);
     expect(narratorRows().map((r) => r.status)).toEqual(["tool_missing"]);
+  });
+
+  it("tool_use cortado no max_tokens (input parcial reprovado no Zod): não tenta de novo", async () => {
+    narratorReplies({
+      ...anthropicMessage("submit_narration", { rationale: "O modelo de placar estima" }),
+      stop_reason: "max_tokens",
+    });
+    await runMatchResult();
+    expect(narratorRequests()).toHaveLength(1);
+    const rows = narratorRows();
+    expect(rows.map((r) => r.status)).toEqual(["invalid_output"]);
+    expect(onlyPredictionRow().aiCallId).toBe(rows[0].__id);
+  });
+
+  it("a row da 1ª tentativa é gravada ANTES da 2ª chamada (o custo pago não se perde)", async () => {
+    narratorReplies(
+      anthropicMessage("submit_narration", BAD_FIDELITY),
+      anthropicMessage("submit_narration", NARRATION)
+    );
+    await runMatchResult();
+    const firstRowAt = insertValues.mock.calls.findIndex(
+      (c) => (c[0] as Row).promptVersion === NARRATOR_VERSION && (c[0] as Row).status === "invalid_output"
+    );
+    const narrationCalls = anthropicCreate.mock.calls
+      .map((c, i) => (toolNameOf(c) === "submit_narration" ? i : -1))
+      .filter((i) => i >= 0);
+    expect(firstRowAt).toBeGreaterThanOrEqual(0);
+    expect(narrationCalls).toHaveLength(2);
+    expect(insertValues.mock.invocationCallOrder[firstRowAt]).toBeLessThan(
+      anthropicCreate.mock.invocationCallOrder[narrationCalls[1]]
+    );
   });
 
   it("a IA não respondeu (erro do provider ou recusa): nunca repete", async () => {
@@ -2189,6 +2222,43 @@ describe("best bet no motor code_jev (#512): 1 JEV, mercados em código, 1 narra
     const predictions = rowsWhere((r) => "recommendation" in r);
     expect(predictions).toHaveLength(3);
     for (const p of predictions) expect(p.aiCallId).toBe(rows[1].__id);
+  });
+
+  it("insert da row da 1ª tentativa falha (#669): a etapa fecha como falha, sem 2ª chamada, e os mercados falham", async () => {
+    // Aqui a narração roda fora do progressScope do predict: sem o step.fail() do
+    // narrateWith, a etapa ficaria girando.
+    narratorReplies(
+      anthropicMessage("submit_narration", {
+        rationale: "O modelo vê 99% de chance para esta decisão.",
+        key_factors: ["Tabela", "Forma recente"],
+      })
+    );
+    insertValues.mockImplementation((row: Row) => {
+      if (row.promptVersion === NARRATOR_VERSION && row.status === "invalid_output") {
+        throw new Error("db down");
+      }
+    });
+    const events: ProgressEvent[] = [];
+    let out: Awaited<ReturnType<typeof runCodeJevFanOut>>;
+    try {
+      out = await withRunProgress(
+        (e) => events.push(e),
+        () =>
+          runCodeJevFanOut(
+            base,
+            markets("over_under", "match_result", "btts"),
+            mapError,
+            vi.fn(async () => ({ ok: true }))
+          )
+      );
+    } finally {
+      // clearAllMocks do beforeEach não desfaz a implementação.
+      insertValues.mockReset();
+    }
+    expect(out.every((o) => !o.ok)).toBe(true);
+    expect(narratorRequests()).toHaveLength(1);
+    const narration = events.filter((e) => e.id === "narration").map((e) => e.status);
+    expect(narration).toEqual(["active", "failed"]);
   });
 
   it("recusa do narrador (#524) → racional templado, 1 row de ai_calls provider_error COM tokens, pendentes persistidos", async () => {

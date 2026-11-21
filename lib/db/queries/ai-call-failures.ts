@@ -1,4 +1,5 @@
 import { and, count, desc, eq, gte, ne, sql, type SQL } from "drizzle-orm";
+import { alias } from "drizzle-orm/pg-core";
 
 import { aiCalls, matches } from "@/db/schema";
 import type { AiCallStatus } from "@/lib/ai/providers/types";
@@ -8,7 +9,8 @@ import { db } from "@/lib/db";
  * Falhas de IA legíveis pro admin (#669): as rows de `ai_calls` com status ≠ ok, sem
  * precisar de SQL no banco de produção. Nunca seleciona `input_payload` nem
  * `output_payload` (system prompt, contexto e texto do modelo): só colunas escalares e
- * o `retryOf` do output (a 2ª tentativa do narrador aponta pra 1ª).
+ * o `retryOf` do output (a 2ª tentativa do narrador aponta pra 1ª), e se uma 2ª
+ * tentativa ok refez a row (`recoveredByRetry`).
  *
  * `costUsd` é numeric (string no Drizzle): vira number aqui, na fronteira.
  */
@@ -42,6 +44,8 @@ export type AiCallFailureRow = {
   errorRedacted: boolean;
   // A 2ª tentativa do narrador (#669) aponta pra row da 1ª.
   retryOf: string | null;
+  // Uma 2ª tentativa com status ok aponta pra esta row: a análise saiu com o texto da IA.
+  recoveredByRetry: boolean;
   latencyMs: number;
   costUsd: number;
 };
@@ -75,6 +79,17 @@ const freeTextPrompt = sql.join(
   sql` or `
 );
 
+// A 2ª tentativa roda logo depois da 1ª, na mesma função: a janela de 1 h limita a
+// subconsulta ao trecho do índice de created_at, sem varrer a tabela por row.
+const retryCall = alias(aiCalls, "retry_call");
+const recoveredByRetry = sql<boolean>`exists (
+  select 1 from ${aiCalls} as ${sql.identifier("retry_call")}
+  where ${retryCall.status} = 'ok'
+    and ${retryCall.createdAt} >= ${aiCalls.createdAt}
+    and ${retryCall.createdAt} < ${aiCalls.createdAt} + interval '1 hour'
+    and ${retryCall.outputPayload}->>'retryOf' = ${aiCalls.id}::text
+)`;
+
 export async function getAiCallFailures(
   f: FailureFilter
 ): Promise<{ rows: AiCallFailureRow[]; hasMore: boolean }> {
@@ -94,6 +109,7 @@ export async function getAiCallFailures(
       >`case when (${freeTextPrompt}) then null else ${aiCalls.errorMessage} end`,
       errorRedacted: sql<boolean>`((${freeTextPrompt}) and ${aiCalls.errorMessage} is not null)`,
       retryOf: sql<string | null>`${aiCalls.outputPayload}->>'retryOf'`,
+      recoveredByRetry,
       latencyMs: aiCalls.latencyMs,
       costUsd: aiCalls.costUsd,
     })
@@ -107,6 +123,7 @@ export async function getAiCallFailures(
     rows: raw.slice(0, AI_CALL_FAILURES_LIMIT).map((r) => ({
       ...r,
       errorRedacted: r.errorRedacted === true,
+      recoveredByRetry: r.recoveredByRetry === true,
       costUsd: Number(r.costUsd ?? 0),
     })),
     hasMore: raw.length > AI_CALL_FAILURES_LIMIT,
@@ -115,7 +132,9 @@ export async function getAiCallFailures(
 
 /**
  * Taxa de falha por versão de prompt na janela: conta todas as chamadas (ok incluído)
- * e devolve só as versões com alguma falha, as de mais falhas primeiro.
+ * e devolve só as versões com alguma falha, as de mais falhas primeiro. Conta
+ * CHAMADAS, não análises: uma narração reprovada e refeita com sucesso conta 1 falha
+ * em 2 chamadas (a página avisa).
  */
 export async function getAiCallFailureSummary(
   f: FailureFilter

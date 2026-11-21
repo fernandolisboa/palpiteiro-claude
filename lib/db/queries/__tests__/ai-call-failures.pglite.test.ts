@@ -118,6 +118,8 @@ describe("getAiCallFailures / getAiCallFailureSummary", () => {
     old: string;
     betParse: string;
     palpite: string;
+    recovered: string;
+    lateOk: string;
   };
 
   beforeAll(async () => {
@@ -135,6 +137,24 @@ describe("getAiCallFailures / getAiCallFailureSummary", () => {
       errorMessage:
         "retry: fidelity: texto recomenda 'away', mas a decisão é 'home'",
       outputPayload: { content: "TEXTO DO MODELO", retryOf: seeded.first },
+    });
+    // Reprovada e refeita com sucesso: a 2ª (ok) aponta pra 1ª.
+    seeded.recovered = await call({
+      status: "invalid_output",
+      hoursAgo: 4,
+      errorMessage: "fidelity: texto recomenda 'draw', mas a decisão é 'home'",
+    });
+    await call({
+      status: "ok",
+      hoursAgo: 3.99,
+      outputPayload: { content: "TEXTO DO MODELO", retryOf: seeded.recovered },
+    });
+    // Um ok apontando pra uma falha de muito antes não é a 2ª tentativa dela.
+    seeded.lateOk = await call({ status: "tool_missing", hoursAgo: 4.5 });
+    await call({
+      status: "ok",
+      hoursAgo: 2.5,
+      outputPayload: { content: "TEXTO DO MODELO", retryOf: seeded.lateOk },
     });
     seeded.providerB = await call({
       status: "provider_error",
@@ -168,6 +188,8 @@ describe("getAiCallFailures / getAiCallFailureSummary", () => {
     expect(rows.map((r) => r.id)).toEqual([
       seeded.retry,
       seeded.first,
+      seeded.recovered,
+      seeded.lateOk,
       seeded.providerB,
       seeded.betParse,
       seeded.palpite,
@@ -212,6 +234,7 @@ describe("getAiCallFailures / getAiCallFailureSummary", () => {
         "model",
         "promptVersion",
         "provider",
+        "recoveredByRetry",
         "retryOf",
         "status",
       ].sort()
@@ -221,6 +244,18 @@ describe("getAiCallFailures / getAiCallFailureSummary", () => {
     expect(dump).not.toContain("TEXTO DO MODELO");
     expect(rows.find((r) => r.id === seeded.retry)!.retryOf).toBe(seeded.first);
     expect(rows.find((r) => r.id === seeded.first)!.retryOf).toBeNull();
+  });
+
+  it("refeita → ok: só a falha que uma 2ª tentativa ok refez (e logo depois)", async () => {
+    const { rows } = await getAiCallFailures({
+      days: 7,
+      matchId: null,
+      now: NOW,
+    });
+    const recovered = rows.filter((r) => r.recoveredByRetry).map((r) => r.id);
+    // `first` foi refeita mas a 2ª também falhou; `lateOk` tem um ok fora da janela de 1 h.
+    expect(recovered).toEqual([seeded.recovered]);
+    expect(typeof rows[0].recoveredByRetry).toBe("boolean");
   });
 
   it("erro de prompt de texto livre vem anulado do SQL (ADR 0046); os outros, inteiros", async () => {
@@ -265,9 +300,9 @@ describe("getAiCallFailures / getAiCallFailureSummary", () => {
     expect(summary).toEqual([
       {
         promptVersion: "narrator_v1.5",
-        total: 4,
-        failed: 2,
-        byStatus: { invalid_output: 2 },
+        total: 8,
+        failed: 4,
+        byStatus: { invalid_output: 3, tool_missing: 1 },
       },
       {
         promptVersion: "bet_parse_v2",

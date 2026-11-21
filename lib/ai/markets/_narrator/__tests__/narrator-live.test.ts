@@ -167,6 +167,11 @@ describe("narrator_live_v1.1", () => {
         decision(),
       );
       expect(r.ok).toBe(false);
+      // error_message com a chave crua; o retorno da 2ª tentativa com o rótulo.
+      if (!r.ok) {
+        expect(r.reason).toBe("texto recomenda 'draw' numa leitura sem aposta");
+        expect(r.feedback).toBe("texto recomenda 'Empate' numa leitura sem aposta");
+      }
     });
 
     it.each(["aposte no mandante", "há valor aqui", "o edge é grande", "stake baixa"])(

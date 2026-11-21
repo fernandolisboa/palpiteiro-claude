@@ -118,11 +118,17 @@ export default async function AdminAiFailuresPage({ searchParams }: PageProps) {
               Nenhuma falha nesta janela.
             </p>
           ) : (
-            <div className="border-border rounded-md border">
-              {summary.map((s) => (
-                <SummaryRow key={s.promptVersion} row={s} />
-              ))}
-            </div>
+            <>
+              <div className="border-border rounded-md border">
+                {summary.map((s) => (
+                  <SummaryRow key={s.promptVersion} row={s} />
+                ))}
+              </div>
+              <p className="text-meta text-muted-foreground pt-2">
+                A taxa conta chamadas, não análises: uma narração reprovada e
+                refeita com sucesso soma 1 falha em 2 chamadas.
+              </p>
+            </>
           )}
         </section>
 
@@ -202,6 +208,14 @@ function FailureItem({
           {row.retryOf && (
             <span className="bg-surface-2 text-meta rounded-sm px-1.5 py-0.5">
               2ª tentativa
+            </span>
+          )}
+          {row.recoveredByRetry && (
+            <span
+              title="Uma 2ª tentativa refez esta chamada e deu certo: a análise saiu com o texto da IA"
+              className="bg-surface-2 text-meta rounded-sm px-1.5 py-0.5"
+            >
+              refeita → ok
             </span>
           )}
           <span title={row.status} className="text-body-sm font-medium">

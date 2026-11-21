@@ -3316,10 +3316,12 @@ type NarrationCartridge<D, C> = {
   toolName: string;
   outputSchema: typeof narratorCartridge.outputSchema;
   buildUserMessage: (decision: D, context: C) => string;
+  // `feedback`: o motivo com os rótulos que o modelo leu, só pra 2ª tentativa; o
+  // `reason` (chaves cruas) vai pro error_message.
   checkFidelity: (
     output: NarratorOutput,
     decision: D,
-  ) => { ok: true } | { ok: false; reason: string };
+  ) => { ok: true } | { ok: false; reason: string; feedback?: string };
   fallback: (decision: D) => NarratorOutput;
 };
 
@@ -3431,7 +3433,15 @@ async function narrateWith<D, C>(
     // cacheado é lido). Sem slot novo: `beforeLlmPath` não roda de novo, a falha é
     // nossa e não do pedido. A row da 1ª fica gravada ANTES, pra o custo já pago não se
     // perder se a função morrer no meio; a prediction aponta pra row final.
-    const firstId = await insert(outcome);
+    let firstId: string;
+    try {
+      firstId = await insert(outcome);
+    } catch (err) {
+      // A etapa ainda está aberta: fecha antes de propagar, senão o progresso fica
+      // girando numa análise que já falhou.
+      step.fail();
+      throw err;
+    }
     persistedId = firstId;
     if (fitsCall()) {
       const retry = await runNarration(
@@ -3607,10 +3617,11 @@ async function runNarration<D, C>(
   };
   // Recusa do modelo (stop_reason refusal), erro e timeout: "a IA não respondeu".
   if (!result.ok) return failed(result.status, result.message, base);
+  // Cortada no teto de tokens: a 2ª falharia igual, não tenta de novo. Vale também pro
+  // tool_use cortado no meio, cujo input parcial cai no Zod.
+  const truncated =
+    result.stopReason !== null && TRUNCATED_STOP_REASONS.has(result.stopReason);
   if (result.toolInput === undefined) {
-    // Cortada no teto de tokens: a 2ª falharia igual, não tenta de novo.
-    const truncated =
-      result.stopReason !== null && TRUNCATED_STOP_REASONS.has(result.stopReason);
     return failed("tool_missing", `model did not call ${cartridge.toolName}`, base, {
       failure: "format",
       retryFeedback: truncated ? null : TOOL_MISSING_FEEDBACK,
@@ -3620,14 +3631,16 @@ async function runNarration<D, C>(
   if (!parsed.success) {
     return failed("invalid_output", JSON.stringify(parsed.error.issues), base, {
       failure: "format",
-      retryFeedback: zodRejectionFeedback(parsed.error.issues),
+      retryFeedback: truncated ? null : zodRejectionFeedback(parsed.error.issues),
     });
   }
   const fidelity = cartridge.checkFidelity(parsed.data, decision);
   if (!fidelity.ok) {
     return failed("invalid_output", `fidelity: ${fidelity.reason}`, base, {
       failure: "fidelity",
-      retryFeedback: fidelityRejectionFeedback(fidelity.reason),
+      retryFeedback: fidelityRejectionFeedback(
+        fidelity.feedback ?? fidelity.reason,
+      ),
     });
   }
   return {
