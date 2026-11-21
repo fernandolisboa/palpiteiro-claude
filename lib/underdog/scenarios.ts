@@ -26,7 +26,7 @@ import type {
   UnderdogSide,
 } from "./types";
 
-// Cenários "se acontecer…" do painel do azarão (#671, ADR 0072 §3), todos em código
+// Cenários "se acontecer…" do painel do azarão (#671, ADR 0073 §3), todos em código
 // sobre o modelo da base. Puros e determinísticos. Cenário que falha (null) ou muda a
 // chance do azarão menos que SCENARIO_MIN_DELTA_PP sai da lista.
 

@@ -3,7 +3,7 @@ import type { ToolDef } from "@/lib/ai/providers/types";
 
 import { ADVOCATE_MAX_SENTENCES } from "./advocate-cartridge";
 
-// Cartucho do revisor adversarial (#671, ADR 0072): Haiku em contexto LIMPO. Recebe só
+// Cartucho do revisor adversarial (#671, ADR 0073): Haiku em contexto LIMPO. Recebe só
 // o bloco de fatos e o rascunho numerado (nada do system do advogado), dá um veredito
 // por frase e escreve o contraponto. O código corta só `sem_base`. System e ferramenta
 // constantes (ADR 0071). Mudou prompt ou tool → bump + commit `prompt:`.

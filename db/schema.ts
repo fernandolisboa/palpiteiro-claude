@@ -976,7 +976,7 @@ export const aiConfig = pgTable("ai_config", {
   // 0063). Default ON. SET ... = false → o painel mostra só a avaliação em código, sem
   // o botão.
   enableBetSlipExplain: boolean().notNull().default(true),
-  // Kill-switch do painel "Chances do azarão" (#671, ADR 0072). Default ON. SET ... =
+  // Kill-switch do painel "Chances do azarão" (#671, ADR 0073). Default ON. SET ... =
   // false → nada aparece na página do jogo (nem o texto guardado) e a action recusa.
   enableUnderdogView: boolean().notNull().default(true),
   // Kill-switch da reconferência com a escalação (#619, PR B; ADR 0041 adendo). Default
@@ -1291,7 +1291,7 @@ export const userPalpiteAnalyses = pgTable(
   ],
 );
 
-// Chances do azarão (#671, ADR 0072): o painel aberto por usuário e base do modelo. Os
+// Chances do azarão (#671, ADR 0073): o painel aberto por usuário e base do modelo. Os
 // números congelados (`facts`) e o texto revisado (`narrative`) batem ao reabrir; ler e
 // escrever só via lib/db/queries/underdog-views.ts (Zod em toda leitura). UNIQUE (user,
 // base) só deduplica a corrida de dois cliques; "mesma base" na tela é a materialidade

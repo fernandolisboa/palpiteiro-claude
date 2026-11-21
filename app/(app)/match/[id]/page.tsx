@@ -268,7 +268,7 @@ export default async function MatchPage({ params, searchParams }: PageProps) {
     // Análise que segue rodando de uma visita anterior (saiu do jogo no meio, F5, outra
     // aba): o HERO volta acompanhando o mesmo run. Nunca lança; KV lento = sem marcador.
     readRunMarker(session.user.id, match.id),
-    // Chances do azarão (#671, ADR 0072): só leitura do banco (flag, base, texto
+    // Chances do azarão (#671, ADR 0073): só leitura do banco (flag, base, texto
     // guardado), em paralelo e sem Suspense pra não haver salto abaixo do HERO. Antes do
     // apito só; nunca lança.
     match.status === "scheduled" && match.kickoffAt.getTime() > now.getTime()

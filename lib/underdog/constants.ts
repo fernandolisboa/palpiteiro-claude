@@ -1,4 +1,4 @@
-// Chances do azarão (#671, ADR 0072): limiares e versão do cálculo. Mudou fórmula,
+// Chances do azarão (#671, ADR 0073): limiares e versão do cálculo. Mudou fórmula,
 // limiar ou constante que mexe nos números do painel → bump UNDERDOG_CALC_VERSION
 // (a versão vai gravada na row de underdog_views).
 

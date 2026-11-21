@@ -1,7 +1,7 @@
 import { toToolDef } from "@/lib/ai/markets/types";
 import type { ToolDef } from "@/lib/ai/providers/types";
 
-// Cartucho do advogado da zebra (#671, ADR 0072). O código já calculou tudo (chances,
+// Cartucho do advogado da zebra (#671, ADR 0073). O código já calculou tudo (chances,
 // placares, cenários, sinais); o LLM monta o melhor caso para o azarão citando os ids
 // do bloco de fatos, que vai SÓ na mensagem do usuário. System e ferramenta são
 // constantes (ADR 0071: nada que varie por pedido aqui). Mudou prompt ou tool → bump +

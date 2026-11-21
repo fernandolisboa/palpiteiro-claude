@@ -1,7 +1,7 @@
 import { UNDERDOG_MATERIAL_DELTA_PP, UNDERDOG_MIN_GAP_PP } from "./constants";
 import type { UnderdogChances, UnderdogSide } from "./types";
 
-// Quem é o azarão e quando o teaser aparece (#671, ADR 0072 §2). Puro: a página e a
+// Quem é o azarão e quando o teaser aparece (#671, ADR 0073 §2). Puro: a página e a
 // action usam as MESMAS funções. Não confundir com `underdogSide` de
 // lib/view/match-tags.ts (a etiqueta do /jogos, < 20%, ADR 0070 §7): as duas regras
 // convivem, a etiqueta é mais restrita que o botão.
@@ -95,7 +95,7 @@ export function underdogTeaserVisible(
 
 /**
  * A row guardada vale como atual: mesmo lado e azarão, empate e favorito mudaram menos
- * que UNDERDOG_MATERIAL_DELTA_PP (ADR 0072 §9). Sem base atual válida → false.
+ * que UNDERDOG_MATERIAL_DELTA_PP (ADR 0073 §9). Sem base atual válida → false.
  */
 export function isMaterialSame(
   stored: { side: UnderdogSide; chances: UnderdogChances },

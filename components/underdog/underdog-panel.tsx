@@ -20,7 +20,7 @@ import { Skeleton } from "@/components/ui/skeleton";
 import { cn } from "@/lib/utils";
 import type { UnderdogSlotView } from "@/lib/view/underdog";
 
-// "Chances do azarão" (#671, ADR 0072) abaixo do palpite, FORA do HERO (firewall da
+// "Chances do azarão" (#671, ADR 0073) abaixo do palpite, FORA do HERO (firewall da
 // ADR 0030: o `%` não entra no cartão do palpite). Fechado: lado e chance, grátis.
 // Abrir sem texto guardado chama a action (1 do limite de palpites); com texto
 // guardado que vale, abre na hora. Só o matchId vai ao servidor.

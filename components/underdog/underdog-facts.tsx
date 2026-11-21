@@ -8,7 +8,7 @@ import {
 } from "@/lib/view/underdog";
 import type { Ref, ReactNode } from "react";
 
-// O painel aberto das chances do azarão (#671, ADR 0072), só apresentação. Os números
+// O painel aberto das chances do azarão (#671, ADR 0073), só apresentação. Os números
 // são código; só o bloco de fundo `muted` do fim é texto da IA. Sem odd, stake, cor de
 // edge nem aviso de risco (um aviso por tela, ADR 0057).
 

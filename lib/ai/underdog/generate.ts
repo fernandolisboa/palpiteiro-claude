@@ -42,7 +42,7 @@ import {
 } from "./review-cartridge";
 import { UnderdogCaseSchema, UnderdogReviewSchema } from "./schema";
 
-// Advogado da zebra + revisor adversarial (#671, ADR 0072). Segunda porta de LLM, fora
+// Advogado da zebra + revisor adversarial (#671, ADR 0073). Segunda porta de LLM, fora
 // do predict (como o "Explicar com IA", ADR 0063 §5): seam AIProvider, uma row em
 // ai_calls por chamada (promptVersion de cada uma, custo com cache, modelo que serviu).
 // NUNCA lança. `failure`:

@@ -9,7 +9,7 @@ import {
 } from "./labels";
 import type { FormResult, UnderdogFacts } from "./types";
 
-// Bloco de fatos do advogado da zebra e do revisor (#671, ADR 0072 §5.1). Vai SÓ na
+// Bloco de fatos do advogado da zebra e do revisor (#671, ADR 0073 §5.1). Vai SÓ na
 // mensagem do usuário (ADR 0071: nada que varie por pedido no system). Cada linha tem
 // um id (P#, S#, C#, F#, M#) que a frase da IA cita; `allowed` são os números que o
 // texto pode usar (as guardas comparam com tolerância).

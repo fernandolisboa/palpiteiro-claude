@@ -1,6 +1,6 @@
 import { z } from "zod";
 
-// Tipos e schemas do painel "Chances do azarão" (#671, ADR 0072). As colunas jsonb de
+// Tipos e schemas do painel "Chances do azarão" (#671, ADR 0073). As colunas jsonb de
 // `underdog_views` são tipadas por `$type<>`, mas o Postgres não garante a forma: toda
 // leitura passa por estes schemas (row inválida → omitida com log).
 
@@ -94,7 +94,7 @@ export type UnderdogNarrativeSource = (typeof NARRATIVE_SOURCES)[number];
 
 // O texto que foi à tela: as frases que sobreviveram (com os fatos citados e o
 // veredito do revisor; null no template), o contraponto, quantas frases foram cortadas
-// e a distribuição dos vereditos (log, ADR 0072 §5).
+// e a distribuição dos vereditos (log, ADR 0073 §5).
 export const UnderdogNarrativeSchema = z.object({
   sentences: z
     .array(

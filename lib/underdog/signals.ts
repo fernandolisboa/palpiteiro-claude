@@ -18,7 +18,7 @@ import type {
   UnderdogSignal,
 } from "./types";
 
-// Sinais a favor do azarão (#671, ADR 0072 §3), puros sobre dados já buscados. Cada
+// Sinais a favor do azarão (#671, ADR 0073 §3), puros sobre dados já buscados. Cada
 // fonte que faltou (null = provider falhou) só tira o próprio sinal. As contagens são
 // funções pequenas daqui, sem tocar no cartucho palpites_v13.
 

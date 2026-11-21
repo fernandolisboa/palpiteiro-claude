@@ -33,7 +33,7 @@ const FILES = [
   "components/match-list/match-tags.tsx",
   "components/h2h-section.tsx",
   "components/palpites/palpite-badges.tsx",
-  // Chances do azarão (#671, ADR 0072): o texto de tela e o texto padrão.
+  // Chances do azarão (#671, ADR 0073): o texto de tela e o texto padrão.
   "lib/view/underdog.ts",
   "lib/underdog/labels.ts",
   "lib/ai/underdog/fallback.ts",

@@ -16,7 +16,7 @@ import {
   type UnderdogVersions,
 } from "@/lib/underdog/types";
 
-// Fronteira ÚNICA de `underdog_views` (#671, ADR 0072). Insert (com dedupe da corrida por
+// Fronteira ÚNICA de `underdog_views` (#671, ADR 0073). Insert (com dedupe da corrida por
 // (user, base)), troca da row da MESMA base quando ela ficou velha (versão do cálculo) ou
 // inválida, e leitura da mais recente do usuário no jogo. Toda escrita valida antes de
 // gravar e toda leitura passa pelo Zod; row inválida → omitida com log, nunca derruba a

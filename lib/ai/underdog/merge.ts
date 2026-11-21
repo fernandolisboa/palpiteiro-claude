@@ -6,7 +6,7 @@ import { checkAdvocateSentence, checkCounterpoint } from "./guards";
 import type { UnderdogCase, UnderdogReview } from "./schema";
 
 // Junta o rascunho do advogado, as guardas por frase e o veredito do revisor (#671, ADR
-// 0072 §5.4). Puro, nunca lança. O código corta só `sem_base`; `exagerada` fica (o
+// 0073 §5.4). Puro, nunca lança. O código corta só `sem_base`; `exagerada` fica (o
 // contraponto responde). Sobra pouco → texto padrão.
 
 export type Survivor = { text: string; facts: string[]; draftIndex: number };

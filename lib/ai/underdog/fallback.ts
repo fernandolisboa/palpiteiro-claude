@@ -6,7 +6,7 @@ import type {
   UnderdogScenario,
 } from "@/lib/underdog/types";
 
-// Texto PADRÃO do painel do azarão (#671, ADR 0072 §5.5): quando o rascunho da IA não
+// Texto PADRÃO do painel do azarão (#671, ADR 0073 §5.5): quando o rascunho da IA não
 // passa na conferência ou o revisor falha. Só frases do código com os números do bloco;
 // passa nas próprias guardas (teste). Tom de mesa de amigos, sem promessa.
 

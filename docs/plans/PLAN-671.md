@@ -33,7 +33,7 @@ Issue: #671 (PR B de 3; A = #670/PR #674, C = #672). Proposta aprovada: `/mnt/pr
   - os sinais a favor, com a origem de cada um;
   - o texto do advogado da zebra, revisado pelo Haiku, com o contraponto.
 - Persistência por (usuário, base). Reabrir com a mesma base não cobra.
-- Flag `enable_underdog_view` (default ON), ADR 0072, migration 0067.
+- Flag `enable_underdog_view` (default ON), ADR 0073, migration 0067.
 
 **Fora:**
 - Ao vivo. Não é trivial: o azarão muda com o placar, a base não serve de chave de persistência (o estado muda a cada minuto) e os cenários perdem o sentido. Fica para depois.
@@ -397,13 +397,13 @@ O cliente manda **só** o `matchId`. Números, base e sinais saem do servidor.
 - **Prazo:** advogado (Sonnet ou Opus, 10-40 s) mais Haiku (3-6 s), dentro dos 270 s da action. Opus com o prazo apertado → `canFitCall` → template.
 - **Quota:** form/H2H/desfalques passam pelo provider com cache (o mesmo da aba Dados). Nunca chamar a The Odds API. Nunca usar o fallback de web search das notícias.
 - **Os testes de `ai_calls` contam linhas por `promptVersion`?** Conferir `lib/db/queries/ai-costs.ts`: hoje ele não filtra por versão.
-- **Duas ADR "0067" já existem;** a próxima livre é a **0072**.
+- **Duas ADR "0067" já existem;** a próxima livre é a **0073**.
 
 ---
 
 ## 11. Ordem de implementação (um PR, commits nesta ordem)
 
-1. `docs:` ADR 0072 ("Chances do azarão: advogado da zebra com revisor adversarial"):
+1. `docs:` ADR 0073 ("Chances do azarão: advogado da zebra com revisor adversarial"):
    - segunda porta de LLM como as ADRs 0063 e 0055;
    - porta de 8 pp e coerência;
    - cenários em código;
@@ -457,7 +457,7 @@ Review independente conferiu os símbolos no código e rodou a matemática dos c
 9. **Notícias fora do v1** (como a issue diz: entram com o C). Sem refactor do cartucho `palpites_v13`; contagens de forma/H2H como funções puras pequenas em `lib/underdog/signals.ts`. Sem ids N#, sem "Fontes citadas".
 10. **Contraponto**: o prompt do revisor proíbe citar ou parafrasear frase `sem_base`; o código rejeita contraponto que divida 6+ palavras seguidas com frase cortada → contraponto de template.
 11. **"exagerada" NÃO é cortada.** `sem_base` é objetivo (número, fato ou causa fora do bloco); "na dúvida, o mais severo" vale só entre `apoiada` e `exagerada`. Os índices `exagerada` vão para o contraponto rebater. Template quando < 2 frases `apoiada`. Logar a distribuição de vereditos (em `narrative`).
-12. **ADR 0072 emenda a ADR 0070 §7**: a etiqueta do /jogos segue "< 20%"; o botão usa "lado menos provável, gap ≥ 8 pp".
+12. **ADR 0073 emenda a ADR 0070 §7**: a etiqueta do /jogos segue "< 20%"; o botão usa "lado menos provável, gap ≥ 8 pp".
 13. **voice-firewall**: `components/underdog` em `DIRS`; `lib/view/underdog.ts` e `lib/ai/underdog/fallback.ts` em `FILES`. Guardas e cartuchos ficam fora (contêm as palavras proibidas de propósito). Títulos do painel h2/h3.
 14. **Slot no PalpiteArea**: desestruturar `underdog` explicitamente (não vazar no `...hero`); o `<form>` do painel não fica dentro do form do HERO (teste). Slot DEPOIS da região "Ler análise completa", não entre o HERO e o toggle. Teaser aparece só com `heroPalpite` presente e sem run em andamento.
 15. **Estados e a11y**: região `role="status"` `aria-live="polite"` para carregando/resultado/erro; `aria-busy` no painel; nota de custo ligada ao botão por `aria-describedby`; foco no título do painel ao carregar; mensagens para limite, fail-closed, desligado, fechado e sem-azarão.

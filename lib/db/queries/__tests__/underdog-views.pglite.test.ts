@@ -1,6 +1,6 @@
 // @vitest-environment node
 //
-// Chances do azarão (#671, ADR 0072) contra Postgres REAL via pglite, com as migrations
+// Chances do azarão (#671, ADR 0073) contra Postgres REAL via pglite, com as migrations
 // reais: UNIQUE (user, base) com ON CONFLICT que relê, última row por jogo, row
 // inválida omitida pelo Zod e a coluna da flag com default true.
 import { PGlite } from "@electric-sql/pglite";

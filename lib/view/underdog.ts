@@ -19,7 +19,7 @@ import type {
   UnderdogNarrativeSource,
 } from "@/lib/underdog/types";
 
-// O painel "Chances do azarão" pronto pra tela (#671, ADR 0072): nomes de exibição,
+// O painel "Chances do azarão" pronto pra tela (#671, ADR 0073): nomes de exibição,
 // percentuais formatados e o estado da base. Serializável (cruza Server → Client). Sem
 // odd, odd justa, stake nem cor de edge; o `%` mora aqui, FORA do HERO (ADR 0030).
 
@@ -138,7 +138,7 @@ function teaserFor(
 /**
  * O slot do azarão na página. null = nada aparece: flag desligada, fora do pré-jogo, ou
  * sem texto guardado e com a porta do teaser fechada. Texto pago aparece até o apito
- * (ADR 0072 §9), mesmo quando a base atual não passa mais na porta.
+ * (ADR 0073 §9), mesmo quando a base atual não passa mais na porta.
  */
 export function toUnderdogSlot(args: {
   data: UnderdogTeaserData | null;

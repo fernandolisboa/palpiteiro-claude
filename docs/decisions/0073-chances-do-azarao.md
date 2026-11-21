@@ -1,4 +1,4 @@
-# ADR 0072 — "Chances do azarão": advogado da zebra com revisor adversarial
+# ADR 0073 — "Chances do azarão": advogado da zebra com revisor adversarial
 
 ## Status
 

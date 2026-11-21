@@ -195,7 +195,7 @@ describe("PalpiteArea — Ler análise completa (#576)", () => {
   });
 });
 
-describe("PalpiteArea — Chances do azarão (#671, ADR 0072)", () => {
+describe("PalpiteArea — Chances do azarão (#671, ADR 0073)", () => {
   // O slot do azarão tem `%` e um <form> próprio: nunca dentro da casca quente nem do
   // form do HERO, e depois de "Ler análise completa".
   const UNDERDOG = (

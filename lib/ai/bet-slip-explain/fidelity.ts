@@ -38,7 +38,7 @@ const DECIMAL_RE =
   /(?<![\d.,])(\d+[.,]\d+)(?!\d)(?!\s*(?:%|p\.\s?p\.|pp(?![\p{L}\d])|pontos|u(?![\p{L}])|unidade))/giu;
 
 // As guardas de linguagem moram em lib/ai/language-guards.ts (compartilhadas com o
-// painel do azarão, ADR 0072); o nome de casa segue reexportado daqui.
+// painel do azarão, ADR 0073); o nome de casa segue reexportado daqui.
 export { BOOKMAKER_NAME_RE };
 
 // Contradição do veredito, por perna: "tem valor" numa perna sem valor e vice-versa.

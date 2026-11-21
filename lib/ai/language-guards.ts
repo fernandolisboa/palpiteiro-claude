@@ -1,5 +1,5 @@
 // Guardas de LINGUAGEM compartilhadas pelas portas de IA fora do predict (ADR 0063 e
-// 0072): mandar apostar, prometer resultado, citar casa de apostas ou link, falar de
+// 0073): mandar apostar, prometer resultado, citar casa de apostas ou link, falar de
 // aposta. Só regex e funções puras; quem usa decide o que fazer com o acerto. Movidas
 // de lib/ai/bet-slip-explain/fidelity.ts e lib/ai/user-palpite/fidelity.ts (os dois
 // módulos reexportam/importam daqui); BOOKMAKER_NAME_RE foi ampliado depois.

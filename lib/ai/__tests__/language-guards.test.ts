@@ -11,7 +11,7 @@ import {
   URL_RE,
 } from "@/lib/ai/language-guards";
 
-// Guardas de linguagem compartilhadas (ADR 0072). BOOKMAKER_NAME_RE ganhou a forma
+// Guardas de linguagem compartilhadas (ADR 0073). BOOKMAKER_NAME_RE ganhou a forma
 // genérica "<marca>bet" e as casas licenciadas mais citadas (review do #677).
 describe("language-guards", () => {
   it("o reexport do bet-slip-explain é o mesmo regex", () => {

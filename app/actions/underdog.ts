@@ -43,7 +43,7 @@ import {
   type UnderdogPanelView,
 } from "@/lib/view/underdog";
 
-// "Chances do azarão" (#671, ADR 0072). O cliente manda SÓ o matchId: base, números e
+// "Chances do azarão" (#671, ADR 0073). O cliente manda SÓ o matchId: base, números e
 // sinais saem do servidor. Todos os portões grátis antes da cobrança (1 unidade do
 // limite de palpites), inclusive o cálculo dos números; a row guardada que ainda vale
 // (materialidade) volta sem cobrar. Depois da cobrança o pedido nunca falha: falha da

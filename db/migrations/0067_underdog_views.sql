@@ -1,4 +1,4 @@
--- Chances do azarão (#671, ADR 0072). IF NOT EXISTS / DO block: o DB de preview da Vercel é compartilhado entre branches.
+-- Chances do azarão (#671, ADR 0073). IF NOT EXISTS / DO block: o DB de preview da Vercel é compartilhado entre branches.
 CREATE TABLE IF NOT EXISTS "underdog_views" (
 	"id" uuid PRIMARY KEY DEFAULT gen_random_uuid() NOT NULL,
 	"user_id" uuid NOT NULL,

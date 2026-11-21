@@ -14,7 +14,7 @@ import {
   type FactsBlock,
 } from "@/lib/underdog/facts";
 
-// Guardas do painel do azarão (#671, ADR 0072 §5.4). Puras, nunca lançam. Rodam POR
+// Guardas do painel do azarão (#671, ADR 0073 §5.4). Puras, nunca lançam. Rodam POR
 // FRASE do advogado (reprovou → a frase é cortada, o resto segue) e no contraponto do
 // revisor (reprovou → contraponto padrão). Números só do bloco de fatos; linguagem: as
 // guardas compartilhadas (lib/ai/language-guards.ts), linguagem de valor (ADR 0030 §3),

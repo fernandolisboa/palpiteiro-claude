@@ -332,7 +332,7 @@ export async function getEnableBetSlipExplain(): Promise<boolean> {
 }
 
 /**
- * Kill-switch do painel "Chances do azarão" (#671, ADR 0072). Default ON quando não há
+ * Kill-switch do painel "Chances do azarão" (#671, ADR 0073). Default ON quando não há
  * row. false → nada aparece na página do jogo e a action recusa.
  */
 export async function getEnableUnderdogView(): Promise<boolean> {

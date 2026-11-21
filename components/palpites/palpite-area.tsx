@@ -19,7 +19,7 @@ type Props = Omit<ComponentProps<typeof PalpiteHero>, "collapsible"> & {
   // `hasAnalyses`, que é o portão do "Gerar só o palpite" (só as análises da fase de
   // agora): depois do apito sem leitura ao vivo, a análise de pré-jogo segue legível.
   canOpenAnalysis: boolean;
-  // "Chances do azarão" (#671, ADR 0072), montado na página. Fica DEPOIS de "Ler análise
+  // "Chances do azarão" (#671, ADR 0073), montado na página. Fica DEPOIS de "Ler análise
   // completa" e fora do `section[aria-label=palpite]`: o `%` dele não entra no HERO
   // (firewall da ADR 0030), e o form dele não fica dentro do form do HERO.
   underdog?: ReactNode;

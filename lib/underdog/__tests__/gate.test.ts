@@ -144,7 +144,7 @@ describe("underdogTeaserVisible", () => {
   });
 });
 
-describe("isMaterialSame (ADR 0072 §9)", () => {
+describe("isMaterialSame (ADR 0073 §9)", () => {
   const stored = {
     side: "away" as const,
     chances: { underdog: 26, draw: 29, favorite: 45 },
