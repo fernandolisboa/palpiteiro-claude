@@ -168,6 +168,9 @@ const CLUB_SHORT_NAMES: Record<string, string> = {
   Flamengo: "Flamengo",
   Fluminense: "Fluminense",
   Palmeiras: "Palmeiras",
+  // Sul-Americana (os fixos de CANONICAL_TEAMS.copa_sudamericana)
+  "Atlético Mineiro": "Atlético-MG",
+  "Boca Juniors": "Boca Juniors",
 };
 
 // Sigla de 3 letras por canonical. Não depende da liga: o mesmo time tem a mesma
@@ -273,6 +276,10 @@ const TEAM_CODES: Record<string, string> = {
   Flamengo: "FLA",
   Fluminense: "FLU",
   Palmeiras: "PAL",
+
+  // Sul-Americana
+  "Atlético Mineiro": "CAM",
+  "Boca Juniors": "BOC",
 
   // Copa (código FIFA)
   Algeria: "ALG",

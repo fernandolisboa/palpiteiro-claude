@@ -34,7 +34,7 @@ const SYNC_LOCK_TTL_MS = 7 * 60 * 60 * 1000; // 7h
  * ensureOddsSnapshotsFresh.
  */
 export async function ensureUpcomingFixturesSynced(
-  opts: { force?: boolean; leagues?: readonly SupportedLeague[] } = {},
+  opts: { force?: boolean; leagues?: readonly SupportedLeague[] } = {}
 ): Promise<void> {
   const acquired = await acquireSyncLock({
     force: opts.force,
@@ -43,42 +43,53 @@ export async function ensureUpcomingFixturesSynced(
   if (!acquired) return;
 
   try {
-    const leagues = opts.leagues ?? (await getActiveLeagues());
-    const provider = getSportsDataProvider();
-    const settled = await Promise.allSettled(
-      leagues.map((league) => provider.getFixturesBySeason(league)),
-    );
-    const fixtures: NormalizedFixture[] = [];
-    for (const r of settled) {
-      if (r.status === "fulfilled") {
-        fixtures.push(...r.value);
-      } else {
-        console.error(
-          JSON.stringify({
-            scope: "sync-upcoming-fixtures",
-            error: "provider_call_failed",
-            message:
-              r.reason instanceof Error ? r.reason.message : String(r.reason),
-          }),
-        );
-      }
-    }
-    // Jogo remarcado antes do upsert: a row antiga herda a chave nova em vez de nascer
-    // uma segunda. Falha aqui não segura o sync (a próxima rodada replaneja).
-    try {
-      await reconcileRescheduledFixtures(fixtures);
-    } catch (err) {
-      console.error(
-        JSON.stringify({
-          scope: "sync-upcoming-fixtures",
-          error: "reschedule_reconcile_failed",
-          message: err instanceof Error ? err.message : String(err),
-        }),
-      );
-    }
-    await upsertMatchesFromProvider(fixtures);
+    await syncFixturesForLeagues(opts.leagues ?? (await getActiveLeagues()));
   } catch (err) {
     await releaseSyncLock();
     throw err;
   }
+}
+
+/**
+ * O fetch + upsert em si, sem o lock. Exportado pro toggle do /admin/leagues: ao
+ * ligar uma liga, as fixtures dela entram na hora em vez de esperar até 6h pelo cron
+ * (a final da Sul-Americana estaria encerrada antes). Não mexe no lock global de
+ * propósito, pra não adiar o sync das outras ligas.
+ */
+export async function syncFixturesForLeagues(
+  leagues: readonly SupportedLeague[]
+): Promise<void> {
+  const provider = getSportsDataProvider();
+  const settled = await Promise.allSettled(
+    leagues.map((league) => provider.getFixturesBySeason(league))
+  );
+  const fixtures: NormalizedFixture[] = [];
+  for (const r of settled) {
+    if (r.status === "fulfilled") {
+      fixtures.push(...r.value);
+    } else {
+      console.error(
+        JSON.stringify({
+          scope: "sync-upcoming-fixtures",
+          error: "provider_call_failed",
+          message:
+            r.reason instanceof Error ? r.reason.message : String(r.reason),
+        })
+      );
+    }
+  }
+  // Jogo remarcado antes do upsert: a row antiga herda a chave nova em vez de nascer
+  // uma segunda. Falha aqui não segura o sync (a próxima rodada replaneja).
+  try {
+    await reconcileRescheduledFixtures(fixtures);
+  } catch (err) {
+    console.error(
+      JSON.stringify({
+        scope: "sync-upcoming-fixtures",
+        error: "reschedule_reconcile_failed",
+        message: err instanceof Error ? err.message : String(err),
+      })
+    );
+  }
+  await upsertMatchesFromProvider(fixtures);
 }

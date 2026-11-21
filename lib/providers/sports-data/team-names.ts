@@ -101,6 +101,12 @@ const TEAM_NAME_ALIASES: Partial<
     // Grafia da API-Football pro Estudiantes (não normaliza igual à da The Odds API).
     "Estudiantes L.P.": "Estudiantes de La Plata",
   },
+  copa_sudamericana: {
+    // API-Football escreve "Atletico-MG"; a The Odds API, "Clube Atlético Mineiro".
+    // "atletico mg" não contém nem é contido por "atletico mineiro", então só o
+    // canônico "Atlético Mineiro" casa os dois lados.
+    "Atletico-MG": "Atlético Mineiro",
+  },
   premier_league: {
     Brighton: "Brighton & Hove Albion FC",
     Coventry: "Coventry City FC",

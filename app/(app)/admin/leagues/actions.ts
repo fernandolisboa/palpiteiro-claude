@@ -1,6 +1,7 @@
 "use server";
 
 import { revalidatePath } from "next/cache";
+import { after } from "next/server";
 
 import { auth } from "@/auth";
 import {
@@ -12,6 +13,7 @@ import {
   setLeagueActive,
 } from "@/lib/db/queries/league-settings";
 import { CANONICAL_TEAMS } from "@/lib/providers/sports-data/canonical-teams";
+import { syncFixturesForLeagues } from "@/lib/sync/sync-upcoming-fixtures";
 
 export type ToggleLeagueResult = { ok: boolean; error?: string };
 
@@ -52,5 +54,25 @@ export async function toggleLeague(
   await setLeagueActive(league, active, session.user.id);
   revalidatePath("/admin/leagues");
   revalidatePath("/jogos");
+  // Liga recém-ligada: puxa as fixtures dela já, sem esperar até 6h pelo cron.
+  // 1 chamada /fixtures da API-Football; fora do request (a temporada pode levar
+  // dezenas de segundos) e best-effort (o cron cobre se falhar).
+  const wasOn = settings.some((s) => s.league === league && s.active);
+  if (active && !wasOn) {
+    after(async () => {
+      try {
+        await syncFixturesForLeagues([league]);
+      } catch (err) {
+        console.error(
+          JSON.stringify({
+            scope: "admin-leagues",
+            error: "activation_sync_failed",
+            league,
+            message: err instanceof Error ? err.message : String(err),
+          })
+        );
+      }
+    });
+  }
   return { ok: true };
 }
