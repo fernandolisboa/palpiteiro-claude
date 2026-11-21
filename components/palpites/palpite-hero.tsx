@@ -185,18 +185,11 @@ export function PalpiteHero({
   const state: HeroRunOutcome | null =
     source === "stream" ? run.outcome : actionOutcome;
   const pending = actionPending || run.running;
+  // O texto do contexto extra e o painel ficam como estão depois do run (#668): o que a
+  // pessoa escreveu continua visível e vai junto em "Analisar de novo" (a dica diz isso),
+  // pra a nova análise não perder o contexto sem querer.
   const [context, setContext] = useState("");
   const [contextOpen, setContextOpen] = useState(false);
-  // Análise completa que deu certo limpa e fecha o campo: "Analisar de novo" não reenvia
-  // o mesmo contexto sem querer. Ajuste no render (não em efeito) quando o resultado muda.
-  const [seenState, setSeenState] = useState(state);
-  if (state !== seenState) {
-    setSeenState(state);
-    if (state?.ok && state.analysis) {
-      setContext("");
-      setContextOpen(false);
-    }
-  }
   const contextNotice = state?.ok ? (state.contextNotice ?? null) : null;
   const contextField: ContextField =
     contextEnabled && analyzable && fanOutEnabled
@@ -831,7 +824,8 @@ function UserContextField({
           <p id={`${id}-hint`} className="text-meta leading-relaxed tracking-tight text-muted-foreground">
             A IA lê o que você escrever e a gente confere cada afirmação com os nossos dados
             antes de usar. Só entra o que passa, com peso limitado. Não conta a mais no seu
-            limite do dia. Não escreva dados pessoais.
+            limite do dia. Não escreva dados pessoais. O que estiver aqui vai junto em
+            “Analisar de novo”.
           </p>
           <span className="shrink-0 font-mono text-meta tabular-nums text-muted-foreground">
             {value.length}/{MAX_CONTEXT_CHARS}
