@@ -273,6 +273,7 @@ const call = (over?: Partial<Parameters<typeof generatePalpites>[0]>) =>
     userId: ids.userId,
     analyses,
     modelOverride: "claude-haiku-5-5",
+    displayTeams: { home: "Flamengo", away: "Fluminense" },
     ...over,
   });
 

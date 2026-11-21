@@ -237,6 +237,8 @@ const baseCall = {
   userId: "u-1",
   analyses: [analysis()],
   modelOverride: "claude-haiku-5-5" as const,
+  // A action resolve o nome de exibição (lib/view/team) e passa pronto (#668).
+  displayTeams: { home: "Flamengo", away: "Fluminense" },
 };
 
 describe("generatePalpites (síntese) — prazo do run (#524 re-review)", () => {
@@ -977,6 +979,25 @@ describe("generatePalpites — palpite decidido em código (#668)", () => {
     expect(setRow.headline.verdict).toBe("Vai dar Fluminense");
     expect(setRow.headline.templated).toMatchObject({ verdict: true, narrative: true });
     expect(setRow.headline.citedMarkets).toEqual([]);
+  });
+
+  it("sem nome de exibição: template com o canonical, e o veredito com o canonical passa", async () => {
+    const { displayTeams: _omit, ...canonicalCall } = pickCall;
+    runAnalysis.mockResolvedValueOnce(
+      okResult({ ...modelPickText, probableScore: { home: 2, away: 1 } }),
+    );
+    await quietly(() => generatePalpites(canonicalCall));
+    const templ = insertValues.mock.calls[1][0] as SetRow;
+    expect(templ.headline.verdict).toBe("Vai dar Fluminense FC");
+
+    insertValues.mockClear();
+    runAnalysis.mockResolvedValueOnce(
+      okResult({ ...modelPickText, verdict: "Vai dar Fluminense FC" }),
+    );
+    await quietly(() => generatePalpites(pickCall));
+    const ok = insertValues.mock.calls[1][0] as SetRow;
+    expect(ok.headline.verdict).toBe("Vai dar Fluminense FC");
+    expect(ok.headline.templated).toBeUndefined();
   });
 
   it("erro do provedor com pick → template, sem throw", async () => {

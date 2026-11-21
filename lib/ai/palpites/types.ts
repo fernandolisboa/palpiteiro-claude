@@ -51,6 +51,10 @@ export type GeneratePalpiteArgs = {
   // Busca de notícias já em andamento (startNewsFetch), disparada pelo caller em paralelo
   // ao fan-out. Ausente = a síntese busca agora, como antes.
   news?: Promise<NewsFetchOutcome>;
+  // Nome de exibição dos times (#668), resolvido pela action (a fronteira #578 proíbe
+  // lib/ai de importar lib/view/team). Só entra no texto de template e nas linhas do
+  // "Ver raciocínio"; o prompt segue com o canonical. Ausente = o canonical.
+  displayTeams?: { home: string; away: string };
 };
 
 // Palpite ao vivo (#594): a leitura ao vivo já feita + o estado e o modelo em jogo do

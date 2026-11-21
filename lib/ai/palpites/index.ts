@@ -41,7 +41,6 @@ import {
 } from "../deadline";
 import { liveColumns, liveStampFromState } from "@/lib/live/stamp";
 import { LEAGUE_LABEL, leagueToKey } from "@/lib/format";
-import { teamToTeam } from "@/lib/view/team";
 import type { ZodType } from "zod";
 
 import {
@@ -206,6 +205,7 @@ export async function generatePalpites({
   modelOverride,
   deadlineAt,
   news,
+  displayTeams,
 }: GeneratePalpiteArgs): Promise<PalpiteGenerationResult> {
   // 1. Modelo: SEM cascata de preferência (palpite é universal). Fixo no registry.
   const resolvedModelId: AIModelId = modelOverride ?? UTILITY_MODEL_ID;
@@ -314,10 +314,11 @@ export async function generatePalpites({
     0,
     Math.ceil((kickoffMs - Date.now()) / 86_400_000),
   );
-  const league = leagueToKey(match.league);
+  // Nome de exibição vem da action (fronteira #578); o canonical, que é o do prompt,
+  // fica como apelido aceito na conferência do veredito.
   const teams: CoherenceTeams = {
-    home: teamToTeam(match.homeTeam, league).name,
-    away: teamToTeam(match.awayTeam, league).name,
+    home: displayTeams?.home ?? match.homeTeam,
+    away: displayTeams?.away ?? match.awayTeam,
     homeAliases: [match.homeTeam],
     awayAliases: [match.awayTeam],
   };
