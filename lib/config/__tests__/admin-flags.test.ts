@@ -32,7 +32,7 @@ const FAKE_ENUM = {
 const FAKE_FLAGS = [...ADMIN_FLAGS, FAKE_ENUM] as const satisfies readonly AdminFlagDef[];
 
 describe("ADMIN_FLAGS (registry, #514)", () => {
-  it("tem as 13 flags boolean + o motor de análise e o personagem do progresso (enums), sem key repetida", () => {
+  it("tem as 14 flags boolean + o motor de análise e o personagem do progresso (enums), sem key repetida", () => {
     const keys = ADMIN_FLAGS.map((f) => f.key);
     expect(keys).toEqual([
       "enableOverUnderExtraLines",
@@ -47,6 +47,7 @@ describe("ADMIN_FLAGS (registry, #514)", () => {
       "enableLiveMode",
       "enableAutoModelVersions",
       "enableBetSlipExplain",
+      "enableUnderdogView",
       "enableLineupRecheck",
       "analysisEngine",
       "progressMascot",
@@ -76,6 +77,7 @@ describe("ADMIN_FLAGS (registry, #514)", () => {
       enableLiveMode: true,
       enableAutoModelVersions: true,
       enableBetSlipExplain: true,
+      enableUnderdogView: true,
       enableLineupRecheck: true,
       analysisEngine: "llm",
       progressMascot: "robo",
@@ -123,6 +125,17 @@ describe("ADMIN_FLAGS (registry, #514)", () => {
     expect(def.costNote).toContain("Sem The Odds API");
   });
 
+  it("chances do azarão (#671): ligada por padrão, no /admin/ia, limite de palpites, sem The Odds API", () => {
+    const def = getAdminFlagDef("enableUnderdogView");
+    expect(def.kind).toBe("boolean");
+    expect(def.default).toBe(true);
+    expect(def.area).toBe("ia");
+    expect(def.label).toBe("Chances do azarão");
+    expect(def.costNote).toContain("limite diário de palpites");
+    expect(def.costNote).toContain("sem The Odds API");
+    expect(def.costNote).toContain("1 Haiku");
+  });
+
   it("reconferir com a escalação (#619): ligada, sem LLM, sem The Odds API e fora do limite diário", () => {
     const def = getAdminFlagDef("enableLineupRecheck");
     expect(def.kind).toBe("boolean");
@@ -154,6 +167,7 @@ describe("ADMIN_FLAGS (registry, #514)", () => {
       enableLiveMode: boolean;
       enableAutoModelVersions: boolean;
       enableBetSlipExplain: boolean;
+      enableUnderdogView: boolean;
       enableLineupRecheck: boolean;
       analysisEngine: "llm" | "code_jev";
       progressMascot: "robo" | "papagaio";

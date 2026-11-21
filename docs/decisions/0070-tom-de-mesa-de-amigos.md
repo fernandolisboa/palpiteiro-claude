@@ -25,6 +25,7 @@ O limite vem da ADR 0048 §4, que adotou de forma voluntária as regras de conte
    - **deu zebra**: jogo encerrado cujo resultado (casa, empate ou fora) tinha menos de 20% na base do modelo conferida até 24h antes do apito. No bolão sem ganhador, "Deu zebra: ninguém acertou." pela mesma regra, só com o jogo encerrado (o placar lançado à mão pode vir no meio do jogo ou num jogo cancelado).
    - **chocolate**: vitória por 3 gols ou mais.
    - **azarão**: antes do jogo, o lado com menos de 20% de vitória na base fresca.
+     *Emenda (ADR 0073, #671):* o botão "Chances do azarão" da página do jogo usa outra regra, mais larga (o lado menos provável quando a diferença entre as vitórias é de pelo menos 8 pontos). A etiqueta do /jogos segue com os 20%.
    - **Freguesia**: nos confrontos diretos listados (até 5, no mínimo 4 com placar), um time venceu 4 ou mais.
    - **cravou o placar**: ao lado do selo Acertou do palpite da IA (só dentro do app, não na /p), e na linha do placar exato acertado em Suas apostas e no bolão.
    - **Ficou na trave.**: placar exato errado por um gol só, depois do jogo, em Suas apostas e no bolão (no bolão, também só com o jogo encerrado).

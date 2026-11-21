@@ -195,6 +195,48 @@ describe("PalpiteArea — Ler análise completa (#576)", () => {
   });
 });
 
+describe("PalpiteArea — Chances do azarão (#671, ADR 0073)", () => {
+  // O slot do azarão tem `%` e um <form> próprio: nunca dentro da casca quente nem do
+  // form do HERO, e depois de "Ler análise completa".
+  const UNDERDOG = (
+    <form data-testid="underdog">
+      <p>Flamengo vence 22%</p>
+    </form>
+  );
+
+  it("fica fora do section[aria-label=palpite] e do form do HERO, depois da análise", async () => {
+    await act(async () =>
+      root.render(<PalpiteArea {...props({ underdog: UNDERDOG })} />)
+    );
+    const slot = container.querySelector('[data-testid="underdog"]')!;
+    expect(slot).not.toBeNull();
+    const shell = container.querySelector('section[aria-label="palpite"]')!;
+    expect(shell.contains(slot)).toBe(false);
+    expect(shell.textContent).not.toMatch(/%/);
+    const heroForm = container.querySelector("form")!;
+    expect(heroForm).not.toBe(slot);
+    expect(heroForm.contains(slot)).toBe(false);
+    expect(slot.parentElement?.closest("form")).toBeNull();
+    const analysis = container.querySelector("#analise-completa")!;
+    expect(
+      toggle()!.compareDocumentPosition(slot) & Node.DOCUMENT_POSITION_FOLLOWING
+    ).toBeTruthy();
+    expect(
+      analysis.compareDocumentPosition(slot) & Node.DOCUMENT_POSITION_FOLLOWING
+    ).toBeTruthy();
+  });
+
+  it("aparece mesmo sem análise para abrir; sem slot, nada", () => {
+    const html = renderToStaticMarkup(
+      <PalpiteArea {...props({ canOpenAnalysis: false, underdog: UNDERDOG })} />
+    );
+    expect(html).toContain('data-testid="underdog"');
+    expect(renderToStaticMarkup(<PalpiteArea {...props()} />)).not.toContain(
+      'data-testid="underdog"'
+    );
+  });
+});
+
 describe("PalpiteArea — palpite anterior à escalação (#619)", () => {
   it("uma linha no HERO, só texto, sem número de valor", () => {
     const markup = renderToStaticMarkup(

@@ -8,6 +8,7 @@ vi.mock("@/lib/db/queries/match-model-snapshots", () => ({
 
 import {
   getMatchModelScoreline,
+  modelScorelineFromSnapshot,
   MODEL_SCORELINE_MAX_AGE_MS,
 } from "@/lib/model-base/model-scoreline";
 import type { MatchModelSnapshot } from "@/lib/model-base/types";
@@ -118,5 +119,28 @@ describe("getMatchModelScoreline (seam do cupom)", () => {
     await expect(getMatchModelScoreline("m-1", NOW)).resolves.toBeNull();
     expect(err).toHaveBeenCalled();
     err.mockRestore();
+  });
+});
+
+describe("modelScorelineFromSnapshot (#671): a parte pura do seam", () => {
+  it.each([
+    ["DC válido", snapshot(), KICKOFF],
+    [
+      "heurístico",
+      snapshot({ lambdaSource: "heuristic", rho: null, lambdaFallbackReason: "no_fit" }),
+      KICKOFF,
+    ],
+    ["versão antiga", snapshot({ modelVersion: "match_model_v0" }), KICKOFF],
+    [
+      "base velha",
+      snapshot({ checkedAt: new Date(NOW.getTime() - MODEL_SCORELINE_MAX_AGE_MS - 1) }),
+      KICKOFF,
+    ],
+    ["jogo começado", snapshot(), NOW],
+  ] as const)("%s: igual ao getMatchModelScoreline", async (_l, snap, kickoffAt) => {
+    getLatest.mockResolvedValue({ snapshot: snap, kickoffAt });
+    expect(modelScorelineFromSnapshot(snap, kickoffAt, NOW)).toEqual(
+      await getMatchModelScoreline("m-1", NOW),
+    );
   });
 });

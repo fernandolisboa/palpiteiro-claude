@@ -1129,7 +1129,7 @@ describe("generatePalpiteFromAnalyses — só a síntese, sobre as análises sal
     );
     expect(res).toEqual({
       ok: false,
-      error: "Você atingiu o limite de 50 palpites por dia. Tente novamente amanhã.",
+      error: "Você atingiu o limite de 50 usos por dia (palpites, Seu palpite, explicações e chances do azarão). Tente novamente amanhã.",
     });
     expect(mockGeneratePalpites).not.toHaveBeenCalled();
   });

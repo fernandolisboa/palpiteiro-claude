@@ -205,6 +205,17 @@ export const ADMIN_FLAGS = [
       "Cada uso: 1 chamada do modelo de análise do usuário (até 2.000 tokens), contando 1 do limite diário de palpites. Sem The Odds API e sem API-Football.",
   },
   {
+    key: "enableUnderdogView",
+    kind: "boolean",
+    area: "ia",
+    label: "Chances do azarão",
+    description:
+      "Mostra o botão \"Chances do azarão\" abaixo do palpite (pré-jogo, quando um lado tem pelo menos 8 pontos a menos de vitória que o outro): chances, placares de zebra, cenários e sinais calculados em código, mais o texto do advogado da zebra revisado por um segundo modelo. Desligada, o botão some (inclusive o texto já guardado).",
+    default: true,
+    costNote:
+      "Cada uso: 1 chamada do modelo de análise do usuário (até 1.500 tokens) + 1 Haiku (até 1.000), contando 1 do limite diário de palpites. Forma/H2H/desfalques pelo cache da API-Football; sem The Odds API. ~US$ 0,006. Reabrir não cobra.",
+  },
+  {
     key: "enableLineupRecheck",
     kind: "boolean",
     area: "motor",
