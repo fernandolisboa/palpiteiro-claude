@@ -39,7 +39,7 @@ describe("/como-usar", () => {
   it("cita os botões pelo nome que eles têm na tela", () => {
     for (const label of [
       "Analisar com IA",
-      "Refazer só o palpite",
+      "Refazer palpite",
       "Ler análise completa",
       "Palpite da IA",
       "Registrar apostas",
