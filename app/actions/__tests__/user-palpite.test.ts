@@ -301,7 +301,7 @@ describe("analyzeUserPalpite — gates grátis antes da cobrança", () => {
     mockRateLimit.mockResolvedValue({ ok: false, limit: 50, remaining: 0, reset: 0 });
     expect(await analyzeUserPalpite(null, form())).toEqual({
       ok: false,
-      error: "Você atingiu o limite de 50 palpites por dia. Tente novamente amanhã.",
+      error: "Você atingiu o limite de 50 usos por dia (palpites, Seu palpite, explicações e chances do azarão). Tente novamente amanhã.",
       kind: "limite",
     });
     expect(mockExtract).not.toHaveBeenCalled();

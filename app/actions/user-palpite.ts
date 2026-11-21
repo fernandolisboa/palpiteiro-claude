@@ -17,6 +17,7 @@ import {
 } from "@/lib/ai/user-palpite/narrate-cartridge";
 import { templatedPalpiteNarration } from "@/lib/ai/user-palpite/fallback";
 import { narratePalpite } from "@/lib/ai/user-palpite/narrate";
+import { palpitesLimitMessage } from "@/lib/ai/palpites-limit";
 import { isEmailAllowed } from "@/lib/auth/whitelist";
 import { getEnableUserContext } from "@/lib/db/queries/ai-config";
 import { getMatchById } from "@/lib/db/queries/matches";
@@ -230,7 +231,7 @@ export async function analyzeUserPalpite(
   if (!rl.ok) {
     return {
       ok: false,
-      error: `Você atingiu o limite de ${rl.limit} palpites por dia. Tente novamente amanhã.`,
+      error: palpitesLimitMessage(rl.limit),
       kind: "limite",
     };
   }

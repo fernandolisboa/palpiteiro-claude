@@ -7,6 +7,7 @@ import { explainBetSlipWithAI } from "@/lib/ai/bet-slip-explain/explain";
 import { templatedBetExplanation } from "@/lib/ai/bet-slip-explain/fallback";
 import { ANALYSES_UNAVAILABLE_MESSAGE } from "@/lib/ai/best-bet";
 import { actionDeadline } from "@/lib/ai/deadline";
+import { palpitesLimitMessage } from "@/lib/ai/palpites-limit";
 import { isEmailAllowed } from "@/lib/auth/whitelist";
 import {
   buildBetExplainInput,
@@ -169,7 +170,7 @@ export async function explainBetSlip(
   if (rl.reason === "fail-closed") return refuse(ANALYSES_UNAVAILABLE_MESSAGE);
   if (!rl.ok) {
     return refuse(
-      `Você atingiu o limite de ${rl.limit} usos por dia (palpites, Seu palpite e explicações). Tente novamente amanhã.`,
+      palpitesLimitMessage(rl.limit),
       "limite"
     );
   }

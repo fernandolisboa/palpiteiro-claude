@@ -108,6 +108,7 @@ import {
   type MatchPhase,
 } from "@/lib/view/match-availability";
 import { ExactScoreParamsSchema } from "@/lib/ai/palpites/cartridges/cartridge";
+import { palpitesLimitMessage } from "@/lib/ai/palpites-limit";
 import { toBestBetView } from "@/lib/view/best-bet";
 import {
   toDimensionViews,
@@ -1315,7 +1316,7 @@ export async function generatePalpiteFromAnalyses(
   if (!rl.ok) {
     return {
       ok: false,
-      error: `Você atingiu o limite de ${rl.limit} palpites por dia. Tente novamente amanhã.`,
+      error: palpitesLimitMessage(rl.limit),
     };
   }
   const { palpite, palpiteError } = await synthesizeHeadline({
