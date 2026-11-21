@@ -6,7 +6,8 @@
 //   - cita só o outro time quando o palpite é vitória (tokens comuns aos dois nomes,
 //     como "Atlético" ou "Man", não contam);
 //   - um placar diferente do palpite ("2 x 1", "1–0", "2 a 1"), em qualquer ordem;
-//   - "empate" quando o palpite é vitória e o veredito nem cita o vencedor.
+//   - "empate" quando o palpite é vitória e o veredito nem cita o vencedor;
+//   - num palpite de empate, o veredito cita um time só, sem "empate" nem placar.
 // Contradição-only: o que a regex não pega passa (falso negativo, sem dano); um falso
 // positivo troca o veredito pelo de template, que é seguro. A narrativa não passa por
 // checagem de resultado (é prosa longa, cheia de "o Flamengo assusta"). Sem regra de
@@ -41,7 +42,7 @@ const MIN_TOKEN = 3;
 export function normalizeText(text: string): string {
   return text
     .normalize("NFD")
-    .replace(/[̀-ͯ]/g, "")
+    .replace(/[\u0300-\u036f]/g, "")
     .toLowerCase()
     .replace(/[^a-z0-9]+/g, " ")
     .trim();
@@ -102,6 +103,7 @@ export function checkVerdictCoherence(
     };
   }
 
+  let citesScore = false;
   for (const m of verdict.matchAll(SCORE_RE)) {
     const a = Number(m[1]);
     const b = Number(m[2]);
@@ -110,11 +112,20 @@ export function checkVerdictCoherence(
     if (!same) {
       return { ok: false, reason: `veredito cita o placar ${a}–${b}, palpite ${home}–${away}` };
     }
+    citesScore = true;
   }
 
-  if (pick.outcome === "draw") return { ok: true };
-
   const text = normalizeText(verdict);
+  if (pick.outcome === "draw") {
+    // "Vai dar Palmeiras" num empate: um time só, sem falar em empate nem no placar.
+    const citesHome = mentions(text, teamAliases(teamNames(teams, "home"), teamNames(teams, "away")));
+    const citesAway = mentions(text, teamAliases(teamNames(teams, "away"), teamNames(teams, "home")));
+    if (citesHome !== citesAway && !DRAW_RE.test(text) && !citesScore) {
+      return { ok: false, reason: "veredito cita um time só num palpite de empate" };
+    }
+    return { ok: true };
+  }
+
   const winner = pick.outcome;
   const loser = winner === "home" ? "away" : "home";
   const winnerAliases = teamAliases(teamNames(teams, winner), teamNames(teams, loser));

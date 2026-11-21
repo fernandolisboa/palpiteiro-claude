@@ -85,6 +85,16 @@ describe("checkVerdictCoherence — corpus (T6)", () => {
     expect(checkVerdictCoherence("Clássico empata no fim", "away", awayWin, PAL_FLA).ok).toBe(false);
   });
 
+  it("empate com um time só, sem 'empate' nem placar → dispara", () => {
+    expect(checkVerdictCoherence("Vai dar Palmeiras", "draw", draw, PAL_FLA).ok).toBe(false);
+    expect(checkVerdictCoherence("O Flamengo leva essa", "draw", draw, PAL_FLA).ok).toBe(false);
+    // Coerentes: fala em empate, cita o placar do palpite, ou cita os dois / nenhum time.
+    expect(checkVerdictCoherence("O Flamengo arranca o empate", "draw", draw, PAL_FLA).ok).toBe(true);
+    expect(checkVerdictCoherence("Palmeiras fica no 1 a 1", "draw", draw, PAL_FLA).ok).toBe(true);
+    expect(checkVerdictCoherence("Palmeiras e Flamengo se anulam", "draw", draw, PAL_FLA).ok).toBe(true);
+    expect(checkVerdictCoherence("Ninguém sai ganhando", "draw", draw, PAL_FLA).ok).toBe(true);
+  });
+
   it("acento e caixa não importam", () => {
     expect(checkVerdictCoherence("VAI DAR FLAMENGO", "home", homeWin, PAL_FLA).ok).toBe(false);
     expect(

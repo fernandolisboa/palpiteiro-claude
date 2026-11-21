@@ -96,7 +96,9 @@ function validLambda(l: number): boolean {
 }
 
 // 1º gol coerente com o placar: o vencedor; ninguém num 0–0; num empate com gols, o lado
-// com mais chance de marcar primeiro (mandante no empate exato).
+// com mais chance de marcar primeiro (mandante no empate exato). No empate com gols ele só
+// vai ao texto do v13 e ao headline.pick: buildSettleablePalpiteRows não cria a linha
+// first_to_score sem vencedor no placar, então nunca é conferido.
 function firstToScoreFor(score: Pair, lambda: Pair): PalpitePick["firstToScore"] {
   if (score.home > score.away) return "home";
   if (score.away > score.home) return "away";
