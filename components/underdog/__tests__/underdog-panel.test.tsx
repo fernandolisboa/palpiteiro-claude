@@ -244,6 +244,57 @@ describe("UnderdogPanel — texto guardado", () => {
   });
 });
 
+describe("UnderdogPanel — um cartão só", () => {
+  it("cabeçalho e corpo no MESMO cartão (borda única), corpo separado por uma linha", async () => {
+    await render({ teaser: TEASER, view: VIEW });
+    await act(async () => header().click());
+    const card = header().closest("h2")!.parentElement!;
+    expect(card.contains(region())).toBe(true);
+    expect(region().parentElement).toBe(card);
+    expect(card.className).toMatch(/\bborder\b/);
+    expect(card.className).toContain("rounded-lg");
+    expect(card.className).toContain("overflow-hidden");
+    // Só o cartão tem borda e raio: nem o botão nem o corpo têm cartão próprio.
+    expect(header().className).not.toMatch(/\brounded-lg\b|\bborder\b/);
+    expect(region().className).not.toContain("rounded-lg");
+    expect(region().className).toContain("border-t");
+    // O cabeçalho mantém o fundo tingido.
+    expect(header().className).toContain("bg-palpite-soft");
+  });
+
+  it("fechado: só a linha do cabeçalho no cartão; custo e status fora dele", async () => {
+    await render({ teaser: TEASER, view: null });
+    const card = header().closest("h2")!.parentElement!;
+    expect(region().hidden).toBe(true);
+    expect(card.textContent).not.toContain(UNDERDOG_COST_NOTE);
+    expect(card.contains(container.querySelector('[role="status"]'))).toBe(
+      false
+    );
+  });
+
+  it("carregando: a frase aparece no corpo do cartão e o status a anuncia", async () => {
+    vi.mocked(openUnderdogView).mockImplementation(() => new Promise(() => {}));
+    await render({ teaser: TEASER, view: null });
+    await act(async () => header().click());
+    expect(region().textContent).toContain(UNDERDOG_LOADING_COPY);
+    expect(container.querySelector('[role="status"]')!.textContent).toBe(
+      UNDERDOG_LOADING_COPY
+    );
+  });
+
+  it("etiqueta dados/modelo só no desktop; no celular fica pro leitor de tela", async () => {
+    await render({ teaser: TEASER, view: VIEW });
+    const item = Array.from(container.querySelectorAll("li")).find((li) =>
+      li.textContent?.includes("dos últimos 5 confrontos")
+    )!;
+    const pill = item.querySelector("span")!;
+    expect(pill.textContent).toBe("dados: ");
+    expect(pill.className).toContain("sr-only");
+    expect(pill.className).toContain("sm:not-sr-only");
+    expect(pill.className).toContain("sm:border");
+  });
+});
+
 describe("UnderdogPanel — linguagem", () => {
   it("sem linguagem de valor, casa de apostas ou 'bet' na tela", () => {
     for (const freshness of [

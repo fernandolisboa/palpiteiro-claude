@@ -91,45 +91,83 @@ export function UnderdogPanel({
       data-testid="underdog-panel"
     >
       <input type="hidden" name="matchId" value={matchId} />
-      <h2 className="m-0">
-        <button
-          type="button"
-          onClick={onHeader}
-          // Sem `disabled`: o botão focado não perde o foco enquanto carrega (o clique é
-          // ignorado em onHeader).
-          aria-disabled={pending || undefined}
-          aria-expanded={expanded}
-          aria-controls={panelId}
-          aria-describedby={paid ? undefined : costId}
-          className={cn(
-            "flex w-full items-center justify-between gap-3 rounded-lg border px-4 py-3 text-left transition-colors",
-            "border-palpite-border/60 bg-palpite-soft/30 hover:bg-palpite-soft/60",
-            "focus-visible:ring-ring focus-visible:ring-2 focus-visible:outline-none",
-            "aria-disabled:cursor-progress"
-          )}
+      {/* UM cartão: o cabeçalho tingido (o botão) e, aberto, o corpo logo abaixo,
+          separados por uma linha. Fechado, só a linha do cabeçalho. */}
+      <div className="border-palpite-border/60 overflow-hidden rounded-lg border">
+        <h2 className="m-0">
+          <button
+            type="button"
+            onClick={onHeader}
+            // Sem `disabled`: o botão focado não perde o foco enquanto carrega (o
+            // clique é ignorado em onHeader).
+            aria-disabled={pending || undefined}
+            aria-expanded={expanded}
+            aria-controls={panelId}
+            aria-describedby={paid ? undefined : costId}
+            className={cn(
+              "flex w-full items-center justify-between gap-3 px-4 py-3 text-left transition-colors",
+              "bg-palpite-soft/30 hover:bg-palpite-soft/60",
+              "focus-visible:ring-ring focus-visible:ring-2 focus-visible:outline-none focus-visible:ring-inset",
+              "aria-disabled:cursor-progress"
+            )}
+          >
+            <span className="flex min-w-0 flex-col gap-0.5">
+              <span className="text-label text-foreground font-medium tracking-tight">
+                Chances do azarão
+              </span>
+              <span className="text-body-sm text-muted-foreground truncate tracking-tight">
+                {teaser.underdogName} vence · como a zebra acontece
+              </span>
+            </span>
+            <span className="flex shrink-0 items-center gap-2">
+              <span className="text-display-sm text-palpite-strong-fg font-mono font-medium tabular-nums">
+                {teaser.pct}
+              </span>
+              <ChevronDown
+                className={cn(
+                  "text-muted-foreground size-4 transition-transform",
+                  expanded && "rotate-180"
+                )}
+                aria-hidden
+              />
+            </span>
+          </button>
+        </h2>
+
+        <div
+          ref={regionRef}
+          id={panelId}
+          role="region"
+          aria-label="Chances do azarão"
+          hidden={!expanded}
+          // Recebe o foco quando "Atualizar" some (vira o esqueleto do carregando).
+          tabIndex={-1}
+          className="border-palpite-border/60 border-t px-4 py-4 focus-visible:outline-none"
         >
-          <span className="flex min-w-0 flex-col gap-0.5">
-            <span className="text-label text-foreground font-medium tracking-tight">
-              Chances do azarão
-            </span>
-            <span className="text-body-sm text-muted-foreground truncate tracking-tight">
-              {teaser.underdogName} vence · como a zebra acontece
-            </span>
-          </span>
-          <span className="flex shrink-0 items-center gap-2">
-            <span className="text-display-sm text-palpite-strong-fg font-mono font-medium tabular-nums">
-              {teaser.pct}
-            </span>
-            <ChevronDown
-              className={cn(
-                "text-muted-foreground size-4 transition-transform",
-                expanded && "rotate-180"
-              )}
-              aria-hidden
-            />
-          </span>
-        </button>
-      </h2>
+          {pending ? (
+            <UnderdogSkeleton />
+          ) : (
+            view && (
+              <UnderdogFacts
+                view={view}
+                titleRef={titleRef}
+                refresh={
+                  <Button
+                    type="submit"
+                    size="sm"
+                    variant="outline"
+                    // O botão some no carregando: o foco vai pro painel antes.
+                    onClick={() => regionRef.current?.focus()}
+                  >
+                    Atualizar · usa 1 do limite
+                  </Button>
+                }
+              />
+            )
+          )}
+        </div>
+      </div>
+
       {!paid && (
         <p
           id={costId}
@@ -140,11 +178,9 @@ export function UnderdogPanel({
       )}
 
       <div role="status" aria-live="polite">
-        {pending && (
-          <p className="text-body-sm text-muted-foreground px-1 tracking-tight">
-            {UNDERDOG_LOADING_COPY}
-          </p>
-        )}
+        {/* Carregando: a frase visível fica no corpo do cartão (acima do esqueleto);
+            aqui ela só é anunciada. */}
+        {pending && <p className="sr-only">{UNDERDOG_LOADING_COPY}</p>}
         {error && !pending && (
           <p className="text-body-sm text-destructive px-1 tracking-tight">
             {error}
@@ -159,39 +195,6 @@ export function UnderdogPanel({
           </p>
         )}
       </div>
-
-      <div
-        ref={regionRef}
-        id={panelId}
-        role="region"
-        aria-label="Chances do azarão"
-        hidden={!expanded}
-        // Recebe o foco quando "Atualizar" some (vira o esqueleto do carregando).
-        tabIndex={-1}
-        className="border-border-subtle rounded-lg border px-4 py-4 focus-visible:outline-none"
-      >
-        {pending ? (
-          <UnderdogSkeleton />
-        ) : (
-          view && (
-            <UnderdogFacts
-              view={view}
-              titleRef={titleRef}
-              refresh={
-                <Button
-                  type="submit"
-                  size="sm"
-                  variant="outline"
-                  // O botão some no carregando: o foco vai pro painel antes.
-                  onClick={() => regionRef.current?.focus()}
-                >
-                  Atualizar · usa 1 do limite
-                </Button>
-              }
-            />
-          )
-        )}
-      </div>
     </form>
   );
 }
@@ -199,6 +202,9 @@ export function UnderdogPanel({
 function UnderdogSkeleton() {
   return (
     <div className="flex flex-col gap-4" aria-hidden>
+      <p className="text-body-sm text-muted-foreground tracking-tight">
+        {UNDERDOG_LOADING_COPY}
+      </p>
       <Skeleton className="h-8 w-40" />
       <Skeleton className="h-4 w-64" />
       <div className="flex gap-2">

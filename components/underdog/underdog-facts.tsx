@@ -131,8 +131,11 @@ export function UnderdogFacts({
                 key={s.label}
                 className="text-body-sm text-foreground flex items-baseline gap-2 tracking-tight"
               >
-                <span className="border-border text-meta text-muted-foreground shrink-0 rounded-sm border px-1.5 tracking-tight">
+                {/* A etiqueta "dados"/"modelo" só no desktop; no celular fica só
+                    pro leitor de tela. */}
+                <span className="sm:border-border sm:text-meta sm:text-muted-foreground sr-only sm:not-sr-only sm:shrink-0 sm:rounded-sm sm:border sm:px-1.5 sm:tracking-tight">
                   {s.origin}
+                  <span className="sr-only">: </span>
                 </span>
                 <span>
                   {s.label}
