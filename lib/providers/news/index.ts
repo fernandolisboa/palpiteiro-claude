@@ -1,17 +1,16 @@
-import { getNewsByMatchViaWebSearch } from "./anthropic-web-search";
+import { getNewsCombined } from "./combined";
 import type { NewsProvider } from "./types";
 
 // Factory do provider DEDICADO de notícias (ADR 0032 / #377), espelhando
-// getAbsencesProvider (ADR 0026). Hoje só há a implementação via web search nativa da
-// Claude. Key-gated INERTE em paralelo ao SportMonks dos desfalques: sem chave Anthropic
-// o adapter de baixo (hasKey() false) devolve unavailable:true — nunca throw. O palpite
-// embarca sem notícias (mirror absences).
+// getAbsencesProvider (ADR 0026). RSS do ge por time primeiro, web search nativa da
+// Claude como fallback (adendo #670, combined.ts). Nunca throw: qualquer falha vira um
+// status (failed/none/no_search) e o palpite embarca sem notícias (mirror absences).
 let cached: NewsProvider | undefined;
 
 export function getNewsProvider(): NewsProvider {
   if (cached) return cached;
   cached = {
-    getNewsByMatch: getNewsByMatchViaWebSearch,
+    getNewsByMatch: getNewsCombined,
   };
   return cached;
 }
@@ -30,6 +29,8 @@ export type {
   NewsProvider,
   NewsResult,
   NewsFetchOutcome,
+  NewsFetchStatus,
+  NewsSourceKind,
   NewsMatchContext,
   NewsAuditContext,
   NewsFetchOptions,

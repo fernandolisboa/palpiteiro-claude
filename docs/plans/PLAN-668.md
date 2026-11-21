@@ -151,3 +151,7 @@ O que saiu diferente do texto acima, e por quê:
 - **Copy**: o `como-funciona`, o texto do HERO vazio (pré-jogo) e a landing diziam que a IA crava o palpite; os três agora dizem que o resultado e o placar saem da conta e a IA escreve o porquê (o `como-funciona` cita o caminho v12, sem dado pra conta). O HERO ao vivo segue "a IA crava" (o ao vivo ainda é `palpites_live_v2`).
 - **`finalizeLivePick`** existe, mas o ao vivo segue no `palpites_live_v2` (v3 adiado).
 - **Reaproveitamento da extração** (voltou na correção do code review): sem hash nem coluna. `reuseExtraction` (`lib/ai/user-palpite/extract.ts`) procura no `ai_calls` a última row ok da mesma pessoa, jogo e versão do prompt cuja mensagem do pedido Anthropic (`input_payload->'messages'->0->>'content'`) é a mesma (texto normalizado + times) e relê o `tool_use` gravado pelas mesmas regras da extração nova. Nada novo é gravado; o texto cru já estava no pedido logado.
+
+## Nota do merge com o #670 (2026-11-21)
+
+O #670 (notícias do ge) entrou antes na main e já usou o nome `palpites_v13` para o cartucho em que o LLM escolhe (o v12 com trecho, data e fonte das notícias). Por isso, no código, o palpite decidido em código saiu como **`palpites_v14`** e o fallback sem fonte de λ é o `palpites_v13` da main. Onde este plano diz "v13" leia v14, e onde diz "v12" (fallback) leia v13. As notícias usam a mesma seção (`pushNewsLines`) nos dois cartuchos.

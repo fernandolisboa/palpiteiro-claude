@@ -88,7 +88,12 @@ export function checkFidelity(
   // racional de uma análise que demos ao modelo (ex.: total da temporada na tabela).
   const goalsFor = collectTotals(input, "goalsFor");
   const goalsAgainst = collectTotals(input, "goalsAgainst");
-  const rationales = input.analyses.map((a) => a.rationale).join(" ");
+  // #670: título e trecho das notícias também são texto que demos ao modelo: um total
+  // de gols tirado da matéria ("5 gols sofridos nos últimos jogos") não é contradição.
+  const rationales = [
+    ...input.analyses.map((a) => a.rationale),
+    ...input.news.map((n) => `${n.title} ${n.snippet ?? ""}`),
+  ].join(" ");
 
   const marcados = checkGoalClaims(prose, rationales, "marcados", goalsFor);
   if (marcados !== null) {

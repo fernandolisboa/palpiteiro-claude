@@ -105,17 +105,18 @@ describe("getNewsByMatchViaWebSearch — caminho feliz", () => {
 
     const out = await getNewsByMatchViaWebSearch(CTX, AUDIT);
 
-    expect(out.unavailable).toBe(false);
+    expect(out.status).toBe("found");
+    expect(out.via).toBe("web_search");
     expect(out.results).toEqual([
-      { title: "Flamengo confirma desfalque", url: "https://ge.globo.com/a" },
-      { title: "Fluminense muda técnico", url: "https://lance.com.br/b" },
+      { title: "Flamengo confirma desfalque", url: "https://ge.globo.com/a", source: "web_search" },
+      { title: "Fluminense muda técnico", url: "https://lance.com.br/b", source: "web_search" },
     ]);
     expect(out.aiCall).toEqual({ id: "news-call-1" });
 
-    // Loga UM ai_call(ok) com promptVersion news_v1.
+    // Loga UM ai_call(ok) com promptVersion news_v2.
     const row = insertValues.mock.calls[0][0] as Record<string, unknown>;
     expect(row.status).toBe("ok");
-    expect(row.promptVersion).toBe("news_v1");
+    expect(row.promptVersion).toBe("news_v2");
     expect(row.provider).toBe("anthropic");
     // Nenhum erro auditado no caminho feliz.
     expect(persistAiCallError).not.toHaveBeenCalled();
@@ -127,11 +128,22 @@ describe("getNewsByMatchViaWebSearch — caminho feliz", () => {
     const req = runAnalysis.mock.calls[0][0] as AnalysisRequest;
     expect(req.serverTool).toBeDefined();
     expect(req.serverTool?.kind).toBe("web_search");
-    expect(req.serverTool?.maxUses).toBe(1);
+    expect(req.serverTool?.maxUses).toBe(2);
     expect(req.serverTool?.allowedDomains).toEqual([...ALLOWED_DOMAINS]);
-    // O userMessage carrega o contexto da partida.
-    expect(req.userMessage).toContain("CR Flamengo");
-    expect(req.userMessage).toContain("Fluminense FC");
+    // #670: sem user_location (o ServerToolDef não ganhou o campo).
+    expect(Object.keys(req.serverTool ?? {}).sort()).toEqual([
+      "allowedDomains",
+      "kind",
+      "maxUses",
+    ]);
+    // O userMessage carrega o contexto da partida, com nome curto, liga por extenso e
+    // a data no fuso de Brasília (16h do dia 15 = 19h UTC).
+    expect(req.userMessage).toContain("- Mandante: Flamengo");
+    expect(req.userMessage).toContain("- Visitante: Fluminense");
+    expect(req.userMessage).not.toContain("CR Flamengo");
+    expect(req.userMessage).toContain("- Competição: Brasileirão");
+    expect(req.userMessage).toMatch(/- Data: 15\/05\/2026,? 16:00 \(horário de Brasília\)/);
+    expect(req.userMessage).toContain('Sugestão de consulta: "Flamengo x Fluminense"');
     // Sem prazo explícito, a request não leva prazo.
     expect(req.deadlineAt).toBeUndefined();
   });
@@ -159,15 +171,15 @@ describe("getNewsByMatchViaWebSearch — 'nunca inventa fonte'", () => {
     );
     const out = await getNewsByMatchViaWebSearch(CTX, AUDIT);
     expect(out.results).toEqual([
-      { title: "Válida", url: "https://espn.com.br/ok" },
+      { title: "Válida", url: "https://espn.com.br/ok", source: "web_search" },
     ]);
   });
 
-  it("dropa url com esquema não-http(s) (javascript:/data:/mailto:/relativa)", async () => {
+  it("só https: dropa http puro e esquema perigoso (javascript:/data:/mailto:/relativa)", async () => {
     runAnalysis.mockResolvedValue(
       okResult([
         searchResultBlock([
-          { title: "OK http", url: "http://ge.globo.com/a" },
+          { title: "http puro", url: "http://ge.globo.com/a" },
           { title: "OK https", url: "https://espn.com.br/b" },
           { title: "XSS", url: "javascript:alert(1)" },
           { title: "Data", url: "data:text/html,<script>1</script>" },
@@ -179,8 +191,7 @@ describe("getNewsByMatchViaWebSearch — 'nunca inventa fonte'", () => {
     );
     const out = await getNewsByMatchViaWebSearch(CTX, AUDIT);
     expect(out.results).toEqual([
-      { title: "OK http", url: "http://ge.globo.com/a" },
-      { title: "OK https", url: "https://espn.com.br/b" },
+      { title: "OK https", url: "https://espn.com.br/b", source: "web_search" },
     ]);
   });
 
@@ -196,12 +207,12 @@ describe("getNewsByMatchViaWebSearch — 'nunca inventa fonte'", () => {
     );
     const out = await getNewsByMatchViaWebSearch(CTX, AUDIT);
     expect(out.results).toEqual([
-      { title: "A", url: "https://ge.globo.com/x" },
-      { title: "B", url: "https://ge.globo.com/y" },
+      { title: "A", url: "https://ge.globo.com/x", source: "web_search" },
+      { title: "B", url: "https://ge.globo.com/y", source: "web_search" },
     ]);
   });
 
-  it("bloco de ERRO (content = objeto {error_code}) → [] (não trata como sucesso)", async () => {
+  it("bloco de ERRO (content = objeto {error_code}) → [] e status failed (#670)", async () => {
     runAnalysis.mockResolvedValue(
       okResult([
         {
@@ -211,31 +222,95 @@ describe("getNewsByMatchViaWebSearch — 'nunca inventa fonte'", () => {
         },
       ]),
     );
+    const errSpy = vi.spyOn(console, "error").mockImplementation(() => {});
     const out = await getNewsByMatchViaWebSearch(CTX, AUDIT);
     expect(out.results).toEqual([]);
-    // Erro de busca é HTTP 200 → ainda é result.ok=true → unavailable:false, loga ai_call(ok).
-    expect(out.unavailable).toBe(false);
+    // Erro de busca é HTTP 200 → result.ok=true, loga ai_call(ok), mas o desfecho é
+    // failed (antes virava "nenhuma notícia") e o error_code vai pro log.
+    expect(out.status).toBe("failed");
+    expect(out.via).toBeNull();
     const row = insertValues.mock.calls[0][0] as Record<string, unknown>;
     expect(row.status).toBe("ok");
+    expect(String(errSpy.mock.calls[0]?.[0])).toContain("max_uses_exceeded");
+    errSpy.mockRestore();
+  });
+
+  it("um erro e uma busca vazia → none (a busca respondeu)", async () => {
+    const errSpy = vi.spyOn(console, "error").mockImplementation(() => {});
+    runAnalysis.mockResolvedValue(
+      okResult([
+        {
+          type: "web_search_tool_result",
+          tool_use_id: "srvtoolu_err",
+          content: { type: "web_search_tool_result_error", error_code: "unavailable" },
+        },
+        searchResultBlock([]),
+      ]),
+    );
+    const out = await getNewsByMatchViaWebSearch(CTX, AUDIT);
+    expect(out.status).toBe("none");
+    expect(out.via).toBe("web_search");
+    errSpy.mockRestore();
+  });
+
+  it("resposta sem nenhum bloco de busca → no_search", async () => {
+    runAnalysis.mockResolvedValue(okResult([{ type: "text", text: "Sem buscar." }]));
+    const out = await getNewsByMatchViaWebSearch(CTX, AUDIT);
+    expect(out.status).toBe("no_search");
+    expect(out.results).toEqual([]);
+  });
+
+  it("busca que voltou vazia → none", async () => {
+    runAnalysis.mockResolvedValue(okResult([searchResultBlock([])]));
+    const out = await getNewsByMatchViaWebSearch(CTX, AUDIT);
+    expect(out.status).toBe("none");
+    expect(out.via).toBe("web_search");
+  });
+
+  it("time fora da tabela e liga de fora: segue com o nome que veio", async () => {
+    runAnalysis.mockResolvedValue(okResult([]));
+    await getNewsByMatchViaWebSearch(
+      {
+        league: "premier_league",
+        homeTeam: "Arsenal FC",
+        awayTeam: "Chelsea FC",
+        kickoffAt: "2026-05-15T19:00:00.000Z",
+      },
+      AUDIT,
+    );
+    const req = runAnalysis.mock.calls[0][0] as AnalysisRequest;
+    expect(req.userMessage).toContain("- Competição: Premier League");
+    expect(req.userMessage).toContain('Sugestão de consulta: "Arsenal FC x Chelsea FC"');
+  });
+
+  it("o system prompt é constante entre jogos (ADR 0071)", async () => {
+    runAnalysis.mockResolvedValue(okResult([]));
+    await getNewsByMatchViaWebSearch(CTX, AUDIT);
+    await getNewsByMatchViaWebSearch(
+      { ...CTX, homeTeam: "SE Palmeiras", kickoffAt: "2026-06-01T00:00:00.000Z" },
+      AUDIT,
+    );
+    const [a, b] = runAnalysis.mock.calls.map((c) => (c[0] as AnalysisRequest).system);
+    expect(a).toBe(b);
   });
 });
 
 describe("getNewsByMatchViaWebSearch — degrade gracioso", () => {
-  it("hasKey()===false → unavailable:true, ZERO runAnalysis, provider_error auditado", async () => {
+  it("hasKey()===false → failed, ZERO runAnalysis, provider_error auditado", async () => {
     hasKey.mockReturnValue(false);
     const out = await getNewsByMatchViaWebSearch(CTX, AUDIT);
-    expect(out.unavailable).toBe(true);
+    expect(out.status).toBe("failed");
     expect(out.results).toEqual([]);
     expect(out.aiCall).toBeNull();
     expect(runAnalysis).not.toHaveBeenCalled();
     const errArgs = persistAiCallError.mock.calls[0][0] as Record<string, unknown>;
     expect(errArgs.status).toBe("provider_error");
-    expect(errArgs.promptVersion).toBe("news_v1");
+    expect(errArgs.promptVersion).toBe("news_v2");
     // Nenhum ai_call(ok) inserido.
     expect(insertValues).not.toHaveBeenCalled();
   });
 
-  it("provider !ok → results:[], unavailable:false, status do provider auditado (não throw)", async () => {
+  it("provider !ok → results:[], status failed, status do provider auditado (não throw)", async () => {
     runAnalysis.mockResolvedValue({
       ok: false,
       status: "timeout",
@@ -254,7 +329,7 @@ describe("getNewsByMatchViaWebSearch — degrade gracioso", () => {
     } satisfies AnalysisResult);
     const out = await getNewsByMatchViaWebSearch(CTX, AUDIT);
     expect(out.results).toEqual([]);
-    expect(out.unavailable).toBe(false);
+    expect(out.status).toBe("failed");
     expect(out.aiCall).toBeNull();
     const errArgs = persistAiCallError.mock.calls[0][0] as Record<string, unknown>;
     expect(errArgs.status).toBe("timeout");

@@ -8,7 +8,7 @@
 //     ajustados pra a matriz reproduzir o mercado (lib/quant/market-fit.ts), e por cima
 //     os multiplicadores JEV + contexto do MESMO run (adjusted/base de cada lado);
 //   - dc_jev: o λ ajustado do motor code_jev do run (`judgments.lambda.adjusted`).
-// Sem nenhuma das duas, o chamador roda o cartucho v12 (o LLM escolhe, como antes).
+// Sem nenhuma das duas, o chamador roda o cartucho v13 (o LLM escolhe, como antes).
 //
 // As odds são as congeladas na análise (já passaram pelo portão de frescor quando ela
 // rodou): "Gerar só o palpite" sobre as mesmas análises dá o mesmo palpite.
@@ -97,7 +97,7 @@ function validLambda(l: number): boolean {
 
 // 1º gol coerente com o placar: o vencedor; ninguém num 0–0; num empate com gols, o lado
 // com mais chance de marcar primeiro (mandante no empate exato). No empate com gols ele só
-// vai ao texto do v13 e ao headline.pick: buildSettleablePalpiteRows não cria a linha
+// vai ao texto do v14 e ao headline.pick: buildSettleablePalpiteRows não cria a linha
 // first_to_score sem vencedor no placar, então nunca é conferido.
 function firstToScoreFor(score: Pair, lambda: Pair): PalpitePick["firstToScore"] {
   if (score.home > score.away) return "home";
@@ -287,7 +287,7 @@ export function dcJevBaseFromAnalyses(analyses: readonly Summary[]): PalpiteBase
 
 /**
  * O palpite de pré-jogo: `market_first` tenta mercado → modelo; `model_only`, só o
- * modelo. null = sem fonte (o chamador roda o v12).
+ * modelo. null = sem fonte (o chamador roda o v13).
  */
 export function resolvePregamePick(
   analyses: readonly Summary[],

@@ -19,6 +19,7 @@ import {
   progressTrace,
   stepDetail,
   trackStep,
+  type StepVerdict,
 } from "@/lib/ai/progress/run-progress";
 import { STEP_NOTES, STEPS, synthesisStep } from "@/lib/ai/progress/steps";
 import type {
@@ -116,15 +117,19 @@ const MAX_FIDELITY_ATTEMPTS = 1;
 const SYNTHESIS_MIN_MAX_TOKENS = 8192;
 
 /**
- * Busca de notícias da síntese (ADR 0032 / #377): provider DEDICADO via web search da
- * Claude. Degrada GRACIOSO (mirror absences): QUALQUER falha → results:[] e o palpite
- * ainda embarca — NUNCA bloqueia a manchete por notícia, e a promise nunca rejeita (o
- * caller pode dispará-la cedo e só aguardar depois). O provider já loga seu próprio
- * ai_call (predict.ts é a única porta).
+ * Busca de notícias da síntese (ADR 0032 / #377, adendo #670): RSS do ge por time
+ * primeiro, web search da Claude como fallback (lib/providers/news/combined.ts).
+ * Degrada GRACIOSO (mirror absences): QUALQUER falha → results:[] e o palpite ainda
+ * embarca — NUNCA bloqueia a manchete por notícia, e a promise nunca rejeita (o caller
+ * pode dispará-la cedo e só aguardar depois). A web search loga seu próprio ai_call
+ * (predict.ts é a única porta).
  *
  * Prazo: a busca termina SYNTHESIS_CALL_RESERVE_MS antes do prazo do run, pra nunca
  * comer o tempo da manchete (que é o produto; notícia é cor). Sem tempo pra uma busca
  * útil, nem chama: o palpite sai sem fontes em vez de não sair.
+ *
+ * O passo mostra o desfecho de verdade (#670): achou N (por fonte), procurou e nada
+ * (no ge ou na busca), meia falha, busca que não rodou, falha, sem tempo.
  *
  * Depende só do jogo (não das análises), então o analyzeBestBet a dispara junto do
  * fan-out e a síntese não espera mais por ela no fim do run.
@@ -140,18 +145,35 @@ export function startNewsFetch(
     newsDeadline === undefined || remainingMs(newsDeadline) >= NEWS_MIN_BUDGET_MS;
   if (!newsFits) {
     noteStep(STEPS.news, "skipped");
-    return Promise.resolve({ results: [], aiCall: null, unavailable: true });
+    return Promise.resolve({ results: [], aiCall: null, status: "skipped", via: null });
   }
-  return trackStep(
-    STEPS.news,
-    () => fetchNews(match, audit, newsDeadline),
-    (outcome) =>
-      outcome.unavailable
-        ? { status: "failed" }
-        : outcome.results.length === 0
-          ? { status: "done", label: STEP_NOTES.newsEmpty }
-          : { detail: newsDetail(outcome.results.length) },
-  );
+  return trackStep(STEPS.news, () => fetchNews(match, audit, newsDeadline), newsVerdict);
+}
+
+// Desfecho do passo de notícias pro "Ver raciocínio" (#670).
+export function newsVerdict(outcome: NewsFetchOutcome): StepVerdict {
+  switch (outcome.status) {
+    case "found":
+      return {
+        detail: [
+          ...newsDetail(outcome.results),
+          ...(outcome.partial ? [STEP_NOTES.newsPartial] : []),
+        ],
+      };
+    case "none":
+      if (outcome.via === "ge") {
+        return outcome.partial
+          ? { status: "done", label: STEP_NOTES.newsPartial, detail: [STEP_NOTES.newsNoneGe] }
+          : { status: "done", label: STEP_NOTES.newsNoneGe };
+      }
+      return { status: "done", label: STEP_NOTES.newsNoneWeb };
+    case "no_search":
+      return { status: "skipped", label: STEP_NOTES.newsNoSearch };
+    case "skipped":
+      return { status: "skipped" };
+    case "failed":
+      return { status: "failed" };
+  }
 }
 
 function fetchNews(
@@ -179,7 +201,7 @@ function fetchNews(
           message: err instanceof Error ? err.message : String(err),
         }),
       );
-      return { results: [] as NewsResult[], aiCall: null, unavailable: true };
+      return { results: [] as NewsResult[], aiCall: null, status: "failed", via: null };
     });
 }
 
@@ -239,7 +261,7 @@ export async function generatePalpites({
   const kickoffMs = match.kickoffAt.getTime();
 
   // 3. O palpite decidido em código (#668, ADR 0072), das análises do run ANTES do input
-  //    da síntese (o parse do input descarta odds/λ). null = sem fonte de λ: o v12 decide.
+  //    da síntese (o parse do input descarta odds/λ). null = sem fonte de λ: o v13 decide.
   const pick = resolvePregamePick(analyses);
 
   // 4. Fetch de dados de suporte — ENXUTO: form/h2h/standings via a SportsDataProvider
@@ -276,7 +298,7 @@ export async function generatePalpites({
       provider.getH2H(match.homeTeam, match.awayTeam, match.league, H2H_LAST),
       provider.getStandings(match.league),
       newsFetch,
-      // Fonte da confiança do palpite do v12 (#649), lida só sem palpite decidido em
+      // Fonte da confiança do palpite do v13 (#649), lida só sem palpite decidido em
       // código. Falha de leitura não derruba a síntese: cai na análise de 1X2 do code_jev
       // ou fica sem chip.
       pick
@@ -308,8 +330,10 @@ export async function generatePalpites({
     h2h,
     standings,
     analyses,
-    // ADR 0032 / #377 — notícias factuais reais como insumo da síntese.
+    // ADR 0032 / #377 — notícias factuais reais como insumo da síntese, com o desfecho
+    // da busca (#670: "nada novo" ≠ "não deu pra ler").
     news: newsOutcome.results,
+    newsStatus: newsOutcome.status,
   };
   const daysToKickoff = Math.max(
     0,
@@ -323,19 +347,24 @@ export async function generatePalpites({
     homeAliases: [match.homeTeam],
     awayAliases: [match.awayTeam],
   };
+  // Só {title,url} persiste (#670): trecho e data ficam fora do banco (direito autoral;
+  // o jsonb de headline.sources e quem o lê não mudam). Persiste a notícia LIMPA que o
+  // modelo viu (input.news: sem item barrado, título achatado, URL https normalizada),
+  // não o resultado cru do provider. Os dois cartuchos limpam com o mesmo builder.
+  const sourcesOf = (news: readonly { title: string; url: string }[]) =>
+    news.map(({ title, url }) => ({ title, url }));
   const common = {
     userId,
     matchId,
     model,
     deadlineAt,
     sourcePredictionIds: analyses.map((a) => a.predictionId),
-    sources: newsOutcome.results,
     live: null,
     analysesLines: analysesDetail(analyses, teams),
   };
 
   if (pick) {
-    // v13: o resultado, o placar, o 1º tempo e quem marca primeiro já estão decididos; o
+    // v14: o resultado, o placar, o 1º tempo e quem marca primeiro já estão decididos; o
     // LLM escreve o texto. Falha do texto vira o palpite de template (nunca palpite nulo).
     const cartridge = getPalpiteCartridge("model_pick");
     const confidence = confidenceFromPick(pick);
@@ -347,6 +376,7 @@ export async function generatePalpites({
     });
     return runSynthesis({
       ...common,
+      sources: sourcesOf(input.news),
       cartridge,
       userMessage: cartridge.buildUserMessage(input, { daysToKickoff }),
       finalize: (output) => finalizeModelPick(output, pick, teams),
@@ -362,12 +392,13 @@ export async function generatePalpites({
     });
   }
 
-  // v12: sem fonte de λ no run, o LLM escolhe resultado e placar, como antes do #668.
+  // v13: sem fonte de λ no run, o LLM escolhe resultado e placar, como antes do #668.
   const cartridge = getPalpiteCartridge("llm_pick");
   const input = cartridge.buildPredictionInput(buildArgs);
   const confidenceProbs = pregameConfidenceProbs(snapshot, analyses);
   return runSynthesis({
     ...common,
+    sources: sourcesOf(input.news),
     cartridge,
     userMessage: cartridge.buildUserMessage(input, { daysToKickoff }),
     finalize: finalizeLlmPick,
@@ -399,10 +430,10 @@ type SynthesisSpec<O> = {
   // Saída validada → manchete + linhas settleable (templates fixos).
   finalize: (output: O) => FinalPalpite;
   // Palpite decidido em código (#668): texto que falha vira template, nunca palpite nulo.
-  // null = sem rede (v12 e ao vivo: a falha degrada pra palpite nulo, como antes).
+  // null = sem rede (v13 e ao vivo: a falha degrada pra palpite nulo, como antes).
   textFallback: {
     template: (reason: string) => FinalPalpite;
-    // O guard de valor do v13 (pega também "preço") e o reparo campo a campo.
+    // O guard de valor do v14 (pega também "preço") e o reparo campo a campo.
     leaks: (final: FinalPalpite) => boolean;
     repairLeaks: (final: FinalPalpite) => FinalPalpite;
   } | null;

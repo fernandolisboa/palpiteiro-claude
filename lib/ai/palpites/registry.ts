@@ -13,8 +13,8 @@ import {
 import type { PalpiteCartridge } from "./types";
 
 // Registry do cartucho de palpites. Dois cartuchos de pré-jogo desde o #668 (ADR 0072):
-// - "model_pick" (palpites_v13): resultado e placar decididos em código, o LLM escreve;
-// - "llm_pick" (palpites_v12): sem nenhuma fonte de λ no run, o LLM escolhe, como antes.
+// - "model_pick" (palpites_v14): resultado e placar decididos em código, o LLM escreve;
+// - "llm_pick" (palpites_v13): sem nenhuma fonte de λ no run, o LLM escolhe, como antes.
 // Retorna o cartucho CONCRETAMENTE tipado (o gerador lê a manchete com o tipo exato).
 export function getPalpiteCartridge(
   kind: "model_pick",

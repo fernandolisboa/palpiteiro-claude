@@ -16,7 +16,7 @@ import {
   type BuildModelPickInputArgs,
 } from "../model-pick";
 
-// palpites_v13 (#668, ADR 0072): o LLM escreve o texto do palpite decidido em código.
+// palpites_v14 (#668, ADR 0072): o LLM escreve o texto do palpite decidido em código.
 
 const BOOKMAKER_NAME =
   /\b(betano|bet365|pinnacle|betfair|sportingbet|superbet|novibet|kto)\b/i;
@@ -135,10 +135,10 @@ describe("PalpitesModelPickOutputSchema", () => {
   });
 });
 
-describe("cartucho palpites_v13", () => {
+describe("cartucho palpites_v14", () => {
   it("versão, ferramenta e schema", () => {
-    expect(PALPITES_VERSION).toBe("palpites_v13");
-    expect(palpitesModelPickCartridge.version).toBe("palpites_v13");
+    expect(PALPITES_VERSION).toBe("palpites_v14");
+    expect(palpitesModelPickCartridge.version).toBe("palpites_v14");
     expect(palpitesModelPickCartridge.toolName).toBe("submit_palpite");
     const props = Object.keys(SUBMIT_PALPITE_V13_TOOL.input_schema.properties).sort();
     expect(props).toEqual([
@@ -221,5 +221,32 @@ describe("buildModelPickUserMessage", () => {
         pick: { ...args().pick, outcome: "visitante" as never },
       }),
     ).toThrow();
+  });
+});
+
+describe("palpites_v14 — notícias do #670", () => {
+  it("leva trecho, fonte e data dentro dos delimitadores; sem notícia, diz se a busca falhou", () => {
+    const withNews = buildModelPickInput({
+      ...args(),
+      news: [
+        {
+          title: "Escalação do Flamengo: três desfalques",
+          url: "https://ge.globo.com/futebol/times/flamengo/noticia/a.ghtml",
+          snippet: "Léo Pereira e Pulgar cumprem suspensão",
+          publishedAt: "2026-05-14T20:02:01.000Z",
+          source: "ge",
+        },
+      ],
+      newsStatus: "found",
+    });
+    const msg = palpitesModelPickCartridge.buildUserMessage(withNews, { daysToKickoff: 1 });
+    const block = msg.slice(msg.lastIndexOf("<<<NOTICIAS>>>"), msg.lastIndexOf("<<<FIM_NOTICIAS>>>"));
+    expect(block).toContain("[ge, 14/05 17:02]");
+    expect(block).toContain("Trecho: Léo Pereira e Pulgar cumprem suspensão");
+
+    const failed = buildModelPickInput({ ...args(), news: [], newsStatus: "failed" });
+    expect(palpitesModelPickCartridge.buildUserMessage(failed, { daysToKickoff: 1 })).toContain(
+      "notícias indisponíveis nesta análise",
+    );
   });
 });

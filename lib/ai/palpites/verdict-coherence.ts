@@ -88,7 +88,7 @@ function teamNames(teams: CoherenceTeams, side: "home" | "away"): string[] {
 }
 
 /**
- * Confere o veredito contra o palpite. `verdictOutcome` é o campo estruturado do v13.
+ * Confere o veredito contra o palpite. `verdictOutcome` é o campo estruturado do v14.
  */
 export function checkVerdictCoherence(
   verdict: string,

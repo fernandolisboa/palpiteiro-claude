@@ -14,7 +14,7 @@ import {
   type BuildPalpitesInputArgs,
 } from "./cartridge";
 
-// Cartucho palpites_v13 (#668, ADR 0072): o palpite decidido em código. O resultado, o
+// Cartucho palpites_v14 (#668, ADR 0072): o palpite decidido em código. O resultado, o
 // placar, o 1º tempo e quem marca primeiro chegam FIXADOS (lib/ai/palpites/pick.ts); o
 // LLM só escreve o texto em volta. Nada que varie por pedido no system prompt nem na
 // ferramenta (ADR 0071): o palpite fixado vai na mensagem do usuário.

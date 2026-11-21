@@ -6,7 +6,7 @@ import { deriveSettleable, type PalpiteType } from "./settleable";
 type SettleableRowInsert = typeof palpites.$inferInsert;
 
 // O que as linhas leem (estrutural): o palpite decidido em código (#668) e a saída do
-// cartucho v12 têm esta forma; os portões de coerência são os mesmos pros dois.
+// cartucho v13 têm esta forma; os portões de coerência são os mesmos pros dois.
 export type SettleableRowsSource = {
   probableScore: { home: number; away: number };
   firstHalfScore: { home: number; away: number };

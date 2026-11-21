@@ -1,10 +1,10 @@
 // Da saída do LLM à manchete que vai pro banco (#668, ADR 0072). PURO.
 //
-// - Palpite decidido em código (v13): o placar, o 1º tempo e quem marca primeiro vêm do
+// - Palpite decidido em código (v14): o placar, o 1º tempo e quem marca primeiro vêm do
 //   pick; o texto vem do LLM, conferido. Campo de texto que falha (veredito incoerente,
 //   linguagem de valor) vira o de template; falha do texto inteiro vira o palpite de
 //   template, nunca palpite nenhum.
-// - v12 (sem fonte de λ) e ao vivo: tudo vem do LLM, como antes.
+// - v13 (sem fonte de λ) e ao vivo: tudo vem do LLM, como antes.
 
 import type { PalpiteSynthesisOutput } from "./cartridges/cartridge";
 import type { PalpiteLiveOutput } from "./cartridges/live";
@@ -67,7 +67,7 @@ function mergeTemplated(
   };
 }
 
-/** v13: o texto do LLM sobre o pick; veredito incoerente → veredito de template. */
+/** v14: o texto do LLM sobre o pick; veredito incoerente → veredito de template. */
 export function finalizeModelPick(
   output: PalpiteModelPickOutput,
   pick: PickForFinal,
@@ -116,7 +116,7 @@ export function finalLeaksValue(final: FinalPalpite): boolean {
   return leaksWith(final, containsValueLanguage);
 }
 
-// No palpite decidido em código (v13), "preço" também é vazamento: a palavra já foi
+// No palpite decidido em código (v14), "preço" também é vazamento: a palavra já foi
 // insumo da síntese. Fica fora do containsValueLanguage porque o "Ver raciocínio"
 // (run-progress.ts) usa "preço" de propósito e descartaria a linha.
 const PRICE_WORD = /\bpreços?\b/i;
@@ -125,13 +125,13 @@ function modelPickLeaks(text: string): boolean {
   return containsValueLanguage(text) || PRICE_WORD.test(text);
 }
 
-/** `finalLeaksValue` do v13: o guard de valor + "preço". */
+/** `finalLeaksValue` do v14: o guard de valor + "preço". */
 export function finalLeaksValueModelPick(final: FinalPalpite): boolean {
   return leaksWith(final, modelPickLeaks);
 }
 
 /**
- * v13: só os campos que vazaram linguagem de valor (ou "preço") trocam pelo template;
+ * v14: só os campos que vazaram linguagem de valor (ou "preço") trocam pelo template;
  * rótulo citado que vazou sai da lista. As linhas são de templates fixos (nunca vazam).
  */
 export function repairValueLeaks(
@@ -155,7 +155,7 @@ export function repairValueLeaks(
   };
 }
 
-/** v12: o LLM escolheu resultado e placar (sem fonte de λ no run). */
+/** v13: o LLM escolheu resultado e placar (sem fonte de λ no run). */
 export function finalizeLlmPick(output: PalpiteSynthesisOutput): FinalPalpite {
   return {
     verdict: output.verdict,

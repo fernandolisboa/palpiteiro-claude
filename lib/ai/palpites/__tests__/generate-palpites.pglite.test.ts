@@ -140,7 +140,7 @@ vi.mock("@/lib/ai/providers", () => ({
 // (coberta no unit test do adapter). Não-mockar faria o adapter real chamar o seam
 // mockado e consumir a fila de runAnalysis.
 const getNewsByMatch = vi.fn(() =>
-  Promise.resolve({ results: [], aiCall: null, unavailable: true }),
+  Promise.resolve({ results: [], aiCall: null, status: "failed" as const, via: null }),
 );
 vi.mock("@/lib/providers/news", () => ({
   getNewsProvider: vi.fn(() => ({ getNewsByMatch })),
@@ -445,7 +445,7 @@ describe("generatePalpites (síntese) — write path real (pglite)", () => {
     expect(h0.confidenceProbPct).toBe(h1.confidenceProbPct);
     expect(h0.confidenceSource).toBe("market");
     expect(h0.pick).toEqual(h1.pick);
-    expect(sets.every((s) => s.palpiteSet.promptVersion === "palpites_v13")).toBe(true);
+    expect(sets.every((s) => s.palpiteSet.promptVersion === "palpites_v14")).toBe(true);
   });
 
   it("assimetria: palpite_set falha → throw, NENHUMA row órfã", async () => {
