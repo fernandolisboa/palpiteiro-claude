@@ -61,10 +61,11 @@ export const ADMIN_SECTIONS: readonly NavItem[] = [
   {
     href: "/admin/ia",
     label: "assistente de IA",
-    description: "modelos · parâmetros · custos · flags de IA",
+    description: "modelos · parâmetros · custos · falhas · flags de IA",
     children: [
       { href: "/admin/ia", label: "modelos" },
       { href: "/admin/ia/custos", label: "custos" },
+      { href: "/admin/ia/falhas", label: "falhas" },
     ],
   },
   {

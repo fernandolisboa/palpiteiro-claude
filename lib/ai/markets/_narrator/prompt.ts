@@ -1,4 +1,4 @@
-// Cartucho narrador `narrator_v1.4` (ADR 0041 §4): o LLM recebe a decisão JÁ TOMADA
+// Cartucho narrador `narrator_v1.5` (ADR 0041 §4): o LLM recebe a decisão JÁ TOMADA
 // pelo código e só escreve racional + fatores. Mudou texto do prompt, tool ou
 // mensagem? Bump NARRATOR_VERSION + commit `prompt:` (ADR 0017).
 // v1.1 (#565): regra 4 cobre os fatores que vieram do contexto extra do usuário.
@@ -7,7 +7,11 @@
 // outra competição (só a mensagem; system prompt igual).
 // v1.4 (#619): frases dos fatores de ataque/defesa enfraquecidos cobrem desfalque e
 // titular poupado (jev_judgments_v3 lê a escalação); só a mensagem.
-export const NARRATOR_VERSION = "narrator_v1.4" as const;
+// v1.5 (#669): o bloco "Decisão" lista a chance do modelo e a implícita de todas as
+// seleções (a fidelidade aceita citá-las), e uma narração reprovada (formato ou
+// fidelidade) ganha UMA 2ª tentativa com o motivo no fim da mensagem (retry.ts). System
+// prompt e tool idênticos aos da v1.4 (cache, ADR 0071): só a mensagem.
+export const NARRATOR_VERSION = "narrator_v1.5" as const;
 
 export const RATIONALE_MAX_CHARS = 600;
 export const KEY_FACTORS_MIN = 2;

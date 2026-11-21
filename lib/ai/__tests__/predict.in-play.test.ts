@@ -354,15 +354,52 @@ describe("predictInPlay", () => {
     );
   });
 
-  it("narração reprovada na fidelidade → racional templado, ai_call invalid_output", async () => {
+  it("narração reprovada na fidelidade → 2ª tentativa (#669), falha igual: racional templado, 2 rows invalid_output", async () => {
     narration = {
       rationale: "Aos 63', aposte no CR Flamengo: 90% de chance.",
       key_factors: ["valor claro", "edge alto"],
     };
     await predictInPlay(args());
-    expect(aiCallRows()[0]).toMatchObject({ status: "invalid_output" });
+    expect(anthropicCreate).toHaveBeenCalledTimes(2);
+    const calls = aiCallRows();
+    expect(calls.map((c) => c.status)).toEqual(["invalid_output", "invalid_output"]);
+    expect(calls[1].errorMessage).toMatch(/^retry: fidelity: /);
     const mr = predictionRows().find((p) => p.marketId === "mkt-match_result")!;
     expect(mr.rationale).toContain("Sem odd ao vivo, o app não recomenda aposta.");
+    // As 2 rows de ai_calls são os 2 primeiros inserts (row-1, row-2); as predictions
+    // apontam pra final.
+    expect(new Set(predictionRows().map((p) => p.aiCallId))).toEqual(new Set(["row-2"]));
+  });
+
+  it("leitura reprovada e depois ok (#669): o texto da 2ª, system igual e o motivo antes da última linha", async () => {
+    const bad = {
+      rationale: "Aos 63', aposte no CR Flamengo: 90% de chance.",
+      key_factors: ["valor claro", "edge alto"],
+    };
+    let n = 0;
+    anthropicCreate.mockImplementation(() =>
+      Promise.resolve(anthropicMessage(n++ === 0 ? bad : narration)),
+    );
+    await predictInPlay(args());
+
+    expect(anthropicCreate).toHaveBeenCalledTimes(2);
+    const [first, second] = anthropicCreate.mock.calls.map(
+      (c) => c[0] as { system: unknown; tools: unknown; messages: { content: string }[] },
+    );
+    expect(second.system).toEqual(first.system);
+    expect(second.tools).toEqual(first.tools);
+    const last = "Escreva o racional e os fatores-chave desta leitura via submit_narration.";
+    expect(first.messages[0].content.endsWith(last)).toBe(true);
+    expect(second.messages[0].content.endsWith(last)).toBe(true);
+    expect(second.messages[0].content).toContain("## Tentativa anterior reprovada");
+
+    const calls = aiCallRows();
+    expect(calls.map((c) => c.status)).toEqual(["invalid_output", "ok"]);
+    // row-1 = a 1ª tentativa, row-2 = a 2ª (os 2 primeiros inserts).
+    expect((calls[1].outputPayload as Record<string, unknown>).retryOf).toBe("row-1");
+    const mr = predictionRows().find((p) => p.marketId === "mkt-match_result")!;
+    expect(mr.rationale).toBe(narration.rationale);
+    expect(mr.aiCallId).toBe("row-2");
   });
 
   it("estado velho (> 2 min), sem placar, ou fase errada → recusa antes de qualquer gasto", async () => {

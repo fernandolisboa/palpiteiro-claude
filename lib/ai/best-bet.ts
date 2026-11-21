@@ -108,7 +108,8 @@ export type FanOutOptions = {
   deadlineAt?: number;
   // Pede 1 slot de rate-limit. Chamado logo ANTES de cada chamada paga (hook
   // beforeLlmPath do predict): mercado pulado, ou que falha antes do LLM (sem odds),
-  // não pede slot. O caller pode servir o 1º pedido com um slot já cobrado antes do
+  // não pede slot. A 2ª tentativa da narração (#669), depois de uma reprovação nossa,
+  // também não: o slot da narração cobre as duas. O caller pode servir o 1º pedido com um slot já cobrado antes do
   // run (a trava contra gasto de cota de terceiros sem slot). Ausente = sem cobrança.
   acquireSlot?: () => Promise<SlotGrant>;
   // Mercados independentes em PARALELO (flag enable_parallel_fan_out, admin). Ligado,
@@ -242,7 +243,8 @@ export function isCodeJevFanOutMarket(m: FanOutMarket): boolean {
 }
 
 /**
- * Unidades de cobrança de rate-limit (1 slot = 1 chamada paga, #492/#512): cada
+ * Unidades de cobrança de rate-limit (1 slot = 1 chamada paga, #492/#512; a 2ª
+ * tentativa da narração reprovada pela nossa conferência não conta, #669): cada
  * item é a própria unidade, exceto os `grouped`, que formam UMA unidade na posição
  * do 1º deles (ordem preservada). Sem agrupados = um item por unidade (o fan-out
  * de hoje).
@@ -287,7 +289,8 @@ class SlotDeniedError extends Error {
  * Rate-limit (#492/#493, #524 review): TODA chamada paga pede o próprio slot via
  * `acquireSlot` logo ANTES do gasto — a narração, cada mercado fora do grupo e cada
  * mercado do grupo que cai no caminho LLM porque o λ faltou. Mercado pulado (prazo)
- * ou que falha antes do LLM não pede slot. (O caller cobra o 1º slot antes do run e
+ * ou que falha antes do LLM não pede slot, nem a 2ª tentativa da narração reprovada
+ * pela nossa conferência (#669: a falha é nossa, o slot da narração cobre as duas). (O caller cobra o 1º slot antes do run e
  * o serve no 1º pedido — ver slotAcquirer em app/actions/predictions.ts.)
  *
  * Ordem (#524 review): o GRUPO code_jev primeiro (decisões em código, baratas), depois
@@ -372,7 +375,8 @@ export async function runCodeJevFanOut(
         out[index] = lane.fail(m.marketKey, err);
       }
     }
-    // Narração do escolhido (1 chamada paga) + persistência dos pendentes.
+    // Narração do escolhido (1 slot; 2ª tentativa sem slot, #669) + persistência dos
+    // pendentes.
     if (pendings.length > 0) {
       await narrateAndPersist(
         pendings,

@@ -725,8 +725,8 @@ export async function analyzeBestBet(
   // Rate-limit POR CHAMADA PAGA (#492 / Report 01 #3, #512, #524 review): 1 slot = 1
   // chamada paga. No motor 'llm' cada mercado é uma unidade (1 predict() pago cada). No
   // 'code_jev' os mercados decididos em código formam UMA unidade (só o escolhido é
-  // narrado — 1 chamada paga, ADR 0041 §4), na posição do 1º deles; os demais (placar
-  // exato/scorer/assist) seguem 1 slot cada.
+  // narrado — 1 slot, ADR 0041 §4; a 2ª tentativa da narração, #669, não cobra outro),
+  // na posição do 1º deles; os demais (placar exato/scorer/assist) seguem 1 slot cada.
   //
   // O 1º slot é cobrado aqui, ANTES do pré-warm e de qualquer busca (chargeRunBudget); os
   // demais, sob demanda antes de cada chamada paga. As unidades são cortadas no que resta

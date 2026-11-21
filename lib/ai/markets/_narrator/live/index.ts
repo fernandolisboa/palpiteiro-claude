@@ -1,8 +1,12 @@
-import type { FidelityCheck } from "@/lib/ai/palpites/fidelity-validator";
 
 import { toToolDef } from "../../types";
-import { PERCENT_RE, PERCENT_TOLERANCE_PP, recommends } from "../fidelity";
-import { fmtNumber, selectionAliases } from "../labels";
+import {
+  PERCENT_RE,
+  PERCENT_TOLERANCE_PP,
+  recommends,
+  type NarrationFidelityCheck,
+} from "../fidelity";
+import { fmtNumber, selectionAliases, selectionLabel } from "../labels";
 import { KEY_FACTORS_MAX, RATIONALE_MAX_CHARS } from "../prompt";
 import { NarratorOutputSchema, type NarratorOutput } from "../schemas";
 import type { NarratorTeams } from "../types";
@@ -120,7 +124,7 @@ function allowedLivePercents(d: LiveNarratorDecision): number[] {
 export function checkLiveNarrationFidelity(
   output: NarratorOutput,
   decision: LiveNarratorDecision
-): FidelityCheck {
+): NarrationFidelityCheck {
   const text = [output.rationale, ...output.key_factors].join(" \n ");
 
   const allowed = allowedLivePercents(decision);
@@ -154,6 +158,7 @@ export function checkLiveNarrationFidelity(
           return {
             ok: false,
             reason: `texto recomenda '${s.key}' numa leitura sem aposta`,
+            feedback: `texto recomenda '${selectionLabel(market.marketKey, s.key, decision.teams, market.line)}' numa leitura sem aposta`,
           };
         }
       }

@@ -27,6 +27,15 @@ describe("menu do app", () => {
     expect(activeItemHref("/bolao/abc", BETS_NAV.items)).toBe("/bolao");
   });
 
+  it("assistente de IA: abas modelos, custos e falhas (#669)", () => {
+    const ia = ADMIN_NAV.items.find((i) => i.href === "/admin/ia");
+    expect(ia?.children?.map((c) => [c.label, c.href])).toEqual([
+      ["modelos", "/admin/ia"],
+      ["custos", "/admin/ia/custos"],
+      ["falhas", "/admin/ia/falhas"],
+    ]);
+  });
+
   it("admin: visão geral + assistente de IA, motor e calibração, ligas e odds, usuários", () => {
     expect(ADMIN_NAV.items.map((i) => [i.label, i.href])).toEqual([
       ["visão geral", "/admin"],
@@ -36,6 +45,7 @@ describe("menu do app", () => {
       ["usuários", "/admin/users"],
     ]);
     expect(activeItemHref("/admin/ia/custos", ADMIN_NAV.items)).toBe("/admin/ia");
+    expect(activeItemHref("/admin/ia/falhas", ADMIN_NAV.items)).toBe("/admin/ia");
     expect(activeItemHref("/admin/motor/calibracao", ADMIN_NAV.items)).toBe("/admin/motor");
   });
 

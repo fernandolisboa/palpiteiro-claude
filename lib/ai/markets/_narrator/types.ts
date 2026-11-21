@@ -23,6 +23,16 @@ export type NarratorSelection = {
   odd: number | null;
 };
 
+// Uma seleção do mercado vista pelo narrador (#669): só a chance do modelo e a
+// implícita, sem edge (o edge citável é só o do focus). Deixa o texto citar a chance do
+// favorito, ou do empate, sem a fidelidade reprovar.
+export type NarratorMarketSelection = {
+  key: string;
+  label: string;
+  modelProbPct: number;
+  impliedPct: number | null;
+};
+
 export type NarratorDecision = {
   marketKey: string;
   marketLabel: string;
@@ -30,6 +40,8 @@ export type NarratorDecision = {
   teams: NarratorTeams;
   // Todas as seleções do mercado (descriptor.selectionKeys).
   selectionKeys: readonly string[];
+  // As seleções da linha decidida, na ordem de selectionKeys (#669). O template não lê.
+  selections: NarratorMarketSelection[];
   // selectionKey recomendada ou "pass".
   side: string;
   // A seleção recomendada; num pass, a melhor candidata (maior edge). null quando
