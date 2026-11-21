@@ -1,34 +1,44 @@
-import { p1X2, type ScorelineMatrix } from "@/lib/quant/scoreline-model";
+import {
+  p1X2,
+  scoreOutcome,
+  type MatchOutcome,
+  type ScorelineMatrix,
+} from "@/lib/quant/scoreline-model";
 
+import type { PalpitePick } from "./pick";
 import type { MarketAnalysisSummary } from "./synthesis-input";
 
 // Confiança do palpite calculada pelo motor (#649, ADR 0069): a chance que o modelo
 // estatístico dá ao RESULTADO (casa/empate/fora) do placar provável, em faixas fixas. O
 // LLM não escolhe mais o rótulo. O número fica no jsonb (calibração); a view mostra só a
-// palavra (firewall ADR 0030).
+// palavra (firewall ADR 0030). Desde o #668 (ADR 0072), com o palpite decidido em
+// código, a chance vem da MESMA matriz que escolheu o resultado (`confidenceFromPick`).
 
 export type PalpiteConfidenceLevel = "baixa" | "media" | "alta";
-export type MatchOutcome = "home" | "draw" | "away";
+// Um lugar só (lib/quant/scoreline-model.ts); reexportados pros consumidores de antes.
+export type { MatchOutcome };
+export { scoreOutcome };
 // Pontos percentuais (0..100), Σ = 100.
 export type MatchResultProbs = Record<MatchOutcome, number>;
 
 // De onde veio a probabilidade:
+// - market: o palpite decidido em código sobre a base do mercado + ajustes (#668);
+// - dc_jev: o palpite decidido em código sobre o λ do modelo do run (#668);
 // - snapshot: a base do modelo por jogo (ADR 0052), a mesma pra todo usuário;
 // - analysis: a análise de 1X2 do motor code_jev que alimentou o palpite (sem base);
 // - live_matrix: a matriz do placar final do modelo em jogo (#580).
-export type PalpiteConfidenceSource = "snapshot" | "analysis" | "live_matrix";
+export type PalpiteConfidenceSource =
+  | "market"
+  | "dc_jev"
+  | "snapshot"
+  | "analysis"
+  | "live_matrix";
 
 // P do resultado em pp, limites inclusivos: ≥ 40 é média, ≥ 55 é alta. Um empate quase
 // nunca passa de 33% antes do jogo, então palpite de empate sai "baixa", e é isso mesmo.
 export const PALPITE_CONFIDENCE_BANDS = { media: 40, alta: 55 } as const;
 
 const OUTCOMES: readonly MatchOutcome[] = ["home", "draw", "away"];
-
-export function scoreOutcome(score: { home: number; away: number }): MatchOutcome {
-  if (score.home > score.away) return "home";
-  if (score.home < score.away) return "away";
-  return "draw";
-}
 
 export function confidenceLevel(probPct: number): PalpiteConfidenceLevel {
   if (probPct >= PALPITE_CONFIDENCE_BANDS.alta) return "alta";
@@ -120,4 +130,12 @@ export function palpiteConfidence(
   if (!probs) return null;
   const probPct = Number(probs.values[scoreOutcome(probableScore)].toFixed(2));
   return { level: confidenceLevel(probPct), probPct, source: probs.source };
+}
+
+// Palpite decidido em código (#668): a chance do resultado escolhido, da mesma matriz.
+export function confidenceFromPick(
+  pick: Pick<PalpitePick, "outcome" | "probs" | "source">,
+): PalpiteConfidence {
+  const probPct = Number(pick.probs[pick.outcome].toFixed(2));
+  return { level: confidenceLevel(probPct), probPct, source: pick.source };
 }

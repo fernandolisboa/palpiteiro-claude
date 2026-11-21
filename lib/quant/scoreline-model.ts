@@ -388,3 +388,52 @@ export function firstToScoreProbs(
     none,
   };
 }
+
+// ── Resultado e placar mais prováveis (#668, ADR 0072) ──────────────────────
+// O palpite é o resultado mais provável, decidido em código: argmax do 1X2 e, dentro
+// dele, o placar de maior chance. Mesmos desempates de `topScorelines`.
+
+export type MatchOutcome = "home" | "draw" | "away";
+
+export function scoreOutcome(score: { home: number; away: number }): MatchOutcome {
+  if (score.home > score.away) return "home";
+  if (score.home < score.away) return "away";
+  return "draw";
+}
+
+// O placar de maior p entre as células que passam em `pred` (todas, sem ele). Célula
+// com p ≤ 0 nunca é candidata; empate de p → menos gols totais, depois mandante com
+// menos gols (o mesmo de `topScorelines`). null sem candidato.
+export function argmaxScoreline(
+  matrix: ScorelineMatrix,
+  pred?: (home: number, away: number) => boolean,
+): { home: number; away: number; p: number } | null {
+  let best: { home: number; away: number; p: number } | null = null;
+  for (let h = 0; h <= matrix.maxGoals; h++) {
+    for (let a = 0; a <= matrix.maxGoals; a++) {
+      const p = matrix.cells[h][a];
+      if (!(p > 0)) continue;
+      if (pred && !pred(h, a)) continue;
+      if (
+        best === null ||
+        p > best.p ||
+        (p === best.p &&
+          (h + a < best.home + best.away ||
+            (h + a === best.home + best.away && h < best.home)))
+      ) {
+        best = { home: h, away: a, p };
+      }
+    }
+  }
+  return best;
+}
+
+// O resultado de maior chance. Empate exato fica com o primeiro na ordem
+// mandante → empate → visitante (`>` estrito).
+export function mostLikelyOutcome(probs: Record<MatchOutcome, number>): MatchOutcome {
+  let best: MatchOutcome = "home";
+  for (const k of ["draw", "away"] as const) {
+    if (probs[k] > probs[best]) best = k;
+  }
+  return best;
+}

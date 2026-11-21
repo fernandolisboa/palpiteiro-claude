@@ -5,11 +5,13 @@ import {
   KAPPA_FIRST_HALF,
   LAMBDA_MAX,
   LAMBDA_MIN,
+  argmaxScoreline,
   cs16,
   estimateLambdas,
   firstHalfScorelineMatrix,
   firstToScoreProbs,
   jointProbability,
+  mostLikelyOutcome,
   p1X2,
   pBtts,
   pCleanSheet,
@@ -18,6 +20,7 @@ import {
   pOverUnder,
   poolSplitRates,
   pScoreline,
+  scoreOutcome,
   scorelineMatrix,
   topScorelines,
   type SplitGoalRates,
@@ -327,5 +330,49 @@ describe("topScorelines (#555)", () => {
     expect(["1-1", "0-0", "1-0", "0-1"]).toEqual(
       expect.arrayContaining(top2),
     );
+  });
+});
+
+describe("argmaxScoreline e mostLikelyOutcome (#668)", () => {
+  it("argmax = o 1º de topScorelines, com e sem predicado", () => {
+    for (const [lh, la] of [
+      [1.6, 1.1],
+      [0.9, 1.7],
+      [2.8, 0.5],
+    ] as const) {
+      const m = scorelineMatrix(lh, la);
+      const best = argmaxScoreline(m)!;
+      const [top] = topScorelines(m, 1);
+      expect(best).toEqual(top);
+      const away = argmaxScoreline(m, (h, a) => a > h)!;
+      expect(away.away).toBeGreaterThan(away.home);
+      const topAway = topScorelines(m, 121).find((c) => c.away > c.home)!;
+      expect(away).toEqual(topAway);
+    }
+  });
+
+  it("desempate de p: menos gols, depois mandante com menos gols; p ≤ 0 nunca é candidata", () => {
+    const cells = Array.from({ length: 3 }, () => [0, 0, 0]);
+    cells[2][0] = 0.3;
+    cells[0][2] = 0.3;
+    cells[1][0] = 0.3;
+    cells[0][1] = 0.1;
+    const m = { cells, maxGoals: 2 };
+    expect(argmaxScoreline(m)).toEqual({ home: 1, away: 0, p: 0.3 });
+    expect(argmaxScoreline(m, (h, a) => h + a === 2)).toEqual({ home: 0, away: 2, p: 0.3 });
+    expect(argmaxScoreline(m, (h, a) => h === a)).toBeNull();
+  });
+
+  it("mostLikelyOutcome: `>` estrito, empate exato fica com home → draw → away", () => {
+    expect(mostLikelyOutcome({ home: 0.3, draw: 0.3, away: 0.4 })).toBe("away");
+    expect(mostLikelyOutcome({ home: 0.35, draw: 0.35, away: 0.3 })).toBe("home");
+    expect(mostLikelyOutcome({ home: 0.3, draw: 0.35, away: 0.35 })).toBe("draw");
+    expect(mostLikelyOutcome({ home: 1 / 3, draw: 1 / 3, away: 1 / 3 })).toBe("home");
+  });
+
+  it("scoreOutcome", () => {
+    expect(scoreOutcome({ home: 2, away: 1 })).toBe("home");
+    expect(scoreOutcome({ home: 1, away: 1 })).toBe("draw");
+    expect(scoreOutcome({ home: 0, away: 3 })).toBe("away");
   });
 });
