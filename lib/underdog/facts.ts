@@ -102,7 +102,7 @@ export function buildFactsBlock(
   facts.scenarios.forEach((c, i) => {
     add(
       `C${i + 1}`,
-      `${scenarioLabel(c.id, n, "x")}: a chance de ${n.underdog} vencer vai de ${int(c.beforePct)} para ${int(c.afterPct)}.`
+      `${scenarioLabel(c.id, n, "x")}: a chance de ${n.underdog} vencer passa de ${int(c.beforePct)} para ${int(c.afterPct)}.`
     );
     pushPct(c.beforePct, c.afterPct);
     if (c.id === "lead_30") {
