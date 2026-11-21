@@ -37,9 +37,11 @@ vi.mock("@/lib/db", () => ({
 
 import { getEnableUnderdogView } from "@/lib/db/queries/ai-config";
 import {
+  findUnderdogViewForSnapshot,
   getLatestUnderdogView,
   getUnderdogViewForSnapshot,
   insertUnderdogView,
+  replaceUnderdogView,
   type NewUnderdogView,
 } from "@/lib/db/queries/underdog-views";
 import { buildMatchModelSnapshot } from "@/lib/model-base/build-snapshot";
@@ -214,6 +216,65 @@ describe("underdog_views", () => {
     expect(await getUnderdogViewForSnapshot(ids.user, ids.s2)).toBeNull();
     expect(err).toHaveBeenCalled();
     err.mockRestore();
+  });
+
+  it("find: existe-e-vale, existe-mas-inválida (record null) e não existe", async () => {
+    const err = vi.spyOn(console, "error").mockImplementation(() => {});
+    expect(await findUnderdogViewForSnapshot(ids.user, ids.s1)).toBeNull();
+    const rec = await insertUnderdogView(view());
+    expect(
+      (await findUnderdogViewForSnapshot(ids.user, ids.s1))?.record?.id
+    ).toBe(rec?.id);
+    await realDb.execute(
+      sql`UPDATE underdog_views SET narrative = '{"x":1}'::jsonb WHERE id = ${rec!.id}`
+    );
+    expect(await findUnderdogViewForSnapshot(ids.user, ids.s1)).toEqual({
+      record: null,
+    });
+    err.mockRestore();
+  });
+
+  it("replace troca a row da mesma base (inválida ou velha) sem duplicar", async () => {
+    const err = vi.spyOn(console, "error").mockImplementation(() => {});
+    const first = await insertUnderdogView(view());
+    await realDb.execute(
+      sql`UPDATE underdog_views SET facts = '{"x":1}'::jsonb WHERE id = ${first!.id}`
+    );
+    const replaced = await replaceUnderdogView(
+      view({
+        narrativeSource: "template",
+        versions: {
+          calc: "underdog_calc_v2",
+          advocate: "underdog_advocate_v1",
+          review: "underdog_review_v1",
+          matchModel: "match_model_v1",
+        },
+      })
+    );
+    expect(replaced).toMatchObject({
+      id: first!.id,
+      facts: FACTS,
+      narrativeSource: "template",
+    });
+    expect(replaced?.versions.calc).toBe("underdog_calc_v2");
+    const count = await realDb
+      .select({ n: sql<number>`count(*)::int` })
+      .from(schema.underdogViews);
+    expect(count[0].n).toBe(1);
+    // Sem row: replace grava.
+    const fresh = await replaceUnderdogView(view({ modelSnapshotId: ids.s2 }));
+    expect(fresh?.modelSnapshotId).toBe(ids.s2);
+    err.mockRestore();
+  });
+
+  it("row que não releria nunca é gravada (valida antes do insert)", async () => {
+    await expect(
+      insertUnderdogView(view({ facts: { x: 1 } as unknown as UnderdogFacts }))
+    ).rejects.toThrow(/inválida/);
+    await expect(
+      replaceUnderdogView(view({ facts: { x: 1 } as unknown as UnderdogFacts }))
+    ).rejects.toThrow(/inválida/);
+    expect(await getLatestUnderdogView(ids.user, ids.match)).toBeNull();
   });
 
   it("base referenciada não pode ser apagada (FK restrict)", async () => {

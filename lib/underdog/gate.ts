@@ -51,22 +51,46 @@ export function palpiteFavorsSide(
   return side === "home" ? score.home > score.away : score.away > score.home;
 }
 
+// Por que o teaser (o botão que cobra) não aparece. Os motivos importam pra tela: run em
+// andamento e palpite ausente são passageiros; "coherence" = o palpite da IA agora dá a
+// vitória ao próprio azarão.
+export type UnderdogTeaserBlock =
+  | "flag"
+  | "not_pre"
+  | "run"
+  | "no_pick"
+  | "no_palpite"
+  | "coherence";
+
 /**
- * O teaser (o botão que cobra) aparece: flag ligada, pré-jogo analisável, palpite da IA
- * na tela, nenhum run em andamento, azarão claro e o palpite não cravando a vitória do
- * próprio azarão (porta de coerência até o #668 decidir o palpite em código).
+ * null = o teaser aparece: flag ligada, pré-jogo analisável, palpite da IA na tela,
+ * nenhum run em andamento, azarão claro e o palpite não cravando a vitória do próprio
+ * azarão (porta de coerência até o #668 decidir o palpite em código).
  */
-export function underdogTeaserVisible(args: {
+export function underdogTeaserBlock(args: {
   flag: boolean;
   preMatch: boolean;
   heroPalpite: { probableScore: { home: number; away: number } } | null;
   runInFlight: boolean;
   pick: UnderdogPick | null;
-}): boolean {
+}): UnderdogTeaserBlock | null {
   const { flag, preMatch, heroPalpite, runInFlight, pick } = args;
-  if (!flag || !preMatch || runInFlight || pick === null) return false;
-  if (heroPalpite === null) return false;
-  return !palpiteFavorsSide(heroPalpite.probableScore, pick.side);
+  if (!flag) return "flag";
+  if (!preMatch) return "not_pre";
+  if (runInFlight) return "run";
+  if (pick === null) return "no_pick";
+  if (heroPalpite === null) return "no_palpite";
+  if (palpiteFavorsSide(heroPalpite.probableScore, pick.side)) {
+    return "coherence";
+  }
+  return null;
+}
+
+/** O teaser aparece (ver `underdogTeaserBlock`). */
+export function underdogTeaserVisible(
+  args: Parameters<typeof underdogTeaserBlock>[0]
+): boolean {
+  return underdogTeaserBlock(args) === null;
 }
 
 /**

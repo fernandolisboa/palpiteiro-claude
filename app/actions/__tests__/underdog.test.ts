@@ -14,8 +14,10 @@ vi.mock("@/lib/db/queries/palpites", () => ({
   getPalpiteSetsForMatch: vi.fn(),
 }));
 vi.mock("@/lib/db/queries/underdog-views", () => ({
+  findUnderdogViewForSnapshot: vi.fn(),
   getLatestUnderdogView: vi.fn(),
   insertUnderdogView: vi.fn(),
+  replaceUnderdogView: vi.fn(),
 }));
 vi.mock("@/lib/rate-limit", () => ({ checkPalpitesRateLimit: vi.fn() }));
 vi.mock("@/lib/server/request-timezone", () => ({
@@ -42,8 +44,10 @@ import { getLatestMatchModelSnapshotWithKickoff } from "@/lib/db/queries/match-m
 import { getMatchById } from "@/lib/db/queries/matches";
 import { getPalpiteSetsForMatch } from "@/lib/db/queries/palpites";
 import {
+  findUnderdogViewForSnapshot,
   getLatestUnderdogView,
   insertUnderdogView,
+  replaceUnderdogView,
   type UnderdogViewRecord,
 } from "@/lib/db/queries/underdog-views";
 import { getUserAccessState } from "@/lib/db/queries/users";
@@ -65,6 +69,8 @@ const mockSets = vi.mocked(getPalpiteSetsForMatch);
 const mockHeadline = vi.mocked(toPalpiteHeadlineViewFromSet);
 const mockStored = vi.mocked(getLatestUnderdogView);
 const mockInsert = vi.mocked(insertUnderdogView);
+const mockFind = vi.mocked(findUnderdogViewForSnapshot);
+const mockReplace = vi.mocked(replaceUnderdogView);
 const mockRateLimit = vi.mocked(checkPalpitesRateLimit);
 const mockGenerate = vi.mocked(generateUnderdogCase);
 const mockSignals = vi.mocked(fetchUnderdogSignals);
@@ -132,8 +138,12 @@ beforeEach(() => {
     probableScore: { home: 1, away: 0 },
   } as ReturnType<typeof toPalpiteHeadlineViewFromSet>);
   mockStored.mockResolvedValue(null);
+  mockFind.mockResolvedValue(null);
   mockInsert.mockImplementation(async (row) =>
     storedRow({ id: "row-new", narrative: row.narrative })
+  );
+  mockReplace.mockImplementation(async (row) =>
+    storedRow({ id: "row-replaced", narrative: row.narrative })
   );
   mockRateLimit.mockResolvedValue({
     ok: true,
@@ -220,12 +230,22 @@ describe("openUnderdogView: portões grátis (sem cobrar)", () => {
     expect(mockRateLimit).not.toHaveBeenCalled();
   });
 
-  it("palpite crava a vitória do azarão → sem-azarao (porta de coerência)", async () => {
+  it("palpite crava a vitória do azarão → coerencia, com texto próprio", async () => {
     mockHeadline.mockReturnValue({
       probableScore: { home: 0, away: 1 },
     } as ReturnType<typeof toPalpiteHeadlineViewFromSet>);
+    const res = await openUnderdogView(null, form());
+    expect(res).toMatchObject({ ok: false, kind: "coerencia" });
+    expect(!res.ok && res.error).toContain("dá a vitória a Flamengo");
+    expect(!res.ok && res.error).not.toContain("não vê azarão");
+    expect(mockRateLimit).not.toHaveBeenCalled();
+  });
+
+  it("sem palpite da IA → sem-palpite, sem cobrar", async () => {
+    mockSets.mockResolvedValue([]);
     expect(await openUnderdogView(null, form())).toMatchObject({
-      kind: "sem-azarao",
+      ok: false,
+      kind: "sem-palpite",
     });
     expect(mockRateLimit).not.toHaveBeenCalled();
   });
@@ -256,6 +276,83 @@ describe("openUnderdogView: portões grátis (sem cobrar)", () => {
     });
     expect(mockRateLimit).toHaveBeenCalledTimes(1);
   });
+
+  it("row desta base que ainda vale (não é a mais recente) → sem cobrar", async () => {
+    mockFind.mockResolvedValue({
+      record: storedRow({ modelSnapshotId: "snap-1" }),
+    });
+    const res = await openUnderdogView(null, form());
+    expect(res).toMatchObject({ ok: true, charged: false });
+    expect(mockRateLimit).not.toHaveBeenCalled();
+    expect(mockGenerate).not.toHaveBeenCalled();
+  });
+
+  it("row desta base velha (cálculo mudou) → cobra uma vez e TROCA a row", async () => {
+    const old = storedRow({ modelSnapshotId: "snap-1" });
+    mockFind.mockResolvedValue({
+      record: {
+        ...old,
+        facts: {
+          ...old.facts,
+          chances: {
+            ...old.facts.chances,
+            underdog: old.facts.chances.underdog + 5,
+          },
+        },
+      },
+    });
+    const res = await openUnderdogView(null, form());
+    expect(res).toMatchObject({ ok: true, charged: true });
+    expect(mockRateLimit).toHaveBeenCalledTimes(1);
+    expect(mockReplace).toHaveBeenCalledWith(
+      expect.objectContaining({ modelSnapshotId: "snap-1" })
+    );
+    expect(mockInsert).not.toHaveBeenCalled();
+    if (res.ok) expect(res.view.narrative.family).toBe("Sonnet");
+  });
+
+  it("row desta base que falha no Zod → troca (a próxima abertura não cobra de novo)", async () => {
+    mockFind.mockResolvedValueOnce({ record: null });
+    await openUnderdogView(null, form());
+    expect(mockReplace).toHaveBeenCalledTimes(1);
+    expect(mockInsert).not.toHaveBeenCalled();
+    // Depois da troca a row vale: reabrir devolve sem cobrar.
+    mockFind.mockResolvedValueOnce({
+      record: storedRow({ modelSnapshotId: "snap-1" }),
+    });
+    expect(await openUnderdogView(null, form())).toMatchObject({
+      ok: true,
+      charged: false,
+    });
+    expect(mockRateLimit).toHaveBeenCalledTimes(1);
+  });
+
+  it.each([
+    ["flag", () => mockFlag.mockRejectedValueOnce(new Error("db down"))],
+    ["jogo", () => mockMatch.mockRejectedValueOnce(new Error("db down"))],
+    ["base", () => mockSnap.mockRejectedValueOnce(new Error("db down"))],
+    [
+      "row guardada",
+      () => mockStored.mockRejectedValueOnce(new Error("db down")),
+    ],
+    ["row da base", () => mockFind.mockRejectedValueOnce(new Error("db down"))],
+    ["palpites", () => mockSets.mockRejectedValueOnce(new Error("db down"))],
+    [
+      "limite (KV)",
+      () => mockRateLimit.mockRejectedValueOnce(new Error("kv down")),
+    ],
+  ])(
+    "falha de %s antes da cobrança → recusa inline, sem lançar",
+    async (_l, arrange) => {
+      vi.spyOn(console, "error").mockImplementation(() => {});
+      arrange();
+      await expect(openUnderdogView(null, form())).resolves.toEqual({
+        ok: false,
+        error: ANALYSES_UNAVAILABLE_MESSAGE,
+      });
+      expect(mockGenerate).not.toHaveBeenCalled();
+    }
+  );
 
   it("limite estourado → limite, sem chamar a IA", async () => {
     mockRateLimit.mockResolvedValue({

@@ -16,8 +16,10 @@ import { getLatestMatchModelSnapshotWithKickoff } from "@/lib/db/queries/match-m
 import { getMatchById } from "@/lib/db/queries/matches";
 import { getPalpiteSetsForMatch } from "@/lib/db/queries/palpites";
 import {
+  findUnderdogViewForSnapshot,
   getLatestUnderdogView,
   insertUnderdogView,
+  replaceUnderdogView,
 } from "@/lib/db/queries/underdog-views";
 import { getUserAccessState } from "@/lib/db/queries/users";
 import { formatKickoffAbsolute, LEAGUE_LABEL, leagueToKey } from "@/lib/format";
@@ -27,11 +29,12 @@ import { getRequestTimeZone } from "@/lib/server/request-timezone";
 import {
   computeUnderdogFacts,
   underdogBaseFromSnapshot,
+  type UnderdogBase,
 } from "@/lib/underdog/compute";
 import { UNDERDOG_CALC_VERSION } from "@/lib/underdog/constants";
-import { buildFactsBlock } from "@/lib/underdog/facts";
+import { buildFactsBlock, underdogNames } from "@/lib/underdog/facts";
 import { fetchUnderdogSignals } from "@/lib/underdog/fetch-signals";
-import { isMaterialSame, underdogTeaserVisible } from "@/lib/underdog/gate";
+import { isMaterialSame, underdogTeaserBlock } from "@/lib/underdog/gate";
 import type { UnderdogFacts } from "@/lib/underdog/types";
 import { toPalpiteHeadlineViewFromSet } from "@/lib/view/palpites-headline";
 import { displayMatchTeams } from "@/lib/view/team";
@@ -44,7 +47,8 @@ import {
 // sinais saem do servidor. Todos os portões grátis antes da cobrança (1 unidade do
 // limite de palpites), inclusive o cálculo dos números; a row guardada que ainda vale
 // (materialidade) volta sem cobrar. Depois da cobrança o pedido nunca falha: falha da
-// IA vira o texto padrão, e uma exceção inesperada também (sem gravar).
+// IA vira o texto padrão, e uma exceção inesperada também (sem gravar). Antes dela, uma
+// exceção de banco/KV vira recusa grátis inline (nunca a página de erro).
 
 export type OpenUnderdogResult =
   | { ok: true; view: UnderdogPanelView; charged: boolean }
@@ -57,6 +61,8 @@ export type OpenUnderdogResult =
         | "nao-encontrado"
         | "fechado"
         | "sem-azarao"
+        | "sem-palpite"
+        | "coerencia"
         | "limite";
     };
 
@@ -66,16 +72,46 @@ const refuse = (error: string, kind?: Refusal["kind"]): Refusal =>
 
 const NO_UNDERDOG =
   "O modelo não vê azarão claro neste jogo agora. Volte mais perto do apito.";
+const NO_PALPITE = "As chances do azarão aparecem depois do palpite da IA.";
+// Porta de coerência: o palpite da IA na tela agora dá a vitória ao próprio azarão.
+const underdogCoherenceMessage = (underdog: string) =>
+  `O palpite da IA agora dá a vitória a ${underdog}, então não há zebra pra defender neste jogo.`;
 
-export async function openUnderdogView(
-  _prev: OpenUnderdogResult | null,
-  formData: FormData
-): Promise<OpenUnderdogResult> {
-  const deadlineAt = actionDeadline();
-  const parsedId = z.uuid().safeParse(formData.get("matchId"));
-  if (!parsedId.success) return refuse("Pedido inválido.", "invalido");
-  const matchId = parsedId.data;
+type Teams = { home: string; away: string };
+type Match = NonNullable<Awaited<ReturnType<typeof getMatchById>>>;
 
+// O que passou por todos os portões grátis (e pela cobrança).
+type Charged = {
+  kind: "charged";
+  userId: string;
+  isAdmin: boolean;
+  match: Match;
+  base: UnderdogBase;
+  teams: Teams;
+  leagueKey: ReturnType<typeof leagueToKey>;
+  codeFacts: UnderdogFacts;
+  // Já existe row nesta base (velha ou inválida): troca em vez de insert.
+  replace: boolean;
+  now: Date;
+};
+
+const log = (matchId: string, error: string, err: unknown) =>
+  console.error(
+    JSON.stringify({
+      scope: "underdog",
+      matchId,
+      error,
+      message: err instanceof Error ? err.message : String(err),
+    })
+  );
+
+/**
+ * Todos os portões grátis e, por último, a cobrança. Lança só por falha de banco/KV; o
+ * chamador transforma isso em recusa grátis.
+ */
+async function gateAndCharge(
+  matchId: string
+): Promise<Refusal | { kind: "stored"; result: OpenUnderdogResult } | Charged> {
   const session = await auth();
   if (!session?.user?.id)
     return refuse("Faça login para ver as chances do azarão.");
@@ -111,15 +147,24 @@ export async function openUnderdogView(
 
   const leagueKey = leagueToKey(match.league);
   const teams = displayMatchTeams(match.homeTeam, match.awayTeam, leagueKey);
+  const stored = (record: Parameters<typeof toUnderdogPanelView>[0]) => ({
+    kind: "stored" as const,
+    result: {
+      ok: true as const,
+      view: toUnderdogPanelView(record, teams, "current"),
+      charged: false,
+    },
+  });
 
   // Texto pago que ainda vale pra base atual: volta sem cobrar.
-  const stored = await getLatestUnderdogView(userId, matchId);
-  if (stored && isMaterialSame(stored.facts, base.pick)) {
-    return {
-      ok: true,
-      view: toUnderdogPanelView(stored, teams, "current"),
-      charged: false,
-    };
+  const latest = await getLatestUnderdogView(userId, matchId);
+  if (latest && isMaterialSame(latest.facts, base.pick)) return stored(latest);
+  // A row desta MESMA base: se vale, volta sem cobrar; se existe e não vale (versão do
+  // cálculo mudou, ou falhou no Zod), o texto novo a substitui (nunca um insert que bate
+  // no UNIQUE e devolve a velha depois de cobrar).
+  const sameBase = await findUnderdogViewForSnapshot(userId, base.snapshot.id);
+  if (sameBase?.record && isMaterialSame(sameBase.record.facts, base.pick)) {
+    return stored(sameBase.record);
   }
 
   // A mesma porta da página (coerência com o palpite na tela; sem run aqui).
@@ -127,28 +172,28 @@ export async function openUnderdogView(
   const heroPalpite = latestSet
     ? toPalpiteHeadlineViewFromSet(latestSet)
     : null;
-  const visible = underdogTeaserVisible({
+  const block = underdogTeaserBlock({
     flag: true,
     preMatch: true,
     heroPalpite,
     runInFlight: false,
     pick: base.pick,
   });
-  if (!visible) return refuse(NO_UNDERDOG, "sem-azarao");
+  if (block === "no_palpite") return refuse(NO_PALPITE, "sem-palpite");
+  if (block === "coherence") {
+    return refuse(
+      underdogCoherenceMessage(underdogNames(base.pick, teams).underdog),
+      "coerencia"
+    );
+  }
+  if (block !== null) return refuse(NO_UNDERDOG, "sem-azarao");
 
   // Os números são código puro: falha aqui é recusa grátis, antes da cobrança.
   let codeFacts: UnderdogFacts;
   try {
     codeFacts = computeUnderdogFacts(base);
   } catch (err) {
-    console.error(
-      JSON.stringify({
-        scope: "underdog",
-        matchId,
-        error: "facts_failed",
-        message: err instanceof Error ? err.message : String(err),
-      })
-    );
+    log(matchId, "facts_failed", err);
     return refuse(ANALYSES_UNAVAILABLE_MESSAGE);
   }
 
@@ -157,8 +202,42 @@ export async function openUnderdogView(
   if (rl.reason === "fail-closed") return refuse(ANALYSES_UNAVAILABLE_MESSAGE);
   if (!rl.ok) return refuse(palpitesLimitMessage(rl.limit), "limite");
 
+  return {
+    kind: "charged",
+    userId,
+    isAdmin,
+    match,
+    base,
+    teams,
+    leagueKey,
+    codeFacts,
+    replace: sameBase !== null,
+    now,
+  };
+}
+
+export async function openUnderdogView(
+  _prev: OpenUnderdogResult | null,
+  formData: FormData
+): Promise<OpenUnderdogResult> {
+  const deadlineAt = actionDeadline();
+  const parsedId = z.uuid().safeParse(formData.get("matchId"));
+  if (!parsedId.success) return refuse("Pedido inválido.", "invalido");
+  const matchId = parsedId.data;
+
+  let gate: Awaited<ReturnType<typeof gateAndCharge>>;
+  try {
+    gate = await gateAndCharge(matchId);
+  } catch (err) {
+    log(matchId, "precharge_failed", err);
+    return refuse(ANALYSES_UNAVAILABLE_MESSAGE);
+  }
+  if ("ok" in gate) return gate;
+  if (gate.kind === "stored") return gate.result;
+  const { userId, isAdmin, match, base, teams, leagueKey, now } = gate;
+
   // ─── Depois da cobrança: nada daqui pra baixo falha ───
-  let facts = codeFacts;
+  let facts = gate.codeFacts;
   try {
     const signals = await fetchUnderdogSignals({ match, side: base.pick.side });
     facts = computeUnderdogFacts(base, signals);
@@ -184,7 +263,7 @@ export async function openUnderdogView(
     };
     if (generated.persist) {
       try {
-        const saved = await insertUnderdogView({
+        const row = {
           userId,
           matchId,
           modelSnapshotId: base.snapshot.id,
@@ -200,8 +279,12 @@ export async function openUnderdogView(
           },
           advocateAiCallId: generated.advocateAiCallId,
           reviewerAiCallId: generated.reviewerAiCallId,
-        });
-        // Corrida com outra aba: a row que ficou é a que vale (o texto bate ao reabrir).
+        };
+        // Row velha/inválida desta base: troca. Senão insert; na corrida com outra aba,
+        // a row que ficou é a que vale (o texto bate ao reabrir).
+        const saved = gate.replace
+          ? await replaceUnderdogView(row)
+          : await insertUnderdogView(row);
         if (saved) {
           return {
             ok: true,
@@ -210,14 +293,7 @@ export async function openUnderdogView(
           };
         }
       } catch (err) {
-        console.error(
-          JSON.stringify({
-            scope: "underdog",
-            matchId,
-            error: "insert_failed",
-            message: err instanceof Error ? err.message : String(err),
-          })
-        );
+        log(matchId, "insert_failed", err);
       }
     }
     return {
@@ -226,14 +302,7 @@ export async function openUnderdogView(
       charged: true,
     };
   } catch (err) {
-    console.error(
-      JSON.stringify({
-        scope: "underdog",
-        matchId,
-        error: "unexpected",
-        message: err instanceof Error ? err.message : String(err),
-      })
-    );
+    log(matchId, "unexpected", err);
     return {
       ok: true,
       view: toUnderdogPanelView(

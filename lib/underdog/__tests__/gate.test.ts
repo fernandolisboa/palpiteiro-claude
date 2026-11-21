@@ -4,9 +4,13 @@ import {
   findUnderdog,
   isMaterialSame,
   palpiteFavorsSide,
+  underdogTeaserBlock,
   underdogTeaserVisible,
 } from "@/lib/underdog/gate";
-import { underdogBaseFromSnapshot } from "@/lib/underdog/compute";
+import {
+  readUnderdogBase,
+  underdogBaseFromSnapshot,
+} from "@/lib/underdog/compute";
 import { MODEL_SCORELINE_MAX_AGE_MS } from "@/lib/model-base/model-scoreline";
 
 import { KICKOFF, NOW, snapshot } from "./fixtures";
@@ -64,6 +68,26 @@ describe("underdogBaseFromSnapshot: os portões da base", () => {
   ] as const)("%s → null", (_l, snap, kickoff) => {
     expect(underdogBaseFromSnapshot(snap, kickoff, NOW)).toBeNull();
   });
+
+  it("readUnderdogBase separa base indisponível de base sem azarão", () => {
+    expect(readUnderdogBase(snapshot(), KICKOFF, NOW).status).toBe("ok");
+    expect(
+      readUnderdogBase(
+        snapshot({
+          checkedAt: new Date(NOW.getTime() - MODEL_SCORELINE_MAX_AGE_MS - 1),
+        }),
+        KICKOFF,
+        NOW
+      ).status
+    ).toBe("unavailable");
+    expect(
+      readUnderdogBase(
+        snapshot({ lambdaHome: 1.2, lambdaAway: 1.15 }),
+        KICKOFF,
+        NOW
+      ).status
+    ).toBe("no_underdog");
+  });
 });
 
 describe("underdogTeaserVisible", () => {
@@ -92,6 +116,17 @@ describe("underdogTeaserVisible", () => {
     ],
   ] as const)("%s → esconde", (_l, over) => {
     expect(underdogTeaserVisible({ ...ok, ...over })).toBe(false);
+  });
+
+  it.each([
+    ["flag", { flag: false }],
+    ["not_pre", { preMatch: false }],
+    ["run", { runInFlight: true }],
+    ["no_pick", { pick: null }],
+    ["no_palpite", { heroPalpite: null }],
+    ["coherence", { heroPalpite: { probableScore: { home: 0, away: 1 } } }],
+  ] as const)("underdogTeaserBlock → %s", (reason, over) => {
+    expect(underdogTeaserBlock({ ...ok, ...over })).toBe(reason);
   });
 
   it("palpite de empate não esconde", () => {
