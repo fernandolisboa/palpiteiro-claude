@@ -149,11 +149,11 @@ function extractSources(contentBlocks: unknown[] | undefined): ExtractedSources 
       if (typeof title !== "string" || title.trim() === "") continue;
       if (typeof url !== "string") continue;
       const cleanUrl = url.trim();
-      // Só http(s): a url vira <a href> na UI, então dropamos esquemas perigosos/
-      // estranhos (javascript:, data:, mailto:, //protocol-relative, …). Espelha o
-      // urlSchema do avatar em app/actions/profile.ts (report 01 achado #5). Cobre
+      // Só https: a url vira <a href> na UI, então dropamos esquemas perigosos/
+      // estranhos (javascript:, data:, mailto:, //protocol-relative, …) e http puro
+      // (#670: a síntese também só aceita https; o que persiste é o que ela viu). Cobre
       // também a url vazia (trim === "" não casa o regex).
-      if (!/^https?:\/\//i.test(cleanUrl)) continue;
+      if (!/^https:\/\//i.test(cleanUrl)) continue;
       if (seen.has(cleanUrl)) continue;
       seen.add(cleanUrl);
       out.sources.push({ title: title.trim(), url: cleanUrl, source: "web_search" });

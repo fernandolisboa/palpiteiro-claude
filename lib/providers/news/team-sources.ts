@@ -35,13 +35,29 @@ export function foldText(s: string): string {
 // "contra o X", "diante do X", "sobre o X" já caem aqui pelo artigo.
 const MASC_ARTICLE = String.raw`\b(?:o|do|ao|no|pelo)\s+`;
 
-// Nome ambíguo: casa só com artigo masculino ou em confronto. `name` é regex já dobrada.
+// Verbos de jogo que pedem o nome do clube logo depois (ou antes, como sujeito):
+// "Flamengo vence Remo", "Corinthians recebe São Paulo", "Santos empata com Palmeiras".
+const MATCH_VERBS = String.raw`(?:vence|venceu|recebe|recebeu|enfrenta|enfrentou|encara|encarou|pega|pegou|goleia|goleou|empata\s+com|empatou\s+com|perde\s+para|perdeu\s+para|bate|bateu)`;
+
+// Forma de jogo pra nome ambíguo: depois de um verbo de jogo ("vence Remo") ou como
+// sujeito no começo da manchete ou da oração ("Santos empata com…"). Sujeito só no
+// começo pra "Douglas Santos vence prêmio" não contar.
+function verbForms(name: string, tail: string): RegExp[] {
+  return [
+    new RegExp(String.raw`\b${MATCH_VERBS}\s+${name}${tail}`),
+    new RegExp(String.raw`(?:^|[:;!?.]\s+)${name}${tail}\s+${MATCH_VERBS}\b`),
+  ];
+}
+
+// Nome ambíguo: casa só com artigo masculino, em confronto ou em forma de jogo.
+// `name` é regex já dobrada.
 function clubForms(name: string, notFollowedBy = ""): RegExp[] {
   const tail = String.raw`\b${notFollowedBy}`;
   return [
     new RegExp(`${MASC_ARTICLE}${name}${tail}`),
     new RegExp(String.raw`\b${name}\s+x\b`),
     new RegExp(String.raw`\bx\s+${name}${tail}`),
+    ...verbForms(name, tail),
   ];
 }
 
@@ -221,6 +237,7 @@ export const TEAM_NEWS_SOURCES: readonly TeamNewsSource[] = [
       new RegExp(String.raw`\bx\s+remo\b`),
       word("contra o remo"),
       word(String.raw`remo\s*-\s*pa`),
+      ...verbForms("remo", String.raw`\b`),
     ],
   },
   {
@@ -246,6 +263,7 @@ export const TEAM_NEWS_SOURCES: readonly TeamNewsSource[] = [
       word(String.raw`(?:contra\s+o|diante\s+do)\s+ceara`),
       word("ceara sc"),
       word("vozao"),
+      ...verbForms("ceara", String.raw`\b`),
     ],
   },
   {
@@ -282,26 +300,98 @@ function escapeRegex(s: string): string {
   return s.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
 }
 
+// Termo literal como "palavra": `\b` só nas pontas que são caractere de palavra
+// ("Estudiantes L.P." termina em ponto; um `\b` depois dele nunca casaria).
+function literalTerm(folded: string): RegExp {
+  const body = escapeRegex(folded).replace(/\s+/g, String.raw`\s+`);
+  const head = /^\w/.test(folded) ? String.raw`\b` : "";
+  const tail = /\w$/.test(folded) ? String.raw`\b` : "";
+  return new RegExp(`${head}${body}${tail}`);
+}
+
+// Tokens que não identificam um clube estrangeiro: artigo/preposição e sigla ou palavra
+// genérica de nome de clube.
+const FOREIGN_STOPWORDS = new Set(
+  (
+    "de da do das dos del la las los el the and y club clube atletico " +
+    "athletic fc cf sc ca cd cs ac afc deportivo deportiva deportes " +
+    "sociedad sporting futbol football"
+  ).split(" ")
+);
+
+// Tokens que identificam o clube mas também são palavra comum em português ("o real",
+// "seleção nacional", "Lima" sobrenome): só em forma de clube, como os ambíguos da
+// tabela.
+const FOREIGN_COMMON_WORDS = new Set(
+  (
+    "real nacional union central universidad catolica santa san sao city " +
+    "united junior juniors lima independiente boca liga plata"
+  ).split(" ")
+);
+
 /**
  * Padrões que contam como "o texto cita este time" (sobre texto dobrado). Time fora da
- * tabela cai no nome inteiro como palavra (cru e normalizado).
+ * tabela (o estrangeiro da Libertadores): o nome inteiro como palavra (cru e
+ * normalizado) e cada token distintivo do nome (≥3 letras, sem artigo/sigla de clube):
+ * a manchete diz "Flamengo x Estudiantes", "a LDU", "x River", nunca o nome oficial.
+ * Token que é palavra comum só casa em forma de clube.
  */
 export function mentionTermsFor(name: string): readonly RegExp[] {
   const source = resolveTeamSources(name);
   if (source) return source.mentions;
+  const folded = foldText(name).replace(/\s+/g, " ").trim();
   const forms = new Set(
-    [foldText(name).trim(), normalizeTeamName(name)].filter(
-      (f) => f.length >= 3
-    )
+    [folded, normalizeTeamName(name)].filter((f) => f.length >= 3)
   );
-  return [...forms].map((f) =>
-    word(escapeRegex(f).replace(/\s+/g, String.raw`\s+`))
+  const tokens = new Set(
+    folded
+      .split(/[^a-z0-9]+/)
+      .filter((t) => t.length >= 3 && !FOREIGN_STOPWORDS.has(t))
   );
+  return [
+    ...[...forms].map(literalTerm),
+    ...[...tokens].flatMap((t) =>
+      FOREIGN_COMMON_WORDS.has(t) ? clubForms(t) : [word(t)]
+    ),
+  ];
 }
 
 export function textMentionsTeam(text: string, name: string): boolean {
   const folded = foldText(text);
   return mentionTermsFor(name).some((re) => re.test(folded));
+}
+
+/** `true` se o time tem padrões próprios na tabela (o adversário foi reconhecido). */
+export function isKnownTeam(name: string): boolean {
+  return resolveTeamSources(name) !== null;
+}
+
+// "Estudiantes de La Plata" → "estudiantes-de-la-plata" (forma de slug do ge).
+function slugify(s: string): string {
+  return foldText(s)
+    .replace(/[^a-z0-9]+/g, "-")
+    .replace(/^-+|-+$/g, "");
+}
+
+/**
+ * Slug do time na URL das matérias do ge ("palmeiras-x-flamengo-onde-assistir…"): o da
+ * tabela ou, fora dela, o nome normalizado em forma de slug. Só pra casar o confronto
+ * no link; nunca vira chave.
+ */
+export function teamUrlSlug(name: string): string {
+  return resolveTeamSources(name)?.geSlug ?? slugify(normalizeTeamName(name));
+}
+
+/**
+ * Padrão do confronto no caminho do link (`<mandante>-x-<visitante>` ou o inverso),
+ * com borda de segmento dos dois lados: "palmeiras-x-flamengo-onde-assistir" casa,
+ * "nao-palmeiras-x-flamengoxyz" não.
+ */
+export function matchupSlugPattern(home: string, away: string): RegExp | null {
+  const h = escapeRegex(teamUrlSlug(home));
+  const a = escapeRegex(teamUrlSlug(away));
+  if (h === "" || a === "") return null;
+  return new RegExp(String.raw`[/-](?:${h}-x-${a}|${a}-x-${h})(?:[-./]|$)`);
 }
 
 /**

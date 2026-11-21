@@ -175,11 +175,11 @@ describe("getNewsByMatchViaWebSearch — 'nunca inventa fonte'", () => {
     ]);
   });
 
-  it("dropa url com esquema não-http(s) (javascript:/data:/mailto:/relativa)", async () => {
+  it("só https: dropa http puro e esquema perigoso (javascript:/data:/mailto:/relativa)", async () => {
     runAnalysis.mockResolvedValue(
       okResult([
         searchResultBlock([
-          { title: "OK http", url: "http://ge.globo.com/a" },
+          { title: "http puro", url: "http://ge.globo.com/a" },
           { title: "OK https", url: "https://espn.com.br/b" },
           { title: "XSS", url: "javascript:alert(1)" },
           { title: "Data", url: "data:text/html,<script>1</script>" },
@@ -191,7 +191,6 @@ describe("getNewsByMatchViaWebSearch — 'nunca inventa fonte'", () => {
     );
     const out = await getNewsByMatchViaWebSearch(CTX, AUDIT);
     expect(out.results).toEqual([
-      { title: "OK http", url: "http://ge.globo.com/a", source: "web_search" },
       { title: "OK https", url: "https://espn.com.br/b", source: "web_search" },
     ]);
   });

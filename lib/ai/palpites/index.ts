@@ -330,8 +330,10 @@ export async function generatePalpites({
     fidelity: (output) => checkFidelity(output, input),
     sourcePredictionIds: analyses.map((a) => a.predictionId),
     // Só {title,url} persiste (#670): trecho e data ficam fora do banco (direito autoral;
-    // o jsonb de headline.sources e quem o lê não mudam).
-    sources: newsOutcome.results.map(({ title, url }) => ({ title, url })),
+    // o jsonb de headline.sources e quem o lê não mudam). Persiste a notícia LIMPA que o
+    // modelo viu (input.news: sem item barrado, título achatado, URL https normalizada),
+    // não o resultado cru do provider.
+    sources: input.news.map(({ title, url }) => ({ title, url })),
     live: null,
     analysesLines: analysesDetail(analyses),
     confidenceProbs: pregameConfidenceProbs(snapshot, analyses),

@@ -7,7 +7,13 @@ import {
   flattenWhitespace,
   type RssItem,
 } from "./rss-parse";
-import { foldText, mentionTermsFor, resolveTeamSources } from "./team-sources";
+import {
+  foldText,
+  isKnownTeam,
+  matchupSlugPattern,
+  mentionTermsFor,
+  resolveTeamSources,
+} from "./team-sources";
 import type { NewsMatchContext, NewsResult } from "./types";
 
 // Fonte primária de notícias pra time brasileiro (ADR 0032, adendo #670): o RSS do ge
@@ -35,13 +41,16 @@ const TOTAL_CAP = 10;
 
 // Só matéria de futebol masculino do ge: /futebol/ ou /<uf>/futebol/, menos blog,
 // fantasy (gato-mestre/cartola), internacional e feminino.
+const GE_ORIGIN = "https://ge.globo.com";
 const GE_PATH_ALLOW = /^https:\/\/ge\.globo\.com\/(?:[a-z]{2}\/)?futebol\//;
 const GE_PATH_DENY =
   /\/(?:blogs|gato-mestre|cartola|futebol-internacional|futebol-feminino|basquete|volei)\//;
 
-// Notícia de escalação/desfalque sobe antes da ordem por data (texto dobrado).
+// Notícia de escalação/desfalque sobe antes da ordem por data (texto dobrado). Técnico
+// só conta com troca (novo/demitido/demissão): "técnico" sozinho está em meia matéria
+// do ge. "fora de casa" é mando, não desfalque.
 const PRIORITY_TERMS =
-  /desfalque|lesao|lesionad|suspens|escalacao|escalad|pendurad|tecnico|treinador|poupa|reserva/;
+  /desfalc|\bles(?:ao|oes)\b|lesionad|suspens|escala|pendurad|amarelo|vetad|duvida|\bfora d[oe]\b(?!\s+casa)|poupa|\bdemit|\bdemiss|\bnovo\s+(?:tecnico|treinador)/;
 
 export function geFeedUrl(slug: string): string {
   return `${GE_FEED_BASE}${slug}/`;
@@ -164,14 +173,19 @@ function rank(a: Candidate, b: Candidate): number {
 /**
  * Itens de UM feed que servem pro jogo: publicados na janela (anchor − 72h ≤ pubDate ≤
  * anchor), matéria de futebol do ge (allowlist de caminho) e que citam o ADVERSÁRIO no
- * título ou na linha fina (o corpo gera ruído). Ordenados (escalação/desfalque antes,
- * depois o mais novo) e cortados em PER_TEAM_CAP.
+ * título ou na linha fina (o corpo gera ruído) ou trazem o confronto no link
+ * (`palmeiras-x-flamengo-…`, com `team` informado). Ordenados (escalação/desfalque
+ * antes, depois o mais novo), sem duplicata e SEM corte.
  */
-export function filterFeedItems(
+export function matchFeedItems(
   items: readonly RssItem[],
-  args: { anchorMs: number; opponent: string }
+  args: { anchorMs: number; opponent: string; team?: string }
 ): Candidate[] {
   const terms = mentionTermsFor(args.opponent);
+  const matchup =
+    args.team === undefined
+      ? null
+      : matchupSlugPattern(args.team, args.opponent);
   const out: Candidate[] = [];
   const seen = new Set<string>();
   for (const item of items) {
@@ -182,9 +196,12 @@ export function filterFeedItems(
     const link = item.link.trim();
     if (!GE_PATH_ALLOW.test(link) || GE_PATH_DENY.test(link)) continue;
     const head = foldText(`${item.title} ${item.subtitle ?? ""}`);
-    if (!terms.some((re) => re.test(head))) continue;
-    // Duplicata no mesmo feed não come vaga do corte por time.
     const key = canonicalUrl(link);
+    const mentions =
+      terms.some((re) => re.test(head)) ||
+      (matchup !== null && matchup.test(foldText(key.slice(GE_ORIGIN.length))));
+    if (!mentions) continue;
+    // Duplicata no mesmo feed não come vaga do corte por time.
     if (seen.has(key)) continue;
     seen.add(key);
     const snippet = makeSnippet(item);
@@ -198,7 +215,15 @@ export function filterFeedItems(
       publishedMs: published,
     });
   }
-  return out.sort(rank).slice(0, PER_TEAM_CAP);
+  return out.sort(rank);
+}
+
+/** `matchFeedItems` cortado em PER_TEAM_CAP (um feed sozinho). */
+export function filterFeedItems(
+  items: readonly RssItem[],
+  args: { anchorMs: number; opponent: string; team?: string }
+): Candidate[] {
+  return matchFeedItems(items, args).slice(0, PER_TEAM_CAP);
 }
 
 export type TeamFeedsOutcome =
@@ -206,8 +231,15 @@ export type TeamFeedsOutcome =
   | { kind: "no_sources" }
   // Todo feed tentado falhou.
   | { kind: "all_failed" }
-  // Algum feed respondeu; `partial` = outro feed tentado falhou.
-  | { kind: "ok"; results: NewsResult[]; partial: boolean };
+  // Algum feed respondeu; `partial` = outro feed tentado falhou. `unknownOpponent` = o
+  // adversário de algum feed lido está fora da tabela (estrangeiro da Libertadores):
+  // a menção a ele é casada por token, então "nada no feed" não prova "nada novo".
+  | {
+      kind: "ok";
+      results: NewsResult[];
+      partial: boolean;
+      unknownOpponent: boolean;
+    };
 
 /**
  * Notícias do jogo pelos feeds do ge dos dois times, em paralelo (allSettled: um feed
@@ -234,8 +266,9 @@ export async function getNewsViaTeamFeeds(
   const settled = await Promise.allSettled(
     sides.map((side) => fetchFeed(side.url, options.deadlineAt))
   );
-  const candidates: Candidate[] = [];
+  const perFeed: Candidate[][] = [];
   let okCount = 0;
+  let unknownOpponent = false;
   settled.forEach((s, i) => {
     const feed: FeedResult =
       s.status === "fulfilled"
@@ -258,22 +291,40 @@ export async function getNewsViaTeamFeeds(
       return;
     }
     okCount += 1;
-    candidates.push(
-      ...filterFeedItems(feed.items, { anchorMs, opponent: sides[i].opponent })
+    if (!isKnownTeam(sides[i].opponent)) unknownOpponent = true;
+    perFeed.push(
+      matchFeedItems(feed.items, {
+        anchorMs,
+        opponent: sides[i].opponent,
+        team: sides[i].team,
+      })
     );
   });
   if (okCount === 0) return { kind: "all_failed" };
 
-  const seen = new Set<string>();
+  // Tira a duplicata entre feeds ANTES do corte por time: a matéria que já veio pelo
+  // feed de um time não come vaga do outro.
+  const taken = new Set<string>();
+  const candidates: Candidate[] = [];
+  for (const list of perFeed) {
+    let kept = 0;
+    for (const c of list) {
+      if (kept >= PER_TEAM_CAP) break;
+      const key = canonicalUrl(c.url);
+      if (taken.has(key)) continue;
+      taken.add(key);
+      candidates.push(c);
+      kept += 1;
+    }
+  }
   const results = candidates
     .sort(rank)
-    .filter((c) => {
-      const key = canonicalUrl(c.url);
-      if (seen.has(key)) return false;
-      seen.add(key);
-      return true;
-    })
     .slice(0, TOTAL_CAP)
     .map(({ priority: _p, publishedMs: _m, ...result }) => result);
-  return { kind: "ok", results, partial: okCount < sides.length };
+  return {
+    kind: "ok",
+    results,
+    partial: okCount < sides.length,
+    unknownOpponent,
+  };
 }

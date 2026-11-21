@@ -730,13 +730,13 @@ describe("generatePalpites (síntese) — notícias (#377 / ADR 0032)", () => {
   });
 
   it("FIREWALL-REGRESSION: termo de valor numa NOTÍCIA não derruba a síntese NEM vaza pra manchete", async () => {
-    // Uma fonte com "odd" no título é INPUT (sources), não verdict/narrative — não
-    // pode tropeçar no guard de value-language. E o output limpo (validHeadline) não
-    // vaza o termo pra manchete. Defesa-em-profundidade: se o LLM ECOASSE "odd" no
-    // output, o guard existente ainda pegaria (provado nos testes de firewall acima).
+    // Um título com "odd" sai na ENTRADA (o modelo nem o vê) e, por isso, também não
+    // persiste. O output limpo (validHeadline) segue; se o LLM ECOASSE "odd", o guard
+    // de saída ainda pegaria (testes de firewall acima).
     getNewsByMatch.mockResolvedValue({
       results: [
         { title: "Palmeiras com odd alta no mercado", url: "https://ge.globo.com/odd" },
+        { title: "Flamengo confirma retorno de Arrascaeta", url: "https://ge.globo.com/volta" },
       ],
       aiCall: { id: "news-2" },
       status: "found",
@@ -744,25 +744,66 @@ describe("generatePalpites (síntese) — notícias (#377 / ADR 0032)", () => {
     });
     runAnalysis.mockResolvedValue(okResult(validHeadline));
 
-    // Não lança (a notícia com "odd" é fonte, não manchete).
     const res = await generatePalpites(baseCall);
     expect(res.palpiteSet).toBeDefined();
 
-    // A fonte (com "odd") foi persistida como sources…
+    const req = runAnalysis.mock.calls[0][0] as AnalysisRequest;
+    expect(req.userMessage).not.toContain("odd alta");
+    expect(req.userMessage).toContain("retorno de Arrascaeta");
+
     const setRow = insertValues.mock.calls[1][0] as Record<string, unknown>;
     const headline = setRow.headline as {
       verdict: string;
       narrative: string;
-      sources?: Array<{ title: string }>;
+      sources?: Array<{ title: string; url: string }>;
     };
-    expect(headline.sources?.[0].title).toContain("odd");
-    // …mas NÃO vazou pra verdict/narrative (a manchete segue limpa).
+    expect(headline.sources).toEqual([
+      { title: "Flamengo confirma retorno de Arrascaeta", url: "https://ge.globo.com/volta" },
+    ]);
     const serialized = `${headline.verdict} ${headline.narrative}`.toLowerCase();
     expect(serialized).not.toContain("odd");
 
-    // O ai_call(ok) foi gravado (a síntese não foi rejeitada pelo firewall).
     const aiCallRow = insertValues.mock.calls[0][0] as Record<string, unknown>;
     expect(aiCallRow.status).toBe("ok");
+  });
+
+  it("persiste EXATAMENTE a notícia limpa que o modelo viu (#670)", async () => {
+    getNewsByMatch.mockResolvedValue({
+      results: [
+        {
+          title: "  Escalação do Flamengo:\n três   desfalques ",
+          url: " https://ge.globo.com/a b ",
+          snippet: "Pulgar está suspenso.",
+          source: "ge",
+        },
+        { title: "Sem https", url: "http://ge.globo.com/http", source: "ge" },
+        { title: "Esquema estranho", url: "javascript:alert(1)", source: "ge" },
+        { title: "Casa de apostas patrocina o clube", url: "https://ge.globo.com/bet", source: "ge" },
+      ],
+      aiCall: null,
+      status: "found",
+      via: "ge",
+    });
+    runAnalysis.mockResolvedValue(okResult(validHeadline));
+    await generatePalpites(baseCall);
+
+    const req = runAnalysis.mock.calls[0][0] as AnalysisRequest;
+    const setRow = insertValues.mock.calls[1][0] as Record<string, unknown>;
+    const headline = setRow.headline as {
+      sources?: Array<{ title: string; url: string }>;
+    };
+    expect(headline.sources).toEqual([
+      {
+        title: "Escalação do Flamengo: três desfalques",
+        url: "https://ge.globo.com/a%20b",
+      },
+    ]);
+    // Cada fonte persistida aparece no prompt exatamente assim; as barradas, não.
+    for (const src of headline.sources ?? []) {
+      expect(req.userMessage).toContain(`${src.title} (${src.url})`);
+    }
+    expect(req.userMessage).not.toContain("http://ge.globo.com/http");
+    expect(req.userMessage).not.toContain("Casa de apostas");
   });
 });
 

@@ -137,6 +137,58 @@ describe("getNewsCombined — fallback pra web search", () => {
     expect(getNewsByMatchViaWebSearch).not.toHaveBeenCalled();
   });
 
+  it("adversário fora da tabela e feed sem nada casado → web search (não 'nada no ge')", async () => {
+    getNewsViaTeamFeeds.mockResolvedValue({
+      kind: "ok",
+      results: [],
+      partial: false,
+      unknownOpponent: true,
+    });
+    const ctx = {
+      ...CTX,
+      league: "copa_libertadores",
+      homeTeam: "Flamengo",
+      awayTeam: "Estudiantes de La Plata",
+    };
+    const deadlineAt = Date.now() + NEWS_MIN_BUDGET_MS + 5_000;
+    const out = await getNewsCombined(ctx, AUDIT, { deadlineAt });
+    expect(out).toBe(WEB_OUTCOME);
+    expect(getNewsByMatchViaWebSearch).toHaveBeenCalledWith(ctx, AUDIT, {
+      deadlineAt,
+    });
+  });
+
+  it("adversário fora da tabela, feed sem nada e sem prazo → skipped (nunca via ge)", async () => {
+    getNewsViaTeamFeeds.mockResolvedValue({
+      kind: "ok",
+      results: [],
+      partial: false,
+      unknownOpponent: true,
+    });
+    const out = await getNewsCombined(CTX, AUDIT, {
+      deadlineAt: Date.now() + 2_000,
+    });
+    expect(out).toEqual({
+      results: [],
+      aiCall: null,
+      status: "skipped",
+      via: null,
+    });
+    expect(getNewsByMatchViaWebSearch).not.toHaveBeenCalled();
+  });
+
+  it("adversário fora da tabela mas o feed casou notícia → found pelo ge", async () => {
+    getNewsViaTeamFeeds.mockResolvedValue({
+      kind: "ok",
+      results: [GE_ITEM],
+      partial: false,
+      unknownOpponent: true,
+    });
+    const out = await getNewsCombined(CTX, AUDIT);
+    expect(out).toMatchObject({ status: "found", via: "ge" });
+    expect(getNewsByMatchViaWebSearch).not.toHaveBeenCalled();
+  });
+
   it("jogo de fora (nenhum time com feed) → web search", async () => {
     getNewsViaTeamFeeds.mockResolvedValue({ kind: "no_sources" });
     const ctx = {

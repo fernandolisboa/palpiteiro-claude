@@ -6,6 +6,7 @@ import { normalizeTeamName } from "@/lib/providers/sports-data/team-names";
 
 import {
   TEAM_NEWS_SOURCES,
+  matchupSlugPattern,
   mentionTermsFor,
   newsShortName,
   resolveTeamSources,
@@ -221,9 +222,126 @@ describe("textMentionsTeam — nomes ambíguos exigem forma de clube", () => {
 });
 
 describe("mentionTermsFor — time fora da tabela", () => {
-  it("cai no nome inteiro como palavra", () => {
+  it("nome inteiro como palavra; token que é palavra comum só em forma de clube", () => {
     const terms = mentionTermsFor("Real Madrid CF");
     expect(terms.some((re) => re.test("real madrid vence"))).toBe(true);
-    expect(terms.some((re) => re.test("real vence"))).toBe(false);
+    expect(terms.some((re) => re.test("madrid vence"))).toBe(true);
+    // "real" é palavra comum (moeda, adjetivo).
+    expect(terms.some((re) => re.test("o preco real do ingresso"))).toBe(false);
+    expect(terms.some((re) => re.test("flamengo tem gasto real menor"))).toBe(
+      false
+    );
+    expect(terms.some((re) => re.test("flamengo x real"))).toBe(true);
+  });
+
+  it("estrangeiro da Libertadores casa pelo token distintivo, como a manchete escreve", () => {
+    expect(
+      textMentionsTeam(
+        "Flamengo x Estudiantes: onde assistir",
+        "Estudiantes de La Plata"
+      )
+    ).toBe(true);
+    expect(
+      textMentionsTeam(
+        "Palmeiras visita a LDU na altitude de Quito",
+        "LDU de Quito"
+      )
+    ).toBe(true);
+    expect(
+      textMentionsTeam(
+        "Escalação do Flamengo para encarar a LDU",
+        "LDU de Quito"
+      )
+    ).toBe(true);
+    expect(
+      textMentionsTeam("Palmeiras x River: escalações", "River Plate")
+    ).toBe(true);
+    expect(
+      textMentionsTeam("Flamengo impõe virada ao Boca Juniors", "Boca Juniors")
+    ).toBe(true);
+    // Sigla com ponto: o termo não termina em \b (nunca casaria depois do ponto).
+    expect(
+      textMentionsTeam(
+        "Flamengo pega o Estudiantes L.P. hoje",
+        "Estudiantes L.P."
+      )
+    ).toBe(true);
+    // Artigo/preposição/sigla de clube não casam sozinhos.
+    expect(
+      textMentionsTeam("A escalação de la para cá", "Estudiantes de La Plata")
+    ).toBe(false);
+    expect(
+      textMentionsTeam("Flamengo treina no CT", "Club Atlético River Plate")
+    ).toBe(false);
+  });
+});
+
+describe("textMentionsTeam — forma de jogo (verbo) pra nome ambíguo", () => {
+  it("verbo de jogo antes do nome", () => {
+    expect(
+      textMentionsTeam("Flamengo vence Remo no Mangueirão", "Clube do Remo")
+    ).toBe(true);
+    expect(
+      textMentionsTeam(
+        "Corinthians recebe São Paulo em Itaquera",
+        "São Paulo FC"
+      )
+    ).toBe(true);
+    expect(
+      textMentionsTeam("Flamengo goleia Vitória no Maracanã", "EC Vitória")
+    ).toBe(true);
+    expect(textMentionsTeam("Flamengo perde para Bahia fora", "EC Bahia")).toBe(
+      true
+    );
+    expect(textMentionsTeam("Fortaleza empata com Ceará", "Ceará SC")).toBe(
+      true
+    );
+  });
+
+  it("nome como sujeito só no começo da manchete ou da oração", () => {
+    expect(
+      textMentionsTeam("Santos empata com Palmeiras na Vila", "Santos FC")
+    ).toBe(true);
+    expect(
+      textMentionsTeam(
+        "Classificação do segundo turno: Santos empata com Palmeiras",
+        "Santos FC"
+      )
+    ).toBe(true);
+    expect(
+      textMentionsTeam(
+        "Douglas Santos vence prêmio de melhor lateral",
+        "Santos FC"
+      )
+    ).toBe(false);
+    // "vitória" seguida de verbo de jogo no meio da frase segue sendo palavra comum.
+    expect(
+      textMentionsTeam(
+        "Flamengo celebra vitória e encara maratona",
+        "EC Vitória"
+      )
+    ).toBe(false);
+  });
+});
+
+describe("matchupSlugPattern — confronto no link do ge", () => {
+  it("casa os dois sentidos com borda de segmento", () => {
+    const re = matchupSlugPattern("SE Palmeiras", "CR Flamengo");
+    expect(
+      re?.test(
+        "/futebol/noticia/2026/11/21/palmeiras-x-flamengo-onde-assistir.ghtml"
+      )
+    ).toBe(true);
+    expect(re?.test("/futebol/noticia/flamengo-x-palmeiras.ghtml")).toBe(true);
+    expect(re?.test("/futebol/noticia/palmeiras-x-flamengoxyz.ghtml")).toBe(
+      false
+    );
+    const sp = matchupSlugPattern("SC Corinthians Paulista", "São Paulo FC");
+    expect(
+      sp?.test("/futebol/noticia/corinthians-x-sao-paulo-ao-vivo.ghtml")
+    ).toBe(true);
+    // Fora da tabela: nome normalizado como slug.
+    const est = matchupSlugPattern("Flamengo", "Estudiantes de La Plata");
+    expect(est?.source).toContain("estudiantes");
   });
 });

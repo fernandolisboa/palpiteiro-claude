@@ -176,6 +176,88 @@ describe("filterFeedItems — feed real do ge", () => {
     expect(out[0].title).toBe("Flamengo encara o Palmeiras, parte 0");
   });
 
+  it("ranking: desfalque/amarelo sobem; técnico sozinho e 'fora de casa' não", () => {
+    const xml = feed([
+      item({
+        title:
+          'Jardim cutuca Abel Ferreira antes de Palmeiras x Flamengo: "Os adversários se vitimizam"',
+        subtitle:
+          'Treinador rubro-negro minimizou declaração do compatriota, que disse que o "título brasileiro está entregue"',
+        link: "https://ge.globo.com/futebol/times/flamengo/noticia/2026/11/21/jardim-cutuca-abel-ferreira-antes-de-palmeiras-x-flamengo-os-adversarios-se-vitimizam.ghtml",
+        date: "Sat, 21 Nov 2026 18:43:20 -0000",
+      }),
+      item({
+        title: "Flamengo vence fora de casa e mira o Palmeiras",
+        link: "https://ge.globo.com/futebol/times/flamengo/noticia/fora.ghtml",
+        date: "Sat, 21 Nov 2026 17:00:00 -0000",
+      }),
+      item({
+        title: "Técnico do Flamengo elogia o Palmeiras",
+        link: "https://ge.globo.com/futebol/times/flamengo/noticia/tecnico.ghtml",
+        date: "Sat, 21 Nov 2026 16:00:00 -0000",
+      }),
+      item({
+        title: "Torcida do Flamengo lota aeroporto antes do Palmeiras",
+        link: "https://ge.globo.com/futebol/times/flamengo/noticia/torcida.ghtml",
+        date: "Sat, 21 Nov 2026 15:00:00 -0000",
+      }),
+      item({
+        title: "Flamengo e Palmeiras fazem final",
+        link: "https://ge.globo.com/futebol/times/flamengo/noticia/final.ghtml",
+        date: "Sat, 21 Nov 2026 14:00:00 -0000",
+      }),
+      item({
+        title:
+          "Pulgar e Léo Pereira recebem o terceiro amarelo e desfalcam o Flamengo contra o Palmeiras",
+        link: "https://ge.globo.com/futebol/times/flamengo/noticia/2026/11/19/pulgar-e-leo-pereira-desfalcam.ghtml",
+        date: "Thu, 19 Nov 2026 03:00:00 -0000",
+      }),
+    ]);
+    const out = filterFeedItems(parseRssItems(xml), {
+      anchorMs: Math.min(NOW, Date.parse(KICKOFF)),
+      opponent: "SE Palmeiras",
+      team: "CR Flamengo",
+    });
+    expect(out.map((r) => r.title)).toEqual([
+      // a mais velha, mas é desfalque: sobe e fica dentro do corte de 5
+      "Pulgar e Léo Pereira recebem o terceiro amarelo e desfalcam o Flamengo contra o Palmeiras",
+      'Jardim cutuca Abel Ferreira antes de Palmeiras x Flamengo: "Os adversários se vitimizam"',
+      "Flamengo vence fora de casa e mira o Palmeiras",
+      "Técnico do Flamengo elogia o Palmeiras",
+      "Torcida do Flamengo lota aeroporto antes do Palmeiras",
+    ]);
+  });
+
+  it("confronto no link conta como menção (nome ambíguo fora de forma de clube)", () => {
+    const at = new Date(NOW - 3_600_000).toUTCString();
+    const xml = feed([
+      item({
+        title: "Dorival define o time para o clássico",
+        link: "https://ge.globo.com/futebol/times/corinthians/noticia/2026/11/21/corinthians-x-sao-paulo-escalacao.ghtml",
+        date: at,
+      }),
+      item({
+        title: "Dorival define o time para o treino",
+        link: "https://ge.globo.com/futebol/times/corinthians/noticia/2026/11/21/treino.ghtml",
+        date: at,
+      }),
+      item({
+        title: "Corinthians recebe São Paulo em Itaquera",
+        link: "https://ge.globo.com/futebol/times/corinthians/noticia/2026/11/21/recebe.ghtml",
+        date: at,
+      }),
+    ]);
+    const out = filterFeedItems(parseRssItems(xml), {
+      anchorMs: NOW,
+      opponent: "São Paulo FC",
+      team: "SC Corinthians Paulista",
+    });
+    expect(out.map((r) => r.title).sort()).toEqual([
+      "Corinthians recebe São Paulo em Itaquera",
+      "Dorival define o time para o clássico",
+    ]);
+  });
+
   it("allowlist de caminho: /<uf>/futebol/ entra; blog, cartola e http não", () => {
     const xml = feed(
       [
@@ -311,7 +393,89 @@ describe("getNewsViaTeamFeeds", () => {
       kickoffAt: KICKOFF,
     });
     expect(fetchMock).toHaveBeenCalledTimes(1);
-    expect(out).toEqual({ kind: "ok", results: [], partial: false });
+    // Adversário fora da tabela: o vazio não prova "nada novo" (combined decide).
+    expect(out).toEqual({
+      kind: "ok",
+      results: [],
+      partial: false,
+      unknownOpponent: true,
+    });
+  });
+
+  it("estrangeiro casa por token: 'Flamengo x Estudiantes', 'a LDU', 'x River'", async () => {
+    const at = new Date(NOW - 3_600_000).toUTCString();
+    serve({
+      [FLAMENGO_URL]: () =>
+        xmlResponse(
+          feed([
+            item({
+              title: "Flamengo x Estudiantes: onde assistir ao vivo",
+              link: "https://ge.globo.com/futebol/libertadores/noticia/a.ghtml",
+              date: at,
+            }),
+            item({
+              title: "Flamengo encara a LDU na altitude",
+              link: "https://ge.globo.com/futebol/libertadores/noticia/b.ghtml",
+              date: at,
+            }),
+            item({
+              title: "Flamengo x River: escalações",
+              link: "https://ge.globo.com/futebol/libertadores/noticia/c.ghtml",
+              date: at,
+            }),
+          ])
+        ),
+    });
+    const titles = async (awayTeam: string) => {
+      __clearFeedCacheForTesting();
+      const out = await getNewsViaTeamFeeds({
+        league: "copa_libertadores",
+        homeTeam: "Flamengo",
+        awayTeam,
+        kickoffAt: KICKOFF,
+      });
+      return out.kind === "ok" ? out.results.map((r) => r.title) : [];
+    };
+    expect(await titles("Estudiantes de La Plata")).toEqual([
+      "Flamengo x Estudiantes: onde assistir ao vivo",
+    ]);
+    expect(await titles("LDU de Quito")).toEqual([
+      "Flamengo encara a LDU na altitude",
+    ]);
+    expect(await titles("River Plate")).toEqual([
+      "Flamengo x River: escalações",
+    ]);
+  });
+
+  it("tira a duplicata entre feeds ANTES do corte por time", async () => {
+    const shared = Array.from({ length: 5 }, (_, i) =>
+      item({
+        title: `Palmeiras x Flamengo: bastidores ${i}`,
+        link: `https://ge.globo.com/futebol/brasileirao-serie-a/noticia/shared-${i}.ghtml`,
+        date: new Date(NOW - (i + 1) * 3_600_000).toUTCString(),
+      })
+    );
+    const own = (team: string) =>
+      item({
+        title: `Matéria só do ${team} sobre o jogo contra o ${team === "Flamengo" ? "Palmeiras" : "Flamengo"}`,
+        link: `https://ge.globo.com/futebol/times/${team.toLowerCase()}/noticia/own.ghtml`,
+        date: new Date(NOW - 10 * 3_600_000).toUTCString(),
+      });
+    serve({
+      [PALMEIRAS_URL]: () => xmlResponse(feed([...shared, own("Palmeiras")])),
+      [FLAMENGO_URL]: () => xmlResponse(feed([...shared, own("Flamengo")])),
+    });
+    const out = await getNewsViaTeamFeeds(CTX);
+    expect(out.kind).toBe("ok");
+    if (out.kind !== "ok") return;
+    const urls = out.results.map((r) => r.url);
+    expect(new Set(urls).size).toBe(urls.length);
+    // As 5 compartilhadas vieram pelo feed do Palmeiras; não comem a vaga da matéria
+    // própria do Flamengo.
+    expect(urls).toContain(
+      "https://ge.globo.com/futebol/times/flamengo/noticia/own.ghtml"
+    );
+    expect(out.results).toHaveLength(6);
   });
 });
 

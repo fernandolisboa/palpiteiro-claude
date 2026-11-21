@@ -1,7 +1,7 @@
 import { z } from "zod";
 
 import { truncate } from "@/lib/ai/ai-call-logging";
-import { containsValueLanguage } from "../value-language-guard";
+import { containsNewsValueLanguage } from "../value-language-guard";
 import { toToolDef } from "@/lib/ai/markets/types";
 import { competitionLabel } from "@/lib/format";
 import {
@@ -79,7 +79,8 @@ import type { PalpiteCartridge } from "../types";
 // v13 (#670) = notícias com fonte, data (fuso de Brasília) e TRECHO curto da matéria
 // dentro dos delimitadores (o trecho também é conteúdo externo não-confiável); título e
 // trecho com espaços achatados e `<<<`/`>>>` neutralizados; trecho com linguagem de valor
-// cai (título com linguagem de valor tira o item); URL só https. A seção diz o desfecho
+// sai frase a frase (título com linguagem de valor tira o item; "retorno"/R$ da matéria
+// passam, e o modelo é instruído a escrever "volta"); URL só https. A seção diz o desfecho
 // da busca: "nenhuma notícia recente" só quando a fonte respondeu vazia; falha/sem
 // busca/sem tempo viram "indisponíveis: não conclua nada pela ausência". System prompt
 // igual.
@@ -408,22 +409,42 @@ function neutralizeExternal(s: string): string {
   return s.replace(/\s+/g, " ").replace(/<{2,}/g, "<").replace(/>{2,}/g, ">").trim();
 }
 
+// #670 — URL externa só https, revalidada pelo parser de URL e emitida normalizada
+// (`href` codifica `<`, `>` e espaço: um link não fecha os delimitadores da seção).
+function safeHttpsUrl(raw: string): string | null {
+  try {
+    const u = new URL(raw.trim());
+    return u.protocol === "https:" && u.hostname !== "" ? u.href : null;
+  } catch {
+    return null;
+  }
+}
+
+// #670 — tira do trecho só as frases com linguagem de valor (o resto da matéria segue).
+function cleanSnippet(snippet: string): string | null {
+  const kept = snippet
+    .split(/(?<=[.!?…])\s+/)
+    .filter((sentence) => !containsNewsValueLanguage(sentence))
+    .join(" ")
+    .trim();
+  return kept === "" ? null : truncate(kept, NEWS_SNIPPET_MAX);
+}
+
 // #670 — prepara as notícias pro prompt: título/trecho achatados e neutralizados, URL
-// só https, trecho com linguagem de valor descartado (fica o título) e item cujo título
-// tem linguagem de valor fora. O firewall de SAÍDA continua a rede final; isto só evita
-// entregar "odd"/"valor esperado" de bandeja pro modelo ecoar.
+// só https (normalizada), frase do trecho com linguagem de valor fora (o resto do trecho
+// fica) e item cujo título tem linguagem de valor fora. A régua da notícia
+// (containsNewsValueLanguage) deixa passar "retorno" e "R$"; o firewall de SAÍDA continua
+// a rede final. O que sai daqui é exatamente o que o modelo vê E o que persiste em
+// headline.sources ({title,url}).
 function sanitizeNews(news: readonly NewsResult[]): PalpitesInput["news"] {
   const out: PalpitesInput["news"] = [];
   for (const n of news) {
     const title = neutralizeExternal(n.title);
-    const url = n.url.trim();
-    if (title === "" || !/^https:\/\/\S+$/i.test(url)) continue;
-    if (containsValueLanguage(title)) continue;
+    const url = safeHttpsUrl(n.url);
+    if (title === "" || url === null) continue;
+    if (containsNewsValueLanguage(title)) continue;
     const snippetRaw = n.snippet ? neutralizeExternal(n.snippet) : "";
-    const snippet =
-      snippetRaw !== "" && !containsValueLanguage(snippetRaw)
-        ? truncate(snippetRaw, NEWS_SNIPPET_MAX)
-        : undefined;
+    const snippet = snippetRaw === "" ? null : cleanSnippet(snippetRaw);
     out.push({
       title,
       url,
@@ -786,7 +807,7 @@ export function buildUserMessage(
     }
     lines.push("<<<FIM_NOTICIAS>>>");
     lines.push(
-      "Use as notícias como contexto factual; cite o fato, NUNCA a linguagem de valor da fonte; NUNCA invente.",
+      "Use as notícias como contexto factual; cite o fato, NUNCA a linguagem de valor da fonte (jogador que volta é \"volta\", nunca \"retorno\"; nada de R$); NUNCA invente.",
     );
   }
 

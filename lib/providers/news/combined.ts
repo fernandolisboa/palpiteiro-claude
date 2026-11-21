@@ -14,8 +14,11 @@ import type {
 //      ge, SEM web search: o ge já está no allowed_domains e a busca acharia o mesmo,
 //      pagando a busca e 10–15s. Um feed ok e o outro quebrado = meia falha (partial),
 //      ainda sem web search.
-//   2. Todo feed falhou → web search, se o prazo ainda couber; senão failed.
-//   3. Nenhum time com feed (ligas de fora) → web search.
+//   2. Feed lido, nada casou e o adversário está fora da tabela (estrangeiro da
+//      Libertadores, casado só por token) → o vazio não prova "nada novo no ge": web
+//      search se o prazo couber; senão skipped (nunca "nada no ge").
+//   3. Todo feed falhou → web search, se o prazo ainda couber; senão failed.
+//   4. Nenhum time com feed (ligas de fora) → web search.
 export async function getNewsCombined(
   ctx: NewsMatchContext,
   audit: NewsAuditContext,
@@ -25,6 +28,20 @@ export async function getNewsCombined(
     deadlineAt: options.deadlineAt,
     matchId: audit.matchId,
   });
+
+  const fits =
+    options.deadlineAt === undefined ||
+    remainingMs(options.deadlineAt) >= NEWS_MIN_BUDGET_MS;
+
+  if (
+    feeds.kind === "ok" &&
+    feeds.results.length === 0 &&
+    feeds.unknownOpponent
+  ) {
+    if (!fits)
+      return { results: [], aiCall: null, status: "skipped", via: null };
+    return getNewsByMatchViaWebSearch(ctx, audit, options);
+  }
 
   if (feeds.kind === "ok") {
     return {
@@ -36,12 +53,8 @@ export async function getNewsCombined(
     };
   }
 
-  if (feeds.kind === "all_failed") {
-    const fits =
-      options.deadlineAt === undefined ||
-      remainingMs(options.deadlineAt) >= NEWS_MIN_BUDGET_MS;
-    if (!fits)
-      return { results: [], aiCall: null, status: "failed", via: null };
+  if (feeds.kind === "all_failed" && !fits) {
+    return { results: [], aiCall: null, status: "failed", via: null };
   }
 
   return getNewsByMatchViaWebSearch(ctx, audit, options);
