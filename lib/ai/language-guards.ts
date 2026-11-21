@@ -1,8 +1,8 @@
 // Guardas de LINGUAGEM compartilhadas pelas portas de IA fora do predict (ADR 0063 e
 // 0072): mandar apostar, prometer resultado, citar casa de apostas ou link, falar de
 // aposta. Só regex e funções puras; quem usa decide o que fazer com o acerto. Movidas
-// de lib/ai/bet-slip-explain/fidelity.ts e lib/ai/user-palpite/fidelity.ts sem mudar
-// um caractere (os dois módulos reexportam/importam daqui).
+// de lib/ai/bet-slip-explain/fidelity.ts e lib/ai/user-palpite/fidelity.ts (os dois
+// módulos reexportam/importam daqui); BOOKMAKER_NAME_RE foi ampliado depois.
 
 // Mandar apostar ou mexer na aposta. Lookarounds de letra: o \b do JS não enxerga
 // letra acentuada.
@@ -32,8 +32,12 @@ export function promisesGuarantee(text: string): boolean {
   return false;
 }
 
+// Casas de apostas: as licenciadas mais citadas no Brasil e a forma genérica de marca
+// "<algo>bet" (Pixbet, 1xbet, Estrelabet). "bet" sozinho não entra aqui (cada porta
+// decide; o painel do azarão barra pelo regex do voice-firewall). Lookarounds de letra
+// e dígito: o \b do JS não enxerga letra acentuada.
 export const BOOKMAKER_NAME_RE =
-  /\b(betano|bet365|pinnacle|betfair|sportingbet|superbet|novibet|kto)\b/i;
+  /(?<![\p{L}\d])(?:betano|bet365|bet\s?nacional|betfair|betsson|betway|betmgm|betboo|betwarrior|pinnacle|sportingbet|superbet|novibet|kto|pixbet|esportes\s+da\s+sorte|estrela\s*bet|galera\s*\.?\s*bet|rei\s+do\s+pitaco|parimatch|bwin|[\p{L}\d]+bet)(?![\p{L}\d])/iu;
 export const HOUSE_RE =
   /casas?\s+de\s+apostas?|(?:odds?|margem)\s+da\s+(?:sua\s+)?casa/iu;
 export const URL_RE = /https?:\/\/|www\.|\.com\b|\.bet\b/iu;

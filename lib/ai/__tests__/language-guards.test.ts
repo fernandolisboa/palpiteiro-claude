@@ -11,7 +11,8 @@ import {
   URL_RE,
 } from "@/lib/ai/language-guards";
 
-// Guardas de linguagem compartilhadas (ADR 0072): movidas sem mudar comportamento.
+// Guardas de linguagem compartilhadas (ADR 0072). BOOKMAKER_NAME_RE ganhou a forma
+// genérica "<marca>bet" e as casas licenciadas mais citadas (review do #677).
 describe("language-guards", () => {
   it("o reexport do bet-slip-explain é o mesmo regex", () => {
     expect(reexported).toBe(BOOKMAKER_NAME_RE);
@@ -24,6 +25,20 @@ describe("language-guards", () => {
     [HOUSE_RE, "a casa de apostas paga", true],
     [URL_RE, "veja em www.site.com", true],
     [BOOKMAKER_NAME_RE, "na Betano", true],
+    [BOOKMAKER_NAME_RE, "a Pixbet paga", true],
+    [BOOKMAKER_NAME_RE, "odds da 1xbet", true],
+    [BOOKMAKER_NAME_RE, "na Estrela Bet", true],
+    [BOOKMAKER_NAME_RE, "na Estrelabet", true],
+    [BOOKMAKER_NAME_RE, "Esportes da Sorte", true],
+    [BOOKMAKER_NAME_RE, "Betnacional", true],
+    [BOOKMAKER_NAME_RE, "na KTO", true],
+    [BOOKMAKER_NAME_RE, "Bet365", true],
+    [BOOKMAKER_NAME_RE, "Superbet e Novibet", true],
+    [BOOKMAKER_NAME_RE, "o goleiro de Betim", false],
+    [BOOKMAKER_NAME_RE, "a beterraba do almoço", false],
+    [BOOKMAKER_NAME_RE, "o alfabeto da tática", false],
+    [BOOKMAKER_NAME_RE, "Elizabeth no estádio", false],
+    [BOOKMAKER_NAME_RE, "uma bet só", false],
     [BET_LANGUAGE_RE, "uma aposta boa", true],
     [BET_LANGUAGE_RE, "o Flamengo vence", false],
   ] as const)("%s em %j → %s", (re, text, hit) => {
