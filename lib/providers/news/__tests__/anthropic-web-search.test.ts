@@ -113,10 +113,10 @@ describe("getNewsByMatchViaWebSearch — caminho feliz", () => {
     ]);
     expect(out.aiCall).toEqual({ id: "news-call-1" });
 
-    // Loga UM ai_call(ok) com promptVersion news_v1.
+    // Loga UM ai_call(ok) com promptVersion news_v2.
     const row = insertValues.mock.calls[0][0] as Record<string, unknown>;
     expect(row.status).toBe("ok");
-    expect(row.promptVersion).toBe("news_v1");
+    expect(row.promptVersion).toBe("news_v2");
     expect(row.provider).toBe("anthropic");
     // Nenhum erro auditado no caminho feliz.
     expect(persistAiCallError).not.toHaveBeenCalled();
@@ -128,11 +128,22 @@ describe("getNewsByMatchViaWebSearch — caminho feliz", () => {
     const req = runAnalysis.mock.calls[0][0] as AnalysisRequest;
     expect(req.serverTool).toBeDefined();
     expect(req.serverTool?.kind).toBe("web_search");
-    expect(req.serverTool?.maxUses).toBe(1);
+    expect(req.serverTool?.maxUses).toBe(2);
     expect(req.serverTool?.allowedDomains).toEqual([...ALLOWED_DOMAINS]);
-    // O userMessage carrega o contexto da partida.
-    expect(req.userMessage).toContain("CR Flamengo");
-    expect(req.userMessage).toContain("Fluminense FC");
+    // #670: sem user_location (o ServerToolDef não ganhou o campo).
+    expect(Object.keys(req.serverTool ?? {}).sort()).toEqual([
+      "allowedDomains",
+      "kind",
+      "maxUses",
+    ]);
+    // O userMessage carrega o contexto da partida, com nome curto, liga por extenso e
+    // a data no fuso de Brasília (16h do dia 15 = 19h UTC).
+    expect(req.userMessage).toContain("- Mandante: Flamengo");
+    expect(req.userMessage).toContain("- Visitante: Fluminense");
+    expect(req.userMessage).not.toContain("CR Flamengo");
+    expect(req.userMessage).toContain("- Competição: Brasileirão");
+    expect(req.userMessage).toMatch(/- Data: 15\/05\/2026,? 16:00 \(horário de Brasília\)/);
+    expect(req.userMessage).toContain('Sugestão de consulta: "Flamengo x Fluminense"');
     // Sem prazo explícito, a request não leva prazo.
     expect(req.deadlineAt).toBeUndefined();
   });
@@ -257,6 +268,22 @@ describe("getNewsByMatchViaWebSearch — 'nunca inventa fonte'", () => {
     expect(out.via).toBe("web_search");
   });
 
+  it("time fora da tabela e liga de fora: segue com o nome que veio", async () => {
+    runAnalysis.mockResolvedValue(okResult([]));
+    await getNewsByMatchViaWebSearch(
+      {
+        league: "premier_league",
+        homeTeam: "Arsenal FC",
+        awayTeam: "Chelsea FC",
+        kickoffAt: "2026-05-15T19:00:00.000Z",
+      },
+      AUDIT,
+    );
+    const req = runAnalysis.mock.calls[0][0] as AnalysisRequest;
+    expect(req.userMessage).toContain("- Competição: Premier League");
+    expect(req.userMessage).toContain('Sugestão de consulta: "Arsenal FC x Chelsea FC"');
+  });
+
   it("o system prompt é constante entre jogos (ADR 0071)", async () => {
     runAnalysis.mockResolvedValue(okResult([]));
     await getNewsByMatchViaWebSearch(CTX, AUDIT);
@@ -279,7 +306,7 @@ describe("getNewsByMatchViaWebSearch — degrade gracioso", () => {
     expect(runAnalysis).not.toHaveBeenCalled();
     const errArgs = persistAiCallError.mock.calls[0][0] as Record<string, unknown>;
     expect(errArgs.status).toBe("provider_error");
-    expect(errArgs.promptVersion).toBe("news_v1");
+    expect(errArgs.promptVersion).toBe("news_v2");
     // Nenhum ai_call(ok) inserido.
     expect(insertValues).not.toHaveBeenCalled();
   });

@@ -308,8 +308,10 @@ export async function generatePalpites({
     h2h,
     standings,
     analyses,
-    // ADR 0032 / #377 — notícias factuais reais como insumo da síntese.
+    // ADR 0032 / #377 — notícias factuais reais como insumo da síntese, com o desfecho
+    // da busca (#670: "nada novo" ≠ "não deu pra ler").
     news: newsOutcome.results,
+    newsStatus: newsOutcome.status,
   });
   const daysToKickoff = Math.max(
     0,

@@ -12,10 +12,13 @@ import {
 } from "@/lib/ai/models";
 import { getProviderForModel } from "@/lib/ai/providers";
 import type { AnalysisRequest } from "@/lib/ai/providers/types";
+import { LEAGUE_LABEL, leagueToKey } from "@/lib/format";
+import { SupportedLeagueSchema } from "@/lib/providers/sports-data/leagues";
 
 import { NewsUnavailableError } from "./types";
 
 import { ALLOWED_DOMAINS } from "./allowed-domains";
+import { newsShortName } from "./team-sources";
 import type {
   NewsAuditContext,
   NewsFetchOptions,
@@ -35,15 +38,18 @@ import type {
 // gerado), uma fonte não pode carregar afirmação de valor por construção.
 
 // Versão do "cartucho" de notícias (ADR 0017) — grava em ai_calls.promptVersion.
-const NEWS_PROMPT_VERSION = "news_v1";
+// v2 (#670) = consulta com o nome curto dos times, a liga por extenso, a data no fuso
+// de Brasília e a sugestão "<Mandante> x <Visitante>"; max_uses 2. System prompt igual.
+const NEWS_PROMPT_VERSION = "news_v2";
 
 // Default Haiku: econômico (web_search_20250305 básica). NÃO admin-gated. maxTokens
 // enxuto — a busca devolve poucos resultados; não geramos prosa longa (o thinking do
 // Haiku 5.5 conta dentro).
 const NEWS_MODEL_ID: AIModelId = UTILITY_MODEL_ID;
 const NEWS_MAX_TOKENS = 4096;
-// max_uses:1 — 1 busca por run (ADR 0032 §4: teto ≈ 20/dia pelo cap de 20 runs).
-const NEWS_MAX_SEARCH_USES = 1;
+// max_uses:2 (#670): uma 2ª consulta quando a 1ª volta vazia ou erra. Teto do ADR 0032
+// §4 dobra no pior caso, e só roda quando o RSS do ge não cobre o jogo (adendo #670).
+const NEWS_MAX_SEARCH_USES = 2;
 const MAX_RESULTS = 10;
 
 const SYSTEM_PROMPT = `Você é um assistente de PESQUISA de notícias de futebol. Sua única função é BUSCAR, com a ferramenta de web search, notícias FACTUAIS e recentes sobre a partida indicada (desfalques de última hora, troca de técnico, contexto de lesão/motivação, escalação provável).
@@ -54,15 +60,39 @@ REGRAS:
 - Não emita opinião de aposta, palpite, odd, edge ou valor — só os fatos noticiados.
 - Pode resumir brevemente, mas o que importa são as fontes reais encontradas.`;
 
+// Data do jogo no fuso de Brasília (o horário que a imprensa BR usa).
+const KICKOFF_FORMAT = new Intl.DateTimeFormat("pt-BR", {
+  timeZone: "America/Sao_Paulo",
+  day: "2-digit",
+  month: "2-digit",
+  year: "numeric",
+  hour: "2-digit",
+  minute: "2-digit",
+});
+
+function leagueLabel(league: string): string {
+  const parsed = SupportedLeagueSchema.safeParse(league);
+  return parsed.success ? LEAGUE_LABEL[leagueToKey(parsed.data)] : league;
+}
+
+function kickoffLabel(kickoffAt: string): string {
+  const ms = Date.parse(kickoffAt);
+  return Number.isFinite(ms) ? `${KICKOFF_FORMAT.format(new Date(ms))} (horário de Brasília)` : kickoffAt;
+}
+
+// Tudo que varia por jogo fica aqui, na mensagem do usuário (ADR 0071: o system prompt é
+// constante). Nome curto só na consulta (team-sources.ts, fronteira do #578).
 function buildUserMessage(ctx: NewsMatchContext): string {
+  const home = newsShortName(ctx.homeTeam);
+  const away = newsShortName(ctx.awayTeam);
   return [
     "Busque notícias recentes e factuais sobre esta partida de futebol:",
-    `- Competição: ${ctx.league}`,
-    `- Mandante: ${ctx.homeTeam}`,
-    `- Visitante: ${ctx.awayTeam}`,
-    `- Data (UTC): ${ctx.kickoffAt}`,
+    `- Competição: ${leagueLabel(ctx.league)}`,
+    `- Mandante: ${home}`,
+    `- Visitante: ${away}`,
+    `- Data: ${kickoffLabel(ctx.kickoffAt)}`,
     "",
-    "Foque em desfalques confirmados, troca de técnico, lesões, suspensões e contexto relevante das duas equipes. Use a web search; não invente.",
+    `Sugestão de consulta: "${home} x ${away}". Foque em desfalques confirmados, troca de técnico, lesões, suspensões e contexto relevante das duas equipes. Use a web search; não invente.`,
   ].join("\n");
 }
 

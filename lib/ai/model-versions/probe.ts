@@ -192,8 +192,9 @@ const probeToolCall: ProbeStep = async (model, deadlineAt) => {
 };
 
 // S6: o Haiku é o modelo de notícias e cartões, que buscam na web. Mesmo formato
-// desses caminhos (effort medium, allowed_domains, max_uses 1); passa só se veio um
-// bloco `web_search_tool_result`. Opus e Sonnet não buscam em produção.
+// desses caminhos (effort medium, allowed_domains); uma busca basta aqui (max_uses 1;
+// notícias usam 2 desde o #670). Passa só se veio um bloco `web_search_tool_result`.
+// Opus e Sonnet não buscam em produção.
 const probeWebSearch: ProbeStep = async (model, deadlineAt) => {
   const request: AnalysisRequest = {
     model,

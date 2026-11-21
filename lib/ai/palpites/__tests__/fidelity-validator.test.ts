@@ -350,3 +350,34 @@ describe("checkFidelity — robustez (NUNCA lança)", () => {
     expect(r.ok).toBe(true);
   });
 });
+
+describe("checkFidelity — total de gols vindo da notícia (#670)", () => {
+  it("total citado que está no trecho de uma notícia não é contradição", () => {
+    const r = checkFidelity(
+      output({ narrative: "O Flu tem 12 gols sofridos fora de casa no turno." }),
+      input({
+        news: [
+          {
+            title: "Fluminense tenta arrumar a defesa",
+            url: "https://ge.globo.com/futebol/a",
+            snippet: "O time já tem 12 gols sofridos como visitante no turno",
+            source: "ge",
+          },
+        ],
+      }),
+    );
+    expect(r.ok).toBe(true);
+  });
+
+  it("total citado que não está em lugar nenhum segue reprovando", () => {
+    const r = checkFidelity(
+      output({ narrative: "O Flu tem 12 gols sofridos fora de casa no turno." }),
+      input({
+        news: [
+          { title: "Fluminense tenta arrumar a defesa", url: "https://ge.globo.com/futebol/a" },
+        ],
+      }),
+    );
+    expect(r.ok).toBe(false);
+  });
+});

@@ -388,11 +388,11 @@ describe("generatePalpites (síntese) — caminho ok", () => {
     const aiCallRow = insertValues.mock.calls[0][0] as Record<string, unknown>;
     expect(aiCallRow.status).toBe("ok");
     expect(aiCallRow.model).toBe("claude-haiku-5-5");
-    expect(aiCallRow.promptVersion).toBe("palpites_v12");
+    expect(aiCallRow.promptVersion).toBe("palpites_v13");
 
     const setRow = insertValues.mock.calls[1][0] as Record<string, unknown>;
     expect(setRow.modelVersion).toBe("claude-haiku-5-5");
-    expect(setRow.promptVersion).toBe("palpites_v12");
+    expect(setRow.promptVersion).toBe("palpites_v13");
     expect(setRow.aiCallId).toBe("row-1");
     // headline jsonb: a manchete SEM placar (vira a linha) e SEM número de valor.
     expect(setRow.headline).toEqual({
@@ -860,16 +860,37 @@ describe("generatePalpites (síntese) — notícias honestas (#670)", () => {
     },
   ];
 
-  it("só {title,url} persiste (sem trecho, data nem fonte)", async () => {
+  it("trecho e data vão pro prompt, mas só {title,url} persiste", async () => {
     getNewsByMatch.mockResolvedValue({ results: geNews, aiCall: null, status: "found", via: "ge" });
     runAnalysis.mockResolvedValue(okResult(validHeadline));
     await generatePalpites(baseCall);
+
+    const req = runAnalysis.mock.calls[0][0] as AnalysisRequest;
+    expect(req.userMessage).toContain("[ge, 14/05 17:02] Escalação do Flamengo");
+    expect(req.userMessage).toContain("  Trecho: Léo Pereira e Pulgar cumprem suspensão");
 
     const setRow = insertValues.mock.calls[1][0] as Record<string, unknown>;
     const headline = setRow.headline as { sources?: unknown };
     expect(headline.sources).toEqual([
       { title: geNews[0].title, url: geNews[0].url },
     ]);
+  });
+
+  it("'none' diz 'nenhuma notícia recente'; 'failed' diz 'indisponíveis'", async () => {
+    runAnalysis.mockResolvedValue(okResult(validHeadline));
+    getNewsByMatch.mockResolvedValue({ results: [], aiCall: null, status: "none", via: "ge" });
+    await generatePalpites(baseCall);
+    const noneMsg = (runAnalysis.mock.calls[0][0] as AnalysisRequest).userMessage;
+    expect(noneMsg).toContain("(nenhuma notícia recente sobre o jogo)");
+
+    runAnalysis.mockClear();
+    getNewsByMatch.mockResolvedValue({ results: [], aiCall: null, status: "failed", via: null });
+    await generatePalpites(baseCall);
+    const failedMsg = (runAnalysis.mock.calls[0][0] as AnalysisRequest).userMessage;
+    expect(failedMsg).toContain(
+      "(notícias indisponíveis nesta análise: não conclua nada pela ausência)",
+    );
+    expect(failedMsg).not.toContain("nenhuma notícia recente");
   });
 
   it("sem tempo pra busca → status skipped", async () => {
