@@ -20,16 +20,36 @@ export type UnderdogBase = {
   pick: UnderdogPick;
 };
 
+// O estado da base atual pro painel: "unavailable" = a base não vale agora (versão,
+// idade > 24h, refit atrasado, apito) e nada se sabe do azarão; "no_underdog" = a base
+// vale e a diferença entre as vitórias ficou abaixo da porta.
+export type UnderdogBaseRead =
+  | { status: "ok"; base: UnderdogBase }
+  | { status: "no_underdog" }
+  | { status: "unavailable" };
+
+/** Lê a base atual e diz quem é o azarão. Nunca lança. */
+export function readUnderdogBase(
+  snapshot: MatchModelSnapshot,
+  kickoffAt: Date,
+  now: Date
+): UnderdogBaseRead {
+  const model = modelScorelineFromSnapshot(snapshot, kickoffAt, now);
+  if (!model) return { status: "unavailable" };
+  const pick = findUnderdog(p1X2(model.matrix));
+  return pick
+    ? { status: "ok", base: { snapshot, model, pick } }
+    : { status: "no_underdog" };
+}
+
 /** null: base que não vale (versão, idade, apito) ou sem azarão claro. Nunca lança. */
 export function underdogBaseFromSnapshot(
   snapshot: MatchModelSnapshot,
   kickoffAt: Date,
   now: Date
 ): UnderdogBase | null {
-  const model = modelScorelineFromSnapshot(snapshot, kickoffAt, now);
-  if (!model) return null;
-  const pick = findUnderdog(p1X2(model.matrix));
-  return pick ? { snapshot, model, pick } : null;
+  const read = readUnderdogBase(snapshot, kickoffAt, now);
+  return read.status === "ok" ? read.base : null;
 }
 
 export function snapshotAnswers(

@@ -1,9 +1,10 @@
 import { formatPct } from "@/lib/format-number";
 import type { UnderdogViewRecord } from "@/lib/db/queries/underdog-views";
 import { underdogNames } from "@/lib/underdog/facts";
+import type { UnderdogBaseRead } from "@/lib/underdog/compute";
 import {
   isMaterialSame,
-  underdogTeaserVisible,
+  underdogTeaserBlock,
   type UnderdogPick,
 } from "@/lib/underdog/gate";
 import {
@@ -22,10 +23,18 @@ import type {
 // percentuais formatados e o estado da base. Serializável (cruza Server → Client). Sem
 // odd, odd justa, stake nem cor de edge; o `%` mora aqui, FORA do HERO (ADR 0030).
 
-// current: o texto vale pra base atual. refresh: a base mudou de forma material e o
-// azarão ainda vale ("Atualizar"). changed: a base atual não passa mais na porta (o
-// texto pago fica, sem botão).
-export type UnderdogFreshness = "current" | "refresh" | "changed";
+// current: o texto vale pra base atual, ou a base atual não pode ser lida agora (mais de
+// 24h, refit atrasado: nada mudou que se saiba, sem aviso). refresh: a base mudou de
+// forma material e o azarão ainda vale ("Atualizar"). recalculated: mudou de forma
+// material, mas o botão está suspenso por um motivo passageiro (run em andamento, sem
+// palpite na tela): o aviso sem o botão. changed: mudança material e a base atual não
+// passa mais na porta (sem azarão claro, ou o palpite agora dá a vitória ao azarão): o
+// texto pago fica, sem botão.
+export type UnderdogFreshness =
+  | "current"
+  | "refresh"
+  | "recalculated"
+  | "changed";
 
 export type UnderdogPanelView = {
   underdogName: string;
@@ -56,6 +65,8 @@ export type UnderdogSlotView = {
 // O que a página lê do banco (lib/underdog/load.ts). null = flag desligada.
 export type UnderdogTeaserData = {
   current: UnderdogPick | null;
+  // Por que `current` é null (ou "ok").
+  baseStatus: UnderdogBaseRead["status"];
   stored: UnderdogViewRecord | null;
 };
 
@@ -138,28 +149,46 @@ export function toUnderdogSlot(args: {
 }): UnderdogSlotView | null {
   const { data, preMatch, teams } = args;
   if (data === null || !preMatch) return null;
-  const visible = underdogTeaserVisible({
+  const { stored, current, baseStatus } = data;
+  const block = underdogTeaserBlock({
     flag: true,
     preMatch,
     heroPalpite: args.heroPalpite,
     runInFlight: args.runInFlight,
-    pick: data.current,
+    pick: current,
   });
-  const { stored, current } = data;
   if (stored) {
-    const freshness: UnderdogFreshness = isMaterialSame(stored.facts, current)
-      ? "current"
-      : visible
-        ? "refresh"
-        : "changed";
+    const freshness = storedFreshness({
+      materialSame: isMaterialSame(stored.facts, current),
+      baseStatus,
+      block,
+    });
+    const showCurrent =
+      (freshness === "refresh" || freshness === "recalculated") && current;
     return {
-      teaser:
-        freshness === "refresh" && current
-          ? teaserFor(current, teams)
-          : teaserFor(stored.facts, teams),
+      teaser: showCurrent
+        ? teaserFor(current, teams)
+        : teaserFor(stored.facts, teams),
       view: toUnderdogPanelView(stored, teams, freshness),
     };
   }
-  if (!visible || current === null) return null;
+  if (block !== null || current === null) return null;
   return { teaser: teaserFor(current, teams), view: null };
+}
+
+/** O estado do texto guardado diante da base atual (ver UnderdogFreshness). */
+function storedFreshness(args: {
+  materialSame: boolean;
+  baseStatus: UnderdogBaseRead["status"];
+  block: ReturnType<typeof underdogTeaserBlock>;
+}): UnderdogFreshness {
+  const { materialSame, baseStatus, block } = args;
+  if (materialSame) return "current";
+  // Base que não dá pra ler agora não é mudança: nada se sabe.
+  if (baseStatus === "unavailable") return "current";
+  // A base vale e não tem mais azarão claro: mudança material de verdade.
+  if (baseStatus === "no_underdog") return "changed";
+  if (block === null) return "refresh";
+  if (block === "run" || block === "no_palpite") return "recalculated";
+  return "changed";
 }

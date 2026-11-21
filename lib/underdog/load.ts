@@ -3,7 +3,7 @@ import { getLatestMatchModelSnapshotWithKickoff } from "@/lib/db/queries/match-m
 import { getLatestUnderdogView } from "@/lib/db/queries/underdog-views";
 import type { UnderdogTeaserData } from "@/lib/view/underdog";
 
-import { underdogBaseFromSnapshot } from "./compute";
+import { readUnderdogBase } from "./compute";
 
 /**
  * O que a página do jogo precisa pro painel do azarão (#671), só leitura do banco: a
@@ -22,10 +22,14 @@ export async function loadUnderdogTeaser(args: {
       getLatestUnderdogView(args.userId, args.matchId),
     ]);
     if (!flag) return null;
-    const base = found
-      ? underdogBaseFromSnapshot(found.snapshot, found.kickoffAt, args.now)
-      : null;
-    return { current: base?.pick ?? null, stored };
+    const read = found
+      ? readUnderdogBase(found.snapshot, found.kickoffAt, args.now)
+      : ({ status: "unavailable" } as const);
+    return {
+      current: read.status === "ok" ? read.base.pick : null,
+      baseStatus: read.status,
+      stored,
+    };
   } catch (err) {
     console.error(
       JSON.stringify({

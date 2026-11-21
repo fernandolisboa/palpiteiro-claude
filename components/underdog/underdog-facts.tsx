@@ -167,9 +167,9 @@ export function UnderdogFacts({
         {view.freshness !== "current" && (
           <div className="border-border flex flex-wrap items-center gap-x-3 gap-y-2 border-t pt-3">
             <p className="text-body-sm text-muted-foreground tracking-tight">
-              {view.freshness === "refresh"
-                ? UNDERDOG_STALE_REFRESH
-                : UNDERDOG_STALE_CHANGED}
+              {view.freshness === "changed"
+                ? UNDERDOG_STALE_CHANGED
+                : UNDERDOG_STALE_REFRESH}
             </p>
             {view.freshness === "refresh" && refresh}
           </div>

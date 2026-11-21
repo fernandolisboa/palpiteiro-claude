@@ -9,7 +9,11 @@ import {
 import type { UnderdogPick } from "@/lib/underdog/gate";
 import { KICKOFF, NOW, snapshot } from "@/lib/underdog/__tests__/fixtures";
 import { containsValueLanguage } from "@/lib/ai/palpites/value-language-guard";
-import { toUnderdogPanelView, toUnderdogSlot } from "@/lib/view/underdog";
+import {
+  toUnderdogPanelView,
+  toUnderdogSlot,
+  type UnderdogTeaserData,
+} from "@/lib/view/underdog";
 
 const TEAMS = { home: "Palmeiras", away: "Flamengo" };
 const base = underdogBaseFromSnapshot(snapshot(), KICKOFF, NOW)!;
@@ -29,8 +33,20 @@ const stored: UnderdogViewRecord = {
   versions: { calc: "c", advocate: "a", review: "r", matchModel: "m" },
 };
 const PALPITE = { probableScore: { home: 1, away: 0 } };
-const args = (over: Partial<Parameters<typeof toUnderdogSlot>[0]> = {}) => ({
-  data: { current: base.pick, stored: null },
+const data = (over: Partial<UnderdogTeaserData> = {}): UnderdogTeaserData => ({
+  current: base.pick,
+  baseStatus: "ok",
+  stored: null,
+  ...over,
+});
+const MOVED: UnderdogPick = {
+  side: "away",
+  chances: { underdog: 30, draw: 28, favorite: 42 },
+};
+const args = (
+  over: Partial<Parameters<typeof toUnderdogSlot>[0]> = {}
+): Parameters<typeof toUnderdogSlot>[0] => ({
+  data: data(),
   preMatch: true,
   heroPalpite: PALPITE,
   runInFlight: false,
@@ -81,37 +97,104 @@ describe("toUnderdogSlot", () => {
     ["fora do pré-jogo", { preMatch: false }],
     ["sem palpite", { heroPalpite: null }],
     ["run em andamento", { runInFlight: true }],
-    ["sem azarão", { data: { current: null, stored: null } }],
+    [
+      "sem azarão",
+      { data: data({ current: null, baseStatus: "no_underdog" }) },
+    ],
+    [
+      "base indisponível",
+      { data: data({ current: null, baseStatus: "unavailable" }) },
+    ],
+    [
+      "palpite dá a vitória ao azarão",
+      { heroPalpite: { probableScore: { home: 0, away: 1 } } },
+    ],
   ])("%s → nada", (_l, over) => {
     expect(toUnderdogSlot(args(over))).toBeNull();
   });
 
   it("texto guardado que vale → current, teaser com o % congelado", () => {
-    const slot = toUnderdogSlot(args({ data: { current: base.pick, stored } }));
+    const slot = toUnderdogSlot(args({ data: data({ stored }) }));
     expect(slot?.view?.freshness).toBe("current");
   });
 
   it("mudança material com a porta aberta → refresh, teaser com o % atual", () => {
-    const moved: UnderdogPick = {
-      side: "away",
-      chances: { underdog: 30, draw: 28, favorite: 42 },
-    };
-    const slot = toUnderdogSlot(args({ data: { current: moved, stored } }));
+    const slot = toUnderdogSlot(
+      args({ data: data({ current: MOVED, stored }) })
+    );
     expect(slot?.view?.freshness).toBe("refresh");
     expect(slot?.teaser.pct).toBe("30%");
   });
 
-  it("base atual sem azarão → o texto pago fica, changed, sem botão", () => {
+  it("base atual sem azarão claro → o texto pago fica, changed, sem botão", () => {
     const slot = toUnderdogSlot(
-      args({ data: { current: null, stored }, heroPalpite: null })
+      args({
+        data: data({ current: null, baseStatus: "no_underdog", stored }),
+      })
     );
     expect(slot?.view?.freshness).toBe("changed");
     expect(slot?.teaser.underdogName).toBe("Flamengo");
   });
 
+  it("mudança material e o palpite agora dá a vitória ao azarão → changed", () => {
+    const slot = toUnderdogSlot(
+      args({
+        data: data({ current: MOVED, stored }),
+        heroPalpite: { probableScore: { home: 0, away: 1 } },
+      })
+    );
+    expect(slot?.view?.freshness).toBe("changed");
+  });
+
+  it.each([
+    ["mais de 24h / refit atrasado", { heroPalpite: PALPITE }],
+    ["indisponível e sem palpite", { heroPalpite: null }],
+    ["indisponível com run em andamento", { runInFlight: true }],
+  ])(
+    "base indisponível (%s) → o texto fica sem aviso de mudança",
+    (_l, over) => {
+      const slot = toUnderdogSlot(
+        args({
+          data: data({ current: null, baseStatus: "unavailable", stored }),
+          ...over,
+        })
+      );
+      expect(slot?.view?.freshness).toBe("current");
+      expect(slot?.teaser.pct).toBe(
+        `${Math.round(stored.facts.chances.underdog)}%`
+      );
+    }
+  );
+
+  it.each([
+    ["run em andamento", { runInFlight: true }],
+    ["sem palpite na tela", { heroPalpite: null }],
+  ])(
+    "mudança material com o botão suspenso (%s) → recalculated, nunca changed",
+    (_l, over) => {
+      const slot = toUnderdogSlot(
+        args({ data: data({ current: MOVED, stored }), ...over })
+      );
+      expect(slot?.view?.freshness).toBe("recalculated");
+      expect(slot?.teaser.pct).toBe("30%");
+    }
+  );
+
+  it("botão suspenso sem mudança material → current", () => {
+    const slot = toUnderdogSlot(
+      args({ data: data({ stored }), runInFlight: true, heroPalpite: null })
+    );
+    expect(slot?.view?.freshness).toBe("current");
+  });
+
   it("depois do apito nem o texto guardado aparece", () => {
     expect(
-      toUnderdogSlot(args({ data: { current: null, stored }, preMatch: false }))
+      toUnderdogSlot(
+        args({
+          data: data({ current: null, baseStatus: "unavailable", stored }),
+          preMatch: false,
+        })
+      )
     ).toBeNull();
   });
 });
