@@ -32,7 +32,7 @@ const FAKE_ENUM = {
 const FAKE_FLAGS = [...ADMIN_FLAGS, FAKE_ENUM] as const satisfies readonly AdminFlagDef[];
 
 describe("ADMIN_FLAGS (registry, #514)", () => {
-  it("tem as 14 flags boolean + o motor de análise e o personagem do progresso (enums), sem key repetida", () => {
+  it("tem as 15 flags boolean + o motor de análise e o personagem do progresso (enums), sem key repetida", () => {
     const keys = ADMIN_FLAGS.map((f) => f.key);
     expect(keys).toEqual([
       "enableOverUnderExtraLines",
@@ -49,6 +49,7 @@ describe("ADMIN_FLAGS (registry, #514)", () => {
       "enableBetSlipExplain",
       "enableUnderdogView",
       "enableLineupRecheck",
+      "enableNewsFactors",
       "analysisEngine",
       "progressMascot",
       "listAnalyzePlacement",
@@ -79,6 +80,7 @@ describe("ADMIN_FLAGS (registry, #514)", () => {
       enableBetSlipExplain: true,
       enableUnderdogView: true,
       enableLineupRecheck: true,
+      enableNewsFactors: true,
       analysisEngine: "llm",
       progressMascot: "robo",
       listAnalyzePlacement: "lateral",
@@ -147,6 +149,16 @@ describe("ADMIN_FLAGS (registry, #514)", () => {
     expect(def.costNote).toContain("API-Football só na última hora");
   });
 
+  it("notícias viram fator (#672): ligada, no /admin/motor, 1 Haiku por lote novo, sem The Odds API", () => {
+    const def = getAdminFlagDef("enableNewsFactors");
+    expect(def.kind).toBe("boolean");
+    expect(def.default).toBe(true);
+    expect(def.area).toBe("motor");
+    expect(def.label).toBe("Notícias viram fator no modelo");
+    expect(def.costNote).toContain("1 Haiku (até 4.096 tokens)");
+    expect(def.costNote).toContain("sem The Odds API e sem API-Football extra");
+  });
+
   it("nota de custo do fan-out casa com os tetos pinados em best-bet", () => {
     const note = getAdminFlagDef("enableBestBetFanOut").costNote ?? "";
     expect(note).toContain(`até ${MAX_FANOUT_MARKETS} chamadas pagas`);
@@ -169,6 +181,7 @@ describe("ADMIN_FLAGS (registry, #514)", () => {
       enableBetSlipExplain: boolean;
       enableUnderdogView: boolean;
       enableLineupRecheck: boolean;
+      enableNewsFactors: boolean;
       analysisEngine: "llm" | "code_jev";
       progressMascot: "robo" | "papagaio";
       listAnalyzePlacement: "lateral" | "embaixo";

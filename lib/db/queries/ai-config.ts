@@ -358,6 +358,19 @@ export async function getEnableLineupRecheck(): Promise<boolean> {
 }
 
 /**
+ * Kill-switch das notícias como fator no modelo (#672). Default ON quando não há row.
+ * false → o cron da base não roda a fase de notícias (sem RSS, sem Haiku).
+ */
+export async function getEnableNewsFactors(): Promise<boolean> {
+  const rows = await db
+    .select({ enabled: aiConfig.enableNewsFactors })
+    .from(aiConfig)
+    .where(eq(aiConfig.id, 1))
+    .limit(1);
+  return rows[0]?.enabled ?? true;
+}
+
+/**
  * Motor de análise (ADR 0041 §5, #511): 'llm' (cartucho de mercado decide — caminho
  * de hoje) ou 'code_jev' (código + julgamentos JEV decidem, LLM narra). Sem row ou
  * valor persistido inválido → 'llm'. Editado em /admin/motor via registry

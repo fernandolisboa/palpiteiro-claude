@@ -34,7 +34,10 @@ export function truncate(text: string, limit: number): string {
 // id da extração/narração mesmo quando elas caem no template).
 export async function persistAiCallError(args: {
   provider: AIProviderKey;
-  userId: string;
+  // null = chamada de SISTEMA (extração das notícias do jogo no cron da base, #672): o
+  // CHECK ai_calls_user_id_system_only só aceita isso com prompt_version `match_news_*`
+  // (ou TypeSafe/sondagem); qualquer outro insert sem usuário falha e é engolido abaixo.
+  userId: string | null;
   matchId: string;
   // O modelo que rodou (`result.servedModel`; o pedido quando não houve chamada).
   model: AIModel;

@@ -477,6 +477,13 @@
       "when": 1795295946947,
       "tag": "0067_underdog_views",
       "breakpoints": true
+    },
+    {
+      "idx": 68,
+      "version": "7",
+      "when": 1795302893243,
+      "tag": "0068_match_news",
+      "breakpoints": true
     }
   ]
 }
