@@ -1,3 +1,4 @@
+import { BET_LANGUAGE_RE } from "@/lib/ai/language-guards";
 import { PERCENT_RE, PERCENT_TOLERANCE_PP } from "@/lib/ai/markets/_narrator/fidelity";
 import type { FidelityCheck } from "@/lib/ai/palpites/fidelity-validator";
 import { containsValueLanguage } from "@/lib/ai/palpites/value-language-guard";
@@ -9,10 +10,7 @@ import { allowedPercents, type NarrationInput } from "./narrate-cartridge";
 // e rodam SÓ nos campos que o LLM escreveu (o template usa texto do código). Reprovou →
 // a narração vira o template e a row de ai_calls fica `invalid_output`.
 
-// Mandar apostar (ou falar de aposta) não cabe numa leitura de probabilidade. Lookarounds
-// de letra: o \b do JS não enxerga letra acentuada.
-const BET_LANGUAGE_RE =
-  /(?<![\p{L}\d])(?:apost\p{L}*|v[áa]\s+de|vai\s+de|vamos\s+de|entr[ae]\s+n[oa]s?\s+(?:over|under|mercado))(?![\p{L}\d])/iu;
+// Mandar apostar (ou falar de aposta): BET_LANGUAGE_RE em lib/ai/language-guards.ts.
 
 function llmText(o: PalpiteNarration): string {
   return [o.resumo, ...o.pontos, ...o.discordancias.map((d) => d.texto)].join(" \n ");
