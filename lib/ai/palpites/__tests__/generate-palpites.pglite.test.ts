@@ -336,7 +336,9 @@ describe("generatePalpites (síntese) — write path real (pglite)", () => {
       label: "Palpite pronto",
       detail: [
         "Confiança do palpite: sem a chance do modelo pra esse jogo",
-        "Resultado (1X2): Casa",
+        // #668: sem odds nem λ no run, o v12 escolhe; a análise mostra o preço, com o time.
+        "Palpite escolhido pela IA: sem preço nem modelo de placar para este jogo",
+        "Resultado (1X2): preço mais interessante em vitória do Flamengo",
       ],
     });
   });
@@ -388,6 +390,61 @@ describe("generatePalpites (síntese) — write path real (pglite)", () => {
     // As linhas settleable ainda foram escritas (batch).
     expect(sets[0].palpites.length).toBeGreaterThanOrEqual(1);
     expect(sets[0].palpites.some((l) => l.type === "exact_score")).toBe(true);
+  });
+
+  it("#668 (T8): dois runs com textos diferentes → mesmas linhas liquidáveis e mesma confiança", async () => {
+    const pickAnalyses: MarketAnalysisSummary[] = [
+      {
+        ...analyses[0],
+        engine: "code_jev",
+        odds: { home: 2.9, draw: 3.3, away: 2.35 },
+        line: null,
+        predictionCreatedAt: "2026-05-15T12:00:00.000Z",
+        judgmentsModel: {
+          base: { home: 1.2, away: 1.4 },
+          adjusted: { home: 1.15, away: 1.45 },
+          rho: -0.08,
+          stateHash: "s-1",
+          jevAiCallId: null,
+        },
+        factorPhrases: [],
+      },
+    ];
+    runAnalysis.mockResolvedValueOnce(
+      okResult({
+        verdict: "Vai dar Fluminense",
+        verdictOutcome: "away",
+        narrative: "O Flu chega embalado.",
+        citedMarkets: ["Resultado (1X2)"],
+      }),
+    );
+    await call({ analyses: pickAnalyses });
+    runAnalysis.mockResolvedValueOnce(
+      okResult({
+        verdict: "Tricolor leva o clássico",
+        verdictOutcome: "away",
+        narrative: "Texto totalmente diferente.",
+        citedMarkets: [],
+        cardsTemperature: "pegado",
+      }),
+    );
+    await call({ analyses: pickAnalyses });
+
+    const sets = await getPalpiteSetsForMatch(ids.matchId, ids.userId);
+    expect(sets).toHaveLength(2);
+    const settled = (s: (typeof sets)[number]) =>
+      s.palpites
+        .filter((l) => ["exact_score", "first_half_score", "first_to_score", "margin", "clean_sheet"].includes(l.type))
+        .map((l) => [l.type, l.params])
+        .sort((a, b) => String(a[0]).localeCompare(String(b[0])));
+    expect(settled(sets[0])).toEqual(settled(sets[1]));
+    expect(settled(sets[0]).map((r) => r[0])).toContain("first_half_score");
+    const [h0, h1] = sets.map((s) => s.palpiteSet.headline!);
+    expect(h0.confidence).toBe(h1.confidence);
+    expect(h0.confidenceProbPct).toBe(h1.confidenceProbPct);
+    expect(h0.confidenceSource).toBe("market");
+    expect(h0.pick).toEqual(h1.pick);
+    expect(sets.every((s) => s.palpiteSet.promptVersion === "palpites_v13")).toBe(true);
   });
 
   it("assimetria: palpite_set falha → throw, NENHUMA row órfã", async () => {

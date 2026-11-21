@@ -24,6 +24,26 @@ describe("toConfidenceRow", () => {
     ).toEqual({ matchId: "m", era: "motor", level: "baixa", probPct: 30, hit: true });
   });
 
+  it("#668: market/dc_jev entram no enum; set com `pick` é a era modelo", () => {
+    for (const confidenceSource of ["market", "dc_jev"]) {
+      expect(
+        toConfidenceRow(
+          raw({
+            confidence: "media",
+            confidenceProbPct: 41.2,
+            confidenceSource,
+            pick: { rule: "most_likely_v1", outcome: "away" },
+          }),
+        ),
+      ).toEqual({ matchId: "m", era: "modelo", level: "media", probPct: 41.2, hit: true });
+    }
+    // Fonte nova sem `pick` (não acontece hoje) segue legível, na era motor.
+    expect(
+      toConfidenceRow(raw({ confidence: "media", confidenceProbPct: 41, confidenceSource: "market" }))
+        ?.era,
+    ).toBe("motor");
+  });
+
   it("llm: sem P mesmo que o jsonb traga algo estranho", () => {
     expect(toConfidenceRow(raw({ confidence: "alta" }))).toEqual({
       matchId: "m",
@@ -59,13 +79,15 @@ describe("deriveConfidenceCalibration", () => {
   });
 
   it("por era e faixa: n, jogos distintos, previsto e acerto", () => {
-    const [motor, llm] = deriveConfidenceCalibration([
+    const [modelo, motor, llm] = deriveConfidenceCalibration([
       row({ matchId: "m1", probPct: 44, hit: true }),
       row({ matchId: "m1", probPct: 46, hit: false }),
       row({ matchId: "m2", level: "alta", probPct: 60, hit: true }),
       row({ matchId: "m3", level: null, probPct: null, hit: false }),
       row({ era: "llm", level: "alta", probPct: null, hit: false }),
     ]);
+    expect(modelo.era).toBe("modelo");
+    expect(modelo.bands.every((band) => band.n === 0)).toBe(true);
     expect(motor.era).toBe("motor");
     expect(motor.bands).toEqual([
       { level: "baixa", n: 0, matches: 0, meanForecast: null, hitRate: null },

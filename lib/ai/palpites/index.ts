@@ -8,7 +8,12 @@ import type { DbPalpiteSet } from "@/lib/db/queries/palpites";
 import { getSportsDataProvider } from "@/lib/providers/sports-data";
 import type { FixtureRef } from "@/lib/providers/sports-data/types";
 import { getNewsProvider } from "@/lib/providers/news";
-import { analysesDetail, newsDetail, synthesisDetail } from "@/lib/ai/progress/details";
+import {
+  analysesDetail,
+  newsDetail,
+  pickDetail,
+  synthesisDetail,
+} from "@/lib/ai/progress/details";
 import {
   noteStep,
   progressTrace,
@@ -36,6 +41,7 @@ import {
 } from "../deadline";
 import { liveColumns, liveStampFromState } from "@/lib/live/stamp";
 import { LEAGUE_LABEL, leagueToKey } from "@/lib/format";
+import { teamToTeam } from "@/lib/view/team";
 import type { ZodType } from "zod";
 
 import {
@@ -57,18 +63,29 @@ import {
   type PalpiteLiveOutput,
 } from "./cartridges/live";
 import {
+  confidenceFromPick,
   liveConfidenceProbs,
   palpiteConfidence,
   pregameConfidenceProbs,
-  type ConfidenceProbs,
+  type PalpiteConfidence,
 } from "./confidence";
 import { checkFidelity, type FidelityCheck } from "./fidelity-validator";
-import { getPalpiteCartridge } from "./registry";
 import {
-  buildLivePalpiteRows,
-  buildSettleablePalpiteRows,
-} from "./settleable-rows";
-import { containsValueLanguage } from "./value-language-guard";
+  finalLeaksValue,
+  finalizeLivePick,
+  finalizeLlmPick,
+  finalizeModelPick,
+  repairValueLeaks,
+  templateModelPick,
+  type FinalPalpite,
+} from "./finalize";
+import {
+  resolvePregamePick,
+  runJudgmentsFromAnalyses,
+  type PalpitePick,
+} from "./pick";
+import { getPalpiteCartridge } from "./registry";
+import type { CoherenceTeams } from "./verdict-coherence";
 import {
   PalpiteError,
   type GenerateLivePalpiteArgs,
@@ -220,8 +237,9 @@ export async function generatePalpites({
   }
   const kickoffMs = match.kickoffAt.getTime();
 
-  // 3. Cartucho (sem extraLines/marketKey).
-  const cartridge = getPalpiteCartridge();
+  // 3. O palpite decidido em código (#668, ADR 0072), das análises do run ANTES do input
+  //    da síntese (o parse do input descarta odds/λ). null = sem fonte de λ: o v12 decide.
+  const pick = resolvePregamePick(analyses);
 
   // 4. Fetch de dados de suporte — ENXUTO: form/h2h/standings via a SportsDataProvider
   //    (mantido como COR NARRATIVA, crucial no caso all-pass; cache do fan-out já
@@ -257,23 +275,26 @@ export async function generatePalpites({
       provider.getH2H(match.homeTeam, match.awayTeam, match.league, H2H_LAST),
       provider.getStandings(match.league),
       newsFetch,
-      // Fonte da confiança do palpite (#649). Falha de leitura não derruba a síntese:
-      // cai na análise de 1X2 do code_jev ou fica sem chip.
-      getLatestMatchModelSnapshot(matchId).catch((err: unknown) => {
-        console.error(
-          JSON.stringify({
-            scope: "generatePalpites",
-            matchId,
-            error: "snapshot_read_failed",
-            message: err instanceof Error ? err.message : String(err),
+      // Fonte da confiança do palpite do v12 (#649), lida só sem palpite decidido em
+      // código. Falha de leitura não derruba a síntese: cai na análise de 1X2 do code_jev
+      // ou fica sem chip.
+      pick
+        ? Promise.resolve(null)
+        : getLatestMatchModelSnapshot(matchId).catch((err: unknown) => {
+            console.error(
+              JSON.stringify({
+                scope: "generatePalpites",
+                matchId,
+                error: "snapshot_read_failed",
+                message: err instanceof Error ? err.message : String(err),
+              }),
+            );
+            return null;
           }),
-        );
-        return null;
-      }),
     ]);
 
   // 5. Monta input (com as análises) + 6. userMessage.
-  const input = cartridge.buildPredictionInput({
+  const buildArgs = {
     match: {
       league: match.league,
       homeTeam: match.homeTeam,
@@ -288,27 +309,70 @@ export async function generatePalpites({
     analyses,
     // ADR 0032 / #377 — notícias factuais reais como insumo da síntese.
     news: newsOutcome.results,
-  });
+  };
   const daysToKickoff = Math.max(
     0,
     Math.ceil((kickoffMs - Date.now()) / 86_400_000),
   );
-  const userMessage = cartridge.buildUserMessage(input, { daysToKickoff });
-
-  return runSynthesis({
+  const league = leagueToKey(match.league);
+  const teams: CoherenceTeams = {
+    home: teamToTeam(match.homeTeam, league).name,
+    away: teamToTeam(match.awayTeam, league).name,
+    homeAliases: [match.homeTeam],
+    awayAliases: [match.awayTeam],
+  };
+  const common = {
     userId,
     matchId,
     model,
-    cartridge,
-    userMessage,
     deadlineAt,
-    rowsFor: (output) => buildSettleablePalpiteRows("", output),
-    fidelity: (output) => checkFidelity(output, input),
     sourcePredictionIds: analyses.map((a) => a.predictionId),
     sources: newsOutcome.results,
     live: null,
-    analysesLines: analysesDetail(analyses),
-    confidenceProbs: pregameConfidenceProbs(snapshot, analyses),
+    analysesLines: analysesDetail(analyses, teams),
+  };
+
+  if (pick) {
+    // v13: o resultado, o placar, o 1º tempo e quem marca primeiro já estão decididos; o
+    // LLM escreve o texto. Falha do texto vira o palpite de template (nunca palpite nulo).
+    const cartridge = getPalpiteCartridge("model_pick");
+    const confidence = confidenceFromPick(pick);
+    const input = cartridge.buildPredictionInput({
+      ...buildArgs,
+      pick,
+      confidence: confidence.level,
+      factors: runJudgmentsFromAnalyses(analyses)?.factorPhrases ?? [],
+    });
+    return runSynthesis({
+      ...common,
+      cartridge,
+      userMessage: cartridge.buildUserMessage(input, { daysToKickoff }),
+      finalize: (output) => finalizeModelPick(output, pick, teams),
+      textFallback: {
+        template: (reason) => templateModelPick(pick, teams, reason),
+        repairLeaks: (final) => repairValueLeaks(final, pick, teams),
+      },
+      fidelity: (final) => checkFidelity(final, input),
+      confidence: () => confidence,
+      pick,
+      pickLines: pickDetail(pick, teams),
+    });
+  }
+
+  // v12: sem fonte de λ no run, o LLM escolhe resultado e placar, como antes do #668.
+  const cartridge = getPalpiteCartridge("llm_pick");
+  const input = cartridge.buildPredictionInput(buildArgs);
+  const confidenceProbs = pregameConfidenceProbs(snapshot, analyses);
+  return runSynthesis({
+    ...common,
+    cartridge,
+    userMessage: cartridge.buildUserMessage(input, { daysToKickoff }),
+    finalize: finalizeLlmPick,
+    textFallback: null,
+    fidelity: (final) => checkFidelity(final, input),
+    confidence: (final) => palpiteConfidence(final.probableScore, confidenceProbs),
+    pick: null,
+    pickLines: pickDetail(null, teams),
   });
 }
 
@@ -322,38 +386,59 @@ type SynthesisCartridge<O> = {
   outputSchema: ZodType<O>;
 };
 
-type SynthesisOutputBase = {
-  verdict: string;
-  probableScore: { home: number; away: number };
-  narrative: string;
-  citedMarkets: string[];
-};
-
-type SynthesisSpec<O extends SynthesisOutputBase> = {
+type SynthesisSpec<O> = {
   userId: string;
   matchId: string;
   model: AIModel;
   cartridge: SynthesisCartridge<O>;
   userMessage: string;
   deadlineAt?: number;
-  // As linhas settleable (templates fixos) da saída.
-  rowsFor: (output: O) => ReturnType<typeof buildSettleablePalpiteRows>;
-  fidelity: (output: O) => FidelityCheck;
+  // Saída validada → manchete + linhas settleable (templates fixos).
+  finalize: (output: O) => FinalPalpite;
+  // Palpite decidido em código (#668): texto que falha vira template, nunca palpite nulo.
+  // null = sem rede (v12 e ao vivo: a falha degrada pra palpite nulo, como antes).
+  textFallback: {
+    template: (reason: string) => FinalPalpite;
+    repairLeaks: (final: FinalPalpite) => FinalPalpite;
+  } | null;
+  fidelity: (final: FinalPalpite) => FidelityCheck;
   sourcePredictionIds: string[];
   sources: NewsResult[];
   live: ReturnType<typeof liveColumns> | null;
   // O que cada análise escolheu, pro "Ver raciocínio" (ADR 0065).
   analysesLines: string[];
-  // P(1X2) do motor pra confiança do palpite (#649); null = sem fonte, sem chip.
-  confidenceProbs: ConfidenceProbs | null;
+  // De onde saiu o palpite, pro "Ver raciocínio" (#668).
+  pickLines: string[];
+  // Confiança calculada pelo motor (#649); null = sem fonte, sem chip.
+  confidence: (final: FinalPalpite) => PalpiteConfidence | null;
+  // O palpite decidido em código, gravado no headline (calibração/auditoria, nunca na view).
+  pick: PalpitePick | null;
 };
+
+// Quem responde pela manchete em ai_calls: a chamada aceita (row "ok" a inserir) ou a
+// row de erro já gravada (texto de template, #668).
+type SynthesisAudit =
+  | {
+      status: "ok";
+      usage: AnalysisUsage;
+      inputPayload: Record<string, unknown>;
+      outputPayload: Record<string, unknown>;
+      latencyMs: number;
+      servedModel: AIModel;
+    }
+  | { status: "failed"; aiCallId: string | null; servedModel: AIModel };
 
 /**
  * O loop de síntese (#380) + a persistência (ai_call → palpite_set → palpites), comum ao
  * palpite de pré-jogo e ao ao vivo. O firewall (Zod `.strict()` + guard de conteúdo) roda
  * em todo candidato; a fidelidade depois dele.
+ *
+ * Com o palpite decidido em código (#668, `textFallback`), nenhuma falha do TEXTO derruba
+ * o palpite: erro do provedor, ferramenta não chamada, Zod, linguagem de valor ou
+ * fidelidade gravam a row de ai_calls com o status real e o set sai com o texto de
+ * template (só nos campos que falharam, quando dá pra saber quais).
  */
-async function runSynthesis<O extends SynthesisOutputBase>(
+async function runSynthesis<O>(
   spec: SynthesisSpec<O>,
 ): Promise<PalpiteGenerationResult> {
   const { userId, matchId, model, cartridge, userMessage, deadlineAt } = spec;
@@ -406,25 +491,22 @@ async function runSynthesis<O extends SynthesisOutputBase>(
   //     (?? true): em DB fresco/vazio (testes, primeiro deploy) também valida por padrão.
   //     OFF → caminho de hoje, byte-idêntico, ZERO custo extra (sem checkFidelity, sem regen).
   const validateFidelity = await getEnableFidelityValidation();
+  const fallback = spec.textFallback;
 
   // 8c–11b. LOOP BOUNDED de síntese (#380). O firewall (3 pernas, ADR 0030 §3) fica DENTRO
   //   do loop: qualquer candidato (inclusive uma regeneração) RE-LIMPA todas as pernas antes
   //   de poder ser aceito ou sequer fidelity-checado. O validador de fidelidade roda DEPOIS
   //   do firewall e só pode ADICIONAR uma rejeição (regen/degrade), nunca burlar/enfraquecer
-  //   o guard. Sai APENAS por `break` (aceite) ou `throw` (degrade/erro terminal) — sem
-  //   recursão. Com MAX_FIDELITY_ATTEMPTS=1, divergência → degrada na hora (sem 2ª paga).
-  let output: O;
-  let settleableRows: ReturnType<typeof buildSettleablePalpiteRows>;
-  let latencyMs: number;
-  let usage: AnalysisUsage;
-  let inputPayload: Record<string, unknown>;
-  let outputPayload: Record<string, unknown>;
-  // O modelo que respondeu a tentativa aceita (auditoria, custo e modelVersion).
-  let servedModel: AIModel;
+  //   o guard. Sai APENAS por `break` (aceite ou template) ou `throw` (degrade/erro
+  //   terminal) — sem recursão. Com MAX_FIDELITY_ATTEMPTS=1, divergência → degrada na hora
+  //   (sem 2ª paga); com o palpite decidido em código, vira template.
+  let final: FinalPalpite;
+  let audit: SynthesisAudit;
 
   for (let attempt = 1; ; attempt += 1) {
     // Prazo do run (#524): sem tempo pra uma chamada inteira, não chama — nada gasto e
-    // nenhuma row 0/0 de timeout falso em ai_calls. O caller trata como síntese falha.
+    // nenhuma row 0/0 de timeout falso em ai_calls. Sem palpite decidido em código, o
+    // caller trata como síntese falha; com ele, o texto sai de template.
     if (
       !canFitCall(deadlineAt, {
         speed: model.speed,
@@ -432,15 +514,18 @@ async function runSynthesis<O extends SynthesisOutputBase>(
         effort: analysisRequest.effort,
       })
     ) {
-      throw new AnalysisDeadlineError();
+      if (!fallback) throw new AnalysisDeadlineError();
+      final = fallback.template("sem tempo para a chamada da síntese");
+      audit = { status: "failed", aiCallId: null, servedModel: model };
+      break;
     }
     const result = await aiProvider.runAnalysis(analysisRequest);
-    latencyMs = result.latencyMs;
-    servedModel = result.servedModel;
+    const latencyMs = result.latencyMs;
+    const servedModel = result.servedModel;
 
     // 9. Erro do provider.
     if (!result.ok) {
-      await persistAiCallError({
+      const failedId = await persistAiCallError({
         userId,
         matchId,
         provider: providerKey,
@@ -453,94 +538,86 @@ async function runSynthesis<O extends SynthesisOutputBase>(
         errorMessage: result.message,
         promptVersion: cartridge.version,
       });
-      throw new PalpiteError(`palpite generation failed: ${result.message}`, {
-        cause: result.cause,
-      });
+      if (!fallback) {
+        throw new PalpiteError(`palpite generation failed: ${result.message}`, {
+          cause: result.cause,
+        });
+      }
+      final = fallback.template(`erro do provedor (${result.status})`);
+      audit = { status: "failed", aiCallId: failedId, servedModel };
+      break;
     }
-    usage = result.usage;
-    inputPayload = result.inputPayload;
-    outputPayload = result.outputPayload;
+    const usage = result.usage;
+    const inputPayload = result.inputPayload;
+    const outputPayload = result.outputPayload;
+    const failRow = (status: "tool_missing" | "invalid_output" | "fidelity_divergence", errorMessage: string) =>
+      persistAiCallError({
+        userId,
+        matchId,
+        provider: providerKey,
+        model: servedModel,
+        inputPayload,
+        outputPayload,
+        ...usage,
+        latencyMs,
+        status,
+        errorMessage,
+        promptVersion: cartridge.version,
+      });
 
     // 10. tool_missing.
     if (result.toolInput === undefined) {
       const snippet = JSON.stringify(
         (result.outputPayload as { content?: unknown }).content,
       ).slice(0, 500);
-      await persistAiCallError({
-        userId,
-        matchId,
-        provider: providerKey,
-        model: servedModel,
-        inputPayload,
-        outputPayload,
-        ...usage,
-        latencyMs,
-        status: "tool_missing",
-        errorMessage: `model did not call ${cartridge.toolName}; content=${snippet}`,
-        promptVersion: cartridge.version,
-      });
-      throw new PalpiteError(`LLM did not call ${cartridge.toolName} tool`, {
-        stopReason: result.stopReason,
-      });
+      const failedId = await failRow(
+        "tool_missing",
+        `model did not call ${cartridge.toolName}; content=${snippet}`,
+      );
+      if (!fallback) {
+        throw new PalpiteError(`LLM did not call ${cartridge.toolName} tool`, {
+          stopReason: result.stopReason,
+        });
+      }
+      final = fallback.template("ferramenta não chamada");
+      audit = { status: "failed", aiCallId: failedId, servedModel };
+      break;
     }
 
     // 11. Validação Zod (fronteira do CLAUDE.md).
     const parsed = cartridge.outputSchema.safeParse(result.toolInput);
     if (!parsed.success) {
-      await persistAiCallError({
-        userId,
-        matchId,
-        provider: providerKey,
-        model: servedModel,
-        inputPayload,
-        outputPayload,
-        ...usage,
-        latencyMs,
-        status: "invalid_output",
-        errorMessage: JSON.stringify(parsed.error.issues),
-        promptVersion: cartridge.version,
-      });
-      throw new PalpiteError("LLM output failed Zod validation", {
-        issues: parsed.error.issues,
-      });
+      const failedId = await failRow("invalid_output", JSON.stringify(parsed.error.issues));
+      if (!fallback) {
+        throw new PalpiteError("LLM output failed Zod validation", {
+          issues: parsed.error.issues,
+        });
+      }
+      final = fallback.template("saída fora do formato");
+      audit = { status: "failed", aiCallId: failedId, servedModel };
+      break;
     }
-    // Já tipado pelo schema concreto do cartucho (diferente de predict, que apaga
-    // para BaseMarketOutput).
-    const candidate: O = parsed.data;
+    // Já tipado pelo schema concreto do cartucho; vira manchete + linhas (puras, sem DB),
+    // reusadas no insert em batch (12c).
+    let candidate = spec.finalize(parsed.data);
 
     // 11b. FIREWALL leg (b) — guard de CONTEÚDO pós-Zod (ADR 0030 §3, blocker #5). O
     //      `.strict()` só barra chaves; o LLM pode ecoar um TERMO de valor numa string.
     //      Rodamos sobre TODO campo que cruza pra manchete/view: verdict + narrative +
     //      o `text` derivado de CADA linha settleable (templates fixos, #354) + os
     //      rótulos de citedMarkets (LLM-livre, vão verbatim pro PalpiteHeadlineView). Hit
-    //      → tratado como `invalid_output` (mesmo path auditado do Zod) → throw → degrada
-    //      pra palpite:null no try/catch do analyzeBestBet. REJEITAR > VAZAR. As rows são
-    //      construídas AQUI (puras, sem DB) e reusadas no insert em batch (12c).
-    const candidateRows = spec.rowsFor(candidate);
-    const valueLeak =
-      containsValueLanguage(candidate.verdict) ||
-      containsValueLanguage(candidate.narrative) ||
-      candidateRows.some((r) => containsValueLanguage(r.text)) ||
-      candidate.citedMarkets.some(containsValueLanguage);
-    if (valueLeak) {
-      await persistAiCallError({
-        userId,
-        matchId,
-        provider: providerKey,
-        model: servedModel,
-        inputPayload,
-        outputPayload,
-        ...usage,
-        latencyMs,
-        status: "invalid_output",
-        errorMessage:
-          "manchete contém linguagem de valor (firewall ADR 0030 §3)",
-        promptVersion: cartridge.version,
-      });
+    //      sem rede → `invalid_output` (mesmo path auditado do Zod) → throw → degrada pra
+    //      palpite:null no try/catch do analyzeBestBet. REJEITAR > VAZAR. Com o palpite
+    //      decidido em código, o campo que vazou troca pelo template (#668).
+    const leaked = finalLeaksValue(candidate);
+    const leakMessage = "manchete contém linguagem de valor (firewall ADR 0030 §3)";
+    if (leaked && !fallback) {
+      await failRow("invalid_output", leakMessage);
       throw new PalpiteError("palpite headline leaked value language", {
         matchId,
       });
     }
+    if (leaked && fallback) candidate = fallback.repairLeaks(candidate);
 
     // 11c. VALIDAÇÃO DE FIDELIDADE (#380) — pós-firewall, pré-persist. Flag-OFF → aceita o
     //      primeiro candidato firewall-limpo (caminho de hoje, sem checkFidelity, custo zero).
@@ -548,87 +625,114 @@ async function runSynthesis<O extends SynthesisOutputBase>(
     //      citadas na manchete batem com os fatos pré-contados do #379, aceita; em
     //      CONTRADIÇÃO, loga uma row de auditoria `fidelity_divergence` em ai_calls (sinal de
     //      frequência pra a kill-switch — NÃO uma chamada nova de LLM) + console.warn, e então
-    //      DEGRADA (MAX=1: throw → palpite:null no try/catch do analyzeBestBet) ou regenera
-    //      (MAX>1: re-síntese paga, re-limpa o firewall acima na próxima iteração).
-    if (!validateFidelity) {
-      output = candidate;
-      settleableRows = candidateRows;
+    //      DEGRADA (MAX=1: throw → palpite:null no try/catch do analyzeBestBet), regenera
+    //      (MAX>1: re-síntese paga) ou, com o palpite decidido em código, usa o template.
+    const fidelity: FidelityCheck = validateFidelity
+      ? spec.fidelity(candidate)
+      : { ok: true };
+    if (fidelity.ok && validateFidelity) noteStep(STEPS.check);
+    if (fidelity.ok && !leaked) {
+      final = candidate;
+      audit = {
+        status: "ok",
+        usage,
+        inputPayload,
+        outputPayload,
+        latencyMs,
+        servedModel,
+      };
       break;
     }
-    const fidelity = spec.fidelity(candidate);
-    if (fidelity.ok) {
-      noteStep(STEPS.check);
-      output = candidate;
-      settleableRows = candidateRows;
-      break;
+    if (!fidelity.ok) {
+      console.warn(
+        JSON.stringify({
+          scope: "generatePalpites",
+          matchId,
+          attempt,
+          warning: "fidelity_divergence",
+          reason: fidelity.reason,
+        }),
+      );
     }
-    await persistAiCallError({
-      userId,
-      matchId,
-      provider: providerKey,
-      model: servedModel,
-      inputPayload,
-      outputPayload,
-      ...usage,
-      latencyMs,
-      status: "fidelity_divergence",
-      errorMessage: `validação de fidelidade falhou (#380): ${fidelity.reason}`,
-      promptVersion: cartridge.version,
-    });
-    console.warn(
-      JSON.stringify({
-        scope: "generatePalpites",
-        matchId,
-        attempt,
-        warning: "fidelity_divergence",
-        reason: fidelity.reason,
-      }),
+    // Uma row só por chamada (o custo entra uma vez): o status do 1º problema.
+    const failedId = await failRow(
+      leaked ? "invalid_output" : "fidelity_divergence",
+      [
+        leaked ? leakMessage : null,
+        fidelity.ok ? null : `validação de fidelidade falhou (#380): ${fidelity.reason}`,
+      ]
+        .filter((m): m is string => m !== null)
+        .join("; "),
     );
+    if (fallback) {
+      final = fidelity.ok ? candidate : fallback.template("contagem citada diverge dos fatos");
+      audit = { status: "failed", aiCallId: failedId, servedModel };
+      break;
+    }
     if (attempt >= MAX_FIDELITY_ATTEMPTS) {
       throw new PalpiteError(
         "fidelity validation failed after bounded retries",
-        { matchId, reason: fidelity.reason },
+        { matchId, reason: fidelity.ok ? "" : fidelity.reason },
       );
     }
     // MAX>1: cai pra a próxima iteração — uma SÍNTESE PAGA a mais (a regeneração).
   }
 
-  // 12. Persistência (sequencial — neon-http não suporta transação real).
-  // 12a. ai_call (status ok) — id alimenta palpite_sets.aiCallId.
-  const cost = calculateCost({ model: servedModel, ...usage });
-  let aiCallId: string | null = null;
-  try {
-    const [row] = await db
-      .insert(aiCalls)
-      .values({
-        userId,
-        matchId,
-        provider: providerKey,
-        model: servedModel.id,
-        promptVersion: cartridge.version,
-        inputPayload,
-        outputPayload,
-        ...usage,
-        latencyMs,
-        costUsd: cost.toFixed(6),
-        status: "ok",
-        errorMessage: null,
-      })
-      .returning({ id: aiCalls.id });
-    aiCallId = row.id;
-  } catch (err) {
-    // ASSIMETRIA INTENCIONAL: aiCallId=null no insert do ai_call que falha é
-    // DELIBERADO (ADR 0028 §1, FK nullable em palpite_sets). O set é o produto e
-    // SOBREVIVE à falha do log de auditoria. Não throw aqui. (Contraste: a falha
-    // do insert de palpite_set SIM faz throw — sem child rows órfãs.)
-    console.error(
+  if (final.templated) {
+    console.warn(
       JSON.stringify({
         scope: "generatePalpites",
         matchId,
-        error: "ai_call_insert_failed",
-        ...extractDbCause(err),
+        warning: "palpite_text_templated",
+        verdict: final.templated.verdict,
+        narrative: final.templated.narrative,
+        reason: final.templated.reason,
       }),
     );
+  }
+
+  // 12. Persistência (sequencial — neon-http não suporta transação real).
+  // 12a. ai_call (status ok) — id alimenta palpite_sets.aiCallId. Com o texto de template
+  //      por falha da chamada, a row de erro já gravada é a da manchete.
+  const servedModel = audit.servedModel;
+  let aiCallId: string | null = null;
+  if (audit.status === "failed") {
+    aiCallId = audit.aiCallId;
+  } else {
+    const cost = calculateCost({ model: servedModel, ...audit.usage });
+    try {
+      const [row] = await db
+        .insert(aiCalls)
+        .values({
+          userId,
+          matchId,
+          provider: providerKey,
+          model: servedModel.id,
+          promptVersion: cartridge.version,
+          inputPayload: audit.inputPayload,
+          outputPayload: audit.outputPayload,
+          ...audit.usage,
+          latencyMs: audit.latencyMs,
+          costUsd: cost.toFixed(6),
+          status: "ok",
+          errorMessage: null,
+        })
+        .returning({ id: aiCalls.id });
+      aiCallId = row.id;
+    } catch (err) {
+      // ASSIMETRIA INTENCIONAL: aiCallId=null no insert do ai_call que falha é
+      // DELIBERADO (ADR 0028 §1, FK nullable em palpite_sets). O set é o produto e
+      // SOBREVIVE à falha do log de auditoria. Não throw aqui. (Contraste: a falha
+      // do insert de palpite_set SIM faz throw — sem child rows órfãs.)
+      console.error(
+        JSON.stringify({
+          scope: "generatePalpites",
+          matchId,
+          error: "ai_call_insert_failed",
+          ...extractDbCause(err),
+        }),
+      );
+    }
   }
 
   // 12b. palpite_set — parent. RETURNING id p/ a linha filha. Falha aqui PROPAGA
@@ -639,10 +743,14 @@ async function runSynthesis<O extends SynthesisOutputBase>(
   // O raciocínio do run (ADR 0065): as etapas que rodaram até aqui, mais a síntese, que
   // termina com este insert. Vazio fora de um run com progresso (cron, script).
   const synthesis = synthesisStep(spec.live !== null);
-  // Confiança calculada pelo motor (#649, ADR 0069): a chance do resultado do placar
-  // provável, não a palavra do LLM.
-  const confidence = palpiteConfidence(output.probableScore, spec.confidenceProbs);
-  stepDetail(synthesis, [...synthesisDetail(confidence), ...spec.analysesLines]);
+  // Confiança calculada pelo motor (#649, ADR 0069): a chance do resultado do palpite,
+  // não a palavra do LLM. Com o palpite decidido em código, da mesma matriz (#668).
+  const confidence = spec.confidence(final);
+  stepDetail(synthesis, [
+    ...synthesisDetail(confidence),
+    ...spec.pickLines,
+    ...spec.analysesLines,
+  ]);
   const reasoning = progressTrace({ assumeDone: synthesis });
   let setRow: DbPalpiteSet;
   try {
@@ -655,13 +763,17 @@ async function runSynthesis<O extends SynthesisOutputBase>(
         modelVersion: servedModel.id,
         promptVersion: cartridge.version,
         headline: {
-          verdict: output.verdict,
+          verdict: final.verdict,
           confidence: confidence?.level ?? null,
           confidenceProbPct: confidence?.probPct ?? null,
           confidenceSource: confidence?.source ?? "none",
-          narrative: output.narrative,
-          citedMarkets: output.citedMarkets,
+          narrative: final.narrative,
+          citedMarkets: final.citedMarkets,
           sourcePredictionIds,
+          // #668 — o palpite decidido em código (calibração/auditoria; a view não lê) e
+          // quais campos de texto saíram do template.
+          ...(spec.pick ? { pick: spec.pick } : {}),
+          ...(final.templated ? { templated: final.templated } : {}),
           // ADR 0032 / #377 — fontes de notícia REAIS capturadas que alimentaram o
           // palpite (no jsonb existente, sem migration). Omitido quando não houve notícia.
           ...(spec.sources.length > 0 ? { sources: spec.sources } : {}),
@@ -695,7 +807,7 @@ async function runSynthesis<O extends SynthesisOutputBase>(
   //      DERIVADO da constante de tipo (NUNCA do LLM); params/text de templates FIXOS já
   //      passaram pelo guard de value-language acima. Insert em batch único; `inserted` é
   //      o array completo de rows. NÃO gera red_card/corners (gate Tier 3 de pé, ADR 0028).
-  const rows = settleableRows.map((r) => ({ ...r, palpiteSetId: setRow.id }));
+  const rows = final.rows.map((r) => ({ ...r, palpiteSetId: setRow.id }));
   const inserted = await db.insert(palpites).values(rows).returning();
 
   return {
@@ -777,13 +889,17 @@ export async function generateLivePalpites({
     cartridge: { ...cartridge, outputSchema },
     userMessage: cartridge.buildUserMessage(input),
     deadlineAt,
-    rowsFor: (output) => buildLivePalpiteRows("", output),
-    fidelity: (output) => cartridge.checkFidelity(output, input),
+    finalize: finalizeLivePick,
+    textFallback: null,
+    fidelity: (final) => cartridge.checkFidelity(final, input),
     sourcePredictionIds: analyses.map((a) => a.predictionId),
     sources: [],
     live: liveColumns(stamp),
-    analysesLines: analysesDetail(analyses),
+    analysesLines: analysesDetail(analyses, undefined, { live: true }),
+    pickLines: pickDetail(null, { home: match.homeTeam, away: match.awayTeam }, { live: true }),
     // Ao vivo, a matriz do placar final do modelo em jogo (a mesma das leituras).
-    confidenceProbs: liveConfidenceProbs(scoreline.matrix),
+    confidence: (final) =>
+      palpiteConfidence(final.probableScore, liveConfidenceProbs(scoreline.matrix)),
+    pick: null,
   });
 }

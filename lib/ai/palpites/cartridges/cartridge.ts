@@ -72,8 +72,16 @@ import type { PalpiteCartridge } from "../types";
 // v12 (#649, ADR 0069) = sai o campo `confidence`: a confiança do palpite passa a ser
 // calculada em código (lib/ai/palpites/confidence.ts) a partir da chance que o motor dá ao
 // resultado do placar provável. O LLM não escolhe mais o rótulo.
+// v13 (#668, ADR 0072) = palpite DETERMINÍSTICO: o resultado, o placar, o 1º tempo e quem
+// marca primeiro saem do código (lib/ai/palpites/pick.ts, regra most_likely_v1, base do
+// mercado + ajustes do run, ou o λ do modelo sem preço). O LLM só escreve verdict,
+// verdictOutcome (conferido), narrative, citedMarkets e cardsTemperature. Sai o "crave o
+// azarão". Cartucho em ./model-pick.ts; este arquivo segue com o v12 BYTE-IDÊNTICO, que
+// roda só quando o run não tem nenhuma fonte de λ (o LLM escolhe, como antes).
 // BUMP MANUAL (commit `prompt:`) em QUALQUER mudança de prompt/schema.
-export const PALPITES_VERSION = "palpites_v12" as const;
+export const PALPITES_VERSION = "palpites_v13" as const;
+// O v12 (o LLM escolhe resultado e placar): o fallback sem fonte de λ (#668).
+export const PALPITES_LLM_PICK_VERSION = "palpites_v12" as const;
 
 const TEXT_MAX = 280;
 // Narrativa: prosa um pouco mais longa que uma linha de palpite. Truncada (não
@@ -550,11 +558,13 @@ export function buildPredictionInput(args: BuildPalpitesInputArgs): PalpitesInpu
 
 const fmt1 = (n: number): string => (Number.isFinite(n) ? n.toFixed(1) : "n/a");
 
-export function buildUserMessage(
+// Seções comuns ao v12 e ao v13 (#668): o jogo, os dois lados e os confrontos diretos.
+// O v12 monta exatamente as mesmas linhas de antes (byte-idêntico).
+export function pushMatchFactLines(
+  lines: string[],
   input: PalpitesInput,
   ctx: { daysToKickoff: number },
-): string {
-  const lines: string[] = [];
+): void {
   lines.push("# Jogo");
   lines.push(`- Competição: ${input.match.league}`);
   lines.push(`- Mandante: ${input.match.homeTeam}`);
@@ -642,6 +652,14 @@ export function buildUserMessage(
       lines.push(`- ${m.date}: ${m.home} ${m.scoreHome}-${m.scoreAway} ${m.away}`);
     }
   }
+}
+
+export function buildUserMessage(
+  input: PalpitesInput,
+  ctx: { daysToKickoff: number },
+): string {
+  const lines: string[] = [];
+  pushMatchFactLines(lines, input, ctx);
 
   // # Análises por mercado — o INSUMO central da síntese (ADR 0030). Inclui os números
   // internos (edge/odd/prob) como DADO pro veredito; o firewall garante que não vazam
@@ -670,9 +688,22 @@ export function buildUserMessage(
     }
   }
 
-  // # Notícias recentes (ADR 0032 / #377) — fontes REAIS {title,url} capturadas via web
-  // search da Claude. Contexto factual pro veredito (desfalque de última hora, troca de
-  // técnico). Cite o FATO, NUNCA a linguagem de valor da fonte, NUNCA invente.
+  pushNewsLines(lines, input);
+
+  lines.push("");
+  lines.push("# Sua tarefa");
+  lines.push(
+    "Sintetize TUDO acima num único palpite-manchete (quem ganha + placar provável + placar do 1º tempo + quem marca primeiro + narrativa + mercados citados). Use TODO o insumo — forma/H2H/tabela MAIS o sinal das análises MAIS as notícias factuais — pra dar a sua MELHOR previsão; pode cravar o lado menos óbvio/azarão quando o conjunto justifica. O placar do 1º tempo deve ser <= o placar provável final em cada lado; o 'primeiro a marcar' deve ser coerente com quem você acha que ganha. Opcionalmente preencha cardsTemperature ('pegado'/'muito_pegado') se o jogo tem cara de pegado (clássico/decisão/rivalidade/árbitro citado) — OMITA em jogo morno; NUNCA cite cartões/árbitro em verdict ou narrative (a estimativa vai SÓ no campo cardsTemperature). Mesmo sem valor em nenhum mercado, dê seu palpite honesto a partir de forma/H2H/tabela. Chame submit_palpite. NUNCA cite edge/EV/stake/odd/R$ — tom de torcida.",
+  );
+
+  return lines.join("\n");
+}
+
+// # Notícias recentes (ADR 0032 / #377) — fontes REAIS {title,url} capturadas via web
+// search da Claude. Contexto factual pro veredito (desfalque de última hora, troca de
+// técnico). Cite o FATO, NUNCA a linguagem de valor da fonte, NUNCA invente. Comum ao
+// v12 e ao v13.
+export function pushNewsLines(lines: string[], input: PalpitesInput): void {
   lines.push("");
   lines.push("# Notícias recentes (fontes reais)");
   if (input.news.length === 0) {
@@ -696,24 +727,18 @@ export function buildUserMessage(
       "Use as notícias como contexto factual; cite o fato, NUNCA a linguagem de valor da fonte; NUNCA invente.",
     );
   }
-
-  lines.push("");
-  lines.push("# Sua tarefa");
-  lines.push(
-    "Sintetize TUDO acima num único palpite-manchete (quem ganha + placar provável + placar do 1º tempo + quem marca primeiro + narrativa + mercados citados). Use TODO o insumo — forma/H2H/tabela MAIS o sinal das análises MAIS as notícias factuais — pra dar a sua MELHOR previsão; pode cravar o lado menos óbvio/azarão quando o conjunto justifica. O placar do 1º tempo deve ser <= o placar provável final em cada lado; o 'primeiro a marcar' deve ser coerente com quem você acha que ganha. Opcionalmente preencha cardsTemperature ('pegado'/'muito_pegado') se o jogo tem cara de pegado (clássico/decisão/rivalidade/árbitro citado) — OMITA em jogo morno; NUNCA cite cartões/árbitro em verdict ou narrative (a estimativa vai SÓ no campo cardsTemperature). Mesmo sem valor em nenhum mercado, dê seu palpite honesto a partir de forma/H2H/tabela. Chame submit_palpite. NUNCA cite edge/EV/stake/odd/R$ — tom de torcida.",
-  );
-
-  return lines.join("\n");
 }
 
 // ─── Cartridge ────────────────────────────────────────────────────────────────
 
-export const palpitesCartridge: PalpiteCartridge<
+// O v12 (#668: o fallback sem fonte de λ). Prompt, ferramenta, schema e mensagem iguais
+// aos de antes do v13, byte a byte.
+export const palpitesLlmPickCartridge: PalpiteCartridge<
   PalpitesInput,
   PalpiteSynthesisOutput,
   BuildPalpitesInputArgs
 > = {
-  version: PALPITES_VERSION,
+  version: PALPITES_LLM_PICK_VERSION,
   systemPrompt: SYSTEM_PROMPT,
   tool: toToolDef(SUBMIT_PALPITE_TOOL),
   toolName: SUBMIT_PALPITE_TOOL.name,

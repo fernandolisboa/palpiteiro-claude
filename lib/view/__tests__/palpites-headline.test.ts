@@ -85,6 +85,44 @@ describe("toPalpiteHeadlineView", () => {
     ).toBeNull();
   });
 
+  it("#668: o palpite decidido em código (pick) e o `templated` NÃO cruzam pra view", () => {
+    const v = toPalpiteHeadlineView(
+      source({
+        headline: {
+          ...headline,
+          confidence: "media",
+          confidenceProbPct: 41.37,
+          confidenceSource: "market",
+          pick: {
+            rule: "most_likely_v1",
+            source: "market",
+            outcome: "away",
+            score: { home: 1, away: 2 },
+            scorePct: 11.83,
+            probs: { home: 31.2, draw: 27.43, away: 41.37 },
+            marginPp: 10.17,
+            firstHalfScore: { home: 0, away: 1 },
+            firstToScore: "away",
+            lambda: { home: 1.1, away: 1.45 },
+            base: { home: 1.12, away: 1.4 },
+            multipliers: { home: 0.98, away: 1.04 },
+            rho: -0.08,
+            basePredictionId: "pred-1",
+            predictionCreatedAt: "2026-11-21T18:00:00.000Z",
+            fit: null,
+          },
+          templated: { verdict: true, narrative: false, reason: "verdictOutcome" },
+        },
+      }),
+    );
+    expect(v).not.toHaveProperty("pick");
+    expect(v).not.toHaveProperty("templated");
+    const json = JSON.stringify(v);
+    for (const leaked of ["41.37", "most_likely", "market", "pred-1", "lambda"]) {
+      expect(json).not.toContain(leaked);
+    }
+  });
+
   it("badge = outcome.result quando liquidado (won/lost)", () => {
     expect(toPalpiteHeadlineView(source({ outcome: { result: "won" } })).badge).toBe(
       "won",
