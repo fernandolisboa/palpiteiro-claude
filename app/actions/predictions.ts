@@ -910,6 +910,7 @@ export async function analyzeBestBet(
     // Prazo do run inteiro: a reserva do fan-out é o que sobra pra ela.
     deadlineAt: runDeadline,
     news,
+    displayTeams: displayTeams(match),
   });
   revalidatePath(`/match/${matchId}`);
   revalidatePath("/jogos");
@@ -1118,6 +1119,8 @@ async function synthesizeHeadline(args: {
   news?: ReturnType<typeof startNewsFetch>;
   // Palpite ao vivo (#594): cartucho palpites_live, sem notícias.
   live?: GenerateLivePalpiteArgs["live"];
+  // Nome de exibição dos times pro texto de template e o "Ver raciocínio" (#668).
+  displayTeams?: { home: string; away: string };
 }): Promise<HeadlineOutcome> {
   const { scope, matchId, isAdmin } = args;
   const spec = synthesisStep(args.live !== undefined);
@@ -1145,6 +1148,7 @@ async function synthesizeHeadline(args: {
           modelOverride: UTILITY_MODEL_ID,
           deadlineAt: args.deadlineAt,
           news: args.news,
+          ...(args.displayTeams ? { displayTeams: args.displayTeams } : {}),
         })
     ).catch((err: unknown) => {
       step.fail();
@@ -1326,6 +1330,7 @@ export async function generatePalpiteFromAnalyses(
     analyses,
     deadlineAt,
     ...(liveContext ? { live: liveContext } : {}),
+    displayTeams: displayTeams(match),
   });
   revalidatePath(`/match/${matchId}`);
   revalidatePath("/jogos");

@@ -71,7 +71,8 @@ describe("palpites_live_v2 — cartucho", () => {
   it("versão própria; o cartucho de pré-jogo segue o mesmo", () => {
     expect(PALPITES_LIVE_VERSION).toBe("palpites_live_v2");
     expect(palpitesLiveCartridge.version).toBe("palpites_live_v2");
-    expect(getPalpiteCartridge().version).not.toBe(PALPITES_LIVE_VERSION);
+    expect(getPalpiteCartridge("model_pick").version).not.toBe(PALPITES_LIVE_VERSION);
+    expect(getPalpiteCartridge("llm_pick").version).not.toBe(PALPITES_LIVE_VERSION);
   });
 
   it("prompt fixado (mudou? bump + commit prompt:)", () => {

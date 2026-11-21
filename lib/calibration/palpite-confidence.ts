@@ -17,9 +17,11 @@ export const CONFIDENCE_LEVELS: readonly PalpiteConfidenceLevel[] = [
   "alta",
 ];
 
-// "motor" = confiança calculada em código (#649); "llm" = a palavra que o LLM escolhia
-// antes (sets sem `confidenceSource`).
-export type ConfidenceEra = "motor" | "llm";
+// "modelo" = palpite decidido em código (#668, ADR 0072: sets com `pick`), a confiança da
+// mesma matriz que escolheu o resultado; "motor" = confiança calculada em código sobre o
+// placar que o LLM escolheu (#649); "llm" = a palavra que o LLM escolhia antes (sets sem
+// `confidenceSource`).
+export type ConfidenceEra = "modelo" | "motor" | "llm";
 
 const score = z.object({
   home: z.number().int().nonnegative(),
@@ -31,8 +33,10 @@ const headlineSchema = z.object({
   confidence: z.enum(["baixa", "media", "alta"]).nullable(),
   confidenceProbPct: z.number().finite().min(0).max(100).nullable().optional(),
   confidenceSource: z
-    .enum(["snapshot", "analysis", "live_matrix", "none"])
+    .enum(["market", "dc_jev", "snapshot", "analysis", "live_matrix", "none"])
     .optional(),
+  // Presença marca a era "modelo" (#668); o conteúdo não é lido aqui.
+  pick: z.unknown().optional(),
 });
 
 export type PalpiteConfidenceRawRow = {
@@ -64,12 +68,16 @@ export function toConfidenceRow(
   const result = resultScore.safeParse(raw.resultData);
   if (!headline.success || !predicted.success || !result.success) return null;
   const era: ConfidenceEra =
-    headline.data.confidenceSource === undefined ? "llm" : "motor";
+    headline.data.pick !== undefined
+      ? "modelo"
+      : headline.data.confidenceSource === undefined
+        ? "llm"
+        : "motor";
   return {
     matchId: raw.matchId,
     era,
     level: headline.data.confidence,
-    probPct: era === "motor" ? (headline.data.confidenceProbPct ?? null) : null,
+    probPct: era === "llm" ? null : (headline.data.confidenceProbPct ?? null),
     hit:
       scoreOutcome(predicted.data) ===
       scoreOutcome({ home: result.data.homeScore, away: result.data.awayScore }),
@@ -102,7 +110,7 @@ function mean(values: number[]): number | null {
 export function deriveConfidenceCalibration(
   rows: readonly PalpiteConfidenceRow[],
 ): ConfidenceEraSummary[] {
-  return (["motor", "llm"] as const).map((era) => {
+  return (["modelo", "motor", "llm"] as const).map((era) => {
     const ofEra = rows.filter((r) => r.era === era);
     return {
       era,
@@ -113,7 +121,7 @@ export function deriveConfidenceCalibration(
           level,
           n: band.length,
           matches: new Set(band.map((r) => r.matchId)).size,
-          meanForecast: era === "motor" ? mean(probs) : null,
+          meanForecast: era === "llm" ? null : mean(probs),
           hitRate: mean(band.map((r) => (r.hit ? 1 : 0))),
         };
       }),

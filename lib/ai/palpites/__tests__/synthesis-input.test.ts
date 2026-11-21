@@ -394,6 +394,37 @@ describe("contexto extra fora da síntese (PLAN-565 §13.2)", () => {
     expect(expectNoUserText(out)).toContain("Racional: Fatores do modelo:");
   });
 
+  it("#668: insumo do palpite em código — odds de 3 casas, λ do run e fatores sem os do usuário", () => {
+    const pred = withUser();
+    (pred as { createdAt: Date }).createdAt = new Date("2026-05-20T12:00:00.000Z");
+    const [a] = summarizeAnalysesForSynthesis([
+      okOutcome("match_result", pred, [
+        { key: "home", modelProbPct: 58, odd: 1.85049 },
+        { key: "draw", modelProbPct: 24, odd: 3.4 },
+        { key: "away", modelProbPct: 18, odd: null },
+      ]),
+    ]);
+    expect(a.odds).toEqual({ home: 1.85, draw: 3.4 });
+    expect(a.line).toBeNull();
+    expect(a.predictionCreatedAt).toBe("2026-05-20T12:00:00.000Z");
+    expect(a.judgmentsModel).toEqual({
+      base: { home: 1.5, away: 1.1 },
+      adjusted: { home: 1.52, away: 1.1 },
+      rho: null,
+      stateHash: "h",
+      jevAiCallId: null,
+    });
+    // Só o fator do JEV; o que o usuário moveu (ataque do mandante) não vai.
+    expect(a.factorPhrases).toEqual([
+      "Desfalques ou titulares poupados atingem a defesa ou o goleiro titular do visitante (gols esperados do mandante ajustados para cima) — sinal forte",
+    ]);
+    // Nada disso entra no input da síntese (o parse descarta).
+    const parsed = MarketAnalysisSchema.parse(a);
+    expect(parsed).not.toHaveProperty("odds");
+    expect(parsed).not.toHaveProperty("judgmentsModel");
+    expect(parsed).not.toHaveProperty("factorPhrases");
+  });
+
   it("refazer só o palpite (histórico salvo): mesma regra", () => {
     const out = summarizeSavedAnalysesForSynthesis([
       { prediction: withUser(), aiCall: null, marketKey: "match_result", selections: SELECTIONS },

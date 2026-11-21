@@ -342,7 +342,11 @@ function BacktestSection() {
 }
 
 const CONFIDENCE_WORD = { baixa: "baixa", media: "média", alta: "alta" } as const;
-const ERA_LABEL = { motor: "pelo motor", llm: "LLM (antes do #649)" } as const;
+const ERA_LABEL = {
+  modelo: "palpite pelo modelo (#668)",
+  motor: "pelo motor",
+  llm: "LLM (antes do #649)",
+} as const;
 
 // Confiança do palpite (#649, ADR 0069): a P que o motor deu ao resultado do placar
 // provável, por faixa, contra o resultado de 90 minutos. A era LLM fica de comparação.
@@ -354,6 +358,7 @@ function ConfidenceSection({
   skipped: number;
 }) {
   const { media, alta } = PALPITE_CONFIDENCE_BANDS;
+  const motorWithout = eras.find((e) => e.era === "motor")?.withoutConfidence ?? 0;
   return (
     <section className="pb-8">
       <h2 className="pb-3 font-mono text-meta uppercase tracking-label text-muted-foreground">
@@ -396,8 +401,8 @@ function ConfidenceSection({
         {alta}% é média, a partir de {alta}% é alta. Previsto = essa chance, em média; acerto = quantas
         vezes o resultado bateu com o placar de 90 minutos. Só palpites de pré-jogo
         liquidados, o mais novo de cada jogo e usuário.
-        {eras[0].withoutConfidence > 0 &&
-          ` ${eras[0].withoutConfidence} palpite(s) pelo motor ficaram sem confiança (sem a chance do modelo pro jogo).`}
+        {motorWithout > 0 &&
+          ` ${motorWithout} palpite(s) pelo motor ficaram sem confiança (sem a chance do modelo pro jogo).`}
         {skipped > 0 &&
           ` ${skipped} palpite(s) liquidado(s) ficaram fora por não ter o placar de 90 minutos gravado (override manual) ou dado ilegível.`}
       </p>

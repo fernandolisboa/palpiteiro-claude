@@ -240,6 +240,8 @@ const baseCall = {
   userId: "u-1",
   analyses: [analysis()],
   modelOverride: "claude-haiku-5-5" as const,
+  // A action resolve o nome de exibição (lib/view/team) e passa pronto (#668).
+  displayTeams: { home: "Flamengo", away: "Fluminense" },
 };
 
 describe("generatePalpites (síntese) — prazo do run (#524 re-review)", () => {
@@ -887,6 +889,247 @@ describe("generatePalpites (síntese) — caminhos de erro (auditados, sem set)"
       "match is not analyzable",
     );
     expect(runAnalysis).not.toHaveBeenCalled();
+  });
+});
+
+// ─── #668 (ADR 0072): palpite decidido em código ─────────────────────────────
+
+// O 1X2 code_jev do run: recomenda o mandante por PREÇO (2.90), mas o mercado sem margem
+// dá o visitante como mais provável (2.35). O palpite é o visitante.
+function codeJevAnalysis(over: Partial<MarketAnalysisSummary> = {}): MarketAnalysisSummary {
+  return analysis({
+    recommendation: "home",
+    recommendedLabel: "Casa",
+    oddAtRecommendation: 2.9,
+    engine: "code_jev",
+    odds: { home: 2.9, draw: 3.3, away: 2.35 },
+    line: null,
+    predictionCreatedAt: "2026-05-15T12:00:00.000Z",
+    judgmentsModel: {
+      base: { home: 1.2, away: 1.4 },
+      adjusted: { home: 1.2, away: 1.4 },
+      rho: -0.08,
+      stateHash: "s-1",
+      jevAiCallId: "jev-1",
+    },
+    factorPhrases: [],
+    ...over,
+  });
+}
+
+const modelPickText = {
+  verdict: "Vai dar Fluminense",
+  verdictOutcome: "away",
+  narrative: "O Flu chega embalado e o Fla sente a semana pesada.",
+  citedMarkets: ["Resultado (1X2)"],
+};
+
+const pickCall = { ...baseCall, analyses: [codeJevAnalysis()] };
+
+type SetRow = {
+  aiCallId: string | null;
+  promptVersion: string;
+  headline: Record<string, unknown> & {
+    pick: {
+      source: string;
+      outcome: string;
+      probs: Record<string, number>;
+      basePredictionId: string;
+    };
+  };
+};
+type LineRow = { type: string; params: { home: number; away: number } };
+
+function quietly<T>(fn: () => Promise<T>): Promise<T> {
+  const warn = vi.spyOn(console, "warn").mockImplementation(() => {});
+  return fn().finally(() => warn.mockRestore());
+}
+
+describe("generatePalpites — palpite decidido em código (#668)", () => {
+  it("base de mercado: v13, placar e confiança do pick, headline com pick, sem ler o snapshot", async () => {
+    runAnalysis.mockResolvedValue(okResult(modelPickText));
+    await generatePalpites(pickCall);
+
+    const req = runAnalysis.mock.calls[0][0] as AnalysisRequest;
+    expect(req.userMessage).toContain("# Palpite fixado");
+    expect(req.userMessage).toContain("vitória do Fluminense FC (visitante)");
+    expect(getLatestMatchModelSnapshot).not.toHaveBeenCalled();
+
+    const aiCallRow = insertValues.mock.calls[0][0] as Record<string, unknown>;
+    expect(aiCallRow.status).toBe("ok");
+    expect(aiCallRow.promptVersion).toBe("palpites_v14");
+    const setRow = insertValues.mock.calls[1][0] as SetRow;
+    expect(setRow.promptVersion).toBe("palpites_v14");
+    expect(setRow.headline.verdict).toBe("Vai dar Fluminense");
+    expect(setRow.headline.confidenceSource).toBe("market");
+    expect(setRow.headline.pick.source).toBe("market");
+    expect(setRow.headline.pick.outcome).toBe("away");
+    expect(setRow.headline.pick.basePredictionId).toBe("pred-1");
+    expect(setRow.headline.confidenceProbPct).toBe(setRow.headline.pick.probs.away);
+    expect(setRow.headline.templated).toBeUndefined();
+    const rows = insertValues.mock.calls[2][0] as LineRow[];
+    const exact = rows.find((r) => r.type === "exact_score")!;
+    expect(exact.params.away).toBeGreaterThan(exact.params.home);
+  });
+
+  it("sem odds no 1X2: λ do modelo (dc_jev)", async () => {
+    runAnalysis.mockResolvedValue(
+      okResult({ ...modelPickText, verdict: "Vai dar Flamengo", verdictOutcome: "home" }),
+    );
+    await generatePalpites({
+      ...baseCall,
+      analyses: [
+        codeJevAnalysis({
+          odds: {},
+          judgmentsModel: {
+            base: { home: 1.9, away: 0.8 },
+            adjusted: { home: 1.9, away: 0.8 },
+            rho: null,
+            stateHash: "s",
+            jevAiCallId: null,
+          },
+        }),
+      ],
+    });
+    const setRow = insertValues.mock.calls[1][0] as SetRow;
+    expect(setRow.headline.pick.source).toBe("dc_jev");
+    expect(setRow.headline.pick.outcome).toBe("home");
+    expect(setRow.headline.confidenceSource).toBe("dc_jev");
+  });
+
+  it("veredito do outro time → veredito de template, narrativa do LLM fica, row ok", async () => {
+    runAnalysis.mockResolvedValue(
+      okResult({ ...modelPickText, verdict: "Vai dar Flamengo", verdictOutcome: "home" }),
+    );
+    await quietly(() => generatePalpites(pickCall));
+    const aiCallRow = insertValues.mock.calls[0][0] as Record<string, unknown>;
+    expect(aiCallRow.status).toBe("ok");
+    const setRow = insertValues.mock.calls[1][0] as SetRow;
+    expect(setRow.headline.verdict).toBe("Vai dar Fluminense");
+    expect(setRow.headline.narrative).toBe(modelPickText.narrative);
+    expect(setRow.headline.templated).toMatchObject({ verdict: true, narrative: false });
+  });
+
+  it("probableScore na saída v13 → row invalid_output e palpite de template (T7)", async () => {
+    runAnalysis.mockResolvedValue(
+      okResult({ ...modelPickText, probableScore: { home: 2, away: 1 } }),
+    );
+    const res = await quietly(() => generatePalpites(pickCall));
+    expect(insertValues).toHaveBeenCalledTimes(3);
+    const errRow = insertValues.mock.calls[0][0] as Record<string, unknown>;
+    expect(errRow.status).toBe("invalid_output");
+    expect(errRow.promptVersion).toBe("palpites_v14");
+    const setRow = insertValues.mock.calls[1][0] as SetRow;
+    // O set aponta pra row de erro (status real), com o texto de template.
+    expect(setRow.aiCallId).toBe("row-1");
+    expect(res.aiCall).toEqual({ id: "row-1" });
+    expect(setRow.headline.verdict).toBe("Vai dar Fluminense");
+    expect(setRow.headline.templated).toMatchObject({ verdict: true, narrative: true });
+    expect(setRow.headline.citedMarkets).toEqual([]);
+  });
+
+  it("sem nome de exibição: template com o canonical, e o veredito com o canonical passa", async () => {
+    const { displayTeams: _omit, ...canonicalCall } = pickCall;
+    runAnalysis.mockResolvedValueOnce(
+      okResult({ ...modelPickText, probableScore: { home: 2, away: 1 } }),
+    );
+    await quietly(() => generatePalpites(canonicalCall));
+    const templ = insertValues.mock.calls[1][0] as SetRow;
+    expect(templ.headline.verdict).toBe("Vai dar Fluminense FC");
+
+    insertValues.mockClear();
+    runAnalysis.mockResolvedValueOnce(
+      okResult({ ...modelPickText, verdict: "Vai dar Fluminense FC" }),
+    );
+    await quietly(() => generatePalpites(pickCall));
+    const ok = insertValues.mock.calls[1][0] as SetRow;
+    expect(ok.headline.verdict).toBe("Vai dar Fluminense FC");
+    expect(ok.headline.templated).toBeUndefined();
+  });
+
+  it("erro do provedor com pick → template, sem throw", async () => {
+    runAnalysis.mockResolvedValue({
+      ok: false,
+      status: "provider_error",
+      message: "overloaded",
+      cause: null,
+      usage: {
+        inputTokens: 0,
+        outputTokens: 0,
+        cacheCreationInputTokens: 0,
+        cacheReadInputTokens: 0,
+      },
+      inputPayload: {},
+      outputPayload: {},
+      stopReason: null,
+      latencyMs: 10,
+      servedModel: MODEL_REGISTRY["claude-haiku-5-5"],
+    } satisfies AnalysisResult);
+    await quietly(() => generatePalpites(pickCall));
+    expect((insertValues.mock.calls[0][0] as Record<string, unknown>).status).toBe(
+      "provider_error",
+    );
+    const setRow = insertValues.mock.calls[1][0] as SetRow;
+    expect(setRow.headline.templated).toMatchObject({ verdict: true, narrative: true });
+  });
+
+  it("sem tempo pra chamada com pick → template, sem chamada nem row de ai_calls", async () => {
+    await quietly(() => generatePalpites({ ...pickCall, deadlineAt: Date.now() + 5_000 }));
+    expect(runAnalysis).not.toHaveBeenCalled();
+    // set + linhas (sem ai_call).
+    expect(insertValues).toHaveBeenCalledTimes(2);
+    const setRow = insertValues.mock.calls[0][0] as SetRow;
+    expect(setRow.aiCallId).toBeNull();
+  });
+
+  it("linguagem de valor só na narrativa → só ela sai do template; uma row invalid_output", async () => {
+    runAnalysis.mockResolvedValue(okResult({ ...modelPickText, narrative: "Tem edge no Flu." }));
+    await quietly(() => generatePalpites(pickCall));
+    expect(insertValues).toHaveBeenCalledTimes(3);
+    const errRow = insertValues.mock.calls[0][0] as Record<string, unknown>;
+    expect(errRow.status).toBe("invalid_output");
+    const setRow = insertValues.mock.calls[1][0] as SetRow;
+    expect(setRow.headline.verdict).toBe(modelPickText.verdict);
+    expect(setRow.headline.narrative).not.toContain("edge");
+    expect(setRow.headline.templated).toMatchObject({ verdict: false, narrative: true });
+  });
+
+  it("v13: 'preço' no veredito → só ele sai do template; uma row invalid_output", async () => {
+    runAnalysis.mockResolvedValue(
+      okResult({ ...modelPickText, verdict: "Flu no preço certo pra levar" }),
+    );
+    await quietly(() => generatePalpites(pickCall));
+    expect(insertValues).toHaveBeenCalledTimes(3);
+    const errRow = insertValues.mock.calls[0][0] as Record<string, unknown>;
+    expect(errRow.status).toBe("invalid_output");
+    const setRow = insertValues.mock.calls[1][0] as SetRow;
+    expect(setRow.headline.verdict).not.toMatch(/preço/i);
+    expect(setRow.headline.narrative).toBe(modelPickText.narrative);
+    expect(setRow.headline.templated).toMatchObject({ verdict: true, narrative: false });
+  });
+
+  it("determinismo: dois runs com textos diferentes → mesmo exact_score e mesma confiança", async () => {
+    const capture = () => ({
+      set: insertValues.mock.calls[1][0] as SetRow,
+      rows: insertValues.mock.calls[2][0] as LineRow[],
+    });
+    const settled = (rows: LineRow[]) =>
+      rows.filter((r) => r.type !== "cards").map((r) => [r.type, r.params]);
+
+    runAnalysis.mockResolvedValueOnce(okResult(modelPickText));
+    await generatePalpites(pickCall);
+    const first = capture();
+    insertValues.mockClear();
+    runAnalysis.mockResolvedValueOnce(
+      okResult({ ...modelPickText, verdict: "O Flu leva", narrative: "Outro texto qualquer." }),
+    );
+    await generatePalpites(pickCall);
+    const second = capture();
+
+    expect(settled(second.rows)).toEqual(settled(first.rows));
+    expect(second.set.headline.confidence).toBe(first.set.headline.confidence);
+    expect(second.set.headline.confidenceProbPct).toBe(first.set.headline.confidenceProbPct);
+    expect(second.set.headline.pick).toEqual(first.set.headline.pick);
   });
 });
 

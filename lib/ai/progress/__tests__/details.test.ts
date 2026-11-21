@@ -10,6 +10,7 @@ import {
   jevDetail,
   modelDetail,
   newsDetail,
+  pickDetail,
   sportsDataDetail,
   synthesisDetail,
   userContextDetail,
@@ -157,6 +158,58 @@ describe("detalhes das etapas (Ver raciocínio, ADR 0065)", () => {
         { marketLabel: "Ambas marcam", recommendedLabel: null, isPass: true },
       ]),
     ).toEqual(["Dupla chance: Vitória ou empate", "Ambas marcam: sem escolha neste mercado"]);
+    expect(
+      analysesDetail(
+        [
+          {
+            marketKey: "match_result",
+            marketLabel: "Resultado (1X2)",
+            recommendation: "home",
+            recommendedLabel: "Casa",
+            isPass: false,
+          },
+          {
+            marketKey: "double_chance",
+            marketLabel: "Dupla chance",
+            recommendation: "away_or_draw",
+            recommendedLabel: "Fora ou empate",
+            isPass: false,
+          },
+          {
+            marketKey: "over_under",
+            marketLabel: "Mais/Menos gols",
+            recommendation: "over",
+            recommendedLabel: "Mais de 2,5 gols",
+            isPass: false,
+          },
+          { marketKey: "btts", marketLabel: "Ambas marcam", recommendedLabel: null, isPass: true },
+        ],
+        teams,
+      ),
+    ).toEqual([
+      "Resultado (1X2): preço mais interessante em vitória do Vitória",
+      "Dupla chance: preço mais interessante em empate ou Athletico-PR",
+      "Mais/Menos gols: preço mais interessante em Mais de 2,5 gols",
+      "Ambas marcam: nenhum preço chamou atenção",
+    ]);
+    // Ao vivo, como antes.
+    expect(
+      analysesDetail(
+        [{ marketLabel: "Resultado (1X2)", recommendedLabel: "Casa", isPass: false }],
+        teams,
+        { live: true },
+      ),
+    ).toEqual(["Resultado (1X2): Casa"]);
+    expect(
+      pickDetail({ source: "market", outcome: "away", score: { home: 1, away: 2 } }, teams),
+    ).toEqual([
+      "Palpite: vitória do Athletico-PR, 1–2. O resultado mais provável pelos preços do jogo, com o contexto do jogo por cima",
+    ]);
+    expect(
+      pickDetail({ source: "dc_jev", outcome: "draw", score: { home: 1, away: 1 } }, teams)[0],
+    ).toMatch(/^Palpite: empate, 1–1\. O resultado mais provável pelo modelo/);
+    expect(pickDetail(null, teams)[0]).toMatch(/^Palpite escolhido pela IA/);
+    expect(pickDetail(null, teams, { live: true })[0]).toMatch(/^Palpite ao vivo/);
     expect(synthesisDetail({ level: "media" })).toEqual([
       "Confiança do palpite: média, pela chance que o modelo dá a esse resultado",
     ]);
@@ -194,6 +247,23 @@ describe("detalhes das etapas (Ver raciocínio, ADR 0065)", () => {
         { marketLabel: "Over/Under gols", recommendedLabel: "Mais de 2.5", isPass: false },
         { marketLabel: "Placar exato", recommendedLabel: "2-1", isPass: false },
       ]),
+      ...analysesDetail(
+        [
+          {
+            marketKey: "match_result",
+            marketLabel: "Resultado (1X2)",
+            recommendation: "draw",
+            recommendedLabel: "Empate",
+            isPass: false,
+          },
+          { marketKey: "btts", marketLabel: "Ambas marcam", recommendedLabel: null, isPass: true },
+        ],
+        teams,
+      ),
+      ...pickDetail({ source: "market", outcome: "home", score: { home: 2, away: 1 } }, teams),
+      ...pickDetail({ source: "dc_jev", outcome: "away", score: { home: 0, away: 1 } }, teams),
+      ...pickDetail(null, teams),
+      ...pickDetail(null, teams, { live: true }),
       ...synthesisDetail({ level: "alta" }),
       ...synthesisDetail(null),
     ];

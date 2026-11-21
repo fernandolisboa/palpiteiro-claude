@@ -7,13 +7,14 @@ import type {
 } from "@/lib/providers/sports-data/types";
 
 import {
+  PALPITES_LLM_PICK_VERSION,
   PALPITES_VERSION,
   PalpitesInputSchema,
   PalpitesOutputSchema,
   SUBMIT_PALPITE_TOOL,
   buildPredictionInput,
   buildUserMessage,
-  palpitesCartridge,
+  palpitesLlmPickCartridge,
   type BuildPalpitesInputArgs,
 } from "../cartridge";
 import { deriveSettleable } from "../../settleable";
@@ -106,7 +107,7 @@ describe("PalpitesOutputSchema (síntese v3)", () => {
         PalpitesOutputSchema.safeParse({ ...validHeadline, confidence }).success,
       ).toBe(false);
     }
-    expect(palpitesCartridge.systemPrompt).not.toMatch(/confidence/);
+    expect(palpitesLlmPickCartridge.systemPrompt).not.toMatch(/confidence/);
   });
 
   it("rejeita probableScore faltando / negativo / não-inteiro / >20", () => {
@@ -220,15 +221,16 @@ describe("deriveSettleable", () => {
 
 describe("SUBMIT_PALPITE_TOOL", () => {
   it("o cartucho expõe o ToolDef neutro com o mesmo nome (submit_palpite)", () => {
-    expect(palpitesCartridge.toolName).toBe("submit_palpite");
-    expect(palpitesCartridge.tool.name).toBe("submit_palpite");
-    expect(palpitesCartridge.tool.inputSchema).toBe(
+    expect(palpitesLlmPickCartridge.toolName).toBe("submit_palpite");
+    expect(palpitesLlmPickCartridge.tool.name).toBe("submit_palpite");
+    expect(palpitesLlmPickCartridge.tool.inputSchema).toBe(
       SUBMIT_PALPITE_TOOL.input_schema,
     );
   });
-  it("a versão é palpites_v13 (notícias com trecho e desfecho da busca, #670)", () => {
-    expect(PALPITES_VERSION).toBe("palpites_v13");
-    expect(palpitesCartridge.version).toBe("palpites_v13");
+  it("o fallback sem fonte de λ (#668) é o v13 (notícias com trecho e desfecho da busca, #670); a versão corrente é a v14", () => {
+    expect(PALPITES_LLM_PICK_VERSION).toBe("palpites_v13");
+    expect(palpitesLlmPickCartridge.version).toBe("palpites_v13");
+    expect(PALPITES_VERSION).toBe("palpites_v14");
   });
   it("o tool NÃO declara campos de valor (firewall estrutural); declara firstHalfScore + firstToScore (#354) + cardsTemperature (#419)", () => {
     const props = SUBMIT_PALPITE_TOOL.input_schema.properties as Record<
@@ -272,7 +274,7 @@ describe("SUBMIT_PALPITE_TOOL", () => {
 
 describe("SYSTEM_PROMPT", () => {
   it("proíbe explicitamente odd/edge/stake/Yield e exige a chamada do tool", () => {
-    const p = palpitesCartridge.systemPrompt.toLowerCase();
+    const p = palpitesLlmPickCartridge.systemPrompt.toLowerCase();
     expect(p).toContain("odd");
     expect(p).toContain("edge");
     expect(p).toContain("stake");
@@ -283,13 +285,13 @@ describe("SYSTEM_PROMPT", () => {
   });
 
   it("instrui o caso ALL-PASS (palpite mesmo sem valor em nenhum mercado)", () => {
-    const p = palpitesCartridge.systemPrompt.toLowerCase();
+    const p = palpitesLlmPickCartridge.systemPrompt.toLowerCase();
     expect(p).toContain("pass");
     expect(p).toMatch(/mesmo que nenhum|mesmo sem|nunca recuse/);
   });
 
   it("#376 / ADR 0031: é value-aware — autoriza o lado menos óbvio/azarão usando as análises", () => {
-    const p = palpitesCartridge.systemPrompt.toLowerCase();
+    const p = palpitesLlmPickCartridge.systemPrompt.toLowerCase();
     // O dogma do óbvio caiu: o prompt agora autoriza explicitamente o lado não-óbvio.
     expect(p).toMatch(/menos óbvio|azarão|não-óbvio/);
     // E o sinal das análises é insumo legítimo da previsão (não algo a ignorar).
@@ -297,14 +299,14 @@ describe("SYSTEM_PROMPT", () => {
   });
 
   it("#376: coherence-survival — a expansão value-aware NÃO derruba a exigência de placar provável coerente (badge settleable)", () => {
-    const p = palpitesCartridge.systemPrompt.toLowerCase();
+    const p = palpitesLlmPickCartridge.systemPrompt.toLowerCase();
     // A cláusula de coerência do badge liquidável (#354) segue no prompt.
     expect(p).toContain("placar provável");
     expect(p).toContain("coerente com o veredito");
   });
 
   it("#419: instrui cardsTemperature como campo OPCIONAL (omite em jogo morno) — temperatura, NÃO número", () => {
-    const p = palpitesCartridge.systemPrompt.toLowerCase();
+    const p = palpitesLlmPickCartridge.systemPrompt.toLowerCase();
     expect(p).toContain("cardstemperature");
     expect(p).toContain("pegado");
     expect(p).toContain("muito_pegado");
@@ -314,7 +316,7 @@ describe("SYSTEM_PROMPT", () => {
   });
 
   it("#419 FIREWALL: proíbe mencionar cartões/árbitro/contagem em verdict ou narrative (a estimativa vai SÓ no campo estruturado)", () => {
-    const p = palpitesCartridge.systemPrompt.toLowerCase();
+    const p = palpitesLlmPickCartridge.systemPrompt.toLowerCase();
     // O único vetor de fabricação não-coberto pelo value-guard/validador de fidelidade
     // é fechado por uma cláusula de prompt: nada de cartão/árbitro na prosa.
     expect(p).toContain("cardstemperature");
