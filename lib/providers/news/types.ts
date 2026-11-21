@@ -3,22 +3,44 @@
 // SportsDataProvider gorda. Notícia é insumo do palpite embasado (ADR 0031), nunca
 // um mercado liquidável novo (gate Tier 3 de pé, ADR 0025).
 
-// Uma fonte REAL capturada de um bloco `web_search_tool_result` da Claude — só
-// `{title, url}`. NUNCA inventada pelo LLM: é tool output, não prosa do modelo, então
-// não pode carregar afirmação de valor por construção (firewall, ADR 0030/0032).
+// De onde veio a notícia (ADR 0032, adendo #670). `ge` = RSS do ge por time (fonte
+// primária pra time brasileiro); `web_search` = server tool da Claude (fallback).
+export type NewsSourceKind = "ge" | "web_search";
+
+// Uma fonte REAL: item do RSS do ge ou bloco `web_search_tool_result` da Claude. NUNCA
+// inventada pelo LLM: é dado de feed/tool output, não prosa do modelo (firewall, ADR
+// 0030/0032). Só `{title, url}` persiste (headline.sources); `snippet`/`publishedAt`
+// vão só pro prompt da síntese (trecho curto, direito autoral: nunca exibido).
 export type NewsResult = {
   title: string;
   url: string;
+  // Trecho curto da matéria (linha fina ou começo do texto, ≤280 chars).
+  snippet?: string;
+  // Data de publicação (ISO).
+  publishedAt?: string;
+  source?: NewsSourceKind;
 };
 
-// O resultado da busca de notícias de uma partida. `unavailable=true` ⇒ provider
-// inerte (sem key, capability off) — degrada gracioso pra `results: []`, NUNCA bloqueia
-// o palpite (mirror absences). `aiCall` é o id da row de auditoria logada pelo adapter
-// (null se o log de auditoria falhou — o palpite ainda embarca).
+// Desfecho honesto do passo de notícias (#670): a UI e a síntese diferenciam "achou",
+// "procurou e não tinha nada", "falhou" e "nem buscou".
+//   found     — ≥1 notícia
+//   none      — a fonte respondeu e não havia notícia do jogo
+//   failed    — a fonte falhou (timeout, erro, sem chave, feed inválido)
+//   skipped   — sem tempo pra buscar (decidido no caller)
+//   no_search — o modelo respondeu sem rodar a web search
+export type NewsFetchStatus = "found" | "none" | "failed" | "skipped" | "no_search";
+
+// O resultado da busca de notícias de uma partida. NUNCA bloqueia o palpite (mirror
+// absences): qualquer desfecho que não `found` degrada pra `results: []`. `via` = a
+// fonte que respondeu (null quando nenhuma respondeu). `partial` = um feed de time
+// respondeu e o outro falhou (meia falha, só no caminho do ge). `aiCall` é o id da row
+// de auditoria da web search (null no RSS, que não é chamada de LLM, ou se o log falhou).
 export type NewsFetchOutcome = {
   results: NewsResult[];
   aiCall: { id: string } | null;
-  unavailable: boolean;
+  status: NewsFetchStatus;
+  via: NewsSourceKind | null;
+  partial?: boolean;
 };
 
 // Contexto mínimo da partida pra busca (nomes + liga + janela). Espelha o shape

@@ -14,6 +14,7 @@ import {
   progressTrace,
   stepDetail,
   trackStep,
+  type StepVerdict,
 } from "@/lib/ai/progress/run-progress";
 import { STEP_NOTES, STEPS, synthesisStep } from "@/lib/ai/progress/steps";
 import type {
@@ -99,15 +100,19 @@ const MAX_FIDELITY_ATTEMPTS = 1;
 const SYNTHESIS_MIN_MAX_TOKENS = 8192;
 
 /**
- * Busca de notícias da síntese (ADR 0032 / #377): provider DEDICADO via web search da
- * Claude. Degrada GRACIOSO (mirror absences): QUALQUER falha → results:[] e o palpite
- * ainda embarca — NUNCA bloqueia a manchete por notícia, e a promise nunca rejeita (o
- * caller pode dispará-la cedo e só aguardar depois). O provider já loga seu próprio
- * ai_call (predict.ts é a única porta).
+ * Busca de notícias da síntese (ADR 0032 / #377, adendo #670): RSS do ge por time
+ * primeiro, web search da Claude como fallback (lib/providers/news/combined.ts).
+ * Degrada GRACIOSO (mirror absences): QUALQUER falha → results:[] e o palpite ainda
+ * embarca — NUNCA bloqueia a manchete por notícia, e a promise nunca rejeita (o caller
+ * pode dispará-la cedo e só aguardar depois). A web search loga seu próprio ai_call
+ * (predict.ts é a única porta).
  *
  * Prazo: a busca termina SYNTHESIS_CALL_RESERVE_MS antes do prazo do run, pra nunca
  * comer o tempo da manchete (que é o produto; notícia é cor). Sem tempo pra uma busca
  * útil, nem chama: o palpite sai sem fontes em vez de não sair.
+ *
+ * O passo mostra o desfecho de verdade (#670): achou N (por fonte), procurou e nada
+ * (no ge ou na busca), meia falha, busca que não rodou, falha, sem tempo.
  *
  * Depende só do jogo (não das análises), então o analyzeBestBet a dispara junto do
  * fan-out e a síntese não espera mais por ela no fim do run.
@@ -123,18 +128,35 @@ export function startNewsFetch(
     newsDeadline === undefined || remainingMs(newsDeadline) >= NEWS_MIN_BUDGET_MS;
   if (!newsFits) {
     noteStep(STEPS.news, "skipped");
-    return Promise.resolve({ results: [], aiCall: null, unavailable: true });
+    return Promise.resolve({ results: [], aiCall: null, status: "skipped", via: null });
   }
-  return trackStep(
-    STEPS.news,
-    () => fetchNews(match, audit, newsDeadline),
-    (outcome) =>
-      outcome.unavailable
-        ? { status: "failed" }
-        : outcome.results.length === 0
-          ? { status: "done", label: STEP_NOTES.newsEmpty }
-          : { detail: newsDetail(outcome.results.length) },
-  );
+  return trackStep(STEPS.news, () => fetchNews(match, audit, newsDeadline), newsVerdict);
+}
+
+// Desfecho do passo de notícias pro "Ver raciocínio" (#670).
+export function newsVerdict(outcome: NewsFetchOutcome): StepVerdict {
+  switch (outcome.status) {
+    case "found":
+      return {
+        detail: [
+          ...newsDetail(outcome.results),
+          ...(outcome.partial ? [STEP_NOTES.newsPartial] : []),
+        ],
+      };
+    case "none":
+      if (outcome.via === "ge") {
+        return outcome.partial
+          ? { status: "done", label: STEP_NOTES.newsPartial, detail: [STEP_NOTES.newsNoneGe] }
+          : { status: "done", label: STEP_NOTES.newsNoneGe };
+      }
+      return { status: "done", label: STEP_NOTES.newsNoneWeb };
+    case "no_search":
+      return { status: "skipped", label: STEP_NOTES.newsNoSearch };
+    case "skipped":
+      return { status: "skipped" };
+    case "failed":
+      return { status: "failed" };
+  }
 }
 
 function fetchNews(
@@ -162,7 +184,7 @@ function fetchNews(
           message: err instanceof Error ? err.message : String(err),
         }),
       );
-      return { results: [] as NewsResult[], aiCall: null, unavailable: true };
+      return { results: [] as NewsResult[], aiCall: null, status: "failed", via: null };
     });
 }
 
@@ -305,7 +327,9 @@ export async function generatePalpites({
     rowsFor: (output) => buildSettleablePalpiteRows("", output),
     fidelity: (output) => checkFidelity(output, input),
     sourcePredictionIds: analyses.map((a) => a.predictionId),
-    sources: newsOutcome.results,
+    // Só {title,url} persiste (#670): trecho e data ficam fora do banco (direito autoral;
+    // o jsonb de headline.sources e quem o lê não mudam).
+    sources: newsOutcome.results.map(({ title, url }) => ({ title, url })),
     live: null,
     analysesLines: analysesDetail(analyses),
     confidenceProbs: pregameConfidenceProbs(snapshot, analyses),

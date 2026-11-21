@@ -140,7 +140,7 @@ vi.mock("@/lib/ai/providers", () => ({
 // (coberta no unit test do adapter). Não-mockar faria o adapter real chamar o seam
 // mockado e consumir a fila de runAnalysis.
 const getNewsByMatch = vi.fn(() =>
-  Promise.resolve({ results: [], aiCall: null, unavailable: true }),
+  Promise.resolve({ results: [], aiCall: null, status: "failed" as const, via: null }),
 );
 vi.mock("@/lib/providers/news", () => ({
   getNewsProvider: vi.fn(() => ({ getNewsByMatch })),

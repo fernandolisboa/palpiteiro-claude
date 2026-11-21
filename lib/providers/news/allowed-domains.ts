@@ -2,19 +2,20 @@
 // busca a fontes reputadas de futebol — BR + grandes internacionais — pra melhorar o
 // sinal e a confiança nas citações. Começa curado; EXPANDE COM O TEMPO (uma fonte mal
 // curada = sinal ruim). Vira `allowed_domains` na web search tool (request-builder).
+//
+// #670: saíram uol.com.br, bbc.com, theguardian.com e espn.com. Os quatro bloqueiam os
+// robôs da Anthropic no robots.txt, e a doc da web search trata domínio permitido mas
+// inacessível ao crawler como motivo de rejeição da busca. Os pools de cartões abaixo
+// ficam como estão (follow-up próprio: CARD_DOMAINS_INTL ainda lista três deles).
 export const ALLOWED_DOMAINS: readonly string[] = [
   // Brasil
   "ge.globo.com",
   "espn.com.br",
   "lance.com.br",
-  "uol.com.br",
   "cnnbrasil.com.br",
   "gazetaesportiva.com",
   // Internacional
-  "bbc.com",
-  "theguardian.com",
   "reuters.com",
-  "espn.com",
   "goal.com",
 ] as const;
 

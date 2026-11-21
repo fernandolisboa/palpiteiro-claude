@@ -127,9 +127,11 @@ vi.mock("@/lib/db/queries/match-model-snapshots", () => ({
 
 import {
   generatePalpites,
+  newsVerdict,
   PalpiteError,
   startNewsFetch,
 } from "@/lib/ai/palpites";
+import { STEP_NOTES } from "@/lib/ai/progress/steps";
 import {
   NEWS_MIN_BUDGET_MS,
   SYNTHESIS_CALL_RESERVE_MS,
@@ -210,7 +212,8 @@ beforeEach(() => {
   getNewsByMatch.mockResolvedValue({
     results: [],
     aiCall: null,
-    unavailable: true,
+    status: "failed",
+    via: null,
   });
   getFixtureByMatch.mockResolvedValue({
     ...fixture("CR Flamengo", "Fluminense FC", 0, 0),
@@ -275,7 +278,7 @@ describe("generatePalpites (síntese) — prazo do run (#524 re-review)", () => 
       getNewsByMatch.mockImplementation(async (_ctx, _audit, opts) => {
         // A busca roda até o próprio prazo (o timeout da request corta aqui).
         clock = opts.deadlineAt;
-        return { results: [], aiCall: null, unavailable: false };
+        return { results: [], aiCall: null, status: "none", via: "ge" };
       });
       runAnalysis.mockResolvedValue(okResult(validHeadline));
       const res = await generatePalpites({ ...baseCall, deadlineAt });
@@ -309,7 +312,8 @@ describe("generatePalpites (síntese) — notícias já disparadas pelo run", ()
     const news = Promise.resolve({
       results: [],
       aiCall: { id: "ac-news" },
-      unavailable: false,
+      status: "none" as const,
+      via: "web_search" as const,
     });
     const res = await generatePalpites({ ...baseCall, news });
     expect(getNewsByMatch).not.toHaveBeenCalled();
@@ -331,7 +335,7 @@ describe("generatePalpites (síntese) — notícias já disparadas pelo run", ()
           { userId: "u-1", matchId: "m-1" },
           undefined,
         ),
-      ).resolves.toEqual({ results: [], aiCall: null, unavailable: true });
+      ).resolves.toEqual({ results: [], aiCall: null, status: "failed", via: null });
     } finally {
       errSpy.mockRestore();
     }
@@ -696,7 +700,8 @@ describe("generatePalpites (síntese) — notícias (#377 / ADR 0032)", () => {
     getNewsByMatch.mockResolvedValue({
       results: newsSources,
       aiCall: { id: "news-1" },
-      unavailable: false,
+      status: "found",
+      via: "web_search",
     });
     runAnalysis.mockResolvedValue(okResult(validHeadline));
     await generatePalpites(baseCall);
@@ -713,7 +718,7 @@ describe("generatePalpites (síntese) — notícias (#377 / ADR 0032)", () => {
   });
 
   it("sem notícia (degrade gracioso) → headline SEM sources; palpite ainda embarca", async () => {
-    getNewsByMatch.mockResolvedValue({ results: [], aiCall: null, unavailable: true });
+    getNewsByMatch.mockResolvedValue({ results: [], aiCall: null, status: "failed", via: null });
     runAnalysis.mockResolvedValue(okResult(validHeadline));
     const res = await generatePalpites(baseCall);
     const setRow = insertValues.mock.calls[1][0] as Record<string, unknown>;
@@ -734,7 +739,8 @@ describe("generatePalpites (síntese) — notícias (#377 / ADR 0032)", () => {
         { title: "Palmeiras com odd alta no mercado", url: "https://ge.globo.com/odd" },
       ],
       aiCall: { id: "news-2" },
-      unavailable: false,
+      status: "found",
+      via: "web_search",
     });
     runAnalysis.mockResolvedValue(okResult(validHeadline));
 
@@ -840,5 +846,104 @@ describe("generatePalpites (síntese) — caminhos de erro (auditados, sem set)"
       "match is not analyzable",
     );
     expect(runAnalysis).not.toHaveBeenCalled();
+  });
+});
+
+describe("generatePalpites (síntese) — notícias honestas (#670)", () => {
+  const geNews = [
+    {
+      title: "Escalação do Flamengo: Jardim tem três desfalques",
+      url: "https://ge.globo.com/futebol/times/flamengo/noticia/a.ghtml",
+      snippet: "Léo Pereira e Pulgar cumprem suspensão e não viajam",
+      publishedAt: "2026-05-14T20:02:01.000Z",
+      source: "ge" as const,
+    },
+  ];
+
+  it("só {title,url} persiste (sem trecho, data nem fonte)", async () => {
+    getNewsByMatch.mockResolvedValue({ results: geNews, aiCall: null, status: "found", via: "ge" });
+    runAnalysis.mockResolvedValue(okResult(validHeadline));
+    await generatePalpites(baseCall);
+
+    const setRow = insertValues.mock.calls[1][0] as Record<string, unknown>;
+    const headline = setRow.headline as { sources?: unknown };
+    expect(headline.sources).toEqual([
+      { title: geNews[0].title, url: geNews[0].url },
+    ]);
+  });
+
+  it("sem tempo pra busca → status skipped", async () => {
+    await expect(
+      startNewsFetch(
+        {
+          league: "brasileirao_a",
+          homeTeam: "A",
+          awayTeam: "B",
+          kickoffAt: new Date("2099-01-01T00:00:00Z"),
+        },
+        { userId: "u-1", matchId: "m-1" },
+        Date.now() + 1_000,
+      ),
+    ).resolves.toEqual({ results: [], aiCall: null, status: "skipped", via: null });
+    expect(getNewsByMatch).not.toHaveBeenCalled();
+  });
+});
+
+describe("newsVerdict — desfecho do passo de notícias (#670)", () => {
+  const base = { aiCall: null } as const;
+
+  it("found → done com o detalhe por fonte", () => {
+    expect(
+      newsVerdict({
+        ...base,
+        results: [
+          { title: "a", url: "https://ge.globo.com/a", source: "ge" },
+          { title: "b", url: "https://ge.globo.com/b", source: "ge" },
+        ],
+        status: "found",
+        via: "ge",
+      }),
+    ).toEqual({ detail: ["2 notícias do ge"] });
+  });
+
+  it("found com meia falha → detalhe + nota de um dos times", () => {
+    expect(
+      newsVerdict({
+        ...base,
+        results: [{ title: "a", url: "https://ge.globo.com/a", source: "ge" }],
+        status: "found",
+        via: "ge",
+        partial: true,
+      }),
+    ).toEqual({ detail: ["1 notícia do ge", STEP_NOTES.newsPartial] });
+  });
+
+  it("none pelo ge, none pela busca, none com meia falha", () => {
+    expect(newsVerdict({ ...base, results: [], status: "none", via: "ge" })).toEqual({
+      status: "done",
+      label: STEP_NOTES.newsNoneGe,
+    });
+    expect(
+      newsVerdict({ ...base, results: [], status: "none", via: "web_search" }),
+    ).toEqual({ status: "done", label: STEP_NOTES.newsNoneWeb });
+    expect(
+      newsVerdict({ ...base, results: [], status: "none", via: "ge", partial: true }),
+    ).toEqual({
+      status: "done",
+      label: STEP_NOTES.newsPartial,
+      detail: [STEP_NOTES.newsNoneGe],
+    });
+  });
+
+  it("no_search → skipped com nota; failed → failed; skipped → skipped", () => {
+    expect(
+      newsVerdict({ ...base, results: [], status: "no_search", via: "web_search" }),
+    ).toEqual({ status: "skipped", label: STEP_NOTES.newsNoSearch });
+    expect(newsVerdict({ ...base, results: [], status: "failed", via: null })).toEqual({
+      status: "failed",
+    });
+    expect(newsVerdict({ ...base, results: [], status: "skipped", via: null })).toEqual({
+      status: "skipped",
+    });
   });
 });

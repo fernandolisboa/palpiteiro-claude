@@ -20,6 +20,7 @@ import type {
   NewsAuditContext,
   NewsFetchOptions,
   NewsFetchOutcome,
+  NewsFetchStatus,
   NewsMatchContext,
   NewsResult,
 } from "./types";
@@ -65,15 +66,30 @@ function buildUserMessage(ctx: NewsMatchContext): string {
   ].join("\n");
 }
 
+type ExtractedSources = {
+  sources: NewsResult[];
+  // error_code de cada bloco de erro da busca (HTTP 200, não cobrado).
+  searchErrors: string[];
+  // A busca rodou? (veio ao menos um bloco `web_search_tool_result`, de sucesso ou erro)
+  searched: boolean;
+  // Blocos de sucesso (lista), mesmo vazios.
+  successfulSearches: number;
+};
+
 // Anda atrás dos blocos `web_search_tool_result` nos contentBlocks crus da resposta e
 // extrai SÓ os {title, url} reais (ADR 0032 §2). Na server tool da Claude:
 //   - sucesso: block.content é uma LISTA de web_search_result ({title,url,...})
 //   - erro:    block.content é um OBJETO { error_code } (HTTP 200, não cobrado)
 // Dropa qualquer item sem title NÃO-VAZIO E url http(s) válida (nunca inventa); dedup
-// por url.
-function extractSources(contentBlocks: unknown[] | undefined): NewsResult[] {
-  if (!Array.isArray(contentBlocks)) return [];
-  const out: NewsResult[] = [];
+// por url. O erro não some calado (#670): volta em `searchErrors`.
+function extractSources(contentBlocks: unknown[] | undefined): ExtractedSources {
+  const out: ExtractedSources = {
+    sources: [],
+    searchErrors: [],
+    searched: false,
+    successfulSearches: 0,
+  };
+  if (!Array.isArray(contentBlocks)) return out;
   const seen = new Set<string>();
   for (const block of contentBlocks) {
     if (
@@ -83,10 +99,20 @@ function extractSources(contentBlocks: unknown[] | undefined): NewsResult[] {
     ) {
       continue;
     }
+    out.searched = true;
     const content = (block as { content?: unknown }).content;
     // Erro = objeto ({error_code}); só LISTA é sucesso. Branch ANTES de iterar.
-    if (!Array.isArray(content)) continue;
+    if (!Array.isArray(content)) {
+      const code =
+        content && typeof content === "object"
+          ? (content as { error_code?: unknown }).error_code
+          : undefined;
+      out.searchErrors.push(typeof code === "string" ? code : "unknown");
+      continue;
+    }
+    out.successfulSearches += 1;
     for (const item of content) {
+      if (out.sources.length >= MAX_RESULTS) break;
       if (!item || typeof item !== "object") continue;
       const title = (item as { title?: unknown }).title;
       const url = (item as { url?: unknown }).url;
@@ -100,11 +126,19 @@ function extractSources(contentBlocks: unknown[] | undefined): NewsResult[] {
       if (!/^https?:\/\//i.test(cleanUrl)) continue;
       if (seen.has(cleanUrl)) continue;
       seen.add(cleanUrl);
-      out.push({ title: title.trim(), url: cleanUrl });
-      if (out.length >= MAX_RESULTS) return out;
+      out.sources.push({ title: title.trim(), url: cleanUrl, source: "web_search" });
     }
   }
   return out;
+}
+
+// Desfecho honesto (#670): só erro de busca = falhou; resposta sem busca = não buscou;
+// buscou e nada = none.
+function searchStatus(extracted: ExtractedSources): NewsFetchStatus {
+  if (extracted.sources.length > 0) return "found";
+  if (!extracted.searched) return "no_search";
+  if (extracted.successfulSearches === 0) return "failed";
+  return "none";
 }
 
 export async function getNewsByMatchViaWebSearch(
@@ -125,7 +159,7 @@ export async function getNewsByMatchViaWebSearch(
     );
   }
 
-  // Key-gated/inerte (mirror SportMonks/#227): sem chave Anthropic → unavailable:true,
+  // Key-gated/inerte (mirror SportMonks/#227): sem chave Anthropic → status failed,
   // ZERO gasto. Loga um provider_error de auditoria (não throw) e devolve [].
   const analysisRequest: AnalysisRequest = {
     model,
@@ -161,14 +195,14 @@ export async function getNewsByMatchViaWebSearch(
       errorMessage: noKeyMsg,
       promptVersion: NEWS_PROMPT_VERSION,
     });
-    return { results: [], aiCall: null, unavailable: true };
+    return { results: [], aiCall: null, status: "failed", via: null };
   }
 
   const result = await provider.runAnalysis(analysisRequest);
   const served = result.servedModel;
 
-  // Erro do provider → loga (auditado) e degrada gracioso (results:[], unavailable:false).
-  // NUNCA throw: o palpite embarca sem notícias (mirror absences).
+  // Erro do provider → loga (auditado) e degrada gracioso (results:[], status failed:
+  // antes virava "nenhuma notícia", #670). NUNCA throw: o palpite embarca sem notícias.
   if (!result.ok) {
     await persistAiCallError({
       userId: audit.userId,
@@ -183,10 +217,22 @@ export async function getNewsByMatchViaWebSearch(
       errorMessage: result.message,
       promptVersion: NEWS_PROMPT_VERSION,
     });
-    return { results: [], aiCall: null, unavailable: false };
+    return { results: [], aiCall: null, status: "failed", via: null };
   }
 
-  const sources = extractSources(result.contentBlocks);
+  const extracted = extractSources(result.contentBlocks);
+  const status = searchStatus(extracted);
+  if (extracted.searchErrors.length > 0) {
+    console.error(
+      JSON.stringify({
+        scope: "getNewsByMatchViaWebSearch",
+        matchId: audit.matchId,
+        error: "news_search_error",
+        errorCodes: extracted.searchErrors,
+        status,
+      }),
+    );
+  }
 
   // Loga o ai_call (status ok). costUsd = SÓ tokens (pelo preço do modelo que serviu); a
   // taxa de ~$0,01/busca da web search NÃO entra aqui — é metered out-of-band (ADR 0032
@@ -228,8 +274,9 @@ export async function getNewsByMatchViaWebSearch(
   }
 
   return {
-    results: sources,
+    results: extracted.sources,
     aiCall: aiCallId ? { id: aiCallId } : null,
-    unavailable: false,
+    status,
+    via: status === "failed" ? null : "web_search",
   };
 }
