@@ -161,3 +161,44 @@ describe("Copa Libertadores — grafia dos semifinalistas", () => {
     }
   });
 });
+
+// Final da Sul-Americana 2026 (21/11). Nomes da The Odds API conferidos em
+// /v4/sports/soccer_conmebol_copa_sudamericana/events.
+describe("Copa Sudamericana — grafia dos finalistas", () => {
+  const cases: ReadonlyArray<{
+    canonical: string;
+    apiFootball: string;
+    oddsApi: string;
+  }> = [
+    {
+      canonical: "Atlético Mineiro",
+      apiFootball: "Atletico-MG",
+      oddsApi: "Clube Atlético Mineiro",
+    },
+    {
+      canonical: "Boca Juniors",
+      apiFootball: "Boca Juniors",
+      oddsApi: "Boca Juniors",
+    },
+  ];
+
+  it.each(cases)(
+    "$canonical: API-Football canonicaliza e The Odds API pareia",
+    ({ canonical, apiFootball, oddsApi }) => {
+      expect(isCanonicalTeam(canonical, "copa_sudamericana")).toBe(true);
+      expect(canonicalizeTeamName(apiFootball, "copa_sudamericana")).toBe(
+        canonical
+      );
+      expect(teamsMatch(oddsApi, canonical)).toBe(true);
+    }
+  );
+
+  it("sem o alias, o nome da API-Football não pareia com a The Odds API", () => {
+    expect(teamsMatch("Clube Atlético Mineiro", "Atletico-MG")).toBe(false);
+  });
+
+  it("um finalista não pareia com o nome do outro", () => {
+    expect(teamsMatch("Boca Juniors", "Atlético Mineiro")).toBe(false);
+    expect(teamsMatch("Clube Atlético Mineiro", "Boca Juniors")).toBe(false);
+  });
+});

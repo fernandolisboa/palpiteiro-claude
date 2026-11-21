@@ -31,10 +31,12 @@ import { RevisitRefresh } from "@/components/revisit-refresh";
 export const dynamic = "force-dynamic";
 
 function teamsLabel(league: SupportedLeague, count: number): string {
-  if (count === 0) return "times não semeados";
-  return RUNTIME_TEAM_ID_LEAGUES.has(league)
-    ? `${count} nomes · ids via API-Football`
-    : `${count} times`;
+  if (RUNTIME_TEAM_ID_LEAGUES.has(league)) {
+    return count === 0
+      ? "ids via API-Football"
+      : `${count} nomes · ids via API-Football`;
+  }
+  return count === 0 ? "times não semeados" : `${count} times`;
 }
 
 // Saldo real é telemetria: falha de leitura não pode derrubar a página dos toggles.
@@ -217,7 +219,8 @@ export default async function AdminLeaguesPage() {
           <p className="text-body-sm text-muted-foreground pt-3">
             Liga sem times precisa ser semeada com scripts/generate-team-ids.ts
             (e deploy) antes de ser ligada. Nas copas os ids vêm da API-Football
-            na hora; a lista só fixa a grafia dos clubes ainda vivos.
+            na hora (dá pra ligar sem lista); a lista só fixa a grafia dos
+            clubes ainda vivos.
           </p>
         </section>
       </div>
