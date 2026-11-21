@@ -137,6 +137,24 @@ describe("copy das etapas (firewall ADR 0030 §3, sem casa de aposta)", () => {
     }
   });
 
+  it("narração que falhou diz por quê (#669): não respondeu, fora do formato ou fora dos números", () => {
+    const pre = narrationStep({ family: "sonnet", marketLabel: "Resultado", live: false });
+    const live = narrationStep({ family: "sonnet", marketLabel: null, live: true });
+    expect(pre.failed).toBe("A IA não respondeu: a análise saiu com o texto padrão");
+    expect(live.failed).toBe("A IA não respondeu: a leitura saiu com o texto padrão");
+    expect(live.skipped).toBe("Sem tempo para o texto da IA: a leitura saiu com o texto padrão");
+    const failures = [
+      pre.failed,
+      STEP_NOTES.narrationOffFormat,
+      STEP_NOTES.narrationMismatch,
+    ];
+    expect(new Set(failures).size).toBe(failures.length);
+    expect(STEP_NOTES.narrationOffFormat).toMatch(/fora do formato: a análise/);
+    expect(STEP_NOTES.narrationMismatch).toMatch(/conferência com os números: a análise/);
+    expect(STEP_NOTES.narrationOffFormatLive).toMatch(/fora do formato: a leitura/);
+    expect(STEP_NOTES.narrationMismatchLive).toMatch(/conferência com os números: a leitura/);
+  });
+
   it("ids únicos e estáveis por etapa", () => {
     const ids = Object.values(STEPS).map((s) => s.id);
     expect(new Set(ids).size).toBe(ids.length);

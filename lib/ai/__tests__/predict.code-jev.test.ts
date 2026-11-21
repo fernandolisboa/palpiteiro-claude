@@ -282,6 +282,7 @@ import { computeMarketImpliedProbabilities } from "@/lib/odds/implied-probabilit
 import { CORRECT_SCORE } from "@/lib/odds/market-descriptor";
 import { predict } from "@/lib/ai/predict";
 import { MODEL_REGISTRY, type AIModel } from "@/lib/ai/models";
+import { minCallBudgetMs } from "@/lib/ai/deadline";
 import { anthropicProvider } from "@/lib/ai/providers/anthropic";
 import { runCodeJevFanOut } from "@/lib/ai/best-bet";
 import { computeBestBetRank } from "@/lib/view/best-bet";
@@ -858,6 +859,9 @@ describe("flag analysis_engine = 'code_jev'", () => {
     });
     const [narratorCall] = rowsWhere((r) => r.promptVersion === NARRATOR_VERSION);
     expect(narratorCall.status).toBe("invalid_output");
+    // #669: reprovada no formato → 1 nova tentativa (falha igual): 2 chamadas, 2 rows.
+    expect(narratorRequests()).toHaveLength(2);
+    expect(narratorRows()).toHaveLength(2);
     const [prediction] = rowsWhere((r) => "recommendation" in r);
     expect(prediction.recommendation).toBe("home");
     expect(prediction.rationale).toMatch(/^O modelo de placar estima/);
@@ -877,6 +881,9 @@ describe("flag analysis_engine = 'code_jev'", () => {
     const [narratorCall] = rowsWhere((r) => r.promptVersion === NARRATOR_VERSION);
     expect(narratorCall.status).toBe("invalid_output");
     expect(narratorCall.errorMessage).toMatch(/^fidelity:/);
+    // #669: reprovada na fidelidade → 1 nova tentativa (falha igual): 2 chamadas, 2 rows.
+    expect(narratorRequests()).toHaveLength(2);
+    expect(narratorRows()).toHaveLength(2);
     const [prediction] = rowsWhere((r) => "recommendation" in r);
     expect(prediction.rationale).toMatch(/^O modelo de placar estima/);
   });
@@ -892,6 +899,8 @@ describe("flag analysis_engine = 'code_jev'", () => {
     expect(result.prediction).toBeDefined();
     const [narratorCall] = rowsWhere((r) => r.promptVersion === NARRATOR_VERSION);
     expect(narratorCall.status).not.toBe("ok");
+    // A IA não respondeu: sem 2ª tentativa (#669).
+    expect(narratorRows()).toHaveLength(1);
     const [prediction] = rowsWhere((r) => "recommendation" in r);
     expect(prediction.rationale).toMatch(/^O modelo de placar estima/);
   });
@@ -1102,6 +1111,220 @@ describe("flag analysis_engine = 'code_jev'", () => {
     expect(engine.recommendation).not.toBe("pass");
     expect(params.line).toBe(engine.line);
     expect(prediction.recommendation).toBe(engine.recommendation);
+  });
+});
+
+// #669: a narração reprovada pela nossa conferência (formato ou fidelidade) ganha UMA
+// 2ª tentativa, com o motivo no fim da mensagem; "a IA não respondeu" nunca repete.
+const LAST_NARRATION_LINE =
+  "Escreva o racional e os fatores-chave desta decisão via submit_narration.";
+const BAD_FIDELITY = {
+  rationale: "Mesmo com o modelo, recomendamos o empate neste clássico.",
+  key_factors: ["Clássico equilibrado", "Pouca diferença na tabela"],
+};
+
+function narratorReplies(...replies: Record<string, unknown>[]) {
+  let n = 0;
+  anthropicCreate.mockImplementation((req: { tools: { name: string }[] }) =>
+    Promise.resolve(
+      req.tools[0].name === "submit_narration"
+        ? replies[Math.min(n++, replies.length - 1)]
+        : anthropicMessage(req.tools[0].name, marketOutput)
+    )
+  );
+}
+
+type SentRequest = {
+  system: unknown;
+  tools: unknown;
+  messages: { content: unknown }[];
+};
+const narratorRequests = () =>
+  anthropicCreate.mock.calls
+    .filter((c) => toolNameOf(c) === "submit_narration")
+    .map((c) => c[0] as SentRequest);
+const userText = (r: SentRequest) => {
+  const content = r.messages[0].content;
+  return typeof content === "string" ? content : JSON.stringify(content);
+};
+const narratorRows = () =>
+  rowsWhere((r) => r.promptVersion === NARRATOR_VERSION && "provider" in r);
+const onlyPredictionRow = () => {
+  const rows = rowsWhere((r) => "recommendation" in r);
+  expect(rows).toHaveLength(1);
+  return rows[0];
+};
+const runMatchResult = (extra: { deadlineAt?: number } = {}) =>
+  predict({ matchId: "m-1", userId: "u-1", isAdmin: true, marketKey: "match_result", ...extra });
+
+describe("2ª tentativa do narrador (#669)", () => {
+  it("1X2: a mensagem leva as três seleções (os dois times e o empate) dentro do bloco Decisão", async () => {
+    await runMatchResult();
+    const msg = userText(narratorRequests()[0]);
+    const decision = msg.slice(msg.indexOf("## Decisão"), msg.indexOf("## Fatores qualitativos"));
+    expect(decision).toContain("Chances de cada seleção");
+    expect(decision).toContain("  - Vitória do CR Flamengo: ");
+    expect(decision).toContain("  - Empate: ");
+    expect(decision).toContain("  - Vitória do Fluminense FC: ");
+  });
+
+  it("a narração que cita a chance do visitante (não decidido) passa na fidelidade", async () => {
+    const away = expectedEngine(JEV_ANSWERS).evaluations.find((e) => e.key === "away")!;
+    narratorOutput = {
+      rationale: `O Fluminense FC tem ${away.modelProbPct.toFixed(1).replace(".", ",")}% pelo modelo, mas o preço do CR Flamengo em casa deixa margem.`,
+      key_factors: ["Mandante forte em casa", "Visitante irregular"],
+    };
+    await runMatchResult();
+    expect(narratorRequests()).toHaveLength(1);
+    expect(narratorRows().map((r) => r.status)).toEqual(["ok"]);
+  });
+
+  it("reprovada na fidelidade e depois ok: 2 chamadas, rows [invalid_output, ok], texto do LLM e a prediction na row ok", async () => {
+    narratorReplies(
+      anthropicMessage("submit_narration", BAD_FIDELITY),
+      anthropicMessage("submit_narration", NARRATION)
+    );
+    await runMatchResult();
+
+    const [first, second] = narratorRequests();
+    expect(narratorRequests()).toHaveLength(2);
+    // Só a mensagem muda: system (com o cache_control) e tool idênticos → cache lido.
+    expect(second.system).toEqual(first.system);
+    expect(second.tools).toEqual(first.tools);
+    expect(userText(first)).not.toContain("## Tentativa anterior reprovada");
+    expect(userText(second)).toContain(
+      "## Tentativa anterior reprovada\n- A resposta anterior não passou na conferência com os números e o lado da decisão: texto recomenda 'Empate', mas a decisão é 'Vitória do CR Flamengo'."
+    );
+    // O retorno usa os rótulos que o modelo leu; as chaves cruas ficam só no error_message.
+    expect(userText(second)).not.toContain("'draw'");
+    expect(userText(first).endsWith(LAST_NARRATION_LINE)).toBe(true);
+    expect(userText(second).endsWith(LAST_NARRATION_LINE)).toBe(true);
+
+    const rows = narratorRows();
+    expect(rows.map((r) => r.status)).toEqual(["invalid_output", "ok"]);
+    expect(rows[0].errorMessage).toBe("fidelity: texto recomenda 'draw', mas a decisão é 'home'");
+    expect(rows[1].errorMessage).toBeNull();
+    expect((rows[1].outputPayload as Record<string, unknown>).retryOf).toBe(rows[0].__id);
+    expect(rows[0].outputPayload).not.toHaveProperty("retryOf");
+    const prediction = onlyPredictionRow();
+    expect(prediction.aiCallId).toBe(rows[1].__id);
+    expect(prediction.rationale).toBe(NARRATION.rationale);
+  });
+
+  it("fidelidade reprovada duas vezes: 2 rows, a 2ª com 'retry: ', racional templado apontando pra 2ª", async () => {
+    narratorOutput = BAD_FIDELITY;
+    await runMatchResult();
+    expect(narratorRequests()).toHaveLength(2);
+    const rows = narratorRows();
+    expect(rows.map((r) => r.status)).toEqual(["invalid_output", "invalid_output"]);
+    expect(rows[0].errorMessage).toMatch(/^fidelity: /);
+    expect(rows[1].errorMessage).toMatch(/^retry: fidelity: /);
+    const prediction = onlyPredictionRow();
+    expect(prediction.aiCallId).toBe(rows[1].__id);
+    expect(prediction.rationale).toMatch(/^O modelo de placar estima/);
+  });
+
+  it("Zod: a 2ª mensagem leva 'caminho: mensagem' e o errorMessage segue o JSON das issues", async () => {
+    narratorOutput = { ...NARRATION, key_factors: ["só um"] };
+    await runMatchResult();
+    expect(narratorRequests()).toHaveLength(2);
+    expect(userText(narratorRequests()[1])).toMatch(
+      /A resposta anterior veio fora do formato pedido: key_factors: /
+    );
+    const rows = narratorRows();
+    expect(rows.map((r) => r.status)).toEqual(["invalid_output", "invalid_output"]);
+    expect(JSON.parse(rows[0].errorMessage as string)[0].path).toEqual(["key_factors"]);
+    expect(rows[1].errorMessage).toMatch(/^retry: \[/);
+  });
+
+  it("tool_missing: tenta de novo; cortada no max_tokens, não", async () => {
+    const noTool = { ...anthropicMessage("submit_narration", {}), stop_reason: "end_turn", content: [] };
+    narratorReplies(noTool);
+    await runMatchResult();
+    expect(narratorRequests()).toHaveLength(2);
+    expect(userText(narratorRequests()[1])).toContain(
+      "a resposta não chamou a ferramenta submit_narration"
+    );
+    expect(narratorRows().map((r) => r.status)).toEqual(["tool_missing", "tool_missing"]);
+
+    vi.clearAllMocks();
+    insertSeq = 0;
+    narratorReplies({ ...noTool, stop_reason: "max_tokens" });
+    await runMatchResult();
+    expect(narratorRequests()).toHaveLength(1);
+    expect(narratorRows().map((r) => r.status)).toEqual(["tool_missing"]);
+  });
+
+  it("tool_use cortado no max_tokens (input parcial reprovado no Zod): não tenta de novo", async () => {
+    narratorReplies({
+      ...anthropicMessage("submit_narration", { rationale: "O modelo de placar estima" }),
+      stop_reason: "max_tokens",
+    });
+    await runMatchResult();
+    expect(narratorRequests()).toHaveLength(1);
+    const rows = narratorRows();
+    expect(rows.map((r) => r.status)).toEqual(["invalid_output"]);
+    expect(onlyPredictionRow().aiCallId).toBe(rows[0].__id);
+  });
+
+  it("a row da 1ª tentativa é gravada ANTES da 2ª chamada (o custo pago não se perde)", async () => {
+    narratorReplies(
+      anthropicMessage("submit_narration", BAD_FIDELITY),
+      anthropicMessage("submit_narration", NARRATION)
+    );
+    await runMatchResult();
+    const firstRowAt = insertValues.mock.calls.findIndex(
+      (c) => (c[0] as Row).promptVersion === NARRATOR_VERSION && (c[0] as Row).status === "invalid_output"
+    );
+    const narrationCalls = anthropicCreate.mock.calls
+      .map((c, i) => (toolNameOf(c) === "submit_narration" ? i : -1))
+      .filter((i) => i >= 0);
+    expect(firstRowAt).toBeGreaterThanOrEqual(0);
+    expect(narrationCalls).toHaveLength(2);
+    expect(insertValues.mock.invocationCallOrder[firstRowAt]).toBeLessThan(
+      anthropicCreate.mock.invocationCallOrder[narrationCalls[1]]
+    );
+  });
+
+  it("a IA não respondeu (erro do provider ou recusa): nunca repete", async () => {
+    anthropicCreate.mockRejectedValue(new Error("boom"));
+    await runMatchResult();
+    expect(narratorRows()).toHaveLength(1);
+
+    vi.clearAllMocks();
+    insertSeq = 0;
+    narratorReplies({
+      ...anthropicMessage("submit_narration", {}),
+      stop_reason: "refusal",
+      stop_details: { type: "refusal", category: null, explanation: "Não posso." },
+      content: [],
+    });
+    await runMatchResult();
+    expect(narratorRequests()).toHaveLength(1);
+    expect(narratorRows().map((r) => r.status)).toEqual(["provider_error"]);
+  });
+
+  it("sem prazo pra 2ª: 1 chamada, 1 row, e a etapa diz que não bateu com os números", async () => {
+    // A 1ª cabe com 30 s de folga; a resposta dela leva 60 s, e a 2ª já não cabe.
+    const min = minCallBudgetMs({ speed: "deliberate", maxTokens: 16000, effort: "high" });
+    const deadlineAt = Date.now() + min + 30_000;
+    anthropicCreate.mockImplementation((req: { tools: { name: string }[] }) => {
+      if (req.tools[0].name !== "submit_narration") {
+        return Promise.resolve(anthropicMessage(req.tools[0].name, marketOutput));
+      }
+      vi.setSystemTime(Date.now() + 60_000);
+      return Promise.resolve(anthropicMessage("submit_narration", BAD_FIDELITY));
+    });
+    const events: ProgressEvent[] = [];
+    await withRunProgress((e) => events.push(e), () => runMatchResult({ deadlineAt }));
+
+    expect(narratorRequests()).toHaveLength(1);
+    const rows = narratorRows();
+    expect(rows.map((r) => r.status)).toEqual(["invalid_output"]);
+    expect(onlyPredictionRow().aiCallId).toBe(rows[0].__id);
+    const last = events.at(-1)!;
+    expect(`${last.id}:${last.status}`).toBe("narration:failed");
+    expect(last.label).toBe(STEP_NOTES.narrationMismatch);
   });
 });
 
@@ -1972,6 +2195,72 @@ describe("best bet no motor code_jev (#512): 1 JEV, mercados em código, 1 narra
     });
   });
 
+  it("narração reprovada e refeita (#669): 1 slot só, 2 rows, todos os pendentes apontam pra row final", async () => {
+    narratorReplies(
+      anthropicMessage("submit_narration", {
+        rationale: "O modelo vê 99% de chance para esta decisão.",
+        key_factors: ["Tabela", "Forma recente"],
+      }),
+      anthropicMessage("submit_narration", narratorOutput)
+    );
+    const acquireSlot = vi.fn(async () => ({ ok: true }));
+
+    const out = await runCodeJevFanOut(
+      base,
+      markets("over_under", "match_result", "btts"),
+      mapError,
+      acquireSlot
+    );
+
+    expect(out.every((o) => o.ok)).toBe(true);
+    expect(narratorRequests()).toHaveLength(2);
+    // A 2ª tentativa não cobra slot: a reprovação é nossa.
+    expect(acquireSlot).toHaveBeenCalledTimes(1);
+    const rows = narratorRows();
+    expect(rows.map((r) => r.status)).toEqual(["invalid_output", "ok"]);
+    expect((rows[1].outputPayload as Record<string, unknown>).retryOf).toBe(rows[0].__id);
+    const predictions = rowsWhere((r) => "recommendation" in r);
+    expect(predictions).toHaveLength(3);
+    for (const p of predictions) expect(p.aiCallId).toBe(rows[1].__id);
+  });
+
+  it("insert da row da 1ª tentativa falha (#669): a etapa fecha como falha, sem 2ª chamada, e os mercados falham", async () => {
+    // Aqui a narração roda fora do progressScope do predict: sem o step.fail() do
+    // narrateWith, a etapa ficaria girando.
+    narratorReplies(
+      anthropicMessage("submit_narration", {
+        rationale: "O modelo vê 99% de chance para esta decisão.",
+        key_factors: ["Tabela", "Forma recente"],
+      })
+    );
+    insertValues.mockImplementation((row: Row) => {
+      if (row.promptVersion === NARRATOR_VERSION && row.status === "invalid_output") {
+        throw new Error("db down");
+      }
+    });
+    const events: ProgressEvent[] = [];
+    let out: Awaited<ReturnType<typeof runCodeJevFanOut>>;
+    try {
+      out = await withRunProgress(
+        (e) => events.push(e),
+        () =>
+          runCodeJevFanOut(
+            base,
+            markets("over_under", "match_result", "btts"),
+            mapError,
+            vi.fn(async () => ({ ok: true }))
+          )
+      );
+    } finally {
+      // clearAllMocks do beforeEach não desfaz a implementação.
+      insertValues.mockReset();
+    }
+    expect(out.every((o) => !o.ok)).toBe(true);
+    expect(narratorRequests()).toHaveLength(1);
+    const narration = events.filter((e) => e.id === "narration").map((e) => e.status);
+    expect(narration).toEqual(["active", "failed"]);
+  });
+
   it("recusa do narrador (#524) → racional templado, 1 row de ai_calls provider_error COM tokens, pendentes persistidos", async () => {
     anthropicCreate.mockImplementation((req: { tools: { name: string }[] }) =>
       Promise.resolve(
@@ -2689,6 +2978,36 @@ describe("progresso ao vivo (ADR 0064)", () => {
       predict({ matchId: "m-1", userId: "u-1", isAdmin: true, marketKey: "match_result" })
     );
     expect(seen(events).at(-1)).toBe("narration:failed");
+    expect(events.at(-1)?.label).toBe("A IA não respondeu: a análise saiu com o texto padrão");
+  });
+
+  it("a etapa diz o tipo da falha (#669): fora do formato ou fora dos números", async () => {
+    narratorOutput = { ...NARRATION, recommendation: "away" };
+    const offFormat = await stepsOf(() =>
+      predict({ matchId: "m-1", userId: "u-1", isAdmin: true, marketKey: "match_result" })
+    );
+    expect(seen(offFormat).at(-1)).toBe("narration:failed");
+    expect(offFormat.at(-1)?.label).toBe(STEP_NOTES.narrationOffFormat);
+
+    narratorOutput = BAD_FIDELITY;
+    const mismatch = await stepsOf(() =>
+      predict({ matchId: "m-1", userId: "u-1", isAdmin: true, marketKey: "match_result" })
+    );
+    expect(mismatch.at(-1)?.label).toBe(STEP_NOTES.narrationMismatch);
+  });
+
+  it("reprovada e depois ok (#669): a etapa fecha pronta, sem linha de falha no meio", async () => {
+    narratorReplies(
+      anthropicMessage("submit_narration", BAD_FIDELITY),
+      anthropicMessage("submit_narration", NARRATION)
+    );
+    const events = await stepsOf(() =>
+      predict({ matchId: "m-1", userId: "u-1", isAdmin: true, marketKey: "match_result" })
+    );
+    expect(seen(events).filter((e) => e.startsWith("narration:"))).toEqual([
+      "narration:active",
+      "narration:done",
+    ]);
   });
 
   it("motor llm: a chamada paga do mercado é a etapa market:<key>", async () => {

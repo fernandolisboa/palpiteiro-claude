@@ -94,6 +94,14 @@ export const STEP_NOTES = {
   newsNoneWeb: "A busca não achou notícia recente do jogo",
   newsNoSearch: "A busca de notícias não rodou desta vez",
   newsPartial: "Só deu pra ler as notícias de um dos times",
+  // Narração reprovada pela nossa conferência (#669), por tipo. "A IA não respondeu"
+  // (sem resposta, erro, recusa) é o `failed` de narrationStep.
+  narrationOffFormat: "O texto da IA veio fora do formato: a análise saiu com o texto padrão",
+  narrationMismatch:
+    "O texto da IA não passou na conferência com os números: a análise saiu com o texto padrão",
+  narrationOffFormatLive: "O texto da IA veio fora do formato: a leitura saiu com o texto padrão",
+  narrationMismatchLive:
+    "O texto da IA não passou na conferência com os números: a leitura saiu com o texto padrão",
 } as const;
 
 // Mercado decidido em código e escolhido pra narração (ADR 0041 §4).
@@ -127,8 +135,8 @@ export function narrationStep(args: {
     done: args.live
       ? "Leitura ao vivo escrita e conferida"
       : "Análise escrita e conferida com os números",
-    failed: "A IA não respondeu: a análise saiu com o texto padrão",
-    skipped: "Sem tempo para o texto da IA: a análise saiu com o texto padrão",
+    failed: `A IA não respondeu: a ${args.live ? "leitura" : "análise"} saiu com o texto padrão`,
+    skipped: `Sem tempo para o texto da IA: a ${args.live ? "leitura" : "análise"} saiu com o texto padrão`,
   };
 }
 

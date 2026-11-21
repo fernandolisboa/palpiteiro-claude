@@ -131,6 +131,24 @@ const STATIC_ENTRIES: readonly StaticEntry[] = [
     ],
   },
   {
+    id: "ai-failures",
+    kind: "página",
+    label: "Falhas de IA",
+    description:
+      "Chamadas de IA que falharam, com o motivo, filtráveis por jogo, e a taxa por versão de prompt.",
+    href: "/admin/ia/falhas",
+    keywords: [
+      "erro",
+      "falha",
+      "error_message",
+      "ai_calls",
+      "narrador",
+      "fidelidade",
+      "texto padrão",
+      "invalid_output",
+    ],
+  },
+  {
     id: "page-motor",
     kind: "página",
     label: "Motor e calibração",

@@ -41,6 +41,7 @@ function decisionBlock(d: NarratorDecision): string[] {
     }
     if (f.odd !== null) lines.push(`- Odd: ${f.odd.toFixed(2)}`);
   }
+  lines.push(...selectionsBlock(d));
   if (d.stakeUnits !== null) {
     lines.push(`- Stake: ${fmtNumber(d.stakeUnits, 2)}u`);
   }
@@ -48,6 +49,21 @@ function decisionBlock(d: NarratorDecision): string[] {
     `- Gols esperados pelo modelo: ${d.teams.home} ${fmtNumber(d.expectedGoals.home, 2)} × ${fmtNumber(d.expectedGoals.away, 2)} ${d.teams.away}`
   );
   return lines;
+}
+
+// narrator_v1.5 (#669): as chances de todas as seleções, dentro do bloco "Decisão" (a
+// regra 2 do system deixa citar só o que está nele, e o system não muda: cache, ADR
+// 0071). Sem isso, citar a chance do favorito num 1X2 reprovava na fidelidade.
+function selectionsBlock(d: NarratorDecision): string[] {
+  if (d.selections.length === 0) return [];
+  return [
+    "- Chances de cada seleção (modelo · implícita na odd, sem margem):",
+    ...d.selections.map(
+      (s) =>
+        `  - ${s.label}: ${pct(s.modelProbPct)} · ${s.impliedPct === null ? "sem odd" : pct(s.impliedPct)}`
+    ),
+    "- A decisão compara a chance do modelo com o preço de cada seleção, não aponta quem é o favorito. Pode citar a chance de qualquer seleção acima (inclusive a do favorito) como contexto; para as que não são a decisão, sem verbos de aposta: nada de recomendar, apostar ou dizer que o mercado aposta nelas.",
+  ];
 }
 
 function judgmentBlock(d: NarratorDecision): string[] {

@@ -1,15 +1,23 @@
+import { createHash } from "node:crypto";
+
 import { describe, expect, it } from "vitest";
 
 import {
   buildNarratorContext,
   buildNarratorMessage,
   checkNarrationFidelity,
+  fidelityRejectionFeedback,
   judgmentFactorPhrases,
   lineupNotePhrases,
   NARRATOR_VERSION,
+  narratorCartridge,
   NarratorOutputSchema,
+  rejectionBlock,
+  SUBMIT_NARRATION_TOOL,
   SYSTEM_PROMPT,
   templatedNarration,
+  withRejection,
+  zodRejectionFeedback,
   type NarratorDecision,
 } from "@/lib/ai/markets/_narrator";
 import { KEY_FACTOR_MAX_CHARS } from "@/lib/ai/markets/_narrator/prompt";
@@ -29,6 +37,10 @@ function overDecision(
     line: 2.5,
     teams: TEAMS,
     selectionKeys: ["over", "under"],
+    selections: [
+      { key: "over", label: "Mais de 2,5 gols (over 2,5)", modelProbPct: 58.4, impliedPct: 50.2 },
+      { key: "under", label: "Menos de 2,5 gols (under 2,5)", modelProbPct: 41.6, impliedPct: 49.8 },
+    ],
     side: "over",
     focus: {
       key: "over",
@@ -51,6 +63,10 @@ function passDecision(): NarratorDecision {
   return overDecision({
     side: "pass",
     stakeUnits: null,
+    selections: [
+      { key: "over", label: "Mais de 2,5 gols (over 2,5)", modelProbPct: 53.1, impliedPct: 50.2 },
+      { key: "under", label: "Menos de 2,5 gols (under 2,5)", modelProbPct: 46.9, impliedPct: 49.8 },
+    ],
     focus: {
       key: "over",
       label: "Mais de 2,5 gols (over 2,5)",
@@ -150,6 +166,11 @@ describe("checkNarrationFidelity", () => {
       marketLabel: "Resultado (1X2)",
       line: null,
       selectionKeys: ["home", "draw", "away"],
+      selections: [
+        { key: "home", label: "Vitória do CR Flamengo", modelProbPct: 55, impliedPct: 40 },
+        { key: "draw", label: "Empate", modelProbPct: 25, impliedPct: 30 },
+        { key: "away", label: "Vitória do Fluminense FC", modelProbPct: 20, impliedPct: 30 },
+      ],
       side: "home",
       focus: {
         key: "home",
@@ -429,7 +450,7 @@ describe("judgmentFactorPhrases", () => {
     });
 
     it("narrator_v1.2+: a regra 4 explica as duas origens e as notas", () => {
-      expect(NARRATOR_VERSION).toBe("narrator_v1.4");
+      expect(NARRATOR_VERSION).toBe("narrator_v1.5");
       expect(SYSTEM_PROMPT).toContain('"(informado por você, não conferido)"');
       expect(SYSTEM_PROMPT).toContain("nunca como fato confirmado");
       expect(SYSTEM_PROMPT).toContain('Os itens do bloco "Informado por você"');
@@ -754,6 +775,237 @@ describe("escalação confirmada na reconferência (#619)", () => {
     });
     expect(buildNarratorMessage(overDecision({ lineupNotes: ["Escalação X"] }), ctx)).toBe(
       buildNarratorMessage(overDecision(), ctx)
+    );
+  });
+});
+
+// #669 (Palmeiras x Flamengo, 2026-11-21): num 1X2 o código decidiu o mandante pelo
+// preço e a narração caiu no texto padrão. Causa provável: o texto citava a chance do
+// favorito (o visitante), que não estava no bloco "Decisão", e a fidelidade reprovava.
+describe("narrator_v1.5 (#669): todas as seleções na decisão e 2ª tentativa", () => {
+  const sha256 = (s: string) => createHash("sha256").update(s).digest("hex");
+  const CTX = buildNarratorContext({
+    league: "brasileirao_a",
+    kickoffAt: new Date("2026-05-15T19:00:00Z"),
+    homeTeam: TEAMS.home,
+    awayTeam: TEAMS.away,
+    standings: undefined,
+    homeForm: [],
+    awayForm: [],
+    h2h: [],
+    absencesAvailable: false,
+    absences: { home: [], away: [] },
+  });
+  const LAST_LINE =
+    "Escreva o racional e os fatores-chave desta decisão via submit_narration.";
+
+  // O mercado vê o visitante como favorito; o modelo acha valor no mandante.
+  function homeByPrice(overrides: Partial<NarratorDecision> = {}): NarratorDecision {
+    return overDecision({
+      marketKey: "match_result",
+      marketLabel: "Resultado (1X2)",
+      line: null,
+      selectionKeys: ["home", "draw", "away"],
+      selections: [
+        { key: "home", label: "Vitória do CR Flamengo", modelProbPct: 38.5, impliedPct: 31.2 },
+        { key: "draw", label: "Empate", modelProbPct: 27.1, impliedPct: 29 },
+        { key: "away", label: "Vitória do Fluminense FC", modelProbPct: 34.4, impliedPct: 39.8 },
+      ],
+      side: "home",
+      focus: {
+        key: "home",
+        label: "Vitória do CR Flamengo",
+        modelProbPct: 38.5,
+        impliedPct: 31.2,
+        edgePct: 7.3,
+        odd: 3.1,
+      },
+      ...overrides,
+    });
+  }
+
+  it("versão nova; system e tool byte-idênticos aos da v1.4 (cache, ADR 0071)", () => {
+    expect(NARRATOR_VERSION).toBe("narrator_v1.5");
+    expect(narratorCartridge.version).toBe("narrator_v1.5");
+    // Literais calculados no código da narrator_v1.4, antes da mudança.
+    expect(sha256(SYSTEM_PROMPT)).toBe(
+      "44474ddf2f778d6bf327cad4bd06c83bc15f412b30cb80f63113ca0b55757269"
+    );
+    expect(sha256(JSON.stringify(SUBMIT_NARRATION_TOOL))).toBe(
+      "bc9ae9c6d42d369caea9414f82c0d83a34dca74c385b73d10e9dcaa71c200638"
+    );
+    expect(sha256(JSON.stringify(narratorCartridge.tool))).toBe(
+      "1352aaf02a8249a1c8859dbd190ee13e631dbaf5dbb72097a001a381eaeeb1dc"
+    );
+  });
+
+  it("1X2: as três seleções entram DENTRO do bloco Decisão, com modelo e implícita", () => {
+    const msg = buildNarratorMessage(homeByPrice(), CTX);
+    const decisionBlock = msg.slice(
+      msg.indexOf("## Decisão"),
+      msg.indexOf("## Fatores qualitativos")
+    );
+    expect(decisionBlock).toContain(
+      "- Chances de cada seleção (modelo · implícita na odd, sem margem):"
+    );
+    expect(decisionBlock).toContain("  - Vitória do CR Flamengo: 38,5% · 31,2%");
+    expect(decisionBlock).toContain("  - Empate: 27,1% · 29,0%");
+    expect(decisionBlock).toContain("  - Vitória do Fluminense FC: 34,4% · 39,8%");
+    expect(decisionBlock).toContain("não aponta quem é o favorito");
+    // O edge citável continua sendo só o do focus.
+    expect(decisionBlock.match(/Edge:/g)).toHaveLength(1);
+  });
+
+  it("seleção sem odd sai como 'sem odd'; sem seleções, nenhuma linha", () => {
+    const d = homeByPrice({
+      selections: [
+        { key: "home", label: "Vitória do CR Flamengo", modelProbPct: 38.5, impliedPct: 31.2 },
+        { key: "draw", label: "Empate", modelProbPct: 27.1, impliedPct: null },
+      ],
+    });
+    expect(buildNarratorMessage(d, CTX)).toContain("  - Empate: 27,1% · sem odd");
+    expect(buildNarratorMessage(homeByPrice({ selections: [] }), CTX)).not.toContain(
+      "Chances de cada seleção"
+    );
+  });
+
+  it("fidelidade: aceita a chance do favorito e a implícita do empate", () => {
+    const out = {
+      rationale:
+        "O Fluminense FC chega como favorito do mercado, com 39,8% implícitos, e o modelo lhe dá 34,4%; o empate tem 29,0% implícitos. Para o CR Flamengo o modelo vê 38,5% contra 31,2%: edge de 7,3 pp.",
+      key_factors: ["Mandante subvalorizado pelo preço", "Visitante favorito no mercado"],
+    };
+    expect(checkNarrationFidelity(out, homeByPrice())).toEqual({ ok: true });
+  });
+
+  it("fidelidade: número fora da decisão segue reprovando, e o edge das outras não vale", () => {
+    const off = {
+      rationale: "O empate tem 45% de chance pelo modelo.",
+      key_factors: ["a", "b"],
+    };
+    expect(checkNarrationFidelity(off, homeByPrice()).ok).toBe(false);
+    // Edge do empate (27,1 − 29,0 = −1,9) não está no bloco.
+    const edgeDraw = {
+      rationale: "O empate fica 1,9 pp abaixo do preço.",
+      key_factors: ["a", "b"],
+    };
+    expect(checkNarrationFidelity(edgeDraw, homeByPrice()).ok).toBe(false);
+  });
+
+  describe("fidelidade: o percentual fica amarrado à seleção citada na frase (code review)", () => {
+    const say = (rationale: string) => ({ rationale, key_factors: ["a", "b"] });
+
+    it("reprova o número de outra seleção na frase do mandante", () => {
+      const res = checkNarrationFidelity(say("O CR Flamengo tem 34,4% de chance."), homeByPrice());
+      expect(res.ok).toBe(false);
+      if (res.ok) return;
+      // error_message com a chave crua; o retorno pro modelo com o rótulo que ele leu.
+      expect(res.reason).toContain("não bate com 'home', citada na mesma frase [");
+      expect(res.feedback).toBe(
+        "percentual citado 34,4% não bate com os números de 'Vitória do CR Flamengo', citada na mesma frase"
+      );
+    });
+
+    it("reprova a implícita apresentada como chance do modelo", () => {
+      for (const text of [
+        "O modelo dá 39,8% ao Fluminense FC.",
+        // Sem o rótulo completo: cai na lista do modelo, onde 39,8 não está.
+        "O modelo dá 39,8% ao Fluminense.",
+      ]) {
+        const res = checkNarrationFidelity(say(text), homeByPrice());
+        expect(res.ok, text).toBe(false);
+        if (!res.ok) expect(res.reason).toContain("como chance do modelo");
+      }
+    });
+
+    it("aceita a chance do modelo do favorito, a implícita do empate e o focus com edge e piso", () => {
+      for (const text of [
+        "O modelo dá 34,4% ao Fluminense FC.",
+        "O mercado dá 39,8% ao Fluminense FC.",
+        "O empate tem 29,0% implícitos.",
+        "Para o CR Flamengo o modelo vê 38,5% contra 31,2%: edge de 7,3 pp, acima do piso de 5 pp.",
+        // Duas seleções na frase: vale o número de qualquer uma.
+        "O Fluminense FC é o favorito do mercado, mas o modelo vê 38,5% para o CR Flamengo.",
+        // Papel ("mandante"/"visitante") também liga o número à seleção.
+        "O Fluminense FC é favorito do mercado, mas o modelo vê 38,5% para o mandante.",
+        // Sem seleção na frase: a lista global.
+        "O favorito do mercado aparece com 39,8% implícitos.",
+      ]) {
+        expect(checkNarrationFidelity(say(text), homeByPrice()), text).toEqual({ ok: true });
+      }
+    });
+  });
+
+  it("feedback do lado usa os rótulos; o reason segue com as chaves cruas", () => {
+    const res = checkNarrationFidelity(
+      { rationale: "O mercado aposta no Fluminense FC.", key_factors: ["a", "b"] },
+      homeByPrice()
+    );
+    expect(res).toEqual({
+      ok: false,
+      reason: "texto recomenda 'away', mas a decisão é 'home'",
+      feedback: "texto recomenda 'Vitória do Fluminense FC', mas a decisão é 'Vitória do CR Flamengo'",
+    });
+    const draw = checkNarrationFidelity(
+      { rationale: "Jogo sem aposta.", key_factors: ["a", "b"] },
+      homeByPrice({ side: "draw" })
+    );
+    expect(draw).toEqual({
+      ok: false,
+      reason: "texto diz que não há aposta, mas a decisão é 'draw'",
+      feedback: "texto diz que não há aposta, mas a decisão é 'Empate'",
+    });
+  });
+
+  it("fidelidade: 'o mercado aposta no favorito' continua sendo recomendação da outra seleção", () => {
+    const out = {
+      rationale: "O mercado aposta no Fluminense FC, mas o modelo vê valor no mandante.",
+      key_factors: ["a", "b"],
+    };
+    const res = checkNarrationFidelity(out, homeByPrice());
+    expect(res.ok).toBe(false);
+  });
+
+  it("2ª tentativa: o bloco de reprovação entra antes da última linha, que segue igual", () => {
+    const msg = buildNarratorMessage(homeByPrice(), CTX);
+    expect(msg.split("\n").at(-1)).toBe(LAST_LINE);
+    const retry = withRejection(
+      msg,
+      rejectionBlock("fidelity", "percentual citado 64% não bate com a decisão persistida")
+    );
+    expect(retry.split("\n").at(-1)).toBe(LAST_LINE);
+    expect(retry.startsWith(msg.slice(0, msg.lastIndexOf("\n")))).toBe(true);
+    expect(retry).toContain(
+      [
+        "",
+        "## Tentativa anterior reprovada",
+        "- A resposta anterior não passou na conferência com os números e o lado da decisão: percentual citado 64% não bate com a decisão persistida.",
+        "- Escreva de novo seguindo as regras e o formato. A decisão e os números não mudaram.",
+        "",
+        LAST_LINE,
+      ].join("\n")
+    );
+    expect(rejectionBlock("format", "x")[1]).toBe(
+      "- A resposta anterior veio fora do formato pedido: x."
+    );
+  });
+
+  it("feedback: Zod em 'caminho: mensagem' até 500 caracteres; fidelidade sem a lista do fim", () => {
+    const parsed = NarratorOutputSchema.safeParse({ rationale: "", key_factors: ["só um"] });
+    expect(parsed.success).toBe(false);
+    const zod = zodRejectionFeedback(parsed.error!.issues);
+    expect(zod).toMatch(/^rationale: .+; key_factors: .+/);
+    const long = zodRejectionFeedback(
+      Array.from({ length: 40 }, (_, i) => ({ path: ["k", i], message: "x".repeat(30) }))
+    );
+    expect(long.length).toBe(500);
+    expect(
+      fidelityRejectionFeedback(
+        "percentual citado 64% não bate com a decisão persistida [5.00, 58.40, 50.20]"
+      )
+    ).toBe("percentual citado 64% não bate com a decisão persistida");
+    expect(fidelityRejectionFeedback("texto recomenda 'away', mas a decisão é 'home'")).toBe(
+      "texto recomenda 'away', mas a decisão é 'home'"
     );
   });
 });

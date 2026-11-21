@@ -333,7 +333,10 @@ export type PredictionDetailView = {
     status: string;
   } | null;
   // Só populado quando o chamador é admin (protege o system prompt no inputPayload).
-  rawPayloads: { input: string; output: string } | null;
+  // `errorMessage` (#669): o motivo da falha da chamada (ai_calls.error_message), null
+  // quando ela deu certo. Rows ligadas a uma predição nunca são de prompt de texto livre
+  // do usuário (ADR 0046), então o texto vai inteiro.
+  rawPayloads: { input: string; output: string; errorMessage: string | null } | null;
 };
 
 export function toPredictionDetailView(
@@ -461,6 +464,7 @@ export function toPredictionDetailView(
         ? {
             input: stringifyPayload(aiCall.inputPayload),
             output: stringifyPayload(aiCall.outputPayload),
+            errorMessage: aiCall.errorMessage,
           }
         : null,
   };

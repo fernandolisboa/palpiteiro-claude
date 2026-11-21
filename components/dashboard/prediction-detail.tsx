@@ -166,6 +166,13 @@ export function PredictionDetail({
           <Row label="custo" value={aiCall.costUsd} />
           <Row label="latência" value={`${aiCall.latencyMs}ms`} />
           <Row label="status" value={aiCall.status} />
+          {rawPayloads?.errorMessage ? (
+            <Row
+              label="erro"
+              value={rawPayloads.errorMessage}
+              className="ml-4 min-w-0 text-right text-body-sm [overflow-wrap:anywhere]"
+            />
+          ) : null}
         </>
       )}
 

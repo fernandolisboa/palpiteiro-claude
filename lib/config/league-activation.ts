@@ -1,6 +1,7 @@
 import { z } from "zod";
 
 import {
+  RUNTIME_TEAM_ID_LEAGUES,
   SupportedLeagueSchema,
   type SupportedLeague,
 } from "@/lib/providers/sports-data/leagues";
@@ -23,6 +24,9 @@ export type LeagueToggleValidation =
  * - não liga liga sem times canônicos semeados: sem eles o casamento de nomes com
  *   os providers falha e a liga aparece sem forma/H2H/odds. Semear exige script +
  *   deploy (ids estáticos, ADR 0005), então isso não dá pra fazer pelo admin.
+ *   Exceção: copas (RUNTIME_TEAM_ID_LEAGUES, ADR 0045 emenda 2026-09-27). Lá o id
+ *   vem da API-Football em runtime e clube fora da lista passa com o nome do
+ *   provider; a lista só corrige grafia pra casar odds, então vazia não bloqueia.
  * Desligar uma liga já desligada / ligar uma já ligada é no-op permitido.
  */
 export function validateLeagueToggle(params: {
@@ -44,7 +48,11 @@ export function validateLeagueToggle(params: {
     return { ok: true };
   }
 
-  if (!isOn && canonicalTeamCount === 0) {
+  if (
+    !isOn &&
+    canonicalTeamCount === 0 &&
+    !RUNTIME_TEAM_ID_LEAGUES.has(league)
+  ) {
     return {
       ok: false,
       error:

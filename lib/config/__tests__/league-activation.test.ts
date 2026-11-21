@@ -54,6 +54,19 @@ describe("validateLeagueToggle (ADR 0050)", () => {
     if (!r.ok) expect(r.error).toMatch(/scripts\/generate-team-ids\.ts/);
   });
 
+  it("liga copa com ids em runtime mesmo sem nomes canônicos", () => {
+    for (const league of ["copa_sudamericana", "copa_libertadores"] as const) {
+      expect(
+        validateLeagueToggle({
+          league,
+          active: true,
+          currentActive: ["brasileirao_a"],
+          canonicalTeamCount: 0,
+        }).ok
+      ).toBe(true);
+    }
+  });
+
   it("liga liga com times semeados", () => {
     expect(
       validateLeagueToggle({

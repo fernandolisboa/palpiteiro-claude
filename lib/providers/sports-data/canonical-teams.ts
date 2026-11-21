@@ -140,7 +140,9 @@ export const CANONICAL_TEAMS: Record<SupportedLeague, readonly string[]> = {
     "Fluminense",
     "Palmeiras",
   ],
-  copa_sudamericana: [],
+  // Final 2026 (21/11): grafia conferida em
+  // /v4/sports/soccer_conmebol_copa_sudamericana/events ("Clube Atlético Mineiro").
+  copa_sudamericana: ["Atlético Mineiro", "Boca Juniors"],
   premier_league: [
     "AFC Bournemouth",
     "Arsenal FC",
