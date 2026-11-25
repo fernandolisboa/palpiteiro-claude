@@ -294,11 +294,11 @@ export type PalpiteWeighedView = {
 
 - `audience: "public"` em `toWeighedView`. Lista branca de origens públicas: `jev` e `news`. A notícia é pública (PLAN-672 §8.3). O contexto do dono não sai, nem origem desconhecida.
 - Os fatores escondidos saem da lista, e as somas das raias deles juntam-se numa linha neutra: **"Outro ajuste de quem fez o palpite"**. Sem frase, sem etiqueta, sem força. Raias e barra continuam batendo.
-- **Decisão D1 para a revisão do plano.** A v2 dizia "no /p, a linha 'você contou' some". Tirar sem agregar deixa raia ≠ barra. Alternativas: (a) linha neutra agregada (recomendada; revela que houve contexto, não o conteúdo); (b) tirar e aceitar a conta aberta; (c) esconder o bloco inteiro no `/p` quando há fator do usuário.
+- **Decisão D1 (tomada pelo dono em 2026-11-25, reversível): bloco inteiro some no `/p`.** Nenhuma versão do "o que pesou" vai para a página pública, com ou sem fator do usuário. Com isso caem a lista branca de origens, a linha neutra "Outro ajuste de quem fez o palpite" e o `audience` do view model (ver "Revisão do plano", R2). As alternativas antigas (linha neutra agregada; tirar e aceitar a conta aberta; esconder só quando há fator do usuário) ficam registradas como não adotadas.
 - O resumo usa os totais e não muda. O `/p` não leva `alsoRead` (é do diálogo).
 - O raciocínio continua fora do `/p` (`delete mapped.reasoning`).
 - `unsafeForPublic` não muda: guarda texto livre (verdict/narrative). O bloco é texto de código.
-- **Decisão D2.** A ADR 0035 §2(d) diz "FORA, sempre: … %". Mostrar a barra no `/p` exige emendá-la também (a issue cita só 0030 e 0065). Se o dono não quiser `%` no público, a alternativa é o `/p` sem o bloco. O plano segue com o bloco e com a emenda (§9).
+- **Decisão D2 (consequência da D1): bloco inteiro some no `/p`, sem emenda da ADR 0035.** A §2(d) ("FORA, sempre: … %") fica intacta: o `/p` nunca mostra `%` nem pontos. A emenda da 0035 sai do §9, e a emenda da 0030 registra numa frase que o bloco é só da superfície do dono (HERO e "Ver raciocínio").
 
 ## 7. CSS e animação (`app/globals.css`, seção nova "o que pesou (#683)")
 
@@ -435,3 +435,121 @@ Quem fizer merge por último roda os testes de origem com uma predição que ten
 - Bloco no palpite ao vivo (`pickFromMatrix`, com fatores em jogo).
 - `moves` gravado, se a revisão preferir.
 - Encurtar o ciclo de 5,4 s (ressalva da v6).
+
+## Revisão do plano
+
+Revisão de olhos frescos, 2026-11-25, sobre `175093f`. Conferido contra o código: `lib/ai/palpites/pick.ts`, `lib/ai/judgments/apply.ts`, `lib/ai/palpites/synthesis-input.ts`, `lib/ai/engine/types.ts`, `lib/user-palpite/evidence.ts` e `types.ts`, `lib/match-news/apply.ts` e `model-answers.ts`, `lib/quant/scoreline-model.ts`, `lib/ai/predict.ts` (`toPredictionJudgments`), `lib/ai/palpites/cartridges/model-pick.ts`, `lib/calibration/palpite-confidence.ts`, `lib/view/palpites-headline.ts`, `app/p/[id]/load-shared-palpite.ts`, `components/palpites/palpite-hero.tsx` e `reasoning-dialog.tsx`, `app/globals.css`, ADRs 0030/0035/0065/0072, PLAN-672 e a v6 (`proposta-v6.md`, print do "vira").
+
+**O que se confirmou:**
+- O clamp nunca corta com os pesos de hoje: por λ, o produto fica em [0,893; 1,092].
+- O `lambda.adjusted` gravado é `base × applied` (`toPredictionJudgments`). Logo, `adjusted/base` do pick = `Π m` (clampado).
+- A matriz é renormalizada (Σ = 1), então cada Δ soma 0 entre os três resultados.
+- O `model-pick.ts` monta o pick do prompt campo a campo, e a manchete nunca volta a prompt nenhum: system prompts e cache intactos (ADR 0071).
+- A calibração lê `pick: z.unknown()`, então o campo novo não a quebra.
+- Custo de CPU desprezível: até 9 matrizes 11×11; o ajuste ao mercado por bisseção custa mais.
+- Lógica em `lib/`, componentes só renderizam, nenhum nome de casa: OK.
+
+### Must-fix
+
+**R1 (must-fix). Na base de mercado, o "antes→depois" é o edge por resultado, só sem a palavra.** O `basePts` da fonte `market` é o 1X2 do mercado sem margem (a matriz ajustada aos preços). Os pontos de cada fator, somados, dão `finalPts − basePts` = chance do modelo − chance do mercado, por resultado. É exatamente o que a ADR 0030 §3 tira do HERO ("nenhum número de valor cruza a fronteira do HERO"). Não há odd, EV nem a palavra edge, mas o número está lá. O texto da emenda no §9 ("são chances do modelo, não números de valor") não descreve isso direito.
+- **Correção:** a emenda da 0030 §3 diz isso com todas as letras: "na base de mercado, o antes é a chance do mercado sem margem, e a diferença antes→depois é a distância entre o modelo e o mercado, em pontos inteiros, por resultado". Justificativa: o palpite é o resultado mais provável, não uma escolha por valor; o número é chance e nunca odd, EV ou stake; só a superfície do dono mostra (D1).
+- Pedir o OK explícito do dono **para essa frase** antes do commit 1. Se ele recusar, a mitigação possível é mostrar só a base `dc_jev` ou a base em palavras, mas os pontos das raias continuam somando a diferença, então na prática o recurso cai.
+
+**R2 (must-fix). O `/p` precisa de corte explícito, não da ausência de `teams`.** Com a D1, o plano ainda descreve `audience`, a lista branca, a linha neutra, o bloco em `public-palpite.tsx`, a emenda da 0035 e o commit 6.
+- **Correção:**
+  - tirar `audience` de `toWeighedView`, `toPalpiteHeadlineView` e `toPalpiteHeadlineViewFromSet`;
+  - tirar o §6 (exceto D1/D2), o bloco de `public-palpite.tsx` e a emenda 0035 do §9 e do título do commit 1;
+  - o commit 6 vira uma linha em `load-shared-palpite.ts`, `delete mapped.weighed`, ao lado do `delete mapped.reasoning` (defesa em profundidade: amanhã alguém passa `teams` no loader e o bloco vaza);
+  - teste em `load-shared-palpite.test.ts` (fixture com `pick.weighed` válido → view sem `weighed`) e em `public-palpite.test.tsx` (HTML sem `data-pesou` e sem `%`);
+  - `components/landing/palpite-preview.tsx` não muda.
+
+**R3 (must-fix). A direção do fator precisa bater com a frase.** O §3.1 aceita "fator com `value ≤ 0.5` e `m ≠ 1`" (linhas da regra simétrica antiga). Lá um "não" (noul 0,2) em `attack_weakened_home` dá `m = 1,036`, **aumenta** o ataque, e a linha sairia "Atlético-MG sem peça no ataque" com pontos indo **para** o Atlético. A conta fecha (telescópica), mas o texto mente. O caminho "Gerar só o palpite" lê a análise mais recente de cada mercado, que pode ser antiga.
+- **Correção:** para todo fator com `m ≠ 1`, exigir `value > 0.5` e `sign(m − 1) === sign(factorMultiplier(factor, 1) − 1)`. Esse teste dá o sinal esperado sem duplicar `FACTOR_EFFECT`, e não quebra se os pesos mudarem. Se falhar → `weighed: null`, `reason: "factor_direction"`.
+- Teste com uma linha simétrica sintética.
+
+**R4 (must-fix). JEV falho vira "sem bloco" em vez de "nenhum ajuste".** Com o JEV falho e sem contexto, `applyJudgments(null)` grava `multipliers: null`. Mesmo assim, `judgmentsModel` existe (`engine === "code_jev"`), e `multipliersOf` devolve `{1, 1}`, não `null`. Pelo §3.1, `weighedFactorInputs` → `null`. Pelo §3.5 ("há multiplicadores no pick mas a análise não tem `factors`"), o resultado é `weighed: null`. O §3.5 queria mostrar "nenhum ajuste" nesse caso.
+- **Correção:**
+  - `weighedFactorInputs` devolve `{ factors: [], applied: {1,1}, product: {1,1} }` para `code_jev` com `multipliers === null`;
+  - `null` fica reservado ao `userContext` ilegível;
+  - no §3.5, multiplicador do pick com `|m − 1| ≤ 1e-9` conta como "sem multiplicador".
+- Teste: JEV falho sem contexto → `factors: []` e resumo "Nenhum ajuste mexeu".
+
+**R5 (must-fix). O invariante de arredondamento do §11 é falso, e o rateio pode contradizer o sinal.**
+- *Erro > 1.* Base 37,45/30,30/32,25 → maior resto 38/30/32. Final 35,55/30,60/33,85 → 35/31/34. Com um fator só, `pts_home = T = −3` contra `Δ = −1,90`: erro 1,1. O teste "`|pts − pp| ≤ 1` em casa/visitante" falha no teste de propriedade. O limite certo é `< 2`. O empate, que é o resto, pode errar mais que ±1, ao contrário do que diz o §3.6.
+- *Sinal trocado.* Base 37,55/30,80/31,65 → 37/31/32. Final 37,45/31,25/31,30 → 38/31/31. A barra mostra "37→38" para um resultado que **caiu** 0,1. Com um fator "sem peça no ataque", o rateio dá +1 ao próprio time.
+- **Correção:**
+  - `apportion` passa a respeitar o sinal nas colunas casa/visitante: o resíduo ±1 só vai para um item cujo `raw` tem o mesmo sinal (ou é zero);
+  - se nenhum item serve, `weighed: null` com `reason: "rounding_conflict"`. Isso só acontece quando a própria barra contradiz o Δ, que é o caso raro acima;
+  - o teste de propriedade confere as somas exatas, a ausência de sinal trocado em casa/visitante, `|pts − raw| < 2`, e mede a taxa de `null` (esperada perto de 0; o teste falha se passar de 1%);
+  - corrigir o texto do §3.6 sobre o empate ("arredondamento", sem prometer ±1).
+
+**R6 (must-fix, com saída para o dono). Animação em loop infinito no HERO.** Ciclo de 5,4 s, automático e sem fim, ao lado de outro conteúdo: falha na WCAG 2.2.2 (Pause, Stop, Hide, nível A) para quem não ligou o movimento reduzido. E ainda gasta bateria com duas instâncias (HERO e diálogo).
+- **Correção:**
+  - `animation-iteration-count: 2` (ou 1) nas raias, arcos e listras, terminando no estado parado, o mesmo do movimento reduzido: bolinhas das raias no destino, as dos arcos escondidas;
+  - opcional: tocar de novo ao tocar ou passar o mouse no bloco;
+  - o teste de CSS do §11 confere que nenhuma regra `.pesou` usa `infinite`;
+  - se o dono quiser manter o loop, registrar a exceção na emenda da 0030 e na PR.
+
+### Should-fix
+
+**R7 (should-fix). Origem: usar o helper único e corrigir a promessa do "efeito marginal".**
+- O PLAN-672 (ajuste 4, "um helper só") manda todo leitor usar `modelAnswersOf(judgments)` como "o que o número já tinha".
+  - **Correção:** a regra do usuário fica `user > max(0.5, modelAnswersOf(j)?.[q]?.value ?? 0)` (a semântica do `claimEffect`), e a da notícia `news > max(0.5, answers?.[q]?.value ?? 0)`. Sem um terceiro jeito de combinar.
+- O §3.2 diz que "você contou" é "o efeito marginal do contexto sobre o modelo". Isso só vale quando o JEV estava neutro. Com JEV 0,6 e usuário 0,7, a linha carrega o fator inteiro `m(0,7)`, não `m(0,7)/m(0,6)`.
+  - **Correção:** reescrever como "a linha mostra o fator inteiro; a etiqueta diz quem o levou ao valor final".
+  - A separação JEV/incremento entra em §15 como acompanhamento. Hoje o caso é raro: o usuário só move com 0,7 ou 0,85.
+
+**R8 (should-fix). Altura dos arcos no view model, para o SSR reservar a caixa.** O §5 promete "no SSR sai só a caixa com a altura certa", mas no §4.2 a altura sai de `fanArcs(flows, widthPx, …)`, que só roda no cliente.
+- **Correção:**
+  - `bar.arcsHeight` (0, 22 ou 32) no `PalpiteWeighedView`, calculado dos fluxos (1 ou 2 destinos por lado), sem largura;
+  - `fanArcs` recebe a altura pronta;
+  - `WeighedFlows` mede com `useLayoutEffect` (React 19, sem aviso no SSR) e com `ResizeObserver` para recalcular no resize (a v6 não recalculava);
+  - teste de render no servidor: a caixa sai com a altura e sem `<path>`.
+
+**R9 (should-fix). Contraste e tema.**
+- O "2 pts", a sigla de destino e os rótulos de `%` são **texto** pequeno, então pedem 4,5:1 (AA). O 3:1 do §7 vale só para raia, arco e listra (não texto).
+  - **Correção:** texto com os tokens que já existem (`--palpite-strong-fg`, `--muted-fg-2`, `--foreground`); misturas de cor só no gráfico.
+- O tema escuro do app é a classe `.dark` (`@custom-variant dark`), não a media query.
+  - **Correção:** seletores `.dark .pesou[data-winner=…]`.
+- `--surface` não existe (há `--surface-2` e `--surface-3`).
+  - **Correção:** usar `--surface-2`, sem criar token.
+
+**R10 (should-fix). Paridade memória × histórico (regra M3 do #668), com teste.** O jsonb do Postgres reordena chaves (as mais curtas primeiro), então `multipliers.{s}.factors` chega em ordem diferente pelos dois caminhos.
+- O §3.2 já ordena, mas a soma `Σ ln m` do clamp também depende da ordem em ponto flutuante.
+  - **Correção:** ordenar canonicamente **antes** de qualquer soma.
+- Teste em `pick.test.ts`: as mesmas predições por `summarizeAnalysesForSynthesis` e por `summarizeSavedAnalysesForSynthesis` (com as chaves do jsonb embaralhadas) dão `weighed` profundamente igual.
+
+**R11 (should-fix). Leitura com Zod: faixa dos inteiros.** O §4.1 rejeita "inteiro fora de [0, 100]", mas `pts` é negativo por natureza.
+- **Correção:** `basePts` e `finalPts` em `int` [0, 100]; `pts` em `int` [−100, 100]; `value` em [0, 1]; `multiplier` > 0 e finito.
+
+**R12 (should-fix). Resumo quando todo fator é minúsculo.** Com fatores, mas todos com `pts` zero, cai em "os ajustes quase se anulam", o que não é verdade: eles não se anularam, foram pequenos.
+- **Correção:** um caso próprio, "Os ajustes mexeram menos de 1 pt: vale {os preços|o modelo}", com teste.
+
+**R13 (should-fix). Conflito com a C2 do #672: copy e arquivos a mais na tabela do §13.**
+- O `originLine` da notícia tem de usar as mesmas palavras do passo da C2 (PLAN-672 §8.1: "segundo o ge (não conferido com os nossos dados)" / "(confirmado pelos nossos dados)"). O mesmo diálogo mostra os dois.
+  - **Correção:** quem fizer merge por último troca a string local pela constante da C2, se ela exportar uma.
+- Acrescentar à tabela:
+  - `lib/match-news/model-answers.ts` (só leitura, R7);
+  - `app/globals.css` e `palpite-hero.tsx`: o sinal de notícia no azarão (`underdog_calc_v2`) pode mexer no teaser abaixo do HERO. Risco baixo, hunks separados.
+- O `palpites_v15` da C2 mexe em cartuchos e `index.ts`; este plano não toca neles, então nada muda ali.
+
+**R14 (should-fix). Limpeza do plano pela D1.**
+- §1 "Entra": sem `/p`.
+- §8: o helper de firewall serve ao HERO e à área. No `/p`, o teste passa a ser "zero `data-pesou`".
+- §11: troca os testes públicos pelos de R2.
+- §12: o commit 6 encolhe (R2).
+- §14: os riscos 1 e 5 perdem a parte do `/p`.
+
+### Nits
+
+- **R15 (nit). Clamp em log.** A conta está certa: com o clamp ativo, `c ∈ (0,1)`, nenhum fator troca de sinal e `Π m' = applied` exato. Mas é caminho morto com os pesos de hoje. Uma alternativa mais simples: `clamped` → `weighed: null` (fail-closed) até um bump de pesos precisar disso. As duas servem; se ficar, que seja depois da ordenação (R10).
+- **R16 (nit). `pp` gravado** é redundante (sai de `baseProbs` e da sequência). Manter só se a auditoria usar; se ficar, documentar que a view não lê.
+- **R17 (nit). Nome repetido:** o componente `PalpiteWeighed` e o tipo `PalpiteWeighed` (`weighed.ts`). Renomear o componente para `WeighedBlock`.
+- **R18 (nit). Desempate do `movesOf`.** Quando o empate perde para os dois times, "o destino mais perto" não decide (os dois são vizinhos). Fixar: mandante primeiro.
+- **R19 (nit). Slot limitado a 7.** Com muitos fatores, várias raias animam juntas no slot 7. Aceitável, mas vale dizer no comentário do CSS.
+- **R20 (nit). "Preços do jogo"** é a matriz ajustada ao mercado (resíduo de até 1 pp na divisão), não o 1X2 sem margem cru. Dizer isso numa linha na emenda (R1).
+- **R21 (nit). O `alsoRead` conta `headline.sources`** (notícias citadas), não as lidas. Ajustar a frase ("e N notícias do ge citadas") ou ler a contagem certa depois da C2.
+
+### Decisões D1/D2
+
+Resolvidas pelo dono (2026-11-25, reversível): **bloco inteiro some no `/p`**, ADR 0035 §2(d) intacta, sem emenda da 0035 (texto do §6 atualizado).
