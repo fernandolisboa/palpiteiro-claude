@@ -14,11 +14,29 @@ vi.mock("@/lib/db/queries/palpites", async (orig) => {
   const actual = await orig<typeof import("@/lib/db/queries/palpites")>();
   return { ...actual, getSharedPalpiteSet };
 });
+// #683: o mapper de verdade, mas sempre com os times, pra provar que o loader tira o
+// `weighed` mesmo quando o mapper o monta (D1 do PLAN-683).
+vi.mock("@/lib/view/palpites-headline", async (orig) => {
+  const actual = await orig<typeof import("@/lib/view/palpites-headline")>();
+  return {
+    ...actual,
+    toPalpiteHeadlineViewFromSet: (set: PalpiteSetWithLines) =>
+      actual.toPalpiteHeadlineViewFromSet(set, { teams: WEIGHED_TEAMS }),
+  };
+});
 
 import {
   loadSharedPalpite,
   NEUTRAL_DESCRIPTION,
 } from "@/app/p/[id]/load-shared-palpite";
+import { resolvePregamePick } from "@/lib/ai/palpites/pick";
+import { codeJev, mr, ou, VIRA } from "@/lib/ai/palpites/__tests__/weighed-fixtures";
+import { toPalpiteHeadlineViewFromSet } from "@/lib/view/palpites-headline";
+
+const WEIGHED_TEAMS = {
+  home: { name: "Atlético-MG", short: "CAM" },
+  away: { name: "Boca Juniors", short: "BOC" },
+};
 
 // loadSharedPalpite é embrulhado em React cache() → MEMOIZA por argumento no processo de
 // teste. Cada `it` usa um UUID FRESCO pra não colidir com a entrada cacheada de outro teste.
@@ -167,6 +185,22 @@ describe("loadSharedPalpite — guard de texto público (ADR §2d/§2e / #438)",
     const out = await loadSharedPalpite(freshUuid());
     expect(out).not.toBeNull();
     expect(out!.view).not.toHaveProperty("reasoning");
+  });
+
+  it("#683: o que pesou fica fora da página pública", async () => {
+    const pick = resolvePregamePick([
+      mr(VIRA.odds, codeJev({ base: { home: 1, away: 1 }, jev: VIRA.jev, user: VIRA.user })),
+      ou(...VIRA.ou),
+    ]);
+    expect(pick?.weighed).toBeTruthy();
+    const set = makeSet({ headline: { ...HEADLINE, pick: pick! } });
+    // O mapper (com os times do mock) monta o bloco; o loader o tira.
+    expect(toPalpiteHeadlineViewFromSet(set)?.weighed).toBeDefined();
+    getSharedPalpiteSet.mockResolvedValue({ palpiteSetWithLines: set, match: makeMatch() });
+    const out = await loadSharedPalpite(freshUuid());
+    expect(out).not.toBeNull();
+    expect(out!.view).not.toHaveProperty("weighed");
+    expect(JSON.stringify(out)).not.toMatch(/%|weighed/);
   });
 
   it("narrativa limpa passa verbatim", async () => {

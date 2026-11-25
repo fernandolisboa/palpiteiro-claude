@@ -11,6 +11,7 @@ import {
 } from "@/lib/view/share/disclaimer";
 import type { PalpiteHeadlineView } from "@/lib/view/palpites-headline";
 import type { MatchPublicView } from "@/app/p/[id]/load-shared-palpite";
+import { WEIGHED_VIRA } from "@/components/__tests__/firewall-helpers";
 
 // leaksValue: MESMO guard do firewall do HERO (containsValueLanguage + "%").
 function leaksValue(html: string): boolean {
@@ -74,6 +75,15 @@ describe("PublicPalpite — privacidade + firewall (ADR §3/§5)", () => {
     const html = render();
     expect(leaksValue(html)).toBe(false);
     expect(html).not.toContain("edge-");
+  });
+
+  it("#683: mesmo com `weighed` na view, nada do bloco 'o que pesou' nem '%'", () => {
+    const html = renderToStaticMarkup(
+      <PublicPalpite view={{ ...VIEW, weighed: WEIGHED_VIRA() }} match={MATCH} />,
+    );
+    expect(html).not.toContain("data-pesou");
+    expect(html).not.toContain("o que pesou");
+    expect(leaksValue(html)).toBe(false);
   });
 
   it("linguagem de valor na NARRATIVE é pega pelo guard (prova que cobre o campo que cruza)", () => {
