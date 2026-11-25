@@ -11,7 +11,11 @@
 // seleções (a fidelidade aceita citá-las), e uma narração reprovada (formato ou
 // fidelidade) ganha UMA 2ª tentativa com o motivo no fim da mensagem (retry.ts). System
 // prompt e tool idênticos aos da v1.4 (cache, ADR 0071): só a mensagem.
-export const NARRATOR_VERSION = "narrator_v1.5" as const;
+// v1.6 (#672): fatores movidos pelas notícias do ge levam a origem na frase ("(segundo o
+// ge, não conferido)" / "(segundo o ge, confirmado pelos nossos dados)") e a mensagem
+// ganha o bloco "Segundo as notícias do ge" só quando há nota. Regra 4 do system prompt
+// estendida (constante: o cache quebra uma vez). Sem notícia, a mensagem é a da v1.5.
+export const NARRATOR_VERSION = "narrator_v1.6" as const;
 
 export const RATIONALE_MAX_CHARS = 600;
 export const KEY_FACTORS_MIN = 2;
@@ -24,7 +28,7 @@ REGRAS INVIOLÁVEIS:
 1. A decisão é fixa. Não mude o lado, a linha, a stake nem a conclusão. Se a decisão é "SEM APOSTA", explique por que não há valor; nunca sugira apostar em nenhuma seleção. Se a decisão é uma aposta, defenda essa seleção; nunca recomende outra seleção nem diga que é melhor não apostar.
 2. Números: cite no máximo os percentuais que aparecem no bloco "Decisão" (probabilidade do modelo, probabilidade implícita, edge e piso), exatamente como estão. Não invente probabilidades, não calcule percentuais novos e não arredonde de forma diferente.
 3. Use os dados de contexto (tabela, forma recente, confrontos diretos, desfalques) só para explicar por que o modelo chegou nesse número. Desfalques aparecem por função (ex.: "atacante titular"); não invente nomes de jogadores.
-4. Os fatores qualitativos (quando houver) já foram aplicados ao modelo. Mencione-os como fatores, sem atribuir a eles números próprios. Um fator marcado "(informado por você, não conferido)" veio do contexto que a pessoa que pediu a análise acrescentou e não foi conferido com os nossos dados: cite-o como informação dela ("segundo o que você informou"), nunca como fato confirmado. Um fator marcado "(informado por você)" também veio dela, e os nossos dados o confirmam. Os itens do bloco "Informado por você" (quando houver) também vieram dela, não foram conferidos e não mudaram nenhum número: cite-os uma vez, como informação dela ("você também informou…"), nunca como fato confirmado nem como motivo dos percentuais.
+4. Os fatores qualitativos (quando houver) já foram aplicados ao modelo. Mencione-os como fatores, sem atribuir a eles números próprios. Um fator marcado "(informado por você, não conferido)" veio do contexto que a pessoa que pediu a análise acrescentou e não foi conferido com os nossos dados: cite-o como informação dela ("segundo o que você informou"), nunca como fato confirmado. Um fator marcado "(informado por você)" também veio dela, e os nossos dados o confirmam. Os itens do bloco "Informado por você" (quando houver) também vieram dela, não foram conferidos e não mudaram nenhum número: cite-os uma vez, como informação dela ("você também informou…"), nunca como fato confirmado nem como motivo dos percentuais. Um fator marcado "(segundo o ge, não conferido)" veio de uma notícia do ge que os nossos dados não confirmam: cite-o como notícia ("segundo o ge"), nunca como fato confirmado. Um fator marcado "(segundo o ge, confirmado pelos nossos dados)" também veio de notícia, e os nossos dados o confirmam. Os itens do bloco "Segundo as notícias do ge" (quando houver) vieram de notícias, não foram conferidos e não mudaram nenhum número: cite-os no máximo uma vez, como notícia ("segundo o ge…"), nunca como fato confirmado nem como motivo dos percentuais.
 5. Tom analítico e sóbrio: sem promessas de lucro, sem "aposta certa", sem exclamações.
 
 FORMATO (via a ferramenta submit_narration):

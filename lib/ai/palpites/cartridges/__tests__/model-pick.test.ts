@@ -16,7 +16,8 @@ import {
   type BuildModelPickInputArgs,
 } from "../model-pick";
 
-// palpites_v14 (#668, ADR 0072): o LLM escreve o texto do palpite decidido em código.
+// palpites_v14/v15 (#668, ADR 0072; v15 = notícias do ge, #672): o LLM escreve o texto do
+// palpite decidido em código.
 
 const BOOKMAKER_NAME =
   /\b(betano|bet365|pinnacle|betfair|sportingbet|superbet|novibet|kto)\b/i;
@@ -135,10 +136,10 @@ describe("PalpitesModelPickOutputSchema", () => {
   });
 });
 
-describe("cartucho palpites_v14", () => {
+describe("cartucho palpites_v15", () => {
   it("versão, ferramenta e schema", () => {
-    expect(PALPITES_VERSION).toBe("palpites_v14");
-    expect(palpitesModelPickCartridge.version).toBe("palpites_v14");
+    expect(PALPITES_VERSION).toBe("palpites_v15");
+    expect(palpitesModelPickCartridge.version).toBe("palpites_v15");
     expect(palpitesModelPickCartridge.toolName).toBe("submit_palpite");
     const props = Object.keys(SUBMIT_PALPITE_V13_TOOL.input_schema.properties).sort();
     expect(props).toEqual([
@@ -166,7 +167,7 @@ describe("cartucho palpites_v14", () => {
   });
 
   it("prompt fixado (mudou? bump + commit prompt:)", () => {
-    expect(sha(SYSTEM_PROMPT_V13)).toMatchInlineSnapshot(`"375f7914d90b8cb9"`);
+    expect(sha(SYSTEM_PROMPT_V13)).toMatchInlineSnapshot(`"742f430860c1d5de"`);
     expect(sha(JSON.stringify(SUBMIT_PALPITE_V13_TOOL))).toMatchInlineSnapshot(`"627be51454f4962e"`);
   });
 });
@@ -248,5 +249,66 @@ describe("palpites_v14 — notícias do #670", () => {
     expect(palpitesModelPickCartridge.buildUserMessage(failed, { daysToKickoff: 1 })).toContain(
       "notícias indisponíveis nesta análise",
     );
+  });
+});
+
+describe("palpites_v15 — notícias do ge (#672)", () => {
+  const withNews = (over: Partial<BuildModelPickInputArgs> = {}) => ({
+    ...args(),
+    analyses: args().analyses.slice(0, 2),
+    news: [
+      {
+        title: "Escalação do Flamengo",
+        url: "https://ge.globo.com/a.ghtml",
+        snippet: "Trecho",
+        publishedAt: "2026-05-14T20:02:01.000Z",
+        source: "ge" as const,
+      },
+    ],
+    newsStatus: "found" as const,
+    ...over,
+  });
+
+  it("sem nota de notícia, a mensagem é byte-idêntica à da v14", () => {
+    // Literal calculado com o código da palpites_v14, antes da mudança.
+    const v14 = "9d52ba17970dacb5";
+    const opts = { daysToKickoff: 3 };
+    expect(sha(buildModelPickUserMessage(buildModelPickInput(withNews()), opts))).toBe(v14);
+    expect(
+      sha(buildModelPickUserMessage(buildModelPickInput(withNews({ newsNotes: [] })), opts)),
+    ).toBe(v14);
+  });
+
+  it("com nota: seção própria depois dos fatores; fator do ge chega com a origem", () => {
+    const input = buildModelPickInput(
+      withNews({
+        factors: [
+          "Desfalques tiram do CR Flamengo uma peça ofensiva central (segundo o ge, não conferido)",
+        ],
+        newsNotes: ["Segundo o ge (não conferido): troca de técnico no Fluminense FC"],
+      }),
+    );
+    const msg = buildModelPickUserMessage(input, { daysToKickoff: 3 });
+    expect(msg).toContain(
+      "# Segundo as notícias do ge (não conferido, sem efeito no palpite)\n" +
+        "- Segundo o ge (não conferido): troca de técnico no Fluminense FC",
+    );
+    expect(msg).toContain("(segundo o ge, não conferido)");
+    expect(msg.indexOf("# Segundo as notícias do ge")).toBeLessThan(
+      msg.indexOf("# Análises por mercado"),
+    );
+    expect(BOOKMAKER_NAME.test(msg)).toBe(false);
+  });
+
+  it("regra do system prompt: notícia se cita como notícia, nunca como fato", () => {
+    expect(SYSTEM_PROMPT_V13).toContain('"(segundo o ge, não conferido)"');
+    expect(SYSTEM_PROMPT_V13).toContain("NUNCA como fato confirmado");
+    expect(SYSTEM_PROMPT_V13).toContain('seção "Segundo as notícias do ge"');
+  });
+
+  it("no máximo 8 notas; nota vazia falha no boundary", () => {
+    const notes = Array.from({ length: 10 }, (_, i) => `Nota ${i}`);
+    expect(buildModelPickInput(withNews({ newsNotes: notes })).newsNotes).toHaveLength(8);
+    expect(() => buildModelPickInput(withNews({ newsNotes: [""] }))).toThrow();
   });
 });

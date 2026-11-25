@@ -7,11 +7,13 @@ import {
   underdogTeaserBlock,
   type UnderdogPick,
 } from "@/lib/underdog/gate";
+import { isUnsafeNewsTitle, safeGeArticleUrl } from "@/lib/match-news/labels";
 import {
   oneInN,
   scenarioLabel,
   signalLabel,
   signalOrigin,
+  type SignalOrigin,
 } from "@/lib/underdog/labels";
 import type {
   UnderdogFacts,
@@ -43,7 +45,14 @@ export type UnderdogPanelView = {
   oneInN: number | null;
   scorelines: { label: string; pct: string }[];
   scenarios: { label: string; before: string; after: string }[];
-  signals: { label: string; origin: "dados" | "modelo"; note: string | null }[];
+  signals: {
+    label: string;
+    origin: SignalOrigin;
+    note: string | null;
+    // A matéria do ge do sinal de notícia (#672): título como texto do link. Ausente sem
+    // título seguro (nome de casa de aposta, linguagem de valor) ou sem URL https.
+    link?: { url: string; title: string };
+  }[];
   narrative: {
     sentences: string[];
     counterpoint: string;
@@ -109,11 +118,19 @@ export function toUnderdogPanelView(
       before: int(c.beforePct),
       after: int(c.afterPct),
     })),
-    signals: facts.signals.map((s) => ({
-      label: signalLabel(s, n),
-      origin: signalOrigin(s),
-      note: s.kind === "jev" ? UNDERDOG_JEV_NOTE : null,
-    })),
+    signals: facts.signals.map((s) => {
+      // Link só pra matéria do ge (https, *.globo.com) com título seguro; sem isso, a
+      // frase do código fica sem link.
+      const url = s.kind === "news" && s.url ? safeGeArticleUrl(s.url) : null;
+      return {
+        label: signalLabel(s, n),
+        origin: signalOrigin(s),
+        note: s.kind === "jev" || s.kind === "news" ? UNDERDOG_JEV_NOTE : null,
+        ...(s.kind === "news" && url && s.title && !isUnsafeNewsTitle(s.title)
+          ? { link: { url, title: s.title } }
+          : {}),
+      };
+    }),
     narrative: {
       sentences: narrative.sentences.map((s) => s.text),
       counterpoint: narrative.counterpoint,

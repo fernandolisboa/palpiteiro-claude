@@ -14,10 +14,11 @@ import {
   type BuildPalpitesInputArgs,
 } from "./cartridge";
 
-// Cartucho palpites_v14 (#668, ADR 0072): o palpite decidido em código. O resultado, o
-// placar, o 1º tempo e quem marca primeiro chegam FIXADOS (lib/ai/palpites/pick.ts); o
-// LLM só escreve o texto em volta. Nada que varie por pedido no system prompt nem na
-// ferramenta (ADR 0071): o palpite fixado vai na mensagem do usuário.
+// Cartucho palpites_v15 (#668, ADR 0072; v15 = notícias do ge, #672): o palpite decidido
+// em código. O resultado, o placar, o 1º tempo e quem marca primeiro chegam FIXADOS
+// (lib/ai/palpites/pick.ts); o LLM só escreve o texto em volta. Nada que varie por pedido
+// no system prompt nem na ferramenta (ADR 0071): o palpite fixado vai na mensagem do
+// usuário.
 
 const TEXT_MAX = 280;
 const NARRATIVE_MAX = 600;
@@ -69,8 +70,11 @@ export const PalpitesModelPickInputSchema = PalpitesInputSchema.extend({
   pick: FixedPickSchema,
   // A palavra da confiança do chip, pro tom do texto bater com ela.
   confidence: z.enum(["baixa", "media", "alta"]),
-  // Fatores do JEV que mexeram no λ (frases sem número, sem os do contexto extra).
+  // Fatores do JEV que mexeram no λ (frases sem número, sem os do contexto extra; os das
+  // notícias com a origem "(segundo o ge…)", #672).
   factors: z.array(z.string().min(1)).max(12).default([]),
+  // Notícias do ge sem efeito no número (#672), em linhas do código. [] = sem seção.
+  newsNotes: z.array(z.string().min(1)).max(8).default([]),
 });
 export type PalpitesModelPickInput = z.infer<typeof PalpitesModelPickInputSchema>;
 
@@ -78,6 +82,7 @@ export type BuildModelPickInputArgs = BuildPalpitesInputArgs & {
   pick: Pick<PalpitePick, "outcome" | "score" | "firstHalfScore" | "firstToScore" | "probs">;
   confidence: "baixa" | "media" | "alta";
   factors: readonly string[];
+  newsNotes?: readonly string[];
 };
 
 export function buildModelPickInput(args: BuildModelPickInputArgs): PalpitesModelPickInput {
@@ -93,6 +98,7 @@ export function buildModelPickInput(args: BuildModelPickInputArgs): PalpitesMode
     },
     confidence: args.confidence,
     factors: args.factors.slice(0, 12),
+    newsNotes: (args.newsNotes ?? []).slice(0, 8),
   });
 }
 
@@ -116,6 +122,7 @@ REGRAS INVIOLÁVEIS:
 - NUNCA cite números de chance ou porcentagem em verdict ou narrative.
 - É TERMINANTEMENTE PROIBIDO linguagem de aposta em verdict ou narrative — como número OU como palavra: edge, valor esperado/EV, stake/unidades, Yield, lucro, retorno, odd/cotação, preço, R$. (PROIBIDO: "odd boa no Palmeiras", "o preço do over". OK: "o Palmeiras vem voando e marca fácil em casa".)
 - Use SÓ os dados fornecidos. NÃO invente jogadores, lesões ou números.
+- Fator marcado "(segundo o ge, não conferido)" e os itens da seção "Segundo as notícias do ge" vieram de notícia e NÃO foram conferidos: se citar, é como notícia ("segundo o ge…"), NUNCA como fato confirmado. Fator marcado "(segundo o ge, confirmado pelos nossos dados)" veio de notícia e os dados confirmam. Os itens da seção "Segundo as notícias do ge" não mudaram o palpite: nunca os use como motivo do resultado.
 - Total de gols: se citar gols marcados/sofridos de um time, copie o total exato da linha "Últimos N jogos (placares contados)" desse time, dizendo a janela (ex.: "7 gols sofridos nos últimos 5 jogos"). NUNCA some, recalcule ou arredonde; a média por jogo, se citada, vai como média (ex.: "0,8 gol sofrido por jogo"), nunca como total.
 - Cartões/árbitro: a temperatura de cartões vai EXCLUSIVAMENTE no campo cardsTemperature. É PROIBIDO mencionar cartões, árbitro, faltas ou contagem de cartões em verdict ou narrative.
 - O placar provável é conferido depois (acertou/errou). Trate como palpite divertido, nunca como "acerto garantido".
@@ -228,6 +235,12 @@ export function buildModelPickUserMessage(
     lines.push("- (nenhum fator de contexto mexeu no jogo)");
   } else {
     for (const f of input.factors) lines.push(`- ${f}`);
+  }
+  // v15 (#672): só com nota; sem ela a mensagem é a da v14.
+  if (input.newsNotes.length > 0) {
+    lines.push("");
+    lines.push("# Segundo as notícias do ge (não conferido, sem efeito no palpite)");
+    for (const n of input.newsNotes) lines.push(`- ${n}`);
   }
 
   lines.push("");

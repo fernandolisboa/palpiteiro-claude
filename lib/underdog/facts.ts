@@ -2,6 +2,7 @@ import { formatPct } from "@/lib/format-number";
 
 import { SCENARIO_LEAD_MINUTE, SCENARIO_RED_MINUTE } from "./constants";
 import {
+  newsSignalFactLine,
   oneInN,
   scenarioLabel,
   signalLabel,
@@ -150,13 +151,14 @@ export function buildFactsBlock(
 
   facts.signals.forEach((s, i) => {
     allowSignal(s, numbers, pairs);
-    const base = signalLabel(s, n);
+    // Notícia (#672): a frase do código com a conferência, sem o título da matéria.
+    const base = s.kind === "news" ? newsSignalFactLine(s, n) : signalLabel(s, n);
     const extra =
       s.kind === "h2h"
         ? `; ${n.favorite} venceu ${s.favoriteWins}`
         : s.kind === "form"
           ? " (V vitória, E empate, D derrota, do mais recente ao mais antigo)"
-          : s.kind === "jev"
+          : s.kind === "jev" || s.kind === "news"
             ? " (esse fator já está na chance do modelo acima)"
             : "";
     add(`F${i + 1}`, `${base}${extra}.`);
@@ -230,6 +232,7 @@ function allowSignal(
       numbers.add(s.favorite).add(s.underdog);
       return;
     case "jev":
+    case "news":
       return;
   }
 }

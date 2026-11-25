@@ -1,4 +1,8 @@
-import type { JudgmentAnswers } from "@/lib/ai/judgments/types";
+import type { JudgmentAnswers, JudgmentQuestionId } from "@/lib/ai/judgments/types";
+import { newsFactorOrigins } from "@/lib/match-news/apply";
+import { isUnsafeNewsTitle, safeGeArticleUrl } from "@/lib/match-news/labels";
+import type { MatchModelNews } from "@/lib/match-news/types";
+import { claimEffect } from "@/lib/user-palpite/evidence";
 import type {
   NormalizedFixture,
   NormalizedH2H,
@@ -104,6 +108,52 @@ export function jevSignals(
     return typeof v === "number" && Number.isFinite(v) && v >= JEV_SIGNAL_MIN
       ? [{ kind: "jev" as const, factor }]
       : [];
+  });
+}
+
+/**
+ * Sinais das notícias da base (#672, sem chamada nova): só os fatores que a NOTÍCIA moveu
+ * acima do JEV a favor do azarão (ataque, defesa e rodízio do favorito; peso do jogo do
+ * azarão). Já estão na chance. A matéria citada é a 1ª fonte de uma afirmação que moveu
+ * o fator; o título só passa sem nome de casa de aposta e sem linguagem de valor.
+ */
+export function newsSignals(
+  side: UnderdogSide,
+  news: MatchModelNews | null | undefined,
+  jev: JudgmentAnswers | null
+): UnderdogSignal[] {
+  if (!news) return [];
+  const origins = newsFactorOrigins(news.claims, jev);
+  const fav = other(side);
+  const checks: [JevSignalFactor, UnderdogSide][] = [
+    ["attack_weakened", fav],
+    ["defense_weakened", fav],
+    ["rotation_risk", fav],
+    ["high_stakes", side],
+  ];
+  return checks.flatMap(([factor, who]) => {
+    const id: JudgmentQuestionId = `${factor}_${who}`;
+    const strength = origins[id];
+    if (!strength) return [];
+    const ref = news.claims
+      .filter((c) => claimEffect(c, jev).moved.includes(id))
+      .flatMap((c) => c.sources)[0];
+    const source = news.sources.find((s) => s.ref === ref);
+    const url = source ? safeGeArticleUrl(source.url) : null;
+    const title =
+      source && url && !isUnsafeNewsTitle(source.title)
+        ? source.title.replace(/\s+/g, " ").trim().slice(0, 300) || null
+        : null;
+    return [
+      {
+        kind: "news" as const,
+        factor,
+        strength,
+        ref: ref ?? "",
+        url,
+        title,
+      },
+    ];
   });
 }
 

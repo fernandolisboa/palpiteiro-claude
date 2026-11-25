@@ -122,6 +122,8 @@ vi.mock("@/lib/db/queries/ai-config", () => ({
   getGenerationParams: (...args: unknown[]) => getGenerationParams(...args),
   getEnableFidelityValidation: (...args: unknown[]) =>
     getEnableFidelityValidation(...args),
+  // Lote guardado das notícias (#672) desligado: o caminho ao vivo de sempre.
+  getEnableNewsFactors: async () => false,
 }));
 
 const runAnalysis = vi.fn();
@@ -445,7 +447,7 @@ describe("generatePalpites (síntese) — write path real (pglite)", () => {
     expect(h0.confidenceProbPct).toBe(h1.confidenceProbPct);
     expect(h0.confidenceSource).toBe("market");
     expect(h0.pick).toEqual(h1.pick);
-    expect(sets.every((s) => s.palpiteSet.promptVersion === "palpites_v14")).toBe(true);
+    expect(sets.every((s) => s.palpiteSet.promptVersion === "palpites_v15")).toBe(true);
   });
 
   it("assimetria: palpite_set falha → throw, NENHUMA row órfã", async () => {

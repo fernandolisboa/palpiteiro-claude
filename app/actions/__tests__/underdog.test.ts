@@ -401,7 +401,7 @@ describe("openUnderdogView: depois da cobrança", () => {
         underdogSide: "away",
         advocateAiCallId: "a-1",
         reviewerAiCallId: "r-1",
-        versions: expect.objectContaining({ calc: "underdog_calc_v1" }),
+        versions: expect.objectContaining({ calc: "underdog_calc_v2" }),
       })
     );
     if (res.ok) expect(res.view.underdogName).toBe("Flamengo");

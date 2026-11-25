@@ -47,12 +47,15 @@ export function templatedNarration(d: NarratorDecision): NarratorOutput {
     rationale = `Sem aposta: não foi possível medir o edge deste mercado com as odds disponíveis. ${goals}${judgments}`;
     factors.push(`Piso de edge do mercado: ${floor}`);
   }
-  rationale = withLineupNotes(withNotes(rationale, notes), d.lineupNotes ?? []);
+  rationale = withLineupNotes(
+    withNotes(withNotes(rationale, notes), d.newsNotes ?? [], NEWS_NOTES_PREFIX),
+    d.lineupNotes ?? [],
+  );
   // Escalação (#619) depois de probabilidade/edge (ou piso/candidata no pass): o número
   // continua sendo o 1º fato do card.
   // Cortadas no limite do fator (o schema rejeitaria a saída inteira).
   factors.push(...(d.lineupNotes ?? []).map(capKeyFactor));
-  factors.push(...d.judgmentFactors);
+  factors.push(...d.judgmentFactors.map(capKeyFactor));
   if (factors.length < 2) factors.push(goals);
 
   return {
@@ -62,16 +65,22 @@ export function templatedNarration(d: NarratorDecision): NarratorOutput {
 }
 
 const NOTES_PREFIX = " Você também informou (não conferido, sem efeito nos números): ";
+// Notícias sem efeito no número (#672): as linhas já dizem "segundo o ge (não conferido)".
+const NEWS_NOTES_PREFIX = " Nas notícias (sem efeito nos números): ";
 
 // As notas entram uma a uma enquanto cabem; nenhuma é cortada no meio.
-function withNotes(rationale: string, notes: readonly string[]): string {
+function withNotes(
+  rationale: string,
+  notes: readonly string[],
+  prefix: string = NOTES_PREFIX,
+): string {
   const fit: string[] = [];
   for (const note of notes) {
-    const next = `${rationale}${NOTES_PREFIX}${[...fit, note].join("; ")}.`;
+    const next = `${rationale}${prefix}${[...fit, note].join("; ")}.`;
     if (next.length > RATIONALE_MAX_CHARS) break;
     fit.push(note);
   }
-  return fit.length > 0 ? `${rationale}${NOTES_PREFIX}${fit.join("; ")}.` : rationale;
+  return fit.length > 0 ? `${rationale}${prefix}${fit.join("; ")}.` : rationale;
 }
 
 // Reconferência com a escalação (#619): as notas ABREM o racional (é o que mudou desde a

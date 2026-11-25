@@ -91,6 +91,18 @@ function notesBlock(d: NarratorDecision): string[] {
   ];
 }
 
+// narrator_v1.6 (#672): notícias sem efeito no número, em linhas do código. Sem nota,
+// nenhuma linha: a mensagem fica igual à da v1.5.
+function newsNotesBlock(d: NarratorDecision): string[] {
+  const notes = d.newsNotes ?? [];
+  if (notes.length === 0) return [];
+  return [
+    "## Segundo as notícias do ge (não conferido, sem efeito nos números)",
+    ...notes.map((n) => `- ${n}`),
+    "",
+  ];
+}
+
 function contextBlock(c: NarratorContext, d: NarratorDecision): string[] {
   const lines: string[] = [];
   lines.push(
@@ -140,6 +152,7 @@ export function buildNarratorMessage(
     ...judgmentBlock(decision),
     "",
     ...notesBlock(decision),
+    ...newsNotesBlock(decision),
     "## Contexto",
     ...contextBlock(context, decision),
     "",

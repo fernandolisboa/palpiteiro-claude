@@ -65,9 +65,13 @@ vi.mock("@/lib/ai/user-palpite/analysis-context", () => ({
 // Passo de síntese (#353): generatePalpites é a porta da síntese (Haiku) — mockada
 // aqui (a corretude do gerador é coberta por generate-palpites.test). summarize roda
 // REAL (lê os outcomes do fan-out). toPalpiteHeadlineView roda REAL (puro).
+// resolveMatchNews (#672): sem lote guardado por padrão (o caminho ao vivo de hoje, que
+// delega ao startNewsFetch mockado); os testes do lote trocam a implementação.
 vi.mock("@/lib/ai/palpites", () => ({
   generatePalpites: vi.fn(),
   startNewsFetch: vi.fn(),
+  noteStoredNewsStep: vi.fn(),
+  resolveMatchNews: vi.fn(),
 }));
 // Motor (ADR 0041 §5): default 'llm' (o fan-out de hoje). O fan-out code_jev (#512) é
 // mockado aqui — a orquestração real é coberta em best-bet-code-jev.test e
@@ -90,7 +94,12 @@ import {
 import { after } from "next/server";
 import { runCodeJevFanOut } from "@/lib/ai/best-bet";
 import { readAnalysisEngine } from "@/lib/ai/engine/analysis-engine-flag";
-import { generatePalpites, startNewsFetch } from "@/lib/ai/palpites";
+import {
+  generatePalpites,
+  noteStoredNewsStep,
+  resolveMatchNews,
+  startNewsFetch,
+} from "@/lib/ai/palpites";
 import { auth } from "@/auth";
 import { predict } from "@/lib/ai/predict";
 import {
@@ -133,6 +142,8 @@ const mockEngine = vi.mocked(readAnalysisEngine);
 const mockCodeJevFanOut = vi.mocked(runCodeJevFanOut);
 const mockParallelFlag = vi.mocked(getEnableParallelFanOut);
 const mockStartNewsFetch = vi.mocked(startNewsFetch);
+const mockResolveMatchNews = vi.mocked(resolveMatchNews);
+const mockNoteStoredNewsStep = vi.mocked(noteStoredNewsStep);
 
 const ALLOWED_ADMIN = { role: "admin" as const, allowed: true };
 
@@ -294,6 +305,12 @@ beforeEach(() => {
   mockParallelFlag.mockReset();
   mockParallelFlag.mockResolvedValue(false);
   mockStartNewsFetch.mockReset();
+  mockResolveMatchNews.mockReset();
+  mockResolveMatchNews.mockImplementation(async (match, audit, deadlineAt, opts) => ({
+    stored: null,
+    outcome: opts.startLive ? startNewsFetch(match, audit, deadlineAt) : undefined,
+  }));
+  mockNoteStoredNewsStep.mockReset();
 });
 
 describe("analyzeBestBet — gate order (rate-limit é o ÚLTIMO antes do spend)", () => {
@@ -968,13 +985,15 @@ describe("analyzeBestBet — motor code_jev (#512): 1 slot pelo grupo narrado", 
   beforeEach(() => {
     mockEngine.mockResolvedValue("code_jev");
     // Só o 1º mercado foi narrado; os demais compartilham a ai_call dele.
-    mockCodeJevFanOut.mockImplementation(async (_base, markets) =>
-      markets.map((m, i) => ({
+    mockCodeJevFanOut.mockImplementation(async (_base, markets) => ({
+      news: null,
+      outcomes: markets.map((m, i) => ({
         ok: true as const,
         marketKey: m.marketKey,
         result: resultFor(m.marketKey),
         ...(i === 0 ? {} : { sharesAiCall: true as const }),
       })),
+    }),
     );
   });
 
@@ -1328,12 +1347,14 @@ describe("analyzeBestBet — fan-out paralelo (flag enable_parallel_fan_out)", (
 
   it("motor code_jev recebe parallel:true", async () => {
     mockEngine.mockResolvedValue("code_jev");
-    mockCodeJevFanOut.mockImplementation(async (_base, markets) =>
-      markets.map((m) => ({
+    mockCodeJevFanOut.mockImplementation(async (_base, markets) => ({
+      news: null,
+      outcomes: markets.map((m) => ({
         ok: true as const,
         marketKey: m.marketKey,
         result: resultFor(m.marketKey),
       })),
+    }),
     );
     await analyzeBestBet(null, form({ matchId: VALID_MATCH_ID }));
     expect(mockCodeJevFanOut.mock.calls[0][4]).toEqual({
@@ -1354,6 +1375,92 @@ describe("analyzeBestBet — fan-out paralelo (flag enable_parallel_fan_out)", (
     await analyzeBestBet(null, form({ matchId: VALID_MATCH_ID }));
     expect(mockStartNewsFetch).not.toHaveBeenCalled();
     expect(mockGeneratePalpites.mock.calls[0][0].news).toBeUndefined();
+  });
+});
+
+describe("analyzeBestBet — notícias guardadas (#672, C2)", () => {
+  const STORED = {
+    batch: { id: "b-1", status: "ok", items: [], checkedAt: new Date() },
+    results: [],
+    factorsEnabled: true,
+  } as unknown as NonNullable<Awaited<ReturnType<typeof resolveMatchNews>>["stored"]>;
+  const OUTCOME = Promise.resolve({
+    results: [],
+    aiCall: null,
+    status: "none" as const,
+    via: "ge" as const,
+  });
+
+  beforeEach(() => {
+    mockResolveMatchNews.mockResolvedValue({ stored: STORED, outcome: OUTCOME });
+  });
+
+  const fanOutWith = (news: unknown) =>
+    mockCodeJevFanOut.mockImplementation(async (_base, markets) => ({
+      news: news as never,
+      outcomes: markets.map((m) => ({
+        ok: true as const,
+        marketKey: m.marketKey,
+        result: resultFor(m.marketKey),
+      })),
+    }));
+
+  it("lote guardado: vai na base do fan-out e na síntese; sem busca ao vivo nem after()", async () => {
+    vi.mocked(after).mockClear();
+    mockEngine.mockResolvedValue("code_jev");
+    fanOutWith({ stored: STORED, applied: null });
+    const res = await analyzeBestBet(null, form({ matchId: VALID_MATCH_ID }));
+    expect(res.ok).toBe(true);
+    expect(mockResolveMatchNews).toHaveBeenCalledTimes(1);
+    expect(mockCodeJevFanOut.mock.calls[0][0]).toMatchObject({ news: STORED });
+    expect(mockGeneratePalpites.mock.calls[0][0].news).toBe(OUTCOME);
+    expect(mockStartNewsFetch).not.toHaveBeenCalled();
+    expect(vi.mocked(after)).not.toHaveBeenCalled();
+  });
+
+  it("o predict code_jev emitiu o passo (fan-out devolve a notícia): a action não emite de novo", async () => {
+    mockEngine.mockResolvedValue("code_jev");
+    fanOutWith({ stored: STORED, applied: null });
+    await analyzeBestBet(null, form({ matchId: VALID_MATCH_ID }));
+    expect(mockNoteStoredNewsStep).not.toHaveBeenCalled();
+  });
+
+  it("code_jev que caiu antes do bloco 5.6 (news null): a action emite o passo, uma vez", async () => {
+    mockEngine.mockResolvedValue("code_jev");
+    fanOutWith(null);
+    await analyzeBestBet(null, form({ matchId: VALID_MATCH_ID }));
+    expect(mockNoteStoredNewsStep).toHaveBeenCalledTimes(1);
+    expect(mockNoteStoredNewsStep).toHaveBeenCalledWith(
+      STORED,
+      expect.objectContaining({ id: VALID_MATCH_ID }),
+    );
+  });
+
+  it("motor 'llm': o lote vai na base do runFanOut e a action emite o passo só de texto", async () => {
+    mockPredict.mockImplementation(async (args) => resultFor(args.marketKey!));
+    await analyzeBestBet(null, form({ matchId: VALID_MATCH_ID }));
+    expect(mockPredict.mock.calls[0][0]).toMatchObject({ news: STORED });
+    expect(mockNoteStoredNewsStep).toHaveBeenCalledTimes(1);
+  });
+
+  it("sem lote: nada de passo do lote; a base leva news null (o predict não relê o memo)", async () => {
+    mockResolveMatchNews.mockResolvedValue({ stored: null, outcome: undefined });
+    mockPredict.mockImplementation(async (args) => resultFor(args.marketKey!));
+    await analyzeBestBet(null, form({ matchId: VALID_MATCH_ID }));
+    expect(mockPredict.mock.calls[0][0]).toHaveProperty("news", null);
+    expect(mockNoteStoredNewsStep).not.toHaveBeenCalled();
+    expect(mockGeneratePalpites.mock.calls[0][0].news).toBeUndefined();
+  });
+
+  it("code_jev sem lote: todo mercado do fan-out recebe news null explícito", async () => {
+    mockResolveMatchNews.mockResolvedValue({ stored: null, outcome: undefined });
+    mockEngine.mockResolvedValue("code_jev");
+    fanOutWith(null);
+    await analyzeBestBet(null, form({ matchId: VALID_MATCH_ID }));
+    const base = mockCodeJevFanOut.mock.calls[0][0];
+    expect(base).toHaveProperty("news", null);
+    expect(base.news).not.toBeUndefined();
+    expect(mockNoteStoredNewsStep).not.toHaveBeenCalled();
   });
 });
 
@@ -1392,8 +1499,9 @@ describe("analyzeBestBet — contexto extra (#565)", () => {
 
   // Rows do fan-out code_jev: com contexto gravado (JEV nulo → a evidência moveu) ou sem.
   function fanOutWith(userContext: typeof STORED | undefined) {
-    mockCodeJevFanOut.mockImplementation(async (_base, markets) =>
-      markets.map((m, i) => {
+    mockCodeJevFanOut.mockImplementation(async (_base, markets) => ({
+      news: null,
+      outcomes: markets.map((m, i) => {
         const r = resultFor(m.marketKey);
         return {
           ok: true as const,
@@ -1413,6 +1521,7 @@ describe("analyzeBestBet — contexto extra (#565)", () => {
           ...(i === 0 ? {} : { sharesAiCall: true as const }),
         };
       }),
+    }),
     );
   }
 
@@ -1511,12 +1620,14 @@ describe("analyzeBestBet — contexto extra (#565)", () => {
     mockMarketsForAudience.mockResolvedValue([
       { key: "correct_score", label: "Placar exato" },
     ]);
-    mockCodeJevFanOut.mockImplementation(async (_base, markets) =>
-      markets.map((m) => ({
+    mockCodeJevFanOut.mockImplementation(async (_base, markets) => ({
+      news: null,
+      outcomes: markets.map((m) => ({
         ok: true as const,
         marketKey: m.marketKey,
         result: resultFor("match_result"),
       })),
+    }),
     );
     const res = await analyzeBestBet(
       null,

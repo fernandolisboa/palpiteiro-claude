@@ -107,6 +107,29 @@ export function newsNotes(
   return [...new Set(lines)];
 }
 
+/**
+ * Fatores que as afirmações moveram acima do JEV e a força do sinal que os moveu, por
+ * SINAL (a regra do contexto extra, #565): "confirmed" só quando um sinal confirmado
+ * pelos nossos dados moveu o fator. Serve às afirmações conferidas na hora e às
+ * guardadas em `judgments.news.claims` (os sinais são os mesmos): a síntese e o painel do
+ * azarão refazem a origem a partir da row, sem guardar outro campo.
+ */
+export function newsFactorOrigins(
+  claims: readonly Pick<CheckedClaim, "signals">[],
+  jev: JudgmentAnswers | null,
+): Partial<Record<JudgmentQuestionId, SignalStrength>> {
+  const origins: Partial<Record<JudgmentQuestionId, SignalStrength>> = {};
+  for (const c of claims) {
+    const byConfirmed = new Set(
+      claimEffect({ signals: c.signals.filter((s) => s.strength === "confirmed") }, jev).moved,
+    );
+    for (const q of claimEffect(c, jev).moved) {
+      origins[q] = origins[q] === "confirmed" || byConfirmed.has(q) ? "confirmed" : "unverified";
+    }
+  }
+  return origins;
+}
+
 export function applyNewsClaims(args: {
   batch: { id: string; promptVersion: string; items: readonly MatchNewsBatchItem[]; claims: readonly NewsClaim[] };
   facts: PalpiteFacts;
@@ -141,18 +164,10 @@ export function applyNewsClaims(args: {
   const jevApplied = args.jev !== null;
   const evidence = evidenceFromClaims(checked, { jevApplied });
 
-  const origins: AppliedNews["origins"] = {};
+  const origins = newsFactorOrigins(checked, args.jev);
   const movedRefs = new Set<string>();
   for (const c of checked) {
-    const byConfirmed = new Set(
-      claimEffect({ signals: c.signals.filter((s) => s.strength === "confirmed") }, args.jev)
-        .moved,
-    );
-    const moved = claimEffect(c, args.jev).moved;
-    if (moved.length > 0) for (const s of c.sources) movedRefs.add(s);
-    for (const q of moved) {
-      origins[q] = origins[q] === "confirmed" || byConfirmed.has(q) ? "confirmed" : "unverified";
-    }
+    if (claimEffect(c, args.jev).moved.length > 0) for (const s of c.sources) movedRefs.add(s);
   }
   const moved = Object.keys(origins) as JudgmentQuestionId[];
   const notes = newsNotes(checked, args.teams);
