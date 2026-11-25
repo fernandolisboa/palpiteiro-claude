@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vitest";
 
-import { apportion, largestRemainder } from "@/lib/quant/apportion";
+import { apportionTable, largestRemainder } from "@/lib/quant/apportion";
 
 // PRNG determinístico (mulberry32): o teste de propriedade não pode variar entre runs.
 function rng(seed: number) {
@@ -50,47 +50,121 @@ describe("largestRemainder", () => {
   });
 });
 
-describe("apportion", () => {
-  it("alvo igual à soma dos arredondados: fica o arredondado", () => {
-    expect(apportion([-1.9, -0.8, -0.4], -3)).toEqual([-2, -1, 0]);
+const colSums = (t: readonly (readonly number[])[], cols: number) =>
+  Array.from({ length: cols }, (_, k) => sum(t.map((r) => r[k])));
+
+// Nenhum inteiro contradiz o cru: 0 ou o sinal dele.
+const signOk = (v: number, raw: number) =>
+  v === 0 || Math.sign(v) === Math.sign(raw);
+
+describe("apportionTable", () => {
+  it("alvos iguais às somas dos arredondados: fica o arredondado", () => {
+    expect(
+      apportionTable(
+        [
+          [-1.9, 0.8, 1.1],
+          [-0.4, 0.1, 0.3],
+        ],
+        [-2, 1, 1]
+      )
+    ).toEqual([
+      [-2, 1, 1],
+      [0, 0, 0],
+    ]);
   });
 
-  it("alvo positivo acima do arredondado: +1 no de maior erro", () => {
-    expect(apportion([1.4, 0.45, 0.3], 3)).toEqual([2, 1, 0]);
+  it("linha que não fecha em 0 no arredondamento: ±1 onde o erro cresce menos", () => {
+    // −1,4 → −1; 0,7 → 1; 0,7 → 1 soma +1. Tirar 1 do mandante custa 0,2; do empate ou
+    // do visitante, 0,4.
+    expect(apportionTable([[-1.4, 0.7, 0.7]], [-2, 1, 1])).toEqual([
+      [-2, 1, 1],
+    ]);
   });
 
-  it("alvo negativo abaixo do arredondado", () => {
-    expect(apportion([-1.4, -0.45, -0.3], -3)).toEqual([-2, -1, 0]);
+  it("o caso do VIRA (#683): o empate não sai com −1 de quem deu chance a ele", () => {
+    // O rodízio tira 0,66 do Galo, dá 0,16 ao empate e 0,50 ao Boca.
+    const raws = [
+      [-1.68, 0.45, 1.22],
+      [-0.88, -0.32, 1.19],
+      [-0.66, 0.16, 0.5],
+    ];
+    expect(apportionTable(raws, [-3, 0, 3])).toEqual([
+      [-1, 0, 1],
+      [-1, 0, 1],
+      [-1, 0, 1],
+    ]);
   });
 
-  it("alvo zero com crus que se anulam", () => {
-    expect(apportion([-1.2, 1.1, 0.2], 0)).toEqual([-1, 1, 0]);
+  it("move o ponto entre colunas dentro de uma linha, sem trocar sinal", () => {
+    // O primeiro fator tirou do empate: não pode receber o +1 dele. O segundo pode.
+    expect(
+      apportionTable(
+        [
+          [0.05, -0.1, 0.05],
+          [-0.3, 0.4, -0.1],
+        ],
+        [0, 1, -1]
+      )
+    ).toEqual([
+      [0, 0, 0],
+      [0, 1, -1],
+    ]);
   });
 
-  it("alvo ±2 longe do arredondado", () => {
-    const out = apportion([0.4, 0.4, 0.4], 3)!;
-    expect(out).toEqual([1, 1, 1]);
-    expect(apportion([-0.2, -0.2], -2)).toEqual([-1, -1]);
+  it("sem movimento que respeite o sinal → null", () => {
+    // Um fator só, que tirou 0,1 do empate, com a barra pedindo +1 no empate.
+    expect(apportionTable([[0.05, -0.1, 0.05]], [0, 1, -1])).toBeNull();
+    // Cru ≈ 0 só aceita 0.
+    expect(apportionTable([[-0.4, 0, 0.4]], [0, -1, 1])).toBeNull();
   });
 
-  it("com sinal: nunca dá ponto a quem o cru tirou", () => {
-    // Um fator só, que tirou 0,1 do resultado, com a barra mostrando +1: não fecha.
-    expect(apportion([-0.1], 1)).toBeNull();
-    // Sem a regra de sinal, fecharia mentindo.
-    expect(apportion([-0.1], 1, { signSafe: false })).toEqual([1]);
-    // Com outro item positivo, o +1 vai pra ele.
-    expect(apportion([-0.4, 0.3], 1)).toEqual([0, 1]);
-  });
-
-  it("com sinal: pode encolher um negativo até zero", () => {
-    expect(apportion([-0.6, -0.1], 0)).toEqual([0, 0]);
-  });
-
-  it("é determinístico nos empates", () => {
-    const a = apportion([0.5, 0.5, 0.5], 1);
+  it("é determinístico nos empates (fator, depois coluna)", () => {
+    const raws = [
+      [-0.5, 0, 0.5],
+      [-0.5, 0, 0.5],
+    ];
+    const a = apportionTable(raws, [-1, 0, 1]);
     for (let i = 0; i < 10; i++)
-      expect(apportion([0.5, 0.5, 0.5], 1)).toEqual(a);
-    // 0,5 arredonda pra 1 nos três; os dois −1 saem dos primeiros índices.
-    expect(a).toEqual([0, 0, 1]);
+      expect(apportionTable(raws, [-1, 0, 1])).toEqual(a);
+    // ∓0,5 arredondam pra ∓1 nos dois; o ponto de volta sai do primeiro fator.
+    expect(a).toEqual([
+      [0, 0, 0],
+      [-1, 0, 1],
+    ]);
+  });
+
+  it("propriedade: linhas somam 0, colunas o alvo, sinal certo, |int − cru| < 2", () => {
+    const r = rng(11);
+    let nulls = 0;
+    const N = 2000;
+    for (let n = 0; n < N; n++) {
+      const rows = 1 + Math.floor(r() * 6);
+      const raws = Array.from({ length: rows }, () => {
+        const h = (r() - 0.5) * 5;
+        const d = (r() - 0.5) * Math.abs(h);
+        return [h, d, -(h + d)];
+      });
+      // Alvos de verdade: maior resto de uma base e de um final que somam 100.
+      const b = [30 + r() * 20, 20 + r() * 10];
+      const base = [b[0], b[1], 100 - b[0] - b[1]];
+      const fin = base.map((x, k) => x + sum(raws.map((row) => row[k])));
+      const lb = largestRemainder(base, 100);
+      const lf = largestRemainder(fin, 100);
+      const targets = lf.map((x, k) => x - lb[k]);
+      const out = apportionTable(raws, targets);
+      if (!out) {
+        nulls++;
+        continue;
+      }
+      expect(colSums(out, 3)).toEqual(targets);
+      out.forEach((row, i) => {
+        expect(sum(row)).toBe(0);
+        row.forEach((v, k) => {
+          expect(signOk(v, raws[i][k])).toBe(true);
+          expect(Math.abs(v - raws[i][k])).toBeLessThan(2);
+        });
+      });
+    }
+    expect(nulls / N).toBeLessThanOrEqual(0.02);
   });
 });

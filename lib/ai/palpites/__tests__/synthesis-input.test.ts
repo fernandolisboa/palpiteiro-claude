@@ -1,4 +1,4 @@
-import { describe, expect, it } from "vitest";
+import { describe, expect, it, vi } from "vitest";
 
 import type { FanOutOutcome } from "@/lib/ai/best-bet";
 import type { PredictionJudgments } from "@/lib/ai/engine/types";
@@ -383,6 +383,33 @@ describe("contexto extra fora da síntese (PLAN-565 §13.2)", () => {
       okOutcome("match_result", withUser(broken), SELECTIONS),
     ]);
     expect(bad.judgmentsModel?.factors).toBeNull();
+  });
+
+  it("#683: multiplicadores tortos no jsonb não derrubam o 'Gerar só o palpite' (fatores null)", () => {
+    const warn = vi.spyOn(console, "warn").mockImplementation(() => {});
+    // Linha sem `factors` em um lado (JEV não rodou, sem contexto extra): o resto da
+    // síntese não lê os fatores; só a leitura do "o que pesou" leria.
+    const torto = judgments({
+      answers: null,
+      userContext: undefined,
+      multipliers: {
+        home: { product: 1.05, applied: 1.05 },
+        away: { factors: {}, product: 1, applied: 1 },
+      } as unknown as PredictionJudgments["multipliers"],
+    });
+    const run = () => [
+      summarizeAnalysesForSynthesis([okOutcome("match_result", withUser(torto), SELECTIONS)]),
+      summarizeSavedAnalysesForSynthesis([
+        { prediction: withUser(torto), aiCall: null, marketKey: "match_result", selections: SELECTIONS },
+      ] as unknown as PredictionWithAiCall[]),
+    ];
+    expect(run).not.toThrow();
+    for (const [a] of run()) {
+      expect(a.judgmentsModel).not.toBeNull();
+      expect(a.judgmentsModel?.factors).toBeNull();
+    }
+    expect(warn).toHaveBeenCalledWith({ scope: "palpite_weighed", reason: "error" });
+    warn.mockRestore();
   });
 
   const withUser = (j: PredictionJudgments | null = judgments()) =>

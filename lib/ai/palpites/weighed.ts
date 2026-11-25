@@ -6,9 +6,15 @@
 // fecham com a barra (base e palpite em inteiros que somam 100). Gravado em
 // `headline.pick.weighed`; a view lê só isso, por Zod (lib/view/palpite-weighed.ts).
 //
+// Inteiros: cada fator soma 0 e cada coluna fecha com palpite − base; nenhum ponto
+// contradiz o sinal do efeito cru em NENHUM dos três resultados (o empate inclusive):
+// um fator que tirou chance do empate nunca aparece dando chance a ele
+// (apportionTable, lib/quant/apportion.ts).
+//
 // Fail-closed: quando a decomposição não fecha com o palpite exibido (multiplicadores
-// incoerentes, linha antiga com a regra simétrica, rateio que trocaria o sinal), o campo
-// sai null e o bloco não aparece.
+// incoerentes ou fator desconhecido no produto, clamp que não encolhe, linha antiga com a
+// regra simétrica, rateio que trocaria um sinal, jsonb torto), o campo sai null e o
+// bloco não aparece.
 
 import type { PredictionJudgments } from "@/lib/ai/engine/types";
 import { factorMultiplier } from "@/lib/ai/judgments/apply";
@@ -19,7 +25,7 @@ import {
   type TeamSide,
 } from "@/lib/ai/judgments/types";
 import { modelAnswersOf } from "@/lib/match-news/model-answers";
-import { apportion, largestRemainder } from "@/lib/quant/apportion";
+import { apportionTable, largestRemainder } from "@/lib/quant/apportion";
 import {
   mostLikelyOutcome,
   p1X2,
@@ -105,6 +111,19 @@ const round = (x: number, d: number) => Number(x.toFixed(d));
  * - `factors: []`: code_jev sem multiplicadores (JEV falhou, sem contexto): nada mexeu.
  */
 export function weighedFactorInputs(
+  judgments: PredictionJudgments | null | undefined
+): WeighedInputs | null {
+  // O jsonb persistido pode vir torto (linha antiga, gravação parcial): ler os fatores
+  // nunca derruba a análise nem o "Gerar só o palpite"; sai sem leitura.
+  try {
+    return readFactorInputs(judgments);
+  } catch {
+    console.warn({ scope: "palpite_weighed", reason: "error" });
+    return null;
+  }
+}
+
+function readFactorInputs(
   judgments: PredictionJudgments | null | undefined
 ): WeighedInputs | null {
   if (!judgments || judgments.engine !== "code_jev") return null;
@@ -261,10 +280,19 @@ export function weighPickDetailed(args: WeighArgs): WeighResult {
     const L = canonical
       .filter((f) => f.lambdaSide === side)
       .reduce((acc, f) => acc + Math.log(f.multiplier), 0);
+    // Os fatores lidos têm de ser TODOS os que entraram no produto: um fator gravado que
+    // a leitura não conhece (chave nova, renomeada) teria o efeito dele repassado aos
+    // outros pelo corte do clamp.
+    if (!(Math.abs(L - Math.log(inputs.product[side])) <= 1e-9)) {
+      return { ok: false, reason: "multiplier_mismatch" };
+    }
     const A = Math.log(inputs.applied[side]);
-    if (Math.abs(L - A) <= 1e-12) continue;
-    if (L === 0 || !Number.isFinite(A)) return { ok: false, reason: "clamp" };
-    scale[side] = A / L;
+    if (Math.abs(L - A) <= 1e-9) continue;
+    // O clamp só encolhe: 0 < A/L < 1. Fora disso a conta inventaria efeito (> 1) ou
+    // inverteria a direção dos fatores (< 0).
+    const s = A / L;
+    if (!(s > 0 && s < 1)) return { ok: false, reason: "clamp" };
+    scale[side] = s;
     clamped[side] = true;
   }
   const effective = canonical.map((f) => ({
@@ -301,8 +329,8 @@ export function weighPickDetailed(args: WeighArgs): WeighResult {
     return { ok: false, reason: "sequence_mismatch" };
   }
 
-  // Inteiros: base e palpite somam 100; casa e visitante rateados com sinal; o empate
-  // fecha cada fator em zero.
+  // Inteiros: base e palpite somam 100; cada fator soma 0; cada coluna fecha com
+  // palpite − base; e nenhum ponto contradiz o sinal do cru, nos TRÊS resultados.
   const lr = (p: OutcomeTriple) => {
     const [home, draw, away] = largestRemainder(
       OUTCOMES.map((k) => p[k] * 100),
@@ -312,15 +340,13 @@ export function weighPickDetailed(args: WeighArgs): WeighResult {
   };
   const basePts = lr(p0);
   const finalPts = lr(finalRaw);
-  const home = apportion(
-    steps.map((s) => s.home),
-    finalPts.home - basePts.home
+  // O cru entra como o `pp` gravado (2 casas): um efeito de 0,004 pp conta como zero e
+  // não leva ponto, e o sinal de `pts` confere com o de `pp` em qualquer auditoria.
+  const pts = apportionTable(
+    steps.map((s) => OUTCOMES.map((k) => round(s[k], 2))),
+    OUTCOMES.map((k) => finalPts[k] - basePts[k])
   );
-  const away = apportion(
-    steps.map((s) => s.away),
-    finalPts.away - basePts.away
-  );
-  if (!home || !away) return { ok: false, reason: "rounding_conflict" };
+  if (!pts) return { ok: false, reason: "rounding_conflict" };
 
   return {
     ok: true,
@@ -337,7 +363,7 @@ export function weighPickDetailed(args: WeighArgs): WeighResult {
         value: round(f.value, 2),
         multiplier: round(f.multiplier, 6),
         pp: triple((k) => round(steps[i][k], 2)),
-        pts: { home: home[i], draw: -(home[i] + away[i]) || 0, away: away[i] },
+        pts: { home: pts[i][0], draw: pts[i][1], away: pts[i][2] },
       })),
       clamped,
     },
@@ -346,7 +372,14 @@ export function weighPickDetailed(args: WeighArgs): WeighResult {
 
 /** A decomposição gravada no pick; null (com aviso) quando não fecha. */
 export function weighPick(args: WeighArgs): PalpiteWeighed | null {
-  const r = weighPickDetailed(args);
+  let r: WeighResult;
+  try {
+    r = weighPickDetailed(args);
+  } catch {
+    // Entrada torta que escapou das conferências: o palpite sai sem o bloco.
+    console.warn({ scope: "palpite_weighed", reason: "error" });
+    return null;
+  }
   if (r.ok) return r.weighed;
   console.warn({ scope: "palpite_weighed", reason: r.reason });
   return null;

@@ -184,8 +184,11 @@ describe("PalpiteHero — o que pesou (#683)", () => {
     );
     expect(html).toContain("você contou");
     expect(html).toContain("Virou pro Boca Juniors, por pouco");
-    // Leitor de tela: a raia e a barra em palavras.
-    expect(html).toContain("1 ponto do Atlético-MG para o Boca Juniors.");
+    // Leitor de tela: a raia e a barra em palavras. Os três fatores levam 1 ponto do
+    // Galo pro Boca; nenhum passa pelo empate (#683 M1: o rodízio deu chance ao empate).
+    expect(html.match(/1 ponto do Atlético-MG para o Boca Juniors\./g)).toHaveLength(3);
+    expect(html).not.toContain("do empate para");
+    expect(html).not.toContain("data-draw-lane");
     expect(html).toContain("Chances do palpite, em pontos de 100:");
     const pesou = html.indexOf("data-pesou");
     expect(html.indexOf("provável")).toBeLessThan(pesou);
@@ -230,6 +233,7 @@ describe("PalpiteHero — o que pesou (#683)", () => {
     const html = render({ heroPalpite: { ...POPULATED, weighed: WEIGHED_NAO_VIRA() } });
     expect(html).toContain("mexeu menos de 1 pt");
     expect(html).toContain("Continua Atlético-MG:");
+    expect(html).toContain("data-draw-lane");
   });
 });
 

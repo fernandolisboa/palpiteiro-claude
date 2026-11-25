@@ -285,6 +285,27 @@ describe("summaryOf — os casos", () => {
     });
   });
 
+  it("base quase empatada, pontos iguais antes e depois: ainda é virada, por pouco (N3)", () => {
+    // Cru 36,6 × 36,4 → 36/28/36 nos dois lados da barra; o ajuste (abaixo de 1 pt) troca
+    // o mais provável. A barra não mexe, mas o palpite mudou de lado: a frase tem de
+    // explicar por que ele não é o favorito da base, e o "por pouco" e o "jogo parelho"
+    // dizem que foi no detalhe.
+    const tied = { home: 36, draw: 28, away: 36 };
+    const s = summaryOf({
+      ...args,
+      basePts: tied,
+      finalPts: tied,
+      outcome: "away",
+      factorPts: [{ home: 0, draw: 0, away: 0 }],
+    });
+    expect(s).toEqual({
+      kind: "flip",
+      icon: "flip",
+      short: ["Virou pro Boca Juniors, por pouco"],
+      long: "Os preços viam um jogo parelho. Os ajustes viraram pro Boca Juniors, por pouco.",
+    });
+  });
+
   it("virou com folga e virou pro empate", () => {
     expect(
       summaryOf({
@@ -410,19 +431,17 @@ describe("toWeighedView", () => {
         r.lanes.map((l) => `${l.from}>${l.to}:${l.pts}@${l.slot}`),
       ])
     ).toEqual([
-      [
-        "Atlético-MG sem peça no ataque",
-        null,
-        ["home>draw:1@0", "home>away:1@1"],
-      ],
-      ["Defesa do Atlético-MG desfalcada", null, ["home>away:1@2"]],
-      ["Atlético-MG vai poupar titulares", "user", ["draw>away:1@3"]],
+      ["Atlético-MG sem peça no ataque", null, ["home>away:1@0"]],
+      ["Defesa do Atlético-MG desfalcada", null, ["home>away:1@1"]],
+      // O rodízio deu 0,16 pp ao empate: nunca uma raia "empate → Boca" (o sinal do
+      // empate é respeitado no rateio, #683 M1).
+      ["Atlético-MG vai poupar titulares", "user", ["home>away:1@2"]],
     ]);
-    expect(v.rows[0].lanes[1].sr).toBe(
+    expect(v.rows[0].lanes[0].sr).toBe(
       "1 ponto do Atlético-MG para o Boca Juniors"
     );
     expect(v.rows[2].originLine).toBe("você contou (não conferido)");
-    expect(v.hasDrawLane).toBe(true);
+    expect(v.hasDrawLane).toBe(false);
     expect(v.bar.slices).toEqual([
       { key: "home", pts: 34, before: 37, strong: false },
       { key: "draw", pts: 30, before: null, strong: false },
@@ -440,6 +459,8 @@ describe("toWeighedView", () => {
   it("não vira: fator abaixo de 1 pt fica na lista, sem raia (tinyRow)", () => {
     const v = toWeighedView(naoViraPick, TEAMS)!;
     expect(v.winner).toBe("home");
+    // O ataque tira 2 do Galo: 1 vai pro empate (raia pro empate).
+    expect(v.hasDrawLane).toBe(true);
     const tiny = v.rows.find((r) => r.key === "high_stakes_away")!;
     expect(tiny.tiny).toBe(true);
     expect(tiny.lanes).toEqual([]);

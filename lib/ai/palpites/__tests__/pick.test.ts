@@ -20,6 +20,7 @@ import {
   summarizeSavedAnalysesForSynthesis,
   type MarketAnalysisSummary,
 } from "@/lib/ai/palpites/synthesis-input";
+import type { WeighedInputs } from "@/lib/ai/palpites/weighed";
 import type { PredictionWithAiCall } from "@/lib/db/queries/predictions";
 import { DIXON_COLES_RHO, scoreOutcome } from "@/lib/quant/scoreline-model";
 
@@ -514,6 +515,24 @@ describe("pick.weighed (#683)", () => {
     warn.mockRestore();
   });
 
+  it("fatores tortos na análise de origem: o palpite sai, sem o weighed (aviso)", () => {
+    const warn = vi.spyOn(console, "warn").mockImplementation(() => {});
+    const j = codeJev({ jev: VIRA.jev });
+    const a = mr(VIRA.odds, j);
+    const torto = {
+      ...a.judgmentsModel!.factors!,
+      applied: null,
+      product: null,
+    } as unknown as WeighedInputs;
+    const pick = resolvePregamePick([
+      { ...a, judgmentsModel: { ...a.judgmentsModel!, factors: torto } },
+    ]);
+    expect(pick).not.toBeNull();
+    expect(pick!.weighed).toBeNull();
+    expect(warn).toHaveBeenCalledWith({ scope: "palpite_weighed", reason: "error" });
+    warn.mockRestore();
+  });
+
   // Regressão com os cenários do mock v6, com os números do motor real (os do mock
   // eram ilustrativos).
   it("Galo x Boca, vira: 37/30/33 → 34/30/36, pro Boca", () => {
@@ -528,13 +547,20 @@ describe("pick.weighed (#683)", () => {
     expect(w.baseOutcome).toBe("home");
     expect(w.basePts).toEqual({ home: 37, draw: 30, away: 33 });
     expect(w.finalPts).toEqual({ home: 34, draw: 30, away: 36 });
-    // O rodízio, contado pelo usuário, tira 0,7 pp do Galo: arredonda pra 0 e o ponto
-    // do Boca sai do empate.
+    // Os três tiram do Galo e dão ao Boca. O rodízio, contado pelo usuário, tira 0,66 pp
+    // do Galo e dá 0,16 ao empate: o empate não pode sair com −1 dele (o fator deu chance
+    // ao empate), então o ponto do Boca sai do Galo. Quem fecha a coluna do empate é o
+    // ataque (−2/+1/+1 no arredondamento), que devolve ao Galo o ponto do empate.
     expect(w.factors.map((f) => [f.key, f.origin, f.pts])).toEqual([
-      ["attack_weakened_home", "jev", { home: -2, draw: 1, away: 1 }],
+      ["attack_weakened_home", "jev", { home: -1, draw: 0, away: 1 }],
       ["defense_weakened_home", "jev", { home: -1, draw: 0, away: 1 }],
-      ["rotation_risk_home", "user", { home: 0, draw: -1, away: 1 }],
+      ["rotation_risk_home", "user", { home: -1, draw: 0, away: 1 }],
     ]);
+    for (const f of w.factors) {
+      for (const k of ["home", "draw", "away"] as const) {
+        if (f.pts[k] !== 0) expect(Math.sign(f.pts[k])).toBe(Math.sign(f.pp[k]));
+      }
+    }
   });
 
   it("Galo x Boca, não vira: 52/27/21 → 51/28/21, continua Galo", () => {

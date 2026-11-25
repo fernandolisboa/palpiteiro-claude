@@ -254,6 +254,61 @@ describe("weighPick — conferências (fail-closed)", () => {
     expect(r).toEqual({ ok: false, reason: "sequence_mismatch" });
   });
 
+  it("fator desconhecido no produto (chave a mais no jsonb) → multiplier_mismatch, não clamp", () => {
+    const j = codeJev({ jev: { attack_weakened_home: 0.9 } });
+    // O efeito de um fator que a leitura não conhece não pode ser repassado aos outros.
+    const extra = 0.9;
+    const h = j.multipliers!.home;
+    (h.factors as Record<string, number>).unknown_factor_home = extra;
+    h.product *= extra;
+    h.applied *= extra;
+    j.lambda.adjusted.home = j.lambda.base.home * h.applied;
+    expect(weighPickDetailed(argsOf(j))).toEqual({
+      ok: false,
+      reason: "multiplier_mismatch",
+    });
+  });
+
+  it("clamp que não encolhe (applied além do produto, ou do lado oposto) → clamp", () => {
+    const j = codeJev({ jev: { attack_weakened_home: 0.9 } });
+    const m = j.multipliers!.home.product;
+    for (const applied of [m * m, 1 / m]) {
+      const k: PredictionJudgments = JSON.parse(JSON.stringify(j));
+      k.multipliers!.home.applied = applied;
+      k.lambda.adjusted.home = k.lambda.base.home * applied;
+      expect(weighPickDetailed(argsOf(k))).toEqual({
+        ok: false,
+        reason: "clamp",
+      });
+    }
+  });
+
+  it("jsonb torto: a leitura dos fatores e o weighPick não lançam (null + aviso)", () => {
+    const warn = vi.spyOn(console, "warn").mockImplementation(() => {});
+    const j = codeJev({ jev: { attack_weakened_home: 0.9 } });
+    const broken = {
+      ...j,
+      multipliers: { home: null, away: 1 },
+    } as unknown as PredictionJudgments;
+    expect(weighedFactorInputs(broken)).toBeNull();
+    expect(warn).toHaveBeenCalledWith({
+      scope: "palpite_weighed",
+      reason: "error",
+    });
+    warn.mockClear();
+    const inputs = {
+      ...weighedFactorInputs(j)!,
+      applied: null,
+      product: null,
+    } as unknown as WeighedInputs;
+    expect(weighPick(argsOf(j, { inputs }))).toBeNull();
+    expect(warn).toHaveBeenCalledWith({
+      scope: "palpite_weighed",
+      reason: "error",
+    });
+    warn.mockRestore();
+  });
+
   it("weighPick avisa e devolve null", () => {
     const warn = vi.spyOn(console, "warn").mockImplementation(() => {});
     const j = codeJev({ jev: { attack_weakened_home: 0.9 } });
@@ -347,7 +402,7 @@ describe("weighPick — conta e inteiros", () => {
 });
 
 describe("weighPick — propriedade (λ, ρ e nouls aleatórios)", () => {
-  it("somas exatas, sinal certo em casa/visitante, |pts − cru| < 2, null ≤ 1%", () => {
+  it("somas exatas, sinal certo nos três resultados, |pts − cru| < 2, null ≤ 1%", () => {
     const r = rng(683);
     const pick = (): number => {
       const x = r();
@@ -382,7 +437,7 @@ describe("weighPick — propriedade (λ, ρ e nouls aleatórios)", () => {
       expect(sumTriple(w.finalPts)).toBe(100);
       for (const f of w.factors) {
         expect(sumTriple(f.pts)).toBe(0);
-        for (const k of ["home", "away"] as const) {
+        for (const k of OUTCOMES) {
           expect(Math.abs(f.pts[k] - f.pp[k])).toBeLessThan(2);
           if (f.pts[k] !== 0)
             expect(Math.sign(f.pts[k])).toBe(Math.sign(f.pp[k]));
