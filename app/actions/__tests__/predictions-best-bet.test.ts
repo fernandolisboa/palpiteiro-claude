@@ -1443,13 +1443,24 @@ describe("analyzeBestBet — notícias guardadas (#672, C2)", () => {
     expect(mockNoteStoredNewsStep).toHaveBeenCalledTimes(1);
   });
 
-  it("sem lote: nada de passo do lote; a base não leva news", async () => {
+  it("sem lote: nada de passo do lote; a base leva news null (o predict não relê o memo)", async () => {
     mockResolveMatchNews.mockResolvedValue({ stored: null, outcome: undefined });
     mockPredict.mockImplementation(async (args) => resultFor(args.marketKey!));
     await analyzeBestBet(null, form({ matchId: VALID_MATCH_ID }));
-    expect(mockPredict.mock.calls[0][0]).not.toHaveProperty("news");
+    expect(mockPredict.mock.calls[0][0]).toHaveProperty("news", null);
     expect(mockNoteStoredNewsStep).not.toHaveBeenCalled();
     expect(mockGeneratePalpites.mock.calls[0][0].news).toBeUndefined();
+  });
+
+  it("code_jev sem lote: todo mercado do fan-out recebe news null explícito", async () => {
+    mockResolveMatchNews.mockResolvedValue({ stored: null, outcome: undefined });
+    mockEngine.mockResolvedValue("code_jev");
+    fanOutWith(null);
+    await analyzeBestBet(null, form({ matchId: VALID_MATCH_ID }));
+    const base = mockCodeJevFanOut.mock.calls[0][0];
+    expect(base).toHaveProperty("news", null);
+    expect(base.news).not.toBeUndefined();
+    expect(mockNoteStoredNewsStep).not.toHaveBeenCalled();
   });
 });
 

@@ -847,7 +847,9 @@ export async function analyzeBestBet(
     isAdmin,
     modelOverride,
     ...(userContextP ? { userContextP } : {}),
-    ...(newsResolved.stored ? { news: newsResolved.stored } : {}),
+    // Sempre explícito (null = sem lote): o predict nunca relê o memo (TTL 60s) no meio
+    // do run e aplica um lote que a síntese não viu, nem emite um 2º passo de notícias.
+    news: newsResolved.stored,
   };
   const fanOutResult =
     engine === "code_jev"
