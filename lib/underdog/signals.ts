@@ -1,7 +1,6 @@
 import type { JudgmentAnswers, JudgmentQuestionId } from "@/lib/ai/judgments/types";
-import { safeHttpsUrl } from "@/lib/ai/news-input";
 import { newsFactorOrigins } from "@/lib/match-news/apply";
-import { isUnsafeNewsTitle } from "@/lib/match-news/labels";
+import { isUnsafeNewsTitle, safeGeArticleUrl } from "@/lib/match-news/labels";
 import type { MatchModelNews } from "@/lib/match-news/types";
 import { claimEffect } from "@/lib/user-palpite/evidence";
 import type {
@@ -140,7 +139,7 @@ export function newsSignals(
       .filter((c) => claimEffect(c, jev).moved.includes(id))
       .flatMap((c) => c.sources)[0];
     const source = news.sources.find((s) => s.ref === ref);
-    const url = source ? safeHttpsUrl(source.url) : null;
+    const url = source ? safeGeArticleUrl(source.url) : null;
     const title =
       source && url && !isUnsafeNewsTitle(source.title)
         ? source.title.replace(/\s+/g, " ").trim().slice(0, 300) || null

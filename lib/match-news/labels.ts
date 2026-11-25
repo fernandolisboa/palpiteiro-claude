@@ -43,3 +43,15 @@ export function newsFactorPhrase(id: JudgmentQuestionId, teams: Teams): string {
 export function isUnsafeNewsTitle(title: string): boolean {
   return BOOKMAKER_NAME_RE.test(title) || containsNewsValueLanguage(title);
 }
+
+// Link de matéria só do ge (subdomínio de globo.com), em https: a mesma regra na
+// gravação do sinal e na tela, pra um link de fora nunca virar "a matéria do ge".
+export function safeGeArticleUrl(raw: string): string | null {
+  try {
+    const u = new URL(raw.trim());
+    if (u.protocol !== "https:") return null;
+    return u.hostname.toLowerCase().endsWith(".globo.com") ? u.href : null;
+  } catch {
+    return null;
+  }
+}

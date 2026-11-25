@@ -112,6 +112,28 @@ describe("newsSignals", () => {
     const http = news({ sources: [{ ref: "N1", url: "http://ge.globo.com/x", title: "Ok" }] });
     expect(newsSignals("away", http, JEV)[0]).toMatchObject({ url: null, title: null });
   });
+
+  it("URL https fora do ge (não *.globo.com): o link some, o sinal fica", () => {
+    for (const url of [
+      "https://example.com/noticia/1",
+      "https://globo.com.evil.example/x",
+      "https://evilglobo.com/x",
+    ]) {
+      const other = news({ sources: [{ ref: "N1", url, title: "Palmeiras perde zagueiro" }] });
+      expect(newsSignals("away", other, JEV)).toEqual([
+        {
+          kind: "news",
+          factor: "defense_weakened",
+          strength: "unverified",
+          ref: "N1",
+          url: null,
+          title: null,
+        },
+      ]);
+    }
+    const sub = news({ sources: [{ ref: "N1", url: "https://globoesporte.globo.com/x", title: "Ok" }] });
+    expect(newsSignals("away", sub, JEV)[0]).toMatchObject({ url: "https://globoesporte.globo.com/x" });
+  });
 });
 
 describe("painel com sinal de notícia", () => {
@@ -158,6 +180,17 @@ describe("painel com sinal de notícia", () => {
       TEAMS,
       "current",
     );
+    expect(view.signals[0].link).toBeUndefined();
+  });
+
+  it("row gravada com URL https fora do ge: a tela tira o link e mantém a frase", () => {
+    const f = { ...facts, signals: [{ ...newsSignal, url: "https://example.com/noticia/1" }] };
+    const view = toUnderdogPanelView(
+      { facts: f, narrative: templatedNarrative(f, TEAMS), narrativeSource: "template" },
+      TEAMS,
+      "current",
+    );
+    expect(view.signals[0].label).toBe(signalLabel(newsSignal, { underdog: "Flamengo", favorite: "Palmeiras" }));
     expect(view.signals[0].link).toBeUndefined();
   });
 

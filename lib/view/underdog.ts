@@ -7,7 +7,7 @@ import {
   underdogTeaserBlock,
   type UnderdogPick,
 } from "@/lib/underdog/gate";
-import { isUnsafeNewsTitle } from "@/lib/match-news/labels";
+import { isUnsafeNewsTitle, safeGeArticleUrl } from "@/lib/match-news/labels";
 import {
   oneInN,
   scenarioLabel,
@@ -118,14 +118,19 @@ export function toUnderdogPanelView(
       before: int(c.beforePct),
       after: int(c.afterPct),
     })),
-    signals: facts.signals.map((s) => ({
-      label: signalLabel(s, n),
-      origin: signalOrigin(s),
-      note: s.kind === "jev" || s.kind === "news" ? UNDERDOG_JEV_NOTE : null,
-      ...(s.kind === "news" && s.url && s.title && !isUnsafeNewsTitle(s.title)
-        ? { link: { url: s.url, title: s.title } }
-        : {}),
-    })),
+    signals: facts.signals.map((s) => {
+      // Link só pra matéria do ge (https, *.globo.com) com título seguro; sem isso, a
+      // frase do código fica sem link.
+      const url = s.kind === "news" && s.url ? safeGeArticleUrl(s.url) : null;
+      return {
+        label: signalLabel(s, n),
+        origin: signalOrigin(s),
+        note: s.kind === "jev" || s.kind === "news" ? UNDERDOG_JEV_NOTE : null,
+        ...(s.kind === "news" && url && s.title && !isUnsafeNewsTitle(s.title)
+          ? { link: { url, title: s.title } }
+          : {}),
+      };
+    }),
     narrative: {
       sentences: narrative.sentences.map((s) => s.text),
       counterpoint: narrative.counterpoint,
