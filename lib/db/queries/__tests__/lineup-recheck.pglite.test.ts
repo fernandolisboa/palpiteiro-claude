@@ -44,7 +44,10 @@ import {
   hasNewerPreMatchPrediction,
   isLineupRecheckEligible,
 } from "@/lib/db/queries/lineup-recheck";
-import { getNonPassPredictionsNearKickoff } from "@/lib/db/queries/predictions";
+import {
+  getNonPassPredictionsNearKickoff,
+  getUpcomingAnalyzedKickoffs,
+} from "@/lib/db/queries/predictions";
 import { buildLiveStamp, liveColumns } from "@/lib/live/stamp";
 
 const NOW = new Date("2026-05-15T18:00:00Z");
@@ -480,5 +483,49 @@ describe("reconferência nas métricas (ADR 0020 adendo)", () => {
     expect(kelly).toHaveLength(1);
     expect(kelly[0]).toMatchObject({ isBet: false, isRecheck: false });
     expect(await getOverUnderCalibrationRows()).toHaveLength(2);
+  });
+});
+
+describe("getUpcomingAnalyzedKickoffs (índice do portão dos crons, #680)", () => {
+  it("jogos à frente com predição de pré-jogo (pass entra), um por jogo; ao vivo, passado e encerrado ficam fora", async () => {
+    const soon = await insertMatch({ kickoffAt: new Date(NOW.getTime() + min(40)) });
+    const later = await insertMatch({ kickoffAt: new Date(NOW.getTime() + min(60 * 24 * 20)) });
+    const onlyLive = await insertMatch({ kickoffAt: new Date(NOW.getTime() + min(30)) });
+    const past = await insertMatch({ kickoffAt: new Date(NOW.getTime() - min(10)) });
+    const finished = await insertMatch({
+      kickoffAt: new Date(NOW.getTime() + min(50)),
+      status: "finished",
+    });
+    await insertMatch({ kickoffAt: new Date(NOW.getTime() + min(45)) }); // sem predição
+
+    await insertPrediction({ matchId: soon, createdAt: NOW });
+    await insertPrediction({ matchId: soon, userId: ids.userB, createdAt: NOW });
+    await insertPrediction({ matchId: later, recommendation: "pass", createdAt: NOW });
+    await insertPrediction({ matchId: onlyLive, live: true, createdAt: NOW });
+    await insertPrediction({ matchId: past, createdAt: NOW });
+    await insertPrediction({ matchId: finished, createdAt: NOW });
+
+    const rows = await getUpcomingAnalyzedKickoffs({ now: NOW });
+    expect(rows.map((r) => r.matchId).sort()).toEqual([soon, later].sort());
+    expect(rows.find((r) => r.matchId === soon)!.kickoffAt.getTime()).toBe(
+      NOW.getTime() + min(40),
+    );
+  });
+
+  it("cobre todo candidato dos dois crons que ele deixa dormir (superconjunto)", async () => {
+    const m1 = await insertMatch({ kickoffAt: new Date(NOW.getTime() + min(30)) });
+    const m2 = await insertMatch({ kickoffAt: new Date(NOW.getTime() + min(80)) });
+    await insertPrediction({ matchId: m1, createdAt: new Date(NOW.getTime() - min(60)) });
+    await insertPrediction({ matchId: m2, createdAt: new Date(NOW.getTime() - min(60)) });
+
+    const indexed = new Set(
+      (await getUpcomingAnalyzedKickoffs({ now: NOW })).map((r) => r.matchId),
+    );
+    const recheck = await getLineupRecheckCandidates({ now: NOW });
+    const clv = await getNonPassPredictionsNearKickoff({ now: NOW, lookaheadMs: min(90) });
+    expect(recheck.length).toBeGreaterThan(0);
+    expect(clv.length).toBeGreaterThan(0);
+    for (const c of recheck) expect(indexed.has(c.match.id)).toBe(true);
+    for (const c of clv) expect(indexed.has(c.match.id)).toBe(true);
   });
 });

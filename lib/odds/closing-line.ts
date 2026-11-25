@@ -8,6 +8,7 @@ import {
 } from "@/lib/odds/market-descriptor";
 import { persistOddsApiQuota } from "@/lib/odds/persist-odds-api-quota";
 import { getLastOddsApiQuota } from "@/lib/providers/odds-api";
+import { hasAnalyzedKickoffBetween } from "@/lib/sync/analyzed-kickoffs";
 
 // Forward-capture da closing line (#180). Nenhum provider dá odds históricas de
 // fechamento (ADR 0025): a closing line tem que ser capturada AO VIVO perto do KO. O
@@ -15,6 +16,9 @@ import { getLastOddsApiQuota } from "@/lib/providers/odds-api";
 // (default OFF → zero quota). Captura SÓ pra jogos com predição non-pass (AC do #180).
 
 export type CaptureClosingLinesSummary = {
+  // Portão no KV fechado (#680, ADR 0074): nenhum jogo analisado na janela, a flag nem
+  // foi lida (`enabled` false) e o Postgres não foi tocado.
+  skipped?: "no_analyzed_kickoff";
   enabled: boolean;
   consideredMatches: number;
   capturedMatches: number;
@@ -42,6 +46,26 @@ export async function captureClosingLines(
   opts: { now?: Date } = {},
 ): Promise<CaptureClosingLinesSummary> {
   const now = opts.now ?? new Date();
+
+  // Portão no KV (#680, ADR 0074) antes da flag: a flag mora no Postgres, e lê-la a
+  // cada 30 min mantinha o Neon acordado. Sem jogo analisado com KO na janela → sai
+  // calado, sem query. `null` (sem KV, índice sem carimbo) segue o caminho de sempre.
+  const gate = await hasAnalyzedKickoffBetween(
+    now.getTime(),
+    now.getTime() + CLV_CAPTURE_LOOKAHEAD_MS,
+  );
+  if (gate === false) {
+    return {
+      skipped: "no_analyzed_kickoff",
+      enabled: false,
+      consideredMatches: 0,
+      capturedMatches: 0,
+      skippedNoDescriptor: 0,
+      errors: 0,
+      quotaMonthlyRemaining: null,
+      quotaMonthlyUsed: null,
+    };
+  }
 
   if (!(await getEnableClvCapture())) {
     console.log(

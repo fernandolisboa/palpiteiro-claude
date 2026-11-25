@@ -8,6 +8,8 @@ import { hasTypeSafeKey } from "@/lib/ai/providers/typesafe/client";
 import { getEnableLineupRecheck } from "@/lib/db/queries/ai-config";
 import {
   getLineupRecheckCandidates,
+  LINEUP_RECHECK_MAX_LEAD_MS,
+  LINEUP_RECHECK_MIN_LEAD_MS,
   type LineupRecheckCandidate,
 } from "@/lib/db/queries/lineup-recheck";
 import { fetchMatchJudgmentData } from "@/lib/model-base/judgment-data";
@@ -17,6 +19,7 @@ import type {
   FixtureRef,
   NormalizedStanding,
 } from "@/lib/providers/sports-data/types";
+import { hasAnalyzedKickoffBetween } from "@/lib/sync/analyzed-kickoffs";
 import {
   acquireKvLock,
   readKvStamp,
@@ -52,7 +55,12 @@ export const lineupRecheckMarkerKey = (matchId: string) =>
   `lineup-recheck:done:${matchId}`;
 
 export type LineupRecheckSummary = {
-  skipped?: "flag_off" | "model_base_running" | "locked" | "missing_jev_key";
+  skipped?:
+    | "no_analyzed_kickoff"
+    | "flag_off"
+    | "model_base_running"
+    | "locked"
+    | "missing_jev_key";
   candidates: number;
   matches: number;
   alreadyDone: number;
@@ -144,6 +152,15 @@ function groupByMatch(candidates: LineupRecheckCandidate[]): MatchGroup[] {
 export async function runLineupRechecks(
   opts: { now?: Date } = {},
 ): Promise<LineupRecheckSummary> {
+  // Portão no KV (#680, ADR 0074) ANTES de qualquer query: sem jogo analisado na janela
+  // (o caso de quase todo run), sai sem acordar o Postgres. `null` (sem KV, índice sem
+  // carimbo) segue o caminho de sempre.
+  const nowMs = (opts.now ?? new Date()).getTime();
+  const gate = await hasAnalyzedKickoffBetween(
+    nowMs + LINEUP_RECHECK_MIN_LEAD_MS,
+    nowMs + LINEUP_RECHECK_MAX_LEAD_MS,
+  );
+  if (gate === false) return { ...emptySummary(), skipped: "no_analyzed_kickoff" };
   if (!(await getEnableLineupRecheck())) {
     return { ...emptySummary(), skipped: "flag_off" };
   }

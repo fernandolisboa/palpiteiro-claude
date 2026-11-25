@@ -13,6 +13,16 @@ vi.mock("@/lib/db/queries/ai-config", () => ({
 const getLineupRecheckCandidates = vi.fn();
 vi.mock("@/lib/db/queries/lineup-recheck", () => ({
   getLineupRecheckCandidates: (...a: unknown[]) => getLineupRecheckCandidates(...a),
+  LINEUP_RECHECK_MIN_LEAD_MS: 5 * 60_000,
+  LINEUP_RECHECK_MAX_LEAD_MS: 75 * 60_000,
+}));
+
+// Portão no KV (#680): null (sem KV) por padrão = caminho de sempre.
+const hasAnalyzedKickoffBetween = vi.fn(
+  async (_fromMs: number, _toMs: number): Promise<boolean | null> => null,
+);
+vi.mock("@/lib/sync/analyzed-kickoffs", () => ({
+  hasAnalyzedKickoffBetween: (...a: [number, number]) => hasAnalyzedKickoffBetween(...a),
 }));
 
 const recheckPredictionWithLineup = vi.fn();
@@ -139,6 +149,7 @@ beforeEach(() => {
   vi.setSystemTime(NOW);
   vi.clearAllMocks();
   kv.clear();
+  hasAnalyzedKickoffBetween.mockResolvedValue(null);
   getEnableLineupRecheck.mockResolvedValue(true);
   hasTypeSafeKey.mockReturnValue(true);
   getLineupRecheckCandidates.mockResolvedValue([]);
@@ -178,6 +189,31 @@ function expectNoProviderCalls() {
 }
 
 describe("runLineupRechecks: quando não faz nada", () => {
+  it("portão no KV fechado (#680) → sai sem tocar no Postgres (nem a flag) nem no lock", async () => {
+    hasAnalyzedKickoffBetween.mockResolvedValue(false);
+    const s = await runLineupRechecks({ now: NOW });
+    expect(s.skipped).toBe("no_analyzed_kickoff");
+    expect(hasAnalyzedKickoffBetween).toHaveBeenCalledWith(
+      NOW.getTime() + 5 * 60_000,
+      NOW.getTime() + 75 * 60_000,
+    );
+    expect(getEnableLineupRecheck).not.toHaveBeenCalled();
+    expect(getLineupRecheckCandidates).not.toHaveBeenCalled();
+    expect(acquireKvLock).not.toHaveBeenCalled();
+    expectNoProviderCalls();
+  });
+
+  it("portão aberto (jogo analisado na janela) ou desconhecido → segue pro banco", async () => {
+    for (const gate of [true, null]) {
+      vi.clearAllMocks();
+      hasAnalyzedKickoffBetween.mockResolvedValue(gate);
+      const s = await runLineupRechecks({ now: NOW });
+      expect(s.skipped).toBeUndefined();
+      expect(getEnableLineupRecheck).toHaveBeenCalledTimes(1);
+      expect(getLineupRecheckCandidates).toHaveBeenCalledTimes(1);
+    }
+  });
+
   it("flag OFF → sai sem query de candidatos nem provider", async () => {
     getEnableLineupRecheck.mockResolvedValue(false);
     const s = await runLineupRechecks({ now: NOW });

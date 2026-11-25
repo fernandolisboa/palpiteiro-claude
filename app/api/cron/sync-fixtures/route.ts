@@ -1,6 +1,7 @@
 import { NextResponse } from "next/server";
 
 import { isAuthorizedCron } from "@/lib/auth/cron-auth";
+import { rebuildAnalyzedKickoffs } from "@/lib/sync/analyzed-kickoffs";
 import { ensureUpcomingFixturesSynced } from "@/lib/sync/sync-upcoming-fixtures";
 
 // Vercel Cron hits this endpoint (GET) every 6h (see vercel.json) and sends
@@ -22,7 +23,6 @@ export async function GET(request: Request): Promise<Response> {
 
   try {
     await ensureUpcomingFixturesSynced({ force: true });
-    return NextResponse.json({ ok: true });
   } catch (err) {
     console.error(
       JSON.stringify({
@@ -31,9 +31,32 @@ export async function GET(request: Request): Promise<Response> {
         message: err instanceof Error ? err.message : String(err),
       }),
     );
+    await refreshAnalyzedKickoffs();
     return NextResponse.json(
       { ok: false, error: "sync_fixtures_failed" },
       { status: 500 },
+    );
+  }
+  await refreshAnalyzedKickoffs();
+  return NextResponse.json({ ok: true });
+}
+
+// Índice do portão dos crons frequentes (#680, ADR 0074): reconstruído aqui a cada 6 h,
+// com ou sem sucesso do sync (o banco já está acordado e o índice não depende do
+// provider). Falha só loga: sem carimbo novo, o portão reabre sozinho pelo TTL.
+async function refreshAnalyzedKickoffs(): Promise<void> {
+  try {
+    const indexed = await rebuildAnalyzedKickoffs();
+    console.log(
+      JSON.stringify({ scope: "sync_fixtures", event: "analyzed_kickoffs_rebuilt", indexed }),
+    );
+  } catch (err) {
+    console.error(
+      JSON.stringify({
+        scope: "sync_fixtures",
+        event: "analyzed_kickoffs_rebuild_failed",
+        message: err instanceof Error ? err.message : String(err),
+      }),
     );
   }
 }
