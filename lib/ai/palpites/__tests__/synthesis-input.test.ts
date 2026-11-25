@@ -341,6 +341,50 @@ describe("contexto extra fora da síntese (PLAN-565 §13.2)", () => {
     };
   }
 
+  // #683: os fatores do "o que pesou", com quem levou cada um ao valor final.
+  const EXPECTED_FACTORS = {
+    factors: [
+      {
+        key: "attack_weakened_home",
+        lambdaSide: "home",
+        multiplier: 0.92,
+        origin: "user",
+        value: 0.7,
+      },
+      {
+        key: "defense_weakened_away",
+        lambdaSide: "home",
+        multiplier: 1.1,
+        origin: "jev",
+        value: 0.9,
+      },
+    ],
+    applied: { home: 1.012, away: 1 },
+    product: { home: 1.012, away: 1 },
+  };
+
+  it("#683: fatores com origem nos dois caminhos (memória e histórico), em ordem canônica", () => {
+    const [mem] = summarizeAnalysesForSynthesis([
+      okOutcome("match_result", withUser(), SELECTIONS),
+    ]);
+    const [hist] = summarizeSavedAnalysesForSynthesis([
+      {
+        prediction: withUser(),
+        aiCall: null,
+        marketKey: "match_result",
+        selections: SELECTIONS,
+      },
+    ] as unknown as PredictionWithAiCall[]);
+    expect(mem.judgmentsModel?.factors).toEqual(EXPECTED_FACTORS);
+    expect(hist.judgmentsModel?.factors).toEqual(EXPECTED_FACTORS);
+    // Contexto extra ilegível: na dúvida, nenhum fator (null, o bloco não aparece).
+    const broken = judgments({ userContext: { evidence: "x" } as never });
+    const [bad] = summarizeAnalysesForSynthesis([
+      okOutcome("match_result", withUser(broken), SELECTIONS),
+    ]);
+    expect(bad.judgmentsModel?.factors).toBeNull();
+  });
+
   const withUser = (j: PredictionJudgments | null = judgments()) =>
     prediction({ id: "p-ctx", rationale: USER_RATIONALE, judgments: j } as Partial<Prediction>);
 
@@ -413,6 +457,7 @@ describe("contexto extra fora da síntese (PLAN-565 §13.2)", () => {
       rho: null,
       stateHash: "h",
       jevAiCallId: null,
+      factors: EXPECTED_FACTORS,
     });
     // Só o fator do JEV; o que o usuário moveu (ataque do mandante) não vai.
     expect(a.factorPhrases).toEqual([

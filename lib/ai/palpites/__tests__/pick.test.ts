@@ -1,4 +1,4 @@
-import { describe, expect, it } from "vitest";
+import { describe, expect, it, vi } from "vitest";
 
 import type { FanOutOutcome } from "@/lib/ai/best-bet";
 import type { PredictionJudgments } from "@/lib/ai/engine/types";
@@ -12,6 +12,7 @@ import {
   resolvePregamePick,
   runJudgmentsFromAnalyses,
   type PalpiteBase,
+  type PalpitePick,
 } from "@/lib/ai/palpites/pick";
 import { buildSettleablePalpiteRows } from "@/lib/ai/palpites/settleable-rows";
 import {
@@ -21,6 +22,8 @@ import {
 } from "@/lib/ai/palpites/synthesis-input";
 import type { PredictionWithAiCall } from "@/lib/db/queries/predictions";
 import { DIXON_COLES_RHO, scoreOutcome } from "@/lib/quant/scoreline-model";
+
+import { NAO_VIRA, VIRA, codeJev, mr, ou } from "./weighed-fixtures";
 
 const T0 = "2026-11-21T18:00:00.000Z";
 
@@ -213,6 +216,7 @@ describe("pickFromBase", () => {
     source: "dc_jev",
     base: lambda,
     multipliers: null,
+    factors: null,
     lambda,
     rho: DIXON_COLES_RHO,
     basePredictionId: "p",
@@ -444,5 +448,160 @@ describe("paridade dos caminhos (T2)", () => {
     const pick = resolvePregamePick(summarizeSavedAnalysesForSynthesis(history));
     expect(pick!.fit!.anchor).toBe("draw");
     expect(pick!.fit!.overUnderPredictionId).toBeNull();
+  });
+});
+
+// ─── #683: o que pesou, gravado no pick ──────────────────────────────────────
+
+describe("pick.weighed (#683)", () => {
+  const product = (
+    w: NonNullable<PalpitePick["weighed"]>,
+    side: "home" | "away"
+  ) =>
+    w.factors
+      .filter((f) => f.lambdaSide === side)
+      .reduce((a, f) => a * f.multiplier, 1);
+
+  it("base de mercado: weighed presente e Π m' = pick.multipliers", () => {
+    const j = codeJev({
+      base: { home: 1, away: 1 },
+      jev: VIRA.jev,
+      user: VIRA.user,
+    });
+    const pick = resolvePregamePick([mr(VIRA.odds, j), ou(...VIRA.ou)])!;
+    expect(pick.source).toBe("market");
+    const w = pick.weighed!;
+    expect(w).toBeTruthy();
+    expect(product(w, "home")).toBeCloseTo(pick.multipliers!.home, 5);
+    expect(product(w, "away")).toBeCloseTo(pick.multipliers!.away, 5);
+  });
+
+  it("base dc_jev: weighed presente, base = λ base do modelo", () => {
+    const j = codeJev({ base: { home: 1.4, away: 1.0 }, jev: NAO_VIRA.jev });
+    const pick = resolvePregamePick([{ ...mr(NAO_VIRA.odds, j), odds: {} }])!;
+    expect(pick.source).toBe("dc_jev");
+    const w = pick.weighed!;
+    expect(w.factors.map((f) => f.key)).toEqual([
+      "attack_weakened_home",
+      "defense_weakened_away",
+      "high_stakes_away",
+    ]);
+    expect(product(w, "home")).toBeCloseTo(pick.multipliers!.home, 5);
+    expect(w.finalPts.home + w.finalPts.draw + w.finalPts.away).toBe(100);
+  });
+
+  it("sem julgamentos (motor LLM no 1X2) → factors []", () => {
+    const pick = resolvePregamePick([mr(VIRA.odds, null)])!;
+    expect(pick.multipliers).toBeNull();
+    expect(pick.weighed!.factors).toEqual([]);
+    expect(pick.weighed!.basePts).toEqual(pick.weighed!.finalPts);
+  });
+
+  it("JEV falho sem contexto → factors [] (nenhum ajuste)", () => {
+    const pick = resolvePregamePick([mr(VIRA.odds, codeJev({ jev: null }))])!;
+    expect(pick.multipliers).toEqual({ home: 1, away: 1 });
+    expect(pick.weighed!.factors).toEqual([]);
+  });
+
+  it("análise de origem sem `factors` → null", () => {
+    const warn = vi.spyOn(console, "warn").mockImplementation(() => {});
+    const j = codeJev({ jev: VIRA.jev });
+    const a = mr(VIRA.odds, j);
+    const pick = resolvePregamePick([
+      { ...a, judgmentsModel: { ...a.judgmentsModel!, factors: undefined } },
+    ])!;
+    expect(pick.weighed).toBeNull();
+    warn.mockRestore();
+  });
+
+  // Regressão com os cenários do mock v6, com os números do motor real (os do mock
+  // eram ilustrativos).
+  it("Galo x Boca, vira: 37/30/33 → 34/30/36, pro Boca", () => {
+    const j = codeJev({
+      base: { home: 1, away: 1 },
+      jev: VIRA.jev,
+      user: VIRA.user,
+    });
+    const pick = resolvePregamePick([mr(VIRA.odds, j), ou(...VIRA.ou)])!;
+    const w = pick.weighed!;
+    expect(pick.outcome).toBe("away");
+    expect(w.baseOutcome).toBe("home");
+    expect(w.basePts).toEqual({ home: 37, draw: 30, away: 33 });
+    expect(w.finalPts).toEqual({ home: 34, draw: 30, away: 36 });
+    // O rodízio, contado pelo usuário, tira 0,7 pp do Galo: arredonda pra 0 e o ponto
+    // do Boca sai do empate.
+    expect(w.factors.map((f) => [f.key, f.origin, f.pts])).toEqual([
+      ["attack_weakened_home", "jev", { home: -2, draw: 1, away: 1 }],
+      ["defense_weakened_home", "jev", { home: -1, draw: 0, away: 1 }],
+      ["rotation_risk_home", "user", { home: 0, draw: -1, away: 1 }],
+    ]);
+  });
+
+  it("Galo x Boca, não vira: 52/27/21 → 51/28/21, continua Galo", () => {
+    const j = codeJev({ base: { home: 1, away: 1 }, jev: NAO_VIRA.jev });
+    const pick = resolvePregamePick([
+      mr(NAO_VIRA.odds, j),
+      ou(...NAO_VIRA.ou),
+    ])!;
+    const w = pick.weighed!;
+    expect(pick.outcome).toBe("home");
+    expect(w.baseOutcome).toBe("home");
+    expect(w.basePts).toEqual({ home: 52, draw: 27, away: 21 });
+    expect(w.finalPts).toEqual({ home: 51, draw: 28, away: 21 });
+    expect(w.factors.map((f) => [f.key, f.pts])).toEqual([
+      ["attack_weakened_home", { home: -2, draw: 1, away: 1 }],
+      ["defense_weakened_away", { home: 1, draw: 0, away: -1 }],
+      ["high_stakes_away", { home: 0, draw: 0, away: 0 }],
+    ]);
+  });
+
+  it("memória × histórico (chaves do jsonb embaralhadas) → weighed igual (R10)", () => {
+    const j = codeJev({
+      base: { home: 1.2, away: 1.4 },
+      jev: {
+        attack_weakened_home: 0.9,
+        defense_weakened_away: 0.8,
+        high_stakes_home: 0.85,
+      },
+      user: { rotation_risk_away: 0.7 },
+    });
+    const shuffled: PredictionJudgments = JSON.parse(JSON.stringify(j));
+    for (const side of ["home", "away"] as const) {
+      const f = shuffled.multipliers![side].factors;
+      shuffled.multipliers![side].factors = Object.fromEntries(
+        Object.entries(f).reverse()
+      );
+    }
+    const odds = { home: 2.9, draw: 3.3, away: 2.35 };
+    const sels = (["home", "draw", "away"] as const).map((key) => ({
+      key,
+      modelProbPct: 33,
+      odd: odds[key],
+    }));
+    const mem = resolvePregamePick(
+      summarizeAnalysesForSynthesis([
+        {
+          ok: true,
+          marketKey: "match_result",
+          result: {
+            prediction: prediction({ judgments: j }),
+            marketKey: "match_result",
+            selections: sels,
+          },
+        },
+      ] as FanOutOutcome[])
+    )!;
+    const saved = resolvePregamePick(
+      summarizeSavedAnalysesForSynthesis([
+        {
+          prediction: prediction({ judgments: shuffled }),
+          aiCall: null,
+          marketKey: "match_result",
+          selections: sels,
+        },
+      ] as unknown as PredictionWithAiCall[])
+    )!;
+    expect(mem.weighed).toBeTruthy();
+    expect(saved.weighed).toEqual(mem.weighed);
   });
 });
