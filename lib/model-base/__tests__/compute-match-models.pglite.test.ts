@@ -244,7 +244,13 @@ beforeEach(async () => {
   await realDb.delete(schema.teamRatingFits);
   await realDb
     .update(schema.aiConfig)
-    .set({ enableMatchModelJev: true, enableDixonColes: true, analysisEngine: "llm" });
+    .set({
+      enableMatchModelJev: true,
+      enableDixonColes: true,
+      analysisEngine: "llm",
+      // A fase de notícias tem a própria suíte (compute-match-models-news.pglite).
+      enableNewsFactors: false,
+    });
 
   // Fit fresco do Brasileirão com os quatro times (≥10 jogos cada); La Liga sem fit.
   await realDb.insert(schema.teamRatingFits).values({

@@ -71,6 +71,48 @@ describe("orderJevQueue (puro)", () => {
     ]);
   });
 
+  it("lote de notícias que a base ainda não viu volta pro bucket 0 (#672, ajuste 1)", () => {
+    const items = [
+      { matchId: "fresh", kickoffAt: at(2) },
+      { matchId: "new-batch", kickoffAt: at(30) },
+      { matchId: "same-batch", kickoffAt: at(10) },
+      { matchId: "old-batch", kickoffAt: at(20) },
+    ];
+    const withNews = (id: string, batchId: string) => {
+      const s = latest(id, "applied", at(-1));
+      return {
+        ...s,
+        judgments: { ...s.judgments, news: { batchId } },
+      } as MatchModelSnapshot;
+    };
+    const byMatch = new Map<string, MatchModelSnapshot>([
+      ["fresh", latest("fresh", "applied", at(-1))],
+      ["new-batch", withNews("new-batch", "b-1")],
+      ["same-batch", withNews("same-batch", "b-2")],
+      // Lote diferente, mas criado ANTES do último checked_at: a base já o viu (mesma
+      // evidência, só heartbeat) e não volta pra frente.
+      ["old-batch", latest("old-batch", "applied", at(-1))],
+    ]);
+    const batches = new Map([
+      ["new-batch", { id: "b-9", createdAt: at(-0.5) }],
+      ["same-batch", { id: "b-2", createdAt: at(-0.5) }],
+      ["old-batch", { id: "b-3", createdAt: at(-2) }],
+    ]);
+    expect(orderJevQueue(items, byMatch, NOW, batches).map((i) => i.matchId)).toEqual([
+      "new-batch",
+      "fresh",
+      "same-batch",
+      "old-batch",
+    ]);
+    // Sem o mapa de lotes (flag de notícias off), a ordem de hoje.
+    expect(orderJevQueue(items, byMatch, NOW).map((i) => i.matchId)).toEqual([
+      "fresh",
+      "same-batch",
+      "old-batch",
+      "new-batch",
+    ]);
+  });
+
   it("não muta a entrada", () => {
     const items = [
       { matchId: "b", kickoffAt: at(5) },
