@@ -558,3 +558,752 @@ body:has([data-page-width="form"]) [data-footer-column] {
     padding-bottom: var(--mobile-tabbar-h);
   }
 }
+
+/* ─── "O que pesou" no palpite (#683, components/palpites/weighed-block.tsx) ─────────
+   Desenho v6 (destaque-fatores/v6): balança de partida, uma raia por fator
+   ("CAM ──●› BOC  2 pts"), barra antes→depois com tiras listradas e arcos em leque.
+   Larguras e posições chegam sem unidade (`--w`, `--l`, `--to`) e viram % / px aqui:
+   o único `%` do HTML é o dos rótulos da barra (guard de firewall, ADR 0030 §3).
+
+   Cores por papel: a fatia do palpite (win), a do empate (draw) e a do outro time
+   (other); `data-winner` liga cada resultado ao papel dele. `--c-*` pinta as fatias;
+   `--t-*` é o tom de quem recebe: raia, número, destino, arcos e listras. Contraste do
+   tom como TEXTO (destino e "N pts", 11–12 px), sobre o fundo do bloco no HERO e no
+   diálogo: claro ≥ 4,5:1 (win 7,7; other 7,0; draw 7,1); escuro ≥ 5:1 (win 11,9; other
+   5,1; draw 8,5). A origem da raia vai em --muted-foreground (≥ 5,6:1). */
+.pesou {
+  /* Fundo do próprio bloco (o mesmo das listras, dos separadores e das pílulas, pra
+     casarem): bg/40 sobre a casca palpite-soft/40 do HERO, a mesma composição que o
+     navegador faz (em srgb). Variável local, não token. */
+  --pesou-surface: color-mix(in srgb, var(--background) 76%, var(--palpite-soft));
+  --pesou-rail: color-mix(in oklch, var(--palpite-border) 80%, transparent);
+  --pw-c: var(--palpite-strong-fg);
+  --pd-c: color-mix(in oklch, var(--muted-fg-2) 45%, var(--muted));
+  --po-c: var(--palpite-border);
+  --pw-t: var(--palpite-strong-fg);
+  --pd-t: var(--muted-foreground);
+  --po-t: color-mix(in oklch, var(--palpite-border) 45%, var(--foreground));
+  background: var(--pesou-surface);
+}
+.dark .pesou {
+  --pw-t: color-mix(in oklch, var(--palpite-strong-fg) 60%, white);
+  --pd-t: color-mix(in oklch, var(--muted-fg-2) 60%, white);
+  --po-t: color-mix(in oklch, var(--palpite-border) 60%, white);
+}
+.pesou-dialog {
+  /* palpite-soft/30 sobre o fundo do diálogo. */
+  --pesou-surface: color-mix(in srgb, var(--popover) 70%, var(--palpite-soft));
+}
+.pesou[data-winner="home"] {
+  --c-home: var(--pw-c);
+  --t-home: var(--pw-t);
+  --c-draw: var(--pd-c);
+  --t-draw: var(--pd-t);
+  --c-away: var(--po-c);
+  --t-away: var(--po-t);
+}
+.pesou[data-winner="draw"] {
+  --c-home: var(--po-c);
+  --t-home: var(--po-t);
+  --c-draw: var(--pw-c);
+  --t-draw: var(--pw-t);
+  --c-away: var(--po-c);
+  --t-away: var(--po-t);
+}
+.pesou[data-winner="away"] {
+  --c-home: var(--po-c);
+  --t-home: var(--po-t);
+  --c-draw: var(--pd-c);
+  --t-draw: var(--pd-t);
+  --c-away: var(--pw-c);
+  --t-away: var(--pw-t);
+}
+.pesou [data-k="home"],
+.pesou [data-to="home"] {
+  color: var(--t-home);
+}
+.pesou [data-k="draw"],
+.pesou [data-to="draw"] {
+  color: var(--t-draw);
+}
+.pesou [data-k="away"],
+.pesou [data-to="away"] {
+  color: var(--t-away);
+}
+
+/* linha do tempo: trilho à esquerda, um degrau por fator */
+.pesou-steps {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+}
+.pesou-step {
+  position: relative;
+  padding-left: 22px;
+}
+.pesou-mark {
+  position: absolute;
+  left: 0;
+  top: 1px;
+  width: 14px;
+  height: 14px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+.pesou-dot {
+  width: 7px;
+  height: 7px;
+  border-radius: 9999px;
+  border: 1.5px solid var(--palpite-fg);
+  background: var(--pesou-surface);
+}
+.pesou-step[data-tiny] .pesou-dot {
+  border-color: var(--muted-fg-2);
+}
+.pesou-step:not(:last-child)::after {
+  content: "";
+  position: absolute;
+  left: 6.5px;
+  width: 1px;
+  top: 14px;
+  bottom: -15px;
+  background: var(--pesou-rail);
+}
+.pesou-start::after {
+  top: 18px !important;
+}
+.pesou-row {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) auto;
+  align-items: start;
+  column-gap: 10px;
+}
+.pesou-lanes {
+  display: flex;
+  flex-direction: column;
+  align-items: flex-end;
+}
+/* "Ver raciocínio" no celular: a frase é longa, a raia vai embaixo dela */
+.pesou-row-long {
+  grid-template-columns: minmax(0, 1fr);
+}
+.pesou-row-long .pesou-lanes {
+  align-items: flex-start;
+  margin-top: 3px;
+}
+@media (min-width: 640px) {
+  .pesou-row-long {
+    grid-template-columns: minmax(0, 1fr) auto;
+  }
+  .pesou-row-long .pesou-lanes {
+    align-items: flex-end;
+    margin-top: 0;
+  }
+}
+
+/* raia de um fator: origem ──●› destino  N pts (cor de quem recebeu, `data-to`) */
+.pesou-lane {
+  display: inline-grid;
+  grid-template-columns: auto 30px var(--dstw, 24px) 29px;
+  align-items: center;
+  column-gap: 5px;
+  white-space: nowrap;
+  font-size: var(--text-meta);
+  line-height: 16.5px;
+  letter-spacing: -0.01em;
+}
+.pesou-steps[data-draw-lane] {
+  --dstw: 37px;
+}
+.pesou-lane .src {
+  text-align: right;
+  color: var(--muted-foreground);
+}
+.pesou-lane .num {
+  text-align: right;
+  font-size: var(--text-body-sm);
+  font-variant-numeric: tabular-nums;
+}
+.pesou-lane .num b {
+  font-family: var(--font-mono);
+  font-weight: 500;
+}
+.pesou-lane .trk {
+  position: relative;
+  height: 8px;
+}
+.pesou-lane .trk::before {
+  content: "";
+  position: absolute;
+  left: 0;
+  right: 1px;
+  top: 50%;
+  height: 1px;
+  margin-top: -0.5px;
+  background: currentColor;
+  opacity: 0.32;
+}
+.pesou-lane .trk::after {
+  content: "";
+  position: absolute;
+  right: 1px;
+  top: 50%;
+  width: 5px;
+  height: 5px;
+  margin-top: -2.5px;
+  border-top: 1.25px solid currentColor;
+  border-right: 1.25px solid currentColor;
+  transform: rotate(45deg);
+}
+/* Parado (estado final, e o de quem pediu menos movimento): bolinha no destino. */
+.pesou-lane .trk i {
+  position: absolute;
+  left: 0;
+  top: 50%;
+  width: 4px;
+  height: 4px;
+  margin-top: -2px;
+  border-radius: 9999px;
+  background: currentColor;
+  transform: translateX(calc(var(--to) * 1px));
+}
+
+/* barra */
+.pesou-chart {
+  display: flex;
+  flex-direction: column;
+  padding-top: 2px;
+}
+.pesou-flows {
+  position: relative;
+  margin-bottom: 3px;
+}
+.pesou-flows svg {
+  position: absolute;
+  left: 0;
+  top: 0;
+  width: 100%;
+  height: 100%;
+  overflow: visible;
+}
+.pesou-flows svg path {
+  stroke: currentColor;
+}
+.pesou-flows svg path + path,
+.pesou-flows svg circle {
+  fill: currentColor;
+}
+.pesou-flows span {
+  position: absolute;
+  z-index: 2;
+  transform: translate(-50%, -50%);
+  white-space: nowrap;
+  font-size: var(--text-meta);
+  line-height: 13px;
+  font-weight: 500;
+  letter-spacing: -0.01em;
+  font-variant-numeric: tabular-nums;
+  padding: 0 4px;
+  border-radius: 9999px;
+}
+.pesou-flows span b {
+  font-family: var(--font-mono);
+  font-weight: 500;
+}
+.pesou-flows span.on-line {
+  background: var(--pesou-surface);
+}
+/* Bolinhas dos arcos: só enquanto toca (escondidas parado). */
+.pesou-fly {
+  display: none;
+  position: absolute;
+  z-index: 1;
+  left: 0;
+  top: 0;
+  width: 4.5px;
+  height: 4.5px;
+  border-radius: 9999px;
+  background: currentColor;
+  offset-rotate: 0deg;
+  opacity: 0;
+}
+.pesou[data-play] .pesou-fly {
+  display: block;
+}
+/* Sem offset-path a bolinha ficaria parada no canto da caixa. */
+@supports not (offset-path: path("M0,0")) {
+  .pesou[data-play] .pesou-fly {
+    display: none;
+  }
+}
+.pesou-bar {
+  position: relative;
+  display: flex;
+  height: 14px;
+  width: 100%;
+  overflow: hidden;
+  border-radius: 9999px;
+  background: var(--muted);
+}
+.pesou-bar > span {
+  flex: var(--w) 0 0;
+  min-width: 0;
+  height: 100%;
+}
+.pesou-bar > span[data-k="home"] {
+  background: var(--c-home);
+}
+.pesou-bar > span[data-k="draw"] {
+  background: var(--c-draw);
+}
+.pesou-bar > span[data-k="away"] {
+  background: var(--c-away);
+}
+.pesou-bar > span + span {
+  box-shadow: inset 2px 0 0 var(--pesou-surface);
+}
+/* Listras: ladrilho 6×6 no tom de quem recebeu; anda um ladrilho por volta enquanto
+   toca, na direção de quem recebeu (`--dir`). */
+.pesou-bar > i {
+  position: absolute;
+  top: 0;
+  bottom: 0;
+  left: calc(var(--l) * 1%);
+  width: calc(var(--w) * 1%);
+  background-color: var(--pesou-surface);
+  background-image: linear-gradient(
+    135deg,
+    currentColor 25%,
+    transparent 25% 50%,
+    currentColor 50% 75%,
+    transparent 75%
+  );
+  background-size: 6px 6px;
+}
+.pesou[data-play] .pesou-bar > i {
+  animation: pesou-hatch 1.35s linear 8;
+}
+@keyframes pesou-hatch {
+  to {
+    background-position: calc(var(--dir, 1) * 6px) 0;
+  }
+}
+.pesou-cols {
+  display: flex;
+  width: 100%;
+}
+.pesou-cols > span {
+  flex: var(--w) 0 0;
+  min-width: 0;
+  display: flex;
+  flex-direction: column;
+}
+.pesou-pct {
+  display: inline-flex;
+  align-items: baseline;
+  white-space: nowrap;
+  font-family: var(--font-mono);
+  font-size: var(--text-body);
+  line-height: 1.3;
+  letter-spacing: -0.02em;
+  font-variant-numeric: tabular-nums;
+}
+.pesou-before {
+  display: inline-flex;
+  align-items: center;
+  gap: 2px;
+  margin-right: 2px;
+  font-size: var(--text-body-sm);
+  color: var(--muted-foreground);
+}
+.pesou-arrow {
+  width: 12px;
+  height: 8px;
+  flex: none;
+  opacity: 0.85;
+}
+.pesou-before .pesou-arrow {
+  width: 10px;
+  height: 7px;
+  opacity: 0.7;
+}
+.pesou-summary {
+  border-top: 1px solid color-mix(in oklch, var(--palpite-border) 40%, transparent);
+  padding-top: 10px;
+}
+
+/* Sequência: raias de cima pra baixo, uma vaga a cada 0,4 s, depois os arcos; tudo
+   descansa e o ciclo (5,4 s) recomeça. Toca 2 ciclos quando o bloco entra na tela
+   (`data-play`, components/palpites/weighed-flows.tsx) e para: 1.83 voltas param no
+   descanso do 2º ciclo, antes do fade, com as bolinhas das raias no destino. Nenhuma
+   regra infinita (WCAG 2.2.2). Da vaga 7 em diante as raias animam juntas (keyframes
+   0..7). Gerado por um script (T 5,4 s; vaga q começa em 0,2 + 0,4·q s; raia anda
+   0,75 s; arco 1,4 s; fade 4,5–4,9 s); pra mudar, refazer os 16 keyframes juntos. */
+@keyframes pesou-lane-0 {
+  0%,
+  3.7% {
+    transform: translateX(0);
+    opacity: 0;
+    animation-timing-function: cubic-bezier(0.4, 0, 0.2, 1);
+  }
+  5.56% {
+    opacity: 1;
+  }
+  17.59%,
+  83.33% {
+    transform: translateX(calc(var(--to) * 1px));
+    opacity: 1;
+  }
+  90.74%,
+  100% {
+    transform: translateX(calc(var(--to) * 1px));
+    opacity: 0;
+  }
+}
+@keyframes pesou-arc-0 {
+  0%,
+  5.56% {
+    offset-distance: 0%;
+    opacity: 0;
+    animation-timing-function: cubic-bezier(0.45, 0, 0.35, 1);
+  }
+  7.78%,
+  28.15% {
+    opacity: 1;
+  }
+  31.48%,
+  100% {
+    offset-distance: 100%;
+    opacity: 0;
+  }
+}
+@keyframes pesou-lane-1 {
+  0%,
+  11.11% {
+    transform: translateX(0);
+    opacity: 0;
+    animation-timing-function: cubic-bezier(0.4, 0, 0.2, 1);
+  }
+  12.96% {
+    opacity: 1;
+  }
+  25%,
+  83.33% {
+    transform: translateX(calc(var(--to) * 1px));
+    opacity: 1;
+  }
+  90.74%,
+  100% {
+    transform: translateX(calc(var(--to) * 1px));
+    opacity: 0;
+  }
+}
+@keyframes pesou-arc-1 {
+  0%,
+  12.96% {
+    offset-distance: 0%;
+    opacity: 0;
+    animation-timing-function: cubic-bezier(0.45, 0, 0.35, 1);
+  }
+  15.19%,
+  35.56% {
+    opacity: 1;
+  }
+  38.89%,
+  100% {
+    offset-distance: 100%;
+    opacity: 0;
+  }
+}
+@keyframes pesou-lane-2 {
+  0%,
+  18.52% {
+    transform: translateX(0);
+    opacity: 0;
+    animation-timing-function: cubic-bezier(0.4, 0, 0.2, 1);
+  }
+  20.37% {
+    opacity: 1;
+  }
+  32.41%,
+  83.33% {
+    transform: translateX(calc(var(--to) * 1px));
+    opacity: 1;
+  }
+  90.74%,
+  100% {
+    transform: translateX(calc(var(--to) * 1px));
+    opacity: 0;
+  }
+}
+@keyframes pesou-arc-2 {
+  0%,
+  20.37% {
+    offset-distance: 0%;
+    opacity: 0;
+    animation-timing-function: cubic-bezier(0.45, 0, 0.35, 1);
+  }
+  22.59%,
+  42.96% {
+    opacity: 1;
+  }
+  46.3%,
+  100% {
+    offset-distance: 100%;
+    opacity: 0;
+  }
+}
+@keyframes pesou-lane-3 {
+  0%,
+  25.93% {
+    transform: translateX(0);
+    opacity: 0;
+    animation-timing-function: cubic-bezier(0.4, 0, 0.2, 1);
+  }
+  27.78% {
+    opacity: 1;
+  }
+  39.81%,
+  83.33% {
+    transform: translateX(calc(var(--to) * 1px));
+    opacity: 1;
+  }
+  90.74%,
+  100% {
+    transform: translateX(calc(var(--to) * 1px));
+    opacity: 0;
+  }
+}
+@keyframes pesou-arc-3 {
+  0%,
+  27.78% {
+    offset-distance: 0%;
+    opacity: 0;
+    animation-timing-function: cubic-bezier(0.45, 0, 0.35, 1);
+  }
+  30%,
+  50.37% {
+    opacity: 1;
+  }
+  53.7%,
+  100% {
+    offset-distance: 100%;
+    opacity: 0;
+  }
+}
+@keyframes pesou-lane-4 {
+  0%,
+  33.33% {
+    transform: translateX(0);
+    opacity: 0;
+    animation-timing-function: cubic-bezier(0.4, 0, 0.2, 1);
+  }
+  35.19% {
+    opacity: 1;
+  }
+  47.22%,
+  83.33% {
+    transform: translateX(calc(var(--to) * 1px));
+    opacity: 1;
+  }
+  90.74%,
+  100% {
+    transform: translateX(calc(var(--to) * 1px));
+    opacity: 0;
+  }
+}
+@keyframes pesou-arc-4 {
+  0%,
+  35.19% {
+    offset-distance: 0%;
+    opacity: 0;
+    animation-timing-function: cubic-bezier(0.45, 0, 0.35, 1);
+  }
+  37.41%,
+  57.78% {
+    opacity: 1;
+  }
+  61.11%,
+  100% {
+    offset-distance: 100%;
+    opacity: 0;
+  }
+}
+@keyframes pesou-lane-5 {
+  0%,
+  40.74% {
+    transform: translateX(0);
+    opacity: 0;
+    animation-timing-function: cubic-bezier(0.4, 0, 0.2, 1);
+  }
+  42.59% {
+    opacity: 1;
+  }
+  54.63%,
+  83.33% {
+    transform: translateX(calc(var(--to) * 1px));
+    opacity: 1;
+  }
+  90.74%,
+  100% {
+    transform: translateX(calc(var(--to) * 1px));
+    opacity: 0;
+  }
+}
+@keyframes pesou-arc-5 {
+  0%,
+  42.59% {
+    offset-distance: 0%;
+    opacity: 0;
+    animation-timing-function: cubic-bezier(0.45, 0, 0.35, 1);
+  }
+  44.81%,
+  65.19% {
+    opacity: 1;
+  }
+  68.52%,
+  100% {
+    offset-distance: 100%;
+    opacity: 0;
+  }
+}
+@keyframes pesou-lane-6 {
+  0%,
+  48.15% {
+    transform: translateX(0);
+    opacity: 0;
+    animation-timing-function: cubic-bezier(0.4, 0, 0.2, 1);
+  }
+  50% {
+    opacity: 1;
+  }
+  62.04%,
+  83.33% {
+    transform: translateX(calc(var(--to) * 1px));
+    opacity: 1;
+  }
+  90.74%,
+  100% {
+    transform: translateX(calc(var(--to) * 1px));
+    opacity: 0;
+  }
+}
+@keyframes pesou-arc-6 {
+  0%,
+  50% {
+    offset-distance: 0%;
+    opacity: 0;
+    animation-timing-function: cubic-bezier(0.45, 0, 0.35, 1);
+  }
+  52.22%,
+  72.59% {
+    opacity: 1;
+  }
+  75.93%,
+  100% {
+    offset-distance: 100%;
+    opacity: 0;
+  }
+}
+@keyframes pesou-lane-7 {
+  0%,
+  55.56% {
+    transform: translateX(0);
+    opacity: 0;
+    animation-timing-function: cubic-bezier(0.4, 0, 0.2, 1);
+  }
+  57.41% {
+    opacity: 1;
+  }
+  69.44%,
+  83.33% {
+    transform: translateX(calc(var(--to) * 1px));
+    opacity: 1;
+  }
+  90.74%,
+  100% {
+    transform: translateX(calc(var(--to) * 1px));
+    opacity: 0;
+  }
+}
+@keyframes pesou-arc-7 {
+  0%,
+  57.41% {
+    offset-distance: 0%;
+    opacity: 0;
+    animation-timing-function: cubic-bezier(0.45, 0, 0.35, 1);
+  }
+  59.63%,
+  80% {
+    opacity: 1;
+  }
+  83.33%,
+  100% {
+    offset-distance: 100%;
+    opacity: 0;
+  }
+}
+.pesou[data-play] .pesou-q0 i {
+  animation: pesou-lane-0 5.4s linear 1.83 both;
+}
+.pesou[data-play] .pesou-fly.pesou-q0 {
+  animation: pesou-arc-0 5.4s linear 1.83 both;
+}
+.pesou[data-play] .pesou-q1 i {
+  animation: pesou-lane-1 5.4s linear 1.83 both;
+}
+.pesou[data-play] .pesou-fly.pesou-q1 {
+  animation: pesou-arc-1 5.4s linear 1.83 both;
+}
+.pesou[data-play] .pesou-q2 i {
+  animation: pesou-lane-2 5.4s linear 1.83 both;
+}
+.pesou[data-play] .pesou-fly.pesou-q2 {
+  animation: pesou-arc-2 5.4s linear 1.83 both;
+}
+.pesou[data-play] .pesou-q3 i {
+  animation: pesou-lane-3 5.4s linear 1.83 both;
+}
+.pesou[data-play] .pesou-fly.pesou-q3 {
+  animation: pesou-arc-3 5.4s linear 1.83 both;
+}
+.pesou[data-play] .pesou-q4 i {
+  animation: pesou-lane-4 5.4s linear 1.83 both;
+}
+.pesou[data-play] .pesou-fly.pesou-q4 {
+  animation: pesou-arc-4 5.4s linear 1.83 both;
+}
+.pesou[data-play] .pesou-q5 i {
+  animation: pesou-lane-5 5.4s linear 1.83 both;
+}
+.pesou[data-play] .pesou-fly.pesou-q5 {
+  animation: pesou-arc-5 5.4s linear 1.83 both;
+}
+.pesou[data-play] .pesou-q6 i {
+  animation: pesou-lane-6 5.4s linear 1.83 both;
+}
+.pesou[data-play] .pesou-fly.pesou-q6 {
+  animation: pesou-arc-6 5.4s linear 1.83 both;
+}
+.pesou[data-play] .pesou-q7 i {
+  animation: pesou-lane-7 5.4s linear 1.83 both;
+}
+.pesou[data-play] .pesou-fly.pesou-q7 {
+  animation: pesou-arc-7 5.4s linear 1.83 both;
+}
+/* Movimento reduzido: o cliente nem liga `data-play`, e isto segura o resto. A regra
+   global (lá em cima) só encurta a animação, e com `both` a bolinha da raia terminaria
+   no 100% (opacidade 0) e sumiria. Especificidade maior que a global (0,1,0), os dois
+   com !important: vence em qualquer ordem. */
+@media (prefers-reduced-motion: reduce) {
+  .pesou .pesou-lane .trk i {
+    animation: none !important;
+  }
+  .pesou .pesou-fly {
+    display: none !important;
+  }
+  .pesou .pesou-bar > i {
+    animation: none !important;
+  }
+}

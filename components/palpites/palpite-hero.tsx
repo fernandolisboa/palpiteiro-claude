@@ -33,6 +33,7 @@ import {
   ReasoningDialog,
 } from "@/components/palpites/reasoning-dialog";
 import { usePalpiteRun } from "@/components/palpites/use-palpite-run";
+import { WeighedBlock } from "@/components/palpites/weighed-block";
 import { Button } from "@/components/ui/button";
 import {
   DEFAULT_PROGRESS_MASCOT,
@@ -294,6 +295,9 @@ export function PalpiteHero({
         onOpenChange={setReasoningOpen}
         steps={reasoningSteps}
         running={pending}
+        // "O que pesou" (#683) é do palpite exibido: durante um run as etapas são as ao
+        // vivo e o bloco do palpite anterior não aparece junto delas.
+        weighed={showLive ? undefined : heroPalpite?.weighed}
       />
     </form>
   );
@@ -466,6 +470,10 @@ function PopulatedHero({
             <ProbableScore score={view.probableScore} />
           )}
         </div>
+
+        {/* "O que pesou" (#683): sempre visível, até no compacto. Chances em pontos só
+            aqui dentro (emenda da ADR 0030 §3). */}
+        {view.weighed && <WeighedBlock view={view.weighed} variant="hero" />}
 
         {/* Compacto (#576): 2 linhas, com o texto inteiro no DOM (busca do navegador,
             leitor de tela); "Ler mais" abre o resto do palpite aqui mesmo. */}

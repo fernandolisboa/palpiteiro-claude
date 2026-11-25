@@ -47,6 +47,11 @@ import {
   type StreamMessage,
 } from "@/lib/ai/progress/protocol";
 import { containsValueLanguage } from "@/lib/ai/palpites/value-language-guard";
+import {
+  WEIGHED_NAO_VIRA,
+  WEIGHED_VIRA,
+  leaksValueOutsideWeighedBar,
+} from "./firewall-helpers";
 import type { MatchUnavailableReason } from "@/lib/view/match-availability";
 import {
   PALPITE_DISCLAIMER,
@@ -119,10 +124,9 @@ const POPULATED: PalpiteHeadlineView = {
 // retorno/cotação/valor esperado/R$) como FONTE ÚNICA: a UI passa a casar exatamente o
 // que a camada de dado barra (o \bedge\b já pega até uma classe `edge-*`). Soma a regra
 // HERO-específica "sem %" (confiança é PALAVRA, nunca percentual; o guard de dado não bane
-// % de propósito). Um vazamento — número de valor OU % — falha aqui.
-function leaksValue(html: string): boolean {
-  return containsValueLanguage(html) || /%/.test(html);
-}
+// % de propósito). Um vazamento — número de valor OU % — falha aqui. Desde o #683 o único
+// `%` permitido é o dos rótulos da barra do "o que pesou" (helper compartilhado).
+const leaksValue = leaksValueOutsideWeighedBar;
 
 function render(props: Partial<Parameters<typeof PalpiteHero>[0]> = {}): string {
   return renderToStaticMarkup(
@@ -163,6 +167,69 @@ describe("PalpiteHero — firewall de valor (ADR 0030 §3, inviolável)", () => 
     const html = render({ heroPalpite: null });
     expect(leaksValue(html)).toBe(false);
     expect(html).not.toContain("edge-");
+  });
+});
+
+describe("PalpiteHero — o que pesou (#683)", () => {
+  const VIRA_VIEW = { ...POPULATED, weighed: WEIGHED_VIRA() };
+
+  it("bloco entre o placar e a narrativa, com data-winner, etiqueta do usuário e raias", () => {
+    const html = render({ heroPalpite: VIRA_VIEW });
+    expect(html).toContain('data-pesou=""');
+    expect(html).toContain('data-winner="away"');
+    expect(html).toContain("o que pesou");
+    expect(html).toContain("Ponto de partida, os preços do jogo:");
+    expect(html).toContain(
+      '<span class="whitespace-nowrap">Atlético-MG</span> sem peça no ataque'
+    );
+    expect(html).toContain("você contou");
+    expect(html).toContain("Virou pro Boca Juniors, por pouco");
+    // Leitor de tela: a raia e a barra em palavras.
+    expect(html).toContain("1 ponto do Atlético-MG para o Boca Juniors.");
+    expect(html).toContain("Chances do palpite, em pontos de 100:");
+    const pesou = html.indexOf("data-pesou");
+    expect(html.indexOf("provável")).toBeLessThan(pesou);
+    expect(html.indexOf(POPULATED.narrative)).toBeGreaterThan(pesou);
+  });
+
+  it("firewall: % só nos rótulos da barra, nenhum termo de valor, nenhum style com %", () => {
+    for (const weighed of [WEIGHED_VIRA(), WEIGHED_NAO_VIRA()]) {
+      const html = render({ heroPalpite: { ...POPULATED, weighed } });
+      expect(leaksValueOutsideWeighedBar(html)).toBe(false);
+      expect(containsValueLanguage(html)).toBe(false);
+      expect(html.match(/data-pesou-pct=""/g)).toHaveLength(3);
+      for (const style of html.match(/style="[^"]*"/g) ?? []) expect(style).not.toMatch(/%/);
+      // A confiança segue palavra: o chip sem %.
+      const chip = /<span aria-label="confiança média"[^>]*>([^<]*)<\/span>/.exec(html)![1];
+      expect(chip).toBe("confiança média");
+    }
+  });
+
+  it("um % fora dos rótulos da barra é pego pelo helper", () => {
+    expect(leaksValueOutsideWeighedBar('<span data-pesou-pct="" class="x">33%</span>')).toBe(false);
+    expect(leaksValueOutsideWeighedBar("<p>Boca 33%</p>")).toBe(true);
+    expect(leaksValueOutsideWeighedBar('<span data-pesou-pct="">odd 2.10</span>')).toBe(true);
+  });
+
+  it("set antigo ou v13 (sem weighed): sem bloco", () => {
+    expect(render()).not.toContain("data-pesou");
+  });
+
+  it("SSR: a caixa dos arcos sai com a altura reservada e sem traço (R8)", () => {
+    const html = render({ heroPalpite: VIRA_VIEW });
+    expect(html).toMatch(/class="pesou-flows" style="height:22px"/);
+    expect(html).not.toMatch(/<path d="M[\d.]+,[\d.]+ A/);
+  });
+
+  it("compacto: o bloco continua visível", () => {
+    const html = render({ heroPalpite: VIRA_VIEW, collapsible: true });
+    expect(html).toContain('data-pesou=""');
+  });
+
+  it("não vira: fator abaixo de 1 pt fica esmaecido, sem raia", () => {
+    const html = render({ heroPalpite: { ...POPULATED, weighed: WEIGHED_NAO_VIRA() } });
+    expect(html).toContain("mexeu menos de 1 pt");
+    expect(html).toContain("Continua Atlético-MG:");
   });
 });
 
@@ -1275,6 +1342,54 @@ describe("PalpiteHero — Ver raciocínio + robozinho (ADR 0065)", () => {
     expect(leaksValue(dialog.innerHTML)).toBe(false);
     // Abrir o diálogo não dispara o run.
     expect(nav.refresh).not.toHaveBeenCalled();
+    await h.cleanup();
+  });
+
+  it("#683: com o que pesou, o diálogo abre com o bloco antes das etapas", async () => {
+    const h = await mount({ ...POPULATED, reasoning: REASONING, weighed: WEIGHED_VIRA() });
+    await act(async () => h.button()!.click());
+    const dialog = h.dialog()!;
+    const block = dialog.querySelector("section[data-pesou]")!;
+    expect(block).not.toBeNull();
+    expect(block.textContent).toContain("O que pesou no palpite");
+    expect(block.textContent).toContain("você contou (não conferido)");
+    expect(block.textContent).toContain("3 notícias do ge citadas (entram só no texto)");
+    const steps = dialog.querySelector("ol[aria-label='raciocínio da análise']")!;
+    expect(block.compareDocumentPosition(steps) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy();
+    expect(dialog.textContent).toContain("O que pesou no palpite e as etapas que rodaram");
+    expect(leaksValue(dialog.innerHTML)).toBe(false);
+    await h.cleanup();
+  });
+
+  it("#683: durante um run, o bloco do palpite anterior some do diálogo", async () => {
+    let controller!: ReadableStreamDefaultController<Uint8Array>;
+    const body = new ReadableStream<Uint8Array>({
+      start(c) {
+        controller = c;
+      },
+    });
+    vi.stubGlobal(
+      "fetch",
+      vi.fn(async () => new Response(body, { status: 200 })),
+    );
+    const h = await mount({ ...POPULATED, reasoning: REASONING, weighed: WEIGHED_VIRA() });
+    const analyze = h.container.querySelector<HTMLButtonElement>(
+      'button[name="intent"][value="analysis"]',
+    )!;
+    await act(async () => {
+      h.container.querySelector("form")!.requestSubmit(analyze);
+      await settle();
+    });
+    controller.enqueue(
+      new TextEncoder().encode(
+        encodeStreamMessage({ t: "step", id: "odds", status: "done", label: "Preços lidos" }),
+      ),
+    );
+    await act(settle);
+    await act(async () => h.button()!.click());
+    expect(h.dialog()!.textContent).toContain("Preços lidos");
+    expect(h.dialog()!.querySelector("[data-pesou]")).toBeNull();
+    controller.close();
     await h.cleanup();
   });
 

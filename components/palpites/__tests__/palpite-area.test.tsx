@@ -12,6 +12,10 @@ vi.mock("@/app/actions/share", () => ({
 
 import { PalpiteArea } from "@/components/palpites/palpite-area";
 import type { PalpiteHeadlineView } from "@/lib/view/palpites-headline";
+import {
+  WEIGHED_VIRA,
+  leaksValueOutsideWeighedBar,
+} from "@/components/__tests__/firewall-helpers";
 
 const PALPITE: PalpiteHeadlineView = {
   verdict: "Pra mim vai dar Palmeiras",
@@ -206,13 +210,26 @@ describe("PalpiteArea — Chances do azarão (#671, ADR 0073)", () => {
 
   it("fica fora do section[aria-label=palpite] e do form do HERO, depois da análise", async () => {
     await act(async () =>
-      root.render(<PalpiteArea {...props({ underdog: UNDERDOG })} />)
+      root.render(
+        <PalpiteArea
+          {...props({
+            underdog: UNDERDOG,
+            heroPalpite: { ...PALPITE, weighed: WEIGHED_VIRA() },
+          })}
+        />
+      )
     );
     const slot = container.querySelector('[data-testid="underdog"]')!;
     expect(slot).not.toBeNull();
     const shell = container.querySelector('section[aria-label="palpite"]')!;
     expect(shell.contains(slot)).toBe(false);
-    expect(shell.textContent).not.toMatch(/%/);
+    // O "o que pesou" (#683) tem % nos rótulos da barra (emenda da ADR 0030 §3); o resto
+    // da casca, nenhum.
+    expect(shell.querySelector("[data-pesou]")).not.toBeNull();
+    expect(leaksValueOutsideWeighedBar(shell.innerHTML)).toBe(false);
+    const rest = shell.cloneNode(true) as HTMLElement;
+    rest.querySelector("[data-pesou]")!.remove();
+    expect(rest.textContent).not.toMatch(/%/);
     const heroForm = container.querySelector("form")!;
     expect(heroForm).not.toBe(slot);
     expect(heroForm.contains(slot)).toBe(false);
