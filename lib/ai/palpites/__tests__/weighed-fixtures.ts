@@ -66,7 +66,20 @@ export function codeJev(opts: {
           },
         }
       : {}),
-    ...(Object.keys(news).length > 0 ? { news: { evidence: news } } : {}),
+    ...(Object.keys(news).length > 0
+      ? {
+          news: {
+            batchId: "batch-1",
+            itemsRead: 1,
+            claims: [],
+            sources: [],
+            evidence: news,
+            moved: [],
+            notes: [],
+            versions: { extract: "x", newsEvidence: "n" },
+          },
+        }
+      : {}),
   };
 }
 
