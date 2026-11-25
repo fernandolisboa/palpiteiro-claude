@@ -55,7 +55,7 @@ export function templatedNarration(d: NarratorDecision): NarratorOutput {
   // continua sendo o 1º fato do card.
   // Cortadas no limite do fator (o schema rejeitaria a saída inteira).
   factors.push(...(d.lineupNotes ?? []).map(capKeyFactor));
-  factors.push(...d.judgmentFactors);
+  factors.push(...d.judgmentFactors.map(capKeyFactor));
   if (factors.length < 2) factors.push(goals);
 
   return {

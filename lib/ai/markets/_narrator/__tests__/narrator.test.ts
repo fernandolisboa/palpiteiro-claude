@@ -1078,6 +1078,36 @@ describe("narrator_v1.6 (#672): notícias do ge", () => {
     expect(phrases[1]).not.toContain("sinal");
   });
 
+  it("nomes longos: a origem fica inteira no fim e a frase cabe no limite do fator", () => {
+    const LONG = { home: "SC Corinthians Paulista", away: "CR Vasco da Gama" };
+    const combined = answers({
+      defense_weakened_home: 0.9,
+      defense_weakened_away: 0.9,
+      attack_weakened_away: 0.9,
+    });
+    const applied = applyJudgments({ lambdaHome: 1.5, lambdaAway: 1.1 }, combined);
+    const phrases = judgmentFactorPhrases(combined, applied.multipliers, LONG, {
+      jev: answers({ defense_weakened_home: 0.9 }),
+      origins: {
+        defense_weakened_home: { by: "news", strength: "confirmed" },
+        defense_weakened_away: { by: "news", strength: "unverified" },
+      },
+    });
+    expect(phrases).toHaveLength(3);
+    for (const p of phrases) expect(p.length).toBeLessThanOrEqual(KEY_FACTOR_MAX_CHARS);
+    const home = phrases.find((p) => p.includes("defesa ou o goleiro titular do SC Corinthians"))!;
+    expect(home).toMatch(/… \(segundo o ge, confirmado pelos nossos dados\)$/);
+    const away = phrases.find((p) => p.includes("defesa ou o goleiro titular do CR Vasco"))!;
+    expect(away).toMatch(/ \(segundo o ge, não conferido\)$/);
+    // O template nunca sai inválido, mesmo com uma frase de fator acima do limite.
+    const out = templatedNarration({
+      ...overDecision(),
+      judgmentFactors: [...phrases, "x".repeat(KEY_FACTOR_MAX_CHARS + 40)],
+    });
+    for (const f of out.key_factors) expect(f.length).toBeLessThanOrEqual(KEY_FACTOR_MAX_CHARS);
+    expect(NarratorOutputSchema.safeParse(out).success).toBe(true);
+  });
+
   it("regra 4 do system prompt explica as duas marcas do ge e o bloco de notas", () => {
     expect(SYSTEM_PROMPT).toContain('"(segundo o ge, não conferido)"');
     expect(SYSTEM_PROMPT).toContain('"(segundo o ge, confirmado pelos nossos dados)"');

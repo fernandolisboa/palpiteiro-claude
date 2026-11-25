@@ -179,12 +179,12 @@ export function judgmentFactorPhrases(
       const phrase = FACTOR_PHRASE[factor](team, opponent);
       const from = origin?.origins[id];
       if (!from) {
-        phrases.push(`${phrase} — ${strengthOf(answers[id].value)}`);
+        phrases.push(capKeyFactor(`${phrase} — ${strengthOf(answers[id].value)}`));
         continue;
       }
       const jevValue = origin?.jev?.[id]?.value ?? 0;
       const strength = jevValue > 0.5 ? ` — ${strengthOf(jevValue)}` : "";
-      phrases.push(`${phrase}${strength} ${ORIGIN_LABEL[from.by][from.strength]}`);
+      phrases.push(withOriginLabel(`${phrase}${strength}`, ORIGIN_LABEL[from.by][from.strength]));
     }
   }
   return phrases;
@@ -282,6 +282,15 @@ function lineupNoteForTeam(
     if (phrase.length <= KEY_FACTOR_MAX_CHARS) return phrase;
   }
   return capKeyFactor(build(0));
+}
+
+// A frase é fator-chave: com nomes longos, corta o texto do fator (com reticências) e
+// mantém a origem inteira no fim, tudo dentro de KEY_FACTOR_MAX_CHARS. Nomes de tamanho
+// normal cabem e a frase sai byte a byte igual.
+function withOriginLabel(head: string, label: string): string {
+  const room = KEY_FACTOR_MAX_CHARS - label.length - 1;
+  const fitted = head.length <= room ? head : `${head.slice(0, room - 1).trimEnd()}…`;
+  return `${fitted} ${label}`;
 }
 
 /** Corta uma frase de fator-chave no limite do schema, com reticências. */
