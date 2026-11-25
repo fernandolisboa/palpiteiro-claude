@@ -35,6 +35,7 @@ import {
   getLatestUsableNewsBatch,
   getLatestUsableNewsBatchesForMatches,
   getMatchNewsByIds,
+  getNewsBatchForAnalysis,
   insertMatchNewsBatch,
   listMatchNewsInWindow,
   markMatchNewsBatchRetry,
@@ -273,6 +274,49 @@ describe("match_news_batches", () => {
     expect(console.warn).toHaveBeenCalledWith(
       expect.stringContaining("invalid_batch_claims_dropped"),
     );
+  });
+});
+
+describe("getNewsBatchForAnalysis (C2)", () => {
+  const since = at(-12);
+
+  it("o usável mais novo; failed mais novo não esconde o usável e não marca 'não conferido'", async () => {
+    await insertMatchNewsBatch(batch({ batchHash: "fresh", now: at(-2) }));
+    await insertMatchNewsBatch(batch({ batchHash: "failed", status: "failed", now: at(-1) }));
+    const got = await getNewsBatchForAnalysis(matchId, { since, promptVersion: V });
+    expect(got.usable?.batchHash).toBe("fresh");
+    expect(got.failedOnly).toBe(false);
+  });
+
+  it("empty com adversário estrangeiro não é usável: cai no caminho ao vivo", async () => {
+    await insertMatchNewsBatch(
+      batch({ batchHash: "foreign", status: "empty", items: [], claims: [], unknownOpponent: true, now: at(-1) }),
+    );
+    expect(await getNewsBatchForAnalysis(matchId, { since, promptVersion: V })).toEqual({
+      usable: null,
+      failedOnly: false,
+    });
+  });
+
+  it("empty comum é usável (o ge respondeu sem item)", async () => {
+    await insertMatchNewsBatch(
+      batch({ batchHash: "empty", status: "empty", items: [], claims: [], now: at(-1) }),
+    );
+    const got = await getNewsBatchForAnalysis(matchId, { since, promptVersion: V });
+    expect(got.usable?.status).toBe("empty");
+  });
+
+  it("só failed na janela → failedOnly; velho, de outra versão ou de outro jogo → nada", async () => {
+    await insertMatchNewsBatch(batch({ batchHash: "failed", status: "failed", now: at(-1) }));
+    await insertMatchNewsBatch(batch({ batchHash: "old", now: at(-20) }));
+    await insertMatchNewsBatch(batch({ matchId: otherMatchId, batchHash: "other", now: at(-1) }));
+    expect(await getNewsBatchForAnalysis(matchId, { since, promptVersion: V })).toEqual({
+      usable: null,
+      failedOnly: true,
+    });
+    expect(
+      await getNewsBatchForAnalysis(matchId, { since, promptVersion: "match_news_extract_v2" }),
+    ).toEqual({ usable: null, failedOnly: false });
   });
 });
 

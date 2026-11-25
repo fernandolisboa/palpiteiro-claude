@@ -319,3 +319,37 @@ export async function getLatestUsableNewsBatchesForMatches(
   }
   return out;
 }
+
+/**
+ * O lote que a ANÁLISE lê (#672, C2): o usável mais recente visto pelo cron desde
+ * `since` e, sem nenhum usável, se o cron viu um lote que a extração não conseguiu ler
+ * (`failed`): a análise segue no caminho ao vivo e o passo diz que as notícias de hoje
+ * ainda não foram conferidas. Uma leitura só, pelo índice (match_id, checked_at).
+ */
+export async function getNewsBatchForAnalysis(
+  matchId: string,
+  opts: { since: Date; promptVersion: string },
+): Promise<{ usable: StoredNewsBatch | null; failedOnly: boolean }> {
+  const rows = await db
+    .select()
+    .from(matchNewsBatches)
+    .where(
+      and(
+        eq(matchNewsBatches.matchId, matchId),
+        eq(matchNewsBatches.promptVersion, opts.promptVersion),
+        gte(matchNewsBatches.checkedAt, opts.since),
+      ),
+    )
+    .orderBy(desc(matchNewsBatches.checkedAt), desc(matchNewsBatches.createdAt))
+    .limit(5);
+  // A mesma regra de `usable` (acima): ok ou empty, e empty com adversário fora da
+  // tabela não prova "nada novo".
+  const isUsable = (r: BatchRow) =>
+    r.status === "ok" || (r.status === "empty" && !r.unknownOpponent);
+  for (const row of rows) {
+    if (!isUsable(row)) continue;
+    const parsed = parseBatch(row);
+    if (parsed) return { usable: parsed, failedOnly: false };
+  }
+  return { usable: null, failedOnly: rows.some((r) => r.status === "failed") };
+}

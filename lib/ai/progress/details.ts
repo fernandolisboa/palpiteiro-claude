@@ -14,6 +14,12 @@ import type {
   NormalizedStanding,
 } from "@/lib/providers/sports-data/types";
 import type { ModelScoreline } from "@/lib/quant/match-model";
+import { newsFactorOrigins } from "@/lib/match-news/apply";
+import { newsFactorPhrase } from "@/lib/match-news/labels";
+import type { MatchModelNews } from "@/lib/match-news/types";
+import { claimEffect } from "@/lib/user-palpite/evidence";
+
+import { STEP_NOTES, newsBatchTimeLabel, newsFactorsLabel } from "./steps";
 
 type Teams = { home: string; away: string };
 
@@ -172,6 +178,95 @@ export function newsDetail(
       ? `${noun(n)} ${n === 1 ? "usada" : "usadas"} no palpite`
       : `${noun(n)} ${NEWS_SOURCE_PHRASE[key]}`,
   );
+}
+
+const NEWS_ORIGIN_DETAIL = {
+  confirmed: "confirmado pelos nossos dados",
+  unverified: "não conferido com os nossos dados",
+} as const;
+
+const pickPlural = (n: number, one: string, many: string) => (n === 1 ? one : many);
+
+/**
+ * O que as notícias guardadas fizeram no número (#672, PLAN-672 §8.1), em linhas do
+ * código: cada fator movido ("Desfalque na defesa do Flamengo, segundo o ge (não
+ * conferido com os nossos dados)"), as notícias que o modelo já considerava, as
+ * contraditas e as notas sem efeito. Nunca a frase da matéria nem nome de jogador.
+ */
+export function newsFactorsDetail(
+  news: Pick<MatchModelNews, "claims" | "notes">,
+  jev: JudgmentAnswers | null,
+  teams: Teams,
+): string[] {
+  const lines: string[] = [];
+  const origins = newsFactorOrigins(news.claims, jev);
+  for (const [id, strength] of Object.entries(origins)) {
+    if (!strength) continue;
+    lines.push(
+      `${newsFactorPhrase(id as keyof typeof origins, teams)}, segundo o ge (${NEWS_ORIGIN_DETAIL[strength]})`,
+    );
+  }
+  const movedRefs = new Set<string>();
+  const consideredRefs = new Set<string>();
+  const contradictedRefs = new Set<string>();
+  for (const c of news.claims) {
+    const effect = claimEffect(c, jev);
+    if (effect.moved.length > 0) for (const r of c.sources) movedRefs.add(r);
+    else if (c.status === "contradicted") for (const r of c.sources) contradictedRefs.add(r);
+    else if (effect.alreadyConsidered) for (const r of c.sources) consideredRefs.add(r);
+  }
+  const considered = [...consideredRefs].filter((r) => !movedRefs.has(r)).length;
+  const contradicted = [...contradictedRefs].filter(
+    (r) => !movedRefs.has(r) && !consideredRefs.has(r),
+  ).length;
+  if (considered > 0) {
+    lines.push(
+      `${considered} ${pickPlural(considered, "notícia confirmou", "notícias confirmaram")} o que o modelo já considerava`,
+    );
+  }
+  if (contradicted > 0) {
+    lines.push(
+      `${contradicted} ${pickPlural(contradicted, "notícia contradita pelos nossos dados ficou", "notícias contraditas pelos nossos dados ficaram")} de fora`,
+    );
+  }
+  for (const note of news.notes) {
+    lines.push(`${note.charAt(0).toUpperCase()}${note.slice(1)}, sem efeito nos números`);
+  }
+  return lines;
+}
+
+/**
+ * O passo de notícias do caminho GUARDADO (#672): rótulo e linhas. `applied` = a notícia
+ * aplicada neste run (predict code_jev); null = só texto (sem a parte "· K viraram
+ * fator"). `itemsRead` = notícias do lote na janela.
+ */
+export function storedNewsStep(args: {
+  status: "ok" | "empty";
+  itemsRead: number;
+  checkedAt: Date;
+  applied: {
+    news: MatchModelNews;
+    jev: JudgmentAnswers | null;
+    factorItems: number;
+    teams: Teams;
+  } | null;
+  now: Date;
+}): { label: string; detail: string[] } {
+  const when = `Notícias do ge conferidas pela última vez ${newsBatchTimeLabel(args.checkedAt, args.now)}`;
+  if (args.status === "empty" || args.itemsRead === 0) {
+    return { label: STEP_NOTES.newsNoneGe, detail: [when] };
+  }
+  return {
+    label: newsFactorsLabel({
+      itemsRead: args.itemsRead,
+      factors: args.applied ? args.applied.factorItems : null,
+      at: args.checkedAt,
+      now: args.now,
+    }),
+    detail: args.applied
+      ? newsFactorsDetail(args.applied.news, args.applied.jev, args.applied.teams)
+      : [],
+  };
 }
 
 type AnalysisLine = {
