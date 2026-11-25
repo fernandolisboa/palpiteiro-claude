@@ -2,7 +2,8 @@ import type { JudgmentMultipliers } from "@/lib/ai/judgments/apply";
 import type { LineupChangeBucket } from "@/lib/ai/judgments/lineup-vocabulary";
 import type { JudgmentAnswers } from "@/lib/ai/judgments/types";
 import type { DixonColesFallbackReason } from "@/lib/quant/match-model";
-import type { PredictionUserContext, UserEvidence } from "@/lib/user-palpite/types";
+import type { MatchModelNews } from "@/lib/match-news/types";
+import type { PredictionUserContext } from "@/lib/user-palpite/types";
 
 export type PredictionLineupSide = {
   changes: LineupChangeBucket | null;
@@ -110,7 +111,10 @@ export type PredictionJudgments = {
   // jogador, e a evidência que entrou no combine. Ausente nas rows sem contexto e nas
   // anteriores.
   userContext?: PredictionUserContext;
-  // Notícias do jogo aplicadas por MÁXIMO depois do JEV (#672). Só o que os leitores
-  // precisam (modelAnswersOf); a análise passa a gravar na C2. Ausente sem notícia.
-  news?: { evidence: UserEvidence };
+  // Notícias guardadas do jogo aplicadas por MÁXIMO depois do JEV (#672): o mesmo
+  // registro da base (lote, N lidas, afirmações conferidas sem texto livre nem nome,
+  // fontes citadas, evidência, fatores movidos, notas, versões). `answers`/`applied`
+  // seguem SÓ do JEV; quem refaz o λ usa modelAnswersOf. Ausente sem notícia aplicada
+  // (e na reconferência de escalação, que não lê notícia).
+  news?: MatchModelNews;
 };

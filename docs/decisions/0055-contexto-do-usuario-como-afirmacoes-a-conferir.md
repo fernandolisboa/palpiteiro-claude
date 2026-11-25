@@ -12,6 +12,9 @@ Accepted (2026-10-13). Fase 3 da proposta "pré-previsão, bet slip e análise d
 > (`user_palpite_extract_v2`) e chega ao narrador da análise como linha do código, sem
 > efeito no número. Ver a seção "Emenda (#569)" no fim.
 >
+> **Adendo (#672, 2026-11-25):** as notícias do ge guardadas pela base passam pela MESMA
+> conferência e entram no número como terceira fonte. Ver a seção "Adendo (#672)" no fim.
+>
 > **Emenda (ADR 0060, 2026-10-15):** o bloco existe durante o jogo. A leitura pelos botões
 > refaz a matriz em jogo no cliente; "Analisar meu palpite" usa a base do apito e aplica a
 > transformação em jogo depois da evidência do usuário. Ver [ADR 0060](./0060-modo-ao-vivo-estado-do-jogo-modelo-em-jogo-registros-marcados.md).
@@ -137,3 +140,46 @@ Plano: `docs/plans/PLAN-569.md`.
 - **"Seu palpite".** Mesma extração (v2); a tela mostra o subtipo como tópico. O narrador do
   palpite não muda (`user_palpite_narrate_v1`/`_live_v1` byte-idênticos): ele já recebe a
   paráfrase cercada.
+
+## Adendo (#672): notícias do ge como terceira fonte
+
+Plano: `docs/plans/PLAN-672.md` (a seção "Ajustes pós-review" vale sobre o resto). A C1
+(#682) levou as notícias à base do modelo; este adendo registra o que a análise com IA
+(C2) passa a fazer.
+
+- **A mesma conferência.** As afirmações que a extração tira das notícias do ge
+  (`match_news_extract_v1`) são `Claim`s como as do usuário e passam pelo mesmo
+  `checkClaims` + `evidenceFromClaims` (`lib/match-news/apply.ts`, `news_evidence_v1`).
+  Nenhuma regra de conferência nova: "confirmado pelos nossos dados" e "não conferido"
+  valem igual, e a afirmação contradita fica de fora.
+- **MAX das três fontes.** O que o número aplica é JEV ∨ notícia ∨ usuário, combinado por
+  MAX (`combineAnswers`). `judgments.answers` continua SÓ do JEV (reuso, gate do JEV,
+  `jevSignals` do azarão); a notícia mora em `judgments.news` e o usuário em
+  `judgments.userContext`. `modelAnswersOf(judgments)` = JEV ∨ notícia é o "o que o modelo
+  já tinha" para todo leitor.
+- **Baseline do usuário = JEV ∨ notícia.** `applyUserClaims` mede o "moveu?" e combina
+  contra esse baseline: o fator que a notícia já moveu não conta como do usuário (sem tag
+  `user=`, sem "informado por você"). O peso da confirmada continua decidido só pelo JEV
+  (com JEV presente, confirmada não sobe).
+- **Só nas condições da base.** A notícia só vira fator na análise com
+  `enable_news_factors`, o JEV da base ligado e a chave da TypeSafe presente; fora disso o
+  lote só vira texto. Mesma regra, mesmo lote: o predict lê o lote usável mais novo
+  (12 h, memo por jogo) e aplica com a mesma função da base.
+- **Escalação publicada.** Com o XI anunciado, os sinais de `absence` e `rotation` da
+  notícia daquele lado caem (o JEV já julgou o XI), como na base.
+- **Sem notícia na reconferência de escalação.** `recheckPredictionWithLineup` segue só com
+  o JEV da escalação: a notícia não entra no filho da escalação (nem número, nem texto).
+  É de propósito (ajuste 3 do PLAN-672): o filho perde o efeito da notícia. O que a
+  notícia movia some na reconferência, inclusive o `high_stakes` que só ela sustentava
+  (a regra da escalação só derruba `absence`/`rotation`) e as notas "segundo o ge". Por
+  isso parte do antes→depois da reconferência pode vir de a notícia ter saído, não da
+  escalação.
+- **Fator e nota da notícia são frases do código.** O narrador (`narrator_v1.6`) e a
+  síntese (`palpites_v15`) recebem o fator com a origem "(segundo o ge, não conferido)" /
+  "(segundo o ge, confirmado pelos nossos dados)" e as notas sem efeito num bloco próprio
+  (só quando há; sem notícia, as mensagens são byte a byte as da v1.5/v14). O narrador e o
+  advogado do azarão nunca recebem texto da matéria (o advogado ganha uma linha F# do
+  código, sem título). A síntese continua com os itens das notícias cercados, como no
+  #670, agora os do lote e sem os de título inseguro (nome de casa de aposta ou linguagem
+  de valor). Na tela, o título só aparece no link do sinal do azarão, com o mesmo filtro.
+

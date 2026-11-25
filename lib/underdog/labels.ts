@@ -1,3 +1,5 @@
+import { newsFactorPhraseFor } from "@/lib/match-news/labels";
+
 import type {
   FormResult,
   JevSignalFactor,
@@ -50,11 +52,50 @@ export function signalLabel(s: UnderdogSignal, n: UnderdogNames): string {
       return `${n.favorite} com ${s.favorite} na lista de desfalques`;
     case "jev":
       return JEV_LABEL[s.factor](n);
+    case "news":
+      return newsSignalLabel(s, n);
   }
 }
 
-export const signalOrigin = (s: UnderdogSignal): "dados" | "modelo" =>
-  s.kind === "jev" ? "modelo" : "dados";
+/**
+ * Rótulo do sinal de notícia: a frase do código e "segundo o ge", com "(não conferido)"
+ * quando os nossos dados não confirmam (como no narrador e na síntese). `extra` entra no
+ * mesmo parêntese (o template do azarão acrescenta "já está na chance").
+ */
+export function newsSignalLabel(
+  s: Extract<UnderdogSignal, { kind: "news" }>,
+  n: UnderdogNames,
+  extra: readonly string[] = []
+): string {
+  const phrase = newsFactorPhraseFor(
+    s.factor,
+    s.factor === "high_stakes" ? n.underdog : n.favorite
+  );
+  const notes = [...(s.strength === "unverified" ? ["não conferido"] : []), ...extra];
+  return `${phrase}, segundo o ge${notes.length > 0 ? ` (${notes.join(", ")})` : ""}`;
+}
+
+export type SignalOrigin = "dados" | "modelo" | "notícia";
+
+export const signalOrigin = (s: UnderdogSignal): SignalOrigin =>
+  s.kind === "jev" ? "modelo" : s.kind === "news" ? "notícia" : "dados";
+
+/**
+ * A linha do sinal de notícia no bloco de fatos da IA (#672): só a frase do código, com a
+ * conferência, NUNCA o título da matéria (texto de terceiro não vai ao advogado).
+ */
+export function newsSignalFactLine(
+  s: Extract<UnderdogSignal, { kind: "news" }>,
+  n: UnderdogNames
+): string {
+  const check =
+    s.strength === "confirmed" ? "confirmado pelos nossos dados" : "não conferido";
+  const phrase = newsFactorPhraseFor(
+    s.factor,
+    s.factor === "high_stakes" ? n.underdog : n.favorite
+  );
+  return `Segundo o ge, ${check}: ${phrase.charAt(0).toLowerCase()}${phrase.slice(1)}`;
+}
 
 /** "1 jogo em cada N": só entre 5% e 50%, senão o arredondamento engana. */
 export function oneInN(pct: number): number | null {

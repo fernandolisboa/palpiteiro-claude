@@ -97,6 +97,8 @@ vi.mock("@/lib/db/queries/ai-config", () => ({
   getGenerationParams: (...args: unknown[]) => getGenerationParams(...args),
   getEnableFidelityValidation: (...args: unknown[]) =>
     getEnableFidelityValidation(...args),
+  // Lote guardado das notícias (#672) desligado: o caminho ao vivo de sempre.
+  getEnableNewsFactors: async () => false,
 }));
 
 // Seam de provider (ADR 0027): mockamos getProviderForModel → runAnalysis capturado.
@@ -957,9 +959,9 @@ describe("generatePalpites — palpite decidido em código (#668)", () => {
 
     const aiCallRow = insertValues.mock.calls[0][0] as Record<string, unknown>;
     expect(aiCallRow.status).toBe("ok");
-    expect(aiCallRow.promptVersion).toBe("palpites_v14");
+    expect(aiCallRow.promptVersion).toBe("palpites_v15");
     const setRow = insertValues.mock.calls[1][0] as SetRow;
-    expect(setRow.promptVersion).toBe("palpites_v14");
+    expect(setRow.promptVersion).toBe("palpites_v15");
     expect(setRow.headline.verdict).toBe("Vai dar Fluminense");
     expect(setRow.headline.confidenceSource).toBe("market");
     expect(setRow.headline.pick.source).toBe("market");
@@ -1018,7 +1020,7 @@ describe("generatePalpites — palpite decidido em código (#668)", () => {
     expect(insertValues).toHaveBeenCalledTimes(3);
     const errRow = insertValues.mock.calls[0][0] as Record<string, unknown>;
     expect(errRow.status).toBe("invalid_output");
-    expect(errRow.promptVersion).toBe("palpites_v14");
+    expect(errRow.promptVersion).toBe("palpites_v15");
     const setRow = insertValues.mock.calls[1][0] as SetRow;
     // O set aponta pra row de erro (status real), com o texto de template.
     expect(setRow.aiCallId).toBe("row-1");

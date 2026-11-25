@@ -23,6 +23,8 @@ import {
 } from "./retry";
 import { NarratorOutputSchema, type NarratorOutput } from "./schemas";
 import type {
+  FactorOrigin,
+  FactorOrigins,
   NarratorContext,
   NarratorDecision,
   NarratorMarketSelection,
@@ -65,6 +67,8 @@ export {
   zodRejectionFeedback,
 };
 export type {
+  FactorOrigin,
+  FactorOrigins,
   NarrationRejection,
   NarratorContext,
   NarratorDecision,

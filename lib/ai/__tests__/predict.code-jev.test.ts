@@ -266,6 +266,14 @@ vi.mock("@/lib/ai/user-palpite/extract", async (importOriginal) => ({
   extractPalpiteClaims: (...args: unknown[]) => extractPalpiteClaims(...args),
 }));
 
+// Lote guardado das notícias (#672, C2): o predict o carrega sozinho quando a action não
+// o passa. Default = sem lote (o caminho de antes); os testes das notícias passam o lote.
+const loadStoredMatchNews = vi.fn();
+vi.mock("@/lib/match-news/stored", async (importOriginal) => ({
+  ...(await importOriginal<typeof import("@/lib/match-news/stored")>()),
+  loadStoredMatchNews: (...args: unknown[]) => loadStoredMatchNews(...args),
+}));
+
 import { resetAnalysisEngineMemo } from "@/lib/ai/engine/analysis-engine-flag";
 import { resetDixonColesFlagMemo } from "@/lib/ratings/model-scoreline";
 import { runCodeJevEngine } from "@/lib/ai/engine/code-jev";
@@ -295,6 +303,9 @@ import {
 import type { ExtractResult } from "@/lib/ai/user-palpite/extract";
 import { combineAnswers } from "@/lib/user-palpite/evidence";
 import type { Claim } from "@/lib/user-palpite/types";
+import { NEWS_EVIDENCE_VERSION } from "@/lib/match-news/apply";
+import type { StoredMatchNews } from "@/lib/match-news/stored";
+import type { NewsClaim } from "@/lib/match-news/types";
 
 // ─── Fixtures ────────────────────────────────────────────────────────────────
 
@@ -490,6 +501,7 @@ beforeEach(() => {
   snapshotStore = [];
   insertSeq = 0;
   setHappyPath();
+  loadStoredMatchNews.mockResolvedValue({ stored: null, notChecked: false });
 });
 
 afterEach(() => {
@@ -2032,7 +2044,7 @@ describe("best bet no motor code_jev (#512): 1 JEV, mercados em código, 1 narra
 
   it("todos os mercados decididos da MESMA matriz; só o do topo é narrado; os outros templados com a narração do run", async () => {
     const acquireSlot = vi.fn(async () => ({ ok: true }));
-    const out = await runCodeJevFanOut(
+    const { outcomes: out } = await runCodeJevFanOut(
       base,
       markets("over_under", "match_result", "btts"),
       mapError,
@@ -2118,7 +2130,7 @@ describe("best bet no motor code_jev (#512): 1 JEV, mercados em código, 1 narra
 
   it("narração servida por outra versão: TODOS os mercados do run gravam o id que serviu", async () => {
     const spy = serveAs(ADOPTED_SONNET);
-    const out = await runCodeJevFanOut(
+    const { outcomes: out } = await runCodeJevFanOut(
       base,
       markets("over_under", "match_result", "btts"),
       mapError,
@@ -2174,7 +2186,7 @@ describe("best bet no motor code_jev (#512): 1 JEV, mercados em código, 1 narra
       .mockResolvedValueOnce({ ok: true })
       .mockResolvedValue({ ok: false });
 
-    const out = await runCodeJevFanOut(
+    const { outcomes: out } = await runCodeJevFanOut(
       base,
       markets("over_under", "btts"),
       mapError,
@@ -2205,7 +2217,7 @@ describe("best bet no motor code_jev (#512): 1 JEV, mercados em código, 1 narra
     );
     const acquireSlot = vi.fn(async () => ({ ok: true }));
 
-    const out = await runCodeJevFanOut(
+    const { outcomes: out } = await runCodeJevFanOut(
       base,
       markets("over_under", "match_result", "btts"),
       mapError,
@@ -2239,9 +2251,9 @@ describe("best bet no motor code_jev (#512): 1 JEV, mercados em código, 1 narra
       }
     });
     const events: ProgressEvent[] = [];
-    let out: Awaited<ReturnType<typeof runCodeJevFanOut>>;
+    let out: Awaited<ReturnType<typeof runCodeJevFanOut>>["outcomes"];
     try {
-      out = await withRunProgress(
+      ({ outcomes: out } = await withRunProgress(
         (e) => events.push(e),
         () =>
           runCodeJevFanOut(
@@ -2250,7 +2262,7 @@ describe("best bet no motor code_jev (#512): 1 JEV, mercados em código, 1 narra
             mapError,
             vi.fn(async () => ({ ok: true }))
           )
-      );
+      ));
     } finally {
       // clearAllMocks do beforeEach não desfaz a implementação.
       insertValues.mockReset();
@@ -2281,7 +2293,7 @@ describe("best bet no motor code_jev (#512): 1 JEV, mercados em código, 1 narra
     );
     const acquireSlot = vi.fn(async () => ({ ok: true }));
 
-    const out = await runCodeJevFanOut(
+    const { outcomes: out } = await runCodeJevFanOut(
       base,
       markets("over_under", "match_result", "btts"),
       mapError,
@@ -2318,7 +2330,7 @@ describe("best bet no motor code_jev (#512): 1 JEV, mercados em código, 1 narra
 
     // Opus 5.5 (deliberate) precisa de ≥120s pra começar; restam 100s. As decisões em
     // código ainda cabem (piso de 20s do orquestrador).
-    const out = await runCodeJevFanOut(
+    const { outcomes: out } = await runCodeJevFanOut(
       { ...base, modelOverride: "claude-opus-5-5" },
       markets("over_under", "match_result", "btts"),
       mapError,
@@ -2415,7 +2427,7 @@ describe("best bet code_jev (#512) — JEV/matriz fixados, multi-linha e a view"
       ],
     });
 
-    const out = await runCodeJevFanOut(
+    const { outcomes: out } = await runCodeJevFanOut(
       base,
       [
         { marketKey: "match_result", extraLines: false },
@@ -2452,7 +2464,7 @@ describe("best bet code_jev (#512) — JEV/matriz fixados, multi-linha e a view"
       away: { attack: 1.0, defence: 1.1, matches: 60 },
     });
 
-    const out = await runCodeJevFanOut(
+    const { outcomes: out } = await runCodeJevFanOut(
       base,
       [
         { marketKey: "match_result", extraLines: false },
@@ -2476,7 +2488,7 @@ describe("best bet code_jev (#512) — JEV/matriz fixados, multi-linha e a view"
   });
 
   it("over/under com linhas extras entra no grupo: linha da escada decidida em código, 1 narração", async () => {
-    const out = await runCodeJevFanOut(
+    const { outcomes: out } = await runCodeJevFanOut(
       base,
       [
         { marketKey: "over_under", extraLines: true },
@@ -2504,7 +2516,7 @@ describe("best bet code_jev (#512) — JEV/matriz fixados, multi-linha e a view"
   });
 
   it("o topo de toBestBetView (a view real) é o mercado narrado", async () => {
-    const out = await runCodeJevFanOut(
+    const { outcomes: out } = await runCodeJevFanOut(
       base,
       [
         { marketKey: "btts", extraLines: false },
@@ -2770,7 +2782,7 @@ describe("contexto do usuário (#565)", () => {
       key_factors: ["Tabela", "Forma recente"],
     };
     const userContextP = extraction([ATTACK_HOME]);
-    const out = await runCodeJevFanOut(
+    const { outcomes: out } = await runCodeJevFanOut(
       { matchId: "m-1", userId: "u-1", isAdmin: true, userContextP },
       ["over_under", "match_result", "btts"].map((marketKey) => ({
         marketKey,
@@ -3050,5 +3062,299 @@ describe("progresso ao vivo (ADR 0064)", () => {
       marketKey: "match_result",
     });
     expect(result.prediction).toBeDefined();
+  });
+});
+
+describe("notícias guardadas do ge (#672, C2)", () => {
+  // Agora = 2026-05-12T00:00Z (beforeEach). Matéria de 3h atrás; a de 100h fica fora.
+  const HOUR = 3_600_000;
+  const at = (hoursAgo: number) =>
+    new Date(Date.parse("2026-05-12T00:00:00.000Z") - hoursAgo * HOUR);
+  const TITLE = "Flamengo perde o centroavante para o clássico";
+  // Desfalque no ataque do mandante, com nome: não está na nossa lista (vazia) → não
+  // conferido (0,7), acima do JEV (0,2).
+  const ATTACK_HOME_NEWS: NewsClaim = {
+    team: "home",
+    topic: "absence",
+    text: "o centroavante titular está fora",
+    players: ["Pedro Guilherme"],
+    role: "attack",
+    sources: ["N1"],
+  };
+
+  function storedNews(
+    over: { claims?: NewsClaim[]; factorsEnabled?: boolean; status?: "ok" | "empty" } = {}
+  ): StoredMatchNews {
+    return {
+      batch: {
+        id: "batch-1",
+        matchId: "m-1",
+        batchHash: "h",
+        promptVersion: "match_news_extract_v1",
+        items: [
+          {
+            ref: "N1",
+            newsId: "n-1",
+            url: "https://ge.globo.com/futebol/times/flamengo/noticia/1.ghtml",
+            title: TITLE,
+            publishedAt: at(3).toISOString(),
+          },
+          {
+            ref: "N2",
+            newsId: "n-2",
+            url: "https://ge.globo.com/futebol/times/flamengo/noticia/2.ghtml",
+            title: "Matéria velha",
+            publishedAt: at(100).toISOString(),
+          },
+        ],
+        status: over.status ?? "ok",
+        claims: over.claims ?? [ATTACK_HOME_NEWS],
+        warnings: [],
+        attempts: 1,
+        partial: false,
+        unknownOpponent: false,
+        aiCallId: "ai-news",
+        createdAt: at(2),
+        checkedAt: at(1),
+        usableAt: at(2),
+      },
+      results: [],
+      factorsEnabled: over.factorsEnabled ?? true,
+    };
+  }
+
+  const run = (
+    news?: StoredMatchNews | null,
+    extra: Partial<Parameters<typeof predict>[0]> = {}
+  ) =>
+    predict({
+      matchId: "m-1",
+      userId: "u-1",
+      isAdmin: true,
+      marketKey: "match_result",
+      ...(news !== undefined ? { news } : {}),
+      ...extra,
+    });
+
+  const onlyPrediction = () => {
+    const [prediction] = rowsWhere((r) => "recommendation" in r);
+    return prediction;
+  };
+  const narratorMessage = () =>
+    JSON.stringify((anthropicCreate.mock.calls[0][0] as { messages: unknown }).messages);
+
+  it("(a) notícia move o λ; answers só do JEV; judgments.news; tag news=; origem no narrador, sem título nem nome", async () => {
+    await run(storedNews());
+
+    const prediction = onlyPrediction();
+    const j = prediction.judgments as PredictionJudgments;
+    const withNews = expectedEngine(combineAnswers(JEV_ANSWERS, { attack_weakened_home: 0.7 }));
+    expect(j.answers).toEqual(JEV_ANSWERS);
+    expect(j.lambda.adjusted.home).toBeCloseTo(withNews.judgments.lambdaHome, 10);
+    expect(j.news).toMatchObject({
+      batchId: "batch-1",
+      itemsRead: 1,
+      evidence: { attack_weakened_home: 0.7 },
+      moved: ["attack_weakened_home"],
+      versions: { newsEvidence: NEWS_EVIDENCE_VERSION },
+    });
+    const storedJson = JSON.stringify(j.news);
+    expect(storedJson).not.toContain("Pedro");
+    expect(storedJson).not.toContain("está fora");
+    expect(prediction.modelVersion).toBe(
+      "claude-sonnet-5-5;engine=code_jev;lambda=heuristic;judg=jev_judgments_v3;w=judgment_weights_v1;news=news_evidence_v1"
+    );
+    expect(prediction.promptVersion).toBe("narrator_v1.6");
+    const message = narratorMessage();
+    expect(message).toContain(
+      "ataque do CR Flamengo ajustado para baixo) (segundo o ge, não conferido)"
+    );
+    expect(message).not.toContain(TITLE);
+    expect(message).not.toContain("Pedro");
+    expect(message).not.toContain("ge.globo.com");
+    // A notícia não reabre o "Seu palpite": o lote passado não é relido.
+    expect(loadStoredMatchNews).not.toHaveBeenCalled();
+  });
+
+  it("(b) sem as condições da base (JEV ou chave): judgments.news ausente, números e tag do JEV", async () => {
+    await run(storedNews({ factorsEnabled: false }));
+    const prediction = onlyPrediction();
+    const j = prediction.judgments as PredictionJudgments;
+    const without = expectedEngine(JEV_ANSWERS);
+    expect(j).not.toHaveProperty("news");
+    expect(j.lambda.adjusted.home).toBe(without.judgments.lambdaHome);
+    expect(prediction.modelVersion).not.toContain(";news=");
+  });
+
+  it("(c) notícia que o JEV já considerava: guardada, sem tag nem origem", async () => {
+    judge.mockResolvedValue(
+      jevResult(answers({ attack_weakened_away: 0.9, attack_weakened_home: 0.8 }))
+    );
+    await run(storedNews());
+    const prediction = onlyPrediction();
+    const j = prediction.judgments as PredictionJudgments;
+    expect(j.news?.moved).toEqual([]);
+    expect(prediction.modelVersion).not.toContain(";news=");
+    expect(narratorMessage()).not.toContain("segundo o ge");
+  });
+
+  it("(d) contexto do usuário sobre a notícia: o mesmo fator já movido não é do usuário", async () => {
+    await run(storedNews(), {
+      userContextP: Promise.resolve({
+        ok: true as const,
+        claims: [{ team: "home", topic: "absence", text: "sem o centroavante", role: "attack" } as Claim],
+        warnings: [],
+        aiCallId: "ai-extract",
+      }),
+    });
+    const prediction = onlyPrediction();
+    const j = prediction.judgments as PredictionJudgments;
+    expect(j.answers).toEqual(JEV_ANSWERS);
+    expect(j.userContext?.claims).toHaveLength(1);
+    expect(prediction.modelVersion).toMatch(/;news=news_evidence_v1$/);
+    expect(prediction.modelVersion).not.toContain(";user=");
+    expect(narratorMessage()).toContain("(segundo o ge, não conferido)");
+    expect(narratorMessage()).not.toContain("informado por você");
+  });
+
+  it("(e) sem o lote na chamada, o predict carrega o do jogo (memo); null explícito não carrega", async () => {
+    loadStoredMatchNews.mockResolvedValue({ stored: storedNews(), notChecked: false });
+    await run();
+    expect(loadStoredMatchNews).toHaveBeenCalledWith({ id: "m-1", kickoffAt: matchRow.kickoffAt });
+    expect((onlyPrediction().judgments as PredictionJudgments).news?.batchId).toBe("batch-1");
+    loadStoredMatchNews.mockClear();
+    insertValues.mockClear();
+    predictionStore = [];
+    await run(null);
+    expect(loadStoredMatchNews).not.toHaveBeenCalled();
+    expect(onlyPrediction().judgments).not.toHaveProperty("news");
+  });
+
+  it("(f) reuso do JEV de uma predição com notícia: answers só do JEV; sem lote, λ só do JEV", async () => {
+    await run(storedNews());
+    insertValues.mockClear();
+    await run(null);
+    expect(judge).toHaveBeenCalledTimes(1);
+    const j = onlyPrediction().judgments as PredictionJudgments;
+    expect(j.reusedFromPredictionId).not.toBeNull();
+    expect(j.answers).toEqual(JEV_ANSWERS);
+    expect(j).not.toHaveProperty("news");
+    expect(j.lambda.adjusted.home).toBe(expectedEngine(JEV_ANSWERS).judgments.lambdaHome);
+  });
+
+  it("(g) reuso da base com notícia (#555): answers só do JEV, a notícia reaplicada por cima", async () => {
+    await run(null);
+    const hash = predictionStore[0].judgments.stateHash;
+    predictionStore = [];
+    judge.mockClear();
+    insertValues.mockClear();
+    snapshotStore = [
+      {
+        id: "snap-1",
+        matchId: "m-1",
+        checkedAt: new Date(),
+        judgments: {
+          applied: true,
+          answers: JEV_ANSWERS,
+          stateHash: hash,
+          aiCallId: "call-cron",
+          reusedFromPredictionId: null,
+          reusedFromModelSnapshotId: null,
+          versions: {
+            judgments: "jev_judgments_v3",
+            weights: "judgment_weights_v1",
+            jevModel: "jev-1.13.0",
+            jevModelServed: "jev-1.13.0",
+          },
+          // A base guardou a notícia dela (judgments.news): nunca entra em answers.
+          news: { evidence: { attack_weakened_home: 0.85 } },
+        } as StoredSnapshot["judgments"],
+      },
+    ];
+    await run(storedNews());
+    expect(judge).not.toHaveBeenCalled();
+    const j = onlyPrediction().judgments as PredictionJudgments;
+    expect(j.reusedFromModelSnapshotId).toBe("snap-1");
+    expect(j.answers).toEqual(JEV_ANSWERS);
+    expect(j.news?.evidence).toEqual({ attack_weakened_home: 0.7 });
+  });
+
+  it("(h) passo de notícias: 'N lidas às HH · K viraram fator', com a linha do fator, sem título", async () => {
+    const events: ProgressEvent[] = [];
+    await withRunProgress((e) => events.push(e), () => run(storedNews()));
+    const news = events.filter((e) => e.id === "news");
+    expect(news.at(-1)).toMatchObject({
+      status: "done",
+      label: "1 notícia do ge lida às 20h00 · 1 virou fator",
+    });
+    expect(news.at(-1)?.detail).toEqual([
+      "Desfalque no ataque do CR Flamengo, segundo o ge (não conferido com os nossos dados)",
+    ]);
+    expect(JSON.stringify(events)).not.toContain(TITLE);
+  });
+
+  it("(i) STEPS.news uma vez só no best bet, serial e paralelo; o fan-out devolve a notícia aplicada", async () => {
+    getLatestFreshSelectionOddsSnapshots.mockImplementation((args: { dbMarketKey: string }) =>
+      Promise.resolve(
+        freshSnapshot(
+          args.dbMarketKey === "over_under"
+            ? { over: 1.9, under: 1.95 }
+            : args.dbMarketKey === "btts"
+              ? { yes: 1.85, no: 1.95 }
+              : ODDS
+        )
+      )
+    );
+    resolveMarketCatalog.mockImplementation((key: string) =>
+      Promise.resolve(
+        catalogFor(
+          key === "over_under" ? ["over", "under"] : key === "btts" ? ["yes", "no"] : ["home", "draw", "away"]
+        )
+      )
+    );
+    for (const parallel of [false, true]) {
+      insertValues.mockClear();
+      predictionStore = [];
+      const events: ProgressEvent[] = [];
+      const result = await withRunProgress(
+        (e) => events.push(e),
+        () =>
+          runCodeJevFanOut(
+            { matchId: "m-1", userId: "u-1", isAdmin: true, news: storedNews() },
+            ["over_under", "match_result", "btts"].map((marketKey) => ({ marketKey, extraLines: false })),
+            (e) => String(e),
+            async () => ({ ok: true }),
+            { parallel }
+          )
+      );
+      expect(result.outcomes.every((o) => o.ok)).toBe(true);
+      expect(result.news?.applied?.moved).toEqual(["attack_weakened_home"]);
+      expect(events.filter((e) => e.id === "news" && e.status === "active")).toHaveLength(1);
+      expect(events.filter((e) => e.id === "news" && e.status !== "active")).toHaveLength(1);
+      const js = rowsWhere((r) => "recommendation" in r).map((r) => r.judgments as PredictionJudgments);
+      expect(js).toHaveLength(3);
+      for (const j of js) {
+        expect(j.news).toEqual(js[0].news);
+        expect(j.answers).toEqual(JEV_ANSWERS);
+      }
+    }
+  });
+
+  it("(j) code_jev que cai antes do bloco 5.6 (λ indisponível): o fan-out devolve news null", async () => {
+    getStandings.mockResolvedValue(undefined);
+    const events: ProgressEvent[] = [];
+    const result = await withRunProgress(
+      (e) => events.push(e),
+      () =>
+        runCodeJevFanOut(
+          { matchId: "m-1", userId: "u-1", isAdmin: true, news: storedNews() },
+          [{ marketKey: "match_result", extraLines: false }],
+          (e) => String(e),
+          async () => ({ ok: true })
+        )
+    );
+    expect(result.news).toBeNull();
+    // Quem emite o passo nesse caso é a action (noteStoredNewsStep).
+    expect(events.filter((e) => e.id === "news")).toEqual([]);
   });
 });

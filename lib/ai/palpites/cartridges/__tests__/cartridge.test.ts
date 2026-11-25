@@ -227,10 +227,10 @@ describe("SUBMIT_PALPITE_TOOL", () => {
       SUBMIT_PALPITE_TOOL.input_schema,
     );
   });
-  it("o fallback sem fonte de λ (#668) é o v13 (notícias com trecho e desfecho da busca, #670); a versão corrente é a v14", () => {
+  it("o fallback sem fonte de λ (#668) é o v13 (notícias com trecho e desfecho da busca, #670); a versão corrente é a v15", () => {
     expect(PALPITES_LLM_PICK_VERSION).toBe("palpites_v13");
     expect(palpitesLlmPickCartridge.version).toBe("palpites_v13");
-    expect(PALPITES_VERSION).toBe("palpites_v14");
+    expect(PALPITES_VERSION).toBe("palpites_v15");
   });
   it("o tool NÃO declara campos de valor (firewall estrutural); declara firstHalfScore + firstToScore (#354) + cardsTemperature (#419)", () => {
     const props = SUBMIT_PALPITE_TOOL.input_schema.properties as Record<

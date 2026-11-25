@@ -94,6 +94,9 @@ export const STEP_NOTES = {
   newsNoneWeb: "A busca não achou notícia recente do jogo",
   newsNoSearch: "A busca de notícias não rodou desta vez",
   newsPartial: "Só deu pra ler as notícias de um dos times",
+  // Notícias guardadas (#672): o cron viu notícia nova, mas a extração não a leu. A
+  // análise segue com a busca ao vivo, que vira só texto.
+  newsNotChecked: "As notícias de hoje ainda não foram conferidas: entram só no texto",
   // Narração reprovada pela nossa conferência (#669), por tipo. "A IA não respondeu"
   // (sem resposta, erro, recusa) é o `failed` de narrationStep.
   narrationOffFormat: "O texto da IA veio fora do formato: a análise saiu com o texto padrão",
@@ -168,4 +171,50 @@ export function synthesisStep(live: boolean): StepSpec {
     failed: "O palpite não saiu desta vez",
     skipped: "Sem tempo para montar o palpite",
   };
+}
+
+// Hora do lote de notícias guardado (#672, ajuste 10: a análise vê o lote do último cron
+// da base, então o passo diz de quando é). "às 13h30" no mesmo dia, "ontem às 22h30" no
+// anterior, no fuso de Brasília.
+const NEWS_TIME = new Intl.DateTimeFormat("pt-BR", {
+  timeZone: "America/Sao_Paulo",
+  hour: "2-digit",
+  minute: "2-digit",
+  hour12: false,
+});
+const NEWS_DAY = new Intl.DateTimeFormat("en-CA", {
+  timeZone: "America/Sao_Paulo",
+  year: "numeric",
+  month: "2-digit",
+  day: "2-digit",
+});
+
+export function newsBatchTimeLabel(at: Date, now: Date): string {
+  const [hh, mm] = NEWS_TIME.format(at).split(":");
+  const time = `${hh}h${mm}`;
+  if (NEWS_DAY.format(at) === NEWS_DAY.format(now)) return `às ${time}`;
+  const yesterday = new Date(now.getTime() - 86_400_000);
+  return NEWS_DAY.format(at) === NEWS_DAY.format(yesterday)
+    ? `ontem às ${time}`
+    : `em ${NEWS_DAY.format(at).slice(8, 10)}/${NEWS_DAY.format(at).slice(5, 7)} às ${time}`;
+}
+
+/**
+ * Rótulo do passo de notícias guardadas (#672, PLAN-672 §8.1): "12 notícias do ge lidas
+ * às 13h30 · 1 virou fator". `factors` null = a notícia não podia virar fator neste run
+ * (sem a parte do "· K"). Sem notícia na janela: a frase do ge vazio de hoje.
+ */
+export function newsFactorsLabel(args: {
+  itemsRead: number;
+  factors: number | null;
+  at: Date;
+  now: Date;
+}): string {
+  const { itemsRead: n, factors: k } = args;
+  if (n === 0) return STEP_NOTES.newsNoneGe;
+  const read = `${n} ${n === 1 ? "notícia do ge lida" : "notícias do ge lidas"} ${newsBatchTimeLabel(args.at, args.now)}`;
+  if (k === null) return read;
+  const factor =
+    k === 0 ? "nenhuma virou fator" : k === 1 ? "1 virou fator" : `${k} viraram fator`;
+  return `${read} · ${factor}`;
 }

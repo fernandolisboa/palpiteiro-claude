@@ -195,7 +195,7 @@ describe("runCodeJevFanOut — contexto extra (#565)", () => {
 describe("runCodeJevFanOut — 1 narração por best bet", () => {
   it("narra SÓ o mercado do topo (maior edge); os demais persistem templados apontando pra narração", async () => {
     const acquireSlot = vi.fn(async () => ({ ok: true }));
-    const out = await runCodeJevFanOut(
+    const { outcomes: out } = await runCodeJevFanOut(
       base,
       markets("over_under", "match_result", "btts"),
       mapError,
@@ -261,7 +261,7 @@ describe("runCodeJevFanOut — 1 narração por best bet", () => {
 
   it("mercado fora do code_jev (placar exato) roda o predict de sempre, cobrando o próprio slot", async () => {
     const acquireSlot = vi.fn(async () => ({ ok: true }));
-    const out = await runCodeJevFanOut(
+    const { outcomes: out } = await runCodeJevFanOut(
       base,
       markets("over_under", "correct_score"),
       mapError,
@@ -289,7 +289,7 @@ describe("runCodeJevFanOut — 1 narração por best bet", () => {
       log.push(`predict:${args.marketKey}`);
       return resultFor(args.marketKey!, `ac-${args.marketKey}`);
     });
-    const out = await runCodeJevFanOut(
+    const { outcomes: out } = await runCodeJevFanOut(
       base,
       markets("correct_score", "over_under", "match_result"),
       mapError,
@@ -319,7 +319,7 @@ describe("runCodeJevFanOut — 1 narração por best bet", () => {
       .mockResolvedValueOnce({ ok: true })
       .mockResolvedValue({ ok: false });
 
-    const out = await runCodeJevFanOut(
+    const { outcomes: out } = await runCodeJevFanOut(
       base,
       markets("over_under", "match_result", "btts"),
       mapError,
@@ -346,7 +346,7 @@ describe("runCodeJevFanOut — 1 narração por best bet", () => {
       await opts.beforeLlmPath?.();
       return { kind: "done", result: resultFor(args.marketKey!, "ac-llm") };
     });
-    const out = await runCodeJevFanOut(
+    const { outcomes: out } = await runCodeJevFanOut(
       base,
       markets("over_under", "match_result"),
       mapError,
@@ -370,7 +370,7 @@ describe("runCodeJevFanOut — 1 narração por best bet", () => {
       .mockResolvedValueOnce({ ok: true })
       .mockResolvedValue({ ok: false });
 
-    const out = await runCodeJevFanOut(
+    const { outcomes: out } = await runCodeJevFanOut(
       base,
       markets("over_under", "match_result"),
       mapError,
@@ -394,7 +394,7 @@ describe("runCodeJevFanOut — 1 narração por best bet", () => {
 
   it("falha ao registrar a narração → nenhum pendente persiste (sem ai_call pra referenciar)", async () => {
     mockNarrate.mockRejectedValue(new Error("failed to persist ai_call"));
-    const out = await runCodeJevFanOut(
+    const { outcomes: out } = await runCodeJevFanOut(
       base,
       markets("over_under", "match_result"),
       mapError,
@@ -424,7 +424,7 @@ describe("runCodeJevFanOut — 1 narração por best bet", () => {
       if (pending.marketKey === "match_result") throw new Error("insert");
       return resultFor(pending.marketKey, args.aiCallId);
     });
-    const out = await runCodeJevFanOut(
+    const { outcomes: out } = await runCodeJevFanOut(
       base,
       markets("over_under", "match_result", "btts"),
       mapError,
@@ -450,7 +450,7 @@ describe("runCodeJevFanOut — prazo do run (#524 review)", () => {
 
   it("prazo já esgotado → nada roda, nenhum slot, todos 'Tempo esgotado'", async () => {
     const acquireSlot = vi.fn(async () => ({ ok: true }));
-    const out = await runCodeJevFanOut(
+    const { outcomes: out } = await runCodeJevFanOut(
       base,
       markets("over_under", "correct_score"),
       mapError,
@@ -489,7 +489,7 @@ describe("runCodeJevFanOut — prazo do run (#524 review)", () => {
     });
     const acquireSlot = vi.fn(async () => ({ ok: true }));
     const deadlineAt = clock + 100_000;
-    const out = await runCodeJevFanOut(
+    const { outcomes: out } = await runCodeJevFanOut(
       base,
       markets("over_under", "correct_score", "match_result"),
       mapError,
@@ -524,7 +524,7 @@ describe("runCodeJevFanOut — prazo do run (#524 review)", () => {
       servedModelId: "claude-sonnet-5-5",
     }));
     const acquireSlot = vi.fn(async () => ({ ok: true }));
-    const out = await runCodeJevFanOut(
+    const { outcomes: out } = await runCodeJevFanOut(
       base,
       markets("over_under", "match_result"),
       mapError,
@@ -572,7 +572,7 @@ describe("runCodeJevFanOut — paralelo (flag enable_parallel_fan_out)", () => {
     await vi.waitFor(() => expect(log).toContain("predict:correct_score"));
     await vi.waitFor(() => expect(log).toContain("narra:over_under"));
     narrationGate.resolve();
-    const out = await run;
+    const { outcomes: out } = await run;
 
     expect(out.map((o) => o.marketKey)).toEqual([
       "correct_score",
@@ -609,7 +609,7 @@ describe("runCodeJevFanOut — paralelo (flag enable_parallel_fan_out)", () => {
     );
     await vi.waitFor(() => expect(acquireSlot).toHaveBeenCalledTimes(1));
     narrationGate.resolve();
-    const out = await run;
+    const { outcomes: out } = await run;
 
     expect(out).toEqual([
       expect.objectContaining({ marketKey: "over_under", ok: true }),
@@ -632,7 +632,7 @@ describe("runCodeJevFanOut — erro inesperado fora do try por mercado", () => {
       kind: "pending",
       pending: { marketKey: args.marketKey } as unknown as PendingCodeJevPrediction,
     }));
-    const out = await runCodeJevFanOut(
+    const { outcomes: out } = await runCodeJevFanOut(
       base,
       markets("over_under", "correct_score"),
       mapError,

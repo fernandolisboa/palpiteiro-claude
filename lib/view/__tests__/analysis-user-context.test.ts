@@ -85,6 +85,20 @@ const row = (marketKey: string, hoursAgo: number, j: PredictionJudgments | null)
     },
   }) as never;
 
+// Notícias aplicadas (#672): só a evidência importa aqui.
+function newsWith(evidence: NonNullable<PredictionJudgments["news"]>["evidence"]) {
+  return {
+    batchId: "b1",
+    itemsRead: 1,
+    claims: [],
+    sources: [],
+    evidence,
+    moved: [],
+    notes: [],
+    versions: { extract: "match_news_extract_v1", newsEvidence: "news_evidence_v1" },
+  } satisfies NonNullable<PredictionJudgments["news"]>;
+}
+
 describe("toAnalysisUserContextView", () => {
   it("mapeia as afirmações pelo texto do código, com status, evidência e efeito", () => {
     const view = toAnalysisUserContextView(
@@ -141,7 +155,7 @@ describe("toAnalysisUserContextView", () => {
           1,
           judgments({
             userContext: CONTEXT,
-            news: { evidence: { attack_weakened_home: 0.7 } },
+            news: newsWith({ attack_weakened_home: 0.7 }),
           }),
         ),
       ],
@@ -172,7 +186,7 @@ describe("toAnalysisUserContextView", () => {
             applied: false,
             answers: null,
             userContext: confirmed,
-            news: { evidence: { attack_weakened_home: 0.7 } },
+            news: newsWith({ attack_weakened_home: 0.7 }),
           }),
         ),
       ],

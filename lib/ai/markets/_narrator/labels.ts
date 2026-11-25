@@ -13,7 +13,7 @@ import type {
 } from "@/lib/ai/judgments/types";
 
 import { KEY_FACTOR_MAX_CHARS } from "./prompt";
-import type { NarratorTeams, UserFactorOrigins } from "./types";
+import type { FactorOrigin, FactorOrigins, NarratorTeams } from "./types";
 
 // Número em PT-BR (vírgula decimal).
 export function fmtNumber(n: number, digits = 1): string {
@@ -135,20 +135,30 @@ const SIDES: readonly TeamSide[] = ["home", "away"];
 
 const STRONG_SIGNAL = 0.8;
 
-const USER_ORIGIN_LABEL: Record<"confirmed" | "unverified", string> = {
-  confirmed: "(informado por você)",
-  unverified: "(informado por você, não conferido)",
+const ORIGIN_LABEL: Record<
+  FactorOrigin["by"],
+  Record<FactorOrigin["strength"], string>
+> = {
+  user: {
+    confirmed: "(informado por você)",
+    unverified: "(informado por você, não conferido)",
+  },
+  // narrator_v1.6 / palpites_v15 (#672): notícia do ge que moveu o fator.
+  news: {
+    confirmed: "(segundo o ge, confirmado pelos nossos dados)",
+    unverified: "(segundo o ge, não conferido)",
+  },
 };
 
 // Só os fatores que de fato moveram λ (multiplicador ≠ 1, ou seja noul > 0.5). Com o
-// contexto extra (#565), `user.origins` diz quais fatores o usuário moveu: a frase
-// ganha a origem e a força ("sinal forte/moderado") vem SÓ do valor do JEV, nunca do
-// noul do usuário (sem JEV acima do neutro, a frase sai sem força).
+// contexto extra (#565) ou as notícias (#672), `origin.origins` diz quais fatores o
+// usuário ou a notícia moveu: a frase ganha a origem e a força ("sinal forte/moderado")
+// vem SÓ do valor do JEV, nunca do noul (sem JEV acima do neutro, a frase sai sem força).
 export function judgmentFactorPhrases(
   answers: JudgmentAnswers | null,
   multipliers: JudgmentMultipliers | null,
   teams: NarratorTeams,
-  user?: { jev: JudgmentAnswers | null; origins: UserFactorOrigins }
+  origin?: { jev: JudgmentAnswers | null; origins: FactorOrigins }
 ): string[] {
   if (!answers || !multipliers) return [];
   const moved = new Map<JudgmentQuestionId, number>();
@@ -167,14 +177,14 @@ export function judgmentFactorPhrases(
       const team = side === "home" ? teams.home : teams.away;
       const opponent = side === "home" ? teams.away : teams.home;
       const phrase = FACTOR_PHRASE[factor](team, opponent);
-      const origin = user?.origins[id];
-      if (!origin) {
-        phrases.push(`${phrase} — ${strengthOf(answers[id].value)}`);
+      const from = origin?.origins[id];
+      if (!from) {
+        phrases.push(capKeyFactor(`${phrase} — ${strengthOf(answers[id].value)}`));
         continue;
       }
-      const jevValue = user?.jev?.[id]?.value ?? 0;
+      const jevValue = origin?.jev?.[id]?.value ?? 0;
       const strength = jevValue > 0.5 ? ` — ${strengthOf(jevValue)}` : "";
-      phrases.push(`${phrase}${strength} ${USER_ORIGIN_LABEL[origin]}`);
+      phrases.push(withOriginLabel(`${phrase}${strength}`, ORIGIN_LABEL[from.by][from.strength]));
     }
   }
   return phrases;
@@ -272,6 +282,15 @@ function lineupNoteForTeam(
     if (phrase.length <= KEY_FACTOR_MAX_CHARS) return phrase;
   }
   return capKeyFactor(build(0));
+}
+
+// A frase é fator-chave: com nomes longos, corta o texto do fator (com reticências) e
+// mantém a origem inteira no fim, tudo dentro de KEY_FACTOR_MAX_CHARS. Nomes de tamanho
+// normal cabem e a frase sai byte a byte igual.
+function withOriginLabel(head: string, label: string): string {
+  const room = KEY_FACTOR_MAX_CHARS - label.length - 1;
+  const fitted = head.length <= room ? head : `${head.slice(0, room - 1).trimEnd()}…`;
+  return `${fitted} ${label}`;
 }
 
 /** Corta uma frase de fator-chave no limite do schema, com reticências. */

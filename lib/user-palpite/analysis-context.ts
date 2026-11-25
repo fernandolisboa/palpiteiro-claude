@@ -81,7 +81,11 @@ export function applyUserClaims(args: {
   teams: TeamNames;
   league: SupportedLeague;
   kickoffAt: Date;
+  // Respostas SÓ do JEV (null = o JEV não respondeu): decide o peso da confirmada.
   jev: JudgmentAnswers | null;
+  // O que o número já tinha antes do usuário (#672): JEV ∨ notícia. O combine e o
+  // "moveu?" medem contra ele. Ausente = só o JEV.
+  baseline?: JudgmentAnswers | null;
   extractionAiCallId: string | null;
   warnings: string[];
   extractVersion: string;
@@ -93,7 +97,9 @@ export function applyUserClaims(args: {
     league: args.league,
     kickoffAt: args.kickoffAt,
   });
-  const evidence = evidenceFromClaims(checked, { jevApplied: args.jev !== null });
+  const jevApplied = args.jev !== null;
+  const baseline = args.baseline === undefined ? args.jev : args.baseline;
+  const evidence = evidenceFromClaims(checked, { jevApplied });
   // Origem por SINAL, não pelo status da afirmação: "confirmado" só quando foi um sinal
   // de força "confirmed" (posição nossa) que moveu o fator. Desfalque confirmado na
   // nossa lista como meio-campista, com o papel dito pelo usuário, move pelo sinal
@@ -101,15 +107,18 @@ export function applyUserClaims(args: {
   const origins: UserFactorOrigins = {};
   for (const c of checked) {
     const byConfirmed = new Set(
-      claimEffect({ signals: c.signals.filter((s) => s.strength === "confirmed") }, args.jev)
-        .moved,
+      claimEffect(
+        { signals: c.signals.filter((s) => s.strength === "confirmed") },
+        baseline,
+        jevApplied,
+      ).moved,
     );
-    for (const q of claimEffect(c, args.jev).moved) {
+    for (const q of claimEffect(c, baseline, jevApplied).moved) {
       origins[q] = origins[q] === "confirmed" || byConfirmed.has(q) ? "confirmed" : "unverified";
     }
   }
   return {
-    answers: Object.keys(evidence).length > 0 ? combineAnswers(args.jev, evidence) : args.jev,
+    answers: Object.keys(evidence).length > 0 ? combineAnswers(baseline, evidence) : baseline,
     evidence,
     origins,
     moved: Object.keys(origins).length > 0,

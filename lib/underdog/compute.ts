@@ -8,7 +8,7 @@ import { p1X2 } from "@/lib/quant/scoreline-model";
 import { findUnderdog, type UnderdogPick } from "./gate";
 import { computeScenarios } from "./scenarios";
 import { underdogScorelines } from "./scorelines";
-import { jevSignals } from "./signals";
+import { jevSignals, newsSignals } from "./signals";
 import type { UnderdogFacts, UnderdogSignal } from "./types";
 
 // A base do painel do azarão (#671): a row atual da base passa pelos portões
@@ -84,7 +84,12 @@ export function computeUnderdogFacts(
       lambdaAwayBase: snapshot.lambdaAwayBase,
       answers: modelAnswers,
     }),
-    signals: [...signals, ...jevSignals(pick.side, answers)],
+    // Notícia (#672): só o fator que ELA moveu acima do JEV, nunca repete um "jev".
+    signals: [
+      ...signals,
+      ...jevSignals(pick.side, answers),
+      ...newsSignals(pick.side, snapshot.judgments?.news, answers),
+    ],
     model: {
       source: snapshot.lambdaSource,
       jevApplied: snapshot.jevStatus === "applied" && answers !== null,

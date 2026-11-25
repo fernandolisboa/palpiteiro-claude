@@ -3,8 +3,12 @@ import {
   type AnalysisEngine,
 } from "@/lib/ai/engine/analysis-engine";
 import type { JudgmentMultipliers } from "@/lib/ai/judgments/apply";
-import type { JudgmentQuestionId } from "@/lib/ai/judgments/types";
+import type { JudgmentAnswers, JudgmentQuestionId } from "@/lib/ai/judgments/types";
 import { judgmentFactorPhrases } from "@/lib/ai/markets/_narrator/labels";
+import type { FactorOrigins } from "@/lib/ai/markets/_narrator/types";
+import { newsFactorOrigins } from "@/lib/match-news/apply";
+import { modelAnswersOf } from "@/lib/match-news/model-answers";
+import { MatchModelNewsSchema, type MatchModelNews } from "@/lib/match-news/types";
 import type { PredictionWithAiCall } from "@/lib/db/queries/predictions";
 import { asStoredOdd } from "@/lib/odds/stored-odd";
 import { claimEffect } from "@/lib/user-palpite/evidence";
@@ -55,8 +59,11 @@ export type MarketAnalysisSummary = {
   // λ do motor code_jev gravado na predição (judgments.lambda) + chaves do run.
   judgmentsModel?: AnalysisJudgmentsModel | null;
   // Fatores do JEV que mexeram no λ, em frases sem número (times genéricos), sem os que
-  // o contexto extra do usuário moveu (mesma regra do racional, #565).
+  // o contexto extra do usuário moveu (mesma regra do racional, #565). Os que a notícia
+  // moveu (#672) levam a origem "(segundo o ge…)": a notícia é pública.
   factorPhrases?: string[];
+  // Notícias do ge sem efeito no número (#672), em linhas do código. Ausente = nenhuma.
+  newsNotes?: string[];
 };
 
 export type AnalysisJudgmentsModel = {
@@ -187,6 +194,7 @@ function summarizeSources(sources: AnalysisSource[]): MarketAnalysisSummary[] {
       predictionCreatedAt: isoOrNull(prediction.createdAt),
       judgmentsModel: judgmentsModelOf(prediction),
       factorPhrases: synthesisFactorPhrases(prediction),
+      ...newsNotesField(prediction),
       // Só as seleções COM prob: sem isso o schema da síntese rejeitava o input inteiro
       // (um jogador sem estimativa derrubava a manchete de todos os mercados).
       selections: selections.flatMap((s) => {
@@ -252,58 +260,109 @@ function analysisEngineOf(
 // Times genéricos nas frases de fator: a síntese já recebe os nomes no cabeçalho.
 const GENERIC_TEAMS = { home: "mandante", away: "visitante" };
 
+// As notícias aplicadas na análise (#672), relidas pelo Zod (jsonb). Ilegível → sem.
+function newsOf(prediction: PredictResult["prediction"]): MatchModelNews | null {
+  const raw = prediction.judgments?.news;
+  if (raw === undefined) return null;
+  const parsed = MatchModelNewsSchema.safeParse(raw);
+  return parsed.success ? parsed.data : null;
+}
+
+// Há `judgments.news` gravado, mas o Zod não o lê: não dá pra saber quais fatores a
+// notícia moveu.
+function newsUnreadable(prediction: PredictResult["prediction"]): boolean {
+  return prediction.judgments?.news !== undefined && newsOf(prediction) === null;
+}
+
+function newsNotesField(prediction: PredictResult["prediction"]): { newsNotes?: string[] } {
+  if (prediction.judgments?.engine !== "code_jev") return {};
+  const notes = newsOf(prediction)?.notes ?? [];
+  return notes.length > 0 ? { newsNotes: notes } : {};
+}
+
+// O que o número já tinha antes do usuário (JEV ∨ notícia), os fatores que a notícia
+// moveu (origem nas frases) e os que o usuário moveu (fora da síntese). `userMoved` null
+// = contexto ilegível (na dúvida, tratado como movido).
+function judgmentsReading(prediction: PredictResult["prediction"]): {
+  modelAnswers: JudgmentAnswers | null;
+  newsOrigins: FactorOrigins;
+  userMoved: Set<JudgmentQuestionId> | null;
+  noted: boolean;
+} | null {
+  const judgments = prediction.judgments;
+  if (judgments?.engine !== "code_jev") return null;
+  const news = newsOf(prediction);
+  const modelAnswers = modelAnswersOf({ answers: judgments.answers, news });
+  const jevApplied = judgments.answers !== null;
+  const newsOrigins: FactorOrigins = {};
+  if (news) {
+    for (const [id, strength] of Object.entries(newsFactorOrigins(news.claims, judgments.answers))) {
+      if (strength) newsOrigins[id as JudgmentQuestionId] = { by: "news", strength };
+    }
+  }
+  if (judgments.userContext === undefined) {
+    return { modelAnswers, newsOrigins, userMoved: new Set(), noted: false };
+  }
+  const parsed = PredictionUserContextSchema.safeParse(judgments.userContext);
+  if (!parsed.success) return { modelAnswers, newsOrigins, userMoved: null, noted: true };
+  return {
+    modelAnswers,
+    newsOrigins,
+    userMoved: new Set(
+      parsed.data.claims.flatMap((c) => claimEffect(c, modelAnswers, jevApplied).moved),
+    ),
+    // Nota do contexto extra (#569): o racional a cita mesmo sem fator movido.
+    noted: hasContextNote(parsed.data.claims),
+  };
+}
+
+function factorPhrasesOf(
+  prediction: PredictResult["prediction"],
+  reading: NonNullable<ReturnType<typeof judgmentsReading>>,
+  userMoved: ReadonlySet<JudgmentQuestionId>,
+): string[] {
+  const judgments = prediction.judgments;
+  if (!reading.modelAnswers || !judgments?.multipliers) return [];
+  // Notícia ilegível: na dúvida, nenhum fator (como o contexto ilegível). Senão um fator
+  // que a notícia moveu sairia como fator do modelo, sem a origem.
+  if (newsUnreadable(prediction)) return [];
+  return judgmentFactorPhrases(
+    reading.modelAnswers,
+    withoutFactors(judgments.multipliers, userMoved),
+    GENERIC_TEAMS,
+    Object.keys(reading.newsOrigins).length > 0
+      ? { jev: judgments.answers, origins: reading.newsOrigins }
+      : undefined,
+  );
+}
+
 /**
  * O racional que a síntese vê. A manchete pode ser compartilhada (/p) e a síntese não
  * sabe de onde veio cada fator: quando o contexto extra do usuário moveu algum fator
  * (PLAN-565 §13.2, emenda do ADR 0055) ou deixou nota pro narrador (#569), o racional do
- * narrador (que cita o que a pessoa informou) NÃO vai. No lugar, um racional montado em código só com os fatores do JEV
- * que o usuário não moveu; sem nenhum, vazio (a linha "Racional" some). As probs e a
- * seleção seguem as da row.
+ * narrador (que cita o que a pessoa informou) NÃO vai. No lugar, um racional montado em
+ * código só com os fatores que o usuário não moveu (os da notícia com a origem, #672);
+ * sem nenhum, vazio (a linha "Racional" some). As probs e a seleção seguem as da row.
+ * O "moveu?" do usuário mede contra JEV ∨ notícia (o que o número já tinha).
  */
 function synthesisRationale(prediction: PredictResult["prediction"]): string {
-  const judgments = prediction.judgments;
-  if (judgments?.engine !== "code_jev" || judgments.userContext === undefined) {
+  const reading = judgmentsReading(prediction);
+  if (!reading || prediction.judgments?.userContext === undefined) {
     return prediction.rationale;
   }
-  const parsed = PredictionUserContextSchema.safeParse(judgments.userContext);
-  // Contexto ilegível: na dúvida, trata como movido.
-  const userMoved = parsed.success
-    ? new Set(
-        parsed.data.claims.flatMap((c) => claimEffect(c, judgments.answers ?? null).moved),
-      )
-    : null;
-  // Nota do contexto extra (#569): o racional a cita mesmo sem fator movido.
-  const noted = !parsed.success || hasContextNote(parsed.data.claims);
-  if (userMoved?.size === 0 && !noted) return prediction.rationale;
-  if (!userMoved || !judgments.answers || !judgments.multipliers) return "";
-  const phrases = judgmentFactorPhrases(
-    judgments.answers,
-    withoutFactors(judgments.multipliers, userMoved),
-    GENERIC_TEAMS,
-  );
+  if (reading.userMoved?.size === 0 && !reading.noted) return prediction.rationale;
+  if (!reading.userMoved) return "";
+  const phrases = factorPhrasesOf(prediction, reading, reading.userMoved);
   return phrases.length > 0 ? `Fatores do modelo: ${phrases.join("; ")}.` : "";
 }
 
-// Os fatores do JEV pra síntese, sem os que o contexto extra do usuário moveu (#565).
-// Contexto ilegível: na dúvida, nenhum fator (como no racional).
+// Os fatores pra síntese, sem os que o contexto extra do usuário moveu (#565), com os da
+// notícia marcados "(segundo o ge…)" (#672). Contexto ou notícia ilegível: na dúvida,
+// nenhum fator (como no racional). Sem notícia, as mesmas frases de antes (palpites_v14).
 function synthesisFactorPhrases(prediction: PredictResult["prediction"]): string[] {
-  const judgments = prediction.judgments;
-  if (judgments?.engine !== "code_jev" || !judgments.answers || !judgments.multipliers) {
-    return [];
-  }
-  if (judgments.userContext === undefined) {
-    return judgmentFactorPhrases(judgments.answers, judgments.multipliers, GENERIC_TEAMS);
-  }
-  const parsed = PredictionUserContextSchema.safeParse(judgments.userContext);
-  if (!parsed.success) return [];
-  const moved = new Set(
-    parsed.data.claims.flatMap((c) => claimEffect(c, judgments.answers ?? null).moved),
-  );
-  return judgmentFactorPhrases(
-    judgments.answers,
-    withoutFactors(judgments.multipliers, moved),
-    GENERIC_TEAMS,
-  );
+  const reading = judgmentsReading(prediction);
+  if (!reading || !reading.userMoved) return [];
+  return factorPhrasesOf(prediction, reading, reading.userMoved);
 }
 
 function withoutFactors(

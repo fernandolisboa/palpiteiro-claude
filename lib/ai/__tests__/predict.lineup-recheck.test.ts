@@ -347,6 +347,37 @@ describe("recheckPredictionWithLineup", () => {
     expect(JSON.stringify(inserted.map((i) => i.values))).not.toContain("Zézinho");
   });
 
+  it("sem notícias na reconferência (#672, ajuste 3): pai com judgments.news não passa a notícia", async () => {
+    const news = {
+      batchId: "b-1",
+      itemsRead: 3,
+      claims: [],
+      sources: [],
+      evidence: { attack_weakened_away: 0.85 },
+      moved: ["attack_weakened_away" as const],
+      notes: ["segundo o ge (não conferido): troca de técnico"],
+      versions: { extract: "match_news_extract_v1", newsEvidence: "news_evidence_v1" },
+    };
+    const withNews = await recheckPredictionWithLineup(
+      args({
+        parent: {
+          prediction: parent({ judgments: parentJudgments({ news }) }),
+          marketKey: "match_result",
+        },
+      })
+    );
+    const rowWith = predictionInsert()!;
+    inserted.length = 0;
+    await recheckPredictionWithLineup(args());
+    const rowWithout = predictionInsert()!;
+    expect(withNews.kind).toBe("persisted");
+    expect(rowWith.judgments).not.toHaveProperty("news");
+    expect(rowWith.judgments.lambda).toEqual(rowWithout.judgments.lambda);
+    expect(rowWith.modelVersion).toBe(rowWithout.modelVersion);
+    expect(rowWith.modelVersion as string).not.toContain(";news=");
+    expect(JSON.stringify(rowWith)).not.toContain("técnico");
+  });
+
   it("mesma recomendação do pai → flipped false", async () => {
     const out = await recheckPredictionWithLineup(
       args({

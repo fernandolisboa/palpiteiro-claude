@@ -12,8 +12,14 @@ import {
   analysesDetail,
   newsDetail,
   pickDetail,
+  storedNewsStep,
   synthesisDetail,
 } from "@/lib/ai/progress/details";
+import {
+  batchItemsInWindow,
+  loadStoredMatchNews,
+  type StoredMatchNews,
+} from "@/lib/match-news/stored";
 import {
   noteStep,
   progressTrace,
@@ -150,6 +156,80 @@ export function startNewsFetch(
   return trackStep(STEPS.news, () => fetchNews(match, audit, newsDeadline), newsVerdict);
 }
 
+// ─── Notícias guardadas (#672, C2) ───────────────────────────────────────────
+
+export type ResolvedMatchNews = {
+  // O lote guardado usável e fresco do jogo (o predict code_jev aplica o MESMO).
+  stored: StoredMatchNews | null;
+  // O desfecho pra síntese: o lote guardado (pronto, sem busca) ou a busca ao vivo.
+  // undefined = sem lote e a busca ao vivo ainda não partiu (fan-out serial: a síntese
+  // busca no fim, como antes).
+  outcome: Promise<NewsFetchOutcome> | undefined;
+};
+
+/** O lote guardado como desfecho da busca: os itens dele na janela, `via: "ge"`. */
+export function storedNewsOutcome(stored: StoredMatchNews): NewsFetchOutcome {
+  return {
+    results: stored.results,
+    aiCall: null,
+    status: stored.results.length > 0 ? "found" : "none",
+    via: "ge",
+    ...(stored.batch.partial ? { partial: true } : {}),
+  };
+}
+
+/**
+ * De onde vêm as notícias da análise (PLAN-672 §7, ajuste 12): o lote guardado pelo cron
+ * da base, quando há um usável e fresco (flag `enable_news_factors` ligada), ou o caminho
+ * de hoje (#670: RSS do ge ao vivo, web search de fallback, só texto). O lote guardado
+ * chega pronto e não emite passo: quem emite é o predict code_jev (com o "· K viraram
+ * fator") ou, sem ele, `noteStoredNewsStep`. `startLive` false deixa a busca ao vivo pra
+ * depois (a síntese a dispara). Nunca rejeita.
+ */
+export async function resolveMatchNews(
+  match: {
+    id: string;
+    league: string;
+    homeTeam: string;
+    awayTeam: string;
+    kickoffAt: Date;
+  },
+  audit: { userId: string; matchId: string },
+  deadlineAt: number | undefined,
+  opts: { startLive: boolean },
+): Promise<ResolvedMatchNews> {
+  const lookup = await loadStoredMatchNews({ id: match.id, kickoffAt: match.kickoffAt });
+  if (lookup.stored) {
+    return { stored: lookup.stored, outcome: Promise.resolve(storedNewsOutcome(lookup.stored)) };
+  }
+  if (!opts.startLive) return { stored: null, outcome: undefined };
+  const outcome = startNewsFetch(match, audit, deadlineAt);
+  // O cron viu notícia nova e a extração não a leu: a busca ao vivo vira só texto.
+  if (lookup.notChecked) stepDetail(STEPS.news, [STEP_NOTES.newsNotChecked]);
+  return { stored: null, outcome };
+}
+
+/**
+ * Passo de notícias do lote guardado SEM o predict code_jev (motor 'llm', code_jev que
+ * falhou antes do bloco 5.6, "gerar só o palpite"): "N notícias do ge lidas às 13h30",
+ * sem a parte do fator. A action só chama quando o fan-out não emitiu (ajuste 5).
+ */
+export function noteStoredNewsStep(
+  stored: StoredMatchNews,
+  match: { kickoffAt: Date },
+  now: Date = new Date(),
+): void {
+  const step = storedNewsStep({
+    status: stored.batch.status === "empty" ? "empty" : "ok",
+    itemsRead: batchItemsInWindow(stored.batch.items, match.kickoffAt, now).length,
+    checkedAt: stored.batch.checkedAt,
+    applied: null,
+    now,
+  });
+  noteStep(STEPS.news, "done", step.label);
+  stepDetail(STEPS.news, step.detail);
+}
+
 // Desfecho do passo de notícias pro "Ver raciocínio" (#670).
 export function newsVerdict(outcome: NewsFetchOutcome): StepVerdict {
   switch (outcome.status) {
@@ -275,19 +355,24 @@ export async function generatePalpites({
     homeTeam: match.homeTeam,
     awayTeam: match.awayTeam,
   };
-  // Notícias (ADR 0032 / #377): a busca que o caller já disparou junto do fan-out, ou
-  // uma agora, em paralelo ao fetch de suporte. Nunca rejeita (ver startNewsFetch).
-  const newsFetch =
+  // Notícias (ADR 0032 / #377, #672): o desfecho que o caller já resolveu (lote guardado
+  // ou busca disparada junto do fan-out), ou agora: o lote guardado do jogo, senão a
+  // busca ao vivo, em paralelo ao fetch de suporte. Nunca rejeita (ver startNewsFetch).
+  const newsFetch: Promise<NewsFetchOutcome> =
     news ??
-    startNewsFetch(
-      {
-        league: match.league,
-        homeTeam: match.homeTeam,
-        awayTeam: match.awayTeam,
-        kickoffAt: match.kickoffAt,
+    resolveMatchNews(match, { userId, matchId }, deadlineAt, { startLive: true }).then(
+      (resolved) => {
+        if (resolved.stored) noteStoredNewsStep(resolved.stored, match);
+        return (
+          resolved.outcome ??
+          Promise.resolve<NewsFetchOutcome>({
+            results: [],
+            aiCall: null,
+            status: "failed",
+            via: null,
+          })
+        );
       },
-      { userId, matchId },
-      deadlineAt,
     );
 
   const [fixture, homeForm, awayForm, h2h, standings, newsOutcome, snapshot] =
@@ -368,11 +453,13 @@ export async function generatePalpites({
     // LLM escreve o texto. Falha do texto vira o palpite de template (nunca palpite nulo).
     const cartridge = getPalpiteCartridge("model_pick");
     const confidence = confidenceFromPick(pick);
+    const runJudgments = runJudgmentsFromAnalyses(analyses);
     const input = cartridge.buildPredictionInput({
       ...buildArgs,
       pick,
       confidence: confidence.level,
-      factors: runJudgmentsFromAnalyses(analyses)?.factorPhrases ?? [],
+      factors: runJudgments?.factorPhrases ?? [],
+      newsNotes: runJudgments?.newsNotes ?? [],
     });
     return runSynthesis({
       ...common,

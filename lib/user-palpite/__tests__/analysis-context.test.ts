@@ -127,6 +127,49 @@ describe("applyUserClaims", () => {
     expect(r.origins).toEqual({});
   });
 
+  it("baseline JEV ∨ notícia (#672): o fator que a notícia já moveu não conta como do usuário", () => {
+    const jev = answers();
+    // A notícia já pôs 0,7 no ataque do mandante.
+    const baseline = answers({ attack_weakened_home: 0.7 });
+    const r = applyUserClaims({
+      claims: [ATTACK_HOME],
+      facts: NO_FACTS,
+      teams: TEAMS,
+      league: "brasileirao_a",
+      kickoffAt: KICKOFF,
+      jev,
+      baseline,
+      extractionAiCallId: "ai-x",
+      warnings: [],
+      extractVersion: "user_palpite_extract_v1",
+    });
+    expect(r.moved).toBe(false);
+    expect(r.origins).toEqual({});
+    // O que todo mercado aplica parte do baseline (JEV ∨ notícia), nunca só do JEV.
+    expect(r.answers?.attack_weakened_home.value).toBe(0.7);
+    // Sem o baseline (só o JEV), a mesma afirmação move.
+    expect(apply([ATTACK_HOME], jev).moved).toBe(true);
+  });
+
+  it("baseline sem JEV (null) mas com notícia: o peso da confirmada segue o JEV ausente", () => {
+    const baseline = answers({ defense_weakened_away: 0.7 });
+    const r = applyUserClaims({
+      claims: [ATTACK_HOME],
+      facts: NO_FACTS,
+      teams: TEAMS,
+      league: "brasileirao_a",
+      kickoffAt: KICKOFF,
+      jev: null,
+      baseline,
+      extractionAiCallId: null,
+      warnings: [],
+      extractVersion: "user_palpite_extract_v1",
+    });
+    expect(r.answers?.defense_weakened_away.value).toBe(0.7);
+    expect(r.answers?.attack_weakened_home.value).toBe(0.7);
+    expect(r.origins).toEqual({ attack_weakened_home: "unverified" });
+  });
+
   it("confirmada pelos nossos dados com JEV presente não sobe; sem JEV vale 0,85", () => {
     const facts = factsFromAnalysisData({
       absences: {

@@ -417,7 +417,7 @@ describe("judgmentFactorPhrases", () => {
       const applied = applyJudgments({ lambdaHome: 1.5, lambdaAway: 1.1 }, combined);
       const phrases = judgmentFactorPhrases(combined, applied.multipliers, TEAMS, {
         jev,
-        origins: { attack_weakened_home: "unverified" },
+        origins: { attack_weakened_home: { by: "user", strength: "unverified" } },
       });
       expect(phrases).toEqual([
         "Desfalques ou titulares poupados tiram do CR Flamengo uma peça ofensiva central (ataque do CR Flamengo ajustado para baixo) (informado por você, não conferido)",
@@ -431,7 +431,7 @@ describe("judgmentFactorPhrases", () => {
       const applied = applyJudgments({ lambdaHome: 1.5, lambdaAway: 1.1 }, combined);
       const [phrase] = judgmentFactorPhrases(combined, applied.multipliers, TEAMS, {
         jev,
-        origins: { rotation_risk_home: "confirmed" },
+        origins: { rotation_risk_home: { by: "user", strength: "confirmed" } },
       });
       expect(phrase).toContain("— sinal moderado (informado por você)");
       expect(phrase).not.toContain("sinal forte");
@@ -443,14 +443,14 @@ describe("judgmentFactorPhrases", () => {
       const applied = applyJudgments({ lambdaHome: 1.5, lambdaAway: 1.1 }, combined);
       const phrases = judgmentFactorPhrases(combined, applied.multipliers, TEAMS, {
         jev: null,
-        origins: { attack_weakened_home: "unverified" },
+        origins: { attack_weakened_home: { by: "user", strength: "unverified" } },
       });
       expect(phrases).toHaveLength(1);
       expect(phrases[0]).toMatch(/ajustado para baixo\) \(informado por você, não conferido\)$/);
     });
 
     it("narrator_v1.2+: a regra 4 explica as duas origens e as notas", () => {
-      expect(NARRATOR_VERSION).toBe("narrator_v1.5");
+      expect(NARRATOR_VERSION).toBe("narrator_v1.6");
       expect(SYSTEM_PROMPT).toContain('"(informado por você, não conferido)"');
       expect(SYSTEM_PROMPT).toContain("nunca como fato confirmado");
       expect(SYSTEM_PROMPT).toContain('Os itens do bloco "Informado por você"');
@@ -824,12 +824,13 @@ describe("narrator_v1.5 (#669): todas as seleções na decisão e 2ª tentativa"
     });
   }
 
-  it("versão nova; system e tool byte-idênticos aos da v1.4 (cache, ADR 0071)", () => {
-    expect(NARRATOR_VERSION).toBe("narrator_v1.5");
-    expect(narratorCartridge.version).toBe("narrator_v1.5");
-    // Literais calculados no código da narrator_v1.4, antes da mudança.
+  it("tool byte-idêntica à da v1.4; o system só muda na v1.6 (regra 4, notícias do ge #672)", () => {
+    expect(NARRATOR_VERSION).toBe("narrator_v1.6");
+    expect(narratorCartridge.version).toBe("narrator_v1.6");
+    // Literais calculados no código: system da narrator_v1.6 (a v1.4/v1.5 era
+    // 44474ddf…57269); a tool é a da v1.4. Mudou? bump + commit prompt: (ADR 0071).
     expect(sha256(SYSTEM_PROMPT)).toBe(
-      "44474ddf2f778d6bf327cad4bd06c83bc15f412b30cb80f63113ca0b55757269"
+      "1446d6c15795cd16160e96ff7537fc0a3c45ea0d71d86440e75151d6ae0d51cf"
     );
     expect(sha256(JSON.stringify(SUBMIT_NARRATION_TOOL))).toBe(
       "bc9ae9c6d42d369caea9414f82c0d83a34dca74c385b73d10e9dcaa71c200638"
@@ -1007,5 +1008,120 @@ describe("narrator_v1.5 (#669): todas as seleções na decisão e 2ª tentativa"
     expect(fidelityRejectionFeedback("texto recomenda 'away', mas a decisão é 'home'")).toBe(
       "texto recomenda 'away', mas a decisão é 'home'"
     );
+  });
+});
+
+describe("narrator_v1.6 (#672): notícias do ge", () => {
+  const sha256 = (s: string) => createHash("sha256").update(s).digest("hex");
+  const answers = (over: Partial<Record<string, number>>) =>
+    Object.fromEntries(
+      JUDGMENT_QUESTION_IDS.map((id) => [id, { value: over[id] ?? 0.2, confidence: null }])
+    ) as JudgmentAnswers;
+  const CTX = buildNarratorContext({
+    league: "brasileirao_a",
+    kickoffAt: new Date("2026-05-15T19:00:00Z"),
+    homeTeam: TEAMS.home,
+    awayTeam: TEAMS.away,
+    standings: undefined,
+    homeForm: [],
+    awayForm: [],
+    h2h: [],
+    absencesAvailable: false,
+    absences: { home: [], away: [] },
+  });
+  const BASE = overDecision({
+    judgmentFactors: [
+      "Desfalques tiram do CR Flamengo uma peça ofensiva central — sinal forte (informado por você)",
+    ],
+    userNotes: ["O CR Flamengo trocou de técnico"],
+  });
+
+  it("sem notícia, a mensagem é byte-idêntica à da v1.5", () => {
+    // Literal calculado com o código da narrator_v1.5, antes da mudança.
+    const v15 = "928fce41ce781ab528841c4670af231804b143354fa8bed4ffd7476b11710e8d";
+    expect(sha256(buildNarratorMessage(BASE, CTX))).toBe(v15);
+    expect(sha256(buildNarratorMessage({ ...BASE, newsNotes: [] }, CTX))).toBe(v15);
+  });
+
+  it("com nota de notícia: bloco próprio depois do 'Informado por você', antes do Contexto", () => {
+    const msg = buildNarratorMessage(
+      { ...BASE, newsNotes: ["Segundo o ge (não conferido): troca de técnico no Fluminense FC"] },
+      CTX
+    );
+    const block = msg.slice(
+      msg.indexOf("## Segundo as notícias do ge"),
+      msg.indexOf("## Contexto")
+    );
+    expect(block).toBe(
+      "## Segundo as notícias do ge (não conferido, sem efeito nos números)\n" +
+        "- Segundo o ge (não conferido): troca de técnico no Fluminense FC\n\n"
+    );
+    expect(msg.indexOf("## Informado por você")).toBeLessThan(
+      msg.indexOf("## Segundo as notícias do ge")
+    );
+    expect(msg).not.toMatch(/\bbet(ano|365)\b/i);
+  });
+
+  it("fator movido pela notícia leva a origem; a força vem só do JEV", () => {
+    const combined = answers({ attack_weakened_home: 0.9, defense_weakened_away: 0.7 });
+    const applied = applyJudgments({ lambdaHome: 1.5, lambdaAway: 1.1 }, combined);
+    const phrases = judgmentFactorPhrases(combined, applied.multipliers, TEAMS, {
+      jev: answers({ attack_weakened_home: 0.9 }),
+      origins: {
+        attack_weakened_home: { by: "news", strength: "confirmed" },
+        defense_weakened_away: { by: "news", strength: "unverified" },
+      },
+    });
+    expect(phrases).toHaveLength(2);
+    expect(phrases[0]).toMatch(/— sinal forte \(segundo o ge, confirmado pelos nossos dados\)$/);
+    expect(phrases[1]).toMatch(/\) \(segundo o ge, não conferido\)$/);
+    expect(phrases[1]).not.toContain("sinal");
+  });
+
+  it("nomes longos: a origem fica inteira no fim e a frase cabe no limite do fator", () => {
+    const LONG = { home: "SC Corinthians Paulista", away: "CR Vasco da Gama" };
+    const combined = answers({
+      defense_weakened_home: 0.9,
+      defense_weakened_away: 0.9,
+      attack_weakened_away: 0.9,
+    });
+    const applied = applyJudgments({ lambdaHome: 1.5, lambdaAway: 1.1 }, combined);
+    const phrases = judgmentFactorPhrases(combined, applied.multipliers, LONG, {
+      jev: answers({ defense_weakened_home: 0.9 }),
+      origins: {
+        defense_weakened_home: { by: "news", strength: "confirmed" },
+        defense_weakened_away: { by: "news", strength: "unverified" },
+      },
+    });
+    expect(phrases).toHaveLength(3);
+    for (const p of phrases) expect(p.length).toBeLessThanOrEqual(KEY_FACTOR_MAX_CHARS);
+    const home = phrases.find((p) => p.includes("defesa ou o goleiro titular do SC Corinthians"))!;
+    expect(home).toMatch(/… \(segundo o ge, confirmado pelos nossos dados\)$/);
+    const away = phrases.find((p) => p.includes("defesa ou o goleiro titular do CR Vasco"))!;
+    expect(away).toMatch(/ \(segundo o ge, não conferido\)$/);
+    // O template nunca sai inválido, mesmo com uma frase de fator acima do limite.
+    const out = templatedNarration({
+      ...overDecision(),
+      judgmentFactors: [...phrases, "x".repeat(KEY_FACTOR_MAX_CHARS + 40)],
+    });
+    for (const f of out.key_factors) expect(f.length).toBeLessThanOrEqual(KEY_FACTOR_MAX_CHARS);
+    expect(NarratorOutputSchema.safeParse(out).success).toBe(true);
+  });
+
+  it("regra 4 do system prompt explica as duas marcas do ge e o bloco de notas", () => {
+    expect(SYSTEM_PROMPT).toContain('"(segundo o ge, não conferido)"');
+    expect(SYSTEM_PROMPT).toContain('"(segundo o ge, confirmado pelos nossos dados)"');
+    expect(SYSTEM_PROMPT).toContain('Os itens do bloco "Segundo as notícias do ge"');
+  });
+
+  it("racional templado cita as notas de notícia sem efeito nos números", () => {
+    const out = templatedNarration({
+      ...BASE,
+      newsNotes: ["Segundo o ge (não conferido): troca de técnico no Fluminense FC"],
+    });
+    expect(out.rationale).toContain(
+      "Nas notícias (sem efeito nos números): Segundo o ge (não conferido): troca de técnico no Fluminense FC."
+    );
+    expect(NarratorOutputSchema.safeParse(out).success).toBe(true);
   });
 });
