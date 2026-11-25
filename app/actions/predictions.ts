@@ -50,7 +50,8 @@ import {
 import {
   generateLivePalpites,
   generatePalpites,
-  startNewsFetch,
+  noteStoredNewsStep,
+  resolveMatchNews,
   type GenerateLivePalpiteArgs,
 } from "@/lib/ai/palpites";
 import { PalpiteError } from "@/lib/ai/palpites/types";
@@ -100,6 +101,7 @@ import { checkAnalysisRateLimit, checkPalpitesRateLimit } from "@/lib/rate-limit
 import { getRequestTimeZone } from "@/lib/server/request-timezone";
 import { leagueToKey } from "@/lib/format";
 import type { SupportedLeague } from "@/lib/providers/sports-data/leagues";
+import type { NewsFetchOutcome } from "@/lib/providers/news/types";
 import { toAnalysisView } from "@/lib/view/analysis";
 import { teamToTeam } from "@/lib/view/team";
 import {
@@ -806,16 +808,22 @@ export async function analyzeBestBet(
       parallel,
     }),
   );
-  // Notícias da síntese: dependem só do jogo, então no modo paralelo a busca parte
-  // agora (depois do 1º slot, como todo gasto) e corre junto do fan-out, em vez de
-  // atrasar a manchete no fim do run. Nunca rejeita (startNewsFetch).
-  const news = parallel
-    ? startNewsFetch(match, { userId: session.user.id, matchId }, runDeadline)
-    : undefined;
+  // Notícias (#672, PLAN-672 §7): o lote guardado pelo cron da base, quando há um usável e
+  // fresco, é a fonte do número (o predict code_jev aplica) E do texto (a síntese), lido
+  // uma vez aqui. Sem lote, o caminho de hoje (#670): a busca ao vivo depende só do jogo,
+  // então no modo paralelo parte agora (depois do 1º slot, como todo gasto) e corre junto
+  // do fan-out; no serial, a síntese busca no fim. Nunca rejeita.
+  const newsResolved = await resolveMatchNews(
+    match,
+    { userId: session.user.id, matchId },
+    runDeadline,
+    { startLive: parallel },
+  );
+  const news = newsResolved.outcome;
   // Em qualquer saída do run (todos os mercados falharam, síntese pulada por prazo, erro
   // inesperado), a busca paga termina depois da resposta e a row de ai_calls dela é
   // gravada, sem segurar a resposta.
-  if (news) after(() => news);
+  if (news && !newsResolved.stored) after(() => news);
   const messageContext = messageContextFor(isAdmin);
   const mapError = (err: unknown) => friendlyMessageFromUnknown(err, messageContext);
   const preWarmErrors: { marketKey: string; message: string }[] = [];
@@ -839,18 +847,29 @@ export async function analyzeBestBet(
     isAdmin,
     modelOverride,
     ...(userContextP ? { userContextP } : {}),
+    ...(newsResolved.stored ? { news: newsResolved.stored } : {}),
   };
-  const allOutcomes =
+  const fanOutResult =
     engine === "code_jev"
       ? await runCodeJevFanOut(fanOutBase, fanOut, mapError, acquireSlot, {
           deadlineAt: fanOutDeadline,
           parallel,
         })
-      : await runFanOut(fanOutBase, fanOut, mapError, {
-          deadlineAt: fanOutDeadline,
-          acquireSlot,
-          parallel,
-        });
+      : {
+          outcomes: await runFanOut(fanOutBase, fanOut, mapError, {
+            deadlineAt: fanOutDeadline,
+            acquireSlot,
+            parallel,
+          }),
+          news: null,
+        };
+  const allOutcomes = fanOutResult.outcomes;
+  // Passo de notícias do lote guardado UMA vez (ajuste 5): o predict code_jev já emitiu
+  // (com o "· K viraram fator") quando o fan-out devolve as notícias que aplicou; senão
+  // (motor 'llm', code_jev que falhou antes do bloco 5.6), a action emite só a leitura.
+  if (newsResolved.stored && !fanOutResult.news) {
+    noteStoredNewsStep(newsResolved.stored, match);
+  }
   // Não analisados (prazo / slot negado no meio do run) vão pra lista de indisponíveis,
   // depois das falhas reais e antes da cauda sem slot.
   const { ran: outcomes, notRun } = splitNotRun(allOutcomes);
@@ -1116,8 +1135,9 @@ async function synthesizeHeadline(args: {
   isAdmin: boolean;
   analyses: MarketAnalysisSummary[];
   deadlineAt: number;
-  // Busca de notícias já disparada pelo run (modo paralelo); ausente = a síntese busca.
-  news?: ReturnType<typeof startNewsFetch>;
+  // Notícias já resolvidas pelo run (lote guardado, ou busca ao vivo no modo paralelo);
+  // ausente = a síntese resolve.
+  news?: Promise<NewsFetchOutcome>;
   // Palpite ao vivo (#594): cartucho palpites_live, sem notícias.
   live?: GenerateLivePalpiteArgs["live"];
   // Nome de exibição dos times pro texto de template e o "Ver raciocínio" (#668).

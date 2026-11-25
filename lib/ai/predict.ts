@@ -39,6 +39,7 @@ import {
   jevDetail,
   modelDetail,
   sportsDataDetail,
+  storedNewsStep,
   userContextDetail,
 } from "@/lib/ai/progress/details";
 import { STEP_NOTES, STEPS, marketStep, narrationStep } from "@/lib/ai/progress/steps";
@@ -94,6 +95,17 @@ import {
 } from "@/lib/user-palpite/analysis-context";
 import { USER_EVIDENCE_VERSION } from "@/lib/user-palpite/evidence";
 import type { PredictionUserContext } from "@/lib/user-palpite/types";
+import {
+  NEWS_EVIDENCE_VERSION,
+  applyNewsClaims,
+  type AppliedNews,
+} from "@/lib/match-news/apply";
+import {
+  batchItemsInWindow,
+  loadStoredMatchNews,
+  type StoredMatchNews,
+} from "@/lib/match-news/stored";
+import type { MatchModelNews } from "@/lib/match-news/types";
 
 import {
   persistAiCallError,
@@ -156,8 +168,8 @@ import {
   type NarrationRejection,
   type NarratorContext,
   type NarratorDecision,
-  type NarratorOutput,
   type FactorOrigins,
+  type NarratorOutput,
 } from "./markets/_narrator";
 import {
   liveNarratorCartridge,
@@ -216,6 +228,10 @@ export type PredictArgs = {
   // code_jev usa: confere as afirmações com os dados DESTE predict e aplica a evidência
   // nos fatores do JEV, uma vez por run. O caminho LLM ignora.
   userContextP?: Promise<ExtractResult | null>;
+  // Notícias guardadas do jogo (#672, C2), já lidas pelo caller (loadStoredMatchNews).
+  // undefined = o predict lê sozinho (memoizado por jogo); null = sem lote. Só o motor
+  // code_jev aplica (bloco 5.6), e só nas condições da base (StoredMatchNews.factorsEnabled).
+  news?: StoredMatchNews | null;
 };
 
 // Opções do caller que não são dados da análise.
@@ -321,14 +337,24 @@ export async function predict(
 // entre um mercado e outro (sem busca de escalação anterior, sem lookup de reuso).
 export type CodeJevRunMemo = Map<string, ResolvedCodeJevJudgments>;
 
+// As notícias guardadas que o code_jev do run leu (#672, C2): o lote e, quando a notícia
+// pôde virar fator, o que ela aplicou. Não-null = o predict já emitiu o passo de
+// notícias (a action não emite de novo; ajuste 5 do PLAN-672).
+export type AppliedRunNews = {
+  stored: StoredMatchNews;
+  // null = lote vazio, notícia que não pode virar fator neste run, ou falha ao aplicar.
+  applied: AppliedNews | null;
+};
+
 // O que o 1º mercado code_jev resolve e o run inteiro aplica.
 type ResolvedCodeJevJudgments = {
   scoreline: ModelScoreline;
   input: MatchJudgmentInput;
   run: JudgmentRun;
-  // JEV ∨ contexto extra do usuário (#565): o que TODO mercado do run aplica. Sem
-  // contexto, a mesma referência de `run.answers`.
+  // JEV ∨ notícia ∨ contexto extra do usuário (#565, #672): o que TODO mercado do run
+  // aplica. Sem notícia nem contexto, a mesma referência de `run.answers`.
   answers: JudgmentAnswers | null;
+  news: AppliedRunNews | null;
   user: AppliedUserContext | null;
 };
 
@@ -469,6 +495,7 @@ async function runPredict(
     extraLines = false,
     deadlineAt,
     userContextP,
+    news: newsArg,
   }: PredictArgs,
   opts: RunPredictOptions,
 ): Promise<PredictOutcome> {
@@ -1006,11 +1033,32 @@ async function runPredict(
           };
         },
       );
+      // Notícias guardadas (#672, C2): o MESMO lote e a MESMA regra da base, aplicados
+      // por MÁXIMO depois do JEV e antes do contexto do usuário, uma vez por run.
+      const newsRun = await resolveRunNews({
+        stored:
+          newsArg !== undefined
+            ? newsArg
+            : (await loadStoredMatchNews({ id: matchId, kickoffAt: match.kickoffAt }))
+                .stored,
+        matchId,
+        jev: run.answers,
+        input,
+        teams: { home: match.homeTeam, away: match.awayTeam },
+        league: match.league,
+        kickoffAt: match.kickoffAt,
+        absences: injuries.unavailable ? null : input.providerAbsences,
+        homeForm,
+        awayForm,
+        standings,
+      });
+      const baseline = newsRun?.applied?.answers ?? run.answers;
       const resolveUser = () =>
         resolveUserContext({
           userContextP,
           matchId,
           jev: run.answers,
+          baseline,
           teams: { home: match.homeTeam, away: match.awayTeam },
           league: match.league,
           kickoffAt: match.kickoffAt,
@@ -1030,12 +1078,14 @@ async function runPredict(
         scoreline: engineScoreline,
         input,
         run,
-        answers: user ? user.answers : run.answers,
+        answers: user ? user.answers : baseline,
+        news: newsRun,
         user,
       };
       opts.runMemo?.set(matchId, resolved);
     }
     const { input: judgmentInput, run: jev, user } = resolved;
+    const appliedNews = resolved.news?.applied ?? null;
 
     const minEdgePp = cartridge.descriptor.minEdgePp ?? MIN_EDGE_PP;
     const engine = runCodeJevEngine({
@@ -1093,15 +1143,9 @@ async function runPredict(
       teams,
       engine,
       answers: resolved.answers,
-      user: user
-        ? {
-            jev: jev.answers,
-            origins: Object.fromEntries(
-              Object.entries(user.origins).map(([id, strength]) => [id, { by: "user", strength }]),
-            ) as FactorOrigins,
-          }
-        : undefined,
+      origins: factorOriginsOf(jev.answers, appliedNews, user),
       userNotes: user?.notes ?? [],
+      newsNotes: appliedNews?.notes ?? [],
       decision,
       line: marketParams?.line ?? null,
       oddByKey,
@@ -1167,11 +1211,12 @@ async function runPredict(
                 oddAtRec: decision.oddAtRec,
               }) ?? undefined),
         bookmaker: oddsBundle.bookmakerTitle,
-        // Tag `user=` só quando o contexto extra moveu um fator: a calibração separa
-        // esses números (afirmação não verificável) do motor puro.
+        // Tags `news=`/`user=` só quando a notícia/o contexto extra moveu um fator: a
+        // calibração separa esses números (afirmação não verificável) do motor puro.
         modelTags: codeJevModelTags(
           engineScoreline,
           user?.moved ? USER_EVIDENCE_VERSION : null,
+          appliedNews && appliedNews.moved.length > 0 ? NEWS_EVIDENCE_VERSION : null,
         ),
         promptVersion: narratorCartridge.version,
         judgments: toPredictionJudgments(
@@ -1180,6 +1225,7 @@ async function runPredict(
           jev,
           judgmentInput.lineup,
           user?.stored,
+          appliedNews?.stored,
         ),
         labelByKey: null,
       },
@@ -3095,8 +3141,106 @@ async function fetchPreviousLineups(args: {
 function codeJevModelTags(
   scoreline: ModelScoreline,
   userTag: string | null = null,
+  newsTag: string | null = null,
 ): string {
-  return `;engine=code_jev;lambda=${scoreline.source};judg=${JUDGMENTS_VERSION};w=${JUDGMENT_WEIGHTS_VERSION}${userTag ? `;user=${userTag}` : ""}`;
+  return `;engine=code_jev;lambda=${scoreline.source};judg=${JUDGMENTS_VERSION};w=${JUDGMENT_WEIGHTS_VERSION}${newsTag ? `;news=${newsTag}` : ""}${userTag ? `;user=${userTag}` : ""}`;
+}
+
+// Origem de cada fator que não veio só do JEV (#565, #672): o usuário por cima da
+// notícia (o contexto dele mede o "moveu?" contra JEV ∨ notícia). A força da frase segue
+// vindo só do JEV.
+function factorOriginsOf(
+  jev: JudgmentAnswers | null,
+  news: AppliedNews | null,
+  user: AppliedUserContext | null,
+): { jev: JudgmentAnswers | null; origins: FactorOrigins } | undefined {
+  if (!news && !user) return undefined;
+  const origins: FactorOrigins = {};
+  for (const [id, strength] of Object.entries(news?.origins ?? {})) {
+    if (strength) origins[id as keyof FactorOrigins] = { by: "news", strength };
+  }
+  for (const [id, strength] of Object.entries(user?.origins ?? {})) {
+    if (strength) origins[id as keyof FactorOrigins] = { by: "user", strength };
+  }
+  return { jev, origins };
+}
+
+// Notícias guardadas no code_jev (#672, C2): confere o lote com os dados que ESTE predict
+// buscou (os mesmos fatos que o laço do JEV da base usa) e combina com o JEV por
+// MÁXIMO, pela MESMA função da base (applyNewsClaims). Só nas condições da base (flag
+// das notícias, flag do JEV da base e chave da TypeSafe: StoredMatchNews.factorsEnabled)
+// e com lote `ok`; senão o lote só vira texto. Emite o passo de notícias UMA vez por run
+// (o predict só chega aqui no 1º mercado; os demais leem o memo). Nunca lança: falha ao
+// aplicar segue sem a notícia no número.
+async function resolveRunNews(args: {
+  stored: StoredMatchNews | null;
+  matchId: string;
+  jev: JudgmentAnswers | null;
+  input: MatchJudgmentInput;
+  teams: { home: string; away: string };
+  league: SupportedLeague;
+  kickoffAt: Date;
+  absences: MatchJudgmentInput["absences"] | null;
+  homeForm: readonly NormalizedFixture[];
+  awayForm: readonly NormalizedFixture[];
+  standings: NormalizedStanding | undefined;
+}): Promise<AppliedRunNews | null> {
+  const { stored } = args;
+  if (!stored) return null;
+  const now = new Date();
+  const apply = (): AppliedNews | null => {
+    if (!stored.factorsEnabled || stored.batch.status !== "ok") return null;
+    try {
+      return applyNewsClaims({
+        batch: stored.batch,
+        facts: factsFromAnalysisData({
+          absences: args.absences,
+          homeForm: args.homeForm,
+          awayForm: args.awayForm,
+          standings: args.standings,
+        }),
+        lineup: args.input.lineup,
+        teams: args.teams,
+        league: args.league,
+        kickoffAt: args.kickoffAt,
+        now,
+        jev: args.jev,
+      });
+    } catch (err) {
+      console.error(
+        JSON.stringify({
+          scope: "predict",
+          matchId: args.matchId,
+          error: "news_apply_failed",
+          message: err instanceof Error ? err.message : String(err),
+        }),
+      );
+      return null;
+    }
+  };
+  return trackStep(
+    STEPS.news,
+    async (): Promise<AppliedRunNews> => ({ stored, applied: apply() }),
+    ({ applied }) => {
+      const step = storedNewsStep({
+        status: stored.batch.status === "empty" ? "empty" : "ok",
+        itemsRead:
+          applied?.itemsRead ??
+          batchItemsInWindow(stored.batch.items, args.kickoffAt, now).length,
+        checkedAt: stored.batch.checkedAt,
+        applied: applied
+          ? {
+              news: applied.stored,
+              jev: args.jev,
+              factorItems: applied.factorItems,
+              teams: args.teams,
+            }
+          : null,
+        now,
+      });
+      return { label: step.label, detail: step.detail };
+    },
+  );
 }
 
 // Contexto extra da análise (#565): espera a extração (já com teto na action), confere
@@ -3107,6 +3251,8 @@ async function resolveUserContext(args: {
   userContextP: Promise<ExtractResult | null> | undefined;
   matchId: string;
   jev: JudgmentAnswers | null;
+  // O que o número já tinha antes do usuário: JEV ∨ notícia (#672).
+  baseline: JudgmentAnswers | null;
   teams: { home: string; away: string };
   league: SupportedLeague;
   kickoffAt: Date;
@@ -3131,6 +3277,7 @@ async function resolveUserContext(args: {
       league: args.league,
       kickoffAt: args.kickoffAt,
       jev: args.jev,
+      baseline: args.baseline,
       extractionAiCallId: extraction.aiCallId,
       warnings: extraction.warnings,
       extractVersion: USER_PALPITE_EXTRACT_VERSION,
@@ -3173,6 +3320,7 @@ function toPredictionJudgments(
   jev: JudgmentRun,
   lineup: MatchJudgmentInput["lineup"],
   userContext?: PredictionUserContext,
+  news?: MatchModelNews,
 ): PredictionJudgments {
   return {
     engine: "code_jev",
@@ -3210,6 +3358,9 @@ function toPredictionJudgments(
     reusedFromModelSnapshotId: jev.reusedFromModelSnapshotId,
     lineup: toPredictionLineup(lineup),
     ...(userContext ? { userContext } : {}),
+    // Notícias aplicadas por MÁXIMO (#672): `answers`/`applied` acima seguem SÓ do JEV
+    // (o reuso por stateHash lê dali); quem refaz o λ usa modelAnswersOf.
+    ...(news ? { news } : {}),
   };
 }
 
@@ -3220,13 +3371,15 @@ function toNarratorDecision(args: {
   selectionKeys: readonly string[];
   teams: { home: string; away: string };
   engine: CodeJevDecision;
-  // JEV ∨ usuário (o que gerou o λ).
+  // JEV ∨ notícia ∨ usuário (o que gerou o λ).
   answers: JudgmentAnswers | null;
-  // Contexto extra (#565): respostas só do JEV (a força das frases) e os fatores movidos
-  // pelo usuário (a origem).
-  user?: { jev: JudgmentAnswers | null; origins: FactorOrigins };
+  // Contexto extra (#565) e notícias (#672): respostas só do JEV (a força das frases) e
+  // os fatores movidos pelo usuário ou pela notícia (a origem).
+  origins?: { jev: JudgmentAnswers | null; origins: FactorOrigins };
   // Contexto extra sem efeito no número (#569), em linhas do código.
   userNotes: string[];
+  // Notícias sem efeito no número (#672), em linhas do código. Ausente = nenhuma.
+  newsNotes?: string[];
   decision: GatedDecision;
   line: number | null;
   oddByKey: Record<string, number>;
@@ -3288,9 +3441,10 @@ function toNarratorDecision(args: {
       args.answers,
       engine.judgments.multipliers,
       teams,
-      args.user,
+      args.origins,
     ),
     ...(args.userNotes.length > 0 ? { userNotes: args.userNotes } : {}),
+    ...(args.newsNotes && args.newsNotes.length > 0 ? { newsNotes: args.newsNotes } : {}),
   };
 }
 

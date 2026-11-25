@@ -16,6 +16,7 @@ import {
   persistPendingPrediction,
   predict,
   predictForBestBet,
+  type AppliedRunNews,
   type CodeJevRunMemo,
   type PendingCodeJevPrediction,
   type PredictArgs,
@@ -188,6 +189,9 @@ export async function runFanOut(
     // Contexto extra da análise (#565): chega a todo predict() por `...base`; só o
     // motor code_jev o usa.
     userContextP?: PredictArgs["userContextP"];
+    // Notícias guardadas do jogo (#672), lidas uma vez pela action: chegam a todo
+    // predict() por `...base`; só o motor code_jev aplica.
+    news?: PredictArgs["news"];
   },
   markets: FanOutMarket[],
   mapError: (err: unknown) => string,
@@ -303,14 +307,24 @@ class SlotDeniedError extends Error {
  * run leva o tempo do caminho mais lento. Serial (flag off): o grupo, depois os de fora,
  * com um estado de parada só. O mesmo contrato best-of-successful nos dois: erro de um
  * mercado nunca derruba os irmãos.
+ *
+ * Devolve também as notícias guardadas que o grupo leu e aplicou (#672, ajuste 5 do
+ * PLAN-672): não-null = o predict já emitiu o passo de notícias, e a action não emite de
+ * novo. null = nenhum mercado do grupo chegou ao bloco 5.6 (falhou antes, prazo, grupo
+ * vazio) ou não havia lote: quem emite é a action.
  */
+export type CodeJevFanOutResult = {
+  outcomes: FanOutOutcome[];
+  news: AppliedRunNews | null;
+};
+
 export async function runCodeJevFanOut(
   base: FanOutBase,
   markets: FanOutMarket[],
   mapError: (err: unknown) => string,
   acquireSlot: () => Promise<SlotGrant>,
   opts: Pick<FanOutOptions, "deadlineAt" | "parallel"> = {},
-): Promise<FanOutOutcome[]> {
+): Promise<CodeJevFanOutResult> {
   const { deadlineAt } = opts;
   const parallel = opts.parallel ?? false;
   // Na ordem dos mercados; null = ainda sem resultado.
@@ -345,10 +359,12 @@ export async function runCodeJevFanOut(
   const sharedLane = parallel ? null : newLane();
   const laneFor = (): Lane => sharedLane ?? newLane();
 
+  // λ + JEV (e as notícias) fixados no 1º mercado do grupo: 1 chamada JEV e 1 matriz
+  // por run.
+  const runMemo: CodeJevRunMemo = new Map();
+
   // 1–2. Grupo code_jev: decisões em código, depois a narração do escolhido.
   const runGroup = async (lane: Lane): Promise<void> => {
-    // λ + JEV fixados no 1º mercado: 1 chamada JEV e 1 matriz por run.
-    const runMemo: CodeJevRunMemo = new Map();
     const pendings: { index: number; pending: PendingCodeJevPrediction }[] = [];
     for (const [index, m] of markets.entries()) {
       if (!isCodeJevFanOutMarket(m) || lane.skipIfStopped(index, m.marketKey)) {
@@ -426,7 +442,10 @@ export async function runCodeJevFanOut(
     tasks.push(() => runOther(index, m, lane));
   }
   await runTasks(tasks, parallel);
-  return out.filter((o): o is FanOutOutcome => o !== null);
+  return {
+    outcomes: out.filter((o): o is FanOutOutcome => o !== null),
+    news: runMemo.get(base.matchId)?.news ?? null,
+  };
 }
 
 // Fase de narração do runCodeJevFanOut. Sem a row da narração não há ai_call pra

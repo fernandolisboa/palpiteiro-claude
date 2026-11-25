@@ -45,6 +45,9 @@ vi.mock("@/lib/ai/palpites", () => ({
   generateLivePalpites: vi.fn(),
   generatePalpites: vi.fn(),
   startNewsFetch: vi.fn(),
+  noteStoredNewsStep: vi.fn(),
+  // Sem lote guardado (#672): o caminho ao vivo de antes.
+  resolveMatchNews: vi.fn(async () => ({ stored: null, outcome: undefined })),
 }));
 vi.mock("@/lib/ai/engine/analysis-engine-flag", () => ({
   readAnalysisEngine: vi.fn(),
