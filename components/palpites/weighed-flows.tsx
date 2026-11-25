@@ -2,13 +2,12 @@
 
 import { useEffect, useLayoutEffect, useRef, useState } from "react";
 
+import { MAX_DOTS, type PalpiteWeighedView } from "@/lib/view/palpite-weighed";
 import { fanArcs } from "@/lib/view/palpite-weighed-arcs";
-import type { PalpiteWeighedView } from "@/lib/view/palpite-weighed";
 
 // Parte cliente do "o que pesou" (#683): os arcos da barra (medem a largura) e o gatilho
 // da animação. Tudo aria-hidden: o bloco já diz em palavras o que os arcos desenham.
 
-const MAX_DOTS = 4;
 const ARC_DOT_DELAY_S = 0.16;
 // Um ciclo da sequência (app/globals.css, "o que pesou"): 2 ciclos e para.
 const CYCLE_MS = 5400;
@@ -19,11 +18,12 @@ const PLAY_MS = 2 * CYCLE_MS + 200;
  * altura certa; os arcos entram depois de medir, sem salto de layout, e refazem no resize.
  */
 export function WeighedFlows({ bar }: { bar: PalpiteWeighedView["bar"] }) {
-  const ref = useRef<HTMLDivElement>(null);
+  // Ref de callback (via state): a caixa pode entrar depois da 1ª montagem (arcsHeight
+  // 0 → > 0) ou ser trocada; a medida segue o elemento que estiver na tela.
+  const [el, setEl] = useState<HTMLDivElement | null>(null);
   const [width, setWidth] = useState(0);
 
   useLayoutEffect(() => {
-    const el = ref.current;
     if (!el) return;
     const measure = () => setWidth(Math.round(el.clientWidth));
     measure();
@@ -31,13 +31,13 @@ export function WeighedFlows({ bar }: { bar: PalpiteWeighedView["bar"] }) {
     const ro = new ResizeObserver(measure);
     ro.observe(el);
     return () => ro.disconnect();
-  }, []);
+  }, [el]);
 
   if (bar.arcsHeight === 0) return null;
   const arcs = width > 0 ? fanArcs(bar.flows, width, bar.arcsHeight) : null;
   return (
     <div
-      ref={ref}
+      ref={setEl}
       className="pesou-flows"
       style={{ height: bar.arcsHeight }}
       aria-hidden="true"
