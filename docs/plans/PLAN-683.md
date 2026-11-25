@@ -1,0 +1,437 @@
+# PLAN-683 — "O que pesou" no palpite
+
+Issue: #683. Snapshot de 2026-11-25, conferido no branch `claude/project-thread-3gxnu3` (HEAD `a8a544d` = `origin/main`, já com a C1 do #672). Arquivo histórico, não spec viva (ver `docs/plans/README.md`).
+
+Desenho aprovado: `/mnt/project-files/destaque-fatores/v6/` (`proposta-v6.md`, `v6-arcos-baixos.html`, `v6-c-raciocinio-vira.html`, prints `v6-arcos-baixos-*-mobile.png` e `v6-c-raciocinio-*-mobile.png`). Achados de dado das rodadas anteriores em `../proposta.md` e `../v2..v5/proposta-*.md`. Os scripts do mock (`scratchpad/fx/calc.ts`, `v6-new.cjs`, `build-v5.cjs`) são referência de geometria e de conta; o código do app reescreve a lógica em funções puras tipadas.
+
+## 0. Sanity-check (faz sentido?)
+
+Sim. Desde o #668 (ADR 0072) o palpite é decidido em código, então "por que deu Boca?" tem resposta exata: a base (mercado sem margem ou Dixon-Coles) mais os multiplicadores de cada fator. Hoje essa resposta não aparece em lugar nenhum. O "Ver raciocínio" fala dos fatores em palavras, mas não diz quanto cada um mexeu, nem se algum virou o resultado. O custo é baixo: nenhuma chamada paga, nenhuma migration, sem mudança de prompt. O risco está na regra de firewall (% no HERO e no /p), que precisa de emenda de ADR explícita (§9).
+
+Três fatos do código que mudam o que a issue supõe:
+
+1. **O clamp de ±15% por time nunca corta com os pesos de hoje.** Cada λ recebe 4 fatores (`lib/ai/judgments/apply.ts`, `FACTOR_EFFECT`): ataque próprio (−6%), defesa do adversário (+6%), rodízio próprio (−5%) e peso do jogo próprio (+3%). O produto fica sempre entre 0,94 × 0,95 = 0,893 e 1,06 × 1,03 = 1,092, dentro de [0,85; 1,15]. Mesmo assim o corte proporcional entra (§3.3): os pesos são código versionado (`JUDGMENT_WEIGHTS_VERSION`) e podem mudar. O teste usa multiplicadores sintéticos.
+2. **Notícia já é origem de fator.** Na C2 do #672, `predict.ts` passa a gravar `judgments.news.evidence` e o λ da análise reflete JEV ∨ notícia ∨ usuário, combinados por MÁXIMO (PLAN-672 §6/§7). O tipo `PredictionJudgments.news?: { evidence }` já existe na `main` (`lib/ai/engine/types.ts`). A atribuição de origem deste plano lê esse campo desde já, então a C2 chega sem mudança aqui. Até ela entrar o campo vem vazio, e nenhum fator sai como "notícia".
+3. **O valor final de cada pergunta é o máximo entre as fontes, e o multiplicador gravado já é o desse máximo.** `judgments.multipliers.{home,away}.factors[questionId]` traz o multiplicador aplicado, com tudo já combinado. A origem é quem deu o máximo: a mesma regra do `claimEffect` (`lib/user-palpite/evidence.ts`) e do `applyNewsClaims` (`lib/match-news/apply.ts`).
+
+## 1. Escopo
+
+**Entra**
+- O cálculo puro do efeito de cada fator, em sequência sobre o λ base, gravado em `headline.pick.weighed` (jsonb, sem migration). Calculado nas duas bases: `market` e `dc_jev`.
+- O view model puro do bloco, em `lib/view/`. Leitura do jsonb com Zod, raias, barra, listras, arcos, resumo, texto para leitor de tela e filtro público.
+- O bloco no HERO (`palpite-hero.tsx`), no "Ver raciocínio" (`reasoning-dialog.tsx`) e no `/p` (`public-palpite.tsx`), sem os fatores do contexto do usuário.
+- CSS e animação em `app/globals.css`: bolinhas nas raias e nos arcos em sequência, listras andando e regra própria de movimento reduzido.
+- Emendas das ADRs 0030 §3, 0065 §2, 0035 §2(d) e 0072 §9, e o ajuste dos guards de `%` nos testes.
+
+**Não entra**
+- Palpite ao vivo (`generateLivePalpites`, `palpites_live_v2`): sem `pick`, sem bloco.
+- Palpite do v13 (LLM escolhe, sem fonte de λ): sem `pick`, sem bloco.
+- Sets antigos sem `pick.weighed`: sem bloco, sem backfill.
+- Imagem OG (`og-palpite-image.tsx`) e prévia da landing: sem bloco.
+- Prompt e cartuchos: o bloco não vai ao LLM. O `model-pick.ts` monta o `pick` do prompt campo a campo (`outcome, score, firstHalfScore, firstToScore, probs`), então `weighed` nunca entra na mensagem. Sem bump de cartucho, sem quebra de cache.
+- Caminho "fresco" da action (`app/actions/predictions.ts:1175`): o HERO ignora a view devolvida pela action em sucesso, porque o revalidate traz `heroPalpite` do servidor (comentário em `palpite-hero.tsx:~212`). Sem `teams` ali, a view sai sem `weighed`. Ficar fora evita conflito com a C2, que mexe em `analyzeBestBet`.
+
+## 2. Forma do dado (`headline.pick.weighed`)
+
+Novo módulo puro `lib/ai/palpites/weighed.ts`:
+
+```ts
+export const PALPITE_WEIGHED_VERSION = "palpite_weighed_v1" as const;
+
+export type OutcomeTriple = { home: number; draw: number; away: number };
+
+// Origem de quem deu o MÁXIMO na pergunta. Gravada como string: o leitor (lib/view)
+// aceita origem desconhecida (cai em rótulo neutro) e o /p esconde tudo o que não está
+// na lista pública.
+export type WeighedOrigin = "jev" | "news" | "user";
+
+export type WeighedFactor = {
+  key: string;            // JudgmentQuestionId hoje ("attack_weakened_home"); chave da frase
+  lambdaSide: "home" | "away"; // qual λ ele multiplica (o lado em multipliers.{side}.factors)
+  origin: string;         // WeighedOrigin
+  value: number;          // noul de quem deu o máximo, 2 casas (força: forte/moderado, conferido)
+  multiplier: number;     // efetivo, depois do corte proporcional do clamp, 6 casas
+  pp: OutcomeTriple;      // efeito cru em pp, 2 casas (soma ≈ 0)
+  pts: OutcomeTriple;     // inteiro, soma 0; Σ fatores = finalPts − basePts (por resultado)
+};
+
+export type PalpiteWeighed = {
+  version: typeof PALPITE_WEIGHED_VERSION;
+  baseProbs: OutcomeTriple;   // P(1X2) da matriz base (sem fator), pp 2 casas
+  baseOutcome: MatchOutcome;  // mostLikelyOutcome(base), mesma regra do pick
+  basePts: OutcomeTriple;     // inteiros, soma 100 (maior resto)
+  finalPts: OutcomeTriple;    // inteiros, soma 100 (maior resto sobre o P final do pick)
+  factors: WeighedFactor[];   // na ordem em que foram aplicados (§3.2); [] = nada mexeu
+  clamped: { home: boolean; away: boolean };
+};
+```
+
+`PalpitePick` (`lib/ai/palpites/pick.ts`) ganha `weighed?: PalpiteWeighed | null`:
+- ausente nos sets anteriores;
+- `null` quando não deu para decompor (§3.5);
+- objeto quando deu.
+
+A view lê só `pick.weighed` (e `pick.outcome`/`pick.source`), sempre por Zod (§4.1).
+
+**Por que `pts` e não `moves[]`** (a issue sugere `moves: [{from,to,pts}]`). As raias saem de `pts` por uma regra determinística de apresentação: quem perdeu manda para quem ganhou, o destino mais perto primeiro (`movesOf`, §4.2). Gravar as duas formas duplicaria o dado e abriria espaço para incoerência. Gravando `pts`, a regra das raias muda sem bump de versão. Se a revisão preferir `moves` gravado, é só acrescentar o campo: o leitor ignora campo extra.
+
+**Tolerância a origem nova.** `origin` é `string` no jsonb e `z.string()` no leitor. O mapa de rótulos tem fallback neutro ("ajuste do modelo"). O `/p` usa lista branca (`jev`, `news`) e trata o resto como não público (§6). Uma origem futura (por exemplo "escalação") entra sem quebrar sets.
+
+## 3. Algoritmo (`lib/ai/palpites/weighed.ts`, puro)
+
+### 3.1 Entrada: fatores e origens de cada análise
+
+`weighedFactorInputs(judgments: PredictionJudgments | null | undefined): WeighedInputs | null`, onde
+`WeighedInputs = { factors: { key, lambdaSide, multiplier, origin, value }[]; applied: Pair; product: Pair }`.
+
+- Só `engine === "code_jev"` com `multipliers` presentes. Sem isso → `null` (sem fator).
+- Para cada lado `s` e cada `[key, m]` de `multipliers[s].factors`, entra o fator com `m !== 1`. O lado vem da posição: `defense_weakened_away` aparece em `home.factors` porque multiplica o λ do mandante. Não duplica a tabela `FACTOR_EFFECT`.
+- **Origem.** Com `jev = answers?.[key]?.value ?? 0`, `news = news?.evidence?.[key] ?? 0` e `user = userContext.evidence[key] ?? 0`:
+  - `user` quando `user > max(0.5, jev, news)`;
+  - senão `news` quando `news > max(0.5, jev)`;
+  - senão `jev`.
+  - `value` é o da origem escolhida.
+  - Empate fica com a fonte anterior (JEV antes de notícia, notícia antes de usuário): é a regra do `claimEffect` (o usuário só move com noul estritamente maior) e do `applyNewsClaims`.
+- **`userContext` ilegível** (`PredictionUserContextSchema.safeParse` falha): devolve `null`, e o bloco não aparece. É a mesma prudência do `synthesisFactorPhrases` (#565): na dúvida, nenhum fator.
+- **Fator com `value ≤ 0.5` e `m ≠ 1`** (linha anterior à regra unilateral do `factorMultiplier`): entra como está. Se a soma não bater, quem barra é a conferência do §3.5.
+
+`AnalysisJudgmentsModel` (`lib/ai/palpites/synthesis-input.ts`) ganha `factors?: WeighedInputs | null`, preenchido em `judgmentsModelOf` por uma linha: `factors: weighedFactorInputs(j)`. Vale nos dois caminhos (em memória e histórico), porque os dois passam por `summarizeSources`.
+
+### 3.2 Ordem
+
+Fixa, para ser determinística e invariante à ordem das análises:
+1. por origem: `jev` → `news` → `user` (desconhecida por último, ordem alfabética);
+2. dentro da origem, ordem canônica `JUDGMENT_FACTORS` × (`home`, `away`), a mesma de `judgmentFactorPhrases`.
+
+Com isso, "você contou" é o efeito marginal do contexto sobre o modelo, que é a leitura natural. O mock usa a mesma ordem.
+
+**Alternativa considerada e não adotada:** Shapley (média sobre as ordens; com até 8 fatores são 256 matrizes). É justo e não depende de ordem, mas a issue pede sequencial e o achado da v1 (`proposta.md` §2) mediu diferença ≤ 0,1 pt contra tirar um por vez. Fica como acompanhamento se aparecer caso real com ordem relevante.
+
+### 3.3 Corte do clamp, proporcional em log
+
+Por lado `s`, com os fatores `F_s` daquele λ:
+- `L_s = Σ ln m_i`, `A_s = ln(applied_s)`, onde `applied_s` = `multipliers[s].applied` gravado.
+- Se `|L_s − A_s| ≤ 1e-12`: `m_i' = m_i`, sem corte.
+- Senão: `c_s = A_s / L_s` e `m_i' = exp(c_s · ln m_i)`; `clamped[s] = true`.
+- Garantia: `Π m_i' = applied_s`.
+
+Dentro de [0,85; 1,15], o produto só sai do intervalo na direção do sinal de `L_s`, então `c_s ∈ (0, 1)` e todos os fatores encolhem na mesma proporção, sem trocar de sinal. Com pesos de hoje isso nunca acontece (§0.1).
+
+### 3.4 Sequência sobre a matriz
+
+Entrada: `base: Pair` (o `PalpiteBase.base`: fit do mercado ou `judgments.lambda.base`), `rho`, os fatores ordenados com `m'` e o `P` final cru do pick.
+
+```
+λ = base; p_0 = p1X2(scorelineMatrix(λ.home, λ.away, { rho }))
+para cada fator i: λ[lambdaSide_i] *= m_i'; p_i = p1X2(matriz(λ)); Δ_i = (p_i − p_{i−1}) × 100
+```
+
+- `baseProbs` = `p_0` (pp, 2 casas); `baseOutcome` = `mostLikelyOutcome(p_0)`.
+- **Conferência:** `|p_último − p_pick| < 1e-6` por resultado, onde `p_pick` é o cru de `pickFromBase`. Garante que a decomposição fecha com o palpite exibido. A soma dos `Δ` é telescópica, igual a `p_final − p_0`.
+
+### 3.5 Quando não decompor
+
+`weighed: null`, com `console.warn` `{scope:"palpite_weighed", reason}`, quando:
+- a conferência do §3.4 falha;
+- `Π m_i'` difere de `pick.multipliers` (= `adjusted/base`) em mais de 1e-6 relativo, num lado;
+- há multiplicadores no pick mas a análise de origem não tem `factors`.
+
+A análise de origem é a de `predictionId === pick.basePredictionId`: `match_result` na base de mercado, a de `runJudgmentsFromAnalyses` na `dc_jev`. É a mesma de onde `multipliersOf` tirou o agregado.
+
+Sem multiplicadores (JEV falhou, motor LLM no 1X2): `factors: []` e o bloco mostra a base e "nenhum ajuste" (§4.4).
+
+### 3.6 Arredondamento (maior resto)
+
+1. `basePts` = maior resto de `p_0 × 100` para somar 100. `finalPts` = idem sobre `p_final`.
+2. Alvos por resultado: `T_o = finalPts_o − basePts_o`, com `T_home + T_draw + T_away = 0`.
+3. Colunas `home` e `away`, cada uma em separado: distribui `T_o` entre os fatores a partir de `Δ_{i,o}` com `apportion(raws, target)`.
+   - Começa com `round(raw)`.
+   - Enquanto `Σ ≠ target`, soma ±1 no item de maior erro na direção que falta (`raw − atual`).
+   - Desempate pelo índice. Determinístico.
+4. Coluna `draw`: `pts_{i,draw} = −(pts_{i,home} + pts_{i,away})`. Cada fator soma 0, e a coluna do empate fecha sozinha: `Σ draw = −(T_h + T_a) = T_d`.
+
+As três colunas batem com a barra, inclusive as raias para o empate do "não vira". O empate de um fator pode ficar a ±1 do cru: é o "arredondamento" já aceito nas v2–v4.
+
+O maior resto é monotônico dentro do mesmo inteiro, então a barra nunca inverte a ordem de dois resultados. Fica no máximo empatada, e o resumo diz "por pouco" (§4.4).
+
+Helper `largestRemainder(values, total)` e `apportion(raws, target)` em `lib/quant/apportion.ts` (puro, testado à parte). Não há helper parecido no repo (procurado).
+
+### 3.7 Integração em `pick.ts` (mudança pequena)
+
+- `PalpiteBase` ganha `factors: WeighedInputs | null`, preenchido em `marketBaseFromAnalyses` (de `mr.judgmentsModel?.factors`) e em `dcJevBaseFromAnalyses` (de `run.judgmentsModel.factors`).
+- O `Summary` de `pick.ts` já lê `judgmentsModel`, então não muda.
+- `pickFromBase` calcula o pick como hoje e, no fim: `weighed: weighPick({ base: base.base, rho, inputs: base.factors, multipliers: base.multipliers, finalRaw: raw })`.
+- `pickFromBase` continua puro e determinístico. Custo: até 9 matrizes 11×11 a mais por palpite.
+
+## 4. View model (`lib/view/palpite-weighed.ts`, puro, seguro no cliente)
+
+### 4.1 Leitura
+
+`toWeighedView(rawPick: unknown, teams: WeighedTeams, opts: { audience: "owner" | "public" }): PalpiteWeighedView | null`
+- `teams = { home: { name, short }, away: { name, short } }` (de `teamPair`).
+- Zod sobre `{ outcome, source, weighed }`: `.passthrough()` no pick, `origin: z.string()`.
+- Rejeita (→ `null`) quando:
+  - `version` é desconhecida;
+  - as somas não fecham: `Σ basePts = Σ finalPts = 100`, cada `pts` soma 0, `Σ_i pts_i = finalPts − basePts`;
+  - algum inteiro está fora de [0, 100].
+- Não importa `@/lib/ai*`. O tipo vem de `import type` de `weighed.ts`, mesmo padrão de `PalpiteHeadline` em `db/schema.ts`.
+
+### 4.2 Peças puras (todas testadas)
+
+- `movesOf(pts: OutcomeTriple): Move[]`: porta de `build-v5.cjs:movesOf`. Quem perdeu manda para quem ganhou, destino mais perto primeiro (empate antes do outro time). Com 3 resultados dá no máximo 2 raias (1 perdedor e 2 ganhadores, ou 2 perdedores e 1 ganhador).
+- `laneSlots(rows)`: numera as raias de cima para baixo (`slot` 0..), `dots = min(pts, 4)`, posições `--to = 18 − i × 5,5 px` e atrasos `i × 0,09 s`, como no mock. Os arcos continuam a numeração (`q0 = nº de raias`). O slot é limitado a 7 (keyframes 0..7).
+- `barGeometry(basePts, finalPts)`: porta de `geometry5/geometry6`, tudo em **pontos (0–100)**, nunca em `%`.
+  - `slices` (largura de cada fatia).
+  - `hatches` (`left`, `width`, `tint`, `dir`). Tiras de saída na ponta de quem perdeu, repartidas por destino. Tira de chegada no começo de quem ganhou. O empate não ganha listra, como no mock.
+  - `flows` (`x0` no meio da tira de saída e destinos com `x`, `pts`, `key`, `slot`). O destino do empate é o centro da fatia.
+  - Os fluxos da barra são os **líquidos** (`movesOf(finalPts − basePts)`), não a soma das raias: no "não vira" as raias têm CAM→BOC e BOC→CAM que se anulam.
+- `fanArcs(flows, widthPx, labelWidth)` (`lib/view/palpite-weighed-arcs.ts`): porta do `FLOW_SCRIPT_V6`, sem DOM.
+  - Snap de meio pixel; leque por lado de cada origem, o mais perto por dentro.
+  - Altura 22 px com um destino por lado e 32 px com dois.
+  - `HOP 8 / LOW 14 / HIGH 24,5`, raios 5/9/12; caminho `arch(...)` com dois quartos de elipse e trecho reto; ponta triangular.
+  - Posição das etiquetas: a de dentro acima do salto, a de fora no trecho que é só dela (`on-line`). Ficam presas à largura com `labelWidth(n)` estimado (dígitos mono 7 px + " pt/pts" + 8 px de padding).
+  - Devolve `{ height, paths: [{ d, tint, tip, label: {x, y, onLine}, dots, slot }], origins: [{ cx, cy, tint }] }`.
+- `startLine(base, source, teams)`:
+  - prefixo "Ponto de partida, os preços do jogo:" (`market`) ou "Ponto de partida, o modelo de força dos times:" (`dc_jev`);
+  - folga = `basePts[fav] − segundo maior`: ≤ 2 dá "jogo parelho"; de 3 a 12, "{Time} um pouco à frente"; ≥ 13, "{Time} bem à frente";
+  - favorito empate: "o empate um pouco à frente";
+  - limiares numa constante, para afinar.
+- `factorText(key, teams, "short" | "long")`: frases novas, **num arquivo novo**. Não tocam `_narrator/labels.ts`, onde a C2 mexe.
+  - `attack_weakened`: "{T} sem peça no ataque" / "Desfalques ou titulares poupados tiram do {T} uma peça ofensiva central".
+  - `defense_weakened`: "Defesa do {T} desfalcada" / "Desfalques ou titulares poupados atingem a defesa do {T}".
+  - `rotation_risk`: "{T} vai poupar titulares" / "O {T} tende a escalar um time poupado".
+  - `high_stakes`: "Jogo de peso pro {T}" / "Jogo de peso na tabela para o {T}".
+  - Chave desconhecida → linha some do bloco, e as raias somam a uma linha neutra "Outro ajuste" para a conta fechar (§6).
+- `originLine(origin, value)` (diálogo):
+  - `jev`: "contexto do jogo (JEV) · sinal forte|moderado", com `value ≥ 0,8`. É o mesmo limiar do `STRONG_SIGNAL` do narrador, que não é exportado. Vira uma constante local com comentário apontando para ele, sem tocar `labels.ts` (conflito com a C2);
+  - `news`: "segundo o ge (não conferido)" ou "(confirmado pelos nossos dados)" quando `value ≥ NEWS_NOUL.confirmed`;
+  - `user`: "você contou (não conferido)" / "você contou (conferido)" por `USER_NOUL`;
+  - desconhecida: "ajuste do modelo".
+  - O HERO só mostra a etiqueta "você contou" (e "notícia" para `news`, mesmo estilo tracejado).
+  - **Desvio da v6:** o mock tem "forte/médio/leve" sem regra no dado. Fica a escala de 2 níveis que o narrador já usa, para não haver duas escalas de força no produto.
+- `tinyRow`: fator com `pts` todo zero continua na lista com "mexeu menos de 1 pt" esmaecido, sem raia e sem slot. Esconder seria desonesto: ele pesou, só arredondou para zero.
+- `summary(view)`: versão curta (HERO) e longa (diálogo); textos no §4.4.
+- `alsoReadLine(source, newsCount, hasNewsFactor)` (só no diálogo):
+  - "Também lido, sem mexer na conta: forma recente, confrontos e tabela (já estão nos preços)";
+  - com `dc_jev`, "(já estão no modelo)";
+  - e, quando `headline.sources` tem N itens e nenhum fator é notícia: "e N notícias do ge (entram só no texto)".
+  - Com a C2 pode haver fator de notícia: aí sai o "entram só no texto".
+- `srText(view)`: a descrição em palavras, sem `%`.
+  - por raia: "Atlético-MG sem peça no ataque: 2 pontos do Atlético-MG para o Boca Juniors";
+  - barra: "Chances do palpite, em pontos de 100: Atlético-MG de 37 para 33, empate 30, Boca Juniors de 33 para 37".
+
+### 4.3 Tipo exposto
+
+```ts
+export type PalpiteWeighedView = {
+  winner: "home" | "draw" | "away";      // cor da fatia forte (data-winner no CSS)
+  start: { prefix: string; text: string };
+  rows: Array<{
+    key: string; short: string; long: string;
+    tag: "user" | "news" | null;         // etiqueta do HERO
+    originLine: string;                   // linha do diálogo
+    tiny: boolean;
+    lanes: Array<{ from: K; to: K; pts: number; slot: number; dots: { to: number; delay: number }[]; sr: string }>;
+  }>;
+  hasDrawLane: boolean;                   // --dstw 37px
+  bar: { slices: {key: K; pts: number; before: number | null; strong: boolean}[]; hatches: Hatch[]; flows: Flow[]; q0: number };
+  labels: Record<K, { short: string; full: string }>;
+  summary: { kind: "flip" | "same" | "none"; short: string; long: string };
+  alsoRead: string | null;
+  sr: string;
+};
+```
+
+### 4.4 Textos do resumo
+
+`fav = baseOutcome` e `out = pick.outcome`. "por pouco" quando a folga final, em pp crus, entre `out` e o segundo é < 5.
+
+| Caso | Curto (HERO) | Longo (diálogo) | Ícone |
+|---|---|---|---|
+| `out ≠ fav` | "Virou pro {X}[, por pouco]" / "Virou pro empate" | "{Os preços viam\|O modelo via} o {fav} {um pouco\|bem} à frente. Os ajustes viraram pro {X}[, por pouco]." | `Repeat2`, cor forte |
+| igual, `\|Δfav\| ≤ 2` | "Continua {fav}: os ajustes quase se anulam" | "… Os ajustes quase se anulam e o palpite fica com ele." | `Equal` |
+| igual, `Δfav ≥ 3` | "Continua {fav}: os ajustes reforçaram" | "… Os ajustes reforçaram e o palpite fica com ele." | `Equal` |
+| igual, `Δfav ≤ −3` | "Continua {fav}, com menos folga" | "… Os ajustes tiraram folga, mas o palpite fica com ele." | `Equal` |
+| sem fator | "Nenhum ajuste mexeu: vale {os preços\|o modelo}" | idem | `Equal` |
+
+`Δfav = finalPts[fav] − basePts[fav]`. Todo texto passa por `containsValueLanguage` em teste. "preços" é permitido (ADR 0072, PLAN-668 S7); "odd/cotação/edge" não.
+
+### 4.5 Ligação na view da manchete
+
+- `PalpiteHeadlineView` (`lib/view/palpites-headline.ts`) ganha `weighed?: PalpiteWeighedView`.
+- `toPalpiteHeadlineView(source)` ganha `source.teams?: WeighedTeams` e `source.audience?`. Sem `teams`, nada de `weighed`.
+- `toPalpiteHeadlineViewFromSet(set, opts?: { teams?, audience? })` repassa.
+- Chamadores:
+  - `app/(app)/match/[id]/page.tsx:285`: passa `teamPair(match.homeTeam, match.awayTeam, leagueToKey(...))`, com os mesmos `name`/`short` do cabeçalho. Basta calcular o par antes do `heroPalpite`.
+  - `app/p/[id]/load-shared-palpite.ts:65`: `audience: "public"` e `teams` do `row.match`.
+  - `app/actions/underdog.ts:173`: não muda (não renderiza o bloco).
+
+## 5. Componentes (só renderizam)
+
+- **`components/palpites/palpite-weighed.tsx`** (sem diretiva: renderiza no servidor e no cliente). `PalpiteWeighed({ view, variant: "hero" | "dialog" })`, com a marcação da v6:
+  - `div.pesou` (hero) ou `section.pesou.pesou-dialog`, com `data-winner={view.winner}` e `data-pesou`;
+  - `ol.pesou-steps` com a linha da balança (`Scale`) e uma `li.pesou-step` por fator;
+  - raias `span.pesou-lane` (src, `trk.pesou-q{slot}` com `<i>` por bolinha, dst, número), com `aria-hidden` no visual e `<span class="sr-only">{lane.sr}</span>`;
+  - `.pesou-chart` com `<WeighedFlows>`, `.pesou-bar` e a linha de % com antes→depois;
+  - `.pesou-summary`; no diálogo, `alsoRead`;
+  - etiqueta "você contou" com `UserRound` (tracejada, como no mock) e "notícia" com `Newspaper`;
+  - no diálogo, `pesou-row-long` (raia embaixo da frase no celular).
+- **Sem `%` no HTML fora dos rótulos.** Larguras e posições usam variáveis sem unidade (`style={{"--w": 33}}`, `--l`, `--x`), e o CSS faz `calc(var(--w) * 1%)`. As cores ficam em `.pesou[data-winner=…]` no CSS, nunca em `color-mix(… 60%, …)` inline. Assim o único `%` no HTML é o dos rótulos `span[data-pesou-pct]`, o que mantém o guard de teste simples (§8).
+- **`components/palpites/weighed-flows.tsx`** (`"use client"`):
+  - mede a largura com `ResizeObserver` e chama `fanArcs`;
+  - renderiza o `<svg>` (caminhos, pontas e origens), as etiquetas "N pts" e as bolinhas `i.pesou-fly.pesou-q{slot}` com `offset-path: path(...)`;
+  - no SSR (largura desconhecida) sai só a caixa com a altura certa: os arcos entram após a hidratação, sem salto de layout;
+  - `aria-hidden`.
+- **`palpite-hero.tsx` (`PopulatedHero`)**: `{view.weighed && <PalpiteWeighed view={view.weighed} variant="hero" />}`.
+  - Fica entre o bloco veredito+placar e o `div#detailId` da narrativa, sempre visível (inclusive compacto), como no print.
+  - Dentro do `WarmShell` (`section[aria-label=palpite]`), o que exige a emenda da ADR 0030.
+- **`reasoning-dialog.tsx`**: nova prop `weighed?: PalpiteWeighedView`, renderizada antes da `<ol>` das etapas.
+  - A descrição troca para "O que pesou no palpite e as etapas que rodaram nesta análise." quando há bloco.
+  - O `PalpiteHero` passa `heroPalpite?.weighed` só quando `!showLive`. Durante um run, as etapas são as ao vivo, e o bloco do palpite anterior não pode aparecer junto delas.
+- **`public-palpite.tsx`**: depois do placar e antes da narrativa, `{view.weighed && <PalpiteWeighed variant="hero" … />}`. A view já vem filtrada pelo loader.
+
+## 6. `/p` e o contexto do usuário (mesma regra do #565)
+
+- `audience: "public"` em `toWeighedView`. Lista branca de origens públicas: `jev` e `news`. A notícia é pública (PLAN-672 §8.3). O contexto do dono não sai, nem origem desconhecida.
+- Os fatores escondidos saem da lista, e as somas das raias deles juntam-se numa linha neutra: **"Outro ajuste de quem fez o palpite"**. Sem frase, sem etiqueta, sem força. Raias e barra continuam batendo.
+- **Decisão D1 para a revisão do plano.** A v2 dizia "no /p, a linha 'você contou' some". Tirar sem agregar deixa raia ≠ barra. Alternativas: (a) linha neutra agregada (recomendada; revela que houve contexto, não o conteúdo); (b) tirar e aceitar a conta aberta; (c) esconder o bloco inteiro no `/p` quando há fator do usuário.
+- O resumo usa os totais e não muda. O `/p` não leva `alsoRead` (é do diálogo).
+- O raciocínio continua fora do `/p` (`delete mapped.reasoning`).
+- `unsafeForPublic` não muda: guarda texto livre (verdict/narrative). O bloco é texto de código.
+- **Decisão D2.** A ADR 0035 §2(d) diz "FORA, sempre: … %". Mostrar a barra no `/p` exige emendá-la também (a issue cita só 0030 e 0065). Se o dono não quiser `%` no público, a alternativa é o `/p` sem o bloco. O plano segue com o bloco e com a emenda (§9).
+
+## 7. CSS e animação (`app/globals.css`, seção nova "o que pesou (#683)")
+
+Porta do `STYLE_V6`, com estas trocas:
+- **Cores por classe:** `.pesou[data-winner=home|draw|away]` define `--c-home/draw/away` (fatias) e `--t-*` (tons claros de raia e arco).
+  - O mock só tinha dark mode, com `color-mix(…, white)`. No tema claro, misturar com branco apaga o tom.
+  - Usar `color-mix(in oklch, var(--x) 60%, var(--foreground))` no claro e `white` no escuro, conferindo contraste ≥ 3:1 do número da raia (texto `text-meta`) nos dois temas.
+- **Posições:** `.pesou-bar > span { flex: var(--w) 0 0 }`; `.pesou-bar > i { left: calc(var(--l) * 1%); width: calc(var(--w) * 1%) }`.
+- **Tempos:** `T = 5,4 s`, `SLOT0 0,2`, `SLOT_GAP 0,4`, `LANE_TRAVEL 0,75`, `ARC_TRAVEL 1,4`, `FADE 4,5–4,9`, 8 slots.
+  - Keyframes `pesou-lane-0..7` e `pesou-arc-0..7` escritos estáticos no CSS: 16 regras geradas uma vez por script e coladas, com comentário de como regenerar.
+  - Listras: `pesou-hatch` 1,35 s, `background-position` andando `var(--dir) × 6px`.
+- **Movimento reduzido.** Regra própria, com especificidade maior que a global (`*:not(.mascot-motion…)`, (0,1,0)).
+  - A global só encurta para 0,01 ms. Com `both`, a bolinha da raia terminaria no keyframe 100% (`opacity: 0`) e sumiria.
+  - `.pesou .pesou-lane .trk i { animation: none !important }`: a bolinha fica parada no destino, porque o estilo base já tem `translateX(var(--to))` e opacidade 1.
+  - `.pesou .pesou-fly { display: none !important }`.
+  - `.pesou .pesou-bar > i { animation: none !important }`.
+- **Sem `offset-path`:** `@supports not (offset-path: path("M0,0")) { .pesou-fly { display: none } }`. Sem suporte, a bolinha ficaria parada no canto da caixa.
+- Os tokens `--palpite-*`, `--muted-fg-2` e `--surface` (definido no bloco) já existem.
+
+## 8. Firewall e guards de `%`
+
+- **HERO** (`components/__tests__/palpite-hero.test.tsx`): o `leaksValue(html)` de hoje (`containsValueLanguage || /%/`) passa a ser `leaksValueOutsideWeighedBar(html)`.
+  - Remove os `<span data-pesou-pct="">\d{1,3}%</span>` e então exige zero `%` e zero termo de valor no resto.
+  - Exige também `containsValueLanguage(html) === false` no HTML inteiro, sem tirar nada.
+  - Helper compartilhado em `components/__tests__/firewall-helpers.ts`, usado também por `public-palpite.test.tsx` e `palpite-area.test.tsx`.
+  - O `palpite-area.test.tsx:215` (`shell.textContent` sem `%`) passa a tirar o bloco `[data-pesou]` antes de conferir. O teste do azarão fora da casca continua valendo como está.
+- **Confiança:** segue palavra. O teste "rende a PALAVRA da confiança e nenhum dígito/%" passa a olhar o chip, não o HTML inteiro.
+- **Etapas do raciocínio:** `run-progress.ts:106`, que derruba linha de etapa com `%`, **não muda**. O bloco não é linha de etapa.
+- **Público:** `unsafeForPublic` não muda. O teste do `/p` usa o mesmo helper e exige que nenhum texto de fator do usuário apareça.
+
+## 9. Emendas de ADR (commit `docs:` próprio, primeiro)
+
+- **ADR 0030 §3:** o HERO pode mostrar as chances 1X2 do palpite decidido em código (antes→depois, inteiros, `%` só nos rótulos da barra) e os pontos movidos por fator, no bloco "o que pesou". São chances do modelo, não números de valor. Odd, edge, EV, stake, Yield, R$ e nome de casa seguem fora. A confiança segue palavra. "preços do jogo" é permitido como palavra, nunca o número da odd.
+- **ADR 0065 §2:** o diálogo abre com o bloco "O que pesou no palpite" (mesmo dado e mesmo firewall da emenda 0030). As linhas das etapas seguem sem `%`.
+- **ADR 0035 §2(d)** (D2): o `/p` mostra o bloco sem os fatores do contexto do dono (agregados numa linha neutra, D1). `%` só nos rótulos gerados por código. Texto livre segue no `unsafeForPublic`. A imagem OG não leva o bloco.
+- **ADR 0072 §9:** `headline.pick.weighed` (versão `palpite_weighed_v1`) e "a view lê só `pick.weighed`, por Zod; λ, base, ajuste e resíduos seguem fora da view". Atualizar o comentário de `PalpiteHeadline.pick` em `db/schema.ts` ("a view NÃO lê" → "a view lê só `weighed`").
+
+## 10. Acessibilidade
+
+- O bloco é uma `ol` com `aria-label="o que pesou no palpite"`. Cada linha tem a frase visível mais o `sr-only` da raia ("2 pontos do Atlético-MG para o Boca Juniors"); o desenho da raia é `aria-hidden`.
+- A barra, os arcos e as listras são `aria-hidden`. Um `<p class="sr-only">` com `view.sr` descreve antes→depois em palavras, sem `%`. Os rótulos visíveis de % ficam `aria-hidden` para não ler duas vezes.
+- O resumo é texto normal. O ícone é `aria-hidden`.
+- Nenhuma informação depende só da animação ou da cor: o número está em cada raia e em cada fatia.
+- Movimento reduzido: estático, com as bolinhas das raias no destino (§7).
+- Contraste dos tons de raia nos dois temas (§7), conferido no print.
+- O foco do diálogo não muda.
+
+## 11. Testes
+
+**Núcleo**
+- `lib/quant/__tests__/apportion.test.ts`:
+  - `largestRemainder` soma o total e é monotônico (nunca inverte a ordem);
+  - `apportion` com alvo positivo, negativo, zero e fora do arredondado (±2);
+  - determinismo nos empates.
+- `lib/ai/palpites/__tests__/weighed.test.ts`:
+  - **Origem:** JEV puro; notícia acima do JEV; usuário acima dos dois; empate JEV = usuário fica JEV; usuário 0,7 com JEV 0,8 fica JEV; `userContext` ilegível dá `null`; `news.evidence` ausente.
+  - **Lado:** `defense_weakened_away` multiplica o λ do mandante.
+  - **Ordem:** jev → news → user e, dentro de cada uma, a canônica; invariância à ordem das chaves do jsonb.
+  - **Clamp sintético** (multiplicadores 1,10 × 1,10 com `applied` 1,15): `Π m' = applied`, proporção preservada, `clamped`.
+  - **Telescópica:** `Σ Δ = p_final − p_0` (1e-9); a conferência barra multiplicadores incoerentes (`weighed: null`).
+  - **Inteiros:** soma 0 por fator; colunas = `finalPts − basePts` nas três; `basePts`/`finalPts` somam 100; `|pts − pp| ≤ 1` em casa/visitante.
+  - **Propriedade:** 200 casos com λ, ρ e nouls aleatórios, invariantes acima.
+  - **Determinismo:** dez chamadas iguais.
+- `lib/ai/palpites/__tests__/pick.test.ts`:
+  - `weighed` presente em `market` e em `dc_jev`;
+  - `Π m'` = `pick.multipliers`;
+  - sem julgamentos → `factors: []`;
+  - análise de origem sem `factors` → `null`.
+  - **Regressão com os cenários do mock** (`calc.ts`): Galo x Boca "vira" (odds 2,45/3,15/3,05, O/U 2,5 a 2,20/1,68; JEV ataque 0,9, defesa 0,8, peso do jogo do visitante 0,85; usuário rodízio 0,7) e "não vira" (1,85/3,50/4,60). O teste fixa resultado, `basePts`, `finalPts` e pts por fator **com os números do motor real**: os do mock eram ilustrativos.
+- `synthesis-input.test.ts`: `judgmentsModel.factors` nos dois caminhos (memória e histórico), com origens.
+
+**View**
+- `lib/view/__tests__/palpite-weighed.test.ts`:
+  - `movesOf`: divisão em duas raias, mais perto primeiro, dois perdedores;
+  - slots e bolinhas: teto de 4 bolinhas e de slot 7;
+  - `barGeometry` dos dois cenários (listras e fluxos iguais ao `data-flows` do mock: vira `x0 35 → x 65, n 4`);
+  - `startLine` nos limiares; `summary` nos cinco casos; `tinyRow`;
+  - público: usuário vira "Outro ajuste", origem desconhecida escondida, `news` mantido;
+  - Zod: jsonb malformado ou soma que não fecha → `null`;
+  - nenhum texto com linguagem de valor; `sr` sem `%`.
+- `lib/view/__tests__/palpite-weighed-arcs.test.ts`: altura 22/32; o de dentro antes do de fora; etiquetas dentro de [0, W]; snapshot dos `d` nos dois cenários a 330 px.
+- `palpites-headline.test.ts`: `weighed` só com `teams` e pick válido; set antigo sem campo.
+
+**Componentes**
+- `palpite-hero.test.tsx`: bloco presente; "você contou" com fator de usuário; ausente em set antigo e no v13; firewall pelo helper novo; `data-winner`; nenhum `style` com `%`.
+- `reasoning-dialog` (novo teste ou dentro do do HERO): bloco no topo quando não está rodando; some durante o run.
+- `public-palpite.test.tsx` e `app/p/__tests__/load-shared-palpite.test.ts`: sem frase de fator do usuário, sem "você contou", linha neutra presente, `%` só nos rótulos.
+- `og-palpite-image.test.tsx`: sem mudança (confere que o bloco não entra).
+- CSS: um teste barato que lê `app/globals.css` e confere as três regras de movimento reduzido do `.pesou` e os 8 keyframes de cada tipo. Ele protege a regra mais fácil de perder num refactor.
+
+**Fim a fim (manual, no PR):** prints celular 390 e desktop, claro e escuro, com e sem movimento reduzido, nos dois cenários, contra os PNG da v6.
+
+## 12. Commits (um PR)
+
+1. `docs(adr): % do palpite no bloco "o que pesou" (emendas 0030 §3, 0065 §2, 0035 §2d, 0072 §9)` + comentário de `db/schema.ts`.
+2. `feat(quant): maior resto e rateio inteiro` (`lib/quant/apportion.ts` + testes).
+3. `feat(palpite): efeito de cada fator gravado em headline.pick.weighed`: `weighed.ts`, `synthesis-input.ts` (`factors` em `judgmentsModelOf`), `pick.ts` (`PalpiteBase.factors`, `pickFromBase`) e testes. Sem prompt, sem migration.
+4. `feat(view): view model do "o que pesou"`: `palpite-weighed.ts`, `palpite-weighed-arcs.ts`, `palpites-headline.ts` (`teams`/`audience`) e testes.
+5. `feat(palpite): bloco "o que pesou" no HERO e no Ver raciocínio`: componentes, `globals.css`, `page.tsx` (`teams`), helper de firewall e testes do HERO e da área.
+6. `feat(share): /p mostra o que pesou sem o contexto do dono`: loader, `public-palpite.tsx` e testes.
+
+Cada commit com build/lint/typecheck/test verdes.
+
+## 13. Conflitos com a C2 do #672 (outro thread)
+
+| Arquivo | C2 mexe em | Este plano mexe em | Risco |
+|---|---|---|---|
+| `lib/ai/palpites/synthesis-input.ts` | `synthesisRationale`, `synthesisFactorPhrases` (origem notícia, `modelAnswersOf`) | 1 campo em `AnalysisJudgmentsModel` + 1 linha em `judgmentsModelOf` | baixo, hunks separados |
+| `lib/ai/palpites/pick.ts` | nada previsto | `PalpiteBase.factors`, fim de `pickFromBase` | nenhum |
+| `lib/ai/palpites/index.ts` | `resolveMatchNews` | **nada** (o `weighed` viaja dentro do `pick`) | nenhum |
+| `lib/ai/markets/_narrator/labels.ts` | `UserFactorOrigins` com notícia, rótulos | **nada** (frases curtas/longas num arquivo novo) | nenhum |
+| `app/actions/predictions.ts` | `analyzeBestBet` (~813) | **nada** (caminho fresco fora, §1) | nenhum |
+| `lib/ai/engine/types.ts` | grava `news` | só lê o tipo | nenhum |
+| `components/palpites/reasoning-dialog.tsx`, `lib/ai/progress/*` | passo de notícias em `steps.ts`/`details.ts` | só o diálogo (prop nova) | baixo |
+
+Quem fizer merge por último roda os testes de origem com uma predição que tenha `news.evidence` (já cobertos com fixture aqui).
+
+## 14. Riscos
+
+1. **Regra de firewall/regulatória:** `%` e pontos no HERO e no `/p` mexem em três ADRs, e a 0035 §2(d) não estava na issue (D2). Sem o OK do dono, o `/p` fica sem bloco.
+2. **Decomposição que não fecha com o palpite** (linhas antigas com regra simétrica, multiplicadores inconsistentes, pick de mercado com multiplicadores de outra análise): fail-closed com `weighed: null` + `console.warn`, mais testes de propriedade. O custo é o bloco faltar em alguns sets.
+3. **Arcos dependem de medida em px:**
+   - SSR sem arcos até hidratar, com a altura reservada e sem salto;
+   - etiqueta estimada pode encostar com o empate muito estreito (ressalva da v6);
+   - `offset-path` sem suporte esconde as bolinhas dos arcos.
+4. **Contraste e tema claro:** o mock é dark-only, e os tons de raia misturados com branco somem no claro. Tem de conferir nos dois temas, senão o número da raia fica ilegível.
+5. **Ordem e atribuição:** o sequencial depende da ordem fixa e da origem por máximo; um fator de usuário que empata com o JEV aparece como JEV. É coerente com o `claimEffect`, mas pode surpreender quem digitou. No `/p`, a linha neutra revela que houve contexto do dono (D1).
+6. Altura do HERO: o bloco fica sempre visível, até no compacto, e o HERO cresce ~200–250 px no celular. Foi aprovado no print, mas empurra "Ler análise completa" para baixo.
+7. Movimento: a regra global de movimento reduzido só encurta. Sem a regra própria, as bolinhas somem (coberto por teste de CSS).
+
+## 15. Acompanhamentos
+
+- Shapley no lugar do sequencial, se aparecer caso com ordem relevante.
+- Bloco no palpite ao vivo (`pickFromMatrix`, com fatores em jogo).
+- `moves` gravado, se a revisão preferir.
+- Encurtar o ciclo de 5,4 s (ressalva da v6).
