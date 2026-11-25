@@ -26,6 +26,9 @@ export const STORED_NEWS_FRESH_MS = 12 * 60 * 60 * 1000;
 // Memo por jogo: todos os mercados de um run (e o predict, a action e a síntese) leem o
 // MESMO lote, com uma leitura só. Curto: o cron grava lote novo a cada 6h.
 const MEMO_TTL_MS = 60_000;
+// Teto de jogos no memo (instância quente de longa vida): ao inserir, saem os vencidos
+// e, se ainda cheio, os mais antigos.
+export const MEMO_MAX_ENTRIES = 200;
 
 export type StoredMatchNews = {
   // O lote: `ok` (com afirmações) ou `empty` (o ge respondeu sem item).
@@ -56,6 +59,26 @@ const memo = new Map<string, { expiresAt: number; value: Promise<StoredNewsLooku
 /** Só pros testes: esquece o memo. */
 export function resetStoredMatchNewsMemo(): void {
   memo.clear();
+}
+
+/** Só pros testes: quantos jogos estão no memo. */
+export function storedMatchNewsMemoSize(): number {
+  return memo.size;
+}
+
+function memoSet(matchId: string, value: Promise<StoredNewsLookup>): void {
+  const nowMs = Date.now();
+  for (const [id, entry] of memo) {
+    if (entry.expiresAt <= nowMs) memo.delete(id);
+  }
+  // Reinserir vai pro fim da ordem de inserção (= o mais novo).
+  memo.delete(matchId);
+  while (memo.size >= MEMO_MAX_ENTRIES) {
+    const oldest = memo.keys().next();
+    if (oldest.done) break;
+    memo.delete(oldest.value);
+  }
+  memo.set(matchId, { expiresAt: nowMs + MEMO_TTL_MS, value });
 }
 
 /** Itens do lote dentro da janela das fontes ([min(agora, apito) − 72h, min(agora, apito)]). */
@@ -93,12 +116,17 @@ export function loadStoredMatchNews(
     );
     return NONE;
   });
-  memo.set(match.id, { expiresAt: Date.now() + MEMO_TTL_MS, value });
+  memoSet(match.id, value);
   return value;
 }
 
 async function readStoredMatchNews(match: MatchRef, now: Date): Promise<StoredNewsLookup> {
-  if (!(await getEnableNewsFactors())) return NONE;
+  // As duas flags numa ida só; com enable_news_factors desligada, nada mais é lido.
+  const [newsFlag, jevFlag] = await Promise.all([
+    getEnableNewsFactors(),
+    getEnableMatchModelJev(),
+  ]);
+  if (!newsFlag) return NONE;
   const { usable, failedOnly } = await getNewsBatchForAnalysis(match.id, {
     since: new Date(now.getTime() - STORED_NEWS_FRESH_MS),
     promptVersion: MATCH_NEWS_EXTRACT_VERSION,
@@ -119,6 +147,6 @@ async function readStoredMatchNews(match: MatchRef, now: Date): Promise<StoredNe
         source: "ge" as const,
       };
     });
-  const factorsEnabled = (await getEnableMatchModelJev()) && hasTypeSafeKey();
+  const factorsEnabled = jevFlag && hasTypeSafeKey();
   return { stored: { batch: usable, results, factorsEnabled }, notChecked: false };
 }

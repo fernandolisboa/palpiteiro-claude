@@ -23,10 +23,12 @@ import { MATCH_NEWS_EXTRACT_VERSION } from "@/lib/ai/match-news/extract-cartridg
 
 import { isUnsafeNewsTitle, newsFactorPhrase, splitQuestionId } from "../labels";
 import {
+  MEMO_MAX_ENTRIES,
   STORED_NEWS_FRESH_MS,
   batchItemsInWindow,
   loadStoredMatchNews,
   resetStoredMatchNewsMemo,
+  storedMatchNewsMemoSize,
 } from "../stored";
 import type { MatchNewsBatchItem, StoredNewsBatch } from "../types";
 
@@ -111,6 +113,19 @@ describe("loadStoredMatchNews", () => {
     getEnableNewsFactors.mockResolvedValue(false);
     expect(await loadStoredMatchNews(MATCH, NOW)).toEqual({ stored: null, notChecked: false });
     expect(getNewsBatchForAnalysis).not.toHaveBeenCalled();
+    expect(getMatchNewsByIds).not.toHaveBeenCalled();
+  });
+
+  it("as duas flags são lidas juntas, antes do lote", async () => {
+    let releaseNews: (v: boolean) => void = () => {};
+    getEnableNewsFactors.mockReturnValue(new Promise<boolean>((r) => (releaseNews = r)));
+    const p = loadStoredMatchNews(MATCH, NOW);
+    await Promise.resolve();
+    // A flag do JEV já partiu enquanto a de notícias ainda não respondeu.
+    expect(getEnableMatchModelJev).toHaveBeenCalledTimes(1);
+    expect(getNewsBatchForAnalysis).not.toHaveBeenCalled();
+    releaseNews(true);
+    expect((await p).stored?.factorsEnabled).toBe(true);
   });
 
   it("sem lote usável e só failed → 'não conferido'", async () => {
@@ -133,6 +148,29 @@ describe("loadStoredMatchNews", () => {
     expect(getNewsBatchForAnalysis).toHaveBeenCalledTimes(1);
     await loadStoredMatchNews({ id: "m2", kickoffAt: KICKOFF }, NOW);
     expect(getNewsBatchForAnalysis).toHaveBeenCalledTimes(2);
+  });
+
+  it("memo com teto: vencidos saem ao inserir e o tamanho nunca passa do teto", async () => {
+    vi.useFakeTimers({ toFake: ["Date"] });
+    try {
+      vi.setSystemTime(NOW);
+      for (let n = 0; n < MEMO_MAX_ENTRIES + 25; n++) {
+        await loadStoredMatchNews({ id: `m-${n}`, kickoffAt: KICKOFF }, NOW);
+      }
+      expect(storedMatchNewsMemoSize()).toBe(MEMO_MAX_ENTRIES);
+      // O mais antigo saiu: ler de novo vai ao banco; o mais novo segue no memo.
+      getNewsBatchForAnalysis.mockClear();
+      await loadStoredMatchNews({ id: `m-${MEMO_MAX_ENTRIES + 24}`, kickoffAt: KICKOFF }, NOW);
+      expect(getNewsBatchForAnalysis).not.toHaveBeenCalled();
+      await loadStoredMatchNews({ id: "m-0", kickoffAt: KICKOFF }, NOW);
+      expect(getNewsBatchForAnalysis).toHaveBeenCalledTimes(1);
+      // Passado o TTL, o próximo insert limpa todos os vencidos.
+      vi.setSystemTime(new Date(NOW.getTime() + 61_000));
+      await loadStoredMatchNews({ id: "fresh", kickoffAt: KICKOFF }, NOW);
+      expect(storedMatchNewsMemoSize()).toBe(1);
+    } finally {
+      vi.useRealTimers();
+    }
   });
 
   it("falha de leitura nunca rejeita: vira 'sem lote', com log", async () => {
