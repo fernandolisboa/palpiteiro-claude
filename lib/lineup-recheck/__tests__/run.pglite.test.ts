@@ -59,6 +59,15 @@ vi.mock("@/lib/ai/providers/typesafe/client", async (importOriginal) => ({
   hasTypeSafeKey: () => true,
 }));
 
+// Índice do portão dos crons (#680): o insert de pré-jogo grava o jogo no KV; o portão
+// fica desconhecido (null), como sem KV, pra o cron seguir pro banco.
+const noteAnalyzedKickoff = vi.fn(async (_matchId: string, _kickoffAt: Date) => {});
+vi.mock("@/lib/sync/analyzed-kickoffs", () => ({
+  noteAnalyzedKickoff: (matchId: string, kickoffAt: Date) =>
+    noteAnalyzedKickoff(matchId, kickoffAt),
+  hasAnalyzedKickoffBetween: async () => null,
+}));
+
 // Fronteiras pagas que a reconferência nunca toca.
 const anthropicCreate = vi.fn();
 vi.mock("@/lib/ai/anthropic", () => ({
@@ -388,6 +397,12 @@ describe("runLineupRechecks de ponta a ponta (predict real)", () => {
     });
     // Uma chamada JEV (de sistema), uma sonda + a escalação do state.
     expect(judge).toHaveBeenCalledTimes(1);
+    // A predição de pré-jogo gravada entra no índice do portão dos crons (#680).
+    const [m] = await realDb
+      .select({ kickoffAt: schema.matches.kickoffAt })
+      .from(schema.matches)
+      .where(eq(schema.matches.id, matchId));
+    expect(noteAnalyzedKickoff).toHaveBeenCalledWith(matchId, m.kickoffAt);
 
     const rows = await realDb
       .select()

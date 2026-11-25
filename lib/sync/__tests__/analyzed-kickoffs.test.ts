@@ -7,6 +7,7 @@ import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 
 const zsets = new Map<string, Map<string, number>>();
 const strings = new Map<string, unknown>();
+const setOpts = new Map<string, unknown>();
 let failNext = false;
 
 function zset(key: string): Map<string, number> {
@@ -32,9 +33,18 @@ class FakeRedis {
     maybeFail();
     return [...zset(key).values()].filter((s) => s >= min && s <= max).length;
   }
+  async zscore(key: string, member: string) {
+    maybeFail();
+    return zset(key).get(member) ?? null;
+  }
   async get(key: string) {
     maybeFail();
     return strings.get(key) ?? null;
+  }
+  async del(key: string) {
+    maybeFail();
+    const had = strings.delete(key) || zsets.delete(key);
+    return had ? 1 : 0;
   }
   multi() {
     const ops: (() => void)[] = [];
@@ -49,8 +59,11 @@ class FakeRedis {
         });
         return tx;
       },
-      set: (key: string, value: unknown) => {
-        ops.push(() => strings.set(key, value));
+      set: (key: string, value: unknown, opts?: unknown) => {
+        ops.push(() => {
+          strings.set(key, value);
+          setOpts.set(key, opts);
+        });
         return tx;
       },
       exec: async () => {
@@ -78,9 +91,12 @@ vi.mock("@/lib/db/queries/predictions", () => ({
 import {
   ANALYZED_KICKOFFS_BUILT_KEY,
   ANALYZED_KICKOFFS_KEY,
+  ANALYZED_KICKOFFS_SENTINEL,
   hasAnalyzedKickoffBetween,
+  invalidateAnalyzedKickoffs,
   noteAnalyzedKickoff,
   rebuildAnalyzedKickoffs,
+  refreshAnalyzedKickoffs,
 } from "@/lib/sync/analyzed-kickoffs";
 
 const NOW = new Date("2026-11-25T18:00:00Z");
@@ -90,11 +106,14 @@ const at = (m: number) => new Date(NOW.getTime() + m * MIN);
 beforeEach(() => {
   zsets.clear();
   strings.clear();
+  setOpts.clear();
   failNext = false;
   getUpcomingAnalyzedKickoffs.mockReset().mockResolvedValue([]);
   vi.stubEnv("KV_REST_API_URL", "https://kv.example");
   vi.stubEnv("KV_REST_API_TOKEN", "t");
   vi.spyOn(console, "warn").mockImplementation(() => {});
+  vi.spyOn(console, "log").mockImplementation(() => {});
+  vi.spyOn(console, "error").mockImplementation(() => {});
 });
 
 afterEach(() => {
@@ -119,6 +138,27 @@ describe("hasAnalyzedKickoffBetween", () => {
     expect(await hasAnalyzedKickoffBetween(at(5).getTime(), at(75).getTime())).toBe(false);
   });
 
+  it("set despejado com o carimbo ainda lá (sem sentinela) → null", async () => {
+    await rebuildAnalyzedKickoffs({ now: NOW });
+    zsets.delete(ANALYZED_KICKOFFS_KEY);
+    expect(await hasAnalyzedKickoffBetween(NOW.getTime(), at(90).getTime())).toBeNull();
+  });
+
+  it("carimbo derrubado (sync gravando kickoffs) → null até o próximo rebuild", async () => {
+    await rebuildAnalyzedKickoffs({ now: NOW });
+    await invalidateAnalyzedKickoffs();
+    expect(await hasAnalyzedKickoffBetween(NOW.getTime(), at(90).getTime())).toBeNull();
+    await rebuildAnalyzedKickoffs({ now: NOW });
+    expect(await hasAnalyzedKickoffBetween(NOW.getTime(), at(90).getTime())).toBe(false);
+  });
+
+  it("sentinela nunca cai numa janela real", async () => {
+    await rebuildAnalyzedKickoffs({ now: NOW });
+    expect(
+      await hasAnalyzedKickoffBetween(NOW.getTime(), at(60 * 24 * 365).getTime()),
+    ).toBe(false);
+  });
+
   it("erro no KV → null (fail-open), sem lançar", async () => {
     await rebuildAnalyzedKickoffs({ now: NOW });
     failNext = true;
@@ -132,11 +172,17 @@ describe("hasAnalyzedKickoffBetween", () => {
 });
 
 describe("noteAnalyzedKickoff", () => {
-  it("grava matchId → kickoff e nunca lança com o KV fora", async () => {
+  it("grava matchId → kickoff", async () => {
     await noteAnalyzedKickoff("m1", at(30));
     expect(zset(ANALYZED_KICKOFFS_KEY).get("m1")).toBe(at(30).getTime());
+  });
+
+  it("ZADD que falha não lança e derruba o carimbo (portão abre em vez de pular o jogo)", async () => {
+    await rebuildAnalyzedKickoffs({ now: NOW });
     failNext = true;
     await expect(noteAnalyzedKickoff("m2", at(30))).resolves.toBeUndefined();
+    expect(strings.has(ANALYZED_KICKOFFS_BUILT_KEY)).toBe(false);
+    expect(await hasAnalyzedKickoffBetween(NOW.getTime(), at(90).getTime())).toBeNull();
   });
 });
 
@@ -158,7 +204,16 @@ describe("rebuildAnalyzedKickoffs", () => {
     expect(z.get("fresh-insert")).toBe(at(40).getTime());
     expect(z.get("a")).toBe(at(120).getTime());
     expect(z.get("moved")).toBe(at(300).getTime());
+    expect(z.get(ANALYZED_KICKOFFS_SENTINEL)).toBe(Number.MAX_SAFE_INTEGER);
     expect(strings.get(ANALYZED_KICKOFFS_BUILT_KEY)).toBe(NOW.getTime());
+    // TTL do carimbo em SEGUNDOS: 13 h = 2 ciclos do sync (6 h) + folga.
+    expect(setOpts.get(ANALYZED_KICKOFFS_BUILT_KEY)).toEqual({ ex: 13 * 60 * 60 });
+  });
+
+  it("refreshAnalyzedKickoffs nunca lança e não grava carimbo se o banco falhar", async () => {
+    getUpcomingAnalyzedKickoffs.mockRejectedValue(new Error("db down"));
+    await expect(refreshAnalyzedKickoffs()).resolves.toBeUndefined();
+    expect(strings.has(ANALYZED_KICKOFFS_BUILT_KEY)).toBe(false);
   });
 
   it("sem KV → null, sem consultar o banco", async () => {

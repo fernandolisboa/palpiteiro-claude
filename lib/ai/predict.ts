@@ -85,6 +85,7 @@ import { findReusableJudgments } from "@/lib/db/queries/judgments";
 import { isKellyStakingActive } from "@/lib/calibration/kelly-live";
 import { getPreferredModelId } from "@/lib/db/queries/users";
 import { computeMinimumOdd, MIN_EDGE_PP } from "@/lib/odds/scenario";
+import { noteAnalyzedKickoff } from "@/lib/sync/analyzed-kickoffs";
 import { getMarketPresentation } from "@/lib/view/markets/presentation";
 import {
   applyUserClaims,
@@ -178,7 +179,6 @@ import { getProviderForModel } from "./providers";
 import type { AiCallStatus, AnalysisRequest } from "./providers/types";
 import type { ExtractResult } from "./user-palpite/extract";
 import { USER_PALPITE_EXTRACT_VERSION } from "./user-palpite/extract-cartridge";
-import { noteAnalyzedKickoff } from "@/lib/sync/analyzed-kickoffs";
 
 // Rationale neutro de um pass REBAIXADO pelo gate de edge (ADR 0038) — coerente com a
 // manchete "sem aposta recomendada", em vez da prosa pró-lado do LLM (que fica em
@@ -1880,11 +1880,6 @@ async function persistPrediction(a: PersistArgs): Promise<PredictResult> {
     throw new PredictError("failed to persist prediction", cause);
   }
 
-  // Índice do portão dos crons frequentes (#680, ADR 0074): jogo com análise de
-  // pré-jogo acorda o recheck-lineups e o capture-closing-odds perto do apito. Ao vivo
-  // não entra (nenhum dos dois olha jogo começado). Best-effort, nunca lança.
-  if (!a.live) await noteAnalyzedKickoff(a.matchId, a.kickoffAt);
-
   // 12. prediction_selection_odds (SEQUENCIAL, após prediction.id — o FK NOT NULL
   //     só existe após .returning()). As rows (candidate set, INCLUSIVE pass) já
   //     foram montadas acima; aqui só ligamos o predictionId e inserimos.
@@ -1917,6 +1912,12 @@ async function persistPrediction(a: PersistArgs): Promise<PredictResult> {
     // Degrade: a prediction já está persistida; não derrubar o caller por uma
     // falha do candidate set (re-preenchível pelo backfill #162).
   }
+
+  // Índice do portão dos crons frequentes (#680, ADR 0074): jogo com análise de
+  // pré-jogo acorda o recheck-lineups e o capture-closing-odds perto do apito. Ao vivo
+  // não entra (nenhum dos dois olha jogo começado). Depois do PSO pra um KV lento não
+  // atrasar o insert dele. Best-effort, nunca lança.
+  if (!a.live) await noteAnalyzedKickoff(a.matchId, a.kickoffAt);
 
   // Carrier da grade N-vias (gate #15): a prediction + o marketKey resolvido + uma
   // entrada por selectionKey (prob do modelo + odd congelada). A action monta a

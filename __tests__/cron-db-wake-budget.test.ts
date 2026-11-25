@@ -77,6 +77,9 @@ describe("orçamento de acordadas do Postgres pelos crons (ADR 0074)", () => {
         gateFile,
         `${c.path} (${c.schedule}) roda mais que 24×/dia sem portão no KV: cada run acorda o Neon por ≥ 5 min (ADR 0074)`,
       ).toBeDefined();
+      // Aqui só a presença da chamada. Que ela vem ANTES de qualquer query é provado
+      // nos testes de cada cron (lib/lineup-recheck/__tests__/run.test.ts,
+      // lib/odds/closing-line.test.ts: portão fechado, flag e candidatos não chamados).
       expect(readFileSync(join(ROOT, gateFile), "utf8")).toContain(
         "hasAnalyzedKickoffBetween(",
       );

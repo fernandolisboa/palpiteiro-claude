@@ -48,6 +48,12 @@ vi.mock("@/lib/db", () => {
   return { db: { select, insert } };
 });
 
+// Índice do portão dos crons (#680): predição ao vivo nunca entra.
+const noteAnalyzedKickoff = vi.fn();
+vi.mock("@/lib/sync/analyzed-kickoffs", () => ({
+  noteAnalyzedKickoff: (...a: unknown[]) => noteAnalyzedKickoff(...a),
+}));
+
 // Nenhuma odd depois do apito: qualquer toque nas fronteiras de odds derruba o teste.
 const oddsTouched = vi.fn(() => {
   throw new Error("odds provider tocado ao vivo");
@@ -240,6 +246,7 @@ describe("predictInPlay", () => {
 
     const preds = predictionRows();
     expect(preds).toHaveLength(4);
+    expect(noteAnalyzedKickoff).not.toHaveBeenCalled();
     for (const p of preds) {
       expect(p).toMatchObject({
         recommendation: "pass",

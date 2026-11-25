@@ -22,9 +22,9 @@ Os dois crons só têm trabalho perto do apito de um jogo que alguém analisou: 
 ## Decisão
 
 1. **Índice no KV** (`lib/sync/analyzed-kickoffs.ts`): sorted set `analyzed-kickoffs:v1` com `matchId → kickoff (epoch ms)` dos jogos com predição de pré-jogo. O Upstash já está no projeto (locks, rate limit) e não tem scale-to-zero nem cobrança por tempo acordado.
-   - `persistPrediction` grava o jogo logo após o insert (best-effort, nunca lança; predição ao vivo não entra).
-   - O `sync-fixtures` (a cada 6 h, com o banco já acordado) reconstrói o índice com `getUpcomingAnalyzedKickoffs`, com ou sem sucesso do sync. Só faz upsert + corte do passado (> 6 h), nunca `DEL`, então um ZADD concorrente do insert não se perde. Conserta jogo remarcado, ZADD que falhou e despejo do KV (o store tem eviction ligado).
-   - O carimbo `analyzed-kickoffs:v1:built-at` (TTL 13 h, dois ciclos do sync + folga) marca o índice como completo.
+   - `persistPrediction` grava o jogo depois dos inserts da predição e do PSO (best-effort, nunca lança; predição ao vivo não entra). Se o ZADD falhar, apaga o carimbo: o portão abre até o próximo rebuild em vez de deixar o jogo de fora.
+   - Todo sync de fixtures (`syncFixturesForLeagues`: cron de 6 h, toggle do /admin/leagues, after() da lista) apaga o carimbo **antes** de gravar qualquer kickoff e reconstrói o índice no fim com `getUpcomingAnalyzedKickoffs`. Sync que lança ou morre no meio (maxDuration) deixa o portão em `null`, nunca respondendo com kickoff velho. O rebuild só faz upsert + corte do passado (> 6 h), nunca `DEL` do set, então um ZADD concorrente do insert não se perde.
+   - O carimbo `analyzed-kickoffs:v1:built-at` (TTL 13 h, dois ciclos do sync + folga) e um membro sentinela `__built__` (score `Number.MAX_SAFE_INTEGER`, fora de qualquer janela) marcam o índice como completo. Faltando qualquer um dos dois (nunca construído, sync em andamento, KV despejou o set ou o carimbo), o portão responde `null`.
 2. **Portão antes da primeira query.** `runLineupRechecks` e `captureClosingLines` chamam `hasAnalyzedKickoffBetween(janela)` antes até da flag. `false` → saem sem tocar no Postgres (`skipped: "no_analyzed_kickoff"`, sem log). `null` (sem KV, índice sem carimbo, erro no KV) → caminho antigo, direto no banco. Fail-open: na dúvida o comportamento é o de antes, nunca uma reconferência ou closing line perdida por causa do portão.
 3. **Orçamento como teste.** `__tests__/cron-db-wake-budget.test.ts` lê o `vercel.json`: cron com mais de 24 runs/dia só passa se estiver na lista dos que têm portão (e o arquivo dele chamar o portão); os crons sem portão somam no máximo 24 runs/dia (hoje 16).
 
@@ -32,8 +32,10 @@ Os dois crons só têm trabalho perto do apito de um jogo que alguém analisou: 
 
 - Dia sem jogo analisado: zero queries dos dois crons. Com jogo analisado, o portão abre ~75–90 min antes do KO e os crons rodam como antes.
 - Estimativa depois da mudança: ~16 acordadas/dia dos crons sem portão (sync, prewarm, base do modelo, refit, settlement, alerta de gasto, versões de modelo), a maioria de 5–6 min a 0,25 CU, mais o uso real e os minutos de jogo analisado. Algo entre 15 e 25 CU-h/mês, contra ~120 antes.
-- Membro velho no índice (jogo remarcado pra depois, adiado) só custa um run que desce ao banco à toa até o próximo rebuild. Jogo remarcado pra **antes** sem rebuild no meio pode perder a reconferência daquele jogo (raro, e o rebuild de 6 h corrige).
-- Primeiro deploy: até o primeiro `sync-fixtures` o índice não tem carimbo e os crons seguem o caminho antigo.
+- Kickoff mudado pelo sync é corrigido no mesmo sync (carimbo derrubado antes, rebuild no fim). Membro velho que sobra (jogo adiado) só custa um run que desce ao banco à toa.
+- Corrida aceita: uma análise que leu o kickoff antes de um sync remarcar o jogo e grava depois do rebuild deixa o kickoff velho no índice até o próximo sync. Pode perder a reconferência/closing line daquele jogo; exige remarcação durante os segundos de uma análise.
+- O portão depende do KV: com o Upstash fora, todo cron cai no caminho antigo (mais compute, nunca trabalho perdido).
+- Primeiro deploy: até o primeiro sync o índice não tem carimbo e os crons seguem o caminho antigo.
 - Cron novo de alta frequência precisa de portão próprio (ou entrar no orçamento). O teste aponta pra este ADR.
 
 ## Alternativas descartadas

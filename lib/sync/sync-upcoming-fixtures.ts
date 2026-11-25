@@ -3,6 +3,10 @@ import { getActiveLeagues } from "@/lib/db/queries/league-settings";
 import { getSportsDataProvider } from "@/lib/providers/sports-data";
 import type { SupportedLeague } from "@/lib/providers/sports-data/leagues";
 import type { NormalizedFixture } from "@/lib/providers/sports-data/types";
+import {
+  invalidateAnalyzedKickoffs,
+  refreshAnalyzedKickoffs,
+} from "@/lib/sync/analyzed-kickoffs";
 import { acquireSyncLock, releaseSyncLock } from "@/lib/sync/lock";
 import { reconcileRescheduledFixtures } from "@/lib/sync/rescheduled-fixtures";
 
@@ -78,6 +82,10 @@ export async function syncFixturesForLeagues(
       );
     }
   }
+  // Índice do portão dos crons frequentes (#680, ADR 0074): o carimbo cai ANTES de
+  // qualquer kickoff mudar e volta no rebuild do fim. Sync que lança ou morre no meio
+  // deixa o portão em `null` (crons no caminho antigo), nunca com kickoff velho.
+  await invalidateAnalyzedKickoffs();
   // Jogo remarcado antes do upsert: a row antiga herda a chave nova em vez de nascer
   // uma segunda. Falha aqui não segura o sync (a próxima rodada replaneja).
   try {
@@ -92,4 +100,5 @@ export async function syncFixturesForLeagues(
     );
   }
   await upsertMatchesFromProvider(fixtures);
+  await refreshAnalyzedKickoffs();
 }
