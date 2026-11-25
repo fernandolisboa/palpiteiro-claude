@@ -129,19 +129,26 @@ export function ou(
 // Os dois cenários do mock v6 (scratchpad fx/calc.ts), com o motor real.
 // Os números do mock eram ilustrativos; o "vira" usa as odds do cenário "FLIP close" do
 // calc.ts, que dão a mesma base do print (37/30/33) e viram pro Boca.
-export const VIRA = {
-  odds: [2.6, 3.15, 2.85] as [number, number, number],
-  ou: [2.5, 2.15, 1.72] as const,
-  jev: { attack_weakened_home: 0.9, defense_weakened_home: 0.8 } as Nouls,
-  user: { rotation_risk_home: 0.7 } as Nouls,
+export type Scenario = {
+  odds: [number, number, number];
+  ou: readonly [number, number, number];
+  jev: Nouls;
+  user: Nouls;
 };
-export const NAO_VIRA = {
-  odds: [1.85, 3.5, 4.6] as [number, number, number],
-  ou: [2.5, 2.05, 1.78] as const,
+
+export const VIRA: Scenario = {
+  odds: [2.6, 3.15, 2.85],
+  ou: [2.5, 2.15, 1.72],
+  jev: { attack_weakened_home: 0.9, defense_weakened_home: 0.8 },
+  user: { rotation_risk_home: 0.7 },
+};
+export const NAO_VIRA: Scenario = {
+  odds: [1.85, 3.5, 4.6],
+  ou: [2.5, 2.05, 1.78],
   jev: {
     attack_weakened_home: 0.9,
     high_stakes_away: 0.85,
     defense_weakened_away: 0.8,
   } as Nouls,
-  user: {} as Nouls,
+  user: {},
 };

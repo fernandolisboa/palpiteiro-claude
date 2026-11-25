@@ -3,6 +3,11 @@ import { ExactScoreParamsSchema } from "@/lib/ai/palpites/cartridges/cartridge";
 import { parseReasoning, type ReasoningStep } from "@/lib/ai/progress/protocol";
 import type { PalpiteSetWithLines } from "@/lib/db/queries/palpites";
 import type { ListPalpiteView } from "@/lib/view/types";
+import {
+  toWeighedView,
+  type PalpiteWeighedView,
+  type WeighedTeams,
+} from "@/lib/view/palpite-weighed";
 import { livePalpiteLabel } from "@/lib/live/readings";
 import { readLiveStamp } from "@/lib/live/stamp";
 
@@ -59,6 +64,10 @@ export type PalpiteHeadlineView = {
   // ADR 0065: as etapas do run que gerou o palpite e o que cada uma encontrou ("Ver
   // raciocínio"). Ausente = set antigo ou gerado fora do HERO (sem botão).
   reasoning?: ReasoningStep[];
+  // #683: "o que pesou" (headline.pick.weighed lido por Zod), só da superfície do dono
+  // (HERO e "Ver raciocínio"; o /p apaga). Ausente = set antigo, palpite do v13/ao vivo,
+  // decomposição recusada ou chamador sem os times.
+  weighed?: PalpiteWeighedView;
 };
 
 // Insumos do mapper — tipos puros (sem importar @/lib/db pra não arrastar Drizzle pra
@@ -72,6 +81,8 @@ export type PalpiteHeadlineSource = {
   dimensions?: PalpiteDimensionView[];
   // As colunas is_live/live_state do set (#594). Ausente = pré-jogo.
   live?: { isLive: boolean; liveState: unknown };
+  // #683: nomes e siglas dos times (os do cabeçalho). Sem eles, nada de `weighed`.
+  teams?: WeighedTeams;
 };
 
 /**
@@ -101,7 +112,17 @@ export function toPalpiteHeadlineView(
       ? { liveLabel: livePalpiteLabel(readLiveStamp(source.live.liveState)) }
       : {}),
     ...reasoningField(source.headline.reasoning),
+    ...weighedField(source),
   };
+}
+
+// jsonb sem schema no banco: o pick cru vai pelo Zod do view model.
+function weighedField(source: PalpiteHeadlineSource): { weighed?: PalpiteWeighedView } {
+  if (!source.teams) return {};
+  const weighed = toWeighedView(source.headline.pick, source.teams, {
+    newsCount: source.headline.sources?.length ?? 0,
+  });
+  return weighed ? { weighed } : {};
 }
 
 // jsonb sem schema no banco: lê com a mesma validação do stream.
@@ -139,6 +160,7 @@ export function toDimensionViews(
  */
 export function toPalpiteHeadlineViewFromSet(
   set: PalpiteSetWithLines,
+  opts: { teams?: WeighedTeams } = {},
 ): PalpiteHeadlineView | null {
   const headline = set.palpiteSet.headline;
   const scoreLine = set.palpites.find((p) => p.type === "exact_score");
@@ -154,6 +176,7 @@ export function toPalpiteHeadlineViewFromSet(
       isLive: set.palpiteSet.isLive,
       liveState: set.palpiteSet.liveState,
     },
+    ...(opts.teams ? { teams: opts.teams } : {}),
   });
 }
 
