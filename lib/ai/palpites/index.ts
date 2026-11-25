@@ -373,6 +373,7 @@ export async function generatePalpites({
       pick,
       confidence: confidence.level,
       factors: runJudgmentsFromAnalyses(analyses)?.factorPhrases ?? [],
+      newsNotes: runJudgmentsFromAnalyses(analyses)?.newsNotes ?? [],
     });
     return runSynthesis({
       ...common,

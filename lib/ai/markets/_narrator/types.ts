@@ -13,6 +13,15 @@ export type UserFactorOrigins = Partial<
   Record<JudgmentQuestionId, "confirmed" | "unverified">
 >;
 
+// De onde veio um fator que não é só do JEV (narrator_v1.6, #672): o contexto extra do
+// usuário (#565) ou as notícias do ge, com a força do sinal que o moveu ("confirmed" =
+// os nossos dados confirmam o fato). A força da FRASE continua vindo só do JEV.
+export type FactorOrigin = {
+  by: "user" | "news";
+  strength: "confirmed" | "unverified";
+};
+export type FactorOrigins = Partial<Record<JudgmentQuestionId, FactorOrigin>>;
+
 export type NarratorSelection = {
   key: string;
   // Rótulo PT-BR da seleção (ex.: "Mais de 2,5 gols (over 2,5)").
@@ -58,6 +67,9 @@ export type NarratorDecision = {
   // Contexto extra (#569): o que a pessoa informou e o código não confere (subtipos de
   // "outra informação"), em linhas montadas pelo código. Sem efeito no número.
   userNotes?: string[];
+  // Notícias do ge (#672) sem efeito no número (troca de técnico, motivação), em linhas
+  // montadas pelo código (nunca a frase da matéria). Ausente = nenhuma.
+  newsNotes?: string[];
   // Reconferência com a escalação (#619): frases da escalação confirmada (papéis, sem
   // nome), montadas pelo código. Só o racional templado lê; o narrador LLM nunca recebe
   // este campo (a reconferência não chama o narrador).

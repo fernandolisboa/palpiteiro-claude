@@ -494,3 +494,118 @@ describe("contexto extra fora da síntese (PLAN-565 §13.2)", () => {
     expect(out[0].rationale).not.toContain("técnico");
   });
 });
+
+describe("notícias do ge na síntese (#672, palpites_v15)", () => {
+  function answers(over: Partial<Record<JudgmentQuestionId, number>> = {}): JudgmentAnswers {
+    return Object.fromEntries(
+      JUDGMENT_QUESTION_IDS.map((id) => [id, { value: over[id] ?? 0.2, confidence: null }]),
+    ) as JudgmentAnswers;
+  }
+  const SELECTIONS = [
+    { key: "home", modelProbPct: 58, odd: 1.85 },
+    { key: "draw", modelProbPct: 24, odd: 3.4 },
+    { key: "away", modelProbPct: 18, odd: 4.2 },
+  ];
+  // JEV: defesa do visitante (0,9). Notícia: ataque do mandante, não conferido (0,7).
+  const NEWS = {
+    batchId: "b-1",
+    itemsRead: 5,
+    claims: [
+      {
+        team: "home" as const,
+        topic: "absence" as const,
+        role: "attack" as const,
+        playersCount: 1,
+        index: 0,
+        status: "unverifiable" as const,
+        evidence: "Não está na nossa lista de desfalques.",
+        sides: [{ side: "home" as const, status: "unverifiable" as const }],
+        playerChecks: [{ status: "unverifiable" as const, questionId: "attack_weakened_home" as const }],
+        signals: [{ questionId: "attack_weakened_home" as const, strength: "unverified" as const }],
+        sources: ["N1"],
+      },
+    ],
+    sources: [{ ref: "N1", url: "https://ge.globo.com/a.ghtml", title: "Matéria" }],
+    evidence: { attack_weakened_home: 0.7 },
+    moved: ["attack_weakened_home" as const],
+    notes: ["segundo o ge (não conferido): troca de técnico no mandante"],
+    versions: { extract: "match_news_extract_v1", newsEvidence: "news_evidence_v1" },
+  };
+  function judgments(over: Partial<PredictionJudgments> = {}): PredictionJudgments {
+    return {
+      engine: "code_jev",
+      applied: true,
+      answers: answers({ defense_weakened_away: 0.9 }),
+      multipliers: {
+        home: {
+          factors: { attack_weakened_home: 0.92, defense_weakened_away: 1.1 },
+          product: 1.012,
+          applied: 1.012,
+        },
+        away: { factors: {}, product: 1, applied: 1 },
+      },
+      lambda: {
+        source: "heuristic",
+        degraded: false,
+        rho: null,
+        base: { home: 1.5, away: 1.1 },
+        adjusted: { home: 1.52, away: 1.1 },
+      },
+      versions: { judgments: "jev_judgments_v1", weights: "judgment_weights_v1", narrator: "narrator_v1.6", jevModel: "jev" },
+      failure: null,
+      stateHash: "h",
+      aiCallId: null,
+      reusedFromPredictionId: null,
+      news: NEWS,
+      ...over,
+    };
+  }
+  const summarize = (j: PredictionJudgments, rationale = "Mandante superior.") =>
+    summarizeAnalysesForSynthesis([
+      okOutcome("match_result", prediction({ rationale, judgments: j } as Partial<Prediction>), SELECTIONS),
+    ])[0];
+
+  it("fator movido pela notícia leva a origem; o do JEV sai como antes; notas viram newsNotes", () => {
+    const a = summarize(judgments());
+    expect(a.factorPhrases).toEqual([
+      "Desfalques ou titulares poupados tiram do mandante uma peça ofensiva central (ataque do mandante ajustado para baixo) (segundo o ge, não conferido)",
+      "Desfalques ou titulares poupados atingem a defesa ou o goleiro titular do visitante (gols esperados do mandante ajustados para cima) — sinal forte",
+    ]);
+    expect(a.newsNotes).toEqual(["segundo o ge (não conferido): troca de técnico no mandante"]);
+    // O racional do narrador vai intacto (a notícia é pública, sem dado do usuário).
+    expect(a.rationale).toBe("Mandante superior.");
+    // Nem o título nem a URL da matéria chegam à síntese pelas análises.
+    expect(JSON.stringify(a)).not.toContain("ge.globo.com");
+  });
+
+  it("sem notícia, as frases de antes (sem origem) e sem newsNotes", () => {
+    const { news: _n, ...plain } = judgments();
+    const a = summarize(plain);
+    expect(a.factorPhrases?.join(" ")).not.toContain("segundo o ge");
+    expect(a).not.toHaveProperty("newsNotes");
+  });
+
+  it("baseline do usuário = JEV ∨ notícia: o mesmo fator já movido pela notícia não tira o racional", () => {
+    const userContext = {
+      claims: [{ ...NEWS.claims[0], sources: undefined }].map(({ sources: _s, ...c }) => c),
+      evidence: { attack_weakened_home: 0.7 },
+      extractionAiCallId: null,
+      warnings: [],
+      versions: { userEvidence: "user_evidence_v1", extract: "user_palpite_extract_v1" },
+    };
+    const a = summarize(judgments({ userContext }), "Segundo o que você informou, o ataque perde peça.");
+    // O usuário não moveu nada acima da notícia: o racional fica.
+    expect(a.rationale).toBe("Segundo o que você informou, o ataque perde peça.");
+    // Sem a notícia, o mesmo contexto moveria o fator: o racional sai.
+    const { news: _n, ...noNews } = judgments({ userContext });
+    expect(summarize(noNews, "Segundo o que você informou, o ataque perde peça.").rationale).toMatch(
+      /^Fatores do modelo: /,
+    );
+  });
+
+  it("news ilegível: tratado como sem notícia", () => {
+    const a = summarize(judgments({ news: { batchId: 1 } as never }));
+    expect(a).not.toHaveProperty("newsNotes");
+    expect(a.factorPhrases?.join(" ")).not.toContain("segundo o ge");
+  });
+});

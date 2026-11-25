@@ -157,7 +157,7 @@ import {
   type NarratorContext,
   type NarratorDecision,
   type NarratorOutput,
-  type UserFactorOrigins,
+  type FactorOrigins,
 } from "./markets/_narrator";
 import {
   liveNarratorCartridge,
@@ -1093,7 +1093,14 @@ async function runPredict(
       teams,
       engine,
       answers: resolved.answers,
-      user: user ? { jev: jev.answers, origins: user.origins } : undefined,
+      user: user
+        ? {
+            jev: jev.answers,
+            origins: Object.fromEntries(
+              Object.entries(user.origins).map(([id, strength]) => [id, { by: "user", strength }]),
+            ) as FactorOrigins,
+          }
+        : undefined,
       userNotes: user?.notes ?? [],
       decision,
       line: marketParams?.line ?? null,
@@ -3217,7 +3224,7 @@ function toNarratorDecision(args: {
   answers: JudgmentAnswers | null;
   // Contexto extra (#565): respostas só do JEV (a força das frases) e os fatores movidos
   // pelo usuário (a origem).
-  user?: { jev: JudgmentAnswers | null; origins: UserFactorOrigins };
+  user?: { jev: JudgmentAnswers | null; origins: FactorOrigins };
   // Contexto extra sem efeito no número (#569), em linhas do código.
   userNotes: string[];
   decision: GatedDecision;

@@ -91,8 +91,13 @@ import type { PalpiteCartridge } from "../types";
 // azarão". Cartucho em ./model-pick.ts; este arquivo segue com o v13 (o LLM escolhe), que
 // roda só quando o run não tem nenhuma fonte de λ. As notícias (pushNewsLines) são as
 // mesmas nos dois.
+// v15 (#672) = fatores movidos pelas notícias do ge chegam com a origem "(segundo o ge,
+// não conferido)" / "(segundo o ge, confirmado pelos nossos dados)" na lista de fatores,
+// e as notas das notícias (sem efeito no número, linhas do código) numa seção própria só
+// quando existem. Regra nova no system prompt: notícia se cita como notícia, nunca como
+// fato. Sem notícia, a mensagem é byte a byte a da v14. Só o cartucho model_pick.
 // BUMP MANUAL (commit `prompt:`) em QUALQUER mudança de prompt/schema.
-export const PALPITES_VERSION = "palpites_v14" as const;
+export const PALPITES_VERSION = "palpites_v15" as const;
 // O v13 (o LLM escolhe resultado e placar): o fallback sem fonte de λ (#668).
 export const PALPITES_LLM_PICK_VERSION = "palpites_v13" as const;
 
