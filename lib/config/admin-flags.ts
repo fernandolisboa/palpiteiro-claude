@@ -227,6 +227,17 @@ export const ADMIN_FLAGS = [
       "Sem LLM, sem The Odds API e sem contar no limite diário: 1 chamada JEV (~US$ 0,0001) por jogo. API-Football só na última hora antes do jogo.",
   },
   {
+    key: "enableNewsFactors",
+    kind: "boolean",
+    area: "motor",
+    label: "Notícias viram fator no modelo",
+    description:
+      "Nos jogos a até 48h do início, o cron da base lê as notícias do ge dos dois times, separa as afirmações de fato (desfalque, time misto, jogo decisivo), confere cada uma com os nossos dados e só então ajusta os fatores do JEV, sempre dentro do mesmo teto. Desligada, a base usa só os nossos dados.",
+    default: true,
+    costNote:
+      "Cada lote novo de notícias de um jogo: 1 Haiku (até 4.096 tokens) no cron da base, ~US$ 0,001. RSS do ge grátis; sem The Odds API e sem API-Football extra.",
+  },
+  {
     key: "analysisEngine",
     kind: "enum",
     area: "motor",

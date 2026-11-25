@@ -100,6 +100,8 @@ describe("readingMatrix ao vivo", () => {
       lambdaAwayBase: L.lambdaAway,
       rho: L.rho,
       jevAnswers: null,
+      modelAnswers: null,
+      newsEvidence: {},
     };
     const palpite = { kind: "score" as const, home: 2, away: 0 };
     const r = computeReadings(base, {}, palpite, inPlay);

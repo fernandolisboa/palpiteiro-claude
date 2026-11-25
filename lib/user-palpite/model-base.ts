@@ -2,10 +2,12 @@ import { JUDGMENTS_VERSION } from "@/lib/ai/judgments/questions";
 import type { JudgmentAnswers } from "@/lib/ai/judgments/types";
 import { resolveSlipModel, type SlipModelMatch } from "@/lib/bets/slip-model";
 import { getLatestMatchModelSnapshotWithKickoff } from "@/lib/db/queries/match-model-snapshots";
+import { modelAnswersOf } from "@/lib/match-news/model-answers";
 import { MODEL_SCORELINE_MAX_AGE_MS } from "@/lib/model-base/model-scoreline";
 import type { MatchModelSnapshot } from "@/lib/model-base/types";
 import { MATCH_MODEL_VERSION } from "@/lib/model-base/version";
 import { isInPlayScoreline } from "@/lib/quant/in-play";
+import type { UserEvidence } from "./types";
 import type {
   DixonColesFallbackReason,
   ModelScoreline,
@@ -18,8 +20,10 @@ import type {
 // cliente só faz `import type` daqui.
 //
 // O λ daqui é SEMPRE o pré-JEV: o caminho "base" lê lambdaHome/AwayBase e devolve as
-// respostas JEV à parte; o caminho "live" não tem respostas. Quem lê aplica
-// `applyJudgments` UMA vez (lambdasFor), então o JEV nunca entra duas vezes.
+// respostas à parte; o caminho "live" não tem respostas. Quem lê aplica
+// `applyJudgments` UMA vez (lambdasFor), então o JEV nunca entra duas vezes. A
+// referência do número é `modelAnswers` (JEV ∨ notícia, #672): o "sem o seu contexto"
+// bate com as probabilidades da base.
 
 export type PalpiteModelBase = {
   origin: "snapshot" | "live";
@@ -38,8 +42,13 @@ export type PalpiteModelBase = {
   lambdaAwayBase: number;
   // null = DIXON_COLES_RHO pinado.
   rho: number | null;
-  // null = JEV não aplicado.
+  // null = JEV não aplicado. SÓ o JEV: decide `jevApplied` (confirmada sem efeito).
   jevAnswers: JudgmentAnswers | null;
+  // O que a base aplicou (JEV ∨ notícia, modelAnswersOf). = jevAnswers sem notícia;
+  // pode ser não-null com o JEV falho (só a notícia). null no caminho ao vivo.
+  modelAnswers: JudgmentAnswers | null;
+  // Os nouls da notícia que a base aplicou ({} sem notícia). Gravado na análise.
+  newsEvidence: UserEvidence;
 };
 
 /** As MESMAS regras de getMatchModelScoreline (lib/model-base/model-scoreline.ts). */
@@ -61,13 +70,25 @@ function snapshotAnswers(s: MatchModelSnapshot): JudgmentAnswers | null {
   return j.answers;
 }
 
+// JEV ∨ notícia da base, com o mesmo filtro de versão das perguntas.
+function snapshotModelAnswers(
+  s: MatchModelSnapshot,
+  jev: JudgmentAnswers | null,
+): JudgmentAnswers | null {
+  const j = s.judgments;
+  if (!j || j.versions.judgments !== JUDGMENTS_VERSION) return null;
+  return modelAnswersOf({ answers: jev, news: j.news ?? null });
+}
+
 function fromSnapshot(s: MatchModelSnapshot): PalpiteModelBase {
   const answers = snapshotAnswers(s);
+  const modelAnswers = snapshotModelAnswers(s, answers);
+  const newsEvidence = modelAnswers ? (s.judgments?.news?.evidence ?? {}) : {};
   return {
     origin: "snapshot",
     snapshotId: s.id,
     modelVersion: s.modelVersion,
-    snapshotWeightsVersion: answers ? (s.judgments?.versions.weights ?? null) : null,
+    snapshotWeightsVersion: modelAnswers ? (s.judgments?.versions.weights ?? null) : null,
     source: s.lambdaSource,
     degraded: s.lambdaDegraded,
     fallbackReason: s.lambdaFallbackReason,
@@ -76,6 +97,8 @@ function fromSnapshot(s: MatchModelSnapshot): PalpiteModelBase {
     lambdaAwayBase: s.lambdaAwayBase,
     rho: s.rho,
     jevAnswers: answers,
+    modelAnswers,
+    newsEvidence,
   };
 }
 
@@ -97,6 +120,8 @@ function fromLive(m: ModelScoreline, staleBase: boolean): PalpiteModelBase {
       lambdaAwayBase: pre.lambdaAway,
       rho: pre.rho,
       jevAnswers: null,
+      modelAnswers: null,
+      newsEvidence: {},
     };
   }
   return {
@@ -112,6 +137,8 @@ function fromLive(m: ModelScoreline, staleBase: boolean): PalpiteModelBase {
     lambdaAwayBase: m.lambdaAway,
     rho: m.rho ?? null,
     jevAnswers: null,
+    modelAnswers: null,
+    newsEvidence: {},
   };
 }
 

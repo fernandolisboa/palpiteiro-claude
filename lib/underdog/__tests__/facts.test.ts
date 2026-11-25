@@ -9,7 +9,10 @@ import {
   complementPct,
   scorelineKey,
 } from "@/lib/underdog/facts";
+import { favoriteWeakenedMax } from "@/lib/underdog/scenarios";
 import type { UnderdogFacts } from "@/lib/underdog/types";
+import { NEWS_EVIDENCE_VERSION } from "@/lib/match-news/apply";
+import { combineAnswers } from "@/lib/user-palpite/evidence";
 
 import { answers, KICKOFF, NOW, snapshot } from "./fixtures";
 
@@ -61,6 +64,60 @@ describe("computeUnderdogFacts", () => {
     );
     expect(f.signals.map((s) => s.kind)).toEqual(["absences", "jev"]);
     expect(f.model.jevApplied).toBe(true);
+  });
+});
+
+describe("notícia da base (#672, ajuste 4)", () => {
+  // Azarão = Flamengo (visitante). A notícia põe 0,7 no ataque do favorito (Palmeiras) e
+  // no do azarão; o JEV respondeu 0,2 em tudo.
+  const jev = answers();
+  const evidence = { attack_weakened_home: 0.7, attack_weakened_away: 0.7 };
+  const snap = () =>
+    snapshot({
+      jevStatus: "applied",
+      judgments: {
+        applied: true,
+        answers: jev,
+        multipliers: null,
+        versions: { judgments: "j", weights: "w", jevModel: "m", jevModelServed: "m" },
+        failure: null,
+        stateHash: "h",
+        aiCallId: null,
+        reusedFromPredictionId: null,
+        reusedFromModelSnapshotId: null,
+        news: {
+          batchId: "b-1",
+          itemsRead: 2,
+          claims: [],
+          sources: [],
+          evidence,
+          moved: ["attack_weakened_home", "attack_weakened_away"],
+          notes: [],
+          versions: { extract: "match_news_extract_v1", newsEvidence: NEWS_EVIDENCE_VERSION },
+        },
+      },
+    });
+
+  it("o 0,7 só da notícia não vira sinal do JEV (jevSignals segue só JEV)", () => {
+    const f = computeUnderdogFacts(underdogBaseFromSnapshot(snap(), KICKOFF, NOW)!);
+    expect(f.signals.filter((s) => s.kind === "jev")).toEqual([]);
+    expect(f.model.jevApplied).toBe(true);
+  });
+
+  it("cenário C (absences_max) parte do que a base aplicou: JEV ∨ notícia", () => {
+    const s = snap();
+    const f = computeUnderdogFacts(underdogBaseFromSnapshot(s, KICKOFF, NOW)!);
+    const c = f.scenarios.find((x) => x.id === "absences_max");
+    const args = {
+      lambdaHomeBase: s.lambdaHomeBase,
+      lambdaAwayBase: s.lambdaAwayBase,
+      rho: s.rho ?? undefined,
+      side: "away" as const,
+    };
+    const withNews = favoriteWeakenedMax({ ...args, answers: combineAnswers(jev, evidence) })!;
+    const jevOnly = favoriteWeakenedMax({ ...args, answers: jev })!;
+    expect(c?.afterPct).toBe(Math.round(withNews * 10) / 10);
+    expect(Math.round(withNews * 10)).not.toBe(Math.round(jevOnly * 10));
   });
 });
 

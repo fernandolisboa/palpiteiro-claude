@@ -1,4 +1,5 @@
 import type { JudgmentAnswers } from "@/lib/ai/judgments/types";
+import { modelAnswersOf } from "@/lib/match-news/model-answers";
 import { modelScorelineFromSnapshot } from "@/lib/model-base/model-scoreline";
 import type { MatchModelSnapshot } from "@/lib/model-base/types";
 import type { ModelScoreline } from "@/lib/quant/match-model";
@@ -67,7 +68,11 @@ export function computeUnderdogFacts(
   signals: UnderdogSignal[] = []
 ): UnderdogFacts {
   const { snapshot, model, pick } = base;
+  // Sinais "jev" e jevApplied: SÓ o JEV (o 0,7 da notícia não vira sinal do JEV).
+  // Cenários: o que a base aplicou (JEV ∨ notícia, #672), senão o cenário C esquece a
+  // notícia que já está no número.
   const answers = snapshotAnswers(snapshot);
+  const modelAnswers = modelAnswersOf(snapshot.judgments);
   return {
     side: pick.side,
     chances: pick.chances,
@@ -77,7 +82,7 @@ export function computeUnderdogFacts(
       side: pick.side,
       lambdaHomeBase: snapshot.lambdaHomeBase,
       lambdaAwayBase: snapshot.lambdaAwayBase,
-      answers,
+      answers: modelAnswers,
     }),
     signals: [...signals, ...jevSignals(pick.side, answers)],
     model: {

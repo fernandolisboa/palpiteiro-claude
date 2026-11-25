@@ -18,6 +18,7 @@ const GUARDED_DIRS = [
   "lib/sync",
   "lib/user-palpite",
   "lib/model-base",
+  "lib/match-news",
   "lib/bets",
   "lib/pools",
   "lib/db",

@@ -8,8 +8,11 @@ import {
   buildMatchModelSnapshot,
   matchModelFingerprint,
   modelProbabilities,
+  newsFingerprintKey,
   type FingerprintInput,
 } from "@/lib/model-base/build-snapshot";
+import { NEWS_EVIDENCE_VERSION, type AppliedNews } from "@/lib/match-news/apply";
+import { combineAnswers } from "@/lib/user-palpite/evidence";
 import type { ModelScoreline } from "@/lib/quant/match-model";
 import {
   DIXON_COLES_RHO,
@@ -290,5 +293,126 @@ describe("matchModelFingerprint", () => {
     });
     expect(b.fingerprint).toBe(a.fingerprint);
     expect(c.fingerprint).toBe(a.fingerprint);
+  });
+});
+
+describe("notícias na base (#672)", () => {
+  function applied(
+    evidence: Record<string, number>,
+    jev: JudgmentAnswers | null,
+    urls: string[] = ["https://ge.globo.com/a.ghtml"],
+  ): AppliedNews {
+    const moved = Object.keys(evidence) as AppliedNews["moved"];
+    return {
+      evidence,
+      answers: Object.keys(evidence).length > 0 ? combineAnswers(jev, evidence) : jev,
+      origins: Object.fromEntries(moved.map((q) => [q, "unverified"])),
+      moved,
+      notes: [],
+      itemsRead: 3,
+      factorItems: urls.length,
+      movedUrls: urls,
+      stored: {
+        batchId: "batch-1",
+        itemsRead: 3,
+        claims: [],
+        sources: [],
+        evidence,
+        moved,
+        notes: [],
+        versions: { extract: "match_news_extract_v1", newsEvidence: NEWS_EVIDENCE_VERSION },
+      },
+    };
+  }
+
+  it("sem notícia (ou evidência vazia): row e fingerprint idênticos aos de hoje", () => {
+    const s = dc();
+    const today = buildMatchModelSnapshot({ matchId: "m-1", scoreline: s, neutral: false, jev: run() });
+    const none = buildMatchModelSnapshot({
+      matchId: "m-1",
+      scoreline: s,
+      neutral: false,
+      jev: run(),
+      news: null,
+    });
+    const empty = buildMatchModelSnapshot({
+      matchId: "m-1",
+      scoreline: s,
+      neutral: false,
+      jev: run(),
+      news: applied({}, run().answers),
+    });
+    expect(none).toEqual(today);
+    expect(empty.fingerprint).toBe(today.fingerprint);
+    expect(empty.lambdaHome).toBe(today.lambdaHome);
+    expect(newsFingerprintKey(null)).toBeUndefined();
+    expect(newsFingerprintKey({ evidence: {}, urls: ["x"] })).toBeUndefined();
+  });
+
+  it("com evidência: λ = base × (JEV ∨ notícia); answers, applied e stateHash SÓ do JEV", () => {
+    const s = dc();
+    const r = run();
+    const news = applied({ attack_weakened_home: 0.7 }, r.answers);
+    const row = buildMatchModelSnapshot({ matchId: "m-1", scoreline: s, neutral: false, jev: r, news });
+    const jevOnly = buildMatchModelSnapshot({ matchId: "m-1", scoreline: s, neutral: false, jev: r });
+    expect(row.lambdaHome).toBeLessThan(jevOnly.lambdaHome);
+    expect(row.lambdaAway).toBe(jevOnly.lambdaAway);
+    expect(row.judgments?.answers).toEqual(r.answers);
+    expect(row.judgments?.applied).toBe(true);
+    expect(row.judgments?.stateHash).toBe("hash-a");
+    expect(row.judgments?.news?.batchId).toBe("batch-1");
+    expect(row.judgments?.multipliers?.home.applied).toBeLessThan(
+      jevOnly.judgments?.multipliers?.home.applied ?? 0,
+    );
+    expect(row.fingerprint).not.toBe(jevOnly.fingerprint);
+  });
+
+  it("JEV que falhou + notícia: applied false (só JEV), mas o λ reflete a notícia", () => {
+    const s = dc();
+    const failed = run({ answers: null, jevModel: null, jevModelServed: null });
+    const row = buildMatchModelSnapshot({
+      matchId: "m-1",
+      scoreline: s,
+      neutral: false,
+      jev: failed,
+      news: applied({ attack_weakened_home: 0.85 }, null),
+    });
+    expect(row.jevStatus).toBe("failed");
+    expect(row.judgments?.applied).toBe(false);
+    expect(row.judgments?.answers).toBeNull();
+    expect(row.lambdaHome).toBeLessThan(s.lambdaHome);
+  });
+
+  it("JEV não tentado: a notícia não entra (os fatos são os do laço do JEV)", () => {
+    const s = dc();
+    const row = buildMatchModelSnapshot({
+      matchId: "m-1",
+      scoreline: s,
+      neutral: false,
+      jev: null,
+      news: applied({ attack_weakened_home: 0.85 }, null),
+    });
+    expect(row.judgments).toBeNull();
+    expect(row.lambdaHome).toBe(s.lambdaHome);
+  });
+
+  it("fingerprint: muda com a evidência (6ª casa) e as URLs; não com batchId nem a ordem das URLs", () => {
+    const s = dc();
+    const r = run();
+    const fp = (n: AppliedNews) =>
+      buildMatchModelSnapshot({ matchId: "m-1", scoreline: s, neutral: false, jev: r, news: n })
+        .fingerprint;
+    const a = applied({ attack_weakened_home: 0.7 }, r.answers, ["u1", "u2"]);
+    const otherBatch = { ...a, stored: { ...a.stored, batchId: "batch-2" } };
+    const reordered = { ...a, movedUrls: ["u2", "u1", "u1"] };
+    expect(fp(otherBatch)).toBe(fp(a));
+    expect(fp(reordered)).toBe(fp(a));
+    expect(fp(applied({ attack_weakened_home: 0.7 }, r.answers, ["u1", "u3"]))).not.toBe(fp(a));
+    expect(
+      newsFingerprintKey({ evidence: { attack_weakened_home: 0.7000001 }, urls: ["u1"] }),
+    ).toBe(newsFingerprintKey({ evidence: { attack_weakened_home: 0.7 }, urls: ["u1"] }));
+    expect(
+      newsFingerprintKey({ evidence: { attack_weakened_home: 0.700001 }, urls: ["u1"] }),
+    ).not.toBe(newsFingerprintKey({ evidence: { attack_weakened_home: 0.7 }, urls: ["u1"] }));
   });
 });

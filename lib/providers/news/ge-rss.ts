@@ -239,6 +239,10 @@ export type TeamFeedsOutcome =
       results: NewsResult[];
       partial: boolean;
       unknownOpponent: boolean;
+      // De qual feed veio cada resultado (URL canônica → lado) e os lados cujo feed
+      // falhou (#672: o cron completa o lote com os itens guardados desse lado).
+      sideByUrl: Record<string, "home" | "away">;
+      failedSides: ("home" | "away")[];
     };
 
 /**
@@ -255,8 +259,8 @@ export async function getNewsViaTeamFeeds(
     ? Math.min(Date.now(), kickoffMs)
     : Date.now();
   const sides = [
-    { team: ctx.homeTeam, opponent: ctx.awayTeam },
-    { team: ctx.awayTeam, opponent: ctx.homeTeam },
+    { team: ctx.homeTeam, opponent: ctx.awayTeam, side: "home" as const },
+    { team: ctx.awayTeam, opponent: ctx.homeTeam, side: "away" as const },
   ].flatMap((side) => {
     const source = resolveTeamSources(side.team);
     return source ? [{ ...side, url: geFeedUrl(source.geSlug) }] : [];
@@ -266,7 +270,8 @@ export async function getNewsViaTeamFeeds(
   const settled = await Promise.allSettled(
     sides.map((side) => fetchFeed(side.url, options.deadlineAt))
   );
-  const perFeed: Candidate[][] = [];
+  const perFeed: { side: "home" | "away"; list: Candidate[] }[] = [];
+  const failedSides: ("home" | "away")[] = [];
   let okCount = 0;
   let unknownOpponent = false;
   settled.forEach((s, i) => {
@@ -288,17 +293,19 @@ export async function getNewsViaTeamFeeds(
           reason: feed.reason,
         })
       );
+      failedSides.push(sides[i].side);
       return;
     }
     okCount += 1;
     if (!isKnownTeam(sides[i].opponent)) unknownOpponent = true;
-    perFeed.push(
-      matchFeedItems(feed.items, {
+    perFeed.push({
+      side: sides[i].side,
+      list: matchFeedItems(feed.items, {
         anchorMs,
         opponent: sides[i].opponent,
         team: sides[i].team,
-      })
-    );
+      }),
+    });
   });
   if (okCount === 0) return { kind: "all_failed" };
 
@@ -306,13 +313,15 @@ export async function getNewsViaTeamFeeds(
   // feed de um time não come vaga do outro.
   const taken = new Set<string>();
   const candidates: Candidate[] = [];
-  for (const list of perFeed) {
+  const sideByUrl: Record<string, "home" | "away"> = {};
+  for (const { side, list } of perFeed) {
     let kept = 0;
     for (const c of list) {
       if (kept >= PER_TEAM_CAP) break;
       const key = canonicalUrl(c.url);
       if (taken.has(key)) continue;
       taken.add(key);
+      sideByUrl[key] = side;
       candidates.push(c);
       kept += 1;
     }
@@ -321,10 +330,15 @@ export async function getNewsViaTeamFeeds(
     .sort(rank)
     .slice(0, TOTAL_CAP)
     .map(({ priority: _p, publishedMs: _m, ...result }) => result);
+  const kept = new Set(results.map((r) => canonicalUrl(r.url)));
   return {
     kind: "ok",
     results,
     partial: okCount < sides.length,
     unknownOpponent,
+    sideByUrl: Object.fromEntries(
+      Object.entries(sideByUrl).filter(([url]) => kept.has(url))
+    ),
+    failedSides,
   };
 }

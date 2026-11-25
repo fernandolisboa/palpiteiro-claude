@@ -402,6 +402,7 @@ function storedModel(
     },
     jevApplied: base.jevAnswers !== null,
     jevAnswers: base.jevAnswers,
+    ...(Object.keys(base.newsEvidence).length > 0 ? { newsEvidence: base.newsEvidence } : {}),
     userEvidence: ev,
     combinedAnswers: readings.combined,
     multipliersWith: readings.lambdaWith.multipliers,
@@ -463,7 +464,7 @@ async function analyzeAfterCharge(ctx: ChargedContext): Promise<AnalyzeUserPalpi
     without: readings.without,
     with: readings.with,
     codeVerdict: verdict,
-    claims: toNarrationClaims(checked, base.jevAnswers, teams),
+    claims: toNarrationClaims(checked, base.modelAnswers, teams, jevApplied),
     facts: summarizeFacts(factInput),
     ...(ctx.live ? { live: narrationLive(ctx) } : {}),
   };

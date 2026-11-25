@@ -60,6 +60,8 @@ const BASE: PalpiteModelBase = {
   lambdaAwayBase: 1.0,
   rho: null,
   jevAnswers: null,
+  modelAnswers: null,
+  newsEvidence: {},
 };
 
 function state(over: Record<string, unknown> = {}) {

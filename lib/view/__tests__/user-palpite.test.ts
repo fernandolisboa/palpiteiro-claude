@@ -4,7 +4,7 @@ import { JUDGMENT_QUESTION_IDS } from "@/lib/ai/judgments/questions";
 import type { JudgmentAnswers } from "@/lib/ai/judgments/types";
 import { containsValueLanguage } from "@/lib/ai/palpites/value-language-guard";
 import type { UserPalpiteAnalysisRecord } from "@/lib/db/queries/user-palpite-analyses";
-import { computeReadings, evidenceFromClaims } from "@/lib/user-palpite/evidence";
+import { combineAnswers, computeReadings, evidenceFromClaims } from "@/lib/user-palpite/evidence";
 import { lambdasFor } from "@/lib/user-palpite/lambdas";
 import type { PalpiteModelBase } from "@/lib/user-palpite/model-base";
 import { readingMatrix, readPalpite } from "@/lib/user-palpite/reading";
@@ -40,6 +40,8 @@ function base(jev: JudgmentAnswers | null, over: Partial<PalpiteModelBase> = {})
     lambdaAwayBase: 1.1,
     rho: -0.07,
     jevAnswers: jev,
+    modelAnswers: jev,
+    newsEvidence: {},
     ...over,
   } satisfies PalpiteModelBase;
 }
@@ -87,6 +89,7 @@ function record(
       lambdaWith: { home: r.lambdaWith.lambdaHome, away: r.lambdaWith.lambdaAway },
       jevApplied,
       jevAnswers: b.jevAnswers,
+      ...(Object.keys(b.newsEvidence).length > 0 ? { newsEvidence: b.newsEvidence } : {}),
       userEvidence: ev,
       combinedAnswers: r.combined,
       multipliersWith: r.lambdaWith.multipliers,
@@ -222,6 +225,22 @@ describe("toUserPalpiteAnalysisView", () => {
     expect(v.discordancias).toEqual([
       { claimText: "o jogador citado, atacante, está fora", texto: "Discordo disso." },
     ]);
+  });
+
+  it("notícia da base no mesmo fator (#672): 'já considerado', leitura não muda; sem notícia gravada, move", () => {
+    const newsEvidence = { attack_weakened_away: 0.7 };
+    const b = base(null, { modelAnswers: combineAnswers(null, newsEvidence), newsEvidence });
+    const rec = record(b, [claim()]);
+    expect(rec.model.newsEvidence).toEqual(newsEvidence);
+    const v = toUserPalpiteAnalysisView(rec, TEAMS, NOW);
+    expect(v.claims[0].effect).toBe("já considerado pelo modelo");
+    expect(v.changed).toBe(false);
+    expect(v.showUnverifiedNote).toBe(false);
+    // "Sem o seu contexto" = base × notícia (o número da base), não o λ base cru.
+    expect(rec.model.lambdaWithout.away).toBeLessThan(b.lambdaAwayBase);
+    const view = toSeuPalpiteModelView(b);
+    expect(view.lambdaAway).toBe(rec.model.lambdaWithout.away);
+    expect(view.jevApplied).toBe(false);
   });
 
   it("confirmada com JEV presente: 'já considerado pelo modelo', leitura não muda", () => {

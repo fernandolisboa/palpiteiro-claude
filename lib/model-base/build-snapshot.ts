@@ -7,6 +7,8 @@ import { JUDGMENTS_VERSION } from "@/lib/ai/judgments/questions";
 import { canonicalHash } from "@/lib/ai/judgments/state-hash";
 import type { JudgmentRun } from "@/lib/ai/predict";
 import type { NewMatchModelSnapshot } from "@/lib/db/queries/match-model-snapshots";
+import { NEWS_EVIDENCE_VERSION, type AppliedNews } from "@/lib/match-news/apply";
+import type { UserEvidence } from "@/lib/user-palpite/types";
 import type {
   DixonColesFallbackReason,
   ModelScoreline,
@@ -91,7 +93,30 @@ export type FingerprintInput = {
         stateHash: string;
         jevModel: string | null;
       };
+  // Notícias do jogo (#672): só quando a evidência não é vazia. Sem ela o hash é
+  // idêntico ao de antes (o deploy não grava row nova em todo jogo).
+  news?: { evidence: UserEvidence; urls: readonly string[] } | null;
 };
+
+/**
+ * Chave da notícia no fingerprint (ajuste 7 do PLAN-672): versão da regra, evidência
+ * (6 casas) e as URLs citadas pelos fatores movidos. undefined quando não há evidência
+ * (canonicalJson ignora undefined, nunca null). O id do lote fica só no jsonb: lote novo
+ * com a mesma evidência e as mesmas fontes só faz heartbeat.
+ */
+export function newsFingerprintKey(
+  news: FingerprintInput["news"],
+): string | undefined {
+  if (!news || Object.keys(news.evidence).length === 0) return undefined;
+  const evidence = Object.fromEntries(
+    Object.entries(news.evidence).map(([k, v]) => [k, (v ?? 0).toFixed(6)]),
+  );
+  return canonicalHash({
+    version: NEWS_EVIDENCE_VERSION,
+    evidence,
+    urls: [...new Set(news.urls)].sort(),
+  });
+}
 
 /**
  * Hash do que define o resultado. Fica de fora o que não muda as probabilidades nem o
@@ -126,22 +151,30 @@ export function matchModelFingerprint(input: FingerprintInput): string {
             weightsVersion: JUDGMENT_WEIGHTS_VERSION,
             jevModel: input.jev.jevModel,
           },
+    news: newsFingerprintKey(input.news),
   });
 }
 
 /**
  * Row da base. `jev` null = JEV não tentado (fora da janela, flag desligado, sem chave,
  * prazo do run, dados indisponíveis); com um run, `applied` quando o JEV respondeu
- * (respostas novas ou reusadas) e `failed` quando não.
+ * (respostas novas ou reusadas) e `failed` quando não. `news` (#672) só entra com o JEV
+ * tentado (os dados da conferência são os do laço do JEV): λ = base × (JEV ∨ notícia),
+ * `judgments.answers`/`applied` seguem SÓ do JEV e `judgments.news` guarda o aplicado.
  */
 export function buildMatchModelSnapshot(args: {
   matchId: string;
   scoreline: ModelScoreline;
   neutral: boolean;
   jev: JudgmentRun | null;
+  news?: AppliedNews | null;
 }): NewMatchModelSnapshot {
   const { scoreline, jev } = args;
-  const applied = applyJudgments(scoreline, jev?.answers ?? null);
+  const news = jev === null ? null : (args.news ?? null);
+  const applied = applyJudgments(
+    scoreline,
+    news ? news.answers : (jev?.answers ?? null),
+  );
   // Sem JEV aplicado, a matriz do getModelScoreline já é a do λ base; com JEV, a MESMA
   // montagem de runCodeJevEngine (λ ajustado, ρ do fit).
   const matrix = applied.applied
@@ -156,7 +189,8 @@ export function buildMatchModelSnapshot(args: {
     jev === null
       ? null
       : {
-          applied: applied.applied,
+          // Só o JEV (D4): o reuso por stateHash filtra applied e lê answers.
+          applied: jev.answers !== null,
           answers: jev.answers,
           multipliers: applied.multipliers,
           versions: {
@@ -172,6 +206,7 @@ export function buildMatchModelSnapshot(args: {
           aiCallId: jev.aiCallId,
           reusedFromPredictionId: jev.reusedFromPredictionId,
           reusedFromModelSnapshotId: jev.reusedFromModelSnapshotId,
+          ...(news ? { news: news.stored } : {}),
         };
 
   const topScorelinesPct: TopScoreline[] = topScorelines(
@@ -195,6 +230,7 @@ export function buildMatchModelSnapshot(args: {
             stateHash: jev.stateHash,
             jevModel: jev.jevModel,
           },
+    news: news ? { evidence: news.evidence, urls: news.movedUrls } : null,
   });
 
   return {

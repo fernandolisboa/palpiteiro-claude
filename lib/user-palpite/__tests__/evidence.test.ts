@@ -37,6 +37,8 @@ function base(jev: JudgmentAnswers | null): PalpiteModelBase {
     lambdaAwayBase: 1.1,
     rho: -0.07,
     jevAnswers: jev,
+    modelAnswers: jev,
+    newsEvidence: {},
   };
 }
 

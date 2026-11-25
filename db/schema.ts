@@ -8,6 +8,13 @@ import type { ModelPricing } from "@/lib/ai/model-versions/types";
 import type { PalpitePick } from "@/lib/ai/palpites/pick";
 import type { ReasoningStep } from "@/lib/ai/progress/protocol";
 import type {
+  MatchNewsBatchItem,
+  MatchNewsBatchStatus,
+  MatchNewsFeedSide,
+  MatchNewsSource,
+  NewsClaim,
+} from "@/lib/match-news/types";
+import type {
   MatchModelJevStatus,
   MatchModelJudgments,
   MatchModelProbabilities,
@@ -317,9 +324,10 @@ export const aiCalls = pgTable(
   {
     id: uuid().primaryKey().defaultRandom(),
     // Nullable SÓ pras chamadas de sistema (#555, ADR 0052): o JEV do cron da base do
-    // modelo não tem usuário, nem a sondagem de versão nova de modelo (ADR 0062). O
-    // CHECK abaixo trava no banco que só provider TypeSafe ou a sondagem podem ficar sem
-    // usuário — um insert Claude/narração sem user_id é bug e falha.
+    // modelo não tem usuário, nem a sondagem de versão nova de modelo (ADR 0062), nem a
+    // extração das notícias do jogo no mesmo cron (#672). O CHECK abaixo trava no banco
+    // que só esses três podem ficar sem usuário — um insert Claude/narração sem user_id
+    // é bug e falha.
     userId: uuid().references(() => users.id, { onDelete: "restrict" }),
     // Nullable SÓ pra sondagem de versão nova (ADR 0062, prompt_version
     // `model_probe_*`), que não é sobre jogo nenhum. CHECK ai_calls_match_id_system_only.
@@ -344,9 +352,11 @@ export const aiCalls = pgTable(
   (t) => [
     index("ai_calls_created_at_idx").on(t.createdAt),
     index("ai_calls_user_id_idx").on(t.userId),
+    // Sem usuário: JEV (TypeSafe), sondagem de versão (`model_probe_*`) e extração
+    // das notícias do jogo no cron da base (`match_news_*`, #672). Migration 0068.
     check(
       "ai_calls_user_id_system_only",
-      sql`${t.userId} IS NOT NULL OR ${t.provider} = ${sql.raw(`'${JUDGMENT_PROVIDER_KEY}'`)} OR ${t.promptVersion} LIKE 'model\\_probe\\_%'`,
+      sql`${t.userId} IS NOT NULL OR ${t.provider} = ${sql.raw(`'${JUDGMENT_PROVIDER_KEY}'`)} OR ${t.promptVersion} LIKE 'model\\_probe\\_%' OR ${t.promptVersion} LIKE 'match\\_news\\_%'`,
     ),
     check(
       "ai_calls_match_id_system_only",
@@ -984,6 +994,11 @@ export const aiConfig = pgTable("ai_config", {
   // análises code_jev feitas antes da escalação sair. SET ... = false → nada é
   // reconferido; o state v3 do JEV (escalação no state) vale sempre.
   enableLineupRecheck: boolean().notNull().default(true),
+  // Kill-switch das notícias como fator no modelo (#672). Default ON. O cron da base lê
+  // o RSS do ge dos jogos a ≤48h, extrai afirmações tipadas (1 Haiku por lote novo),
+  // confere com os nossos dados e aplica como evidência nos fatores do JEV. SET ... =
+  // false → nenhuma fase de notícia no cron (a base fica como antes).
+  enableNewsFactors: boolean().notNull().default(true),
   // Personagem ao lado do progresso da análise (ADR 0068): 'robo' (robozinho da ADR
   // 0065, padrão) ou 'papagaio'. Text validado na app (lib/brand/progress-mascot.ts).
   progressMascot: text().notNull().default("robo"),
@@ -1361,3 +1376,83 @@ export const matchLiveStates = pgTable("match_live_states", {
   claimedAt: timestamp({ withTimezone: true }),
   updatedAt: timestamp({ withTimezone: true }).notNull().defaultNow(),
 });
+
+// Notícias do jogo (#672, PLAN-672 §2): um item por jogo e URL (canônica: https, sem
+// query/fragmento). Só notícia pública, sem dado de usuário. O trecho (≤280, linha fina
+// ou começo da matéria) é de uso INTERNO (auditoria e entrada reproduzível da extração)
+// e nunca é exibido. Ler/escrever SÓ via lib/db/queries/match-news.ts.
+export const matchNews = pgTable(
+  "match_news",
+  {
+    id: uuid().primaryKey().defaultRandom(),
+    matchId: uuid()
+      .notNull()
+      .references(() => matches.id, { onDelete: "restrict" }),
+    url: text().notNull(),
+    title: text().notNull(),
+    snippet: text(),
+    publishedAt: timestamp({ withTimezone: true }).notNull(),
+    source: text().$type<MatchNewsSource>().notNull().default("ge"),
+    // De qual feed veio primeiro (diagnóstico e merge do feed que falhou).
+    feedSide: text().$type<MatchNewsFeedSide>(),
+    firstSeenAt: timestamp({ withTimezone: true }).notNull().defaultNow(),
+    // Última vez que título ou trecho mudaram (matéria atualizada).
+    updatedAt: timestamp({ withTimezone: true }).notNull().defaultNow(),
+  },
+  (t) => [
+    check("match_news_source_check", sql`${t.source} IN ('ge')`),
+    check(
+      "match_news_feed_side_check",
+      sql`${t.feedSide} IS NULL OR ${t.feedSide} IN ('home', 'away')`,
+    ),
+    uniqueIndex("match_news_match_url_uniq").on(t.matchId, t.url),
+    index("match_news_match_published_idx").on(t.matchId, t.publishedAt.desc()),
+  ],
+);
+
+// Lotes de notícias de um jogo (#672): um por conjunto distinto de itens (hash de url,
+// título e trecho) e versão do prompt de extração, com as afirmações extraídas pela
+// Haiku (validadas por Zod; `text`/`players` só internos). `empty` = feeds ok sem item
+// (sem chamada). `checked_at` é o heartbeat: o cron viu o mesmo lote de novo.
+export const matchNewsBatches = pgTable(
+  "match_news_batches",
+  {
+    id: uuid().primaryKey().defaultRandom(),
+    matchId: uuid()
+      .notNull()
+      .references(() => matches.id, { onDelete: "restrict" }),
+    batchHash: text().notNull(),
+    promptVersion: text().notNull(),
+    items: jsonb().$type<MatchNewsBatchItem[]>().notNull(),
+    status: text().$type<MatchNewsBatchStatus>().notNull(),
+    claims: jsonb().$type<NewsClaim[]>().notNull().default([]),
+    warnings: jsonb().$type<string[]>().notNull().default([]),
+    attempts: integer().notNull().default(1),
+    // Um feed tentado falhou (os itens dele vieram de match_news).
+    partial: boolean().notNull().default(false),
+    // Adversário fora da tabela (estrangeiro da Libertadores): um lote vazio não prova
+    // "nada novo" e não é usável.
+    unknownOpponent: boolean().notNull().default(false),
+    aiCallId: uuid().references(() => aiCalls.id, { onDelete: "set null" }),
+    createdAt: timestamp({ withTimezone: true }).notNull().defaultNow(),
+    checkedAt: timestamp({ withTimezone: true }).notNull().defaultNow(),
+    // Quando o lote ficou usável (ok/empty), em hora real: no insert ou na nova tentativa
+    // que deu ok. A fila do JEV compara com o checked_at da base (#672). null = failed.
+    usableAt: timestamp({ withTimezone: true }),
+  },
+  (t) => [
+    check(
+      "match_news_batches_status_check",
+      sql`${t.status} IN ('ok', 'empty', 'failed')`,
+    ),
+    uniqueIndex("match_news_batches_match_hash_version_uniq").on(
+      t.matchId,
+      t.batchHash,
+      t.promptVersion,
+    ),
+    index("match_news_batches_match_checked_idx").on(
+      t.matchId,
+      t.checkedAt.desc(),
+    ),
+  ],
+);

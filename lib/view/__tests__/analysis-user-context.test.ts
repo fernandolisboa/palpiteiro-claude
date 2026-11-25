@@ -133,6 +133,55 @@ describe("toAnalysisUserContextView", () => {
     expect(view!.showUnverifiedNote).toBe(false);
   });
 
+  it("notícia da base já no fator (#672): \"já considerado\", referência = JEV ∨ notícia", () => {
+    const view = toAnalysisUserContextView(
+      [
+        row(
+          "match_result",
+          1,
+          judgments({
+            userContext: CONTEXT,
+            news: { evidence: { attack_weakened_home: 0.7 } },
+          }),
+        ),
+      ],
+      TEAMS,
+      NOW,
+    );
+    expect(view!.claims[0].effect).toBe("já considerado pelo modelo");
+    expect(view!.showUnverifiedNote).toBe(false);
+  });
+
+  it("JEV falho + notícia: confirmada do usuário ainda move (jevApplied segue só o JEV)", () => {
+    const confirmed: PredictionUserContext = {
+      ...CONTEXT,
+      claims: [
+        {
+          ...CONTEXT.claims[0],
+          status: "confirmed",
+          signals: [{ questionId: "defense_weakened_home", strength: "confirmed" }],
+        },
+      ],
+    };
+    const view = toAnalysisUserContextView(
+      [
+        row(
+          "match_result",
+          1,
+          judgments({
+            applied: false,
+            answers: null,
+            userContext: confirmed,
+            news: { evidence: { attack_weakened_home: 0.7 } },
+          }),
+        ),
+      ],
+      TEAMS,
+      NOW,
+    );
+    expect(view!.claims[0].effect).toMatch(/^efeito no modelo: /);
+  });
+
   it("reanálise de uma seção sem contexto esconde o contexto antigo", () => {
     const view = toAnalysisUserContextView(
       [

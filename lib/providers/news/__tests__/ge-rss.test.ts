@@ -14,6 +14,7 @@ import {
 
 import {
   __clearFeedCacheForTesting,
+  canonicalUrl,
   fetchFeed,
   filterFeedItems,
   geFeedUrl,
@@ -304,6 +305,11 @@ describe("getNewsViaTeamFeeds", () => {
       'Flamengo e Palmeiras fazem "final" em Brasileirão de domínio sobre concorrentes',
     ]);
     expect(out.results.every((r) => r.source === "ge")).toBe(true);
+    // Cada resultado sabe de qual feed veio (#672); nenhum feed falhou.
+    expect(out.failedSides).toEqual([]);
+    expect(Object.keys(out.sideByUrl).sort()).toEqual(
+      out.results.map((r) => canonicalUrl(r.url)).sort()
+    );
     // O resultado não carrega campo interno do ranking.
     expect(Object.keys(out.results[0]).sort()).toEqual([
       "publishedAt",
@@ -357,6 +363,11 @@ describe("getNewsViaTeamFeeds", () => {
     if (out.kind !== "ok") return;
     expect(out.partial).toBe(true);
     expect(out.results.length).toBeGreaterThan(0);
+    // O feed do Palmeiras (mandante) caiu; o que veio é do feed do Flamengo.
+    expect(out.failedSides).toEqual(["home"]);
+    expect(
+      out.results.every((r) => out.sideByUrl[canonicalUrl(r.url)] === "away")
+    ).toBe(true);
     const logged = errSpy.mock.calls.map((c) => String(c[0]));
     expect(
       logged.some(
@@ -399,6 +410,8 @@ describe("getNewsViaTeamFeeds", () => {
       results: [],
       partial: false,
       unknownOpponent: true,
+      sideByUrl: {},
+      failedSides: [],
     });
   });
 

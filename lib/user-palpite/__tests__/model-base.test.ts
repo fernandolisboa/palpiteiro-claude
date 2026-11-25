@@ -23,6 +23,9 @@ import {
 import type { ModelScoreline } from "@/lib/quant/match-model";
 import { inPlayScoreline } from "@/lib/quant/in-play";
 import { scorelineMatrix } from "@/lib/quant/scoreline-model";
+import { NEWS_EVIDENCE_VERSION, type AppliedNews } from "@/lib/match-news/apply";
+import { combineAnswers, computeReadings } from "@/lib/user-palpite/evidence";
+import { toSeuPalpiteModelView } from "@/lib/view/user-palpite";
 import {
   isSnapshotUsable,
   lambdasFor,
@@ -50,6 +53,7 @@ const ANSWERS = Object.fromEntries(
 function snapshot(
   withJev: boolean,
   over: Partial<MatchModelSnapshot> = {},
+  opts: { news?: AppliedNews; jevFailed?: boolean } = {},
 ): MatchModelSnapshot {
   const row = buildMatchModelSnapshot({
     matchId: MATCH.id,
@@ -62,9 +66,10 @@ function snapshot(
       matrix: scorelineMatrix(1.62, 1.04, { rho: -0.07 }),
     },
     neutral: false,
+    news: opts.news ?? null,
     jev: withJev
       ? {
-          answers: ANSWERS,
+          answers: opts.jevFailed ? null : ANSWERS,
           jevModel: "jev-1.13.0",
           jevModelServed: "jev-1.13.0",
           failure: null,
@@ -259,5 +264,86 @@ describe("isSnapshotUsable ⇔ getMatchModelScoreline (mesmas regras)", () => {
     getLatest.mockResolvedValue({ snapshot: s, kickoffAt });
     const real = await getMatchModelScoreline(MATCH.id, NOW);
     expect(isSnapshotUsable(s, kickoffAt, NOW)).toBe(real !== null);
+  });
+});
+
+// Notícia aplicada pela base (#672): o mesmo formato que applyNewsClaims devolve.
+function news(
+  evidence: AppliedNews["evidence"],
+  jev: JudgmentAnswers | null,
+): AppliedNews {
+  const moved = Object.keys(evidence) as AppliedNews["moved"];
+  return {
+    evidence,
+    answers: combineAnswers(jev, evidence),
+    origins: {},
+    moved,
+    notes: [],
+    itemsRead: 2,
+    factorItems: 1,
+    movedUrls: ["https://ge.globo.com/a.ghtml"],
+    stored: {
+      batchId: "batch-1",
+      itemsRead: 2,
+      claims: [],
+      sources: [],
+      evidence,
+      moved,
+      notes: [],
+      versions: { extract: "match_news_extract_v1", newsEvidence: NEWS_EVIDENCE_VERSION },
+    },
+  };
+}
+
+describe("base com notícia (#672, ajuste 4)", () => {
+  const PALPITE = { kind: "score" as const, home: 1, away: 0 };
+
+  it("jevAnswers só JEV; modelAnswers = JEV ∨ notícia; 'sem o seu contexto' = probabilidades da base (±0,01 pp)", async () => {
+    const s = snapshot(true, {}, { news: news({ attack_weakened_home: 0.7 }, ANSWERS) });
+    getLatest.mockResolvedValue({ snapshot: s, kickoffAt: KICKOFF });
+    const base = (await resolvePalpiteModelBase(MATCH, { now: NOW }))!;
+    expect(base.jevAnswers).toEqual(ANSWERS);
+    expect(base.modelAnswers?.attack_weakened_home.value).toBe(0.7);
+    expect(base.newsEvidence).toEqual({ attack_weakened_home: 0.7 });
+
+    const l = lambdasFor(base, base.modelAnswers);
+    expect(l.lambdaHome).toBeCloseTo(s.lambdaHome, 9);
+    expect(l.lambdaAway).toBeCloseTo(s.lambdaAway, 9);
+    // Com só o JEV, o "sem o seu contexto" esqueceria a notícia que está no número.
+    expect(lambdasFor(base, base.jevAnswers).lambdaHome).not.toBeCloseTo(s.lambdaHome, 4);
+
+    const without = computeReadings(base, {}, PALPITE).without.oneXTwo;
+    const fromBase = s.probabilities!.match_result;
+    for (const k of ["home", "draw", "away"] as const) {
+      expect(Math.abs(without[k] - fromBase[k])).toBeLessThanOrEqual(0.011);
+    }
+    const view = toSeuPalpiteModelView(base);
+    expect(view.lambdaHome).toBeCloseTo(s.lambdaHome, 9);
+    expect(view.jevApplied).toBe(true);
+  });
+
+  it("JEV falho + notícia: jevAnswers null (jevApplied false), modelAnswers só com a notícia", async () => {
+    const s = snapshot(
+      true,
+      {},
+      { news: news({ attack_weakened_home: 0.85 }, null), jevFailed: true },
+    );
+    expect(s.jevStatus).toBe("failed");
+    getLatest.mockResolvedValue({ snapshot: s, kickoffAt: KICKOFF });
+    const base = (await resolvePalpiteModelBase(MATCH, { now: NOW }))!;
+    expect(base.jevAnswers).toBeNull();
+    expect(base.modelAnswers?.attack_weakened_home.value).toBe(0.85);
+    expect(lambdasFor(base, base.modelAnswers).lambdaHome).toBeCloseTo(s.lambdaHome, 9);
+    expect(toSeuPalpiteModelView(base).jevApplied).toBe(false);
+  });
+
+  it("notícia de outro conjunto de perguntas não entra", async () => {
+    const s = snapshot(true, {}, { news: news({ attack_weakened_home: 0.7 }, ANSWERS) });
+    s.judgments!.versions.judgments = "jev_judgments_v1";
+    getLatest.mockResolvedValue({ snapshot: s, kickoffAt: KICKOFF });
+    const base = (await resolvePalpiteModelBase(MATCH, { now: NOW }))!;
+    expect(base.jevAnswers).toBeNull();
+    expect(base.modelAnswers).toBeNull();
+    expect(base.newsEvidence).toEqual({});
   });
 });

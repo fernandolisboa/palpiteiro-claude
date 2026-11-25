@@ -1,0 +1,61 @@
+{
+  "claims": [
+    {
+      "team": "away",
+      "topic": "absence",
+      "text": "Léo Pereira e Pulgar cumprem suspensão e estão fora",
+      "players": ["Léo Pereira", "Pulgar"],
+      "role": "defense",
+      "sources": ["N1"]
+    },
+    {
+      "team": "away",
+      "topic": "absence",
+      "text": "o meia titular foi preservado e está fora",
+      "players": ["De la Cruz"],
+      "role": "unknown",
+      "sources": ["N1"]
+    },
+    {
+      "team": "away",
+      "topic": "absence",
+      "text": "Carrascal começa no banco",
+      "players": ["Carrascal"],
+      "role": "attack",
+      "sources": ["N2"]
+    },
+    {
+      "team": "both",
+      "topic": "stakes",
+      "text": "jogo pode decidir o título",
+      "direction": "good",
+      "sources": ["N2", "N3"]
+    },
+    {
+      "team": "away",
+      "topic": "other",
+      "otherKind": "motivation",
+      "text": "o empate garante o título ao visitante",
+      "sources": ["N3"]
+    },
+    {
+      "team": "home",
+      "topic": "form",
+      "text": "o mandante não vence o visitante em casa desde 2017",
+      "direction": "bad",
+      "sources": ["N3"]
+    },
+    {
+      "team": "home",
+      "topic": "rotation",
+      "text": "time misto",
+      "sources": ["N9"]
+    },
+    {
+      "team": "away",
+      "topic": "absence",
+      "text": "sem nome nem função",
+      "sources": ["N1"]
+    }
+  ]
+}

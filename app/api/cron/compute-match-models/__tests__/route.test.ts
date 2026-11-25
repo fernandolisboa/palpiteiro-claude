@@ -9,6 +9,7 @@ import {
   computeMatchModels,
   type ComputeMatchModelsSummary,
 } from "@/lib/model-base/compute-match-models";
+import { emptyNewsSummary } from "@/lib/model-base/news-phase";
 
 const runMock = vi.mocked(computeMatchModels);
 
@@ -39,6 +40,8 @@ function summary(
       skippedDeadline: 0,
       skippedMissingKey: 0,
     },
+    newsEnabled: false,
+    news: emptyNewsSummary(),
     ...over,
   };
 }

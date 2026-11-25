@@ -78,7 +78,10 @@ export type ComputedReadings = {
   combined: JudgmentAnswers | null;
 };
 
-/** Leitura "sem o seu contexto" (base × JEV) e "com o seu contexto" (base × JEV∨usuário). */
+/**
+ * Leitura "sem o seu contexto" (base × modelo) e "com o seu contexto" (base × modelo ∨
+ * usuário). Modelo = o que a base aplicou: JEV ∨ notícia (#672).
+ */
 export function computeReadings(
   base: PalpiteModelBase,
   ev: UserEvidence,
@@ -87,8 +90,8 @@ export function computeReadings(
   // transformação em jogo (o JEV nunca entra duas vezes).
   inPlay: InPlayReading | null = null,
 ): ComputedReadings {
-  const combined = combineAnswers(base.jevAnswers, ev);
-  const lambdaWithout = lambdasFor(base, base.jevAnswers);
+  const combined = combineAnswers(base.modelAnswers, ev);
+  const lambdaWithout = lambdasFor(base, base.modelAnswers);
   const lambdaWith = lambdasFor(base, combined);
   const read = (l: AppliedJudgments) =>
     readPalpite(
@@ -119,18 +122,23 @@ export type ClaimEffect = {
 /**
  * Efeito de UMA afirmação, pelos sinais dela (a mesma regra de evidenceFromClaims): uma
  * confirmada com JEV presente é "já considerada pelo modelo" mesmo que outra afirmação
- * tenha posto 0.7 na mesma pergunta. jev null = JEV não rodou.
+ * tenha posto 0.7 na mesma pergunta. `baseline` = o que o número já tinha (JEV, ou JEV ∨
+ * notícia da base, #672); `jevApplied` = o JEV respondeu (default: baseline presente,
+ * o caso só-JEV). Com notícia e JEV falho, passar `jevApplied: false` explícito.
  */
 export function claimEffect(
   c: Pick<CheckedClaim, "signals">,
-  jev: JudgmentAnswers | null,
+  baseline: JudgmentAnswers | null,
+  jevApplied: boolean = baseline !== null,
 ): ClaimEffect {
   const moved = [
     ...new Set(
       c.signals
-        .filter((s) => !(s.strength === "confirmed" && jev !== null))
+        .filter((s) => !(s.strength === "confirmed" && jevApplied))
         .filter(
-          (s) => USER_NOUL[s.strength] > Math.max(NEUTRAL.value, jev?.[s.questionId]?.value ?? 0),
+          (s) =>
+            USER_NOUL[s.strength] >
+            Math.max(NEUTRAL.value, baseline?.[s.questionId]?.value ?? 0),
         )
         .map((s) => s.questionId),
     ),

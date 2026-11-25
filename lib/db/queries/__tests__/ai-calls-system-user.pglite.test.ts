@@ -4,10 +4,12 @@
 // Postgres REAL (pglite) com as migrations reais: o CHECK ai_calls_user_id_system_only
 // recusa uma row sem usuário que não seja do provider TypeSafe (JEV) ou da sondagem de
 // versão nova de modelo (ADR 0062, `model_probe_*`), e o CHECK
-// ai_calls_match_id_system_only só deixa a sondagem ficar sem jogo.
+// ai_calls_match_id_system_only só deixa a sondagem ficar sem jogo. A extração das
+// notícias do jogo no cron da base (#672, `match_news_*`) também fica sem usuário.
 import { readFileSync } from "node:fs";
 
 import { PGlite } from "@electric-sql/pglite";
+import { like } from "drizzle-orm";
 import { drizzle, type PgliteDatabase } from "drizzle-orm/pglite";
 import { migrate } from "drizzle-orm/pglite/migrator";
 import { afterAll, beforeAll, describe, expect, it } from "vitest";
@@ -117,12 +119,66 @@ describe("ai_calls da sondagem de modelo (ADR 0062)", () => {
   });
 });
 
+describe("ai_calls da extração das notícias do jogo (#672)", () => {
+  // O re-run do 0060 abaixo recria o CHECK antigo (sem match_news_*): sai antes.
+  afterAll(async () => {
+    await db.delete(schema.aiCalls).where(like(schema.aiCalls.promptVersion, "match%news%"));
+  });
+
+  it("sem usuário, Claude, prompt_version match_news_extract_v1 → passa", async () => {
+    const [inserted] = await db
+      .insert(schema.aiCalls)
+      .values(row("anthropic", { promptVersion: "match_news_extract_v1" }))
+      .returning({ userId: schema.aiCalls.userId, matchId: schema.aiCalls.matchId });
+    expect(inserted).toEqual({ userId: null, matchId });
+  });
+
+  it("outra versão sem usuário segue recusada; o `_` do LIKE é literal", async () => {
+    for (const promptVersion of ["user_palpite_extract_v2", "matchXnewsYextract_v1", "palpites_v14"]) {
+      await expect(
+        db.insert(schema.aiCalls).values(row("anthropic", { promptVersion })),
+      ).rejects.toMatchObject({
+        cause: { code: "23514", constraint: "ai_calls_user_id_system_only" },
+      });
+    }
+  });
+
+  it("sem jogo → recusado (a extração é sempre de um jogo)", async () => {
+    await expect(
+      db
+        .insert(schema.aiCalls)
+        .values(row("anthropic", { matchId: null, promptVersion: "match_news_extract_v1" })),
+    ).rejects.toMatchObject({
+      cause: { code: "23514", constraint: "ai_calls_match_id_system_only" },
+    });
+  });
+});
+
 describe("migration 0060_model_versions", () => {
   it("roda de novo sem erro (DB de preview compartilhado) e os CHECKs seguem valendo", async () => {
     const sql = readFileSync("./db/migrations/0060_model_versions.sql", "utf8");
     for (const stmt of sql.split("--> statement-breakpoint")) {
       if (stmt.trim()) await client.exec(stmt);
     }
+    await expect(
+      db.insert(schema.aiCalls).values(row("anthropic")),
+    ).rejects.toMatchObject({
+      cause: { code: "23514", constraint: "ai_calls_user_id_system_only" },
+    });
+  });
+});
+
+describe("migration 0068_match_news", () => {
+  it("roda de novo sem erro (DB de preview compartilhado) e o CHECK volta a aceitar match_news_*", async () => {
+    const sql = readFileSync("./db/migrations/0068_match_news.sql", "utf8");
+    for (const stmt of sql.split("--> statement-breakpoint")) {
+      if (stmt.trim()) await client.exec(stmt);
+    }
+    const [inserted] = await db
+      .insert(schema.aiCalls)
+      .values(row("anthropic", { promptVersion: "match_news_extract_v1" }))
+      .returning({ userId: schema.aiCalls.userId });
+    expect(inserted.userId).toBeNull();
     await expect(
       db.insert(schema.aiCalls).values(row("anthropic")),
     ).rejects.toMatchObject({

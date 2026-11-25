@@ -6,6 +6,7 @@ import type {
   JudgmentAnswers,
   JudgmentQuestionId,
 } from "@/lib/ai/judgments/types";
+import { MatchModelNewsSchema, type MatchModelNews } from "@/lib/match-news/types";
 import type {
   DixonColesFallbackReason,
   ModelScorelineSource,
@@ -93,6 +94,11 @@ export type MatchModelJudgments = {
   // Origem das respostas quando reusadas (no máximo um dos dois é não-null).
   reusedFromPredictionId: string | null;
   reusedFromModelSnapshotId: string | null;
+  // Notícias do jogo aplicadas por MÁXIMO depois do JEV (#672). `answers` e `applied`
+  // seguem SÓ do JEV (o reuso por stateHash lê dali); `multipliers` e o λ da row
+  // refletem JEV ∨ notícia. Quem refaz o λ usa modelAnswersOf (lib/match-news).
+  // Ausente nas rows antigas e quando não houve lote usável.
+  news?: MatchModelNews;
 };
 
 export const matchModelJudgmentsSchema: z.ZodType<MatchModelJudgments> =
@@ -113,6 +119,8 @@ export const matchModelJudgmentsSchema: z.ZodType<MatchModelJudgments> =
     aiCallId: z.string().nullable(),
     reusedFromPredictionId: z.string().nullable(),
     reusedFromModelSnapshotId: z.string().nullable(),
+    // Malformado → ausente: a notícia nunca derruba os julgamentos nem a base.
+    news: MatchModelNewsSchema.optional().catch(undefined),
   });
 
 export const JEV_STATUSES = ["not_attempted", "applied", "failed"] as const;

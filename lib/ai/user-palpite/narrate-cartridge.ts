@@ -170,11 +170,13 @@ const ALREADY = "nenhum a mais (o modelo já considerava isso)";
 /** Afirmações conferidas → o que o narrador vê (paráfrase, status, evidência, efeito). */
 export function toNarrationClaims(
   claims: readonly CheckedClaim[],
-  jev: JudgmentAnswers | null,
+  // O que o número já tinha (JEV, ou JEV ∨ notícia da base, #672).
+  baseline: JudgmentAnswers | null,
   teams: TeamNames,
+  jevApplied: boolean = baseline !== null,
 ): NarrationClaim[] {
   return claims.map((c) => {
-    const effect = claimEffect(c, jev);
+    const effect = claimEffect(c, baseline, jevApplied);
     return {
       index: c.index,
       teamLabel:
