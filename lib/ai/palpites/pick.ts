@@ -28,6 +28,7 @@ import {
 } from "@/lib/quant/scoreline-model";
 
 import type { MarketAnalysisSummary } from "./synthesis-input";
+import { weighPick, type PalpiteWeighed, type WeighedInputs } from "./weighed";
 
 export const PALPITE_PICK_RULE = "most_likely_v1" as const;
 
@@ -50,6 +51,9 @@ export type PalpiteBase = {
   base: Pair;
   // adjusted/base de cada lado (JEV + contexto extra do run); null = sem ajuste.
   multipliers: Pair | null;
+  // Os fatores da MESMA análise de onde saíram os multiplicadores (#683); null = sem
+  // leitura (o "o que pesou" só sai se não houver ajuste a explicar).
+  factors: WeighedInputs | null;
   // O λ da matriz final.
   lambda: Pair;
   rho: number;
@@ -87,6 +91,9 @@ export type PalpitePick = {
   basePredictionId: string;
   predictionCreatedAt: string | null;
   fit: PalpiteFit | null;
+  // "O que pesou" (#683): o efeito de cada fator em pontos. Ausente nos sets anteriores;
+  // null quando a decomposição não fecha com o palpite.
+  weighed?: PalpiteWeighed | null;
 };
 
 const pp2 = (p: number) => Number((p * 100).toFixed(2));
@@ -140,6 +147,13 @@ export function pickFromBase(base: PalpiteBase): PalpitePick | null {
     basePredictionId: base.basePredictionId,
     predictionCreatedAt: base.predictionCreatedAt,
     fit: base.fit,
+    weighed: weighPick({
+      base: base.base,
+      rho,
+      inputs: base.factors,
+      multipliers: base.multipliers,
+      finalRaw: raw,
+    }),
   };
 }
 
@@ -253,6 +267,7 @@ export function marketBaseFromAnalyses(analyses: readonly Summary[]): PalpiteBas
     source: "market",
     base,
     multipliers,
+    factors: j?.factors ?? null,
     lambda: multipliers
       ? { home: base.home * multipliers.home, away: base.away * multipliers.away }
       : { ...base },
@@ -277,6 +292,7 @@ export function dcJevBaseFromAnalyses(analyses: readonly Summary[]): PalpiteBase
     source: "dc_jev",
     base: { ...j.base },
     multipliers: multipliersOf(j),
+    factors: j.factors ?? null,
     lambda: { ...j.adjusted },
     rho: j.rho ?? DIXON_COLES_RHO,
     basePredictionId: run.predictionId,

@@ -1,6 +1,8 @@
 import { describe, expect, it } from "vitest";
 
 import type { PalpiteHeadline } from "@/db/schema";
+import { codeJev, mr, ou, VIRA } from "@/lib/ai/palpites/__tests__/weighed-fixtures";
+import { resolvePregamePick } from "@/lib/ai/palpites/pick";
 import { containsValueLanguage } from "@/lib/ai/palpites/value-language-guard";
 import type { PalpiteSetWithLines } from "@/lib/db/queries/palpites";
 import { liveColumns, liveStampFromState } from "@/lib/live/stamp";
@@ -392,5 +394,45 @@ describe("toListPalpiteView (lista de jogos, #662)", () => {
     }
     expect(toListPalpiteView({ ...base, confidence: "talvez", probableScore: null }).confidence).toBeNull();
     expect(toListPalpiteView({ ...base, confidence: null, probableScore: null }).confidence).toBeNull();
+  });
+});
+
+// ─── #683: o que pesou ───────────────────────────────────────────────────────
+
+describe("weighed (#683)", () => {
+  const TEAMS = {
+    home: { name: "Atlético-MG", short: "CAM" },
+    away: { name: "Boca Juniors", short: "BOC" },
+  };
+  const pick = resolvePregamePick([
+    mr(VIRA.odds, codeJev({ base: { home: 1, away: 1 }, jev: VIRA.jev, user: VIRA.user })),
+    ou(...VIRA.ou),
+  ])!;
+  const withPick = { ...headline, pick };
+
+  it("só com os times e um pick com weighed válido", () => {
+    expect(toPalpiteHeadlineView(source({ headline: withPick })).weighed).toBeUndefined();
+    const v = toPalpiteHeadlineView(source({ headline: withPick, teams: TEAMS }));
+    expect(v.weighed?.winner).toBe("away");
+    expect(v.weighed?.rows).toHaveLength(3);
+    const fromSet = toPalpiteHeadlineViewFromSet(setWith({ headline: withPick }), { teams: TEAMS });
+    expect(fromSet?.weighed).toEqual(v.weighed);
+  });
+
+  it("set antigo (sem pick ou sem weighed): sem o campo", () => {
+    expect(toPalpiteHeadlineView(source({ teams: TEAMS }))).not.toHaveProperty("weighed");
+    const { weighed: _w, ...oldPick } = pick;
+    void _w;
+    const old = { ...headline, pick: oldPick as typeof pick };
+    expect(toPalpiteHeadlineView(source({ headline: old, teams: TEAMS }))).not.toHaveProperty("weighed");
+    const refused = { ...headline, pick: { ...pick, weighed: null } };
+    expect(toPalpiteHeadlineView(source({ headline: refused, teams: TEAMS }))).not.toHaveProperty("weighed");
+  });
+
+  it("conta as notícias citadas no 'Também lido'", () => {
+    const v = toPalpiteHeadlineView(
+      source({ headline: { ...withPick, sources: [{ title: "a", url: "https://ge.globo.com/a" }] }, teams: TEAMS }),
+    );
+    expect(v.weighed?.alsoRead?.text).toContain("1 notícia do ge citada");
   });
 });

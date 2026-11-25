@@ -41,7 +41,7 @@ import {
 import { seuPalpiteClosedMessage } from "@/app/actions/not-analyzable";
 import { auth } from "@/auth";
 import { leagueToKey } from "@/lib/format";
-import { teamToTeam } from "@/lib/view/team";
+import { teamPair, teamToTeam } from "@/lib/view/team";
 import {
   getEnableBestBetFanOut,
   getEnableLiveMode,
@@ -281,8 +281,11 @@ export default async function MatchPage({ params, searchParams }: PageProps) {
   // Manchete palpite-first (ADR 0030 / #351): o HERO server-rendered lê o set mais
   // recente. null = sem palpite ainda (estado empty/CTA) OU set antigo pré-#353 sem
   // manchete. Dado puro sem número de valor (firewall no tipo) → cruza Server→Client.
+  // "O que pesou" (#683): os mesmos nome e sigla do cabeçalho do jogo.
   const heroPalpite: PalpiteHeadlineView | null = palpiteSets[0]
-    ? toPalpiteHeadlineViewFromSet(palpiteSets[0])
+    ? toPalpiteHeadlineViewFromSet(palpiteSets[0], {
+        teams: teamPair(match.homeTeam, match.awayTeam, leagueKey),
+      })
     : null;
   // #384: id + shared_at do set mais recente, pro botão de compartilhar do HERO (gera/copia
   // o link /p/[id] e ramifica Compartilhar/Copiar). null quando não há set persistido ainda.

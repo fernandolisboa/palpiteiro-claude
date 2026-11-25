@@ -26,6 +26,8 @@ Crucialmente, a separação que o 0028 mais defende — **EV/stake/Yield nunca n
 
 **5. O gerador separado do #315 é dropado, re-significado como passo de síntese.** `generatePalpites()` (`lib/ai/palpites/index.ts:47`, hoje market-free, lê só form/h2h/standings via `SportsDataProvider`, zero edge) deixa de ser um gerador **independente** com auto-run próprio e vira o **passo de síntese** sobre as análises já pagas pelo botão. Sem auto-run caro novo.
 
+**Emenda do §3 (#683, 2026-11-25, aceita pelo dono em 2026-11-25):** ver "Emenda (#683)" no fim.
+
 ## Consequências
 
 - **(+)** O app passa a responder a pergunta que o humano realmente abre pra fazer ("quem ganha?") com **uma manchete legível**, em vez de uma tabela de edges de nicho. Engajamento é o objetivo do arco.
@@ -43,6 +45,25 @@ Crucialmente, a separação que o 0028 mais defende — **EV/stake/Yield nunca n
 1. **Manter o ADR 0028 (separação total de dado + dois apps disjuntos)** — rejeitado: produz um **analista de nicho** que mostra edges e chutes lado a lado, mas nunca o veredito que engaja. A firewall de **dado** era um custo sem retorno, já que a proteção regulatória vive inteira na UI (`palpite-row.tsx`/`lib/view/palpites.ts:79`).
 2. **Manchete palpite-first, mas mostrando EV/lucro/stake nela** ("Aposte X, lucro esperado Y") — rejeitado: **exposição regulatória**. Cruza a linha de "ferramenta de análise informativa" pra "recomendação de aposta com retorno prometido" (`docs/ops/05-legal-compliance.md §1/§6`, Lei 14.790/2023) — exatamente o risco que rejeitou `.bet`. Os números de valor ficam **só no detalhe**, enquadrados como análise.
 3. **Síntese por um gerador independente que NÃO lê as análises (manter o #315 como estava)** — rejeitado: produziria uma manchete "burra", desalinhada das N análises pagas no mesmo run, e manteria o auto-run frágil. A manchete tem de **derivar** do que o fan-out apurou.
+
+## Emenda (#683): "o que pesou" no palpite
+
+_Proposta e aceita pelo dono em 2026-11-25 (OK explícito no card de decisão do #683). A emenda está num commit só dela (c3b6f8c), para poder ser revertida sozinha._
+
+O palpite é decidido em código desde a ADR 0072: a base (os preços do jogo sem margem, ou o modelo de força dos times quando não há preço) mais os multiplicadores de cada fator. O bloco "o que pesou" mostra essa conta no HERO: as chances do 1X2 antes e depois dos ajustes, em pontos inteiros de 100, e quantos pontos cada fator moveu e para onde.
+
+**O que isso é, com todas as letras.** Na base de mercado, o "antes" é a chance do mercado sem margem, e o "depois" é a chance do modelo. A diferença antes→depois, por resultado, é a chance do modelo menos a chance do mercado: exatamente a distância que o §3 mantinha fora do HERO. O número aparece em pontos inteiros, sem odd, sem EV, sem stake e sem a palavra edge.
+
+**Por que agora é permitido:**
+- o app não move dinheiro: não há casa, aposta, stake nem retorno em lugar nenhum da tela;
+- o bloco não tem palavra de valor (odd, cotação, edge, EV, valor, lucro, retorno, stake, Yield, R$, nome de casa), o que o guard `containsValueLanguage` confere em teste;
+- o número explica o palpite (por que deu Boca e não Galo), não sugere aposta: o palpite é o resultado mais provável, não uma escolha por valor.
+
+**O que muda no §3:**
+- o HERO pode mostrar, só dentro do bloco "o que pesou", as chances 1X2 do palpite antes→depois (inteiros; `%` só nos rótulos da barra) e os pontos movidos por fator;
+- "os preços do jogo" pode aparecer como palavra; o número da odd, nunca. Os "preços" do bloco são a matriz ajustada aos preços (resíduo de até 1 pp contra o 1X2 sem margem, ADR 0072 §3), não a divisão crua;
+- o bloco é só da superfície do dono (HERO e "Ver raciocínio"). A página pública `/p` não o leva (ADR 0035 §2(d) intacta);
+- a confiança continua palavra; odd, edge, EV, stake, Yield, R$ e nome de casa continuam fora do HERO.
 
 ## Referências
 

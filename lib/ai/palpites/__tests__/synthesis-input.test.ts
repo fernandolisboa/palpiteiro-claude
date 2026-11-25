@@ -1,4 +1,4 @@
-import { describe, expect, it } from "vitest";
+import { describe, expect, it, vi } from "vitest";
 
 import type { FanOutOutcome } from "@/lib/ai/best-bet";
 import type { PredictionJudgments } from "@/lib/ai/engine/types";
@@ -341,6 +341,77 @@ describe("contexto extra fora da síntese (PLAN-565 §13.2)", () => {
     };
   }
 
+  // #683: os fatores do "o que pesou", com quem levou cada um ao valor final.
+  const EXPECTED_FACTORS = {
+    factors: [
+      {
+        key: "attack_weakened_home",
+        lambdaSide: "home",
+        multiplier: 0.92,
+        origin: "user",
+        value: 0.7,
+      },
+      {
+        key: "defense_weakened_away",
+        lambdaSide: "home",
+        multiplier: 1.1,
+        origin: "jev",
+        value: 0.9,
+      },
+    ],
+    applied: { home: 1.012, away: 1 },
+    product: { home: 1.012, away: 1 },
+  };
+
+  it("#683: fatores com origem nos dois caminhos (memória e histórico), em ordem canônica", () => {
+    const [mem] = summarizeAnalysesForSynthesis([
+      okOutcome("match_result", withUser(), SELECTIONS),
+    ]);
+    const [hist] = summarizeSavedAnalysesForSynthesis([
+      {
+        prediction: withUser(),
+        aiCall: null,
+        marketKey: "match_result",
+        selections: SELECTIONS,
+      },
+    ] as unknown as PredictionWithAiCall[]);
+    expect(mem.judgmentsModel?.factors).toEqual(EXPECTED_FACTORS);
+    expect(hist.judgmentsModel?.factors).toEqual(EXPECTED_FACTORS);
+    // Contexto extra ilegível: na dúvida, nenhum fator (null, o bloco não aparece).
+    const broken = judgments({ userContext: { evidence: "x" } as never });
+    const [bad] = summarizeAnalysesForSynthesis([
+      okOutcome("match_result", withUser(broken), SELECTIONS),
+    ]);
+    expect(bad.judgmentsModel?.factors).toBeNull();
+  });
+
+  it("#683: multiplicadores tortos no jsonb não derrubam o 'Gerar só o palpite' (fatores null)", () => {
+    const warn = vi.spyOn(console, "warn").mockImplementation(() => {});
+    // Linha sem `factors` em um lado (JEV não rodou, sem contexto extra): o resto da
+    // síntese não lê os fatores; só a leitura do "o que pesou" leria.
+    const torto = judgments({
+      answers: null,
+      userContext: undefined,
+      multipliers: {
+        home: { product: 1.05, applied: 1.05 },
+        away: { factors: {}, product: 1, applied: 1 },
+      } as unknown as PredictionJudgments["multipliers"],
+    });
+    const run = () => [
+      summarizeAnalysesForSynthesis([okOutcome("match_result", withUser(torto), SELECTIONS)]),
+      summarizeSavedAnalysesForSynthesis([
+        { prediction: withUser(torto), aiCall: null, marketKey: "match_result", selections: SELECTIONS },
+      ] as unknown as PredictionWithAiCall[]),
+    ];
+    expect(run).not.toThrow();
+    for (const [a] of run()) {
+      expect(a.judgmentsModel).not.toBeNull();
+      expect(a.judgmentsModel?.factors).toBeNull();
+    }
+    expect(warn).toHaveBeenCalledWith({ scope: "palpite_weighed", reason: "error" });
+    warn.mockRestore();
+  });
+
   const withUser = (j: PredictionJudgments | null = judgments()) =>
     prediction({ id: "p-ctx", rationale: USER_RATIONALE, judgments: j } as Partial<Prediction>);
 
@@ -413,6 +484,7 @@ describe("contexto extra fora da síntese (PLAN-565 §13.2)", () => {
       rho: null,
       stateHash: "h",
       jevAiCallId: null,
+      factors: EXPECTED_FACTORS,
     });
     // Só o fator do JEV; o que o usuário moveu (ataque do mandante) não vai.
     expect(a.factorPhrases).toEqual([

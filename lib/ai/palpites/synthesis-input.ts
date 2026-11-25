@@ -18,6 +18,7 @@ import { getMarketPresentation } from "@/lib/view/markets/presentation";
 
 import type { FanOutOutcome } from "../best-bet";
 import type { PredictResult } from "../predict";
+import { weighedFactorInputs, type WeighedInputs } from "./weighed";
 
 // Projeção de UMA análise de mercado pro passo de síntese (#353, Fork A / ADR 0030).
 // Camada `lib/ai`: lê os campos JÁ PERSISTIDOS da prediction (edge/confiança/odd) —
@@ -72,6 +73,10 @@ export type AnalysisJudgmentsModel = {
   rho: number | null;
   stateHash: string;
   jevAiCallId: string | null;
+  // Os fatores que mexeram no λ e quem levou cada um ao valor final (#683): insumo do
+  // "o que pesou" (headline.pick.weighed). null = contexto extra ilegível; [] = nada mexeu.
+  // Ausente nos resumos montados à mão (testes).
+  factors?: WeighedInputs | null;
 };
 
 // Uma análise já persistida, venha ela do fan-out em memória (PredictResult) ou do
@@ -242,6 +247,7 @@ function judgmentsModelOf(
     rho: j.lambda.rho ?? null,
     stateHash: j.stateHash,
     jevAiCallId: j.aiCallId ?? null,
+    factors: weighedFactorInputs(j),
   };
 }
 

@@ -68,6 +68,9 @@ export const loadSharedPalpite = cache(
     // fora da página pública.
     const mapped: PalpiteHeadlineView = { ...owned };
     delete mapped.reasoning;
+    // "O que pesou" (#683) é só do dono (D1 do PLAN-683): fora da página pública mesmo
+    // que um dia o mapper receba os times aqui.
+    delete mapped.weighed;
 
     // (iv) guard de texto público: veredito inseguro → 404; narrativa insegura → "".
     if (unsafeForPublic(mapped.verdict)) return null;

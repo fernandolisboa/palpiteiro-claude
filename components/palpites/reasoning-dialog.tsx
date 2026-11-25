@@ -4,6 +4,7 @@ import { ListTree } from "lucide-react";
 
 import type { ProgressStepView } from "@/components/palpites/palpite-progress";
 import { StepIcon } from "@/components/palpites/step-icon";
+import { WeighedBlock } from "@/components/palpites/weighed-block";
 import { Button } from "@/components/ui/button";
 import {
   Dialog,
@@ -13,6 +14,7 @@ import {
   DialogTitle,
 } from "@/components/ui/dialog";
 import { cn } from "@/lib/utils";
+import type { PalpiteWeighedView } from "@/lib/view/palpite-weighed";
 
 // Botão do HERO que abre o raciocínio. type="button": fica dentro do form do HERO e
 // não pode disparar o run.
@@ -37,18 +39,21 @@ export function ReasoningButton({ onClick }: { onClick: () => void }) {
  * run termina e troca as etapas ao vivo pelas gravadas com o palpite.
  *
  * FIREWALL (ADR 0030 §3): as frases vêm prontas do servidor (lib/ai/progress/steps.ts e
- * details.ts), sem odd, edge, stake, % ou nome de casa.
+ * details.ts), sem odd, edge, stake, % ou nome de casa. O bloco "O que pesou" (#683, ADR
+ * 0065 §2 emendada) abre o diálogo com as chances antes→depois; não é linha de etapa.
  */
 export function ReasoningDialog({
   open,
   onOpenChange,
   steps,
   running,
+  weighed,
 }: {
   open: boolean;
   onOpenChange: (open: boolean) => void;
   steps: readonly ProgressStepView[];
   running: boolean;
+  weighed?: PalpiteWeighedView;
 }) {
   return (
     <Dialog open={open} onOpenChange={onOpenChange}>
@@ -69,9 +74,12 @@ export function ReasoningDialog({
           <DialogDescription className="text-body-sm tracking-tight">
             {running
               ? "Cada etapa aparece aqui assim que acontece, com o que ela encontrou."
-              : "As etapas que rodaram nesta análise e o que cada uma encontrou."}
+              : weighed
+                ? "O que pesou no palpite e as etapas que rodaram nesta análise."
+                : "As etapas que rodaram nesta análise e o que cada uma encontrou."}
           </DialogDescription>
         </DialogHeader>
+        {weighed && <WeighedBlock view={weighed} variant="dialog" />}
         <ol aria-label="raciocínio da análise" className="flex flex-col gap-4">
           {steps.map((step) => (
             <li key={step.id} data-status={step.status} className="flex items-start gap-3">
