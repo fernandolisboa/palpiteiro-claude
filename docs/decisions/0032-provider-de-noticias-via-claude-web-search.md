@@ -64,3 +64,14 @@ Quase toda análise mostrava "Nenhuma notícia relevante do jogo", e na maioria 
 Custo: o caso comum (Brasileirão) deixa de pagar a busca. O teto do §4 (≤ ~20 + 50 buscas/dia por usuário) segue valendo como pior caso, agora com até 2 usos por busca.
 
 Follow-ups: notícia do próprio time sem citar o adversário (lesão nas últimas 48h); `pause_turn` com `max_uses: 2`; gate de prazo menor quando há feed (`NEWS_MIN_BUDGET_MS` é dimensionado pra web search); `CARD_DOMAINS_INTL` ainda lista bbc/guardian/espn; o probe de versão aceita `{error_code}` como sucesso; feeds oficiais de clube como campo novo da tabela.
+
+## Adendo (2026-11-25): notícia guardada por jogo, lida pelo cron da base (#672, PR C1)
+
+A notícia do ge passa a ser dado guardado por jogo e insumo do modelo (ADR 0052, adendo da mesma data). Plano: `docs/plans/PLAN-672.md` (a seção "Ajustes pós-review" prevalece).
+
+1. **Tabelas** (migration 0068): `match_news` (um item por `(match_id, url)`, URL canônica sem query/fragmento; título, trecho, data, lado do feed; `updated_at` muda quando título ou trecho mudam) e `match_news_batches` (um lote por conjunto distinto de itens: hash de url + título + trecho, e versão do prompt de extração; `status` `ok`/`empty`/`failed`, `attempts`, `partial`, `unknown_opponent`, `checked_at` como heartbeat).
+2. **Só o RSS do ge, nunca a web search, no cron.** A fase de notícias roda dentro do run do `compute-match-models`, sem usuário e sem custo de busca. Jogo sem time no mapa do ge fica sem notícia na base. A web search continua só na análise por usuário, como fallback (adendo #670).
+3. **Trecho interno.** O trecho guardado tem no máximo 280 caracteres e só vai pro prompt de extração (`match_news_extract_v1`, Haiku), dentro dos delimitadores anti-injection. Nunca é exibido. O texto livre e os jogadores das afirmações extraídas também ficam internos: não vão pra outro LLM nem pra tela. A base guarda só o que foi conferido (tópico, lado, status, sinais, fontes `{ref, url, title}`).
+4. **`makeSnippet` cai no começo do corpo** quando o item não tem linha fina (`atom:subtitle`). O trecho pode ser só a abertura da matéria, e a extração lê com isso em mente.
+5. **Feed robusto.** Feed que falha mantém o último lote usável. Feed parcial (um lado caiu) completa o lado que caiu com o que já está em `match_news` na janela de 72h, então o lote não "esquece" a notícia. Lote vazio com adversário fora da tabela (`unknown_opponent`) não é usável.
+6. **A análise lê o lote na C2.** Nesta etapa a análise por usuário segue intocada: continua buscando a notícia ao vivo pra síntese (adendo #670). Na C2 o predict passa a ler o lote guardado (`resolveMatchNews`).
