@@ -169,6 +169,11 @@ Plano: `docs/plans/PLAN-672.md` (a seção "Ajustes pós-review" vale sobre o re
   notícia daquele lado caem (o JEV já julgou o XI), como na base.
 - **Sem notícia na reconferência de escalação.** `recheckPredictionWithLineup` segue só com
   o JEV da escalação: a notícia não entra no filho da escalação (nem número, nem texto).
+  É de propósito (ajuste 3 do PLAN-672): o filho perde o efeito da notícia. O que a
+  notícia movia some na reconferência, inclusive o `high_stakes` que só ela sustentava
+  (a regra da escalação só derruba `absence`/`rotation`) e as notas "segundo o ge". Por
+  isso parte do antes→depois da reconferência pode vir de a notícia ter saído, não da
+  escalação.
 - **Fator e nota da notícia são frases do código.** O narrador (`narrator_v1.6`) e a
   síntese (`palpites_v15`) recebem o fator com a origem "(segundo o ge, não conferido)" /
   "(segundo o ge, confirmado pelos nossos dados)" e as notas sem efeito num bloco próprio
