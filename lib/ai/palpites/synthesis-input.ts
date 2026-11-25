@@ -268,6 +268,12 @@ function newsOf(prediction: PredictResult["prediction"]): MatchModelNews | null 
   return parsed.success ? parsed.data : null;
 }
 
+// Há `judgments.news` gravado, mas o Zod não o lê: não dá pra saber quais fatores a
+// notícia moveu.
+function newsUnreadable(prediction: PredictResult["prediction"]): boolean {
+  return prediction.judgments?.news !== undefined && newsOf(prediction) === null;
+}
+
 function newsNotesField(prediction: PredictResult["prediction"]): { newsNotes?: string[] } {
   if (prediction.judgments?.engine !== "code_jev") return {};
   const notes = newsOf(prediction)?.notes ?? [];
@@ -317,6 +323,9 @@ function factorPhrasesOf(
 ): string[] {
   const judgments = prediction.judgments;
   if (!reading.modelAnswers || !judgments?.multipliers) return [];
+  // Notícia ilegível: na dúvida, nenhum fator (como o contexto ilegível). Senão um fator
+  // que a notícia moveu sairia como fator do modelo, sem a origem.
+  if (newsUnreadable(prediction)) return [];
   return judgmentFactorPhrases(
     reading.modelAnswers,
     withoutFactors(judgments.multipliers, userMoved),
@@ -348,8 +357,8 @@ function synthesisRationale(prediction: PredictResult["prediction"]): string {
 }
 
 // Os fatores pra síntese, sem os que o contexto extra do usuário moveu (#565), com os da
-// notícia marcados "(segundo o ge…)" (#672). Contexto ilegível: na dúvida, nenhum fator
-// (como no racional). Sem notícia, as mesmas frases de antes (palpites_v14).
+// notícia marcados "(segundo o ge…)" (#672). Contexto ou notícia ilegível: na dúvida,
+// nenhum fator (como no racional). Sem notícia, as mesmas frases de antes (palpites_v14).
 function synthesisFactorPhrases(prediction: PredictResult["prediction"]): string[] {
   const reading = judgmentsReading(prediction);
   if (!reading || !reading.userMoved) return [];

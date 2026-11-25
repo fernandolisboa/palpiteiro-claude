@@ -603,9 +603,30 @@ describe("notícias do ge na síntese (#672, palpites_v15)", () => {
     );
   });
 
-  it("news ilegível: tratado como sem notícia", () => {
+  it("news ilegível: sem notas e, na dúvida, sem fator nenhum (como o contexto ilegível)", () => {
     const a = summarize(judgments({ news: { batchId: 1 } as never }));
     expect(a).not.toHaveProperty("newsNotes");
-    expect(a.factorPhrases?.join(" ")).not.toContain("segundo o ge");
+    // O fator que a notícia moveu não sai como fator do modelo, sem a origem.
+    expect(a.factorPhrases ?? []).toEqual([]);
+    // O racional do narrador (sem contexto do usuário) segue.
+    expect(a.rationale).toBe("Mandante superior.");
+  });
+
+  it("news ilegível com contexto do usuário que moveu fator: racional vazio, sem fator", () => {
+    const userContext = {
+      claims: [{ ...NEWS.claims[0], sources: undefined }].map(({ sources: _s, ...c }) => c),
+      evidence: { attack_weakened_home: 0.7 },
+      extractionAiCallId: null,
+      warnings: [],
+      versions: { userEvidence: "user_evidence_v1", extract: "user_palpite_extract_v1" },
+    };
+    const rationale = "Segundo o que você informou, o ataque perde peça.";
+    // Sem notícia gravada, o racional em código lista o fator do JEV que sobrou.
+    const { news: _n, ...noNews } = judgments({ userContext });
+    expect(summarize(noNews, rationale).rationale).toMatch(/^Fatores do modelo: /);
+    // Com notícia gravada mas ilegível: não dá pra separar o que a notícia moveu.
+    const a = summarize(judgments({ news: { batchId: 1 } as never, userContext }), rationale);
+    expect(a.factorPhrases ?? []).toEqual([]);
+    expect(a.rationale).toBe("");
   });
 });
