@@ -540,7 +540,8 @@ export type PalpiteHeadline = {
     | "none";
   // #668 (ADR 0072) — o palpite decidido em código: regra, fonte, resultado, placar, P do
   // 1X2, λ, base, multiplicadores, ajuste ao mercado e a predição de origem. Calibração e
-  // auditoria; a view NÃO lê. Ausente nos sets do v12 e anteriores. Sem migration.
+  // auditoria. A view lê só `pick.weighed` (+ outcome/source), por Zod: o "o que pesou"
+  // (#683). Ausente nos sets do v12 e anteriores. Sem migration.
   pick?: PalpitePick;
   // #668 — quais campos de texto saíram do template (veredito incoerente, linguagem de
   // valor, falha da chamada) e por quê. Ausente quando o texto é todo do LLM.

@@ -21,7 +21,7 @@ Palmeiras x Flamengo, 2026-11-21: o mesmo jogo, analisado 4 vezes com o motor `c
 6. **Conferência do texto**: `verdictOutcome` ≠ resultado do palpite → veredito de template; regex de alta precisão só no veredito (cita só o outro time, placar diferente, "empate" num palpite de vitória sem citar o vencedor). Sem segunda chamada paga.
 7. **Falha de texto com palpite vira template, não palpite nulo**: erro do provedor, ferramenta não chamada, Zod, linguagem de valor ou fidelidade gravam a row de `ai_calls` com o status real e o set sai com o texto de template (só nos campos que falharam, quando dá pra saber). O firewall (ADR 0030 §3) segue igual.
 8. **Confiança da mesma matriz** (emenda a ADR 0069 §3): `probs[outcome]` do palpite, mesmas faixas, `confidenceSource` = `market` ou `dc_jev`. O snapshot só é lido no caminho v12.
-9. **Persistência sem migration**: `headline.pick` (regra, fonte, resultado, placar, P do 1X2 em pp, λ, base, multiplicadores, ρ, ajuste e resíduos, `basePredictionId`, `predictionCreatedAt`) e `headline.templated`. A view não lê nenhum dos dois. A calibração ganha a era `modelo` (sets com `pick`).
+9. **Persistência sem migration**: `headline.pick` (regra, fonte, resultado, placar, P do 1X2 em pp, λ, base, multiplicadores, ρ, ajuste e resíduos, `basePredictionId`, `predictionCreatedAt`) e `headline.templated`. A view não lê nenhum dos dois. _(Emenda #683, 2026-11-25: `headline.pick.weighed`, versão `palpite_weighed_v1`, guarda o efeito de cada fator em pontos inteiros. A view lê só `pick.weighed` (com `pick.outcome` e `pick.source`), sempre por Zod; λ, base, multiplicadores, ajuste e resíduos seguem fora da view.)_ A calibração ganha a era `modelo` (sets com `pick`).
 
 ## Consequências
 
