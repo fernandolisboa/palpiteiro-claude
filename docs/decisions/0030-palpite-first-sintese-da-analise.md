@@ -26,7 +26,7 @@ Crucialmente, a separação que o 0028 mais defende — **EV/stake/Yield nunca n
 
 **5. O gerador separado do #315 é dropado, re-significado como passo de síntese.** `generatePalpites()` (`lib/ai/palpites/index.ts:47`, hoje market-free, lê só form/h2h/standings via `SportsDataProvider`, zero edge) deixa de ser um gerador **independente** com auto-run próprio e vira o **passo de síntese** sobre as análises já pagas pelo botão. Sem auto-run caro novo.
 
-**Emenda do §3 (#683, 2026-11-25, proposta; OK explícito do dono pendente):** ver "Emenda (#683)" no fim.
+**Emenda do §3 (#683, 2026-11-25, aceita pelo dono em 2026-11-25):** ver "Emenda (#683)" no fim.
 
 ## Consequências
 
@@ -48,7 +48,7 @@ Crucialmente, a separação que o 0028 mais defende — **EV/stake/Yield nunca n
 
 ## Emenda (#683): "o que pesou" no palpite
 
-_Proposta em 2026-11-25. O OK explícito do dono está pendente; esta emenda fica num commit só dela para poder ser revertida sozinha._
+_Proposta e aceita pelo dono em 2026-11-25 (OK explícito no card de decisão do #683). A emenda está num commit só dela (c3b6f8c), para poder ser revertida sozinha._
 
 O palpite é decidido em código desde a ADR 0072: a base (os preços do jogo sem margem, ou o modelo de força dos times quando não há preço) mais os multiplicadores de cada fator. O bloco "o que pesou" mostra essa conta no HERO: as chances do 1X2 antes e depois dos ajustes, em pontos inteiros de 100, e quantos pontos cada fator moveu e para onde.
 
