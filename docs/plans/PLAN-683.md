@@ -553,3 +553,43 @@ Revisão de olhos frescos, 2026-11-25, sobre `175093f`. Conferido contra o códi
 ### Decisões D1/D2
 
 Resolvidas pelo dono (2026-11-25, reversível): **bloco inteiro some no `/p`**, ADR 0035 §2(d) intacta, sem emenda da 0035 (texto do §6 atualizado).
+
+## Ajustes pós-revisão
+
+Fechamento da revisão antes do código (2026-11-25). Regra geral: aceito a correção do revisor, salvo onde o código mostra outra coisa. Decisões do dono nesta rodada:
+
+- **/p:** o bloco inteiro some (R2 como escrito). ADR 0035 intacta.
+- **Animação:** toca **2 ciclos** quando o bloco entra na tela (`IntersectionObserver` na parte cliente) e termina no estado parado final. Com `prefers-reduced-motion`, parado desde o início (R6).
+- **R1:** a emenda da ADR 0030 §3 diz com todas as letras que, na base de mercado, o antes→depois é a chance do modelo menos a chance do mercado (a diferença que a ADR 0030 mantinha fora do HERO), e que isso agora é permitido porque o app não move dinheiro, o bloco não tem palavra de valor/odd/edge e explica o palpite. O OK explícito do dono está pendente num cartão de decisão: a emenda vai como proposta, num commit só dela (o primeiro depois deste), para poder ser revertida sozinha.
+
+| Item | Decisão | Como |
+|---|---|---|
+| R1 | aceito | Emenda da 0030 §3 em commit próprio, com a frase do dono e a nota da R20 (a base é a matriz ajustada aos preços, resíduo de até 1 pp). Bloco só na superfície do dono (HERO e "Ver raciocínio"). |
+| R2 | aceito | Sem `audience`, sem lista branca, sem linha neutra, sem bloco no `public-palpite.tsx`, sem emenda da 0035. O loader do `/p` faz `delete mapped.weighed` ao lado do `delete mapped.reasoning`. Testes: loader com `pick.weighed` válido → view sem `weighed`; HTML público sem `data-pesou` e sem `%`. |
+| R3 | aceito | Todo fator com `m ≠ 1` precisa de `value > 0,5` e `sign(m − 1) = sign(factorMultiplier(fator, 1) − 1)`; senão `weighed: null`, `reason: "factor_direction"`. Teste com linha simétrica sintética. |
+| R4 | aceito | `code_jev` com `multipliers === null` → `{ factors: [], applied: {1,1}, product: {1,1} }`. `null` só para `userContext` ilegível. Multiplicador do pick com `|m − 1| ≤ 1e-9` conta como "sem multiplicador". Teste: JEV falho → "Nenhum ajuste mexeu". |
+| R5 | aceito | `apportion` com sinal: o ±1 só vai para item com `raw ≠ 0` cujo novo valor não troca de sinal (fica 0 ou no sinal do `raw`). Sem candidato → `weighed: null`, `reason: "rounding_conflict"`. Empate (coluna do meio) é o resto: "arredondamento", sem promessa de ±1. Teste de propriedade: somas exatas, sem sinal trocado em casa/visitante, `|pts − raw| < 2`, taxa de `null` ≤ 1%. |
+| R6 | aceito, com a decisão do dono | Estado parado por padrão (bolinhas das raias no destino, as dos arcos escondidas, listras paradas). A parte cliente põe `data-play` no `.pesou` ao entrar na tela (uma vez) e tira depois de 2 ciclos. Raias e arcos com `animation-iteration-count: 1.83` (para no descanso do 2º ciclo, antes do fade), listras com 8 voltas (= 2 ciclos). Nenhuma regra `infinite` no `.pesou` (teste de CSS). Movimento reduzido: o cliente não liga `data-play` e o CSS tem a regra própria (as três linhas do §7) contra a regra global. |
+| R7 | aceito | Usuário: `user > max(0,5, modelAnswersOf(j)?.[q]?.value ?? 0)`; notícia: `news > max(0,5, answers?.[q]?.value ?? 0)`; senão JEV. O §3.2 passa a dizer: "a linha mostra o fator inteiro; a etiqueta diz quem o levou ao valor final". Separar JEV e incremento do usuário vai para §15. |
+| R8 | aceito | `bar.arcsHeight` (0, 22 ou 32) no view model; `fanArcs` recebe a altura; `WeighedFlows` mede com `useLayoutEffect` + `ResizeObserver`. Teste de SSR: caixa com a altura e sem `<path>`. |
+| R9 | aceito | Tema escuro por `.dark .pesou[data-winner=…]`. Texto ≥ 4,5:1 nos dois temas: origem da raia em `--muted-foreground`; destino e número no tom de quem recebeu, com tons escolhidos por tema e conferidos (claro: `--palpite-strong-fg`, `--muted-foreground` e borda misturada com `--foreground`; escuro: os tons da v6 misturados com branco; todos ≥ 5:1 no HERO e no diálogo, conta no comentário do CSS). Sem token global novo: o fundo do bloco é uma variável local `--pesou-surface` (a mesma mistura da v6), usada também nas listras, separadores e pílulas, para casarem com o fundo de verdade. `--surface-2` não casaria com o fundo quente do HERO. |
+| R10 | aceito | Fatores em ordem canônica antes de qualquer soma (`Σ ln m` incluso). Teste em `pick.test.ts`: memória × histórico com chaves do jsonb embaralhadas → `weighed` igual. |
+| R11 | aceito | Zod: `basePts`/`finalPts` int [0, 100]; `pts` int [−100, 100]; `value` [0, 1]; `multiplier` finito > 0. |
+| R12 | aceito | Caso próprio: "Os ajustes mexeram menos de 1 pt: vale {os preços\|o modelo}". |
+| R13 | aceito | `originLine` da notícia com as palavras da C2: "segundo o ge (não conferido com os nossos dados)" / "segundo o ge (confirmado pelos nossos dados)", em constante local com comentário para quem fizer merge por último trocar pela da C2. Tabela do §13 ganha `lib/match-news/model-answers.ts` (só leitura), `app/globals.css` e `palpite-hero.tsx` (hunks separados do azarão). |
+| R14 | aceito | §1, §8, §11, §12 e §14 leem-se com a D1: nada de bloco no `/p`; o helper de firewall serve ao HERO e à área; no `/p`, "zero `data-pesou`"; o commit 6 é só o loader e os testes. |
+| R15 | mantido | Corte proporcional em log, depois da ordenação (R10), com teste sintético. É barato e evita bloco sumindo no dia em que um peso mudar. |
+| R16 | mantido, documentado | `pp` fica no jsonb para auditoria (e para o "mexeu menos de 1 pt"); a view não lê. |
+| R17 | aceito | Componente `WeighedBlock`. |
+| R18 | aceito | `movesOf` desempata pelo destino: mandante antes. |
+| R19 | aceito | Comentário no CSS: a partir do slot 7 as raias animam juntas. |
+| R20 | aceito | Uma linha na emenda da 0030 (ver R1). |
+| R21 | aceito | "e N notícias do ge citadas (entram só no texto)": a contagem é de `headline.sources`, as citadas. |
+
+Outros ajustes de leitura do código:
+
+- "por pouco" usa a folga final em pontos inteiros (`finalPts`, < 5), não `pick.probs`: a view lê só `pick.weighed`, `pick.outcome` e `pick.source`.
+- A bolinha de raia usa `--to` sem unidade e `animation-delay` inline em segundos; nenhum `style` com `%`.
+- O bloco no "Ver raciocínio" vem do `heroPalpite.weighed`, só quando `!showLive` (§5).
+
+Ordem dos commits: este ajuste; emenda da 0030 §3 (sozinha); emendas 0065 §2 e 0072 §9 + comentário do `db/schema.ts`; rateio (`lib/quant/apportion.ts`); cálculo (`weighed.ts`, `synthesis-input.ts`, `pick.ts`); view model; componentes + CSS + HERO + diálogo; `/p` (loader).
