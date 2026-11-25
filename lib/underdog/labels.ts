@@ -53,8 +53,26 @@ export function signalLabel(s: UnderdogSignal, n: UnderdogNames): string {
     case "jev":
       return JEV_LABEL[s.factor](n);
     case "news":
-      return `${newsFactorPhraseFor(s.factor, s.factor === "high_stakes" ? n.underdog : n.favorite)}, segundo o ge`;
+      return newsSignalLabel(s, n);
   }
+}
+
+/**
+ * Rótulo do sinal de notícia: a frase do código e "segundo o ge", com "(não conferido)"
+ * quando os nossos dados não confirmam (como no narrador e na síntese). `extra` entra no
+ * mesmo parêntese (o template do azarão acrescenta "já está na chance").
+ */
+export function newsSignalLabel(
+  s: Extract<UnderdogSignal, { kind: "news" }>,
+  n: UnderdogNames,
+  extra: readonly string[] = []
+): string {
+  const phrase = newsFactorPhraseFor(
+    s.factor,
+    s.factor === "high_stakes" ? n.underdog : n.favorite
+  );
+  const notes = [...(s.strength === "unverified" ? ["não conferido"] : []), ...extra];
+  return `${phrase}, segundo o ge${notes.length > 0 ? ` (${notes.join(", ")})` : ""}`;
 }
 
 export type SignalOrigin = "dados" | "modelo" | "notícia";

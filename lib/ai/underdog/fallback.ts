@@ -1,5 +1,5 @@
 import { complementPct, underdogNames } from "@/lib/underdog/facts";
-import { oneInN, signalLabel } from "@/lib/underdog/labels";
+import { newsSignalLabel, oneInN, signalLabel } from "@/lib/underdog/labels";
 import type {
   UnderdogFacts,
   UnderdogNarrative,
@@ -53,7 +53,10 @@ export function templateSentences(
   const first = facts.signals[0];
   if (first) {
     out.push({
-      text: `${signalLabel(first, n)}${first.kind === "jev" || first.kind === "news" ? " (já está na chance)" : ""}.`,
+      text:
+        first.kind === "news"
+          ? `${newsSignalLabel(first, n, ["já está na chance"])}.`
+          : `${signalLabel(first, n)}${first.kind === "jev" ? " (já está na chance)" : ""}.`,
       facts: ["F1"],
     });
   }

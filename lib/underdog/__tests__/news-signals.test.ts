@@ -156,7 +156,7 @@ describe("painel com sinal de notícia", () => {
 
   it("rótulo do código, origem 'notícia' e link com o título seguro", () => {
     expect(signalLabel(newsSignal, { underdog: "Flamengo", favorite: "Palmeiras" })).toBe(
-      "Desfalque na defesa do Palmeiras, segundo o ge",
+      "Desfalque na defesa do Palmeiras, segundo o ge (não conferido)",
     );
     expect(signalOrigin(newsSignal)).toBe("notícia");
     const view = toUnderdogPanelView(
@@ -166,7 +166,7 @@ describe("painel com sinal de notícia", () => {
     );
     const row = view.signals.find((s) => s.origin === "notícia")!;
     expect(row).toEqual({
-      label: "Desfalque na defesa do Palmeiras, segundo o ge",
+      label: "Desfalque na defesa do Palmeiras, segundo o ge (não conferido)",
       origin: "notícia",
       note: expect.any(String),
       link: { url: URL1, title: "Palmeiras perde zagueiro titular para o clássico" },
@@ -211,7 +211,24 @@ describe("painel com sinal de notícia", () => {
     const f = { ...facts, signals: [newsSignal] };
     const narrative = templatedNarrative(f, TEAMS);
     expect(narrative.sentences.map((x) => x.text)).toContain(
+      "Desfalque na defesa do Palmeiras, segundo o ge (não conferido, já está na chance).",
+    );
+    const confirmed = { ...newsSignal, strength: "confirmed" as const };
+    expect(templatedNarrative({ ...facts, signals: [confirmed] }, TEAMS).sentences.map((x) => x.text)).toContain(
       "Desfalque na defesa do Palmeiras, segundo o ge (já está na chance).",
+    );
+  });
+
+  it("rótulo do sinal: '(não conferido)' só quando os nossos dados não confirmam", () => {
+    const names = { underdog: "Flamengo", favorite: "Palmeiras" };
+    expect(signalLabel(newsSignal, names)).toBe(
+      "Desfalque na defesa do Palmeiras, segundo o ge (não conferido)",
+    );
+    expect(signalLabel({ ...newsSignal, strength: "confirmed" }, names)).toBe(
+      "Desfalque na defesa do Palmeiras, segundo o ge",
+    );
+    expect(signalLabel({ ...newsSignal, factor: "high_stakes" }, names)).toBe(
+      "Jogo de peso para o Flamengo, segundo o ge (não conferido)",
     );
   });
 });
