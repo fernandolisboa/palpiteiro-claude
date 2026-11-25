@@ -66,6 +66,18 @@ export const UnderdogSignalSchema = z.discriminatedUnion("kind", [
     underdog: z.number().int().nonnegative(),
   }),
   z.object({ kind: z.literal("jev"), factor: z.enum(JEV_SIGNAL_FACTORS) }),
+  // Notícia do ge que moveu o fator na base a favor do azarão (#672, underdog_calc_v2):
+  // já está na chance. `url`/`title` = a matéria citada; `title` null quando tem nome de
+  // casa de aposta ou linguagem de valor (a tela mostra só a frase do código), `url`
+  // null quando não é https. O advogado nunca recebe o título.
+  z.object({
+    kind: z.literal("news"),
+    factor: z.enum(JEV_SIGNAL_FACTORS),
+    strength: z.enum(["confirmed", "unverified"]),
+    ref: z.string().max(4),
+    url: z.string().max(2000).nullable(),
+    title: z.string().max(300).nullable(),
+  }),
 ]);
 export type UnderdogSignal = z.infer<typeof UnderdogSignalSchema>;
 

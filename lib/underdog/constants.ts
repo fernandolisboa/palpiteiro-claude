@@ -2,7 +2,8 @@
 // limiar ou constante que mexe nos números do painel → bump UNDERDOG_CALC_VERSION
 // (a versão vai gravada na row de underdog_views).
 
-export const UNDERDOG_CALC_VERSION = "underdog_calc_v1";
+// v2 (#672): sinal de notícia do ge em "Sinais a favor".
+export const UNDERDOG_CALC_VERSION = "underdog_calc_v2";
 
 // Diferença mínima, em pontos, entre as vitórias dos dois lados para haver azarão.
 export const UNDERDOG_MIN_GAP_PP = 8;
