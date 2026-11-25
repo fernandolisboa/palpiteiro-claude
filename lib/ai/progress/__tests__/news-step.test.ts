@@ -101,7 +101,7 @@ describe("newsFactorsDetail", () => {
     );
     expect(lines).toEqual([
       "Desfalque na defesa do CR Flamengo, segundo o ge (não conferido com os nossos dados)",
-      "2 notícias confirmaram o que o modelo já considerava",
+      "2 notícias concordaram com o que o modelo já considerava",
       "1 notícia contradita pelos nossos dados ficou de fora",
       "Segundo o ge (não conferido): troca de técnico no CR Flamengo, sem efeito nos números",
     ]);
@@ -109,6 +109,24 @@ describe("newsFactorsDetail", () => {
       expect(containsValueLanguage(l)).toBe(false);
       expect(l).not.toMatch(/\d+(,\d+)?\s*%/);
     }
+  });
+
+  it("uma notícia só que o modelo já considerava: singular 'concordou com'", () => {
+    const lines = newsFactorsDetail(
+      news([
+        claim({
+          topic: "stakes",
+          team: "home",
+          role: undefined,
+          status: "confirmed",
+          signals: [{ questionId: "high_stakes_home", strength: "confirmed" }],
+          sources: ["N2"],
+        }),
+      ]),
+      JEV,
+      TEAMS,
+    );
+    expect(lines).toEqual(["1 notícia concordou com o que o modelo já considerava"]);
   });
 
   it("sem JEV, o sinal confirmado move e sai 'confirmado pelos nossos dados'", () => {

@@ -221,7 +221,7 @@ export function newsFactorsDetail(
   ).length;
   if (considered > 0) {
     lines.push(
-      `${considered} ${pickPlural(considered, "notícia confirmou", "notícias confirmaram")} o que o modelo já considerava`,
+      `${considered} ${pickPlural(considered, "notícia concordou", "notícias concordaram")} com o que o modelo já considerava`,
     );
   }
   if (contradicted > 0) {
