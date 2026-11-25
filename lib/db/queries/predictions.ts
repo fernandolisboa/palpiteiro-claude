@@ -302,6 +302,29 @@ export async function getNonPassPredictionsNearKickoff(args: {
   }));
 }
 
+/**
+ * Jogos agendados com kickoff à frente que têm alguma predição de PRÉ-JOGO (#680, ADR
+ * 0074). Fonte do índice no KV que deixa os crons de 10/30 min (reconferência com a
+ * escalação, closing line) saírem sem tocar no Postgres quando não há jogo analisado
+ * perto do apito. Superconjunto dos candidatos dos dois crons: eles refinam no banco.
+ */
+export async function getUpcomingAnalyzedKickoffs(args: {
+  now?: Date;
+}): Promise<{ matchId: string; kickoffAt: Date }[]> {
+  const now = args.now ?? new Date();
+  return db
+    .selectDistinct({ matchId: matches.id, kickoffAt: matches.kickoffAt })
+    .from(predictions)
+    .innerJoin(matches, eq(predictions.matchId, matches.id))
+    .where(
+      and(
+        eq(predictions.isLive, false),
+        inArray(matches.status, ["scheduled", "live"]),
+        gt(matches.kickoffAt, now)
+      )
+    );
+}
+
 export type PredictionForOverride = {
   prediction: DbPrediction;
   match: DbMatch;

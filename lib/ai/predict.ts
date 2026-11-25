@@ -85,6 +85,7 @@ import { findReusableJudgments } from "@/lib/db/queries/judgments";
 import { isKellyStakingActive } from "@/lib/calibration/kelly-live";
 import { getPreferredModelId } from "@/lib/db/queries/users";
 import { computeMinimumOdd, MIN_EDGE_PP } from "@/lib/odds/scenario";
+import { noteAnalyzedKickoff } from "@/lib/sync/analyzed-kickoffs";
 import { getMarketPresentation } from "@/lib/view/markets/presentation";
 import {
   applyUserClaims,
@@ -1134,6 +1135,7 @@ async function runPredict(
       deadlineAt,
       persist: {
         matchId,
+        kickoffAt: match.kickoffAt,
         userId,
         cartridge,
         catalog,
@@ -1590,6 +1592,7 @@ async function runPredict(
 
   const persisted = await persistPrediction({
     matchId,
+    kickoffAt: match.kickoffAt,
     userId,
     aiCallId: aiCallRow.id,
     cartridge,
@@ -1781,6 +1784,8 @@ async function decideRecommendation(a: DecisionArgs): Promise<GatedDecision> {
 
 type PersistArgs = {
   matchId: string;
+  // Kickoff do jogo: alimenta o índice do portão dos crons no KV (#680, ADR 0074).
+  kickoffAt: Date;
   userId: string;
   aiCallId: string;
   cartridge: MarketCartridge;
@@ -1907,6 +1912,12 @@ async function persistPrediction(a: PersistArgs): Promise<PredictResult> {
     // Degrade: a prediction já está persistida; não derrubar o caller por uma
     // falha do candidate set (re-preenchível pelo backfill #162).
   }
+
+  // Índice do portão dos crons frequentes (#680, ADR 0074): jogo com análise de
+  // pré-jogo acorda o recheck-lineups e o capture-closing-odds perto do apito. Ao vivo
+  // não entra (nenhum dos dois olha jogo começado). Depois do PSO pra um KV lento não
+  // atrasar o insert dele. Best-effort, nunca lança.
+  if (!a.live) await noteAnalyzedKickoff(a.matchId, a.kickoffAt);
 
   // Carrier da grade N-vias (gate #15): a prediction + o marketKey resolvido + uma
   // entrada por selectionKey (prob do modelo + odd congelada). A action monta a
@@ -2226,6 +2237,7 @@ export async function recheckPredictionWithLineup(
 
   const result = await persistPrediction({
     matchId: match.id,
+    kickoffAt: match.kickoffAt,
     userId: p.userId,
     // A chamada JEV deste run (row de sistema, ou a da base do modelo que a fez) só
     // quando o JEV NÃO veio de outra predição: essa row é de outro usuário. Senão (ou
@@ -2437,6 +2449,7 @@ export async function predictInPlay(
       : templatedLiveNarration({ ...decisionFor(i), readings: [plan.reading] });
     const result = await persistPrediction({
       matchId,
+      kickoffAt: match.kickoffAt,
       userId,
       aiCallId: narration.aiCallId,
       cartridge: plan.cartridge,

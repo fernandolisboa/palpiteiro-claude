@@ -43,6 +43,10 @@ describe("SettingsSearch", () => {
     (
       globalThis as { IS_REACT_ACT_ENVIRONMENT?: boolean }
     ).IS_REACT_ACT_ENVIRONMENT = true;
+    // Navegar com âncora dispara o `revealSetting`, que espera a âncora por timer. Com
+    // timer real, a espera sobrevivia ao arquivo de teste e disparava depois do
+    // teardown do jsdom ("document is not defined", erro não tratado no CI).
+    vi.useFakeTimers();
     push.mockClear();
     refresh.mockClear();
     pathname = "/admin/leagues";
@@ -57,6 +61,8 @@ describe("SettingsSearch", () => {
     act(() => root.unmount());
     container.remove();
     document.body.innerHTML = "";
+    vi.clearAllTimers();
+    vi.useRealTimers();
   });
 
   const options = () => [...container.querySelectorAll('[role="option"]')];

@@ -34,6 +34,22 @@ vi.mock("@/lib/sync/rescheduled-fixtures", () => ({
     reconcileSpy(fixtures),
 }));
 
+// Índice do portão dos crons (#680, ADR 0074): carimbo cai antes de gravar kickoff e
+// volta no rebuild do fim.
+const indexOrder = vi.hoisted(() => [] as string[]);
+const invalidateSpy = vi.hoisted(() => vi.fn());
+const refreshSpy = vi.hoisted(() => vi.fn());
+vi.mock("@/lib/sync/analyzed-kickoffs", () => ({
+  invalidateAnalyzedKickoffs: async () => {
+    indexOrder.push("invalidate");
+    await invalidateSpy();
+  },
+  refreshAnalyzedKickoffs: async () => {
+    indexOrder.push("refresh");
+    await refreshSpy();
+  },
+}));
+
 // Lock mockado: simula a semântica check-and-set (1º acquire vence, próximos
 // no-mesmo-"lock" falham) sem KV nem in-memory store real. `force` sempre vence.
 // Estado de lock compartilhado pelo mock — via vi.hoisted pra ser inicializado
@@ -101,6 +117,9 @@ describe("ensureUpcomingFixturesSynced", () => {
     lockState.held = false;
     getActiveLeaguesMock.mockReset();
     getActiveLeaguesMock.mockResolvedValue([...ACTIVE_LEAGUES]);
+    indexOrder.length = 0;
+    invalidateSpy.mockClear();
+    refreshSpy.mockClear();
   });
 
   afterEach(() => {
@@ -205,6 +224,33 @@ describe("ensureUpcomingFixturesSynced", () => {
     expect(reconcileSpy).toHaveBeenCalledWith([bsa]);
     expect(order).toEqual(["reconcile", "upsert"]);
     upsertSpy.mockReset();
+  });
+
+  it("derruba o carimbo do índice antes de gravar kickoff e reconstrói depois do upsert (#680)", async () => {
+    __setSportsDataProviderForTesting(makeProvider());
+    reconcileSpy.mockImplementation(async () => {
+      indexOrder.push("reconcile");
+      return { rekey: [], supersede: [] };
+    });
+    upsertSpy.mockImplementation(async () => {
+      indexOrder.push("upsert");
+    });
+
+    await ensureUpcomingFixturesSynced();
+
+    expect(indexOrder).toEqual(["invalidate", "reconcile", "upsert", "refresh"]);
+    upsertSpy.mockReset();
+  });
+
+  it("upsert que lança deixa o carimbo derrubado, sem rebuild (portão em null)", async () => {
+    __setSportsDataProviderForTesting(makeProvider());
+    upsertSpy.mockImplementationOnce(() => {
+      throw new Error("db down");
+    });
+
+    await expect(ensureUpcomingFixturesSynced()).rejects.toThrow("db down");
+    expect(invalidateSpy).toHaveBeenCalledTimes(1);
+    expect(refreshSpy).not.toHaveBeenCalled();
   });
 
   it("falha no acerto de remarcados não segura o upsert", async () => {

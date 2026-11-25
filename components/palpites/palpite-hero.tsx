@@ -519,24 +519,35 @@ function PopulatedHero({
 
         {analyzable && contextField && <UserContextField {...contextField} />}
 
-        <div className="flex flex-wrap items-center gap-2">
-          {analyzable && (
-            <Button
-              type="submit"
-              name="intent"
-              value="analysis"
-              size="sm"
-              variant="ghost"
-              className="self-start text-palpite-strong-fg hover:bg-palpite-soft"
-            >
-              <Sparkles className="size-3.5" /> Analisar de novo
-            </Button>
-          )}
-          {canRegenerate && <PalpiteOnlyButton label="Refazer só o palpite" />}
-          {onShowReasoning && <ReasoningButton onClick={onShowReasoning} />}
-          {/* #384: compartilhar. Só com set persistido (setId). IMPERATIVO (type="button",
-              onClick) — NÃO sequestra o <form action={runPalpiteHero}>. */}
-          {setId !== null && <ShareButton key={setId} setId={setId} sharedAt={sharedAt} />}
+        {/* Grade, nunca flex-wrap: as ações vão em pares (Analisar de novo + Refazer
+            palpite, depois Ver raciocínio + Compartilhar), colunas do tamanho do
+            rótulo, e uma por linha quando o card não comporta duas; no desktop, todas
+            numa linha. Com flex-wrap a quebra
+            dependia do tamanho de cada rótulo e misturava linhas de 1 e de 2. A largura
+            é a do card (container query), não a da tela. */}
+        <div className="@container">
+          <div
+            data-testid="palpite-actions"
+            className="grid grid-cols-1 items-start justify-items-start gap-x-2 gap-y-1 @min-[18.75rem]:grid-cols-[repeat(2,max-content)] @min-[40rem]:grid-cols-[repeat(4,max-content)]"
+          >
+            {analyzable && (
+              <Button
+                type="submit"
+                name="intent"
+                value="analysis"
+                size="sm"
+                variant="ghost"
+                className="text-palpite-strong-fg hover:bg-palpite-soft"
+              >
+                <Sparkles className="size-3.5" /> Analisar de novo
+              </Button>
+            )}
+            {canRegenerate && <PalpiteOnlyButton label="Refazer palpite" />}
+            {onShowReasoning && <ReasoningButton onClick={onShowReasoning} />}
+            {/* #384: compartilhar. Só com set persistido (setId). IMPERATIVO (type="button",
+                onClick) — NÃO sequestra o <form action={runPalpiteHero}>. */}
+            {setId !== null && <ShareButton key={setId} setId={setId} sharedAt={sharedAt} />}
+          </div>
         </div>
 
         {/* Disclaimer regulatório estático (ADR 0031 §5 / #376): ÚLTIMO filho, footnote
@@ -658,44 +669,46 @@ function ShareButton({
       ? "Copiar link"
       : "Compartilhar";
 
+  // Fragmento: cada botão vira uma célula da grade de ações do HERO (pares), e o erro
+  // ocupa a linha inteira embaixo.
   return (
-    <span className="flex flex-col gap-1">
-      <span className="flex flex-wrap items-center gap-1">
+    <>
+      <Button
+        type="button"
+        size="sm"
+        variant="ghost"
+        onClick={onClick}
+        disabled={busy}
+        aria-live="polite"
+        className="self-start text-palpite-strong-fg hover:bg-palpite-soft"
+      >
+        {copied ? (
+          <Check className="size-3.5" />
+        ) : (
+          <Link2 className="size-3.5" />
+        )}{" "}
+        {label}
+      </Button>
+      {shared && (
         <Button
           type="button"
           size="sm"
           variant="ghost"
-          onClick={onClick}
+          onClick={onUnshare}
           disabled={busy}
-          aria-live="polite"
-          className="self-start text-palpite-strong-fg hover:bg-palpite-soft"
+          // Linha própria: é a ação secundária e a mais longa; numa coluna ela alargaria
+          // o par de cima e estouraria o card no celular.
+          className="col-span-full self-start text-muted-foreground hover:bg-palpite-soft"
         >
-          {copied ? (
-            <Check className="size-3.5" />
-          ) : (
-            <Link2 className="size-3.5" />
-          )}{" "}
-          {label}
+          <Link2Off className="size-3.5" /> Parar de compartilhar
         </Button>
-        {shared && (
-          <Button
-            type="button"
-            size="sm"
-            variant="ghost"
-            onClick={onUnshare}
-            disabled={busy}
-            className="self-start text-muted-foreground hover:bg-palpite-soft"
-          >
-            <Link2Off className="size-3.5" /> Parar de compartilhar
-          </Button>
-        )}
-      </span>
+      )}
       {error && (
-        <span className="text-meta tracking-tight text-muted-foreground">
+        <span className="col-span-full text-meta tracking-tight text-muted-foreground">
           {error}
         </span>
       )}
-    </span>
+    </>
   );
 }
 

@@ -552,10 +552,19 @@ describe("PalpiteHero — gerar só o palpite (síntese sobre as análises salva
     expect(html).toContain("Gerar só o palpite");
   });
 
-  it("com palpite + análises → 'Analisar de novo' + 'Refazer só o palpite'", () => {
+  it("com palpite + análises → 'Analisar de novo' + 'Refazer palpite'", () => {
     const html = render({ hasAnalyses: true });
     expect(html).toContain("Analisar de novo");
-    expect(html).toContain("Refazer só o palpite");
+    expect(html).toContain("Refazer palpite");
+  });
+
+  it("ações em grade (pares), nunca flex-wrap que mistura linhas de 1 e de 2", () => {
+    const html = render({ hasAnalyses: true });
+    const tag = html.match(/<div[^>]*data-testid="palpite-actions"[^>]*>/)?.[0];
+    const cls = tag?.match(/class="([^"]*)"/)?.[1];
+    expect(cls).toMatch(/\bgrid\b/);
+    expect(cls).not.toMatch(/flex-wrap/);
+    expect(html).not.toContain("Refazer só o palpite");
   });
 
   it("flag off ou jogo não analisável → sem o botão", () => {
@@ -563,7 +572,7 @@ describe("PalpiteHero — gerar só o palpite (síntese sobre as análises salva
       render({ heroPalpite: null, hasAnalyses: true, fanOutEnabled: false }),
     ).not.toContain("Gerar só o palpite");
     expect(render({ hasAnalyses: true, unavailable: "finished" })).not.toContain(
-      "Refazer só o palpite",
+      "Refazer palpite",
     );
   });
 
@@ -789,7 +798,7 @@ describe("PalpiteHero — compacto (#576, collapsible)", () => {
     expect(html).toContain(POPULATED.verdict);
     expect(html).toContain("confiança média");
     expect(html).toContain("Analisar de novo");
-    expect(html).toContain("Refazer só o palpite");
+    expect(html).toContain("Refazer palpite");
     expect(html).toContain("Compartilhar");
     expect(html).toContain(PALPITE_DISCLAIMER);
   });

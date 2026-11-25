@@ -214,7 +214,7 @@ export function ComoUsarContent() {
         <p>
           Depois da primeira análise surgem dois botões. <Ui>Analisar de novo</Ui>{" "}
           refaz tudo com dados novos (odds mudam, escalações saem).{" "}
-          <Ui>Refazer só o palpite</Ui> reescreve só o texto do palpite a partir das
+          <Ui>Refazer palpite</Ui> reescreve só o texto do palpite a partir das
           análises que já existem, bem mais rápido.
         </p>
         <p>
@@ -231,7 +231,7 @@ export function ComoUsarContent() {
         <Tip>
           <Strong>Limite diário.</Strong> Cada mercado analisado conta como uma
           análise do seu limite do dia, então um <Ui>Analisar com IA</Ui> gasta
-          várias de uma vez. Refazer só o palpite tem um limite separado, bem maior.
+          várias de uma vez. Refazer palpite tem um limite separado, bem maior.
           Quando o limite acaba, o app avisa; ele libera de novo 24 horas depois da
           primeira análise da janela.
         </Tip>
