@@ -1,6 +1,7 @@
 import type { UserPalpiteAnalysisRecord } from "@/lib/db/queries/user-palpite-analyses";
 import { formatRelativeAgoLabel } from "@/lib/format";
 import { readLiveStamp } from "@/lib/live/stamp";
+import { modelAnswersOf } from "@/lib/match-news/model-answers";
 import { claimEffect } from "@/lib/user-palpite/evidence";
 import {
   effectLabel,
@@ -57,7 +58,8 @@ export function toSeuPalpiteModelView(
   base: PalpiteModelBase,
   inPlay: InPlayReading | null = null,
 ): SeuPalpiteModelView {
-  const l = lambdasFor(base, base.jevAnswers);
+  // Base × (JEV ∨ notícia): o mesmo número das probabilidades da base (#672).
+  const l = lambdasFor(base, base.modelAnswers);
   const jevApplied = base.jevAnswers !== null;
   return {
     lambdaHome: l.lambdaHome,
@@ -234,10 +236,11 @@ function sameReading(a: PalpiteReading, b: PalpiteReading): boolean {
  */
 export function claimEffectText(
   c: Pick<CheckedClaim, "signals">,
-  jev: JudgmentAnswers | null,
+  baseline: JudgmentAnswers | null,
   teams: TeamNames,
+  jevApplied: boolean = baseline !== null,
 ): string {
-  const eff = claimEffect(c, jev);
+  const eff = claimEffect(c, baseline, jevApplied);
   return eff.moved.length > 0
     ? `efeito no modelo: ${eff.moved.map((q) => effectLabel(q, teams)).join("; ")}`
     : eff.alreadyConsidered
@@ -251,6 +254,11 @@ export function toUserPalpiteAnalysisView(
   now: Date,
 ): UserPalpiteAnalysisView {
   const { model, reading, narration } = r;
+  // O que o número já tinha quando a análise rodou: JEV ∨ notícia da base (#672).
+  const baseline = modelAnswersOf({
+    answers: model.jevAnswers,
+    news: model.newsEvidence ? { evidence: model.newsEvidence } : null,
+  });
   const claims: PalpiteClaimView[] = r.claims.map((c) => {
     return {
       index: c.index,
@@ -259,7 +267,7 @@ export function toUserPalpiteAnalysisView(
       status: c.status,
       statusLabel: STATUS_LABEL[c.status],
       evidence: c.evidence,
-      effect: claimEffectText(c, model.jevAnswers, teams),
+      effect: claimEffectText(c, baseline, teams, model.jevApplied),
       players:
         c.playerChecks.length > 1
           ? c.playerChecks.map((pc) => ({
@@ -295,7 +303,7 @@ export function toUserPalpiteAnalysisView(
     showUnverifiedNote: r.claims.some(
       (c) =>
         c.status === "unverifiable" &&
-        claimEffect(c, model.jevAnswers).moved.length > 0,
+        claimEffect(c, baseline, model.jevApplied).moved.length > 0,
     ),
     warnings: narration.warnings,
     liveLabel: liveLabelOf(r),

@@ -267,6 +267,9 @@ export type StoredPalpiteModel = {
   lambdaWith: { home: number; away: number };
   jevApplied: boolean;
   jevAnswers: JudgmentAnswers | null;
+  // Nouls da notícia que a base aplicou (#672): "sem o seu contexto" = base × (JEV ∨
+  // isto). Ausente nas rows antigas e quando não havia notícia.
+  newsEvidence?: UserEvidence;
   userEvidence: UserEvidence;
   combinedAnswers: JudgmentAnswers | null;
   multipliersWith: {
@@ -298,6 +301,7 @@ export const StoredModelSchema: z.ZodType<StoredPalpiteModel> = z.object({
   lambdaWith: lambdaPairSchema,
   jevApplied: z.boolean(),
   jevAnswers: judgmentAnswersSchema.nullable(),
+  newsEvidence: z.partialRecord(questionIdSchema, z.number()).optional(),
   userEvidence: z.partialRecord(questionIdSchema, z.number()),
   combinedAnswers: judgmentAnswersSchema.nullable(),
   multipliersWith: z

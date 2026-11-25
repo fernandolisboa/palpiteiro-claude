@@ -37,6 +37,7 @@ import {
 import { getUserAccessState } from "@/lib/db/queries/users";
 import { checkPalpitesRateLimit } from "@/lib/rate-limit";
 import { fetchPalpiteFacts } from "@/lib/user-palpite/facts";
+import { combineAnswers } from "@/lib/user-palpite/evidence";
 import {
   resolvePalpiteModelBase,
   type PalpiteModelBase,
@@ -77,6 +78,8 @@ const BASE: PalpiteModelBase = {
   lambdaAwayBase: 1.0,
   rho: null,
   jevAnswers: null,
+  modelAnswers: null,
+  newsEvidence: {},
 };
 
 const ABSENCE: Claim = {
@@ -407,6 +410,25 @@ describe("analyzeUserPalpite — depois da cobrança", () => {
     expect(res).toMatchObject({ ok: true, analysis: { changed: true } });
   });
 
+  it("notícia da base (#672): grava newsEvidence; 'sem o seu contexto' = base × notícia; mesmo fator → sem efeito", async () => {
+    const newsEvidence = { attack_weakened_away: 0.7 };
+    mockBase.mockResolvedValue({
+      ...BASE,
+      modelAnswers: combineAnswers(null, newsEvidence),
+      newsEvidence,
+    });
+    const res = await analyzeUserPalpite(null, form());
+    const row = inserted();
+    expect(row.model!.newsEvidence).toEqual(newsEvidence);
+    expect(row.model!.jevApplied).toBe(false);
+    expect(row.model!.lambdaWithout.away).toBeLessThan(BASE.lambdaAwayBase);
+    // O 0,7 do usuário no mesmo fator não passa a notícia: a leitura não muda.
+    expect(row.model!.lambdaWith.away).toBe(row.model!.lambdaWithout.away);
+    expect(res).toMatchObject({ ok: true, analysis: { changed: false } });
+    const input = mockNarrate.mock.calls[0][0].input;
+    expect(input.claims[0].effect).not.toMatch(/ajustado/);
+  });
+
   it("zero afirmações → zero chamadas de fatos", async () => {
     mockExtract.mockResolvedValue({ ok: true, claims: [], warnings: [], aiCallId: null });
     await analyzeUserPalpite(null, form());
@@ -493,7 +515,7 @@ describe("analyzeUserPalpite — depois da cobrança", () => {
         },
       },
     ) as PalpiteModelBase["jevAnswers"];
-    mockBase.mockResolvedValue({ ...BASE, jevAnswers: broken });
+    mockBase.mockResolvedValue({ ...BASE, jevAnswers: broken, modelAnswers: broken });
     await expect(analyzeUserPalpite(null, form())).resolves.toEqual({
       ok: false,
       error: "Não consegui analisar o seu palpite agora. A leitura pelos botões continua valendo.",

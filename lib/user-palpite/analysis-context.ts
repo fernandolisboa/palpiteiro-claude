@@ -2,6 +2,7 @@ import type { PredictionJudgments } from "@/lib/ai/engine/types";
 import type { JudgmentAbsenceInput } from "@/lib/ai/judgments/state";
 import type { JudgmentAnswers } from "@/lib/ai/judgments/types";
 import type { UserFactorOrigins } from "@/lib/ai/markets/_narrator/types";
+import { modelAnswersOf } from "@/lib/match-news/model-answers";
 import type { SupportedLeague } from "@/lib/providers/sports-data/leagues";
 import type {
   NormalizedFixture,
@@ -139,9 +140,13 @@ type HistoryRow = {
  * escolher: uma reanálise sem contexto esconde o contexto do run anterior. Histórico em
  * ordem desc(createdAt), como a página recebe.
  */
-export function pickUserContext(
-  rows: readonly HistoryRow[],
-): { context: PredictionUserContext; jevAnswers: JudgmentAnswers | null; createdAt: Date } | null {
+export function pickUserContext(rows: readonly HistoryRow[]): {
+  context: PredictionUserContext;
+  // O que o número já tinha (JEV ∨ notícia, modelAnswersOf, #672) e se o JEV respondeu.
+  modelAnswers: JudgmentAnswers | null;
+  jevApplied: boolean;
+  createdAt: Date;
+} | null {
   const seen = new Set<string>();
   let newest: HistoryRow | null = null;
   for (const row of rows) {
@@ -160,7 +165,8 @@ export function pickUserContext(
   if (!parsed.success || parsed.data.claims.length === 0) return null;
   return {
     context: parsed.data,
-    jevAnswers: judgments.answers ?? null,
+    modelAnswers: modelAnswersOf(judgments),
+    jevApplied: judgments.answers !== null,
     createdAt: newest.prediction.createdAt,
   };
 }
@@ -205,7 +211,9 @@ export function analysisContextNotice(
     withContext.length === 0
       ? CONTEXT_NOT_USED_NOTICE
       : withContext.some((j) =>
-            j.userContext.claims.some((c) => claimEffect(c, j.answers).moved.length > 0),
+            j.userContext.claims.some(
+              (c) => claimEffect(c, modelAnswersOf(j), j.answers !== null).moved.length > 0,
+            ),
           )
         ? CONTEXT_APPLIED_NOTICE
         : withContext.some((j) => hasContextNote(j.userContext.claims))

@@ -39,7 +39,7 @@ export function toAnalysisUserContextView(
 ): AnalysisUserContextView | null {
   const picked = pickUserContext(history);
   if (!picked) return null;
-  const { context, jevAnswers } = picked;
+  const { context, modelAnswers, jevApplied } = picked;
   return {
     createdAgo: formatRelativeAgoLabel(picked.createdAt, now),
     claims: context.claims.map((c) => ({
@@ -49,10 +49,12 @@ export function toAnalysisUserContextView(
       status: c.status,
       statusLabel: STATUS_LABEL[c.status],
       evidence: c.evidence,
-      effect: claimEffectText(c, jevAnswers, teams),
+      effect: claimEffectText(c, modelAnswers, teams, jevApplied),
     })),
     showUnverifiedNote: context.claims.some(
-      (c) => c.status === "unverifiable" && claimEffect(c, jevAnswers).moved.length > 0,
+      (c) =>
+        c.status === "unverifiable" &&
+        claimEffect(c, modelAnswers, jevApplied).moved.length > 0,
     ),
   };
 }
