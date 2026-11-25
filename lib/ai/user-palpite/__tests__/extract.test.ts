@@ -36,7 +36,12 @@ import {
   extractTool,
   fenceSafe,
 } from "@/lib/ai/user-palpite/extract-cartridge";
-import { extractPalpiteClaims, normalizeClaimInput } from "@/lib/ai/user-palpite/extract";
+import {
+  claimsFromToolInput,
+  extractPalpiteClaims,
+  normalizeClaimInput,
+} from "@/lib/ai/user-palpite/extract";
+import { StoredClaimsSchema } from "@/lib/user-palpite/types";
 
 function ok(toolInput: unknown): AnalysisResult {
   return {
@@ -353,5 +358,36 @@ describe("extractPalpiteClaims — modelo que serviu (PLAN-608)", () => {
       status: "tool_missing",
       model: ADOPTED,
     });
+  });
+});
+
+describe("nome tirado depois do Zod (review #682, achado 3)", () => {
+  it("texto de 200 caracteres com nome curto: a paráfrase alonga, mas o que se grava volta a ser lido", () => {
+    const text = `Gabi está fora e Gabi não viaja ${"com o grupo para o clássico de domingo ".repeat(5)}`
+      .slice(0, 200)
+      .trim();
+    const r = claimsFromToolInput(
+      { claims: [{ team: "home", topic: "absence", text, players: ["Gabi"], role: "attack" }] },
+      { teams: { home: "CR Flamengo", away: "SE Palmeiras" } },
+    );
+    expect(r.ok).toBe(true);
+    if (!r.ok) return;
+    const [claim] = r.claims;
+    expect(claim.text).not.toContain("Gabi");
+    // Aqui a paráfrase pode passar de 200: o registro do "Seu palpite" (StoredClaimsSchema)
+    // não tem teto no texto, e a releitura do ai_calls refaz a extração do tool_use cru.
+    expect(claim.text.length).toBeGreaterThan(200);
+    const stored = StoredClaimsSchema.safeParse([
+      {
+        ...claim,
+        index: 0,
+        status: "unverifiable",
+        evidence: "sem dado",
+        sides: [{ side: "home", status: "unverifiable" }],
+        playerChecks: [],
+        signals: [],
+      },
+    ]);
+    expect(stored.success).toBe(true);
   });
 });

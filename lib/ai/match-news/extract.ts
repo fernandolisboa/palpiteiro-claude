@@ -13,10 +13,10 @@ import { getProviderForModel } from "@/lib/ai/providers";
 import type { AiCallStatus, AnalysisRequest } from "@/lib/ai/providers/types";
 import { ExtractEnvelopeSchema, normalizeClaimInput } from "@/lib/ai/user-palpite/extract";
 import { db } from "@/lib/db";
-import { NewsSourcesSchema, type NewsClaim } from "@/lib/match-news/types";
+import { NewsClaimSchema, NewsSourcesSchema, type NewsClaim } from "@/lib/match-news/types";
 import { stripPlayerNames } from "@/lib/user-palpite/check-claims";
 import type { TeamNames } from "@/lib/user-palpite/reading";
-import { ClaimSchema, MAX_CLAIMS } from "@/lib/user-palpite/types";
+import { CLAIM_TEXT_MAX, ClaimSchema, MAX_CLAIMS } from "@/lib/user-palpite/types";
 
 import {
   MATCH_NEWS_EXTRACT_TOOL_NAME,
@@ -40,8 +40,9 @@ const EXTRACT_MAX_TOKENS = 4096;
 
 export type NewsExtractResult =
   | { ok: true; claims: NewsClaim[]; warnings: string[]; aiCallId: string | null }
-  // `deadline`: não coube no prazo (sem chamada) ou o adapter estourou o tempo. O lote
-  // não vira `failed` e a tentativa não conta.
+  // `deadline`: não coube no prazo da fase (sem chamada) ou o adapter estourou o tempo
+  // com a chamada cortada pelo prazo da fase. O lote não vira `failed` e a tentativa não
+  // conta. Timeout pelo teto da chamada (fase com folga) é `failed`: conta tentativa.
   | { ok: false; kind: "deadline" | "failed"; message: string; aiCallId: string | null };
 
 /**
@@ -50,7 +51,9 @@ export type NewsExtractResult =
  * conferidos contra os ids que o modelo viu; o resto passa por normalizeClaimInput →
  * ClaimSchema (o MESMO do contexto extra, com o superRefine). Tópico "form" é
  * descartado (o retrospecto é dado nosso). Teto de MAX_CLAIMS; nomes de jogador fora
- * das paráfrases.
+ * das paráfrases. Tirar o nome alonga o texto ("Gabi" → "o jogador citado"): o texto é
+ * cortado no teto e a afirmação final passa de novo pelo NewsClaimSchema, o MESMO da
+ * leitura do lote, pra row gravada sempre voltar a ser lida.
  */
 export function claimsFromNewsToolInput(
   toolInput: unknown,
@@ -94,10 +97,16 @@ export function claimsFromNewsToolInput(
     parsed.push({ ...claim.data, sources: valid });
   }
   const allPlayers = parsed.flatMap((c) => c.players ?? []);
-  const claims = parsed.map((c) => {
+  const claims: NewsClaim[] = [];
+  for (const c of parsed) {
     const text = stripPlayerNames(c.text, allPlayers, args.teams);
-    return text === c.text ? c : { ...c, text };
-  });
+    const final = NewsClaimSchema.safeParse(text === c.text ? c : { ...c, text: fitText(text) });
+    if (!final.success) {
+      dropped++;
+      continue;
+    }
+    claims.push(final.data);
+  }
   if (dropped > 0) warnings.push(`${dropped} afirmação(ões) fora do formato ficaram de fora.`);
   if (unsourced > 0) {
     warnings.push(`${unsourced} afirmação(ões) sem notícia do lote como fonte ficaram de fora.`);
@@ -106,13 +115,24 @@ export function claimsFromNewsToolInput(
   return { ok: true, claims, warnings };
 }
 
+// Texto no teto do ClaimSchema (com reticência quando corta).
+function fitText(text: string): string {
+  if (text.length <= CLAIM_TEXT_MAX) return text;
+  return `${text.slice(0, CLAIM_TEXT_MAX - 1).trimEnd()}…`;
+}
+
 type ExtractArgs = {
   matchId: string;
   // Nomes canônicos (os da base).
   teams: TeamNames;
   kickoffAt: Date;
   items: readonly NewsExtractItem[];
+  // Prazo da fase (duro): decide se a chamada ainda cabe (canFitCall) e se um timeout do
+  // adapter foi falta de prazo.
   deadlineAt?: number;
+  // Teto de UMA chamada, contado do início dela: o adapter corta em
+  // min(deadlineAt, início + maxCallMs).
+  maxCallMs?: number;
 };
 
 /**
@@ -161,15 +181,24 @@ async function runExtraction(args: ExtractArgs): Promise<NewsExtractResult> {
   const lines = prepareNewsLines(args.items);
   // Nada sobrou depois do saneamento: nada a extrair, sem chamada.
   if (lines.length === 0) return { ok: true, claims: [], warnings: [], aiCallId: null };
+  const startedAt = Date.now();
   if (
-    !canFitCall(args.deadlineAt, {
-      speed: model.speed,
-      maxTokens: EXTRACT_MAX_TOKENS,
-      effort: UTILITY_EFFORT,
-    })
+    !canFitCall(
+      args.deadlineAt,
+      { speed: model.speed, maxTokens: EXTRACT_MAX_TOKENS, effort: UTILITY_EFFORT },
+      startedAt,
+    )
   ) {
     return { ok: false, kind: "deadline", message: "no time left", aiCallId: null };
   }
+  const capAt = args.maxCallMs === undefined ? undefined : startedAt + args.maxCallMs;
+  // Quem corta esta chamada é o prazo da fase (não o teto dela)?
+  const boundByPhase =
+    args.deadlineAt !== undefined && (capAt === undefined || args.deadlineAt <= capAt);
+  const callDeadlineAt =
+    args.deadlineAt === undefined || capAt === undefined
+      ? (args.deadlineAt ?? capAt)
+      : Math.min(args.deadlineAt, capAt);
   const refs = lines.map((l) => l.ref);
   const request: AnalysisRequest = {
     model,
@@ -183,7 +212,7 @@ async function runExtraction(args: ExtractArgs): Promise<NewsExtractResult> {
     toolName: MATCH_NEWS_EXTRACT_TOOL_NAME,
     maxTokens: EXTRACT_MAX_TOKENS,
     effort: UTILITY_EFFORT,
-    deadlineAt: args.deadlineAt,
+    deadlineAt: callDeadlineAt,
   };
   const provider = getProviderForModel(model);
   const providerKey = provider.providerKey;
@@ -217,7 +246,7 @@ async function runExtraction(args: ExtractArgs): Promise<NewsExtractResult> {
     });
     return {
       ok: false,
-      kind: status === "timeout" ? "deadline" : "failed",
+      kind: status === "timeout" && boundByPhase ? "deadline" : "failed",
       message: errorMessage,
       aiCallId,
     };

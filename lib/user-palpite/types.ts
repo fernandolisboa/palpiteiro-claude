@@ -77,11 +77,15 @@ export const OTHER_KINDS = [
 ] as const;
 export type OtherKind = (typeof OTHER_KINDS)[number];
 
+// Teto da paráfrase (o tool pede o mesmo). Quem reescreve o texto depois do Zod (tirar
+// nomes de jogador alonga "Gabi" → "o jogador citado") tem de voltar a caber aqui.
+export const CLAIM_TEXT_MAX = 200;
+
 export const ClaimSchema = z
   .object({
     team: z.enum(CLAIM_TEAMS),
     topic: z.enum(CLAIM_TOPICS),
-    text: z.string().trim().min(1).max(200),
+    text: z.string().trim().min(1).max(CLAIM_TEXT_MAX),
     players: z.array(z.string().trim().min(2).max(60)).min(1).max(5).optional(),
     role: z.enum(CLAIM_ROLES).optional(),
     direction: z.enum(CLAIM_DIRECTIONS).optional(),
